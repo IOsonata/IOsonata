@@ -2835,5 +2835,15 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
 		</link>
+		<link>
+			<name>include/crypto_ecb_nrf53.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/nRF53/include/crypto_ecb_nrf53.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_ecb_nrf53.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/nRF53/src/crypto_ecb_nrf53.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

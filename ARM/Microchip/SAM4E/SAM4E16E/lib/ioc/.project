@@ -1231,9 +1231,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_default.cpp</name>
+			<name>src/crypto/crypto_sam.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_default.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_sam.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto.cpp</name>
@@ -1244,6 +1244,16 @@
 			<name>include/crypto/crypto.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto_sam.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_sam.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_sam4e.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_sam4e.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

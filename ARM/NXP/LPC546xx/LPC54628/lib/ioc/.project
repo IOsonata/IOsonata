@@ -1396,9 +1396,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_default.cpp</name>
+			<name>src/crypto/crypto_default_lpc546xx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_default.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_default_lpc546xx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto.cpp</name>

@@ -34,10 +34,13 @@ SOFTWARE.
 #include "crypto/ba414ep.h"
 #define CRYPTO_TARGET_AES CryptoMaster
 #define CRYPTO_TARGET_PKA Ba414ep
-#elif defined(NRF5340_XXAA_NETWORK)
+#elif defined(NRF5340_XXAA_NETWORK) || defined(NRF52_SERIES) || \
+	defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || \
+	defined(NRF52832_XXAA) || defined(NRF52840_XXAA)
 #include "../nRF53/include/crypto_ecb_nrf53.h"
 #define CRYPTO_TARGET_AES CryptoEcbNrf53
-#elif defined(NRF52840_XXAA) || defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
+#endif
+#if defined(NRF52840_XXAA) || defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 #include "crypto_cc3xx.h"
 #define CRYPTO_TARGET_PKA CryptoCc3xx
 #endif
@@ -57,19 +60,28 @@ public:
 		{
 			return false;
 		}
+#ifdef CRYPTO_TARGET_AES
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || \
 	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
-		if (!vAes.Init(CracenIntrfInstance()) || !vPka.Init(CracenIntrfInstance(), this))
-#elif defined(NRF5340_XXAA_NETWORK)
-		if (!vAes.Enable())
-#elif defined(NRF52840_XXAA) || defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-		if (!vPka.Init(Cc3xxIntrfInstance(), this))
+		if (!vAes.Init(CracenIntrfInstance()))
 #else
-		if (false)
+		if (!vAes.Enable())
 #endif
 		{
 			return false;
 		}
+#endif
+#ifdef CRYPTO_TARGET_PKA
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || \
+	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+		if (!vPka.Init(CracenIntrfInstance(), this))
+#else
+		if (!vPka.Init(Cc3xxIntrfInstance(), this))
+#endif
+		{
+			return false;
+		}
+#endif
 		vbValid = true;
 		return true;
 	}

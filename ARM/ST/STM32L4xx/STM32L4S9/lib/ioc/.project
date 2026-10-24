@@ -1661,6 +1661,16 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
 		</link>
+		<link>
+			<name>include/crypto_stm32h7.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_stm32h7.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_stm32h7.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/STM32H7xx/src/crypto_stm32h7.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

@@ -30,7 +30,7 @@ SOFTWARE.
 #include "crypto/crypto_stm32wba.h"
 #define CRYPTO_TARGET_AES CryptoWbaAes
 #define CRYPTO_TARGET_PKA CryptoWbaPka
-#elif defined(STM32H753xx)
+#elif (defined(STM32H753xx) || defined(STM32L4S9xx))
 #include "crypto_stm32h7.h"
 #define CRYPTO_TARGET_AES CryptoStm32H7Aes
 #endif
@@ -74,7 +74,7 @@ public:
 			return false;
 		}
 #endif
-#if defined(STM32H753xx)
+#if (defined(STM32H753xx) || defined(STM32L4S9xx))
 		if (!vHash.Enable())
 		{
 			return false;
@@ -99,7 +99,7 @@ public:
 			vbPkaStarted = false;
 		}
 #endif
-#if defined(STM32H753xx)
+#if (defined(STM32H753xx) || defined(STM32L4S9xx))
 		if (vHash.Valid())
 		{
 			vHash.Disable();
@@ -187,7 +187,7 @@ public:
 	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen) override
 	{
-#if defined(STM32H753xx)
+#if (defined(STM32H753xx) || defined(STM32L4S9xx))
 		if (Alg == CRYPTO_MAC_HMAC)
 		{
 			return vHash.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
@@ -202,7 +202,7 @@ public:
 		return Crypto::Mac(Alg, Key, pMsg, Len, pMac, MacLen);
 	}
 
-#if defined(STM32H753xx)
+#if (defined(STM32H753xx) || defined(STM32L4S9xx))
 	CRYPTO_STATUS Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest) override
 	{
 		return vHash.Hash(Alg, pMsg, Len, pDigest);
@@ -265,7 +265,7 @@ private:
 #ifdef CRYPTO_TARGET_PKA
 	CRYPTO_TARGET_PKA vPka;
 #endif
-#if defined(STM32H753xx)
+#if (defined(STM32H753xx) || defined(STM32L4S9xx))
 	CryptoStm32H7Hash vHash;
 #elif defined(STM32WBA65xx)
 	CryptoWbaRng vRng;

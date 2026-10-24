@@ -1020,4 +1020,17 @@ typedef struct {
 #define R9A02_COMPOCR_COP(n)			(1U << (4U * (n) + 2U))		//!< VCOUTn inverted
 #define R9A02_COMPOCR_SPDMD				(1U << 7)					//!< High-speed mode, both comparators
 
+// True Random Number Generator, chapter 28. Byte accesses are required.
+typedef struct {
+	__I uint8_t TRNGSDR;
+	uint8_t Reserved;
+	__IO uint8_t TRNGSCR0;
+	__IO uint8_t TRNGSCR1;
+} R9A02_TRNG_Type;
+
+#define R9A02_TRNG ((R9A02_TRNG_Type *)R9A02_TRNG_BASE)
+#define R9A02_TRNG_EN (1U << 3)
+#define R9A02_TRNG_ST (1U << 2)
+#define R9A02_TRNG_RDY (1U << 7)
+
 #endif

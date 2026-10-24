@@ -1,6 +1,6 @@
 /**-------------------------------------------------------------------------
 @file	crypto_stm32h7.cpp
-@brief	STM32H7 CRYP and HASH register drivers; no HAL dependency.
+@brief	STM32H7 CRYP / STM32L4S9 AES and shared HASH register drivers.
 @author	Hoang Nguyen Hoan
 @date	Oct. 21, 2026
 @license
@@ -52,6 +52,85 @@ static void StoreBe32(uint8_t *p, uint32_t v)
 	p[2] = (uint8_t)(v >> 8); p[3] = (uint8_t)v;
 }
 
+#if defined(STM32L4S9xx)
+static void CrypReset()
+{
+	RCC->AHB2RSTR |= RCC_AHB2RSTR_AESRST;
+	RCC->AHB2RSTR &= ~(uint32_t)RCC_AHB2RSTR_AESRST;
+}
+
+static bool AesWait()
+{
+	uint32_t polls = CRYPTO_STM32H7_POLL_MAX;
+	uint32_t status;
+
+	while (polls-- > 0U)
+	{
+		status = AES->SR;
+		if ((status & (AES_SR_RDERR | AES_SR_WRERR)) != 0U)
+		{
+			return false;
+		}
+		if ((status & AES_SR_CCF) != 0U)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool CrypStart(const uint8_t *pKey, size_t KeyLen, bool Decrypt)
+{
+	uint32_t mode = KeyLen == 32U ? AES_CR_KEYSIZE : 0U;
+
+	AES->CR = 0U;
+	AES->CR = AES_CR_CCFC | AES_CR_ERRC;
+	AES->CR = mode | (Decrypt ? AES_CR_MODE_0 : 0U);
+	if (KeyLen == 32U)
+	{
+		AES->KEYR7 = LoadBe32(pKey);
+		AES->KEYR6 = LoadBe32(pKey + 4U);
+		AES->KEYR5 = LoadBe32(pKey + 8U);
+		AES->KEYR4 = LoadBe32(pKey + 12U);
+		pKey += 16U;
+	}
+	AES->KEYR3 = LoadBe32(pKey);
+	AES->KEYR2 = LoadBe32(pKey + 4U);
+	AES->KEYR1 = LoadBe32(pKey + 8U);
+	AES->KEYR0 = LoadBe32(pKey + 12U);
+	AES->CR |= AES_CR_EN;
+	if (Decrypt)
+	{
+		if (!AesWait())
+		{
+			return false;
+		}
+		AES->CR = mode | AES_CR_CCFC;
+		AES->CR = mode | AES_CR_MODE_1 | AES_CR_EN;
+	}
+	return true;
+}
+
+static bool CrypBlock(const uint8_t *pIn, uint8_t *pOut)
+{
+	unsigned i;
+
+	for (i = 0U; i < 16U; i += 4U)
+	{
+		AES->DINR = LoadBe32(pIn + i);
+	}
+	if (!AesWait())
+	{
+		return false;
+	}
+	for (i = 0U; i < 16U; i += 4U)
+	{
+		StoreBe32(pOut + i, AES->DOUTR);
+	}
+	AES->CR |= AES_CR_CCFC;
+	return true;
+}
+#else
 static void CrypReset()
 {
 	RCC->AHB2RSTR |= RCC_AHB2RSTR_CRYPRST;
@@ -105,10 +184,16 @@ static bool CrypBlock(const uint8_t *pIn, uint8_t *pOut)
 	return true;
 }
 
+#endif
+
 bool CryptoStm32H7Aes::Enable()
 {
 	if (s_AesBusy.test_and_set()) return false;
+	#if defined(STM32L4S9xx)
+	RCC->AHB2ENR |= RCC_AHB2ENR_AESEN;
+#else
 	RCC->AHB2ENR |= RCC_AHB2ENR_CRYPEN;
+#endif
 	(void)RCC->AHB2ENR;
 	CrypReset();
 	vbValid = true;
@@ -147,7 +232,7 @@ void CryptoStm32H7Aes::AesOpEnd()
 bool CryptoStm32H7Aes::AesEcbEncrypt(const uint8_t Key[16],
 								  const uint8_t In[16], uint8_t Out[16])
 {
-	CRYP->CR = 0U;
+	CrypReset();
 	return CrypStart(Key, 16U, false) && CrypBlock(In, Out);
 }
 

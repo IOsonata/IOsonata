@@ -4,9 +4,15 @@
 #include "nrf.h"
 #include "crypto_ecb_nrf53.h"
 #include "crypto/icrypto.h"
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+#include "nrf_soc.h"
+#include "nrf_sdm.h"
+#endif
 
-#if !defined(NRF5340_XXAA_NETWORK)
-#error "CryptoEcbNrf53 is only available on the nRF5340 network core"
+#if !defined(NRF5340_XXAA_NETWORK) && !defined(NRF52_SERIES) && \
+	!defined(NRF52805_XXAA) && !defined(NRF52810_XXAA) && \
+	!defined(NRF52832_XXAA) && !defined(NRF52840_XXAA)
+#error "This ECB driver requires nRF52 or the nRF5340 network core"
 #endif
 
 #ifndef CRYPTO_ECB_NRF53_TIMEOUT
@@ -37,7 +43,38 @@ bool CryptoEcbNrf53::AesEcbEncrypt(const uint8_t Key[16],
 {
 	bool ok = false;
 	bool stopped = false;
+#if defined(NRF5340_XXAA_NETWORK)
 	NRF_ECB_Type *reg = NRF_ECB_NS;
+#else
+	NRF_ECB_Type *reg = NRF_ECB;
+#endif
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	uint8_t enabled = 0U;
+	uint32_t status;
+	nrf_ecb_hal_data_t data;
+
+	if (sd_softdevice_is_enabled(&enabled) != NRF_SUCCESS)
+	{
+		CryptoSecureWipe(Out, 16U);
+		return false;
+	}
+	if (enabled != 0U)
+	{
+		memcpy(data.key, Key, 16U);
+		memcpy(data.cleartext, In, 16U);
+		status = sd_ecb_block_encrypt(&data);
+		if (status == NRF_SUCCESS)
+		{
+			memcpy(Out, data.ciphertext, 16U);
+		}
+		else
+		{
+			CryptoSecureWipe(Out, 16U);
+		}
+		CryptoSecureWipe(&data, sizeof(data));
+		return status == NRF_SUCCESS;
+	}
+#endif
 
 	memcpy(s_Block.Key, Key, 16);
 	memcpy(s_Block.Input, In, 16);

@@ -12,6 +12,9 @@
 #include "stm32.h"
 #include "crypto_stm32h7.h"
 CrypRegs g_Cryp;
+#ifdef STM32L4S9xx
+AesRegs g_Aes;
+#endif
 HashRegs g_Hash;
 RccRegs g_Rcc;
 static uint32_t regs[REG_COUNT];
@@ -29,6 +32,10 @@ static CryptoKey testKey{CRYPTO_KEY_AES_128,CRYPTO_KEY_LOC_PLAIN,
 static void bytes(std::vector<uint8_t>&v,uint32_t w){for(int i=3;i>=0;i--)v.push_back(w>>(8*i));}
 uint32_t ModelRead(unsigned id)
 {
+#ifdef STM32L4S9xx
+	if(id == L_SR) return fault >= 1 && fault <= 3 ? 0U : AES_SR_CCF;
+	if(id == L_DOUT) return ModelRead(C_DOUT);
+#endif
 	if(id==C_SR){
 	 if(fault==1)return 0;
 	 if(fault==3)return CRYP_SR_BUSY;
@@ -41,6 +48,22 @@ uint32_t ModelRead(unsigned id)
 }
 void ModelWrite(unsigned id,uint32_t value)
 {
+#ifdef STM32L4S9xx
+	if (id == L_CR) {
+		regs[L_CR] = value & ~(AES_CR_CCFC | AES_CR_ERRC);
+		uint32_t mode = value & AES_CR_MODE;
+		uint32_t v = (value & AES_CR_KEYSIZE) ? CRYP_CR_KEYSIZE_1 : 0U;
+		v |= mode == AES_CR_MODE_0 ? CRYP_CR_ALGOMODE_AES_KEY : CRYP_CR_ALGOMODE_AES_ECB;
+		if (mode == AES_CR_MODE_1) v |= CRYP_CR_ALGODIR;
+		if (value & AES_CR_EN) v |= CRYP_CR_CRYPEN;
+		ModelWrite(C_CR, v);
+		return;
+	}
+	if (id >= L_K0 && id <= L_K7) { ModelWrite(C_K3R - (id - L_K0), value); return; }
+	if (id == L_DIN) { ModelWrite(C_DIN, value); return; }
+	if (id == R_EN && (value & RCC_AHB2ENR_AESEN)) value |= RCC_AHB2ENR_CRYPEN;
+	if (id == R_RST && (value & RCC_AHB2RSTR_AESRST)) value |= RCC_AHB2RSTR_CRYPRST;
+#endif
 	modelWrites++;
 	regs[id]=value;
 	if(id==R_RST){

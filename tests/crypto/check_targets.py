@@ -6,8 +6,10 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 VARIANTS = [
-    ("nrf52832", ["NRF52832_XXAA"]),
-    ("nrf52840", ["NRF52840_XXAA"]),
+    ("nrf52805", ["NRF52805_XXAA"]),
+    ("nrf52810", ["NRF52810_XXAA"]),
+    ("nrf52832", ["NRF52832_XXAA", "NRF52_SERIES"]),
+    ("nrf52840", ["NRF52840_XXAA", "NRF52_SERIES"]),
     ("nrf5340_net", ["NRF5340_XXAA_NETWORK"]),
     ("nrf5340_app", ["NRF5340_XXAA_APPLICATION"]),
     ("nrf91", ["NRF91_SERIES"]),
@@ -16,6 +18,7 @@ VARIANTS = [
     ("nrf54h20", ["NRF54H20_XXAA"]),
     ("stm32h753", ["STM32H753xx", "IOSONATA_STM32_HAS_RNG=1"]),
     ("stm32wba65", ["STM32WBA65xx", "IOSONATA_STM32_HAS_RNG=1"]),
+    ("stm32l4s9", ["STM32L4S9xx", "IOSONATA_STM32_HAS_RNG=1"]),
     ("stm32l4", ["STM32L476xx", "IOSONATA_STM32_HAS_RNG=1"]),
     ("stm32g4", ["STM32G474xx", "IOSONATA_STM32_HAS_RNG=1"]),
     ("stm32f401", ["STM32F401xx"]),

@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 enum { C_CR, C_SR, C_DIN, C_DOUT, C_K0L, C_K0R, C_K1L, C_K1R, C_K2L, C_K2R, C_K3L, C_K3R,
-	H_CR, H_SR, H_DIN, H_STR, R_EN, R_RST, H_HR=24, REG_COUNT=32 };
+	H_CR, H_SR, H_DIN, H_STR, R_EN, R_RST, H_HR=24, L_CR=32, L_SR, L_DIN, L_DOUT, L_K0, L_K1, L_K2, L_K3, L_K4, L_K5, L_K6, L_K7, REG_COUNT=44 };
 uint32_t ModelRead(unsigned id);
 void ModelWrite(unsigned id, uint32_t value);
 struct ModelReg {
@@ -24,3 +24,11 @@ extern RccRegs g_Rcc;
 #define HASH (&g_Hash)
 #define HASH_DIGEST (&g_Hash)
 #define RCC (&g_Rcc)
+
+#ifdef STM32L4S9xx
+struct AesRegs { ModelReg CR{L_CR}, SR{L_SR}, DINR{L_DIN}, DOUTR{L_DOUT},
+	KEYR0{L_K0}, KEYR1{L_K1}, KEYR2{L_K2}, KEYR3{L_K3},
+	KEYR4{L_K4}, KEYR5{L_K5}, KEYR6{L_K6}, KEYR7{L_K7}; };
+extern AesRegs g_Aes;
+#define AES (&g_Aes)
+#endif

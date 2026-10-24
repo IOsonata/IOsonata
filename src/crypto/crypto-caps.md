@@ -1,22 +1,15 @@
 # Crypto capabilities in the object model
 
-In the object model an engine's capability is not a bitfield. It is expressed
-two ways:
+Applications use one directly declared `Crypto` object. Its working software
+bases provide the supported algorithms. The MCU implementation overrides the
+operations it accelerates; missing acceleration does not remove software
+support. Applications check the result of each operation and do not select
+separate cipher, hash or key-agreement pointers.
 
-1. **Which operation family the engine exposes.** A `KeyAgreeEngine *`,
-   `CipherEngine *`, or `HashEngine *` selects the relevant interface. The
-   call result still decides whether that concrete engine implements the
-   requested operation and algorithm; an interface pointer is not a capability bit.
-2. **Which algorithm value the interface method accepts.** Within an interface the
-   algorithm is an argument (`CRYPTO_CIPHER_ALG`, `CRYPTO_MAC_ALG`,
-   `CRYPTO_HASH_ALG`, `CRYPTO_CURVE`). An engine that does not implement a given
-   value returns `CRYPTO_STATUS_UNSUPPORTED` from the base interface method, which it
-   simply does not override.
-
-There is no `Cap` word to query and no `CryptoIsCapable`. "Can this engine do X"
-is answered by a non-null interface pointer followed by the operation return status.
-Algorithm support is also answered by that return status. This removes the class of bug where
-a `Cap` bit and the backing function pointer disagree.
+The capability interfaces below describe the class hierarchy used by the
+implementations. They do not require application-level provider selection.
+See [the MCU port audit](crypto-port-audit.md) for hardware coverage, remaining
+gaps and validation evidence.
 
 ## Interfaces
 
@@ -113,8 +106,8 @@ implementation used by another object.
 
 AES-128 and AES-256 ECB/CBC/CTR are implemented by `CryptoSoftAes`. Hardware
 classes override the operations they accelerate. CryptoMaster and STM32WBA
-call the base Cipher implementation for AES-256, while H753 accelerates both
-key sizes. The nRF5340 ECB class inherits the mode implementation and replaces
+call the base Cipher implementation for AES-256, while H753, L4S9, SAM4E and ESP32-C3/C6 accelerate both
+key sizes. The nRF52/nRF5340 ECB class inherits the mode implementation and replaces
 its AES-128 block hooks; AES-256 uses the software block without acquiring
 that peripheral. The application and generic object perform no retry based
 on unsupported status. Busy and failed operations remain errors.

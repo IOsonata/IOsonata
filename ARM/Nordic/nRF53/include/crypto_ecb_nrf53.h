@@ -6,7 +6,8 @@
 #include <stdint.h>
 #include "crypto/crypto_softaes.h"
 
-// nRF5340 network-core ECB accelerator. CMAC and CCM use the inherited
+// nRF52 / nRF5340 network-core ECB accelerator. The historical class name
+// is retained for existing callers. CMAC and CCM use the inherited
 // CryptoSoftAes algorithms over the hardware ECB block primitive.
 class CryptoEcbNrf53 : public CryptoSoftAes {
 public:

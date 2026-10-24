@@ -1946,9 +1946,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_default.cpp</name>
+			<name>src/crypto/crypto_esp32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_default.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_esp32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto.cpp</name>

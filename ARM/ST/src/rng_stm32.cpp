@@ -74,6 +74,7 @@ SOFTWARE.
 #endif
 
 static volatile bool s_RngInited = false;
+static atomic_flag s_RngBusy = ATOMIC_FLAG_INIT;
 
 static bool RngClockEnable(void)
 {
@@ -150,21 +151,6 @@ static void RngClearLatchedErrors(void)
 #endif
 }
 
-#if !defined(STM32H753xx)
-static void RngRecoverSeedError(void)
-{
-	RngDisable();
-	RngClearLatchedErrors();
-
-#if defined(RNG_CR_CONDRST)
-	RNG->CR |= RNG_CR_CONDRST;
-	RNG->CR &= ~RNG_CR_CONDRST;
-#endif
-
-	RngEnable();
-}
-#endif
-
 static bool RngInit(void)
 {
 	if (s_RngInited && ((RNG->CR & RNG_CR_RNGEN) != 0U))
@@ -195,37 +181,22 @@ static bool RngReadWord(uint32_t *pWord)
 	{
 		uint32_t sr = RNG->SR;
 
-#if defined(STM32H753xx)
-		// Latched seed errors invalidate data even after SECS has cleared.
-		// Fail this request; the caller must explicitly enable/reset again.
+		// Current and latched health errors invalidate this entire request.
+		// Never clear an error and return subsequent data as if it did not occur.
 		if (sr & (RNG_SR_SECS | RNG_SR_SEIS | RNG_SR_CECS | RNG_SR_CEIS))
 		{
 			return false;
 		}
-#else
-		if ((sr & RNG_SR_SECS) != 0U)
-		{
-			RngRecoverSeedError();
-			continue;
-		}
-
-		if ((sr & RNG_SR_CECS) != 0U)
-		{
-			return false;
-		}
-#endif
 
 		if ((sr & RNG_SR_DRDY) != 0U)
 		{
 			*pWord = RNG->DR;
-#if defined(STM32H753xx)
 			if (RNG->SR & (RNG_SR_SECS | RNG_SR_SEIS | RNG_SR_CECS | RNG_SR_CEIS))
 			{
 				*pWord = 0;
 
 				return false;
 			}
-#endif
 			return true;
 		}
 	}
@@ -270,20 +241,20 @@ bool CryptoRngStm32::Enable()
 	{
 		return true;
 	}
-	if (atomic_flag_test_and_set(&vOpBusy))
+	if (atomic_flag_test_and_set(&s_RngBusy))
 	{
 		return false;
 	}
 	bool ok = RngInit();
 	vbEnabled = ok;
 	vbValid = ok;
-	atomic_flag_clear(&vOpBusy);
+	atomic_flag_clear(&s_RngBusy);
 	return ok;
 }
 
 void CryptoRngStm32::Disable()
 {
-	if (atomic_flag_test_and_set(&vOpBusy))
+	if (atomic_flag_test_and_set(&s_RngBusy))
 	{
 		return;
 	}
@@ -293,12 +264,12 @@ void CryptoRngStm32::Disable()
 		RngDisable();
 		vbEnabled = false;
 	}
-	atomic_flag_clear(&vOpBusy);
+	atomic_flag_clear(&s_RngBusy);
 }
 
 void CryptoRngStm32::Reset()
 {
-	if (atomic_flag_test_and_set(&vOpBusy))
+	if (atomic_flag_test_and_set(&s_RngBusy))
 	{
 		return;
 	}
@@ -308,7 +279,7 @@ void CryptoRngStm32::Reset()
 	bool ok = RngInit();
 	vbEnabled = ok;
 	vbValid = ok;
-	atomic_flag_clear(&vOpBusy);
+	atomic_flag_clear(&s_RngBusy);
 }
 
 CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
@@ -325,22 +296,20 @@ CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (atomic_flag_test_and_set(&vOpBusy))
+	if (atomic_flag_test_and_set(&s_RngBusy))
 	{
 		CryptoSecureWipe(pOut, Len);
 		return CRYPTO_STATUS_BUSY;
 	}
 
 	bool ok = RngFill(pOut, Len);
-#if defined(STM32H753xx)
 	if (ok == false)
 	{
 		RngDisable();
 		vbValid = false;
 		vbEnabled = false;
 	}
-#endif
-	atomic_flag_clear(&vOpBusy);
+	atomic_flag_clear(&s_RngBusy);
 	if (!ok)
 	{
 		CryptoSecureWipe(pOut, Len);
