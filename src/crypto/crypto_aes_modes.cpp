@@ -517,286 +517,154 @@ bool CryptoAesModes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
 	return ok;
 }
 
-CRYPTO_STATUS CryptoAesModes::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
-								  const uint8_t *pNonce, size_t NonceLen,
-								  const uint8_t *pAad, size_t AadLen,
-								  const uint8_t *pMsg, size_t Len,
-								  uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+// Seal and open use the same counter stream and tag construction. GCM open
+// authenticates ciphertext before any plaintext is produced; CCM open wipes
+// the recovered plaintext if its recomputed tag does not match.
+static void GcmTag(const uint8_t H[16], const uint8_t Mask[16],
+	const uint8_t *pAad, size_t AadLen, const uint8_t *pMsg, size_t Len,
+	uint8_t Tag[16])
 {
-	if (Alg == CRYPTO_AEAD_AES_GCM)
+	uint8_t lens[16];
+	uint64_t abits = (uint64_t)AadLen * 8U;
+	uint64_t cbits = (uint64_t)Len * 8U;
+	unsigned i;
+
+	memset(Tag, 0, 16U);
+	GhashAbsorb(Tag, H, pAad, AadLen);
+	GhashAbsorb(Tag, H, pMsg, Len);
+	for (i = 0U; i < 8U; i++)
 	{
-		if (!AesKeyMaterialOk(Key) ||
-			(Key.Usage & CRYPTO_KEY_USE_ENCRYPT) == 0U ||
-			pNonce == nullptr || pTag == nullptr ||
-			(pMsg == nullptr && Len != 0U) || (pOut == nullptr && Len != 0U) ||
-			(pAad == nullptr && AadLen != 0U) ||
-			!GcmParamsOk(NonceLen, TagLen))
-		{
-			return CRYPTO_STATUS_UNSUPPORTED;
-		}
-		if (!AesOpBegin())
-		{
-			// Refused bracket: fail closed and retryable.
-			if (Len > 0U) memset(pOut, 0, Len);
-			memset(pTag, 0, TagLen);
-			return CRYPTO_STATUS_BUSY;
-		}
-		const uint8_t *key = Key.Plain.pData;
-		uint8_t h[16] = {}, j0[16], ej0[16], a[16], stream[16], y[16] = {};
-		bool ok = AesEcbEncrypt(key, h, h);
-		memcpy(j0, pNonce, 12U);
-		j0[12] = 0U; j0[13] = 0U; j0[14] = 0U; j0[15] = 1U;
-		ok = ok && AesEcbEncrypt(key, j0, ej0);
-		for (size_t idx = 0, ctr = 2; ok && idx < Len; idx += 16U, ctr++)
-		{
-			memcpy(a, j0, 12U);
-			a[12] = (uint8_t)(ctr >> 24);
-			a[13] = (uint8_t)(ctr >> 16);
-			a[14] = (uint8_t)(ctr >> 8);
-			a[15] = (uint8_t)ctr;
-			ok = AesEcbEncrypt(key, a, stream);
-			size_t count = Len - idx < 16U ? Len - idx : 16U;
-			for (size_t i = 0; ok && i < count; i++)
-			{
-				pOut[idx + i] = pMsg[idx + i] ^ stream[i];
-			}
-		}
-		AesOpEnd();
-		if (ok)
-		{
-			GhashAbsorb(y, h, pAad, AadLen);
-			GhashAbsorb(y, h, pOut, Len);
-			uint64_t abits = (uint64_t)AadLen * 8U;
-			uint64_t cbits = (uint64_t)Len * 8U;
-			uint8_t lens[16];
-			for (int i = 0; i < 8; i++)
-			{
-				lens[i] = (uint8_t)(abits >> (56 - 8 * i));
-				lens[8 + i] = (uint8_t)(cbits >> (56 - 8 * i));
-			}
-			GhashAbsorb(y, h, lens, sizeof(lens));
-			for (size_t i = 0; i < TagLen; i++)
-			{
-				pTag[i] = y[i] ^ ej0[i];
-			}
-		}
-		else
-		{
-			if (Len > 0U) memset(pOut, 0, Len);
-			memset(pTag, 0, TagLen);
-		}
-		AesWipe(h, sizeof(h));
-		AesWipe(j0, sizeof(j0));
-		AesWipe(ej0, sizeof(ej0));
-		AesWipe(a, sizeof(a));
-		AesWipe(stream, sizeof(stream));
-		AesWipe(y, sizeof(y));
-		return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+		lens[7U - i] = (uint8_t)abits;
+		lens[15U - i] = (uint8_t)cbits;
+		abits >>= 8U;
+		cbits >>= 8U;
 	}
-	if (Alg != CRYPTO_AEAD_AES_CCM || !AesKeyMaterialOk(Key) ||
-		(Key.Usage & CRYPTO_KEY_USE_ENCRYPT) == 0U ||
-		pNonce == nullptr || pTag == nullptr ||
+	GhashAbsorb(Tag, H, lens, sizeof(lens));
+	for (i = 0U; i < 16U; i++)
+	{
+		Tag[i] ^= Mask[i];
+	}
+}
+
+static bool AesTagEqual(const uint8_t *pLeft, const uint8_t *pRight, size_t Len)
+{
+	uint8_t diff = 0U;
+	size_t i;
+
+	for (i = 0U; i < Len; i++)
+	{
+		diff |= pLeft[i] ^ pRight[i];
+	}
+	return diff == 0U;
+}
+
+CRYPTO_STATUS CryptoAesModes::Aead(bool Encrypt, CRYPTO_AEAD_ALG Alg,
+	const CryptoKey &Key, const uint8_t *pNonce, size_t NonceLen,
+	const uint8_t *pAad, size_t AadLen, const uint8_t *pMsg, size_t Len,
+	uint8_t *pOut, const uint8_t *pTag, uint8_t *pNewTag, size_t TagLen)
+{
+	bool gcm = Alg == CRYPTO_AEAD_AES_GCM;
+	bool ok;
+	uint32_t usage = Encrypt ? CRYPTO_KEY_USE_ENCRYPT : CRYPTO_KEY_USE_DECRYPT;
+	const uint8_t *key = Key.Plain.pData;
+	uint8_t tag[16], a[16] = {}, stream[16], h[16] = {}, mask[16];
+	size_t l, idx, ctr, count, i, value;
+
+	if (!AesKeyMaterialOk(Key) || (Key.Usage & usage) == 0U ||
+		pNonce == nullptr || (Encrypt ? pNewTag == nullptr : pTag == nullptr) ||
 		(pMsg == nullptr && Len != 0U) || (pOut == nullptr && Len != 0U) ||
 		(pAad == nullptr && AadLen != 0U) ||
-		!CcmParamsOk(NonceLen, TagLen, AadLen, Len))
+		(gcm ? !GcmParamsOk(NonceLen, TagLen) :
+		 (Alg != CRYPTO_AEAD_AES_CCM || !CcmParamsOk(NonceLen, TagLen, AadLen, Len))))
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 	if (!AesOpBegin())
 	{
-		// Refused bracket: fail closed and retryable.
 		if (Len > 0U) memset(pOut, 0, Len);
-		memset(pTag, 0, TagLen);
+		if (Encrypt) memset(pNewTag, 0, TagLen);
 		return CRYPTO_STATUS_BUSY;
 	}
 
-	const uint8_t *key = Key.Plain.pData;
-	size_t l = 15U - NonceLen;
-	uint8_t tag[AES_BLOCK];
-	uint8_t a[AES_BLOCK], stream[AES_BLOCK];
-	bool ok = CcmMacTag(key, pNonce, NonceLen, pAad, AadLen, pMsg, Len,
-						TagLen, tag);
-
-	// Payload: CTR with counters A1 onward.
-	for (size_t idx = 0, ctr = 1; ok && idx < Len; idx += AES_BLOCK, ctr++)
+	l = gcm ? 4U : 15U - NonceLen;
+	if (gcm)
 	{
-		memset(a, 0, sizeof(a));
-		a[0] = (uint8_t)(l - 1U);
-		memcpy(&a[1], pNonce, NonceLen);
-		for (size_t i = 0; i < l; i++)
+		memcpy(a, pNonce, NonceLen);
+		a[15] = 1U;
+		ok = AesEcbEncrypt(key, h, h) && AesEcbEncrypt(key, a, mask);
+		if (ok && !Encrypt)
 		{
-			a[15U - i] = (uint8_t)(ctr >> (8U * i));
+			GcmTag(h, mask, pAad, AadLen, pMsg, Len, tag);
+			ok = AesTagEqual(tag, pTag, TagLen);
 		}
-		ok = AesEcbEncrypt(key, a, stream);
-		size_t count = Len - idx < AES_BLOCK ? Len - idx : AES_BLOCK;
-		for (size_t i = 0; ok && i < count; i++)
-		{
-			pOut[idx + i] = pMsg[idx + i] ^ stream[i];
-		}
-	}
-	AesOpEnd();
-
-	if (ok)
-	{
-		memcpy(pTag, tag, TagLen);
 	}
 	else
 	{
-		if (Len > 0U) memset(pOut, 0, Len);
-		memset(pTag, 0, TagLen);
-	}
-	AesWipe(tag, sizeof(tag));
-	AesWipe(a, sizeof(a));
-	AesWipe(stream, sizeof(stream));
-	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
-}
-
-CRYPTO_STATUS CryptoAesModes::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
-								  const uint8_t *pNonce, size_t NonceLen,
-								  const uint8_t *pAad, size_t AadLen,
-								  const uint8_t *pMsg, size_t Len,
-								  uint8_t *pOut, const uint8_t *pTag,
-								  size_t TagLen)
-{
-	if (Alg == CRYPTO_AEAD_AES_GCM)
-	{
-		if (!AesKeyMaterialOk(Key) ||
-			(Key.Usage & CRYPTO_KEY_USE_DECRYPT) == 0U ||
-			pNonce == nullptr || pTag == nullptr ||
-			(pMsg == nullptr && Len != 0U) || (pOut == nullptr && Len != 0U) ||
-			(pAad == nullptr && AadLen != 0U) ||
-			!GcmParamsOk(NonceLen, TagLen))
-		{
-			return CRYPTO_STATUS_UNSUPPORTED;
-		}
-		if (!AesOpBegin())
-		{
-			// Refused bracket: fail closed and retryable.
-			if (Len > 0U) memset(pOut, 0, Len);
-			return CRYPTO_STATUS_BUSY;
-		}
-
-		// Verify first over the received ciphertext, decrypt only on an
-		// authentic tag, constant-time compare.
-		const uint8_t *key = Key.Plain.pData;
-		uint8_t h[16] = {}, j0[16], ej0[16], a[16], stream[16], y[16] = {};
-		bool ok = AesEcbEncrypt(key, h, h);
-		memcpy(j0, pNonce, 12U);
-		j0[12] = 0U; j0[13] = 0U; j0[14] = 0U; j0[15] = 1U;
-		ok = ok && AesEcbEncrypt(key, j0, ej0);
-		if (ok)
-		{
-			GhashAbsorb(y, h, pAad, AadLen);
-			GhashAbsorb(y, h, pMsg, Len);
-			uint64_t abits = (uint64_t)AadLen * 8U;
-			uint64_t cbits = (uint64_t)Len * 8U;
-			uint8_t lens[16];
-			for (int i = 0; i < 8; i++)
-			{
-				lens[i] = (uint8_t)(abits >> (56 - 8 * i));
-				lens[8 + i] = (uint8_t)(cbits >> (56 - 8 * i));
-			}
-			GhashAbsorb(y, h, lens, sizeof(lens));
-			uint8_t diff = 0U;
-			for (size_t i = 0; i < TagLen; i++)
-			{
-				diff |= (uint8_t)((y[i] ^ ej0[i]) ^ pTag[i]);
-			}
-			ok = diff == 0U;
-		}
-		for (size_t idx = 0, ctr = 2; ok && idx < Len; idx += 16U, ctr++)
-		{
-			memcpy(a, j0, 12U);
-			a[12] = (uint8_t)(ctr >> 24);
-			a[13] = (uint8_t)(ctr >> 16);
-			a[14] = (uint8_t)(ctr >> 8);
-			a[15] = (uint8_t)ctr;
-			ok = AesEcbEncrypt(key, a, stream);
-			size_t count = Len - idx < 16U ? Len - idx : 16U;
-			for (size_t i = 0; ok && i < count; i++)
-			{
-				pOut[idx + i] = pMsg[idx + i] ^ stream[i];
-			}
-		}
-		AesOpEnd();
-		if (!ok && Len > 0U)
-		{
-			memset(pOut, 0, Len);
-		}
-		AesWipe(h, sizeof(h));
-		AesWipe(j0, sizeof(j0));
-		AesWipe(ej0, sizeof(ej0));
-		AesWipe(a, sizeof(a));
-		AesWipe(stream, sizeof(stream));
-		AesWipe(y, sizeof(y));
-		return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
-	}
-	if (Alg != CRYPTO_AEAD_AES_CCM || !AesKeyMaterialOk(Key) ||
-		(Key.Usage & CRYPTO_KEY_USE_DECRYPT) == 0U ||
-		pNonce == nullptr || pTag == nullptr ||
-		(pMsg == nullptr && Len != 0U) || (pOut == nullptr && Len != 0U) ||
-		(pAad == nullptr && AadLen != 0U) ||
-		!CcmParamsOk(NonceLen, TagLen, AadLen, Len))
-	{
-		return CRYPTO_STATUS_UNSUPPORTED;
-	}
-	if (!AesOpBegin())
-	{
-		// Refused bracket: fail closed and retryable.
-		if (Len > 0U) memset(pOut, 0, Len);
-		return CRYPTO_STATUS_BUSY;
-	}
-
-	const uint8_t *key = Key.Plain.pData;
-	size_t l = 15U - NonceLen;
-	uint8_t a[AES_BLOCK], stream[AES_BLOCK];
-	bool ok = true;
-
-	// Recover the plaintext with the CTR stream, counters A1 onward.
-	for (size_t idx = 0, ctr = 1; ok && idx < Len; idx += AES_BLOCK, ctr++)
-	{
-		memset(a, 0, sizeof(a));
 		a[0] = (uint8_t)(l - 1U);
-		memcpy(&a[1], pNonce, NonceLen);
-		for (size_t i = 0; i < l; i++)
+		memcpy(a + 1U, pNonce, NonceLen);
+		ok = !Encrypt || CcmMacTag(key, pNonce, NonceLen, pAad, AadLen,
+			pMsg, Len, TagLen, tag);
+	}
+
+	for (idx = 0U, ctr = gcm ? 2U : 1U; ok && idx < Len; idx += count, ctr++)
+	{
+		value = ctr;
+		for (i = 0U; i < l; i++)
 		{
-			a[15U - i] = (uint8_t)(ctr >> (8U * i));
+			a[15U - i] = (uint8_t)value;
+			value >>= 8U;
 		}
 		ok = AesEcbEncrypt(key, a, stream);
-		size_t count = Len - idx < AES_BLOCK ? Len - idx : AES_BLOCK;
-		for (size_t i = 0; ok && i < count; i++)
+		count = Len - idx < 16U ? Len - idx : 16U;
+		for (i = 0U; ok && i < count; i++)
 		{
 			pOut[idx + i] = pMsg[idx + i] ^ stream[i];
 		}
 	}
-
-	// Recompute the seal tag over the recovered plaintext and compare in
-	// constant time.
-	uint8_t tag[AES_BLOCK];
-	if (ok)
+	if (ok && !gcm && !Encrypt)
 	{
-		ok = CcmMacTag(key, pNonce, NonceLen, pAad, AadLen, pOut, Len,
-					   TagLen, tag);
+		ok = CcmMacTag(key, pNonce, NonceLen, pAad, AadLen, pOut, Len, TagLen, tag);
 	}
 	AesOpEnd();
-
-	if (ok)
+	if (ok && gcm && Encrypt)
 	{
-		uint8_t diff = 0U;
-		for (size_t i = 0; i < TagLen; i++)
-		{
-			diff |= (uint8_t)(tag[i] ^ pTag[i]);
-		}
-		ok = diff == 0U;
+		GcmTag(h, mask, pAad, AadLen, pOut, Len, tag);
+	}
+	if (ok && !gcm && !Encrypt)
+	{
+		ok = AesTagEqual(tag, pTag, TagLen);
+	}
+	if (ok && Encrypt)
+	{
+		memcpy(pNewTag, tag, TagLen);
+	}
+	if (!ok)
+	{
+		if (Len > 0U) memset(pOut, 0, Len);
+		if (Encrypt) memset(pNewTag, 0, TagLen);
 	}
 	AesWipe(tag, sizeof(tag));
 	AesWipe(a, sizeof(a));
 	AesWipe(stream, sizeof(stream));
-	if (!ok && Len > 0U)
-	{
-		memset(pOut, 0, Len);
-	}
+	AesWipe(h, sizeof(h));
+	AesWipe(mask, sizeof(mask));
 	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
+CRYPTO_STATUS CryptoAesModes::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+	const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+	const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+{
+	return Aead(true, Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len,
+		pOut, nullptr, pTag, TagLen);
+}
+
+CRYPTO_STATUS CryptoAesModes::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+	const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+	const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
+{
+	return Aead(false, Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len,
+		pOut, pTag, nullptr, TagLen);
 }
 
 int CryptoAesModes::SelfTest()

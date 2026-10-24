@@ -40,6 +40,7 @@ SOFTWARE.
 #include <new>
 
 #include "crypto/crypto_uecc.h"
+#include "crypto/crypto.h"
 #include "uECC.h"
 #include "uECC_vli.h"
 
@@ -161,6 +162,18 @@ static CRYPTO_STATUS UeccEnd(void)
 	return status;
 }
 
+static void UeccKeyReset(KeyAgreeEngine *pOwner, void *pKeyCtx)
+{
+	if (pOwner != nullptr)
+	{
+		pOwner->KeyReset(pKeyCtx);
+	}
+	else if (pKeyCtx != nullptr)
+	{
+		UeccWipe(pKeyCtx, sizeof(CryptoUecc::KeyCtx));
+	}
+}
+
 void CryptoUecc::KeyReset(void *pKeyCtx)
 {
 	if (pKeyCtx != nullptr)
@@ -169,7 +182,7 @@ void CryptoUecc::KeyReset(void *pKeyCtx)
 	}
 }
 
-CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
+static CRYPTO_STATUS UeccKeyGen(RngEngine *pRng, KeyAgreeEngine *pOwner, CRYPTO_CURVE Curve, void *pKeyCtx,
 								 uint8_t *pPubKey)
 {
 	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPubKey == nullptr)
@@ -177,15 +190,15 @@ CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	KeyCtx *pk = (KeyCtx *)pKeyCtx;
-	KeyReset(pk);
+	CryptoUecc::KeyCtx *pk = (CryptoUecc::KeyCtx *)pKeyCtx;
+	UeccKeyReset(pOwner, pk);
 	memset(pPubKey, 0, 64U);
 
-	if (vpRng == nullptr || !vpRng->IsSecure())
+	if (pRng == nullptr || !pRng->IsSecure())
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	CRYPTO_STATUS begin = UeccBegin(vpRng, true);
+	CRYPTO_STATUS begin = UeccBegin(pRng, true);
 	if (begin != CRYPTO_STATUS_OK)
 	{
 		return begin;
@@ -195,7 +208,7 @@ CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 	CRYPTO_STATUS rngStatus = UeccEnd();
 	if (ok != 1)
 	{
-		KeyReset(pk);
+		UeccKeyReset(pOwner, pk);
 		memset(pPubKey, 0, 64U);
 		return rngStatus == CRYPTO_STATUS_BUSY ? CRYPTO_STATUS_BUSY :
 			CRYPTO_STATUS_FAIL;
@@ -204,7 +217,7 @@ CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 	return CRYPTO_STATUS_OK;
 }
 
-CRYPTO_STATUS CryptoUecc::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+static CRYPTO_STATUS UeccKeyImport(KeyAgreeEngine *pOwner, CRYPTO_CURVE Curve, void *pKeyCtx,
 									const uint8_t *pPrivKey, uint8_t *pPubKey)
 {
 	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
@@ -213,8 +226,8 @@ CRYPTO_STATUS CryptoUecc::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	KeyCtx *pk = (KeyCtx *)pKeyCtx;
-	KeyReset(pk);
+	CryptoUecc::KeyCtx *pk = (CryptoUecc::KeyCtx *)pKeyCtx;
+	UeccKeyReset(pOwner, pk);
 	if (pPubKey != nullptr)
 	{
 		memset(pPubKey, 0, 64U);
@@ -248,7 +261,7 @@ CRYPTO_STATUS CryptoUecc::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
 	return CRYPTO_STATUS_OK;
 }
 
-CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
+static CRYPTO_STATUS UeccAgree(RngEngine *pRng, KeyAgreeEngine *pOwner, CRYPTO_CURVE Curve, void *pKeyCtx,
 								const uint8_t *pPeerPubKey,
 								uint8_t *pSharedX, bool bKeepKey)
 {
@@ -258,13 +271,13 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	KeyCtx *pk = (KeyCtx *)pKeyCtx;
+	CryptoUecc::KeyCtx *pk = (CryptoUecc::KeyCtx *)pKeyCtx;
 	if (!pk->bKeyValid)
 	{
 		memset(pSharedX, 0, 32U);
 		return CRYPTO_STATUS_FAIL;
 	}
-	CRYPTO_STATUS begin = UeccBegin(vpRng, true);
+	CRYPTO_STATUS begin = UeccBegin(pRng, true);
 	if (begin != CRYPTO_STATUS_OK)
 	{
 		memset(pSharedX, 0, 32U);
@@ -272,7 +285,7 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 		{
 			return CRYPTO_STATUS_BUSY;
 		}
-		KeyReset(pk);
+		UeccKeyReset(pOwner, pk);
 		return CRYPTO_STATUS_FAIL;
 	}
 
@@ -305,7 +318,7 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	{
 		if (!bKeepKey)
 		{
-			KeyReset(pk);
+			UeccKeyReset(pOwner, pk);
 		}
 		return CRYPTO_STATUS_OK;
 	}
@@ -313,11 +326,11 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	{
 		return CRYPTO_STATUS_BUSY;
 	}
-	KeyReset(pk);
+	UeccKeyReset(pOwner, pk);
 	return CRYPTO_STATUS_FAIL;
 }
 
-CRYPTO_STATUS CryptoUecc::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
+static CRYPTO_STATUS UeccSign(RngEngine *pRng, CRYPTO_CURVE Curve, const CryptoKey &Key,
 							   const uint8_t *pHash, size_t HashLen,
 							   uint8_t *pSig)
 {
@@ -329,11 +342,11 @@ CRYPTO_STATUS CryptoUecc::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if (vpRng == nullptr || !vpRng->IsSecure())
+	if (pRng == nullptr || !pRng->IsSecure())
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	CRYPTO_STATUS begin = UeccBegin(vpRng, true);
+	CRYPTO_STATUS begin = UeccBegin(pRng, true);
 	if (begin != CRYPTO_STATUS_OK)
 	{
 		return begin;
@@ -506,4 +519,135 @@ CryptoUeccVerify *CryptoUeccVerifyCreate(void *pMem, size_t MemSize)
 	CryptoUeccVerify *p = new (pMem) CryptoUeccVerify();
 	p->Enable();
 	return p;
+}
+
+// Generic software defaults share primitives; they do not instantiate CryptoUecc.
+CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
+								 uint8_t *pPubKey)
+{
+	return UeccKeyGen(vpRng, this, Curve, pKeyCtx, pPubKey);
+}
+
+
+CRYPTO_STATUS CryptoUecc::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+									const uint8_t *pPrivKey, uint8_t *pPubKey)
+{
+	return UeccKeyImport(this, Curve, pKeyCtx, pPrivKey, pPubKey);
+}
+
+
+CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
+								const uint8_t *pPeerPubKey,
+								uint8_t *pSharedX, bool bKeepKey)
+{
+	return UeccAgree(vpRng, this, Curve, pKeyCtx, pPeerPubKey, pSharedX, bKeepKey);
+}
+
+
+CRYPTO_STATUS CryptoUecc::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
+							   const uint8_t *pHash, size_t HashLen,
+							   uint8_t *pSig)
+{
+	return UeccSign(vpRng, Curve, Key, pHash, HashLen, pSig);
+}
+
+
+__attribute__((weak)) CRYPTO_STATUS Crypto::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKey)
+{
+	if (!vbValid)
+	{
+		if (pPubKey != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pPubKey, 64U);
+		}
+		if (pKeyCtx != nullptr)
+		{
+			KeyReset(pKeyCtx);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return UeccKeyGen(this, nullptr, Curve, pKeyCtx, pPubKey);
+}
+
+__attribute__((weak)) CRYPTO_STATUS Crypto::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+			const uint8_t *pPrivKey, uint8_t *pPubKey)
+{
+	if (!vbValid)
+	{
+		if (pPubKey != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pPubKey, 64U);
+		}
+		if (pKeyCtx != nullptr)
+		{
+			KeyReset(pKeyCtx);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return UeccKeyImport(nullptr, Curve, pKeyCtx, pPrivKey, pPubKey);
+}
+
+__attribute__((weak)) CRYPTO_STATUS Crypto::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
+			const uint8_t *pPeerPubKey, uint8_t *pSharedX, bool bKeepKey)
+{
+	if (!vbValid)
+	{
+		if (pSharedX != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pSharedX, 32U);
+		}
+		if (pKeyCtx != nullptr)
+		{
+			KeyReset(pKeyCtx);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return UeccAgree(this, nullptr, Curve, pKeyCtx, pPeerPubKey, pSharedX, bKeepKey);
+}
+
+__attribute__((weak)) CRYPTO_STATUS Crypto::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
+			const uint8_t *pHash, size_t HashLen, uint8_t *pSig)
+{
+	if (!vbValid)
+	{
+		if (pSig != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pSig, 64U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return UeccSign(this, Curve, Key, pHash, HashLen, pSig);
+}
+
+__attribute__((weak)) CRYPTO_STATUS Crypto::Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
+			const uint8_t *pHash, size_t HashLen, const uint8_t *pSig)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return UeccVerify(Curve, pPubKey, pHash, HashLen, pSig);
+}
+
+__attribute__((weak)) void Crypto::KeyReset(void *pKeyCtx)
+{
+	UeccKeyReset(nullptr, pKeyCtx);
+}
+
+__attribute__((weak)) size_t Crypto::KeyCtxSize() const
+{
+	if (!vbValid)
+	{
+		return 0U;
+	}
+	return sizeof(CryptoUecc::KeyCtx);
+}
+
+__attribute__((weak)) size_t Crypto::KeyCtxAlign() const
+{
+	if (!vbValid)
+	{
+		return 1U;
+	}
+	return alignof(CryptoUecc::KeyCtx);
 }

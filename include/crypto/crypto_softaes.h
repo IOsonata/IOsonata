@@ -91,6 +91,11 @@ public:
 	int SelfTest() override;
 
 private:
+	CRYPTO_STATUS Aead(bool Encrypt, CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+		const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+		const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag,
+		uint8_t *pNewTag, size_t TagLen);
+
 	// CCM authentication: the CBC-MAC over B0, AAD and message, masked with
 	// the A0 keystream. Runs inside the caller's AesOpBegin/AesOpEnd bracket.
 	bool CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce, size_t NonceLen,

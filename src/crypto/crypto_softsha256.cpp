@@ -35,6 +35,7 @@ SOFTWARE.
 #include <new>
 
 #include "crypto/crypto_softsha256.h"
+#include "crypto/crypto.h"
 
 static const uint32_t s_Sha256K[64] = {
 	0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,
@@ -173,7 +174,7 @@ static void Sha256Final(Sha256Ctx *c, uint8_t Digest[32])
 	}
 }
 
-CRYPTO_STATUS CryptoSoftSha256Hash::Hash(CRYPTO_HASH_ALG Alg,
+static CRYPTO_STATUS SoftHash(CRYPTO_HASH_ALG Alg,
 									 const uint8_t *pMsg, size_t Len,
 									 uint8_t *pDigest)
 {
@@ -195,17 +196,17 @@ CRYPTO_STATUS CryptoSoftSha256Hash::Hash(CRYPTO_HASH_ALG Alg,
 static_assert(sizeof(Sha256Ctx) <= CRYPTO_HASHCTX_MAX,
 			  "SHA-256 context exceeds the common consumer storage");
 
-size_t CryptoSoftSha256Hash::HashCtxSize() const
+static size_t SoftHashCtxSize()
 {
 	return sizeof(Sha256Ctx);
 }
 
-size_t CryptoSoftSha256Hash::HashCtxAlign() const
+static size_t SoftHashCtxAlign()
 {
 	return alignof(Sha256Ctx);
 }
 
-CRYPTO_STATUS CryptoSoftSha256Hash::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+static CRYPTO_STATUS SoftHashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
 {
 	if (Alg != CRYPTO_HASH_SHA256 || pHashCtx == nullptr ||
 		((uintptr_t)pHashCtx & (alignof(Sha256Ctx) - 1U)) != 0U)
@@ -216,7 +217,7 @@ CRYPTO_STATUS CryptoSoftSha256Hash::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx
 	return CRYPTO_STATUS_OK;
 }
 
-CRYPTO_STATUS CryptoSoftSha256Hash::HashUpdate(void *pHashCtx,
+static CRYPTO_STATUS SoftHashUpdate(void *pHashCtx,
 										   const uint8_t *pMsg, size_t Len)
 {
 	if (!Sha256CtxLive(pHashCtx) || (pMsg == nullptr && Len != 0U))
@@ -230,7 +231,7 @@ CRYPTO_STATUS CryptoSoftSha256Hash::HashUpdate(void *pHashCtx,
 	return CRYPTO_STATUS_OK;
 }
 
-CRYPTO_STATUS CryptoSoftSha256Hash::HashFinal(void *pHashCtx, uint8_t *pDigest)
+static CRYPTO_STATUS SoftHashFinal(void *pHashCtx, uint8_t *pDigest)
 {
 	if (!Sha256CtxLive(pHashCtx) || pDigest == nullptr)
 	{
@@ -405,4 +406,106 @@ CryptoSoftSha256Hash *CryptoSoftSha256HashCreate(void *pMem, size_t MemSize)
 	CryptoSoftSha256Hash *p = new (pMem) CryptoSoftSha256Hash();
 	p->Enable();
 	return p;
+}
+
+// Both public objects share the implementation without constructing an adapter.
+CRYPTO_STATUS CryptoSoftSha256Hash::Hash(CRYPTO_HASH_ALG Alg,
+									 const uint8_t *pMsg, size_t Len,
+									 uint8_t *pDigest)
+{
+	return SoftHash(Alg, pMsg, Len, pDigest);
+}
+
+
+size_t CryptoSoftSha256Hash::HashCtxSize() const
+{
+	return SoftHashCtxSize();
+}
+
+
+size_t CryptoSoftSha256Hash::HashCtxAlign() const
+{
+	return SoftHashCtxAlign();
+}
+
+
+CRYPTO_STATUS CryptoSoftSha256Hash::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+{
+	return SoftHashInit(Alg, pHashCtx);
+}
+
+
+CRYPTO_STATUS CryptoSoftSha256Hash::HashUpdate(void *pHashCtx,
+										   const uint8_t *pMsg, size_t Len)
+{
+	return SoftHashUpdate(pHashCtx, pMsg, Len);
+}
+
+
+CRYPTO_STATUS CryptoSoftSha256Hash::HashFinal(void *pHashCtx, uint8_t *pDigest)
+{
+	return SoftHashFinal(pHashCtx, pDigest);
+}
+
+
+__attribute__((weak)) CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
+{
+	if (!vbValid)
+	{
+		if (pDigest != nullptr && Alg == CRYPTO_HASH_SHA256)
+		{
+			Sha256Wipe(pDigest, 32U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return SoftHash(Alg, pMsg, Len, pDigest);
+}
+
+__attribute__((weak)) size_t Crypto::HashCtxSize() const
+{
+	if (!vbValid)
+	{
+		return 0U;
+	}
+	return SoftHashCtxSize();
+}
+
+__attribute__((weak)) size_t Crypto::HashCtxAlign() const
+{
+	if (!vbValid)
+	{
+		return 1U;
+	}
+	return SoftHashCtxAlign();
+}
+
+__attribute__((weak)) CRYPTO_STATUS Crypto::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return SoftHashInit(Alg, pHashCtx);
+}
+
+__attribute__((weak)) CRYPTO_STATUS Crypto::HashUpdate(void *pHashCtx, const uint8_t *pMsg, size_t Len)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return SoftHashUpdate(pHashCtx, pMsg, Len);
+}
+
+__attribute__((weak)) CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
+{
+	if (!vbValid)
+	{
+		if (pDigest != nullptr)
+		{
+			Sha256Wipe(pDigest, 32U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return SoftHashFinal(pHashCtx, pDigest);
 }
