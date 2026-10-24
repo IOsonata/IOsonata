@@ -105,11 +105,11 @@ public:
 // Target-specific factories may replace these weak software defaults.
 // Link the target's strong implementations into the executable.
 #if !defined(CRYPTO_TEST_AES_TYPE) || !defined(CRYPTO_TEST_RNG_TYPE)
-__attribute__((weak)) CryptoSoftAes *CryptoTestAesCreate(void *pMem, size_t MemSize)
+extern "C" __attribute__((weak)) CryptoSoftAes *CryptoTestAesCreate(void *pMem, size_t MemSize)
 {
 	return CryptoSoftAesCreate(pMem, MemSize);
 }
-__attribute__((weak)) RngEngine *CryptoTestRngCreate(void *pMem, size_t MemSize)
+extern "C" __attribute__((weak)) RngEngine *CryptoTestRngCreate(void *pMem, size_t MemSize)
 {
 	if (pMem == nullptr || MemSize < sizeof(EngineTestRng))
 	{
