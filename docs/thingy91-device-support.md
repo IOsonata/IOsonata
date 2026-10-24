@@ -25,7 +25,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | nRF5340 application/network cores | IPC/radio | Existing generic nRF5340 support; board integration required |
 | nRF7002 Wi-Fi | SPI/coexistence | Development paused; existing experimental code retained; do not continue until explicitly resumed |
 | ADXL367 low-power accelerometer | I2C | `accel_adxl367` integrated in the nRF91x1 library; Thingy:91 X sensor-rail-aware test project added; hardware validation pending |
-| BMI270 six-axis IMU | SPI | Existing `ag_bmi270` |
+| BMI270 six-axis IMU | SPI | `ag_bmi270` repaired and covered by production-driver host regression; Thingy:91 X SPI3 test project added; hardware validation pending |
 | BMM350 magnetometer | I2C | `mag_bmm350` corrected to Bosch ODR/OTP compensation and 24-bit decoding; host regression and Thingy:91 X test project added; hardware validation pending |
 | BME688 environmental sensor | I2C | Existing `tphg_bme680` forced-mode path is register-compatible (BME68x ID `0x61`, I2C `0x76/0x77`); Thingy:91 X power-aware compatibility test added; parallel/sequential gas modes are not exposed; hardware validation pending |
 | GD25LE255E 256 Mbit flash | SPI | Existing universal external-memory interface; GD25LE255E 32 MiB/4-byte-address configuration and read-only Thingy:91 X test added; hardware validation pending |
@@ -33,6 +33,17 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | nPM1300 charger/fuel/LED PMIC | I2C | `pm_npm1300` software complete with production-driver host tests; Thingy:91 X hardware validation pending |
 | RGB LEDs, button, external load switch | GPIO/PMIC | Shared Thingy:91 X board helper and board test added; hardware validation pending |
 | Battery/USB power and shared sensor rails | PMIC/GPIO | Shared Thingy:91 X helper covers BUCK2/GPIO2, LDO1/LDO2, PMIC IRQ and nPM6001 READY; hardware validation pending |
+
+
+## BMI270 Thingy:91 X integration
+
+- BMI270 shares SPI3 with the external flash and nRF7002. SPI3 uses SCK P0.13, MOSI P0.14 and MISO P0.15.
+- The shared chip-select order is external flash P0.12 = CS0, nRF7002 P0.17 = CS1 and BMI270 P0.10 = CS2. The BMI270 test keeps all three CS outputs configured and inactive except the selected device.
+- BMI270 INT2 reaches nRF9120 P0.06. The initial board test uses polling, so interrupt validation is left for hardware testing.
+- Sensor power is supplied through nPM1300 LDO2 using the common Thingy:91 X board helper.
+- The production driver uses the BMI270 24-bit sensor-time counter when no external IOsonata timer is supplied, reads the live FIFO length registers, parses Bosch headerless FIFO order (gyro then accel), and converts die temperature to the generic C x 100 representation.
+- Test project: `ARM/Nordic/nRF91/nRF91x1/exemples/BMI270Test`.
+- Host regression: `python3 tests/sensors/run_bmi270.py`.
 
 ## Integration rules
 
