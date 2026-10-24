@@ -14,9 +14,6 @@ public:
 	bool Enable() override { return CryptoSoftAes::Enable(); }
 	void Disable() override { CryptoSoftAes::Disable(); }
 	void Reset() override {}
-	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
-						 const CryptoKey &Key, const uint8_t *pIv, size_t IvLen,
-						 const uint8_t *pIn, size_t Len, uint8_t *pOut) override;
 protected:
 	bool AesOpBegin() override;
 	void AesOpEnd() override;

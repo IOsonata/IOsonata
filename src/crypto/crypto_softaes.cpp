@@ -234,6 +234,36 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
+	// Encryption uses the virtual block primitive, allowing a hardware
+	// subclass to accelerate ECB without duplicating the cipher loop.
+	if (Alg == CRYPTO_CIPHER_ECB && bEncrypt != 0)
+	{
+		if ((Len & (AES_BLOCK - 1U)) != 0U)
+		{
+			return CRYPTO_STATUS_FAIL;
+		}
+		if (!AesOpBegin())
+		{
+			if (Len > 0U) memset(pOut, 0, Len);
+			return CRYPTO_STATUS_BUSY;
+		}
+		CRYPTO_STATUS status = CRYPTO_STATUS_OK;
+		for (size_t off = 0; off < Len; off += AES_BLOCK)
+		{
+			if (!AesEcbEncrypt(Key.Plain.pData, pIn + off, pOut + off))
+			{
+				status = CRYPTO_STATUS_FAIL;
+				break;
+			}
+		}
+		AesOpEnd();
+		if (status != CRYPTO_STATUS_OK && Len > 0U)
+		{
+			memset(pOut, 0, Len);
+		}
+		return status;
+	}
+
 	uint8_t rk[AES128_RK_WORDS * 4U];
 	AesKeyExpand(Key.Plain.pData, rk);
 	CRYPTO_STATUS st = CRYPTO_STATUS_OK;

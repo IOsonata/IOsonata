@@ -97,44 +97,6 @@ bool CryptoEcbNrf53::AesEcbEncrypt(const uint8_t Key[16],
 	return ok;
 }
 
-CRYPTO_STATUS CryptoEcbNrf53::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
-									const CryptoKey &Key,
-									const uint8_t *pIv, size_t IvLen,
-									const uint8_t *pIn, size_t Len, uint8_t *pOut)
-{
-	if (Alg != CRYPTO_CIPHER_ECB || bEncrypt == 0)
-	{
-		return CryptoSoftAes::Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
-	}
-	if (Key.Type != CRYPTO_KEY_AES_128 || Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
-		Key.Plain.pData == nullptr || Key.Plain.Len != 16 ||
-		(Key.Usage & CRYPTO_KEY_USE_ENCRYPT) == 0 || pIn == nullptr ||
-		pOut == nullptr || (Len & 15U) != 0)
-	{
-		return CRYPTO_STATUS_UNSUPPORTED;
-	}
-	if (!AesOpBegin())
-	{
-		memset(pOut, 0, Len);
-		return CRYPTO_STATUS_BUSY;
-	}
-	CRYPTO_STATUS status = CRYPTO_STATUS_OK;
-	for (size_t off = 0; off < Len; off += 16)
-	{
-		if (!AesEcbEncrypt(Key.Plain.pData, pIn + off, pOut + off))
-		{
-			status = CRYPTO_STATUS_FAIL;
-			break;
-		}
-	}
-	AesOpEnd();
-	if (status != CRYPTO_STATUS_OK)
-	{
-		memset(pOut, 0, Len);
-	}
-	return status;
-}
-
 CryptoEcbNrf53 *CryptoEcbNrf53Create(void *pMem, size_t MemSize)
 {
 	if (pMem == nullptr || MemSize < sizeof(CryptoEcbNrf53) ||
