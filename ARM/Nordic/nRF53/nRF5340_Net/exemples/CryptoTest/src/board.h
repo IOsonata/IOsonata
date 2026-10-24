@@ -2,13 +2,6 @@
 #define __BOARD_H__
 
 #include "coredev/iopincfg.h"
-#include "crypto_ecb_nrf53.h"
-
-// Hardware AES; software P-256 comparison and deterministic test RNG.
-#define CRYPTO_TEST_AES_TYPE CryptoEcbNrf53
-#define CRYPTO_TEST_AES_MEMSIZE CRYPTO_ECB_NRF53_MEMSIZE
-#define CRYPTO_TEST_AES_CREATE(m, s) CryptoEcbNrf53Create((m), (s))
-
 #define UART_DEVNO 0
 #define UART_RX_PINOP 1
 #define UART_TX_PINOP 1

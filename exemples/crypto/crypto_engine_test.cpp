@@ -102,6 +102,31 @@ public:
 	bool IsSecure() const override { return true; }
 };
 
+// Target-specific factories may replace these weak software defaults.
+// Link the target's strong implementations into the executable.
+#if defined(CRYPTO_TEST_TARGET_OVERRIDE)
+__attribute__((weak)) CryptoSoftAes *CryptoTestAesCreate(void *pMem, size_t MemSize)
+{
+	return CryptoSoftAesCreate(pMem, MemSize);
+}
+__attribute__((weak)) RngEngine *CryptoTestRngCreate(void *pMem, size_t MemSize)
+{
+	if (pMem == nullptr || MemSize < sizeof(EngineTestRng))
+	{
+		return nullptr;
+	}
+	EngineTestRng *pRng = new (pMem) EngineTestRng();
+	pRng->Enable();
+	return pRng;
+}
+#define CRYPTO_TEST_AES_TYPE CryptoSoftAes
+#define CRYPTO_TEST_AES_MEMSIZE 512U
+#define CRYPTO_TEST_AES_CREATE(m, s) CryptoTestAesCreate((m), (s))
+#define CRYPTO_TEST_RNG_TYPE RngEngine
+#define CRYPTO_TEST_RNG_MEMSIZE 256U
+#define CRYPTO_TEST_RNG_CREATE(m, s) CryptoTestRngCreate((m), (s))
+#endif
+
 #ifndef CRYPTO_TEST_AES_TYPE
 #define CRYPTO_TEST_AES_TYPE		CryptoSoftAes
 #define CRYPTO_TEST_AES_MEMSIZE		CRYPTO_SOFTAES_MEMSIZE
@@ -180,9 +205,9 @@ static UART s_Uart;
 
 static int s_pass, s_fail;
 
-alignas(CRYPTO_TEST_AES_TYPE) static uint8_t s_HwAesMem[CRYPTO_TEST_AES_MEMSIZE];
+alignas(16) static uint8_t s_HwAesMem[CRYPTO_TEST_AES_MEMSIZE];
 alignas(CRYPTO_TEST_PKA_TYPE) static uint8_t s_HwPkaMem[CRYPTO_TEST_PKA_MEMSIZE];
-alignas(CRYPTO_TEST_RNG_TYPE) static uint8_t s_HwRngMem[CRYPTO_TEST_RNG_MEMSIZE];
+alignas(16) static uint8_t s_HwRngMem[CRYPTO_TEST_RNG_MEMSIZE];
 alignas(CryptoSoftAes) static uint8_t s_SwAesMem[CRYPTO_SOFTAES_MEMSIZE];
 alignas(CryptoUecc) static uint8_t s_SwPkaMem[CRYPTO_UECC_MEMSIZE];
 alignas(EngineTestRng) static uint8_t s_SwRngMem[sizeof(EngineTestRng)];
