@@ -1048,6 +1048,12 @@ public:
 	bool SetLoadSwitchMode(size_t Index);
 	bool SetLoadSwitchEnabled(size_t Index, bool Enable);
 	bool GpioState(size_t Index, bool &High);
+	bool ReadStatus(uint8_t &Charger, uint8_t &ChargerErrors,
+		uint8_t &Vbus, uint8_t &Ntc, uint8_t &ResetCause);
+	bool ClearErrorLog();
+	bool SetBuckPwm(size_t Index, bool Enable);
+	bool SetBuckRetention(size_t Index, int32_t mVolt);
+	bool SetGpioMode(size_t Index, uint8_t Mode);
 
 	/**
 	 * @brief	Get battery level
