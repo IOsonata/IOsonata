@@ -5,7 +5,8 @@
 
 The default test is board-safe: it attaches without changing charger or
 regulator state, configures only the NTC ADC selector, then reports PMIC,
-battery-voltage, current, temperature, BUCK, load-switch and board GPIO status.
+battery-voltage, current, temperature, SOC, BUCK, load-switch and board GPIO status.
+Fuel gauging uses the LP803448 model for the original Thingy:91 X battery.
 Programming tests are compile-time guarded and disabled by default.
 
 @license
@@ -18,7 +19,9 @@ Copyright (c) 2026 I-SYST inc.
 #include "coredev/i2c.h"
 #include "coredev/uart.h"
 #include "idelay.h"
-#include "pwrmgnt/pm_npm1300.h"
+#include "pwrmgnt/pm_npm1300_fuel.h"
+#include "coredev/timer.h"
+#include "lp803448_model.h"
 
 #include "board.h"
 #include "thingy91x_board.h"
@@ -85,9 +88,12 @@ static const BatProfile_t s_BatteryProfile = {
 	.ThermResistor = 10,
 };
 
+static const TimerCfg_t s_TimerCfg = {0, TIMER_CLKSRC_DEFAULT, 32768, 7, NULL, false};
+
 UART g_Uart;
 I2C g_I2c;
-PmnPM1300 g_Pmic;
+PmnPM1300FuelGauge g_Pmic;
+Timer g_SampleTimer;
 
 static void PrintStatus()
 {
@@ -100,9 +106,10 @@ static void PrintStatus()
 	uint8_t buckStatus;
 	uint8_t ldswStatus;
 	int32_t batteryMv;
-	int32_t currentUa;
 	int32_t temperature;
 	bool npm6001Ready;
+	int32_t currentUa;
+	uint16_t level;
 
 	if (!g_Pmic.ReadStatus(charger, chargerErrors, vbus, ntc, resetCause))
 	{
@@ -111,8 +118,9 @@ static void PrintStatus()
 	}
 
 	batteryMv = g_Pmic.Voltage();
-	currentUa = g_Pmic.Current();
 	temperature = g_Pmic.Temperature();
+	currentUa = g_Pmic.Current();
+	level = g_Pmic.Level();
 
 	g_Uart.printf("charger=0x%02x errors=0x%02x vbus=0x%02x ntc=0x%02x reset=0x%02x\r\n",
 		(unsigned)charger, (unsigned)chargerErrors, (unsigned)vbus,
@@ -125,7 +133,10 @@ static void PrintStatus()
 		g_Uart.printf("IBAT=%ld uA (positive=discharge)\r\n", (long)currentUa);
 	else
 		g_Uart.printf("IBAT unavailable\r\n");
-	g_Uart.printf("SOC unavailable: no portable battery estimator configured\r\n");
+	if (level != UINT16_MAX)
+		g_Uart.printf("SOC=%u.%u%%\r\n", level / 10U, level % 10U);
+	else
+		g_Uart.printf("SOC unavailable\r\n");
 
 	if (g_Pmic.ReadBuckStatus(0, voltageCode, buckStatus))
 		g_Uart.printf("BUCK1 code=%u status=0x%02x\r\n",
@@ -141,6 +152,7 @@ static void PrintStatus()
 
 int main()
 {
+	bool fuelStarted;
 	FuelGaugeCfg_t fuelCfg = {
 		NPM1300_I2C_7BITS_ADDR,
 		s_BatteryProfile,
@@ -182,11 +194,22 @@ int main()
 	}
 #endif
 
+	if (!g_SampleTimer.Init(s_TimerCfg) || !g_SampleTimer.Enable())
+	{
+		g_Uart.printf("Sample timer initialization failed\r\n");
+		return 1;
+	}
+
+	fuelStarted = g_Pmic.StartFuelGauge(battery_model, g_SampleTimer.mSecond());
 	PrintStatus();
 
 	while (1)
 	{
-		msDelay(5000);
+		msDelay(1000);
+		if (!fuelStarted)
+			fuelStarted = g_Pmic.StartFuelGauge(battery_model, g_SampleTimer.mSecond());
+		else
+			g_Pmic.UpdateFuelGauge(g_SampleTimer.mSecond());
 		PrintStatus();
 	}
 
