@@ -10,7 +10,6 @@ CXX = os.environ.get("CXX", "g++")
 SOURCES = [
     ROOT / "tests/sensors/bmm350_test.cpp",
     ROOT / "src/device.cpp",
-    ROOT / "src/sensors/sensor.cpp",
     ROOT / "src/sensors/mag_sensor.cpp",
     ROOT / "src/sensors/mag_bmm350.cpp",
 ]
