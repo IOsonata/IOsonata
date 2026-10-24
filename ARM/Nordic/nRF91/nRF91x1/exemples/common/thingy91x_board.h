@@ -23,6 +23,14 @@ Copyright (c) 2026 I-SYST inc.
 #define THINGY91X_BUCK2_INDEX				1
 #define THINGY91X_EXP_BOARD_ENABLE_PORT			0
 #define THINGY91X_EXP_BOARD_ENABLE_PIN			3
+#define THINGY91X_BUTTON1_PORT				0
+#define THINGY91X_BUTTON1_PIN				26
+#define THINGY91X_LED_RED_PORT				0
+#define THINGY91X_LED_RED_PIN				29
+#define THINGY91X_LED_GREEN_PORT				0
+#define THINGY91X_LED_GREEN_PIN				31
+#define THINGY91X_LED_BLUE_PORT				0
+#define THINGY91X_LED_BLUE_PIN				30
 
 bool Thingy91XPmicConfigure(PmnPM1300 &Pmic);
 int Thingy91XPmicInterruptEnable(PmnPM1300 &Pmic, int Priority);
@@ -32,5 +40,8 @@ bool Thingy91XNpm6001Ready(PmnPM1300 &Pmic, bool &Ready);
 bool Thingy91XSensorPower(PmnPM1300 &Pmic, bool Enable);
 void Thingy91XExpansionPowerInit(bool Enable);
 void Thingy91XExpansionPower(bool Enable);
+void Thingy91XUserIoInit();
+void Thingy91XLedSet(bool Red, bool Green, bool Blue);
+bool Thingy91XButtonPressed();
 
 #endif
