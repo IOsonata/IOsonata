@@ -1138,6 +1138,7 @@ public:
 	virtual void IrqHandler();
 
 private:
+	uint32_t vNtcBeta = 0;
 };
 
 extern "C" {
