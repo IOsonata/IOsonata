@@ -28,7 +28,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | BMI270 six-axis IMU | SPI | `ag_bmi270` repaired; production-driver host regression and Thingy:91 X SPI3 test project added; hardware validation pending |
 | BMM350 magnetometer | I2C | `mag_bmm350` corrected to Bosch ODR/OTP compensation and 24-bit decoding; host regression and Thingy:91 X test project added; hardware validation pending |
 | BME688 environmental sensor | I2C | Existing `tphg_bme680` forced-mode path is register-compatible (BME68x ID `0x61`, I2C `0x76/0x77`); Thingy:91 X power-aware compatibility test added; parallel/sequential gas modes are not exposed; hardware validation pending |
-| GD25LE255E 256 Mbit flash | SPI | Existing universal external-memory interface; GD25LE255E 32 MiB/4-byte-address configuration and read-only Thingy:91 X test added; hardware validation pending |
+| GD25LE255E 256 Mbit flash | SPI | Existing generic storage drivers; Thingy:91 X projects link the shared raw-flash, FatFs, LittleFS and standard file I/O demos; hardware validation pending |
 | nPM6001 regulator PMIC | I2C | `pm_npm6001`: BUCK3 enable, PWM/HYS control, DAC voltage programming and thermal/BUCK3-OC monitoring; Thingy:91 X test project added; hardware validation pending |
 | nPM1300 charger/fuel/LED PMIC | I2C | `pm_npm1300` software complete with production-driver host tests; Thingy:91 X hardware validation pending |
 | RGB LEDs, button, external load switch | GPIO/PMIC | Shared Thingy:91 X board helper and board test added; hardware validation pending |
@@ -105,7 +105,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 
 - BMM350 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/BMM350Test`.
 - ADXL367 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/ADXL367Test`.
-- GD25LE255E validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/GD25LE255ETest`; read-only by default.
+- External flash examples: `FlashMemoryDemo`, `FlashFatFsDemo`, `FlashLittleFsDemo` and `FlashStdFSDemo` under `ARM/Nordic/nRF91/nRF91x1/exemples`.
 - ADXL372 validation project: `ARM/Nordic/nRF91/nRF9160/exemples/ADXL372Test`.
 
 
@@ -115,5 +115,16 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - Shared board helpers are linked as source files in the Eclipse projects. C and C++ Debug/Release include paths must contain `../../../common` relative to the build directory.
 - `python3 tests/pwrmgnt/run_npm1300.py` and `python3 tests/sensors/run_bmm350.py` exercise the production drivers at O0/O2 with address and undefined-behavior sanitizers.
 - `python3 tests/pwrmgnt/run_board_pmic.py` checks ADP5360 and nPM6001 initialization, enable/disable, bus failures and software reset. ADP5360 enable/disable controls charging; nPM6001 enable/disable controls BUCK3. Reset invalidates software initialization without resetting hardware or switching board rails; call Init again before use.
-- Host syntax checks cover ADP5360Test, ADXL372Test, BH1749Test, Thingy91BoardTest, ADXL367Test, BMM350Test, GD25LE255ETest, Thingy91XBoardTest, nPM1300Test and nPM6001Test using the delay shim. These checks do not replace ARM compilation, linking or board testing.
+- Host syntax checks cover ADP5360Test, ADXL372Test, BH1749Test, Thingy91BoardTest, ADXL367Test, BMM350Test, Thingy91XBoardTest, nPM1300Test and nPM6001Test using the delay shim. These checks do not replace ARM compilation, linking or board testing.
 - BME688Test retains its external Bosch BSEC dependency. Board power/GPIO and peripheral hardware validation remain pending.
+
+## Thingy:91 X storage examples
+
+- Import the `ioc` projects for `FlashMemoryDemo`, `FlashFatFsDemo`, `FlashLittleFsDemo` or `FlashStdFSDemo`. Build the matching Debug/Release `IOsonata_nRF91x1` library first.
+- Each project links its existing source from `exemples/storage`; no chip-specific application or driver is required. The filesystem projects also link the required FatFs or LittleFS sources already in the repository.
+- `common/thingy91x_storage_board.h` defines SPI3 and all three chip selects, GD25LE255E JEDEC ID `0x1960C8`, 32 MiB capacity, 4 KiB sectors, 256-byte pages and four-byte addressing. The generic drivers perform initialization and address-mode selection.
+- `FlashMemoryDemo` uses the existing Nvm/NvmDiskIO path and erases the entire flash before sector read/write checks. The filesystem demos use the existing FlashDiskIO path.
+- FatFs and LittleFS format the flash when mounting fails and then write/read test files. They use the same flash area, so switching filesystem demos can replace its contents.
+- Run `FlashLittleFsDemo` once before `FlashStdFSDemo` to create the LittleFS volume. The standard file I/O demo mounts that volume, writes a file, closes it, reopens it and verifies the contents. It reports a mount failure without formatting.
+- Console output uses UART0 on P0.01 TX / P0.00 RX: 1 Mbaud for FlashMemoryDemo and 115200 baud for the filesystem demos. The nRF5340 must provide the matching UART bridge if using USB for the console.
+- Host C++ syntax and project-link checks passed. ARM compilation/linking and board validation remain pending.

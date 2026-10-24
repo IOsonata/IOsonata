@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>GD25LE255ETest</name>
+	<name>FlashStdFSDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -36,9 +36,19 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/main.cpp</name>
+			<name>src/flash_stdfs_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/flash_stdfs_demo.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/lfs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/littlefs/lfs.c</locationURI>
+		</link>
+		<link>
+			<name>src/lfs_util.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/littlefs/lfs_util.c</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>
