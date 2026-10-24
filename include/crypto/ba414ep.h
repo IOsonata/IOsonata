@@ -163,7 +163,7 @@ public:
 	void Reset() override;
 
 	// Operation lock for the multi-transfer computation. bBusy in the
-	// interface is per transfer; this is per operation, owned by the device.
+	// interface is per transfer; Silex devices share operation exclusion.
 	bool OpAcquire();
 	void OpRelease();
 
@@ -191,7 +191,6 @@ private:
 								  const uint8_t Scalar[32], uint8_t Result[64],
 								  bool bValidatePoint);
 
-	atomic_flag vOpBusy;
 	bool vbReady;
 	bool vbIntrfEnabled;
 };

@@ -43,6 +43,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "crypto/ba414ep.h"
+#include "crypto/silex_internal.h"
 
 // Diagnostic tracing. Define BA414EP_TRACE_ENABLE to trace every operation.
 //#define BA414EP_TRACE_ENABLE
@@ -284,6 +285,7 @@ bool Ba414ep::PkAbortAndReset()
 	{
 		vbValid = false;
 		s_bPkQuarantined = true;
+		OpRelease();
 		return false;
 	}
 	OpRelease();
@@ -439,17 +441,16 @@ Ba414ep::Ba414ep()
 	vbValid = false;
 	vbReady = false;
 	vbIntrfEnabled = false;
-	atomic_flag_clear(&vOpBusy);
 }
 
 bool Ba414ep::OpAcquire()
 {
-	return atomic_flag_test_and_set(&vOpBusy) == false;
+	return SilexOpAcquire();
 }
 
 void Ba414ep::OpRelease()
 {
-	atomic_flag_clear(&vOpBusy);
+	SilexOpRelease();
 }
 
 bool Ba414ep::WaitIkIdle()
@@ -607,6 +608,7 @@ void Ba414ep::Reset()
 	else
 	{
 		s_bPkQuarantined = true;
+		OpRelease();
 	}
 }
 

@@ -1,5 +1,8 @@
 #include "crypto/cryptomaster.h"
 #include "crypto/crypto.h"
+#ifdef CRACEN_RNG_MODEL
+#include "crypto_rng_nrf.h"
+#endif
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <cassert>
@@ -76,7 +79,13 @@ public:
 	bool Enable() override { vbValid = s_Cm.Init(&s_Intrf); return vbValid; }
 	bool IsSecure() const override { return true; }
 	CRYPTO_STATUS Random(uint8_t *out, size_t len) override
-	{ return RAND_bytes(out, len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL; }
+	{
+#ifdef CRACEN_RNG_MODEL
+		return CryptoRngNrfInstance()->Random(out, len);
+#else
+		return RAND_bytes(out, len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+#endif
+	}
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG a, int e, const CryptoKey &k, const uint8_t *iv,
 		size_t il, const uint8_t *in, size_t n, uint8_t *out) override
 	{ return s_Cm.Cipher(a,e,k,iv,il,in,n,out); }
@@ -138,4 +147,5 @@ int main()
 	s_Cm.Reset();
 	assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_OK);
 	printf("CryptoMaster: %u DMA blocks, cross-instance exclusion, timeout and quarantine recovery passed\n", s_Blocks);
+	return 0;
 }

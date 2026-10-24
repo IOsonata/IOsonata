@@ -56,7 +56,6 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <stddef.h>
-#include <errno.h>
 #include <string.h>
 
 #include "nrf.h"
@@ -66,7 +65,8 @@ SOFTWARE.
 #include "crypto/ba414ep.h"
 #include "crypto/cryptomaster.h"
 
-#include "nrfx_cracen.h"
+#include "hal/nrf_cracen_rng.h"
+#include "crypto/silex_internal.h"
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 #include "nrf_sdm.h"
 #include "nrf_soc.h"
@@ -88,13 +88,14 @@ SOFTWARE.
 
 //---------------------------------------------------------------------------
 // Per die state. There is one CRACEN core, so these describe the hardware
-// rather than a transaction: where its engines sit, and whether the DRBG has
-// been started.
+// rather than a transaction: where its engines sit.
 //---------------------------------------------------------------------------
 static volatile uint8_t *s_pPkeRegBase;
 static volatile uint8_t *s_pCmRegBase;
 static volatile uint8_t *s_pMemBase;
-static bool s_bDrbgInit;
+#ifndef CRACEN_RNG_POLL_LIMIT
+#define CRACEN_RNG_POLL_LIMIT 1000000U
+#endif
 
 // Which engine a transfer addresses and where in it are per transaction, so
 // they live in CracenIntrfXfer_t behind pDevData.
@@ -139,6 +140,10 @@ static bool CracenStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 
 	if (DevAddr == CRACEN_ADDR_RNG)
 	{
+		if (atomic_load(&pIntrf->EnCnt) == 0 || !SilexOpAcquire())
+		{
+			return false;
+		}
 		xfer->SelDevAddr = DevAddr;
 		xfer->bRngXfer = true;
 
@@ -266,6 +271,152 @@ static int CracenSdRandFill(uint8_t *pBuff, int BuffLen)
 #endif
 }
 
+// TRNG configuration follows nrfx_cracen.c v4.5.0, with bounded waits and
+// failure propagation. Its license applies to the adapted configuration below.
+/*
+ * Copyright (c) 2025 - 2026, Nordic Semiconductor ASA
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived from this
+ *    software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+// Use the RNG's own conditioner. No CryptoMaster DMA or CTR-DRBG runs here.
+static void CracenTrngStart()
+{
+	nrf_cracen_rng_control_t control = {};
+	control.soft_reset = true;
+	nrf_cracen_rng_control_set(NRF_CRACENCORE, &control);
+#if NRF_CRACEN_RNG_HAS_IDLE_TIMER
+	nrf_cracen_rng_off_timer_set(NRF_CRACENCORE, 0U);
+#endif
+#if NRF_CRACEN_HAS_RECOMMENDED_CONF
+	nrf_cracen_rng_clk_div_set(NRF_CRACENCORE,
+		CRACENCORE_RNGCONTROL_SAMPLINGPERIOD_SAMPLINGPERIOD_Recommended);
+	nrf_cracen_rng_init_wait_val_set(NRF_CRACENCORE,
+		CRACENCORE_RNGCONTROL_WARMUPPERIOD_WARMUPPERIOD_Recommended);
+	control.number_128_blocks = CRACENCORE_RNGCONTROL_CONTROL_NB128BITBLOCKS_Recommended;
+#if NRF_CRACEN_RNG_HAS_FIFOWRITESTARTUP
+	control.fifo_write_startup = CRACENCORE_RNGCONTROL_CONTROL_FIFOWRITESTARTUP_Recommended;
+#endif
+#if NRF_CRACEN_RNG_HAS_REPEATTHRESHOLD
+	nrf_cracen_rng_repeatthreshold_set(NRF_CRACENCORE,
+		CRACENCORE_RNGCONTROL_REPEATTHRESHOLD_REPEATTHRESHOLD_Recommended);
+#endif
+#if NRF_CRACEN_RNG_HAS_PROPTESTCUTOFF
+	nrf_cracen_rng_proptestcutoff_set(NRF_CRACENCORE,
+		CRACENCORE_RNGCONTROL_PROPTESTCUTOFF_PROPTESTCUTOFF_Recommended);
+#endif
+#if NRF_CRACEN_RNG_HAS_DISABLEOSC
+	nrf_cracen_rng_disableosc_set(NRF_CRACENCORE, 0,
+		CRACENCORE_RNGCONTROL_DISABLEOSC_DISABLEOSC_Recommended);
+#endif
+#if NRF_CRACEN_RNG_HAS_COOLDOWNPERIOD
+	nrf_cracen_rng_cooldown_period_set(NRF_CRACENCORE,
+		CRACENCORE_RNGCONTROL_COOLDOWNPERIOD_COOLDOWNPERIOD_Recommended);
+#endif
+#else
+	nrf_cracen_rng_clk_div_set(NRF_CRACENCORE, TRNG_CLK_DIV);
+	nrf_cracen_rng_init_wait_val_set(NRF_CRACENCORE, 512U);
+	control.number_128_blocks = 4U;
+#endif
+#if NRF_CRACEN_RNG_HAS_BLENDING
+	control.blending_method = NRF_CRACEN_RNG_BLENDING_CONCATENATION;
+#endif
+	control.soft_reset = false;
+	control.enable = true;
+	nrf_cracen_rng_control_set(NRF_CRACENCORE, &control);
+}
+
+static bool CracenTrngWord(uint32_t *pWord)
+{
+	uint32_t polls;
+	nrf_cracen_rng_fsm_state_t state;
+	for (polls = 0; polls < CRACEN_RNG_POLL_LIMIT; polls++)
+	{
+		state = nrf_cracen_rng_fsm_state_get(NRF_CRACENCORE);
+		if (state == NRF_CRACEN_RNG_FSM_STATE_ERROR)
+		{
+			return false;
+		}
+		if (state != NRF_CRACEN_RNG_FSM_STATE_RESET &&
+			state != NRF_CRACEN_RNG_FSM_STATE_STARTUP &&
+			nrf_cracen_rng_fifo_level_get(NRF_CRACENCORE) != 0U)
+		{
+			*pWord = nrf_cracen_rng_fifo_get(NRF_CRACENCORE);
+			return nrf_cracen_rng_fsm_state_get(NRF_CRACENCORE) != NRF_CRACEN_RNG_FSM_STATE_ERROR;
+		}
+	}
+	return false;
+}
+
+static int CracenTrngRead(uint8_t *pBuff, int BuffLen)
+{
+	nrf_cracen_rng_control_t control = {};
+	uint32_t word = 0U;
+	int count = 0;
+	unsigned i;
+	bool ok = true;
+	CracenTrngStart();
+	// The first four words seed the hardware conditioning function.
+	for (i = 0U; i < 4U && ok; i++)
+	{
+		ok = CracenTrngWord(&word);
+		if (ok)
+		{
+			nrf_cracen_rng_key_set(NRF_CRACENCORE, i, word);
+		}
+	}
+	while (count < BuffLen && ok)
+	{
+		ok = CracenTrngWord(&word);
+		if (ok)
+		{
+			for (i = 0U; i < 4U && count < BuffLen; i++, count++)
+			{
+				pBuff[count] = (uint8_t)(word >> (8U * i));
+			}
+		}
+	}
+	control.soft_reset = true;
+	nrf_cracen_rng_control_set(NRF_CRACENCORE, &control);
+	for (i = 0U; i < 4U; i++)
+	{
+		nrf_cracen_rng_key_set(NRF_CRACENCORE, i, 0U);
+	}
+	CryptoSecureWipe(&word, sizeof(word));
+	if (!ok)
+	{
+		CryptoSecureWipe(pBuff, (size_t)BuffLen);
+		return 0;
+	}
+	return count;
+}
+
 static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 {
 	CracenIntrfXfer_t *xfer = CracenXfer(pIntrf);
@@ -282,34 +433,7 @@ static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 			return CracenSdRandFill(pBuff, BuffLen);
 		}
 
-		int filled = BuffLen;
-		if (!s_bDrbgInit)
-		{
-			int rc = nrfx_cracen_init();
-			if (rc == 0 || rc == -EALREADY)
-			{
-				s_bDrbgInit = true;
-			}
-			else
-			{
-				filled = 0;
-			}
-		}
-		if (filled != 0 &&
-			nrfx_cracen_ctr_drbg_random_get(pBuff, (size_t)BuffLen) != 0)
-		{
-			filled = 0;
-		}
-
-		// The wrapped nrfx driver disables the RNG and CryptoMaster module
-		// bits as a side effect of every draw. Repair the power state the
-		// transport Enable established, at the one place the damage occurs.
-		if (atomic_load(&pIntrf->EnCnt) > 0)
-		{
-			NRF_CRACEN->ENABLE |= CRACEN_ENABLE_ALL_Msk;
-			__DMB();
-		}
-		return filled;
+		return CracenTrngRead(pBuff, BuffLen);
 	}
 
 	if (!xfer->bAddrLatched)
@@ -377,6 +501,7 @@ static void CracenStopRx(DevIntrf_t * const pIntrf)
 	if (xfer->bRngXfer)
 	{
 		xfer->bRngXfer = false;
+		SilexOpRelease();
 
 		return;
 	}
@@ -432,7 +557,7 @@ static bool CracenLoadPkeMicrocode(void)
 // Transport power, driven by the EnCnt reference count: the first engine
 // Enable powers the whole core (all three modules, the way the sdk-nrf
 // cracen_acquire does), the last Disable powers it off. Retained state
-// (microcode RAM, handover, DRBG) survives these cycles. NRF_CRACEN is the
+// (microcode RAM and handover) survives these cycles. NRF_CRACEN is the
 // Nordic wrapper and lives only here; the Silex engines never touch it.
 static void CracenCoreDisable(DevIntrf_t * const pIntrf)
 {
@@ -501,12 +626,6 @@ static void CracenReset(DevIntrf_t * const pIntrf)
 	}
 
 	xfer->bAddrLatched = false;
-	xfer->bRngXfer = false;
-
-	if ((mask & CRACEN_ENABLE_RNG_Msk) != 0U)
-	{
-		s_bDrbgInit = false;
-	}
 }
 static void CracenPowerOff(DevIntrf_t * const pIntrf)
 {
@@ -543,8 +662,6 @@ bool CracenIntrf::Init(void)
 	{
 		return false;
 	}
-
-	s_bDrbgInit = false;
 
 	memset(&vXfer, 0, sizeof(vXfer));
 	vXfer.pXferBase = s_pPkeRegBase;

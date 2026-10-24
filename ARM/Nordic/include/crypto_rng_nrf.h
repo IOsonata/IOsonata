@@ -7,7 +7,7 @@
 		It is security grade (IsSecure() returns true). The engine is a thin
 		policy object with no hardware knowledge; entropy is read through the
 		DeviceIntrf it is constructed on. On nRF54 parts that is CracenIntrf
-		(CTR-DRBG, or the SoftDevice entropy pool when an S115/S145 stack is
+		(conditioned TRNG, or the SoftDevice entropy pool when an S115/S145 stack is
 		enabled at run time). On nRF52/nRF53 it is RngPeriphIntrf over the RNG
 		peripheral registers, or the SoftDevice entropy pool when a stack is
 		enabled. The SoftDevice check is made inside the interface on every

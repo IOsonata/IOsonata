@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "idelay.h"
 #include "crypto/cryptomaster.h"
+#include "crypto/silex_internal.h"
 
 #ifndef __DMB
 #define __DMB()		((void)0)
@@ -48,7 +49,6 @@ SOFTWARE.
 #define CM_POLL_LIMIT	100000U
 
 static bool s_bCmQuarantined;
-static atomic_flag s_CmBusy = ATOMIC_FLAG_INIT;
 // DMA must never retain addresses into a returned stack frame after a fault.
 struct CmDmaStorage {
 	uint32_t Config;
@@ -62,12 +62,12 @@ static CmDmaStorage s_Dma;
 
 bool CryptoMaster::OpAcquire()
 {
-	return !atomic_flag_test_and_set(&s_CmBusy);
+	return SilexOpAcquire();
 }
 
 void CryptoMaster::OpRelease()
 {
-	atomic_flag_clear(&s_CmBusy);
+	SilexOpRelease();
 }
 
 static void CmWipe(void *pData, size_t Len)

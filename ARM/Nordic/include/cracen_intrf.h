@@ -14,7 +14,7 @@
 		so the interface keeps no cross-operation state. The base DeviceIntrf
 		supplies the per-transfer busy flag and the enable reference count
 		(the core is not powered down under an engine still using it); the
-		per-operation lock belongs to each engine device.
+		Silex engines and RNG share operation exclusion.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -60,8 +60,8 @@ SOFTWARE.
 /// One transaction's worth of state. It belongs to the instance, not to the
 /// file, the same way nRFSpiDev_t holds a transfer's buffer and index, and it
 /// is what pDevData points at. Which engine the transaction addresses and
-/// where in it are per transaction; the register bases and the DRBG state
-/// describe the die and stay in the implementation.
+/// where in it are per transaction; the register bases describe the die and
+/// stay in the implementation.
 typedef struct __Cracen_Intrf_Xfer {
 	volatile uint8_t	*pXferBase;		//!< Engine or memory the transfer addresses
 	uint32_t			SelDevAddr;		//!< The DevAddr that selected it
@@ -76,7 +76,7 @@ typedef struct __Cracen_Intrf_Xfer {
 /// One instance per die. The three crypto engines hold a pointer to it and go
 /// through StartTx/StopTx (or StartRx/StopRx) to acquire and release one
 /// transport transaction. Engine operation serialization remains in the
-/// individual engine object. Reset is address-selected: called inside a
+/// shared Silex operation lock. Reset is address-selected: called inside a
 /// StartTx/StopTx pair it power-cycles only the module of the latched
 /// DevAddr, so one engine recovers without disturbing the others.
 class CracenIntrf : public DeviceIntrf {

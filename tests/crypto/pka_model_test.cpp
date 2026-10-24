@@ -210,6 +210,10 @@ CryptoRngNrf *CryptoRngNrfInstance(void)
 
 class BaModel : public DeviceIntrf {
 public:
+	bool DenyReset = false;
+	bool StartTx(uint32_t) override { return !DenyReset; }
+	void StopTx() override {}
+	void Reset() override {}
 	DevIntrf_t Intrf = {};
 	uint8_t Ram[16 * 512] = {};
 	uint32_t Command = 0, Status = 0;
@@ -295,6 +299,7 @@ int main()
 {
 	CryptoCc3xx cc;
 	Ba414ep ba;
+	Ba414ep otherBa;
 	BaModel baIntrf;
 	CryptoUecc::KeyCtx key;
 	uint8_t priv[32], pub[64], secret[32], hash[32] = {}, sig[64];
@@ -353,6 +358,14 @@ int main()
 	check("BA414EP RNG removal reaches inherited signing",
 		ba.Sign(CRYPTO_CURVE_P256, descriptor, hash, sizeof(hash), sig) == CRYPTO_STATUS_UNSUPPORTED);
 	ba.SetRng(CryptoRngNrfInstance());
+	baIntrf.DenyReset = true;
+	ba.Reset();
+	check("BA414EP failed reset invalidates the engine", !ba.Valid());
+	check("BA414EP failed reset releases shared operation lock", otherBa.OpAcquire());
+	otherBa.OpRelease();
+	baIntrf.DenyReset = false;
+	ba.Reset();
+	check("BA414EP explicit reset recovers quarantine", ba.Valid());
 	ba.KeyReset(&key);
 	PkaVectors(&ba, &ba, &s_ReferencePka);
 	PkaSoak(&ba, &ba, &s_ReferencePka, &s_ReferencePka);

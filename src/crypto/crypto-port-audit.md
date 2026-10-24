@@ -23,7 +23,7 @@ A hardware peripheral listed as pending is not claimed as implemented.
 | nRF52840 | CC3xx AES-128/256, SHA-256/HMAC, P-256/RNG | Shared ARM AES/SHA CPU FIFO driver; board validation pending. |
 | nRF5340 network | Existing ECB-128/RNG | AES-256, SHA and P-256 software. |
 | nRF5340 application, nRF9160, nRF91x1 | CC3xx AES-128/256, SHA-256/HMAC, P-256/RNG | Same shared ARM driver and generic test as nRF52840; board validation pending. |
-| nRF54H20 application/network, nRF54L15, nRF54LM20x | Existing CryptoMaster/BA414EP/CRACEN RNG | CryptoMaster now accelerates AES-128/256 ECB/CBC/CTR in both directions. SHA, key import and ECDSA still use inherited software where no override exists. |
+| nRF54H20 application/network, nRF54L15, nRF54LM20x | CryptoMaster/BA414EP and conditioned CRACEN TRNG | AES-128/256 ECB/CBC/CTR in both directions. AES/PKE/RNG share operation exclusion. SHA, key import and ECDSA still use inherited software where no override exists. |
 | nRF54H20 RISC-V skeleton | Not a complete MCU library | No complete generic crypto integration; not equivalent to the Arm application/network libraries. |
 | RP2040 | Generic software | Ring-oscillator bits are not exposed as qualified secure entropy. |
 | RA4M1 (ioc and e2) | SCE5 AES-128/256 and TRNG | Inherited software SHA/P-256. Renesas startup, key-import and block primitives have bounded waits and fault propagation. Board validation pending. |
@@ -79,6 +79,15 @@ fixture is synthetic; displayed timing values are not measured performance.
 - Combined CC3xx AES/SHA/PKA model executes the production Nordic default binding;
   generic test plus CC3xx/BA414EP checks: 148 passed, 0 failed, 0 skipped at O0/O2
   with ASan/UBSan. OpenSSL supplies arithmetic; FIFO timing is modeled.
+- CRACEN TRNG transport models for nRF54L15, nRF54LM20 and nRF54H20:
+  unchanged generic test 101 passed, 0 failed, 0 skipped at O0/O2 with ASan/UBSan.
+  Tests cover startup/FIFO timeouts, health failure after partial output, key/output
+  clearing, next-call recovery, a 70001-byte draw, SoftDevice entropy success and
+  timeout, and operation exclusion across AES, PKE and RNG. Host OpenSSL supplies
+  the model entropy. These do not measure silicon entropy or performance.
+- BA414EP reset failure now releases operation exclusion while retaining engine
+  quarantine; explicit reset recovery is tested. Combined PKA checks now report
+  151 passed, 0 failed, 0 skipped at O0/O2 with ASan/UBSan.
 - Generic object and AES-256/OpenSSL regression tests.
 - Target object compile checks, including nRF52805/810 and STM32L4S9.
 
@@ -125,9 +134,21 @@ CryptoMaster DMA descriptors and block buffers now have static lifetime and a
 shared operation lock. Failed reset prevents reuse across all CryptoMaster
 instances. Descriptors remain intact until a successful explicit engine reset;
 caller output is cleared on failure. Host tests do not validate cache coherence
-on nRF54H20 or concurrent use by the separate nrfx CRACEN RNG implementation.
+on nRF54H20. CRACEN RNG no longer invokes nrfx CTR-DRBG or its CryptoMaster DMA:
+it reads the dedicated hardware conditioner with bounded waits, checks health
+before and after each word, and resets/wipes its own state after each draw.
+Silex AES, PKE and RNG operations share exclusion across objects. This lock is
+within one firmware image; it does not arbitrate another core's firmware or
+external code accessing CRACEN directly.
 
 - Arm CC312 runtime register description and AES/hash drivers in Nordic's TF-M
   mirror, commit `39329596a865299ff77a1f7036986ae3f8032bac`, under
   `lib/ext/cryptocell-312-runtime`: CPU DIN/DOUT access, AES control/key registers,
   SHA state and disabled hardware padding. The new driver starts no memory DMA.
+
+CRACEN TRNG configuration follows Nordic nrfx v4.5.0 `drivers/src/nrfx_cracen.c`
+and `hal/nrf_cracen_rng.h`, including recommended MCU parameters where present:
+https://github.com/nordicsemi/nrfx/blob/v4.5.0/drivers/src/nrfx_cracen.c
+The adapted configuration retains the Nordic BSD-3-Clause notice in the source.
+No new source file is needed in MCU library projects; the existing
+`cracen_intrf.cpp`, `cryptomaster.cpp` and `ba414ep.cpp` links are used.
