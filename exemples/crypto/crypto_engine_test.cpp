@@ -102,39 +102,8 @@ public:
 	bool IsSecure() const override { return true; }
 };
 
-// Target libraries provide the factories on hardware builds.  The functions
-// must remain unresolved in the application object for archive extraction.
-// Host and software-only builds use the reference implementations.
-extern "C" CryptoSoftAes *CryptoTestAesCreate(void *pMem, size_t MemSize);
-extern "C" RngEngine *CryptoTestRngCreate(void *pMem, size_t MemSize);
-
-#if !defined(NRF5340_XXAA_NETWORK)
-extern "C" __attribute__((weak)) CryptoSoftAes *CryptoTestAesCreate(void *pMem, size_t MemSize)
-{
-	return CryptoSoftAesCreate(pMem, MemSize);
-}
-extern "C" __attribute__((weak)) RngEngine *CryptoTestRngCreate(void *pMem, size_t MemSize)
-{
-	if (pMem == nullptr || MemSize < sizeof(EngineTestRng))
-	{
-		return nullptr;
-	}
-	EngineTestRng *pRng = new (pMem) EngineTestRng();
-	pRng->Enable();
-	return pRng;
-}
-#endif
-#ifndef CRYPTO_TEST_AES_TYPE
-#define CRYPTO_TEST_AES_TYPE CryptoSoftAes
-#define CRYPTO_TEST_AES_MEMSIZE 512U
-#define CRYPTO_TEST_AES_CREATE(m, s) CryptoTestAesCreate((m), (s))
-#endif
-#ifndef CRYPTO_TEST_RNG_TYPE
-#define CRYPTO_TEST_RNG_TYPE RngEngine
-#define CRYPTO_TEST_RNG_MEMSIZE 256U
-#define CRYPTO_TEST_RNG_CREATE(m, s) CryptoTestRngCreate((m), (s))
-#endif
-
+// Applications select their target engine in board.h. Software engines are
+// used when the board does not provide an implementation.
 #ifndef CRYPTO_TEST_AES_TYPE
 #define CRYPTO_TEST_AES_TYPE		CryptoSoftAes
 #define CRYPTO_TEST_AES_MEMSIZE		CRYPTO_SOFTAES_MEMSIZE
