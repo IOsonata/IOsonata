@@ -20,6 +20,7 @@ Copyright (c) 2026 I-SYST inc.
 #include "pwrmgnt/pm_npm6001.h"
 
 #include "board.h"
+#include "thingy91x_board.h"
 
 #define UART_FIFO_SIZE				CFIFO_MEMSIZE(256)
 #define NPM6001_READY_TIMEOUT_MS	100
@@ -103,14 +104,13 @@ int main()
 		return 1;
 	}
 
-	if (!g_MainPmic.Init(&g_I2c))
+	if (!g_MainPmic.Init(&g_I2c) || !Thingy91XPmicConfigure(g_MainPmic))
 	{
-		g_Uart.printf("nPM1300 interface initialization failed\r\n");
+		g_Uart.printf("nPM1300 board initialization failed\r\n");
 		return 1;
 	}
 
-	if (!g_MainPmic.SetLoadSwitchMode(NPM6001_ENABLE_NPM1300_LDSW) ||
-		!g_MainPmic.SetLoadSwitchEnabled(NPM6001_ENABLE_NPM1300_LDSW, true))
+	if (!Thingy91XNpm6001Power(g_MainPmic, true))
 	{
 		g_Uart.printf("nPM6001 ENABLE sequence failed\r\n");
 		return 1;
@@ -120,7 +120,7 @@ int main()
 
 	for (i = 0; i < NPM6001_READY_TIMEOUT_MS; i++)
 	{
-		if (!g_MainPmic.GpioState(NPM6001_READY_NPM1300_GPIO, ready))
+		if (!Thingy91XNpm6001Ready(g_MainPmic, ready))
 		{
 			g_Uart.printf("nPM6001 READY read failed\r\n");
 			return 1;

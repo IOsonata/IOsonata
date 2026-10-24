@@ -76,8 +76,9 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 
 - The PMIC is at I2C address `0x6B`.
 - nPM1300 GPIO3 is the PMIC interrupt output; on the nRF9151 it reaches P0.02. The generic driver does not hard-code this board selection.
-- BUCK2 is the main 3.3 V rail and is board-controlled by nPM1300 GPIO2. Non-destructive attachment does not change that control path.
+- BUCK2 is the main 3.3 V rail and is board-controlled by nPM1300 GPIO2. The nPM1300 driver exposes GPIO routing for BUCK enable/retention/PWM and load-switch enable instead of encoding this board policy in the driver.
 - LDO1 is used as the nPM6001 enable load switch. LDO2 is the sensor-domain load switch. nPM1300 GPIO4 reads nPM6001 READY.
+- `ARM/Nordic/nRF91/nRF91x1/exemples/common/thingy91x_board.*` centralizes these PMIC mappings, the nRF9151 P0.02 PMIC interrupt input and the P0.03 external-board 3.3 V enable. The nPM6001 and BME688 tests use the shared helper rather than duplicating rail sequences.
 - The board battery profile uses a 4.2 V termination target and a 675 mA nominal 0.5C charge request. The nPM1300 has a 2 mA charge-current step, so `SetCharge()` programs 674 mA and reports 674 mA as the actual setting.
 - Battery presence and state of charge remain unknown until a battery-specific host fuel-gauge model is integrated.
 - Hardware validation is pending.

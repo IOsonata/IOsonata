@@ -40,5 +40,15 @@
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/thingy91x_board.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/common/thingy91x_board.h</locationURI>
+		</link>
+		<link>
+			<name>src/thingy91x_board.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/common/thingy91x_board.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

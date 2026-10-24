@@ -258,6 +258,23 @@ bool PmnPM1300::SetLoadSwitchEnabled(size_t Index, bool Enable)
 	return WriteReg8(reg, 1);
 }
 
+bool PmnPM1300::SetLoadSwitchEnableGpio(size_t Index, int GpioIndex, bool Invert)
+{
+	uint16_t reg;
+	uint8_t value;
+
+	if (Index > 1 || GpioIndex < -1 || GpioIndex > 4 || Interface() == NULL)
+		return false;
+
+	reg = Index == 0 ? NPM1300_LDSW_LDSW1GPISEL_REG :
+		NPM1300_LDSW_LDSW2GPISEL_REG;
+	value = GpioIndex < 0 ? 0 : (uint8_t)(GpioIndex + 1);
+	if (GpioIndex >= 0 && Invert)
+		value |= NPM1300_LDSW_LDSW1GPISEL_LDSW1GPIINV_INVERTED;
+
+	return UpdateReg8(reg, 0x0F, value);
+}
+
 bool PmnPM1300::SetLoadSwitchSoftStart(size_t Index, uint32_t mA, bool Enable)
 {
 	uint8_t disableMask;
@@ -1000,6 +1017,53 @@ bool PmnPM1300::SetGpioMode(size_t Index, uint8_t Mode)
 		!SetGpioPull(Index, false, false))
 		return false;
 	return WriteReg8((uint16_t)(NPM1300_GPIOS_GPIOMODE_BASE_REG + Index), Mode);
+}
+
+bool PmnPM1300::SetBuckGpioControl(uint16_t Reg, size_t Index,
+	int GpioIndex, bool Invert)
+{
+	uint8_t shift;
+	uint8_t mask;
+	uint8_t value;
+
+	if (Index > 1 || GpioIndex < -1 || GpioIndex > 4 || Interface() == NULL)
+		return false;
+
+	shift = Index == 0 ? 0 : 3;
+	mask = (uint8_t)(7U << shift);
+	value = GpioIndex < 0 ? 0 : (uint8_t)((GpioIndex + 1) << shift);
+	if (Index == 0)
+	{
+		mask |= (1U << 6);
+		if (GpioIndex >= 0 && Invert)
+			value |= (1U << 6);
+	}
+	else
+	{
+		mask |= (1U << 7);
+		if (GpioIndex >= 0 && Invert)
+			value |= (1U << 7);
+	}
+
+	return UpdateReg8(Reg, mask, value);
+}
+
+bool PmnPM1300::SetBuckEnableGpio(size_t Index, int GpioIndex, bool Invert)
+{
+	return SetBuckGpioControl(NPM1300_BUCK_BUCKENCTRL_REG, Index,
+		GpioIndex, Invert);
+}
+
+bool PmnPM1300::SetBuckRetentionGpio(size_t Index, int GpioIndex, bool Invert)
+{
+	return SetBuckGpioControl(NPM1300_BUCK_BUCKVRETCTRL_REG, Index,
+		GpioIndex, Invert);
+}
+
+bool PmnPM1300::SetBuckPwmGpio(size_t Index, int GpioIndex, bool Invert)
+{
+	return SetBuckGpioControl(NPM1300_BUCK_BUCKPWMCTRL_REG, Index,
+		GpioIndex, Invert);
 }
 
 bool PmnPM1300::SetBuckPwm(size_t Index, bool Enable)

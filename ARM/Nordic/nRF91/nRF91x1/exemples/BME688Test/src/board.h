@@ -27,6 +27,5 @@ Copyright (c) 2026 I-SYST inc.
 #define I2C_SCL_PIN					8
 #define I2C_SCL_PINOP				1
 
-#define SENSOR_ENABLE_NPM1300_LDSW	1
 
 #endif

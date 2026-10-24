@@ -360,6 +360,25 @@ static void TestBuckLdoGpio()
 	assert((bus.vReg[NPM1300_BUCK_BUCKCTRL0_REG] & (1U << 3)) != 0);
 	assert(pm.SetBuckDischarge(1, false));
 	assert((bus.vReg[NPM1300_BUCK_BUCKCTRL0_REG] & (1U << 3)) == 0);
+
+	assert(pm.SetBuckEnableGpio(0, 2, false));
+	assert(bus.vReg[NPM1300_BUCK_BUCKENCTRL_REG] == 0x03);
+	assert(pm.SetBuckEnableGpio(1, 4, true));
+	assert(bus.vReg[NPM1300_BUCK_BUCKENCTRL_REG] == 0xAB);
+	assert(pm.SetBuckEnableGpio(0, -1, true));
+	assert(bus.vReg[NPM1300_BUCK_BUCKENCTRL_REG] == 0xA8);
+	assert(!pm.SetBuckEnableGpio(2, 0, false));
+	assert(!pm.SetBuckEnableGpio(0, -2, false));
+	assert(!pm.SetBuckEnableGpio(0, 5, false));
+
+	assert(pm.SetBuckRetentionGpio(0, 1, true));
+	assert(bus.vReg[NPM1300_BUCK_BUCKVRETCTRL_REG] == 0x42);
+	assert(pm.SetBuckPwmGpio(1, 0, false));
+	assert(bus.vReg[NPM1300_BUCK_BUCKPWMCTRL_REG] == 0x08);
+	bus.vFailReadReg = NPM1300_BUCK_BUCKPWMCTRL_REG;
+	assert(!pm.SetBuckPwmGpio(1, 1, false));
+	bus.vFailReadReg = 0xFFFF;
+
 	bus.vReg[NPM1300_BUCK_BUCK1VOUT_STATUS_REG] = 8;
 	bus.vReg[NPM1300_BUCK_BUCKSTATUS_REG] = 0x0C;
 	assert(pm.ReadBuckStatus(0, voltage, status));
@@ -377,6 +396,19 @@ static void TestBuckLdoGpio()
 	assert(pm.SetLoadSwitchEnabled(1, false));
 	assert(bus.WriteCount(NPM1300_LDSW_TASKLDSW1_SET_REG) == 1);
 	assert(bus.WriteCount(NPM1300_LDSW_TASKLDSW2_CLR_REG) == 1);
+
+	assert(pm.SetLoadSwitchEnableGpio(0, 3, true));
+	assert(bus.vReg[NPM1300_LDSW_LDSW1GPISEL_REG] == 0x0C);
+	assert(pm.SetLoadSwitchEnableGpio(1, 4, false));
+	assert(bus.vReg[NPM1300_LDSW_LDSW2GPISEL_REG] == 0x05);
+	assert(pm.SetLoadSwitchEnableGpio(0, -1, true));
+	assert(bus.vReg[NPM1300_LDSW_LDSW1GPISEL_REG] == 0);
+	assert(!pm.SetLoadSwitchEnableGpio(2, 0, false));
+	assert(!pm.SetLoadSwitchEnableGpio(0, -2, false));
+	assert(!pm.SetLoadSwitchEnableGpio(0, 5, false));
+	bus.vFailWriteReg = NPM1300_LDSW_LDSW2GPISEL_REG;
+	assert(!pm.SetLoadSwitchEnableGpio(1, 1, false));
+	bus.vFailWriteReg = 0xFFFF;
 
 	bus.vReg[NPM1300_LDSW_LDSWCONFIG_REG] = 0x80;
 	assert(pm.SetLoadSwitchSoftStart(0, 25, true));

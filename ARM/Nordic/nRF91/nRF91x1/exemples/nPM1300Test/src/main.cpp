@@ -21,6 +21,7 @@ Copyright (c) 2026 I-SYST inc.
 #include "pwrmgnt/pm_npm1300.h"
 
 #include "board.h"
+#include "thingy91x_board.h"
 
 #define UART_FIFO_SIZE	CFIFO_MEMSIZE(256)
 
@@ -126,7 +127,7 @@ static void PrintStatus()
 			(unsigned)voltageCode, (unsigned)buckStatus);
 	if (g_Pmic.ReadLoadSwitchStatus(ldswStatus))
 		g_Uart.printf("LDSW status=0x%02x\r\n", (unsigned)ldswStatus);
-	if (g_Pmic.GpioState(NPM1300_NPM6001_READY_GPIO, npm6001Ready))
+	if (Thingy91XNpm6001Ready(g_Pmic, npm6001Ready))
 		g_Uart.printf("GPIO4 nPM6001_READY=%u\r\n", npm6001Ready ? 1U : 0U);
 }
 
@@ -165,9 +166,8 @@ int main()
 #endif
 
 #if NPM1300_TEST_PROGRAM_RAILS
-	if (g_Pmic.SetVout(1, 3300, 0) != 3300 ||
-		!g_Pmic.SetLoadSwitchMode(NPM1300_SENSOR_ENABLE_LDSW) ||
-		!g_Pmic.SetLoadSwitchEnabled(NPM1300_SENSOR_ENABLE_LDSW, true))
+	if (g_Pmic.SetVout(THINGY91X_BUCK2_INDEX, 3300, 0) != 3300 ||
+		!Thingy91XSensorPower(g_Pmic, true))
 	{
 		g_Uart.printf("rail programming failed\r\n");
 		return 1;

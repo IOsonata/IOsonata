@@ -27,10 +27,6 @@ Copyright (c) 2026 I-SYST inc.
 #define I2C_SCL_PIN					8
 #define I2C_SCL_PINOP				1
 
-#define NPM1300_IRQ_GPIO			3
-#define NPM1300_NPM6001_READY_GPIO	4
-#define NPM1300_NPM6001_ENABLE_LDSW	0
-#define NPM1300_SENSOR_ENABLE_LDSW	1
 
 /* Destructive programming is disabled for the board-safe default test. */
 #define NPM1300_TEST_PROGRAM_CHARGER	0

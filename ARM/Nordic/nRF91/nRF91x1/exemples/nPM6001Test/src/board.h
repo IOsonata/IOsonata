@@ -27,8 +27,6 @@ Copyright (c) 2026 I-SYST inc.
 #define I2C_SCL_PIN					8
 #define I2C_SCL_PINOP				1
 
-#define NPM6001_READY_NPM1300_GPIO	4
-#define NPM6001_ENABLE_NPM1300_LDSW	0
 
 /* Leave voltage programming disabled for the board-safe default test. */
 #define NPM6001_TEST_SET_VOLTAGE		0

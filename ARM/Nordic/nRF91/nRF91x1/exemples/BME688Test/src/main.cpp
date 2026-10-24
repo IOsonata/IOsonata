@@ -23,6 +23,7 @@ Copyright (c) 2026 I-SYST inc.
 #include "sensors/tphg_bme680.h"
 
 #include "board.h"
+#include "thingy91x_board.h"
 
 #define UART_FIFO_SIZE			CFIFO_MEMSIZE(256)
 
@@ -123,9 +124,8 @@ int main()
 		return 1;
 	}
 
-	if (!g_Pmic.Init(&g_I2c) ||
-		!g_Pmic.SetLoadSwitchMode(SENSOR_ENABLE_NPM1300_LDSW) ||
-		!g_Pmic.SetLoadSwitchEnabled(SENSOR_ENABLE_NPM1300_LDSW, true))
+	if (!g_Pmic.Init(&g_I2c) || !Thingy91XPmicConfigure(g_Pmic) ||
+		!Thingy91XSensorPower(g_Pmic, true))
 	{
 		g_Uart.printf("Sensor power enable failed\r\n");
 		return 1;

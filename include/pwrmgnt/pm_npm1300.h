@@ -1045,6 +1045,7 @@ public:
 	bool SetLdoVoltage(size_t Index, int32_t mVolt);
 	bool SetLoadSwitchMode(size_t Index);
 	bool SetLoadSwitchEnabled(size_t Index, bool Enable);
+	bool SetLoadSwitchEnableGpio(size_t Index, int GpioIndex, bool Invert);
 	bool SetLoadSwitchSoftStart(size_t Index, uint32_t mA, bool Enable);
 	bool SetLoadSwitchDischarge(size_t Index, bool Enable);
 	bool ReadLoadSwitchStatus(uint8_t &Status);
@@ -1059,6 +1060,9 @@ public:
 	bool SetBuckPfm(size_t Index, bool Enable);
 	bool SetBuckRetention(size_t Index, int32_t mVolt);
 	bool SetBuckDischarge(size_t Index, bool Enable);
+	bool SetBuckEnableGpio(size_t Index, int GpioIndex, bool Invert);
+	bool SetBuckRetentionGpio(size_t Index, int GpioIndex, bool Invert);
+	bool SetBuckPwmGpio(size_t Index, int GpioIndex, bool Invert);
 	bool ReadBuckStatus(size_t Index, uint8_t &VoltageCode, uint8_t &Status);
 
 	bool SetInputCurrentLimit(uint32_t mA);
@@ -1113,6 +1117,7 @@ private:
 	bool ReadAdc(uint16_t TaskReg, uint8_t EventMask, uint16_t MsbReg,
 		uint8_t LsbShift, uint16_t &Code);
 	bool SetTerminationVoltage(uint16_t Reg, int32_t mVolt);
+	bool SetBuckGpioControl(uint16_t Reg, size_t Index, int GpioIndex, bool Invert);
 
 	uint32_t vNtcBeta;
 	uint32_t vInputCurrentLimit;
