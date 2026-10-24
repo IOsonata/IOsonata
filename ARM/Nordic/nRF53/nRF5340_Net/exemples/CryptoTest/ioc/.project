@@ -40,10 +40,5 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/crypto_engine_test.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/crypto_test_target_nrf53.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/crypto_test_target_nrf53.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>
