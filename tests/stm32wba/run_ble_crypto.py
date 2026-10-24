@@ -339,7 +339,7 @@ def main():
                             "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                             "-I" + str(tmp), "-I" + str(ROOT / "include"),
                             str(tmp / "test.cpp"),
-                            str(ROOT / "src/crypto/crypto_softaes.cpp"),
+                            str(ROOT / "src/crypto/crypto_aes_modes.cpp"),
                             str(ROOT / "src/crypto/crypto_aes_soft.cpp"),
                             "-o", str(exe)], check=True)
             subprocess.run([str(exe)], check=True)

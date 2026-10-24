@@ -134,7 +134,7 @@ $(SMP_CORE_OBJ): $(ROOT)/src/bluetooth/bt_smp.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(SMP_CPPFLAGS) $(SMP_CORE_DEFINES) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
 
-$(SMP_AES_OBJ): $(ROOT)/src/crypto/crypto_softaes.cpp $(HEADERS)
+$(SMP_AES_OBJ): $(ROOT)/src/crypto/crypto_aes_modes.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
 

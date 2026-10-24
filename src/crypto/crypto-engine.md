@@ -124,7 +124,7 @@ consumer is curve-blind and key-blind:
 | `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/crypto_uecc.cpp` | Software P-256 (micro-ecc): ECDH and ECDSA. Uses `RngGet` for `KeyGen`/`Sign`; `Verify` needs no RNG. Software fallback on any part. |
 | `Ba414ep` | `KeyAgreeEngine` | `src/crypto/ba414ep.cpp`, `ARM/Nordic/src/ba414ep_nrfx.cpp` | Hardware P-256 on the Silex BA414EP public-key accelerator (Nordic CRACEN). nRF54L15 / nRF54H20. Microcode-free, fixed-function; no vendor blob. |
 | `CryptoCc3xx` | `KeyAgreeEngine` | `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 on the Arm CryptoCell CC3xx PKA. nRF52840 (CC310). Self-contained register-level driver; the target header `crypto_cc3xx.h` supplies the register base and enable/disable. |
-| `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_softaes.cpp` | Software AES-128 (FIPS-197) and AES-CMAC. The software base of the symmetric interfaces: a hardware AES block overrides `Cipher`, and the inherited software CMAC then runs over that hardware AES through the virtual `Cipher` call. |
+| `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_aes_modes.cpp` | Software AES-128 (FIPS-197) and AES-CMAC. The software base of the symmetric interfaces: a hardware AES block overrides `Cipher`, and the inherited software CMAC then runs over that hardware AES through the virtual `Cipher` call. |
 | `CryptoMaster` | `CipherEngine`, `MacEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128 on the Silex CryptoMaster (BA411e) block. Overrides `Cipher`; CMAC is the inherited software core over the hardware cipher. |
 | `CryptoSoftSha256` | `HashEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4). Unkeyed digest; serves DFU image verification and any hashing consumer. |
 | `CryptoSoftRng` | `RngEngine` | `src/crypto/crypto_softrng.cpp` | Software PRNG base. Statistical use only; not a security random source. |
@@ -189,7 +189,7 @@ appending an interface or an algorithm value, never by renumbering existing ones
 | `include/crypto/icrypto.h` | Crypto interfaces: `CryptoEngine` and its operation interfaces, the algorithm and operation enums, the asynchronous completion handling, `CryptoKey`, `RngGet`, `CryptoSecureWipe`, and the P-256 helper declarations. |
 | `src/crypto/crypto_p256.cpp` | Generic P-256 math: constant-time byte helpers, scalar and field range checks, and the ladder scalar regularization (`P256RegularizeScalar`, `P256RegularBit`). Exports functions only; the curve point arithmetic stays in each engine. |
 | `src/crypto/crypto_uecc.cpp` | Software P-256 engine (micro-ecc): ECDH and ECDSA. |
-| `src/crypto/crypto_softaes.cpp` | Software AES-128 engine: cipher and CMAC. |
+| `src/crypto/crypto_aes_modes.cpp` | Software AES-128 engine: cipher and CMAC. |
 | `src/crypto/cryptomaster.cpp` | Hardware AES engine on the Silex CryptoMaster (BA411e). |
 | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 engine. |
 | `src/crypto/crypto_softrng.cpp` | Software PRNG base (statistical). |

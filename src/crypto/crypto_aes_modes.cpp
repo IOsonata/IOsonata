@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	crypto_softaes.cpp
+@file	crypto_aes_modes.cpp
 
-@brief	Software AES-128 cipher and CMAC engine.
+@brief	AES modes, authentication algorithms and software engine adapter.
 
 		CMAC is computed through the virtual Cipher operation. A hardware subclass
 		therefore accelerates inherited CMAC without duplicating the MAC code. The
