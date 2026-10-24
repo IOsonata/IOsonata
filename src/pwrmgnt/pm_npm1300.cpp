@@ -115,6 +115,9 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	uint16_t addr;
 	uint8_t info[4];
+	const uint16_t intRegs[] = {0x008, 0x00C, 0x010, 0x018, 0x01C};
+	const uint8_t intMasks[] = {0x3f, 0x3e, 0x04, 0x3f, 0x0f};
+	size_t i;
 
 	if (pIntrf == NULL || pIntrf->Type() != DEVINTRF_TYPE_I2C ||
 		Cfg.DevAddr != NPM1300_I2C_7BITS_ADDR || Cfg.NbVout > 2 ||
@@ -158,7 +161,7 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	else if (SetCharge(PWRMGNT_CHARGE_TYPE_NORMAL, Cfg.VEndChrg, Cfg.ChrgCurr) == 0)
 		return false;
 
-	for (size_t i = 0; i < Cfg.NbVout; i++)
+	for (i = 0; i < Cfg.NbVout; i++)
 	{
 		if (SetVout(i, Cfg.pVout[i].mVout, Cfg.pVout[i].mAlimit) < 0)
 			return false;
@@ -169,9 +172,7 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 		addr = EndianCvt16(NPM1300_GPIOS_GPIOMODE1_REG);
 		if (!Write8((uint8_t *)&addr, 2, NPM1300_GPIOS_GPIOMODE_GPOIRQ))
 			return false;
-		const uint16_t intRegs[] = {0x008, 0x00C, 0x010, 0x018, 0x01C};
-		const uint8_t intMasks[] = {0x1f, 0x3e, 0x07, 0x3f, 0x0f};
-		for (size_t i = 0; i < sizeof(intRegs) / sizeof(intRegs[0]); i++)
+		for (i = 0; i < sizeof(intRegs) / sizeof(intRegs[0]); i++)
 		{
 			addr = EndianCvt16(intRegs[i]);
 			if (!Write8((uint8_t *)&addr, 2, intMasks[i]))
@@ -184,7 +185,6 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 bool PmnPM1300::Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	PowerMgnt * const pPwrMnt)
 {
-	(void)pPwrMnt;
 	if (!Init(pIntrf, Cfg.DevAddr))
 		return false;
 	vNtcBeta = Cfg.BatProf.ThermBetaConst;
@@ -446,8 +446,9 @@ void PmnPM1300::IrqHandler()
 	};
 	uint16_t addr;
 	uint8_t events;
+	size_t i;
 
-	for (size_t i = 0; i < sizeof(eventRegs) / sizeof(eventRegs[0]); i++)
+	for (i = 0; i < sizeof(eventRegs) / sizeof(eventRegs[0]); i++)
 	{
 		addr = EndianCvt16(eventRegs[i]);
 		if (Read((uint8_t *)&addr, 2, &events, 1) != 1 || events == 0)
@@ -460,7 +461,9 @@ void PmnPM1300::IrqHandler()
 		switch (i)
 		{
 		case 0:
-			if (events & 0x1d)
+			if (events & (NPM1300_MAIN_EVENTS_BCHARGER0SET_EVENTNTCWARM |
+				NPM1300_MAIN_EVENTS_BCHARGER0SET_EVENTNTCHOT |
+				NPM1300_MAIN_EVENTS_BCHARGER0SET_EVENTDIETEMPHIGH))
 				vpEvtHandler(this, PWRMGNT_EVT_OVER_HEAT);
 			break;
 		case 1:
@@ -525,10 +528,11 @@ bool PmnPM1300::ReadStatus(uint8_t &Charger, uint8_t &ChargerErrors,
 	};
 	uint8_t values[5];
 	uint16_t addr;
+	size_t i;
 
 	if (Interface() == NULL)
 		return false;
-	for (size_t i = 0; i < 5; i++)
+	for (i = 0; i < 5; i++)
 	{
 		addr = EndianCvt16(regs[i]);
 		if (Read((uint8_t *)&addr, 2, &values[i], 1) != 1)
