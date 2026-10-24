@@ -273,7 +273,7 @@ bool CryptoSoftAes::AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16], u
 	return true;
 }
 
-CRYPTO_STATUS CryptoSoftAes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+CRYPTO_STATUS CryptoAesModes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 								 const uint8_t *pMsg, size_t Len,
 								 uint8_t *pMac, size_t MacLen)
 {
@@ -444,7 +444,7 @@ static bool CcmParamsOk(size_t NonceLen, size_t TagLen, size_t AadLen,
 // T = CBC-MAC(B0 | encoded AAD | message), Tag = T xor E(K, A0). The full
 // 16 byte masked block is written; the first TagLen bytes are the tag.
 // Assumes validated parameters and an owned AesOpBegin bracket.
-bool CryptoSoftAes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
+bool CryptoAesModes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
 							  size_t NonceLen, const uint8_t *pAad,
 							  size_t AadLen, const uint8_t *pMsg, size_t Len,
 							  size_t TagLen, uint8_t Tag[16])
@@ -517,7 +517,7 @@ bool CryptoSoftAes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
 	return ok;
 }
 
-CRYPTO_STATUS CryptoSoftAes::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+CRYPTO_STATUS CryptoAesModes::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 								  const uint8_t *pNonce, size_t NonceLen,
 								  const uint8_t *pAad, size_t AadLen,
 								  const uint8_t *pMsg, size_t Len,
@@ -651,7 +651,7 @@ CRYPTO_STATUS CryptoSoftAes::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
 
-CRYPTO_STATUS CryptoSoftAes::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+CRYPTO_STATUS CryptoAesModes::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 								  const uint8_t *pNonce, size_t NonceLen,
 								  const uint8_t *pAad, size_t AadLen,
 								  const uint8_t *pMsg, size_t Len,
@@ -799,7 +799,7 @@ CRYPTO_STATUS CryptoSoftAes::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }
 
-int CryptoSoftAes::SelfTest()
+int CryptoAesModes::SelfTest()
 {
 	static const uint8_t aesKey[16] = {
 		0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,

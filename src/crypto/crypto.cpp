@@ -25,50 +25,64 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "crypto/crypto.h"
+#include "crypto/crypto_softaes.h"
+#include "crypto/crypto_softsha256.h"
+#include "crypto/crypto_softrng.h"
+#include "crypto/crypto_uecc.h"
+#include <string.h>
 
 Crypto::Crypto()
 {
-	CryptoUecc::SetRng(this);
+	vbValid = false;
+	Seed(0U, 0U);
 }
 
-bool Crypto::Enable()
+__attribute__((weak)) bool Crypto::Enable()
 {
 	return Init();
 }
 
-void Crypto::Disable()
+__attribute__((weak)) void Crypto::Disable()
 {
 	vbValid = false;
 }
 
-void Crypto::Reset()
+__attribute__((weak)) void Crypto::Reset()
 {
 	Disable();
-	CryptoSoftRng::Reset();
+	Seed(0U, 0U);
 	(void)Init();
 }
 
-int Crypto::SelfTest()
+__attribute__((weak)) int Crypto::SelfTest()
 {
+	static const uint8_t aes[16] = {0x66,0xE9,0x4B,0xD4,0xEF,0x8A,0x2C,0x3B,0x88,0x4C,0xFA,0x59,0xCA,0x34,0x2B,0x2E};
+	static const uint8_t sha[32] = {0xE3,0xB0,0xC4,0x42,0x98,0xFC,0x1C,0x14,0x9A,0xFB,0xF4,0xC8,0x99,0x6F,0xB9,0x24,0x27,0xAE,0x41,0xE4,0x64,0x9B,0x93,0x4C,0xA4,0x95,0x99,0x1B,0x78,0x52,0xB8,0x55};
+	uint8_t zero[16] = {};
+	uint8_t out[32];
+	CryptoKey key = {};
+	bool ok;
 	if (!vbValid)
 	{
 		return -1;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->SelfTest();
-	}
-	if (CryptoSoftAes::SelfTest() != 0 || CryptoSoftSha256::SelfTest() != 0 ||
-		CryptoUecc::SelfTest() != 0)
-	{
-		return -1;
-	}
-	return 0;
+	key.Type = CRYPTO_KEY_AES_128;
+	key.Loc = CRYPTO_KEY_LOC_PLAIN;
+	key.Usage = CRYPTO_KEY_USE_ENCRYPT;
+	key.Plain.pData = zero;
+	key.Plain.Len = sizeof(zero);
+	ok = Cipher(CRYPTO_CIPHER_ECB, 1, key, nullptr, 0, zero, 16, out) == CRYPTO_STATUS_OK &&
+		memcmp(out, aes, 16) == 0 && Hash(CRYPTO_HASH_SHA256, nullptr, 0, out) == CRYPTO_STATUS_OK &&
+		memcmp(out, sha, 32) == 0;
+	CryptoSecureWipe(out, sizeof(out));
+	return ok ? 0 : -1;
 }
 
-CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+__attribute__((weak)) CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
 			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
 {
+	CryptoSoftAes software;
+
 	if (!vbValid)
 	{
 		if (pOut != nullptr)
@@ -77,17 +91,16 @@ CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKe
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
-	}
-	return CryptoSoftAes::Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+	software.Enable();
+	return software.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
 }
 
-CRYPTO_STATUS Crypto::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+__attribute__((weak)) CRYPTO_STATUS Crypto::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
 			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
 {
+	CryptoSoftAes software;
+
 	if (!vbValid)
 	{
 		if (pOut != nullptr)
@@ -100,17 +113,16 @@ CRYPTO_STATUS Crypto::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
-	}
-	return CryptoSoftAes::Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+	software.Enable();
+	return software.Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
 }
 
-CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+__attribute__((weak)) CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
 			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
 {
+	CryptoSoftAes software;
+
 	if (!vbValid)
 	{
 		if (pOut != nullptr)
@@ -119,15 +131,14 @@ CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
-	}
-	return CryptoSoftAes::Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+	software.Enable();
+	return software.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
 }
 
-CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
+__attribute__((weak)) CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
 {
+	CryptoSoftSha256 software;
+
 	if (!vbValid)
 	{
 		if (pDigest != nullptr && Alg == CRYPTO_HASH_SHA256)
@@ -136,51 +147,43 @@ CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len,
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->Hash(Alg, pMsg, Len, pDigest);
-	}
-	return CryptoSoftSha256::Hash(Alg, pMsg, Len, pDigest);
+	software.Enable();
+	return software.Hash(Alg, pMsg, Len, pDigest);
 }
 
-size_t Crypto::KeyCtxSize() const
+__attribute__((weak)) size_t Crypto::KeyCtxSize() const
 {
+	CryptoUecc software;
+
 	if (!vbValid)
 	{
 		return 0U;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->KeyCtxSize();
-	}
-	return CryptoUecc::KeyCtxSize();
+	return software.KeyCtxSize();
 }
 
-size_t Crypto::KeyCtxAlign() const
+__attribute__((weak)) size_t Crypto::KeyCtxAlign() const
 {
+	CryptoUecc software;
+
 	if (!vbValid)
 	{
 		return 1U;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->KeyCtxAlign();
-	}
-	return CryptoUecc::KeyCtxAlign();
+	return software.KeyCtxAlign();
 }
 
-void Crypto::KeyReset(void *pKeyCtx)
+__attribute__((weak)) void Crypto::KeyReset(void *pKeyCtx)
 {
-	if (vpHardware != nullptr)
-	{
-		vpHardware->KeyReset(pKeyCtx);
-		return;
-	}
-	CryptoUecc::KeyReset(pKeyCtx);
+	CryptoUecc software;
+
+	software.KeyReset(pKeyCtx);
 }
 
-CRYPTO_STATUS Crypto::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKey)
+__attribute__((weak)) CRYPTO_STATUS Crypto::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKey)
 {
+	CryptoUecc software;
+
 	if (!vbValid)
 	{
 		if (pPubKey != nullptr && Curve == CRYPTO_CURVE_P256)
@@ -193,16 +196,16 @@ CRYPTO_STATUS Crypto::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKey
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->KeyGen(Curve, pKeyCtx, pPubKey);
-	}
-	return CryptoUecc::KeyGen(Curve, pKeyCtx, pPubKey);
+	software.Enable();
+	software.SetRng(this);
+	return software.KeyGen(Curve, pKeyCtx, pPubKey);
 }
 
-CRYPTO_STATUS Crypto::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+__attribute__((weak)) CRYPTO_STATUS Crypto::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
 			const uint8_t *pPrivKey, uint8_t *pPubKey)
 {
+	CryptoUecc software;
+
 	if (!vbValid)
 	{
 		if (pPubKey != nullptr && Curve == CRYPTO_CURVE_P256)
@@ -215,16 +218,16 @@ CRYPTO_STATUS Crypto::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->KeyImport(Curve, pKeyCtx, pPrivKey, pPubKey);
-	}
-	return CryptoUecc::KeyImport(Curve, pKeyCtx, pPrivKey, pPubKey);
+	software.Enable();
+	software.SetRng(this);
+	return software.KeyImport(Curve, pKeyCtx, pPrivKey, pPubKey);
 }
 
-CRYPTO_STATUS Crypto::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
+__attribute__((weak)) CRYPTO_STATUS Crypto::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 			const uint8_t *pPeerPubKey, uint8_t *pSharedX, bool bKeepKey)
 {
+	CryptoUecc software;
+
 	if (!vbValid)
 	{
 		if (pSharedX != nullptr && Curve == CRYPTO_CURVE_P256)
@@ -237,16 +240,16 @@ CRYPTO_STATUS Crypto::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->Agree(Curve, pKeyCtx, pPeerPubKey, pSharedX, bKeepKey);
-	}
-	return CryptoUecc::Agree(Curve, pKeyCtx, pPeerPubKey, pSharedX, bKeepKey);
+	software.Enable();
+	software.SetRng(this);
+	return software.Agree(Curve, pKeyCtx, pPeerPubKey, pSharedX, bKeepKey);
 }
 
-CRYPTO_STATUS Crypto::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
+__attribute__((weak)) CRYPTO_STATUS Crypto::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
 			const uint8_t *pHash, size_t HashLen, uint8_t *pSig)
 {
+	CryptoUecc software;
+
 	if (!vbValid)
 	{
 		if (pSig != nullptr && Curve == CRYPTO_CURVE_P256)
@@ -255,30 +258,30 @@ CRYPTO_STATUS Crypto::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->Sign(Curve, Key, pHash, HashLen, pSig);
-	}
-	return CryptoUecc::Sign(Curve, Key, pHash, HashLen, pSig);
+	software.Enable();
+	software.SetRng(this);
+	return software.Sign(Curve, Key, pHash, HashLen, pSig);
 }
 
-CRYPTO_STATUS Crypto::Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
+__attribute__((weak)) CRYPTO_STATUS Crypto::Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
 			const uint8_t *pHash, size_t HashLen, const uint8_t *pSig)
 {
+	CryptoUecc software;
+
 	if (!vbValid)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->Verify(Curve, pPubKey, pHash, HashLen, pSig);
-	}
-	return CryptoUecc::Verify(Curve, pPubKey, pHash, HashLen, pSig);
+	software.Enable();
+	software.SetRng(this);
+	return software.Verify(Curve, pPubKey, pHash, HashLen, pSig);
 }
 
-CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+__attribute__((weak)) CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
 {
+	CryptoSoftAes software;
+
 	if (!vbValid)
 	{
 		if (pMac != nullptr)
@@ -287,18 +290,15 @@ CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->Mac(Alg, Key, pMsg, Len, pMac, MacLen);
-	}
 	if (Alg == CRYPTO_MAC_HMAC)
 	{
-		return CryptoSoftSha256::Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+		return CryptoHmacSha256(this, Alg, Key, pMsg, Len, pMac, MacLen);
 	}
-	return CryptoSoftAes::Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+	software.Enable();
+	return software.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
 }
 
-CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
+__attribute__((weak)) CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
 {
 	if (!vbValid)
 	{
@@ -308,80 +308,68 @@ CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->Random(pOut, Len);
-	}
-	return CryptoSoftRng::Random(pOut, Len);
+	return CryptoSoftRngGenerate(vSoftState[0], vSoftState[1], pOut, Len);
 }
 
-bool Crypto::IsSecure() const
+__attribute__((weak)) bool Crypto::IsSecure() const
 {
 	if (!vbValid)
 	{
 		return false;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->IsSecure();
-	}
-	return CryptoSoftRng::IsSecure();
+	return false;
 }
 
-size_t Crypto::HashCtxSize() const
+__attribute__((weak)) size_t Crypto::HashCtxSize() const
 {
+	CryptoSoftSha256 software;
+
 	if (!vbValid)
 	{
 		return 0U;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->HashCtxSize();
-	}
-	return CryptoSoftSha256::HashCtxSize();
+	return software.HashCtxSize();
 }
 
-size_t Crypto::HashCtxAlign() const
+__attribute__((weak)) size_t Crypto::HashCtxAlign() const
 {
+	CryptoSoftSha256 software;
+
 	if (!vbValid)
 	{
 		return 1U;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->HashCtxAlign();
-	}
-	return CryptoSoftSha256::HashCtxAlign();
+	return software.HashCtxAlign();
 }
 
-CRYPTO_STATUS Crypto::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+__attribute__((weak)) CRYPTO_STATUS Crypto::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
 {
+	CryptoSoftSha256 software;
+
 	if (!vbValid)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->HashInit(Alg, pHashCtx);
-	}
-	return CryptoSoftSha256::HashInit(Alg, pHashCtx);
+	software.Enable();
+	return software.HashInit(Alg, pHashCtx);
 }
 
-CRYPTO_STATUS Crypto::HashUpdate(void *pHashCtx, const uint8_t *pMsg, size_t Len)
+__attribute__((weak)) CRYPTO_STATUS Crypto::HashUpdate(void *pHashCtx, const uint8_t *pMsg, size_t Len)
 {
+	CryptoSoftSha256 software;
+
 	if (!vbValid)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->HashUpdate(pHashCtx, pMsg, Len);
-	}
-	return CryptoSoftSha256::HashUpdate(pHashCtx, pMsg, Len);
+	software.Enable();
+	return software.HashUpdate(pHashCtx, pMsg, Len);
 }
 
-CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
+__attribute__((weak)) CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
 {
+	CryptoSoftSha256 software;
+
 	if (!vbValid)
 	{
 		if (pDigest != nullptr)
@@ -390,10 +378,18 @@ CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
 		}
 		return CRYPTO_STATUS_FAIL;
 	}
-	if (vpHardware != nullptr)
-	{
-		return vpHardware->HashFinal(pHashCtx, pDigest);
-	}
-	return CryptoSoftSha256::HashFinal(pHashCtx, pDigest);
+	software.Enable();
+	return software.HashFinal(pHashCtx, pDigest);
 }
 
+
+void Crypto::Seed(uint64_t Seed0, uint64_t Seed1)
+{
+	vSoftState[0] = Seed0;
+	vSoftState[1] = Seed1;
+	if ((Seed0 | Seed1) == 0U)
+	{
+		vSoftState[0] = 0x9E3779B97F4A7C15ULL;
+		vSoftState[1] = 0xBF58476D1CE4E5B9ULL;
+	}
+}

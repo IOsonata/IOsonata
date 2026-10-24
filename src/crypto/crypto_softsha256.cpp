@@ -247,20 +247,20 @@ CRYPTO_STATUS CryptoSoftSha256Hash::HashFinal(void *pHashCtx, uint8_t *pDigest)
 // hardware subclass that overrides the streaming trio provides the digest
 // work. The key context storage is bounded by CRYPTO_HASHCTX_MAX, the same
 // bound every in-tree consumer reserves.
-CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+CRYPTO_STATUS CryptoHmacSha256(HashEngine *pHash, CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 									const uint8_t *pMsg, size_t Len,
 									uint8_t *pMac, size_t MacLen)
 {
 	// The generic construction chains the streaming hash synchronously on
 	// stack storage; an asynchronous hash engine must provide its own HMAC.
-	if (IsAsync() || Alg != CRYPTO_MAC_HMAC || Key.Type != CRYPTO_KEY_HMAC ||
+	if (pHash->IsAsync() || Alg != CRYPTO_MAC_HMAC || Key.Type != CRYPTO_KEY_HMAC ||
 		Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
 		(Key.Usage & CRYPTO_KEY_USE_SIGN) == 0U ||
 		(Key.Plain.pData == nullptr && Key.Plain.Len != 0U) ||
 		pMac == nullptr || MacLen == 0U || MacLen > SHA256_DIGEST ||
 		(pMsg == nullptr && Len != 0U) ||
-		HashCtxSize() > CRYPTO_HASHCTX_MAX || HashCtxAlign() == 0U ||
-		HashCtxAlign() > CRYPTO_HASHCTX_ALIGN_MAX)
+		pHash->HashCtxSize() > CRYPTO_HASHCTX_MAX || pHash->HashCtxAlign() == 0U ||
+		pHash->HashCtxAlign() > CRYPTO_HASHCTX_ALIGN_MAX)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
@@ -272,10 +272,10 @@ CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
 	if (Key.Plain.Len > HMAC_BLOCK)
 	{
-		if (HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
-			HashUpdate(ctx, Key.Plain.pData, Key.Plain.Len) !=
+		if (pHash->HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
+			pHash->HashUpdate(ctx, Key.Plain.pData, Key.Plain.Len) !=
 				CRYPTO_STATUS_OK ||
-			HashFinal(ctx, key) != CRYPTO_STATUS_OK)
+			pHash->HashFinal(ctx, key) != CRYPTO_STATUS_OK)
 		{
 			st = CRYPTO_STATUS_FAIL;
 		}
@@ -291,10 +291,10 @@ CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	{
 		// Inner digest: H((K xor ipad) || message).
 		for (size_t i = 0; i < HMAC_BLOCK; i++) pad[i] = key[i] ^ 0x36U;
-		if (HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
-			HashUpdate(ctx, pad, sizeof(pad)) != CRYPTO_STATUS_OK ||
-			HashUpdate(ctx, pMsg, Len) != CRYPTO_STATUS_OK ||
-			HashFinal(ctx, inner) != CRYPTO_STATUS_OK)
+		if (pHash->HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
+			pHash->HashUpdate(ctx, pad, sizeof(pad)) != CRYPTO_STATUS_OK ||
+			pHash->HashUpdate(ctx, pMsg, Len) != CRYPTO_STATUS_OK ||
+			pHash->HashFinal(ctx, inner) != CRYPTO_STATUS_OK)
 		{
 			st = CRYPTO_STATUS_FAIL;
 		}
@@ -304,10 +304,10 @@ CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 		// Outer digest: H((K xor opad) || inner).
 		uint8_t full[SHA256_DIGEST];
 		for (size_t i = 0; i < HMAC_BLOCK; i++) pad[i] = key[i] ^ 0x5CU;
-		if (HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
-			HashUpdate(ctx, pad, sizeof(pad)) != CRYPTO_STATUS_OK ||
-			HashUpdate(ctx, inner, sizeof(inner)) != CRYPTO_STATUS_OK ||
-			HashFinal(ctx, full) != CRYPTO_STATUS_OK)
+		if (pHash->HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
+			pHash->HashUpdate(ctx, pad, sizeof(pad)) != CRYPTO_STATUS_OK ||
+			pHash->HashUpdate(ctx, inner, sizeof(inner)) != CRYPTO_STATUS_OK ||
+			pHash->HashFinal(ctx, full) != CRYPTO_STATUS_OK)
 		{
 			st = CRYPTO_STATUS_FAIL;
 		}
@@ -328,6 +328,12 @@ CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	}
 	return st;
 }
+CRYPTO_STATUS CryptoSoftSha256::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+	const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
+{
+	return CryptoHmacSha256(this, Alg, Key, pMsg, Len, pMac, MacLen);
+}
+
 
 int CryptoSoftSha256::SelfTest()
 {

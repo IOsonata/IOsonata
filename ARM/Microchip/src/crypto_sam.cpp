@@ -25,6 +25,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
+#include "crypto/crypto.h"
+#include "crypto/crypto_softsha256.h"
 #include "crypto_sam.h"
 
 bool CryptoSam::AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
@@ -51,7 +53,7 @@ CRYPTO_STATUS CryptoSam::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 
 	if (Key.Type == CRYPTO_KEY_AES_256 && !WideKey())
 	{
-		return CryptoSoftAes::Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+		return NarrowCipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
 	}
 	if ((Key.Type != CRYPTO_KEY_AES_128 && Key.Type != CRYPTO_KEY_AES_256) ||
 		Key.Loc != CRYPTO_KEY_LOC_PLAIN || Key.Plain.pData == nullptr ||
@@ -134,19 +136,91 @@ CRYPTO_STATUS CryptoSam::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	return CRYPTO_STATUS_OK;
 }
 
+static CryptoSam s_Hardware;
+
 bool Crypto::Init()
 {
-	static CryptoSam hardware;
 
 	if (vbValid)
 	{
 		return true;
 	}
-	if (!hardware.Enable())
+	if (!s_Hardware.Enable())
 	{
 		return false;
 	}
-	vpHardware = &hardware;
 	vbValid = true;
 	return true;
+}
+
+CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+}
+
+CRYPTO_STATUS Crypto::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		if (pTag != nullptr)
+		{
+			CryptoSecureWipe(pTag, TagLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
+{
+	if (!vbValid)
+	{
+		if (pMac != nullptr)
+		{
+			CryptoSecureWipe(pMac, MacLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (Alg == CRYPTO_MAC_HMAC)
+	{
+		return CryptoHmacSha256(this, Alg, Key, pMsg, Len, pMac, MacLen);
+	}
+	return s_Hardware.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+}
+
+
+CryptoSam &CryptoSamInstance()
+{
+	return s_Hardware;
 }

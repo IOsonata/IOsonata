@@ -1,5 +1,5 @@
 #include "nrf_ecb_model.h"
-#include "crypto_ecb_nrf53.h"
+#include "crypto_ecb_nrf.h"
 #include <openssl/evp.h>
 #include <assert.h>
 #include <string.h>
@@ -41,7 +41,7 @@ uint32_t sd_ecb_block_encrypt(nrf_ecb_hal_data_t *data)
 }
 int main()
 {
-	CryptoEcbNrf53 crypto;
+	CryptoEcbNrf crypto;
 	uint8_t key[16] = {}, input[16] = {}, output[16];
 	const uint8_t expected[16] = {0x66,0xe9,0x4b,0xd4,0xef,0x8a,0x2c,0x3b,0x88,0x4c,0xfa,0x59,0xca,0x34,0x2b,0x2e};
 	CryptoKey k = {};

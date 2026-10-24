@@ -25,14 +25,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "crypto/crypto.h"
+#include "crypto/crypto_softaes.h"
+#include "crypto/crypto_softsha256.h"
 #include "coredev/interrupt.h"
 #include "r9a02g021.h"
 #include "system_r9a02.h"
 
 static bool s_Busy = false;
 
-class CryptoR9a02 : public Crypto {
+class CryptoR9a02 : public RngEngine {
 public:
+	void Disable() override { vbValid = false; }
+	void Reset() override { (void)Enable(); }
 	bool Enable() override
 	{
 		R9a02ModuleStart(R9A02_MSTPCR_C, R9A02_MSTPCRC_TRNG);
@@ -115,19 +119,42 @@ public:
 	}
 };
 
+static CryptoR9a02 s_Hardware;
+
 bool Crypto::Init()
 {
-	static CryptoR9a02 hardware;
 
 	if (vbValid)
 	{
 		return true;
 	}
-	if (!hardware.Enable())
+	if (!s_Hardware.Enable())
 	{
 		return false;
 	}
-	vpHardware = &hardware;
 	vbValid = true;
 	return true;
 }
+
+CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.Random(pOut, Len);
+}
+
+bool Crypto::IsSecure() const
+{
+	if (!vbValid)
+	{
+		return false;
+	}
+	return s_Hardware.IsSecure();
+}
+

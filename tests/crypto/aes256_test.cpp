@@ -4,13 +4,14 @@
 #include <cstdio>
 #include <openssl/evp.h>
 #include "crypto/crypto.h"
+#include "crypto/crypto_softaes.h"
 
 static CRYPTO_STATUS s_TargetStatus = CRYPTO_STATUS_OK;
 static unsigned s_TargetCalls;
 static unsigned s_BlockCalls;
 
 // Model a hardware override inheriting software support for wider keys.
-class Aes128Target : public Crypto {
+class Aes128Target : public CryptoSoftAes {
 public:
 	bool Enable() override { vbValid = true; return true; }
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int Encrypt, const CryptoKey &Key,
@@ -38,12 +39,26 @@ protected:
 	}
 };
 
+static Aes128Target hardware;
+
+CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return hardware.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+}
+
 bool Crypto::Init()
 {
-	static Aes128Target hardware;
 
 	assert(hardware.Enable());
-	vpHardware = &hardware;
 	vbValid = true;
 	return true;
 }

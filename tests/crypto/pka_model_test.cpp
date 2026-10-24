@@ -15,7 +15,11 @@
 #include "crypto/ba414ep.h"
 #include "crypto/crypto_stm32wba.h"
 #include "crypto_rng_nrf.h"
+#ifdef CRYPTO_LINK_TEST
+#include "crypto/crypto.h"
+#else
 #include "../../exemples/crypto/crypto_engine_test.cpp"
+#endif
 
 static_assert(std::is_base_of<CryptoUecc, CryptoCc3xx>::value);
 static_assert(std::is_base_of<CryptoUecc, Ba414ep>::value);
@@ -208,6 +212,7 @@ CryptoRngNrf *CryptoRngNrfInstance(void)
 	return &rng;
 }
 
+#ifndef CRYPTO_LINK_TEST
 class BaModel : public DeviceIntrf {
 public:
 	bool DenyReset = false;
@@ -377,3 +382,13 @@ int main()
 	s_Timer.Disable();
 	return s_fail ? 1 : 0;
 }
+
+#else
+int main()
+{
+	Crypto crypto;
+	assert(crypto.Init());
+	assert(crypto.SelfTest() == 0);
+	return 0;
+}
+#endif

@@ -59,7 +59,7 @@ void CryptoSoftRng::Seed(uint64_t Seed0, uint64_t Seed1)
 	vState1 = Seed1;
 }
 
-CRYPTO_STATUS CryptoSoftRng::Random(uint8_t *pOut, size_t Len)
+CRYPTO_STATUS CryptoSoftRngGenerate(uint64_t &State0, uint64_t &State1, uint8_t *pOut, size_t Len)
 {
 	if (pOut == nullptr)
 	{
@@ -68,7 +68,7 @@ CRYPTO_STATUS CryptoSoftRng::Random(uint8_t *pOut, size_t Len)
 
 	for (size_t off = 0; off < Len; )
 	{
-		uint64_t value = Xorshift128p(&vState0, &vState1);
+		uint64_t value = Xorshift128p(&State0, &State1);
 		size_t count = Len - off < sizeof(value) ? Len - off : sizeof(value);
 		for (size_t i = 0; i < count; i++)
 		{
@@ -77,6 +77,11 @@ CRYPTO_STATUS CryptoSoftRng::Random(uint8_t *pOut, size_t Len)
 		off += count;
 	}
 	return CRYPTO_STATUS_OK;
+}
+
+CRYPTO_STATUS CryptoSoftRng::Random(uint8_t *pOut, size_t Len)
+{
+	return CryptoSoftRngGenerate(vState0, vState1, pOut, Len);
 }
 
 CryptoSoftRng *CryptoSoftRngCreate(void *pMem, size_t MemSize)

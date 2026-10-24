@@ -95,6 +95,10 @@ public:
 	int SelfTest() override;
 };
 
+// HMAC composition over the selected hash engine; no software digest is bound.
+CRYPTO_STATUS CryptoHmacSha256(HashEngine *pHash, CRYPTO_MAC_ALG Alg,
+	const CryptoKey &Key, const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen);
+
 /// Bytes of storage CryptoSoftSha256HashCreate needs.
 #define CRYPTO_SOFTSHA256_HASH_MEMSIZE	sizeof(CryptoSoftSha256Hash)
 

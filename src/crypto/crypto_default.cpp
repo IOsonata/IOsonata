@@ -28,7 +28,6 @@ SOFTWARE.
 
 bool Crypto::Init()
 {
-	vpHardware = nullptr;
 	vbValid = true;
 	return true;
 }

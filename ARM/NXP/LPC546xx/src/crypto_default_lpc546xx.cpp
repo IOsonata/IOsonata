@@ -26,13 +26,17 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 #include "crypto/crypto.h"
+#include "crypto/crypto_softaes.h"
+#include "crypto/crypto_softsha256.h"
 #include "coredev/interrupt.h"
 #include "LPC546xx.h"
 
 static bool s_Busy = false;
 
-class CryptoLpc546xx : public Crypto {
+class CryptoLpc546xx : public RngEngine {
 public:
+	void Disable() override { vbValid = false; }
+	void Reset() override { (void)Enable(); }
 	bool Enable() override
 	{
 		vbValid = ROM_API != nullptr && OTP_API != nullptr && OTP_API->rngRead != nullptr;
@@ -102,19 +106,42 @@ public:
 	}
 };
 
+static CryptoLpc546xx s_Hardware;
+
 bool Crypto::Init()
 {
-	static CryptoLpc546xx hardware;
 
 	if (vbValid)
 	{
 		return true;
 	}
-	if (!hardware.Enable())
+	if (!s_Hardware.Enable())
 	{
 		return false;
 	}
-	vpHardware = &hardware;
 	vbValid = true;
 	return true;
 }
+
+CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.Random(pOut, Len);
+}
+
+bool Crypto::IsSecure() const
+{
+	if (!vbValid)
+	{
+		return false;
+	}
+	return s_Hardware.IsSecure();
+}
+

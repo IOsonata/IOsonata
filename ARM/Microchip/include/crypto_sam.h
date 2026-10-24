@@ -27,9 +27,10 @@ SOFTWARE.
 #ifndef __CRYPTO_SAM_H__
 #define __CRYPTO_SAM_H__
 #include "crypto/crypto.h"
+#include "crypto/crypto_softaes.h"
 
 // The target library supplies the SAM4E or SAM4L register operations.
-class CryptoSam : public Crypto {
+class CryptoSam : public CryptoAesModes, public RngEngine {
 public:
 	bool Enable() override;
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
@@ -43,6 +44,8 @@ protected:
 	bool AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
 		uint8_t Out[16]) override;
 private:
+	CRYPTO_STATUS NarrowCipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+		const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut);
 	bool Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 		const uint8_t In[16], uint8_t Out[16]);
 	bool WideKey() const;

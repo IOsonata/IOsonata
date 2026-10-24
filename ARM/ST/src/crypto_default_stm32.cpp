@@ -38,260 +38,276 @@ SOFTWARE.
 #include "crypto_rng_stm32.h"
 #endif
 
-// Library-owned hardware implementation. Application Crypto objects borrow it;
-// their Disable and destruction do not stop other users of these peripherals.
-class CryptoStm32 : public Crypto {
-public:
-	bool Enable() override
-	{
-		if (vbValid)
-		{
-			return true;
-		}
-#if defined(STM32WBA65xx)
-		vpRng = &vRng;
-		vbRngStarted = true;
-		if (!vRng.Enable())
-		{
-			return false;
-		}
-		vPka.SetRng(this);
-		vbPkaStarted = true;
-		if (!vPka.Enable())
-		{
-			return false;
-		}
-#elif IOSONATA_STM32_HAS_RNG
-		vpRng = CryptoRngStm32Instance();
-		if (vpRng == nullptr)
-		{
-			return false;
-		}
-#endif
-#ifdef CRYPTO_TARGET_AES
-		if (!vAes.Enable())
-		{
-			return false;
-		}
-#endif
-#if (defined(STM32H753xx) || defined(STM32L4S9xx))
-		if (!vHash.Enable())
-		{
-			return false;
-		}
-#endif
-		vbValid = true;
-		return true;
-	}
+#include "crypto/crypto_softsha256.h"
 
-	void Disable() override
-	{
-#ifdef CRYPTO_TARGET_AES
-		if (vAes.Valid())
-		{
-			vAes.Disable();
-		}
-#endif
-#ifdef CRYPTO_TARGET_PKA
-		if (vbPkaStarted)
-		{
-			vPka.Disable();
-			vbPkaStarted = false;
-		}
-#endif
-#if (defined(STM32H753xx) || defined(STM32L4S9xx))
-		if (vHash.Valid())
-		{
-			vHash.Disable();
-		}
-#elif defined(STM32WBA65xx)
-		if (vbRngStarted)
-		{
-			vRng.Disable();
-			vbRngStarted = false;
-		}
-#endif
-		// Platform RNG singletons may be shared with other devices.
-		vpRng = nullptr;
-		Crypto::Disable();
-	}
-
-	void Reset() override
-	{
-		Disable();
-		CryptoSoftRng::Reset();
-		(void)Enable();
-	}
-
-	int SelfTest() override
-	{
-		if (!vbValid || Crypto::SelfTest() != 0)
-		{
-			return -1;
-		}
-#ifdef CRYPTO_TARGET_AES
-		if (vAes.SelfTest() != 0)
-		{
-			return -1;
-		}
-#endif
-#ifdef CRYPTO_TARGET_PKA
-		if (vPka.SelfTest() != 0)
-		{
-			return -1;
-		}
-#endif
-		return 0;
-	}
-
-	CRYPTO_STATUS Random(uint8_t *pOut, size_t Len) override
-	{
-		if (vpRng != nullptr)
-		{
-			return vpRng->Random(pOut, Len);
-		}
 #if IOSONATA_STM32_HAS_RNG || defined(STM32WBA65xx)
-		return CRYPTO_STATUS_FAIL;
-#else
-		return Crypto::Random(pOut, Len);
-#endif
-	}
-
-	bool IsSecure() const override
-	{
-		return vpRng != nullptr && vpRng->IsSecure();
-	}
-
-#ifdef CRYPTO_TARGET_AES
-	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
-			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut) override
-	{
-		return vAes.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
-	}
-
-	CRYPTO_STATUS Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
-			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
-			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen) override
-	{
-		return vAes.Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
-	}
-
-	CRYPTO_STATUS Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
-			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
-			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen) override
-	{
-		return vAes.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
-	}
-
-#endif
-	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
-			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen) override
-	{
-#if (defined(STM32H753xx) || defined(STM32L4S9xx))
-		if (Alg == CRYPTO_MAC_HMAC)
-		{
-			return vHash.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
-		}
+static RngEngine *s_Rng;
 #endif
 #ifdef CRYPTO_TARGET_AES
-		if (Alg == CRYPTO_MAC_CMAC)
-		{
-			return vAes.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
-		}
-#endif
-		return Crypto::Mac(Alg, Key, pMsg, Len, pMac, MacLen);
-	}
-
-#if (defined(STM32H753xx) || defined(STM32L4S9xx))
-	CRYPTO_STATUS Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest) override
-	{
-		return vHash.Hash(Alg, pMsg, Len, pDigest);
-	}
-
+static CRYPTO_TARGET_AES s_Aes;
 #endif
 #ifdef CRYPTO_TARGET_PKA
-	size_t KeyCtxSize() const override
-	{
-		return vPka.KeyCtxSize();
-	}
-
-	size_t KeyCtxAlign() const override
-	{
-		return vPka.KeyCtxAlign();
-	}
-
-	void KeyReset(void *pKeyCtx) override
-	{
-		vPka.KeyReset(pKeyCtx);
-	}
-
-	CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKey) override
-	{
-		return vPka.KeyGen(Curve, pKeyCtx, pPubKey);
-	}
-
-	CRYPTO_STATUS KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
-			const uint8_t *pPrivKey, uint8_t *pPubKey) override
-	{
-		return vPka.KeyImport(Curve, pKeyCtx, pPrivKey, pPubKey);
-	}
-
-	CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
-			const uint8_t *pPeerPubKey, uint8_t *pSharedX, bool bKeepKey = false) override
-	{
-		return vPka.Agree(Curve, pKeyCtx, pPeerPubKey, pSharedX, bKeepKey);
-	}
-
+static CRYPTO_TARGET_PKA s_Pka;
+static CryptoWbaRng s_WbaRng;
 #endif
-#if defined(STM32WBA65xx)
-	CRYPTO_STATUS Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
-			const uint8_t *pHash, size_t HashLen, uint8_t *pSig) override
-	{
-		return vPka.Sign(Curve, Key, pHash, HashLen, pSig);
-	}
-
-	CRYPTO_STATUS Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
-			const uint8_t *pHash, size_t HashLen, const uint8_t *pSig) override
-	{
-		return vPka.Verify(Curve, pPubKey, pHash, HashLen, pSig);
-	}
-
+#if defined(STM32H753xx) || defined(STM32L4S9xx)
+static CryptoStm32H7Hash s_Hash;
 #endif
-private:
-	RngEngine *vpRng = nullptr;
-#ifdef CRYPTO_TARGET_AES
-	CRYPTO_TARGET_AES vAes;
-#endif
-#ifdef CRYPTO_TARGET_PKA
-	CRYPTO_TARGET_PKA vPka;
-#endif
-#if (defined(STM32H753xx) || defined(STM32L4S9xx))
-	CryptoStm32H7Hash vHash;
-#elif defined(STM32WBA65xx)
-	CryptoWbaRng vRng;
-	bool vbRngStarted = false;
-	bool vbPkaStarted = false;
-#endif
-};
 
 bool Crypto::Init()
 {
-#if defined(CRYPTO_TARGET_AES) || IOSONATA_STM32_HAS_RNG
-	static CryptoStm32 hardware;
-
 	if (vbValid)
 	{
 		return true;
 	}
-	if (!hardware.Enable())
+#if defined(STM32WBA65xx)
+	s_Rng = &s_WbaRng;
+	if (!s_WbaRng.Enable())
 	{
-		hardware.Disable();
 		return false;
 	}
-	vpHardware = &hardware;
-#else
-	vpHardware = nullptr;
+	s_Pka.SetRng(s_Rng);
+	if (!s_Pka.Enable())
+	{
+		return false;
+	}
+#elif IOSONATA_STM32_HAS_RNG
+	s_Rng = CryptoRngStm32Instance();
+	if (s_Rng == nullptr)
+	{
+		return false;
+	}
+#endif
+#ifdef CRYPTO_TARGET_AES
+	if (!s_Aes.Enable())
+	{
+		return false;
+	}
+#endif
+#if defined(STM32H753xx) || defined(STM32L4S9xx)
+	if (!s_Hash.Enable())
+	{
+		return false;
+	}
 #endif
 	vbValid = true;
 	return true;
 }
+
+#if defined(CRYPTO_TARGET_AES)
+CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+}
+
+CRYPTO_STATUS Crypto::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		if (pTag != nullptr)
+		{
+			CryptoSecureWipe(pTag, TagLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
+{
+	if (!vbValid)
+	{
+		if (pMac != nullptr)
+		{
+			CryptoSecureWipe(pMac, MacLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (Alg == CRYPTO_MAC_HMAC)
+	{
+#if defined(STM32H753xx) || defined(STM32L4S9xx)
+		return s_Hash.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+#else
+		return CryptoHmacSha256(this, Alg, Key, pMsg, Len, pMac, MacLen);
+#endif
+	}
+	return s_Aes.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+}
+
+#endif
+
+#if defined(STM32H753xx) || defined(STM32L4S9xx)
+CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
+{
+	if (!vbValid)
+	{
+		if (pDigest != nullptr && Alg == CRYPTO_HASH_SHA256)
+		{
+			CryptoSecureWipe(pDigest, 32U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hash.Hash(Alg, pMsg, Len, pDigest);
+}
+
+#endif
+
+#if defined(CRYPTO_TARGET_PKA)
+size_t Crypto::KeyCtxSize() const
+{
+	if (!vbValid)
+	{
+		return 0U;
+	}
+	return s_Pka.KeyCtxSize();
+}
+
+size_t Crypto::KeyCtxAlign() const
+{
+	if (!vbValid)
+	{
+		return 1U;
+	}
+	return s_Pka.KeyCtxAlign();
+}
+
+void Crypto::KeyReset(void *pKeyCtx)
+{
+	s_Pka.KeyReset(pKeyCtx);
+}
+
+CRYPTO_STATUS Crypto::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKey)
+{
+	if (!vbValid)
+	{
+		if (pPubKey != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pPubKey, 64U);
+		}
+		if (pKeyCtx != nullptr)
+		{
+			KeyReset(pKeyCtx);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Pka.KeyGen(Curve, pKeyCtx, pPubKey);
+}
+
+CRYPTO_STATUS Crypto::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+			const uint8_t *pPrivKey, uint8_t *pPubKey)
+{
+	if (!vbValid)
+	{
+		if (pPubKey != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pPubKey, 64U);
+		}
+		if (pKeyCtx != nullptr)
+		{
+			KeyReset(pKeyCtx);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Pka.KeyImport(Curve, pKeyCtx, pPrivKey, pPubKey);
+}
+
+CRYPTO_STATUS Crypto::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
+			const uint8_t *pPeerPubKey, uint8_t *pSharedX, bool bKeepKey)
+{
+	if (!vbValid)
+	{
+		if (pSharedX != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pSharedX, 32U);
+		}
+		if (pKeyCtx != nullptr)
+		{
+			KeyReset(pKeyCtx);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Pka.Agree(Curve, pKeyCtx, pPeerPubKey, pSharedX, bKeepKey);
+}
+
+CRYPTO_STATUS Crypto::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
+			const uint8_t *pHash, size_t HashLen, uint8_t *pSig)
+{
+	if (!vbValid)
+	{
+		if (pSig != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pSig, 64U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Pka.Sign(Curve, Key, pHash, HashLen, pSig);
+}
+
+CRYPTO_STATUS Crypto::Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
+			const uint8_t *pHash, size_t HashLen, const uint8_t *pSig)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Pka.Verify(Curve, pPubKey, pHash, HashLen, pSig);
+}
+
+#endif
+
+#if IOSONATA_STM32_HAS_RNG || defined(STM32WBA65xx)
+CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return (*s_Rng).Random(pOut, Len);
+}
+
+bool Crypto::IsSecure() const
+{
+	if (!vbValid)
+	{
+		return false;
+	}
+	return (*s_Rng).IsSecure();
+}
+
+#endif
+

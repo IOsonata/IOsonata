@@ -26,10 +26,11 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #ifndef IOSONATA_CRYPTO_CC3XX_SYM_H
 #define IOSONATA_CRYPTO_CC3XX_SYM_H
-#include "crypto/crypto.h"
+#include "crypto/crypto_softaes.h"
+#include "crypto/crypto_softsha256.h"
 #include "cc3xx_intrf.h"
 
-class CryptoCc3xxSym : public Crypto {
+class CryptoCc3xxSym : public CryptoAesModes, public HashEngine {
 public:
 	bool Init(Cc3xxIntrf *pIntrf);
 	bool Enable() override;

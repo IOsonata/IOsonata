@@ -27,22 +27,21 @@ SOFTWARE.
 #ifndef __CRYPTO_H__
 #define __CRYPTO_H__
 
-#include "crypto/crypto_softaes.h"
-#include "crypto/crypto_softsha256.h"
-#include "crypto/crypto_softrng.h"
-#include "crypto/crypto_uecc.h"
+#include "crypto/icrypto.h"
 
 /// Directly declared crypto device, for example Crypto g_Crypto.
-/// Construction initializes software state only. Call Init() after system
-/// startup to bind the MCU library implementation; no allocation is performed.
-/// Hardware engines are shared inside that library. Disable affects this
-/// object's access only; peripheral recovery and locking remain in the drivers.
+/// Construction initializes object state only. Call Init() after system
+/// startup to enable the MCU library implementation; no allocation is performed.
+/// Hardware methods replace weak software methods when the MCU library is linked.
+/// Disable affects this object's access only; peripheral recovery and locking
+/// remain in the drivers.
 /// Keys and hash contexts are caller-owned. Initialize before sizing contexts,
 /// and finish operations before Disable, Reset or destruction.
-class Crypto : public CryptoSoftAes, public CryptoSoftSha256,
-			   public CryptoUecc, public CryptoSoftRng {
+class Crypto : public CipherEngine, public MacEngine, public AeadEngine,
+	public HashEngine, public KeyAgreeEngine, public SignEngine, public RngEngine {
 public:
 	Crypto();
+	void Seed(uint64_t Seed0, uint64_t Seed1);
 	Crypto(const Crypto &) = delete;
 	Crypto &operator=(const Crypto &) = delete;
 
@@ -86,9 +85,7 @@ public:
 	CRYPTO_STATUS HashFinal(void *pHashCtx, uint8_t *pDigest) override;
 
 private:
-	// Borrowed target implementation with library lifetime. Null on software
-	// targets and inside the target implementation itself.
-	Crypto *vpHardware = nullptr;
+	uint64_t vSoftState[2];
 };
 
 #endif

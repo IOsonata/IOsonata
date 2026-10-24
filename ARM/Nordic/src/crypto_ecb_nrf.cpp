@@ -2,7 +2,7 @@
 #include <new>
 #include <string.h>
 #include "nrf.h"
-#include "crypto_ecb_nrf53.h"
+#include "crypto_ecb_nrf.h"
 #include "crypto/icrypto.h"
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 #include "nrf_soc.h"
@@ -15,20 +15,20 @@
 #error "This ECB driver requires nRF52 or the nRF5340 network core"
 #endif
 
-#ifndef CRYPTO_ECB_NRF53_TIMEOUT
-#define CRYPTO_ECB_NRF53_TIMEOUT 1000000U
+#ifndef CRYPTO_ECB_NRF_TIMEOUT
+#define CRYPTO_ECB_NRF_TIMEOUT 1000000U
 #endif
 
-CryptoEcbNrf53::EcbBlock CryptoEcbNrf53::s_Block = {};
-std::atomic_flag CryptoEcbNrf53::s_Busy = ATOMIC_FLAG_INIT;
-bool CryptoEcbNrf53::s_DmaUnresolved = false;
+CryptoEcbNrf::EcbBlock CryptoEcbNrf::s_Block = {};
+std::atomic_flag CryptoEcbNrf::s_Busy = ATOMIC_FLAG_INIT;
+bool CryptoEcbNrf::s_DmaUnresolved = false;
 
-bool CryptoEcbNrf53::AesOpBegin()
+bool CryptoEcbNrf::AesOpBegin()
 {
 	return !s_Busy.test_and_set(std::memory_order_acquire);
 }
 
-void CryptoEcbNrf53::AesOpEnd()
+void CryptoEcbNrf::AesOpEnd()
 {
 	// A timeout without a terminal event leaves DMA ownership unresolved.
 	// Retain exclusive ownership until a system reset, not just a new object.
@@ -38,7 +38,7 @@ void CryptoEcbNrf53::AesOpEnd()
 	}
 }
 
-bool CryptoEcbNrf53::AesEcbEncrypt(const uint8_t Key[16],
+bool CryptoEcbNrf::AesEcbEncrypt(const uint8_t Key[16],
 								  const uint8_t In[16], uint8_t Out[16])
 {
 	bool ok = false;
@@ -85,7 +85,7 @@ bool CryptoEcbNrf53::AesEcbEncrypt(const uint8_t Key[16],
 	__DMB();
 	reg->TASKS_STARTECB = 1;
 
-	for (uint32_t n = 0; n < CRYPTO_ECB_NRF53_TIMEOUT; n++)
+	for (uint32_t n = 0; n < CRYPTO_ECB_NRF_TIMEOUT; n++)
 	{
 		if (reg->EVENTS_ERRORECB != 0)
 		{
@@ -101,7 +101,7 @@ bool CryptoEcbNrf53::AesEcbEncrypt(const uint8_t Key[16],
 	{
 		stopped = reg->EVENTS_ERRORECB != 0 || reg->EVENTS_ENDECB != 0;
 		reg->TASKS_STOPECB = 1;
-		for (uint32_t n = 0; n < CRYPTO_ECB_NRF53_TIMEOUT; n++)
+		for (uint32_t n = 0; n < CRYPTO_ECB_NRF_TIMEOUT; n++)
 		{
 			if (reg->EVENTS_ERRORECB != 0 || reg->EVENTS_ENDECB != 0)
 			{
@@ -134,13 +134,13 @@ bool CryptoEcbNrf53::AesEcbEncrypt(const uint8_t Key[16],
 	return ok;
 }
 
-CryptoEcbNrf53 *CryptoEcbNrf53Create(void *pMem, size_t MemSize)
+CryptoEcbNrf *CryptoEcbNrfCreate(void *pMem, size_t MemSize)
 {
-	if (pMem == nullptr || MemSize < sizeof(CryptoEcbNrf53) ||
-		(reinterpret_cast<uintptr_t>(pMem) & (alignof(CryptoEcbNrf53) - 1U)) != 0)
+	if (pMem == nullptr || MemSize < sizeof(CryptoEcbNrf) ||
+		(reinterpret_cast<uintptr_t>(pMem) & (alignof(CryptoEcbNrf) - 1U)) != 0)
 	{
 		return nullptr;
 	}
-	CryptoEcbNrf53 *p = new (pMem) CryptoEcbNrf53();
+	CryptoEcbNrf *p = new (pMem) CryptoEcbNrf();
 	return p->Enable() ? p : nullptr;
 }

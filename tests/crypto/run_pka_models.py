@@ -26,10 +26,13 @@ with tempfile.TemporaryDirectory(prefix="pka-models-") as temp:
         "#include <stdint.h>\nstatic inline uint32_t __get_IPSR(void) { return 0; }\n")
     inc = ["-I" + str(p) for p in (out, ROOT / "include", ROOT / "ARM/include",
                                   ROOT / "ARM/Nordic/include", ROOT / "micro-ecc")]
-    for opt in ("-O0", "-O2"):
+    for opt in ("-O0", "-O2", "-Os"):
         flags = [opt, "-g", "-fsanitize=address,undefined", "-DuECC_ENABLE_VLI_API=1",
                  "-DuECC_WORD_SIZE=4", "-DNRF5340_XXAA_APPLICATION", "-DCRYPTO_TEST_NO_MAIN",
                  "-DCC3XX_ACQUIRE_SPINS=4", "-DCC3XX_PKA_WAIT_SPINS=4", "-ffunction-sections", "-fdata-sections"]
+        if opt == "-Os":
+            flags.remove("-fsanitize=address,undefined")
+            flags.append("-DCRYPTO_LINK_TEST")
         run(["gcc", *flags, *inc, "-c", ROOT / "micro-ecc/uECC.c", "-o", out / "uecc.o"])
         objects = [out / "uecc.o"]
         cxx = ["g++", "-std=gnu++23", "-Wall", "-Wextra", "-Werror", "-fno-rtti",
@@ -44,3 +47,11 @@ with tempfile.TemporaryDirectory(prefix="pka-models-") as temp:
              "-Wl,--gc-sections", "-lcrypto", "-o", out / "test"])
         print(opt, flush=True)
         run([out / "test"], env={**os.environ, "ASAN_OPTIONS": "detect_leaks=0"})
+
+        if opt == "-Os":
+            symbols = subprocess.check_output(["nm", "-C", out / "test"], text=True)
+            for forbidden in ("CryptoSoftAes", "CryptoSoftSha256", "CryptoSoftRng", "CryptoAesSoft", "Sha256Transform"):
+                assert forbidden not in symbols, forbidden
+            assert "CryptoCc3xxSym::Cipher" in symbols
+            assert "CryptoCc3xxSym::HashUpdate" in symbols
+            print("Minimal target archive: no software AES, SHA-256 or PRNG linked", flush=True)

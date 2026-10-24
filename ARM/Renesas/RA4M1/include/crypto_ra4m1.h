@@ -27,9 +27,10 @@ SOFTWARE.
 #ifndef __CRYPTO_RA4M1_H__
 #define __CRYPTO_RA4M1_H__
 #include "crypto/crypto.h"
+#include "crypto/crypto_softaes.h"
 
-// SCE5 AES/TRNG with inherited software SHA and P-256.
-class CryptoRa4m1 : public Crypto {
+// SCE5 AES/TRNG. The target library keeps generic SHA and P-256 defaults.
+class CryptoRa4m1 : public CryptoAesModes, public RngEngine {
 public:
 	bool Enable() override;
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,

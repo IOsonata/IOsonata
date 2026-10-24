@@ -2816,14 +2816,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
 		</link>
 		<link>
-			<name>include/crypto_ecb_nrf53.h</name>
+			<name>include/crypto_ecb_nrf.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/nRF53/include/crypto_ecb_nrf53.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_ecb_nrf.h</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_ecb_nrf53.cpp</name>
+			<name>src/crypto/crypto_ecb_nrf.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/nRF53/src/crypto_ecb_nrf53.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_ecb_nrf.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

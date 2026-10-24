@@ -41,230 +41,293 @@ SOFTWARE.
 #elif defined(NRF5340_XXAA_NETWORK) || defined(NRF52_SERIES) || \
 	defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || \
 	defined(NRF52832_XXAA) || defined(NRF52840_XXAA)
-#include "../nRF53/include/crypto_ecb_nrf53.h"
-#define CRYPTO_TARGET_AES CryptoEcbNrf53
+#include "crypto_ecb_nrf.h"
+#define CRYPTO_TARGET_AES CryptoEcbNrf
 #endif
 #if defined(NRF52840_XXAA) || defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 #include "crypto_cc3xx.h"
 #define CRYPTO_TARGET_PKA CryptoCc3xx
 #endif
 
-// Library-owned hardware implementation. Application Crypto objects borrow it;
-// their Disable and destruction do not stop other users of these peripherals.
-class CryptoNordic : public Crypto {
-public:
-	bool Enable() override
-	{
-		if (vbValid)
-		{
-			return true;
-		}
-		vpRng = CryptoRngNrfInstance();
-		if (vpRng == nullptr)
-		{
-			return false;
-		}
+#include "crypto/crypto_softsha256.h"
+
+static RngEngine *s_Rng;
 #ifdef CRYPTO_TARGET_AES
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || \
-	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
-		if (!vAes.Init(CracenIntrfInstance()))
-#elif defined(CRYPTO_TARGET_CC_HASH)
-		if (!vAes.Init(Cc3xxIntrfInstance()))
-#else
-		if (!vAes.Enable())
-#endif
-		{
-			return false;
-		}
+static CRYPTO_TARGET_AES s_Aes;
 #endif
 #ifdef CRYPTO_TARGET_PKA
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || \
-	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
-		if (!vPka.Init(CracenIntrfInstance(), this))
-#else
-		if (!vPka.Init(Cc3xxIntrfInstance(), this))
+static CRYPTO_TARGET_PKA s_Pka;
 #endif
-		{
-			return false;
-		}
-#endif
-		vbValid = true;
-		return true;
-	}
-
-	void Disable() override
-	{
-#ifdef CRYPTO_TARGET_AES
-		vAes.Disable();
-#endif
-#ifdef CRYPTO_TARGET_PKA
-		vPka.Disable();
-#endif
-		// Platform RNG singletons may be shared with other devices.
-		vpRng = nullptr;
-		Crypto::Disable();
-	}
-
-	void Reset() override
-	{
-		Disable();
-		CryptoSoftRng::Reset();
-		(void)Enable();
-	}
-
-	int SelfTest() override
-	{
-		if (!vbValid || Crypto::SelfTest() != 0)
-		{
-			return -1;
-		}
-#ifdef CRYPTO_TARGET_AES
-		if (vAes.SelfTest() != 0)
-		{
-			return -1;
-		}
-#endif
-#ifdef CRYPTO_TARGET_PKA
-		if (vPka.SelfTest() != 0)
-		{
-			return -1;
-		}
-#endif
-		return 0;
-	}
-
-	CRYPTO_STATUS Random(uint8_t *pOut, size_t Len) override
-	{
-		if (vpRng != nullptr)
-		{
-			return vpRng->Random(pOut, Len);
-		}
-		return CRYPTO_STATUS_FAIL;
-	}
-
-	bool IsSecure() const override
-	{
-		return vpRng != nullptr && vpRng->IsSecure();
-	}
-
-#ifdef CRYPTO_TARGET_AES
-	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
-			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut) override
-	{
-		return vAes.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
-	}
-
-	CRYPTO_STATUS Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
-			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
-			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen) override
-	{
-		return vAes.Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
-	}
-
-	CRYPTO_STATUS Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
-			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
-			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen) override
-	{
-		return vAes.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
-	}
-
-#endif
-	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
-			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen) override
-	{
-#ifdef CRYPTO_TARGET_AES
-		if (Alg == CRYPTO_MAC_CMAC)
-		{
-			return vAes.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
-		}
-#endif
-		return Crypto::Mac(Alg, Key, pMsg, Len, pMac, MacLen);
-	}
-
-#ifdef CRYPTO_TARGET_CC_HASH
-	CRYPTO_STATUS Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg,
-			size_t Len, uint8_t *pDigest) override
-	{
-		return vAes.Hash(Alg, pMsg, Len, pDigest);
-	}
-
-	size_t HashCtxSize() const override { return vAes.HashCtxSize(); }
-	size_t HashCtxAlign() const override { return vAes.HashCtxAlign(); }
-
-	CRYPTO_STATUS HashInit(CRYPTO_HASH_ALG Alg, void *pCtx) override
-	{
-		return vAes.HashInit(Alg, pCtx);
-	}
-
-	CRYPTO_STATUS HashUpdate(void *pCtx, const uint8_t *pMsg, size_t Len) override
-	{
-		return vAes.HashUpdate(pCtx, pMsg, Len);
-	}
-
-	CRYPTO_STATUS HashFinal(void *pCtx, uint8_t *pDigest) override
-	{
-		return vAes.HashFinal(pCtx, pDigest);
-	}
-#endif
-
-#ifdef CRYPTO_TARGET_PKA
-	size_t KeyCtxSize() const override
-	{
-		return vPka.KeyCtxSize();
-	}
-
-	size_t KeyCtxAlign() const override
-	{
-		return vPka.KeyCtxAlign();
-	}
-
-	void KeyReset(void *pKeyCtx) override
-	{
-		vPka.KeyReset(pKeyCtx);
-	}
-
-	CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKey) override
-	{
-		return vPka.KeyGen(Curve, pKeyCtx, pPubKey);
-	}
-
-	CRYPTO_STATUS KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
-			const uint8_t *pPrivKey, uint8_t *pPubKey) override
-	{
-		return vPka.KeyImport(Curve, pKeyCtx, pPrivKey, pPubKey);
-	}
-
-	CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
-			const uint8_t *pPeerPubKey, uint8_t *pSharedX, bool bKeepKey = false) override
-	{
-		return vPka.Agree(Curve, pKeyCtx, pPeerPubKey, pSharedX, bKeepKey);
-	}
-
-#endif
-private:
-	RngEngine *vpRng = nullptr;
-#ifdef CRYPTO_TARGET_AES
-	CRYPTO_TARGET_AES vAes;
-#endif
-#ifdef CRYPTO_TARGET_PKA
-	CRYPTO_TARGET_PKA vPka;
-#endif
-};
 
 bool Crypto::Init()
 {
-	static CryptoNordic hardware;
-
 	if (vbValid)
 	{
 		return true;
 	}
-	if (!hardware.Enable())
+	s_Rng = CryptoRngNrfInstance();
+	if (s_Rng == nullptr)
 	{
-		hardware.Disable();
 		return false;
 	}
-	vpHardware = &hardware;
+#ifdef CRYPTO_TARGET_AES
+#if defined(CRYPTO_TARGET_CC_HASH)
+	if (!s_Aes.Init(Cc3xxIntrfInstance()))
+#elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	if (!s_Aes.Init(CracenIntrfInstance()))
+#else
+	if (!s_Aes.Enable())
+#endif
+	{
+		return false;
+	}
+#endif
+#ifdef CRYPTO_TARGET_PKA
+#ifdef CRYPTO_TARGET_CC_HASH
+	if (!s_Pka.Init(Cc3xxIntrfInstance(), s_Rng))
+#else
+	if (!s_Pka.Init(CracenIntrfInstance(), s_Rng))
+#endif
+	{
+		return false;
+	}
+#endif
 	vbValid = true;
 	return true;
 }
+
+#if defined(CRYPTO_TARGET_AES)
+CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+}
+
+CRYPTO_STATUS Crypto::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		if (pTag != nullptr)
+		{
+			CryptoSecureWipe(pTag, TagLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
+{
+	if (!vbValid)
+	{
+		if (pMac != nullptr)
+		{
+			CryptoSecureWipe(pMac, MacLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (Alg == CRYPTO_MAC_HMAC)
+	{
+		return CryptoHmacSha256(this, Alg, Key, pMsg, Len, pMac, MacLen);
+	}
+	return s_Aes.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+}
+
+#endif
+
+#if defined(CRYPTO_TARGET_CC_HASH)
+CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
+{
+	if (!vbValid)
+	{
+		if (pDigest != nullptr && Alg == CRYPTO_HASH_SHA256)
+		{
+			CryptoSecureWipe(pDigest, 32U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.Hash(Alg, pMsg, Len, pDigest);
+}
+
+size_t Crypto::HashCtxSize() const
+{
+	if (!vbValid)
+	{
+		return 0U;
+	}
+	return s_Aes.HashCtxSize();
+}
+
+size_t Crypto::HashCtxAlign() const
+{
+	if (!vbValid)
+	{
+		return 1U;
+	}
+	return s_Aes.HashCtxAlign();
+}
+
+CRYPTO_STATUS Crypto::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.HashInit(Alg, pHashCtx);
+}
+
+CRYPTO_STATUS Crypto::HashUpdate(void *pHashCtx, const uint8_t *pMsg, size_t Len)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.HashUpdate(pHashCtx, pMsg, Len);
+}
+
+CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
+{
+	if (!vbValid)
+	{
+		if (pDigest != nullptr)
+		{
+			CryptoSecureWipe(pDigest, 32U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Aes.HashFinal(pHashCtx, pDigest);
+}
+
+#endif
+
+#if defined(CRYPTO_TARGET_PKA)
+size_t Crypto::KeyCtxSize() const
+{
+	if (!vbValid)
+	{
+		return 0U;
+	}
+	return s_Pka.KeyCtxSize();
+}
+
+size_t Crypto::KeyCtxAlign() const
+{
+	if (!vbValid)
+	{
+		return 1U;
+	}
+	return s_Pka.KeyCtxAlign();
+}
+
+void Crypto::KeyReset(void *pKeyCtx)
+{
+	s_Pka.KeyReset(pKeyCtx);
+}
+
+CRYPTO_STATUS Crypto::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKey)
+{
+	if (!vbValid)
+	{
+		if (pPubKey != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pPubKey, 64U);
+		}
+		if (pKeyCtx != nullptr)
+		{
+			KeyReset(pKeyCtx);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Pka.KeyGen(Curve, pKeyCtx, pPubKey);
+}
+
+CRYPTO_STATUS Crypto::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+			const uint8_t *pPrivKey, uint8_t *pPubKey)
+{
+	if (!vbValid)
+	{
+		if (pPubKey != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pPubKey, 64U);
+		}
+		if (pKeyCtx != nullptr)
+		{
+			KeyReset(pKeyCtx);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Pka.KeyImport(Curve, pKeyCtx, pPrivKey, pPubKey);
+}
+
+CRYPTO_STATUS Crypto::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
+			const uint8_t *pPeerPubKey, uint8_t *pSharedX, bool bKeepKey)
+{
+	if (!vbValid)
+	{
+		if (pSharedX != nullptr && Curve == CRYPTO_CURVE_P256)
+		{
+			CryptoSecureWipe(pSharedX, 32U);
+		}
+		if (pKeyCtx != nullptr)
+		{
+			KeyReset(pKeyCtx);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Pka.Agree(Curve, pKeyCtx, pPeerPubKey, pSharedX, bKeepKey);
+}
+
+#endif
+
+CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return (*s_Rng).Random(pOut, Len);
+}
+
+bool Crypto::IsSecure() const
+{
+	if (!vbValid)
+	{
+		return false;
+	}
+	return (*s_Rng).IsSecure();
+}
+

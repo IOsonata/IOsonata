@@ -382,7 +382,7 @@ CRYPTO_STATUS CryptoCc3xxSym::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 CRYPTO_STATUS CryptoCc3xxSym::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
 {
-	CRYPTO_STATUS status = Crypto::Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+	CRYPTO_STATUS status = (Alg == CRYPTO_MAC_HMAC ? CryptoHmacSha256(this, Alg, Key, pMsg, Len, pMac, MacLen) : CryptoAesModes::Mac(Alg, Key, pMsg, Len, pMac, MacLen));
 	if (status == CRYPTO_STATUS_OK && vFault)
 	{
 		CryptoSecureWipe(pMac, MacLen);
@@ -395,7 +395,7 @@ CRYPTO_STATUS CryptoCc3xxSym::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 	const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
 	const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
 {
-	CRYPTO_STATUS status = Crypto::Seal(Alg, Key, pNonce, NonceLen, pAad,
+	CRYPTO_STATUS status = CryptoAesModes::Seal(Alg, Key, pNonce, NonceLen, pAad,
 		AadLen, pMsg, Len, pOut, pTag, TagLen);
 	if (status == CRYPTO_STATUS_OK && vFault)
 	{
@@ -410,7 +410,7 @@ CRYPTO_STATUS CryptoCc3xxSym::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
 	const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
 	const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
 {
-	CRYPTO_STATUS status = Crypto::Open(Alg, Key, pNonce, NonceLen, pAad,
+	CRYPTO_STATUS status = CryptoAesModes::Open(Alg, Key, pNonce, NonceLen, pAad,
 		AadLen, pMsg, Len, pOut, pTag, TagLen);
 	if (status == CRYPTO_STATUS_OK && vFault)
 	{

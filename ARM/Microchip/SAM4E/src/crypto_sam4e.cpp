@@ -118,10 +118,20 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 
 CRYPTO_STATUS CryptoSam::Random(uint8_t *pOut, size_t Len)
 {
-	return Crypto::Random(pOut, Len);
+	if (pOut != nullptr)
+	{
+		CryptoSecureWipe(pOut, Len);
+	}
+	return CRYPTO_STATUS_UNSUPPORTED;
 }
 
 bool CryptoSam::IsSecure() const
 {
 	return false;
+}
+
+CRYPTO_STATUS CryptoSam::NarrowCipher(CRYPTO_CIPHER_ALG, int, const CryptoKey &,
+	const uint8_t *, size_t, const uint8_t *, size_t, uint8_t *)
+{
+	return CRYPTO_STATUS_UNSUPPORTED;
 }

@@ -1,5 +1,6 @@
 #include "crypto/cryptomaster.h"
 #include "crypto/crypto.h"
+#include "crypto/crypto_softsha256.h"
 #ifdef CRACEN_RNG_MODEL
 #include "crypto_rng_nrf.h"
 #endif
@@ -74,38 +75,85 @@ public:
 	}
 };
 static ModelCm s_Cm;
-class ModelCrypto : public Crypto {
-public:
-	bool Enable() override { vbValid = s_Cm.Init(&s_Intrf); return vbValid; }
-	bool IsSecure() const override { return true; }
-	CRYPTO_STATUS Random(uint8_t *out, size_t len) override
-	{
-#ifdef CRACEN_RNG_MODEL
-		return CryptoRngNrfInstance()->Random(out, len);
-#else
-		return RAND_bytes(out, len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
-#endif
-	}
-	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG a, int e, const CryptoKey &k, const uint8_t *iv,
-		size_t il, const uint8_t *in, size_t n, uint8_t *out) override
-	{ return s_Cm.Cipher(a,e,k,iv,il,in,n,out); }
-	CRYPTO_STATUS Seal(CRYPTO_AEAD_ALG a, const CryptoKey &k, const uint8_t *iv, size_t il,
-		const uint8_t *ad, size_t al, const uint8_t *in, size_t n, uint8_t *out, uint8_t *tag, size_t tl) override
-	{ return s_Cm.Seal(a,k,iv,il,ad,al,in,n,out,tag,tl); }
-	CRYPTO_STATUS Open(CRYPTO_AEAD_ALG a, const CryptoKey &k, const uint8_t *iv, size_t il,
-		const uint8_t *ad, size_t al, const uint8_t *in, size_t n, uint8_t *out, const uint8_t *tag, size_t tl) override
-	{ return s_Cm.Open(a,k,iv,il,ad,al,in,n,out,tag,tl); }
-	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG a, const CryptoKey &k, const uint8_t *in, size_t n, uint8_t *out, size_t ol) override
-	{ return a == CRYPTO_MAC_CMAC ? s_Cm.Mac(a,k,in,n,out,ol) : Crypto::Mac(a,k,in,n,out,ol); }
-};
 bool Crypto::Init()
 {
-	static ModelCrypto hardware;
-	if (vbValid) return true;
-	if (!hardware.Enable()) return false;
-	vpHardware = &hardware;
-	vbValid = true;
-	return true;
+	vbValid = s_Cm.Init(&s_Intrf);
+	return vbValid;
+}
+CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Cm.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+}
+
+CRYPTO_STATUS Crypto::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		if (pTag != nullptr)
+		{
+			CryptoSecureWipe(pTag, TagLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Cm.Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Cm.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
+{
+	if (!vbValid)
+	{
+		if (pMac != nullptr)
+		{
+			CryptoSecureWipe(pMac, MacLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (Alg == CRYPTO_MAC_HMAC)
+	{
+		return CryptoHmacSha256(this, Alg, Key, pMsg, Len, pMac, MacLen);
+	}
+	return s_Cm.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+}
+
+bool Crypto::IsSecure() const { return vbValid; }
+CRYPTO_STATUS Crypto::Random(uint8_t *out, size_t len)
+{
+#ifdef CRACEN_RNG_MODEL
+	return CryptoRngNrfInstance()->Random(out, len);
+#else
+	return RAND_bytes(out, len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+#endif
 }
 extern int CryptoEngineTest();
 int main()

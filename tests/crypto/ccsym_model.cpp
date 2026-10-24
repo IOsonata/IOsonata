@@ -1,4 +1,5 @@
 #include "crypto_cc3xx_sym.h"
+#include "crypto/crypto.h"
 #define OPENSSL_SUPPRESS_DEPRECATED
 #include <openssl/evp.h>
 #include <openssl/sha.h>
@@ -82,39 +83,147 @@ public:
 	}
 };
 static ModelSym s_Sym;
-class ModelCrypto : public Crypto {
-public:
-	CRYPTO_STATUS Hash(CRYPTO_HASH_ALG a, const uint8_t *in, size_t n, uint8_t *out) override
-	{ return s_Sym.Hash(a,in,n,out); }
-	size_t HashCtxSize() const override { return s_Sym.HashCtxSize(); }
-	size_t HashCtxAlign() const override { return s_Sym.HashCtxAlign(); }
-	CRYPTO_STATUS HashInit(CRYPTO_HASH_ALG a, void *ctx) override { return s_Sym.HashInit(a,ctx); }
-	CRYPTO_STATUS HashUpdate(void *ctx, const uint8_t *in, size_t n) override { return s_Sym.HashUpdate(ctx,in,n); }
-	CRYPTO_STATUS HashFinal(void *ctx, uint8_t *out) override { return s_Sym.HashFinal(ctx,out); }
-	bool Enable() override { vbValid = s_Sym.Init(Cc3xxIntrfInstance()); return vbValid; }
-	bool IsSecure() const override { return true; }
-	CRYPTO_STATUS Random(uint8_t *out, size_t len) override
-	{ return RAND_bytes(out, len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL; }
-	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG a, int e, const CryptoKey &k, const uint8_t *iv,
-		size_t il, const uint8_t *in, size_t n, uint8_t *out) override
-	{ return s_Sym.Cipher(a,e,k,iv,il,in,n,out); }
-	CRYPTO_STATUS Seal(CRYPTO_AEAD_ALG a, const CryptoKey &k, const uint8_t *iv, size_t il,
-		const uint8_t *ad, size_t al, const uint8_t *in, size_t n, uint8_t *out, uint8_t *tag, size_t tl) override
-	{ return s_Sym.Seal(a,k,iv,il,ad,al,in,n,out,tag,tl); }
-	CRYPTO_STATUS Open(CRYPTO_AEAD_ALG a, const CryptoKey &k, const uint8_t *iv, size_t il,
-		const uint8_t *ad, size_t al, const uint8_t *in, size_t n, uint8_t *out, const uint8_t *tag, size_t tl) override
-	{ return s_Sym.Open(a,k,iv,il,ad,al,in,n,out,tag,tl); }
-	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG a, const CryptoKey &k, const uint8_t *in, size_t n, uint8_t *out, size_t ol) override
-	{ return a == CRYPTO_MAC_CMAC ? s_Sym.Mac(a,k,in,n,out,ol) : Crypto::Mac(a,k,in,n,out,ol); }
-};
 bool Crypto::Init()
 {
-	static ModelCrypto hardware;
-	if (vbValid) return true;
-	if (!hardware.Enable()) return false;
-	vpHardware = &hardware;
-	vbValid = true;
-	return true;
+	vbValid = s_Sym.Init(Cc3xxIntrfInstance());
+	return vbValid;
+}
+CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Sym.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+}
+
+CRYPTO_STATUS Crypto::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		if (pTag != nullptr)
+		{
+			CryptoSecureWipe(pTag, TagLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Sym.Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Sym.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
+{
+	if (!vbValid)
+	{
+		if (pMac != nullptr)
+		{
+			CryptoSecureWipe(pMac, MacLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (Alg == CRYPTO_MAC_HMAC)
+	{
+		return CryptoHmacSha256(this, Alg, Key, pMsg, Len, pMac, MacLen);
+	}
+	return s_Sym.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+}
+
+CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
+{
+	if (!vbValid)
+	{
+		if (pDigest != nullptr && Alg == CRYPTO_HASH_SHA256)
+		{
+			CryptoSecureWipe(pDigest, 32U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Sym.Hash(Alg, pMsg, Len, pDigest);
+}
+
+size_t Crypto::HashCtxSize() const
+{
+	if (!vbValid)
+	{
+		return 0U;
+	}
+	return s_Sym.HashCtxSize();
+}
+
+size_t Crypto::HashCtxAlign() const
+{
+	if (!vbValid)
+	{
+		return 1U;
+	}
+	return s_Sym.HashCtxAlign();
+}
+
+CRYPTO_STATUS Crypto::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Sym.HashInit(Alg, pHashCtx);
+}
+
+CRYPTO_STATUS Crypto::HashUpdate(void *pHashCtx, const uint8_t *pMsg, size_t Len)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Sym.HashUpdate(pHashCtx, pMsg, Len);
+}
+
+CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
+{
+	if (!vbValid)
+	{
+		if (pDigest != nullptr)
+		{
+			CryptoSecureWipe(pDigest, 32U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Sym.HashFinal(pHashCtx, pDigest);
+}
+
+bool Crypto::IsSecure() const { return vbValid; }
+CRYPTO_STATUS Crypto::Random(uint8_t *out, size_t len)
+{
+#ifdef CRACEN_RNG_MODEL
+	return CryptoRngNrfInstance()->Random(out, len);
+#else
+	return RAND_bytes(out, len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+#endif
 }
 extern int CryptoEngineTest();
 int main()

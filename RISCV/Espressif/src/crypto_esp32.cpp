@@ -28,6 +28,8 @@ SOFTWARE.
 #include "esp32xx.h"
 #include "coredev/interrupt.h"
 #include "crypto/crypto.h"
+#include "crypto/crypto_softaes.h"
+#include "crypto/crypto_softsha256.h"
 
 #if !defined(ESP32C3) && !defined(ESP32C6)
 #error "Crypto register mapping is verified only for ESP32-C3/C6"
@@ -56,7 +58,7 @@ static_assert(sizeof(EspShaCtx) <= CRYPTO_HASHCTX_MAX, "SHA storage too small");
 static bool s_ShaBusy;
 static bool s_AesBusy = false;
 
-class CryptoEsp32 : public Crypto {
+class CryptoEsp32 : public CryptoAesModes, public HashEngine {
 public:
 	CRYPTO_STATUS Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest) override;
 	size_t HashCtxSize() const override;
@@ -77,6 +79,8 @@ private:
 	bool Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 		const uint8_t In[16], uint8_t Out[16]);
 };
+
+static CryptoEsp32 s_Hardware;
 
 static void AesReset()
 {
@@ -280,17 +284,15 @@ CRYPTO_STATUS CryptoEsp32::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 
 bool Crypto::Init()
 {
-	static CryptoEsp32 hardware;
 
 	if (vbValid)
 	{
 		return true;
 	}
-	if (!hardware.Enable())
+	if (!s_Hardware.Enable())
 	{
 		return false;
 	}
-	vpHardware = &hardware;
 	vbValid = true;
 	return true;
 }
@@ -503,3 +505,132 @@ CRYPTO_STATUS CryptoEsp32::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg,
 	CryptoSecureWipe(&ctx, sizeof(ctx));
 	return status;
 }
+
+CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+}
+
+CRYPTO_STATUS Crypto::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		if (pTag != nullptr)
+		{
+			CryptoSecureWipe(pTag, TagLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+}
+
+CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
+{
+	if (!vbValid)
+	{
+		if (pMac != nullptr)
+		{
+			CryptoSecureWipe(pMac, MacLen);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (Alg == CRYPTO_MAC_HMAC)
+	{
+		return CryptoHmacSha256(this, Alg, Key, pMsg, Len, pMac, MacLen);
+	}
+	return s_Hardware.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+}
+
+CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
+{
+	if (!vbValid)
+	{
+		if (pDigest != nullptr && Alg == CRYPTO_HASH_SHA256)
+		{
+			CryptoSecureWipe(pDigest, 32U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.Hash(Alg, pMsg, Len, pDigest);
+}
+
+size_t Crypto::HashCtxSize() const
+{
+	if (!vbValid)
+	{
+		return 0U;
+	}
+	return s_Hardware.HashCtxSize();
+}
+
+size_t Crypto::HashCtxAlign() const
+{
+	if (!vbValid)
+	{
+		return 1U;
+	}
+	return s_Hardware.HashCtxAlign();
+}
+
+CRYPTO_STATUS Crypto::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.HashInit(Alg, pHashCtx);
+}
+
+CRYPTO_STATUS Crypto::HashUpdate(void *pHashCtx, const uint8_t *pMsg, size_t Len)
+{
+	if (!vbValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.HashUpdate(pHashCtx, pMsg, Len);
+}
+
+CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
+{
+	if (!vbValid)
+	{
+		if (pDigest != nullptr)
+		{
+			CryptoSecureWipe(pDigest, 32U);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return s_Hardware.HashFinal(pHashCtx, pDigest);
+}
+

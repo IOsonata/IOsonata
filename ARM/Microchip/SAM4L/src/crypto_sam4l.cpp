@@ -232,3 +232,37 @@ bool CryptoSam::IsSecure() const
 {
 	return vbValid;
 }
+
+CRYPTO_STATUS CryptoSam::NarrowCipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+	const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
+{
+	CryptoSoftAes software;
+
+	software.Enable();
+	return software.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+}
+
+extern CryptoSam &CryptoSamInstance();
+
+CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+	return CryptoSamInstance().Random(pOut, Len);
+}
+
+bool Crypto::IsSecure() const
+{
+	if (!vbValid)
+	{
+		return false;
+	}
+	return CryptoSamInstance().IsSecure();
+}
+
