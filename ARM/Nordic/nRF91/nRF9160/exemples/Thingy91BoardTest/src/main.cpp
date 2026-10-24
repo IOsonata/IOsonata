@@ -12,6 +12,7 @@ MIT License
 Copyright (c) 2026 I-SYST inc.
 -------------------------------------------------------------------------*/
 #include "audio/buzzer.h"
+#include "coredev/iopincfg.h"
 #include "coredev/pwm.h"
 #include "coredev/uart.h"
 #include "idelay.h"
@@ -98,7 +99,7 @@ int main()
 	g_Uart.printf("Buzzer %u Hz for %u ms\r\n",
 		(unsigned)THINGY91_TEST_BUZZER_FREQ,
 		(unsigned)THINGY91_TEST_BUZZER_MS);
-	g_Buzzer.Play(THINGY91_TEST_BUZZER_FREQ, THINGY91_TEST_BUZZER_MS);
+	g_Buzzer.Play((uint32_t)THINGY91_TEST_BUZZER_FREQ, THINGY91_TEST_BUZZER_MS);
 #endif
 
 	g_Uart.printf("nRF52840 reset deasserted\r\n");

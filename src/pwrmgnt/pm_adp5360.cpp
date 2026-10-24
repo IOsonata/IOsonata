@@ -87,6 +87,7 @@ bool PmAdp5360::Init(DeviceIntrf * const pIntrf, uint8_t Addr)
 	uint8_t id;
 
 	vbInitialized = false;
+	Valid(false);
 
 	if (pIntrf == NULL || pIntrf->Type() != DEVINTRF_TYPE_I2C ||
 		Addr != ADP5360_I2C_ADDR)
@@ -99,6 +100,7 @@ bool PmAdp5360::Init(DeviceIntrf * const pIntrf, uint8_t Addr)
 		return false;
 
 	vbInitialized = true;
+	Valid(true);
 
 	return true;
 }
@@ -466,4 +468,23 @@ bool PmAdp5360::ReadFaultStatus(uint8_t &Status)
 bool PmAdp5360::ReadPowerGood(uint8_t &Status)
 {
 	return vbInitialized && ReadReg(ADP5360_PGOOD_STATUS_REG, Status);
+}
+
+
+bool PmAdp5360::Enable()
+{
+	return vbInitialized && UpdateReg(ADP5360_CHARGER_FUNC_REG,
+		ADP5360_CHARGER_ENABLE_MASK, ADP5360_CHARGER_ENABLE_MASK);
+}
+
+void PmAdp5360::Disable()
+{
+	if (vbInitialized)
+		UpdateReg(ADP5360_CHARGER_FUNC_REG, ADP5360_CHARGER_ENABLE_MASK, 0);
+}
+
+void PmAdp5360::Reset()
+{
+	vbInitialized = false;
+	Valid(false);
 }

@@ -43,6 +43,7 @@ bool PmnPM6001::Init(DeviceIntrf * const pI2c, uint8_t Addr)
 	uint8_t ready;
 
 	vbInitialized = false;
+	Valid(false);
 
 	if (pI2c == NULL || Addr != NPM6001_I2C_ADDR ||
 		pI2c->Type() != DEVINTRF_TYPE_I2C)
@@ -59,6 +60,7 @@ bool PmnPM6001::Init(DeviceIntrf * const pI2c, uint8_t Addr)
 		return false;
 
 	vbInitialized = true;
+	Valid(true);
 
 	return true;
 }
@@ -198,4 +200,21 @@ bool PmnPM6001::EnableFaultInterrupts(uint8_t Mask, bool Enable)
 
 	return WriteReg(Enable ? NPM6001_INTENSET_REG :
 		NPM6001_INTENCLR_REG, Mask);
+}
+
+
+bool PmnPM6001::Enable()
+{
+	return SetBuck3Enabled(true);
+}
+
+void PmnPM6001::Disable()
+{
+	SetBuck3Enabled(false);
+}
+
+void PmnPM6001::Reset()
+{
+	vbInitialized = false;
+	Valid(false);
 }

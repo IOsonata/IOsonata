@@ -63,6 +63,12 @@ class PmAdp5360 : public PowerMgnt {
 public:
 	PmAdp5360();
 
+	/** Enable/disable charging; other rails retain their state. */
+	bool Enable() override;
+	void Disable() override;
+	/** Forget initialization; no hardware reset or board power cycle. */
+	void Reset() override;
+
 	bool Init(DeviceIntrf * const pIntrf, uint8_t Addr = ADP5360_I2C_ADDR);
 	bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf);
 

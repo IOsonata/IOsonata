@@ -48,6 +48,12 @@ class PmnPM6001 : public Device {
 public:
 	PmnPM6001();
 
+	/** Enable/disable BUCK3; other rails retain their state. */
+	bool Enable() override;
+	void Disable() override;
+	/** Forget initialization; no hardware reset or board power cycle. */
+	void Reset() override;
+
 	bool Init(DeviceIntrf * const pI2c, uint8_t Addr = NPM6001_I2C_ADDR);
 
 	bool SetBuck3Enabled(bool Enable);
