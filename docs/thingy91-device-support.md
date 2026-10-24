@@ -81,3 +81,4 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - The board battery profile uses a 4.2 V termination target and a 675 mA nominal 0.5C charge request. The nPM1300 has a 2 mA charge-current step, so `SetCharge()` programs 674 mA and reports 674 mA as the actual setting.
 - Battery presence and state of charge remain unknown until a battery-specific host fuel-gauge model is integrated.
 - Hardware validation is pending.
+- Test project: `ARM/Nordic/nRF91/nRF91x1/exemples/nPM1300Test`; default mode is non-destructive and reports charger/status, VBAT, NTC temperature, BUCK/LDSW status and GPIO4.
