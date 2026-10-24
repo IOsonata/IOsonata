@@ -25,7 +25,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | nRF5340 application/network cores | IPC/radio | Existing generic nRF5340 support; board integration required |
 | nRF7002 Wi-Fi | SPI/coexistence | Development paused; existing experimental code retained; do not continue until explicitly resumed |
 | ADXL367 low-power accelerometer | I2C | `accel_adxl367` integrated in the nRF91x1 library; Thingy:91 X sensor-rail-aware test project added; hardware validation pending |
-| BMI270 six-axis IMU | SPI | `ag_bmi270` repaired and covered by production-driver host regression; Thingy:91 X SPI3 test project added; hardware validation pending |
+| BMI270 six-axis IMU | SPI | `ag_bmi270` repaired; production-driver host regression and Thingy:91 X SPI3 test project added; hardware validation pending |
 | BMM350 magnetometer | I2C | `mag_bmm350` corrected to Bosch ODR/OTP compensation and 24-bit decoding; host regression and Thingy:91 X test project added; hardware validation pending |
 | BME688 environmental sensor | I2C | Existing `tphg_bme680` forced-mode path is register-compatible (BME68x ID `0x61`, I2C `0x76/0x77`); Thingy:91 X power-aware compatibility test added; parallel/sequential gas modes are not exposed; hardware validation pending |
 | GD25LE255E 256 Mbit flash | SPI | Existing universal external-memory interface; GD25LE255E 32 MiB/4-byte-address configuration and read-only Thingy:91 X test added; hardware validation pending |

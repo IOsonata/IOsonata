@@ -349,6 +349,18 @@ static void TestHeaderlessFifoOrderAndLength()
 	assert(bus.vFifoLen == 0);
 }
 
+static void TestTemperatureDoesNotForceGyro()
+{
+	MockIntrf bus;
+	AgBmi270 imu;
+	TempSensorCfg_t cfg;
+
+	cfg = TempConfig();
+	assert(imu.Init(cfg, &bus, NULL));
+	assert((bus.vReg[BMI270_PWR_CTRL_REG] & BMI270_PWR_CTRL_TEMP_EN) != 0);
+	assert((bus.vReg[BMI270_PWR_CTRL_REG] & BMI270_PWR_CTRL_GYR_EN) == 0);
+}
+
 static void TestSpiDummyAndChipSelect()
 {
 	MockIntrf bus(DEVINTRF_TYPE_SPI);
@@ -386,6 +398,7 @@ int main()
 	TestInitAndConfiguration();
 	TestFailedInitCanRetry();
 	TestDirectDataAndTemperature();
+	TestTemperatureDoesNotForceGyro();
 	TestHeaderlessFifoOrderAndLength();
 	TestSpiDummyAndChipSelect();
 	TestReadFailure();

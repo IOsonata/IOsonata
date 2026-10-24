@@ -1155,8 +1155,7 @@ bool TempBmi270::Enable()
 		return false;
 	}
 
-	/* BMI270 temperature measurement requires the gyroscope domain enabled. */
-	d |= BMI270_PWR_CTRL_TEMP_EN | BMI270_PWR_CTRL_GYR_EN;
+	d |= BMI270_PWR_CTRL_TEMP_EN;
 	if (!Write8(&regaddr, 1, d))
 	{
 		return false;
