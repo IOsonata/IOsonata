@@ -89,6 +89,8 @@ def build(tmp):
                                    ROOT / 'micro-ecc', BOARD_DIR)]
     cxx = ['arm-none-eabi-g++', *cpu, '-std=gnu++23', '-Wall', '-Werror', '-fno-exceptions', '-fno-rtti', *inc]
     srcs = [
+        (ROOT / "src/coredev/timer.cpp", []),
+        (ROOT / "tests/crypto/timer_fixture.cpp", []),
         (HERE / 'crypto_fw.cpp', []),
         (ROOT / 'exemples/crypto/crypto_engine_test.cpp',
          ['-DCRYPTO_TEST_NO_MAIN', f'-DCRYPTO_TEST_SOAK_PKA={SOAK_PKA}', f'-DCRYPTO_TEST_SOAK_AES={SOAK_AES}']),

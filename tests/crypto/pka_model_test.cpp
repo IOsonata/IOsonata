@@ -255,8 +255,12 @@ int main()
 	uint8_t priv[32], pub[64], secret[32], hash[32] = {}, sig[64];
 	CryptoKey descriptor;
 	unsigned before;
+	TimerCfg_t timerCfg = {};
 
 	assert(CryptoEngineTest() == 0);
+	timerCfg.DevNo = TimerGetHighFreqDevNo();
+	timerCfg.Freq = 1000000U;
+	assert(s_Timer.Init(timerCfg));
 	assert(s_Cc.Operations > 0);
 	assert(P256IsZero((uint8_t *)s_Cc.Ram, sizeof(s_Cc.Ram)));
 	assert(cc.Init(Cc3xxIntrfInstance(), CryptoRngNrfInstance()));
@@ -312,5 +316,6 @@ int main()
 	assert(P256IsZero(baIntrf.Slot(7), 32));
 	assert(P256IsZero(baIntrf.Slot(15), 32));
 	printf("CC3xx/BA414EP models: %d passed, %d failed, %d skipped\n", s_pass, s_fail, s_skip);
+	s_Timer.Disable();
 	return s_fail ? 1 : 0;
 }

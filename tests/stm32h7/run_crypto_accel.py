@@ -25,7 +25,8 @@ with tempfile.TemporaryDirectory(prefix="h7-crypto-") as temp:
         flags = [opt, "-g", "-fsanitize=address,undefined", "-DuECC_ENABLE_VLI_API=1",
                  "-DSTM32H753xx", "-DuECC_WORD_SIZE=4", "-DCRYPTO_STM32H7_POLL_MAX=32", "-DCRYPTO_TEST_NO_MAIN"]
         run(["gcc", *flags, *inc, "-c", ROOT / "micro-ecc/uECC.c", "-o", out / "uecc.o"])
-        sources = ["src/crypto/crypto_aes_modes.cpp", "src/crypto/crypto_aes_soft.cpp",
+        sources = ["src/coredev/timer.cpp", "tests/crypto/timer_fixture.cpp",
+                   "src/crypto/crypto_aes_modes.cpp", "src/crypto/crypto_aes_soft.cpp",
                    "src/crypto/crypto_softsha256.cpp", "src/crypto/crypto_softrng.cpp",
                    "src/crypto/crypto_uecc.cpp", "src/crypto/crypto_p256.cpp",
                    "src/crypto/crypto.cpp", "ARM/ST/src/crypto_default_stm32.cpp",

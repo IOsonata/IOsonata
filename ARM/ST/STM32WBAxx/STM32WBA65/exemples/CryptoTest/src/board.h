@@ -44,7 +44,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BOARD				STM32WBA65I_DK1
 
 #include "stm32_boards.h"
-#include "coredev/system_core_clock.h"
 
 // Output on USART2, the Arduino D0/D1 pins, also the second ST-LINK virtual
 // COM port. The test prints one line per check and the totals.
@@ -56,12 +55,5 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_TX_PORT		IOPORTB
 #define UART_TX_PIN			12
 #define UART_TX_PINOP		IOPINOP_FUNC7
-
-// Timing from the Cortex-M33 cycle counter (DWT), needs no library
-#define CRYPTO_TEST_TICKS_INIT()	do { \
-		*(volatile uint32_t *)0xE000EDFCU |= (1U << 24); \
-		*(volatile uint32_t *)0xE0001000U |= 1U; } while (0)
-#define CRYPTO_TEST_TICKS()			(*(volatile uint32_t *)0xE0001004U)
-#define CRYPTO_TEST_TICKS_PER_US	(SystemCoreClockGet() / 1000000U)
 
 #endif

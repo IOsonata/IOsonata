@@ -6,8 +6,7 @@ The seven configured examples (nRF5340 application/network, nRF9160, nRF91x1,
 STM32H753, STM32WBA65 and STM32L476) link the same `crypto_engine_test.cpp`.
 
 The test declares `Crypto s_Crypto` and calls `s_Crypto.Init()`. The MCU library
-binds its internal hardware implementation; `board.h` supplies console and timing data
-only. Software objects in the test are independent comparison references.
+binds its internal hardware implementation; `board.h` supplies console configuration only. Software objects in the test are independent comparison references.
 No hardware factory names, target headers or linker forcing options are needed.
 
 Release uses the configured UART; check the board's baud rate and pins. Debug
@@ -62,3 +61,18 @@ The ported operations above have working implementations. Software-only entropy
 is intentionally non-secure and cannot supply key generation/signing. Desktop
 and the skeletal RISC-V nRF54H20 project remain outside this MCU integration.
 The host models do not validate silicon timing, DMA, or physical entropy quality.
+
+All MCU builds run the same performance section. The test declares a `Timer`,
+selects the first high-frequency device with `TimerGetHighFreqDevNo()`, and
+requests 1 MHz through `Timer::Init`. The timer driver selects the actual
+frequency. `TickCount()` supplies 64-bit counts; `nSecond()` and `uSecond()`
+perform all time conversion. Results are nanoseconds per operation (averaged
+over 64 operations) and microseconds per P-256 key import/public-key calculation.
+These are elapsed times, not CPU cycle counts. Timing initialization failure
+fails the test. No board timing macros, DWT register access or target selection
+is present in the generic test.
+
+Host and register-model runners supply a deterministic test-only TimerInit
+implementation. It exercises conversion at 32768 Hz and a 32-bit rollover;
+its printed times are simulated and must not be used as performance results.
+MCU projects link the existing timer driver from their MCU library.

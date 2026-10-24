@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCES = ["src/device.cpp", "src/device_intrf.cpp", "src/crypto/crypto.cpp",
+SOURCES = ["src/coredev/timer.cpp", "tests/crypto/timer_fixture.cpp", "src/device.cpp", "src/device_intrf.cpp", "src/crypto/crypto.cpp",
            "src/crypto/crypto_default.cpp", "src/crypto/crypto_aes_modes.cpp",
            "src/crypto/crypto_aes_soft.cpp", "src/crypto/crypto_softsha256.cpp",
            "src/crypto/crypto_softrng.cpp", "src/crypto/crypto_uecc.cpp",
@@ -37,4 +37,20 @@ with tempfile.TemporaryDirectory(prefix="crypto-objects-") as temp:
             run(["g++", "-std=gnu++23", "-fno-rtti", "-fno-exceptions", *flags,
                  *includes, ROOT / source, archive, "-Wl,--gc-sections", "-o", executable])
             print(opt, source, flush=True)
-            run([executable])
+            result = subprocess.run([str(executable)], check=True, text=True, capture_output=True)
+            print(result.stdout, end="")
+            if source.endswith("crypto_engine_test.cpp"):
+                assert "Benchmark timer: 32768 Hz" in result.stdout
+                assert "Crypto performance (nanoseconds per operation" in result.stdout
+                assert result.stdout.count("ns/op") == 28
+                assert "target 3337, software 3337 ns/op" in result.stdout
+        executable = out / "timer_failure_test"
+        run(["g++", "-std=gnu++23", "-fno-rtti", "-fno-exceptions", *flags,
+             "-DCRYPTO_TEST_NO_MAIN", *includes,
+             ROOT / "exemples/crypto/crypto_engine_test.cpp",
+             ROOT / "tests/crypto/timer_failure_test.cpp", archive,
+             "-Wl,--gc-sections", "-o", executable])
+        result = subprocess.run([str(executable)], check=True, text=True, capture_output=True)
+        assert "[FAIL] benchmark timer initializes" in result.stdout
+        assert "Crypto performance" not in result.stdout
+        print("Timer failure reported; no benchmark output", flush=True)

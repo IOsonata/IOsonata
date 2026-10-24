@@ -10,16 +10,14 @@ Every call goes through the CipherEngine, MacEngine, AeadEngine,
 KeyAgreeEngine, SignEngine and RngEngine interfaces, so the same file tests
 any chip engine.
 
-The MCU library supplies its default engines through crypto/icrypto.h.
+The MCU library supplies its default engine through crypto/crypto.h.
+Timing uses the generic Timer class on every MCU.
 The application contains no target engine selection. Software engines below
 are independent references for comparisons. A software random source is not
 security grade; tests requiring secure entropy are explicitly skipped.
 
 Optional:
 
-	CRYPTO_TEST_TICKS_INIT()	start a free running counter
-	CRYPTO_TEST_TICKS()			read it, a uint32_t
-	CRYPTO_TEST_TICKS_PER_US	counts per microsecond
 	CRYPTO_TEST_SOAK_AES		random AES rounds, default 200
 	CRYPTO_TEST_SOAK_PKA		random P-256 rounds, default 8
 	CRYPTO_TEST_NO_MAIN			give CryptoEngineTest() and no main() or UART setup
@@ -58,13 +56,14 @@ SOFTWARE.
 #include <stdio.h>
 #include <string.h>
 
+#include "coredev/timer.h"
 #include "crypto/crypto.h"
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_softrng.h"
 #include "crypto/crypto_softsha256.h"
 #include "crypto/crypto_uecc.h"
 
-// Board data supplies the console and optional timing counter only.
+// Board data supplies console configuration only.
 #if defined(__has_include)
 #if __has_include("board.h")
 #include "board.h"
@@ -136,6 +135,7 @@ static int s_pass, s_fail, s_skip;
 static CryptoSoftAes s_ReferenceAes;
 static CryptoUecc s_ReferencePka;
 static Crypto s_Crypto;
+static Timer s_Timer;
 
 static EngineTestRng s_ReferenceRng;
 
@@ -818,13 +818,9 @@ static void PkaVectors(KeyAgreeEngine *pKa, SignEngine *pSign, SignEngine *pRefS
 		pSign->Verify(CRYPTO_CURVE_P256, pubKey, hash, 32, sig) == CRYPTO_STATUS_FAIL);
 }
 
-static uint32_t Ticks(void)
+static uint64_t Ticks(void)
 {
-#ifdef CRYPTO_TEST_TICKS
-	return (uint32_t)CRYPTO_TEST_TICKS();
-#else
-	return 0U;
-#endif
+	return s_Timer.TickCount();
 }
 
 static void PkaSoak(KeyAgreeEngine *pKa, SignEngine *pSign, KeyAgreeEngine *pRefKa,
@@ -832,7 +828,7 @@ static void PkaSoak(KeyAgreeEngine *pKa, SignEngine *pSign, KeyAgreeEngine *pRef
 {
 	int n = CRYPTO_TEST_SOAK_PKA;
 	int badPub = 0, badDh = 0, badSig = 0;
-	uint32_t hwTicks = 0, swTicks = 0;
+	uint64_t hwTicks = 0, swTicks = 0;
 	int timed = 0;
 
 	printf("P-256 against the software engine, %d random rounds\r\n", n);
@@ -851,11 +847,11 @@ static void PkaSoak(KeyAgreeEngine *pKa, SignEngine *pSign, KeyAgreeEngine *pRef
 			privB[0] &= 0x7F;
 		} while (priv[0] == 0U || privB[0] == 0U);
 
-		uint32_t t0 = Ticks();
+		uint64_t t0 = Ticks();
 		CRYPTO_STATUS s1 = pKa->KeyImport(CRYPTO_CURVE_P256, s_CtxA, priv, pubHw);
-		uint32_t t1 = Ticks();
+		uint64_t t1 = Ticks();
 		CRYPTO_STATUS s2 = pRefKa->KeyImport(CRYPTO_CURVE_P256, s_CtxB, priv, pubSw);
-		uint32_t t2 = Ticks();
+		uint64_t t2 = Ticks();
 
 		if (s1 != CRYPTO_STATUS_OK || s2 != CRYPTO_STATUS_OK || memcmp(pubHw, pubSw, 64) != 0)
 		{
@@ -902,26 +898,14 @@ static void PkaSoak(KeyAgreeEngine *pKa, SignEngine *pSign, KeyAgreeEngine *pRef
 	check("shared secrets equal the software engine", badDh == 0);
 	check("signatures verify across the two engines", badSig == 0);
 
-#ifdef CRYPTO_TEST_TICKS
 	if (timed > 0)
 	{
-		uint32_t perUs = (uint32_t)CRYPTO_TEST_TICKS_PER_US;
+		uint32_t hwUs = s_Timer.uSecond(hwTicks) / (uint32_t)timed;
+		uint32_t swUs = s_Timer.uSecond(swTicks) / (uint32_t)timed;
 
-		if (perUs == 0U)
-		{
-			perUs = 1U;
-		}
-		uint32_t hwUs = hwTicks / (uint32_t)timed / perUs;
-		uint32_t swUs = swTicks / (uint32_t)timed / perUs;
-
-		printf("  P-256 scalar multiplication, mean of %d: engine %lu us, software %lu us\r\n",
+		printf("  P-256 key import/public key, mean of %d: engine %lu us, software %lu us\r\n",
 			timed, (unsigned long)hwUs, (unsigned long)swUs);
 	}
-#else
-	(void)timed;
-	(void)hwTicks;
-	(void)swTicks;
-#endif
 }
 
 static void RngChecks(RngEngine *pRng)
@@ -1040,7 +1024,6 @@ static void HashChecks(HashEngine *hash, MacEngine *mac)
 }
 
 
-#ifdef CRYPTO_TEST_TICKS
 // Timed comparison includes acquisition, key expansion, and peripheral setup.
 // Outputs are checked against the software reference before measurements.
 static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
@@ -1053,7 +1036,8 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 	static uint8_t key[16], iv[16], nonce[12], aad[16];
 	uint8_t tag[16], referenceTag[16];
 	const unsigned rounds = 64U;
-	uint32_t targetCycles, referenceCycles, begin;
+	uint64_t targetTicks, referenceTicks, begin;
+	unsigned completed;
 	CryptoKey cipherKey = AesKey(key, CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT);
 	CryptoKey macKey = AesKey(key, CRYPTO_KEY_USE_SIGN);
 	XsFill(key, sizeof(key));
@@ -1061,7 +1045,7 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 	XsFill(nonce, sizeof(nonce));
 	XsFill(aad, sizeof(aad));
 	XsFill(input, sizeof(input));
-	printf("\r\nCrypto performance (cycles per operation, including setup)\r\n");
+	printf("\r\nCrypto performance (nanoseconds per operation, including setup)\r\n");
 	for (size_t j = 0; j < sizeof(sizes) / sizeof(sizes[0]); j++)
 	{
 		size_t len = sizes[j];
@@ -1076,38 +1060,69 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 				memcmp(output, reference, len) != 0)
 			{
 				printf("  AES %d %lu: correctness FAIL\r\n", mode, (unsigned long)len);
+				s_fail++;
 				continue;
 			}
-			begin = (uint32_t)CRYPTO_TEST_TICKS();
-			for (unsigned i = 0; i < rounds; i++)
+			begin = Ticks();
+			for (completed = 0; completed < rounds; completed++)
 			{
 				if (pTarget->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, output) != CRYPTO_STATUS_OK) break;
 			}
-			targetCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
-			begin = (uint32_t)CRYPTO_TEST_TICKS();
-			for (unsigned i = 0; i < rounds; i++)
+			targetTicks = Ticks() - begin;
+			if (completed != rounds)
+			{
+				check("benchmark completes every operation", false);
+				continue;
+			}
+			begin = Ticks();
+			for (completed = 0; completed < rounds; completed++)
 			{
 				if (pReference->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, reference) != CRYPTO_STATUS_OK) break;
 			}
-			referenceCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
-			printf("  AES %s %4lu: target %lu, software %lu cycles/op\r\n",
+			referenceTicks = Ticks() - begin;
+			if (completed != rounds)
+			{
+				check("benchmark completes every operation", false);
+				continue;
+			}
+			printf("  AES %s %4lu: target %lu, software %lu ns/op\r\n",
 				mode == 0 ? "ECB" : (mode == 1 ? "CTR" : "CBC"),
-				(unsigned long)len, (unsigned long)(targetCycles / rounds),
-				(unsigned long)(referenceCycles / rounds));
+				(unsigned long)len, (unsigned long)(s_Timer.nSecond(targetTicks) / rounds),
+				(unsigned long)(s_Timer.nSecond(referenceTicks) / rounds));
 		}
 		if (pTargetMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, tag, 16) == CRYPTO_STATUS_OK &&
 			pReferenceMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, referenceTag, 16) == CRYPTO_STATUS_OK &&
 			memcmp(tag, referenceTag, 16) == 0)
 		{
-			begin = (uint32_t)CRYPTO_TEST_TICKS();
-			for (unsigned i = 0; i < rounds; i++) pTargetMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, tag, 16);
-			targetCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
-			begin = (uint32_t)CRYPTO_TEST_TICKS();
-			for (unsigned i = 0; i < rounds; i++) pReferenceMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, referenceTag, 16);
-			referenceCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
-			printf("  CMAC    %4lu: target %lu, software %lu cycles/op\r\n",
-				(unsigned long)len, (unsigned long)(targetCycles / rounds),
-				(unsigned long)(referenceCycles / rounds));
+			begin = Ticks();
+			for (completed = 0; completed < rounds; completed++)
+			{
+				if (pTargetMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, tag, 16) != CRYPTO_STATUS_OK) break;
+			}
+			targetTicks = Ticks() - begin;
+			if (completed != rounds)
+			{
+				check("benchmark completes every operation", false);
+				continue;
+			}
+			begin = Ticks();
+			for (completed = 0; completed < rounds; completed++)
+			{
+				if (pReferenceMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, referenceTag, 16) != CRYPTO_STATUS_OK) break;
+			}
+			referenceTicks = Ticks() - begin;
+			if (completed != rounds)
+			{
+				check("benchmark completes every operation", false);
+				continue;
+			}
+			printf("  CMAC    %4lu: target %lu, software %lu ns/op\r\n",
+				(unsigned long)len, (unsigned long)(s_Timer.nSecond(targetTicks) / rounds),
+				(unsigned long)(s_Timer.nSecond(referenceTicks) / rounds));
+		}
+		else
+		{
+			check("benchmark CMAC matches reference", false);
 		}
 		for (int mode = 0; mode < 2; mode++)
 		{
@@ -1117,38 +1132,59 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 				memcmp(output, reference, len) != 0 || memcmp(tag, referenceTag, 16) != 0)
 			{
 				printf("  AEAD %d %lu: correctness FAIL\r\n", mode, (unsigned long)len);
+				s_fail++;
 				continue;
 			}
-			begin = (uint32_t)CRYPTO_TEST_TICKS();
-			for (unsigned i = 0; i < rounds; i++) pTargetAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, output, tag, 16);
-			targetCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
-			begin = (uint32_t)CRYPTO_TEST_TICKS();
-			for (unsigned i = 0; i < rounds; i++) pReferenceAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, reference, referenceTag, 16);
-			referenceCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
-			printf("  %s %4lu: target %lu, software %lu cycles/op\r\n",
+			begin = Ticks();
+			for (completed = 0; completed < rounds; completed++)
+			{
+				if (pTargetAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, output, tag, 16) != CRYPTO_STATUS_OK) break;
+			}
+			targetTicks = Ticks() - begin;
+			if (completed != rounds)
+			{
+				check("benchmark completes every operation", false);
+				continue;
+			}
+			begin = Ticks();
+			for (completed = 0; completed < rounds; completed++)
+			{
+				if (pReferenceAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, reference, referenceTag, 16) != CRYPTO_STATUS_OK) break;
+			}
+			referenceTicks = Ticks() - begin;
+			if (completed != rounds)
+			{
+				check("benchmark completes every operation", false);
+				continue;
+			}
+			printf("  %s %4lu: target %lu, software %lu ns/op\r\n",
 				mode == 0 ? "CCM" : "GCM", (unsigned long)len,
-				(unsigned long)(targetCycles / rounds),
-				(unsigned long)(referenceCycles / rounds));
+				(unsigned long)(s_Timer.nSecond(targetTicks) / rounds),
+				(unsigned long)(s_Timer.nSecond(referenceTicks) / rounds));
 		}
 	}
 	static const size_t rngSizes[] = {1U, 16U, 256U, 1024U};
 	for (size_t j = 0; j < sizeof(rngSizes) / sizeof(rngSizes[0]); j++)
 	{
 		size_t len = rngSizes[j];
-		begin = (uint32_t)CRYPTO_TEST_TICKS();
-		unsigned completed = 0;
+		begin = Ticks();
+		completed = 0;
 		for (unsigned i = 0; i < rounds; i++)
 		{
 			if (pTargetRng->Random(output, len) != CRYPTO_STATUS_OK) break;
 			completed++;
 		}
-		targetCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
-		printf("  RNG %4lu: %lu cycles/op (%u/%u draws)\r\n",
-			(unsigned long)len, (unsigned long)(completed ? targetCycles / completed : 0U),
+		targetTicks = Ticks() - begin;
+		if (completed != rounds)
+		{
+			check("benchmark completes every RNG draw", false);
+			continue;
+		}
+		printf("  RNG %4lu: %lu ns/op (%u/%u draws)\r\n",
+			(unsigned long)len, (unsigned long)(completed ? s_Timer.nSecond(targetTicks) / completed : 0U),
 			completed, rounds);
 	}
 }
-#endif
 
 static bool DefaultPkaChecks(KeyAgreeEngine *pKa, SignEngine *pSign,
 		RngEngine *pRng, CryptoUecc *pReference)
@@ -1231,6 +1267,8 @@ int CryptoEngineTest(void)
 	CryptoUecc *swPka = &s_ReferencePka;
 	bool references;
 	bool contexts;
+	bool timerReady;
+	TimerCfg_t timerCfg = {};
 
 	s_pass = 0;
 	s_fail = 0;
@@ -1257,9 +1295,23 @@ int CryptoEngineTest(void)
 		crypto->Disable();
 		return 1;
 	}
-#ifdef CRYPTO_TEST_TICKS_INIT
-	CRYPTO_TEST_TICKS_INIT();
-#endif
+	timerCfg.DevNo = TimerGetHighFreqDevNo();
+	timerCfg.ClkSrc = TIMER_CLKSRC_DEFAULT;
+	timerCfg.Freq = 1000000U;
+	timerCfg.IntPrio = 0;
+	timerReady = s_Timer.Init(timerCfg);
+	check("benchmark timer initializes", timerReady && s_Timer.Frequency() != 0U);
+	if (!timerReady || s_Timer.Frequency() == 0U)
+	{
+		if (timerReady)
+		{
+			s_Timer.Disable();
+		}
+		crypto->Disable();
+		printf("\r\n%d passed, %d failed, %d skipped\r\n", s_pass, s_fail, s_skip);
+		return 1;
+	}
+	printf("Benchmark timer: %lu Hz\r\n", (unsigned long)s_Timer.Frequency());
 
 	check("crypto object self-test", crypto->SelfTest() == 0);
 	HashChecks(crypto, crypto);
@@ -1273,9 +1325,8 @@ int CryptoEngineTest(void)
 		PkaVectors(crypto, crypto, swPka);
 		PkaSoak(crypto, crypto, swPka, swPka);
 	}
-#ifdef CRYPTO_TEST_TICKS
 	CryptoBenchmark(crypto, crypto, crypto, crypto, swAes, swAes, swAes);
-#endif
+	s_Timer.Disable();
 
 	printf("\r\n%d passed, %d failed, %d skipped\r\n", s_pass, s_fail, s_skip);
 	crypto->Disable();
