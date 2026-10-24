@@ -11,6 +11,7 @@ Copyright (c) 2026 I-SYST inc.
 #ifndef __COLOR_BH1749_H__
 #define __COLOR_BH1749_H__
 
+#include <stddef.h>
 #include <stdint.h>
 #include "device_intrf.h"
 
