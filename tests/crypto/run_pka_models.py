@@ -9,7 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = ["src/coredev/timer.cpp", "tests/crypto/timer_fixture.cpp", "src/device.cpp", "src/device_intrf.cpp", "src/crypto/crypto.cpp",
-           "ARM/Nordic/src/crypto_default_nrfx.cpp", "src/crypto/crypto_aes_modes.cpp",
+           "ARM/Nordic/src/crypto_default_nrfx.cpp", "ARM/Nordic/src/rng_nrfx.cpp", "src/crypto/crypto_aes_modes.cpp",
            "src/crypto/crypto_aes_soft.cpp", "src/crypto/crypto_softsha256.cpp",
            "src/crypto/crypto_softrng.cpp", "src/crypto/crypto_uecc.cpp",
            "src/crypto/crypto_p256.cpp", "src/crypto/ba414ep.cpp", "ARM/src/crypto_cc3xx.cpp", "ARM/src/crypto_cc3xx_sym.cpp"]

@@ -84,3 +84,23 @@ The changes retain the public inheritance, automatic hardware overrides,
 software support for operations absent from hardware, and existing failure
 handling. An isolated experiment removing virtual Device inheritance was not
 adopted because it would change shared-Device composition with other families.
+
+
+## nRF5340 application-core baseline, 2026-10-24
+
+The maintainer's CryptoTest(10).map occupies 88,784 bytes of flash and 6,372
+bytes of static RAM including alignment. The accompanying generic CryptoTest
+run passed 101 checks with no failures or skips and a 1 MHz benchmark timer.
+This is the baseline before the CryptoCell performance changes, not a measured
+result of those changes. AES ECB at 16 bytes took 934,062 ns; RNG requests of
+1 and 1024 bytes took 65,014,187 ns and 2,830,375,515 ns respectively.
+
+The subsequent changes reuse the AES key setup within an operation, combine
+contiguous register writes and use an entropy-seeded HMAC_DRBG for the App-core
+and nRF91 RNG. The DRBG adds 72 bytes of state per CryptoRngNrf object on those
+targets. It uses the hardware SHA implementation and existing HMAC composition.
+Its algorithm follows NIST SP 800-90A rev. 1 section 10.1.2:
+https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-90Ar1.pdf
+
+No post-change target flash size, stack high-water mark or speedup has yet been
+measured. The first draw and periodic reseeds still require fresh entropy.

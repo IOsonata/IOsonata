@@ -12,7 +12,10 @@
 		peripheral registers, or the SoftDevice entropy pool when a stack is
 		enabled. The SoftDevice check is made inside the interface on every
 		draw. The nRF91 has no RNG peripheral: there it is Cc3xxIntrf, the
-		true random generator of the CryptoCell CC310.
+		true random generator of the CryptoCell CC310. The nRF5340 application
+		core also uses CryptoCell. These two targets seed HMAC_DRBG/SHA-256
+		from the raw entropy interface and reseed at bounded intervals;
+		the hardware SHA engine is used without a software digest copy.
 
 @author	Hoang Nguyen Hoan
 @date	Jul. 15, 2026
@@ -105,6 +108,15 @@ public:
 private:
 	atomic_flag vOpBusy;
 	bool vbIntrfEnabled;
+#if defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)
+	uint8_t vDrbgKey[32] = {};
+	uint8_t vDrbgValue[32] = {};
+	uint32_t vDrbgCalls = 0U;
+	uint32_t vDrbgBytes = 0U;
+	void DrbgClear();
+	CRYPTO_STATUS DrbgUpdate(HashEngine *pHash, const uint8_t *pSeed, size_t Len);
+	CRYPTO_STATUS DrbgGenerate(uint8_t *pOut, size_t Len);
+#endif
 };
 
 CryptoRngNrf *CryptoRngNrfInstance(void);

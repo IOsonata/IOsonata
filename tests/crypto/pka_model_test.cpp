@@ -55,6 +55,18 @@ public:
 	DEVINTRF_TYPE Type() override { return DEVINTRF_TYPE_CRYPTO; }
 	void Enable() override {}
 	void Disable() override {}
+	void Reset() override {}
+	bool StartRx(uint32_t addr) override {
+		assert(addr == CC3XX_ADDR_RNG);
+		if (Held || Busy) return false;
+		Held = true;
+		return true;
+	}
+	int RxData(uint8_t *out, int len) override {
+		assert(Held && len == 48);
+		return RAND_bytes(out, len) == 1 ? len : 0;
+	}
+	void StopRx() override { Held = false; }
 
 	BIGNUM *Operand(unsigned Index, bool Immediate)
 	{
@@ -146,7 +158,16 @@ public:
 		const uint8_t *pData, int Len) override
 	{
 		uint32_t addr = Word(pAddr), v = Word(pData);
-		assert(AddrLen == 4 && Len == 4 && addr < sizeof(Reg));
+		assert(AddrLen == 4 && Len > 0 && Len % 4 == 0 && addr + Len <= sizeof(Reg));
+		if (Len > 4)
+		{
+			for (int i = 0; i < Len; i += 4)
+			{
+				uint32_t next = addr + i;
+				assert(Write(CC3XX_ADDR_REG, (uint8_t *)&next, 4, pData+i, 4) == 4);
+			}
+			return Len;
+		}
 		if (addr == 0x8C) { Fault = false; ResultRead = false; }
 		if (addr == 0xD4 && v == 0 && ResultRead && FailCleanup) Fault = true;
 		Reg[addr / 4] = v;
@@ -199,21 +220,7 @@ bool Cc3xxIntrf::OpHold(const void *)
 }
 bool Cc3xxIntrf::OpRelease(const void *) { s_Cc.Held = false; return true; }
 
-// Test entropy is OpenSSL's host RNG, never substituted into a target build.
-bool CryptoRngNrf::Enable() { vbValid = true; return true; }
-void CryptoRngNrf::Disable() { vbValid = false; }
-void CryptoRngNrf::Reset() { vbValid = true; }
-CRYPTO_STATUS CryptoRngNrf::Random(uint8_t *pOut, size_t Len)
-{
-	return RAND_bytes(pOut, (int)Len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
-}
-CryptoRngNrf *CryptoRngNrfInstance(void)
-{
-	static CryptoRngNrf rng;
-	rng.Enable();
-	return &rng;
-}
-
+// Production RNG uses the entropy transfer above and production CryptoCell SHA.
 #ifndef CRYPTO_LINK_TEST
 class BaModel : public DeviceIntrf {
 public:

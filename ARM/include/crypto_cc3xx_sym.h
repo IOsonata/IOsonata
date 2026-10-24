@@ -60,8 +60,10 @@ protected:
 private:
 	bool vEnabled = false;
 	bool vFault = false;
+	bool vAesReady = false;
 	uint32_t RegRead(uint32_t Offset);
 	void RegWrite(uint32_t Offset, uint32_t Value);
+	void RegWriteBlock(uint32_t Offset, const void *pData, size_t Len);
 	bool Wait(uint32_t Offset, uint32_t Expected);
 	CRYPTO_STATUS Begin();
 	void End();

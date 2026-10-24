@@ -23,6 +23,7 @@ Host validation:
 python3 tests/crypto/run_objects.py
 python3 tests/crypto/run_aes256.py
 python3 tests/crypto/run_pka_models.py
+python3 tests/crypto/run_ccrng.py
 python3 tests/crypto/check_targets.py
 python3 tests/stm32wba/run_crypto_link.py
 python3 tests/stm32h7/run_crypto_accel.py
@@ -51,7 +52,7 @@ Port review after the App-core import failure:
 
 | Port | Software behavior and hardware overrides | Validation available |
 |---|---|---|
-| CC3xx: nRF52840, nRF5340 App, nRF91 | Software import/ECDSA; hardware key generation/ECDH | Host model; App-core board had passed generated-key operations before this fix; imported-key board run pending |
+| CC3xx: nRF52840, nRF5340 App, nRF91 | Software import/ECDSA; hardware key generation/ECDH | Audio DK App core, 2026-10-24: 101 passed, 0 failed, 0 skipped before the CryptoCell performance changes; other targets retain host-model coverage |
 | BA414EP: nRF54 | Software import/ECDSA; hardware key generation/ECDH | Host model; board rerun pending |
 | CryptoMaster: nRF54 | Hardware AES-128/256 encryption/decryption; shared CMAC/CCM/GCM composition | DMA register model; board rerun pending |
 | nRF5340 Net ECB | Inherits software modes and AES-256 | Audio DK, 2026-10-24: 101 passed, 0 failed, 0 skipped after the AES/CMAC/CCM size reductions |
@@ -119,3 +120,20 @@ benchmark timer at 1 MHz. HciController also restored a bond and enabled
 encryption after reset and reconnection with BleSecurityDemo on the App core.
 See [crypto size measurements](../../tests/crypto/size_notes.md) for the measured
 688-byte HciController flash reduction and the separate CryptoTest footprint.
+
+CryptoCell performance changes retain the generic test and automatic selection.
+AES keys are loaded once per complete operation; contiguous key/hash register
+writes use one interface transfer. nRF5340 App and nRF91 random generation uses
+HMAC_DRBG/SHA-256 seeded from 48 bytes of hardware entropy. It reseeds after
+1024 requests or 64 KiB, whichever comes first; Reset and Disable erase its
+state. Entropy or hash failure erases the requested output and invalidates the
+state. First use and reseeding still pay the hardware entropy collection cost.
+The raw entropy interface and hardware health checks are unchanged. The network
+core and other Nordic random sources retain their existing behavior.
+
+`run_ccrng.py` compares the production DRBG with an independent Python HMAC
+reference at -O0/-Os/-O2 for both target defines, including request/byte reseeds,
+reset, disable/enable, short entropy reads, busy and injected hash failures.
+`run_pka_models.py` runs the production RNG with CryptoCell SHA register models
+and checks minimal linkage for unwanted software AES, SHA-256 and PRNG code.
+These are host checks; post-change hardware timings and map sizes are pending.

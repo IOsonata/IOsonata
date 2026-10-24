@@ -10,7 +10,7 @@
 
 static uint32_t s_Reg[1024];
 static uint8_t s_Input[64], s_Output[16];
-static unsigned s_In, s_Out, s_AesBlocks, s_HashBlocks;
+static unsigned s_In, s_Out, s_AesBlocks, s_HashBlocks, s_KeyLoads;
 static bool s_Timeout;
 static bool s_SetupTimeout;
 static bool s_ReadFailure;
@@ -44,12 +44,23 @@ public:
 	int Write(uint8_t *addr, int len, const uint8_t *in, int count) override
 	{
 		uint32_t offset, value;
-		assert(len == 4 && count == 4);
+		assert(len == 4 && count > 0 && count % 4 == 0);
+		if (count > 4)
+		{
+			memcpy(&offset, addr, 4);
+			for (int i = 0; i < count; i += 4)
+			{
+				uint32_t next = offset + i;
+				if (Write((uint8_t *)&next, 4, in + i, 4) != 4) return i;
+			}
+			return count;
+		}
 		memcpy(&offset, addr, 4);
 		memcpy(&value, in, 4);
 		assert(offset < sizeof(s_Reg));
 		if (s_CleanupFailure && offset == 0x900 && value == 0) return 0;
 		s_Reg[offset/4] = value;
+		if (offset == 0x4C0) s_KeyLoads++;
 		if (offset == 0xC58 || offset == 0xC48) s_In = 0;
 		if (offset == 0xC00) {
 			assert(s_In < 64);
@@ -249,6 +260,16 @@ int main()
 	assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_BUSY);
 	assert(c.Hash(CRYPTO_HASH_SHA256, input, 64, out+1) == CRYPTO_STATUS_BUSY);
 	assert(Cc3xxIntrfInstance()->OpRelease(&owner));
+	{
+		uint8_t multi[64];
+		unsigned loads = s_KeyLoads;
+		assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 64, multi) == CRYPTO_STATUS_OK);
+		assert(s_KeyLoads == loads + 1);
+		key[0] = 1;
+		assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 64, multi) == CRYPTO_STATUS_OK);
+		assert(s_KeyLoads == loads + 2);
+		key[0] = 0;
+	}
 	s_Timeout = true;
 	memset(out, 0xA5, sizeof(out));
 	assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_FAIL);

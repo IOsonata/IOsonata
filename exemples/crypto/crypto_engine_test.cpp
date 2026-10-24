@@ -955,7 +955,7 @@ static void RngChecks(RngEngine *pRng)
 		ones > 16384U - 450U && ones < 16384U + 450U && missing < 8);
 
 	printf("  Source: %s\r\n", pRng->IsSecure() ?
-		"secure entropy" : "software PRNG, not for security use");
+		"secure random generator" : "software PRNG, not for security use");
 }
 
 static void HashChecks(HashEngine *hash, MacEngine *mac)

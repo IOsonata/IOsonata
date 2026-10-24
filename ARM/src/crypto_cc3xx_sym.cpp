@@ -65,6 +65,7 @@ struct CcShaCtx {
 	uint8_t Buf[64];
 	size_t Used;
 };
+static const uint32_t s_ClearWords[8] = {};
 static const uint32_t s_InitialHash[8] = {
 	0x6A09E667U, 0xBB67AE85U, 0x3C6EF372U, 0xA54FF53AU,
 	0x510E527FU, 0x9B05688CU, 0x1F83D9ABU, 0x5BE0CD19U
@@ -88,9 +89,14 @@ uint32_t CryptoCc3xxSym::RegRead(uint32_t Offset)
 
 void CryptoCc3xxSym::RegWrite(uint32_t Offset, uint32_t Value)
 {
+	RegWriteBlock(Offset, &Value, sizeof(Value));
+}
+
+void CryptoCc3xxSym::RegWriteBlock(uint32_t Offset, const void *pData, size_t Len)
+{
 	uint8_t address[4] = {(uint8_t)Offset, (uint8_t)(Offset >> 8),
 		(uint8_t)(Offset >> 16), (uint8_t)(Offset >> 24)};
-	if (Write(address, 4, (const uint8_t *)&Value, 4) != 4)
+	if (Write(address, 4, (const uint8_t *)pData, Len) != (int)Len)
 	{
 		vFault = true;
 	}
@@ -175,6 +181,7 @@ CRYPTO_STATUS CryptoCc3xxSym::Begin()
 		return CRYPTO_STATUS_BUSY;
 	}
 	vFault = !Cc3xxEnable();
+	vAesReady = false;
 	RegWrite(REG_AES_CLK, 1U);
 	RegWrite(REG_HASH_CLK, 1U);
 	RegWrite(REG_DMA_CLK, 1U);
@@ -197,12 +204,8 @@ CRYPTO_STATUS CryptoCc3xxSym::Begin()
 
 void CryptoCc3xxSym::End()
 {
-	unsigned i;
-	for (i = 0U; i < 8U; i++)
-	{
-		RegWrite(REG_AES_KEY0 + 4U * i, 0U);
-		RegWrite(REG_HASH_H0 + 4U * i, 0U);
-	}
+	RegWriteBlock(REG_AES_KEY0, s_ClearWords, sizeof(s_ClearWords));
+	RegWriteBlock(REG_HASH_H0, s_ClearWords, sizeof(s_ClearWords));
 	RegWrite(REG_CRYPTO_CTL, 0U);
 	RegWrite(REG_DIN_RESET, 0U);
 	RegWrite(REG_AES_CLK, 0U);
@@ -242,12 +245,14 @@ bool CryptoCc3xxSym::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 {
 	uint32_t word = 0U;
 	unsigned i;
-	RegWrite(REG_CRYPTO_CTL, 1U);
-	RegWrite(REG_AES_CONTROL, (Encrypt ? 0U : 1U) | (KeyLen == 32U ? 0x2000U : 0U));
-	for (i = 0U; i < KeyLen; i += 4U)
+	// Cipher and the common CMAC/AEAD loops use one key and direction
+	// for the whole operation. End wipes it before releasing the interface.
+	if (!vAesReady)
 	{
-		memcpy(&word, pKey + i, 4U);
-		RegWrite(REG_AES_KEY0 + i, word);
+		RegWrite(REG_CRYPTO_CTL, 1U);
+		RegWrite(REG_AES_CONTROL, (Encrypt ? 0U : 1U) | (KeyLen == 32U ? 0x2000U : 0U));
+		RegWriteBlock(REG_AES_KEY0, pKey, KeyLen);
+		vAesReady = !vFault;
 	}
 	RegWrite(REG_AES_REMAINING, 16U);
 	RegWrite(REG_DIN_SIZE, 16U);
