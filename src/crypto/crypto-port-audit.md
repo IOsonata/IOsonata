@@ -8,6 +8,21 @@ hardware overrides; applications do not route operations or retry unsupported
 hardware operations. `exemples/crypto/crypto_engine_test.cpp` remains the shared
 test, including its Timer-based benchmarks.
 
+## Binding and binary checks
+
+`Crypto` inherits operation interfaces, not complete software engines. MCU
+libraries provide strong hardware methods that replace weak software defaults.
+Complete AES hardware drivers inherit `CryptoAesModes`; its CMAC/CCM/GCM
+composition does not reference a software AES primitive. Software is retained
+only where the target still needs it, or where an application explicitly creates
+a software reference object.
+
+Minimal target archive tests exclude CryptoTest's software references and check
+linked symbols. CryptoCell retains no software AES, SHA-256 or PRNG. H753/L4S9
+retain no software AES or PRNG; software SHA streaming is still required.
+Their register tests also check that a second application object's Init and
+Reset do not reset the shared AES/HASH engines.
+
 ## MCU library coverage
 
 This table distinguishes working software support from hardware acceleration.

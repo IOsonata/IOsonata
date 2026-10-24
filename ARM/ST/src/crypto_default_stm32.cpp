@@ -79,13 +79,13 @@ bool Crypto::Init()
 	}
 #endif
 #ifdef CRYPTO_TARGET_AES
-	if (!s_Aes.Enable())
+	if (!s_Aes.Valid() && !s_Aes.Enable())
 	{
 		return false;
 	}
 #endif
 #if defined(STM32H753xx) || defined(STM32L4S9xx)
-	if (!s_Hash.Enable())
+	if (!s_Hash.Valid() && !s_Hash.Enable())
 	{
 		return false;
 	}

@@ -25,6 +25,7 @@ python3 tests/crypto/run_aes256.py
 python3 tests/crypto/run_pka_models.py
 python3 tests/crypto/check_targets.py
 python3 tests/stm32h7/run_crypto_accel.py
+python3 tests/stm32h7/run_crypto_accel.py --l4s9
 ```
 
 The first builds an actual software archive at O0/O2 and checks direct global/local construction,
@@ -51,7 +52,7 @@ Port review after the App-core import failure:
 |---|---|---|
 | CC3xx: nRF52840, nRF5340 App, nRF91 | Software import/ECDSA; hardware key generation/ECDH | Host model; App-core board had passed generated-key operations before this fix; imported-key board run pending |
 | BA414EP: nRF54 | Software import/ECDSA; hardware key generation/ECDH | Host model; board rerun pending |
-| CryptoMaster: nRF54 | Software AES-256 and AES-128 ECB/CBC decryption; hardware AES-128 encryption hooks | Source review and shared software/AES tests; board rerun pending |
+| CryptoMaster: nRF54 | Hardware AES-128/256 encryption/decryption; shared CMAC/CCM/GCM composition | DMA register model; board rerun pending |
 | nRF5340 Net ECB | Inherits software modes and AES-256 | Maintainer board result: 100 passed, no failures/skips before this PKA fix |
 | STM32WBA65 | Software P-256 base with hardware overrides; software AES-256 | Target initialization compiles; ARM emulator/board rerun pending |
 | STM32H753 | Hardware AES-128/256 and one-shot hash/HMAC; software P-256 and streaming hash | Host register model; board rerun pending |
@@ -76,3 +77,20 @@ Host and register-model runners supply a deterministic test-only TimerInit
 implementation. It exercises conversion at 32768 Hz and a 32-bit rollover;
 its printed times are simulated and must not be used as performance results.
 MCU projects link the existing timer driver from their MCU library.
+
+## Checking software linkage
+
+CryptoTest includes software reference objects intentionally, so its map cannot
+prove that a normal application discards overridden software implementations.
+The PKA and STM32 accelerator runners additionally link a minimal `Crypto`
+application from the production target archive at `-Os` with section garbage
+collection, without the generic test or software reference objects.
+
+- CryptoCell: software AES, SHA-256 and PRNG symbols must be absent.
+- H753/L4S9: software AES and PRNG symbols must be absent. Software SHA streaming
+  remains required; one-shot SHA and HMAC use hardware.
+
+The STM32 model also verifies that initializing, disabling and re-enabling one
+application object does not reset the shared engines used by another object.
+These are host link and register-model checks, not measurements of MCU flash
+usage or proof of silicon behavior.

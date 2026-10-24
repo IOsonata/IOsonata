@@ -26,7 +26,10 @@ static unsigned modelWrites;
 static unsigned hashFailAt = ~0U;
 static CryptoStm32H7Hash *hashReenter;
 static CryptoStm32H7Aes *reenter;
-static uint8_t key[16], block[16], dest[16];
+static uint8_t key[16], block[16];
+#ifndef CRYPTO_LINK_TEST
+static uint8_t dest[16];
+#endif
 static CryptoKey testKey{CRYPTO_KEY_AES_128,CRYPTO_KEY_LOC_PLAIN,
 	CRYPTO_KEY_USE_ENCRYPT|CRYPTO_KEY_USE_DECRYPT,{{key,16}}};
 static void bytes(std::vector<uint8_t>&v,uint32_t w){for(int i=3;i>=0;i--)v.push_back(w>>(8*i));}
@@ -121,9 +124,21 @@ void ModelWrite(unsigned id,uint32_t value)
 }
 // Host entropy adapter only. The physical RNG driver has separate register tests.
 static bool rngAvailable;
-bool CryptoRngStm32::Enable() { return true; }
-void CryptoRngStm32::Disable() {}
-void CryptoRngStm32::Reset() {}
+bool CryptoRngStm32::Enable()
+{
+	vbValid = rngAvailable;
+	vbEnabled = rngAvailable;
+	return vbValid;
+}
+void CryptoRngStm32::Disable()
+{
+	vbValid = false;
+	vbEnabled = false;
+}
+void CryptoRngStm32::Reset()
+{
+	(void)Enable();
+}
 CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
 {
 	return RAND_bytes(pOut, (int)Len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
@@ -132,8 +147,9 @@ CryptoRngStm32 *CryptoRngStm32Instance(void)
 {
 	static CryptoRngStm32 instance;
 
-	return rngAvailable ? &instance : nullptr;
+	return instance.Enable() ? &instance : nullptr;
 }
+#ifndef CRYPTO_LINK_TEST
 int CryptoEngineTest();
 int main()
 {
@@ -153,6 +169,7 @@ int main()
 	assert(retry.Init());
 	initializedWrites = modelWrites;
 	assert(other.Init());
+	assert(other.IsSecure());
 	assert(retry.Init());
 	assert(modelWrites == initializedWrites);
 	retry.Disable();
@@ -246,3 +263,23 @@ int main()
 	printf("Register model: %u AES blocks, %u hashes; timeout recovery, wiping and cross-instance locking PASS\n",aesBlocks,hashRuns);
 	return result;
 }
+
+#else
+int main()
+{
+	Crypto crypto;
+	Crypto other;
+	unsigned initializedWrites;
+
+	rngAvailable = true;
+	assert(crypto.Init());
+	initializedWrites = modelWrites;
+	assert(other.Init());
+	assert(modelWrites == initializedWrites);
+	crypto.Disable();
+	crypto.Reset();
+	assert(modelWrites == initializedWrites);
+	assert(other.SelfTest() == 0);
+	return 0;
+}
+#endif

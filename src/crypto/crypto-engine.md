@@ -38,11 +38,10 @@ not instantiate.
 
 ## Generic crypto object
 
-`Crypto` in `include/crypto/crypto.h` combines the working software AES,
-SHA-256/HMAC, P-256 and RNG classes through inheritance. The shared virtual
-`Device` base provides one lifecycle and completion handler. Both MAC bases
-use virtual `MacEngine` inheritance; `Crypto::Mac` dispatches CMAC and HMAC
-by algorithm. It does not duplicate the cryptographic implementations.
+`Crypto` in `include/crypto/crypto.h` inherits the operation interfaces, with
+one shared `Device` base. It does not inherit or contain complete software
+engines. Generic methods provide weak software defaults; the MCU library
+replaces accelerated methods with strong definitions at link time.
 
 The application declares a normal C++ object. Its constructor initializes
 software state without touching peripherals. After system startup, `Init()`
@@ -64,13 +63,18 @@ Sign/Verify. Its public layout is identical across MCU libraries. There is no
 raw object arena, placement construction, heap allocation or public factory.
 The compiler handles object storage, alignment and lifetime.
 
-The library supplies one strong `Crypto::Init` definition. Software-only targets
-use the object's inherited software implementations. Nordic and applicable STM32
-targets bind a private `CryptoNordic` or `CryptoStm32` implementation containing
-the existing hardware drivers. These library-owned objects derive from `Crypto`
-and replace accelerated operations, retaining the existing drivers' arbitration
-and recovery. The application object itself remains a `Crypto`; initialization
-does not change its type or construct another object over it.
+The library supplies one strong `Crypto::Init` definition and strong methods
+for its hardware operations. Init enables typed, library-owned hardware engines.
+There is no second full `Crypto` object or runtime provider pointer. Software
+methods remain selected only for operations without a target definition.
+
+`CryptoAesModes` contains CMAC/CCM/GCM composition over a virtual AES block
+operation. Complete AES accelerators derive from it without inheriting software
+AES. `CryptoSoftAes` adds the software primitive and cipher modes for targets
+that need them. `CryptoHmacSha256` similarly composes streaming hash operations
+without retaining software SHA compression when hardware supplies every hash
+method. Drivers for partial accelerators select software for the specific key
+sizes or operations that hardware cannot execute.
 
 Hardware engines are shared for the lifetime of the MCU library. Repeated
 initialization does not reset an engine already in use. `Disable()` marks only
@@ -86,29 +90,16 @@ fail; output-producing operations clear their output where its size is known.
 Initialize before querying context requirements, and finish operations before
 Disable, Reset or destruction. Keys and streaming hash contexts remain in caller
 storage; do not reuse contexts across implementations. Startup initialization
-must be serialized before concurrent operation access begins. Objects cannot
-be copied because their software P-256 implementation refers to their RNG.
+must be serialized before concurrent operation access begins. Copy construction and assignment are disabled.
 
 Existing consumers accepting capability pointers can receive `&g_Crypto` through
 ordinary base conversion. Software-only objects have independent RNG state.
 
-| MCU library | AES / CMAC / AEAD | SHA-256 / HMAC | ECDH | ECDSA | RNG |
-|---|---|---|---|---|---|
-| nRF5340 network | ECB accelerator | Software | Software | Software | Nordic RNG |
-| nRF52840, nRF5340 application, nRF91 | Software | Software | CC3xx | Software | Nordic RNG |
-| nRF54H20, nRF54L15, nRF54LM20 | CryptoMaster | Software | BA414EP | Software | CRACEN |
-| Other Nordic Arm libraries | Software | Software | Software | Software | Nordic RNG |
-| STM32H753 | CRYP | HASH one-shot, software streaming | Software | Software | STM32 RNG |
-| STM32WBA65 | AES | Software | PKA | PKA | WBA RNG |
-| Other STM32 libraries with RNG | Software | Software | Software | Software | STM32 RNG |
-| Other configured MCU libraries | Software | Software | Software | Software | Non-secure PRNG |
-
-AES-256 ECB/CBC/CTR uses software where the selected accelerator does not
-implement it, and hardware on H753. This choice stays inside the library.
-Hardware classes override accelerated operations and call the working
-software base for key sizes they do not accelerate. The generic object does
-not retry operations based on their return status. AES-256 is a required CryptoTest
-operation, not a target capability skip.
+The [MCU port audit](crypto-port-audit.md) lists hardware acceleration and required
+software operations for every port. AES-128/256 ECB/CBC/CTR and P-256 import are
+required generic operations. Missing hardware support selects the software
+implementation inside the library; a hardware error never triggers a software
+retry. AES-256 is not an optional CryptoTest capability.
 
 This selection reflects existing IOsonata drivers. A hardware block with no
 implemented driver is not advertised as accelerated. Desktop projects and the
@@ -118,7 +109,16 @@ Specialized legacy placement factories remain available to existing library
 consumers. The shared CryptoTest declares a `Crypto` object and calls `Init()`;
 explicit software objects remain independent references. Link the matching MCU
 library normally. The strong `Crypto::Init` reference extracts its implementation
-from the archive without weak fallbacks or linker forcing options.
+from the archive, bringing its strong operation definitions with it. Generic
+operation defaults are weak; Init itself is not. MCU builds compile with
+`-ffunction-sections -fdata-sections` and link with `--gc-sections`, so replaced
+software sections are discarded. A software source being compiled into the
+archive does not mean its implementation remains in the executable.
+
+CryptoTest deliberately instantiates independent software reference objects.
+Use a minimal application without those references to check unwanted software
+linkage. The CC3xx and STM32 accelerator runners also build such an application
+and inspect its linked symbols.
 
 ## Per-instance key state
 
@@ -179,7 +179,7 @@ consumer is curve-blind and key-blind:
   `RngEngine` and require `IsSecure()`. The generic software RNG is a
   deterministic PRNG and reports false. Targets without entropy can hash,
   encrypt and verify signatures, but cannot securely generate keys or sign.
-  A selected hardware RNG that fails initialization makes construction fail.
+  A selected hardware RNG that fails initialization makes `Init()` fail.
 
 ## Engines
 
@@ -190,10 +190,10 @@ consumer is curve-blind and key-blind:
 | `CryptoCc3xx` | `KeyAgreeEngine`, `SignEngine` | `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 key generation/ECDH on CC3xx. Inherits software key import and ECDSA. `Cc3xxIntrf` supplies register access and arbitration. |
 | `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` | `ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp` | Derives from `CryptoUecc`; overrides P-256 import, generation, agreement and ECDSA with WBA PKA operations. |
 | `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_aes_modes.cpp` | Software AES-128/256 cipher (FIPS-197) and AES-128 CMAC. CMAC/CCM/GCM use protected virtual block hooks, which hardware subclasses override. |
-| `CryptoMaster` | `CipherEngine`, `MacEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128 on the Silex CryptoMaster (BA411e) block. Overrides AES-128 encryption and block hooks; inherits software decryption and AES-256. |
+| `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128/256 encryption and decryption on Silex BA411e. Inherits CMAC/CCM/GCM composition from `CryptoAesModes`, without software AES. |
 | `CryptoSoftSha256` | `HashEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4). Unkeyed digest; serves DFU image verification and any hashing consumer. |
 | `CryptoSoftRng` | `RngEngine` | `src/crypto/crypto_softrng.cpp` | Software PRNG base. Statistical use only; not a security random source. |
-| `CryptoRngNrf` | `RngEngine` | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG (CRACEN CTR-DRBG on nRF54L/H, NRF_RNG on nRF52/network core, CC3xx on nRF5340 application/nRF91). Platform singleton `CryptoRngNrfInstance`. |
+| `CryptoRngNrf` | `RngEngine` | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG (conditioned CRACEN TRNG on nRF54L/H, NRF_RNG on nRF52/network core, CC3xx on nRF5340 application/nRF91). Platform singleton `CryptoRngNrfInstance`. |
 | `CryptoRngStm32` | `RngEngine` | `ARM/ST/src/rng_stm32.cpp` | STM32 hardware RNG peripheral. Platform singleton `CryptoRngStm32Instance`. |
 
 Engine class names are provider-class, not target-specific. `CryptoCc3xx` names
@@ -243,7 +243,7 @@ appending an interface or an algorithm value, never by renumbering existing ones
 | `include/crypto/icrypto.h` | Crypto interfaces: `CryptoEngine` and its operation interfaces, the algorithm and operation enums, the asynchronous completion handling, `CryptoKey`, `CryptoSecureWipe`, and the P-256 helper declarations. |
 | `src/crypto/crypto_p256.cpp` | Generic P-256 math: constant-time byte helpers, scalar and field range checks, and the ladder scalar regularization (`P256RegularizeScalar`, `P256RegularBit`). Exports functions only; the curve point arithmetic stays in each engine. |
 | `src/crypto/crypto_uecc.cpp` | Software P-256 engine (micro-ecc): ECDH and ECDSA. |
-| `src/crypto/crypto_aes_modes.cpp` | Software AES-128/256 cipher and AES-128 CMAC. |
+| `src/crypto/crypto_aes_modes.cpp` | Common AES-128 CMAC/CCM/GCM composition and the separate software cipher adapter. |
 | `src/crypto/cryptomaster.cpp` | Hardware AES engine on the Silex CryptoMaster (BA411e). |
 | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 engine. |
 | `src/crypto/crypto_softrng.cpp` | Software PRNG base (statistical). |

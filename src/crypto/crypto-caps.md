@@ -1,7 +1,7 @@
 # Crypto capabilities in the object model
 
-Applications use one directly declared `Crypto` object. Its working software
-bases provide the supported algorithms. The MCU implementation overrides the
+Applications use one directly declared `Crypto` object. Its generic methods provide
+working software defaults. The MCU library overrides the
 operations it accelerates; missing acceleration does not remove software
 support. Applications check the result of each operation and do not select
 separate cipher, hash or key-agreement pointers.
@@ -63,19 +63,19 @@ bit.
 | `CryptoSoftRng`, `CryptoRngNrf`, `CryptoRngStm32` | `RngEngine` |
 | `CryptoCtlrSdc` | `CipherEngine` (Bluetooth-owned, controller AES) |
 
-## The software AES base and derived constructions
+## AES and HMAC composition
 
-`CryptoSoftAes` implements `CipherEngine` (AES-128/256 ECB/CTR/CBC), `MacEngine`
-(AES-CMAC) and `AeadEngine` (AES-CCM, AES-GCM). CMAC, CCM and GCM are computed
-over the protected virtual block primitive `AesEcbEncrypt` inside one
-`AesOpBegin` / `AesOpEnd` bracket per operation, so a hardware AES engine that
-overrides those three (`CryptoMaster`) gets hardware-backed CMAC, CCM and GCM
-under a single accelerator acquisition with no further code. The GCM GHASH
-field multiply is constant-time software on every engine. HMAC-SHA-256
-follows the same pattern on the hash side: the generic RFC 2104 construction
-in `CryptoSoftSha256` chains the virtual streaming hash calls, so a hardware
-digest block that overrides them provides the digest work. The generic HMAC
-requires a synchronous hash engine (`!IsAsync()`).
+`CryptoAesModes` implements AES-128 CMAC, CCM and GCM over the protected virtual
+block primitive `AesEcbEncrypt`, inside one `AesOpBegin` / `AesOpEnd` bracket per
+operation. It contains no software AES primitive. Complete hardware AES engines
+derive from it directly; `CryptoSoftAes` adds software AES-128/256 ECB/CBC/CTR.
+The GCM GHASH field multiply remains constant-time software.
+
+`CryptoHmacSha256` implements RFC 2104 over a supplied synchronous `HashEngine`.
+It chains virtual streaming calls without requiring software SHA compression.
+Software SHA and complete hardware hash implementations share this composition.
+STM32H753/L4S9 retain their hardware one-shot HMAC implementation and software
+streaming SHA until a streaming hardware implementation is provided.
 
 ## Note on the DFU SHA-256 utility
 
@@ -90,8 +90,8 @@ collide and serve different purposes.
 
 Declare `Crypto g_Crypto` and call `g_Crypto.Init()` after system startup. The
 compiler supplies object storage and alignment. The MCU library binds its
-hardware implementation internally; software-only targets use the object's
-inherited software behavior. No raw buffer, public factory or placement new is
+hardware methods at link time; software-only targets retain the generic
+software definitions. No raw buffer, public factory or placement new is
 required. All capabilities are methods on the same application object.
 
 The caller checks operation status. Missing acceleration does not make a
@@ -105,9 +105,9 @@ implementation used by another object.
 ## Software cipher base and hardware overrides
 
 AES-128 and AES-256 ECB/CBC/CTR are implemented by `CryptoSoftAes`. Hardware
-classes override the operations they accelerate. CryptoMaster and STM32WBA
-call the base Cipher implementation for AES-256, while H753, L4S9, SAM4E and ESP32-C3/C6 accelerate both
-key sizes. The nRF52/nRF5340 ECB class inherits the mode implementation and replaces
+classes override the operations they accelerate. STM32WBA uses the software
+cipher for AES-256. CryptoMaster, CryptoCell, H753, L4S9, SAM4E, RA4M1 and
+ESP32-C3/C6 accelerate both key sizes. SAM4L requires software AES-256. The nRF52/nRF5340 ECB class inherits the mode implementation and replaces
 its AES-128 block hooks; AES-256 uses the software block without acquiring
 that peripheral. The application and generic object perform no retry based
 on unsupported status. Busy and failed operations remain errors.
