@@ -135,9 +135,11 @@ __attribute__((weak)) CRYPTO_STATUS Crypto::Open(CRYPTO_AEAD_ALG Alg, const Cryp
 	return software.Open(Alg, Key, pNonce, NonceLen, pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
 }
 
+// The hash-only object avoids retaining the separate SHA/HMAC self-test and
+// multiple-inheritance tables in firmware that uses the generic Crypto object.
 __attribute__((weak)) CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
 {
-	CryptoSoftSha256 software;
+	CryptoSoftSha256Hash software;
 
 	if (!vbValid)
 	{
@@ -153,24 +155,20 @@ __attribute__((weak)) CRYPTO_STATUS Crypto::Hash(CRYPTO_HASH_ALG Alg, const uint
 
 __attribute__((weak)) size_t Crypto::KeyCtxSize() const
 {
-	CryptoUecc software;
-
 	if (!vbValid)
 	{
 		return 0U;
 	}
-	return software.KeyCtxSize();
+	return sizeof(CryptoUecc::KeyCtx);
 }
 
 __attribute__((weak)) size_t Crypto::KeyCtxAlign() const
 {
-	CryptoUecc software;
-
 	if (!vbValid)
 	{
 		return 1U;
 	}
-	return software.KeyCtxAlign();
+	return alignof(CryptoUecc::KeyCtx);
 }
 
 __attribute__((weak)) void Crypto::KeyReset(void *pKeyCtx)
@@ -322,7 +320,7 @@ __attribute__((weak)) bool Crypto::IsSecure() const
 
 __attribute__((weak)) size_t Crypto::HashCtxSize() const
 {
-	CryptoSoftSha256 software;
+	CryptoSoftSha256Hash software;
 
 	if (!vbValid)
 	{
@@ -333,7 +331,7 @@ __attribute__((weak)) size_t Crypto::HashCtxSize() const
 
 __attribute__((weak)) size_t Crypto::HashCtxAlign() const
 {
-	CryptoSoftSha256 software;
+	CryptoSoftSha256Hash software;
 
 	if (!vbValid)
 	{
@@ -344,7 +342,7 @@ __attribute__((weak)) size_t Crypto::HashCtxAlign() const
 
 __attribute__((weak)) CRYPTO_STATUS Crypto::HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx)
 {
-	CryptoSoftSha256 software;
+	CryptoSoftSha256Hash software;
 
 	if (!vbValid)
 	{
@@ -356,7 +354,7 @@ __attribute__((weak)) CRYPTO_STATUS Crypto::HashInit(CRYPTO_HASH_ALG Alg, void *
 
 __attribute__((weak)) CRYPTO_STATUS Crypto::HashUpdate(void *pHashCtx, const uint8_t *pMsg, size_t Len)
 {
-	CryptoSoftSha256 software;
+	CryptoSoftSha256Hash software;
 
 	if (!vbValid)
 	{
@@ -368,7 +366,7 @@ __attribute__((weak)) CRYPTO_STATUS Crypto::HashUpdate(void *pHashCtx, const uin
 
 __attribute__((weak)) CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
 {
-	CryptoSoftSha256 software;
+	CryptoSoftSha256Hash software;
 
 	if (!vbValid)
 	{

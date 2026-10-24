@@ -63,30 +63,33 @@ static void Sha256Wipe(void *pData, size_t Len)
 
 static void Sha256Block(uint32_t H[8], const uint8_t block[64])
 {
-	uint32_t W[64];
-	for (int t = 0; t < 16; t++)
+	// Only the preceding 16 words are needed by the message schedule.
+	uint32_t W[16];
+	uint32_t a=H[0], b=H[1], c=H[2], d=H[3];
+	uint32_t e=H[4], f=H[5], g=H[6], h=H[7];
+	uint32_t s0, s1, ch, maj, t1, t2;
+	unsigned t;
+	for (t = 0; t < 16; t++)
 	{
 		W[t] = ((uint32_t)block[4*t] << 24) |
 			   ((uint32_t)block[4*t+1] << 16) |
 			   ((uint32_t)block[4*t+2] << 8) |
 			   (uint32_t)block[4*t+3];
 	}
-	for (int t = 16; t < 64; t++)
+	for (t = 0; t < 64; t++)
 	{
-		uint32_t s0 = Sha256Ror(W[t-15],7) ^ Sha256Ror(W[t-15],18) ^ (W[t-15] >> 3);
-		uint32_t s1 = Sha256Ror(W[t-2],17) ^ Sha256Ror(W[t-2],19) ^ (W[t-2] >> 10);
-		W[t] = W[t-16] + s0 + W[t-7] + s1;
-	}
-	uint32_t a=H[0], b=H[1], c=H[2], d=H[3];
-	uint32_t e=H[4], f=H[5], g=H[6], h=H[7];
-	for (int t = 0; t < 64; t++)
-	{
-		uint32_t s1 = Sha256Ror(e,6) ^ Sha256Ror(e,11) ^ Sha256Ror(e,25);
-		uint32_t ch = (e & f) ^ (~e & g);
-		uint32_t t1 = h + s1 + ch + s_Sha256K[t] + W[t];
-		uint32_t s0 = Sha256Ror(a,2) ^ Sha256Ror(a,13) ^ Sha256Ror(a,22);
-		uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
-		uint32_t t2 = s0 + maj;
+		if (t >= 16U)
+		{
+			s0 = Sha256Ror(W[(t-15U)&15U],7) ^ Sha256Ror(W[(t-15U)&15U],18) ^ (W[(t-15U)&15U] >> 3);
+			s1 = Sha256Ror(W[(t-2U)&15U],17) ^ Sha256Ror(W[(t-2U)&15U],19) ^ (W[(t-2U)&15U] >> 10);
+			W[t&15U] += s0 + W[(t-7U)&15U] + s1;
+		}
+		s1 = Sha256Ror(e,6) ^ Sha256Ror(e,11) ^ Sha256Ror(e,25);
+		ch = (e & f) ^ (~e & g);
+		t1 = h + s1 + ch + s_Sha256K[t] + W[t&15U];
+		s0 = Sha256Ror(a,2) ^ Sha256Ror(a,13) ^ Sha256Ror(a,22);
+		maj = (a & b) ^ (a & c) ^ (b & c);
+		t2 = s0 + maj;
 		h=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
 	}
 	H[0]+=a; H[1]+=b; H[2]+=c; H[3]+=d;
@@ -251,6 +254,12 @@ CRYPTO_STATUS CryptoHmacSha256(HashEngine *pHash, CRYPTO_MAC_ALG Alg, const Cryp
 									const uint8_t *pMsg, size_t Len,
 									uint8_t *pMac, size_t MacLen)
 {
+	uint8_t key[HMAC_BLOCK] = {};
+	uint8_t inner[SHA256_DIGEST];
+	alignas(CRYPTO_HASHCTX_ALIGN_MAX) uint8_t ctx[CRYPTO_HASHCTX_MAX];
+	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
+	size_t i;
+
 	// The generic construction chains the streaming hash synchronously on
 	// stack storage; an asynchronous hash engine must provide its own HMAC.
 	if (pHash->IsAsync() || Alg != CRYPTO_MAC_HMAC || Key.Type != CRYPTO_KEY_HMAC ||
@@ -267,9 +276,6 @@ CRYPTO_STATUS CryptoHmacSha256(HashEngine *pHash, CRYPTO_MAC_ALG Alg, const Cryp
 
 	// Block-sized key: a longer key is first hashed (RFC 2104), a shorter
 	// one zero padded.
-	uint8_t key[HMAC_BLOCK] = {};
-	alignas(CRYPTO_HASHCTX_ALIGN_MAX) uint8_t ctx[CRYPTO_HASHCTX_MAX];
-	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
 	if (Key.Plain.Len > HMAC_BLOCK)
 	{
 		if (pHash->HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
@@ -285,14 +291,12 @@ CRYPTO_STATUS CryptoHmacSha256(HashEngine *pHash, CRYPTO_MAC_ALG Alg, const Cryp
 		memcpy(key, Key.Plain.pData, Key.Plain.Len);
 	}
 
-	uint8_t pad[HMAC_BLOCK];
-	uint8_t inner[SHA256_DIGEST];
 	if (st == CRYPTO_STATUS_OK)
 	{
 		// Inner digest: H((K xor ipad) || message).
-		for (size_t i = 0; i < HMAC_BLOCK; i++) pad[i] = key[i] ^ 0x36U;
+		for (i = 0; i < HMAC_BLOCK; i++) key[i] ^= 0x36U;
 		if (pHash->HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
-			pHash->HashUpdate(ctx, pad, sizeof(pad)) != CRYPTO_STATUS_OK ||
+			pHash->HashUpdate(ctx, key, sizeof(key)) != CRYPTO_STATUS_OK ||
 			pHash->HashUpdate(ctx, pMsg, Len) != CRYPTO_STATUS_OK ||
 			pHash->HashFinal(ctx, inner) != CRYPTO_STATUS_OK)
 		{
@@ -302,24 +306,23 @@ CRYPTO_STATUS CryptoHmacSha256(HashEngine *pHash, CRYPTO_MAC_ALG Alg, const Cryp
 	if (st == CRYPTO_STATUS_OK)
 	{
 		// Outer digest: H((K xor opad) || inner).
-		uint8_t full[SHA256_DIGEST];
-		for (size_t i = 0; i < HMAC_BLOCK; i++) pad[i] = key[i] ^ 0x5CU;
+		// Convert ipad to opad in place. HashUpdate consumes inner before
+		// HashFinal reuses it for the outer digest (asynchronous use is rejected).
+		for (i = 0; i < HMAC_BLOCK; i++) key[i] ^= 0x36U ^ 0x5CU;
 		if (pHash->HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
-			pHash->HashUpdate(ctx, pad, sizeof(pad)) != CRYPTO_STATUS_OK ||
+			pHash->HashUpdate(ctx, key, sizeof(key)) != CRYPTO_STATUS_OK ||
 			pHash->HashUpdate(ctx, inner, sizeof(inner)) != CRYPTO_STATUS_OK ||
-			pHash->HashFinal(ctx, full) != CRYPTO_STATUS_OK)
+			pHash->HashFinal(ctx, inner) != CRYPTO_STATUS_OK)
 		{
 			st = CRYPTO_STATUS_FAIL;
 		}
 		else
 		{
-			memcpy(pMac, full, MacLen);
+			memcpy(pMac, inner, MacLen);
 		}
-		Sha256Wipe(full, sizeof(full));
 	}
 
 	Sha256Wipe(key, sizeof(key));
-	Sha256Wipe(pad, sizeof(pad));
 	Sha256Wipe(inner, sizeof(inner));
 	Sha256Wipe(ctx, sizeof(ctx));
 	if (st != CRYPTO_STATUS_OK)
