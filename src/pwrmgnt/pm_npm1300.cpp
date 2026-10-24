@@ -245,7 +245,7 @@ int32_t PmnPM1300::Temperature()
 	uint16_t adc;
 	float kelvin;
 
-	if (vNtcBeta == 0)
+	if (vNtcBeta == 0 || Interface() == NULL)
 		return INT32_MIN;
 	addr = EndianCvt16(NPM1300_ADC_ADCNTC_RESULTMSB_REG);
 	if (Read((uint8_t *)&addr, 2, &msb, 1) != 1)
@@ -267,6 +267,8 @@ int32_t PmnPM1300::Voltage()
 	uint8_t lsb;
 	uint16_t adc;
 
+	if (Interface() == NULL)
+		return -1;
 	addr = EndianCvt16(NPM1300_ADC_ADCVBAT_RESULTMSB_REG);
 	if (Read((uint8_t *)&addr, 2, &msb, 1) != 1)
 		return -1;
@@ -297,7 +299,7 @@ int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 	uint8_t code;
 
 	(void)CurrLimit;
-	if (VoutIdx > 1 || (mVolt != 0 &&
+	if (Interface() == NULL || VoutIdx > 1 || (mVolt != 0 &&
 		(mVolt < 1000 || mVolt > 3300 || (mVolt - 1000) % 100 != 0)))
 		return -1;
 	if (mVolt != 0)
@@ -387,9 +389,12 @@ uint32_t PmnPM1300::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32
 	uint16_t raw;
 	uint8_t code;
 
+	if (Interface() == NULL)
+		return 0;
 	if (mACurr == 0)
 	{
-		Disable();
+		addr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_CLR_REG);
+		Write8((uint8_t *)&addr, 2, 1);
 		return 0;
 	}
 	if (Type != PWRMGNT_CHARGE_TYPE_NORMAL && Type != PWRMGNT_CHARGE_TYPE_AUTO)
@@ -398,9 +403,13 @@ uint32_t PmnPM1300::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32
 		return 0;
 	if (mVoltEoC >= 3700 && mVoltEoC < 4000)
 		return 0;
-	if (mACurr < 32 || mACurr > 800)
+	if (mACurr < 32 || mACurr > 800 || (mACurr & 1U) != 0)
 		return 0;
 
+	/* Charging must be disabled before changing the ICHG registers. */
+	addr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_CLR_REG);
+	if (!Write8((uint8_t *)&addr, 2, 1))
+		return 0;
 	raw = (uint16_t)(mACurr / 2);
 	addr = EndianCvt16(NPM1300_BCHARGER_BCHGISET_MSB_REG);
 	if (!Write8((uint8_t *)&addr, 2, raw >> 1))
@@ -423,9 +432,10 @@ uint32_t PmnPM1300::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32
 bool PmnPM1300::Charging()
 {
 	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG);
-	uint8_t	d = 0;
+	uint8_t d;
 
-	d = Read8((uint8_t*)&regaddr, 2);
+	if (Read((uint8_t *)&regaddr, 2, &d, 1) != 1)
+		return false;
 
 	return d & (NPM1300_BCHARGER_BCHG_CHARGE_STATUS_TRICKLECHARGE |
 				NPM1300_BCHARGER_BCHG_CHARGE_STATUS_CONSTANTCURRENT |
@@ -441,9 +451,10 @@ bool PmnPM1300::Charging()
 bool PmnPM1300::Battery()
 {
 	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG);
-	uint8_t	d = 0;
+	uint8_t d;
 
-	d = Read8((uint8_t*)&regaddr, 2);
+	if (Read((uint8_t *)&regaddr, 2, &d, 1) != 1)
+		return false;
 
 	return d & NPM1300_BCHARGER_BCHG_CHARGE_STATUS_BATTERYDETECTED;
 }
