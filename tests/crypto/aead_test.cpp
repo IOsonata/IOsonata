@@ -1,4 +1,4 @@
-// OpenSSL comparison and failure injection for shared CCM/GCM seal/open code.
+// OpenSSL comparisons and failure injection for CMAC and CCM/GCM.
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -38,6 +38,63 @@ static void Reference(bool Gcm, const uint8_t *pKey, const uint8_t *pNonce,
 	EVP_CIPHER_CTX_free(ctx);
 }
 
+static void CheckCmac()
+{
+	FailingAes engine;
+	CryptoKey key{CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN, CRYPTO_KEY_USE_SIGN, {}};
+	uint8_t k[16], msg[257], ref[16], out[18], overlap[257];
+	size_t len, tagLen, resultLen, i;
+	unsigned seed, fail, calls;
+
+	engine.Enable();
+	key.Plain.pData = k;
+	key.Plain.Len = sizeof(k);
+	for (seed = 0; seed < 4; seed++)
+	{
+		for (i = 0; i < sizeof(k); i++) k[i] = (uint8_t)(31U * i + seed);
+		for (i = 0; i < sizeof(msg); i++) msg[i] = (uint8_t)(17U * i + seed);
+		for (len = 0; len <= sizeof(msg); len++)
+		{
+			assert(EVP_Q_mac(nullptr, "CMAC", nullptr, "AES-128-CBC", nullptr,
+				k, sizeof(k), msg, len, ref, sizeof(ref), &resultLen) == ref);
+			assert(resultLen == 16);
+			for (tagLen = 1; tagLen <= 16; tagLen++)
+			{
+				memset(out, 0xA5, sizeof(out));
+				assert(engine.Mac(CRYPTO_MAC_CMAC, key, len ? msg : nullptr, len,
+					out + 1, tagLen) == CRYPTO_STATUS_OK);
+				assert(memcmp(out + 1, ref, tagLen) == 0);
+				assert(out[0] == 0xA5 && out[tagLen + 1] == 0xA5);
+			}
+			memcpy(overlap, msg, sizeof(msg));
+			assert(engine.Mac(CRYPTO_MAC_CMAC, key, overlap, len, overlap, 16) == CRYPTO_STATUS_OK);
+			assert(memcmp(overlap, ref, 16) == 0);
+		}
+	}
+	for (len = 0; len <= sizeof(msg); len++)
+	{
+		calls = 1U + (len ? (len + 15U) / 16U : 1U);
+		for (fail = 1; fail <= calls; fail++)
+		{
+			engine.Blocks = engine.Begins = engine.Ends = 0;
+			engine.FailAt = fail;
+			memset(out, 0xA5, sizeof(out));
+			assert(engine.Mac(CRYPTO_MAC_CMAC, key, msg, len, out + 1, 16) == CRYPTO_STATUS_FAIL);
+			assert(engine.Blocks == fail && engine.Begins == 1 && engine.Ends == 1);
+			for (i = 1; i <= 16; i++) assert(out[i] == 0);
+			assert(out[0] == 0xA5 && out[17] == 0xA5);
+		}
+	}
+	engine.Refuse = true;
+	engine.Blocks = engine.Begins = engine.Ends = 0;
+	memset(out, 0xA5, sizeof(out));
+	assert(engine.Mac(CRYPTO_MAC_CMAC, key, msg, sizeof(msg), out + 1, 16) == CRYPTO_STATUS_BUSY);
+	assert(engine.Blocks == 0 && engine.Begins == 1 && engine.Ends == 0);
+	for (i = 1; i <= 16; i++) assert(out[i] == 0);
+	assert(out[0] == 0xA5 && out[17] == 0xA5);
+	puts("CMAC: 16512 OpenSSL comparisons, overlap, bounds, every AES failure and busy passed");
+}
+
 int main()
 {
 	CryptoSoftAes engine;
@@ -52,6 +109,7 @@ int main()
 	size_t len, alen, nlen, tlen, li, ai, i;
 	unsigned mode, calls, fail, direction, cases = 0;
 
+	CheckCmac();
 	engine.Enable();
 	key.Plain.pData = k;
 	key.Plain.Len = sizeof(k);

@@ -93,7 +93,7 @@ static void AesKeyExpand(const uint8_t *Key, uint32_t Words,
 static void AesMixColumns(uint8_t State[16])
 {
 	uint8_t *p;
-	uint8_t a0, a1, a2, a3;
+	uint8_t a0, a1, a2, a3, sum;
 	int c;
 
 	for (c = 0; c < 4; c++)
@@ -103,97 +103,72 @@ static void AesMixColumns(uint8_t State[16])
 		a1 = p[1];
 		a2 = p[2];
 		a3 = p[3];
-		p[0] = (uint8_t)(AesXtime(a0) ^ (AesXtime(a1) ^ a1) ^ a2 ^ a3);
-		p[1] = (uint8_t)(a0 ^ AesXtime(a1) ^ (AesXtime(a2) ^ a2) ^ a3);
-		p[2] = (uint8_t)(a0 ^ a1 ^ AesXtime(a2) ^ (AesXtime(a3) ^ a3));
-		p[3] = (uint8_t)((AesXtime(a0) ^ a0) ^ a1 ^ a2 ^ AesXtime(a3));
+		sum = a0 ^ a1 ^ a2 ^ a3;
+		p[0] = a0 ^ sum ^ AesXtime(a0 ^ a1);
+		p[1] = a1 ^ sum ^ AesXtime(a1 ^ a2);
+		p[2] = a2 ^ sum ^ AesXtime(a2 ^ a3);
+		p[3] = a3 ^ sum ^ AesXtime(a3 ^ a0);
 	}
 }
 
-static void AesEncryptBlock(const uint8_t *Rk, uint32_t Rounds,
-							const uint8_t In[16], uint8_t Out[16])
+// Both directions share SubBytes, ShiftRows and round-key addition.
+// The inverse cipher adds the key before inverse MixColumns; the forward
+// cipher adds it after MixColumns. Neither final round mixes columns.
+static void AesCryptBlock(const uint8_t *Rk, uint32_t Rounds, bool Encrypt,
+						 const uint8_t In[16], uint8_t Out[16])
 {
-	uint8_t st[16];
-	uint8_t t[16];
+	uint8_t st[16], t[16];
+	const uint8_t *pKey = Rk + (Encrypt ? 0U : Rounds * 16U);
+	const uint8_t *pBox = Encrypt ? s_SBox : s_InvSBox;
+	int step = Encrypt ? 16 : -16;
+	int rowStep = Encrypt ? 1 : -1;
+	uint8_t *p;
+	uint8_t u, v;
 	uint32_t round;
-	int i;
+	int i, c, r;
 
 	for (i = 0; i < 16; i++)
 	{
-		st[i] = (uint8_t)(In[i] ^ Rk[i]);
+		st[i] = In[i] ^ pKey[i];
 	}
-
 	for (round = 1; round <= Rounds; round++)
 	{
-		for (i = 0; i < 16; i++)
+		pKey += step;
+		for (c = 0; c < 4; c++)
 		{
-			st[i] = s_SBox[st[i]];
+			for (r = 0; r < 4; r++)
+			{
+				t[c * 4 + r] = pBox[st[((c + 4 + rowStep * r) & 3) * 4 + r]];
+			}
 		}
-		t[0] = st[0];
-		t[4] = st[4];
-		t[8] = st[8];
-		t[12] = st[12];
-		t[1] = st[5];
-		t[5] = st[9];
-		t[9] = st[13];
-		t[13] = st[1];
-		t[2] = st[10];
-		t[6] = st[14];
-		t[10] = st[2];
-		t[14] = st[6];
-		t[3] = st[15];
-		t[7] = st[3];
-		t[11] = st[7];
-		t[15] = st[11];
-		// The final round omits MixColumns, but shares the other steps.
+		if (!Encrypt)
+		{
+			for (i = 0; i < 16; i++)
+			{
+				t[i] ^= pKey[i];
+			}
+		}
 		if (round != Rounds)
 		{
+			if (!Encrypt)
+			{
+				for (c = 0; c < 4; c++)
+				{
+					p = &t[c * 4];
+					u = AesXtime(AesXtime(p[0] ^ p[2]));
+					v = AesXtime(AesXtime(p[1] ^ p[3]));
+					p[0] ^= u;
+					p[2] ^= u;
+					p[1] ^= v;
+					p[3] ^= v;
+				}
+			}
 			AesMixColumns(t);
 		}
 		for (i = 0; i < 16; i++)
 		{
-			st[i] = (uint8_t)(t[i] ^ Rk[round * 16U + (uint32_t)i]);
+			st[i] = t[i] ^ (Encrypt ? pKey[i] : 0U);
 		}
-	}
-	memcpy(Out, st, sizeof(st));
-	AesWipe(st, sizeof(st));
-	AesWipe(t, sizeof(t));
-}
-
-// FIPS-197 inverse cipher, using the encryption round keys in reverse.
-static void AesDecryptBlock(const uint8_t *Rk, uint32_t Rounds,
-							const uint8_t In[16], uint8_t Out[16])
-{
-	uint8_t st[16], t[16];
-	for (int i = 0; i < 16; i++)
-	{
-		st[i] = In[i] ^ Rk[Rounds * 16U + (uint32_t)i];
-	}
-	for (int round = (int)Rounds - 1; round >= 0; round--)
-	{
-		// Inverse ShiftRows and SubBytes, column-major state.
-		for (int c = 0; c < 4; c++)
-		{
-			for (int r = 0; r < 4; r++)
-			{
-				t[c * 4 + r] = s_InvSBox[st[((c + 4 - r) & 3) * 4 + r]];
-			}
-		}
-		for (int i = 0; i < 16; i++) t[i] ^= Rk[round * 16 + i];
-		if (round != 0)
-		{
-			for (int c = 0; c < 4; c++)
-			{
-				uint8_t *p = &t[c * 4];
-				// Inverse MixColumns: precondition, then forward MixColumns.
-				uint8_t u = AesXtime(AesXtime(p[0] ^ p[2]));
-				uint8_t v = AesXtime(AesXtime(p[1] ^ p[3]));
-				p[0] ^= u; p[2] ^= u;
-				p[1] ^= v; p[3] ^= v;
-			}
-			AesMixColumns(t);
-		}
-		memcpy(st, t, sizeof(st));
 	}
 	memcpy(Out, st, sizeof(st));
 	AesWipe(st, sizeof(st));
@@ -205,14 +180,14 @@ void CryptoAesSoftEncryptBlock(const uint8_t Key[16], const uint8_t In[16], uint
 {
 	uint8_t rk[AES128_RK_WORDS * 4U];
 	AesKeyExpand(Key, 4U, AES128_ROUNDS, rk);
-	AesEncryptBlock(rk, AES128_ROUNDS, In, Out);
+	AesCryptBlock(rk, AES128_ROUNDS, true, In, Out);
 	AesWipe(rk, sizeof(rk));
 }
 void CryptoAesSoftDecryptBlock(const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16])
 {
 	uint8_t rk[AES128_RK_WORDS * 4U];
 	AesKeyExpand(Key, 4U, AES128_ROUNDS, rk);
-	AesDecryptBlock(rk, AES128_ROUNDS, In, Out);
+	AesCryptBlock(rk, AES128_ROUNDS, false, In, Out);
 	AesWipe(rk, sizeof(rk));
 }
 
@@ -222,7 +197,7 @@ void CryptoAesSoftEncryptBlock256(const uint8_t Key[32], const uint8_t In[16], u
 	uint8_t rk[60U * 4U];
 
 	AesKeyExpand(Key, 8U, 14U, rk);
-	AesEncryptBlock(rk, 14U, In, Out);
+	AesCryptBlock(rk, 14U, true, In, Out);
 	AesWipe(rk, sizeof(rk));
 }
 
@@ -231,6 +206,6 @@ void CryptoAesSoftDecryptBlock256(const uint8_t Key[32], const uint8_t In[16], u
 	uint8_t rk[60U * 4U];
 
 	AesKeyExpand(Key, 8U, 14U, rk);
-	AesDecryptBlock(rk, 14U, In, Out);
+	AesCryptBlock(rk, 14U, false, In, Out);
 	AesWipe(rk, sizeof(rk));
 }

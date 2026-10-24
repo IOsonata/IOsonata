@@ -238,6 +238,16 @@ CRYPTO_STATUS CryptoAesModes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 								 const uint8_t *pMsg, size_t Len,
 								 uint8_t *pMac, size_t MacLen)
 {
+	const uint8_t *key = Key.Plain.pData;
+	uint8_t subkey[AES_BLOCK] = {};
+	uint8_t chain[AES_BLOCK] = {};
+	uint8_t block[AES_BLOCK];
+	CRYPTO_STATUS st;
+	size_t off = 0U;
+	size_t count;
+	size_t i;
+	bool last;
+
 	if (Alg != CRYPTO_MAC_CMAC || !AesKeyMaterialOk(Key) ||
 		(Key.Usage & CRYPTO_KEY_USE_SIGN) == 0U || pMac == nullptr ||
 		MacLen == 0U || MacLen > AES_BLOCK || (Len > 0U && pMsg == nullptr))
@@ -245,85 +255,58 @@ CRYPTO_STATUS CryptoAesModes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	// One acquisition for the whole CMAC: the block primitive runs between
-	// AesOpBegin and AesOpEnd, so a hardware subclass holds its operation once
-	// instead of once per block and no other user interleaves mid-MAC.
+	// Hold the hardware once for subkey generation and every message block.
 	if (!AesOpBegin())
 	{
-		// Fail closed on a refused bracket (hardware contention): the caller
-		// must never read a stale tag, and BUSY marks the refusal retryable.
 		memset(pMac, 0, MacLen);
 		return CRYPTO_STATUS_BUSY;
 	}
-
-	const uint8_t *key = Key.Plain.pData;
-	uint8_t zero[AES_BLOCK] = {};
-	uint8_t L[AES_BLOCK] = {}, K1[AES_BLOCK] = {}, K2[AES_BLOCK] = {};
-	uint8_t X[AES_BLOCK] = {};
-	uint8_t Y[AES_BLOCK] = {};
-	CRYPTO_STATUS st = AesEcbEncrypt(key, zero, L) ? CRYPTO_STATUS_OK
-												 : CRYPTO_STATUS_FAIL;
+	st = AesEcbEncrypt(key, subkey, subkey) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 	if (st == CRYPTO_STATUS_OK)
 	{
-		CmacSubkey(L, K1);
-		CmacSubkey(K1, K2);
-
-		size_t blocks = (Len + AES_BLOCK - 1U) / AES_BLOCK;
-		bool complete = Len != 0U && (Len & (AES_BLOCK - 1U)) == 0U;
-		if (blocks == 0U) blocks = 1U;
-
-		for (size_t i = 0; i + 1U < blocks; i++)
+		CmacSubkey(subkey, subkey);
+		if (Len == 0U || (Len & (AES_BLOCK - 1U)) != 0U)
 		{
-			for (size_t j = 0; j < AES_BLOCK; j++) Y[j] = X[j] ^ pMsg[i*AES_BLOCK+j];
-			if (!AesEcbEncrypt(key, Y, X))
+			CmacSubkey(subkey, subkey);
+		}
+		// Process the final block in the same loop, including an empty message.
+		do
+		{
+			count = Len - off < AES_BLOCK ? Len - off : AES_BLOCK;
+			last = Len - off <= AES_BLOCK;
+			memset(block, 0, sizeof(block));
+			if (count != 0U)
+			{
+				memcpy(block, pMsg + off, count);
+			}
+			if (count < AES_BLOCK)
+			{
+				block[count] = 0x80U;
+			}
+			for (i = 0U; i < AES_BLOCK; i++)
+			{
+				block[i] ^= chain[i] ^ (last ? subkey[i] : 0U);
+			}
+			if (!AesEcbEncrypt(key, block, chain))
 			{
 				st = CRYPTO_STATUS_FAIL;
 				break;
 			}
-		}
-
-		if (st == CRYPTO_STATUS_OK)
-		{
-			uint8_t last[AES_BLOCK];
-			size_t base = (blocks - 1U) * AES_BLOCK;
-			if (complete)
-			{
-				for (size_t j = 0; j < AES_BLOCK; j++) last[j] = pMsg[base+j] ^ K1[j];
-			}
-			else
-			{
-				size_t rem = Len - base;
-				for (size_t j = 0; j < AES_BLOCK; j++)
-				{
-					uint8_t value = j < rem ? pMsg[base+j] : (j == rem ? 0x80U : 0U);
-					last[j] = value ^ K2[j];
-				}
-			}
-			for (size_t j = 0; j < AES_BLOCK; j++) Y[j] = X[j] ^ last[j];
-			uint8_t full[AES_BLOCK];
-			if (!AesEcbEncrypt(key, Y, full))
-			{
-				st = CRYPTO_STATUS_FAIL;
-			}
-			else
-			{
-				memcpy(pMac, full, MacLen);
-			}
-			AesWipe(last, sizeof(last));
-			AesWipe(full, sizeof(full));
-		}
+			off += count;
+		} while (!last);
 	}
 	AesOpEnd();
-
-	AesWipe(L, sizeof(L));
-	AesWipe(K1, sizeof(K1));
-	AesWipe(K2, sizeof(K2));
-	AesWipe(X, sizeof(X));
-	AesWipe(Y, sizeof(Y));
-	if (st != CRYPTO_STATUS_OK)
+	if (st == CRYPTO_STATUS_OK)
+	{
+		memcpy(pMac, chain, MacLen);
+	}
+	else
 	{
 		memset(pMac, 0, MacLen);
 	}
+	AesWipe(subkey, sizeof(subkey));
+	AesWipe(chain, sizeof(chain));
+	AesWipe(block, sizeof(block));
 	return st;
 }
 
@@ -411,6 +394,7 @@ bool CryptoAesModes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
 							  size_t TagLen, uint8_t Tag[16])
 {
 	size_t l = 15U - NonceLen;
+	size_t value = Len;
 	uint8_t x[AES_BLOCK], b[AES_BLOCK];
 	bool ok;
 
@@ -418,9 +402,11 @@ bool CryptoAesModes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
 	b[0] = (uint8_t)(((AadLen != 0U) ? 0x40U : 0U) |
 					 (((TagLen - 2U) / 2U) << 3) | (l - 1U));
 	memcpy(&b[1], pNonce, NonceLen);
+	// L may exceed sizeof(size_t); shift one byte at a time to zero extend.
 	for (size_t i = 0; i < l; i++)
 	{
-		b[15U - i] = (uint8_t)(Len >> (8U * i));
+		b[15U - i] = (uint8_t)value;
+		value >>= 8U;
 	}
 	ok = AesEcbEncrypt(pKey, b, x);
 
