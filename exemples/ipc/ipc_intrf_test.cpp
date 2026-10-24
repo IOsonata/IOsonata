@@ -112,6 +112,10 @@ static_assert(BLOCK_SIZE <= IPCTEST_MEM_SIZE, "IPCTEST_MEM_SIZE is too small for
 
 static IpcIntrfDev_t s_Ipc;
 
+#ifdef CORE_PINS
+static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
+#endif
+
 /*---------------------------------------------------------------------------
  * Trace, both cores: SysLog over the UART of the board, the application
  * core on its console port, the network core on its own port.
@@ -389,26 +393,6 @@ static void LedInit(void)
 	}
 }
 
-// Hand the GPIOs of the network core image to it. After reset every pin is
-// the application core's; a pin the network core drives without this stays
-// silent.
-static void NetCorePins(void)
-{
-#ifdef IPCTEST_NET_PINS
-	static const struct { int Port; int Pin; } pins[] = IPCTEST_NET_PINS;
-	NRF_GPIO_Type *port[] = { NRF_P0_S, NRF_P1_S };
-
-	for (size_t i = 0; i < sizeof(pins) / sizeof(pins[0]); i++)
-	{
-		uint32_t cnf = port[pins[i].Port]->PIN_CNF[pins[i].Pin];
-
-		cnf &= ~GPIO_PIN_CNF_MCUSEL_Msk;
-		cnf |= GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
-		port[pins[i].Port]->PIN_CNF[pins[i].Pin] = cnf;
-	}
-#endif
-}
-
 static void NetCore(bool bRun)
 {
 #if defined(NRF_RESET_S) && !defined(NRF_TRUSTZONE_NONSECURE)
@@ -456,7 +440,17 @@ int main()
 	// never meets leftovers of an earlier run.
 	NetCore(false);
 	memset(reinterpret_cast<void*>(IPCTEST_MEM_ADDR), 0, IPCTEST_MEM_SIZE);
-	NetCorePins();
+#ifdef CORE_PINS
+	if (!IOPinCoreCfg(s_CorePins, sizeof(s_CorePins) / sizeof(s_CorePins[0])))
+	{
+		LOG("core pin assignment failed\r\n");
+		Led(2, true);
+		while (1)
+		{
+			__WFE();
+		}
+	}
+#endif
 	LOG("block cleared, network core pins handed over\r\n");
 
 	IpcIntrfCfg_t cfg = {};

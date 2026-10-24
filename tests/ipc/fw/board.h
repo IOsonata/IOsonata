@@ -31,6 +31,10 @@ extern uint8_t g_HostIpcMem[];
 #define LED4_PIN		31
 #define LED4_PINOP		0
 
+#if !IPCTEST_OWNER
+#define CORE_PINS { {1, 1, 8}, {1, 1, 9} }
+#endif
+
 #define UART_DEVNO		0
 #define UART_BAUDRATE	1000000
 

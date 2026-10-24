@@ -11,6 +11,7 @@ link and not at the test. The exit code is 0 when the peer prints RESULT PASS.
 
 @license	MIT, Copyright (c) 2026, I-SYST inc.
 ----------------------------------------------------------------------------*/
+#include <assert.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -35,6 +36,7 @@ void IpcTestOwnerStep(void);
 extern int peer_main(void);
 
 static bool s_OwnerUp;
+static int s_CorePinCount;
 static unsigned long s_IdleCalls;
 static int s_Led[4];
 
@@ -42,6 +44,7 @@ extern "C" void HostIdle(uint32_t)
 {
 	if (s_OwnerUp == false && g_HostReset.NETWORK.FORCEOFF == RESET_NETWORK_FORCEOFF_FORCEOFF_Release)
 	{
+		assert(s_CorePinCount == 2);
 		s_OwnerUp = IpcTestOwnerInit();
 		if (s_OwnerUp == false)
 		{
@@ -77,6 +80,14 @@ extern "C" void HostPinToggle(int, int Pin)
 	{
 		s_Led[Pin - 28] ^= 1;
 	}
+}
+
+extern "C" bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+	assert(g_HostReset.NETWORK.FORCEOFF == RESET_NETWORK_FORCEOFF_FORCEOFF_Hold);
+	assert(CoreNo == 1 && PortNo == 1 && PinNo == 8 + s_CorePinCount);
+	s_CorePinCount++;
+	return true;
 }
 
 extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
@@ -128,8 +139,9 @@ extern "C" int SysLogPrintf(SysLog_t * const, const char *pFormat, ...)
 
 	if (strstr(line, "RESULT PASS") != nullptr)
 	{
-		// LED4 (index 3) is on when active low is 0 and LED3 stayed off
-		int ledOk = s_Led[3] == 0 && s_Led[2] == 1;
+		// RESULT PASS is logged before the firmware sets the done LED.
+		// At this point the link LED must be on and the error LED off.
+		int ledOk = s_Led[0] == 0 && s_Led[2] == 1;
 
 		printf("leds: link=%d error=%d done=%d\n", s_Led[0] == 0, s_Led[2] == 0, s_Led[3] == 0);
 		exit(ledOk ? 0 : 4);

@@ -110,7 +110,7 @@ def main():
 				print(f"PASS {compiler} {optimization}: {len(variants)} core configurations")
 		# Compile and run the board tables through the generic batch helper.
 		(build / "blueio_board.h").write_text("")
-		for example in ["NetCoreStart", "BleAdvertiser", "BleSecurityDemo", "BleTestDut", "UartBleDemo"]:
+		for example in ["NetCoreStart", "BleAdvertiser", "BleSecurityDemo", "BleTestDut", "UartBleDemo", "IpcIntrfTest"]:
 			board = ROOT / f"ARM/Nordic/nRF53/nRF5340_App/exemples/{example}/src/board.h"
 			for standard_dk in [False, True]:
 				check = build / "board.c"
@@ -140,7 +140,7 @@ int main(void)
 						*(["-DNRF5340_DK_PCA10095"] if standard_dk else []),
 						str(check), "-o", str(build / "board"))
 					run(str(build / "board"))
-		print("PASS C/C++ Audio DK and standard DK CORE_PINS in all five examples")
+		print("PASS C/C++ Audio DK and standard DK CORE_PINS in all six examples")
 
 
 if __name__ == "__main__":

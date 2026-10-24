@@ -15,7 +15,7 @@ other cores. Existing package validation is reused where provided; board maps
 must still select bonded pins. nRF54 auxiliary-core routing and ESP32-C5/C6
 LP-core pad routing are not implemented and return false, including for core 0.
 
-NetCoreStart and the four nRF5340 App BLE examples assign the Net console pins
+NetCoreStart, IpcIntrfTest and the four nRF5340 App BLE examples assign the Net console pins
 before releasing the Net core. The default Audio DK map is RX P1.08, TX P1.09.
 `NRF5340_DK_PCA10095` selects RX P1.00, TX P1.01 for the standard DK.
 The BLE library continues to start the Net core through IPC.
@@ -31,7 +31,7 @@ their port sources, using mock registers and production validation helpers.
 They check C and C++ use, valid/invalid core and pin numbers, secure permission
 locks, repeated assignments, returning ownership, unrelated pin/configuration
 preservation, and interrupt-state restoration. Nordic checks run at O0 and Os
-with undefined-behavior sanitization. All five board mappings are compiled for
+with undefined-behavior sanitization. All six board mappings are compiled for
 Audio DK and standard DK.
 
 These are not full MCU builds or hardware tests. Rebuild the nRF5340 App library
