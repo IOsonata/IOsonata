@@ -126,8 +126,12 @@ Interfaces that hold a key between calls (`KeyAgreeEngine`) take a `pKeyCtx` (a
 caller-owned key-context buffer of `KeyCtxSize()` bytes). `KeyGen` writes the
 private key into it and `Agree` consumes it, so one engine object serves several
 independent key contexts. `KeyImport` loads a private scalar the caller was
-handed (the BLE link layer on STM32WBA) and returns its public key; only
-`CryptoUecc` provides it so far, the other engines report unsupported. The engine object itself is stateless beyond its
+handed and optionally returns its public key. `CryptoCc3xx`, `Ba414ep` and
+`CryptoWbaPka` derive from `CryptoUecc` and use its exact `KeyCtx` type. CC3xx
+and BA414EP inherit software import and ECDSA while overriding hardware
+key generation and agreement. WBA overrides import and ECDSA in hardware too.
+`SetRng` and its RNG pointer are inherited, so software and hardware methods
+share one binding. The engine object itself is stateless beyond its
 `Device` lifecycle; the scarce hardware resource, not a per-key secret, is what
 the object owns.
 
@@ -161,14 +165,14 @@ consumer is curve-blind and key-blind:
 
 - **Peer key validation**: a P-256 engine rejects a peer public key that is not
   on the curve before the agreement, closing the invalid-curve attack
-  (CVE-2018-5383). The software engine checks with `uECC_valid_public_key`; the
-  PSA path relies on `psa_raw_key_agreement`, which performs the check; the PKA
+  (CVE-2018-5383). The software engine checks with `uECC_valid_public_key`; the PKA
   engines validate the point on the accelerator.
 - **Single-use ephemeral key**: `Agree` wipes the shared secret on every exit
   and, by default, wipes the private key too, so a second `Agree` without a fresh
   `KeyGen` fails rather than reusing a spent key. A caller that needs one
   ephemeral pair for several concurrent peers passes `bKeepKey = true`, which
-  keeps the key after a success; a failure always wipes.
+  keeps the key after a success. A failure wipes it; transient busy status
+  retains the key for retry.
 - **Per-instance key context**: the private key lives in caller-owned `pKeyCtx`,
   never in a file static, so concurrent or sequential key contexts never collide.
 - **Strong RNG required**: P-256 key generation and signing use an injected
@@ -182,15 +186,15 @@ consumer is curve-blind and key-blind:
 | Engine | Interfaces | Location | Notes |
 |---|---|---|---|
 | `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/crypto_uecc.cpp` | Software P-256 (micro-ecc): ECDH and ECDSA. Uses an injected secure `RngEngine` for `KeyGen`/`Sign`; `Verify` needs no RNG. Software fallback on any part. |
-| `Ba414ep` | `KeyAgreeEngine` | `src/crypto/ba414ep.cpp`, `ARM/Nordic/src/ba414ep_nrfx.cpp` | Hardware P-256 on the Silex BA414EP public-key accelerator (Nordic CRACEN). nRF54L15 / nRF54H20. Microcode-free, fixed-function; no vendor blob. |
-| `CryptoCc3xx` | `KeyAgreeEngine` | `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 on the Arm CryptoCell CC3xx PKA. nRF52840 (CC310). Self-contained register-level driver; the target header `crypto_cc3xx.h` supplies the register base and enable/disable. |
-| `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_aes_modes.cpp` | Software AES-128/256 cipher (FIPS-197) and AES-128 CMAC. The software base of the symmetric interfaces: a hardware AES block overrides `Cipher`, and the inherited software CMAC then runs over that hardware AES through the virtual `Cipher` call. |
-| `CryptoMaster` | `CipherEngine`, `MacEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128 on the Silex CryptoMaster (BA411e) block. Overrides `Cipher`; CMAC is the inherited software core over the hardware cipher. |
+| `Ba414ep` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/ba414ep.cpp` | Hardware P-256 key generation/ECDH over the injected CRACEN interface. Inherits software key import and ECDSA. The Nordic interface loads PKE microcode. |
+| `CryptoCc3xx` | `KeyAgreeEngine`, `SignEngine` | `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 key generation/ECDH on CC3xx. Inherits software key import and ECDSA. `Cc3xxIntrf` supplies register access and arbitration. |
+| `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` | `ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp` | Derives from `CryptoUecc`; overrides P-256 import, generation, agreement and ECDSA with WBA PKA operations. |
+| `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_aes_modes.cpp` | Software AES-128/256 cipher (FIPS-197) and AES-128 CMAC. CMAC/CCM/GCM use protected virtual block hooks, which hardware subclasses override. |
+| `CryptoMaster` | `CipherEngine`, `MacEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128 on the Silex CryptoMaster (BA411e) block. Overrides AES-128 encryption and block hooks; inherits software decryption and AES-256. |
 | `CryptoSoftSha256` | `HashEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4). Unkeyed digest; serves DFU image verification and any hashing consumer. |
 | `CryptoSoftRng` | `RngEngine` | `src/crypto/crypto_softrng.cpp` | Software PRNG base. Statistical use only; not a security random source. |
-| `CryptoRngNrf` | `RngEngine` | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG (CRACEN CTR-DRBG on nRF54L/H, NRF_RNG peripheral on nRF52/53/91). Platform singleton `CryptoRngNrfInstance`. |
+| `CryptoRngNrf` | `RngEngine` | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG (CRACEN CTR-DRBG on nRF54L/H, NRF_RNG on nRF52/network core, CC3xx on nRF5340 application/nRF91). Platform singleton `CryptoRngNrfInstance`. |
 | `CryptoRngStm32` | `RngEngine` | `ARM/ST/src/rng_stm32.cpp` | STM32 hardware RNG peripheral. Platform singleton `CryptoRngStm32Instance`. |
-| `CryptoPsa` | `CipherEngine`, `KeyAgreeEngine` | `src/crypto/crypto_psa.cpp` | AES-128 and P-256 over the ARM PSA Crypto API; key held in the PSA keystore by handle. Kept in the tree but linked by no current target: every current part has a native driver or software. Opt-in for a future PSA-only platform. |
 
 Engine class names are provider-class, not target-specific. `CryptoCc3xx` names
 the CryptoCell family; the target header pins the actual chip. The `_bm` suffix
@@ -243,8 +247,7 @@ appending an interface or an algorithm value, never by renumbering existing ones
 | `src/crypto/cryptomaster.cpp` | Hardware AES engine on the Silex CryptoMaster (BA411e). |
 | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 engine. |
 | `src/crypto/crypto_softrng.cpp` | Software PRNG base (statistical). |
-| `src/crypto/ba414ep.cpp` | Hardware P-256 engine on the Silex BA414EP; `ARM/Nordic/src/ba414ep_nrfx.cpp` binds it to the Nordic CRACEN registers. |
-| `src/crypto/crypto_psa.cpp` | AES + P-256 over the PSA Crypto API. Opt-in; no current target links it. |
-| `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 engine on the CC3xx PKA; the target header `crypto_cc3xx.h` supplies the register base and enable/disable. nRF52840. |
+| `src/crypto/ba414ep.cpp` | Hardware P-256 engine on the Silex BA414EP; `CracenIntrf` provides Nordic CRACEN register access. |
+| `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 engine on the CC3xx PKA; `Cc3xxIntrf` provides target register access and power control. |
 | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG engine (`CryptoRngNrf`). |
 | `ARM/ST/src/rng_stm32.cpp` | STM32 hardware RNG engine (`CryptoRngStm32`). |

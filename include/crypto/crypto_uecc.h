@@ -77,7 +77,8 @@ public:
 
 	int SelfTest() override;
 
-private:
+protected:
+	// One RNG binding shared by software methods and hardware overrides.
 	RngEngine *vpRng;
 };
 

@@ -36,25 +36,23 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "crypto/icrypto.h"
+#ifdef __cplusplus
+#include "crypto/crypto_uecc.h"
+#endif
 #include "cc3xx_intrf.h"
 
 #ifdef __cplusplus
 
-class CryptoCc3xx : public KeyAgreeEngine {
+class CryptoCc3xx : public CryptoUecc {
 public:
 	CryptoCc3xx()
 	{
 		vbValid = false;
 		vbIntrfEnabled = false;
-		vpRng = nullptr;
 	}
 
-	struct KeyCtx {
-		uint8_t PrivKey[32];
-		bool bKeyValid;
-	};
-
-	void SetRng(RngEngine *pRng) { vpRng = pRng; }
+	// Software import and hardware operations use the same context type.
+	using KeyCtx = CryptoUecc::KeyCtx;
 
 	bool Init(Cc3xxIntrf * const pIntrf, RngEngine *pRng)
 	{
@@ -82,7 +80,6 @@ public:
 						bool bKeepKey = false) override;
 
 protected:
-	RngEngine *vpRng;
 	// Whether this engine owns one interface user count. Separate from
 	// vbValid: a failed re-Enable leaves the engine non-operational while
 	// the count is still owned, and the count must be released exactly once.

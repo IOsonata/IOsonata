@@ -61,8 +61,9 @@ bit.
 | Engine | Interfaces |
 |---|---|
 | `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` |
-| `Ba414ep` | `KeyAgreeEngine` |
-| `CryptoCc3xx` | `KeyAgreeEngine` |
+| `Ba414ep` | `KeyAgreeEngine`, `SignEngine` (software import and ECDSA inherited) |
+| `CryptoCc3xx` | `KeyAgreeEngine`, `SignEngine` (software import and ECDSA inherited) |
+| `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` (hardware overrides of `CryptoUecc`) |
 | `CryptoSoftAes` | `CipherEngine`, `MacEngine`, `AeadEngine` |
 | `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` |
 | `CryptoSoftSha256` | `HashEngine`, `MacEngine` (HMAC-SHA-256) |
@@ -100,8 +101,9 @@ hardware implementation internally; software-only targets use the object's
 inherited software behavior. No raw buffer, public factory or placement new is
 required. All capabilities are methods on the same application object.
 
-The caller checks operation status. `CRYPTO_STATUS_UNSUPPORTED` from a valid
-optional request can be reported as a skip. Initialization failure, busy and
+The caller checks operation status. Missing acceleration does not make a
+software-supported operation optional. P-256 key import and AES-128/256
+cipher tests are required on every configured target. Initialization failure, busy and
 failed operations must not be hidden as unsupported. A non-secure software RNG
 cannot be used for key generation or signing; CryptoTest reports those cases
 explicitly. Disabling one object does not disable the library's shared hardware

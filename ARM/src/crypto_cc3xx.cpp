@@ -834,6 +834,8 @@ static bool P256Multiply(Device *pDev, const uint8_t Point[64],
 out:
 	CryptoSecureWipe(regular, sizeof(regular));
 	PkaUninit(pDev);
+	// A cleanup timeout is a failed operation even if the multiply completed.
+	ok = ok && !s_bPkaFault;
 	if (!ok)
 	{
 		memset(Result, 0, 64U);
@@ -907,7 +909,7 @@ bool CryptoCc3xx::Init(DeviceIntrf * const pIntrf, RngEngine *pRng)
 		return false;
 	}
 	Interface(pIntrf);
-	vpRng = pRng;
+	SetRng(pRng);
 	return Enable();
 }
 

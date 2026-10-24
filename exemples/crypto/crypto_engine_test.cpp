@@ -1174,15 +1174,8 @@ static bool DefaultPkaChecks(KeyAgreeEngine *pKa, SignEngine *pSign,
 
 	status = pKa->KeyImport(CRYPTO_CURVE_P256, s_CtxA, priv, pub);
 	imported = status == CRYPTO_STATUS_OK;
-	if (status == CRYPTO_STATUS_UNSUPPORTED)
-	{
-		skip("private-key import is unsupported; testing generated keys");
-	}
-	else
-	{
-		check("default key import matches known public key",
-			imported && HexEq(pub, s_PubA, sizeof(pub)));
-	}
+	check("default key import matches known public key",
+		imported && HexEq(pub, s_PubA, sizeof(pub)));
 	pKa->KeyReset(s_CtxA);
 
 	status = pKa->KeyGen(CRYPTO_CURVE_P256, s_CtxA, pub);

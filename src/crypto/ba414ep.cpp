@@ -437,7 +437,6 @@ CRYPTO_STATUS Ba414ep::PkPointMultiply(const uint8_t Point[64],
 Ba414ep::Ba414ep()
 {
 	vbValid = false;
-	vpRng = nullptr;
 	vbReady = false;
 	vbIntrfEnabled = false;
 	atomic_flag_clear(&vOpBusy);
@@ -521,7 +520,7 @@ bool Ba414ep::Init(DeviceIntrf * const pIntrf, RngEngine *pRng)
 		return false;
 	}
 	Interface(pIntrf);
-	vpRng = pRng;
+	SetRng(pRng);
 	return Enable();
 }
 
