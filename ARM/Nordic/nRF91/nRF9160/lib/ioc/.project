@@ -1773,7 +1773,7 @@
 		<link>
 			<name>src/sensors/accel_adxl372.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/accel_adxl372.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_adxl372.cpp</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>

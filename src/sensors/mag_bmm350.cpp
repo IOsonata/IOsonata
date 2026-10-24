@@ -337,15 +337,51 @@ uint32_t MagBmm350::SamplingFrequency(uint32_t Freq)
 		return 0;
 	}
 
-	if (Freq < 2000U) { odr = BMM350_PMU_CMD_AGGR_SET_ODR_1_5625HZ; actual = 1562U; }
-	else if (Freq < 6000U) { odr = BMM350_PMU_CMD_AGGR_SET_ODR_3_125HZ; actual = 3125U; }
-	else if (Freq < 10000U) { odr = BMM350_PMU_CMD_AGGR_SET_ODR_6_25HZ; actual = 6250U; }
-	else if (Freq < 17000U) { odr = BMM350_PMU_CMD_AGGR_SET_ODR_12_5HZ; actual = 12500U; }
-	else if (Freq < 35000U) { odr = BMM350_PMU_CMD_AGGR_SET_ODR_25HZ; actual = 25000U; }
-	else if (Freq < 80000U) { odr = BMM350_PMU_CMD_AGGR_SET_ODR_50HZ; actual = 50000U; }
-	else if (Freq < 150000U) { odr = BMM350_PMU_CMD_AGGR_SET_ODR_100HZ; actual = 100000U; }
-	else if (Freq < 300000U) { odr = BMM350_PMU_CMD_AGGR_SET_ODR_200HZ; actual = 200000U; }
-	else { odr = BMM350_PMU_CMD_AGGR_SET_ODR_400HZ; actual = 400000U; }
+	if (Freq < 2000U)
+	{
+		odr = BMM350_PMU_CMD_AGGR_SET_ODR_1_5625HZ;
+		actual = 1562U;
+	}
+	else if (Freq < 6000U)
+	{
+		odr = BMM350_PMU_CMD_AGGR_SET_ODR_3_125HZ;
+		actual = 3125U;
+	}
+	else if (Freq < 10000U)
+	{
+		odr = BMM350_PMU_CMD_AGGR_SET_ODR_6_25HZ;
+		actual = 6250U;
+	}
+	else if (Freq < 17000U)
+	{
+		odr = BMM350_PMU_CMD_AGGR_SET_ODR_12_5HZ;
+		actual = 12500U;
+	}
+	else if (Freq < 35000U)
+	{
+		odr = BMM350_PMU_CMD_AGGR_SET_ODR_25HZ;
+		actual = 25000U;
+	}
+	else if (Freq < 80000U)
+	{
+		odr = BMM350_PMU_CMD_AGGR_SET_ODR_50HZ;
+		actual = 50000U;
+	}
+	else if (Freq < 150000U)
+	{
+		odr = BMM350_PMU_CMD_AGGR_SET_ODR_100HZ;
+		actual = 100000U;
+	}
+	else if (Freq < 300000U)
+	{
+		odr = BMM350_PMU_CMD_AGGR_SET_ODR_200HZ;
+		actual = 200000U;
+	}
+	else
+	{
+		odr = BMM350_PMU_CMD_AGGR_SET_ODR_400HZ;
+		actual = 400000U;
+	}
 
 	if (!WriteReg(BMM350_PMU_CMD_AGGR_SET_REG, odr) ||
 		!WriteReg(BMM350_PMU_CMD_REG, BMM350_PMU_CMD_UPD_OAE))
