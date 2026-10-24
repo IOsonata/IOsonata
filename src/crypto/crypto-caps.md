@@ -56,7 +56,7 @@ bit.
 | `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` |
 | `Ba414ep` | `KeyAgreeEngine`, `SignEngine` (software import and ECDSA inherited) |
 | `CryptoCc3xx` | `KeyAgreeEngine`, `SignEngine` (software import and ECDSA inherited) |
-| `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` (hardware overrides of `CryptoUecc`) |
+| `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` (hardware operations; common key-context type) |
 | `CryptoSoftAes` | `CipherEngine`, `MacEngine`, `AeadEngine` |
 | `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` |
 | `CryptoSoftSha256` | `HashEngine`, `MacEngine` (HMAC-SHA-256) |

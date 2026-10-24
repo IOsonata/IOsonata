@@ -29,10 +29,10 @@ with tempfile.TemporaryDirectory(prefix="h7-crypto-") as temp:
             r"#define (AES_(CR|SR)_|HASH_(CR|SR|STR)_|RCC_AHB2(?:ENR|RSTR)_)", line)]
     (out / "stm32.h").write_text('#define IOSONATA_STM32_HAS_RNG 1\n#include "crypto_accel_model.h"\n' + "\n".join(defines))
     inc = ["-I" + str(p) for p in (out, HERE, ROOT / "include", ROOT / "ARM/ST/include", ROOT / "micro-ecc")]
-    for opt in ("-O0", "-O2", "-Os"):
+    for opt, minimal in (("-O0", False), ("-O2", False), ("-O0", True), ("-Os", True)):
         flags = [opt, "-g", "-fsanitize=address,undefined", "-DuECC_ENABLE_VLI_API=1",
                  "-DSTM32L4S9xx" if L4 else "-DSTM32H753xx", "-DuECC_WORD_SIZE=4", "-DCRYPTO_STM32H7_POLL_MAX=32", "-DCRYPTO_TEST_NO_MAIN"]
-        if opt == "-Os":
+        if minimal:
             flags.remove("-fsanitize=address,undefined")
             flags.append("-DCRYPTO_LINK_TEST")
         run(["gcc", *flags, *inc, "-c", ROOT / "micro-ecc/uECC.c", "-o", out / "uecc.o"])
@@ -52,14 +52,14 @@ with tempfile.TemporaryDirectory(prefix="h7-crypto-") as temp:
             objects.append(obj)
         archive = out / "libcrypto-target.a"
         run(["ar", "rcs", archive, *objects])
-        reference = [] if opt == "-Os" else [ROOT / "exemples/crypto/crypto_engine_test.cpp"]
+        reference = [] if minimal else [ROOT / "exemples/crypto/crypto_engine_test.cpp"]
         run([*cxx, *reference,
              HERE / "crypto_accel_model.cpp", archive, "-Wl,--gc-sections",
              "-lcrypto", "-o", out / "test"])
         print(opt, flush=True)
         run([out / "test"], env={**os.environ, "ASAN_OPTIONS": "detect_leaks=0"})
 
-        if opt == "-Os":
+        if minimal:
             symbols = subprocess.check_output(["nm", "-C", out / "test"], text=True)
             for forbidden in ("CryptoSoftAes", "CryptoAesSoft", "CryptoSoftRng"):
                 assert forbidden not in symbols, forbidden

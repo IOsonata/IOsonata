@@ -24,6 +24,7 @@ python3 tests/crypto/run_objects.py
 python3 tests/crypto/run_aes256.py
 python3 tests/crypto/run_pka_models.py
 python3 tests/crypto/check_targets.py
+python3 tests/stm32wba/run_crypto_link.py
 python3 tests/stm32h7/run_crypto_accel.py
 python3 tests/stm32h7/run_crypto_accel.py --l4s9
 ```
@@ -54,7 +55,7 @@ Port review after the App-core import failure:
 | BA414EP: nRF54 | Software import/ECDSA; hardware key generation/ECDH | Host model; board rerun pending |
 | CryptoMaster: nRF54 | Hardware AES-128/256 encryption/decryption; shared CMAC/CCM/GCM composition | DMA register model; board rerun pending |
 | nRF5340 Net ECB | Inherits software modes and AES-256 | Maintainer board result: 100 passed, no failures/skips before this PKA fix |
-| STM32WBA65 | Software P-256 base with hardware overrides; software AES-256 | Target initialization compiles; ARM emulator/board rerun pending |
+| STM32WBA65 | Hardware P-256; software AES-256 and SHA | Production-driver host link and initialization-failure checks; ARM emulator/board rerun pending |
 | STM32H753 | Hardware AES-128/256 and one-shot hash/HMAC; software P-256 and streaming hash | Host register model; board rerun pending |
 | Other configured MCU libraries | Software algorithms, hardware RNG where implemented | Software archive and target initialization checks |
 
@@ -83,10 +84,13 @@ MCU projects link the existing timer driver from their MCU library.
 CryptoTest includes software reference objects intentionally, so its map cannot
 prove that a normal application discards overridden software implementations.
 The PKA and STM32 accelerator runners additionally link a minimal `Crypto`
-application from the production target archive at `-Os` with section garbage
+application from the production target archive at `-O0` and `-Os` with section garbage
 collection, without the generic test or software reference objects.
 
 - CryptoCell: software AES, SHA-256 and PRNG symbols must be absent.
+- WBA: the production drivers link without software P-256 or PRNG object files.
+  Software AES-256 and SHA must remain. The host fixture exercises construction
+  and initialization failure; it does not simulate accelerator arithmetic.
 - H753/L4S9: software AES and PRNG symbols must be absent. Software SHA streaming
   remains required; one-shot SHA and HMAC use hardware.
 

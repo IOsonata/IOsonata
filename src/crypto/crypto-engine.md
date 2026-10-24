@@ -126,12 +126,13 @@ Interfaces that hold a key between calls (`KeyAgreeEngine`) take a `pKeyCtx` (a
 caller-owned key-context buffer of `KeyCtxSize()` bytes). `KeyGen` writes the
 private key into it and `Agree` consumes it, so one engine object serves several
 independent key contexts. `KeyImport` loads a private scalar the caller was
-handed and optionally returns its public key. `CryptoCc3xx`, `Ba414ep` and
-`CryptoWbaPka` derive from `CryptoUecc` and use its exact `KeyCtx` type. CC3xx
-and BA414EP inherit software import and ECDSA while overriding hardware
-key generation and agreement. WBA overrides import and ECDSA in hardware too.
-`SetRng` and its RNG pointer are inherited, so software and hardware methods
-share one binding. The engine object itself is stateless beyond its
+handed and optionally returns its public key. `CryptoCc3xx` and `Ba414ep`
+derive from `CryptoUecc` and inherit software import and ECDSA while overriding
+hardware key generation and agreement. `CryptoWbaPka` implements every P-256
+operation in hardware and derives directly from `KeyAgreeEngine` and
+`SignEngine`. It keeps the exact same `CryptoUecc::KeyCtx` type and `SetRng`
+entry point without retaining software P-256 construction tables. Each engine
+shares one RNG binding across its methods. The engine object itself is stateless beyond its
 `Device` lifecycle; the scarce hardware resource, not a per-key secret, is what
 the object owns.
 
@@ -188,7 +189,7 @@ consumer is curve-blind and key-blind:
 | `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/crypto_uecc.cpp` | Software P-256 (micro-ecc): ECDH and ECDSA. Uses an injected secure `RngEngine` for `KeyGen`/`Sign`; `Verify` needs no RNG. Software fallback on any part. |
 | `Ba414ep` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/ba414ep.cpp` | Hardware P-256 key generation/ECDH over the injected CRACEN interface. Inherits software key import and ECDSA. The Nordic interface loads PKE microcode. |
 | `CryptoCc3xx` | `KeyAgreeEngine`, `SignEngine` | `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 key generation/ECDH on CC3xx. Inherits software key import and ECDSA. `Cc3xxIntrf` supplies register access and arbitration. |
-| `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` | `ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp` | Derives from `CryptoUecc`; overrides P-256 import, generation, agreement and ECDSA with WBA PKA operations. |
+| `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` | `ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp` | Hardware P-256 import, generation, agreement and ECDSA. Shares the key-context type with `CryptoUecc`, without inheriting its software methods. |
 | `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_aes_modes.cpp` | Software AES-128/256 cipher (FIPS-197) and AES-128 CMAC. CMAC/CCM/GCM use protected virtual block hooks, which hardware subclasses override. |
 | `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128/256 encryption and decryption on Silex BA411e. Inherits CMAC/CCM/GCM composition from `CryptoAesModes`, without software AES. |
 | `CryptoSoftSha256` | `HashEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4). Unkeyed digest; serves DFU image verification and any hashing consumer. |

@@ -23,7 +23,9 @@
 
 static_assert(std::is_base_of<CryptoUecc, CryptoCc3xx>::value);
 static_assert(std::is_base_of<CryptoUecc, Ba414ep>::value);
-static_assert(std::is_base_of<CryptoUecc, CryptoWbaPka>::value);
+static_assert(!std::is_base_of<CryptoUecc, CryptoWbaPka>::value);
+static_assert(std::is_base_of<KeyAgreeEngine, CryptoWbaPka>::value);
+static_assert(std::is_base_of<SignEngine, CryptoWbaPka>::value);
 static_assert(std::is_same<CryptoUecc::KeyCtx, CryptoCc3xx::KeyCtx>::value);
 static_assert(std::is_same<CryptoUecc::KeyCtx, Ba414ep::KeyCtx>::value);
 static_assert(std::is_same<CryptoUecc::KeyCtx, CryptoWbaPka::KeyCtx>::value);

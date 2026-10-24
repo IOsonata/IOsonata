@@ -20,6 +20,9 @@ a software reference object.
 Minimal target archive tests exclude CryptoTest's software references and check
 linked symbols. CryptoCell retains no software AES, SHA-256 or PRNG. H753/L4S9
 retain no software AES or PRNG; software SHA streaming is still required.
+WBA links without software P-256 or PRNG objects at O0 and Os; software AES-256
+and SHA remain required. Its host link fixture checks failed initialization and
+output clearing without simulating AES/PKA arithmetic.
 Their register tests also check that a second application object's Init and
 Reset do not reset the shared AES/HASH engines.
 
@@ -48,7 +51,7 @@ A hardware peripheral listed as pending is not claimed as implemented.
 | STM32G474, STM32L432, STM32L476, STM32L496 | Existing RNG, software algorithms | RNG kernel clock must be provided by target clock setup. Health failures now fail and wipe the entire request. |
 | STM32L4S9 | New AES-128/256 and HASH/HMAC binding, existing RNG | Shared H753 cipher/hash logic with L4 AES register operations. Streaming SHA remains software. |
 | STM32H753 | Existing CRYP/HASH/HMAC/RNG | Regression tested after adding L4S9. Streaming SHA and P-256 software. |
-| STM32WBA65 | Existing AES/RNG/PKA | Software behavior inherited where hardware overrides are absent. |
+| STM32WBA65 | AES-128/RNG/PKA | All P-256 operations use hardware without retaining software P-256. AES-256 and SHA remain software. |
 | ESP32-C3, ESP32-C6 | New AES-128/256 ECB/CBC/CTR; AES-128 CMAC/CCM/GCM use its block hook | SHA-256 streaming and HMAC now use SHA registers. Secure entropy source configuration and C6 ECC acceleration remain incomplete. P-256 remains software. |
 | Windows host | Generic software | Host entropy integration is separate from MCU acceleration. |
 

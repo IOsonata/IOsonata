@@ -138,15 +138,18 @@ CryptoWbaAes *CryptoWbaAesCreate(void *pMem, size_t MemSize);
 /// private scalar and the ECDSA nonce come from it. Agree checks the peer
 /// point against the curve in the accelerator before it is used. The
 /// accelerator RAM is cleared after every operation.
-class CryptoWbaPka : public CryptoUecc {
+class CryptoWbaPka : public KeyAgreeEngine, public SignEngine {
 public:
-	// Software import and hardware operations use the same context type.
+	// Preserve the common context layout without inheriting software operations.
 	using KeyCtx = CryptoUecc::KeyCtx;
 
 	CryptoWbaPka() {
 		vbValid = false;
+		vpRng = nullptr;
 		std::atomic_flag_clear(&vOpBusy);
 	}
+
+	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
 	bool Enable() override;
 	void Disable() override;
@@ -174,6 +177,9 @@ public:
 	/// Known-answer test on the accelerator: ECDH, point check, ECDSA with a
 	/// fixed nonce (RFC 6979 A.2.5) and verify. 0 on pass.
 	int SelfTest() override;
+
+protected:
+	RngEngine *vpRng;
 
 private:
 	bool OpAcquire() { return std::atomic_flag_test_and_set(&vOpBusy) == false; }
