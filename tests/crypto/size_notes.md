@@ -300,3 +300,50 @@ optimization to pass.
 A fresh host runner result, MCU build, linker map and Audio DK timing are still
 required for this performance pass. No new target flash/RAM size or hardware
 speedup is claimed here.
+
+
+## CryptoCell P-256 optimized hardware validation, 2026-10-25
+
+The Audio DK nRF5340 application-core CryptoTest completed **101 passed,
+0 failed, 0 skipped** after commit `4fdd11e729df1dd0c97d6b7ef4e190535d42afa8`.
+It includes mixed Jacobian-affine additions to the prior PKA transaction and
+arithmetic reductions. The fixed input remains affine, while the scalar
+accumulator retains randomized Jacobian coordinates. The full generic
+CryptoTest covers known-answer P-256 multiplication, ECDH, boundary scalars,
+invalid peers and software/hardware comparisons.
+
+| P-256 public-key import, mean of eight | CryptoCell | Software reference |
+| --- | ---: | ---: |
+| Restored baseline before optimization | 2,058,809 us | 487,297 us |
+| First transaction/arithmetic reduction | 567,540 us | 487,297 us |
+| Mixed-coordinate board run | 516,627 us | 532,576 us |
+
+The final CryptoCell timing is 74.9% below the restored baseline (3.99x
+speedup) and 3.0% below the software reference in the same final run. These
+are individual eight-operation means, not a statistical speed comparison.
+The mixed-coordinate change reduced the observed hardware time by 9.0%
+relative to the first optimized run.
+
+The supplied `CryptoTest(20261025-012944).map` has the following linker
+measurements, including vector/startup sections, alignment and initialized
+RAM data's Flash load image:
+
+| App-core CryptoTest footprint | Bytes |
+| --- | ---: |
+| Flash occupied | 90,168 |
+| .data, initialized static RAM | 796 |
+| .bss, zero-initialized static RAM | 5,644 |
+| Total static RAM | 6,440 |
+| `.text` section | 59,896 |
+| `.rodata` section | 28,564 |
+
+Compared with the earlier failed transfer-attempt map (90,100 bytes Flash,
+6,444 bytes static RAM), this final tested map is 68 bytes larger in Flash
+and 4 bytes smaller in static RAM. Those two maps represent different code
+revisions; the comparison does not isolate any one optimization. The generic
+test deliberately includes software comparison objects; the map does not
+represent production-only crypto linkage. Peak stack usage is not measured.
+
+The board validation establishes function and performance correctness for the
+compiled Audio DK App-core build only. Other CC3xx targets retain their
+separate validation requirements.

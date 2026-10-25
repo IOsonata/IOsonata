@@ -53,7 +53,7 @@ Port review after the App-core import failure:
 
 | Port | Software behavior and hardware overrides | Validation available |
 |---|---|---|
-| CC3xx: nRF52840, nRF5340 App, nRF91 | Hardware public-key import/key generation/ECDH; software ECDSA | Audio DK App core, 2026-10-24: recovery revision `d245e43` passed 101, failed 0, skipped 0; current PKA performance changes require a board rerun; other targets retain host-model coverage |
+| CC3xx: nRF52840, nRF5340 App, nRF91 | Hardware public-key import/key generation/ECDH; software ECDSA | Audio DK App core, 2026-10-25: mixed-coordinate optimization `4fdd11e` passed 101, failed 0, skipped 0; other targets retain host-model coverage |
 | BA414EP: nRF54 | Software import/ECDSA; hardware key generation/ECDH | Host model; board rerun pending |
 | CryptoMaster: nRF54 | Hardware AES-128/256 encryption/decryption; shared CMAC/CCM/GCM composition | DMA register model; board rerun pending |
 | nRF5340 Net ECB | Inherits software modes and AES-256 | Audio DK, 2026-10-24: 101 passed, 0 failed, 0 skipped after the AES/CMAC/CCM size reductions |
@@ -192,5 +192,9 @@ exceptional-point alternatives are retained only for the final two iterations.
 This choice depends only on the public loop index. The host PKA model now
 changes result mappings, enforces SRAM direction clearing and checks bounded
 PKA/SRAM traffic so the failed fixed-map assumption is no longer hidden.
-Rebuild the MCU library and unchanged generic CryptoTest before judging this
-pass; no MCU speedup or target map delta is claimed without that board run.
+The Audio DK App-core board run after `4fdd11e` passed 101 tests with no
+failures or skips. P-256 public-key import averaged 516,627 us over eight
+operations versus 532,576 us for the software reference. The verified
+CryptoTest linker map occupies 90,168 bytes of Flash and 6,440 bytes of
+static RAM. See the size notes for preceding measurements and limitations.
+Other target MCU builds still require separate hardware validation.
