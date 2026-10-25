@@ -161,3 +161,73 @@ Register references:
 - [ROHM BH1745NUC Rev.002](https://media.digikey.com/pdf/Data%20Sheets/Rohm%20PDFs/BH1745NUC.pdf)
 - [ams CCS811 v1-06](https://cdn.sparkfun.com/assets/2/c/c/6/5/CN04-2019_attachment_CCS811_Datasheet_v1-06.pdf)
 - [Semtech SX1508B/SX1509B Rev.4](https://www.mouser.com/datasheet/2/761/sx150x_89b-1283302.pdf)
+
+## Thingy:52 board test
+
+Import these two IOcomposer/Eclipse projects:
+
+- `ARM/Nordic/nRF52/nRF52832/lib/ioc` (`IOsonata_nRF52832`).
+- `ARM/Nordic/nRF52/nRF52832/exemples/Thingy52PeripheralTest/ioc`.
+
+Build the library and application using the matching Debug or Release
+configuration. The application uses `NRF52832_XXAA` and the existing
+`gcc_nrf52_xxaa.ld` full-flash linker script. It is a standalone test, without
+SoftDevice or the old Thingy52 firmware. Program it through an external SWD
+probe. Both configurations use the external UART console, without semihosting.
+
+Connect an adapter with logic levels compatible with the board's VREG supply:
+
+| Thingy:52 pin | Adapter connection |
+| --- | --- |
+| P0.02 / ANA_DIG0 / P4 pin 3 | RX |
+| P0.03 / ANA_DIG1 / P4 pin 4 | TX (optional; test only prints) |
+| P4 pin 6 or 20 | GND |
+
+Use **115200 baud, 8N1, no flow control**. The USB connector supplies power and
+charging; it is not a USB-to-UART bridge. Do not use an RS-232 voltage adapter.
+
+The test owns the production PCA20020 v1.x board's power and expander state:
+
+- P0.30 enables VDD, then P0.16 releases the expander reset input.
+- I2C0 uses SDA P0.07 and SCL P0.08, with synchronous EasyDMA transfers.
+- The expander is explicitly reset. External GPIOs 0..3 and battery-monitor
+  pin 4 remain inputs. Motion, microphone and gas supplies start off, as does
+  the speaker amplifier. Both RGB LED groups start off.
+- CCS811 power is SXIO10, reset is SXIO11 and wake is SXIO12. Power-up waits
+  30 ms before reset release; shutdown lowers reset and wake before power.
+- Lightwell RGB uses SXIO7/5/6; color-sensor illumination uses SXIO13/14/15.
+- The button is P0.11; color and gas interrupt inputs are P0.31 and P0.22.
+
+The reusable implementation is `exemples/common/thingy52_board.*` under the
+nRF52832 directory. Call its startup functions only when taking ownership of
+the board; they deliberately reset existing expander configuration. Do not run
+them while another application is using the expander or switched supplies.
+The old 0.7/0.8/0.9 prototype boards have different power polarity and are not
+supported by these helpers.
+
+After startup, the console prints CCS811 firmware versions, raw BH1745 RGBC
+counts, gas measurements, button state and interrupt pin levels once per loop.
+The lightwell cycles red/green/blue. Hold the button until the next sample to
+toggle the color-sensor illumination. The first color sample after a toggle
+may precede the illumination change. The color interrupt window spans the
+full range and normally remains inactive; gas data-ready interrupts are
+polled and acknowledged by the gas read. No MCU interrupt handler is installed.
+
+The test leaves CCS811 environmental compensation at the chip defaults and
+does not restore a saved baseline. Early readings do not establish accuracy;
+allow sensor conditioning. A failed initialization or board-control write
+prints `STOP` and stops further bus operations. Not-ready sensor reads are
+reported separately. No firmware update or persistent configuration is written.
+
+Run `python3 tests/sensors/run_thingy52_board.py` for board sequence tests and
+host syntax checks, and `python3 tests/sensors/run_thingy52_devices.py` for the
+generic driver tests. The board tests use the production SX1509/CCS811 drivers
+on a shared mock bus and check rail defaults, wake bracketing, LED/control-bit
+preservation, power-off ordering and transfer failures. These tests do not
+replace an ARM build or hardware validation; both remain pending.
+
+Board references:
+
+- [Nordic pin maps](https://docs.nordicsemi.com/r/bundle/ug_thingy52/page/ug/thingy52/hw_description/pin_maps.html)
+- [Nordic connector pinouts](https://docs.nordicsemi.com/r/bundle/ug_thingy52/page/ug/thingy52/hw_description/hw_connector_pinout.html)
+- [Nordic gas-sensor power sequencing](https://github.com/NordicSemiconductor/Nordic-Thingy52-FW/blob/master/source/drivers/drv_gas_sensor.c)
