@@ -2,7 +2,7 @@
 
 Import the MCU library project and its CryptoTest project into IOcomposer.
 Rebuild the library and application in matching Debug or Release configurations.
-The eight configured examples (nRF52832, nRF5340 application/network, nRF9160, nRF91x1,
+The nine configured examples (nRF52832, nRF52840, nRF5340 application/network, nRF9160, nRF91x1,
 STM32H753, STM32WBA65 and STM32L476) link the same `crypto_engine_test.cpp`.
 
 The test declares `Crypto s_Crypto` and calls `s_Crypto.Init()`. The MCU library
@@ -198,3 +198,15 @@ operations versus 532,576 us for the software reference. The verified
 CryptoTest linker map occupies 90,168 bytes of Flash and 6,440 bytes of
 static RAM. See the size notes for preceding measurements and limitations.
 Other target MCU builds still require separate hardware validation.
+
+## nRF52840 project
+
+Import `ARM/Nordic/nRF52/nRF52840/lib/ioc` and
+`ARM/Nordic/nRF52/nRF52840/exemples/CryptoTest/ioc`. Rebuild the
+matching Debug or Release library before building the example. This project
+links the unchanged generic `exemples/crypto/crypto_engine_test.cpp` and
+selects its crypto implementation inside the MCU library. The included
+`src/board.h` uses the BLUEIO-WIZARD UART pin definitions.
+
+Release uses `UART_RETARGET` and the configured UART console; Debug uses
+semihosting. Hardware validation on nRF52840 is still pending.
