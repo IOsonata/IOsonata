@@ -385,3 +385,23 @@ CMAC, CCM, GCM, P-256, ECDH/ECDSA, and RNG tests passed.
 The target and software comparisons have nearly equal execution time for
 large operations, consistent with software execution for those operations.
 No linker map or peak-stack measurement was supplied for this run.
+
+## nRF9160 CryptoCell CC310 hardware validation, 2026-10-24
+
+Following the explicit nRF9160 CC310 compile-time selection correction
+(`446eeac`), the maintainer's nRF9160 CryptoTest completed **101 passed,
+0 failed, 0 skipped** (1 MHz timer). The previous result was 73 passed,
+52 failed. All AES-128/256, SHA-256/HMAC, CMAC, CCM, GCM, RNG and
+P-256/ECDH/ECDSA checks now pass.
+
+| Operation | Crypto engine | Software reference |
+| --- | ---: | ---: |
+| AES ECB, 1024 B | 7,086,687 ns | 22,715,078 ns |
+| AES CTR, 1024 B | 7,384,750 ns | 22,860,343 ns |
+| AES CBC, 1024 B | 7,338,078 ns | 22,932,796 ns |
+| CMAC, 1024 B | 7,615,921 ns | 23,877,796 ns |
+| CCM, 1024 B | 14,706,468 ns | 47,849,921 ns |
+| GCM, 1024 B | 15,541,218 ns | 32,053,765 ns |
+| P-256 public key (8 mean) | 360,728 us | 365,688 us |
+
+No linker map or peak stack measurement was supplied for this run.

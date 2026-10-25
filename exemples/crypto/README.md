@@ -230,3 +230,12 @@ versus 10.405 ms in the software reference; P-256 import averaged
 194,147 us for both the target and reference. The 1024-byte RNG draw
 measured 224,703 ns. These timings are from the generic CryptoTest;
 no linker map was supplied.
+
+## nRF9160 validation
+
+The maintainer's nRF9160 CC310 CryptoTest run passed **101 tests, 0 failures,
+0 skips**, after the device-macro correction in `446eeac`. The previous
+73-pass/52-fail failure was caused by CC312 register selection in the
+CC310 symmetric engine. The 1024-byte AES ECB timing was 7.087 ms versus
+22.715 ms for software, and P-256 public-key import averaged 360,728 us
+versus 365,688 us for software.
