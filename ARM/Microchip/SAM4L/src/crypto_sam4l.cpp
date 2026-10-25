@@ -47,6 +47,11 @@ static uint32_t s_Sam4lAesDiagLines = 0U;
 
 static bool s_AesBusy = false;
 static bool s_RngBusy = false;
+// Key currently in AESA_KEY, kept for the duration of one operation so the
+// expanded key is reused across blocks. Wiped in AesOpEnd.
+static uint8_t s_LoadedKey[16];
+static bool s_KeyLoaded = false;
+static bool s_DecKeyReady = false;
 
 // Debugger-readable counters. No key, seed or plaintext is retained.
 extern "C" {
@@ -165,6 +170,19 @@ bool CryptoSam::AesOpBegin()
 	return ok;
 }
 
+// The AESA expands a newly written key on its own clock. Give it time
+// before the next register write that depends on the expanded key.
+static void AesaSettle()
+{
+	uint32_t reads = 64U;
+
+	while (reads > 0U)
+	{
+		(void)SAM4L_AESA->AESA_SR;
+		reads--;
+	}
+}
+
 void CryptoSam::AesOpEnd()
 {
 	uintptr_t state;
@@ -174,6 +192,9 @@ void CryptoSam::AesOpEnd()
 	{
 		SAM4L_AESA->AESA_KEY[i].AESA_KEY = 0U;
 	}
+	CryptoSecureWipe(s_LoadedKey, sizeof(s_LoadedKey));
+	s_KeyLoaded = false;
+	s_DecKeyReady = false;
 	state = DisableInterrupt();
 	s_AesBusy = false;
 	EnableInterrupt(state);
@@ -194,15 +215,30 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 		return false;
 	}
 	// Keep AESA enabled between blocks, as in the ASF SAM4L driver.
-	// The key must be in AESA_KEY before NEWMSG: in decryption mode the
-	// AESA expands the key held at NEWMSG into the last round key, so a
-	// key written after NEWMSG races that expansion.
+	// The key is written once per operation. Rewriting it before every
+	// block restarts the key expansion, and a block fed while that runs
+	// decrypts with a partial key; encryption only needs the first round
+	// key and never showed it. Decryption needs the last round key, which
+	// DKEYGEN computes from AESA_KEY (ASF aes_decryption_key_generate).
 	SAM4L_AESA->AESA_MODE = AESA_MODE_CTYPE(15U) | (Encrypt ? AESA_MODE_ENCRYPT : 0U);
 	SAM4L_AESA->AESA_DRNGSEED = word;
-	for (i = 0U; i < 4U; i++)
+	if (!s_KeyLoaded || memcmp(s_LoadedKey, pKey, sizeof(s_LoadedKey)) != 0)
 	{
-		memcpy(&word, pKey + i * 4U, sizeof(word));
-		SAM4L_AESA->AESA_KEY[i].AESA_KEY = word;
+		for (i = 0U; i < 4U; i++)
+		{
+			memcpy(&word, pKey + i * 4U, sizeof(word));
+			SAM4L_AESA->AESA_KEY[i].AESA_KEY = word;
+		}
+		memcpy(s_LoadedKey, pKey, sizeof(s_LoadedKey));
+		s_KeyLoaded = true;
+		s_DecKeyReady = false;
+		AesaSettle();
+	}
+	if (!Encrypt && !s_DecKeyReady)
+	{
+		SAM4L_AESA->AESA_CTRL = AESA_CTRL_ENABLE | AESA_CTRL_DKEYGEN;
+		AesaSettle();
+		s_DecKeyReady = true;
 	}
 	SAM4L_AESA->AESA_CTRL = AESA_CTRL_ENABLE | AESA_CTRL_NEWMSG;
 	while ((SAM4L_AESA->AESA_SR & AESA_SR_IBUFRDY) == 0U && polls > 0U)

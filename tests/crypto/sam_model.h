@@ -48,6 +48,7 @@ extern unsigned g_AesBlocks;
 #define AES_ISR_DATRDY 1U
 #define AES_ISR_URAD 256U
 #define AESA_CTRL_ENABLE 1U
+#define AESA_CTRL_DKEYGEN 2U
 #define AESA_CTRL_NEWMSG 4U
 #define AESA_CTRL_SWRST 256U
 #define AESA_MODE_ENCRYPT 1U
