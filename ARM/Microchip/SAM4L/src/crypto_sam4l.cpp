@@ -32,6 +32,16 @@ SOFTWARE.
 static bool s_AesBusy = false;
 static bool s_RngBusy = false;
 
+// Debugger-readable counters. No key, seed or plaintext is retained.
+extern "C" {
+volatile uint32_t g_Sam4lAesBlocks = 0U;
+volatile uint32_t g_Sam4lAesCompleted = 0U;
+volatile uint32_t g_Sam4lAesRngFailures = 0U;
+volatile uint32_t g_Sam4lAesInputTimeouts = 0U;
+volatile uint32_t g_Sam4lAesOutputTimeouts = 0U;
+volatile uint32_t g_Sam4lAesLastStatus = 0U;
+}
+
 static void PmEnable(volatile uint32_t *pReg, uint32_t Mask)
 {
 	uintptr_t state = DisableInterrupt();
@@ -182,8 +192,10 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 	uint32_t polls = 1000000U;
 	unsigned i;
 
+	g_Sam4lAesBlocks++;
 	if (KeyLen != 16U || Random(reinterpret_cast<uint8_t *>(&word), sizeof(word)) != CRYPTO_STATUS_OK)
 	{
+		g_Sam4lAesRngFailures++;
 		CryptoSecureWipe(Out, 16U);
 		return false;
 	}
@@ -202,6 +214,8 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 	}
 	if (polls == 0U)
 	{
+		g_Sam4lAesInputTimeouts++;
+		g_Sam4lAesLastStatus = SAM4L_AESA->AESA_SR;
 		CryptoSecureWipe(Out, 16U);
 		CryptoSecureWipe(&word, sizeof(word));
 		return false;
@@ -218,6 +232,8 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 	}
 	if (polls == 0U)
 	{
+		g_Sam4lAesOutputTimeouts++;
+		g_Sam4lAesLastStatus = SAM4L_AESA->AESA_SR;
 		CryptoSecureWipe(Out, 16U);
 		CryptoSecureWipe(&word, sizeof(word));
 		return false;
@@ -227,6 +243,8 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 		word = SAM4L_AESA->AESA_ODATA;
 		memcpy(Out + i * 4U, &word, sizeof(word));
 	}
+	g_Sam4lAesLastStatus = SAM4L_AESA->AESA_SR;
+	g_Sam4lAesCompleted++;
 	CryptoSecureWipe(&word, sizeof(word));
 	return true;
 }
