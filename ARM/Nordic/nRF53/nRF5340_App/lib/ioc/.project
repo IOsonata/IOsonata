@@ -2021,5 +2021,10 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ina230.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/i2s_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2s_nrfx.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

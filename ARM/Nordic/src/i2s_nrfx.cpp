@@ -98,10 +98,18 @@ alignas(4) static const int s_NbRatio = sizeof(s_Ratio) / sizeof(uint32_t);
 
 alignas(4) static I2SDev_t *s_pI2SDev = NULL;
 
-#define I2S_BUFF_MAX		4
+#define I2S_BUFF_MAX		128
 
-alignas(4) static uint32_t s_I2S_RxBuffer[I2S_BUFF_MAX];
-alignas(4) static uint32_t s_I2S_TxBuffer[I2S_BUFF_MAX] = { 0xA500A4, 0xA600a7, };
+alignas(4) static uint32_t s_I2S_RxBuffer[2][I2S_BUFF_MAX];
+alignas(4) static uint32_t s_I2S_TxBuffer[2][I2S_BUFF_MAX];
+alignas(4) static uint32_t s_I2S_RxReady[I2S_BUFF_MAX];
+alignas(4) static uint32_t s_I2S_TxPending[I2S_BUFF_MAX];
+static volatile uint32_t s_RxEventCount;
+static volatile uint32_t s_TxEventCount;
+static volatile bool s_RxReady;
+static volatile bool s_TxPending;
+static uint32_t s_BlockWords;
+static bool s_Running;
 
 static int s_RxBuffLen = 0;
 static int s_TxBuffLen = 0;
@@ -150,29 +158,40 @@ bool nRFxI2SWaitTx(I2SDev_t * const pDev, int32_t Timeout)
 
 static void nRFxI2SDisable(DevIntrf_t * const pDev)
 {
-	NRF_I2S->TASKS_STOP = 1;
+	if (s_Running)
+	{
+		NRF_I2S->TASKS_STOP = 1;
+		nRFxI2SWaitStop(s_pI2SDev, 100000);
+	}
 	NRF_I2S->ENABLE = 0;
+	s_Running = false;
 }
 
 static void nRFxI2SEnable(DevIntrf_t * const pDev)
 {
-	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
-
-	if (NRF_I2S->PSEL.SDIN != -1)
-	{
-		NRF_I2S->CONFIG.RXEN = I2S_CONFIG_RXEN_RXEN_Msk;
-	}
-	if (NRF_I2S->PSEL.SDOUT != -1)
-	{
-		NRF_I2S->CONFIG.TXEN = I2S_CONFIG_RXEN_RXEN_Msk;
-	}
-	NRF_I2S->CONFIG.MCKEN = I2S_CONFIG_MCKEN_MCKEN_Msk;
+	NRF_I2S->CONFIG.RXEN = (NRF_I2S->PSEL.SDIN != 0xFFFFFFFFUL) ? 1 : 0;
+	NRF_I2S->CONFIG.TXEN = (NRF_I2S->PSEL.SDOUT != 0xFFFFFFFFUL) ? 1 : 0;
+	NRF_I2S->CONFIG.MCKEN = (NRF_I2S->PSEL.MCK != 0xFFFFFFFFUL) ? 1 : 0;
+	NRF_I2S->RXD.PTR = (uint32_t)s_I2S_RxBuffer[0];
+	NRF_I2S->TXD.PTR = (uint32_t)s_I2S_TxBuffer[0];
+	NRF_I2S->RXTXD.MAXCNT = s_BlockWords;
+	s_RxEventCount = 0;
+	s_TxEventCount = 0;
+	s_RxReady = false;
+	s_TxPending = false;
+	memset(s_I2S_RxBuffer, 0, sizeof(s_I2S_RxBuffer));
+	memset(s_I2S_TxBuffer, 0, sizeof(s_I2S_TxBuffer));
+	NRF_I2S->EVENTS_RXPTRUPD = 0;
+	NRF_I2S->EVENTS_TXPTRUPD = 0;
+	NRF_I2S->EVENTS_STOPPED = 0;
 	NRF_I2S->ENABLE = I2S_ENABLE_ENABLE_Msk;
+	s_Running = true;
 	NRF_I2S->TASKS_START = 1;
 }
 
 static void nRFxI2SPowerOff(DevIntrf_t * const pDev)
 {
+	nRFxI2SDisable(pDev);
 	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC) = 0;
@@ -207,7 +226,22 @@ static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 			r = w;
 		}
 
-		// Recalc real frequency
+		// The ratio register only accepts a discrete hardware divider.
+		bool allowed = false;
+		for (int j = 0; j < s_NbRatio; j++)
+		{
+			if (s_Ratio[j] == r)
+			{
+				allowed = true;
+				break;
+			}
+		}
+		if (!allowed)
+		{
+			continue;
+		}
+
+		// Recalculate the actual sample rate.
 		uint32_t f = s_MClkFreqTable[i].Freq / r;
 
 		uint32_t d = (f > Rate) ? f - Rate : Rate - f;
@@ -217,6 +251,11 @@ static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 			diff = d;
 			ratio = r;
 		}
+	}
+
+	if (ratio == 0)
+	{
+		return 0;
 	}
 
 	dev->MClkFreq = s_MClkFreqTable[idx].Freq;
@@ -236,22 +275,132 @@ static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	return dev->Freq;
 }
 
+static void nRFxI2SService(void)
+{
+	uint32_t event;
+	uint32_t complete;
+	uint32_t next;
+	uint8_t *pFifo;
+	uint32_t byteCount;
+
+	if (s_pI2SDev == NULL || !s_Running)
+	{
+		return;
+	}
+
+	byteCount = s_BlockWords * sizeof(uint32_t);
+	event = NRF_I2S->EVENTS_RXPTRUPD;
+	if (event != 0)
+	{
+		NRF_I2S->EVENTS_RXPTRUPD = 0;
+		complete = s_RxEventCount;
+		next = (complete + 1U) & 1U;
+		NRF_I2S->RXD.PTR = (uint32_t)s_I2S_RxBuffer[next];
+		s_RxEventCount++;
+		if (complete > 0)
+		{
+			complete = (complete - 1U) & 1U;
+			memcpy(s_I2S_RxReady, s_I2S_RxBuffer[complete], byteCount);
+			s_RxReady = true;
+			if (s_pI2SDev->hRxFifo != NULL &&
+				CFifoBlockSize(s_pI2SDev->hRxFifo) == byteCount)
+			{
+				pFifo = CFifoResv(s_pI2SDev->hRxFifo);
+				if (pFifo != NULL)
+				{
+					memcpy(pFifo, s_I2S_RxBuffer[complete], byteCount);
+					CFifoPut(s_pI2SDev->hRxFifo);
+				}
+			}
+			if (s_pI2SDev->DevIntrf.EvtCB != NULL)
+			{
+				s_pI2SDev->DevIntrf.EvtCB(&s_pI2SDev->DevIntrf,
+					DEVINTRF_EVT_RX_DATA,
+					(uint8_t *)s_I2S_RxBuffer[complete], byteCount);
+			}
+		}
+	}
+
+	event = NRF_I2S->EVENTS_TXPTRUPD;
+	if (event != 0)
+	{
+		NRF_I2S->EVENTS_TXPTRUPD = 0;
+		next = (s_TxEventCount + 1U) & 1U;
+		pFifo = NULL;
+		if (s_pI2SDev->hTxFifo != NULL &&
+			CFifoBlockSize(s_pI2SDev->hTxFifo) == byteCount)
+		{
+			pFifo = CFifoGet(s_pI2SDev->hTxFifo);
+		}
+		if (pFifo != NULL)
+		{
+			memcpy(s_I2S_TxBuffer[next], pFifo, byteCount);
+		}
+		else if (s_TxPending)
+		{
+			memcpy(s_I2S_TxBuffer[next], s_I2S_TxPending, byteCount);
+			s_TxPending = false;
+		}
+		else
+		{
+			memset(s_I2S_TxBuffer[next], 0, byteCount);
+		}
+		NRF_I2S->TXD.PTR = (uint32_t)s_I2S_TxBuffer[next];
+		s_TxEventCount++;
+	}
+
+	if (NRF_I2S->EVENTS_STOPPED != 0)
+	{
+		NRF_I2S->EVENTS_STOPPED = 0;
+		s_Running = false;
+	}
+}
+
 bool nRFxI2SStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	return true;
+	return s_Running;
 }
 
 int nRFxI2SRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
+	uint32_t remaining;
+	uint32_t blockBytes;
+	uint8_t *pFifo;
 
+	if (pBuff == NULL || BuffLen <= 0 || !s_Running)
+	{
+		return 0;
+	}
+	blockBytes = s_BlockWords * 4U;
+	if ((uint32_t)BuffLen < blockBytes)
+	{
+		return 0;
+	}
 
-	//NRF_I2S->RXD.PTR = (uint32_t)pBuff;
-	//NRF_I2S->RXTXD.MAXCNT = BuffLen;
-	memcpy(pBuff, s_I2S_RxBuffer, min(BuffLen, I2S_BUFF_MAX * 4));
-//	NRF_I2S->CONFIG.RXEN = 1;
-//	NRF_I2S->TASKS_START = 1;
-	nRFxI2SWaitRx(dev, 10000);
+	pFifo = NULL;
+	remaining = 1000000;
+	while (remaining-- != 0)
+	{
+		if (s_pI2SDev->hRxFifo != NULL)
+		{
+			pFifo = CFifoGet(s_pI2SDev->hRxFifo);
+			if (pFifo != NULL)
+			{
+				memcpy(pBuff, pFifo, blockBytes);
+				return blockBytes;
+			}
+		}
+		else if (s_RxReady)
+		{
+			s_RxReady = false;
+			memcpy(pBuff, s_I2S_RxReady, blockBytes);
+			return blockBytes;
+		}
+		if ((NRF_I2S->INTEN & I2S_INTEN_RXPTRUPD_Msk) == 0)
+		{
+			nRFxI2SService();
+		}
+	}
 
 	return 0;
 }
@@ -262,13 +411,46 @@ void nRFxI2SStopRx(DevIntrf_t * const pDev)
 
 bool nRFxI2SStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	return true;
+	return s_Running;
 }
 
 int nRFxI2STxData(DevIntrf_t * const pDev, const uint8_t *pBuff, int BuffLen)
 {
+	uint32_t blockBytes;
+	uint8_t *pFifo;
 
-	return 0;
+	if (pBuff == NULL || !s_Running)
+	{
+		return 0;
+	}
+	blockBytes = s_BlockWords * 4U;
+	if (BuffLen < 0 || (uint32_t)BuffLen != blockBytes)
+	{
+		return 0;
+	}
+
+	if (s_pI2SDev->hTxFifo != NULL)
+	{
+		if (CFifoBlockSize(s_pI2SDev->hTxFifo) != blockBytes)
+		{
+			return 0;
+		}
+		pFifo = CFifoResv(s_pI2SDev->hTxFifo);
+		if (pFifo == NULL)
+		{
+			return 0;
+		}
+		memcpy(pFifo, pBuff, blockBytes);
+		CFifoPut(s_pI2SDev->hTxFifo);
+		return blockBytes;
+	}
+	if (s_TxPending)
+	{
+		return 0;
+	}
+	memcpy(s_I2S_TxPending, pBuff, blockBytes);
+	s_TxPending = true;
+	return blockBytes;
 }
 
 void nRFxI2SStopTx(DevIntrf_t * const pDev)
@@ -279,7 +461,7 @@ void nRFxI2SReset(DevIntrf_t * const pDev)
 {
 	nRFxI2SDisable(pDev);
 	msDelay(1);
-	nRFxI2SDisable(pDev);
+	nRFxI2SEnable(pDev);
 }
 
 /**
@@ -294,7 +476,12 @@ void nRFxI2SReset(DevIntrf_t * const pDev)
  */
 bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 {
-	if (pDev == nullptr || pCfgData == nullptr)
+	if (pDev == nullptr || pCfgData == nullptr ||
+		pCfgData->pIOPinMap == nullptr || pCfgData->NbIOPins < 3 ||
+		pCfgData->NbIOPins > 5 || pCfgData->Freq == 0 ||
+		pCfgData->DevNo != 0 ||
+		(pCfgData->SampleWidth != I2SSWIDTH_16BITS &&
+		 pCfgData->SampleWidth != I2SSWIDTH_24BITS))
 	{
 		return false;
 	}
@@ -307,9 +494,25 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC) = 1;
 
-	if (pCfgData->pRxFifoMem)
+	pDev->hRxFifo = NULL;
+	pDev->hTxFifo = NULL;
+	if (pCfgData->pRxFifoMem != NULL)
 	{
-
+		pDev->hRxFifo = CFifoInit(pCfgData->pRxFifoMem,
+			pCfgData->RxFifoMemSize, I2S_BUFF_MAX * sizeof(uint32_t), true);
+		if (pDev->hRxFifo == NULL)
+		{
+			return false;
+		}
+	}
+	if (pCfgData->pTxFifoMem != NULL)
+	{
+		pDev->hTxFifo = CFifoInit(pCfgData->pTxFifoMem,
+			pCfgData->TxFifoMemSize, I2S_BUFF_MAX * sizeof(uint32_t), true);
+		if (pDev->hTxFifo == NULL)
+		{
+			return false;
+		}
 	}
 
 	pDev->Mode = pCfgData->Mode;
@@ -321,20 +524,26 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 
 	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
 
-	NRF_I2S->PSEL.SCK = pDev->pIOPinMap[I2S_SCK_IOPIN_IDX].PinNo;
-	NRF_I2S->PSEL.LRCK = pDev->pIOPinMap[I2S_WS_IOPIN_IDX].PinNo;
-	NRF_I2S->PSEL.SDIN = pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PinNo;
+	NRF_I2S->PSEL.SCK = (pDev->pIOPinMap[I2S_SCK_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_SCK_IOPIN_IDX].PinNo;
+	NRF_I2S->PSEL.LRCK = (pDev->pIOPinMap[I2S_WS_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_WS_IOPIN_IDX].PinNo;
+	NRF_I2S->PSEL.SDIN = pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PinNo >= 0 ?
+		((pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PinNo) :
+		0xFFFFFFFFUL;
 	NRF_I2S->PSEL.SDOUT = -1;
 	NRF_I2S->PSEL.MCK = -1;
 
 	if (pDev->NbIOPins > 3)
 	{
-		NRF_I2S->PSEL.SDOUT = pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PinNo;
+		NRF_I2S->PSEL.SDOUT = pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PinNo >= 0 ?
+			((pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PinNo) :
+			0xFFFFFFFFUL;
 	}
 
 	if (pDev->NbIOPins > 4)
 	{
-		NRF_I2S->PSEL.MCK = pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PinNo;
+		NRF_I2S->PSEL.MCK = pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PinNo >= 0 ?
+			((pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PinNo) :
+			0xFFFFFFFFUL;
 	}
 
 	if (pCfgData->Mode == I2SMODE_SLAVE)
@@ -347,7 +556,8 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 	}
 
 	NRF_I2S->CONFIG.FORMAT = 0;
-	NRF_I2S->CONFIG.SWIDTH = pDev->SampleWidth - 1;
+	NRF_I2S->CONFIG.SWIDTH = pDev->SampleWidth == 2 ? 1U : 2U;
+	NRF_I2S->CONFIG.CHANNELS = pCfgData->Chan;
 
 	if (pCfgData->Format != I2SFMT_NORMAL)
 	{
@@ -355,7 +565,10 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 		NRF_I2S->CONFIG.ALIGN = pCfgData->Format == I2SFMT_ALIGN_RIGHT ? 1 : 0;
 	}
 
-	nRFxI2SSetRate(&pDev->DevIntrf, pCfgData->Freq);
+	if (nRFxI2SSetRate(&pDev->DevIntrf, pCfgData->Freq) == 0)
+	{
+		return false;
+	}
 
 
 	pDev->DevIntrf.EnCnt = 1;
@@ -378,9 +591,10 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	NRF_I2S->RXD.PTR = (uint32_t)s_I2S_RxBuffer;
-	NRF_I2S->TXD.PTR = (uint32_t)s_I2S_TxBuffer;
-	NRF_I2S->RXTXD.MAXCNT = ((pDev->SampleWidth << 1) >> 2) + 1;//I2S_BUFF_MAX;	// count in 32 bits word
+	s_BlockWords = I2S_BUFF_MAX;
+	NRF_I2S->RXD.PTR = (uint32_t)s_I2S_RxBuffer[0];
+	NRF_I2S->TXD.PTR = (uint32_t)s_I2S_TxBuffer[0];
+	NRF_I2S->RXTXD.MAXCNT = s_BlockWords;
 	NRF_I2S->INTEN = 0;
 	NRF_I2S->EVENTS_RXPTRUPD = 0;
 	NRF_I2S->EVENTS_STOPPED = 0;
@@ -400,45 +614,11 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 	return true;
 }
 
+#if defined(NRF53_SERIES)
+extern "C" void I2S0_IRQHandler()
+#else
 extern "C" void I2S_IRQHandler()
+#endif
 {
-	int len = s_pI2SDev->SampleWidth << 1;
-
-	if (NRF_I2S->EVENTS_TXPTRUPD)
-	{
-		if (s_pI2SDev->hTxFifo)
-		{
-			uint8_t *p = CFifoGet(s_pI2SDev->hTxFifo);
-			if (p)
-			{
-				memcpy(s_I2S_TxBuffer, p, len);
-			}
-			else
-			{
-				memset(s_I2S_TxBuffer, 0, len);
-			}
-		}
-	}
-
-	if (NRF_I2S->EVENTS_RXPTRUPD)
-	{
-		if (s_pI2SDev->hRxFifo)
-		{
-			uint8_t *p = CFifoPut(s_pI2SDev->hRxFifo);
-			if (p)
-			{
-				memcpy(p, s_I2S_RxBuffer, len);
-			}
-		}
-
-		if (s_pI2SDev->DevIntrf.EvtCB)
-		{
-			s_pI2SDev->DevIntrf.EvtCB(&s_pI2SDev->DevIntrf, DEVINTRF_EVT_RX_DATA, (uint8_t*)s_I2S_RxBuffer, len);
-		}
-	}
-
-	if (NRF_I2S->EVENTS_STOPPED)
-	{
-
-	}
+	nRFxI2SService();
 }
