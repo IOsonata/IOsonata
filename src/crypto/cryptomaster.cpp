@@ -215,10 +215,17 @@ static bool CmAesBlock(CryptoMaster *pDev, const uint8_t *Key,
 	outDesc.Size = Len | CRYPTOMASTER_DMA_REALIGN;
 	outDesc.Tag = CRYPTOMASTER_TAG_LAST;
 
-	ok = CmReset(pDev);
-	if (!ok && !s_bCmQuarantined)
+	// The previous transaction already reset the engine after DMA finished.
+	// Avoid a second reset for every block of CBC, CMAC, CCM and GCM.
+	// Recover a busy engine before submitting new descriptors.
+	ok = (CmRegRead(pDev, CRYPTOMASTER_STATUS) & CRYPTOMASTER_STATUS_BUSY) == 0U;
+	if (!ok)
 	{
-		ok = pDev->Recover();
+		ok = CmReset(pDev);
+		if (!ok && !s_bCmQuarantined)
+		{
+			ok = pDev->Recover();
+		}
 	}
 	if (ok)
 	{
