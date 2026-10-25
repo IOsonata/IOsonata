@@ -217,11 +217,13 @@ int main()
 	blocks = 0;
 	while (1)
 	{
-		for (unsigned i = 0; i < 128; i++)
+		for (unsigned i = 0; i < 128; i += 2)
 		{
-			// 1.5-kHz tone at 48 kHz. Each EasyDMA word holds one
-			// signed 16-bit I2S slot; duplicate to mono playback.
-			tx[i] = (uint32_t)(int32_t)s_Sine[phase++ & 31];
+			// Each 32-bit DMA word carries a signed 16-bit slot.
+			// Both channels use the same 1.5-kHz tone at 48 kHz.
+			uint32_t sample = (uint32_t)(int32_t)s_Sine[phase++ & 31];
+			tx[i] = sample;
+			tx[i + 1] = sample;
 		}
 		count = s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx));
 		if (count != (int)sizeof(tx))

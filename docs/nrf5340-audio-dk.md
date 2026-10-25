@@ -59,3 +59,9 @@ The AudioDkTest application-core project exercises all four monitors,
 CS47L63 48-kHz audio setup, nRF5340 I2S playback and optional SD-card
 presence. Debug uses semihosting for printf; Release uses UART0 at 1 Mbaud.
 Codec audio and timing have not been validated on physical hardware.
+
+Run the IOcomposer `AudioDkTest` Debug or Release build for nRF5340
+application core. Audio output runs at 48 kHz and the test periodically
+prints a captured microphone word and power monitor voltage. A headphone
+and powered microphone are needed for an audible/recorded check. The
+microSD test does not write or format the card.
