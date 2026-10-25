@@ -25,14 +25,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
+#include <stdio.h>
 #include "sam4lxxx.h"
 #include "coredev/interrupt.h"
 #include "crypto_sam.h"
 
-// Set SAM4L_AES_DIAG to 1 for a temporary hardware/software block comparison.
-// Leave disabled for normal operation and performance measurements.
+// Temporary UART diagnostics. Set to 0 for release and performance tests.
 #ifndef SAM4L_AES_DIAG
-#define SAM4L_AES_DIAG 0
+#define SAM4L_AES_DIAG 1
 #endif
 
 #if SAM4L_AES_DIAG
@@ -41,6 +41,7 @@ volatile uint32_t g_Sam4lAesDiagChecks = 0U;
 volatile uint32_t g_Sam4lAesDiagEncryptMismatch = 0U;
 volatile uint32_t g_Sam4lAesDiagDecryptMismatch = 0U;
 volatile uint32_t g_Sam4lAesDiagReferenceFailures = 0U;
+static uint32_t s_Sam4lAesDiagLines = 0U;
 }
 #endif
 
@@ -277,9 +278,19 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 		status = reference.Cipher(CRYPTO_CIPHER_ECB, Encrypt ? 1 : 0,
 			key, nullptr, 0U, In, 16U, expected);
 		g_Sam4lAesDiagChecks++;
+		if (g_Sam4lAesDiagChecks == 1U)
+		{
+			printf("SAM4L AES block diagnostics enabled\\r\\n");
+		}
 		if (status != CRYPTO_STATUS_OK)
 		{
 			g_Sam4lAesDiagReferenceFailures++;
+			if (s_Sam4lAesDiagLines < 8U)
+			{
+				printf("SAM4L AES reference failure: block %lu status %u\\r\\n",
+					(unsigned long)g_Sam4lAesDiagChecks, (unsigned)status);
+				s_Sam4lAesDiagLines++;
+			}
 		}
 		else if (memcmp(Out, expected, sizeof(expected)) != 0)
 		{
@@ -291,6 +302,26 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 			{
 				g_Sam4lAesDiagDecryptMismatch++;
 			}
+			if (s_Sam4lAesDiagLines < 8U)
+			{
+				printf("SAM4L AES mismatch: block %lu %s sr=%08lx enc=%lu dec=%lu\\r\\n",
+					(unsigned long)g_Sam4lAesDiagChecks,
+					Encrypt ? "encrypt" : "decrypt",
+					(unsigned long)g_Sam4lAesLastStatus,
+					(unsigned long)g_Sam4lAesDiagEncryptMismatch,
+					(unsigned long)g_Sam4lAesDiagDecryptMismatch);
+				s_Sam4lAesDiagLines++;
+			}
+		}
+		if ((g_Sam4lAesDiagChecks & 4095U) == 0U)
+		{
+			printf("SAM4L AES summary: blocks=%lu enc=%lu dec=%lu ref=%lu timeouts=%lu/%lu\\r\\n",
+				(unsigned long)g_Sam4lAesDiagChecks,
+				(unsigned long)g_Sam4lAesDiagEncryptMismatch,
+				(unsigned long)g_Sam4lAesDiagDecryptMismatch,
+				(unsigned long)g_Sam4lAesDiagReferenceFailures,
+				(unsigned long)g_Sam4lAesInputTimeouts,
+				(unsigned long)g_Sam4lAesOutputTimeouts);
 		}
 		CryptoSecureWipe(expected, sizeof(expected));
 	}
