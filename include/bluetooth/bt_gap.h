@@ -188,6 +188,13 @@ typedef struct __Bt_Gatt_Cccd_State {
 /// and the spec allows at most one instance of the characteristic.
 #define BT_GAP_SEC_LEVELS_MAX_LEN			8
 
+/// Encrypted Data Key Material, Core 5.4 Vol 3 Part C 12.6.
+#define BT_GAP_EAD_SESSION_KEY_LEN			16
+#define BT_GAP_EAD_IV_LEN					8
+#define BT_GAP_EAD_KEY_MATERIAL_LEN			(BT_GAP_EAD_SESSION_KEY_LEN + BT_GAP_EAD_IV_LEN)
+
+typedef bool (*BtGapEadKeyAuthorizeCb_t)(uint16_t ConnHdl);
+
 typedef enum __Bt_Gap_SecType {
 	BTGAP_SECTYPE_NONE = BT_GAP_SECTYPE_NONE,
 	BTGAP_SECTYPE_STATICKEY_NO_MITM = BT_GAP_SECTYPE_STATICKEY_NO_MITM,
@@ -334,6 +341,41 @@ bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec);
  * @return	true on success
  */
 bool BtGapSecLevelsSet(const uint8_t *pReq, size_t Len);
+
+/**
+ * @brief	Set or clear the Encrypted Data Key Material characteristic
+ *
+ * Core 5.4 Vol 3 Part C 12.6. The characteristic value is exactly 24 octets:
+ * the 16-octet Session Key followed by the 8-octet Initialization Vector.
+ * Passing both pointers as null clears the value. Passing only one null is
+ * invalid.
+ *
+ * This function stages the value before GAP registration and also updates an
+ * already-registered generic GATT server. Applications using the Core GAP
+ * key-distribution procedure should configure it from the same BtEadKey_t used
+ * for advertising. It is intentionally separate from BtAdvEadKeySet because a
+ * profile may distribute EAD key material by another standardized mechanism.
+ *
+ * Clearing wipes the 24-octet value and disables authorization; the fixed-size
+ * characteristic remains present. After peripheral initialization, false means
+ * the selected GATT backend does not expose this optional GAP characteristic or
+ * the value update failed.
+ *
+ * @param	pSessionKey	: 16-octet Session Key, or null when clearing
+ * @param	pIv			: 8-octet Initialization Vector, or null when clearing
+ *
+ * @return	true on success
+ */
+bool BtGapEadKeyMaterialSet(const uint8_t *pSessionKey, const uint8_t *pIv);
+
+/**
+ * @brief	Set application authorization for reading EAD key material
+ *
+ * The key characteristic is always read-authenticated. It is additionally
+ * authorization protected and fails closed until this callback accepts the
+ * connection. Set null to revoke application authorization.
+ */
+void BtGapEadKeyAuthorizeSet(BtGapEadKeyAuthorizeCb_t Callback);
 
 
 /**

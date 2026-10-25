@@ -66,6 +66,19 @@ SOFTWARE.
 // write through to a database that does not hold the characteristic yet. So
 // the staging writes here directly and registration copies it.
 static uint8_t s_BtGapSecLevels[BT_GAP_SEC_LEVELS_MAX_LEN];
+static uint8_t s_BtGapEadKeyMaterial[BT_GAP_EAD_KEY_MATERIAL_LEN];
+static bool s_BtGapEadKeyValid = false;
+static bool s_BtGapPeripheralInitialized = false;
+static bool s_BtGapEadKeyRegistered = false;
+static BtGapEadKeyAuthorizeCb_t s_BtGapEadAuthorize = nullptr;
+
+static bool BtGapEadKeyAuthorize(uint16_t ConnHdl, BtChar_t *pChar, bool bRead)
+{
+	(void)pChar;
+
+	return bRead && s_BtGapEadKeyValid && s_BtGapEadAuthorize != nullptr &&
+		s_BtGapEadAuthorize(ConnHdl);
+}
 
 static BtGattChar_t s_BtGapChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_DEVICE_NAME,
@@ -89,10 +102,21 @@ static BtGattChar_t s_BtGapChar[] = {
 	        BT_GATT_CHAR_PROP_READ,
 	        NULL,
 	        .pValue = s_BtGapSecLevels),
+	// Encrypted Data Key Material, Core 5.4 Vol 3 Part C 12.6. The value is
+	// readable only after authenticated encryption and application
+	// authorization. Indications are optional and are not exposed here.
+	BT_CHAR(BT_UUID_CHARACTERISTIC_ENCRYPTED_DATA_KEY_MATERIAL,
+	        BT_GAP_EAD_KEY_MATERIAL_LEN,
+	        BT_GATT_CHAR_PROP_READ,
+	        NULL,
+	        .AuthorizeCB = BtGapEadKeyAuthorize,
+	        .pValue = s_BtGapEadKeyMaterial,
+	        .SecType = BTGAP_SECTYPE_STATICKEY_MITM),
 };
 
-// Index of the security levels characteristic in the array above.
+// Indexes in the GAP characteristic array above.
 #define BT_GAP_SEC_LEVELS_CHAR_IDX		3
+#define BT_GAP_EAD_KEY_CHAR_IDX			4
 
 static BtGattSrvc_t s_BtGapSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_GENERIC_ACCESS, s_BtGapChar);
 
@@ -164,6 +188,69 @@ __attribute__((weak)) void BtGapParamInit(const BtGapCfg_t *pCfg)
 // The spec makes meeting any one of the requirements listed for a mode
 // sufficient, so a longer sequence is a weaker statement, not a stronger one.
 // One requirement is what a server with a single policy has to say.
+bool BtGapEadKeyMaterialSet(const uint8_t *pSessionKey, const uint8_t *pIv)
+{
+	BtGattChar_t *pChar = &s_BtGapChar[BT_GAP_EAD_KEY_CHAR_IDX];
+	bool registered = pChar->pSrvc != nullptr &&
+		pChar->ValHdl != BT_ATT_HANDLE_INVALID && pChar->pValue != nullptr;
+	uint8_t material[BT_GAP_EAD_KEY_MATERIAL_LEN];
+
+	if ((pSessionKey == nullptr) != (pIv == nullptr))
+	{
+		return false;
+	}
+
+	if (pSessionKey == nullptr)
+	{
+		memset(s_BtGapEadKeyMaterial, 0, sizeof(s_BtGapEadKeyMaterial));
+		s_BtGapEadKeyValid = false;
+
+		if (registered)
+		{
+			memset(pChar->pValue, 0, pChar->MaxDataLen);
+			pChar->ValueLen = BT_GAP_EAD_KEY_MATERIAL_LEN;
+		}
+		else
+		{
+			pChar->pValue = s_BtGapEadKeyMaterial;
+			pChar->ValueLen = BT_GAP_EAD_KEY_MATERIAL_LEN;
+		}
+		return true;
+	}
+
+	if (s_BtGapPeripheralInitialized && !s_BtGapEadKeyRegistered)
+	{
+		return false;
+	}
+
+	memcpy(material, pSessionKey, BT_GAP_EAD_SESSION_KEY_LEN);
+	memcpy(&material[BT_GAP_EAD_SESSION_KEY_LEN], pIv, BT_GAP_EAD_IV_LEN);
+
+	if (registered &&
+		!BtGattCharSetValue(pChar, material, sizeof(material)))
+	{
+		memset(material, 0, sizeof(material));
+		return false;
+	}
+
+	memcpy(s_BtGapEadKeyMaterial, material, sizeof(material));
+	memset(material, 0, sizeof(material));
+	s_BtGapEadKeyValid = true;
+
+	if (!registered)
+	{
+		pChar->pValue = s_BtGapEadKeyMaterial;
+		pChar->ValueLen = sizeof(s_BtGapEadKeyMaterial);
+	}
+
+	return true;
+}
+
+void BtGapEadKeyAuthorizeSet(BtGapEadKeyAuthorizeCb_t Callback)
+{
+	s_BtGapEadAuthorize = Callback;
+}
+
 bool BtGapSecLevelsSet(const uint8_t *pReq, size_t Len)
 {
 	if (pReq == nullptr || Len < 2 || (Len & 1) != 0 ||
@@ -240,6 +327,8 @@ static void BtGapSecLevelsDefault(uint32_t SecType)
 
 bool BtGapInit(const BtGapCfg_t *pCfg)
 {
+	BtGattChar_t *pEad = &s_BtGapChar[BT_GAP_EAD_KEY_CHAR_IDX];
+
 	if (pCfg == nullptr)
 	{
 		return false;
@@ -247,13 +336,34 @@ bool BtGapInit(const BtGapCfg_t *pCfg)
 
 	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
 	{
+		s_BtGapPeripheralInitialized = false;
+		s_BtGapEadKeyRegistered = false;
 		BtGapSecLevelsDefault(pCfg->SecType);
+
+		// Registration copies from staging storage. The generic server moves
+		// pValue into its database, so restore the staging pointer on init in
+		// the same way as the Security Levels characteristic.
+		s_BtGapChar[BT_GAP_EAD_KEY_CHAR_IDX].pValue = s_BtGapEadKeyMaterial;
+		s_BtGapChar[BT_GAP_EAD_KEY_CHAR_IDX].ValueLen =
+			sizeof(s_BtGapEadKeyMaterial);
 
 		// A service the server would not take leaves the attribute table
 		// without the entries a client reads, so a caller that goes on to
 		// advertise would put an incomplete table on the air.
 		if (!BtGattSrvcAdd(&s_BtGattSrvc) ||
 			!BtGattSrvcAdd(&s_BtGapSrvc))
+		{
+			return false;
+		}
+
+		s_BtGapEadKeyRegistered = pEad->pSrvc != nullptr &&
+			pEad->ValHdl != BT_ATT_HANDLE_INVALID && pEad->pValue != nullptr;
+		s_BtGapPeripheralInitialized = true;
+
+		// A staged key requests the standard GAP distribution mechanism.
+		// Do not let a native backend that cannot extend its built-in GAP
+		// service claim that this mechanism is available.
+		if (s_BtGapEadKeyValid && !s_BtGapEadKeyRegistered)
 		{
 			return false;
 		}

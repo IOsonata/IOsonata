@@ -405,6 +405,15 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 	ble_gatts_attr_md_t attrMd;
 	ble_gatts_attr_t attrValue;
 	ble_uuid_t uuid;
+
+	// This native backend does not yet translate application authorization
+	// callbacks into vendor read/write authorization events. Refuse such a
+	// declaration rather than expose it without the requested policy.
+	if (pChar->AuthorizeCB != nullptr)
+	{
+		return NRF_ERROR_NOT_SUPPORTED;
+	}
+
 	memset(&charMd, 0, sizeof(charMd));
 	memset(&cccdMd, 0, sizeof(cccdMd));
 	memset(&attrMd, 0, sizeof(attrMd));

@@ -854,6 +854,7 @@ static bool BtGattSrvcAddFailed(BtGattSrvc_t *pSrvc,
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	uint8_t baseidx = 0;
+	uint32_t permission = 0;
 	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr ||
 		pSrvc->NbChar <= 0)
 	{
@@ -952,6 +953,23 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		BtAttCharValue_t *charval = (BtAttCharValue_t*)entry->Data;
 		charval->pChar = c;
 		c->ValHdl = entry->Hdl;
+
+		if (c->AuthorizeCB != nullptr)
+		{
+			permission = BtAttDBEntryGetPermission(entry);
+			if ((c->Property & BT_GATT_CHAR_PROP_READ) != 0)
+			{
+				permission |= BT_ATT_PERMISSION_READ_AUTHOR;
+			}
+			if ((c->Property & (BT_GATT_CHAR_PROP_WRITE |
+				BT_GATT_CHAR_PROP_WRITE_WORESP |
+				BT_GATT_CHAR_PROP_AUTH_SIGNED)) != 0)
+			{
+				permission |= BT_ATT_PERMISSION_WRITE_AUTHOR;
+			}
+			BtAttDBEntrySetPermission(entry, permission);
+		}
+
 		void *pInitVal = c->pValue;
 		uint16_t initLen = c->ValueLen;
 		c->pValue = charval->Data;

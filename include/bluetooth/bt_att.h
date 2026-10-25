@@ -157,6 +157,16 @@ typedef void (*BtCharSetIndCb_t) (BtChar_t *pChar, bool bEnable, uint16_t ConnHd
 typedef void (*BtCharTxComplete_t) (BtChar_t *pChar, int CharIdx);
 
 /**
+ * @brief	Authorize access to a characteristic
+ *
+ * Called only for a characteristic whose GATT registration marks the
+ * corresponding ATT access as requiring authorization. A backend that cannot
+ * enforce this callback must reject the characteristic at registration.
+ */
+typedef bool (*BtCharAuthorizeCb_t)(uint16_t ConnHdl, BtChar_t *pChar,
+									bool bRead);
+
+/**
  * @brief	Callback on authorization request
  *
  * @param	pBleSvc
@@ -548,6 +558,7 @@ struct __Bt_Characteristic {
 	BtCharSetNotifCb_t SetNotifCB;		//!< Callback on set notification
 	BtCharSetIndCb_t SetIndCB;			//!< Callback on set indication
 	BtCharTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
+	BtCharAuthorizeCb_t AuthorizeCB;	//!< Per-link read/write authorization callback
 	void *pValue;						//!< Characteristic data value
 	uint16_t ValueLen;					//!< Current length in bytes of data value
 	uint8_t SecType;					//!< Per-characteristic security, a BT_GAP_SECTYPE_* value. NONE inherits the service SecType.

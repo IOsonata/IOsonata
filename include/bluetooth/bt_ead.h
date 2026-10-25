@@ -76,17 +76,11 @@ SOFTWARE.
 /// Key material, Vol 3 Part C 12.6 Table 12.10: a 128 bit session key then a
 /// 64 bit IV.
 ///
-/// The two fields are held in the order the algorithm consumes them, and they
-/// are not the same way round. SessionKey is fed to AES exactly as the sample
-/// data of CSS Part A 2.3 prints it, most significant octet first. Iv is laid
-/// out as the CCM nonce needs it, least significant octet first, which is the
-/// reverse of how 2.3 prints it. BtEadSelfTest pins both against the
-/// published ciphertext.
-///
-/// How the Encrypted Data Key Material characteristic orders its value on the
-/// wire is a separate question, and one this structure does not answer. Do
-/// not assume a read of that characteristic can be copied in verbatim without
-/// checking it against a peer.
+/// This is also the 24-octet Encrypted Data Key Material characteristic value
+/// in wire order. SessionKey is fed to AES exactly as the CSS sample prints
+/// it. Iv is stored least-significant octet first, which is both the CCM nonce
+/// order and the characteristic value order used by the EAD procedure.
+/// BtEadSelfTest pins both fields against the published ciphertext.
 typedef struct __Bt_Ead_Key {
 	uint8_t SessionKey[BTEAD_KEY_LEN];	//!< Shared session key
 	uint8_t Iv[BTEAD_IV_LEN];			//!< Shared initialization vector

@@ -29,6 +29,8 @@ namespace {
 
 int s_Failures = 0;
 int s_Checks = 0;
+bool s_EadAuthorized = false;
+uint16_t s_EadAuthorizedHdl = BT_CONN_HDL_INVALID;
 
 #define CHECK(expr) do { \
 	++s_Checks; \
@@ -55,6 +57,111 @@ BtGapCfg_t Cfg(uint8_t Role, uint32_t SecType)
 	cfg.SecType = SecType;
 
 	return cfg;
+}
+
+bool EadAuthorize(uint16_t ConnHdl)
+{
+	s_EadAuthorizedHdl = ConnHdl;
+	return s_EadAuthorized;
+}
+
+const BtGattChar_t *FindGapChar(uint16_t Uuid)
+{
+	const BtGattSrvc_t *pSrvc = BtGattGetSrvcList();
+	int i;
+
+	while (pSrvc != nullptr)
+	{
+		if (pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ACCESS)
+		{
+			for (i = 0; i < pSrvc->NbChar; i++)
+			{
+				if (pSrvc->pCharArray[i].Uuid == Uuid)
+				{
+					return &pSrvc->pCharArray[i];
+				}
+			}
+		}
+		pSrvc = pSrvc->pNext;
+	}
+	return nullptr;
+}
+
+// Run before any other BtGapInit call so this case sees the real database
+// entries rather than a service that is already in the process-wide list.
+void TestEadKeyMaterialCharacteristic(void)
+{
+	BtGapCfg_t cfg;
+	const BtGattChar_t *pChar;
+	BtAttDBEntry_t *pEntry;
+	const uint8_t session[BT_GAP_EAD_SESSION_KEY_LEN] = {
+		0x57,0xA9,0xDA,0x12,0xD1,0x2E,0x6E,0x13,
+		0x1E,0x20,0x61,0x2A,0xD1,0x0A,0x6A,0x19
+	};
+	const uint8_t iv[BT_GAP_EAD_IV_LEN] = {
+		0x9E,0x7A,0x00,0xEF,0xB1,0x7A,0xE7,0x46
+	};
+	size_t i;
+
+	ResetDb();
+	s_EadAuthorized = false;
+	s_EadAuthorizedHdl = BT_CONN_HDL_INVALID;
+	BtGapEadKeyAuthorizeSet(nullptr);
+
+	cfg = Cfg(BT_GAP_ROLE_PERIPHERAL, BTGAP_SECTYPE_LESC_MITM);
+	CHECK(BtGapInit(&cfg));
+
+	pChar = FindGapChar(
+		BT_UUID_CHARACTERISTIC_ENCRYPTED_DATA_KEY_MATERIAL);
+	CHECK(pChar != nullptr);
+	if (pChar == nullptr)
+	{
+		return;
+	}
+
+	CHECK(pChar->MaxDataLen == BT_GAP_EAD_KEY_MATERIAL_LEN);
+	CHECK(pChar->Property == BT_GATT_CHAR_PROP_READ);
+	CHECK(pChar->SecType == BTGAP_SECTYPE_STATICKEY_MITM);
+	CHECK(pChar->AuthorizeCB != nullptr);
+	CHECK(pChar->ValueLen == BT_GAP_EAD_KEY_MATERIAL_LEN);
+	for (i = 0; i < pChar->ValueLen; i++)
+	{
+		CHECK(((const uint8_t*)pChar->pValue)[i] == 0);
+	}
+
+	pEntry = BtAttDBFindHandle(pChar->ValHdl);
+	CHECK(pEntry != nullptr);
+	if (pEntry != nullptr)
+	{
+		CHECK((BtAttDBEntryGetPermission(pEntry) &
+			BT_ATT_PERMISSION_READ_AUTHOR) != 0);
+		CHECK(BtAttLinkAuthorized(0x0042, pEntry, true) == false);
+	}
+
+	CHECK(BtGapEadKeyMaterialSet(session, iv));
+	CHECK(pChar->ValueLen == BT_GAP_EAD_KEY_MATERIAL_LEN);
+	CHECK(std::memcmp(pChar->pValue, session, sizeof(session)) == 0);
+	CHECK(std::memcmp((const uint8_t*)pChar->pValue + sizeof(session),
+		iv, sizeof(iv)) == 0);
+	CHECK(BtGapEadKeyMaterialSet(session, nullptr) == false);
+
+	BtGapEadKeyAuthorizeSet(EadAuthorize);
+	if (pEntry != nullptr)
+	{
+		CHECK(BtAttLinkAuthorized(0x0042, pEntry, true) == false);
+		s_EadAuthorized = true;
+		CHECK(BtAttLinkAuthorized(0x0042, pEntry, true));
+		CHECK(s_EadAuthorizedHdl == 0x0042);
+	}
+
+	CHECK(BtGapEadKeyMaterialSet(nullptr, nullptr));
+	CHECK(pChar->ValueLen == BT_GAP_EAD_KEY_MATERIAL_LEN);
+	for (i = 0; i < pChar->MaxDataLen; i++)
+	{
+		CHECK(((const uint8_t*)pChar->pValue)[i] == 0);
+	}
+
+	BtGapEadKeyAuthorizeSet(nullptr);
 }
 
 // A peripheral has to come out of BtGapInit ready to advertise. This is the
@@ -268,6 +375,7 @@ bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *)
 
 int main(void)
 {
+	TestEadKeyMaterialCharacteristic();
 	TestPeripheralInitLeavesNoError();
 	TestEverySecTypeInitialises();
 	TestSecurityLevelsValueIsWritable();

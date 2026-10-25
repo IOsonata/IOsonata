@@ -758,18 +758,18 @@ static BtGattChar_t *BtAttEntryChar(BtAttDBEntry_t *pEntry)
 }
 
 // Link security (encryption / authentication / key size) is read from the
-// generic BtGapConnSecGet snapshot, not from SMP internals. Authorization stays
-// a per-attribute hook here because it is app policy, not link state: ports or
-// apps override it. The default authorizes everything; gating happens only when
-// an attribute sets the AUTHOR Permission bit.
+// generic BtGapConnSecGet snapshot, not from SMP internals. Authorization is
+// application policy, so an attribute that asks for it must provide a
+// characteristic callback. Ports may still override this hook when the vendor
+// stack owns authorization. The generic default is deliberately fail closed.
 __attribute__((weak)) bool BtAttLinkAuthorized(uint16_t ConnHdl,
 											  BtAttDBEntry_t *pEntry,
 											  bool bRead)
 {
-	(void)ConnHdl;
-	(void)pEntry;
-	(void)bRead;
-	return true;
+	BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+
+	return pChar != nullptr && pChar->AuthorizeCB != nullptr &&
+		pChar->AuthorizeCB(ConnHdl, pChar, bRead);
 }
 
 // Enforce service/characteristic security in the ATT core itself. This must

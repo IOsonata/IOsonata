@@ -106,6 +106,14 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 	uint8_t uuidType;
 	uint8_t baseidx = pSrvc->Uuid.BaseIdx;
 
+	// This native backend does not yet translate application authorization
+	// callbacks into vendor read/write authorization events. Refuse such a
+	// declaration rather than expose it without the requested policy.
+	if (pChar->AuthorizeCB != nullptr)
+	{
+		return false;
+	}
+
 	if (pChar->pUuidBase != nullptr)
 	{
 		int idx = BtUuidAddBase(pChar->pUuidBase);
