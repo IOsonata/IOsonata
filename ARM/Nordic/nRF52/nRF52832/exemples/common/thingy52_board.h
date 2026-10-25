@@ -8,6 +8,11 @@
 #define THINGY52_I2C_PORT 0
 #define THINGY52_I2C_SDA_PIN 7
 #define THINGY52_I2C_SCL_PIN 8
+// LIS2DH12 uses the separate external I2C bus and the always-on supply.
+#define THINGY52_ACCEL_I2C_DEVNO 1
+#define THINGY52_ACCEL_I2C_PORT 0
+#define THINGY52_ACCEL_I2C_SDA_PIN 14
+#define THINGY52_ACCEL_I2C_SCL_PIN 15
 #define THINGY52_VDD_PORT 0
 #define THINGY52_VDD_PIN 30
 #define THINGY52_SX_RESET_PORT 0
@@ -39,6 +44,8 @@ void Thingy52PowerInit();
 // Explicitly resets the expander. LEDs and switched sensor supplies start off;
 // expansion pins 0..3 and battery monitor pin 4 remain inputs.
 bool Thingy52ExpanderInit(IoExpSx1509 &Expander, DeviceIntrf &Bus);
+// Enable before MPU9250 initialization; stop bus access before disabling.
+bool Thingy52MotionPower(IoExpSx1509 &Expander, bool Enable);
 bool Thingy52GasPower(IoExpSx1509 &Expander, bool Enable);
 // Install with GasCcs811::WakeControl(Thingy52GasWake, &Expander).
 bool Thingy52GasWake(bool Active, void *pContext);

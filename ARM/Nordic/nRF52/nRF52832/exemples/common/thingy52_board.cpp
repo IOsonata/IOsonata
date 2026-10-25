@@ -62,6 +62,17 @@ bool Thingy52ExpanderInit(IoExpSx1509 &Expander, DeviceIntrf &Bus)
 	return true;
 }
 
+bool Thingy52MotionPower(IoExpSx1509 &Expander, bool Enable)
+{
+	uint16_t mask = 1U << THINGY52_SX_MOTION_POWER;
+
+	if (!Expander.WritePins(mask, Enable ? mask : 0))
+		return false;
+	if (Enable)
+		msDelay(100);
+	return true;
+}
+
 bool Thingy52GasPower(IoExpSx1509 &Expander, bool Enable)
 {
 	// Keep reset/wake low while switching the supply, avoiding back-powering.

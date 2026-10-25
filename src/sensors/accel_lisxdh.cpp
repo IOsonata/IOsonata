@@ -100,7 +100,7 @@ bool AccelLisxdh::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 
 	// High res 12bits default
 	uint8_t regaddr = LISXDH_CTRL_REG4_REG;
-	uint8_t d = Read8(&regaddr, 1) | LISXDH_CTRL_REG4_HR_EN;
+	uint8_t d = Read8(&regaddr, 1) | LISXDH_CTRL_REG4_HR_EN | LISXDH_CTRL_REG4_BDU;
 	Write8(&regaddr, 1, d);
 
 	AccelSensor::Range(2047);
@@ -108,6 +108,7 @@ bool AccelLisxdh::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	Scale(Cfg.Scale);
 	uint32_t f = SamplingFrequency(Cfg.Freq);
 
+	vbIntEn = Cfg.Inter != 0;
 	if (Cfg.Inter)
 	{
 
@@ -146,7 +147,8 @@ bool AccelLisxdh::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 
 	uint8_t b[196];
 
-	regaddr = LISXDH_OUT_X_L_REG | 0x40;
+	regaddr = LISXDH_OUT_X_L_REG |
+		(vpIntrf->Type() == DEVINTRF_TYPE_SPI ? 0x40 : 0x80);
 	if (d > 0)
 	{
 		Device::Read(&regaddr, 1, b, d * 6);
@@ -489,75 +491,72 @@ void AccelLisxdh::IntHandler()
 bool AccelLisxdh::UpdateData()
 {
 	uint8_t regaddr = LISXDH_STATUS_REG;
-	uint8_t d = Read8(&regaddr, 1);
-	uint8_t fstatus;
-	uint32_t ts = 0;
+	uint8_t status;
+	uint8_t fifo = 0;
+	uint8_t ctrl1;
+	uint8_t ctrl4;
+	uint8_t data[6];
+	uint8_t increment;
+	unsigned count = 0;
+	unsigned shift;
+	unsigned i;
+	uint64_t timestamp = vpTimer != nullptr ? vpTimer->uSecond() : 0;
+	bool available = false;
 
-	if (vpTimer)
+	if (!Valid() || Device::Read(&regaddr, 1, &status, 1) != 1)
+		return false;
+	increment = vpIntrf->Type() == DEVINTRF_TYPE_SPI ? 0x40 : 0x80;
+	if (vbIntEn)
 	{
-		ts = vpTimer->uSecond();
+		regaddr = LISXDH_FIFO_SRC_REG;
+		if (Device::Read(&regaddr, 1, &fifo, 1) != 1)
+			return false;
+		if (!(fifo & LISXDH_FIFO_SRC_REG_EMPTY))
+			count = (fifo & LISXDH_FIFO_SRC_REG_FSS_MASK) +
+				((fifo & LISXDH_FIFO_SRC_REG_OVRN_FIFO) ? 1 : 0);
 	}
+	else if (status & 0x08)
+		count = 1;
 
-	regaddr = LISXDH_FIFO_SRC_REG;
-	fstatus = Read8(&regaddr, 1);
-
-	bool avail = false;
-
-	if ((fstatus & LISXDH_FIFO_SRC_REG_FSS_MASK) & vbIntEn)
+	if (count != 0)
 	{
-		avail = true;
-	}
-	else if (d & 0xf)
-	{
-		avail = true;
-	}
-
-	if (avail == true)
-	{
-		// New data avail
-		if (vpTimer)
+		regaddr = LISXDH_CTRL_REG1_REG;
+		if (Device::Read(&regaddr, 1, &ctrl1, 1) != 1)
+			return false;
+		regaddr = LISXDH_CTRL_REG4_REG;
+		if (Device::Read(&regaddr, 1, &ctrl4, 1) != 1)
+			return false;
+		shift = (ctrl1 & LISXDH_CTRL_REG1_LPEN) ? 8 :
+			((ctrl4 & LISXDH_CTRL_REG4_HR_EN) ? 4 : 6);
+		for (i = 0; i < count; ++i)
 		{
-			AccelSensor::vData.Timestamp = ts;
+			regaddr = LISXDH_OUT_X_L_REG | increment;
+			if (Device::Read(&regaddr, 1, data, sizeof(data)) != (int)sizeof(data))
+				return false;
+			AccelSensor::vData.X = (int16_t)(data[0] | (data[1] << 8)) / (1 << shift);
+			AccelSensor::vData.Y = (int16_t)(data[2] | (data[3] << 8)) / (1 << shift);
+			AccelSensor::vData.Z = (int16_t)(data[4] | (data[5] << 8)) / (1 << shift);
+			AccelSensor::vData.Timestamp = timestamp;
+			AccelSensor::vSampleTime = timestamp;
+			AccelSensor::vSampleCnt++;
 		}
-		for (int i = 0; i < (fstatus & 0x1f); i++)
-		{
-			regaddr = LISXDH_OUT_X_L_REG | 0x40;
-
-			uint16_t dd[3];
-
-			Device::Read(&regaddr, 1, (uint8_t*)dd, 6);
-			AccelSensor::vData.X = dd[0];
-			AccelSensor::vData.Y = dd[1];
-			AccelSensor::vData.Z = dd[2];
-		}
+		available = true;
 	}
 
 	regaddr = LISXDH_STATUS_REG_AUX_REG;
-	d = Read8(&regaddr, 1);
-	if (d & LISXDH_STATUS_REG_TDA_AUX_3DA)
+	if (Device::Read(&regaddr, 1, &status, 1) != 1)
+		return available;
+	if (status & LISXDH_STATUS_REG_TDA_AUX_3DA)
 	{
-		if (vpTimer)
-		{
-			TempSensor::vData.Timestamp = ts;
-		}
-
-		regaddr = LISXDH_OUT_TEMP_ADC3_L_REG | 0x40;
-		uint16_t t = 0;
-		Device::Read(&regaddr, 1, (uint8_t*)&t, 2);
-
-		int32_t r = TempSensor::Range();
-		if (r <= 127)
-		{
-			TempSensor::vData.Temperature = t * 100 / 256 + 2500;
-		}
-		else
-		{
-			TempSensor::vData.Temperature = t * 100 / (64 * r) + 2500;
-		}
-
-		avail = true;
+		regaddr = LISXDH_OUT_TEMP_ADC3_L_REG | increment;
+		if (Device::Read(&regaddr, 1, data, 2) != 2)
+			return available;
+		// Temperature is relative to 25 C, 1 C per high-byte count.
+		TempSensor::vData.Temperature =
+			(int16_t)(data[0] | (data[1] << 8)) * 100 / 256 + 2500;
+		TempSensor::vData.Timestamp = timestamp;
+		TempSensor::vSampleCnt++;
+		available = true;
 	}
-
-	return avail;
+	return available;
 }
-

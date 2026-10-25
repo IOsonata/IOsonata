@@ -190,6 +190,10 @@ The test owns the production PCA20020 v1.x board's power and expander state:
 
 - P0.30 enables VDD, then P0.16 releases the expander reset input.
 - I2C0 uses SDA P0.07 and SCL P0.08, with synchronous EasyDMA transfers.
+- LIS2DH12 is at 0x19 on I2C1, SDA P0.14 and SCL P0.15, on the always-on rail.
+- MPU9250 is at 0x68 on I2C0. `Thingy52MotionPower` enables SXIO8 and waits
+  100 ms before initialization. It preserves gas, microphone and LED outputs.
+- HTS221 (0x5F) and LPS22HB (0x5C) share I2C0. Both run at 1 Hz.
 - The expander is explicitly reset. External GPIOs 0..3 and battery-monitor
   pin 4 remain inputs. Motion, microphone and gas supplies start off, as does
   the speaker amplifier. Both RGB LED groups start off.
@@ -213,8 +217,18 @@ may precede the illumination change. The color interrupt window spans the
 full range and normally remains inactive; gas data-ready interrupts are
 polled and acknowledged by the gas read. No MCU interrupt handler is installed.
 
-The test leaves CCS811 environmental compensation at the chip defaults and
-does not restore a saved baseline. Early readings do not establish accuracy;
+The test also reads the existing `AccelLisxdh`, `AgmMpu9250`, `HumiHts221` and
+`PressLps22hb` drivers. Motion output is signed raw counts; the AK8963 counts
+include factory sensitivity trim. These are register snapshots, not a motion
+fusion or FIFO streaming test. The gyro uses its explicit unfiltered 32 kHz
+mode; the console reads it once per loop. The timer timestamps let the example
+recognize a new magnetometer sample and complete humidity/temperature pairs.
+HTS221 reports centi-degrees C and centi-percent RH; LPS22HB reports Pa.
+
+CCS811 compensation is updated only after a fresh HTS221 temperature/humidity
+pair, within the driver's supported temperature range. Until that first pair,
+the chip defaults apply. Missing/partial samples retain the previous
+compensation. No saved baseline is restored. Early readings do not establish accuracy;
 allow sensor conditioning. A failed initialization or board-control write
 prints `STOP` and stops further bus operations. Not-ready sensor reads are
 reported separately. No firmware update or persistent configuration is written.
@@ -225,6 +239,17 @@ generic driver tests. The board tests use the production SX1509/CCS811 drivers
 on a shared mock bus and check rail defaults, wake bracketing, LED/control-bit
 preservation, power-off ordering and transfer failures. These tests do not
 replace an ARM build or hardware validation; both remain pending.
+
+`python3 tests/sensors/run_thingy52_motion.py` checks the existing motion drivers
+on I2C and SPI at O0/O2 with ASan/UBSan. It covers LIS2DH12 polling with an empty
+FIFO, even FIFO counts, signed high-resolution samples, address increment,
+MPU9250 I2C bypass after reset, signed AG samples, little-endian AK8963 samples,
+factory trim, overflow rejection and short transfers. The direct-register path
+is used by this example; DMP/FIFO packet parsing is not exercised.
+
+The nRF52832 library already linked the motion drivers; the HTS221 and LPS22HB
+header/source links are now included as well. Rebuild the library before the
+example. Microphone, speaker and battery measurement are outside this test.
 
 Board references:
 

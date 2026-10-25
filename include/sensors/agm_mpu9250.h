@@ -600,6 +600,7 @@ private:
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
 	bool UploadDMPImage(uint8_t * const pDmpImage, int Len);
 	void EnableFifo();
+	bool UpdateRawData();
 
 	bool vbInitialized;
 	bool vbDmpEnabled;
@@ -612,3 +613,4 @@ private:
 /** @} End of group Sensors */
 
 #endif // __AGM_MPU9250_H__
+

@@ -6790,6 +6790,26 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/ioexp_sx1509.cpp</locationURI>
 		</link>
+		<link>
+			<name>include/sensors/humi_hts221.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/humi_hts221.h</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/humi_hts221.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/humi_hts221.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/press_lps22hb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/press_lps22hb.h</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/press_lps22hb.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/press_lps22hb.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

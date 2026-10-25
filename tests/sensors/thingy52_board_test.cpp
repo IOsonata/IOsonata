@@ -140,6 +140,27 @@ static void TestBoardSequences()
 	assert(bus.Reg[0x11] == 0x60); // Lightwell unaffected by gas power-off.
 }
 
+static void TestMotionPower()
+{
+	BoardBus bus;
+	IoExpSx1509 expander;
+	uint64_t before;
+
+	assert(Thingy52ExpanderInit(expander, bus));
+	assert(Thingy52GasPower(expander, true));
+	assert(Thingy52ColorLight(expander, true, false, true));
+	before = g_DelayUs;
+	assert(Thingy52MotionPower(expander, true));
+	assert(g_DelayUs - before >= 100000);
+	assert(bus.Reg[0x10] == 0x5D && bus.Reg[0x11] == 0xE0);
+	assert(Thingy52GasWake(true, &expander));
+	assert(bus.Reg[0x10] == 0x4D); // Motion stays powered during gas access.
+	assert(Thingy52MotionPower(expander, false));
+	assert(bus.Reg[0x10] == 0x4C); // Gas and illumination remain unchanged.
+	bus.FailWrite = 0x10;
+	assert(!Thingy52MotionPower(expander, true));
+}
+
 static void TestFailures()
 {
 	BoardBus bus;
@@ -163,6 +184,7 @@ int main()
 {
 	TestPowerAndPins();
 	TestBoardSequences();
+	TestMotionPower();
 	TestFailures();
 	puts("Thingy52 board tests: PASS");
 	return 0;
