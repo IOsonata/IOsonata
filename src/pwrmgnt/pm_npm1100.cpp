@@ -24,7 +24,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include "pwrmgnt/pm_npm1100.h"
-#include "coredev/iopinctrl.h"
+#include "iopinctrl.h"
 
 void PmnPM1100::Select100mA()
 {
