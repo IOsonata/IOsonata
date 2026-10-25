@@ -450,6 +450,36 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		CmWipe(stream, sizeof(stream));
 		CmWipe(counters, sizeof(counters));
 	}
+	else if (bEncrypt == 0)
+	{
+		uint8_t chain[AES_BLOCK];
+		uint8_t ciphertext[CM_AES_BATCH];
+		uint8_t plaintext[CM_AES_BATCH];
+
+		memcpy(chain, pIv, AES_BLOCK);
+		for (size_t off = 0; off < Len; )
+		{
+			size_t count = Len - off < CM_AES_BATCH ? Len - off : CM_AES_BATCH;
+			memcpy(ciphertext, pIn + off, count);
+			if (!CmAesBlock(this, key, keyLen, false, ciphertext, plaintext, count))
+			{
+				status = CRYPTO_STATUS_FAIL;
+				break;
+			}
+			for (size_t i = 0; i < count; i += AES_BLOCK)
+			{
+				for (size_t j = 0; j < AES_BLOCK; j++)
+				{
+					pOut[off + i + j] = plaintext[i + j] ^ chain[j];
+				}
+				memcpy(chain, ciphertext + i, AES_BLOCK);
+			}
+			off += count;
+		}
+		CmWipe(chain, sizeof(chain));
+		CmWipe(ciphertext, sizeof(ciphertext));
+		CmWipe(plaintext, sizeof(plaintext));
+	}
 	else
 	{
 		uint8_t chain[AES_BLOCK];
