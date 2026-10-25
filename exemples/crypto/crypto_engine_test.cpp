@@ -132,10 +132,10 @@ static const UARTCfg_t s_UartCfg = {
 	.RxMemSize = 0,
 	.pRxMem = NULL,
 	#if CRYPTO_TEST_UART_POLLING
-		0,
+	.TxMemSize = 0,
 	.pTxMem = NULL,
 #else
-		sizeof(s_UartTxMem),
+	.TxMemSize = sizeof(s_UartTxMem),
 	.pTxMem = s_UartTxMem,
 #endif
 	.bDMAMode = false,
