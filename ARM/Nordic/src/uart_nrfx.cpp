@@ -827,9 +827,15 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
     int cnt = 0;
     int rtry = pDev->MaxRetry;
+    int stalled = 0;
+    const bool blocking = dev->pUartDev->hTxFifo->bBlocking;
 
-    while (Datalen > 0 && rtry-- > 0)
+    // A blocking FIFO must wait for DMA to free space; the legacy
+    // MaxRetry limit is appropriate only for non-blocking clients.
+    // Bound successive no-progress attempts if interrupts cannot run.
+    while (Datalen > 0 && (blocking || rtry-- > 0))
     {
+        int before = Datalen;
         uint32_t state = DisableInterrupt();
 
         while (Datalen > 0)
@@ -892,6 +898,17 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
             }
         }
         EnableInterrupt(state);
+        if (Datalen == before)
+        {
+            if (++stalled >= (blocking ? 1000000 : 1))
+            {
+                break;
+            }
+        }
+        else
+        {
+            stalled = 0;
+        }
     }
 
     // Datalen is what is left and cnt is what was accepted, both moved by the
