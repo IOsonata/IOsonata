@@ -146,6 +146,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
 		</link>
 		<link>
+			<name>include/idelay.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/idelay.h</locationURI>
+		</link>
+		<link>
 			<name>include/intelhex.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
@@ -826,9 +831,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/systick.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/systick.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/timer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/timer_systick.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/timer_systick.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/uart.h</name>
@@ -846,9 +861,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/ba414ep.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto/cc3xx_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/cc3xx_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto/crypto.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_cc3xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/crypto_cc3xx.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_cc3xx_sym.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/crypto_cc3xx_sym.h</locationURI>
 		</link>
 		<link>
 			<name>include/crypto/crypto_softaes.h</name>
@@ -899,6 +929,11 @@
 			<name>include/dfu/dfu_boot.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_boot.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_cm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/dfu_cm.h</locationURI>
 		</link>
 		<link>
 			<name>include/dfu/dfu_http.h</name>
@@ -1651,6 +1686,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_cdcdef.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usb_def.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_def.h</locationURI>
@@ -2004,6 +2044,11 @@
 			<name>src/coredev/timer_ra4m1.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/src/timer_ra4m1.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_systick.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/timer_systick.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/uart.cpp</name>
