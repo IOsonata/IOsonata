@@ -49,7 +49,13 @@ enum : uint32_t {
 	REG_DIN = 0xC00U,
 	REG_DIN_SIZE = 0xC48U,
 	REG_DOUT_EMPTY = 0xD50U,
+#if defined(NRF52840_XXAA)
+	// CC310 shares its CPU DIN/DOUT buffer window at 0xC00.
+	REG_DOUT = 0xC00U,
+#else
+	// CC312 has a separate DOUT buffer window.
 	REG_DOUT = 0xD00U,
+#endif
 	REG_HASH_SEL_AES_MAC = 0x6A4U,
 	REG_HASH_CONTROL = 0x7C0U,
 	REG_HASH_PAD_ENABLE = 0x7C4U,
