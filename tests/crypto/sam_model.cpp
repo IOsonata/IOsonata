@@ -13,7 +13,7 @@ SamRng g_Rng;
 SamPmc g_Pmc = {};
 bool g_AesTimeout = false, g_RngTimeout = false;
 unsigned g_AesBlocks = 0;
-static uint8_t s_Key[32], s_Input[16], s_Output[16];
+static uint8_t s_Key[32], s_DecKey[32], s_Input[16], s_Output[16];
 static unsigned s_In, s_Out;
 static bool s_RngEnabled, s_RngReady;
 
@@ -50,7 +50,10 @@ static void RunBlock(bool sam4l)
 	assert(ctx);
 	const EVP_CIPHER *cipher = (!sam4l && (mode & AES_MR_KEYSIZE_AES256)) ?
 		EVP_aes_256_ecb() : EVP_aes_128_ecb();
-	assert(EVP_CipherInit_ex(ctx, cipher, nullptr, s_Key, nullptr, mode & 1U) == 1);
+	// AESA decryption runs on the key expanded at NEWMSG, not on the key
+	// registers as they stand when the block is written.
+	const uint8_t *key = (sam4l && (mode & 1U) == 0U) ? s_DecKey : s_Key;
+	assert(EVP_CipherInit_ex(ctx, cipher, nullptr, key, nullptr, mode & 1U) == 1);
 	assert(EVP_CIPHER_CTX_set_padding(ctx, 0) == 1);
 	assert(EVP_CipherUpdate(ctx, s_Output, &length, s_Input, 16) == 1);
 	assert(EVP_CipherFinal_ex(ctx, s_Output + length, &final) == 1);
@@ -71,6 +74,9 @@ SamReg &SamReg::operator=(uint32_t v)
 		assert((v & AESA_CTRL_ENABLE) != 0U);
 		s_In = 0;
 		s_Out = 0;
+		if ((g_Aes.AESA_MODE.value & AESA_MODE_ENCRYPT) == 0U) {
+			memcpy(s_DecKey, s_Key, sizeof(s_DecKey));
+		}
 	}
 	if (id >= 20 && id < 28) {
 		memcpy(s_Key + 4 * (id - 20), &v, 4);
@@ -87,7 +93,7 @@ SamReg &SamReg::operator=(uint32_t v)
 		assert((g_Pm.PM_HSBMASK & PM_HSBMASK_AESA) != 0U);
 		assert((g_Scif.SCIF_GCCTRL[4].SCIF_GCCTRL.value &
 			(SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_CEN)) ==
-			(SCIF_GCCTRL_OSCSEL(0U) | SCIF_GCCTRL_CEN));
+			(SCIF_GCCTRL_OSCSEL(7U) | SCIF_GCCTRL_CEN));
 		assert(s_In < 4);
 		memcpy(s_Input + 4 * s_In++, &v, 4);
 		if (s_In == 4) {
