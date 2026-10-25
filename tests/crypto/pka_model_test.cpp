@@ -50,6 +50,14 @@ public:
 	bool Fault = false;
 	unsigned Operations = 0;
 	unsigned FailOperation = 0;
+	unsigned DoneReads = 0;
+	unsigned SramReads = 0;
+	unsigned SramWrites = 0;
+	unsigned SramReadAddresses = 0;
+	unsigned SramClears = 0;
+	unsigned MapRemaps = 0;
+	uint8_t SramDirection = 0U;
+	bool SramSwitchClear = false;
 	DevIntrf_t Intrf = {};
 
 	operator DevIntrf_t *() override { return &Intrf; }
@@ -94,9 +102,12 @@ public:
 		BIGNUM *n = Operand(0, false);
 		BIGNUM *r = BN_new();
 		BIGNUM *limit = BN_new();
+		BIGNUM *inv = nullptr;
 		uint8_t aa[48], bb[48];
 		unsigned op = Code >> 27;
 		unsigned dest = (Code >> 6) & 31;
+		uint32_t destAddr;
+		uint32_t scratchAddr;
 		Operations++;
 		if (Operations == FailOperation) Fault = true;
 		switch (op)
@@ -118,6 +129,11 @@ public:
 			break;
 		case 17: assert(BN_mod_mul(r, a, b, n, ctx)); break;
 		case 19: assert(BN_mod_exp(r, a, b, n, ctx)); break;
+		case 21:
+			inv = BN_mod_inverse(nullptr, b, n, ctx);
+			assert(inv != nullptr);
+			assert(BN_copy(r, inv));
+			break;
 		default: assert(false);
 		}
 		Reg[0x88 / 4] = (BN_is_negative(r) ? 1U << 8 : 0U) |
@@ -127,9 +143,22 @@ public:
 			BN_one(limit);
 			assert(BN_lshift(limit, limit, 384));
 			assert(BN_nnmod(r, r, limit, ctx));
-			assert(BN_bn2lebinpad(r, (uint8_t *)&Ram[Reg[dest]], 48) == 48);
+			destAddr = Reg[dest];
+			if (dest != 31U)
+			{
+				scratchAddr = Reg[31];
+				assert(scratchAddr + 12U <= 1024U);
+				assert(BN_bn2lebinpad(r, (uint8_t *)&Ram[scratchAddr], 48) == 48);
+				Reg[dest] = scratchAddr;
+				Reg[31] = destAddr;
+				MapRemaps++;
+			}
+			else
+			{
+				assert(BN_bn2lebinpad(r, (uint8_t *)&Ram[destAddr], 48) == 48);
+			}
 		}
-		BN_free(a); BN_free(b); BN_free(n); BN_free(r); BN_free(limit);
+		BN_free(a); BN_free(b); BN_free(n); BN_free(r); BN_free(limit); BN_free(inv);
 		BN_CTX_free(ctx);
 	}
 
@@ -138,10 +167,21 @@ public:
 	{
 		uint32_t addr = Word(pAddr), v;
 		assert(AddrLen == 4 && Len == 4 && addr < sizeof(Reg));
-		if (addr == 0xB0 || addr == 0xB4) v = Fault ? 0 : 1;
+		if (addr == 0xB0 || addr == 0xB4)
+		{
+			if (addr == 0xB4) DoneReads++;
+			v = Fault ? 0 : 1;
+		}
 		else if (addr == 0xDC)
 		{
-			v = Ram[Reg[0xE4 / 4]];
+			if (SramDirection == 1U)
+			{
+				assert(SramSwitchClear);
+				SramSwitchClear = false;
+			}
+			SramDirection = 2U;
+			v = Ram[Reg[0xE4 / 4]++];
+			SramReads++;
 			ResultRead = true;
 		}
 		else if (addr == 0xC50) v = 1;
@@ -170,10 +210,32 @@ public:
 			}
 			return Len;
 		}
-		if (addr == 0x8C) { Fault = false; ResultRead = false; }
+		if (addr == 0x8C)
+		{
+			Fault = false;
+			ResultRead = false;
+			SramDirection = 0U;
+			SramSwitchClear = false;
+		}
 		if (addr == 0xD4 && v == 0 && ResultRead && FailCleanup) Fault = true;
+		if (addr == 0xE0)
+		{
+			SramSwitchClear = true;
+			SramClears++;
+		}
+		if (addr == 0xE4) SramReadAddresses++;
 		Reg[addr / 4] = v;
-		if (addr == 0xD8) Ram[Reg[0xD4 / 4]++] = v;
+		if (addr == 0xD8)
+		{
+			if (SramDirection == 2U)
+			{
+				assert(SramSwitchClear);
+				SramSwitchClear = false;
+			}
+			SramDirection = 1U;
+			Ram[Reg[0xD4 / 4]++] = v;
+			SramWrites++;
+		}
 		if (addr == 0x80) Execute(v);
 		if (addr == 0xC58 || addr == 0xC48) In = 0;
 		if (addr == 0xC00)
@@ -347,6 +409,11 @@ int main()
 	uint8_t priv[32], pub[64], secret[32], hash[32] = {}, sig[64];
 	CryptoKey descriptor;
 	unsigned before;
+	unsigned beforeDone;
+	unsigned beforeSramWrites;
+	unsigned beforeReadAddresses;
+	unsigned beforeSramClears;
+	unsigned beforeRemaps;
 	TimerCfg_t timerCfg = {};
 
 	assert(CryptoEngineTest() == 0);
@@ -358,9 +425,21 @@ int main()
 	assert(cc.Init(Cc3xxIntrfInstance(), CryptoRngNrfInstance()));
 	Hex(s_PrivA, priv, sizeof(priv));
 	before = s_Cc.Operations;
+	beforeDone = s_Cc.DoneReads;
+	beforeSramWrites = s_Cc.SramWrites;
+	beforeReadAddresses = s_Cc.SramReadAddresses;
+	beforeSramClears = s_Cc.SramClears;
+	beforeRemaps = s_Cc.MapRemaps;
 	check("CC3xx imports public key through hardware",
 		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_OK &&
 		HexEq(pub, s_PubA, sizeof(pub)) && s_Cc.Operations > before);
+	check("CC3xx PKA import bounds command and SRAM traffic",
+		s_Cc.Operations - before < 30000U &&
+		s_Cc.DoneReads - beforeDone < 512U &&
+		s_Cc.SramWrites - beforeSramWrites < 1024U &&
+		s_Cc.SramReadAddresses - beforeReadAddresses == 2U &&
+		s_Cc.SramClears - beforeSramClears >= 2U &&
+		s_Cc.MapRemaps > beforeRemaps);
 	s_Cc.Busy = true;
 	memset(secret, 0xa5, sizeof(secret));
 	check("CC3xx busy preserves imported key and clears output",

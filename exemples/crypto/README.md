@@ -53,7 +53,7 @@ Port review after the App-core import failure:
 
 | Port | Software behavior and hardware overrides | Validation available |
 |---|---|---|
-| CC3xx: nRF52840, nRF5340 App, nRF91 | Hardware public-key import/key generation/ECDH; software ECDSA | Audio DK App core, 2026-10-24: 101 passed, 0 failed, 0 skipped before the CryptoCell performance changes; other targets retain host-model coverage |
+| CC3xx: nRF52840, nRF5340 App, nRF91 | Hardware public-key import/key generation/ECDH; software ECDSA | Audio DK App core, 2026-10-24: recovery revision `d245e43` passed 101, failed 0, skipped 0; current PKA performance changes require a board rerun; other targets retain host-model coverage |
 | BA414EP: nRF54 | Software import/ECDSA; hardware key generation/ECDH | Host model; board rerun pending |
 | CryptoMaster: nRF54 | Hardware AES-128/256 encryption/decryption; shared CMAC/CCM/GCM composition | DMA register model; board rerun pending |
 | nRF5340 Net ECB | Inherits software modes and AES-256 | Audio DK, 2026-10-24: 101 passed, 0 failed, 0 skipped after the AES/CMAC/CCM size reductions |
@@ -164,12 +164,33 @@ GCM at 1024 bytes fell from 138.228 ms to 21.462 ms, with only 32 additional
 flash bytes and unchanged static RAM. The software comparison also benefits
 from the shared GHASH implementation.
 
-CryptoCell key import now uses the existing hardware P-256 multiply when a
-public key is requested, including projective blinding from the secure RNG.
-Import without public output validates and stores the scalar without a
-multiply or RNG draw. Key generation shares the public-key import path.
-The first P-256 board run exposed a regression (83 passed, 18 failed).
-The accompanying operand-transfer optimization has been withdrawn: SRAM
-access again reads the hardware mapping and clears before writing operands.
-Hardware import remains, with board recovery and latency still to be verified. Rebuild
-both the MCU library and the unchanged generic CryptoTest.
+CryptoCell key import now uses the hardware P-256 multiply when a public
+key is requested, including projective blinding from the secure RNG. Import
+without public output validates and stores the scalar without a multiply or
+RNG draw. Key generation shares the public-key import path.
+
+The first P-256 board run after `7c6ae5d` exposed an operand-transfer
+regression (83 passed, 18 failed). Revision `d245e43` withdrew both transfer
+shortcuts while retaining hardware import. The Audio DK App-core rerun then
+passed 101 checks with no failures or skips. Public-key calculation remained
+too slow: the mean of eight imports was 2,058,809 us in CryptoCell versus
+487,297 us in software, so the hardware path was 4.23x slower.
+
+The nRF5340 CryptoCell 312 specification states that PKA memory mappings may
+change during operations, so operand access continues to read the hardware
+mapping instead of deriving a physical slot. Operand writes also retain the
+separate clear and write passes. The current performance pass uses the
+documented auto-incrementing PKA SRAM ports, clears the SRAM write buffer when
+changing read/write direction, builds scalar-selection masks and small
+constants with PKA operations instead of SRAM transfers, and uses the native
+ModInv operation for the final Jacobian conversion.
+
+The regularized scalar has an implicit leading one. For loop bits 255..2 its
+current prefix is below 2^254, while the P-256 order is above 2^255; therefore
+the doubled accumulator is finite and cannot equal P or -P. The full
+exceptional-point alternatives are retained only for the final two iterations.
+This choice depends only on the public loop index. The host PKA model now
+changes result mappings, enforces SRAM direction clearing and checks bounded
+PKA/SRAM traffic so the failed fixed-map assumption is no longer hidden.
+Rebuild the MCU library and unchanged generic CryptoTest before judging this
+pass; no MCU speedup or target map delta is claimed without that board run.

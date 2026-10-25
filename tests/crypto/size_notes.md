@@ -195,7 +195,7 @@ The 1024-byte software comparison also improved, to 47.566 ms. P-256 public
 key import remained software at this point: engine 487,307 us, reference
 487,306 us. Those timings do not measure the following P-256 change.
 
-## CryptoCell public-key import and operand transfers
+## CryptoCell public-key import and operand-transfer attempt
 
 KeyImport overrides inherited software public-key calculation with the same
 blinded P-256 multiply used for key generation. KeyGen generates a scalar and
@@ -203,34 +203,100 @@ shares KeyImport's calculation and failure handling. Context-only import needs
 only range validation and storage. Public-key calculation requires a secure
 blinding RNG; failure clears the destination key and public output.
 
-PKA SRAM writes combine data and zero-extension into one full-register pass,
-removing the preliminary clear. The register map is fixed by PkaInit under
-the operation lock, so operand accesses no longer reread mapping registers.
-The scalar loop, exceptional-point handling and final SRAM erasure remain.
+Revision `7c6ae5d` also tried two operand-transfer changes: it combined
+preliminary clearing and zero-extension into one SRAM write pass, and derived
+physical PKA operand addresses from the initial register layout instead of
+reading MEMORY_MAP. The host -Os CryptoCell object text changed from 13,444 to
+13,709 bytes (+265), with unchanged object data/BSS. This is not an ARM flash
+measurement. Both transfer changes were later withdrawn after the board
+regression below.
 
-The host -Os CryptoCell object text changes from 13,444 to 13,709 bytes (+265),
-with unchanged object data/BSS. This is not an ARM flash measurement. The
-production register-model suite exercises the generic test, boundary scalars,
-OpenSSL comparisons, import contention, missing/failed blinding RNG, repeated
-zero blinding values, arithmetic and cleanup timeouts, recovery and disabled
-objects. Minimal archive checks cover unwanted software AES/SHA/PRNG linkage.
-No hardware P-256 speedup or target flash delta is claimed before a board run.
+The production register-model suite exercises the generic test, boundary
+scalars, OpenSSL comparisons, import contention, missing/failed blinding RNG,
+repeated zero blinding values, arithmetic and cleanup timeouts, recovery and
+disabled objects. Minimal archive checks cover unwanted software
+AES/SHA/PRNG linkage. The model success on `7c6ae5d` did not reproduce the
+silicon mapping behavior and therefore did not establish hardware correctness.
 
-
-## P-256 board regression and transfer restoration
+## P-256 board regression and restored baseline
 
 The Audio DK App-core run after `7c6ae5d` returned 83 passed, 18 failed.
 Public-key import and valid ECDH comparisons failed; AES/GCM/hash/RNG checks
 continued to pass. CryptoTest(20261025-003032).map occupies 90,100 bytes of
-flash (+88) with unchanged 6,444-byte static RAM including alignment.
-This board result supersedes the host-model success for that revision.
+flash (+88 from the preceding GHASH result) with unchanged 6,444-byte static
+RAM including alignment. That map belongs to the failed revision.
 
-Both operand-transfer changes from that commit are withdrawn. The driver
-again reads PKA mapping registers and clears each operand before writing it,
-matching the previously hardware-tested implementation. The new hardware
-KeyImport and context-only fast path remain. The precise silicon dependency
-has not been isolated; restored board correctness and import timing are pending.
+Revision `d245e43` restored mapping-register reads and the separate clear then
+write operand sequence. The next Audio DK App-core run passed 101 checks with
+0 failures and 0 skips, confirming correctness recovery. No linker map was
+supplied for that restored run, so no target flash delta is recorded for
+`d245e43`.
+
+The restored P-256 path was not a performance success. Mean public-key
+calculation over eight imports was 2,058,809 us in CryptoCell and 487,297 us
+in software: hardware was 4.23x slower. Other timings from the same run were:
+
+| Operation | CryptoCell/target | Software reference |
+| --- | ---: | ---: |
+| AES ECB, 16 bytes | 362,828 ns | 522,156 ns |
+| AES ECB, 1024 bytes | 10,133,718 ns | 32,114,703 ns |
+| GCM, 1024 bytes | 21,810,359 ns | 45,057,687 ns |
+| RNG, 1024 bytes | 89,541,000 ns | n/a |
+| P-256 public-key calculation | 2,058,809 us | 487,297 us |
 
 The generic P-256 soak now counts executed ECDH and signature rounds. A
 public-key failure previously bypassed those checks while allowing them to
 print PASS. Each result now requires all requested rounds to have executed.
+
+## P-256 transaction and arithmetic reduction
+
+The nRF5340 CryptoCell 312 product specification documents three relevant PKA
+properties that the previous model did not represent:
+
+- MEMORY_MAP entries may be changed dynamically by the PKA engine.
+- PKA SRAM read and write data ports auto-increment their address.
+- The SRAM write buffer must be cleared when changing between read and write
+  access.
+
+The fixed-address shortcut from `7c6ae5d` is therefore invalid. The optimized
+driver continues to read the current hardware mapping for operand access and
+retains the separate full clear before each partial operand write.
+
+The new pass reduces the valid scalar-multiply path without changing the
+generic application, key validation, projective blinding, scalar
+regularization, bounded waits, ownership, cleanup, or result wiping:
+
+- SRAM words are streamed through the documented auto-incrementing ports.
+  Per-word PKA_DONE polling and repeated read-address programming are removed;
+  a bounded completion check remains around each transfer.
+- PKA_SRAM_WCLEAR is issued when the access direction changes.
+- Final physical SRAM erasure is one contiguous auto-incrementing write over
+  the same 32 allocated 48-byte slots.
+- Selection masks and small temporary constants are formed with PKA logical
+  and immediate operations instead of repeated 48-byte SRAM mask writes.
+- The final Jacobian-to-affine conversion uses the PKA ModInv opcode instead
+  of exponentiating Z to p-2.
+- The regularized scalar has an implicit leading one. Before loop bits 255..2,
+  its processed prefix r is below 2^254. Since the P-256 order is above
+  2^255, 2*r*P is finite and cannot equal P or -P. The expensive exceptional
+  PointAdd alternatives are therefore retained only for bits 1 and 0. This
+  branch depends only on the public loop index.
+
+For a successful 256-bit multiply, source-level helper expansion reduces the
+scalar loop from roughly 44.8k PKA opcode submissions to roughly 24.5k, before
+setup and affine conversion. It also removes the old 1,280 per-iteration
+selection-mask SRAM writes; those masks alone previously caused 30,720
+PKA_SRAM_WDATA word writes (12 clear plus 12 mask words per selection).
+These are structural command/transaction counts, not MCU timing measurements.
+
+The CC3xx PKA model now changes a result register's mapping after arithmetic,
+auto-increments SRAM reads, requires PKA_SRAM_WCLEAR on direction changes,
+models ModInv, and adds a successful-import traffic guard: fewer than 30,000
+PKA operations, fewer than 1,024 SRAM word writes, fewer than 512 PKA_DONE
+reads, two read-address programs, at least two direction clears, and observed
+dynamic remapping. This closes the model gap that allowed the fixed-map
+optimization to pass.
+
+A fresh host runner result, MCU build, linker map and Audio DK timing are still
+required for this performance pass. No new target flash/RAM size or hardware
+speedup is claimed here.
