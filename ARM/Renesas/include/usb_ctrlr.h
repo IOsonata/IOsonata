@@ -26,7 +26,7 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 	INT = USB_ENDPATT_TRANS_INT,
 } UsbCtrlrTransType_t;
 
-#if defined(RA4M1_USBFS)
+#if defined(RA4M1)
 enum {
 	USB_CTRLR_CNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 0,
