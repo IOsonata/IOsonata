@@ -660,7 +660,8 @@ static void PointSelectCopy(Device *pDev, const PkaPoint &Zero, const PkaPoint &
 	}
 }
 
-static void PointAdd(Device *pDev, const PkaPoint &P, const PkaPoint &Q,
+// Q remains affine (Q.Z = 1); P and R use Jacobian coordinates.
+static void PointAddMixed(Device *pDev, const PkaPoint &P, const PkaPoint &Q,
 					 const PkaPoint &R, bool Complete)
 {
 	const PkaReg_t t0 = P256_T0;
@@ -683,11 +684,9 @@ static void PointAdd(Device *pDev, const PkaPoint &P, const PkaPoint &Q,
 	}
 
 	PkaModMul(pDev, P.Z, P.Z, t0);
-	PkaModMul(pDev, Q.Z, Q.Z, t1);
-	PkaModMul(pDev, P.X, t1, u1);
+	PkaCopy(pDev, P.X, u1);
 	PkaModMul(pDev, Q.X, t0, u2);
-	PkaModMul(pDev, P.Y, Q.Z, s1);
-	PkaModMul(pDev, s1, t1, s1);
+	PkaCopy(pDev, P.Y, s1);
 	PkaModMul(pDev, Q.Y, P.Z, s2);
 	PkaModMul(pDev, s2, t0, s2);
 
@@ -698,10 +697,7 @@ static void PointAdd(Device *pDev, const PkaPoint &P, const PkaPoint &Q,
 	}
 
 	PkaModSub(pDev, u2, u1, u2);
-	PkaModAdd(pDev, P.Z, Q.Z, R.Z);
-	PkaModMul(pDev, R.Z, R.Z, R.Z);
-	PkaModSub(pDev, R.Z, t0, R.Z);
-	PkaModSub(pDev, R.Z, t1, R.Z);
+	PkaModAdd(pDev, P.Z, P.Z, R.Z);
 	PkaModMul(pDev, R.Z, u2, R.Z);
 	PkaModAdd(pDev, u2, u2, t1);
 	PkaModMul(pDev, t1, t1, t1);
@@ -839,13 +835,13 @@ static bool P256Multiply(Device *pDev, const uint8_t Point[64],
 	{
 		goto out;
 	}
-	if (Randomize && !RandomizePoint(pDev, ProjectiveZ, POINT_P))
+	PointCopy(pDev, POINT_P, POINT_R);
+	if (Randomize && !RandomizePoint(pDev, ProjectiveZ, POINT_R))
 	{
 		goto out;
 	}
 
 	P256RegularizeScalar(Scalar, regular);
-	PointCopy(pDev, POINT_P, POINT_R);
 
 	// For bits 255..2, the regularized scalar prefix r is below 2^254.
 	// Since the P-256 order is above 2^255, 2*r*P is finite and cannot
@@ -854,7 +850,7 @@ static bool P256Multiply(Device *pDev, const uint8_t Point[64],
 	for (int bit = 255; bit >= 0; bit--)
 	{
 		PointDouble(pDev, POINT_R, POINT_D);
-		PointAdd(pDev, POINT_D, POINT_P, POINT_A, bit <= 1);
+		PointAddMixed(pDev, POINT_D, POINT_P, POINT_A, bit <= 1);
 		PointSelectCopy(pDev, POINT_D, POINT_A,
 						 P256RegularBit(regular, (uint32_t)bit), POINT_R);
 		if (s_bPkaFault)
