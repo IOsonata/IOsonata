@@ -7,6 +7,7 @@
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 #include "nrf_soc.h"
 #include "nrf_sdm.h"
+extern "C" void ResetEntry(void);
 #endif
 
 #if !defined(NRF5340_XXAA_NETWORK) && !defined(NRF52_SERIES) && \
@@ -53,10 +54,16 @@ bool CryptoEcbNrf::AesEcbEncrypt(const uint8_t Key[16],
 	uint32_t status;
 	nrf_ecb_hal_data_t data;
 
-	if (sd_softdevice_is_enabled(&enabled) != NRF_SUCCESS)
+	// The standalone image owns the vector table at zero. In that case
+	// no SoftDevice SVC handler exists; use the ECB peripheral directly.
+	if (*(volatile const uint32_t *)(uintptr_t)4U !=
+		(uint32_t)(uintptr_t)&ResetEntry)
 	{
-		CryptoSecureWipe(Out, 16U);
-		return false;
+		if (sd_softdevice_is_enabled(&enabled) != NRF_SUCCESS)
+		{
+			CryptoSecureWipe(Out, 16U);
+			return false;
+		}
 	}
 	if (enabled != 0U)
 	{
