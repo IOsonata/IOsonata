@@ -366,3 +366,22 @@ SVC for standalone applications. Benchmark timer: 1 MHz.
 The nRF52832 has hardware AES-128 ECB but no hardware P-256 accelerator.
 The P-256 default path therefore matches software timing. No linker map
 or peak-stack measurement was supplied for this run.
+
+## STM32L475 B-L475E-IOT01A hardware validation, 2026-10-24
+
+The maintainer's generic CryptoTest completed **101 passed, 0 failed,
+0 skipped**, with a 1 MHz benchmark timer. All AES-128/256, SHA-256/HMAC,
+CMAC, CCM, GCM, P-256, ECDH/ECDSA, and RNG tests passed.
+
+| Operation | Target | Software reference |
+| --- | ---: | ---: |
+| AES ECB, 16 B | 185,171 ns | 171,640 ns |
+| AES ECB, 1024 B | 10,418,234 ns | 10,404,671 ns |
+| CCM, 1024 B | 21,620,718 ns | 21,607,703 ns |
+| GCM, 1024 B | 14,250,218 ns | 14,237,078 ns |
+| P-256 public-key import (8 mean) | 194,147 us | 194,147 us |
+| RNG, 1024 B | 224,703 ns | n/a |
+
+The target and software comparisons have nearly equal execution time for
+large operations, consistent with software execution for those operations.
+No linker map or peak-stack measurement was supplied for this run.

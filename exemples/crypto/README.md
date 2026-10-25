@@ -221,3 +221,12 @@ generic test and uses `blueio_board.h` UART TX/RX mappings. Hardware ECB
 accelerates AES-128, CMAC and CCM; P-256 uses software. The measured mean of
 eight public-key imports was 246,751 us versus 246,746 us in the software
 reference. No MCU linker map was supplied for this run.
+
+## STM32L475 B-L475E-IOT01A validation
+
+The maintainer's STM32L475 CryptoTest passed **101 tests, 0 failures,
+0 skips** with a 1 MHz timer. AES ECB at 1024 bytes measured 10.418 ms
+versus 10.405 ms in the software reference; P-256 import averaged
+194,147 us for both the target and reference. The 1024-byte RNG draw
+measured 224,703 ns. These timings are from the generic CryptoTest;
+no linker map was supplied.
