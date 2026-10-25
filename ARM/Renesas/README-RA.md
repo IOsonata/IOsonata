@@ -5,6 +5,8 @@ MCU groups nested below their series. Do not introduce an extra `RA/` parent.
 
 ```text
 ARM/Renesas/
+    include/          # common across compatible Renesas MCU families
+    src/              # common across compatible Renesas MCU families
     RA0/
         <MCU-group>/
     RA2/
@@ -36,8 +38,12 @@ Share proven peripheral-IP-compatible code at the narrowest useful scope,
 for example `ARM/Renesas/RA4/include` and `ARM/Renesas/RA4/src`
 for common RA4 IP, and target-specific code under `RA4/RA4M1`.
 Do not presume register, IRQ, clock, flash, DMAC, security or peripheral
-compatibility solely from the series name. Cross-series code should live in
-an explicitly named common directory only after compatibility is verified.
+compatibility solely from the series name. Renesas-wide reusable code belongs in `ARM/Renesas/include` and
+`ARM/Renesas/src`, but only after compatibility is verified across the
+Renesas targets that compile it. This level is shared by RA and RE01 where
+appropriate, not a dumping ground for hardware-specific implementations.
+Do not force all Renesas devices to compile a common source if the underlying
+peripheral IP differs.
 
 Keep IOsonata's existing public interfaces, native MCU startup and
 device-header selection, with no FSP dependency. MCU library projects select
