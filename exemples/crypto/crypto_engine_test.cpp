@@ -828,6 +828,7 @@ static void PkaSoak(KeyAgreeEngine *pKa, SignEngine *pSign, KeyAgreeEngine *pRef
 {
 	int n = CRYPTO_TEST_SOAK_PKA;
 	int badPub = 0, badDh = 0, badSig = 0;
+	int dhRounds = 0, sigRounds = 0;
 	uint64_t hwTicks = 0, swTicks = 0;
 	int timed = 0;
 
@@ -874,6 +875,7 @@ static void PkaSoak(KeyAgreeEngine *pKa, SignEngine *pSign, KeyAgreeEngine *pRef
 		}
 		memset(dhHw, 0, sizeof(dhHw));
 		memset(dhSw, 0, sizeof(dhSw));
+		dhRounds++;
 		CRYPTO_STATUS d1 = pKa->Agree(CRYPTO_CURVE_P256, s_CtxA, pubPeer, dhHw);
 		CRYPTO_STATUS d2 = pRefKa->Agree(CRYPTO_CURVE_P256, s_CtxB, pubHw, dhSw);
 		if (d1 != CRYPTO_STATUS_OK || d2 != CRYPTO_STATUS_OK || memcmp(dhHw, dhSw, 32) != 0)
@@ -882,6 +884,7 @@ static void PkaSoak(KeyAgreeEngine *pKa, SignEngine *pSign, KeyAgreeEngine *pRef
 		}
 
 		// Signatures cross-checked
+		sigRounds++;
 		XsFill(hash, sizeof(hash));
 		CryptoKey k = EccKey(priv, CRYPTO_KEY_USE_SIGN);
 		if (pSign->Sign(CRYPTO_CURVE_P256, k, hash, 32, sig) != CRYPTO_STATUS_OK ||
@@ -894,9 +897,9 @@ static void PkaSoak(KeyAgreeEngine *pKa, SignEngine *pSign, KeyAgreeEngine *pRef
 		}
 	}
 
-	check("public keys equal the software engine", badPub == 0);
-	check("shared secrets equal the software engine", badDh == 0);
-	check("signatures verify across the two engines", badSig == 0);
+	check("public keys equal the software engine", n > 0 && badPub == 0);
+	check("shared secrets equal the software engine", n > 0 && dhRounds == n && badDh == 0);
+	check("signatures verify across the two engines", n > 0 && sigRounds == n && badSig == 0);
 
 	if (timed > 0)
 	{

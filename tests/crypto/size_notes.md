@@ -215,3 +215,22 @@ OpenSSL comparisons, import contention, missing/failed blinding RNG, repeated
 zero blinding values, arithmetic and cleanup timeouts, recovery and disabled
 objects. Minimal archive checks cover unwanted software AES/SHA/PRNG linkage.
 No hardware P-256 speedup or target flash delta is claimed before a board run.
+
+
+## P-256 board regression and transfer restoration
+
+The Audio DK App-core run after `7c6ae5d` returned 83 passed, 18 failed.
+Public-key import and valid ECDH comparisons failed; AES/GCM/hash/RNG checks
+continued to pass. CryptoTest(20261025-003032).map occupies 90,100 bytes of
+flash (+88) with unchanged 6,444-byte static RAM including alignment.
+This board result supersedes the host-model success for that revision.
+
+Both operand-transfer changes from that commit are withdrawn. The driver
+again reads PKA mapping registers and clears each operand before writing it,
+matching the previously hardware-tested implementation. The new hardware
+KeyImport and context-only fast path remain. The precise silicon dependency
+has not been isolated; restored board correctness and import timing are pending.
+
+The generic P-256 soak now counts executed ECDH and signature rounds. A
+public-key failure previously bypassed those checks while allowing them to
+print PASS. Each result now requires all requested rounds to have executed.

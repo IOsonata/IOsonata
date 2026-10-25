@@ -198,10 +198,9 @@ static void CcRegWrite(Device *pDev, uint32_t Offset, uint32_t Value)
 	pDev->Write32(off, 4, Value);
 }
 
-static inline uint32_t PkaMap(uint32_t Reg)
+static inline uint32_t PkaMap(Device *pDev, uint32_t Reg)
 {
-	// PkaInit installs this fixed map once under the operation lock.
-	return Reg * PKA_REG_WORDS;
+	return CcRegRead(pDev, REG_PKA_MEMORY_MAP + Reg * sizeof(uint32_t));
 }
 
 static inline void PkaMapWrite(Device *pDev, uint32_t Reg, uint32_t Value)
@@ -311,7 +310,7 @@ static void PkaClear(Device *pDev, PkaReg_t Reg)
 	{
 		return;
 	}
-	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(Reg));
+	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(pDev, Reg));
 	for (uint32_t idx = 0U; idx < PKA_REG_WORDS; idx++)
 	{
 		CcRegWrite(pDev, REG_PKA_SRAM_WRITE, 0U);
@@ -324,21 +323,18 @@ static void PkaClear(Device *pDev, PkaReg_t Reg)
 
 static void PkaWrite(Device *pDev, PkaReg_t Reg, const uint32_t *pData, size_t Len)
 {
-	size_t idx;
-
 	assert(PkaRegValid(Reg));
 	assert(pData != nullptr);
 	assert(Len <= PKA_REG_BYTES && (Len & 3U) == 0U);
-	if (!PkaWaitDone(pDev))
+	PkaClear(pDev, Reg);
+	if (s_bPkaFault)
 	{
 		return;
 	}
-	// Overwrite every word, including zero extension, in one SRAM pass.
-	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(Reg));
-	for (idx = 0U; idx < PKA_REG_WORDS; idx++)
+	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(pDev, Reg));
+	for (size_t idx = 0U; idx < Len / sizeof(uint32_t); idx++)
 	{
-		CcRegWrite(pDev, REG_PKA_SRAM_WRITE,
-			idx < Len / sizeof(uint32_t) ? pData[idx] : 0U);
+		CcRegWrite(pDev, REG_PKA_SRAM_WRITE, pData[idx]);
 		if (!PkaWaitDone(pDev))
 		{
 			return;
@@ -348,28 +344,24 @@ static void PkaWrite(Device *pDev, PkaReg_t Reg, const uint32_t *pData, size_t L
 
 static void PkaWriteBe(Device *pDev, PkaReg_t Reg, const uint8_t *pData, size_t Len)
 {
-	size_t idx;
-	uint32_t word;
-
 	assert(PkaRegValid(Reg));
 	assert(pData != nullptr);
 	assert(Len <= PKA_REG_BYTES && (Len & 3U) == 0U);
-	if (!PkaWaitDone(pDev))
+	PkaClear(pDev, Reg);
+	if (s_bPkaFault)
 	{
 		return;
 	}
-	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(Reg));
-	for (idx = 0U; idx < PKA_REG_WORDS; idx++)
+	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(pDev, Reg));
+	for (size_t idx = 0U; idx < Len / sizeof(uint32_t); idx++)
 	{
-		word = idx < Len / sizeof(uint32_t) ?
-			LoadBe32(pData + Len - (idx + 1U) * sizeof(uint32_t)) : 0U;
-		CcRegWrite(pDev, REG_PKA_SRAM_WRITE, word);
+		const size_t offset = Len - (idx + 1U) * sizeof(uint32_t);
+		CcRegWrite(pDev, REG_PKA_SRAM_WRITE, LoadBe32(&pData[offset]));
 		if (!PkaWaitDone(pDev))
 		{
-			break;
+			return;
 		}
 	}
-	CryptoSecureWipe(&word, sizeof(word));
 }
 
 static void PkaReadBe(Device *pDev, PkaReg_t Reg, uint8_t *pData, size_t Len)
@@ -384,7 +376,7 @@ static void PkaReadBe(Device *pDev, PkaReg_t Reg, uint8_t *pData, size_t Len)
 	}
 	for (size_t idx = 0U; idx < Len / sizeof(uint32_t); idx++)
 	{
-		CcRegWrite(pDev, REG_PKA_SRAM_READ_ADDR, PkaMap(Reg) + (uint32_t)idx);
+		CcRegWrite(pDev, REG_PKA_SRAM_READ_ADDR, PkaMap(pDev, Reg) + (uint32_t)idx);
 		if (!PkaWaitDone(pDev))
 		{
 			memset(pData, 0, Len);

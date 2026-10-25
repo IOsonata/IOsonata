@@ -168,7 +168,8 @@ CryptoCell key import now uses the existing hardware P-256 multiply when a
 public key is requested, including projective blinding from the secure RNG.
 Import without public output validates and stores the scalar without a
 multiply or RNG draw. Key generation shares the public-key import path.
-PKA operand writes overwrite and zero-extend each register in one pass;
-register addresses use the fixed mapping installed by PkaInit. Hardware
-latency and flash cost for this P-256 change remain to be measured. Rebuild
+The first P-256 board run exposed a regression (83 passed, 18 failed).
+The accompanying operand-transfer optimization has been withdrawn: SRAM
+access again reads the hardware mapping and clears before writing operands.
+Hardware import remains, with board recovery and latency still to be verified. Rebuild
 both the MCU library and the unchanged generic CryptoTest.

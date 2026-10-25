@@ -32,7 +32,8 @@ with tempfile.TemporaryDirectory(prefix="crypto-objects-") as temp:
             objects.append(obj)
         archive = out / "libcrypto-test.a"
         run(["ar", "rcs", archive, *objects])
-        for source in ("tests/crypto/object_test.cpp", "exemples/crypto/crypto_engine_test.cpp"):
+        for source in ("tests/crypto/object_test.cpp", "tests/crypto/soak_failure_test.cpp",
+                       "exemples/crypto/crypto_engine_test.cpp"):
             executable = out / Path(source).stem
             run(["g++", "-std=gnu++23", "-fno-rtti", "-fno-exceptions", *flags,
                  *includes, ROOT / source, archive, "-Wl,--gc-sections", "-o", executable])
