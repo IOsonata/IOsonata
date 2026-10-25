@@ -424,3 +424,24 @@ ECDH/ECDSA and randomized comparisons all passed.
 | P-256 public-key import (8 mean) | 362,360 us | 371,158 us |
 
 No linker map or peak-stack measurement was supplied.
+
+## nRF54L15 DK CryptoTest hardware validation, 2026-10-25
+
+Maintainer's generic CryptoTest completed **101 passed, 0 failed, 0 skipped**.
+AES-128/256, SHA-256/HMAC, CMAC, CCM, GCM, P-256/ECDH/ECDSA,
+randomized comparisons, and RNG checks passed. The UART capture contains
+truncated/interleaved lines; the P-256 timing and complete timer-frequency
+line cannot be recovered reliably. These are captured values, not a new
+measurement.
+
+| Operation | Target | Software reference |
+| --- | ---: | ---: |
+| AES ECB, 1024 B | 37,052,703 ns | 44,769,484 ns |
+| AES CTR, 1024 B | 37,897,093 ns | 45,138,484 ns |
+| AES CBC, 1024 B | 38,390,625 ns | 45,250,812 ns |
+| CMAC, 1024 B | 40,068,953 ns | 47,062,453 ns |
+| CCM, 1024 B | 81,079,562 ns | 94,158,031 ns |
+| GCM, 1024 B | 58,314,406 ns | 64,668,890 ns |
+| RNG, 1024 B | 2,332,421 ns | n/a |
+
+No linker map or peak-stack measurement was supplied.

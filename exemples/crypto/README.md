@@ -247,3 +247,13 @@ The maintainer's nRF91x1 CryptoTest completed **101 passed,
 SHA-256/HMAC, P-256, RNG and randomized comparisons. At 1024 bytes,
 AES ECB measured 7.111 ms versus 22.715 ms for software; P-256
 public-key import averaged 362,360 us versus 371,158 us for software.
+
+## nRF54L15 DK validation
+
+The nRF54L15 DK CryptoTest project links the generic crypto test and
+was hardware-tested by the maintainer: **101 passed, 0 failed, 0 skipped**.
+Captured UART output was partially truncated or interleaved; P-256
+benchmark time and the complete timer-frequency line are unavailable.
+AES ECB at 1024 bytes measured 37.053 ms for the target and 44.769 ms
+for the software reference. Further performance comparisons require a
+clean UART capture.
