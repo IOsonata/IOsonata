@@ -180,12 +180,20 @@ bool PmnPM1300FuelGauge::SaveFuelGaugeState(void *pState, size_t Size)
 
 float PmnPM1300FuelGauge::TimeToEmpty()
 {
-	float tte;\n\n\tif (Level() == UINT16_MAX || nrf_fuel_gauge_tte_get(&tte) != 0)\n\t\treturn NAN;\n\treturn tte;
+	float tte;
+
+	if (Level() == UINT16_MAX || nrf_fuel_gauge_tte_get(&tte) != 0)
+		return NAN;
+	return tte;
 }
 
 float PmnPM1300FuelGauge::TimeToFull()
 {
-	float ttf;\n\n\tif (Level() == UINT16_MAX || nrf_fuel_gauge_ttf_get(&ttf) != 0)\n\t\treturn NAN;\n\treturn ttf;
+	float ttf;
+
+	if (Level() == UINT16_MAX || nrf_fuel_gauge_ttf_get(&ttf) != 0)
+		return NAN;
+	return ttf;
 }
 
 void PmnPM1300FuelGauge::Reset()
