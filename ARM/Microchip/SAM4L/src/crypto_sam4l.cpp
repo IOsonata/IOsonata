@@ -130,7 +130,7 @@ bool CryptoSam::Enable()
 	{
 		return false;
 	}
-	// Source 7 is CLK_CPU.
+	// Apply the active clock source selected above.
 	SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL = aesClock;
 	clock = SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL;
 	if ((clock & (SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_DIVEN |
@@ -138,6 +138,8 @@ bool CryptoSam::Enable()
 	{
 		return false;
 	}
+	// ASF enables AESA once, after configuring the generic clock.
+	SAM4L_AESA->AESA_CTRL = AESA_CTRL_ENABLE;
 	SAM4L_TRNG->TRNG_IDR = TRNG_IDR_DATRDY;
 	SAM4L_TRNG->TRNG_CR = TRNG_CR_KEY(0x524E47U) | TRNG_CR_ENABLE;
 	if (!RngWord(&word))
@@ -175,7 +177,6 @@ void CryptoSam::AesOpEnd()
 	uintptr_t state;
 	unsigned i;
 
-	SAM4L_AESA->AESA_CTRL = AESA_CTRL_SWRST;
 	for (i = 0U; i < 4U; i++)
 	{
 		SAM4L_AESA->AESA_KEY[i].AESA_KEY = 0U;
@@ -199,7 +200,7 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 		CryptoSecureWipe(Out, 16U);
 		return false;
 	}
-	SAM4L_AESA->AESA_CTRL = AESA_CTRL_SWRST;
+	// Keep AESA enabled between blocks, as in the ASF SAM4L driver.
 	SAM4L_AESA->AESA_MODE = AESA_MODE_CTYPE(15U) | (Encrypt ? AESA_MODE_ENCRYPT : 0U);
 	SAM4L_AESA->AESA_DRNGSEED = word;
 	SAM4L_AESA->AESA_CTRL = AESA_CTRL_ENABLE | AESA_CTRL_NEWMSG;
