@@ -77,12 +77,7 @@
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/src/vectors_ra4m1.c</locationURI>
 		</link>
-		<link>
-			<name>src/ra4m1_startup_regs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_startup_regs.h</locationURI>
-		</link>
-		<link>
+<link>
 			<name>include/ra4m1_ioregs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/include/ra4m1_ioregs.h</locationURI>
@@ -132,12 +127,7 @@
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/include/timer_ra4m1.h</locationURI>
 		</link>
-		<link>
-			<name>src/ra4m1_timer_regs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_timer_regs.h</locationURI>
-		</link>
-		<link>
+<link>
 			<name>src/timer_ra4m1.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/src/timer_ra4m1.cpp</locationURI>
