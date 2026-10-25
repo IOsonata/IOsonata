@@ -67,7 +67,7 @@ bool PmnPM1300FuelGauge::InformFuelGauge(const Npm1300BatterySample_t &Sample)
 	else if ((Sample.ChargerStatus & (1U << 2)) != 0)
 		data.charge_state = NRF_FUEL_GAUGE_CHARGE_STATE_TRICKLE;
 	else if ((Sample.ChargerStatus & (1U << 3)) != 0)
-		data.charge_state = NRF_FUEL_GAUGE_CHARGE_STATE_CC_VBUS_LIMITED;
+		data.charge_state = NRF_FUEL_GAUGE_CHARGE_STATE_CC_LIMITED;
 	else if ((Sample.ChargerStatus & (1U << 4)) != 0)
 		data.charge_state = NRF_FUEL_GAUGE_CHARGE_STATE_CV;
 	else
@@ -114,7 +114,9 @@ bool PmnPM1300FuelGauge::StartFuelGauge(const battery_model &Model, uint32_t Now
 	params.state = pState;
 	if (nrf_fuel_gauge_init(&params, NULL) != 0 || !InformFuelGauge(sample))
 		return false;
-	soc = nrf_fuel_gauge_process(params.v0, params.i0, params.t0, 0.0f, NULL);
+	if (nrf_fuel_gauge_process(params.v0, params.i0, params.t0, 0.0f,
+		&soc, NULL) != 0)
+		return false;
 	s_pOwner = this;
 	vSampleTimeMs = NowMs;
 	if (!SetLevel(soc))
@@ -139,9 +141,11 @@ bool PmnPM1300FuelGauge::UpdateFuelGauge(uint32_t NowMs)
 	if (elapsed == 0 || elapsed > INT32_MAX || !ReadBatterySample(sample) ||
 		!InformFuelGauge(sample))
 		return false;
-	soc = nrf_fuel_gauge_process((float)sample.VoltageMv / 1000.0f,
+	if (nrf_fuel_gauge_process((float)sample.VoltageMv / 1000.0f,
 		(float)sample.CurrentUa / 1000000.0f,
-		(float)sample.TemperatureDeciC / 10.0f, (float)elapsed / 1000.0f, NULL);
+		(float)sample.TemperatureDeciC / 10.0f, (float)elapsed / 1000.0f,
+		&soc, NULL) != 0)
+		return false;
 	vSampleTimeMs = NowMs;
 	return SetLevel(soc);
 }
@@ -176,12 +180,12 @@ bool PmnPM1300FuelGauge::SaveFuelGaugeState(void *pState, size_t Size)
 
 float PmnPM1300FuelGauge::TimeToEmpty()
 {
-	return Level() != UINT16_MAX ? nrf_fuel_gauge_tte_get() : NAN;
+	float tte;\n\n\tif (Level() == UINT16_MAX || nrf_fuel_gauge_tte_get(&tte) != 0)\n\t\treturn NAN;\n\treturn tte;
 }
 
 float PmnPM1300FuelGauge::TimeToFull()
 {
-	return Level() != UINT16_MAX ? nrf_fuel_gauge_ttf_get() : NAN;
+	float ttf;\n\n\tif (Level() == UINT16_MAX || nrf_fuel_gauge_ttf_get(&ttf) != 0)\n\t\treturn NAN;\n\treturn ttf;
 }
 
 void PmnPM1300FuelGauge::Reset()
