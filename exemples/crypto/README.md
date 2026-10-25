@@ -45,7 +45,7 @@ Hardware compilation and board tests remain required.
 The PKA host test links the production Nordic App-core initialization and CC3xx
 implementation as an archive. OpenSSL models register arithmetic; the driver
 runs its actual point operations. The same test exercises BA414EP through an
-injected register model. It checks inherited import/signing, hardware agreement,
+injected register model. It checks hardware CC3xx import/agreement, inherited signing,
 boundary scalars, invalid peers, key consumption, busy handling, RNG rebinding,
 and a CC3xx cleanup timeout. Both optimization levels use ASan/UBSan.
 
@@ -53,7 +53,7 @@ Port review after the App-core import failure:
 
 | Port | Software behavior and hardware overrides | Validation available |
 |---|---|---|
-| CC3xx: nRF52840, nRF5340 App, nRF91 | Software import/ECDSA; hardware key generation/ECDH | Audio DK App core, 2026-10-24: 101 passed, 0 failed, 0 skipped before the CryptoCell performance changes; other targets retain host-model coverage |
+| CC3xx: nRF52840, nRF5340 App, nRF91 | Hardware public-key import/key generation/ECDH; software ECDSA | Audio DK App core, 2026-10-24: 101 passed, 0 failed, 0 skipped before the CryptoCell performance changes; other targets retain host-model coverage |
 | BA414EP: nRF54 | Software import/ECDSA; hardware key generation/ECDH | Host model; board rerun pending |
 | CryptoMaster: nRF54 | Hardware AES-128/256 encryption/decryption; shared CMAC/CCM/GCM composition | DMA register model; board rerun pending |
 | nRF5340 Net ECB | Inherits software modes and AES-256 | Audio DK, 2026-10-24: 101 passed, 0 failed, 0 skipped after the AES/CMAC/CCM size reductions |
@@ -157,3 +157,18 @@ counts and masked selection, without secret-indexed tables. `run_ghash.py`
 checks it against the former byte implementation and reports isolated host
 timing. The generic CryptoTest is unchanged. Rebuild both library and test
 to measure this change on the MCU; see the size notes for host measurements.
+
+
+The Audio DK App-core GHASH run passed 101 checks with no failures or skips.
+GCM at 1024 bytes fell from 138.228 ms to 21.462 ms, with only 32 additional
+flash bytes and unchanged static RAM. The software comparison also benefits
+from the shared GHASH implementation.
+
+CryptoCell key import now uses the existing hardware P-256 multiply when a
+public key is requested, including projective blinding from the secure RNG.
+Import without public output validates and stores the scalar without a
+multiply or RNG draw. Key generation shares the public-key import path.
+PKA operand writes overwrite and zero-extend each register in one pass;
+register addresses use the fixed mapping installed by PkaInit. Hardware
+latency and flash cost for this P-256 change remain to be measured. Rebuild
+both the MCU library and the unchanged generic CryptoTest.

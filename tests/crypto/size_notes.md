@@ -175,3 +175,43 @@ The OpenSSL CMAC/CCM/GCM differential and failure-injection suite passes at
 register-model suites also exercise the shared implementation. Hardware
 validation should rebuild the library and the unchanged generic CryptoTest
 with matching configurations, comparing GCM timings and the linker map.
+
+
+## Shared GHASH hardware result, 2026-10-24
+
+After `196bd5504c4bcc1ec1bcb73c2b1b1d12bbbc5b10`, the Audio DK App-core
+CryptoTest passed 101 checks with no failures or skips. The supplied
+CryptoTest(20261025-002055).map occupies 90,012 bytes of flash (+32) and
+6,444 bytes of static RAM including alignment (unchanged).
+
+| GCM message | Before | After |
+| --- | ---: | ---: |
+| 16 bytes | 6.497 ms | 1.189 ms |
+| 64 bytes | 12.770 ms | 2.155 ms |
+| 256 bytes | 37.862 ms | 6.016 ms |
+| 1024 bytes | 138.228 ms | 21.462 ms |
+
+The 1024-byte software comparison also improved, to 47.566 ms. P-256 public
+key import remained software at this point: engine 487,307 us, reference
+487,306 us. Those timings do not measure the following P-256 change.
+
+## CryptoCell public-key import and operand transfers
+
+KeyImport overrides inherited software public-key calculation with the same
+blinded P-256 multiply used for key generation. KeyGen generates a scalar and
+shares KeyImport's calculation and failure handling. Context-only import needs
+only range validation and storage. Public-key calculation requires a secure
+blinding RNG; failure clears the destination key and public output.
+
+PKA SRAM writes combine data and zero-extension into one full-register pass,
+removing the preliminary clear. The register map is fixed by PkaInit under
+the operation lock, so operand accesses no longer reread mapping registers.
+The scalar loop, exceptional-point handling and final SRAM erasure remain.
+
+The host -Os CryptoCell object text changes from 13,444 to 13,709 bytes (+265),
+with unchanged object data/BSS. This is not an ARM flash measurement. The
+production register-model suite exercises the generic test, boundary scalars,
+OpenSSL comparisons, import contention, missing/failed blinding RNG, repeated
+zero blinding values, arithmetic and cleanup timeouts, recovery and disabled
+objects. Minimal archive checks cover unwanted software AES/SHA/PRNG linkage.
+No hardware P-256 speedup or target flash delta is claimed before a board run.

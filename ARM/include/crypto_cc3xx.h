@@ -51,7 +51,7 @@ public:
 		vbIntrfEnabled = false;
 	}
 
-	// Software import and hardware operations use the same context type.
+	// Hardware operations and inherited signing use the same context type.
 	using KeyCtx = CryptoUecc::KeyCtx;
 
 	bool Init(Cc3xxIntrf * const pIntrf, RngEngine *pRng)
@@ -75,6 +75,8 @@ public:
 	}
 	CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 						 uint8_t *pPubKey) override;
+	CRYPTO_STATUS KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+			const uint8_t *pPrivKey, uint8_t *pPubKey) override;
 	CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 						const uint8_t *pPeerPubKey, uint8_t *pSharedX,
 						bool bKeepKey = false) override;

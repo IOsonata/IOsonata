@@ -3,7 +3,7 @@
 
 @brief	IOsonata P-256 engine for Arm CryptoCell CC3xx PKA.
 
-		Implements P-256 key generation, public-key validation, and ECDH
+		Implements P-256 key generation/import, public-key validation, and ECDH
 		directly on the CC3xx public-key accelerator. The implementation is
 		self-contained and does not depend on PSA, tf-psa-crypto-drivers, a
 		vendor binary, dynamic allocation, or a generic multi-curve framework.
@@ -198,9 +198,10 @@ static void CcRegWrite(Device *pDev, uint32_t Offset, uint32_t Value)
 	pDev->Write32(off, 4, Value);
 }
 
-static inline uint32_t PkaMap(Device *pDev, uint32_t Reg)
+static inline uint32_t PkaMap(uint32_t Reg)
 {
-	return CcRegRead(pDev, REG_PKA_MEMORY_MAP + Reg * sizeof(uint32_t));
+	// PkaInit installs this fixed map once under the operation lock.
+	return Reg * PKA_REG_WORDS;
 }
 
 static inline void PkaMapWrite(Device *pDev, uint32_t Reg, uint32_t Value)
@@ -310,7 +311,7 @@ static void PkaClear(Device *pDev, PkaReg_t Reg)
 	{
 		return;
 	}
-	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(pDev, Reg));
+	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(Reg));
 	for (uint32_t idx = 0U; idx < PKA_REG_WORDS; idx++)
 	{
 		CcRegWrite(pDev, REG_PKA_SRAM_WRITE, 0U);
@@ -323,18 +324,21 @@ static void PkaClear(Device *pDev, PkaReg_t Reg)
 
 static void PkaWrite(Device *pDev, PkaReg_t Reg, const uint32_t *pData, size_t Len)
 {
+	size_t idx;
+
 	assert(PkaRegValid(Reg));
 	assert(pData != nullptr);
 	assert(Len <= PKA_REG_BYTES && (Len & 3U) == 0U);
-	PkaClear(pDev, Reg);
-	if (s_bPkaFault)
+	if (!PkaWaitDone(pDev))
 	{
 		return;
 	}
-	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(pDev, Reg));
-	for (size_t idx = 0U; idx < Len / sizeof(uint32_t); idx++)
+	// Overwrite every word, including zero extension, in one SRAM pass.
+	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(Reg));
+	for (idx = 0U; idx < PKA_REG_WORDS; idx++)
 	{
-		CcRegWrite(pDev, REG_PKA_SRAM_WRITE, pData[idx]);
+		CcRegWrite(pDev, REG_PKA_SRAM_WRITE,
+			idx < Len / sizeof(uint32_t) ? pData[idx] : 0U);
 		if (!PkaWaitDone(pDev))
 		{
 			return;
@@ -344,24 +348,28 @@ static void PkaWrite(Device *pDev, PkaReg_t Reg, const uint32_t *pData, size_t L
 
 static void PkaWriteBe(Device *pDev, PkaReg_t Reg, const uint8_t *pData, size_t Len)
 {
+	size_t idx;
+	uint32_t word;
+
 	assert(PkaRegValid(Reg));
 	assert(pData != nullptr);
 	assert(Len <= PKA_REG_BYTES && (Len & 3U) == 0U);
-	PkaClear(pDev, Reg);
-	if (s_bPkaFault)
+	if (!PkaWaitDone(pDev))
 	{
 		return;
 	}
-	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(pDev, Reg));
-	for (size_t idx = 0U; idx < Len / sizeof(uint32_t); idx++)
+	CcRegWrite(pDev, REG_PKA_SRAM_ADDR, PkaMap(Reg));
+	for (idx = 0U; idx < PKA_REG_WORDS; idx++)
 	{
-		const size_t offset = Len - (idx + 1U) * sizeof(uint32_t);
-		CcRegWrite(pDev, REG_PKA_SRAM_WRITE, LoadBe32(&pData[offset]));
+		word = idx < Len / sizeof(uint32_t) ?
+			LoadBe32(pData + Len - (idx + 1U) * sizeof(uint32_t)) : 0U;
+		CcRegWrite(pDev, REG_PKA_SRAM_WRITE, word);
 		if (!PkaWaitDone(pDev))
 		{
-			return;
+			break;
 		}
 	}
+	CryptoSecureWipe(&word, sizeof(word));
 }
 
 static void PkaReadBe(Device *pDev, PkaReg_t Reg, uint8_t *pData, size_t Len)
@@ -376,7 +384,7 @@ static void PkaReadBe(Device *pDev, PkaReg_t Reg, uint8_t *pData, size_t Len)
 	}
 	for (size_t idx = 0U; idx < Len / sizeof(uint32_t); idx++)
 	{
-		CcRegWrite(pDev, REG_PKA_SRAM_READ_ADDR, PkaMap(pDev, Reg) + (uint32_t)idx);
+		CcRegWrite(pDev, REG_PKA_SRAM_READ_ADDR, PkaMap(Reg) + (uint32_t)idx);
 		if (!PkaWaitDone(pDev))
 		{
 			memset(pData, 0, Len);
@@ -963,68 +971,85 @@ void CryptoCc3xx::Reset()
 CRYPTO_STATUS CryptoCc3xx::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 								  uint8_t *pPubKey)
 {
-	Device *pDev = this;
-	Cc3xxIntrf *pIntrf = (Cc3xxIntrf *)Interface();
+	uint8_t scalar[P256_BYTES];
+	CRYPTO_STATUS status;
+
 	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPubKey == nullptr)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-
-	KeyCtx *pk = (KeyCtx *)pKeyCtx;
-	KeyReset(pk);
+	KeyReset(pKeyCtx);
 	memset(pPubKey, 0, 64U);
+	if (!vbValid || Interface() == nullptr)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	status = P256RandomScalarStatus(vpRng, scalar);
+	if (status == CRYPTO_STATUS_OK)
+	{
+		status = KeyImport(Curve, pKeyCtx, scalar, pPubKey);
+	}
+	CryptoSecureWipe(scalar, sizeof(scalar));
+	return status;
+}
 
-	if (!vbValid || pIntrf == nullptr)
+CRYPTO_STATUS CryptoCc3xx::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+	const uint8_t *pPrivKey, uint8_t *pPubKey)
+{
+	Device *pDev = this;
+	Cc3xxIntrf *pIntrf = (Cc3xxIntrf *)Interface();
+	KeyCtx *pk = (KeyCtx *)pKeyCtx;
+	uint8_t projectiveZ[P256_BYTES];
+	CRYPTO_STATUS status;
+	bool ok;
+
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPrivKey == nullptr)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	KeyReset(pk);
+	if (pPubKey != nullptr)
+	{
+		memset(pPubKey, 0, 64U);
+	}
+	if (!vbValid || pIntrf == nullptr || !P256ScalarInRange(pPrivKey))
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	CRYPTO_STATUS status = P256RandomScalarStatus(vpRng, pk->PrivKey);
-	if (status != CRYPTO_STATUS_OK)
+	// A validated scalar is sufficient when the caller needs only a context.
+	// Public-key output uses the same blinded multiply as generated keys.
+	if (pPubKey != nullptr)
 	{
-		KeyReset(pk);
-		return status;
-	}
-
-	uint8_t projectiveZ[P256_BYTES];
-	status = P256RandomFieldElementStatus(vpRng, projectiveZ);
-	if (status != CRYPTO_STATUS_OK)
-	{
-		KeyReset(pk);
+		status = P256RandomFieldElementStatus(vpRng, projectiveZ);
+		if (status == CRYPTO_STATUS_OK)
+		{
+			status = EnsureCc3xx(pDev, pIntrf);
+		}
+		if (status == CRYPTO_STATUS_OK)
+		{
+			if (Cc3xxAcquire(pDev, pIntrf))
+			{
+				ok = P256Multiply(pDev, s_P256Generator, pPrivKey,
+					pPubKey, projectiveZ, true);
+				Cc3xxRelease(pDev, pIntrf);
+				status = ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+			}
+			else
+			{
+				status = CRYPTO_STATUS_BUSY;
+			}
+		}
 		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
-		return status;
+		if (status != CRYPTO_STATUS_OK)
+		{
+			memset(pPubKey, 0, 64U);
+			return status;
+		}
 	}
-
-	CRYPTO_STATUS ready = EnsureCc3xx(pDev, pIntrf);
-	if (ready != CRYPTO_STATUS_OK)
-	{
-		KeyReset(pk);
-		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
-		return ready;
-	}
-	if (!Cc3xxAcquire(pDev, pIntrf))
-	{
-		KeyReset(pk);
-		CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
-		return CRYPTO_STATUS_BUSY;
-	}
-
-	const bool ok = P256Multiply(pDev, s_P256Generator, pk->PrivKey,
-		pPubKey, projectiveZ, true);
-	CryptoSecureWipe(projectiveZ, sizeof(projectiveZ));
-	if (ok)
-	{
-		pk->bKeyValid = true;
-		status = CRYPTO_STATUS_OK;
-	}
-	else
-	{
-		KeyReset(pk);
-		memset(pPubKey, 0, 64U);
-		status = CRYPTO_STATUS_FAIL;
-	}
-	Cc3xxRelease(pDev, pIntrf);
-	return status;
+	memcpy(pk->PrivKey, pPrivKey, P256_BYTES);
+	pk->bKeyValid = true;
+	return CRYPTO_STATUS_OK;
 }
 
 CRYPTO_STATUS CryptoCc3xx::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,

@@ -49,6 +49,7 @@ public:
 	bool ResultRead = false;
 	bool Fault = false;
 	unsigned Operations = 0;
+	unsigned FailOperation = 0;
 	DevIntrf_t Intrf = {};
 
 	operator DevIntrf_t *() override { return &Intrf; }
@@ -97,6 +98,7 @@ public:
 		unsigned op = Code >> 27;
 		unsigned dest = (Code >> 6) & 31;
 		Operations++;
+		if (Operations == FailOperation) Fault = true;
 		switch (op)
 		{
 		case 4: assert(BN_add(r, a, b)); break;
@@ -320,9 +322,24 @@ public:
 	}
 };
 
+class ImportRng : public RngEngine {
+public:
+	bool Enable() override { return true; }
+	void Disable() override {}
+	void Reset() override {}
+	CRYPTO_STATUS Status = CRYPTO_STATUS_FAIL;
+	bool IsSecure() const override { return true; }
+	CRYPTO_STATUS Random(uint8_t *pOut, size_t Len) override
+	{
+		memset(pOut, 0, Len);
+		return Status;
+	}
+};
+
 int main()
 {
 	CryptoCc3xx cc;
+	ImportRng importRng;
 	Ba414ep ba;
 	Ba414ep otherBa;
 	BaModel baIntrf;
@@ -341,9 +358,9 @@ int main()
 	assert(cc.Init(Cc3xxIntrfInstance(), CryptoRngNrfInstance()));
 	Hex(s_PrivA, priv, sizeof(priv));
 	before = s_Cc.Operations;
-	check("CC3xx inherits software key import",
+	check("CC3xx imports public key through hardware",
 		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_OK &&
-		HexEq(pub, s_PubA, sizeof(pub)) && s_Cc.Operations == before);
+		HexEq(pub, s_PubA, sizeof(pub)) && s_Cc.Operations > before);
 	s_Cc.Busy = true;
 	memset(secret, 0xa5, sizeof(secret));
 	check("CC3xx busy preserves imported key and clears output",
@@ -362,6 +379,55 @@ int main()
 		cc.Agree(CRYPTO_CURVE_P256, &key, pub, secret, true) == CRYPTO_STATUS_FAIL &&
 		!key.bKeyValid && P256IsZero(secret, sizeof(secret)));
 	s_Cc.FailCleanup = false;
+	memset(pub, 0xA5, sizeof(pub));
+	s_Cc.FailCleanup = true;
+	check("CC3xx import cleanup failure clears key and public output",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_FAIL &&
+		P256IsZero((uint8_t *)&key, sizeof(key)) && P256IsZero(pub, sizeof(pub)) && !s_Cc.Held);
+	s_Cc.FailCleanup = false;
+	check("CC3xx import recovers after cleanup fault",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_OK &&
+		HexEq(pub, s_PubA, sizeof(pub)));
+	s_Cc.Busy = true;
+	memset(pub, 0xA5, sizeof(pub));
+	check("CC3xx busy import clears destination key and output",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_BUSY &&
+		P256IsZero((uint8_t *)&key, sizeof(key)) && P256IsZero(pub, sizeof(pub)));
+	s_Cc.Busy = false;
+	cc.SetRng(nullptr);
+	before = s_Cc.Operations;
+	check("CC3xx context-only import needs no RNG or multiplication",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, nullptr) == CRYPTO_STATUS_OK &&
+		key.bKeyValid && memcmp(key.PrivKey, priv, sizeof(priv)) == 0 && s_Cc.Operations == before);
+	memset(pub, 0xA5, sizeof(pub));
+	check("CC3xx public import requires blinding RNG",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_UNSUPPORTED &&
+		P256IsZero((uint8_t *)&key, sizeof(key)) && P256IsZero(pub, sizeof(pub)));
+
+	cc.SetRng(&importRng);
+	check("CC3xx import entropy failure clears key and output",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_FAIL &&
+		P256IsZero((uint8_t *)&key, sizeof(key)) && P256IsZero(pub, sizeof(pub)));
+	importRng.Status = CRYPTO_STATUS_OK;
+	check("CC3xx import rejects repeated zero blinding values",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_FAIL &&
+		P256IsZero((uint8_t *)&key, sizeof(key)) && P256IsZero(pub, sizeof(pub)));
+	cc.SetRng(CryptoRngNrfInstance());
+	s_Cc.FailOperation = s_Cc.Operations + 100U;
+	check("CC3xx import arithmetic timeout clears key and output",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_FAIL &&
+		P256IsZero((uint8_t *)&key, sizeof(key)) && P256IsZero(pub, sizeof(pub)) && !s_Cc.Held);
+	s_Cc.FailOperation = 0U;
+	check("CC3xx import recovers after arithmetic timeout",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_OK &&
+		HexEq(pub, s_PubA, sizeof(pub)));
+	assert(P256IsZero((uint8_t *)s_Cc.Ram, sizeof(s_Cc.Ram)));
+	cc.Disable();
+	check("CC3xx disabled context import fails",
+		cc.KeyImport(CRYPTO_CURVE_P256, &key, priv, nullptr) == CRYPTO_STATUS_FAIL &&
+		P256IsZero((uint8_t *)&key, sizeof(key)));
+	assert(cc.Enable());
+
 	cc.SetRng(nullptr);
 	check("CC3xx RNG removal reaches inherited signing",
 		cc.Sign(CRYPTO_CURVE_P256, descriptor, hash, sizeof(hash), sig) == CRYPTO_STATUS_UNSUPPORTED);
