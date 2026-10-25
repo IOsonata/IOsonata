@@ -32,7 +32,7 @@ SOFTWARE.
 
 // Temporary UART diagnostics. Set to 0 for release and performance tests.
 #ifndef SAM4L_AES_DIAG
-#define SAM4L_AES_DIAG 1
+#define SAM4L_AES_DIAG 0
 #endif
 
 #if SAM4L_AES_DIAG
@@ -134,6 +134,7 @@ bool CryptoSam::Enable()
 	if ((SAM4L_PM->PM_HSBMASK & hsbMask) != hsbMask ||
 		(SAM4L_PM->PM_PBAMASK & PM_PBAMASK_TRNG) == 0U)
 	{
+		printf("SAM4L crypto init: PM gate failure HSB=%08lx PBA=%08lx\r\n", (unsigned long)SAM4L_PM->PM_HSBMASK, (unsigned long)SAM4L_PM->PM_PBAMASK);
 		return false;
 	}
 	clock = SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL;
@@ -144,6 +145,7 @@ bool CryptoSam::Enable()
 	}
 	if (polls == 0U)
 	{
+		printf("SAM4L crypto init: GCLK4 disable failed\r\n");
 		return false;
 	}
 	// Apply the active clock source selected above.
@@ -152,6 +154,7 @@ bool CryptoSam::Enable()
 	if ((clock & (SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_DIVEN |
 		SCIF_GCCTRL_DIV_Msk | SCIF_GCCTRL_CEN)) != aesClock)
 	{
+		printf("SAM4L crypto init: GCLK4 configuration failed\r\n");
 		return false;
 	}
 	// ASF enables AESA once, after configuring the generic clock.
@@ -162,6 +165,7 @@ bool CryptoSam::Enable()
 	{
 		SAM4L_TRNG->TRNG_CR = TRNG_CR_KEY(0x524E47U);
 		CryptoSecureWipe(&word, sizeof(word));
+		printf("SAM4L crypto init: TRNG ready failed\r\n");
 		return false;
 	}
 	CryptoSecureWipe(&word, sizeof(word));
