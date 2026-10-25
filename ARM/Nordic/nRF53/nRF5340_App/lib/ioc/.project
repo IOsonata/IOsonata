@@ -1990,5 +1990,36 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/ioexp_sx1509.cpp</locationURI>
 		</link>
+
+		<link>
+			<name>include/audio/cs47l63.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/cs47l63.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwrmgnt/pm_npm1100.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_npm1100.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/ina230.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ina230.h</locationURI>
+		</link>
+		<link>
+			<name>src/audio/cs47l63.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/cs47l63.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_npm1100.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_npm1100.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/ina230.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ina230.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
