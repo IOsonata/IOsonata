@@ -181,9 +181,9 @@
 			<locationURI>PARENT-5-PROJECT_LOC/include/intelhex.h</locationURI>
 		</link>
 		<link>
-			<name>include/interrupt.h</name>
+			<name>include/coredev/interrupt.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/interrupt.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/include/coredev/interrupt.h</locationURI>
 		</link>
 		<link>
 			<name>include/isha1.h</name>
@@ -670,11 +670,7 @@
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
 		</link>
-		<link>
-			<name>include/sensors/accel_lis2dh12.h</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
-		</link>
+
 		<link>
 			<name>include/sensors/accel_sensor.h</name>
 			<type>1</type>
