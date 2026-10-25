@@ -67,7 +67,8 @@ bool CryptoSam::Enable()
 	{
 		return true;
 	}
-	PmEnable(&SAM4L_PM->PM_HSBMASK, PM_HSBMASK_AESA);
+	// The TRNG is accessed through the APBA bridge as well as PBAMASK.
+	PmEnable(&SAM4L_PM->PM_HSBMASK, PM_HSBMASK_AESA | PM_HSBMASK_APBA);
 	PmEnable(&SAM4L_PM->PM_PBAMASK, PM_PBAMASK_TRNG);
 	SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL &= ~SCIF_GCCTRL_CEN;
 	while ((SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL & SCIF_GCCTRL_CEN) != 0U && polls > 0U)
