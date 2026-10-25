@@ -130,8 +130,11 @@ bool CryptoSam::IsSecure() const
 	return false;
 }
 
-CRYPTO_STATUS CryptoSam::NarrowCipher(CRYPTO_CIPHER_ALG, int, const CryptoKey &,
-	const uint8_t *, size_t, const uint8_t *, size_t, uint8_t *)
+CRYPTO_STATUS CryptoSam::NarrowCipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+	const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut)
 {
-	return CRYPTO_STATUS_UNSUPPORTED;
+	CryptoSoftAes software;
+
+	software.Enable();
+	return software.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
 }
