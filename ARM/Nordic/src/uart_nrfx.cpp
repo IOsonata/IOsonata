@@ -845,8 +845,6 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
             pData += l;
             cnt += l;
         }
-        EnableInterrupt(state);
-
 #ifdef UARTE_PRESENT
         if (pDev->bIntEn == false && pDev->bDma == true)
         {
@@ -854,6 +852,9 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
         }
 #endif
 
+        // Keep FIFO retirement and DMA launch atomic with the TX ISR.
+        // Otherwise an ENDTX interrupt can reuse TxDmaMem between the
+        // foreground bTxReady check and TASKS_STARTTX.
         if (dev->pUartDev->bTxReady)
         {
 #ifdef UARTE_PRESENT
@@ -890,6 +891,7 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 #endif
             }
         }
+        EnableInterrupt(state);
     }
 
     // Datalen is what is left and cnt is what was accepted, both moved by the

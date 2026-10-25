@@ -153,28 +153,7 @@ int UARTStdDevWrite(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len
 
 	if (Handle == dev->hStdOut)
 	{
-#if defined(NRF54L15_ENGA_XXAA)
-		// The caller expects a full console write. Give UARTE DMA time
-		// to free FIFO space instead of silently losing the suffix.
-		size_t sent = 0;
-		unsigned stalls = 0;
-		while (sent < Len)
-		{
-			int count = UARTTx(dev, pBuff + sent, Len - sent);
-			if (count > 0)
-			{
-				sent += (size_t)count;
-				stalls = 0;
-			}
-			else if (++stalls >= 1000000U)
-			{
-				break;
-			}
-		}
-		return (int)sent;
-#else
-		return UARTTx(dev, pBuff, Len);
-#endif
+return UARTTx(dev, pBuff, Len);
 	}
 
 	return 0;
