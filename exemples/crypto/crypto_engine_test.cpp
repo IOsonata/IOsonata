@@ -1347,7 +1347,14 @@ int main(void)
 
 #ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+#if defined(NRF54L15_ENGA_XXAA) || defined(NRF54L15_XXAA)
+	// Batch formatted output into complete lines for the newlib UART retarget.
+	// Reduces the number of small _write calls without changing UART/FIFO.
+	static char stdoutBuffer[256];
+	setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
+#else
 	setvbuf(stdout, NULL, _IONBF, 0);
+#endif
 #else
 	// Batch semihosting output by line, using static storage without allocation.
 	static char stdoutBuffer[256];
