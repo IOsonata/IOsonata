@@ -781,9 +781,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/dac_device.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/R7FA4M1AB.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/R7FA4M1AB.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/i2c.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2c.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/i2c_ra4m1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/i2c_ra4m1.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/i2s.h</name>
@@ -801,6 +811,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/iopincfg.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/iopinctrl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/iopinctrl.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
@@ -809,6 +824,11 @@
 			<name>include/coredev/pwm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/ra4m1xxx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/ra4m1xxx.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/shared_intrf.h</name>
@@ -826,9 +846,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi_soft.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/system.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/system.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/system_core_clock.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/system_ra4m1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/system_ra4m1.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/systick.h</name>
@@ -839,6 +869,11 @@
 			<name>include/coredev/timer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/timer_ra4m1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/timer_ra4m1.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/timer_systick.h</name>
@@ -879,6 +914,16 @@
 			<name>include/crypto/crypto_cc3xx_sym.h</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/include/crypto_cc3xx_sym.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_ra4m1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/crypto_ra4m1.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_sce5.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/crypto_sce5.h</locationURI>
 		</link>
 		<link>
 			<name>include/crypto/crypto_softaes.h</name>
@@ -2109,6 +2154,16 @@
 			<name>src/crypto/crypto_p256.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_ra4m1.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/crypto_ra4m1.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_sce5.c</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/crypto_sce5.c</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
