@@ -321,6 +321,16 @@ CRYPTO_STATUS CryptoCc3xxSym::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
+#if defined(NRF52840_XXAA)
+	// CC310 provides AES-128 only; preserve AES-256 through the generic
+	// software implementation rather than passing an unsupported key size.
+	if (Key.Type == CRYPTO_KEY_AES_256)
+	{
+		CryptoSoftAes soft;
+		soft.Enable();
+		return soft.Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+	}
+#endif
 	status = Begin();
 	if (status != CRYPTO_STATUS_OK)
 	{
