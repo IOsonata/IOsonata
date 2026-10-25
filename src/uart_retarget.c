@@ -130,13 +130,12 @@ int UARTStdDevRead(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len)
 	{
 		while (l < Len)
 		{
-			int cnt = UARTRx(dev, pBuff + l, 1);
+			int cnt = UARTRx(dev, pBuff, Len);
 			if (cnt > 0)
 			{
-				if (pBuff[l++] == '\r')
-				{
+				l++;
+				if (*pBuff++ == '\r')
 					break;
-				}
 			}
 			else if (l > 0)
 				break;
@@ -154,7 +153,7 @@ int UARTStdDevWrite(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len
 
 	if (Handle == dev->hStdOut)
 	{
-return UARTTx(dev, pBuff, Len);
+		return UARTTx(dev, pBuff, Len);
 	}
 
 	return 0;

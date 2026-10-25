@@ -827,15 +827,9 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
     int cnt = 0;
     int rtry = pDev->MaxRetry;
-    int stalled = 0;
-    const bool blocking = dev->pUartDev->hTxFifo->bBlocking;
 
-    // A blocking FIFO must wait for DMA to free space; the legacy
-    // MaxRetry limit is appropriate only for non-blocking clients.
-    // Bound successive no-progress attempts if interrupts cannot run.
-    while (Datalen > 0 && (blocking || rtry-- > 0))
+    while (Datalen > 0 && rtry-- > 0)
     {
-        int before = Datalen;
         uint32_t state = DisableInterrupt();
 
         while (Datalen > 0)
@@ -851,6 +845,8 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
             pData += l;
             cnt += l;
         }
+        EnableInterrupt(state);
+
 #ifdef UARTE_PRESENT
         if (pDev->bIntEn == false && pDev->bDma == true)
         {
@@ -858,9 +854,6 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
         }
 #endif
 
-        // Keep FIFO retirement and DMA launch atomic with the TX ISR.
-        // Otherwise an ENDTX interrupt can reuse TxDmaMem between the
-        // foreground bTxReady check and TASKS_STARTTX.
         if (dev->pUartDev->bTxReady)
         {
 #ifdef UARTE_PRESENT
@@ -896,18 +889,6 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
                 }
 #endif
             }
-        }
-        EnableInterrupt(state);
-        if (Datalen == before)
-        {
-            if (++stalled >= (blocking ? 1000000 : 1))
-            {
-                break;
-            }
-        }
-        else
-        {
-            stalled = 0;
         }
     }
 
