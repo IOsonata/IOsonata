@@ -405,3 +405,22 @@ P-256/ECDH/ECDSA checks now pass.
 | P-256 public key (8 mean) | 360,728 us | 365,688 us |
 
 No linker map or peak stack measurement was supplied for this run.
+
+## nRF91x1 CC310 hardware validation, 2026-10-25
+
+The maintainer's generic CryptoTest on nRF91x1 completed **101 passed,
+0 failed, 0 skipped** with a 1 MHz benchmark timer. AES-128, AES-256
+software fallback, SHA-256/HMAC, CMAC, CCM, GCM, RNG, P-256,
+ECDH/ECDSA and randomized comparisons all passed.
+
+| Operation | Target | Software reference |
+| --- | ---: | ---: |
+| AES ECB, 1024 B | 7,111,171 ns | 22,715,078 ns |
+| AES CTR, 1024 B | 7,317,500 ns | 22,860,359 ns |
+| AES CBC, 1024 B | 7,361,546 ns | 22,932,796 ns |
+| CMAC, 1024 B | 7,634,500 ns | 23,877,796 ns |
+| CCM, 1024 B | 14,742,625 ns | 47,849,921 ns |
+| GCM, 1024 B | 15,560,375 ns | 32,053,781 ns |
+| P-256 public-key import (8 mean) | 362,360 us | 371,158 us |
+
+No linker map or peak-stack measurement was supplied.

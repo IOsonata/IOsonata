@@ -239,3 +239,11 @@ The maintainer's nRF9160 CC310 CryptoTest run passed **101 tests, 0 failures,
 CC310 symmetric engine. The 1024-byte AES ECB timing was 7.087 ms versus
 22.715 ms for software, and P-256 public-key import averaged 360,728 us
 versus 365,688 us for software.
+
+## nRF91x1 CC310 validation
+
+The maintainer's nRF91x1 CryptoTest completed **101 passed,
+0 failed, 0 skipped** on 2026-10-25. The generic test passed AES,
+SHA-256/HMAC, P-256, RNG and randomized comparisons. At 1024 bytes,
+AES ECB measured 7.111 ms versus 22.715 ms for software; P-256
+public-key import averaged 362,360 us versus 371,158 us for software.
