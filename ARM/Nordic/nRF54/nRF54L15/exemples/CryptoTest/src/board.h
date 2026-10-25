@@ -2,6 +2,8 @@
 #define __BOARD_H__
 
 // nRF54L15 DK UART0 console, aligned with UartRetargetDemo.
+// Large TX queue prevents truncated diagnostics during CryptoTest bursts.
+#define CRYPTO_TEST_UART_TX_FIFO_SIZE 4096
 #define NORDIC_DK
 #define UART_DEVNO		0
 #define UART_RX_PORT	0

@@ -105,7 +105,10 @@ static const IOPinCfg_t s_UartPins[] = {
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
-alignas(4) static uint8_t s_UartTxMem[CFIFO_MEMSIZE(256)];
+#ifndef CRYPTO_TEST_UART_TX_FIFO_SIZE
+#define CRYPTO_TEST_UART_TX_FIFO_SIZE 256
+#endif
+alignas(4) static uint8_t s_UartTxMem[CFIFO_MEMSIZE(CRYPTO_TEST_UART_TX_FIFO_SIZE)];
 
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
