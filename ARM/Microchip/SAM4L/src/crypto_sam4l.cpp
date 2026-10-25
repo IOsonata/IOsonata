@@ -30,8 +30,33 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "crypto_sam.h"
 
+// Temporary UART diagnostics. Set to 0 for release and performance tests.
+#ifndef SAM4L_AES_DIAG
+#define SAM4L_AES_DIAG 0
+#endif
+
+#if SAM4L_AES_DIAG
+extern "C" {
+volatile uint32_t g_Sam4lAesDiagChecks = 0U;
+volatile uint32_t g_Sam4lAesDiagEncryptMismatch = 0U;
+volatile uint32_t g_Sam4lAesDiagDecryptMismatch = 0U;
+volatile uint32_t g_Sam4lAesDiagReferenceFailures = 0U;
+static uint32_t s_Sam4lAesDiagLines = 0U;
+}
+#endif
+
 static bool s_AesBusy = false;
 static bool s_RngBusy = false;
+
+// Debugger-readable counters. No key, seed or plaintext is retained.
+extern "C" {
+volatile uint32_t g_Sam4lAesBlocks = 0U;
+volatile uint32_t g_Sam4lAesCompleted = 0U;
+volatile uint32_t g_Sam4lAesRngFailures = 0U;
+volatile uint32_t g_Sam4lAesInputTimeouts = 0U;
+volatile uint32_t g_Sam4lAesOutputTimeouts = 0U;
+volatile uint32_t g_Sam4lAesLastStatus = 0U;
+}
 
 static void PmEnable(volatile uint32_t *pReg, uint32_t Mask)
 {
@@ -68,41 +93,12 @@ bool CryptoSam::Enable()
 	uint32_t word = 0U;
 	uint32_t clock;
 	uint32_t hsbMask = PM_HSBMASK_AESA | PM_HSBMASK_HTOP0;
-	uint32_t source = SAM4L_PM->PM_MCCTRL & PM_MCCTRL_MCSEL_Msk;
-	uint32_t aesClock;
+	// ASF genclk.h defines source 7 as CLK_CPU (48 MHz on this board).
+	uint32_t aesClock = SCIF_GCCTRL_OSCSEL(7U) | SCIF_GCCTRL_CEN;
 
 	if (vbValid)
 	{
 		return true;
-	}
-	// Table 13-8: generic clock source 7 is reserved on this part and the
-	// AESA does not come up on it. Follow the main clock to an oscillator
-	// that is already running.
-	switch (source)
-	{
-	case PM_MCCTRL_MCSEL(1U):
-	case PM_MCCTRL_MCSEL_PLL0:
-		// OSC0 is already running when used directly or as the PLL input.
-		aesClock = SCIF_GCCTRL_OSCSEL(3U) | SCIF_GCCTRL_CEN;
-		break;
-	case PM_MCCTRL_MCSEL_DFLL0:
-		// The default DFLL runs at 80 MHz; divide by two for GCLK4.
-		aesClock = SCIF_GCCTRL_OSCSEL(2U) | SCIF_GCCTRL_DIVEN |
-			SCIF_GCCTRL_DIV(0U) | SCIF_GCCTRL_CEN;
-		break;
-	case PM_MCCTRL_MCSEL_RC80M:
-		aesClock = SCIF_GCCTRL_OSCSEL(4U) | SCIF_GCCTRL_DIVEN |
-			SCIF_GCCTRL_DIV(0U) | SCIF_GCCTRL_CEN;
-		break;
-	case PM_MCCTRL_MCSEL(5U):
-		aesClock = SCIF_GCCTRL_OSCSEL(5U) | SCIF_GCCTRL_CEN;
-		break;
-	case PM_MCCTRL_MCSEL(6U):
-		aesClock = SCIF_GCCTRL_OSCSEL(6U) | SCIF_GCCTRL_CEN;
-		break;
-	default:
-		aesClock = SCIF_GCCTRL_OSCSEL(0U) | SCIF_GCCTRL_CEN;
-		break;
 	}
 	// TRNG is on PBA; AESA is on HSB and uses generic clock 4.
 	PmEnable(&SAM4L_PM->PM_HSBMASK, hsbMask);
@@ -110,9 +106,7 @@ bool CryptoSam::Enable()
 	if ((SAM4L_PM->PM_HSBMASK & hsbMask) != hsbMask ||
 		(SAM4L_PM->PM_PBAMASK & PM_PBAMASK_TRNG) == 0U)
 	{
-		// Temporary bring-up diagnostics, printed before the test banner.
-		printf("SAM4L crypto init: PM mask failure HSB=%08lx PBA=%08lx\r\n",
-			(unsigned long)SAM4L_PM->PM_HSBMASK, (unsigned long)SAM4L_PM->PM_PBAMASK);
+		printf("SAM4L crypto init: PM gate failure HSB=%08lx PBA=%08lx\r\n", (unsigned long)SAM4L_PM->PM_HSBMASK, (unsigned long)SAM4L_PM->PM_PBAMASK);
 		return false;
 	}
 	clock = SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL;
@@ -123,17 +117,17 @@ bool CryptoSam::Enable()
 	}
 	if (polls == 0U)
 	{
-		printf("SAM4L crypto init: GCLK4 disable failed, GCCTRL=%08lx\r\n",
-			(unsigned long)SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL);
+		printf("SAM4L crypto init: GCLK4 disable failed\r\n");
 		return false;
 	}
+	// Apply the active clock source selected above.
 	SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL = aesClock;
 	clock = SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL;
 	if ((clock & (SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_DIVEN |
 		SCIF_GCCTRL_DIV_Msk | SCIF_GCCTRL_CEN)) != aesClock)
 	{
-		printf("SAM4L crypto init: GCLK4 MCSEL=%lu expected=%08lx actual=%08lx\r\n",
-			(unsigned long)source, (unsigned long)aesClock, (unsigned long)clock);
+		printf("SAM4L crypto init: GCLK4 expected=%08lx actual=%08lx\r\n",
+			(unsigned long)aesClock, (unsigned long)clock);
 		return false;
 	}
 	// ASF enables AESA once, after configuring the generic clock.
@@ -144,8 +138,7 @@ bool CryptoSam::Enable()
 	{
 		SAM4L_TRNG->TRNG_CR = TRNG_CR_KEY(0x524E47U);
 		CryptoSecureWipe(&word, sizeof(word));
-		printf("SAM4L crypto init: TRNG ready failed, ISR=%08lx\r\n",
-			(unsigned long)SAM4L_TRNG->TRNG_ISR);
+		printf("SAM4L crypto init: TRNG ready failed\r\n");
 		return false;
 	}
 	CryptoSecureWipe(&word, sizeof(word));
@@ -193,17 +186,17 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 	uint32_t polls = 1000000U;
 	unsigned i;
 
+	g_Sam4lAesBlocks = g_Sam4lAesBlocks + 1U;
 	if (KeyLen != 16U || Random(reinterpret_cast<uint8_t *>(&word), sizeof(word)) != CRYPTO_STATUS_OK)
 	{
+		g_Sam4lAesRngFailures = g_Sam4lAesRngFailures + 1U;
 		CryptoSecureWipe(Out, 16U);
 		return false;
 	}
-	// AESA stays enabled between blocks, as in the ASF SAM4L driver.
+	// Keep AESA enabled between blocks, as in the ASF SAM4L driver.
 	// The key must be in AESA_KEY before NEWMSG: in decryption mode the
-	// AESA expands the key held at NEWMSG to the last round key, so a key
-	// written after NEWMSG races that expansion and the block decrypts
-	// with a partially loaded key. Encryption expands round by round and
-	// does not show the race.
+	// AESA expands the key held at NEWMSG into the last round key, so a
+	// key written after NEWMSG races that expansion.
 	SAM4L_AESA->AESA_MODE = AESA_MODE_CTYPE(15U) | (Encrypt ? AESA_MODE_ENCRYPT : 0U);
 	SAM4L_AESA->AESA_DRNGSEED = word;
 	for (i = 0U; i < 4U; i++)
@@ -218,6 +211,8 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 	}
 	if (polls == 0U)
 	{
+		g_Sam4lAesInputTimeouts = g_Sam4lAesInputTimeouts + 1U;
+		g_Sam4lAesLastStatus = SAM4L_AESA->AESA_SR;
 		CryptoSecureWipe(Out, 16U);
 		CryptoSecureWipe(&word, sizeof(word));
 		return false;
@@ -234,6 +229,8 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 	}
 	if (polls == 0U)
 	{
+		g_Sam4lAesOutputTimeouts = g_Sam4lAesOutputTimeouts + 1U;
+		g_Sam4lAesLastStatus = SAM4L_AESA->AESA_SR;
 		CryptoSecureWipe(Out, 16U);
 		CryptoSecureWipe(&word, sizeof(word));
 		return false;
@@ -243,6 +240,72 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 		word = SAM4L_AESA->AESA_ODATA;
 		memcpy(Out + i * 4U, &word, sizeof(word));
 	}
+	g_Sam4lAesLastStatus = SAM4L_AESA->AESA_SR;
+	g_Sam4lAesCompleted = g_Sam4lAesCompleted + 1U;
+#if SAM4L_AES_DIAG
+	{
+		CryptoSoftAes reference;
+		CryptoKey key = {};
+		uint8_t expected[16];
+		CRYPTO_STATUS status;
+
+		key.Type = CRYPTO_KEY_AES_128;
+		key.Loc = CRYPTO_KEY_LOC_PLAIN;
+		key.Usage = Encrypt ? CRYPTO_KEY_USE_ENCRYPT : CRYPTO_KEY_USE_DECRYPT;
+		key.Plain.pData = pKey;
+		key.Plain.Len = 16U;
+		reference.Enable();
+		status = reference.Cipher(CRYPTO_CIPHER_ECB, Encrypt ? 1 : 0,
+			key, nullptr, 0U, In, 16U, expected);
+		g_Sam4lAesDiagChecks = g_Sam4lAesDiagChecks + 1U;
+		if (g_Sam4lAesDiagChecks == 1U)
+		{
+			printf("SAM4L AES block diagnostics enabled\\r\\n");
+		}
+		if (status != CRYPTO_STATUS_OK)
+		{
+			g_Sam4lAesDiagReferenceFailures = g_Sam4lAesDiagReferenceFailures + 1U;
+			if (s_Sam4lAesDiagLines < 8U)
+			{
+				printf("SAM4L AES reference failure: block %lu status %u\\r\\n",
+					(unsigned long)g_Sam4lAesDiagChecks, (unsigned)status);
+				s_Sam4lAesDiagLines++;
+			}
+		}
+		else if (memcmp(Out, expected, sizeof(expected)) != 0)
+		{
+			if (Encrypt)
+			{
+				g_Sam4lAesDiagEncryptMismatch = g_Sam4lAesDiagEncryptMismatch + 1U;
+			}
+			else
+			{
+				g_Sam4lAesDiagDecryptMismatch = g_Sam4lAesDiagDecryptMismatch + 1U;
+			}
+			if (s_Sam4lAesDiagLines < 8U)
+			{
+				printf("SAM4L AES mismatch: block %lu %s sr=%08lx enc=%lu dec=%lu\\r\\n",
+					(unsigned long)g_Sam4lAesDiagChecks,
+					Encrypt ? "encrypt" : "decrypt",
+					(unsigned long)g_Sam4lAesLastStatus,
+					(unsigned long)g_Sam4lAesDiagEncryptMismatch,
+					(unsigned long)g_Sam4lAesDiagDecryptMismatch);
+				s_Sam4lAesDiagLines++;
+			}
+		}
+		if ((g_Sam4lAesDiagChecks & 4095U) == 0U)
+		{
+			printf("SAM4L AES summary: blocks=%lu enc=%lu dec=%lu ref=%lu timeouts=%lu/%lu\\r\\n",
+				(unsigned long)g_Sam4lAesDiagChecks,
+				(unsigned long)g_Sam4lAesDiagEncryptMismatch,
+				(unsigned long)g_Sam4lAesDiagDecryptMismatch,
+				(unsigned long)g_Sam4lAesDiagReferenceFailures,
+				(unsigned long)g_Sam4lAesInputTimeouts,
+				(unsigned long)g_Sam4lAesOutputTimeouts);
+		}
+		CryptoSecureWipe(expected, sizeof(expected));
+	}
+#endif
 	CryptoSecureWipe(&word, sizeof(word));
 	return true;
 }
