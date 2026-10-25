@@ -57,6 +57,7 @@ public:
 		uint8_t value;
 		bool ok = true;
 		unsigned i;
+		const size_t fullWords = Len & ~(size_t)3U;
 
 		if (Len == 0U)
 		{
@@ -96,12 +97,26 @@ public:
 					ok = false;
 					break;
 				}
-				for (i = 0U; i < 4U; i++)
+				// A generated seed is always four byte-wide reads. Avoid
+				// branching after each read in the common aligned path.
+				if (offset < fullWords)
 				{
-					value = R9A02_TRNG->TRNGSDR;
-					if (offset < Len)
+					pOut[offset++] = R9A02_TRNG->TRNGSDR;
+					pOut[offset++] = R9A02_TRNG->TRNGSDR;
+					pOut[offset++] = R9A02_TRNG->TRNGSDR;
+					pOut[offset++] = R9A02_TRNG->TRNGSDR;
+				}
+				else
+				{
+					// Drain all four bytes to clear RDY, even for a short
+					// caller buffer, but never write beyond Len.
+					for (i = 0U; i < 4U; i++)
 					{
-						pOut[offset++] = value;
+						value = R9A02_TRNG->TRNGSDR;
+						if (offset < Len)
+						{
+							pOut[offset++] = value;
+						}
 					}
 				}
 			}
