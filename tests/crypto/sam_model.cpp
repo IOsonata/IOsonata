@@ -79,6 +79,7 @@ SamReg &SamReg::operator=(uint32_t v)
 		memcpy(s_Input + 4 * (id - 30), &v, 4);
 	}
 	if (id == 3) {
+		assert((g_Aes.AESA_CTRL.value & AESA_CTRL_ENABLE) != 0U);
 		assert((g_Pm.PM_HSBMASK & PM_HSBMASK_AESA) != 0U);
 		assert((g_Scif.SCIF_GCCTRL[4].SCIF_GCCTRL.value &
 			(SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_CEN)) ==

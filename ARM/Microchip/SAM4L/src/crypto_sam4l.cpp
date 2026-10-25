@@ -120,7 +120,7 @@ bool CryptoSam::Enable()
 	{
 		return false;
 	}
-	// Source 7 is CLK_CPU.
+	// Apply the selected, running clock source.
 	SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL = aesClock;
 	clock = SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL;
 	if ((clock & (SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_DIVEN |
@@ -188,14 +188,15 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 		return false;
 	}
 	SAM4L_AESA->AESA_CTRL = AESA_CTRL_SWRST;
+	SAM4L_AESA->AESA_CTRL = AESA_CTRL_ENABLE;
 	SAM4L_AESA->AESA_MODE = AESA_MODE_CTYPE(15U) | (Encrypt ? AESA_MODE_ENCRYPT : 0U);
 	SAM4L_AESA->AESA_DRNGSEED = word;
-	SAM4L_AESA->AESA_CTRL = AESA_CTRL_ENABLE | AESA_CTRL_NEWMSG;
 	for (i = 0U; i < 4U; i++)
 	{
 		memcpy(&word, pKey + i * 4U, sizeof(word));
 		SAM4L_AESA->AESA_KEY[i].AESA_KEY = word;
 	}
+	SAM4L_AESA->AESA_CTRL = AESA_CTRL_ENABLE | AESA_CTRL_NEWMSG;
 	while ((SAM4L_AESA->AESA_SR & AESA_SR_IBUFRDY) == 0U && polls > 0U)
 	{
 		polls--;
