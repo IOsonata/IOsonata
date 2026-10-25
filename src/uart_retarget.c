@@ -153,7 +153,29 @@ int UARTStdDevWrite(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len
 
 	if (Handle == dev->hStdOut)
 	{
-return UARTTx(dev, pBuff, Len);
+#if defined(NRF54L_SERIES) || defined(NRF54L15_ENGA_XXAA) || defined(NRF54L15_XXAA)
+		size_t done = 0;
+		unsigned idle = 0;
+
+		// stdout is a blocking stream. UARTTx may accept a short write
+		// while DMA is still transmitting the previous FIFO contents.
+		while (done < Len)
+		{
+			int count = UARTTx(dev, pBuff + done, Len - done);
+			if (count > 0)
+			{
+				done += count;
+				idle = 0;
+			}
+			else if (++idle >= 1000000U)
+			{
+				break;
+			}
+		}
+		return (int)done;
+#else
+		return UARTTx(dev, pBuff, Len);
+#endif
 	}
 
 	return 0;
