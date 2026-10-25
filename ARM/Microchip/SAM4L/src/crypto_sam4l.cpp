@@ -29,6 +29,21 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "crypto_sam.h"
 
+// Set SAM4L_AES_DIAG to 1 for a temporary hardware/software block comparison.
+// Leave disabled for normal operation and performance measurements.
+#ifndef SAM4L_AES_DIAG
+#define SAM4L_AES_DIAG 0
+#endif
+
+#if SAM4L_AES_DIAG
+extern "C" {
+volatile uint32_t g_Sam4lAesDiagChecks = 0U;
+volatile uint32_t g_Sam4lAesDiagEncryptMismatch = 0U;
+volatile uint32_t g_Sam4lAesDiagDecryptMismatch = 0U;
+volatile uint32_t g_Sam4lAesDiagReferenceFailures = 0U;
+}
+#endif
+
 static bool s_AesBusy = false;
 static bool s_RngBusy = false;
 
@@ -246,6 +261,40 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 	}
 	g_Sam4lAesLastStatus = SAM4L_AESA->AESA_SR;
 	g_Sam4lAesCompleted++;
+#if SAM4L_AES_DIAG
+	{
+		CryptoSoftAes reference;
+		CryptoKey key = {};
+		uint8_t expected[16];
+		CRYPTO_STATUS status;
+
+		key.Type = CRYPTO_KEY_AES_128;
+		key.Loc = CRYPTO_KEY_LOC_PLAIN;
+		key.Usage = Encrypt ? CRYPTO_KEY_USE_ENCRYPT : CRYPTO_KEY_USE_DECRYPT;
+		key.Plain.pData = pKey;
+		key.Plain.Len = 16U;
+		reference.Enable();
+		status = reference.Cipher(CRYPTO_CIPHER_ECB, Encrypt ? 1 : 0,
+			key, nullptr, 0U, In, 16U, expected);
+		g_Sam4lAesDiagChecks++;
+		if (status != CRYPTO_STATUS_OK)
+		{
+			g_Sam4lAesDiagReferenceFailures++;
+		}
+		else if (memcmp(Out, expected, sizeof(expected)) != 0)
+		{
+			if (Encrypt)
+			{
+				g_Sam4lAesDiagEncryptMismatch++;
+			}
+			else
+			{
+				g_Sam4lAesDiagDecryptMismatch++;
+			}
+		}
+		CryptoSecureWipe(expected, sizeof(expected));
+	}
+#endif
 	CryptoSecureWipe(&word, sizeof(word));
 	return true;
 }
