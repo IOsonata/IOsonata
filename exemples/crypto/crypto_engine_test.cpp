@@ -105,7 +105,12 @@ static const IOPinCfg_t s_UartPins[] = {
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
+#ifndef CRYPTO_TEST_UART_POLLING
+#define CRYPTO_TEST_UART_POLLING 0
+#endif
+#if !CRYPTO_TEST_UART_POLLING
 alignas(4) static uint8_t s_UartTxMem[CFIFO_MEMSIZE(256)];
+#endif
 
 #ifndef CRYPTO_TEST_UART_RATE
 #define CRYPTO_TEST_UART_RATE 1000000
@@ -120,14 +125,19 @@ static const UARTCfg_t s_UartCfg = {
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = true,
+	.bIntMode = !CRYPTO_TEST_UART_POLLING,
 	.IntPrio = IRQ_PRIO_NORMAL,
 	.EvtCallback = NULL,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = NULL,
-	.TxMemSize = sizeof(s_UartTxMem),
+	#if CRYPTO_TEST_UART_POLLING
+		0,
+	.pTxMem = NULL,
+#else
+		sizeof(s_UartTxMem),
 	.pTxMem = s_UartTxMem,
+#endif
 	.bDMAMode = false,
 };
 
@@ -1348,6 +1358,11 @@ int main(void)
 	{
 		while (1);
 	}
+
+#if defined(CRYPTO_TEST_UART_START_BANNER)
+	static const uint8_t banner[] = "CryptoTest UART initialized\r\n";
+	(void)s_Uart.Tx(banner, sizeof(banner) - 1U);
+#endif
 
 #ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
