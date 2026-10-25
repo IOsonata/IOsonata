@@ -66,10 +66,13 @@ public:
 			assert(EVP_CipherInit_ex(ctx, keyLen == 32 ? EVP_aes_256_ecb() : EVP_aes_128_ecb(),
 				nullptr, in[1].pAddr, nullptr, !(cfg & 1)) == 1);
 			assert(EVP_CIPHER_CTX_set_padding(ctx, 0) == 1);
-			assert(EVP_CipherUpdate(ctx, out->pAddr, &n, in[2].pAddr, 16) == 1);
+			unsigned count = in[2].Size & ~CRYPTOMASTER_DMA_REALIGN;
+			assert(count >= 16 && count <= 256 && (count & 15U) == 0);
+			assert((out->Size & ~CRYPTOMASTER_DMA_REALIGN) == count);
+			assert(EVP_CipherUpdate(ctx, out->pAddr, &n, in[2].pAddr, count) == 1);
 			assert(EVP_CipherFinal_ex(ctx, out->pAddr+n, &final) == 1);
 			EVP_CIPHER_CTX_free(ctx);
-			s_Blocks++;
+			s_Blocks += count / 16U;
 		}
 		return true;
 	}
