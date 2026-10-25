@@ -107,11 +107,15 @@ static const IOPinCfg_t s_UartPins[] = {
 
 alignas(4) static uint8_t s_UartTxMem[CFIFO_MEMSIZE(256)];
 
+#ifndef CRYPTO_TEST_UART_RATE
+#define CRYPTO_TEST_UART_RATE 1000000
+#endif
+
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 1000000,
+	.Rate = CRYPTO_TEST_UART_RATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

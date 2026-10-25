@@ -36,9 +36,7 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
-// The IICA needs PCLKB at 32 MHz or lower (notes of table 8.2), the HOCO is
-// set to 32 MHz. SystemInit runs PCLKB at the core clock.
-#define MCUOSC	{ {OSC_TYPE_RC, 32000000, 0, 0}, {OSC_TYPE_RC, 32768, 0, 0}, false }
+// Use the library default 48 MHz HOCO clock, as in UartPrbsTxTest.
 
 // SAU UART0 on the on-board J-Link OB virtual COM port, R31 and R33 fitted
 // and E56 closed (board defaults):
@@ -59,6 +57,7 @@ SOFTWARE.
 }
 
 #define UART_RETARGET
+#define CRYPTO_TEST_UART_RATE 115200
 
 
 #endif
