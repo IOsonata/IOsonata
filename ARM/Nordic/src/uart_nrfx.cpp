@@ -391,13 +391,20 @@ static void nRFUARTRxDmaEnd(nRFUartDev_t * const dev)
 	while (l > 0)
 	{
 		int n = l;
-		uint8_t *p = CFifoPutMultiple(dev->pUartDev->hRxFifo, &n);
+		uint8_t *p = CFifoResvMultiple(dev->pUartDev->hRxFifo, &n);
 		if (p == NULL)
 		{
 			dev->pUartDev->RxDropCnt++;
 			break;
 		}
 		memcpy(p, src, n);
+		int published = n;
+		uint8_t *committed = CFifoPutMultiple(dev->pUartDev->hRxFifo, &published);
+		if (committed != p || published != n)
+		{
+			dev->pUartDev->RxDropCnt++;
+			break;
+		}
 		src += n;
 		l -= n;
 	}
@@ -841,12 +848,18 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
         while (Datalen > 0)
         {
             int l = Datalen;
-            uint8_t *p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
+            uint8_t *p = CFifoResvMultiple(dev->pUartDev->hTxFifo, &l);
             if (p == NULL)
             {
             	break;
             }
             memcpy(p, pData, l);
+            int published = l;
+            uint8_t *committed = CFifoPutMultiple(dev->pUartDev->hTxFifo, &published);
+            if (committed != p || published != l)
+            {
+                break;
+            }
             Datalen -= l;
             pData += l;
             cnt += l;

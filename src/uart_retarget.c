@@ -130,12 +130,13 @@ int UARTStdDevRead(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len)
 	{
 		while (l < Len)
 		{
-			int cnt = UARTRx(dev, pBuff, Len);
+			int cnt = UARTRx(dev, pBuff + l, 1);
 			if (cnt > 0)
 			{
-				l++;
-				if (*pBuff++ == '\r')
+				if (pBuff[l++] == '\r')
+				{
 					break;
+				}
 			}
 			else if (l > 0)
 				break;
