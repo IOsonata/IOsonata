@@ -147,5 +147,13 @@ using word MMIO under the existing transfer lock. It avoids generic command
 buffer packing while retaining the C transfer path and operation exclusion.
 The Nordic wrapper waits for power-up only when transitioning from disabled.
 `run_ccintrf.py` covers the production transfer paths, unaligned buffers, busy,
-invalid transfers and wrapper power transitions. Hardware timings and map sizes
-for this transport change remain pending.
+invalid transfers and wrapper power transitions. The Audio DK App-core run passed 101 checks with no failures or skips:
+AES ECB at 16 bytes took 358.890 us, GCM at 1024 bytes took 138.228 ms and
+RNG at 1024 bytes took 88.479 ms. Flash grew by 224 bytes; static RAM was
+unchanged.
+
+The shared GCM GHASH multiply now uses four 32-bit words with fixed iteration
+counts and masked selection, without secret-indexed tables. `run_ghash.py`
+checks it against the former byte implementation and reports isolated host
+timing. The generic CryptoTest is unchanged. Rebuild both library and test
+to measure this change on the MCU; see the size notes for host measurements.

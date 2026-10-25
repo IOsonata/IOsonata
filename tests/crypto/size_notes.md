@@ -134,5 +134,44 @@ Nordic wrapper no longer repeats its startup spin when already powered.
 Host tests compare both production transfer paths and exercise contention,
 malformed requests and power recovery. A RAM-register benchmark at -Os/-O2
 shows about one third of the generic path's CPU time, under host sanitizers.
-This is not an MCU speedup measurement. Target flash size and timings for the
-transport optimization still require a rebuilt App-core library and CryptoTest.
+This is not an MCU speedup measurement. The maintainer subsequently supplied the App-core result below.
+
+
+## CryptoCell transport hardware result, 2026-10-24
+
+After `c628fa0c7c915fca0b6055adf8a1639727eaff54`, the Audio DK App-core
+CryptoTest passed 101 checks with no failures or skips. The supplied
+CryptoTest(20261025-000223).map occupies 89,980 bytes of flash and 6,444 bytes
+of static RAM including alignment: 224 additional flash bytes, unchanged RAM.
+
+| Operation | Before transport change | After |
+| --- | ---: | ---: |
+| AES ECB, 16 bytes | 738.203 us | 358.890 us |
+| AES ECB, 1024 bytes | 19.239 ms | 10.053 ms |
+| CCM, 1024 bytes | 39.304 ms | 20.613 ms |
+| GCM, 1024 bytes | 147.693 ms | 138.228 ms |
+| RNG, 1024 bytes | 176.086 ms | 88.479 ms |
+
+## Shared GHASH word multiply
+
+The generic GCM multiply now processes the 128-bit accumulator in four
+32-bit words instead of two 16-byte loops per input bit. The 128-step loop,
+masked selection, masked polynomial reduction and explicit temporary wiping
+remain. Big-endian byte loads/stores accept unaligned buffers on either host
+byte order. No lookup tables, persistent state or public API changes are added.
+The two temporary arrays still occupy 32 bytes; compiled stack usage depends
+on the target compiler.
+
+`run_ghash.py` compares all 16,384 single-bit basis pairs, 4,096 mixed inputs,
+zero/ones and unaligned bounds with the previous byte-serial implementation.
+ASan/UBSan checks pass at -O0/-Os/-O2. Separate unsanitized host timings measured
+3,804 versus 322 ns per multiply at -Os and 2,475 versus 334 ns at -O2. These
+are isolated host results, not a prediction of full GCM or MCU throughput.
+Host -Os AES-modes object text grows from 10,311 to 10,456 bytes (+145);
+object data and BSS are unchanged. Target flash and timings remain unmeasured.
+
+The OpenSSL CMAC/CCM/GCM differential and failure-injection suite passes at
+-O0/-Os/-O2. CryptoCell, Nordic ECB, Renesas RA4, Microchip SAM and Espressif
+register-model suites also exercise the shared implementation. Hardware
+validation should rebuild the library and the unchanged generic CryptoTest
+with matching configurations, comparing GCM timings and the linker map.

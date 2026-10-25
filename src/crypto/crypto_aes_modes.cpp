@@ -314,32 +314,41 @@ CRYPTO_STATUS CryptoAesModes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 // or open, the CBC-MAC and CTR streams both running on the AesEcbEncrypt
 // primitive so a hardware subclass provides every block operation.
 
-// GHASH (SP 800-38D): constant-time bit-serial GF(2^128) multiply. No table,
-// no data-dependent branch; the per-bit select is a mask. Software on every
-// engine: a hardware AES subclass supplies the block cipher through
-// AesEcbEncrypt while the field multiply stays here.
+// GHASH (SP 800-38D): fixed 128-step multiply using four 32-bit words.
+// Masked selection and reduction need no secret-indexed table or branch.
+// Explicit big-endian loads/stores also support unaligned byte buffers.
 static void GhashMul(uint8_t Z[16], const uint8_t H[16])
 {
-	uint8_t v[16], z[16];
-	memcpy(v, H, 16);
-	memset(z, 0, 16);
-	for (int i = 0; i < 128; i++)
+	uint32_t v[4], z[4] = {};
+	uint32_t mask, reduce;
+	unsigned i;
+
+	for (i = 0U; i < 4U; i++)
 	{
-		uint8_t bit = (uint8_t)((Z[i >> 3] >> (7 - (i & 7))) & 1U);
-		uint8_t mask = (uint8_t)(0U - bit);
-		for (int j = 0; j < 16; j++)
-		{
-			z[j] ^= (uint8_t)(v[j] & mask);
-		}
-		uint8_t lsb = (uint8_t)(v[15] & 1U);
-		for (int j = 15; j > 0; j--)
-		{
-			v[j] = (uint8_t)((v[j] >> 1) | (v[j - 1] << 7));
-		}
-		v[0] >>= 1;
-		v[0] ^= (uint8_t)((0U - lsb) & 0xE1U);
+		v[i] = ((uint32_t)H[4U * i] << 24) |
+			((uint32_t)H[4U * i + 1U] << 16) |
+			((uint32_t)H[4U * i + 2U] << 8) | H[4U * i + 3U];
 	}
-	memcpy(Z, z, 16);
+	for (i = 0U; i < 128U; i++)
+	{
+		mask = 0U - ((Z[i >> 3] >> (7U - (i & 7U))) & 1U);
+		z[0] ^= v[0] & mask;
+		z[1] ^= v[1] & mask;
+		z[2] ^= v[2] & mask;
+		z[3] ^= v[3] & mask;
+		reduce = (0U - (v[3] & 1U)) & 0xE1000000U;
+		v[3] = (v[3] >> 1) | (v[2] << 31);
+		v[2] = (v[2] >> 1) | (v[1] << 31);
+		v[1] = (v[1] >> 1) | (v[0] << 31);
+		v[0] = (v[0] >> 1) ^ reduce;
+	}
+	for (i = 0U; i < 4U; i++)
+	{
+		Z[4U * i] = (uint8_t)(z[i] >> 24);
+		Z[4U * i + 1U] = (uint8_t)(z[i] >> 16);
+		Z[4U * i + 2U] = (uint8_t)(z[i] >> 8);
+		Z[4U * i + 3U] = (uint8_t)z[i];
+	}
 	AesWipe(v, sizeof(v));
 	AesWipe(z, sizeof(z));
 }
