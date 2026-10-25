@@ -49,8 +49,8 @@ enum : uint32_t {
 	REG_DIN = 0xC00U,
 	REG_DIN_SIZE = 0xC48U,
 	REG_DOUT_EMPTY = 0xD50U,
-#if defined(NRF52840_XXAA)
-	// CC310 shares its CPU DIN/DOUT buffer window at 0xC00.
+#if defined(NRF52840_XXAA) || defined(NRF91_SERIES)
+	// CC310 (nRF52840 and nRF91) shares the CPU DIN/DOUT buffer at 0xC00.
 	REG_DOUT = 0xC00U,
 #else
 	// CC312 has a separate DOUT buffer window.
@@ -321,7 +321,7 @@ CRYPTO_STATUS CryptoCc3xxSym::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-#if defined(NRF52840_XXAA)
+#if defined(NRF52840_XXAA) || defined(NRF91_SERIES)
 	// CC310 provides AES-128 only; preserve AES-256 through the generic
 	// software implementation rather than passing an unsupported key size.
 	if (Key.Type == CRYPTO_KEY_AES_256)
