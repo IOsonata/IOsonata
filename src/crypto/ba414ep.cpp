@@ -664,6 +664,41 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 	return st;
 }
 
+CRYPTO_STATUS Ba414ep::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+	const uint8_t *pPrivKey, uint8_t *pPubKey)
+{
+	KeyCtx *pk;
+	CRYPTO_STATUS status;
+
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPrivKey == nullptr)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	pk = (KeyCtx *)pKeyCtx;
+	KeyReset(pk);
+	if (pPubKey != nullptr)
+	{
+		memset(pPubKey, 0, 64U);
+	}
+	if (!vbValid || !P256ScalarInRange(pPrivKey))
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	memcpy(pk->PrivKey, pPrivKey, P256_SZ);
+	if (pPubKey != nullptr)
+	{
+		status = PkPointMultiply(s_P256Generator, pk->PrivKey, pPubKey, false);
+		if (status != CRYPTO_STATUS_OK)
+		{
+			KeyReset(pk);
+			memset(pPubKey, 0, 64U);
+			return status;
+		}
+	}
+	pk->bKeyValid = true;
+	return CRYPTO_STATUS_OK;
+}
+
 int Ba414ep::SelfTest()
 {
 	static const uint8_t priv[32] = {
