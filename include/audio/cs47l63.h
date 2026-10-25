@@ -50,6 +50,24 @@ typedef struct __Cs47l63_Reg_Val
 	uint16_t DelayMs;
 } Cs47l63RegVal_t;
 
+
+// The Audio DK codec is the slave on a 48 kHz, 16-bit stereo ASP1 interface.
+// Input and headphone paths can be selected independently.
+typedef enum __Cs47l63_Input
+{
+	CS47L63_INPUT_OFF,
+	CS47L63_INPUT_PDM,
+	CS47L63_INPUT_LINE
+} CS47L63_INPUT;
+
+typedef struct __Cs47l63_Audio_Config
+{
+	uint32_t SampleRate;		//!< 48000 Hz for this hardware audio profile.
+	CS47L63_INPUT Input;
+	bool HeadphoneEnable;
+	int HeadphoneGainMilliDb;	//!< -64000 .. 31500, multiples of 500 mB.
+} Cs47l63AudioCfg_t;
+
 class Cs47l63 : public Device
 {
 public:
@@ -66,6 +84,14 @@ public:
 	bool WriteBlock(uint32_t Reg, const uint8_t *pData, size_t DataLen);
 	bool Apply(const Cs47l63RegVal_t *pConfig, size_t Count);
 
+	bool ConfigureAudio(const Cs47l63AudioCfg_t &Cfg);
+	bool SelectInput(CS47L63_INPUT Input);
+	bool HeadphoneMute(bool Mute);
+	bool HeadphoneGain(int MilliDb);
+	bool StopAudio();
+	bool ReadInterrupts(uint32_t &Faults, uint32_t &FllEvents);
+	bool AudioConfigured() const { return vbAudioConfigured; }
+
 	uint8_t Revision() const { return vRevision; }
 	bool IrqActive() const;
 
@@ -77,6 +103,10 @@ private:
 	Cs47l63Cfg_t vCfg{};
 	uint8_t vRevision = 0;
 	bool vbEnabled = false;
+	bool vbAudioConfigured = false;
+	bool vbAudioSaved = false;
+	bool vbMuted = true;
+	Cs47l63AudioCfg_t vAudioCfg{};
 };
 
 #endif

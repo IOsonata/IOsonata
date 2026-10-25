@@ -156,7 +156,10 @@ alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 	},
 #ifdef NRF5340_XXAA_APPLICATION
 	{
-		4, NULL, {.pQSpiReg = (NRF_QSPI_Type*)NRF_QSPI_S_BASE},
+		4, NULL, (NRF_SPIM_Type *)NRF_SPIM4_S_BASE,
+	},
+	{
+		5, NULL, {.pQSpiReg = (NRF_QSPI_Type*)NRF_QSPI_S_BASE},
 	}
 #endif
 #endif
@@ -1542,10 +1545,15 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
                 NVIC_EnableIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
                 break;
     	    case 4:
-                NVIC_ClearPendingIRQ(QSPI_IRQn);
-                NVIC_SetPriority(QSPI_IRQn, pCfgData->IntPrio);
-                NVIC_EnableIRQ(QSPI_IRQn);
-    	    	break;
+                NVIC_ClearPendingIRQ(SPIM4_IRQn);
+                NVIC_SetPriority(SPIM4_IRQn, pCfgData->IntPrio);
+                NVIC_EnableIRQ(SPIM4_IRQn);
+                break;
+			case 5:
+				NVIC_ClearPendingIRQ(QSPI_IRQn);
+				NVIC_SetPriority(QSPI_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(QSPI_IRQn);
+				break;
 #endif
 #else
     		case 0:

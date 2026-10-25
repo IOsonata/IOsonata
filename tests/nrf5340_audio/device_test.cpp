@@ -122,7 +122,7 @@ public:
 class CodecBus : public DeviceIntrf
 {
 public:
-	uint32_t Reg[64]{};
+	uint32_t Reg[30000]{};
 
 	CodecBus()
 	{
@@ -325,10 +325,33 @@ static void TestCs47l63()
 	assert(bus.Reg[0x30 / 4] == 0xA5A50001);
 	assert(bus.Reg[0x34 / 4] == 0x5A5A0002);
 
+	Cs47l63AudioCfg_t audio = { 48000, CS47L63_INPUT_PDM, true, -12000 };
+	assert(codec.ConfigureAudio(audio));
+	assert(codec.AudioConfigured());
+	assert(bus.Reg[0x1404 / 4] == 0x034C);
+	assert(bus.Reg[0x6008 / 4] == 0x10100200);
+	assert(bus.Reg[0x6000 / 4] == 0x30003);
+	assert(bus.Reg[0x4020 / 4] == 0x50021);
+	assert(bus.Reg[0x8200 / 4] == 0x800010);
+	assert(bus.Reg[0x4818 / 4] == (0x200U | 104U));
+	assert(codec.HeadphoneMute(true));
+	assert((bus.Reg[0x4818 / 4] & 0x100U) != 0);
+	assert(codec.HeadphoneMute(false));
+	assert(codec.HeadphoneGain(-18000));
+	assert((bus.Reg[0x4818 / 4] & 0xFFU) == 92U);
+	assert(codec.SelectInput(CS47L63_INPUT_LINE));
+	assert(bus.Reg[0x4060 / 4] == 0x50020);
+	assert(bus.Reg[0x8200 / 4] == 0x800012);
+	assert(codec.SelectInput(CS47L63_INPUT_OFF));
+	assert(bus.Reg[0x4000 / 4] == 0);
+	assert(codec.SelectInput(CS47L63_INPUT_PDM));
+
 	codec.Disable();
 	assert(s_Pin[0][18] == 0);
 	assert(codec.Enable());
 	assert(s_Pin[0][18] == 1);
+	assert(codec.AudioConfigured());
+	assert(bus.Reg[0x6000 / 4] == 0x30003);
 	codec.Reset();
 	assert(codec.Valid());
 	codec.PowerOff();

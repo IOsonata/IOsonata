@@ -50,6 +50,12 @@ nPM1100 ISET is P0.23. Keep it low for the 100 mA USB input-current state and on
 
 The CS47L63 driver implements one R/W bit plus a 31-bit register address, 32 padding clocks and 32-bit data words. ReadBlock/WriteBlock keep chip select asserted for continuous multiword transfers. Apply writes application-specific register sequences. Initialization holds RESET low, waits for the active-low boot-done IRQ after release, and verifies device ID 0x047A63.
 
-The driver does not embed one Nordic LE Audio register profile or Cirrus DSP firmware image. Those are application/audio-profile data and can be loaded through Apply and WriteBlock; keeping them out of the device transport avoids coupling the generic driver to one audio use case. Disable and Reset hold the codec in hardware reset, so the application must reapply its selected register profile and DSP image after a subsequent Enable or Reset.
+The driver now includes a 48 kHz, stereo 16-bit ASP1 audio profile with FLL1/SYSCLK configuration, PDM microphone capture, analog line input, mono headphone playback, digital gain and mute, and audio-routing changes. The profile is retained and reapplied across Disable/Enable or Reset. ReadInterrupts exposes codec fault and FLL events. Advanced Halo DSP firmware images remain application data and can be loaded through WriteBlock. No proprietary firmware is embedded.
 
 The nRF5340 application-core library project includes the three new generic drivers. Hardware validation of the Audio DK devices remains to be recorded.
+
+
+The AudioDkTest application-core project exercises all four monitors,
+CS47L63 48-kHz audio setup, nRF5340 I2S playback and optional SD-card
+presence. Debug uses semihosting for printf; Release uses UART0 at 1 Mbaud.
+Codec audio and timing have not been validated on physical hardware.

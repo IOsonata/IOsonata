@@ -111,6 +111,66 @@ static volatile bool s_TxPending;
 static uint32_t s_BlockWords;
 static bool s_Running;
 
+#if defined(NRF53_SERIES)
+// HFCLKAUDIO synthesizes exact integer-family and 44.1-kHz-family sample
+// clocks. The 32 MHz PCLK dividers do not provide exact 48 kHz.
+typedef struct {
+	uint32_t Rate;
+	uint32_t Mclk;
+	uint32_t MckReg;
+	uint32_t RatioReg;
+	uint32_t AudioReg;
+} I2SAudioRate_t;
+
+static const I2SAudioRate_t s_AudioRates[] = {
+	// HFCLKAUDIO 12.288 MHz, MCK = 12.288 MHz / 4 = 3.072 MHz.
+	// RATIO register indices: 32,48,64,96,128,192,256,384,512.
+	{ 8000,  3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 7, 39846 },
+	{ 12000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 6, 39846 },
+	{ 16000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 5, 39846 },
+	{ 24000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 4, 39846 },
+	{ 32000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 3, 39846 },
+	{ 48000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 2, 39846 },
+	{ 96000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 0, 39846 },
+};
+
+static bool s_AudioClockStarted;
+static uint32_t s_AudioClockReg;
+
+static bool nRF53AudioClockStart(void)
+{
+	uint32_t retry;
+
+	if (s_AudioClockStarted)
+	{
+		return true;
+	}
+	NRF_CLOCK_S->HFCLKAUDIO.FREQUENCY = s_AudioClockReg;
+	NRF_CLOCK_S->EVENTS_HFCLKAUDIOSTARTED = 0;
+	NRF_CLOCK_S->TASKS_HFCLKAUDIOSTART = 1;
+	retry = 1000000U;
+	while (NRF_CLOCK_S->EVENTS_HFCLKAUDIOSTARTED == 0 && retry-- > 0)
+	{
+	}
+	if (NRF_CLOCK_S->EVENTS_HFCLKAUDIOSTARTED == 0)
+	{
+		return false;
+	}
+	NRF_CLOCK_S->EVENTS_HFCLKAUDIOSTARTED = 0;
+	s_AudioClockStarted = true;
+	return true;
+}
+
+static void nRF53AudioClockStop(void)
+{
+	if (s_AudioClockStarted)
+	{
+		NRF_CLOCK_S->TASKS_HFCLKAUDIOSTOP = 1;
+		s_AudioClockStarted = false;
+	}
+}
+#endif
+
 static int s_RxBuffLen = 0;
 static int s_TxBuffLen = 0;
 
@@ -165,10 +225,20 @@ static void nRFxI2SDisable(DevIntrf_t * const pDev)
 	}
 	NRF_I2S->ENABLE = 0;
 	s_Running = false;
+#if defined(NRF53_SERIES)
+	nRF53AudioClockStop();
+#endif
 }
 
 static void nRFxI2SEnable(DevIntrf_t * const pDev)
 {
+#if defined(NRF53_SERIES)
+	if (!nRF53AudioClockStart())
+	{
+		s_Running = false;
+		return;
+	}
+#endif
 	NRF_I2S->CONFIG.RXEN = (NRF_I2S->PSEL.SDIN != 0xFFFFFFFFUL) ? 1 : 0;
 	NRF_I2S->CONFIG.TXEN = (NRF_I2S->PSEL.SDOUT != 0xFFFFFFFFUL) ? 1 : 0;
 	NRF_I2S->CONFIG.MCKEN = (NRF_I2S->PSEL.MCK != 0xFFFFFFFFUL) ? 1 : 0;
@@ -206,27 +276,58 @@ static uint32_t nRFxI2SGetRate(DevIntrf_t * const pDev)
 
 static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
-	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
-	uint32_t diff = -1;
-	int idx = 0;
-	int ratio = 0;
-	uint32_t w = dev->SampleWidth << 4;
+	I2SDev_t *dev;
 
+	dev = (I2SDev_t *)pDev->pDevData;
+	if (dev == NULL || Rate == 0 || s_Running)
+	{
+		return 0;
+	}
+#if defined(NRF53_SERIES)
+	for (unsigned i = 0; i < sizeof(s_AudioRates) / sizeof(s_AudioRates[0]); i++)
+	{
+		if (s_AudioRates[i].Rate == Rate)
+		{
+			if (s_AudioClockStarted &&
+				s_AudioClockReg != s_AudioRates[i].AudioReg)
+			{
+				nRF53AudioClockStop();
+			}
+			s_AudioClockReg = s_AudioRates[i].AudioReg;
+			if (!nRF53AudioClockStart())
+			{
+				return 0;
+			}
+			NRF_I2S->CONFIG.CLKCONFIG = I2S_CONFIG_CLKCONFIG_CLKSRC_ACLK;
+			NRF_I2S->CONFIG.MCKFREQ = s_AudioRates[i].MckReg;
+			NRF_I2S->CONFIG.RATIO = s_AudioRates[i].RatioReg;
+			dev->MClkFreq = s_AudioRates[i].Mclk;
+			dev->Freq = Rate;
+			return Rate;
+		}
+	}
+	return 0;
+#else
+	uint32_t diff;
+	int idx;
+	int ratio;
+	uint32_t width;
+
+	diff = UINT32_MAX;
+	idx = 0;
+	ratio = 0;
+	width = dev->SampleWidth << 4;
 	for (int i = 0; i < s_NbFreq; i++)
 	{
 		uint32_t r = s_MClkFreqTable[i].Freq / Rate;
-
-		// Ratio must be multiple of 2 * Width
-		if (r > w)
+		if (r > width)
 		{
-			r = ((r + (w >>1)) / w) * w;
+			r = ((r + (width >> 1)) / width) * width;
 		}
 		else
 		{
-			r = w;
+			r = width;
 		}
-
-		// The ratio register only accepts a discrete hardware divider.
 		bool allowed = false;
 		for (int j = 0; j < s_NbRatio; j++)
 		{
@@ -240,11 +341,8 @@ static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		{
 			continue;
 		}
-
-		// Recalculate the actual sample rate.
-		uint32_t f = s_MClkFreqTable[i].Freq / r;
-
-		uint32_t d = (f > Rate) ? f - Rate : Rate - f;
+		uint32_t freq = s_MClkFreqTable[i].Freq / r;
+		uint32_t d = freq > Rate ? freq - Rate : Rate - freq;
 		if (d < diff)
 		{
 			idx = i;
@@ -252,27 +350,23 @@ static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 			ratio = r;
 		}
 	}
-
 	if (ratio == 0)
 	{
 		return 0;
 	}
-
 	dev->MClkFreq = s_MClkFreqTable[idx].Freq;
 	NRF_I2S->CONFIG.MCKFREQ = s_MClkFreqTable[idx].RegVal;
-
 	for (int i = 0; i < s_NbRatio; i++)
 	{
-		if (s_Ratio[i] == ratio)
+		if (s_Ratio[i] == (uint32_t)ratio)
 		{
 			NRF_I2S->CONFIG.RATIO = i;
 			break;
 		}
 	}
-
 	dev->Freq = dev->MClkFreq / ratio;
-
 	return dev->Freq;
+#endif
 }
 
 static void nRFxI2SService(void)
