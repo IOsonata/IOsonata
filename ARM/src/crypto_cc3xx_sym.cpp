@@ -50,7 +50,8 @@ enum : uint32_t {
 	REG_DIN_SIZE = 0xC48U,
 	REG_DOUT_EMPTY = 0xD50U,
 #if defined(NRF52840_XXAA) || defined(NRF9160_XXAA) || defined(NRF9120_XXAA)
-	// CC310 (nRF52840 and nRF91) uses the CPU DOUT buffer at 0xC00.\n	// Use project device macros: this file does not include Nordic's nrf.h.
+	// CC310 (nRF52840 and nRF91) uses the CPU DOUT buffer at 0xC00.
+	// Use project device macros: this file does not include Nordic's nrf.h.
 	REG_DOUT = 0xC00U,
 #else
 	// CC312 has a separate DOUT buffer window.

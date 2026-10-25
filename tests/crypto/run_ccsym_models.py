@@ -22,9 +22,12 @@ with tempfile.TemporaryDirectory(prefix='crypto-cc3xx-') as temp:
         'inline void EnableInterrupt(uintptr_t) {}\n')
     (out/'idelay.h').write_text('#pragma once\n#include <stdint.h>\nextern "C" void usDelay(uint32_t);\n')
     for opt in ('-O0', '-O2'):
-        for target in ('cc3xx',):
+        for target, target_define in (('cc312', None), ('cc310_nrf52840', 'NRF52840_XXAA'),
+                ('cc310_nrf9160', 'NRF9160_XXAA'), ('cc310_nrf9120', 'NRF9120_XXAA')):
             flags = [opt, '-g', '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                 '-fno-pie', '-DuECC_ENABLE_VLI_API=1', '-DCRYPTO_TEST_NO_MAIN', '-DCC3XX_SYM_POLL_MAX=32']
+            if target_define:
+                flags.append('-D' + target_define)
             inc = ['-I' + str(p) for p in (out, ROOT/'include', ROOT/'micro-ecc', ROOT/'ARM/include',
                  ROOT/'tests/crypto')]
             objects = []

@@ -8,6 +8,11 @@
 #include <cstring>
 #include <cstdio>
 
+#if defined(NRF52840_XXAA) || defined(NRF9160_XXAA) || defined(NRF9120_XXAA)
+#define MODEL_DOUT 0xC00U
+#else
+#define MODEL_DOUT 0xD00U
+#endif
 static uint32_t s_Reg[1024];
 static uint8_t s_Input[64], s_Output[16];
 static unsigned s_In, s_Out, s_AesBlocks, s_HashBlocks, s_KeyLoads;
@@ -33,7 +38,7 @@ public:
 		if (offset == 0x910) value = s_SetupTimeout ? 1 : 0;
 		if (offset == 0x91C) value = 0;
 		if (offset == 0xD50) value = s_Out >= 16;
-		if (offset == 0xD00) {
+		if (offset == MODEL_DOUT) {
 			assert(s_Out < 16);
 			memcpy(&value, s_Output+s_Out, 4);
 			s_Out += 4;
@@ -251,11 +256,15 @@ int main()
 	assert(CryptoEngineTest() == 0);
 	assert(s_AesBlocks > 1000 && s_HashBlocks > 1000);
 	assert(c.Init());
+	#if defined(NRF52840_XXAA) || defined(NRF9160_XXAA) || defined(NRF9120_XXAA)
+	k.Type = CRYPTO_KEY_AES_128;
+#else
 	k.Type = CRYPTO_KEY_AES_256;
+#endif
 	k.Loc = CRYPTO_KEY_LOC_PLAIN;
 	k.Usage = CRYPTO_KEY_USE_ENCRYPT;
 	k.Plain.pData = key;
-	k.Plain.Len = sizeof(key);
+	k.Plain.Len = k.Type == CRYPTO_KEY_AES_128 ? 16U : sizeof(key);
 	assert(Cc3xxIntrfInstance()->OpHold(&owner));
 	assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_BUSY);
 	assert(c.Hash(CRYPTO_HASH_SHA256, input, 64, out+1) == CRYPTO_STATUS_BUSY);
