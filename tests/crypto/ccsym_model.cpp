@@ -256,7 +256,30 @@ int main()
 	assert(CryptoEngineTest() == 0);
 	assert(s_AesBlocks > 1000 && s_HashBlocks > 1000);
 	assert(c.Init());
-	#if defined(NRF52840_XXAA) || defined(NRF9160_XXAA) || defined(NRF9120_XXAA)
+#if defined(NRF52840_XXAA) || defined(NRF9160_XXAA) || defined(NRF9120_XXAA)
+	// CC310 AES-256 must use software without starting a hardware block.
+	{
+		CryptoSoftAes software;
+		CryptoKey wide = {};
+		uint8_t expected[16];
+		uint8_t actual[16];
+		unsigned blocks = s_AesBlocks;
+
+		assert(software.Enable());
+		wide.Type = CRYPTO_KEY_AES_256;
+		wide.Loc = CRYPTO_KEY_LOC_PLAIN;
+		wide.Usage = CRYPTO_KEY_USE_ENCRYPT;
+		wide.Plain.pData = key;
+		wide.Plain.Len = sizeof(key);
+		assert(software.Cipher(CRYPTO_CIPHER_ECB, 1, wide, nullptr, 0,
+			input, sizeof(expected), expected) == CRYPTO_STATUS_OK);
+		assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, wide, nullptr, 0,
+			input, sizeof(actual), actual) == CRYPTO_STATUS_OK);
+		assert(memcmp(expected, actual, sizeof(actual)) == 0);
+		assert(s_AesBlocks == blocks);
+	}
+#endif
+#if defined(NRF52840_XXAA) || defined(NRF9160_XXAA) || defined(NRF9120_XXAA)
 	k.Type = CRYPTO_KEY_AES_128;
 #else
 	k.Type = CRYPTO_KEY_AES_256;
