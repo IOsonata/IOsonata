@@ -82,7 +82,7 @@ SamReg &SamReg::operator=(uint32_t v)
 		assert((g_Pm.PM_HSBMASK & PM_HSBMASK_AESA) != 0U);
 		assert((g_Scif.SCIF_GCCTRL[4].SCIF_GCCTRL.value &
 			(SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_CEN)) ==
-			(SCIF_GCCTRL_OSCSEL(7U) | SCIF_GCCTRL_CEN));
+			(SCIF_GCCTRL_OSCSEL(0U) | SCIF_GCCTRL_CEN));
 		assert(s_In < 4);
 		memcpy(s_Input + 4 * s_In++, &v, 4);
 		if (s_In == 4) {

@@ -20,7 +20,7 @@ struct SamAes {
 	SamReg AESA_IDATA, AESA_ODATA;
 	SamAes();
 };
-struct SamPm { uint32_t PM_HSBMASK, PM_PBAMASK, PM_UNLOCK; };
+struct SamPm { uint32_t PM_MCCTRL, PM_HSBMASK, PM_PBAMASK, PM_UNLOCK; };
 struct SamClock { SamReg SCIF_GCCTRL; };
 struct SamScif { SamClock SCIF_GCCTRL[5]; };
 struct SamRng { SamReg TRNG_ISR, TRNG_ODATA, TRNG_IDR, TRNG_CR; SamRng(); };
@@ -59,7 +59,15 @@ extern unsigned g_AesBlocks;
 #define PM_PBAMASK_TRNG (1U << 17)
 #define PM_UNLOCK_KEY(x) ((x) << 24)
 #define PM_UNLOCK_ADDR(x) (x)
+#define PM_MCCTRL_MCSEL_Msk 7U
+#define PM_MCCTRL_MCSEL(x) (x)
+#define PM_MCCTRL_MCSEL_PLL0 2U
+#define PM_MCCTRL_MCSEL_DFLL0 3U
+#define PM_MCCTRL_MCSEL_RC80M 4U
 #define SCIF_GCCTRL_CEN 1U
+#define SCIF_GCCTRL_DIVEN 2U
+#define SCIF_GCCTRL_DIV_Msk (0xFFU << 16)
+#define SCIF_GCCTRL_DIV(x) ((x) << 16)
 #define SCIF_GCCTRL_OSCSEL_Msk (0x1FU << 8)
 #define SCIF_GCCTRL_OSCSEL(x) ((x) << 8)
 #define TRNG_CR_KEY(x) ((x) << 8)

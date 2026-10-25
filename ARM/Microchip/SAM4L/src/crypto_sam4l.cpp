@@ -67,7 +67,36 @@ bool CryptoSam::Enable()
 	uint32_t word = 0U;
 	uint32_t clock;
 	uint32_t hsbMask = PM_HSBMASK_AESA | PM_HSBMASK_HTOP0;
-	uint32_t aesClock = SCIF_GCCTRL_OSCSEL(7U) | SCIF_GCCTRL_CEN;
+	uint32_t source = SAM4L_PM->PM_MCCTRL & PM_MCCTRL_MCSEL_Msk;
+	uint32_t aesClock;
+
+	// Table 13-8: 7 is reserved, not CLK_CPU. Select a running oscillator.
+	switch (source)
+	{
+	case PM_MCCTRL_MCSEL(1U):
+	case PM_MCCTRL_MCSEL_PLL0:
+		// OSC0 is already running when used directly or as the PLL input.
+		aesClock = SCIF_GCCTRL_OSCSEL(3U) | SCIF_GCCTRL_CEN;
+		break;
+	case PM_MCCTRL_MCSEL_DFLL0:
+		// The default DFLL runs at 80 MHz; divide by two for GCLK4.
+		aesClock = SCIF_GCCTRL_OSCSEL(2U) | SCIF_GCCTRL_DIVEN |
+			SCIF_GCCTRL_DIV(0U) | SCIF_GCCTRL_CEN;
+		break;
+	case PM_MCCTRL_MCSEL_RC80M:
+		aesClock = SCIF_GCCTRL_OSCSEL(4U) | SCIF_GCCTRL_DIVEN |
+			SCIF_GCCTRL_DIV(0U) | SCIF_GCCTRL_CEN;
+		break;
+	case PM_MCCTRL_MCSEL(5U):
+		aesClock = SCIF_GCCTRL_OSCSEL(5U) | SCIF_GCCTRL_CEN;
+		break;
+	case PM_MCCTRL_MCSEL(6U):
+		aesClock = SCIF_GCCTRL_OSCSEL(6U) | SCIF_GCCTRL_CEN;
+		break;
+	default:
+		aesClock = SCIF_GCCTRL_OSCSEL(0U) | SCIF_GCCTRL_CEN;
+		break;
+	}
 
 	if (vbValid)
 	{
@@ -94,7 +123,8 @@ bool CryptoSam::Enable()
 	// Source 7 is CLK_CPU.
 	SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL = aesClock;
 	clock = SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL;
-	if ((clock & (SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_CEN)) != aesClock)
+	if ((clock & (SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_DIVEN |
+		SCIF_GCCTRL_DIV_Msk | SCIF_GCCTRL_CEN)) != aesClock)
 	{
 		return false;
 	}
