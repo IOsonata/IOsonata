@@ -36,14 +36,14 @@ static constexpr UsbdCdcDesc_t UsbdCdcDescTemplate(void)
 	desc.Association.bInterfaceCount = 2U;
 	desc.Association.bFunctionClass = USB_INTRFCLASS_CDC;
 	desc.Association.bFunctionSubClass = USB_CDC_SUBCLASS_ACM;
-	desc.Association.bFunctionProtocol = USB_CDC_PROT_ITUTV250;
+	desc.Association.bFunctionProtocol = USB_CDC_PROT_NONE;
 
 	desc.Control.bLength = sizeof(desc.Control);
 	desc.Control.bDescriptorType = USB_DESCTYPE_INTERFACE;
 	desc.Control.bNumEndpoints = 1U;
 	desc.Control.bInterfaceClass = USB_INTRFCLASS_CDC;
 	desc.Control.bInterfaceSubClass = USB_CDC_SUBCLASS_ACM;
-	desc.Control.bInterfaceProtocol = USB_CDC_PROT_ITUTV250;
+	desc.Control.bInterfaceProtocol = USB_CDC_PROT_NONE;
 
 	desc.Header.bFunctionLength = sizeof(desc.Header);
 	desc.Header.bDescriptorType = USB_FUNCTYPE_CS_INTERFACE;
