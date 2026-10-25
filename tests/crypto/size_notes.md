@@ -445,3 +445,21 @@ measurement.
 | RNG, 1024 B | 2,332,421 ns | n/a |
 
 No linker map or peak-stack measurement was supplied.
+
+## STM32WBA65I-DK1 hardware validation, 2026-10-25
+
+Maintainer's generic CryptoTest completed **101 passed, 0 failed, 0 skipped**
+with 1 MHz benchmark timer. AES-128/256, SHA-256/HMAC, CMAC, CCM, GCM,
+P-256/ECDH/ECDSA, randomized cross-engine comparisons and RNG all passed.
+
+| Operation | Engine | Software reference |
+| --- | ---: | ---: |
+| AES ECB, 1024 B | 137,078 ns | 12,542,937 ns |
+| AES CTR, 1024 B | 141,703 ns | 12,642,906 ns |
+| AES CBC, 1024 B | 138,109 ns | 12,667,375 ns |
+| CMAC, 1024 B | 847,765 ns | 13,148,625 ns |
+| CCM, 1024 B | 1,407,343 ns | 26,389,718 ns |
+| GCM, 1024 B | 4,245,750 ns | 16,736,421 ns |
+| P-256 public-key import (8 mean) | 31,074 us | 194,190 us |
+
+No linker map or peak stack measurement was supplied.

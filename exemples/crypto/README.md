@@ -257,3 +257,11 @@ benchmark time and the complete timer-frequency line are unavailable.
 AES ECB at 1024 bytes measured 37.053 ms for the target and 44.769 ms
 for the software reference. Further performance comparisons require a
 clean UART capture.
+
+## STM32WBA65I-DK1 validation
+
+The maintainer's generic CryptoTest passed **101 tests, 0 failures, 0 skips**
+on STM32WBA65I-DK1 (2026-10-25). The AES, SHA-256/HMAC, P-256,
+RNG and randomized cross-engine checks passed. At 1024 bytes AES ECB
+measured 137,078 ns versus 12,542,937 ns in software, while hardware
+P-256 key import averaged 31,074 us versus 194,190 us in software.
