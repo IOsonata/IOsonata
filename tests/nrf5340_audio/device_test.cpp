@@ -128,6 +128,7 @@ public:
 	{
 		Reg[CS47L63_REG_DEVID / 4] = CS47L63_DEVICE_ID;
 		Reg[CS47L63_REG_REVID / 4] = 0x12;
+		Reg[0x18014U / 4] = (1U << 3);
 	}
 
 	operator DevIntrf_t *()
@@ -283,7 +284,7 @@ static void TestCs47l63()
 	uint8_t block[8];
 
 	memset(s_Pin, 0, sizeof(s_Pin));
-	s_Pin[0][19] = 0;
+	s_Pin[0][19] = 1; // IRQ pin can remain masked while BOOT_DONE latches.
 	cfg.DevAddr = 2;
 	cfg.ResetPin = { 0, 18, IOPINOP_GPIO, IOPINDIR_OUTPUT,
 					 IOPINRES_NONE, IOPINTYPE_NORMAL };

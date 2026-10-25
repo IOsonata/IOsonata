@@ -86,11 +86,15 @@ bool Cs47l63::IrqActive() const
 bool Cs47l63::WaitBoot()
 {
 	uint32_t count;
+	uint32_t pending;
 
+	// BOOT_DONE is latched in IRQ1_EINT_2. The external IRQ pin is
+	// masked until the codec enables the corresponding interrupt source.
+	// Waiting on that pin would time out on an otherwise healthy codec.
 	count = vCfg.BootTimeoutMs;
 	while (count > 0)
 	{
-		if (IrqActive())
+		if (ReadReg(0x18014U, pending) && (pending & (1U << 3)) != 0)
 		{
 			return true;
 		}
