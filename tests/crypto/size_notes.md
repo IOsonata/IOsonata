@@ -347,3 +347,22 @@ represent production-only crypto linkage. Peak stack usage is not measured.
 The board validation establishes function and performance correctness for the
 compiled Audio DK App-core build only. Other CC3xx targets retain their
 separate validation requirements.
+
+## nRF52832 BlueIO hardware validation, 2026-10-24
+
+The maintainer's Release CryptoTest completed **101 passed, 0 failed,
+0 skipped** on the nRF52832 after `6956ebe` guarded the ECB SoftDevice
+SVC for standalone applications. Benchmark timer: 1 MHz.
+
+| Operation | Target | Software reference |
+| --- | ---: | ---: |
+| AES ECB, 16 B | 29,156 ns | 212,843 ns |
+| AES ECB, 1024 B | 1,304,921 ns | 13,099,656 ns |
+| CMAC, 1024 B | 1,772,859 ns | 13,761,937 ns |
+| CCM, 1024 B | 3,163,984 ns | 27,519,781 ns |
+| GCM, 1024 B | 5,826,296 ns | 18,001,765 ns |
+| P-256 public-key import (8 mean) | 246,751 us | 246,746 us |
+
+The nRF52832 has hardware AES-128 ECB but no hardware P-256 accelerator.
+The P-256 default path therefore matches software timing. No linker map
+or peak-stack measurement was supplied for this run.

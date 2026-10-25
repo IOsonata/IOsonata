@@ -209,4 +209,15 @@ selects its crypto implementation inside the MCU library. The included
 `src/board.h` uses the BLUEIO-WIZARD UART pin definitions.
 
 Release uses `UART_RETARGET` and the configured UART console; Debug uses
-semihosting. Hardware validation on nRF52840 is still pending.
+semihosting. The maintainer's nRF52840 DK Release run passed 101 tests with no failures or skips after the CC310 DOUT and AES-256 software-fallback fixes. Other CC310 targets still require their own validation.
+
+## nRF52832 validation
+
+The nRF52832 BlueIO Release CryptoTest passed **101 tests, 0 failures,
+0 skips** after standalone-image ECB SoftDevice SVC handling was fixed in
+`6956ebe`. The existing project at
+`ARM/Nordic/nRF52/nRF52832/exemples/CryptoTest/ioc` links the unchanged
+generic test and uses `blueio_board.h` UART TX/RX mappings. Hardware ECB
+accelerates AES-128, CMAC and CCM; P-256 uses software. The measured mean of
+eight public-key imports was 246,751 us versus 246,746 us in the software
+reference. No MCU linker map was supplied for this run.
