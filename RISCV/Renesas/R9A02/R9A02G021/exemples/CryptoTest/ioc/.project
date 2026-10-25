@@ -38,7 +38,7 @@
 		<link>
 			<name>src/crypto_engine_test.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/i2c/crypto_engine_test.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/crypto_engine_test.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
