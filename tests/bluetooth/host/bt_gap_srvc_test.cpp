@@ -231,24 +231,38 @@ void TestTheValueCannotChangeDuringAConnection(void)
 	CHECK(((const uint8_t*)p->pValue)[1] == 4);
 }
 
-// Each requirement is two octets, so an odd length is not a sequence of them.
+// Each requirement is two octets and must name a security mode and level
+// defined for a GATT server operating on an LE connection.
 void TestMalformedValuesAreRefused(void)
 {
 	ResetReg();
 
 	BtGapCfg_t cfg = MakeCfg(BTGAP_SECTYPE_LESC_MITM);
+	const uint8_t valid[BT_GAP_SEC_LEVELS_MAX_LEN] = {
+		1, 1, 1, 4, 2, 1, 2, 2
+	};
+	const uint8_t invalid[][2] = {
+		{ 0, 1 }, { 1, 0 }, { 1, 5 },
+		{ 2, 0 }, { 2, 3 }, { 3, 1 }, { 0x7F, 0x57 }
+	};
+	const BtGattChar_t *p;
+	size_t i;
+
 	BtGapInit(&cfg);
 
-	const uint8_t v[BT_GAP_SEC_LEVELS_MAX_LEN + 2] = { 1, 4 };
-
 	CHECK(BtGapSecLevelsSet(nullptr, 2) == false);
-	CHECK(BtGapSecLevelsSet(v, 0) == false);
-	CHECK(BtGapSecLevelsSet(v, 1) == false);
-	CHECK(BtGapSecLevelsSet(v, 3) == false);
-	CHECK(BtGapSecLevelsSet(v, BT_GAP_SEC_LEVELS_MAX_LEN + 2) == false);
+	CHECK(BtGapSecLevelsSet(valid, 0) == false);
+	CHECK(BtGapSecLevelsSet(valid, 1) == false);
+	CHECK(BtGapSecLevelsSet(valid, 3) == false);
+	CHECK(BtGapSecLevelsSet(valid, BT_GAP_SEC_LEVELS_MAX_LEN + 2) == false);
+
+	for (i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++)
+	{
+		CHECK(BtGapSecLevelsSet(invalid[i], sizeof(invalid[i])) == false);
+	}
 
 	// The value the refusals left alone is still the one from init.
-	const BtGattChar_t *p = SecLevelChar();
+	p = SecLevelChar();
 	CHECK(p != nullptr);
 	if (p != nullptr)
 	{
@@ -256,8 +270,8 @@ void TestMalformedValuesAreRefused(void)
 		CHECK(((const uint8_t*)p->pValue)[1] == 4);
 	}
 
-	// The largest legal value is accepted.
-	CHECK(BtGapSecLevelsSet(v, BT_GAP_SEC_LEVELS_MAX_LEN));
+	// The largest stored value is accepted when every pair is defined.
+	CHECK(BtGapSecLevelsSet(valid, sizeof(valid)));
 }
 
 // A device with no peripheral role registers no GAP service, so there is

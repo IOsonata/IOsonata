@@ -251,12 +251,41 @@ void BtGapEadKeyAuthorizeSet(BtGapEadKeyAuthorizeCb_t Callback)
 	s_BtGapEadAuthorize = Callback;
 }
 
+static bool BtGapSecLevelReqValid(uint8_t Mode, uint8_t Level)
+{
+	// The characteristic describes a GATT server operating on an LE
+	// connection. Security mode 3 is BIS broadcast security, not a connection
+	// security requirement. Core 5.4 defines four levels for mode 1 and two for
+	// mode 2.
+	if (Mode == 1)
+	{
+		return Level >= 1 && Level <= 4;
+	}
+
+	if (Mode == 2)
+	{
+		return Level >= 1 && Level <= 2;
+	}
+
+	return false;
+}
+
 bool BtGapSecLevelsSet(const uint8_t *pReq, size_t Len)
 {
+	size_t i;
+
 	if (pReq == nullptr || Len < 2 || (Len & 1) != 0 ||
 		Len > BT_GAP_SEC_LEVELS_MAX_LEN)
 	{
 		return false;
+	}
+
+	for (i = 0; i < Len; i += 2)
+	{
+		if (!BtGapSecLevelReqValid(pReq[i], pReq[i + 1]))
+		{
+			return false;
+		}
 	}
 
 	// Core 5.4 Vol 3 Part C 12.7 requires this value to remain static for the
