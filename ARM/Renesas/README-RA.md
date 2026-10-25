@@ -52,10 +52,10 @@ Board headers define pin mapping, not peripheral register initialization.
 
 ## RA4M1 migration checklist
 
-The currently implemented RA4M1 port is still located at
-`ARM/Renesas/RA4M1`; moving it to `ARM/Renesas/RA4/RA4M1` requires an
-atomic update of linked Eclipse resources, relative project paths,
-compiler include/search paths, linker scripts and documentation references.
+The RA4M1 port has been relocated to `ARM/Renesas/RA4/RA4M1`.
+The Eclipse resource links and project search paths were adjusted for the
+additional directory level. Rebuild both Debug and Release library and
+example configurations on a configured Arm toolchain to verify the move.
 Keep the existing `IOsonata_RA4M1` project and its library dependencies.
 Preserve the working GPIO, UART, timer, startup and crypto configuration.
 RA4M1 IIC master/slave remains unvalidated on physical hardware.
