@@ -290,8 +290,8 @@ size_t BtEadEncrypt(const BtEadKey_t * const pKey, const uint8_t *pRand,
 					const uint8_t *pPayload, size_t Len,
 					uint8_t *pOut, size_t OutLen)
 {
-	if (pKey == nullptr || pRand == nullptr || pOut == nullptr ||
-		(Len > 0 && pPayload == nullptr) ||
+	if (pKey == nullptr || pRand == nullptr || pPayload == nullptr ||
+		pOut == nullptr || Len == 0 ||
 		OutLen < Len + BTEAD_OVERHEAD)
 	{
 		return 0;
@@ -353,7 +353,7 @@ size_t BtEadDecrypt(const BtEadKey_t * const pKey, const uint8_t *pAd,
 					size_t AdLen, uint8_t *pOut, size_t OutLen)
 {
 	if (pKey == nullptr || pAd == nullptr || pOut == nullptr ||
-		AdLen < BTEAD_OVERHEAD)
+		AdLen <= BTEAD_OVERHEAD)
 	{
 		return 0;
 	}

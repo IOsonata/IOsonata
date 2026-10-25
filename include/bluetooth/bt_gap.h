@@ -324,7 +324,8 @@ bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec);
  * for an authenticated configuration and level 3 tells a client that
  * authenticated legacy pairing is enough.
  *
- * The value has to be static during a connection, so this belongs before the
+ * The value has to be static during a connection. The setter therefore
+ * refuses the update while any peer is connected; configure it before the
  * first connection rather than in response to one.
  *
  * @param	pReq	: Security Level Requirements, two octets each

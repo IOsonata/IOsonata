@@ -171,8 +171,12 @@ bool BtEadRandGen(uint8_t Rand[BTEAD_RANDOMIZER_LEN]);
  *
  * @param	pKey	: Session key and IV
  * @param	pRand	: Randomizer, BTEAD_RANDOMIZER_LEN octets
- * @param	pPayload: AD structures to encrypt
- * @param	Len		: Payload length
+ * pPayload must contain a non-empty sequence of AD structures. The low-level
+ * crypto primitive does not parse that sequence; callers that construct it
+ * themselves are responsible for its AD framing.
+ *
+ * @param	pPayload: Non-empty AD structures to encrypt
+ * @param	Len		: Payload length, greater than zero
  * @param	pOut	: Output buffer
  * @param	OutLen	: Output buffer size, at least Len + BTEAD_OVERHEAD
  *
@@ -191,7 +195,8 @@ size_t BtEadEncrypt(const BtEadKey_t * const pKey, const uint8_t *pRand,
  * The MIC is verified before anything is returned. A payload that does not
  * authenticate yields 0 and pOut is left wiped, because a caller that acted
  * on unauthenticated advertising data would be taking direction from anyone
- * within radio range.
+ * within radio range. A structure with no payload is invalid; CSS Part A 1.23
+ * requires one or more AD structures inside the encrypted payload.
  *
  * @param	pKey	: Session key and IV
  * @param	pAd		: AD data of the Encrypted Data structure

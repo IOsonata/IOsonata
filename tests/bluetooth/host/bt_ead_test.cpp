@@ -180,28 +180,25 @@ void TestBoundariesAreRefused(void)
 	CHECK(BtEadEncrypt(&kKey, kRand1, kPlain, sizeof(kPlain), out,
 					   sizeof(kPlain) + BTEAD_OVERHEAD) != 0);
 
-	// Shorter than the overhead is not a structure at all.
+	// The payload must contain one or more AD structures. Overhead alone, and
+	// anything shorter, cannot be a valid Encrypted Data structure.
+	CHECK(BtEadEncrypt(&kKey, kRand1, nullptr, 0, out, sizeof(out)) == 0);
 	CHECK(BtEadDecrypt(&kKey, kAd1, BTEAD_OVERHEAD - 1, back, sizeof(back)) == 0);
+	CHECK(BtEadDecrypt(&kKey, kAd1, BTEAD_OVERHEAD, back, sizeof(back)) == 0);
 	CHECK(BtEadDecrypt(&kKey, nullptr, sizeof(kAd1), back, sizeof(back)) == 0);
 	CHECK(BtEadDecrypt(&kKey, kAd1, sizeof(kAd1), nullptr, sizeof(back)) == 0);
 	CHECK(BtEadDecrypt(&kKey, kAd1, sizeof(kAd1), back, sizeof(kPlain) - 1) == 0);
 }
 
-// An empty payload is a legal structure of randomizer and MIC alone, and it
-// still authenticates.
-void TestAnEmptyPayloadRoundTrips(void)
+// CSS Part A 1.23 requires the payload to contain one or more AD structures.
+// Rejecting an empty one also keeps the zero return value unambiguously a
+// failure from both encrypt and decrypt.
+void TestAnEmptyPayloadIsRefused(void)
 {
-	uint8_t out[BTEAD_OVERHEAD];
-	uint8_t back[4];
+	uint8_t out[BTEAD_OVERHEAD] = {};
+	uint8_t back[4] = {};
 
-	CHECK(BtEadEncrypt(&kKey, kRand1, nullptr, 0, out, sizeof(out)) ==
-		  BTEAD_OVERHEAD);
-	CHECK(BtEadDecrypt(&kKey, out, sizeof(out), back, sizeof(back)) == 0);
-
-	// Zero is both the length of an empty payload and the failure answer, so
-	// the two are told apart by tampering: a corrupted empty structure has to
-	// stop authenticating.
-	out[0] ^= 0x01;
+	CHECK(BtEadEncrypt(&kKey, kRand1, nullptr, 0, out, sizeof(out)) == 0);
 	CHECK(BtEadDecrypt(&kKey, out, sizeof(out), back, sizeof(back)) == 0);
 }
 
@@ -320,16 +317,9 @@ void TestAWholePacketEngineAgreesWithTheBlockPath(void)
 	out[sizeof(out) - 1] ^= 0x01;
 	CHECK(BtEadDecrypt(&kKey, out, sizeof(out), back, sizeof(back)) == 0);
 
-	// What the block path wrote, the engine reads; the empty structure of
-	// each is the other's to the octet, since a zero length decrypt has no
-	// return value to tell success from refusal.
-	uint8_t empty[BTEAD_OVERHEAD];
-	uint8_t blockEmpty[BTEAD_OVERHEAD];
+	// What the block path wrote, the whole-packet engine reads.
 	uint8_t blockOut[sizeof(kAd1)];
-	CHECK(BtEadEncrypt(&kKey, kRand1, nullptr, 0, empty, sizeof(empty)) == BTEAD_OVERHEAD);
 	BtEadSetAeadEngine(nullptr);
-	CHECK(BtEadEncrypt(&kKey, kRand1, nullptr, 0, blockEmpty, sizeof(blockEmpty)) == BTEAD_OVERHEAD);
-	CHECK(std::memcmp(empty, blockEmpty, sizeof(empty)) == 0);
 	CHECK(BtEadEncrypt(&kKey, kRand2, kPlain, sizeof(kPlain), blockOut, sizeof(blockOut)) == sizeof(kAd2));
 	BtEadSetAeadEngine(&s_Aes);
 	CHECK(BtEadDecrypt(&kKey, blockOut, sizeof(blockOut), back, sizeof(back)) == sizeof(kPlain));
@@ -356,7 +346,7 @@ int main()
 	TestATamperedStructureIsRejected();
 	TestAFailedDecryptLeavesNothingBehind();
 	TestBoundariesAreRefused();
-	TestAnEmptyPayloadRoundTrips();
+	TestAnEmptyPayloadIsRefused();
 	TestLongerPayloadsRoundTrip();
 	TestNoEngineFailsClosed();
 	TestTheRandomizerNeedsASecureEngine();

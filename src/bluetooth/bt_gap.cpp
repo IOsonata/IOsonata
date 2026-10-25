@@ -172,6 +172,14 @@ bool BtGapSecLevelsSet(const uint8_t *pReq, size_t Len)
 		return false;
 	}
 
+	// Core 5.4 Vol 3 Part C 12.7 requires this value to remain static for the
+	// duration of a connection. Refuse a late policy change instead of
+	// changing what an already-connected client observes.
+	if (BtPeerIsConnected())
+	{
+		return false;
+	}
+
 	if (!BtGattCharSetValue(&s_BtGapChar[BT_GAP_SEC_LEVELS_CHAR_IDX],
 							(void*)pReq, Len))
 	{

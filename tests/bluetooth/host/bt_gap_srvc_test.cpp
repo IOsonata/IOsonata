@@ -21,6 +21,7 @@ namespace {
 
 int s_Failures = 0;
 int s_Checks = 0;
+bool s_bConnected = false;
 
 #define CHECK(expr) do { \
 	++s_Checks; \
@@ -45,6 +46,7 @@ struct {
 void ResetReg(void)
 {
 	std::memset(&s_Reg, 0, sizeof(s_Reg));
+	s_bConnected = false;
 }
 
 BtGapCfg_t MakeCfg(uint32_t SecType)
@@ -196,6 +198,39 @@ void TestAnApplicationCanReplaceTheValue(void)
 	CHECK(std::memcmp(p->pValue, two, sizeof(two)) == 0);
 }
 
+// Core 5.4 requires the value to remain static during a connection. A late
+// policy change is refused and the value already visible to the peer remains.
+void TestTheValueCannotChangeDuringAConnection(void)
+{
+	ResetReg();
+
+	BtGapCfg_t cfg = MakeCfg(BTGAP_SECTYPE_STATICKEY_MITM);
+	BtGapInit(&cfg);
+
+	const BtGattChar_t *p = SecLevelChar();
+	CHECK(p != nullptr);
+	if (p == nullptr)
+	{
+		return;
+	}
+
+	const uint8_t before[2] = {
+		((const uint8_t*)p->pValue)[0],
+		((const uint8_t*)p->pValue)[1]
+	};
+	const uint8_t sc[2] = { 1, 4 };
+
+	s_bConnected = true;
+	CHECK(BtGapSecLevelsSet(sc, sizeof(sc)) == false);
+	CHECK(p->ValueLen == 2);
+	CHECK(((const uint8_t*)p->pValue)[0] == before[0]);
+	CHECK(((const uint8_t*)p->pValue)[1] == before[1]);
+
+	s_bConnected = false;
+	CHECK(BtGapSecLevelsSet(sc, sizeof(sc)));
+	CHECK(((const uint8_t*)p->pValue)[1] == 4);
+}
+
 // Each requirement is two octets, so an odd length is not a sequence of them.
 void TestMalformedValuesAreRefused(void)
 {
@@ -242,6 +277,11 @@ void TestACentralOnlyDeviceRegistersNothing(void)
 } // namespace
 
 // --- stubs ---------------------------------------------------------------
+
+bool BtPeerIsConnected(void)
+{
+	return s_bConnected;
+}
 
 // The real one lives in bt_gatt.cpp, which brings the whole attribute
 // database with it. What these cases need is only that a value set through it
@@ -314,6 +354,7 @@ int main()
 	TestTheDefaultFollowsTheConfiguredSecurity();
 	TestTheValueIsSetBeforeRegistration();
 	TestAnApplicationCanReplaceTheValue();
+	TestTheValueCannotChangeDuringAConnection();
 	TestMalformedValuesAreRefused();
 	TestACentralOnlyDeviceRegistersNothing();
 
