@@ -49,6 +49,7 @@
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 #include "nrf_sdm.h"
 #include "nrf_soc.h"
+extern "C" void ResetEntry(void);
 #endif
 #endif
 
@@ -74,6 +75,14 @@ static inline NRF_RNG_Type *RngPeriphReg(void)
 static bool RngPeriphSdEnabled(void)
 {
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	// A standalone image owns the vector table at address zero. Do not issue
+	// a SoftDevice SVC when no SoftDevice image is installed: SVC_Handler
+	// is the application's default handler in that configuration.
+	if (*(volatile const uint32_t *)(uintptr_t)4U ==
+		(uint32_t)(uintptr_t)&ResetEntry)
+	{
+		return false;
+	}
 	uint8_t enabled = 0U;
 	(void)sd_softdevice_is_enabled(&enabled);
 	return enabled != 0U;
