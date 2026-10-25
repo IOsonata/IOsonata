@@ -67,6 +67,11 @@ SamReg &SamReg::operator=(uint32_t v)
 		memset(s_Input, 0, sizeof(s_Input));
 		memset(s_Output, 0, sizeof(s_Output));
 	}
+	if (id == 2 && (v & AESA_CTRL_NEWMSG)) {
+		assert((v & AESA_CTRL_ENABLE) != 0U);
+		s_In = 0;
+		s_Out = 0;
+	}
 	if (id >= 20 && id < 28) {
 		memcpy(s_Key + 4 * (id - 20), &v, 4);
 	}
