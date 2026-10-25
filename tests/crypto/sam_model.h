@@ -54,12 +54,15 @@ extern unsigned g_AesBlocks;
 #define AESA_MODE_CTYPE(x) ((x) << 16)
 #define AESA_SR_IBUFRDY (1U << 16)
 #define AESA_SR_ODATARDY 1U
+#define PM_HSBMASK_HTOP0 (1U << 5)
 #define PM_HSBMASK_AESA (1U << 9)
 #define PM_PBAMASK_TRNG (1U << 17)
 #define PM_UNLOCK_KEY(x) ((x) << 24)
 #define PM_UNLOCK_ADDR(x) (x)
 #define SCIF_GCCTRL_CEN 1U
+#define SCIF_GCCTRL_OSCSEL_Msk (0x1FU << 8)
 #define SCIF_GCCTRL_OSCSEL(x) ((x) << 8)
 #define TRNG_CR_KEY(x) ((x) << 8)
 #define TRNG_CR_ENABLE 1U
+#define TRNG_IDR_DATRDY 1U
 #define TRNG_ISR_DATRDY 1U

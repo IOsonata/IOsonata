@@ -46,31 +46,43 @@ static void PmEnable(volatile uint32_t *pReg, uint32_t Mask)
 static bool RngWord(uint32_t *pWord)
 {
 	uint32_t polls = 1000000U;
+	uint32_t status;
 
-	while ((SAM4L_TRNG->TRNG_ISR & TRNG_ISR_DATRDY) == 0U && polls > 0U)
+	while (polls > 0U)
 	{
+		status = SAM4L_TRNG->TRNG_ISR;
+		if ((status & TRNG_ISR_DATRDY) != 0U)
+		{
+			*pWord = SAM4L_TRNG->TRNG_ODATA;
+			return true;
+		}
 		polls--;
 	}
-	if ((SAM4L_TRNG->TRNG_ISR & TRNG_ISR_DATRDY) == 0U)
-	{
-		return false;
-	}
-	*pWord = SAM4L_TRNG->TRNG_ODATA;
-	return true;
+	return false;
 }
 
 bool CryptoSam::Enable()
 {
 	uint32_t polls = 1000000U;
+	uint32_t word = 0U;
+	uint32_t clock;
+	uint32_t hsbMask = PM_HSBMASK_AESA | PM_HSBMASK_HTOP0;
+	uint32_t aesClock = SCIF_GCCTRL_OSCSEL(7U) | SCIF_GCCTRL_CEN;
 
 	if (vbValid)
 	{
 		return true;
 	}
-	// The TRNG is accessed through the APBA bridge as well as PBAMASK.
-	PmEnable(&SAM4L_PM->PM_HSBMASK, PM_HSBMASK_AESA | PM_HSBMASK_HTOP0);
+	// TRNG is on PBA; AESA is on HSB and uses generic clock 4.
+	PmEnable(&SAM4L_PM->PM_HSBMASK, hsbMask);
 	PmEnable(&SAM4L_PM->PM_PBAMASK, PM_PBAMASK_TRNG);
-	SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL &= ~SCIF_GCCTRL_CEN;
+	if ((SAM4L_PM->PM_HSBMASK & hsbMask) != hsbMask ||
+		(SAM4L_PM->PM_PBAMASK & PM_PBAMASK_TRNG) == 0U)
+	{
+		return false;
+	}
+	clock = SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL;
+	SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL = clock & ~SCIF_GCCTRL_CEN;
 	while ((SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL & SCIF_GCCTRL_CEN) != 0U && polls > 0U)
 	{
 		polls--;
@@ -79,10 +91,22 @@ bool CryptoSam::Enable()
 	{
 		return false;
 	}
-	// GCLK4 is dedicated to AESA. Source 7 is the running CPU clock.
-	SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL = SCIF_GCCTRL_OSCSEL(7U) | SCIF_GCCTRL_CEN;
-	SAM4L_TRNG->TRNG_IDR = 1U;
+	// Source 7 is CLK_CPU.
+	SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL = aesClock;
+	clock = SAM4L_SCIF->SCIF_GCCTRL[4].SCIF_GCCTRL;
+	if ((clock & (SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_CEN)) != aesClock)
+	{
+		return false;
+	}
+	SAM4L_TRNG->TRNG_IDR = TRNG_IDR_DATRDY;
 	SAM4L_TRNG->TRNG_CR = TRNG_CR_KEY(0x524E47U) | TRNG_CR_ENABLE;
+	if (!RngWord(&word))
+	{
+		SAM4L_TRNG->TRNG_CR = TRNG_CR_KEY(0x524E47U);
+		CryptoSecureWipe(&word, sizeof(word));
+		return false;
+	}
+	CryptoSecureWipe(&word, sizeof(word));
 	vbValid = true;
 	return true;
 }

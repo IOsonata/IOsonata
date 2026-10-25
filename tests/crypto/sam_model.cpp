@@ -15,6 +15,7 @@ bool g_AesTimeout = false, g_RngTimeout = false;
 unsigned g_AesBlocks = 0;
 static uint8_t s_Key[32], s_Input[16], s_Output[16];
 static unsigned s_In, s_Out;
+static bool s_RngEnabled, s_RngReady;
 
 SamAes::SamAes()
 {
@@ -39,6 +40,7 @@ SamRng::SamRng()
 	memset(this, 0, sizeof(*this));
 	TRNG_ISR.id = 7;
 	TRNG_ODATA.id = 8;
+	TRNG_CR.id = 10;
 }
 static void RunBlock(bool sam4l)
 {
@@ -65,19 +67,38 @@ SamReg &SamReg::operator=(uint32_t v)
 		memset(s_Input, 0, sizeof(s_Input));
 		memset(s_Output, 0, sizeof(s_Output));
 	}
-	if (id >= 20 && id < 28) memcpy(s_Key + 4 * (id - 20), &v, 4);
-	if (id >= 30 && id < 34) memcpy(s_Input + 4 * (id - 30), &v, 4);
+	if (id >= 20 && id < 28) {
+		memcpy(s_Key + 4 * (id - 20), &v, 4);
+	}
+	if (id == 10) {
+		s_RngEnabled = (v & TRNG_CR_ENABLE) != 0U &&
+			(v & 0xFFFFFF00U) == TRNG_CR_KEY(0x524E47U);
+		s_RngReady = s_RngEnabled;
+	}
+	if (id >= 30 && id < 34) {
+		memcpy(s_Input + 4 * (id - 30), &v, 4);
+	}
 	if (id == 3) {
+		assert((g_Pm.PM_HSBMASK & PM_HSBMASK_AESA) != 0U);
+		assert((g_Scif.SCIF_GCCTRL[4].SCIF_GCCTRL.value &
+			(SCIF_GCCTRL_OSCSEL_Msk | SCIF_GCCTRL_CEN)) ==
+			(SCIF_GCCTRL_OSCSEL(7U) | SCIF_GCCTRL_CEN));
 		assert(s_In < 4);
 		memcpy(s_Input + 4 * s_In++, &v, 4);
-		if (s_In == 4) RunBlock(true);
+		if (s_In == 4) {
+			RunBlock(true);
+		}
 	}
-	if (id == 1 && (v & 1U)) RunBlock(false);
+	if (id == 1 && (v & 1U)) {
+		RunBlock(false);
+	}
 	return *this;
 }
 SamReg::operator uint32_t() const
 {
 	uint32_t v = 0;
+	bool clocked;
+
 	if (id == 4) {
 		assert(s_Out < 4);
 		memcpy(&v, s_Output + 4 * s_Out++, 4);
@@ -89,9 +110,20 @@ SamReg::operator uint32_t() const
 	}
 	if (id == 5) return g_AesTimeout ? 0U : 1U;
 	if (id == 6) return g_AesTimeout ? 0U : 0x10001U;
-	if (id == 7) return g_RngTimeout ? 0U : 1U;
+	if (id == 7) {
+		clocked = (g_Pm.PM_HSBMASK & PM_HSBMASK_HTOP0) != 0U &&
+			(g_Pm.PM_PBAMASK & PM_PBAMASK_TRNG) != 0U;
+		if (g_RngTimeout || !s_RngEnabled || !s_RngReady || !clocked) {
+			return 0U;
+		}
+		s_RngReady = false;
+		return TRNG_ISR_DATRDY;
+	}
 	if (id == 8) {
+		assert(s_RngEnabled);
+		assert(!s_RngReady);
 		assert(RAND_bytes(reinterpret_cast<unsigned char *>(&v), 4) == 1);
+		s_RngReady = true;
 		return v;
 	}
 	return value;
@@ -102,6 +134,12 @@ int main()
 	Crypto crypto;
 	uint8_t key[16] = {}, in[16] = {}, out[18];
 	CryptoKey k = {};
+#ifdef TEST_SAM4L
+	g_RngTimeout = true;
+	assert(!crypto.Init());
+	assert(!crypto.IsSecure());
+	g_RngTimeout = false;
+#endif
 	assert(CryptoEngineTest() == 0);
 	assert(g_AesBlocks > 1000U);
 	assert(crypto.Init());
