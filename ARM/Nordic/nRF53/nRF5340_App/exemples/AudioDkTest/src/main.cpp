@@ -41,7 +41,7 @@ static const UARTCfg_t s_UartCfg = {
 };
 static const IOPinCfg_t s_I2cPins[] = {
 	{ 1, 2, 0, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN },
-	{ 1, 3, 0, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN }
+	{ 1, 3, 0, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN }
 };
 static const I2CCfg_t s_I2cCfg = {
 	.DevNo = AUDIO_I2C_DEVNO, .Type = I2CTYPE_STANDARD,
