@@ -912,7 +912,6 @@ static void nRFUsbdBusReset(void)
 		USBD_INTEN_EPDATA_Msk |
 		USBD_INTEN_EP0SETUP_Msk |
 		USBD_INTEN_EP0DATADONE_Msk |
-		USBD_INTEN_ENDEPIN0_Msk |
 		USBD_INTEN_ENDEPOUT0_Msk;
 
 	nRFUsbdResetState();

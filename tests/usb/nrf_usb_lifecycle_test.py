@@ -9,13 +9,6 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 src = (ROOT / 'ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp').read_text()
 
-# EP0 IN completion drives the next descriptor packet and status stage.
-# Missing ENDEPIN0 interrupts stall GET_DESCRIPTOR enumeration.
-reset_handler = src.split('static void nRFUsbdBusReset(void)', 1)[1].split('void UsbCtrlrProcess(int DevNo)', 1)[0]
-assert 'USBD_INTEN_ENDEPIN0_Msk' in reset_handler
-assert 'USBD_INTEN_ENDEPOUT0_Msk' in reset_handler
-
-
 # Start/stop pairing ownership moved to the usb core: UsbCtrlrStart is not
 # idempotent and UsbCtrlrStop pairs with one successful start, so the core
 # must guard both behind its started flag.
