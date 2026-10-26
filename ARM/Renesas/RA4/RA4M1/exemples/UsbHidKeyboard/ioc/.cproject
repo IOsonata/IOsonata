@@ -89,7 +89,7 @@
 							<tool id="ra4m1.example.46" name="GNU Arm Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
 								<option id="ra4m1.example.1001" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" valueType="boolean" value="true" />
 								<option id="ra4m1.example.1002" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano" valueType="boolean" value="true" />
-								<option id="ra4m1.example.1003" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" valueType="string" value="--specs=rdimon.specs -Wl,-u,ResetEntry,-u,__Vectors,-Map,${ProjName}.map -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group" />
+								<option id="ra4m1.example.1003" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" valueType="string" value="--specs=rdimon.specs -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group" />
 								<option id="ra4m1.example.1004" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
 									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_ra4m1.ld&quot;" />
 								</option>
@@ -103,7 +103,7 @@
 							<tool id="ra4m1.example.47" name="GNU Arm Cross C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
 								<option id="ra4m1.example.1007" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" valueType="boolean" value="true" />
 								<option id="ra4m1.example.1008" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" valueType="boolean" value="true" />
-								<option id="ra4m1.example.1009" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" valueType="string" value="--specs=rdimon.specs -Wl,-u,ResetEntry,-u,__Vectors,-Map,${ProjName}.map -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group" />
+								<option id="ra4m1.example.1009" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" valueType="string" value="--specs=rdimon.specs -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group" />
 								<option id="ra4m1.example.1010" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" valueType="stringList">
 									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_ra4m1.ld&quot;" />
 								</option>
