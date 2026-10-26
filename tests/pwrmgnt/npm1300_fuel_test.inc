@@ -1,6 +1,7 @@
 // Algorithm mock: exercise units, timing, failure handling and FuelGauge lifecycle.
 static float s_Soc = 52.34f, s_Dt, s_V, s_I, s_T, s_IdleCurrent;
 static float s_ChargeLimit, s_TermCurrent;
+static float s_Tte = 1234.0f, s_Ttf = 567.0f;
 static int s_InitResult, s_ExtResult, s_LowCount, s_ProcessCount;
 static bool s_Vbus;
 static nrf_fuel_gauge_charge_state s_ChargeState;
@@ -19,8 +20,8 @@ float nrf_fuel_gauge_process(float v, float i, float t, float dt,
 	s_V = v; s_I = i; s_T = t; s_Dt = dt; ++s_ProcessCount;
 	return s_Soc;
 }
-float nrf_fuel_gauge_tte_get() { return 1234.0f; }
-float nrf_fuel_gauge_ttf_get() { return 567.0f; }
+float nrf_fuel_gauge_tte_get() { return s_Tte; }
+float nrf_fuel_gauge_ttf_get() { return s_Ttf; }
 void nrf_fuel_gauge_idle_set(float, float, float i) { s_IdleCurrent = i; }
 int nrf_fuel_gauge_state_get(void *p, size_t n)
 {
@@ -45,30 +46,37 @@ int nrf_fuel_gauge_ext_state_update(nrf_fuel_gauge_ext_state_info_type type,
 	}
 	return s_ExtResult;
 }
-static void FuelLow(PowerMgnt *) { ++s_LowCount; }
+static PowerMgnt *s_ExpectedPower;
+static void FuelLow(PowerMgnt *pm) { assert(pm == s_ExpectedPower); ++s_LowCount; }
 
 static void TestFuelGauge()
 {
 	MockIntrf bus;
 	PmnPM1300FuelGauge pm, other;
+	FuelGauge &gauge = pm;
+	PowerMgnt &power = pm;
+	Device &device = gauge;
 	BatProfile_t profile = BatteryProfile(3435, 10);
 	FuelGaugeCfg_t cfg = { NPM1300_I2C_7BITS_ADDR, profile, FuelLow };
 	battery_model model = {};
 	Npm1300BatterySample_t sample = {};
 	uint8_t state[16];
 	int calls;
+	s_ExpectedPower = &power;
 
-	assert(pm.Level() == UINT16_MAX);
+	assert(gauge.Level() == UINT16_MAX);
 	assert(!pm.StartFuelGauge(model, 0));
-	assert(pm.Init(cfg, &bus, &pm));
+	assert(gauge.Init(cfg, &bus, &power));
+	assert(device.Valid());
 	bus.SetAdcVbat(768); bus.SetAdcNtc(512);
 	bus.vReg[0x510] = 4;
 	bus.vReg[0x30A] = 207; bus.vReg[0x30B] = 1;
 	bus.vReg[0x518] = 128;
-	assert(pm.SetCharge(PWRMGNT_CHARGE_TYPE_NORMAL, 4200, 400) == 400);
+	assert(power.SetCharge(PWRMGNT_CHARGE_TYPE_NORMAL, 4200, 400) == 400);
 	assert(pm.ReadBatterySample(sample));
 	assert(sample.VoltageMv == 3750 && sample.CurrentUa == 560547);
 	assert(sample.TemperatureDeciC == 250);
+	assert(gauge.Voltage() == 3750 && gauge.Temperature() == 250);
 	assert(!pm.StartFuelGauge(model, 0, state, 15));
 	assert(!pm.StartFuelGauge(model, 0, NULL, 16));
 	s_InitResult = -1;
@@ -78,16 +86,23 @@ static void TestFuelGauge()
 	assert(!pm.StartFuelGauge(model, 0));
 	s_ExtResult = 0;
 	assert(pm.StartFuelGauge(model, 100));
-	assert(pm.Level() == 523 && s_Dt == 0.0f);
+	assert(gauge.Level() == 523 && s_Dt == 0.0f);
 	assert(s_V == 3.75f && fabsf(s_I - 0.560547f) < 0.000001f && s_T == 25.0f);
 	assert(fabsf(s_ChargeLimit - 0.4f) < 0.00001f);
 	assert(fabsf(s_TermCurrent - 0.04f) < 0.00001f);
 	assert(!s_Vbus && s_ChargeState == NRF_FUEL_GAUGE_CHARGE_STATE_IDLE);
 	assert(other.Init(cfg, &bus, &other));
 	assert(!other.StartFuelGauge(model, 0));
-	assert(pm.Level() == 523);
+	assert(gauge.Level() == 523);
 	assert(pm.UpdateFuelGauge(1600) && s_Dt == 1.5f);
 	assert(pm.TimeToEmpty() == 1234 && pm.TimeToFull() == 567);
+	s_Tte = s_Ttf = NAN;
+	assert(isnan(pm.TimeToEmpty()) && isnan(pm.TimeToFull()));
+	s_Tte = 1234; s_Ttf = 567;
+	bus.vReg[NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG] = 1U << 3;
+	assert(pm.UpdateFuelGauge(1700));
+	assert(s_ChargeState == NRF_FUEL_GAUGE_CHARGE_STATE_CC);
+	bus.vReg[NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG] = 0;
 	assert(pm.FuelGaugeStateSize() == 16);
 	assert(!pm.SaveFuelGaugeState(NULL, 16));
 	assert(!pm.SaveFuelGaugeState(state, 15));
@@ -98,18 +113,18 @@ static void TestFuelGauge()
 	bus.vFailReadReg = NPM1300_ADC_ADCVBAT_RESULTMSB_REG;
 	sample.VoltageMv = 123;
 	assert(!pm.ReadBatterySample(sample) && sample.VoltageMv == 123);
-	assert(!pm.UpdateFuelGauge(2600) && pm.Level() == UINT16_MAX);
+	assert(!pm.UpdateFuelGauge(2600) && gauge.Level() == UINT16_MAX);
 	assert(s_ProcessCount == calls && isnan(pm.TimeToEmpty()));
 	bus.vFailReadReg = 0xFFFF;
-	assert(pm.UpdateFuelGauge(3600) && s_Dt == 2.0f);
+	assert(pm.UpdateFuelGauge(3600) && fabsf(s_Dt - 1.9f) < 0.00001f);
 	assert(!pm.UpdateFuelGauge(3600));
 	assert(!pm.UpdateFuelGauge(3500));
 	s_Soc = NAN;
-	assert(!pm.UpdateFuelGauge(4600) && pm.Level() == UINT16_MAX);
+	assert(!pm.UpdateFuelGauge(4600) && gauge.Level() == UINT16_MAX);
 	s_Soc = 101;
 	assert(!pm.UpdateFuelGauge(5600));
 	s_Soc = 10;
-	assert(pm.UpdateFuelGauge(6600) && pm.Level() == 100 && s_LowCount == 1);
+	assert(pm.UpdateFuelGauge(6600) && gauge.Level() == 100 && s_LowCount == 1);
 	assert(pm.UpdateFuelGauge(7600) && s_LowCount == 1);
 	s_Soc = 15;
 	assert(pm.UpdateFuelGauge(8600));
@@ -123,10 +138,11 @@ static void TestFuelGauge()
 	bus.vReg[NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG] = 1U << 4;
 	assert(pm.UpdateFuelGauge(1500) && s_Vbus);
 	assert(s_ChargeState == NRF_FUEL_GAUGE_CHARGE_STATE_CV);
-	assert(!pm.EnterShipMode() && pm.Level() == 500);
+	assert(!pm.EnterShipMode() && gauge.Level() == 500);
 	bus.vReg[NPM1300_VBUSIN_VBUSIN_STATUS_REG] = 0;
-	assert(pm.EnterShipMode() && pm.Level() == UINT16_MAX);
+	assert(pm.EnterShipMode() && gauge.Level() == UINT16_MAX);
 	assert(other.StartFuelGauge(model, 0));
-	other.Reset();
+	Device &otherDevice = other;
+	otherDevice.Reset();
 	assert(other.Level() == UINT16_MAX);
 }
