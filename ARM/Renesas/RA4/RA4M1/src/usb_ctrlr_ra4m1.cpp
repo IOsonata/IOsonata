@@ -171,11 +171,48 @@ static Ra4UsbState_t s_Usb;
 
 #if !defined(NDEBUG)
 // Debug builds link rdimon.specs: print only in thread context, never ISR.
+struct Ra4UsbTraceEntry
+{
+	uint16_t Status;
+	uint16_t Enable;
+	uint16_t Dcp;
+	uint16_t Line;
+};
+static Ra4UsbTraceEntry s_Trace[16];
+static volatile unsigned s_TraceCount;
+static unsigned s_TracePrinted;
+
+// Record only bus/control transitions. Never call semihosting from the ISR.
+static void Ra4UsbTraceRecord(uint16_t Status, uint16_t Enable)
+{
+	if (s_TraceCount < sizeof(s_Trace) / sizeof(s_Trace[0]))
+	{
+		Ra4UsbTraceEntry *entry = &s_Trace[s_TraceCount];
+		entry->Status = Status;
+		entry->Enable = Enable;
+		entry->Dcp = R_USB_FS0->DCPCTR;
+		entry->Line = R_USB_FS0->SYSSTS0;
+		++s_TraceCount;
+	}
+}
 static uint32_t s_TraceStage = ~0U;
 static uint16_t s_TraceSyscfg = 0xFFFFU;
 static uint16_t s_TraceStatus = 0xFFFFU;
 static void Ra4UsbTracePoll(void)
 {
+	// A semihosting write stops the CPU. Do not interrupt attachment,
+	// reset or control transfers with debugger I/O; dump after suspend.
+	if (s_Usb.Started && !s_Usb.Suspended)
+	{
+		return;
+	}
+	while (s_TracePrinted < s_TraceCount)
+	{
+		const Ra4UsbTraceEntry entry = s_Trace[s_TracePrinted++];
+		printf("[RA4 USBFS] irq=%04x enable=%04x DCPCTR=%04x SYSSTS0=%04x\n",
+			(unsigned)entry.Status, (unsigned)entry.Enable,
+			(unsigned)entry.Dcp, (unsigned)entry.Line);
+	}
 	const uint32_t stage = g_Ra4UsbStage;
 	const uint16_t syscfg = g_Ra4UsbSyscfg;
 	const uint16_t status = g_Ra4UsbIntsts0;
@@ -192,6 +229,7 @@ static void Ra4UsbTracePoll(void)
 }
 #else
 #define Ra4UsbTracePoll() ((void)0)
+#define Ra4UsbTraceRecord(Status, Enable) ((void)0)
 #endif
 alignas(4) static uint8_t s_Ep0In[RA4USB_EP0_MPS];
 alignas(4) static uint8_t s_Ep0Out[RA4USB_EP0_MPS];
@@ -711,6 +749,11 @@ static bool Ra4UsbHandleOneInterrupt(void)
 	const uint16_t intStatus = R_USB_FS0->INTSTS0;
 	const uint16_t intEnable = R_USB_FS0->INTENB0;
 	const uint16_t enabled = intStatus & intEnable;
+
+	if ((enabled & (RA4USB_INT_DVST | RA4USB_INT_CTRT | RA4USB_INT_RESM)) != 0U)
+	{
+		Ra4UsbTraceRecord(intStatus, intEnable);
+	}
 
 	if ((enabled & RA4USB_INT_RESM) != 0U)
 	{
