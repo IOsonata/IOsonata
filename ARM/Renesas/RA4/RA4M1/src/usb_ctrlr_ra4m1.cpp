@@ -750,15 +750,6 @@ static bool Ra4UsbHandleOneInterrupt(void)
 
 		return true;
 	}
-	if ((enabled & RA4USB_INT_SOFR) != 0U)
-	{
-		R_USB_FS0->INTSTS0 = (uint16_t)~RA4USB_INT_SOFR;
-		UsbCtrlrEvt_t event = {};
-		event.Type = USB_CTRLR_EVT_SOF;
-		event.FrameNo = R_USB_FS0->FRMNUM & 0x07FFU;
-		UsbDevProcessEvent(0, &event);
-		return true;
-	}
 	if ((enabled & RA4USB_INT_DVST) != 0U)
 	{
 		R_USB_FS0->INTSTS0 = (uint16_t)~RA4USB_INT_DVST;
@@ -786,16 +777,6 @@ static bool Ra4UsbHandleOneInterrupt(void)
 		return true;
 	}
 
-	const uint16_t brdy =
-		R_USB_FS0->BRDYSTS & R_USB_FS0->BRDYENB & RA4USB_PIPE_MASK;
-	if ((enabled & RA4USB_INT_BRDY) != 0U && brdy != 0U)
-	{
-		R_USB_FS0->BRDYSTS =
-			(uint16_t)((uint16_t)~brdy & RA4USB_PIPE_MASK);
-		Ra4UsbHandleBrdy(brdy);
-		return true;
-	}
-
 	const uint16_t bemp =
 		R_USB_FS0->BEMPSTS & R_USB_FS0->BEMPENB & RA4USB_PIPE_MASK;
 	if ((enabled & RA4USB_INT_BEMP) != 0U && bemp != 0U)
@@ -806,6 +787,27 @@ static bool Ra4UsbHandleOneInterrupt(void)
 		return true;
 	}
 
+	const uint16_t brdy =
+		R_USB_FS0->BRDYSTS & R_USB_FS0->BRDYENB & RA4USB_PIPE_MASK;
+	if ((enabled & RA4USB_INT_BRDY) != 0U && brdy != 0U)
+	{
+		R_USB_FS0->BRDYSTS =
+			(uint16_t)((uint16_t)~brdy & RA4USB_PIPE_MASK);
+		Ra4UsbHandleBrdy(brdy);
+		return true;
+	}
+
+	// Retire transmitted frames and publish received frames before offering
+	// the next ISO frame. SOF may be pending together with BEMP/BRDY.
+	if ((enabled & RA4USB_INT_SOFR) != 0U)
+	{
+		R_USB_FS0->INTSTS0 = (uint16_t)~RA4USB_INT_SOFR;
+		UsbCtrlrEvt_t event = {};
+		event.Type = USB_CTRLR_EVT_SOF;
+		event.FrameNo = R_USB_FS0->FRMNUM & 0x07FFU;
+		UsbDevProcessEvent(0, &event);
+		return true;
+	}
 	const uint16_t nrdy =
 		R_USB_FS0->NRDYSTS & R_USB_FS0->NRDYENB & RA4USB_PIPE_MASK;
 	if ((enabled & RA4USB_INT_NRDY) != 0U && nrdy != 0U)
@@ -1604,6 +1606,13 @@ bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	if (inPipe == 0U || s_Usb.Pipe[inPipe].Type != ISO)
 	{
 		return false;
+	}
+	// A null pointer means no queued frame, not an application ZLP. A
+	// fabricated completion could pop a frame queued after this SOF.
+	// Keep servicing OUT above; a real queued ZLP has a non-null pointer.
+	if (pBuffer == nullptr)
+	{
+		return Length == 0U;
 	}
 	return UsbCtrlrEpSend(DevNo, EpNum, pBuffer, Length);
 }

@@ -876,3 +876,16 @@ For concurrent CDC and ISO hardware testing, use
 loopback function and one bidirectional ISO function (five physical pipes).
 The full dual-CDC/HID/INT/ISO combo exceeds RA4M1 USBFS pipe capacity.
 CDC+ISO hardware validation remains pending.
+
+
+CDC+ISO hardware testing reached CDC echo with zero errors, but ISO lost
+alternating validation frames and reported 22 loopback queue drops. The
+RA4M1 ISR now retires BEMP completions before BRDY receive callbacks and
+SOF scheduling, so simultaneous events free the transmitted FIFO head before
+queuing another echo and offering the next frame. ISO scheduler calls with
+a null buffer service OUT without submitting a fabricated IN transfer;
+a non-null zero-length packet remains a real application transfer. This
+matches the existing SAM4L and Nordic distinction between idle service and
+a queued frame. `tests/ra4m1/usb_iso_schedule_test.py` checks idle service,
+queued ZLPs and 100 co-pending completion/receive/SOF intervals at O0/Os/O2.
+These sequencing fixes require a hardware retest; ISO is not yet validated.
