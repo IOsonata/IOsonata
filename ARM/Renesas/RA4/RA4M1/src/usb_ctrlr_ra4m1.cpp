@@ -42,6 +42,9 @@ SOFTWARE.
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#if defined(DEBUG)
+#include <stdio.h>
+#endif
 
 #include "ra4m1xxx.h"
 #include "interrupt_ra4m1.h"
@@ -165,6 +168,31 @@ extern "C" volatile uint32_t g_Ra4UsbStage = 0U;
 extern "C" volatile uint16_t g_Ra4UsbSyscfg = 0U;
 extern "C" volatile uint16_t g_Ra4UsbIntsts0 = 0U;
 static Ra4UsbState_t s_Usb;
+
+#if defined(DEBUG)
+// Debug builds link rdimon.specs: print only in thread context, never ISR.
+static uint32_t s_TraceStage = ~0U;
+static uint16_t s_TraceSyscfg = 0xFFFFU;
+static uint16_t s_TraceStatus = 0xFFFFU;
+static void Ra4UsbTracePoll(void)
+{
+	const uint32_t stage = g_Ra4UsbStage;
+	const uint16_t syscfg = g_Ra4UsbSyscfg;
+	const uint16_t status = g_Ra4UsbIntsts0;
+	if (stage != s_TraceStage || syscfg != s_TraceSyscfg ||
+		((status ^ s_TraceStatus) & RA4USB_INT_VBSTS) != 0U)
+	{
+		printf("[RA4 USBFS] stage=%lu SYSCFG=%04x INTSTS0=%04x VBUS=%u\\n",
+			(unsigned long)stage, (unsigned)syscfg, (unsigned)status,
+			(unsigned)((status & RA4USB_INT_VBSTS) != 0U));
+		s_TraceStage = stage;
+		s_TraceSyscfg = syscfg;
+		s_TraceStatus = status;
+	}
+}
+#else
+#define Ra4UsbTracePoll() ((void)0)
+#endif
 alignas(4) static uint8_t s_Ep0In[RA4USB_EP0_MPS];
 alignas(4) static uint8_t s_Ep0Out[RA4USB_EP0_MPS];
 static_assert(sizeof(UsbSetupData_t) == 8U, "USB setup layout");
@@ -914,7 +942,8 @@ bool UsbCtrlrVbusDetected(int DevNo)
 	}
 	if (s_Usb.Started)
 	{
-		return (R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) != 0U;
+		g_Ra4UsbIntsts0 = R_USB_FS0->INTSTS0;
+		return (g_Ra4UsbIntsts0 & RA4USB_INT_VBSTS) != 0U;
 	}
 	// The generic USB stack checks VBUS before calling UsbCtrlrStart.
 	// USBFS must therefore be released from module-stop before checking
@@ -946,6 +975,9 @@ bool UsbCtrlrStart(int DevNo)
 	}
 	if (SystemUsbClockGet() != 48000000U)
 	{
+#if defined(DEBUG)
+		printf("[RA4 USBFS] start rejected USBCLK=%lu\\n", (unsigned long)SystemUsbClockGet());
+#endif
 		return false;
 	}
 
@@ -958,6 +990,9 @@ bool UsbCtrlrStart(int DevNo)
 	}
 	if ((R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) == 0U)
 	{
+#if defined(DEBUG)
+		printf("[RA4 USBFS] start rejected VBUS INTSTS0=%04x\\n", (unsigned)R_USB_FS0->INTSTS0);
+#endif
 		Ra4UsbClockDisable();
 		EnableInterrupt(state);
 		return false;
@@ -993,6 +1028,7 @@ bool UsbCtrlrStart(int DevNo)
 		RA4USB_INT_RESM | RA4USB_INT_VBINT;
 	NVIC_ClearPendingIRQ(s_Usb.Irq);
 	EnableInterrupt(state);
+	Ra4UsbTracePoll();
 	RA4USB_TRACE("start USBCLK=%lu\r\n",
 		static_cast<unsigned long>(SystemUsbClockGet()));
 	return true;
@@ -1025,7 +1061,10 @@ void UsbCtrlrStop(int DevNo)
 
 void UsbCtrlrProcess(int DevNo)
 {
-	(void)DevNo;
+	if (DevNo == 0)
+	{
+		Ra4UsbTracePoll();
+	}
 }
 
 bool UsbCtrlrHighSpeed(int DevNo)
