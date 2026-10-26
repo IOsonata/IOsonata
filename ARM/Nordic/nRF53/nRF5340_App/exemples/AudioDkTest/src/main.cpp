@@ -285,6 +285,10 @@ int main()
 	alignas(4) uint32_t rx[128];
 	unsigned phase;
 	unsigned blocks;
+#ifdef AUDIO_TEST_I2S_RESTART
+	unsigned reports = 0;
+	unsigned restarts = 0;
+#endif
 	int count;
 
 	if (!s_Uart.Init(s_UartCfg))
@@ -318,6 +322,9 @@ int main()
 	puts("SD card probe skipped (define AUDIO_TEST_SD_CARD to enable)");
 #endif
 	puts("Starting continuous I2S audio streaming (1.5 kHz tone, -6 dB output gain)");
+#ifdef AUDIO_TEST_I2S_RESTART
+	puts("I2S restart test enabled: stop for 100 ms every ten microphone reports");
+#endif
 
 	phase = 0;
 	blocks = 0;
@@ -366,6 +373,20 @@ int main()
 			{
 				puts("I2S microphone capture timeout");
 			}
+#ifdef AUDIO_TEST_I2S_RESTART
+			// Restart the peripheral in place every ten reports. Do not
+			// reinitialize the codec or MCU: this exercises I2S STOPPED,
+			// IRQ shutdown, FIFO reset and restart handling.
+			if (++reports == 10)
+			{
+				reports = 0;
+				printf("I2S restart %u: stopping for 100 ms\n", ++restarts);
+				s_I2s.Disable();
+				msDelay(100);
+				s_I2s.Enable();
+				printf("I2S restart %u: streaming resumed\n", restarts);
+			}
+#endif
 		}
 	}
 }
