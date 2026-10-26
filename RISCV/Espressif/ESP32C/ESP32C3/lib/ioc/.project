@@ -486,11 +486,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_att.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_ctlr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ctlr.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_dev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
@@ -514,11 +509,6 @@
 			<name>include/bluetooth/bt_hcievt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_host.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_host.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_intrf.h</name>
@@ -554,11 +544,6 @@
 			<name>include/converters/adc_device.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_device.h</locationURI>
-		</link>
-		<link>
-			<name>include/converters/adc_hx711.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_hx711.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_ltc2495.h</name>
@@ -704,11 +689,6 @@
 			<name>include/display/eink_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/display/eink_vb3300.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_vb3300.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/ifont.h</name>

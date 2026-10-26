@@ -296,11 +296,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/include/system_core_clock.h</locationURI>
 		</link>
 		<link>
-			<name>include/system_nrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/system_nrf.h</locationURI>
-		</link>
-		<link>
 			<name>include/temp_nrf5x.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/temp_nrf5x.h</locationURI>
@@ -641,11 +636,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_att.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_ctlr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ctlr.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_dev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
@@ -684,11 +674,6 @@
 			<name>include/bluetooth/bt_hcievt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_host.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_host.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_intrf.h</name>
@@ -839,11 +824,6 @@
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/cc310_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/cc310_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/crypto/cc3xx_intrf.h</name>
@@ -1174,11 +1154,6 @@
 			<name>include/sensors/agm_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/agm_icm456x_ak09940.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm456x_ak09940.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/agm_invn_icm20948.h</name>

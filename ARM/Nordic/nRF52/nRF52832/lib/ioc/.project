@@ -86,11 +86,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/adc_nrf52_saadc.h</locationURI>
 		</link>
 		<link>
-			<name>include/analog_comp_nrf5x.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/analog_comp_nrf5x.h</locationURI>
-		</link>
-		<link>
 			<name>include/app_evt_handler.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
@@ -399,11 +394,6 @@
 			<name>include/sysstatusdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatusdef.h</locationURI>
-		</link>
-		<link>
-			<name>include/system_nrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/system_nrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/systick.h</name>
@@ -1359,11 +1349,6 @@
 			<name>include/sensors/agm_icm20948DMP.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948DMP.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/agm_icm456x_ak09940.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm456x_ak09940.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/agm_invn_icm20948.h</name>

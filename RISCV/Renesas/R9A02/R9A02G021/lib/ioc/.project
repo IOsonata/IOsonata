@@ -976,11 +976,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948DMP.h</locationURI>
 		</link>
 		<link>
-			<name>include/sensors/agm_icm456x_ak09940.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm456x_ak09940.h</locationURI>
-		</link>
-		<link>
 			<name>include/sensors/agm_invn_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_invn_icm20948.h</locationURI>

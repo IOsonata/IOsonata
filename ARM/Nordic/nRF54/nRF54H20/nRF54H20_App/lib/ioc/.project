@@ -726,11 +726,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/include/display/display_st77xx.h</locationURI>
 		</link>
 		<link>
-			<name>include/display/display_uc8151d.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/display/display_uc8151d.h</locationURI>
-		</link>
-		<link>
 			<name>include/display/display_uc8151x.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/display/display_uc8151x.h</locationURI>
@@ -739,11 +734,6 @@
 			<name>include/display/eink_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/display/eink_vb3300.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/display/eink_vb3300.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/ifont.h</name>
@@ -864,11 +854,6 @@
 			<name>include/sensors/accel_h3lis331dl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/accel_lis2dh12.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_sensor.h</name>
