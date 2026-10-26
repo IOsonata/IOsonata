@@ -591,11 +591,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/wm8904.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/.DS_Store</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
