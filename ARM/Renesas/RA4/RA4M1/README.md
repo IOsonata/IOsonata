@@ -13,12 +13,18 @@ against a host model of the IIC, not yet hardware-validated.
 
 ## IOsonata 0.13 release scope
 
-RA4M1 I2C (IIC) fixes and master/slave hardware validation are deferred beyond
-0.13 by maintainer decision on October 18, 2026. The unresolved hardware
-issue remains open; the existing IIC implementation is not hardware validated
-and is excluded from the validated functionality claimed for this release.
-This deferral removes RA4M1 I2C from the 0.13 merge requirements. Startup,
-GPIO, timer and UART hardware results remain unchanged.
+RA4M1 I2C (IIC) master/slave hardware validation is deferred beyond 0.13
+by maintainer decision on October 18, 2026. Software regression fixes have
+since been applied, but IIC remains excluded from the hardware-validated
+functionality claimed for this release. This deferral removes RA4M1 I2C
+hardware validation from the 0.13 merge requirements.
+
+On October 26, 2026, the maintainer confirmed that suitable external bus
+pull-ups are unavailable, so the EK-RA4M1 loopback cannot currently be tested.
+The earlier SCL-low observation is retained as an unresolved hardware result;
+its cause has not been established. Passing host tests do not establish
+electrical operation or resolve that observation. Startup, GPIO, timer, UART
+and USB hardware results remain unchanged.
 
 ## Implementation status (October 13, 2026)
 
@@ -43,12 +49,15 @@ RAM without semihosting inside the measurement loop.
 other AGT/GPT channels and all six GPT compare routes, long-run rollover/pause/resume,
 stop/start recovery, low-power operation, general DMA/DTC and ELC integration.
 See USBFS supply and validation below for current USB hardware results.
-SCI UART is complete and hardware-tested. Apart from the UART test
-(`run_uart_validation.py`, see SCI UART), the host-register-model test runners
-under `tests/ra4m1` predate the CMSIS migration and require updates;
-the old published model assertion counts are not post-migration results.
-Neither a complete automated production-header compiler matrix nor updated
-host regression results are claimed here.
+SCI UART is complete and hardware-tested. The October 26, 2026 host
+regression pass repaired the moved port paths and updated the startup model
+for the current USB clock selector and HOCO access. IIC passed 1,060
+assertions and startup passed 59 scenarios at -O0, -Os, -O2 and with
+AddressSanitizer/UndefinedBehaviorSanitizer. UART and RSPI host models also
+passed those four build modes; the USB clock regression passed at -O0, -Os
+and -O2. These are host results, not MCU execution. Full production-header
+ARM builds and ELF layout checks were not run in that review environment
+because the required ARM/LLVM toolchains were unavailable.
 
 ### Interrupt architecture
 
@@ -72,9 +81,10 @@ The ICU driver is not a replacement for the ARM NVIC.
 ### Remaining engineering work
 
 Complete the RA4M1 coding-style pass (file headers, declaration placement,
-one statement per line, explicit multi-line control-flow blocks), refresh the
-CMSIS-based host regression models, run production-header Cortex-M4 Debug
-and Release checks, and validate the IIC master, IIC slave and GPIO interrupts on hardware.
+one statement per line, explicit multi-line control-flow blocks), run
+production-header Cortex-M4 Debug and Release checks and ELF layout checks,
+and validate GPIO interrupts on hardware. IIC master/slave hardware testing
+remains deferred as described in the release scope above.
 No merge into `main` is authorized by this documentation update.
 
 ## IOsonata integration
@@ -378,7 +388,9 @@ configuration.
 Validation: `python3 tests/ra4m1/run_i2c_validation.py` runs
 `tests/ra4m1/i2c_test.cpp` against a register and bus model of the IIC, at
 -O0, -Os, -O2 and with the address and undefined behavior sanitizers, and
-compiles the driver for Cortex-M4 with the real headers. The model checks the
+attempts a Cortex-M4 compile with the real headers when a supported ARM
+compiler is available; otherwise it explicitly reports the compile as not
+run. The model checks the
 bus sequence (every start, address, byte, acknowledge and stop), the SCL
 hold of WAIT and of a master NACK, ICU edge events with a settable handler
 latency, and stuck-bus, arbitration-loss and stuck-slave recovery. It follows
