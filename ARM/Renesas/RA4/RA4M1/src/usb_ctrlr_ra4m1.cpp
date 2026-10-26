@@ -158,6 +158,12 @@ typedef struct __Ra4UsbState
 	uint16_t Ep0OutRemaining;
 } Ra4UsbState_t;
 
+// Debugger-visible bring-up state: 1=clock ready, 2=VBUS present,
+// 3=controller started, 4=D+ pull-up requested, 5=USB reset observed,
+// 6=SETUP received. Registers retain the latest sampled levels.
+extern "C" volatile uint32_t g_Ra4UsbStage = 0U;
+extern "C" volatile uint16_t g_Ra4UsbSyscfg = 0U;
+extern "C" volatile uint16_t g_Ra4UsbIntsts0 = 0U;
 static Ra4UsbState_t s_Usb;
 alignas(4) static uint8_t s_Ep0In[RA4USB_EP0_MPS];
 alignas(4) static uint8_t s_Ep0Out[RA4USB_EP0_MPS];
@@ -442,6 +448,7 @@ static void Ra4UsbReset(void)
 	Ra4UsbReleaseAll(false);
 	s_Usb.Closing = false;
 	Ra4UsbEp0Reset();
+	g_Ra4UsbStage = 5U;
 	s_Usb.Suspended = false;
 	Ra4UsbBusEvent(USB_CTRLR_EVT_RESET);
 }
@@ -473,6 +480,7 @@ static void Ra4UsbHandleSetup(uint16_t Stage)
 		(event.Setup.bmRequestType & USB_ENDPADDR_DIR_IN) == 0U ?
 		event.Setup.wLength : 0U;
 
+	g_Ra4UsbStage = 6U;
 	UsbDevProcessEvent(0, &event);
 
 	if (!s_Usb.Ep0Halted && s_Usb.Ep0OutRemaining != 0U)
@@ -772,6 +780,8 @@ static bool Ra4UsbClockEnable(void)
 {
 	R_MSTP->MSTPCRB &= ~RA4USB_MSTP_MASK;
 	(void)R_MSTP->MSTPCRB;
+	// Enable the USB transceiver supply before starting USBFS operation.
+	R_USB_FS0->USBMC |= RA4USB_USBMC_VDCEN;
 	R_USB_FS0->SYSCFG = RA4USB_SYSCFG_SCKE;
 	for (uint32_t i = 0U; i < RA4USB_WAIT_COUNT; ++i)
 	{
@@ -779,7 +789,8 @@ static bool Ra4UsbClockEnable(void)
 		{
 			R_USB_FS0->SYSCFG =
 				RA4USB_SYSCFG_SCKE | RA4USB_SYSCFG_USBE;
-			R_USB_FS0->USBMC |= RA4USB_USBMC_VDCEN;
+			g_Ra4UsbSyscfg = R_USB_FS0->SYSCFG;
+			g_Ra4UsbStage = 1U;
 			return true;
 		}
 	}
@@ -917,7 +928,10 @@ bool UsbCtrlrVbusDetected(int DevNo)
 	{
 		return false;
 	}
-	return (R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) != 0U;
+	g_Ra4UsbIntsts0 = R_USB_FS0->INTSTS0;
+	if ((g_Ra4UsbIntsts0 & RA4USB_INT_VBSTS) != 0U)
+		g_Ra4UsbStage = 2U;
+	return (g_Ra4UsbIntsts0 & RA4USB_INT_VBSTS) != 0U;
 }
 
 bool UsbCtrlrStart(int DevNo)
@@ -967,6 +981,7 @@ bool UsbCtrlrStart(int DevNo)
 	s_Usb.SofEnabled = false;
 	s_Usb.Closing = false;
 	s_Usb.Started = true;
+	g_Ra4UsbStage = 3U;
 	Ra4UsbEp0Reset();
 
 	R_USB_FS0->INTSTS0 = 0U;
@@ -1041,6 +1056,8 @@ void UsbCtrlrConnect(int DevNo)
 	if (DevNo == 0 && s_Usb.Started && UsbCtrlrVbusDetected(DevNo))
 	{
 		R_USB_FS0->SYSCFG |= RA4USB_SYSCFG_DPRPU;
+		g_Ra4UsbSyscfg = R_USB_FS0->SYSCFG;
+		g_Ra4UsbStage = 4U;
 	}
 }
 
