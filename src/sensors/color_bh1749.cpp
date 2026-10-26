@@ -27,6 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 -------------------------------------------------------------------------*/
 #include "sensors/color_bh1749.h"
+#include "idelay.h"
 
 #define BH1749_SYSTEM_CONTROL_REG			0x40U
 #define BH1749_MODE_CONTROL1_REG				0x41U
@@ -40,6 +41,7 @@ SOFTWARE.
 
 #define BH1749_PART_ID_MASK					0x3FU
 #define BH1749_MANUFACTURER_ID				0xE0U
+#define BH1749_SOFT_RESET_MASK				0x80U
 #define BH1749_INT_RESET_MASK				0x40U
 #define BH1749_VALID_MASK					0x80U
 #define BH1749_RGB_ENABLE					0x10U
@@ -47,12 +49,20 @@ SOFTWARE.
 #define BH1749_INT_SOURCE_SHIFT				2U
 #define BH1749_INT_ENABLE_MASK				0x01U
 
+ColorBh1749::ColorBh1749()
+{
+	DeviceAddress(BH1749_I2C_ADDR0);
+	vEvtHandler = NULL;
+	vIntId = 0;
+	vByteOrder = DEV_BYTEORDER_LITTLE;
+}
+
 bool ColorBh1749::ReadReg(uint8_t Reg, uint8_t *pData, int Len)
 {
 	if (vpIntrf == NULL || pData == NULL || Len <= 0)
 		return false;
 
-	return vpIntrf->Read(vDevAddr, &Reg, 1, pData, Len) == Len;
+	return Device::Read(&Reg, 1, pData, Len) == Len;
 }
 
 bool ColorBh1749::WriteReg(uint8_t Reg, uint8_t Value)
@@ -60,7 +70,7 @@ bool ColorBh1749::WriteReg(uint8_t Reg, uint8_t Value)
 	if (vpIntrf == NULL)
 		return false;
 
-	return vpIntrf->Write(vDevAddr, &Reg, 1, &Value, 1) == 1;
+	return Device::Write(&Reg, 1, &Value, 1) == 1;
 }
 
 bool ColorBh1749::WriteReg16(uint8_t Reg, uint16_t Value)
@@ -73,7 +83,7 @@ bool ColorBh1749::WriteReg16(uint8_t Reg, uint16_t Value)
 	data[0] = (uint8_t)Value;
 	data[1] = (uint8_t)(Value >> 8);
 
-	return vpIntrf->Write(vDevAddr, &Reg, 1, data, sizeof(data)) == sizeof(data);
+	return Device::Write(&Reg, 1, data, sizeof(data)) == sizeof(data);
 }
 
 bool ColorBh1749::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
@@ -81,15 +91,17 @@ bool ColorBh1749::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
 	uint8_t id;
 	uint8_t manufacturer;
 
-	vbInitialized = false;
-	vpIntrf = NULL;
+	Valid(false);
+	Interface(NULL);
+	DeviceID(UINT64_MAX);
 
 	if (pIntrf == NULL || pIntrf->Type() != DEVINTRF_TYPE_I2C ||
 		(DevAddr != BH1749_I2C_ADDR0 && DevAddr != BH1749_I2C_ADDR1))
 		return false;
 
-	vpIntrf = pIntrf;
-	vDevAddr = DevAddr;
+	Interface(pIntrf);
+	DeviceAddress(DevAddr);
+	msDelay(2);
 
 	if (!ReadReg(BH1749_SYSTEM_CONTROL_REG, &id, 1))
 		return false;
@@ -101,12 +113,13 @@ bool ColorBh1749::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
 		manufacturer != BH1749_MANUFACTURER_ID)
 		return false;
 
-	vbInitialized = true;
+	DeviceID(id & BH1749_PART_ID_MASK);
+	Valid(true);
 
 	if (!Configure(COLOR_BH1749_GAIN_1X, COLOR_BH1749_GAIN_1X,
 		COLOR_BH1749_MEASURE_120MS) || !Enable())
 	{
-		vbInitialized = false;
+		Valid(false);
 		return false;
 	}
 
@@ -115,18 +128,27 @@ bool ColorBh1749::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
 
 bool ColorBh1749::Enable()
 {
-	if (!vbInitialized)
+	if (!Valid())
 		return false;
 
 	return WriteReg(BH1749_MODE_CONTROL2_REG, BH1749_RGB_ENABLE);
 }
 
-bool ColorBh1749::Disable()
+void ColorBh1749::Disable()
 {
-	if (!vbInitialized)
-		return false;
+	if (!Valid())
+		return;
 
-	return WriteReg(BH1749_MODE_CONTROL2_REG, 0);
+	if (!WriteReg(BH1749_MODE_CONTROL2_REG, 0))
+		Valid(false);
+}
+
+void ColorBh1749::Reset()
+{
+	// The reset measurement fields are not usable until Init configures them.
+	if (Valid())
+		WriteReg(BH1749_SYSTEM_CONTROL_REG, BH1749_SOFT_RESET_MASK);
+	Valid(false);
 }
 
 bool ColorBh1749::Configure(ColorBh1749Gain_t RgbGain,
@@ -134,7 +156,7 @@ bool ColorBh1749::Configure(ColorBh1749Gain_t RgbGain,
 {
 	uint8_t value;
 
-	if (!vbInitialized)
+	if (!Valid())
 		return false;
 
 	if ((RgbGain != COLOR_BH1749_GAIN_1X &&
@@ -159,7 +181,7 @@ bool ColorBh1749::ConfigureInterrupt(ColorBh1749IntSource_t Source,
 {
 	uint8_t value;
 
-	if (!vbInitialized || LowThreshold > HighThreshold)
+	if (!Valid() || LowThreshold > HighThreshold)
 		return false;
 
 	if ((Source != COLOR_BH1749_INT_RED &&
@@ -188,7 +210,7 @@ bool ColorBh1749::ConfigureInterrupt(ColorBh1749IntSource_t Source,
 
 bool ColorBh1749::DisableInterrupt()
 {
-	if (!vbInitialized)
+	if (!Valid())
 		return false;
 
 	return WriteReg(BH1749_INTERRUPT_REG, 0);
@@ -198,7 +220,7 @@ bool ColorBh1749::ReadInterruptStatus(bool &Active)
 {
 	uint8_t value;
 
-	if (!vbInitialized || !ReadReg(BH1749_INTERRUPT_REG, &value, 1))
+	if (!Valid() || !ReadReg(BH1749_INTERRUPT_REG, &value, 1))
 		return false;
 
 	Active = (value & BH1749_INT_STATUS_MASK) != 0;
@@ -208,7 +230,7 @@ bool ColorBh1749::ReadInterruptStatus(bool &Active)
 
 bool ColorBh1749::ClearInterrupt()
 {
-	if (!vbInitialized)
+	if (!Valid())
 		return false;
 
 	return WriteReg(BH1749_SYSTEM_CONTROL_REG, BH1749_INT_RESET_MASK);
@@ -220,7 +242,7 @@ bool ColorBh1749::Read(ColorBh1749Data_t &Data)
 	uint8_t raw[12];
 	ColorBh1749Data_t sample;
 
-	if (!vbInitialized)
+	if (!Valid())
 		return false;
 
 	/*

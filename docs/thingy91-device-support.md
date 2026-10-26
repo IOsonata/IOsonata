@@ -129,3 +129,24 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - Console output uses UART0 on P0.01 TX / P0.00 RX: 1 Mbaud for FlashMemoryDemo and 115200 baud for the filesystem demos. The nRF5340 must provide the matching UART bridge if using USB for the console.
 - Host C++ syntax and project-link checks passed. ARM compilation/linking and board validation remain pending.
 
+
+## BH1749 device lifecycle
+
+`ColorBh1749` derives from `Device` and uses its interface, address, device ID
+and validity state. Register transfers use `Device::Read` and `Device::Write`.
+The existing `Init`, configuration, interrupt and raw-sample APIs are retained.
+
+`Disable()` now returns `void`, matching `Device::Disable()`. It preserves the
+measurement configuration so `Enable()` can resume measurement. A failed disable
+write clears `Valid()`; call `Init()` to recover. Code that previously tested the
+return from `Disable()` must instead call it and then check `Valid()`.
+
+`Reset()` sends the software-reset command and clears validity. Call `Init()`
+afterward to restore valid gain/timing settings and enable measurement. An
+uninitialized or invalid object does not issue a reset command.
+
+Run `python3 tests/sensors/run_bh1749.py` for the host regression. It exercises
+the lifecycle through `Device *`, inherited address selection, identity checks,
+configuration retention, reset/reinitialization, raw samples, interrupts and
+failed/short transfers at GCC O0/O2 with ASan/UBSan. These tests do not establish
+hardware timing or replace an ARM firmware build.

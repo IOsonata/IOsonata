@@ -31,7 +31,7 @@ SOFTWARE.
 
 #include <stddef.h>
 #include <stdint.h>
-#include "device_intrf.h"
+#include "device.h"
 
 #define BH1749_I2C_ADDR0					0x38U
 #define BH1749_I2C_ADDR1					0x39U
@@ -75,17 +75,19 @@ typedef struct __ColorBh1749_Data
 	uint16_t Green2;
 } ColorBh1749Data_t;
 
-class ColorBh1749
+class ColorBh1749 : public Device
 {
 public:
-	ColorBh1749() : vpIntrf(NULL), vDevAddr(BH1749_I2C_ADDR0), vbInitialized(false)
-	{
-	}
+	ColorBh1749();
 
 	/** Detect device, select 120-ms measurement and 1x RGB/IR gains, and enable it. */
 	bool Init(DeviceIntrf * const pIntrf, uint32_t DevAddr = BH1749_I2C_ADDR0);
-	bool Enable();
-	bool Disable();
+	bool Enable() override;
+	// Preserves measurement configuration. A bus failure clears Valid().
+	void Disable() override;
+	// Software reset clears configuration and validity; call Init() afterward.
+	void Reset() override;
+	using Device::Read;
 
 	/** Configure RGB/IR gains and measurement time. */
 	bool Configure(ColorBh1749Gain_t RgbGain, ColorBh1749Gain_t IrGain,
@@ -115,10 +117,6 @@ private:
 	bool ReadReg(uint8_t Reg, uint8_t *pData, int Len);
 	bool WriteReg(uint8_t Reg, uint8_t Value);
 	bool WriteReg16(uint8_t Reg, uint16_t Value);
-
-	DeviceIntrf *vpIntrf;
-	uint32_t vDevAddr;
-	bool vbInitialized;
 };
 
 #endif
