@@ -371,10 +371,19 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 	if (Usb)
 	{
 		const uint8_t usbSource = pPlan->Source == RA4M1_CK_HOCO ? 1U : 0U;
-		if (usbSource != 0U && R_SYSTEM->HOCOUTCR != 0U)
-			return RA4M1_STARTUP_USB_CLOCK;
-		R_SYSTEM->USBCKCR =  usbSource;
-		if (R_SYSTEM->USBCKCR != usbSource)
+		// USBFS may select HOCO only with user trimming disabled.
+		// The register can retain a nonzero value across a warm restart.
+		if (usbSource != 0U)
+		{
+			R_SYSTEM->HOCOUTCR = 0U;
+			if (R_SYSTEM->HOCOUTCR != 0U)
+				return RA4M1_STARTUP_USB_CLOCK;
+		}
+		// USBCKCR is an 8-bit register at 0x4001E0D0 on RA4M1.
+		// Use byte access so the adjacent reserved addresses are untouched.
+		volatile uint8_t * const pUsbClock = (volatile uint8_t *)0x4001E0D0UL;
+		*pUsbClock = usbSource;
+		if ((*pUsbClock & 1U) != usbSource)
 			return RA4M1_STARTUP_USB_CLOCK;
 	}
 	if (!Ra4m1SetDividers(pPlan->Dividers) || !Ra4m1SetSource(pPlan->Source))
