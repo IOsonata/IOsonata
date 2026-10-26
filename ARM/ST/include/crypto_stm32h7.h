@@ -37,7 +37,8 @@ SOFTWARE.
 // Polled peripheral: ECB/CBC/CTR accept AES-128/256. AES-128
 // CMAC/CCM/GCM reuse the software base's constructions
 // over the hardware block primitive. Separate instances share peripheral locks.
-class CryptoStm32H7Aes : public CryptoAesModes {
+class CryptoStm32H7Aes : public CryptoAesModes
+{
 public:
 	bool Enable() override;
 	void Disable() override;

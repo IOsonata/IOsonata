@@ -32,7 +32,8 @@ SOFTWARE.
  * SPI commands follow Nordic's nRF70 bus protocol, not serial NOR flash.
  * No power sequencing or firmware loading is performed here.
  */
-class Nrf70Spi {
+class Nrf70Spi
+{
 public:
 	Nrf70Spi() : vpSpi(nullptr), vSelect(0), vLatency(0), vErrors(0)
 	{

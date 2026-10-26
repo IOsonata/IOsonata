@@ -30,7 +30,8 @@ SOFTWARE.
 #include "crypto/crypto_softsha256.h"
 #include "cc3xx_intrf.h"
 
-class CryptoCc3xxSym : public CryptoAesModes, public HashEngine {
+class CryptoCc3xxSym : public CryptoAesModes, public HashEngine
+{
 public:
 	bool Init(Cc3xxIntrf *pIntrf);
 	bool Enable() override;

@@ -38,10 +38,22 @@ SOFTWARE.
 #define SX1509_I2C_ADDR2 0x70
 #define SX1509_I2C_ADDR3 0x71
 
-enum SX1509_PULL { SX1509_PULL_NONE, SX1509_PULL_UP, SX1509_PULL_DOWN };
-enum SX1509_EDGE { SX1509_EDGE_NONE, SX1509_EDGE_RISING, SX1509_EDGE_FALLING, SX1509_EDGE_BOTH };
+enum SX1509_PULL
+{
+	SX1509_PULL_NONE,
+	SX1509_PULL_UP,
+	SX1509_PULL_DOWN
+};
+enum SX1509_EDGE
+{
+	SX1509_EDGE_NONE,
+	SX1509_EDGE_RISING,
+	SX1509_EDGE_FALLING,
+	SX1509_EDGE_BOTH
+};
 
-struct Sx1509LedCfg_t {
+struct Sx1509LedCfg_t
+{
 	uint8_t OnIntensity; // 0..255
 	uint8_t OffIntensity; // 0..7 (linear intensity = 4 * code)
 	uint8_t OnTime; // 0..31; 0 = static. Other codes are datasheet clock units.
@@ -50,7 +62,8 @@ struct Sx1509LedCfg_t {
 	uint8_t FallTime;
 };
 
-class IoExpSx1509 : public Device {
+class IoExpSx1509 : public Device
+{
 public:
 	IoExpSx1509();
 	// Attach without resetting GPIOs or rails. Disables interrupt autoclear on

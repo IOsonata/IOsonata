@@ -41,20 +41,23 @@ SOFTWARE.
 #define ADXL367_EVT_TAP_ONE      0x0100
 #define ADXL367_EVT_TAP_TWO      0x0200
 
-typedef enum {
+typedef enum
+{
 	ADXL367_FIFO_DISABLED = 0,
 	ADXL367_FIFO_OLDEST = 1,
 	ADXL367_FIFO_STREAM = 2,
 	ADXL367_FIFO_TRIGGERED = 3
 } ADXL367_FIFO_MODE;
 
-typedef enum {
+typedef enum
+{
 	ADXL367_FIFO_XYZ = 0,
 	ADXL367_FIFO_XYZ_TEMP = 4,
 	ADXL367_FIFO_XYZ_ADC = 8
 } ADXL367_FIFO_FORMAT;
 
-class AccelAdxl367 : public AccelSensor {
+class AccelAdxl367 : public AccelSensor
+{
 public:
 	AccelAdxl367();
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);

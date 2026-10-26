@@ -870,7 +870,8 @@ private:
 class AgBmi270 : public AccelBmi270, public GyroBmi270, public TempBmi270 {
 public:
 	AgBmi270() : vbInitialized(false), vFifoDataFlag(0), vFifoFrameSize(0),
-		vPrevTime(0), vRollover(0) {
+		vPrevTime(0), vRollover(0)
+		{
 		vbSensorEnabled[0] = false;
 		vbSensorEnabled[1] = false;
 		vbSensorEnabled[2] = false;

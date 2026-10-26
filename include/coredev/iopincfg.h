@@ -184,7 +184,8 @@ typedef struct __iopin_cfg {
 typedef IOPinCfg_t		IOPINCFG;
 
 /// I/O pin core assignment, ordered as core, port, pin.
-typedef struct __iopin_core_cfg {
+typedef struct __iopin_core_cfg
+{
 	int CoreNo;				//!< Core number, main core is 0
 	int PortNo;				//!< Port number
 	int PinNo;				//!< Pin number

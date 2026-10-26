@@ -71,7 +71,8 @@ typedef enum __PowerMgnt_Evt {
 	PWRMGNT_EVT_CHARGE_DETECTED			//!< Charge source detected
 } PWRMGNT_EVT;
 
-typedef enum __PowerMgnt_Battery_State {
+typedef enum __PowerMgnt_Battery_State
+{
 	PWRMGNT_BATTERY_UNKNOWN,
 	PWRMGNT_BATTERY_ABSENT,
 	PWRMGNT_BATTERY_PRESENT
@@ -170,7 +171,8 @@ public:
 	 * Drivers that cannot distinguish an absent battery from an unsupported
 	 * presence indication return PWRMGNT_BATTERY_UNKNOWN.
 	 */
-	virtual PWRMGNT_BATTERY_STATE BatteryState() {
+	virtual PWRMGNT_BATTERY_STATE BatteryState()
+	{
 		return Battery() ? PWRMGNT_BATTERY_PRESENT : PWRMGNT_BATTERY_UNKNOWN;
 	}
 

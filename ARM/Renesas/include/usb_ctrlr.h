@@ -37,7 +37,8 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "usb/usb_def.h"
 
-typedef enum __Usb_Ctrlr_Trans_Type {
+typedef enum __Usb_Ctrlr_Trans_Type
+{
 	CONTROL = USB_ENDPATT_TRANS_CONTROL,
 	ISO = USB_ENDPATT_TRANS_ISO,
 	BULK = USB_ENDPATT_TRANS_BULK,
@@ -45,7 +46,8 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 } UsbCtrlrTransType_t;
 
 #if defined(RA4M1)
-enum {
+enum
+{
 	USB_CTRLR_CNT = 1,
 	USB_HIGHSPEED_CAPABLE_0 = 0,
 	USB_EPIN_CNT_0 = 10,
@@ -90,13 +92,15 @@ enum {
 
 #define USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)
 
-typedef enum __Usb_Ctrlr_Xfer_Result {
+typedef enum __Usb_Ctrlr_Xfer_Result
+{
 	USB_CTRLR_XFER_SUCCESS,
 	USB_CTRLR_XFER_FAILED,
 	USB_CTRLR_XFER_CANCELLED,
 } UsbCtrlrXferResult_t;
 
-typedef enum __Usb_Ctrlr_Evt_Type {
+typedef enum __Usb_Ctrlr_Evt_Type
+{
 	USB_CTRLR_EVT_RESET,		//!< USB bus reset
 	USB_CTRLR_EVT_SETUP,		//!< New EP0 SETUP request
 	USB_CTRLR_EVT_DRDY,			//!< Data is ready in the device to be retrieved
@@ -111,14 +115,16 @@ typedef enum __Usb_Ctrlr_Evt_Type {
 
 #pragma pack(push, 4)
 
-typedef struct __Usb_Ctrlr_Xfer_Evt {
+typedef struct __Usb_Ctrlr_Xfer_Evt
+{
 	uint8_t EpAddr;
 	uint16_t Length;
 	UsbCtrlrXferResult_t Result;
 	const uint8_t *pBuffer;		//!< EP0 OUT bytes, valid during the callback only
 } UsbCtrlrXferEvt_t;
 
-typedef struct __Usb_Ctrlr_Evt {
+typedef struct __Usb_Ctrlr_Evt
+{
 	UsbCtrlrEvtType_t Type;
 	union {
 		UsbSetupData_t Setup;
@@ -142,7 +148,8 @@ typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t Event,
 									uint16_t Length, void *pContext);
 
 /// What the generic layer hands the port at UsbCtrlrInit.
-typedef struct __Usb_Ctrlr_Config {
+typedef struct __Usb_Ctrlr_Config
+{
 	int IntPrio;					//!< Interrupt priority of the USB peripheral
 	const IOPinCfg_t *pIOPinMap;	//!< Optional board USB pins
 	int NbIOPins;					//!< Number of entries in pIOPinMap

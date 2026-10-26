@@ -36,14 +36,16 @@ SOFTWARE.
 #define BH1745_I2C_ADDR0 0x38
 #define BH1745_I2C_ADDR1 0x39
 
-struct Bh1745Data_t {
+struct Bh1745Data_t
+{
 	uint16_t Red;
 	uint16_t Green;
 	uint16_t Blue;
 	uint16_t Clear;
 };
 
-class ColorBh1745 : public Device {
+class ColorBh1745 : public Device
+{
 public:
 	ColorBh1745();
 	bool Init(DeviceIntrf *pIntrf, uint32_t Addr = BH1745_I2C_ADDR0);

@@ -111,19 +111,23 @@ static void IntClearDiag(void);
 static int IntEvent(DevIntrf_t *, DEVINTRF_EVT, uint8_t *, int);
 
 // Only application diagnostics extend the reusable device class.
-class IntLoopbackClass final : public UsbdInt {
+class IntLoopbackClass final : public UsbdInt
+{
 public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-		uint8_t **ppData, uint16_t *pLength) override {
+		uint8_t **ppData, uint16_t *pLength) override
+		{
 		return IntControl(pSetup, Stage, ppData, pLength);
 	}
-	void Reset(void) override {
+	void Reset(void) override
+	{
 		UsbdInt::Reset();
 		IntClearDiag();
 	}
 
 protected:
-	bool OpenTransport(uint16_t Mps, uint8_t Interval) override {
+	bool OpenTransport(uint16_t Mps, uint8_t Interval) override
+	{
 		IntClearDiag();
 		return UsbdInt::OpenTransport(Mps, Interval);
 	}

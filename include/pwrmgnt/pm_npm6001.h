@@ -62,7 +62,8 @@ SOFTWARE.
  * nPM1300 LDO1 used as a load switch and nPM6001 READY is connected to
  * nPM1300 GPIO4. Board code must establish that power sequence before Init().
  */
-class PmnPM6001 : public Device {
+class PmnPM6001 : public Device
+{
 public:
 	PmnPM6001();
 

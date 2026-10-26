@@ -53,7 +53,8 @@ SOFTWARE.
 #endif
 
 #pragma pack(push, 4)
-typedef struct {
+typedef struct
+{
 	uint32_t Freq;		//!< Freq in Hz
 	uint32_t RegVal;	//!< Register value
 } MCLK_FREQ;
@@ -115,7 +116,8 @@ static bool s_IntEnabled;
 #if defined(NRF53_SERIES)
 // HFCLKAUDIO synthesizes exact integer-family and 44.1-kHz-family sample
 // clocks. The 32 MHz PCLK dividers do not provide exact 48 kHz.
-typedef struct {
+typedef struct
+{
 	uint32_t Rate;
 	uint32_t Mclk;
 	uint32_t MckReg;

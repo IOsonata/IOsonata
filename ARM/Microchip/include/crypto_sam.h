@@ -30,7 +30,8 @@ SOFTWARE.
 #include "crypto/crypto_softaes.h"
 
 // The target library supplies the SAM4E or SAM4L register operations.
-class CryptoSam : public CryptoAesModes, public RngEngine {
+class CryptoSam : public CryptoAesModes, public RngEngine
+{
 public:
 	bool Enable() override;
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,

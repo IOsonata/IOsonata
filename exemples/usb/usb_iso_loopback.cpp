@@ -113,19 +113,23 @@ static void IsoClearDiag(void);
 static int IsoEvent(DevIntrf_t *, DEVINTRF_EVT, uint8_t *, int);
 
 // Only application diagnostics extend the reusable device class.
-class IsoLoopbackClass final : public UsbdIso {
+class IsoLoopbackClass final : public UsbdIso
+{
 public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-		uint8_t **ppData, uint16_t *pLength) override {
+		uint8_t **ppData, uint16_t *pLength) override
+		{
 		return IsoControl(pSetup, Stage, ppData, pLength);
 	}
-	void Reset(void) override {
+	void Reset(void) override
+	{
 		UsbdIso::Reset();
 		IsoClearDiag();
 	}
 
 protected:
-	bool OpenTransport(uint16_t Mps, uint8_t Interval) override {
+	bool OpenTransport(uint16_t Mps, uint8_t Interval) override
+	{
 		IsoClearDiag();
 #ifdef ISO_TEST_RX_CLAMP
 		// Test-only oversize receive injection; advertised layout is unchanged.

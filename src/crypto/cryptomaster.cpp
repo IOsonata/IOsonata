@@ -51,7 +51,8 @@ SOFTWARE.
 
 static bool s_bCmQuarantined;
 // DMA must never retain addresses into a returned stack frame after a fault.
-struct CmDmaStorage {
+struct CmDmaStorage
+{
 	uint32_t Config;
 	uint8_t Key[32];
 	uint8_t Input[CM_AES_BATCH];

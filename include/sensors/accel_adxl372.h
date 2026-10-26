@@ -30,19 +30,22 @@ SOFTWARE.
 #define ADXL372_PART_ID 0xFA
 #define ADXL372_I2C_ADDR 0x53
 
-enum Adxl372PowerMode {
+enum Adxl372PowerMode
+{
 	ADXL372_STANDBY = 0,
 	ADXL372_WAKEUP = 1,
 	ADXL372_INSTANT_ON = 2,
 	ADXL372_MEASUREMENT = 3
 };
-enum Adxl372FifoMode {
+enum Adxl372FifoMode
+{
 	ADXL372_FIFO_BYPASS = 0,
 	ADXL372_FIFO_STREAM = 1,
 	ADXL372_FIFO_TRIGGER = 2,
 	ADXL372_FIFO_OLDEST = 3
 };
-enum Adxl372FifoFormat {
+enum Adxl372FifoFormat
+{
 	ADXL372_FIFO_XYZ = 0,
 	ADXL372_FIFO_X = 1,
 	ADXL372_FIFO_Y = 2,
@@ -52,24 +55,28 @@ enum Adxl372FifoFormat {
 	ADXL372_FIFO_YZ = 6,
 	ADXL372_FIFO_XYZ_PEAK = 7
 };
-enum Adxl372Detection {
+enum Adxl372Detection
+{
 	ADXL372_DETECT_ACTIVITY = 0,
 	ADXL372_DETECT_ACTIVITY2 = 1,
 	ADXL372_DETECT_INACTIVITY = 2
 };
-struct Adxl372FifoSample {
+struct Adxl372FifoSample
+{
 	AccelSensorRawData_t Accel;
 	uint8_t AxisMask;
 	bool Peak;
 };
 
-struct Adxl372Status {
+struct Adxl372Status
+{
 	uint8_t Status1;
 	uint8_t Status2;
 	uint16_t FifoEntries;
 };
 
-class AccelAdxl372 : public AccelSensor {
+class AccelAdxl372 : public AccelSensor
+{
 public:
 	AccelAdxl372();
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);

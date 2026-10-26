@@ -178,7 +178,8 @@ static const uint32_t s_P256B[P256_WORDS] = {
 	0x769886BCU, 0xB3EBBD55U, 0xAA3A93E7U, 0x5AC635D8U,
 };
 
-enum PkaSramDirection : uint8_t {
+enum PkaSramDirection : uint8_t
+{
 	PKA_SRAM_NONE,
 	PKA_SRAM_WRITE,
 	PKA_SRAM_READ,

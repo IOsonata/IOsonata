@@ -143,7 +143,8 @@ extern "C" {
 #ifdef __cplusplus
 }
 
-class Ba414ep : public CryptoUecc {
+class Ba414ep : public CryptoUecc
+{
 public:
 	// Software import and hardware operations use the same context type.
 	using KeyCtx = CryptoUecc::KeyCtx;

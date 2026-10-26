@@ -41,7 +41,8 @@ SOFTWARE.
 
 struct battery_model;
 
-class PmnPM1300FuelGauge : public PmnPM1300 {
+class PmnPM1300FuelGauge : public PmnPM1300
+{
 public:
 	PmnPM1300FuelGauge();
 	~PmnPM1300FuelGauge();

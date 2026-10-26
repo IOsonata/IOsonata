@@ -33,7 +33,8 @@ SOFTWARE.
 
 static bool s_Busy = false;
 
-class CryptoLpc546xx : public RngEngine {
+class CryptoLpc546xx : public RngEngine
+{
 public:
 	void Disable() override
 	{

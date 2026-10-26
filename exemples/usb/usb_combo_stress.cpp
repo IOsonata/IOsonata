@@ -78,7 +78,8 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define ISO_REQ_GET_DIAG		0x5AU
 
 #pragma pack(push, 1)
-typedef struct __Combo_Iso_Diag {
+typedef struct __Combo_Iso_Diag
+{
 	uint32_t RxMissCnt;
 	uint32_t TxMissCnt;
 	uint32_t LoopbackDropCnt;
@@ -87,7 +88,8 @@ typedef struct __Combo_Iso_Diag {
 } ComboIsoDiag_t;
 #pragma pack(pop)
 
-typedef struct __Combo_Function_State {
+typedef struct __Combo_Function_State
+{
 	uint32_t IsoLoopbackDropCnt;
 } ComboFunctionState_t;
 
@@ -97,14 +99,17 @@ static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	uint8_t **ppData, uint16_t *pLength);
 static void IsoClearDiag(void);
 
-class IsoLoopbackClass final : public UsbdIso {
+class IsoLoopbackClass final : public UsbdIso
+{
 public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-		uint8_t **ppData, uint16_t *pLength) override {
+		uint8_t **ppData, uint16_t *pLength) override
+		{
 		return IsoControl(pSetup, Stage, ppData, pLength);
 	}
 protected:
-	bool OpenTransport(uint16_t Mps, uint8_t Interval) override {
+	bool OpenTransport(uint16_t Mps, uint8_t Interval) override
+	{
 		IsoClearDiag();
 		return UsbdIso::OpenTransport(Mps, Interval);
 	}

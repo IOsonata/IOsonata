@@ -39,14 +39,16 @@ SOFTWARE.
 /// Interrupt as 2^(Interval-1) frames/microframes. HS fields are required
 /// only on high-speed-capable targets. High-bandwidth transactions are not
 /// supported. The const table must remain alive and unchanged while registered.
-typedef struct __Usbd_Periodic_Alternate {
+typedef struct __Usbd_Periodic_Alternate
+{
 	uint16_t FsMps;
 	uint16_t HsMps;
 	uint8_t FsInterval;
 	uint8_t HsInterval;
 } UsbdPeriodicAlt_t;
 
-typedef struct __Usbd_Periodic_Config {
+typedef struct __Usbd_Periodic_Config
+{
 	int DevNo;
 	const UsbdPeriodicAlt_t *pAlternates;
 	uint8_t AltCount;
@@ -59,7 +61,8 @@ typedef struct __Usbd_Periodic_Config {
 /// Shared device policy for a vendor interface with one bidirectional pair.
 /// Applications instantiate UsbdInt or UsbdIso. Override Control only for
 /// application-specific requests; enumeration belongs to this class.
-class UsbdPeriodic : public UsbDeviceClass {
+class UsbdPeriodic : public UsbDeviceClass
+{
 public:
 	bool SelectConfig(uint8_t ConfigValue) override;
 	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override;

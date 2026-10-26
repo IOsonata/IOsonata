@@ -52,7 +52,8 @@ SOFTWARE.
 #define ADP5360_PGOOD_CHARGE_COMPLETE		0x10U
 #define ADP5360_PGOOD_RESET					0x20U
 
-typedef enum __Adp5360ChargerMode {
+typedef enum __Adp5360ChargerMode
+{
 	ADP5360_CHARGER_OFF = 0,
 	ADP5360_CHARGER_TRICKLE = 1,
 	ADP5360_CHARGER_FAST_CONST_I = 2,
@@ -63,7 +64,8 @@ typedef enum __Adp5360ChargerMode {
 	ADP5360_CHARGER_BATTERY_DETECT = 7,
 } Adp5360ChargerMode_t;
 
-typedef enum __Adp5360BatteryState {
+typedef enum __Adp5360BatteryState
+{
 	ADP5360_BATTERY_NORMAL = 0,
 	ADP5360_BATTERY_NOT_PRESENT = 1,
 	ADP5360_BATTERY_DEAD = 2,
@@ -77,7 +79,8 @@ typedef enum __Adp5360BatteryState {
  * Init(DeviceIntrf...) only verifies the device ID and does not change
  * regulator, charger, fuel-gauge or protection configuration.
  */
-class PmAdp5360 : public PowerMgnt {
+class PmAdp5360 : public PowerMgnt
+{
 public:
 	PmAdp5360();
 

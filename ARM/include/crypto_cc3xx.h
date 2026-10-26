@@ -43,7 +43,8 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-class CryptoCc3xx : public CryptoUecc {
+class CryptoCc3xx : public CryptoUecc
+{
 public:
 	CryptoCc3xx()
 	{

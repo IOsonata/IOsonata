@@ -479,7 +479,8 @@ static const uint8_t s_BMI270CfgData[] = {
 
 static const size_t s_BMI270CfgDataLen = sizeof(s_BMI270CfgData) / sizeof(uint8_t);
 
-typedef struct __BMI270_Odr {
+typedef struct __BMI270_Odr
+{
 	uint32_t Freq;
 	uint8_t Code;
 } BMI270Odr_t;

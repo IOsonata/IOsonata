@@ -54,7 +54,8 @@ SOFTWARE.
 // operation and an AES operation cannot start during a random draw. SHA-256
 // and P-256 have no SCE5 primitive on this part and stay in software.
 
-class CryptoRa4m1Rng : public RngEngine {
+class CryptoRa4m1Rng : public RngEngine
+{
 public:
 	CryptoRa4m1Rng()
 	{
@@ -75,7 +76,8 @@ CryptoRa4m1Rng *CryptoRa4m1RngCreate(void *pMem, size_t MemSize);
 // Complete AES accelerator: ECB, CBC and CTR with AES-128 and AES-256 keys in
 // both directions on the SCE5; CMAC, CCM and GCM are composed by
 // CryptoAesModes over the ECB block inside one operation.
-class CryptoRa4m1Aes : public CryptoAesModes {
+class CryptoRa4m1Aes : public CryptoAesModes
+{
 public:
 	CryptoRa4m1Aes()
 	{

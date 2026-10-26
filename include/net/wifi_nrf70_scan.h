@@ -28,7 +28,8 @@ SOFTWARE.
 #include <stdbool.h>
 
 #define WIFI_NRF70_SSID_MAX 32
-typedef struct {
+typedef struct
+{
 	uint8_t Ssid[WIFI_NRF70_SSID_MAX];
 	uint8_t SsidLen;
 	uint8_t Bssid[6];

@@ -34,7 +34,8 @@ SOFTWARE.
 #include "usb/usbd_periodic.h"
 #include "usb/usb_iso.h"
 
-typedef struct __Usbd_Iso_Config {
+typedef struct __Usbd_Iso_Config
+{
 	UsbdPeriodicCfg_t Function;
 	DevIntrfEvtHandler_t EvtCB;
 	void *pContext;
@@ -46,7 +47,8 @@ typedef struct __Usbd_Iso_Config {
 } UsbdIsoCfg_t;
 
 #ifdef __cplusplus
-class UsbdIso : public UsbdPeriodic, public UsbIsoIntrf {
+class UsbdIso : public UsbdPeriodic, public UsbIsoIntrf
+{
 public:
 	UsbdIso();
 	bool Init(const UsbdIsoCfg_t &Cfg);
@@ -54,7 +56,8 @@ public:
 	void Process(void) override;
 
 protected:
-	bool OpenTransport(uint16_t Mps, uint8_t Interval) override {
+	bool OpenTransport(uint16_t Mps, uint8_t Interval) override
+	{
 		return UsbIsoIntrf::Open(Mps, Interval);
 	}
 	void CloseTransport(void) override;

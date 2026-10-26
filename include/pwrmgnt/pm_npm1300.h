@@ -1032,7 +1032,8 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-struct Npm1300BatterySample_t {
+struct Npm1300BatterySample_t
+{
 	int32_t VoltageMv;
 	int32_t CurrentUa; // Positive discharge, negative charge.
 	int32_t TemperatureDeciC;
@@ -1042,7 +1043,8 @@ struct Npm1300BatterySample_t {
 	uint8_t VbusStatus;
 };
 
-class PmnPM1300 : public PowerMgnt, public FuelGauge {
+class PmnPM1300 : public PowerMgnt, public FuelGauge
+{
 public:
 	PmnPM1300();
 

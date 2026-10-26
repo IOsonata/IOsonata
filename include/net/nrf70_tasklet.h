@@ -31,7 +31,8 @@ SOFTWARE.
 extern "C" {
 #endif
 typedef void (*Nrf70TaskletCb_t)(unsigned long Context);
-typedef struct __Nrf70_Tasklet {
+typedef struct __Nrf70_Tasklet
+{
 	Nrf70TaskletCb_t Callback;
 	unsigned long Context;
 	bool Pending;

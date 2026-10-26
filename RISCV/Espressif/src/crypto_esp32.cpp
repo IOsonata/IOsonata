@@ -46,7 +46,8 @@ SOFTWARE.
 #define AES_REG(offset) ESP32_CRYPTO_REG(ESP32_AES_BASE + (offset))
 #define SHA_REG(offset) ESP32_CRYPTO_REG(ESP32_SHA_BASE + (offset))
 #define ESP_SHA_MAGIC 0x53484145UL
-struct EspShaCtx {
+struct EspShaCtx
+{
 	uint32_t Magic;
 	uint32_t H[8];
 	uint64_t Total;
@@ -58,7 +59,8 @@ static_assert(sizeof(EspShaCtx) <= CRYPTO_HASHCTX_MAX, "SHA storage too small");
 static bool s_ShaBusy;
 static bool s_AesBusy = false;
 
-class CryptoEsp32 : public CryptoAesModes, public HashEngine {
+class CryptoEsp32 : public CryptoAesModes, public HashEngine
+{
 public:
 	CRYPTO_STATUS Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest) override;
 	size_t HashCtxSize() const override;

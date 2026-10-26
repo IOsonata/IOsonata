@@ -29,7 +29,8 @@ SOFTWARE.
 #include "osal_ops.h"
 #endif
 
-typedef struct {
+typedef struct
+{
 	uint32_t PreviousState;
 } Nrf70OsalSpin_t;
 

@@ -34,7 +34,8 @@ SOFTWARE.
 #include "usb/usbd_periodic.h"
 #include "usb/usb_int.h"
 
-typedef struct __Usbd_Int_Config {
+typedef struct __Usbd_Int_Config
+{
 	UsbdPeriodicCfg_t Function;
 	DevIntrfEvtHandler_t EvtCB;
 	void *pContext;
@@ -44,14 +45,16 @@ typedef struct __Usbd_Int_Config {
 } UsbdIntCfg_t;
 
 #ifdef __cplusplus
-class UsbdInt : public UsbdPeriodic, public UsbIntIntrf {
+class UsbdInt : public UsbdPeriodic, public UsbIntIntrf
+{
 public:
 	UsbdInt();
 	bool Init(const UsbdIntCfg_t &Cfg);
 	void Reset(void) override;
 
 protected:
-	bool OpenTransport(uint16_t Mps, uint8_t Interval) override {
+	bool OpenTransport(uint16_t Mps, uint8_t Interval) override
+	{
 		return UsbIntIntrf::Open(Mps, Interval);
 	}
 	void CloseTransport(void) override;

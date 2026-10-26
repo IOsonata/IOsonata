@@ -93,7 +93,8 @@ struct __CryptoMaster_Desc {
 #ifdef __cplusplus
 }
 
-class CryptoMaster : public CryptoAesModes {
+class CryptoMaster : public CryptoAesModes
+{
 public:
 	CryptoMaster() : vbIntrfEnabled(false) {
 		vbValid = false;

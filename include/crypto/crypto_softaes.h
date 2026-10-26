@@ -124,7 +124,8 @@ protected:
 
 // Only targets needing software AES instantiate this adapter. Hardware engines
 // implementing both key sizes derive from CryptoAesModes directly.
-class CryptoSoftAes : public CryptoAesModes {
+class CryptoSoftAes : public CryptoAesModes
+{
 public:
 	// CipherEngine: software AES-128/256 ECB/CTR/CBC encryption and decryption.
 	// AES-256 bypasses the AES-128 hardware block hooks.

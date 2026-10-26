@@ -39,7 +39,8 @@ SOFTWARE.
 // Shared nRF52 / nRF5340 network-core ECB accelerator.
 // CMAC and CCM use the inherited
 // CryptoSoftAes algorithms over the hardware ECB block primitive.
-class CryptoEcbNrf : public CryptoSoftAes {
+class CryptoEcbNrf : public CryptoSoftAes
+{
 public:
 	CryptoEcbNrf()
 	{
@@ -61,7 +62,8 @@ protected:
 	bool AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
 					   uint8_t Out[16]) override;
 private:
-	struct alignas(4) EcbBlock {
+	struct alignas(4) EcbBlock
+	{
 		uint8_t Key[16];
 		uint8_t Input[16];
 		uint8_t Output[16];

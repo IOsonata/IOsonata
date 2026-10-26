@@ -36,7 +36,8 @@ SOFTWARE.
 #define CCS811_I2C_ADDR0 0x5A
 #define CCS811_I2C_ADDR1 0x5B
 
-struct Ccs811Data_t {
+struct Ccs811Data_t
+{
 	uint64_t Timestamp; // us; zero without a supplied timer
 	uint16_t Eco2; // ppm; only meaningful when AlgorithmValid
 	uint16_t Etvoc; // ppb; only meaningful when AlgorithmValid
@@ -48,7 +49,8 @@ struct Ccs811Data_t {
 // Callback drives nWAKE low when Active=true. Must report GPIO transport failures.
 typedef bool (*Ccs811WakeFn_t)(bool Active, void *pContext);
 
-class GasCcs811 : public GasSensor {
+class GasCcs811 : public GasSensor
+{
 public:
 	GasCcs811();
 	// Configure before Init. Without callback the board must hold nWAKE low.
