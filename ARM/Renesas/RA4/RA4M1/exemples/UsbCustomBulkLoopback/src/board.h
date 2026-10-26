@@ -23,7 +23,8 @@ are owned directly by USBFS and are not configured as ordinary GPIO pins.
 
 #define USB_VBUS_PORT			4
 #define USB_VBUS_PIN			7
-#define USB_VBUS_PINOP			IOPINOP_FUNC19
+// RA4M1 IOPinConfig uses raw PSEL: FUNC18 expands to 19 (USBFS).
+#define USB_VBUS_PINOP			IOPINOP_FUNC18
 
 #define USB_PINS				{ \
 	{USB_VBUS_PORT, USB_VBUS_PIN, USB_VBUS_PINOP, IOPINDIR_INPUT, \
