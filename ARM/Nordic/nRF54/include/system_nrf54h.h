@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2009-2023 ARM Limited. All rights reserved.
+Copyright (c) 2009-2026 ARM Limited. All rights reserved.
 
     SPDX-License-Identifier: Apache-2.0
 
@@ -20,8 +20,8 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 */
 
-#ifndef SYSTEM_NRF54L_H
-#define SYSTEM_NRF54L_H
+#ifndef SYSTEM_NRF54H_H
+#define SYSTEM_NRF54H_H
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 extern "C" {
@@ -58,4 +58,4 @@ extern void SystemCoreClockUpdate (void);
 #endif
 
 #endif /* __ASSEMBLY__ */
-#endif /* SYSTEM_NRF54L_H */
+#endif /* SYSTEM_NRF54H_H */
