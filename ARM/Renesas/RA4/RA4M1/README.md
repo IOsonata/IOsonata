@@ -790,4 +790,9 @@ faulted, wipes the request output and resets the block on the next `Enable`.
 Host checks: `python3 tests/crypto/run_ra4_models.py` runs the generic
 CryptoTest against an OpenSSL model of the primitive interface, and the
 production primitive file against a register model with injected poll
-failures. Board run of `exemples/CryptoTest` on the EK-RA4M1 is still owed.
+failures. `exemples/CryptoTest` on the EK-RA4M1 (48 MHz): 101 of 101 checks.
+An AES operation costs about 300 us of key index generation and engine
+setup plus about 3.3 us per block (ECB, 1 KiB: 3.39 ms against 51.7 ms in
+software); CMAC 1 KiB 6.1 ms, CCM 11.8 ms, GCM 25.0 ms (GHASH in software);
+TRNG 16 bytes in 63 us. SHA-256 and P-256 run in software (P-256 key import
+1.44 s).

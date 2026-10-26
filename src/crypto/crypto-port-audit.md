@@ -44,7 +44,7 @@ A hardware peripheral listed as pending is not claimed as implemented.
 | nRF54H20 application/network, nRF54L15, nRF54LM20x | CryptoMaster/BA414EP and conditioned CRACEN TRNG | AES-128/256 ECB/CBC/CTR in both directions. AES/PKE/RNG share operation exclusion. SHA, key import and ECDSA still use inherited software where no override exists. |
 | nRF54H20 RISC-V skeleton | Not a complete MCU library | No complete generic crypto integration; not equivalent to the Arm application/network libraries. |
 | RP2040 | Generic software | Ring-oscillator bits are not exposed as qualified secure entropy. |
-| RA4M1 (ioc and e2) | SCE5 AES-128/256 and TRNG (CryptoRa4m1Aes, CryptoRa4m1Rng) | Inherited software SHA/P-256. Key index generated once per operation, blocks through the update primitive; bounded waits and fault propagation. Board validation pending. |
+| RA4M1 (ioc and e2) | SCE5 AES-128/256 and TRNG (CryptoRa4m1Aes, CryptoRa4m1Rng) | Inherited software SHA/P-256. Key index generated once per operation, blocks through the update primitive; bounded waits and fault propagation. EK-RA4M1 CryptoTest 101 of 101 (2026-10-25). |
 | RE01_1500KB (ioc and e2) | Generic software | TSIP-Lite integration blocked on the RE01-specific source package. Renesas lists V1.01 as available through its sales division. RA4M1 sequences are not substituted. |
 | R9A02G021 (ioc and e2) | New TRNG override, inherited software algorithms | Module start, bounded ready wait, four-byte reads and stop sequence. No AES accelerator. |
 | STM32F030, STM32F401, STM32L152RE | Generic software | No secure entropy driver selected. |
@@ -117,8 +117,9 @@ clocking, electrical entropy quality, timing or silicon errata behavior.
 ## Work still required
 
 This is not a claim that every hardware crypto block is implemented. RA4M1 SCE5
-needs board validation. Its bounded failures invalidate the SCE state and wipe
-request output; the generic Crypto Reset path reinitializes the hardware.
+passes the generic CryptoTest on the EK-RA4M1. Its bounded failures invalidate
+the SCE state and wipe request output; the generic Crypto Reset path
+reinitializes the hardware.
 RE01 needs the RE01-specific TSIP-Lite V1.01 source package from Renesas.
 The public Renesas driver page directs source requests to its sales division:
 https://www.renesas.com/en/software-tool/trusted-secure-ip-driver
