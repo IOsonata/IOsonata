@@ -13,6 +13,7 @@ are owned directly by USBFS and are not configured as ordinary GPIO pins.
 #define __BOARD_H__
 
 #include "coredev/iopincfg.h"
+#include "coredev/system_core_clock.h"
 
 // Supply USBFS with a dedicated 48 MHz clock from HOCO.
 #define MCUOSC				{ \
