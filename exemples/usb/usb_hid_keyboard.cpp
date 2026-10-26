@@ -61,52 +61,7 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #define HID_LED_CAPS_LOCK	(1U << 1)
 #define HID_DEBOUNCE_COUNT	5U
 
-#pragma pack(push, 1)
-typedef struct __Hid_Keyboard_Report {
-	uint8_t Modifiers;
-	uint8_t Reserved;
-	uint8_t Key[6];
-} HidKeyboardReport_t;
-
-#pragma pack(pop)
-
-static_assert(sizeof(HidKeyboardReport_t) == 8U,
-	"Boot keyboard reports must be eight bytes");
-
-static const uint8_t s_ReportDesc[] = {
-	0x05U, 0x01U,			// Usage Page (Generic Desktop)
-	0x09U, 0x06U,			// Usage (Keyboard)
-	0xA1U, 0x01U,			// Collection (Application)
-	0x05U, 0x07U,			// Usage Page (Keyboard/Keypad)
-	0x19U, 0xE0U,			// Usage Minimum (Left Control)
-	0x29U, 0xE7U,			// Usage Maximum (Right GUI)
-	0x15U, 0x00U,			// Logical Minimum (0)
-	0x25U, 0x01U,			// Logical Maximum (1)
-	0x75U, 0x01U,			// Report Size (1)
-	0x95U, 0x08U,			// Report Count (8)
-	0x81U, 0x02U,			// Input (Data, Variable, Absolute)
-	0x95U, 0x01U,
-	0x75U, 0x08U,
-	0x81U, 0x01U,			// Input (Constant)
-	0x05U, 0x08U,			// Usage Page (LEDs)
-	0x19U, 0x01U,			// Usage Minimum (Num Lock)
-	0x29U, 0x05U,			// Usage Maximum (Kana)
-	0x95U, 0x05U,
-	0x75U, 0x01U,
-	0x91U, 0x02U,			// Output (Data, Variable, Absolute)
-	0x95U, 0x01U,
-	0x75U, 0x03U,
-	0x91U, 0x01U,			// Output (Constant)
-	0x05U, 0x07U,			// Usage Page (Keyboard/Keypad)
-	0x19U, 0x00U,			// Usage Minimum (Reserved)
-	0x29U, 0x65U,			// Usage Maximum (Keyboard Application)
-	0x15U, 0x00U,
-	0x25U, 0x65U,
-	0x75U, 0x08U,
-	0x95U, 0x06U,
-	0x81U, 0x00U,			// Input (Data, Array, Absolute)
-	0xC0U,
-};
+static const uint8_t s_ReportDesc[] = USB_HID_KEYBOARD_REPORT_DESC;
 
 static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
 	uint8_t *pBuffer, uint16_t BufferSize, void *pContext);
@@ -114,7 +69,7 @@ static bool HidSetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
 	const uint8_t *pBuffer, uint16_t Length, void *pContext);
 
 static UsbdHid s_Hid;
-static HidKeyboardReport_t s_Report;
+static UsbHidKeyboardReport_t s_Report = {};
 static uint8_t s_LedReport;
 static bool s_ReportPending;
 
@@ -129,8 +84,8 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.pReportDesc = s_ReportDesc,
 	.ReportDescLength = sizeof(s_ReportDesc),
 	.BcdHid = 0U,
-	.FsMps = sizeof(HidKeyboardReport_t),
-	.HsMps = sizeof(HidKeyboardReport_t),
+	.FsMps = sizeof(UsbHidKeyboardReport_t),
+	.HsMps = sizeof(UsbHidKeyboardReport_t),
 	.FsInterval = 1U,
 	.HsInterval = 4U,
 	.SubClass = USB_HID_SUBCLASS_BOOT,

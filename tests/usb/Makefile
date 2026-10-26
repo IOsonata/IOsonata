@@ -274,7 +274,10 @@ test-c-header:
 	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
 		'#include "usb/usbd_int.h"' '#include "usb/usbd_iso.h"' \
 		'#include "usb/usbd_hid.h"' '#include "usb/usb_mscdef.h"' \
+		'static const uint8_t keyboard[] = USB_HID_KEYBOARD_REPORT_DESC;' \
+		'_Static_assert(sizeof(UsbHidKeyboardReport_t) == 8, "keyboard size");' \
 		'int main(void) {' \
+		' (void)keyboard;' \
 		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ? 1 : 0;' '}' | \
 		$(CC) $(CPPFLAGS) $(CFLAGS) -x c -fsyntax-only -
 

@@ -289,6 +289,21 @@ Use optional `GetReportCB` and `SetReportCB` callbacks for control reports.
 No subclass or endpoint-zero transfer-stage handler is needed. Existing
 `Control()` overrides remain supported for specialized requests.
 
+For a standard six-key boot keyboard, use the predefined descriptor and report
+type from `usb_hiddef.h` (also included by `usbd_hid.h`):
+
+```cpp
+static const uint8_t s_ReportDesc[] = USB_HID_KEYBOARD_REPORT_DESC;
+static UsbHidKeyboardReport_t s_Report = {};
+```
+
+Set `pReportDesc` and `ReportDescLength` to this array and its size, and select
+`USB_HID_SUBCLASS_BOOT` / `USB_HID_PROT_KEYBOARD`. The report has modifier bits,
+a zero reserved byte and six HID key usages. Send all zeros to release the keys.
+The host's one-byte output report contains the five keyboard LED bits.
+There is no report ID; this fixed layout works in both boot and report protocol.
+Custom layouts continue to use an application-defined report descriptor.
+
 Supply separate caller-owned RX and TX slots in `UsbdHidCfg_t::pRxBuffer`
 and `pTxBuffer`. Both must remain alive for the interface lifetime, be
 4-byte aligned and contain at least `USB_INT_INTRF_PKT_BLKSIZE` bytes.

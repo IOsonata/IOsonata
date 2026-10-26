@@ -104,3 +104,7 @@ the library handles endpoint-zero transfer stages and control buffering.
 Applications still supply the HID report descriptor defining their data.
 See [the HID guide](../../docs/usb-user-guide.md#hid) for callback and storage
 requirements.
+
+The keyboard example uses `USB_HID_KEYBOARD_REPORT_DESC` and
+`UsbHidKeyboardReport_t` from the generic HID definitions. No descriptor byte
+array or report structure needs to be written for this standard keyboard.

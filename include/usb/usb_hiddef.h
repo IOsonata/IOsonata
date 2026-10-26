@@ -111,7 +111,58 @@ typedef enum __USB_Usage_Page {
 	USB_HID_USAGEPAGE_VENDOR	= 0xFF00//!< 0xFF00-0xFFFF Vendor-defined
 } USB_HID_USAGEPAGE;
 
+/// Standard unnumbered boot-keyboard report descriptor initializer.
+/// Input: modifier bits, reserved byte, six key usages (0..0x65).
+/// Output: Num/Caps/Scroll Lock, Compose and Kana LED bits, then padding.
+/// Use with USB_HID_SUBCLASS_BOOT and USB_HID_PROT_KEYBOARD.
+#define USB_HID_KEYBOARD_REPORT_DESC \
+{ \
+	0x05U, 0x01U, /* Usage Page (Generic Desktop) */ \
+	0x09U, 0x06U, /* Usage (Keyboard) */ \
+	0xA1U, 0x01U, /* Collection (Application) */ \
+	0x05U, 0x07U, /* Usage Page (Keyboard/Keypad) */ \
+	0x19U, 0xE0U, /* Usage Minimum (Left Control) */ \
+	0x29U, 0xE7U, /* Usage Maximum (Right GUI) */ \
+	0x15U, 0x00U, /* Logical Minimum (0) */ \
+	0x25U, 0x01U, /* Logical Maximum (1) */ \
+	0x75U, 0x01U, /* Report Size (1) */ \
+	0x95U, 0x08U, /* Report Count (8) */ \
+	0x81U, 0x02U, /* Input (Data, Variable, Absolute) */ \
+	0x95U, 0x01U, \
+	0x75U, 0x08U, \
+	0x81U, 0x01U, /* Input (Constant) */ \
+	0x05U, 0x08U, /* Usage Page (LEDs) */ \
+	0x19U, 0x01U, /* Usage Minimum (Num Lock) */ \
+	0x29U, 0x05U, /* Usage Maximum (Kana) */ \
+	0x95U, 0x05U, \
+	0x75U, 0x01U, \
+	0x91U, 0x02U, /* Output (Data, Variable, Absolute) */ \
+	0x95U, 0x01U, \
+	0x75U, 0x03U, \
+	0x91U, 0x01U, /* Output (Constant) */ \
+	0x05U, 0x07U, /* Usage Page (Keyboard/Keypad) */ \
+	0x19U, 0x00U, /* Usage Minimum (Reserved) */ \
+	0x29U, 0x65U, /* Usage Maximum (Keyboard Application) */ \
+	0x15U, 0x00U, \
+	0x25U, 0x65U, \
+	0x75U, 0x08U, \
+	0x95U, 0x06U, \
+	0x81U, 0x00U, /* Input (Data, Array, Absolute) */ \
+	0xC0U, \
+}
+
 #pragma pack(push, 1)
+
+/// Eight-byte input report matching USB_HID_KEYBOARD_REPORT_DESC.
+/// Modifiers: left Ctrl/Shift/Alt/GUI in bits 0..3, right in bits 4..7.
+/// Reserved must be zero; Key contains HID usages, not ASCII characters.
+/// Zero unused keys. Send an all-zero report to release every key.
+/// More than six held non-modifier keys: fill Key with ErrorRollOver (0x01).
+typedef struct __USB_HID_Keyboard_Report {
+	uint8_t Modifiers;
+	uint8_t Reserved;
+	uint8_t Key[6];
+} UsbHidKeyboardReport_t;
 
 typedef struct __USB_HID_Report_Descriptor {
 	uint8_t bDescriptorType;		//!< type of class descriptor. See Section 7.1.2:
@@ -136,3 +187,4 @@ typedef struct __USB_HID_Descriptor {
 /** @} end group USB */
 
 #endif	// __USB_HIDDEF_H__
+

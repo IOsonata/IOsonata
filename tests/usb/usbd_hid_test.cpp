@@ -837,8 +837,84 @@ static void TestReportStorage()
 	CHECK(!plain.Control(&setup, USB_CTRL_SETUP, &data, &length));
 }
 
+static void TestKeyboardDefinition()
+{
+	static const uint8_t desc[] = USB_HID_KEYBOARD_REPORT_DESC;
+	static_assert(sizeof(UsbHidKeyboardReport_t) == 8U,
+		"Boot keyboard input report must be eight bytes");
+	const UsbHidKeyboardReport_t report = {0x02U, 0U, {0x04U, 0x39U}};
+	const uint8_t expected[] = {0x02U, 0U, 0x04U, 0x39U, 0U, 0U, 0U, 0U};
+	CHECK(memcmp(&report, expected, sizeof(expected)) == 0);
+
+	// Decode short items to check the input/output lengths advertised to the
+	// host. This fixed preset has no Report IDs, long items or global stack.
+	unsigned size = 0U;
+	unsigned count = 0U;
+	unsigned inputBits = 0U;
+	unsigned outputBits = 0U;
+	unsigned inputs = 0U;
+	unsigned outputs = 0U;
+	for (unsigned i = 0U; i < sizeof(desc);)
+	{
+		const uint8_t item = desc[i++];
+		const unsigned bytes = (item & 3U) == 3U ? 4U : (item & 3U);
+		CHECK(item != 0xFEU && i + bytes <= sizeof(desc));
+		if (i + bytes > sizeof(desc))
+		{
+			return;
+		}
+		unsigned value = 0U;
+		for (unsigned j = 0U; j < bytes; j++)
+		{
+			value |= (unsigned)desc[i++] << (8U * j);
+		}
+		switch (item & 0xFCU)
+		{
+			case 0x74U:
+				size = value;
+				break;
+			case 0x94U:
+				count = value;
+				break;
+			case 0x80U:
+				inputBits += size * count;
+				inputs++;
+				break;
+			case 0x90U:
+				outputBits += size * count;
+				outputs++;
+				break;
+			case 0x84U: // Report ID would change the wire layout.
+			case 0xB0U: // Feature report is not part of this preset.
+				CHECK(false);
+				break;
+		}
+	}
+	CHECK(inputBits == 64U && inputs == 3U);
+	CHECK(outputBits == 8U && outputs == 2U);
+
+	ResetFake();
+	UsbdHid hid;
+	auto cfg = MakeCfg();
+	cfg.pReportDesc = desc;
+	cfg.ReportDescLength = sizeof(desc);
+	cfg.FsMps = sizeof(report);
+	CHECK(hid.Init(cfg));
+	UsbSetupData_t setup = {};
+	setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_STANDARD |
+		USB_REQTYPE_INTERFACE;
+	setup.bRequest = USB_REQ_GET_DESCRIPTOR;
+	setup.wValue = USB_DESCTYPE_HID_REPORT << 8;
+	setup.wLength = sizeof(desc);
+	uint8_t *data = nullptr;
+	uint16_t length = 0U;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(length == sizeof(desc) && data == desc);
+}
+
 int main(void)
 {
+	TestKeyboardDefinition();
 	TestReportCallbacks();
 	TestReportStorage();
 	TestProtocolValues();
