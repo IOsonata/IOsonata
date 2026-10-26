@@ -173,6 +173,18 @@ def check_ioc():
           len(source_names), 'sources, target links, hard-float configurations and wizard metadata')
 
 
+def prepare_register_model():
+    # Substitute only the fixed physical HOCO byte access. All startup logic
+    # still comes from the production source and uses the register model.
+    source = (TARGET/'src/system_ra4m1.c').read_text()
+    access = '#define RA4M1_HOCOCR2 (*(volatile uint8_t *)0x4001E037UL)'
+    assert source.count(access) == 1, 'Review the HOCO register model after driver changes'
+    source = source.replace(access, '#define RA4M1_HOCOCR2 (R_SYSTEM->HOCOCR2)')
+    source = source.replace('RA4M1_HOCOCR2', 'MODEL_HOCOCR2')
+    BUILD.mkdir(parents=True, exist_ok=True)
+    (BUILD/'system_ra4m1_model.c').write_text(source)
+
+
 def main():
     clang = os.environ.get('CLANG') or shutil.which('clang')
     linker = os.environ.get('LD_LLD') or shutil.which('ld.lld')
@@ -181,7 +193,8 @@ def main():
     if not all((clang, clangxx, linker, ar)):
         raise SystemExit('Install Clang/Clang++, LLD and llvm-ar, or set CLANG, CLANGXX, LD_LLD, LLVM_AR.')
     BUILD.mkdir(exist_ok=True)
-    includes = ['-I'+str(HERE/'include'), '-I'+str(TARGET/'include')]
+    prepare_register_model()
+    includes = ['-I'+str(BUILD), '-I'+str(HERE/'include'), '-I'+str(TARGET/'include')]
     # The register model is C++: the driver registers are host objects
     # (include/ra4m1_host_regs.h). system_ra4m1.c is compiled as C++ there,
     # where {0} initializers warn without being wrong.

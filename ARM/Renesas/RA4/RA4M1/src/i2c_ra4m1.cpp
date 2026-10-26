@@ -1238,10 +1238,10 @@ static void Ra4m1I2cSlaveAddress(Ra4m1I2cDev_t * const pDev)
 		idx = 2;
 	}
 
-	// The match START and any stale STOP are consumed here, so a later
-	// START flag can only be a repeated START.
-	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_START | RA4M1_I2C_SR2_STOP |
-		RA4M1_I2C_SR2_NACKF);
+	// A STOP with the bus idle can belong to this address-only request.
+	// With the bus busy, it is left over from an earlier transaction.
+	const uint8_t stop = Ra4m1I2cBusy(reg) ? RA4M1_I2C_SR2_STOP : 0U;
+	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_START | stop | RA4M1_I2C_SR2_NACKF);
 
 	pDev->SlaveIdx = idx;
 	pDev->SlaveCount = 0;
@@ -1328,8 +1328,20 @@ static void Ra4m1I2cSlaveService(Ra4m1I2cDev_t * const pDev)
 		return;
 	}
 
-	Ra4m1I2cSlaveEnd(pDev);
+	// Errors invalidate the pending byte. A read phase must also end
+	// before interpreting the next address after a repeated START.
+	if ((reg->ICSR2 & (RA4M1_I2C_SR2_TMOF | RA4M1_I2C_SR2_AL)) != 0U)
+	{
+		Ra4m1I2cSlaveEnd(pDev);
+		return;
+	}
+	if (pDev->SState == RA4M1_I2C_S_READ)
+	{
+		Ra4m1I2cSlaveEnd(pDev);
+	}
 
+	// Drain received payload before STOP/repeated START reports its
+	// count, so it cannot be mistaken for the next address.
 	if ((reg->ICSR2 & RA4M1_I2C_SR2_RDRF) != 0U)
 	{
 		switch (pDev->SState)
@@ -1347,6 +1359,8 @@ static void Ra4m1I2cSlaveService(Ra4m1I2cDev_t * const pDev)
 				break;
 		}
 	}
+
+	Ra4m1I2cSlaveEnd(pDev);
 
 	if (pDev->SState == RA4M1_I2C_S_READ)
 	{
