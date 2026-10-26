@@ -108,6 +108,7 @@ enum
 	RA4USB_PIPECFG_SHTNAK = 1U << 7,
 	RA4USB_PIPECFG_TYPE_BULK = 1U << 14,
 	RA4USB_PIPECFG_TYPE_INT = 2U << 14,
+	RA4USB_PIPECFG_TYPE_ISO = 3U << 14,
 
 	RA4USB_SYSCFG_USBE = 1U << 0,
 	RA4USB_SYSCFG_DPRPU = 1U << 4,
@@ -343,7 +344,14 @@ static bool Ra4UsbArmOut(uint8_t Pipe)
 	R_USB_FS0->BRDYSTS = (uint16_t)((uint16_t)~bit & RA4USB_PIPE_MASK);
 	R_USB_FS0->NRDYSTS = (uint16_t)((uint16_t)~bit & RA4USB_PIPE_MASK);
 	R_USB_FS0->BRDYENB |= bit;
-	R_USB_FS0->NRDYENB |= bit;
+	if (Pipe == 0U || s_Usb.Pipe[Pipe].Type != ISO)
+	{
+		R_USB_FS0->NRDYENB |= bit;
+	}
+	else
+	{
+		R_USB_FS0->NRDYENB &= (uint16_t)~bit;
+	}
 	return Ra4UsbSetPid(Pipe, RA4USB_PID_BUF);
 }
 
@@ -580,7 +588,10 @@ static void Ra4UsbHandleOut(uint8_t Pipe)
 	ep->Busy = false;
 	ep->pBuffer = nullptr;
 	ep->Length = 0U;
-	R_USB_FS0->NRDYENB |= bit;
+	if (ep->Type != ISO)
+	{
+		R_USB_FS0->NRDYENB |= bit;
+	}
 	if (length < 0)
 	{
 		Ra4UsbNotify(Pipe, USB_CTRLR_EVT_XFER_FAILED, 0U);
@@ -789,29 +800,45 @@ static void Ra4UsbClockDisable(void)
 
 static bool Ra4UsbPipeMpsValid(uint8_t Pipe, uint8_t Type, uint16_t Mps)
 {
-	if (Mps == 0U || Mps > 64U)
+	if (Mps == 0U)
+	{
+		return false;
+	}
+	if (Type == ISO)
+	{
+		return Pipe >= 1U && Pipe <= 2U && Mps <= 256U;
+	}
+	if (Mps > 64U)
 	{
 		return false;
 	}
 	if (Type == BULK)
 	{
-		if (Mps != 8U && Mps != 16U && Mps != 32U && Mps != 64U)
-		{
-			return false;
-		}
-		if (Pipe >= 3U && Pipe <= 5U)
-		{
-			return Mps == 8U || Mps == 16U || Mps == 32U || Mps == 64U;
-		}
-		return Pipe >= 1U && Pipe <= 5U;
+		return Pipe >= 1U && Pipe <= 5U &&
+			(Mps == 8U || Mps == 16U || Mps == 32U || Mps == 64U);
 	}
 	return Type == INT && Pipe >= 6U && Pipe <= 9U;
 }
 
 static uint8_t Ra4UsbAllocatePipe(uint8_t Type, uint16_t Mps)
 {
-	const uint8_t first = Type == BULK ? 1U : 6U;
-	const uint8_t last = Type == BULK ? 5U : 9U;
+	if (Type == BULK)
+	{
+		// Keep ISO-capable pipes 1 and 2 free while pipes 3..5 are available.
+		static const uint8_t order[] = {3U, 4U, 5U, 1U, 2U};
+		for (uint8_t pipe : order)
+		{
+			if (s_Usb.Pipe[pipe].Mps == 0U &&
+				Ra4UsbPipeMpsValid(pipe, Type, Mps))
+			{
+				return pipe;
+			}
+		}
+		return 0U;
+	}
+
+	const uint8_t first = Type == ISO ? 1U : 6U;
+	const uint8_t last = Type == ISO ? 2U : 9U;
 	for (uint8_t pipe = first; pipe <= last; ++pipe)
 	{
 		if (s_Usb.Pipe[pipe].Mps == 0U &&
@@ -1075,7 +1102,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 {
 	if (DevNo != 0 || !s_Usb.Started || s_Usb.Closing ||
 		EpNo == 0U || EpNo >= 16U ||
-		(Type != BULK && Type != INT) ||
+		(Type != BULK && Type != INT && Type != ISO) ||
 		Ra4UsbPhysical(EpNo, bIn) != 0U)
 	{
 		return false;
@@ -1096,7 +1123,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 
 	uint16_t cfg = EpNo & 0x0FU;
 	cfg |= Type == BULK ? RA4USB_PIPECFG_TYPE_BULK :
-		RA4USB_PIPECFG_TYPE_INT;
+		Type == ISO ? RA4USB_PIPECFG_TYPE_ISO : RA4USB_PIPECFG_TYPE_INT;
 	if (bIn)
 	{
 		cfg |= RA4USB_PIPECFG_DIR_IN;
@@ -1126,7 +1153,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 	ep->pBuffer = nullptr;
 	ep->Length = 0U;
 	s_Usb.EpToPipe[EpNo][bIn ? 1U : 0U] = pipe;
-	if (!bIn)
+	if (!bIn && Type != ISO)
 	{
 		R_USB_FS0->NRDYENB |= Ra4UsbPipeBit(pipe);
 	}
@@ -1417,7 +1444,7 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 				(void)Ra4UsbArmOut(pipe);
 			}
 		}
-		else if (!ep->In)
+		else if (!ep->In && ep->Type != ISO)
 		{
 			R_USB_FS0->NRDYENB |= Ra4UsbPipeBit(pipe);
 		}
@@ -1452,28 +1479,39 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pSerial, size_t MaxLen)
 
 bool UsbCtrlrIsoInit(int DevNo)
 {
-	(void)DevNo;
-	return false;
+	return DevNo == 0 && s_Usb.Initialized;
 }
 
 bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 	uint16_t MaxPacketSize)
 {
-	(void)DevNo;
-	(void)EpNo;
-	(void)bIn;
-	(void)MaxPacketSize;
-	return false;
+	return UsbCtrlrEpOpenData(DevNo, EpNo, bIn, ISO, MaxPacketSize);
 }
 
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	uint16_t Length)
 {
-	(void)DevNo;
-	(void)EpNum;
-	(void)pBuffer;
-	(void)Length;
-	return false;
+	if (DevNo != 0 || EpNum == 0U || EpNum >= 16U || !s_Usb.Started)
+	{
+		return false;
+	}
+
+	// The generic ISO scheduler calls this once per service interval even
+	// when no IN frame is queued. Service OUT first so it is armed before
+	// the host's isochronous OUT transaction in the current USB frame.
+	const uint8_t outPipe = Ra4UsbPhysical(EpNum, false);
+	if (outPipe != 0U && s_Usb.Pipe[outPipe].Type == ISO &&
+		!s_Usb.Pipe[outPipe].Busy && !s_Usb.Pipe[outPipe].Halted)
+	{
+		Ra4UsbNotify(outPipe, USB_CTRLR_EVT_DRDY, 0U);
+	}
+
+	const uint8_t inPipe = Ra4UsbPhysical(EpNum, true);
+	if (inPipe == 0U || s_Usb.Pipe[inPipe].Type != ISO)
+	{
+		return false;
+	}
+	return UsbCtrlrEpSend(DevNo, EpNum, pBuffer, Length);
 }
 
 uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)

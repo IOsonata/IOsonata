@@ -26,8 +26,10 @@ reference.
 - ICU USBI event 0x33 is routed dynamically through the existing RA4M1
   interrupt allocator. FIFO0/FIFO1 events are not allocated as CPU IRQs.
 - DCP implements EP0 setup, control IN/OUT, status completion and stalls.
-- Pipes 1..5 are allocated to bulk endpoints; pipes 6..9 to interrupt
-  endpoints. IN and OUT consume the same physical pipe pool.
+- Pipes 1..2 support isochronous endpoints up to 256 bytes. Bulk allocation
+  prefers pipes 3..5 and falls back to 1..2, preserving ISO-capable pipes when
+  possible. Pipes 6..9 are allocated to interrupt endpoints. IN and OUT consume
+  the same physical pipe pool.
 - CFIFO handles data transfers. USBFS uses its fixed full-speed pipe-buffer
   organization; `PIPEBUF` is not programmed. D0FIFO/D1FIFO remain unused so
   DMA can be added later without changing the controller ABI.
@@ -37,7 +39,10 @@ reference.
   implemented.
 - SET_ADDRESS is left to the USBFS hardware.
 - Endpoint close/reset reclaims the physical pipe and FIFO ownership.
-- ISO is disabled until a real RA4M1 ISO test is completed.
+- ISO IN is SOF-driven through the existing generic `UsbIsoIntrf` path. At
+  each service interval the controller arms ISO OUT first, then submits ISO IN.
+  ISO OUT does not use NRDY retry because an isochronous host transaction is
+  not retried.
 - `bLowPowerSuspend=true` is rejected. Normal USB suspend/resume is supported;
   low-power clock/power entry must not be advertised until validated.
 
@@ -51,6 +56,8 @@ RA4M1 USBFS controller source is now linked into it. The e2 library project
 links the same generic USB headers/sources and the RA4M1 controller source.
 `RA4/RA4M1/exemples/UsbCdcLoopback/ioc` builds the existing generic CDC
 loopback application for the EK-RA4M1 device USB connector.
+`RA4/RA4M1/exemples/UsbComboStress/ioc` builds the generic combined CDC,
+HID, interrupt and isochronous stress application against the same backend.
 
 ## Validation still requiring hardware
 
@@ -65,6 +72,8 @@ USB protocol behavior. On EK-RA4M1, run the existing generic USB regressions:
 5. Suspend/resume and remote wakeup.
 6. EP0 standard/class requests, ZLP, malformed request stall and clear-stall
    recovery.
+7. ISO IN/OUT at 1 ms and longer service intervals, including RX FIFO pressure
+   and zero-length ISO frames.
 
 USBHS remains future work for a target with confirmed USBHS register, clock and
 PHY compatibility.
