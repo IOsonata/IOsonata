@@ -12,9 +12,12 @@ The shared example owns the I2S, SPI, I2C, codec and monitor objects and calls
 their IOsonata interfaces directly, as the other generic audio examples do.
 There is no board implementation module or board callback interface.
 
-This example uses the CS47L63 codec API. The WM8904 examples use that codec's
-own configuration API; changing codec families requires adapting the codec
-configuration in the example, not only changing the pin map.
+The codec is a `Device`. Its injected SPI `DeviceIntrf` carries register
+transactions; the separate I2S `DeviceIntrf` carries PCM samples. Codec
+configuration, mute and playback-status interpretation belong to the codec
+driver. The example uses those device operations and the generic I2S transfer
+operations directly. The onboard PDM microphone connects to the codec; it does
+not use the MCU's PDM transport in this example.
 
 ## Audio configuration
 

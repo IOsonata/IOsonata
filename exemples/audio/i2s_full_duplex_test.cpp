@@ -195,42 +195,6 @@ static void PrintSigned64(int64_t value)
 	PrintUnsigned64(magnitude);
 }
 
-static bool CheckCodecPlayback()
-{
-	uint32_t en;
-	uint32_t status;
-	uint32_t volume;
-	uint32_t clock;
-	uint32_t asp;
-	uint32_t mixer;
-
-	if (!s_Codec.ReadReg(0x4804U, en) ||
-		!s_Codec.ReadReg(0x4808U, status) ||
-		!s_Codec.ReadReg(0x4818U, volume) ||
-		!s_Codec.ReadReg(0x1404U, clock) ||
-		!s_Codec.ReadReg(0x6000U, asp) ||
-		!s_Codec.ReadReg(0x8100U, mixer))
-	{
-		puts("CS47L63 playback register read failed");
-		return false;
-	}
-	printf("Codec OUT_EN=%08lX OUT_STS=%08lX VOL=%08lX\n",
-		(unsigned long)en, (unsigned long)status, (unsigned long)volume);
-	printf("Codec SYSCLK=%08lX ASP1=%08lX OUT_MIX=%08lX\n",
-		(unsigned long)clock, (unsigned long)asp, (unsigned long)mixer);
-	if ((en & 2U) == 0 || (status & 2U) == 0)
-	{
-		puts("CS47L63 output path not active");
-		return false;
-	}
-	if ((volume & 0x100U) != 0)
-	{
-		puts("CS47L63 output muted");
-		return false;
-	}
-	return true;
-}
-
 static bool InitDevices()
 {
 	PmnPM1100Cfg_t pmicCfg;
@@ -266,15 +230,7 @@ static bool InitDevices()
 			INA230_CONFIG_MODE_SHUNT_BUS_CONT;
 		if (!s_Monitors[i].Init(monitorCfg, &s_I2c))
 		{
-			uint8_t reg = INA230_REG_CONFIG;
-			uint8_t raw[2] = { 0, 0 };
-			int readCount = s_I2c.Read(s_Addresses[i], &reg, 1, raw, 2);
-			printf("INA230 %02X init failed: config read=%d", s_Addresses[i], readCount);
-			if (readCount == 2)
-			{
-				printf(", config=%04X", (unsigned)((raw[0] << 8) | raw[1]));
-			}
-			puts("");
+			printf("INA230 %02X initialization failed\n", s_Addresses[i]);
 			return false;
 		}
 		printf("INA230 %02X: %lu uV, ", s_Addresses[i],
@@ -315,7 +271,7 @@ static bool InitDevices()
 	printf("CS47L63 revision %u, I2S %lu Hz\n",
 		(unsigned)s_Codec.Revision(), (unsigned long)s_I2s.Rate());
 	msDelay(10);
-	if (!CheckCodecPlayback())
+	if (!s_Codec.PlaybackReady())
 	{
 		puts("Codec playback not ready; continuing I2S diagnostics");
 	}

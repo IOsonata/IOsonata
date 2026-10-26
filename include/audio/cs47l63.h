@@ -99,6 +99,9 @@ public:
 	bool HeadphoneMute(bool Mute);
 	bool HeadphoneGain(int MilliDb);
 	bool StopAudio();
+	// True when the headphone output is enabled, active and unmuted.
+	// Returns false on a control-interface read failure.
+	bool PlaybackReady();
 	bool ReadInterrupts(uint32_t &Faults, uint32_t &FllEvents);
 	bool AudioConfigured() const
 	{

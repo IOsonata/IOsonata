@@ -63,6 +63,7 @@ SOFTWARE.
 #define CS47L63_REG_IN2R_SOURCE			0x4084U
 #define CS47L63_REG_IN2R_VOLUME			0x4088U
 #define CS47L63_REG_OUT_ENABLE			0x4804U
+#define CS47L63_REG_OUT_STATUS			0x4808U
 #define CS47L63_REG_OUT_VOLUME			0x4818U
 #define CS47L63_REG_ASP1_ENABLE			0x6000U
 #define CS47L63_REG_ASP1_CTRL2			0x6008U
@@ -483,6 +484,28 @@ bool Cs47l63::HeadphoneGain(int MilliDb)
 
 	vAudioCfg.HeadphoneGainMilliDb = MilliDb;
 	return true;
+}
+
+bool Cs47l63::PlaybackReady()
+{
+	uint32_t enable;
+	uint32_t status;
+	uint32_t volume;
+
+	if (!Device::Valid() || !vbEnabled || !vbAudioConfigured ||
+		!vAudioCfg.HeadphoneEnable)
+	{
+		return false;
+	}
+	if (!ReadReg(CS47L63_REG_OUT_ENABLE, enable) ||
+		!ReadReg(CS47L63_REG_OUT_STATUS, status) ||
+		!ReadReg(CS47L63_REG_OUT_VOLUME, volume))
+	{
+		return false;
+	}
+
+	return (enable & 2U) != 0 && (status & 2U) != 0 &&
+		(volume & 0x100U) == 0;
 }
 
 bool Cs47l63::HeadphoneMute(bool Mute)

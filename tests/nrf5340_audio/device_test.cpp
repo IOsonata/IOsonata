@@ -152,6 +152,7 @@ class CodecBus : public DeviceIntrf
 {
 public:
 	uint32_t Reg[30000]{};
+	uint32_t FailReadAddress = UINT32_MAX;
 
 	CodecBus()
 	{
@@ -195,6 +196,10 @@ public:
 				  (uint32_t(pCmd[2]) << 8) | pCmd[3];
 		assert((address & CS47L63_SPI_READ) != 0);
 		address &= CS47L63_SPI_ADDR_MASK;
+		if (address == FailReadAddress)
+		{
+			return 0;
+		}
 		for (offset = 0; offset < DataLen; offset += 4)
 		{
 			value = Reg[(address + uint32_t(offset)) / 4];
@@ -321,7 +326,9 @@ static void TestCs47l63()
 				   IOPINRES_PULLUP, IOPINTYPE_NORMAL };
 	cfg.BootTimeoutMs = 20;
 
+	assert(!codec.PlaybackReady());
 	assert(codec.Init(cfg, &bus));
+	assert(!codec.PlaybackReady());
 	assert(codec.Valid());
 	assert(codec.DeviceID() == ((uint64_t(CS47L63_DEVICE_ID) << 8) | 0x12));
 	assert(codec.Revision() == 0x12);
@@ -364,9 +371,25 @@ static void TestCs47l63()
 	assert(bus.Reg[0x4020 / 4] == 0x50021);
 	assert(bus.Reg[0x8200 / 4] == 0x800010);
 	assert(bus.Reg[0x4818 / 4] == (0x200U | 104U));
+	assert(!codec.PlaybackReady());
+	bus.Reg[0x4808 / 4] = 2;
+	assert(codec.PlaybackReady());
+	bus.Reg[0x4804 / 4] = 0;
+	assert(!codec.PlaybackReady());
+	bus.Reg[0x4804 / 4] = 2;
+	const uint32_t playbackRegs[] = { 0x4804, 0x4808, 0x4818 };
+	for (unsigned i = 0; i < sizeof(playbackRegs) / sizeof(playbackRegs[0]); i++)
+	{
+		bus.FailReadAddress = playbackRegs[i];
+		assert(!codec.PlaybackReady());
+	}
+	bus.FailReadAddress = UINT32_MAX;
+	assert(codec.PlaybackReady());
 	assert(codec.HeadphoneMute(true));
+	assert(!codec.PlaybackReady());
 	assert((bus.Reg[0x4818 / 4] & 0x100U) != 0);
 	assert(codec.HeadphoneMute(false));
+	assert(codec.PlaybackReady());
 	assert(codec.HeadphoneGain(-18000));
 	assert((bus.Reg[0x4818 / 4] & 0xFFU) == 92U);
 	assert(codec.SelectInput(CS47L63_INPUT_LINE));
@@ -377,6 +400,7 @@ static void TestCs47l63()
 	assert(codec.SelectInput(CS47L63_INPUT_PDM));
 
 	codec.Disable();
+	assert(!codec.PlaybackReady());
 	assert(s_Pin[0][18] == 0);
 	assert(codec.Enable());
 	assert(s_Pin[0][18] == 1);
@@ -385,6 +409,7 @@ static void TestCs47l63()
 	codec.Reset();
 	assert(codec.Valid());
 	codec.PowerOff();
+	assert(!codec.PlaybackReady());
 	assert(!codec.Valid());
 	assert(s_Pin[0][18] == 0);
 }
