@@ -978,7 +978,7 @@ bool UsbCtrlrStart(int DevNo)
 #if !defined(NDEBUG)
 		printf("[RA4 USBFS] start rejected USBCLK=%lu cfgUSB=%u USBCKCR=%02x HOCOCR=%02x HOCOCR2=%02x OSCSF=%02x HOCOUTCR=%02x\n",
 			(unsigned long)SystemUsbClockGet(), (unsigned)g_McuOsc.bUSBClk,
-			(unsigned)R_SYSTEM->USBCKCR, (unsigned)R_SYSTEM->HOCOCR,
+			(unsigned)R_SYSTEM->USBCKCR_ALT, (unsigned)R_SYSTEM->HOCOCR,
 			(unsigned)*(volatile uint8_t *)0x4001E037UL,
 			(unsigned)R_SYSTEM->OSCSF, (unsigned)R_SYSTEM->HOCOUTCR);
 #endif

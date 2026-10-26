@@ -381,9 +381,10 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 			if (R_SYSTEM->HOCOUTCR != 0U)
 				return RA4M1_STARTUP_USB_CLOCK;
 		}
-		// USBCKCR is an 8-bit register at 0x4001E0D0 on RA4M1.
+		// RA4M1 uses USBCKCR_ALT at 0x4001E0D0. USBCKCR is the
+		// other-family selector at 0x4001E074 in this CMSIS header.
 		// Use byte access so the adjacent reserved addresses are untouched.
-		volatile uint8_t * const pUsbClock = (volatile uint8_t *)0x4001E0D0UL;
+		volatile uint8_t * const pUsbClock = &R_SYSTEM->USBCKCR_ALT;
 		*pUsbClock = usbSource;
 		if ((*pUsbClock & 1U) != usbSource)
 			return RA4M1_STARTUP_USB_CLOCK;
@@ -473,7 +474,7 @@ uint32_t SystemUsbClockGet(void)
 	uint32_t hz = 0U;
 	if (g_McuOsc.bUSBClk)
 	{
-		const bool hoco = (R_SYSTEM->USBCKCR & 1U) != 0U;
+		const bool hoco = (R_SYSTEM->USBCKCR_ALT & 1U) != 0U;
 		hz = Ra4m1SourceHz(hoco ? RA4M1_CK_HOCO : RA4M1_CK_PLL);
 		if (hoco && R_SYSTEM->HOCOUTCR != 0U)
 			hz = 0U;
