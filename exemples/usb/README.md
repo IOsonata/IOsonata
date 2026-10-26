@@ -97,3 +97,10 @@ suspend/resume and the production loopback diagnostic layouts. The full `test`
 target also compiles the shared non-RTOS examples and runs the class regressions.
 TaktOS firmware still requires the external TaktOS project. Host models do not
 replace target firmware builds or physical USB tests.
+
+The HID loopback, keyboard and 3D mouse use plain `UsbdHid` objects. Their
+`GetReportCB` and `SetReportCB` functions supply or consume report bytes;
+the library handles endpoint-zero transfer stages and control buffering.
+Applications still supply the HID report descriptor defining their data.
+See [the HID guide](../../docs/usb-user-guide.md#hid) for callback and storage
+requirements.

@@ -656,8 +656,191 @@ static void TestProtocolValues(void)
 	}
 }
 
+struct ReportContext {
+	int GetLength;
+	int Gets;
+	int Sets;
+	bool Accept;
+	USB_HID_REPTYPE Type;
+	uint8_t Id;
+	uint16_t Length;
+	uint8_t Bytes[128];
+};
+
+static int GetReport(USB_HID_REPTYPE Type, uint8_t Id,
+	uint8_t *pBuffer, uint16_t Capacity, void *pContext)
+{
+	auto &ctx = *static_cast<ReportContext *>(pContext);
+	ctx.Gets++;
+	ctx.Type = Type;
+	ctx.Id = Id;
+	if (ctx.GetLength >= 0 && ctx.GetLength <= Capacity)
+	{
+		memcpy(pBuffer, ctx.Bytes, ctx.GetLength);
+	}
+	return ctx.GetLength;
+}
+
+static bool SetReport(USB_HID_REPTYPE Type, uint8_t Id,
+	const uint8_t *pBuffer, uint16_t Length, void *pContext)
+{
+	auto &ctx = *static_cast<ReportContext *>(pContext);
+	ctx.Sets++;
+	ctx.Type = Type;
+	ctx.Id = Id;
+	ctx.Length = Length;
+	CHECK(Length <= sizeof(ctx.Bytes));
+	memcpy(ctx.Bytes, pBuffer, Length);
+	return ctx.Accept;
+}
+
+static void TestReportCallbacks()
+{
+	ResetFake();
+	UsbdHid hid;
+	ReportContext ctx = {};
+	ctx.GetLength = 8;
+	ctx.Accept = true;
+	ctx.Bytes[0] = 0x37U;
+	auto cfg = MakeCfg();
+	cfg.GetReportCB = GetReport;
+	cfg.SetReportCB = SetReport;
+	cfg.pContext = &ctx;
+	CHECK(hid.Init(cfg));
+	UsbSetupData_t setup = {};
+	setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+		USB_REQTYPE_INTERFACE;
+	setup.bRequest = USB_HID_REQ_GET_REPORT;
+	setup.wValue = USB_HID_REPTYPE_INPUT | 7U;
+	setup.wLength = 2U;
+	uint8_t *data = nullptr;
+	uint16_t length = 0;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(length == 8 && ctx.Gets == 1 && ctx.Id == 7 &&
+		ctx.Type == USB_HID_REPTYPE_INPUT && data[0] == 0x37U);
+	// Snapshot survives application changes until the transfer is complete.
+	ctx.Bytes[0] = 0U;
+	CHECK(data[0] == 0x37U);
+	CHECK(hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(ctx.Gets == 1);
+	setup.wLength = 1000U;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(length == 8);
+	ctx.GetLength = -1;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	ctx.GetLength = 65;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	ctx.GetLength = 8;
+	setup.wLength = 0;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.wLength = 8;
+	setup.wValue = 0x400;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.wValue = USB_HID_REPTYPE_OUTPUT | 3U;
+	setup.bRequest = USB_HID_REQ_SET_REPORT;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.bmRequestType &= ~USB_REQTYPE_DIRHOST;
+	setup.wLength = 65;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.wLength = 8;
+	setup.wIndex = 1;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.wIndex = 0;
+	CHECK(!hid.Control(nullptr, USB_CTRL_SETUP, &data, &length));
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, nullptr));
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, nullptr, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(ctx.Sets == 0);
+	memset(data, 0x5A, length);
+	CHECK(hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Sets == 1 && ctx.Id == 3 && ctx.Type == USB_HID_REPTYPE_OUTPUT &&
+		ctx.Length == 8 && ctx.Bytes[7] == 0x5A);
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(ctx.Sets == 1);
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	length--;
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Sets == 1);
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_ABORT, &data, &length));
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Sets == 1);
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	hid.Reset();
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(hid.SelectConfig(0));
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	ctx.Accept = false;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Sets == 2);
+	CHECK(hid.Control(&setup, USB_CTRL_ABORT, &data, &length));
+	CHECK(ctx.Sets == 2);
+}
+
+static void TestReportStorage()
+{
+	ResetFake();
+	UsbdHid hid;
+	alignas(4) uint8_t storage[136];
+	memset(storage, 0xA5, sizeof(storage));
+	auto cfg = MakeCfg();
+	cfg.ControlBufferSize = 128;
+	CHECK(!hid.Init(cfg));
+	cfg.pControlBuffer = storage + 5;
+	CHECK(!hid.Init(cfg));
+	cfg.pControlBuffer = storage + 4;
+	cfg.ControlBufferSize = 0;
+	CHECK(!hid.Init(cfg));
+	cfg.ControlBufferSize = 128;
+	cfg.pControlBuffer = cfg.pRxBuffer;
+	CHECK(!hid.Init(cfg));
+	cfg.pControlBuffer = cfg.pTxBuffer + 4;
+	CHECK(!hid.Init(cfg));
+	cfg.pControlBuffer = storage + 4;
+	ReportContext ctx = {};
+	ctx.GetLength = 128;
+	ctx.Accept = true;
+	cfg.GetReportCB = GetReport;
+	cfg.SetReportCB = SetReport;
+	cfg.pContext = &ctx;
+	CHECK(hid.Init(cfg));
+	CHECK(static_cast<UsbdHidDev_t *>(hid)->ItfNo == 0);
+	CHECK(static_cast<UsbdHidDev_t *>(hid)->EpNo == 1);
+	UsbSetupData_t setup = {};
+	setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+		USB_REQTYPE_INTERFACE;
+	setup.bRequest = USB_HID_REQ_GET_REPORT;
+	setup.wValue = USB_HID_REPTYPE_FEATURE | 9U;
+	setup.wLength = 128;
+	uint8_t *data = nullptr;
+	uint16_t length = 0;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(data == storage + 4 && length == 128 && ctx.Type == USB_HID_REPTYPE_FEATURE);
+	setup.bmRequestType &= ~USB_REQTYPE_DIRHOST;
+	setup.bRequest = USB_HID_REQ_SET_REPORT;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	memset(data, 0x33, length);
+	CHECK(hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Length == 128 && ctx.Bytes[127] == 0x33);
+	CHECK(storage[3] == 0xA5 && storage[132] == 0xA5);
+	// Legacy configurations without callbacks continue to reject reports.
+	ResetFake();
+	UsbdHid plain;
+	CHECK(plain.Init(MakeCfg()));
+	CHECK(!plain.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.bmRequestType |= USB_REQTYPE_DIRHOST;
+	setup.bRequest = USB_HID_REQ_GET_REPORT;
+	CHECK(!plain.Control(&setup, USB_CTRL_SETUP, &data, &length));
+}
+
 int main(void)
 {
+	TestReportCallbacks();
+	TestReportStorage();
 	TestProtocolValues();
 	TestSubclassProtocolValidation();
 	TestPendingControlLifetime();

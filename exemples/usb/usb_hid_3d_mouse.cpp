@@ -164,26 +164,10 @@ static const GyroSensorCfg_t s_GyroCfg = {
 static SPI s_Spi;
 static Timer s_Timer;
 static AgBmi323 s_Imu;
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength);
+static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t BufferSize, void *pContext);
 
-class Hid3dMouse final : public UsbdHid {
-public:
-	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-				 uint8_t **ppData, uint16_t *pLength) override {
-		if (pSetup != nullptr &&
-			(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
-				USB_REQTYPE_CLASS &&
-			pSetup->bRequest == USB_HID_REQ_GET_REPORT)
-		{
-			return HidReportRequest(pSetup, Stage, ppData, pLength);
-		}
-		return UsbdHid::Control(pSetup, Stage, ppData, pLength);
-	}
-};
-
-static Hid3dMouse s_Hid;
+static UsbdHid s_Hid;
 static Hid3dMouseReport_t s_Report;
 static int32_t s_AccelCenter[3];
 static int32_t s_GyroCenter[3];
@@ -208,6 +192,7 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.pContext = nullptr,
 	.pRxBuffer = s_HidRxBuffer,
 	.pTxBuffer = s_HidTxBuffer,
+	.GetReportCB = HidGetReport,
 };
 
 // Application event queue memory, replaces the 4 event library default. The
@@ -235,27 +220,16 @@ static const UsbCfg_t s_UsbCfg = {
 	.EvtHandler = nullptr,
 };
 
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength)
+static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t BufferSize, void *)
 {
-	if (pSetup == nullptr || pLength == nullptr ||
-		pSetup->bRequest != USB_HID_REQ_GET_REPORT ||
-		(pSetup->wValue & USB_HID_REPTYPE_MASK) != USB_HID_REPTYPE_INPUT ||
-		(pSetup->wValue & USB_HID_REPID_MASK) != 0U)
+	if (Type != USB_HID_REPTYPE_INPUT || ReportId != 0U ||
+		BufferSize < sizeof(s_Report))
 	{
-		return false;
+		return -1;
 	}
-	if (Stage == USB_CTRL_SETUP)
-	{
-		if (ppData == nullptr)
-		{
-			return false;
-		}
-		*ppData = reinterpret_cast<uint8_t *>(&s_Report);
-		*pLength = sizeof(s_Report);
-	}
-	return true;
+	memcpy(pBuffer, &s_Report, sizeof(s_Report));
+	return sizeof(s_Report);
 }
 
 static bool ImuInit()

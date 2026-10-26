@@ -405,8 +405,14 @@ UsbIntIntrf
 Interrupt OUT/IN endpoint pair
 ```
 
-The application supplies the report descriptor and the staged handler for
-`GET_REPORT` and `SET_REPORT`. `UsbdHid` handles the HID descriptor,
+The application supplies the report descriptor and optional `GetReportCB` /
+`SetReportCB` callbacks. `UsbdHid` owns the control-transfer stages, validates
+report direction/type and buffer bounds, snapshots GET_REPORT data, and calls
+SET_REPORT only when its full payload has arrived. Each object has a 64-byte
+control buffer; larger reports use optional caller-owned storage. Reset,
+unconfiguration and transfer abort discard pending control-report state.
+The role-neutral `UsbIntIntrf` transport is unchanged.
+`UsbdHid` also handles the HID descriptor,
 `GET/SET_IDLE` and boot-subclass `GET/SET_PROTOCOL`. All USB and HID constants
 and descriptor structures come from `usb_def.h` and `usb_hiddef.h`.
 

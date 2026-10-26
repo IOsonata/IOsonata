@@ -7,7 +7,8 @@ Links usb.cpp, usb_intrf.cpp, usbd_cdc.cpp and usbd_cdc_desc.cpp together and
 runs the sequence an application runs: UsbInit, two UsbdCdc initializations,
 UsbEnable and UsbProcess. It also verifies that the class registration assigns
 the established dual-CDC endpoint layout without placement fields in either
-application configuration.
+application configuration. HID report callbacks are also exercised through
+the real core, including multi-packet transfers, rejection and reset recovery.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -62,6 +63,8 @@ static uint8_t s_RegisteredEp[6];
 static int s_RegisteredEpCount;
 static int s_EpOpenCount;
 static int s_Ep0EventCount;
+static int s_Stalls;
+static uint8_t s_LastEp0Bytes[64];
 static UsbCtrlrEpHandler_t s_EpHandler[16];
 static void *s_EpContext[16];
 static unsigned s_EpSendCount[8];
@@ -134,15 +137,26 @@ static bool RecordEp0(uint8_t EpAddr, uint16_t Length)
 	s_LastEp0Length = Length;
 	return true;
 }
-int UsbCtrlrEp0Send(int, uint8_t *, int Length)
+int UsbCtrlrEp0Send(int, uint8_t *pBuffer, int Length)
 {
+	if (Length > 64)
+	{
+		Length = 64;
+	}
+	if (Length > 0 && Length <= (int)sizeof(s_LastEp0Bytes))
+	{
+		memcpy(s_LastEp0Bytes, pBuffer, Length);
+	}
 	return RecordEp0(USB_ENDPADDR_DIR_IN, Length) ? Length : -1;
 }
 bool UsbCtrlrEp0Status(int, uint8_t EpAddr)
 {
 	return RecordEp0(EpAddr, 0);
 }
-void UsbCtrlrEpStall(int, uint8_t, bool) {}
+void UsbCtrlrEpStall(int, uint8_t, bool)
+{
+	s_Stalls++;
+}
 void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
@@ -199,6 +213,164 @@ static UsbdCdcCfg_t CdcCfg(uint8_t *pRx, int RxSize,
 	cfg.pTxFifoMem = pTx;
 	cfg.DevNo = 0;
 	return cfg;
+}
+
+static int s_ReportSets;
+static bool s_AcceptReport;
+static uint8_t s_ReportBytes[128];
+
+static int HidGetReport(USB_HID_REPTYPE, uint8_t, uint8_t *pBuffer,
+	uint16_t Capacity, void *)
+{
+	if (Capacity < sizeof(s_ReportBytes))
+	{
+		return -1;
+	}
+	memcpy(pBuffer, s_ReportBytes, sizeof(s_ReportBytes));
+	return sizeof(s_ReportBytes);
+}
+
+static bool HidSetReport(USB_HID_REPTYPE Type, uint8_t Id,
+	const uint8_t *pBuffer, uint16_t Length, void *)
+{
+	if (Type != USB_HID_REPTYPE_FEATURE || Id != 0 ||
+		Length != sizeof(s_ReportBytes))
+	{
+		return false;
+	}
+	s_ReportSets++;
+	memcpy(s_ReportBytes, pBuffer, Length);
+	return s_AcceptReport;
+}
+
+static void HidSetup(bool Get, uint16_t Length)
+{
+	UsbCtrlrEvt_t evt = {};
+	evt.Type = USB_CTRLR_EVT_SETUP;
+	evt.Setup.bmRequestType = USB_REQTYPE_CLASS | USB_REQTYPE_INTERFACE |
+		(Get ? USB_REQTYPE_DIRHOST : USB_REQTYPE_DIRDEV);
+	evt.Setup.bRequest = Get ? USB_HID_REQ_GET_REPORT : USB_HID_REQ_SET_REPORT;
+	evt.Setup.wValue = USB_HID_REPTYPE_FEATURE;
+	evt.Setup.wLength = Length;
+	UsbDevProcessEvent(0, &evt);
+}
+
+static void HidComplete(uint8_t EpAddr, uint8_t *pBuffer, uint16_t Length)
+{
+	UsbCtrlrEvt_t evt = {};
+	evt.Type = USB_CTRLR_EVT_XFER_CMPL;
+	evt.Xfer.EpAddr = EpAddr;
+	evt.Xfer.pBuffer = pBuffer;
+	evt.Xfer.Length = Length;
+	evt.Xfer.Result = USB_CTRLR_XFER_SUCCESS;
+	UsbDevProcessEvent(0, &evt);
+}
+
+#define HID_CHECK(c) do { if (!(c)) { \
+	printf("HID core check failed at line %d: %s\n", __LINE__, #c); \
+	return false; } } while (0)
+
+static bool TestHidReports()
+{
+	UsbDisable(0);
+	UsbCfg_t cfg = {};
+	cfg.Vid = 0x1209;
+	cfg.Pid = 5;
+	HID_CHECK(UsbInit(&cfg));
+	static const uint8_t reportDesc[] = {
+		0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01,
+		0x75, 0x08, 0x95, 0x80, 0x09, 0x01, 0xB1, 0x02, 0xC0,
+	};
+	alignas(4) static uint8_t rx[USB_INT_INTRF_PKT_BLKSIZE];
+	alignas(4) static uint8_t tx[USB_INT_INTRF_PKT_BLKSIZE];
+	alignas(4) static uint8_t control[128];
+	static UsbdHid hid;
+	UsbdHidCfg_t hidCfg = {};
+	hidCfg.pReportDesc = reportDesc;
+	hidCfg.ReportDescLength = sizeof(reportDesc);
+	hidCfg.pRxBuffer = rx;
+	hidCfg.pTxBuffer = tx;
+	hidCfg.GetReportCB = HidGetReport;
+	hidCfg.SetReportCB = HidSetReport;
+	hidCfg.pControlBuffer = control;
+	hidCfg.ControlBufferSize = sizeof(control);
+	HID_CHECK(hid.Init(hidCfg));
+	HID_CHECK(UsbEnable(0));
+	Setup(USB_REQ_SET_ADDRESS, 5);
+	CompleteEp0In();
+	Setup(USB_REQ_SET_CONFIGURATION, 1);
+	CompleteEp0In();
+	HID_CHECK(UsbConfigured(0));
+	s_AcceptReport = true;
+	uint8_t packet[64];
+	memset(packet, 0x37, sizeof(packet));
+	int stalls = s_Stalls;
+	HidSetup(false, 128);
+	HID_CHECK(s_ReportSets == 0 && s_Stalls == stalls);
+	HidComplete(0, packet, 64);
+	HID_CHECK(s_ReportSets == 0);
+	memset(packet, 0x59, sizeof(packet));
+	HidComplete(0, packet, 64);
+	HID_CHECK(s_ReportSets == 1 && s_ReportBytes[0] == 0x37 &&
+		s_ReportBytes[127] == 0x59 && s_LastEp0Length == 0);
+	CompleteEp0In();
+	HID_CHECK(s_ReportSets == 1);
+
+	// GET_REPORT uses a stable snapshot and the core limits host-visible bytes.
+	HidSetup(true, 3);
+	HID_CHECK(s_LastEp0Length == 3 && s_LastEp0Bytes[0] == 0x37);
+	HidComplete(USB_ENDPADDR_DIRIN(0), nullptr, 3);
+	HidComplete(0, nullptr, 0);
+	HidSetup(true, 128);
+	HID_CHECK(s_LastEp0Length == 64 && s_LastEp0Bytes[0] == 0x37);
+	memset(s_ReportBytes, 0, sizeof(s_ReportBytes));
+	HidComplete(USB_ENDPADDR_DIRIN(0), nullptr, 64);
+	HID_CHECK(s_LastEp0Length == 64 && s_LastEp0Bytes[0] == 0x59);
+	HidComplete(USB_ENDPADDR_DIRIN(0), nullptr, 64);
+	HidComplete(0, nullptr, 0);
+
+	HidSetup(false, 129);
+	HID_CHECK(s_Stalls > stalls && s_ReportSets == 1);
+	stalls = s_Stalls;
+	HidSetup(false, 128);
+	HidComplete(0, packet, 7);
+	HID_CHECK(s_Stalls > stalls && s_ReportSets == 1);
+	// A new setup aborts the incomplete report without invoking the callback.
+	HidSetup(false, 128);
+	HidComplete(0, packet, 64);
+	HidSetup(true, 3);
+	HID_CHECK(s_ReportSets == 1);
+	HidComplete(USB_ENDPADDR_DIRIN(0), nullptr, 3);
+	HidComplete(0, nullptr, 0);
+	stalls = s_Stalls;
+	s_AcceptReport = false;
+	HidSetup(false, 128);
+	HidComplete(0, packet, 64);
+	HidComplete(0, packet, 64);
+	HID_CHECK(s_ReportSets == 2 && s_Stalls > stalls);
+	// Reset cancels a partial report. Re-enumeration permits a fresh report.
+	HidSetup(false, 128);
+	HidComplete(0, packet, 64);
+	UsbCtrlrEvt_t evt = {};
+	evt.Type = USB_CTRLR_EVT_RESET;
+	UsbDevProcessEvent(0, &evt);
+	HID_CHECK(s_ReportSets == 2);
+	Setup(USB_REQ_SET_ADDRESS, 5);
+	CompleteEp0In();
+	Setup(USB_REQ_SET_CONFIGURATION, 1);
+	CompleteEp0In();
+	evt.Type = USB_CTRLR_EVT_SUSPEND;
+	UsbDevProcessEvent(0, &evt);
+	evt.Type = USB_CTRLR_EVT_RESUME;
+	UsbDevProcessEvent(0, &evt);
+	s_AcceptReport = true;
+	HidSetup(false, 128);
+	HidComplete(0, packet, 64);
+	HidComplete(0, packet, 64);
+	CompleteEp0In();
+	HID_CHECK(s_ReportSets == 3 && UsbConfigured(0));
+	puts("HID callbacks through real USB core: PASS");
+	return true;
 }
 
 int main(void)
@@ -391,6 +563,6 @@ int main(void)
 	UsbdCdcSetSerialState(nullptr, 1U);
 	UsbProcess(0);
 	printf("UsbInit, dual UsbdCdc Init, UsbEnable, UsbProcess all completed\n");
-	return UsbConfigured(0) ? 0 : 4;
+	return UsbConfigured(0) && TestHidReports() ? 0 : 4;
 }
 

@@ -285,8 +285,9 @@ Use `--serial` when several matching devices are connected.
 
 `UsbdHid` inherits `UsbIntIntrf` and owns HID descriptors and standard HID class
 requests. The application supplies the report descriptor and report meaning.
-Subclass `UsbdHid` only when application-specific control reports are needed,
-and delegate unhandled requests to `UsbdHid::Control()`.
+Use optional `GetReportCB` and `SetReportCB` callbacks for control reports.
+No subclass or endpoint-zero transfer-stage handler is needed. Existing
+`Control()` overrides remain supported for specialized requests.
 
 Supply separate caller-owned RX and TX slots in `UsbdHidCfg_t::pRxBuffer`
 and `pTxBuffer`. Both must remain alive for the interface lifetime, be
@@ -303,6 +304,53 @@ Use these arrays in the matching configuration fields, as shown in
 [usb_hid_loopback.cpp](../exemples/usb/usb_hid_loopback.cpp).
 `UsbIntIntrfCfg_t` has the same slot requirements. Rebuild the MCU library
 and application together when migrating from the earlier embedded-buffer API.
+
+For example, an unnumbered input report can be returned with:
+
+```cpp
+static int GetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t Capacity, void *)
+{
+	if (Type != USB_HID_REPTYPE_INPUT || ReportId != 0 ||
+		Capacity < sizeof(s_Report))
+	{
+		return -1;
+	}
+	memcpy(pBuffer, &s_Report, sizeof(s_Report));
+	return sizeof(s_Report);
+}
+```
+
+Set `.GetReportCB = GetReport` in `UsbdHidCfg_t`. For output or feature
+reports, set `.SetReportCB` to a function with this signature:
+
+```cpp
+static bool SetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	const uint8_t *pBuffer, uint16_t Length, void *pContext);
+```
+
+The library assembles the complete SET_REPORT payload before calling the
+function. Return `true` to accept it or `false` to stall the request. Short
+or oversized transfers are rejected without calling the function. An absent
+callback stalls that request. Both callbacks receive the configuration's
+`pContext` and run in USB processing context; keep them short and nonblocking.
+The report type uses the `USB_HID_REPTYPE_*` constants. Report bytes are passed
+unchanged, including any report ID byte; the library does not interpret the
+report descriptor or add/remove IDs.
+
+Each object contains a 64-byte control buffer, separate from the interrupt
+RX/TX slots. GET_REPORT copies a stable snapshot into it; the core truncates
+the reply to the host's requested length. For larger control reports, provide
+`.pControlBuffer` and `.ControlBufferSize`: separate, 4-byte aligned storage
+that remains valid for the object's lifetime and does not overlap RX/TX slots.
+No heap allocation is used. SET_REPORT callbacks run before the status stage,
+so they can reject a report; a later status failure cannot undo application
+effects already applied by the callback. Interrupt OUT reports still arrive
+through `EvtCB` or the transport read API.
+
+Rebuild the MCU library and application together for the added configuration
+fields and object storage. Zero-initialize configurations before assigning
+individual fields.
 
 The generic loopback is exercised through the native HID driver:
 

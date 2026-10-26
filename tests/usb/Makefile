@@ -44,6 +44,7 @@ MULTICONFIG_SOURCES := usb_multiconfig_test.cpp $(filter-out usb_core_test.cpp,$
 LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
 LINK_SOURCES := \
 	usb_stack_link_test.cpp \
+	$(ROOT)/src/usb/usbd_hid.cpp $(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/usb/usb.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \

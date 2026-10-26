@@ -72,27 +72,12 @@ static const uint8_t s_ReportDesc[] = {
 	0xC0U,
 };
 
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength);
+static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t BufferSize, void *pContext);
+static bool HidSetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	const uint8_t *pBuffer, uint16_t Length, void *pContext);
 
-class HidLoopback final : public UsbdHid {
-public:
-	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-				 uint8_t **ppData, uint16_t *pLength) override {
-		if (pSetup != nullptr &&
-			(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
-				USB_REQTYPE_CLASS &&
-			(pSetup->bRequest == USB_HID_REQ_GET_REPORT ||
-			 pSetup->bRequest == USB_HID_REQ_SET_REPORT))
-		{
-			return HidReportRequest(pSetup, Stage, ppData, pLength);
-		}
-		return UsbdHid::Control(pSetup, Stage, ppData, pLength);
-	}
-};
-
-static HidLoopback s_Hid;
+static UsbdHid s_Hid;
 static uint8_t s_Pending[HID_REPORT_SIZE];
 static uint16_t s_PendingLength;
 static uint8_t s_ControlReport[HID_REPORT_SIZE];
@@ -120,6 +105,8 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.pContext = nullptr,
 	.pRxBuffer = s_HidRxBuffer,
 	.pTxBuffer = s_HidTxBuffer,
+	.GetReportCB = HidGetReport,
+	.SetReportCB = HidSetReport,
 };
 
 // Application event queue memory, replaces the 4 event library default. The
@@ -187,33 +174,28 @@ static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
 
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength)
+static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t BufferSize, void *)
 {
-	if (pSetup == nullptr || pLength == nullptr)
+	if (Type != USB_HID_REPTYPE_INPUT || ReportId != 0U ||
+		BufferSize < sizeof(s_ControlReport))
+	{
+		return -1;
+	}
+	memcpy(pBuffer, s_ControlReport, sizeof(s_ControlReport));
+	return sizeof(s_ControlReport);
+}
+
+static bool HidSetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	const uint8_t *pBuffer, uint16_t Length, void *)
+{
+	if (Type != USB_HID_REPTYPE_OUTPUT || ReportId != 0U ||
+		Length > sizeof(s_ControlReport))
 	{
 		return false;
 	}
-	if (Stage == USB_CTRL_ABORT)
-	{
-		return true;
-	}
-	if (Stage == USB_CTRL_SETUP)
-	{
-		if (ppData == nullptr || pSetup->wLength > sizeof(s_ControlReport))
-		{
-			return false;
-		}
-		*ppData = s_ControlReport;
-		*pLength = sizeof(s_ControlReport);
-		return true;
-	}
-	if (Stage == USB_CTRL_COMPLETE &&
-		pSetup->bRequest == USB_HID_REQ_SET_REPORT)
-	{
-		return s_Hid.Tx(0, s_ControlReport, *pLength) == (int)*pLength;
-	}
+	memcpy(s_ControlReport, pBuffer, Length);
+	HidEvent(nullptr, DEVINTRF_EVT_RX_DATA, s_ControlReport, Length);
 	return true;
 }
 
