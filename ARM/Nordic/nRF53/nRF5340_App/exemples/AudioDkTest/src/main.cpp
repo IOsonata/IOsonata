@@ -343,34 +343,24 @@ int main()
 			received = s_I2s.Rx(0, (uint8_t *)rx, sizeof(rx));
 			if (received == (int)sizeof(rx))
 			{
-				int64_t sumLeft = 0;
-				int64_t sumRight = 0;
-				uint64_t squaresLeft = 0;
-				uint64_t squaresRight = 0;
-				uint32_t peakLeft = 0;
-				uint32_t peakRight = 0;
-				unsigned differing = 0;
+				// Audio DK has one onboard PDM microphone. The codec can
+				// expose its signal in both I2S slots; analyze one mono slot.
+				int64_t sum = 0;
+				uint64_t squares = 0;
+				uint32_t peak = 0;
 				for (unsigned i = 0; i < 128; i++)
 				{
-					int32_t left = (int16_t)(uint16_t)rx[i];
-					int32_t right = (int16_t)(uint16_t)(rx[i] >> 16);
-					uint32_t magnitudeLeft = left < 0 ? (uint32_t)-left : (uint32_t)left;
-					uint32_t magnitudeRight = right < 0 ? (uint32_t)-right : (uint32_t)right;
-					if (magnitudeLeft > peakLeft) { peakLeft = magnitudeLeft; }
-					if (magnitudeRight > peakRight) { peakRight = magnitudeRight; }
-					sumLeft += left;
-					sumRight += right;
-					squaresLeft += (uint64_t)(int64_t)left * left;
-					squaresRight += (uint64_t)(int64_t)right * right;
-					if (left != right) { differing++; }
+					int32_t sample = (int16_t)(uint16_t)rx[i];
+					uint32_t magnitude = sample < 0 ? (uint32_t)-sample : (uint32_t)sample;
+					if (magnitude > peak) { peak = magnitude; }
+					sum += sample;
+					squares += (uint64_t)(int64_t)sample * sample;
 				}
-				// Subtract DC power so RMS tracks acoustic signal rather than bias.
-				uint64_t powerLeft = (squaresLeft - (uint64_t)(sumLeft * sumLeft / 128)) / 128;
-				uint64_t powerRight = (squaresRight - (uint64_t)(sumRight * sumRight / 128)) / 128;
-				printf("I2S mic peak L/R=%lu/%lu RMS(AC)=%lu/%lu differ=%u/128 VBAT=%lu uV\n",
-					(unsigned long)peakLeft, (unsigned long)peakRight,
-					(unsigned long)AudioSqrt(powerLeft), (unsigned long)AudioSqrt(powerRight),
-					differing, (unsigned long)s_Monitors[0].BusVoltageMicroVolt());
+				// Remove DC offset from the measured signal power.
+				uint64_t power = (squares - (uint64_t)(sum * sum / 128)) / 128;
+				printf("I2S mono mic peak=%lu RMS(AC)=%lu VBAT=%lu uV\n",
+					(unsigned long)peak, (unsigned long)AudioSqrt(power),
+					(unsigned long)s_Monitors[0].BusVoltageMicroVolt());
 			}
 			else
 			{
