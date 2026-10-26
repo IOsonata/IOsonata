@@ -110,6 +110,7 @@ static volatile bool s_RxReady;
 static volatile bool s_TxPending;
 static uint32_t s_BlockWords;
 static bool s_Running;
+static bool s_IntEnabled;
 
 #if defined(NRF53_SERIES)
 // HFCLKAUDIO synthesizes exact integer-family and 44.1-kHz-family sample
@@ -216,13 +217,22 @@ bool nRFxI2SWaitTx(I2SDev_t * const pDev, int32_t Timeout)
 
 static void nRFxI2SDisable(DevIntrf_t * const pDev)
 {
+	// Keep the IRQ handler from clearing STOPPED or changing DMA pointers
+	// while stopping the peripheral and reclaiming its buffers.
+	NVIC_DisableIRQ(I2S_IRQn);
+	NRF_I2S->INTEN = 0;
 	if (s_Running)
 	{
+		s_Running = false;
+		NRF_I2S->EVENTS_STOPPED = 0;
 		NRF_I2S->TASKS_STOP = 1;
 		nRFxI2SWaitStop(s_pI2SDev, 100000);
 	}
 	NRF_I2S->ENABLE = 0;
-	s_Running = false;
+	NRF_I2S->EVENTS_RXPTRUPD = 0;
+	NRF_I2S->EVENTS_TXPTRUPD = 0;
+	NRF_I2S->EVENTS_STOPPED = 0;
+	NVIC_ClearPendingIRQ(I2S_IRQn);
 #if defined(NRF53_SERIES)
 	nRF53AudioClockStop();
 #endif
@@ -263,6 +273,13 @@ static void nRFxI2SEnable(DevIntrf_t * const pDev)
 	NRF_I2S->EVENTS_TXPTRUPD = 0;
 	NRF_I2S->EVENTS_STOPPED = 0;
 	NRF_I2S->ENABLE = I2S_ENABLE_ENABLE_Msk;
+	if (s_IntEnabled)
+	{
+		NRF_I2S->INTEN = I2S_INTEN_RXPTRUPD_Msk |
+			I2S_INTEN_TXPTRUPD_Msk | I2S_INTEN_STOPPED_Msk;
+		NVIC_ClearPendingIRQ(I2S_IRQn);
+		NVIC_EnableIRQ(I2S_IRQn);
+	}
 	s_Running = true;
 	NRF_I2S->TASKS_START = 1;
 }
@@ -710,13 +727,12 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 	NRF_I2S->EVENTS_STOPPED = 0;
 	NRF_I2S->EVENTS_TXPTRUPD = 0;
 
-	if (pCfgData->bIntEn)
+	s_IntEnabled = pCfgData->bIntEn;
+	NVIC_DisableIRQ(I2S_IRQn);
+	NVIC_ClearPendingIRQ(I2S_IRQn);
+	if (s_IntEnabled)
 	{
-        NRF_I2S->INTEN = I2S_INTEN_RXPTRUPD_Msk | I2S_INTEN_TXPTRUPD_Msk | I2S_INTEN_STOPPED_Msk;
-
-        NVIC_ClearPendingIRQ(I2S_IRQn);
-        NVIC_SetPriority(I2S_IRQn, pCfgData->IntPrio);
-        NVIC_EnableIRQ(I2S_IRQn);
+		NVIC_SetPriority(I2S_IRQn, pCfgData->IntPrio);
 	}
 
 	nRFxI2SEnable(&pDev->DevIntrf);
