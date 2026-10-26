@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the RA4M1 debug trace without stopping a live enumeration."""
+"""Exercise bounded RA4M1 capture and deferred semihosting output."""
 from pathlib import Path
 import os
 import subprocess
@@ -39,6 +39,10 @@ int main()
 	const uint8_t prefix[] = {0x12, 1, 0, 2, 0xef, 2, 1, 64};
 	Ra4UsbTraceTx(nullptr, 0);
 	Ra4UsbTraceTx(prefix, 3);
+	s_Usb.Suspended = true;
+	Ra4UsbTracePoll();
+	assert(prints == 0); // Initial pre-reset suspend must stay quiet.
+	s_Usb.Suspended = false;
 	for (unsigned i = 0; i < 64; ++i)
 	{
 		Ra4UsbTraceTx(prefix, sizeof(prefix));
@@ -62,17 +66,26 @@ int main()
 	assert(s_Trace[0].Dcp == 0x101 && s_Trace[0].Line == 1);
 	s_Usb.Suspended = true;
 	Ra4UsbTracePoll();
-	assert(prints == 0);
-	regs.INTSTS0 = 0;
-	Ra4UsbTracePoll();
 	assert(prints == 41 && s_TracePrinted == 32 && s_TxTracePrinted == 8);
 	Ra4UsbTracePoll();
 	assert(prints == 41);
+	regs.INTSTS0 = 0;
+	Ra4UsbTracePoll();
+	assert(prints == 42); // Live VBUS changes; captures are not repeated.
+	Ra4UsbTracePoll();
+	assert(prints == 42);
 	s_Usb.Suspended = false;
 	regs.INTSTS0 = RA4USB_INT_VBSTS;
 	g_Ra4UsbStage = 6;
 	Ra4UsbTracePoll();
-	assert(prints == 41);
+	assert(prints == 42);
+	// A short capture still dumps on unplug without waiting for capacity.
+	s_TraceCount = s_TracePrinted = 0;
+	s_TxTraceCount = s_TxTracePrinted = 0;
+	Ra4UsbTraceRecord(0x1090, 0xdf00);
+	regs.INTSTS0 = 0;
+	Ra4UsbTracePoll();
+	assert(s_TracePrinted == 1 && prints == 44);
 }
 """
 with tempfile.TemporaryDirectory() as tmp:
@@ -83,4 +96,4 @@ with tempfile.TemporaryDirectory() as tmp:
                         "-Wextra", "-Werror", opt, str(path / "trace.cpp"),
                         "-o", str(path / "trace")], check=True)
         subprocess.run([str(path / "trace")], check=True)
-        print("PASS", opt, "attached/suspended silence, bounded records, unplug dump")
+        print("PASS", opt, "initial suspend silence, bounded capture, full suspended dump")

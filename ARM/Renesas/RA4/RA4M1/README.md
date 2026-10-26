@@ -810,9 +810,16 @@ sections 5.6.5.3/5.6.5.4, and the
 [RA4M1 datasheet](https://www.renesas.com/en/document/dst/ra4m1-group-datasheet),
 table 2.2.
 
-Debug interrupt snapshots are buffered in RAM while VBUS is present, including
-suspend before the first host reset. To print the capture, unplug the USB device
-cable while leaving the debugger connected and the application running.
-Rebuild both the library and application after changing the driver.
+Debug builds print a "trace armed" banner before enabling the D+ pull-up.
+Interrupt and EP0 payload snapshots are buffered in RAM. The initial suspend
+before the first host reset stays quiet. A full interrupt capture (32 entries)
+is printed when the bus suspends; this permits diagnosis of repeated enumeration
+failures without relying on unplug. Semihosting still pauses the CPU during that
+dump, so it is a diagnostic mode, not a transfer timing measurement.
+A partial capture can be printed by unplugging the USB device cable while
+leaving the debugger connected and the application running.
+Rebuild both the library and application in Debug after changing the driver.
+If the startup banner is absent, check the loaded build and semihosting before
+interpreting silence as a USB result.
 Host register-model tests do not establish electrical operation or enumeration;
 EK-RA4M1 enumeration remains pending hardware validation.

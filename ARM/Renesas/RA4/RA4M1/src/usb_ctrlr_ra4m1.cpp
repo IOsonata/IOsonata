@@ -257,9 +257,13 @@ static uint16_t s_TraceStatus = 0xFFFFU;
 static void Ra4UsbTracePoll(void)
 {
 	// A semihosting write stops the CPU. Do not interrupt attachment,
-	// reset or control transfers with debugger I/O. Suspend can precede
-	// the first host reset; wait for physical disconnection before dumping.
-	if (s_Usb.Started && (R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) != 0U)
+	// reset or control transfers with debugger I/O. The initial suspend
+	// must stay quiet. A full capture may also be dumped on later suspend
+	// so diagnosing repeated enumeration failures does not require unplug.
+	const bool fullSuspended = s_Usb.Suspended &&
+		s_TraceCount == sizeof(s_Trace) / sizeof(s_Trace[0]);
+	if (s_Usb.Started && (R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) != 0U &&
+		!fullSuspended)
 	{
 		return;
 	}
@@ -1167,6 +1171,10 @@ bool UsbCtrlrStart(int DevNo)
 		RA4USB_INT_RESM | RA4USB_INT_VBINT;
 	NVIC_ClearPendingIRQ(s_Usb.Irq);
 	EnableInterrupt(state);
+#if !defined(NDEBUG)
+	// UsbCoreStart enables the IRQ and D+ pull-up after this returns.
+	printf("[RA4 USBFS] trace armed: dump on unplug or full capture + suspend\n");
+#endif
 	Ra4UsbTracePoll();
 	RA4USB_TRACE("start USBCLK=%lu\r\n",
 		static_cast<unsigned long>(SystemUsbClockGet()));
