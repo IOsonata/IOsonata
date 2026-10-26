@@ -25,12 +25,14 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "../nrf.h"
+#include "nrf.h"
 #include "system_nrf54l.h"
-#include "../nrf_peripherals.h"
+#include "nrf_peripherals.h"
 #include "nrf54l_erratas.h"
 #include "system_nrf54l_approtect.h"
-#include "../common/system_config_sau.h"
+#include "system_config_sau.h"
+
+#include "coredev/system_core_clock.h"
 
 /*lint ++flb "Enter library region" */
 
@@ -81,6 +83,16 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 #endif    
 
+/**
+ * @brief	Get core clock frequency
+ *
+ * @return	Core frequency in Hz.
+ */
+uint32_t SystemCoreClockGet(void)
+{
+	return SystemCoreClock;
+}
+
 void SystemCoreClockUpdate(void)
 {
 #if !defined(NRF_TRUSTZONE_NONSECURE)
@@ -109,6 +121,18 @@ void SystemInit(void)
             #else
                 NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
             #endif
+
+			/* Start the selected PLL and wait for the clock to be ready. */
+			NRF_CLOCK_S->EVENTS_PLLSTARTED = 0UL;
+			NRF_CLOCK_S->TASKS_PLLSTART = 1UL;
+			while (NRF_CLOCK_S->EVENTS_PLLSTARTED == 0UL)
+			{
+			}
+
+			SystemCoreClockUpdate();
+
+			/* Restore IOsonata instruction caching for RRAM execution. */
+			NRF_ICACHE->ENABLE = CACHE_ENABLE_ENABLE_Enabled;
         #endif
 
         #if !defined(NRF_TRUSTZONE_NONSECURE) && defined(__ARM_FEATURE_CMSE)

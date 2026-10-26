@@ -25,10 +25,12 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "../nrf.h"
+#include "nrf.h"
 #include "system_nrf54h.h"
 #include "nrf54h_erratas.h"
-#include "../common/system_config_sau.h"
+#include "system_config_sau.h"
+#include "coredev/system_core_clock.h"
+
 /*lint ++flb "Enter library region" */
 
 #define __SYSTEM_CLOCK_MHZ (1000000UL)
@@ -45,6 +47,16 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #elif defined ( __ICCARM__ )
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 #endif
+
+/**
+ * @brief	Get core clock frequency
+ *
+ * @return	Core frequency in Hz.
+ */
+uint32_t SystemCoreClockGet(void)
+{
+	return SystemCoreClock;
+}
 
 void SystemCoreClockUpdate(void)
 {

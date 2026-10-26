@@ -503,7 +503,7 @@
 		<link>
 			<name>src/system_nrf54h.c</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/system_nrf54h.c</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_nrf54h.c</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>

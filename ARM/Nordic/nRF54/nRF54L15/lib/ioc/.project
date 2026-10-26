@@ -268,7 +268,7 @@
 		<link>
 			<name>include/system_nrf54l.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/system_nrf54l.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/system_nrf54l.h</locationURI>
 		</link>
 		<link>
 			<name>include/usb</name>
