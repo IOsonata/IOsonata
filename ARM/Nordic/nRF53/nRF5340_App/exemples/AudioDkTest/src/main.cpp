@@ -17,7 +17,7 @@ MIT License. Copyright (c) 2026 I-SYST inc.
 #include "coredev/i2s.h"
 #include "coredev/spi.h"
 #include "coredev/uart.h"
-#include "coredev/iopinctrl.h"
+#include "iopinctrl.h"
 #include "pwrmgnt/pm_npm1100.h"
 #include "sensors/ina230.h"
 #include "audio/cs47l63.h"
