@@ -137,8 +137,6 @@ static void PrintSigned64(int64_t value)
 	PrintUnsigned64(magnitude);
 }
 
-extern "C" void nRFxI2SGetTxStats(uint32_t *pAudio, uint32_t *pSilent);
-
 static bool CheckCodecPlayback()
 {
 	uint32_t en;
@@ -304,22 +302,6 @@ int main()
 #else
 	puts("SD card probe skipped (define AUDIO_TEST_SD_CARD to enable)");
 #endif
-	// Isolate the serial audio path: return ASP1 RX1 (MCU TX) on
-	// ASP1 TX1 (MCU RX). This temporarily replaces microphone capture.
-	// The headphone mixer continues to use ASP1 RX1.
-	if (s_Codec.WriteReg(0x8200U, 0x00800020U))
-	{
-		uint32_t route;
-		if (s_Codec.ReadReg(0x8200U, route))
-		{
-			printf("ASP1 digital loopback source=%08lX (RX1 to TX1)\n",
-				(unsigned long)route);
-		}
-	}
-	else
-	{
-		puts("ASP1 loopback setup failed");
-	}
 	puts("Starting continuous I2S audio streaming (1.5 kHz tone, -6 dB output gain)");
 
 	phase = 0;
@@ -342,33 +324,24 @@ int main()
 		if (++blocks == 750)
 		{
 			int received;
-			uint32_t audioBlocks;
-			uint32_t silentBlocks;
-			nRFxI2SGetTxStats(&audioBlocks, &silentBlocks);
-			printf("I2S DMA: audio=%lu silent=%lu\n",
-				(unsigned long)audioBlocks, (unsigned long)silentBlocks);
 			blocks = 0;
 			received = s_I2s.Rx(0, (uint8_t *)rx, sizeof(rx));
 			if (received == (int)sizeof(rx))
 			{
-				unsigned different = 0;
 				unsigned activeLeft = 0;
 				unsigned activeRight = 0;
 				for (unsigned i = 0; i < 128; i++)
 				{
-					uint16_t left = (uint16_t)rx[i];
-					uint16_t right = (uint16_t)(rx[i] >> 16);
-					if (left != right) { different++; }
-					if (left != 0) { activeLeft++; }
-					if (right != 0) { activeRight++; }
+					if ((uint16_t)rx[i] != 0) { activeLeft++; }
+					if ((uint16_t)(rx[i] >> 16) != 0) { activeRight++; }
 				}
-				printf("I2S loopback: first=%08lX active L/R=%u/%u different=%u of 128, VBAT=%lu uV\n",
-					(unsigned long)rx[0], activeLeft, activeRight, different,
+				printf("I2S microphone: first=%08lX active L/R=%u/%u of 128, VBAT=%lu uV\n",
+					(unsigned long)rx[0], activeLeft, activeRight,
 					(unsigned long)s_Monitors[0].BusVoltageMicroVolt());
 			}
 			else
 			{
-				puts("I2S capture timeout");
+				puts("I2S microphone capture timeout");
 			}
 		}
 	}

@@ -106,8 +106,6 @@ alignas(4) static uint32_t s_I2S_RxReady[I2S_BUFF_MAX];
 alignas(4) static uint32_t s_I2S_TxPending[I2S_BUFF_MAX];
 static volatile uint32_t s_RxEventCount;
 static volatile uint32_t s_TxEventCount;
-static volatile uint32_t s_TxAudioBlocks;
-static volatile uint32_t s_TxSilentBlocks;
 static volatile bool s_RxReady;
 static volatile bool s_TxPending;
 static uint32_t s_BlockWords;
@@ -173,13 +171,6 @@ static void nRF53AudioClockStop(void)
 	}
 }
 #endif
-
-// Non-blocking diagnostics for the audio test. Counters are reset on I2S start.
-extern "C" void nRFxI2SGetTxStats(uint32_t *pAudio, uint32_t *pSilent)
-{
-	if (pAudio != NULL) { *pAudio = s_TxAudioBlocks; }
-	if (pSilent != NULL) { *pSilent = s_TxSilentBlocks; }
-}
 
 static int s_RxBuffLen = 0;
 static int s_TxBuffLen = 0;
@@ -257,8 +248,6 @@ static void nRFxI2SEnable(DevIntrf_t * const pDev)
 	NRF_I2S->RXTXD.MAXCNT = s_BlockWords;
 	s_RxEventCount = 0;
 	s_TxEventCount = 0;
-	s_TxAudioBlocks = 0;
-	s_TxSilentBlocks = 0;
 	s_RxReady = false;
 	s_TxPending = false;
 	memset(s_I2S_RxBuffer, 0, sizeof(s_I2S_RxBuffer));
@@ -441,18 +430,15 @@ static void nRFxI2SService(void)
 		if (pFifo != NULL)
 		{
 			memcpy(s_I2S_TxBuffer[next], pFifo, byteCount);
-			s_TxAudioBlocks++;
 		}
 		else if (s_TxPending)
 		{
 			memcpy(s_I2S_TxBuffer[next], s_I2S_TxPending, byteCount);
-			s_TxAudioBlocks++;
 			s_TxPending = false;
 		}
 		else
 		{
 			memset(s_I2S_TxBuffer[next], 0, byteCount);
-			s_TxSilentBlocks++;
 		}
 		NRF_I2S->TXD.PTR = (uint32_t)s_I2S_TxBuffer[next];
 		s_TxEventCount++;
