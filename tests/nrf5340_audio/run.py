@@ -19,6 +19,7 @@ with tempfile.TemporaryDirectory() as temp:
         "-Werror",
         "-fsanitize=address,undefined",
         "-I" + str(ROOT / "tests/nrf5340_audio/hostport"),
+        "-I" + str(ROOT / "tests/nrf5340_audio/hostport/coredev"),
         "-I" + str(ROOT / "include"),
         str(ROOT / "tests/nrf5340_audio/device_test.cpp"),
         str(ROOT / "src/audio/cs47l63.cpp"),

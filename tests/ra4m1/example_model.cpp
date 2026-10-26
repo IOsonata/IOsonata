@@ -11,7 +11,7 @@
 // The package masks (Ra4m1PinValid) of the port. Its IOPinToggle is renamed:
 // the examples get the test double of example_include/iopinctrl.h.
 #define IOPinToggle Ra4m1PortIOPinToggle
-#include "../../ARM/Renesas/RA4M1/include/iopinctrl.h"
+#include "../../ARM/Renesas/RA4/RA4M1/include/iopinctrl.h"
 #undef IOPinToggle
 SCB_Type test_scb;
 uint32_t test_primask, test_disabled, test_cleared;

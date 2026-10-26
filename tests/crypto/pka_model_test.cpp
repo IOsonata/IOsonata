@@ -512,9 +512,9 @@ int main()
 		cc.Sign(CRYPTO_CURVE_P256, descriptor, hash, sizeof(hash), sig) == CRYPTO_STATUS_UNSUPPORTED);
 	assert(ba.Init(&baIntrf, CryptoRngNrfInstance()));
 	before = baIntrf.Operations;
-	check("BA414EP inherits software key import",
+	check("BA414EP key import uses hardware point multiplication",
 		ba.KeyImport(CRYPTO_CURVE_P256, &key, priv, pub) == CRYPTO_STATUS_OK &&
-		HexEq(pub, s_PubA, sizeof(pub)) && baIntrf.Operations == before);
+		HexEq(pub, s_PubA, sizeof(pub)) && baIntrf.Operations > before);
 	check("BA414EP inherited signing receives Init RNG",
 		ba.Sign(CRYPTO_CURVE_P256, descriptor, hash, sizeof(hash), sig) == CRYPTO_STATUS_OK &&
 		ba.Verify(CRYPTO_CURVE_P256, pub, hash, sizeof(hash), sig) == CRYPTO_STATUS_OK);

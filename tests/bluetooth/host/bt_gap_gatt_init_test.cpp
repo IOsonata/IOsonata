@@ -30,6 +30,7 @@ namespace {
 int s_Failures = 0;
 int s_Checks = 0;
 bool s_EadAuthorized = false;
+bool s_Connected = false;
 uint16_t s_EadAuthorizedHdl = BT_CONN_HDL_INVALID;
 
 #define CHECK(expr) do { \
@@ -209,6 +210,15 @@ void TestSecurityLevelsValueIsWritable(void)
 
 	uint8_t req[2] = { 1, 4 };
 	CHECK(BtGapSecLevelsSet(req, sizeof(req)));
+	const BtGattChar_t *levels = FindGapChar(BT_UUID_CHARACTERISTIC_LE_GATT_SECURITY_LEVELS);
+	CHECK(levels != nullptr && levels->pValue != nullptr);
+	s_Connected = true;
+	uint8_t changed[2] = { 1, 2 };
+	CHECK(!BtGapSecLevelsSet(changed, sizeof(changed)));
+	if (levels != nullptr && levels->pValue != nullptr)
+		CHECK(levels->ValueLen == sizeof(req) && std::memcmp(levels->pValue, req, sizeof(req)) == 0);
+	s_Connected = false;
+	CHECK(BtGapSecLevelsSet(changed, sizeof(changed)));
 
 	// And the shape rules still hold: pairs of octets, never odd, never empty,
 	// never longer than the characteristic.
@@ -332,6 +342,11 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const)
 extern "C" bool BtAppConnInit(void)
 {
 	return true;
+}
+
+bool BtPeerIsConnected(void)
+{
+	return s_Connected;
 }
 
 uint16_t BtPeerCount(void)

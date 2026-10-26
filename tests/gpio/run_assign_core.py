@@ -39,10 +39,10 @@ def single_core_checks(build):
 		("ARM/Renesas/RE01/src/iopincfg_re01.c",
 		 "#define RE01_1500KB_MAX_PORT 9\n" +
 		 function("ARM/Renesas/RE01/src/iopincfg_re01.c", "IsValidIOPin"), ""),
-		("ARM/Renesas/RA4M1/src/iopincfg_ra4m1.c",
+		("ARM/Renesas/RA4/RA4M1/src/iopincfg_ra4m1.c",
 		 "#define RA4M1_PACKAGE_PINS 100\n" +
-		 function("ARM/Renesas/RA4M1/include/iopinctrl.h", "Ra4m1PortMask") +
-		 function("ARM/Renesas/RA4M1/include/iopinctrl.h", "Ra4m1PinValid"), ""),
+		 function("ARM/Renesas/RA4/RA4M1/include/iopinctrl.h", "Ra4m1PortMask") +
+		 function("ARM/Renesas/RA4/RA4M1/include/iopinctrl.h", "Ra4m1PinValid"), ""),
 		("RISCV/Renesas/R9A02/src/iopincfg_r9a02.c",
 		 "#define R9A02_PACKAGE_PINS 32\n#define R9A02_PORT_COUNT 5\n#define R9A02_PORT_PIN_COUNT 16\n" +
 		 function("RISCV/Renesas/R9A02/include/iopinctrl.h", "R9a02PortMask") +

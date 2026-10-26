@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-TARGET = ROOT / 'ARM/Renesas/RA4M1'
+TARGET = ROOT / 'ARM/Renesas/RA4/RA4M1'
 BUILD = HERE / 'build'
 
 
@@ -168,7 +168,7 @@ def check_ioc():
     assert names == {'Debug','Release'}
     wizard = json.loads((project/'wizard.json').read_text())
     assert wizard['lib'] == 'IOsonata_RA4M1' and wizard['mcu'] == 'RA4M1'
-    assert wizard['lib_path'] == '${iosonata}/ARM/Renesas/RA4M1/lib/ioc/${config}'
+    assert wizard['lib_path'] == '${iosonata}/ARM/Renesas/RA4/RA4M1/lib/ioc/${config}'
     print('PASS: IOC XML, all', len(port_sources), 'RA4M1 sources and shared driver sources linked,',
           len(source_names), 'sources, target links, hard-float configurations and wizard metadata')
 

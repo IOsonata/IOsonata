@@ -14,6 +14,7 @@
 #include <cstring>
 
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_uuid.h"
 

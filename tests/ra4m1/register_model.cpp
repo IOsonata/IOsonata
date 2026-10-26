@@ -23,7 +23,7 @@ static void delay_us(uint32_t);
 #define RA4M1_TEST_DELAY_US(us) delay_us(us)
 #include "ra4m1xxx.h"
 #include "ra4m1_host_regs.h"
-#include "../../ARM/Renesas/RA4M1/src/system_ra4m1.c"
+#include "../../ARM/Renesas/RA4/RA4M1/src/system_ra4m1.c"
 SCB_Type test_scb;
 uint32_t test_primask, test_disabled, test_cleared;
 uint32_t SystemMicroSecLoopCnt;

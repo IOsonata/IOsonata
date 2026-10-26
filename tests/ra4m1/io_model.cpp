@@ -24,8 +24,8 @@ static void wr32(uintptr_t,uint32_t);
 #define RA4M1_WR32(a,v) wr32(a,v)
 #include "ra4m1xxx.h"
 #include "ra4m1_host_regs.h"
-#include "../../ARM/Renesas/RA4M1/src/interrupt_ra4m1.cpp"
-#include "../../ARM/Renesas/RA4M1/src/iopincfg_ra4m1.c"
+#include "../../ARM/Renesas/RA4/RA4M1/src/interrupt_ra4m1.cpp"
+#include "../../ARM/Renesas/RA4/RA4M1/src/iopincfg_ra4m1.c"
 SCB_Type test_scb;
 uint32_t test_primask, test_disabled, test_cleared, test_enabled, test_active, test_pending;
 uint32_t test_priority[32];

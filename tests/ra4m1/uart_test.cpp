@@ -70,7 +70,7 @@ SOFTWARE.
 #include <deque>
 #include <vector>
 
-#include "../../ARM/Renesas/RA4M1/src/uart_ra4m1.cpp"
+#include "../../ARM/Renesas/RA4/RA4M1/src/uart_ra4m1.cpp"
 
 #define CHECK(c)	do { if (!(c)) { printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_FailCnt++; } } while (0)
 

@@ -302,6 +302,7 @@ bt_crypto_ctlr_test_SOURCES := \
 	bt_crypto_ctlr_test.cpp \
 	$(ROOT)/src/bluetooth/bt_crypto_ctlr.cpp \
 	$(ROOT)/src/crypto/crypto_aes_modes.cpp \
+	$(ROOT)/src/crypto/crypto_aes_soft.cpp \
 	$(ROOT)/src/crypto/crypto_p256.cpp \
 	$(ROOT)/src/device.cpp
 
@@ -309,6 +310,7 @@ bt_ead_test_SOURCES := \
 	bt_ead_test.cpp \
 	$(ROOT)/src/bluetooth/bt_ead.cpp \
 	$(ROOT)/src/crypto/crypto_aes_modes.cpp \
+	$(ROOT)/src/crypto/crypto_aes_soft.cpp \
 	$(ROOT)/src/crypto/crypto_softrng.cpp \
 	$(ROOT)/src/crypto/crypto_p256.cpp \
 	$(ROOT)/src/device.cpp \
@@ -458,6 +460,7 @@ bt_smp_keydist_test_SOURCES := \
 	bt_smp_link_test_stubs.cpp \
 	$(ROOT)/src/crypto/crypto_p256.cpp \
 	$(ROOT)/src/crypto/crypto_aes_modes.cpp \
+	$(ROOT)/src/crypto/crypto_aes_soft.cpp \
 	$(ROOT)/src/crypto/crypto_softrng.cpp \
 	$(ROOT)/src/device.cpp \
 	$(ROOT)/src/device_intrf.cpp \
