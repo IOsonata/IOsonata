@@ -24,7 +24,7 @@ The PRBS project additionally links unchanged `src/prbs.c`. Every application
 source is an IOC linked resource; none is copied into the MCU example directory.
 Each example's `src/board.h` is its application-local configuration. There is no
 shared board runtime, generated FSP package, constructor-based GPIO setup or
-pin wiring in the MCU library. USB, other unported peripherals, and RTOS examples are not included.
+pin wiring in the MCU library. USB projects are included; other unported peripherals and RTOS examples are not included.
 
 ## Application pin configuration
 
@@ -208,3 +208,26 @@ unmodified shared repository files. Missing source existence checks are then
 reported explicitly. Firmware compilation and basic GPIO/timer execution were subsequently
 confirmed by the user on an EK-RA4M1. IIC hardware behavior, oscillator accuracy, interrupt latency, and updated
 CMSIS host-model regressions remain unverified. The driver regression limitations in `../TIMER.md` still apply.
+
+## USB device examples
+
+The native RA4M1 USBFS driver is used by all the projects below. They link the generic
+applications from `exemples/usb` rather than copying implementation code. The
+`src/board.h` configuration enables the 48 MHz HOCO USB clock and assigns the USB
+VBUS input to P407. Use the EK-RA4M1 USB device connector.
+
+| Project | Generic source |
+| --- | --- |
+| `UsbCdcLoopback` | `usb_cdc_loopback.cpp` |
+| `UsbComboStress` | `usb_combo_stress.cpp` |
+| `UsbCdcPrbsTx` | `usb_cdc_prbs_tx.cpp` |
+| `UsbDualCdcStress` | `usb_dual_cdc_stress.cpp` |
+| `UsbHidKeyboard` | `usb_hid_keyboard.cpp` |
+| `UsbHidLoopback` | `usb_hid_loopback.cpp` |
+| `UsbIntLoopback` | `usb_int_loopback.cpp` |
+| `UsbIsoLoopback` | `usb_iso_loopback.cpp` |
+| `UsbMscRamdisk` | `usb_msc_ramdisk.cpp` |
+| `UsbCustomBulkLoopback` | `usb_custom_bulk_loopback.cpp` |
+
+`UsbCdcPrbsTx` and `UsbDualCdcStress` also link `src/prbs.c`.
+These projects have not yet been confirmed to enumerate on physical RA4M1 hardware.
