@@ -363,6 +363,18 @@ static uint8_t Ra4UsbPhysical(uint8_t EpNo, bool In)
 	return EpNo < 16U ? s_Usb.EpToPipe[EpNo][In ? 1U : 0U] : 0U;
 }
 
+static void Ra4UsbRequestOut(uint8_t Pipe)
+{
+	const Ra4UsbPipe_t *ep = &s_Usb.Pipe[Pipe];
+	if (s_Usb.Started && !s_Usb.Closing && !ep->In && !ep->Busy &&
+		!ep->Halted && ep->Mps != 0U)
+	{
+		// UsbIntrf reserves a destination on DRDY. If its queue is full,
+		// it records RxPending and retries when the application consumes it.
+		Ra4UsbNotify(Pipe, USB_CTRLR_EVT_DRDY, 0U);
+	}
+}
+
 static bool Ra4UsbArmOut(uint8_t Pipe)
 {
 	// FSP ctrl_write selects/clears the FIFO and enables reception without
@@ -622,21 +634,22 @@ static void Ra4UsbHandleOut(uint8_t Pipe)
 		return;
 	}
 
-	const int length = Ra4UsbFifoRead(Pipe, ep->pBuffer, ep->Length);
-	(void)Ra4UsbSetPid(Pipe, RA4USB_PID_NAK);
+	// Stop reception before draining/releasing the current FIFO buffer.
+	// Otherwise a subsequent OUT can arrive between BCLR and PID=NAK.
+	const int length = Ra4UsbSetPid(Pipe, RA4USB_PID_NAK) ?
+		Ra4UsbFifoRead(Pipe, ep->pBuffer, ep->Length) : -1;
 	ep->Busy = false;
 	ep->pBuffer = nullptr;
 	ep->Length = 0U;
-	if (ep->Type != ISO)
-	{
-		R_USB_FS0->NRDYENB |= bit;
-	}
 	if (length < 0)
 	{
 		Ra4UsbNotify(Pipe, USB_CTRLR_EVT_XFER_FAILED, 0U);
-		return;
 	}
-	Ra4UsbNotify(Pipe, USB_CTRLR_EVT_XFER_CMPL, (uint16_t)length);
+	else
+	{
+		Ra4UsbNotify(Pipe, USB_CTRLR_EVT_XFER_CMPL, (uint16_t)length);
+	}
+	Ra4UsbRequestOut(Pipe);
 }
 
 static void Ra4UsbHandleIn(uint8_t Pipe)
@@ -701,8 +714,8 @@ static void Ra4UsbHandleBemp(uint16_t Pipes)
 
 static void Ra4UsbHandleNrdy(uint16_t Pipes)
 {
-	// An idle OUT endpoint is intentionally NAKed until its owner supplies a
-	// destination. NRDY is the retry hint required by the generic USB ABI.
+	// Retry idle OUT owners if a not-ready event occurs. Initial and next
+	// receives are requested explicitly, rather than depending on NRDY.
 	for (uint8_t pipe = 1U; pipe <= RA4USB_PIPE_COUNT; ++pipe)
 	{
 		const uint16_t bit = Ra4UsbPipeBit(pipe);
@@ -710,11 +723,7 @@ static void Ra4UsbHandleNrdy(uint16_t Pipes)
 		{
 			continue;
 		}
-		Ra4UsbPipe_t *ep = &s_Usb.Pipe[pipe];
-		if (!ep->In && !ep->Busy && !ep->Halted && ep->Mps != 0U)
-		{
-			Ra4UsbNotify(pipe, USB_CTRLR_EVT_DRDY, 0U);
-		}
+		Ra4UsbRequestOut(pipe);
 	}
 }
 
@@ -1237,10 +1246,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 	ep->pBuffer = nullptr;
 	ep->Length = 0U;
 	s_Usb.EpToPipe[EpNo][bIn ? 1U : 0U] = pipe;
-	if (!bIn && Type != ISO)
-	{
-		R_USB_FS0->NRDYENB |= Ra4UsbPipeBit(pipe);
-	}
+	Ra4UsbRequestOut(pipe);
 	EnableInterrupt(state);
 	return true;
 }
@@ -1532,9 +1538,9 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 				(void)Ra4UsbArmOut(pipe);
 			}
 		}
-		else if (!ep->In && ep->Type != ISO)
+		else if (!ep->In)
 		{
-			R_USB_FS0->NRDYENB |= Ra4UsbPipeBit(pipe);
+			Ra4UsbRequestOut(pipe);
 		}
 	}
 	EnableInterrupt(state);

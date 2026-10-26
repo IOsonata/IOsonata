@@ -854,3 +854,13 @@ the transfer and BEMP interrupt stay active; the caller cannot refill the
 buffer prematurely. Interrupt pipes 6-9 retain their separate completion
 behavior. Host tests `usb_out_test.py` and `usb_in_test.py` cover these
 sequences; terminal opening and sustained traffic need hardware validation.
+
+Data OUT endpoints explicitly request their first destination with the existing
+DRDY callback when opened, then request another after each completion or
+clear-halt. This follows the generic UsbIntrf reserve/commit flow; it does not
+rely on NRDY occurring while a pipe is NAKed. A full software queue keeps the
+pipe NAKed and UsbIntrf retries its pending receive after the application
+consumes a packet. The pipe is NAKed before reading/clearing its receive FIFO.
+`tests/ra4m1/usb_rx_lifecycle_test.py` checks first-buffer acquisition,
+100 packet completions, full-queue backpressure, consumption/rearming and
+callback teardown. CDC loopback hardware retest remains pending.
