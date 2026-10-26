@@ -106,6 +106,21 @@ static const int16_t s_Sine[32] = {
 	-4096, -4017, -3784, -3406, -2896, -2276, -1567, -799
 };
 
+// Integer RMS without libm: input is the mean-square magnitude of 128 samples.
+static uint32_t AudioSqrt(uint64_t value)
+{
+	uint32_t root = 0;
+	for (uint32_t bit = 1U << 15; bit != 0; bit >>= 1)
+	{
+		uint32_t candidate = root | bit;
+		if ((uint64_t)candidate * candidate <= value)
+		{
+			root = candidate;
+		}
+	}
+	return root;
+}
+
 static void PrintUnsigned64(uint64_t value)
 {
 	uint32_t high = (uint32_t)(value / 1000000000ULL);
@@ -328,16 +343,34 @@ int main()
 			received = s_I2s.Rx(0, (uint8_t *)rx, sizeof(rx));
 			if (received == (int)sizeof(rx))
 			{
-				unsigned activeLeft = 0;
-				unsigned activeRight = 0;
+				int64_t sumLeft = 0;
+				int64_t sumRight = 0;
+				uint64_t squaresLeft = 0;
+				uint64_t squaresRight = 0;
+				uint32_t peakLeft = 0;
+				uint32_t peakRight = 0;
+				unsigned differing = 0;
 				for (unsigned i = 0; i < 128; i++)
 				{
-					if ((uint16_t)rx[i] != 0) { activeLeft++; }
-					if ((uint16_t)(rx[i] >> 16) != 0) { activeRight++; }
+					int32_t left = (int16_t)(uint16_t)rx[i];
+					int32_t right = (int16_t)(uint16_t)(rx[i] >> 16);
+					uint32_t magnitudeLeft = left < 0 ? (uint32_t)-left : (uint32_t)left;
+					uint32_t magnitudeRight = right < 0 ? (uint32_t)-right : (uint32_t)right;
+					if (magnitudeLeft > peakLeft) { peakLeft = magnitudeLeft; }
+					if (magnitudeRight > peakRight) { peakRight = magnitudeRight; }
+					sumLeft += left;
+					sumRight += right;
+					squaresLeft += (uint64_t)(int64_t)left * left;
+					squaresRight += (uint64_t)(int64_t)right * right;
+					if (left != right) { differing++; }
 				}
-				printf("I2S microphone: first=%08lX active L/R=%u/%u of 128, VBAT=%lu uV\n",
-					(unsigned long)rx[0], activeLeft, activeRight,
-					(unsigned long)s_Monitors[0].BusVoltageMicroVolt());
+				// Subtract DC power so RMS tracks acoustic signal rather than bias.
+				uint64_t powerLeft = (squaresLeft - (uint64_t)(sumLeft * sumLeft / 128)) / 128;
+				uint64_t powerRight = (squaresRight - (uint64_t)(sumRight * sumRight / 128)) / 128;
+				printf("I2S mic peak L/R=%lu/%lu RMS(AC)=%lu/%lu differ=%u/128 VBAT=%lu uV\n",
+					(unsigned long)peakLeft, (unsigned long)peakRight,
+					(unsigned long)AudioSqrt(powerLeft), (unsigned long)AudioSqrt(powerRight),
+					differing, (unsigned long)s_Monitors[0].BusVoltageMicroVolt());
 			}
 			else
 			{
