@@ -302,6 +302,22 @@ int main()
 #else
 	puts("SD card probe skipped (define AUDIO_TEST_SD_CARD to enable)");
 #endif
+	// Isolate the serial audio path: return ASP1 RX1 (MCU TX) on
+	// ASP1 TX1 (MCU RX). This temporarily replaces microphone capture.
+	// The headphone mixer continues to use ASP1 RX1.
+	if (s_Codec.WriteReg(0x8200U, 0x00800020U))
+	{
+		uint32_t route;
+		if (s_Codec.ReadReg(0x8200U, route))
+		{
+			printf("ASP1 digital loopback source=%08lX (RX1 to TX1)\\n",
+				(unsigned long)route);
+		}
+	}
+	else
+	{
+		puts("ASP1 loopback setup failed");
+	}
 	puts("Starting continuous I2S audio streaming (1.5 kHz tone, -6 dB output gain)");
 
 	phase = 0;
