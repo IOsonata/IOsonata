@@ -292,29 +292,37 @@ static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		return 0;
 	}
 #if defined(NRF53_SERIES)
+	unsigned idx = 0;
+	uint32_t diff = UINT32_MAX;
+
+	// Keep the first (lower) rate when two entries are equally close.
 	for (unsigned i = 0; i < sizeof(s_AudioRates) / sizeof(s_AudioRates[0]); i++)
 	{
-		if (s_AudioRates[i].Rate == Rate)
+		uint32_t actual = s_AudioRates[i].Rate;
+		uint32_t d = actual > Rate ? actual - Rate : Rate - actual;
+
+		if (d < diff)
 		{
-			if (s_AudioClockStarted &&
-				s_AudioClockReg != s_AudioRates[i].AudioReg)
-			{
-				nRF53AudioClockStop();
-			}
-			s_AudioClockReg = s_AudioRates[i].AudioReg;
-			if (!nRF53AudioClockStart())
-			{
-				return 0;
-			}
-			NRF_I2S->CONFIG.CLKCONFIG = I2S_CONFIG_CLKCONFIG_CLKSRC_ACLK;
-			NRF_I2S->CONFIG.MCKFREQ = s_AudioRates[i].MckReg;
-			NRF_I2S->CONFIG.RATIO = s_AudioRates[i].RatioReg;
-			dev->MClkFreq = s_AudioRates[i].Mclk;
-			dev->Freq = Rate;
-			return Rate;
+			idx = i;
+			diff = d;
 		}
 	}
-	return 0;
+	if (s_AudioClockStarted &&
+		s_AudioClockReg != s_AudioRates[idx].AudioReg)
+	{
+		nRF53AudioClockStop();
+	}
+	s_AudioClockReg = s_AudioRates[idx].AudioReg;
+	if (!nRF53AudioClockStart())
+	{
+		return 0;
+	}
+	NRF_I2S->CONFIG.CLKCONFIG = I2S_CONFIG_CLKCONFIG_CLKSRC_ACLK;
+	NRF_I2S->CONFIG.MCKFREQ = s_AudioRates[idx].MckReg;
+	NRF_I2S->CONFIG.RATIO = s_AudioRates[idx].RatioReg;
+	dev->MClkFreq = s_AudioRates[idx].Mclk;
+	dev->Freq = s_AudioRates[idx].Rate;
+	return dev->Freq;
 #else
 	uint32_t diff;
 	int idx;
