@@ -431,16 +431,22 @@ int main()
 						tx[j] = sample | (sample << 16);
 					}
 					unsigned retry = 10000;
-					while (s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx)) != (int)sizeof(tx) &&
-						retry > 0)
+					int written = 0;
+					while (retry > 0)
 					{
+						written = s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx));
+						if (written == (int)sizeof(tx))
+						{
+							break;
+						}
 						retry--;
 						usDelay(100);
 					}
-					if (retry == 0)
+					if (written != (int)sizeof(tx))
 					{
-						puts("I2S restart TX timeout");
-						break;
+						puts("I2S restart TX timeout; headphone remains muted");
+						s_I2s.Disable();
+						return 1;
 					}
 				}
 				msDelay(10);
