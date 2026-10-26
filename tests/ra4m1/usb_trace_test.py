@@ -16,7 +16,8 @@ static unsigned prints;
 static int trace_printf(const char *, ...) { ++prints; return 0; }
 #define printf trace_printf
 struct { bool Started, Suspended; } s_Usb;
-struct { uint16_t DCPCTR, SYSSTS0, INTSTS0; } regs;
+struct { uint16_t DCPCTR, SYSSTS0, INTSTS0, USBADDR, USBREQ,
+	USBVAL, USBINDX, USBLENG; } regs;
 #define R_USB_FS0 (&regs)
 static uint32_t g_Ra4UsbStage;
 static uint16_t g_Ra4UsbSyscfg, g_Ra4UsbIntsts0;
@@ -28,29 +29,36 @@ int main()
 	regs.INTSTS0 = RA4USB_INT_VBSTS;
 	regs.DCPCTR = 0x101;
 	regs.SYSSTS0 = 1;
-	for (unsigned i = 0; i < 32; ++i)
+	regs.USBADDR = 7;
+	regs.USBREQ = 0x680;
+	regs.USBVAL = 0x100;
+	regs.USBLENG = 18;
+	for (unsigned i = 0; i < 64; ++i)
 	{
 		Ra4UsbTraceRecord((uint16_t)(0x1000 + i), 0xDF00);
 		Ra4UsbTracePoll();
 	}
 	assert(prints == 0);
-	assert(s_TraceCount == 16);
+	assert(s_TraceCount == 32);
 	assert(s_Trace[0].Status == 0x1000);
 	assert(s_Trace[15].Status == 0x100F);
+	assert(s_Trace[31].Status == 0x101F);
+	assert(s_Trace[0].Address == 7 && s_Trace[0].Request == 0x680);
+	assert(s_Trace[0].Value == 0x100 && s_Trace[0].Length == 18);
 	assert(s_Trace[0].Dcp == 0x101 && s_Trace[0].Line == 1);
 	s_Usb.Suspended = true;
 	Ra4UsbTracePoll();
 	assert(prints == 0);
 	regs.INTSTS0 = 0;
 	Ra4UsbTracePoll();
-	assert(prints == 17 && s_TracePrinted == 16);
+	assert(prints == 33 && s_TracePrinted == 32);
 	Ra4UsbTracePoll();
-	assert(prints == 17);
+	assert(prints == 33);
 	s_Usb.Suspended = false;
 	regs.INTSTS0 = RA4USB_INT_VBSTS;
 	g_Ra4UsbStage = 6;
 	Ra4UsbTracePoll();
-	assert(prints == 17);
+	assert(prints == 33);
 }
 """
 with tempfile.TemporaryDirectory() as tmp:

@@ -111,6 +111,7 @@ enum
 
 	RA4USB_DVSQ_MASK = 0x0070U,
 	RA4USB_DVSQ_DEFAULT = 0x0010U,
+	RA4USB_DVSQ_ADDRESS = 0x0020U,
 	RA4USB_DVSQ_SUSPEND = 0x0040U,
 
 	RA4USB_PIPECFG_DIR_IN = 1U << 4,
@@ -183,8 +184,13 @@ struct Ra4UsbTraceEntry
 	uint16_t Enable;
 	uint16_t Dcp;
 	uint16_t Line;
+	uint16_t Address;
+	uint16_t Request;
+	uint16_t Value;
+	uint16_t Index;
+	uint16_t Length;
 };
-static Ra4UsbTraceEntry s_Trace[16];
+static Ra4UsbTraceEntry s_Trace[32];
 static volatile unsigned s_TraceCount;
 static unsigned s_TracePrinted;
 
@@ -198,6 +204,11 @@ static void Ra4UsbTraceRecord(uint16_t Status, uint16_t Enable)
 		entry->Enable = Enable;
 		entry->Dcp = R_USB_FS0->DCPCTR;
 		entry->Line = R_USB_FS0->SYSSTS0;
+		entry->Address = R_USB_FS0->USBADDR & 0x7FU;
+		entry->Request = R_USB_FS0->USBREQ;
+		entry->Value = R_USB_FS0->USBVAL;
+		entry->Index = R_USB_FS0->USBINDX;
+		entry->Length = R_USB_FS0->USBLENG;
 		++s_TraceCount;
 	}
 }
@@ -216,9 +227,13 @@ static void Ra4UsbTracePoll(void)
 	while (s_TracePrinted < s_TraceCount)
 	{
 		const Ra4UsbTraceEntry entry = s_Trace[s_TracePrinted++];
-		printf("[RA4 USBFS] irq=%04x enable=%04x DCPCTR=%04x SYSSTS0=%04x\n",
+		printf("[RA4 USBFS] irq=%04x enable=%04x DCPCTR=%04x SYSSTS0=%04x "
+			"addr=%u req=%04x value=%04x index=%04x len=%u\n",
 			(unsigned)entry.Status, (unsigned)entry.Enable,
-			(unsigned)entry.Dcp, (unsigned)entry.Line);
+			(unsigned)entry.Dcp, (unsigned)entry.Line,
+			(unsigned)entry.Address, (unsigned)entry.Request,
+			(unsigned)entry.Value, (unsigned)entry.Index,
+			(unsigned)entry.Length);
 	}
 	const uint32_t stage = g_Ra4UsbStage;
 	const uint16_t syscfg = g_Ra4UsbSyscfg;
@@ -592,7 +607,8 @@ static void Ra4UsbHandleControlStage(uint16_t Status)
 	}
 
 	s_Usb.Ep0StatusPending = false;
-	R_USB_FS0->DCPCTR |= RA4USB_DCP_CCPL;
+	// A no-data SETUP leaves PID at NAK. CCPL alone cannot complete it.
+	R_USB_FS0->DCPCTR = RA4USB_PID_BUF | RA4USB_DCP_CCPL;
 	Ra4UsbControlComplete(s_Usb.Ep0StatusAddr, nullptr, 0U,
 		USB_CTRLR_XFER_SUCCESS);
 }
@@ -794,6 +810,16 @@ static bool Ra4UsbHandleOneInterrupt(void)
 		if (state == RA4USB_DVSQ_DEFAULT)
 		{
 			Ra4UsbReset();
+		}
+		else if (state == RA4USB_DVSQ_ADDRESS)
+		{
+			// SET_ADDRESS is completed by USBFS without a software SETUP
+			// transaction. Keep the generic Chapter 9 state in sync before
+			// it handles the next request (including SET_CONFIGURATION).
+			UsbCtrlrEvt_t event = {};
+			event.Type = USB_CTRLR_EVT_ADDRESS;
+			event.Address = (uint8_t)(R_USB_FS0->USBADDR & 0x7FU);
+			UsbDevProcessEvent(0, &event);
 		}
 		else if ((state & RA4USB_DVSQ_SUSPEND) != 0U && !s_Usb.Suspended)
 		{
@@ -1200,8 +1226,8 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 	(void)DevNo;
 	(void)Address;
 	// USBFS performs SET_ADDRESS in hardware. USBADDR is read-only in
-	// peripheral mode; the generic core commits its pending address after
-	// the status stage completes.
+	// peripheral mode. The addressed-state interrupt reports USBADDR to
+	// the generic core using USB_CTRLR_EVT_ADDRESS.
 }
 
 void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
@@ -1492,7 +1518,7 @@ bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 	if (ready)
 	{
 		s_Usb.Ep0StatusPending = false;
-		R_USB_FS0->DCPCTR |= RA4USB_DCP_CCPL;
+		R_USB_FS0->DCPCTR = RA4USB_PID_BUF | RA4USB_DCP_CCPL;
 		EnableInterrupt(state);
 		Ra4UsbControlComplete(EpAddr, nullptr, 0U,
 			USB_CTRLR_XFER_SUCCESS);
