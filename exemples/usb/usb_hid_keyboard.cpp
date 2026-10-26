@@ -42,6 +42,8 @@ SOFTWARE.
 #include "usb/usb.h"
 #include "usb/usbd_hid.h"
 
+#include "coredev/iopincfg.h"
+#include "coredev/system_core_clock.h"
 #include "board.h"
 
 #ifdef MCUOSC

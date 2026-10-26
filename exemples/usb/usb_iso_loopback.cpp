@@ -54,6 +54,8 @@ SOFTWARE.
 #include "usb/usb_iso.h"
 #include "usb/usbd_epalloc.h"
 #if __has_include("board.h")
+#include "coredev/iopincfg.h"
+#include "coredev/system_core_clock.h"
 #include "board.h"
 #endif
 
