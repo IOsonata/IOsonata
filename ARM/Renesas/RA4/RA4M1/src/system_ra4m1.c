@@ -305,8 +305,8 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 		R_SYSTEM->OSTDCR != 0U ||
 		(R_SYSTEM->OSTDSR & 1U) != 0U)
 		return RA4M1_STARTUP_BAD_ENTRY;
-	if ((R_USB_FS0->SYSCFG & RA4M1_USB_SCKE) != 0U)
-		return RA4M1_STARTUP_USB_CLOCK;
+	// USBFS is still in module-stop at reset. Do not access its registers
+	// during system clock configuration: SCKE is managed by UsbCtrlrStart.
 	if (!Ra4m1Wait8(&R_SYSTEM->OPCCR, RA4M1_MODE_BUSY, 0U))
 		return RA4M1_STARTUP_POWER_MODE;
 
