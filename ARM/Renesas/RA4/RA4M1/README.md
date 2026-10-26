@@ -765,3 +765,29 @@ Controller sequence reference: Renesas RA4M1 hardware manual, FACI LP data-flash
 program/erase flowcharts, cross-checked against the RA4M1 MF3 paths in Renesas
 FSP `ra/fsp/src/r_flash_lp/r_flash_lp.c`. The port uses the existing vendor
 CMSIS registers directly and has no FSP runtime dependency.
+
+## SCE5 crypto
+
+`crypto_ra4m1.cpp` provides two engines on the SCE5 block: `CryptoRa4m1Rng`
+(TRNG) and `CryptoRa4m1Aes` (AES-128/256 ECB, CBC and CTR in both directions;
+CMAC, CCM and GCM composed over the block by `CryptoAesModes`). Both can be
+built with the `CryptoRa4m1RngCreate` and `CryptoRa4m1AesCreate` factories
+into caller storage of `CRYPTO_RA4M1_RNG_MEMSIZE` and
+`CRYPTO_RA4M1_AES_MEMSIZE` bytes. `crypto_default_ra4.cpp` binds the generic
+`Crypto` object to them; SHA-256, HMAC and P-256 keep the generic software
+definitions. The two engines share one lock: the SCE5 runs one primitive at a
+time and a random draw inside an AES operation is a resource conflict.
+
+The SCE5 has no register description in the hardware manual. Its access
+sequences, including the key information table the engine verifies at start,
+are the Renesas plain-key primitives in `crypto_sce5.c` (BSD-3-Clause, notice
+in `crypto_sce5-LICENSE.txt`, copied from FSP at the commit named in the file
+header). Nothing else from FSP is built. An AES operation generates the key
+index and initializes the engine once, runs every block through the update
+primitive and finalizes at the end; a failed primitive marks the engine
+faulted, wipes the request output and resets the block on the next `Enable`.
+
+Host checks: `python3 tests/crypto/run_ra4_models.py` runs the generic
+CryptoTest against an OpenSSL model of the primitive interface, and the
+production primitive file against a register model with injected poll
+failures. Board run of `exemples/CryptoTest` on the EK-RA4M1 is still owed.

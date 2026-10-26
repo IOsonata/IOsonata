@@ -28,7 +28,7 @@ static uint32_t *Register(unsigned offset)
 }
 #define SCE_REG(offset) (*Register(offset))
 #define SCE_POLL_MAX 8U
-#include "../../ARM/Renesas/RA4M1/src/crypto_sce5.c"
+#include "../../ARM/Renesas/RA4/RA4M1/src/crypto_sce5.c"
 static bool Operation(unsigned operation)
 {
 	uint8_t key[32] = {0};
@@ -39,16 +39,23 @@ static bool Operation(unsigned operation)
 
 	memset(output, 0xA5, sizeof(output));
 	memset(random, 0xA5, sizeof(random));
-	ok = operation == 0 ? Sce5RandomWords(random) :
-		Sce5AesBlock(key, operation <= 2 ? 16 : 32,
-			(operation & 1U) != 0, input, output);
-	if (!ok) {
-		if (operation == 0) {
+	if (operation == 0) {
+		ok = Sce5RandomWords(random);
+		if (!ok) {
 			for (unsigned j = 0; j < 4; j++) assert(random[j] == 0);
-		} else {
+		}
+		return ok;
+	}
+	// A failed update wipes its block; a failed begin or end leaves the
+	// block output to the engine, which wipes the whole request.
+	ok = Sce5AesBegin(key, operation <= 2 ? 16 : 32, (operation & 1U) != 0);
+	if (ok) {
+		ok = Sce5AesUpdate(input, output);
+		if (!ok) {
 			for (unsigned j = 0; j < 16; j++) assert(output[j] == 0);
 		}
 	}
+	if (ok) ok = Sce5AesEnd();
 	return ok;
 }
 
@@ -60,8 +67,14 @@ int main(void)
 	assert(Sce5Init());
 	assert(Sce5Ready());
 	assert(Sce5RandomWords(output));
-	assert(Sce5AesBlock(key, 16, true, input, cipher));
-	assert(Sce5AesBlock(key, 32, false, input, cipher));
+	assert(Sce5AesBegin(key, 16, true));
+	assert(Sce5AesUpdate(input, cipher));
+	assert(Sce5AesUpdate(input, cipher));
+	assert(!Sce5RandomWords(output));
+	assert(Sce5AesEnd());
+	assert(Sce5AesBegin(key, 32, false));
+	assert(Sce5AesUpdate(input, cipher));
+	assert(Sce5AesEnd());
 	total = accesses;
 	for (unsigned n = 1; n < total; n += total/32 + 1) {
 		memset(registers, 0, sizeof(registers));
@@ -70,8 +83,8 @@ int main(void)
 		failAfter = n;
 		bool ok = Sce5Init();
 		if (ok) ok = Sce5RandomWords(output);
-		if (ok) ok = Sce5AesBlock(key, 16, true, input, cipher);
-		if (ok) ok = Sce5AesBlock(key, 32, false, input, cipher);
+		if (ok) ok = Sce5AesBegin(key, 16, true) && Sce5AesUpdate(input, cipher) && Sce5AesEnd();
+		if (ok) ok = Sce5AesBegin(key, 32, false) && Sce5AesUpdate(input, cipher) && Sce5AesEnd();
 		assert(!ok && !Sce5Ready());
 		memset(output, 0xA5, sizeof(output));
 		assert(!Sce5RandomWords(output));

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise RA4M1 wrapper and production SCE5 primitive failure paths separately."""
+"""Exercise the RA4M1 engines and the production SCE5 primitive failure paths separately."""
 from pathlib import Path
 import os
 import subprocess
@@ -11,7 +11,8 @@ SOURCES = ['src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp',
     'src/crypto/crypto_aes_modes.cpp', 'src/crypto/crypto_aes_soft.cpp',
     'src/crypto/crypto_softsha256.cpp', 'src/crypto/crypto_softrng.cpp',
     'src/crypto/crypto_uecc.cpp', 'src/crypto/crypto_p256.cpp', 'micro-ecc/uECC.c',
-    'ARM/Renesas/RA4M1/src/crypto_ra4m1.cpp', 'exemples/crypto/crypto_engine_test.cpp',
+    'ARM/Renesas/RA4/RA4M1/src/crypto_ra4m1.cpp', 'ARM/Renesas/RA4/src/crypto_default_ra4.cpp',
+    'exemples/crypto/crypto_engine_test.cpp',
     'tests/crypto/ra4_model.cpp']
 
 with tempfile.TemporaryDirectory(prefix='crypto-sam-') as temp:
@@ -27,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='crypto-sam-') as temp:
             flags = [opt, '-g', '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                 '-fno-pie', '-DuECC_ENABLE_VLI_API=1', '-DCRYPTO_TEST_NO_MAIN']
             inc = ['-I' + str(p) for p in (out, ROOT/'include', ROOT/'micro-ecc',
-                ROOT/'ARM/Renesas/RA4M1/include', ROOT/'tests/crypto')]
+                ROOT/'ARM/Renesas/RA4/RA4M1/include', ROOT/'tests/crypto')]
             objects = []
             sources = SOURCES
             for n, source in enumerate(sources):
@@ -48,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix='crypto-sam-') as temp:
         exe = out/'primitive'
         subprocess.run(['gcc', '-std=c17', opt, '-Wall', '-Wextra', '-Werror',
             '-fsanitize=address,undefined', '-fno-pie', '-no-pie',
-            '-I'+str(ROOT/'ARM/Renesas/RA4M1/include'),
+            '-I'+str(ROOT/'ARM/Renesas/RA4/RA4M1/include'),
             str(ROOT/'tests/crypto/sce5_primitive_test.c'), '-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True,
             env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=0'})

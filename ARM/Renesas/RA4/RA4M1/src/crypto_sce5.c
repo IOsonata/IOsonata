@@ -4131,11 +4131,21 @@ End of function ./input_dir/HW_SCE_Sec_200408/200408/RA4M1/Cryptographic/HW_SCE_
 ***********************************************************************************************************************/
 
 
+// AES session: the key index is generated and the engine initialized once,
+// every block of the operation then runs through the update primitive.
+static bool s_AesOpen = false;
+static bool s_AesEncrypt = false;
+static size_t s_AesKeyLen = 0U;
+static uint8_t s_AesKey[32];
+
+static void AesSessionClear(void);
+
 static bool Finish(fsp_err_t status)
 {
 	if (s_Fault || status != FSP_SUCCESS)
 	{
 		s_Ready = false;
+		AesSessionClear();
 		HW_SCE_SoftwareResetSub();
 		Wipe(S_RAM, sizeof(S_RAM));
 		return false;
@@ -4181,7 +4191,7 @@ bool Sce5RandomWords(uint32_t output[4])
 {
 	bool ok;
 
-	if (!Sce5Ready())
+	if (!Sce5Ready() || s_AesOpen)
 	{
 		Wipe(output, 16U);
 		return false;
@@ -4194,26 +4204,55 @@ bool Sce5RandomWords(uint32_t output[4])
 	return ok;
 }
 
-bool Sce5AesBlock(const uint8_t *key, size_t keyLen, bool encrypt,
-	const uint8_t input[16], uint8_t output[16])
+static void AesSessionClear(void)
+{
+	s_AesOpen = false;
+	s_AesKeyLen = 0U;
+	Wipe(s_AesKey, sizeof(s_AesKey));
+}
+
+bool Sce5AesEnd(void)
+{
+	fsp_err_t status = FSP_SUCCESS;
+	bool ok;
+
+	if (!s_AesOpen)
+	{
+		return Sce5Ready();
+	}
+	if (!s_Fault)
+	{
+		status = s_AesKeyLen == 16U ? HW_SCE_Aes128EncryptDecryptFinalSub() :
+			HW_SCE_Aes256EncryptDecryptFinalSub();
+	}
+	AesSessionClear();
+	ok = Finish(status);
+	return ok;
+}
+
+bool Sce5AesBegin(const uint8_t *key, size_t keyLen, bool encrypt)
 {
 	uint32_t plain[8] = {0};
 	uint32_t wrapped[16] = {0};
-	uint32_t block[4] = {0};
-	uint32_t result[4] = {0};
 	uint32_t unused[8] = {0};
 	uint32_t keyType = 1U;
 	uint32_t command = change_endian_long(encrypt ? 0U : 1U);
-	fsp_err_t status = FSP_ERR_CRYPTO_SCE_FAIL;
-	bool ok = false;
+	fsp_err_t status;
 
-	if (!Sce5Ready() || (keyLen != 16U && keyLen != 32U))
+	if (!Sce5Ready() || key == NULL || (keyLen != 16U && keyLen != 32U))
 	{
-		Wipe(output, 16U);
+		return false;
+	}
+	if (s_AesOpen && s_AesKeyLen == keyLen && s_AesEncrypt == encrypt &&
+		memcmp(s_AesKey, key, keyLen) == 0)
+	{
+		return true;
+	}
+	if (s_AesOpen && !Sce5AesEnd())
+	{
 		return false;
 	}
 	memcpy(plain, key, keyLen);
-	memcpy(block, input, 16U);
 	if (keyLen == 16U)
 	{
 		status = HW_SCE_GenerateAes128PlainKeyIndexSub(&keyType, unused, unused,
@@ -4221,14 +4260,6 @@ bool Sce5AesBlock(const uint8_t *key, size_t keyLen, bool encrypt,
 		if (status == FSP_SUCCESS && !s_Fault)
 		{
 			status = HW_SCE_Aes128EncryptDecryptInitSub(&keyType, &command, wrapped, unused);
-		}
-		if (status == FSP_SUCCESS && !s_Fault)
-		{
-			HW_SCE_Aes128EncryptDecryptUpdateSub(block, result, 4U);
-			if (!s_Fault)
-			{
-				status = HW_SCE_Aes128EncryptDecryptFinalSub();
-			}
 		}
 	}
 	else
@@ -4239,26 +4270,51 @@ bool Sce5AesBlock(const uint8_t *key, size_t keyLen, bool encrypt,
 		{
 			status = HW_SCE_Aes256EncryptDecryptInitSub(&keyType, &command, wrapped, unused);
 		}
-		if (status == FSP_SUCCESS && !s_Fault)
-		{
-			HW_SCE_Aes256EncryptDecryptUpdateSub(block, result, 4U);
-			if (!s_Fault)
-			{
-				status = HW_SCE_Aes256EncryptDecryptFinalSub();
-			}
-		}
 	}
-	ok = Finish(status);
+	Wipe(plain, sizeof(plain));
+	Wipe(wrapped, sizeof(wrapped));
+	if (!Finish(status))
+	{
+		return false;
+	}
+	memcpy(s_AesKey, key, keyLen);
+	s_AesKeyLen = keyLen;
+	s_AesEncrypt = encrypt;
+	s_AesOpen = true;
+	return true;
+}
+
+bool Sce5AesUpdate(const uint8_t input[16], uint8_t output[16])
+{
+	uint32_t block[4] = {0};
+	uint32_t result[4] = {0};
+	bool ok;
+
+	if (!s_AesOpen || !Sce5Ready() || input == NULL || output == NULL)
+	{
+		Wipe(output, 16U);
+		return false;
+	}
+	memcpy(block, input, 16U);
+	if (s_AesKeyLen == 16U)
+	{
+		HW_SCE_Aes128EncryptDecryptUpdateSub(block, result, 4U);
+	}
+	else
+	{
+		HW_SCE_Aes256EncryptDecryptUpdateSub(block, result, 4U);
+	}
+	ok = !s_Fault;
 	if (ok)
 	{
 		memcpy(output, result, 16U);
 	}
 	else
 	{
+		AesSessionClear();
+		(void)Finish(FSP_ERR_CRYPTO_SCE_FAIL);
 		Wipe(output, 16U);
 	}
-	Wipe(plain, sizeof(plain));
-	Wipe(wrapped, sizeof(wrapped));
 	Wipe(block, sizeof(block));
 	Wipe(result, sizeof(result));
 	return ok;
