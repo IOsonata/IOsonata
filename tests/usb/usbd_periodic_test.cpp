@@ -104,7 +104,10 @@ void UsbCtrlrEpClose(int, uint8_t ep, bool in)
 {
 	s_Open[ep][in] = 0;
 }
-void UsbCtrlrEpCloseAll(int) { memset(s_Open, 0, sizeof(s_Open)); }
+void UsbCtrlrEpCloseAll(int)
+{
+	memset(s_Open, 0, sizeof(s_Open));
+}
 void UsbCtrlrEpBind(int, uint8_t ep, bool in, bool, UsbCtrlrEpHandler_t h, void *c)
 {
 	s_Handler[ep][in] = h; s_Context[ep][in] = c;
@@ -141,7 +144,12 @@ void UsbCtrlrEpStall(int, uint8_t, bool)
 void UsbCtrlrEpClearStall(int, uint8_t, bool)
 {
 }
-size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) *p = 0; return 0; }
+size_t UsbCtrlrGetSerial(int, char *p, size_t n)
+{
+	if (n)
+		*p = 0;
+	return 0;
+}
 bool UsbEvtQue(uint32_t, void *, UsbEvtQueHandler_t)
 {
 	return true;
@@ -368,7 +376,11 @@ static void Lifecycle()
 int main()
 {
 	Failures(); Lifecycle();
-	if (USB_HIGHSPEED_CAPABLE(0)) { s_HighSpeed = true; Lifecycle(); }
+	if (USB_HIGHSPEED_CAPABLE(0))
+	{
+		s_HighSpeed = true;
+		Lifecycle();
+	}
 	puts("PASS periodic classes: descriptors, allocation/rollback, alternate failure, reset, reconnect, suspend/resume");
 	return 0;
 }

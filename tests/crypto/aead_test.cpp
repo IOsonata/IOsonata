@@ -35,7 +35,8 @@ SOFTWARE.
 #include <openssl/evp.h>
 #include "crypto/crypto_softaes.h"
 
-class FailingAes : public CryptoSoftAes {
+class FailingAes : public CryptoSoftAes
+{
 public:
 	unsigned Blocks = 0, FailAt = 0, Begins = 0, Ends = 0;
 	bool Refuse = false;
@@ -259,7 +260,8 @@ int main()
 					for (i = 1; i <= sizeof(msg); i++)
 						assert(actual[i] == 0);
 					if (direction)
-						for (i = 1; i <= 16; i++) assert(actualTag[i] == 0);
+						for (i = 1; i <= 16; i++)
+							assert(actualTag[i] == 0);
 				}
 				assert(actual[0] == 0xA5 && actual[258] == 0xA5);
 				assert(actualTag[0] == 0xA5 && actualTag[17] == 0xA5);

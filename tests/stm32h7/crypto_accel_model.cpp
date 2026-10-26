@@ -66,8 +66,16 @@ void ModelWrite(unsigned id,uint32_t value)
 		ModelWrite(C_CR, v);
 		return;
 	}
-	if (id >= L_K0 && id <= L_K7) { ModelWrite(C_K3R - (id - L_K0), value); return; }
-	if (id == L_DIN) { ModelWrite(C_DIN, value); return; }
+	if (id >= L_K0 && id <= L_K7)
+	{
+		ModelWrite(C_K3R - (id - L_K0), value);
+		return;
+	}
+	if (id == L_DIN)
+	{
+		ModelWrite(C_DIN, value);
+		return;
+	}
 	if (id == R_EN && (value & RCC_AHB2ENR_AESEN))
 		value |= RCC_AHB2ENR_CRYPEN;
 	if (id == R_RST && (value & RCC_AHB2RSTR_AESRST))

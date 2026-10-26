@@ -50,14 +50,22 @@ static bool s_Timeout;
 static bool s_SetupTimeout;
 static bool s_ReadFailure;
 static bool s_CleanupFailure;
-uintptr_t Cc3xxBase() { return (uintptr_t)s_Reg; }
+uintptr_t Cc3xxBase()
+{
+	return (uintptr_t)s_Reg;
+}
 bool Cc3xxEnable()
 {
 	return true;
 }
-void Cc3xxDisable() { memset(s_Reg, 0, sizeof(s_Reg)); s_In = s_Out = 0; }
+void Cc3xxDisable()
+{
+	memset(s_Reg, 0, sizeof(s_Reg));
+	s_In = s_Out = 0;
+}
 
-class ModelSym : public CryptoCc3xxSym {
+class ModelSym : public CryptoCc3xxSym
+{
 public:
 	int Read(uint8_t *addr, int len, uint8_t *out, int count) override
 	{
@@ -76,7 +84,8 @@ public:
 			value = 0;
 		if (offset == 0xD50)
 			value = s_Out >= 16;
-		if (offset == MODEL_DOUT) {
+		if (offset == MODEL_DOUT)
+		{
 			assert(s_Out < 16);
 			memcpy(&value, s_Output+s_Out, 4);
 			s_Out += 4;
@@ -109,11 +118,13 @@ public:
 			s_KeyLoads++;
 		if (offset == 0xC58 || offset == 0xC48)
 			s_In = 0;
-		if (offset == 0xC00) {
+		if (offset == 0xC00)
+		{
 			assert(s_In < 64);
 			memcpy(s_Input+s_In, &value, 4);
 			s_In += 4;
-			if (s_Reg[0x900/4] == 1 && s_In == 16) {
+			if (s_Reg[0x900/4] == 1 && s_In == 16)
+			{
 				uint32_t control = s_Reg[0x4C0/4];
 				int n, final;
 				EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
@@ -127,7 +138,8 @@ public:
 				s_Out = 0;
 				s_AesBlocks++;
 			}
-			if (s_Reg[0x900/4] == 7 && s_In == 64) {
+			if (s_Reg[0x900/4] == 7 && s_In == 64)
+			{
 				SHA256_CTX ctx;
 				assert(SHA256_Init(&ctx) == 1);
 				assert(s_Reg[0x7C0/4] == 2 && s_Reg[0x684/4] == 0);

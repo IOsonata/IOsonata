@@ -55,7 +55,17 @@ static void check_clocks(void)
 	if(ic>32000000){assert(sys[0x31]==1);assert((sys[0xA0]&3)==0);}
 }
 static uint8_t rd8(uintptr_t a){assert(a>=0x4001E000UL && a<0x4001E500UL);return sys[a-0x4001E000UL];}
-static uint16_t rd16(uintptr_t a){if(a==RA4M1_PRCR)return protect;if(a==RA4M1_FCACHEE)return cache;if(a==RA4M1_FCACHEIV)return invalid;assert(false && "startup must not read the stopped USB controller");return 0;}
+static uint16_t rd16(uintptr_t a)
+{
+	if (a == RA4M1_PRCR)
+		return protect;
+	if (a == RA4M1_FCACHEE)
+		return cache;
+	if (a == RA4M1_FCACHEIV)
+		return invalid;
+	assert(false && "startup must not read the stopped USB controller");
+	return 0;
+}
 static uint32_t rd32(uintptr_t a){if(a==RA4M1_SCKDIVCR)return dividers;assert(a>=RA4M1_IELSR(0)&&a<=RA4M1_IELSR(31));return links[(a-RA4M1_IELSR(0))/4];}
 static void wr8(uintptr_t a,uint8_t v)
 {
@@ -126,7 +136,16 @@ int main(void)
 	for(unsigned i=0;i<7;i++){reset_model();assert(!SystemCoreClockSelect(OSC_TYPE_RC,bad[i]));assert(writes==0&&SystemCoreClock==500000);pass("invalid RC frequency rejected without register writes");}
 	reset_model();assert(!SystemCoreClockSelect((OSC_TYPE)99,12000000));assert(writes==0);pass("unknown oscillator type rejected");
 	const uint32_t exts[]={4000000,6000000,8000000,12000000};
-	for(unsigned i=0;i<4;i++){reset_model();input_hz=exts[i];g_McuOsc.bUSBClk=true;assert(SystemCoreClockSelect(OSC_TYPE_XTAL,input_hz));assert(SystemCoreClock==48000000&&SystemUsbClockGet()==48000000);assert(sys[0xD0]==0);pass("external crystal to exact 48 MHz PLL and USB source");}
+	for (unsigned i = 0; i < 4; i++)
+	{
+		reset_model();
+		input_hz = exts[i];
+		g_McuOsc.bUSBClk = true;
+		assert(SystemCoreClockSelect(OSC_TYPE_XTAL, input_hz));
+		assert(SystemCoreClock == 48000000 && SystemUsbClockGet() == 48000000);
+		assert(sys[0xD0] == 0);
+		pass("external crystal to exact 48 MHz PLL and USB source");
+	}
 	reset_model();input_hz=12000000;assert(SystemCoreClockSelect(OSC_TYPE_TCXO,input_hz));assert(sys[0x413]==0x40&&sys[0xA2]==0&&SystemCoreClock==48000000);pass("external-clock bypass and zero MOSC wait");
 	const uint32_t direct[]={1000000,10000000,12288000,16000000,20000000};
 	for(unsigned i=0;i<5;i++){reset_model();input_hz=direct[i];assert(SystemCoreClockSelect(OSC_TYPE_XTAL,input_hz));assert(SystemCoreClock==input_hz&&sys[0x26]==3&&sys[0x31]==0);pass("external frequencies without exact PLL solution use MOSC directly");}

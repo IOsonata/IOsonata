@@ -36,7 +36,10 @@ SOFTWARE.
 #include <cstring>
 static uint32_t s_Registers[1024];
 static bool s_Enabled;
-uintptr_t Cc3xxBase() { return (uintptr_t)s_Registers; }
+uintptr_t Cc3xxBase()
+{
+	return (uintptr_t)s_Registers;
+}
 bool Cc3xxEnable()
 {
 	s_Enabled = true;
@@ -60,7 +63,8 @@ int main()
 	memcpy(address+1, &offset, 4);
 	for (unsigned i = 0; i < sizeof(input); ++i)
 		input[i] = (uint8_t)(3*i+1);
-	for (int len : {4, 16, 32}) {
+	for (int len : {4, 16, 32})
+	{
 		memset(output, 0xA5, sizeof(output));
 		assert(api->Write(0, address+1, 4, input+1, len) == len);
 		assert(intrf.DeviceIntrf::Read(0, address+1, 4, output+1, len) == len);
@@ -89,7 +93,8 @@ int main()
 	assert(intrf.OpRelease(&owner));
 	// Malformed word transfers must not touch the register file or caller buffer.
 	memset(output, 0xA5, sizeof(output));
-	for (int len : {-1, 0, 1, 3, 5}) {
+	for (int len : {-1, 0, 1, 3, 5})
+	{
 		assert(api->Read(0, address+1, 4, output+1, len) == 0);
 		assert(api->Write(0, address+1, 4, input+1, len) == 0);
 	}
@@ -106,13 +111,18 @@ int main()
 	assert(!atomic_flag_test_and_set(&dev->bBusy));
 	atomic_flag_clear(&dev->bBusy);
 	// CPU overhead comparison only: RAM registers do not model peripheral timing.
-	for (bool generic : {true, false}) {
+	for (bool generic : {true, false})
+	{
 		auto start = std::chrono::steady_clock::now();
-		for (unsigned i = 0; i < 1000000; ++i) {
-			if (generic) {
+		for (unsigned i = 0; i < 1000000; ++i)
+		{
+			if (generic)
+			{
 				assert(intrf.DeviceIntrf::Write(0, address+1, 4, (uint8_t *)&i, 4) == 4);
 				assert(intrf.DeviceIntrf::Read(0, address+1, 4, (uint8_t *)&value, 4) == 4);
-			} else {
+			}
+			else
+			{
 				assert(api->Write(0, address+1, 4, (uint8_t *)&i, 4) == 4);
 				assert(api->Read(0, address+1, 4, (uint8_t *)&value, 4) == 4);
 			}

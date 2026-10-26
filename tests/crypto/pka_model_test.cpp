@@ -67,7 +67,8 @@ static uint32_t Word(const uint8_t *p)
 	return v;
 }
 
-class CcModel : public Cc3xxIntrf {
+class CcModel : public Cc3xxIntrf
+{
 public:
 	uint32_t Reg[0x1000 / 4] = {};
 	uint8_t Input[64] = {}, Output[16] = {};
@@ -338,8 +339,14 @@ int Cc3xxIntrf::Write(uint32_t dev, const uint8_t *addr, int alen, const uint8_t
 	return s_Cc.Write(dev, addr, alen, in, len);
 }
 
-extern "C" bool Cc3xxEnable(void) { return true; }
-extern "C" void Cc3xxDisable(void) { memset(s_Cc.Reg, 0, sizeof(s_Cc.Reg)); }
+extern "C" bool Cc3xxEnable(void)
+{
+	return true;
+}
+extern "C" void Cc3xxDisable(void)
+{
+	memset(s_Cc.Reg, 0, sizeof(s_Cc.Reg));
+}
 Cc3xxIntrf *Cc3xxIntrfInstance(void)
 {
 	return &s_Cc;
@@ -359,7 +366,8 @@ bool Cc3xxIntrf::OpRelease(const void *)
 
 // Production RNG uses the entropy transfer above and production CryptoCell SHA.
 #ifndef CRYPTO_LINK_TEST
-class BaModel : public DeviceIntrf {
+class BaModel : public DeviceIntrf
+{
 public:
 	bool DenyReset = false;
 	bool StartTx(uint32_t) override
@@ -398,7 +406,10 @@ public:
 	void Disable() override
 	{
 	}
-	uint8_t *Slot(unsigned n) { return Ram + (n + 1) * 512 - 32; }
+	uint8_t *Slot(unsigned n)
+	{
+		return Ram + (n + 1) * 512 - 32;
+	}
 	void Execute()
 	{
 		BN_CTX *ctx = BN_CTX_new();
@@ -474,7 +485,8 @@ public:
 	}
 };
 
-class ImportRng : public RngEngine {
+class ImportRng : public RngEngine
+{
 public:
 	bool Enable() override
 	{

@@ -31,7 +31,8 @@ SOFTWARE.
 #define CC3XX_SYM_POLL_MAX 100000U
 #endif
 #define CC_SHA_MAGIC 0x53484343UL
-enum : uint32_t {
+enum : uint32_t
+{
 	REG_AES_KEY0 = 0x400U,
 	REG_AES_CONTROL = 0x4C0U,
 	REG_AES_REMAINING = 0x4BCU,
@@ -65,7 +66,8 @@ enum : uint32_t {
 	REG_HASH_BUSY = 0x91CU,
 };
 
-struct CcShaCtx {
+struct CcShaCtx
+{
 	uint32_t Magic;
 	uint32_t H[8];
 	uint64_t Total;
@@ -226,8 +228,14 @@ void CryptoCc3xxSym::End()
 	((Cc3xxIntrf *)Interface())->OpRelease(this);
 }
 
-bool CryptoCc3xxSym::AesOpBegin() { return Begin() == CRYPTO_STATUS_OK; }
-void CryptoCc3xxSym::AesOpEnd() { End(); }
+bool CryptoCc3xxSym::AesOpBegin()
+{
+	return Begin() == CRYPTO_STATUS_OK;
+}
+void CryptoCc3xxSym::AesOpEnd()
+{
+	End();
+}
 
 bool CryptoCc3xxSym::Feed(const uint8_t *pIn, size_t Len)
 {
@@ -482,8 +490,14 @@ static bool ShaLive(const void *pCtx)
 		((const CcShaCtx *)pCtx)->Used < 64U;
 }
 
-size_t CryptoCc3xxSym::HashCtxSize() const { return sizeof(CcShaCtx); }
-size_t CryptoCc3xxSym::HashCtxAlign() const { return alignof(CcShaCtx); }
+size_t CryptoCc3xxSym::HashCtxSize() const
+{
+	return sizeof(CcShaCtx);
+}
+size_t CryptoCc3xxSym::HashCtxAlign() const
+{
+	return alignof(CcShaCtx);
+}
 
 CRYPTO_STATUS CryptoCc3xxSym::HashInit(CRYPTO_HASH_ALG Alg, void *pCtx)
 {

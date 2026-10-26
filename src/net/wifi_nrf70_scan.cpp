@@ -102,7 +102,10 @@ extern "C" void WifiNrf70ScanClose(void)
 	s_Callback = NULL;
 	s_pContext = NULL;
 }
-extern "C" bool WifiNrf70ScanBusy(void) { return s_bBusy; }
+extern "C" bool WifiNrf70ScanBusy(void)
+{
+	return s_bBusy;
+}
 
 #else
 extern "C" bool WifiNrf70ScanInit(uint8_t pMac[6], void *pRegInfo)
@@ -120,6 +123,11 @@ extern "C" bool WifiNrf70ScanStart(uint8_t Bands, uint16_t MaxResults,
 	(void)pContext;
 	return false;
 }
-extern "C" void WifiNrf70ScanClose(void) {}
-extern "C" bool WifiNrf70ScanBusy(void) { return false; }
+extern "C" void WifiNrf70ScanClose(void)
+{
+}
+extern "C" bool WifiNrf70ScanBusy(void)
+{
+	return false;
+}
 #endif

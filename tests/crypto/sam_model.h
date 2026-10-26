@@ -33,19 +33,27 @@ SOFTWARE.
 #include <stddef.h>
 
 // Register model only: AES uses OpenSSL, entropy uses RAND_bytes.
-struct SamReg {
+struct SamReg
+{
 	unsigned id;
 	uint32_t value;
 	operator uint32_t() const;
 	SamReg &operator=(uint32_t v);
-	SamReg &operator|=(uint32_t v) { return *this = uint32_t(*this) | v; }
-	SamReg &operator&=(uint32_t v) { return *this = uint32_t(*this) & v; }
+	SamReg &operator|=(uint32_t v)
+	{
+		return *this = uint32_t(*this) | v;
+	}
+	SamReg &operator&=(uint32_t v)
+	{
+		return *this = uint32_t(*this) & v;
+	}
 };
 struct SamKey
 {
 	SamReg AESA_KEY;
 };
-struct SamAes {
+struct SamAes
+{
 	SamReg AES_CR, AES_MR, AES_ISR;
 	SamReg AES_KEYWR[8], AES_IDATAR[4], AES_ODATAR[4];
 	SamReg AESA_CTRL, AESA_MODE, AESA_DRNGSEED, AESA_SR;
@@ -65,7 +73,11 @@ struct SamScif
 {
 	SamClock SCIF_GCCTRL[5];
 };
-struct SamRng { SamReg TRNG_ISR, TRNG_ODATA, TRNG_IDR, TRNG_CR; SamRng(); };
+struct SamRng
+{
+	SamReg TRNG_ISR, TRNG_ODATA, TRNG_IDR, TRNG_CR;
+	SamRng();
+};
 struct SamPmc
 {
 	uint32_t PMC_PCER1, PMC_PCSR1;

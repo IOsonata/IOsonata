@@ -39,7 +39,8 @@ SOFTWARE.
 #define RNG_SR_SECS 4U
 #define RNG_SR_CEIS 32U
 #define RNG_SR_SEIS 64U
-struct RngReg {
+struct RngReg
+{
 	unsigned id;
 	uint32_t value;
 	operator uint32_t() const;
@@ -48,10 +49,19 @@ struct RngReg {
 		value = v;
 		return *this;
 	}
-	RngReg &operator|=(uint32_t v) { return *this = uint32_t(*this) | v; }
-	RngReg &operator&=(uint32_t v) { return *this = uint32_t(*this) & v; }
+	RngReg &operator|=(uint32_t v)
+	{
+		return *this = uint32_t(*this) | v;
+	}
+	RngReg &operator&=(uint32_t v)
+	{
+		return *this = uint32_t(*this) & v;
+	}
 };
-struct RngRegisters { RngReg CR{0,0}, SR{1,0}, DR{2,0}; };
+struct RngRegisters
+{
+	RngReg CR{0,0}, SR{1,0}, DR{2,0};
+};
 struct RccRegisters
 {
 	uint32_t AHB2ENR, AHB2RSTR;
