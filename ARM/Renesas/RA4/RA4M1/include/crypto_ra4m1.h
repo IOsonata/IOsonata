@@ -91,12 +91,24 @@ public:
 						 const uint8_t *pIv, size_t IvLen,
 						 const uint8_t *pIn, size_t Len,
 						 uint8_t *pOut) override;
+	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+		const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen) override;
+	CRYPTO_STATUS Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+		const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+		const uint8_t *pMsg, size_t Len, uint8_t *pOut,
+		uint8_t *pTag, size_t TagLen) override;
+	CRYPTO_STATUS Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+		const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+		const uint8_t *pMsg, size_t Len, uint8_t *pOut,
+		const uint8_t *pTag, size_t TagLen) override;
 	int SelfTest() override;
 protected:
 	bool AesOpBegin() override;
 	void AesOpEnd() override;
 	bool AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
 					   uint8_t Out[16]) override;
+private:
+	CRYPTO_STATUS FinishOperation(CRYPTO_STATUS Status);
 };
 
 #define CRYPTO_RA4M1_AES_MEMSIZE	sizeof(CryptoRa4m1Aes)

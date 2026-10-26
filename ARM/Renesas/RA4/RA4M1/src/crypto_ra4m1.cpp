@@ -223,7 +223,9 @@ CryptoRa4m1Rng *CryptoRa4m1RngCreate(void *pMem, size_t MemSize)
 // CryptoAesModes) runs between AesOpBegin and AesOpEnd under the SCE lock.
 // The key index is generated and the engine initialized by the first block
 // of the operation; the following blocks only run the update primitive. The
-// session is finalized in AesOpEnd. The SCE5 works on single ECB blocks here;
+// public driver method checks finalization through FinishOperation before
+// returning, then releases the lock. AesOpEnd leaves that work to its caller.
+// The SCE5 works on single ECB blocks here;
 // CBC and CTR chaining is done in this file.
 //=============================================================================
 
@@ -260,8 +262,70 @@ bool CryptoRa4m1Aes::AesOpBegin()
 
 void CryptoRa4m1Aes::AesOpEnd()
 {
-	(void)Sce5AesEnd();
+	// Keep ownership until the public driver operation checks finalization.
+	// The inherited composition routines cannot return status from this hook.
+}
+
+CRYPTO_STATUS CryptoRa4m1Aes::FinishOperation(CRYPTO_STATUS Status)
+{
+	bool finished = Sce5AesEnd();
 	SceRelease();
+	return finished ? Status : CRYPTO_STATUS_FAIL;
+}
+
+CRYPTO_STATUS CryptoRa4m1Aes::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+	const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
+{
+	CRYPTO_STATUS status = CryptoAesModes::Mac(Alg, Key, pMsg, Len, pMac, MacLen);
+
+	// The generic modes return UNSUPPORTED before acquisition and BUSY when
+	// acquisition fails. Only OK/FAIL have an owned operation to finish.
+	if (status == CRYPTO_STATUS_OK || status == CRYPTO_STATUS_FAIL)
+	{
+		status = FinishOperation(status);
+		if (status != CRYPTO_STATUS_OK)
+		{
+			CryptoSecureWipe(pMac, MacLen);
+		}
+	}
+	return status;
+}
+
+CRYPTO_STATUS CryptoRa4m1Aes::Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+	const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+	const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen)
+{
+	CRYPTO_STATUS status = CryptoAesModes::Seal(Alg, Key, pNonce, NonceLen,
+		pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+
+	if (status == CRYPTO_STATUS_OK || status == CRYPTO_STATUS_FAIL)
+	{
+		status = FinishOperation(status);
+		if (status != CRYPTO_STATUS_OK)
+		{
+			CryptoSecureWipe(pOut, Len);
+			CryptoSecureWipe(pTag, TagLen);
+		}
+	}
+	return status;
+}
+
+CRYPTO_STATUS CryptoRa4m1Aes::Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+	const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+	const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen)
+{
+	CRYPTO_STATUS status = CryptoAesModes::Open(Alg, Key, pNonce, NonceLen,
+		pAad, AadLen, pMsg, Len, pOut, pTag, TagLen);
+
+	if (status == CRYPTO_STATUS_OK || status == CRYPTO_STATUS_FAIL)
+	{
+		status = FinishOperation(status);
+		if (status != CRYPTO_STATUS_OK)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+	}
+	return status;
 }
 
 bool CryptoRa4m1Aes::AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
@@ -358,7 +422,7 @@ CRYPTO_STATUS CryptoRa4m1Aes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		}
 		memcpy(pOut + off, output, count);
 	}
-	AesOpEnd();
+	ok = FinishOperation(ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL) == CRYPTO_STATUS_OK;
 	CryptoSecureWipe(chain, sizeof(chain));
 	CryptoSecureWipe(input, sizeof(input));
 	CryptoSecureWipe(output, sizeof(output));

@@ -38,10 +38,14 @@ SOFTWARE.
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <initializer_list>
 
 RaSystem g_System = {};
 RaMstp g_Mstp = {0xFFFFFFFFU};
 static bool s_Fail;
+static bool s_FinalFail;
+static unsigned s_Ends;
+static Crypto *s_pReentrant;
 static unsigned s_Blocks;
 
 static bool s_Open;
@@ -52,6 +56,7 @@ static unsigned s_Begins;
 
 bool Sce5Init(void)
 {
+	s_Fail = false;
 	return true;
 }
 bool Sce5Ready(void)
@@ -104,10 +109,153 @@ bool Sce5AesUpdate(const uint8_t in[16], uint8_t out[16])
 }
 bool Sce5AesEnd(void)
 {
+	s_Ends++;
+	if (s_pReentrant != nullptr)
+	{
+		Crypto *dev = s_pReentrant;
+		s_pReentrant = nullptr;
+		uint8_t key[16] = {};
+		uint8_t input[16] = {};
+		uint8_t output[16];
+		uint8_t tag[16] = {};
+		CryptoKey k = {};
+		k.Type = CRYPTO_KEY_AES_128;
+		k.Loc = CRYPTO_KEY_LOC_PLAIN;
+		k.Usage = CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT | CRYPTO_KEY_USE_SIGN;
+		k.Plain.pData = key;
+		k.Plain.Len = sizeof(key);
+		unsigned ends = s_Ends;
+		assert(dev->Mac(CRYPTO_MAC_CMAC, k, input, 16, nullptr, 16) == CRYPTO_STATUS_UNSUPPORTED);
+		assert(dev->Mac(CRYPTO_MAC_CMAC, k, input, 16, tag, 16) == CRYPTO_STATUS_BUSY);
+		assert(dev->Seal(CRYPTO_AEAD_AES_GCM, k, input, 12, nullptr, 0,
+			input, 16, output, tag, 16) == CRYPTO_STATUS_BUSY);
+		assert(dev->Open(CRYPTO_AEAD_AES_GCM, k, input, 12, nullptr, 0,
+			input, 16, output, tag, 16) == CRYPTO_STATUS_BUSY);
+		assert(dev->Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0,
+			input, 16, output) == CRYPTO_STATUS_BUSY);
+		assert(dev->Random(output, 16) == CRYPTO_STATUS_BUSY);
+		assert(s_Ends == ends);
+	}
+	if (s_FinalFail)
+	{
+		s_Fail = true;
+	}
 	s_Open = false;
 	memset(s_Key, 0, sizeof(s_Key));
 	return !s_Fail;
 }
+static void CheckWiped(const uint8_t *pBuffer, size_t Len)
+{
+	assert(pBuffer[0] == 0xA5 && pBuffer[Len + 1] == 0xA5);
+	for (size_t i = 1; i <= Len; i++)
+	{
+		assert(pBuffer[i] == 0);
+	}
+}
+
+static void Recover(CryptoRa4m1Aes &Engine, Crypto &CryptoDev)
+{
+	s_FinalFail = false;
+	Engine.Reset();
+	assert(Engine.Valid());
+	uint8_t random[4];
+	assert(CryptoDev.Random(random, sizeof(random)) == CRYPTO_STATUS_OK);
+}
+
+static void FinalizationFailures(Crypto &CryptoDev)
+{
+	s_pReentrant = &CryptoDev;
+	CryptoRa4m1Aes recovery;
+	assert(recovery.Enable());
+	uint8_t key[32] = {};
+	uint8_t input[32] = {};
+	uint8_t nonce[16] = {};
+	uint8_t output[34];
+	uint8_t tag[18];
+	uint8_t ciphertext[32];
+	uint8_t validTag[16];
+	CryptoKey k = {};
+	k.Loc = CRYPTO_KEY_LOC_PLAIN;
+	k.Usage = CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT | CRYPTO_KEY_USE_SIGN;
+	k.Plain.pData = key;
+
+	for (size_t keyLen : { 16U, 32U })
+	{
+		k.Type = keyLen == 16 ? CRYPTO_KEY_AES_128 : CRYPTO_KEY_AES_256;
+		k.Plain.Len = keyLen;
+		for (CRYPTO_CIPHER_ALG alg : { CRYPTO_CIPHER_ECB, CRYPTO_CIPHER_CBC, CRYPTO_CIPHER_CTR })
+		{
+			for (int encrypt = 0; encrypt <= 1; encrypt++)
+			{
+				memset(output, 0xA5, sizeof(output));
+				s_FinalFail = true;
+				assert(CryptoDev.Cipher(alg, encrypt, k, nonce, sizeof(nonce),
+					input, sizeof(input), output + 1) == CRYPTO_STATUS_FAIL);
+				CheckWiped(output, sizeof(input));
+				assert(!s_Open && !Sce5Ready());
+				Recover(recovery, CryptoDev);
+				// Same operation succeeds after recovery; the lock was released.
+				assert(CryptoDev.Cipher(alg, encrypt, k, nonce, sizeof(nonce),
+					input, sizeof(input), output + 1) == CRYPTO_STATUS_OK);
+			}
+		}
+	}
+
+	k.Type = CRYPTO_KEY_AES_128;
+	k.Plain.Len = 16;
+	for (size_t len : { 0U, 17U, 32U })
+	{
+		memset(tag, 0xA5, sizeof(tag));
+		s_FinalFail = true;
+		assert(CryptoDev.Mac(CRYPTO_MAC_CMAC, k, input, len, tag + 1, 16) == CRYPTO_STATUS_FAIL);
+		CheckWiped(tag, 16);
+		Recover(recovery, CryptoDev);
+		assert(CryptoDev.Mac(CRYPTO_MAC_CMAC, k, input, len, tag + 1, 16) == CRYPTO_STATUS_OK);
+
+		for (CRYPTO_AEAD_ALG alg : { CRYPTO_AEAD_AES_CCM, CRYPTO_AEAD_AES_GCM })
+		{
+			memset(output, 0xA5, sizeof(output));
+			memset(tag, 0xA5, sizeof(tag));
+			s_FinalFail = true;
+			assert(CryptoDev.Seal(alg, k, nonce, 12, nullptr, 0,
+				input, len, output + 1, tag + 1, 16) == CRYPTO_STATUS_FAIL);
+			CheckWiped(output, len);
+			CheckWiped(tag, 16);
+			Recover(recovery, CryptoDev);
+			assert(CryptoDev.Seal(alg, k, nonce, 12, nullptr, 0,
+				input, len, ciphertext, validTag, 16) == CRYPTO_STATUS_OK);
+			memset(output, 0xA5, sizeof(output));
+			s_FinalFail = true;
+			assert(CryptoDev.Open(alg, k, nonce, 12, nullptr, 0,
+				ciphertext, len, output + 1, validTag, 16) == CRYPTO_STATUS_FAIL);
+			CheckWiped(output, len);
+			Recover(recovery, CryptoDev);
+			assert(CryptoDev.Open(alg, k, nonce, 12, nullptr, 0,
+				ciphertext, len, output + 1, validTag, 16) == CRYPTO_STATUS_OK);
+			assert(memcmp(output + 1, input, len) == 0);
+		}
+	}
+
+	// Rejected parameters must not finalize or release another operation.
+	unsigned ends = s_Ends;
+	assert(CryptoDev.Mac(CRYPTO_MAC_CMAC, k, input, 1, nullptr, 16) == CRYPTO_STATUS_UNSUPPORTED);
+	assert(CryptoDev.Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 1, nullptr, 0,
+		input, 16, output, tag, 16) == CRYPTO_STATUS_UNSUPPORTED);
+	assert(CryptoDev.Open(CRYPTO_AEAD_AES_GCM, k, nonce, 1, nullptr, 0,
+		input, 16, output, tag, 16) == CRYPTO_STATUS_UNSUPPORTED);
+	assert(s_Ends == ends);
+	assert(CryptoDev.Mac(CRYPTO_MAC_CMAC, k, input, 16, tag, 16) == CRYPTO_STATUS_OK);
+	// In-place output is also discarded when finalization fails.
+	memset(output, 0xA5, sizeof(output));
+	s_FinalFail = true;
+	assert(CryptoDev.Cipher(CRYPTO_CIPHER_CTR, 1, k, nonce, sizeof(nonce),
+		output + 1, 32, output + 1) == CRYPTO_STATUS_FAIL);
+	CheckWiped(output, 32);
+	Recover(recovery, CryptoDev);
+	assert(s_pReentrant == nullptr);
+	puts("RA4 finalization failure: cipher/CMAC/CCM/GCM status, wiping and recovery passed");
+}
+
 extern int CryptoEngineTest();
 int main()
 {
@@ -124,6 +272,7 @@ int main()
 	assert(!s_Open);
 	assert((g_Mstp.MSTPCRC & (1UL << 31)) == 0);
 	assert(crypto.Init());
+	FinalizationFailures(crypto);
 	k.Type = CRYPTO_KEY_AES_128;
 	k.Loc = CRYPTO_KEY_LOC_PLAIN;
 	k.Usage = CRYPTO_KEY_USE_ENCRYPT;
