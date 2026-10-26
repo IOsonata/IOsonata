@@ -326,11 +326,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/types.h</locationURI>
 		</link>
 		<link>
-			<name>micro-ecc/uECC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
-		</link>
-		<link>
 			<name>micro-ecc/uECC.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.h</locationURI>
