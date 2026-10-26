@@ -382,8 +382,14 @@ static bool ShaLive(const void *pCtx)
 		((const EspShaCtx *)pCtx)->Used < 64U;
 }
 
-size_t CryptoEsp32::HashCtxSize() const { return sizeof(EspShaCtx); }
-size_t CryptoEsp32::HashCtxAlign() const { return alignof(EspShaCtx); }
+size_t CryptoEsp32::HashCtxSize() const
+{
+	return sizeof(EspShaCtx);
+}
+size_t CryptoEsp32::HashCtxAlign() const
+{
+	return alignof(EspShaCtx);
+}
 
 CRYPTO_STATUS CryptoEsp32::HashInit(CRYPTO_HASH_ALG Alg, void *pCtx)
 {

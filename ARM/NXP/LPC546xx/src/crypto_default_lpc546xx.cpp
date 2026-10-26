@@ -39,7 +39,10 @@ public:
 	{
 		vbValid = false;
 	}
-	void Reset() override { (void)Enable(); }
+	void Reset() override
+	{
+		(void)Enable();
+	}
 	bool Enable() override
 	{
 		vbValid = ROM_API != nullptr && OTP_API != nullptr && OTP_API->rngRead != nullptr;

@@ -66,7 +66,12 @@ public:
 		++serial;
 		return fail ? len - 1 : len;
 	}
-	void StopRx() override { assert(active); active = false; ++stops; }
+	void StopRx() override
+	{
+		assert(active);
+		active = false;
+		++stops;
+	}
 };
 static void CheckZero(const uint8_t *p, size_t n) {
 	for (size_t i = 0; i < n; ++i)

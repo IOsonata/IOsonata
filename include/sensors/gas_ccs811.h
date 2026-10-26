@@ -65,7 +65,10 @@ public:
 	bool Read(GasSensorData_t &Data) override;
 	bool StartSampling() override;
 	bool UpdateData() override;
-	void IntHandler() override { DataReadySet(); } // No I2C in ISR.
+	void IntHandler() override
+	{
+		DataReadySet();
+	} // No I2C in ISR.
 	bool SetHeatingProfile(int Count, const GasSensorHeater_t * const pProfile) override;
 	bool Mode(SENSOR_OPMODE Mode, uint32_t Freq) override;
 	using Sensor::Mode;

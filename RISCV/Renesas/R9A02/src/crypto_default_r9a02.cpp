@@ -39,7 +39,10 @@ public:
 	{
 		vbValid = false;
 	}
-	void Reset() override { (void)Enable(); }
+	void Reset() override
+	{
+		(void)Enable();
+	}
 	bool Enable() override
 	{
 		R9a02ModuleStart(R9A02_MSTPCR_C, R9A02_MSTPCRC_TRNG);

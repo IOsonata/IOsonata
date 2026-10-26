@@ -64,7 +64,10 @@ public:
 	bool SelectConfig(uint8_t ConfigValue) override;
 	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override;
 	void Reset(void) override;
-	void Detach(void) override { Reset(); }
+	void Detach(void) override
+	{
+		Reset();
+	}
 	uint8_t Alternate(void) const
 	{
 		return vAlternate;

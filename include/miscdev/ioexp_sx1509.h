@@ -56,8 +56,14 @@ public:
 	// Attach without resetting GPIOs or rails. Disables interrupt autoclear on
 	// pin reads. No device-ID register exists: caller must identify the hardware.
 	bool Init(DeviceIntrf *pIntrf, uint32_t Addr = SX1509_I2C_ADDR0);
-	bool Enable() override { return Valid(); }
-	void Disable() override {} // Intentionally preserves GPIO/power states.
+	bool Enable() override
+	{
+		return Valid();
+	}
+	void Disable() override
+	{
+
+	} // Intentionally preserves GPIO/power states.
 	void Reset() override;
 	bool SoftReset(); // Destructive: all pins become inputs; output latch = 0xFFFF.
 	// Before masked writes, either reset, write all outputs, or supply the exact

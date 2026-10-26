@@ -44,8 +44,14 @@ public:
 	CryptoEcbNrf()
 	{
 	}
-	bool Enable() override { return CryptoSoftAes::Enable(); }
-	void Disable() override { CryptoSoftAes::Disable(); }
+	bool Enable() override
+	{
+		return CryptoSoftAes::Enable();
+	}
+	void Disable() override
+	{
+		CryptoSoftAes::Disable();
+	}
 	void Reset() override
 	{
 	}
