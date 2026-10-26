@@ -45,7 +45,7 @@ SOFTWARE.
 
 #include "cfifo.h"
 #include "prbs.h"
-#include "usb_combo_stress.h"
+#include "usb/usbd_cdc.h"
 #include "usb/usb_int.h"
 #include "usb/usb_iso.h"
 #include "usb/usbd_epalloc.h"
@@ -55,6 +55,63 @@ SOFTWARE.
 #include "TaktOS.h"
 #include "TaktOSThread.h"
 #include "TaktOSSem.h"
+
+#define USB_DEVNO			0
+#define CDC_BUFFER_SIZE		USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK)
+
+#define CDC_RXFIFO_PKTCNT	4
+#define CDC_RXFIFO_MEMSIZE \
+	USB_INTRF_RXMEM_SIZE(CDC_RXFIFO_PKTCNT, CDC_BUFFER_SIZE)
+#define LOOPBACK_TXFIFO_MEMSIZE	CFIFO_MEMSIZE(1024)
+#define PRBS_TXFIFO_MEMSIZE		CFIFO_MEMSIZE(2048)
+
+#define COMBO_STR_INTERFACE	4U
+#define HID_REPORT_SIZE			64U
+
+#define INT_ALT_COUNT			3U
+#define INT_MPS					64U
+
+#define ISO_ALT_COUNT			6U
+#define ISO_MAX_MPS			63U
+#define ISO_REQ_GET_DIAG		0x5AU
+
+#pragma pack(push, 1)
+typedef struct __Combo_Alt_Descriptor {
+	UsbIntrfDesc_t Interface;
+	UsbEndPointDesc_t Out;
+	UsbEndPointDesc_t In;
+} ComboAltDesc_t;
+
+typedef struct __Combo_Int_Function_Descriptor {
+	UsbIntrfDesc_t Alt0;
+	ComboAltDesc_t Alt[INT_ALT_COUNT];
+} ComboIntFunctionDesc_t;
+
+typedef struct __Combo_Iso_Function_Descriptor {
+	UsbIntrfDesc_t Alt0;
+	ComboAltDesc_t Alt[ISO_ALT_COUNT];
+} ComboIsoFunctionDesc_t;
+
+typedef struct __Combo_Iso_Diag {
+	uint32_t RxMissCnt;
+	uint32_t TxMissCnt;
+	uint32_t LoopbackDropCnt;
+	uint32_t RxEmptyCnt;
+	uint32_t TxEmptyCnt;
+} ComboIsoDiag_t;
+#pragma pack(pop)
+
+typedef struct __Combo_Function_State {
+	bool IntConfigured;
+	uint8_t IntAlt;
+	uint8_t IntInterfaceNo;
+	uint8_t IntEpNo;
+	bool IsoConfigured;
+	uint8_t IsoAlt;
+	uint8_t IsoInterfaceNo;
+	uint8_t IsoEpNo;
+	uint32_t IsoLoopbackDropCnt;
+} ComboFunctionState_t;
 
 // Bound traffic work between yields while keeping the bare-metal per-byte
 // PRBS Tx calls. Loopback may receive and echo in the same pass.

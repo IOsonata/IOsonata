@@ -47,9 +47,54 @@ McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
 #include "app_evt_handler.h"
-#include "usb_cdc_iso_stress.h"
+#include "usb/usbd_cdc.h"
 #include "usb/usb_iso.h"
 #include "usb/usbd_epalloc.h"
+
+#define USB_DEVNO			0
+#define CDC_BUFFER_SIZE		USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK)
+
+#define CDC_RXFIFO_PKTCNT	4
+#define CDC_RXFIFO_MEMSIZE \
+	USB_INTRF_RXMEM_SIZE(CDC_RXFIFO_PKTCNT, CDC_BUFFER_SIZE)
+#define LOOPBACK_TXFIFO_MEMSIZE	CFIFO_MEMSIZE(1024)
+
+#define CDC_ISO_STR_INTERFACE	4U
+
+
+#define ISO_ALT_COUNT			6U
+#define ISO_MAX_MPS			63U
+#define ISO_REQ_GET_DIAG		0x5AU
+
+#pragma pack(push, 1)
+typedef struct __CdcIso_Alt_Descriptor {
+	UsbIntrfDesc_t Interface;
+	UsbEndPointDesc_t Out;
+	UsbEndPointDesc_t In;
+} CdcIsoAltDesc_t;
+
+
+typedef struct __CdcIso_Iso_Function_Descriptor {
+	UsbIntrfDesc_t Alt0;
+	CdcIsoAltDesc_t Alt[ISO_ALT_COUNT];
+} CdcIsoFunctionDesc_t;
+
+typedef struct __CdcIso_Iso_Diag {
+	uint32_t RxMissCnt;
+	uint32_t TxMissCnt;
+	uint32_t LoopbackDropCnt;
+	uint32_t RxEmptyCnt;
+	uint32_t TxEmptyCnt;
+} CdcIsoIsoDiag_t;
+#pragma pack(pop)
+
+typedef struct __CdcIso_Function_State {
+	bool IsoConfigured;
+	uint8_t IsoAlt;
+	uint8_t IsoInterfaceNo;
+	uint8_t IsoEpNo;
+	uint32_t IsoLoopbackDropCnt;
+} CdcIsoFunctionState_t;
 
 static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	uint8_t **ppData, uint16_t *pLength);
