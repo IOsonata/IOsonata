@@ -204,7 +204,7 @@ int main()
 		return 1;
 	}
 	// SD card is optional and can be absent; do not write user data.
-	if (s_Card.Init(&s_Spi))
+	if (s_Card.Init(&s_Spi, (uint8_t *)NULL, 0))
 	{
 		printf("SD card sectors: %lu\n", (unsigned long)s_Card.GetNbSect());
 	}
