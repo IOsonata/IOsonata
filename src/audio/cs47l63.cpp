@@ -160,7 +160,7 @@ bool Cs47l63::Init(const Cs47l63Cfg_t &Cfg, DeviceIntrf *pIntrf)
 				vCfg.IrqPin.PinOp, IOPINDIR_INPUT,
 				vCfg.IrqPin.Res, vCfg.IrqPin.Type);
 	// Hold reset long enough for warm-reset and cold power-up cases.
-	msDelay(10);
+	msDelay(2);
 
 	if (!Boot())
 	{
@@ -532,7 +532,7 @@ bool Cs47l63::ConfigureAudio(const Cs47l63AudioCfg_t &Cfg)
 		{ CS47L63_REG_FLL1_CTRL3, 0x00010000U, 0 },
 		{ CS47L63_REG_FLL1_GPIO_CLOCK, 0x0005U, 0 },
 		{ CS47L63_REG_FLL1_CTRL1, 0, 1 },
-		{ CS47L63_REG_FLL1_CTRL1, 1, 50 },
+		{ CS47L63_REG_FLL1_CTRL1, 1, 2 },
 		{ CS47L63_REG_SYSCLK, 0x034CU, 0 },
 		{ CS47L63_REG_ASYNCCLK, 0x034CU, 0 },
 	};
