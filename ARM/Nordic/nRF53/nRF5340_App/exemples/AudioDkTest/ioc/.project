@@ -45,10 +45,5 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/audio/i2s_full_duplex_test.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/i2s_full_duplex_test.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/audio/i2s_full_duplex_test.h</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>

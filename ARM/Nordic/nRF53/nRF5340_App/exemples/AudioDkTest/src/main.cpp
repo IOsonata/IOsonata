@@ -41,7 +41,6 @@ SOFTWARE.
 #include "stddev.h"
 #include "coredev/i2c.h"
 #include "coredev/i2s.h"
-#include "i2s_full_duplex_test.h"
 #include "coredev/spi.h"
 #include "coredev/uart.h"
 #include "iopinctrl.h"
@@ -52,6 +51,8 @@ SOFTWARE.
 
 // Set to 0 to run continuous audio without periodic I2S restarts.
 #define AUDIO_TEST_I2S_RESTART 0
+
+int I2SFullDuplexTest(I2S &Audio, bool (*Mute)(bool), uint32_t (*Voltage)(), bool RestartTest);
 
 static const IOPinCfg_t s_UartPins[] = {
 	{ 1, 4, 0, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },

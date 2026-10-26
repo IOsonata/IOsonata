@@ -35,7 +35,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdio.h>
 #include "idelay.h"
-#include "i2s_full_duplex_test.h"
+#include "coredev/i2s.h"
 
 static const int16_t s_Sine[32] = {
 	0, 799, 1567, 2276, 2896, 3406, 3784, 4017,
