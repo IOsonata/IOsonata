@@ -362,7 +362,10 @@ int main()
 				{
 					int32_t sample = (int16_t)(uint16_t)rx[i];
 					uint32_t magnitude = sample < 0 ? (uint32_t)-sample : (uint32_t)sample;
-					if (magnitude > peak) { peak = magnitude; }
+					if (magnitude > peak)
+					{
+						peak = magnitude;
+					}
 					sum += sample;
 					squares += (uint64_t)(int64_t)sample * sample;
 				}
