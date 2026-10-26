@@ -50,7 +50,7 @@ SOFTWARE.
 #include "storage/sdcard.h"
 
 // Set to 0 to run continuous audio without periodic I2S restarts.
-#define AUDIO_TEST_I2S_RESTART 1
+#define AUDIO_TEST_I2S_RESTART 0
 
 static const IOPinCfg_t s_UartPins[] = {
 	{ 1, 4, 0, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
@@ -430,9 +430,17 @@ int main()
 						uint32_t sample = (uint16_t)(s_Sine[phase++ & 31] * 4);
 						tx[j] = sample | (sample << 16);
 					}
-					while (s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx)) != (int)sizeof(tx))
+					unsigned retry = 10000;
+					while (s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx)) != (int)sizeof(tx) &&
+						retry > 0)
 					{
+						retry--;
 						usDelay(100);
+					}
+					if (retry == 0)
+					{
+						puts("I2S restart TX timeout");
+						break;
 					}
 				}
 				msDelay(10);
