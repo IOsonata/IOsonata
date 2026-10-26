@@ -52,16 +52,23 @@ The CS47L63 driver implements one R/W bit plus a 31-bit register address, 32 pad
 
 The driver now includes a 48 kHz, stereo 16-bit ASP1 audio profile with FLL1/SYSCLK configuration, PDM microphone capture, analog line input, mono headphone playback, digital gain and mute, and audio-routing changes. The profile is retained and reapplied across Disable/Enable or Reset. ReadInterrupts exposes codec fault and FLL events. Advanced Halo DSP firmware images remain application data and can be loaded through WriteBlock. No proprietary firmware is embedded.
 
-The nRF5340 application-core library project includes the three new generic drivers. Hardware validation of the Audio DK devices remains to be recorded.
+The nRF5340 application-core library project includes the three generic device drivers. The maintainer validated Release-build headphone playback, simultaneous microphone capture and I2S stop/restart recovery on the Audio DK. Codec access exercises the board's SPIM4 path; this does not establish coverage of every SPIM4 mode.
 
 
 The AudioDkTest application-core project exercises all four monitors,
 CS47L63 48-kHz audio setup, nRF5340 I2S playback and optional SD-card
 presence. Debug uses semihosting for printf; Release uses UART0 at 1 Mbaud.
-Codec audio and timing have not been validated on physical hardware.
+The October 26, 2026 hardware run reported codec revision 160 and 48000 Hz I2S, with playback and microphone capture continuing after two 100 ms restart cycles. These are application-reported rates, not independent timing measurements.
 
 Run the IOcomposer `AudioDkTest` Debug or Release build for nRF5340
 application core. Audio output runs at 48 kHz and the test periodically
-prints a captured microphone word and power monitor voltage. A headphone
-and powered microphone are needed for an audible/recorded check. The
-microSD test does not write or format the card.
+prints mono microphone peak/RMS and power monitor voltage. Headphones and
+an acoustic stimulus for the onboard microphone allow audible/capture checks.
+The microSD test does not write or format the card; SD probing was disabled
+in the reported hardware run.
+
+Full-scale startup samples and a large sample block after one restart remain
+recorded limitations; playback/capture recovery does not establish transient-free
+capture. The tested local checkout SHA was not supplied. See the
+[AudioDkTest hardware record](../ARM/Nordic/nRF53/nRF5340_App/exemples/AudioDkTest/README.md)
+for the test configuration and evidence.
