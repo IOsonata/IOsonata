@@ -15,6 +15,7 @@ end = source.index("\n}", end_start) + 2
 code = """
 #include <cassert>
 #include <cstdint>
+#define RA4USB_LIVE(...) ((void)0)
 struct { uint32_t MSTPCRB; } mstp;
 struct { uint16_t USBMC, SYSCFG; } usb;
 #define R_MSTP (&mstp)

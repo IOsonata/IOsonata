@@ -810,18 +810,20 @@ sections 5.6.5.3/5.6.5.4, and the
 [RA4M1 datasheet](https://www.renesas.com/en/document/dst/ra4m1-group-datasheet),
 table 2.2.
 
-Debug builds print a "trace armed" banner before enabling the D+ pull-up.
-Interrupt and EP0 payload snapshots are buffered in RAM. The initial suspend
-before the first host reset stays quiet. A full interrupt capture (32 entries)
-is printed when the bus suspends; this permits diagnosis of repeated enumeration
-failures without relying on unplug. Semihosting still pauses the CPU during that
-dump, so it is a diagnostic mode, not a transfer timing measurement.
-A partial capture can be printed by unplugging the USB device cable while
-leaving the debugger connected and the application running.
-Rebuild both the library and application in Debug after changing the driver.
-If the startup banner is absent, check the loaded build and semihosting before
-interpreting silence as a USB result.
-Host register-model tests do not establish electrical operation or enumeration;
+Debug builds print live semihosting traces at initialization, clock enable,
+controller start, NVIC enable, D+ pull-up, IRQ entry/exit, VBUS changes,
+reset/address transitions, SETUP dispatch, FIFO loading and control status.
+Each line is flushed immediately, including inside the ISR. VBUS handling
+prints before and after queuing; controller processing prints entry and exit.
+There is no capture limit or unplug/suspend gate. The first message is
+`[RA4 USBFS] init begin dev=0`; startup then prints `LIVE trace active`.
+Rebuild both the library and application in Debug. Release builds omit these
+traces. This is an intrusive bring-up diagnostic: semihosting pauses the CPU
+and can cause USB host timeouts. It is not a throughput or enumeration timing
+measurement. The trace never reads FIFO data merely for logging; printed
+payload bytes come from the supplied transmit buffer.
+`python3 tests/ra4m1/usb_trace_test.py` checks immediate output and flushing
+while attached, suspended and detached, and that Release tracing is silent.
 EK-RA4M1 enumeration remains pending hardware validation.
 
 USBFS FIFO writes follow the Renesas FSP CPU transfer sequence: select the
@@ -837,3 +839,4 @@ continue to use 8-bit access. Reference: Renesas FSP commit
 against delayed post-clear readiness, stuck readiness, byte order, unaligned
 buffers, odd lengths, zero-length and full packets at O0/Os/O2. This model
 checks software sequencing, not actual USBFS timing or enumeration.
+

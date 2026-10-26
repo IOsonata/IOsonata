@@ -178,137 +178,55 @@ extern "C" volatile uint16_t g_Ra4UsbIntsts0 = 0U;
 static Ra4UsbState_t s_Usb;
 
 #if !defined(NDEBUG)
-// Debug builds link rdimon.specs: print only in thread context, never ISR.
-struct Ra4UsbTraceEntry
-{
-	uint16_t Status;
-	uint16_t Enable;
-	uint16_t Dcp;
-	uint16_t Line;
-	uint16_t Address;
-	uint16_t Request;
-	uint16_t Value;
-	uint16_t Index;
-	uint16_t Length;
-};
-static Ra4UsbTraceEntry s_Trace[32];
-static volatile unsigned s_TraceCount;
-static unsigned s_TracePrinted;
+// Live bring-up trace requested for semihosting. Serialize printf/fflush
+// against USB IRQ preemption and flush each stage before continuing.
+// Debugger I/O pauses the CPU and can change host USB timing.
+#define RA4USB_LIVE(...) do { \
+	const uint32_t traceState = DisableInterrupt(); \
+	printf("[RA4 USBFS] " __VA_ARGS__); \
+	fflush(stdout); \
+	EnableInterrupt(traceState); \
+} while (0)
 
-struct Ra4UsbTxTraceEntry
-{
-	uint16_t Address;
-	uint16_t Request;
-	uint16_t Value;
-	uint16_t Requested;
-	uint16_t Length;
-	uint16_t Select;
-	uint16_t Fifo;
-	uint16_t MaxPacket;
-	uint8_t Data[8];
-};
-static Ra4UsbTxTraceEntry s_TxTrace[8];
-static unsigned s_TxTraceCount;
-static unsigned s_TxTracePrinted;
-
-// Capture the bytes supplied to CFIFO, not a claim of host reception.
-static void Ra4UsbTraceTx(const uint8_t *pData, uint16_t Length)
-{
-	if (s_TxTraceCount == sizeof(s_TxTrace) / sizeof(s_TxTrace[0]))
-	{
-		return;
-	}
-	Ra4UsbTxTraceEntry *entry = &s_TxTrace[s_TxTraceCount];
-	entry->Address = R_USB_FS0->USBADDR & 0x7FU;
-	entry->Request = R_USB_FS0->USBREQ;
-	entry->Value = R_USB_FS0->USBVAL;
-	entry->Requested = R_USB_FS0->USBLENG;
-	entry->Length = Length;
-	entry->Select = R_USB_FS0->CFIFOSEL;
-	entry->Fifo = R_USB_FS0->CFIFOCTR;
-	entry->MaxPacket = R_USB_FS0->DCPMAXP;
-	for (unsigned i = 0; i < sizeof(entry->Data); ++i)
-	{
-		entry->Data[i] = i < Length ? pData[i] : 0U;
-	}
-	++s_TxTraceCount;
-}
-
-// Record only bus/control transitions. Never call semihosting from the ISR.
 static void Ra4UsbTraceRecord(uint16_t Status, uint16_t Enable)
 {
-	if (s_TraceCount < sizeof(s_Trace) / sizeof(s_Trace[0]))
-	{
-		Ra4UsbTraceEntry *entry = &s_Trace[s_TraceCount];
-		entry->Status = Status;
-		entry->Enable = Enable;
-		entry->Dcp = R_USB_FS0->DCPCTR;
-		entry->Line = R_USB_FS0->SYSSTS0;
-		entry->Address = R_USB_FS0->USBADDR & 0x7FU;
-		entry->Request = R_USB_FS0->USBREQ;
-		entry->Value = R_USB_FS0->USBVAL;
-		entry->Index = R_USB_FS0->USBINDX;
-		entry->Length = R_USB_FS0->USBLENG;
-		++s_TraceCount;
-	}
+	RA4USB_LIVE("irq status=%04x enable=%04x DCP=%04x line=%04x "
+		"VBUS=%u addr=%u\n", (unsigned)Status, (unsigned)Enable,
+		(unsigned)R_USB_FS0->DCPCTR, (unsigned)R_USB_FS0->SYSSTS0,
+		(unsigned)((Status & RA4USB_INT_VBSTS) != 0U),
+		(unsigned)(R_USB_FS0->USBADDR & 0x7FU));
 }
-static uint32_t s_TraceStage = ~0U;
-static uint16_t s_TraceSyscfg = 0xFFFFU;
-static uint16_t s_TraceStatus = 0xFFFFU;
+
+static void Ra4UsbTraceTx(const uint8_t *pData, uint16_t Length)
+{
+	uint8_t data[8] = {};
+	for (unsigned i = 0U; i < sizeof(data) && i < Length; ++i)
+	{
+		data[i] = pData[i];
+	}
+	RA4USB_LIVE("fifo loaded=%u SEL=%04x CTR=%04x MPS=%u "
+		"bytes=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+		(unsigned)Length, (unsigned)R_USB_FS0->CFIFOSEL,
+		(unsigned)R_USB_FS0->CFIFOCTR, (unsigned)R_USB_FS0->DCPMAXP,
+		(unsigned)data[0], (unsigned)data[1], (unsigned)data[2],
+		(unsigned)data[3], (unsigned)data[4], (unsigned)data[5],
+		(unsigned)data[6], (unsigned)data[7]);
+}
+
 static void Ra4UsbTracePoll(void)
 {
-	// A semihosting write stops the CPU. Do not interrupt attachment,
-	// reset or control transfers with debugger I/O. The initial suspend
-	// must stay quiet. A full capture may also be dumped on later suspend
-	// so diagnosing repeated enumeration failures does not require unplug.
-	const bool fullSuspended = s_Usb.Suspended &&
-		s_TraceCount == sizeof(s_Trace) / sizeof(s_Trace[0]);
-	if (s_Usb.Started && (R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) != 0U &&
-		!fullSuspended)
+	RA4USB_LIVE("process stage=%lu started=%u suspended=%u\n",
+		(unsigned long)g_Ra4UsbStage, (unsigned)s_Usb.Started,
+		(unsigned)s_Usb.Suspended);
+	if (s_Usb.Started)
 	{
-		return;
-	}
-	while (s_TracePrinted < s_TraceCount)
-	{
-		const Ra4UsbTraceEntry entry = s_Trace[s_TracePrinted++];
-		printf("[RA4 USBFS] irq=%04x enable=%04x DCPCTR=%04x SYSSTS0=%04x "
-			"addr=%u req=%04x value=%04x index=%04x len=%u\n",
-			(unsigned)entry.Status, (unsigned)entry.Enable,
-			(unsigned)entry.Dcp, (unsigned)entry.Line,
-			(unsigned)entry.Address, (unsigned)entry.Request,
-			(unsigned)entry.Value, (unsigned)entry.Index,
-			(unsigned)entry.Length);
-	}
-	while (s_TxTracePrinted < s_TxTraceCount)
-	{
-		const Ra4UsbTxTraceEntry entry = s_TxTrace[s_TxTracePrinted++];
-		printf("[RA4 USBFS] tx addr=%u req=%04x value=%04x requested=%u "
-			"loaded=%u CFIFOSEL=%04x CFIFOCTR=%04x DCPMAXP=%04x "
-			"data=%02x %02x %02x %02x %02x %02x %02x %02x\n",
-			(unsigned)entry.Address, (unsigned)entry.Request,
-			(unsigned)entry.Value, (unsigned)entry.Requested,
-			(unsigned)entry.Length, (unsigned)entry.Select,
-			(unsigned)entry.Fifo, (unsigned)entry.MaxPacket,
-			(unsigned)entry.Data[0], (unsigned)entry.Data[1],
-			(unsigned)entry.Data[2], (unsigned)entry.Data[3],
-			(unsigned)entry.Data[4], (unsigned)entry.Data[5],
-			(unsigned)entry.Data[6], (unsigned)entry.Data[7]);
-	}
-	const uint32_t stage = g_Ra4UsbStage;
-	const uint16_t syscfg = g_Ra4UsbSyscfg;
-	const uint16_t status = s_Usb.Started ? R_USB_FS0->INTSTS0 : g_Ra4UsbIntsts0;
-	if (stage != s_TraceStage || syscfg != s_TraceSyscfg ||
-		((status ^ s_TraceStatus) & RA4USB_INT_VBSTS) != 0U)
-	{
-		printf("[RA4 USBFS] stage=%lu SYSCFG=%04x INTSTS0=%04x VBUS=%u\n",
-			(unsigned long)stage, (unsigned)syscfg, (unsigned)status,
-			(unsigned)((status & RA4USB_INT_VBSTS) != 0U));
-		s_TraceStage = stage;
-		s_TraceSyscfg = syscfg;
-		s_TraceStatus = status;
+		RA4USB_LIVE("process SYSCFG=%04x INTSTS0=%04x VBUS=%u\n",
+			(unsigned)R_USB_FS0->SYSCFG, (unsigned)R_USB_FS0->INTSTS0,
+			(unsigned)((R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) != 0U));
 	}
 }
 #else
+#define RA4USB_LIVE(...) ((void)0)
 #define Ra4UsbTracePoll() ((void)0)
 #define Ra4UsbTraceRecord(Status, Enable) ((void)0)
 #define Ra4UsbTraceTx(Data, Length) ((void)0)
@@ -409,18 +327,23 @@ static bool Ra4UsbSelectFifo(uint8_t Pipe, bool In, uint16_t Width = 0U)
 static bool Ra4UsbFifoWrite(uint8_t Pipe, const uint8_t *pData,
 	uint16_t Length, uint16_t Mps)
 {
+	RA4USB_LIVE("fifo begin pipe=%u len=%u\n", (unsigned)Pipe, (unsigned)Length);
 	if (!Ra4UsbSetPid(Pipe, RA4USB_PID_NAK) ||
 		!Ra4UsbSelectFifo(Pipe, true, RA4USB_CFIFO_MBW16))
 	{
+		RA4USB_LIVE("fifo failed: NAK/select pipe=%u\n", (unsigned)Pipe);
 		return false;
 	}
 	R_USB_FS0->CFIFOCTR = RA4USB_CFIFO_BCLR;
+	RA4USB_LIVE("fifo cleared pipe=%u\n", (unsigned)Pipe);
 	// Follow FSP ctrl_read -> write_data: check FRDY after BCLR, before
 	// loading the packet. Readiness before clearing does not cover this access.
 	if (!Ra4UsbSelectFifo(Pipe, true, RA4USB_CFIFO_MBW16))
 	{
+		RA4USB_LIVE("fifo failed: FRDY after clear\n");
 		return false;
 	}
+	RA4USB_LIVE("fifo ready\n");
 	uint16_t i = 0U;
 	for (; i + 1U < Length; i += 2U)
 	{
@@ -433,6 +356,7 @@ static bool Ra4UsbFifoWrite(uint8_t Pipe, const uint8_t *pData,
 	{
 		if (!Ra4UsbSelectFifo(Pipe, true))
 		{
+			RA4USB_LIVE("fifo failed: odd-byte select\n");
 			return false;
 		}
 		R_USB_FS0->CFIFOLL = pData[i];
@@ -445,6 +369,7 @@ static bool Ra4UsbFifoWrite(uint8_t Pipe, const uint8_t *pData,
 	{
 		R_USB_FS0->CFIFOCTR = RA4USB_CFIFO_BVAL;
 	}
+	RA4USB_LIVE("fifo committed CTR=%04x\n", (unsigned)R_USB_FS0->CFIFOCTR);
 	return true;
 }
 
@@ -615,6 +540,7 @@ static void Ra4UsbEp0Reset(void)
 
 static void Ra4UsbReset(void)
 {
+	RA4USB_LIVE("reset begin\n");
 	s_Usb.Closing = true;
 	Ra4UsbReleaseAll(false);
 	s_Usb.Closing = false;
@@ -622,6 +548,7 @@ static void Ra4UsbReset(void)
 	g_Ra4UsbStage = 5U;
 	s_Usb.Suspended = false;
 	Ra4UsbBusEvent(USB_CTRLR_EVT_RESET);
+	RA4USB_LIVE("reset end\n");
 }
 
 static void Ra4UsbHandleSetup(uint16_t Stage)
@@ -642,6 +569,9 @@ static void Ra4UsbHandleSetup(uint16_t Stage)
 	event.Setup.wValue = R_USB_FS0->USBVAL;
 	event.Setup.wIndex = R_USB_FS0->USBINDX;
 	event.Setup.wLength = R_USB_FS0->USBLENG;
+	RA4USB_LIVE("setup req=%04x value=%04x index=%04x len=%u\n",
+		(unsigned)request, (unsigned)event.Setup.wValue,
+		(unsigned)event.Setup.wIndex, (unsigned)event.Setup.wLength);
 
 	s_Usb.Ep0Halted = false;
 	s_Usb.Ep0InBusy = false;
@@ -653,6 +583,9 @@ static void Ra4UsbHandleSetup(uint16_t Stage)
 
 	g_Ra4UsbStage = 6U;
 	UsbDevProcessEvent(0, &event);
+	RA4USB_LIVE("setup dispatched halted=%u busy=%u statusPending=%u\n",
+		(unsigned)s_Usb.Ep0Halted, (unsigned)s_Usb.Ep0InBusy,
+		(unsigned)s_Usb.Ep0StatusPending);
 
 	if (!s_Usb.Ep0Halted && s_Usb.Ep0OutRemaining != 0U)
 	{
@@ -663,6 +596,8 @@ static void Ra4UsbHandleSetup(uint16_t Stage)
 static void Ra4UsbHandleControlStage(uint16_t Status)
 {
 	const uint16_t stage = Status & RA4USB_CTSQ_MASK;
+	RA4USB_LIVE("control stage=%u pending=%u\n", (unsigned)stage,
+		(unsigned)s_Usb.Ep0StatusPending);
 	if (stage == RA4USB_CTSQ_SQER)
 	{
 		R_USB_FS0->INTSTS0 = (uint16_t)~RA4USB_INT_VALID;
@@ -692,17 +627,20 @@ static void Ra4UsbHandleControlStage(uint16_t Status)
 	s_Usb.Ep0StatusPending = false;
 	// A no-data SETUP leaves PID at NAK. CCPL alone cannot complete it.
 	R_USB_FS0->DCPCTR = RA4USB_PID_BUF | RA4USB_DCP_CCPL;
+	RA4USB_LIVE("status deferred CCPL DCP=%04x\n", (unsigned)R_USB_FS0->DCPCTR);
 	Ra4UsbControlComplete(s_Usb.Ep0StatusAddr, nullptr, 0U,
 		USB_CTRLR_XFER_SUCCESS);
 }
 
 static void Ra4UsbHandleEp0Out(void)
 {
+	RA4USB_LIVE("ep0 OUT begin\n");
 	R_USB_FS0->BRDYENB &= (uint16_t)~1U;
 	const uint16_t capacity =
 		s_Usb.Ep0OutRemaining < (uint16_t)RA4USB_EP0_MPS ?
 		s_Usb.Ep0OutRemaining : (uint16_t)RA4USB_EP0_MPS;
 	const int length = Ra4UsbFifoRead(0U, s_Ep0Out, capacity);
+	RA4USB_LIVE("ep0 OUT read=%d\n", length);
 	if (length < 0)
 	{
 		s_Usb.Ep0OutRemaining = 0U;
@@ -738,6 +676,8 @@ static void Ra4UsbHandleEp0Out(void)
 
 static void Ra4UsbHandleEp0In(void)
 {
+	RA4USB_LIVE("ep0 IN complete busy=%u len=%u\n",
+		(unsigned)s_Usb.Ep0InBusy, (unsigned)s_Usb.Ep0InLength);
 	if (!s_Usb.Ep0InBusy)
 	{
 		R_USB_FS0->BEMPENB &= (uint16_t)~1U;
@@ -856,13 +796,14 @@ static bool Ra4UsbHandleOneInterrupt(void)
 	const uint16_t intEnable = R_USB_FS0->INTENB0;
 	const uint16_t enabled = intStatus & intEnable;
 
-	if ((enabled & (RA4USB_INT_DVST | RA4USB_INT_CTRT | RA4USB_INT_RESM)) != 0U)
+	if ((enabled & (uint16_t)~RA4USB_INT_SOFR) != 0U)
 	{
 		Ra4UsbTraceRecord(intStatus, intEnable);
 	}
 
 	if ((enabled & RA4USB_INT_RESM) != 0U)
 	{
+		RA4USB_LIVE("resume\n");
 		R_USB_FS0->INTSTS0 = (uint16_t)~RA4USB_INT_RESM;
 		if (s_Usb.Suspended)
 		{
@@ -873,8 +814,11 @@ static bool Ra4UsbHandleOneInterrupt(void)
 	}
 	if ((enabled & RA4USB_INT_VBINT) != 0U)
 	{
+		RA4USB_LIVE("VBUS change=%u queue begin\n",
+			(unsigned)((intStatus & RA4USB_INT_VBSTS) != 0U));
 		R_USB_FS0->INTSTS0 = (uint16_t)~RA4USB_INT_VBINT;
 		UsbProcessQue(0);
+		RA4USB_LIVE("VBUS queue end\n");
 		return true;
 	}
 	if ((enabled & RA4USB_INT_SOFR) != 0U)
@@ -890,6 +834,7 @@ static bool Ra4UsbHandleOneInterrupt(void)
 	{
 		R_USB_FS0->INTSTS0 = (uint16_t)~RA4USB_INT_DVST;
 		const uint16_t state = intStatus & RA4USB_DVSQ_MASK;
+		RA4USB_LIVE("device state=%04x\n", (unsigned)state);
 		if (state == RA4USB_DVSQ_DEFAULT)
 		{
 			Ra4UsbReset();
@@ -903,6 +848,7 @@ static bool Ra4UsbHandleOneInterrupt(void)
 			event.Type = USB_CTRLR_EVT_ADDRESS;
 			event.Address = (uint8_t)(R_USB_FS0->USBADDR & 0x7FU);
 			UsbDevProcessEvent(0, &event);
+			RA4USB_LIVE("address=%u dispatched\n", (unsigned)event.Address);
 		}
 		else if ((state & RA4USB_DVSQ_SUSPEND) != 0U && !s_Usb.Suspended)
 		{
@@ -916,6 +862,7 @@ static bool Ra4UsbHandleOneInterrupt(void)
 		R_USB_FS0->BRDYSTS & R_USB_FS0->BRDYENB & RA4USB_PIPE_MASK;
 	if ((enabled & RA4USB_INT_BRDY) != 0U && brdy != 0U)
 	{
+		RA4USB_LIVE("BRDY pipes=%04x\n", (unsigned)brdy);
 		R_USB_FS0->BRDYSTS =
 			(uint16_t)((uint16_t)~brdy & RA4USB_PIPE_MASK);
 		Ra4UsbHandleBrdy(brdy);
@@ -926,6 +873,7 @@ static bool Ra4UsbHandleOneInterrupt(void)
 		R_USB_FS0->BEMPSTS & R_USB_FS0->BEMPENB & RA4USB_PIPE_MASK;
 	if ((enabled & RA4USB_INT_BEMP) != 0U && bemp != 0U)
 	{
+		RA4USB_LIVE("BEMP pipes=%04x\n", (unsigned)bemp);
 		R_USB_FS0->BEMPSTS =
 			(uint16_t)((uint16_t)~bemp & RA4USB_PIPE_MASK);
 		Ra4UsbHandleBemp(bemp);
@@ -936,6 +884,7 @@ static bool Ra4UsbHandleOneInterrupt(void)
 		R_USB_FS0->NRDYSTS & R_USB_FS0->NRDYENB & RA4USB_PIPE_MASK;
 	if ((enabled & RA4USB_INT_NRDY) != 0U && nrdy != 0U)
 	{
+		RA4USB_LIVE("NRDY pipes=%04x\n", (unsigned)nrdy);
 		R_USB_FS0->NRDYSTS =
 			(uint16_t)((uint16_t)~nrdy & RA4USB_PIPE_MASK);
 		Ra4UsbHandleNrdy(nrdy);
@@ -956,15 +905,18 @@ static void Ra4UsbInterrupt(int IntNo, void *pContext)
 {
 	(void)IntNo;
 	(void)pContext;
+	RA4USB_LIVE("IRQ enter\n");
 	for (uint32_t i = 0U; i < 32U && Ra4UsbHandleOneInterrupt(); ++i)
 	{
 	}
 	(void)R_USB_FS0->INTSTS0;
 	__DSB();
+	RA4USB_LIVE("IRQ exit\n");
 }
 
 static bool Ra4UsbClockEnable(void)
 {
+	RA4USB_LIVE("clock enable begin USBCLK=%lu\n", (unsigned long)SystemUsbClockGet());
 	R_MSTP->MSTPCRB &= ~RA4USB_MSTP_MASK;
 	(void)R_MSTP->MSTPCRB;
 	// VDCEN controls the internal regulator, not the transceiver itself.
@@ -982,10 +934,13 @@ static bool Ra4UsbClockEnable(void)
 				RA4USB_SYSCFG_SCKE | RA4USB_SYSCFG_USBE;
 			g_Ra4UsbSyscfg = R_USB_FS0->SYSCFG;
 			g_Ra4UsbStage = 1U;
+			RA4USB_LIVE("clock ready SYSCFG=%04x USBMC=%04x\n",
+				(unsigned)R_USB_FS0->SYSCFG, (unsigned)R_USB_FS0->USBMC);
 			return true;
 		}
 	}
 	R_USB_FS0->SYSCFG = 0U;
+	RA4USB_LIVE("clock failed: SCKE timeout\n");
 	R_USB_FS0->USBMC &= (uint16_t)~RA4USB_USBMC_VDCEN;
 	R_MSTP->MSTPCRB |= RA4USB_MSTP_MASK;
 	return false;
@@ -1054,6 +1009,7 @@ static uint8_t Ra4UsbAllocatePipe(uint8_t Type, uint16_t Mps)
 
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 {
+	RA4USB_LIVE("init begin dev=%d\n", DevNo);
 	if (DevNo != 0 || pCfg == nullptr || pCfg->IntPrio < 0 ||
 		pCfg->IntPrio >= (1 << __NVIC_PRIO_BITS) ||
 		pCfg->bLowPowerSuspend ||
@@ -1093,6 +1049,7 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 	}
 	NVIC_DisableIRQ(s_Usb.Irq);
 	s_Usb.Initialized = true;
+	RA4USB_LIVE("init ready IRQ=%d pins=%d\n", (int)s_Usb.Irq, s_Usb.NbIOPins);
 	EnableInterrupt(state);
 	return true;
 }
@@ -1106,6 +1063,7 @@ bool UsbCtrlrVbusDetected(int DevNo)
 	if (s_Usb.Started)
 	{
 		g_Ra4UsbIntsts0 = R_USB_FS0->INTSTS0;
+		RA4USB_LIVE("VBUS sample INTSTS0=%04x\n", (unsigned)g_Ra4UsbIntsts0);
 		return (g_Ra4UsbIntsts0 & RA4USB_INT_VBSTS) != 0U;
 	}
 	// The generic USB stack checks VBUS before calling UsbCtrlrStart.
@@ -1128,6 +1086,7 @@ bool UsbCtrlrVbusDetected(int DevNo)
 
 bool UsbCtrlrStart(int DevNo)
 {
+	RA4USB_LIVE("start begin dev=%d\n", DevNo);
 	if (DevNo != 0 || !s_Usb.Initialized || s_Usb.Closing)
 	{
 		return false;
@@ -1185,6 +1144,7 @@ bool UsbCtrlrStart(int DevNo)
 	s_Usb.Started = true;
 	g_Ra4UsbStage = 3U;
 	Ra4UsbEp0Reset();
+	RA4USB_LIVE("start EP0 ready\n");
 
 	R_USB_FS0->INTSTS0 = 0U;
 	R_USB_FS0->BRDYSTS = 0U;
@@ -1197,7 +1157,8 @@ bool UsbCtrlrStart(int DevNo)
 	EnableInterrupt(state);
 #if !defined(NDEBUG)
 	// UsbCoreStart enables the IRQ and D+ pull-up after this returns.
-	printf("[RA4 USBFS] trace armed: dump on unplug or full capture + suspend\n");
+	RA4USB_LIVE("LIVE trace active: start ready INTENB0=%04x\n",
+		(unsigned)R_USB_FS0->INTENB0);
 #endif
 	Ra4UsbTracePoll();
 	RA4USB_TRACE("start USBCLK=%lu\r\n",
@@ -1207,6 +1168,7 @@ bool UsbCtrlrStart(int DevNo)
 
 void UsbCtrlrStop(int DevNo)
 {
+	RA4USB_LIVE("stop begin dev=%d\n", DevNo);
 	if (DevNo != 0 || !s_Usb.Started || s_Usb.Closing)
 	{
 		return;
@@ -1235,6 +1197,7 @@ void UsbCtrlrProcess(int DevNo)
 	if (DevNo == 0)
 	{
 		Ra4UsbTracePoll();
+		RA4USB_LIVE("process end\n");
 	}
 }
 
@@ -1250,6 +1213,7 @@ void UsbCtrlrIntEnable(int DevNo)
 	{
 		NVIC_ClearPendingIRQ(s_Usb.Irq);
 		NVIC_EnableIRQ(s_Usb.Irq);
+		RA4USB_LIVE("NVIC enabled IRQ=%d\n", (int)s_Usb.Irq);
 	}
 }
 
@@ -1263,16 +1227,21 @@ void UsbCtrlrIntDisable(int DevNo)
 
 void UsbCtrlrConnect(int DevNo)
 {
+	RA4USB_LIVE("connect begin\n");
 	if (DevNo == 0 && s_Usb.Started && UsbCtrlrVbusDetected(DevNo))
 	{
 		R_USB_FS0->SYSCFG |= RA4USB_SYSCFG_DPRPU;
 		g_Ra4UsbSyscfg = R_USB_FS0->SYSCFG;
 		g_Ra4UsbStage = 4U;
+		RA4USB_LIVE("connect pullup on SYSCFG=%04x INTSTS0=%04x\n",
+			(unsigned)R_USB_FS0->SYSCFG, (unsigned)R_USB_FS0->INTSTS0);
 	}
+	RA4USB_LIVE("connect end\n");
 }
 
 void UsbCtrlrDisconnect(int DevNo)
 {
+	RA4USB_LIVE("disconnect requested\n");
 	if (DevNo == 0 && s_Usb.Started)
 	{
 		R_USB_FS0->SYSCFG &= (uint16_t)~RA4USB_SYSCFG_DPRPU;
@@ -1542,6 +1511,7 @@ void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
+	RA4USB_LIVE("ep0 send requested=%d\n", Length);
 	if (DevNo != 0 || Length < 0 ||
 		(Length != 0 && pBuffer == nullptr))
 	{
@@ -1578,11 +1548,13 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 		return -1;
 	}
 	EnableInterrupt(state);
+	RA4USB_LIVE("ep0 send armed len=%u\n", (unsigned)length);
 	return length;
 }
 
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 {
+	RA4USB_LIVE("status requested ep=%02x\n", (unsigned)EpAddr);
 	if (DevNo != 0 || !s_Usb.Started || s_Usb.Closing ||
 		s_Usb.Ep0Halted ||
 		(EpAddr != USB_ENDPADDR_DIR_IN &&
@@ -1607,17 +1579,20 @@ bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 	{
 		s_Usb.Ep0StatusPending = false;
 		R_USB_FS0->DCPCTR = RA4USB_PID_BUF | RA4USB_DCP_CCPL;
+		RA4USB_LIVE("status immediate CCPL DCP=%04x\n", (unsigned)R_USB_FS0->DCPCTR);
 		EnableInterrupt(state);
 		Ra4UsbControlComplete(EpAddr, nullptr, 0U,
 			USB_CTRLR_XFER_SUCCESS);
 		return true;
 	}
 	EnableInterrupt(state);
+	RA4USB_LIVE("status waiting CTSQ=%u\n", (unsigned)stage);
 	return true;
 }
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 {
+	RA4USB_LIVE("stall ep=%u in=%u\n", (unsigned)EpNo, (unsigned)bIn);
 	if (DevNo != 0 || !s_Usb.Started || s_Usb.Closing)
 	{
 		return;

@@ -1,99 +1,85 @@
 #!/usr/bin/env python3
-"""Exercise bounded RA4M1 capture and deferred semihosting output."""
+"""Check live semihosting output without suspend/unplug/capture gates."""
 from pathlib import Path
 import os
 import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-source = (root / "ARM/Renesas/RA4/RA4M1/src/usb_ctrlr_ra4m1.cpp").read_text()
-start = source.index("struct Ra4UsbTraceEntry")
-end = source.index("\n#else", start)
-code = """
+source = (root / 'ARM/Renesas/RA4/RA4M1/src/usb_ctrlr_ra4m1.cpp').read_text()
+start = source.index('#if !defined(NDEBUG)\n// Live bring-up')
+end = source.index('alignas(4) static uint8_t s_Ep0In', start)
+trace = source[start:end]
+code = r'''
 #include <cassert>
 #include <cstdint>
-static unsigned prints;
-static int trace_printf(const char *, ...) { ++prints; return 0; }
+#include <cstdio>
+#include <cstdarg>
+#include <string>
+static unsigned prints, flushes, mask;
+static std::string output;
+static uint32_t DisableInterrupt() { unsigned old = mask; mask = 1; return old; }
+static void EnableInterrupt(uint32_t old) { mask = old; }
+static int trace_printf(const char *format, ...)
+{
+	assert(mask == 1);
+	char text[512];
+	va_list args; va_start(args, format);
+	int n = vsnprintf(text, sizeof(text), format, args);
+	va_end(args);
+	assert(n >= 0 && (unsigned)n < sizeof(text));
+	output += text; ++prints; return n;
+}
+static int trace_fflush(FILE *)
+{
+	assert(mask == 1); ++flushes; assert(flushes == prints); return 0;
+}
 #define printf trace_printf
+#define fflush trace_fflush
 struct { bool Started, Suspended; } s_Usb;
-struct { uint16_t DCPCTR, SYSSTS0, INTSTS0, USBADDR, USBREQ,
-	USBVAL, USBINDX, USBLENG, CFIFOSEL, CFIFOCTR, DCPMAXP; } regs;
+struct { uint16_t DCPCTR, SYSSTS0, INTSTS0, USBADDR, CFIFOSEL,
+	CFIFOCTR, DCPMAXP, SYSCFG; } regs;
 #define R_USB_FS0 (&regs)
 static uint32_t g_Ra4UsbStage;
-static uint16_t g_Ra4UsbSyscfg, g_Ra4UsbIntsts0;
 enum { RA4USB_INT_VBSTS = 0x80 };
-""" + source[start:end] + """
+''' + trace + r'''
 int main()
 {
 	s_Usb.Started = true;
-	regs.INTSTS0 = RA4USB_INT_VBSTS;
-	regs.DCPCTR = 0x101;
-	regs.SYSSTS0 = 1;
-	regs.USBADDR = 7;
-	regs.USBREQ = 0x680;
-	regs.USBVAL = 0x100;
-	regs.USBLENG = 18;
-	regs.CFIFOSEL = 0x20;
-	regs.CFIFOCTR = 0x8000;
-	regs.DCPMAXP = 64;
-	const uint8_t prefix[] = {0x12, 1, 0, 2, 0xef, 2, 1, 64};
+	regs.INTSTS0 = 0x80;
+	const uint8_t bytes[] = {0x12, 1, 0, 2, 0xef, 2, 1, 64};
+	Ra4UsbTraceRecord(0x28a9, 0xdf00);
+	assert(prints == 1 && flushes == 1 && mask == 0);
+	assert(output.find("irq status=28a9 enable=df00") != std::string::npos);
+	Ra4UsbTraceTx(bytes, sizeof(bytes));
+	assert(prints == 2 && output.find("bytes=12 01 00 02 ef 02 01 40") != std::string::npos);
+	// Zero-length transfers do not dereference a null data pointer.
 	Ra4UsbTraceTx(nullptr, 0);
-	Ra4UsbTraceTx(prefix, 3);
+	assert(output.find("bytes=00 00 00 00 00 00 00 00") != std::string::npos);
+	for (unsigned i = 0; i < 64; ++i) { Ra4UsbTraceRecord(0x28a9, 0xdf00); }
+	assert(prints == 67); // No full-capture cutoff.
+	Ra4UsbTracePoll(); assert(prints == 69); // Attached and active.
 	s_Usb.Suspended = true;
-	Ra4UsbTracePoll();
-	assert(prints == 0); // Initial pre-reset suspend must stay quiet.
-	s_Usb.Suspended = false;
-	for (unsigned i = 0; i < 64; ++i)
-	{
-		Ra4UsbTraceTx(prefix, sizeof(prefix));
-		Ra4UsbTraceRecord((uint16_t)(0x1000 + i), 0xDF00);
-		Ra4UsbTracePoll();
-	}
-	assert(prints == 0);
-	assert(s_TxTraceCount == 8);
-	assert(s_TxTrace[0].Length == 0 && s_TxTrace[0].Data[0] == 0);
-	assert(s_TxTrace[1].Length == 3 && s_TxTrace[1].Data[3] == 0);
-	for (unsigned i = 0; i < sizeof(prefix); ++i)
-		assert(s_TxTrace[2].Data[i] == prefix[i]);
-	assert(s_TxTrace[2].Length == 8 && s_TxTrace[2].Requested == 18);
-	assert(s_TxTrace[2].Select == 0x20 && s_TxTrace[2].MaxPacket == 64);
-	assert(s_TraceCount == 32);
-	assert(s_Trace[0].Status == 0x1000);
-	assert(s_Trace[15].Status == 0x100F);
-	assert(s_Trace[31].Status == 0x101F);
-	assert(s_Trace[0].Address == 7 && s_Trace[0].Request == 0x680);
-	assert(s_Trace[0].Value == 0x100 && s_Trace[0].Length == 18);
-	assert(s_Trace[0].Dcp == 0x101 && s_Trace[0].Line == 1);
-	s_Usb.Suspended = true;
-	Ra4UsbTracePoll();
-	assert(prints == 41 && s_TracePrinted == 32 && s_TxTracePrinted == 8);
-	Ra4UsbTracePoll();
-	assert(prints == 41);
+	mask = 1; // ISR/critical-section caller keeps its original mask.
+	Ra4UsbTracePoll(); assert(prints == 71 && mask == 1);
 	regs.INTSTS0 = 0;
-	Ra4UsbTracePoll();
-	assert(prints == 42); // Live VBUS changes; captures are not repeated.
-	Ra4UsbTracePoll();
-	assert(prints == 42);
-	s_Usb.Suspended = false;
-	regs.INTSTS0 = RA4USB_INT_VBSTS;
-	g_Ra4UsbStage = 6;
-	Ra4UsbTracePoll();
-	assert(prints == 42);
-	// A short capture still dumps on unplug without waiting for capacity.
-	s_TraceCount = s_TracePrinted = 0;
-	s_TxTraceCount = s_TxTracePrinted = 0;
-	Ra4UsbTraceRecord(0x1090, 0xdf00);
-	regs.INTSTS0 = 0;
-	Ra4UsbTracePoll();
-	assert(s_TracePrinted == 1 && prints == 44);
+	Ra4UsbTracePoll(); assert(prints == 73);
+	assert(output.find("VBUS=0") != std::string::npos);
+	assert(prints == flushes);
 }
-"""
+'''
 with tempfile.TemporaryDirectory() as tmp:
-    path = Path(tmp)
-    (path / "trace.cpp").write_text(code)
-    for opt in ("-O0", "-Os", "-O2"):
-        subprocess.run([os.environ.get("CXX", "c++"), "-std=c++11", "-Wall",
-                        "-Wextra", "-Werror", opt, str(path / "trace.cpp"),
-                        "-o", str(path / "trace")], check=True)
-        subprocess.run([str(path / "trace")], check=True)
-        print("PASS", opt, "initial suspend silence, bounded capture, full suspended dump")
+    p = Path(tmp)
+    (p / 'trace.cpp').write_text(code)
+    for opt in ('-O0', '-Os', '-O2'):
+        subprocess.run([os.environ.get('CXX', 'c++'), '-std=c++11', '-Wall',
+                        '-Wextra', '-Werror', opt, str(p / 'trace.cpp'),
+                        '-o', str(p / 'trace')], check=True)
+        subprocess.run([str(p / 'trace')], check=True)
+        print('PASS', opt, 'immediate trace, flush, IRQ mask preservation, no capture gate')
+    (p / 'release.cpp').write_text(trace + '\nvoid test() { RA4USB_LIVE("hidden"); Ra4UsbTracePoll(); Ra4UsbTraceRecord(0, 0); Ra4UsbTraceTx(nullptr, 0); }\n')
+    result = subprocess.run([os.environ.get('CXX', 'c++'), '-DNDEBUG', '-E',
+                             '-P', str(p / 'release.cpp')], check=True,
+                            capture_output=True, text=True)
+    assert 'printf' not in result.stdout and 'hidden' not in result.stdout
+    print('PASS Release trace compiles out')
