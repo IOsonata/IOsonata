@@ -81,13 +81,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NRFX_SPI_ENDTX(reg) ((reg)->EVENTS_ENDTX)
 #endif
 
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 #define NRFX_SPI_RX_LIST 0
 #define NRFX_SPI_TX_LIST 0
-#define NRFX_SPIS_RX_INT SPIS_INTENSET_DMARXEND_Msk
 #else
 #define NRFX_SPI_RX_LIST (SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos)
 #define NRFX_SPI_TX_LIST (SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos)
+#endif
+#ifdef NRF54L_SERIES
+#define NRFX_SPIS_RX_INT SPIS_INTENSET_DMARXEND_Msk
+#else
 #define NRFX_SPIS_RX_INT SPIS_INTENSET_ENDRX_Msk
 #endif
 
@@ -192,6 +195,12 @@ alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 
 static const int s_NbnRFxSPIDev = sizeof(g_nRFxSPIDev) / sizeof(nRFSpiDev_t);
 
+static uint32_t nRFxSPIPinSelect(const IOPinCfg_t &Pin)
+{
+	return Pin.PortNo < 0 || Pin.PinNo < 0 ? UINT32_MAX :
+		((uint32_t)Pin.PortNo << 5) | (uint32_t)Pin.PinNo;
+}
+
 // Allow at least one CPU cycle per polling iteration for the wire time.
 static uint32_t nRFxSPIDmaTimeout(int Length, uint32_t Rate)
 {
@@ -263,7 +272,7 @@ bool nRFxSPIWaitDMA(nRFSpiDev_t * const pDev, uint32_t Timeout)
 		}
 	} while (Timeout-- > 0);
 
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 	// Finish or abort DMA before the caller can reuse its buffer.
 	pDev->pDmaReg->EVENTS_STOPPED = 0;
 	pDev->pDmaReg->TASKS_STOP = 1;
@@ -345,8 +354,51 @@ uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_MASTER)
 		dev->pDmaReg->PRESCALER = divisor;
 #else
+#ifdef NRF5340_XXAA_APPLICATION
+	const IOPinCfg_t *pins = dev->pSpiDev->Cfg.pIOPinMap;
+	uint32_t limit = dev->DevNo == 4 ? 16000000U : 8000000U;
+	bool highSpeed = dev->DevNo == 4 && SystemCoreClock == 128000000U &&
+		dev->pSpiDev->Cfg.Phy == SPIPHY_NORMAL &&
+		pins[SPI_SCK_IOPIN_IDX].PortNo == 0 && pins[SPI_SCK_IOPIN_IDX].PinNo == 8 &&
+		pins[SPI_MOSI_IOPIN_IDX].PortNo == 0 && pins[SPI_MOSI_IOPIN_IDX].PinNo == 9 &&
+		pins[SPI_MISO_IOPIN_IDX].PinNo == -1;
+	if (highSpeed)
+		limit = 32000000U;
+	uint32_t error = UINT32_MAX;
+	uint32_t regval = s_nRFxSPIFreq[0].RegVal;
+	for (int i = 0; i < s_NbnRFxSPIFreq && s_nRFxSPIFreq[i].Freq <= limit; ++i)
+	{
+		uint32_t freq = s_nRFxSPIFreq[i].Freq;
+		uint32_t diff = freq > Rate ? freq - Rate : Rate - freq;
+		if (diff < error)
+		{
+			error = diff;
+			regval = s_nRFxSPIFreq[i].RegVal;
+			dev->pSpiDev->Cfg.Rate = freq;
+		}
+	}
+	if (dev->DevNo == 4)
+	{
+		// Only the fixed SCK/MOSI pins use the dedicated 32-Mbps path.
+		// CS remains software-controlled by the generic SPI transaction.
+		for (int i = SPI_SCK_IOPIN_IDX; i <= SPI_MOSI_IOPIN_IDX; i += 2)
+		{
+			int pin = pins[i].PinNo;
+			if (pins[i].PortNo == 0 && pin == (i == SPI_SCK_IOPIN_IDX ? 8 : 9))
+			{
+				uint32_t cnf = NRF_P0_S->PIN_CNF[pin] & ~GPIO_PIN_CNF_MCUSEL_Msk;
+				if (dev->pSpiDev->Cfg.Rate == 32000000U)
+					{
+					cnf &= ~GPIO_PIN_CNF_DRIVE_Msk;
+					cnf |= (GPIO_PIN_CNF_MCUSEL_Peripheral << GPIO_PIN_CNF_MCUSEL_Pos) |
+						(GPIO_PIN_CNF_DRIVE_H0H1 << GPIO_PIN_CNF_DRIVE_Pos);
+				}
+				NRF_P0_S->PIN_CNF[pin] = cnf;
+			}
+		}
+	}
+#else
 	uint32_t regval = 0;
-
 
 	for (int i = 0; i < s_NbnRFxSPIFreq; i++)
 	{
@@ -357,6 +409,7 @@ uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		}
 	}
 
+#endif
 #ifdef SPI_PRESENT
 	dev->pReg->FREQUENCY = regval;
 #else
@@ -417,7 +470,7 @@ void nRFxSPIPowerOff(DevIntrf_t * const pDev)
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	// Undocumented Power down.  Nordic Bug with DMA causing high current consumption
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 	nRFxSPIDisable(pDev);
 #else
 #ifdef SPIM_PRESENT
@@ -453,10 +506,8 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 		return false;
 	}
 
-	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
-		return true;
-
-	if (DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
+	if (dev->pSpiDev->Cfg.ChipSel != SPICSEL_MAN &&
+		DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
 		return false;
 
 	dev->pSpiDev->CurDevCs = DevCs;
@@ -464,13 +515,16 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
 	{
 #ifdef SPIM_PRESENT
-        dev->pDmaReg->PSEL.MISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
+        dev->pDmaReg->PSEL.MISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
 		dev->pDmaReg->PSEL.MOSI = -1;
 #else
-        dev->pReg->PSELMISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
+        dev->pReg->PSELMISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
 		dev->pReg->PSELMOSI = -1;
 #endif
 	}
+
+	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
+		return true;
 
 	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
 			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
@@ -680,6 +734,15 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		return pending ? -1 : 0;
 	}
 
+	if (pBuff == NULL || BuffLen <= 0)
+		return 0;
+
+#ifdef NRF5340_XXAA_APPLICATION
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_MASTER &&
+		nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]) == UINT32_MAX)
+		return 0;
+#endif
+
 #ifdef SPIM_PRESENT
 	NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
 	NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
@@ -710,13 +773,13 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	while (BuffLen > 0)
 	{
 		int l = min(BuffLen, NRFX_SPI_DMA_MAXCNT);
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 		uint32_t timeout = nRFxSPIDmaTimeout(l, dev->pSpiDev->Cfg.Rate);
 #else
 		uint32_t timeout = NRFSPI_TIMEOUT;
 #endif
 
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 		NRFX_SPI_RX(dev->pDmaReg).PTR = (uint32_t)pBuff;
 #endif
 		NRFX_SPI_RX(dev->pDmaReg).MAXCNT = l;
@@ -724,7 +787,7 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
 		dev->pDmaReg->TASKS_START = 1;
 
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 		if (nRFxSPIWaitDMA(dev, timeout) == false)
 #else
 		if (nRFxSPIWaitRX(dev, timeout) == false)
@@ -732,7 +795,7 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 			break;
 
 		l = NRFX_SPI_RX(dev->pDmaReg).AMOUNT;
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 		if (l <= 0)
 			break;
 #endif
@@ -769,10 +832,8 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 		return false;
 	}
 
-	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
-		return true;
-
-	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
+	if (dev->pSpiDev->Cfg.ChipSel != SPICSEL_MAN &&
+		DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
 		return false;
 
 	dev->pSpiDev->CurDevCs = DevCs;
@@ -780,13 +841,16 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
     if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
     {
 #ifdef SPIM_PRESENT
-        dev->pDmaReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
+        dev->pDmaReg->PSEL.MOSI = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
         dev->pDmaReg->PSEL.MISO = -1;
 #else
-        dev->pReg->PSELMOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
+        dev->pReg->PSELMOSI = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
         dev->pReg->PSELMISO = -1;
 #endif
     }
+
+	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
+		return true;
 
 	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
 			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
@@ -857,6 +921,9 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
+	if (pData == NULL || DataLen <= 0)
+		return 0;
+
 #ifdef SPIM_PRESENT
 	NRFX_SPI_RX(dev->pDmaReg).PTR = 0;
 	NRFX_SPI_RX(dev->pDmaReg).MAXCNT = 0;
@@ -886,13 +953,21 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 	while (DataLen > 0)
 	{
 		int l = min(DataLen, NRFX_SPI_DMA_MAXCNT);
-#ifdef NRF54L_SERIES
+#ifdef NRF5340_XXAA_APPLICATION
+		l = min(l, NRFX_SPI_TXBUF_SIZE);
+		memcpy(dev->TxBuf, pData, l);
+#endif
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 		uint32_t timeout = nRFxSPIDmaTimeout(l, dev->pSpiDev->Cfg.Rate);
 #else
 		uint32_t timeout = NRFSPI_TIMEOUT;
 #endif
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
+#ifdef NRF5340_XXAA_APPLICATION
+		NRFX_SPI_TX(dev->pDmaReg).PTR = (uint32_t)dev->TxBuf;
+#else
 		NRFX_SPI_TX(dev->pDmaReg).PTR = (uint32_t)pData;
+#endif
 #endif
 		NRFX_SPI_TX(dev->pDmaReg).MAXCNT = l;
 		dev->pDmaReg->EVENTS_END = 0;
@@ -905,7 +980,7 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		}
 
 		l = NRFX_SPI_TX(dev->pDmaReg).AMOUNT;
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 		if (l <= 0)
 			break;
 #endif
@@ -931,11 +1006,11 @@ void nRFxSPIStopTx(DevIntrf_t * const pDev)
     if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
     {
 #ifdef SPIM_PRESENT
-        dev->pDmaReg->PSEL.MISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
+        dev->pDmaReg->PSEL.MISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
         dev->pDmaReg->PSEL.MOSI = -1;
 #else
         dev->pReg->PSELMOSI = -1;
-        dev->pReg->PSELMISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
+        dev->pReg->PSELMISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
 #endif
     }
 }
@@ -1149,13 +1224,13 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 
 	// Get the correct register map
 #ifdef SPIM_PRESENT
-	NRF_SPIM_Type *reg = reg = g_nRFxSPIDev[pDev->Cfg.DevNo].pDmaReg;
+	NRF_SPIM_Type *reg = g_nRFxSPIDev[pDev->Cfg.DevNo].pDmaReg;
 #else
-	NRF_SPI_Type *reg = reg = g_nRFxSPIDev[pDev->Cfg.DevNo].pReg;
+	NRF_SPI_Type *reg = g_nRFxSPIDev[pDev->Cfg.DevNo].pReg;
 #endif
 
 	// Force power on in case it was powered off previously
-#ifndef NRF54L_SERIES
+#if !defined(NRF54L_SERIES) && !defined(NRF5340_XXAA_APPLICATION)
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
 #else
@@ -1165,6 +1240,13 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 	// READY left enabled by an interrupt SPI configuration would also fire
 	// for the SPIM, whose handler does not clear it.
 	reg->INTENCLR = 0xFFFFFFFF;
+#ifdef NRF5340_XXAA_APPLICATION
+	reg->EVENTS_END = 0;
+	reg->EVENTS_STOPPED = 0;
+	reg->EVENTS_ENDRX = 0;
+	reg->EVENTS_ENDTX = 0;
+	reg->SHORTS = 0;
+#endif
 
 	// Configure I/O pins
 	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
@@ -1280,15 +1362,15 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 		NRF_SPIS_Type *sreg = g_nRFxSPIDev[pDev->Cfg.DevNo].pDmaSReg;
 
 #ifdef SPIM_PRESENT
-        sreg->PSEL.SCK = (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
-        sreg->PSEL.MISO = (pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
-        sreg->PSEL.MOSI = (pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX].PortNo << 5);
-		sreg->PSEL.CSN = (pDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX].PortNo << 5);
+        sreg->PSEL.SCK = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX]);
+        sreg->PSEL.MISO = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+        sreg->PSEL.MOSI = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX]);
+		sreg->PSEL.CSN = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX]);
 #else
-        sreg->PSELSCK = (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
-        sreg->PSELMISO = (pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
-        sreg->PSELMOSI = (pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX].PortNo << 5);
-		sreg->PSELCSN = (pDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX].PortNo << 5);
+        sreg->PSELSCK = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX]);
+        sreg->PSELMISO = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+        sreg->PSELMOSI = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX]);
+		sreg->PSELCSN = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX]);
 #endif
 		sreg->ORC = 0xFF;
 		sreg->STATUS = sreg->STATUS;
@@ -1307,13 +1389,13 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 	else
 	{
 #ifdef SPIM_PRESENT
-		reg->PSEL.SCK = (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
-		reg->PSEL.MISO = (pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
-		reg->PSEL.MOSI = (pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX].PortNo << 5);
+		reg->PSEL.SCK = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX]);
+		reg->PSEL.MISO = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		reg->PSEL.MOSI = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX]);
 
 		if (pDev->DevIntrf.bDma)
 		{
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 			reg->ORC = pDev->Cfg.DummyByte;
 #else
 			reg->ORC = 0xFF;
@@ -1337,9 +1419,9 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 #endif
 		}
 #else
-		reg->PSELSCK = (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
-		reg->PSELMISO = (pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
-		reg->PSELMOSI = (pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX].PortNo << 5);
+		reg->PSELSCK = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX]);
+		reg->PSELMISO = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		reg->PSELMOSI = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX]);
 
 		reg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
         reg->EVENTS_READY = 0;
@@ -1380,9 +1462,14 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 		return false;
 	}
 
-#ifdef NRF54L_SERIES
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 	if (pCfgData->pIOPinMap == NULL || pCfgData->DataSize != 8 ||
 		((pCfgData->Mode == SPIMODE_SLAVE || pCfgData->ChipSel == SPICSEL_AUTO) && pCfgData->NbIOPins < 4))
+		return false;
+#endif
+
+#ifdef NRF5340_XXAA_APPLICATION
+	if (pCfgData->DevNo == 4 && pCfgData->Mode != SPIMODE_MASTER)
 		return false;
 #endif
 
@@ -1425,7 +1512,11 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
     if (pCfgData->bIntEn || pCfgData->Mode == SPIMODE_SLAVE)
     {
-    	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, SPI_IRQHandler);
+#ifdef NRF5340_XXAA_APPLICATION
+		// SPIM4 and QSPI have dedicated vectors, not shared serial instances.
+		if (pCfgData->DevNo < 4)
+#endif
+		SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, SPI_IRQHandler);
 
     	switch (pCfgData->DevNo)
     	{
@@ -1590,4 +1681,16 @@ extern "C" void SPIM3_IRQHandler(void)
     NVIC_ClearPendingIRQ(SPIM3_IRQn);
 }
 #endif
+#endif
+
+#ifdef NRF5340_XXAA_APPLICATION
+// SPIM4 has its own interrupt, like SPIM3 on nRF52840. It is not part of
+// the UART/TWI/SPI shared serial dispatcher (instances 0 through 3).
+extern "C" void SPIM4_IRQHandler(void)
+{
+	SPIDev_t *dev = g_nRFxSPIDev[4].pSpiDev;
+
+	if (dev != NULL)
+		SPI_IRQHandler(4, &dev->DevIntrf);
+}
 #endif

@@ -8,6 +8,9 @@ not to use the same device number on an other device.
 
 For 3 wire support : Set both MISO & MOSI to the same pin.
 For QSPI support where available is the last device of the list.
+On nRF5340 App: devices 0..3 are shared serial instances, 4 is dedicated
+SPIM4 (master only, EasyDMA), and 5 is QSPI. Both polling and interrupt
+completion use the generic SPI / DeviceIntrf API. See docs/nrf5340-spi.md.
 
 @author	Hoang Nguyen Hoan
 @date	Apr. 11, 2021
