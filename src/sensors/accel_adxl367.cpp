@@ -163,27 +163,28 @@ bool AccelAdxl367::SetSamplingFrequency(uint32_t FreqMilliHz)
 
 	if (!vbInitialized)
 		return false;
-	if (FreqMilliHz <= 12500)
+	// Midpoints select the closest supported rate; ties select the lower rate.
+	if (FreqMilliHz <= 18750)
 	{
 		odr = 0;
 		actual = 12500;
 	}
-	else if (FreqMilliHz <= 25000)
+	else if (FreqMilliHz <= 37500)
 	{
 		odr = 1;
 		actual = 25000;
 	}
-	else if (FreqMilliHz <= 50000)
+	else if (FreqMilliHz <= 75000)
 	{
 		odr = 2;
 		actual = 50000;
 	}
-	else if (FreqMilliHz <= 100000)
+	else if (FreqMilliHz <= 150000)
 	{
 		odr = 3;
 		actual = 100000;
 	}
-	else if (FreqMilliHz <= 200000)
+	else if (FreqMilliHz <= 300000)
 	{
 		odr = 4;
 		actual = 200000;

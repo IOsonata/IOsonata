@@ -165,22 +165,23 @@ bool AccelAdxl372::SetOutputRate(uint32_t MilliHz)
 
 	if (!vbInitialized)
 		return false;
-	if (MilliHz <= 400000)
+	// Midpoints select the closest supported rate; ties select the lower rate.
+	if (MilliHz <= 600000)
 	{
 		odr = 0;
 		actual = 400000;
 	}
-	else if (MilliHz <= 800000)
+	else if (MilliHz <= 1200000)
 	{
 		odr = 1;
 		actual = 800000;
 	}
-	else if (MilliHz <= 1600000)
+	else if (MilliHz <= 2400000)
 	{
 		odr = 2;
 		actual = 1600000;
 	}
-	else if (MilliHz <= 3200000)
+	else if (MilliHz <= 4800000)
 	{
 		odr = 3;
 		actual = 3200000;

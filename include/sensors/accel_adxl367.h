@@ -67,6 +67,8 @@ public:
 	virtual bool WakeOnEvent(bool bEnable, int Threshold);
 	virtual void IntHandler();
 
+	/** Select the closest rate in mHz (ties lower); read SamplingFrequency()
+	 * for the applied rate. Returns false if uninitialized or transfer fails. */
 	bool SetSamplingFrequency(uint32_t FreqMilliHz);
 	bool ConfigureInterrupts(uint16_t Int1Map, uint16_t Int2Map);
 	bool Status(uint16_t &Events);
