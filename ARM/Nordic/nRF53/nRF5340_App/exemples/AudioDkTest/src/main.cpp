@@ -94,7 +94,9 @@ static I2S s_I2s;
 static Cs47l63 s_Codec;
 static PmnPM1100 s_Pmic;
 static Ina230 s_Monitors[4];
+#ifdef AUDIO_TEST_SD_CARD
 static SDCard s_Card;
+#endif
 static const uint8_t s_Addresses[4] = { 0x44, 0x45, 0x41, 0x40 };
 static const uint32_t s_Shunts[4] = { 510000, 2200000, 2200000, 1000000 };
 static const int16_t s_Sine[32] = {
@@ -243,7 +245,11 @@ int main()
 		puts("Device test FAIL");
 		return 1;
 	}
-	// SD card is optional and can be absent; do not write user data.
+	// SD card probing is opt-in: the generic driver performs lengthy
+	// synchronous command retries when no card answers. Audio streaming
+	// must not depend on optional removable storage.
+#ifdef AUDIO_TEST_SD_CARD
+	puts("SD card probe starting");
 	if (s_Card.Init(&s_Spi, (uint8_t *)NULL, 0))
 	{
 		printf("SD card sectors: %lu\n", (unsigned long)s_Card.GetNbSect());
@@ -252,6 +258,10 @@ int main()
 	{
 		puts("SD card absent/not initialized");
 	}
+#else
+	puts("SD card probe skipped (define AUDIO_TEST_SD_CARD to enable)");
+#endif
+	puts("Starting continuous I2S audio streaming");
 
 	phase = 0;
 	blocks = 0;
