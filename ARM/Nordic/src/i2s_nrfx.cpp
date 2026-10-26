@@ -96,7 +96,7 @@ static const uint32_t s_Ratio[] = {
 
 alignas(4) static const int s_NbRatio = sizeof(s_Ratio) / sizeof(uint32_t);
 
-alignas(4) static I2SDev_t *s_pI2SDev = NULL;
+alignas(4) static I2SDev_t *s_pI2SDev = nullptr;
 
 #define I2S_BUFF_MAX		128
 
@@ -304,7 +304,7 @@ static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	I2SDev_t *dev;
 
 	dev = (I2SDev_t *)pDev->pDevData;
-	if (dev == NULL || Rate == 0 || s_Running)
+	if (dev == nullptr || Rate == 0 || s_Running)
 	{
 		return 0;
 	}
@@ -410,7 +410,7 @@ static void nRFxI2SService(void)
 	uint8_t *pFifo;
 	uint32_t byteCount;
 
-	if (s_pI2SDev == NULL || !s_Running)
+	if (s_pI2SDev == nullptr || !s_Running)
 	{
 		return;
 	}
@@ -433,7 +433,7 @@ static void nRFxI2SService(void)
 				CFifoBlockSize(s_pI2SDev->hRxFifo) == byteCount)
 			{
 				pFifo = CFifoResv(s_pI2SDev->hRxFifo);
-				if (pFifo != NULL)
+				if (pFifo != nullptr)
 				{
 					memcpy(pFifo, s_I2S_RxBuffer[complete], byteCount);
 					CFifoPut(s_pI2SDev->hRxFifo);
@@ -453,7 +453,7 @@ static void nRFxI2SService(void)
 	{
 		NRF_I2S->EVENTS_TXPTRUPD = 0;
 		next = (s_TxEventCount + 1U) & 1U;
-		pFifo = NULL;
+		pFifo = nullptr;
 		if (s_pI2SDev->hTxFifo != NULL &&
 			CFifoBlockSize(s_pI2SDev->hTxFifo) == byteCount)
 		{
@@ -494,7 +494,7 @@ int nRFxI2SRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	uint32_t blockBytes;
 	uint8_t *pFifo;
 
-	if (pBuff == NULL || BuffLen <= 0 || !s_Running)
+	if (pBuff == nullptr || BuffLen <= 0 || !s_Running)
 	{
 		return 0;
 	}
@@ -563,7 +563,7 @@ int nRFxI2STxData(DevIntrf_t * const pDev, const uint8_t *pBuff, int BuffLen)
 			return 0;
 		}
 		pFifo = CFifoResv(s_pI2SDev->hTxFifo);
-		if (pFifo == NULL)
+		if (pFifo == nullptr)
 		{
 			return 0;
 		}

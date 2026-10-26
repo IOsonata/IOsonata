@@ -7,7 +7,7 @@
 MIT License. Copyright (c) 2026 I-SYST inc.
 ----------------------------------------------------------------------------*/
 // Set to 0 to run continuous audio without periodic I2S restarts.
-#define AUDIO_TEST_I2S_RESTART 1
+#define AUDIO_TEST_I2S_RESTART 0
 
 #include <stdint.h>
 #include <stdio.h>

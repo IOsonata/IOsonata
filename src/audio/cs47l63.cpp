@@ -267,7 +267,7 @@ bool Cs47l63::ReadBlock(uint32_t Reg, uint8_t *pData, size_t DataLen)
 	command[7] = 0;
 
 	count = Interface()->Read(DeviceAddress(), command, sizeof(command),
-							  pData, int(DataLen));
+		pData, int(DataLen));
 
 	return count == int(DataLen);
 }
@@ -295,7 +295,7 @@ bool Cs47l63::WriteBlock(uint32_t Reg, const uint8_t *pData, size_t DataLen)
 	command[7] = 0;
 
 	count = Interface()->Write(DeviceAddress(), command, sizeof(command),
-							   pData, int(DataLen));
+		pData, int(DataLen));
 
 	return count == int(DataLen);
 }
