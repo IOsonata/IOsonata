@@ -843,3 +843,14 @@ executes the production USB ISR, ICU acknowledgement and dispatcher with
 injected requests across the batch boundary; it also verifies that the old
 ISR loses the pending request. Hardware confirmed that the pending ICU request survives ISR exit, the ISR
 re-enters, and enumeration completes.
+
+OUT reception follows FSP `usb_pstd_ctrl_write`: select the FIFO, clear it,
+enable BRDY, then set PID=BUF without waiting for FRDY. Waiting for received
+data before permitting the host to send it can prevent CDC SET_LINE_CODING
+from completing when a terminal opens. FIFO reads still require FRDY.
+For IN pipes 1-5, BEMP completes a transfer only when PIPE_CTR.INBUFM is
+clear, matching FSP `usb_pstd_bemp_pipe_process`. While it remains set,
+the transfer and BEMP interrupt stay active; the caller cannot refill the
+buffer prematurely. Interrupt pipes 6-9 retain their separate completion
+behavior. Host tests `usb_out_test.py` and `usb_in_test.py` cover these
+sequences; terminal opening and sustained traffic need hardware validation.

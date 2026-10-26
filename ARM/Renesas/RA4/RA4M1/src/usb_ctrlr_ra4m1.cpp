@@ -72,6 +72,7 @@ enum
 	RA4USB_SQCLR = 1U << 8,
 	RA4USB_ACLRM = 1U << 9,
 	RA4USB_CSCLR = 1U << 13,
+	RA4USB_INBUFM = 1U << 14,
 
 	RA4USB_CFIFO_CURPIPE_MASK = 0x000FU,
 	RA4USB_CFIFO_ISEL = 1U << 5,
@@ -233,7 +234,8 @@ static void Ra4UsbClearPipeBuffer(uint8_t Pipe)
 	*pCtr |= RA4USB_CSCLR;
 }
 
-static bool Ra4UsbSelectFifo(uint8_t Pipe, bool In, uint16_t Width = 0U)
+static bool Ra4UsbSelectFifo(uint8_t Pipe, bool In, uint16_t Width = 0U,
+	bool WaitReady = true)
 {
 	uint16_t select = (Pipe & RA4USB_CFIFO_CURPIPE_MASK) | Width;
 	if (Pipe == 0U && In)
@@ -246,7 +248,8 @@ static bool Ra4UsbSelectFifo(uint8_t Pipe, bool In, uint16_t Width = 0U)
 		const uint16_t current = R_USB_FS0->CFIFOSEL;
 		if ((current & (RA4USB_CFIFO_CURPIPE_MASK | RA4USB_CFIFO_ISEL |
 			RA4USB_CFIFO_MBW16)) ==
-			select && (R_USB_FS0->CFIFOCTR & RA4USB_CFIFO_FRDY) != 0U)
+			select && (!WaitReady ||
+			(R_USB_FS0->CFIFOCTR & RA4USB_CFIFO_FRDY) != 0U))
 		{
 			return true;
 		}
@@ -362,8 +365,11 @@ static uint8_t Ra4UsbPhysical(uint8_t EpNo, bool In)
 
 static bool Ra4UsbArmOut(uint8_t Pipe)
 {
+	// FSP ctrl_write selects/clears the FIFO and enables reception without
+	// waiting for FRDY. An empty OUT FIFO may not be ready until a packet
+	// arrives, which cannot happen while PID is still NAK.
 	if (!Ra4UsbSetPid(Pipe, RA4USB_PID_NAK) ||
-		!Ra4UsbSelectFifo(Pipe, false))
+		!Ra4UsbSelectFifo(Pipe, false, 0U, false))
 	{
 		return false;
 	}
@@ -637,6 +643,15 @@ static void Ra4UsbHandleIn(uint8_t Pipe)
 {
 	Ra4UsbPipe_t *ep = &s_Usb.Pipe[Pipe];
 	const uint16_t bit = Ra4UsbPipeBit(Pipe);
+	// On pipes 1-5, BEMP alone does not establish that the transmit
+	// buffer is empty. Follow FSP usb_pstd_bemp_pipe_process: leave the
+	// pipe running and BEMP enabled until INBUFM clears. Completing now
+	// would let the callback refill/clear a buffer still owned by USBFS.
+	if (ep->Busy && ep->In && Pipe <= 5U &&
+		(*Ra4UsbPipeCtr(Pipe) & RA4USB_INBUFM) != 0U)
+	{
+		return;
+	}
 	R_USB_FS0->BEMPENB &= (uint16_t)~bit;
 	R_USB_FS0->NRDYENB &= (uint16_t)~bit;
 	if (!ep->Busy || !ep->In)
