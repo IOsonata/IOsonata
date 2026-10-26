@@ -248,7 +248,7 @@ static bool InitDevices()
 	audioCfg.SampleRate = 48000;
 	audioCfg.Input = CS47L63_INPUT_PDM;
 	audioCfg.HeadphoneEnable = true;
-	audioCfg.HeadphoneGainMilliDb = -24000;
+	audioCfg.HeadphoneGainMilliDb = -6000;
 	if (!s_Codec.ConfigureAudio(audioCfg))
 	{
 		puts("CS47L63 48-kHz microphone/headphone initialization failed");
@@ -302,7 +302,7 @@ int main()
 #else
 	puts("SD card probe skipped (define AUDIO_TEST_SD_CARD to enable)");
 #endif
-	puts("Starting continuous I2S audio streaming");
+	puts("Starting continuous I2S audio streaming (1.5 kHz tone, -6 dB output gain)");
 
 	phase = 0;
 	blocks = 0;
@@ -312,7 +312,7 @@ int main()
 		{
 			// nRF I2S 16-bit stereo DMA packs left/right into one
 			// 32-bit word. Advance the 32-sample tone once per frame.
-			uint32_t sample = (uint16_t)s_Sine[phase++ & 31];
+			uint32_t sample = (uint16_t)(s_Sine[phase++ & 31] * 4);
 			tx[i] = sample | (sample << 16);
 		}
 		count = s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx));
