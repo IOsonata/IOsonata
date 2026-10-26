@@ -74,3 +74,44 @@ restriction against copying Zephyr peripheral drivers into IOsonata.
 
 - https://docs.nordicsemi.com/r/bundle/ps_nrf7002/page/chapters/functional/doc/host_connection.html
 - https://docs.nordicsemi.com/r/bundle/ug_thingy91x/page/ug/thingy91x/hw_description/nrf7002.html
+
+## Bare-metal OSAL storage
+
+The OSAL memory and lock callbacks use caller-owned fixed blocks. Configure
+`Nrf70OsalMemInit()` before starting the Nordic host library. There is no
+`malloc`, `calloc` or fallback heap. Each request takes the smallest available
+block large enough for it; zero-size, oversized and exhausted requests return
+`NULL`. Lock objects use the same blocks, so include small blocks for locks.
+
+Place buffers and their `Nrf70OsalMemBlock_t` table beside application
+configuration, not in `board.h`. For example, this small configuration reserves
+256 payload bytes and two table entries; it demonstrates the API and is not a
+measured Nordic host memory budget:
+
+```cpp
+alignas(max_align_t) static uint8_t s_Small[64];
+alignas(max_align_t) static uint8_t s_Large[192];
+static Nrf70OsalMemBlock_t s_Blocks[] = {
+	{ s_Small, sizeof(s_Small), false },
+	{ s_Large, sizeof(s_Large), false },
+};
+
+// Before Nordic host initialization:
+if (!Nrf70OsalMemInit(s_Blocks, sizeof(s_Blocks) / sizeof(s_Blocks[0])))
+{
+	return false;
+}
+```
+
+Include `net/nrf70_osal_memory.h` and `<stdint.h>` in the application source.
+Size the block classes and counts for the pinned Nordic host configuration.
+The table and buffers must outlive all allocations and must not be modified
+while installed. All memory callbacks run in the single foreground owner;
+they are not ISR, multicore or concurrent RTOS allocators. After host shutdown
+has released all objects and locks, `Nrf70OsalMemInit(NULL, 0)` detaches storage.
+Reconfiguration with live allocations fails without changing the current pool.
+A cancelled tasklet's caller storage must also outlive its queued event.
+
+Host tests cover block exhaustion, reuse, alignment, invalid configuration,
+zeroing, and lock allocation. The optional Nordic host dependency and firmware
+are still absent; target memory sizing and enabled integration remain unverified.

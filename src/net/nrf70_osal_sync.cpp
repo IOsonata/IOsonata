@@ -22,7 +22,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 -------------------------------------------------------------------------*/
-#include <stdlib.h>
+#include "net/nrf70_osal_memory.h"
 #include "coredev/interrupt.h"
 #include "net/nrf70_osal_sync.h"
 #ifdef IO_ENABLE_NRF70_BM
@@ -41,12 +41,12 @@ typedef struct
  */
 extern "C" void *Nrf70OsalSpinAlloc(void)
 {
-	return calloc(1, sizeof(Nrf70OsalSpin_t));
+	return Nrf70OsalMemZalloc(sizeof(Nrf70OsalSpin_t));
 }
 
 extern "C" void Nrf70OsalSpinFree(void *Lock)
 {
-	free(Lock);
+	Nrf70OsalMemFree(Lock);
 }
 
 extern "C" void Nrf70OsalSpinInit(void *Lock)

@@ -26,11 +26,36 @@ SOFTWARE.
 #define __NRF70_OSAL_MEMORY_H__
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/** One caller-owned fixed block. Used is maintained by the OSAL. */
+typedef struct __Nrf70_Osal_Memory_Block
+{
+	void *pMem;
+	size_t Size;
+	bool Used;
+} Nrf70OsalMemBlock_t;
+
+/**
+ * Install fixed blocks before Nordic host initialization. Blocks must be
+ * non-overlapping, aligned for max_align_t, and separate from the table.
+ * The table and storage must remain alive and unchanged until detached.
+ * Initial Used values are ignored. Reconfiguration is refused while any
+ * block is allocated; invalid configuration preserves the installed table.
+ * Pass NULL, 0 after host shutdown and all frees to detach the table.
+ *
+ * Single foreground owner only, like the nRF70 bare-metal callbacks. Do not
+ * call from an ISR, another core or a concurrent RTOS thread.
+ */
+bool Nrf70OsalMemInit(Nrf70OsalMemBlock_t *pBlocks, size_t Count);
+
+/** Smallest available fitting block, NULL for zero size or exhaustion.
+ * No fallback allocation. Allocations are aligned for max_align_t.
+ */
 void *Nrf70OsalMemAlloc(size_t Size);
 void *Nrf70OsalMemZalloc(size_t Size);
 void Nrf70OsalMemFree(void *pMem);
