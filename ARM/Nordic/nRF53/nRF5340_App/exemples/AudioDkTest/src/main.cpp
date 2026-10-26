@@ -139,7 +139,15 @@ static bool InitDevices()
 			INA230_CONFIG_MODE_SHUNT_BUS_CONT;
 		if (!s_Monitors[i].Init(monitorCfg, &s_I2c))
 		{
-			printf("INA230 %02X failed\n", s_Addresses[i]);
+			uint8_t reg = INA230_REG_CONFIG;
+			uint8_t raw[2] = { 0, 0 };
+			int readCount = s_I2c.Read(s_Addresses[i], &reg, 1, raw, 2);
+			printf("INA230 %02X init failed: config read=%d", s_Addresses[i], readCount);
+			if (readCount == 2)
+			{
+				printf(", config=%04X", (unsigned)((raw[0] << 8) | raw[1]));
+			}
+			puts("");
 			return false;
 		}
 		printf("INA230 %02X: %lu uV, %lld uA, %llu uW\n",
