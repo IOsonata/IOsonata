@@ -6,9 +6,6 @@
 @license
 MIT License. Copyright (c) 2026 I-SYST inc.
 ----------------------------------------------------------------------------*/
-// Set to 0 to run continuous audio without periodic I2S restarts.
-#define AUDIO_TEST_I2S_RESTART 0
-
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -25,6 +22,9 @@ MIT License. Copyright (c) 2026 I-SYST inc.
 #include "sensors/ina230.h"
 #include "audio/cs47l63.h"
 #include "storage/sdcard.h"
+
+// Set to 0 to run continuous audio without periodic I2S restarts.
+#define AUDIO_TEST_I2S_RESTART 1
 
 static const IOPinCfg_t s_UartPins[] = {
 	{ 1, 4, 0, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
