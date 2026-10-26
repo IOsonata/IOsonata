@@ -61,6 +61,7 @@
 								<option id="ra4m1.example.36" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START" />
 									<listOptionValue builtIn="false" value="RA4M1" />
+									<listOptionValue builtIn="false" value="MSC_SECTOR_COUNT=32U" />
 									<listOptionValue builtIn="false" value="DEBUG" />
 								</option>
 								<option id="ra4m1.example.37" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated" />
@@ -79,6 +80,7 @@
 								<option id="ra4m1.example.41" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START" />
 									<listOptionValue builtIn="false" value="RA4M1" />
+									<listOptionValue builtIn="false" value="MSC_SECTOR_COUNT=32U" />
 									<listOptionValue builtIn="false" value="DEBUG" />
 								</option>
 								<option id="ra4m1.example.42" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated" />
@@ -192,6 +194,7 @@
 								<option id="ra4m1.example.87" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START" />
 									<listOptionValue builtIn="false" value="RA4M1" />
+									<listOptionValue builtIn="false" value="MSC_SECTOR_COUNT=32U" />
 									<listOptionValue builtIn="false" value="NDEBUG" />
 								</option>
 								<option id="ra4m1.example.88" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated" />
@@ -210,6 +213,7 @@
 								<option id="ra4m1.example.92" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START" />
 									<listOptionValue builtIn="false" value="RA4M1" />
+									<listOptionValue builtIn="false" value="MSC_SECTOR_COUNT=32U" />
 									<listOptionValue builtIn="false" value="NDEBUG" />
 								</option>
 								<option id="ra4m1.example.93" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated" />
