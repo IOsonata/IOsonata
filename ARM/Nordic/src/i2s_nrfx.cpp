@@ -172,9 +172,6 @@ static void nRF53AudioClockStop(void)
 }
 #endif
 
-static int s_RxBuffLen = 0;
-static int s_TxBuffLen = 0;
-
 bool nRFxI2SWaitStop(I2SDev_t * const pDev, int32_t Timeout)
 {
 	do {
@@ -240,6 +237,16 @@ static void nRFxI2SEnable(DevIntrf_t * const pDev)
 		return;
 	}
 #endif
+	// Restart with empty application queues. DMA buffers are reset below;
+	// retaining queued blocks would replay stale audio after a stop.
+	if (s_pI2SDev->hRxFifo != NULL)
+	{
+		CFifoFlush(s_pI2SDev->hRxFifo);
+	}
+	if (s_pI2SDev->hTxFifo != NULL)
+	{
+		CFifoFlush(s_pI2SDev->hTxFifo);
+	}
 	NRF_I2S->CONFIG.RXEN = (NRF_I2S->PSEL.SDIN != 0xFFFFFFFFUL) ? 1 : 0;
 	NRF_I2S->CONFIG.TXEN = (NRF_I2S->PSEL.SDOUT != 0xFFFFFFFFUL) ? 1 : 0;
 	NRF_I2S->CONFIG.MCKEN = (NRF_I2S->PSEL.MCK != 0xFFFFFFFFUL) ? 1 : 0;
