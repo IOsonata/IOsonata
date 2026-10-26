@@ -869,3 +869,10 @@ consumes a packet. The pipe is NAKed before reading/clearing its receive FIFO.
 `tests/ra4m1/usb_rx_lifecycle_test.py` checks first-buffer acquisition,
 100 packet completions, full-queue backpressure, consumption/rearming and
 callback teardown. Release CDC loopback hardware results are recorded above.
+
+
+For concurrent CDC and ISO hardware testing, use
+[`UsbCdcIsoStress`](exemples/UsbCdcIsoStress/README.md). It uses one CDC
+loopback function and one bidirectional ISO function (five physical pipes).
+The full dual-CDC/HID/INT/ISO combo exceeds RA4M1 USBFS pipe capacity.
+CDC+ISO hardware validation remains pending.
