@@ -17,6 +17,7 @@ def function(source, signature):
 prefix = r'''
 #include <cassert>
 #include <cstdint>
+#define RA4USB_RXTRACE(...) ((void)0)
 using IRQn_Type = int;
 using Ra4m1IRQHandler_t = void (*)(int, void *);
 enum { RA4M1_IELS_CNT = 32, RA4M1_EVTID_PORT_IRQ15 = 16, USB_EVENT = 0x33 };

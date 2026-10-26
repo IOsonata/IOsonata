@@ -42,6 +42,9 @@ SOFTWARE.
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#if !defined(NDEBUG)
+#include <stdio.h>
+#endif
 
 #include "ra4m1xxx.h"
 #include "interrupt_ra4m1.h"
@@ -49,6 +52,18 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "usb/usb.h"
 #include "usb_ctrlr.h"
+
+// Immediate Debug-only receive diagnostics; semihosting affects USB timing.
+#if !defined(NDEBUG)
+#define RA4USB_RXTRACE(...) do { \
+	const uint32_t traceState = DisableInterrupt(); \
+	printf("[RA4 USB RX] " __VA_ARGS__); \
+	fflush(stdout); \
+	EnableInterrupt(traceState); \
+} while (0)
+#else
+#define RA4USB_RXTRACE(...) ((void)0)
+#endif
 
 // EK-RA4M1 supplies VCC_USB externally at 3.3 V. Enable only for a board
 // wired to use the internal USB regulator (VCC_USB_LDO = 3.8 to 5.5 V).
@@ -356,6 +371,10 @@ static void Ra4UsbNotify(uint8_t Pipe, UsbCtrlrEvtType_t Event, uint16_t Length)
 	{
 		reg.Handler(Event, Length, reg.pContext);
 	}
+	else
+	{
+		RA4USB_RXTRACE("no callback pipe=%u event=%u\n", (unsigned)Pipe, (unsigned)Event);
+	}
 }
 
 static uint8_t Ra4UsbPhysical(uint8_t EpNo, bool In)
@@ -371,18 +390,25 @@ static void Ra4UsbRequestOut(uint8_t Pipe)
 	{
 		// UsbIntrf reserves a destination on DRDY. If its queue is full,
 		// it records RxPending and retries when the application consumes it.
+		RA4USB_RXTRACE("request buffer pipe=%u mps=%u\n", (unsigned)Pipe, (unsigned)ep->Mps);
 		Ra4UsbNotify(Pipe, USB_CTRLR_EVT_DRDY, 0U);
+		RA4USB_RXTRACE("request returned pipe=%u busy=%u capacity=%u buffer=%p\n",
+			(unsigned)Pipe, (unsigned)ep->Busy, (unsigned)ep->Length, (void *)ep->pBuffer);
 	}
 }
 
 static bool Ra4UsbArmOut(uint8_t Pipe)
 {
+	RA4USB_RXTRACE("arm begin pipe=%u CTR=%04x\n", (unsigned)Pipe, (unsigned)*Ra4UsbPipeCtr(Pipe));
 	// FSP ctrl_write selects/clears the FIFO and enables reception without
 	// waiting for FRDY. An empty OUT FIFO may not be ready until a packet
 	// arrives, which cannot happen while PID is still NAK.
 	if (!Ra4UsbSetPid(Pipe, RA4USB_PID_NAK) ||
 		!Ra4UsbSelectFifo(Pipe, false, 0U, false))
 	{
+		RA4USB_RXTRACE("arm failed pipe=%u CTR=%04x SEL=%04x FIFO=%04x\n",
+			(unsigned)Pipe, (unsigned)*Ra4UsbPipeCtr(Pipe),
+			(unsigned)R_USB_FS0->CFIFOSEL, (unsigned)R_USB_FS0->CFIFOCTR);
 		return false;
 	}
 	R_USB_FS0->CFIFOCTR = RA4USB_CFIFO_BCLR;
@@ -398,7 +424,11 @@ static bool Ra4UsbArmOut(uint8_t Pipe)
 	{
 		R_USB_FS0->NRDYENB &= (uint16_t)~bit;
 	}
-	return Ra4UsbSetPid(Pipe, RA4USB_PID_BUF);
+	const bool armed = Ra4UsbSetPid(Pipe, RA4USB_PID_BUF);
+	RA4USB_RXTRACE("arm end pipe=%u ok=%u CTR=%04x BRDYENB=%04x NRDYENB=%04x\n",
+		(unsigned)Pipe, (unsigned)armed, (unsigned)*Ra4UsbPipeCtr(Pipe),
+		(unsigned)R_USB_FS0->BRDYENB, (unsigned)R_USB_FS0->NRDYENB);
+	return armed;
 }
 
 static void Ra4UsbCancelPipe(uint8_t Pipe, bool Notify)
@@ -511,6 +541,11 @@ static void Ra4UsbHandleSetup(uint16_t Stage)
 	event.Setup.wValue = R_USB_FS0->USBVAL;
 	event.Setup.wIndex = R_USB_FS0->USBINDX;
 	event.Setup.wLength = R_USB_FS0->USBLENG;
+	if ((request & 0xFFU) == 0x21U)
+	{
+		RA4USB_RXTRACE("CDC setup req=%04x value=%04x len=%u\n",
+			(unsigned)request, (unsigned)event.Setup.wValue, (unsigned)event.Setup.wLength);
+	}
 
 	s_Usb.Ep0Halted = false;
 	s_Usb.Ep0InBusy = false;
@@ -625,6 +660,9 @@ static void Ra4UsbHandleEp0In(void)
 static void Ra4UsbHandleOut(uint8_t Pipe)
 {
 	Ra4UsbPipe_t *ep = &s_Usb.Pipe[Pipe];
+	RA4USB_RXTRACE("BRDY pipe=%u busy=%u in=%u capacity=%u buffer=%p CTR=%04x\n",
+		(unsigned)Pipe, (unsigned)ep->Busy, (unsigned)ep->In,
+		(unsigned)ep->Length, (void *)ep->pBuffer, (unsigned)*Ra4UsbPipeCtr(Pipe));
 	const uint16_t bit = Ra4UsbPipeBit(Pipe);
 	R_USB_FS0->BRDYENB &= (uint16_t)~bit;
 	R_USB_FS0->NRDYENB &= (uint16_t)~bit;
@@ -638,6 +676,8 @@ static void Ra4UsbHandleOut(uint8_t Pipe)
 	// Otherwise a subsequent OUT can arrive between BCLR and PID=NAK.
 	const int length = Ra4UsbSetPid(Pipe, RA4USB_PID_NAK) ?
 		Ra4UsbFifoRead(Pipe, ep->pBuffer, ep->Length) : -1;
+	RA4USB_RXTRACE("read pipe=%u length=%d SEL=%04x FIFO=%04x\n",
+		(unsigned)Pipe, length, (unsigned)R_USB_FS0->CFIFOSEL, (unsigned)R_USB_FS0->CFIFOCTR);
 	ep->Busy = false;
 	ep->pBuffer = nullptr;
 	ep->Length = 0U;
@@ -649,6 +689,7 @@ static void Ra4UsbHandleOut(uint8_t Pipe)
 	{
 		Ra4UsbNotify(Pipe, USB_CTRLR_EVT_XFER_CMPL, (uint16_t)length);
 	}
+	RA4USB_RXTRACE("completion returned pipe=%u\n", (unsigned)Pipe);
 	Ra4UsbRequestOut(Pipe);
 }
 
@@ -833,6 +874,10 @@ static void Ra4UsbInterrupt(int IntNo, void *pContext)
 	// service. This also suppresses the dispatcher's trailing clear, which
 	// would erase requests arriving while this bounded batch is running.
 	(void)Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
+	RA4USB_RXTRACE("IRQ status=%04x enable=%04x BRDY=%04x NRDY=%04x BEMP=%04x\n",
+		(unsigned)R_USB_FS0->INTSTS0, (unsigned)R_USB_FS0->INTENB0,
+		(unsigned)R_USB_FS0->BRDYSTS, (unsigned)R_USB_FS0->NRDYSTS,
+		(unsigned)R_USB_FS0->BEMPSTS);
 
 	for (uint32_t i = 0U; i < 32U && Ra4UsbHandleOneInterrupt(); ++i)
 	{
@@ -932,6 +977,7 @@ static uint8_t Ra4UsbAllocatePipe(uint8_t Type, uint16_t Mps)
 
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 {
+	RA4USB_RXTRACE("live receive trace enabled dev=%d\n", DevNo);
 	if (DevNo != 0 || pCfg == nullptr || pCfg->IntPrio < 0 ||
 		pCfg->IntPrio >= (1 << __NVIC_PRIO_BITS) ||
 		pCfg->bLowPowerSuspend ||
@@ -1230,6 +1276,9 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 	R_USB_FS0->PIPECFG = cfg;
 	R_USB_FS0->PIPEMAXP = MaxPacketSize;
 	R_USB_FS0->PIPEPERI = 0U;
+	RA4USB_RXTRACE("open ep=%u in=%u pipe=%u type=%u CFG=%04x MAXP=%04x\n",
+		(unsigned)EpNo, (unsigned)bIn, (unsigned)pipe, (unsigned)Type,
+		(unsigned)R_USB_FS0->PIPECFG, (unsigned)R_USB_FS0->PIPEMAXP);
 	R_USB_FS0->PIPESEL = 0U;
 	*Ra4UsbPipeCtr(pipe) = RA4USB_SQCLR;
 	Ra4UsbClearPipeBuffer(pipe);
@@ -1297,20 +1346,27 @@ void UsbCtrlrEpCloseAll(int DevNo)
 bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 	uint16_t Capacity)
 {
+	RA4USB_RXTRACE("receive dev=%d ep=%u capacity=%u buffer=%p\n",
+		DevNo, (unsigned)EpNo, (unsigned)Capacity, (void *)pBuffer);
 	if (DevNo != 0 || EpNo == 0U || pBuffer == nullptr)
 	{
+		RA4USB_RXTRACE("receive rejected: arguments\n");
 		return false;
 	}
 	const uint32_t state = DisableInterrupt();
 	const uint8_t pipe = Ra4UsbPhysical(EpNo, false);
 	if (!s_Usb.Started || s_Usb.Closing || pipe == 0U)
 	{
+		RA4USB_RXTRACE("receive rejected: started=%u closing=%u pipe=%u\n",
+			(unsigned)s_Usb.Started, (unsigned)s_Usb.Closing, (unsigned)pipe);
 		EnableInterrupt(state);
 		return false;
 	}
 	Ra4UsbPipe_t *ep = &s_Usb.Pipe[pipe];
 	if (ep->Busy || ep->Halted || ep->In || Capacity < ep->Mps)
 	{
+		RA4USB_RXTRACE("receive rejected: busy=%u halted=%u in=%u mps=%u\n",
+			(unsigned)ep->Busy, (unsigned)ep->Halted, (unsigned)ep->In, (unsigned)ep->Mps);
 		EnableInterrupt(state);
 		return false;
 	}
@@ -1332,6 +1388,7 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 	uint16_t Length)
 {
+	RA4USB_RXTRACE("send dev=%d ep=%u length=%u\n", DevNo, (unsigned)EpNo, (unsigned)Length);
 	if (DevNo != 0 || EpNo == 0U ||
 		(Length != 0U && pBuffer == nullptr))
 	{

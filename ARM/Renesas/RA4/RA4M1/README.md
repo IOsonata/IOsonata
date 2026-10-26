@@ -864,3 +864,12 @@ consumes a packet. The pipe is NAKed before reading/clearing its receive FIFO.
 `tests/ra4m1/usb_rx_lifecycle_test.py` checks first-buffer acquisition,
 100 packet completions, full-queue backpressure, consumption/rearming and
 callback teardown. CDC loopback hardware retest remains pending.
+
+For the stalled CDC loopback investigation, Debug builds now emit immediate
+`[RA4 USB RX]` semihosting lines: endpoint/pipe configuration, buffer requests
+and callback results, receive rejection reasons, FIFO arming, IRQ status,
+OUT packet reads/completions, CDC control requests and IN send requests.
+Each line is flushed without waiting for unplug or suspend. Rebuild both
+the library and UsbCdcLoopback in Debug, then run the same loopback command.
+These intrusive diagnostics affect timing; use them to locate the stalled
+receive stage, not to measure throughput. Release builds omit the trace.

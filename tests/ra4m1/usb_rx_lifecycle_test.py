@@ -12,6 +12,7 @@ def function(sig):
 code = r'''
 #include <cassert>
 #include <cstdint>
+#define RA4USB_RXTRACE(...) ((void)0)
 enum { USB_CTRLR_EVT_DRDY, USB_CTRLR_EVT_XFER_CMPL, USB_CTRLR_EVT_XFER_FAILED,
 	RA4USB_PID_NAK = 0, RA4USB_PID_BUF = 1 };
 struct Ra4UsbPipe_t { bool In, Busy, Halted; uint16_t Mps, Length; uint8_t *pBuffer; };
