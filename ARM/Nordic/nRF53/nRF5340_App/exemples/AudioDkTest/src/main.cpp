@@ -386,10 +386,34 @@ int main()
 			if (++reports == 10)
 			{
 				reports = 0;
-				printf("I2S restart %u: stopping for 100 ms\n", ++restarts);
+				printf("I2S restart %u: muting and stopping for 100 ms\n", ++restarts);
+				if (!s_Codec.HeadphoneMute(true))
+				{
+					puts("Codec headphone mute failed");
+				}
+				msDelay(10);
 				s_I2s.Disable();
 				msDelay(100);
 				s_I2s.Enable();
+				// Allow the DMA to queue and transmit fresh audio blocks
+				// before enabling the headphone output again.
+				for (unsigned i = 0; i < 8; i++)
+				{
+					for (unsigned j = 0; j < 128; j++)
+					{
+						uint32_t sample = (uint16_t)(s_Sine[phase++ & 31] * 4);
+						tx[j] = sample | (sample << 16);
+					}
+					while (s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx)) != (int)sizeof(tx))
+					{
+						usDelay(100);
+					}
+				}
+				msDelay(10);
+				if (!s_Codec.HeadphoneMute(false))
+				{
+					puts("Codec headphone unmute failed");
+				}
 				printf("I2S restart %u: streaming resumed\n", restarts);
 			}
 #endif
