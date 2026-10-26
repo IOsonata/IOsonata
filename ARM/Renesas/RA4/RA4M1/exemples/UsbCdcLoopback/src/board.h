@@ -14,6 +14,14 @@ are owned directly by USBFS and are not configured as ordinary GPIO pins.
 
 #include "coredev/iopincfg.h"
 
+// Supply USBFS with a dedicated 48 MHz clock from HOCO.
+#define MCUOSC				{ \
+	{ OSC_TYPE_RC, 48000000UL, 0U, 0U }, \
+	{ OSC_TYPE_RC, 32768UL, 0U, 0U }, \
+	true \
+}
+
+
 #define USB_VBUS_PORT			4
 #define USB_VBUS_PIN			7
 #define USB_VBUS_PINOP			IOPINOP_FUNC19
