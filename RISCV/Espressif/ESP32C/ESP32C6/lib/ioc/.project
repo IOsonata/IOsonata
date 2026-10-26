@@ -433,7 +433,7 @@
 		<link>
 			<name>src/usb_hidhost.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb_hidhost.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_hidhost.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>
@@ -1101,11 +1101,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_dev.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_gap.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
@@ -1119,11 +1114,6 @@
 			<name>src/bluetooth/bt_hci_host.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_host.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_host.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_host.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_intrf.cpp</name>
@@ -1234,11 +1224,6 @@
 			<name>src/display/eink_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/display/eink_vb3300.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts</name>
@@ -1524,11 +1509,6 @@
 			<name>src/storage/stdfs_littlefs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_cdc_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/CREDITS</name>

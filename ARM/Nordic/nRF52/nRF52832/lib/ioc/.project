@@ -1611,11 +1611,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionMath.h</locationURI>
 		</link>
 		<link>
-			<name>src/audio/audiodev.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/audio/audiodev.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/audio/i2s_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/i2s_nrfx.cpp</locationURI>

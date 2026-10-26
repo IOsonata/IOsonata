@@ -211,16 +211,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/I-SYST_Logo320.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/I-SYST_Logo320.c</locationURI>
-		</link>
-		<link>
-			<name>src/I-SYST_Logo320_little.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/I-SYST_Logo320_little.c</locationURI>
-		</link>
-		<link>
 			<name>src/app_evt_handler.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
@@ -383,7 +373,7 @@
 		<link>
 			<name>src/usb_hidhost.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb_hidhost.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_hidhost.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>
@@ -986,11 +976,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/eink_vb3300.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1009,11 +994,6 @@
 			<name>src/motion/mot_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_icm20948x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_icm20948x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/motion/mot_invn_icm20948.cpp</name>

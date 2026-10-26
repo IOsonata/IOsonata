@@ -1331,11 +1331,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/eink_vb3300.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1439,11 +1434,6 @@
 			<name>src/sensors/accel_h3lis331dl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/accel_h3lis331dl.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/accel_lis2dh12.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/accel_lis2dh12.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_sensor.cpp</name>
