@@ -5,8 +5,8 @@
 
 The Renesas USBFS and USBHS hardware engines require separate register
 backends. This interface is shared with the generic IOsonata USB stack.
-The backend is not yet implemented; do not add USB stack objects to a
-Renesas library until the controller implementation and tests are complete.
+RA4M1 USBFS is implemented by the target library; USBHS remains a separate
+future backend and must not be selected by applications.
 
 @license MIT License
 ----------------------------------------------------------------------------*/
@@ -128,7 +128,7 @@ typedef struct __Usb_Ctrlr_Config {
 	int IntPrio;					//!< Interrupt priority of the USB peripheral
 	const IOPinCfg_t *pIOPinMap;	//!< Optional board USB pins
 	int NbIOPins;					//!< Number of entries in pIOPinMap
-	bool bLowPowerSuspend;			//!< true - Sit in USB low power while suspended
+	bool bLowPowerSuspend;			//!< RA4M1 rejects true; normal suspend/resume is supported
 } UsbCtrlrCfg_t;
 
 #ifdef __cplusplus

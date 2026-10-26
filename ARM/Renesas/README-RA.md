@@ -50,6 +50,22 @@ device-header selection, with no FSP dependency. MCU library projects select
 hardware backends; applications never select crypto or other MCU drivers.
 Board headers define pin mapping, not peripheral register initialization.
 
+## Sharing audit: RA4M1 and RE01
+
+The current RA4M1 and RE01 ports were compared before completing the USB work.
+Their public IOsonata interfaces are common, but their GPIO/PFS, ICU, SCI/DMAC,
+clock, I2C and startup implementations are not register-compatible enough to
+justify a Renesas-wide source. The vector files have superficial table
+boilerplate in common, but the event layout and startup ownership are
+target-specific. The audit also found stale e2 workspace paths in the RA4M1 and
+RE01 library `.cproject` files; those paths now match their `_e2` project names.
+
+Therefore `ARM/Renesas/src` is intentionally sparse. Renesas-wide code goes
+there only after at least two supported targets prove compatible peripheral IP.
+The shared `ARM/Renesas/include/usb_ctrlr.h` is an ABI, while the RA4M1 USBFS
+register backend remains under `RA4/RA4M1/src`. This avoids compile-time
+MCU conditionals in a nominally common source.
+
 ## RA4M1 migration checklist
 
 The RA4M1 port has been relocated to `ARM/Renesas/RA4/RA4M1`.

@@ -3260,5 +3260,10 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
 		</link>
+		<link>
+			<name>src/usb/usb_ctrlr_ra4m1.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/usb_ctrlr_ra4m1.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

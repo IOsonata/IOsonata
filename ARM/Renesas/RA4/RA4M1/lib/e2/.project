@@ -242,5 +242,35 @@
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/include/crypto_ra4m1.h</locationURI>
 		</link>
+		<link>
+			<name>include/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+<link>
+			<name>include/app_evt_handler.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
+		</link>
+		<link>
+			<name>src/app_evt_handler.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/usb</name>
+			<type>2</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb</locationURI>
+		</link>
+		<link>
+			<name>src/usb</name>
+			<type>2</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb</locationURI>
+		</link>
+		<link>
+			<name>src/usb_ctrlr_ra4m1.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/usb_ctrlr_ra4m1.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

@@ -99,8 +99,8 @@ static inline bool Ra4m1PinValid(int PortNo, int PinNo)
 }
 static inline uint32_t Ra4m1OutputMask(int PortNo)
 {
-	// P200/P214/P215 are input-only. USB pair is owned by the future USB
-	// driver: its one-time paired mux transition is not a per-pin operation.
+	// P200/P214/P215 are input-only. The dedicated USB D+/D- pair is owned by
+	// USBFS hardware; it is not exposed as ordinary fast GPIO output.
 	uint32_t mask = Ra4m1PortMask(PortNo);
 	if (PortNo == 2)
 	{

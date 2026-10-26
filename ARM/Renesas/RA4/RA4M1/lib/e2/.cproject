@@ -5,11 +5,11 @@
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="ra4m1.1" moduleId="org.eclipse.cdt.core.settings" name="Debug">
 				<externalSettings>
 					<externalSetting>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1/include"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1/include/ARM"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1/include/CMSIS"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_RA4M1/Debug"/>
-						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_RA4M1" srcPrefixMapping="" srcRootPath=""/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1_e2/include"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1_e2/include/ARM"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1_e2/include/CMSIS"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_RA4M1_e2/Debug"/>
+						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_RA4M1_e2" srcPrefixMapping="" srcRootPath=""/>
 					</externalSetting>
 				</externalSettings>
 				<extensions>
@@ -51,7 +51,7 @@
 							<option id="ra4m1.27" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash" value="false" valueType="boolean"/>
 							<option id="ra4m1.28" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ra4m1.29" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
-							<builder buildPath="${workspace_loc:/IOsonata_RA4M1}/Debug" id="ra4m1.30" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
+							<builder buildPath="${workspace_loc:/IOsonata_RA4M1_e2}/Debug" id="ra4m1.30" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
 							<tool id="ra4m1.31" name="GNU Arm Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
 								<option id="ra4m1.32" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
 								<inputType id="ra4m1.33" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
@@ -114,11 +114,11 @@
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="ra4m1.52" moduleId="org.eclipse.cdt.core.settings" name="Release">
 				<externalSettings>
 					<externalSetting>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1/include"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1/include/ARM"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1/include/CMSIS"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_RA4M1/Release"/>
-						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_RA4M1" srcPrefixMapping="" srcRootPath=""/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1_e2/include"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1_e2/include/ARM"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_RA4M1_e2/include/CMSIS"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_RA4M1_e2/Release"/>
+						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_RA4M1_e2" srcPrefixMapping="" srcRootPath=""/>
 					</externalSetting>
 				</externalSettings>
 				<extensions>
@@ -160,7 +160,7 @@
 							<option id="ra4m1.78" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash" value="false" valueType="boolean"/>
 							<option id="ra4m1.79" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ra4m1.80" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
-							<builder buildPath="${workspace_loc:/IOsonata_RA4M1}/Release" id="ra4m1.81" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
+							<builder buildPath="${workspace_loc:/IOsonata_RA4M1_e2}/Release" id="ra4m1.81" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
 							<tool id="ra4m1.82" name="GNU Arm Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
 								<option id="ra4m1.83" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
 								<inputType id="ra4m1.84" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
