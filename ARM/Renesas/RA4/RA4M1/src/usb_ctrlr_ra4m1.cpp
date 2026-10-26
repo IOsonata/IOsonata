@@ -108,6 +108,7 @@ enum
 
 	RA4USB_PIPECFG_DIR_IN = 1U << 4,
 	RA4USB_PIPECFG_SHTNAK = 1U << 7,
+	RA4USB_PIPECFG_DBLB = 1U << 9,
 	RA4USB_PIPECFG_TYPE_BULK = 1U << 14,
 	RA4USB_PIPECFG_TYPE_INT = 2U << 14,
 	RA4USB_PIPECFG_TYPE_ISO = 3U << 14,
@@ -258,14 +259,19 @@ static bool Ra4UsbSelectFifo(uint8_t Pipe, bool In, uint16_t Width = 0U,
 }
 
 static bool Ra4UsbFifoWrite(uint8_t Pipe, const uint8_t *pData,
-	uint16_t Length, uint16_t Mps)
+	uint16_t Length, uint16_t Mps, bool Buffered = false)
 {
-	if (!Ra4UsbSetPid(Pipe, RA4USB_PID_NAK) ||
+	if ((!Buffered && !Ra4UsbSetPid(Pipe, RA4USB_PID_NAK)) ||
 		!Ra4UsbSelectFifo(Pipe, true, RA4USB_CFIFO_MBW16))
 	{
 		return false;
 	}
-	R_USB_FS0->CFIFOCTR = RA4USB_CFIFO_BCLR;
+	// ISO IN keeps the SIE bank running while filling the free CPU bank.
+	// Do not clear or NAK it between frames.
+	if (!Buffered)
+	{
+		R_USB_FS0->CFIFOCTR = RA4USB_CFIFO_BCLR;
+	}
 
 	// Follow FSP ctrl_read -> write_data: check FRDY after BCLR, before
 	// loading the packet. Readiness before clearing does not cover this access.
@@ -1222,6 +1228,10 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 	if (bIn)
 	{
 		cfg |= RA4USB_PIPECFG_DIR_IN;
+		if (Type == ISO)
+		{
+			cfg |= RA4USB_PIPECFG_DBLB;
+		}
 	}
 	else if (Type == BULK)
 	{
@@ -1587,34 +1597,47 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	uint16_t Length)
 {
-	if (DevNo != 0 || EpNum == 0U || EpNum >= 16U || !s_Usb.Started)
+	if (DevNo != 0 || EpNum == 0U || EpNum >= 16U)
 	{
 		return false;
 	}
-
-	// The generic ISO scheduler calls this once per service interval even
-	// when no IN frame is queued. Service OUT first so it is armed before
-	// the host's isochronous OUT transaction in the current USB frame.
-	const uint8_t outPipe = Ra4UsbPhysical(EpNum, false);
-	if (outPipe != 0U && s_Usb.Pipe[outPipe].Type == ISO &&
-		!s_Usb.Pipe[outPipe].Busy && !s_Usb.Pipe[outPipe].Halted)
-	{
-		Ra4UsbNotify(outPipe, USB_CTRLR_EVT_DRDY, 0U);
-	}
-
+	const uint32_t state = DisableInterrupt();
 	const uint8_t inPipe = Ra4UsbPhysical(EpNum, true);
-	if (inPipe == 0U || s_Usb.Pipe[inPipe].Type != ISO)
+	if (!s_Usb.Started || s_Usb.Closing || inPipe == 0U ||
+		s_Usb.Pipe[inPipe].Type != ISO || s_Usb.Pipe[inPipe].Halted ||
+		Length > s_Usb.Pipe[inPipe].Mps)
 	{
+		EnableInterrupt(state);
 		return false;
 	}
-	// A null pointer means no queued frame, not an application ZLP. A
-	// fabricated completion could pop a frame queued after this SOF.
-	// Keep servicing OUT above; a real queued ZLP has a non-null pointer.
+
+	const uint8_t outPipe = Ra4UsbPhysical(EpNum, false);
+	if (outPipe != 0U && s_Usb.Pipe[outPipe].Type == ISO)
+	{
+		Ra4UsbRequestOut(outPipe);
+	}
+	// A null pointer services OUT only. A queued ZLP has a real pointer.
 	if (pBuffer == nullptr)
 	{
+		EnableInterrupt(state);
 		return Length == 0U;
 	}
-	return UsbCtrlrEpSend(DevNo, EpNum, pBuffer, Length);
+
+	// USBFS makes ISO IN data eligible at the SOF AFTER the FIFO write
+	// (manual 27.3.12.3(4)). Two banks let this SOF stage the next frame
+	// while the previous bank answers this frame's IN token.
+	const bool loaded = Ra4UsbFifoWrite(inPipe, pBuffer, Length,
+		s_Usb.Pipe[inPipe].Mps, true);
+	if (loaded)
+	{
+		(void)Ra4UsbSetPid(inPipe, RA4USB_PID_BUF);
+		// The CPU copy has consumed the caller's buffer, just as DMA-end
+		// does on other ports. Release that FIFO entry now. BEMP must not
+		// complete it a second time when the hardware bank goes on the bus.
+		Ra4UsbNotify(inPipe, USB_CTRLR_EVT_XFER_CMPL, Length);
+	}
+	EnableInterrupt(state);
+	return loaded;
 }
 
 uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)

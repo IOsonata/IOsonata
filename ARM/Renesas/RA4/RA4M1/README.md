@@ -889,3 +889,17 @@ matches the existing SAM4L and Nordic distinction between idle service and
 a queued frame. `tests/ra4m1/usb_iso_schedule_test.py` checks idle service,
 queued ZLPs and 100 co-pending completion/receive/SOF intervals at O0/Os/O2.
 These sequencing fixes require a hardware retest; ISO is not yet validated.
+
+
+The first ISO sequencing retest still lost every other validation frame
+(`loop_drop=23`, `tx_empty=0`). The RA4M1 manual Rev.1.10 section
+27.3.12.3(4), pages 687-688, specifies that ISO IN data becomes eligible
+only after the SOF following the FIFO write. A single bank written at SOF
+and held until bus completion therefore limits this scheduler to alternate
+frames. ISO IN now uses PIPECFG.DBLB and copies into the free CPU bank
+without NAK or BCLR while the other bank remains available to the SIE.
+The synchronous copy completion releases the software FIFO entry; BEMP is
+not enabled for these transfers, so bus completion cannot release it twice.
+FRDY enforces hardware-bank backpressure. Bulk/interrupt completion remains
+unchanged. The host models cover a 100-frame pipeline and occupied banks;
+the double-buffered implementation still needs hardware validation.

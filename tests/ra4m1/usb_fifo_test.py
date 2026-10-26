@@ -21,6 +21,7 @@ code = r'''
 static std::vector<uint8_t> bytes;
 static unsigned delay, delayAfterClear, byteWrites, wordWrites, commits;
 static bool ready, pidOk = true;
+static unsigned clears, nakCalls;
 static uint16_t selectValue, fifoValue;
 struct FifoControl
 {
@@ -34,7 +35,7 @@ struct FifoControl
 	{
 		if (value == RA4USB_CFIFO_BCLR)
 		{
-			bytes.clear(); fifoValue = 0U;
+			++clears; bytes.clear(); fifoValue = 0U;
 			delay = delayAfterClear; ready = false;
 		}
 		else
@@ -75,7 +76,7 @@ struct Registers
 #define R_USB_FS0 (&regs)
 static bool Ra4UsbSetPid(uint8_t, uint16_t pid)
 {
-	assert(pid == RA4USB_PID_NAK); return pidOk;
+	++nakCalls; assert(pid == RA4USB_PID_NAK); return pidOk;
 }
 ''' + function("static bool Ra4UsbSelectFifo(") + "\n" + function("static bool Ra4UsbFifoWrite(") + r'''
 int main()
@@ -101,6 +102,14 @@ int main()
 			}
 		}
 	}
+	// ISO fills the free bank without stopping or clearing the active bank.
+	bytes.clear(); fifoValue = 0; delay = 0; clears = nakCalls = 0;
+	assert(Ra4UsbFifoWrite(1, data, 63, 64, true));
+	assert(bytes.size() == 63 && clears == 0 && nakCalls == 0);
+	// Both banks occupied: FRDY never asserts, neither bank is overwritten.
+	bytes.clear(); fifoValue = 0; delay = RA4USB_WAIT_COUNT + 1;
+	assert(!Ra4UsbFifoWrite(1, data, 63, 64, true));
+	assert(bytes.empty() && clears == 0 && nakCalls == 0);
 	// A stuck FIFO after BCLR must fail without writing or committing data.
 	delay = 0U; delayAfterClear = RA4USB_WAIT_COUNT + 1U; commits = 0U;
 	assert(!Ra4UsbFifoWrite(0U, data, 8U, 64U));
