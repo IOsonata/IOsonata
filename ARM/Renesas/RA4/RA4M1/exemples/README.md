@@ -219,7 +219,7 @@ VBUS input to P407. Use the EK-RA4M1 USB device connector.
 | Project | Generic source |
 | --- | --- |
 | `UsbCdcLoopback` | `usb_cdc_loopback.cpp` |
-| `UsbComboStress` | `usb_combo_stress.cpp` |
+| `UsbCdcIsoStress` | `usb_cdc_iso_stress.cpp` |
 | `UsbCdcPrbsTx` | `usb_cdc_prbs_tx.cpp` |
 | `UsbDualCdcStress` | `usb_dual_cdc_stress.cpp` |
 | `UsbHidKeyboard` | `usb_hid_keyboard.cpp` |
@@ -230,4 +230,16 @@ VBUS input to P407. Use the EK-RA4M1 USB device connector.
 | `UsbCustomBulkLoopback` | `usb_custom_bulk_loopback.cpp` |
 
 `UsbCdcPrbsTx` and `UsbDualCdcStress` also link `src/prbs.c`.
-These projects have not yet been confirmed to enumerate on physical RA4M1 hardware.
+Hardware validation covers CDC PRBS, CDC loopback, concurrent CDC+ISO,
+interrupt loopback, and MSC mounting/file read-write on macOS. CDC+ISO also
+recovered after repeated unplug/replug without a board reset or crash.
+See [USBFS validation](../README.md#usbfs-supply-and-validation) for measured
+results and limits; untested examples are not included in those claims.
+
+`UsbMscRamdisk` defines `MSC_SECTOR_COUNT=32U` in both build configurations
+to allocate a 16 KiB disk within the MCU's 32 KiB RAM. The shared application
+source stays the same across targets.
+
+Use [`UsbCdcIsoStress`](UsbCdcIsoStress/README.md) for concurrent bulk and ISO
+traffic. The full `UsbComboStress` composition exceeds RA4M1's physical pipe
+capacity and has no RA4M1 project.

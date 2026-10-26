@@ -818,8 +818,9 @@ traces and debugger-only state have been removed from the controller.
 Release hardware logs show CDC PRBS reception around 105.3 kB/s and CDC
 loopback around 423 kB/s in each direction (846 kB/s combined), with zero
 reported errors over the supplied approximately 50-second loopback excerpt.
-The final 60-second summary was not supplied. Combo stress and unplug/replug
-validation remain pending. RA4M1 USBFS operates at full speed (12 Mbit/s).
+The final standalone CDC loopback summary was not supplied. Subsequent
+CDC+ISO stress and reconnect results are recorded below. RA4M1 USBFS operates
+at full speed (12 Mbit/s).
 
 USBFS FIFO writes follow the Renesas FSP CPU transfer sequence: select the
 FIFO, clear the buffer, recheck FRDY, write 16-bit little-endian pairs and an
@@ -874,32 +875,55 @@ callback teardown. Release CDC loopback hardware results are recorded above.
 For concurrent CDC and ISO hardware testing, use
 [`UsbCdcIsoStress`](exemples/UsbCdcIsoStress/README.md). It uses one CDC
 loopback function and one bidirectional ISO function (five physical pipes).
-The full dual-CDC/HID/INT/ISO combo exceeds RA4M1 USBFS pipe capacity.
-CDC+ISO hardware validation remains pending.
+The full dual-CDC/HID/INT/ISO combo requires twelve data pipes and exceeds
+RA4M1 USBFS capacity. Its RA4M1 project is not provided.
 
+The ISR handles BEMP and BRDY before SOF scheduling. An idle ISO scheduler
+call with a null buffer services OUT without fabricating an IN packet; a
+non-null zero-length packet remains a real queued transfer.
 
-CDC+ISO hardware testing reached CDC echo with zero errors, but ISO lost
-alternating validation frames and reported 22 loopback queue drops. The
-RA4M1 ISR now retires BEMP completions before BRDY receive callbacks and
-SOF scheduling, so simultaneous events free the transmitted FIFO head before
-queuing another echo and offering the next frame. ISO scheduler calls with
-a null buffer service OUT without submitting a fabricated IN transfer;
-a non-null zero-length packet remains a real application transfer. This
-matches the existing SAM4L and Nordic distinction between idle service and
-a queued frame. `tests/ra4m1/usb_iso_schedule_test.py` checks idle service,
-queued ZLPs and 100 co-pending completion/receive/SOF intervals at O0/Os/O2.
-These sequencing fixes require a hardware retest; ISO is not yet validated.
+The RA4M1 manual Rev.1.10 section 27.3.12.3(4), pages 687-688, specifies that
+ISO IN data becomes eligible only after the SOF following the FIFO write.
+ISO IN uses PIPECFG.DBLB and copies into the free CPU bank without NAK or
+BCLR while the other bank remains available to the SIE. Synchronous copy
+completion releases the software FIFO entry; BEMP is not enabled for these
+transfers, so bus completion cannot release it twice. FRDY enforces
+hardware-bank backpressure. Bulk/interrupt completion remains unchanged.
+`tests/ra4m1/usb_iso_schedule_test.py` checks idle service, queued ZLPs,
+event ordering, a 100-frame pipeline and occupied-bank backpressure.
 
+### EK-RA4M1 USB hardware results (October 26, 2026)
 
-The first ISO sequencing retest still lost every other validation frame
-(`loop_drop=23`, `tx_empty=0`). The RA4M1 manual Rev.1.10 section
-27.3.12.3(4), pages 687-688, specifies that ISO IN data becomes eligible
-only after the SOF following the FIFO write. A single bank written at SOF
-and held until bus completion therefore limits this scheduler to alternate
-frames. ISO IN now uses PIPECFG.DBLB and copies into the free CPU bank
-without NAK or BCLR while the other bank remains available to the SIE.
-The synchronous copy completion releases the software FIFO entry; BEMP is
-not enabled for these transfers, so bus completion cannot release it twice.
-FRDY enforces hardware-bank backpressure. Bulk/interrupt completion remains
-unchanged. The host models cover a 100-frame pipeline and occupied banks;
-the double-buffered implementation still needs hardware validation.
+The maintainer supplied these results on macOS:
+
+- CDC+ISO Release stress: 60.13 seconds, CDC TX/RX both 23,478,272 bytes
+  (390,468 B/s each), ISO 2,667,168 bytes (44,358 B/s), zero data errors,
+  zero pending CDC bytes and zero ISO host misses/skews/unsent packets.
+  ISO rates count validated echoed payload once, not both bus directions.
+- Three unplug/replug recoveries without a board reset. The first resumed
+  run was manually interrupted after 33.24 seconds with zero errors and no
+  pending CDC bytes. The next two completed 60.13-second PASS runs, with
+  CDC around 391 kB/s per direction and ISO around 44.36 kB/s.
+  The debugger confirmed no crash or MCU restart during unplug/replug.
+  The host test was restarted after reconnecting; intentional unplugging
+  ends the active host test with a device-disconnected failure.
+- Interrupt loopback: 1,000 rounds at each alternate setting, yielding
+  5,000 exchanges per setting at intervals 1, 4 and 16 ms. ZLP and TX
+  busy/recovery checks passed with no transfer errors.
+- MSC RAM disk: the corrected project builds, mounts on the iMac, and
+  supports copying a small file onto the disk and reading it back.
+
+The MSC project defines `MSC_SECTOR_COUNT=32U` in both Debug and Release
+compiler settings: 32 sectors of 512 bytes, or a 16 KiB RAM disk. The shared
+application source is unchanged; the target resource setting avoids the
+default 64 KiB allocation on a 32 KiB MCU. Stack and heap reservations remain
+unchanged. The disk is volatile.
+
+Suspend/remote wake and the other USB class examples have not been
+hardware-validated in this test sequence. These results do not claim
+long-duration endurance or USB compliance certification.
+
+The ten `tests/ra4m1/usb_*_test.py` suites passed at O0/Os/O2 during merge
+review. The CDC+ISO example initialization and host-runner checks also passed.
+These host checks supplement the maintainer's hardware results; they are not
+a full ARM firmware build.

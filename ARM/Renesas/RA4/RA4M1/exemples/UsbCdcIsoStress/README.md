@@ -38,5 +38,10 @@ Validation: `tests/usb/cdc_iso_init_test.py` compiles the production example and
 generic USB classes with host controller models, including the RA4M1 capability
 header, and checks descriptors, endpoint counts, alternate settings and close.
 `tests/usb/cdc_iso_host_test.py` checks pass/fail accounting and CDC drain order.
-These are host tests; the ARM firmware build and hardware stress result remain
-pending.
+The maintainer built and ran the Release firmware on EK-RA4M1: a 60.13-second
+run passed with CDC TX/RX at 390,468 B/s each and ISO at 44,358 B/s, zero
+errors and no pending CDC bytes. Three unplug/replug recoveries required no
+board reset; two subsequent runs completed 60.13-second passes. The debugger
+confirmed no crash or MCU restart. Restart the host test after reconnecting.
+See [USBFS validation](../../README.md#usbfs-supply-and-validation) for the
+complete results and remaining validation limits.
