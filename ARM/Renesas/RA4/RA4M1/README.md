@@ -840,3 +840,15 @@ against delayed post-clear readiness, stuck readiness, byte order, unaligned
 buffers, odd lengths, zero-length and full packets at O0/Os/O2. This model
 checks software sequencing, not actual USBFS timing or enumeration.
 
+
+USBFS acknowledges the ICU latch on ISR entry through
+`Ra4m1AcknowledgeInt`, following FSP `usbfs_interrupt_handler` in
+`ra/fsp/src/r_usb_basic/src/hw/r_usb_mcu.c`. The helper suppresses the
+shared dispatcher's trailing acknowledgement. This preserves new requests
+latched during the bounded 32-event USB batch. The live hardware trace
+reached the full configuration descriptor, then stopped after exactly
+32 handled events with INTSTS0=0x2ca2 still pending. The previous trailing
+clear could discard that request. `python3 tests/ra4m1/usb_irq_test.py`
+executes the production USB ISR, ICU acknowledgement and dispatcher with
+injected requests across the batch boundary; it also verifies that the old
+ISR loses the pending request. Hardware confirmation of this fix is pending.

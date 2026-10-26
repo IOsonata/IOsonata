@@ -903,15 +903,20 @@ static bool Ra4UsbHandleOneInterrupt(void)
 
 static void Ra4UsbInterrupt(int IntNo, void *pContext)
 {
-	(void)IntNo;
 	(void)pContext;
+	// FSP usbfs_interrupt_handler acknowledges the ICU latch before USB
+	// service. This also suppresses the dispatcher's trailing clear, which
+	// would erase requests arriving while this bounded batch is running.
+	(void)Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
 	RA4USB_LIVE("IRQ enter\n");
 	for (uint32_t i = 0U; i < 32U && Ra4UsbHandleOneInterrupt(); ++i)
 	{
 	}
 	(void)R_USB_FS0->INTSTS0;
 	__DSB();
-	RA4USB_LIVE("IRQ exit\n");
+	RA4USB_LIVE("IRQ exit INTSTS0=%04x IELSR=%08lx\n",
+		(unsigned)R_USB_FS0->INTSTS0,
+		(unsigned long)R_ICU->IELSR[IntNo]);
 }
 
 static bool Ra4UsbClockEnable(void)
