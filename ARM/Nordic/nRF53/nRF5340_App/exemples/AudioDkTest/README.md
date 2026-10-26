@@ -44,8 +44,28 @@ The following checks were reported PASS on Release hardware during development:
 - Repeated reset and USB cable disconnect/reconnect playback tests
 - Three in-place I2S stop/restart cycles with capture continuing afterward
 
-These hardware results precede the generic-source extraction and architecture
-correction. Rebuild and repeat the Release checks after updating.
+The maintainer repeated the Release hardware test on October 26, 2026 after
+the generic-source extraction, device-layer correction and project-path fixes:
+
+- Continuous headphone tone and microphone acoustic response confirmed
+- Codec revision reported as 160; I2S reported as 48000 Hz
+- With `AUDIO_TEST_I2S_RESTART=1`, two 100 ms mute/stop/restart cycles
+  completed and microphone reporting continued
+- No capture timeout, restart TX timeout or mute/unmute error was reported
+- SD card probing remained disabled and was not tested
+
+The log includes full-scale startup samples and a large first sample block
+after the second restart. This run confirms playback and capture recovery;
+it does not establish transient-free microphone capture. Reset and USB
+disconnect/reconnect results above are from the earlier hardware tests.
+
+The headphone output is mono. Nordic documents output on the left channel
+of the headphone jack even when I2S carries stereo frames; equal output in
+both earpieces is not an acceptance criterion for this board. See
+[Nordic's audio application documentation](https://github.com/nrfconnect/sdk-nrf/blob/main/applications/nrf_audio/unicast_server/README.rst).
+
+Host driver tests and syntax checks are separate from these maintainer-run
+hardware results. The tested local checkout SHA was not supplied.
 
 ## Optional restart test
 
