@@ -104,6 +104,37 @@ static const int16_t s_Sine[32] = {
 	-4096, -4017, -3784, -3406, -2896, -2276, -1567, -799
 };
 
+static void PrintUnsigned64(uint64_t value)
+{
+	uint32_t high = (uint32_t)(value / 1000000000ULL);
+	uint32_t low = (uint32_t)(value % 1000000000ULL);
+
+	if (high != 0U)
+	{
+		printf("%lu%09lu", (unsigned long)high, (unsigned long)low);
+	}
+	else
+	{
+		printf("%lu", (unsigned long)low);
+	}
+}
+
+static void PrintSigned64(int64_t value)
+{
+	uint64_t magnitude;
+
+	if (value < 0)
+	{
+		putchar('-');
+		magnitude = (uint64_t)(-(value + 1)) + 1U;
+	}
+	else
+	{
+		magnitude = (uint64_t)value;
+	}
+	PrintUnsigned64(magnitude);
+}
+
 static bool InitDevices()
 {
 	PmnPM1100Cfg_t pmicCfg;
@@ -150,11 +181,12 @@ static bool InitDevices()
 			puts("");
 			return false;
 		}
-		printf("INA230 %02X: %lu uV, %lld uA, %llu uW\n",
-			s_Addresses[i],
-			(unsigned long)s_Monitors[i].BusVoltageMicroVolt(),
-			(long long)s_Monitors[i].CurrentMicroAmp(),
-			(unsigned long long)s_Monitors[i].PowerMicroWatt());
+		printf("INA230 %02X: %lu uV, ", s_Addresses[i],
+			(unsigned long)s_Monitors[i].BusVoltageMicroVolt());
+		PrintSigned64(s_Monitors[i].CurrentMicroAmp());
+		printf(" uA, ");
+		PrintUnsigned64(s_Monitors[i].PowerMicroWatt());
+		puts(" uW");
 	}
 
 	codecCfg.DevAddr = AUDIO_CODEC_CS;
