@@ -43,7 +43,10 @@ public:
 	void PowerOff();
 
 	uint32_t InputCurrentLimit(uint32_t MilliAmp);
-	uint32_t InputCurrentLimit() const { return vCurrentLimit; }
+	uint32_t InputCurrentLimit() const
+	{
+		return vCurrentLimit;
+	}
 
 private:
 	void Select100mA();

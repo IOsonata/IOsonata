@@ -56,7 +56,10 @@ SOFTWARE.
 
 class CryptoRa4m1Rng : public RngEngine {
 public:
-	CryptoRa4m1Rng() { vbValid = false; }
+	CryptoRa4m1Rng()
+	{
+		vbValid = false;
+	}
 	bool Enable() override;
 	void Disable() override;
 	void Reset() override;
@@ -74,7 +77,10 @@ CryptoRa4m1Rng *CryptoRa4m1RngCreate(void *pMem, size_t MemSize);
 // CryptoAesModes over the ECB block inside one operation.
 class CryptoRa4m1Aes : public CryptoAesModes {
 public:
-	CryptoRa4m1Aes() { vbValid = false; }
+	CryptoRa4m1Aes()
+	{
+		vbValid = false;
+	}
 	bool Enable() override;
 	void Disable() override;
 	void Reset() override;

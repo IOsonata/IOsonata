@@ -1594,9 +1594,9 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
                 break;
 #elif defined(NRF53_SERIES)
     		case 0:
-                NVIC_ClearPendingIRQ(NRF53_SERIAL0_IRQ);
-                NVIC_SetPriority(NRF53_SERIAL0_IRQ, pCfgData->IntPrio);
-                NVIC_EnableIRQ(NRF53_SERIAL0_IRQ);
+				NVIC_ClearPendingIRQ(NRF53_SERIAL0_IRQ);
+				NVIC_SetPriority(NRF53_SERIAL0_IRQ, pCfgData->IntPrio);
+				NVIC_EnableIRQ(NRF53_SERIAL0_IRQ);
                 break;
 #ifdef NRF5340_XXAA_APPLICATION
     	    case 1:

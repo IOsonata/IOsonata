@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	ra4_model.cpp
+
+@brief	Host test support: ra4 model.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 // Model the primitive boundary; production register sequences are tested separately.
 #include "ra4_model.h"
 #include "crypto/crypto.h"
@@ -20,18 +50,26 @@ static size_t s_KeyLen;
 static uint8_t s_Key[32];
 static unsigned s_Begins;
 
-bool Sce5Init(void) { return true; }
-bool Sce5Ready(void) { return !s_Fail; }
+bool Sce5Init(void)
+{
+	return true;
+}
+bool Sce5Ready(void)
+{
+	return !s_Fail;
+}
 bool Sce5RandomWords(uint32_t out[4])
 {
-	if (s_Fail) return false;
+	if (s_Fail)
+		return false;
 	// A draw inside an AES session is a resource conflict in the engine.
 	assert(!s_Open);
 	return RAND_bytes(reinterpret_cast<unsigned char *>(out), 16) == 1;
 }
 bool Sce5AesBegin(const uint8_t *key, size_t keyLen, bool encrypt)
 {
-	if (s_Fail) return false;
+	if (s_Fail)
+		return false;
 	assert(keyLen == 16 || keyLen == 32);
 	if (s_Open && s_KeyLen == keyLen && s_Encrypt == encrypt && memcmp(s_Key, key, keyLen) == 0)
 	{
@@ -50,7 +88,8 @@ bool Sce5AesUpdate(const uint8_t in[16], uint8_t out[16])
 	int final = 0;
 	EVP_CIPHER_CTX *ctx;
 
-	if (s_Fail) return false;
+	if (s_Fail)
+		return false;
 	assert(s_Open);
 	ctx = EVP_CIPHER_CTX_new();
 	assert(ctx);
@@ -93,7 +132,8 @@ int main()
 	s_Fail = true;
 	memset(out, 0xA5, sizeof(out));
 	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, in, 16, out+1) == CRYPTO_STATUS_FAIL);
-	for (unsigned i = 1; i < 17; i++) assert(out[i] == 0);
+	for (unsigned i = 1; i < 17; i++)
+		assert(out[i] == 0);
 	assert(out[0] == 0xA5 && out[17] == 0xA5);
 	memset(out, 0xA5, sizeof(out));
 	assert(crypto.Random(out+1, 3) == CRYPTO_STATUS_FAIL);

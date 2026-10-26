@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	sce5_primitive_test.c
+
+@brief	Host test support: sce5 primitive test.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -9,20 +39,33 @@ static uint32_t *Register(unsigned offset)
 {
 	uint32_t *p = &registers[offset / 4U];
 	accesses++;
-	if (offset == 0x104U) *p |= 1U << 31;
-	if (offset == 0x04U) *p |= 1U << 30;
-	if (offset == 0x00U) *p &= ~((1U << 31) | (1U << 25));
-	if (offset == 0x64U) *p &= ~(1U << 11);
-	if (offset == 0xA8U) *p &= ~(1U << 6);
-	if (offset == 0x18U) *p = 1U << 13;
-	if (offset == 0x1CU || offset == 0x1BCU) *p = 0;
+	if (offset == 0x104U)
+		*p |= 1U << 31;
+	if (offset == 0x04U)
+		*p |= 1U << 30;
+	if (offset == 0x00U)
+		*p &= ~((1U << 31) | (1U << 25));
+	if (offset == 0x64U)
+		*p &= ~(1U << 11);
+	if (offset == 0xA8U)
+		*p &= ~(1U << 6);
+	if (offset == 0x18U)
+		*p = 1U << 13;
+	if (offset == 0x1CU || offset == 0x1BCU)
+		*p = 0;
 	if (failAfter && accesses >= failAfter) {
-		if (offset == 0x104U) *p &= ~(1U << 31);
-		if (offset == 0x04U) *p &= ~(1U << 30);
-		if (offset == 0x00U) *p |= 1U << 25;
-		if (offset == 0x64U) *p |= 1U << 11;
-		if (offset == 0xA8U) *p |= 1U << 6;
-		if (offset == 0x18U) *p |= 1U << 12;
+		if (offset == 0x104U)
+			*p &= ~(1U << 31);
+		if (offset == 0x04U)
+			*p &= ~(1U << 30);
+		if (offset == 0x00U)
+			*p |= 1U << 25;
+		if (offset == 0x64U)
+			*p |= 1U << 11;
+		if (offset == 0xA8U)
+			*p |= 1U << 6;
+		if (offset == 0x18U)
+			*p |= 1U << 12;
 	}
 	return p;
 }
@@ -42,7 +85,8 @@ static bool Operation(unsigned operation)
 	if (operation == 0) {
 		ok = Sce5RandomWords(random);
 		if (!ok) {
-			for (unsigned j = 0; j < 4; j++) assert(random[j] == 0);
+			for (unsigned j = 0; j < 4; j++)
+				assert(random[j] == 0);
 		}
 		return ok;
 	}
@@ -52,10 +96,12 @@ static bool Operation(unsigned operation)
 	if (ok) {
 		ok = Sce5AesUpdate(input, output);
 		if (!ok) {
-			for (unsigned j = 0; j < 16; j++) assert(output[j] == 0);
+			for (unsigned j = 0; j < 16; j++)
+				assert(output[j] == 0);
 		}
 	}
-	if (ok) ok = Sce5AesEnd();
+	if (ok)
+		ok = Sce5AesEnd();
 	return ok;
 }
 
@@ -82,13 +128,17 @@ int main(void)
 		accesses = 0;
 		failAfter = n;
 		bool ok = Sce5Init();
-		if (ok) ok = Sce5RandomWords(output);
-		if (ok) ok = Sce5AesBegin(key, 16, true) && Sce5AesUpdate(input, cipher) && Sce5AesEnd();
-		if (ok) ok = Sce5AesBegin(key, 32, false) && Sce5AesUpdate(input, cipher) && Sce5AesEnd();
+		if (ok)
+			ok = Sce5RandomWords(output);
+		if (ok)
+			ok = Sce5AesBegin(key, 16, true) && Sce5AesUpdate(input, cipher) && Sce5AesEnd();
+		if (ok)
+			ok = Sce5AesBegin(key, 32, false) && Sce5AesUpdate(input, cipher) && Sce5AesEnd();
 		assert(!ok && !Sce5Ready());
 		memset(output, 0xA5, sizeof(output));
 		assert(!Sce5RandomWords(output));
-		for (unsigned j = 0; j < 4; j++) assert(output[j] == 0);
+		for (unsigned j = 0; j < 4; j++)
+			assert(output[j] == 0);
 		assert(accesses < total + 200);
 	}
 	for (unsigned operation = 0; operation < 5; operation++) {

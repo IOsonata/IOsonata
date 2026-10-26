@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	sha256_test.cpp
+
+@brief	Host test support: sha256 test.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 // SHA/HMAC differential tests and synchronous hash failure injection.
 #include <assert.h>
 #include <stdio.h>
@@ -36,8 +66,10 @@ int main()
 	size_t i, len, off, count, keyLen, keyIndex, macLen;
 
 	engine.Enable();
-	for (i = 0; i < sizeof(msg); i++) msg[i] = (uint8_t)(i * 17U + (i >> 5));
-	for (i = 0; i < sizeof(key); i++) key[i] = (uint8_t)(i * 31U);
+	for (i = 0; i < sizeof(msg); i++)
+		msg[i] = (uint8_t)(i * 17U + (i >> 5));
+	for (i = 0; i < sizeof(key); i++)
+		key[i] = (uint8_t)(i * 31U);
 	k.Plain.pData = key;
 	for (len = 0; len <= 4096; len++)
 	{
@@ -49,12 +81,14 @@ int main()
 		for (off = 0; off < len; off += count)
 		{
 			count = 1U + off % 137U;
-			if (count > len - off) count = len - off;
+			if (count > len - off)
+				count = len - off;
 			assert(engine.HashUpdate(ctx, msg + 1 + off, count) == CRYPTO_STATUS_OK);
 		}
 		assert(engine.HashFinal(ctx, actual + 1) == CRYPTO_STATUS_OK);
 		assert(memcmp(actual + 1, expected, 32) == 0);
-		for (i = 0; i < engine.HashCtxSize(); i++) assert(ctx[i] == 0);
+		for (i = 0; i < engine.HashCtxSize(); i++)
+			assert(ctx[i] == 0);
 		assert(engine.HashUpdate(ctx, msg, 1) != CRYPTO_STATUS_OK);
 		for (keyIndex = 0; keyIndex < sizeof(keySizes) / sizeof(keySizes[0]); keyIndex++)
 		{
@@ -87,7 +121,8 @@ int main()
 			assert(CryptoHmacSha256(&failing, CRYPTO_MAC_HMAC, k, msg, sizeof(msg), actual + 1, 32) == CRYPTO_STATUS_FAIL);
 			assert(failing.Calls == i);
 			assert(actual[0] == 0xA5 && actual[33] == 0xA5);
-			for (off = 1; off <= 32; off++) assert(actual[off] == 0);
+			for (off = 1; off <= 32; off++)
+				assert(actual[off] == 0);
 		}
 	}
 	puts("SHA-256/HMAC: lengths 0..4096, streaming, truncation, overlap and every hash failure passed");

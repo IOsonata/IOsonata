@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	esp_model.cpp
+
+@brief	Host test support: esp model.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #include "esp_model.h"
 #include "esp32xx.h"
 #include "crypto/crypto.h"
@@ -17,7 +47,8 @@ static unsigned s_ShaBlocks;
 EspReg &EspRegister(uintptr_t address)
 {
 	for (unsigned i = 0; i < s_Count; i++) {
-		if (s_Registers[i].address == address) return s_Registers[i];
+		if (s_Registers[i].address == address)
+			return s_Registers[i];
 	}
 	assert(s_Count < 128);
 	s_Registers[s_Count].address = address;
@@ -25,8 +56,10 @@ EspReg &EspRegister(uintptr_t address)
 }
 EspReg::operator uint32_t() const
 {
-	if (address == ESP32_SHA_BASE + 0x18) return s_ShaTimeout ? 1U : 0U;
-	if (address == ESP32_AES_BASE + 0x4C) return s_Timeout ? 1U : 0U;
+	if (address == ESP32_SHA_BASE + 0x18)
+		return s_ShaTimeout ? 1U : 0U;
+	if (address == ESP32_AES_BASE + 0x4C)
+		return s_Timeout ? 1U : 0U;
 	return s_Values[this - s_Registers];
 }
 EspReg &EspReg::operator=(uint32_t value)
@@ -105,14 +138,17 @@ int main()
 	memset(output, 0xA5, sizeof(output));
 	s_Timeout = true;
 	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, output+1) == CRYPTO_STATUS_FAIL);
-	for (unsigned i = 1; i < 17; i++) assert(output[i] == 0);
+	for (unsigned i = 1; i < 17; i++)
+		assert(output[i] == 0);
 	assert(output[0] == 0xA5 && output[17] == 0xA5);
-	for (unsigned i = 0; i < 16; i++) assert(EspRegister(ESP32_AES_BASE + i*4) == 0);
+	for (unsigned i = 0; i < 16; i++)
+		assert(EspRegister(ESP32_AES_BASE + i*4) == 0);
 	s_Timeout = false;
 	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, output+1) == CRYPTO_STATUS_OK);
 	alignas(CRYPTO_HASHCTX_ALIGN_MAX) uint8_t a[CRYPTO_HASHCTX_MAX], b[CRYPTO_HASHCTX_MAX];
 	uint8_t msg[193], digest[34], expected[32];
-	for (unsigned i = 0; i < sizeof(msg); i++) msg[i] = i;
+	for (unsigned i = 0; i < sizeof(msg); i++)
+		msg[i] = i;
 	assert(s_ShaBlocks > 1000);
 	assert(crypto.HashInit(CRYPTO_HASH_SHA256, a) == CRYPTO_STATUS_OK);
 	assert(crypto.HashInit(CRYPTO_HASH_SHA256, b) == CRYPTO_STATUS_OK);
@@ -128,7 +164,8 @@ int main()
 	memset(digest, 0xA5, sizeof(digest));
 	s_ShaTimeout = true;
 	assert(crypto.Hash(CRYPTO_HASH_SHA256, msg, sizeof(msg), digest+1) == CRYPTO_STATUS_FAIL);
-	for (unsigned i = 1; i <= 32; i++) assert(digest[i] == 0);
+	for (unsigned i = 1; i <= 32; i++)
+		assert(digest[i] == 0);
 	assert(digest[0] == 0xA5 && digest[33] == 0xA5);
 	s_ShaTimeout = false;
 	assert(crypto.Hash(CRYPTO_HASH_SHA256, msg, sizeof(msg), digest) == CRYPTO_STATUS_OK);

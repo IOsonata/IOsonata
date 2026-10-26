@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	cm_model.cpp
+
+@brief	Host test support: cm model.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #include "crypto/cryptomaster.h"
 #include "crypto/crypto.h"
 #include "crypto/crypto_softsha256.h"
@@ -17,14 +47,34 @@ extern "C" void usDelay(uint32_t) {}
 
 class ModelIntrf : public DeviceIntrf {
 public:
-	operator DevIntrf_t *() override { return nullptr; }
-	uint32_t Rate(uint32_t) override { return 0; }
-	uint32_t Rate() override { return 0; }
-	void Enable() override {}
-	void Disable() override {}
-	bool StartTx(uint32_t) override { return true; }
-	void StopTx() override {}
-	void Reset() override {}
+	operator DevIntrf_t *() override
+	{
+		return nullptr;
+	}
+	uint32_t Rate(uint32_t) override
+	{
+		return 0;
+	}
+	uint32_t Rate() override
+	{
+		return 0;
+	}
+	void Enable() override
+	{
+	}
+	void Disable() override
+	{
+	}
+	bool StartTx(uint32_t) override
+	{
+		return true;
+	}
+	void StopTx() override
+	{
+	}
+	void Reset() override
+	{
+	}
 };
 static ModelIntrf s_Intrf;
 class ModelCm : public CryptoMaster {
@@ -34,7 +84,8 @@ public:
 		uint32_t offset;
 		assert(len == 4);
 		memcpy(&offset, addr, 4);
-		if (offset == CRYPTOMASTER_HW_PRESENCE) return CRYPTOMASTER_PRESENT_AES;
+		if (offset == CRYPTOMASTER_HW_PRESENCE)
+			return CRYPTOMASTER_PRESENT_AES;
 		if (offset == CRYPTOMASTER_STATUS)
 			return s_Stuck ? CRYPTOMASTER_STATUS_RESET_BUSY | CRYPTOMASTER_STATUS_BUSY :
 				s_Timeout ? CRYPTOMASTER_STATUS_BUSY : 0;
@@ -45,9 +96,12 @@ public:
 		uint32_t offset;
 		assert(len == 4);
 		memcpy(&offset, addr, 4);
-		if (offset == CRYPTOMASTER_FETCH_ADDR) s_Fetch = value;
-		if (offset == CRYPTOMASTER_PUSH_ADDR) s_Push = value;
-		if (offset == CRYPTOMASTER_START && s_StuckOnStart) s_Stuck = true;
+		if (offset == CRYPTOMASTER_FETCH_ADDR)
+			s_Fetch = value;
+		if (offset == CRYPTOMASTER_PUSH_ADDR)
+			s_Push = value;
+		if (offset == CRYPTOMASTER_START && s_StuckOnStart)
+			s_Stuck = true;
 		if (offset == CRYPTOMASTER_START && !s_Timeout && !s_Stuck) {
 			auto *in = reinterpret_cast<CryptoMasterDesc_t *>((uintptr_t)s_Fetch);
 			auto *out = reinterpret_cast<CryptoMasterDesc_t *>((uintptr_t)s_Push);
@@ -149,7 +203,10 @@ CRYPTO_STATUS Crypto::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
 	return s_Cm.Mac(Alg, Key, pMsg, Len, pMac, MacLen);
 }
 
-bool Crypto::IsSecure() const { return vbValid; }
+bool Crypto::IsSecure() const
+{
+	return vbValid;
+}
 CRYPTO_STATUS Crypto::Random(uint8_t *out, size_t len)
 {
 #ifdef CRACEN_RNG_MODEL
@@ -181,7 +238,8 @@ int main()
 	memset(out, 0xA5, sizeof(out));
 	assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_FAIL);
 	assert(out[0] == 0xA5 && out[17] == 0xA5);
-	for (unsigned i = 1; i <= 16; i++) assert(out[i] == 0);
+	for (unsigned i = 1; i <= 16; i++)
+		assert(out[i] == 0);
 	s_Timeout = false;
 	assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_OK);
 	s_StuckOnStart = true;
@@ -191,7 +249,8 @@ int main()
 	assert(pending->pAddr != out+1);
 	assert(pending->pNext == CRYPTOMASTER_DMA_STOP);
 	memset(pending->pAddr, 0xCC, 16);
-	for (unsigned i = 1; i <= 16; i++) assert(out[i] == 0);
+	for (unsigned i = 1; i <= 16; i++)
+		assert(out[i] == 0);
 	s_StuckOnStart = false;
 	s_Stuck = false;
 	assert(other.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_FAIL);

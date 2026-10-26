@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	entropy_model.cpp
+
+@brief	Host test support: entropy model.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #include "entropy_model.h"
 #include "crypto/crypto.h"
 #include <assert.h>
@@ -19,7 +49,8 @@ EntropyReg &EntropyReg::operator=(uint8_t v)
 		assert(s_Read == 0 || s_Read == 4);
 		assert(RAND_bytes(s_Seed, 4) == 1);
 		s_Read = 0;
-		if (!g_Timeout) value |= R9A02_TRNG_RDY;
+		if (!g_Timeout)
+			value |= R9A02_TRNG_RDY;
 	}
 	return *this;
 }
@@ -30,7 +61,8 @@ EntropyReg::operator uint8_t() const
 		assert(s_Read < 4);
 		g_Reads++;
 		uint8_t v = s_Seed[s_Read++];
-		if (s_Read == 4) g_Trng.TRNGSCR0.value &= ~R9A02_TRNG_RDY;
+		if (s_Read == 4)
+			g_Trng.TRNGSCR0.value &= ~R9A02_TRNG_RDY;
 		return v;
 	}
 	return value;
@@ -67,7 +99,8 @@ int main()
 	g_Timeout = true;
 	memset(out, 0xA5, sizeof(out));
 	assert(crypto.Random(out+1, 7) == CRYPTO_STATUS_FAIL);
-	for (unsigned i = 1; i < 8; i++) assert(out[i] == 0);
+	for (unsigned i = 1; i < 8; i++)
+		assert(out[i] == 0);
 	assert(out[0] == 0xA5 && out[8] == 0xA5);
 	assert(g_Trng.TRNGSCR0.value == 0);
 	g_Timeout = false;

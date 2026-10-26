@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	usbd_periodic_test.cpp
+
+@brief	Host test support: usbd periodic test.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 // Host tests of the production device classes, descriptor core and transports.
 #include <cassert>
 #include <cstdio>
@@ -13,48 +43,109 @@ static unsigned s_OpenFail, s_Stalls;
 static uint16_t s_Open[16][2];
 static UsbCtrlrEpHandler_t s_Handler[16][2];
 static void *s_Context[16][2];
-bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
-bool UsbCtrlrStart(int) { return true; }
-void UsbCtrlrStop(int) {}
-void UsbCtrlrProcess(int) {}
-bool UsbCtrlrVbusDetected(int) { return s_Vbus; }
-bool UsbCtrlrHighSpeed(int) { return s_HighSpeed; }
-bool UsbCtrlrIsoInit(int) { return !s_IsoInitFail; }
-void UsbCtrlrIntEnable(int) {}
-void UsbCtrlrIntDisable(int) {}
-void UsbCtrlrConnect(int) {}
-void UsbCtrlrDisconnect(int) {}
-void UsbCtrlrRemoteWakeup(int) {}
-void UsbCtrlrSofEnable(int, bool) {}
-void UsbCtrlrSetAddress(int, uint8_t) {}
+bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *)
+{
+	return true;
+}
+bool UsbCtrlrStart(int)
+{
+	return true;
+}
+void UsbCtrlrStop(int)
+{
+}
+void UsbCtrlrProcess(int)
+{
+}
+bool UsbCtrlrVbusDetected(int)
+{
+	return s_Vbus;
+}
+bool UsbCtrlrHighSpeed(int)
+{
+	return s_HighSpeed;
+}
+bool UsbCtrlrIsoInit(int)
+{
+	return !s_IsoInitFail;
+}
+void UsbCtrlrIntEnable(int)
+{
+}
+void UsbCtrlrIntDisable(int)
+{
+}
+void UsbCtrlrConnect(int)
+{
+}
+void UsbCtrlrDisconnect(int)
+{
+}
+void UsbCtrlrRemoteWakeup(int)
+{
+}
+void UsbCtrlrSofEnable(int, bool)
+{
+}
+void UsbCtrlrSetAddress(int, uint8_t)
+{
+}
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *p)
 {
-	if (s_OpenFail && --s_OpenFail == 0) return false;
+	if (s_OpenFail && --s_OpenFail == 0)
+		return false;
 	const unsigned ep = p->bEndpointAddress & 15U;
 	const bool in = (p->bEndpointAddress & 128U) != 0;
 	assert(!s_Open[ep][in]);
 	s_Open[ep][in] = p->wMaxPacketSize;
 	return true;
 }
-void UsbCtrlrEpClose(int, uint8_t ep, bool in) { s_Open[ep][in] = 0; }
+void UsbCtrlrEpClose(int, uint8_t ep, bool in)
+{
+	s_Open[ep][in] = 0;
+}
 void UsbCtrlrEpCloseAll(int) { memset(s_Open, 0, sizeof(s_Open)); }
 void UsbCtrlrEpBind(int, uint8_t ep, bool in, bool, UsbCtrlrEpHandler_t h, void *c)
 {
 	s_Handler[ep][in] = h; s_Context[ep][in] = c;
 }
-bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *, uint16_t) { return true; }
+bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *, uint16_t)
+{
+	return true;
+}
 void UsbCtrlrEpProcessEvent(int, uint8_t ep, bool in, UsbCtrlrEvtType_t e, uint16_t n)
 {
-	if (s_Handler[ep][in]) s_Handler[ep][in](e, n, s_Context[ep][in]);
+	if (s_Handler[ep][in])
+		s_Handler[ep][in](e, n, s_Context[ep][in]);
 }
-bool UsbCtrlrEpSend(int, uint8_t ep, uint8_t *, uint16_t) { return !s_Suspended && s_Open[ep][1]; }
-bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t) { return true; }
-int UsbCtrlrEp0Send(int, uint8_t *, int n) { return n; }
-bool UsbCtrlrEp0Status(int, uint8_t) { return true; }
-void UsbCtrlrEpStall(int, uint8_t, bool) { ++s_Stalls; }
-void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
+bool UsbCtrlrEpSend(int, uint8_t ep, uint8_t *, uint16_t)
+{
+	return !s_Suspended && s_Open[ep][1];
+}
+bool UsbCtrlrIsoSend(int, uint8_t, uint8_t *, uint16_t)
+{
+	return true;
+}
+int UsbCtrlrEp0Send(int, uint8_t *, int n)
+{
+	return n;
+}
+bool UsbCtrlrEp0Status(int, uint8_t)
+{
+	return true;
+}
+void UsbCtrlrEpStall(int, uint8_t, bool)
+{
+	++s_Stalls;
+}
+void UsbCtrlrEpClearStall(int, uint8_t, bool)
+{
+}
 size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) *p = 0; return 0; }
-bool UsbEvtQue(uint32_t, void *, UsbEvtQueHandler_t) { return true; }
+bool UsbEvtQue(uint32_t, void *, UsbEvtQueHandler_t)
+{
+	return true;
+}
 
 static const UsbdPeriodicAlt_t s_IntAlts[] = {{16, 32, 1, 4}, {64, 64, 4, 6}, {64, 64, 16, 8}};
 static const UsbdPeriodicAlt_t s_IsoAlts[] = {{9, 9, 1, 4}, {17, 17, 1, 4}, {25, 25, 1, 4},
@@ -96,7 +187,8 @@ static bool Setup(uint8_t type, uint8_t req, uint16_t value, uint16_t index = 0)
 	e.Setup.bmRequestType = type; e.Setup.bRequest = req;
 	e.Setup.wValue = value; e.Setup.wIndex = index;
 	UsbDevProcessEvent(0, &e);
-	if (stalls != s_Stalls) return false;
+	if (stalls != s_Stalls)
+		return false;
 	e.Type = USB_CTRLR_EVT_XFER_CMPL;
 	e.Xfer = {}; e.Xfer.EpAddr = 0x80; e.Xfer.Result = USB_CTRLR_XFER_SUCCESS;
 	UsbDevProcessEvent(0, &e);
@@ -134,7 +226,9 @@ static void CheckDesc(UsbdPeriodic &fn, const UsbdPeriodicCfg_t &cfg, uint8_t ty
 	}
 	assert(p == bytes.data() + bytes.size() - 1);
 }
-class Blocker : public UsbDeviceClass {};
+class Blocker : public UsbDeviceClass
+{
+};
 static void Failures()
 {
 	Init();

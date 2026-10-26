@@ -35,7 +35,10 @@ static bool s_Busy = false;
 
 class CryptoLpc546xx : public RngEngine {
 public:
-	void Disable() override { vbValid = false; }
+	void Disable() override
+	{
+		vbValid = false;
+	}
 	void Reset() override { (void)Enable(); }
 	bool Enable() override
 	{

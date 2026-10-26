@@ -3,6 +3,24 @@
 @brief ADXL367 device driver
 @license MIT License
 Copyright (c) 2026 I-SYST inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 -------------------------------------------------------------------------*/
 #include "sensors/accel_adxl367.h"
 
@@ -128,7 +146,7 @@ bool AccelAdxl367::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	if (!SetSamplingFrequency(Cfg.Freq))
 		goto fail;
 	scale = Cfg.Scale <= 2 ? 2 : Cfg.Scale <= 4 ? 4 : 8;
-		if (Scale(scale) != scale)
+	if (Scale(scale) != scale)
 		goto fail;
 	Mode(Cfg.OpMode, SamplingFrequency());
 	DeviceID(ADXL367_PART_ID);
@@ -145,12 +163,36 @@ bool AccelAdxl367::SetSamplingFrequency(uint32_t FreqMilliHz)
 
 	if (!vbInitialized)
 		return false;
-	if (FreqMilliHz <= 12500) { odr = 0; actual = 12500; }
-	else if (FreqMilliHz <= 25000) { odr = 1; actual = 25000; }
-	else if (FreqMilliHz <= 50000) { odr = 2; actual = 50000; }
-	else if (FreqMilliHz <= 100000) { odr = 3; actual = 100000; }
-	else if (FreqMilliHz <= 200000) { odr = 4; actual = 200000; }
-	else { odr = 5; actual = 400000; }
+	if (FreqMilliHz <= 12500)
+	{
+		odr = 0;
+		actual = 12500;
+	}
+	else if (FreqMilliHz <= 25000)
+	{
+		odr = 1;
+		actual = 25000;
+	}
+	else if (FreqMilliHz <= 50000)
+	{
+		odr = 2;
+		actual = 50000;
+	}
+	else if (FreqMilliHz <= 100000)
+	{
+		odr = 3;
+		actual = 100000;
+	}
+	else if (FreqMilliHz <= 200000)
+	{
+		odr = 4;
+		actual = 200000;
+	}
+	else
+	{
+		odr = 5;
+		actual = 400000;
+	}
 	if (!WriteReg(REG_FILTER, (vFilter & ~7) | odr))
 		return false;
 	vFilter = (vFilter & ~7) | odr;

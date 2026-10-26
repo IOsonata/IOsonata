@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	ccsym_model.cpp
+
+@brief	Host test support: ccsym model.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #include "crypto_cc3xx_sym.h"
 #include "crypto/crypto.h"
 #define OPENSSL_SUPPRESS_DEPRECATED
@@ -21,7 +51,10 @@ static bool s_SetupTimeout;
 static bool s_ReadFailure;
 static bool s_CleanupFailure;
 uintptr_t Cc3xxBase() { return (uintptr_t)s_Reg; }
-bool Cc3xxEnable() { return true; }
+bool Cc3xxEnable()
+{
+	return true;
+}
 void Cc3xxDisable() { memset(s_Reg, 0, sizeof(s_Reg)); s_In = s_Out = 0; }
 
 class ModelSym : public CryptoCc3xxSym {
@@ -31,13 +64,18 @@ public:
 		uint32_t offset, value;
 		assert(len == 4 && count == 4);
 		memcpy(&offset, addr, 4);
-		if (s_ReadFailure) return 0;
+		if (s_ReadFailure)
+			return 0;
 		assert(offset < sizeof(s_Reg));
 		value = s_Reg[offset/4];
-		if (offset == 0xC50) value = s_Timeout ? 0 : 1;
-		if (offset == 0x910) value = s_SetupTimeout ? 1 : 0;
-		if (offset == 0x91C) value = 0;
-		if (offset == 0xD50) value = s_Out >= 16;
+		if (offset == 0xC50)
+			value = s_Timeout ? 0 : 1;
+		if (offset == 0x910)
+			value = s_SetupTimeout ? 1 : 0;
+		if (offset == 0x91C)
+			value = 0;
+		if (offset == 0xD50)
+			value = s_Out >= 16;
 		if (offset == MODEL_DOUT) {
 			assert(s_Out < 16);
 			memcpy(&value, s_Output+s_Out, 4);
@@ -56,17 +94,21 @@ public:
 			for (int i = 0; i < count; i += 4)
 			{
 				uint32_t next = offset + i;
-				if (Write((uint8_t *)&next, 4, in + i, 4) != 4) return i;
+				if (Write((uint8_t *)&next, 4, in + i, 4) != 4)
+					return i;
 			}
 			return count;
 		}
 		memcpy(&offset, addr, 4);
 		memcpy(&value, in, 4);
 		assert(offset < sizeof(s_Reg));
-		if (s_CleanupFailure && offset == 0x900 && value == 0) return 0;
+		if (s_CleanupFailure && offset == 0x900 && value == 0)
+			return 0;
 		s_Reg[offset/4] = value;
-		if (offset == 0x4C0) s_KeyLoads++;
-		if (offset == 0xC58 || offset == 0xC48) s_In = 0;
+		if (offset == 0x4C0)
+			s_KeyLoads++;
+		if (offset == 0xC58 || offset == 0xC48)
+			s_In = 0;
 		if (offset == 0xC00) {
 			assert(s_In < 64);
 			memcpy(s_Input+s_In, &value, 4);
@@ -232,7 +274,10 @@ CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
 	return s_Sym.HashFinal(pHashCtx, pDigest);
 }
 
-bool Crypto::IsSecure() const { return vbValid; }
+bool Crypto::IsSecure() const
+{
+	return vbValid;
+}
 CRYPTO_STATUS Crypto::Random(uint8_t *out, size_t len)
 {
 #ifdef CRACEN_RNG_MODEL
@@ -306,10 +351,12 @@ int main()
 	memset(out, 0xA5, sizeof(out));
 	assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_FAIL);
 	assert(out[0] == 0xA5 && out[17] == 0xA5);
-	for (unsigned i = 1; i <= 16; i++) assert(out[i] == 0);
+	for (unsigned i = 1; i <= 16; i++)
+		assert(out[i] == 0);
 	memset(out, 0xA5, sizeof(out));
 	assert(c.Hash(CRYPTO_HASH_SHA256, input, 64, out+1) == CRYPTO_STATUS_FAIL);
-	for (unsigned i = 1; i <= 32; i++) assert(out[i] == 0);
+	for (unsigned i = 1; i <= 32; i++)
+		assert(out[i] == 0);
 	assert(out[0] == 0xA5 && out[33] == 0xA5);
 	s_Timeout = false;
 	assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_OK);
@@ -331,7 +378,8 @@ int main()
 	assert(memcmp(ref, digestA, 32) == 0);
 	assert(SHA256(msgB, sizeof(msgB), ref));
 	assert(memcmp(ref, digestB, 32) == 0);
-	for (i = 0; i < s_Sym.HashCtxSize(); i++) assert(ctxA[i] == 0 && ctxB[i] == 0);
+	for (i = 0; i < s_Sym.HashCtxSize(); i++)
+		assert(ctxA[i] == 0 && ctxB[i] == 0);
 	s_SetupTimeout = true;
 	assert(c.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, out+1) == CRYPTO_STATUS_FAIL);
 	assert(c.Hash(CRYPTO_HASH_SHA256, input, 64, out+1) == CRYPTO_STATUS_FAIL);
@@ -343,18 +391,22 @@ int main()
 	assert(second.Hash(CRYPTO_HASH_SHA256, input, 64, out+1) == CRYPTO_STATUS_BUSY);
 	assert(Cc3xxIntrfInstance()->OpRelease(&owner));
 	assert(c.Hash(CRYPTO_HASH_SHA256, input, 64, out+1) == CRYPTO_STATUS_OK);
-	for (i = 0; i < 8; i++) assert(s_Reg[0x400/4+i] == 0 && s_Reg[0x640/4+i] == 0);
+	for (i = 0; i < 8; i++)
+		assert(s_Reg[0x400/4+i] == 0 && s_Reg[0x640/4+i] == 0);
 	k.Type = CRYPTO_KEY_AES_128;
 	k.Plain.Len = 16;
 	k.Usage = CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT | CRYPTO_KEY_USE_SIGN;
 	assert(c.Seal(CRYPTO_AEAD_AES_GCM, k, nonce, sizeof(nonce), nullptr, 0, input, 16, cipher, tag, 16) == CRYPTO_STATUS_OK);
 	s_CleanupFailure = true;
 	assert(c.Open(CRYPTO_AEAD_AES_GCM, k, nonce, sizeof(nonce), nullptr, 0, cipher, 16, out+1, tag, 16) == CRYPTO_STATUS_FAIL);
-	for (i = 1; i <= 16; i++) assert(out[i] == 0);
+	for (i = 1; i <= 16; i++)
+		assert(out[i] == 0);
 	assert(c.Seal(CRYPTO_AEAD_AES_GCM, k, nonce, sizeof(nonce), nullptr, 0, input, 16, out+1, tag, 16) == CRYPTO_STATUS_FAIL);
-	for (i = 0; i < 16; i++) assert(tag[i] == 0 && out[i+1] == 0);
+	for (i = 0; i < 16; i++)
+		assert(tag[i] == 0 && out[i+1] == 0);
 	assert(c.Mac(CRYPTO_MAC_CMAC, k, input, 16, out+1, 16) == CRYPTO_STATUS_FAIL);
-	for (i = 1; i <= 16; i++) assert(out[i] == 0);
+	for (i = 1; i <= 16; i++)
+		assert(out[i] == 0);
 	s_CleanupFailure = false;
 	second.Disable();
 	printf("CC3xx FIFO model: %u AES and %u SHA blocks; shared exclusion and timeouts passed\n", s_AesBlocks, s_HashBlocks);

@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	ccrng_test.cpp
+
+@brief	Host test support: ccrng test.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #include "crypto_rng_nrf.h"
 #include "cc3xx_intrf.h"
 #include <cassert>
@@ -5,16 +35,25 @@
 #include <cstring>
 #include <vector>
 int g_HashFailAfter = -1;
-uintptr_t Cc3xxBase() { return 0; }
-bool Cc3xxEnable() { return true; }
-void Cc3xxDisable() {}
+uintptr_t Cc3xxBase()
+{
+	return 0;
+}
+bool Cc3xxEnable()
+{
+	return true;
+}
+void Cc3xxDisable()
+{
+}
 class Entropy : public Cc3xxIntrf {
 public:
 	unsigned draws = 0, stops = 0, serial = 0;
 	bool busy = false, fail = false, active = false;
 	bool StartRx(uint32_t addr) override {
 		assert(addr == CC3XX_ADDR_RNG);
-		if (busy) return false;
+		if (busy)
+			return false;
 		assert(!active);
 		active = true;
 		return true;
@@ -22,14 +61,16 @@ public:
 	int RxData(uint8_t *out, int len) override {
 		assert(active && len == 48);
 		++draws;
-		for (int i = 0; i < len; ++i) out[i] = (uint8_t)(serial * 73U + i);
+		for (int i = 0; i < len; ++i)
+			out[i] = (uint8_t)(serial * 73U + i);
 		++serial;
 		return fail ? len - 1 : len;
 	}
 	void StopRx() override { assert(active); active = false; ++stops; }
 };
 static void CheckZero(const uint8_t *p, size_t n) {
-	for (size_t i = 0; i < n; ++i) assert(p[i] == 0);
+	for (size_t i = 0; i < n; ++i)
+		assert(p[i] == 0);
 }
 int main(int argc, char **argv)
 {

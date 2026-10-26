@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	thingy52_mock.h
+
+@brief	Host test support: thingy52 mock.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #pragma once
 #include <assert.h>
 #include <string.h>
@@ -20,13 +50,32 @@ public:
 		memset(Algorithm, 0, sizeof(Algorithm));
 		memset(Raw, 0, sizeof(Raw));
 	}
-	operator DevIntrf_t * () override { return nullptr; }
-	DEVINTRF_TYPE Type() override { return DEVINTRF_TYPE_I2C; }
-	uint32_t Rate(uint32_t Rate) override { return Rate; }
-	uint32_t Rate() override { return 100000; }
-	void Disable() override {}
-	void Enable() override {}
-	int Rx(uint32_t, uint8_t *, int) override { return 0; }
+	operator DevIntrf_t * () override
+	{
+		return nullptr;
+	}
+	DEVINTRF_TYPE Type() override
+	{
+		return DEVINTRF_TYPE_I2C;
+	}
+	uint32_t Rate(uint32_t Rate) override
+	{
+		return Rate;
+	}
+	uint32_t Rate() override
+	{
+		return 100000;
+	}
+	void Disable() override
+	{
+	}
+	void Enable() override
+	{
+	}
+	int Rx(uint32_t, uint8_t *, int) override
+	{
+		return 0;
+	}
 	int Tx(uint32_t, const uint8_t *pData, int Len) override
 	{
 		assert(!RequireWake || Wake);
@@ -36,14 +85,35 @@ public:
 		Reg[0] |= 0x80;
 		return 1;
 	}
-	bool StartRx(uint32_t) override { return false; }
-	int RxData(uint8_t *, int) override { return 0; }
-	void StopRx() override {}
-	bool StartTx(uint32_t) override { return false; }
-	int TxData(const uint8_t *, int) override { return 0; }
-	void StopTx() override {}
-	bool RequestToSend(int) override { return true; }
-	void Reset() override {}
+	bool StartRx(uint32_t) override
+	{
+		return false;
+	}
+	int RxData(uint8_t *, int) override
+	{
+		return 0;
+	}
+	void StopRx() override
+	{
+	}
+	bool StartTx(uint32_t) override
+	{
+		return false;
+	}
+	int TxData(const uint8_t *, int) override
+	{
+		return 0;
+	}
+	void StopTx() override
+	{
+	}
+	bool RequestToSend(int) override
+	{
+		return true;
+	}
+	void Reset() override
+	{
+	}
 	int Read(uint32_t, const uint8_t *pCmd, int CmdLen, uint8_t *pData, int Len) override
 	{
 		int count;

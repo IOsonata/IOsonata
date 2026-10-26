@@ -3,6 +3,24 @@
 @brief ADXL372 high-g accelerometer, SPI/I2C
 @license MIT License
 Copyright (c) 2026 I-SYST inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 -------------------------------------------------------------------------*/
 #include "sensors/accel_adxl372.h"
 
@@ -147,11 +165,31 @@ bool AccelAdxl372::SetOutputRate(uint32_t MilliHz)
 
 	if (!vbInitialized)
 		return false;
-	if (MilliHz <= 400000) { odr = 0; actual = 400000; }
-	else if (MilliHz <= 800000) { odr = 1; actual = 800000; }
-	else if (MilliHz <= 1600000) { odr = 2; actual = 1600000; }
-	else if (MilliHz <= 3200000) { odr = 3; actual = 3200000; }
-	else { odr = 4; actual = 6400000; }
+	if (MilliHz <= 400000)
+	{
+		odr = 0;
+		actual = 400000;
+	}
+	else if (MilliHz <= 800000)
+	{
+		odr = 1;
+		actual = 800000;
+	}
+	else if (MilliHz <= 1600000)
+	{
+		odr = 2;
+		actual = 1600000;
+	}
+	else if (MilliHz <= 3200000)
+	{
+		odr = 3;
+		actual = 3200000;
+	}
+	else
+	{
+		odr = 4;
+		actual = 6400000;
+	}
 	if (!UpdateField(REG_TIMING, 0xE0, odr << 5))
 		return false;
 	Sensor::SamplingFrequency(actual);

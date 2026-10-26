@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	thingy52_motion_test.cpp
+
+@brief	Host test support: thingy52 motion test.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 // Thingy:52 motion register-transfer regressions. SPDX-License-Identifier: MIT
 #include <assert.h>
 #include <stdio.h>
@@ -16,7 +46,10 @@ public:
 	unsigned Samples = 0;
 	int FailMag = -1;
 
-	DEVINTRF_TYPE Type() override { return Spi ? DEVINTRF_TYPE_SPI : DEVINTRF_TYPE_I2C; }
+	DEVINTRF_TYPE Type() override
+	{
+		return Spi ? DEVINTRF_TYPE_SPI : DEVINTRF_TYPE_I2C;
+	}
 	int Read(uint32_t Addr, const uint8_t *Cmd, int CmdLen, uint8_t *Data, int Len) override
 	{
 		uint8_t reg = *Cmd;

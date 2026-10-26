@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	sam_model.h
+
+@brief	Host test support: sam model.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
@@ -11,7 +41,10 @@ struct SamReg {
 	SamReg &operator|=(uint32_t v) { return *this = uint32_t(*this) | v; }
 	SamReg &operator&=(uint32_t v) { return *this = uint32_t(*this) & v; }
 };
-struct SamKey { SamReg AESA_KEY; };
+struct SamKey
+{
+	SamReg AESA_KEY;
+};
 struct SamAes {
 	SamReg AES_CR, AES_MR, AES_ISR;
 	SamReg AES_KEYWR[8], AES_IDATAR[4], AES_ODATAR[4];
@@ -20,11 +53,23 @@ struct SamAes {
 	SamReg AESA_IDATA, AESA_ODATA;
 	SamAes();
 };
-struct SamPm { uint32_t PM_MCCTRL, PM_HSBMASK, PM_PBAMASK, PM_UNLOCK; };
-struct SamClock { SamReg SCIF_GCCTRL; };
-struct SamScif { SamClock SCIF_GCCTRL[5]; };
+struct SamPm
+{
+	uint32_t PM_MCCTRL, PM_HSBMASK, PM_PBAMASK, PM_UNLOCK;
+};
+struct SamClock
+{
+	SamReg SCIF_GCCTRL;
+};
+struct SamScif
+{
+	SamClock SCIF_GCCTRL[5];
+};
 struct SamRng { SamReg TRNG_ISR, TRNG_ODATA, TRNG_IDR, TRNG_CR; SamRng(); };
-struct SamPmc { uint32_t PMC_PCER1, PMC_PCSR1; };
+struct SamPmc
+{
+	uint32_t PMC_PCER1, PMC_PCSR1;
+};
 extern SamAes g_Aes;
 extern SamPm g_Pm;
 extern SamScif g_Scif;

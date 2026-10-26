@@ -1506,9 +1506,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 			break;
 #elif defined(NRF53_SERIES)
     		case 0:
-                NVIC_ClearPendingIRQ(NRF53_SERIAL0_IRQ);
-                NVIC_SetPriority(NRF53_SERIAL0_IRQ, pCfg->IntPrio);
-                NVIC_EnableIRQ(NRF53_SERIAL0_IRQ);
+				NVIC_ClearPendingIRQ(NRF53_SERIAL0_IRQ);
+				NVIC_SetPriority(NRF53_SERIAL0_IRQ, pCfg->IntPrio);
+				NVIC_EnableIRQ(NRF53_SERIAL0_IRQ);
                 break;
 #ifdef NRF5340_XXAA_APPLICATION
     	    case 1:

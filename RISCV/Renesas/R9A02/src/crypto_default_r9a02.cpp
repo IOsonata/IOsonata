@@ -35,7 +35,10 @@ static bool s_Busy = false;
 
 class CryptoR9a02 : public RngEngine {
 public:
-	void Disable() override { vbValid = false; }
+	void Disable() override
+	{
+		vbValid = false;
+	}
 	void Reset() override { (void)Enable(); }
 	bool Enable() override
 	{

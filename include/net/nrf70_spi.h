@@ -3,6 +3,24 @@
 @brief Low-level nRF7002 SPI command transport using IOsonata DeviceIntrf.
 @license MIT License
 Copyright (c) 2026 I-SYST inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 -------------------------------------------------------------------------*/
 #ifndef __NRF70_SPI_H__
 #define __NRF70_SPI_H__
@@ -16,7 +34,9 @@ Copyright (c) 2026 I-SYST inc.
  */
 class Nrf70Spi {
 public:
-	Nrf70Spi() : vpSpi(nullptr), vSelect(0), vLatency(0), vErrors(0) {}
+	Nrf70Spi() : vpSpi(nullptr), vSelect(0), vLatency(0), vErrors(0)
+	{
+	}
 	bool Init(DeviceIntrf * const pSpi, uint32_t ChipSelect, uint8_t SlaveLatency = 0);
 	bool ReadStatus(uint8_t Opcode, uint8_t &Value);
 	bool WriteStatus(uint8_t Opcode, uint8_t Value);
@@ -25,7 +45,10 @@ public:
 	bool ReadHighLatency(uint32_t Address, void *pData, uint32_t Length);
 	bool ReadRegister32(uint32_t Address, uint32_t &Value);
 	bool WriteRegister32(uint32_t Address, uint32_t Value);
-	uint32_t Errors() const { return vErrors; }
+	uint32_t Errors() const
+	{
+		return vErrors;
+	}
 
 private:
 	bool ReadBlock(uint32_t Address, void *pData, uint32_t Length, uint32_t Discard);

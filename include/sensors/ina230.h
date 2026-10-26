@@ -95,8 +95,14 @@ public:
 	int64_t CurrentMicroAmp();
 	uint64_t PowerMicroWatt();
 
-	uint16_t Calibration() const { return vCalibration; }
-	uint16_t Configuration() const { return vCfg.Config; }
+	uint16_t Calibration() const
+	{
+		return vCalibration;
+	}
+	uint16_t Configuration() const
+	{
+		return vCfg.Config;
+	}
 
 private:
 	bool ReadReg(uint8_t Reg, uint16_t &Value);

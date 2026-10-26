@@ -36,8 +36,10 @@ static void bytes(std::vector<uint8_t>&v,uint32_t w){for(int i=3;i>=0;i--)v.push
 uint32_t ModelRead(unsigned id)
 {
 #ifdef STM32L4S9xx
-	if(id == L_SR) return fault >= 1 && fault <= 3 ? 0U : AES_SR_CCF;
-	if(id == L_DOUT) return ModelRead(C_DOUT);
+	if(id == L_SR)
+		return fault >= 1 && fault <= 3 ? 0U : AES_SR_CCF;
+	if(id == L_DOUT)
+		return ModelRead(C_DOUT);
 #endif
 	if(id==C_SR){
 	 if(fault==1)return 0;
@@ -57,15 +59,19 @@ void ModelWrite(unsigned id,uint32_t value)
 		uint32_t mode = value & AES_CR_MODE;
 		uint32_t v = (value & AES_CR_KEYSIZE) ? CRYP_CR_KEYSIZE_1 : 0U;
 		v |= mode == AES_CR_MODE_0 ? CRYP_CR_ALGOMODE_AES_KEY : CRYP_CR_ALGOMODE_AES_ECB;
-		if (mode == AES_CR_MODE_1) v |= CRYP_CR_ALGODIR;
-		if (value & AES_CR_EN) v |= CRYP_CR_CRYPEN;
+		if (mode == AES_CR_MODE_1)
+			v |= CRYP_CR_ALGODIR;
+		if (value & AES_CR_EN)
+			v |= CRYP_CR_CRYPEN;
 		ModelWrite(C_CR, v);
 		return;
 	}
 	if (id >= L_K0 && id <= L_K7) { ModelWrite(C_K3R - (id - L_K0), value); return; }
 	if (id == L_DIN) { ModelWrite(C_DIN, value); return; }
-	if (id == R_EN && (value & RCC_AHB2ENR_AESEN)) value |= RCC_AHB2ENR_CRYPEN;
-	if (id == R_RST && (value & RCC_AHB2RSTR_AESRST)) value |= RCC_AHB2RSTR_CRYPRST;
+	if (id == R_EN && (value & RCC_AHB2ENR_AESEN))
+		value |= RCC_AHB2ENR_CRYPEN;
+	if (id == R_RST && (value & RCC_AHB2RSTR_AESRST))
+		value |= RCC_AHB2RSTR_CRYPRST;
 #endif
 	modelWrites++;
 	regs[id]=value;

@@ -58,7 +58,10 @@ SOFTWARE.
 class CryptoAesModes : public CipherEngine, virtual public MacEngine,
 					  public AeadEngine {
 public:
-	CryptoAesModes() { vbValid = false; }
+	CryptoAesModes()
+	{
+		vbValid = false;
+	}
 
 	// Default lifecycle; hardware subclasses manage their peripherals.
 	bool Enable() override { vbValid = true; return true; }

@@ -222,7 +222,8 @@ static void CmacSubkey(const uint8_t In[16], uint8_t Out[16])
 		Out[i] = (uint8_t)((b << 1) | carry);
 		carry = (b >> 7) & 1U;
 	}
-	if (msb != 0U) Out[15] ^= 0x87U;
+	if (msb != 0U)
+		Out[15] ^= 0x87U;
 }
 
 // One software AES-128 ECB block for the inherited CMAC. A hardware subclass
@@ -535,8 +536,10 @@ CRYPTO_STATUS CryptoAesModes::Aead(bool Encrypt, CRYPTO_AEAD_ALG Alg,
 	}
 	if (!AesOpBegin())
 	{
-		if (Len > 0U) memset(pOut, 0, Len);
-		if (Encrypt) memset(pNewTag, 0, TagLen);
+		if (Len > 0U)
+			memset(pOut, 0, Len);
+		if (Encrypt)
+			memset(pNewTag, 0, TagLen);
 		return CRYPTO_STATUS_BUSY;
 	}
 
@@ -594,8 +597,10 @@ CRYPTO_STATUS CryptoAesModes::Aead(bool Encrypt, CRYPTO_AEAD_ALG Alg,
 	}
 	if (!ok)
 	{
-		if (Len > 0U) memset(pOut, 0, Len);
-		if (Encrypt) memset(pNewTag, 0, TagLen);
+		if (Len > 0U)
+			memset(pOut, 0, Len);
+		if (Encrypt)
+			memset(pNewTag, 0, TagLen);
 	}
 	AesWipe(tag, sizeof(tag));
 	AesWipe(a, sizeof(a));

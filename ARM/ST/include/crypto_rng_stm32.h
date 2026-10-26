@@ -61,7 +61,10 @@ public:
 	void Reset() override;
 
 	CRYPTO_STATUS Random(uint8_t *pOut, size_t Len) override;
-	bool IsSecure() const override { return vbValid && vbEnabled; }
+	bool IsSecure() const override
+	{
+		return vbValid && vbEnabled;
+	}
 
 private:
 	bool vbEnabled;

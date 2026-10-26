@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	nrf.h
+
+@brief	Host test support: nrf.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 // Host register model for the production nRF5340 SPI driver.
 #pragma once
 #include <stdint.h>
@@ -14,8 +44,14 @@ struct NRF_SPIM_Type {
 	struct { uint32_t PTR, MAXCNT, AMOUNT, LIST; } RXD, TXD;
 };
 using NRF_SPIS_Type = NRF_SPIM_Type;
-struct NRF_QSPI_Type { uint32_t unused; };
-struct NRF_GPIO_Type { uint32_t PIN_CNF[32]; };
+struct NRF_QSPI_Type
+{
+	uint32_t unused;
+};
+struct NRF_GPIO_Type
+{
+	uint32_t PIN_CNF[32];
+};
 extern NRF_SPIM_Type g_Regs[5];
 extern NRF_QSPI_Type g_Qspi;
 extern NRF_GPIO_Type g_Gpio;
@@ -28,12 +64,26 @@ extern NRF_GPIO_Type g_Gpio;
 #define NRF_QSPI_S_BASE (&g_Qspi)
 extern uint32_t SystemCoreClock;
 extern bool g_IrqEnabled[6];
-inline uint32_t __get_PRIMASK() { return 0; }
-inline void __disable_irq() {}
-inline void __set_PRIMASK(uint32_t) {}
-inline void NVIC_ClearPendingIRQ(int) {}
-inline void NVIC_SetPriority(int, int) {}
-inline void NVIC_EnableIRQ(int n) { g_IrqEnabled[n] = true; }
+inline uint32_t __get_PRIMASK()
+{
+	return 0;
+}
+inline void __disable_irq()
+{
+}
+inline void __set_PRIMASK(uint32_t)
+{
+}
+inline void NVIC_ClearPendingIRQ(int)
+{
+}
+inline void NVIC_SetPriority(int, int)
+{
+}
+inline void NVIC_EnableIRQ(int n)
+{
+	g_IrqEnabled[n] = true;
+}
 enum { SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn, SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn,
 	SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn, SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn,
 	SPIM4_IRQn, QSPI_IRQn };

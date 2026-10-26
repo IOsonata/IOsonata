@@ -65,16 +65,28 @@ public:
 	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override;
 	void Reset(void) override;
 	void Detach(void) override { Reset(); }
-	uint8_t Alternate(void) const { return vAlternate; }
-	bool Configured(void) const { return vConfigured; }
+	uint8_t Alternate(void) const
+	{
+		return vAlternate;
+	}
+	bool Configured(void) const
+	{
+		return vConfigured;
+	}
 
 protected:
 	UsbdPeriodic() = default;
 	bool Register(const UsbdPeriodicCfg_t &Cfg, uint8_t Type,
 		uint16_t BufferSize);
 	void Rollback(void);
-	int DevNo(void) const { return vCfg.DevNo; }
-	uint8_t Endpoint(void) const { return vEndpoint; }
+	int DevNo(void) const
+	{
+		return vCfg.DevNo;
+	}
+	uint8_t Endpoint(void) const
+	{
+		return vEndpoint;
+	}
 	virtual bool OpenTransport(uint16_t Mps, uint8_t Interval) = 0;
 	virtual void CloseTransport(void) = 0;
 

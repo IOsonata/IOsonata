@@ -1069,7 +1069,8 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 			begin = Ticks();
 			for (completed = 0; completed < rounds; completed++)
 			{
-				if (pTarget->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, output) != CRYPTO_STATUS_OK) break;
+				if (pTarget->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, output) != CRYPTO_STATUS_OK)
+					break;
 			}
 			targetTicks = Ticks() - begin;
 			if (completed != rounds)
@@ -1080,7 +1081,8 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 			begin = Ticks();
 			for (completed = 0; completed < rounds; completed++)
 			{
-				if (pReference->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, reference) != CRYPTO_STATUS_OK) break;
+				if (pReference->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, reference) != CRYPTO_STATUS_OK)
+					break;
 			}
 			referenceTicks = Ticks() - begin;
 			if (completed != rounds)
@@ -1100,7 +1102,8 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 			begin = Ticks();
 			for (completed = 0; completed < rounds; completed++)
 			{
-				if (pTargetMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, tag, 16) != CRYPTO_STATUS_OK) break;
+				if (pTargetMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, tag, 16) != CRYPTO_STATUS_OK)
+					break;
 			}
 			targetTicks = Ticks() - begin;
 			if (completed != rounds)
@@ -1111,7 +1114,8 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 			begin = Ticks();
 			for (completed = 0; completed < rounds; completed++)
 			{
-				if (pReferenceMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, referenceTag, 16) != CRYPTO_STATUS_OK) break;
+				if (pReferenceMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, referenceTag, 16) != CRYPTO_STATUS_OK)
+					break;
 			}
 			referenceTicks = Ticks() - begin;
 			if (completed != rounds)
@@ -1141,7 +1145,8 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 			begin = Ticks();
 			for (completed = 0; completed < rounds; completed++)
 			{
-				if (pTargetAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, output, tag, 16) != CRYPTO_STATUS_OK) break;
+				if (pTargetAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, output, tag, 16) != CRYPTO_STATUS_OK)
+					break;
 			}
 			targetTicks = Ticks() - begin;
 			if (completed != rounds)
@@ -1152,7 +1157,8 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 			begin = Ticks();
 			for (completed = 0; completed < rounds; completed++)
 			{
-				if (pReferenceAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, reference, referenceTag, 16) != CRYPTO_STATUS_OK) break;
+				if (pReferenceAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, reference, referenceTag, 16) != CRYPTO_STATUS_OK)
+					break;
 			}
 			referenceTicks = Ticks() - begin;
 			if (completed != rounds)
@@ -1174,7 +1180,8 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 		completed = 0;
 		for (unsigned i = 0; i < rounds; i++)
 		{
-			if (pTargetRng->Random(output, len) != CRYPTO_STATUS_OK) break;
+			if (pTargetRng->Random(output, len) != CRYPTO_STATUS_OK)
+				break;
 			completed++;
 		}
 		targetTicks = Ticks() - begin;

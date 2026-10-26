@@ -129,7 +129,8 @@ protected:
 		IsoClearDiag();
 #ifdef ISO_TEST_RX_CLAMP
 		// Test-only oversize receive injection; advertised layout is unchanged.
-		if (Mps > ISO_TEST_RX_CLAMP) Mps = ISO_TEST_RX_CLAMP;
+		if (Mps > ISO_TEST_RX_CLAMP)
+			Mps = ISO_TEST_RX_CLAMP;
 #endif
 		return UsbdIso::OpenTransport(Mps, Interval);
 	}

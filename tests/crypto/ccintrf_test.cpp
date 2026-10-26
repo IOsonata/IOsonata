@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	ccintrf_test.cpp
+
+@brief	Host test support: ccintrf test.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 // Exercise the real C and C++ register transfer paths against a RAM register file.
 #include "cc3xx_intrf.h"
 #include <cassert>
@@ -7,8 +37,15 @@
 static uint32_t s_Registers[1024];
 static bool s_Enabled;
 uintptr_t Cc3xxBase() { return (uintptr_t)s_Registers; }
-bool Cc3xxEnable() { s_Enabled = true; return true; }
-void Cc3xxDisable() { s_Enabled = false; }
+bool Cc3xxEnable()
+{
+	s_Enabled = true;
+	return true;
+}
+void Cc3xxDisable()
+{
+	s_Enabled = false;
+}
 int main()
 {
 	Cc3xxIntrf intrf;
@@ -21,7 +58,8 @@ int main()
 	intrf.Enable();
 	assert(s_Enabled);
 	memcpy(address+1, &offset, 4);
-	for (unsigned i = 0; i < sizeof(input); ++i) input[i] = (uint8_t)(3*i+1);
+	for (unsigned i = 0; i < sizeof(input); ++i)
+		input[i] = (uint8_t)(3*i+1);
 	for (int len : {4, 16, 32}) {
 		memset(output, 0xA5, sizeof(output));
 		assert(api->Write(0, address+1, 4, input+1, len) == len);
@@ -63,7 +101,8 @@ int main()
 	assert(api->Read(0, address+1, 4, output, 4) == 0);
 	assert(api->Write(0, address+1, 4, input, 4) == 0);
 	address[1]--;
-	for (uint8_t b : output) assert(b == 0xA5);
+	for (uint8_t b : output)
+		assert(b == 0xA5);
 	assert(!atomic_flag_test_and_set(&dev->bBusy));
 	atomic_flag_clear(&dev->bBusy);
 	// CPU overhead comparison only: RAM registers do not model peripheral timing.

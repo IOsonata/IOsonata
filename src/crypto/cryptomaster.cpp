@@ -439,7 +439,8 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 				memcpy(counters + i, ctr, AES_BLOCK);
 				for (int j = AES_BLOCK - 1; j >= 0; j--)
 				{
-					if (++ctr[j] != 0U) break;
+					if (++ctr[j] != 0U)
+						break;
 				}
 			}
 			if (!CmAesBlock(this, key, keyLen, true, counters, stream, padded))

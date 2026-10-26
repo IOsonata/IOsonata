@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	pka_model_test.cpp
+
+@brief	Host test support: pka model test.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 // Host register models for the production CC3xx and BA414EP drivers.
 // OpenSSL supplies arithmetic only; driver sequencing and key handling run unchanged.
 // These models do not validate silicon timing or hardware countermeasures.
@@ -60,14 +90,27 @@ public:
 	bool SramSwitchClear = false;
 	DevIntrf_t Intrf = {};
 
-	operator DevIntrf_t *() override { return &Intrf; }
-	DEVINTRF_TYPE Type() override { return DEVINTRF_TYPE_CRYPTO; }
-	void Enable() override {}
-	void Disable() override {}
-	void Reset() override {}
+	operator DevIntrf_t *() override
+	{
+		return &Intrf;
+	}
+	DEVINTRF_TYPE Type() override
+	{
+		return DEVINTRF_TYPE_CRYPTO;
+	}
+	void Enable() override
+	{
+	}
+	void Disable() override
+	{
+	}
+	void Reset() override
+	{
+	}
 	bool StartRx(uint32_t addr) override {
 		assert(addr == CC3XX_ADDR_RNG);
-		if (Held || Busy) return false;
+		if (Held || Busy)
+			return false;
 		Held = true;
 		return true;
 	}
@@ -75,7 +118,10 @@ public:
 		assert(Held && len == 48);
 		return RAND_bytes(out, len) == 1 ? len : 0;
 	}
-	void StopRx() override { Held = false; }
+	void StopRx() override
+	{
+		Held = false;
+	}
 
 	BIGNUM *Operand(unsigned Index, bool Immediate)
 	{
@@ -109,7 +155,8 @@ public:
 		uint32_t destAddr;
 		uint32_t scratchAddr;
 		Operations++;
-		if (Operations == FailOperation) Fault = true;
+		if (Operations == FailOperation)
+			Fault = true;
 		switch (op)
 		{
 		case 4: assert(BN_add(r, a, b)); break;
@@ -169,7 +216,8 @@ public:
 		assert(AddrLen == 4 && Len == 4 && addr < sizeof(Reg));
 		if (addr == 0xB0 || addr == 0xB4)
 		{
-			if (addr == 0xB4) DoneReads++;
+			if (addr == 0xB4)
+				DoneReads++;
 			v = Fault ? 0 : 1;
 		}
 		else if (addr == 0xDC)
@@ -184,8 +232,10 @@ public:
 			SramReads++;
 			ResultRead = true;
 		}
-		else if (addr == 0xC50) v = 1;
-		else if (addr == 0xD50) v = Out >= 16;
+		else if (addr == 0xC50)
+			v = 1;
+		else if (addr == 0xD50)
+			v = Out >= 16;
 		else if (addr == 0xD00)
 		{
 			assert(Out < 16);
@@ -217,13 +267,15 @@ public:
 			SramDirection = 0U;
 			SramSwitchClear = false;
 		}
-		if (addr == 0xD4 && v == 0 && ResultRead && FailCleanup) Fault = true;
+		if (addr == 0xD4 && v == 0 && ResultRead && FailCleanup)
+			Fault = true;
 		if (addr == 0xE0)
 		{
 			SramSwitchClear = true;
 			SramClears++;
 		}
-		if (addr == 0xE4) SramReadAddresses++;
+		if (addr == 0xE4)
+			SramReadAddresses++;
 		Reg[addr / 4] = v;
 		if (addr == 0xD8)
 		{
@@ -236,8 +288,10 @@ public:
 			Ram[Reg[0xD4 / 4]++] = v;
 			SramWrites++;
 		}
-		if (addr == 0x80) Execute(v);
-		if (addr == 0xC58 || addr == 0xC48) In = 0;
+		if (addr == 0x80)
+			Execute(v);
+		if (addr == 0xC58 || addr == 0xC48)
+			In = 0;
 		if (addr == 0xC00)
 		{
 			assert(In < 64);
@@ -286,33 +340,64 @@ int Cc3xxIntrf::Write(uint32_t dev, const uint8_t *addr, int alen, const uint8_t
 
 extern "C" bool Cc3xxEnable(void) { return true; }
 extern "C" void Cc3xxDisable(void) { memset(s_Cc.Reg, 0, sizeof(s_Cc.Reg)); }
-Cc3xxIntrf *Cc3xxIntrfInstance(void) { return &s_Cc; }
+Cc3xxIntrf *Cc3xxIntrfInstance(void)
+{
+	return &s_Cc;
+}
 bool Cc3xxIntrf::OpHold(const void *)
 {
-	if (s_Cc.Held || s_Cc.Busy) return false;
+	if (s_Cc.Held || s_Cc.Busy)
+		return false;
 	s_Cc.Held = true;
 	return true;
 }
-bool Cc3xxIntrf::OpRelease(const void *) { s_Cc.Held = false; return true; }
+bool Cc3xxIntrf::OpRelease(const void *)
+{
+	s_Cc.Held = false;
+	return true;
+}
 
 // Production RNG uses the entropy transfer above and production CryptoCell SHA.
 #ifndef CRYPTO_LINK_TEST
 class BaModel : public DeviceIntrf {
 public:
 	bool DenyReset = false;
-	bool StartTx(uint32_t) override { return !DenyReset; }
-	void StopTx() override {}
-	void Reset() override {}
+	bool StartTx(uint32_t) override
+	{
+		return !DenyReset;
+	}
+	void StopTx() override
+	{
+	}
+	void Reset() override
+	{
+	}
 	DevIntrf_t Intrf = {};
 	uint8_t Ram[16 * 512] = {};
 	uint32_t Command = 0, Status = 0;
 	unsigned Operations = 0;
-	operator DevIntrf_t *() override { return &Intrf; }
-	DEVINTRF_TYPE Type() override { return DEVINTRF_TYPE_CRYPTO; }
-	uint32_t Rate(uint32_t) override { return 0; }
-	uint32_t Rate() override { return 0; }
-	void Enable() override {}
-	void Disable() override {}
+	operator DevIntrf_t *() override
+	{
+		return &Intrf;
+	}
+	DEVINTRF_TYPE Type() override
+	{
+		return DEVINTRF_TYPE_CRYPTO;
+	}
+	uint32_t Rate(uint32_t) override
+	{
+		return 0;
+	}
+	uint32_t Rate() override
+	{
+		return 0;
+	}
+	void Enable() override
+	{
+	}
+	void Disable() override
+	{
+	}
 	uint8_t *Slot(unsigned n) { return Ram + (n + 1) * 512 - 32; }
 	void Execute()
 	{
@@ -335,7 +420,8 @@ public:
 			assert(Slot(0)[31] == 13 && Slot(6)[31] == 7 && Slot(8)[31] == 8);
 			memset(Slot(10), 0, 32); Slot(10)[31] = 2;
 		}
-		else if (!valid) Status = BA414EP_STATUS_POINT_ERROR;
+		else if (!valid)
+			Status = BA414EP_STATUS_POINT_ERROR;
 		else if ((Command & 0xff) == BA414EP_CMD_ECC_PTMUL)
 		{
 			assert(EC_POINT_mul(group, point, nullptr, point, k, ctx));
@@ -359,8 +445,10 @@ public:
 		else
 		{
 			assert(Len == 4);
-			if (addr == BA414EP_REG_HWCONFIG) v = 512 | BA414EP_HWCONFIG_PRIME_FIELD_Msk;
-			if (addr == BA414EP_REG_STATUS) v = Status;
+			if (addr == BA414EP_REG_HWCONFIG)
+				v = 512 | BA414EP_HWCONFIG_PRIME_FIELD_Msk;
+			if (addr == BA414EP_REG_STATUS)
+				v = Status;
 			memcpy(pData, &v, 4);
 		}
 		return Len;
@@ -377,8 +465,10 @@ public:
 		else
 		{
 			assert(Len == 4);
-			if (addr == BA414EP_REG_COMMAND) Command = Word(pData);
-			if (addr == BA414EP_REG_CONTROL && (Word(pData) & BA414EP_CONTROL_START)) Execute();
+			if (addr == BA414EP_REG_COMMAND)
+				Command = Word(pData);
+			if (addr == BA414EP_REG_CONTROL && (Word(pData) & BA414EP_CONTROL_START))
+				Execute();
 		}
 		return Len;
 	}
@@ -386,11 +476,21 @@ public:
 
 class ImportRng : public RngEngine {
 public:
-	bool Enable() override { return true; }
-	void Disable() override {}
-	void Reset() override {}
+	bool Enable() override
+	{
+		return true;
+	}
+	void Disable() override
+	{
+	}
+	void Reset() override
+	{
+	}
 	CRYPTO_STATUS Status = CRYPTO_STATUS_FAIL;
-	bool IsSecure() const override { return true; }
+	bool IsSecure() const override
+	{
+		return true;
+	}
 	CRYPTO_STATUS Random(uint8_t *pOut, size_t Len) override
 	{
 		memset(pOut, 0, Len);

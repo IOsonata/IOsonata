@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	aes256_test.cpp
+
+@brief	Host test support: aes256 test.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 // Independent AES-256 checks and hardware override inheritance.
 #include <cassert>
 #include <cstring>
@@ -13,7 +43,11 @@ static unsigned s_BlockCalls;
 // Model a hardware override inheriting software support for wider keys.
 class Aes128Target : public CryptoSoftAes {
 public:
-	bool Enable() override { vbValid = true; return true; }
+	bool Enable() override
+	{
+		vbValid = true;
+		return true;
+	}
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int Encrypt, const CryptoKey &Key,
 			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut) override
 	{
@@ -30,8 +64,15 @@ public:
 // never acquire or call the AES-128-only block hooks.
 class Aes128Hooks : public CryptoSoftAes {
 protected:
-	bool AesOpBegin() override { s_BlockCalls++; return false; }
-	void AesOpEnd() override { s_BlockCalls++; }
+	bool AesOpBegin() override
+	{
+		s_BlockCalls++;
+		return false;
+	}
+	void AesOpEnd() override
+	{
+		s_BlockCalls++;
+	}
 	bool AesEcbEncrypt(const uint8_t *, const uint8_t *, uint8_t *) override
 	{
 		s_BlockCalls++;
@@ -47,8 +88,15 @@ public:
 	unsigned FailBlock = 0;
 	bool Busy = false;
 protected:
-	bool AesOpBegin() override { Begins++; return !Busy; }
-	void AesOpEnd() override { Ends++; }
+	bool AesOpBegin() override
+	{
+		Begins++;
+		return !Busy;
+	}
+	void AesOpEnd() override
+	{
+		Ends++;
+	}
 	bool AesEcbEncrypt(const uint8_t *pKey, const uint8_t *pIn, uint8_t *pOut) override
 	{
 		Blocks++;

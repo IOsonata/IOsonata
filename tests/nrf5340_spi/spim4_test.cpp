@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	spim4_test.cpp
+
+@brief	Host test support: spim4 test.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -23,8 +53,14 @@ static uint32_t s_LastPtr;
 static uint8_t s_Rx[70000], s_Tx[800];
 static SPI s_Spi;
 
-void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
-bool nRFxQSPIInit(SPIDev_t *) { s_QspiCalled = true; return true; }
+void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
+{
+}
+bool nRFxQSPIInit(SPIDev_t *)
+{
+	s_QspiCalled = true;
+	return true;
+}
 
 static void Complete()
 {
@@ -38,21 +74,24 @@ static void Complete()
 
 void TestTask::operator=(uint32_t value)
 {
-	if (!value) return;
+	if (!value)
+		return;
 	auto &r = g_Regs[4];
 	if (this == &r.TASKS_STOP)
 	{
 		r.EVENTS_STOPPED = s_StopFail ? 0 : 1;
 		return;
 	}
-	if (this != &r.TASKS_START) return;
+	if (this != &r.TASKS_START)
+		return;
 	++s_Blocks;
 	s_LastPtr = r.RXD.MAXCNT ? r.RXD.PTR : r.TXD.PTR;
 	r.RXD.AMOUNT = r.TXD.AMOUNT = 0;
 	if ((s_Poll || s_AutoIrq) && !s_Timeout)
 	{
 		Complete();
-		if (s_AutoIrq) SPIM4_IRQHandler();
+		if (s_AutoIrq)
+			SPIM4_IRQHandler();
 	}
 }
 
@@ -90,12 +129,14 @@ int main()
 	DevIntrf_t *intrf = s_Spi;
 	assert(intrf->bDma && g_IrqEnabled[SPIM4_IRQn]);
 	assert(g_Regs[4].ORC == 0x37 && g_Regs[4].PSEL.MISO == 10);
-	for (auto &entry : g_SharedIntrf) assert(entry.pIntrf == nullptr);
+	for (auto &entry : g_SharedIntrf)
+		assert(entry.pIntrf == nullptr);
 	assert(s_Spi.Rate(0) == 125000);
 	assert(s_Spi.Rate(700000) == 500000);
 	assert(s_Spi.Rate(32000000) == 16000000); // RX cannot operate at 32 Mbps.
 	assert(s_Spi.Rate(8000000) == 8000000);
-	for (unsigned i = 0; i < sizeof(s_Tx); ++i) s_Tx[i] = i;
+	for (unsigned i = 0; i < sizeof(s_Tx); ++i)
+		s_Tx[i] = i;
 
 	// Async TX owns a copy and completes through the actual dedicated vector.
 	assert(s_Spi.Tx(0, s_Tx, 64) == -1);

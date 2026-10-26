@@ -62,7 +62,7 @@ void SERIAL1_IRQHandler(void)
 
 void SERIAL2_IRQHandler(void)
 {
-    if (g_SharedIntrf[2].pIntrf != NULL && g_SharedIntrf[2].Handler != NULL)
+	if (g_SharedIntrf[2].pIntrf != NULL && g_SharedIntrf[2].Handler != NULL)
     {
     	g_SharedIntrf[2].Handler(2, g_SharedIntrf[2].pIntrf);
     }
@@ -70,7 +70,7 @@ void SERIAL2_IRQHandler(void)
 
 void SERIAL3_IRQHandler(void)
 {
-    if (g_SharedIntrf[3].pIntrf != NULL && g_SharedIntrf[3].Handler != NULL)
+	if (g_SharedIntrf[3].pIntrf != NULL && g_SharedIntrf[3].Handler != NULL)
     {
     	g_SharedIntrf[3].Handler(3, g_SharedIntrf[3].pIntrf);
     }

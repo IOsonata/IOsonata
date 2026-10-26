@@ -515,10 +515,10 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
 	{
 #ifdef SPIM_PRESENT
-        dev->pDmaReg->PSEL.MISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		dev->pDmaReg->PSEL.MISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
 		dev->pDmaReg->PSEL.MOSI = -1;
 #else
-        dev->pReg->PSELMISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		dev->pReg->PSELMISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
 		dev->pReg->PSELMOSI = -1;
 #endif
 	}
@@ -841,10 +841,10 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
     if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
     {
 #ifdef SPIM_PRESENT
-        dev->pDmaReg->PSEL.MOSI = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		dev->pDmaReg->PSEL.MOSI = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
         dev->pDmaReg->PSEL.MISO = -1;
 #else
-        dev->pReg->PSELMOSI = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		dev->pReg->PSELMOSI = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
         dev->pReg->PSELMISO = -1;
 #endif
     }
@@ -1006,11 +1006,11 @@ void nRFxSPIStopTx(DevIntrf_t * const pDev)
     if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
     {
 #ifdef SPIM_PRESENT
-        dev->pDmaReg->PSEL.MISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		dev->pDmaReg->PSEL.MISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
         dev->pDmaReg->PSEL.MOSI = -1;
 #else
         dev->pReg->PSELMOSI = -1;
-        dev->pReg->PSELMISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		dev->pReg->PSELMISO = nRFxSPIPinSelect(dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
 #endif
     }
 }
@@ -1362,14 +1362,14 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 		NRF_SPIS_Type *sreg = g_nRFxSPIDev[pDev->Cfg.DevNo].pDmaSReg;
 
 #ifdef SPIM_PRESENT
-        sreg->PSEL.SCK = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX]);
-        sreg->PSEL.MISO = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
-        sreg->PSEL.MOSI = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX]);
+		sreg->PSEL.SCK = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX]);
+		sreg->PSEL.MISO = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		sreg->PSEL.MOSI = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX]);
 		sreg->PSEL.CSN = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX]);
 #else
-        sreg->PSELSCK = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX]);
-        sreg->PSELMISO = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
-        sreg->PSELMOSI = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX]);
+		sreg->PSELSCK = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX]);
+		sreg->PSELMISO = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX]);
+		sreg->PSELMOSI = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_MOSI_IOPIN_IDX]);
 		sreg->PSELCSN = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX]);
 #endif
 		sreg->ORC = 0xFF;
@@ -1569,23 +1569,23 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
                 NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
                 NVIC_SetPriority(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
-                break;
+				break;
     	    case 1:
                 NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
                 NVIC_SetPriority(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
-                break;
+				break;
     	    case 2:
                 NVIC_ClearPendingIRQ(SPIM2_SPIS2_SPI2_IRQn);
                 NVIC_SetPriority(SPIM2_SPIS2_SPI2_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM2_SPIS2_SPI2_IRQn);
-                break;
+				break;
 #ifdef NRF52840_XXAA
     	    case 3:
                 NVIC_ClearPendingIRQ(SPIM3_IRQn);
                 NVIC_SetPriority(SPIM3_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM3_IRQn);
-                break;
+				break;
     	    case 4:
                 NVIC_ClearPendingIRQ(QSPI_IRQn);
                 NVIC_SetPriority(QSPI_IRQn, pCfgData->IntPrio);
@@ -1597,49 +1597,49 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
                 NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
                 NVIC_SetPriority(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
-                break;
+				break;
     	    case 1:
                 NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
                 NVIC_SetPriority(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
-                break;
+				break;
     	    case 2:
                 NVIC_ClearPendingIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
                 NVIC_SetPriority(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
-                break;
+				break;
     	    case 3:
                 NVIC_ClearPendingIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
                 NVIC_SetPriority(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
-                break;
+				break;
 #elif defined(NRF53_SERIES)
     		case 0:
-                NVIC_ClearPendingIRQ(NRF53_SERIAL0_IRQ);
-                NVIC_SetPriority(NRF53_SERIAL0_IRQ, pCfgData->IntPrio);
-                NVIC_EnableIRQ(NRF53_SERIAL0_IRQ);
-                break;
+				NVIC_ClearPendingIRQ(NRF53_SERIAL0_IRQ);
+				NVIC_SetPriority(NRF53_SERIAL0_IRQ, pCfgData->IntPrio);
+				NVIC_EnableIRQ(NRF53_SERIAL0_IRQ);
+				break;
 #ifdef NRF5340_XXAA_APPLICATION
     	    case 1:
                 NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
                 NVIC_SetPriority(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
-                break;
+				break;
     	    case 2:
                 NVIC_ClearPendingIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
                 NVIC_SetPriority(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
-                break;
+				break;
     	    case 3:
                 NVIC_ClearPendingIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
                 NVIC_SetPriority(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
-                break;
+				break;
     	    case 4:
-                NVIC_ClearPendingIRQ(SPIM4_IRQn);
-                NVIC_SetPriority(SPIM4_IRQn, pCfgData->IntPrio);
-                NVIC_EnableIRQ(SPIM4_IRQn);
-                break;
+				NVIC_ClearPendingIRQ(SPIM4_IRQn);
+				NVIC_SetPriority(SPIM4_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SPIM4_IRQn);
+				break;
 			case 5:
 				NVIC_ClearPendingIRQ(QSPI_IRQn);
 				NVIC_SetPriority(QSPI_IRQn, pCfgData->IntPrio);
@@ -1651,12 +1651,12 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
                 NVIC_ClearPendingIRQ(SPI0_TWI0_IRQn);
                 NVIC_SetPriority(SPI0_TWI0_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPI0_TWI0_IRQn);
-                break;
+				break;
     	    case 1:
                 NVIC_ClearPendingIRQ(SPI1_TWI1_IRQn);
                 NVIC_SetPriority(SPI1_TWI1_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPI1_TWI1_IRQn);
-                break;
+				break;
 #endif
     	}
 

@@ -449,7 +449,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 {
 	s_pGpIOSenseEvt = s_GpIOSenseEvt;
 
-    if (IntNo < -1 || IntNo >= IOPIN_MAX_INT)
+	if (IntNo < -1 || IntNo >= IOPIN_MAX_INT)
 		return false;
 
 #ifdef NRF5340_XXAA_NETWORK

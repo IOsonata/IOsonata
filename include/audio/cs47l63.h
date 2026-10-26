@@ -100,9 +100,15 @@ public:
 	bool HeadphoneGain(int MilliDb);
 	bool StopAudio();
 	bool ReadInterrupts(uint32_t &Faults, uint32_t &FllEvents);
-	bool AudioConfigured() const { return vbAudioConfigured; }
+	bool AudioConfigured() const
+	{
+		return vbAudioConfigured;
+	}
 
-	uint8_t Revision() const { return vRevision; }
+	uint8_t Revision() const
+	{
+		return vRevision;
+	}
 	bool IrqActive() const;
 
 private:

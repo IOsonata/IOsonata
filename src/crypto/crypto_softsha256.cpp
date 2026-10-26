@@ -295,7 +295,8 @@ CRYPTO_STATUS CryptoHmacSha256(HashEngine *pHash, CRYPTO_MAC_ALG Alg, const Cryp
 	if (st == CRYPTO_STATUS_OK)
 	{
 		// Inner digest: H((K xor ipad) || message).
-		for (i = 0; i < HMAC_BLOCK; i++) key[i] ^= 0x36U;
+		for (i = 0; i < HMAC_BLOCK; i++)
+			key[i] ^= 0x36U;
 		if (pHash->HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
 			pHash->HashUpdate(ctx, key, sizeof(key)) != CRYPTO_STATUS_OK ||
 			pHash->HashUpdate(ctx, pMsg, Len) != CRYPTO_STATUS_OK ||
@@ -309,7 +310,8 @@ CRYPTO_STATUS CryptoHmacSha256(HashEngine *pHash, CRYPTO_MAC_ALG Alg, const Cryp
 		// Outer digest: H((K xor opad) || inner).
 		// Convert ipad to opad in place. HashUpdate consumes inner before
 		// HashFinal reuses it for the outer digest (asynchronous use is rejected).
-		for (i = 0; i < HMAC_BLOCK; i++) key[i] ^= 0x36U ^ 0x5CU;
+		for (i = 0; i < HMAC_BLOCK; i++)
+			key[i] ^= 0x36U ^ 0x5CU;
 		if (pHash->HashInit(CRYPTO_HASH_SHA256, ctx) != CRYPTO_STATUS_OK ||
 			pHash->HashUpdate(ctx, key, sizeof(key)) != CRYPTO_STATUS_OK ||
 			pHash->HashUpdate(ctx, inner, sizeof(inner)) != CRYPTO_STATUS_OK ||

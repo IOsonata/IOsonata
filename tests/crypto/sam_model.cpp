@@ -1,3 +1,33 @@
+/**-------------------------------------------------------------------------
+@file	sam_model.cpp
+
+@brief	Host test support: sam model.
+
+@license
+
+MIT License
+
+Copyright (c) 2019 I-SYST inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+----------------------------------------------------------------------------*/
+
 #include "sam_model.h"
 #include "crypto/crypto.h"
 #include <openssl/evp.h>
@@ -127,8 +157,10 @@ SamReg::operator uint32_t() const
 		memcpy(&v, s_Output + 4 * (id - 40), 4);
 		return v;
 	}
-	if (id == 5) return g_AesTimeout ? 0U : 1U;
-	if (id == 6) return g_AesTimeout ? 0U : 0x10001U;
+	if (id == 5)
+		return g_AesTimeout ? 0U : 1U;
+	if (id == 6)
+		return g_AesTimeout ? 0U : 0x10001U;
 	if (id == 7) {
 		clocked = (g_Pm.PM_HSBMASK & PM_HSBMASK_HTOP0) != 0U &&
 			(g_Pm.PM_PBAMASK & PM_PBAMASK_TRNG) != 0U;
@@ -170,7 +202,8 @@ int main()
 	memset(out, 0xA5, sizeof(out));
 	g_AesTimeout = true;
 	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, in, 16, out+1) == CRYPTO_STATUS_FAIL);
-	for (unsigned i = 1; i < 17; i++) assert(out[i] == 0);
+	for (unsigned i = 1; i < 17; i++)
+		assert(out[i] == 0);
 	assert(out[0] == 0xA5 && out[17] == 0xA5);
 	g_AesTimeout = false;
 	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, in, 16, out+1) == CRYPTO_STATUS_OK);
