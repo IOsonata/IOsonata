@@ -4,7 +4,7 @@ This directory is reserved for source implementations proven compatible across
 multiple supported Renesas MCU targets.
 
 The current RA4M1 and RE01 review found common IOsonata interfaces but no
-register-level GPIO, interrupt, SCI/DMAC, clock, I2C, startup or USB backend that
+register-level GPIO, interrupt, SCI/DMAC, clock, I2C, startup or USB implementation that
 is safe to share at this level. Do not move target drivers here solely because
 the vendor is Renesas or the devices belong to the RA family.
 

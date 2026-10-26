@@ -64,7 +64,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 
 - The board uses nPM6001 BUCK3 for the Wi-Fi power domain; other outputs are unused or hardware-disabled.
 - `pm_npm6001` does not alter rails on initialization. On Thingy:91 X, nPM1300 LDO1 is used as the nPM6001 ENABLE load switch and nPM1300 GPIO4 reads nPM6001 READY; the board test performs that sequence before accessing nPM6001.
-- The internal BUCK3 DAC supports 500–3300 mV in 25 mV steps. Voltage updates are performed in forced PWM mode and restore the prior mode. The Thingy:91 X test leaves voltage programming disabled by default and reports the existing BUCK3 setting before enabling the rail.
+- The internal BUCK3 DAC supports 500-3300 mV in 25 mV steps. Voltage updates are performed in forced PWM mode and restore the prior mode. The Thingy:91 X test leaves voltage programming disabled by default and reports the existing BUCK3 setting before enabling the rail.
 - The driver covers BUCK3, thermal warning and BUCK3 overcurrent monitoring. General-purpose nPM6001 GPIO, watchdog, hibernate and unused output-rail programming are not integrated for Thingy:91 X.
 - Test project: `ARM/Nordic/nRF91/nRF91x1/exemples/nPM6001Test`.
 

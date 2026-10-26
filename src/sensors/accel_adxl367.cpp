@@ -52,7 +52,9 @@ SOFTWARE.
 AccelAdxl367::AccelAdxl367() :
 	vbInitialized(false), vbFifoEnabled(false), vFilter(0), vPower(0),
 	vFifoCtl(0), vFifoReadMode(0xC0), vFifoSamples(0), vInt1Map(0),
-	vInt2Map(0), vFifoOverruns(0) {}
+	vInt2Map(0), vFifoOverruns(0)
+{
+}
 
 int16_t AccelAdxl367::Sign14(uint16_t Value)
 {
@@ -145,6 +147,8 @@ bool AccelAdxl367::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vbInitialized = true;
 	if (!SetSamplingFrequency(Cfg.Freq))
 		goto fail;
+	// 4000 LSB/g at +/-2 g gives 8000 nominal full-scale counts.
+	AccelSensor::Range(8000);
 	scale = Cfg.Scale <= 2 ? 2 : Cfg.Scale <= 4 ? 4 : 8;
 	if (Scale(scale) != scale)
 		goto fail;
@@ -213,7 +217,9 @@ uint16_t AccelAdxl367::Scale(uint16_t Value)
 	if (!WriteReg(REG_FILTER, filter))
 		return AccelSensor::Scale();
 	vFilter = filter;
-	return AccelSensor::Scale(scale);
+	AccelSensor::Scale(scale);
+	vData.GFactor = (float)scale / vRange;
+	return scale;
 }
 
 bool AccelAdxl367::Enable()

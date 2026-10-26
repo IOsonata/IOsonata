@@ -46,7 +46,8 @@ SOFTWARE.
 
 AccelAdxl372::AccelAdxl372() :
 	vbInitialized(false), vPower(0), vMeasure(0), vInt1(0), vInt2(0),
-	vFifoControl(0), vFifoEntries(0), vFifoOverruns(0) {
+	vFifoControl(0), vFifoEntries(0), vFifoOverruns(0)
+{
 	vLastInterrupt.Status1 = 0;
 	vLastInterrupt.Status2 = 0;
 	vLastInterrupt.FifoEntries = 0;
@@ -142,7 +143,9 @@ bool AccelAdxl372::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		goto fail;
 	if (!SetBandwidth(2))
 		goto fail;
-	AccelSensor::Scale(200);
+	// 10 LSB/g at +/-200 g gives 2000 nominal full-scale counts.
+	AccelSensor::Range(2000);
+	Scale(200);
 	if (!Mode(Cfg.OpMode, SamplingFrequency()))
 		goto fail;
 	DeviceID(ADXL372_PART_ID);
@@ -154,8 +157,14 @@ fail:
 
 uint16_t AccelAdxl372::Scale(uint16_t Value)
 {
+	uint16_t scale;
+
 	(void)Value;
-	return AccelSensor::Scale(200);
+	scale = AccelSensor::Scale(200);
+
+	if (scale != 0)
+		vData.GFactor = 0.1f;
+	return scale;
 }
 
 bool AccelAdxl372::SetOutputRate(uint32_t MilliHz)
@@ -223,9 +232,18 @@ bool AccelAdxl372::SetPowerMode(Adxl372PowerMode Mode)
 	return true;
 }
 
-bool AccelAdxl372::Enable() { return SetPowerMode(ADXL372_MEASUREMENT); }
-void AccelAdxl372::Disable() { SetPowerMode(ADXL372_STANDBY); }
-bool AccelAdxl372::StartSampling() { return Enable(); }
+bool AccelAdxl372::Enable()
+{
+	return SetPowerMode(ADXL372_MEASUREMENT);
+}
+void AccelAdxl372::Disable()
+{
+	SetPowerMode(ADXL372_STANDBY);
+}
+bool AccelAdxl372::StartSampling()
+{
+	return Enable();
+}
 
 void AccelAdxl372::Reset()
 {

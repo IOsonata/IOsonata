@@ -63,7 +63,7 @@ RE01 library `.cproject` files; those paths now match their `_e2` project names.
 Therefore `ARM/Renesas/src` is intentionally sparse. Renesas-wide code goes
 there only after at least two supported targets prove compatible peripheral IP.
 The shared `ARM/Renesas/include/usb_ctrlr.h` is an ABI, while the RA4M1 USBFS
-register backend remains under `RA4/RA4M1/src`. This avoids compile-time
+register implementation remains under `RA4/RA4M1/src`. This avoids compile-time
 MCU conditionals in a nominally common source.
 
 ## RA4M1 migration checklist

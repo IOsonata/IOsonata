@@ -7,7 +7,7 @@ Status: **RA4M1 USBFS software port complete; physical USB validation pending**.
 The generic IOsonata USB stack remains in `include/usb` and `src/usb`.
 Renesas-wide controller declarations remain in `ARM/Renesas/include/usb_ctrlr.h`.
 Applications use the generic USB interfaces and never select a controller
-backend.
+implementation.
 
 RA4M1 USBFS is implemented in
 `ARM/Renesas/RA4/RA4M1/src/usb_ctrlr_ra4m1.cpp`. It is target-local because
@@ -15,7 +15,7 @@ the current supported Renesas targets do not share a proven register-compatible
 USB controller. Do not move it to `ARM/Renesas/src` until a second target
 proves that compatibility.
 
-The backend is FSP-free. It uses the native RA4M1 device header and the existing
+The implementation is FSP-free. It uses the native RA4M1 device header and the existing
 IOsonata ICU helper. Renesas FSP register sequences were used only as a hardware
 reference.
 
@@ -57,7 +57,7 @@ links the same generic USB headers/sources and the RA4M1 controller source.
 `RA4/RA4M1/exemples/UsbCdcLoopback/ioc` builds the existing generic CDC
 loopback application for the EK-RA4M1 device USB connector.
 `RA4/RA4M1/exemples/UsbComboStress/ioc` builds the generic combined CDC,
-HID, interrupt and isochronous stress application against the same backend.
+HID, interrupt and isochronous stress application against the same implementation.
 
 ## Validation still requiring hardware
 

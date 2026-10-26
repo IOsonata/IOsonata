@@ -29,6 +29,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include <assert.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "sensors/accel_adxl367.h"
@@ -68,9 +69,6 @@ int main()
 	bus367.Reg[1] = bus372.Reg[1] = 0x1D;
 	bus367.Reg[2] = ADXL367_PART_ID;
 	bus372.Reg[2] = ADXL372_PART_ID;
-	// Provide the generic conversion range; this test exercises rate selection.
-	s_Adxl367.Range(8192);
-	s_Adxl372.Range(2048);
 	cfg.OpMode = SENSOR_OPMODE_CONTINUOUS;
 	cfg.Scale = 2;
 	cfg.Freq = 13000;
@@ -123,5 +121,42 @@ int main()
 	assert(bus372.Reg[0x3D] == 0x9B);
 	bus372.FailWrite = -1;
 	Check372(bus372, 410000, 400000, 0);
+	// Decode signed samples and verify the public converted-data path.
+	bus367.Reg[0x0B] = 1;
+	bus367.Reg[0x0E] = 0x3E; // +4000 counts = +1 g at +/-2 g.
+	bus367.Reg[0x0F] = 0x80;
+	bus367.Reg[0x10] = 0xC1; // -4000 counts = -1 g.
+	bus367.Reg[0x11] = 0x80;
+	bus372.Reg[0x04] = 1;
+	bus372.Reg[0x08] = 0;
+	bus372.Reg[0x09] = 0xA0; // +10 counts = +1 g.
+	bus372.Reg[0x0A] = 0xFF;
+	bus372.Reg[0x0B] = 0x60; // -10 counts = -1 g.
+	AccelSensorData_t data;
+	AccelSensorRawData_t raw;
+	for (unsigned pass = 0; pass < 2; pass++)
+	{
+		assert(s_Adxl367.UpdateData());
+		assert(s_Adxl367.Read(data));
+		assert(fabsf(data.X - 1.0f) < 0.00001f);
+		assert(fabsf(data.Y + 1.0f) < 0.00001f);
+		assert(s_Adxl367.Read(raw));
+		assert(fabsf(raw.GFactor - 0.00025f) < 0.000001f);
+		assert(s_Adxl372.UpdateData());
+		assert(s_Adxl372.Read(data));
+		assert(fabsf(data.X - 1.0f) < 0.00001f);
+		assert(fabsf(data.Y + 1.0f) < 0.00001f);
+		assert(s_Adxl372.Read(raw));
+		assert(fabsf(raw.GFactor - 0.1f) < 0.000001f);
+		cfg.Scale = 2;
+		assert(s_Adxl367.Init(cfg, &bus367));
+		cfg.Scale = 200;
+		assert(s_Adxl372.Init(cfg, &bus372));
+	}
+	assert(s_Adxl367.Scale(4) == 4);
+	assert(s_Adxl367.UpdateData() && s_Adxl367.Read(data));
+	assert(fabsf(data.X - 2.0f) < 0.00001f);
+	assert(s_Adxl367.Read(raw));
+	assert(fabsf(raw.GFactor - 0.0005f) < 0.000001f);
 	puts("ADXL367/ADXL372 rate tests: PASS");
 }
