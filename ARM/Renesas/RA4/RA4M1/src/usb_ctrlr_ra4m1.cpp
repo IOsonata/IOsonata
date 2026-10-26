@@ -194,6 +194,45 @@ static Ra4UsbTraceEntry s_Trace[32];
 static volatile unsigned s_TraceCount;
 static unsigned s_TracePrinted;
 
+struct Ra4UsbTxTraceEntry
+{
+	uint16_t Address;
+	uint16_t Request;
+	uint16_t Value;
+	uint16_t Requested;
+	uint16_t Length;
+	uint16_t Select;
+	uint16_t Fifo;
+	uint16_t MaxPacket;
+	uint8_t Data[8];
+};
+static Ra4UsbTxTraceEntry s_TxTrace[8];
+static unsigned s_TxTraceCount;
+static unsigned s_TxTracePrinted;
+
+// Capture the bytes supplied to CFIFO, not a claim of host reception.
+static void Ra4UsbTraceTx(const uint8_t *pData, uint16_t Length)
+{
+	if (s_TxTraceCount == sizeof(s_TxTrace) / sizeof(s_TxTrace[0]))
+	{
+		return;
+	}
+	Ra4UsbTxTraceEntry *entry = &s_TxTrace[s_TxTraceCount];
+	entry->Address = R_USB_FS0->USBADDR & 0x7FU;
+	entry->Request = R_USB_FS0->USBREQ;
+	entry->Value = R_USB_FS0->USBVAL;
+	entry->Requested = R_USB_FS0->USBLENG;
+	entry->Length = Length;
+	entry->Select = R_USB_FS0->CFIFOSEL;
+	entry->Fifo = R_USB_FS0->CFIFOCTR;
+	entry->MaxPacket = R_USB_FS0->DCPMAXP;
+	for (unsigned i = 0; i < sizeof(entry->Data); ++i)
+	{
+		entry->Data[i] = i < Length ? pData[i] : 0U;
+	}
+	++s_TxTraceCount;
+}
+
 // Record only bus/control transitions. Never call semihosting from the ISR.
 static void Ra4UsbTraceRecord(uint16_t Status, uint16_t Enable)
 {
@@ -235,9 +274,24 @@ static void Ra4UsbTracePoll(void)
 			(unsigned)entry.Value, (unsigned)entry.Index,
 			(unsigned)entry.Length);
 	}
+	while (s_TxTracePrinted < s_TxTraceCount)
+	{
+		const Ra4UsbTxTraceEntry entry = s_TxTrace[s_TxTracePrinted++];
+		printf("[RA4 USBFS] tx addr=%u req=%04x value=%04x requested=%u "
+			"loaded=%u CFIFOSEL=%04x CFIFOCTR=%04x DCPMAXP=%04x "
+			"data=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+			(unsigned)entry.Address, (unsigned)entry.Request,
+			(unsigned)entry.Value, (unsigned)entry.Requested,
+			(unsigned)entry.Length, (unsigned)entry.Select,
+			(unsigned)entry.Fifo, (unsigned)entry.MaxPacket,
+			(unsigned)entry.Data[0], (unsigned)entry.Data[1],
+			(unsigned)entry.Data[2], (unsigned)entry.Data[3],
+			(unsigned)entry.Data[4], (unsigned)entry.Data[5],
+			(unsigned)entry.Data[6], (unsigned)entry.Data[7]);
+	}
 	const uint32_t stage = g_Ra4UsbStage;
 	const uint16_t syscfg = g_Ra4UsbSyscfg;
-	const uint16_t status = g_Ra4UsbIntsts0;
+	const uint16_t status = s_Usb.Started ? R_USB_FS0->INTSTS0 : g_Ra4UsbIntsts0;
 	if (stage != s_TraceStage || syscfg != s_TraceSyscfg ||
 		((status ^ s_TraceStatus) & RA4USB_INT_VBSTS) != 0U)
 	{
@@ -252,6 +306,7 @@ static void Ra4UsbTracePoll(void)
 #else
 #define Ra4UsbTracePoll() ((void)0)
 #define Ra4UsbTraceRecord(Status, Enable) ((void)0)
+#define Ra4UsbTraceTx(Data, Length) ((void)0)
 #endif
 alignas(4) static uint8_t s_Ep0In[RA4USB_EP0_MPS];
 alignas(4) static uint8_t s_Ep0Out[RA4USB_EP0_MPS];
@@ -1479,6 +1534,7 @@ int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 		return -1;
 	}
 	s_Usb.Ep0InLength = length;
+	Ra4UsbTraceTx(s_Ep0In, length);
 	s_Usb.Ep0InBusy = true;
 	R_USB_FS0->BEMPSTS = (uint16_t)~1U;
 	R_USB_FS0->BEMPENB |= 1U;

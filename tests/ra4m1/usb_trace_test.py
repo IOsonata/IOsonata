@@ -17,7 +17,7 @@ static int trace_printf(const char *, ...) { ++prints; return 0; }
 #define printf trace_printf
 struct { bool Started, Suspended; } s_Usb;
 struct { uint16_t DCPCTR, SYSSTS0, INTSTS0, USBADDR, USBREQ,
-	USBVAL, USBINDX, USBLENG; } regs;
+	USBVAL, USBINDX, USBLENG, CFIFOSEL, CFIFOCTR, DCPMAXP; } regs;
 #define R_USB_FS0 (&regs)
 static uint32_t g_Ra4UsbStage;
 static uint16_t g_Ra4UsbSyscfg, g_Ra4UsbIntsts0;
@@ -33,12 +33,26 @@ int main()
 	regs.USBREQ = 0x680;
 	regs.USBVAL = 0x100;
 	regs.USBLENG = 18;
+	regs.CFIFOSEL = 0x20;
+	regs.CFIFOCTR = 0x8000;
+	regs.DCPMAXP = 64;
+	const uint8_t prefix[] = {0x12, 1, 0, 2, 0xef, 2, 1, 64};
+	Ra4UsbTraceTx(nullptr, 0);
+	Ra4UsbTraceTx(prefix, 3);
 	for (unsigned i = 0; i < 64; ++i)
 	{
+		Ra4UsbTraceTx(prefix, sizeof(prefix));
 		Ra4UsbTraceRecord((uint16_t)(0x1000 + i), 0xDF00);
 		Ra4UsbTracePoll();
 	}
 	assert(prints == 0);
+	assert(s_TxTraceCount == 8);
+	assert(s_TxTrace[0].Length == 0 && s_TxTrace[0].Data[0] == 0);
+	assert(s_TxTrace[1].Length == 3 && s_TxTrace[1].Data[3] == 0);
+	for (unsigned i = 0; i < sizeof(prefix); ++i)
+		assert(s_TxTrace[2].Data[i] == prefix[i]);
+	assert(s_TxTrace[2].Length == 8 && s_TxTrace[2].Requested == 18);
+	assert(s_TxTrace[2].Select == 0x20 && s_TxTrace[2].MaxPacket == 64);
 	assert(s_TraceCount == 32);
 	assert(s_Trace[0].Status == 0x1000);
 	assert(s_Trace[15].Status == 0x100F);
@@ -51,14 +65,14 @@ int main()
 	assert(prints == 0);
 	regs.INTSTS0 = 0;
 	Ra4UsbTracePoll();
-	assert(prints == 33 && s_TracePrinted == 32);
+	assert(prints == 41 && s_TracePrinted == 32 && s_TxTracePrinted == 8);
 	Ra4UsbTracePoll();
-	assert(prints == 33);
+	assert(prints == 41);
 	s_Usb.Suspended = false;
 	regs.INTSTS0 = RA4USB_INT_VBSTS;
 	g_Ra4UsbStage = 6;
 	Ra4UsbTracePoll();
-	assert(prints == 33);
+	assert(prints == 41);
 }
 """
 with tempfile.TemporaryDirectory() as tmp:
