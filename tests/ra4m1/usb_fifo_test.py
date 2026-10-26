@@ -16,7 +16,6 @@ constants = source[source.index("enum\n{"):source.index("typedef struct __Ra4Usb
 code = r'''
 #include <cassert>
 #include <cstdint>
-#define RA4USB_LIVE(...) ((void)0)
 #include <vector>
 ''' + constants + r'''
 static std::vector<uint8_t> bytes;

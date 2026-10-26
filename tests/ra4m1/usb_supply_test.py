@@ -15,14 +15,11 @@ end = source.index("\n}", end_start) + 2
 code = """
 #include <cassert>
 #include <cstdint>
-#define RA4USB_LIVE(...) ((void)0)
 struct { uint32_t MSTPCRB; } mstp;
 struct { uint16_t USBMC, SYSCFG; } usb;
 #define R_MSTP (&mstp)
 #define R_USB_FS0 (&usb)
 #define __DSB() ((void)0)
-static uint16_t g_Ra4UsbSyscfg;
-static uint32_t g_Ra4UsbStage;
 enum { RA4USB_MSTP_MASK = 1 << 11, RA4USB_USBMC_VDCEN = 1 << 7,
 	RA4USB_SYSCFG_SCKE = 1 << 10, RA4USB_SYSCFG_USBE = 1,
 	RA4USB_WAIT_COUNT = 4096 };

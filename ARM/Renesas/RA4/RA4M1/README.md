@@ -798,7 +798,7 @@ TRNG 16 bytes in 63 us. SHA-256 and P-256 run in software (P-256 key import
 1.44 s).
 
 
-## USBFS supply and debug capture
+## USBFS supply and validation
 
 The USBFS driver defaults to an external 3.3 V supply on VCC_USB, as wired
 on the EK-RA4M1 (E7/E8 closed). USBMC.VDCEN stays clear. For hardware wired
@@ -810,21 +810,11 @@ sections 5.6.5.3/5.6.5.4, and the
 [RA4M1 datasheet](https://www.renesas.com/en/document/dst/ra4m1-group-datasheet),
 table 2.2.
 
-Debug builds print live semihosting traces at initialization, clock enable,
-controller start, NVIC enable, D+ pull-up, IRQ entry/exit, VBUS changes,
-reset/address transitions, SETUP dispatch, FIFO loading and control status.
-Each line is flushed immediately, including inside the ISR. VBUS handling
-prints before and after queuing; controller processing prints entry and exit.
-There is no capture limit or unplug/suspend gate. The first message is
-`[RA4 USBFS] init begin dev=0`; startup then prints `LIVE trace active`.
-Rebuild both the library and application in Debug. Release builds omit these
-traces. This is an intrusive bring-up diagnostic: semihosting pauses the CPU
-and can cause USB host timeouts. It is not a throughput or enumeration timing
-measurement. The trace never reads FIFO data merely for logging; printed
-payload bytes come from the supplied transmit buffer.
-`python3 tests/ra4m1/usb_trace_test.py` checks immediate output and flushing
-while attached, suspended and detached, and that Release tracing is silent.
-EK-RA4M1 enumeration remains pending hardware validation.
+EK-RA4M1 enumeration was confirmed on hardware: the host completed the
+configuration descriptor transfer, selected configuration 1, and read back
+configuration 1; USBFS entered the configured state. Temporary semihosting
+traces and debugger-only state have been removed from the controller.
+CDC PRBS data integrity, throughput and unplug/replug validation remain pending.
 
 USBFS FIFO writes follow the Renesas FSP CPU transfer sequence: select the
 FIFO, clear the buffer, recheck FRDY, write 16-bit little-endian pairs and an
@@ -851,4 +841,5 @@ reached the full configuration descriptor, then stopped after exactly
 clear could discard that request. `python3 tests/ra4m1/usb_irq_test.py`
 executes the production USB ISR, ICU acknowledgement and dispatcher with
 injected requests across the batch boundary; it also verifies that the old
-ISR loses the pending request. Hardware confirmation of this fix is pending.
+ISR loses the pending request. Hardware confirmed that the pending ICU request survives ISR exit, the ISR
+re-enters, and enumeration completes.

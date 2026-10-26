@@ -16,7 +16,6 @@ constants = source[source.index("enum\n{"):source.index("typedef struct __Ra4Usb
 code = """
 #include <cassert>
 #include <cstdint>
-#define RA4USB_LIVE(...) ((void)0)
 enum { USB_ENDPADDR_DIR_IN = 0x80, USB_ENDPADDR_DIR_OUT = 0,
 	USB_CTRLR_XFER_SUCCESS = 0 };
 struct { uint16_t INTSTS0, DCPCTR; } regs;

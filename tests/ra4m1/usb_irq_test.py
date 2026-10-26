@@ -26,7 +26,6 @@ struct { uint16_t INTSTS0; } usb;
 #define R_USB_FS0 (&usb)
 #define __DSB() ((void)0)
 #define __NOP() ((void)0)
-#define RA4USB_LIVE(...) ((void)0)
 struct Ra4m1IntHook {
 	Ra4m1IRQHandler_t Handler; void *pCtx; uint32_t Generation; uint8_t Event;
 };

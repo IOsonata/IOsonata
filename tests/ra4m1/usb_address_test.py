@@ -13,7 +13,6 @@ end = source.index("static void Ra4UsbInterrupt(", start)
 code = """
 #include <cassert>
 #include <cstdint>
-#define RA4USB_LIVE(...) ((void)0)
 enum UsbCtrlrEvtType_t { USB_CTRLR_EVT_ADDRESS, USB_CTRLR_EVT_SOF,
 	USB_CTRLR_EVT_RESUME, USB_CTRLR_EVT_SUSPEND };
 struct UsbCtrlrEvt_t { UsbCtrlrEvtType_t Type; uint8_t Address; uint16_t FrameNo; };
@@ -35,7 +34,6 @@ static void UsbDevProcessEvent(int dev, const UsbCtrlrEvt_t *event)
 static void Ra4UsbReset() { ++resets; coreAddress = 0; }
 static void Ra4UsbBusEvent(UsbCtrlrEvtType_t) {}
 static void UsbProcessQue(int) {}
-static void Ra4UsbTraceRecord(uint16_t, uint16_t) {}
 static void Ra4UsbHandleBrdy(uint16_t) {}
 static void Ra4UsbHandleBemp(uint16_t) {}
 static void Ra4UsbHandleNrdy(uint16_t) {}
