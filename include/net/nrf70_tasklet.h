@@ -40,7 +40,12 @@ typedef struct __Nrf70_Tasklet
 	bool Active;
 } Nrf70Tasklet_t;
 
-/* Tasklets are caller-owned, and must outlive any queued event. */
+/* Tasklets are caller-owned. Init accepts uninitialized storage and leaves
+ * Active false if all 16 registry slots are occupied. Init cannot replace a
+ * tasklet while its Queued flag is true.
+ * Cancel releases an idle tasklet immediately. A cancelled queued tasklet
+ * must remain alive until dispatch clears Queued; its callback is suppressed
+ * and its registry slot is then released. Call Init again before reuse. */
 void Nrf70TaskletInit(Nrf70Tasklet_t *pTask, Nrf70TaskletCb_t Callback,
 	unsigned long Context);
 bool Nrf70TaskletSchedule(Nrf70Tasklet_t *pTask);

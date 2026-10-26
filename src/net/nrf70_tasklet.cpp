@@ -43,6 +43,19 @@ static bool Nrf70TaskletRegistered(Nrf70Tasklet_t *pTask)
 	return false;
 }
 
+// Caller holds the interrupt mask while changing the registry.
+static void Nrf70TaskletUnregister(Nrf70Tasklet_t *pTask)
+{
+	for (int i = 0; i < NRF70_TASKLET_MAX; i++)
+	{
+		if (s_Tasks[i] == pTask)
+		{
+			s_Tasks[i] = nullptr;
+			break;
+		}
+	}
+}
+
 static void Nrf70TaskletDispatch(uint32_t Event, void *pContext)
 {
 	Nrf70Tasklet_t *pTask;
@@ -60,6 +73,10 @@ static void Nrf70TaskletDispatch(uint32_t Event, void *pContext)
 	cb = pTask->Active && pTask->Pending ? pTask->Callback : nullptr;
 	context = pTask->Context;
 	pTask->Pending = false;
+	if (!pTask->Active)
+	{
+		Nrf70TaskletUnregister(pTask);
+	}
 	EnableInterrupt(state);
 	if (cb != nullptr)
 		cb(context);
@@ -79,23 +96,35 @@ extern "C" void Nrf70TaskletInit(Nrf70Tasklet_t *pTask,
 		if (s_Tasks[i] == pTask)
 			break;
 	}
-	if (i == NRF70_TASKLET_MAX)
+	// Only a registered tasklet has flags initialized by this dispatcher.
+	if (i < NRF70_TASKLET_MAX && pTask->Queued)
 	{
-		for (i = 0; i < NRF70_TASKLET_MAX; i++)
+		EnableInterrupt(state);
+		return;
+	}
+	pTask->Callback = Callback;
+	pTask->Context = Context;
+	pTask->Pending = false;
+	pTask->Queued = false;
+	pTask->Active = false;
+	if (Callback == nullptr)
+	{
+		Nrf70TaskletUnregister(pTask);
+	}
+	else
+	{
+		if (i == NRF70_TASKLET_MAX)
 		{
-			if (s_Tasks[i] == nullptr)
+			for (i = 0; i < NRF70_TASKLET_MAX; i++)
 			{
-				s_Tasks[i] = pTask;
-				break;
+				if (s_Tasks[i] == nullptr)
+				{
+					s_Tasks[i] = pTask;
+					break;
+				}
 			}
 		}
-	}
-	if (i < NRF70_TASKLET_MAX && !pTask->Queued)
-	{
-		pTask->Callback = Callback;
-		pTask->Context = Context;
-		pTask->Active = Callback != nullptr;
-		pTask->Pending = false;
+		pTask->Active = i < NRF70_TASKLET_MAX;
 	}
 	EnableInterrupt(state);
 }
@@ -133,8 +162,16 @@ extern "C" void Nrf70TaskletCancel(Nrf70Tasklet_t *pTask)
 	if (pTask == nullptr)
 		return;
 	state = DisableInterrupt();
-	pTask->Pending = false;
-	pTask->Active = false;
+	if (Nrf70TaskletRegistered(pTask))
+	{
+		pTask->Pending = false;
+		pTask->Active = false;
+		// A queued callback still owns its context until dispatch drains it.
+		if (!pTask->Queued)
+		{
+			Nrf70TaskletUnregister(pTask);
+		}
+	}
 	EnableInterrupt(state);
 }
 
@@ -148,8 +185,9 @@ extern "C" bool Nrf70TaskletPending(void)
 	pending = false;
 	for (i = 0; i < NRF70_TASKLET_MAX; i++)
 	{
-		if (s_Tasks[i] != nullptr && s_Tasks[i]->Active &&
-			(s_Tasks[i]->Pending || s_Tasks[i]->Queued))
+		if (s_Tasks[i] != nullptr &&
+			(s_Tasks[i]->Queued ||
+			(s_Tasks[i]->Active && s_Tasks[i]->Pending)))
 		{
 			pending = true;
 			break;
@@ -165,8 +203,12 @@ extern "C" void Nrf70TaskletCheckStatus(void)
 
 	for (i = 0; i < NRF70_TASKLET_MAX; i++)
 	{
+		uint32_t state = DisableInterrupt();
 		if (s_Tasks[i] != nullptr && s_Tasks[i]->Pending &&
 			!s_Tasks[i]->Queued && s_Tasks[i]->Active)
+		{
 			(void)Nrf70TaskletSchedule(s_Tasks[i]);
+		}
+		EnableInterrupt(state);
 	}
 }
