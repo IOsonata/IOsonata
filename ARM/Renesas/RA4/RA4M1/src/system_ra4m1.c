@@ -64,6 +64,8 @@ SOFTWARE.
 #endif
 
 #define RA4M1_USB_SCKE       0x0400U
+// The RA4M1 HOCOCR2 byte is at 0x4001E037 (not the documented 0x4001E000).
+#define RA4M1_HOCOCR2 (*(volatile uint8_t *)0x4001E037UL)
 
 // Reset is MOCO /16, not HOCO. ResetEntry initializes this storage before
 // calling SystemInit, including an application's strong g_McuOsc override.
@@ -244,7 +246,7 @@ static bool Ra4m1StartHoco(uint8_t Config)
 	{
 		if (!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_HOCO, RA4M1_OSCSF_HOCO))
 			return false;
-		if (R_SYSTEM->HOCOCR2 == Config)
+		if (RA4M1_HOCOCR2 == Config)
 		{
 			// RA4M1 changes HOCOWTCR only at 64 MHz.
 			return true;
@@ -254,13 +256,13 @@ static bool Ra4m1StartHoco(uint8_t Config)
 	if (!Ra4m1Wait8(&R_SYSTEM->HOCOCR, 1U, 1U) ||
 		!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_HOCO, 0U))
 		return false;
-	R_SYSTEM->HOCOCR2 =  Config;
+	RA4M1_HOCOCR2 =  Config;
 	// RA4M1 FSP only programs HOCOWTCR for 64 MHz, to 6.
 	if (Config == 0x28U)
 	{
 		R_SYSTEM->HOCOWTCR =  6U;
 	}
-	if (R_SYSTEM->HOCOCR2 != Config)
+	if (RA4M1_HOCOCR2 != Config)
 		return false;
 	Ra4m1DelayUs(2U);
 	R_SYSTEM->HOCOCR =  0U;
@@ -316,7 +318,7 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 	if ((R_SYSTEM->OPCCR & 3U) == 2U &&
 		(R_SYSTEM->HOCOCR & 1U) != 0U)
 	{
-		if (Ra4m1HocoHz(R_SYSTEM->HOCOCR2) == 0U)
+		if (Ra4m1HocoHz(RA4M1_HOCOCR2) == 0U)
 			return RA4M1_STARTUP_HOCO;
 		R_SYSTEM->HOCOCR =  0U;
 	}
@@ -414,7 +416,7 @@ static uint32_t Ra4m1SourceHz(uint8_t Source)
 		case RA4M1_CK_HOCO:
 			return (R_SYSTEM->HOCOCR & 1U) == 0U &&
 				(ready & RA4M1_OSCSF_HOCO) != 0U ?
-				Ra4m1HocoHz(R_SYSTEM->HOCOCR2) : 0U;
+				Ra4m1HocoHz(RA4M1_HOCOCR2) : 0U;
 		case RA4M1_CK_MOCO:
 			return (R_SYSTEM->MOCOCR & 1U) == 0U ? RA4M1_MOCO_HZ : 0U;
 		case RA4M1_CK_LOCO:
