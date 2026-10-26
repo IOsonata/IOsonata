@@ -110,10 +110,27 @@ int main(void)
 	uint32_t output[4];
 	uint8_t key[32] = {0}, input[16] = {0}, cipher[16];
 	unsigned total;
+	assert(!Sce5RandomWords(NULL));
+	assert(!Sce5AesUpdate(input, NULL));
+	assert(accesses == 0);
 	assert(Sce5Init());
 	assert(Sce5Ready());
+	unsigned before = accesses;
+	assert(!Sce5RandomWords(NULL));
+	assert(!Sce5AesUpdate(input, NULL));
+	assert(accesses == before && Sce5Ready());
 	assert(Sce5RandomWords(output));
 	assert(Sce5AesBegin(key, 16, true));
+	before = accesses;
+	assert(!Sce5RandomWords(NULL));
+	assert(!Sce5AesUpdate(input, NULL));
+	memset(cipher, 0xA5, sizeof(cipher));
+	assert(!Sce5AesUpdate(NULL, cipher));
+	for (unsigned i = 0; i < sizeof(cipher); i++)
+	{
+		assert(cipher[i] == 0);
+	}
+	assert(accesses == before && Sce5Ready());
 	assert(Sce5AesUpdate(input, cipher));
 	assert(Sce5AesUpdate(input, cipher));
 	assert(!Sce5RandomWords(output));

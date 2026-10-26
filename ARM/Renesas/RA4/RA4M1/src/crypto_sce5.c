@@ -4191,6 +4191,11 @@ bool Sce5RandomWords(uint32_t output[4])
 {
 	bool ok;
 
+	if (output == NULL)
+	{
+		return false;
+	}
+
 	if (!Sce5Ready() || s_AesOpen)
 	{
 		Wipe(output, 16U);
@@ -4290,7 +4295,11 @@ bool Sce5AesUpdate(const uint8_t input[16], uint8_t output[16])
 	uint32_t result[4] = {0};
 	bool ok;
 
-	if (!s_AesOpen || !Sce5Ready() || input == NULL || output == NULL)
+	if (output == NULL)
+	{
+		return false;
+	}
+	if (!s_AesOpen || !Sce5Ready() || input == NULL)
 	{
 		Wipe(output, 16U);
 		return false;
