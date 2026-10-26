@@ -6,7 +6,7 @@ CPU interrupt registration through the ICU, asynchronous SCI UART, AGT/GPT timer
 See [TIMER.md](TIMER.md) for timer device mapping and validation limits, and
 [INTERRUPTS.md](INTERRUPTS.md) for the ICU/NVIC routing architecture,
 registration rules, and interrupt-maintenance invariants.
-No board package, Arduino/FSP runtime, USB controller, IIC DMA/DTC,
+No board package, Arduino/FSP runtime, IIC DMA/DTC,
 general DTC, or NMI driver is included yet. UART TX uses native DMAC.
 The IIC master (polling and interrupt) and slave are rewritten and checked
 against a host model of the IIC, not yet hardware-validated.
@@ -41,7 +41,8 @@ RAM without semihosting inside the measurement loop.
 
 **Not yet confirmed on hardware:** the rewritten IIC master and slave paths, the RSPI master and slave (new, see RSPI master and slave), GPIO edge interrupts,
 other AGT/GPT channels and all six GPT compare routes, long-run rollover/pause/resume,
-stop/start recovery, low-power operation, USB, general DMA/DTC and ELC integration.
+stop/start recovery, low-power operation, general DMA/DTC and ELC integration.
+See USBFS supply and validation below for current USB hardware results.
 SCI UART is complete and hardware-tested. Apart from the UART test
 (`run_uart_validation.py`, see SCI UART), the host-register-model test runners
 under `tests/ra4m1` predate the CMSIS migration and require updates;
@@ -208,7 +209,7 @@ register at `0x4001E02B`; the implementation does not copy RE01 PLL encodings.
 `bUSBClk=true` requires a 48 MHz source and sets only the USB clock selector.
 HOCO is a device-only USB source and requires zero HOCO user trim; PLL can
 supply the clock for host or device. USBFS remains stopped/disabled. This is
-clock preparation only: no claim of a working RA4M1 USB port is made.
+clock preparation only; the USBFS controller driver enables the peripheral.
 
 Low-frequency descriptors accept internal RC at 32768 Hz or a 32768 Hz crystal.
 The selected oscillator is started; RTC/AGT/LCD drivers own their individual
@@ -814,7 +815,11 @@ EK-RA4M1 enumeration was confirmed on hardware: the host completed the
 configuration descriptor transfer, selected configuration 1, and read back
 configuration 1; USBFS entered the configured state. Temporary semihosting
 traces and debugger-only state have been removed from the controller.
-CDC PRBS data integrity, throughput and unplug/replug validation remain pending.
+Release hardware logs show CDC PRBS reception around 105.3 kB/s and CDC
+loopback around 423 kB/s in each direction (846 kB/s combined), with zero
+reported errors over the supplied approximately 50-second loopback excerpt.
+The final 60-second summary was not supplied. Combo stress and unplug/replug
+validation remain pending. RA4M1 USBFS operates at full speed (12 Mbit/s).
 
 USBFS FIFO writes follow the Renesas FSP CPU transfer sequence: select the
 FIFO, clear the buffer, recheck FRDY, write 16-bit little-endian pairs and an
@@ -853,7 +858,7 @@ clear, matching FSP `usb_pstd_bemp_pipe_process`. While it remains set,
 the transfer and BEMP interrupt stay active; the caller cannot refill the
 buffer prematurely. Interrupt pipes 6-9 retain their separate completion
 behavior. Host tests `usb_out_test.py` and `usb_in_test.py` cover these
-sequences; terminal opening and sustained traffic need hardware validation.
+sequences; see the Release hardware results above for CDC traffic validation.
 
 Data OUT endpoints explicitly request their first destination with the existing
 DRDY callback when opened, then request another after each completion or
@@ -863,13 +868,4 @@ pipe NAKed and UsbIntrf retries its pending receive after the application
 consumes a packet. The pipe is NAKed before reading/clearing its receive FIFO.
 `tests/ra4m1/usb_rx_lifecycle_test.py` checks first-buffer acquisition,
 100 packet completions, full-queue backpressure, consumption/rearming and
-callback teardown. CDC loopback hardware retest remains pending.
-
-For the stalled CDC loopback investigation, Debug builds now emit immediate
-`[RA4 USB RX]` semihosting lines: endpoint/pipe configuration, buffer requests
-and callback results, receive rejection reasons, FIFO arming, IRQ status,
-OUT packet reads/completions, CDC control requests and IN send requests.
-Each line is flushed without waiting for unplug or suspend. Rebuild both
-the library and UsbCdcLoopback in Debug, then run the same loopback command.
-These intrusive diagnostics affect timing; use them to locate the stalled
-receive stage, not to measure throughput. Release builds omit the trace.
+callback teardown. Release CDC loopback hardware results are recorded above.

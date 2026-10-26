@@ -14,7 +14,6 @@ constants = source[source.index('enum\n{'):source.index('typedef struct __Ra4Usb
 code = r'''
 #include <cassert>
 #include <cstdint>
-#define RA4USB_RXTRACE(...) ((void)0)
 #include <initializer_list>
 ''' + constants + r'''
 enum { ISO = 1, BULK = 2 };
