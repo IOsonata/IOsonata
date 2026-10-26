@@ -267,13 +267,12 @@ int main()
 	blocks = 0;
 	while (1)
 	{
-		for (unsigned i = 0; i < 128; i += 2)
+		for (unsigned i = 0; i < 128; i++)
 		{
-			// Each 32-bit DMA word carries a signed 16-bit slot.
-			// Both channels use the same 1.5-kHz tone at 48 kHz.
-			uint32_t sample = (uint32_t)(int32_t)s_Sine[phase++ & 31];
-			tx[i] = sample;
-			tx[i + 1] = sample;
+			// nRF I2S 16-bit stereo DMA packs left/right into one
+			// 32-bit word. Advance the 32-sample tone once per frame.
+			uint32_t sample = (uint16_t)s_Sine[phase++ & 31];
+			tx[i] = sample | (sample << 16);
 		}
 		count = s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx));
 		if (count != (int)sizeof(tx))
