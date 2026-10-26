@@ -85,6 +85,7 @@ enum
 
 	RA4USB_CFIFO_CURPIPE_MASK = 0x000FU,
 	RA4USB_CFIFO_ISEL = 1U << 5,
+	RA4USB_CFIFO_MBW16 = 1U << 10,
 	RA4USB_CFIFO_FRDY = 1U << 13,
 	RA4USB_CFIFO_BCLR = 1U << 14,
 	RA4USB_CFIFO_BVAL = 1U << 15,
@@ -384,9 +385,9 @@ static void Ra4UsbClearPipeBuffer(uint8_t Pipe)
 	*pCtr |= RA4USB_CSCLR;
 }
 
-static bool Ra4UsbSelectFifo(uint8_t Pipe, bool In)
+static bool Ra4UsbSelectFifo(uint8_t Pipe, bool In, uint16_t Width = 0U)
 {
-	uint16_t select = Pipe & RA4USB_CFIFO_CURPIPE_MASK;
+	uint16_t select = (Pipe & RA4USB_CFIFO_CURPIPE_MASK) | Width;
 	if (Pipe == 0U && In)
 	{
 		select |= RA4USB_CFIFO_ISEL;
@@ -395,7 +396,8 @@ static bool Ra4UsbSelectFifo(uint8_t Pipe, bool In)
 	for (uint32_t i = 0; i < RA4USB_WAIT_COUNT; ++i)
 	{
 		const uint16_t current = R_USB_FS0->CFIFOSEL;
-		if ((current & (RA4USB_CFIFO_CURPIPE_MASK | RA4USB_CFIFO_ISEL)) ==
+		if ((current & (RA4USB_CFIFO_CURPIPE_MASK | RA4USB_CFIFO_ISEL |
+			RA4USB_CFIFO_MBW16)) ==
 			select && (R_USB_FS0->CFIFOCTR & RA4USB_CFIFO_FRDY) != 0U)
 		{
 			return true;
@@ -408,16 +410,38 @@ static bool Ra4UsbFifoWrite(uint8_t Pipe, const uint8_t *pData,
 	uint16_t Length, uint16_t Mps)
 {
 	if (!Ra4UsbSetPid(Pipe, RA4USB_PID_NAK) ||
-		!Ra4UsbSelectFifo(Pipe, true))
+		!Ra4UsbSelectFifo(Pipe, true, RA4USB_CFIFO_MBW16))
 	{
 		return false;
 	}
 	R_USB_FS0->CFIFOCTR = RA4USB_CFIFO_BCLR;
-	for (uint16_t i = 0; i < Length; ++i)
+	// Follow FSP ctrl_read -> write_data: check FRDY after BCLR, before
+	// loading the packet. Readiness before clearing does not cover this access.
+	if (!Ra4UsbSelectFifo(Pipe, true, RA4USB_CFIFO_MBW16))
 	{
-		R_USB_FS0->CFIFOLL = pData[i];
+		return false;
 	}
-	if (Length < Mps)
+	uint16_t i = 0U;
+	for (; i + 1U < Length; i += 2U)
+	{
+		// FSP's USBFS path uses 16-bit writes, then an 8-bit odd tail.
+		// Assemble explicitly so caller buffers need not be halfword aligned.
+		R_USB_FS0->CFIFOL = (uint16_t)((uint16_t)pData[i] |
+			((uint16_t)pData[i + 1U] << 8U));
+	}
+	if (i < Length)
+	{
+		if (!Ra4UsbSelectFifo(Pipe, true))
+		{
+			return false;
+		}
+		R_USB_FS0->CFIFOLL = pData[i];
+		R_USB_FS0->CFIFOSEL |= RA4USB_CFIFO_MBW16;
+	}
+	// Read back after the data writes, as FSP does, before committing a
+	// short packet. A full packet is committed by the controller itself.
+	const uint16_t fifo = R_USB_FS0->CFIFOCTR;
+	if (Length < Mps && (fifo & RA4USB_CFIFO_BVAL) == 0U)
 	{
 		R_USB_FS0->CFIFOCTR = RA4USB_CFIFO_BVAL;
 	}

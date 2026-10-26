@@ -823,3 +823,17 @@ If the startup banner is absent, check the loaded build and semihosting before
 interpreting silence as a USB result.
 Host register-model tests do not establish electrical operation or enumeration;
 EK-RA4M1 enumeration remains pending hardware validation.
+
+USBFS FIFO writes follow the Renesas FSP CPU transfer sequence: select the
+FIFO, clear the buffer, recheck FRDY, write 16-bit little-endian pairs and an
+8-bit odd tail, then read CFIFOCTR before setting BVAL for a short packet.
+Source bytes are assembled without requiring aligned caller buffers. Reads
+continue to use 8-bit access. Reference: Renesas FSP commit
+`6e2675336b37fbd805f0c01d5134adfdab4bf294`, `r_usb_pcontrolrw.c`
+(`usb_pstd_ctrl_read`), `r_usb_plibusbip.c` (`usb_pstd_write_data`), and
+`r_usb_preg_abs.c` (`usb_pstd_write_fifo`) under
+[`ra/fsp/src/r_usb_basic/src`](https://github.com/renesas/fsp/tree/6e2675336b37fbd805f0c01d5134adfdab4bf294/ra/fsp/src/r_usb_basic/src).
+`python3 tests/ra4m1/usb_fifo_test.py` checks the production write functions
+against delayed post-clear readiness, stuck readiness, byte order, unaligned
+buffers, odd lengths, zero-length and full packets at O0/Os/O2. This model
+checks software sequencing, not actual USBFS timing or enumeration.
