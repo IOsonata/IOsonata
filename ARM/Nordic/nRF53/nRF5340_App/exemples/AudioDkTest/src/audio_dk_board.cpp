@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	main.cpp
+@file	audio_dk_board.cpp
 
-@brief	nRF5340 Audio DK hardware diagnostic and 48-kHz audio test
+@brief	nRF5340 Audio DK audio test board setup
 
 @author	Nguyen Hoan Hoang
 @date	Oct. 24, 2026
@@ -51,8 +51,6 @@ SOFTWARE.
 
 // Set to 0 to run continuous audio without periodic I2S restarts.
 #define AUDIO_TEST_I2S_RESTART 0
-
-int I2SFullDuplexTest(I2S &Audio, bool (*Mute)(bool), uint32_t (*Voltage)(), bool RestartTest);
 
 static const IOPinCfg_t s_UartPins[] = {
 	{ 1, 4, 0, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
@@ -288,28 +286,18 @@ static bool InitDevices()
 	return true;
 }
 
-static bool AudioTestMute(bool mute)
+bool AudioBoardMute(bool mute)
 {
 	return s_Codec.HeadphoneMute(mute);
 }
 
-static uint32_t AudioTestVoltage()
+uint32_t AudioBoardVoltage()
 {
 	return s_Monitors[0].BusVoltageMicroVolt();
 }
 
-int main()
+bool AudioBoardInit()
 {
-	alignas(4) uint32_t tx[128];
-	alignas(4) uint32_t rx[128];
-	unsigned phase;
-	unsigned blocks;
-#if AUDIO_TEST_I2S_RESTART
-	unsigned reports = 0;
-	unsigned restarts = 0;
-#endif
-	int count;
-
 	if (!s_Uart.Init(s_UartCfg))
 	{
 		while (1);
@@ -322,7 +310,7 @@ int main()
 	if (!InitDevices())
 	{
 		puts("Device test FAIL");
-		return 1;
+		return false;
 	}
 	// SD card probing is opt-in: the generic driver performs lengthy
 	// synchronous command retries when no card answers. Audio streaming
@@ -340,11 +328,15 @@ int main()
 #else
 	puts("SD card probe skipped (define AUDIO_TEST_SD_CARD to enable)");
 #endif
-	puts("Starting continuous I2S audio streaming (1.5 kHz tone, -6 dB output gain)");
-	if (AUDIO_TEST_I2S_RESTART)
-	{
-		puts("I2S restart test enabled: stop for 100 ms every ten microphone reports");
-	}
+	return true;
+}
 
-	return I2SFullDuplexTest(s_I2s, AudioTestMute, AudioTestVoltage, AUDIO_TEST_I2S_RESTART != 0);
+I2S &AudioBoardI2S()
+{
+	return s_I2s;
+}
+
+bool AudioBoardRestartTest()
+{
+	return AUDIO_TEST_I2S_RESTART != 0;
 }

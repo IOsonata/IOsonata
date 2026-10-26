@@ -59,6 +59,13 @@ static uint32_t AudioSqrt(uint64_t value)
 	return root;
 }
 
+// Board integration functions are supplied by each target project.
+bool AudioBoardInit();
+I2S &AudioBoardI2S();
+bool AudioBoardMute(bool Mute);
+uint32_t AudioBoardVoltage();
+bool AudioBoardRestartTest();
+
 int I2SFullDuplexTest(I2S &audio, bool (*mute)(bool), uint32_t (*voltage)(), bool restartTest)
 {
 	alignas(4) uint32_t tx[128];
@@ -168,4 +175,19 @@ int I2SFullDuplexTest(I2S &audio, bool (*mute)(bool), uint32_t (*voltage)(), boo
 			}
 		}
 	}
+}
+
+int main()
+{
+	if (!AudioBoardInit())
+	{
+		return 1;
+	}
+	puts("Starting continuous I2S audio streaming (1.5 kHz tone, -6 dB output gain)");
+	bool restartTest = AudioBoardRestartTest();
+	if (restartTest)
+	{
+		puts("I2S restart test enabled: stop for 100 ms every ten microphone reports");
+	}
+	return I2SFullDuplexTest(AudioBoardI2S(), AudioBoardMute, AudioBoardVoltage, restartTest);
 }
