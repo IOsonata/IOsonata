@@ -54,7 +54,7 @@ bool UsbCtrlrIsoOpen(int dev, uint8_t ep, bool in, uint16_t mps) {
  return UsbCtrlrEpOpenData(dev, ep, in, ISO, mps);
 }
 #endif
-void UsbCtrlrEpClose(int, uint8_t ep, bool) { if (ep == s_Fn.IsoEpNo && iso) --iso; }
+void UsbCtrlrEpClose(int, uint8_t ep, bool) { if (ep == static_cast<UsbIsoIntrf_t *>(s_Iso)->EpNo && iso) --iso; }
 void UsbCtrlrEpCloseAll(int) {}
 void UsbCtrlrEpBind(int, uint8_t, bool, bool, UsbCtrlrEpHandler_t, void *) {}
 bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *, uint16_t) { return false; }
@@ -73,9 +73,9 @@ int main()
  assert(s_LoopbackCdc.Init(s_LoopbackCfg));
  assert(IsoInit());
  assert(s_LoopbackCdc.FirstInterface() == 0);
- assert(s_IsoClass.FirstInterface() == 2);
- assert((s_LoopbackCdc.EpInMask() & s_IsoClass.EpInMask()) == 0);
- assert((s_LoopbackCdc.EpOutMask() & s_IsoClass.EpOutMask()) == 0);
+ assert(s_Iso.FirstInterface() == 2);
+ assert((s_LoopbackCdc.EpInMask() & s_Iso.EpInMask()) == 0);
+ assert((s_LoopbackCdc.EpOutMask() & s_Iso.EpOutMask()) == 0);
  uint16_t length = 0;
  const uint8_t *desc = UsbGetDescriptor(0, USB_DESCTYPE_CONFIGURATION,
      0, 0, USB_SPEED_FULL, &length);
@@ -92,15 +92,15 @@ int main()
  assert(isoAlts == 7);
  assert(s_LoopbackCdc.SelectConfig(1));
  assert(bulk == 2 && interrupt == 1);
- assert(s_IsoClass.SelectConfig(1));
+ assert(s_Iso.SelectConfig(1));
  for (unsigned alt = 1; alt <= 6; ++alt) {
-  assert(s_IsoClass.SelectInterface(2, alt));
+  assert(s_Iso.SelectInterface(2, alt));
   assert(iso == 2);
-  assert(s_IsoClass.SelectInterface(2, 0));
+  assert(s_Iso.SelectInterface(2, 0));
   assert(iso == 0);
  }
- assert(!s_IsoClass.SelectInterface(2, 7));
- assert(!s_IsoClass.SelectInterface(3, 1));
+ assert(!s_Iso.SelectInterface(2, 7));
+ assert(!s_Iso.SelectInterface(3, 1));
  puts("PASS CDC+ISO descriptors, five pipes, six alternate settings and teardown");
 }
 
@@ -110,7 +110,8 @@ SOURCES = [
     'src/usb/usb.cpp', 'src/usb/usb_intrf.cpp',
     'src/usb/usb_iso.cpp', 'src/usb/usbd_cdc.cpp',
     'src/usb/usbd_cdc_desc.cpp',
-    'src/usb/usbd_epalloc.cpp', 'src/app_evt_handler.cpp', 'src/app_run.cpp',
+    'src/usb/usbd_epalloc.cpp', 'src/usb/usbd_periodic.cpp',
+    'src/usb/usbd_iso.cpp', 'src/app_evt_handler.cpp', 'src/app_run.cpp',
     'src/device_intrf.cpp', 'src/cfifo.c',
 ]
 

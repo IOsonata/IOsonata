@@ -71,6 +71,10 @@ typedef struct __Usbd_EpAlloc_Res {
 #pragma pack(pop)
 
 #ifdef __cplusplus
+/// Undo the last registration during failed Init, before UsbEnable only.
+/// Does not close transports; Init must not have opened any endpoints.
+bool UsbdClassRollback(int DevNo, UsbDeviceClass *pClass);
+
 /// Find the lowest free interface/endpoint placement satisfying pReq,
 /// atomically register pClass with that topology and return the assigned
 /// numbers in pRes. Returns false when no placement fits.

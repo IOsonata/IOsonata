@@ -50,8 +50,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "board.h"
 #endif
-#include "usb/usb_int.h"
-#include "usb/usbd_epalloc.h"
+#include "usb/usbd_int.h"
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -61,7 +60,6 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #endif
 
 #define USB_DEVNO			0
-#define INT_CONFIG_VALUE	1U
 #define INT_ALT_COUNT		3U
 #define INT_MPS				64U
 #define INT_REQ_GET_DIAG	0x5BU
@@ -73,17 +71,6 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #define INT_STR_INTERFACE	4U
 
 #pragma pack(push, 1)
-typedef struct __Int_Alt_Descriptor {
-	UsbIntrfDesc_t Interface;
-	UsbEndPointDesc_t Out;
-	UsbEndPointDesc_t In;
-} IntAltDesc_t;
-
-typedef struct __Int_Function_Descriptor {
-	UsbIntrfDesc_t Alt0;
-	IntAltDesc_t Alt[INT_ALT_COUNT];
-} IntFunctionDesc_t;
-
 typedef struct __Int_Diag {
 	uint32_t RxCnt;
 	uint32_t TxSubmitCnt;
@@ -109,10 +96,6 @@ static_assert(sizeof(IntDiag_t) == 50U,
 	"interrupt diagnostic wire format changed");
 
 typedef struct __Int_Function_State {
-	bool Configured;
-	uint8_t Alt;
-	uint8_t InterfaceNo;
-	uint8_t EpNo;
 	uint32_t RxCnt;
 	uint32_t TxSubmitCnt;
 	uint32_t TxDoneCnt;
@@ -124,128 +107,32 @@ typedef struct __Int_Function_State {
 
 static bool IntControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 					   uint8_t **ppData, uint16_t *pLength);
-static bool IntSelectConfig(uint8_t Configuration);
-static bool IntSelectInterface(uint8_t InterfaceNo, uint8_t Alt);
-static void IntReset(void);
+static void IntClearDiag(void);
+static int IntEvent(DevIntrf_t *, DEVINTRF_EVT, uint8_t *, int);
 
-class IntLoopbackClass final : public UsbDeviceClass {
+// Only application diagnostics extend the reusable device class.
+class IntLoopbackClass final : public UsbdInt {
 public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-				 uint8_t **ppData, uint16_t *pLength) override {
+		uint8_t **ppData, uint16_t *pLength) override {
 		return IntControl(pSetup, Stage, ppData, pLength);
 	}
-	bool SelectConfig(uint8_t ConfigValue) override {
-		return IntSelectConfig(ConfigValue);
+	void Reset(void) override {
+		UsbdInt::Reset();
+		IntClearDiag();
 	}
-	bool SelectInterface(uint8_t InterfaceNo, uint8_t Option) override {
-		return IntSelectInterface(InterfaceNo, Option);
+
+protected:
+	bool OpenTransport(uint16_t Mps, uint8_t Interval) override {
+		IntClearDiag();
+		return UsbdInt::OpenTransport(Mps, Interval);
 	}
-	void Reset(void) override { IntReset(); }
 };
 
-static constexpr uint8_t s_IntIntervals[INT_ALT_COUNT] = { 1U, 4U, 16U };
-
-static constexpr IntFunctionDesc_t s_IntFunctionDesc = {
-	.Alt0 = {
-		.bLength = sizeof(UsbIntrfDesc_t),
-		.bDescriptorType = USB_DESCTYPE_INTERFACE,
-		.bInterfaceNumber = 0U,
-		.bAlternateSetting = 0U,
-		.bNumEndpoints = 0U,
-		.bInterfaceClass = USB_INTRFCLASS_VENDOR,
-		.bInterfaceSubClass = 0U,
-		.bInterfaceProtocol = 0U,
-		.iInterface = INT_STR_INTERFACE,
-	},
-	.Alt = {
-		{
-			.Interface = {
-				.bLength = sizeof(UsbIntrfDesc_t),
-				.bDescriptorType = USB_DESCTYPE_INTERFACE,
-				.bInterfaceNumber = 0U,
-				.bAlternateSetting = 1U,
-				.bNumEndpoints = 2U,
-				.bInterfaceClass = USB_INTRFCLASS_VENDOR,
-				.bInterfaceSubClass = 0U,
-				.bInterfaceProtocol = 0U,
-				.iInterface = INT_STR_INTERFACE,
-			},
-			.Out = {
-				.bLength = sizeof(UsbEndPointDesc_t),
-				.bDescriptorType = USB_DESCTYPE_ENDPOINT,
-				.bEndpointAddress = 0U,
-				.bmAttributes = USB_ENDPATT_TRANS_INT,
-				.wMaxPacketSize = INT_MPS,
-				.bInterval = 1U,
-			},
-			.In = {
-				.bLength = sizeof(UsbEndPointDesc_t),
-				.bDescriptorType = USB_DESCTYPE_ENDPOINT,
-				.bEndpointAddress = 0U,
-				.bmAttributes = USB_ENDPATT_TRANS_INT,
-				.wMaxPacketSize = INT_MPS,
-				.bInterval = 1U,
-			},
-		},
-		{
-			.Interface = {
-				.bLength = sizeof(UsbIntrfDesc_t),
-				.bDescriptorType = USB_DESCTYPE_INTERFACE,
-				.bInterfaceNumber = 0U,
-				.bAlternateSetting = 2U,
-				.bNumEndpoints = 2U,
-				.bInterfaceClass = USB_INTRFCLASS_VENDOR,
-				.bInterfaceSubClass = 0U,
-				.bInterfaceProtocol = 0U,
-				.iInterface = INT_STR_INTERFACE,
-			},
-			.Out = {
-				.bLength = sizeof(UsbEndPointDesc_t),
-				.bDescriptorType = USB_DESCTYPE_ENDPOINT,
-				.bEndpointAddress = 0U,
-				.bmAttributes = USB_ENDPATT_TRANS_INT,
-				.wMaxPacketSize = INT_MPS,
-				.bInterval = 4U,
-			},
-			.In = {
-				.bLength = sizeof(UsbEndPointDesc_t),
-				.bDescriptorType = USB_DESCTYPE_ENDPOINT,
-				.bEndpointAddress = 0U,
-				.bmAttributes = USB_ENDPATT_TRANS_INT,
-				.wMaxPacketSize = INT_MPS,
-				.bInterval = 4U,
-			},
-		},
-		{
-			.Interface = {
-				.bLength = sizeof(UsbIntrfDesc_t),
-				.bDescriptorType = USB_DESCTYPE_INTERFACE,
-				.bInterfaceNumber = 0U,
-				.bAlternateSetting = 3U,
-				.bNumEndpoints = 2U,
-				.bInterfaceClass = USB_INTRFCLASS_VENDOR,
-				.bInterfaceSubClass = 0U,
-				.bInterfaceProtocol = 0U,
-				.iInterface = INT_STR_INTERFACE,
-			},
-			.Out = {
-				.bLength = sizeof(UsbEndPointDesc_t),
-				.bDescriptorType = USB_DESCTYPE_ENDPOINT,
-				.bEndpointAddress = 0U,
-				.bmAttributes = USB_ENDPATT_TRANS_INT,
-				.wMaxPacketSize = INT_MPS,
-				.bInterval = 16U,
-			},
-			.In = {
-				.bLength = sizeof(UsbEndPointDesc_t),
-				.bDescriptorType = USB_DESCTYPE_ENDPOINT,
-				.bEndpointAddress = 0U,
-				.bmAttributes = USB_ENDPATT_TRANS_INT,
-				.wMaxPacketSize = INT_MPS,
-				.bInterval = 16U,
-			},
-		},
-	},
+static const UsbdPeriodicAlt_t s_IntAlternates[] = {
+	{ 64U, 64U, 1U, 1U },
+	{ 64U, 64U, 4U, 4U },
+	{ 64U, 64U, 16U, 16U },
 };
 
 // Application event queue memory, replaces the 4 event library default. The
@@ -282,11 +169,11 @@ static const UsbCfg_t s_UsbCfg = {
 
 alignas(4) static uint8_t s_IntRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
 alignas(4) static uint8_t s_IntTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
-static UsbIntIntrf s_Int;
+static IntLoopbackClass s_Int;
 
 static IntFunctionState_t s_Fn;
 static IntDiag_t s_DiagReply;
-static IntLoopbackClass s_IntClass;
+
 
 static void IntClearDiag(void)
 {
@@ -325,7 +212,7 @@ static void IntBuildDiag(void)
 	s_DiagReply.LastTxLength = s_Fn.LastTxLength;
 	s_DiagReply.Mps = pInt->Mps;
 	s_DiagReply.Interval = pInt->Interval;
-	s_DiagReply.Alt = s_Fn.Alt;
+	s_DiagReply.Alt = s_Int.Alternate();
 
 	if (pInt->pData->Mps != 0U)
 	{
@@ -414,7 +301,7 @@ static bool IntControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 		pSetup->bmRequestType !=
 			(USB_REQTYPE_DIRHOST | USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE) ||
 		pSetup->bRequest != INT_REQ_GET_DIAG || pSetup->wValue != 0U ||
-		pSetup->wIndex != s_Fn.InterfaceNo || pSetup->wLength != sizeof(IntDiag_t))
+		pSetup->wIndex != s_Int.FirstInterface() || pSetup->wLength != sizeof(IntDiag_t))
 	{
 		return false;
 	}
@@ -425,115 +312,30 @@ static bool IntControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	return true;
 }
 
-static bool IntSelectConfig(uint8_t Configuration)
-{
-	s_Int.Close();
-	s_Fn.Configured = false;
-	s_Fn.Alt = 0U;
-
-	if (Configuration == 0U)
-	{
-		return true;
-	}
-	if (Configuration != INT_CONFIG_VALUE)
-	{
-		return false;
-	}
-
-	s_Fn.Configured = true;
-	return true;
-}
-
-static bool IntSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
-{
-	if (!s_Fn.Configured || InterfaceNo != s_Fn.InterfaceNo || Alt > INT_ALT_COUNT)
-	{
-		return false;
-	}
-
-	s_Int.Close();
-	s_Fn.Alt = 0U;
-	if (Alt == 0U)
-	{
-		return true;
-	}
-
-	IntClearDiag();
-	if (!s_Int.Open(INT_MPS, s_IntIntervals[Alt - 1U]))
-	{
-		return false;
-	}
-
-	s_Fn.Alt = Alt;
-	return true;
-}
-
-static void IntReset(void)
-{
-	s_Fn.Configured = false;
-	s_Fn.Alt = 0U;
-	s_Int.Reset();
-	IntClearDiag();
-}
-
-static void IntPatchFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
-								 UsbSpeed_t)
-{
-	IntFunctionDesc_t *pDesc =
-		reinterpret_cast<IntFunctionDesc_t *>(pData);
-	pDesc->Alt0.bInterfaceNumber = s_Fn.InterfaceNo;
-	for (unsigned i = 0U; i < INT_ALT_COUNT; i++)
-	{
-		IntAltDesc_t &alt = pDesc->Alt[i];
-		alt.Interface.bInterfaceNumber = s_Fn.InterfaceNo;
-		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_Fn.EpNo);
-		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_Fn.EpNo);
-	}
-}
-
-static bool IntRegisterFunction(void)
-{
-	UsbdEpAllocReq_t req = {};
-	req.InterfaceCount = 1U;
-	req.BidirectionalCount = 1U;
-
-	UsbdEpAllocRes_t alloc = {};
-	if (!UsbdEpAlloc(USB_DEVNO, &req, &s_IntClass, &alloc))
-	{
-		return false;
-	}
-
-	s_Fn.InterfaceNo = alloc.FirstInterface;
-	s_Fn.EpNo = alloc.Bidirectional[0];
-	return UsbDescRegister(USB_DEVNO, &s_IntClass,
-		&s_IntFunctionDesc, sizeof(s_IntFunctionDesc), IntPatchFunctionDesc);
-}
+static const UsbdIntCfg_t s_IntCfg = {
+	.Function = {
+		.DevNo = USB_DEVNO,
+		.pAlternates = s_IntAlternates,
+		.AltCount = INT_ALT_COUNT,
+		.SubClass = 0U,
+		.Protocol = 0U,
+		.InterfaceString = INT_STR_INTERFACE,
+	},
+	.EvtCB = IntEvent,
+	.pContext = nullptr,
+	.pRxBuffer = s_IntRxBuffer,
+	.pTxBuffer = s_IntTxBuffer,
+};
 
 int main()
 {
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
-		!UsbInit(&s_UsbCfg) || !IntRegisterFunction())
-	{
-		return -1;
-	}
-
-	UsbIntIntrfCfg_t intCfg = {};
-	intCfg.DevNo = USB_DEVNO;
-	intCfg.EpNo = s_Fn.EpNo;
-	intCfg.EvtCB = IntEvent;
-	intCfg.pRxBuffer = s_IntRxBuffer;
-	intCfg.pTxBuffer = s_IntTxBuffer;
-	if (!s_Int.Init(intCfg))
+		!UsbInit(&s_UsbCfg) || !s_Int.Init(s_IntCfg))
 	{
 		return -1;
 	}
 
 	(void)UsbEnable(USB_DEVNO);
-	while (1)
-	{
-		AppEvtHandlerExec();
-	}
-
+	AppRun();
 	return 0;
 }
-

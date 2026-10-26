@@ -225,6 +225,7 @@ TARGETS += $(MSC_TARGET) $(MULTICONFIG_TARGET)
 all: test
 
 test: $(TARGETS) examples-build
+	$(MAKE) test-periodic
 	$(MAKE) test-combo-init
 	$(MAKE) test-combo-prbs
 	$(MAKE) test-combo-shutdown
@@ -270,6 +271,7 @@ test-iso-host-sched:
 
 test-c-header:
 	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
+		'#include "usb/usbd_int.h"' '#include "usb/usbd_iso.h"' \
 		'#include "usb/usbd_hid.h"' '#include "usb/usb_mscdef.h"' \
 		'int main(void) {' \
 		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ? 1 : 0;' '}' | \
@@ -442,3 +444,8 @@ $(MULTICONFIG_TARGET): $(MULTICONFIG_SOURCES) usb_core_test.cpp $(HEADERS)
 test-sam4l:
 	CXX=$(CXX) python3 ./sam4l_usb_ctrlr_test.py
 	CXX=$(CXX) python3 ./sam4l_usb_platform_test.py
+
+
+.PHONY: test-periodic
+test-periodic:
+	CXX="$(CXX)" python3 ./periodic_test.py

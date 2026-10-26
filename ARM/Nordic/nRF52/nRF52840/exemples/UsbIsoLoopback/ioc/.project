@@ -40,5 +40,15 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/usbd_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/usb/usbd_iso.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usbd_periodic.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/usb/usbd_periodic.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

@@ -19,8 +19,8 @@ composition, endpoint dispatch and controller-port rules.
 | Custom Bulk | `UsbdBulk` | `exemples/usb/usb_custom_bulk_loopback.cpp` | `UsbCustomBulkLoopback/ioc` | `Python/usb_custom_bulk_loopback.py` |
 | HID | `UsbdHid` | `exemples/usb/usb_hid_loopback.cpp` | `UsbHidLoopback/ioc` | `Python/usb_hid_loopback.py` |
 | Mass Storage | `UsbdMsc` | `exemples/usb/usb_msc_ramdisk.cpp` | `UsbMscRamDisk/ioc` | `Python/usb_msc_test.py` |
-| Interrupt transport | `UsbIntIntrf` | `exemples/usb/usb_int_loopback.cpp` | `UsbIntLoopback/ioc` | `Python/usb_int_loopback.py` |
-| Isochronous transport | `UsbIsoIntrf` | `exemples/usb/usb_iso_loopback.cpp` | `UsbIsoLoopback/ioc` | `Python/usb_iso_loopback.py` |
+| Vendor Interrupt | `UsbdInt` | `exemples/usb/usb_int_loopback.cpp` | `UsbIntLoopback/ioc` | `Python/usb_int_loopback.py` |
+| Vendor Isochronous | `UsbdIso` | `exemples/usb/usb_iso_loopback.cpp` | `UsbIsoLoopback/ioc` | `Python/usb_iso_loopback.py` |
 
 The target projects are below
 `ARM/Nordic/nRF52/nRF52840/exemples/`. Interrupt and Isochronous loopback
@@ -397,11 +397,87 @@ configuration. The maintainer validated the HCI/MSC storage optimization
 with HciController for HCI and UsbMscRamDisk for MSC. HciController is not
 included as a target project in this repository.
 
-## Interrupt and Isochronous transports
+## Interrupt and Isochronous functions
 
-`UsbIntIntrf` and `UsbIsoIntrf` are role-neutral endpoint-pair transports used
-to build a USB class. Their loopback firmware deliberately uses a vendor
-interface so the endpoint behavior can be tested directly.
+Use `UsbdInt` and `UsbdIso` for vendor-specific USB device functions. They
+allocate one interface and one bidirectional endpoint pair, generate alternate
+zero with no endpoints, and generate active alternates from a const table.
+`UsbIntIntrf` and `UsbIsoIntrf` remain role-neutral transports underneath them.
+
+For Interrupt, provide separate aligned direct slots and the polling choices:
+
+```cpp
+#include "usb/usbd_int.h"
+
+static const UsbdPeriodicAlt_t s_Alternates[] = {
+	// FS bytes, HS bytes, FS bInterval, HS bInterval
+	{64, 64, 1, 1},
+	{64, 64, 4, 4},
+	{64, 64, 16, 16},
+};
+alignas(4) static uint8_t s_Rx[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_Tx[USB_INT_INTRF_PKT_BLKSIZE];
+static UsbdInt s_Int;
+static const UsbdIntCfg_t s_IntCfg = {
+	.Function = {0, s_Alternates, 3, 0, 0, 4},
+	.EvtCB = IntEvent,
+	.pContext = nullptr,
+	.pRxBuffer = s_Rx,
+	.pTxBuffer = s_Tx,
+};
+
+// After initializing the application event queue:
+if (!UsbInit(&s_UsbCfg) || !s_Int.Init(s_IntCfg)) return -1;
+(void)UsbEnable(0);
+AppRun();
+```
+
+`IntEvent` is the application's `DevIntrfEvtHandler_t`. The function fields are
+controller number, alternate table, count, vendor subclass, protocol and
+interface string index. Index 4 uses `UsbCfg_t::pFuncName`; zero omits the string.
+No interface or endpoint number is supplied. The alternate table must remain
+alive and unchanged for the registered function's lifetime.
+
+For ISO, use `UsbdIsoCfg_t` with the same `Function` fields and event callback.
+Leaving both FIFO pointers null selects the transport's internal two-packet
+FIFOs. Caller-owned FIFOs instead use two distinct aligned regions of
+`USB_ISO_INTRF_FIFO_MEMSIZE(BufferSize)` bytes. Each alternate must fit that
+capacity. The loopback example supplies six choices:
+
+```cpp
+static const UsbdPeriodicAlt_t s_IsoAlternates[] = {
+	{9, 9, 1, 4}, {17, 17, 1, 4}, {25, 25, 1, 4},
+	{33, 33, 1, 4}, {49, 49, 1, 4}, {63, 63, 1, 4},
+};
+static UsbdIso s_Iso;
+static const UsbdIsoCfg_t s_IsoCfg = {
+	.Function = {0, s_IsoAlternates, 6, 0, 0, 4},
+	.EvtCB = IsoEvent,
+};
+// Between UsbInit and UsbEnable:
+if (!s_Iso.Init(s_IsoCfg)) return -1;
+```
+
+Table entries are active settings 1..AltCount. Alternate 0 disables transfers.
+Full-speed Interrupt intervals are milliseconds. ISO intervals and high-speed
+Interrupt intervals encode `2^(bInterval-1)` frames or microframes. Thus ISO
+intervals 1 at full speed and 4 at high speed both request one millisecond.
+HS fields are required only on high-speed-capable targets. High-bandwidth
+multiple transactions per microframe and USB audio class semantics are not
+provided by these vendor functions.
+
+The classes close transfers on unconfiguration, reset and detach. ISO suspend
+and resume are handled through the existing deferred USB process pass.
+An endpoint-open failure rejects the requested alternate and attempts to reopen
+the previous one. A persistent controller failure requires host reconfiguration
+or bus reset. Invalid configuration, exhausted ownership and descriptor capacity
+fail initialization without retaining the new class's allocation. Hardware pipe
+limits are still enforced by the controller when endpoints open.
+
+Subclass `Control()` for application-specific diagnostic requests. The loopback
+samples also clear their diagnostic counters when an active alternate opens.
+Their request IDs (Interrupt 0x5B, ISO 0x5A), reply formats, VID/PID and alternate
+layouts are unchanged. Composite stress samples use the same classes.
 
 ```bash
 ./.venv/bin/python3 Python/usb_int_loopback.py
@@ -412,6 +488,15 @@ Both runners provide a `--manual-suspend-wake` phase. The Interrupt runner
 checks alternate settings with different polling intervals. The Isochronous
 runner checks scheduled packet flow and diagnostic counters. Use
 `Python/usb_iso_diag.py` for focused isochronous endpoint diagnosis.
+
+### HID report definitions
+
+`UsbdHid` continues to generate the USB interface, HID and endpoint descriptors.
+Applications supply their report definition because it describes their actual
+input/output data. The keyboard, vendor loopback and six-axis mouse have distinct
+report layouts and report handling. A general descriptor generator would add
+more API than these short definitions remove, so this change retains the existing
+report API and examples rather than adding presets with implicit report layouts.
 
 ## Composite devices
 
