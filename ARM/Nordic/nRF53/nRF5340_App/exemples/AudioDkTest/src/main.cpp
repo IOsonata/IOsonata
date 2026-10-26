@@ -137,6 +137,42 @@ static void PrintSigned64(int64_t value)
 	PrintUnsigned64(magnitude);
 }
 
+static bool CheckCodecPlayback()
+{
+	uint32_t en;
+	uint32_t status;
+	uint32_t volume;
+	uint32_t clock;
+	uint32_t asp;
+	uint32_t mixer;
+
+	if (!s_Codec.ReadReg(0x4804U, en) ||
+		!s_Codec.ReadReg(0x4808U, status) ||
+		!s_Codec.ReadReg(0x4818U, volume) ||
+		!s_Codec.ReadReg(0x1404U, clock) ||
+		!s_Codec.ReadReg(0x6000U, asp) ||
+		!s_Codec.ReadReg(0x8100U, mixer))
+	{
+		puts("CS47L63 playback register read failed");
+		return false;
+	}
+	printf("Codec OUT_EN=%08lX OUT_STS=%08lX VOL=%08lX\n",
+		(unsigned long)en, (unsigned long)status, (unsigned long)volume);
+	printf("Codec SYSCLK=%08lX ASP1=%08lX OUT_MIX=%08lX\n",
+		(unsigned long)clock, (unsigned long)asp, (unsigned long)mixer);
+	if ((en & 2U) == 0 || (status & 2U) == 0)
+	{
+		puts("CS47L63 output path not active");
+		return false;
+	}
+	if ((volume & 0x100U) != 0)
+	{
+		puts("CS47L63 output muted");
+		return false;
+	}
+	return true;
+}
+
 static bool InitDevices()
 {
 	PmnPM1100Cfg_t pmicCfg;
@@ -220,6 +256,11 @@ static bool InitDevices()
 	}
 	printf("CS47L63 revision %u, I2S %lu Hz\n",
 		(unsigned)s_Codec.Revision(), (unsigned long)s_I2s.Rate());
+	msDelay(10);
+	if (!CheckCodecPlayback())
+	{
+		puts("Codec playback not ready; continuing I2S diagnostics");
+	}
 	return true;
 }
 
