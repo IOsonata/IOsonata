@@ -705,6 +705,15 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 	}
 
 	nRFxI2SEnable(&pDev->DevIntrf);
+	if (!s_Running)
+	{
+		// Audio clock startup failed. Do not report a usable I2S device.
+		NRF_I2S->INTEN = 0;
+		NVIC_DisableIRQ(I2S_IRQn);
+		NVIC_ClearPendingIRQ(I2S_IRQn);
+		nRFxI2SDisable(&pDev->DevIntrf);
+		return false;
+	}
 
 	return true;
 }
