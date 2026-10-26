@@ -41,6 +41,7 @@ SOFTWARE.
 #include "stddev.h"
 #include "coredev/i2c.h"
 #include "coredev/i2s.h"
+#include "i2s_full_duplex_test.h"
 #include "coredev/spi.h"
 #include "coredev/uart.h"
 #include "iopinctrl.h"
@@ -128,28 +129,6 @@ static SDCard s_Card;
 #endif
 static const uint8_t s_Addresses[4] = { 0x44, 0x45, 0x41, 0x40 };
 static const uint32_t s_Shunts[4] = { 510000, 2200000, 2200000, 1000000 };
-static const int16_t s_Sine[32] = {
-	0, 799, 1567, 2276, 2896, 3406, 3784, 4017,
-	4096, 4017, 3784, 3406, 2896, 2276, 1567, 799,
-	0, -799, -1567, -2276, -2896, -3406, -3784, -4017,
-	-4096, -4017, -3784, -3406, -2896, -2276, -1567, -799
-};
-
-// Integer RMS without libm: input is the mean-square magnitude of 128 samples.
-static uint32_t AudioSqrt(uint64_t value)
-{
-	uint32_t root = 0;
-	for (uint32_t bit = 1U << 15; bit != 0; bit >>= 1)
-	{
-		uint32_t candidate = root | bit;
-		if ((uint64_t)candidate * candidate <= value)
-		{
-			root = candidate;
-		}
-	}
-	return root;
-}
-
 static void PrintUnsigned64(uint64_t value)
 {
 	uint32_t high = (uint32_t)(value / 1000000000ULL);
@@ -308,6 +287,16 @@ static bool InitDevices()
 	return true;
 }
 
+static bool AudioTestMute(bool mute)
+{
+	return s_Codec.HeadphoneMute(mute);
+}
+
+static uint32_t AudioTestVoltage()
+{
+	return s_Monitors[0].BusVoltageMicroVolt();
+}
+
 int main()
 {
 	alignas(4) uint32_t tx[128];
@@ -351,112 +340,10 @@ int main()
 	puts("SD card probe skipped (define AUDIO_TEST_SD_CARD to enable)");
 #endif
 	puts("Starting continuous I2S audio streaming (1.5 kHz tone, -6 dB output gain)");
-#if AUDIO_TEST_I2S_RESTART
-	puts("I2S restart test enabled: stop for 100 ms every ten microphone reports");
-#endif
-
-	phase = 0;
-	blocks = 0;
-	while (1)
+	if (AUDIO_TEST_I2S_RESTART)
 	{
-		for (unsigned i = 0; i < 128; i++)
-		{
-			// nRF I2S 16-bit stereo DMA packs left/right into one
-			// 32-bit word. Advance the 32-sample tone once per frame.
-			uint32_t sample = (uint16_t)(s_Sine[phase++ & 31] * 4);
-			tx[i] = sample | (sample << 16);
-		}
-		count = s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx));
-		if (count != (int)sizeof(tx))
-		{
-			usDelay(100);
-			continue;
-		}
-		if (++blocks == 750)
-		{
-			int received;
-			blocks = 0;
-			received = s_I2s.Rx(0, (uint8_t *)rx, sizeof(rx));
-			if (received == (int)sizeof(rx))
-			{
-				// Audio DK has one onboard PDM microphone. The codec can
-				// expose its signal in both I2S slots; analyze one mono slot.
-				int64_t sum = 0;
-				uint64_t squares = 0;
-				uint32_t peak = 0;
-				for (unsigned i = 0; i < 128; i++)
-				{
-					int32_t sample = (int16_t)(uint16_t)rx[i];
-					uint32_t magnitude = sample < 0 ? (uint32_t)-sample : (uint32_t)sample;
-					if (magnitude > peak)
-					{
-						peak = magnitude;
-					}
-					sum += sample;
-					squares += (uint64_t)(int64_t)sample * sample;
-				}
-				// Remove DC offset from the measured signal power.
-				uint64_t power = (squares - (uint64_t)(sum * sum / 128)) / 128;
-				printf("I2S mono mic peak=%lu RMS(AC)=%lu VBAT=%lu uV\n",
-					(unsigned long)peak, (unsigned long)AudioSqrt(power),
-					(unsigned long)s_Monitors[0].BusVoltageMicroVolt());
-			}
-			else
-			{
-				puts("I2S microphone capture timeout");
-			}
-#if AUDIO_TEST_I2S_RESTART
-			// Restart the peripheral in place every ten reports. Do not
-			// reinitialize the codec or MCU: this exercises I2S STOPPED,
-			// IRQ shutdown, FIFO reset and restart handling.
-			if (++reports == 10)
-			{
-				reports = 0;
-				printf("I2S restart %u: muting and stopping for 100 ms\n", ++restarts);
-				if (!s_Codec.HeadphoneMute(true))
-				{
-					puts("Codec headphone mute failed");
-				}
-				msDelay(10);
-				s_I2s.Disable();
-				msDelay(100);
-				s_I2s.Enable();
-				// Allow the DMA to queue and transmit fresh audio blocks
-				// before enabling the headphone output again.
-				for (unsigned i = 0; i < 8; i++)
-				{
-					for (unsigned j = 0; j < 128; j++)
-					{
-						uint32_t sample = (uint16_t)(s_Sine[phase++ & 31] * 4);
-						tx[j] = sample | (sample << 16);
-					}
-					unsigned retry = 10000;
-					int written = 0;
-					while (retry > 0)
-					{
-						written = s_I2s.Tx(0, (const uint8_t *)tx, sizeof(tx));
-						if (written == (int)sizeof(tx))
-						{
-							break;
-						}
-						retry--;
-						usDelay(100);
-					}
-					if (written != (int)sizeof(tx))
-					{
-						puts("I2S restart TX timeout; headphone remains muted");
-						s_I2s.Disable();
-						return 1;
-					}
-				}
-				msDelay(10);
-				if (!s_Codec.HeadphoneMute(false))
-				{
-					puts("Codec headphone unmute failed");
-				}
-				printf("I2S restart %u: streaming resumed\n", restarts);
-			}
-#endif
-		}
+		puts("I2S restart test enabled: stop for 100 ms every ten microphone reports");
 	}
+
+	return I2SFullDuplexTest(s_I2s, AudioTestMute, AudioTestVoltage, AUDIO_TEST_I2S_RESTART != 0);
 }
