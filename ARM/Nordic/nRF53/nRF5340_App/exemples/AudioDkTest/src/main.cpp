@@ -137,6 +137,8 @@ static void PrintSigned64(int64_t value)
 	PrintUnsigned64(magnitude);
 }
 
+extern "C" void nRFxI2SGetTxStats(uint32_t *pAudio, uint32_t *pSilent);
+
 static bool CheckCodecPlayback()
 {
 	uint32_t en;
@@ -340,6 +342,11 @@ int main()
 		if (++blocks == 750)
 		{
 			int received;
+			uint32_t audioBlocks;
+			uint32_t silentBlocks;
+			nRFxI2SGetTxStats(&audioBlocks, &silentBlocks);
+			printf("I2S DMA: audio=%lu silent=%lu\n",
+				(unsigned long)audioBlocks, (unsigned long)silentBlocks);
 			blocks = 0;
 			received = s_I2s.Rx(0, (uint8_t *)rx, sizeof(rx));
 			if (received == (int)sizeof(rx))
