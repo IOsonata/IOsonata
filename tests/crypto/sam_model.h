@@ -32,12 +32,12 @@ extern SamRng g_Rng;
 extern SamPmc g_Pmc;
 extern bool g_AesTimeout, g_RngTimeout;
 extern unsigned g_AesBlocks;
-#define AES (&g_Aes)
+#define SAM4E_AES (&g_Aes)
 #define SAM4L_AESA (&g_Aes)
 #define SAM4L_PM (&g_Pm)
 #define SAM4L_SCIF (&g_Scif)
 #define SAM4L_TRNG (&g_Rng)
-#define PMC (&g_Pmc)
+#define SAM4E_PMC (&g_Pmc)
 #define ID_AES 39U
 #define AES_CR_START 1U
 #define AES_CR_SWRST 256U

@@ -37,8 +37,8 @@ bool CryptoSam::Enable()
 	{
 		return true;
 	}
-	PMC->PMC_PCER1 = 1UL << (ID_AES - 32U);
-	(void)PMC->PMC_PCSR1;
+	SAM4E_PMC->PMC_PCER1 = 1UL << (ID_AES - 32U);
+	(void)SAM4E_PMC->PMC_PCSR1;
 	vbValid = true;
 	return true;
 }
@@ -66,10 +66,10 @@ void CryptoSam::AesOpEnd()
 	uintptr_t state;
 	unsigned i;
 
-	AES->AES_CR = AES_CR_SWRST;
+	SAM4E_AES->AES_CR = AES_CR_SWRST;
 	for (i = 0U; i < 8U; i++)
 	{
-		AES->AES_KEYWR[i] = 0U;
+		SAM4E_AES->AES_KEYWR[i] = 0U;
 	}
 	state = DisableInterrupt();
 	s_AesBusy = false;
@@ -83,25 +83,25 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 	uint32_t polls = 1000000U;
 	unsigned i;
 
-	AES->AES_CR = AES_CR_SWRST;
-	AES->AES_MR = AES_MR_CKEY_PASSWD | (Encrypt ? AES_MR_CIPHER : 0U) |
+	SAM4E_AES->AES_CR = AES_CR_SWRST;
+	SAM4E_AES->AES_MR = AES_MR_CKEY_PASSWD | (Encrypt ? AES_MR_CIPHER : 0U) |
 		(KeyLen == 32U ? AES_MR_KEYSIZE_AES256 : AES_MR_KEYSIZE_AES128);
 	for (i = 0U; i < KeyLen / 4U; i++)
 	{
 		memcpy(&word, pKey + i * 4U, sizeof(word));
-		AES->AES_KEYWR[i] = word;
+		SAM4E_AES->AES_KEYWR[i] = word;
 	}
 	for (i = 0U; i < 4U; i++)
 	{
 		memcpy(&word, In + i * 4U, sizeof(word));
-		AES->AES_IDATAR[i] = word;
+		SAM4E_AES->AES_IDATAR[i] = word;
 	}
-	AES->AES_CR = AES_CR_START;
-	while ((AES->AES_ISR & (AES_ISR_DATRDY | AES_ISR_URAD)) == 0U && polls > 0U)
+	SAM4E_AES->AES_CR = AES_CR_START;
+	while ((SAM4E_AES->AES_ISR & (AES_ISR_DATRDY | AES_ISR_URAD)) == 0U && polls > 0U)
 	{
 		polls--;
 	}
-	if ((AES->AES_ISR & (AES_ISR_DATRDY | AES_ISR_URAD)) != AES_ISR_DATRDY)
+	if ((SAM4E_AES->AES_ISR & (AES_ISR_DATRDY | AES_ISR_URAD)) != AES_ISR_DATRDY)
 	{
 		CryptoSecureWipe(&word, sizeof(word));
 		CryptoSecureWipe(Out, 16U);
@@ -109,7 +109,7 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 	}
 	for (i = 0U; i < 4U; i++)
 	{
-		word = AES->AES_ODATAR[i];
+		word = SAM4E_AES->AES_ODATAR[i];
 		memcpy(Out + i * 4U, &word, sizeof(word));
 	}
 	CryptoSecureWipe(&word, sizeof(word));
