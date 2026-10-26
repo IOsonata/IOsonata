@@ -116,6 +116,10 @@ public:
 		assert(RegLen == 1);
 		assert(DataLen == 2);
 		value = Reg[*pReg];
+		if (*pReg == INA230_REG_CONFIG)
+		{
+			value |= 0x4000U;	// Reserved D14 reads as one on INA230.
+		}
 		pData[0] = uint8_t(value >> 8);
 		pData[1] = uint8_t(value);
 

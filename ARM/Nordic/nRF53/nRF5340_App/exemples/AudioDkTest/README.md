@@ -4,6 +4,18 @@ This IOsonata example exercises the nRF5340 I2S peripheral and the CS47L63
 codec on the nRF5340 Audio DK. It uses IOsonata drivers, not the Nordic nrfx
 I2S driver.
 
+## Source layout
+
+The Eclipse project links `exemples/audio/i2s_full_duplex_test.cpp` as its only
+application source and `src/board.h` for board configuration and pin maps.
+The shared example owns the I2S, SPI, I2C, codec and monitor objects and calls
+their IOsonata interfaces directly, as the other generic audio examples do.
+There is no board implementation module or board callback interface.
+
+This example uses the CS47L63 codec API. The WM8904 examples use that codec's
+own configuration API; changing codec families requires adapting the codec
+configuration in the example, not only changing the pin map.
+
 ## Audio configuration
 
 - I2S master, 48 kHz, 16-bit stereo frames
@@ -29,12 +41,12 @@ The following checks were reported PASS on Release hardware during development:
 - Repeated reset and USB cable disconnect/reconnect playback tests
 - Three in-place I2S stop/restart cycles with capture continuing afterward
 
-These results precede the final source-formatting cleanup commit. Rebuild
-after that commit to verify no regression.
+These hardware results precede the generic-source extraction and architecture
+correction. Rebuild and repeat the Release checks after updating.
 
 ## Optional restart test
 
-In `src/main.cpp`, change:
+In `src/board.h`, change:
 
 ```cpp
 #define AUDIO_TEST_I2S_RESTART 0

@@ -36,7 +36,6 @@ SOFTWARE.
 #include <stdio.h>
 #include <unistd.h>
 
-#include "board.h"
 #include "idelay.h"
 #include "stddev.h"
 #include "coredev/i2c.h"
@@ -48,52 +47,87 @@ SOFTWARE.
 #include "sensors/ina230.h"
 #include "audio/cs47l63.h"
 #include "storage/sdcard.h"
-
+#include "board.h"
 
 static const IOPinCfg_t s_UartPins[] = AUDIO_UART_PINS;
 alignas(4) static uint8_t s_UartMem[CFIFO_MEMSIZE(256)];
 static const UARTCfg_t s_UartCfg = {
-	.DevNo = UART_DEVNO, .pIOPinMap = s_UartPins,
-	.NbIOPins = 2, .Rate = 1000000, .DataBits = 8,
-	.Parity = UART_PARITY_NONE, .StopBits = 1,
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = 2,
+	.Rate = 1000000,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = true, .IntPrio = IRQ_PRIO_NORMAL,
-	.EvtCallback = NULL, .bFifoBlocking = true,
-	.RxMemSize = 0, .pRxMem = NULL,
-	.TxMemSize = sizeof(s_UartMem), .pTxMem = s_UartMem,
+	.bIntMode = true,
+	.IntPrio = IRQ_PRIO_NORMAL,
+	.EvtCallback = NULL,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,
+	.pRxMem = NULL,
+	.TxMemSize = sizeof(s_UartMem),
+	.pTxMem = s_UartMem,
 	.bDMAMode = false
 };
 static const IOPinCfg_t s_I2cPins[] = AUDIO_I2C_PINS;
 static const I2CCfg_t s_I2cCfg = {
-	.DevNo = AUDIO_I2C_DEVNO, .Type = I2CTYPE_STANDARD,
-	.Mode = I2CMODE_MASTER, .pIOPinMap = s_I2cPins,
-	.NbIOPins = 2, .Rate = 400000, .MaxRetry = 3,
-	.AddrType = I2CADDR_TYPE_NORMAL, .NbSlaveAddr = 0,
-	.SlaveAddr = { 0 }, .bDmaEn = false, .bIntEn = false,
-	.IntPrio = 6, .EvtCB = NULL
+	.DevNo = AUDIO_I2C_DEVNO,
+	.Type = I2CTYPE_STANDARD,
+	.Mode = I2CMODE_MASTER,
+	.pIOPinMap = s_I2cPins,
+	.NbIOPins = 2,
+	.Rate = 400000,
+	.MaxRetry = 3,
+	.AddrType = I2CADDR_TYPE_NORMAL,
+	.NbSlaveAddr = 0,
+	.SlaveAddr = { 0 },
+	.bDmaEn = false,
+	.bIntEn = false,
+	.IntPrio = 6,
+	.EvtCB = NULL
 };
 static const IOPinCfg_t s_SpiPins[] = AUDIO_SPI_PINS;
 static const SPICfg_t s_SpiCfg = {
-	.DevNo = AUDIO_SPI_DEVNO, .Phy = SPIPHY_NORMAL,
-	.Mode = SPIMODE_MASTER, .pIOPinMap = s_SpiPins,
-	.NbIOPins = sizeof(s_SpiPins) / sizeof(s_SpiPins[0]), .Rate = 8000000, .DataSize = 8,
-	.MaxRetry = 3, .BitOrder = SPIDATABIT_MSB,
+	.DevNo = AUDIO_SPI_DEVNO,
+	.Phy = SPIPHY_NORMAL,
+	.Mode = SPIMODE_MASTER,
+	.pIOPinMap = s_SpiPins,
+	.NbIOPins = sizeof(s_SpiPins) / sizeof(s_SpiPins[0]),
+	.Rate = 8000000,
+	.DataSize = 8,
+	.MaxRetry = 3,
+	.BitOrder = SPIDATABIT_MSB,
 	.DataPhase = SPIDATAPHASE_FIRST_CLK,
 	.ClkPol = SPICLKPOL_HIGH,
-	.ChipSel = SPICSEL_AUTO, .bDmaEn = true,
-	.bIntEn = false, .IntPrio = 6, .DummyByte = 0, .EvtCB = NULL
+	.ChipSel = SPICSEL_AUTO,
+	.bDmaEn = true,
+	.bIntEn = false,
+	.IntPrio = 6,
+	.DummyByte = 0,
+	.EvtCB = NULL
 };
 static const IOPinCfg_t s_I2sPins[] = AUDIO_I2S_PINS;
 alignas(4) static uint8_t s_I2sRxFifo[CFIFO_TOTAL_MEMSIZE(512, 4)];
 alignas(4) static uint8_t s_I2sTxFifo[CFIFO_TOTAL_MEMSIZE(512, 4)];
 static const I2SCfg_t s_I2sCfg = {
-	.DevNo = AUDIO_I2S_DEVNO, .pIOPinMap = s_I2sPins, .NbIOPins = sizeof(s_I2sPins) / sizeof(s_I2sPins[0]),
-	.Mode = I2SMODE_MASTER, .Format = I2SFMT_NORMAL,
-	.SampleWidth = I2SSWIDTH_16BITS, .Chan = I2SCHAN_STEREO,
-	.Freq = 48000, .MaxRetry = 3, .bDmaEn = true,
-	.bIntEn = true, .IntPrio = 6, .EvtCB = NULL,
-	.pRxFifoMem = s_I2sRxFifo, .RxFifoMemSize = sizeof(s_I2sRxFifo),
-	.pTxFifoMem = s_I2sTxFifo, .TxFifoMemSize = sizeof(s_I2sTxFifo)
+	.DevNo = AUDIO_I2S_DEVNO,
+	.pIOPinMap = s_I2sPins,
+	.NbIOPins = sizeof(s_I2sPins) / sizeof(s_I2sPins[0]),
+	.Mode = I2SMODE_MASTER,
+	.Format = I2SFMT_NORMAL,
+	.SampleWidth = I2SSWIDTH_16BITS,
+	.Chan = I2SCHAN_STEREO,
+	.Freq = 48000,
+	.MaxRetry = 3,
+	.bDmaEn = true,
+	.bIntEn = true,
+	.IntPrio = 6,
+	.EvtCB = NULL,
+	.pRxFifoMem = s_I2sRxFifo,
+	.RxFifoMemSize = sizeof(s_I2sRxFifo),
+	.pTxFifoMem = s_I2sTxFifo,
+	.TxFifoMemSize = sizeof(s_I2sTxFifo)
 };
 
 static UART s_Uart;
@@ -265,7 +299,7 @@ static bool InitDevices()
 
 	if (!s_I2s.Init(s_I2sCfg) || s_I2s.Rate() != 48000)
 	{
-		puts("nRF5340 48-kHz I2S initialization failed");
+		puts("48-kHz I2S initialization failed");
 		return false;
 	}
 
@@ -302,7 +336,9 @@ int main()
 
 	if (!s_Uart.Init(s_UartCfg))
 	{
-		while (1);
+		while (1)
+		{
+		}
 	}
 #ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
@@ -341,8 +377,8 @@ int main()
 	{
 		for (unsigned i = 0; i < 128; i++)
 		{
-			// nRF I2S 16-bit stereo DMA packs left/right into one
-			// 32-bit word. Advance the 32-sample tone once per frame.
+			// Each 16-bit stereo frame contains left and right samples.
+			// Advance the 32-sample tone once per frame.
 			uint32_t sample = (uint16_t)(s_Sine[phase++ & 31] * 4);
 			tx[i] = sample | (sample << 16);
 		}
