@@ -70,7 +70,10 @@ bool Ina230::Program()
 	{
 		return false;
 	}
-	if (!ReadReg(INA230_REG_CONFIG, value) || (value & 0x7FFFU) != vCfg.Config)
+	// The INA230 reads reserved D14 as one (POR value 0x4000).
+	// Compare the configured bits and the documented reserved-bit value.
+	if (!ReadReg(INA230_REG_CONFIG, value) ||
+		(value & 0x7FFFU) != (uint16_t)(vCfg.Config | 0x4000U))
 	{
 		return false;
 	}
