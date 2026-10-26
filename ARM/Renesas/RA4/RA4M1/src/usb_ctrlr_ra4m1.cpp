@@ -905,7 +905,19 @@ bool UsbCtrlrVbusDetected(int DevNo)
 	{
 		return (R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) != 0U;
 	}
-	return R_USB_FS0->DPUSR0R_FS_b.DVBSTS0 != 0U;
+	// The generic USB stack checks VBUS before calling UsbCtrlrStart.
+	// USBFS must therefore be released from module-stop before checking
+	// INTSTS0.VBSTS. The deep-standby DVBSTS0 bit is not the normal
+	// operating-mode cable-detect source.
+	if (SystemUsbClockGet() != 48000000U)
+	{
+		return false;
+	}
+	if (!Ra4UsbClockEnable())
+	{
+		return false;
+	}
+	return (R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) != 0U;
 }
 
 bool UsbCtrlrStart(int DevNo)
