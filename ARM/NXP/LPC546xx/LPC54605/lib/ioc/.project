@@ -98,12 +98,12 @@
 		<link>
 			<name>include/LPC54605.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/LPC54605.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/LPC54605.h</locationURI>
 		</link>
 		<link>
 			<name>include/LPC54605_features.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/LPC54605_features.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/LPC54605_features.h</locationURI>
 		</link>
 		<link>
 			<name>include/LPC546xx.h</name>

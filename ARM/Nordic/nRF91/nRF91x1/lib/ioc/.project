@@ -153,7 +153,7 @@
 		<link>
 			<name>include/interrupt.h</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/include/interrupt.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/interrupt.h</locationURI>
 		</link>
 		<link>
 			<name>include/isha1.h</name>
@@ -188,7 +188,7 @@
 		<link>
 			<name>include/nrfx_glue.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/nrfx_glue.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrfx_glue.h</locationURI>
 		</link>
 		<link>
 			<name>include/prbs.h</name>
