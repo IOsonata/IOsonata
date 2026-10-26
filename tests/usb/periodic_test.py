@@ -32,7 +32,8 @@ with tempfile.TemporaryDirectory(prefix='iosonata-periodic-') as temp:
         output = work / ('hs' if high_speed else 'fs')
         command = shlex.split(os.environ.get('CXX', 'g++')) + [
             '-std=gnu++17', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
-            '-fno-exceptions', '-fno-rtti', '-ffunction-sections', '-fdata-sections',
+            # DeviceIntrf uses GNU VLAs; keep the warning nonfatal in this GNU-mode test.
+            '-Wno-error=vla', '-fno-exceptions', '-fno-rtti', '-ffunction-sections', '-fdata-sections',
             '-fsanitize=address,undefined', '-fno-sanitize-recover=all',
             '-I' + str(work), '-I' + str(ROOT / 'include'), '-x', 'c++',
             *[str(ROOT / p) for p in SOURCES],

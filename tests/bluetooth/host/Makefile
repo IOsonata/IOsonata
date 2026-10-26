@@ -304,7 +304,8 @@ bt_crypto_ctlr_test_SOURCES := \
 	$(ROOT)/src/crypto/crypto_aes_modes.cpp \
 	$(ROOT)/src/crypto/crypto_aes_soft.cpp \
 	$(ROOT)/src/crypto/crypto_p256.cpp \
-	$(ROOT)/src/device.cpp
+	$(ROOT)/src/device.cpp \
+	$(ROOT)/src/device_intrf.cpp
 
 bt_ead_test_SOURCES := \
 	bt_ead_test.cpp \
