@@ -36,11 +36,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/audio_dk_board.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/audio_dk_board.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/i2s_full_duplex_test.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/audio/i2s_full_duplex_test.cpp</locationURI>
