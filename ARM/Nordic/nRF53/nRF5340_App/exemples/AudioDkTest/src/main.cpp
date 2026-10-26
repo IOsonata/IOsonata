@@ -310,7 +310,7 @@ int main()
 		uint32_t route;
 		if (s_Codec.ReadReg(0x8200U, route))
 		{
-			printf("ASP1 digital loopback source=%08lX (RX1 to TX1)\\n",
+			printf("ASP1 digital loopback source=%08lX (RX1 to TX1)\n",
 				(unsigned long)route);
 		}
 	}
@@ -344,8 +344,19 @@ int main()
 			received = s_I2s.Rx(0, (uint8_t *)rx, sizeof(rx));
 			if (received == (int)sizeof(rx))
 			{
-				printf("Audio TX/RX continuing, mic sample %08lX, VBAT %lu uV\n",
-					(unsigned long)rx[0],
+				unsigned different = 0;
+				unsigned activeLeft = 0;
+				unsigned activeRight = 0;
+				for (unsigned i = 0; i < 128; i++)
+				{
+					uint16_t left = (uint16_t)rx[i];
+					uint16_t right = (uint16_t)(rx[i] >> 16);
+					if (left != right) { different++; }
+					if (left != 0) { activeLeft++; }
+					if (right != 0) { activeRight++; }
+				}
+				printf("I2S loopback: first=%08lX active L/R=%u/%u different=%u of 128, VBAT=%lu uV\n",
+					(unsigned long)rx[0], activeLeft, activeRight, different,
 					(unsigned long)s_Monitors[0].BusVoltageMicroVolt());
 			}
 			else
