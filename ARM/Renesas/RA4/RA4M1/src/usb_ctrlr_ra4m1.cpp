@@ -53,6 +53,12 @@ SOFTWARE.
 #include "usb/usb.h"
 #include "usb_ctrlr.h"
 
+// EK-RA4M1 supplies VCC_USB externally at 3.3 V. Enable only for a board
+// wired to use the internal USB regulator (VCC_USB_LDO = 3.8 to 5.5 V).
+#ifndef RA4USB_USE_INTERNAL_REGULATOR
+#define RA4USB_USE_INTERNAL_REGULATOR 0
+#endif
+
 #if defined(USB_DEBUG_TRACE) && USB_DEBUG_TRACE > 0
 #include "syslog.h"
 #define RA4USB_TRACE(...) SysLogPrintf(SysLogGet(), "[USBFS] " __VA_ARGS__)
@@ -201,8 +207,9 @@ static uint16_t s_TraceStatus = 0xFFFFU;
 static void Ra4UsbTracePoll(void)
 {
 	// A semihosting write stops the CPU. Do not interrupt attachment,
-	// reset or control transfers with debugger I/O; dump after suspend.
-	if (s_Usb.Started && !s_Usb.Suspended)
+	// reset or control transfers with debugger I/O. Suspend can precede
+	// the first host reset; wait for physical disconnection before dumping.
+	if (s_Usb.Started && (R_USB_FS0->INTSTS0 & RA4USB_INT_VBSTS) != 0U)
 	{
 		return;
 	}
@@ -851,8 +858,12 @@ static bool Ra4UsbClockEnable(void)
 {
 	R_MSTP->MSTPCRB &= ~RA4USB_MSTP_MASK;
 	(void)R_MSTP->MSTPCRB;
-	// Enable the USB transceiver supply before starting USBFS operation.
+	// VDCEN controls the internal regulator, not the transceiver itself.
+#if RA4USB_USE_INTERNAL_REGULATOR
 	R_USB_FS0->USBMC |= RA4USB_USBMC_VDCEN;
+#else
+	R_USB_FS0->USBMC &= (uint16_t)~RA4USB_USBMC_VDCEN;
+#endif
 	R_USB_FS0->SYSCFG = RA4USB_SYSCFG_SCKE;
 	for (uint32_t i = 0U; i < RA4USB_WAIT_COUNT; ++i)
 	{

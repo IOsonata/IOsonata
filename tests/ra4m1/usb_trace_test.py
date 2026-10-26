@@ -16,7 +16,7 @@ static unsigned prints;
 static int trace_printf(const char *, ...) { ++prints; return 0; }
 #define printf trace_printf
 struct { bool Started, Suspended; } s_Usb;
-struct { uint16_t DCPCTR, SYSSTS0; } regs;
+struct { uint16_t DCPCTR, SYSSTS0, INTSTS0; } regs;
 #define R_USB_FS0 (&regs)
 static uint32_t g_Ra4UsbStage;
 static uint16_t g_Ra4UsbSyscfg, g_Ra4UsbIntsts0;
@@ -25,6 +25,7 @@ enum { RA4USB_INT_VBSTS = 0x80 };
 int main()
 {
 	s_Usb.Started = true;
+	regs.INTSTS0 = RA4USB_INT_VBSTS;
 	regs.DCPCTR = 0x101;
 	regs.SYSSTS0 = 1;
 	for (unsigned i = 0; i < 32; ++i)
@@ -39,10 +40,14 @@ int main()
 	assert(s_Trace[0].Dcp == 0x101 && s_Trace[0].Line == 1);
 	s_Usb.Suspended = true;
 	Ra4UsbTracePoll();
+	assert(prints == 0);
+	regs.INTSTS0 = 0;
+	Ra4UsbTracePoll();
 	assert(prints == 17 && s_TracePrinted == 16);
 	Ra4UsbTracePoll();
 	assert(prints == 17);
 	s_Usb.Suspended = false;
+	regs.INTSTS0 = RA4USB_INT_VBSTS;
 	g_Ra4UsbStage = 6;
 	Ra4UsbTracePoll();
 	assert(prints == 17);
@@ -56,4 +61,4 @@ with tempfile.TemporaryDirectory() as tmp:
                         "-Wextra", "-Werror", opt, str(path / "trace.cpp"),
                         "-o", str(path / "trace")], check=True)
         subprocess.run([str(path / "trace")], check=True)
-        print("PASS", opt, "active-bus silence, bounded records, suspend dump")
+        print("PASS", opt, "attached/suspended silence, bounded records, unplug dump")

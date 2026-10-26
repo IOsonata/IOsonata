@@ -796,3 +796,23 @@ setup plus about 3.3 us per block (ECB, 1 KiB: 3.39 ms against 51.7 ms in
 software); CMAC 1 KiB 6.1 ms, CCM 11.8 ms, GCM 25.0 ms (GHASH in software);
 TRNG 16 bytes in 63 us. SHA-256 and P-256 run in software (P-256 key import
 1.44 s).
+
+
+## USBFS supply and debug capture
+
+The USBFS driver defaults to an external 3.3 V supply on VCC_USB, as wired
+on the EK-RA4M1 (E7/E8 closed). USBMC.VDCEN stays clear. For hardware wired
+to use the internal USB regulator, compile the IOsonata library with
+`RA4USB_USE_INTERNAL_REGULATOR=1`; VCC_USB_LDO must then be 3.8 to 5.5 V
+and VCC_USB must be wired as the regulator output, not an external supply.
+See the [EK-RA4M1 manual](https://www.renesas.com/en/document/mat/ek-ra4m1-v1-users-manual),
+sections 5.6.5.3/5.6.5.4, and the
+[RA4M1 datasheet](https://www.renesas.com/en/document/dst/ra4m1-group-datasheet),
+table 2.2.
+
+Debug interrupt snapshots are buffered in RAM while VBUS is present, including
+suspend before the first host reset. To print the capture, unplug the USB device
+cable while leaving the debugger connected and the application running.
+Rebuild both the library and application after changing the driver.
+Host register-model tests do not establish electrical operation or enumeration;
+EK-RA4M1 enumeration remains pending hardware validation.
