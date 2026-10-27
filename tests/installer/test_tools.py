@@ -25,19 +25,23 @@ class ToolTests(unittest.TestCase):
 					bin_dir = root / 'bin'
 					bin_dir.mkdir()
 					for path, code in [
-						(bin_dir / 'python3', '#!/bin/bash\n[[ "$1" == "-c" ]] || exit 88\n'),
-						(venv / 'bin/python3', '#!/bin/bash\nprintf "%s\\n" "$*" >> "$LOG"\nexit "$FAIL"\n'),
+						(bin_dir / 'python3', '#!/bin/bash\necho used >> "$HOST_LOG"\nexit 99\n'),
+						(venv / 'bin/python3', '#!/bin/bash\n[[ "$1" == "-c" ]] && exit 0\nprintf "%s\\n" "$*" >> "$LOG"\nexit "$FAIL"\n'),
 						(venv / 'bin/pyocd', '#!/bin/bash\necho pyocd-test\n')]:
 						path.write_text(code)
 						path.chmod(0o755)
 					# Existing unrelated command must remain untouched.
 					(bin_dir / 'pyocd').write_text('unrelated')
 					env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'],
-						PYOCD_DIR=str(venv), PYOCD=str(venv / 'bin/pyocd'), BIN=str(bin_dir), LOG=str(root / 'log'), FAIL=fail)
+						PYOCD_DIR=str(venv), PYOCD=str(venv / 'bin/pyocd'), BIN=str(bin_dir), LOG=str(root / 'log'), HOST_LOG=str(root / 'host-python'), FAIL=fail)
 					result = subprocess.run(['bash', '-c', 'set -e\n' + self.functions(platform) + '\ninstall_python_tools'], env=env, capture_output=True)
 					self.assertEqual(result.returncode == 0, fail == '0')
 					self.assertEqual((root / 'log').read_text().strip(), '-m pip install --upgrade pyocd')
+					self.assertFalse((root / 'host-python').exists())
 					self.assertEqual((bin_dir / 'pyocd').read_text(), 'unrelated')
+		windows = (INSTALLER / 'install_iocdevtools_win.ps1').read_text()
+		self.assertIn('if (Test-Path $ManagedPython)', windows)
+		self.assertIn('$PythonExecutablePath = $ManagedPython', windows)
 
 	def test_srecord_links_repeated_runs_and_no_self_links(self):
 		for platform in ['linux', 'macos']:

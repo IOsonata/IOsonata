@@ -26,7 +26,7 @@ check_and_install_dependencies() {
   command -v make &>/dev/null || missing_dependencies+=("make")
 	command -v curl &>/dev/null || missing_dependencies+=("curl")
 	command -v unzip &>/dev/null || missing_dependencies+=("unzip")
-	command -v python3 &>/dev/null || missing_dependencies+=("python3")
+	[[ -x "$ROOT/Tools/Python/bin/python3" ]] || command -v python3 &>/dev/null || missing_dependencies+=("python3")
   
   if [[ ${#missing_dependencies[@]} -eq 0 ]]; then
     echo "✓ All required dependencies are installed"
@@ -111,6 +111,7 @@ done
 EXT="$ROOT/external"
 PYOCD_DIR="$ROOT/Tools/Python"
 PYOCD="$PYOCD_DIR/bin/pyocd"
+PYTHON3="$PYOCD_DIR/bin/python3"
 SRECORD_DIR="$ROOT/Tools/SRecord"
 LLVM_DIR="$ROOT/Tools/LLVM"
 
@@ -224,14 +225,14 @@ echo ">>> Detected architecture: $ARCH -> Eclipse arch=$ECLIPSE_ARCH"
 # Helpers
 # ---------------------------------------------------------
 resolve_path() {
-  python3 - "$1" <<'PY'
+  "$PYTHON3" - "$1" <<'PY'
 import os, sys
 print(os.path.realpath(sys.argv[1]))
 PY
 }
 
 java_hash() {
-  python3 - "$1" <<'EOF'
+  "$PYTHON3" - "$1" <<'EOF'
 import sys
 s = sys.argv[1]; h = 0
 for c in s: h = (31*h + ord(c)) & 0xFFFFFFFF
@@ -281,7 +282,7 @@ trap cleanup EXIT
 iocomposer_plugin_url() {
 	local plugin_id="$1"
 	local listing="$2"
-	python3 - "$plugin_id" "$listing" <<'PY'
+	"$PYTHON3" - "$plugin_id" "$listing" <<'PY'
 import json
 import re
 import sys
@@ -330,7 +331,7 @@ install_iocomposer() (
 	done
 
 	# Keep SDK path preferences and one customization hook in the runtime ini.
-	python3 - "$runtime" "$stage" <<'PY'
+	"$PYTHON3" - "$runtime" "$stage" <<'PY'
 from pathlib import Path
 import sys
 
@@ -455,7 +456,7 @@ install_xpack() {
 
   local latest_tag latest_url
   read -r latest_tag latest_url < <(
-    printf '%s' "$latest_json" | python3 -c '
+    printf '%s' "$latest_json" | "$PYTHON3" -c '
 import json, sys
 platforms = [p.strip() for p in (sys.argv[1] or "").split(",") if p.strip()]
 j = json.load(sys.stdin)
@@ -677,12 +678,25 @@ install_optional_llvm() {
 
 # Firmware tools share the SDK Tools directory. Python packages stay isolated.
 install_python_tools() {
-	python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || {
-		echo "Python 3.9 or newer is required for pyOCD." >&2
-		return 1
-	}
-	if [[ ! -x "$PYOCD_DIR/bin/python3" ]]; then
-		if ! python3 -c 'import venv, ensurepip' 2>/dev/null; then
+	local managed_python="${PYTHON3:-$PYOCD_DIR/bin/python3}"
+	local bootstrap_python=""
+
+	if [[ -x "$managed_python" ]]; then
+		"$managed_python" -c 'import sys; sys.exit(sys.version_info < (3, 9))' || {
+			echo "Managed Python 3.9 or newer is required for pyOCD: $managed_python" >&2
+			return 1
+		}
+	else
+		bootstrap_python=$(command -v python3 || true)
+		if [[ -z "$bootstrap_python" ]]; then
+			echo "Python 3.9 or newer is required to create the managed pyOCD environment." >&2
+			return 1
+		fi
+		"$bootstrap_python" -c 'import sys; sys.exit(sys.version_info < (3, 9))' || {
+			echo "Python 3.9 or newer is required to create the managed pyOCD environment." >&2
+			return 1
+		}
+		if ! "$bootstrap_python" -c 'import venv, ensurepip' 2>/dev/null; then
 			if command -v apt-get >/dev/null; then
 				sudo apt-get update
 				sudo apt-get install -y python3-venv
@@ -691,9 +705,9 @@ install_python_tools() {
 				return 1
 			fi
 		fi
-		python3 -m venv "$PYOCD_DIR" || return 1
+		"$bootstrap_python" -m venv "$PYOCD_DIR" || return 1
 	fi
-	"$PYOCD_DIR/bin/python3" -m pip install --upgrade pyocd || return 1
+	"$managed_python" -m pip install --upgrade pyocd || return 1
 	"$PYOCD" --version || return 1
 	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "${ROOT:-}/tools/pyocd/bin/pyocd" ]]; then
 		sudo ln -sf "$PYOCD" "$BIN/pyocd"

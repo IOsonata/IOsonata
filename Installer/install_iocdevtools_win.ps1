@@ -42,6 +42,7 @@ if ($Version) { Write-Host "$($SCRIPT_NAME.Split('.')[0]) $SCRIPT_VERSION"; exit
 $ROOT = $SdkHome
 $PYOCD_DIR = "$ROOT\Tools\Python"
 $PYOCD = "$PYOCD_DIR\Scripts\pyocd.exe"
+$ManagedPython = "$PYOCD_DIR\Scripts\python.exe"
 $SRECORD_DIR = "$ROOT\Tools\SRecord"
 $LLVM_DIR = "$ROOT\Tools\LLVM"
 $TOOLS = "$env:ProgramFiles\xPacks"
@@ -148,7 +149,15 @@ function Set-ContentNoBom {
 
 # --- Pre-flight Checks ---
 if ($MODE -ne "uninstall") {
-    $PythonExecutablePath = Find-PythonExecutable
+    if (Test-Path $ManagedPython) {
+        try {
+            & $ManagedPython -c 'import sys; sys.exit(sys.version_info < (3, 9))'
+            if ($LASTEXITCODE -eq 0) { $PythonExecutablePath = $ManagedPython }
+        } catch {}
+    }
+    if (-not $PythonExecutablePath) {
+        $PythonExecutablePath = Find-PythonExecutable
+    }
     if (-not $PythonExecutablePath) {
         Write-Host "[INFO] Python not found. Installing..." -ForegroundColor Yellow
         try {
@@ -403,13 +412,17 @@ function Install-LLVM {
 }
 
 function Install-PythonTools {
-	& $PythonExecutablePath -c 'import sys; sys.exit(sys.version_info < (3, 9))'
-	if ($LASTEXITCODE -ne 0) { throw 'Python 3.9 or newer is required for pyOCD.' }
-	if (-not (Test-Path "$PYOCD_DIR\Scripts\python.exe")) {
+	if (Test-Path $ManagedPython) {
+		& $ManagedPython -c 'import sys; sys.exit(sys.version_info < (3, 9))'
+		if ($LASTEXITCODE -ne 0) { throw "Managed Python 3.9 or newer is required for pyOCD: $ManagedPython" }
+	} else {
+		& $PythonExecutablePath -c 'import sys; sys.exit(sys.version_info < (3, 9))'
+		if ($LASTEXITCODE -ne 0) { throw 'Python 3.9 or newer is required to create the Tools Python environment.' }
 		& $PythonExecutablePath -m venv $PYOCD_DIR
 		if ($LASTEXITCODE -ne 0) { throw 'Failed to create the Tools Python environment.' }
 	}
-	& "$PYOCD_DIR\Scripts\python.exe" -m pip install --upgrade pyocd
+	$PythonExecutablePath = $ManagedPython
+	& $ManagedPython -m pip install --upgrade pyocd
 	if ($LASTEXITCODE -ne 0) { throw 'pyOCD installation failed.' }
 	& $PYOCD --version
 	if ($LASTEXITCODE -ne 0) { throw 'pyOCD verification failed.' }
