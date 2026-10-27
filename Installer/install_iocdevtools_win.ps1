@@ -43,7 +43,6 @@ $ROOT = $SdkHome
 $PYOCD_DIR = "$ROOT\Tools\Python"
 $PYOCD = "$PYOCD_DIR\Scripts\pyocd.exe"
 $ManagedPython = "$PYOCD_DIR\Scripts\python.exe"
-$SRECORD_DIR = "$ROOT\Tools\SRecord"
 $LLVM_DIR = "$ROOT\Tools\LLVM"
 $TOOLS = "$env:ProgramFiles\xPacks"
 $ECLIPSE_DIR = $IocomposerDir
@@ -274,7 +273,7 @@ if ($MODE -eq "uninstall") {
 	# Preserve shared profiles belonging to other CDT installations.
 	Remove-Item "$([Environment]::GetFolderPath('Desktop'))\IOcomposer.lnk", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\IOcomposer.lnk" -Force -ErrorAction SilentlyContinue
     
-	Remove-Item $PYOCD_DIR, $SRECORD_DIR -Recurse -Force -ErrorAction SilentlyContinue
+	Remove-Item $PYOCD_DIR -Recurse -Force -ErrorAction SilentlyContinue
 	if (Test-Path "$LLVM_DIR\.iocomposer-managed") {
 		Remove-Item $LLVM_DIR -Recurse -Force -ErrorAction SilentlyContinue
 	}
@@ -488,79 +487,8 @@ function Install-PythonTools {
 	if ($LASTEXITCODE -ne 0) { throw 'pyOCD verification failed.' }
 }
 
-function Install-SRecord {
-	$tools = @('srec_cat.exe', 'srec_cmp.exe', 'srec_info.exe')
-	$needsInstall = ($MODE -eq 'force')
-	foreach ($tool in $tools) {
-		$path = Join-Path $SRECORD_DIR $tool
-		if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) {
-			$needsInstall = $true
-		}
-	}
-
-	if ($needsInstall) {
-		$parent = Split-Path $SRECORD_DIR -Parent
-		$stage = Join-Path $parent ('.srecord-stage-' + [guid]::NewGuid().ToString('N'))
-		$backup = Join-Path $parent ('.srecord-backup-' + [guid]::NewGuid().ToString('N'))
-		New-Item $stage -ItemType Directory | Out-Null
-		try {
-			$archive = Join-Path $stage 'srecord.zip'
-			# Official portable release; SHA256 also published by ScoopInstaller/Main.
-			$url = 'https://downloads.sourceforge.net/project/srecord/srecord-win32/1.64/srecord-1.64-win32.zip'
-			Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $archive
-			$expected = '83ef7da6e114705b35d06edf4ce430414d14c0088a8fa6a273da8fe3282bc280'
-			if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $expected) { throw 'SRecord checksum mismatch.' }
-
-			$unpacked = Join-Path $stage 'unpacked'
-			Expand-Archive $archive $unpacked
-			$candidate = Join-Path $stage 'candidate'
-			New-Item $candidate -ItemType Directory | Out-Null
-			if (Test-Path $SRECORD_DIR) {
-				Get-ChildItem $SRECORD_DIR -Force | Copy-Item -Destination $candidate -Recurse -Force
-			}
-			Get-ChildItem $unpacked -Force | Copy-Item -Destination $candidate -Recurse -Force
-
-			foreach ($tool in $tools) {
-				$path = Join-Path $candidate $tool
-				if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) {
-					throw "Missing or empty SRecord tool: $tool"
-				}
-			}
-			& (Join-Path $candidate 'srec_cat.exe') -VERSion
-			if ($LASTEXITCODE -ne 0) { throw 'Staged SRecord verification failed.' }
-
-			if (Test-Path $SRECORD_DIR) {
-				Move-Item $SRECORD_DIR $backup
-			}
-			try {
-				Move-Item $candidate $SRECORD_DIR
-				if (Test-Path $backup) {
-					Remove-Item $backup -Recurse -Force
-				}
-			} catch {
-				Remove-Item $SRECORD_DIR -Recurse -Force -ErrorAction SilentlyContinue
-				if (Test-Path $backup) {
-					Move-Item $backup $SRECORD_DIR
-				}
-				throw
-			}
-		} finally {
-			Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-		}
-	}
-
-	foreach ($tool in $tools) {
-		$path = Join-Path $SRECORD_DIR $tool
-		if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) {
-			throw "Missing or empty installed SRecord tool: $tool"
-		}
-	}
-	& "$SRECORD_DIR\srec_cat.exe" -VERSion
-	if ($LASTEXITCODE -ne 0) { throw 'SRecord verification failed.' }
-}
 
 Install-PythonTools
-Install-SRecord
 $LLVM_STATUS = 'skipped (optional; use -WithLLVM)'
 if ($WithLLVM) {
 	try {
@@ -571,7 +499,7 @@ if ($WithLLVM) {
 		Write-Warning "LLVM installation failed; continuing with GCC and remaining tools. $_"
 	}
 }
-$env:Path = "$SRECORD_DIR;$PYOCD_DIR\Scripts;$ROOT\Tools\IDAP-Link;$env:Path"
+$env:Path = "$PYOCD_DIR\Scripts;$ROOT\Tools\IDAP-Link;$env:Path"
 
 $ARM_DIR = Install-xPack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC"
 $RISCV_DIR = Install-xPack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC"
@@ -716,7 +644,7 @@ environment/project/LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/ARM_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/RISCV_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/IOCOMPOSER_HOME/value=$RT
-environment/project/PATH/value=$RT/Tools/SRecord;$RT/Tools/Python/Scripts;$RT/Tools/IDAP-Link
+environment/project/PATH/value=$RT/Tools/Python/Scripts;$RT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=;
 environment/project/ARM_GCC_HOME/value=$AD/bin
@@ -830,7 +758,7 @@ environment/project/LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/ARM_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/RISCV_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/IOCOMPOSER_HOME/value=$RT
-environment/project/PATH/value=$RT/Tools/SRecord;$RT/Tools/Python/Scripts;$RT/Tools/IDAP-Link
+environment/project/PATH/value=$RT/Tools/Python/Scripts;$RT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=;
 environment/project/ARM_GCC_HOME/value=$AD/bin
@@ -1183,8 +1111,6 @@ LLVM_OBJCOPY = $RT/Tools/LLVM/bin/llvm-objcopy.exe
 ARM_LLVM_TARGET = --target=arm-none-eabi
 RISCV_LLVM_TARGET = --target=riscv32-unknown-elf
 SDK_TOOLS_ROOT = $RT/Tools
-SRECORD_ROOT = $RT/Tools/SRecord
-SREC_CAT = $RT/Tools/SRecord/srec_cat.exe
 PYTHON = $RT/Tools/Python/Scripts/python.exe
 PYOCD_ROOT = $RT/Tools/Python
 PYOCD = $RT/Tools/Python/Scripts/pyocd.exe
@@ -1419,7 +1345,6 @@ Write-Host "  `${system_property:iosonata_loc}/IOsonata/include"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/include"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 Write-Host
-Write-Host "SRecord: $SRECORD_DIR"
 Write-Host "Python venv: $PYOCD_DIR"
 Write-Host "pyOCD: $PYOCD"
 Write-Host "IDAP-Link: $ROOT\Tools\IDAP-Link"

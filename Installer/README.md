@@ -274,36 +274,17 @@ The managed layout below is relative to the SDK root, not the IDE directory:
 | Tool | Linux/macOS | Windows |
 |---|---|---|
 | IDAP-Link tools | `Tools/IDAP-Link/IDAPnRFProg` | `Tools/IDAP-Link/IDAPnRFProg.exe` |
-| HEX merge | `Tools/SRecord/bin/srec_cat` | `Tools/SRecord/srec_cat.exe` |
 | Python venv | `Tools/Python/bin/python3` | `Tools/Python/Scripts/python.exe` |
 | pyOCD | `Tools/Python/bin/pyocd` | `Tools/Python/Scripts/pyocd.exe` |
 
-SRecord is installed by the native Linux package manager or Homebrew/MacPorts
-on macOS. Its commands are linked into `Tools/SRecord/bin`; package libraries
-remain managed by the package manager. On macOS, MacPorts is preferred when it
-is installed. Homebrew is used only when its current SRecord formula publishes
-an exact bottle for the running macOS version and CPU; the installer does not
-start a Homebrew source build. If no matching bottle exists, install SRecord
-with MacPorts or put `srec_cat` on PATH before rerunning. The Windows installer uses the official
-portable 1.64 archive with SHA256 verification (the checksum is also recorded in
-[Scoop's manifest](https://github.com/ScoopInstaller/Main/blob/master/bucket/srecord.json)).
+SRecord is not installed, updated, or required by IOcomposer. If you already
+have `srec_cat`, you may use it independently for optional HEX merging.
+Existing SRecord installations and `Tools/SRecord` directories are left untouched.
 
-The installer adds these tool directories to the IDE's project PATH preferences
-and its own build environment. The generated `makefile_path.mk` includes
-`SREC_CAT`, `PYTHON` and `PYOCD`. For a terminal outside IOcomposer, use the full
-paths above or add the tool directories to PATH. No venv activation is required
-when invoking its Python or pyOCD executable directly.
-
-Merge a bootloader and application using non-overlapping addresses:
-
-```bash
-"$HOME/IOcomposer/Tools/SRecord/bin/srec_cat" bootloader.hex -Intel application.hex -Intel -o merged.hex -Intel
-```
-
-Existing legacy `IDAP` and `tools/pyocd` directories are preserved; the new setup
-uses the paths above. A global pyOCD symlink pointing to this SDK's old venv is
-updated, while unrelated commands are preserved. Uninstall removes the managed
-Tools subdirectories, but does not uninstall a system SRecord package.
+The installer adds the managed Python and IDAP-Link tool directories to the
+IDE project PATH preferences. The generated `makefile_path.mk` includes
+`PYTHON` and `PYOCD`. No venv activation is required when invoking their
+executables directly.
 
 All three installers install or update pyOCD in a Python virtual environment at
 `$ROOT/Tools/Python`, where `ROOT` defaults to `~/IOcomposer`. A usable existing

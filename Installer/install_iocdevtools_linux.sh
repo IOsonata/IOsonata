@@ -121,7 +121,6 @@ EXT="$ROOT/external"
 PYOCD_DIR="$ROOT/Tools/Python"
 PYOCD="$PYOCD_DIR/bin/pyocd"
 PYTHON3="$PYOCD_DIR/bin/python3"
-SRECORD_DIR="$ROOT/Tools/SRecord"
 LLVM_DIR="$ROOT/Tools/LLVM"
 
 # Create directories
@@ -169,7 +168,7 @@ if [[ "$MODE" == "uninstall" ]]; then
 	elif [[ -f "$LLVM_DIR/.iocomposer-managed" ]]; then
 		rm -rf "$LLVM_DIR"
 	fi
-	rm -rf "$PYOCD_DIR" "$SRECORD_DIR"
+	rm -rf "$PYOCD_DIR"
   echo ">>> Removing IDAP tools..."
   rm -rf "$ROOT/Tools/IDAP-Link" || true
 
@@ -725,57 +724,10 @@ install_python_tools() {
 	fi
 }
 
-install_srecord() {
-	if ! command -v srec_cat >/dev/null; then
-		if [[ "$(uname -s)" == "Darwin" ]]; then
-			local brew_cmd=""
-			brew_cmd=$(command -v brew || true)
-			[[ -n "$brew_cmd" ]] || {
-				for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-					[[ ! -x "$candidate" ]] || { brew_cmd="$candidate"; break; }
-				done
-			}
-			if [[ -n "$brew_cmd" ]]; then
-				"$brew_cmd" install srecord || return 1
-				export PATH="$("$brew_cmd" --prefix)/bin:$PATH"
-			elif command -v port >/dev/null; then
-				sudo port install srecord || return 1
-			else
-				echo "SRecord requires Homebrew or MacPorts on macOS. Install one and rerun, or provide srec_cat on PATH." >&2
-				return 1
-			fi
-		elif command -v apt-get >/dev/null; then
-			sudo apt-get update
-			sudo apt-get install -y srecord || return 1
-		elif command -v dnf >/dev/null; then
-			sudo dnf install -y srecord || return 1
-		elif command -v yum >/dev/null; then
-			sudo yum install -y srecord || return 1
-		elif command -v pacman >/dev/null; then
-			sudo pacman -S --needed --noconfirm srecord || return 1
-		elif command -v zypper >/dev/null; then
-			sudo zypper install -y srecord || return 1
-		else
-			echo "Install SRecord with your package manager and retry." >&2
-			return 1
-		fi
-	fi
-	mkdir -p "$SRECORD_DIR/bin"
-	local tool executable destination
-	for tool in srec_cat srec_cmp srec_info; do
-		executable=$(command -v "$tool") || return 1
-		destination="$SRECORD_DIR/bin/$tool"
-		if [[ "$executable" != "$destination" ]]; then
-			ln -sf "$executable" "$destination" || return 1
-		fi
-	done
-	"$SRECORD_DIR/bin/srec_cat" -VERSion || return 1
-}
 
 install_python_tools
 install_optional_llvm
-install_srecord
-export PATH="$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link:$PATH"
+export PATH="$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link:$PATH"
 
 ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
 RISCV_DIR=$(install_xpack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC")
@@ -1002,7 +954,7 @@ environment/project/LLVM_HOME/value=$LLVM_DIR
 environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
 environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
+environment/project/PATH/value=$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
@@ -1157,7 +1109,7 @@ environment/project/LLVM_HOME/value=$LLVM_DIR
 environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
 environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
+environment/project/PATH/value=$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
@@ -1332,8 +1284,6 @@ LLVM_OBJCOPY = $LLVM_DIR/bin/llvm-objcopy
 ARM_LLVM_TARGET = --target=arm-none-eabi
 RISCV_LLVM_TARGET = --target=riscv32-unknown-elf
 SDK_TOOLS_ROOT = $ROOT/Tools
-SRECORD_ROOT = $SRECORD_DIR
-SREC_CAT = $SRECORD_DIR/bin/srec_cat
 PYTHON = $PYOCD_DIR/bin/python3
 PYOCD_ROOT = $PYOCD_DIR
 PYOCD = $PYOCD
@@ -1553,6 +1503,6 @@ echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 echo
 echo "If prefs seeding was skipped, run Eclipse once, then re-run this script to seed Embedded CDT toolchain paths."
 echo
-printf "SRecord: %s\nPython venv: %s\npyOCD: %s\nIDAP-Link: %s\n" "$SRECORD_DIR" "$PYOCD_DIR" "$PYOCD" "$ROOT/Tools/IDAP-Link"
+printf "Python venv: %s\npyOCD: %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$ROOT/Tools/IDAP-Link"
 
 printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"
