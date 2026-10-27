@@ -95,6 +95,10 @@ class ToolTests(unittest.TestCase):
 		self.assertIn('IDAPnRFProg extraction failed.', windows)
 		self.assertIn('missing or empty IDAPnRFProg.exe', windows)
 		self.assertIn('Move-Item $IDAP_DIR $IDAP_BACKUP', windows)
+		self.assertIn('.xp-stage-', windows)
+		self.assertIn('curl.exe -fL -o $zip $url', windows)
+		self.assertIn('if ($LASTEXITCODE -ne 0) { throw "$Name extraction failed." }', windows)
+		self.assertIn('archive is missing bin\\$Tool.exe', windows)
 
 
 	def test_srecord_verification_failure(self):

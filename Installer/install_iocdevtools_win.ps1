@@ -305,56 +305,85 @@ function Add-ToSystemPath {
 }
 
 function Install-xPack {
-    param([string]$Repo, [string]$Tool, [string]$Name)
-    Write-Host ">>> Checking $Name..."
-    try { $json = Invoke-RestMethod -Uri "https://api.github.com/repos/xpack-dev-tools/$Repo/releases/latest" } 
-    catch { 
-        Write-Host "[ERROR] Failed to query GitHub API for $Name" -ForegroundColor Red
-        exit 1 
-    }
-    $tag = $json.tag_name
-    $ver = $tag.TrimStart('v')
-    $base = ($ver -split '-')[0]
-    
-    $toolExe = Get-Command "$Tool.exe" -ErrorAction SilentlyContinue
-    if ($toolExe) {
-        # Fix: Added try-catch to avoid $ErrorActionPreference = 'Stop' from being triggered
-        $currVerOutput = try { (& $toolExe.Source --version 2>&1) | Out-String -Stream | Select-Object -First 1 } catch { "" }        # Extract version number for exact comparison
-        if ($currVerOutput -match '(\d+\.\d+\.\d+)') {
-            $currVer = $Matches[1]
-            if ($currVer -eq $base -and $MODE -ne "force") {
-                Write-Host "   [OK] $Name up-to-date ($currVer)." -ForegroundColor Green
-                return (Split-Path (Split-Path $toolExe.Source -Parent) -Parent)
-            }
-        }
-    }
+	param([string]$Repo, [string]$Tool, [string]$Name)
+	Write-Host ">>> Checking $Name..."
+	try {
+		$json = Invoke-RestMethod -Uri "https://api.github.com/repos/xpack-dev-tools/$Repo/releases/latest"
+	} catch {
+		throw "Failed to query GitHub API for $Name. $_"
+	}
+	if (-not $json.tag_name) { throw "GitHub returned no release tag for $Name." }
+	$tag = $json.tag_name
+	$ver = $tag.TrimStart('v')
+	$base = ($ver -split '-')[0]
 
-    # Find asset URL matching our platform
-    $url = ($json.assets | Where-Object { $_.name -like "*$XPACK_PLATFORM.zip" }).browser_download_url
-    if (-not $url) { 
-        Write-Host "[ERROR] No download URL found for $Name ($XPACK_PLATFORM)" -ForegroundColor Red
-        return $null 
-    }
+	$toolExe = Get-Command "$Tool.exe" -ErrorAction SilentlyContinue
+	if ($toolExe) {
+		$currVerOutput = try { (& $toolExe.Source --version 2>&1) | Out-String -Stream | Select-Object -First 1 } catch { "" }
+		if ($currVerOutput -match '(\d+\.\d+\.\d+)') {
+			$currVer = $Matches[1]
+			if ($currVer -eq $base -and $MODE -ne "force") {
+				Write-Host "   [OK] $Name up-to-date ($currVer)." -ForegroundColor Green
+				return (Split-Path (Split-Path $toolExe.Source -Parent) -Parent)
+			}
+		}
+	}
 
-    Write-Host ">>> Installing $Name $ver..."
-    $zip = Join-Path $env:TEMP "$Name.zip"
-    curl.exe -L -o $zip $url
-    $tmp = Join-Path $env:TEMP "xp-extract"
-    if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-    & $SEVENZIP_EXE x $zip -o"$tmp" -y | Out-Null
-    
-    $root = Get-ChildItem $tmp -Directory | Select-Object -First 1
-    if (-not $root) {
-        Write-Host "[ERROR] Failed to extract $Name" -ForegroundColor Red
-        return $null
-    }
-    $target = Join-Path $TOOLS $root.Name
-    if (Test-Path $target) { Remove-Item $target -Recurse -Force }
-    Move-Item $root.FullName $target
-    Remove-Item $zip, $tmp -Recurse -Force
-    Add-ToSystemPath "$target\bin"
-    Write-Host "   [OK] Installed at $target" -ForegroundColor Green
-    return $target
+	$url = ($json.assets | Where-Object { $_.name -like "*$XPACK_PLATFORM.zip" } |
+		Select-Object -First 1).browser_download_url
+	if (-not $url) { throw "No download URL found for $Name ($XPACK_PLATFORM)." }
+
+	Write-Host ">>> Installing $Name $ver..."
+	$stage = Join-Path $env:TEMP (".xp-stage-" + [guid]::NewGuid().ToString('N'))
+	$backup = $null
+	New-Item $stage -ItemType Directory | Out-Null
+	try {
+		$zip = Join-Path $stage "archive.zip"
+		$unpacked = Join-Path $stage "unpacked"
+		New-Item $unpacked -ItemType Directory | Out-Null
+
+		curl.exe -fL -o $zip $url
+		if ($LASTEXITCODE -ne 0) { throw "$Name download failed." }
+
+		& $SEVENZIP_EXE x $zip -o"$unpacked" -y | Out-Null
+		if ($LASTEXITCODE -ne 0) { throw "$Name extraction failed." }
+
+		$root = Get-ChildItem $unpacked -Directory | Select-Object -First 1
+		if (-not $root) { throw "$Name archive contains no tool directory." }
+		$stagedTool = Join-Path $root.FullName "bin\$Tool.exe"
+		if (-not (Test-Path $stagedTool) -or (Get-Item $stagedTool).Length -le 0) {
+			throw "$Name archive is missing bin\$Tool.exe."
+		}
+
+		$target = Join-Path $TOOLS $root.Name
+		if (Test-Path $target) {
+			$backup = "$target.backup-$([guid]::NewGuid().ToString('N'))"
+			Move-Item $target $backup
+		}
+		try {
+			Move-Item $root.FullName $target
+		} catch {
+			Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue
+			if ($backup -and (Test-Path $backup)) {
+				Move-Item $backup $target
+				$backup = $null
+			}
+			throw
+		}
+
+		Add-ToSystemPath "$target\bin"
+		if ($backup -and (Test-Path $backup)) {
+			Remove-Item $backup -Recurse -Force
+			$backup = $null
+		}
+		Write-Host "   [OK] Installed at $target" -ForegroundColor Green
+		return $target
+	} finally {
+		Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+		if ($backup -and (Test-Path $backup) -and -not (Test-Path $target)) {
+			Move-Item $backup $target
+		}
+	}
 }
 
 $BUILDTOOLS_DIR = Install-xPack "windows-build-tools-xpack" "make" "Windows Build Tools"
