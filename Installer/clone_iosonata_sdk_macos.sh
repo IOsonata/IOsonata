@@ -191,7 +191,12 @@ clone_cube_wba() {
 
   if [[ ( -e "$target_dir" || -L "$target_dir" ) && "$MODE" != "force" ]]; then
     current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
-    if [[ "$current" == "$ref" && -f "$target_dir/Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h" ]]; then
+    if [[ "$current" == "$ref" \
+      && -f "$target_dir/Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h" \
+      && -d "$target_dir/Drivers/CMSIS/Device/ST/STM32WBAxx/Include" \
+      && -d "$target_dir/Projects/Common/WPAN/Interfaces" \
+      && -d "$target_dir/Utilities/lpm/tiny_lpm" \
+      && -f "$target_dir/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c" ]]; then
       echo "Keeping $target_dir at $ref"
       return 0
     fi

@@ -71,7 +71,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
@@ -145,7 +145,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
@@ -292,7 +292,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
@@ -366,7 +366,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>

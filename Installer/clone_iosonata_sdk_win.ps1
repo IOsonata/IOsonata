@@ -180,7 +180,12 @@ function Sync-CubeWba {
         } finally {
             Pop-Location
         }
-        if (($current -eq $Ref) -and (Test-Path "$Target\Drivers\STM32WBAxx_HAL_Driver\Inc\stm32wbaxx_hal.h")) {
+        if (($current -eq $Ref) -and
+			(Test-Path "$Target\Drivers\STM32WBAxx_HAL_Driver\Inc\stm32wbaxx_hal.h" -PathType Leaf) -and
+			(Test-Path "$Target\Drivers\CMSIS\Device\ST\STM32WBAxx\Include" -PathType Container) -and
+			(Test-Path "$Target\Projects\Common\WPAN\Interfaces" -PathType Container) -and
+			(Test-Path "$Target\Utilities\lpm\tiny_lpm" -PathType Container) -and
+			(Test-Path "$Target\Projects\NUCLEO-WBA65RI\Applications\BLE\BLE_p2pServer\STM32_WPAN\Target\linklayer_plat.c" -PathType Leaf)) {
             Write-Host "   `[INFO`] Keeping $Target at $Ref" -ForegroundColor Yellow
             return
         }

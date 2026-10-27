@@ -17,11 +17,21 @@ class InstallerTests(unittest.TestCase):
 			if shutil.which(shell):
 				yield platform, shell
 
-	def run_helper(self, platform, shell, helper, mode='normal', tag='', fail=''):
+	def run_helper(self, platform, shell, helper, mode='normal', tag='', fail='', cube_state=''):
 		with tempfile.TemporaryDirectory() as directory:
 			root = Path(directory)
 			target = root / 'STM32CubeWBA'
 			target.mkdir()
+			if cube_state:
+				header = target / 'Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h'
+				header.parent.mkdir(parents=True)
+				header.touch()
+			if cube_state == 'complete':
+				for folder in ['Drivers/CMSIS/Device/ST/STM32WBAxx/Include', 'Projects/Common/WPAN/Interfaces', 'Utilities/lpm/tiny_lpm']:
+					(target / folder).mkdir(parents=True)
+				platform_file = target / 'Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c'
+				platform_file.parent.mkdir(parents=True)
+				platform_file.touch()
 			sentinel = target / 'user-work.txt'
 			sentinel.write_text('keep me')
 			git = root / 'git'
@@ -66,6 +76,15 @@ esac
 						self.assertNotEqual(result.returncode, 0)
 						self.assertTrue(preserved)
 						self.assertNotIn('clone ', calls)
+
+	def test_cube_requires_cmsis_and_platform_files_as_well_as_hal(self):
+		for platform, shell in self.shells():
+			for state in ['hal-only', 'complete']:
+				with self.subTest(platform=platform, state=state):
+					result, preserved, calls = self.run_helper(platform, shell, 'clone_cube_wba', tag='v1.10.0', cube_state=state)
+					self.assertEqual(result.returncode == 0, state == 'complete')
+					self.assertTrue(preserved)
+					self.assertNotIn('clone ', calls)
 
 	def test_matching_pin_is_kept(self):
 		for platform, shell in self.shells():
