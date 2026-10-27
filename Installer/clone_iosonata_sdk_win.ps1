@@ -260,7 +260,7 @@ Write-Host "   `[OK`] All repositories cloned successfully!" -ForegroundColor Gr
 # ---------------------------------------------------------
 Write-Host ""
 Write-Host ">>> Installing IDAP Tools..." -ForegroundColor Cyan
-$IDAP_DIR = "$ROOT\IDAP"
+$IDAP_DIR = "$ROOT\Tools\IDAP-Link"
 $IDAP_PROG = "$IDAP_DIR\IDAPnRFProg.exe"
 
 if (-not (Test-Path $IDAP_DIR)) {
@@ -582,7 +582,7 @@ Write-Host "=========================================================" -Foregrou
 Write-Host "IOsonata Root:        $ROOT" -ForegroundColor White
 Write-Host "IOsonata Framework:   $ROOT\IOsonata" -ForegroundColor White
 Write-Host "External Repos:       $EXT" -ForegroundColor White
-Write-Host "IDAP Tools:           $ROOT\IDAP" -ForegroundColor White
+Write-Host "IDAP Tools:           $ROOT\Tools\IDAP-Link" -ForegroundColor White
 Write-Host ""
 Write-Host "Cloned repositories:" -ForegroundColor White
 Write-Host "  - IOsonata"

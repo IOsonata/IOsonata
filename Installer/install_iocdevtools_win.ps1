@@ -38,6 +38,9 @@ if ($Help) { Show-Help; exit 0 }
 if ($Version) { Write-Host "$($SCRIPT_NAME.Split('.')[0]) $SCRIPT_VERSION"; exit 0 }
 
 $ROOT = $SdkHome
+$PYOCD_DIR = "$ROOT\Tools\Python"
+$PYOCD = "$PYOCD_DIR\Scripts\pyocd.exe"
+$SRECORD_DIR = "$ROOT\Tools\SRecord"
 $TOOLS = "$env:ProgramFiles\xPacks"
 $ECLIPSE_DIR = $IocomposerDir
 
@@ -230,9 +233,10 @@ if ($MODE -eq "uninstall") {
 	# Preserve shared profiles belonging to other CDT installations.
 	Remove-Item "$([Environment]::GetFolderPath('Desktop'))\IOcomposer.lnk", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\IOcomposer.lnk" -Force -ErrorAction SilentlyContinue
     
+	Remove-Item $PYOCD_DIR, $SRECORD_DIR -Recurse -Force -ErrorAction SilentlyContinue
     # Remove IDAP tools
     Write-Host ">>> Removing IDAP tools..."
-    $IDAP_DIR = "$ROOT\IDAP"
+    $IDAP_DIR = "$ROOT\Tools\IDAP-Link"
     if (Test-Path $IDAP_DIR) {
         Remove-Item $IDAP_DIR -Recurse -Force -ErrorAction SilentlyContinue
         Write-Host "   [OK] IDAP tools removed." -ForegroundColor Green
@@ -342,6 +346,47 @@ function Install-xPack {
 }
 
 $BUILDTOOLS_DIR = Install-xPack "windows-build-tools-xpack" "make" "Windows Build Tools"
+function Install-PythonTools {
+	& $PythonExecutablePath -c 'import sys; sys.exit(sys.version_info < (3, 9))'
+	if ($LASTEXITCODE -ne 0) { throw 'Python 3.9 or newer is required for pyOCD.' }
+	if (-not (Test-Path "$PYOCD_DIR\Scripts\python.exe")) {
+		& $PythonExecutablePath -m venv $PYOCD_DIR
+		if ($LASTEXITCODE -ne 0) { throw 'Failed to create the Tools Python environment.' }
+	}
+	& "$PYOCD_DIR\Scripts\python.exe" -m pip install --upgrade pyocd
+	if ($LASTEXITCODE -ne 0) { throw 'pyOCD installation failed.' }
+	& $PYOCD --version
+	if ($LASTEXITCODE -ne 0) { throw 'pyOCD verification failed.' }
+}
+
+function Install-SRecord {
+	if (-not (Test-Path "$SRECORD_DIR\srec_cat.exe")) {
+		$stage = Join-Path $env:TEMP ([guid]::NewGuid().ToString('N'))
+		New-Item $stage -ItemType Directory | Out-Null
+		try {
+			$archive = Join-Path $stage 'srecord.zip'
+			# Official portable release; SHA256 also published by ScoopInstaller/Main.
+			$url = 'https://downloads.sourceforge.net/project/srecord/srecord-win32/1.64/srecord-1.64-win32.zip'
+			Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $archive
+			$expected = '83ef7da6e114705b35d06edf4ce430414d14c0088a8fa6a273da8fe3282bc280'
+			if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $expected) { throw 'SRecord checksum mismatch.' }
+			$unpacked = Join-Path $stage 'unpacked'
+			Expand-Archive $archive $unpacked
+			foreach ($tool in @('srec_cat.exe', 'srec_cmp.exe', 'srec_info.exe')) {
+				if (-not (Test-Path (Join-Path $unpacked $tool))) { throw "Missing SRecord tool: $tool" }
+			}
+			New-Item $SRECORD_DIR -ItemType Directory -Force | Out-Null
+			Copy-Item "$unpacked\*" $SRECORD_DIR -Recurse -Force
+		} finally { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
+	}
+	& "$SRECORD_DIR\srec_cat.exe" -VERSion
+	if ($LASTEXITCODE -ne 0) { throw 'SRecord verification failed.' }
+}
+
+Install-PythonTools
+Install-SRecord
+$env:Path = "$SRECORD_DIR;$PYOCD_DIR\Scripts;$ROOT\Tools\IDAP-Link;$env:Path"
+
 $ARM_DIR = Install-xPack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC"
 $RISCV_DIR = Install-xPack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC"
 $OPENOCD_DIR = Install-xPack "openocd-xpack" "openocd" "OpenOCD"
@@ -465,6 +510,9 @@ function Write-EclipseInstallPrefs {
     $runtime_prefs = @"
 eclipse.preferences.version=1
 environment/project/IOCOMPOSER_HOME/value=$RT
+environment/project/PATH/value=$RT/Tools/SRecord;$RT/Tools/Python/Scripts;$RT/Tools/IDAP-Link
+environment/project/PATH/operation=prepend
+environment/project/PATH/delimiter=;
 environment/project/ARM_GCC_HOME/value=$AD/bin
 environment/project/RISCV_GCC_HOME/value=$RD/bin
 environment/project/OPENOCD_HOME/value=$OD/bin
@@ -573,6 +621,9 @@ install.folder.strict=true
     $runtime_prefs = @"
 eclipse.preferences.version=1
 environment/project/IOCOMPOSER_HOME/value=$RT
+environment/project/PATH/value=$RT/Tools/SRecord;$RT/Tools/Python/Scripts;$RT/Tools/IDAP-Link
+environment/project/PATH/operation=prepend
+environment/project/PATH/delimiter=;
 environment/project/ARM_GCC_HOME/value=$AD/bin
 environment/project/RISCV_GCC_HOME/value=$RD/bin
 environment/project/OPENOCD_HOME/value=$OD/bin
@@ -759,7 +810,7 @@ function Install-IOcomposer {
 function Build-IOcomposerIndex {
 	$index = Join-Path $ROOT 'IOsonata\Installer\build_external_index.py'
 	if ($PythonExecutablePath -and (Test-Path $index)) {
-		& $PythonExecutablePath $index --sdk-root "$ROOT\external"
+		& "$PYOCD_DIR\Scripts\python.exe" $index --sdk-root "$ROOT\external"
 		if ($LASTEXITCODE -ne 0) { Write-Warning "SDK index failed. Retry: python $index --sdk-root $ROOT\external" }
 	} else { Write-Warning "Python or SDK index script missing; index was not built." }
 }
@@ -843,7 +894,7 @@ if (Test-Path $CLONE_LOG) {
 }
 
 # --- Install IDAP Tools ---
-$IDAP_DIR = "$ROOT\IDAP"
+$IDAP_DIR = "$ROOT\Tools\IDAP-Link"
 $IDAP_PROG = "$IDAP_DIR\IDAPnRFProg.exe"
 New-Item -Path $IDAP_DIR -ItemType Directory -Force | Out-Null
 
@@ -892,6 +943,12 @@ $MK_CONTENT = @"
 # ============================================
 # Toolchain Paths
 # ============================================
+SDK_TOOLS_ROOT = $RT/Tools
+SRECORD_ROOT = $RT/Tools/SRecord
+SREC_CAT = $RT/Tools/SRecord/srec_cat.exe
+PYTHON = $RT/Tools/Python/Scripts/python.exe
+PYOCD_ROOT = $RT/Tools/Python
+PYOCD = $RT/Tools/Python/Scripts/pyocd.exe
 ARM_GCC_ROOT = $AD
 ARM_GCC_BIN = $AD/bin
 ARM_GCC = `$(ARM_GCC_BIN)/arm-none-eabi-gcc
@@ -1123,4 +1180,8 @@ Write-Host "  `${system_property:iosonata_loc}/IOsonata/include"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/include"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 Write-Host
+Write-Host "SRecord: $SRECORD_DIR"
+Write-Host "Python venv: $PYOCD_DIR"
+Write-Host "pyOCD: $PYOCD"
+Write-Host "IDAP-Link: $ROOT\Tools\IDAP-Link"
 exit 0

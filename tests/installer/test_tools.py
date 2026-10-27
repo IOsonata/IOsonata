@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Offline tests for the managed firmware tools; never install host packages."""
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import unittest
+
+INSTALLER = Path(__file__).resolve().parents[2] / 'Installer'
+
+
+class ToolTests(unittest.TestCase):
+	def functions(self, platform):
+		source = (INSTALLER / f'install_iocdevtools_{platform}.sh').read_text()
+		return '\n'.join(re.findall(r'^install_(?:python_tools|srecord)\(\) \{.*?^\}', source, re.M | re.S))
+
+	def test_venv_pip_and_failure_propagation(self):
+		for platform in ['linux', 'macos']:
+			for fail in ['0', '19']:
+				with self.subTest(platform=platform, fail=fail), tempfile.TemporaryDirectory() as d:
+					root = Path(d)
+					venv = root / 'Tools with spaces' / 'Python'
+					(venv / 'bin').mkdir(parents=True)
+					bin_dir = root / 'bin'
+					bin_dir.mkdir()
+					for path, code in [
+						(bin_dir / 'python3', '#!/bin/bash\n[[ "$1" == "-c" ]] || exit 88\n'),
+						(venv / 'bin/python3', '#!/bin/bash\nprintf "%s\\n" "$*" >> "$LOG"\nexit "$FAIL"\n'),
+						(venv / 'bin/pyocd', '#!/bin/bash\necho pyocd-test\n')]:
+						path.write_text(code)
+						path.chmod(0o755)
+					# Existing unrelated command must remain untouched.
+					(bin_dir / 'pyocd').write_text('unrelated')
+					env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'],
+						PYOCD_DIR=str(venv), PYOCD=str(venv / 'bin/pyocd'), BIN=str(bin_dir), LOG=str(root / 'log'), FAIL=fail)
+					result = subprocess.run(['bash', '-c', 'set -e\n' + self.functions(platform) + '\ninstall_python_tools'], env=env, capture_output=True)
+					self.assertEqual(result.returncode == 0, fail == '0')
+					self.assertEqual((root / 'log').read_text().strip(), '-m pip install --upgrade pyocd')
+					self.assertEqual((bin_dir / 'pyocd').read_text(), 'unrelated')
+
+	def test_srecord_links_repeated_runs_and_no_self_links(self):
+		for platform in ['linux', 'macos']:
+			with self.subTest(platform=platform), tempfile.TemporaryDirectory() as d:
+				root = Path(d)
+				bin_dir = root / 'native tools'
+				bin_dir.mkdir()
+				for tool in ['srec_cat', 'srec_cmp', 'srec_info']:
+					path = bin_dir / tool
+					path.write_text('#!/bin/bash\necho SRecord-test\n')
+					path.chmod(0o755)
+				dest = root / 'Tools' / 'SRecord'
+				env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'], SRECORD_DIR=str(dest))
+				for _ in range(2):
+					result = subprocess.run(['bash', '-c', 'set -e\n' + self.functions(platform) + '\ninstall_srecord'], env=env, capture_output=True)
+					self.assertEqual(result.returncode, 0, result.stderr)
+					env['PATH'] = str(dest / 'bin') + os.pathsep + env['PATH']
+				self.assertEqual((dest / 'bin/srec_cat').resolve(), bin_dir / 'srec_cat')
+
+	def test_srecord_verification_failure(self):
+		with tempfile.TemporaryDirectory() as d:
+			root = Path(d)
+			for tool in ['srec_cat', 'srec_cmp', 'srec_info']:
+				path = root / tool
+				path.write_text('#!/bin/bash\nexit 7\n')
+				path.chmod(0o755)
+			env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'], SRECORD_DIR=str(root / 'managed'))
+			result = subprocess.run(['bash', '-c', 'set -e\n' + self.functions('linux') + '\ninstall_srecord'], env=env)
+			self.assertNotEqual(result.returncode, 0)
+
+
+if __name__ == '__main__':
+	unittest.main(verbosity=2)

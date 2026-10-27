@@ -267,13 +267,46 @@ validation and rollout.
 Get-Help .\install_iocdevtools_win.ps1
 ```
 
-### macOS debug tools
+### Firmware tools and Python environment
 
-The macOS installer installs or updates pyOCD in a Python virtual environment at
-`$ROOT/tools/pyocd`, where `ROOT` defaults to `~/IOcomposer`. Python 3.9 or newer
+The managed layout below is relative to the SDK root, not the IDE directory:
+
+| Tool | Linux/macOS | Windows |
+|---|---|---|
+| IDAP-Link tools | `Tools/IDAP-Link/IDAPnRFProg` | `Tools/IDAP-Link/IDAPnRFProg.exe` |
+| HEX merge | `Tools/SRecord/bin/srec_cat` | `Tools/SRecord/srec_cat.exe` |
+| Python venv | `Tools/Python/bin/python3` | `Tools/Python/Scripts/python.exe` |
+| pyOCD | `Tools/Python/bin/pyocd` | `Tools/Python/Scripts/pyocd.exe` |
+
+SRecord is installed by the native Linux package manager or Homebrew/MacPorts
+on macOS. Its commands are linked into `Tools/SRecord/bin`; package libraries
+remain managed by the package manager. On macOS, install Homebrew or MacPorts
+first unless SRecord is already on PATH. The Windows installer uses the official
+portable 1.64 archive with SHA256 verification (the checksum is also recorded in
+[Scoop's manifest](https://github.com/ScoopInstaller/Main/blob/master/bucket/srecord.json)).
+
+The installer adds these tool directories to the IDE's project PATH preferences
+and its own build environment. The generated `makefile_path.mk` includes
+`SREC_CAT`, `PYTHON` and `PYOCD`. For a terminal outside IOcomposer, use the full
+paths above or add the tool directories to PATH. No venv activation is required
+when invoking its Python or pyOCD executable directly.
+
+Merge a bootloader and application using non-overlapping addresses:
+
+```bash
+"$HOME/IOcomposer/Tools/SRecord/bin/srec_cat" bootloader.hex -Intel application.hex -Intel -o merged.hex -Intel
+```
+
+Existing legacy `IDAP` and `tools/pyocd` directories are preserved; the new setup
+uses the paths above. A global pyOCD symlink pointing to this SDK's old venv is
+updated, while unrelated commands are preserved. Uninstall removes the managed
+Tools subdirectories, but does not uninstall a system SRecord package.
+
+All three installers install or update pyOCD in a Python virtual environment at
+`$ROOT/Tools/Python`, where `ROOT` defaults to `~/IOcomposer`. Python 3.9 or newer
 with `venv` is required. Python packages are installed without sudo.
 
-To install only pyOCD, leaving Eclipse and the other tools alone:
+On macOS, to install only pyOCD, leaving IOcomposer and the other tools alone:
 
 ```bash
 bash Installer/install_iocdevtools_macos.sh --pyocd-only
@@ -284,8 +317,8 @@ Use `--home /path/to/sdk` to select another root. The installer adds
 installation's command. The executable can always be invoked directly:
 
 ```bash
-~/IOcomposer/tools/pyocd/bin/pyocd --version
-~/IOcomposer/tools/pyocd/bin/pyocd list
+~/IOcomposer/Tools/Python/bin/pyocd --version
+~/IOcomposer/Tools/Python/bin/pyocd list
 ```
 
 Normal installation updates pyOCD; `--force-update` reinstalls its packages.
@@ -293,9 +326,9 @@ Uninstall removes this virtual environment and only its own command symlink.
 Device packs are installed separately for the required MCU. For STM32WBA65:
 
 ```bash
-~/IOcomposer/tools/pyocd/bin/pyocd pack find stm32wba65
-~/IOcomposer/tools/pyocd/bin/pyocd pack install stm32wba65
-~/IOcomposer/tools/pyocd/bin/pyocd list --targets
+~/IOcomposer/Tools/Python/bin/pyocd pack find stm32wba65
+~/IOcomposer/Tools/Python/bin/pyocd pack install stm32wba65
+~/IOcomposer/Tools/Python/bin/pyocd list --targets
 ```
 
 Use the exact target name reported by the installed pack. Pack availability does

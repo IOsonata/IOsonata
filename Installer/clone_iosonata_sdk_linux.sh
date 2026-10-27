@@ -335,7 +335,7 @@ echo -e "${GREEN}✅ All repositories cloned successfully!${RESET}"
 # ---------------------------------------------------------
 echo ""
 echo -e "${BLUE}>>> Installing IDAP Tools...${RESET}"
-IDAP_DIR="$ROOT/IDAP"
+IDAP_DIR="$ROOT/Tools/IDAP-Link"
 IDAP_PROG="$IDAP_DIR/IDAPnRFProg"
 mkdir -p "$IDAP_DIR"
 
@@ -656,7 +656,7 @@ echo -e "${BLUE}=========================================================${RESET
 echo -e "${BOLD}IOsonata Root:${RESET}       $ROOT"
 echo -e "${BOLD}IOsonata Framework:${RESET}  $ROOT/IOsonata"
 echo -e "${BOLD}External Repos:${RESET}      $EXT"
-echo -e "${BOLD}IDAP Tools:${RESET}          $ROOT/IDAP"
+echo -e "${BOLD}IDAP Tools:${RESET}          $ROOT/Tools/IDAP-Link"
 echo ""
 echo -e "${BOLD}Cloned repositories:${RESET}"
 echo "  • IOsonata"

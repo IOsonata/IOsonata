@@ -105,6 +105,9 @@ done
 [[ "$MODE" == "uninstall" ]] || check_and_install_dependencies
 
 EXT="$ROOT/external"
+PYOCD_DIR="$ROOT/Tools/Python"
+PYOCD="$PYOCD_DIR/bin/pyocd"
+SRECORD_DIR="$ROOT/Tools/SRecord"
 
 # Create directories
 mkdir -p "$ROOT" "$EXT"
@@ -143,8 +146,12 @@ if [[ "$MODE" == "uninstall" ]]; then
   sudo udevadm control --reload-rules 2>/dev/null || true
   sudo udevadm trigger 2>/dev/null || true
 
+	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "$PYOCD" ]]; then
+		sudo rm -f "$BIN/pyocd"
+	fi
+	rm -rf "$PYOCD_DIR" "$SRECORD_DIR"
   echo ">>> Removing IDAP tools..."
-  rm -rf "$ROOT/IDAP" || true
+  rm -rf "$ROOT/Tools/IDAP-Link" || true
 
   echo ">>> Removing desktop entry..."
   rm -f "$HOME/.local/share/applications/iocomposer.desktop" || true
@@ -367,7 +374,7 @@ PY
 build_iocomposer_index() {
 	local index="$ROOT/IOsonata/Installer/build_external_index.py"
 	if [[ -f "$index" ]]; then
-		python3 "$index" --sdk-root "$ROOT/external" || {
+		"$PYOCD_DIR/bin/python3" "$index" --sdk-root "$ROOT/external" || {
 			echo "Warning: SDK index failed. Retry: python3 $index --sdk-root $ROOT/external" >&2
 		}
 	else
@@ -545,6 +552,84 @@ OPENOCD_DIR=""
 # Toolchains
 # ---------------------------------------------------------
 echo
+# Firmware tools share the SDK Tools directory. Python packages stay isolated.
+install_python_tools() {
+	python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || {
+		echo "Python 3.9 or newer is required for pyOCD." >&2
+		return 1
+	}
+	if [[ ! -x "$PYOCD_DIR/bin/python3" ]]; then
+		if ! python3 -c 'import venv, ensurepip' 2>/dev/null; then
+			if command -v apt-get >/dev/null; then
+				sudo apt-get update
+				sudo apt-get install -y python3-venv
+			else
+				echo "Install the venv/ensurepip components for python3, then retry." >&2
+				return 1
+			fi
+		fi
+		python3 -m venv "$PYOCD_DIR" || return 1
+	fi
+	"$PYOCD_DIR/bin/python3" -m pip install --upgrade pyocd || return 1
+	"$PYOCD" --version || return 1
+	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "${ROOT:-}/tools/pyocd/bin/pyocd" ]]; then
+		sudo ln -sf "$PYOCD" "$BIN/pyocd"
+	elif [[ ! -e "$BIN/pyocd" && ! -L "$BIN/pyocd" ]]; then
+		sudo ln -s "$PYOCD" "$BIN/pyocd"
+	fi
+}
+
+install_srecord() {
+	if ! command -v srec_cat >/dev/null; then
+		if [[ "$(uname -s)" == "Darwin" ]]; then
+			local brew_cmd=""
+			brew_cmd=$(command -v brew || true)
+			[[ -n "$brew_cmd" ]] || {
+				for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+					[[ ! -x "$candidate" ]] || { brew_cmd="$candidate"; break; }
+				done
+			}
+			if [[ -n "$brew_cmd" ]]; then
+				"$brew_cmd" install srecord || return 1
+				export PATH="$("$brew_cmd" --prefix)/bin:$PATH"
+			elif command -v port >/dev/null; then
+				sudo port install srecord || return 1
+			else
+				echo "SRecord requires Homebrew or MacPorts on macOS. Install one and rerun, or provide srec_cat on PATH." >&2
+				return 1
+			fi
+		elif command -v apt-get >/dev/null; then
+			sudo apt-get update
+			sudo apt-get install -y srecord || return 1
+		elif command -v dnf >/dev/null; then
+			sudo dnf install -y srecord || return 1
+		elif command -v yum >/dev/null; then
+			sudo yum install -y srecord || return 1
+		elif command -v pacman >/dev/null; then
+			sudo pacman -S --needed --noconfirm srecord || return 1
+		elif command -v zypper >/dev/null; then
+			sudo zypper install -y srecord || return 1
+		else
+			echo "Install SRecord with your package manager and retry." >&2
+			return 1
+		fi
+	fi
+	mkdir -p "$SRECORD_DIR/bin"
+	local tool executable destination
+	for tool in srec_cat srec_cmp srec_info; do
+		executable=$(command -v "$tool") || return 1
+		destination="$SRECORD_DIR/bin/$tool"
+		if [[ "$executable" != "$destination" ]]; then
+			ln -sf "$executable" "$destination" || return 1
+		fi
+	done
+	"$SRECORD_DIR/bin/srec_cat" -VERSion || return 1
+}
+
+install_python_tools
+install_srecord
+export PATH="$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link:$PATH"
+
 ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
 RISCV_DIR=$(install_xpack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC")
 OPENOCD_DIR=$(install_xpack "openocd-xpack" "openocd" "OpenOCD")
@@ -557,7 +642,7 @@ echo "   OpenOCD:$OPENOCD_DIR"
 # ---------------------------------------------------------
 # Install udev rules and IDAP tools
 # ---------------------------------------------------------
-TOOLS_DIR="$ROOT/IDAP"
+TOOLS_DIR="$ROOT/Tools/IDAP-Link"
 UDEV_SRC="$TOOLS_DIR/99-idap-link-hid.rules"
 UDEV_DEST="/etc/udev/rules.d/99-idap-link-hid.rules"
 
@@ -720,6 +805,9 @@ seed_eclipse_install_prefs() {
   sudo tee "$install_cfg/org.eclipse.core.runtime.prefs" > /dev/null <<EOF
 eclipse.preferences.version=1
 environment/project/IOCOMPOSER_HOME/value=$ROOT
+environment/project/PATH/value=$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
+environment/project/PATH/operation=prepend
+environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
 environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
 environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
@@ -869,6 +957,9 @@ EOF
   cat > "$instance_cfg/.settings/org.eclipse.core.runtime.prefs" <<EOF
 eclipse.preferences.version=1
 environment/project/IOCOMPOSER_HOME/value=$ROOT
+environment/project/PATH/value=$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
+environment/project/PATH/operation=prepend
+environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
 environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
 environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
@@ -1030,6 +1121,12 @@ cat > "$MAKEFILE_PATH_MK" <<EOF
 # ============================================
 # Toolchain Paths
 # ============================================
+SDK_TOOLS_ROOT = $ROOT/Tools
+SRECORD_ROOT = $SRECORD_DIR
+SREC_CAT = $SRECORD_DIR/bin/srec_cat
+PYTHON = $PYOCD_DIR/bin/python3
+PYOCD_ROOT = $PYOCD_DIR
+PYOCD = $PYOCD
 ARM_GCC_ROOT = $ARM_DIR
 ARM_GCC_BIN = $ARM_DIR/bin
 ARM_GCC = \$(ARM_GCC_BIN)/arm-none-eabi-gcc
@@ -1246,3 +1343,4 @@ echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 echo
 echo "If prefs seeding was skipped, run Eclipse once, then re-run this script to seed Embedded CDT toolchain paths."
 echo
+printf "SRecord: %s\nPython venv: %s\npyOCD: %s\nIDAP-Link: %s\n" "$SRECORD_DIR" "$PYOCD_DIR" "$PYOCD" "$ROOT/Tools/IDAP-Link"
