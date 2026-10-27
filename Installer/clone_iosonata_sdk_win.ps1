@@ -9,7 +9,9 @@
 
 param(
     [string]$SdkHome = "$env:USERPROFILE\IOcomposer",
+	[ValidateSet("normal", "force")]
     [string]$Mode = "normal",
+	[Alias("Iocomposer")]
     [switch]$Eclipse,
     [switch]$NoBuild,
     [switch]$Help
@@ -35,7 +37,7 @@ function Show-Help {
     Write-Host "Options:" -ForegroundColor White
     Write-Host "  -SdkHome <path>     Set custom root directory (default: ~\IOcomposer)"
     Write-Host "  -Mode <mode>        Clone mode: 'normal' (default) or 'force'"
-    Write-Host "  -Eclipse            Configure Eclipse system properties"
+    Write-Host "  -Iocomposer         Configure IOcomposer/CDT properties (-Eclipse alias)"
     Write-Host "  -NoBuild            Skip IOsonata library auto-build step"
     Write-Host "  -Help               Show this help message and exit"
     Write-Host ""
@@ -67,7 +69,10 @@ Write-Host "Mode:                 $Mode" -ForegroundColor White
 Write-Host "External path:        $EXT" -ForegroundColor White
 
 # --- Detect Eclipse Installation ---
-$ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
+$ECLIPSE_DIR = "$env:ProgramFiles\IOcomposer"
+if (-not (Test-Path "$ECLIPSE_DIR\eclipse.exe")) {
+	$ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
+}
 $ECLIPSE_INSTALLED = $false
 if (Test-Path "$ECLIPSE_DIR\eclipse.exe") {
     $ECLIPSE_INSTALLED = $true
@@ -78,6 +83,14 @@ Write-Host "Configure Eclipse:    $Eclipse" -ForegroundColor White
 Write-Host "Skip auto-build:      $NoBuild" -ForegroundColor White
 Write-Host "---------------------------------------------------------" -ForegroundColor Blue
 Write-Host ""
+
+# Native programs do not throw on nonzero exit codes in Windows PowerShell.
+function Invoke-Git {
+	& git @args
+	if ($LASTEXITCODE -ne 0) {
+		throw "Git failed with exit code $LASTEXITCODE`: $args"
+	}
+}
 
 # --- Function: Clone or update repo ---
 function Sync-Repository {
@@ -92,18 +105,18 @@ function Sync-Repository {
             Write-Host "   `[WARN`] Re-cloning $Target ..." -ForegroundColor Yellow
             Remove-Item -Path $Target -Recurse -Force
             if ($RecurseSubmodules) {
-                git clone --depth=1 --recurse-submodules $Url $Target
+                Invoke-Git clone --depth=1 --recurse-submodules $Url $Target
             } else {
-                git clone --depth=1 $Url $Target
+                Invoke-Git clone --depth=1 $Url $Target
             }
         } else {
             Write-Host "   `[INFO`] Updating $Target ..." -ForegroundColor Yellow
             Push-Location $Target
             try {
-                git pull --rebase
+                Invoke-Git pull --rebase
                 if ($RecurseSubmodules) {
                     Write-Host "      -> Updating submodules..." -ForegroundColor Blue
-                    git submodule update --init --recursive
+                    Invoke-Git submodule update --init --recursive
                 }
             } finally {
                 Pop-Location
@@ -112,17 +125,16 @@ function Sync-Repository {
     } else {
         Write-Host "   `[INFO`] Cloning $Target ..." -ForegroundColor Blue
         if ($RecurseSubmodules) {
-            git clone --depth=1 --recurse-submodules $Url $Target
+            Invoke-Git clone --depth=1 --recurse-submodules $Url $Target
             Write-Host "      `[OK`] Submodules initialized" -ForegroundColor Green
         } else {
-            git clone --depth=1 $Url $Target
+            Invoke-Git clone --depth=1 $Url $Target
         }
     }
 }
 
 # --- Function: Clone a repository pinned to a tag ---
-# A checkout that is already at the tag is kept. Any other checkout is
-# replaced, so a pinned repository never follows the default branch.
+# Existing checkouts are preserved unless force mode is explicitly requested.
 function Sync-PinnedRepository {
     param(
         [string]$Url,
@@ -133,7 +145,9 @@ function Sync-PinnedRepository {
     if ((Test-Path $Target) -and ($Mode -ne "force")) {
         Push-Location $Target
         try {
-            $current = git describe --tags --exact-match 2>$null
+			$current = $null
+			try { $current = git describe --tags --exact-match 2>$null } catch { $current = $null }
+			if ($LASTEXITCODE -ne 0) { $current = $null }
         } finally {
             Pop-Location
         }
@@ -141,17 +155,18 @@ function Sync-PinnedRepository {
             Write-Host "   `[INFO`] Keeping $Target at $Ref" -ForegroundColor Yellow
             return
         }
+		throw "Pinned checkout needs attention; preserved: $Target (required $Ref). Align it manually or use force mode to replace it."
     }
     if (Test-Path $Target) {
         Remove-Item -Path $Target -Recurse -Force
     }
     Write-Host "   `[INFO`] Cloning $Target at $Ref ..." -ForegroundColor Blue
-    git clone --depth=1 --branch $Ref $Url $Target
+    Invoke-Git clone --depth=1 --branch $Ref $Url $Target
 }
 
 # STM32CubeWBA holds the platform files of the ST BLE link layer that the
-# STM32WBA examples build. Only the folders they use are checked out, with
-# the HAL and CMSIS device submodules.
+# STM32WBA examples build. Only their platform and utility folders are checked
+# out. IOsonata does not require separate HAL or CMSIS downloads.
 function Sync-CubeWba {
     $Target = Join-Path $EXT "STM32CubeWBA"
     $Ref = "v1.10.0"
@@ -159,24 +174,29 @@ function Sync-CubeWba {
     if ((Test-Path $Target) -and ($Mode -ne "force")) {
         Push-Location $Target
         try {
-            $current = git describe --tags --exact-match 2>$null
+			$current = $null
+			try { $current = git describe --tags --exact-match 2>$null } catch { $current = $null }
+			if ($LASTEXITCODE -ne 0) { $current = $null }
         } finally {
             Pop-Location
         }
-        if (($current -eq $Ref) -and (Test-Path "$Target\Drivers\STM32WBAxx_HAL_Driver\Inc\stm32wbaxx_hal.h")) {
+        if (($current -eq $Ref) -and
+			(Test-Path "$Target\Projects\Common\WPAN\Interfaces" -PathType Container) -and
+			(Test-Path "$Target\Utilities\lpm\tiny_lpm" -PathType Container) -and
+			(Test-Path "$Target\Projects\NUCLEO-WBA65RI\Applications\BLE\BLE_p2pServer\STM32_WPAN\Target\linklayer_plat.c" -PathType Leaf)) {
             Write-Host "   `[INFO`] Keeping $Target at $Ref" -ForegroundColor Yellow
             return
         }
+		throw "Pinned checkout needs attention; preserved: $Target (required $Ref). Align it manually or use force mode to replace it."
     }
     if (Test-Path $Target) {
         Remove-Item -Path $Target -Recurse -Force
     }
     Write-Host "   `[INFO`] Cloning $Target at $Ref ..." -ForegroundColor Blue
-    git clone --depth=1 --branch $Ref --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git $Target
+    Invoke-Git clone --depth=1 --branch $Ref --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git $Target
     Push-Location $Target
     try {
-        git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers
-        git submodule update --init --depth 1 Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx
+        Invoke-Git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities
     } finally {
         Pop-Location
     }
@@ -237,61 +257,6 @@ Sync-CubeWba
 Write-Host ""
 Write-Host "   `[OK`] All repositories cloned successfully!" -ForegroundColor Green
 
-# ---------------------------------------------------------
-# Install IDAP Tools
-# ---------------------------------------------------------
-Write-Host ""
-Write-Host ">>> Installing IDAP Tools..." -ForegroundColor Cyan
-$IDAP_DIR = "$ROOT\IDAP"
-$IDAP_PROG = "$IDAP_DIR\IDAPnRFProg.exe"
-
-if (-not (Test-Path $IDAP_DIR)) {
-    New-Item -Path $IDAP_DIR -ItemType Directory -Force | Out-Null
-}
-
-# Find 7-Zip for extraction
-$SEVENZIP_EXE = $null
-$candidates = @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe", "C:\Program Files\7-Zip\7z.exe")
-foreach ($c in $candidates) { if (Test-Path $c) { $SEVENZIP_EXE = $c; break } }
-
-if (-not (Test-Path $IDAP_PROG) -or $Mode -eq "force") {
-    Write-Host "   Downloading IDAPnRFProg tool..."
-    $IDAP_URL = "https://sourceforge.net/projects/idaplinkfirmware/files/Windows/IDAPnRFProg_Win_2_1_240807.zip/download"
-    $IDAP_TMP = Join-Path $env:TEMP "IDAPnRFProg.zip"
-    
-    $curlExitCode = 0
-    try {
-        $ErrorActionPreference = 'Continue'
-        curl.exe -fL $IDAP_URL -o $IDAP_TMP --silent --show-error
-        $curlExitCode = $LASTEXITCODE
-        $ErrorActionPreference = 'Stop'
-    } catch {
-        $curlExitCode = 1
-        $ErrorActionPreference = 'Stop'
-    }
-    
-    if ($curlExitCode -eq 0 -and (Test-Path $IDAP_TMP)) {
-        if ($SEVENZIP_EXE) {
-            & $SEVENZIP_EXE e $IDAP_TMP -o"$IDAP_DIR" -y | Out-Null
-        } else {
-            # Fallback to Expand-Archive
-            Expand-Archive -Path $IDAP_TMP -DestinationPath $IDAP_DIR -Force
-        }
-        Remove-Item $IDAP_TMP -Force -ErrorAction SilentlyContinue
-        Write-Host "   [OK] IDAPnRFProg installed at: $IDAP_PROG" -ForegroundColor Green
-    } else {
-        Write-Host "   [WARN] Failed to download IDAPnRFProg. You can download manually from:" -ForegroundColor Yellow
-        Write-Host "         https://sourceforge.net/projects/idaplinkfirmware/files/Windows/" -ForegroundColor Yellow
-        Remove-Item $IDAP_TMP -Force -ErrorAction SilentlyContinue
-    }
-} else {
-    Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
-}
-
-Write-Host ""
-Write-Host "   `[OK`] All repositories cloned successfully!" -ForegroundColor Green
-
-# ---------------------------------------------------------
 # Generate makefile_path.mk
 # ---------------------------------------------------------
 Write-Host ""
@@ -321,7 +286,7 @@ IOSONATA_SRC = `$(IOSONATA_ROOT)/src
 # ============================================
 ARM_ROOT = `$(IOSONATA_ROOT)/ARM
 ARM_CMSIS = `$(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Include
+ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Core/Include
 ARM_INCLUDE = `$(ARM_ROOT)/include
 ARM_SRC = `$(ARM_ROOT)/src
 ARM_LDSCRIPT = `$(ARM_ROOT)/ldscript
@@ -479,7 +444,6 @@ if ($Eclipse) {
     Write-Host "=========================================================" -ForegroundColor Blue
     Write-Host ""
     
-    $ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
     $ECLIPSE_INI = Join-Path $ECLIPSE_DIR "eclipse.ini"
     
     if (-not (Test-Path $ECLIPSE_INI)) {
@@ -565,7 +529,7 @@ Write-Host "=========================================================" -Foregrou
 Write-Host "IOsonata Root:        $ROOT" -ForegroundColor White
 Write-Host "IOsonata Framework:   $ROOT\IOsonata" -ForegroundColor White
 Write-Host "External Repos:       $EXT" -ForegroundColor White
-Write-Host "IDAP Tools:           $ROOT\IDAP" -ForegroundColor White
+Write-Host "IDAP Tools:           $ROOT\Tools\IDAP-Link" -ForegroundColor White
 Write-Host ""
 Write-Host "Cloned repositories:" -ForegroundColor White
 Write-Host "  - IOsonata"
@@ -584,7 +548,7 @@ Write-Host "  - tinyusb"
 Write-Host "  - stm32-mw-wpan v2.10.0 and STM32CubeWBA v1.10.0 (pinned)"
 Write-Host ""
 
-if ($Eclipse -and (Test-Path "$env:ProgramFiles\Eclipse Embedded CDT\eclipse.ini")) {
+if ($Eclipse -and (Test-Path "$ECLIPSE_DIR\eclipse.ini")) {
     Write-Host "Eclipse Configuration:" -ForegroundColor White
     Write-Host "  - System properties configured"
     Write-Host "  - iosonata_loc = $ROOT\IOsonata"
@@ -613,6 +577,7 @@ if (-not $NoBuild -and $ECLIPSE_INSTALLED -and $TOOLCHAIN_INSTALLED) {
         Write-Host "=========================================================" -ForegroundColor Blue
         Write-Host ""
         & $BUILD_SCRIPT -SdkHome $ROOT
+		if ($LASTEXITCODE -ne 0) { throw "Library build failed with exit code $LASTEXITCODE" }
     } else {
         Write-Host ""
         Write-Host "Note: Build script not found at:" -ForegroundColor Yellow

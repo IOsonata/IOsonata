@@ -183,7 +183,33 @@ Installation scripts set up a **complete development environment** from scratch:
 - Configure the development environment with the required IOsonata paths
 - Optionally build IOsonata libraries
 
-The current installers use Eclipse Embedded CDT as the underlying managed-build runtime. The build scripts prefer IOcomposer and retain Eclipse Embedded CDT as a compatibility fallback.
+The IOsonata installers own the complete IOcomposer installation: Eclipse
+Embedded CDT runtime, IOcomposer AI and UI plugins, branding, toolchains,
+SDK setup and external SDK indexing. The scripts hosted at iocomposer.io only
+download and invoke these installers, forwarding arguments and failures.
+Plugin JARs and splash assets remain published in `I-SYST/iocomposer.io/plugin`.
+
+The runtime keeps Eclipse launcher filenames (`eclipse`, `eclipse.exe`,
+`eclipse.ini`). It is installed directly in the final IOcomposer directory;
+there is no post-install directory rename. Existing standalone Eclipse
+installations remain available as a compatibility fallback for clone/build
+scripts. Shared Eclipse user profiles are preserved on uninstall.
+
+Use `--iocomposer <path>` on Unix or `-IocomposerDir <path>` on Windows to
+select the IDE destination independently of the SDK root (`--home` or
+`-SdkHome`). Unix `--eclipse` remains an alias for the IDE destination.
+Existing IOcomposer installations at a non-default path can be updated by
+passing that path explicitly. No existing Eclipse installation is moved or
+removed unless explicitly selected as the IDE destination.
+
+Both IOcomposer plugins are required. A discovery, download or archive failure
+stops installation; both downloads are validated before replacing installed
+plugins. The splash and SDK index are optional and report failures as warnings.
+The macOS app is signed after configuration and again after the build step.
+
+Website launchers are maintained only in `I-SYST/iocomposer.io` at the repository
+root. The website scripts delegate to these IOsonata installers. Merge the
+IOsonata installer changes before updating the website launchers.
 
 ### Usage
 
@@ -193,8 +219,8 @@ The current installers use Eclipse Embedded CDT as the underlying managed-build 
 # Basic installation
 ./install_iocdevtools_macos.sh
 
-# Custom installation directory
-./install_iocdevtools_macos.sh --home /path/to/custom/location
+# Custom SDK and IDE directories
+./install_iocdevtools_macos.sh --home /path/to/sdk --iocomposer /Applications/IOcomposer.app
 
 # Force reinstall everything
 ./install_iocdevtools_macos.sh --force-update
@@ -212,8 +238,8 @@ The current installers use Eclipse Embedded CDT as the underlying managed-build 
 # Basic installation
 ./install_iocdevtools_linux.sh
 
-# Custom installation directory
-./install_iocdevtools_linux.sh --home /path/to/custom/location
+# Custom SDK and IDE directories
+./install_iocdevtools_linux.sh --home /path/to/sdk --iocomposer /path/to/iocomposer
 
 # Force reinstall
 ./install_iocdevtools_linux.sh --force-update
@@ -231,7 +257,7 @@ The current installers use Eclipse Embedded CDT as the underlying managed-build 
 .\install_iocdevtools_win.ps1
 
 # Custom installation directory
-.\install_iocdevtools_win.ps1 -SdkHome C:\Dev\IOsonata
+.\install_iocdevtools_win.ps1 -SdkHome C:\Dev\IOsonata -IocomposerDir C:\Tools\IOcomposer
 
 # Force reinstall
 .\install_iocdevtools_win.ps1 -ForceUpdate
@@ -240,13 +266,44 @@ The current installers use Eclipse Embedded CDT as the underlying managed-build 
 Get-Help .\install_iocdevtools_win.ps1
 ```
 
-### macOS debug tools
+### Firmware tools and Python environment
 
-The macOS installer installs or updates pyOCD in a Python virtual environment at
-`$ROOT/tools/pyocd`, where `ROOT` defaults to `~/IOcomposer`. Python 3.9 or newer
-with `venv` is required. Python packages are installed without sudo.
+The managed layout below is relative to the SDK root, not the IDE directory:
 
-To install only pyOCD, leaving Eclipse and the other tools alone:
+| Tool | Linux/macOS | Windows |
+|---|---|---|
+| IDAP tools | `Tools/bin/IDAPnRFProg` | `Tools/bin/IDAPnRFProg.exe` |
+| Python command | `Tools/bin/python3` | `Tools/bin/python.cmd` |
+| pyOCD command | `Tools/bin/pyocd` | `Tools/bin/pyocd.cmd` |
+
+IOcomposer installs IntelHex 2.3.0 into the same managed Python environment
+as pyOCD. IntelHex provides `hexmerge.py` for combining Intel HEX images;
+SRecord is not installed or required. Existing SRecord installations are untouched.
+
+The installer adds the managed Python and IDAP-Link tool directories to the
+IDE project PATH preferences. The generated `makefile_path.mk` includes
+`PYTHON` and `PYOCD`. No venv activation is required when invoking their
+executables directly.
+
+Merge bootloader and application images with overlap rejection (the default):
+
+```bash
+"$HOME/IOcomposer/Tools/bin/hexmerge.py" --overlap=error -o combined.hex bootloader.hex application.hex
+```
+
+On Windows, use `%USERPROFILE%\\IOcomposer\\Tools\\Python\\Scripts\\hexmerge.py`
+with the Python interpreter in the same `Scripts` directory. Custom SDK roots
+use their corresponding `Tools/Python` path.
+
+All three installers install or update pyOCD in a Python virtual environment at
+`$ROOT/Tools/Python`, where `ROOT` defaults to `~/IOcomposer`. A usable existing
+managed environment is reused directly. Linux requires a host Python 3.9 or
+newer with `venv` when the managed environment must be created. Windows and
+macOS bootstrap pinned Python 3.12.4 installers when no suitable interpreter is
+available; the macOS package is the official signed python.org universal2
+package. Python packages inside the managed venv are installed without sudo.
+
+On macOS, to install only pyOCD, leaving IOcomposer and the other tools alone:
 
 ```bash
 bash Installer/install_iocdevtools_macos.sh --pyocd-only
@@ -257,8 +314,8 @@ Use `--home /path/to/sdk` to select another root. The installer adds
 installation's command. The executable can always be invoked directly:
 
 ```bash
-~/IOcomposer/tools/pyocd/bin/pyocd --version
-~/IOcomposer/tools/pyocd/bin/pyocd list
+~/IOcomposer/Tools/bin/pyocd --version
+~/IOcomposer/Tools/bin/pyocd list
 ```
 
 Normal installation updates pyOCD; `--force-update` reinstalls its packages.
@@ -266,9 +323,9 @@ Uninstall removes this virtual environment and only its own command symlink.
 Device packs are installed separately for the required MCU. For STM32WBA65:
 
 ```bash
-~/IOcomposer/tools/pyocd/bin/pyocd pack find stm32wba65
-~/IOcomposer/tools/pyocd/bin/pyocd pack install stm32wba65
-~/IOcomposer/tools/pyocd/bin/pyocd list --targets
+~/IOcomposer/Tools/bin/pyocd pack find stm32wba65
+~/IOcomposer/Tools/bin/pyocd pack install stm32wba65
+~/IOcomposer/Tools/bin/pyocd list --targets
 ```
 
 Use the exact target name reported by the installed pack. Pack availability does
@@ -298,9 +355,9 @@ References: [pyOCD installation](https://pyocd.io/docs/installing.html),
 
 | Platform | IDE runtime | Toolchains | IOsonata SDK |
 |----------|-------------|------------|--------------|
-| macOS | `/Applications/Eclipse.app` | `/opt/xPacks` | `~/IOcomposer` |
-| Linux | `~/eclipse` | `/opt/xPacks` | `~/IOcomposer` |
-| Windows | `C:\Program Files\Eclipse Embedded CDT` | `C:\Program Files\xPacks` | `%USERPROFILE%\IOcomposer` |
+| macOS | `/Applications/IOcomposer.app` | `/opt/xPacks` | `~/IOcomposer` |
+| Linux | `~/iocomposer` | `/opt/xPacks` | `~/IOcomposer` |
+| Windows | `C:\Program Files\IOcomposer` | `C:\Program Files\xPacks` | `%USERPROFILE%\IOcomposer` |
 
 **Repository Structure:**
 ```
@@ -657,20 +714,20 @@ chmod +x install_iocdevtools_macos.sh
 **macOS:**
 ```bash
 # Check the installed runtime
-ls -la /Applications/Eclipse.app
+ls -la /Applications/IOcomposer.app
 
 # Remove it and try again
-sudo rm -rf /Applications/Eclipse.app
+sudo rm -rf /Applications/IOcomposer.app
 ./install_iocdevtools_macos.sh --force-update
 ```
 
 **Linux:**
 ```bash
 # Check the installed runtime
-ls -la ~/eclipse
+ls -la ~/iocomposer
 
 # Remove and reinstall
-rm -rf ~/eclipse
+rm -rf ~/iocomposer
 ./install_iocdevtools_linux.sh --force-update
 ```
 
@@ -698,7 +755,7 @@ ls -ld /Applications/IOcomposer.app /Applications/Eclipse.app 2>/dev/null
 **Linux:**
 ```bash
 # Check preferred IOcomposer and compatibility fallback locations
-ls -ld /opt/iocomposer ~/eclipse /opt/eclipse 2>/dev/null
+ls -ld ~/iocomposer /opt/iocomposer ~/eclipse /opt/eclipse 2>/dev/null
 
 # If none is installed, run the installer
 ./install_iocdevtools_linux.sh
@@ -763,7 +820,7 @@ git --version
 - 4 GB free disk space
 
 **Default Paths:**
-- IDE runtime: `/Applications/Eclipse.app`
+- IDE runtime: `/Applications/IOcomposer.app`
 - Toolchains: `/opt/xPacks`
 - IOsonata: `~/IOcomposer`
 
@@ -775,12 +832,16 @@ git --version
 ### Linux
 
 **Requirements:**
-- Ubuntu 20.04+ or equivalent distribution
+- Ubuntu 22.04+ or an equivalent distribution with Python 3.9+ and `venv`
 - `sudo` access for system installations
 - 4 GB free disk space
 
+Ubuntu 20.04 can be used only when a separate Python 3.9-or-newer interpreter
+with `venv` is already available; its default Python 3.8 is insufficient for
+the managed pyOCD environment.
+
 **Default Paths:**
-- IDE runtime: `~/eclipse`
+- IDE runtime: `~/iocomposer`
 - Toolchains: `/opt/xPacks`
 - IOsonata: `~/IOcomposer`
 
@@ -804,7 +865,7 @@ The installer will check and prompt to install:
 - 4 GB free disk space
 
 **Default Paths:**
-- IDE runtime: `C:\Program Files\Eclipse Embedded CDT`
+- IDE runtime: `C:\Program Files\IOcomposer`
 - Toolchains: `C:\Program Files\xPacks`
 - IOsonata: `%USERPROFILE%\IOcomposer`
 
@@ -953,3 +1014,61 @@ IOsonata is released under the Apache License 2.0. See LICENSE file in the repos
 **Happy Building!** 🚀
 
 For the latest updates and documentation, visit: [https://github.com/IOsonata/IOsonata](https://github.com/IOsonata/IOsonata)
+
+
+### LLVM compiler option for Arm and RISC-V
+
+LLVM is optional and skipped by default. Pass `--with-llvm` on Linux/macOS
+or `-WithLLVM` on Windows to install Clang/LLVM and LLD under `Tools/LLVM`.
+If LLVM setup fails, installation continues with GCC and the remaining tools.
+The final summary reports whether LLVM was skipped, verified, or failed.
+Generated LLVM paths are only usable after successful LLVM installation.
+On macOS 11, omit `--with-llvm` to avoid the failing Homebrew dependency build.
+One installation supports both architectures; it is selected explicitly with
+`--target=arm-none-eabi` or `--target=riscv32-unknown-elf`. GCC remains the default
+for the existing IOsonata projects. No project compiler selection is changed.
+
+Linux uses distribution packages (`clang`, `llvm`, `lld`); macOS uses Homebrew
+`llvm` and `lld`, exposed together through managed links in `Tools/LLVM`.
+Windows uses the official LLVM 23.1.4 MSI for x64 or Arm64, SHA256-verified and
+administratively extracted into `Tools/LLVM` without changing global PATH.
+An existing complete installation in that directory is checked and reused.
+Installer-created LLVM directories carry an ownership marker; uninstall removes
+only a marked LLVM directory and preserves an unmarked installation supplied by
+the user.
+
+The generated `makefile_path.mk` exposes `LLVM_ROOT`, `ARM_LLVM_ROOT`,
+`RISCV_LLVM_ROOT`, `CLANG`, `CLANGXX`, `LLVM_LD`, `LLVM_AR`, `LLVM_OBJCOPY`,
+`ARM_LLVM_TARGET` and `RISCV_LLVM_TARGET`. Both architecture roots refer to the
+same installation. IDE project environment preferences expose `LLVM_HOME`,
+`ARM_LLVM_HOME` and `RISCV_LLVM_HOME` without replacing GCC preferences.
+
+Example compile-only commands, with target settings chosen for the actual MCU:
+
+```bash
+"$HOME/IOcomposer/Tools/LLVM/bin/clang" --target=arm-none-eabi -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -c example.c -o example-arm.o
+"$HOME/IOcomposer/Tools/LLVM/bin/clang" --target=riscv32-unknown-elf -march=rv32imac -mabi=ilp32 -ffreestanding -c example.c -o example-riscv.o
+```
+
+For linking, pass the explicit LLD path (`--ld-path` with `LLVM_LD`) so a host
+linker is not selected. The installer checks C/C++ compilation, freestanding
+linking and Intel HEX output for both targets. These small checks use
+`-nostdlib`; they do not validate the IOsonata firmware libraries.
+
+This installs a compiler option, not complete LLVM project profiles or target
+C/C++ runtimes. A firmware build must configure the matching sysroot, runtime
+libraries, CPU/ABI and linker script. The installed GCC toolchains remain
+available, but their libraries are not automatically wired into Clang. GCC
+specs files and GCC LTO objects are not interchangeable with LLVM settings.
+
+References: [Clang cross-compilation](https://clang.llvm.org/docs/CrossCompilation.html),
+[LLVM releases](https://github.com/llvm/llvm-project/releases),
+[Homebrew LLVM](https://formulae.brew.sh/formula/llvm).
+
+### Consolidated tools
+
+The installed Python, pyOCD, and IntelHex commands are exposed in `Tools/bin`.
+IDAPnRFProg and IDAPSetTarget are also installed into `Tools/bin` when provided
+by the downloaded IDAP archive. The SDK clone scripts do not install tools.
+The Python virtual environment remains isolated in `Tools/Python` and is not
+moved on an existing SDK installation.

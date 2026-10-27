@@ -36,7 +36,7 @@ print_help() {
   echo "${BOLD}Options:${RESET}"
   echo "  --home <path>       Set custom root directory (default: ~/IOcomposer)"
   echo "  --mode <mode>       Clone mode: 'normal' (default) or 'force'"
-  echo "  --eclipse           Configure Eclipse system properties
+  echo "  --iocomposer        Configure IOcomposer/CDT system properties (--eclipse alias)
   --no-build          Skip IOsonata library auto-build step"
   echo "  --help, -h          Show this help message and exit"
 
@@ -73,14 +73,16 @@ NO_BUILD=false
 while [[ $# -gt 0 ]]; do
   case $1 in
     --home)
+		[[ -n "${2:-}" ]] || { echo "Missing value after --home" >&2; exit 1; }
       ROOT="$2"
       shift 2
       ;;
     --mode)
+		[[ -n "${2:-}" ]] || { echo "Missing value after --mode" >&2; exit 1; }
       MODE="$2"
       shift 2
       ;;
-    --eclipse)
+    --iocomposer|--eclipse)
       CONFIGURE_ECLIPSE=true
       shift
       ;;
@@ -98,6 +100,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+case "$MODE" in
+	normal|force) ;;
+	*) echo "Invalid mode: $MODE (expected normal or force)" >&2; exit 1 ;;
+esac
 
 # --- Prepare directories safely ---
 mkdir -p "$ROOT"
@@ -151,21 +158,22 @@ clone_or_update_repo() {
 # ---------------------------------------------------------
 # CLONE A REPOSITORY PINNED TO A TAG
 # ---------------------------------------------------------
-# A checkout that is already at the tag is kept. Any other checkout is
-# replaced, so a pinned repository never follows the default branch.
+# Existing checkouts are preserved unless force mode is explicitly requested.
 
 clone_pinned_repo() {
   local repo_url="$1"
   local target_dir="$2"
   local ref="$3"
 
-  if [[ -d "$target_dir" && "$MODE" != "force" ]]; then
+  if [[ ( -e "$target_dir" || -L "$target_dir" ) && "$MODE" != "force" ]]; then
     local current
     current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
     if [[ "$current" == "$ref" ]]; then
       echo "Keeping $target_dir at $ref"
       return 0
     fi
+		echo "Pinned checkout needs attention; preserved: $target_dir (required $ref). Align it manually or use force mode to replace it." >&2
+		return 1
   fi
 
   rm -rf "$target_dir"
@@ -174,19 +182,24 @@ clone_pinned_repo() {
 }
 
 # STM32CubeWBA holds the platform files of the ST BLE link layer that the
-# STM32WBA examples build. Only the folders they use are checked out, with
-# the HAL and CMSIS device submodules.
+# STM32WBA examples build. Only their platform and utility folders are checked
+# out. IOsonata does not require separate HAL or CMSIS downloads.
 clone_cube_wba() {
   local target_dir="$EXT/STM32CubeWBA"
   local ref="v1.10.0"
   local current=""
 
-  if [[ -d "$target_dir" && "$MODE" != "force" ]]; then
+  if [[ ( -e "$target_dir" || -L "$target_dir" ) && "$MODE" != "force" ]]; then
     current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
-    if [[ "$current" == "$ref" && -f "$target_dir/Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h" ]]; then
+    if [[ "$current" == "$ref" \
+      && -d "$target_dir/Projects/Common/WPAN/Interfaces" \
+      && -d "$target_dir/Utilities/lpm/tiny_lpm" \
+      && -f "$target_dir/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c" ]]; then
       echo "Keeping $target_dir at $ref"
       return 0
     fi
+		echo "Pinned checkout needs attention; preserved: $target_dir (required $ref). Align it manually or use force mode to replace it." >&2
+		return 1
   fi
 
   rm -rf "$target_dir"
@@ -195,9 +208,7 @@ clone_cube_wba() {
     https://github.com/STMicroelectronics/STM32CubeWBA.git "$target_dir"
   (cd "$target_dir" \
     && git sparse-checkout set Projects/Common/WPAN \
-         Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers \
-    && git submodule update --init --depth 1 \
-         Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx)
+         Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities)
 }
 
 # --- IOsonata Library Build Function ---
@@ -260,37 +271,6 @@ clone_cube_wba
 echo ""
 echo "${GREEN}✅ All repositories cloned successfully!${RESET}"
 
-# ---------------------------------------------------------
-# Install IDAP Tools
-# ---------------------------------------------------------
-echo ""
-echo "${BLUE}>>> Installing IDAP Tools...${RESET}"
-IDAP_DIR="$ROOT/IDAP"
-IDAP_PROG="$IDAP_DIR/IDAPnRFProg"
-mkdir -p "$IDAP_DIR"
-
-if [[ ! -f "$IDAP_PROG" || "$MODE" == "force" ]]; then
-  echo "   Downloading IDAPnRFProg tool..."
-  IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/OSX/IDAPnRFProg_OSX_2_1_240807.zip/download"
-  IDAP_TMP=$(mktemp)
-  if curl -fL "$IDAP_URL" -o "$IDAP_TMP"; then
-    unzip -o -j "$IDAP_TMP" -d "$IDAP_DIR" 2>/dev/null || true
-    chmod +x "$IDAP_DIR/IDAPnRFProg" 2>/dev/null || true
-    rm -f "$IDAP_TMP"
-    echo "${GREEN}   ✅ IDAPnRFProg installed at: $IDAP_PROG${RESET}"
-  else
-    echo "${YELLOW}   ⚠️  Failed to download IDAPnRFProg. You can download manually from:${RESET}"
-    echo "      https://sourceforge.net/projects/idaplinkfirmware/files/OSX/"
-    rm -f "$IDAP_TMP"
-  fi
-else
-  echo "${GREEN}   ✅ IDAPnRFProg already installed (skipping)${RESET}"
-fi
-
-echo ""
-echo "${GREEN}✅ All repositories cloned successfully!${RESET}"
-
-# ---------------------------------------------------------
 # Generate makefile_path.mk
 # ---------------------------------------------------------
 echo ""
@@ -316,7 +296,7 @@ IOSONATA_SRC = $(IOSONATA_ROOT)/src
 # ============================================
 ARM_ROOT = $(IOSONATA_ROOT)/ARM
 ARM_CMSIS = $(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = $(ARM_CMSIS)/Include
+ARM_CMSIS_INCLUDE = $(ARM_CMSIS)/Core/Include
 ARM_INCLUDE = $(ARM_ROOT)/include
 ARM_SRC = $(ARM_ROOT)/src
 ARM_LDSCRIPT = $(ARM_ROOT)/ldscript
@@ -473,7 +453,8 @@ if [[ "$CONFIGURE_ECLIPSE" == "true" ]]; then
   echo "${BLUE}=========================================================${RESET}"
   echo ""
   
-  ECLIPSE_APP="/Applications/Eclipse.app"
+	ECLIPSE_APP="/Applications/IOcomposer.app"
+	[[ -d "$ECLIPSE_APP" ]] || ECLIPSE_APP="/Applications/Eclipse.app"
   ECLIPSE_INI="$ECLIPSE_APP/Contents/Eclipse/eclipse.ini"
   
   if [[ ! -f "$ECLIPSE_INI" ]]; then
@@ -532,7 +513,7 @@ echo "${BLUE}=========================================================${RESET}"
 echo "${BOLD}IOsonata Root:${RESET}       $ROOT"
 echo "${BOLD}IOsonata Framework:${RESET}  $ROOT/IOsonata"
 echo "${BOLD}External Repos:${RESET}      $EXT"
-echo "${BOLD}IDAP Tools:${RESET}          $ROOT/IDAP"
+echo "${BOLD}IDAP Tools:${RESET}          $ROOT/Tools/IDAP-Link"
 echo ""
 echo "${BOLD}Cloned repositories:${RESET}"
 echo "  • IOsonata"
@@ -560,7 +541,8 @@ fi
 echo "${BLUE}---------------------------------------------------------${RESET}"
 
 # --- Detect Eclipse Installation ---
-ECLIPSE_APP="/Applications/Eclipse.app"
+ECLIPSE_APP="/Applications/IOcomposer.app"
+[[ -d "$ECLIPSE_APP" ]] || ECLIPSE_APP="/Applications/Eclipse.app"
 ECLIPSE_INSTALLED=false
 if [[ -d "$ECLIPSE_APP" ]]; then
   ECLIPSE_INSTALLED=true
@@ -591,7 +573,7 @@ if [[ "$NO_BUILD" != "true" && "$ECLIPSE_INSTALLED" == "true" && "$TOOLCHAIN_INS
     echo "${BOLD}   IOsonata Library Auto-Build${RESET}"
     echo "${BLUE}=========================================================${RESET}"
     echo ""
-    "$BUILD_SCRIPT" --home "$ROOT" || true
+    "$BUILD_SCRIPT" --home "$ROOT"
   else
     echo ""
     echo "${YELLOW}Note: Build script not found at:${RESET}"

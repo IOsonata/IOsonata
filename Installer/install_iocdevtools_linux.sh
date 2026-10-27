@@ -2,12 +2,12 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.96"
+SCRIPT_VERSION="v1.1.0"
 
 ROOT="${ROOT:-$HOME/IOcomposer}"
 TOOLS="/opt/xPacks"
 BIN="/usr/local/bin"
-ECLIPSE_DIR="$HOME/eclipse"
+ECLIPSE_DIR="$HOME/iocomposer"
 
 echo "=============================================="
 echo "   IOcomposer MCU Dev Tools Installer (Linux) "
@@ -24,34 +24,45 @@ check_and_install_dependencies() {
   
   command -v git &>/dev/null || missing_dependencies+=("git")
   command -v make &>/dev/null || missing_dependencies+=("make")
+	command -v curl &>/dev/null || missing_dependencies+=("curl")
+	command -v unzip &>/dev/null || missing_dependencies+=("unzip")
+	[[ -x "$ROOT/Tools/Python/bin/python3" ]] || command -v python3 &>/dev/null || missing_dependencies+=("python3")
   
-  if [[ ${#missing_dependencies[@]} -eq 0 ]]; then
-    echo "✓ All required dependencies are installed"
-    return 0
-  fi
-  
-  echo "⚠️  Missing dependencies: ${missing_dependencies[*]}"
-  
-  if command -v apt-get &>/dev/null; then
-    echo ">>> Installing via apt-get..."
-    sudo apt-get update && sudo apt-get install -y "${missing_dependencies[@]}"
-  elif command -v dnf &>/dev/null; then
-    sudo dnf install -y "${missing_dependencies[@]}"
-  elif command -v yum &>/dev/null; then
-    sudo yum install -y "${missing_dependencies[@]}"
-  elif command -v pacman &>/dev/null; then
-    sudo pacman -S --noconfirm "${missing_dependencies[@]}"
-  elif command -v zypper &>/dev/null; then
-    sudo zypper install -y "${missing_dependencies[@]}"
+  if [[ ${#missing_dependencies[@]} -gt 0 ]]; then
+    echo "⚠️  Missing dependencies: ${missing_dependencies[*]}"
+
+    if command -v apt-get &>/dev/null; then
+      echo ">>> Installing via apt-get..."
+      sudo apt-get update && sudo apt-get install -y "${missing_dependencies[@]}"
+    elif command -v dnf &>/dev/null; then
+      sudo dnf install -y "${missing_dependencies[@]}"
+    elif command -v yum &>/dev/null; then
+      sudo yum install -y "${missing_dependencies[@]}"
+    elif command -v pacman &>/dev/null; then
+      sudo pacman -S --noconfirm "${missing_dependencies[@]}"
+    elif command -v zypper &>/dev/null; then
+      sudo zypper install -y "${missing_dependencies[@]}"
+    else
+      echo "❌ Could not detect package manager. Please install: ${missing_dependencies[*]}"
+      exit 1
+    fi
+    echo "✓ Dependencies installed successfully"
   else
-    echo "❌ Could not detect package manager. Please install: ${missing_dependencies[*]}"
-    exit 1
+    echo "Required dependency commands are installed"
   fi
-  
-  echo "✓ Dependencies installed successfully"
+
+  if [[ -x "$ROOT/Tools/Python/bin/python3" ]]; then
+    if ! "$ROOT/Tools/Python/bin/python3" -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
+      echo "Error: Existing managed Python must be 3.9 or newer: $ROOT/Tools/Python/bin/python3" >&2
+      return 1
+    fi
+  elif ! command -v python3 &>/dev/null || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
+    echo "Error: Python 3.9 or newer with venv is required to create Tools/Python." >&2
+    echo "   Ubuntu 20.04's default Python 3.8 is not sufficient; use Ubuntu 22.04+ or provide a newer Python." >&2
+    return 1
+  fi
 }
 
-check_and_install_dependencies
 
 # ---------------------------------------------------------
 # CLI
@@ -61,19 +72,24 @@ show_help() {
 Usage: ./$SCRIPT_NAME.sh [OPTION]
 
 Options:
+  --with-llvm        Install optional LLVM compiler (failure does not stop setup)
   --help              Show help and exit
   --version           Show version and exit
   --home <path>       Set custom SDK installation root (default: ~/IOcomposer)
   --force-update      Force reinstall
-  --uninstall         Remove toolchains + Eclipse (keep repos/workspaces)
+  --iocomposer <path> Set custom IOcomposer installation path
+  --uninstall         Remove toolchains + IOcomposer (keep repos/workspaces)
   (no option)         Install/update (skip if already installed)
 EOF
 }
 
+WITH_LLVM=0
+LLVM_STATUS="skipped (optional; use --with-llvm)"
 MODE="install"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --with-llvm) WITH_LLVM=1 ;;
     --help) show_help; exit 0 ;;
     --version) echo "$SCRIPT_NAME $SCRIPT_VERSION"; exit 0 ;;
     --force-update) MODE="force"; echo ">>> Force update mode enabled" ;;
@@ -86,20 +102,27 @@ while [[ $# -gt 0 ]]; do
       ROOT="$1"
       echo ">>> Using custom home folder: $ROOT"
       ;;
-    --eclipse)
+    --iocomposer|--eclipse)
       shift
       if [[ -z "${1:-}" ]]; then
-        echo "❌ Missing path after --eclipse"; exit 1
+        echo "❌ Missing IOcomposer path"; exit 1
       fi
       ECLIPSE_DIR="$1"
-      echo ">>> Using custom Eclipse folder: $ECLIPSE_DIR"
+      echo ">>> Using custom IOcomposer folder: $ECLIPSE_DIR"
       ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
   shift
 done
 
+[[ "$MODE" == "uninstall" ]] || check_and_install_dependencies
+
 EXT="$ROOT/external"
+PYOCD_DIR="$ROOT/Tools/Python"
+TOOL_BIN="$ROOT/Tools/bin"
+PYOCD="$PYOCD_DIR/bin/pyocd"
+PYTHON3="$PYOCD_DIR/bin/python3"
+LLVM_DIR="$ROOT/Tools/LLVM"
 
 # Create directories
 mkdir -p "$ROOT" "$EXT"
@@ -109,7 +132,7 @@ sudo mkdir -p "$TOOLS" "$BIN"
 # UNINSTALL
 # ---------------------------------------------------------
 if [[ "$MODE" == "uninstall" ]]; then
-  echo "⚠️  Removing toolchains + Eclipse (repos and workspace kept)..."
+  echo "⚠️  Removing toolchains + IOcomposer (repos and workspace kept)..."
   read -r -p "Proceed? (y/N) " c; [[ "$c" =~ ^[Yy]$ ]] || exit 0
 
   echo ">>> Checking xPacks in $TOOLS..."
@@ -129,22 +152,29 @@ if [[ "$MODE" == "uninstall" ]]; then
   echo ">>> Removing symlinks..."
   sudo rm -f "$BIN/arm-none-eabi-gcc" "$BIN/riscv-none-elf-gcc" "$BIN/openocd" || true
 
-  echo ">>> Removing Eclipse installation..."
+  echo ">>> Removing IOcomposer installation..."
   sudo rm -rf "$ECLIPSE_DIR" || true
 
-  echo ">>> Removing Eclipse user settings (~/.eclipse)..."
-  rm -rf "$HOME/.eclipse" || true
 
   echo ">>> Removing udev rules..."
   sudo rm -f /etc/udev/rules.d/99-idap-link-hid.rules || true
   sudo udevadm control --reload-rules 2>/dev/null || true
   sudo udevadm trigger 2>/dev/null || true
 
+	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "$PYOCD" ]]; then
+		sudo rm -f "$BIN/pyocd"
+	fi
+	if [[ -L "$LLVM_DIR" ]]; then
+		rm -f "$LLVM_DIR"
+	elif [[ -f "$LLVM_DIR/.iocomposer-managed" ]]; then
+		rm -rf "$LLVM_DIR"
+	fi
+	rm -rf "$PYOCD_DIR"
   echo ">>> Removing IDAP tools..."
-  rm -rf "$ROOT/IDAP" || true
+  
 
   echo ">>> Removing desktop entry..."
-  rm -f "$HOME/.local/share/applications/eclipse-embedcdt.desktop" || true
+  rm -f "$HOME/.local/share/applications/iocomposer.desktop" || true
 
   # Prompt for IOsonata and external SDK removal
   echo
@@ -204,14 +234,14 @@ echo ">>> Detected architecture: $ARCH -> Eclipse arch=$ECLIPSE_ARCH"
 # Helpers
 # ---------------------------------------------------------
 resolve_path() {
-  python3 - "$1" <<'PY'
+  "$PYTHON3" - "$1" <<'PY'
 import os, sys
 print(os.path.realpath(sys.argv[1]))
 PY
 }
 
 java_hash() {
-  python3 - "$1" <<'EOF'
+  "$PYTHON3" - "$1" <<'EOF'
 import sys
 s = sys.argv[1]; h = 0
 for c in s: h = (31*h + ord(c)) & 0xFFFFFFFF
@@ -255,6 +285,122 @@ cleanup() {
   if [[ -n "${TMP_ECLIPSE_ARCHIVE:-}" ]]; then rm -f "$TMP_ECLIPSE_ARCHIVE" || true; fi
 }
 trap cleanup EXIT
+
+# IOcomposer plugins and branding are installed here, not by the website launcher.
+# Eclipse Embedded CDT supplies the runtime; retain its launcher filenames.
+iocomposer_plugin_url() {
+	local plugin_id="$1"
+	local listing="$2"
+	"$PYTHON3" - "$plugin_id" "$listing" <<'PY'
+import json
+import re
+import sys
+
+plugin_id, listing = sys.argv[1:]
+with open(listing) as stream:
+	items = json.load(stream)
+versions = []
+for item in items:
+	name = item.get("name", "")
+	match = re.fullmatch(re.escape(plugin_id) + r"_([0-9]+(?:\.[0-9]+)*)\.jar", name)
+	if match:
+		versions.append((tuple(int(part) for part in match[1].split(".")), name))
+if not versions:
+	raise SystemExit("No published IOcomposer plugin found: " + plugin_id)
+print("https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/" + max(versions)[1])
+PY
+}
+
+install_iocomposer() (
+	# Subshell cleanup does not replace the main installer's cleanup trap.
+	local runtime="$1"
+	local stage
+	stage=$(mktemp -d)
+	trap 'rm -rf "$stage"' EXIT
+	local plugin url
+	curl -fsSL "https://api.github.com/repos/I-SYST/iocomposer.io/contents/plugin?ref=main" -o "$stage/plugins.json"
+	for plugin in com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
+		url=""
+		if [[ "$plugin" == "com.iocomposer.embedcdt.ai" ]]; then
+			url="${IOCOMPOSER_AI_PLUGIN_URL:-}"
+		fi
+		if [[ -z "$url" ]]; then
+			url=$(iocomposer_plugin_url "$plugin" "$stage/plugins.json")
+		fi
+		curl -fsSL "$url" -o "$stage/$plugin.jar"
+		# Reject HTML/error responses before replacing installed plugins.
+		unzip -tq "$stage/$plugin.jar" >/dev/null
+	done
+	# Both required plugins have downloaded successfully before either is replaced.
+	sudo mkdir -p "$runtime/dropins"
+	for plugin in com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
+		sudo cp "$stage/$plugin.jar" "$runtime/dropins/$plugin.jar"
+		sudo chmod 644 "$runtime/dropins/$plugin.jar"
+		sudo find "$runtime/dropins" -maxdepth 1 -type f -name "${plugin}_*.jar" -delete
+	done
+
+	# Keep SDK path preferences and one customization hook in the runtime ini.
+	"$PYTHON3" - "$runtime" "$stage" <<'PY'
+from pathlib import Path
+import sys
+
+runtime, stage = map(Path, sys.argv[1:])
+ini = (runtime / "eclipse.ini").read_text().splitlines()
+result = []
+skip = False
+for line in ini:
+	if skip:
+		skip = False
+		continue
+	if line in ("-name", "-pluginCustomization"):
+		skip = True
+		continue
+	result.append(line)
+if "-vmargs" not in result:
+	result.append("-vmargs")
+index = result.index("-vmargs")
+custom = "../Eclipse/plugin_customization.ini" if runtime.parent.name == "Contents" else "plugin_customization.ini"
+result[index:index] = ["-name", "IOcomposer", "-pluginCustomization", custom]
+if runtime.parent.name == "Contents" and "-Dswt.autoScale=false" not in result:
+	result.append("-Dswt.autoScale=false")
+(stage / "eclipse.ini").write_text("\n".join(result) + "\n")
+preferences = {
+	"org.eclipse.ui/showIntro": "false",
+	"org.eclipse.ui/defaultPerspectiveId": "com.iocomposer.embedcdt.ui.perspective",
+}
+for package in ("embedcpp", "embedcpp.ui", "cpp", "common"):
+	preferences["org.eclipse.epp.package." + package + "/showNewsOnStartup"] = "false"
+preferences["org.eclipse.epp.mpc.ui/showNewsOnStartup"] = "false"
+custom_file = runtime / "plugin_customization.ini"
+lines = custom_file.read_text().splitlines() if custom_file.exists() else []
+lines = [line for line in lines if line.split("=", 1)[0] not in preferences]
+lines += [key + "=" + value for key, value in preferences.items()]
+(stage / "plugin_customization.ini").write_text("\n".join(lines) + "\n")
+PY
+	sudo cp "$stage/eclipse.ini" "$runtime/eclipse.ini"
+	sudo cp "$stage/plugin_customization.ini" "$runtime/plugin_customization.ini"
+
+	if curl -fsSL "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/splash.bmp" -o "$stage/splash.bmp"; then
+		sudo cp "$stage/splash.bmp" "$runtime/splash.bmp"
+		while IFS= read -r destination; do
+			sudo cp "$stage/splash.bmp" "$destination"
+		done < <(find "$runtime/plugins" -name splash.bmp -type f)
+	else
+		echo "Warning: IOcomposer splash download failed; keeping the existing splash." >&2
+	fi
+	echo "IOcomposer AI and UI plugins installed at $runtime"
+)
+
+build_iocomposer_index() {
+	local index="$ROOT/IOsonata/Installer/build_external_index.py"
+	if [[ -f "$index" ]]; then
+		"$PYOCD_DIR/bin/python3" "$index" --sdk-root "$ROOT/external" || {
+			echo "Warning: SDK index failed. Retry: python3 $index --sdk-root $ROOT/external" >&2
+		}
+	else
+		echo "Warning: SDK index script not found: $index" >&2
+	fi
+}
 
 # ---------------------------------------------------------
 # Install IOsonata Eclipse Plugin
@@ -319,7 +465,7 @@ install_xpack() {
 
   local latest_tag latest_url
   read -r latest_tag latest_url < <(
-    printf '%s' "$latest_json" | python3 -c '
+    printf '%s' "$latest_json" | "$PYTHON3" -c '
 import json, sys
 platforms = [p.strip() for p in (sys.argv[1] or "").split(",") if p.strip()]
 j = json.load(sys.stdin)
@@ -426,6 +572,169 @@ OPENOCD_DIR=""
 # Toolchains
 # ---------------------------------------------------------
 echo
+# One LLVM installation provides both Arm and RISC-V code generation.
+verify_llvm() (
+	local directory="$1"
+	local stage tool
+	stage=$(mktemp -d)
+	trap 'rm -rf "$stage"' EXIT
+	for tool in clang clang++ ld.lld llvm-ar llvm-objcopy llvm-size; do
+		[[ -x "$directory/bin/$tool" ]] || {
+			echo "Missing LLVM tool: $directory/bin/$tool" >&2
+			return 1
+		}
+	done
+	printf 'int probe(void) { return 7; }\n' > "$stage/probe.c"
+	printf 'extern "C" int probe(void) { return 7; }\n' > "$stage/probe.cpp"
+	local target language
+	for target in arm-none-eabi riscv32-unknown-elf; do
+		local flags=()
+		if [[ "$target" == "arm-none-eabi" ]]; then
+			flags=(-mcpu=cortex-m4 -mthumb -mfloat-abi=soft)
+		else
+			flags=(-march=rv32imac -mabi=ilp32)
+		fi
+		for language in c cpp; do
+			local compiler=clang
+			[[ "$language" != "cpp" ]] || compiler=clang++
+			"$directory/bin/$compiler" --target="$target" "${flags[@]}" \
+				-ffreestanding -fno-exceptions -fno-rtti -nostdlib --ld-path="$directory/bin/ld.lld" \
+				-Wl,-e,probe "$stage/probe.$language" -o "$stage/$target-$language.elf" || return 1
+			"$directory/bin/llvm-objcopy" -O ihex "$stage/$target-$language.elf" "$stage/$target-$language.hex" || return 1
+		done
+	done
+	"$directory/bin/clang" --version
+)
+
+install_llvm() {
+	if [[ -x "$LLVM_DIR/bin/clang" ]]; then
+		verify_llvm "$LLVM_DIR"
+		return $?
+	fi
+	local prefix="" lld=""
+	if [[ "$(uname -s)" == "Darwin" ]]; then
+		local brew_cmd
+		brew_cmd=$(command -v brew || true)
+		if [[ -z "$brew_cmd" ]]; then
+			for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+				[[ ! -x "$candidate" ]] || { brew_cmd="$candidate"; break; }
+			done
+		fi
+		if [[ -z "$brew_cmd" ]]; then
+			echo "Install Homebrew for LLVM, or provide a complete LLVM installation at $LLVM_DIR." >&2
+			return 1
+		fi
+		"$brew_cmd" install llvm lld || return 1
+		prefix=$("$brew_cmd" --prefix llvm) || return 1
+		lld="$("$brew_cmd" --prefix lld)/bin/ld.lld"
+	else
+		if command -v apt-get >/dev/null; then
+			sudo apt-get update
+			sudo apt-get install -y clang llvm lld || return 1
+		elif command -v dnf >/dev/null; then
+			sudo dnf install -y clang llvm llvm-devel lld || return 1
+		elif command -v yum >/dev/null; then
+			sudo yum install -y clang llvm llvm-devel lld || return 1
+		elif command -v pacman >/dev/null; then
+			sudo pacman -S --needed --noconfirm clang llvm lld || return 1
+		elif command -v zypper >/dev/null; then
+			sudo zypper install -y clang llvm llvm-devel lld || return 1
+		else
+			echo "Provide a complete LLVM installation at $LLVM_DIR and retry." >&2
+			return 1
+		fi
+		prefix=$(llvm-config --prefix) || return 1
+	fi
+	# Keep package-managed libraries in place and expose one complete tool directory.
+	if [[ -e "$LLVM_DIR" || -L "$LLVM_DIR" ]]; then
+		echo "LLVM destination already exists; inspect it before retrying: $LLVM_DIR" >&2
+		return 1
+	fi
+	mkdir -p "$(dirname "$LLVM_DIR")"
+	local stage entry
+	stage=$(mktemp -d "$(dirname "$LLVM_DIR")/llvm-stage.XXXXXXXX") || return 1
+	mkdir -p "$stage/bin"
+	for entry in lib lib64 libexec include share; do
+		[[ ! -e "$prefix/$entry" ]] || ln -s "$prefix/$entry" "$stage/$entry"
+	done
+	for entry in clang clang++ ld.lld llvm-ar llvm-objcopy llvm-size; do
+		ln -s "$prefix/bin/$entry" "$stage/bin/$entry"
+	done
+	if [[ -n "$lld" ]]; then
+		ln -sf "$lld" "$stage/bin/ld.lld"
+	fi
+	if ! verify_llvm "$stage"; then
+		rm -rf "$stage"
+		return 1
+	fi
+	touch "$stage/.iocomposer-managed"
+	mv "$stage" "$LLVM_DIR"
+
+}
+
+install_optional_llvm() {
+	if [[ "$WITH_LLVM" != 1 ]]; then
+		echo "LLVM: $LLVM_STATUS"
+		return 0
+	fi
+	if (install_llvm); then
+		LLVM_STATUS="$LLVM_DIR (verified Arm and RISC-V)"
+	else
+		LLVM_STATUS="unavailable (optional installation failed)"
+		echo "Warning: LLVM installation failed; continuing with GCC and remaining tools." >&2
+	fi
+}
+
+# Firmware tools share the SDK Tools directory. Python packages stay isolated.
+install_python_tools() {
+	local managed_python="${PYTHON3:-$PYOCD_DIR/bin/python3}"
+	local bootstrap_python=""
+
+	if [[ -x "$managed_python" ]]; then
+		"$managed_python" -c 'import sys; sys.exit(sys.version_info < (3, 9))' || {
+			echo "Managed Python 3.9 or newer is required for pyOCD: $managed_python" >&2
+			return 1
+		}
+	else
+		bootstrap_python=$(command -v python3 || true)
+		if [[ -z "$bootstrap_python" ]]; then
+			echo "Python 3.9 or newer is required to create the managed pyOCD environment." >&2
+			return 1
+		fi
+		"$bootstrap_python" -c 'import sys; sys.exit(sys.version_info < (3, 9))' || {
+			echo "Python 3.9 or newer is required to create the managed pyOCD environment." >&2
+			return 1
+		}
+		if ! "$bootstrap_python" -c 'import venv, ensurepip' 2>/dev/null; then
+			if command -v apt-get >/dev/null; then
+				sudo apt-get update
+				sudo apt-get install -y python3-venv
+			else
+				echo "Install the venv/ensurepip components for python3, then retry." >&2
+				return 1
+			fi
+		fi
+		"$bootstrap_python" -m venv "$PYOCD_DIR" || return 1
+	fi
+	"$managed_python" -m pip install --upgrade pyocd intelhex==2.3.0 || return 1
+	"$managed_python" -c 'from intelhex import IntelHex' || return 1
+	mkdir -p "$TOOL_BIN"
+	for tool in python3 pyocd hexmerge.py; do
+		ln -sfn "$PYOCD_DIR/bin/$tool" "$TOOL_BIN/$tool" || return 1
+	done
+	"$PYOCD" --version || return 1
+	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "${ROOT:-}/tools/pyocd/bin/pyocd" ]]; then
+		sudo ln -sf "$PYOCD" "$BIN/pyocd"
+	elif [[ ! -e "$BIN/pyocd" && ! -L "$BIN/pyocd" ]]; then
+		sudo ln -s "$PYOCD" "$BIN/pyocd"
+	fi
+}
+
+
+install_python_tools
+install_optional_llvm
+export PATH="$TOOL_BIN:$PATH"
+
 ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
 RISCV_DIR=$(install_xpack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC")
 OPENOCD_DIR=$(install_xpack "openocd-xpack" "openocd" "OpenOCD")
@@ -438,7 +747,7 @@ echo "   OpenOCD:$OPENOCD_DIR"
 # ---------------------------------------------------------
 # Install udev rules and IDAP tools
 # ---------------------------------------------------------
-TOOLS_DIR="$ROOT/IDAP"
+TOOLS_DIR="$TOOL_BIN"
 UDEV_SRC="$TOOLS_DIR/99-idap-link-hid.rules"
 UDEV_DEST="/etc/udev/rules.d/99-idap-link-hid.rules"
 
@@ -458,21 +767,30 @@ echo ">>> udev rules file created at: $UDEV_SRC"
 
 # Download IDAPnRFProg if not present
 IDAP_PROG="$TOOLS_DIR/IDAPnRFProg"
-if [[ ! -f "$IDAP_PROG" || "$MODE" == "force" ]]; then
+if [[ ! -x "$IDAP_PROG" || "$MODE" == "force" ]]; then
   echo
   echo ">>> Downloading IDAPnRFProg tool..."
   IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/Linux/IDAPnRFProg_Linux_2_1_240807.zip/download"
-  IDAP_TMP=$(mktemp)
-  if curl -fL "$IDAP_URL" -o "$IDAP_TMP"; then
-    unzip -o -j "$IDAP_TMP" -d "$TOOLS_DIR" 2>/dev/null || true
-    chmod +x "$TOOLS_DIR/IDAPnRFProg" 2>/dev/null || true
-    rm -f "$IDAP_TMP"
-    echo "✅ IDAPnRFProg installed at: $IDAP_PROG"
-  else
-    echo "⚠️  Failed to download IDAPnRFProg. You can download manually from:"
-    echo "   https://sourceforge.net/projects/idaplinkfirmware/files/Linux/"
-    rm -f "$IDAP_TMP"
-  fi
+	IDAP_STAGE=$(mktemp -d)
+	if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
+		rm -rf "$IDAP_STAGE"
+		echo "IDAP download failed; existing executables preserved." >&2
+		exit 1
+	fi
+	if ! unzip -o -j "$IDAP_STAGE/archive.zip" -d "$IDAP_STAGE/unpacked" \
+		|| [[ ! -s "$IDAP_STAGE/unpacked/IDAPnRFProg" ]]; then
+		rm -rf "$IDAP_STAGE"
+		echo "Invalid IDAP archive." >&2
+		exit 1
+	fi
+	for tool in IDAPnRFProg IDAPSetTarget; do
+		if [[ -s "$IDAP_STAGE/unpacked/$tool" ]]; then
+			chmod +x "$IDAP_STAGE/unpacked/$tool" || exit 1
+			cp "$IDAP_STAGE/unpacked/$tool" "$TOOLS_DIR/$tool" || exit 1
+		fi
+	done
+	rm -rf "$IDAP_STAGE"
+	echo "IDAP executables installed in $TOOLS_DIR"
 else
   echo "✅ IDAPnRFProg already installed (skipping)"
 fi
@@ -503,11 +821,11 @@ fi
 # ---------------------------------------------------------
 echo
 
-if [[ "$MODE" != "force" && -d "$ECLIPSE_DIR" ]]; then
-  echo "✅ Eclipse already installed at $ECLIPSE_DIR (skipping; use --force-update to reinstall)."
+if [[ "$MODE" != "force" && -x "$ECLIPSE_DIR/eclipse" ]]; then
+  echo "✅ IOcomposer runtime already installed at $ECLIPSE_DIR (skipping; use --force-update to reinstall)."
 else
-  echo "💻 Installing Eclipse Embedded CDT IDE..."
-  MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
+  echo "💻 Installing IOcomposer runtime (Eclipse Embedded CDT)..."
+  MIRROR="https://download.eclipse.org/technology/epp/downloads/release"
 
   RELEASES=$(curl -fsSL "$MIRROR/" | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' | cut -d'"' -f2 | sed 's|/||g' | sort -r | uniq || true)
   if [[ -z "${RELEASES:-}" ]]; then
@@ -520,11 +838,11 @@ else
     URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-linux-gtk-$ECLIPSE_ARCH.tar.gz"
     URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-linux-gtk-$ECLIPSE_ARCH.tar.gz"
 
-    if is_valid_archive_url "$URL_EMBEDCDT"; then
-      ECLIPSE_URL="$URL_EMBEDCDT"
-      break
-    elif is_valid_archive_url "$URL_EMBEDCPP"; then
+    if is_valid_archive_url "$URL_EMBEDCPP"; then
       ECLIPSE_URL="$URL_EMBEDCPP"
+      break
+    elif is_valid_archive_url "$URL_EMBEDCDT"; then
+      ECLIPSE_URL="$URL_EMBEDCDT"
       break
     fi
   done
@@ -542,37 +860,54 @@ else
     exit 1
   fi
 
-  # Extract to temp dir first, then move (safer approach)
   TMP_EXTRACT=$(mktemp -d)
   tar -xzf "$TMP_ECLIPSE_ARCHIVE" -C "$TMP_EXTRACT"
+  if [[ ! -x "$TMP_EXTRACT/eclipse/eclipse" ]]; then
+    rm -rf "$TMP_EXTRACT"
+    rm -f "$TMP_ECLIPSE_ARCHIVE"
+    echo "Error: Invalid IOcomposer runtime archive." >&2
+    exit 1
+  fi
 
-  sudo rm -rf "$ECLIPSE_DIR"
-  sudo mv "$TMP_EXTRACT/eclipse" "$ECLIPSE_DIR"
+  ECLIPSE_BACKUP="$ECLIPSE_DIR.backup.$RANDOM.$RANDOM"
+  sudo rm -rf "$ECLIPSE_BACKUP"
+  if [[ -e "$ECLIPSE_DIR" ]]; then
+    sudo mv "$ECLIPSE_DIR" "$ECLIPSE_BACKUP"
+  fi
+  if ! sudo mv "$TMP_EXTRACT/eclipse" "$ECLIPSE_DIR"; then
+    sudo rm -rf "$ECLIPSE_DIR"
+    [[ ! -e "$ECLIPSE_BACKUP" ]] || sudo mv "$ECLIPSE_BACKUP" "$ECLIPSE_DIR"
+    rm -rf "$TMP_EXTRACT"
+    rm -f "$TMP_ECLIPSE_ARCHIVE"
+    echo "Error: Failed to replace the IOcomposer runtime; previous installation restored." >&2
+    exit 1
+  fi
+  sudo rm -rf "$ECLIPSE_BACKUP" || true
   rm -rf "$TMP_EXTRACT"
   rm -f "$TMP_ECLIPSE_ARCHIVE"
   TMP_ECLIPSE_ARCHIVE=""
 
-  echo "✅ Eclipse installed at $ECLIPSE_DIR"
+  echo "✅ IOcomposer runtime installed at $ECLIPSE_DIR"
 fi
 
 
 # ---------------------------------------------------------
 # Create desktop entry for Eclipse
 # ---------------------------------------------------------
-DESKTOP_FILE="$HOME/.local/share/applications/eclipse-embedcdt.desktop"
+DESKTOP_FILE="$HOME/.local/share/applications/iocomposer.desktop"
 mkdir -p "$HOME/.local/share/applications"
 
 cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
-Name=Eclipse Embedded CDT
-Comment=Eclipse IDE for Embedded C/C++ Development
-Exec=$ECLIPSE_DIR/eclipse
+Name=IOcomposer
+Comment=IOcomposer Embedded Development
+Exec="$ECLIPSE_DIR/eclipse"
 Icon=$ECLIPSE_DIR/icon.xpm
 Terminal=false
 Type=Application
 Categories=Development;IDE;
 StartupNotify=true
-StartupWMClass=Eclipse
+StartupWMClass=IOcomposer
 EOF
 
 echo "✅ Desktop entry created at $DESKTOP_FILE"
@@ -600,7 +935,13 @@ seed_eclipse_install_prefs() {
   # 1. org.eclipse.core.runtime.prefs (with environment variables like macOS)
   sudo tee "$install_cfg/org.eclipse.core.runtime.prefs" > /dev/null <<EOF
 eclipse.preferences.version=1
+environment/project/LLVM_HOME/value=$LLVM_DIR
+environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
+environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
+environment/project/PATH/value=$TOOL_BIN
+environment/project/PATH/operation=prepend
+environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
 environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
 environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
@@ -749,7 +1090,13 @@ EOF
   # 5. org.eclipse.core.runtime.prefs
   cat > "$instance_cfg/.settings/org.eclipse.core.runtime.prefs" <<EOF
 eclipse.preferences.version=1
+environment/project/LLVM_HOME/value=$LLVM_DIR
+environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
+environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
+environment/project/PATH/value=$TOOL_BIN
+environment/project/PATH/operation=prepend
+environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
 environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
 environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
@@ -833,7 +1180,7 @@ echo
 echo
 echo "📦 Syncing IOsonata + external SDKs..."
 
-CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/clone_iosonata_sdk_linux.sh"
+CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_linux.sh"
 TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.sh)
 CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.log)
 
@@ -857,16 +1204,10 @@ run_clone() {
   bash "$TMP_CLONE" "$@" 2>&1 | tee -a "$CLONE_LOG"
 }
 
-if run_clone "${CLONE_ARGS[@]}"; then
-  :
-else
-  echo "⚠️  Clone script does not support --no-build yet. Retrying without it..."
-  CLONE_ARGS_NO_BUILD=()
-  for a in "${CLONE_ARGS[@]}"; do
-    [[ "$a" == "--no-build" ]] && continue
-    CLONE_ARGS_NO_BUILD+=("$a")
-  done
-  run_clone "${CLONE_ARGS_NO_BUILD[@]}"
+if ! run_clone "${CLONE_ARGS[@]}"; then
+	echo "SDK synchronization failed. See $CLONE_LOG" >&2
+	rm -f "$TMP_CLONE"
+	exit 1
 fi
 
 rm -f "$TMP_CLONE" || true
@@ -890,13 +1231,15 @@ find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|external/fusion|external
 # Fix CMSIS case sensitivity (folder is "Include" not "include")
 find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|CMSIS/Core/include|CMSIS/Core/Include|g' {} \; 2>/dev/null || true
 
-echo "✅ Eclipse project paths fixed for Linux"
+echo "Eclipse project path substitutions completed for Linux"
 
 # ---------------------------------------------------------
 # Install IOsonata Eclipse Plugin
 # ---------------------------------------------------------
 echo
 install_iosonata_plugin
+
+install_iocomposer "$ECLIPSE_DIR"
 
 # ---------------------------------------------------------
 # Generate makefile_path.mk
@@ -915,6 +1258,21 @@ cat > "$MAKEFILE_PATH_MK" <<EOF
 # ============================================
 # Toolchain Paths
 # ============================================
+LLVM_ROOT = $LLVM_DIR
+ARM_LLVM_ROOT = $LLVM_DIR
+RISCV_LLVM_ROOT = $LLVM_DIR
+CLANG = $LLVM_DIR/bin/clang
+CLANGXX = $LLVM_DIR/bin/clang++
+LLVM_LD = $LLVM_DIR/bin/ld.lld
+LLVM_AR = $LLVM_DIR/bin/llvm-ar
+LLVM_OBJCOPY = $LLVM_DIR/bin/llvm-objcopy
+ARM_LLVM_TARGET = --target=arm-none-eabi
+RISCV_LLVM_TARGET = --target=riscv32-unknown-elf
+SDK_TOOLS_ROOT = $ROOT/Tools
+PYTHON = $TOOL_BIN/python3
+HEXMERGE = $TOOL_BIN/hexmerge.py
+PYOCD_ROOT = $PYOCD_DIR
+PYOCD = $PYOCD
 ARM_GCC_ROOT = $ARM_DIR
 ARM_GCC_BIN = $ARM_DIR/bin
 ARM_GCC = \$(ARM_GCC_BIN)/arm-none-eabi-gcc
@@ -959,7 +1317,7 @@ IOSONATA_SRC = \$(IOSONATA_ROOT)/src
 # ============================================
 ARM_ROOT = \$(IOSONATA_ROOT)/ARM
 ARM_CMSIS = \$(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = \$(ARM_CMSIS)/Include
+ARM_CMSIS_INCLUDE = \$(ARM_CMSIS)/Core/Include
 ARM_INCLUDE = \$(ARM_ROOT)/include
 ARM_SRC = \$(ARM_ROOT)/src
 ARM_LDSCRIPT = \$(ARM_ROOT)/ldscript
@@ -1060,21 +1418,23 @@ if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
     echo "========================================================="
     echo ""
     chmod +x "$BUILD_SCRIPT"
-    "$BUILD_SCRIPT" --home "$ROOT" || true
+    "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_DIR"
   else
     echo ""
     echo "ℹ️  IOsonata library builder not found:"
     echo "   $BUILD_SCRIPT"
-    echo "   (Skipping library build)"
+    echo "   Library build not run: builder script is missing."
     echo ""
   fi
 else
   echo ""
-  echo "ℹ️  IOsonata libraries were already handled by the clone step (skipping rebuild)."
+  echo "IOsonata library build was invoked by the SDK synchronization step; not running it again."
   echo ""
 fi
 
 # ---------------------------------------------------------
+build_iocomposer_index
+
 # Summary
 # ---------------------------------------------------------
 echo
@@ -1117,15 +1477,18 @@ printf "│ %-24s   %-49s │\n" "Symlinks Directory:" "$BIN"
 echo "└─────────────────────────────────────────────────────────────────────────────┘"
 echo ""
 echo "=============================================="
-echo " Installation complete!"
+echo " IOcomposer development tools setup completed"
 echo "=============================================="
 echo
-echo "✅ iosonata_loc is configured in Eclipse installation"
+echo "Eclipse installation settings contain iosonata_loc"
 echo
 echo "Usage in .cproject files:"
 echo "  \${system_property:iosonata_loc}/IOsonata/include"
 echo "  \${system_property:iosonata_loc}/IOsonata/ARM/include"
-echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
+echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 echo
-echo "If prefs seeding was skipped, run Eclipse once, then re-run this script to seed Embedded CDT toolchain paths."
+echo "If user-specific Eclipse preferences were not created, launch IOcomposer and rerun the installer."
 echo
+printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nTool binaries: %s\n" "$PYOCD_DIR" "$PYOCD" "$TOOL_BIN/hexmerge.py" "$TOOL_BIN"
+
+printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"
