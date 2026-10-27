@@ -1030,15 +1030,19 @@ sudo /usr/libexec/PlistBuddy -c "Set :CFBundleName IOcomposer" "$ECLIPSE_APP/Con
 sudo /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist" 2>/dev/null || \
 	sudo /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
 
-# Initialize the IOcomposer Eclipse instance even when library compilation is skipped.
-# Managed CDT preferences must not depend on a headless firmware build.
+# The downloaded app was modified by the installer. Sign it before any launch.
+sudo xattr -cr "$ECLIPSE_APP"
+sudo codesign --force --deep --sign - "$ECLIPSE_APP"
+sudo codesign --verify --deep --strict "$ECLIPSE_APP" || {
+	echo "Error: IOcomposer application signature verification failed." >&2
+	exit 1
+}
+
+# MCU global preferences are written in the installation configuration scope
+# above; creating a user instance is independent of optional library builds.
 echo "Initializing IOcomposer Eclipse configuration..."
 if ! "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize; then
-	echo "Error: IOcomposer Eclipse configuration initialization failed." >&2
-	exit 1
-fi
-if [[ ! -d "$HOME/.eclipse" ]]; then
-	echo "Warning: Eclipse did not create ~/.eclipse; global MCU preferences are in $ECLIPSE_SETTINGS." >&2
+	echo "Warning: Eclipse instance initialization failed; global MCU preferences remain in $ECLIPSE_SETTINGS." >&2
 fi
 
 # ---------------------------------------------------------
