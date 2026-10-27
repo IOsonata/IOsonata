@@ -112,30 +112,6 @@ esac
 			self.assertNotEqual(self.run_setup('linux', runtime, env).returncode, 0)
 			self.assertEqual((runtime / 'dropins/com.iocomposer.embedcdt.ai.jar').read_text(), 'existing-plugin')
 
-	def test_launchers_forward_arguments_ref_and_failure(self):
-		for platform in ['linux', 'macos']:
-			with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory:
-				root = Path(directory)
-				env = self.fixture(root)
-				env['IOSONATA_INSTALLER_REF'] = 'release_0.13_readiness'
-				(root / 'child.sh').write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "$FIXTURE/args"\nexit 37\n')
-				args = ['--help', '--home', '/SDK path with spaces', '--iocomposer', '/IDE path']
-				result = subprocess.run(['bash', str(INSTALLER / f'website/install_ioc_{platform}.sh'), *args],
-					env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL)
-				self.assertEqual(result.returncode, 37, result.stderr)
-				self.assertEqual((root / 'args').read_text().splitlines(), args)
-				calls = (root / 'calls').read_text().splitlines()
-				self.assertEqual(len(calls), 1)
-				self.assertIn('/release_0.13_readiness/Installer/install_iocdevtools_', calls[0])
-
-	def test_launcher_download_failure_does_not_run_child(self):
-		with tempfile.TemporaryDirectory() as directory:
-			root = Path(directory)
-			env = self.fixture(root)
-			env['FAIL_URL'] = 'install_iocdevtools'
-			result = subprocess.run(['bash', str(INSTALLER / 'website/install_ioc_linux.sh'), '--help'], env=env)
-			self.assertNotEqual(result.returncode, 0)
-			self.assertFalse((root / 'args').exists())
 
 
 if __name__ == '__main__':

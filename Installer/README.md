@@ -207,10 +207,9 @@ stops installation; both downloads are validated before replacing installed
 plugins. The splash and SDK index are optional and report failures as warnings.
 The macOS app is signed after configuration and again after the build step.
 
-Website launcher copies are maintained in [website](website). Merge the
-IOsonata installer changes first, then update the three root launchers in
-`I-SYST/iocomposer.io`. See [website/README.md](website/README.md) for branch
-validation and rollout.
+Website launchers are maintained only in `I-SYST/iocomposer.io` at the repository
+root. The website scripts delegate to these IOsonata installers. Merge the
+IOsonata installer changes before updating the website launchers.
 
 ### Usage
 
