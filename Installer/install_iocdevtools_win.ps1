@@ -1266,12 +1266,12 @@ if (-not $CLONE_INVOKED_BUILD) {
         Write-Host
         Write-Host "   [INFO] IOsonata library builder not found:" -ForegroundColor Yellow
         Write-Host "   $BS" -ForegroundColor Yellow
-        Write-Host "   (Skipping library build)" -ForegroundColor Yellow
+        Write-Host "   Library build not run: builder script is missing." -ForegroundColor Yellow
         Write-Host
     }
 } else {
     Write-Host
-    Write-Host "   [INFO] IOsonata libraries were already handled by the clone step (skipping rebuild)." -ForegroundColor Yellow
+    Write-Host "   IOsonata library build was invoked by SDK synchronization; not running it again."
     Write-Host
 }
 
@@ -1320,16 +1320,6 @@ if ($OPENOCD_DIR -and (Test-Path "$OPENOCD_DIR\bin\openocd.exe")) {
     }
 }
 
-$OPENOCD_VER = "Not found"
-if ($OPENOCD_DIR -and (Test-Path "$OPENOCD_DIR\bin\openocd.exe")) {
-    try {
-        $verOut = (& "$OPENOCD_DIR\bin\openocd.exe" --version 2>&1) | Out-String -Stream | Select-Object -First 1
-        if ($verOut -match '(\d+\.\d+\.\d+)') { $OPENOCD_VER = $Matches[1] }
-    } catch {
-        $OPENOCD_VER = "Installed"
-    }
-}
-
 Write-Host ("{0,-25} {1}" -f "IOcomposer runtime:", $ECLIPSE_VER)
 Write-Host ("{0,-25} {1}" -f "ARM GCC:", $ARM_VER)
 Write-Host ("{0,-25} {1}" -f "RISC-V GCC:", $RISCV_VER)
@@ -1339,7 +1329,7 @@ Write-Host ("{0,-25} {1}" -f "iocomposer_home:", $RT)
 Write-Host ("{0,-25} {1}" -f "iosonata_loc:", $RT)
 
 Write-Host "==============================================" -ForegroundColor Green
-Write-Host " Installation complete!" -ForegroundColor Green
+Write-Host " IOcomposer development tools setup completed" -ForegroundColor Green
 Write-Host "==============================================" -ForegroundColor Green
 Write-Host
 Write-Host "Usage in .cproject files:"
@@ -1347,8 +1337,9 @@ Write-Host "  `${system_property:iosonata_loc}/IOsonata/include"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/include"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 Write-Host
-Write-Host "Python venv: $PYOCD_DIR"
+Write-Host "Python environment: $PYOCD_DIR"
 Write-Host "pyOCD: $PYOCD"
+Write-Host "IntelHex (HEX merge): $PYOCD_DIR\Scripts\hexmerge.py"
 Write-Host "IDAP-Link: $ROOT\Tools\IDAP-Link"
 Write-Host "LLVM (Arm + RISC-V): $LLVM_STATUS"
 exit 0

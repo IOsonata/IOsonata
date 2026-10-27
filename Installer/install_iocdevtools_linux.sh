@@ -1247,7 +1247,7 @@ find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|external/fusion|external
 # Fix CMSIS case sensitivity (folder is "Include" not "include")
 find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|CMSIS/Core/include|CMSIS/Core/Include|g' {} \; 2>/dev/null || true
 
-echo "✅ Eclipse project paths fixed for Linux"
+echo "Eclipse project path substitutions completed for Linux"
 
 # ---------------------------------------------------------
 # Install IOsonata Eclipse Plugin
@@ -1438,12 +1438,12 @@ if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
     echo ""
     echo "ℹ️  IOsonata library builder not found:"
     echo "   $BUILD_SCRIPT"
-    echo "   (Skipping library build)"
+    echo "   Library build not run: builder script is missing."
     echo ""
   fi
 else
   echo ""
-  echo "ℹ️  IOsonata libraries were already handled by the clone step (skipping rebuild)."
+  echo "IOsonata library build was invoked by the SDK synchronization step; not running it again."
   echo ""
 fi
 
@@ -1492,18 +1492,18 @@ printf "│ %-24s   %-49s │\n" "Symlinks Directory:" "$BIN"
 echo "└─────────────────────────────────────────────────────────────────────────────┘"
 echo ""
 echo "=============================================="
-echo " Installation complete!"
+echo " IOcomposer development tools setup completed"
 echo "=============================================="
 echo
-echo "✅ iosonata_loc is configured in Eclipse installation"
+echo "Eclipse installation settings contain iosonata_loc"
 echo
 echo "Usage in .cproject files:"
 echo "  \${system_property:iosonata_loc}/IOsonata/include"
 echo "  \${system_property:iosonata_loc}/IOsonata/ARM/include"
 echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 echo
-echo "If prefs seeding was skipped, run Eclipse once, then re-run this script to seed Embedded CDT toolchain paths."
+echo "If user-specific Eclipse preferences were not created, launch IOcomposer and rerun the installer."
 echo
-printf "Python venv: %s\npyOCD: %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$ROOT/Tools/IDAP-Link"
+printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$PYOCD_DIR/bin/hexmerge.py" "$ROOT/Tools/IDAP-Link"
 
 printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"

@@ -28,7 +28,7 @@ Options:
   --help           Show help and exit
   --version        Show version and exit
   --home <path>    Set custom SDK installation root (default: ~/IOcomposer)
-  --pyocd-only     Install/update pyOCD without reinstalling other tools
+  --pyocd-only     Install/update pyOCD and IntelHex without reinstalling other tools
   --force-update   Force reinstall
   --iocomposer <path> Set custom IOcomposer installation path
   --uninstall      Remove toolchains + IOcomposer (keep repos/workspaces)
@@ -1281,12 +1281,12 @@ if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
     echo ""
     echo "ℹ️  IOsonata library builder not found:"
     echo "   $BUILD_SCRIPT"
-    echo "   (Skipping library build)"
+    echo "   Library build not run: builder script is missing."
     echo ""
   fi
 else
   echo ""
-  echo "ℹ️  IOsonata libraries were already handled by the clone step (skipping rebuild)."
+  echo "IOsonata library build was invoked by the SDK synchronization step; not running it again."
   echo ""
 fi
 
@@ -1339,21 +1339,21 @@ printf "%-25s %s\n" "iocomposer_home:" "$ROOT"
 printf "%-25s %s\n" "iosonata_loc:" "$ROOT"
 
 echo "=============================================="
-echo " Installation complete!"
+echo " IOcomposer development tools setup completed"
 echo "=============================================="
 echo
-echo "✅ iosonata_loc is configured in Eclipse installation"
+echo "Eclipse installation settings contain iosonata_loc"
 echo
 echo "Usage in .cproject files:"
 echo "  \${system_property:iosonata_loc}/IOsonata/include"
 echo "  \${system_property:iosonata_loc}/IOsonata/ARM/include"
 echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 echo
-echo "The variable is available in ALL workspaces."
-echo "No macOS reboot required!"
+echo "The installation-level setting is available to workspaces using this IOcomposer runtime."
+echo "No restart of macOS is required by the installer."
 echo "=============================================="
 echo
 
-printf "Python venv: %s\npyOCD: %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$ROOT/Tools/IDAP-Link"
+printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$PYOCD_DIR/bin/hexmerge.py" "$ROOT/Tools/IDAP-Link"
 
 printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"
