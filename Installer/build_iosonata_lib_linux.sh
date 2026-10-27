@@ -390,8 +390,8 @@ build_project() {
   echo
 
   # Log File Setup
-  local LOGFILE="/tmp/build_lib_$$.log"
-  rm -f "$LOGFILE" || true
+	local LOGFILE
+	LOGFILE=$(mktemp /tmp/iosonata_build.XXXXXXXX) || return 1
 
   # Run headless build with AWK filter
   set +e

@@ -9,6 +9,7 @@
 
 param(
     [string]$SdkHome = "$env:USERPROFILE\IOcomposer",
+	[ValidateSet("normal", "force")]
     [string]$Mode = "normal",
     [switch]$Eclipse,
     [switch]$NoBuild,
@@ -79,6 +80,14 @@ Write-Host "Skip auto-build:      $NoBuild" -ForegroundColor White
 Write-Host "---------------------------------------------------------" -ForegroundColor Blue
 Write-Host ""
 
+# Native programs do not throw on nonzero exit codes in Windows PowerShell.
+function Invoke-Git {
+	& git @args
+	if ($LASTEXITCODE -ne 0) {
+		throw "Git failed with exit code $LASTEXITCODE`: $args"
+	}
+}
+
 # --- Function: Clone or update repo ---
 function Sync-Repository {
     param(
@@ -92,18 +101,18 @@ function Sync-Repository {
             Write-Host "   `[WARN`] Re-cloning $Target ..." -ForegroundColor Yellow
             Remove-Item -Path $Target -Recurse -Force
             if ($RecurseSubmodules) {
-                git clone --depth=1 --recurse-submodules $Url $Target
+                Invoke-Git clone --depth=1 --recurse-submodules $Url $Target
             } else {
-                git clone --depth=1 $Url $Target
+                Invoke-Git clone --depth=1 $Url $Target
             }
         } else {
             Write-Host "   `[INFO`] Updating $Target ..." -ForegroundColor Yellow
             Push-Location $Target
             try {
-                git pull --rebase
+                Invoke-Git pull --rebase
                 if ($RecurseSubmodules) {
                     Write-Host "      -> Updating submodules..." -ForegroundColor Blue
-                    git submodule update --init --recursive
+                    Invoke-Git submodule update --init --recursive
                 }
             } finally {
                 Pop-Location
@@ -112,17 +121,16 @@ function Sync-Repository {
     } else {
         Write-Host "   `[INFO`] Cloning $Target ..." -ForegroundColor Blue
         if ($RecurseSubmodules) {
-            git clone --depth=1 --recurse-submodules $Url $Target
+            Invoke-Git clone --depth=1 --recurse-submodules $Url $Target
             Write-Host "      `[OK`] Submodules initialized" -ForegroundColor Green
         } else {
-            git clone --depth=1 $Url $Target
+            Invoke-Git clone --depth=1 $Url $Target
         }
     }
 }
 
 # --- Function: Clone a repository pinned to a tag ---
-# A checkout that is already at the tag is kept. Any other checkout is
-# replaced, so a pinned repository never follows the default branch.
+# Existing checkouts are preserved unless force mode is explicitly requested.
 function Sync-PinnedRepository {
     param(
         [string]$Url,
@@ -133,7 +141,9 @@ function Sync-PinnedRepository {
     if ((Test-Path $Target) -and ($Mode -ne "force")) {
         Push-Location $Target
         try {
-            $current = git describe --tags --exact-match 2>$null
+			$current = $null
+			try { $current = git describe --tags --exact-match 2>$null } catch { $current = $null }
+			if ($LASTEXITCODE -ne 0) { $current = $null }
         } finally {
             Pop-Location
         }
@@ -141,12 +151,13 @@ function Sync-PinnedRepository {
             Write-Host "   `[INFO`] Keeping $Target at $Ref" -ForegroundColor Yellow
             return
         }
+		throw "Pinned checkout needs attention; preserved: $Target (required $Ref). Align it manually or use force mode to replace it."
     }
     if (Test-Path $Target) {
         Remove-Item -Path $Target -Recurse -Force
     }
     Write-Host "   `[INFO`] Cloning $Target at $Ref ..." -ForegroundColor Blue
-    git clone --depth=1 --branch $Ref $Url $Target
+    Invoke-Git clone --depth=1 --branch $Ref $Url $Target
 }
 
 # STM32CubeWBA holds the platform files of the ST BLE link layer that the
@@ -159,7 +170,9 @@ function Sync-CubeWba {
     if ((Test-Path $Target) -and ($Mode -ne "force")) {
         Push-Location $Target
         try {
-            $current = git describe --tags --exact-match 2>$null
+			$current = $null
+			try { $current = git describe --tags --exact-match 2>$null } catch { $current = $null }
+			if ($LASTEXITCODE -ne 0) { $current = $null }
         } finally {
             Pop-Location
         }
@@ -167,16 +180,17 @@ function Sync-CubeWba {
             Write-Host "   `[INFO`] Keeping $Target at $Ref" -ForegroundColor Yellow
             return
         }
+		throw "Pinned checkout needs attention; preserved: $Target (required $Ref). Align it manually or use force mode to replace it."
     }
     if (Test-Path $Target) {
         Remove-Item -Path $Target -Recurse -Force
     }
     Write-Host "   `[INFO`] Cloning $Target at $Ref ..." -ForegroundColor Blue
-    git clone --depth=1 --branch $Ref --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git $Target
+    Invoke-Git clone --depth=1 --branch $Ref --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git $Target
     Push-Location $Target
     try {
-        git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers
-        git submodule update --init --depth 1 Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx
+        Invoke-Git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers
+        Invoke-Git submodule update --init --depth 1 Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx
     } finally {
         Pop-Location
     }
@@ -321,7 +335,7 @@ IOSONATA_SRC = `$(IOSONATA_ROOT)/src
 # ============================================
 ARM_ROOT = `$(IOSONATA_ROOT)/ARM
 ARM_CMSIS = `$(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Include
+ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Core/Include
 ARM_INCLUDE = `$(ARM_ROOT)/include
 ARM_SRC = `$(ARM_ROOT)/src
 ARM_LDSCRIPT = `$(ARM_ROOT)/ldscript
@@ -613,6 +627,7 @@ if (-not $NoBuild -and $ECLIPSE_INSTALLED -and $TOOLCHAIN_INSTALLED) {
         Write-Host "=========================================================" -ForegroundColor Blue
         Write-Host ""
         & $BUILD_SCRIPT -SdkHome $ROOT
+		if ($LASTEXITCODE -ne 0) { throw "Library build failed with exit code $LASTEXITCODE" }
     } else {
         Write-Host ""
         Write-Host "Note: Build script not found at:" -ForegroundColor Yellow

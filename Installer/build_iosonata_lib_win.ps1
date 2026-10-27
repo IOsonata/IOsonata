@@ -289,14 +289,14 @@ function Build-Project {
     Write-Host ""
 
     # Create temporary workspace
-    $WS = "$env:TEMP\iosonata_build_ws_$PID"
+	$buildId = [guid]::NewGuid().ToString("N")
+    $WS = "$env:TEMP\iosonata_build_ws_$buildId"
     New-Item -Path $WS -ItemType Directory -Force | Out-Null
     Write-Host ">>> Workspace: $WS" -ForegroundColor Gray
     Write-Host ">>> Running $IDE_NAME headless build..." -ForegroundColor Cyan
     Write-Host ""
 
-    $logFile = "$env:TEMP\build_lib_$PID.log"
-    if (Test-Path $logFile) { Remove-Item $logFile -Force }
+    $logFile = "$env:TEMP\build_lib_$buildId.log"
 
     # Run Headless Build
     try {

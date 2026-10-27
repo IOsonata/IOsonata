@@ -73,10 +73,12 @@ NO_BUILD=false
 while [[ $# -gt 0 ]]; do
   case $1 in
     --home)
+		[[ -n "${2:-}" ]] || { echo "Missing value after --home" >&2; exit 1; }
       ROOT="$2"
       shift 2
       ;;
     --mode)
+		[[ -n "${2:-}" ]] || { echo "Missing value after --mode" >&2; exit 1; }
       MODE="$2"
       shift 2
       ;;
@@ -98,6 +100,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+case "$MODE" in
+	normal|force) ;;
+	*) echo "Invalid mode: $MODE (expected normal or force)" >&2; exit 1 ;;
+esac
 
 # --- Prepare directories safely ---
 mkdir -p "$ROOT"
@@ -151,21 +158,22 @@ clone_or_update_repo() {
 # ---------------------------------------------------------
 # CLONE A REPOSITORY PINNED TO A TAG
 # ---------------------------------------------------------
-# A checkout that is already at the tag is kept. Any other checkout is
-# replaced, so a pinned repository never follows the default branch.
+# Existing checkouts are preserved unless force mode is explicitly requested.
 
 clone_pinned_repo() {
   local repo_url="$1"
   local target_dir="$2"
   local ref="$3"
 
-  if [[ -d "$target_dir" && "$MODE" != "force" ]]; then
+  if [[ ( -e "$target_dir" || -L "$target_dir" ) && "$MODE" != "force" ]]; then
     local current
     current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
     if [[ "$current" == "$ref" ]]; then
       echo "Keeping $target_dir at $ref"
       return 0
     fi
+		echo "Pinned checkout needs attention; preserved: $target_dir (required $ref). Align it manually or use force mode to replace it." >&2
+		return 1
   fi
 
   rm -rf "$target_dir"
@@ -181,12 +189,14 @@ clone_cube_wba() {
   local ref="v1.10.0"
   local current=""
 
-  if [[ -d "$target_dir" && "$MODE" != "force" ]]; then
+  if [[ ( -e "$target_dir" || -L "$target_dir" ) && "$MODE" != "force" ]]; then
     current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
     if [[ "$current" == "$ref" && -f "$target_dir/Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h" ]]; then
       echo "Keeping $target_dir at $ref"
       return 0
     fi
+		echo "Pinned checkout needs attention; preserved: $target_dir (required $ref). Align it manually or use force mode to replace it." >&2
+		return 1
   fi
 
   rm -rf "$target_dir"
@@ -316,7 +326,7 @@ IOSONATA_SRC = $(IOSONATA_ROOT)/src
 # ============================================
 ARM_ROOT = $(IOSONATA_ROOT)/ARM
 ARM_CMSIS = $(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = $(ARM_CMSIS)/Include
+ARM_CMSIS_INCLUDE = $(ARM_CMSIS)/Core/Include
 ARM_INCLUDE = $(ARM_ROOT)/include
 ARM_SRC = $(ARM_ROOT)/src
 ARM_LDSCRIPT = $(ARM_ROOT)/ldscript
@@ -591,7 +601,7 @@ if [[ "$NO_BUILD" != "true" && "$ECLIPSE_INSTALLED" == "true" && "$TOOLCHAIN_INS
     echo "${BOLD}   IOsonata Library Auto-Build${RESET}"
     echo "${BLUE}=========================================================${RESET}"
     echo ""
-    "$BUILD_SCRIPT" --home "$ROOT" || true
+    "$BUILD_SCRIPT" --home "$ROOT"
   else
     echo ""
     echo "${YELLOW}Note: Build script not found at:${RESET}"

@@ -348,8 +348,8 @@ build_project() {
   echo ">>> Running $IDE_NAME headless build (indexing disabled)..."
   echo
 
-  local LOGFILE="/tmp/build_lib_$$.log"
-  rm -f "$LOGFILE" || true
+	local LOGFILE
+	LOGFILE=$(mktemp /tmp/iosonata_build.XXXXXXXX) || return 1
 
   # Run headless build with AWK filter to remove Java verbosity
   set +e

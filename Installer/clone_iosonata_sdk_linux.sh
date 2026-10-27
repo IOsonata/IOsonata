@@ -39,6 +39,8 @@ check_and_install_dependencies() {
   # Check for git and make
   command -v git &>/dev/null || missing_dependencies+=("git")
   command -v make &>/dev/null || missing_dependencies+=("make")
+	command -v curl &>/dev/null || missing_dependencies+=("curl")
+	command -v unzip &>/dev/null || missing_dependencies+=("unzip")
 
   # No missing dependencies (So end function)
   if [[ ${#missing_dependencies[@]} -eq 0 ]]; then
@@ -67,7 +69,6 @@ check_and_install_dependencies() {
   echo "✓ Dependencies installed successfully"
 }
 
-check_and_install_dependencies
 
 # ---------------------------------------------------------
 # DEFAULT CONFIGURATION VALUES
@@ -147,6 +148,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+case "$MODE" in
+	normal|force) ;;
+	*) echo "Invalid mode: $MODE (expected normal or force)" >&2; exit 1 ;;
+esac
+
+check_and_install_dependencies
+
 # ---------------------------------------------------------
 # DIRECTORY PREPARATION AND DISPLAY
 # ---------------------------------------------------------
@@ -190,12 +198,10 @@ clone_or_update_repo() {
     # Otherwise update (git pull)
     else
       echo -e "${YELLOW}🔄 Updating${RESET} $target_dir ..."
-      # Added fallback logic for failed updates
-      (cd "$target_dir" && git pull --rebase) || {
-        echo -e "${RED}   ✗ Update failed, trying fresh clone...${RESET}"
-        rm -rf "$target_dir"
-        git clone --depth=1 "$repo_url" "$target_dir"
-      }
+		(cd "$target_dir" && git pull --rebase) || {
+			echo "Update failed; existing checkout preserved: $target_dir" >&2
+			return 1
+		}
       if [[ "$recurse_submodules" == "true" ]]; then
         echo -e "${BLUE}   ↳ Updating submodules...${RESET}"
         (cd "$target_dir" && git submodule update --init --recursive)
@@ -217,21 +223,22 @@ clone_or_update_repo() {
 # ---------------------------------------------------------
 # CLONE A REPOSITORY PINNED TO A TAG
 # ---------------------------------------------------------
-# A checkout that is already at the tag is kept. Any other checkout is
-# replaced, so a pinned repository never follows the default branch.
+# Existing checkouts are preserved unless force mode is explicitly requested.
 
 clone_pinned_repo() {
   local repo_url="$1"
   local target_dir="$2"
   local ref="$3"
 
-  if [[ -d "$target_dir" && "$MODE" != "force" ]]; then
+  if [[ ( -e "$target_dir" || -L "$target_dir" ) && "$MODE" != "force" ]]; then
     local current
     current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
     if [[ "$current" == "$ref" ]]; then
       echo "Keeping $target_dir at $ref"
       return 0
     fi
+		echo "Pinned checkout needs attention; preserved: $target_dir (required $ref). Align it manually or use force mode to replace it." >&2
+		return 1
   fi
 
   rm -rf "$target_dir"
@@ -247,12 +254,14 @@ clone_cube_wba() {
   local ref="v1.10.0"
   local current=""
 
-  if [[ -d "$target_dir" && "$MODE" != "force" ]]; then
+  if [[ ( -e "$target_dir" || -L "$target_dir" ) && "$MODE" != "force" ]]; then
     current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
     if [[ "$current" == "$ref" && -f "$target_dir/Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h" ]]; then
       echo "Keeping $target_dir at $ref"
       return 0
     fi
+		echo "Pinned checkout needs attention; preserved: $target_dir (required $ref). Align it manually or use force mode to replace it." >&2
+		return 1
   fi
 
   rm -rf "$target_dir"
@@ -375,7 +384,7 @@ IOSONATA_SRC = $(IOSONATA_ROOT)/src
 # ============================================
 ARM_ROOT = $(IOSONATA_ROOT)/ARM
 ARM_CMSIS = $(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = $(ARM_CMSIS)/Include
+ARM_CMSIS_INCLUDE = $(ARM_CMSIS)/Core/Include
 ARM_INCLUDE = $(ARM_ROOT)/include
 ARM_SRC = $(ARM_ROOT)/src
 ARM_LDSCRIPT = $(ARM_ROOT)/ldscript
@@ -717,7 +726,7 @@ if [[ "$NO_BUILD" != "true" && "$ECLIPSE_INSTALLED" == "true" && "$TOOLCHAIN_INS
     echo -e "${BLUE}=========================================================${RESET}"
     echo ""
     chmod +x "$BUILD_SCRIPT" 2>/dev/null || true
-    "$BUILD_SCRIPT" --home "$ROOT" || true
+    "$BUILD_SCRIPT" --home "$ROOT"
   else
     echo ""
     echo -e "${YELLOW}Note: Build script not found at:${RESET}"

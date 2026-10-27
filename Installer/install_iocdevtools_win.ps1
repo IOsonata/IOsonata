@@ -703,7 +703,7 @@ function Install-Plugin {
 # ---------------------------------------------------------
 Write-Host; Write-Host ">>> Syncing IOsonata + external SDKs..." -ForegroundColor Cyan
 
-$CLONE_URL = "https://raw.githubusercontent.com/IOsonata/IOsonata/master/Installer/clone_iosonata_sdk_win.ps1"
+$CLONE_URL = "https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/clone_iosonata_sdk_win.ps1"
 $TMP_CLONE = Join-Path $env:TEMP "clone_iosonata_sdk_win.ps1"
 $CLONE_LOG = Join-Path $env:TEMP "clone_iosonata_sdk_win.log"
 
@@ -716,8 +716,7 @@ try {
     exit 1
 }
 
-# Prefer -NoBuild if supported by the clone script (newer versions). If not supported,
-# retry without it. We capture output so we can detect whether the builder ran.
+# Prefer -NoBuild when supported. Capture output to detect whether the builder ran.
 $CLONE_INVOKED_BUILD = $false
 
 # First, check if the clone script supports -NoBuild by examining its content
@@ -729,7 +728,7 @@ if ($supportsNoBuild) {
     $cloneArgs += "-NoBuild"
 }
 if ($MODE -eq "force") {
-    $cloneArgs += "-ForceUpdate"
+    $cloneArgs += @("-Mode", "force")
 }
 
 # Run clone script and capture output
@@ -739,17 +738,8 @@ $cloneExitCode = $LASTEXITCODE
 $cloneOutput | Write-Host
 $ErrorActionPreference = 'Stop'
 
-# If clone failed and we tried -NoBuild, retry without it
-if ($cloneExitCode -ne 0 -and $supportsNoBuild) {
-    Write-Host "   [WARN] Clone script may not support -NoBuild yet. Retrying without it..." -ForegroundColor Yellow
-    $cloneArgs = @("-SdkHome", $ROOT)
-    if ($MODE -eq "force") {
-        $cloneArgs += "-ForceUpdate"
-    }
-    $ErrorActionPreference = 'Continue'
-    $cloneOutput = & powershell.exe -ExecutionPolicy Bypass -File $TMP_CLONE @cloneArgs 2>&1 | Tee-Object -FilePath $CLONE_LOG
-    $cloneOutput | Write-Host
-    $ErrorActionPreference = 'Stop'
+if ($cloneExitCode -ne 0) {
+	throw "SDK synchronization failed with exit code $cloneExitCode. See $CLONE_LOG"
 }
 
 Remove-Item $TMP_CLONE -Force -ErrorAction SilentlyContinue
@@ -856,7 +846,7 @@ IOSONATA_SRC = `$(IOSONATA_ROOT)/src
 # ============================================
 ARM_ROOT = `$(IOSONATA_ROOT)/ARM
 ARM_CMSIS = `$(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Include
+ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Core/Include
 ARM_INCLUDE = `$(ARM_ROOT)/include
 ARM_SRC = `$(ARM_ROOT)/src
 ARM_LDSCRIPT = `$(ARM_ROOT)/ldscript
@@ -957,6 +947,7 @@ if (-not $CLONE_INVOKED_BUILD) {
         Write-Host "=========================================================" -ForegroundColor Cyan
         Write-Host
         & $BS -SdkHome $ROOT
+		if ($LASTEXITCODE -ne 0) { throw "Library build failed with exit code $LASTEXITCODE" }
     } else { 
         Write-Host
         Write-Host "   [INFO] IOsonata library builder not found:" -ForegroundColor Yellow
@@ -1038,5 +1029,5 @@ Write-Host
 Write-Host "Usage in .cproject files:"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/include"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/include"
-Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
+Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 Write-Host

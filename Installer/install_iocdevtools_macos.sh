@@ -721,16 +721,10 @@ run_clone() {
   zsh "$TMP_CLONE" "$@" 2>&1 | tee -a "$CLONE_LOG"
 }
 
-if run_clone "${CLONE_ARGS[@]}"; then
-  :
-else
-  echo "⚠️  Clone script does not support --no-build yet. Retrying without it..."
-  CLONE_ARGS_NO_BUILD=()
-  for a in "${CLONE_ARGS[@]}"; do
-    [[ "$a" == "--no-build" ]] && continue
-    CLONE_ARGS_NO_BUILD+=("$a")
-  done
-  run_clone "${CLONE_ARGS_NO_BUILD[@]}"
+if ! run_clone "${CLONE_ARGS[@]}"; then
+	echo "SDK synchronization failed. See $CLONE_LOG" >&2
+	rm -f "$TMP_CLONE"
+	exit 1
 fi
 
 rm -f "$TMP_CLONE" || true
@@ -812,7 +806,7 @@ IOSONATA_SRC = \$(IOSONATA_ROOT)/src
 # ============================================
 ARM_ROOT = \$(IOSONATA_ROOT)/ARM
 ARM_CMSIS = \$(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = \$(ARM_CMSIS)/Include
+ARM_CMSIS_INCLUDE = \$(ARM_CMSIS)/Core/Include
 ARM_INCLUDE = \$(ARM_ROOT)/include
 ARM_SRC = \$(ARM_ROOT)/src
 ARM_LDSCRIPT = \$(ARM_ROOT)/ldscript
@@ -911,7 +905,7 @@ if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
     echo "  IOsonata Library Build"
     echo "========================================================="
     echo ""
-    bash "$BUILD_SCRIPT" --home "$ROOT" || true
+    bash "$BUILD_SCRIPT" --home "$ROOT" --eclipse "$ECLIPSE_APP"
   else
     echo ""
     echo "ℹ️  IOsonata library builder not found:"
@@ -977,7 +971,7 @@ echo
 echo "Usage in .cproject files:"
 echo "  \${system_property:iosonata_loc}/IOsonata/include"
 echo "  \${system_property:iosonata_loc}/IOsonata/ARM/include"
-echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
+echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 echo
 echo "The variable is available in ALL workspaces."
 echo "No macOS reboot required!"
