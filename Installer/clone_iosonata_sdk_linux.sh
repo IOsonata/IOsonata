@@ -247,8 +247,8 @@ clone_pinned_repo() {
 }
 
 # STM32CubeWBA holds the platform files of the ST BLE link layer that the
-# STM32WBA examples build. Only the folders they use are checked out, with
-# the HAL/LL submodule required by the BLE platform. CMSIS is in IOsonata.
+# STM32WBA examples build. Only their platform and utility folders are checked
+# out. IOsonata does not require separate HAL or CMSIS downloads.
 clone_cube_wba() {
   local target_dir="$EXT/STM32CubeWBA"
   local ref="v1.10.0"
@@ -257,7 +257,6 @@ clone_cube_wba() {
   if [[ ( -e "$target_dir" || -L "$target_dir" ) && "$MODE" != "force" ]]; then
     current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
     if [[ "$current" == "$ref" \
-      && -f "$target_dir/Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h" \
       && -d "$target_dir/Projects/Common/WPAN/Interfaces" \
       && -d "$target_dir/Utilities/lpm/tiny_lpm" \
       && -f "$target_dir/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c" ]]; then
@@ -274,9 +273,7 @@ clone_cube_wba() {
     https://github.com/STMicroelectronics/STM32CubeWBA.git "$target_dir"
   (cd "$target_dir" \
     && git sparse-checkout set Projects/Common/WPAN \
-         Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers/STM32WBAxx_HAL_Driver \
-    && git submodule update --init --depth 1 \
-         Drivers/STM32WBAxx_HAL_Driver)
+         Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities)
 }
 
 # ---------------------------------------------------------

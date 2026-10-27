@@ -22,7 +22,7 @@ class InstallerTests(unittest.TestCase):
 			root = Path(directory)
 			target = root / 'STM32CubeWBA'
 			target.mkdir()
-			if cube_state:
+			if cube_state == 'hal-only':
 				header = target / 'Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h'
 				header.parent.mkdir(parents=True)
 				header.touch()
@@ -77,7 +77,7 @@ esac
 						self.assertTrue(preserved)
 						self.assertNotIn('clone ', calls)
 
-	def test_cube_uses_local_cmsis_and_requires_platform_files(self):
+	def test_cube_requires_platform_files_without_hal_or_cmsis(self):
 		for platform, shell in self.shells():
 			for state in ['hal-only', 'complete']:
 				with self.subTest(platform=platform, state=state):
@@ -85,6 +85,15 @@ esac
 					self.assertEqual(result.returncode == 0, state == 'complete')
 					self.assertTrue(preserved)
 					self.assertNotIn('clone ', calls)
+
+	def test_cube_clone_downloads_no_driver_submodules(self):
+		for platform, shell in self.shells():
+			result, preserved, calls = self.run_helper(platform, shell, 'clone_cube_wba', mode='force')
+			self.assertEqual(result.returncode, 0, result.stderr)
+			self.assertIn('sparse-checkout set Projects/Common/WPAN', calls)
+			self.assertNotIn('Drivers', calls)
+			self.assertNotIn('submodule', calls)
+
 
 	def test_matching_pin_is_kept(self):
 		for platform, shell in self.shells():

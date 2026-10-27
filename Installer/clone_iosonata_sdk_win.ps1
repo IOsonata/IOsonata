@@ -165,8 +165,8 @@ function Sync-PinnedRepository {
 }
 
 # STM32CubeWBA holds the platform files of the ST BLE link layer that the
-# STM32WBA examples build. Only the folders they use are checked out, with
-# the HAL/LL submodule required by the BLE platform. CMSIS is in IOsonata.
+# STM32WBA examples build. Only their platform and utility folders are checked
+# out. IOsonata does not require separate HAL or CMSIS downloads.
 function Sync-CubeWba {
     $Target = Join-Path $EXT "STM32CubeWBA"
     $Ref = "v1.10.0"
@@ -181,7 +181,6 @@ function Sync-CubeWba {
             Pop-Location
         }
         if (($current -eq $Ref) -and
-			(Test-Path "$Target\Drivers\STM32WBAxx_HAL_Driver\Inc\stm32wbaxx_hal.h" -PathType Leaf) -and
 			(Test-Path "$Target\Projects\Common\WPAN\Interfaces" -PathType Container) -and
 			(Test-Path "$Target\Utilities\lpm\tiny_lpm" -PathType Container) -and
 			(Test-Path "$Target\Projects\NUCLEO-WBA65RI\Applications\BLE\BLE_p2pServer\STM32_WPAN\Target\linklayer_plat.c" -PathType Leaf)) {
@@ -197,8 +196,7 @@ function Sync-CubeWba {
     Invoke-Git clone --depth=1 --branch $Ref --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git $Target
     Push-Location $Target
     try {
-        Invoke-Git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers/STM32WBAxx_HAL_Driver
-        Invoke-Git submodule update --init --depth 1 Drivers/STM32WBAxx_HAL_Driver
+        Invoke-Git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities
     } finally {
         Pop-Location
     }
