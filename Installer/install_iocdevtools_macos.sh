@@ -68,6 +68,7 @@ done
 
 EXT="$ROOT/external"
 PYOCD_DIR="$ROOT/Tools/Python"
+TOOL_BIN="$ROOT/Tools/bin"
 LLVM_DIR="$ROOT/Tools/LLVM"
 PYOCD="$PYOCD_DIR/bin/pyocd"
 PYTHON3="$PYOCD_DIR/bin/python3"
@@ -658,6 +659,10 @@ install_python_tools() {
 	fi
 	"$managed_python" -m pip install --upgrade pyocd intelhex==2.3.0 || return 1
 	"$managed_python" -c 'from intelhex import IntelHex' || return 1
+	mkdir -p "$TOOL_BIN"
+	for tool in python3 pyocd hexmerge.py; do
+		ln -sfn "$PYOCD_DIR/bin/$tool" "$TOOL_BIN/$tool" || return 1
+	done
 	"$PYOCD" --version || return 1
 	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "${ROOT:-}/tools/pyocd/bin/pyocd" ]]; then
 		sudo ln -sf "$PYOCD" "$BIN/pyocd"
@@ -673,7 +678,7 @@ if [[ "$MODE" == "pyocd" ]]; then
 fi
 
 install_optional_llvm
-export PATH="$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link:$PATH"
+export PATH="$TOOL_BIN:$ROOT/Tools/IDAP-Link:$PATH"
 
 ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
 RISCV_DIR=$(install_xpack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC")
@@ -884,7 +889,7 @@ environment/project/LLVM_HOME/value=$LLVM_DIR
 environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
 environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
+environment/project/PATH/value=$TOOL_BIN:$ROOT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
@@ -1027,7 +1032,7 @@ environment/project/LLVM_HOME/value=$LLVM_DIR
 environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
 environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
+environment/project/PATH/value=$TOOL_BIN:$ROOT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
@@ -1152,7 +1157,8 @@ LLVM_OBJCOPY = $LLVM_DIR/bin/llvm-objcopy
 ARM_LLVM_TARGET = --target=arm-none-eabi
 RISCV_LLVM_TARGET = --target=riscv32-unknown-elf
 SDK_TOOLS_ROOT = $ROOT/Tools
-PYTHON = $PYOCD_DIR/bin/python3
+PYTHON = $TOOL_BIN/python3
+HEXMERGE = $TOOL_BIN/hexmerge.py
 PYOCD_ROOT = $PYOCD_DIR
 PYOCD = $PYOCD
 
@@ -1354,6 +1360,6 @@ echo "No restart of macOS is required by the installer."
 echo "=============================================="
 echo
 
-printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$PYOCD_DIR/bin/hexmerge.py" "$ROOT/Tools/IDAP-Link"
+printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$TOOL_BIN/hexmerge.py" "$ROOT/Tools/IDAP-Link"
 
 printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"

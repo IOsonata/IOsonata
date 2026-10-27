@@ -41,6 +41,7 @@ if ($Version) { Write-Host "$($SCRIPT_NAME.Split('.')[0]) $SCRIPT_VERSION"; exit
 
 $ROOT = $SdkHome
 $PYOCD_DIR = "$ROOT\Tools\Python"
+$TOOL_BIN = "$ROOT\Tools\bin"
 $PYOCD = "$PYOCD_DIR\Scripts\pyocd.exe"
 $ManagedPython = "$PYOCD_DIR\Scripts\python.exe"
 $LLVM_DIR = "$ROOT\Tools\LLVM"
@@ -485,6 +486,12 @@ function Install-PythonTools {
 	if ($LASTEXITCODE -ne 0) { throw 'pyOCD/IntelHex installation failed.' }
 	& $ManagedPython -c 'from intelhex import IntelHex'
 	if ($LASTEXITCODE -ne 0) { throw 'IntelHex verification failed.' }
+	New-Item $TOOL_BIN -ItemType Directory -Force | Out-Null
+	foreach ($tool in @('python', 'pyocd', 'hexmerge')) {
+		$exe = if ($tool -eq 'hexmerge') { 'hexmerge.py' } elseif ($tool -eq 'python') { 'python.exe' } else { 'pyocd.exe' }
+		$command = '@echo off' + [Environment]::NewLine + '"' + (Join-Path $PYOCD_DIR "Scripts\$exe") + '" %*' + [Environment]::NewLine
+		[IO.File]::WriteAllText((Join-Path $TOOL_BIN "$tool.cmd"), $command, [Text.Encoding]::ASCII)
+	}
 	& $PYOCD --version
 	if ($LASTEXITCODE -ne 0) { throw 'pyOCD verification failed.' }
 }
@@ -501,7 +508,7 @@ if ($WithLLVM) {
 		Write-Warning "LLVM installation failed; continuing with GCC and remaining tools. $_"
 	}
 }
-$env:Path = "$PYOCD_DIR\Scripts;$ROOT\Tools\IDAP-Link;$env:Path"
+$env:Path = "$TOOL_BIN;$ROOT\Tools\IDAP-Link;$env:Path"
 
 $ARM_DIR = Install-xPack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC"
 $RISCV_DIR = Install-xPack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC"
@@ -646,7 +653,7 @@ environment/project/LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/ARM_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/RISCV_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/IOCOMPOSER_HOME/value=$RT
-environment/project/PATH/value=$RT/Tools/Python/Scripts;$RT/Tools/IDAP-Link
+environment/project/PATH/value=$RT/Tools/bin;$RT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=;
 environment/project/ARM_GCC_HOME/value=$AD/bin
@@ -760,7 +767,7 @@ environment/project/LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/ARM_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/RISCV_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/IOCOMPOSER_HOME/value=$RT
-environment/project/PATH/value=$RT/Tools/Python/Scripts;$RT/Tools/IDAP-Link
+environment/project/PATH/value=$RT/Tools/bin;$RT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=;
 environment/project/ARM_GCC_HOME/value=$AD/bin
@@ -1113,9 +1120,10 @@ LLVM_OBJCOPY = $RT/Tools/LLVM/bin/llvm-objcopy.exe
 ARM_LLVM_TARGET = --target=arm-none-eabi
 RISCV_LLVM_TARGET = --target=riscv32-unknown-elf
 SDK_TOOLS_ROOT = $RT/Tools
-PYTHON = $RT/Tools/Python/Scripts/python.exe
+PYTHON = $RT/Tools/bin/python.cmd
+HEXMERGE = $RT/Tools/bin/hexmerge.cmd
 PYOCD_ROOT = $RT/Tools/Python
-PYOCD = $RT/Tools/Python/Scripts/pyocd.exe
+PYOCD = $RT/Tools/bin/pyocd.cmd
 ARM_GCC_ROOT = $AD
 ARM_GCC_BIN = $AD/bin
 ARM_GCC = `$(ARM_GCC_BIN)/arm-none-eabi-gcc
@@ -1339,7 +1347,7 @@ Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 Write-Host
 Write-Host "Python environment: $PYOCD_DIR"
 Write-Host "pyOCD: $PYOCD"
-Write-Host "IntelHex (HEX merge): $PYOCD_DIR\Scripts\hexmerge.py"
+Write-Host "IntelHex (HEX merge): $TOOL_BIN\hexmerge.cmd"
 Write-Host "IDAP-Link: $ROOT\Tools\IDAP-Link"
 Write-Host "LLVM (Arm + RISC-V): $LLVM_STATUS"
 exit 0
