@@ -485,8 +485,19 @@ function Install-PythonTools {
 }
 
 function Install-SRecord {
-	if (-not (Test-Path "$SRECORD_DIR\srec_cat.exe")) {
-		$stage = Join-Path $env:TEMP ([guid]::NewGuid().ToString('N'))
+	$tools = @('srec_cat.exe', 'srec_cmp.exe', 'srec_info.exe')
+	$needsInstall = ($MODE -eq 'force')
+	foreach ($tool in $tools) {
+		$path = Join-Path $SRECORD_DIR $tool
+		if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) {
+			$needsInstall = $true
+		}
+	}
+
+	if ($needsInstall) {
+		$parent = Split-Path $SRECORD_DIR -Parent
+		$stage = Join-Path $parent ('.srecord-stage-' + [guid]::NewGuid().ToString('N'))
+		$backup = Join-Path $parent ('.srecord-backup-' + [guid]::NewGuid().ToString('N'))
 		New-Item $stage -ItemType Directory | Out-Null
 		try {
 			$archive = Join-Path $stage 'srecord.zip'
@@ -495,14 +506,50 @@ function Install-SRecord {
 			Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $archive
 			$expected = '83ef7da6e114705b35d06edf4ce430414d14c0088a8fa6a273da8fe3282bc280'
 			if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $expected) { throw 'SRecord checksum mismatch.' }
+
 			$unpacked = Join-Path $stage 'unpacked'
 			Expand-Archive $archive $unpacked
-			foreach ($tool in @('srec_cat.exe', 'srec_cmp.exe', 'srec_info.exe')) {
-				if (-not (Test-Path (Join-Path $unpacked $tool))) { throw "Missing SRecord tool: $tool" }
+			$candidate = Join-Path $stage 'candidate'
+			New-Item $candidate -ItemType Directory | Out-Null
+			if (Test-Path $SRECORD_DIR) {
+				Get-ChildItem $SRECORD_DIR -Force | Copy-Item -Destination $candidate -Recurse -Force
 			}
-			New-Item $SRECORD_DIR -ItemType Directory -Force | Out-Null
-			Copy-Item "$unpacked\*" $SRECORD_DIR -Recurse -Force
-		} finally { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
+			Get-ChildItem $unpacked -Force | Copy-Item -Destination $candidate -Recurse -Force
+
+			foreach ($tool in $tools) {
+				$path = Join-Path $candidate $tool
+				if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) {
+					throw "Missing or empty SRecord tool: $tool"
+				}
+			}
+			& (Join-Path $candidate 'srec_cat.exe') -VERSion
+			if ($LASTEXITCODE -ne 0) { throw 'Staged SRecord verification failed.' }
+
+			if (Test-Path $SRECORD_DIR) {
+				Move-Item $SRECORD_DIR $backup
+			}
+			try {
+				Move-Item $candidate $SRECORD_DIR
+				if (Test-Path $backup) {
+					Remove-Item $backup -Recurse -Force
+				}
+			} catch {
+				Remove-Item $SRECORD_DIR -Recurse -Force -ErrorAction SilentlyContinue
+				if (Test-Path $backup) {
+					Move-Item $backup $SRECORD_DIR
+				}
+				throw
+			}
+		} finally {
+			Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+		}
+	}
+
+	foreach ($tool in $tools) {
+		$path = Join-Path $SRECORD_DIR $tool
+		if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) {
+			throw "Missing or empty installed SRecord tool: $tool"
+		}
 	}
 	& "$SRECORD_DIR\srec_cat.exe" -VERSion
 	if ($LASTEXITCODE -ne 0) { throw 'SRecord verification failed.' }

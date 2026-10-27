@@ -104,6 +104,11 @@ class ToolTests(unittest.TestCase):
 		self.assertIn('Python installer failed: $($process.ExitCode)', windows)
 		self.assertIn('.7zip-stage-', windows)
 		self.assertIn('7-Zip installer failed: $($process.ExitCode)', windows)
+		self.assertIn("$needsInstall = ($MODE -eq 'force')", windows)
+		self.assertIn("'.srecord-stage-'", windows)
+		self.assertIn('Missing or empty SRecord tool: $tool', windows)
+		self.assertIn('Staged SRecord verification failed.', windows)
+		self.assertIn('Move-Item $SRECORD_DIR $backup', windows)
 
 
 	def test_srecord_verification_failure(self):
