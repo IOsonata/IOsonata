@@ -987,6 +987,13 @@ install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
 
+  sudo tee "$install_cfg/org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+install.folder=$TOOL_BIN
+executable.name=pyocd
+folder.strict=true
+EOF
+
   echo "✅ Eclipse MCU preferences seeded in:"
   echo "   $install_cfg"
 }
@@ -1085,6 +1092,13 @@ EOF
 eclipse.preferences.version=1
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
+EOF
+
+  cat > "$instance_cfg/.settings/org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs" <<EOF
+eclipse.preferences.version=1
+install.folder=$TOOL_BIN
+executable.name=pyocd
+folder.strict=true
 EOF
 
   # 5. org.eclipse.core.runtime.prefs

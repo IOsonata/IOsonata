@@ -874,6 +874,13 @@ install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF"
 
+sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs' <<EOF
+eclipse.preferences.version=1
+install.folder=$TOOL_BIN
+executable.name=pyocd
+folder.strict=true
+EOF"
+
 sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.core.runtime.prefs' <<EOF
 eclipse.preferences.version=1
 environment/project/LLVM_HOME/value=$LLVM_DIR
@@ -957,7 +964,8 @@ echo
 # Do not write to an unrelated or arbitrarily selected ~/.eclipse instance.
 for pref in org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs \
 	org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs \
-	org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs; do
+	org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs \
+	org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs; do
 	[[ -s "$ECLIPSE_SETTINGS/$pref" ]] || {
 		echo "Missing Embedded CDT preference file: $pref" >&2
 		exit 1

@@ -705,6 +705,13 @@ install.folder=$OD/bin
 install.folder.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
+    $pyocd_prefs = @"
+eclipse.preferences.version=1
+install.folder=$($PYOCD_DIR -replace '\\','/')/Scripts
+executable.name=pyocd.exe
+folder.strict=true
+"@
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs" $pyocd_prefs -Encoding UTF8
 
     # 7. org.eclipse.embedcdt.managedbuild.cross.core.prefs (Windows specific: needs Build Tools for make)
     if ($BT) {
@@ -759,6 +766,13 @@ install.folder=$OD/bin
 install.folder.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
+    $pyocd_prefs = @"
+eclipse.preferences.version=1
+install.folder=$($PYOCD_DIR -replace '\\','/')/Scripts
+executable.name=pyocd.exe
+folder.strict=true
+"@
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs" $pyocd_prefs -Encoding UTF8
 
     # 5. org.eclipse.core.runtime.prefs
     $runtime_prefs = @"
