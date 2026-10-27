@@ -1037,6 +1037,9 @@ Linux uses distribution packages (`clang`, `llvm`, `lld`); macOS uses Homebrew
 Windows uses the official LLVM 23.1.4 MSI for x64 or Arm64, SHA256-verified and
 administratively extracted into `Tools/LLVM` without changing global PATH.
 An existing complete installation in that directory is checked and reused.
+Installer-created LLVM directories carry an ownership marker; uninstall removes
+only a marked LLVM directory and preserves an unmarked installation supplied by
+the user.
 
 The generated `makefile_path.mk` exposes `LLVM_ROOT`, `ARM_LLVM_ROOT`,
 `RISCV_LLVM_ROOT`, `CLANG`, `CLANGXX`, `LLVM_LD`, `LLVM_AR`, `LLVM_OBJCOPY`,

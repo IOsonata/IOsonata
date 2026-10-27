@@ -109,6 +109,8 @@ class ToolTests(unittest.TestCase):
 		self.assertIn('Missing or empty SRecord tool: $tool', windows)
 		self.assertIn('Staged SRecord verification failed.', windows)
 		self.assertIn('Move-Item $SRECORD_DIR $backup', windows)
+		self.assertIn('Test-Path "$LLVM_DIR\\.iocomposer-managed"', windows)
+		self.assertIn("New-Item (Join-Path $distribution '.iocomposer-managed')", windows)
 		self.assertIn('-not (Test-Path "$ECLIPSE_DIR\\eclipse.exe")', windows)
 		linux = (INSTALLER / 'install_iocdevtools_linux.sh').read_text()
 		self.assertIn('[[ "$MODE" != "force" && -x "$ECLIPSE_DIR/eclipse" ]]', linux)

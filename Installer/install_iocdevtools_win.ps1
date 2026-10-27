@@ -274,7 +274,10 @@ if ($MODE -eq "uninstall") {
 	# Preserve shared profiles belonging to other CDT installations.
 	Remove-Item "$([Environment]::GetFolderPath('Desktop'))\IOcomposer.lnk", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\IOcomposer.lnk" -Force -ErrorAction SilentlyContinue
     
-	Remove-Item $PYOCD_DIR, $SRECORD_DIR, $LLVM_DIR -Recurse -Force -ErrorAction SilentlyContinue
+	Remove-Item $PYOCD_DIR, $SRECORD_DIR -Recurse -Force -ErrorAction SilentlyContinue
+	if (Test-Path "$LLVM_DIR\.iocomposer-managed") {
+		Remove-Item $LLVM_DIR -Recurse -Force -ErrorAction SilentlyContinue
+	}
     # Remove IDAP tools
     Write-Host ">>> Removing IDAP tools..."
     $IDAP_DIR = "$ROOT\Tools\IDAP-Link"
@@ -462,6 +465,7 @@ function Install-LLVM {
 		if ($process.ExitCode -ne 0) { throw "LLVM extraction failed: $($process.ExitCode)" }
 		$distribution = Join-Path $unpacked 'LLVM'
 		Test-LLVM $distribution
+		New-Item (Join-Path $distribution '.iocomposer-managed') -ItemType File | Out-Null
 		New-Item (Split-Path $LLVM_DIR -Parent) -ItemType Directory -Force | Out-Null
 		Move-Item $distribution $LLVM_DIR
 	} finally { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
