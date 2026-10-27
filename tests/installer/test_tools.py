@@ -46,6 +46,10 @@ class ToolTests(unittest.TestCase):
 		self.assertIn('Homebrew has no SRecord bottle for $bottle_tag', macos)
 		self.assertIn('data.get("formulae")', macos)
 		self.assertLess(macos.index('command -v port'), macos.index('brew_cmd=$(command -v brew'))
+		self.assertIn('install_macos_python() {', macos)
+		self.assertIn('python-3.12.4-macos11.pkg', macos)
+		self.assertIn('pkgutil --check-signature "$pkg"', macos)
+		self.assertIn('bootstrap_python=$(install_macos_python)', macos)
 
 	def test_srecord_links_repeated_runs_and_no_self_links(self):
 		for platform in ['linux', 'macos']:

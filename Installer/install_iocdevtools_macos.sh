@@ -599,6 +599,35 @@ install_optional_llvm() {
 	fi
 }
 
+install_macos_python() {
+	local stage pkg python
+	stage=$(mktemp -d)
+	pkg="$stage/python.pkg"
+	python="/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"
+	echo "Installing Python 3.12.4 from the official python.org macOS package..." >&2
+	if ! curl -fL "https://www.python.org/ftp/python/3.12.4/python-3.12.4-macos11.pkg" -o "$pkg"; then
+		rm -rf "$stage"
+		echo "Failed to download the Python 3.12.4 macOS installer." >&2
+		return 1
+	fi
+	if ! pkgutil --check-signature "$pkg" >/dev/null 2>&1; then
+		rm -rf "$stage"
+		echo "Python package signature verification failed." >&2
+		return 1
+	fi
+	if ! sudo installer -pkg "$pkg" -target / >&2; then
+		rm -rf "$stage"
+		echo "Python 3.12.4 installation failed." >&2
+		return 1
+	fi
+	rm -rf "$stage"
+	if [[ ! -x "$python" ]] || ! "$python" -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
+		echo "Python 3.12.4 was not found after package installation." >&2
+		return 1
+	fi
+	echo "$python"
+}
+
 # Firmware tools share the SDK Tools directory. Python packages stay isolated.
 install_python_tools() {
 	local managed_python="${PYTHON3:-$PYOCD_DIR/bin/python3}"
@@ -611,14 +640,12 @@ install_python_tools() {
 		}
 	else
 		bootstrap_python=$(command -v python3 || true)
-		if [[ -z "$bootstrap_python" ]]; then
-			echo "Python 3.9 or newer is required to create the managed pyOCD environment." >&2
-			return 1
+		if [[ -n "$bootstrap_python" ]] && ! "$bootstrap_python" -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
+			bootstrap_python=""
 		fi
-		"$bootstrap_python" -c 'import sys; sys.exit(sys.version_info < (3, 9))' || {
-			echo "Python 3.9 or newer is required to create the managed pyOCD environment." >&2
-			return 1
-		}
+		if [[ -z "$bootstrap_python" ]]; then
+			bootstrap_python=$(install_macos_python) || return 1
+		fi
 		if ! "$bootstrap_python" -c 'import venv, ensurepip' 2>/dev/null; then
 			if command -v apt-get >/dev/null; then
 				sudo apt-get update

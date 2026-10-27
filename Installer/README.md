@@ -307,9 +307,11 @@ Tools subdirectories, but does not uninstall a system SRecord package.
 
 All three installers install or update pyOCD in a Python virtual environment at
 `$ROOT/Tools/Python`, where `ROOT` defaults to `~/IOcomposer`. A usable existing
-managed environment is reused directly. Python 3.9 or newer with `venv` is
-required only when creating that environment. Python packages are installed
-without sudo.
+managed environment is reused directly. Linux requires a host Python 3.9 or
+newer with `venv` when the managed environment must be created. Windows and
+macOS bootstrap pinned Python 3.12.4 installers when no suitable interpreter is
+available; the macOS package is the official signed python.org universal2
+package. Python packages inside the managed venv are installed without sudo.
 
 On macOS, to install only pyOCD, leaving IOcomposer and the other tools alone:
 
