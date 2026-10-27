@@ -405,7 +405,7 @@ opens its endpoints when configuration 1 becomes active.
 UsbdHid
     |
     +-- HID descriptor and class requests
-    +-- application report descriptor
+    +-- preset or application report descriptor
     |
     v
 UsbIntIntrf
@@ -414,8 +414,9 @@ UsbIntIntrf
 Interrupt OUT/IN endpoint pair
 ```
 
-The application supplies the report descriptor and optional `GetReportCB` /
-`SetReportCB` callbacks. `UsbdHid` owns the control-transfer stages, validates
+`InitKeyboard()`, `InitMouse()` and `Init3dMouse()` supply standard report
+descriptors. Custom layouts use `Init()` with an application-owned report
+descriptor. Applications may supply `GetReportCB` / `SetReportCB` callbacks. `UsbdHid` owns the control-transfer stages, validates
 report direction/type and buffer bounds, snapshots GET_REPORT data, and calls
 SET_REPORT only when its full payload has arrived. Each object has a 64-byte
 control buffer; larger reports use optional caller-owned storage. Reset,

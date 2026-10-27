@@ -101,7 +101,8 @@ replace target firmware builds or physical USB tests.
 The HID loopback, keyboard and 3D mouse use plain `UsbdHid` objects. Their
 `GetReportCB` and `SetReportCB` functions supply or consume report bytes;
 the library handles endpoint-zero transfer stages and control buffering.
-Applications still supply the HID report descriptor defining their data.
+For custom HID layouts, applications supply the report descriptor defining
+their data. The standard presets described below supply their descriptors.
 See [the HID guide](../../docs/usb-user-guide.md#hid) for callback and storage
 requirements.
 

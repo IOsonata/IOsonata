@@ -303,7 +303,9 @@ Use `--serial` when several matching devices are connected.
 ## HID
 
 `UsbdHid` inherits `UsbIntIntrf` and owns HID descriptors and standard HID class
-requests. The application supplies the report descriptor and report meaning.
+requests. The keyboard, mouse and 3D-mouse initialization presets supply their
+report descriptors. Custom layouts use `Init()` with an application-owned
+report descriptor and application-defined report meaning.
 Use optional `GetReportCB` and `SetReportCB` callbacks for control reports.
 No subclass or endpoint-zero transfer-stage handler is needed. Existing
 `Control()` overrides remain supported for specialized requests.

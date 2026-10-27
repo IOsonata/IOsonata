@@ -292,7 +292,8 @@ for selecting a pin actually bonded on its part. Package configuration changes
 require rebuilding the library as well as the application.
 
 `IOPINOP_GPIO` selects GPIO; `IOPINOP_FUNC0` through `IOPINOP_FUNC30` encode
-PSEL 1 through 31, following the RE01 convention. Only function codes implemented
+PSEL 1 through 31 using IOsonata's generic enum values. These `FUNC` names
+are IOsonata identifiers, not names assigned by the RA4M1 datasheet. Only function codes implemented
 somewhere on RA4M1 are accepted, and the caller must choose a valid per-pin
 function from the manual's pin table. `IOPINOP_FUNC31` selects analog operation
 on analog-capable pins. The driver disconnects PMR before changing the mux,

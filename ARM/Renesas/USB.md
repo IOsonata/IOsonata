@@ -1,6 +1,7 @@
 # Renesas USB controller integration
 
-Status: **RA4M1 USBFS software port complete; physical USB validation pending**.
+Status: **RA4M1 USBFS device operation is hardware validated on EK-RA4M1
+for the tests recorded below.** USBFS is full speed (12 Mbit/s), not high speed.
 
 ## Architecture
 
@@ -56,14 +57,28 @@ RA4M1 USBFS controller source is now linked into it. The e2 library project
 links the same generic USB headers/sources and the RA4M1 controller source.
 `RA4/RA4M1/exemples/UsbCdcLoopback/ioc` builds the existing generic CDC
 loopback application for the EK-RA4M1 device USB connector.
-`RA4/RA4M1/exemples/UsbComboStress/ioc` builds the generic combined CDC,
-HID, interrupt and isochronous stress application against the same implementation.
+`RA4/RA4M1/exemples/UsbCdcIsoStress/ioc` builds the CDC loopback plus
+isochronous stress application. `RA4/RA4M1/exemples/UsbDualCdcStress/ioc`
+builds the dual-CDC stress application. These use the same controller.
 
-## Validation still requiring hardware
+## Recorded hardware validation
+
+Maintainer tests on EK-RA4M1 confirmed enumeration, CDC PRBS reception,
+sustained CDC loopback, a 60-second CDC plus ISO stress PASS with zero errors,
+interrupt loopback at all three tested intervals, and MSC RAM-disk mounting
+on an iMac. Repeated unplug/replug recovered without a board reset.
+See the [RA4M1 hardware record](RA4/RA4M1/README.md#usbfs-supply-and-validation)
+for details and limitations. These results describe the tested firmware;
+they do not establish that every later change has been rerun on hardware.
+
+## Remaining validation and regression coverage
 
 Software review and strict host-side C++ syntax compilation cover the controller
 ABI and register access structure, but these tests do not prove electrical or
-USB protocol behavior. On EK-RA4M1, run the existing generic USB regressions:
+USB protocol behavior. The following is the regression checklist; the results
+above cover only the recorded configurations. Suspend/resume and remote wakeup,
+HID, pipe exhaustion/reuse and the additional protocol edge cases still need
+explicit hardware results:
 
 1. CDC loopback enumeration and sustained traffic.
 2. PRBS/bulk, interrupt, HID and MSC class tests.
