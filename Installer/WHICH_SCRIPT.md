@@ -372,8 +372,8 @@ cd ~/IOcomposer/IOsonata && git pull && cd ..
 
 - Read [README.md](README.md) for detailed usage
 - Read [QUICKSTART.md](QUICKSTART.md) for quick start
-- Check [ARCHITECTURE.md](ARCHITECTURE.md) for technical details
-- See [CHANGELOG.md](CHANGELOG.md) for version history
+- Check the [IOcomposer workflow](../docs/architecture/iocomposer-workflow.md) for technical details
+- See the [0.13 release notes](../docs/releases/0.13.md) for upcoming changes
 
 ---
 
