@@ -105,6 +105,14 @@ Applications still supply the HID report descriptor defining their data.
 See [the HID guide](../../docs/usb-user-guide.md#hid) for callback and storage
 requirements.
 
-The keyboard example uses `USB_HID_KEYBOARD_REPORT_DESC` and
-`UsbHidKeyboardReport_t` from the generic HID definitions. No descriptor byte
-array or report structure needs to be written for this standard keyboard.
+The keyboard example uses `UsbdHid::InitKeyboard()` and
+`UsbHidKeyboardReport_t`. The library supplies the report descriptor, boot
+protocol and endpoint packet sizes. Applications provide buffers and callbacks;
+no descriptor array, report structure or keyboard protocol fields are needed.
+
+The BMI323 3D mouse uses `UsbdHid::Init3dMouse()` and
+`UsbHid3dMouseReport_t`; its six-axis report layout is unchanged. Sensor setup,
+calibration and motion scaling remain in the application. For a conventional
+three-button X/Y boot mouse, use `InitMouse()` and `UsbHidMouseReport_t` instead.
+Neither mouse preset has a wheel or report IDs. Custom layouts still use
+`Init()` with an application-defined report descriptor.

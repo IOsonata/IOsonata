@@ -61,8 +61,6 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #define HID_LED_CAPS_LOCK	(1U << 1)
 #define HID_DEBOUNCE_COUNT	5U
 
-static const uint8_t s_ReportDesc[] = USB_HID_KEYBOARD_REPORT_DESC;
-
 static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
 	uint8_t *pBuffer, uint16_t BufferSize, void *pContext);
 static bool HidSetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
@@ -81,19 +79,8 @@ alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
 
 static const UsbdHidCfg_t s_HidCfg = {
 	.DevNo = USB_DEVNO,
-	.pReportDesc = s_ReportDesc,
-	.ReportDescLength = sizeof(s_ReportDesc),
-	.BcdHid = 0U,
-	.FsMps = sizeof(UsbHidKeyboardReport_t),
-	.HsMps = sizeof(UsbHidKeyboardReport_t),
-	.FsInterval = 1U,
-	.HsInterval = 4U,
-	.SubClass = USB_HID_SUBCLASS_BOOT,
-	.Protocol = USB_HID_PROT_KEYBOARD,
-	.CountryCode = 0U,
 	.InterfaceString = HID_STR_INTERFACE,
 	.EvtCB = HidEvent,
-	.pContext = nullptr,
 	.pRxBuffer = s_HidRxBuffer,
 	.pTxBuffer = s_HidTxBuffer,
 	.GetReportCB = HidGetReport,
@@ -112,24 +99,13 @@ static const UsbCfg_t s_UsbCfg = {
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
 	.pProduct = "IOsonata HID Keyboard",
-	.pSerial = nullptr,
 	.pFuncName = "HID Keyboard",
 	.IntPrio = 6,
 #ifdef USB_PINS
 	.pIOPinMap = s_UsbPins,
 	.NbIOPins = sizeof(s_UsbPins) / sizeof(IOPinCfg_t),
-#else
-	.pIOPinMap = nullptr,
-	.NbIOPins = 0,
 #endif
-	.DeviceClass = USB_DEVCLASS_NONE,
-	.DeviceSubClass = 0U,
-	.DeviceProtocol = 0U,
-	.bSelfPowered = false,
-	.bRemoteWakeup = false,
-	.bLowPowerSuspend = false,
 	.MaxPower = 100,
-	.EvtHandler = nullptr,
 };
 
 static bool ButtonDebounce(bool Pressed, bool &Candidate, bool &Stable,
@@ -242,7 +218,7 @@ int main()
 	KeyboardLedApply(0U);
 
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
-		!UsbInit(&s_UsbCfg) || !s_Hid.Init(s_HidCfg))
+		!UsbInit(&s_UsbCfg) || !s_Hid.InitKeyboard(s_HidCfg))
 	{
 		return -1;
 	}

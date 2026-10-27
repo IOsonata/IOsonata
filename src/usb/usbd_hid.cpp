@@ -495,6 +495,45 @@ bool UsbdHid::Init(const UsbdHidCfg_t &Cfg)
 		&vUsbDevIntrf, &Cfg, vControlBuffer, this);
 }
 
+bool UsbdHid::InitKeyboard(const UsbdHidCfg_t &Cfg)
+{
+	static const uint8_t reportDesc[] = USB_HID_KEYBOARD_REPORT_DESC;
+	UsbdHidCfg_t cfg = Cfg;
+	cfg.pReportDesc = reportDesc;
+	cfg.ReportDescLength = sizeof(reportDesc);
+	cfg.FsMps = sizeof(UsbHidKeyboardReport_t);
+	cfg.HsMps = sizeof(UsbHidKeyboardReport_t);
+	cfg.SubClass = USB_HID_SUBCLASS_BOOT;
+	cfg.Protocol = USB_HID_PROT_KEYBOARD;
+	return Init(cfg);
+}
+
+bool UsbdHid::InitMouse(const UsbdHidCfg_t &Cfg)
+{
+	static const uint8_t reportDesc[] = USB_HID_MOUSE_REPORT_DESC;
+	UsbdHidCfg_t cfg = Cfg;
+	cfg.pReportDesc = reportDesc;
+	cfg.ReportDescLength = sizeof(reportDesc);
+	cfg.FsMps = sizeof(UsbHidMouseReport_t);
+	cfg.HsMps = sizeof(UsbHidMouseReport_t);
+	cfg.SubClass = USB_HID_SUBCLASS_BOOT;
+	cfg.Protocol = USB_HID_PROT_MOUSE;
+	return Init(cfg);
+}
+
+bool UsbdHid::Init3dMouse(const UsbdHidCfg_t &Cfg)
+{
+	static const uint8_t reportDesc[] = USB_HID_3D_MOUSE_REPORT_DESC;
+	UsbdHidCfg_t cfg = Cfg;
+	cfg.pReportDesc = reportDesc;
+	cfg.ReportDescLength = sizeof(reportDesc);
+	cfg.FsMps = sizeof(UsbHid3dMouseReport_t);
+	cfg.HsMps = sizeof(UsbHid3dMouseReport_t);
+	cfg.SubClass = USB_HID_SUBCLASS_NONE;
+	cfg.Protocol = USB_HID_PROT_NONE;
+	return Init(cfg);
+}
+
 bool UsbdHid::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 					   uint8_t **ppData, uint16_t *pLength)
 {

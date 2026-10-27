@@ -276,8 +276,12 @@ test-c-header:
 		'#include "usb/usbd_hid.h"' '#include "usb/usb_mscdef.h"' \
 		'static const uint8_t keyboard[] = USB_HID_KEYBOARD_REPORT_DESC;' \
 		'_Static_assert(sizeof(UsbHidKeyboardReport_t) == 8, "keyboard size");' \
+		'static const uint8_t mouse[] = USB_HID_MOUSE_REPORT_DESC;' \
+		'static const uint8_t mouse3d[] = USB_HID_3D_MOUSE_REPORT_DESC;' \
+		'_Static_assert(sizeof(UsbHidMouseReport_t) == 3, "mouse size");' \
+		'_Static_assert(sizeof(UsbHid3dMouseReport_t) == 12, "3d mouse size");' \
 		'int main(void) {' \
-		' (void)keyboard;' \
+		' (void)keyboard; (void)mouse; (void)mouse3d;' \
 		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ? 1 : 0;' '}' | \
 		$(CC) $(CPPFLAGS) $(CFLAGS) -x c -fsyntax-only -
 

@@ -182,6 +182,17 @@ public:
 	UsbdHid &operator = (const UsbdHid &) = delete;
 
 	bool Init(const UsbdHidCfg_t &Cfg);
+	/// Standard six-key boot keyboard, with an eight-byte input report and
+	/// one-byte LED output report, without report IDs. Replaces pReportDesc,
+	/// ReportDescLength, FsMps, HsMps, SubClass and Protocol in a local copy.
+	/// Other options, callbacks and caller-owned buffers follow Init().
+	bool InitKeyboard(const UsbdHidCfg_t &Cfg);
+	/// Three-button boot mouse with signed 8-bit relative X/Y, no wheel.
+	/// Replaces the same six layout fields as InitKeyboard().
+	bool InitMouse(const UsbdHidCfg_t &Cfg);
+	/// Six signed 16-bit relative axes, no buttons or report IDs.
+	/// Non-boot multi-axis controller; replaces the same six layout fields.
+	bool Init3dMouse(const UsbdHidCfg_t &Cfg);
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;

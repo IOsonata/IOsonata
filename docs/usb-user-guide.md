@@ -289,20 +289,73 @@ Use optional `GetReportCB` and `SetReportCB` callbacks for control reports.
 No subclass or endpoint-zero transfer-stage handler is needed. Existing
 `Control()` overrides remain supported for specialized requests.
 
-For a standard six-key boot keyboard, use the predefined descriptor and report
-type from `usb_hiddef.h` (also included by `usbd_hid.h`):
+For a standard six-key boot keyboard, use `UsbdHid::InitKeyboard()`:
 
 ```cpp
-static const uint8_t s_ReportDesc[] = USB_HID_KEYBOARD_REPORT_DESC;
+static UsbdHid s_Hid;
 static UsbHidKeyboardReport_t s_Report = {};
+alignas(4) static uint8_t s_Rx[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_Tx[USB_INT_INTRF_PKT_BLKSIZE];
+static const UsbdHidCfg_t s_HidCfg = {
+	.EvtCB = HidEvent,
+	.pRxBuffer = s_Rx,
+	.pTxBuffer = s_Tx,
+	.GetReportCB = HidGetReport,
+	.SetReportCB = HidSetReport,
+};
+// After UsbInit(), before UsbEnable():
+if (!s_Hid.InitKeyboard(s_HidCfg))
+{
+	return -1;
+}
 ```
 
-Set `pReportDesc` and `ReportDescLength` to this array and its size, and select
-`USB_HID_SUBCLASS_BOOT` / `USB_HID_PROT_KEYBOARD`. The report has modifier bits,
-a zero reserved byte and six HID key usages. Send all zeros to release the keys.
-The host's one-byte output report contains the five keyboard LED bits.
-There is no report ID; this fixed layout works in both boot and report protocol.
-Custom layouts continue to use an application-defined report descriptor.
+The library supplies the report descriptor, boot subclass, keyboard protocol,
+and eight-byte full/high-speed endpoint packet sizes. It replaces those six
+configuration fields in a local copy; the caller's configuration is unchanged.
+Other options retain their normal meaning, including controller number,
+callbacks, context, strings and intervals. Zero intervals select 1 ms at full
+speed and high-speed bInterval 4 (also 1 ms). No heap or extra object storage is
+used. `HidEvent`, `HidGetReport` and `HidSetReport` are application callbacks;
+the complete example is `exemples/usb/usb_hid_keyboard.cpp`.
+
+The report has modifier bits, a zero reserved byte and six HID key usages.
+Send all zeros to release the keys. The host's one-byte output report contains
+the five keyboard LED bits. There is no report ID; this fixed layout works in
+both boot and report protocol. The application still owns key scanning, report
+submission and LED behavior. This helper does not add idle-repeat scheduling.
+
+Custom layouts continue to use `Init()` with an application-defined report
+descriptor. `USB_HID_KEYBOARD_REPORT_DESC` remains available for applications
+that want to use the standard report definition with their own configuration.
+
+For a three-button desktop mouse, use `InitMouse(s_HidCfg)` with
+`UsbHidMouseReport_t`. It supplies a three-byte boot mouse report: button bits
+0/1/2 (left/right/middle), then signed relative X/Y movement (-127..127).
+The upper button bits must be zero. There is no wheel, output report or report
+ID. Boot and report protocol use the same layout.
+
+For a six-axis controller, use `Init3dMouse(s_HidCfg)` with
+`UsbHid3dMouseReport_t`. This preserves the BMI323 example's twelve-byte report:
+signed relative X/Y/Z/Rx/Ry/Rz (-32767..32767), little-endian on USB. It has no
+buttons, output report or report ID and does not advertise boot mouse protocol.
+Both mouse helpers replace the same six layout fields as `InitKeyboard()`.
+The existing interrupt IN/OUT endpoint pair is retained; OUT reports are not
+part of these mouse report definitions. Unused control callbacks may be omitted.
+
+```cpp
+// After successful InitMouse(), submit movement through the normal transport.
+UsbHidMouseReport_t report = {0, 10, -5};
+const int sent = s_Hid.Tx(0,
+	reinterpret_cast<const uint8_t *>(&report), sizeof(report));
+// Retain the movement in application state if sent != sizeof(report).
+```
+
+Relative movement must be submitted once per accepted sample; repeatedly sending
+the same delta repeats the movement. Sensor sampling, motion accumulation and
+button handling remain application-specific. The descriptor initializer macros
+`USB_HID_MOUSE_REPORT_DESC` and `USB_HID_3D_MOUSE_REPORT_DESC` are also available
+with `Init()` for applications needing a different endpoint configuration.
 
 Supply separate caller-owned RX and TX slots in `UsbdHidCfg_t::pRxBuffer`
 and `pTxBuffer`. Both must remain alive for the interface lifetime, be

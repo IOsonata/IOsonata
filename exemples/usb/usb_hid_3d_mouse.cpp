@@ -56,39 +56,6 @@ SOFTWARE.
 #define HID_ACCEL_DIVISOR	16
 #define HID_GYRO_DIVISOR		4
 
-#pragma pack(push, 1)
-typedef struct __Hid_3d_Mouse_Report {
-	int16_t X;
-	int16_t Y;
-	int16_t Z;
-	int16_t Rx;
-	int16_t Ry;
-	int16_t Rz;
-} Hid3dMouseReport_t;
-
-#pragma pack(pop)
-
-static_assert(sizeof(Hid3dMouseReport_t) == 12U,
-	"The six 16-bit axes must form a 12-byte report");
-
-static const uint8_t s_ReportDesc[] = {
-	0x05U, 0x01U,			// Usage Page (Generic Desktop)
-	0x09U, 0x08U,			// Usage (Multi-axis Controller)
-	0xA1U, 0x01U,			// Collection (Application)
-	0x16U, 0x01U, 0x80U,	// Logical Minimum (-32767)
-	0x26U, 0xFFU, 0x7FU,	// Logical Maximum (32767)
-	0x75U, 0x10U,			// Report Size (16)
-	0x95U, 0x06U,			// Report Count (6)
-	0x09U, 0x30U,			// Usage (X)
-	0x09U, 0x31U,			// Usage (Y)
-	0x09U, 0x32U,			// Usage (Z)
-	0x09U, 0x33U,			// Usage (Rx)
-	0x09U, 0x34U,			// Usage (Ry)
-	0x09U, 0x35U,			// Usage (Rz)
-	0x81U, 0x06U,			// Input (Data, Variable, Relative)
-	0xC0U,
-};
-
 static const IOPinCfg_t s_PowerPins[] = {
 	{BMI323_VDD_EN_PORT, BMI323_VDD_EN_PIN, BMI323_VDD_EN_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -168,7 +135,7 @@ static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
 	uint8_t *pBuffer, uint16_t BufferSize, void *pContext);
 
 static UsbdHid s_Hid;
-static Hid3dMouseReport_t s_Report;
+static UsbHid3dMouseReport_t s_Report;
 static int32_t s_AccelCenter[3];
 static int32_t s_GyroCenter[3];
 
@@ -177,19 +144,7 @@ alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
 
 static const UsbdHidCfg_t s_HidCfg = {
 	.DevNo = USB_DEVNO,
-	.pReportDesc = s_ReportDesc,
-	.ReportDescLength = sizeof(s_ReportDesc),
-	.BcdHid = 0U,
-	.FsMps = sizeof(Hid3dMouseReport_t),
-	.HsMps = sizeof(Hid3dMouseReport_t),
-	.FsInterval = 1U,
-	.HsInterval = 4U,
-	.SubClass = USB_HID_SUBCLASS_NONE,
-	.Protocol = USB_HID_PROT_NONE,
-	.CountryCode = 0U,
 	.InterfaceString = HID_STR_INTERFACE,
-	.EvtCB = nullptr,
-	.pContext = nullptr,
 	.pRxBuffer = s_HidRxBuffer,
 	.pTxBuffer = s_HidTxBuffer,
 	.GetReportCB = HidGetReport,
@@ -207,17 +162,9 @@ static const UsbCfg_t s_UsbCfg = {
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
 	.pProduct = "IOsonata HID 3D Mouse",
-	.pSerial = nullptr,
 	.pFuncName = "HID 3D Mouse",
 	.IntPrio = 6,
-	.DeviceClass = USB_DEVCLASS_NONE,
-	.DeviceSubClass = 0U,
-	.DeviceProtocol = 0U,
-	.bSelfPowered = false,
-	.bRemoteWakeup = false,
-	.bLowPowerSuspend = false,
 	.MaxPower = 100,
-	.EvtHandler = nullptr,
 };
 
 static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
@@ -326,7 +273,7 @@ static bool HidReportUpdate()
 int main()
 {
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
-		!ImuInit() || !UsbInit(&s_UsbCfg) || !s_Hid.Init(s_HidCfg))
+		!ImuInit() || !UsbInit(&s_UsbCfg) || !s_Hid.Init3dMouse(s_HidCfg))
 	{
 		return -1;
 	}
