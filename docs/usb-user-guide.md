@@ -9,6 +9,25 @@ Use this guide to build and test an application. See
 [USB architecture](architecture/usb.md) for class ownership, descriptor
 composition, endpoint dispatch and controller-port rules.
 
+## Configuration defaults
+
+The examples use aggregate initializers: omitted fields are zero-initialized.
+Applications only need to list required values and choices that differ from
+those defaults. There is no generated application configuration behind them.
+
+For `UsbCfg_t`, an omitted `pSerial` uses the MCU unique ID; omitted power flags
+select bus power with remote wakeup disabled. The CDC loopback and PRBS examples
+explicitly retain their remote-wakeup setting. Omitted pin-map fields are null
+and zero; targets needing USB pin configuration still supply `USB_PINS` through
+`board.h`. Device identity, power budget and interrupt priority remain explicit.
+
+For `UsbdHidCfg_t`, zero selects the documented HID version and polling defaults
+(1 ms full speed, high-speed bInterval 4). Zero subclass/protocol selects ordinary
+non-boot HID. Buffer pointers, report definitions and application callbacks must
+still be supplied where needed. The keyboard and mouse helpers select their
+predefined report layouts. Packet sizes remain explicit in the custom HID
+loopback so its 64-byte host protocol is visible in the application.
+
 ## Supported functions
 
 | Function | Application class or interface | Shared example | nRF52840 project | Host runner |
