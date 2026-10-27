@@ -981,36 +981,56 @@ if (Test-Path $CLONE_LOG) {
 # --- Install IDAP Tools ---
 $IDAP_DIR = "$ROOT\Tools\IDAP-Link"
 $IDAP_PROG = "$IDAP_DIR\IDAPnRFProg.exe"
-New-Item -Path $IDAP_DIR -ItemType Directory -Force | Out-Null
+$IDAP_PARENT = Split-Path $IDAP_DIR -Parent
+New-Item -Path $IDAP_PARENT -ItemType Directory -Force | Out-Null
 
 if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
-    Write-Host
-    Write-Host ">>> Downloading IDAPnRFProg tool..."
-    $IDAP_URL = "https://sourceforge.net/projects/idaplinkfirmware/files/Windows/IDAPnRFProg_Win_2_1_240807.zip/download"
-    $IDAP_TMP = Join-Path $env:TEMP "IDAPnRFProg.zip"
-    
-    $curlExitCode = 0
-    try {
-        $ErrorActionPreference = 'Continue'
-        curl.exe -fL $IDAP_URL -o $IDAP_TMP --silent --show-error
-        $curlExitCode = $LASTEXITCODE
-        $ErrorActionPreference = 'Stop'
-    } catch {
-        $curlExitCode = 1
-        $ErrorActionPreference = 'Stop'
-    }
-    
-    if ($curlExitCode -eq 0 -and (Test-Path $IDAP_TMP)) {
-        & $SEVENZIP_EXE e $IDAP_TMP -o"$IDAP_DIR" -y | Out-Null
-        Remove-Item $IDAP_TMP -Force -ErrorAction SilentlyContinue
-        Write-Host "   [OK] IDAPnRFProg installed at: $IDAP_PROG" -ForegroundColor Green
-    } else {
-        Write-Host "   [WARN] Failed to download IDAPnRFProg. You can download manually from:" -ForegroundColor Yellow
-        Write-Host "         https://sourceforge.net/projects/idaplinkfirmware/files/Windows/" -ForegroundColor Yellow
-        Remove-Item $IDAP_TMP -Force -ErrorAction SilentlyContinue
-    }
+	Write-Host
+	Write-Host ">>> Downloading IDAPnRFProg tool..."
+	$IDAP_URL = "https://sourceforge.net/projects/idaplinkfirmware/files/Windows/IDAPnRFProg_Win_2_1_240807.zip/download"
+	$IDAP_STAGE = Join-Path $IDAP_PARENT (".idap-stage-" + [guid]::NewGuid().ToString('N'))
+	$IDAP_BACKUP = Join-Path $IDAP_PARENT (".idap-backup-" + [guid]::NewGuid().ToString('N'))
+	New-Item $IDAP_STAGE -ItemType Directory | Out-Null
+
+	try {
+		$archive = Join-Path $IDAP_STAGE "archive.zip"
+		curl.exe -fL $IDAP_URL -o $archive --silent --show-error
+		if ($LASTEXITCODE -ne 0) { throw "IDAPnRFProg download failed." }
+
+		$candidate = Join-Path $IDAP_STAGE "candidate"
+		New-Item $candidate -ItemType Directory | Out-Null
+		if (Test-Path $IDAP_DIR) {
+			Get-ChildItem $IDAP_DIR -Force | Copy-Item -Destination $candidate -Recurse -Force
+		}
+		& $SEVENZIP_EXE e $archive -o"$candidate" -y | Out-Null
+		if ($LASTEXITCODE -ne 0) { throw "IDAPnRFProg extraction failed." }
+
+		$stagedProgram = Join-Path $candidate "IDAPnRFProg.exe"
+		if (-not (Test-Path $stagedProgram) -or (Get-Item $stagedProgram).Length -le 0) {
+			throw "Invalid IDAPnRFProg archive: missing or empty IDAPnRFProg.exe."
+		}
+
+		if (Test-Path $IDAP_DIR) {
+			Move-Item $IDAP_DIR $IDAP_BACKUP
+		}
+		try {
+			Move-Item $candidate $IDAP_DIR
+			if (Test-Path $IDAP_BACKUP) {
+				Remove-Item $IDAP_BACKUP -Recurse -Force
+			}
+		} catch {
+			Remove-Item $IDAP_DIR -Recurse -Force -ErrorAction SilentlyContinue
+			if (Test-Path $IDAP_BACKUP) {
+				Move-Item $IDAP_BACKUP $IDAP_DIR
+			}
+			throw
+		}
+		Write-Host "   [OK] IDAPnRFProg installed at: $IDAP_PROG" -ForegroundColor Green
+	} finally {
+		Remove-Item $IDAP_STAGE -Recurse -Force -ErrorAction SilentlyContinue
+	}
 } else {
-    Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
+	Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
 }
 
 Install-Plugin

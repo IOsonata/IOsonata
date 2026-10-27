@@ -86,6 +86,11 @@ class ToolTests(unittest.TestCase):
 					result = subprocess.run(['bash', '-c', 'set -e\n' + block], env=env, text=True, capture_output=True)
 					self.assertEqual(result.returncode == 0, failure == 'none', result.stderr)
 					self.assertEqual(program.read_text().strip(), 'replacement' if failure == 'none' else 'original')
+		windows = (INSTALLER / 'install_iocdevtools_win.ps1').read_text()
+		self.assertIn('.idap-stage-', windows)
+		self.assertIn('IDAPnRFProg extraction failed.', windows)
+		self.assertIn('missing or empty IDAPnRFProg.exe', windows)
+		self.assertIn('Move-Item $IDAP_DIR $IDAP_BACKUP', windows)
 
 
 	def test_srecord_verification_failure(self):
