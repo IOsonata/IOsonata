@@ -1051,20 +1051,35 @@ static void TestMousePresets()
 			const uint8_t item = expected[i++];
 			const unsigned bytes = (item & 3) == 3 ? 4 : item & 3;
 			CHECK(item != 0xFE && i + bytes <= expectedLength);
-			if (i + bytes > expectedLength) return;
+			if (i + bytes > expectedLength)
+			{
+				return;
+			}
 			unsigned value = 0;
-			for (unsigned j = 0; j < bytes; j++) value |= unsigned(expected[i++]) << (8 * j);
+			for (unsigned j = 0; j < bytes; j++)
+			{
+				value |= unsigned(expected[i++]) << (8 * j);
+			}
 			switch (item & 0xFC)
 			{
-				case 0x74: size = value; break;
-				case 0x94: count = value; break;
+				case 0x74:
+					size = value;
+					break;
+				case 0x94:
+					count = value;
+					break;
 				case 0x80:
 					inputBits += size * count;
-					if (value & 4) relativeBits += size * count;
+					if (value & 4)
+					{
+						relativeBits += size * count;
+					}
 					break;
 				case 0x84: // No report IDs, output or feature reports.
 				case 0x90:
-				case 0xB0: CHECK(false); break;
+				case 0xB0:
+					CHECK(false);
+					break;
 			}
 		}
 		CHECK(inputBits == (multi ? 96U : 24U));
