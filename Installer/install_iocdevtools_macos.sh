@@ -979,17 +979,25 @@ echo "Embedded CDT global compiler preferences created in $ECLIPSE_SETTINGS"
 echo
 echo "📦 Syncing IOsonata + external SDKs..."
 
-CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_macos.sh"
-TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.sh)
+LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+LOCAL_CLONE="$LOCAL_INSTALLER_DIR/clone_iosonata_sdk_macos.sh"
+TMP_CLONE=""
 CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.log)
 
-if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
-  echo "❌ Failed to download clone script:"
-  echo "   $CLONE_URL"
-  exit 1
+if [[ -f "$LOCAL_CLONE" ]]; then
+	CLONE_SCRIPT="$LOCAL_CLONE"
+	echo "SDK clone script: $CLONE_SCRIPT"
+else
+	CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_macos.sh"
+	TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.sh)
+	if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
+		echo "Failed to download SDK clone script: $CLONE_URL" >&2
+		[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" "$CLONE_LOG"
+		exit 1
+	fi
+	CLONE_SCRIPT="$TMP_CLONE"
+	echo "SDK clone script: $CLONE_URL"
 fi
-
-chmod +x "$TMP_CLONE"
 
 # Prefer --no-build if supported by the clone script (newer versions). If not supported,
 # retry without it. We capture output so we can detect whether the builder ran.
@@ -1000,16 +1008,16 @@ fi
 
 run_clone() {
   # shellcheck disable=SC2068
-  zsh "$TMP_CLONE" "$@" 2>&1 | tee -a "$CLONE_LOG"
+  zsh "$CLONE_SCRIPT" "$@" 2>&1 | tee -a "$CLONE_LOG"
 }
 
 if ! run_clone "${CLONE_ARGS[@]}"; then
 	echo "SDK synchronization failed. See $CLONE_LOG" >&2
-	rm -f "$TMP_CLONE"
+	[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE"
 	exit 1
 fi
 
-rm -f "$TMP_CLONE" || true
+[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" || true
 
 # Detect whether the clone script already invoked the IOsonata library builder.
 CLONE_INVOKED_BUILD=0
