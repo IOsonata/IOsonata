@@ -39,15 +39,38 @@ SOFTWARE.
 
 #include "idelay.h"
 #include "crypto/cryptomaster.h"
+#include "crypto/silex_internal.h"
 
 #ifndef __DMB
 #define __DMB()		((void)0)
 #endif
 
 #define AES_BLOCK		16U
+#define CM_AES_BATCH		256U
 #define CM_POLL_LIMIT	100000U
 
 static bool s_bCmQuarantined;
+// DMA must never retain addresses into a returned stack frame after a fault.
+struct CmDmaStorage
+{
+	uint32_t Config;
+	uint8_t Key[32];
+	uint8_t Input[CM_AES_BATCH];
+	uint8_t Output[CM_AES_BATCH];
+	CryptoMasterDesc_t In[3];
+	CryptoMasterDesc_t Out;
+};
+static CmDmaStorage s_Dma;
+
+bool CryptoMaster::OpAcquire()
+{
+	return SilexOpAcquire();
+}
+
+void CryptoMaster::OpRelease()
+{
+	SilexOpRelease();
+}
 
 static void CmWipe(void *pData, size_t Len)
 {
@@ -105,7 +128,8 @@ static bool CmWait(Device *pDev)
 		if ((CmRegRead(pDev, CRYPTOMASTER_STATUS) &
 			 CRYPTOMASTER_STATUS_BUSY) == 0U)
 		{
-			return true;
+			return (CmRegRead(pDev, CRYPTOMASTER_INT_STATRAW) &
+				CRYPTOMASTER_INT_ERROR) == 0U;
 		}
 	}
 	return false;
@@ -138,20 +162,36 @@ bool CryptoMaster::Recover()
 		 CRYPTOMASTER_PRESENT_AES) != 0U;
 }
 
-static bool CmAesBlock(CryptoMaster *pDev, const uint8_t Key[16],
-						const uint8_t In[16], uint8_t Out[16])
+static bool CmAesBlock(CryptoMaster *pDev, const uint8_t *Key,
+						size_t KeyLen, bool Encrypt, const uint8_t *In, uint8_t *Out,
+						size_t Len)
 {
-	alignas(uint32_t) uint32_t config = CRYPTOMASTER_BA411_MODE_ECB;
-	alignas(uint32_t) uint8_t key[AES_BLOCK];
-	alignas(uint32_t) uint8_t input[AES_BLOCK];
-	alignas(uint32_t) uint8_t output[AES_BLOCK];
-	alignas(uint32_t) CryptoMasterDesc_t inDesc[3];
-	alignas(uint32_t) CryptoMasterDesc_t outDesc;
+	uint32_t &config = s_Dma.Config;
+	uint8_t *key = s_Dma.Key;
+	uint8_t *input = s_Dma.Input;
+	uint8_t *output = s_Dma.Output;
+	CryptoMasterDesc_t *inDesc = s_Dma.In;
+	CryptoMasterDesc_t &outDesc = s_Dma.Out;
+	bool ok;
+	bool resetOk;
 
-	memcpy(key, Key, sizeof(key));
-	memcpy(input, In, sizeof(input));
-	memset(output, 0, sizeof(output));
-	memset(inDesc, 0, sizeof(inDesc));
+	if (s_bCmQuarantined)
+	{
+		CmWipe(Out, Len);
+		return false;
+	}
+	config = CRYPTOMASTER_BA411_MODE_ECB | (Encrypt ? 0U : 1U) |
+		(KeyLen == 32U ? 4U : 0U);
+
+	memcpy(key, Key, KeyLen);
+	if (Len == 0U || Len > CM_AES_BATCH || (Len & (AES_BLOCK - 1U)) != 0U)
+	{
+		CmWipe(Out, Len);
+		return false;
+	}
+	memcpy(input, In, Len);
+	memset(output, 0, Len);
+	memset(inDesc, 0, sizeof(s_Dma.In));
 	memset(&outDesc, 0, sizeof(outDesc));
 
 	inDesc[0].pAddr = (uint8_t *)&config;
@@ -162,24 +202,31 @@ static bool CmAesBlock(CryptoMaster *pDev, const uint8_t Key[16],
 
 	inDesc[1].pAddr = key;
 	inDesc[1].pNext = &inDesc[2];
-	inDesc[1].Size = sizeof(key) | CRYPTOMASTER_DMA_REALIGN;
+	inDesc[1].Size = KeyLen | CRYPTOMASTER_DMA_REALIGN;
 	inDesc[1].Tag = CRYPTOMASTER_TAG_ENGINE_AES |
 		CRYPTOMASTER_TAG_CONFIG(CRYPTOMASTER_BA411_KEY_OFFSET);
 
 	inDesc[2].pAddr = input;
 	inDesc[2].pNext = CRYPTOMASTER_DMA_STOP;
-	inDesc[2].Size = sizeof(input) | CRYPTOMASTER_DMA_REALIGN;
+	inDesc[2].Size = Len | CRYPTOMASTER_DMA_REALIGN;
 	inDesc[2].Tag = CRYPTOMASTER_TAG_ENGINE_AES | CRYPTOMASTER_TAG_LAST;
 
 	outDesc.pAddr = output;
 	outDesc.pNext = CRYPTOMASTER_DMA_STOP;
-	outDesc.Size = sizeof(output) | CRYPTOMASTER_DMA_REALIGN;
+	outDesc.Size = Len | CRYPTOMASTER_DMA_REALIGN;
 	outDesc.Tag = CRYPTOMASTER_TAG_LAST;
 
-	bool ok = !s_bCmQuarantined && CmReset(pDev);
-	if (!ok && !s_bCmQuarantined)
+	// The previous transaction already reset the engine after DMA finished.
+	// Avoid a second reset for every block of CBC, CMAC, CCM and GCM.
+	// Recover a busy engine before submitting new descriptors.
+	ok = (CmRegRead(pDev, CRYPTOMASTER_STATUS) & CRYPTOMASTER_STATUS_BUSY) == 0U;
+	if (!ok)
 	{
-		ok = pDev->Recover();
+		ok = CmReset(pDev);
+		if (!ok && !s_bCmQuarantined)
+		{
+			ok = pDev->Recover();
+		}
 	}
 	if (ok)
 	{
@@ -193,7 +240,7 @@ static bool CmAesBlock(CryptoMaster *pDev, const uint8_t Key[16],
 		__DMB();
 	}
 
-	bool resetOk = CmReset(pDev);
+	resetOk = CmReset(pDev);
 	if (!resetOk)
 	{
 		resetOk = pDev->Recover();
@@ -206,19 +253,18 @@ static bool CmAesBlock(CryptoMaster *pDev, const uint8_t Key[16],
 
 	if (ok)
 	{
-		memcpy(Out, output, sizeof(output));
+		memcpy(Out, output, Len);
 	}
 	else
 	{
-		memset(Out, 0, AES_BLOCK);
+		memset(Out, 0, Len);
 	}
 
-	CmWipe(key, sizeof(key));
-	CmWipe(input, sizeof(input));
-	CmWipe(output, sizeof(output));
-	CmWipe(inDesc, sizeof(inDesc));
-	CmWipe(&outDesc, sizeof(outDesc));
-	config = 0U;
+	// A stuck DMA retains stable descriptors until an explicit successful reset.
+	if (resetOk)
+	{
+		CmWipe(&s_Dma, sizeof(s_Dma));
+	}
 	return ok;
 }
 
@@ -311,6 +357,10 @@ void CryptoMaster::Reset()
 	vbValid = false;
 	bool ok = Recover();
 	s_bCmQuarantined = !ok;
+	if (ok)
+	{
+		CmWipe(&s_Dma, sizeof(s_Dma));
+	}
 	vbValid = ok;
 	OpRelease();
 }
@@ -321,24 +371,20 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 								   const uint8_t *pIn, size_t Len,
 								   uint8_t *pOut)
 {
-	uint32_t required = bEncrypt != 0 ? CRYPTO_KEY_USE_ENCRYPT :
-									 CRYPTO_KEY_USE_DECRYPT;
-	if (Key.Type != CRYPTO_KEY_AES_128 || Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
-		Key.Plain.pData == nullptr || Key.Plain.Len != AES_BLOCK ||
-		(Key.Usage & required) == 0U || pIn == nullptr || pOut == nullptr)
+	size_t keyLen = Key.Type == CRYPTO_KEY_AES_256 ? 32U : 16U;
+	uint32_t required = bEncrypt != 0 ? CRYPTO_KEY_USE_ENCRYPT : CRYPTO_KEY_USE_DECRYPT;
+	if ((Key.Type != CRYPTO_KEY_AES_128 && Key.Type != CRYPTO_KEY_AES_256) ||
+		Key.Loc != CRYPTO_KEY_LOC_PLAIN || Key.Plain.pData == nullptr ||
+		Key.Plain.Len != keyLen || (Key.Usage & required) == 0U ||
+		pIn == nullptr || pOut == nullptr)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
+
 	if (!vbValid || !vbIntrfEnabled || Interface() == nullptr || s_bCmQuarantined)
 	{
 		if (Len > 0U) memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
-	}
-
-	if (bEncrypt == 0 && Alg != CRYPTO_CIPHER_CTR)
-	{
-		return CryptoSoftAes::Cipher(Alg, bEncrypt, Key, pIv, IvLen,
-								 pIn, Len, pOut);
 	}
 
 	if (Alg == CRYPTO_CIPHER_ECB && (Len & (AES_BLOCK - 1U)) != 0U)
@@ -370,61 +416,109 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 
 	if (Alg == CRYPTO_CIPHER_ECB)
 	{
-		for (size_t off = 0; off < Len; off += AES_BLOCK)
+		for (size_t off = 0; off < Len; )
 		{
-			if (!CmAesBlock(this, key, pIn + off, pOut + off))
+			size_t count = Len - off < CM_AES_BATCH ? Len - off : CM_AES_BATCH;
+			if (!CmAesBlock(this, key, keyLen, bEncrypt != 0, pIn + off, pOut + off, count))
 			{
 				status = CRYPTO_STATUS_FAIL;
 				break;
 			}
+			off += count;
 		}
 	}
 	else if (Alg == CRYPTO_CIPHER_CTR)
 	{
-		uint8_t ctr[AES_BLOCK], stream[AES_BLOCK];
+		uint8_t ctr[AES_BLOCK], stream[CM_AES_BATCH], counters[CM_AES_BATCH];
 		memcpy(ctr, pIv, AES_BLOCK);
 		for (size_t off = 0; off < Len; )
 		{
-			if (!CmAesBlock(this, key, ctr, stream))
+			size_t count = Len - off < CM_AES_BATCH ? Len - off : CM_AES_BATCH;
+			size_t padded = (count + AES_BLOCK - 1U) & ~(AES_BLOCK - 1U);
+			for (size_t i = 0; i < padded; i += AES_BLOCK)
+			{
+				memcpy(counters + i, ctr, AES_BLOCK);
+				for (int j = AES_BLOCK - 1; j >= 0; j--)
+				{
+					if (++ctr[j] != 0U)
+						break;
+				}
+			}
+			if (!CmAesBlock(this, key, keyLen, true, counters, stream, padded))
 			{
 				status = CRYPTO_STATUS_FAIL;
 				break;
 			}
-			size_t count = Len - off < AES_BLOCK ? Len - off : AES_BLOCK;
 			for (size_t i = 0; i < count; i++)
 			{
 				pOut[off + i] = pIn[off + i] ^ stream[i];
-			}
-			for (int i = AES_BLOCK - 1; i >= 0; i--)
-			{
-				if (++ctr[i] != 0U) break;
 			}
 			off += count;
 		}
 		CmWipe(ctr, sizeof(ctr));
 		CmWipe(stream, sizeof(stream));
+		CmWipe(counters, sizeof(counters));
+	}
+	else if (bEncrypt == 0)
+	{
+		uint8_t chain[AES_BLOCK];
+		uint8_t ciphertext[CM_AES_BATCH];
+		uint8_t plaintext[CM_AES_BATCH];
+
+		memcpy(chain, pIv, AES_BLOCK);
+		for (size_t off = 0; off < Len; )
+		{
+			size_t count = Len - off < CM_AES_BATCH ? Len - off : CM_AES_BATCH;
+			memcpy(ciphertext, pIn + off, count);
+			if (!CmAesBlock(this, key, keyLen, false, ciphertext, plaintext, count))
+			{
+				status = CRYPTO_STATUS_FAIL;
+				break;
+			}
+			for (size_t i = 0; i < count; i += AES_BLOCK)
+			{
+				for (size_t j = 0; j < AES_BLOCK; j++)
+				{
+					pOut[off + i + j] = plaintext[i + j] ^ chain[j];
+				}
+				memcpy(chain, ciphertext + i, AES_BLOCK);
+			}
+			off += count;
+		}
+		CmWipe(chain, sizeof(chain));
+		CmWipe(ciphertext, sizeof(ciphertext));
+		CmWipe(plaintext, sizeof(plaintext));
 	}
 	else
 	{
 		uint8_t chain[AES_BLOCK];
+		uint8_t block[AES_BLOCK];
+		uint8_t saved[AES_BLOCK];
 		memcpy(chain, pIv, AES_BLOCK);
 		for (size_t off = 0; off < Len; off += AES_BLOCK)
 		{
-			uint8_t block[AES_BLOCK];
+			memcpy(saved, pIn + off, AES_BLOCK);
 			for (size_t i = 0; i < AES_BLOCK; i++)
 			{
-				block[i] = pIn[off + i] ^ chain[i];
+				block[i] = saved[i] ^ (bEncrypt ? chain[i] : 0U);
 			}
-			if (!CmAesBlock(this, key, block, pOut + off))
+			if (!CmAesBlock(this, key, keyLen, bEncrypt != 0, block, pOut + off, AES_BLOCK))
 			{
 				status = CRYPTO_STATUS_FAIL;
-				CmWipe(block, sizeof(block));
 				break;
 			}
-			memcpy(chain, pOut + off, AES_BLOCK);
-			CmWipe(block, sizeof(block));
+			if (!bEncrypt)
+			{
+				for (size_t i = 0; i < AES_BLOCK; i++)
+				{
+					pOut[off + i] ^= chain[i];
+				}
+			}
+			memcpy(chain, bEncrypt ? pOut + off : saved, AES_BLOCK);
 		}
 		CmWipe(chain, sizeof(chain));
+		CmWipe(block, sizeof(block));
+		CmWipe(saved, sizeof(saved));
 	}
 
 	if (s_bCmQuarantined)
@@ -454,5 +548,5 @@ void CryptoMaster::AesOpEnd()
 bool CryptoMaster::AesEcbEncrypt(const uint8_t Key[16], const uint8_t In[16],
 							   uint8_t Out[16])
 {
-	return CmAesBlock(this, Key, In, Out);
+	return CmAesBlock(this, Key, 16U, true, In, Out, AES_BLOCK);
 }

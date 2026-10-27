@@ -4,7 +4,7 @@
 @brief	Board specific definitions, crypto hardware tests on the nRF9160 DK
 or the Nordic Thingy:91
 
-The console is the nRF9160 UART0, the SysLog output: on the nRF9160 DK the
+The console is the nRF9160 UART0: on the nRF9160 DK the
 interface MCU VCOM0 port, on the Thingy:91 the first USB serial port of its
 nRF52840. Select the board below.
 
@@ -48,7 +48,8 @@ SOFTWARE.
 #define NRF9160_DK
 //#define NORDIC_THINGY91
 
-// Console, UART0, the SysLog output
+// Console, UART0, 1 Mbaud in Release builds.
+#define UART_RETARGET
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PINOP		1

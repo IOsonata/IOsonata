@@ -21,7 +21,7 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 UECC = Path(os.environ.get('UECC_ROOT', ROOT / 'micro-ecc'))
 SOURCES = ['src/net/tls.cpp', 'src/crypto/x509.cpp',
-           'src/crypto/crypto_softaes.cpp', 'src/crypto/crypto_softsha256.cpp',
+           'src/crypto/crypto_aes_modes.cpp', 'src/crypto/crypto_aes_soft.cpp', 'src/crypto/crypto_softsha256.cpp',
            'src/crypto/crypto_p256.cpp', 'src/crypto/crypto_uecc.cpp',
            'src/device.cpp', 'src/device_intrf.cpp']
 ENV = dict(os.environ, ASAN_OPTIONS='detect_leaks=0:abort_on_error=1',

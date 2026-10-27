@@ -87,17 +87,17 @@ class DiskIO;
 
 typedef struct __Usbd_Msc_Config {
 	int DevNo;
-	DiskIO *pDisk;
-	uint8_t *pSectorBuffer;
-	uint16_t SectorBufferSize;
-	bool bReadOnly;
-	bool bRemovable;
+	DiskIO *pDisk;			//!< Required; initialized medium, valid for class lifetime
+	uint8_t *pSectorBuffer;	//!< Required; caller-owned work buffer, not disk contents
+	uint16_t SectorBufferSize;	//!< Required; at least pDisk->GetSectSize() bytes
+	bool bReadOnly;			//!< Zero permits writes
+	bool bRemovable;			//!< Zero selects fixed media; true enables host eject
 	uint8_t InterfaceString;
 	uint16_t FsMps;				//!< Zero selects USBD_MSC_FS_MPS
 	uint16_t HsMps;				//!< Zero selects USBD_MSC_HS_MPS
-	const char *pVendor;			//!< INQUIRY vendor, padded or truncated to 8 bytes
-	const char *pProduct;		//!< INQUIRY product, padded or truncated to 16 bytes
-	const char *pRevision;		//!< INQUIRY revision, padded or truncated to 4 bytes
+	const char *pVendor;			//!< Null: "I-SYST"; padded/truncated to 8 bytes
+	const char *pProduct;		//!< Null: "IOsonata MSC"; padded/truncated to 16 bytes
+	const char *pRevision;		//!< Null: "1.00"; padded/truncated to 4 bytes
 } UsbdMscCfg_t;
 
 typedef enum __Usbd_Msc_Tx_Kind {
@@ -157,14 +157,20 @@ typedef struct __Usbd_Msc_Dev {
 	char Vendor[8];
 	char Product[16];
 	char Revision[4];
-	uint8_t Response[36];
+	// BOT consumes OUT packets only while waiting for a CBW or writing data.
+	// The CBW is copied before building a SCSI reply. Reply bytes are copied
+	// to TxPacket before transmission; queued OUT packets remain in RxFifo.
+	// These foreground-only work buffers therefore have disjoint lifetimes.
+	union {
+		uint8_t Response[36];
+		uint32_t RxPacket[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
+						 sizeof(uint32_t)];
+	};
 	uint32_t RxFifo[(USBD_MSC_RXFIFO_MEMSIZE + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
 	uint32_t TxFifo[(USBD_MSC_TXFIFO_MEMSIZE + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
 	uint32_t TxPacket[(USBD_MSC_PKT_BLKSIZE + sizeof(uint32_t) - 1U) /
-					 sizeof(uint32_t)];
-	uint32_t RxPacket[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
 } UsbdMscDev_t;
 

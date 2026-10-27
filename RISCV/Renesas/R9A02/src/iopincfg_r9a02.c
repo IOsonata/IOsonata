@@ -476,3 +476,9 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 	(void)PinNo;
 	(void)Speed;
 }
+
+// This port has one application core and no pin ownership selector.
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+	return CoreNo == 0 && R9a02PinValid(PortNo, PinNo);
+}

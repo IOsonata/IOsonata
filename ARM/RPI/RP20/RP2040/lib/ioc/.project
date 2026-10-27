@@ -211,16 +211,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/I-SYST_Logo320.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/I-SYST_Logo320.c</locationURI>
-		</link>
-		<link>
-			<name>src/I-SYST_Logo320_little.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/I-SYST_Logo320_little.c</locationURI>
-		</link>
-		<link>
 			<name>src/app_evt_handler.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
@@ -383,7 +373,7 @@
 		<link>
 			<name>src/usb_hidhost.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb_hidhost.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_hidhost.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>
@@ -399,11 +389,6 @@
 			<name>include/converters/adc_device.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_device.h</locationURI>
-		</link>
-		<link>
-			<name>include/converters/adc_hx711.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_hx711.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_ltc2495.h</name>
@@ -534,11 +519,6 @@
 			<name>include/display/eink_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/display/eink_vb3300.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_vb3300.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/ifont.h</name>
@@ -724,11 +704,6 @@
 			<name>include/sensors/agm_icm20948DMP.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948DMP.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/agm_icm456x_ak09940.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm456x_ak09940.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/agm_lsm9ds1.h</name>
@@ -986,11 +961,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/eink_vb3300.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1009,11 +979,6 @@
 			<name>src/motion/mot_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_icm20948x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_icm20948x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/motion/mot_invn_icm20948.cpp</name>
@@ -1629,6 +1594,96 @@
 			<name>src/display/fonts/FreeSerif/FreeSerifIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
+		</link>
+		<link>
+			<name>include/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softsha256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_uecc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_p256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/micro-ecc/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/icrypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softaes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softrng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softsha256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_uecc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_default.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

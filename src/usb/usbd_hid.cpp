@@ -44,6 +44,7 @@ static void UsbdHidUnconfigure(UsbdHidDev_t *pHid)
 {
 	UsbIntIntrfClose(pHid->pIntIntrf);
 	pHid->Configured = false;
+	pHid->PendingRequest = 0U;
 }
 
 // Out of line for the same reason as UsbdHidInitInternal.
@@ -73,6 +74,71 @@ static void UsbdHidReset(UsbdHidDev_t *pHid)
 	pHid->Configured = false;
 	pHid->Idle = 0U;
 	pHid->ActiveProtocol = USBD_HID_PROTOCOL_REPORT;
+	pHid->PendingRequest = 0U;
+}
+
+static bool UsbdHidReportRequest(UsbdHidDev_t *pHid,
+								const UsbSetupData_t *pSetup,
+								UsbCtrlStage_t Stage, uint8_t **ppData,
+								uint16_t *pLength)
+{
+	const bool get = pSetup->bRequest == USB_HID_REQ_GET_REPORT;
+	const bool dirIn =
+		(pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) == USB_REQTYPE_DIRHOST;
+	const uint16_t type = pSetup->wValue & USB_HID_REPTYPE_MASK;
+	const uint8_t reportId = pSetup->wValue & USB_HID_REPID_MASK;
+	if (get != dirIn || pSetup->wLength == 0U ||
+		type < USB_HID_REPTYPE_INPUT || type > USB_HID_REPTYPE_FEATURE ||
+		(get ? pHid->GetReportCB == nullptr : pHid->SetReportCB == nullptr))
+	{
+		return false;
+	}
+	if (Stage == USB_CTRL_SETUP)
+	{
+		if (ppData == nullptr ||
+			(!get && pSetup->wLength > pHid->ControlBufferSize))
+		{
+			return false;
+		}
+		int length = pSetup->wLength;
+		if (get)
+		{
+			length = pHid->GetReportCB((USB_HID_REPTYPE)type, reportId,
+				pHid->pControlBuffer, pHid->ControlBufferSize, pHid->pContext);
+			if (length < 0 || length > pHid->ControlBufferSize)
+			{
+				return false;
+			}
+		}
+		*ppData = pHid->pControlBuffer;
+		*pLength = (uint16_t)length;
+		pHid->PendingRequest = pSetup->bRequest;
+		pHid->PendingReportValue = pSetup->wValue;
+		pHid->PendingReportLength = pSetup->wLength;
+		return true;
+	}
+	if (Stage == USB_CTRL_ABORT || Stage == USB_CTRL_COMPLETE)
+	{
+		pHid->PendingRequest = 0U;
+		return true;
+	}
+	if (Stage != USB_CTRL_DATA ||
+		pHid->PendingRequest != pSetup->bRequest ||
+		pHid->PendingReportValue != pSetup->wValue ||
+		pHid->PendingReportLength != pSetup->wLength)
+	{
+		return false;
+	}
+	if (get)
+	{
+		return true;
+	}
+	// Reject a short OUT transfer without presenting a partial report. Clear
+	// first so an abort, duplicate notification or callback cannot replay it.
+	pHid->PendingRequest = 0U;
+	return *pLength == pSetup->wLength &&
+		pHid->SetReportCB((USB_HID_REPTYPE)type, reportId,
+			pHid->pControlBuffer, *pLength, pHid->pContext);
 }
 
 static bool UsbdHidGetDescriptor(UsbdHidDev_t *pHid,
@@ -132,7 +198,7 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 	{
 		case USB_HID_REQ_GET_REPORT:
 		case USB_HID_REQ_SET_REPORT:
-			return false;
+			return UsbdHidReportRequest(pHid, pSetup, Stage, ppData, pLength);
 
 		case USB_HID_REQ_GET_IDLE:
 			if ((pSetup->wValue & 0xFF00U) != 0U)
@@ -214,8 +280,12 @@ static bool UsbdHidRequest(UsbdHidDev_t *pHid, const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage, uint8_t **ppData,
 						   uint16_t *pLength)
 {
-	// The core passes its own setup copy and length; pHid is the class member.
-	if (pSetup->wIndex != (uint8_t)pHid->ItfNo)
+	if (Stage == USB_CTRL_SETUP)
+	{
+		pHid->PendingRequest = 0U;
+	}
+	if (pSetup == nullptr || pLength == nullptr ||
+		pSetup->wIndex != (uint8_t)pHid->ItfNo)
 	{
 		return false;
 	}
@@ -307,18 +377,34 @@ bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc,
 	return true;
 }
 
+static bool UsbdHidBufferOverlap(const uint8_t *pA, uint16_t SizeA,
+	const uint8_t *pB, uint16_t SizeB)
+{
+	const uintptr_t a = (uintptr_t)pA;
+	const uintptr_t b = (uintptr_t)pB;
+	return a <= b ? b - a < SizeA : a - b < SizeB;
+}
+
 // Out of line: the class wrapper becomes a tail call and the body addresses
 // the device state with short offsets.
 __attribute__((noinline))
 static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 								UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 								const UsbdHidCfg_t *pCfg,
+								uint8_t *pControlBuffer,
 								UsbDeviceClass *pClass)
 {
 	if (UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pReportDesc == nullptr ||
 		pCfg->ReportDescLength == 0U ||
+		((pCfg->pControlBuffer == nullptr) != (pCfg->ControlBufferSize == 0U)) ||
+		((uintptr_t)pCfg->pControlBuffer & 3U) != 0U ||
 		pCfg->pRxBuffer == nullptr || pCfg->pTxBuffer == nullptr ||
 		(((uintptr_t)pCfg->pRxBuffer | (uintptr_t)pCfg->pTxBuffer) & 3U) != 0U ||
+		(pCfg->pControlBuffer != nullptr &&
+		 (UsbdHidBufferOverlap(pCfg->pControlBuffer, pCfg->ControlBufferSize,
+			pCfg->pRxBuffer, USB_INT_INTRF_PKT_BLKSIZE) ||
+		  UsbdHidBufferOverlap(pCfg->pControlBuffer, pCfg->ControlBufferSize,
+			pCfg->pTxBuffer, USB_INT_INTRF_PKT_BLKSIZE))) ||
 		pCfg->SubClass > USB_HID_SUBCLASS_BOOT ||
 		(pCfg->SubClass == USB_HID_SUBCLASS_NONE &&
 		 pCfg->Protocol != USB_HID_PROT_NONE) ||
@@ -346,6 +432,12 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	pHid->CountryCode = pCfg->CountryCode;
 	pHid->InterfaceString = pCfg->InterfaceString;
 	pHid->pContext = pCfg->pContext;
+	pHid->GetReportCB = pCfg->GetReportCB;
+	pHid->SetReportCB = pCfg->SetReportCB;
+	pHid->pControlBuffer = pCfg->pControlBuffer != nullptr ?
+		pCfg->pControlBuffer : pControlBuffer;
+	pHid->ControlBufferSize = pCfg->pControlBuffer != nullptr ?
+		pCfg->ControlBufferSize : USBD_HID_CTRL_REPORT_SIZE;
 	pHid->ActiveProtocol = USBD_HID_PROTOCOL_REPORT;
 
 	// Zero MPS and interval values were replaced by the defaults above.
@@ -400,7 +492,46 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 bool UsbdHid::Init(const UsbdHidCfg_t &Cfg)
 {
 	return UsbdHidInitInternal(&vUsbdHid, &vUsbIntIntrf,
-		&vUsbDevIntrf, &Cfg, this);
+		&vUsbDevIntrf, &Cfg, vControlBuffer, this);
+}
+
+bool UsbdHid::InitKeyboard(const UsbdHidCfg_t &Cfg)
+{
+	static const uint8_t reportDesc[] = USB_HID_KEYBOARD_REPORT_DESC;
+	UsbdHidCfg_t cfg = Cfg;
+	cfg.pReportDesc = reportDesc;
+	cfg.ReportDescLength = sizeof(reportDesc);
+	cfg.FsMps = sizeof(UsbHidKeyboardReport_t);
+	cfg.HsMps = sizeof(UsbHidKeyboardReport_t);
+	cfg.SubClass = USB_HID_SUBCLASS_BOOT;
+	cfg.Protocol = USB_HID_PROT_KEYBOARD;
+	return Init(cfg);
+}
+
+bool UsbdHid::InitMouse(const UsbdHidCfg_t &Cfg)
+{
+	static const uint8_t reportDesc[] = USB_HID_MOUSE_REPORT_DESC;
+	UsbdHidCfg_t cfg = Cfg;
+	cfg.pReportDesc = reportDesc;
+	cfg.ReportDescLength = sizeof(reportDesc);
+	cfg.FsMps = sizeof(UsbHidMouseReport_t);
+	cfg.HsMps = sizeof(UsbHidMouseReport_t);
+	cfg.SubClass = USB_HID_SUBCLASS_BOOT;
+	cfg.Protocol = USB_HID_PROT_MOUSE;
+	return Init(cfg);
+}
+
+bool UsbdHid::Init3dMouse(const UsbdHidCfg_t &Cfg)
+{
+	static const uint8_t reportDesc[] = USB_HID_3D_MOUSE_REPORT_DESC;
+	UsbdHidCfg_t cfg = Cfg;
+	cfg.pReportDesc = reportDesc;
+	cfg.ReportDescLength = sizeof(reportDesc);
+	cfg.FsMps = sizeof(UsbHid3dMouseReport_t);
+	cfg.HsMps = sizeof(UsbHid3dMouseReport_t);
+	cfg.SubClass = USB_HID_SUBCLASS_NONE;
+	cfg.Protocol = USB_HID_PROT_NONE;
+	return Init(cfg);
 }
 
 bool UsbdHid::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,

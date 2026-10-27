@@ -24,8 +24,8 @@ configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 | [usb_hid_loopback.cpp](usb_hid_loopback.cpp) | UsbHidLoopback/ioc | Vendor HID reports |
 | [usb_hid_keyboard.cpp](usb_hid_keyboard.cpp) | UsbHidKeyboard/ioc | Button-driven boot keyboard |
 | [usb_hid_3d_mouse.cpp](usb_hid_3d_mouse.cpp) | UsbHid3dMouse/ioc | BMI323 six-axis HID reports |
-| [usb_int_loopback.cpp](usb_int_loopback.cpp) | UsbIntLoopback/ioc | Interrupt alternate settings |
-| [usb_iso_loopback.cpp](usb_iso_loopback.cpp) | UsbIsoLoopback/ioc | Isochronous alternate settings |
+| [usb_int_loopback.cpp](usb_int_loopback.cpp) | UsbIntLoopback/ioc | `UsbdInt` alternate settings |
+| [usb_iso_loopback.cpp](usb_iso_loopback.cpp) | UsbIsoLoopback/ioc | `UsbdIso` alternate settings |
 | [usb_msc_ramdisk.cpp](usb_msc_ramdisk.cpp) | UsbMscRamDisk/ioc | Disposable 64 KiB FAT12 RAM disk |
 
 Use the [USB User Guide](../../docs/usb-user-guide.md) for dependency
@@ -80,3 +80,45 @@ make -C tests/usb test ASAN_RUNTIME_OPTIONS=detect_leaks=0:strict_string_checks=
 
 These checks compile against host support and exercise the software stack;
 they do not build or run nRF52840 firmware.
+
+## Vendor Interrupt and ISO API
+
+The standalone loopback and composite stress examples use `UsbdInt` and
+`UsbdIso`. Applications supply const alternate tables, buffers and callbacks;
+the library allocates interface/endpoint numbers and builds the USB descriptors.
+The Interrupt choices remain 64 bytes at intervals 1, 4 and 16. ISO choices
+remain 9, 17, 25, 33, 49 and 63 bytes with a one-millisecond service interval.
+Alternate zero disables each function. Existing host runners and diagnostic
+request/reply formats are unchanged.
+
+`make -C tests/usb test-periodic` exercises FS/HS descriptors, bounds, resource
+exhaustion and rollback, alternate selection, reset/reconfiguration, reconnect,
+suspend/resume and the production loopback diagnostic layouts. The full `test`
+target also compiles the shared non-RTOS examples and runs the class regressions.
+TaktOS firmware still requires the external TaktOS project. Host models do not
+replace target firmware builds or physical USB tests.
+
+The HID loopback, keyboard and 3D mouse use plain `UsbdHid` objects. Their
+`GetReportCB` and `SetReportCB` functions supply or consume report bytes;
+the library handles endpoint-zero transfer stages and control buffering.
+For custom HID layouts, applications supply the report descriptor defining
+their data. The standard presets described below supply their descriptors.
+See [the HID guide](../../docs/usb-user-guide.md#hid) for callback and storage
+requirements.
+
+The keyboard example uses `UsbdHid::InitKeyboard()` and
+`UsbHidKeyboardReport_t`. The library supplies the report descriptor, boot
+protocol and endpoint packet sizes. Applications provide buffers and callbacks;
+no descriptor array, report structure or keyboard protocol fields are needed.
+
+The BMI323 3D mouse uses `UsbdHid::Init3dMouse()` and
+`UsbHid3dMouseReport_t`; its six-axis report layout is unchanged. Sensor setup,
+calibration and motion scaling remain in the application. For a conventional
+three-button X/Y boot mouse, use `InitMouse()` and `UsbHidMouseReport_t` instead.
+Neither mouse preset has a wheel or report IDs. Custom layouts still use
+`Init()` with an application-defined report descriptor.
+
+MSC needs an initialized `DiskIO`, a caller-owned sector work buffer and its
+size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
+removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
+USB descriptors; the example's FAT12 formatting only defines the disk contents.

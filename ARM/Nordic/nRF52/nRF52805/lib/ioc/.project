@@ -326,11 +326,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/types.h</locationURI>
 		</link>
 		<link>
-			<name>micro-ecc/uECC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
-		</link>
-		<link>
 			<name>micro-ecc/uECC.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.h</locationURI>
@@ -646,11 +641,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_att.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_ctlr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ctlr.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_gap.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
@@ -669,11 +659,6 @@
 			<name>include/bluetooth/bt_hcievt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_host.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_host.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_intrf.h</name>
@@ -841,11 +826,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_st77xx.h</locationURI>
 		</link>
 		<link>
-			<name>include/display/display_uc8151d.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_uc8151d.h</locationURI>
-		</link>
-		<link>
 			<name>include/display/display_uc8151x.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_uc8151x.h</locationURI>
@@ -854,11 +834,6 @@
 			<name>include/display/eink_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/display/eink_vb3300.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_vb3300.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/ifont.h</name>
@@ -979,11 +954,6 @@
 			<name>include/sensors/accel_h3lis331dl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/accel_lis2dh12.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_sensor.h</name>
@@ -1226,11 +1196,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_ctlr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ctlr.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_ead.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ead.cpp</locationURI>
@@ -1406,9 +1371,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_softaes.cpp</name>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
@@ -2794,6 +2764,31 @@
 			<name>src/coredev/timer_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto_ecb_nrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_ecb_nrf.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_ecb_nrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_ecb_nrf.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

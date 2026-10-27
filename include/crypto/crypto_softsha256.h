@@ -82,7 +82,8 @@ public:
 };
 
 /// @brief	Software SHA-256 engine implementing HashEngine and HMAC.
-class CryptoSoftSha256 : public CryptoSoftSha256Hash, public MacEngine {
+class CryptoSoftSha256 : public CryptoSoftSha256Hash, virtual public MacEngine
+{
 public:
 	CryptoSoftSha256() {}
 
@@ -94,6 +95,10 @@ public:
 	// Known-answer self-test: FIPS 180-4 SHA-256 and RFC 4231 HMAC vectors.
 	int SelfTest() override;
 };
+
+// HMAC composition over the selected hash engine; no software digest is bound.
+CRYPTO_STATUS CryptoHmacSha256(HashEngine *pHash, CRYPTO_MAC_ALG Alg,
+	const CryptoKey &Key, const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen);
 
 /// Bytes of storage CryptoSoftSha256HashCreate needs.
 #define CRYPTO_SOFTSHA256_HASH_MEMSIZE	sizeof(CryptoSoftSha256Hash)

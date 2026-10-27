@@ -41,6 +41,8 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "usb/usb.h"
 #if __has_include("board.h")
+#include "coredev/iopincfg.h"
+#include "coredev/system_core_clock.h"
 #include "board.h"
 #endif
 #include "usb/usbd_msc.h"
@@ -144,24 +146,13 @@ static const UsbCfg_t s_UsbCfg = {
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
 	.pProduct = "IOsonata MSC RAM Disk",
-	.pSerial = nullptr,
 	.pFuncName = "Mass Storage",
 	.IntPrio = 6,
 #ifdef USB_PINS
 	.pIOPinMap = s_UsbPins,
 	.NbIOPins = sizeof(s_UsbPins) / sizeof(IOPinCfg_t),
-#else
-	.pIOPinMap = nullptr,
-	.NbIOPins = 0,
 #endif
-	.DeviceClass = USB_DEVCLASS_NONE,
-	.DeviceSubClass = 0U,
-	.DeviceProtocol = 0U,
-	.bSelfPowered = false,
-	.bRemoteWakeup = false,
-	.bLowPowerSuspend = false,
 	.MaxPower = 100,
-	.EvtHandler = nullptr,
 };
 
 static const UsbdMscCfg_t s_MscCfg = {
@@ -169,14 +160,9 @@ static const UsbdMscCfg_t s_MscCfg = {
 	.pDisk = &s_RamDisk,
 	.pSectorBuffer = s_SectorBuffer,
 	.SectorBufferSize = sizeof(s_SectorBuffer),
-	.bReadOnly = false,
 	.bRemovable = true,
 	.InterfaceString = MSC_STR_INTERFACE,
-	.FsMps = 0U,
-	.HsMps = 0U,
-	.pVendor = "I-SYST",
 	.pProduct = "IOsonata RAM Disk",
-	.pRevision = "1.00",
 };
 
 int main(void)
@@ -189,9 +175,6 @@ int main(void)
 	}
 	(void)UsbEnable(USB_DEVNO);
 
-	while (1)
-	{
-		AppEvtHandlerExec();
-	}
+	AppRun();
 	return 0;
 }

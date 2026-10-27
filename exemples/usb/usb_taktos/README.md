@@ -76,11 +76,7 @@ integration on the board. A clean ARM build and hardware run are still required.
 [usb_combo_stress_taktos.cpp](../usb_combo_stress_taktos.cpp) uses the same
 device composition as the bare-metal combo example. Each benchmark contains
 its own device state, callbacks and initialization.
-[usb_combo_stress.h](../usb_combo_stress.h) contains only constants and data
-types. CDC calls use concrete objects directly to preserve the benchmark
-comparison with TinyUSB. Build the
-[UsbComboStressTaktOS/ioc](../../../ARM/Nordic/nRF52/nRF52840/exemples/UsbComboStressTaktOS/ioc)
-project with the same library configurations listed above.
+Each example keeps its constants and data types in its own source file.
 
 | Thread | Work | Stack budget, excluding kernel overhead |
 |---|---|---:|

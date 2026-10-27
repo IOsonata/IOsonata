@@ -340,6 +340,7 @@ protected:
 	~UsbDeviceClass() = default;
 
 private:
+	friend bool UsbdClassRollback(int DevNo, UsbDeviceClass *pClass);
 	friend bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 								 uint8_t FirstInterface, uint8_t InterfaceCount,
 								 uint16_t EpInMask, uint16_t EpOutMask);

@@ -183,6 +183,8 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 };
 
 static std::atomic<int> s_nRfxHFClockSem(0);
+static bool s_bTimerEnabled[TIMER_NRFX_HF_MAX];
+static bool s_bHFClockOwned = false;
 
 // Set by nRFxTimerInit. The interrupt handlers below are kept by the linker as soon as
 // this file is part of a build, used or not. They reach the timer data
@@ -201,6 +203,11 @@ static void TimerIRQHandler(int DevNo)
 	NRF_TIMER_Type *reg = s_pnRFxTimerData[DevNo].pReg;
 	const nRFTimerData_t &tdata = s_pnRFxTimerData[DevNo];
 	TimerDev_t *timer = s_pnRFxTimerDev[DevNo];
+	if (timer == nullptr)
+	{
+		return;
+	}
+
     uint32_t evt = 0;
 	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
 
@@ -318,8 +325,12 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 
-	// Clock source not available.  Only 64MHz XTAL
-	if (s_nRfxHFClockSem <= 0)
+	if (s_bTimerEnabled[devno])
+	{
+		return true;
+	}
+
+	if (s_nRfxHFClockSem == 0)
 	{
 #if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		if (!(NRF_CLOCK->PLL.STAT & CLOCK_PLL_STAT_STATE_Msk))
@@ -333,27 +344,35 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 		}
 
 #else
-		NRF_CLOCK->TASKS_HFCLKSTART = 1;
-
-		int timout = 1000000;
-
-		do
+		if (!(NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk))
 		{
-			if ((NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk) || NRF_CLOCK->EVENTS_HFCLKSTARTED)
-				break;
+			NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+			NRF_CLOCK->TASKS_HFCLKSTART = 1;
 
-		} while (timout-- > 0);
+			bool started = false;
+			for (int timeout = 1000000; timeout > 0; timeout--)
+			{
+				if (NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk)
+				{
+					started = true;
+					break;
+				}
+			}
 
-		if (timout <= 0)
-			return false;
+			if (!started)
+			{
+				NRF_CLOCK->TASKS_HFCLKSTOP = 1;
+				return false;
+			}
 
-		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+			NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+			s_bHFClockOwned = true;
+		}
 #endif
 	}
 
+	s_bTimerEnabled[devno] = true;
 	s_nRfxHFClockSem++;
-
-    reg->TASKS_START = 1;
 
 	switch (devno)
 	{
@@ -426,18 +445,27 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 
+	if (!s_bTimerEnabled[devno])
+	{
+		return;
+	}
+
+	s_bTimerEnabled[devno] = false;
 	s_nRfxHFClockSem--;
 
 	reg->TASKS_STOP = 1;
 
-	if (s_nRfxHFClockSem <= 0)
+	if (s_nRfxHFClockSem == 0)
 	{
 #if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		NRF_CLOCK->TASKS_XOSTOP = 1;
 #else
-		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
+		if (s_bHFClockOwned)
+		{
+			NRF_CLOCK->TASKS_HFCLKSTOP = 1;
+			s_bHFClockOwned = false;
+		}
 #endif
-		s_nRfxHFClockSem = 0;
 	}
 
     switch (devno)

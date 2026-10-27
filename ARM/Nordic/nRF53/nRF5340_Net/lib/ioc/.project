@@ -571,9 +571,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_softaes.cpp</name>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
@@ -1089,6 +1094,61 @@
 			<name>src/bluetooth/bt_crypto_ctlr.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_crypto_ctlr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/storage/diskio_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_region.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_rng_nrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_rng_nrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/temp_nrf5x.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/temp_nrf5x.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_ecb_nrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_ecb_nrf.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_ecb_nrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_ecb_nrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

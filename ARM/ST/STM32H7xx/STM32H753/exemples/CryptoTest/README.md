@@ -1,7 +1,7 @@
 # CryptoTest: NUCLEO-H753ZI
 
 This project runs the existing `exemples/crypto/crypto_engine_test.cpp`, also
-used by STM32WBA. It selects `CryptoRngStm32` for hardware random numbers,
+used by STM32WBA. The MCU library binds an internal implementation using `CryptoRngStm32` for hardware random numbers,
 `CryptoStm32H7Aes` for the CRYP AES accelerator and
 `CryptoStm32H7Hash` for one-shot SHA-256 and HMAC-SHA-256 on HASH.
 P-256 uses `CryptoUecc`.
@@ -24,7 +24,7 @@ native HMAC mode. No context-size or public API changes are required.
 
 Import `ioc` and `../../lib/ioc` into IOcomposer. Build the library and example
 in matching configurations. Use Release for the board test: stdout uses
-USART3/ST-LINK VCP, PD9 RX and PD8 TX, at **115200 baud, 8N1**. Debug uses
+USART3/ST-LINK VCP, PD9 RX and PD8 TX, at **1 Mbaud, 8N1**. Debug uses
 semihosting; enable `monitor arm semihosting enable` before resume. No Ethernet
 cable or external wiring is needed.
 
@@ -78,3 +78,14 @@ lengths 0/1/63/64/65/131 with message lengths 0..257 and output lengths 1..32,
 overlapping output, and input/key policy validation. The board result is
 **92 passed, 0 failed, no skips**. This is functional validation; no crypto
 throughput measurement or entropy certification is claimed.
+
+
+The shared test declares a `Crypto` object and calls its `Init()` member; `board.h`
+contains no engine selection. Rebuild both the library and application because
+the generic object layout and initialization changed. Historical 92-check board results
+above predate this integration. The updated H753 host register model passes
+100 checks with zero failures or skips at O0 and O2 under ASan/UBSan. Direct construction, failed initialization/retry and independent access by two
+application objects are also checked. Its entropy
+adapter uses host OpenSSL; physical RNG remains covered by the separate RNG
+register model and prior board tests. A new board run is required for this
+object integration.

@@ -632,3 +632,9 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 	// Not available on this Renesas
 }
 
+
+// This port has one application core and no pin ownership selector.
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+	return CoreNo == 0 && IsValidIOPin(PortNo, PinNo);
+}

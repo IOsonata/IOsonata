@@ -29,6 +29,8 @@ usbd_cdc.*       UsbdCdc        USB device CDC ACM
 usbd_bulk.*      UsbdBulk       USB device custom Bulk class
 usbd_hid.*       UsbdHid        USB device HID class
 usbd_msc.*       UsbdMsc        USB device Mass Storage BOT/SCSI class
+usbd_int.*       UsbdInt        USB device vendor Interrupt function
+usbd_iso.*       UsbdIso        USB device vendor Isochronous function
 
 usbh_*           future USB host class/driver layer
 ```
@@ -124,8 +126,36 @@ HCI command control transfers, configuration selection, HCI
 and SCO interface options, and reset run through the virtual class API. The
 underlying request and endpoint logic is reused by its virtual methods.
 
-`UsbdBulk`, `UsbdHid` and `UsbdMsc` follow the same model and register their
+`UsbdBulk`, `UsbdHid`, `UsbdMsc`, `UsbdInt` and `UsbdIso` follow the same model and register their
 class objects directly. HID inherits its transport through `UsbIntIntrf`.
+
+## Vendor Interrupt and ISO composition
+
+`UsbdInt` inherits `UsbIntIntrf`; `UsbdIso` inherits `UsbIsoIntrf`. Both use
+`UsbdPeriodic`, a `UsbDeviceClass` implementation sharing the vendor interface
+builder, alternate-setting table validation, ownership allocation and device
+configuration state. It contains no endpoint transfer engine. Each concrete
+wrapper opens and closes its existing role-neutral transport.
+
+One const `UsbdPeriodicAlt_t` table supplies full/high-speed packet sizes and
+intervals. The builder writes an inactive alternate zero and one interface plus
+OUT/IN endpoint pair per active alternate directly into the core descriptor
+buffer. No per-instance descriptor array or heap allocation is used.
+ISO allocation tries all controller-advertised bidirectional ISO candidates,
+including dedicated endpoints outside the ordinary endpoint-number limit.
+Interrupt allocation uses the existing transfer-type-aware allocator.
+
+Registration remains before `UsbEnable`. Descriptor registration checks the
+aggregate configuration-buffer bound. `UsbdClassRollback` is an internal,
+last-registration-only rollback before connection, used when a new wrapper's
+initialization fails. It releases ownership and descriptor metadata without
+renumbering existing classes. No running class may be removed through it.
+
+The device classes implement configuration and interface selection, reset and
+detach. ISO uses `Process` for suspend/resume, with interrupt exclusion around
+its state check. Application-specific requests still override `Control`; the
+library does not know the loopback diagnostic protocol. See the
+[USB user guide](../usb-user-guide.md#interrupt-and-isochronous-functions).
 
 ## Current device-side data-path model
 
@@ -154,7 +184,7 @@ interface lifetime. C++ initialization supplies the inherited storage.
            UsbdCdc      UsbdBulk / UsbdMsc  UsbIsoIntrf / UsbIntIntrf
               |                |                         |
            Bulk EP          Bulk EP                  ISO / INT EP
-           BYTE mode        BYTE/PACKET              DIRECT mode
+           BYTE mode        BYTE/PACKET           PACKET / DIRECT
 ```
 
 The inheritance view is intentionally small:
@@ -230,11 +260,20 @@ UsbIntrf (PACKET mode)
 Bulk OUT/IN endpoint pair
 ```
 
-The class owns fixed endpoint FIFOs and an OUT DMA buffer. The application supplies
+The class owns fixed endpoint FIFOs. The application supplies
 a statically owned `DiskIO` and a statically allocated sector buffer. Class
 initialization rejects a medium whose reported sector size exceeds that
 buffer. `DiskIO` remains responsible for physical read, write, reset and cache
 flush behavior.
+
+MSC shares one aligned scratch region between received packets and small SCSI
+responses. BOT reads an OUT packet only in WAIT_CBW or DATA_OUT; the CBW is
+copied into command state before a response is built. DATA_IN and status
+transfers use separate TX storage, and newly received packets remain in the
+RX FIFO until consumed. Sharing this foreground scratch space saves 36 bytes
+per MSC instance without reducing FIFO capacity or caller-owned sector memory.
+Rebuild the MCU library and applications together after this object-layout
+change. Public configuration and transfer calls are unchanged.
 
 Substantial SCSI and storage work runs from `UsbdMsc::Process()`, not from the
 USB interrupt. Malformed CBWs and phase errors use the core endpoint-halt state
@@ -268,12 +307,12 @@ Future host-side classes should reuse the same `UsbIsoIntrf` transport layer
 instead of introducing a separate `UsbhIsoIntrf` with duplicated transfer
 logic.
 
-`UsbIsoIntrf` owns only ISO-specific behavior:
+`UsbIsoIntrf` owns ISO-specific behavior:
 
 - open/configure an endpoint pair as Isochronous;
 - ISO maximum packet size and service interval;
 - ISO synchronization/usage attributes;
-- DIRECT data-policy selection;
+- packet FIFO data-policy selection;
 - reset/suspend/resume transport state;
 - frame-facing convenience callbacks and counters.
 
@@ -287,10 +326,10 @@ logic.
 - endpoint transfer submission;
 - transfer completion handling.
 
-ISO always configures `UsbIntrf` with `bBlocking = false`. An isochronous
-service opportunity cannot be backpressured and retried like Bulk. If software
-cannot keep up, data is missed/dropped according to the non-blocking path rather
-than delaying the service interval.
+ISO configures `UsbIntrf` with blocking packet FIFOs. The controller retains
+the TX head until completion; a full TX queue refuses the next frame. A full
+RX FIFO has no destination for the next OUT frame, so that frame is dropped;
+isochronous traffic cannot be backpressured on the bus.
 
 There is no independent ISO controller transfer engine and no class-level
 completion forwarding path.
@@ -298,7 +337,7 @@ completion forwarding path.
 ## Interrupt transfer
 
 `UsbIntIntrf` is the role-neutral Interrupt specialization of `UsbIntrf`. It
-uses the same DIRECT storage policy as `UsbIsoIntrf`, but opens its endpoint
+uses DIRECT storage and opens its endpoint
 pair with `USB_ENDPATT_TRANS_INT` and owns the interrupt polling interval.
 
 Interrupt slots are caller-owned. `UsbIntIntrfCfg_t` and `UsbdHidCfg_t`
@@ -352,8 +391,7 @@ receive DMA using the registered buffer.
 `UsbIntIntrf` contains no HID report or descriptor behavior. `UsbdHid` inherits
 it and owns the device-side HID descriptor, class requests and report policy.
 
-The nRF52840 `UsbIntLoopback` project exercises this transport without adding
-class semantics. See the [USB User Guide](../usb-user-guide.md) for its build and host
+The nRF52840 `UsbIntLoopback` project uses `UsbdInt` above this transport. See the [USB User Guide](../usb-user-guide.md) for its build and host
 test procedure.
 
 ## HID
@@ -367,7 +405,7 @@ opens its endpoints when configuration 1 becomes active.
 UsbdHid
     |
     +-- HID descriptor and class requests
-    +-- application report descriptor
+    +-- preset or application report descriptor
     |
     v
 UsbIntIntrf
@@ -376,8 +414,15 @@ UsbIntIntrf
 Interrupt OUT/IN endpoint pair
 ```
 
-The application supplies the report descriptor and the staged handler for
-`GET_REPORT` and `SET_REPORT`. `UsbdHid` handles the HID descriptor,
+`InitKeyboard()`, `InitMouse()` and `Init3dMouse()` supply standard report
+descriptors. Custom layouts use `Init()` with an application-owned report
+descriptor. Applications may supply `GetReportCB` / `SetReportCB` callbacks. `UsbdHid` owns the control-transfer stages, validates
+report direction/type and buffer bounds, snapshots GET_REPORT data, and calls
+SET_REPORT only when its full payload has arrived. Each object has a 64-byte
+control buffer; larger reports use optional caller-owned storage. Reset,
+unconfiguration and transfer abort discard pending control-report state.
+The role-neutral `UsbIntIntrf` transport is unchanged.
+`UsbdHid` also handles the HID descriptor,
 `GET/SET_IDLE` and boot-subclass `GET/SET_PROTOCOL`. All USB and HID constants
 and descriptor structures come from `usb_def.h` and `usb_hiddef.h`.
 
@@ -598,7 +643,7 @@ Transfer type and data-path mode are separate:
 CDC       = Bulk + byte mode
 UsbdBulk  = Bulk + byte or packet mode
 UsbdMsc   = Mass Storage BOT/SCSI + Bulk packet mode
-UsbIsoIntrf = Isochronous + DIRECT mode
+UsbIsoIntrf = Isochronous + PACKET mode
 UsbIntIntrf = Interrupt + DIRECT mode
 UsbdHid   = HID class + UsbIntIntrf
 ```
@@ -688,7 +733,7 @@ Follow these rules when adding a class, transfer type or future host support:
    Isochronous operation.
 8. Nonzero endpoint events go directly to the registered endpoint owner.
 9. `UsbIntrf` remains the common endpoint-pair data engine.
-10. CDC and Bulk use BYTE/PACKET; ISO and Interrupt specializations use DIRECT.
+10. CDC and Bulk use BYTE/PACKET; ISO uses PACKET; Interrupt uses DIRECT.
 11. `UsbIsoIntrf` must not contain device descriptors, device Chapter 9 policy,
     host enumeration policy or class-specific packet semantics.
 12. Class-owned Interrupt endpoints do not need to pass through `UsbIntrf` when

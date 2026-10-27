@@ -922,10 +922,9 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		return true;
 	}
 
-	// Each packet is a payload of its own and gets its own randomizer, which
-	// is what CSS Part A 1.23.4 asks for. An empty packet is left alone: an
-	// Encrypted Data structure holding nothing tells a scanner this device
-	// uses the feature and nothing else, which is information for free.
+	// Each non-empty packet is a payload of its own and gets its own
+	// randomizer, which is what CSS Part A 1.23.4 asks for. Empty packets stay
+	// absent; an Encrypted Data payload must contain one or more AD structures.
 	if (pAdvPkt != nullptr && pAdvPkt->Len > 0 &&
 		s_pBtAdvEadEncrypt(pAdvPkt) == false)
 	{

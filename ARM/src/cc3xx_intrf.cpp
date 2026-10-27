@@ -112,6 +112,34 @@ static inline volatile uint32_t *Cc3xxWord(uint32_t Offset)
 	return (volatile uint32_t *)(s_Base + Offset);
 }
 
+// memcpy permits unaligned caller buffers while MMIO remains word-sized.
+// Both the C transfer callbacks and C++ complete transfers use these loops.
+static void Cc3xxReadWords(uint32_t Offset, uint8_t *pBuff, int Len)
+{
+	volatile uint32_t *words = Cc3xxWord(Offset);
+	uint32_t value;
+	int i;
+
+	for (i = 0; i < Len; i += 4)
+	{
+		value = *words++;
+		memcpy(pBuff + i, &value, sizeof(value));
+	}
+}
+
+static void Cc3xxWriteWords(uint32_t Offset, const uint8_t *pData, int Len)
+{
+	volatile uint32_t *words = Cc3xxWord(Offset);
+	uint32_t value;
+	int i;
+
+	for (i = 0; i < Len; i += 4)
+	{
+		memcpy(&value, pData + i, sizeof(value));
+		*words++ = value;
+	}
+}
+
 // Clear a copy of random data. Volatile, so the stores are not dropped as
 // unused.
 static void Cc3xxRngClear(void *p, size_t Len)
@@ -301,19 +329,11 @@ static int Cc3xxRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 	{
 		return Cc3xxRngRead(pBuff, BuffLen) ? BuffLen : 0;
 	}
-	if (!s_bAddrLatched)
+	if (!s_bAddrLatched || (s_Offset & 3U) != 0U || (BuffLen & 3) != 0)
 	{
 		return 0;
 	}
-	volatile uint32_t *w = Cc3xxWord(s_Offset);
-	for (int i = 0; i + 4 <= BuffLen; i += 4)
-	{
-		uint32_t v = w[i / 4];
-		pBuff[i] = (uint8_t)v;
-		pBuff[i + 1] = (uint8_t)(v >> 8);
-		pBuff[i + 2] = (uint8_t)(v >> 16);
-		pBuff[i + 3] = (uint8_t)(v >> 24);
-	}
+	Cc3xxReadWords(s_Offset, pBuff, BuffLen);
 	return BuffLen;
 }
 
@@ -366,12 +386,11 @@ static int Cc3xxTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int Data
 	}
 	int len = DataLen - consumed;
 	const uint8_t *p = &pData[consumed];
-	volatile uint32_t *w = Cc3xxWord(s_Offset);
-	for (int i = 0; i + 4 <= len; i += 4)
+	if ((s_Offset & 3U) != 0U || (len & 3) != 0)
 	{
-		w[i / 4] = (uint32_t)p[i] | ((uint32_t)p[i + 1] << 8) |
-				   ((uint32_t)p[i + 2] << 16) | ((uint32_t)p[i + 3] << 24);
+		return 0;
 	}
+	Cc3xxWriteWords(s_Offset, p, len);
 	return DataLen;
 }
 
@@ -393,6 +412,46 @@ static void Cc3xxPowerOff(DevIntrf_t * const pDevIntrf)
 	Cc3xxDisable();
 }
 static void *Cc3xxGetHandle(DevIntrf_t * const pDevIntrf) { (void)pDevIntrf; return nullptr; }
+
+int Cc3xxIntrf::Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+	uint8_t *pBuff, int BuffLen)
+{
+	uint32_t offset;
+
+	if (DevAddr != CC3XX_ADDR_REG || pAdCmd == nullptr || AdCmdLen != 4 ||
+		pBuff == nullptr || BuffLen <= 0 || (BuffLen & 3) != 0)
+	{
+		return 0;
+	}
+	memcpy(&offset, pAdCmd, sizeof(offset));
+	if ((offset & 3U) != 0U || !DeviceIntrfStartRx(&vDevIntrf, DevAddr))
+	{
+		return 0;
+	}
+	Cc3xxReadWords(offset, pBuff, BuffLen);
+	DeviceIntrfStopRx(&vDevIntrf);
+	return BuffLen;
+}
+
+int Cc3xxIntrf::Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+	const uint8_t *pData, int DataLen)
+{
+	uint32_t offset;
+
+	if (DevAddr != CC3XX_ADDR_REG || pAdCmd == nullptr || AdCmdLen != 4 ||
+		pData == nullptr || DataLen <= 0 || (DataLen & 3) != 0)
+	{
+		return 0;
+	}
+	memcpy(&offset, pAdCmd, sizeof(offset));
+	if ((offset & 3U) != 0U || !DeviceIntrfStartTx(&vDevIntrf, DevAddr))
+	{
+		return 0;
+	}
+	Cc3xxWriteWords(offset, pData, DataLen);
+	DeviceIntrfStopTx(&vDevIntrf);
+	return DataLen;
+}
 
 bool Cc3xxIntrf::Init(void)
 {

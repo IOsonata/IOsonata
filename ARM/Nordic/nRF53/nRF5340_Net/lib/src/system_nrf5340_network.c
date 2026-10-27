@@ -44,10 +44,15 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 // Overload this variable in application firmware to change oscillator
 __WEAK McuOsc_t g_McuOsc = {
-	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20 },
-	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20 },
+	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 0 },
+	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 0 },
 	.bUSBClk = false
 };
+
+uint32_t SystemCoreClockGet(void)
+{
+	return SystemCoreClock;
+}
 
 void SystemCoreClockUpdate(void)
 {

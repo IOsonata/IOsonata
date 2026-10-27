@@ -1741,9 +1741,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_softaes.cpp</name>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
@@ -1899,6 +1904,127 @@
 			<name>include/bluetooth/bt_hci_h4_ctlr.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_h4_ctlr.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_cc3xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/crypto_cc3xx.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/cc3xx_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/cc3xx_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_rng_nrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_rng_nrf.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_cc3xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/crypto_cc3xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_cc3xx_sym.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/crypto_cc3xx_sym.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/cc3xx_intrf_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/cc3xx_intrf_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/rng_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/cc3xx_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/cc3xx_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/color_bh1745.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/color_bh1745.h</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/color_bh1745.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/color_bh1745.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/gas_ccs811.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gas_ccs811.h</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/gas_ccs811.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gas_ccs811.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/ioexp_sx1509.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/ioexp_sx1509.h</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/ioexp_sx1509.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/ioexp_sx1509.cpp</locationURI>
+		</link>
+
+		<link>
+			<name>include/audio/cs47l63.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/cs47l63.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwrmgnt/pm_npm1100.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_npm1100.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/ina230.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ina230.h</locationURI>
+		</link>
+		<link>
+			<name>src/audio/cs47l63.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/cs47l63.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_npm1100.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_npm1100.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/ina230.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ina230.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/i2s_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2s_nrfx.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -44,6 +44,7 @@ MULTICONFIG_SOURCES := usb_multiconfig_test.cpp $(filter-out usb_core_test.cpp,$
 LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
 LINK_SOURCES := \
 	usb_stack_link_test.cpp \
+	$(ROOT)/src/usb/usbd_hid.cpp $(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/usb/usb.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
@@ -225,6 +226,7 @@ TARGETS += $(MSC_TARGET) $(MULTICONFIG_TARGET)
 all: test
 
 test: $(TARGETS) examples-build
+	$(MAKE) test-periodic
 	$(MAKE) test-combo-init
 	$(MAKE) test-combo-prbs
 	$(MAKE) test-combo-shutdown
@@ -270,8 +272,16 @@ test-iso-host-sched:
 
 test-c-header:
 	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
+		'#include "usb/usbd_int.h"' '#include "usb/usbd_iso.h"' \
 		'#include "usb/usbd_hid.h"' '#include "usb/usb_mscdef.h"' \
+		'static const uint8_t keyboard[] = USB_HID_KEYBOARD_REPORT_DESC;' \
+		'_Static_assert(sizeof(UsbHidKeyboardReport_t) == 8, "keyboard size");' \
+		'static const uint8_t mouse[] = USB_HID_MOUSE_REPORT_DESC;' \
+		'static const uint8_t mouse3d[] = USB_HID_3D_MOUSE_REPORT_DESC;' \
+		'_Static_assert(sizeof(UsbHidMouseReport_t) == 3, "mouse size");' \
+		'_Static_assert(sizeof(UsbHid3dMouseReport_t) == 12, "3d mouse size");' \
 		'int main(void) {' \
+		' (void)keyboard; (void)mouse; (void)mouse3d;' \
 		' return UsbIsoIntrfTxReady((const UsbIsoIntrf_t *)0) ? 1 : 0;' '}' | \
 		$(CC) $(CPPFLAGS) $(CFLAGS) -x c -fsyntax-only -
 
@@ -442,3 +452,8 @@ $(MULTICONFIG_TARGET): $(MULTICONFIG_SOURCES) usb_core_test.cpp $(HEADERS)
 test-sam4l:
 	CXX=$(CXX) python3 ./sam4l_usb_ctrlr_test.py
 	CXX=$(CXX) python3 ./sam4l_usb_platform_test.py
+
+
+.PHONY: test-periodic
+test-periodic:
+	CXX="$(CXX)" python3 ./periodic_test.py

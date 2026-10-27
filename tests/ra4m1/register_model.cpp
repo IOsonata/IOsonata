@@ -23,7 +23,7 @@ static void delay_us(uint32_t);
 #define RA4M1_TEST_DELAY_US(us) delay_us(us)
 #include "ra4m1xxx.h"
 #include "ra4m1_host_regs.h"
-#include "../../ARM/Renesas/RA4M1/src/system_ra4m1.c"
+#include "system_ra4m1_model.c"
 SCB_Type test_scb;
 uint32_t test_primask, test_disabled, test_cleared;
 uint32_t SystemMicroSecLoopCnt;
@@ -55,7 +55,17 @@ static void check_clocks(void)
 	if(ic>32000000){assert(sys[0x31]==1);assert((sys[0xA0]&3)==0);}
 }
 static uint8_t rd8(uintptr_t a){assert(a>=0x4001E000UL && a<0x4001E500UL);return sys[a-0x4001E000UL];}
-static uint16_t rd16(uintptr_t a){if(a==RA4M1_PRCR)return protect;if(a==RA4M1_FCACHEE)return cache;if(a==RA4M1_FCACHEIV)return invalid;assert(a==RA4M1_USB_SYSCFG);return usb_cfg;}
+static uint16_t rd16(uintptr_t a)
+{
+	if (a == RA4M1_PRCR)
+		return protect;
+	if (a == RA4M1_FCACHEE)
+		return cache;
+	if (a == RA4M1_FCACHEIV)
+		return invalid;
+	assert(false && "startup must not read the stopped USB controller");
+	return 0;
+}
 static uint32_t rd32(uintptr_t a){if(a==RA4M1_SCKDIVCR)return dividers;assert(a>=RA4M1_IELSR(0)&&a<=RA4M1_IELSR(31));return links[(a-RA4M1_IELSR(0))/4];}
 static void wr8(uintptr_t a,uint8_t v)
 {
@@ -126,14 +136,23 @@ int main(void)
 	for(unsigned i=0;i<7;i++){reset_model();assert(!SystemCoreClockSelect(OSC_TYPE_RC,bad[i]));assert(writes==0&&SystemCoreClock==500000);pass("invalid RC frequency rejected without register writes");}
 	reset_model();assert(!SystemCoreClockSelect((OSC_TYPE)99,12000000));assert(writes==0);pass("unknown oscillator type rejected");
 	const uint32_t exts[]={4000000,6000000,8000000,12000000};
-	for(unsigned i=0;i<4;i++){reset_model();input_hz=exts[i];g_McuOsc.bUSBClk=true;assert(SystemCoreClockSelect(OSC_TYPE_XTAL,input_hz));assert(SystemCoreClock==48000000&&SystemUsbClockGet()==48000000);assert(sys[0x74]==0);pass("external crystal to exact 48 MHz PLL and USB source");}
+	for (unsigned i = 0; i < 4; i++)
+	{
+		reset_model();
+		input_hz = exts[i];
+		g_McuOsc.bUSBClk = true;
+		assert(SystemCoreClockSelect(OSC_TYPE_XTAL, input_hz));
+		assert(SystemCoreClock == 48000000 && SystemUsbClockGet() == 48000000);
+		assert(sys[0xD0] == 0);
+		pass("external crystal to exact 48 MHz PLL and USB source");
+	}
 	reset_model();input_hz=12000000;assert(SystemCoreClockSelect(OSC_TYPE_TCXO,input_hz));assert(sys[0x413]==0x40&&sys[0xA2]==0&&SystemCoreClock==48000000);pass("external-clock bypass and zero MOSC wait");
 	const uint32_t direct[]={1000000,10000000,12288000,16000000,20000000};
 	for(unsigned i=0;i<5;i++){reset_model();input_hz=direct[i];assert(SystemCoreClockSelect(OSC_TYPE_XTAL,input_hz));assert(SystemCoreClock==input_hz&&sys[0x26]==3&&sys[0x31]==0);pass("external frequencies without exact PLL solution use MOSC directly");}
-	reset_model();g_McuOsc.bUSBClk=true;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0x74]==1&&SystemUsbClockGet()==48000000);pass("48 MHz HOCO USB source, controller stays disabled");
+	reset_model();g_McuOsc.bUSBClk=true;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0xD0]==1&&SystemUsbClockGet()==48000000);pass("48 MHz HOCO USB source, controller stays disabled");
 	reset_model();g_McuOsc.bUSBClk=true;assert(!SystemCoreClockSelect(OSC_TYPE_XTAL,16000000));assert(writes==0);pass("USB request rejects non-48 MHz plan");
-	reset_model();g_McuOsc.bUSBClk=true;sys[0x62]=1;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_USB_CLOCK&&SystemUsbClockGet()==0);pass("nonzero HOCO user trim is not silently used for USB");
-	reset_model();usb_cfg=0x400;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_USB_CLOCK&&dividers==RA4M1_RESET_DIV);pass("clock change refused with USB SCKE enabled");
+	reset_model();g_McuOsc.bUSBClk=true;sys[0x62]=1;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0x62]==0&&SystemUsbClockGet()==48000000);pass("USB startup clears retained HOCO user trim");
+	reset_model();assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));pass("startup never accesses the stopped USB controller");
 	for(unsigned mode=1;mode<=3;mode++){reset_model();sys[0xA0]=mode;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0xA0]==0);pass("legal slow-clock operating-mode entry");}
 	reset_model();sys[0xAA]=1;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_BAD_ENTRY);pass("Subosc-mode transition refused");
 	reset_model();sys[0x40]=0x80;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_BAD_ENTRY);pass("enabled clock-stop detector prevents unsafe oscillator stop");

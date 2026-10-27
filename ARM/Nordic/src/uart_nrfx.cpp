@@ -50,6 +50,12 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
+#if defined(NRF5340_XXAA_NETWORK)
+#define NRF53_SERIAL0_IRQ SERIAL0_IRQn
+#else
+#define NRF53_SERIAL0_IRQ SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -157,6 +163,9 @@ typedef struct __nRF_UART_Dev {
 	uint32_t CtsPin;
 	uint32_t RtsPin;
 	uint32_t RxDmaCnt;
+#if defined(NRF54L_SERIES)
+	uint32_t TxDmaLen;
+#endif
 	uint8_t RxFifoMem[NRFX_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[NRFX_UART_CFIFO_SIZE];
 	uint8_t RxDmaMem[NRFX_UART_RXDMA_SIZE];
@@ -558,6 +567,29 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	{
 		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+#if defined(NRF54L_SERIES)
+		// TX.END also occurs when transmission was stopped early. Resume
+		// the unsent suffix before consuming more bytes from the FIFO.
+		if (dev->TxDmaLen != 0U)
+		{
+			uint32_t sent = dev->pDmaReg->DMA.TX.AMOUNT;
+			if (sent > dev->TxDmaLen)
+			{
+				sent = dev->TxDmaLen;
+			}
+			if (sent < dev->TxDmaLen)
+			{
+				uint32_t remaining = dev->TxDmaLen - sent;
+				memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);
+				dev->TxDmaLen = remaining;
+				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = remaining;
+				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
+				return;
+			}
+			dev->TxDmaLen = 0U;
+		}
+#endif
 
 		int l = NRFX_UART_TXDMA_SIZE;
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
@@ -570,6 +602,9 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			// if uart tx has not completed in time.
 			memcpy(dev->TxDmaMem, p, l);
 
+			#if defined(NRF54L_SERIES)
+			dev->TxDmaLen = (uint32_t)l;
+#endif
 			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
 			NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
 			NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
@@ -864,7 +899,10 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
         			// if uart tx has not completed in time.
         			memcpy(dev->TxDmaMem, p, l);
 
-					NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
+					#if defined(NRF54L_SERIES)
+			dev->TxDmaLen = (uint32_t)l;
+#endif
+			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
 					NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
 					NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
         		}
@@ -1301,6 +1339,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	s_nRFxUARTDev[devno].pUartDev->RxDropCnt = 0;
 	s_nRFxUARTDev[devno].pUartDev->TxDropCnt = 0;
 	s_nRFxUARTDev[devno].RxDmaCnt = 0;
+#if defined(NRF54L_SERIES)
+	s_nRFxUARTDev[devno].TxDmaLen = 0U;
+#endif
 
 
 	pDev->DevIntrf.bTxReady = true;
@@ -1465,9 +1506,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 			break;
 #elif defined(NRF53_SERIES)
     		case 0:
-                NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
-                NVIC_SetPriority(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn, pCfg->IntPrio);
-                NVIC_EnableIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
+				NVIC_ClearPendingIRQ(NRF53_SERIAL0_IRQ);
+				NVIC_SetPriority(NRF53_SERIAL0_IRQ, pCfg->IntPrio);
+				NVIC_EnableIRQ(NRF53_SERIAL0_IRQ);
                 break;
 #ifdef NRF5340_XXAA_APPLICATION
     	    case 1:

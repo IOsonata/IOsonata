@@ -50,7 +50,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-TARGET = ROOT / 'ARM/Renesas/RA4M1'
+TARGET = ROOT / 'ARM/Renesas/RA4/RA4M1'
 BUILD = HERE / 'build/uart'
 
 

@@ -54,7 +54,6 @@ class CryptoRngStm32 : public RngEngine {
 public:
 	CryptoRngStm32() : vbEnabled(false) {
 		vbValid = false;
-		atomic_flag_clear(&vOpBusy);
 	}
 
 	bool Enable() override;
@@ -62,10 +61,12 @@ public:
 	void Reset() override;
 
 	CRYPTO_STATUS Random(uint8_t *pOut, size_t Len) override;
-	bool IsSecure() const override { return true; }
+	bool IsSecure() const override
+	{
+		return vbValid && vbEnabled;
+	}
 
 private:
-	atomic_flag vOpBusy;
 	bool vbEnabled;
 };
 

@@ -641,3 +641,9 @@ void EXTI15_10_IRQHandler(void) { Stm32ExtiDispatch(10U, 15U); }
 
 }
 
+
+// This port has one application core and no pin ownership selector.
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+	return CoreNo == 0 && (unsigned)PinNo < 16U && Stm32Gpio(PortNo) != NULL;
+}

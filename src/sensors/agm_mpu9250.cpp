@@ -37,7 +37,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 #include "sensors/agm_mpu9250.h"
-#include "iopinctrl.h"
 
 bool AgmMpu9250::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 {
@@ -88,6 +87,13 @@ bool AgmMpu9250::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 
 		msDelay(10);
 
+		if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+		{
+			regaddr = MPU9250_AG_INT_PIN_CFG;
+			if (!Write8(&regaddr, 1, MPU9250_AG_INT_PIN_CFG_BYPASS_EN))
+				return false;
+		}
+
 		regaddr = MPU9250_MAG_CTRL2;
 		d = MPU9250_MAG_CTRL2_SRST;
 		MagMpu9250::Write(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, &d, 1);
@@ -136,6 +142,17 @@ bool AgmMpu9250::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 
 	regaddr = MPU9250_AG_I2C_MST_CTRL;
 	Write8(&regaddr, 1, mst);
+
+	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+	{
+		regaddr = MPU9250_AG_INT_PIN_CFG;
+		if (!Write8(&regaddr, 1, MPU9250_AG_INT_PIN_CFG_BYPASS_EN))
+		{
+			vbInitialized = false;
+			Valid(false);
+			return false;
+		}
+	}
 
 	// Enable FIFO
 
@@ -441,7 +458,12 @@ bool MagMpu9250::Init(const MagSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer 
 	msDelay(10);
 
 	regaddr = MPU9250_MAG_ASAX;
-	Read(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, d, 3);
+	if (Read(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, d, 3) != 3)
+	{
+		regaddr = MPU9250_AG_INT_ENABLE;
+		Write8(&regaddr, 1, intval);
+		return false;
+	}
 
 	vMagSenAdj[0] = (int16_t)d[0] - 128;
 	vMagSenAdj[1] = (int16_t)d[1] - 128;
@@ -825,6 +847,74 @@ uint32_t GyroMpu9250::Sensitivity(uint32_t Value)
 	return GyroSensor::Sensitivity(sen);
 }
 
+bool AgmMpu9250::UpdateRawData()
+{
+	uint8_t regaddr = MPU9250_AG_ACCEL_XOUT_H;
+	uint8_t data[14];
+	uint8_t mag[8];
+	int32_t value;
+	unsigned i;
+	uint64_t timestamp = vpTimer != nullptr ? vpTimer->uSecond() : 0;
+	bool available = false;
+
+	if (!Valid())
+		return false;
+	// Always read the complete contiguous AG/temperature block. Its layout
+	// does not change when only one of the two motion sensors is enabled.
+	if (vbSensorEnabled[MPU9250_ACCEL_IDX] || vbSensorEnabled[MPU9250_GYRO_IDX])
+	{
+		if (Read(&regaddr, 1, data, sizeof(data)) != (int)sizeof(data))
+			return false;
+		value = (int16_t)((data[6] << 8) | data[7]);
+		TempSensor::vData.Temperature = 2100 + value * 10000 / 33387;
+		TempSensor::vData.Timestamp = timestamp;
+		for (i = 0; i < 3; ++i)
+		{
+			if (vbSensorEnabled[MPU9250_ACCEL_IDX])
+				AccelSensor::vData.Val[i] = (int16_t)((data[2 * i] << 8) | data[2 * i + 1]);
+			if (vbSensorEnabled[MPU9250_GYRO_IDX])
+				GyroSensor::vData.Val[i] = (int16_t)((data[8 + 2 * i] << 8) | data[9 + 2 * i]);
+		}
+		if (vbSensorEnabled[MPU9250_ACCEL_IDX])
+		{
+			AccelSensor::vData.Timestamp = timestamp;
+			AccelSensor::vData.Temp = TempSensor::vData.Temperature;
+			AccelSensor::vSampleTime = timestamp;
+			AccelSensor::vSampleCnt++;
+		}
+		if (vbSensorEnabled[MPU9250_GYRO_IDX])
+		{
+			GyroSensor::vData.Timestamp = timestamp;
+			GyroSensor::vData.Temp = TempSensor::vData.Temperature;
+			GyroSensor::vSampleTime = timestamp;
+			GyroSensor::vSampleCnt++;
+		}
+		available = true;
+	}
+	if (vbSensorEnabled[MPU9250_MAG_IDX])
+	{
+		// Read ST2 as well: it releases the AK8963 sample latch.
+		regaddr = MPU9250_MAG_ST1;
+		if (MagMpu9250::Read(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, mag, sizeof(mag)) != (int)sizeof(mag))
+			return available;
+		if ((mag[0] & MPU9250_MAG_ST1_DRDY) && !(mag[7] & MPU9250_MAG_ST2_HOFL))
+		{
+			for (i = 0; i < 3; ++i)
+			{
+				value = (int16_t)(mag[1 + 2 * i] | (mag[2 + 2 * i] << 8));
+				// Apply factory trim in counts; MagSensor applies nT/count once.
+				MagSensor::vData.Val[i] = value * (256 + vMagSenAdj[i]) / 256;
+				MagSensor::vData.Sensitivity[i] = MagSensor::vSensitivity[i];
+			}
+			MagSensor::vData.Timestamp = timestamp;
+			MagSensor::vSampleTime = timestamp;
+			MagSensor::vSampleCnt++;
+			available = true;
+		}
+	}
+	return available;
+}
+
 bool AgmMpu9250::UpdateData()
 {
 	uint8_t regaddr = MPU9250_AG_FIFO_COUNT_H;//MPU9250_AG_ACCEL_XOUT_H;
@@ -832,6 +922,9 @@ bool AgmMpu9250::UpdateData()
 	uint16_t val;
 	uint16_t cnt;
 	uint64_t t = 0;
+
+	if (!vbDmpEnabled)
+		return UpdateRawData();
 
 	//vSampleCnt++;
 
@@ -1044,9 +1137,7 @@ void AgmMpu9250::IntHandler()
 	//printf("int %x\r\n", d);
 	if (d & MPU9250_AG_INT_STATUS_RAW_DATA_RDY_INT)
 	{
-		IOPinSet(0, 24);
 		UpdateData();
-		IOPinClear(0, 24);
 	}
 }
 
@@ -1266,3 +1357,4 @@ void MagMpu9250::Disable()
 	uint8_t d = 0;
 	Write(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, &d, 1);
 }
+

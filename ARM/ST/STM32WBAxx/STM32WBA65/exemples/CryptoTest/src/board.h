@@ -44,7 +44,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BOARD				STM32WBA65I_DK1
 
 #include "stm32_boards.h"
-#include "coredev/system_core_clock.h"
 
 // Output on USART2, the Arduino D0/D1 pins, also the second ST-LINK virtual
 // COM port. The test prints one line per check and the totals.
@@ -56,28 +55,5 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_TX_PORT		IOPORTB
 #define UART_TX_PIN			12
 #define UART_TX_PINOP		IOPINOP_FUNC7
-
-// Engines under test: the STM32WBA AES, PKA and RNG blocks. The software
-// engines are the reference inside the test.
-#define CRYPTO_TEST_ENGINE_HEADER	"crypto/crypto_stm32wba.h"
-
-#define CRYPTO_TEST_AES_TYPE		CryptoWbaAes
-#define CRYPTO_TEST_AES_MEMSIZE		CRYPTO_WBA_AES_MEMSIZE
-#define CRYPTO_TEST_AES_CREATE(m, s)	CryptoWbaAesCreate((m), (s))
-
-#define CRYPTO_TEST_PKA_TYPE		CryptoWbaPka
-#define CRYPTO_TEST_PKA_MEMSIZE		CRYPTO_WBA_PKA_MEMSIZE
-#define CRYPTO_TEST_PKA_CREATE(m, s, r)	CryptoWbaPkaCreate((m), (s), (r))
-
-#define CRYPTO_TEST_RNG_TYPE		CryptoWbaRng
-#define CRYPTO_TEST_RNG_MEMSIZE		CRYPTO_WBA_RNG_MEMSIZE
-#define CRYPTO_TEST_RNG_CREATE(m, s)	CryptoWbaRngCreate((m), (s))
-
-// Timing from the Cortex-M33 cycle counter (DWT), needs no library
-#define CRYPTO_TEST_TICKS_INIT()	do { \
-		*(volatile uint32_t *)0xE000EDFCU |= (1U << 24); \
-		*(volatile uint32_t *)0xE0001000U |= 1U; } while (0)
-#define CRYPTO_TEST_TICKS()			(*(volatile uint32_t *)0xE0001004U)
-#define CRYPTO_TEST_TICKS_PER_US	(SystemCoreClockGet() / 1000000U)
 
 #endif

@@ -114,6 +114,8 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 };
 
 static std::atomic<int> s_nRfxLFClockSem(0);
+static bool s_bRtcEnabled[TIMER_NRFX_RTC_MAX];
+static bool s_bLFClockOwned = false;
 
 // Set by nRFxRtcInit. The interrupt handlers below are kept by the linker as soon as
 // this file is part of a build, used or not. They reach the timer data
@@ -129,47 +131,52 @@ static void RtcIRQHandler(int DevNo)
 		return;
 	}
 
-	NRF_RTC_Type *reg = s_pnRfxRtcData[DevNo].pReg;
 	TimerDev_t *timer = s_pnRfxRtcDev[DevNo];
+	if (timer == nullptr)
+	{
+		return;
+	}
+
+	NRF_RTC_Type *reg = s_pnRfxRtcData[DevNo].pReg;
     uint32_t evt = 0;
     uint32_t count = reg->COUNTER;
 
     if (reg->EVENTS_TICK)
-    {
+	{
         evt |= TIMER_EVT_TICK;
         reg->EVENTS_TICK = 0;
-    }
+	}
 
     if (reg->EVENTS_OVRFLW)
-    {
+	{
     	timer->Rollover += 0x1000000ULL;
         evt |= TIMER_EVT_COUNTER_OVR;
         reg->EVENTS_OVRFLW = 0;
-    }
+	}
 
     timer->LastCount = count;
 
 	for (int i = 0; i < s_pnRfxRtcData[DevNo].MaxNbTrigEvt; i++)
-    {
+	{
         if (reg->EVENTS_COMPARE[i])
-        {
+		{
             evt |= TIMER_EVT_TRIGGER(i);
             reg->EVENTS_COMPARE[i] = 0;
 			if (s_pnRfxRtcData[DevNo].pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
-            {
+			{
             	reg->CC[i] = (count + s_pnRfxRtcData[DevNo].pCC[i]) & 0xffffff;
-            }
+			}
 			if (s_pnRfxRtcData[DevNo].pTrigger[i].Handler)
-            {
+			{
             	s_pnRfxRtcData[DevNo].pTrigger[i].Handler(timer, i, s_pnRfxRtcData[DevNo].pTrigger[i].pContext);
-            }
-        }
-    }
+			}
+		}
+	}
 
     if (timer->EvtHandler)
-    {
+	{
         timer->EvtHandler(timer, evt);
-    }
+	}
 }
 
 extern "C" {
@@ -195,12 +202,42 @@ __WEAK void RTC2_IRQHandler()
 
 static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 {
-    NRF_CLOCK->TASKS_LFCLKSTART = 1;
+	if (s_bRtcEnabled[pTimer->DevNo])
+	{
+		return true;
+	}
 
+	if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
+	{
+		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
+		NRF_CLOCK->TASKS_LFCLKSTART = 1;
+
+		bool started = false;
+		for (int timeout = 1000000; timeout > 0; timeout--)
+		{
+			if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) &&
+				NRF_CLOCK->EVENTS_LFCLKSTARTED)
+			{
+				started = true;
+				break;
+			}
+		}
+
+		if (!started)
+		{
+			NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+			return false;
+		}
+
+		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
+		s_bLFClockOwned = true;
+	}
+
+	s_bRtcEnabled[pTimer->DevNo] = true;
     s_nRfxLFClockSem++;
 
     switch (pTimer->DevNo)
-    {
+	{
         case 0:
             NVIC_ClearPendingIRQ(RTC0_IRQn);
             NVIC_EnableIRQ(RTC0_IRQn);
@@ -215,19 +252,26 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
             NVIC_EnableIRQ(RTC2_IRQn);
             break;
 #endif
-    }
+	}
 
     s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_START = 1;
 
     return true;
 }
 
+
 static void nRFxRtcDisable(TimerDev_t * const pTimer)
 {
+	if (!s_bRtcEnabled[pTimer->DevNo])
+	{
+		return;
+	}
+
+	s_bRtcEnabled[pTimer->DevNo] = false;
 	s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_STOP = 1;
 
     switch (pTimer->DevNo)
-    {
+	{
         case 0:
         	NVIC_ClearPendingIRQ(RTC0_IRQn);
             NVIC_DisableIRQ(RTC0_IRQn);
@@ -242,15 +286,15 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
             NVIC_ClearPendingIRQ(RTC2_IRQn);
             break;
 #endif
-    }
+	}
 
     s_nRfxLFClockSem--;
 
-    if (s_nRfxLFClockSem <= 0)
-    {
-    	s_nRfxLFClockSem = 0;
-    	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-    }
+	if (s_nRfxLFClockSem == 0 && s_bLFClockOwned)
+	{
+		NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+		s_bLFClockOwned = false;
+	}
 }
 
 static void nRFxRtcReset(TimerDev_t * const pTimer)
@@ -265,14 +309,14 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
     uint32_t prescaler = 1;
 
     if (Freq > 0)
-    {
+	{
     	prescaler = TIMER_NRFX_RTC_BASE_FREQ / Freq;
     	if (prescaler > 0x1000)
     	{
     		// Cap at 12 bits
     		prescaler = 0x1000;
     	}
-    }
+	}
 
     s_nRfxRtcData[pTimer->DevNo].pReg->PRESCALER = prescaler - 1;
 
@@ -309,9 +353,9 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 	uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
 
     if (cc <= 0)
-    {
+	{
         return 0;
-    }
+	}
 
 	rtc.pTrigger[TrigNo].Type = Type;
 	rtc.pCC[TrigNo] = cc;
@@ -383,9 +427,9 @@ bool nRFxRtcEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_EXT
 bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
     if (pCfg->DevNo < 0 || pCfg->DevNo >= TIMER_NRFX_RTC_MAX || pCfg->Freq > TIMER_NRFX_RTC_BASE_FREQ)
-    {
+	{
     	return false;
-    }
+	}
 
     pTimer->DevNo = pCfg->DevNo;
     pTimer->EvtHandler = pCfg->EvtHandler;
@@ -414,8 +458,8 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     reg->TASKS_STOP = 1;
     reg->TASKS_CLEAR = 1;
 
-    if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
-    {
+	if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
+	{
     	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
 
     	// Init oscillator
@@ -438,26 +482,27 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 		NRF_CLOCK->TASKS_LFCLKSTART = 1;
 
-		int timout = 1000000;
+		int timeout = 1000000;
+		bool started = false;
 
 		do
 		{
 			if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) && NRF_CLOCK->EVENTS_LFCLKSTARTED)
+			{
+				started = true;
 				break;
+			}
+		} while (timeout-- > 0);
 
-		} while (timout-- > 0);
-
-		if (timout <= 0)
+		if (!started)
+		{
+			NRF_CLOCK->TASKS_LFCLKSTOP = 1;
 			return false;
+		}
 
 		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-    }
-    else
-    {
-		// Clock source already enabled externally.
-		// This is to ensure we don't disable it when all timers are disabled
-    	s_nRfxLFClockSem++;
-    }
+		s_bLFClockOwned = true;
+	}
 
 	// Init interrupt for RTC
 	switch (pCfg->DevNo)
@@ -486,10 +531,10 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     reg->EVTENSET = RTC_EVTEN_OVRFLW_Msk;
 
     if (pCfg->EvtHandler && pCfg->bTickInt)
-    {
+	{
     	reg->INTENSET = RTC_INTENSET_TICK_Msk;
         reg->EVTENSET = RTC_EVTEN_TICK_Msk;
-    }
+	}
 
     nRFxRtcSetFrequency(pTimer, pCfg->Freq);
 

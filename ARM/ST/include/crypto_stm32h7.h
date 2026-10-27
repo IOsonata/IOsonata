@@ -33,10 +33,12 @@ SOFTWARE.
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_softsha256.h"
 
-// Polled CRYP peripheral: ECB/CBC/CTR accept AES-128/256. AES-128
+// Shared H753 CRYP / L4S9 AES implementation. Historical class names retained.
+// Polled peripheral: ECB/CBC/CTR accept AES-128/256. AES-128
 // CMAC/CCM/GCM reuse the software base's constructions
 // over the hardware block primitive. Separate instances share peripheral locks.
-class CryptoStm32H7Aes : public CryptoSoftAes {
+class CryptoStm32H7Aes : public CryptoAesModes
+{
 public:
 	bool Enable() override;
 	void Disable() override;

@@ -111,7 +111,131 @@ typedef enum __USB_Usage_Page {
 	USB_HID_USAGEPAGE_VENDOR	= 0xFF00//!< 0xFF00-0xFFFF Vendor-defined
 } USB_HID_USAGEPAGE;
 
+/// Standard unnumbered boot-keyboard report descriptor initializer.
+/// Input: modifier bits, reserved byte, six key usages (0..0x65).
+/// Output: Num/Caps/Scroll Lock, Compose and Kana LED bits, then padding.
+/// Use with USB_HID_SUBCLASS_BOOT and USB_HID_PROT_KEYBOARD.
+#define USB_HID_KEYBOARD_REPORT_DESC \
+{ \
+	0x05U, 0x01U, /* Usage Page (Generic Desktop) */ \
+	0x09U, 0x06U, /* Usage (Keyboard) */ \
+	0xA1U, 0x01U, /* Collection (Application) */ \
+	0x05U, 0x07U, /* Usage Page (Keyboard/Keypad) */ \
+	0x19U, 0xE0U, /* Usage Minimum (Left Control) */ \
+	0x29U, 0xE7U, /* Usage Maximum (Right GUI) */ \
+	0x15U, 0x00U, /* Logical Minimum (0) */ \
+	0x25U, 0x01U, /* Logical Maximum (1) */ \
+	0x75U, 0x01U, /* Report Size (1) */ \
+	0x95U, 0x08U, /* Report Count (8) */ \
+	0x81U, 0x02U, /* Input (Data, Variable, Absolute) */ \
+	0x95U, 0x01U, \
+	0x75U, 0x08U, \
+	0x81U, 0x01U, /* Input (Constant) */ \
+	0x05U, 0x08U, /* Usage Page (LEDs) */ \
+	0x19U, 0x01U, /* Usage Minimum (Num Lock) */ \
+	0x29U, 0x05U, /* Usage Maximum (Kana) */ \
+	0x95U, 0x05U, \
+	0x75U, 0x01U, \
+	0x91U, 0x02U, /* Output (Data, Variable, Absolute) */ \
+	0x95U, 0x01U, \
+	0x75U, 0x03U, \
+	0x91U, 0x01U, /* Output (Constant) */ \
+	0x05U, 0x07U, /* Usage Page (Keyboard/Keypad) */ \
+	0x19U, 0x00U, /* Usage Minimum (Reserved) */ \
+	0x29U, 0x65U, /* Usage Maximum (Keyboard Application) */ \
+	0x15U, 0x00U, \
+	0x25U, 0x65U, \
+	0x75U, 0x08U, \
+	0x95U, 0x06U, \
+	0x81U, 0x00U, /* Input (Data, Array, Absolute) */ \
+	0xC0U, \
+}
+
+/// Unnumbered three-button boot mouse: buttons, relative X and Y.
+/// No wheel; identical three-byte layout in boot and report protocol.
+#define USB_HID_MOUSE_REPORT_DESC \
+{ \
+	0x05U, 0x01U, /* Usage Page (Generic Desktop) */ \
+	0x09U, 0x02U, /* Usage (Mouse) */ \
+	0xA1U, 0x01U, /* Collection (Application) */ \
+	0x09U, 0x01U, /* Usage (Pointer) */ \
+	0xA1U, 0x00U, /* Collection (Physical) */ \
+	0x05U, 0x09U, /* Usage Page (Button) */ \
+	0x19U, 0x01U, /* Usage Minimum (1) */ \
+	0x29U, 0x03U, /* Usage Maximum (3) */ \
+	0x15U, 0x00U, /* Logical Minimum (0) */ \
+	0x25U, 0x01U, /* Logical Maximum (1) */ \
+	0x95U, 0x03U, /* Report Count (3) */ \
+	0x75U, 0x01U, /* Report Size (1) */ \
+	0x81U, 0x02U, /* Input (Data, Variable, Absolute) */ \
+	0x95U, 0x01U, \
+	0x75U, 0x05U, \
+	0x81U, 0x01U, /* Input (Constant padding) */ \
+	0x05U, 0x01U, /* Usage Page (Generic Desktop) */ \
+	0x09U, 0x30U, /* Usage (X) */ \
+	0x09U, 0x31U, /* Usage (Y) */ \
+	0x15U, 0x81U, /* Logical Minimum (-127) */ \
+	0x25U, 0x7FU, /* Logical Maximum (127) */ \
+	0x75U, 0x08U, \
+	0x95U, 0x02U, \
+	0x81U, 0x06U, /* Input (Data, Variable, Relative) */ \
+	0xC0U, 0xC0U, \
+}
+
+/// Unnumbered six-axis relative controller, preserving the 3D mouse example.
+/// Twelve input bytes: signed 16-bit X/Y/Z/Rx/Ry/Rz, each -32767..32767.
+/// No buttons or output reports. Not a boot mouse protocol device.
+#define USB_HID_3D_MOUSE_REPORT_DESC \
+{ \
+	0x05U, 0x01U, \
+	0x09U, 0x08U, \
+	0xA1U, 0x01U, \
+	0x16U, 0x01U, 0x80U, \
+	0x26U, 0xFFU, 0x7FU, \
+	0x75U, 0x10U, \
+	0x95U, 0x06U, \
+	0x09U, 0x30U, \
+	0x09U, 0x31U, \
+	0x09U, 0x32U, \
+	0x09U, 0x33U, \
+	0x09U, 0x34U, \
+	0x09U, 0x35U, \
+	0x81U, 0x06U, \
+	0xC0U, \
+}
+
 #pragma pack(push, 1)
+
+/// Eight-byte input report matching USB_HID_KEYBOARD_REPORT_DESC.
+/// Modifiers: left Ctrl/Shift/Alt/GUI in bits 0..3, right in bits 4..7.
+/// Reserved must be zero; Key contains HID usages, not ASCII characters.
+/// Zero unused keys. Send an all-zero report to release every key.
+/// More than six held non-modifier keys: fill Key with ErrorRollOver (0x01).
+typedef struct __USB_HID_Keyboard_Report {
+	uint8_t Modifiers;
+	uint8_t Reserved;
+	uint8_t Key[6];
+} UsbHidKeyboardReport_t;
+
+/// Three-byte report matching USB_HID_MOUSE_REPORT_DESC.
+/// Buttons bits 0/1/2: left/right/middle; upper bits must be zero.
+/// X/Y are relative movement (-127..127); use zero for no movement.
+typedef struct __USB_HID_Mouse_Report {
+	uint8_t Buttons;
+	int8_t X;
+	int8_t Y;
+} UsbHidMouseReport_t;
+
+/// Six relative axes matching USB_HID_3D_MOUSE_REPORT_DESC.
+/// Each value is -32767..32767, serialized little-endian on USB.
+typedef struct __USB_HID_3d_Mouse_Report {
+	int16_t X;
+	int16_t Y;
+	int16_t Z;
+	int16_t Rx;
+	int16_t Ry;
+	int16_t Rz;
+} UsbHid3dMouseReport_t;
 
 typedef struct __USB_HID_Report_Descriptor {
 	uint8_t bDescriptorType;		//!< type of class descriptor. See Section 7.1.2:
@@ -136,3 +260,4 @@ typedef struct __USB_HID_Descriptor {
 /** @} end group USB */
 
 #endif	// __USB_HIDDEF_H__
+

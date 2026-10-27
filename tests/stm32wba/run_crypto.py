@@ -89,11 +89,17 @@ def build(tmp):
                                    ROOT / 'micro-ecc', BOARD_DIR)]
     cxx = ['arm-none-eabi-g++', *cpu, '-std=gnu++23', '-Wall', '-Werror', '-fno-exceptions', '-fno-rtti', *inc]
     srcs = [
+        (ROOT / "src/coredev/timer.cpp", []),
+        (ROOT / "tests/crypto/timer_fixture.cpp", []),
         (HERE / 'crypto_fw.cpp', []),
         (ROOT / 'exemples/crypto/crypto_engine_test.cpp',
          ['-DCRYPTO_TEST_NO_MAIN', f'-DCRYPTO_TEST_SOAK_PKA={SOAK_PKA}', f'-DCRYPTO_TEST_SOAK_AES={SOAK_AES}']),
         (ROOT / 'ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp', []),
-        (ROOT / 'src/crypto/crypto_softaes.cpp', []),
+        (ROOT / 'src/crypto/crypto.cpp', []),
+        (ROOT / 'ARM/ST/src/crypto_default_stm32.cpp', []),
+        (ROOT / 'src/crypto/crypto_softsha256.cpp', []),
+        (ROOT / 'src/crypto/crypto_aes_modes.cpp', []),
+        (ROOT / 'src/crypto/crypto_aes_soft.cpp', []),
         (ROOT / 'src/crypto/crypto_softrng.cpp', []),
         (ROOT / 'src/crypto/crypto_p256.cpp', []),
         (ROOT / 'src/crypto/crypto_uecc.cpp', []),

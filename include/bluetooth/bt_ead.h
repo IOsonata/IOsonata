@@ -76,17 +76,11 @@ SOFTWARE.
 /// Key material, Vol 3 Part C 12.6 Table 12.10: a 128 bit session key then a
 /// 64 bit IV.
 ///
-/// The two fields are held in the order the algorithm consumes them, and they
-/// are not the same way round. SessionKey is fed to AES exactly as the sample
-/// data of CSS Part A 2.3 prints it, most significant octet first. Iv is laid
-/// out as the CCM nonce needs it, least significant octet first, which is the
-/// reverse of how 2.3 prints it. BtEadSelfTest pins both against the
-/// published ciphertext.
-///
-/// How the Encrypted Data Key Material characteristic orders its value on the
-/// wire is a separate question, and one this structure does not answer. Do
-/// not assume a read of that characteristic can be copied in verbatim without
-/// checking it against a peer.
+/// This is also the 24-octet Encrypted Data Key Material characteristic value
+/// in wire order. SessionKey is fed to AES exactly as the CSS sample prints
+/// it. Iv is stored least-significant octet first, which is both the CCM nonce
+/// order and the characteristic value order used by the EAD procedure.
+/// BtEadSelfTest pins both fields against the published ciphertext.
 typedef struct __Bt_Ead_Key {
 	uint8_t SessionKey[BTEAD_KEY_LEN];	//!< Shared session key
 	uint8_t Iv[BTEAD_IV_LEN];			//!< Shared initialization vector
@@ -171,8 +165,12 @@ bool BtEadRandGen(uint8_t Rand[BTEAD_RANDOMIZER_LEN]);
  *
  * @param	pKey	: Session key and IV
  * @param	pRand	: Randomizer, BTEAD_RANDOMIZER_LEN octets
- * @param	pPayload: AD structures to encrypt
- * @param	Len		: Payload length
+ * pPayload must contain a non-empty sequence of AD structures. The low-level
+ * crypto primitive does not parse that sequence; callers that construct it
+ * themselves are responsible for its AD framing.
+ *
+ * @param	pPayload: Non-empty AD structures to encrypt
+ * @param	Len		: Payload length, greater than zero
  * @param	pOut	: Output buffer
  * @param	OutLen	: Output buffer size, at least Len + BTEAD_OVERHEAD
  *
@@ -191,7 +189,8 @@ size_t BtEadEncrypt(const BtEadKey_t * const pKey, const uint8_t *pRand,
  * The MIC is verified before anything is returned. A payload that does not
  * authenticate yields 0 and pOut is left wiped, because a caller that acted
  * on unauthenticated advertising data would be taking direction from anyone
- * within radio range.
+ * within radio range. A structure with no payload is invalid; CSS Part A 1.23
+ * requires one or more AD structures inside the encrypted payload.
  *
  * @param	pKey	: Session key and IV
  * @param	pAd		: AD data of the Encrypted Data structure

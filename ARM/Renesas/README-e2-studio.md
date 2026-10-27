@@ -6,7 +6,7 @@ links and Debug/Release settings from the corresponding `ioc` configurations.
 
 ## ARM projects
 
-- `RA4M1/lib/e2` plus Blinky, TimerDemo, UartLoopback and UartPrbsTxTest
+- `RA4/RA4M1/lib/e2` plus Blinky, TimerDemo, UartLoopback and UartPrbsTxTest
   example projects in their respective `exemples/<name>/e2` directories.
 - `RE01/RE01_1500KB/lib/e2` plus Blinky, TimerDemo, UartRetargetDemo,
   UartPrbsTxTest, I2CMasterDemo, SPIMasterDemo, PulseTrain and

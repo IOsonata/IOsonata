@@ -1,6 +1,10 @@
 # IOsonata crypto architecture design note
 
-Status: proposal for review. No code committed. This note fixes the object
+Status: historical proposal, not a description of the current implementation.
+See `crypto-engine.md` and `include/crypto/crypto.h` for the implemented object
+and target selection. The operation-object and KDF examples below remain proposals.
+
+Original proposal: This note fixes the object
 model, the key object, and the engine tree, then proves the shape against three
 consumers (BLE SMP, LoRaWAN, Wi-Fi). Read the worked examples last; they are the
 test of whether the abstraction is right.

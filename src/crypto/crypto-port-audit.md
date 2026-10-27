@@ -1,0 +1,173 @@
+# Crypto port audit
+
+Reviewed against prerelease_0.13_4, October 2026.
+
+Applications declare `Crypto` directly and call `Init()`. All supported software
+operations remain available through that object. Each MCU library selects its
+hardware overrides; applications do not route operations or retry unsupported
+hardware operations. `exemples/crypto/crypto_engine_test.cpp` remains the shared
+test, including its Timer-based benchmarks.
+
+## Binding and binary checks
+
+`Crypto` inherits operation interfaces, not complete software engines. MCU
+libraries provide strong hardware methods that replace weak software defaults.
+Complete AES hardware drivers inherit `CryptoAesModes`; its CMAC/CCM/GCM
+composition does not reference a software AES primitive. Software is retained
+only where the target still needs it, or where an application explicitly creates
+a software reference object.
+
+Minimal target archive tests exclude CryptoTest's software references and check
+linked symbols. CryptoCell retains no software AES, SHA-256 or PRNG. H753/L4S9
+retain no software AES or PRNG; software SHA streaming is still required.
+WBA links without software P-256 or PRNG objects at O0 and Os; software AES-256
+and SHA remain required. Its host link fixture checks failed initialization and
+output clearing without simulating AES/PKA arithmetic.
+Their register tests also check that a second application object's Init and
+Reset do not reset the shared AES/HASH engines.
+
+## MCU library coverage
+
+This table distinguishes working software support from hardware acceleration.
+A hardware peripheral listed as pending is not claimed as implemented.
+
+| Port | Implementation selected by the library | Status and limits |
+|---|---|---|
+| SAM4E16E | New AES-128/256 ECB/CBC/CTR; AES-128 CMAC/CCM/GCM use its block hook | SHA/P-256 software. No on-chip TRNG used; software RNG is not secure. |
+| SAM4LCxC, SAM4LSxC | New AES-128 and TRNG, AESA clock/countermeasure setup | AES-256 inherited software; SAM4L AESA supports 128-bit keys. SHA/P-256 software. |
+| LPC11U35, LPC1769 | Generic software | No secure entropy implementation. |
+| LPC54605, LPC54628 | New ROM RNG override, software algorithms | Discards 32 ROM RNG words between returned words, following the NXP driver. Production LPC546xx does not provide the AES/SHA acceleration implied by old register headers. |
+| nRF52805, nRF52810, nRF52832 | New default binding of ECB-128 override; existing RNG | SoftDevice ECB service used when enabled; otherwise peripheral DMA. AES-256 and decrypt modes inherit software. |
+| nRF52840 | CC3xx AES-128/256, SHA-256/HMAC, P-256/RNG | Shared ARM AES/SHA CPU FIFO driver; board validation pending. |
+| nRF5340 network | Existing ECB-128/RNG | AES-256, SHA and P-256 software. |
+| nRF5340 application, nRF9160, nRF91x1 | CC3xx AES-128/256, SHA-256/HMAC, P-256/RNG | Same shared ARM driver and generic test as nRF52840; board validation pending. |
+| nRF54H20 application/network, nRF54L15, nRF54LM20x | CryptoMaster/BA414EP and conditioned CRACEN TRNG | AES-128/256 ECB/CBC/CTR in both directions. AES/PKE/RNG share operation exclusion. SHA, key import and ECDSA still use inherited software where no override exists. |
+| nRF54H20 RISC-V skeleton | Not a complete MCU library | No complete generic crypto integration; not equivalent to the Arm application/network libraries. |
+| RP2040 | Generic software | Ring-oscillator bits are not exposed as qualified secure entropy. |
+| RA4M1 (ioc and e2) | SCE5 AES-128/256 and TRNG (CryptoRa4m1Aes, CryptoRa4m1Rng) | Inherited software SHA/P-256. Key index generated once per operation, blocks through the update primitive; bounded waits and fault propagation. EK-RA4M1 CryptoTest 101 of 101 (2026-10-25). |
+| RE01_1500KB (ioc and e2) | Generic software | TSIP-Lite integration blocked on the RE01-specific source package. Renesas lists V1.01 as available through its sales division. RA4M1 sequences are not substituted. |
+| R9A02G021 (ioc and e2) | New TRNG override, inherited software algorithms | Module start, bounded ready wait, four-byte reads and stop sequence. No AES accelerator. |
+| STM32F030, STM32F401, STM32L152RE | Generic software | No secure entropy driver selected. |
+| STM32G474, STM32L432, STM32L476, STM32L496 | Existing RNG, software algorithms | RNG kernel clock must be provided by target clock setup. Health failures now fail and wipe the entire request. |
+| STM32L4S9 | New AES-128/256 and HASH/HMAC binding, existing RNG | Shared H753 cipher/hash logic with L4 AES register operations. Streaming SHA remains software. |
+| STM32H753 | Existing CRYP/HASH/HMAC/RNG | Regression tested after adding L4S9. Streaming SHA and P-256 software. |
+| STM32WBA65 | AES-128/RNG/PKA | All P-256 operations use hardware without retaining software P-256. AES-256 and SHA remain software. |
+| ESP32-C3, ESP32-C6 | New AES-128/256 ECB/CBC/CTR; AES-128 CMAC/CCM/GCM use its block hook | SHA-256 streaming and HMAC now use SHA registers. Secure entropy source configuration and C6 ECC acceleration remain incomplete. P-256 remains software. |
+| Windows host | Generic software | Host entropy integration is separate from MCU acceleration. |
+
+CMAC, CCM and GCM currently accept AES-128 keys in the generic implementation.
+AES-256 ECB/CBC/CTR are mandatory software-supported operations on every complete
+MCU library. Hardware timeouts and faults return failure; they never trigger a
+software retry that hides the fault.
+
+## Validation performed
+
+New register models compile the production drivers and compare AES work against
+OpenSSL. The SAM, ESP32, R9A02 and LPC models execute the unchanged generic test
+at `-O0` and `-O2` with address and undefined-behavior sanitizers. Their Timer
+fixture is synthetic; displayed timing values are not measured performance.
+
+- SAM4L, R9A02 and LPC546xx: 101 passed, 0 failed, 0 skipped per model run.
+- SAM4E and ESP32-C3/C6: 59 passed, 0 failed, 1 explicit secure-entropy skip.
+  AES-256 tests run. Key generation/signing with an insecure RNG are rejected.
+- STM32H753 and L4S9 accelerator models: 101 passed, 0 failed, 0 skipped;
+  timeout recovery, wiping and cross-instance locks checked.
+- Nordic ECB model: bare-metal nRF52, nRF52 SoftDevice and nRF5340 paths;
+  known answer, service errors, output wiping, stopped DMA recovery, and
+  permanently blocked reuse when DMA ownership cannot be resolved.
+- STM32 RNG model: current and latched seed/clock errors before and after a
+  data read, bounded timeout, request wiping and explicit reset recovery.
+- RA4M1 wrapper model: 101 passed, 0 failed, 0 skipped at O0/O2 with
+  ASan/UBSan. AES uses OpenSSL at the SCE primitive boundary; this does not
+  validate silicon AES output. The separate production-primitive test executes
+  startup, key import, AES and RNG register paths, injects bounded poll failures
+  in each operation, and checks output clearing and explicit reinitialization.
+- ESP32-C3/C6 SHA register models: generic SHA/HMAC known answers and boundary
+  tests, interleaved byte-at-a-time streams, timeout/output clearing and recovery
+  at O0/O2 with ASan/UBSan. All 28 generic benchmark rows remain present.
+- CryptoMaster DMA model: 101 passed, 0 failed, 0 skipped at O0/O2 with
+  ASan/UBSan, including AES-256 and ECB/CBC decryption. Added cross-instance
+  exclusion, timeout clearing, retained DMA addresses after a failed reset,
+  quarantine across instances and explicit CryptoMaster reset recovery.
+- CC3xx AES/SHA FIFO model: 101 passed, 0 failed, 0 skipped at O0/O2 with
+  ASan/UBSan. Interleaved SHA streams and AES operations, cross-instance locking,
+  setup/FIFO timeouts, short register reads, output/context clearing and recovery
+  are checked. PKA restores shared configuration after another engine powers
+  down the wrapper. All four Nordic library projects include the new ARM source.
+- Combined CC3xx AES/SHA/PKA model executes the production Nordic default binding;
+  generic test plus CC3xx/BA414EP checks: 148 passed, 0 failed, 0 skipped at O0/O2
+  with ASan/UBSan. OpenSSL supplies arithmetic; FIFO timing is modeled.
+- CRACEN TRNG transport models for nRF54L15, nRF54LM20 and nRF54H20:
+  unchanged generic test 101 passed, 0 failed, 0 skipped at O0/O2 with ASan/UBSan.
+  Tests cover startup/FIFO timeouts, health failure after partial output, key/output
+  clearing, next-call recovery, a 70001-byte draw, SoftDevice entropy success and
+  timeout, and operation exclusion across AES, PKE and RNG. Host OpenSSL supplies
+  the model entropy. These do not measure silicon entropy or performance.
+- BA414EP reset failure now releases operation exclusion while retaining engine
+  quarantine; explicit reset recovery is tested. Combined PKA checks now report
+  151 passed, 0 failed, 0 skipped at O0/O2 with ASan/UBSan.
+- Generic object and AES-256/OpenSSL regression tests.
+- Target object compile checks, including nRF52805/810 and STM32L4S9.
+
+No new physical MCU runs or MCU-toolchain builds were performed during this
+pass. The maintainer's earlier nRF5340 application/network results remain the
+hardware evidence. Host models check driver logic; they do not prove peripheral
+clocking, electrical entropy quality, timing or silicon errata behavior.
+
+## Work still required
+
+This is not a claim that every hardware crypto block is implemented. RA4M1 SCE5
+passes the generic CryptoTest on the EK-RA4M1. Its bounded failures invalidate
+the SCE state and wipe request output; the generic Crypto Reset path
+reinitializes the hardware.
+RE01 needs the RE01-specific TSIP-Lite V1.01 source package from Renesas.
+The public Renesas driver page directs source requests to its sales division:
+https://www.renesas.com/en/software-tool/trusted-secure-ip-driver
+ESP32 secure entropy requires qualifying/enabling the source, not merely reading
+the RNG register; the current library does not own that source configuration.
+CC310/CC312 AES/SHA now have shared ARM overrides and require board validation.
+CRACEN acceleration gaps and ESP32-C6 ECC still require implementation; working
+software remains selected for those operations.
+
+## Register and vendor references
+
+- Renesas R9A02G021 User's Manual: Hardware, TRNG chapter, registers at
+  0x40091100 and the enable/start/ready/four-read/stop sequence.
+- Microchip SAM4L datasheet and ASF AESA driver/unit tests: AES-128, GCLK4,
+  CPU clock selector 7, countermeasure seed and little-endian data words.
+- Microchip SAM4E AES component header and ASF AES unit tests: 128/256-bit
+  key modes, manual start and data-ready/access-error handling.
+- NXP legacy-mcux-sdk `drivers/rng/fsl_rng.c`: LPC546xx ROM API and 32-word
+  discard interval. LPC546xx datasheet revision history removes AES/SHA.
+- ST STM32L4S9 CMSIS device header and AES key derivation/decrypt sequencing.
+- Espressif ESP-IDF v5.4.2 `hal/esp32c3/include/hal/aes_ll.h` and
+  `hal/esp32c6/include/hal/aes_ll.h`, with their SYSTEM/PCR register headers:
+  AES mode, little-endian words, CPU-block idle state and DS reset dependency.
+- Renesas FSP SCE5 plain-key primitives inspected at
+  `6e2675336b37fbd805f0c01d5134adfdab4bf294`; selected primitives are adapted in
+  RA4M1 crypto_sce5.c with the original BSD-3-Clause license.
+- Espressif ESP-IDF v5.4.2 SHA HAL, C3/C6 sha_ll.h, SHA and SYSTEM/PCR
+  register headers: block/state byte order, start/continue, clock/reset dependencies.
+
+CryptoMaster DMA descriptors and block buffers now have static lifetime and a
+shared operation lock. Failed reset prevents reuse across all CryptoMaster
+instances. Descriptors remain intact until a successful explicit engine reset;
+caller output is cleared on failure. Host tests do not validate cache coherence
+on nRF54H20. CRACEN RNG no longer invokes nrfx CTR-DRBG or its CryptoMaster DMA:
+it reads the dedicated hardware conditioner with bounded waits, checks health
+before and after each word, and resets/wipes its own state after each draw.
+Silex AES, PKE and RNG operations share exclusion across objects. This lock is
+within one firmware image; it does not arbitrate another core's firmware or
+external code accessing CRACEN directly.
+
+- Arm CC312 runtime register description and AES/hash drivers in Nordic's TF-M
+  mirror, commit `39329596a865299ff77a1f7036986ae3f8032bac`, under
+  `lib/ext/cryptocell-312-runtime`: CPU DIN/DOUT access, AES control/key registers,
+  SHA state and disabled hardware padding. The new driver starts no memory DMA.
+
+CRACEN TRNG configuration follows Nordic nrfx v4.5.0 `drivers/src/nrfx_cracen.c`
+and `hal/nrf_cracen_rng.h`, including recommended MCU parameters where present:
+https://github.com/nordicsemi/nrfx/blob/v4.5.0/drivers/src/nrfx_cracen.c
+The adapted configuration retains the Nordic BSD-3-Clause notice in the source.
+No new source file is needed in MCU library projects; the existing
+`cracen_intrf.cpp`, `cryptomaster.cpp` and `ba414ep.cpp` links are used.

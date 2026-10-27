@@ -43,6 +43,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "crypto/ba414ep.h"
+#include "crypto/silex_internal.h"
 
 // Diagnostic tracing. Define BA414EP_TRACE_ENABLE to trace every operation.
 //#define BA414EP_TRACE_ENABLE
@@ -284,6 +285,7 @@ bool Ba414ep::PkAbortAndReset()
 	{
 		vbValid = false;
 		s_bPkQuarantined = true;
+		OpRelease();
 		return false;
 	}
 	OpRelease();
@@ -437,20 +439,18 @@ CRYPTO_STATUS Ba414ep::PkPointMultiply(const uint8_t Point[64],
 Ba414ep::Ba414ep()
 {
 	vbValid = false;
-	vpRng = nullptr;
 	vbReady = false;
 	vbIntrfEnabled = false;
-	atomic_flag_clear(&vOpBusy);
 }
 
 bool Ba414ep::OpAcquire()
 {
-	return atomic_flag_test_and_set(&vOpBusy) == false;
+	return SilexOpAcquire();
 }
 
 void Ba414ep::OpRelease()
 {
-	atomic_flag_clear(&vOpBusy);
+	SilexOpRelease();
 }
 
 bool Ba414ep::WaitIkIdle()
@@ -521,7 +521,7 @@ bool Ba414ep::Init(DeviceIntrf * const pIntrf, RngEngine *pRng)
 		return false;
 	}
 	Interface(pIntrf);
-	vpRng = pRng;
+	SetRng(pRng);
 	return Enable();
 }
 
@@ -608,6 +608,7 @@ void Ba414ep::Reset()
 	else
 	{
 		s_bPkQuarantined = true;
+		OpRelease();
 	}
 }
 
@@ -661,6 +662,41 @@ CRYPTO_STATUS Ba414ep::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKe
 	KeyReset(pk);
 	memset(pPubKey, 0, 64U);
 	return st;
+}
+
+CRYPTO_STATUS Ba414ep::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+	const uint8_t *pPrivKey, uint8_t *pPubKey)
+{
+	KeyCtx *pk;
+	CRYPTO_STATUS status;
+
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr || pPrivKey == nullptr)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	pk = (KeyCtx *)pKeyCtx;
+	KeyReset(pk);
+	if (pPubKey != nullptr)
+	{
+		memset(pPubKey, 0, 64U);
+	}
+	if (!vbValid || !P256ScalarInRange(pPrivKey))
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+	memcpy(pk->PrivKey, pPrivKey, P256_SZ);
+	if (pPubKey != nullptr)
+	{
+		status = PkPointMultiply(s_P256Generator, pk->PrivKey, pPubKey, false);
+		if (status != CRYPTO_STATUS_OK)
+		{
+			KeyReset(pk);
+			memset(pPubKey, 0, 64U);
+			return status;
+		}
+	}
+	pk->bKeyValid = true;
+	return CRYPTO_STATUS_OK;
 }
 
 int Ba414ep::SelfTest()

@@ -41,6 +41,8 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "usb/usb.h"
 #if __has_include("board.h")
+#include "coredev/iopincfg.h"
+#include "coredev/system_core_clock.h"
 #include "board.h"
 #endif
 #include "usb/usbd_hid.h"
@@ -70,27 +72,12 @@ static const uint8_t s_ReportDesc[] = {
 	0xC0U,
 };
 
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength);
+static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t BufferSize, void *pContext);
+static bool HidSetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	const uint8_t *pBuffer, uint16_t Length, void *pContext);
 
-class HidLoopback final : public UsbdHid {
-public:
-	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-				 uint8_t **ppData, uint16_t *pLength) override {
-		if (pSetup != nullptr &&
-			(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
-				USB_REQTYPE_CLASS &&
-			(pSetup->bRequest == USB_HID_REQ_GET_REPORT ||
-			 pSetup->bRequest == USB_HID_REQ_SET_REPORT))
-		{
-			return HidReportRequest(pSetup, Stage, ppData, pLength);
-		}
-		return UsbdHid::Control(pSetup, Stage, ppData, pLength);
-	}
-};
-
-static HidLoopback s_Hid;
+static UsbdHid s_Hid;
 static uint8_t s_Pending[HID_REPORT_SIZE];
 static uint16_t s_PendingLength;
 static uint8_t s_ControlReport[HID_REPORT_SIZE];
@@ -105,19 +92,14 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.DevNo = USB_DEVNO,
 	.pReportDesc = s_ReportDesc,
 	.ReportDescLength = sizeof(s_ReportDesc),
-	.BcdHid = 0U,
 	.FsMps = HID_REPORT_SIZE,
 	.HsMps = HID_REPORT_SIZE,
-	.FsInterval = 1U,
-	.HsInterval = 4U,
-	.SubClass = USB_HID_SUBCLASS_NONE,
-	.Protocol = USB_HID_PROT_NONE,
-	.CountryCode = 0U,
 	.InterfaceString = HID_STR_INTERFACE,
 	.EvtCB = HidEvent,
-	.pContext = nullptr,
 	.pRxBuffer = s_HidRxBuffer,
 	.pTxBuffer = s_HidTxBuffer,
+	.GetReportCB = HidGetReport,
+	.SetReportCB = HidSetReport,
 };
 
 // Application event queue memory, replaces the 4 event library default. The
@@ -132,24 +114,13 @@ static const UsbCfg_t s_UsbCfg = {
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
 	.pProduct = "IOsonata USB HID Loopback",
-	.pSerial = nullptr,
 	.pFuncName = "HID Loopback",
 	.IntPrio = 6,
 #ifdef USB_PINS
 	.pIOPinMap = s_UsbPins,
 	.NbIOPins = sizeof(s_UsbPins) / sizeof(IOPinCfg_t),
-#else
-	.pIOPinMap = nullptr,
-	.NbIOPins = 0,
 #endif
-	.DeviceClass = USB_DEVCLASS_NONE,
-	.DeviceSubClass = 0U,
-	.DeviceProtocol = 0U,
-	.bSelfPowered = false,
-	.bRemoteWakeup = false,
-	.bLowPowerSuspend = false,
 	.MaxPower = 100,
-	.EvtHandler = nullptr,
 };
 
 static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
@@ -185,33 +156,28 @@ static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
 
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength)
+static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t BufferSize, void *)
 {
-	if (pSetup == nullptr || pLength == nullptr)
+	if (Type != USB_HID_REPTYPE_INPUT || ReportId != 0U ||
+		BufferSize < sizeof(s_ControlReport))
+	{
+		return -1;
+	}
+	memcpy(pBuffer, s_ControlReport, sizeof(s_ControlReport));
+	return sizeof(s_ControlReport);
+}
+
+static bool HidSetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	const uint8_t *pBuffer, uint16_t Length, void *)
+{
+	if (Type != USB_HID_REPTYPE_OUTPUT || ReportId != 0U ||
+		Length > sizeof(s_ControlReport))
 	{
 		return false;
 	}
-	if (Stage == USB_CTRL_ABORT)
-	{
-		return true;
-	}
-	if (Stage == USB_CTRL_SETUP)
-	{
-		if (ppData == nullptr || pSetup->wLength > sizeof(s_ControlReport))
-		{
-			return false;
-		}
-		*ppData = s_ControlReport;
-		*pLength = sizeof(s_ControlReport);
-		return true;
-	}
-	if (Stage == USB_CTRL_COMPLETE &&
-		pSetup->bRequest == USB_HID_REQ_SET_REPORT)
-	{
-		return s_Hid.Tx(0, s_ControlReport, *pLength) == (int)*pLength;
-	}
+	memcpy(s_ControlReport, pBuffer, Length);
+	HidEvent(nullptr, DEVINTRF_EVT_RX_DATA, s_ControlReport, Length);
 	return true;
 }
 

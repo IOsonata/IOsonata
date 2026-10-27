@@ -656,8 +656,482 @@ static void TestProtocolValues(void)
 	}
 }
 
+struct ReportContext {
+	int GetLength;
+	int Gets;
+	int Sets;
+	bool Accept;
+	USB_HID_REPTYPE Type;
+	uint8_t Id;
+	uint16_t Length;
+	uint8_t Bytes[128];
+};
+
+static int GetReport(USB_HID_REPTYPE Type, uint8_t Id,
+	uint8_t *pBuffer, uint16_t Capacity, void *pContext)
+{
+	auto &ctx = *static_cast<ReportContext *>(pContext);
+	ctx.Gets++;
+	ctx.Type = Type;
+	ctx.Id = Id;
+	if (ctx.GetLength >= 0 && ctx.GetLength <= Capacity)
+	{
+		memcpy(pBuffer, ctx.Bytes, ctx.GetLength);
+	}
+	return ctx.GetLength;
+}
+
+static bool SetReport(USB_HID_REPTYPE Type, uint8_t Id,
+	const uint8_t *pBuffer, uint16_t Length, void *pContext)
+{
+	auto &ctx = *static_cast<ReportContext *>(pContext);
+	ctx.Sets++;
+	ctx.Type = Type;
+	ctx.Id = Id;
+	ctx.Length = Length;
+	CHECK(Length <= sizeof(ctx.Bytes));
+	memcpy(ctx.Bytes, pBuffer, Length);
+	return ctx.Accept;
+}
+
+static void TestReportCallbacks()
+{
+	ResetFake();
+	UsbdHid hid;
+	ReportContext ctx = {};
+	ctx.GetLength = 8;
+	ctx.Accept = true;
+	ctx.Bytes[0] = 0x37U;
+	auto cfg = MakeCfg();
+	cfg.GetReportCB = GetReport;
+	cfg.SetReportCB = SetReport;
+	cfg.pContext = &ctx;
+	CHECK(hid.Init(cfg));
+	UsbSetupData_t setup = {};
+	setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+		USB_REQTYPE_INTERFACE;
+	setup.bRequest = USB_HID_REQ_GET_REPORT;
+	setup.wValue = USB_HID_REPTYPE_INPUT | 7U;
+	setup.wLength = 2U;
+	uint8_t *data = nullptr;
+	uint16_t length = 0;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(length == 8 && ctx.Gets == 1 && ctx.Id == 7 &&
+		ctx.Type == USB_HID_REPTYPE_INPUT && data[0] == 0x37U);
+	// Snapshot survives application changes until the transfer is complete.
+	ctx.Bytes[0] = 0U;
+	CHECK(data[0] == 0x37U);
+	CHECK(hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(ctx.Gets == 1);
+	setup.wLength = 1000U;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(length == 8);
+	ctx.GetLength = -1;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	ctx.GetLength = 65;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	ctx.GetLength = 8;
+	setup.wLength = 0;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.wLength = 8;
+	setup.wValue = 0x400;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.wValue = USB_HID_REPTYPE_OUTPUT | 3U;
+	setup.bRequest = USB_HID_REQ_SET_REPORT;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.bmRequestType &= ~USB_REQTYPE_DIRHOST;
+	setup.wLength = 65;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.wLength = 8;
+	setup.wIndex = 1;
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.wIndex = 0;
+	CHECK(!hid.Control(nullptr, USB_CTRL_SETUP, &data, &length));
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, &data, nullptr));
+	CHECK(!hid.Control(&setup, USB_CTRL_SETUP, nullptr, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(ctx.Sets == 0);
+	memset(data, 0x5A, length);
+	CHECK(hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Sets == 1 && ctx.Id == 3 && ctx.Type == USB_HID_REPTYPE_OUTPUT &&
+		ctx.Length == 8 && ctx.Bytes[7] == 0x5A);
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(ctx.Sets == 1);
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	length--;
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Sets == 1);
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_ABORT, &data, &length));
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Sets == 1);
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	hid.Reset();
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(hid.SelectConfig(0));
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	ctx.Accept = false;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(!hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Sets == 2);
+	CHECK(hid.Control(&setup, USB_CTRL_ABORT, &data, &length));
+	CHECK(ctx.Sets == 2);
+}
+
+static void TestReportStorage()
+{
+	ResetFake();
+	UsbdHid hid;
+	alignas(4) uint8_t storage[136];
+	memset(storage, 0xA5, sizeof(storage));
+	auto cfg = MakeCfg();
+	cfg.ControlBufferSize = 128;
+	CHECK(!hid.Init(cfg));
+	cfg.pControlBuffer = storage + 5;
+	CHECK(!hid.Init(cfg));
+	cfg.pControlBuffer = storage + 4;
+	cfg.ControlBufferSize = 0;
+	CHECK(!hid.Init(cfg));
+	cfg.ControlBufferSize = 128;
+	cfg.pControlBuffer = cfg.pRxBuffer;
+	CHECK(!hid.Init(cfg));
+	cfg.pControlBuffer = cfg.pTxBuffer + 4;
+	CHECK(!hid.Init(cfg));
+	cfg.pControlBuffer = storage + 4;
+	ReportContext ctx = {};
+	ctx.GetLength = 128;
+	ctx.Accept = true;
+	cfg.GetReportCB = GetReport;
+	cfg.SetReportCB = SetReport;
+	cfg.pContext = &ctx;
+	CHECK(hid.Init(cfg));
+	CHECK(static_cast<UsbdHidDev_t *>(hid)->ItfNo == 0);
+	CHECK(static_cast<UsbdHidDev_t *>(hid)->EpNo == 1);
+	UsbSetupData_t setup = {};
+	setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+		USB_REQTYPE_INTERFACE;
+	setup.bRequest = USB_HID_REQ_GET_REPORT;
+	setup.wValue = USB_HID_REPTYPE_FEATURE | 9U;
+	setup.wLength = 128;
+	uint8_t *data = nullptr;
+	uint16_t length = 0;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(data == storage + 4 && length == 128 && ctx.Type == USB_HID_REPTYPE_FEATURE);
+	setup.bmRequestType &= ~USB_REQTYPE_DIRHOST;
+	setup.bRequest = USB_HID_REQ_SET_REPORT;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	memset(data, 0x33, length);
+	CHECK(hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(ctx.Length == 128 && ctx.Bytes[127] == 0x33);
+	CHECK(storage[3] == 0xA5 && storage[132] == 0xA5);
+	// Legacy configurations without callbacks continue to reject reports.
+	ResetFake();
+	UsbdHid plain;
+	CHECK(plain.Init(MakeCfg()));
+	CHECK(!plain.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.bmRequestType |= USB_REQTYPE_DIRHOST;
+	setup.bRequest = USB_HID_REQ_GET_REPORT;
+	CHECK(!plain.Control(&setup, USB_CTRL_SETUP, &data, &length));
+}
+
+static void TestKeyboardDefinition()
+{
+	static const uint8_t desc[] = USB_HID_KEYBOARD_REPORT_DESC;
+	static_assert(sizeof(UsbHidKeyboardReport_t) == 8U,
+		"Boot keyboard input report must be eight bytes");
+	const UsbHidKeyboardReport_t report = {0x02U, 0U, {0x04U, 0x39U}};
+	const uint8_t expected[] = {0x02U, 0U, 0x04U, 0x39U, 0U, 0U, 0U, 0U};
+	CHECK(memcmp(&report, expected, sizeof(expected)) == 0);
+
+	// Decode short items to check the input/output lengths advertised to the
+	// host. This fixed preset has no Report IDs, long items or global stack.
+	unsigned size = 0U;
+	unsigned count = 0U;
+	unsigned inputBits = 0U;
+	unsigned outputBits = 0U;
+	unsigned inputs = 0U;
+	unsigned outputs = 0U;
+	for (unsigned i = 0U; i < sizeof(desc);)
+	{
+		const uint8_t item = desc[i++];
+		const unsigned bytes = (item & 3U) == 3U ? 4U : (item & 3U);
+		CHECK(item != 0xFEU && i + bytes <= sizeof(desc));
+		if (i + bytes > sizeof(desc))
+		{
+			return;
+		}
+		unsigned value = 0U;
+		for (unsigned j = 0U; j < bytes; j++)
+		{
+			value |= (unsigned)desc[i++] << (8U * j);
+		}
+		switch (item & 0xFCU)
+		{
+			case 0x74U:
+				size = value;
+				break;
+			case 0x94U:
+				count = value;
+				break;
+			case 0x80U:
+				inputBits += size * count;
+				inputs++;
+				break;
+			case 0x90U:
+				outputBits += size * count;
+				outputs++;
+				break;
+			case 0x84U: // Report ID would change the wire layout.
+			case 0xB0U: // Feature report is not part of this preset.
+				CHECK(false);
+				break;
+		}
+	}
+	CHECK(inputBits == 64U && inputs == 3U);
+	CHECK(outputBits == 8U && outputs == 2U);
+
+	ResetFake();
+	UsbdHid hid;
+	auto cfg = MakeCfg();
+	cfg.pReportDesc = desc;
+	cfg.ReportDescLength = sizeof(desc);
+	cfg.FsMps = sizeof(report);
+	CHECK(hid.Init(cfg));
+	UsbSetupData_t setup = {};
+	setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_STANDARD |
+		USB_REQTYPE_INTERFACE;
+	setup.bRequest = USB_REQ_GET_DESCRIPTOR;
+	setup.wValue = USB_DESCTYPE_HID_REPORT << 8;
+	setup.wLength = sizeof(desc);
+	uint8_t *data = nullptr;
+	uint16_t length = 0U;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(length == sizeof(desc) && data == desc);
+}
+
+static void TestKeyboardInit()
+{
+	static const uint8_t expected[] = USB_HID_KEYBOARD_REPORT_DESC;
+	for (unsigned custom = 0; custom < 2; custom++)
+	{
+		ResetFake();
+		UsbdHid hid;
+		UsbdHidCfg_t cfg = {};
+		cfg.pRxBuffer = s_RxSlot;
+		cfg.pTxBuffer = s_TxSlot;
+		ReportContext ctx = {};
+		ctx.GetLength = 8;
+		ctx.Accept = true;
+		cfg.GetReportCB = GetReport;
+		cfg.SetReportCB = SetReport;
+		cfg.pContext = &ctx;
+		if (custom)
+		{
+			// Preset replaces only the six keyboard layout fields.
+			cfg.pReportDesc = s_ReportDesc;
+			cfg.ReportDescLength = sizeof(s_ReportDesc);
+			cfg.FsMps = 64;
+			cfg.HsMps = 64;
+			cfg.SubClass = 255;
+			cfg.Protocol = 255;
+			cfg.FsInterval = 4;
+			cfg.HsInterval = 6;
+			cfg.InterfaceString = 4;
+			cfg.CountryCode = 33;
+		}
+		CHECK(hid.InitKeyboard(cfg));
+		CHECK(cfg.FsMps == (custom ? 64 : 0));
+		CHECK(cfg.pReportDesc == (custom ? s_ReportDesc : nullptr));
+		UsbdHidDev_t *state = hid;
+		CHECK(state->pContext == &ctx);
+		CHECK(state->ReportDescLength == sizeof(expected));
+		CHECK(memcmp(state->pReportDesc, expected, sizeof(expected)) == 0);
+		const UsbSpeed_t speeds[] = {USB_SPEED_FULL, USB_SPEED_HIGH};
+		for (UsbSpeed_t speed : speeds)
+		{
+			UsbdHidDesc_t desc;
+			CHECK(UsbdHidMakeDesc(&desc, state, speed));
+			CHECK(desc.Interface.bInterfaceSubClass == USB_HID_SUBCLASS_BOOT);
+			CHECK(desc.Interface.bInterfaceProtocol == USB_HID_PROT_KEYBOARD);
+			CHECK(desc.Interface.iInterface == (custom ? 4 : 0));
+			CHECK(desc.Out.wMaxPacketSize == 8 && desc.In.wMaxPacketSize == 8);
+			CHECK(desc.In.bInterval == (speed == USB_SPEED_FULL ?
+				(custom ? 4 : 1) : (custom ? 6 : 4)));
+		}
+		CHECK(hid.SelectConfig(1));
+		const UsbHidKeyboardReport_t report = {0, 0, {4}};
+		CHECK(hid.Tx(0, (const uint8_t *)&report, sizeof(report)) == 8);
+		CompleteIn();
+		hid.Reset();
+		CHECK(hid.Tx(0, (const uint8_t *)&report, sizeof(report)) == 0);
+		CHECK(hid.SelectConfig(1));
+		UsbSetupData_t setup = {};
+		setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+			USB_REQTYPE_INTERFACE;
+		setup.bRequest = USB_HID_REQ_GET_REPORT;
+		setup.wValue = USB_HID_REPTYPE_INPUT;
+		setup.wLength = 8;
+		uint8_t *data = nullptr;
+		uint16_t length = 0;
+		CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+		CHECK(ctx.Gets == 1 && length == 8);
+		setup.bmRequestType &= ~USB_REQTYPE_DIRHOST;
+		setup.bRequest = USB_HID_REQ_SET_REPORT;
+		setup.wValue = USB_HID_REPTYPE_OUTPUT;
+		setup.wLength = 1;
+		CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+		data[0] = 2;
+		CHECK(hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+		CHECK(ctx.Sets == 1 && ctx.Length == 1 && ctx.Bytes[0] == 2);
+	}
+	ResetFake();
+	UsbdHid hid;
+	UsbdHidCfg_t cfg = {};
+	CHECK(!hid.InitKeyboard(cfg));
+	CHECK(!s_Registered);
+	cfg.pRxBuffer = s_RxSlot;
+	cfg.pTxBuffer = s_TxSlot;
+	CHECK(hid.InitKeyboard(cfg));
+	CHECK(hid.FirstInterface() == 0);
+}
+
+static void TestMousePresets()
+{
+	static const uint8_t mouseDesc[] = USB_HID_MOUSE_REPORT_DESC;
+	static const uint8_t axesDesc[] = USB_HID_3D_MOUSE_REPORT_DESC;
+	// Original example bytes: prevent changes to the existing host layout.
+	static const uint8_t originalAxes[] = {
+		0x05, 0x01, 0x09, 0x08, 0xA1, 0x01, 0x16, 0x01, 0x80,
+		0x26, 0xFF, 0x7F, 0x75, 0x10, 0x95, 0x06, 0x09, 0x30,
+		0x09, 0x31, 0x09, 0x32, 0x09, 0x33, 0x09, 0x34, 0x09, 0x35,
+		0x81, 0x06, 0xC0
+	};
+	CHECK(sizeof(axesDesc) == sizeof(originalAxes));
+	CHECK(memcmp(axesDesc, originalAxes, sizeof(originalAxes)) == 0);
+	const UsbHidMouseReport_t mouse = {5, -127, 127};
+	const uint8_t mouseBytes[] = {5, 0x81, 0x7F};
+	CHECK(sizeof(mouse) == sizeof(mouseBytes));
+	CHECK(memcmp(&mouse, mouseBytes, sizeof(mouseBytes)) == 0);
+	const UsbHid3dMouseReport_t axes = {1, -1, 32767, -32767, 2, -2};
+	const uint8_t axesBytes[] = {1, 0, 0xFF, 0xFF, 0xFF, 0x7F,
+		1, 0x80, 2, 0, 0xFE, 0xFF};
+	CHECK(sizeof(axes) == sizeof(axesBytes));
+	CHECK(memcmp(&axes, axesBytes, sizeof(axesBytes)) == 0);
+	for (unsigned multi = 0; multi < 2; multi++)
+	{
+		ResetFake();
+		UsbdHid hid;
+		UsbdHidCfg_t cfg = {};
+		CHECK(!(multi ? hid.Init3dMouse(cfg) : hid.InitMouse(cfg)));
+		CHECK(!s_Registered);
+		cfg.pRxBuffer = s_RxSlot;
+		cfg.pTxBuffer = s_TxSlot;
+		cfg.FsInterval = 4;
+		cfg.HsInterval = 6;
+		cfg.SubClass = 255;
+		cfg.Protocol = 255;
+		ReportContext ctx = {};
+		ctx.GetLength = multi ? sizeof(axes) : sizeof(mouse);
+		cfg.GetReportCB = GetReport;
+		cfg.pContext = &ctx;
+		CHECK(multi ? hid.Init3dMouse(cfg) : hid.InitMouse(cfg));
+		CHECK(cfg.SubClass == 255 && cfg.pReportDesc == nullptr);
+		UsbdHidDev_t *state = hid;
+		CHECK(state->ItfNo == 0 && state->EpNo == 1);
+		const uint8_t *expected = multi ? axesDesc : mouseDesc;
+		const unsigned expectedLength = multi ? sizeof(axesDesc) : sizeof(mouseDesc);
+		CHECK(state->ReportDescLength == expectedLength);
+		CHECK(memcmp(state->pReportDesc, expected, expectedLength) == 0);
+		unsigned size = 0, count = 0, inputBits = 0, relativeBits = 0;
+		for (unsigned i = 0; i < expectedLength;)
+		{
+			const uint8_t item = expected[i++];
+			const unsigned bytes = (item & 3) == 3 ? 4 : item & 3;
+			CHECK(item != 0xFE && i + bytes <= expectedLength);
+			if (i + bytes > expectedLength)
+			{
+				return;
+			}
+			unsigned value = 0;
+			for (unsigned j = 0; j < bytes; j++)
+			{
+				value |= unsigned(expected[i++]) << (8 * j);
+			}
+			switch (item & 0xFC)
+			{
+				case 0x74:
+					size = value;
+					break;
+				case 0x94:
+					count = value;
+					break;
+				case 0x80:
+					inputBits += size * count;
+					if (value & 4)
+					{
+						relativeBits += size * count;
+					}
+					break;
+				case 0x84: // No report IDs, output or feature reports.
+				case 0x90:
+				case 0xB0:
+					CHECK(false);
+					break;
+			}
+		}
+		CHECK(inputBits == (multi ? 96U : 24U));
+		CHECK(relativeBits == (multi ? 96U : 16U));
+		const UsbSpeed_t speeds[] = {USB_SPEED_FULL, USB_SPEED_HIGH};
+		for (UsbSpeed_t speed : speeds)
+		{
+			UsbdHidDesc_t desc;
+			CHECK(UsbdHidMakeDesc(&desc, state, speed));
+			CHECK(desc.Interface.bInterfaceSubClass == (multi ? 0 : USB_HID_SUBCLASS_BOOT));
+			CHECK(desc.Interface.bInterfaceProtocol == (multi ? 0 : USB_HID_PROT_MOUSE));
+			CHECK(desc.In.wMaxPacketSize == (multi ? 12 : 3));
+			CHECK(desc.Out.wMaxPacketSize == desc.In.wMaxPacketSize);
+			CHECK(desc.In.bInterval == (speed == USB_SPEED_FULL ? 4 : 6));
+		}
+		UsbSetupData_t setup = {};
+		setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_STANDARD |
+			USB_REQTYPE_INTERFACE;
+		setup.bRequest = USB_REQ_GET_DESCRIPTOR;
+		setup.wValue = USB_DESCTYPE_HID_REPORT << 8;
+		setup.wLength = 255;
+		uint8_t *data = nullptr;
+		uint16_t length = 0;
+		CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+		CHECK(length == expectedLength && memcmp(data, expected, length) == 0);
+		setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+			USB_REQTYPE_INTERFACE;
+		setup.bRequest = USB_HID_REQ_GET_REPORT;
+		setup.wValue = USB_HID_REPTYPE_INPUT;
+		CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+		CHECK(ctx.Gets == 1 && length == ctx.GetLength);
+		setup.bRequest = USB_HID_REQ_GET_PROTOCOL;
+		setup.wValue = 0;
+		setup.wLength = 1;
+		CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length) == !multi);
+		CHECK(hid.SelectConfig(1));
+		CHECK(hid.Tx(0, ctx.Bytes, ctx.GetLength) == ctx.GetLength);
+		CompleteIn();
+		hid.Reset();
+		CHECK(hid.SelectConfig(1));
+		CHECK(hid.Tx(0, ctx.Bytes, ctx.GetLength) == ctx.GetLength);
+		CompleteIn();
+	}
+}
+
 int main(void)
 {
+	TestMousePresets();
+	TestKeyboardInit();
+	TestKeyboardDefinition();
+	TestReportCallbacks();
+	TestReportStorage();
 	TestProtocolValues();
 	TestSubclassProtocolValidation();
 	TestPendingControlLifetime();

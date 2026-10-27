@@ -62,11 +62,12 @@ SMP_TEST_OBJ := $(BUILD_DIR)/smp/bt_smp_dual_host_test.o
 SMP_FRAMEWORK_OBJ := $(BUILD_DIR)/smp/bt_compliance.o
 SMP_CORE_OBJ := $(BUILD_DIR)/smp/bt_smp.o
 SMP_AES_OBJ := $(BUILD_DIR)/smp/crypto_softaes.o
+SMP_AES_BLOCK_OBJ := $(BUILD_DIR)/smp/crypto_aes_soft.o
 SMP_DEVICE_OBJ := $(BUILD_DIR)/smp/device.o
 SMP_DEVICE_INTRF_OBJ := $(BUILD_DIR)/smp/device_intrf.o
 SMP_STUB_OBJ := $(BUILD_DIR)/smp/bt_smp_test_stubs.o
 SMP_OBJECTS := $(SMP_TEST_OBJ) $(SMP_FRAMEWORK_OBJ) $(SMP_CORE_OBJ) \
-	$(SMP_AES_OBJ) $(SMP_DEVICE_OBJ) $(SMP_DEVICE_INTRF_OBJ) $(SMP_STUB_OBJ)
+	$(SMP_AES_OBJ) $(SMP_AES_BLOCK_OBJ) $(SMP_DEVICE_OBJ) $(SMP_DEVICE_INTRF_OBJ) $(SMP_STUB_OBJ)
 
 HEADERS := \
 	$(wildcard framework/*.h) \
@@ -133,7 +134,11 @@ $(SMP_CORE_OBJ): $(ROOT)/src/bluetooth/bt_smp.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(SMP_CPPFLAGS) $(SMP_CORE_DEFINES) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
 
-$(SMP_AES_OBJ): $(ROOT)/src/crypto/crypto_softaes.cpp $(HEADERS)
+$(SMP_AES_OBJ): $(ROOT)/src/crypto/crypto_aes_modes.cpp $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
+
+$(SMP_AES_BLOCK_OBJ): $(ROOT)/src/crypto/crypto_aes_soft.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -c $< -o $@
 

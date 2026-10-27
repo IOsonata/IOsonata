@@ -17,9 +17,20 @@ from run_validation import sanitizer_cxx
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-TARGET = ROOT / 'ARM/Renesas/RA4M1'
+TARGET = ROOT / 'ARM/Renesas/RA4/RA4M1'
 BUILD = HERE / 'build/examples'
 EXAMPLES = {
+    'CryptoTest': ('exemples/crypto/crypto_engine_test.cpp', 0),
+    'UsbCdcIsoStress': ('exemples/usb/usb_cdc_iso_stress.cpp', 0),
+    'UsbCdcLoopback': ('exemples/usb/usb_cdc_loopback.cpp', 0),
+    'UsbCdcPrbsTx': ('exemples/usb/usb_cdc_prbs_tx.cpp', 0),
+    'UsbCustomBulkLoopback': ('exemples/usb/usb_custom_bulk_loopback.cpp', 0),
+    'UsbDualCdcStress': ('exemples/usb/usb_dual_cdc_stress.cpp', 0),
+    'UsbHidKeyboard': ('exemples/usb/usb_hid_keyboard.cpp', 0),
+    'UsbHidLoopback': ('exemples/usb/usb_hid_loopback.cpp', 0),
+    'UsbIntLoopback': ('exemples/usb/usb_int_loopback.cpp', 0),
+    'UsbIsoLoopback': ('exemples/usb/usb_iso_loopback.cpp', 0),
+    'UsbMscRamdisk': ('exemples/usb/usb_msc_ramdisk.cpp', 0),
     'Blinky': ('exemples/misc/blinky.c', 0),
     'TimerDemo': ('exemples/timer/timer_demo.cpp', 1),
     'UartLoopback': ('exemples/uart/uart_loopback.cpp', 2),
@@ -31,8 +42,6 @@ EXAMPLES = {
     'NvmDemo': ('exemples/storage/data_nvm_demo.cpp', 0),
     'SPIMasterSlave': ('exemples/spi/spi_master_slave.cpp', 0),
 }
-# Examples whose Debug C++ link uses semihosting (rdimon) for printf
-SEMIHOSTING = {'TimerDemo', 'I2CMasterSlave', 'SPIMasterSlave'}
 # Sources linked from an example's own src folder besides board.h, with the
 # reason. None at present.
 LOCAL_SOURCES = {}
@@ -54,7 +63,7 @@ def metadata(partial=False):
         assert px.findtext('projects/project') == 'IOsonata_RA4M1'
         assert px.find("natures/nature[.='org.eclipse.cdt.core.ccnature']") is not None
         expected = {ROOT / shared}
-        if name == 'UartPrbsTxTest':
+        if name in ('UartPrbsTxTest', 'UsbCdcPrbsTx', 'UsbDualCdcStress'):
             expected.add(ROOT / 'src/prbs.c')
         local = LOCAL_SOURCES.get(name, [])
         expected |= {(project.parent / 'src' / f).resolve() for f in local}
@@ -100,7 +109,7 @@ def metadata(partial=False):
             for lang in ('c', 'cpp'):
                 values = lambda key: [x.get('value').strip('"') for x in opts[PREFIX+lang+key].findall('listOptionValue')]
                 inc = {(project/config/p).resolve() for p in values('.compiler.include.paths')}
-                assert inc == {project.parent/'src', TARGET/'include', ROOT/'ARM/include',
+                assert inc == {project.parent/'src', TARGET/'include', TARGET.parent/'include', TARGET.parent.parent/'include', ROOT/'ARM/include',
                                ROOT/'ARM/CMSIS/Core/Include', ROOT/'include'}
                 assert values('.linker.libs') == ['IOsonata_RA4M1']
                 assert (project/config/values('.linker.paths')[0]).resolve() == TARGET/'lib/ioc'/config
@@ -108,11 +117,10 @@ def metadata(partial=False):
                 assert script == TARGET/'ldscript/gcc_ra4m1.ld' and script.is_file()
                 flags = opts[PREFIX+lang+'.linker.other'].get('value')
                 assert 'nostartfiles' not in flags
-                if 'rdimon' in flags:
-                    # Debug C++ link of the examples with a console: printf
+                if config == 'Debug':
+                    # Debug builds use printf
                     # through semihosting. ResetEntry stays the ELF entry of
                     # gcc_ra4m1.ld, which keeps the vector table.
-                    assert name in SEMIHOSTING and config == 'Debug' and lang == 'cpp', (name, config, lang)
                     assert '--specs=rdimon.specs' in flags and '-lrdimon' in flags
                     assert 'ENTRY(ResetEntry)' in script.read_text()
                 else:

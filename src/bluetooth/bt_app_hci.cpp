@@ -906,7 +906,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// starting it must not run unprotected.
 	if (pCfg->SecType != BTGAP_SECTYPE_NONE && s_BtAppData.bSecInit == false)
 	{
-		STORE_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
+		STORE_PRINTF("BtAppInit FAIL: SecType=%d but security initialization did not complete\r\n",
 					 (int)pCfg->SecType);
 		return false;
 	}

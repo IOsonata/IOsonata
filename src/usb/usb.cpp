@@ -1855,6 +1855,34 @@ bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 	return true;
 }
 
+bool UsbdClassRollback(int DevNo, UsbDeviceClass *pClass)
+{
+	if (DevNo != s_Core.DevNo || s_Core.Started || pClass == nullptr ||
+		s_Core.ObjectCnt == 0 || s_Core.Object[s_Core.ObjectCnt - 1] != pClass)
+	{
+		return false;
+	}
+	const int index = --s_Core.ObjectCnt;
+	for (unsigned ep = 1; ep < 16; ep++)
+	{
+		for (unsigned dir = 0; dir < 2; dir++)
+		{
+			if (s_Core.EpClass[dir][ep] == index)
+			{
+				s_Core.EpClass[dir][ep] = -1;
+			}
+		}
+	}
+	s_Core.Object[index] = nullptr;
+	pClass->vFirstInterface = 0U;
+	pClass->vInterfaceCount = 0U;
+	pClass->vEpInMask = pClass->vEpOutMask = 0U;
+	pClass->vDescLength = 0U;
+	pClass->vDescTemplate = nullptr;
+	pClass->vDescBuild = nullptr;
+	return true;
+}
+
 bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
 					 const void *pTemplate, uint16_t Length,
 					 UsbDescBuild_t Build)
@@ -1867,6 +1895,17 @@ bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
 
 	if (pClass->vDescLength != 0U)
 		return false;
+	// Reject before publishing a fragment that cannot fit the shared buffer.
+	uint32_t total = sizeof(UsbCfgDesc_t) + Length;
+	for (int i = 0; i < s_Core.ObjectCnt; i++)
+	{
+		total += static_cast<UsbDeviceClass *>(s_Core.Object[i])->DescriptorLength();
+	}
+	if (total > sizeof(s_Core.ConfigDesc))
+	{
+		return false;
+	}
+
 	for (int i = 0; i < s_Core.ObjectCnt; i++)
 	{
 		if (s_Core.Object[i] == pClass)

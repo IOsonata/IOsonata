@@ -53,6 +53,10 @@ SOFTWARE.
 #include "syslog.h"
 #include "board.h"
 
+#ifdef CORE_PINS
+static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
+#endif
+
 // Uncomment this to set custom board oscillator
 // Default library setting is :
 // #define MCU_OSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
@@ -201,6 +205,14 @@ void BtAppAdvTimeoutHandler()
 
 int main()
 {
+
+#ifdef CORE_PINS
+	if (!IOPinCoreCfg(s_CorePins, sizeof(s_CorePins) / sizeof(s_CorePins[0])))
+	{
+		return 1;
+	}
+#endif
+
 	// Configure Leds
 	IOPinCfg(s_Leds, s_NbLeds);
 

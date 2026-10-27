@@ -36,6 +36,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <math.h>
+#include <string.h>
 
 #include "istddef.h"
 #include "idelay.h"
@@ -478,8 +479,82 @@ static const uint8_t s_BMI270CfgData[] = {
 
 static const size_t s_BMI270CfgDataLen = sizeof(s_BMI270CfgData) / sizeof(uint8_t);
 
+typedef struct __BMI270_Odr
+{
+	uint32_t Freq;
+	uint8_t Code;
+} BMI270Odr_t;
+
+static const BMI270Odr_t s_BMI270AccOdr[] = {
+	{781, 1}, {1562, 2}, {3125, 3}, {6250, 4}, {12500, 5}, {25000, 6},
+	{50000, 7}, {100000, 8}, {200000, 9}, {400000, 10}, {800000, 11},
+	{1600000, 12},
+};
+
+static const BMI270Odr_t s_BMI270GyroOdr[] = {
+	{25000, 6}, {50000, 7}, {100000, 8}, {200000, 9}, {400000, 10},
+	{800000, 11}, {1600000, 12}, {3200000, 13},
+};
+
+static uint32_t BMI270SelectOdr(uint32_t Freq, const BMI270Odr_t *pTable,
+								 size_t Count, uint8_t *pCode)
+{
+	uint64_t best;
+	uint64_t diff;
+	uint32_t selected;
+	size_t i;
+
+	if (pTable == NULL || pCode == NULL || Count == 0)
+	{
+		return 0;
+	}
+
+	selected = pTable[0].Freq;
+	*pCode = pTable[0].Code;
+	best = Freq > selected ? (uint64_t)Freq - selected : (uint64_t)selected - Freq;
+
+	for (i = 1; i < Count; i++)
+	{
+		diff = Freq > pTable[i].Freq ? (uint64_t)Freq - pTable[i].Freq :
+			(uint64_t)pTable[i].Freq - Freq;
+		if (diff < best)
+		{
+			best = diff;
+			selected = pTable[i].Freq;
+			*pCode = pTable[i].Code;
+		}
+	}
+
+	return selected;
+}
+
+static int16_t BMI270GetS16(const uint8_t *pData)
+{
+	return (int16_t)((uint16_t)pData[0] | ((uint16_t)pData[1] << 8));
+}
+
+static size_t FifoFrameSize(uint8_t Flag)
+{
+	size_t retval;
+
+	retval = 0;
+	if (Flag & BMI270_FIFO_DATA_FLAG_GYR)
+	{
+		retval += 6;
+	}
+	if (Flag & BMI270_FIFO_DATA_FLAG_ACC)
+	{
+		retval += 6;
+	}
+
+	return retval;
+}
+
 bool AccelBmi270::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
+	uint8_t regaddr;
+	uint8_t d;
+
 	if (Init((uint32_t)CfgData.DevAddr, pIntrf, pTimer) == false)
 	{
 		return false;
@@ -487,502 +562,647 @@ bool AccelBmi270::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 	AccelSensor::Type(SENSOR_TYPE_ACCEL);
 
+	if (CfgData.bFifoEn)
+	{
+		FifoDataFlagSet(BMI270_FIFO_DATA_FLAG_ACC);
+	}
+	else
+	{
+		FifoDataFlagClr(BMI270_FIFO_DATA_FLAG_ACC);
+	}
+
 	Range(BMI270_ADC_RANGE);
-	Scale(CfgData.Scale);
-	SamplingFrequency(CfgData.Freq);
-	FilterFreq(CfgData.FltrFreq);
+	if (Scale((uint8_t)CfgData.Scale) == 0)
+	{
+		return false;
+	}
+	if (SamplingFrequency(CfgData.Freq) == 0)
+	{
+		return false;
+	}
+	if (CfgData.FltrFreq != 0 && FilterFreq(CfgData.FltrFreq) == 0)
+	{
+		return false;
+	}
+	if (CfgData.FltrFreq == 0)
+	{
+		AccelSensor::FilterFreq(0);
+	}
 
 	if (CfgData.Inter)
 	{
-		uint8_t regaddr = BMI270_INT_MAP_DATA_REG;
-		uint8_t d = BMI270_INT_MAP_DATA_FFULL_INT1 |
-					BMI270_INT_MAP_DATA_FWM_INT1 |
-					BMI270_INT_MAP_DATA_DRDY_INT1 |
-					BMI270_INT_MAP_ERR_INT1;
-
-		Write8(&regaddr, 1, d);
-
-		regaddr = BMI270_INT_LATCH_REG;
-		//Write8(&regaddr, 1, BMI270_INT_LATCH_PERM);
-
-		if (vpTimer == nullptr)
+		regaddr = BMI270_INT_MAP_DATA_REG;
+		d = BMI270_INT_MAP_DATA_DRDY_INT1 | BMI270_INT_MAP_ERR_INT1;
+		if (CfgData.bFifoEn)
 		{
-//			d |= BMI270_INT_MAP2_ERR_STATUS_INT1 | Bmi270_INT_MAP2_FIFO_WATERMARK_INT1 | Bmi270_INT_MAP2_FIFO_FULL_INT1;
+			d |= BMI270_INT_MAP_DATA_FFULL_INT1 | BMI270_INT_MAP_DATA_FWM_INT1;
 		}
-//		Write16(&regaddr, 1, d);
+		if (!Write8(&regaddr, 1, d))
+		{
+			return false;
+		}
 
 		regaddr = BMI270_INT1_IO_CTRL_REG;
 		d = BMI270_INT1_IO_CTRL_OD_PUSH_PULL | BMI270_INT1_IO_CTRL_OUTPUT_EN;
-
 		if (CfgData.IntPol == DEVINTR_POL_HIGH)
 		{
 			d |= BMI270_INT1_IO_CTRL_LVL_ACT_HIGH;
 		}
-
-		Write8(&regaddr, 1, d);
-
+		if (!Write8(&regaddr, 1, d))
+		{
+			return false;
+		}
 	}
 
-	AccelBmi270::Enable();
-
-	return true;
+	return AccelBmi270::Enable();
 }
 
 uint8_t AccelBmi270::Scale(uint8_t Value)
 {
-	uint8_t regaddr = BMI270_ACC_RANGE_REG;
-	uint8_t d = 0;//Read16(&regaddr, 1) & ~BMI270_ACC_RANGE_MASK;
+	uint8_t regaddr;
+	uint8_t d;
+	uint8_t actual;
 
-	if (Value < 3)
+	regaddr = BMI270_ACC_RANGE_REG;
+	d = BMI270_ACC_RANGE_2G;
+	actual = 2;
+
+	if (Value >= 12)
 	{
-		d |= BMI270_ACC_RANGE_2G;
-		Value = 2;
+		d = BMI270_ACC_RANGE_16G;
+		actual = 16;
 	}
-	else if (Value < 6)
+	else if (Value >= 6)
 	{
-		d |= BMI270_ACC_RANGE_4G;
-		Value = 4;
+		d = BMI270_ACC_RANGE_8G;
+		actual = 8;
 	}
-	else if (Value < 12)
+	else if (Value >= 3)
 	{
-		d |= BMI270_ACC_RANGE_8G;
-		Value = 8;
-	}
-	else
-	{
-		d |= BMI270_ACC_RANGE_16G;
-		Value = 16;
+		d = BMI270_ACC_RANGE_4G;
+		actual = 4;
 	}
 
-	Write8(&regaddr, 1, d);
-	msDelay(1);	// Require delay, donot remove
+	if (!Write8(&regaddr, 1, d))
+	{
+		return 0;
+	}
+	msDelay(1);
 
-	return AccelSensor::Scale(Value);
+	AccelSensor::Scale(actual);
+	return actual;
 }
 
 uint32_t AccelBmi270::FilterFreq(uint32_t Freq)
 {
-	uint8_t t = AccelSensor::SamplingFrequency() / Freq;
-	uint8_t regaddr = BMI270_ACC_CONF_REG;
-	uint8_t d = Read8(&regaddr, 1) & ~(BMI270_ACC_CONF_ACC_BWP_MASK | BMI270_ACC_CONF_ACC_FILTER_PERF_HP);
+	uint32_t sample;
+	uint32_t ratio;
+	uint32_t actual;
+	uint8_t shift;
+	uint8_t regaddr;
+	uint8_t d;
+	uint8_t bwp;
 
-	if ( t < 4)
+	if (Freq == 0)
 	{
-		d |= BMI270_ACC_CONF_ACC_BWP_OSR2_AVG2;
-		t = 1;
+		return AccelSensor::FilterFreq(0);
 	}
-	else if (t < 8)
+
+	sample = AccelSensor::SamplingFrequency();
+	if (sample == 0)
 	{
-		d |= BMI270_ACC_CONF_ACC_BWP_NORM_AVG4;
-		t = 2;
+		return 0;
 	}
-	else if (t < 16)
+
+	ratio = sample / Freq;
+	if (ratio <= 1)
 	{
-		d |= BMI270_ACC_CONF_ACC_BWP_CIC_AVG8;
-		t = 3;
+		bwp = BMI270_ACC_CONF_ACC_BWP_OSR4_AVG1;
+		shift = 0;
 	}
-	else if (t < 32)
+	else if (ratio <= 2)
 	{
-		d |= BMI270_ACC_CONF_ACC_BWP_RES_AVG16;
-		t = 4;
+		bwp = BMI270_ACC_CONF_ACC_BWP_OSR2_AVG2;
+		shift = 1;
 	}
-	else if (t < 64)
+	else if (ratio <= 4)
 	{
-		d |= BMI270_ACC_CONF_ACC_BWP_RES_AVG32;
-		t = 5;
+		bwp = BMI270_ACC_CONF_ACC_BWP_NORM_AVG4;
+		shift = 2;
 	}
-	else if (t < 128)
+	else if (ratio <= 8)
 	{
-		d |= BMI270_ACC_CONF_ACC_BWP_RES_AVG64;
-		t = 6;
+		bwp = BMI270_ACC_CONF_ACC_BWP_CIC_AVG8;
+		shift = 3;
+	}
+	else if (ratio <= 16)
+	{
+		bwp = BMI270_ACC_CONF_ACC_BWP_RES_AVG16;
+		shift = 4;
+	}
+	else if (ratio <= 32)
+	{
+		bwp = BMI270_ACC_CONF_ACC_BWP_RES_AVG32;
+		shift = 5;
+	}
+	else if (ratio <= 64)
+	{
+		bwp = BMI270_ACC_CONF_ACC_BWP_RES_AVG64;
+		shift = 6;
 	}
 	else
 	{
-		d |= BMI270_ACC_CONF_ACC_BWP_RES_AVG128;
-		t = 7;
+		bwp = BMI270_ACC_CONF_ACC_BWP_RES_AVG128;
+		shift = 7;
 	}
 
+	regaddr = BMI270_ACC_CONF_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return 0;
+	}
+	d &= ~(BMI270_ACC_CONF_ACC_BWP_MASK | BMI270_ACC_CONF_ACC_FILTER_PERF_HP);
+	d |= bwp;
+	if (!Write8(&regaddr, 1, d))
+	{
+		return 0;
+	}
 
-	Write8(&regaddr, 1, d);
-
-	return AccelSensor::FilterFreq(AccelSensor::SamplingFrequency() >> t);
+	actual = sample >> shift;
+	if (actual == 0)
+	{
+		actual = 1;
+	}
+	return AccelSensor::FilterFreq(actual);
 }
 
 uint32_t AccelBmi270::SamplingFrequency(uint32_t Freq)
 {
-	uint8_t regaddr = BMI270_ACC_CONF_REG;
-	uint8_t accconf = Read8(&regaddr, 1) & ~BMI270_ACC_CONF_ODR_MASK;
-	uint32_t f = 0;
-	uint32_t dif = 100000;
+	uint32_t actual;
+	uint8_t code;
+	uint8_t regaddr;
+	uint8_t d;
 
-	if (Freq < 1000)
+	actual = BMI270SelectOdr(Freq, s_BMI270AccOdr,
+						 sizeof(s_BMI270AccOdr) / sizeof(s_BMI270AccOdr[0]), &code);
+	if (actual == 0)
 	{
-		accconf |= 1;
-		f = 781;
+		return 0;
 	}
-	else if (Freq < 2500)
-	{
-		accconf |= 2;
-		f = 1562;
-	}
-	else
-	{
-		for (int i = 0; i < 12; i++)
-		{
-			uint32_t t = 3125 << i;
-			uint32_t x = labs(Freq - t);
 
-			if (x < dif)
-			{
-				accconf &= ~BMI270_ACC_CONF_ODR_MASK;
-				accconf |= i + 3;
-				dif = x;
-				f = t;
-			}
-
-			if (t > Freq)
-			{
-				break;
-			}
-		}
+	regaddr = BMI270_ACC_CONF_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return 0;
 	}
-//	printf("AccelBmi270::SamplingFrequency %d %d %x\n", Freq, f, accconf);
-	Write8(&regaddr, 1, accconf);
+	d &= ~BMI270_ACC_CONF_ODR_MASK;
+	d |= code;
+	if (!Write8(&regaddr, 1, d))
+	{
+		return 0;
+	}
 
 	msDelay(1);
-
-	return Sensor::SamplingFrequency(f);
+	return AccelSensor::SamplingFrequency(actual);
 }
 
 bool AccelBmi270::Enable()
 {
 	uint8_t regaddr;
 	uint8_t d;
+	bool fifo;
 
-	if (vpTimer == nullptr)
+	fifo = (FifoDataFlag() & BMI270_FIFO_DATA_FLAG_ACC) != 0;
+
+	regaddr = BMI270_FIFO_CONFIG1_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
 	{
-		regaddr = BMI270_FIFO_CONFIG1_REG;
-		d = Read8(&regaddr, 1) | BMI270_FIFO_CONFIG1_FIFO_ACC_EN;
-		Write16(&regaddr, 1, d);
-
-		msDelay(1); // Require delay, do not remove
-
-		regaddr = BMI270_CMD_REG;
-		Write8(&regaddr, 1, BMI270_CMD_FIFO_FLUSH);
-
-		FifoDataFlagSet(BMI270_FIFO_DATA_FLAG_ACC);
+		return false;
 	}
-
-	regaddr = BMI270_PWR_CTRL_REG;
-	d = Read8(&regaddr, 1) & ~BMI270_PWR_CTRL_ACC_EN;
-	d |= BMI270_PWR_CTRL_ACC_EN;
-	printf("Enable : %x\n", d);
-	Write8(&regaddr, 1, d);
-
-	msDelay(20); // Require delay, do not remove
-
-	regaddr = BMI270_ERR_REG;
-	d = Read16(&regaddr, 1);
-
-	if (d != 0)
+	d &= ~(BMI270_FIFO_CONFIG1_FIFO_ACC_EN | BMI270_FIFO_CONFIG1_FIFO_HEADER_EN);
+	if (fifo)
+	{
+		d |= BMI270_FIFO_CONFIG1_FIFO_ACC_EN;
+	}
+	if (!Write8(&regaddr, 1, d))
 	{
 		return false;
 	}
 
-	return true;
+	if (fifo)
+	{
+		regaddr = BMI270_CMD_REG;
+		if (!Write8(&regaddr, 1, BMI270_CMD_FIFO_FLUSH))
+		{
+			return false;
+		}
+		msDelay(1);
+	}
+
+	regaddr = BMI270_PWR_CTRL_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return false;
+	}
+	d |= BMI270_PWR_CTRL_ACC_EN;
+	if (!Write8(&regaddr, 1, d))
+	{
+		return false;
+	}
+
+	msDelay(20);
+
+	regaddr = BMI270_ERR_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return false;
+	}
+
+	return d == 0;
 }
 
 void AccelBmi270::Disable()
 {
-	uint8_t regaddr = BMI270_PWR_CTRL_REG;
-	uint8_t d = Read8(&regaddr, 1) & ~BMI270_PWR_CTRL_ACC_EN;
+	uint8_t regaddr;
+	uint8_t d;
 
-	Write8(&regaddr, 1, d);
-
-	msDelay(10);
+	regaddr = BMI270_PWR_CTRL_REG;
+	if (Read(&regaddr, 1, &d, 1) == 1)
+	{
+		d &= ~BMI270_PWR_CTRL_ACC_EN;
+		Write8(&regaddr, 1, d);
+	}
 
 	regaddr = BMI270_FIFO_CONFIG1_REG;
-	d = Read8(&regaddr, 1) & ~BMI270_FIFO_CONFIG1_FIFO_ACC_EN;
-	Write8(&regaddr, 1, d);
+	if (Read(&regaddr, 1, &d, 1) == 1)
+	{
+		d &= ~BMI270_FIFO_CONFIG1_FIFO_ACC_EN;
+		Write8(&regaddr, 1, d);
+	}
 
-//	regaddr = Bmi270_ERR_REG;
-//	Read16(&regaddr, 1);
+	msDelay(10);
 }
 
 bool GyroBmi270::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
+	uint8_t regaddr;
+	uint8_t d;
+
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	{
 		return false;
+	}
 
 	GyroSensor::Type(SENSOR_TYPE_GYRO);
 
-	Range(BMI270_ADC_RANGE);
-
-	Sensitivity(CfgData.Sensitivity);
-	SamplingFrequency(CfgData.Freq);
-	FilterFreq(CfgData.FltrFreq);
-
-	uint8_t regaddr = BMI270_ERR_REG;
-	uint8_t d = Read8(&regaddr, 1);
-
-	if (d != 0)
+	if (CfgData.bFifoEn)
 	{
-		printf("GyroBmi270::Init error %x\n\r", d);
+		FifoDataFlagSet(BMI270_FIFO_DATA_FLAG_GYR);
+	}
+	else
+	{
+		FifoDataFlagClr(BMI270_FIFO_DATA_FLAG_GYR);
+	}
+
+	Range(BMI270_ADC_RANGE);
+	if (Sensitivity(CfgData.Sensitivity) == 0)
+	{
+		return false;
+	}
+	if (SamplingFrequency(CfgData.Freq) == 0)
+	{
+		return false;
+	}
+	if (CfgData.FltrFreq != 0 && FilterFreq(CfgData.FltrFreq) == 0)
+	{
+		return false;
+	}
+	if (CfgData.FltrFreq == 0)
+	{
+		GyroSensor::FilterFreq(0);
+	}
+
+	regaddr = BMI270_ERR_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1 || d != 0)
+	{
 		return false;
 	}
 
-	if (vpTimer == nullptr)
+	if (CfgData.Inter)
 	{
-//		d |= Bmi270_INT_MAP2_ERR_STATUS_INT1 | Bmi270_INT_MAP2_FIFO_FULL_INT1 | Bmi270_INT_MAP2_FIFO_WATERMARK_INT1;
+		regaddr = BMI270_INT_MAP_DATA_REG;
+		if (Read(&regaddr, 1, &d, 1) != 1)
+		{
+			return false;
+		}
+		d |= BMI270_INT_MAP_DATA_DRDY_INT1 | BMI270_INT_MAP_ERR_INT1;
+		if (CfgData.bFifoEn)
+		{
+			d |= BMI270_INT_MAP_DATA_FFULL_INT1 | BMI270_INT_MAP_DATA_FWM_INT1;
+		}
+		if (!Write8(&regaddr, 1, d))
+		{
+			return false;
+		}
+
+		regaddr = BMI270_INT1_IO_CTRL_REG;
+		d = BMI270_INT1_IO_CTRL_OD_PUSH_PULL | BMI270_INT1_IO_CTRL_OUTPUT_EN;
+		if (CfgData.IntPol == DEVINTR_POL_HIGH)
+		{
+			d |= BMI270_INT1_IO_CTRL_LVL_ACT_HIGH;
+		}
+		if (!Write8(&regaddr, 1, d))
+		{
+			return false;
+		}
 	}
-//	Write16(&regaddr, 1, d);
 
-	GyroBmi270::Enable();
-
-	return true;
+	return GyroBmi270::Enable();
 }
 
 uint32_t GyroBmi270::FilterFreq(uint32_t Freq)
 {
-	uint8_t t = GyroSensor::SamplingFrequency() / Freq;
-#if 0
-	uint8_t regaddr = BMI270_GYR_CONF_REG;
-	uint8_t d = Read16(&regaddr, 1) & ~Bmi270_GYR_CONF_AVG_NUM_MASK;
+	uint32_t sample;
+	uint32_t ratio;
+	uint32_t actual;
+	uint8_t shift;
+	uint8_t regaddr;
+	uint8_t d;
+	uint8_t bwp;
 
-	if (t < 4)
+	if (Freq == 0)
 	{
-		d |= BMI270_GYR_CONF_AVG_NUM_2;
-		t = 1;
+		return GyroSensor::FilterFreq(0);
 	}
-	else if (t < 8)
+
+	sample = GyroSensor::SamplingFrequency();
+	if (sample == 0)
 	{
-		d |= BMI270_GYR_CONF_AVG_NUM_4;
-		t = 2;
+		return 0;
 	}
-	else if (t < 16)
+
+	ratio = sample / Freq;
+	if (ratio <= 2)
 	{
-		d |= BMI270_GYR_CONF_AVG_NUM_8;
-		t = 3;
+		bwp = BMI270_GYR_CONF_BWP_OSR4;
+		shift = 0;
 	}
-	else if (t < 32)
+	else if (ratio <= 4)
 	{
-		d |= BMI270_GYR_CONF_AVG_NUM_16;
-		t = 4;
-	}
-	else if (t < 64)
-	{
-		d |= BMI270_GYR_CONF_AVG_NUM_32;
-		t = 5;
+		bwp = BMI270_GYR_CONF_BWP_OSR2;
+		shift = 1;
 	}
 	else
 	{
-		d |= BMI270_GYR_CONF_AVG_NUM_64;
-		t = 6;
+		bwp = BMI270_GYR_CONF_BWP_NORM;
+		shift = 2;
 	}
 
-	Write16(&regaddr, 1, d);
-#endif
+	regaddr = BMI270_GYR_CONF_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return 0;
+	}
+	d &= ~(BMI270_GYR_CONF_BWP_MASK | BMI270_GYR_CONF_FILTER_PERF_HP);
+	d |= bwp;
+	if (!Write8(&regaddr, 1, d))
+	{
+		return 0;
+	}
 
-	return GyroSensor::FilterFreq(GyroSensor::SamplingFrequency() >> t);
+	actual = sample >> shift;
+	if (actual == 0)
+	{
+		actual = 1;
+	}
+	return GyroSensor::FilterFreq(actual);
 }
 
 uint32_t GyroBmi270::SamplingFrequency(uint32_t Freq)
 {
-	uint8_t regaddr = BMI270_GYR_CONF_REG;
-	uint8_t conf = Read8(&regaddr, 1) & ~BMI270_GYR_CONF_ODR_MASK;
-	uint32_t f = 0;
-	uint32_t dif = 100000;
+	uint32_t actual;
+	uint8_t code;
+	uint8_t regaddr;
+	uint8_t d;
 
-	if (Freq < 1000)
+	actual = BMI270SelectOdr(Freq, s_BMI270GyroOdr,
+						 sizeof(s_BMI270GyroOdr) / sizeof(s_BMI270GyroOdr[0]), &code);
+	if (actual == 0)
 	{
-		conf |= 1;
-		f = 781;
+		return 0;
 	}
-	else if (Freq < 2500)
-	{
-		conf |= 2;
-		f = 1562;
-	}
-	else
-	{
-		for (int i = 0; i < 12; i++)
-		{
-			uint32_t t = 3125 << i;
-			uint32_t x = labs(Freq - t);
 
-			if (x < dif)
-			{
-				conf &= ~BMI270_GYR_CONF_ODR_MASK;
-				conf |= i + 3;
-				dif = x;
-				f = t;
-			}
-
-			if (t > Freq)
-			{
-				break;
-			}
-		}
+	regaddr = BMI270_GYR_CONF_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return 0;
 	}
-//printf("SamplingFrequency %d %d %x\r\n", Freq, f, conf);
-	Write8(&regaddr, 1, conf);
+	d &= ~BMI270_GYR_CONF_ODR_MASK;
+	d |= code;
+	if (!Write8(&regaddr, 1, d))
+	{
+		return 0;
+	}
 
 	msDelay(1);
-
-	return Sensor::SamplingFrequency(f);
+	return GyroSensor::SamplingFrequency(actual);
 }
 
 uint32_t GyroBmi270::Sensitivity(uint32_t Value)
 {
-	uint8_t regaddr = BMI270_GYR_RANGE_REG;
-	uint32_t d = Read16(&regaddr, 1) & ~BMI270_GYR_RANGE_GYR_RANGE_MASK;
-	uint32_t range = 0;
+	uint32_t actual;
+	uint8_t regaddr;
+	uint8_t d;
+	uint8_t range;
 
 	if (Value < 250)
 	{
-		d |= BMI270_GYR_RANGE_GYR_RANGE_125;
-		range = 125;
+		range = BMI270_GYR_RANGE_GYR_RANGE_125;
+		actual = 125;
 	}
 	else if (Value < 500)
 	{
-		d |= BMI270_GYR_RANGE_GYR_RANGE_250;
-		range = 250;
+		range = BMI270_GYR_RANGE_GYR_RANGE_250;
+		actual = 250;
 	}
 	else if (Value < 1000)
 	{
-		d |= BMI270_GYR_RANGE_GYR_RANGE_500;
-		range = 500;
+		range = BMI270_GYR_RANGE_GYR_RANGE_500;
+		actual = 500;
 	}
 	else if (Value < 2000)
 	{
-		d |= BMI270_GYR_RANGE_GYR_RANGE_1000;
-		range = 1000;
+		range = BMI270_GYR_RANGE_GYR_RANGE_1000;
+		actual = 1000;
 	}
 	else
 	{
-		d |= BMI270_GYR_RANGE_GYR_RANGE_2000;
-		range = 2000;
+		range = BMI270_GYR_RANGE_GYR_RANGE_2000;
+		actual = 2000;
 	}
 
-	Write16(&regaddr, 1, d);
+	regaddr = BMI270_GYR_RANGE_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return 0;
+	}
+	d &= ~BMI270_GYR_RANGE_GYR_RANGE_MASK;
+	d |= range;
+	if (!Write8(&regaddr, 1, d))
+	{
+		return 0;
+	}
 
-	return GyroSensor::Sensitivity(range);
+	GyroSensor::Sensitivity((uint16_t)actual);
+	return actual;
 }
 
 bool GyroBmi270::Enable()
 {
 	uint8_t regaddr;
 	uint8_t d;
+	bool fifo;
 
-	if (vpTimer == nullptr)
+	fifo = (FifoDataFlag() & BMI270_FIFO_DATA_FLAG_GYR) != 0;
+
+	regaddr = BMI270_FIFO_CONFIG1_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
 	{
-		regaddr = BMI270_FIFO_CONFIG1_REG;
-		d = Read8(&regaddr, 1) | BMI270_FIFO_CONFIG1_FIFO_GYR_EN;
-
-		Write8(&regaddr, 1, d);
-
-		msDelay(1); // Require delay, do not remove
-
-		regaddr = BMI270_CMD_REG;
-		Write8(&regaddr, 1, BMI270_CMD_FIFO_FLUSH);
-
-		FifoDataFlagSet(BMI270_FIFO_DATA_FLAG_GYR);
+		return false;
+	}
+	d &= ~(BMI270_FIFO_CONFIG1_FIFO_GYR_EN | BMI270_FIFO_CONFIG1_FIFO_HEADER_EN);
+	if (fifo)
+	{
+		d |= BMI270_FIFO_CONFIG1_FIFO_GYR_EN;
+	}
+	if (!Write8(&regaddr, 1, d))
+	{
+		return false;
 	}
 
-	regaddr = BMI270_ERR_REG;
-	d = Read16(&regaddr, 1);
-
-	if (d != 0)
+	if (fifo)
 	{
-		printf("Bmi270_FIFO_CTRL_FLUSH err %x\r\n", d);
-		return false;
+		regaddr = BMI270_CMD_REG;
+		if (!Write8(&regaddr, 1, BMI270_CMD_FIFO_FLUSH))
+		{
+			return false;
+		}
+		msDelay(1);
 	}
 
 	regaddr = BMI270_PWR_CTRL_REG;
-	d = Read8(&regaddr, 1) & ~BMI270_PWR_CTRL_GYR_EN;
-	d |= BMI270_PWR_CTRL_GYR_EN;
-
-	printf("Gyr Cfg : %x\r\n", d);
-
-	Write8(&regaddr, 1, d);
-
-	msDelay(20); // Require delay, do not remove
-
-	regaddr = BMI270_ERR_REG;
-	d = Read8(&regaddr, 1);
-
-	if (d != 0)
+	if (Read(&regaddr, 1, &d, 1) != 1)
 	{
-		printf("Gyr err %x\r\n", d);
+		return false;
+	}
+	d |= BMI270_PWR_CTRL_GYR_EN;
+	if (!Write8(&regaddr, 1, d))
+	{
 		return false;
 	}
 
-	return true;
+	msDelay(20);
+
+	regaddr = BMI270_ERR_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return false;
+	}
+
+	return d == 0;
 }
 
 void GyroBmi270::Disable()
 {
-	uint8_t regaddr = BMI270_PWR_CTRL_REG;
-	uint8_t d = Read8(&regaddr, 1) & ~BMI270_PWR_CTRL_GYR_EN;
-	Write8(&regaddr, 1, d);
+	uint8_t regaddr;
+	uint8_t d;
 
-	msDelay(10);
-
-	regaddr = BMI270_ERR_REG;
-	d = Read8(&regaddr, 1);
+	regaddr = BMI270_PWR_CTRL_REG;
+	if (Read(&regaddr, 1, &d, 1) == 1)
+	{
+		d &= ~BMI270_PWR_CTRL_GYR_EN;
+		Write8(&regaddr, 1, d);
+	}
 
 	regaddr = BMI270_FIFO_CONFIG1_REG;
-	d = Read8(&regaddr, 1) & ~BMI270_FIFO_CONFIG1_FIFO_GYR_EN;
+	if (Read(&regaddr, 1, &d, 1) == 1)
+	{
+		d &= ~BMI270_FIFO_CONFIG1_FIFO_GYR_EN;
+		Write8(&regaddr, 1, d);
+	}
 
-	Write8(&regaddr, 1, d);
+	msDelay(10);
 }
 
 bool TempBmi270::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	{
 		return false;
+	}
 
 	TempSensor::Type(SENSOR_TYPE_TEMP);
+	return TempBmi270::Enable();
+}
 
+bool TempBmi270::Enable()
+{
+	uint8_t regaddr;
+	uint8_t d;
+
+	regaddr = BMI270_PWR_CTRL_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return false;
+	}
+
+	d |= BMI270_PWR_CTRL_TEMP_EN;
+	if (!Write8(&regaddr, 1, d))
+	{
+		return false;
+	}
+	msDelay(20);
 
 	return true;
 }
 
-/**
- * @brief	Power on or wake up device
- *
- * @return	true - If success
- */
-bool TempBmi270::Enable()
-{
-	bool retval = false;
-
-	FifoDataFlagSet(BMI270_FIFO_DATA_FLAG_TEMP);
-
-	return retval;
-}
-
-/**
- * @brief	Put device in power down or power saving sleep mode
- *
- * @return	None
- */
 void TempBmi270::Disable()
 {
+	uint8_t regaddr;
+	uint8_t d;
+
+	regaddr = BMI270_PWR_CTRL_REG;
+	if (Read(&regaddr, 1, &d, 1) == 1)
+	{
+		d &= ~BMI270_PWR_CTRL_TEMP_EN;
+		Write8(&regaddr, 1, d);
+	}
 }
 
 bool AgBmi270::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (Valid())
-		return true;
-
-	if (pIntrf == NULL)
-		return false;
-
 	uint8_t regaddr;
 	uint8_t d;
 
+	if (Valid())
+	{
+		return true;
+	}
+	if (pIntrf == NULL)
+	{
+		return false;
+	}
+	if (pIntrf->Type() != DEVINTRF_TYPE_I2C && pIntrf->Type() != DEVINTRF_TYPE_SPI)
+	{
+		return false;
+	}
+
+	Valid(false);
+	vbInitialized = false;
 	Interface(pIntrf);
+	vpTimer = pTimer;
+	vPrevTime = 0;
+	vRollover = 0;
 
 	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
 	{
@@ -1004,28 +1224,25 @@ bool AgBmi270::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 		DeviceAddress(DevAddr);
 	}
 
-	// Read chip id
 	regaddr = BMI270_CHIP_ID_REG;
-	d = Read8(&regaddr, 1);
-
-	if (d != BMI270_CHIP_ID)
+	if (Read(&regaddr, 1, &d, 1) != 1 || d != BMI270_CHIP_ID)
 	{
 		return false;
 	}
 
-	if (pTimer != NULL)
-	{
-		vpTimer = pTimer;
-	}
-
 	Reset();
 
-	DeviceID(d);
-	Valid(true);
+	regaddr = BMI270_CHIP_ID_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1 || d != BMI270_CHIP_ID)
+	{
+		return false;
+	}
 
 	regaddr = BMI270_NV_CONF_REG;
-	d = Read8(&regaddr, 1);
-
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return false;
+	}
 	if (pIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		d |= BMI270_NV_CONF_SPI_EN;
@@ -1034,14 +1251,19 @@ bool AgBmi270::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	{
 		d &= ~BMI270_NV_CONF_SPI_EN;
 	}
-	Write8(&regaddr, 1, d);
+	if (!Write8(&regaddr, 1, d))
+	{
+		return false;
+	}
 
 	regaddr = BMI270_PWR_CONF_REG;
-	Write8(&regaddr, 1, 0);
-
+	if (!Write8(&regaddr, 1, 0))
+	{
+		return false;
+	}
 	msDelay(1);
 
-	if (LoadConfig(s_BMI270CfgData, s_BMI270CfgDataLen) == false)
+	if (!LoadConfig(s_BMI270CfgData, s_BMI270CfgDataLen))
 	{
 		return false;
 	}
@@ -1049,218 +1271,327 @@ bool AgBmi270::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	msDelay(30);
 
 	regaddr = BMI270_INTERNAL_STATUS_REG;
-	d = Read8(&regaddr, 1);
-
-	printf("status %x\r\n", d);
-
-	if ((d & BMI270_INTERNAL_STATUS_MESSAGE_INIT_OK) == 0)
+	if (Read(&regaddr, 1, &d, 1) != 1 ||
+		(d & BMI270_INTERNAL_STATUS_MESSAGE_INIT_OK) == 0)
 	{
-		printf("Init failed\r\n");
 		return false;
 	}
 
-	if (vpTimer == nullptr)
-	{
-		regaddr = BMI270_CMD_REG;
-		Write8(&regaddr, 1, BMI270_CMD_FIFO_FLUSH);
-
-		msDelay(10);
-
-		regaddr = BMI270_FIFO_CONFIG0_REG;
-		d = Read8(&regaddr, 1) | BMI270_FIFO_CONFIG0_FIFO_TIME_EN;
-
-		Write8(&regaddr, 1, d);
-
-		vFifoDataFlag = BMI270_FIFO_DATA_FLAG_TIME;
-		vFifoFrameSize = 2;
-	}
-
+	DeviceID(BMI270_CHIP_ID);
+	vbInitialized = true;
+	Valid(true);
 	return true;
 }
 
 bool AgBmi270::Enable()
 {
-	AccelBmi270::Enable();
-	GyroBmi270::Enable();
+	bool retval;
 
-	return true;
+	retval = true;
+	if (vbSensorEnabled[0])
+	{
+		retval = AccelBmi270::Enable() && retval;
+	}
+	if (vbSensorEnabled[1])
+	{
+		retval = GyroBmi270::Enable() && retval;
+	}
+	if (vbSensorEnabled[2])
+	{
+		retval = TempBmi270::Enable() && retval;
+	}
+
+	return retval;
 }
 
 void AgBmi270::Disable()
 {
-	AccelBmi270::Disable();
-	GyroBmi270::Disable();
+	uint8_t regaddr;
+	uint8_t d;
+
+	if (vbSensorEnabled[2])
+	{
+		TempBmi270::Disable();
+	}
+	if (vbSensorEnabled[1])
+	{
+		GyroBmi270::Disable();
+	}
+	if (vbSensorEnabled[0])
+	{
+		AccelBmi270::Disable();
+	}
+
+	/* Force all sensing domains off, including a gyro enabled only for temperature. */
+	regaddr = BMI270_PWR_CTRL_REG;
+	if (Read(&regaddr, 1, &d, 1) == 1)
+	{
+		d &= ~(BMI270_PWR_CTRL_ACC_EN | BMI270_PWR_CTRL_GYR_EN | BMI270_PWR_CTRL_TEMP_EN);
+		Write8(&regaddr, 1, d);
+	}
 }
 
 void AgBmi270::Reset()
 {
-	uint8_t regaddr = BMI270_CMD_REG;
+	uint8_t regaddr;
+	uint8_t d;
 
-	Write8(&regaddr, 1, BMI270_CMD_SOFTRESET);
+	Valid(false);
+	vbInitialized = false;
+	vbSensorEnabled[0] = false;
+	vbSensorEnabled[1] = false;
+	vbSensorEnabled[2] = false;
+	vFifoDataFlag = 0;
+	vFifoFrameSize = 0;
+	vPrevTime = 0;
+	vRollover = 0;
 
-	msDelay(1);
+	if (vpIntrf == NULL)
+	{
+		return;
+	}
+
+	regaddr = BMI270_CMD_REG;
+	if (!Write8(&regaddr, 1, BMI270_CMD_SOFTRESET))
+	{
+		return;
+	}
+	msDelay(2);
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
-		// SPI require read dummy byte any register
 		regaddr = BMI270_CHIP_ID_REG;
-		uint8_t d = Read8(&regaddr, 1);
+		Read(&regaddr, 1, &d, 1);
 	}
-	regaddr = BMI270_CMD_REG;
-	Write8(&regaddr, 1, BMI270_CMD_FIFO_FLUSH);
+}
 
-	msDelay(10);
+uint64_t AgBmi270::Timestamp()
+{
+	uint64_t ticks;
+	uint32_t now;
+	uint8_t regaddr;
+	uint8_t data[3];
 
-	// Read err register to clear
-	regaddr = BMI270_ERR_REG;
-	Read8(&regaddr, 1);
+	if (vpTimer != NULL)
+	{
+		return vpTimer->uSecond();
+	}
+
+	regaddr = BMI270_SENSOR_TIME_REG;
+	if (Read(&regaddr, 1, data, sizeof(data)) != (int)sizeof(data))
+	{
+		return UINT64_MAX;
+	}
+
+	now = (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
+		((uint32_t)data[2] << 16);
+	if (now < vPrevTime)
+	{
+		vRollover += 0x1000000ULL;
+	}
+	vPrevTime = now;
+	ticks = vRollover + now;
+
+	/* BMI270 sensor-time tick = 39.0625 us = 625 / 16 us. */
+	return (ticks * 625ULL) >> 4;
 }
 
 bool AgBmi270::UpdateData()
 {
-	bool res = false;
+	bool retval;
+	bool fifoReady;
+	bool directReady;
+	bool needStatus;
+	bool tempReady;
+	uint64_t timestamp;
+	uint16_t fifoLen;
+	uint8_t status;
 	uint8_t regaddr;
-	int len = 0;
+	uint8_t lenData[2];
+	uint8_t fifo[BMI270_MAX_BURST_LEN];
+	uint8_t raw[6];
+	uint8_t tempData[2];
+	size_t frameSize;
+	size_t len;
+	size_t offset;
+	size_t pos;
+	int16_t rawTemp;
+	int32_t tempCenti;
 
-	if (vpTimer == nullptr)
+	if (!Valid())
 	{
-		uint8_t fifo[256];
+		return false;
+	}
 
-		regaddr = BMI270_FIFO_WATERMARK_REG;
-		len = Read16(&regaddr, 1);
+	retval = false;
+	fifoReady = false;
+	directReady = false;
+	tempReady = vbSensorEnabled[2];
+	status = 0;
+	fifoLen = 0;
+	frameSize = vFifoFrameSize;
 
-		// Re-adjust length to read full frame only
-		len = (min(len, 128) / vFifoFrameSize) * vFifoFrameSize;
+	if (frameSize > 0)
+	{
+		regaddr = BMI270_FIFO_LENGTH_LSB_REG;
+		if (Read(&regaddr, 1, lenData, 2) != 2)
+		{
+			return false;
+		}
+		fifoLen = (uint16_t)lenData[0] | ((uint16_t)(lenData[1] & 0x3F) << 8);
+		fifoReady = fifoLen >= frameSize;
+	}
 
-		if (len >= vFifoFrameSize)
+	needStatus = (vbSensorEnabled[0] &&
+		(vFifoDataFlag & BMI270_FIFO_DATA_FLAG_ACC) == 0) ||
+		(vbSensorEnabled[1] && (vFifoDataFlag & BMI270_FIFO_DATA_FLAG_GYR) == 0);
+	if (needStatus)
+	{
+		regaddr = BMI270_STATUS_REG;
+		if (Read(&regaddr, 1, &status, 1) != 1)
+		{
+			return false;
+		}
+		directReady = ((vbSensorEnabled[0] &&
+			(status & BMI270_STATUS_DRDY_ACC) != 0) ||
+			(vbSensorEnabled[1] && (status & BMI270_STATUS_DRDY_GYR) != 0));
+	}
+
+	if (!fifoReady && !directReady && !tempReady)
+	{
+		return false;
+	}
+
+	timestamp = Timestamp();
+	if (timestamp == UINT64_MAX)
+	{
+		return false;
+	}
+
+	if (fifoReady)
+	{
+		len = fifoLen;
+		if (len > sizeof(fifo))
+		{
+			len = sizeof(fifo);
+		}
+		len = (len / frameSize) * frameSize;
+		if (len >= frameSize)
 		{
 			regaddr = BMI270_FIFO_DATA_REG;
-			len = Read(&regaddr, 1, fifo, len << 1) >> 1;
-
-			int16_t *p = (int16_t*)fifo;
-
-			while (len >= vFifoFrameSize)
+			if (Read(&regaddr, 1, fifo, (int)len) != (int)len)
 			{
-				if (vFifoDataFlag & BMI270_FIFO_DATA_FLAG_ACC)
-				{
-					if (p[0] != BMI270_ACC_DUMMY_X)
-					{
-						// Take valid data only
-						//memcpy(AccelSensor::vData.Val, p, 6);
-						AccelSensor::vData.X = p[0];
-						AccelSensor::vData.Y = p[1];
-						AccelSensor::vData.Z = p[2];
-						AccelSensor::vSampleCnt++;
-					}
-					p += 3;
-				}
+				return false;
+			}
+
+			for (offset = 0; offset + frameSize <= len; offset += frameSize)
+			{
+				pos = offset;
+
+				/* Bosch headerless combined frames place gyro before accel. */
 				if (vFifoDataFlag & BMI270_FIFO_DATA_FLAG_GYR)
 				{
-					if (p[0] != BMI270_GYR_DUMMY_X)
+					if (BMI270GetS16(&fifo[pos]) != BMI270_GYR_DUMMY_X)
 					{
-						// Take valid data only
-//						memcpy(GyroSensor::vData.Val, p, 6);
-						AccelSensor::vData.X = p[0];
-						AccelSensor::vData.Y = p[1];
-						AccelSensor::vData.Z = p[2];
+						GyroSensor::vData.X = BMI270GetS16(&fifo[pos]);
+						GyroSensor::vData.Y = BMI270GetS16(&fifo[pos + 2]);
+						GyroSensor::vData.Z = BMI270GetS16(&fifo[pos + 4]);
+						GyroSensor::vData.Timestamp = timestamp;
 						GyroSensor::vSampleCnt++;
+						retval = true;
 					}
-					p += 3;
-				}
-				if (vFifoDataFlag & BMI270_FIFO_DATA_FLAG_TEMP)
-				{
-					if (p[0] != BMI270_TEMP_DUMMY)
-					{
-						// Take valid data only
-						TempSensor::vData.Temperature = p[0];
-						TempSensor::vSampleCnt++;
-					}
-					p++;
-				}
-				if (vFifoDataFlag & BMI270_FIFO_DATA_FLAG_TIME)
-				{
-					if (vPrevTime > (uint16_t)p[0])
-					{
-						vRollover += 0x10000U;
-					}
-					vPrevTime = (uint16_t)p[0];
-					uint64_t t = vRollover + ((uint64_t)p[0] & 0xFFFFULL);
-					AccelSensor::vData.Timestamp = t;
-					GyroSensor::vData.Timestamp = t;
-					TempSensor::vData.Timestamp = t;
-					p++;
-				}
-				else if (vpTimer)
-				{
-					uint64_t t = vpTimer->mSecond();
-					AccelSensor::vData.Timestamp = t;
-					GyroSensor::vData.Timestamp = t;
-					TempSensor::vData.Timestamp = t;
+					pos += 6;
 				}
 
-				len -= vFifoFrameSize;
+				if (vFifoDataFlag & BMI270_FIFO_DATA_FLAG_ACC)
+				{
+					if (BMI270GetS16(&fifo[pos]) != BMI270_ACC_DUMMY_X)
+					{
+						AccelSensor::vData.X = BMI270GetS16(&fifo[pos]);
+						AccelSensor::vData.Y = BMI270GetS16(&fifo[pos + 2]);
+						AccelSensor::vData.Z = BMI270GetS16(&fifo[pos + 4]);
+						AccelSensor::vData.Timestamp = timestamp;
+						AccelSensor::vSampleCnt++;
+						retval = true;
+					}
+				}
 			}
-			res = true;
 		}
 	}
-	else
+
+	if (vbSensorEnabled[0] &&
+		(vFifoDataFlag & BMI270_FIFO_DATA_FLAG_ACC) == 0 &&
+		(status & BMI270_STATUS_DRDY_ACC))
 	{
-		// Non FIFO
-		uint64_t t = vpTimer->uSecond();
-
-		regaddr = BMI270_STATUS_REG;
-		uint16_t d = Read16(&regaddr, 1);
-		int16_t p[3];
-
-		if (d & BMI270_STATUS_DRDY_ACC)
+		regaddr = BMI270_ACC_X_LSB_REG;
+		if (Read(&regaddr, 1, raw, 6) != 6)
 		{
-			regaddr = BMI270_ACC_X_LSB_REG;
-			Read(&regaddr, 1, (uint8_t*)p, 6);
-			AccelSensor::vData.X = p[0];
-			AccelSensor::vData.Y = p[1];
-			AccelSensor::vData.Z = p[2];
-			AccelSensor::vData.Timestamp = t;
-
-			res = true;
+			return false;
 		}
-		if (d & BMI270_STATUS_DRDY_GYR)
+		AccelSensor::vData.X = BMI270GetS16(&raw[0]);
+		AccelSensor::vData.Y = BMI270GetS16(&raw[2]);
+		AccelSensor::vData.Z = BMI270GetS16(&raw[4]);
+		AccelSensor::vData.Timestamp = timestamp;
+		AccelSensor::vSampleCnt++;
+		retval = true;
+	}
+
+	if (vbSensorEnabled[1] &&
+		(vFifoDataFlag & BMI270_FIFO_DATA_FLAG_GYR) == 0 &&
+		(status & BMI270_STATUS_DRDY_GYR))
+	{
+		regaddr = BMI270_GYR_X_LSB_REG;
+		if (Read(&regaddr, 1, raw, 6) != 6)
 		{
-			regaddr = BMI270_GYR_X_LSB_REG;
-			Read(&regaddr, 1, (uint8_t*)p, 6);
-			GyroSensor::vData.X = p[0];
-			GyroSensor::vData.Y = p[1];
-			GyroSensor::vData.Z = p[2];
-			GyroSensor::vData.Timestamp = t;
-			res = true;
+			return false;
 		}
-		//if (d & Bmi270_STATUS_DRDY_TEMP)
+		GyroSensor::vData.X = BMI270GetS16(&raw[0]);
+		GyroSensor::vData.Y = BMI270GetS16(&raw[2]);
+		GyroSensor::vData.Z = BMI270GetS16(&raw[4]);
+		GyroSensor::vData.Timestamp = timestamp;
+		GyroSensor::vSampleCnt++;
+		retval = true;
+	}
+
+	if (tempReady)
+	{
+		regaddr = BMI270_TEMPERATURE_LSB_REG;
+		if (Read(&regaddr, 1, tempData, 2) != 2)
 		{
-			regaddr = BMI270_TEMPERATURE_LSB_REG;
-			Read(&regaddr, 1, (uint8_t*)&TempSensor::vData.Temperature, 2);
-			TempSensor::vData.Timestamp = t;
-			res = true;
+			return false;
+		}
+		rawTemp = BMI270GetS16(tempData);
+		if (rawTemp != INT16_MIN)
+		{
+			tempCenti = 2300 + ((int32_t)rawTemp * 100) / 512;
+			TempSensor::vData.Temperature = tempCenti;
+			TempSensor::vData.Timestamp = timestamp;
+			AccelSensor::vData.Temp = (int16_t)tempCenti;
+			GyroSensor::vData.Temp = (int16_t)tempCenti;
+			TempSensor::vSampleCnt++;
+			retval = true;
 		}
 	}
 
-	return res;
+	return retval;
 }
 
 void AgBmi270::IntHandler()
 {
-	uint8_t regaddr = BMI270_INT_STATUS1_REG;
+	uint8_t regaddr;
 	uint8_t d;
 
-	// Read all status
-	//Read(&regaddr, 1, (uint8_t*)&d, 2);
-	d = Read8(&regaddr, 1);
+	regaddr = BMI270_INT_STATUS1_REG;
+	if (Read(&regaddr, 1, &d, 1) != 1)
+	{
+		return;
+	}
 
 	if (d & (BMI270_INT_STATUS1_AUX_DRDY | BMI270_INT_STATUS1_GYR_DRDY |
 			 BMI270_INT_STATUS1_ACC_DRDY | BMI270_INT_STATUS1_FIFO_FULL |
 			 BMI270_INT_STATUS1_FIFO_WATERMARK))
 	{
-		UpdateData();
-
-		if (vEvtHandler)
+		if (UpdateData() && vEvtHandler)
 		{
 			vEvtHandler(this, DEV_EVT_DATA_RDY);
 		}
@@ -1269,135 +1600,113 @@ void AgBmi270::IntHandler()
 
 int AgBmi270::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
-	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	uint8_t buff[BMI270_MAX_BURST_LEN + 1];
+	int n;
+	int dataLen;
+
+	if (vpIntrf == NULL || pCmdAddr == NULL || CmdAddrLen <= 0 ||
+		pBuff == NULL || BuffLen <= 0)
 	{
-		uint8_t b[BuffLen + 1];
-		int n = Device::Read(pCmdAddr, CmdAddrLen, b, BuffLen + 1);
-
-		memcpy(pBuff, &b[1], BuffLen);
-
-		return n - 1;
+		return 0;
 	}
-	else
+
+	if (vpIntrf->Type() != DEVINTRF_TYPE_SPI)
 	{
 		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 	}
-}
 
-static size_t FifoFrameSize(uint8_t Flag)
-{
-	size_t retval = 0;
-
-	if (Flag & BMI270_FIFO_DATA_FLAG_ACC)
+	if ((unsigned)BuffLen > BMI270_MAX_BURST_LEN)
 	{
-		retval += 3;
+		return 0;
 	}
 
-	if (Flag & BMI270_FIFO_DATA_FLAG_GYR)
+	n = Device::Read(pCmdAddr, CmdAddrLen, buff, BuffLen + 1);
+	if (n <= 1)
 	{
-		retval += 3;
+		return n < 0 ? n : 0;
 	}
 
-	if (Flag & BMI270_FIFO_DATA_FLAG_TEMP)
+	dataLen = n - 1;
+	if (dataLen > BuffLen)
 	{
-		retval++;
+		dataLen = BuffLen;
 	}
+	memcpy(pBuff, &buff[1], (size_t)dataLen);
 
-	if (Flag & BMI270_FIFO_DATA_FLAG_TIME)
-	{
-		retval ++;
-	}
-
-	return retval;
+	return dataLen;
 }
 
 void AgBmi270::FifoDataFlagSet(uint8_t Flag)
 {
-	vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag;
-
+	vFifoDataFlag |= Flag;
 	vFifoFrameSize = FifoFrameSize(vFifoDataFlag);
 }
 
 void AgBmi270::FifoDataFlagClr(uint8_t Flag)
 {
-	vFifoDataFlag = (vFifoDataFlag & ~Flag);
-
+	vFifoDataFlag &= ~Flag;
 	vFifoFrameSize = FifoFrameSize(vFifoDataFlag);
 }
 
 bool AgBmi270::LoadConfig(const uint8_t *pData, size_t DataLen)
 {
-	uint8_t regaddr = BMI270_INIT_CTRL_REG;
-	uint16_t cfgaddr = 0;
-	uint8_t *p = (uint8_t*)pData;
-	uint8_t buff[BMI270_MAX_BURST_LEN];
-	size_t len = DataLen;
+	uint16_t cfgaddr;
+	uint8_t regaddr;
+	uint8_t d[2];
+	const uint8_t *p;
+	size_t len;
+	size_t block;
+	int n;
 
-	// initiate load config
-	Write8(&regaddr, 1, 0);
-
-	while (len > 0)
+	if (pData == NULL || DataLen == 0 || (DataLen & 1U) != 0)
 	{
-		uint8_t d[2];
-
-		d[0] = (cfgaddr >> 1) & 0xF;
-		d[1] = (cfgaddr >> 5);
-
-		regaddr = BMI270_INIT_ADDR0_REG;
-		Write(&regaddr, 1, d, 2);
-
-		regaddr = BMI270_INIT_DATA_REG;
-		size_t n = min(len, BMI270_MAX_BURST_LEN) & ~1;
-		n = Write(&regaddr, 1, p, n);
-
-		if (n == 0)
-		{
-			break;
-		}
-		len -= n;
-		p += n;
-		cfgaddr += n;
+		return false;
 	}
 
-	// Verify
-	len = DataLen;
-	cfgaddr = 0;
-	p = (uint8_t*)pData;
-
-	while (len > 0)
-	{
-		uint8_t d[2];
-
-		d[0] = (cfgaddr >> 1) & 0xF;
-		d[1] = (cfgaddr >> 5);
-
-		regaddr = BMI270_INIT_ADDR0_REG;
-		Write(&regaddr, 1, d, 2);
-
-		regaddr = BMI270_INIT_DATA_REG;
-		size_t n = min(len, BMI270_MAX_BURST_LEN) & ~1;
-
-		n = Read(&regaddr, 1, buff, n);
-
-		if (n == 0)
-		{
-			break;
-		}
-
-		if (memcmp(buff, p, n) != 0)
-		{
-			printf("failed verify %x %d\r\n", cfgaddr, n);
-			break;
-		}
-		len -= n;
-		p += n;
-		cfgaddr += n;;
-	}
-
-	// Load config complete
 	regaddr = BMI270_INIT_CTRL_REG;
-	Write8(&regaddr, 1, 1);
+	if (!Write8(&regaddr, 1, 0))
+	{
+		return false;
+	}
 
-	return len == 0;
+	cfgaddr = 0;
+	p = pData;
+	len = DataLen;
+
+	while (len > 0)
+	{
+		d[0] = (uint8_t)((cfgaddr >> 1) & 0x0F);
+		d[1] = (uint8_t)(cfgaddr >> 5);
+
+		regaddr = BMI270_INIT_ADDR0_REG;
+		if (Write(&regaddr, 1, d, 2) != 2)
+		{
+			return false;
+		}
+
+		block = len;
+		if (block > BMI270_MAX_BURST_LEN)
+		{
+			block = BMI270_MAX_BURST_LEN;
+		}
+		block &= ~(size_t)1;
+		if (block == 0)
+		{
+			return false;
+		}
+
+		regaddr = BMI270_INIT_DATA_REG;
+		n = Write(&regaddr, 1, p, (int)block);
+		if (n != (int)block)
+		{
+			return false;
+		}
+
+		len -= block;
+		p += block;
+		cfgaddr += (uint16_t)block;
+	}
+
+	regaddr = BMI270_INIT_CTRL_REG;
+	return Write8(&regaddr, 1, 1);
 }
-

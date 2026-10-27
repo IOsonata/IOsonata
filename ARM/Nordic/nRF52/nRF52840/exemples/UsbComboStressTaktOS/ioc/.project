@@ -31,11 +31,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/usb_combo_stress.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/usb_combo_stress.h</locationURI>
-		</link>
-		<link>
 			<name>src/usb_combo_stress_taktos.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/usb_combo_stress_taktos.cpp</locationURI>

@@ -111,9 +111,10 @@ typedef struct __Bt_Adv_Param {
 #define BTADV_PHY_OPT_MAX								0x04
 
 /// FeatureSet bit the Host sets to say it supports Advertising Coding
-/// Selection, Vol 6 Part B 4.6.33.3. With it clear a Primary or Secondary PHY
-/// of 0x03 means LE Coded with the Controller choosing; with it set 0x03 is
-/// S=8 and 0x04 is S=2.
+/// Selection, Vol 6 Part B 4.6.33.3. It changes coded-PHY values reported to
+/// the Host: with it clear 0x03 reports generic LE Coded; with it set reports
+/// distinguish 0x03 S=8 and 0x04 S=2. Advertising coding itself is selected
+/// by the PHY option fields of LE Set Extended Advertising Parameters [v2].
 #define BTADV_FEATURE_BIT_CODING_SELECTION				41
 
 #define BTADV_EXTADV_EVT_PROP_TXPWR						(1<<6)	//!< Include Tx power in the extended header
@@ -202,9 +203,10 @@ void BtAdvOwnAddrGet(uint8_t *pType, uint8_t pAddr[6]);
  * @brief	Tell the controller this host supports Advertising Coding Selection
  *
  * Issues LE Set Host Feature for FeatureSet bit 41 (Vol 4 Part E 7.8.115).
- * Until this succeeds a Primary or Secondary PHY of 0x03 means LE Coded with
- * the controller choosing the coding, and the PHY options of the [v2]
- * parameters command have no effect.
+ * This tells the Controller that the Host understands coding-aware PHY values
+ * in reports, so S=2 can be reported separately from S=8. It does not enable
+ * the advertising PHY option fields; those are carried by LE Set Extended
+ * Advertising Parameters [v2] itself.
  *
  * Vol 4 Part E 7.8.115 has the controller answer Command Disallowed while it
  * holds any connection, so this belongs in initialization rather than in

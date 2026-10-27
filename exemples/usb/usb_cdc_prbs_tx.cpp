@@ -57,6 +57,8 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "usb/usb.h"
 #if __has_include("board.h")
+#include "coredev/iopincfg.h"
+#include "coredev/system_core_clock.h"
 #include "board.h"
 #endif
 #include "usb/usbd_cdc.h"
@@ -133,7 +135,6 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 	.pRxFifoMem = s_CdcRxFifoMem,
 	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_CdcTxFifoMem,
-	.EvtCB = nullptr,
 };
 
 // USB device configuration.
@@ -152,28 +153,21 @@ static const UsbCfg_t s_UsbCfg = {
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
 	.pProduct = "IOsonata CDC PRBS Tx",
-	.pSerial = nullptr,			// Taken from the MCU unique id
 	.pFuncName = "IOsonata CDC",
 	.IntPrio = 6,
 #ifdef USB_PINS
 	.pIOPinMap = s_UsbPins,
 	.NbIOPins = sizeof(s_UsbPins) / sizeof(IOPinCfg_t),
-#else
-	.pIOPinMap = nullptr,
-	.NbIOPins = 0,
 #endif
 	.DeviceClass = USB_DEVCLASS_MISC,
 	.DeviceSubClass = 2U,
 	.DeviceProtocol = 1U,
-	.bSelfPowered = false,
 #ifdef USB_REMOTE_WAKEUP
 	.bRemoteWakeup = USB_REMOTE_WAKEUP,
 #else
 	.bRemoteWakeup = true,
 #endif
-	.bLowPowerSuspend = false,
 	.MaxPower = 100,
-	.EvtHandler = nullptr,
 };
 
 // CDC class/control object. It inherits the DeviceIntrf transfer methods, so

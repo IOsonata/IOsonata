@@ -5,7 +5,7 @@
 
 UsbdHid owns HID descriptors and class requests. Interrupt report transport is
 provided by the inherited UsbIntIntrf. The application supplies the report
-descriptor and handles GET_REPORT and SET_REPORT payloads.
+descriptor and optional callbacks for GET_REPORT and SET_REPORT payloads.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 10, 2026
@@ -56,8 +56,24 @@ SOFTWARE.
 #define USBD_HID_HS_INTERVAL		4U
 #define USBD_HID_PROTOCOL_BOOT		0U
 #define USBD_HID_PROTOCOL_REPORT	1U
+#define USBD_HID_CTRL_REPORT_SIZE	64U
 
 typedef struct __Usbd_Hid_Dev UsbdHidDev_t;
+
+/// Fill a snapshot of a report. Return its byte length, or -1 to reject it.
+/// Type uses USB_HID_REPTYPE_* values; ReportId is zero for unnumbered reports.
+/// Do not write beyond BufferSize. The core truncates replies to host wLength.
+/// Called in USB processing context; do not block or retain pBuffer.
+typedef int (*UsbdHidGetReport_t)(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t BufferSize, void *pContext);
+
+/// Consume a complete SET_REPORT payload before the status stage. False stalls
+/// the request. Called once, in USB processing context; do not block. The buffer
+/// is valid only during the callback. Payload bytes include any report ID byte;
+/// the library does not parse report layouts or insert/remove report IDs.
+/// A later status-stage failure cannot undo application effects.
+typedef bool (*UsbdHidSetReport_t)(USB_HID_REPTYPE Type, uint8_t ReportId,
+	const uint8_t *pBuffer, uint16_t Length, void *pContext);
 
 #pragma pack(push, 1)
 
@@ -92,6 +108,13 @@ typedef struct __Usbd_Hid_Config {
 	// USB_INT_INTRF_PKT_BLKSIZE bytes; valid for the interface lifetime.
 	uint8_t *pRxBuffer;
 	uint8_t *pTxBuffer;
+	UsbdHidGetReport_t GetReportCB;	//!< Optional; absent callback stalls GET_REPORT
+	UsbdHidSetReport_t SetReportCB;	//!< Optional; absent callback stalls SET_REPORT
+	// Optional separate, 4-byte aligned control storage for larger reports.
+	// Null/zero selects the object's USBD_HID_CTRL_REPORT_SIZE byte buffer.
+	// Must not overlap interrupt RX/TX slots; valid for the object lifetime.
+	uint8_t *pControlBuffer;
+	uint16_t ControlBufferSize;
 } UsbdHidCfg_t;
 
 #pragma pack(pop)
@@ -123,6 +146,12 @@ struct __Usbd_Hid_Dev {
 	bool Configured;
 	const uint8_t *pReportDesc;
 	void *pContext;
+	UsbdHidGetReport_t GetReportCB;
+	UsbdHidSetReport_t SetReportCB;
+	uint8_t *pControlBuffer;
+	uint16_t ControlBufferSize;
+	uint16_t PendingReportValue;
+	uint16_t PendingReportLength;
 };
 
 #ifdef __cplusplus
@@ -153,6 +182,17 @@ public:
 	UsbdHid &operator = (const UsbdHid &) = delete;
 
 	bool Init(const UsbdHidCfg_t &Cfg);
+	/// Standard six-key boot keyboard, with an eight-byte input report and
+	/// one-byte LED output report, without report IDs. Replaces pReportDesc,
+	/// ReportDescLength, FsMps, HsMps, SubClass and Protocol in a local copy.
+	/// Other options, callbacks and caller-owned buffers follow Init().
+	bool InitKeyboard(const UsbdHidCfg_t &Cfg);
+	/// Three-button boot mouse with signed 8-bit relative X/Y, no wheel.
+	/// Replaces the same six layout fields as InitKeyboard().
+	bool InitMouse(const UsbdHidCfg_t &Cfg);
+	/// Six signed 16-bit relative axes, no buttons or report IDs.
+	/// Non-boot multi-axis controller; replaces the same six layout fields.
+	bool Init3dMouse(const UsbdHidCfg_t &Cfg);
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 				 uint8_t **ppData, uint16_t *pLength) override;
 	bool SelectConfig(uint8_t ConfigValue) override;
@@ -164,6 +204,7 @@ public:
 
 private:
 	UsbdHidDev_t vUsbdHid = {};
+	alignas(4) uint8_t vControlBuffer[USBD_HID_CTRL_REPORT_SIZE] = {};
 };
 #endif
 

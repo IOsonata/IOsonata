@@ -352,3 +352,10 @@ extern "C" void PIN_INT7_IRQHandler(void)
 {
 	Lpc546xxPintDispatch(7);
 }
+
+// This port has one application core and no pin ownership selector.
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+	return CoreNo == 0 && (unsigned)PortNo < LPC546XX_GPIO_PORT_MAX &&
+		(unsigned)PinNo < LPC546XX_GPIO_PIN_MAX;
+}

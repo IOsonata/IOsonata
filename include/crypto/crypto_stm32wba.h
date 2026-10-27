@@ -51,7 +51,7 @@ SOFTWARE.
 #include <stddef.h>
 #include <atomic>
 
-#include "crypto/icrypto.h"
+#include "crypto/crypto_uecc.h"
 #include "crypto/crypto_softaes.h"
 
 /** @addtogroup Crypto
@@ -92,7 +92,7 @@ CryptoWbaRng *CryptoWbaRngCreate(void *pMem, size_t MemSize);
 /// @brief	STM32WBA AES-128 engine.
 ///
 /// ECB, CBC and CTR run in the peripheral, decryption of ECB and CBC
-/// included (the software base has no decryption of those two). CMAC, CCM and
+/// included. AES-256 uses the software base. CMAC, CCM and
 /// GCM are the constructions of CryptoSoftAes over the peripheral block
 /// primitive, held under one acquisition per operation.
 class CryptoWbaAes : public CryptoSoftAes {
@@ -140,16 +140,15 @@ CryptoWbaAes *CryptoWbaAesCreate(void *pMem, size_t MemSize);
 /// accelerator RAM is cleared after every operation.
 class CryptoWbaPka : public KeyAgreeEngine, public SignEngine {
 public:
-	struct KeyCtx {
-		uint8_t PrivKey[32];
-		bool bKeyValid;
-	};
+	// Preserve the common context layout without inheriting software operations.
+	using KeyCtx = CryptoUecc::KeyCtx;
 
 	CryptoWbaPka() {
 		vbValid = false;
 		vpRng = nullptr;
 		std::atomic_flag_clear(&vOpBusy);
 	}
+
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
 	bool Enable() override;
@@ -179,11 +178,13 @@ public:
 	/// fixed nonce (RFC 6979 A.2.5) and verify. 0 on pass.
 	int SelfTest() override;
 
+protected:
+	RngEngine *vpRng;
+
 private:
 	bool OpAcquire() { return std::atomic_flag_test_and_set(&vOpBusy) == false; }
 	void OpRelease() { std::atomic_flag_clear(&vOpBusy); }
 
-	RngEngine *vpRng;
 	std::atomic_flag vOpBusy;
 };
 

@@ -58,14 +58,14 @@ SOFTWARE.
 #define BMM350_PMU_CMD_AGGR_SET_REG		0x4
 #define BMM350_PMU_CMD_AGGR_SET_ODR_MASK					(0xF<<0)
 #define BMM350_PMU_CMD_AGGR_SET_ODR_400HZ					(2<<0)	//!< 400 Hz
-#define BMM350_PMU_CMD_AGGR_SET_ODR_200HZ					(2<<0)	//!< 200 Hz
-#define BMM350_PMU_CMD_AGGR_SET_ODR_100HZ					(2<<0)	//!< 100 Hz
-#define BMM350_PMU_CMD_AGGR_SET_ODR_50HZ					(2<<0)	//!< 50 Hz
-#define BMM350_PMU_CMD_AGGR_SET_ODR_25HZ					(2<<0)	//!< 25 Hz
-#define BMM350_PMU_CMD_AGGR_SET_ODR_12_5HZ					(2<<0)	//!< 12.5 Hz
-#define BMM350_PMU_CMD_AGGR_SET_ODR_6_25HZ					(2<<0)	//!< 6.25 Hz
-#define BMM350_PMU_CMD_AGGR_SET_ODR_3_125HZ					(2<<0)	//!< 3.215 Hz
-#define BMM350_PMU_CMD_AGGR_SET_ODR_1_5625HZ				(2<<0)	//!< 1.5625 Hz
+#define BMM350_PMU_CMD_AGGR_SET_ODR_200HZ					(3<<0)	//!< 200 Hz
+#define BMM350_PMU_CMD_AGGR_SET_ODR_100HZ					(4<<0)	//!< 100 Hz
+#define BMM350_PMU_CMD_AGGR_SET_ODR_50HZ					(5<<0)	//!< 50 Hz
+#define BMM350_PMU_CMD_AGGR_SET_ODR_25HZ					(6<<0)	//!< 25 Hz
+#define BMM350_PMU_CMD_AGGR_SET_ODR_12_5HZ					(7<<0)	//!< 12.5 Hz
+#define BMM350_PMU_CMD_AGGR_SET_ODR_6_25HZ					(8<<0)	//!< 6.25 Hz
+#define BMM350_PMU_CMD_AGGR_SET_ODR_3_125HZ					(9<<0)	//!< 3.215 Hz
+#define BMM350_PMU_CMD_AGGR_SET_ODR_1_5625HZ				(10<<0)	//!< 1.5625 Hz
 #define BMM350_PMU_CMD_AGGR_SET_AVG_MASK					(3<<4)
 #define BMM350_PMU_CMD_AGGR_SET_AVG_NOAVG					(0<<4)	//!< No averaging
 #define BMM350_PMU_CMD_AGGR_SET_AVG_2						(1<<4)
@@ -81,7 +81,7 @@ SOFTWARE.
 #define BMM350_PMU_CMD_MASK									(0xF<<0)
 #define BMM350_PMU_CMD_SUSP									(0<<0)	//!< Enter suspend mode
 #define BMM350_PMU_CMD_NM									(1<<0)	//!< Normal mode
-#define BMM350_PMU_CMD_UOD_OAE								(2<<0)	//!< Update ODR and AVG parameter
+#define BMM350_PMU_CMD_UPD_OAE								(2<<0)	//!< Update ODR and AVG parameter
 #define BMM350_PMU_CMD_FM   								(3<<0)	//!< Forced mode with full CRST recharge
 #define BMM350_PMU_CMD_FM_FAST								(4<<0)	//!< Forced mode with fast CRST recharge
 #define BMM350_PMU_CMD_FGR									(5<<0)	//!< flux-guide reset with full CRST recharge
@@ -189,6 +189,7 @@ SOFTWARE.
 
 class MagBmm350 : public MagSensor {
 public:
+	MagBmm350();
 	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual bool StartSampling() { return true; }
@@ -196,6 +197,26 @@ public:
 	virtual void Disable();
 	virtual void Reset();
 	virtual bool UpdateData();
+
+private:
+	bool ReadReg(uint8_t Reg, uint8_t *pData, int Len);
+	bool WriteReg(uint8_t Reg, uint8_t Value);
+	bool SetPowerMode(uint8_t Mode);
+	bool LoadOtp();
+	bool ReadOtpWord(uint8_t Addr, uint16_t &Word);
+	bool MagneticReset();
+	void ParseOtp();
+	void Compensate(int32_t X, int32_t Y, int32_t Z, int32_t Temp);
+	static int32_t SignExtend(uint32_t Value, unsigned Bits);
+
+	uint16_t vOtp[32];
+	float vOffset[4];
+	float vSens[4];
+	float vTco[3];
+	float vTcs[3];
+	float vCross[4];
+	float vT0;
+	bool vbInitialized;
 };
 
 extern "C" {

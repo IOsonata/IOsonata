@@ -53,6 +53,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "syslog.h"
 
 #include "board.h"
+
+#ifdef CORE_PINS
+static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
+#endif
 #ifdef BLE_STATUS_DISPLAY
 #include "coredev/spi.h"
 #include "display/display_ssd1315.h"
@@ -730,6 +734,14 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 
 int main()
 {
+
+#ifdef CORE_PINS
+	if (!IOPinCoreCfg(s_CorePins, sizeof(s_CorePins) / sizeof(s_CorePins[0])))
+	{
+		return 1;
+	}
+#endif
+
 #ifdef BLE_STATUS_DISPLAY
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)))
 	{

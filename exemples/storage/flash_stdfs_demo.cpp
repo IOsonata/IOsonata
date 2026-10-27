@@ -37,6 +37,7 @@ SOFTWARE.
 #include <stdlib.h>
 
 #include "idelay.h"
+#include "stddev.h"
 #include "coredev/uart.h"
 #include "coredev/spi.h"
 #include "storage/diskio_flash.h"
@@ -167,86 +168,48 @@ int nRFUartEvtHandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 
 int main()
 {
-	bool res;
-
-	res = g_Uart.Init(s_UartCfg);
-
-	printf("flash_fatfs_demo\n");
-
-	g_Spi.Init(s_SpiCfg);
-
-	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache) == true)
-	{
-	}
-
+	FILE *fp;
 	uint16_t *p = (uint16_t*)g_Data;
+	bool valid;
 
-	for (int i = 0; i < sizeof(g_Data) / sizeof(uint16_t); i++)
+	if (!g_Uart.Init(s_UartCfg))
+		return 1;
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
+	printf("flash_stdfs_demo\n");
+
+	if (!g_Spi.Init(s_SpiCfg) ||
+		!g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache))
+		return 1;
+
+	if (!StdFSInit(&g_FlashDiskIO))
 	{
+		printf("Mount failed: run FlashLittleFsDemo to format this flash first.\n");
+		return 1;
+	}
+
+	for (unsigned i = 0; i < sizeof(g_Data) / sizeof(uint16_t); i++)
 		p[i] = i;
+
+	fp = fopen("test.txt", "wb");
+	if (!fp)
+		return 1;
+	valid = fwrite(g_Data, 1, sizeof(g_Data), fp) == sizeof(g_Data);
+	if (fclose(fp) != 0 || !valid)
+		return 1;
+
+	memset(g_Temp, 0xa5, sizeof(g_Temp));
+	fp = fopen("test.txt", "rb");
+	if (!fp)
+		return 1;
+	valid = fread(g_Temp, 1, sizeof(g_Temp), fp) == sizeof(g_Temp);
+	if (fclose(fp) != 0 || !valid || memcmp(g_Temp, g_Data, sizeof(g_Data)) != 0)
+	{
+		printf("Readback failed\n");
+		return 1;
 	}
 
-	res = StdFSInit(&g_FlashDiskIO);
-
-	if (res == false)
-	{
-		// mount the filesystem
-//		int err = lfs_mount(&lfs, &cfg);
-
-		// reformat if we can't mount the filesystem
-		// this should only happen on the first boot
-//		if (err) {
-//			lfs_format(&lfs, &cfg);
-//			lfs_mount(&lfs, &cfg);
-//		}
-	}
-
-	FILE *fp = fopen("test.txt", "wrb+");
-
-	if (fp)
-	{
-		printf("file open/create success\n");
-//		fwrite(g_Data, 4096, 1, fp);
-		//fseek(fp, 0, SEEK_SET);
-		fread(g_Temp, 4096, 1, fp);
-		fclose(fp);
-
-		if (memcmp(g_Temp, g_Data, 4096) != 0)
-		//for (int i = 0; i < 4096; i++)
-		{
-			//if (g_Data[i] != g_Temp[i])
-			{
-				printf("read failed %d\n");//, i);
-			}
-		}
-	}
-
-	memset(g_Temp, 0xa5, 4096);
-
-	fp = NULL;
-	fp = fopen("test.txt", "wrb+");
-
-	if (fp)
-	{
-		printf("file open success\n");
-		//fseek(fp, 0, SEEK_SET);
-		fread(g_Temp, 4096, 1, fp);
-		fclose(fp);
-
-		if (memcmp(g_Temp, g_Data, 4096) != 0)
-		{
-			printf("read failed\n");
-		}
-	}
-
-	printf("test complete\n");
-
-	while(1)
-	{
+	printf("Write/close/reopen/readback passed\n");
+	while (1)
 		__WFE();
-	}
-
 	return 0;
 }
-
-

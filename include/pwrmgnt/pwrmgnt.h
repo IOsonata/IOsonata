@@ -71,6 +71,13 @@ typedef enum __PowerMgnt_Evt {
 	PWRMGNT_EVT_CHARGE_DETECTED			//!< Charge source detected
 } PWRMGNT_EVT;
 
+typedef enum __PowerMgnt_Battery_State
+{
+	PWRMGNT_BATTERY_UNKNOWN,
+	PWRMGNT_BATTERY_ABSENT,
+	PWRMGNT_BATTERY_PRESENT
+} PWRMGNT_BATTERY_STATE;
+
 typedef struct __Bat_Profile {
 	uint32_t OpVolt;		//!< Battery nominal operating voltage in mV
 	uint32_t ChrgVolt;		//!< Battery charge voltage in mV
@@ -157,6 +164,17 @@ public:
 	 * @return	true - Battery present
 	 */
 	virtual bool Battery() { return false; }
+
+	/**
+	 * @brief	Battery presence state
+	 *
+	 * Drivers that cannot distinguish an absent battery from an unsupported
+	 * presence indication return PWRMGNT_BATTERY_UNKNOWN.
+	 */
+	virtual PWRMGNT_BATTERY_STATE BatteryState()
+	{
+		return Battery() ? PWRMGNT_BATTERY_PRESENT : PWRMGNT_BATTERY_UNKNOWN;
+	}
 
 	/**
 	 * @brief	Interrupt handler

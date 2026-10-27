@@ -61,6 +61,8 @@ SOFTWARE.
 /// wholly deterministic from its seed. IsSecure() is false, so key generation
 /// declines to use it. Seed defaults to a fixed nonzero constant; Seed() sets
 /// it for reproducible test streams.
+CRYPTO_STATUS CryptoSoftRngGenerate(uint64_t &State0, uint64_t &State1, uint8_t *pOut, size_t Len);
+
 class CryptoSoftRng : public RngEngine {
 public:
 	CryptoSoftRng() { vbValid = false; vState0 = 0x9E3779B97F4A7C15ULL; vState1 = 0xBF58476D1CE4E5B9ULL; }

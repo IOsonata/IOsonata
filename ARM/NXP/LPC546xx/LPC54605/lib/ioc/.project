@@ -98,12 +98,12 @@
 		<link>
 			<name>include/LPC54605.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/LPC54605.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/LPC54605.h</locationURI>
 		</link>
 		<link>
 			<name>include/LPC54605_features.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/LPC54605_features.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/include/LPC54605_features.h</locationURI>
 		</link>
 		<link>
 			<name>include/LPC546xx.h</name>
@@ -259,6 +259,81 @@
 			<name>src/system_LPC546xx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_LPC546xx.c</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softaes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softrng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_default_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/coredev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/timer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
+		</link>
+		<link>
+			<name>include/timer_lpcxx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/timer_lpcxx.h</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_lpcxx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lpcxx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_lpc546xx.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

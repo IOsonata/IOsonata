@@ -533,8 +533,25 @@ static void TestReadWriteAndRepeatedCommands(void)
 	disk.Fill();
 	alignas(4) uint8_t sector[SECTOR_SIZE];
 	UsbdMsc msc;
-	CHECK(msc.Init(MakeCfg(disk, sector)));
+	// Only application storage is required; all USB/SCSI options default.
+	const UsbdMscCfg_t cfg = {
+		.pDisk = &disk,
+		.pSectorBuffer = sector,
+		.SectorBufferSize = sizeof(sector),
+	};
+	CHECK(msc.Init(cfg));
 	CHECK(msc.SelectConfig(1U));
+
+	UsbMscCmdBlkWrapper_t inquiry = MakeCbw(9U, 36U, true,
+		USB_MSC_SCSI_INQUIRY, 6U);
+	inquiry.CBWCB[4] = 36U;
+	RunInCommand(msc, inquiry);
+	CHECK(s_CaptureLength == 36U + sizeof(UsbMscCmdStatusWrapper_t));
+	CHECK(s_Capture[1] == 0U); // Default: fixed medium.
+	CHECK(memcmp(&s_Capture[8], "I-SYST  IOsonata MSC    1.00", 28U) == 0);
+	CheckPassedCsw(9U);
+	uint8_t expectedInquiry[36];
+	memcpy(expectedInquiry, s_Capture, sizeof(expectedInquiry));
 
 	UsbMscCmdBlkWrapper_t cbw = MakeCbw(10U, SECTOR_SIZE * 2U, true,
 		USB_MSC_SCSI_READ_10, 10U);
@@ -570,6 +587,18 @@ static void TestReadWriteAndRepeatedCommands(void)
 	RunInCommand(msc, cbw);
 	CHECK(memcmp(s_Capture, writeData, SECTOR_SIZE) == 0);
 	CheckPassedCsw(12U);
+	msc.Reset();
+	CHECK(msc.SelectConfig(1U));
+	RunInCommand(msc, cbw);
+	CHECK(memcmp(s_Capture, writeData, SECTOR_SIZE) == 0);
+	CheckPassedCsw(12U);
+	// OUT sector traffic overwrites the receive scratch space. A subsequent
+	// reply must be rebuilt completely, including its reserved zero bytes.
+	RunInCommand(msc, inquiry);
+	CHECK(s_CaptureLength == sizeof(expectedInquiry) + sizeof(UsbMscCmdStatusWrapper_t));
+	CHECK(memcmp(s_Capture, expectedInquiry, sizeof(expectedInquiry)) == 0);
+	CheckPassedCsw(9U);
+
 }
 
 static void TestBufferedWrite(void)

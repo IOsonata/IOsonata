@@ -74,6 +74,10 @@ uintptr_t Cc3xxBase(void)
 
 bool Cc3xxEnable(void)
 {
+	if (CC3XX_WRAPPER->ENABLE != 0U)
+	{
+		return true;
+	}
 	CC3XX_WRAPPER->ENABLE = 1U;
 
 	for (uint32_t idx = 0U; idx < CC3XX_POWERUP_SPINS; idx++)

@@ -42,6 +42,8 @@ SOFTWARE.
 #include "usb/usb.h"
 #include "usb/usbd_hid.h"
 
+#include "coredev/iopincfg.h"
+#include "coredev/system_core_clock.h"
 #include "board.h"
 
 #ifdef MCUOSC
@@ -59,75 +61,13 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #define HID_LED_CAPS_LOCK	(1U << 1)
 #define HID_DEBOUNCE_COUNT	5U
 
-#pragma pack(push, 1)
-typedef struct __Hid_Keyboard_Report {
-	uint8_t Modifiers;
-	uint8_t Reserved;
-	uint8_t Key[6];
-} HidKeyboardReport_t;
+static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t BufferSize, void *pContext);
+static bool HidSetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	const uint8_t *pBuffer, uint16_t Length, void *pContext);
 
-#pragma pack(pop)
-
-static_assert(sizeof(HidKeyboardReport_t) == 8U,
-	"Boot keyboard reports must be eight bytes");
-
-static const uint8_t s_ReportDesc[] = {
-	0x05U, 0x01U,			// Usage Page (Generic Desktop)
-	0x09U, 0x06U,			// Usage (Keyboard)
-	0xA1U, 0x01U,			// Collection (Application)
-	0x05U, 0x07U,			// Usage Page (Keyboard/Keypad)
-	0x19U, 0xE0U,			// Usage Minimum (Left Control)
-	0x29U, 0xE7U,			// Usage Maximum (Right GUI)
-	0x15U, 0x00U,			// Logical Minimum (0)
-	0x25U, 0x01U,			// Logical Maximum (1)
-	0x75U, 0x01U,			// Report Size (1)
-	0x95U, 0x08U,			// Report Count (8)
-	0x81U, 0x02U,			// Input (Data, Variable, Absolute)
-	0x95U, 0x01U,
-	0x75U, 0x08U,
-	0x81U, 0x01U,			// Input (Constant)
-	0x05U, 0x08U,			// Usage Page (LEDs)
-	0x19U, 0x01U,			// Usage Minimum (Num Lock)
-	0x29U, 0x05U,			// Usage Maximum (Kana)
-	0x95U, 0x05U,
-	0x75U, 0x01U,
-	0x91U, 0x02U,			// Output (Data, Variable, Absolute)
-	0x95U, 0x01U,
-	0x75U, 0x03U,
-	0x91U, 0x01U,			// Output (Constant)
-	0x05U, 0x07U,			// Usage Page (Keyboard/Keypad)
-	0x19U, 0x00U,			// Usage Minimum (Reserved)
-	0x29U, 0x65U,			// Usage Maximum (Keyboard Application)
-	0x15U, 0x00U,
-	0x25U, 0x65U,
-	0x75U, 0x08U,
-	0x95U, 0x06U,
-	0x81U, 0x00U,			// Input (Data, Array, Absolute)
-	0xC0U,
-};
-
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength);
-
-class HidKeyboard final : public UsbdHid {
-public:
-	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-				 uint8_t **ppData, uint16_t *pLength) override {
-		if (pSetup != nullptr &&
-			(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) ==
-				USB_REQTYPE_CLASS &&
-			(pSetup->bRequest == USB_HID_REQ_GET_REPORT ||
-			 pSetup->bRequest == USB_HID_REQ_SET_REPORT))
-		{
-			return HidReportRequest(pSetup, Stage, ppData, pLength);
-		}
-		return UsbdHid::Control(pSetup, Stage, ppData, pLength);
-	}
-};
-
-static HidKeyboard s_Hid;
-static HidKeyboardReport_t s_Report;
+static UsbdHid s_Hid;
+static UsbHidKeyboardReport_t s_Report = {};
 static uint8_t s_LedReport;
 static bool s_ReportPending;
 
@@ -139,21 +79,12 @@ alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
 
 static const UsbdHidCfg_t s_HidCfg = {
 	.DevNo = USB_DEVNO,
-	.pReportDesc = s_ReportDesc,
-	.ReportDescLength = sizeof(s_ReportDesc),
-	.BcdHid = 0U,
-	.FsMps = sizeof(HidKeyboardReport_t),
-	.HsMps = sizeof(HidKeyboardReport_t),
-	.FsInterval = 1U,
-	.HsInterval = 4U,
-	.SubClass = USB_HID_SUBCLASS_BOOT,
-	.Protocol = USB_HID_PROT_KEYBOARD,
-	.CountryCode = 0U,
 	.InterfaceString = HID_STR_INTERFACE,
 	.EvtCB = HidEvent,
-	.pContext = nullptr,
 	.pRxBuffer = s_HidRxBuffer,
 	.pTxBuffer = s_HidTxBuffer,
+	.GetReportCB = HidGetReport,
+	.SetReportCB = HidSetReport,
 };
 
 // Application event queue memory, replaces the 4 event library default. The
@@ -168,24 +99,13 @@ static const UsbCfg_t s_UsbCfg = {
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
 	.pProduct = "IOsonata HID Keyboard",
-	.pSerial = nullptr,
 	.pFuncName = "HID Keyboard",
 	.IntPrio = 6,
 #ifdef USB_PINS
 	.pIOPinMap = s_UsbPins,
 	.NbIOPins = sizeof(s_UsbPins) / sizeof(IOPinCfg_t),
-#else
-	.pIOPinMap = nullptr,
-	.NbIOPins = 0,
 #endif
-	.DeviceClass = USB_DEVCLASS_NONE,
-	.DeviceSubClass = 0U,
-	.DeviceProtocol = 0U,
-	.bSelfPowered = false,
-	.bRemoteWakeup = false,
-	.bLowPowerSuspend = false,
 	.MaxPower = 100,
-	.EvtHandler = nullptr,
 };
 
 static bool ButtonDebounce(bool Pressed, bool &Candidate, bool &Stable,
@@ -254,46 +174,35 @@ static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 }
 
 
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-							 UsbCtrlStage_t Stage, uint8_t **ppData,
-							 uint16_t *pLength)
+static int HidGetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t BufferSize, void *)
 {
-	if (pSetup == nullptr || pLength == nullptr ||
-		(pSetup->wValue & USB_HID_REPID_MASK) != 0U)
+	if (ReportId != 0U || BufferSize < sizeof(s_Report))
+	{
+		return -1;
+	}
+	if (Type == USB_HID_REPTYPE_INPUT)
+	{
+		memcpy(pBuffer, &s_Report, sizeof(s_Report));
+		return sizeof(s_Report);
+	}
+	if (Type == USB_HID_REPTYPE_OUTPUT)
+	{
+		pBuffer[0] = s_LedReport;
+		return 1;
+	}
+	return -1;
+}
+
+static bool HidSetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	const uint8_t *pBuffer, uint16_t Length, void *)
+{
+	if (Type != USB_HID_REPTYPE_OUTPUT || ReportId != 0U || Length != 1U)
 	{
 		return false;
 	}
-	if (Stage == USB_CTRL_ABORT)
-	{
-		return true;
-	}
-	if (Stage == USB_CTRL_SETUP)
-	{
-		if (ppData == nullptr)
-		{
-			return false;
-		}
-		const uint16_t type = pSetup->wValue & USB_HID_REPTYPE_MASK;
-		if (pSetup->bRequest == USB_HID_REQ_GET_REPORT &&
-			type == USB_HID_REPTYPE_INPUT)
-		{
-			*ppData = reinterpret_cast<uint8_t *>(&s_Report);
-			*pLength = sizeof(s_Report);
-			return true;
-		}
-		if (type == USB_HID_REPTYPE_OUTPUT && pSetup->wLength == 1U)
-		{
-			*ppData = &s_LedReport;
-			*pLength = 1U;
-			return true;
-		}
-		return false;
-	}
-	if (Stage == USB_CTRL_COMPLETE &&
-		pSetup->bRequest == USB_HID_REQ_SET_REPORT)
-	{
-		KeyboardLedApply(s_LedReport);
-	}
+	s_LedReport = pBuffer[0];
+	KeyboardLedApply(s_LedReport);
 	return true;
 }
 
@@ -309,7 +218,7 @@ int main()
 	KeyboardLedApply(0U);
 
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
-		!UsbInit(&s_UsbCfg) || !s_Hid.Init(s_HidCfg))
+		!UsbInit(&s_UsbCfg) || !s_Hid.InitKeyboard(s_HidCfg))
 	{
 		return -1;
 	}

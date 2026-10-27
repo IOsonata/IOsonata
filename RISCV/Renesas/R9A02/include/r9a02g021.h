@@ -313,7 +313,8 @@ SOFTWARE.
 // Machine timer, manual 2.5.4. Counts MTCLK or ICLK, see MACTCR.
 // ICLK must be at least twice MTCLK (2.6).
 
-typedef struct {
+typedef struct
+{
 	__IO uint32_t MTIME_LO;			//!< 0x000
 	__IO uint32_t MTIME_HI;			//!< 0x004
 	__IO uint32_t MTIMECMP_LO;		//!< 0x008
@@ -352,7 +353,8 @@ typedef struct {
 
 // ICU, manual 12.2
 
-typedef struct {
+typedef struct
+{
 	__IO uint8_t IRQCR[8];			//!< 0x000 IRQ0 to IRQ7 pin control
 	uint8_t RESERVED0[0xF8];
 	__IO uint8_t NMICR;				//!< 0x100
@@ -476,7 +478,8 @@ typedef struct {
 // puts the high field first: PODR at +0 and PDR at +2, EIDR at +4 and
 // PIDR at +6, PORR at +8 and POSR at +10, EORR at +12 and EOSR at +14.
 
-typedef struct {
+typedef struct
+{
 	union {
 		__IO uint32_t PCNTR1;		//!< 0x00 PDR [15:0], PODR [31:16]
 		struct {
@@ -583,7 +586,8 @@ typedef struct {
 // UART0: SAU0 channels 0 (TX) and 1 (RX). UART1: SAU0 channels 2 and 3.
 // UART2: SAU1 channels 0 and 1. SAU1 has channels 0 and 1 only.
 
-typedef struct {
+typedef struct
+{
 	__IO uint16_t SDR[4];			//!< 0x00 Data and STCLK[15:9]
 	uint8_t RESERVED0[0x78];
 	__I uint16_t SSR[4];			//!< 0x80 Status
@@ -659,7 +663,8 @@ typedef struct {
 
 // Realtime clock, manual 20.2. Time and alarm registers are BCD.
 
-typedef struct {
+typedef struct
+{
 	__IO uint8_t SEC;				//!< 0x00
 	__IO uint8_t MIN;				//!< 0x01
 	__IO uint8_t HOUR;				//!< 0x02
@@ -699,7 +704,8 @@ typedef struct {
 // I2C bus interface IICA, manual 24.2. IICA1 is at IICA0 + 0x100. All
 // registers are 8-bit.
 
-typedef struct {
+typedef struct
+{
 	__IO uint8_t IICA;				//!< 0x00 Shift register
 	__I uint8_t IICS;				//!< 0x01 Status, ALD clears on read
 	__IO uint8_t IICF;				//!< 0x02 Flag, read-only while IICE = 1
@@ -751,7 +757,8 @@ typedef struct {
 
 // UARTA, manual 25.2
 
-typedef struct {
+typedef struct
+{
 	__IO uint8_t TXBA;				//!< 0x00
 	__I uint8_t RXBA;				//!< 0x01
 	__IO uint8_t ASIMA0;			//!< 0x02
@@ -762,7 +769,8 @@ typedef struct {
 	uint8_t RESERVED0;
 } R9A02_UARTA_Unit_Type;
 
-typedef struct {
+typedef struct
+{
 	R9A02_UARTA_Unit_Type UNIT[2];	//!< 0x00, 0x08
 	__IO uint8_t UTA0CK;			//!< 0x10
 	__IO uint8_t UTA1CK;			//!< 0x11
@@ -808,7 +816,8 @@ typedef struct {
 
 // 12-bit A/D converter ADC12, manual 29.2
 
-typedef struct {
+typedef struct
+{
 	__IO uint8_t ADM0;				//!< 0x00 Mode 0
 	__IO uint8_t ADS;				//!< 0x01 Channel select
 	__IO uint8_t ADM1;				//!< 0x02 Mode 1
@@ -870,7 +879,8 @@ typedef struct {
 
 // Timer array unit, manual 18.2
 
-typedef struct {
+typedef struct
+{
 	__IO uint16_t TDR[8];			//!< 0x00 Compare or capture data
 	uint8_t RESERVED0[0x70];
 	__I uint16_t TCR[8];			//!< 0x80 Counter
@@ -910,7 +920,8 @@ typedef struct {
 
 // 32-bit interval timer, manual 19.2
 
-typedef struct {
+typedef struct
+{
 	__IO uint16_t ITLCMP00;			//!< 0x00 Compare, channels 0 and 1
 	__IO uint16_t ITLCMP01;			//!< 0x02 Compare, channels 2 and 3
 	__I uint16_t ITLCAP00;			//!< 0x04 Capture
@@ -952,7 +963,8 @@ typedef struct {
 // Data transfer controller, manual 14.2. The transfer information records
 // and the vector table are in SRAM, see dtc_r9a02.h.
 
-typedef struct {
+typedef struct
+{
 	__IO uint8_t DTCCR;				//!< 0x00 Control
 	uint8_t RESERVED0[3];
 	__IO uint32_t DTCVBR;			//!< 0x04 Vector table base, 1 KB aligned
@@ -982,7 +994,8 @@ typedef struct {
 // 8-bit D/A converter DAC8, manual 30.2. Module stop MSTPCRC.MSTPC22 and
 // MSTPCRD.MSTPD20, both set to the same value.
 
-typedef struct {
+typedef struct
+{
 	__IO uint16_t DADR[2];			//!< 0x00 Data, channels 0 and 1
 	__IO uint8_t DACR;				//!< 0x04 Control, bits [4:0] write 1
 	__IO uint8_t DADPR;				//!< 0x05 Data placement
@@ -999,7 +1012,8 @@ typedef struct {
 
 // Comparators CMP, manual 31.2. All registers 8-bit.
 
-typedef struct {
+typedef struct
+{
 	__IO uint8_t COMPMDR;			//!< 0x00 Mode
 	__IO uint8_t COMPFIR;			//!< 0x01 Filter and edge
 	__IO uint8_t COMPOCR;			//!< 0x02 Output control
@@ -1019,5 +1033,19 @@ typedef struct {
 #define R9A02_COMPOCR_COE(n)			(1U << (4U * (n) + 1U))		//!< VCOUTn pin output
 #define R9A02_COMPOCR_COP(n)			(1U << (4U * (n) + 2U))		//!< VCOUTn inverted
 #define R9A02_COMPOCR_SPDMD				(1U << 7)					//!< High-speed mode, both comparators
+
+// True Random Number Generator, chapter 28. Byte accesses are required.
+typedef struct
+{
+	__I uint8_t TRNGSDR;
+	uint8_t Reserved;
+	__IO uint8_t TRNGSCR0;
+	__IO uint8_t TRNGSCR1;
+} R9A02_TRNG_Type;
+
+#define R9A02_TRNG ((R9A02_TRNG_Type *)R9A02_TRNG_BASE)
+#define R9A02_TRNG_EN (1U << 3)
+#define R9A02_TRNG_ST (1U << 2)
+#define R9A02_TRNG_RDY (1U << 7)
 
 #endif

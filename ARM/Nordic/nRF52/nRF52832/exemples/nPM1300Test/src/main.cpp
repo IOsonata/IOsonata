@@ -93,7 +93,8 @@ void HardwareInit()
 {
 	g_I2C.Init(s_I2cCfg);
 
-	g_nPM1300.Init(s_PwrCfg, &g_I2C);
+	if (!g_nPM1300.Init(s_PwrCfg, &g_I2C))
+		printf("nPM1300 initialization failed\r\n");
 
 }
 
@@ -117,17 +118,17 @@ int main()
 {
 	HardwareInit();
 
+	int32_t mv;
+	PWRMGNT_BATTERY_STATE battery;
+
 	//g_nPM1300.Enable();
-	if (g_nPM1300.Battery())
-	{
-		printf("Battery present\n");
-	}
 	while (1)
 	{
-		if (g_nPM1300.Charging())
-		{
-			printf("Charging\n");
-		}
+		mv = g_nPM1300.Voltage();
+		battery = g_nPM1300.BatteryState();
+		if (mv >= 0)
+			printf("VBAT=%ld mV charging=%u battery_state=%u\r\n",
+				(long)mv, g_nPM1300.Charging(), (unsigned)battery);
 		__WFE();
 	}
 

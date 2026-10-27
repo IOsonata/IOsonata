@@ -193,7 +193,7 @@
 		<link>
 			<name>include/interrupt.h</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/include/interrupt.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/interrupt.h</locationURI>
 		</link>
 		<link>
 			<name>include/iopinctrl.h</name>
@@ -764,11 +764,6 @@
 			<name>include/sensors/accel_h3lis331dl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/accel_lis2dh12.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_sensor.h</name>
@@ -1686,6 +1681,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_int.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/usb/usbd_int.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_int.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_periodic.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_periodic.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usb_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
@@ -1694,6 +1699,11 @@
 			<name>src/usb/usb_iso.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_iso.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_bulk.cpp</name>
@@ -1750,6 +1760,51 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softaes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softrng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/rng_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/rng_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/crypto_default_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
@@ -1758,4 +1813,3 @@
 		</variable>
 	</variableList>
 </projectDescription>
-

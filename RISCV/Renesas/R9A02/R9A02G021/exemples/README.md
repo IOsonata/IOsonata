@@ -64,6 +64,7 @@ an input filename and causes a "no such file or directory" error.
 | `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UARTA1 (DevNo 4), 115200 8N1; optional UARTA driver linked as project source, no linker flag |
 | `SpiLoopback` | `exemples/spi/spi_loopback.cpp` | `gcc_R9A02G021.ld` | SPI20 (DevNo 4) at 1 MHz, the four modes, interrupt and DTC reception, console on UART0 |
 | `SpiMasterSlave` | `exemples/spi/spi_master_slave.cpp` | `gcc_R9A02G021.ld` | SPI20 master (DevNo 4) at 1 MHz wired to the SPI21 slave (DevNo 5), the four modes, DTC on both, console on UART0 |
+| `CryptoTest` | `exemples/crypto/crypto_engine_test.cpp` | `gcc_R9A02G021.ld` | Generic crypto self-tests, software reference and target TRNG, UART0 console in Release |
 | `I2CScan` | `exemples/i2c/i2c_scan.cpp` | `gcc_R9A02G021.ld` | IICA1 (DevNo 1) at 100 kHz, HOCO 32 MHz, console on UART0 |
 | `I2CMasterSlave` | `exemples/i2c/i2c_master_slave.cpp` | `gcc_R9A02G021.ld` | IICA1 master (DevNo 1) at 100 kHz wired to the IICA0 slave (DevNo 0) at 0x22, HOCO 32 MHz, console on UART0 at 1 Mbaud |
 | `ADCDemo` | `src/adc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | ANI2, ANI3, internal reference, temperature sensor, console on UART0 |

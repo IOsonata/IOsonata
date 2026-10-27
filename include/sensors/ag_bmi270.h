@@ -766,6 +766,9 @@ SOFTWARE.
 
 class AccelBmi270 : public AccelSensor {
 public:
+	using Device::Read;
+	using AccelSensor::Read;
+
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint8_t Scale(uint8_t Value);
@@ -792,6 +795,9 @@ private:
 
 class GyroBmi270 : public GyroSensor {
 public:
+	using Device::Read;
+	using GyroSensor::Read;
+
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t Sensitivity(uint32_t Value);
@@ -819,6 +825,9 @@ private:
 
 class TempBmi270 : public TempSensor {
 public:
+	using Device::Read;
+	using TempSensor::Read;
+
 	/**
 	 * @brief	Initialize sensor (require implementation).
 	 *
@@ -860,6 +869,13 @@ private:
 
 class AgBmi270 : public AccelBmi270, public GyroBmi270, public TempBmi270 {
 public:
+	AgBmi270() : vbInitialized(false), vFifoDataFlag(0), vFifoFrameSize(0),
+		vPrevTime(0), vRollover(0)
+		{
+		vbSensorEnabled[0] = false;
+		vbSensorEnabled[1] = false;
+		vbSensorEnabled[2] = false;
+	}
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[0] = AccelBmi270::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[0];
 	}
@@ -898,10 +914,11 @@ private:
 	virtual void FifoDataFlagSet(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag; }
 	virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
 	bool LoadConfig(const uint8_t *pData, size_t DataLen);
+	uint64_t Timestamp();
 
 	uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
-	size_t vFifoFrameSize;	// Data word count
-	uint16_t vPrevTime;
+	size_t vFifoFrameSize;	// Headerless FIFO frame size in bytes
+	uint32_t vPrevTime;
 	uint64_t vRollover;
 };
 

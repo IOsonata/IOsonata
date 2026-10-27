@@ -38,6 +38,9 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "crypto/icrypto.h"
+#ifdef __cplusplus
+#include "crypto/crypto_uecc.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -140,17 +143,15 @@ extern "C" {
 #ifdef __cplusplus
 }
 
-class Ba414ep : public KeyAgreeEngine {
+class Ba414ep : public CryptoUecc
+{
 public:
-	struct KeyCtx {
-		uint8_t PrivKey[32];
-		bool bKeyValid;
-	};
+	// Software import and hardware operations use the same context type.
+	using KeyCtx = CryptoUecc::KeyCtx;
 
 	Ba414ep();
 
 	bool Init(DeviceIntrf * const pIntrf, RngEngine *pRng);
-	void SetRng(RngEngine *pRng) { vpRng = pRng; }
 
 	// First Enable brings the engine to a proven-ready state: read and validate
 	// the BA414E hardware geometry, wait out the IK side of the module, then run
@@ -163,7 +164,7 @@ public:
 	void Reset() override;
 
 	// Operation lock for the multi-transfer computation. bBusy in the
-	// interface is per transfer; this is per operation, owned by the device.
+	// interface is per transfer; Silex devices share operation exclusion.
 	bool OpAcquire();
 	void OpRelease();
 
@@ -176,6 +177,8 @@ public:
 	int SelfTest() override;
 	CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 						 uint8_t *pPubKey) override;
+	CRYPTO_STATUS KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+						 const uint8_t *pPrivKey, uint8_t *pPubKey) override;
 	CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 						const uint8_t *pPeerPubKey, uint8_t *pSharedX,
 						bool bKeepKey = false) override;
@@ -191,8 +194,6 @@ private:
 								  const uint8_t Scalar[32], uint8_t Result[64],
 								  bool bValidatePoint);
 
-	RngEngine *vpRng;
-	atomic_flag vOpBusy;
 	bool vbReady;
 	bool vbIntrfEnabled;
 };

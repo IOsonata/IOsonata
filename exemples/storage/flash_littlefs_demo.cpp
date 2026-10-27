@@ -155,7 +155,7 @@ const struct lfs_config cfg = {
 	.read_size = 16,
 	.prog_size = 16,
 	.block_size = s_FlashCfg.SectSize,
-	.block_count = s_FlashCfg.TotalSize * 1024UL / s_FlashCfg.SectSize,
+	.block_count = s_FlashCfg.TotalSize * 1024U / s_FlashCfg.SectSize,
 	.block_cycles = 500,
 	.cache_size = 16,
 	.lookahead_size = 16,
@@ -224,14 +224,19 @@ int main()
 {
 	bool res;
 
-	res = g_Uart.Init(s_UartCfg);
+	if (!g_Uart.Init(s_UartCfg))
+		return 1;
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
 	printf("flash_littlefs_demo\n");
 
-	g_Spi.Init(s_SpiCfg);
+	if (!g_Spi.Init(s_SpiCfg))
+		return 1;
 
-	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache) == true)
+	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache) == false)
 	{
+		printf("Init Flash failed\n");
+		return 1;
 	}
 
 	uint16_t *p = (uint16_t*)g_Data;
@@ -301,5 +306,6 @@ int main()
 
 	return 0;
 }
+
 
 

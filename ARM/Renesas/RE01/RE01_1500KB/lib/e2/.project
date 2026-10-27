@@ -646,11 +646,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/shared_irq.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_irq.h</locationURI>
-		</link>
-		<link>
 			<name>include/coredev/spi.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
@@ -784,11 +779,6 @@
 			<name>include/sensors/accel_h3lis331dl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/accel_lis2dh12.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_sensor.h</name>
@@ -944,11 +934,6 @@
 			<name>include/usb/usb_mscdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
-		</link>
-		<link>
-			<name>src/audio/audiodev.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/audio/audiodev.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
@@ -1269,6 +1254,46 @@
 			<name>src/coredev/spi_re01.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/spi_re01.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softaes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softrng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_default.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

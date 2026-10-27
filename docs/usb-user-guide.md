@@ -9,6 +9,25 @@ Use this guide to build and test an application. See
 [USB architecture](architecture/usb.md) for class ownership, descriptor
 composition, endpoint dispatch and controller-port rules.
 
+## Configuration defaults
+
+The examples use aggregate initializers: omitted fields are zero-initialized.
+Applications only need to list required values and choices that differ from
+those defaults. There is no generated application configuration behind them.
+
+For `UsbCfg_t`, an omitted `pSerial` uses the MCU unique ID; omitted power flags
+select bus power with remote wakeup disabled. The CDC loopback and PRBS examples
+explicitly retain their remote-wakeup setting. Omitted pin-map fields are null
+and zero; targets needing USB pin configuration still supply `USB_PINS` through
+`board.h`. Device identity, power budget and interrupt priority remain explicit.
+
+For `UsbdHidCfg_t`, zero selects the documented HID version and polling defaults
+(1 ms full speed, high-speed bInterval 4). Zero subclass/protocol selects ordinary
+non-boot HID. Buffer pointers, report definitions and application callbacks must
+still be supplied where needed. The keyboard and mouse helpers select their
+predefined report layouts. Packet sizes remain explicit in the custom HID
+loopback so its 64-byte host protocol is visible in the application.
+
 ## Supported functions
 
 | Function | Application class or interface | Shared example | nRF52840 project | Host runner |
@@ -19,8 +38,8 @@ composition, endpoint dispatch and controller-port rules.
 | Custom Bulk | `UsbdBulk` | `exemples/usb/usb_custom_bulk_loopback.cpp` | `UsbCustomBulkLoopback/ioc` | `Python/usb_custom_bulk_loopback.py` |
 | HID | `UsbdHid` | `exemples/usb/usb_hid_loopback.cpp` | `UsbHidLoopback/ioc` | `Python/usb_hid_loopback.py` |
 | Mass Storage | `UsbdMsc` | `exemples/usb/usb_msc_ramdisk.cpp` | `UsbMscRamDisk/ioc` | `Python/usb_msc_test.py` |
-| Interrupt transport | `UsbIntIntrf` | `exemples/usb/usb_int_loopback.cpp` | `UsbIntLoopback/ioc` | `Python/usb_int_loopback.py` |
-| Isochronous transport | `UsbIsoIntrf` | `exemples/usb/usb_iso_loopback.cpp` | `UsbIsoLoopback/ioc` | `Python/usb_iso_loopback.py` |
+| Vendor Interrupt | `UsbdInt` | `exemples/usb/usb_int_loopback.cpp` | `UsbIntLoopback/ioc` | `Python/usb_int_loopback.py` |
+| Vendor Isochronous | `UsbdIso` | `exemples/usb/usb_iso_loopback.cpp` | `UsbIsoLoopback/ioc` | `Python/usb_iso_loopback.py` |
 
 The target projects are below
 `ARM/Nordic/nRF52/nRF52840/exemples/`. Interrupt and Isochronous loopback
@@ -284,9 +303,80 @@ Use `--serial` when several matching devices are connected.
 ## HID
 
 `UsbdHid` inherits `UsbIntIntrf` and owns HID descriptors and standard HID class
-requests. The application supplies the report descriptor and report meaning.
-Subclass `UsbdHid` only when application-specific control reports are needed,
-and delegate unhandled requests to `UsbdHid::Control()`.
+requests. The keyboard, mouse and 3D-mouse initialization presets supply their
+report descriptors. Custom layouts use `Init()` with an application-owned
+report descriptor and application-defined report meaning.
+Use optional `GetReportCB` and `SetReportCB` callbacks for control reports.
+No subclass or endpoint-zero transfer-stage handler is needed. Existing
+`Control()` overrides remain supported for specialized requests.
+
+For a standard six-key boot keyboard, use `UsbdHid::InitKeyboard()`:
+
+```cpp
+static UsbdHid s_Hid;
+static UsbHidKeyboardReport_t s_Report = {};
+alignas(4) static uint8_t s_Rx[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_Tx[USB_INT_INTRF_PKT_BLKSIZE];
+static const UsbdHidCfg_t s_HidCfg = {
+	.EvtCB = HidEvent,
+	.pRxBuffer = s_Rx,
+	.pTxBuffer = s_Tx,
+	.GetReportCB = HidGetReport,
+	.SetReportCB = HidSetReport,
+};
+// After UsbInit(), before UsbEnable():
+if (!s_Hid.InitKeyboard(s_HidCfg))
+{
+	return -1;
+}
+```
+
+The library supplies the report descriptor, boot subclass, keyboard protocol,
+and eight-byte full/high-speed endpoint packet sizes. It replaces those six
+configuration fields in a local copy; the caller's configuration is unchanged.
+Other options retain their normal meaning, including controller number,
+callbacks, context, strings and intervals. Zero intervals select 1 ms at full
+speed and high-speed bInterval 4 (also 1 ms). No heap or extra object storage is
+used. `HidEvent`, `HidGetReport` and `HidSetReport` are application callbacks;
+the complete example is `exemples/usb/usb_hid_keyboard.cpp`.
+
+The report has modifier bits, a zero reserved byte and six HID key usages.
+Send all zeros to release the keys. The host's one-byte output report contains
+the five keyboard LED bits. There is no report ID; this fixed layout works in
+both boot and report protocol. The application still owns key scanning, report
+submission and LED behavior. This helper does not add idle-repeat scheduling.
+
+Custom layouts continue to use `Init()` with an application-defined report
+descriptor. `USB_HID_KEYBOARD_REPORT_DESC` remains available for applications
+that want to use the standard report definition with their own configuration.
+
+For a three-button desktop mouse, use `InitMouse(s_HidCfg)` with
+`UsbHidMouseReport_t`. It supplies a three-byte boot mouse report: button bits
+0/1/2 (left/right/middle), then signed relative X/Y movement (-127..127).
+The upper button bits must be zero. There is no wheel, output report or report
+ID. Boot and report protocol use the same layout.
+
+For a six-axis controller, use `Init3dMouse(s_HidCfg)` with
+`UsbHid3dMouseReport_t`. This preserves the BMI323 example's twelve-byte report:
+signed relative X/Y/Z/Rx/Ry/Rz (-32767..32767), little-endian on USB. It has no
+buttons, output report or report ID and does not advertise boot mouse protocol.
+Both mouse helpers replace the same six layout fields as `InitKeyboard()`.
+The existing interrupt IN/OUT endpoint pair is retained; OUT reports are not
+part of these mouse report definitions. Unused control callbacks may be omitted.
+
+```cpp
+// After successful InitMouse(), submit movement through the normal transport.
+UsbHidMouseReport_t report = {0, 10, -5};
+const int sent = s_Hid.Tx(0,
+	reinterpret_cast<const uint8_t *>(&report), sizeof(report));
+// Retain the movement in application state if sent != sizeof(report).
+```
+
+Relative movement must be submitted once per accepted sample; repeatedly sending
+the same delta repeats the movement. Sensor sampling, motion accumulation and
+button handling remain application-specific. The descriptor initializer macros
+`USB_HID_MOUSE_REPORT_DESC` and `USB_HID_3D_MOUSE_REPORT_DESC` are also available
+with `Init()` for applications needing a different endpoint configuration.
 
 Supply separate caller-owned RX and TX slots in `UsbdHidCfg_t::pRxBuffer`
 and `pTxBuffer`. Both must remain alive for the interface lifetime, be
@@ -303,6 +393,53 @@ Use these arrays in the matching configuration fields, as shown in
 [usb_hid_loopback.cpp](../exemples/usb/usb_hid_loopback.cpp).
 `UsbIntIntrfCfg_t` has the same slot requirements. Rebuild the MCU library
 and application together when migrating from the earlier embedded-buffer API.
+
+For example, an unnumbered input report can be returned with:
+
+```cpp
+static int GetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	uint8_t *pBuffer, uint16_t Capacity, void *)
+{
+	if (Type != USB_HID_REPTYPE_INPUT || ReportId != 0 ||
+		Capacity < sizeof(s_Report))
+	{
+		return -1;
+	}
+	memcpy(pBuffer, &s_Report, sizeof(s_Report));
+	return sizeof(s_Report);
+}
+```
+
+Set `.GetReportCB = GetReport` in `UsbdHidCfg_t`. For output or feature
+reports, set `.SetReportCB` to a function with this signature:
+
+```cpp
+static bool SetReport(USB_HID_REPTYPE Type, uint8_t ReportId,
+	const uint8_t *pBuffer, uint16_t Length, void *pContext);
+```
+
+The library assembles the complete SET_REPORT payload before calling the
+function. Return `true` to accept it or `false` to stall the request. Short
+or oversized transfers are rejected without calling the function. An absent
+callback stalls that request. Both callbacks receive the configuration's
+`pContext` and run in USB processing context; keep them short and nonblocking.
+The report type uses the `USB_HID_REPTYPE_*` constants. Report bytes are passed
+unchanged, including any report ID byte; the library does not interpret the
+report descriptor or add/remove IDs.
+
+Each object contains a 64-byte control buffer, separate from the interrupt
+RX/TX slots. GET_REPORT copies a stable snapshot into it; the core truncates
+the reply to the host's requested length. For larger control reports, provide
+`.pControlBuffer` and `.ControlBufferSize`: separate, 4-byte aligned storage
+that remains valid for the object's lifetime and does not overlap RX/TX slots.
+No heap allocation is used. SET_REPORT callbacks run before the status stage,
+so they can reject a report; a later status failure cannot undo application
+effects already applied by the callback. Interrupt OUT reports still arrive
+through `EvtCB` or the transport read API.
+
+Rebuild the MCU library and application together for the added configuration
+fields and object storage. Zero-initialize configurations before assigning
+individual fields.
 
 The generic loopback is exercised through the native HID driver:
 
@@ -338,20 +475,34 @@ alignas(4) static uint8_t s_Sector[512];
 static UsbdMsc s_Msc;
 
 static const UsbdMscCfg_t s_MscCfg = {
-    .DevNo = 0,
-    .pDisk = &s_Disk,
-    .pSectorBuffer = s_Sector,
-    .SectorBufferSize = sizeof(s_Sector),
-    .bReadOnly = false,
-    .bRemovable = true,
-    .InterfaceString = 4,
-    .FsMps = 0,
-    .HsMps = 0,
-    .pVendor = "I-SYST",
-    .pProduct = "IOsonata Disk",
-    .pRevision = "1.00",
+	.pDisk = &s_Disk,
+	.pSectorBuffer = s_Sector,
+	.SectorBufferSize = sizeof(s_Sector),
 };
+
+// After disk initialization and UsbInit():
+if (!s_Msc.Init(s_MscCfg))
+{
+	return -1;
+}
+(void)UsbEnable(0);
+AppRun();
 ```
+
+These three fields are sufficient for controller 0 with writable fixed media.
+The library supplies the USB interface, endpoint numbers, BOT/SCSI protocol,
+64-byte full-speed and 512-byte high-speed packets where supported, and INQUIRY
+identity defaults (`I-SYST`, `IOsonata MSC`, `1.00`). Add `bReadOnly` for write
+protection or `bRemovable` for host eject support. Product identity and interface
+strings remain optional application choices; the RAM-disk example keeps its
+own product name and removable-media setting.
+
+`AppRun()` dispatches queued USB work and uses the target's `AppWait()` when
+idle, rather than continuously polling an empty queue. No application-side
+SCSI callbacks or USB controller calls are needed. The RAM-disk example's
+FAT12 boot sector and allocation tables describe its filesystem, not USB
+descriptors. An existing `DiskIO` medium does not need that RAM-disk subclass
+or formatting code; initialize the intended storage and pass it as `pDisk`.
 
 The sector buffer must be at least `DiskIO::GetSectSize()` bytes. Initialization
 rejects an invalid or oversized sector configuration rather than assuming that
@@ -397,11 +548,87 @@ configuration. The maintainer validated the HCI/MSC storage optimization
 with HciController for HCI and UsbMscRamDisk for MSC. HciController is not
 included as a target project in this repository.
 
-## Interrupt and Isochronous transports
+## Interrupt and Isochronous functions
 
-`UsbIntIntrf` and `UsbIsoIntrf` are role-neutral endpoint-pair transports used
-to build a USB class. Their loopback firmware deliberately uses a vendor
-interface so the endpoint behavior can be tested directly.
+Use `UsbdInt` and `UsbdIso` for vendor-specific USB device functions. They
+allocate one interface and one bidirectional endpoint pair, generate alternate
+zero with no endpoints, and generate active alternates from a const table.
+`UsbIntIntrf` and `UsbIsoIntrf` remain role-neutral transports underneath them.
+
+For Interrupt, provide separate aligned direct slots and the polling choices:
+
+```cpp
+#include "usb/usbd_int.h"
+
+static const UsbdPeriodicAlt_t s_Alternates[] = {
+	// FS bytes, HS bytes, FS bInterval, HS bInterval
+	{64, 64, 1, 1},
+	{64, 64, 4, 4},
+	{64, 64, 16, 16},
+};
+alignas(4) static uint8_t s_Rx[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_Tx[USB_INT_INTRF_PKT_BLKSIZE];
+static UsbdInt s_Int;
+static const UsbdIntCfg_t s_IntCfg = {
+	.Function = {0, s_Alternates, 3, 0, 0, 4},
+	.EvtCB = IntEvent,
+	.pContext = nullptr,
+	.pRxBuffer = s_Rx,
+	.pTxBuffer = s_Tx,
+};
+
+// After initializing the application event queue:
+if (!UsbInit(&s_UsbCfg) || !s_Int.Init(s_IntCfg)) return -1;
+(void)UsbEnable(0);
+AppRun();
+```
+
+`IntEvent` is the application's `DevIntrfEvtHandler_t`. The function fields are
+controller number, alternate table, count, vendor subclass, protocol and
+interface string index. Index 4 uses `UsbCfg_t::pFuncName`; zero omits the string.
+No interface or endpoint number is supplied. The alternate table must remain
+alive and unchanged for the registered function's lifetime.
+
+For ISO, use `UsbdIsoCfg_t` with the same `Function` fields and event callback.
+Leaving both FIFO pointers null selects the transport's internal two-packet
+FIFOs. Caller-owned FIFOs instead use two distinct aligned regions of
+`USB_ISO_INTRF_FIFO_MEMSIZE(BufferSize)` bytes. Each alternate must fit that
+capacity. The loopback example supplies six choices:
+
+```cpp
+static const UsbdPeriodicAlt_t s_IsoAlternates[] = {
+	{9, 9, 1, 4}, {17, 17, 1, 4}, {25, 25, 1, 4},
+	{33, 33, 1, 4}, {49, 49, 1, 4}, {63, 63, 1, 4},
+};
+static UsbdIso s_Iso;
+static const UsbdIsoCfg_t s_IsoCfg = {
+	.Function = {0, s_IsoAlternates, 6, 0, 0, 4},
+	.EvtCB = IsoEvent,
+};
+// Between UsbInit and UsbEnable:
+if (!s_Iso.Init(s_IsoCfg)) return -1;
+```
+
+Table entries are active settings 1..AltCount. Alternate 0 disables transfers.
+Full-speed Interrupt intervals are milliseconds. ISO intervals and high-speed
+Interrupt intervals encode `2^(bInterval-1)` frames or microframes. Thus ISO
+intervals 1 at full speed and 4 at high speed both request one millisecond.
+HS fields are required only on high-speed-capable targets. High-bandwidth
+multiple transactions per microframe and USB audio class semantics are not
+provided by these vendor functions.
+
+The classes close transfers on unconfiguration, reset and detach. ISO suspend
+and resume are handled through the existing deferred USB process pass.
+An endpoint-open failure rejects the requested alternate and attempts to reopen
+the previous one. A persistent controller failure requires host reconfiguration
+or bus reset. Invalid configuration, exhausted ownership and descriptor capacity
+fail initialization without retaining the new class's allocation. Hardware pipe
+limits are still enforced by the controller when endpoints open.
+
+Subclass `Control()` for application-specific diagnostic requests. The loopback
+samples also clear their diagnostic counters when an active alternate opens.
+Their request IDs (Interrupt 0x5B, ISO 0x5A), reply formats, VID/PID and alternate
+layouts are unchanged. Composite stress samples use the same classes.
 
 ```bash
 ./.venv/bin/python3 Python/usb_int_loopback.py
@@ -412,6 +639,15 @@ Both runners provide a `--manual-suspend-wake` phase. The Interrupt runner
 checks alternate settings with different polling intervals. The Isochronous
 runner checks scheduled packet flow and diagnostic counters. Use
 `Python/usb_iso_diag.py` for focused isochronous endpoint diagnosis.
+
+### HID report definitions
+
+`UsbdHid` continues to generate the USB interface, HID and endpoint descriptors.
+Applications supply their report definition because it describes their actual
+input/output data. The keyboard, vendor loopback and six-axis mouse have distinct
+report layouts and report handling. A general descriptor generator would add
+more API than these short definitions remove, so this change retains the existing
+report API and examples rather than adding presets with implicit report layouts.
 
 ## Composite devices
 

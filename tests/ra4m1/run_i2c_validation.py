@@ -44,7 +44,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-TARGET = ROOT / 'ARM/Renesas/RA4M1'
+TARGET = ROOT / 'ARM/Renesas/RA4/RA4M1'
 BUILD = HERE / 'build/i2c'
 
 
@@ -77,7 +77,7 @@ def main():
     if not cxx:
         raise SystemExit('A host C++ compiler is required.')
 
-    inc = ['-I' + str(HERE / 'i2c_include'), '-I' + str(BUILD), '-I' + str(ROOT / 'include'), '-I' + str(ROOT / 'ARM/Renesas/RA4M1/include')]
+    inc = ['-I' + str(HERE / 'i2c_include'), '-I' + str(BUILD), '-I' + str(ROOT / 'include'), '-I' + str(ROOT / 'ARM/Renesas/RA4/RA4M1/include')]
     warn = ['-Wall', '-Wextra', '-Wno-unused-parameter', '-Wno-missing-field-initializers', '-Werror']
     modes = [('O0', ['-O0']), ('Os', ['-Os']), ('O2', ['-O2']),
              ('sanitized', ['-O1', '-g', '-fsanitize=address,undefined',

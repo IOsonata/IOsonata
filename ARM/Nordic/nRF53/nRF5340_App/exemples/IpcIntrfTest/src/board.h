@@ -121,11 +121,11 @@ SOFTWARE.
 
 // GPIOs the network core image uses, its trace UART on the network core's
 // own virtual COM port. The application core owns every pin after reset
-// and hands these to the network core (PIN_CNF MCUSEL) before releasing it.
+// and assigns these to core 1 before releasing it.
 #if defined(NRF5340_DK_PCA10095)
-#define IPCTEST_NET_PINS	{ {1, 0}, {1, 1} }
+#define CORE_PINS	{ {1, 1, 0}, {1, 1, 1} }
 #else
-#define IPCTEST_NET_PINS	{ {1, 8}, {1, 9} }
+#define CORE_PINS	{ {1, 1, 8}, {1, 1, 9} }
 #endif
 
 #define UART_PINS	{ \

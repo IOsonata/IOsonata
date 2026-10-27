@@ -218,18 +218,39 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 class AccelAdxl362 : public AccelSensor {
 public:
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-//	virtual bool Read(ACCELSENSOR_RAWDATA &Data);
+
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
 	virtual bool StartSampling();
 	virtual uint16_t Scale(uint16_t Value);
 	virtual bool WakeOnEvent(bool bEnable, int Threshold);
+	virtual void IntHandler();
+	/** Configure FIFO stream mode, with complete XYZ sample sets. */
+	bool ConfigureFifo(uint16_t WatermarkSamples);
+	/** Select independent INT1/INT2 event sources and polarity. */
+	bool ConfigureInterrupts(uint8_t Int1Map, uint8_t Int2Map);
+	/** Reset the FIFO while retaining its configured watermark and mode. */
+	bool FlushFifo();
+	/** Read one complete XYZ sample set from the FIFO. */
+	bool ReadFifo(AccelSensorRawData_t &Data);
+	/** Raw status flags, including activity and FIFO conditions. */
+	bool Status(uint8_t &Flags);
+
+public:
+	virtual bool UpdateData();
 
 private:
-	bool UpdateData();
-
-	bool vbInitialized;
+	bool ReadRegisters(uint8_t Reg, uint8_t *pData, int Len);
+	bool WriteRegister(uint8_t Reg, uint8_t Value);
+	bool vbInitialized = false;
+	bool vbFifoEnabled = false;
+	bool vbMotionEnabled = false;
+	uint8_t vIntMap1 = 0;
+	uint8_t vIntMap2 = 0;
+	uint8_t vFifoCtl = 0;
+	uint16_t vFifoWatermark = 0;
+	uint32_t vFifoOverruns = 0;
 };
 #endif // __cplusplus
 

@@ -109,6 +109,10 @@ SOFTWARE.
 
 #include "board.h"
 
+#ifdef CORE_PINS
+static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
+#endif
+
 // A board that does not say how many periodic advertising with responses sets
 // it can reserve gets none. Zero is what the controller reserves by default
 // and it keeps the DUT booting on a controller without the feature, which then
@@ -224,6 +228,7 @@ static int DutBleIntrfEvtHandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId,
 static void DutUartHandler(uint32_t Evt, void *pCtx);
 static void DutBleHandler(uint32_t Evt, void *pCtx);
 static void HandleCommand(const char *pLine);
+static bool DutEadKeyAuthorize(uint16_t ConnHdl);
 
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = 0,
@@ -1122,8 +1127,11 @@ static void DutEadKey(const char *pArg)
 		key.Iv[i] = raw[BTEAD_KEY_LEN + BTEAD_IV_LEN - 1 - i];
 	}
 
-	if (BtAdvEadKeySet(&key) == false)
+	if (BtGapEadKeyMaterialSet(key.SessionKey, key.Iv) == false ||
+		BtAdvEadKeySet(&key) == false)
 	{
+		BtAdvEadKeySet(nullptr);
+		BtGapEadKeyMaterialSet(nullptr, nullptr);
 		DutOut("DUT ERROR ead_key rejected");
 		DutOutEnd();
 		return;
@@ -1135,6 +1143,7 @@ static void DutEadKey(const char *pArg)
 		// longer fits once the randomizer and MIC are added. Either way the
 		// advertiser has to come back up unencrypted rather than stay dark.
 		BtAdvEadKeySet(nullptr);
+		BtGapEadKeyMaterialSet(nullptr, nullptr);
 		DutAdvRebuild();
 
 		DutOut("DUT ERROR ead_key init_failed disarmed=1");
@@ -1148,7 +1157,13 @@ static void DutEadKey(const char *pArg)
 
 static void DutEadOff(void)
 {
-	BtAdvEadKeySet(nullptr);
+	if (BtAdvEadKeySet(nullptr) == false ||
+		BtGapEadKeyMaterialSet(nullptr, nullptr) == false)
+	{
+		DutOut("DUT ERROR ead_off rejected");
+		DutOutEnd();
+		return;
+	}
 
 	if (DutAdvRebuild() == false)
 	{
@@ -1851,8 +1866,19 @@ static int DutBleIntrfEvtHandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId,
 // Stack callbacks
 //
 
+static bool DutEadKeyAuthorize(uint16_t ConnHdl)
+{
+	return ConnHdl != BT_CONN_HDL_INVALID;
+}
+
 void BtAppInitUserData(void)
 {
+	// The EAD key characteristic is authenticated by GATT and additionally
+	// authorization protected. The release DUT authorizes connected test
+	// peers here; the characteristic SecType independently enforces the
+	// authenticated encrypted link.
+	BtGapEadKeyAuthorizeSet(DutEadKeyAuthorize);
+
 	// Start the security module. This call is what links it; BtAppInit
 	// fails when SecType asks for security and it was not started.
 	BtAppSecInit();
@@ -2020,6 +2046,14 @@ static void HardwareInit(void)
 
 int main(void)
 {
+
+#ifdef CORE_PINS
+	if (!IOPinCoreCfg(s_CorePins, sizeof(s_CorePins) / sizeof(s_CorePins[0])))
+	{
+		return 1;
+	}
+#endif
+
 	HardwareInit();
 
 	DutOut("DUT BOOT name=%s proto=%u", DUT_DEVICE_NAME,

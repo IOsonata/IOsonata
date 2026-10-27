@@ -287,23 +287,14 @@ bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface)
 }
 
 //
-// Print a greeting message on standard output and exit.
-//
-// On embedded platforms this might require semi-hosting or similar.
-//
-// For example, for toolchains derived from GNU Tools for Embedded,
-// to enable semi-hosting, the following was added to the linker:
-//
-// --specs=rdimon.specs -Wl,--start-group -lgcc -lc -lc -lm -lrdimon -Wl,--end-group
-//
-// Adjust it for other toolchains.
-//
+// Console output is retargeted to the configured UART.
 int main()
 {
-	//g_Uart.Init(s_UartCfg);
+	if (!g_Uart.Init(s_UartCfg))
+		return 1;
 
 	// Retarget printf to UART
-	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 	//UARTRetargetEnable(g_Uart, STDIN_FILENO);
 
 #if NVM_MODE == 0
@@ -313,7 +304,8 @@ int main()
 #endif
 	//getchar();
 
-	g_Spi.Init(s_SpiCfg);
+	if (!g_Spi.Init(s_SpiCfg))
+		return 1;
 
 	// IOPinConfig(FLASH_HOLD_PORT, FLASH_HOLD_PIN, FLASH_HOLD_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 
@@ -333,13 +325,14 @@ int main()
 #endif
 	{
 		printf("Init Flash failed\r\n");
+		return 1;
 	}
 
 	//g_QFlash.Init(s_QFlashCfg, &g_FlashCache, 1);
 
-	uint8_t buff[s_FlashCfg.SectSize];
-	uint8_t buff2[s_FlashCfg.SectSize];
-	uint8_t tmp[s_FlashCfg.SectSize];
+	static uint8_t buff[FLASH_SECTOR_SIZE];
+	static uint8_t buff2[FLASH_SECTOR_SIZE];
+	static uint8_t tmp[FLASH_SECTOR_SIZE];
 	uint16_t *p = (uint16_t*)buff;
 
 	memset(tmp, 0xa5, 512);
@@ -461,3 +454,4 @@ int main()
 	while(1) { __WFE(); }
 
 }
+

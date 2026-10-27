@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-TARGET = ROOT / 'ARM/Renesas/RA4M1'
+TARGET = ROOT / 'ARM/Renesas/RA4/RA4M1'
 BUILD = HERE / 'build'
 
 
@@ -168,9 +168,21 @@ def check_ioc():
     assert names == {'Debug','Release'}
     wizard = json.loads((project/'wizard.json').read_text())
     assert wizard['lib'] == 'IOsonata_RA4M1' and wizard['mcu'] == 'RA4M1'
-    assert wizard['lib_path'] == '${iosonata}/ARM/Renesas/RA4M1/lib/ioc/${config}'
+    assert wizard['lib_path'] == '${iosonata}/ARM/Renesas/RA4/RA4M1/lib/ioc/${config}'
     print('PASS: IOC XML, all', len(port_sources), 'RA4M1 sources and shared driver sources linked,',
           len(source_names), 'sources, target links, hard-float configurations and wizard metadata')
+
+
+def prepare_register_model():
+    # Substitute only the fixed physical HOCO byte access. All startup logic
+    # still comes from the production source and uses the register model.
+    source = (TARGET/'src/system_ra4m1.c').read_text()
+    access = '#define RA4M1_HOCOCR2 (*(volatile uint8_t *)0x4001E037UL)'
+    assert source.count(access) == 1, 'Review the HOCO register model after driver changes'
+    source = source.replace(access, '#define RA4M1_HOCOCR2 (R_SYSTEM->HOCOCR2)')
+    source = source.replace('RA4M1_HOCOCR2', 'MODEL_HOCOCR2')
+    BUILD.mkdir(parents=True, exist_ok=True)
+    (BUILD/'system_ra4m1_model.c').write_text(source)
 
 
 def main():
@@ -181,7 +193,8 @@ def main():
     if not all((clang, clangxx, linker, ar)):
         raise SystemExit('Install Clang/Clang++, LLD and llvm-ar, or set CLANG, CLANGXX, LD_LLD, LLVM_AR.')
     BUILD.mkdir(exist_ok=True)
-    includes = ['-I'+str(HERE/'include'), '-I'+str(TARGET/'include')]
+    prepare_register_model()
+    includes = ['-I'+str(BUILD), '-I'+str(HERE/'include'), '-I'+str(TARGET/'include')]
     # The register model is C++: the driver registers are host objects
     # (include/ra4m1_host_regs.h). system_ra4m1.c is compiled as C++ there,
     # where {0} initializers warn without being wrong.

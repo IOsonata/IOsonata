@@ -469,3 +469,9 @@ void PIOE_Handler(void)
 	NVIC_ClearPendingIRQ(PIOE_IRQn);
 }
 
+
+// This port has one application core and no pin ownership selector.
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+	return CoreNo == 0 && (unsigned)PortNo < IOPIN_MAX_PORT && (unsigned)PinNo < 32U;
+}

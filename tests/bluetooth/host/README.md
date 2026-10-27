@@ -70,8 +70,10 @@ The suite has expanded beyond the three groups above. The current
 - SMP key distribution and signing counters: `bt_smp_keydist_test.cpp` and
   `bt_smp_sign_counter_test.cpp`; SoftDevice LESC adapter checks:
   `bt_lesc_sd_test.cpp`.
-- Periodic advertising, synchronization and encrypted advertising data:
-  `bt_padv_hci_test.cpp`, `bt_psync_test.cpp`, `bt_ead_test.cpp`.
+- Periodic advertising, synchronization and encrypted advertising data,
+  including GAP Encrypted Data Key Material registration and authorization:
+  `bt_padv_hci_test.cpp`, `bt_psync_test.cpp`, `bt_ead_test.cpp`,
+  `bt_gap_gatt_init_test.cpp`.
 - Crypto engines the controller serves over HCI, LE Encrypt and LE Rand and
   the I-SYST vendor commands: `bt_crypto_ctlr_test.cpp`.
 - Controller initialization, HCI USB and GATT-backed transport:

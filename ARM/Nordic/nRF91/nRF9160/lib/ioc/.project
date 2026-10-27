@@ -183,7 +183,7 @@
 		<link>
 			<name>include/interrupt.h</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/include/interrupt.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/interrupt.h</locationURI>
 		</link>
 		<link>
 			<name>include/isha1.h</name>
@@ -218,7 +218,7 @@
 		<link>
 			<name>include/nrfx_glue.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/nrfx_glue.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrfx_glue.h</locationURI>
 		</link>
 		<link>
 			<name>include/prbs.h</name>
@@ -681,6 +681,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/fg_lc709203f.h</locationURI>
 		</link>
 		<link>
+			<name>include/pwrmgnt/pm_adp5360.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_adp5360.h</locationURI>
+		</link>
+		<link>
 			<name>include/pwrmgnt/pm_as3701.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_as3701.h</locationURI>
@@ -704,11 +709,6 @@
 			<name>include/sensors/accel_h3lis331dl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/accel_lis2dh12.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_sensor.h</name>
@@ -834,11 +834,6 @@
 			<name>include/sys/dirent.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
-		</link>
-		<link>
-			<name>include/sys/socket.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sys/socket.h</locationURI>
 		</link>
 		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
@@ -979,6 +974,11 @@
 			<name>src/pwrmgnt/fg_lc709203f.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/fg_lc709203f.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_adp5360.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_adp5360.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/pwrmgnt/pm_as3701.cpp</name>
@@ -1531,6 +1531,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/crypto_cc3xx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/crypto_cc3xx_sym.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/crypto_cc3xx_sym.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/rng_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
@@ -1606,9 +1611,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_softaes.cpp</name>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
@@ -1724,6 +1734,66 @@
 			<name>include/bluetooth/bt_hcievt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/color_bh1749.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/color_bh1749.h</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/color_bh1749.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/color_bh1749.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/accel_adxl372.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_adxl372.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/color_bh1745.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/color_bh1745.h</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/color_bh1745.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/color_bh1745.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/gas_ccs811.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gas_ccs811.h</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/gas_ccs811.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gas_ccs811.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/ioexp_sx1509.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/ioexp_sx1509.h</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/ioexp_sx1509.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/ioexp_sx1509.cpp</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>

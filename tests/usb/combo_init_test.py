@@ -71,9 +71,9 @@ int main(int argc, char **)
 		// Exhaust all remaining ISO candidates. Refusal must be clean.
 		EndpointBlocker blocker;
 		const uint16_t usedIn = s_LoopbackCdc.EpInMask() |
-			s_PrbsCdc.EpInMask() | s_Hid.EpInMask() | s_IntClass.EpInMask();
+			s_PrbsCdc.EpInMask() | s_Hid.EpInMask() | s_Int.EpInMask();
 		const uint16_t usedOut = s_LoopbackCdc.EpOutMask() |
-			s_PrbsCdc.EpOutMask() | s_Hid.EpOutMask() | s_IntClass.EpOutMask();
+			s_PrbsCdc.EpOutMask() | s_Hid.EpOutMask() | s_Int.EpOutMask();
 		assert(UsbClassRegister(0, &blocker, 0, 0,
 			USB_ISO_EPIN_MASK(0) & ~usedIn,
 			USB_ISO_EPOUT_MASK(0) & ~usedOut));
@@ -83,7 +83,7 @@ int main(int argc, char **)
 	}
 	assert(IsoInit());
 	UsbDeviceClass *classes[] = {
-		&s_LoopbackCdc, &s_PrbsCdc, &s_Hid, &s_IntClass, &s_IsoClass,
+		&s_LoopbackCdc, &s_PrbsCdc, &s_Hid, &s_Int, &s_Iso,
 	};
 	uint16_t usedIn = 0U, usedOut = 0U;
 	unsigned interfaces = 0U;
@@ -97,7 +97,7 @@ int main(int argc, char **)
 		usedOut |= p->EpOutMask();
 	}
 	assert(interfaces == 7U);
-	assert(s_Fn.IsoEpNo == (USB_HIGHSPEED_CAPABLE(0) ? 7U : 8U));
+	assert(static_cast<UsbIsoIntrf_t *>(s_Iso)->EpNo == (USB_HIGHSPEED_CAPABLE(0) ? 7U : 8U));
 	for (UsbSpeed_t speed : {USB_SPEED_FULL, USB_SPEED_HIGH})
 	{
 		if (speed == USB_SPEED_HIGH && !USB_HIGHSPEED_CAPABLE(0)) continue;
@@ -106,9 +106,9 @@ int main(int argc, char **)
 			0, 0, speed, &length);
 		assert(desc != nullptr && length > 9U && desc[4] == 7U);
 	}
-	assert(s_IsoClass.SelectConfig(1U));
-	assert(s_IsoClass.SelectInterface(s_Fn.IsoInterfaceNo, 1U));
-	printf("PASS combo initialization: ISO endpoint %u\n", s_Fn.IsoEpNo);
+	assert(s_Iso.SelectConfig(1U));
+	assert(s_Iso.SelectInterface(s_Iso.FirstInterface(), 1U));
+	printf("PASS combo initialization: ISO endpoint %u\n", static_cast<UsbIsoIntrf_t *>(s_Iso)->EpNo);
 }
 '''
 
@@ -116,7 +116,8 @@ SOURCES = [
     'src/usb/usb.cpp', 'src/usb/usb_intrf.cpp', 'src/usb/usb_int.cpp',
     'src/usb/usb_iso.cpp', 'src/usb/usbd_cdc.cpp',
     'src/usb/usbd_cdc_desc.cpp', 'src/usb/usbd_hid.cpp',
-    'src/usb/usbd_epalloc.cpp', 'src/app_evt_handler.cpp', 'src/app_run.cpp',
+    'src/usb/usbd_epalloc.cpp', 'src/usb/usbd_periodic.cpp',
+    'src/usb/usbd_iso.cpp', 'src/usb/usbd_int.cpp', 'src/app_evt_handler.cpp', 'src/app_run.cpp',
     'src/device_intrf.cpp', 'src/cfifo.c',
 ]
 

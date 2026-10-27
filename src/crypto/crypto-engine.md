@@ -13,7 +13,7 @@ states what operation is wanted, never how or where it runs:
 
 - `CryptoEngine` : the common base, `virtual public Device`. Holds the async
   completion handler (see below).
-- `CipherEngine` : symmetric cipher (`Cipher`, AES-128 ECB/CTR/CBC).
+- `CipherEngine` : symmetric cipher (`Cipher`, AES-128/256 ECB/CTR/CBC).
 - `MacEngine` : keyed message authentication (`Mac`, AES-CMAC).
 - `HashEngine` : unkeyed message digest (`Hash`, SHA-256).
 - `KeyAgreeEngine` : key generation and key agreement (`KeyGen`, `Agree`, P-256
@@ -36,29 +36,89 @@ engine only overrides what it provides.
 `Enable` / `Disable` / `Reset`. An engine that skips them is abstract and will
 not instantiate.
 
-## Construction: explicit factories, no selector
+## Generic crypto object
 
-Every engine is constructed by a placement-new factory into caller-owned
-storage. There is no allocation and no runtime provider selector: the
-application constructs exactly the engine it wants and injects it.
+`Crypto` in `include/crypto/crypto.h` inherits the operation interfaces, with
+one shared `Device` base. It does not inherit or contain complete software
+engines. Generic methods provide weak software defaults; the MCU library
+replaces accelerated methods with strong definitions at link time.
+
+The application declares a normal C++ object. Its constructor initializes
+software state without touching peripherals. After system startup, `Init()`
+binds it to the implementation provided by the linked MCU library:
 
 ```cpp
-static uint8_t     s_EcdhMem[BA414EP_MEMSIZE];              // App-owned storage
-KeyAgreeEngine *pEcdh = Ba414epCreate(s_EcdhMem, sizeof(s_EcdhMem),
-                                      CryptoRngNrfInstance());
-CipherEngine   *pAes  = BtCryptoCtlrInit();                 // controller AES
-BtSmpInit(pEcdh, pAes);                                     // inject into SMP
+#include "crypto/crypto.h"
+
+Crypto g_Crypto;
+
+bool InitApplicationCrypto(void)
+{
+	return g_Crypto.Init();
+}
 ```
 
-The factory validates the storage (size and alignment) and returns `nullptr` on
-a bad arena or if hardware bring-up fails. The storage size comes from the
-engine macro (`BA414EP_MEMSIZE`, `CRYPTO_UECC_MEMSIZE`,
-`CRYPTO_SOFTSHA256_MEMSIZE`, and so on), which is the object `sizeof`.
+The same object provides Cipher, Mac, Seal/Open, Hash, Random, KeyGen/Agree and
+Sign/Verify. Its public layout is identical across MCU libraries. There is no
+raw object arena, placement construction, heap allocation or public factory.
+The compiler handles object storage, alignment and lifetime.
 
-Because construction is explicit, the linker pulls only the engines a target
-actually constructs. There is no weak-stub registry, no `_none` fallback object,
-and no `AUTO` selection symbol: those existed only to satisfy the old
-symbol-based selector and are not needed in the object model.
+The library supplies one strong `Crypto::Init` definition and strong methods
+for its hardware operations. Init enables typed, library-owned hardware engines.
+There is no second full `Crypto` object or runtime provider pointer. Software
+methods remain selected only for operations without a target definition.
+
+`CryptoAesModes` contains CMAC/CCM/GCM composition over a virtual AES block
+operation. Complete AES accelerators derive from it without inheriting software
+AES. `CryptoSoftAes` adds the software primitive and cipher modes for targets
+that need them. `CryptoHmacSha256` similarly composes streaming hash operations
+without retaining software SHA compression when hardware supplies every hash
+method. Drivers for partial accelerators select software for the specific key
+sizes or operations that hardware cannot execute.
+
+Hardware engines are shared for the lifetime of the MCU library. Repeated
+initialization does not reset an engine already in use. `Disable()` marks only
+the calling application object invalid; it does not stop another object's
+hardware access. `Enable()` rebinds through `Init()`. `Reset()` resets local
+software RNG state and reinitializes the application object; hardware fault
+recovery remains inside the shared drivers. Hardware engines remain enabled
+once initialized. An application's destruction does not shut them down.
+
+A failed hardware initialization returns false and leaves the application object
+invalid. It never silently selects software. Operations on an invalid object
+fail; output-producing operations clear their output where its size is known.
+Initialize before querying context requirements, and finish operations before
+Disable, Reset or destruction. Keys and streaming hash contexts remain in caller
+storage; do not reuse contexts across implementations. Startup initialization
+must be serialized before concurrent operation access begins. Copy construction and assignment are disabled.
+
+Existing consumers accepting capability pointers can receive `&g_Crypto` through
+ordinary base conversion. Software-only objects have independent RNG state.
+
+The [MCU port audit](crypto-port-audit.md) lists hardware acceleration and required
+software operations for every port. AES-128/256 ECB/CBC/CTR and P-256 import are
+required generic operations. Missing hardware support selects the software
+implementation inside the library; a hardware error never triggers a software
+retry. AES-256 is not an optional CryptoTest capability.
+
+This selection reflects existing IOsonata drivers. A hardware block with no
+implemented driver is not advertised as accelerated. Desktop projects and the
+incomplete RISC-V nRF54H20 project are not MCU integration targets here.
+
+Specialized legacy placement factories remain available to existing library
+consumers. The shared CryptoTest declares a `Crypto` object and calls `Init()`;
+explicit software objects remain independent references. Link the matching MCU
+library normally. The strong `Crypto::Init` reference extracts its implementation
+from the archive, bringing its strong operation definitions with it. Generic
+operation defaults are weak; Init itself is not. MCU builds compile with
+`-ffunction-sections -fdata-sections` and link with `--gc-sections`, so replaced
+software sections are discarded. A software source being compiled into the
+archive does not mean its implementation remains in the executable.
+
+CryptoTest deliberately instantiates independent software reference objects.
+Use a minimal application without those references to check unwanted software
+linkage. The CC3xx and STM32 accelerator runners also build such an application
+and inspect its linked symbols.
 
 ## Per-instance key state
 
@@ -66,8 +126,13 @@ Interfaces that hold a key between calls (`KeyAgreeEngine`) take a `pKeyCtx` (a
 caller-owned key-context buffer of `KeyCtxSize()` bytes). `KeyGen` writes the
 private key into it and `Agree` consumes it, so one engine object serves several
 independent key contexts. `KeyImport` loads a private scalar the caller was
-handed (the BLE link layer on STM32WBA) and returns its public key; only
-`CryptoUecc` provides it so far, the other engines report unsupported. The engine object itself is stateless beyond its
+handed and optionally returns its public key. `CryptoCc3xx` and `Ba414ep`
+derive from `CryptoUecc` and inherit software import and ECDSA while overriding
+hardware key generation and agreement. `CryptoWbaPka` implements every P-256
+operation in hardware and derives directly from `KeyAgreeEngine` and
+`SignEngine`. It keeps the exact same `CryptoUecc::KeyCtx` type and `SetRng`
+entry point without retaining software P-256 construction tables. Each engine
+shares one RNG binding across its methods. The engine object itself is stateless beyond its
 `Device` lifecycle; the scarce hardware resource, not a per-key secret, is what
 the object owns.
 
@@ -101,36 +166,36 @@ consumer is curve-blind and key-blind:
 
 - **Peer key validation**: a P-256 engine rejects a peer public key that is not
   on the curve before the agreement, closing the invalid-curve attack
-  (CVE-2018-5383). The software engine checks with `uECC_valid_public_key`; the
-  PSA path relies on `psa_raw_key_agreement`, which performs the check; the PKA
+  (CVE-2018-5383). The software engine checks with `uECC_valid_public_key`; the PKA
   engines validate the point on the accelerator.
 - **Single-use ephemeral key**: `Agree` wipes the shared secret on every exit
   and, by default, wipes the private key too, so a second `Agree` without a fresh
   `KeyGen` fails rather than reusing a spent key. A caller that needs one
   ephemeral pair for several concurrent peers passes `bKeepKey = true`, which
-  keeps the key after a success; a failure always wipes.
+  keeps the key after a success. A failure wipes it; transient busy status
+  retains the key for retry.
 - **Per-instance key context**: the private key lives in caller-owned `pKeyCtx`,
   never in a file static, so concurrent or sequential key contexts never collide.
-- **Strong RNG required**: `RngGet` is the platform hardware random source,
-  declared in `crypto/icrypto.h`, not a crypto capability. The P-256 engines use
-  it for key generation. There is no software default: a part without an RNG
-  peripheral does not link. Statistical randomness for tests and non-security use
-  comes from `rand_r`, never from `RngGet`, and never the reverse.
+- **Strong RNG required**: P-256 key generation and signing use an injected
+  `RngEngine` and require `IsSecure()`. The generic software RNG is a
+  deterministic PRNG and reports false. Targets without entropy can hash,
+  encrypt and verify signatures, but cannot securely generate keys or sign.
+  A selected hardware RNG that fails initialization makes `Init()` fail.
 
 ## Engines
 
 | Engine | Interfaces | Location | Notes |
 |---|---|---|---|
-| `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/crypto_uecc.cpp` | Software P-256 (micro-ecc): ECDH and ECDSA. Uses `RngGet` for `KeyGen`/`Sign`; `Verify` needs no RNG. Software fallback on any part. |
-| `Ba414ep` | `KeyAgreeEngine` | `src/crypto/ba414ep.cpp`, `ARM/Nordic/src/ba414ep_nrfx.cpp` | Hardware P-256 on the Silex BA414EP public-key accelerator (Nordic CRACEN). nRF54L15 / nRF54H20. Microcode-free, fixed-function; no vendor blob. |
-| `CryptoCc3xx` | `KeyAgreeEngine` | `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 on the Arm CryptoCell CC3xx PKA. nRF52840 (CC310). Self-contained register-level driver; the target header `crypto_cc3xx.h` supplies the register base and enable/disable. |
-| `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_softaes.cpp` | Software AES-128 (FIPS-197) and AES-CMAC. The software base of the symmetric interfaces: a hardware AES block overrides `Cipher`, and the inherited software CMAC then runs over that hardware AES through the virtual `Cipher` call. |
-| `CryptoMaster` | `CipherEngine`, `MacEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128 on the Silex CryptoMaster (BA411e) block. Overrides `Cipher`; CMAC is the inherited software core over the hardware cipher. |
+| `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/crypto_uecc.cpp` | Software P-256 (micro-ecc): ECDH and ECDSA. Uses an injected secure `RngEngine` for `KeyGen`/`Sign`; `Verify` needs no RNG. Software fallback on any part. |
+| `Ba414ep` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/ba414ep.cpp` | Hardware P-256 key generation/ECDH over the injected CRACEN interface. Inherits software key import and ECDSA. The Nordic interface loads PKE microcode. |
+| `CryptoCc3xx` | `KeyAgreeEngine`, `SignEngine` | `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 key generation/ECDH on CC3xx. Inherits software key import and ECDSA. `Cc3xxIntrf` supplies register access and arbitration. |
+| `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` | `ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp` | Hardware P-256 import, generation, agreement and ECDSA. Shares the key-context type with `CryptoUecc`, without inheriting its software methods. |
+| `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_aes_modes.cpp` | Software AES-128/256 cipher (FIPS-197) and AES-128 CMAC. CMAC/CCM/GCM use protected virtual block hooks, which hardware subclasses override. |
+| `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128/256 encryption and decryption on Silex BA411e. Inherits CMAC/CCM/GCM composition from `CryptoAesModes`, without software AES. |
 | `CryptoSoftSha256` | `HashEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4). Unkeyed digest; serves DFU image verification and any hashing consumer. |
 | `CryptoSoftRng` | `RngEngine` | `src/crypto/crypto_softrng.cpp` | Software PRNG base. Statistical use only; not a security random source. |
-| `CryptoRngNrf` | `RngEngine` | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG (CRACEN CTR-DRBG on nRF54L/H, NRF_RNG peripheral on nRF52/53/91). Singleton `CryptoRngNrfInstance`; `RngGet` is its C-shim. |
-| `CryptoRngStm32` | `RngEngine` | `ARM/ST/src/rng_stm32.cpp` | STM32 hardware RNG peripheral. Singleton `CryptoRngStm32Instance`; `RngGet` C-shim. |
-| `CryptoPsa` | `CipherEngine`, `KeyAgreeEngine` | `src/crypto/crypto_psa.cpp` | AES-128 and P-256 over the ARM PSA Crypto API; key held in the PSA keystore by handle. Kept in the tree but linked by no current target: every current part has a native driver or software. Opt-in for a future PSA-only platform. |
+| `CryptoRngNrf` | `RngEngine` | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG (conditioned CRACEN TRNG on nRF54L/H, NRF_RNG on nRF52/network core, CC3xx on nRF5340 application/nRF91). Platform singleton `CryptoRngNrfInstance`. |
+| `CryptoRngStm32` | `RngEngine` | `ARM/ST/src/rng_stm32.cpp` | STM32 hardware RNG peripheral. Platform singleton `CryptoRngStm32Instance`. |
 
 Engine class names are provider-class, not target-specific. `CryptoCc3xx` names
 the CryptoCell family; the target header pins the actual chip. The `_bm` suffix
@@ -148,21 +213,11 @@ layer:
 
 ## Composition for SMP
 
-`BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes)` takes one ECDH engine and
-one AES engine. RNG is the platform hardware RNG through `RngGet`, used by the
-engines and the SMP toolbox directly, so it is not a separate slot. A null or
-incapable engine leaves that path disabled, so pairing fails loud rather than
-running under absent crypto.
-
-The application constructs the right engines for its part at compile time:
-
-- **nRF52840 (CC310):** `CryptoCc3xx` for ECDH, controller AES for the cipher.
-- **nRF54L15 / nRF54H20 (CRACEN):** `Ba414ep` for ECDH, controller AES for the
-  cipher.
-- **nRF52832 (no accelerator):** `CryptoUecc` for ECDH, controller AES.
-- **nRF5340 network core:** `CryptoUecc` for ECDH. The CC312 sits in the
-  application core secure domain and is not reachable from the network core, so
-  software P-256 is the correct choice, not a fallback.
+`BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)`
+accepts generic capability pointers. A `Crypto` object can supply all three:
+`BtSmpInit(pCrypto, pCrypto, pCrypto)`. The application does not select hardware
+classes. Existing Bluetooth-owned controller adapters remain valid where a
+controller supplies those operations; this change does not alter their setup.
 
 ## Host-driven vs stack-owned SMP
 
@@ -186,15 +241,14 @@ appending an interface or an algorithm value, never by renumbering existing ones
 
 | File | Role |
 |---|---|
-| `include/crypto/icrypto.h` | Crypto interfaces: `CryptoEngine` and its operation interfaces, the algorithm and operation enums, the asynchronous completion handling, `CryptoKey`, `RngGet`, `CryptoSecureWipe`, and the P-256 helper declarations. |
+| `include/crypto/icrypto.h` | Crypto interfaces: `CryptoEngine` and its operation interfaces, the algorithm and operation enums, the asynchronous completion handling, `CryptoKey`, `CryptoSecureWipe`, and the P-256 helper declarations. |
 | `src/crypto/crypto_p256.cpp` | Generic P-256 math: constant-time byte helpers, scalar and field range checks, and the ladder scalar regularization (`P256RegularizeScalar`, `P256RegularBit`). Exports functions only; the curve point arithmetic stays in each engine. |
 | `src/crypto/crypto_uecc.cpp` | Software P-256 engine (micro-ecc): ECDH and ECDSA. |
-| `src/crypto/crypto_softaes.cpp` | Software AES-128 engine: cipher and CMAC. |
+| `src/crypto/crypto_aes_modes.cpp` | Common AES-128 CMAC/CCM/GCM composition and the separate software cipher adapter. |
 | `src/crypto/cryptomaster.cpp` | Hardware AES engine on the Silex CryptoMaster (BA411e). |
 | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 engine. |
 | `src/crypto/crypto_softrng.cpp` | Software PRNG base (statistical). |
-| `src/crypto/ba414ep.cpp` | Hardware P-256 engine on the Silex BA414EP; `ARM/Nordic/src/ba414ep_nrfx.cpp` binds it to the Nordic CRACEN registers. |
-| `src/crypto/crypto_psa.cpp` | AES + P-256 over the PSA Crypto API. Opt-in; no current target links it. |
-| `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 engine on the CC3xx PKA; the target header `crypto_cc3xx.h` supplies the register base and enable/disable. nRF52840. |
+| `src/crypto/ba414ep.cpp` | Hardware P-256 engine on the Silex BA414EP; `CracenIntrf` provides Nordic CRACEN register access. |
+| `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 engine on the CC3xx PKA; `Cc3xxIntrf` provides target register access and power control. |
 | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG engine (`CryptoRngNrf`). |
 | `ARM/ST/src/rng_stm32.cpp` | STM32 hardware RNG engine (`CryptoRngStm32`). |

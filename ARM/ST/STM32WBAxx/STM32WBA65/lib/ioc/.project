@@ -1821,9 +1821,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_softaes.cpp</name>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
@@ -2346,6 +2351,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_int.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/usb/usbd_int.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_int.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_periodic.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_periodic.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usb_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
@@ -2354,6 +2369,11 @@
 			<name>src/usb/usb_iso.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_iso.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_bulk.cpp</name>
@@ -2900,9 +2920,25 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/audio/wm8904.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/crypto_default_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
-
-
-
-

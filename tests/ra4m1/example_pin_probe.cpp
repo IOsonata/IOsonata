@@ -6,7 +6,7 @@
 #include "example_api.h"
 // The package masks (Ra4m1PinValid) of the port. Not the example_include
 // iopinctrl.h test double: that one only records LED toggles.
-#include "../../ARM/Renesas/RA4M1/include/iopinctrl.h"
+#include "../../ARM/Renesas/RA4/RA4M1/include/iopinctrl.h"
 #include "board.h"
 
 [[maybe_unused]] static bool IsPin(int Port, int Pin, int P, int N)
@@ -16,7 +16,7 @@
 
 #if defined(I2C_MASTER_DEVNO) || defined(I2C_SLAVE_DEVNO)
 // Legal IIC pins, PSEL 7: IIC0 SCL P204/P400/P408, SDA P401/P407, IIC1 SCL
-// P100/P205, SDA P101/P206 (ARM/Renesas/RA4M1/README.md, i2c_ra4m1.cpp)
+// P100/P205, SDA P101/P206 (ARM/Renesas/RA4/RA4M1/README.md, i2c_ra4m1.cpp)
 static bool I2cPinOk(int DevNo, bool bScl, int Port, int Pin)
 {
 	if (DevNo == 0)
@@ -30,7 +30,7 @@ static bool I2cPinOk(int DevNo, bool bScl, int Port, int Pin)
 #endif
 
 #if defined(SPI_MASTER_DEVNO) || defined(SPI_SLAVE_DEVNO)
-// RSPI pins, PSEL 6 (ARM/Renesas/RA4M1/README.md, spi_ra4m1.cpp)
+// RSPI pins, PSEL 6 (ARM/Renesas/RA4/RA4M1/README.md, spi_ra4m1.cpp)
 // Signal 0 RSPCK, 1 MISO, 2 MOSI, 3 SSL0
 static bool SpiPinOk(int DevNo, int Sig, int Port, int Pin)
 {

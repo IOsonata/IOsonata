@@ -181,15 +181,23 @@ int main()
 {
 	bool res;
 
-	res = g_Uart.Init(s_UartCfg);
+	if (!g_Uart.Init(s_UartCfg))
+		return 1;
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
 	printf("flash_fatfs_demo\n");
 
-	g_Spi.Init(s_SpiCfg);
+	if (!g_Spi.Init(s_SpiCfg))
+		return 1;
 
 	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache) == true)
 	{
 		disk_ioctl(0, SET_DEVICE, &g_FlashDiskIO);
+	}
+	else
+	{
+		printf("Init Flash failed\n");
+		return 1;
 	}
 
 	uint16_t *p = (uint16_t*)g_Data;
@@ -500,5 +508,6 @@ DRESULT disk_ioctl (
 	return RES_PARERR;
 }
 #endif
+
 
 

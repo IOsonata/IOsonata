@@ -110,7 +110,7 @@ def main():
         flags += ['-DuECC_ENABLE_VLI_API=1', '-I' + str(uecc)]
         sources += [str(ROOT / s) for s in ('src/net/tls.cpp', 'src/device.cpp',
                     'src/crypto/x509.cpp',
-                    'src/crypto/crypto_softaes.cpp', 'src/crypto/crypto_softsha256.cpp',
+                    'src/crypto/crypto_aes_modes.cpp', 'src/crypto/crypto_aes_soft.cpp', 'src/crypto/crypto_softsha256.cpp',
                     'src/crypto/crypto_p256.cpp', 'src/crypto/crypto_uecc.cpp')]
         binary = Path(tmp) / 'mqtt_host'
         subprocess.run(['g++', *flags, str(ROOT / 'tests/net/mqtt_host.cpp'),

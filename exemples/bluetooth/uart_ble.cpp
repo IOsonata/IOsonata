@@ -51,6 +51,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
+#ifdef CORE_PINS
+static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
+#endif
+
 #ifndef UART_DEVNO
 #define UART_DEVNO					0
 #endif
@@ -395,6 +399,14 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 
 int main()
 {
+
+#ifdef CORE_PINS
+	if (!IOPinCoreCfg(s_CorePins, sizeof(s_CorePins) / sizeof(s_CorePins[0])))
+	{
+		return 1;
+	}
+#endif
+
 	HardwareInit();
 
 	SysLogPrintf(SysLogGet(), "UART over BLE\r\n");

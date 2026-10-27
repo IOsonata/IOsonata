@@ -183,6 +183,14 @@ typedef struct __iopin_cfg {
 
 typedef IOPinCfg_t		IOPINCFG;
 
+/// I/O pin core assignment, ordered as core, port, pin.
+typedef struct __iopin_core_cfg
+{
+	int CoreNo;				//!< Core number, main core is 0
+	int PortNo;				//!< Port number
+	int PinNo;				//!< Pin number
+} IOPinCoreCfg_t;
+
 #pragma pack(pop)
 
 /**
@@ -195,6 +203,63 @@ typedef void (*IOPinEvtHandler_t)(int IntNo, void *pCtx);
 #ifdef 	__cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief Assign an I/O pin to a processor core.
+ *
+ * Core numbers are fixed for the MCU, independent of the caller. The main
+ * core is 0; additional cores are numbered from 1 by the target port.
+ * Single-core ports accept core 0 for valid pins without changing hardware.
+ *
+ * Preserves direction, pull, drive and function settings. Does not start
+ * a core or assign a peripheral. Stop users of the pin on both cores before
+ * changing ownership. IOPinConfig and IOPinDisable preserve this assignment.
+ * Board pin maps remain responsible for package bonding.
+ *
+ * On nRF5340, core 0 is App and core 1 is Net. Call from secure App code;
+ * Net and non-secure App callers cannot assign pins. Assigning to Net also
+ * makes that pin non-secure. Assigning back to App preserves its security.
+ *
+ * @param PortNo : Port number
+ * @param PinNo  : Pin number
+ * @param CoreNo : Zero-based core number, main core is 0
+ *
+ * @return true if assigned (including already assigned); false for invalid
+ *         arguments, unsupported assignment or insufficient permission.
+ */
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo);
+
+/**
+ * @brief Assign an array of I/O pins to processor cores.
+ *
+ * Uses IOPinAssignCore for each entry in order. Stops at the first failure;
+ * earlier assignments remain applied. Does not start any core.
+ *
+ * @param pCfg   : Array of core, port and pin assignments
+ * @param NbPins : Number of entries; zero succeeds, including with NULL
+ *
+ * @return true if all assignments succeed; false for a negative count,
+ *         NULL with a positive count, or a failed assignment.
+ */
+static inline bool IOPinCoreCfg(const IOPinCoreCfg_t *pCfg, int NbPins)
+{
+	int i;
+
+	if (NbPins < 0 || (NbPins > 0 && pCfg == NULL))
+	{
+		return false;
+	}
+
+	for (i = 0; i < NbPins; i++)
+	{
+		if (!IOPinAssignCore(pCfg[i].PortNo, pCfg[i].PinNo, pCfg[i].CoreNo))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
 
 /**
  * @brief Configure individual I/O pin.

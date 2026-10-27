@@ -6,9 +6,15 @@
 #include <vector>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
+#include <openssl/rand.h>
+#include "crypto_rng_stm32.h"
+#include "crypto/crypto.h"
 #include "stm32.h"
 #include "crypto_stm32h7.h"
 CrypRegs g_Cryp;
+#ifdef STM32L4S9xx
+AesRegs g_Aes;
+#endif
 HashRegs g_Hash;
 RccRegs g_Rcc;
 static uint32_t regs[REG_COUNT];
@@ -16,15 +22,25 @@ static std::vector<uint8_t> input, output, message;
 static bool prepared;
 static uint32_t preparedSize;
 static unsigned fault, aesBlocks, hashRuns;
+static unsigned modelWrites;
 static unsigned hashFailAt = ~0U;
 static CryptoStm32H7Hash *hashReenter;
 static CryptoStm32H7Aes *reenter;
-static uint8_t key[16], block[16], dest[16];
+static uint8_t key[16], block[16];
+#ifndef CRYPTO_LINK_TEST
+static uint8_t dest[16];
+#endif
 static CryptoKey testKey{CRYPTO_KEY_AES_128,CRYPTO_KEY_LOC_PLAIN,
 	CRYPTO_KEY_USE_ENCRYPT|CRYPTO_KEY_USE_DECRYPT,{{key,16}}};
 static void bytes(std::vector<uint8_t>&v,uint32_t w){for(int i=3;i>=0;i--)v.push_back(w>>(8*i));}
 uint32_t ModelRead(unsigned id)
 {
+#ifdef STM32L4S9xx
+	if(id == L_SR)
+		return fault >= 1 && fault <= 3 ? 0U : AES_SR_CCF;
+	if(id == L_DOUT)
+		return ModelRead(C_DOUT);
+#endif
 	if(id==C_SR){
 	 if(fault==1)return 0;
 	 if(fault==3)return CRYP_SR_BUSY;
@@ -37,6 +53,35 @@ uint32_t ModelRead(unsigned id)
 }
 void ModelWrite(unsigned id,uint32_t value)
 {
+#ifdef STM32L4S9xx
+	if (id == L_CR) {
+		regs[L_CR] = value & ~(AES_CR_CCFC | AES_CR_ERRC);
+		uint32_t mode = value & AES_CR_MODE;
+		uint32_t v = (value & AES_CR_KEYSIZE) ? CRYP_CR_KEYSIZE_1 : 0U;
+		v |= mode == AES_CR_MODE_0 ? CRYP_CR_ALGOMODE_AES_KEY : CRYP_CR_ALGOMODE_AES_ECB;
+		if (mode == AES_CR_MODE_1)
+			v |= CRYP_CR_ALGODIR;
+		if (value & AES_CR_EN)
+			v |= CRYP_CR_CRYPEN;
+		ModelWrite(C_CR, v);
+		return;
+	}
+	if (id >= L_K0 && id <= L_K7)
+	{
+		ModelWrite(C_K3R - (id - L_K0), value);
+		return;
+	}
+	if (id == L_DIN)
+	{
+		ModelWrite(C_DIN, value);
+		return;
+	}
+	if (id == R_EN && (value & RCC_AHB2ENR_AESEN))
+		value |= RCC_AHB2ENR_CRYPEN;
+	if (id == R_RST && (value & RCC_AHB2RSTR_AESRST))
+		value |= RCC_AHB2RSTR_CRYPRST;
+#endif
+	modelWrites++;
 	regs[id]=value;
 	if(id==R_RST){
 	 if(value&RCC_AHB2RSTR_CRYPRST){for(unsigned i=0;i<=C_K3R;i++)regs[i]=0;
@@ -91,10 +136,66 @@ void ModelWrite(unsigned id,uint32_t value)
 	 regs[H_SR]=HASH_SR_DCIS;hashRuns++;
 	}
 }
+// Host entropy adapter only. The physical RNG driver has separate register tests.
+static bool rngAvailable;
+bool CryptoRngStm32::Enable()
+{
+	vbValid = rngAvailable;
+	vbEnabled = rngAvailable;
+	return vbValid;
+}
+void CryptoRngStm32::Disable()
+{
+	vbValid = false;
+	vbEnabled = false;
+}
+void CryptoRngStm32::Reset()
+{
+	(void)Enable();
+}
+CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
+{
+	return RAND_bytes(pOut, (int)Len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+CryptoRngStm32 *CryptoRngStm32Instance(void)
+{
+	static CryptoRngStm32 instance;
+
+	return instance.Enable() ? &instance : nullptr;
+}
+#ifndef CRYPTO_LINK_TEST
 int CryptoEngineTest();
 int main()
 {
-	int result=CryptoEngineTest();assert(result==0);
+	int result;
+	Crypto retry;
+	Crypto other;
+	uint8_t failedOutput[32];
+	unsigned initializedWrites;
+
+	assert(modelWrites == 0);
+	assert(!retry.Init());
+	memset(failedOutput, 0xa5, sizeof(failedOutput));
+	assert(retry.Random(failedOutput, sizeof(failedOutput)) == CRYPTO_STATUS_FAIL);
+	assert(P256IsZero(failedOutput, sizeof(failedOutput)));
+	assert(modelWrites == 0);
+	rngAvailable = true;
+	assert(retry.Init());
+	initializedWrites = modelWrites;
+	assert(other.Init());
+	assert(other.IsSecure());
+	assert(retry.Init());
+	assert(modelWrites == initializedWrites);
+	retry.Disable();
+	assert(!retry.Valid());
+	retry.Reset();
+	assert(retry.Valid());
+	assert(modelWrites == initializedWrites);
+	retry.Disable();
+	assert(other.SelfTest() == 0);
+	other.Disable();
+	result = CryptoEngineTest();
+	assert(result == 0);
 	for(unsigned i=0;i<16;i++)key[i]=i+1;
 	CryptoStm32H7Aes a,b;CryptoStm32H7Hash h;assert(a.Enable()&&b.Enable()&&h.Enable());
 	// Check actual hardware Cipher's in-place path, not just the software base.
@@ -176,3 +277,23 @@ int main()
 	printf("Register model: %u AES blocks, %u hashes; timeout recovery, wiping and cross-instance locking PASS\n",aesBlocks,hashRuns);
 	return result;
 }
+
+#else
+int main()
+{
+	Crypto crypto;
+	Crypto other;
+	unsigned initializedWrites;
+
+	rngAvailable = true;
+	assert(crypto.Init());
+	initializedWrites = modelWrites;
+	assert(other.Init());
+	assert(modelWrites == initializedWrites);
+	crypto.Disable();
+	crypto.Reset();
+	assert(modelWrites == initializedWrites);
+	assert(other.SelfTest() == 0);
+	return 0;
+}
+#endif
