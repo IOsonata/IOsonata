@@ -27,7 +27,7 @@ class InstallerTests(unittest.TestCase):
 				header.parent.mkdir(parents=True)
 				header.touch()
 			if cube_state == 'complete':
-				for folder in ['Drivers/CMSIS/Device/ST/STM32WBAxx/Include', 'Projects/Common/WPAN/Interfaces', 'Utilities/lpm/tiny_lpm']:
+				for folder in ['Projects/Common/WPAN/Interfaces', 'Utilities/lpm/tiny_lpm']:
 					(target / folder).mkdir(parents=True)
 				platform_file = target / 'Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c'
 				platform_file.parent.mkdir(parents=True)
@@ -77,7 +77,7 @@ esac
 						self.assertTrue(preserved)
 						self.assertNotIn('clone ', calls)
 
-	def test_cube_requires_cmsis_and_platform_files_as_well_as_hal(self):
+	def test_cube_uses_local_cmsis_and_requires_platform_files(self):
 		for platform, shell in self.shells():
 			for state in ['hal-only', 'complete']:
 				with self.subTest(platform=platform, state=state):
