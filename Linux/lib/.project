@@ -281,11 +281,6 @@
 			<locationURI>PARENT-2-PROJECT_LOC/src/storage/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/fats_vdisk.c</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/fats_vdisk.c</locationURI>
-		</link>
-		<link>
 			<name>src/intelhex.c</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/src/intelhex.c</locationURI>
@@ -356,9 +351,9 @@
 			<locationURI>PARENT-2-PROJECT_LOC/src/uart_retarget.c</locationURI>
 		</link>
 		<link>
-			<name>src/usb_hidhost.cpp</name>
+			<name>src/usb/usb_hidhost.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/usb_hidhost.cpp</locationURI>
+			<locationURI>PARENT-2-PROJECT_LOC/src/usb/usb_hidhost.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>
@@ -489,11 +484,6 @@
 			<name>include/usb/usb_mscdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
-		</link>
-		<link>
-			<name>src/converters/adc_device.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/converters/adc_device.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
