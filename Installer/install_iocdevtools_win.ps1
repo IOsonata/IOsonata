@@ -336,6 +336,7 @@ function Install-xPack {
 	Write-Host ">>> Installing $Name $ver..."
 	$stage = Join-Path $env:TEMP (".xp-stage-" + [guid]::NewGuid().ToString('N'))
 	$backup = $null
+	$target = $null
 	New-Item $stage -ItemType Directory | Out-Null
 	try {
 		$zip = Join-Path $stage "archive.zip"
@@ -362,6 +363,7 @@ function Install-xPack {
 		}
 		try {
 			Move-Item $root.FullName $target
+			Add-ToSystemPath "$target\bin"
 		} catch {
 			Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue
 			if ($backup -and (Test-Path $backup)) {
@@ -371,7 +373,6 @@ function Install-xPack {
 			throw
 		}
 
-		Add-ToSystemPath "$target\bin"
 		if ($backup -and (Test-Path $backup)) {
 			Remove-Item $backup -Recurse -Force
 			$backup = $null
@@ -380,9 +381,6 @@ function Install-xPack {
 		return $target
 	} finally {
 		Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-		if ($backup -and (Test-Path $backup) -and -not (Test-Path $target)) {
-			Move-Item $backup $target
-		}
 	}
 }
 
