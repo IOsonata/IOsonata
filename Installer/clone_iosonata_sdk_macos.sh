@@ -36,7 +36,7 @@ print_help() {
   echo "${BOLD}Options:${RESET}"
   echo "  --home <path>       Set custom root directory (default: ~/IOcomposer)"
   echo "  --mode <mode>       Clone mode: 'normal' (default) or 'force'"
-  echo "  --eclipse           Configure Eclipse system properties
+  echo "  --iocomposer        Configure IOcomposer/CDT system properties (--eclipse alias)
   --no-build          Skip IOsonata library auto-build step"
   echo "  --help, -h          Show this help message and exit"
 
@@ -82,7 +82,7 @@ while [[ $# -gt 0 ]]; do
       MODE="$2"
       shift 2
       ;;
-    --eclipse)
+    --iocomposer|--eclipse)
       CONFIGURE_ECLIPSE=true
       shift
       ;;
@@ -483,7 +483,8 @@ if [[ "$CONFIGURE_ECLIPSE" == "true" ]]; then
   echo "${BLUE}=========================================================${RESET}"
   echo ""
   
-  ECLIPSE_APP="/Applications/Eclipse.app"
+	ECLIPSE_APP="/Applications/IOcomposer.app"
+	[[ -d "$ECLIPSE_APP" ]] || ECLIPSE_APP="/Applications/Eclipse.app"
   ECLIPSE_INI="$ECLIPSE_APP/Contents/Eclipse/eclipse.ini"
   
   if [[ ! -f "$ECLIPSE_INI" ]]; then
@@ -570,7 +571,8 @@ fi
 echo "${BLUE}---------------------------------------------------------${RESET}"
 
 # --- Detect Eclipse Installation ---
-ECLIPSE_APP="/Applications/Eclipse.app"
+ECLIPSE_APP="/Applications/IOcomposer.app"
+[[ -d "$ECLIPSE_APP" ]] || ECLIPSE_APP="/Applications/Eclipse.app"
 ECLIPSE_INSTALLED=false
 if [[ -d "$ECLIPSE_APP" ]]; then
   ECLIPSE_INSTALLED=true

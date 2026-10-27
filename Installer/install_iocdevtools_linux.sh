@@ -2,12 +2,12 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.96"
+SCRIPT_VERSION="v1.1.0"
 
 ROOT="${ROOT:-$HOME/IOcomposer}"
 TOOLS="/opt/xPacks"
 BIN="/usr/local/bin"
-ECLIPSE_DIR="$HOME/eclipse"
+ECLIPSE_DIR="$HOME/iocomposer"
 
 echo "=============================================="
 echo "   IOcomposer MCU Dev Tools Installer (Linux) "
@@ -67,7 +67,8 @@ Options:
   --version           Show version and exit
   --home <path>       Set custom SDK installation root (default: ~/IOcomposer)
   --force-update      Force reinstall
-  --uninstall         Remove toolchains + Eclipse (keep repos/workspaces)
+  --iocomposer <path> Set custom IOcomposer installation path
+  --uninstall         Remove toolchains + IOcomposer (keep repos/workspaces)
   (no option)         Install/update (skip if already installed)
 EOF
 }
@@ -88,13 +89,13 @@ while [[ $# -gt 0 ]]; do
       ROOT="$1"
       echo ">>> Using custom home folder: $ROOT"
       ;;
-    --eclipse)
+    --iocomposer|--eclipse)
       shift
       if [[ -z "${1:-}" ]]; then
-        echo "❌ Missing path after --eclipse"; exit 1
+        echo "❌ Missing IOcomposer path"; exit 1
       fi
       ECLIPSE_DIR="$1"
-      echo ">>> Using custom Eclipse folder: $ECLIPSE_DIR"
+      echo ">>> Using custom IOcomposer folder: $ECLIPSE_DIR"
       ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
@@ -113,7 +114,7 @@ sudo mkdir -p "$TOOLS" "$BIN"
 # UNINSTALL
 # ---------------------------------------------------------
 if [[ "$MODE" == "uninstall" ]]; then
-  echo "⚠️  Removing toolchains + Eclipse (repos and workspace kept)..."
+  echo "⚠️  Removing toolchains + IOcomposer (repos and workspace kept)..."
   read -r -p "Proceed? (y/N) " c; [[ "$c" =~ ^[Yy]$ ]] || exit 0
 
   echo ">>> Checking xPacks in $TOOLS..."
@@ -133,11 +134,9 @@ if [[ "$MODE" == "uninstall" ]]; then
   echo ">>> Removing symlinks..."
   sudo rm -f "$BIN/arm-none-eabi-gcc" "$BIN/riscv-none-elf-gcc" "$BIN/openocd" || true
 
-  echo ">>> Removing Eclipse installation..."
+  echo ">>> Removing IOcomposer installation..."
   sudo rm -rf "$ECLIPSE_DIR" || true
 
-  echo ">>> Removing Eclipse user settings (~/.eclipse)..."
-  rm -rf "$HOME/.eclipse" || true
 
   echo ">>> Removing udev rules..."
   sudo rm -f /etc/udev/rules.d/99-idap-link-hid.rules || true
@@ -148,7 +147,7 @@ if [[ "$MODE" == "uninstall" ]]; then
   rm -rf "$ROOT/IDAP" || true
 
   echo ">>> Removing desktop entry..."
-  rm -f "$HOME/.local/share/applications/eclipse-embedcdt.desktop" || true
+  rm -f "$HOME/.local/share/applications/iocomposer.desktop" || true
 
   # Prompt for IOsonata and external SDK removal
   echo
@@ -259,6 +258,122 @@ cleanup() {
   if [[ -n "${TMP_ECLIPSE_ARCHIVE:-}" ]]; then rm -f "$TMP_ECLIPSE_ARCHIVE" || true; fi
 }
 trap cleanup EXIT
+
+# IOcomposer plugins and branding are installed here, not by the website launcher.
+# Eclipse Embedded CDT supplies the runtime; retain its launcher filenames.
+iocomposer_plugin_url() {
+	local plugin_id="$1"
+	local listing="$2"
+	python3 - "$plugin_id" "$listing" <<'PY'
+import json
+import re
+import sys
+
+plugin_id, listing = sys.argv[1:]
+with open(listing) as stream:
+	items = json.load(stream)
+versions = []
+for item in items:
+	name = item.get("name", "")
+	match = re.fullmatch(re.escape(plugin_id) + r"_([0-9]+(?:\.[0-9]+)*)\.jar", name)
+	if match:
+		versions.append((tuple(int(part) for part in match[1].split(".")), name))
+if not versions:
+	raise SystemExit("No published IOcomposer plugin found: " + plugin_id)
+print("https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/" + max(versions)[1])
+PY
+}
+
+install_iocomposer() (
+	# Subshell cleanup does not replace the main installer's cleanup trap.
+	local runtime="$1"
+	local stage
+	stage=$(mktemp -d)
+	trap 'rm -rf "$stage"' EXIT
+	local plugin url
+	curl -fsSL "https://api.github.com/repos/I-SYST/iocomposer.io/contents/plugin?ref=main" -o "$stage/plugins.json"
+	for plugin in com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
+		url=""
+		if [[ "$plugin" == "com.iocomposer.embedcdt.ai" ]]; then
+			url="${IOCOMPOSER_AI_PLUGIN_URL:-}"
+		fi
+		if [[ -z "$url" ]]; then
+			url=$(iocomposer_plugin_url "$plugin" "$stage/plugins.json")
+		fi
+		curl -fsSL "$url" -o "$stage/$plugin.jar"
+		# Reject HTML/error responses before replacing installed plugins.
+		unzip -tq "$stage/$plugin.jar" >/dev/null
+	done
+	# Both required plugins have downloaded successfully before either is replaced.
+	sudo mkdir -p "$runtime/dropins"
+	for plugin in com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
+		sudo cp "$stage/$plugin.jar" "$runtime/dropins/$plugin.jar"
+		sudo chmod 644 "$runtime/dropins/$plugin.jar"
+		sudo find "$runtime/dropins" -maxdepth 1 -type f -name "${plugin}_*.jar" -delete
+	done
+
+	# Keep SDK path preferences and one customization hook in the runtime ini.
+	python3 - "$runtime" "$stage" <<'PY'
+from pathlib import Path
+import sys
+
+runtime, stage = map(Path, sys.argv[1:])
+ini = (runtime / "eclipse.ini").read_text().splitlines()
+result = []
+skip = False
+for line in ini:
+	if skip:
+		skip = False
+		continue
+	if line in ("-name", "-pluginCustomization"):
+		skip = True
+		continue
+	result.append(line)
+if "-vmargs" not in result:
+	result.append("-vmargs")
+index = result.index("-vmargs")
+custom = "../Eclipse/plugin_customization.ini" if runtime.parent.name == "Contents" else "plugin_customization.ini"
+result[index:index] = ["-name", "IOcomposer", "-pluginCustomization", custom]
+if runtime.parent.name == "Contents" and "-Dswt.autoScale=false" not in result:
+	result.append("-Dswt.autoScale=false")
+(stage / "eclipse.ini").write_text("\n".join(result) + "\n")
+preferences = {
+	"org.eclipse.ui/showIntro": "false",
+	"org.eclipse.ui/defaultPerspectiveId": "com.iocomposer.embedcdt.ui.perspective",
+}
+for package in ("embedcpp", "embedcpp.ui", "cpp", "common"):
+	preferences["org.eclipse.epp.package." + package + "/showNewsOnStartup"] = "false"
+preferences["org.eclipse.epp.mpc.ui/showNewsOnStartup"] = "false"
+custom_file = runtime / "plugin_customization.ini"
+lines = custom_file.read_text().splitlines() if custom_file.exists() else []
+lines = [line for line in lines if line.split("=", 1)[0] not in preferences]
+lines += [key + "=" + value for key, value in preferences.items()]
+(stage / "plugin_customization.ini").write_text("\n".join(lines) + "\n")
+PY
+	sudo cp "$stage/eclipse.ini" "$runtime/eclipse.ini"
+	sudo cp "$stage/plugin_customization.ini" "$runtime/plugin_customization.ini"
+
+	if curl -fsSL "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/splash.bmp" -o "$stage/splash.bmp"; then
+		sudo cp "$stage/splash.bmp" "$runtime/splash.bmp"
+		while IFS= read -r destination; do
+			sudo cp "$stage/splash.bmp" "$destination"
+		done < <(find "$runtime/plugins" -name splash.bmp -type f)
+	else
+		echo "Warning: IOcomposer splash download failed; keeping the existing splash." >&2
+	fi
+	echo "IOcomposer AI and UI plugins installed at $runtime"
+)
+
+build_iocomposer_index() {
+	local index="$ROOT/IOsonata/Installer/build_external_index.py"
+	if [[ -f "$index" ]]; then
+		python3 "$index" --sdk-root "$ROOT/external" || {
+			echo "Warning: SDK index failed. Retry: python3 $index --sdk-root $ROOT/external" >&2
+		}
+	else
+		echo "Warning: SDK index script not found: $index" >&2
+	fi
+}
 
 # ---------------------------------------------------------
 # Install IOsonata Eclipse Plugin
@@ -508,9 +623,9 @@ fi
 echo
 
 if [[ "$MODE" != "force" && -d "$ECLIPSE_DIR" ]]; then
-  echo "✅ Eclipse already installed at $ECLIPSE_DIR (skipping; use --force-update to reinstall)."
+  echo "✅ IOcomposer runtime already installed at $ECLIPSE_DIR (skipping; use --force-update to reinstall)."
 else
-  echo "💻 Installing Eclipse Embedded CDT IDE..."
+  echo "💻 Installing IOcomposer runtime (Eclipse Embedded CDT)..."
   MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
 
   RELEASES=$(curl -fsSL "$MIRROR/" | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' | cut -d'"' -f2 | sed 's|/||g' | sort -r | uniq || true)
@@ -556,27 +671,27 @@ else
   rm -f "$TMP_ECLIPSE_ARCHIVE"
   TMP_ECLIPSE_ARCHIVE=""
 
-  echo "✅ Eclipse installed at $ECLIPSE_DIR"
+  echo "✅ IOcomposer runtime installed at $ECLIPSE_DIR"
 fi
 
 
 # ---------------------------------------------------------
 # Create desktop entry for Eclipse
 # ---------------------------------------------------------
-DESKTOP_FILE="$HOME/.local/share/applications/eclipse-embedcdt.desktop"
+DESKTOP_FILE="$HOME/.local/share/applications/iocomposer.desktop"
 mkdir -p "$HOME/.local/share/applications"
 
 cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
-Name=Eclipse Embedded CDT
-Comment=Eclipse IDE for Embedded C/C++ Development
-Exec=$ECLIPSE_DIR/eclipse
+Name=IOcomposer
+Comment=IOcomposer Embedded Development
+Exec="$ECLIPSE_DIR/eclipse"
 Icon=$ECLIPSE_DIR/icon.xpm
 Terminal=false
 Type=Application
 Categories=Development;IDE;
 StartupNotify=true
-StartupWMClass=Eclipse
+StartupWMClass=IOcomposer
 EOF
 
 echo "✅ Desktop entry created at $DESKTOP_FILE"
@@ -837,7 +952,7 @@ echo
 echo
 echo "📦 Syncing IOsonata + external SDKs..."
 
-CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/clone_iosonata_sdk_linux.sh"
+CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_linux.sh"
 TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.sh)
 CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.log)
 
@@ -895,6 +1010,8 @@ echo "✅ Eclipse project paths fixed for Linux"
 # ---------------------------------------------------------
 echo
 install_iosonata_plugin
+
+install_iocomposer "$ECLIPSE_DIR"
 
 # ---------------------------------------------------------
 # Generate makefile_path.mk
@@ -1058,7 +1175,7 @@ if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
     echo "========================================================="
     echo ""
     chmod +x "$BUILD_SCRIPT"
-    "$BUILD_SCRIPT" --home "$ROOT" --eclipse "$ECLIPSE_DIR"
+    "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_DIR"
   else
     echo ""
     echo "ℹ️  IOsonata library builder not found:"
@@ -1073,6 +1190,8 @@ else
 fi
 
 # ---------------------------------------------------------
+build_iocomposer_index
+
 # Summary
 # ---------------------------------------------------------
 echo

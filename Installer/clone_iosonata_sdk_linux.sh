@@ -100,7 +100,7 @@ while [[ $# -gt 0 ]]; do
       MODE="$2"
       shift 2
       ;;
-    --eclipse)
+    --iocomposer|--eclipse)
       CONFIGURE_ECLIPSE=true
       shift
       ;;
@@ -114,7 +114,7 @@ while [[ $# -gt 0 ]]; do
       echo -e "${BOLD}Options:${RESET}"
       echo "  --home <path>       Set custom root directory (default: ~/IOcomposer)"
       echo "  --mode <mode>       Clone mode: 'normal' (default) or 'force'"
-      echo "  --eclipse           Configure Eclipse system properties"
+      echo "  --iocomposer        Configure IOcomposer/CDT system properties (--eclipse alias)"
       echo "  --no-build          Skip IOsonata library auto-build step"
       echo "  --help, -h          Show this help message and exit"
       echo ""
@@ -566,6 +566,8 @@ if [[ "$CONFIGURE_ECLIPSE" == "true" ]]; then
   
   # Search common locations
   for candidate in \
+	"${HOME}/iocomposer" \
+	"/opt/iocomposer" \
     "${HOME}/eclipse/embedcdt" \
     "${HOME}/eclipse/cpp" \
     "${HOME}/eclipse" \
@@ -691,6 +693,8 @@ ECLIPSE_INSTALLED=false
 ECLIPSE_BIN=""
 
 for candidate in \
+	"${HOME}/iocomposer/eclipse" \
+	"/opt/iocomposer/eclipse" \
   "${HOME}/eclipse/embedcdt/eclipse" \
   "${HOME}/eclipse/cpp/eclipse" \
   "${HOME}/eclipse/eclipse" \

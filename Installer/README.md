@@ -183,7 +183,34 @@ Installation scripts set up a **complete development environment** from scratch:
 - Configure the development environment with the required IOsonata paths
 - Optionally build IOsonata libraries
 
-The current installers use Eclipse Embedded CDT as the underlying managed-build runtime. The build scripts prefer IOcomposer and retain Eclipse Embedded CDT as a compatibility fallback.
+The IOsonata installers own the complete IOcomposer installation: Eclipse
+Embedded CDT runtime, IOcomposer AI and UI plugins, branding, toolchains,
+SDK setup and external SDK indexing. The scripts hosted at iocomposer.io only
+download and invoke these installers, forwarding arguments and failures.
+Plugin JARs and splash assets remain published in `I-SYST/iocomposer.io/plugin`.
+
+The runtime keeps Eclipse launcher filenames (`eclipse`, `eclipse.exe`,
+`eclipse.ini`). It is installed directly in the final IOcomposer directory;
+there is no post-install directory rename. Existing standalone Eclipse
+installations remain available as a compatibility fallback for clone/build
+scripts. Shared Eclipse user profiles are preserved on uninstall.
+
+Use `--iocomposer <path>` on Unix or `-IocomposerDir <path>` on Windows to
+select the IDE destination independently of the SDK root (`--home` or
+`-SdkHome`). Unix `--eclipse` remains an alias for the IDE destination.
+Existing IOcomposer installations at a non-default path can be updated by
+passing that path explicitly. No existing Eclipse installation is moved or
+removed unless explicitly selected as the IDE destination.
+
+Both IOcomposer plugins are required. A discovery, download or archive failure
+stops installation; both downloads are validated before replacing installed
+plugins. The splash and SDK index are optional and report failures as warnings.
+The macOS app is signed after configuration and again after the build step.
+
+Website launcher copies are maintained in [website](website). Merge the
+IOsonata installer changes first, then update the three root launchers in
+`I-SYST/iocomposer.io`. See [website/README.md](website/README.md) for branch
+validation and rollout.
 
 ### Usage
 
@@ -193,8 +220,8 @@ The current installers use Eclipse Embedded CDT as the underlying managed-build 
 # Basic installation
 ./install_iocdevtools_macos.sh
 
-# Custom installation directory
-./install_iocdevtools_macos.sh --home /path/to/custom/location
+# Custom SDK and IDE directories
+./install_iocdevtools_macos.sh --home /path/to/sdk --iocomposer /Applications/IOcomposer.app
 
 # Force reinstall everything
 ./install_iocdevtools_macos.sh --force-update
@@ -212,8 +239,8 @@ The current installers use Eclipse Embedded CDT as the underlying managed-build 
 # Basic installation
 ./install_iocdevtools_linux.sh
 
-# Custom installation directory
-./install_iocdevtools_linux.sh --home /path/to/custom/location
+# Custom SDK and IDE directories
+./install_iocdevtools_linux.sh --home /path/to/sdk --iocomposer /path/to/iocomposer
 
 # Force reinstall
 ./install_iocdevtools_linux.sh --force-update
@@ -231,7 +258,7 @@ The current installers use Eclipse Embedded CDT as the underlying managed-build 
 .\install_iocdevtools_win.ps1
 
 # Custom installation directory
-.\install_iocdevtools_win.ps1 -SdkHome C:\Dev\IOsonata
+.\install_iocdevtools_win.ps1 -SdkHome C:\Dev\IOsonata -IocomposerDir C:\Tools\IOcomposer
 
 # Force reinstall
 .\install_iocdevtools_win.ps1 -ForceUpdate
@@ -298,9 +325,9 @@ References: [pyOCD installation](https://pyocd.io/docs/installing.html),
 
 | Platform | IDE runtime | Toolchains | IOsonata SDK |
 |----------|-------------|------------|--------------|
-| macOS | `/Applications/Eclipse.app` | `/opt/xPacks` | `~/IOcomposer` |
-| Linux | `~/eclipse` | `/opt/xPacks` | `~/IOcomposer` |
-| Windows | `C:\Program Files\Eclipse Embedded CDT` | `C:\Program Files\xPacks` | `%USERPROFILE%\IOcomposer` |
+| macOS | `/Applications/IOcomposer.app` | `/opt/xPacks` | `~/IOcomposer` |
+| Linux | `~/iocomposer` | `/opt/xPacks` | `~/IOcomposer` |
+| Windows | `C:\Program Files\IOcomposer` | `C:\Program Files\xPacks` | `%USERPROFILE%\IOcomposer` |
 
 **Repository Structure:**
 ```
@@ -657,20 +684,20 @@ chmod +x install_iocdevtools_macos.sh
 **macOS:**
 ```bash
 # Check the installed runtime
-ls -la /Applications/Eclipse.app
+ls -la /Applications/IOcomposer.app
 
 # Remove it and try again
-sudo rm -rf /Applications/Eclipse.app
+sudo rm -rf /Applications/IOcomposer.app
 ./install_iocdevtools_macos.sh --force-update
 ```
 
 **Linux:**
 ```bash
 # Check the installed runtime
-ls -la ~/eclipse
+ls -la ~/iocomposer
 
 # Remove and reinstall
-rm -rf ~/eclipse
+rm -rf ~/iocomposer
 ./install_iocdevtools_linux.sh --force-update
 ```
 
@@ -698,7 +725,7 @@ ls -ld /Applications/IOcomposer.app /Applications/Eclipse.app 2>/dev/null
 **Linux:**
 ```bash
 # Check preferred IOcomposer and compatibility fallback locations
-ls -ld /opt/iocomposer ~/eclipse /opt/eclipse 2>/dev/null
+ls -ld ~/iocomposer /opt/iocomposer ~/eclipse /opt/eclipse 2>/dev/null
 
 # If none is installed, run the installer
 ./install_iocdevtools_linux.sh
@@ -763,7 +790,7 @@ git --version
 - 4 GB free disk space
 
 **Default Paths:**
-- IDE runtime: `/Applications/Eclipse.app`
+- IDE runtime: `/Applications/IOcomposer.app`
 - Toolchains: `/opt/xPacks`
 - IOsonata: `~/IOcomposer`
 
@@ -780,7 +807,7 @@ git --version
 - 4 GB free disk space
 
 **Default Paths:**
-- IDE runtime: `~/eclipse`
+- IDE runtime: `~/iocomposer`
 - Toolchains: `/opt/xPacks`
 - IOsonata: `~/IOcomposer`
 
@@ -804,7 +831,7 @@ The installer will check and prompt to install:
 - 4 GB free disk space
 
 **Default Paths:**
-- IDE runtime: `C:\Program Files\Eclipse Embedded CDT`
+- IDE runtime: `C:\Program Files\IOcomposer`
 - Toolchains: `C:\Program Files\xPacks`
 - IOsonata: `%USERPROFILE%\IOcomposer`
 
@@ -953,3 +980,4 @@ IOsonata is released under the Apache License 2.0. See LICENSE file in the repos
 **Happy Building!** 🚀
 
 For the latest updates and documentation, visit: [https://github.com/IOsonata/IOsonata](https://github.com/IOsonata/IOsonata)
+

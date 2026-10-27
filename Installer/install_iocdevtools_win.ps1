@@ -4,11 +4,12 @@
 .SYNOPSIS
     Installs IOcomposer MCU Development Tools on Windows.
 .DESCRIPTION
-    Installs Python, 7-Zip, build tools, and Eclipse to Program Files.
+    Installs Python, 7-Zip, build tools, and IOcomposer to Program Files.
     Refined for parity with macOS preference seeding (path hashing).
 #>
 param (
     [string]$SdkHome = "$env:USERPROFILE\IOcomposer",
+	[string]$IocomposerDir = "$env:ProgramFiles\IOcomposer",
     [switch]$ForceUpdate,
     [switch]$Uninstall,
     [switch]$Version,
@@ -17,7 +18,7 @@ param (
 
 $ErrorActionPreference = 'Stop'
 $SCRIPT_NAME = "install_iocdevtools_win.ps1"
-$SCRIPT_VERSION = "v1.0.100-win"
+$SCRIPT_VERSION = "v1.1.0-win"
 
 function Show-Help {
 @"
@@ -27,8 +28,9 @@ Options:
   -Help            Show help and exit
   -Version         Show version and exit
   -SdkHome <path>  Set custom SDK installation root
+  -IocomposerDir <path> Set custom IOcomposer installation path
   -ForceUpdate     Force reinstall
-  -Uninstall       Remove toolchains + Eclipse
+  -Uninstall       Remove toolchains + IOcomposer
 "@
 }
 
@@ -37,7 +39,7 @@ if ($Version) { Write-Host "$($SCRIPT_NAME.Split('.')[0]) $SCRIPT_VERSION"; exit
 
 $ROOT = $SdkHome
 $TOOLS = "$env:ProgramFiles\xPacks"
-$ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
+$ECLIPSE_DIR = $IocomposerDir
 
 $SEVENZIP_EXE = $null
 $PythonExecutablePath = $null
@@ -194,7 +196,7 @@ Add-DefenderExclusion -Path $ROOT
 
 # --- Uninstall ---
 if ($MODE -eq "uninstall") {
-    $ans = Read-Host "Remove toolchains + Eclipse? (y/N)"
+    $ans = Read-Host "Remove toolchains + IOcomposer? (y/N)"
     if ($ans -ne 'y') { exit 0 }
     
     # Remove xPacks toolchains
@@ -214,21 +216,19 @@ if ($MODE -eq "uninstall") {
     
     # Remove Eclipse
     if (Test-Path $ECLIPSE_DIR) {
-        Write-Host ">>> Removing Eclipse from $ECLIPSE_DIR..."
+        Write-Host ">>> Removing IOcomposer from $ECLIPSE_DIR..."
         try {
-            Get-Process eclipse -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process eclipse -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq "$ECLIPSE_DIR\eclipse.exe" } | Stop-Process -Force -ErrorAction SilentlyContinue
             Start-Sleep -Milliseconds 500
             Remove-Item $ECLIPSE_DIR -Recurse -Force -ErrorAction Stop
-            Write-Host "   [OK] Eclipse removed." -ForegroundColor Green
+            Write-Host "   [OK] IOcomposer removed." -ForegroundColor Green
         } catch {
-            Write-Host "   [WARN] Could not fully remove Eclipse - it may be running." -ForegroundColor Yellow
+            Write-Host "   [WARN] Could not fully remove IOcomposer - it may be running." -ForegroundColor Yellow
         }
     }
     
-    # Remove Eclipse user data
-    Write-Host ">>> Removing Eclipse user settings..."
-    Remove-Item "$env:USERPROFILE\.p2", "$env:USERPROFILE\.eclipse" -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "   [OK] Eclipse user settings removed." -ForegroundColor Green
+	# Preserve shared profiles belonging to other CDT installations.
+	Remove-Item "$([Environment]::GetFolderPath('Desktop'))\IOcomposer.lnk", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\IOcomposer.lnk" -Force -ErrorAction SilentlyContinue
     
     # Remove IDAP tools
     Write-Host ">>> Removing IDAP tools..."
@@ -405,25 +405,27 @@ Write-Host " Done."
 if (-not $ECLIPSE_URL) { Write-Host "`n[ERROR] No Eclipse download found for architecture $ECLIPSE_ARCH." -ForegroundColor Red; exit 1 }
 
 if ($MODE -eq "force" -or -not (Test-Path $ECLIPSE_DIR)) {
-    Write-Host ">>> Installing Eclipse $LATEST..."
+    Write-Host ">>> Installing IOcomposer runtime (Eclipse $LATEST)..."
     $zip = "$env:TEMP\eclipse.zip"
-    curl.exe -L -o $zip $ECLIPSE_URL
-    if (Test-Path $ECLIPSE_DIR) { Remove-Item $ECLIPSE_DIR -Recurse -Force }
+    curl.exe -fL -o $zip $ECLIPSE_URL
+	if ($LASTEXITCODE -ne 0) { throw "IOcomposer runtime download failed" }
     $tmp = "$env:TEMP\ec-extract"
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     & $SEVENZIP_EXE x $zip -o"$tmp" -y | Out-Null
+	if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$tmp\eclipse\eclipse.exe")) { throw "IOcomposer runtime extraction failed" }
+	if (Test-Path $ECLIPSE_DIR) { Remove-Item $ECLIPSE_DIR -Recurse -Force }
     Move-Item "$tmp\eclipse" $ECLIPSE_DIR
     Remove-Item $zip, $tmp -Recurse -Force
     Write-Host "   [OK] Installed at $ECLIPSE_DIR" -ForegroundColor Green
 } else { 
-    Write-Host "   [OK] Eclipse already installed (use -ForceUpdate to reinstall)." -ForegroundColor Green 
+    Write-Host "   [OK] IOcomposer runtime already installed (use -ForceUpdate to reinstall)." -ForegroundColor Green 
 }
 
 # --- Eclipse Shortcuts ---
 $WshShell = New-Object -ComObject WScript.Shell
-$sc = $WshShell.CreateShortcut("$([Environment]::GetFolderPath('Desktop'))\Eclipse Embedded.lnk")
+$sc = $WshShell.CreateShortcut("$([Environment]::GetFolderPath('Desktop'))\IOcomposer.lnk")
 $sc.TargetPath = "$ECLIPSE_DIR\eclipse.exe"; $sc.Save()
-$sc = $WshShell.CreateShortcut("$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Eclipse Embedded.lnk")
+$sc = $WshShell.CreateShortcut("$env:ProgramData\Microsoft\Windows\Start Menu\Programs\IOcomposer.lnk")
 $sc.TargetPath = "$ECLIPSE_DIR\eclipse.exe"; $sc.Save()
 
 # --- Seed Prefs to BOTH locations (required for Eclipse version compatibility) ---
@@ -677,6 +679,91 @@ Write-Host "        iosonata_loc = $RT" -ForegroundColor White
 Write-Host "        iocomposer_home = $RT" -ForegroundColor White
 Write-Host "        IOSONATA_LOC = $RT" -ForegroundColor White
 
+# IOcomposer setup belongs to this installer, not the website launcher.
+function Install-IOcomposer {
+	param([string]$Runtime)
+	$stage = Join-Path $env:TEMP ([guid]::NewGuid().ToString('N'))
+	New-Item $stage -ItemType Directory | Out-Null
+	try {
+		$plugins = Invoke-RestMethod -Uri 'https://api.github.com/repos/I-SYST/iocomposer.io/contents/plugin?ref=main' -Headers @{
+			Accept = 'application/vnd.github+json'
+			'User-Agent' = 'iocomposer-installer'
+		}
+		$ids = @('com.iocomposer.embedcdt.ai', 'com.iocomposer.embedcdt.ui')
+		foreach ($id in $ids) {
+			$url = $null
+			if ($id -eq 'com.iocomposer.embedcdt.ai') { $url = $env:IOCOMPOSER_AI_PLUGIN_URL }
+			if (-not $url) {
+				$candidates = foreach ($item in $plugins) {
+					if ($item.name -match ('^' + [regex]::Escape($id) + '_([0-9]+(?:\.[0-9]+)*)\.jar$')) {
+						$key = ($Matches[1].Split('.') | ForEach-Object { $_.PadLeft(10, '0') }) -join '.'
+						[pscustomobject]@{ Key = $key; Name = $item.name }
+					}
+				}
+				$latest = $candidates | Sort-Object Key -Descending | Select-Object -First 1
+				if (-not $latest) { throw "No published IOcomposer plugin found: $id" }
+				$url = "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/$($latest.Name)"
+			}
+			$jar = Join-Path $stage "$id.jar"
+			Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $jar
+			& $SEVENZIP_EXE t $jar | Out-Null
+			if ($LASTEXITCODE -ne 0) { throw "Invalid IOcomposer plugin archive: $id" }
+		}
+		# Stage both required plugins before replacing either installed plugin.
+		$dropins = Join-Path $Runtime 'dropins'
+		New-Item $dropins -ItemType Directory -Force | Out-Null
+		foreach ($id in $ids) {
+			Copy-Item (Join-Path $stage "$id.jar") (Join-Path $dropins "$id.jar") -Force
+			Get-ChildItem $dropins -Filter "${id}_*.jar" | Remove-Item -Force
+		}
+		$ini = Join-Path $Runtime 'eclipse.ini'
+		$lines = Get-Content $ini
+		$out = [System.Collections.Generic.List[string]]::new()
+		$skip = $false
+		foreach ($line in $lines) {
+			if ($skip) { $skip = $false; continue }
+			if ($line -in @('-name', '-pluginCustomization')) { $skip = $true; continue }
+			$out.Add($line)
+		}
+		if (-not $out.Contains('-vmargs')) { $out.Add('-vmargs') }
+		$index = $out.IndexOf('-vmargs')
+		$out.InsertRange($index, [string[]]@('-name', 'IOcomposer', '-pluginCustomization', 'plugin_customization.ini'))
+		[IO.File]::WriteAllLines($ini, $out, [Text.UTF8Encoding]::new($false))
+		$custom = Join-Path $Runtime 'plugin_customization.ini'
+		$preferences = [ordered]@{
+			'org.eclipse.ui/showIntro' = 'false'
+			'org.eclipse.ui/defaultPerspectiveId' = 'com.iocomposer.embedcdt.ui.perspective'
+			'org.eclipse.epp.package.embedcpp/showNewsOnStartup' = 'false'
+			'org.eclipse.epp.package.embedcpp.ui/showNewsOnStartup' = 'false'
+			'org.eclipse.epp.package.cpp/showNewsOnStartup' = 'false'
+			'org.eclipse.epp.package.common/showNewsOnStartup' = 'false'
+			'org.eclipse.epp.mpc.ui/showNewsOnStartup' = 'false'
+		}
+		$existing = @(Get-Content $custom | Where-Object { -not $preferences.Contains(($_ -split '=', 2)[0]) })
+		foreach ($key in $preferences.Keys) { $existing += "$key=$($preferences[$key])" }
+		[IO.File]::WriteAllLines($custom, [string[]]$existing, [Text.UTF8Encoding]::new($false))
+		try {
+			$splash = Join-Path $stage 'splash.bmp'
+			Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/splash.bmp' -OutFile $splash
+			Copy-Item $splash (Join-Path $Runtime 'splash.bmp') -Force
+			Get-ChildItem (Join-Path $Runtime 'plugins') -Recurse -Filter splash.bmp | ForEach-Object {
+				Copy-Item $splash $_.FullName -Force
+			}
+		} catch { Write-Warning "IOcomposer splash installation failed: $_" }
+		Write-Host "IOcomposer AI and UI plugins installed at $Runtime"
+	} finally {
+		Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+	}
+}
+
+function Build-IOcomposerIndex {
+	$index = Join-Path $ROOT 'IOsonata\Installer\build_external_index.py'
+	if ($PythonExecutablePath -and (Test-Path $index)) {
+		& $PythonExecutablePath $index --sdk-root "$ROOT\external"
+		if ($LASTEXITCODE -ne 0) { Write-Warning "SDK index failed. Retry: python $index --sdk-root $ROOT\external" }
+	} else { Write-Warning "Python or SDK index script missing; index was not built." }
+}
+
 # --- Plugin ---
 function Install-Plugin {
     Write-Host; Write-Host ">>> Installing IOsonata Eclipse Plugin..." -ForegroundColor Cyan
@@ -703,7 +790,9 @@ function Install-Plugin {
 # ---------------------------------------------------------
 Write-Host; Write-Host ">>> Syncing IOsonata + external SDKs..." -ForegroundColor Cyan
 
-$CLONE_URL = "https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/main/Installer/clone_iosonata_sdk_win.ps1"
+$installerRef = $env:IOSONATA_INSTALLER_REF
+if (-not $installerRef) { $installerRef = "main" }
+$CLONE_URL = "https://raw.githubusercontent.com/IOsonata/IOsonata/$installerRef/Installer/clone_iosonata_sdk_win.ps1"
 $TMP_CLONE = Join-Path $env:TEMP "clone_iosonata_sdk_win.ps1"
 $CLONE_LOG = Join-Path $env:TEMP "clone_iosonata_sdk_win.log"
 
@@ -789,6 +878,7 @@ if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
 }
 
 Install-Plugin
+Install-IOcomposer -Runtime $ECLIPSE_DIR
 
 # --- Makefile (aligned with macOS/Linux) ---
 Write-Host; Write-Host ">>> Generating makefile_path.mk..." -ForegroundColor Cyan
@@ -946,7 +1036,7 @@ if (-not $CLONE_INVOKED_BUILD) {
         Write-Host "  IOsonata Library Build" -ForegroundColor Cyan
         Write-Host "=========================================================" -ForegroundColor Cyan
         Write-Host
-        & $BS -SdkHome $ROOT
+        & $BS -SdkHome $ROOT -IocomposerDir $ECLIPSE_DIR
 		if ($LASTEXITCODE -ne 0) { throw "Library build failed with exit code $LASTEXITCODE" }
     } else { 
         Write-Host
@@ -960,6 +1050,8 @@ if (-not $CLONE_INVOKED_BUILD) {
     Write-Host "   [INFO] IOsonata libraries were already handled by the clone step (skipping rebuild)." -ForegroundColor Yellow
     Write-Host
 }
+
+Build-IOcomposerIndex
 
 # --- Summary ---
 Write-Host
@@ -1014,7 +1106,7 @@ if ($OPENOCD_DIR -and (Test-Path "$OPENOCD_DIR\bin\openocd.exe")) {
     }
 }
 
-Write-Host ("{0,-25} {1}" -f "Eclipse Embedded CDT:", $ECLIPSE_VER)
+Write-Host ("{0,-25} {1}" -f "IOcomposer runtime:", $ECLIPSE_VER)
 Write-Host ("{0,-25} {1}" -f "ARM GCC:", $ARM_VER)
 Write-Host ("{0,-25} {1}" -f "RISC-V GCC:", $RISCV_VER)
 Write-Host ("{0,-25} {1}" -f "OpenOCD:", $OPENOCD_VER)
@@ -1031,3 +1123,4 @@ Write-Host "  `${system_property:iosonata_loc}/IOsonata/include"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/include"
 Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 Write-Host
+exit 0

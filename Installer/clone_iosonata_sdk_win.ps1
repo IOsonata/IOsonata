@@ -11,6 +11,7 @@ param(
     [string]$SdkHome = "$env:USERPROFILE\IOcomposer",
 	[ValidateSet("normal", "force")]
     [string]$Mode = "normal",
+	[Alias("Iocomposer")]
     [switch]$Eclipse,
     [switch]$NoBuild,
     [switch]$Help
@@ -36,7 +37,7 @@ function Show-Help {
     Write-Host "Options:" -ForegroundColor White
     Write-Host "  -SdkHome <path>     Set custom root directory (default: ~\IOcomposer)"
     Write-Host "  -Mode <mode>        Clone mode: 'normal' (default) or 'force'"
-    Write-Host "  -Eclipse            Configure Eclipse system properties"
+    Write-Host "  -Iocomposer         Configure IOcomposer/CDT properties (-Eclipse alias)"
     Write-Host "  -NoBuild            Skip IOsonata library auto-build step"
     Write-Host "  -Help               Show this help message and exit"
     Write-Host ""
@@ -68,7 +69,10 @@ Write-Host "Mode:                 $Mode" -ForegroundColor White
 Write-Host "External path:        $EXT" -ForegroundColor White
 
 # --- Detect Eclipse Installation ---
-$ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
+$ECLIPSE_DIR = "$env:ProgramFiles\IOcomposer"
+if (-not (Test-Path "$ECLIPSE_DIR\eclipse.exe")) {
+	$ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
+}
 $ECLIPSE_INSTALLED = $false
 if (Test-Path "$ECLIPSE_DIR\eclipse.exe") {
     $ECLIPSE_INSTALLED = $true
@@ -493,7 +497,6 @@ if ($Eclipse) {
     Write-Host "=========================================================" -ForegroundColor Blue
     Write-Host ""
     
-    $ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
     $ECLIPSE_INI = Join-Path $ECLIPSE_DIR "eclipse.ini"
     
     if (-not (Test-Path $ECLIPSE_INI)) {
@@ -598,7 +601,7 @@ Write-Host "  - tinyusb"
 Write-Host "  - stm32-mw-wpan v2.10.0 and STM32CubeWBA v1.10.0 (pinned)"
 Write-Host ""
 
-if ($Eclipse -and (Test-Path "$env:ProgramFiles\Eclipse Embedded CDT\eclipse.ini")) {
+if ($Eclipse -and (Test-Path "$ECLIPSE_DIR\eclipse.ini")) {
     Write-Host "Eclipse Configuration:" -ForegroundColor White
     Write-Host "  - System properties configured"
     Write-Host "  - iosonata_loc = $ROOT\IOsonata"
