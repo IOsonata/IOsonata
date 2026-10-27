@@ -123,6 +123,11 @@ class ToolTests(unittest.TestCase):
 		self.assertIn('Test-Path "$LLVM_DIR\\.iocomposer-managed"', windows)
 		self.assertIn("New-Item (Join-Path $distribution '.iocomposer-managed')", windows)
 		self.assertIn('-not (Test-Path "$ECLIPSE_DIR\\eclipse.exe")', windows)
+		self.assertIn('.eclipse-stage-', windows)
+		self.assertIn('$ECLIPSE_DIR.backup-', windows)
+		for platform in ['linux', 'macos']:
+			source = (INSTALLER / f'install_iocdevtools_{platform}.sh').read_text()
+			self.assertIn('previous installation restored', source)
 		linux = (INSTALLER / 'install_iocdevtools_linux.sh').read_text()
 		self.assertIn('[[ "$MODE" != "force" && -x "$ECLIPSE_DIR/eclipse" ]]', linux)
 

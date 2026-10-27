@@ -636,18 +636,35 @@ Write-Host " Done."
 if (-not $ECLIPSE_URL) { Write-Host "`n[ERROR] No Eclipse download found for architecture $ECLIPSE_ARCH." -ForegroundColor Red; exit 1 }
 
 if ($MODE -eq "force" -or -not (Test-Path "$ECLIPSE_DIR\eclipse.exe")) {
-    Write-Host ">>> Installing IOcomposer runtime (Eclipse $LATEST)..."
-    $zip = "$env:TEMP\eclipse.zip"
-    curl.exe -fL -o $zip $ECLIPSE_URL
-	if ($LASTEXITCODE -ne 0) { throw "IOcomposer runtime download failed" }
-    $tmp = "$env:TEMP\ec-extract"
-    if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-    & $SEVENZIP_EXE x $zip -o"$tmp" -y | Out-Null
-	if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$tmp\eclipse\eclipse.exe")) { throw "IOcomposer runtime extraction failed" }
-	if (Test-Path $ECLIPSE_DIR) { Remove-Item $ECLIPSE_DIR -Recurse -Force }
-    Move-Item "$tmp\eclipse" $ECLIPSE_DIR
-    Remove-Item $zip, $tmp -Recurse -Force
-    Write-Host "   [OK] Installed at $ECLIPSE_DIR" -ForegroundColor Green
+	Write-Host ">>> Installing IOcomposer runtime (Eclipse $LATEST)..."
+	$stage = Join-Path $env:TEMP (".eclipse-stage-" + [guid]::NewGuid().ToString('N'))
+	$backup = "$ECLIPSE_DIR.backup-$([guid]::NewGuid().ToString('N'))"
+	New-Item $stage -ItemType Directory | Out-Null
+	try {
+		$zip = Join-Path $stage "eclipse.zip"
+		$tmp = Join-Path $stage "unpacked"
+		curl.exe -fL -o $zip $ECLIPSE_URL
+		if ($LASTEXITCODE -ne 0) { throw "IOcomposer runtime download failed" }
+		New-Item $tmp -ItemType Directory | Out-Null
+		& $SEVENZIP_EXE x $zip -o"$tmp" -y | Out-Null
+		if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$tmp\eclipse\eclipse.exe")) {
+			throw "IOcomposer runtime extraction failed"
+		}
+		if (Test-Path $ECLIPSE_DIR) {
+			Move-Item $ECLIPSE_DIR $backup
+		}
+		try {
+			Move-Item "$tmp\eclipse" $ECLIPSE_DIR
+		} catch {
+			Remove-Item $ECLIPSE_DIR -Recurse -Force -ErrorAction SilentlyContinue
+			if (Test-Path $backup) { Move-Item $backup $ECLIPSE_DIR }
+			throw
+		}
+		Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
+		Write-Host "   [OK] Installed at $ECLIPSE_DIR" -ForegroundColor Green
+	} finally {
+		Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+	}
 } else { 
     Write-Host "   [OK] IOcomposer runtime already installed (use -ForceUpdate to reinstall)." -ForegroundColor Green 
 }

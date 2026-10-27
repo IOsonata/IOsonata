@@ -891,8 +891,26 @@ if ! hdiutil attach "$TMP_ECLIPSE_DMG" -mountpoint "$ECLIPSE_MNT" -nobrowse -qui
   exit 1
 fi
 
-sudo rm -rf "$ECLIPSE_APP"
-sudo ditto "$ECLIPSE_MNT/Eclipse.app" "$ECLIPSE_APP"
+ECLIPSE_STAGE="$ECLIPSE_APP.stage.$"
+ECLIPSE_BACKUP="$ECLIPSE_APP.backup.$"
+sudo rm -rf "$ECLIPSE_STAGE" "$ECLIPSE_BACKUP"
+if ! sudo ditto "$ECLIPSE_MNT/Eclipse.app" "$ECLIPSE_STAGE" \
+	|| [[ ! -x "$ECLIPSE_STAGE/Contents/MacOS/eclipse" ]]; then
+	sudo rm -rf "$ECLIPSE_STAGE"
+	echo "❌ Failed to stage the IOcomposer runtime; existing installation preserved." >&2
+	exit 1
+fi
+
+if [[ -e "$ECLIPSE_APP" ]]; then
+	sudo mv "$ECLIPSE_APP" "$ECLIPSE_BACKUP"
+fi
+if ! sudo mv "$ECLIPSE_STAGE" "$ECLIPSE_APP"; then
+	sudo rm -rf "$ECLIPSE_APP"
+	[[ ! -e "$ECLIPSE_BACKUP" ]] || sudo mv "$ECLIPSE_BACKUP" "$ECLIPSE_APP"
+	echo "❌ Failed to replace the IOcomposer runtime; previous installation restored." >&2
+	exit 1
+fi
+sudo rm -rf "$ECLIPSE_BACKUP" || true
 
 hdiutil detach "$ECLIPSE_MNT" -quiet || true
 rm -f "$TMP_ECLIPSE_DMG" || true

@@ -923,12 +923,29 @@ else
     exit 1
   fi
 
-  # Extract to temp dir first, then move (safer approach)
   TMP_EXTRACT=$(mktemp -d)
   tar -xzf "$TMP_ECLIPSE_ARCHIVE" -C "$TMP_EXTRACT"
+  if [[ ! -x "$TMP_EXTRACT/eclipse/eclipse" ]]; then
+    rm -rf "$TMP_EXTRACT"
+    rm -f "$TMP_ECLIPSE_ARCHIVE"
+    echo "❌ Invalid IOcomposer runtime archive." >&2
+    exit 1
+  fi
 
-  sudo rm -rf "$ECLIPSE_DIR"
-  sudo mv "$TMP_EXTRACT/eclipse" "$ECLIPSE_DIR"
+  ECLIPSE_BACKUP="$ECLIPSE_DIR.backup.$"
+  sudo rm -rf "$ECLIPSE_BACKUP"
+  if [[ -e "$ECLIPSE_DIR" ]]; then
+    sudo mv "$ECLIPSE_DIR" "$ECLIPSE_BACKUP"
+  fi
+  if ! sudo mv "$TMP_EXTRACT/eclipse" "$ECLIPSE_DIR"; then
+    sudo rm -rf "$ECLIPSE_DIR"
+    [[ ! -e "$ECLIPSE_BACKUP" ]] || sudo mv "$ECLIPSE_BACKUP" "$ECLIPSE_DIR"
+    rm -rf "$TMP_EXTRACT"
+    rm -f "$TMP_ECLIPSE_ARCHIVE"
+    echo "❌ Failed to replace the IOcomposer runtime; previous installation restored." >&2
+    exit 1
+  fi
+  sudo rm -rf "$ECLIPSE_BACKUP" || true
   rm -rf "$TMP_EXTRACT"
   rm -f "$TMP_ECLIPSE_ARCHIVE"
   TMP_ECLIPSE_ARCHIVE=""
