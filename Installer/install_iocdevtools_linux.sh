@@ -715,7 +715,8 @@ install_python_tools() {
 		fi
 		"$bootstrap_python" -m venv "$PYOCD_DIR" || return 1
 	fi
-	"$managed_python" -m pip install --upgrade pyocd || return 1
+	"$managed_python" -m pip install --upgrade pyocd intelhex==2.3.0 || return 1
+	"$managed_python" -c 'from intelhex import IntelHex' || return 1
 	"$PYOCD" --version || return 1
 	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "${ROOT:-}/tools/pyocd/bin/pyocd" ]]; then
 		sudo ln -sf "$PYOCD" "$BIN/pyocd"

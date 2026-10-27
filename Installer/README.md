@@ -277,14 +277,24 @@ The managed layout below is relative to the SDK root, not the IDE directory:
 | Python venv | `Tools/Python/bin/python3` | `Tools/Python/Scripts/python.exe` |
 | pyOCD | `Tools/Python/bin/pyocd` | `Tools/Python/Scripts/pyocd.exe` |
 
-SRecord is not installed, updated, or required by IOcomposer. If you already
-have `srec_cat`, you may use it independently for optional HEX merging.
-Existing SRecord installations and `Tools/SRecord` directories are left untouched.
+IOcomposer installs IntelHex 2.3.0 into the same managed Python environment
+as pyOCD. IntelHex provides `hexmerge.py` for combining Intel HEX images;
+SRecord is not installed or required. Existing SRecord installations are untouched.
 
 The installer adds the managed Python and IDAP-Link tool directories to the
 IDE project PATH preferences. The generated `makefile_path.mk` includes
 `PYTHON` and `PYOCD`. No venv activation is required when invoking their
 executables directly.
+
+Merge bootloader and application images with overlap rejection (the default):
+
+```bash
+"$HOME/IOcomposer/Tools/Python/bin/hexmerge.py" --overlap=error -o combined.hex bootloader.hex application.hex
+```
+
+On Windows, use `%USERPROFILE%\\IOcomposer\\Tools\\Python\\Scripts\\hexmerge.py`
+with the Python interpreter in the same `Scripts` directory. Custom SDK roots
+use their corresponding `Tools/Python` path.
 
 All three installers install or update pyOCD in a Python virtual environment at
 `$ROOT/Tools/Python`, where `ROOT` defaults to `~/IOcomposer`. A usable existing

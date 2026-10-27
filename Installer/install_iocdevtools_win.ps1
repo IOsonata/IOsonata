@@ -481,8 +481,10 @@ function Install-PythonTools {
 		if ($LASTEXITCODE -ne 0) { throw 'Failed to create the Tools Python environment.' }
 	}
 	$PythonExecutablePath = $ManagedPython
-	& $ManagedPython -m pip install --upgrade pyocd
-	if ($LASTEXITCODE -ne 0) { throw 'pyOCD installation failed.' }
+	& $ManagedPython -m pip install --upgrade pyocd intelhex==2.3.0
+	if ($LASTEXITCODE -ne 0) { throw 'pyOCD/IntelHex installation failed.' }
+	& $ManagedPython -c 'from intelhex import IntelHex'
+	if ($LASTEXITCODE -ne 0) { throw 'IntelHex verification failed.' }
 	& $PYOCD --version
 	if ($LASTEXITCODE -ne 0) { throw 'pyOCD verification failed.' }
 }

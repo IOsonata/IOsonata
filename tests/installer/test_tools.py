@@ -36,11 +36,12 @@ class ToolTests(unittest.TestCase):
 						PYOCD_DIR=str(venv), PYOCD=str(venv / 'bin/pyocd'), BIN=str(bin_dir), LOG=str(root / 'log'), HOST_LOG=str(root / 'host-python'), FAIL=fail)
 					result = subprocess.run(['bash', '-c', 'set -e\n' + self.functions(platform) + '\ninstall_python_tools'], env=env, capture_output=True)
 					self.assertEqual(result.returncode == 0, fail == '0')
-					self.assertEqual((root / 'log').read_text().strip(), '-m pip install --upgrade pyocd')
+					self.assertEqual((root / 'log').read_text().strip(), '-m pip install --upgrade pyocd intelhex==2.3.0')
 					self.assertFalse((root / 'host-python').exists())
 					self.assertEqual((bin_dir / 'pyocd').read_text(), 'unrelated')
 		windows = (INSTALLER / 'install_iocdevtools_win.ps1').read_text()
 		self.assertIn('if (Test-Path $ManagedPython)', windows)
+		self.assertIn('pip install --upgrade pyocd intelhex==2.3.0', windows)
 		self.assertIn('$PythonExecutablePath = $ManagedPython', windows)
 		macos = (INSTALLER / 'install_iocdevtools_macos.sh').read_text()
 		self.assertIn('install_macos_python() {', macos)
@@ -80,12 +81,14 @@ class ToolTests(unittest.TestCase):
 					self.assertEqual(result.returncode == 0, failure == 'none', result.stderr)
 					self.assertEqual(program.read_text().strip(), 'replacement' if failure == 'none' else 'original')
 
-	def test_srecord_not_installed(self):
+	def test_intelhex_installed_without_srecord(self):
 		for platform in ['macos', 'linux']:
 			source = (INSTALLER / f'install_iocdevtools_{platform}.sh').read_text()
+			self.assertIn('pyocd intelhex==2.3.0', source)
 			self.assertNotIn('install_srecord', source)
 			self.assertNotIn('SRECORD_DIR', source)
 		windows = (INSTALLER / 'install_iocdevtools_win.ps1').read_text()
+		self.assertIn('pyocd intelhex==2.3.0', windows)
 		self.assertNotIn('Install-SRecord', windows)
 		self.assertNotIn('SRECORD_DIR', windows)
 
