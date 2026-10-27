@@ -87,14 +87,14 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: $0 [--home <path>] [--iocomposer <path>] [--eclipse <path>] [--taktos <path>] [--no-taktos]"
       echo ""
       echo "Build IOsonata libraries for selected MCU target,"
-      echo "then build all TaktOS ARM + RISCV libraries."
+      echo "after all TaktOS ARM + RISCV libraries have been built."
       echo ""
       echo "Options:"
       echo "  --home <path>         Set SDK root (default: ~/IOcomposer)"
       echo "  --iocomposer <path>   Set IOcomposer.app path (default: /Applications/IOcomposer.app)"
       echo "  --eclipse <path>      Set Eclipse.app path (fallback) (default: /Applications/Eclipse.app)"
       echo "  --taktos <path>       Set TaktOS source dir (default: <home>/TaktOS)"
-      echo "  --no-taktos           Do not build TaktOS, IOsonata only"
+      echo "  --no-taktos           Not supported (TaktOS is required)"
       echo "  --help, -h            Show this help"
       echo ""
       echo "This script will:"
@@ -295,31 +295,11 @@ for i in "${!mcu_families[@]}"; do
   printf "  %2d) %s\n" $((i+1)) "${mcu_families[$i]}"
 done
 echo "   A) Build All"
-echo "   0) Exit"
+echo "   0) Skip IOsonata (TaktOS already built)"
 echo
 if [[ ${#taktos_families[@]} -gt 0 ]]; then
   echo "Note: all ${#taktos_families[@]} TaktOS ARM/RISCV libraries are built automatically."
   echo
-fi
-
-# Get user selection
-selection=""
-while true; do
-  read -r -p "Select IOsonata project to build (0-${#mcu_families[@]} or A): " selection
-  selection_upper=$(echo "$selection" | tr '[:lower:]' '[:upper:]')
-
-  if [[ "$selection_upper" == "A" ]]; then
-    selection="A"
-    break
-  elif [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 0 ]] && [[ "$selection" -le ${#mcu_families[@]} ]]; then
-    break
-  fi
-  echo "Invalid selection. Please try again."
-done
-
-if [[ "$selection" != "A" ]] && [[ "$selection" -eq 0 ]]; then
-  echo "Exiting."
-  exit 0
 fi
 
 # Function to build a single project
@@ -392,10 +372,59 @@ build_project() {
 }
 
 # ---------------------------------------------------------
+# BUILD TAKTOS LIBRARIES FIRST
+# ---------------------------------------------------------
+# TaktOS is part of every installation, independent of IOsonata selection.
+failed_builds=()
+successful_builds=()
+total_builds=0
+
+if [[ ! -d "$TAKTOS_DIR" || ${#taktos_paths[@]} -eq 0 ]]; then
+  echo "ERROR: TaktOS library projects are required but were not found: $TAKTOS_DIR" >&2
+  exit 1
+fi
+
+echo "Building all ${#taktos_paths[@]} TaktOS library projects..."
+for i in "${!taktos_paths[@]}"; do
+  total_builds=$((total_builds + 1))
+  name="TaktOS/${taktos_families[$i]}"
+  if build_project "${taktos_paths[$i]}" "$name" "libTaktOS*.a"; then
+    successful_builds+=("$name")
+  else
+    failed_builds+=("$name")
+  fi
+done
+if [[ ${#failed_builds[@]} -ne 0 ]]; then
+  echo "TaktOS library build failed; IOsonata target selection is not started." >&2
+  exit 1
+fi
+
+# TaktOS is complete; IOsonata libraries are an optional user selection.
+# Get user selection
+selection=""
+while true; do
+  read -r -p "Select IOsonata project to build (0-${#mcu_families[@]} or A): " selection
+  selection_upper=$(echo "$selection" | tr '[:lower:]' '[:upper:]')
+
+  if [[ "$selection_upper" == "A" ]]; then
+    selection="A"
+    break
+  elif [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 0 ]] && [[ "$selection" -le ${#mcu_families[@]} ]]; then
+    break
+  fi
+  echo "Invalid selection. Please try again."
+done
+
+if [[ "$selection" != "A" ]] && [[ "$selection" -eq 0 ]]; then
+  echo "Skipping IOsonata libraries."
+  selection="0"
+fi
+
+
+# ---------------------------------------------------------
 # BUILD WORK LIST
 # ---------------------------------------------------------
-# IOsonata selection (single or all) followed by every
-# TaktOS ARM/RISCV library project.
+# Build only the selected IOsonata targets; TaktOS was already built.
 
 work_names=()
 work_paths=()
@@ -407,19 +436,11 @@ if [[ "$selection" == "A" ]]; then
     work_paths+=("${mcu_paths[$i]}")
     work_globs+=("libIOsonata*.a")
   done
-else
+elif [[ "$selection" != "0" ]]; then
   sel_idx=$((selection - 1))
   work_names+=("IOsonata/${mcu_families[$sel_idx]}")
   work_paths+=("${mcu_paths[$sel_idx]}")
   work_globs+=("libIOsonata*.a")
-fi
-
-if [[ ${#taktos_families[@]} -gt 0 ]]; then
-  for i in "${!taktos_families[@]}"; do
-    work_names+=("TaktOS/${taktos_families[$i]}")
-    work_paths+=("${taktos_paths[$i]}")
-    work_globs+=("libTaktOS*.a")
-  done
 fi
 
 # ---------------------------------------------------------
@@ -435,8 +456,7 @@ echo "========================================================="
 interrupted=0
 trap 'interrupted=1' INT
 
-failed_builds=()
-successful_builds=()
+total_builds=$((total_builds + ${#work_names[@]}))
 
 for i in "${!work_names[@]}"; do
   if [[ $interrupted -eq 1 ]]; then
@@ -474,14 +494,14 @@ else
   echo "Build Summary"
 fi
 echo "========================================================="
-echo "Successful: ${#successful_builds[@]}/${#work_names[@]}"
+echo "Successful: ${#successful_builds[@]}/$total_builds"
 for proj in "${successful_builds[@]:-}"; do
   [[ -n "$proj" ]] && echo "   + $proj"
 done
 
 if [[ ${#failed_builds[@]} -gt 0 ]]; then
   echo
-  echo "Failed: ${#failed_builds[@]}/${#work_names[@]}"
+  echo "Failed: ${#failed_builds[@]}/$total_builds"
   for proj in "${failed_builds[@]}"; do
     echo "   - $proj"
   done
