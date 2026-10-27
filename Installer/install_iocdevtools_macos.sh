@@ -1217,13 +1217,31 @@ sudo codesign --force --deep --sign - "$ECLIPSE_APP"
 # If the clone script already invoked the builder, do NOT run it again.
 # If it did NOT invoke the builder (e.g., clone supports --no-build), run it here.
 if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
-	# Use the same installer ref as the clone step. The SDK checkout may
-	# still be on main while testing an updated installer branch.
-	BUILD_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/build_iosonata_lib_macos.sh"
-	BUILD_STAGE=$(mktemp -d)
-	if ! curl -fsSL "$BUILD_URL" -o "$BUILD_STAGE/build_iosonata_lib_macos.sh"; then
-		rm -rf "$BUILD_STAGE"
-		echo "Failed to download matching library builder: $BUILD_URL" >&2
+	# A locally executed installer must use its adjacent builder, not the
+	# potentially older builder in the installed SDK checkout.
+	LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+	LOCAL_BUILDER="$LOCAL_INSTALLER_DIR/build_iosonata_lib_macos.sh"
+	BUILD_STAGE=""
+	if [[ -f "$LOCAL_BUILDER" ]]; then
+		BUILD_SCRIPT="$LOCAL_BUILDER"
+		echo "Library builder: local installer checkout ($BUILD_SCRIPT)"
+	else
+		BUILD_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/build_iosonata_lib_macos.sh"
+		BUILD_STAGE=$(mktemp -d)
+		BUILD_SCRIPT="$BUILD_STAGE/build_iosonata_lib_macos.sh"
+		if ! curl -fsSL "$BUILD_URL" -o "$BUILD_SCRIPT"; then
+			rm -rf "$BUILD_STAGE"
+			echo "Failed to download library builder: $BUILD_URL" >&2
+			exit 1
+		fi
+		echo "Library builder: $BUILD_URL"
+	fi
+	# Prevent a stale script from offering '0) Exit' before TaktOS is built.
+	if ! grep -Fq '0) Skip IOsonata (TaktOS already built)' "$BUILD_SCRIPT" ||
+	   ! grep -Fq 'Building all ${#taktos_paths[@]} TaktOS library projects' "$BUILD_SCRIPT"; then
+		[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
+		echo "Error: Selected library builder is outdated; TaktOS-first builder required." >&2
+		echo "Use the matching installer ref or update your local checkout." >&2
 		exit 1
 	fi
 	echo ""
@@ -1231,12 +1249,12 @@ if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
 	echo "  TaktOS and IOsonata Library Build"
 	echo "========================================================="
 	echo ""
-	if ! bash "$BUILD_STAGE/build_iosonata_lib_macos.sh" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
-		rm -rf "$BUILD_STAGE"
+	if ! bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
+		[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
 		echo "TaktOS/IOsonata library build failed." >&2
 		exit 1
 	fi
-	rm -rf "$BUILD_STAGE"
+	[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
 else
 	echo "SDK synchronization already invoked the library builder."
 fi
