@@ -67,7 +67,7 @@ class ToolTests(unittest.TestCase):
 						'mv': '[[ "$FAILURE" != replace || "$1" != */candidate ]] || exit 1; exec "$REAL_MV" "$@"',
 					}.items():
 						tool = root / name
-						tool.write_text('#!/bin/bash\\n' + script + '\\n')
+						tool.write_text('#!/bin/bash\n' + script + '\n')
 						tool.chmod(0o755)
 					source = (INSTALLER / f'install_iocdevtools_{platform}.sh').read_text()
 					start = source.index('IDAP_PROG="$' + folder + '/IDAPnRFProg"')
@@ -76,7 +76,7 @@ class ToolTests(unittest.TestCase):
 					env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'], MODE='force',
 						FAILURE=failure, REAL_MV=subprocess.check_output(['which', 'mv'], text=True).strip())
 					env[folder] = str(dest)
-					result = subprocess.run(['bash', '-c', 'set -e\\n' + block], env=env, text=True, capture_output=True)
+					result = subprocess.run(['bash', '-c', 'set -e\n' + block], env=env, text=True, capture_output=True)
 					self.assertEqual(result.returncode == 0, failure == 'none', result.stderr)
 					self.assertEqual(program.read_text().strip(), 'replacement' if failure == 'none' else 'original')
 
