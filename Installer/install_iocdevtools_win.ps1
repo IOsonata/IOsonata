@@ -521,7 +521,7 @@ if (-not $OPENOCD_DIR) { Write-Host "[ERROR] OpenOCD installation failed" -Foreg
 
 # --- Install Eclipse ---
 Write-Host; Write-Host ">>> Checking Eclipse..." -ForegroundColor Cyan
-$MIRROR = "https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
+$MIRROR = "https://download.eclipse.org/technology/epp/downloads/release"
 
 # Enumerate available releases from mirror
 Write-Host "   Probing for latest Eclipse release..." -NoNewline
@@ -537,8 +537,8 @@ try {
     foreach ($rel in $releases) {
         if ($ECLIPSE_URL) { break }
         # Use architecture-appropriate URL
-        $U1 = "$MIRROR/$rel/R/eclipse-embedcdt-$rel-R-win32-$ECLIPSE_ARCH.zip"
-        $U2 = "$MIRROR/$rel/R/eclipse-embedcpp-$rel-R-win32-$ECLIPSE_ARCH.zip"
+        $U1 = "$MIRROR/$rel/R/eclipse-embedcpp-$rel-R-win32-$ECLIPSE_ARCH.zip"
+        $U2 = "$MIRROR/$rel/R/eclipse-embedcdt-$rel-R-win32-$ECLIPSE_ARCH.zip"
         
         try {
             $resp = Invoke-WebRequest $U1 -Method Head -UseBasicParsing -TimeoutSec 10
@@ -561,8 +561,8 @@ if (-not $ECLIPSE_URL) {
         if ($ECLIPSE_URL) { break }
         foreach ($m in $months) {
             $REL = "$y-$m"
-            $U1 = "$MIRROR/$REL/R/eclipse-embedcdt-$REL-R-win32-$ECLIPSE_ARCH.zip"
-            $U2 = "$MIRROR/$REL/R/eclipse-embedcpp-$REL-R-win32-$ECLIPSE_ARCH.zip"
+            $U1 = "$MIRROR/$REL/R/eclipse-embedcpp-$REL-R-win32-$ECLIPSE_ARCH.zip"
+            $U2 = "$MIRROR/$REL/R/eclipse-embedcdt-$REL-R-win32-$ECLIPSE_ARCH.zip"
             try { if ((Invoke-WebRequest $U1 -Method Head -UseBasicParsing -EA SilentlyContinue).StatusCode -eq 200) { $ECLIPSE_URL=$U1; $LATEST=$REL; break } } catch {}
             try { if ((Invoke-WebRequest $U2 -Method Head -UseBasicParsing -EA SilentlyContinue).StatusCode -eq 200) { $ECLIPSE_URL=$U2; $LATEST=$REL; break } } catch {}
         }

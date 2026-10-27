@@ -825,7 +825,7 @@ if [[ "$MODE" != "force" && -x "$ECLIPSE_DIR/eclipse" ]]; then
   echo "✅ IOcomposer runtime already installed at $ECLIPSE_DIR (skipping; use --force-update to reinstall)."
 else
   echo "💻 Installing IOcomposer runtime (Eclipse Embedded CDT)..."
-  MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
+  MIRROR="https://download.eclipse.org/technology/epp/downloads/release"
 
   RELEASES=$(curl -fsSL "$MIRROR/" | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' | cut -d'"' -f2 | sed 's|/||g' | sort -r | uniq || true)
   if [[ -z "${RELEASES:-}" ]]; then
@@ -838,11 +838,11 @@ else
     URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-linux-gtk-$ECLIPSE_ARCH.tar.gz"
     URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-linux-gtk-$ECLIPSE_ARCH.tar.gz"
 
-    if is_valid_archive_url "$URL_EMBEDCDT"; then
-      ECLIPSE_URL="$URL_EMBEDCDT"
-      break
-    elif is_valid_archive_url "$URL_EMBEDCPP"; then
+    if is_valid_archive_url "$URL_EMBEDCPP"; then
       ECLIPSE_URL="$URL_EMBEDCPP"
+      break
+    elif is_valid_archive_url "$URL_EMBEDCDT"; then
+      ECLIPSE_URL="$URL_EMBEDCDT"
       break
     fi
   done

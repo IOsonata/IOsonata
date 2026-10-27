@@ -755,11 +755,11 @@ for MIRROR in "${ECLIPSE_MIRRORS[@]}"; do
     URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-macosx-cocoa-$ECLIPSE_ARCH.dmg"
     URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-macosx-cocoa-$ECLIPSE_ARCH.dmg"
 
-    if is_valid_dmg_url "$URL_EMBEDCDT"; then
-      ECLIPSE_URL="$URL_EMBEDCDT"
-      break
-    elif is_valid_dmg_url "$URL_EMBEDCPP"; then
+    if is_valid_dmg_url "$URL_EMBEDCPP"; then
       ECLIPSE_URL="$URL_EMBEDCPP"
+      break
+    elif is_valid_dmg_url "$URL_EMBEDCDT"; then
+      ECLIPSE_URL="$URL_EMBEDCDT"
       break
     fi
   done
