@@ -828,8 +828,16 @@ fi
 # Seed Eclipse prefs
 # ---------------------------------------------------------
 
-ECLIPSE_SETTINGS="$ECLIPSE_APP/Contents/Eclipse/configuration/.settings"
+# Embedded CDT global preferences live in Eclipse's configuration scope.
+# Set the configuration explicitly so first-run preferences are deterministic.
+ECLIPSE_CONFIG="$ECLIPSE_APP/Contents/Eclipse/configuration"
+ECLIPSE_SETTINGS="$ECLIPSE_CONFIG/.settings"
 sudo mkdir -p "$ECLIPSE_SETTINGS"
+[[ -d "$ECLIPSE_SETTINGS" ]] || { echo "Cannot create Embedded CDT preferences directory." >&2; exit 1; }
+[[ -x "$ARM_DIR/bin/arm-none-eabi-gcc" && -x "$RISCV_DIR/bin/riscv-none-elf-gcc" ]] || {
+	echo "Arm or RISC-V compiler missing from configured xPack directory." >&2
+	exit 1
+}
 
 ARM_HASH=$(java_hash "xPack GNU Arm Embedded GCC")
 if (( ARM_HASH < 0 )); then ARM_HASH=$((ARM_HASH + 4294967296)); fi
@@ -849,12 +857,16 @@ EOF"
 sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs' <<EOF
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.1287942917=$ARM_DIR/bin
-toolchain.path.strict=true
+global.toolchain.path.strict=true
+workspace.toolchain.path.strict=true
 EOF"
 
 sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs' <<EOF
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
-toolchain.path.strict=true
+toolchain.path.2273142912=$RISCV_DIR/bin
+toolchain.path.2021824384=$RISCV_DIR/bin
+global.toolchain.path.strict=true
+workspace.toolchain.path.strict=true
 EOF"
 
 sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs' <<EOF
@@ -941,89 +953,17 @@ echo "✅ Eclipse Path Variables configured in plugin_customization.ini:"
 echo "   IOSONATA_LOC=$ROOT"
 echo
 
-# Step 1: Ensure Eclipse has initialized its instance folder
-if [[ -d "$ECLIPSE_APP" ]]; then
-  echo "⏳ Initializing Eclipse to create instance configuration..."
-  "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize || true
-fi
-
-# Step 2: Find the newest instance configuration folder under ~/.eclipse
-INSTANCE_CFG=""
-if [[ -x "$PYTHON3" ]]; then
-  INSTANCE_CFG=$("$PYTHON3" - <<'PY'
-import os, sys
-base = os.path.expanduser("~/.eclipse")
-cands = []
-if os.path.isdir(base):
-  for root, dirs, _ in os.walk(base):
-    for d in dirs:
-      if d == "configuration":
-        p = os.path.join(root, d)
-        try:
-          cands.append((os.path.getmtime(p), p))
-        except OSError:
-          pass
-if not cands:
-  sys.exit(1)
-cands.sort(reverse=True)
-print(cands[0][1])
-PY
-) || INSTANCE_CFG=""
-fi
-
-if [[ -z "$INSTANCE_CFG" ]]; then
-  echo "⚠️ Could not find Eclipse instance configuration folder under ~/.eclipse."
-  echo "   Eclipse may not have been started yet."
-else
-  echo "📂 Found Eclipse settings: $INSTANCE_CFG"
-  mkdir -p "$INSTANCE_CFG/.settings"
-
-  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.core.prefs" <<EOF
-eclipse.preferences.version=1
-xpack.arm.toolchain.path=$ARM_DIR/bin
-xpack.riscv.toolchain.path=$RISCV_DIR/bin
-xpack.openocd.path=$OPENOCD_DIR/bin
-xpack.strict=true
-EOF
-
-  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
-eclipse.preferences.version=1
-toolchain.path.$ARM_HASH=$ARM_DIR/bin
-toolchain.path.1287942917=$ARM_DIR/bin
-toolchain.path.strict=true
-EOF
-
-  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
-eclipse.preferences.version=1
-toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
-toolchain.path.strict=true
-EOF
-
-  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
-eclipse.preferences.version=1
-install.folder=$OPENOCD_DIR/bin
-install.folder.strict=true
-EOF
-
-  cat > "$INSTANCE_CFG/.settings/org.eclipse.core.runtime.prefs" <<EOF
-eclipse.preferences.version=1
-environment/project/LLVM_HOME/value=$LLVM_DIR
-environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
-environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
-environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$TOOL_BIN
-environment/project/PATH/operation=prepend
-environment/project/PATH/delimiter=:
-environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
-environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
-environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
-environment/project/NRFX_HOME/value=$EXT/nrfx
-environment/project/NRFXLIB_HOME/value=$EXT/sdk-nrfxlib
-environment/project/NRF5_SDK_HOME/value=$EXT/nRF5_SDK
-environment/project/NRF5_SDK_MESH_HOME/value=$EXT/nRF5_SDK_Mesh
-environment/project/BSEC_HOME/value=$EXT/BSEC
-EOF
-fi
+# The global compiler paths are seeded in the IOcomposer configuration scope.
+# Do not write to an unrelated or arbitrarily selected ~/.eclipse instance.
+for pref in org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs \
+	org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs \
+	org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs; do
+	[[ -s "$ECLIPSE_SETTINGS/$pref" ]] || {
+		echo "Missing Embedded CDT preference file: $pref" >&2
+		exit 1
+	}
+done
+echo "Embedded CDT global compiler preferences created in $ECLIPSE_SETTINGS"
 
 # ---------------------------------------------------------
 # Sync IOsonata + external SDKs (single source of truth)
