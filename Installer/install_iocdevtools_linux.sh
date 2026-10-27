@@ -855,7 +855,7 @@ fi
 # ---------------------------------------------------------
 echo
 
-if [[ "$MODE" != "force" && -d "$ECLIPSE_DIR" ]]; then
+if [[ "$MODE" != "force" && -x "$ECLIPSE_DIR/eclipse" ]]; then
   echo "✅ IOcomposer runtime already installed at $ECLIPSE_DIR (skipping; use --force-update to reinstall)."
 else
   echo "💻 Installing IOcomposer runtime (Eclipse Embedded CDT)..."

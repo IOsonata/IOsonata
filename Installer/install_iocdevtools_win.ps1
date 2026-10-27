@@ -631,7 +631,7 @@ Write-Host " Done."
 
 if (-not $ECLIPSE_URL) { Write-Host "`n[ERROR] No Eclipse download found for architecture $ECLIPSE_ARCH." -ForegroundColor Red; exit 1 }
 
-if ($MODE -eq "force" -or -not (Test-Path $ECLIPSE_DIR)) {
+if ($MODE -eq "force" -or -not (Test-Path "$ECLIPSE_DIR\eclipse.exe")) {
     Write-Host ">>> Installing IOcomposer runtime (Eclipse $LATEST)..."
     $zip = "$env:TEMP\eclipse.zip"
     curl.exe -fL -o $zip $ECLIPSE_URL
