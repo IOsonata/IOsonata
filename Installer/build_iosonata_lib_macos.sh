@@ -38,7 +38,6 @@ ECLIPSE_APP="/Applications/Eclipse.app"
 # TaktOS source dir. Empty means derive from ROOT after
 # argument parsing (ROOT/TaktOS, cloned next to IOsonata).
 TAKTOS_DIR=""
-NO_TAKTOS=0
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -80,7 +79,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --no-taktos)
-      NO_TAKTOS=1
+      echo "TaktOS builds are mandatory." >&2
+      exit 1
       shift
       ;;
     --help|-h)
@@ -259,13 +259,9 @@ fi
 taktos_families=()
 taktos_paths=()
 
-if [[ "$NO_TAKTOS" -eq 1 ]]; then
-  echo "TaktOS build disabled (--no-taktos)"
-  echo
-elif [[ ! -d "$TAKTOS_DIR" ]]; then
+if [[ ! -d "$TAKTOS_DIR" ]]; then
   echo "⚠️  WARNING: TaktOS directory not found at $TAKTOS_DIR"
-  echo "   IOsonata will still be built. Use --taktos <path> to set it,"
-  echo "   or --no-taktos to silence this warning."
+  echo "   TaktOS libraries are required; use --taktos <path> to set the source directory."
   echo
 else
   while IFS= read -r proj_file; do
