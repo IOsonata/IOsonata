@@ -273,9 +273,9 @@ The managed layout below is relative to the SDK root, not the IDE directory:
 
 | Tool | Linux/macOS | Windows |
 |---|---|---|
-| IDAP-Link tools | `Tools/IDAP-Link/IDAPnRFProg` | `Tools/IDAP-Link/IDAPnRFProg.exe` |
-| Python venv | `Tools/Python/bin/python3` | `Tools/Python/Scripts/python.exe` |
-| pyOCD | `Tools/Python/bin/pyocd` | `Tools/Python/Scripts/pyocd.exe` |
+| IDAP tools | `Tools/bin/IDAPnRFProg` | `Tools/bin/IDAPnRFProg.exe` |
+| Python command | `Tools/bin/python3` | `Tools/bin/python.cmd` |
+| pyOCD command | `Tools/bin/pyocd` | `Tools/bin/pyocd.cmd` |
 
 IOcomposer installs IntelHex 2.3.0 into the same managed Python environment
 as pyOCD. IntelHex provides `hexmerge.py` for combining Intel HEX images;
@@ -289,7 +289,7 @@ executables directly.
 Merge bootloader and application images with overlap rejection (the default):
 
 ```bash
-"$HOME/IOcomposer/Tools/Python/bin/hexmerge.py" --overlap=error -o combined.hex bootloader.hex application.hex
+"$HOME/IOcomposer/Tools/bin/hexmerge.py" --overlap=error -o combined.hex bootloader.hex application.hex
 ```
 
 On Windows, use `%USERPROFILE%\\IOcomposer\\Tools\\Python\\Scripts\\hexmerge.py`
@@ -315,8 +315,8 @@ Use `--home /path/to/sdk` to select another root. The installer adds
 installation's command. The executable can always be invoked directly:
 
 ```bash
-~/IOcomposer/Tools/Python/bin/pyocd --version
-~/IOcomposer/Tools/Python/bin/pyocd list
+~/IOcomposer/Tools/bin/pyocd --version
+~/IOcomposer/Tools/bin/pyocd list
 ```
 
 Normal installation updates pyOCD; `--force-update` reinstalls its packages.
@@ -324,9 +324,9 @@ Uninstall removes this virtual environment and only its own command symlink.
 Device packs are installed separately for the required MCU. For STM32WBA65:
 
 ```bash
-~/IOcomposer/Tools/Python/bin/pyocd pack find stm32wba65
-~/IOcomposer/Tools/Python/bin/pyocd pack install stm32wba65
-~/IOcomposer/Tools/Python/bin/pyocd list --targets
+~/IOcomposer/Tools/bin/pyocd pack find stm32wba65
+~/IOcomposer/Tools/bin/pyocd pack install stm32wba65
+~/IOcomposer/Tools/bin/pyocd list --targets
 ```
 
 Use the exact target name reported by the installed pack. Pack availability does

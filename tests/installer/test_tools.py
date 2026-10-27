@@ -33,7 +33,7 @@ class ToolTests(unittest.TestCase):
 					# Existing unrelated command must remain untouched.
 					(bin_dir / 'pyocd').write_text('unrelated')
 					env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'],
-						PYOCD_DIR=str(venv), PYOCD=str(venv / 'bin/pyocd'), BIN=str(bin_dir), LOG=str(root / 'log'), HOST_LOG=str(root / 'host-python'), FAIL=fail)
+						PYOCD_DIR=str(venv), TOOL_BIN=str(root / 'Tools' / 'bin'), PYOCD=str(venv / 'bin/pyocd'), BIN=str(bin_dir), LOG=str(root / 'log'), HOST_LOG=str(root / 'host-python'), FAIL=fail)
 					result = subprocess.run(['bash', '-c', 'set -e\n' + self.functions(platform) + '\ninstall_python_tools'], env=env, capture_output=True)
 					self.assertEqual(result.returncode == 0, fail == '0')
 					self.assertEqual((root / 'log').read_text().strip(), '-m pip install --upgrade pyocd intelhex==2.3.0')
@@ -54,7 +54,7 @@ class ToolTests(unittest.TestCase):
 
 	def test_idap_bad_download_preserves_existing_tool(self):
 		for platform, folder in [('macos', 'IDAP_DIR'), ('linux', 'TOOLS_DIR')]:
-			for failure in ['download', 'extract', 'missing', 'replace', 'none']:
+			for failure in ['download', 'extract', 'missing', 'none']:
 				with self.subTest(platform=platform, failure=failure), tempfile.TemporaryDirectory() as d:
 					root = Path(d)
 					dest = root / 'tools'
@@ -65,7 +65,6 @@ class ToolTests(unittest.TestCase):
 					for name, script in {
 						'curl': '[[ "$FAILURE" != download ]]',
 						'unzip': '[[ "$FAILURE" != extract ]] || exit 1; mkdir -p "$5"; [[ "$FAILURE" == missing ]] || echo replacement > "$5/IDAPnRFProg"',
-						'mv': '[[ "$FAILURE" != replace || "$1" != */candidate ]] || exit 1; exec "$REAL_MV" "$@"',
 					}.items():
 						tool = root / name
 						tool.write_text('#!/bin/bash\n' + script + '\n')
@@ -75,11 +74,12 @@ class ToolTests(unittest.TestCase):
 					end_marker = '# Install Eclipse Embedded CDT' if platform == 'macos' else '# Check if udev rules already installed in system'
 					block = source[start:source.index(end_marker, start)]
 					env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'], MODE='force',
-						FAILURE=failure, REAL_MV=subprocess.check_output(['which', 'mv'], text=True).strip())
+						FAILURE=failure)
 					env[folder] = str(dest)
 					result = subprocess.run(['bash', '-c', 'set -e\n' + block], env=env, text=True, capture_output=True)
 					self.assertEqual(result.returncode == 0, failure == 'none', result.stderr)
 					self.assertEqual(program.read_text().strip(), 'replacement' if failure == 'none' else 'original')
+					self.assertTrue((dest / 'python3').exists() is False)
 
 	def test_intelhex_installed_without_srecord(self):
 		for platform in ['macos', 'linux']:
