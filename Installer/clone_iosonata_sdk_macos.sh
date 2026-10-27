@@ -271,37 +271,6 @@ clone_cube_wba
 echo ""
 echo "${GREEN}✅ All repositories cloned successfully!${RESET}"
 
-# ---------------------------------------------------------
-# Install IDAP Tools
-# ---------------------------------------------------------
-echo ""
-echo "${BLUE}>>> Installing IDAP Tools...${RESET}"
-IDAP_DIR="$ROOT/Tools/IDAP-Link"
-IDAP_PROG="$IDAP_DIR/IDAPnRFProg"
-mkdir -p "$IDAP_DIR"
-
-if [[ ! -f "$IDAP_PROG" || "$MODE" == "force" ]]; then
-  echo "   Downloading IDAPnRFProg tool..."
-  IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/OSX/IDAPnRFProg_OSX_2_1_240807.zip/download"
-  IDAP_TMP=$(mktemp)
-  if curl -fL "$IDAP_URL" -o "$IDAP_TMP"; then
-    unzip -o -j "$IDAP_TMP" -d "$IDAP_DIR" 2>/dev/null || true
-    chmod +x "$IDAP_DIR/IDAPnRFProg" 2>/dev/null || true
-    rm -f "$IDAP_TMP"
-    echo "${GREEN}   ✅ IDAPnRFProg installed at: $IDAP_PROG${RESET}"
-  else
-    echo "${YELLOW}   ⚠️  Failed to download IDAPnRFProg. You can download manually from:${RESET}"
-    echo "      https://sourceforge.net/projects/idaplinkfirmware/files/OSX/"
-    rm -f "$IDAP_TMP"
-  fi
-else
-  echo "${GREEN}   ✅ IDAPnRFProg already installed (skipping)${RESET}"
-fi
-
-echo ""
-echo "${GREEN}✅ All repositories cloned successfully!${RESET}"
-
-# ---------------------------------------------------------
 # Generate makefile_path.mk
 # ---------------------------------------------------------
 echo ""

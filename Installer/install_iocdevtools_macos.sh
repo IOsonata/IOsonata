@@ -111,7 +111,7 @@ if [[ "$MODE" == "uninstall" ]]; then
 	fi
 	rm -rf "$PYOCD_DIR"
   echo ">>> Removing IDAP tools..."
-  rm -rf "$ROOT/Tools/IDAP-Link" || true
+  
 
   # Prompt for IOsonata and external SDK removal
   echo
@@ -678,7 +678,7 @@ if [[ "$MODE" == "pyocd" ]]; then
 fi
 
 install_optional_llvm
-export PATH="$TOOL_BIN:$ROOT/Tools/IDAP-Link:$PATH"
+export PATH="$TOOL_BIN:$TOOL_BIN:$PATH"
 
 ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
 RISCV_DIR=$(install_xpack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC")
@@ -692,7 +692,7 @@ fi
 # ---------------------------------------------------------
 # Install IDAP tools
 # ---------------------------------------------------------
-IDAP_DIR="$ROOT/Tools/IDAP-Link"
+IDAP_DIR="$TOOL_BIN"
 mkdir -p "$IDAP_DIR"
 
 IDAP_PROG="$IDAP_DIR/IDAPnRFProg"
@@ -700,47 +700,26 @@ if [[ ! -x "$IDAP_PROG" || "$MODE" == "force" ]]; then
   echo
   echo ">>> Downloading IDAPnRFProg tool..."
   IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/OSX/IDAPnRFProg_OSX_2_1_240807.zip/download"
-	IDAP_PARENT=$(dirname "$IDAP_DIR")
-	IDAP_STAGE=$(mktemp -d "$IDAP_PARENT/.idap-stage.XXXXXXXX")
-	IDAP_BACKUP="$IDAP_PARENT/.idap-backup.$RANDOM.$RANDOM"
+	IDAP_STAGE=$(mktemp -d)
 	if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
 		rm -rf "$IDAP_STAGE"
-		echo "Failed to download IDAPnRFProg; existing installation preserved." >&2
+		echo "IDAP download failed; existing executables preserved." >&2
 		exit 1
 	fi
 	if ! unzip -o -j "$IDAP_STAGE/archive.zip" -d "$IDAP_STAGE/unpacked" \
 		|| [[ ! -s "$IDAP_STAGE/unpacked/IDAPnRFProg" ]]; then
 		rm -rf "$IDAP_STAGE"
-		echo "Invalid IDAPnRFProg archive; existing installation preserved." >&2
+		echo "Invalid IDAP archive." >&2
 		exit 1
 	fi
-	mkdir -p "$IDAP_STAGE/candidate"
-	if [[ -d "$IDAP_DIR" ]]; then
-		cp -R "$IDAP_DIR/." "$IDAP_STAGE/candidate/" || {
-			rm -rf "$IDAP_STAGE"
-			echo "Failed to stage the existing IDAP-Link installation." >&2
-			exit 1
-		}
-	fi
-	if ! cp -R "$IDAP_STAGE/unpacked/." "$IDAP_STAGE/candidate/" \
-		|| ! chmod +x "$IDAP_STAGE/candidate/IDAPnRFProg"; then
-		rm -rf "$IDAP_STAGE"
-		echo "Failed to stage IDAPnRFProg; existing installation preserved." >&2
-		exit 1
-	fi
-	rm -rf "$IDAP_BACKUP"
-	if [[ -d "$IDAP_DIR" ]]; then
-		mv "$IDAP_DIR" "$IDAP_BACKUP"
-	fi
-	if ! mv "$IDAP_STAGE/candidate" "$IDAP_DIR"; then
-		rm -rf "$IDAP_DIR"
-		[[ ! -d "$IDAP_BACKUP" ]] || mv "$IDAP_BACKUP" "$IDAP_DIR"
-		rm -rf "$IDAP_STAGE"
-		echo "Failed to install IDAPnRFProg; previous installation restored." >&2
-		exit 1
-	fi
-	rm -rf "$IDAP_BACKUP" "$IDAP_STAGE"
-	echo "IDAPnRFProg installed at: $IDAP_PROG"
+	for tool in IDAPnRFProg IDAPSetTarget; do
+		if [[ -s "$IDAP_STAGE/unpacked/$tool" ]]; then
+			chmod +x "$IDAP_STAGE/unpacked/$tool" || exit 1
+			cp "$IDAP_STAGE/unpacked/$tool" "$IDAP_DIR/$tool" || exit 1
+		fi
+	done
+	rm -rf "$IDAP_STAGE"
+	echo "IDAP executables installed in $IDAP_DIR"
 else
   echo "✅ IDAPnRFProg already installed (skipping)"
 fi
@@ -889,7 +868,7 @@ environment/project/LLVM_HOME/value=$LLVM_DIR
 environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
 environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$TOOL_BIN:$ROOT/Tools/IDAP-Link
+environment/project/PATH/value=$TOOL_BIN:$TOOL_BIN
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
@@ -1032,7 +1011,7 @@ environment/project/LLVM_HOME/value=$LLVM_DIR
 environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
 environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$TOOL_BIN:$ROOT/Tools/IDAP-Link
+environment/project/PATH/value=$TOOL_BIN:$TOOL_BIN
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
@@ -1360,6 +1339,6 @@ echo "No restart of macOS is required by the installer."
 echo "=============================================="
 echo
 
-printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$TOOL_BIN/hexmerge.py" "$ROOT/Tools/IDAP-Link"
+printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$TOOL_BIN/hexmerge.py" "$TOOL_BIN"
 
 printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"

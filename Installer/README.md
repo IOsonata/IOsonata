@@ -1065,3 +1065,11 @@ specs files and GCC LTO objects are not interchangeable with LLVM settings.
 References: [Clang cross-compilation](https://clang.llvm.org/docs/CrossCompilation.html),
 [LLVM releases](https://github.com/llvm/llvm-project/releases),
 [Homebrew LLVM](https://formulae.brew.sh/formula/llvm).
+
+### Consolidated tools
+
+The installed Python, pyOCD, and IntelHex commands are exposed in `Tools/bin`.
+IDAPnRFProg and IDAPSetTarget are also installed into `Tools/bin` when provided
+by the downloaded IDAP archive. The SDK clone scripts do not install tools.
+The Python virtual environment remains isolated in `Tools/Python` and is not
+moved on an existing SDK installation.

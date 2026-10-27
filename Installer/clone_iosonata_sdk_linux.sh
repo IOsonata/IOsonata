@@ -331,36 +331,6 @@ clone_cube_wba
 echo ""
 echo -e "${GREEN}✅ All repositories cloned successfully!${RESET}"
 
-# ---------------------------------------------------------
-# Install IDAP Tools
-# ---------------------------------------------------------
-echo ""
-echo -e "${BLUE}>>> Installing IDAP Tools...${RESET}"
-IDAP_DIR="$ROOT/Tools/IDAP-Link"
-IDAP_PROG="$IDAP_DIR/IDAPnRFProg"
-mkdir -p "$IDAP_DIR"
-
-if [[ ! -f "$IDAP_PROG" || "$MODE" == "force" ]]; then
-  echo "   Downloading IDAPnRFProg tool..."
-  IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/Linux/IDAPnRFProg_Linux_2_1_240807.zip/download"
-  IDAP_TMP=$(mktemp)
-  if curl -fL "$IDAP_URL" -o "$IDAP_TMP"; then
-    unzip -o -j "$IDAP_TMP" -d "$IDAP_DIR" 2>/dev/null || true
-    chmod +x "$IDAP_DIR/IDAPnRFProg" 2>/dev/null || true
-    rm -f "$IDAP_TMP"
-    echo -e "${GREEN}   ✅ IDAPnRFProg installed at: $IDAP_PROG${RESET}"
-  else
-    echo -e "${YELLOW}   ⚠️  Failed to download IDAPnRFProg. You can download manually from:${RESET}"
-    echo "      https://sourceforge.net/projects/idaplinkfirmware/files/Linux/"
-    rm -f "$IDAP_TMP"
-  fi
-else
-  echo -e "${GREEN}   ✅ IDAPnRFProg already installed (skipping)${RESET}"
-fi
-
-echo ""
-echo -e "${GREEN}✅ All repositories cloned successfully!${RESET}"
-
 # Generate makefile_path.mk
 echo ""
 echo "📝 Generating makefile_path.mk for Makefile-based builds..."

@@ -280,9 +280,9 @@ if ($MODE -eq "uninstall") {
 	}
     # Remove IDAP tools
     Write-Host ">>> Removing IDAP tools..."
-    $IDAP_DIR = "$ROOT\Tools\IDAP-Link"
+    $IDAP_DIR = "$TOOL_BIN"
     if (Test-Path $IDAP_DIR) {
-        Remove-Item $IDAP_DIR -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item "$IDAP_DIR\IDAPnRFProg.exe", "$IDAP_DIR\IDAPSetTarget.exe" -Force -ErrorAction SilentlyContinue
         Write-Host "   [OK] IDAP tools removed." -ForegroundColor Green
     }
     
@@ -508,7 +508,7 @@ if ($WithLLVM) {
 		Write-Warning "LLVM installation failed; continuing with GCC and remaining tools. $_"
 	}
 }
-$env:Path = "$TOOL_BIN;$ROOT\Tools\IDAP-Link;$env:Path"
+$env:Path = "$TOOL_BIN;$TOOL_BIN;$env:Path"
 
 $ARM_DIR = Install-xPack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC"
 $RISCV_DIR = Install-xPack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC"
@@ -653,7 +653,7 @@ environment/project/LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/ARM_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/RISCV_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/IOCOMPOSER_HOME/value=$RT
-environment/project/PATH/value=$RT/Tools/bin;$RT/Tools/IDAP-Link
+environment/project/PATH/value=$RT/Tools/bin;$RT/Tools/bin
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=;
 environment/project/ARM_GCC_HOME/value=$AD/bin
@@ -767,7 +767,7 @@ environment/project/LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/ARM_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/RISCV_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/IOCOMPOSER_HOME/value=$RT
-environment/project/PATH/value=$RT/Tools/bin;$RT/Tools/IDAP-Link
+environment/project/PATH/value=$RT/Tools/bin;$RT/Tools/bin
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=;
 environment/project/ARM_GCC_HOME/value=$AD/bin
@@ -1040,7 +1040,7 @@ if (Test-Path $CLONE_LOG) {
 }
 
 # --- Install IDAP Tools ---
-$IDAP_DIR = "$ROOT\Tools\IDAP-Link"
+$IDAP_DIR = "$TOOL_BIN"
 $IDAP_PROG = "$IDAP_DIR\IDAPnRFProg.exe"
 $IDAP_PARENT = Split-Path $IDAP_DIR -Parent
 New-Item -Path $IDAP_PARENT -ItemType Directory -Force | Out-Null
@@ -1060,31 +1060,15 @@ if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
 
 		$candidate = Join-Path $IDAP_STAGE "candidate"
 		New-Item $candidate -ItemType Directory | Out-Null
-		if (Test-Path $IDAP_DIR) {
-			Get-ChildItem $IDAP_DIR -Force | Copy-Item -Destination $candidate -Recurse -Force
-		}
 		& $SEVENZIP_EXE e $archive -o"$candidate" -y | Out-Null
 		if ($LASTEXITCODE -ne 0) { throw "IDAPnRFProg extraction failed." }
-
 		$stagedProgram = Join-Path $candidate "IDAPnRFProg.exe"
 		if (-not (Test-Path $stagedProgram) -or (Get-Item $stagedProgram).Length -le 0) {
 			throw "Invalid IDAPnRFProg archive: missing or empty IDAPnRFProg.exe."
 		}
-
-		if (Test-Path $IDAP_DIR) {
-			Move-Item $IDAP_DIR $IDAP_BACKUP
-		}
-		try {
-			Move-Item $candidate $IDAP_DIR
-			if (Test-Path $IDAP_BACKUP) {
-				Remove-Item $IDAP_BACKUP -Recurse -Force
-			}
-		} catch {
-			Remove-Item $IDAP_DIR -Recurse -Force -ErrorAction SilentlyContinue
-			if (Test-Path $IDAP_BACKUP) {
-				Move-Item $IDAP_BACKUP $IDAP_DIR
-			}
-			throw
+		foreach ($tool in @('IDAPnRFProg.exe', 'IDAPSetTarget.exe')) {
+			$stagedTool = Join-Path $candidate $tool
+			if (Test-Path $stagedTool) { Copy-Item $stagedTool $IDAP_DIR -Force }
 		}
 		Write-Host "   [OK] IDAPnRFProg installed at: $IDAP_PROG" -ForegroundColor Green
 	} finally {
@@ -1348,6 +1332,6 @@ Write-Host
 Write-Host "Python environment: $PYOCD_DIR"
 Write-Host "pyOCD: $PYOCD"
 Write-Host "IntelHex (HEX merge): $TOOL_BIN\hexmerge.cmd"
-Write-Host "IDAP-Link: $ROOT\Tools\IDAP-Link"
+Write-Host "IDAP-Link: $TOOL_BIN"
 Write-Host "LLVM (Arm + RISC-V): $LLVM_STATUS"
 exit 0
