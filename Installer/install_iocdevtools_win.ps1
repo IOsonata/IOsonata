@@ -508,7 +508,7 @@ if ($WithLLVM) {
 		Write-Warning "LLVM installation failed; continuing with GCC and remaining tools. $_"
 	}
 }
-$env:Path = "$TOOL_BIN;$TOOL_BIN;$env:Path"
+$env:Path = "$TOOL_BIN;$env:Path"
 
 $ARM_DIR = Install-xPack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC"
 $RISCV_DIR = Install-xPack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC"
@@ -1332,6 +1332,6 @@ Write-Host
 Write-Host "Python environment: $PYOCD_DIR"
 Write-Host "pyOCD: $PYOCD"
 Write-Host "IntelHex (HEX merge): $TOOL_BIN\hexmerge.cmd"
-Write-Host "IDAP-Link: $TOOL_BIN"
+Write-Host "Tool binaries: $TOOL_BIN"
 Write-Host "LLVM (Arm + RISC-V): $LLVM_STATUS"
 exit 0

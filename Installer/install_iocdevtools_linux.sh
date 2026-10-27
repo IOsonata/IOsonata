@@ -733,7 +733,7 @@ install_python_tools() {
 
 install_python_tools
 install_optional_llvm
-export PATH="$TOOL_BIN:$TOOL_BIN:$PATH"
+export PATH="$TOOL_BIN:$PATH"
 
 ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
 RISCV_DIR=$(install_xpack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC")
@@ -939,7 +939,7 @@ environment/project/LLVM_HOME/value=$LLVM_DIR
 environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
 environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$TOOL_BIN:$TOOL_BIN
+environment/project/PATH/value=$TOOL_BIN
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
@@ -1094,7 +1094,7 @@ environment/project/LLVM_HOME/value=$LLVM_DIR
 environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
 environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$TOOL_BIN:$TOOL_BIN
+environment/project/PATH/value=$TOOL_BIN
 environment/project/PATH/operation=prepend
 environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
@@ -1489,6 +1489,6 @@ echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
 echo
 echo "If user-specific Eclipse preferences were not created, launch IOcomposer and rerun the installer."
 echo
-printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nIDAP-Link: %s\n" "$PYOCD_DIR" "$PYOCD" "$TOOL_BIN/hexmerge.py" "$TOOL_BIN"
+printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nTool binaries: %s\n" "$PYOCD_DIR" "$PYOCD" "$TOOL_BIN/hexmerge.py" "$TOOL_BIN"
 
 printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"
