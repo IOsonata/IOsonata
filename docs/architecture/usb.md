@@ -260,11 +260,20 @@ UsbIntrf (PACKET mode)
 Bulk OUT/IN endpoint pair
 ```
 
-The class owns fixed endpoint FIFOs and an OUT DMA buffer. The application supplies
+The class owns fixed endpoint FIFOs. The application supplies
 a statically owned `DiskIO` and a statically allocated sector buffer. Class
 initialization rejects a medium whose reported sector size exceeds that
 buffer. `DiskIO` remains responsible for physical read, write, reset and cache
 flush behavior.
+
+MSC shares one aligned scratch region between received packets and small SCSI
+responses. BOT reads an OUT packet only in WAIT_CBW or DATA_OUT; the CBW is
+copied into command state before a response is built. DATA_IN and status
+transfers use separate TX storage, and newly received packets remain in the
+RX FIFO until consumed. Sharing this foreground scratch space saves 36 bytes
+per MSC instance without reducing FIFO capacity or caller-owned sector memory.
+Rebuild the MCU library and applications together after this object-layout
+change. Public configuration and transfer calls are unchanged.
 
 Substantial SCSI and storage work runs from `UsbdMsc::Process()`, not from the
 USB interrupt. Malformed CBWs and phase errors use the core endpoint-halt state

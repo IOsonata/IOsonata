@@ -157,14 +157,20 @@ typedef struct __Usbd_Msc_Dev {
 	char Vendor[8];
 	char Product[16];
 	char Revision[4];
-	uint8_t Response[36];
+	// BOT consumes OUT packets only while waiting for a CBW or writing data.
+	// The CBW is copied before building a SCSI reply. Reply bytes are copied
+	// to TxPacket before transmission; queued OUT packets remain in RxFifo.
+	// These foreground-only work buffers therefore have disjoint lifetimes.
+	union {
+		uint8_t Response[36];
+		uint32_t RxPacket[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
+						 sizeof(uint32_t)];
+	};
 	uint32_t RxFifo[(USBD_MSC_RXFIFO_MEMSIZE + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
 	uint32_t TxFifo[(USBD_MSC_TXFIFO_MEMSIZE + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
 	uint32_t TxPacket[(USBD_MSC_PKT_BLKSIZE + sizeof(uint32_t) - 1U) /
-					 sizeof(uint32_t)];
-	uint32_t RxPacket[(USBD_MSC_MAX_MPS + sizeof(uint32_t) - 1U) /
 					 sizeof(uint32_t)];
 } UsbdMscDev_t;
 

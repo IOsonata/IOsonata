@@ -550,6 +550,8 @@ static void TestReadWriteAndRepeatedCommands(void)
 	CHECK(s_Capture[1] == 0U); // Default: fixed medium.
 	CHECK(memcmp(&s_Capture[8], "I-SYST  IOsonata MSC    1.00", 28U) == 0);
 	CheckPassedCsw(9U);
+	uint8_t expectedInquiry[36];
+	memcpy(expectedInquiry, s_Capture, sizeof(expectedInquiry));
 
 	UsbMscCmdBlkWrapper_t cbw = MakeCbw(10U, SECTOR_SIZE * 2U, true,
 		USB_MSC_SCSI_READ_10, 10U);
@@ -590,6 +592,13 @@ static void TestReadWriteAndRepeatedCommands(void)
 	RunInCommand(msc, cbw);
 	CHECK(memcmp(s_Capture, writeData, SECTOR_SIZE) == 0);
 	CheckPassedCsw(12U);
+	// OUT sector traffic overwrites the receive scratch space. A subsequent
+	// reply must be rebuilt completely, including its reserved zero bytes.
+	RunInCommand(msc, inquiry);
+	CHECK(s_CaptureLength == sizeof(expectedInquiry) + sizeof(UsbMscCmdStatusWrapper_t));
+	CHECK(memcmp(s_Capture, expectedInquiry, sizeof(expectedInquiry)) == 0);
+	CheckPassedCsw(9U);
+
 }
 
 static void TestBufferedWrite(void)
