@@ -50,6 +50,9 @@ class ToolTests(unittest.TestCase):
 		self.assertIn('python-3.12.4-macos11.pkg', macos)
 		self.assertIn('pkgutil --check-signature "$pkg"', macos)
 		self.assertIn('bootstrap_python=$(install_macos_python)', macos)
+		linux = (INSTALLER / 'install_iocdevtools_linux.sh').read_text()
+		self.assertIn("sys.version_info < (3, 9)", linux)
+		self.assertIn("Ubuntu 20.04's default Python 3.8 is not sufficient", linux)
 
 	def test_srecord_links_repeated_runs_and_no_self_links(self):
 		for platform in ['linux', 'macos']:

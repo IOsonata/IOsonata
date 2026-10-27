@@ -28,30 +28,39 @@ check_and_install_dependencies() {
 	command -v unzip &>/dev/null || missing_dependencies+=("unzip")
 	[[ -x "$ROOT/Tools/Python/bin/python3" ]] || command -v python3 &>/dev/null || missing_dependencies+=("python3")
   
-  if [[ ${#missing_dependencies[@]} -eq 0 ]]; then
-    echo "✓ All required dependencies are installed"
-    return 0
-  fi
-  
-  echo "⚠️  Missing dependencies: ${missing_dependencies[*]}"
-  
-  if command -v apt-get &>/dev/null; then
-    echo ">>> Installing via apt-get..."
-    sudo apt-get update && sudo apt-get install -y "${missing_dependencies[@]}"
-  elif command -v dnf &>/dev/null; then
-    sudo dnf install -y "${missing_dependencies[@]}"
-  elif command -v yum &>/dev/null; then
-    sudo yum install -y "${missing_dependencies[@]}"
-  elif command -v pacman &>/dev/null; then
-    sudo pacman -S --noconfirm "${missing_dependencies[@]}"
-  elif command -v zypper &>/dev/null; then
-    sudo zypper install -y "${missing_dependencies[@]}"
+  if [[ ${#missing_dependencies[@]} -gt 0 ]]; then
+    echo "⚠️  Missing dependencies: ${missing_dependencies[*]}"
+
+    if command -v apt-get &>/dev/null; then
+      echo ">>> Installing via apt-get..."
+      sudo apt-get update && sudo apt-get install -y "${missing_dependencies[@]}"
+    elif command -v dnf &>/dev/null; then
+      sudo dnf install -y "${missing_dependencies[@]}"
+    elif command -v yum &>/dev/null; then
+      sudo yum install -y "${missing_dependencies[@]}"
+    elif command -v pacman &>/dev/null; then
+      sudo pacman -S --noconfirm "${missing_dependencies[@]}"
+    elif command -v zypper &>/dev/null; then
+      sudo zypper install -y "${missing_dependencies[@]}"
+    else
+      echo "❌ Could not detect package manager. Please install: ${missing_dependencies[*]}"
+      exit 1
+    fi
+    echo "✓ Dependencies installed successfully"
   else
-    echo "❌ Could not detect package manager. Please install: ${missing_dependencies[*]}"
-    exit 1
+    echo "✓ Required dependency commands are installed"
   fi
-  
-  echo "✓ Dependencies installed successfully"
+
+  if [[ -x "$ROOT/Tools/Python/bin/python3" ]]; then
+    if ! "$ROOT/Tools/Python/bin/python3" -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
+      echo "❌ Existing managed Python must be 3.9 or newer: $ROOT/Tools/Python/bin/python3" >&2
+      return 1
+    fi
+  elif ! command -v python3 &>/dev/null || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
+    echo "❌ Python 3.9 or newer with venv is required to create Tools/Python." >&2
+    echo "   Ubuntu 20.04's default Python 3.8 is not sufficient; use Ubuntu 22.04+ or provide a newer Python." >&2
+    return 1
+  fi
 }
 
 

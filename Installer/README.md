@@ -842,9 +842,13 @@ git --version
 ### Linux
 
 **Requirements:**
-- Ubuntu 20.04+ or equivalent distribution
+- Ubuntu 22.04+ or an equivalent distribution with Python 3.9+ and `venv`
 - `sudo` access for system installations
 - 4 GB free disk space
+
+Ubuntu 20.04 can be used only when a separate Python 3.9-or-newer interpreter
+with `venv` is already available; its default Python 3.8 is insufficient for
+the managed pyOCD environment.
 
 **Default Paths:**
 - IDE runtime: `~/iocomposer`
