@@ -219,6 +219,48 @@ fi
 
 echo "✓ IOsonata SDK found at: $ROOT/IOsonata"
 echo
+# Headless Eclipse starts make in a separate process; MCU global path
+# preferences do not make compiler executables available to /bin/sh.
+# Accept toolchain directories from the installer, or resolve installed tools.
+resolve_compiler_bin() {
+	local compiler="$1"
+	local configured="$2"
+	local path=""
+	local candidate=""
+
+	if [[ -n "$configured" && -x "$configured/$compiler" ]]; then
+		printf '%s\n' "$configured"
+		return 0
+	fi
+	if command -v "$compiler" >/dev/null 2>&1; then
+		path=$(command -v "$compiler")
+		path=$(cd "$(dirname "$path")" && pwd -P)
+		printf '%s\n' "$path"
+		return 0
+	fi
+	for candidate in /opt/xPacks/*/bin; do
+		if [[ -x "$candidate/$compiler" ]]; then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
+ARM_GCC_BIN=$(resolve_compiler_bin arm-none-eabi-g++ "${ARM_GCC_BIN:-}") || {
+	echo "Error: Arm C++ compiler not found. Check the xPack installation." >&2
+	exit 1
+}
+RISCV_GCC_BIN=$(resolve_compiler_bin riscv-none-elf-g++ "${RISCV_GCC_BIN:-}") || {
+	echo "Error: RISC-V C++ compiler not found. Check the xPack installation." >&2
+	exit 1
+}
+export PATH="$ARM_GCC_BIN:$RISCV_GCC_BIN:$PATH"
+echo "Arm toolchain: $ARM_GCC_BIN"
+echo "RISC-V toolchain: $RISCV_GCC_BIN"
+echo
+
+
 
 # Discover available IOsonata MCU library projects (filter platform-specific)
 mcu_families=()
