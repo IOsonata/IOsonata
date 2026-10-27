@@ -1030,6 +1030,17 @@ sudo /usr/libexec/PlistBuddy -c "Set :CFBundleName IOcomposer" "$ECLIPSE_APP/Con
 sudo /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist" 2>/dev/null || \
 	sudo /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
 
+# Initialize the IOcomposer Eclipse instance even when library compilation is skipped.
+# Managed CDT preferences must not depend on a headless firmware build.
+echo "Initializing IOcomposer Eclipse configuration..."
+if ! "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize; then
+	echo "Error: IOcomposer Eclipse configuration initialization failed." >&2
+	exit 1
+fi
+if [[ ! -d "$HOME/.eclipse" ]]; then
+	echo "Warning: Eclipse did not create ~/.eclipse; global MCU preferences are in $ECLIPSE_SETTINGS." >&2
+fi
+
 # ---------------------------------------------------------
 # Generate makefile_path.mk
 # ---------------------------------------------------------
