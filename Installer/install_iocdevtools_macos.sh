@@ -642,21 +642,59 @@ install_python_tools() {
 install_srecord() {
 	if ! command -v srec_cat >/dev/null; then
 		if [[ "$(uname -s)" == "Darwin" ]]; then
-			local brew_cmd=""
-			brew_cmd=$(command -v brew || true)
-			[[ -n "$brew_cmd" ]] || {
-				for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-					[[ ! -x "$candidate" ]] || { brew_cmd="$candidate"; break; }
-				done
-			}
-			if [[ -n "$brew_cmd" ]]; then
-				"$brew_cmd" install srecord || return 1
-				export PATH="$("$brew_cmd" --prefix)/bin:$PATH"
-			elif command -v port >/dev/null; then
+			local brew_cmd="" os_major="" os_tag="" bottle_tag="" brew_json=""
+			if command -v port >/dev/null; then
 				sudo port install srecord || return 1
 			else
-				echo "SRecord requires Homebrew or MacPorts on macOS. Install one and rerun, or provide srec_cat on PATH." >&2
-				return 1
+				brew_cmd=$(command -v brew || true)
+				[[ -n "$brew_cmd" ]] || {
+					for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+						[[ ! -x "$candidate" ]] || { brew_cmd="$candidate"; break; }
+					done
+				}
+				if [[ -z "$brew_cmd" ]]; then
+					echo "SRecord requires MacPorts, a compatible Homebrew bottle, or srec_cat already on PATH." >&2
+					return 1
+				fi
+
+				os_major=$(sw_vers -productVersion | cut -d. -f1)
+				case "$os_major" in
+					11) os_tag="big_sur" ;;
+					12) os_tag="monterey" ;;
+					13) os_tag="ventura" ;;
+					14) os_tag="sonoma" ;;
+					15) os_tag="sequoia" ;;
+					26) os_tag="tahoe" ;;
+					27) os_tag="golden_gate" ;;
+				esac
+				if [[ -z "$os_tag" ]]; then
+					echo "No Homebrew SRecord bottle check is defined for macOS $(sw_vers -productVersion)." >&2
+					echo "Install SRecord with MacPorts or provide srec_cat on PATH, then rerun." >&2
+					return 1
+				fi
+				bottle_tag="$os_tag"
+				[[ "$(uname -m)" != "arm64" ]] || bottle_tag="arm64_$os_tag"
+
+				if ! brew_json=$("$brew_cmd" info --json=v2 srecord); then
+					echo "Could not query Homebrew SRecord package information." >&2
+					return 1
+				fi
+				if ! printf '%s' "$brew_json" | "$PYTHON3" -c '
+import json
+import sys
+data = json.load(sys.stdin)
+formulae = data.get("formulae")
+formula = formulae[0] if formulae else data
+files = (((formula.get("bottle") or {}).get("stable") or {}).get("files") or {})
+sys.exit(0 if sys.argv[1] in files else 1)
+' "$bottle_tag"; then
+					echo "Homebrew has no SRecord bottle for $bottle_tag; source builds are not used by this installer." >&2
+					echo "Install SRecord with MacPorts or provide srec_cat on PATH, then rerun." >&2
+					return 1
+				fi
+
+				"$brew_cmd" install srecord || return 1
+				export PATH="$("$brew_cmd" --prefix)/bin:$PATH"
 			fi
 		elif command -v apt-get >/dev/null; then
 			sudo apt-get update

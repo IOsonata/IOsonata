@@ -42,6 +42,10 @@ class ToolTests(unittest.TestCase):
 		windows = (INSTALLER / 'install_iocdevtools_win.ps1').read_text()
 		self.assertIn('if (Test-Path $ManagedPython)', windows)
 		self.assertIn('$PythonExecutablePath = $ManagedPython', windows)
+		macos = (INSTALLER / 'install_iocdevtools_macos.sh').read_text()
+		self.assertIn('Homebrew has no SRecord bottle for $bottle_tag', macos)
+		self.assertIn('data.get("formulae")', macos)
+		self.assertLess(macos.index('command -v port'), macos.index('brew_cmd=$(command -v brew'))
 
 	def test_srecord_links_repeated_runs_and_no_self_links(self):
 		for platform in ['linux', 'macos']:

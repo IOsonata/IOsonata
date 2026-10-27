@@ -280,8 +280,11 @@ The managed layout below is relative to the SDK root, not the IDE directory:
 
 SRecord is installed by the native Linux package manager or Homebrew/MacPorts
 on macOS. Its commands are linked into `Tools/SRecord/bin`; package libraries
-remain managed by the package manager. On macOS, install Homebrew or MacPorts
-first unless SRecord is already on PATH. The Windows installer uses the official
+remain managed by the package manager. On macOS, MacPorts is preferred when it
+is installed. Homebrew is used only when its current SRecord formula publishes
+an exact bottle for the running macOS version and CPU; the installer does not
+start a Homebrew source build. If no matching bottle exists, install SRecord
+with MacPorts or put `srec_cat` on PATH before rerunning. The Windows installer uses the official
 portable 1.64 archive with SHA256 verification (the checksum is also recorded in
 [Scoop's manifest](https://github.com/ScoopInstaller/Main/blob/master/bucket/srecord.json)).
 
