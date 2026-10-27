@@ -780,27 +780,47 @@ if [[ ! -x "$IDAP_PROG" || "$MODE" == "force" ]]; then
   echo
   echo ">>> Downloading IDAPnRFProg tool..."
   IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/OSX/IDAPnRFProg_OSX_2_1_240807.zip/download"
-  IDAP_STAGE=$(mktemp -d)
-  if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
+	IDAP_PARENT=$(dirname "$IDAP_DIR")
+	IDAP_STAGE=$(mktemp -d "$IDAP_PARENT/.idap-stage.XXXXXXXX")
+	IDAP_BACKUP="$IDAP_PARENT/.idap-backup.$"
+	if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
 		rm -rf "$IDAP_STAGE"
 		echo "Failed to download IDAPnRFProg; existing installation preserved." >&2
 		exit 1
-  fi
-  if ! unzip -o -j "$IDAP_STAGE/archive.zip" -d "$IDAP_STAGE/unpacked" \
+	fi
+	if ! unzip -o -j "$IDAP_STAGE/archive.zip" -d "$IDAP_STAGE/unpacked" \
 		|| [[ ! -s "$IDAP_STAGE/unpacked/IDAPnRFProg" ]]; then
 		rm -rf "$IDAP_STAGE"
 		echo "Invalid IDAPnRFProg archive; existing installation preserved." >&2
 		exit 1
-  fi
-  if ! chmod +x "$IDAP_STAGE/unpacked/IDAPnRFProg" \
-		|| ! cp -R "$IDAP_STAGE/unpacked/." "$IDAP_DIR/" \
-		|| ! chmod +x "$IDAP_PROG"; then
+	fi
+	mkdir -p "$IDAP_STAGE/candidate"
+	if [[ -d "$IDAP_DIR" ]]; then
+		cp -R "$IDAP_DIR/." "$IDAP_STAGE/candidate/" || {
+			rm -rf "$IDAP_STAGE"
+			echo "Failed to stage the existing IDAP-Link installation." >&2
+			exit 1
+		}
+	fi
+	if ! cp -R "$IDAP_STAGE/unpacked/." "$IDAP_STAGE/candidate/" \
+		|| ! chmod +x "$IDAP_STAGE/candidate/IDAPnRFProg"; then
 		rm -rf "$IDAP_STAGE"
-		echo "Failed to install IDAPnRFProg at $IDAP_PROG" >&2
+		echo "Failed to stage IDAPnRFProg; existing installation preserved." >&2
 		exit 1
-  fi
-  rm -rf "$IDAP_STAGE"
-  echo "IDAPnRFProg installed at: $IDAP_PROG"
+	fi
+	rm -rf "$IDAP_BACKUP"
+	if [[ -d "$IDAP_DIR" ]]; then
+		mv "$IDAP_DIR" "$IDAP_BACKUP"
+	fi
+	if ! mv "$IDAP_STAGE/candidate" "$IDAP_DIR"; then
+		rm -rf "$IDAP_DIR"
+		[[ ! -d "$IDAP_BACKUP" ]] || mv "$IDAP_BACKUP" "$IDAP_DIR"
+		rm -rf "$IDAP_STAGE"
+		echo "Failed to install IDAPnRFProg; previous installation restored." >&2
+		exit 1
+	fi
+	rm -rf "$IDAP_BACKUP" "$IDAP_STAGE"
+	echo "IDAPnRFProg installed at: $IDAP_PROG"
 else
   echo "✅ IDAPnRFProg already installed (skipping)"
 fi

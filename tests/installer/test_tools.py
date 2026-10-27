@@ -102,6 +102,10 @@ class ToolTests(unittest.TestCase):
 		self.assertIn('IDAPnRFProg extraction failed.', windows)
 		self.assertIn('missing or empty IDAPnRFProg.exe', windows)
 		self.assertIn('Move-Item $IDAP_DIR $IDAP_BACKUP', windows)
+		for platform in ['linux', 'macos']:
+			source = (INSTALLER / f'install_iocdevtools_{platform}.sh').read_text()
+			self.assertIn('.idap-backup.', source)
+			self.assertIn('previous installation restored', source)
 		self.assertIn('.xp-stage-', windows)
 		self.assertIn('curl.exe -fL -o $zip $url', windows)
 		self.assertIn('if ($LASTEXITCODE -ne 0) { throw "$Name extraction failed." }', windows)
