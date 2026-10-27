@@ -473,20 +473,34 @@ alignas(4) static uint8_t s_Sector[512];
 static UsbdMsc s_Msc;
 
 static const UsbdMscCfg_t s_MscCfg = {
-    .DevNo = 0,
-    .pDisk = &s_Disk,
-    .pSectorBuffer = s_Sector,
-    .SectorBufferSize = sizeof(s_Sector),
-    .bReadOnly = false,
-    .bRemovable = true,
-    .InterfaceString = 4,
-    .FsMps = 0,
-    .HsMps = 0,
-    .pVendor = "I-SYST",
-    .pProduct = "IOsonata Disk",
-    .pRevision = "1.00",
+	.pDisk = &s_Disk,
+	.pSectorBuffer = s_Sector,
+	.SectorBufferSize = sizeof(s_Sector),
 };
+
+// After disk initialization and UsbInit():
+if (!s_Msc.Init(s_MscCfg))
+{
+	return -1;
+}
+(void)UsbEnable(0);
+AppRun();
 ```
+
+These three fields are sufficient for controller 0 with writable fixed media.
+The library supplies the USB interface, endpoint numbers, BOT/SCSI protocol,
+64-byte full-speed and 512-byte high-speed packets where supported, and INQUIRY
+identity defaults (`I-SYST`, `IOsonata MSC`, `1.00`). Add `bReadOnly` for write
+protection or `bRemovable` for host eject support. Product identity and interface
+strings remain optional application choices; the RAM-disk example keeps its
+own product name and removable-media setting.
+
+`AppRun()` dispatches queued USB work and uses the target's `AppWait()` when
+idle, rather than continuously polling an empty queue. No application-side
+SCSI callbacks or USB controller calls are needed. The RAM-disk example's
+FAT12 boot sector and allocation tables describe its filesystem, not USB
+descriptors. An existing `DiskIO` medium does not need that RAM-disk subclass
+or formatting code; initialize the intended storage and pass it as `pDisk`.
 
 The sector buffer must be at least `DiskIO::GetSectSize()` bytes. Initialization
 rejects an invalid or oversized sector configuration rather than assuming that

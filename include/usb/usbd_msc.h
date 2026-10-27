@@ -87,17 +87,17 @@ class DiskIO;
 
 typedef struct __Usbd_Msc_Config {
 	int DevNo;
-	DiskIO *pDisk;
-	uint8_t *pSectorBuffer;
-	uint16_t SectorBufferSize;
-	bool bReadOnly;
-	bool bRemovable;
+	DiskIO *pDisk;			//!< Required; initialized medium, valid for class lifetime
+	uint8_t *pSectorBuffer;	//!< Required; caller-owned work buffer, not disk contents
+	uint16_t SectorBufferSize;	//!< Required; at least pDisk->GetSectSize() bytes
+	bool bReadOnly;			//!< Zero permits writes
+	bool bRemovable;			//!< Zero selects fixed media; true enables host eject
 	uint8_t InterfaceString;
 	uint16_t FsMps;				//!< Zero selects USBD_MSC_FS_MPS
 	uint16_t HsMps;				//!< Zero selects USBD_MSC_HS_MPS
-	const char *pVendor;			//!< INQUIRY vendor, padded or truncated to 8 bytes
-	const char *pProduct;		//!< INQUIRY product, padded or truncated to 16 bytes
-	const char *pRevision;		//!< INQUIRY revision, padded or truncated to 4 bytes
+	const char *pVendor;			//!< Null: "I-SYST"; padded/truncated to 8 bytes
+	const char *pProduct;		//!< Null: "IOsonata MSC"; padded/truncated to 16 bytes
+	const char *pRevision;		//!< Null: "1.00"; padded/truncated to 4 bytes
 } UsbdMscCfg_t;
 
 typedef enum __Usbd_Msc_Tx_Kind {

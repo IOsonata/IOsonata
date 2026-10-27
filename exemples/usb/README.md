@@ -116,3 +116,8 @@ calibration and motion scaling remain in the application. For a conventional
 three-button X/Y boot mouse, use `InitMouse()` and `UsbHidMouseReport_t` instead.
 Neither mouse preset has a wheel or report IDs. Custom layouts still use
 `Init()` with an application-defined report descriptor.
+
+MSC needs an initialized `DiskIO`, a caller-owned sector work buffer and its
+size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
+removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
+USB descriptors; the example's FAT12 formatting only defines the disk contents.
