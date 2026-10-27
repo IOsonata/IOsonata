@@ -63,6 +63,7 @@ show_help() {
 Usage: ./$SCRIPT_NAME.sh [OPTION]
 
 Options:
+  --with-llvm        Install optional LLVM compiler (failure does not stop setup)
   --help              Show help and exit
   --version           Show version and exit
   --home <path>       Set custom SDK installation root (default: ~/IOcomposer)
@@ -73,10 +74,13 @@ Options:
 EOF
 }
 
+WITH_LLVM=0
+LLVM_STATUS="skipped (optional; use --with-llvm)"
 MODE="install"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --with-llvm) WITH_LLVM=1 ;;
     --help) show_help; exit 0 ;;
     --version) echo "$SCRIPT_NAME $SCRIPT_VERSION"; exit 0 ;;
     --force-update) MODE="force"; echo ">>> Force update mode enabled" ;;
@@ -658,6 +662,19 @@ install_llvm() {
 
 }
 
+install_optional_llvm() {
+	if [[ "$WITH_LLVM" != 1 ]]; then
+		echo "LLVM: $LLVM_STATUS"
+		return 0
+	fi
+	if (install_llvm); then
+		LLVM_STATUS="$LLVM_DIR (verified Arm and RISC-V)"
+	else
+		LLVM_STATUS="unavailable (optional installation failed)"
+		echo "Warning: LLVM installation failed; continuing with GCC and remaining tools." >&2
+	fi
+}
+
 # Firmware tools share the SDK Tools directory. Python packages stay isolated.
 install_python_tools() {
 	python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || {
@@ -733,7 +750,7 @@ install_srecord() {
 }
 
 install_python_tools
-install_llvm
+install_optional_llvm
 install_srecord
 export PATH="$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link:$PATH"
 
@@ -1468,4 +1485,4 @@ echo "If prefs seeding was skipped, run Eclipse once, then re-run this script to
 echo
 printf "SRecord: %s\nPython venv: %s\npyOCD: %s\nIDAP-Link: %s\n" "$SRECORD_DIR" "$PYOCD_DIR" "$PYOCD" "$ROOT/Tools/IDAP-Link"
 
-printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_DIR"
+printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"

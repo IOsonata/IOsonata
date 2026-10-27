@@ -14,6 +14,22 @@ class LLVMTests(unittest.TestCase):
 		source = (INSTALLER / f'install_iocdevtools_{platform}.sh').read_text()
 		return source[source.index('verify_llvm() ('):source.index('# Firmware tools share')]
 
+	def test_optional_llvm_skip_success_and_failure(self):
+		for platform in ['linux', 'macos']:
+			for enabled, status in [('0', 0), ('1', 0), ('1', 9)]:
+				with self.subTest(platform=platform, enabled=enabled, status=status):
+					command = 'set -eu\n' + self.source(platform) + '\n'
+					command += f'WITH_LLVM={enabled}; LLVM_DIR=/test/llvm; LLVM_STATUS=skipped\n'
+					command += f'install_llvm() {{ echo attempted; return {status}; }}\n'
+					command += 'install_optional_llvm\necho "continued: $LLVM_STATUS"\n'
+					result = subprocess.run(['bash', '-c', command], text=True, capture_output=True)
+					self.assertEqual(result.returncode, 0, result.stderr)
+					self.assertIn('continued:', result.stdout)
+					self.assertEqual('attempted' in result.stdout, enabled == '1')
+					if enabled == '1':
+						self.assertIn('unavailable' if status else 'verified', result.stdout)
+
+
 	def fixture(self, root):
 		bin_dir = root / 'LLVM path' / 'bin'
 		bin_dir.mkdir(parents=True)

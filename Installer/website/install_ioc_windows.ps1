@@ -2,6 +2,7 @@
 param(
 	[string]$SdkHome = "$env:USERPROFILE\IOcomposer",
 	[string]$IocomposerDir = "$env:ProgramFiles\IOcomposer",
+	[switch]$WithLLVM,
 	[switch]$ForceUpdate,
 	[switch]$Uninstall,
 	[switch]$Version,

@@ -10,6 +10,7 @@
 param (
     [string]$SdkHome = "$env:USERPROFILE\IOcomposer",
 	[string]$IocomposerDir = "$env:ProgramFiles\IOcomposer",
+	[switch]$WithLLVM,
     [switch]$ForceUpdate,
     [switch]$Uninstall,
     [switch]$Version,
@@ -25,6 +26,7 @@ function Show-Help {
 Usage: .\$SCRIPT_NAME [OPTION]
 
 Options:
+  -WithLLVM        Install optional LLVM compiler (failure does not stop setup)
   -Help            Show help and exit
   -Version         Show version and exit
   -SdkHome <path>  Set custom SDK installation root
@@ -439,7 +441,16 @@ function Install-SRecord {
 
 Install-PythonTools
 Install-SRecord
-Install-LLVM
+$LLVM_STATUS = 'skipped (optional; use -WithLLVM)'
+if ($WithLLVM) {
+	try {
+		Install-LLVM
+		$LLVM_STATUS = "$LLVM_DIR (verified Arm and RISC-V)"
+	} catch {
+		$LLVM_STATUS = 'unavailable (optional installation failed)'
+		Write-Warning "LLVM installation failed; continuing with GCC and remaining tools. $_"
+	}
+}
 $env:Path = "$SRECORD_DIR;$PYOCD_DIR\Scripts;$ROOT\Tools\IDAP-Link;$env:Path"
 
 $ARM_DIR = Install-xPack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC"
@@ -1255,5 +1266,5 @@ Write-Host "SRecord: $SRECORD_DIR"
 Write-Host "Python venv: $PYOCD_DIR"
 Write-Host "pyOCD: $PYOCD"
 Write-Host "IDAP-Link: $ROOT\Tools\IDAP-Link"
-Write-Host "LLVM (Arm + RISC-V): $LLVM_DIR"
+Write-Host "LLVM (Arm + RISC-V): $LLVM_STATUS"
 exit 0
