@@ -108,6 +108,7 @@ EXT="$ROOT/external"
 PYOCD_DIR="$ROOT/Tools/Python"
 PYOCD="$PYOCD_DIR/bin/pyocd"
 SRECORD_DIR="$ROOT/Tools/SRecord"
+LLVM_DIR="$ROOT/Tools/LLVM"
 
 # Create directories
 mkdir -p "$ROOT" "$EXT"
@@ -148,6 +149,11 @@ if [[ "$MODE" == "uninstall" ]]; then
 
 	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "$PYOCD" ]]; then
 		sudo rm -f "$BIN/pyocd"
+	fi
+	if [[ -L "$LLVM_DIR" ]]; then
+		rm -f "$LLVM_DIR"
+	elif [[ -f "$LLVM_DIR/.iocomposer-managed" ]]; then
+		rm -rf "$LLVM_DIR"
 	fi
 	rm -rf "$PYOCD_DIR" "$SRECORD_DIR"
   echo ">>> Removing IDAP tools..."
@@ -552,6 +558,106 @@ OPENOCD_DIR=""
 # Toolchains
 # ---------------------------------------------------------
 echo
+# One LLVM installation provides both Arm and RISC-V code generation.
+verify_llvm() (
+	local directory="$1"
+	local stage tool
+	stage=$(mktemp -d)
+	trap 'rm -rf "$stage"' EXIT
+	for tool in clang clang++ ld.lld llvm-ar llvm-objcopy llvm-size; do
+		[[ -x "$directory/bin/$tool" ]] || {
+			echo "Missing LLVM tool: $directory/bin/$tool" >&2
+			return 1
+		}
+	done
+	printf 'int probe(void) { return 7; }\n' > "$stage/probe.c"
+	printf 'extern "C" int probe(void) { return 7; }\n' > "$stage/probe.cpp"
+	local target language
+	for target in arm-none-eabi riscv32-unknown-elf; do
+		local flags=()
+		if [[ "$target" == "arm-none-eabi" ]]; then
+			flags=(-mcpu=cortex-m4 -mthumb -mfloat-abi=soft)
+		else
+			flags=(-march=rv32imac -mabi=ilp32)
+		fi
+		for language in c cpp; do
+			local compiler=clang
+			[[ "$language" != "cpp" ]] || compiler=clang++
+			"$directory/bin/$compiler" --target="$target" "${flags[@]}" \
+				-ffreestanding -fno-exceptions -fno-rtti -nostdlib --ld-path="$directory/bin/ld.lld" \
+				-Wl,-e,probe "$stage/probe.$language" -o "$stage/$target-$language.elf" || return 1
+			"$directory/bin/llvm-objcopy" -O ihex "$stage/$target-$language.elf" "$stage/$target-$language.hex" || return 1
+		done
+	done
+	"$directory/bin/clang" --version
+)
+
+install_llvm() {
+	if [[ -x "$LLVM_DIR/bin/clang" ]]; then
+		verify_llvm "$LLVM_DIR"
+		return $?
+	fi
+	local prefix="" lld=""
+	if [[ "$(uname -s)" == "Darwin" ]]; then
+		local brew_cmd
+		brew_cmd=$(command -v brew || true)
+		if [[ -z "$brew_cmd" ]]; then
+			for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+				[[ ! -x "$candidate" ]] || { brew_cmd="$candidate"; break; }
+			done
+		fi
+		if [[ -z "$brew_cmd" ]]; then
+			echo "Install Homebrew for LLVM, or provide a complete LLVM installation at $LLVM_DIR." >&2
+			return 1
+		fi
+		"$brew_cmd" install llvm lld || return 1
+		prefix=$("$brew_cmd" --prefix llvm) || return 1
+		lld="$("$brew_cmd" --prefix lld)/bin/ld.lld"
+	else
+		if command -v apt-get >/dev/null; then
+			sudo apt-get update
+			sudo apt-get install -y clang llvm lld || return 1
+		elif command -v dnf >/dev/null; then
+			sudo dnf install -y clang llvm llvm-devel lld || return 1
+		elif command -v yum >/dev/null; then
+			sudo yum install -y clang llvm llvm-devel lld || return 1
+		elif command -v pacman >/dev/null; then
+			sudo pacman -S --needed --noconfirm clang llvm lld || return 1
+		elif command -v zypper >/dev/null; then
+			sudo zypper install -y clang llvm llvm-devel lld || return 1
+		else
+			echo "Provide a complete LLVM installation at $LLVM_DIR and retry." >&2
+			return 1
+		fi
+		prefix=$(llvm-config --prefix) || return 1
+	fi
+	# Keep package-managed libraries in place and expose one complete tool directory.
+	if [[ -e "$LLVM_DIR" || -L "$LLVM_DIR" ]]; then
+		echo "LLVM destination already exists; inspect it before retrying: $LLVM_DIR" >&2
+		return 1
+	fi
+	mkdir -p "$(dirname "$LLVM_DIR")"
+	local stage entry
+	stage=$(mktemp -d "$(dirname "$LLVM_DIR")/llvm-stage.XXXXXXXX") || return 1
+	mkdir -p "$stage/bin"
+	for entry in lib lib64 libexec include share; do
+		[[ ! -e "$prefix/$entry" ]] || ln -s "$prefix/$entry" "$stage/$entry"
+	done
+	for entry in clang clang++ ld.lld llvm-ar llvm-objcopy llvm-size; do
+		ln -s "$prefix/bin/$entry" "$stage/bin/$entry"
+	done
+	if [[ -n "$lld" ]]; then
+		ln -sf "$lld" "$stage/bin/ld.lld"
+	fi
+	if ! verify_llvm "$stage"; then
+		rm -rf "$stage"
+		return 1
+	fi
+	touch "$stage/.iocomposer-managed"
+	mv "$stage" "$LLVM_DIR"
+
+}
+
 # Firmware tools share the SDK Tools directory. Python packages stay isolated.
 install_python_tools() {
 	python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || {
@@ -627,6 +733,7 @@ install_srecord() {
 }
 
 install_python_tools
+install_llvm
 install_srecord
 export PATH="$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link:$PATH"
 
@@ -804,6 +911,9 @@ seed_eclipse_install_prefs() {
   # 1. org.eclipse.core.runtime.prefs (with environment variables like macOS)
   sudo tee "$install_cfg/org.eclipse.core.runtime.prefs" > /dev/null <<EOF
 eclipse.preferences.version=1
+environment/project/LLVM_HOME/value=$LLVM_DIR
+environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
+environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
 environment/project/PATH/value=$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
@@ -956,6 +1066,9 @@ EOF
   # 5. org.eclipse.core.runtime.prefs
   cat > "$instance_cfg/.settings/org.eclipse.core.runtime.prefs" <<EOF
 eclipse.preferences.version=1
+environment/project/LLVM_HOME/value=$LLVM_DIR
+environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
+environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
 environment/project/PATH/value=$SRECORD_DIR/bin:$PYOCD_DIR/bin:$ROOT/Tools/IDAP-Link
 environment/project/PATH/operation=prepend
@@ -1121,6 +1234,16 @@ cat > "$MAKEFILE_PATH_MK" <<EOF
 # ============================================
 # Toolchain Paths
 # ============================================
+LLVM_ROOT = $LLVM_DIR
+ARM_LLVM_ROOT = $LLVM_DIR
+RISCV_LLVM_ROOT = $LLVM_DIR
+CLANG = $LLVM_DIR/bin/clang
+CLANGXX = $LLVM_DIR/bin/clang++
+LLVM_LD = $LLVM_DIR/bin/ld.lld
+LLVM_AR = $LLVM_DIR/bin/llvm-ar
+LLVM_OBJCOPY = $LLVM_DIR/bin/llvm-objcopy
+ARM_LLVM_TARGET = --target=arm-none-eabi
+RISCV_LLVM_TARGET = --target=riscv32-unknown-elf
 SDK_TOOLS_ROOT = $ROOT/Tools
 SRECORD_ROOT = $SRECORD_DIR
 SREC_CAT = $SRECORD_DIR/bin/srec_cat
@@ -1344,3 +1467,5 @@ echo
 echo "If prefs seeding was skipped, run Eclipse once, then re-run this script to seed Embedded CDT toolchain paths."
 echo
 printf "SRecord: %s\nPython venv: %s\npyOCD: %s\nIDAP-Link: %s\n" "$SRECORD_DIR" "$PYOCD_DIR" "$PYOCD" "$ROOT/Tools/IDAP-Link"
+
+printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_DIR"

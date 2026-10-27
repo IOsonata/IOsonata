@@ -1014,3 +1014,44 @@ IOsonata is released under the Apache License 2.0. See LICENSE file in the repos
 
 For the latest updates and documentation, visit: [https://github.com/IOsonata/IOsonata](https://github.com/IOsonata/IOsonata)
 
+
+### LLVM compiler option for Arm and RISC-V
+
+The full installer also installs Clang/LLVM and LLD under `Tools/LLVM`.
+One installation supports both architectures; it is selected explicitly with
+`--target=arm-none-eabi` or `--target=riscv32-unknown-elf`. GCC remains the default
+for the existing IOsonata projects. No project compiler selection is changed.
+
+Linux uses distribution packages (`clang`, `llvm`, `lld`); macOS uses Homebrew
+`llvm` and `lld`, exposed together through managed links in `Tools/LLVM`.
+Windows uses the official LLVM 23.1.4 MSI for x64 or Arm64, SHA256-verified and
+administratively extracted into `Tools/LLVM` without changing global PATH.
+An existing complete installation in that directory is checked and reused.
+
+The generated `makefile_path.mk` exposes `LLVM_ROOT`, `ARM_LLVM_ROOT`,
+`RISCV_LLVM_ROOT`, `CLANG`, `CLANGXX`, `LLVM_LD`, `LLVM_AR`, `LLVM_OBJCOPY`,
+`ARM_LLVM_TARGET` and `RISCV_LLVM_TARGET`. Both architecture roots refer to the
+same installation. IDE project environment preferences expose `LLVM_HOME`,
+`ARM_LLVM_HOME` and `RISCV_LLVM_HOME` without replacing GCC preferences.
+
+Example compile-only commands, with target settings chosen for the actual MCU:
+
+```bash
+"$HOME/IOcomposer/Tools/LLVM/bin/clang" --target=arm-none-eabi -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -c example.c -o example-arm.o
+"$HOME/IOcomposer/Tools/LLVM/bin/clang" --target=riscv32-unknown-elf -march=rv32imac -mabi=ilp32 -ffreestanding -c example.c -o example-riscv.o
+```
+
+For linking, pass the explicit LLD path (`--ld-path` with `LLVM_LD`) so a host
+linker is not selected. The installer checks C/C++ compilation, freestanding
+linking and Intel HEX output for both targets. These small checks use
+`-nostdlib`; they do not validate the IOsonata firmware libraries.
+
+This installs a compiler option, not complete LLVM project profiles or target
+C/C++ runtimes. A firmware build must configure the matching sysroot, runtime
+libraries, CPU/ABI and linker script. The installed GCC toolchains remain
+available, but their libraries are not automatically wired into Clang. GCC
+specs files and GCC LTO objects are not interchangeable with LLVM settings.
+
+References: [Clang cross-compilation](https://clang.llvm.org/docs/CrossCompilation.html),
+[LLVM releases](https://github.com/llvm/llvm-project/releases),
+[Homebrew LLVM](https://formulae.brew.sh/formula/llvm).
