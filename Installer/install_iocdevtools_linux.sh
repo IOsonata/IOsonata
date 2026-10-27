@@ -786,21 +786,31 @@ echo ">>> udev rules file created at: $UDEV_SRC"
 
 # Download IDAPnRFProg if not present
 IDAP_PROG="$TOOLS_DIR/IDAPnRFProg"
-if [[ ! -f "$IDAP_PROG" || "$MODE" == "force" ]]; then
+if [[ ! -x "$IDAP_PROG" || "$MODE" == "force" ]]; then
   echo
   echo ">>> Downloading IDAPnRFProg tool..."
   IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/Linux/IDAPnRFProg_Linux_2_1_240807.zip/download"
-  IDAP_TMP=$(mktemp)
-  if curl -fL "$IDAP_URL" -o "$IDAP_TMP"; then
-    unzip -o -j "$IDAP_TMP" -d "$TOOLS_DIR" 2>/dev/null || true
-    chmod +x "$TOOLS_DIR/IDAPnRFProg" 2>/dev/null || true
-    rm -f "$IDAP_TMP"
-    echo "✅ IDAPnRFProg installed at: $IDAP_PROG"
-  else
-    echo "⚠️  Failed to download IDAPnRFProg. You can download manually from:"
-    echo "   https://sourceforge.net/projects/idaplinkfirmware/files/Linux/"
-    rm -f "$IDAP_TMP"
+  IDAP_STAGE=$(mktemp -d)
+  if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
+		rm -rf "$IDAP_STAGE"
+		echo "Failed to download IDAPnRFProg; existing installation preserved." >&2
+		exit 1
   fi
+  if ! unzip -o -j "$IDAP_STAGE/archive.zip" -d "$IDAP_STAGE/unpacked" \
+		|| [[ ! -s "$IDAP_STAGE/unpacked/IDAPnRFProg" ]]; then
+		rm -rf "$IDAP_STAGE"
+		echo "Invalid IDAPnRFProg archive; existing installation preserved." >&2
+		exit 1
+  fi
+  if ! chmod +x "$IDAP_STAGE/unpacked/IDAPnRFProg" \
+		|| ! cp -R "$IDAP_STAGE/unpacked/." "$TOOLS_DIR/" \
+		|| ! chmod +x "$IDAP_PROG"; then
+		rm -rf "$IDAP_STAGE"
+		echo "Failed to install IDAPnRFProg at $IDAP_PROG" >&2
+		exit 1
+  fi
+  rm -rf "$IDAP_STAGE"
+  echo "IDAPnRFProg installed at: $IDAP_PROG"
 else
   echo "✅ IDAPnRFProg already installed (skipping)"
 fi

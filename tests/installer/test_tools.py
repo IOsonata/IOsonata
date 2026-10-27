@@ -57,6 +57,33 @@ class ToolTests(unittest.TestCase):
 					env['PATH'] = str(dest / 'bin') + os.pathsep + env['PATH']
 				self.assertEqual((dest / 'bin/srec_cat').resolve(), bin_dir / 'srec_cat')
 
+	def test_idap_bad_download_preserves_existing_tool(self):
+		for platform, folder in [('macos', 'IDAP_DIR'), ('linux', 'TOOLS_DIR')]:
+			for failure in ['download', 'extract', 'missing', 'none']:
+				with self.subTest(platform=platform, failure=failure), tempfile.TemporaryDirectory() as d:
+					root = Path(d)
+					dest = root / 'tools'
+					dest.mkdir()
+					program = dest / 'IDAPnRFProg'
+					program.write_text('original')
+					program.chmod(0o755)
+					for name, script in {
+						'curl': '[[ "$FAILURE" != download ]]',
+						'unzip': '[[ "$FAILURE" != extract ]] || exit 1; mkdir -p "$5"; [[ "$FAILURE" == missing ]] || echo replacement > "$5/IDAPnRFProg"',
+					}.items():
+						tool = root / name
+						tool.write_text('#!/bin/bash\n' + script + '\n')
+						tool.chmod(0o755)
+					source = (INSTALLER / f'install_iocdevtools_{platform}.sh').read_text()
+					start = source.index('IDAP_PROG="$' + folder + '/IDAPnRFProg"')
+					block = source[start:source.index('\nfi', start) + 3]
+					env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'], MODE='force', FAILURE=failure)
+					env[folder] = str(dest)
+					result = subprocess.run(['bash', '-c', 'set -e\n' + block], env=env, text=True, capture_output=True)
+					self.assertEqual(result.returncode == 0, failure == 'none', result.stderr)
+					self.assertEqual(program.read_text().strip(), 'replacement' if failure == 'none' else 'original')
+
+
 	def test_srecord_verification_failure(self):
 		with tempfile.TemporaryDirectory() as d:
 			root = Path(d)
