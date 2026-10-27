@@ -76,37 +76,48 @@ function Refresh-EnvVars {
     $env:Path = "$machine;$user"
 }
 
+function Test-Python39 {
+	param([string]$Executable)
+	if (-not $Executable -or -not (Test-Path $Executable)) { return $false }
+	try {
+		& $Executable -c 'import sys; sys.exit(sys.version_info < (3, 9))'
+		return ($LASTEXITCODE -eq 0)
+	} catch {
+		return $false
+	}
+}
+
 function Find-PythonExecutable {
-    Write-Host "   [DEBUG] Searching for Python..." -ForegroundColor DarkGray
-    
-    $inPath = Get-Command python -ErrorAction SilentlyContinue
-    if ($inPath -and $inPath.Source -notlike "*\Microsoft\WindowsApps\*") {
-        try { & $inPath.Source --version | Out-Null; return $inPath.Source } catch {}
-    }
+	Write-Host "   [DEBUG] Searching for Python..." -ForegroundColor DarkGray
 
-    $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
-    if ($pyLauncher) {
-        try {
-            $path = (& $pyLauncher.Source -c "import sys; print(sys.executable)") 2>$null
-            if ($path -and (Test-Path $path)) { return $path }
-        } catch {}
-    }
+	$inPath = Get-Command python -ErrorAction SilentlyContinue
+	if ($inPath -and $inPath.Source -notlike "*\Microsoft\WindowsApps\*" -and (Test-Python39 $inPath.Source)) {
+		return $inPath.Source
+	}
 
-    $regPaths = @("HKLM:\SOFTWARE\Python\PythonCore", "HKCU:\SOFTWARE\Python\PythonCore")
-    foreach ($hkey in $regPaths) {
-        if (Test-Path $hkey) {
-            $versions = Get-ChildItem $hkey -ErrorAction SilentlyContinue | Sort-Object Name -Descending
-            foreach ($v in $versions) {
-                $installPathKey = Join-Path $v.PSPath "InstallPath"
-                if (Test-Path $installPathKey) {
-                    $p = (Get-ItemProperty $installPathKey).'(default)'
-                    $exe = Join-Path $p "python.exe"
-                    if (Test-Path $exe) { return $exe }
-                }
-            }
-        }
-    }
-    return $null
+	$pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+	if ($pyLauncher) {
+		try {
+			$path = (& $pyLauncher.Source -c "import sys; print(sys.executable)") 2>$null
+			if (Test-Python39 $path) { return $path }
+		} catch {}
+	}
+
+	$regPaths = @("HKLM:\SOFTWARE\Python\PythonCore", "HKCU:\SOFTWARE\Python\PythonCore")
+	foreach ($hkey in $regPaths) {
+		if (Test-Path $hkey) {
+			$versions = Get-ChildItem $hkey -ErrorAction SilentlyContinue | Sort-Object Name -Descending
+			foreach ($v in $versions) {
+				$installPathKey = Join-Path $v.PSPath "InstallPath"
+				if (Test-Path $installPathKey) {
+					$p = (Get-ItemProperty $installPathKey).'(default)'
+					$exe = Join-Path $p "python.exe"
+					if (Test-Python39 $exe) { return $exe }
+				}
+			}
+		}
+	}
+	return $null
 }
 
 function Find-7Zip {
@@ -149,46 +160,64 @@ function Set-ContentNoBom {
 
 # --- Pre-flight Checks ---
 if ($MODE -ne "uninstall") {
-    if (Test-Path $ManagedPython) {
-        try {
-            & $ManagedPython -c 'import sys; sys.exit(sys.version_info < (3, 9))'
-            if ($LASTEXITCODE -eq 0) { $PythonExecutablePath = $ManagedPython }
-        } catch {}
-    }
-    if (-not $PythonExecutablePath) {
-        $PythonExecutablePath = Find-PythonExecutable
-    }
-    if (-not $PythonExecutablePath) {
-        Write-Host "[INFO] Python not found. Installing..." -ForegroundColor Yellow
-        try {
-            # Detect architecture for Python installer
-            $pyArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
-            $url = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-$pyArch.exe"
-            $inst = Join-Path $env:TEMP "python-installer.exe"
-            curl.exe -L -o $inst $url
-            Start-Process -FilePath $inst -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
-            Refresh-EnvVars; $PythonExecutablePath = Find-PythonExecutable
-            if (-not $PythonExecutablePath) { Throw "Python install failed." }
-        } catch { Write-Host "[ERROR] $_" -ForegroundColor Red; exit 1 }
-    }
+	if (Test-Python39 $ManagedPython) {
+		$PythonExecutablePath = $ManagedPython
+	}
+	if (-not $PythonExecutablePath) {
+		$PythonExecutablePath = Find-PythonExecutable
+	}
+	if (-not $PythonExecutablePath) {
+		Write-Host "[INFO] Python 3.9 or newer not found. Installing..." -ForegroundColor Yellow
+		$pyStage = Join-Path $env:TEMP (".python-stage-" + [guid]::NewGuid().ToString('N'))
+		New-Item $pyStage -ItemType Directory | Out-Null
+		try {
+			$pyArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
+			$url = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-$pyArch.exe"
+			$inst = Join-Path $pyStage "python-installer.exe"
+			curl.exe -fL -o $inst $url
+			if ($LASTEXITCODE -ne 0 -or -not (Test-Path $inst) -or (Get-Item $inst).Length -le 0) {
+				throw "Python installer download failed."
+			}
+			$process = Start-Process -FilePath $inst -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait -PassThru
+			if ($process.ExitCode -ne 0) { throw "Python installer failed: $($process.ExitCode)" }
+			Refresh-EnvVars
+			$PythonExecutablePath = Find-PythonExecutable
+			if (-not $PythonExecutablePath) { throw "Python 3.9 or newer was not found after installation." }
+		} catch {
+			Write-Host "[ERROR] $_" -ForegroundColor Red
+			exit 1
+		} finally {
+			Remove-Item $pyStage -Recurse -Force -ErrorAction SilentlyContinue
+		}
+	}
 
-    $SEVENZIP_EXE = Find-7Zip
-    if (-not $SEVENZIP_EXE) {
-        Write-Host "[INFO] 7-Zip not found. Installing..." -ForegroundColor Yellow
-        try {
-            # Detect architecture for 7-Zip installer
-            $7zArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
-            $7zUrl = "https://www.7-zip.org/a/7z2407-$7zArch.exe"
-            $7zInst = Join-Path $env:TEMP "7z-installer.exe"
-            curl.exe -L -o $7zInst $7zUrl
-            Start-Process -FilePath $7zInst -ArgumentList "/S" -Wait
-            $SEVENZIP_EXE = Find-7Zip
-            if (-not $SEVENZIP_EXE) { 
-                $def = "C:\Program Files\7-Zip\7z.exe"
-                if (Test-Path $def) { $SEVENZIP_EXE = $def } else { Throw "7-Zip failed." }
-            }
-        } catch { Write-Host "[ERROR] $_" -ForegroundColor Red; exit 1 }
-    }
+	$SEVENZIP_EXE = Find-7Zip
+	if (-not $SEVENZIP_EXE) {
+		Write-Host "[INFO] 7-Zip not found. Installing..." -ForegroundColor Yellow
+		$sevenZipStage = Join-Path $env:TEMP (".7zip-stage-" + [guid]::NewGuid().ToString('N'))
+		New-Item $sevenZipStage -ItemType Directory | Out-Null
+		try {
+			$7zArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+			$7zUrl = "https://www.7-zip.org/a/7z2407-$7zArch.exe"
+			$7zInst = Join-Path $sevenZipStage "7z-installer.exe"
+			curl.exe -fL -o $7zInst $7zUrl
+			if ($LASTEXITCODE -ne 0 -or -not (Test-Path $7zInst) -or (Get-Item $7zInst).Length -le 0) {
+				throw "7-Zip installer download failed."
+			}
+			$process = Start-Process -FilePath $7zInst -ArgumentList "/S" -Wait -PassThru
+			if ($process.ExitCode -ne 0) { throw "7-Zip installer failed: $($process.ExitCode)" }
+			$SEVENZIP_EXE = Find-7Zip
+			if (-not $SEVENZIP_EXE) {
+				$def = "C:\Program Files\7-Zip\7z.exe"
+				if (Test-Path $def) { $SEVENZIP_EXE = $def } else { throw "7-Zip was not found after installation." }
+			}
+		} catch {
+			Write-Host "[ERROR] $_" -ForegroundColor Red
+			exit 1
+		} finally {
+			Remove-Item $sevenZipStage -Recurse -Force -ErrorAction SilentlyContinue
+		}
+	}
 
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Write-Host "[ERROR] Git not found. Please install Git for Windows." -ForegroundColor Red; exit 1 }
 }

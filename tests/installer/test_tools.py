@@ -99,6 +99,11 @@ class ToolTests(unittest.TestCase):
 		self.assertIn('curl.exe -fL -o $zip $url', windows)
 		self.assertIn('if ($LASTEXITCODE -ne 0) { throw "$Name extraction failed." }', windows)
 		self.assertIn('archive is missing bin\\$Tool.exe', windows)
+		self.assertIn('function Test-Python39', windows)
+		self.assertIn('.python-stage-', windows)
+		self.assertIn('Python installer failed: $($process.ExitCode)', windows)
+		self.assertIn('.7zip-stage-', windows)
+		self.assertIn('7-Zip installer failed: $($process.ExitCode)', windows)
 
 
 	def test_srecord_verification_failure(self):
