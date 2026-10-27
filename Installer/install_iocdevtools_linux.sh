@@ -48,16 +48,16 @@ check_and_install_dependencies() {
     fi
     echo "✓ Dependencies installed successfully"
   else
-    echo "✓ Required dependency commands are installed"
+    echo "Required dependency commands are installed"
   fi
 
   if [[ -x "$ROOT/Tools/Python/bin/python3" ]]; then
     if ! "$ROOT/Tools/Python/bin/python3" -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
-      echo "❌ Existing managed Python must be 3.9 or newer: $ROOT/Tools/Python/bin/python3" >&2
+      echo "Error: Existing managed Python must be 3.9 or newer: $ROOT/Tools/Python/bin/python3" >&2
       return 1
     fi
   elif ! command -v python3 &>/dev/null || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
-    echo "❌ Python 3.9 or newer with venv is required to create Tools/Python." >&2
+    echo "Error: Python 3.9 or newer with venv is required to create Tools/Python." >&2
     echo "   Ubuntu 20.04's default Python 3.8 is not sufficient; use Ubuntu 22.04+ or provide a newer Python." >&2
     return 1
   fi
@@ -928,7 +928,7 @@ else
   if [[ ! -x "$TMP_EXTRACT/eclipse/eclipse" ]]; then
     rm -rf "$TMP_EXTRACT"
     rm -f "$TMP_ECLIPSE_ARCHIVE"
-    echo "❌ Invalid IOcomposer runtime archive." >&2
+    echo "Error: Invalid IOcomposer runtime archive." >&2
     exit 1
   fi
 
@@ -942,7 +942,7 @@ else
     [[ ! -e "$ECLIPSE_BACKUP" ]] || sudo mv "$ECLIPSE_BACKUP" "$ECLIPSE_DIR"
     rm -rf "$TMP_EXTRACT"
     rm -f "$TMP_ECLIPSE_ARCHIVE"
-    echo "❌ Failed to replace the IOcomposer runtime; previous installation restored." >&2
+    echo "Error: Failed to replace the IOcomposer runtime; previous installation restored." >&2
     exit 1
   fi
   sudo rm -rf "$ECLIPSE_BACKUP" || true
