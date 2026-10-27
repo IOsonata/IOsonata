@@ -128,6 +128,8 @@ class ToolTests(unittest.TestCase):
 		for platform in ['linux', 'macos']:
 			source = (INSTALLER / f'install_iocdevtools_{platform}.sh').read_text()
 			self.assertIn('previous installation restored', source)
+			self.assertIn('$RANDOM.$RANDOM', source)
+			self.assertNotIn('backup.$"', source)
 		linux = (INSTALLER / 'install_iocdevtools_linux.sh').read_text()
 		self.assertIn('[[ "$MODE" != "force" && -x "$ECLIPSE_DIR/eclipse" ]]', linux)
 

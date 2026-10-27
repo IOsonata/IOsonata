@@ -815,7 +815,7 @@ if [[ ! -x "$IDAP_PROG" || "$MODE" == "force" ]]; then
   IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/Linux/IDAPnRFProg_Linux_2_1_240807.zip/download"
 	IDAP_PARENT=$(dirname "$TOOLS_DIR")
 	IDAP_STAGE=$(mktemp -d "$IDAP_PARENT/.idap-stage.XXXXXXXX")
-	IDAP_BACKUP="$IDAP_PARENT/.idap-backup.$"
+	IDAP_BACKUP="$IDAP_PARENT/.idap-backup.$RANDOM.$RANDOM"
 	if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
 		rm -rf "$IDAP_STAGE"
 		echo "Failed to download IDAPnRFProg; existing installation preserved." >&2
@@ -932,7 +932,7 @@ else
     exit 1
   fi
 
-  ECLIPSE_BACKUP="$ECLIPSE_DIR.backup.$"
+  ECLIPSE_BACKUP="$ECLIPSE_DIR.backup.$RANDOM.$RANDOM"
   sudo rm -rf "$ECLIPSE_BACKUP"
   if [[ -e "$ECLIPSE_DIR" ]]; then
     sudo mv "$ECLIPSE_DIR" "$ECLIPSE_BACKUP"

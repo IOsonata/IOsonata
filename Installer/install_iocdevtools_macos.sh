@@ -782,7 +782,7 @@ if [[ ! -x "$IDAP_PROG" || "$MODE" == "force" ]]; then
   IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/OSX/IDAPnRFProg_OSX_2_1_240807.zip/download"
 	IDAP_PARENT=$(dirname "$IDAP_DIR")
 	IDAP_STAGE=$(mktemp -d "$IDAP_PARENT/.idap-stage.XXXXXXXX")
-	IDAP_BACKUP="$IDAP_PARENT/.idap-backup.$"
+	IDAP_BACKUP="$IDAP_PARENT/.idap-backup.$RANDOM.$RANDOM"
 	if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
 		rm -rf "$IDAP_STAGE"
 		echo "Failed to download IDAPnRFProg; existing installation preserved." >&2
@@ -891,8 +891,8 @@ if ! hdiutil attach "$TMP_ECLIPSE_DMG" -mountpoint "$ECLIPSE_MNT" -nobrowse -qui
   exit 1
 fi
 
-ECLIPSE_STAGE="$ECLIPSE_APP.stage.$"
-ECLIPSE_BACKUP="$ECLIPSE_APP.backup.$"
+ECLIPSE_STAGE="$ECLIPSE_APP.stage.$RANDOM.$RANDOM"
+ECLIPSE_BACKUP="$ECLIPSE_APP.backup.$RANDOM.$RANDOM"
 sudo rm -rf "$ECLIPSE_STAGE" "$ECLIPSE_BACKUP"
 if ! sudo ditto "$ECLIPSE_MNT/Eclipse.app" "$ECLIPSE_STAGE" \
 	|| [[ ! -x "$ECLIPSE_STAGE/Contents/MacOS/eclipse" ]]; then
