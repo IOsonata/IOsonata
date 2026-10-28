@@ -1064,8 +1064,8 @@ echo
 echo "📦 Syncing IOsonata + external SDKs..."
 
 CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_linux.sh"
-TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.sh)
-CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.log)
+TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_linux.sh.XXXXXX)
+CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_linux.log.XXXXXX)
 
 if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
   echo "❌ Failed to download clone script:"

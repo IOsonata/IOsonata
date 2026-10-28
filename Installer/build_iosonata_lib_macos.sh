@@ -412,7 +412,7 @@ for i in "${!taktos_paths[@]}"; do
 done
 if [[ ${#skipped_builds[@]} -gt 0 ]]; then
   echo "Skipped TaktOS projects:"
-  printf '  %s\\n' "${skipped_builds[@]}"
+  printf '  %s\n' "${skipped_builds[@]}"
 fi
 if [[ ${#failed_builds[@]} -ne 0 ]]; then
   echo "Failed TaktOS projects:" >&2
