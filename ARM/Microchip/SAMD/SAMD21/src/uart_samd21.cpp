@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	uart_samd21.cpp
 
-@brief	SAM D21 SERCOM USART polling driver
+@brief	SAM D21 SERCOM USART driver
 
 @license
 
@@ -47,6 +47,7 @@ SOFTWARE.
 #define SAMD21_SERCOM_CTRLB		0x04UL
 #define SAMD21_SERCOM_BAUD		0x0CUL
 #define SAMD21_SERCOM_INTENCLR	0x14UL
+#define SAMD21_SERCOM_INTENSET_READ	0x16UL
 #define SAMD21_SERCOM_INTENSET	0x16UL
 #define SAMD21_SERCOM_INTFLAG	0x18UL
 #define SAMD21_SERCOM_DATA		0x28UL
@@ -76,8 +77,8 @@ SOFTWARE.
 typedef struct {
 	UARTDev_t *pUartDev;
 	uint32_t Base;
-	uint8_t RxFifoMem[SAMD21_UART_FIFO_MEMSIZE];
-	uint8_t TxFifoMem[SAMD21_UART_FIFO_MEMSIZE];
+	alignas(4) uint8_t RxFifoMem[SAMD21_UART_FIFO_MEMSIZE];
+	alignas(4) uint8_t TxFifoMem[SAMD21_UART_FIFO_MEMSIZE];
 } Samd21UartDev_t;
 
 static Samd21UartDev_t s_UartDev[6] = {
@@ -202,6 +203,8 @@ static void Samd21UartIrq(Samd21UartDev_t *pDev)
 {
 	UARTDev_t *pUart;
 	uint8_t flags;
+	uint8_t enabled;
+	uint16_t status;
 	int data;
 	uint8_t *p;
 
@@ -212,14 +215,39 @@ static void Samd21UartIrq(Samd21UartDev_t *pDev)
 	}
 
 	flags = *Samd21UartReg8(pDev, SAMD21_SERCOM_INTFLAG);
+	enabled = *Samd21UartReg8(pDev, SAMD21_SERCOM_INTENSET_READ);
+	flags &= enabled;
 	if ((flags & SAMD21_USART_RXC) != 0U)
 	{
+		status = *Samd21UartReg16(pDev, SAMD21_SERCOM_STATUS);
 		data = (int)*Samd21UartReg16(pDev, SAMD21_SERCOM_DATA);
-		if (!CFifoPutByte(pUart->hRxFifo, (uint8_t)data))
+		if ((status & SAMD21_USART_STATUS_BUFOVF) != 0U)
+		{
+			pUart->RxOvrErrCnt++;
+		}
+		if ((status & SAMD21_USART_STATUS_FERR) != 0U)
+		{
+			pUart->FramErrCnt++;
+		}
+		if ((status & SAMD21_USART_STATUS_PERR) != 0U)
+		{
+			pUart->ParErrCnt++;
+		}
+		if ((status & (SAMD21_USART_STATUS_BUFOVF |
+			SAMD21_USART_STATUS_FERR | SAMD21_USART_STATUS_PERR)) != 0U)
+		{
+			*Samd21UartReg16(pDev, SAMD21_SERCOM_STATUS) =
+				status & (SAMD21_USART_STATUS_BUFOVF |
+				SAMD21_USART_STATUS_FERR | SAMD21_USART_STATUS_PERR);
+			*Samd21UartReg8(pDev, SAMD21_SERCOM_INTFLAG) = SAMD21_USART_ERROR;
+		}
+		else if (!CFifoPutByte(pUart->hRxFifo, (uint8_t)data))
 		{
 			pUart->RxDropCnt++;
 		}
-		if (pUart->EvtCallback != NULL)
+		if ((status & (SAMD21_USART_STATUS_BUFOVF |
+			SAMD21_USART_STATUS_FERR | SAMD21_USART_STATUS_PERR)) == 0U &&
+			pUart->EvtCallback != NULL)
 		{
 			pUart->EvtCallback(pUart, UART_EVT_RXDATA, NULL,
 				CFifoUsed(pUart->hRxFifo));
@@ -231,6 +259,7 @@ static void Samd21UartIrq(Samd21UartDev_t *pDev)
 		p = CFifoGet(pUart->hTxFifo);
 		if (p != NULL)
 		{
+			pUart->bTxReady = false;
 			*Samd21UartReg16(pDev, SAMD21_SERCOM_DATA) = *p;
 		}
 		else
@@ -264,9 +293,11 @@ static int Samd21UartRx(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 	count = 0;
 	if (pIntrf->bIntEn)
 	{
+		int value;
+
 		while (count < Len)
 		{
-			int value = CFifoGetByte(pDev->pUartDev->hRxFifo);
+			value = CFifoGetByte(pDev->pUartDev->hRxFifo);
 			if (value < 0)
 			{
 				break;
@@ -332,6 +363,7 @@ static int Samd21UartTx(DevIntrf_t * const pIntrf, const uint8_t *pData, int Len
 		}
 		if (count > 0)
 		{
+			pDev->pUartDev->bTxReady = false;
 			*Samd21UartReg8(pDev, SAMD21_SERCOM_INTENSET) =
 				SAMD21_USART_DRE;
 		}
@@ -474,6 +506,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->EvtCallback = pCfg->EvtCallback;
 	if (pCfg->bIntMode)
 	{
+		if ((pCfg->pRxMem != NULL && pCfg->RxMemSize <= (int)sizeof(CFifo_t)) ||
+			(pCfg->pTxMem != NULL && pCfg->TxMemSize <= (int)sizeof(CFifo_t)))
+		{
+			pHw->pUartDev = NULL;
+			return false;
+		}
 		pDev->hRxFifo = CFifoInit(pCfg->pRxMem != NULL ?
 			pCfg->pRxMem : pHw->RxFifoMem,
 			pCfg->pRxMem != NULL ? pCfg->RxMemSize : SAMD21_UART_FIFO_MEMSIZE,
@@ -520,8 +558,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	if (pCfg->bIntMode)
 	{
+		*Samd21UartReg8(pHw, SAMD21_SERCOM_INTENCLR) = 0xFFU;
 		*Samd21UartReg8(pHw, SAMD21_SERCOM_INTENSET) =
-			SAMD21_USART_RXC;
+			SAMD21_USART_RXC | SAMD21_USART_ERROR;
 		NVIC_ClearPendingIRQ((IRQn_Type)(9 + pCfg->DevNo));
 		NVIC_SetPriority((IRQn_Type)(9 + pCfg->DevNo), pCfg->IntPrio);
 		NVIC_EnableIRQ((IRQn_Type)(9 + pCfg->DevNo));
