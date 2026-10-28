@@ -1306,10 +1306,6 @@ echo "✅ makefile_path.mk created at: $MAKEFILE_PATH_MK"
 echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.mk"
 
 # ---------------------------------------------------------
-# Sign the configured app before the headless builder starts.
-sudo xattr -cr "$ECLIPSE_APP"
-sudo codesign --force --deep --sign - "$ECLIPSE_APP"
-
 # IOsonata Library Build (run exactly once)
 # ---------------------------------------------------------
 # If the clone script already invoked the builder, do NOT run it again.
@@ -1359,9 +1355,6 @@ fi
 
 # ---------------------------------------------------------
 build_iocomposer_index
-# Sign after every installer write to the application bundle, including builds.
-sudo xattr -cr "$ECLIPSE_APP"
-sudo codesign --force --deep --sign - "$ECLIPSE_APP"
 
 # Summary
 
