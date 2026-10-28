@@ -1,0 +1,35 @@
+name: 0.13 firmware host regressions
+
+on:
+  push:
+    branches:
+      - release_0_13_final_prep
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  usb:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: USB GCC and Clang matrix
+        run: make -C tests/usb test-matrix
+
+  bluetooth:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {cc: gcc, cxx: g++, opt: -O0}
+          - {cc: gcc, cxx: g++, opt: -O2}
+          - {cc: clang, cxx: clang++, opt: -O0}
+          - {cc: clang, cxx: clang++, opt: -O2}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bluetooth host tests
+        run: make -C tests/bluetooth/host clean test CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} OPT=${{ matrix.opt }}
+      - name: Bluetooth compliance tests
+        run: make -C tests/bluetooth/compliance clean test CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} OPT=${{ matrix.opt }}
