@@ -54,11 +54,9 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void AC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DAC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PTC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2S_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void AC1_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TCC3_Handler(void);
 
 __attribute__((section(".vectors"), used, aligned(256)))
-void (* const __Vectors[46])(void) = {
+void (* const __Vectors[44])(void) = {
 	(void (*)(void))&__StackTop,
 	ResetEntry,
 	NMI_Handler,
@@ -96,9 +94,7 @@ void (* const __Vectors[46])(void) = {
 	DAC_Handler, // IRQ 25
 	PTC_Handler, // IRQ 26
 	I2S_Handler, // IRQ 27
-	AC1_Handler, // IRQ 28
-	TCC3_Handler, // IRQ 29
 };
 
-_Static_assert(sizeof(__Vectors) == 46U * sizeof(void (*)(void)),
-	"SAMD21 vector table must contain 16 core and 30 external entries");
+_Static_assert(sizeof(__Vectors) == 44U * sizeof(void (*)(void)),
+	"SAMD21 vector table must contain 16 core and 28 external entries");
