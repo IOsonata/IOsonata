@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import subprocess
 import tempfile
 import unittest
@@ -48,7 +49,7 @@ esac
 			for kind in ['ai', 'ui'] for version in ['0.0.9', '0.0.10', '0.0.2']
 		]))
 		return dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'],
-			FIXTURE=str(root), FAIL_URL='', IOCOMPOSER_AI_PLUGIN_URL='')
+			FIXTURE=str(root), FAIL_URL='', IOCOMPOSER_AI_PLUGIN_URL='', PYTHON3=sys.executable)
 
 	def setup_runtime(self, root, platform):
 		runtime = root / 'custom IDE path'
