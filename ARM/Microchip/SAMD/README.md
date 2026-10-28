@@ -22,7 +22,7 @@ the SAMD21J18A linker script for other SAMD21 package/memory variants.
 - [x] Cortex-M0+ IRQ vector tables using IOsonata `ResetEntry` (source added; build and device validation pending)
 - [ ] Clock source and GCLK setup, synchronization and clock reporting (reset-time 1 MHz clock plus selectable 8 MHz OSC8M/GCLK0 path added; channel enable/disable added; peripheral bus gates and 48 MHz setup pending)
 - [ ] PORT GPIO, mux and external interrupts (basic GPIO/mux source added; interrupt API, device definitions and validation pending)
-- [ ] SERCOM UART, SPI and I2C drivers (D21 SERCOM0..5 APBC/GCLK0 clock enable added; serial drivers not implemented)
+- [ ] SERCOM UART, SPI and I2C drivers (D21 polling 8N1 UART source added; pad routing, rate and hardware tests pending; interrupts, DMA, SPI and I2C not implemented)
 - [ ] TC/TCC hardware timers
 - [ ] Embedded CDT managed static-library projects and generic examples
 - [ ] Build and Xplained Pro hardware validation
@@ -56,3 +56,14 @@ SERCOM core GCLK channel for device 0..5, using generator 0. This is an
 internal MCU helper; application source does not configure SERCOM clocks.
 The helper is not a UART driver and has not been compiled or hardware-tested.
 The SAM D11 peripheral clock mapping will be verified separately.
+
+## SAM D21 UART bring-up
+
+The initial `uart_samd21.cpp` is restricted to asynchronous 8N1 with polling
+Rx/Tx, no DMA, no hardware flow control and no interrupt mode. It currently
+uses USART RXPO=1 (PAD1) and TXPO=0 (PAD0); the application pin map must
+select pins matching those SERCOM pad assignments. It is not a general
+SERCOM pad-routing implementation. At 8 MHz, 16x oversampling limits the
+maximum baud rate to 500000; the 1 MHz reset clock is insufficient for
+common high baud rates. The driver still needs a target build and hardware
+verification, including initialization failure paths and error flags.
