@@ -171,9 +171,8 @@ application needs its own provisioning and memory partition review.
 Use the WBA65 device definitions and interrupt mapping from a consistent
 STM32CubeWBA release. Do not compile WBA5x startup or link with the WBA5x
 1 MB/128 KB linker script. The STM32WBA Bluetooth adapter in `../src/`
-additionally requires the CubeWBA HAL and BLE application headers.
-`bt_adv_stm32wba.cpp`, `bt_app_stm32wba.cpp`, `bt_gap_stm32wba.cpp` and
-`bt_gatt_stm32wba.cpp` include `stm32wbaxx_hal.h`.
+uses the ST BLE middleware and the CubeWBA platform files, not the ST HAL. See
+External middleware checkout and Bluetooth in the library.
 
 ## Software validation
 
@@ -501,8 +500,8 @@ versions, next to the other `external` repositories:
 
 - `external/stm32-mw-wpan` at tag `v2.10.0`;
 - `external/STM32CubeWBA` at tag `v1.10.0`, with only `Projects/Common/WPAN`, the
-  NUCLEO-WBA65RI BLE_p2pServer project, `Utilities` and `Drivers`, and the HAL
-  and CMSIS device submodules.
+  NUCLEO-WBA65RI BLE_p2pServer project and `Utilities`. The `Drivers` folder
+  and its HAL and CMSIS device submodules are not needed.
 
 To clone them by hand:
 
@@ -511,14 +510,13 @@ cd ~/swdev/external
 git clone --depth=1 --branch v2.10.0 https://github.com/STMicroelectronics/stm32-mw-wpan.git
 git clone --depth=1 --branch v1.10.0 --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git
 cd STM32CubeWBA
-git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers
-git submodule update --init --depth 1 Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx
+git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities
 ```
 
 Use the tags above, not the default branch of either repository. The two
 releases belong together: STM32CubeWBA 1.10.0 uses STM32_WPAN 2.10.0. The IOC project uses `external/stm32-mw-wpan/ble/`
 and `external/stm32-mw-wpan/link_layer/` for the BLE middleware headers, and
-STM32CubeWBA for the platform files, the HAL headers and `Utilities/tim_serv`.
+STM32CubeWBA for the platform files and `Utilities/tim_serv`.
 The library defines `PHY_40nm_3_40_a` and `BLE_STACK_BASIC_PLUS=1` and takes the
 link layer configuration from `ll_cmd_lib/config/ble_basic_plus`, so the headers
 match the Basic Plus link layer library (extended advertising included).
@@ -638,13 +636,21 @@ ST prebuilt archives and holds only its own sources:
   what the built files use: the radio and PKA interrupt numbers and
   priorities, the link layer task identifiers, the power table selection and
   the sequencer prototypes that `bt_wba_platform.cpp` implements. They are not
-  copies of the ST BLE_p2pServer files, which are under the ST license.
+  copies of the ST BLE_p2pServer files, which are under the ST license;
+- in place of the ST HAL, the headers `include/stm32wbaxx_hal.h`,
+  `stm32wbaxx_hal_conf.h` and `stm32wbaxx_ll_rcc.h`, also included by name.
+  They hold only the HAL and LL items `linklayer_plat.c` and `ll_sys_if.c`
+  use, with CMSIS register access: the radio bus clock macros, the radio mode,
+  voltage scaling, sleep timer clock source and HSE ready reads, the unique
+  device number, the ST company ID, the revision ID, `assert_param` and the
+  `HAL_NVIC_*` and radio baseband clock prototypes that `bt_wba_platform.cpp`
+  implements. A Release build gives the same code as one with the ST HAL
+  headers.
 
 The configurations define `STM32WBA65xx`, `BLE_LL`, `IOSONATA_STM32_WBA`,
 `PHY_40nm_3_40_a` and `BLE_STACK_BASIC_PLUS=1`, and pass
-`-include cmsis_compiler.h` to the C compiler. Do not define `USE_HAL_DRIVER`,
-`stm32wbaxx.h` would then pull in the HAL and its macros clash with the IOsonata
-UART names.
+`-include cmsis_compiler.h` to the C compiler. They do not define
+`USE_HAL_DRIVER`; IOsonata does not use the ST HAL.
 
 
 ## Bluetooth example project

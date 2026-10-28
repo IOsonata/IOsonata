@@ -23,7 +23,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include <string.h>
 
 #include "stm32wbaxx.h"
-#include "stm32wbaxx_hal.h"
 
 #include "bt_wba_stack.h"
 

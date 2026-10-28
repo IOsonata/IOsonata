@@ -70,7 +70,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
@@ -84,7 +83,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/BasicAES&quot;"/>
@@ -143,7 +141,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
@@ -157,7 +154,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/BasicAES&quot;"/>
@@ -289,7 +285,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
@@ -303,7 +298,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/BasicAES&quot;"/>
@@ -362,7 +356,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
@@ -376,7 +369,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/BasicAES&quot;"/>

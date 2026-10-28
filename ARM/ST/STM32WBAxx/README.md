@@ -135,12 +135,18 @@ pending bytes. Reconnect, suspend/resume and FS fallback remain pending. See
 ## STM32CubeWBA dependency
 
 Use an ST STM32CubeWBA distribution matched to the selected device and BLE
-middleware version. The existing adapter includes `stm32wbaxx_hal.h`,
+middleware version. The existing adapter includes
 `ble_gap_aci.h`, `ble_gatt_aci.h`, `host_stack_if.h`,
 `ll_sys.h`, `bpka.h`, `scm.h` and `stm32_timer.h`. The project must provide
 their official headers, linked middleware objects/libraries, and any required
 BLE/link-layer initialization components. Do not substitute invented register
 definitions or mix headers from incompatible CubeWBA releases.
+
+The ST HAL is not used. The CubeWBA platform files built into the library
+include `stm32wbaxx_hal.h`, `stm32wbaxx_hal_conf.h` and `stm32wbaxx_ll_rcc.h`
+by name. IOsonata supplies these in `STM32WBA65/include` with only the items
+those files use, written with CMSIS register access. A project that builds the
+ST HAL must not have that folder in its include path.
 
 The WBA65 library uses `stm32wba65xx.h`, IOsonata `ARM/src/ResetEntry.c`,
 `src/system_stm32wbaxx.c` and `STM32WBA65/src/vectors_stm32wba65.c`. Do not

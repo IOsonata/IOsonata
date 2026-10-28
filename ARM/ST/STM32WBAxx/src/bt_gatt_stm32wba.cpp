@@ -18,7 +18,6 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 #include <stdint.h>
 
 #include "stm32wbaxx.h"
-#include "stm32wbaxx_hal.h"
 #include "bt_wba_stack.h"
 
 #include "bluetooth/bt_gatt.h"

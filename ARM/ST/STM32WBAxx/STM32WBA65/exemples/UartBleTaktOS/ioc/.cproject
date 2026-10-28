@@ -111,7 +111,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths.1101689000" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Debug&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Debug_FPU&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../ldscript&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/stm32-mw-wpan/ble/stack/lib&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/lib&quot;"/>
@@ -133,7 +133,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths.795569951" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" useByScannerDiscovery="false" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Debug&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Debug_FPU&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../ldscript&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/stm32-mw-wpan/ble/stack/lib&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/lib&quot;"/>
@@ -276,7 +276,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths.2047807319" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release_FPU&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../ldscript&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/stm32-mw-wpan/ble/stack/lib&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/lib&quot;"/>
@@ -298,7 +298,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths.2119076058" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" useByScannerDiscovery="false" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release_FPU&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../ldscript&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/stm32-mw-wpan/ble/stack/lib&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/lib&quot;"/>

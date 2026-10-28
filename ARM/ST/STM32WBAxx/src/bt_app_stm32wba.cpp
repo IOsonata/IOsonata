@@ -58,7 +58,6 @@ SOFTWARE.
 #include <string.h>
 
 #include "stm32wbaxx.h"
-#include "stm32wbaxx_hal.h"
 
 // STM32CubeWBA BLE middleware, release 1.10.0 (WPAN middleware commit
 // 7e764835). The project provides the Target files of the Cube reference
@@ -68,8 +67,6 @@ SOFTWARE.
 // Bluetooth event queue.
 #include "bt_wba_stack.h"
 #include "bt_wba_platform.h"
-#include "stm32wbaxx_ll_system.h"
-#include "stm32wbaxx_ll_utils.h"
 
 #include "istddef.h"
 #include "idelay.h"
@@ -1374,9 +1371,12 @@ static uint8_t BtAppWbaPaLevel(int8_t Dbm)
 extern "C" __attribute__((weak))
 void BtAppWbaIdentityGet(uint8_t *pAddr, uint8_t *pIr, uint8_t *pEr)
 {
-	uint32_t udn = LL_FLASH_GetUDN();
-	uint32_t devid = LL_FLASH_GetDeviceID();
-	uint32_t company = LL_FLASH_GetSTCompanyID();
+	// 64 bit unique ID in the flash engineering bytes: unique device number,
+	// then the device ID (bits 7:0) and the ST company ID (bits 31:8)
+	const uint32_t *pUid64 = (const uint32_t *)UID64_BASE;
+	uint32_t udn = pUid64[0];
+	uint32_t devid = pUid64[1] & 0xFFU;
+	uint32_t company = (pUid64[1] >> 8) & 0xFFFFFFU;
 
 	// Layout of the Cube reference application: company ID in the upper three
 	// bytes, device ID, then the last 16 bits of the unique device number. A
@@ -1402,9 +1402,10 @@ void BtAppWbaIdentityGet(uint8_t *pAddr, uint8_t *pIr, uint8_t *pEr)
 
 	// Identity and encryption roots built from the unique ID words the way the
 	// Cube reference does it. Chips without a unique ID get its fixed values.
-	uint32_t uid0 = LL_GetUID_Word0();
-	uint32_t uid1 = LL_GetUID_Word1();
-	uint32_t uid2 = LL_GetUID_Word2();
+	const uint32_t *pUid = (const uint32_t *)UID_BASE;
+	uint32_t uid0 = pUid[0];
+	uint32_t uid1 = pUid[1];
+	uint32_t uid2 = pUid[2];
 
 	if (uid0 != 0xFFFFFFFFUL && uid1 != 0xFFFFFFFFUL)
 	{
