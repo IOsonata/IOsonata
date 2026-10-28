@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - release_0_13_final_prep
+    paths:
+      - 'include/**'
+      - 'src/**'
+      - 'ARM/**'
+      - 'RISCV/**'
+      - 'tests/usb/**'
+      - 'tests/bluetooth/**'
+      - '.github/workflows/release-0_13-host-regressions.yml'
   workflow_dispatch:
 
 permissions:
