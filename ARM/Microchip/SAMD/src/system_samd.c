@@ -37,6 +37,13 @@ SOFTWARE.
 #error Unsupported SAM D device
 #endif
 
+#define SAMD_GCLK_STATUS		(*(volatile uint8_t *)0x40000C01UL)
+#define SAMD_GCLK_GENCTRL		(*(volatile uint32_t *)0x40000C04UL)
+#define SAMD_GCLK_STATUS_SYNCBUSY	(1U << 7)
+#define SAMD_GCLK_GENCTRL_OSC8M	(0x06UL << 8)
+#define SAMD_GCLK_GENCTRL_GENEN	(1UL << 16)
+#define SAMD_GCLK_TIMEOUT		100000UL
+
 #define SAMD_SYSCTRL_OSC8M		(*(volatile uint32_t *)0x40000820UL)
 #define SAMD_OSC8M_PRESC_MASK	(3UL << 8)
 #define SAMD_OSC8M_ENABLE		(1UL << 1)
@@ -52,6 +59,22 @@ __attribute__((weak)) McuOsc_t g_McuOsc = {
 	false
 };
 
+static bool SamdGclkWait(void)
+{
+	uint32_t timeout;
+
+	timeout = SAMD_GCLK_TIMEOUT;
+	while ((SAMD_GCLK_STATUS & SAMD_GCLK_STATUS_SYNCBUSY) != 0U)
+	{
+		if (--timeout == 0U)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 void SystemInit(void)
 {
 	// The initial implementation retains the reset clock configuration.
@@ -62,6 +85,7 @@ void SystemCoreClockUpdate(void)
 {
 	uint32_t osc8m;
 	uint32_t prescaler;
+	uint32_t generator;
 
 	osc8m = SAMD_SYSCTRL_OSC8M;
 	if ((osc8m & SAMD_OSC8M_ENABLE) == 0UL)
@@ -70,6 +94,15 @@ void SystemCoreClockUpdate(void)
 	}
 
 	prescaler = (osc8m & SAMD_OSC8M_PRESC_MASK) >> 8;
+	// Report OSC8M only when generator zero uses that source.
+	generator = SAMD_GCLK_GENCTRL;
+	if ((generator & 0x0FUL) != 0UL ||
+		(generator & (0x1FUL << 8)) != SAMD_GCLK_GENCTRL_OSC8M ||
+		(generator & SAMD_GCLK_GENCTRL_GENEN) == 0UL)
+	{
+		return;
+	}
+
 	SystemCoreClock = SAMD_OSC8M_FREQ >> prescaler;
 }
 
@@ -93,9 +126,30 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-	(void)ClkSrc;
-	(void)OscFreq;
-	return false;
+	uint32_t osc8m;
+
+	if (ClkSrc != OSC_TYPE_RC || OscFreq != SAMD_OSC8M_FREQ)
+	{
+		return false;
+	}
+
+	// Keep GCLK0 on OSC8M while changing its prescaler.
+	osc8m = SAMD_SYSCTRL_OSC8M;
+	if ((osc8m & SAMD_OSC8M_ENABLE) == 0UL || !SamdGclkWait())
+	{
+		return false;
+	}
+
+	SAMD_SYSCTRL_OSC8M = osc8m & ~SAMD_OSC8M_PRESC_MASK;
+	SAMD_GCLK_GENCTRL = SAMD_GCLK_GENCTRL_OSC8M |
+		SAMD_GCLK_GENCTRL_GENEN;
+	if (!SamdGclkWait())
+	{
+		return false;
+	}
+
+	SystemCoreClockUpdate();
+	return SystemCoreClock == SAMD_OSC8M_FREQ;
 }
 
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
