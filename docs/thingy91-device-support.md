@@ -99,7 +99,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - `ARM/Nordic/nRF91/nRF91x1/exemples/common/thingy91x_board.*` centralizes these PMIC mappings, the nRF9151 P0.02 PMIC interrupt input, the P0.03 external-board 3.3 V enable, button 1 on P0.26 and the active-high RGB channels on P0.29/P0.31/P0.30. The nPM6001 and BME688 tests use the shared helper rather than duplicating rail sequences.
 - `ARM/Nordic/nRF91/nRF91x1/exemples/Thingy91XBoardTest` initializes the board-safe PMIC routing, keeps external-board power off by default, cycles the RGB LED and reports button and nPM6001 READY state.
 - The board battery profile uses a 4.2 V termination target and a 675 mA nominal 0.5C charge request. The nPM1300 has a 2 mA charge-current step, so `SetCharge()` programs 674 mA and reports 674 mA as the actual setting.
-- The optional Nordic fuel-gauge adapter and LP803448 battery model provide host-computed state of charge. The example requires the sdk-nrfxlib v3.2.0 fuel-gauge header and archive; see `docs/npm1300.md`. Battery presence remains unknown because detection is disabled on D00 and later silicon.
+- The optional Nordic fuel-gauge adapter and LP803448 battery model provide host-computed state of charge. The example requires the sdk-nrfxlib v3.4.0 or later fuel-gauge header and archive; see `docs/npm1300.md`. Battery presence remains unknown because detection is disabled on D00 and later silicon.
 - Hardware validation is pending.
 - Test project: `ARM/Nordic/nRF91/nRF91x1/exemples/nPM1300Test`; default mode is non-destructive and reports charger/status, VBAT, signed IBAT, NTC temperature, model-based SOC, BUCK/LDSW status and GPIO4.
 

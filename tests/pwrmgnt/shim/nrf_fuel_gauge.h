@@ -28,28 +28,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
 
-// Test-only declarations for the sdk-nrfxlib v3.2.0 fuel-gauge API.
+// Test-only declarations for the sdk-nrfxlib v3.4.0 and later fuel-gauge API:
+// every function returns an error code, values come back through pointers.
 // This mock tests IOsonata integration, not the Nordic estimation algorithm.
 #ifndef NPM1300_TEST_FUEL_GAUGE_H
 #define NPM1300_TEST_FUEL_GAUGE_H
+#include <stdbool.h>
 #include <stddef.h>
 extern "C" {
 struct battery_model
 {
 	int Dummy;
 };
+struct battery_model_primary;
 struct nrf_fuel_gauge_state_info;
+struct nrf_fuel_gauge_config_parameters;
 struct nrf_fuel_gauge_init_parameters {
 	float v0, i0, t0;
-	const struct battery_model *model;
-	const void *opt_params;
+	union {
+		const struct battery_model *model;
+		const struct battery_model_primary *model_primary;
+	};
+	const struct nrf_fuel_gauge_config_parameters *opt_params;
+	int (*lock_func)(const void *context, bool lock);
+	const void *lock_context;
 	const void *state;
+	size_t state_size;
 };
 enum nrf_fuel_gauge_charge_state {
 	NRF_FUEL_GAUGE_CHARGE_STATE_IDLE,
 	NRF_FUEL_GAUGE_CHARGE_STATE_TRICKLE,
 	NRF_FUEL_GAUGE_CHARGE_STATE_CC,
-	NRF_FUEL_GAUGE_CHARGE_STATE_CC_VBUS_LIMITED,
+	NRF_FUEL_GAUGE_CHARGE_STATE_CC_LIMITED,
 	NRF_FUEL_GAUGE_CHARGE_STATE_CV,
 	NRF_FUEL_GAUGE_CHARGE_STATE_COMPLETE
 };
@@ -60,7 +70,8 @@ enum nrf_fuel_gauge_ext_state_info_type {
 	NRF_FUEL_GAUGE_EXT_STATE_INFO_CHARGE_CURRENT_CORRECTION,
 	NRF_FUEL_GAUGE_EXT_STATE_INFO_DISCHARGE_CURRENT_CORRECTION,
 	NRF_FUEL_GAUGE_EXT_STATE_INFO_CHARGE_CURRENT_LIMIT,
-	NRF_FUEL_GAUGE_EXT_STATE_INFO_TERM_CURRENT
+	NRF_FUEL_GAUGE_EXT_STATE_INFO_TERM_CURRENT,
+	NRF_FUEL_GAUGE_EXT_STATE_INFO_BATTERY_REPLACED
 };
 union nrf_fuel_gauge_ext_state_info_data {
 	enum nrf_fuel_gauge_charge_state charge_state;
@@ -70,10 +81,10 @@ union nrf_fuel_gauge_ext_state_info_data {
 };
 extern const size_t nrf_fuel_gauge_state_size;
 int nrf_fuel_gauge_init(const struct nrf_fuel_gauge_init_parameters *, float *);
-float nrf_fuel_gauge_process(float, float, float, float, struct nrf_fuel_gauge_state_info *);
-float nrf_fuel_gauge_tte_get(void);
-float nrf_fuel_gauge_ttf_get(void);
-void nrf_fuel_gauge_idle_set(float, float, float);
+int nrf_fuel_gauge_process(float, float, float, float, float *, struct nrf_fuel_gauge_state_info *);
+int nrf_fuel_gauge_tte_get(float *);
+int nrf_fuel_gauge_ttf_get(float *);
+int nrf_fuel_gauge_idle_set(float, float, float);
 int nrf_fuel_gauge_state_get(void *, size_t);
 int nrf_fuel_gauge_ext_state_update(enum nrf_fuel_gauge_ext_state_info_type,
 	union nrf_fuel_gauge_ext_state_info_data *);

@@ -1,28 +1,55 @@
 // Algorithm mock: exercise units, timing, failure handling and FuelGauge lifecycle.
+// The calls follow the sdk-nrfxlib v3.4.0 API: an error code is returned and
+// values come back through pointers, which are left untouched on error.
 static float s_Soc = 52.34f, s_Dt, s_V, s_I, s_T, s_IdleCurrent;
 static float s_ChargeLimit, s_TermCurrent;
 static float s_Tte = 1234.0f, s_Ttf = 567.0f;
 static int s_InitResult, s_ExtResult, s_LowCount, s_ProcessCount;
+static int s_ProcessResult, s_TimeResult, s_IdleResult;
 static bool s_Vbus;
 static nrf_fuel_gauge_charge_state s_ChargeState;
 static const void *s_State;
+static size_t s_StateSize;
 const size_t nrf_fuel_gauge_state_size = 16;
 
 int nrf_fuel_gauge_init(const nrf_fuel_gauge_init_parameters *p, float *)
 {
-	assert(p->model != NULL);
-	s_V = p->v0; s_I = p->i0; s_T = p->t0; s_State = p->state;
+	assert(p->model != NULL && p->opt_params == NULL && p->lock_func == NULL);
+	s_V = p->v0; s_I = p->i0; s_T = p->t0;
+	s_State = p->state; s_StateSize = p->state_size;
 	return s_InitResult;
 }
-float nrf_fuel_gauge_process(float v, float i, float t, float dt,
+int nrf_fuel_gauge_process(float v, float i, float t, float dt, float *soc,
 	nrf_fuel_gauge_state_info *)
 {
+	assert(soc != NULL);
 	s_V = v; s_I = i; s_T = t; s_Dt = dt; ++s_ProcessCount;
-	return s_Soc;
+	if (s_ProcessResult != 0)
+		return s_ProcessResult;
+	*soc = s_Soc;
+	return 0;
 }
-float nrf_fuel_gauge_tte_get() { return s_Tte; }
-float nrf_fuel_gauge_ttf_get() { return s_Ttf; }
-void nrf_fuel_gauge_idle_set(float, float, float i) { s_IdleCurrent = i; }
+int nrf_fuel_gauge_tte_get(float *p)
+{
+	assert(p != NULL);
+	if (s_TimeResult != 0)
+		return s_TimeResult;
+	*p = s_Tte;
+	return 0;
+}
+int nrf_fuel_gauge_ttf_get(float *p)
+{
+	assert(p != NULL);
+	if (s_TimeResult != 0)
+		return s_TimeResult;
+	*p = s_Ttf;
+	return 0;
+}
+int nrf_fuel_gauge_idle_set(float, float, float i)
+{
+	s_IdleCurrent = i;
+	return s_IdleResult;
+}
 int nrf_fuel_gauge_state_get(void *p, size_t n)
 {
 	assert(n >= nrf_fuel_gauge_state_size);
@@ -85,7 +112,11 @@ static void TestFuelGauge()
 	s_ExtResult = -1;
 	assert(!pm.StartFuelGauge(model, 0));
 	s_ExtResult = 0;
+	s_ProcessResult = -22;
+	assert(!pm.StartFuelGauge(model, 0) && gauge.Level() == UINT16_MAX);
+	s_ProcessResult = 0;
 	assert(pm.StartFuelGauge(model, 100));
+	assert(s_State == NULL && s_StateSize == 0);
 	assert(gauge.Level() == 523 && s_Dt == 0.0f);
 	assert(s_V == 3.75f && fabsf(s_I - 0.560547f) < 0.000001f && s_T == 25.0f);
 	assert(fabsf(s_ChargeLimit - 0.4f) < 0.00001f);
@@ -99,8 +130,19 @@ static void TestFuelGauge()
 	s_Tte = s_Ttf = NAN;
 	assert(isnan(pm.TimeToEmpty()) && isnan(pm.TimeToFull()));
 	s_Tte = 1234; s_Ttf = 567;
+	s_TimeResult = -61;
+	assert(isnan(pm.TimeToEmpty()) && isnan(pm.TimeToFull()));
+	s_TimeResult = 0;
+	// A refused sample invalidates the level and is not counted in the next
+	// time delta.
+	calls = s_ProcessCount;
+	s_ProcessResult = -22;
+	assert(!pm.UpdateFuelGauge(1650) && gauge.Level() == UINT16_MAX);
+	assert(s_ProcessCount == calls + 1 && isnan(pm.TimeToEmpty()));
+	s_ProcessResult = 0;
 	bus.vReg[NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG] = 1U << 3;
-	assert(pm.UpdateFuelGauge(1700));
+	assert(pm.UpdateFuelGauge(1700) && fabsf(s_Dt - 0.1f) < 0.00001f);
+	assert(gauge.Level() == 523);
 	assert(s_ChargeState == NRF_FUEL_GAUGE_CHARGE_STATE_CC);
 	bus.vReg[NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG] = 0;
 	assert(pm.FuelGaugeStateSize() == 16);
@@ -109,6 +151,9 @@ static void TestFuelGauge()
 	assert(pm.SaveFuelGaugeState(state, 16) && state[15] == 0xAB);
 	assert(pm.FuelGaugeIdle(100) && fabsf(s_IdleCurrent - 0.0001f) < 0.000001f);
 	assert(!pm.FuelGaugeIdle(-1));
+	s_IdleResult = -22;
+	assert(!pm.FuelGaugeIdle(100));
+	s_IdleResult = 0;
 	calls = s_ProcessCount;
 	bus.vFailReadReg = NPM1300_ADC_ADCVBAT_RESULTMSB_REG;
 	sample.VoltageMv = 123;
@@ -131,8 +176,13 @@ static void TestFuelGauge()
 	s_Soc = 9;
 	assert(pm.UpdateFuelGauge(9600) && s_LowCount == 2);
 	s_Soc = 50;
+	// State saved by another library version: the library refuses it
+	s_InitResult = -EBADF;
+	assert(!pm.StartFuelGauge(model, UINT32_MAX - 499, state, sizeof(state)));
+	assert(gauge.Level() == UINT16_MAX);
+	s_InitResult = 0;
 	assert(pm.StartFuelGauge(model, UINT32_MAX - 499, state, sizeof(state)));
-	assert(s_State == state);
+	assert(s_State == state && s_StateSize == sizeof(state));
 	assert(pm.UpdateFuelGauge(500) && s_Dt == 1.0f);
 	bus.vReg[NPM1300_VBUSIN_VBUSIN_STATUS_REG] = 1;
 	bus.vReg[NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG] = 1U << 4;

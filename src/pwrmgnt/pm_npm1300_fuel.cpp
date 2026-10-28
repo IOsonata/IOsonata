@@ -142,9 +142,12 @@ bool PmnPM1300FuelGauge::StartFuelGauge(const battery_model &Model, uint32_t Now
 	params.t0 = (float)sample.TemperatureDeciC / 10.0f;
 	params.model = &Model;
 	params.state = pState;
-	if (nrf_fuel_gauge_init(&params, NULL) != 0 || !InformFuelGauge(sample))
+	params.state_size = StateSize;
+	// A state saved by another library version is refused (-EBADF); the
+	// application starts again without it.
+	if (nrf_fuel_gauge_init(&params, NULL) != 0 || !InformFuelGauge(sample) ||
+		nrf_fuel_gauge_process(params.v0, params.i0, params.t0, 0.0f, &soc, NULL) != 0)
 		return false;
-	soc = nrf_fuel_gauge_process(params.v0, params.i0, params.t0, 0.0f, NULL);
 	s_pOwner = this;
 	vSampleTimeMs = NowMs;
 	if (!SetLevel(soc))
@@ -169,10 +172,13 @@ bool PmnPM1300FuelGauge::UpdateFuelGauge(uint32_t NowMs)
 	if (elapsed == 0 || elapsed > INT32_MAX || !ReadBatterySample(sample) ||
 		!InformFuelGauge(sample))
 		return false;
-	soc = nrf_fuel_gauge_process((float)sample.VoltageMv / 1000.0f,
+	// A sample the library refused is not counted: the next update covers the
+	// time since the last processed sample.
+	if (nrf_fuel_gauge_process((float)sample.VoltageMv / 1000.0f,
 		(float)sample.CurrentUa / 1000000.0f,
 		(float)sample.TemperatureDeciC / 10.0f, (float)elapsed / 1000.0f,
-		NULL);
+		&soc, NULL) != 0)
+		return false;
 	vSampleTimeMs = NowMs;
 	return SetLevel(soc);
 }
@@ -189,9 +195,8 @@ bool PmnPM1300FuelGauge::FuelGaugeIdle(int32_t AverageDischargeUa)
 	if (s_pOwner != this || !Valid() || AverageDischargeUa < 0 ||
 		AverageDischargeUa > 1120000 || !ReadBatterySample(sample))
 		return false;
-	nrf_fuel_gauge_idle_set((float)sample.VoltageMv / 1000.0f,
-		(float)sample.TemperatureDeciC / 10.0f, (float)AverageDischargeUa / 1000000.0f);
-	return true;
+	return nrf_fuel_gauge_idle_set((float)sample.VoltageMv / 1000.0f,
+		(float)sample.TemperatureDeciC / 10.0f, (float)AverageDischargeUa / 1000000.0f) == 0;
 }
 
 size_t PmnPM1300FuelGauge::FuelGaugeStateSize()
@@ -207,12 +212,20 @@ bool PmnPM1300FuelGauge::SaveFuelGaugeState(void *pState, size_t Size)
 
 float PmnPM1300FuelGauge::TimeToEmpty()
 {
-	return Level() == UINT16_MAX ? NAN : nrf_fuel_gauge_tte_get();
+	float tte;
+
+	if (Level() == UINT16_MAX || nrf_fuel_gauge_tte_get(&tte) != 0)
+		return NAN;
+	return tte;
 }
 
 float PmnPM1300FuelGauge::TimeToFull()
 {
-	return Level() == UINT16_MAX ? NAN : nrf_fuel_gauge_ttf_get();
+	float ttf;
+
+	if (Level() == UINT16_MAX || nrf_fuel_gauge_ttf_get(&ttf) != 0)
+		return NAN;
+	return ttf;
 }
 
 void PmnPM1300FuelGauge::Reset()

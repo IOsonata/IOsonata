@@ -31,6 +31,8 @@ SOFTWARE.
 /** nPM1300 fuel gauge using Nordic's secondary-cell algorithm.
  * MIT License. Copyright (c) 2026 I-SYST inc.
  * Link pm_npm1300_fuel.cpp and the matching sdk-nrfxlib fuel-gauge archive.
+ * Written for the API of sdk-nrfxlib v3.4.0 and later, where every function
+ * returns an error code.
  * The Nordic library has one global state: only one instance can own it.
  * Call from one application context, never from an ISR.
  */
@@ -55,6 +57,7 @@ public:
 		PowerMgnt * const pPwrMnt) override;
 	// Model must match the installed battery and remain alive. State is optional;
 	// restore only with the same library version, model and firmware addresses.
+	// The library refuses a state saved by another version: start without it.
 	bool StartFuelGauge(const battery_model &Model, uint32_t NowMs,
 		const void *pState = NULL, size_t StateSize = 0);
 	bool UpdateFuelGauge(uint32_t NowMs);
