@@ -2806,6 +2806,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/nvm_ra4m1.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/nvm_ra4m1.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/storage/sdcard_impl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/sdcard_impl.cpp</locationURI>
