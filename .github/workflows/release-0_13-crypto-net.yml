@@ -1,0 +1,41 @@
+name: 0.13 crypto and networking host regressions
+
+on:
+  push:
+    branches:
+      - release_0_13_final_prep
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Crypto host test runners
+        shell: bash
+        run: |
+          set -euo pipefail
+          for runner in tests/crypto/run*.py; do
+            echo "=== $runner ==="
+            python3 "$runner"
+          done
+      - name: Networking host test runners (without external lwIP packet suite)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for runner in tests/net/run*.py; do
+            [[ "$runner" != tests/net/run.py ]] || continue
+            echo "=== $runner ==="
+            python3 "$runner"
+          done
+      - name: Power management host test runners
+        shell: bash
+        run: |
+          set -euo pipefail
+          for runner in tests/pwrmgnt/run*.py; do
+            echo "=== $runner ==="
+            python3 "$runner"
+          done
