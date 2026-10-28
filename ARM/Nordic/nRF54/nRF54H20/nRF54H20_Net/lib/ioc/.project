@@ -196,6 +196,11 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/sbuffer.c</locationURI>
 		</link>
 		<link>
+			<name>src/system_nrf54h.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_nrf54h.c</locationURI>
+		</link>
+		<link>
 			<name>src/vector_nrf52h20_net.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/vector_nrf52h20_net.c</locationURI>
@@ -351,11 +356,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/rng_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/micro-ecc/uECC.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
@@ -369,21 +369,6 @@
 			<name>include/crypto/cryptomaster.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/crypto/cryptomaster.h</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/ba414ep.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/crypto/ba414ep.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/cryptomaster.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/crypto/cryptomaster.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/cracen_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/cracen_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>
@@ -686,9 +671,9 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_crypto_ctlr.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_default_nrfx.cpp</name>
+			<name>src/crypto/crypto_default.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/crypto/crypto_default.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto.cpp</name>

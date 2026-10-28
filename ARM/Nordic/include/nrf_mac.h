@@ -40,7 +40,14 @@ SOFTWARE.
 #include "nrf.h"
 
 static inline uint64_t nrf_get_mac_address() {
+#if defined(FICR_BLE_ADDR_MaxCount)
+	// nRF54H20 FICR keeps the device address in BLE.ADDR, no DEVICEADDR
+	uint64_t addr = ((uint64_t)NRF_FICR->BLE.ADDR[1] << 32) | NRF_FICR->BLE.ADDR[0];
+
+	return (addr & 0xFFFFFFFFFFFFUL) | 0xC00000000000UL;
+#else
 	return (*(uint64_t *)NRF_FICR->DEVICEADDR & 0xFFFFFFFFFFFFUL) | 0xC00000000000UL;
+#endif
 };
 
 #endif // __NRF_MAC_H__

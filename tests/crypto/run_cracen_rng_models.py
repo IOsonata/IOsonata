@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='crypto-cracen-') as temp:
     for name in ('nrf_sdm.h', 'nrf_soc.h'):
         (out/name).write_text('#include "cracen_rng_model.h"\n')
     for opt in ('-O0', '-O2'):
-        for target in ('NRF54L15_XXAA', 'NRF54LM20A_XXAA', 'NRF54H20_XXAA'):
+        for target in ('NRF54L15_XXAA', 'NRF54LM20A_XXAA'):
             flags = [opt, '-g', '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                 '-fno-pie', '-DuECC_ENABLE_VLI_API=1', '-DCRYPTO_TEST_NO_MAIN', '-DCRACEN_RNG_MODEL', '-DCRACEN_RNG_POLL_LIMIT=32',
                 '-DCRACEN_SD_RNG_POLL_LIMIT=32', '-DSOFTDEVICE_PRESENT=1', '-D'+target]

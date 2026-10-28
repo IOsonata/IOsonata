@@ -1186,11 +1186,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/rng_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/micro-ecc/uECC.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
@@ -1204,21 +1199,6 @@
 			<name>include/crypto/cryptomaster.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/crypto/cryptomaster.h</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/ba414ep.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/crypto/ba414ep.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/cryptomaster.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/crypto/cryptomaster.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/cracen_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/cracen_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>
@@ -1336,11 +1316,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/mot_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/motion/mot_invn_icm20948.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/motion/mot_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
@@ -1434,11 +1409,6 @@
 			<name>src/sensors/agm_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/agm_mpu9250.cpp</name>
@@ -2206,9 +2176,9 @@
 			<locationURI>PARENT-5-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_default_nrfx.cpp</name>
+			<name>src/crypto/crypto_default.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/crypto/crypto_default.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto.cpp</name>

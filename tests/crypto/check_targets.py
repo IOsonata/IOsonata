@@ -15,7 +15,6 @@ VARIANTS = [
     ("nrf91", ["NRF91_SERIES"]),
     ("nrf54l15", ["NRF54L15_XXAA"]),
     ("nrf54lm20", ["NRF54LM20A_XXAA"]),
-    ("nrf54h20", ["NRF54H20_XXAA"]),
     ("stm32h753", ["STM32H753xx", "IOSONATA_STM32_HAS_RNG=1"]),
     ("stm32wba65", ["STM32WBA65xx", "IOSONATA_STM32_HAS_RNG=1"]),
     ("stm32l4s9", ["STM32L4S9xx", "IOSONATA_STM32_HAS_RNG=1"]),

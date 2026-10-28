@@ -63,7 +63,7 @@ SOFTWARE.
 #include "crypto_rng_nrf.h"
 #include "crypto/crypto_uecc.h"
 
-#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
+#if defined(NRF54L15_XXAA)
 #include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
 #elif defined(NRF52840_XXAA)
@@ -678,17 +678,18 @@ void BtHciCtlrLinkSupport(void)
 
 // P-256 key agreement for LE Secure Connections. The SDC runs on several
 // families with different P-256 hardware, selected at compile time:
-//   nRF54L15 / nRF54H20 : CRACEN            -> Ba414ep (hardware)
+//   nRF54L15            : CRACEN            -> Ba414ep (hardware)
 //   nRF52840            : CryptoCell CC310  -> CryptoCc3xx (hardware)
 //   nRF52832            : no accelerator    -> CryptoUecc (software)
 //   nRF5340 (net core)  : CC312 is on the app core secure domain, not
 //                         reachable from the network core -> CryptoUecc
+//   nRF54H20 radio core : CRACEN is in the secure domain -> CryptoUecc
 // Randomness comes from the Nordic hardware RNG. Linked only when the
 // security module references it.
 KeyAgreeEngine *BtHciCtlrKeyAgreeEngine(void)
 {
 	KeyAgreeEngine *pEcdh = nullptr;
-#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
+#if defined(NRF54L15_XXAA)
 	static Ba414ep s_Ecdh;								// CRACEN engine object
 	if (s_Ecdh.Init(CracenIntrfInstance(), CryptoRngNrfInstance()))
 	{
@@ -757,11 +758,12 @@ static void BtStackSdcAssert(const char * file, const uint32_t line)
 
 // Controller entropy source. The SoftDevice Controller draws its entropy pool
 // through this fixed-signature callback; it routes to the Nordic hardware RNG
-// (CryptoRngNrf): a CRACEN CTR-DRBG seeded from the CRACEN TRNG on nRF54L/H, the
+// (CryptoRngNrf): a CRACEN CTR-DRBG seeded from the CRACEN TRNG on nRF54L, the
 // NRF_RNG peripheral on nRF52/53/91. This removes the libc rand path so BLE
 // pairing, SMP, OOB and key material never draw from a software PRNG. The build
 // must link the Nordic RNG (rng_nrfx.cpp); a part without an RNG peripheral does
-// not link.
+// not link. The nRF54H20 radio core is such a part until the secure domain
+// entropy service is integrated.
 //
 // sdc_rand_source_t once had a priority pair alongside the poll callback. It
 // holds only rand_poll now, so the two getters written for it had no caller
@@ -1176,7 +1178,9 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	// point for it; a controller behind a link needs a vendor command.
 	sdc_default_tx_power_set(pCfg->TxPower);
 
-#if !defined(NRF54L15_XXAA) && !defined(NRF54LM20A_XXAA) && !defined(NRF54LM20B_XXAA)
+// No FPU exception interrupt on the nRF54L and on the nRF54H20 radio core
+#if !defined(NRF54L15_XXAA) && !defined(NRF54LM20A_XXAA) && !defined(NRF54LM20B_XXAA) && \
+	!defined(NRF54H20_XXAA)
 #if (__FPU_USED == 1)
 	// Patch for the controller and an RTOS to sleep properly when the FPU is
 	// in use: a pending FPU exception keeps the core from entering sleep.

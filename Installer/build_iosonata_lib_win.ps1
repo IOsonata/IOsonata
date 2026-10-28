@@ -38,9 +38,13 @@
     Build with custom IOcomposer location
 
 .NOTES
-    Version: v2.4.0
+    Version: v2.4.2
     Platform: Windows
 
+    v2.4.2: Skip the TaktOS cm55 and esp32c3 library projects; those cores
+            are not supported yet.
+    v2.4.1: Skip the RP2040 and RISC-V nRF54H20 library projects; they
+            have no MCU sources yet.
     v2.4.0: Build all TaktOS lib projects (ARM + RISCV) by default
             after the IOsonata build. Added -TaktosDir and -NoTaktos.
     v2.3.0: Prefer IOcomposer; fall back to Eclipse if not found.
@@ -55,7 +59,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v2.4.0"
+$SCRIPT_VERSION = "v2.4.2"
 
 # --- Helper: Print Banner ---
 function Show-Banner {
@@ -195,6 +199,12 @@ Get-ChildItem -Path "$ROOT\IOsonata" -Recurse -Filter ".project" -ErrorAction Si
             return
         }
 
+        # Skeleton projects without MCU sources, they do not build yet
+        if ($relPath -eq "ARM\RPI\RP20\RP2040\lib\ioc" -or
+            $relPath -eq "RISCV\Nordic\nRF54\nRF54H20\lib\ioc") {
+            return
+        }
+
         $mcuFamilies += $relPath
         $mcuPaths += $projRoot
     }
@@ -228,6 +238,10 @@ if ($NoTaktos) {
         $rel = $projRoot.Replace("$TaktosDir\", "")
         # Keep only top level ARM\<core>\ioc or RISCV\<core>\ioc
         if ($rel -match '^(ARM|RISCV)\\[^\\]+\\ioc$') {
+            # TaktOS cm55 and esp32c3 are not supported yet
+            if ($rel -eq "ARM\cm55\ioc" -or $rel -eq "RISCV\esp32c3\ioc") {
+                return
+            }
             $taktosFamilies += $rel
             $taktosPaths += $projRoot
         }
