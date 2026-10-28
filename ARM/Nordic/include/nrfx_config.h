@@ -36,10 +36,10 @@
 
 #include <nrfx_config_common.h>
 
-// The nRF54 RNG driver and the IOsonata hardware crypto provider both use
+// The nRF54L15 RNG driver and the IOsonata hardware crypto provider both use
 // CRACEN. Enable the nrfx CRACEN driver even when a generated target config
-// omits the switch.
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+// omits the switch. The nRF54H20 application and radio cores have no CRACEN.
+#if defined(NRF54L15_XXAA)
 #ifndef NRFX_CRACEN_ENABLED
 #define NRFX_CRACEN_ENABLED 1
 #endif

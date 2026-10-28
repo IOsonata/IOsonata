@@ -34,7 +34,12 @@
 #endif
 /*******************************/
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54H20_XXAA)
+// The nRF54H20 application and radio cores have no RNG peripheral and no
+// CRACEN; the secure domain owns them. The nRF54H20 libraries do not link this
+// file.
+#error "rng_nrfx.cpp: no RNG peripheral or CRACEN on the nRF54H20 application and radio cores"
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #include "cracen_intrf.h"
 
 #define RNG_USE_CRACEN	1

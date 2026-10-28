@@ -7,8 +7,10 @@ set -euo pipefail
 #  Purpose: Build IOsonata libraries for selected MCU
 #           and all TaktOS ARM + RISCV libraries
 #  Platform: macOS
-#  Version: v2.4.0
+#  Version: v2.4.1
 #
+#  v2.4.1: Skip the RP2040 and RISC-V nRF54H20 library
+#          projects; they have no MCU sources yet.
 #  v2.4.0: Build all TaktOS lib projects (ARM + RISCV) by
 #          default after the IOsonata build. Lib projects
 #          only, Benchmark/KVB/test projects are skipped.
@@ -30,7 +32,7 @@ set -euo pipefail
 #
 # =========================================================
 
-SCRIPT_VERSION="v2.4.0"
+SCRIPT_VERSION="v2.4.1"
 ROOT="${HOME}/IOcomposer"
 IOCOMPOSER_APP="/Applications/IOcomposer.app"
 ECLIPSE_APP="/Applications/Eclipse.app"
@@ -232,6 +234,12 @@ while IFS= read -r proj_file; do
   if [[ "$rel_path" =~ ^Win/lib/ioc$ ]] || \
      [[ "$rel_path" =~ ^Windows/lib/ioc$ ]] || \
      [[ "$rel_path" =~ ^Linux/lib/ioc$ ]]; then
+    continue
+  fi
+
+  # Skeleton projects without MCU sources, they do not build yet
+  if [[ "$rel_path" == "ARM/RPI/RP20/RP2040/lib/ioc" ]] || \
+     [[ "$rel_path" == "RISCV/Nordic/nRF54/nRF54H20/lib/ioc" ]]; then
     continue
   fi
 

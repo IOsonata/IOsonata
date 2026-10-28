@@ -27,8 +27,12 @@ SOFTWARE.
 #include "crypto/crypto.h"
 #include "nrf.h"
 #include "crypto_rng_nrf.h"
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || \
-	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54H20_XXAA)
+// No crypto hardware or RNG on the nRF54H20 application and radio cores. The
+// nRF54H20 libraries do not link this file and use the software Crypto
+// implementation in src/crypto/crypto.cpp.
+#error "crypto_default_nrfx.cpp: no crypto hardware on the nRF54H20 application and radio cores"
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #include "cracen_intrf.h"
 #include "crypto/cryptomaster.h"
 #include "crypto/ba414ep.h"
@@ -73,7 +77,7 @@ bool Crypto::Init()
 #ifdef CRYPTO_TARGET_AES
 #if defined(CRYPTO_TARGET_CC_HASH)
 	if (!s_Aes.Init(Cc3xxIntrfInstance()))
-#elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	if (!s_Aes.Init(CracenIntrfInstance()))
 #else
 	if (!s_Aes.Enable())

@@ -487,6 +487,10 @@ Build scripts compile IOsonata libraries for specific MCU targets. These standal
 - **After source changes** - Rebuild libraries when you modify IOsonata code
 - **From anywhere** - As long as IOcomposer or a compatible Eclipse Embedded CDT installation and IOsonata are installed
 
+The scripts list every `lib/ioc` library project except the host libraries
+and two skeleton projects without MCU sources: `ARM/RPI/RP20/RP2040/lib/ioc`
+and `RISCV/Nordic/nRF54/nRF54H20/lib/ioc`.
+
 ### Usage
 
 #### macOS

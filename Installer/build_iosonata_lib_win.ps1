@@ -38,9 +38,11 @@
     Build with custom IOcomposer location
 
 .NOTES
-    Version: v2.4.0
+    Version: v2.4.1
     Platform: Windows
 
+    v2.4.1: Skip the RP2040 and RISC-V nRF54H20 library projects; they
+            have no MCU sources yet.
     v2.4.0: Build all TaktOS lib projects (ARM + RISCV) by default
             after the IOsonata build. Added -TaktosDir and -NoTaktos.
     v2.3.0: Prefer IOcomposer; fall back to Eclipse if not found.
@@ -55,7 +57,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v2.4.0"
+$SCRIPT_VERSION = "v2.4.1"
 
 # --- Helper: Print Banner ---
 function Show-Banner {
@@ -192,6 +194,12 @@ Get-ChildItem -Path "$ROOT\IOsonata" -Recurse -Filter ".project" -ErrorAction Si
 
         # Filter out non-Windows projects if any exist
         if ($relPath -match "^macOS" -or $relPath -match "^Linux") {
+            return
+        }
+
+        # Skeleton projects without MCU sources, they do not build yet
+        if ($relPath -eq "ARM\RPI\RP20\RP2040\lib\ioc" -or
+            $relPath -eq "RISCV\Nordic\nRF54\nRF54H20\lib\ioc") {
             return
         }
 

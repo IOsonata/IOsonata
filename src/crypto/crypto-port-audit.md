@@ -42,7 +42,8 @@ A hardware peripheral listed as pending is not claimed as implemented.
 | nRF52840 | CC3xx AES-128/256, SHA-256/HMAC, P-256/RNG | Shared ARM AES/SHA CPU FIFO driver; board validation pending. |
 | nRF5340 network | Existing ECB-128/RNG | AES-256, SHA and P-256 software. |
 | nRF5340 application, nRF9160, nRF91x1 | CC3xx AES-128/256, SHA-256/HMAC, P-256/RNG | Same shared ARM driver and generic test as nRF52840; board validation pending. |
-| nRF54H20 application/network, nRF54L15, nRF54LM20x | CryptoMaster/BA414EP and conditioned CRACEN TRNG | AES-128/256 ECB/CBC/CTR in both directions. AES/PKE/RNG share operation exclusion. SHA, key import and ECDSA still use inherited software where no override exists. |
+| nRF54L15, nRF54LM20x | CryptoMaster/BA414EP and conditioned CRACEN TRNG | AES-128/256 ECB/CBC/CTR in both directions. AES/PKE/RNG share operation exclusion. SHA, key import and ECDSA still use inherited software where no override exists. |
+| nRF54H20 application/network | Generic software | The application and radio cores have no RNG peripheral, CRACEN or CryptoCell; CRACEN belongs to the secure domain. The libraries do not link the Nordic RNG or crypto provider: `Random` uses the software generator and `IsSecure` is false. The radio core Bluetooth controller uses software P-256 and needs `CryptoRngNrfInstance`, so a Bluetooth application does not link until the secure domain entropy service is integrated. |
 | nRF54H20 RISC-V skeleton | Not a complete MCU library | No complete generic crypto integration; not equivalent to the Arm application/network libraries. |
 | RP2040 | Generic software | Ring-oscillator bits are not exposed as qualified secure entropy. |
 | RA4M1 (ioc and e2) | SCE5 AES-128/256 and TRNG (CryptoRa4m1Aes, CryptoRa4m1Rng) | Inherited software SHA/P-256. Key index generated once per operation, blocks through the update primitive; bounded waits and fault propagation. EK-RA4M1 CryptoTest 101 of 101 (2026-10-25). |
@@ -102,7 +103,7 @@ fixture is synthetic; displayed timing values are not measured performance.
 - Combined CC3xx AES/SHA/PKA model executes the production Nordic default binding;
   generic test plus CC3xx/BA414EP checks: 148 passed, 0 failed, 0 skipped at O0/O2
   with ASan/UBSan. OpenSSL supplies arithmetic; FIFO timing is modeled.
-- CRACEN TRNG transport models for nRF54L15, nRF54LM20 and nRF54H20:
+- CRACEN TRNG transport models for nRF54L15 and nRF54LM20:
   unchanged generic test 101 passed, 0 failed, 0 skipped at O0/O2 with ASan/UBSan.
   Tests cover startup/FIFO timeouts, health failure after partial output, key/output
   clearing, next-call recovery, a 70001-byte draw, SoftDevice entropy success and
@@ -165,8 +166,7 @@ software remains selected for those operations.
 CryptoMaster DMA descriptors and block buffers now have static lifetime and a
 shared operation lock. Failed reset prevents reuse across all CryptoMaster
 instances. Descriptors remain intact until a successful explicit engine reset;
-caller output is cleared on failure. Host tests do not validate cache coherence
-on nRF54H20. CRACEN RNG no longer invokes nrfx CTR-DRBG or its CryptoMaster DMA:
+caller output is cleared on failure. CRACEN RNG no longer invokes nrfx CTR-DRBG or its CryptoMaster DMA:
 it reads the dedicated hardware conditioner with bounded waits, checks health
 before and after each word, and resets/wipes its own state after each draw.
 Silex AES, PKE and RNG operations share exclusion across objects. This lock is
