@@ -58,17 +58,17 @@
 		<link>
 			<name>src/FreeRTOS/croutine.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/croutine.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS-Kernel/croutine.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/event_groups.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/event_groups.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS-Kernel/event_groups.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/list.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/list.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS-Kernel/list.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/nrf52</name>
@@ -83,22 +83,22 @@
 		<link>
 			<name>src/FreeRTOS/queue.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/queue.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS-Kernel/queue.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/stream_buffer.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/stream_buffer.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS-Kernel/stream_buffer.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/tasks.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/tasks.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS-Kernel/tasks.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/timers.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/timers.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS-Kernel/timers.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx</name>
@@ -153,12 +153,12 @@
 		<link>
 			<name>src/FreeRTOS/portable/Common/mpu_wrappers.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/portable/Common/mpu_wrappers.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS-Kernel/portable/Common/mpu_wrappers.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/portable/MemMang/heap_3.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/portable/MemMang/heap_3.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS-Kernel/portable/MemMang/heap_3.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src</name>

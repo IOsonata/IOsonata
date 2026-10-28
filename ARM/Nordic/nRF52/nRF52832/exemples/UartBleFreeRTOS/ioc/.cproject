@@ -66,7 +66,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS-Kernel/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/device&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/strerror&quot;"/>
@@ -112,7 +112,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS-Kernel/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/device&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
@@ -262,7 +262,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS-Kernel/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/device&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/strerror&quot;"/>
@@ -309,7 +309,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS-Kernel/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/device&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
@@ -457,7 +457,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS-Kernel/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1236857914" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -487,7 +487,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS-Kernel/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.547959845" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -622,7 +622,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS-Kernel/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1798828491" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="NDEBUG"/>
@@ -654,7 +654,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS-Kernel/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.492514899" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="NDEBUG"/>
