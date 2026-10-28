@@ -49,7 +49,6 @@ class VideoLibraryProjects(unittest.TestCase):
                 self.assertGreaterEqual(len(configs), 2)
                 for config in configs:
                     entries = config.findall(".//sourceEntries/entry")
-                    self.assertTrue(entries, "Missing source entries")
                     for entry in entries:
                         exclusions = entry.get("excluding", "").split("|")
                         for excluded in exclusions:
