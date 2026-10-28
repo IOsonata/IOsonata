@@ -22,7 +22,7 @@ the SAMD21J18A linker script for other SAMD21 package/memory variants.
 - [x] Cortex-M0+ IRQ vector tables using IOsonata `ResetEntry` (source added; build and device validation pending)
 - [ ] Clock source and GCLK setup, synchronization and clock reporting (reset-time 1 MHz clock plus selectable 8 MHz OSC8M/GCLK0 path added; channel enable/disable added; peripheral bus gates and 48 MHz setup pending)
 - [ ] PORT GPIO, mux and external interrupts (basic GPIO/mux source added; interrupt API, device definitions and validation pending)
-- [ ] SERCOM UART, SPI and I2C drivers
+- [ ] SERCOM UART, SPI and I2C drivers (D21 SERCOM0..5 APBC/GCLK0 clock enable added; serial drivers not implemented)
 - [ ] TC/TCC hardware timers
 - [ ] Embedded CDT managed static-library projects and generic examples
 - [ ] Build and Xplained Pro hardware validation
@@ -48,3 +48,11 @@ GCLK channels, but peripheral bus clock gates, device-specific channel IDs,
 and the 48 MHz clock source must still be integrated with the drivers. External oscillator selection, 48 MHz DFLL configuration and peripheral
 clock routing is not yet integrated with SERCOM or timer drivers. Do not use this stage to validate
 UART baud rate, high-speed timing or USB.
+
+## SAM D21 SERCOM clocks
+
+`Samd21SercomClockEnable(DevNo)` enables the APBC bus clock and the
+SERCOM core GCLK channel for device 0..5, using generator 0. This is an
+internal MCU helper; application source does not configure SERCOM clocks.
+The helper is not a UART driver and has not been compiled or hardware-tested.
+The SAM D11 peripheral clock mapping will be verified separately.
