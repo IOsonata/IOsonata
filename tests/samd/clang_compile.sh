@@ -5,9 +5,22 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 CLANG=${CLANG:-clang}
+CLANGXX=${CLANGXX:-clang++}
 OUT=${TMPDIR:-/tmp}/iosonata-samd-clang-$$
 trap 'rm -rf "$OUT"' EXIT HUP INT TERM
 mkdir -p "$OUT"
+
+if ! command -v "$CLANG" >/dev/null 2>&1 || ! command -v "$CLANGXX" >/dev/null 2>&1
+then
+	echo "Clang C/C++ compilers are required" >&2
+	exit 1
+fi
+
+if ! printf "#include <stdio.h>\n" | "$CLANG" --target=arm-none-eabi -mcpu=cortex-m0plus -x c -fsyntax-only - >/dev/null 2>&1
+then
+	echo "ARM target C library headers are missing. Set CLANG to a compiler with an ARM sysroot." >&2
+	exit 1
+fi
 
 COMMON="-target arm-none-eabi -mcpu=cortex-m0plus -mthumb -ffreestanding -fno-builtin -Wall -Wextra -Werror"
 CMSIS="-I$ROOT/ARM/CMSIS/Core/Include"
@@ -44,4 +57,9 @@ do
 			-o "$OUT/$DEVICE-sercom-clock.o"
 	fi
 done
-echo "SAMD C-source compile completed"
+"$CLANGXX" $COMMON -std=c++17 -fno-exceptions -fno-rtti -D__SAMD21J18A__ \
+	$CMSIS $GENERIC $FAMILY -I"$ROOT/ARM/Microchip/SAMD/SAMD21/include" \
+	-I"$ROOT/ARM/Microchip/SAMD/SAMD21/include" \
+	-c "$ROOT/ARM/Microchip/SAMD/SAMD21/src/uart_samd21.cpp" \
+	-o "$OUT/SAMD21-uart.o"
+echo "SAMD C and C++ source compile completed"
