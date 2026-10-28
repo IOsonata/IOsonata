@@ -982,14 +982,14 @@ echo "📦 Syncing IOsonata + external SDKs..."
 LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 LOCAL_CLONE="$LOCAL_INSTALLER_DIR/clone_iosonata_sdk_macos.sh"
 TMP_CLONE=""
-CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.log)
+CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.log.XXXXXX)
 
 if [[ -f "$LOCAL_CLONE" ]]; then
 	CLONE_SCRIPT="$LOCAL_CLONE"
 	echo "SDK clone script: $CLONE_SCRIPT"
 else
 	CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_macos.sh"
-	TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.sh)
+	TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.sh.XXXXXX)
 	if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
 		echo "Failed to download SDK clone script: $CLONE_URL" >&2
 		[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" "$CLONE_LOG"
