@@ -910,38 +910,62 @@ sudo codesign --verify --deep --strict "$ECLIPSE_APP" || {
 # The installed app and plugins are complete and signed before initialization.
 # Signing/renaming can change the Eclipse instance identity under ~/.eclipse.
 # Seed user-level MCU preferences only after the final signed instance exists.
-echo "Initializing signed IOcomposer Eclipse configuration..."
-if ! "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize; then
-	echo "Warning: Eclipse instance initialization failed; global MCU preferences remain in $ECLIPSE_SETTINGS." >&2
-fi
+# Snapshot instance configuration state before launching the signed app.
+# A pre-existing Eclipse instance may be newer than IOcomposer's instance.
+INSTANCE_SNAPSHOT=$(mktemp /tmp/iocomposer_instance.XXXXXXXX)
+capture_instances() {
+  "$PYTHON3" - "$1" <<'PY'
+import json
+import os
+import sys
 
-# Find the Eclipse instance configuration created by the signed application
-INSTANCE_CFG=""
-if [[ -x "$PYTHON3" ]]; then
-  INSTANCE_CFG=$("$PYTHON3" - <<'PY'
-import os, sys
-base = os.path.expanduser("~/.eclipse")
-cands = []
-if os.path.isdir(base):
-  for root, dirs, _ in os.walk(base):
-    for d in dirs:
-      if d == "configuration":
-        p = os.path.join(root, d)
-        try:
-          cands.append((os.path.getmtime(p), p))
-        except OSError:
-          pass
-if not cands:
-  sys.exit(1)
-cands.sort(reverse=True)
-print(cands[0][1])
+root = os.path.expanduser("~/.eclipse")
+result = {}
+if os.path.isdir(root):
+  for directory, subdirs, _ in os.walk(root):
+    if os.path.basename(directory) != "configuration":
+      continue
+    subdirs[:] = []
+    paths = [directory, os.path.join(directory, "config.ini"),
+             os.path.join(directory, "org.eclipse.osgi"),
+             os.path.join(directory, ".settings")]
+    stamps = []
+    for path in paths:
+      try:
+        stat = os.stat(path)
+        stamps.append([stat.st_mtime_ns, stat.st_ctime_ns])
+      except OSError:
+        stamps.append(None)
+    result[os.path.realpath(directory)] = stamps
+if sys.argv[1] == "snapshot":
+  print(json.dumps(result))
+else:
+  with open(sys.argv[1], encoding="utf-8") as stream:
+    previous = json.load(stream)
+  changed = [path for path, stamps in result.items()
+             if previous.get(path) != stamps]
+  if len(changed) != 1:
+    sys.stderr.write("Expected exactly one IOcomposer instance changed during initialization; found %d.\\n" % len(changed))
+    sys.exit(1)
+  print(changed[0])
 PY
-) || INSTANCE_CFG=""
+}
+capture_instances snapshot > "$INSTANCE_SNAPSHOT"
+echo "Initializing signed IOcomposer Eclipse configuration..."
+INIT_OK=1
+if ! "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize; then
+  INIT_OK=0
+  echo "Warning: Signed IOcomposer initialization failed." >&2
 fi
+INSTANCE_CFG=""
+if [[ "$INIT_OK" -eq 1 ]]; then
+  INSTANCE_CFG=$(capture_instances "$INSTANCE_SNAPSHOT") || INSTANCE_CFG=""
+fi
+rm -f "$INSTANCE_SNAPSHOT"
 
 if [[ -z "$INSTANCE_CFG" ]]; then
-  echo "⚠️ Could not find Eclipse instance configuration folder under ~/.eclipse."
-  echo "   Eclipse may not have been started yet."
+  echo "Warning: Could not identify the IOcomposer instance initialized under ~/.eclipse." >&2
+  echo "Not writing MCU preferences to an unrelated Eclipse instance." >&2
 else
   echo "📂 Found Eclipse settings: $INSTANCE_CFG"
   mkdir -p "$INSTANCE_CFG/.settings"
