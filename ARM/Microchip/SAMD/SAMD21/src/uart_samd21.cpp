@@ -341,6 +341,14 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	atomic_flag_clear(&pIntrf->bBusy);
 	atomic_store(&pIntrf->EnCnt, 1);
 	Samd21UartEnable(pIntrf);
+	if ((*Samd21UartReg32(pHw, SAMD21_SERCOM_SYNCBUSY) &
+		SAMD21_SYNCBUSY_ENABLE) != 0UL ||
+		(*Samd21UartReg32(pHw, SAMD21_SERCOM_CTRLA) &
+		SAMD21_USART_ENABLE) == 0UL)
+	{
+		pHw->pUartDev = NULL;
+		return false;
+	}
 
 	return true;
 }
