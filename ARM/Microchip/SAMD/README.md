@@ -19,7 +19,7 @@ the SAMD21J18A linker script for other SAMD21 package/memory variants.
 
 - [x] MCU-specific flash/RAM linker memory maps
 - [ ] Microchip device CMSIS headers and core/part definitions
-- [ ] Cortex-M0+ IRQ vector tables using IOsonata `ResetEntry`
+- [x] Cortex-M0+ IRQ vector tables using IOsonata `ResetEntry` (source added; build and device validation pending)
 - [ ] Clock source and GCLK setup, synchronization and clock reporting
 - [ ] PORT GPIO, mux and external interrupts
 - [ ] SERCOM UART, SPI and I2C drivers
