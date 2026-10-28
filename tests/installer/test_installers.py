@@ -151,6 +151,25 @@ esac
 					for log in logs:
 						Path(log).unlink(missing_ok=True)
 
+	def test_installers_sync_sources_before_post_setup_builds(self):
+		for platform in ['macos', 'linux', 'win']:
+			name = f'install_iocdevtools_{platform}.' + ('ps1' if platform == 'win' else 'sh')
+			source = (INSTALLER / name).read_text()
+			with self.subTest(platform=platform):
+				self.assertNotIn('CLONE_INVOKED_BUILD', source)
+				if platform == 'win':
+					self.assertIn('"-NoBuild"', source)
+					self.assertLess(source.index('Install-IOcomposer -Runtime'), source.index('& $BS -SdkHome'))
+					self.assertIn('Write-Warning "Library build', source)
+				else:
+					self.assertIn('CLONE_ARGS=(--home "$ROOT" --no-build)', source)
+					self.assertLess(source.index('install_iocomposer '), source.index('bash "$BUILD_SCRIPT"'))
+					self.assertIn('if ! bash "$BUILD_SCRIPT"', source)
+				if platform == 'macos':
+					self.assertLess(source.index('sudo codesign --verify'), source.index('capture_instances snapshot'))
+					self.assertLess(source.index('capture_instances snapshot'), source.index('Initializing signed IOcomposer'))
+					self.assertLess(source.index('Initializing signed IOcomposer'), source.index('Found Eclipse settings: $INSTANCE_CFG'))
+
 	def test_help_and_invalid_arguments_have_no_side_effects(self):
 		for platform, shell in self.shells():
 			with tempfile.TemporaryDirectory() as directory:
