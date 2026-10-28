@@ -107,7 +107,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths.541000052" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Debug&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Debug_FPU&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano.541000053" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano" value="true" valueType="boolean"/>
 							</tool>
@@ -123,7 +123,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths.541000059" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Debug&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Debug_FPU&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano.541000060" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" value="true" valueType="boolean"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input.541000061" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
@@ -257,8 +257,8 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths.541001052" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release_FPU&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release_FPU&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano.541001053" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano" value="true" valueType="boolean"/>
 							</tool>
@@ -275,8 +275,8 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths.541001059" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release_FPU&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm33/ioc/Release_FPU&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano.541001060" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" value="true" valueType="boolean"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input.541001061" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
