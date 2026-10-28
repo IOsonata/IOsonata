@@ -833,13 +833,89 @@ echo "✅ Eclipse Path Variables configured in plugin_customization.ini:"
 echo "   IOSONATA_LOC=$ROOT"
 echo
 
-# Step 1: Ensure Eclipse has initialized its instance folder
-if [[ -d "$ECLIPSE_APP" ]]; then
-  echo "⏳ Initializing Eclipse to create instance configuration..."
-  "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize || true
+# ---------------------------------------------------------
+# Sync IOsonata + external SDKs (single source of truth)
+# ---------------------------------------------------------
+echo
+echo "📦 Syncing IOsonata + external SDKs..."
+
+LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+LOCAL_CLONE="$LOCAL_INSTALLER_DIR/clone_iosonata_sdk_macos.sh"
+TMP_CLONE=""
+CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.log.XXXXXX)
+
+if [[ -f "$LOCAL_CLONE" ]]; then
+	CLONE_SCRIPT="$LOCAL_CLONE"
+	echo "SDK clone script: $CLONE_SCRIPT"
+else
+	CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_macos.sh"
+	TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.sh.XXXXXX)
+	if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
+		echo "Failed to download SDK clone script: $CLONE_URL" >&2
+		[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" "$CLONE_LOG"
+		exit 1
+	fi
+	CLONE_SCRIPT="$TMP_CLONE"
+	echo "SDK clone script: $CLONE_URL"
 fi
 
-# Step 2: Find the newest instance configuration folder under ~/.eclipse
+# Prefer --no-build if supported by the clone script (newer versions). If not supported,
+# retry without it. We capture output so we can detect whether the builder ran.
+CLONE_ARGS=(--home "$ROOT" --no-build)
+if [[ "$MODE" == "force" ]]; then
+  CLONE_ARGS+=(--mode force)
+fi
+
+run_clone() {
+  # shellcheck disable=SC2068
+  zsh "$CLONE_SCRIPT" "$@" 2>&1 | tee -a "$CLONE_LOG"
+}
+
+if ! run_clone "${CLONE_ARGS[@]}"; then
+	echo "SDK synchronization failed. See $CLONE_LOG" >&2
+	[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE"
+	exit 1
+fi
+
+[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" || true
+
+# Detect whether the clone script already invoked the IOsonata library builder.
+CLONE_INVOKED_BUILD=0
+if grep -qE "IOsonata Library (Auto-)?Build|IOsonata Library Builder|Available IOsonata library projects|Select project to build" "$CLONE_LOG"; then
+  CLONE_INVOKED_BUILD=1
+fi
+
+rm -f "$CLONE_LOG" || true
+
+# ---------------------------------------------------------
+# Install IOsonata Eclipse Plugin
+# ---------------------------------------------------------
+echo
+install_iosonata_plugin
+
+install_iocomposer "$ECLIPSE_APP/Contents/Eclipse"
+
+sudo /usr/libexec/PlistBuddy -c "Set :CFBundleName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
+sudo /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist" 2>/dev/null || \
+	sudo /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
+
+# The downloaded app was modified by the installer. Sign it before any launch.
+sudo xattr -cr "$ECLIPSE_APP"
+sudo codesign --force --deep --sign - "$ECLIPSE_APP"
+sudo codesign --verify --deep --strict "$ECLIPSE_APP" || {
+	echo "Error: IOcomposer application signature verification failed." >&2
+	exit 1
+}
+
+# The installed app and plugins are complete and signed before initialization.
+# Signing/renaming can change the Eclipse instance identity under ~/.eclipse.
+# Seed user-level MCU preferences only after the final signed instance exists.
+echo "Initializing signed IOcomposer Eclipse configuration..."
+if ! "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize; then
+	echo "Warning: Eclipse instance initialization failed; global MCU preferences remain in $ECLIPSE_SETTINGS." >&2
+fi
+
+# Find the Eclipse instance configuration created by the signed application
 INSTANCE_CFG=""
 if [[ -x "$PYTHON3" ]]; then
   INSTANCE_CFG=$("$PYTHON3" - <<'PY'
@@ -934,87 +1010,6 @@ for pref in org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs \
 	}
 done
 echo "Embedded CDT global compiler preferences created in $ECLIPSE_SETTINGS"
-
-# ---------------------------------------------------------
-# Sync IOsonata + external SDKs (single source of truth)
-# ---------------------------------------------------------
-echo
-echo "📦 Syncing IOsonata + external SDKs..."
-
-LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-LOCAL_CLONE="$LOCAL_INSTALLER_DIR/clone_iosonata_sdk_macos.sh"
-TMP_CLONE=""
-CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.log.XXXXXX)
-
-if [[ -f "$LOCAL_CLONE" ]]; then
-	CLONE_SCRIPT="$LOCAL_CLONE"
-	echo "SDK clone script: $CLONE_SCRIPT"
-else
-	CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_macos.sh"
-	TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.sh.XXXXXX)
-	if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
-		echo "Failed to download SDK clone script: $CLONE_URL" >&2
-		[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" "$CLONE_LOG"
-		exit 1
-	fi
-	CLONE_SCRIPT="$TMP_CLONE"
-	echo "SDK clone script: $CLONE_URL"
-fi
-
-# Prefer --no-build if supported by the clone script (newer versions). If not supported,
-# retry without it. We capture output so we can detect whether the builder ran.
-CLONE_ARGS=(--home "$ROOT" --no-build)
-if [[ "$MODE" == "force" ]]; then
-  CLONE_ARGS+=(--mode force)
-fi
-
-run_clone() {
-  # shellcheck disable=SC2068
-  zsh "$CLONE_SCRIPT" "$@" 2>&1 | tee -a "$CLONE_LOG"
-}
-
-if ! run_clone "${CLONE_ARGS[@]}"; then
-	echo "SDK synchronization failed. See $CLONE_LOG" >&2
-	[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE"
-	exit 1
-fi
-
-[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" || true
-
-# Detect whether the clone script already invoked the IOsonata library builder.
-CLONE_INVOKED_BUILD=0
-if grep -qE "IOsonata Library (Auto-)?Build|IOsonata Library Builder|Available IOsonata library projects|Select project to build" "$CLONE_LOG"; then
-  CLONE_INVOKED_BUILD=1
-fi
-
-rm -f "$CLONE_LOG" || true
-
-# ---------------------------------------------------------
-# Install IOsonata Eclipse Plugin
-# ---------------------------------------------------------
-echo
-install_iosonata_plugin
-
-install_iocomposer "$ECLIPSE_APP/Contents/Eclipse"
-
-sudo /usr/libexec/PlistBuddy -c "Set :CFBundleName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
-sudo /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist" 2>/dev/null || \
-	sudo /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
-
-# The downloaded app was modified by the installer. Sign it before any launch.
-sudo xattr -cr "$ECLIPSE_APP"
-sudo codesign --force --deep --sign - "$ECLIPSE_APP"
-sudo codesign --verify --deep --strict "$ECLIPSE_APP" || {
-	echo "Error: IOcomposer application signature verification failed." >&2
-	exit 1
-}
-
-# MCU global preferences are written in the installation configuration scope
-# above; creating a user instance is independent of optional library builds.
-echo "Initializing IOcomposer Eclipse configuration..."
-if ! "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize; then
-	echo "Warning: Eclipse instance initialization failed; global MCU preferences remain in $ECLIPSE_SETTINGS." >&2
-fi
 
 # ---------------------------------------------------------
 # Generate makefile_path.mk
