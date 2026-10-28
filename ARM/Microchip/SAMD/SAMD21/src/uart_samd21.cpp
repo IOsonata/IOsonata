@@ -217,6 +217,28 @@ static void Samd21UartIrq(Samd21UartDev_t *pDev)
 	flags = *Samd21UartReg8(pDev, SAMD21_SERCOM_INTFLAG);
 	enabled = *Samd21UartReg8(pDev, SAMD21_SERCOM_INTENSET_READ);
 	flags &= enabled;
+	if ((flags & SAMD21_USART_ERROR) != 0U &&
+		(flags & SAMD21_USART_RXC) == 0U)
+	{
+		status = *Samd21UartReg16(pDev, SAMD21_SERCOM_STATUS);
+		if ((status & SAMD21_USART_STATUS_BUFOVF) != 0U)
+		{
+			pUart->RxOvrErrCnt++;
+		}
+		if ((status & SAMD21_USART_STATUS_FERR) != 0U)
+		{
+			pUart->FramErrCnt++;
+		}
+		if ((status & SAMD21_USART_STATUS_PERR) != 0U)
+		{
+			pUart->ParErrCnt++;
+		}
+		*Samd21UartReg16(pDev, SAMD21_SERCOM_STATUS) =
+			status & (SAMD21_USART_STATUS_BUFOVF |
+			SAMD21_USART_STATUS_FERR | SAMD21_USART_STATUS_PERR);
+		*Samd21UartReg8(pDev, SAMD21_SERCOM_INTFLAG) = SAMD21_USART_ERROR;
+	}
+
 	if ((flags & SAMD21_USART_RXC) != 0U)
 	{
 		status = *Samd21UartReg16(pDev, SAMD21_SERCOM_STATUS);
