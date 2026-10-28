@@ -18,12 +18,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install Arm GNU cross compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi g++-arm-none-eabi
       - name: Compile Arducam Mega driver with IOsonata headers
         shell: bash
         run: |
           set -euo pipefail
           for opt in -O0 -O2; do
-            g++ -std=gnu++23 -fno-exceptions -fno-rtti -Wall -Wextra -Werror "$opt" \
+            arm-none-eabi-g++ -mcpu=cortex-m4 -mthumb -std=gnu++23 -fno-exceptions -fno-rtti -Wall -Wextra -Werror "$opt" \
               -Iinclude -IARM/include -c src/video/cam_arducam_mega.cpp \
               -o "/tmp/arducam_mega_${opt#-}.o"
           done
