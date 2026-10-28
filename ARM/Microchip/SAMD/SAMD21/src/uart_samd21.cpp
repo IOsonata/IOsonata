@@ -59,6 +59,8 @@ SOFTWARE.
 #define SAMD21_USART_DRE		(1U << 0)
 #define SAMD21_USART_RXC		(1U << 2)
 #define SAMD21_USART_WAIT		100000UL
+#define SAMD21_SYNCBUSY_ENABLE	(1UL << 1)
+#define SAMD21_SYNCBUSY_CTRLB	(1UL << 2)
 
 typedef struct {
 	UARTDev_t *pUartDev;
@@ -207,7 +209,7 @@ static void Samd21UartDisable(DevIntrf_t * const pIntrf)
 	pDev = (Samd21UartDev_t *)pIntrf->pDevData;
 	*Samd21UartReg32(pDev, SAMD21_SERCOM_CTRLA) &=
 		~SAMD21_USART_ENABLE;
-	(void)Samd21UartWait(pDev, SAMD21_USART_ENABLE);
+	(void)Samd21UartWait(pDev, SAMD21_SYNCBUSY_ENABLE);
 }
 
 static void Samd21UartEnable(DevIntrf_t * const pIntrf)
@@ -217,7 +219,24 @@ static void Samd21UartEnable(DevIntrf_t * const pIntrf)
 	pDev = (Samd21UartDev_t *)pIntrf->pDevData;
 	*Samd21UartReg32(pDev, SAMD21_SERCOM_CTRLA) |=
 		SAMD21_USART_ENABLE;
-	(void)Samd21UartWait(pDev, SAMD21_USART_ENABLE);
+	(void)Samd21UartWait(pDev, SAMD21_SYNCBUSY_ENABLE);
+}
+
+static void Samd21UartReset(DevIntrf_t * const pIntrf)
+{
+	Samd21UartDev_t *pDev;
+
+	pDev = (Samd21UartDev_t *)pIntrf->pDevData;
+	*Samd21UartReg32(pDev, SAMD21_SERCOM_CTRLA) &=
+		~SAMD21_USART_ENABLE;
+	if (!Samd21UartWait(pDev, SAMD21_SYNCBUSY_ENABLE))
+	{
+		return;
+	}
+
+	*Samd21UartReg32(pDev, SAMD21_SERCOM_CTRLA) |=
+		SAMD21_USART_ENABLE;
+	(void)Samd21UartWait(pDev, SAMD21_SYNCBUSY_ENABLE);
 }
 
 static void *Samd21UartGetHandle(DevIntrf_t * const pIntrf)
@@ -271,7 +290,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	IOPinCfg((const IOPinCfg_t *)pCfg->pIOPinMap, 2);
 
 	*Samd21UartReg32(pHw, SAMD21_SERCOM_CTRLA) = 0UL;
-	if (!Samd21UartWait(pHw, SAMD21_USART_ENABLE))
+	if (!Samd21UartWait(pHw, SAMD21_SYNCBUSY_ENABLE))
 	{
 		return false;
 	}
@@ -280,7 +299,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		SAMD21_USART_RXPO_1 | SAMD21_USART_TXPO_0;
 	*Samd21UartReg32(pHw, SAMD21_SERCOM_CTRLB) =
 		SAMD21_USART_TXEN | SAMD21_USART_RXEN;
-	if (!Samd21UartWait(pHw, SAMD21_USART_TXEN | SAMD21_USART_RXEN))
+	if (!Samd21UartWait(pHw, SAMD21_SYNCBUSY_CTRLB))
 	{
 		return false;
 	}
@@ -310,9 +329,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pIntrf->StartTx = Samd21UartStart;
 	pIntrf->TxData = Samd21UartTx;
 	pIntrf->StopTx = Samd21UartStop;
+	pIntrf->TxSrData = Samd21UartTx;
 	pIntrf->Disable = Samd21UartDisable;
 	pIntrf->Enable = Samd21UartEnable;
 	pIntrf->PowerOff = Samd21UartDisable;
+	pIntrf->Reset = Samd21UartReset;
 	pIntrf->GetHandle = Samd21UartGetHandle;
 	pIntrf->MaxRetry = UART_RETRY_MAX;
 	pIntrf->bIntEn = false;
