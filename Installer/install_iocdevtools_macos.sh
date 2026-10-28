@@ -1193,14 +1193,6 @@ if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
 		fi
 		echo "Library builder: $BUILD_URL"
 	fi
-	# Prevent a stale script from offering '0) Exit' before TaktOS is built.
-	if ! grep -Fq '0) Skip IOsonata (TaktOS already built)' "$BUILD_SCRIPT" ||
-	   ! grep -Fq 'Building all ${#taktos_paths[@]} TaktOS library projects' "$BUILD_SCRIPT"; then
-		[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
-		echo "Error: Selected library builder is outdated; TaktOS-first builder required." >&2
-		echo "Use the matching installer ref or update your local checkout." >&2
-		exit 1
-	fi
 	echo ""
 	echo "========================================================="
 	echo "  TaktOS and IOsonata Library Build"
