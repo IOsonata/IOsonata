@@ -47,6 +47,7 @@ SOFTWARE.
 #define SAMD21_SERCOM_BAUD		0x0CUL
 #define SAMD21_SERCOM_INTFLAG	0x18UL
 #define SAMD21_SERCOM_DATA		0x28UL
+#define SAMD21_SERCOM_STATUS		0x1AUL
 #define SAMD21_SERCOM_SYNCBUSY	0x1CUL
 
 #define SAMD21_USART_ENABLE		(1UL << 1)
@@ -58,6 +59,11 @@ SOFTWARE.
 #define SAMD21_USART_TXEN		(1UL << 16)
 #define SAMD21_USART_DRE		(1U << 0)
 #define SAMD21_USART_RXC		(1U << 2)
+#define SAMD21_USART_TXC		(1U << 1)
+#define SAMD21_USART_ERROR		(1U << 7)
+#define SAMD21_USART_STATUS_PERR	(1U << 0)
+#define SAMD21_USART_STATUS_FERR	(1U << 2)
+#define SAMD21_USART_STATUS_BUFOVF	(1U << 3)
 #define SAMD21_USART_WAIT		100000UL
 #define SAMD21_SYNCBUSY_ENABLE	(1UL << 1)
 #define SAMD21_SYNCBUSY_CTRLB	(1UL << 2)
@@ -121,12 +127,13 @@ static uint32_t Samd21UartSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 	uint32_t clock;
 	uint32_t baud;
 	uint32_t actual;
+	uint32_t control;
+	bool enabled;
 
 	pDev = (Samd21UartDev_t *)pIntrf->pDevData;
 	clock = SystemCoreClockGet();
 
-	if (Rate == 0UL || clock == 0UL || Rate > clock / 16UL ||
-		(*Samd21UartReg32(pDev, SAMD21_SERCOM_CTRLA) & SAMD21_USART_ENABLE) != 0UL)
+	if (Rate == 0UL || clock == 0UL || Rate > clock / 16UL)
 	{
 		return 0UL;
 	}
@@ -138,7 +145,33 @@ static uint32_t Samd21UartSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 		return 0UL;
 	}
 
+	control = *Samd21UartReg32(pDev, SAMD21_SERCOM_CTRLA);
+	enabled = (control & SAMD21_USART_ENABLE) != 0UL;
+	if (enabled)
+	{
+		// Do not stop a transmission before the last stop bit.
+		if ((*Samd21UartReg8(pDev, SAMD21_SERCOM_INTFLAG) &
+			SAMD21_USART_TXC) == 0U)
+		{
+			return 0UL;
+		}
+		*Samd21UartReg32(pDev, SAMD21_SERCOM_CTRLA) =
+			control & ~SAMD21_USART_ENABLE;
+		if (!Samd21UartWait(pDev, SAMD21_SYNCBUSY_ENABLE))
+		{
+			return 0UL;
+		}
+	}
+
 	*Samd21UartReg16(pDev, SAMD21_SERCOM_BAUD) = (uint16_t)baud;
+	if (enabled)
+	{
+		*Samd21UartReg32(pDev, SAMD21_SERCOM_CTRLA) = control;
+		if (!Samd21UartWait(pDev, SAMD21_SYNCBUSY_ENABLE))
+		{
+			return 0UL;
+		}
+	}
 	actual = (uint32_t)(((uint64_t)(65536UL - baud) * clock + 524288UL) /
 		1048576UL);
 	pDev->pUartDev->Rate = (int)actual;
@@ -162,6 +195,7 @@ static int Samd21UartRx(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 {
 	Samd21UartDev_t *pDev;
 	int count;
+	uint16_t status;
 
 	pDev = (Samd21UartDev_t *)pIntrf->pDevData;
 	count = 0;
@@ -172,7 +206,32 @@ static int Samd21UartRx(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 		{
 			break;
 		}
-		pBuff[count++] = (uint8_t)*Samd21UartReg16(pDev, SAMD21_SERCOM_DATA);
+		status = *Samd21UartReg16(pDev, SAMD21_SERCOM_STATUS);
+		if ((status & SAMD21_USART_STATUS_BUFOVF) != 0U)
+		{
+			pDev->pUartDev->RxOvrErrCnt++;
+		}
+		if ((status & SAMD21_USART_STATUS_FERR) != 0U)
+		{
+			pDev->pUartDev->FramErrCnt++;
+		}
+		if ((status & SAMD21_USART_STATUS_PERR) != 0U)
+		{
+			pDev->pUartDev->ParErrCnt++;
+		}
+		if (status & (SAMD21_USART_STATUS_BUFOVF |
+			SAMD21_USART_STATUS_FERR | SAMD21_USART_STATUS_PERR))
+		{
+			(void)*Samd21UartReg16(pDev, SAMD21_SERCOM_DATA);
+			*Samd21UartReg16(pDev, SAMD21_SERCOM_STATUS) =
+				status & (SAMD21_USART_STATUS_BUFOVF |
+				SAMD21_USART_STATUS_FERR | SAMD21_USART_STATUS_PERR);
+			*Samd21UartReg8(pDev, SAMD21_SERCOM_INTFLAG) =
+				SAMD21_USART_ERROR;
+			continue;
+		}
+		pBuff[count] = (uint8_t)*Samd21UartReg16(pDev, SAMD21_SERCOM_DATA);
+		count++;
 	}
 	return count;
 }
