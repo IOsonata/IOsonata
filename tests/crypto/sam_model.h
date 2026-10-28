@@ -90,7 +90,11 @@ extern SamPmc g_Pmc;
 extern bool g_AesTimeout, g_RngTimeout;
 extern unsigned g_AesBlocks;
 #define SAM4E_AES (&g_Aes)
+// SAM4LS parts have no AESA instance (Microchip SAM4L device pack); the
+// SAM4LS build must not reach it.
+#ifndef TEST_SAM4LS
 #define SAM4L_AESA (&g_Aes)
+#endif
 #define SAM4L_PM (&g_Pm)
 #define SAM4L_SCIF (&g_Scif)
 #define SAM4L_TRNG (&g_Rng)

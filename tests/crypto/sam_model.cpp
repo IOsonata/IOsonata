@@ -30,6 +30,9 @@ SOFTWARE.
 
 #include "sam_model.h"
 #include "crypto/crypto.h"
+#ifdef TEST_SAM4L
+#include "crypto_rng_sam4l.h"
+#endif
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <assert.h>
@@ -192,8 +195,16 @@ int main()
 	g_RngTimeout = false;
 #endif
 	assert(CryptoEngineTest() == 0);
+#ifdef TEST_SAM4LS
+	// No AES block reached the register model: AES ran on the software engine
+	assert(g_AesBlocks == 0U);
+#else
 	assert(g_AesBlocks > 1000U);
+#endif
 	assert(crypto.Init());
+#ifdef TEST_SAM4L
+	assert(crypto.IsSecure());
+#endif
 	k.Type = CRYPTO_KEY_AES_128;
 	k.Loc = CRYPTO_KEY_LOC_PLAIN;
 	k.Usage = CRYPTO_KEY_USE_ENCRYPT;
@@ -201,10 +212,16 @@ int main()
 	k.Plain.Len = sizeof(key);
 	memset(out, 0xA5, sizeof(out));
 	g_AesTimeout = true;
+#ifdef TEST_SAM4LS
+	// The software engine does not depend on the AES registers
+	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, in, 16, out+1) == CRYPTO_STATUS_OK);
+	assert(out[0] == 0xA5 && out[17] == 0xA5 && g_AesBlocks == 0U);
+#else
 	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, in, 16, out+1) == CRYPTO_STATUS_FAIL);
 	for (unsigned i = 1; i < 17; i++)
 		assert(out[i] == 0);
 	assert(out[0] == 0xA5 && out[17] == 0xA5);
+#endif
 	g_AesTimeout = false;
 	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, in, 16, out+1) == CRYPTO_STATUS_OK);
 #ifdef TEST_SAM4L
@@ -213,6 +230,18 @@ int main()
 	assert(crypto.Random(out+1, 3) == CRYPTO_STATUS_FAIL);
 	assert(out[0] == 0xA5 && out[4] == 0xA5);
 	assert(out[1] == 0 && out[2] == 0 && out[3] == 0);
+	g_RngTimeout = false;
+	// A request longer than one word, not a multiple of four, from the TRNG
+	memset(out, 0xA5, sizeof(out));
+	assert(crypto.Random(out+1, 15) == CRYPTO_STATUS_OK);
+	assert(out[0] == 0xA5 && out[16] == 0xA5 && out[17] == 0xA5);
+	// The TRNG stops on Disable and restarts on the next Enable
+	CryptoRngSam4lInstance().Disable();
+	assert(!s_RngEnabled);
+	assert(!CryptoRngSam4lInstance().IsSecure() && !crypto.IsSecure());
+	assert(crypto.Random(out+1, 4) == CRYPTO_STATUS_FAIL);
+	assert(CryptoRngSam4lInstance().Enable() && crypto.IsSecure());
+	assert(crypto.Random(out+1, 4) == CRYPTO_STATUS_OK);
 #endif
 	printf("SAM register model: %u AES blocks; timeout/output bounds passed\n", g_AesBlocks);
 }
