@@ -476,7 +476,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		pCfg->Parity != UART_PARITY_NONE ||
 		pCfg->FlowControl != UART_FLWCTRL_NONE ||
 		pCfg->bDMAMode ||
+		(pCfg->bIntMode && (pCfg->IntPrio < 0 || pCfg->IntPrio > 3)) ||
 		pCfg->pIOPinMap == NULL || pCfg->NbIOPins < 2)
+	{
+		return false;
+	}
+
+	if (pCfg->bIntMode &&
+		((pCfg->pRxMem != NULL && ((uintptr_t)pCfg->pRxMem & 3UL) != 0UL) ||
+		 (pCfg->pTxMem != NULL && ((uintptr_t)pCfg->pTxMem & 3UL) != 0UL)))
 	{
 		return false;
 	}
@@ -526,6 +534,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->Parity = UART_PARITY_NONE;
 	pDev->FlowControl = UART_FLWCTRL_NONE;
 	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->bTxReady = true;
+	pDev->bRxReady = false;
 	if (pCfg->bIntMode)
 	{
 		if ((pCfg->pRxMem != NULL && pCfg->RxMemSize <= (int)sizeof(CFifo_t)) ||
@@ -574,6 +584,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		(*Samd21UartReg32(pHw, SAMD21_SERCOM_CTRLA) &
 		SAMD21_USART_ENABLE) == 0UL)
 	{
+		*Samd21UartReg32(pHw, SAMD21_SERCOM_CTRLA) &=
+			~SAMD21_USART_ENABLE;
+		(void)Samd21UartWait(pHw, SAMD21_SYNCBUSY_ENABLE);
 		pHw->pUartDev = NULL;
 		return false;
 	}
