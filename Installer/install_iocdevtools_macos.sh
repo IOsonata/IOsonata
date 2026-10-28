@@ -24,7 +24,6 @@ show_help() {
 Usage: ./$SCRIPT_NAME.sh [OPTION]
 
 Options:
-  --with-llvm        Install optional LLVM compiler (failure does not stop setup)
   --help           Show help and exit
   --version        Show version and exit
   --home <path>    Set custom SDK installation root (default: ~/IOcomposer)
@@ -36,13 +35,10 @@ Options:
 EOF
 }
 
-WITH_LLVM=0
-LLVM_STATUS="skipped (optional; use --with-llvm)"
 MODE="install"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --with-llvm) WITH_LLVM=1 ;;
     --help) show_help; exit 0 ;;
     --version) echo "$SCRIPT_NAME $SCRIPT_VERSION"; exit 0 ;;
     --pyocd-only) MODE="pyocd" ;;
@@ -69,7 +65,6 @@ done
 EXT="$ROOT/external"
 PYOCD_DIR="$ROOT/Tools/Python"
 TOOL_BIN="$ROOT/Tools/bin"
-LLVM_DIR="$ROOT/Tools/LLVM"
 PYOCD="$PYOCD_DIR/bin/pyocd"
 PYTHON3="$PYOCD_DIR/bin/python3"
 
@@ -103,11 +98,6 @@ if [[ "$MODE" == "uninstall" ]]; then
 
 	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "$PYOCD" ]]; then
 		sudo rm -f "$BIN/pyocd"
-	fi
-	if [[ -L "$LLVM_DIR" ]]; then
-		rm -f "$LLVM_DIR"
-	elif [[ -f "$LLVM_DIR/.iocomposer-managed" ]]; then
-		rm -rf "$LLVM_DIR"
 	fi
 	rm -rf "$PYOCD_DIR"
   echo ">>> Removing IDAP tools..."
@@ -486,119 +476,6 @@ install_xpack() {
 # ---------------------------------------------------------
 # Install pyOCD in an isolated, user-owned Python environment
 # ---------------------------------------------------------
-# One LLVM installation provides both Arm and RISC-V code generation.
-verify_llvm() (
-	local directory="$1"
-	local stage tool
-	stage=$(mktemp -d)
-	trap 'rm -rf "$stage"' EXIT
-	for tool in clang clang++ ld.lld llvm-ar llvm-objcopy llvm-size; do
-		[[ -x "$directory/bin/$tool" ]] || {
-			echo "Missing LLVM tool: $directory/bin/$tool" >&2
-			return 1
-		}
-	done
-	printf 'int probe(void) { return 7; }\n' > "$stage/probe.c"
-	printf 'extern "C" int probe(void) { return 7; }\n' > "$stage/probe.cpp"
-	local target language
-	for target in arm-none-eabi riscv32-unknown-elf; do
-		local flags=()
-		if [[ "$target" == "arm-none-eabi" ]]; then
-			flags=(-mcpu=cortex-m4 -mthumb -mfloat-abi=soft)
-		else
-			flags=(-march=rv32imac -mabi=ilp32)
-		fi
-		for language in c cpp; do
-			local compiler=clang
-			[[ "$language" != "cpp" ]] || compiler=clang++
-			"$directory/bin/$compiler" --target="$target" "${flags[@]}" \
-				-ffreestanding -fno-exceptions -fno-rtti -nostdlib --ld-path="$directory/bin/ld.lld" \
-				-Wl,-e,probe "$stage/probe.$language" -o "$stage/$target-$language.elf" || return 1
-			"$directory/bin/llvm-objcopy" -O ihex "$stage/$target-$language.elf" "$stage/$target-$language.hex" || return 1
-		done
-	done
-	"$directory/bin/clang" --version
-)
-
-install_llvm() {
-	if [[ -x "$LLVM_DIR/bin/clang" ]]; then
-		verify_llvm "$LLVM_DIR"
-		return $?
-	fi
-	local prefix="" lld=""
-	if [[ "$(uname -s)" == "Darwin" ]]; then
-		local brew_cmd
-		brew_cmd=$(command -v brew || true)
-		if [[ -z "$brew_cmd" ]]; then
-			for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-				[[ ! -x "$candidate" ]] || { brew_cmd="$candidate"; break; }
-			done
-		fi
-		if [[ -z "$brew_cmd" ]]; then
-			echo "Install Homebrew for LLVM, or provide a complete LLVM installation at $LLVM_DIR." >&2
-			return 1
-		fi
-		"$brew_cmd" install llvm lld || return 1
-		prefix=$("$brew_cmd" --prefix llvm) || return 1
-		lld="$("$brew_cmd" --prefix lld)/bin/ld.lld"
-	else
-		if command -v apt-get >/dev/null; then
-			sudo apt-get update
-			sudo apt-get install -y clang llvm lld || return 1
-		elif command -v dnf >/dev/null; then
-			sudo dnf install -y clang llvm llvm-devel lld || return 1
-		elif command -v yum >/dev/null; then
-			sudo yum install -y clang llvm llvm-devel lld || return 1
-		elif command -v pacman >/dev/null; then
-			sudo pacman -S --needed --noconfirm clang llvm lld || return 1
-		elif command -v zypper >/dev/null; then
-			sudo zypper install -y clang llvm llvm-devel lld || return 1
-		else
-			echo "Provide a complete LLVM installation at $LLVM_DIR and retry." >&2
-			return 1
-		fi
-		prefix=$(llvm-config --prefix) || return 1
-	fi
-	# Keep package-managed libraries in place and expose one complete tool directory.
-	if [[ -e "$LLVM_DIR" || -L "$LLVM_DIR" ]]; then
-		echo "LLVM destination already exists; inspect it before retrying: $LLVM_DIR" >&2
-		return 1
-	fi
-	mkdir -p "$(dirname "$LLVM_DIR")"
-	local stage entry
-	stage=$(mktemp -d "$(dirname "$LLVM_DIR")/llvm-stage.XXXXXXXX") || return 1
-	mkdir -p "$stage/bin"
-	for entry in lib lib64 libexec include share; do
-		[[ ! -e "$prefix/$entry" ]] || ln -s "$prefix/$entry" "$stage/$entry"
-	done
-	for entry in clang clang++ ld.lld llvm-ar llvm-objcopy llvm-size; do
-		ln -s "$prefix/bin/$entry" "$stage/bin/$entry"
-	done
-	if [[ -n "$lld" ]]; then
-		ln -sf "$lld" "$stage/bin/ld.lld"
-	fi
-	if ! verify_llvm "$stage"; then
-		rm -rf "$stage"
-		return 1
-	fi
-	touch "$stage/.iocomposer-managed"
-	mv "$stage" "$LLVM_DIR"
-
-}
-
-install_optional_llvm() {
-	if [[ "$WITH_LLVM" != 1 ]]; then
-		echo "LLVM: $LLVM_STATUS"
-		return 0
-	fi
-	if (install_llvm); then
-		LLVM_STATUS="$LLVM_DIR (verified Arm and RISC-V)"
-	else
-		LLVM_STATUS="unavailable (optional installation failed)"
-		echo "Warning: LLVM installation failed; continuing with GCC and remaining tools." >&2
-	fi
-}
-
 install_macos_python() {
 	local stage pkg python
 	stage=$(mktemp -d)
@@ -677,7 +554,6 @@ if [[ "$MODE" == "pyocd" ]]; then
   exit 0
 fi
 
-install_optional_llvm
 export PATH="$TOOL_BIN:$PATH"
 
 ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
@@ -883,9 +759,6 @@ EOF"
 
 sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.core.runtime.prefs' <<EOF
 eclipse.preferences.version=1
-environment/project/LLVM_HOME/value=$LLVM_DIR
-environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
-environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
 environment/project/PATH/value=$TOOL_BIN
 environment/project/PATH/operation=prepend
@@ -1186,16 +1059,6 @@ RISCV_GDB = \$(RISCV_GCC_BIN)/riscv-none-elf-gdb
 
 OPENOCD_ROOT = $OPENOCD_DIR
 OPENOCD = $OPENOCD_DIR/bin/openocd
-LLVM_ROOT = $LLVM_DIR
-ARM_LLVM_ROOT = $LLVM_DIR
-RISCV_LLVM_ROOT = $LLVM_DIR
-CLANG = $LLVM_DIR/bin/clang
-CLANGXX = $LLVM_DIR/bin/clang++
-LLVM_LD = $LLVM_DIR/bin/ld.lld
-LLVM_AR = $LLVM_DIR/bin/llvm-ar
-LLVM_OBJCOPY = $LLVM_DIR/bin/llvm-objcopy
-ARM_LLVM_TARGET = --target=arm-none-eabi
-RISCV_LLVM_TARGET = --target=riscv32-unknown-elf
 SDK_TOOLS_ROOT = $ROOT/Tools
 PYTHON = $TOOL_BIN/python3
 HEXMERGE = $TOOL_BIN/hexmerge.py
@@ -1416,4 +1279,3 @@ echo
 
 printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nTool binaries: %s\n" "$PYOCD_DIR" "$PYOCD" "$TOOL_BIN/hexmerge.py" "$TOOL_BIN"
 
-printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"

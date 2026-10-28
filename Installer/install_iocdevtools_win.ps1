@@ -10,7 +10,6 @@
 param (
     [string]$SdkHome = "$env:USERPROFILE\IOcomposer",
 	[string]$IocomposerDir = "$env:ProgramFiles\IOcomposer",
-	[switch]$WithLLVM,
     [switch]$ForceUpdate,
     [switch]$Uninstall,
     [switch]$Version,
@@ -26,7 +25,6 @@ function Show-Help {
 Usage: .\$SCRIPT_NAME [OPTION]
 
 Options:
-  -WithLLVM        Install optional LLVM compiler (failure does not stop setup)
   -Help            Show help and exit
   -Version         Show version and exit
   -SdkHome <path>  Set custom SDK installation root
@@ -44,7 +42,6 @@ $PYOCD_DIR = "$ROOT\Tools\Python"
 $TOOL_BIN = "$ROOT\Tools\bin"
 $PYOCD = "$PYOCD_DIR\Scripts\pyocd.exe"
 $ManagedPython = "$PYOCD_DIR\Scripts\python.exe"
-$LLVM_DIR = "$ROOT\Tools\LLVM"
 $TOOLS = "$env:ProgramFiles\xPacks"
 $ECLIPSE_DIR = $IocomposerDir
 
@@ -275,9 +272,6 @@ if ($MODE -eq "uninstall") {
 	Remove-Item "$([Environment]::GetFolderPath('Desktop'))\IOcomposer.lnk", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\IOcomposer.lnk" -Force -ErrorAction SilentlyContinue
     
 	Remove-Item $PYOCD_DIR -Recurse -Force -ErrorAction SilentlyContinue
-	if (Test-Path "$LLVM_DIR\.iocomposer-managed") {
-		Remove-Item $LLVM_DIR -Recurse -Force -ErrorAction SilentlyContinue
-	}
     # Remove IDAP tools
     Write-Host ">>> Removing IDAP tools..."
     $IDAP_DIR = "$TOOL_BIN"
@@ -417,60 +411,6 @@ function Install-xPack {
 }
 
 $BUILDTOOLS_DIR = Install-xPack "windows-build-tools-xpack" "make" "Windows Build Tools"
-function Test-LLVM {
-	param([string]$Directory)
-	foreach ($tool in @('clang', 'clang++', 'ld.lld', 'llvm-ar', 'llvm-objcopy', 'llvm-size')) {
-		if (-not (Test-Path "$Directory\bin\$tool.exe")) { throw "Missing LLVM tool: $tool" }
-	}
-	$stage = Join-Path $env:TEMP ([guid]::NewGuid().ToString('N'))
-	New-Item $stage -ItemType Directory | Out-Null
-	try {
-		Set-Content "$stage\probe.c" 'int probe(void) { return 7; }' -Encoding ASCII
-		Set-Content "$stage\probe.cpp" 'extern "C" int probe(void) { return 7; }' -Encoding ASCII
-		foreach ($target in @('arm-none-eabi', 'riscv32-unknown-elf')) {
-			$flags = if ($target -eq 'arm-none-eabi') { @('-mcpu=cortex-m4', '-mthumb', '-mfloat-abi=soft') } else { @('-march=rv32imac', '-mabi=ilp32') }
-			foreach ($language in @('c', 'cpp')) {
-				$compiler = if ($language -eq 'c') { 'clang' } else { 'clang++' }
-				& "$Directory\bin\$compiler.exe" "--target=$target" @flags -ffreestanding -fno-exceptions -fno-rtti -nostdlib "--ld-path=$Directory\bin\ld.lld.exe" '-Wl,-e,probe' "$stage\probe.$language" -o "$stage\$target-$language.elf"
-				if ($LASTEXITCODE -ne 0) { throw "LLVM $target $language compile/link check failed." }
-				& "$Directory\bin\llvm-objcopy.exe" -O ihex "$stage\$target-$language.elf" "$stage\$target-$language.hex"
-				if ($LASTEXITCODE -ne 0) { throw "LLVM $target HEX output check failed." }
-			}
-		}
-		& "$Directory\bin\clang.exe" --version
-		if ($LASTEXITCODE -ne 0) { throw 'LLVM version check failed.' }
-	} finally { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
-}
-
-function Install-LLVM {
-	if (Test-Path "$LLVM_DIR\bin\clang.exe") { Test-LLVM $LLVM_DIR; return }
-	if (Test-Path $LLVM_DIR) { throw "LLVM destination already exists; inspect before retrying: $LLVM_DIR" }
-	$arch = $env:PROCESSOR_ARCHITECTURE
-	if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }
-	switch ($arch) {
-		'AMD64' { $package = 'win64'; $hash = '15e49aca3540991a6f28a0e57babab67da82155c4f73f79dd5e8666a851f9127' }
-		'Arm64' { $package = 'woa64'; $hash = 'b484f54264400f0a75b63704b1068da8086f0b14625575f6efea08813109b068' }
-		default { throw "No LLVM installer configured for Windows $arch." }
-	}
-	$stage = Join-Path $env:TEMP ([guid]::NewGuid().ToString('N'))
-	New-Item $stage -ItemType Directory | Out-Null
-	try {
-		$archive = Join-Path $stage 'llvm.msi'
-		$url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.4/LLVM-23.1.4-$package.msi"
-		Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $archive
-		if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $hash) { throw 'LLVM checksum mismatch.' }
-		# Administrative extraction provides a portable tree, without PATH changes.
-		$unpacked = Join-Path $stage 'unpacked'
-		$process = Start-Process msiexec.exe -ArgumentList @('/a', "`"$archive`"", '/qn', "TARGETDIR=`"$unpacked`"") -Wait -PassThru
-		if ($process.ExitCode -ne 0) { throw "LLVM extraction failed: $($process.ExitCode)" }
-		$distribution = Join-Path $unpacked 'LLVM'
-		Test-LLVM $distribution
-		New-Item (Join-Path $distribution '.iocomposer-managed') -ItemType File | Out-Null
-		New-Item (Split-Path $LLVM_DIR -Parent) -ItemType Directory -Force | Out-Null
-		Move-Item $distribution $LLVM_DIR
-	} finally { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
-}
-
 function Install-PythonTools {
 	if (Test-Path $ManagedPython) {
 		& $ManagedPython -c 'import sys; sys.exit(sys.version_info < (3, 9))'
@@ -498,16 +438,6 @@ function Install-PythonTools {
 
 
 Install-PythonTools
-$LLVM_STATUS = 'skipped (optional; use -WithLLVM)'
-if ($WithLLVM) {
-	try {
-		Install-LLVM
-		$LLVM_STATUS = "$LLVM_DIR (verified Arm and RISC-V)"
-	} catch {
-		$LLVM_STATUS = 'unavailable (optional installation failed)'
-		Write-Warning "LLVM installation failed; continuing with GCC and remaining tools. $_"
-	}
-}
 $env:Path = "$TOOL_BIN;$env:Path"
 
 $ARM_DIR = Install-xPack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC"
@@ -649,9 +579,6 @@ function Write-EclipseInstallPrefs {
     # 1. org.eclipse.core.runtime.prefs (with environment variables like macOS)
     $runtime_prefs = @"
 eclipse.preferences.version=1
-environment/project/LLVM_HOME/value=$RT/Tools/LLVM
-environment/project/ARM_LLVM_HOME/value=$RT/Tools/LLVM
-environment/project/RISCV_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/IOCOMPOSER_HOME/value=$RT
 environment/project/PATH/value=$RT/Tools/bin;$RT/Tools/bin
 environment/project/PATH/operation=prepend
@@ -777,9 +704,6 @@ folder.strict=true
     # 5. org.eclipse.core.runtime.prefs
     $runtime_prefs = @"
 eclipse.preferences.version=1
-environment/project/LLVM_HOME/value=$RT/Tools/LLVM
-environment/project/ARM_LLVM_HOME/value=$RT/Tools/LLVM
-environment/project/RISCV_LLVM_HOME/value=$RT/Tools/LLVM
 environment/project/IOCOMPOSER_HOME/value=$RT
 environment/project/PATH/value=$RT/Tools/bin;$RT/Tools/bin
 environment/project/PATH/operation=prepend
@@ -1107,16 +1031,6 @@ $MK_CONTENT = @"
 # ============================================
 # Toolchain Paths
 # ============================================
-LLVM_ROOT = $RT/Tools/LLVM
-ARM_LLVM_ROOT = $RT/Tools/LLVM
-RISCV_LLVM_ROOT = $RT/Tools/LLVM
-CLANG = $RT/Tools/LLVM/bin/clang.exe
-CLANGXX = $RT/Tools/LLVM/bin/clang++.exe
-LLVM_LD = $RT/Tools/LLVM/bin/ld.lld.exe
-LLVM_AR = $RT/Tools/LLVM/bin/llvm-ar.exe
-LLVM_OBJCOPY = $RT/Tools/LLVM/bin/llvm-objcopy.exe
-ARM_LLVM_TARGET = --target=arm-none-eabi
-RISCV_LLVM_TARGET = --target=riscv32-unknown-elf
 SDK_TOOLS_ROOT = $RT/Tools
 PYTHON = $RT/Tools/bin/python.cmd
 HEXMERGE = $RT/Tools/bin/hexmerge.cmd
@@ -1347,5 +1261,4 @@ Write-Host "Python environment: $PYOCD_DIR"
 Write-Host "pyOCD: $PYOCD"
 Write-Host "IntelHex (HEX merge): $TOOL_BIN\hexmerge.cmd"
 Write-Host "Tool binaries: $TOOL_BIN"
-Write-Host "LLVM (Arm + RISC-V): $LLVM_STATUS"
 exit 0
