@@ -24,7 +24,6 @@ show_help() {
 Usage: ./$SCRIPT_NAME.sh [OPTION]
 
 Options:
-  --with-llvm        Install optional LLVM compiler (failure does not stop setup)
   --help           Show help and exit
   --version        Show version and exit
   --home <path>    Set custom SDK installation root (default: ~/IOcomposer)
@@ -36,13 +35,10 @@ Options:
 EOF
 }
 
-WITH_LLVM=0
-LLVM_STATUS="skipped (optional; use --with-llvm)"
 MODE="install"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --with-llvm) WITH_LLVM=1 ;;
     --help) show_help; exit 0 ;;
     --version) echo "$SCRIPT_NAME $SCRIPT_VERSION"; exit 0 ;;
     --pyocd-only) MODE="pyocd" ;;
@@ -69,7 +65,6 @@ done
 EXT="$ROOT/external"
 PYOCD_DIR="$ROOT/Tools/Python"
 TOOL_BIN="$ROOT/Tools/bin"
-LLVM_DIR="$ROOT/Tools/LLVM"
 PYOCD="$PYOCD_DIR/bin/pyocd"
 PYTHON3="$PYOCD_DIR/bin/python3"
 
@@ -103,11 +98,6 @@ if [[ "$MODE" == "uninstall" ]]; then
 
 	if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "$PYOCD" ]]; then
 		sudo rm -f "$BIN/pyocd"
-	fi
-	if [[ -L "$LLVM_DIR" ]]; then
-		rm -f "$LLVM_DIR"
-	elif [[ -f "$LLVM_DIR/.iocomposer-managed" ]]; then
-		rm -rf "$LLVM_DIR"
 	fi
 	rm -rf "$PYOCD_DIR"
   echo ">>> Removing IDAP tools..."
@@ -486,119 +476,6 @@ install_xpack() {
 # ---------------------------------------------------------
 # Install pyOCD in an isolated, user-owned Python environment
 # ---------------------------------------------------------
-# One LLVM installation provides both Arm and RISC-V code generation.
-verify_llvm() (
-	local directory="$1"
-	local stage tool
-	stage=$(mktemp -d)
-	trap 'rm -rf "$stage"' EXIT
-	for tool in clang clang++ ld.lld llvm-ar llvm-objcopy llvm-size; do
-		[[ -x "$directory/bin/$tool" ]] || {
-			echo "Missing LLVM tool: $directory/bin/$tool" >&2
-			return 1
-		}
-	done
-	printf 'int probe(void) { return 7; }\n' > "$stage/probe.c"
-	printf 'extern "C" int probe(void) { return 7; }\n' > "$stage/probe.cpp"
-	local target language
-	for target in arm-none-eabi riscv32-unknown-elf; do
-		local flags=()
-		if [[ "$target" == "arm-none-eabi" ]]; then
-			flags=(-mcpu=cortex-m4 -mthumb -mfloat-abi=soft)
-		else
-			flags=(-march=rv32imac -mabi=ilp32)
-		fi
-		for language in c cpp; do
-			local compiler=clang
-			[[ "$language" != "cpp" ]] || compiler=clang++
-			"$directory/bin/$compiler" --target="$target" "${flags[@]}" \
-				-ffreestanding -fno-exceptions -fno-rtti -nostdlib --ld-path="$directory/bin/ld.lld" \
-				-Wl,-e,probe "$stage/probe.$language" -o "$stage/$target-$language.elf" || return 1
-			"$directory/bin/llvm-objcopy" -O ihex "$stage/$target-$language.elf" "$stage/$target-$language.hex" || return 1
-		done
-	done
-	"$directory/bin/clang" --version
-)
-
-install_llvm() {
-	if [[ -x "$LLVM_DIR/bin/clang" ]]; then
-		verify_llvm "$LLVM_DIR"
-		return $?
-	fi
-	local prefix="" lld=""
-	if [[ "$(uname -s)" == "Darwin" ]]; then
-		local brew_cmd
-		brew_cmd=$(command -v brew || true)
-		if [[ -z "$brew_cmd" ]]; then
-			for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-				[[ ! -x "$candidate" ]] || { brew_cmd="$candidate"; break; }
-			done
-		fi
-		if [[ -z "$brew_cmd" ]]; then
-			echo "Install Homebrew for LLVM, or provide a complete LLVM installation at $LLVM_DIR." >&2
-			return 1
-		fi
-		"$brew_cmd" install llvm lld || return 1
-		prefix=$("$brew_cmd" --prefix llvm) || return 1
-		lld="$("$brew_cmd" --prefix lld)/bin/ld.lld"
-	else
-		if command -v apt-get >/dev/null; then
-			sudo apt-get update
-			sudo apt-get install -y clang llvm lld || return 1
-		elif command -v dnf >/dev/null; then
-			sudo dnf install -y clang llvm llvm-devel lld || return 1
-		elif command -v yum >/dev/null; then
-			sudo yum install -y clang llvm llvm-devel lld || return 1
-		elif command -v pacman >/dev/null; then
-			sudo pacman -S --needed --noconfirm clang llvm lld || return 1
-		elif command -v zypper >/dev/null; then
-			sudo zypper install -y clang llvm llvm-devel lld || return 1
-		else
-			echo "Provide a complete LLVM installation at $LLVM_DIR and retry." >&2
-			return 1
-		fi
-		prefix=$(llvm-config --prefix) || return 1
-	fi
-	# Keep package-managed libraries in place and expose one complete tool directory.
-	if [[ -e "$LLVM_DIR" || -L "$LLVM_DIR" ]]; then
-		echo "LLVM destination already exists; inspect it before retrying: $LLVM_DIR" >&2
-		return 1
-	fi
-	mkdir -p "$(dirname "$LLVM_DIR")"
-	local stage entry
-	stage=$(mktemp -d "$(dirname "$LLVM_DIR")/llvm-stage.XXXXXXXX") || return 1
-	mkdir -p "$stage/bin"
-	for entry in lib lib64 libexec include share; do
-		[[ ! -e "$prefix/$entry" ]] || ln -s "$prefix/$entry" "$stage/$entry"
-	done
-	for entry in clang clang++ ld.lld llvm-ar llvm-objcopy llvm-size; do
-		ln -s "$prefix/bin/$entry" "$stage/bin/$entry"
-	done
-	if [[ -n "$lld" ]]; then
-		ln -sf "$lld" "$stage/bin/ld.lld"
-	fi
-	if ! verify_llvm "$stage"; then
-		rm -rf "$stage"
-		return 1
-	fi
-	touch "$stage/.iocomposer-managed"
-	mv "$stage" "$LLVM_DIR"
-
-}
-
-install_optional_llvm() {
-	if [[ "$WITH_LLVM" != 1 ]]; then
-		echo "LLVM: $LLVM_STATUS"
-		return 0
-	fi
-	if (install_llvm); then
-		LLVM_STATUS="$LLVM_DIR (verified Arm and RISC-V)"
-	else
-		LLVM_STATUS="unavailable (optional installation failed)"
-		echo "Warning: LLVM installation failed; continuing with GCC and remaining tools." >&2
-	fi
-}
-
 install_macos_python() {
 	local stage pkg python
 	stage=$(mktemp -d)
@@ -677,7 +554,6 @@ if [[ "$MODE" == "pyocd" ]]; then
   exit 0
 fi
 
-install_optional_llvm
 export PATH="$TOOL_BIN:$PATH"
 
 ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
@@ -828,8 +704,16 @@ fi
 # Seed Eclipse prefs
 # ---------------------------------------------------------
 
-ECLIPSE_SETTINGS="$ECLIPSE_APP/Contents/Eclipse/configuration/.settings"
+# Embedded CDT global preferences live in Eclipse's configuration scope.
+# Set the configuration explicitly so first-run preferences are deterministic.
+ECLIPSE_CONFIG="$ECLIPSE_APP/Contents/Eclipse/configuration"
+ECLIPSE_SETTINGS="$ECLIPSE_CONFIG/.settings"
 sudo mkdir -p "$ECLIPSE_SETTINGS"
+[[ -d "$ECLIPSE_SETTINGS" ]] || { echo "Cannot create Embedded CDT preferences directory." >&2; exit 1; }
+[[ -x "$ARM_DIR/bin/arm-none-eabi-gcc" && -x "$RISCV_DIR/bin/riscv-none-elf-gcc" ]] || {
+	echo "Arm or RISC-V compiler missing from configured xPack directory." >&2
+	exit 1
+}
 
 ARM_HASH=$(java_hash "xPack GNU Arm Embedded GCC")
 if (( ARM_HASH < 0 )); then ARM_HASH=$((ARM_HASH + 4294967296)); fi
@@ -849,12 +733,16 @@ EOF"
 sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs' <<EOF
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.1287942917=$ARM_DIR/bin
-toolchain.path.strict=true
+global.toolchain.path.strict=true
+workspace.toolchain.path.strict=true
 EOF"
 
 sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs' <<EOF
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
-toolchain.path.strict=true
+toolchain.path.2273142912=$RISCV_DIR/bin
+toolchain.path.2021824384=$RISCV_DIR/bin
+global.toolchain.path.strict=true
+workspace.toolchain.path.strict=true
 EOF"
 
 sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs' <<EOF
@@ -862,11 +750,15 @@ install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF"
 
+sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs' <<EOF
+eclipse.preferences.version=1
+install.folder=$TOOL_BIN
+executable.name=pyocd
+folder.strict=true
+EOF"
+
 sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.core.runtime.prefs' <<EOF
 eclipse.preferences.version=1
-environment/project/LLVM_HOME/value=$LLVM_DIR
-environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
-environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
 environment/project/PATH/value=$TOOL_BIN
 environment/project/PATH/operation=prepend
@@ -990,13 +882,17 @@ EOF
 eclipse.preferences.version=1
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.1287942917=$ARM_DIR/bin
-toolchain.path.strict=true
+global.toolchain.path.strict=true
+workspace.toolchain.path.strict=true
 EOF
 
   cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
 eclipse.preferences.version=1
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
-toolchain.path.strict=true
+toolchain.path.2273142912=$RISCV_DIR/bin
+toolchain.path.2021824384=$RISCV_DIR/bin
+global.toolchain.path.strict=true
+workspace.toolchain.path.strict=true
 EOF
 
   cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
@@ -1005,15 +901,16 @@ install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
 
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs" <<EOF
+eclipse.preferences.version=1
+install.folder=$TOOL_BIN
+executable.name=pyocd
+folder.strict=true
+EOF
+
   cat > "$INSTANCE_CFG/.settings/org.eclipse.core.runtime.prefs" <<EOF
 eclipse.preferences.version=1
-environment/project/LLVM_HOME/value=$LLVM_DIR
-environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
-environment/project/RISCV_LLVM_HOME/value=$LLVM_DIR
 environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/PATH/value=$TOOL_BIN
-environment/project/PATH/operation=prepend
-environment/project/PATH/delimiter=:
 environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
 environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
 environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
@@ -1025,23 +922,44 @@ environment/project/BSEC_HOME/value=$EXT/BSEC
 EOF
 fi
 
+# The global compiler paths are seeded in the IOcomposer configuration scope.
+# Do not write to an unrelated or arbitrarily selected ~/.eclipse instance.
+for pref in org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs \
+	org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs \
+	org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs \
+	org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs; do
+	[[ -s "$ECLIPSE_SETTINGS/$pref" ]] || {
+		echo "Missing Embedded CDT preference file: $pref" >&2
+		exit 1
+	}
+done
+echo "Embedded CDT global compiler preferences created in $ECLIPSE_SETTINGS"
+
 # ---------------------------------------------------------
 # Sync IOsonata + external SDKs (single source of truth)
 # ---------------------------------------------------------
 echo
 echo "📦 Syncing IOsonata + external SDKs..."
 
-CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_macos.sh"
-TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.sh)
-CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.log)
+LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+LOCAL_CLONE="$LOCAL_INSTALLER_DIR/clone_iosonata_sdk_macos.sh"
+TMP_CLONE=""
+CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.log.XXXXXX)
 
-if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
-  echo "❌ Failed to download clone script:"
-  echo "   $CLONE_URL"
-  exit 1
+if [[ -f "$LOCAL_CLONE" ]]; then
+	CLONE_SCRIPT="$LOCAL_CLONE"
+	echo "SDK clone script: $CLONE_SCRIPT"
+else
+	CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_macos.sh"
+	TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.sh.XXXXXX)
+	if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
+		echo "Failed to download SDK clone script: $CLONE_URL" >&2
+		[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" "$CLONE_LOG"
+		exit 1
+	fi
+	CLONE_SCRIPT="$TMP_CLONE"
+	echo "SDK clone script: $CLONE_URL"
 fi
-
-chmod +x "$TMP_CLONE"
 
 # Prefer --no-build if supported by the clone script (newer versions). If not supported,
 # retry without it. We capture output so we can detect whether the builder ran.
@@ -1052,16 +970,16 @@ fi
 
 run_clone() {
   # shellcheck disable=SC2068
-  zsh "$TMP_CLONE" "$@" 2>&1 | tee -a "$CLONE_LOG"
+  zsh "$CLONE_SCRIPT" "$@" 2>&1 | tee -a "$CLONE_LOG"
 }
 
 if ! run_clone "${CLONE_ARGS[@]}"; then
 	echo "SDK synchronization failed. See $CLONE_LOG" >&2
-	rm -f "$TMP_CLONE"
+	[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE"
 	exit 1
 fi
 
-rm -f "$TMP_CLONE" || true
+[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" || true
 
 # Detect whether the clone script already invoked the IOsonata library builder.
 CLONE_INVOKED_BUILD=0
@@ -1078,9 +996,25 @@ echo
 install_iosonata_plugin
 
 install_iocomposer "$ECLIPSE_APP/Contents/Eclipse"
+
 sudo /usr/libexec/PlistBuddy -c "Set :CFBundleName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
 sudo /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist" 2>/dev/null || \
 	sudo /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
+
+# The downloaded app was modified by the installer. Sign it before any launch.
+sudo xattr -cr "$ECLIPSE_APP"
+sudo codesign --force --deep --sign - "$ECLIPSE_APP"
+sudo codesign --verify --deep --strict "$ECLIPSE_APP" || {
+	echo "Error: IOcomposer application signature verification failed." >&2
+	exit 1
+}
+
+# MCU global preferences are written in the installation configuration scope
+# above; creating a user instance is independent of optional library builds.
+echo "Initializing IOcomposer Eclipse configuration..."
+if ! "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize; then
+	echo "Warning: Eclipse instance initialization failed; global MCU preferences remain in $ECLIPSE_SETTINGS." >&2
+fi
 
 # ---------------------------------------------------------
 # Generate makefile_path.mk
@@ -1125,16 +1059,6 @@ RISCV_GDB = \$(RISCV_GCC_BIN)/riscv-none-elf-gdb
 
 OPENOCD_ROOT = $OPENOCD_DIR
 OPENOCD = $OPENOCD_DIR/bin/openocd
-LLVM_ROOT = $LLVM_DIR
-ARM_LLVM_ROOT = $LLVM_DIR
-RISCV_LLVM_ROOT = $LLVM_DIR
-CLANG = $LLVM_DIR/bin/clang
-CLANGXX = $LLVM_DIR/bin/clang++
-LLVM_LD = $LLVM_DIR/bin/ld.lld
-LLVM_AR = $LLVM_DIR/bin/llvm-ar
-LLVM_OBJCOPY = $LLVM_DIR/bin/llvm-objcopy
-ARM_LLVM_TARGET = --target=arm-none-eabi
-RISCV_LLVM_TARGET = --target=riscv32-unknown-elf
 SDK_TOOLS_ROOT = $ROOT/Tools
 PYTHON = $TOOL_BIN/python3
 HEXMERGE = $TOOL_BIN/hexmerge.py
@@ -1245,41 +1169,46 @@ echo "✅ makefile_path.mk created at: $MAKEFILE_PATH_MK"
 echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.mk"
 
 # ---------------------------------------------------------
-# Sign the configured app before the headless builder starts.
-sudo xattr -cr "$ECLIPSE_APP"
-sudo codesign --force --deep --sign - "$ECLIPSE_APP"
-
 # IOsonata Library Build (run exactly once)
 # ---------------------------------------------------------
 # If the clone script already invoked the builder, do NOT run it again.
 # If it did NOT invoke the builder (e.g., clone supports --no-build), run it here.
 if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
-  BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_macos.sh"
-  if [[ -f "$BUILD_SCRIPT" ]]; then
-    echo ""
-    echo "========================================================="
-    echo "  IOsonata Library Build"
-    echo "========================================================="
-    echo ""
-    bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"
-  else
-    echo ""
-    echo "ℹ️  IOsonata library builder not found:"
-    echo "   $BUILD_SCRIPT"
-    echo "   Library build not run: builder script is missing."
-    echo ""
-  fi
+	# A locally executed installer must use its adjacent builder, not the
+	# potentially older builder in the installed SDK checkout.
+	LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+	LOCAL_BUILDER="$LOCAL_INSTALLER_DIR/build_iosonata_lib_macos.sh"
+	BUILD_STAGE=""
+	if [[ -f "$LOCAL_BUILDER" ]]; then
+		BUILD_SCRIPT="$LOCAL_BUILDER"
+		echo "Library builder: local installer checkout ($BUILD_SCRIPT)"
+	else
+		BUILD_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/build_iosonata_lib_macos.sh"
+		BUILD_STAGE=$(mktemp -d)
+		BUILD_SCRIPT="$BUILD_STAGE/build_iosonata_lib_macos.sh"
+		if ! curl -fsSL "$BUILD_URL" -o "$BUILD_SCRIPT"; then
+			rm -rf "$BUILD_STAGE"
+			echo "Failed to download library builder: $BUILD_URL" >&2
+			exit 1
+		fi
+		echo "Library builder: $BUILD_URL"
+	fi
+	echo ""
+	echo "========================================================="
+	echo "  TaktOS and IOsonata Library Build"
+	echo "========================================================="
+	echo ""
+	if ! bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
+		[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
+		echo "Warning: Library build failed; installation continues. Rebuild later after correcting the errors." >&2
+	fi
+	[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
 else
-  echo ""
-  echo "IOsonata library build was invoked by the SDK synchronization step; not running it again."
-  echo ""
+	echo "SDK synchronization already invoked the library builder."
 fi
 
 # ---------------------------------------------------------
 build_iocomposer_index
-# Sign after every installer write to the application bundle, including builds.
-sudo xattr -cr "$ECLIPSE_APP"
-sudo codesign --force --deep --sign - "$ECLIPSE_APP"
 
 # Summary
 
@@ -1341,4 +1270,3 @@ echo
 
 printf "Python environment: %s\npyOCD: %s\nIntelHex (HEX merge): %s\nTool binaries: %s\n" "$PYOCD_DIR" "$PYOCD" "$TOOL_BIN/hexmerge.py" "$TOOL_BIN"
 
-printf "LLVM (Arm + RISC-V): %s\n" "$LLVM_STATUS"

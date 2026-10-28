@@ -1018,12 +1018,9 @@ For the latest updates and documentation, visit: [https://github.com/IOsonata/IO
 
 ### LLVM compiler option for Arm and RISC-V
 
-LLVM is optional and skipped by default. Pass `--with-llvm` on Linux/macOS
-or `-WithLLVM` on Windows to install Clang/LLVM and LLD under `Tools/LLVM`.
 If LLVM setup fails, installation continues with GCC and the remaining tools.
 The final summary reports whether LLVM was skipped, verified, or failed.
 Generated LLVM paths are only usable after successful LLVM installation.
-On macOS 11, omit `--with-llvm` to avoid the failing Homebrew dependency build.
 One installation supports both architectures; it is selected explicitly with
 `--target=arm-none-eabi` or `--target=riscv32-unknown-elf`. GCC remains the default
 for the existing IOsonata projects. No project compiler selection is changed.
@@ -1072,3 +1069,5 @@ IDAPnRFProg and IDAPSetTarget are also installed into `Tools/bin` when provided
 by the downloaded IDAP archive. The SDK clone scripts do not install tools.
 The Python virtual environment remains isolated in `Tools/Python` and is not
 moved on an existing SDK installation.
+
+LLVM is not installed or configured by the IOcomposer development-tool installers. Existing user-managed LLVM installations are preserved.

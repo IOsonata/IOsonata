@@ -38,7 +38,6 @@ ECLIPSE_APP="/Applications/Eclipse.app"
 # TaktOS source dir. Empty means derive from ROOT after
 # argument parsing (ROOT/TaktOS, cloned next to IOsonata).
 TAKTOS_DIR=""
-NO_TAKTOS=0
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -80,21 +79,22 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --no-taktos)
-      NO_TAKTOS=1
+      echo "TaktOS builds are mandatory." >&2
+      exit 1
       shift
       ;;
     --help|-h)
       echo "Usage: $0 [--home <path>] [--iocomposer <path>] [--eclipse <path>] [--taktos <path>] [--no-taktos]"
       echo ""
       echo "Build IOsonata libraries for selected MCU target,"
-      echo "then build all TaktOS ARM + RISCV libraries."
+      echo "after all TaktOS ARM + RISCV libraries have been built."
       echo ""
       echo "Options:"
       echo "  --home <path>         Set SDK root (default: ~/IOcomposer)"
       echo "  --iocomposer <path>   Set IOcomposer.app path (default: /Applications/IOcomposer.app)"
       echo "  --eclipse <path>      Set Eclipse.app path (fallback) (default: /Applications/Eclipse.app)"
       echo "  --taktos <path>       Set TaktOS source dir (default: <home>/TaktOS)"
-      echo "  --no-taktos           Do not build TaktOS, IOsonata only"
+      echo "  --no-taktos           Not supported (TaktOS is required)"
       echo "  --help, -h            Show this help"
       echo ""
       echo "This script will:"
@@ -259,13 +259,9 @@ fi
 taktos_families=()
 taktos_paths=()
 
-if [[ "$NO_TAKTOS" -eq 1 ]]; then
-  echo "TaktOS build disabled (--no-taktos)"
-  echo
-elif [[ ! -d "$TAKTOS_DIR" ]]; then
+if [[ ! -d "$TAKTOS_DIR" ]]; then
   echo "⚠️  WARNING: TaktOS directory not found at $TAKTOS_DIR"
-  echo "   IOsonata will still be built. Use --taktos <path> to set it,"
-  echo "   or --no-taktos to silence this warning."
+  echo "   TaktOS libraries are required; use --taktos <path> to set the source directory."
   echo
 else
   while IFS= read -r proj_file; do
@@ -287,39 +283,6 @@ else
     echo "✓ TaktOS found at: $TAKTOS_DIR (${#taktos_families[@]} lib projects)"
     echo
   fi
-fi
-
-echo "Available IOsonata library projects:"
-echo
-for i in "${!mcu_families[@]}"; do
-  printf "  %2d) %s\n" $((i+1)) "${mcu_families[$i]}"
-done
-echo "   A) Build All"
-echo "   0) Exit"
-echo
-if [[ ${#taktos_families[@]} -gt 0 ]]; then
-  echo "Note: all ${#taktos_families[@]} TaktOS ARM/RISCV libraries are built automatically."
-  echo
-fi
-
-# Get user selection
-selection=""
-while true; do
-  read -r -p "Select IOsonata project to build (0-${#mcu_families[@]} or A): " selection
-  selection_upper=$(echo "$selection" | tr '[:lower:]' '[:upper:]')
-
-  if [[ "$selection_upper" == "A" ]]; then
-    selection="A"
-    break
-  elif [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 0 ]] && [[ "$selection" -le ${#mcu_families[@]} ]]; then
-    break
-  fi
-  echo "Invalid selection. Please try again."
-done
-
-if [[ "$selection" != "A" ]] && [[ "$selection" -eq 0 ]]; then
-  echo "Exiting."
-  exit 0
 fi
 
 # Function to build a single project
@@ -380,6 +343,28 @@ build_project() {
     return 1
   fi
 
+  # A missing executable in an unused configuration is only a warning.
+  # Actual compiler or make failures, however, are fatal.
+  if grep -Eiq 'command not found|No such file or directory|Headless build encountered errors|Build Failed|make: \\*\\*\\*' "$LOGFILE"; then
+    echo "ERROR: Eclipse reported build failures for $proj_family" >&2
+    echo "Build log: $LOGFILE" >&2
+    return 1
+  fi
+
+  if [[ "$proj_family" == TaktOS/* ]]; then
+    local archives
+    archives=$(find "$proj_path" -mindepth 2 -maxdepth 2 -type f -name 'libTaktOS*.a' -print 2>/dev/null)
+    if [[ -z "$archives" ]]; then
+      echo "ERROR: No TaktOS archive found for $proj_family" >&2
+      echo "Build log: $LOGFILE" >&2
+      return 1
+    fi
+  fi
+
+  if grep -Fq 'Unable to find full path for' "$LOGFILE"; then
+    echo "Warning: Eclipse could not resolve a tool in at least one configuration of $proj_family." >&2
+  fi
+
   echo
   echo "✅ Library build completed for $proj_family"
   echo
@@ -392,10 +377,83 @@ build_project() {
 }
 
 # ---------------------------------------------------------
+# BUILD TAKTOS LIBRARIES FIRST
+# ---------------------------------------------------------
+# TaktOS is part of every installation, independent of IOsonata selection.
+failed_builds=()
+successful_builds=()
+total_builds=0
+
+if [[ ! -d "$TAKTOS_DIR" || ${#taktos_paths[@]} -eq 0 ]]; then
+  echo "ERROR: TaktOS library projects are required but were not found: $TAKTOS_DIR" >&2
+  exit 1
+fi
+
+echo "Building supported TaktOS library projects..."
+skipped_builds=()
+for i in "${!taktos_paths[@]}"; do
+  name="TaktOS/${taktos_families[$i]}"
+  case "${taktos_families[$i]}" in
+    ARM/cm55/ioc)
+      skipped_builds+=("$name: Cortex-M55 is not supported by Embedded CDT")
+      continue
+      ;;
+    RISCV/esp32c3/ioc)
+      skipped_builds+=("$name: ESP32-C3 support is incomplete")
+      continue
+      ;;
+  esac
+  total_builds=$((total_builds + 1))
+  if build_project "${taktos_paths[$i]}" "$name" "libTaktOS*.a"; then
+    successful_builds+=("$name")
+  else
+    failed_builds+=("$name")
+  fi
+done
+if [[ ${#skipped_builds[@]} -gt 0 ]]; then
+  echo "Skipped TaktOS projects:"
+  printf '  %s\n' "${skipped_builds[@]}"
+fi
+if [[ ${#failed_builds[@]} -ne 0 ]]; then
+  echo "Failed TaktOS projects:" >&2
+  printf '  %s\n' "${failed_builds[@]}" >&2
+  echo "Warning: Some TaktOS libraries failed. Continue to IOsonata target selection." >&2
+fi
+
+# TaktOS is complete; IOsonata libraries are an optional user selection.
+echo "Available IOsonata library projects:"
+echo
+for i in "${!mcu_families[@]}"; do
+  printf "  %2d) %s\n" $((i+1)) "${mcu_families[$i]}"
+done
+echo "   A) Build All"
+echo "   0) Skip IOsonata (TaktOS already built)"
+echo
+# Get user selection
+selection=""
+while true; do
+  read -r -p "Select IOsonata project to build (0-${#mcu_families[@]} or A): " selection
+  selection_upper=$(echo "$selection" | tr '[:lower:]' '[:upper:]')
+
+  if [[ "$selection_upper" == "A" ]]; then
+    selection="A"
+    break
+  elif [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 0 ]] && [[ "$selection" -le ${#mcu_families[@]} ]]; then
+    break
+  fi
+  echo "Invalid selection. Please try again."
+done
+
+if [[ "$selection" != "A" ]] && [[ "$selection" -eq 0 ]]; then
+  echo "Skipping IOsonata libraries."
+  selection="0"
+fi
+
+
+# ---------------------------------------------------------
 # BUILD WORK LIST
 # ---------------------------------------------------------
-# IOsonata selection (single or all) followed by every
-# TaktOS ARM/RISCV library project.
+# Build only the selected IOsonata targets; TaktOS was already built.
 
 work_names=()
 work_paths=()
@@ -407,19 +465,11 @@ if [[ "$selection" == "A" ]]; then
     work_paths+=("${mcu_paths[$i]}")
     work_globs+=("libIOsonata*.a")
   done
-else
+elif [[ "$selection" != "0" ]]; then
   sel_idx=$((selection - 1))
   work_names+=("IOsonata/${mcu_families[$sel_idx]}")
   work_paths+=("${mcu_paths[$sel_idx]}")
   work_globs+=("libIOsonata*.a")
-fi
-
-if [[ ${#taktos_families[@]} -gt 0 ]]; then
-  for i in "${!taktos_families[@]}"; do
-    work_names+=("TaktOS/${taktos_families[$i]}")
-    work_paths+=("${taktos_paths[$i]}")
-    work_globs+=("libTaktOS*.a")
-  done
 fi
 
 # ---------------------------------------------------------
@@ -435,8 +485,7 @@ echo "========================================================="
 interrupted=0
 trap 'interrupted=1' INT
 
-failed_builds=()
-successful_builds=()
+total_builds=$((total_builds + ${#work_names[@]}))
 
 for i in "${!work_names[@]}"; do
   if [[ $interrupted -eq 1 ]]; then
@@ -474,14 +523,15 @@ else
   echo "Build Summary"
 fi
 echo "========================================================="
-echo "Successful: ${#successful_builds[@]}/${#work_names[@]}"
+echo "Successful: ${#successful_builds[@]}/$total_builds"
+echo "Skipped TaktOS: ${#skipped_builds[@]}"
 for proj in "${successful_builds[@]:-}"; do
   [[ -n "$proj" ]] && echo "   + $proj"
 done
 
 if [[ ${#failed_builds[@]} -gt 0 ]]; then
   echo
-  echo "Failed: ${#failed_builds[@]}/${#work_names[@]}"
+  echo "Failed: ${#failed_builds[@]}/$total_builds"
   for proj in "${failed_builds[@]}"; do
     echo "   - $proj"
   done
@@ -496,7 +546,7 @@ if [[ $interrupted -eq 1 ]]; then
 fi
 
 if [[ ${#failed_builds[@]} -gt 0 ]]; then
-  exit 1
+  echo "Warning: Library build errors remain; rerun the builder after correcting them." >&2
 fi
 
 echo
