@@ -32,12 +32,18 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "coredev/system_core_clock.h"
+#include "clock_samd.h"
 
 #if !defined(__SAMD11D14A__) && !defined(__SAMD21J18A__)
 #error Unsupported SAM D device
 #endif
 
 #define SAMD_GCLK_STATUS		(*(volatile uint8_t *)0x40000C01UL)
+#define SAMD_GCLK_CLKCTRL		(*(volatile uint16_t *)0x40000C02UL)
+#define SAMD_GCLK_CLKCTRL_CLKEN	(1U << 14)
+#define SAMD_GCLK_CLKCTRL_WRTLOCK	(1U << 15)
+#define SAMD_GCLK_CLKCTRL_GEN(n)	((uint16_t)(n) << 8)
+#define SAMD_GCLK_CLKCTRL_ID_MASK	0x3FU
 #define SAMD_GCLK_GENCTRL		(*(volatile uint32_t *)0x40000C04UL)
 #define SAMD_GCLK_STATUS_SYNCBUSY	(1U << 7)
 #define SAMD_GCLK_GENCTRL_OSC8M	(0x06UL << 8)
@@ -73,6 +79,74 @@ static bool SamdGclkWait(void)
 	}
 
 	return true;
+}
+
+bool SamdGclkChannelEnable(uint8_t Channel, uint8_t Generator)
+{
+	uint16_t control;
+
+	if (Channel > SAMD_GCLK_CLKCTRL_ID_MASK || Generator > 7U ||
+		!SamdGclkWait())
+	{
+		return false;
+	}
+
+	// Select the channel without changing its configuration.
+	*(volatile uint8_t *)0x40000C02UL = Channel;
+	if (!SamdGclkWait())
+	{
+		return false;
+	}
+
+	control = SAMD_GCLK_CLKCTRL;
+	if ((control & SAMD_GCLK_CLKCTRL_WRTLOCK) != 0U)
+	{
+		return (control & (SAMD_GCLK_CLKCTRL_CLKEN | (0xFU << 8))) ==
+			(SAMD_GCLK_CLKCTRL_CLKEN | SAMD_GCLK_CLKCTRL_GEN(Generator));
+	}
+
+	SAMD_GCLK_CLKCTRL = Channel | SAMD_GCLK_CLKCTRL_GEN(Generator) |
+		SAMD_GCLK_CLKCTRL_CLKEN;
+	if (!SamdGclkWait())
+	{
+		return false;
+	}
+
+	control = SAMD_GCLK_CLKCTRL;
+	return (control & (SAMD_GCLK_CLKCTRL_ID_MASK |
+		SAMD_GCLK_CLKCTRL_CLKEN | (0xFU << 8))) ==
+		(Channel | SAMD_GCLK_CLKCTRL_GEN(Generator) |
+		SAMD_GCLK_CLKCTRL_CLKEN);
+}
+
+bool SamdGclkChannelDisable(uint8_t Channel)
+{
+	uint16_t control;
+
+	if (Channel > SAMD_GCLK_CLKCTRL_ID_MASK || !SamdGclkWait())
+	{
+		return false;
+	}
+
+	*(volatile uint8_t *)0x40000C02UL = Channel;
+	if (!SamdGclkWait())
+	{
+		return false;
+	}
+
+	control = SAMD_GCLK_CLKCTRL;
+	if ((control & SAMD_GCLK_CLKCTRL_WRTLOCK) != 0U)
+	{
+		return (control & SAMD_GCLK_CLKCTRL_CLKEN) == 0U;
+	}
+
+	SAMD_GCLK_CLKCTRL = Channel | (control & (0xFU << 8));
+	if (!SamdGclkWait())
+	{
+		return false;
+	}
+
+	return (SAMD_GCLK_CLKCTRL & SAMD_GCLK_CLKCTRL_CLKEN) == 0U;
 }
 
 void SystemInit(void)
