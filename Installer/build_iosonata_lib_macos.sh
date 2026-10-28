@@ -285,19 +285,6 @@ else
   fi
 fi
 
-echo "Available IOsonata library projects:"
-echo
-for i in "${!mcu_families[@]}"; do
-  printf "  %2d) %s\n" $((i+1)) "${mcu_families[$i]}"
-done
-echo "   A) Build All"
-echo "   0) Skip IOsonata (TaktOS already built)"
-echo
-if [[ ${#taktos_families[@]} -gt 0 ]]; then
-  echo "Note: all ${#taktos_families[@]} TaktOS ARM/RISCV libraries are built automatically."
-  echo
-fi
-
 # Function to build a single project
 build_project() {
   local proj_path="$1"
@@ -419,6 +406,14 @@ if [[ ${#failed_builds[@]} -ne 0 ]]; then
 fi
 
 # TaktOS is complete; IOsonata libraries are an optional user selection.
+echo "Available IOsonata library projects:"
+echo
+for i in "${!mcu_families[@]}"; do
+  printf "  %2d) %s\n" $((i+1)) "${mcu_families[$i]}"
+done
+echo "   A) Build All"
+echo "   0) Skip IOsonata (TaktOS already built)"
+echo
 # Get user selection
 selection=""
 while true; do
