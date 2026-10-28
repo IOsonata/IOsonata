@@ -34,7 +34,8 @@ A hardware peripheral listed as pending is not claimed as implemented.
 | Port | Implementation selected by the library | Status and limits |
 |---|---|---|
 | SAM4E16E | New AES-128/256 ECB/CBC/CTR; AES-128 CMAC/CCM/GCM use its block hook | SHA/P-256 software. No on-chip TRNG used; software RNG is not secure. |
-| SAM4LCxC, SAM4LSxC | New AES-128 and TRNG, AESA clock/countermeasure setup | AES-256 inherited software; SAM4L AESA supports 128-bit keys. SHA/P-256 software. |
+| SAM4LCxC | AESA AES-128 and the shared SAM4L TRNG engine (`CryptoRngSam4l`), AESA clock/countermeasure setup | AES-256 inherited software; SAM4L AESA supports 128-bit keys. SHA/P-256 software. SAM4L Xplained Pro CryptoTest, Release, 101 of 101 (2026-10-28): the map links `Crypto::Init/Cipher/Seal/Open/Mac` from `crypto_sam.o` and `Random/IsSecure` from `crypto_sam4l.o`, the weak software versions are discarded; AES-128 ECB 16 bytes 66 us against 381 us in software, 1 KB 1.8 ms against 23.5 ms. |
+| SAM4LSxC | TRNG override (`CryptoRngSam4l`), inherited software algorithms | SAM4LS parts have no AESA (Microchip SAM4L device pack: the AESA instance and interrupt 21 exist on SAM4LC parts only). AES-128/256, SHA and P-256 software; the TRNG gives secure random numbers for key generation and signing. SAM4LSxC CryptoTest on a SAM4L Xplained Pro (SAM4LC silicon, same TRNG) 101 of 101 (2026-10-28); no SAM4LS part tested. |
 | LPC11U35, LPC1769 | Generic software | No secure entropy implementation. |
 | LPC54605, LPC54628 | ROM RNG override; LPC54628 SHA block for SHA-256, other algorithms software | Discards 32 ROM RNG words between returned words, following the NXP driver. No AES hardware. The LPC54628 SHA block is used after a known-answer test at Init, the processor writes the blocks (no AHB master mode, erratum SHA.1), one stream at a time owns it and other streams use software. The other parts hash in software. |
 | nRF52805, nRF52810, nRF52832 | New default binding of ECB-128 override; existing RNG | SoftDevice ECB service used when enabled; otherwise peripheral DMA. AES-256 and decrypt modes inherit software. |
@@ -67,7 +68,9 @@ OpenSSL. The SAM, ESP32, R9A02 and LPC models execute the unchanged generic test
 at `-O0` and `-O2` with address and undefined-behavior sanitizers. Their Timer
 fixture is synthetic; displayed timing values are not measured performance.
 
-- SAM4L, R9A02 and LPC546xx: 101 passed, 0 failed, 0 skipped per model run.
+- SAM4LC, SAM4LS, R9A02 and LPC546xx: 101 passed, 0 failed, 0 skipped per model run.
+  The SAM4LS model defines no AESA register and checks that no AES block
+  reaches the register model.
 - LPC54628 SHA block model (`tests/lpc/lpc546xx/crypto_test.cpp`): the same
   test on the block, 101 passed, 0 failed, 0 skipped.
 - SAM4E and ESP32-C3/C6: 59 passed, 0 failed, 1 explicit secure-entropy skip.

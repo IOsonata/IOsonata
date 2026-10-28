@@ -28,6 +28,11 @@ SOFTWARE.
 #include "sam4lxxx.h"
 #include "coredev/interrupt.h"
 #include "crypto_sam.h"
+#include "crypto_rng_sam4l.h"
+
+// SAM4LC: AESA for AES-128 and the shared SAM4L TRNG engine (rng_sam4l.cpp)
+// for random numbers and the AESA countermeasure seed. SAM4LS parts have no
+// AESA and build crypto_default_sam4ls.cpp instead of this file.
 
 // Optional debugger counters compare AES blocks with the software reference.
 // Keep disabled for release and performance tests.
@@ -45,7 +50,6 @@ volatile uint32_t g_Sam4lAesDiagReferenceFailures = 0U;
 #endif
 
 static bool s_AesBusy = false;
-static bool s_RngBusy = false;
 // Key currently in AESA_KEY, kept for the duration of one operation so the
 // expanded key is reused across blocks. Wiped in AesOpEnd.
 static uint8_t s_LoadedKey[16];
@@ -73,30 +77,10 @@ static void PmEnable(volatile uint32_t *pReg, uint32_t Mask)
 	EnableInterrupt(state);
 }
 
-static bool RngWord(uint32_t *pWord)
-{
-	uint32_t polls = 1000000U;
-	uint32_t status;
-
-	while (polls > 0U)
-	{
-		status = SAM4L_TRNG->TRNG_ISR;
-		if ((status & TRNG_ISR_DATRDY) != 0U)
-		{
-			*pWord = SAM4L_TRNG->TRNG_ODATA;
-			return true;
-		}
-		polls--;
-	}
-	return false;
-}
-
 bool CryptoSam::Enable()
 {
 	uint32_t polls = 1000000U;
-	uint32_t word = 0U;
 	uint32_t clock;
-	uint32_t hsbMask = PM_HSBMASK_AESA | PM_HSBMASK_HTOP0;
 	// ASF genclk.h defines source 7 as CLK_CPU (48 MHz on this board).
 	uint32_t aesClock = SCIF_GCCTRL_OSCSEL(7U) | SCIF_GCCTRL_CEN;
 
@@ -104,11 +88,10 @@ bool CryptoSam::Enable()
 	{
 		return true;
 	}
-	// TRNG is on PBA; AESA is on HSB and uses generic clock 4.
-	PmEnable(&SAM4L_PM->PM_HSBMASK, hsbMask);
-	PmEnable(&SAM4L_PM->PM_PBAMASK, PM_PBAMASK_TRNG);
-	if ((SAM4L_PM->PM_HSBMASK & hsbMask) != hsbMask ||
-		(SAM4L_PM->PM_PBAMASK & PM_PBAMASK_TRNG) == 0U)
+	// AESA is on HSB and uses generic clock 4. The TRNG engine clocks its
+	// own PBA bridge and peripheral.
+	PmEnable(&SAM4L_PM->PM_HSBMASK, PM_HSBMASK_AESA);
+	if ((SAM4L_PM->PM_HSBMASK & PM_HSBMASK_AESA) == 0U)
 	{
 		return false;
 	}
@@ -132,15 +115,11 @@ bool CryptoSam::Enable()
 	}
 	// ASF enables AESA once, after configuring the generic clock.
 	SAM4L_AESA->AESA_CTRL = AESA_CTRL_ENABLE;
-	SAM4L_TRNG->TRNG_IDR = TRNG_IDR_DATRDY;
-	SAM4L_TRNG->TRNG_CR = TRNG_CR_KEY(0x524E47U) | TRNG_CR_ENABLE;
-	if (!RngWord(&word))
+	// Block seeds the AESA countermeasure from the TRNG.
+	if (!CryptoRngSam4lInstance().Enable())
 	{
-		SAM4L_TRNG->TRNG_CR = TRNG_CR_KEY(0x524E47U);
-		CryptoSecureWipe(&word, sizeof(word));
 		return false;
 	}
-	CryptoSecureWipe(&word, sizeof(word));
 	vbValid = true;
 	return true;
 }
@@ -312,12 +291,6 @@ bool CryptoSam::Block(const uint8_t *pKey, size_t KeyLen, bool Encrypt,
 
 CRYPTO_STATUS CryptoSam::Random(uint8_t *pOut, size_t Len)
 {
-	uintptr_t state;
-	uint32_t word = 0U;
-	size_t off;
-	size_t count;
-	bool ok = true;
-
 	if (Len == 0U)
 	{
 		return CRYPTO_STATUS_OK;
@@ -331,40 +304,12 @@ CRYPTO_STATUS CryptoSam::Random(uint8_t *pOut, size_t Len)
 		CryptoSecureWipe(pOut, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
-	state = DisableInterrupt();
-	if (s_RngBusy)
-	{
-		EnableInterrupt(state);
-		CryptoSecureWipe(pOut, Len);
-		return CRYPTO_STATUS_BUSY;
-	}
-	s_RngBusy = true;
-	EnableInterrupt(state);
-	for (off = 0U; off < Len; off += count)
-	{
-		if (!RngWord(&word))
-		{
-			ok = false;
-			break;
-		}
-		count = Len - off < sizeof(word) ? Len - off : sizeof(word);
-		memcpy(pOut + off, &word, count);
-	}
-	CryptoSecureWipe(&word, sizeof(word));
-	state = DisableInterrupt();
-	s_RngBusy = false;
-	EnableInterrupt(state);
-	if (!ok)
-	{
-		CryptoSecureWipe(pOut, Len);
-		return CRYPTO_STATUS_FAIL;
-	}
-	return CRYPTO_STATUS_OK;
+	return CryptoRngSam4lInstance().Random(pOut, Len);
 }
 
 bool CryptoSam::IsSecure() const
 {
-	return vbValid;
+	return vbValid && CryptoRngSam4lInstance().IsSecure();
 }
 
 CRYPTO_STATUS CryptoSam::NarrowCipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,

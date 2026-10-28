@@ -54,6 +54,7 @@ No SAM4LS hardware test has been performed.
 | SPI | SPIMasterDemo, SPILoopback, SPIMasterSlave |
 | USB CDC | UsbCdcLoopback, UsbCdcPrbsTx, UsbDualCdcStress, UsbCdcLoopbackTaktOS |
 | Other USB device functions | UsbCustomBulkLoopback, UsbHidKeyboard, UsbHidLoopback, UsbIntLoopback, UsbIsoLoopback, UsbMscRamDisk |
+| Crypto | CryptoTest |
 
 UART, I2C and SPI examples use the default internal clocks. Their board files
 give MCU pin names and loopback connections; adapt these to your hardware.
@@ -71,6 +72,29 @@ application.
 
 The older DfuBoot and Studio projects are retained. They are not covered by
 these build checks. DFU hardware testing remains deferred.
+
+## Crypto
+
+SAM4LS parts have the SAM4L TRNG but no AESA engine; the AESA instance and
+its interrupt exist on SAM4LC parts only. The library uses the TRNG for
+`Crypto::Random` through `CryptoRngSam4l` (`../src/rng_sam4l.cpp`, shared
+with the SAM4LC library) and `../src/crypto_default_sam4ls.cpp`. AES-128 and
+AES-256, SHA-256, HMAC and P-256 run on the software engines. `IsSecure()`
+is true once the TRNG runs, so key generation and signing are available.
+`Crypto::Init()` returns false when the TRNG does not start; no software
+random generator is selected instead.
+
+CryptoTest builds the shared `exemples/crypto/crypto_engine_test.cpp`.
+Debug prints through semihosting; Release prints on USART1 (PC26 RX, PC27
+TX) at 1000000 baud. `tests/crypto/run_sam_models.py` runs the same test
+on the production sources with a TRNG register model: 101 passed, 0 failed,
+0 skipped at `-O0` and `-O2`, with no AES block reaching the AES registers.
+
+On 2026-10-28 the maintainer ran this CryptoTest, built with the SAM4LSxC
+library, on a SAM4L Xplained Pro: 101 passed, 0 failed, 0 skipped, with the
+TRNG reported as the secure random source and the AES times equal to the
+software engine. That board has a SAM4LC part, which has the same TRNG;
+the SAM4LS library does not use its AESA. No SAM4LS part has been tested.
 
 ## Build checks
 

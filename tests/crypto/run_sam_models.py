@@ -11,8 +11,16 @@ SOURCES = ['src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp',
     'src/crypto/crypto_aes_modes.cpp', 'src/crypto/crypto_aes_soft.cpp',
     'src/crypto/crypto_softsha256.cpp', 'src/crypto/crypto_softrng.cpp',
     'src/crypto/crypto_uecc.cpp', 'src/crypto/crypto_p256.cpp', 'micro-ecc/uECC.c',
-    'ARM/Microchip/src/crypto_sam.cpp', 'exemples/crypto/crypto_engine_test.cpp',
-    'tests/crypto/sam_model.cpp']
+    'exemples/crypto/crypto_engine_test.cpp', 'tests/crypto/sam_model.cpp']
+# Provider sources of each library: SAM4E AES, SAM4LC AESA with the shared
+# TRNG engine, SAM4LS TRNG engine with the software algorithms (no AESA).
+TARGETS = {
+    'sam4e': ['ARM/Microchip/src/crypto_sam.cpp', 'ARM/Microchip/SAM4E/src/crypto_sam4e.cpp'],
+    'sam4l': ['ARM/Microchip/src/crypto_sam.cpp', 'ARM/Microchip/SAM4L/src/crypto_sam4l.cpp',
+        'ARM/Microchip/SAM4L/src/rng_sam4l.cpp'],
+    'sam4ls': ['ARM/Microchip/SAM4L/src/rng_sam4l.cpp',
+        'ARM/Microchip/SAM4L/src/crypto_default_sam4ls.cpp'],
+}
 
 with tempfile.TemporaryDirectory(prefix='crypto-sam-') as temp:
     out = Path(temp)
@@ -23,14 +31,18 @@ with tempfile.TemporaryDirectory(prefix='crypto-sam-') as temp:
     for header in ('sam4e.h', 'sam4lxxx.h'):
         (out / header).write_text('#include "sam_model.h"\n')
     for opt in ('-O0', '-O2'):
-        for target in ('sam4e', 'sam4l'):
+        for target in TARGETS:
             flags = [opt, '-g', '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                 '-fno-pie', '-DuECC_ENABLE_VLI_API=1', '-DCRYPTO_TEST_NO_MAIN']
-            if target == 'sam4l': flags.append('-DTEST_SAM4L')
+            if target.startswith('sam4l'): flags.append('-DTEST_SAM4L')
+            if target == 'sam4ls': flags.append('-DTEST_SAM4LS')
+            # The model headers come first; SAM4L/include only adds the TRNG
+            # engine header.
             inc = ['-I' + str(p) for p in (out, ROOT/'include', ROOT/'micro-ecc',
-                ROOT/'ARM/Microchip/include', ROOT/'tests/crypto')]
+                ROOT/'ARM/Microchip/include', ROOT/'tests/crypto',
+                ROOT/'ARM/Microchip/SAM4L/include')]
             objects = []
-            sources = SOURCES + [f'ARM/Microchip/{target.upper()}/src/crypto_{target}.cpp']
+            sources = SOURCES + TARGETS[target]
             for n, source in enumerate(sources):
                 obj = out / f'{n}.o'
                 compiler = ['gcc', '-std=gnu17'] if source.endswith('.c') else [

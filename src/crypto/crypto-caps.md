@@ -107,7 +107,7 @@ implementation used by another object.
 AES-128 and AES-256 ECB/CBC/CTR are implemented by `CryptoSoftAes`. Hardware
 classes override the operations they accelerate. STM32WBA uses the software
 cipher for AES-256. CryptoMaster, CryptoCell, H753, L4S9, SAM4E, RA4M1 and
-ESP32-C3/C6 accelerate both key sizes. SAM4L requires software AES-256. The nRF52/nRF5340 ECB class inherits the mode implementation and replaces
+ESP32-C3/C6 accelerate both key sizes. SAM4LC requires software AES-256; SAM4LS has no AES engine and uses the software engine for both key sizes. The nRF52/nRF5340 ECB class inherits the mode implementation and replaces
 its AES-128 block hooks; AES-256 uses the software block without acquiring
 that peripheral. The application and generic object perform no retry based
 on unsupported status. Busy and failed operations remain errors.
