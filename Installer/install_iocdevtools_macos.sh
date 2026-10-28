@@ -830,9 +830,9 @@ fi
 
 # Embedded CDT global preferences live in Eclipse's configuration scope.
 # Set the configuration explicitly so first-run preferences are deterministic.
-ECLIPSE_CONFIG="$ECLIPSE_APP/Contents/Eclipse/configuration"
+ECLIPSE_CONFIG="$ROOT/Tools/Eclipse/configuration"
 ECLIPSE_SETTINGS="$ECLIPSE_CONFIG/.settings"
-sudo mkdir -p "$ECLIPSE_SETTINGS"
+mkdir -p "$ECLIPSE_SETTINGS"
 [[ -d "$ECLIPSE_SETTINGS" ]] || { echo "Cannot create Embedded CDT preferences directory." >&2; exit 1; }
 [[ -x "$ARM_DIR/bin/arm-none-eabi-gcc" && -x "$RISCV_DIR/bin/riscv-none-elf-gcc" ]] || {
 	echo "Arm or RISC-V compiler missing from configured xPack directory." >&2
@@ -846,7 +846,7 @@ RISCV_HASH=$(java_hash "xPack GNU RISC-V Embedded GCC")
 if (( RISCV_HASH < 0 )); then RISCV_HASH=$((RISCV_HASH + 4294967296)); fi
 RISCV_HASH=$((RISCV_HASH + 1))
 
-sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.core.prefs' <<EOF
+sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.core.prefs' <<EOF
 eclipse.preferences.version=1
 xpack.arm.toolchain.path=$ARM_DIR/bin
 xpack.riscv.toolchain.path=$RISCV_DIR/bin
@@ -854,14 +854,14 @@ xpack.openocd.path=$OPENOCD_DIR/bin
 xpack.strict=true
 EOF"
 
-sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs' <<EOF
+sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs' <<EOF
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.1287942917=$ARM_DIR/bin
 global.toolchain.path.strict=true
 workspace.toolchain.path.strict=true
 EOF"
 
-sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs' <<EOF
+sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs' <<EOF
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
 toolchain.path.2273142912=$RISCV_DIR/bin
 toolchain.path.2021824384=$RISCV_DIR/bin
@@ -869,19 +869,19 @@ global.toolchain.path.strict=true
 workspace.toolchain.path.strict=true
 EOF"
 
-sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs' <<EOF
+sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs' <<EOF
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF"
 
-sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs' <<EOF
+sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs' <<EOF
 eclipse.preferences.version=1
 install.folder=$TOOL_BIN
 executable.name=pyocd
 folder.strict=true
 EOF"
 
-sudo sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.core.runtime.prefs' <<EOF
+sh -c "cat > '$ECLIPSE_SETTINGS/org.eclipse.core.runtime.prefs' <<EOF
 eclipse.preferences.version=1
 environment/project/LLVM_HOME/value=$LLVM_DIR
 environment/project/ARM_LLVM_HOME/value=$LLVM_DIR
@@ -1034,6 +1034,29 @@ echo
 install_iosonata_plugin
 
 install_iocomposer "$ECLIPSE_APP/Contents/Eclipse"
+
+# Bind GUI and headless Eclipse to one user-owned configuration scope.
+# This configuration is independent of whether libraries are compiled.
+ECLIPSE_INI="$ECLIPSE_APP/Contents/Eclipse/eclipse.ini"
+"$PYTHON3" - "$ECLIPSE_INI" "$ECLIPSE_CONFIG" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+configuration = sys.argv[2]
+lines = path.read_text().splitlines()
+result = []
+i = 0
+while i < len(lines):
+    if lines[i] == "-configuration" and i + 1 < len(lines):
+        i += 2
+        continue
+    result.append(lines[i])
+    i += 1
+index = result.index("-vmargs") if "-vmargs" in result else len(result)
+result[index:index] = ["-configuration", configuration]
+path.write_text("\n".join(result) + "\n")
+PY
+
 sudo /usr/libexec/PlistBuddy -c "Set :CFBundleName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
 sudo /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist" 2>/dev/null || \
 	sudo /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
@@ -1257,8 +1280,7 @@ if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
 	echo "  TaktOS and IOsonata Library Build"
 	echo "========================================================="
 	echo ""
-	if ! ARM_GCC_BIN="$ARM_DIR/bin" RISCV_GCC_BIN="$RISCV_DIR/bin" \
-		bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
+	if ! bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
 		[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
 		echo "TaktOS/IOsonata library build failed." >&2
 		exit 1
