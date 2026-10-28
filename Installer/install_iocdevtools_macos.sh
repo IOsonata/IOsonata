@@ -1208,8 +1208,7 @@ if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
 	echo ""
 	if ! bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
 		[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
-		echo "TaktOS/IOsonata library build failed." >&2
-		exit 1
+		echo "Warning: Library build failed; installation continues. Rebuild later after correcting the errors." >&2
 	fi
 	[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
 else

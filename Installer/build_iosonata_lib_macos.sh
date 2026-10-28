@@ -415,8 +415,7 @@ done
 if [[ ${#failed_builds[@]} -ne 0 ]]; then
   echo "Failed TaktOS projects:" >&2
   printf '  %s\n' "${failed_builds[@]}" >&2
-  echo "TaktOS library build failed; IOsonata target selection is not started." >&2
-  exit 1
+  echo "Warning: Some TaktOS libraries failed. Continue to IOsonata target selection." >&2
 fi
 
 # TaktOS is complete; IOsonata libraries are an optional user selection.
@@ -536,7 +535,7 @@ if [[ $interrupted -eq 1 ]]; then
 fi
 
 if [[ ${#failed_builds[@]} -gt 0 ]]; then
-  exit 1
+  echo "Warning: Library build errors remain; rerun the builder after correcting them." >&2
 fi
 
 echo
