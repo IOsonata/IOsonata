@@ -859,32 +859,20 @@ else
 	echo "SDK clone script: $CLONE_URL"
 fi
 
-# Prefer --no-build if supported by the clone script (newer versions). If not supported,
-# retry without it. We capture output so we can detect whether the builder ran.
+# SDK synchronization is source-only. Compilation belongs to the final
+# installer phase, after IOcomposer has been installed, signed and configured.
 CLONE_ARGS=(--home "$ROOT" --no-build)
 if [[ "$MODE" == "force" ]]; then
   CLONE_ARGS+=(--mode force)
 fi
 
-run_clone() {
-  # shellcheck disable=SC2068
-  zsh "$CLONE_SCRIPT" "$@" 2>&1 | tee -a "$CLONE_LOG"
-}
-
-if ! run_clone "${CLONE_ARGS[@]}"; then
-	echo "SDK synchronization failed. See $CLONE_LOG" >&2
-	[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE"
-	exit 1
+if ! zsh "$CLONE_SCRIPT" "${CLONE_ARGS[@]}" > >(tee -a "$CLONE_LOG") 2> >(tee -a "$CLONE_LOG" >&2); then
+  echo "SDK synchronization failed. See $CLONE_LOG" >&2
+  [[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE"
+  exit 1
 fi
 
 [[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" || true
-
-# Detect whether the clone script already invoked the IOsonata library builder.
-CLONE_INVOKED_BUILD=0
-if grep -qE "IOsonata Library (Auto-)?Build|IOsonata Library Builder|Available IOsonata library projects|Select project to build" "$CLONE_LOG"; then
-  CLONE_INVOKED_BUILD=1
-fi
-
 rm -f "$CLONE_LOG" || true
 
 # ---------------------------------------------------------
@@ -1190,41 +1178,35 @@ echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.m
 # ---------------------------------------------------------
 # IOsonata Library Build (run exactly once)
 # ---------------------------------------------------------
-# If the clone script already invoked the builder, do NOT run it again.
-# If it did NOT invoke the builder (e.g., clone supports --no-build), run it here.
-if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
-	# A locally executed installer must use its adjacent builder, not the
-	# potentially older builder in the installed SDK checkout.
-	LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-	LOCAL_BUILDER="$LOCAL_INSTALLER_DIR/build_iosonata_lib_macos.sh"
-	BUILD_STAGE=""
-	if [[ -f "$LOCAL_BUILDER" ]]; then
-		BUILD_SCRIPT="$LOCAL_BUILDER"
-		echo "Library builder: local installer checkout ($BUILD_SCRIPT)"
-	else
-		BUILD_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/build_iosonata_lib_macos.sh"
-		BUILD_STAGE=$(mktemp -d)
-		BUILD_SCRIPT="$BUILD_STAGE/build_iosonata_lib_macos.sh"
-		if ! curl -fsSL "$BUILD_URL" -o "$BUILD_SCRIPT"; then
-			rm -rf "$BUILD_STAGE"
-			echo "Failed to download library builder: $BUILD_URL" >&2
-			exit 1
-		fi
-		echo "Library builder: $BUILD_URL"
-	fi
-	echo ""
-	echo "========================================================="
-	echo "  TaktOS and IOsonata Library Build"
-	echo "========================================================="
-	echo ""
-	if ! bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
-		[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
-		echo "Warning: Library build failed; installation continues. Rebuild later after correcting the errors." >&2
-	fi
-	[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
+# Build only after the completed signed IDE has been initialized and
+# its MCU preferences have been written. Compilation failures are nonfatal.
+LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+LOCAL_BUILDER="$LOCAL_INSTALLER_DIR/build_iosonata_lib_macos.sh"
+BUILD_STAGE=""
+if [[ -f "$LOCAL_BUILDER" ]]; then
+  BUILD_SCRIPT="$LOCAL_BUILDER"
+  echo "Library builder: local installer checkout ($BUILD_SCRIPT)"
 else
-	echo "SDK synchronization already invoked the library builder."
+  BUILD_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/build_iosonata_lib_macos.sh"
+  BUILD_STAGE=$(mktemp -d)
+  BUILD_SCRIPT="$BUILD_STAGE/build_iosonata_lib_macos.sh"
+  if ! curl -fsSL "$BUILD_URL" -o "$BUILD_SCRIPT"; then
+    rm -rf "$BUILD_STAGE"
+    echo "Warning: Could not download library builder: $BUILD_URL" >&2
+    BUILD_SCRIPT=""
+    BUILD_STAGE=""
+  fi
 fi
+
+if [[ -n "$BUILD_SCRIPT" ]]; then
+  echo "========================================================="
+  echo "  TaktOS and IOsonata Library Build"
+  echo "========================================================="
+  if ! bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
+    echo "Warning: Library build failed; installation continues." >&2
+  fi
+fi
+[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
 
 # ---------------------------------------------------------
 build_iocomposer_index
