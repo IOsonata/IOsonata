@@ -51,6 +51,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/uart_retarget.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
+		</link>
+		<link>
 			<name>src/prbs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/prbs.c</locationURI>
