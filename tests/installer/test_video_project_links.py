@@ -39,6 +39,26 @@ class VideoLibraryProjects(unittest.TestCase):
                                      (ROOT / name).resolve())
                     self.assertTrue((target / match.group(2)).is_file())
 
+    def test_camera_source_enabled_in_managed_configurations(self):
+        projects = sorted(ROOT.glob("**/lib/ioc/.cproject"))
+        self.assertGreaterEqual(len(projects), 37)
+        for project in projects:
+            with self.subTest(project=str(project.relative_to(ROOT))):
+                tree = ET.parse(project)
+                configs = tree.findall(".//cconfiguration")
+                self.assertGreaterEqual(len(configs), 2)
+                for config in configs:
+                    entries = config.findall(".//sourceEntries/entry")
+                    self.assertTrue(entries, "Missing source entries")
+                    for entry in entries:
+                        exclusions = entry.get("excluding", "").split("|")
+                        for excluded in exclusions:
+                            self.assertFalse(
+                                excluded == "src/video" or
+                                excluded == "src/video/cam_arducam_mega.cpp" or
+                                (excluded and "src/video/cam_arducam_mega.cpp".startswith(excluded + "/")),
+                                "Video driver excluded from build: " + excluded)
+
     def test_windows_visual_studio_project(self):
         project = ROOT / "Win/lib/IOsonata_Win.vcxproj"
         tree = ET.parse(project)
