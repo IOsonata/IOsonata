@@ -33,6 +33,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "coredev/iopincfg.h"
+#include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/uart.h"
 #include "sercom_clock_samd21.h"
@@ -45,6 +46,8 @@ SOFTWARE.
 #define SAMD21_SERCOM_CTRLA		0x00UL
 #define SAMD21_SERCOM_CTRLB		0x04UL
 #define SAMD21_SERCOM_BAUD		0x0CUL
+#define SAMD21_SERCOM_INTENCLR	0x14UL
+#define SAMD21_SERCOM_INTENSET	0x16UL
 #define SAMD21_SERCOM_INTFLAG	0x18UL
 #define SAMD21_SERCOM_DATA		0x28UL
 #define SAMD21_SERCOM_STATUS		0x1AUL
@@ -65,12 +68,16 @@ SOFTWARE.
 #define SAMD21_USART_STATUS_FERR	(1U << 2)
 #define SAMD21_USART_STATUS_BUFOVF	(1U << 3)
 #define SAMD21_USART_WAIT		100000UL
+#define SAMD21_UART_FIFO_SIZE	16
+#define SAMD21_UART_FIFO_MEMSIZE CFIFO_MEMSIZE(SAMD21_UART_FIFO_SIZE)
 #define SAMD21_SYNCBUSY_ENABLE	(1UL << 1)
 #define SAMD21_SYNCBUSY_CTRLB	(1UL << 2)
 
 typedef struct {
 	UARTDev_t *pUartDev;
 	uint32_t Base;
+	uint8_t RxFifoMem[SAMD21_UART_FIFO_MEMSIZE];
+	uint8_t TxFifoMem[SAMD21_UART_FIFO_MEMSIZE];
 } Samd21UartDev_t;
 
 static Samd21UartDev_t s_UartDev[6] = {
@@ -191,6 +198,62 @@ static void Samd21UartStop(DevIntrf_t * const pIntrf)
 	(void)pIntrf;
 }
 
+static void Samd21UartIrq(Samd21UartDev_t *pDev)
+{
+	UARTDev_t *pUart;
+	uint8_t flags;
+	int data;
+	uint8_t *p;
+
+	pUart = pDev->pUartDev;
+	if (pUart == NULL || !pUart->DevIntrf.bIntEn)
+	{
+		return;
+	}
+
+	flags = *Samd21UartReg8(pDev, SAMD21_SERCOM_INTFLAG);
+	if ((flags & SAMD21_USART_RXC) != 0U)
+	{
+		data = (int)*Samd21UartReg16(pDev, SAMD21_SERCOM_DATA);
+		if (!CFifoPutByte(pUart->hRxFifo, (uint8_t)data))
+		{
+			pUart->RxDropCnt++;
+		}
+		if (pUart->EvtCallback != NULL)
+		{
+			pUart->EvtCallback(pUart, UART_EVT_RXDATA, NULL,
+				CFifoUsed(pUart->hRxFifo));
+		}
+	}
+
+	if ((flags & SAMD21_USART_DRE) != 0U)
+	{
+		p = CFifoGet(pUart->hTxFifo);
+		if (p != NULL)
+		{
+			*Samd21UartReg16(pDev, SAMD21_SERCOM_DATA) = *p;
+		}
+		else
+		{
+			*Samd21UartReg8(pDev, SAMD21_SERCOM_INTENCLR) =
+				SAMD21_USART_DRE;
+			pUart->bTxReady = true;
+			if (pUart->EvtCallback != NULL)
+			{
+				pUart->EvtCallback(pUart, UART_EVT_TXREADY, NULL,
+					CFifoAvail(pUart->hTxFifo));
+			}
+		}
+	}
+}
+
+extern "C" void SERCOM0_Handler(void) { Samd21UartIrq(&s_UartDev[0]); }
+extern "C" void SERCOM1_Handler(void) { Samd21UartIrq(&s_UartDev[1]); }
+extern "C" void SERCOM2_Handler(void) { Samd21UartIrq(&s_UartDev[2]); }
+extern "C" void SERCOM3_Handler(void) { Samd21UartIrq(&s_UartDev[3]); }
+extern "C" void SERCOM4_Handler(void) { Samd21UartIrq(&s_UartDev[4]); }
+extern "C" void SERCOM5_Handler(void) { Samd21UartIrq(&s_UartDev[5]); }
+
 static int Samd21UartRx(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 {
 	Samd21UartDev_t *pDev;
@@ -199,6 +262,19 @@ static int Samd21UartRx(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 
 	pDev = (Samd21UartDev_t *)pIntrf->pDevData;
 	count = 0;
+	if (pIntrf->bIntEn)
+	{
+		while (count < Len)
+		{
+			int value = CFifoGetByte(pDev->pUartDev->hRxFifo);
+			if (value < 0)
+			{
+				break;
+			}
+			pBuff[count++] = (uint8_t)value;
+		}
+		return count;
+	}
 	while (count < Len)
 	{
 		if ((*Samd21UartReg8(pDev, SAMD21_SERCOM_INTFLAG) &
@@ -244,6 +320,23 @@ static int Samd21UartTx(DevIntrf_t * const pIntrf, const uint8_t *pData, int Len
 
 	pDev = (Samd21UartDev_t *)pIntrf->pDevData;
 	count = 0;
+	if (pIntrf->bIntEn)
+	{
+		while (count < Len)
+		{
+			if (!CFifoPutByte(pDev->pUartDev->hTxFifo, pData[count]))
+			{
+				break;
+			}
+			count++;
+		}
+		if (count > 0)
+		{
+			*Samd21UartReg8(pDev, SAMD21_SERCOM_INTENSET) =
+				SAMD21_USART_DRE;
+		}
+		return count;
+	}
 
 	while (count < Len)
 	{
@@ -328,7 +421,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		pCfg->DataBits != 8 || pCfg->StopBits != 1 ||
 		pCfg->Parity != UART_PARITY_NONE ||
 		pCfg->FlowControl != UART_FLWCTRL_NONE ||
-		pCfg->bDMAMode || pCfg->bIntMode ||
+		pCfg->bDMAMode ||
 		pCfg->pIOPinMap == NULL || pCfg->NbIOPins < 2)
 	{
 		return false;
@@ -379,6 +472,22 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->Parity = UART_PARITY_NONE;
 	pDev->FlowControl = UART_FLWCTRL_NONE;
 	pDev->EvtCallback = pCfg->EvtCallback;
+	if (pCfg->bIntMode)
+	{
+		pDev->hRxFifo = CFifoInit(pCfg->pRxMem != NULL ?
+			pCfg->pRxMem : pHw->RxFifoMem,
+			pCfg->pRxMem != NULL ? pCfg->RxMemSize : SAMD21_UART_FIFO_MEMSIZE,
+			1, pCfg->bFifoBlocking);
+		pDev->hTxFifo = CFifoInit(pCfg->pTxMem != NULL ?
+			pCfg->pTxMem : pHw->TxFifoMem,
+			pCfg->pTxMem != NULL ? pCfg->TxMemSize : SAMD21_UART_FIFO_MEMSIZE,
+			1, true);
+		if (pDev->hRxFifo == NULL || pDev->hTxFifo == NULL)
+		{
+			pHw->pUartDev = NULL;
+			return false;
+		}
+	}
 	pIntrf->Type = DEVINTRF_TYPE_UART;
 	pIntrf->GetRate = Samd21UartGetRate;
 	pIntrf->SetRate = Samd21UartSetRate;
@@ -395,7 +504,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pIntrf->Reset = Samd21UartReset;
 	pIntrf->GetHandle = Samd21UartGetHandle;
 	pIntrf->MaxRetry = UART_RETRY_MAX;
-	pIntrf->bIntEn = false;
+	pIntrf->bIntEn = pCfg->bIntMode;
 	pIntrf->bDma = false;
 	atomic_flag_clear(&pIntrf->bBusy);
 	atomic_store(&pIntrf->EnCnt, 1);
@@ -407,6 +516,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		pHw->pUartDev = NULL;
 		return false;
+	}
+
+	if (pCfg->bIntMode)
+	{
+		*Samd21UartReg8(pHw, SAMD21_SERCOM_INTENSET) =
+			SAMD21_USART_RXC;
+		NVIC_ClearPendingIRQ((IRQn_Type)(9 + pCfg->DevNo));
+		NVIC_SetPriority((IRQn_Type)(9 + pCfg->DevNo), pCfg->IntPrio);
+		NVIC_EnableIRQ((IRQn_Type)(9 + pCfg->DevNo));
 	}
 
 	return true;
