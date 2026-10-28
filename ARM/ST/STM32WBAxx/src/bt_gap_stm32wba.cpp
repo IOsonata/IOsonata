@@ -669,6 +669,66 @@ void BtGapScanStop(void)
 	(void)aci_gap_terminate_gap_proc(GAP_OBSERVATION_PROC);
 }
 
+// --- Link procedures on an established connection ---
+
+// The LE Set PHY bits of the ST host are the BT_GAP_PHY_* bits
+static_assert(HCI_TX_PHYS_LE_1M_PREF == BT_GAP_PHY_1MBITS && HCI_TX_PHYS_LE_2M_PREF == BT_GAP_PHY_2MBITS &&
+			  HCI_TX_PHYS_LE_CODED_PREF == BT_GAP_PHY_CODED,
+			  "ST host PHY bits differ from BT_GAP_PHY_*");
+
+bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
+				 uint16_t PhyOptions)
+{
+	if ((TxPhys & ~BT_GAP_PHY_ALL) != 0 || (RxPhys & ~BT_GAP_PHY_ALL) != 0 ||
+		PhyOptions > BT_GAP_PHY_OPT_MAX)
+	{
+		return false;
+	}
+
+	// An empty mask is no preference, which LE Set PHY gives in ALL_PHYS
+	uint8_t allphys = 0;
+
+	if (TxPhys == 0)
+	{
+		allphys |= HCI_ALL_PHYS_TX_NO_PREF;
+	}
+	if (RxPhys == 0)
+	{
+		allphys |= HCI_ALL_PHYS_RX_NO_PREF;
+	}
+
+	// The result arrives as the LE PHY Update Complete event
+	return hci_le_set_phy(ConnHdl, allphys, TxPhys, RxPhys, PhyOptions) == BLE_STATUS_SUCCESS;
+}
+
+bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy)
+{
+	if (pTxPhy == nullptr || pRxPhy == nullptr)
+	{
+		return false;
+	}
+
+	uint8_t tx = 0;
+	uint8_t rx = 0;
+
+	if (hci_le_read_phy(ConnHdl, &tx, &rx) != BLE_STATUS_SUCCESS)
+	{
+		return false;
+	}
+
+	// 1, 2, 3 for 1M, 2M and coded, the API uses the bit mask of LE Set PHY
+	if (tx < HCI_TX_PHY_LE_1M || tx > HCI_TX_PHY_LE_CODED ||
+		rx < HCI_RX_PHY_LE_1M || rx > HCI_RX_PHY_LE_CODED)
+	{
+		return false;
+	}
+
+	*pTxPhy = (uint8_t)(1 << (tx - 1));
+	*pRxPhy = (uint8_t)(1 << (rx - 1));
+
+	return true;
+}
+
 // Strong override of the weak generic BtGapConnSecGet. The ST host owns link
 // security on this port, so query it through aci_gap_get_security_level and map
 // the reported security level (1 to 4) into BtConnSec_t.
