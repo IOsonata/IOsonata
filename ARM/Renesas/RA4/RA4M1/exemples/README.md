@@ -15,8 +15,8 @@ reimporting these projects, without deleting their files from disk.
 | --- | --- | --- | --- |
 | `Blinky` | `Blinky` | `exemples/misc/blinky.c` | Three LED/test outputs, optional falling-edge button |
 | `TimerDemo` | `TimerDemo` | `exemples/timer/timer_demo.cpp` | Timer DevNo 0, default count frequency, triggers according to device capability |
-| `UartLoopback` | `UartLoopback` | `exemples/uart/uart_loopback.cpp` | SCI0, 115200 8N1, interrupt mode, no DMA |
-| `UartPrbsTxTest` | `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | SCI0, 115200 8N1, polling with TX DMA |
+| `UartLoopback` | `UartLoopback` | `exemples/uart/uart_loopback.cpp` | SCI0, 1000000 baud 8N1, interrupt mode, no DMA |
+| `UartPrbsTxTest` | `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | SCI0, 1000000 baud 8N1, polling with TX DMA |
 | `I2CMasterSlave` | `I2CMasterSlave` | `exemples/i2c/i2c_master_slave.cpp` | IIC0, 100 kHz, 7-bit master, polling |
 | `SPIMasterSlave` | `SPIMasterSlave` | `exemples/spi/spi_master_slave.cpp` | RSPI0 master (polled, 400 kHz) to RSPI1 slave (interrupt), modes 1 and 3 |
 
@@ -137,7 +137,7 @@ IIC0 as polling master and IIC1 as interrupt slave at 100 kHz. The slave uses IC
 READ_RQST, WRITE_RQST and COMPLETED callbacks. The first ISR implementation
 is not yet verified on the EK-RA4M1; no hardware PASS is claimed.
 
-**UartLoopback:** open a serial terminal at 115200 8N1, without flow control.
+**UartLoopback:** open a serial terminal at 1000000 baud 8N1, without flow control.
 The firmware writes `UART Loopback Test` at startup and echoes received bytes.
 Its application buffer now retains any unaccepted TX suffix before reading
 another RX block. This prevents partial UART writes from silently dropping echo

@@ -111,7 +111,7 @@ library builds it. `tests/stm32/run_adc.py` runs the driver for the G474 and
 G431 in Unicorn against a model of the ADC registers. The example AdcDemo
 (`exemples/converters/adc_demo.cpp`) prints VREFINT, the temperature sensor,
 VBAT and Arduino A0 (PA0) once per second, on the ST-LINK virtual COM port,
-LPUART1 at 115200 8N1, in Release, with semihosting in Debug. Not run on
+LPUART1 at 1000000 baud 8N1, in Release, with semihosting in Debug. Not run on
 hardware yet.
 
 ## PWM
@@ -132,7 +132,7 @@ The library builds the shared STM32 watchdog driver,
 to 32.8 s from the 32 kHz LSI, window, software reload channels, freeze while
 a debugger halts the core. The G4 IWDG has no interrupt: no timeout event. See
 [STM32 watchdog](../WDT.md). The example WdtDemo (`exemples/misc/wdt_demo.cpp`)
-prints on the ST-LINK virtual COM port (LPUART1, 115200 8N1) in Release, with
+prints on the ST-LINK virtual COM port (LPUART1, 1000000 baud 8N1) in Release, with
 semihosting in Debug: timeout 2000 ms, ten reloads every 500 ms, then the IWDG
 resets the MCU and the demo starts again. Not run on hardware yet.
 
@@ -143,7 +143,7 @@ The library builds the shared STM32 RTC driver, `RtcStm32`
 (`src/miscdev/rtc.cpp`): calendar in the C runtime types, alarms A and B,
 wakeup timer, 32 backup registers in TAMP, from the LSE or the 32 kHz LSI. See
 [STM32 RTC](../RTC.md). The example RtcDemo (`exemples/misc/rtc_demo.cpp`)
-prints on the ST-LINK virtual COM port (LPUART1, 115200 8N1) in Release, with
+prints on the ST-LINK virtual COM port (LPUART1, 1000000 baud 8N1) in Release, with
 semihosting in Debug: the clock in use, a boot count in backup register 0, the
 date and time every second from the wakeup event, an alarm event each minute.
 Not run on hardware yet.

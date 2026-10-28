@@ -1,6 +1,18 @@
 /**-------------------------------------------------------------------------
 @file usb_lpc546xx.c
-@brief LPC546xx USB0 full-speed lifecycle and interrupt handling.
+@brief LPC546xx USB0 full-speed and USB1 high-speed lifecycle and interrupt
+handling.
+
+One context per controller. The shared LPC IP3511 code moves the transfers;
+this file owns VBUS, the clocks through usb_hw_lpc546xx.c, the bus events, the
+bus speed of USB1 and its errata USB.6.
+
+VBUS of USB1 without a pin map: the controller stays on from UsbCtrlrStart
+and reads USB1_VBUS (VBUS_DEBOUNCED). The connection stays requested; the
+controller applies the pull-up only with VBUS, so the first bus reset of the
+host is the attachment and DCON_C the detachment, as in NXP's IP3511 device
+driver. A GPIO in the pin map (USB_VBUS_PIN_IDX) instead keeps the controller
+off until VBUS appears on it, as USB0 does with P0.22.
 
 @author Hoang Nguyen Hoan
 @date Oct. 13, 2026
@@ -36,300 +48,497 @@ SOFTWARE.
 #include "usb_data_lpc_fs.h"
 #include "usb/usb.h"
 #include "iopinctrl.h"
+#include "idelay.h"
 #include "lpc_iap.h"
 
 #define LPCUSB_DEVICE (1UL << 31)
+#define LPCUSB_FRAME (1UL << 30)
 #define LPCUSB_RESET (1UL << 26)
 #define LPCUSB_CONNECT_CHANGE (1UL << 24)
 #define LPCUSB_SUSPEND_CHANGE (1UL << 25)
 #define LPCUSB_SETUP (1UL << 8)
 #define LPCUSB_ENABLE (1UL << 7)
+#define LPCUSB_FORCE_NEEDCLK (1UL << 9)
 #define LPCUSB_CONNECT (1UL << 16)
+#define LPCUSB_SUSPEND (1UL << 17)
+#define LPCUSB_LPM_SUSPEND (1UL << 19)
 #define LPCUSB_NAK_CONTROL (3UL << 14)
+#define LPCUSB_VBUS_DEBOUNCED (1UL << 28)
+// DEVCMDSTAT command bits a direct write keeps
+#define LPCUSB_COMMANDS (0xFFUL | LPCUSB_FORCE_NEEDCLK | (1UL << 11) | (0x1FUL << 12))
+// USB1 bus speed after the reset handshake, DEVCMDSTAT bits 23:22
+#define LPCUSB_SPEED_POS 22
+#define LPCUSB_SPEED_MASK 3UL
+#define LPCUSB_SPEED_FULL 1UL
+#define LPCUSB_SPEED_HIGH 2UL
+// Errata USB.6 (ES_LPC546XX), timings of NXP's LPC54628 SDK
+// USB_DeviceHsPhyChirpIssueWorkaround: PHY test mode Force Enable, then a
+// disconnection.
+#define LPCUSB_TEST_FORCE_ENABLE (5UL << 29)
+#define LPCUSB_CHIRP_TEST_MS 100U
+#define LPCUSB_CHIRP_DISCONNECT_MS 510U
 
-static bool Lpc546xxUsbControlReady(void);
-static void Lpc546xxUsbControlFault(void);
-static void Lpc546xxUsbWakeCancel(void);
-static void Lpc546xxUsbWakeFrame(void);
+// USB.6 state of an attachment
+typedef enum __Lpc546xx_Usb_Chirp {
+	LPC546XX_USB_CHIRP_CHECK,		//!< Check the speed at the next bus reset
+	LPC546XX_USB_CHIRP_PENDING,		//!< Full speed seen, UsbCtrlrProcess runs it
+	LPC546XX_USB_CHIRP_DONE,		//!< Not again until detached
+} Lpc546xxUsbChirp_t;
 
-static bool s_Prepared;
-static bool s_Closing;
-static bool s_Releasing;
-static bool s_Detached;
-static bool s_Initialized;
-static bool s_SofEnabled;
-static bool s_WakeAddedForce;
-// 0 idle, 1..3 waiting for bus idle, 4 waiting for host resume.
-static int s_WakeFrames;
-static int s_VbusInt = -1;
-static int s_IntPrio;
-static LpcUsbFsEp0_t s_Ep0 = {
-	.pReg = USB0,
-	.Ready = Lpc546xxUsbControlReady,
-	.Fault = Lpc546xxUsbControlFault,
+typedef struct __Lpc546xx_Usb_Dev {
+	LpcUsbFsEp0_t Ep0;
+	LpcUsbFsData_t Data;
+	int DevNo;
+	IRQn_Type Irq;
+	bool Prepared;
+	bool Closing;
+	bool Releasing;
+	bool Detached;
+	bool Initialized;
+	bool VbusGpio;			//!< VBUS on a GPIO, else read from the controller
+	bool ConnectWanted;		//!< Connection requested by UsbCtrlrConnect
+	bool SofEnabled;
+	bool WakeAddedForce;
+	bool ChirpBusy;			//!< USB.6 sequence running, Release refused
+	Lpc546xxUsbChirp_t Chirp;
+	// 0 idle, 1..3 waiting for bus idle, 4 waiting for host resume.
+	int WakeFrames;
+	int VbusInt;
+	int IntPrio;
+	int VbusPort;
+	int VbusPin;
+} Lpc546xxUsbDev_t;
+
+static bool Lpc546xxUsb0Ready(void);
+static bool Lpc546xxUsb1Ready(void);
+static void Lpc546xxUsb0Fault(void);
+static void Lpc546xxUsb1Fault(void);
+static void Lpc546xxUsbWakeCancel(Lpc546xxUsbDev_t *pDev);
+static void Lpc546xxUsbWakeFrame(Lpc546xxUsbDev_t *pDev);
+
+// USB0: ten physical endpoints, full-speed list. USB1: twelve, high-speed
+// list and the high-speed device errata.
+static Lpc546xxUsbDev_t s_Usb[2] = {
+	{
+		.Ep0 = {
+			.pReg = USB0,
+			.BufSize = sizeof(((LpcUsbFsMemory_t *)0)->Packet[0]),
+			.NbEp = 5,
+			.bHsList = false,
+			.bHsErrata = false,
+			.Ready = Lpc546xxUsb0Ready,
+			.Fault = Lpc546xxUsb0Fault,
+		},
+		.Data = {
+			.pEp0 = &s_Usb[0].Ep0,
+			.pPrepared = &s_Usb[0].Prepared,
+			.pClosing = &s_Usb[0].Closing,
+			.Irq = USB0_IRQn,
+		},
+		.DevNo = 0,
+		.Irq = USB0_IRQn,
+		.VbusInt = -1,
+	},
+	{
+		.Ep0 = {
+			.pReg = (LpcUsbFsReg_t *)USBHSD,
+			.BufSize = sizeof(((Lpc546xxUsbHsMemory_t *)0)->Packet[0]),
+			.NbEp = 6,
+			.bHsList = true,
+			.bHsErrata = true,
+			.Ready = Lpc546xxUsb1Ready,
+			.Fault = Lpc546xxUsb1Fault,
+		},
+		.Data = {
+			.pEp0 = &s_Usb[1].Ep0,
+			.pPrepared = &s_Usb[1].Prepared,
+			.pClosing = &s_Usb[1].Closing,
+			.Irq = USB1_IRQn,
+		},
+		.DevNo = 1,
+		.Irq = USB1_IRQn,
+		.VbusInt = -1,
+	},
 };
 
-static LpcUsbFsData_t s_Data = {
-	.pEp0 = &s_Ep0,
-	.pPrepared = &s_Prepared,
-	.pClosing = &s_Closing,
-	.Irq = USB0_IRQn,
-};
+static void Lpc546xxUsbBusReset(Lpc546xxUsbDev_t *pDev, uint32_t Status, bool Detached);
 
-static void Lpc546xxUsbBusReset(uint32_t Status, bool Detached);
-
-LpcUsbFsData_t *LpcUsbFsDataContext(void)
+static Lpc546xxUsbDev_t *Lpc546xxUsbDev(int DevNo)
 {
-	return &s_Data;
+	return DevNo == 0 || DevNo == 1 ? &s_Usb[DevNo] : NULL;
 }
 
-static bool Lpc546xxUsbControlReady(void)
+LpcUsbFsData_t *LpcUsbFsDataContext(int DevNo)
 {
-	return s_Prepared && !s_Closing && !s_Detached;
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	return dev != NULL ? &dev->Data : NULL;
 }
 
-static void Lpc546xxUsbControlFault(void)
+// Every physical endpoint of the controller
+static uint32_t Lpc546xxUsbAll(Lpc546xxUsbDev_t *pDev)
 {
-	s_SofEnabled = false;
-	Lpc546xxUsbWakeCancel();
-	s_Ep0.Enabled = false;
-	++s_Ep0.Generation;
-	USB0->INTEN = 0U;
-	NVIC_DisableIRQ(USB0_IRQn);
-	LpcUsbFsEp0Command(&s_Ep0, LPCUSB_CONNECT, 0U, 0U);
+	return LpcUsbFsDataMask(&pDev->Data) | 3U;
+}
+
+static bool Lpc546xxUsbReady(Lpc546xxUsbDev_t *pDev)
+{
+	return pDev->Prepared && !pDev->Closing && !pDev->Detached;
+}
+
+static bool Lpc546xxUsb0Ready(void)
+{
+	return Lpc546xxUsbReady(&s_Usb[0]);
+}
+
+static bool Lpc546xxUsb1Ready(void)
+{
+	return Lpc546xxUsbReady(&s_Usb[1]);
+}
+
+static void Lpc546xxUsbFault(Lpc546xxUsbDev_t *pDev)
+{
+	pDev->SofEnabled = false;
+	Lpc546xxUsbWakeCancel(pDev);
+	pDev->Ep0.Enabled = false;
+	++pDev->Ep0.Generation;
+	pDev->Ep0.pReg->INTEN = 0U;
+	NVIC_DisableIRQ(pDev->Irq);
+	LpcUsbFsEp0Command(&pDev->Ep0, LPCUSB_CONNECT, 0U, 0U);
 	// Keep storage and clocks owned until Release can retire every bank.
 }
 
-bool Lpc546xxUsbControlPrepare(int IntPrio, void (*Event)(const UsbCtrlrEvt_t *))
+static void Lpc546xxUsb0Fault(void)
 {
+	Lpc546xxUsbFault(&s_Usb[0]);
+}
+
+static void Lpc546xxUsb1Fault(void)
+{
+	Lpc546xxUsbFault(&s_Usb[1]);
+}
+
+bool Lpc546xxUsbControlPrepare(int DevNo, int IntPrio, void (*Event)(const UsbCtrlrEvt_t *))
+{
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	if (dev == NULL || Event == NULL)
+		return false;
 	const uint32_t state = DisableInterrupt();
-	if (s_Prepared || s_Releasing || Event == NULL)
+	if (dev->Prepared || dev->Releasing)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
-	LpcUsbFsMemory_t *memory = Lpc546xxUsbHwPrepare(IntPrio);
-	if (memory == NULL)
+	if (DevNo == 0)
 	{
-		EnableInterrupt(state);
-		return false;
+		LpcUsbFsMemory_t *memory = Lpc546xxUsbHwPrepare(IntPrio);
+		if (memory == NULL)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		dev->Ep0.pList = memory->Command;
+		dev->Ep0.pSetup = memory->Setup;
+		dev->Ep0.pBuf = memory->Packet[0];
 	}
-	s_Ep0.pMemory = memory;
-	s_Ep0.Event = Event;
-	s_Prepared = true;
-	s_Closing = false;
-	s_Detached = false;
-	s_SofEnabled = false;
-	LpcUsbFsEp0Reset(&s_Ep0);
-	USB0->INTSTAT = 0xC00003FFU;
-	LpcUsbFsEp0Command(&s_Ep0, 0x7FU | LPCUSB_NAK_CONTROL,
+	else
+	{
+		Lpc546xxUsbHsMemory_t *memory = Lpc546xxUsbHsHwPrepare(IntPrio);
+		if (memory == NULL)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		dev->Ep0.pList = memory->Command;
+		dev->Ep0.pSetup = memory->Setup;
+		dev->Ep0.pBuf = memory->Packet0[0];
+	}
+	dev->Ep0.Event = Event;
+	dev->Ep0.bHighSpeed = false;
+	dev->ConnectWanted = false;
+	dev->Prepared = true;
+	dev->Closing = false;
+	dev->Detached = false;
+	dev->SofEnabled = false;
+	// A powered up PHY attaches as after a power-on reset (USB.6)
+	dev->Chirp = LPC546XX_USB_CHIRP_CHECK;
+	LpcUsbFsEp0Reset(&dev->Ep0);
+	dev->Ep0.pReg->INTSTAT = LPCUSB_DEVICE | LPCUSB_FRAME | Lpc546xxUsbAll(dev);
+	LpcUsbFsEp0Command(&dev->Ep0, 0x7FU | LPCUSB_NAK_CONTROL,
 		LPCUSB_ENABLE, LPCUSB_SETUP | (7U << 24));
-	USB0->INTEN = LPCUSB_DEVICE | 3U;
+	dev->Ep0.pReg->INTEN = LPCUSB_DEVICE | 3U;
 	EnableInterrupt(state);
 	return true;
 }
 
-bool Lpc546xxUsbControlRelease(void)
+bool Lpc546xxUsbControlRelease(int DevNo)
 {
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	if (dev == NULL)
+		return false;
 	const uint32_t state = DisableInterrupt();
-	if (s_Releasing || (s_Closing && s_Ep0.Enabled))
+	if (dev->Releasing || dev->ChirpBusy || (dev->Closing && dev->Ep0.Enabled))
 	{
 		EnableInterrupt(state);
 		return false;
 	}
-	if (!s_Prepared)
+	if (!dev->Prepared)
 	{
 		EnableInterrupt(state);
 		return true;
 	}
-	s_Releasing = true;
-	s_Closing = true;
-	s_SofEnabled = false;
-	Lpc546xxUsbControlFault();
-	if (!LpcUsbFsEp0Retire(&s_Ep0, 0x3FFU))
+	dev->Releasing = true;
+	dev->Closing = true;
+	dev->SofEnabled = false;
+	Lpc546xxUsbFault(dev);
+	if (!LpcUsbFsEp0Retire(&dev->Ep0, Lpc546xxUsbAll(dev)))
 	{
-		s_Releasing = false;
+		dev->Releasing = false;
 		EnableInterrupt(state);
 		return false;
 	}
-	LpcUsbFsDataForget(0x3FCU);
-	LpcUsbFsEp0Command(&s_Ep0, LPCUSB_ENABLE | LPCUSB_NAK_CONTROL, 0U, 0U);
-	const bool released = Lpc546xxUsbHwRelease();
+	LpcUsbFsDataForget(&dev->Data, LpcUsbFsDataMask(&dev->Data));
+	LpcUsbFsEp0Command(&dev->Ep0, LPCUSB_ENABLE | LPCUSB_NAK_CONTROL, 0U, 0U);
+	const bool released = DevNo == 0 ? Lpc546xxUsbHwRelease() : Lpc546xxUsbHsHwRelease();
 	if (released)
 	{
-		s_Prepared = false;
-		s_Closing = false;
-		s_Ep0.pMemory = NULL;
-		s_Ep0.Event = NULL;
+		dev->Prepared = false;
+		dev->Closing = false;
+		dev->Ep0.pList = NULL;
+		dev->Ep0.pSetup = NULL;
+		dev->Ep0.pBuf = NULL;
+		dev->Ep0.Event = NULL;
 	}
-	s_Releasing = false;
+	dev->Releasing = false;
 	EnableInterrupt(state);
 	return released;
 }
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
-	return LpcUsbFsEp0Send(&s_Ep0, DevNo, pBuffer, Length);
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	return dev != NULL ? LpcUsbFsEp0Send(&dev->Ep0, pBuffer, Length) : -1;
 }
 
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 {
-	return LpcUsbFsEp0Status(&s_Ep0, DevNo, EpAddr);
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	return dev != NULL && LpcUsbFsEp0Status(&dev->Ep0, EpAddr);
 }
 
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 {
-	LpcUsbFsEp0SetAddress(&s_Ep0, DevNo, Address);
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	if (dev != NULL)
+		LpcUsbFsEp0SetAddress(&dev->Ep0, Address);
 }
 
-static void Lpc546xxUsbBusReset(uint32_t Status, bool Detached)
+static void Lpc546xxUsbBusReset(Lpc546xxUsbDev_t *pDev, uint32_t Status, bool Detached)
 {
-	s_Detached = Detached;
-	Lpc546xxUsbWakeCancel();
-	if (!LpcUsbFsEp0Retire(&s_Ep0, 0x3FFU))
+	pDev->Detached = Detached;
+	Lpc546xxUsbWakeCancel(pDev);
+	if (!LpcUsbFsEp0Retire(&pDev->Ep0, Lpc546xxUsbAll(pDev)))
 	{
-		Lpc546xxUsbControlFault();
+		Lpc546xxUsbFault(pDev);
 		return;
 	}
-	LpcUsbFsDataForget(0x3FCU);
-	USB0->INTEN &= ~0x3FCU;
-	LpcUsbFsEp0Reset(&s_Ep0);
-	USB0->INTSTAT = 0x3FFU;
+	LpcUsbFsDataForget(&pDev->Data, LpcUsbFsDataMask(&pDev->Data));
+	pDev->Ep0.pReg->INTEN &= ~LpcUsbFsDataMask(&pDev->Data);
+	LpcUsbFsEp0Reset(&pDev->Ep0);
+	pDev->Ep0.pReg->INTSTAT = Lpc546xxUsbAll(pDev);
+	// The bus speed of USB1 is known at the end of the reset handshake. A
+	// full-speed bus at the first reset of an attachment may be USB.6.
+	const uint32_t speed = (Status >> LPCUSB_SPEED_POS) & LPCUSB_SPEED_MASK;
+	pDev->Ep0.bHighSpeed = pDev->DevNo == 1 && !Detached && speed == LPCUSB_SPEED_HIGH;
+	if (Detached)
+		pDev->Chirp = LPC546XX_USB_CHIRP_CHECK;
+	else if (pDev->DevNo == 1 && (Status & LPCUSB_RESET) != 0U && speed == LPCUSB_SPEED_FULL &&
+		pDev->Chirp == LPC546XX_USB_CHIRP_CHECK)
+		pDev->Chirp = LPC546XX_USB_CHIRP_PENDING;
 	// A SETUP following bus reset must survive this interrupt. Cable loss
 	// instead discards the old request, even if VBUS has returned already.
 	const bool clearSetup = Detached || (Status & LPCUSB_RESET) == 0U;
-	LpcUsbFsEp0Command(&s_Ep0, 0x7FU | LPCUSB_NAK_CONTROL, 0U,
+	LpcUsbFsEp0Command(&pDev->Ep0, 0x7FU | LPCUSB_NAK_CONTROL, 0U,
 		(Status & (LPCUSB_RESET | LPCUSB_CONNECT_CHANGE | LPCUSB_SUSPEND_CHANGE)) |
 		(clearSetup ? LPCUSB_SETUP : 0U));
-	if (!clearSetup && (USB0->DEVCMDSTAT & LPCUSB_SETUP) != 0U)
-		USB0->INTSETSTAT = 1U;
+	if (!clearSetup && (pDev->Ep0.pReg->DEVCMDSTAT & LPCUSB_SETUP) != 0U)
+		pDev->Ep0.pReg->INTSETSTAT = 1U;
+	// Without a VBUS pin, the next attachment shows only as a bus reset: the
+	// connection must stay requested while detached.
+	if (Detached && !pDev->VbusGpio && pDev->ConnectWanted)
+		LpcUsbFsEp0Command(&pDev->Ep0, 0U, LPCUSB_CONNECT, 0U);
 	UsbCtrlrEvt_t event = {0};
 	event.Type = USB_CTRLR_EVT_RESET;
-	s_Ep0.Event(&event);
+	pDev->Ep0.Event(&event);
 }
 
-void USB0_IRQHandler(void)
+static void Lpc546xxUsbInterrupt(Lpc546xxUsbDev_t *pDev)
 {
 	const uint32_t state = DisableInterrupt();
-	if (!s_Prepared || !s_Ep0.Enabled || s_Closing)
+	if (!pDev->Prepared || !pDev->Ep0.Enabled || pDev->Closing)
 	{
 		EnableInterrupt(state);
 		return;
 	}
-	const uint32_t generation = s_Ep0.Generation;
-	const uint32_t pending = USB0->INTSTAT & USB0->INTEN;
-	const uint32_t status = USB0->DEVCMDSTAT;
+	const uint32_t generation = pDev->Ep0.Generation;
+	const uint32_t pending = pDev->Ep0.pReg->INTSTAT & pDev->Ep0.pReg->INTEN;
+	const uint32_t status = pDev->Ep0.pReg->DEVCMDSTAT;
 	if ((pending & LPCUSB_DEVICE) != 0U)
 	{
-		USB0->INTSTAT = LPCUSB_DEVICE;
+		pDev->Ep0.pReg->INTSTAT = LPCUSB_DEVICE;
 		if ((status & (LPCUSB_RESET | LPCUSB_CONNECT_CHANGE)) != 0U)
 		{
-			Lpc546xxUsbBusReset(status, s_Initialized && !UsbCtrlrVbusDetected(0));
-			if (s_Initialized && (status & LPCUSB_CONNECT_CHANGE) != 0U)
-				UsbProcessQue(0);
+			Lpc546xxUsbBusReset(pDev, status, pDev->Initialized && !UsbCtrlrVbusDetected(pDev->DevNo));
+			if (pDev->Initialized && (status & LPCUSB_CONNECT_CHANGE) != 0U)
+				UsbProcessQue(pDev->DevNo);
 			__DSB();
 			EnableInterrupt(state);
 			return;
 		}
-		LpcUsbFsEp0Command(&s_Ep0, 0U, 0U, status & LPCUSB_SUSPEND_CHANGE);
+		LpcUsbFsEp0Command(&pDev->Ep0, 0U, 0U, status & LPCUSB_SUSPEND_CHANGE);
 		if ((status & LPCUSB_SUSPEND_CHANGE) != 0U)
-			Lpc546xxUsbWakeCancel();
-		if (!s_Detached && (status & LPCUSB_SUSPEND_CHANGE) != 0U)
+			Lpc546xxUsbWakeCancel(pDev);
+		if (!pDev->Detached && (status & LPCUSB_SUSPEND_CHANGE) != 0U)
 		{
 			UsbCtrlrEvt_t event = {0};
-			event.Type = (status & (1U << 17)) != 0U ?
+			event.Type = (status & LPCUSB_SUSPEND) != 0U ?
 				USB_CTRLR_EVT_SUSPEND : USB_CTRLR_EVT_RESUME;
-			s_Ep0.Event(&event);
+			pDev->Ep0.Event(&event);
 		}
 	}
-	if (Lpc546xxUsbControlReady() && s_Ep0.Enabled && s_Ep0.Generation == generation &&
-		(USB0->DEVCMDSTAT & LPCUSB_RESET) == 0U && (pending & 3U) != 0U)
-		LpcUsbFsEp0Interrupt(&s_Ep0, pending);
-	for (unsigned physical = 2U; physical < 10U && LpcUsbFsDataCurrent(); ++physical)
-		LpcUsbFsDataInterrupt(physical);
-	if (Lpc546xxUsbControlReady() && s_Ep0.Enabled && s_Ep0.Generation == generation &&
-		(USB0->DEVCMDSTAT & LPCUSB_RESET) == 0U &&
-		(USB0->INTSTAT & USB0->INTEN & (1U << 30)) != 0U)
+	if (Lpc546xxUsbReady(pDev) && pDev->Ep0.Enabled && pDev->Ep0.Generation == generation &&
+		(pDev->Ep0.pReg->DEVCMDSTAT & LPCUSB_RESET) == 0U && (pending & 3U) != 0U)
+		LpcUsbFsEp0Interrupt(&pDev->Ep0, pending);
+	const unsigned count = 2U * pDev->Ep0.NbEp;
+	for (unsigned physical = 2U; physical < count && LpcUsbFsDataCurrent(&pDev->Data); ++physical)
+		LpcUsbFsDataInterrupt(&pDev->Data, physical);
+	if (Lpc546xxUsbReady(pDev) && pDev->Ep0.Enabled && pDev->Ep0.Generation == generation &&
+		(pDev->Ep0.pReg->DEVCMDSTAT & LPCUSB_RESET) == 0U &&
+		(pDev->Ep0.pReg->INTSTAT & pDev->Ep0.pReg->INTEN & LPCUSB_FRAME) != 0U)
 	{
-		USB0->INTSTAT = 1U << 30;
-		Lpc546xxUsbWakeFrame();
-		if (s_SofEnabled)
+		pDev->Ep0.pReg->INTSTAT = LPCUSB_FRAME;
+		Lpc546xxUsbWakeFrame(pDev);
+		if (pDev->SofEnabled)
 		{
 			UsbCtrlrEvt_t event = {0};
 			event.Type = USB_CTRLR_EVT_SOF;
-			event.FrameNo = USB0->INFO & 0x7FFU;
-			s_Ep0.Event(&event);
+			event.FrameNo = pDev->Ep0.pReg->INFO & 0x7FFU;
+			pDev->Ep0.Event(&event);
 		}
 	}
 	__DSB();
 	EnableInterrupt(state);
 }
 
-static void Lpc546xxUsbControlEvent(const UsbCtrlrEvt_t *pEvent)
+void USB0_IRQHandler(void)
+{
+	Lpc546xxUsbInterrupt(&s_Usb[0]);
+}
+
+void USB1_IRQHandler(void)
+{
+	Lpc546xxUsbInterrupt(&s_Usb[1]);
+}
+
+static void Lpc546xxUsb0Event(const UsbCtrlrEvt_t *pEvent)
 {
 	UsbDevProcessEvent(0, pEvent);
+}
+
+static void Lpc546xxUsb1Event(const UsbCtrlrEvt_t *pEvent)
+{
+	UsbDevProcessEvent(1, pEvent);
 }
 
 static void Lpc546xxUsbVbusEvent(int IntNo, void *pContext)
 {
 	(void)IntNo;
-	(void)pContext;
 	// GPIO detection stays live while USB is stopped. DCON_C alone only
 	// reports loss of VBUS and cannot start a board powered without a cable.
-	UsbProcessQue(0);
+	UsbProcessQue(((Lpc546xxUsbDev_t *)pContext)->DevNo);
 }
 
+// USB0 VBUS: P0.22 in its USB0_VBUS function, read as a GPIO as well. USB1
+// VBUS: by default no pin map, the controller reads USB1_VBUS while it runs;
+// or a GPIO input as the override, with its interrupt. USB1_VBUS still gives
+// the bus power to the PHY in both cases.
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 {
-	if (DevNo != 0 || pCfg == NULL || pCfg->bLowPowerSuspend ||
-		pCfg->pIOPinMap == NULL || pCfg->NbIOPins != 1)
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	if (dev == NULL || pCfg == NULL || pCfg->bLowPowerSuspend)
 		return false;
-	const IOPinCfg_t *vbus = &pCfg->pIOPinMap[USB_VBUS_PIN_IDX];
-	if (vbus->PortNo != 0 || vbus->PinNo != 22 ||
-		vbus->PinOp != IOPINOP_FUNC7 || vbus->PinDir != IOPINDIR_INPUT ||
-		vbus->Res != IOPINRES_NONE || vbus->Type != IOPINTYPE_NORMAL)
+	const bool gpio = pCfg->NbIOPins != 0;
+	if (gpio ? pCfg->pIOPinMap == NULL || pCfg->NbIOPins != 1 : DevNo == 0)
+		return false;
+	const IOPinCfg_t *vbus = gpio ? &pCfg->pIOPinMap[USB_VBUS_PIN_IDX] : NULL;
+	if (gpio && (vbus->PortNo < 0 || vbus->PinNo < 0 || vbus->PinDir != IOPINDIR_INPUT ||
+		(DevNo == 0 && (vbus->PortNo != 0 || vbus->PinNo != 22 ||
+		 vbus->PinOp != IOPINOP_FUNC7 || vbus->Res != IOPINRES_NONE ||
+		 vbus->Type != IOPINTYPE_NORMAL))))
 		return false;
 	const uint32_t state = DisableInterrupt();
 	// A failed retirement still owns SRAM and must not be reinitialized.
-	if (s_Prepared || s_Closing || s_Releasing)
+	if (dev->Prepared || dev->Closing || dev->Releasing)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
-	s_Initialized = false;
-	LpcUsbFsDataInit();
-	if (s_VbusInt >= 0)
-		IOPinDisableInterrupt(s_VbusInt);
+	dev->Initialized = false;
+	LpcUsbFsDataInit(&dev->Data);
+	if (dev->VbusInt >= 0)
+	{
+		IOPinDisableInterrupt(dev->VbusInt);
+		dev->VbusInt = -1;
+	}
 	const int maxprio = (1 << __NVIC_PRIO_BITS) - 1;
-	s_IntPrio = pCfg->IntPrio < 0 ? 0 :
+	dev->IntPrio = pCfg->IntPrio < 0 ? 0 :
 		(pCfg->IntPrio > maxprio ? maxprio : pCfg->IntPrio);
-	IOPinCfg(vbus, 1);
-	s_VbusInt = IOPinAllocateInterrupt(s_IntPrio, 0, 22, IOPINSENSE_TOGGLE,
-		Lpc546xxUsbVbusEvent, NULL);
-	s_Initialized = s_VbusInt >= 0;
+	dev->VbusGpio = gpio;
+	if (gpio)
+	{
+		IOPinCfg(vbus, 1);
+		dev->VbusPort = vbus->PortNo;
+		dev->VbusPin = vbus->PinNo;
+		dev->VbusInt = IOPinAllocateInterrupt(dev->IntPrio, vbus->PortNo, vbus->PinNo,
+			IOPINSENSE_TOGGLE, Lpc546xxUsbVbusEvent, dev);
+	}
+	dev->Initialized = !gpio || dev->VbusInt >= 0;
 	EnableInterrupt(state);
-	return s_Initialized;
+	return dev->Initialized;
 }
 
 bool UsbCtrlrVbusDetected(int DevNo)
 {
-	// GPIO reads the pad while USB clocks are disabled.
-	// No USB register access is needed while its clocks are disabled.
-	return DevNo == 0 && s_Initialized && IOPinRead(0, 22) != 0;
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	if (dev == NULL || !dev->Initialized)
+		return false;
+	// GPIO reads the pad while USB clocks are disabled. Without a VBUS pin,
+	// VBUS_DEBOUNCED is readable only while the controller runs.
+	return dev->VbusGpio ? IOPinRead(dev->VbusPort, dev->VbusPin) != 0 :
+		dev->Prepared && (dev->Ep0.pReg->DEVCMDSTAT & LPCUSB_VBUS_DEBOUNCED) != 0U;
+}
+
+// The connection can be requested: VBUS on the GPIO, or no VBUS pin, where
+// the controller applies the pull-up only with VBUS.
+static bool Lpc546xxUsbConnectAllowed(Lpc546xxUsbDev_t *pDev)
+{
+	return !pDev->VbusGpio || UsbCtrlrVbusDetected(pDev->DevNo);
 }
 
 bool UsbCtrlrStart(int DevNo)
 {
-	if (DevNo != 0 || s_Closing)
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	if (dev == NULL || dev->Closing)
 		return false;
 	const uint32_t state = DisableInterrupt();
 	bool ready = false;
-	if (UsbCtrlrVbusDetected(0))
+	// Without a VBUS pin the controller starts at once to watch VBUS
+	if (dev->Initialized && Lpc546xxUsbConnectAllowed(dev))
 	{
-		if (s_Prepared)
-			ready = s_Ep0.Enabled;
+		if (dev->Prepared)
+			ready = dev->Ep0.Enabled;
 		else
-			ready = Lpc546xxUsbControlPrepare(s_IntPrio, Lpc546xxUsbControlEvent);
+			ready = Lpc546xxUsbControlPrepare(DevNo, dev->IntPrio,
+				DevNo == 0 ? Lpc546xxUsb0Event : Lpc546xxUsb1Event);
 	}
 	EnableInterrupt(state);
 	return ready;
@@ -337,156 +546,206 @@ bool UsbCtrlrStart(int DevNo)
 
 void UsbCtrlrStop(int DevNo)
 {
-	if (DevNo != 0)
+	if (Lpc546xxUsbDev(DevNo) == NULL)
 		return;
 	const uint32_t state = DisableInterrupt();
 	// Retry is allowed after a timed-out skip. Release leaves the controller
 	// disconnected and disabled to callers until retirement is confirmed.
-	(void)Lpc546xxUsbControlRelease();
+	(void)Lpc546xxUsbControlRelease(DevNo);
+	EnableInterrupt(state);
+}
+
+// Errata USB.6 (ES_LPC546XX): at an attachment the device can miss the
+// high-speed handshake of the host and run at full speed. NXP's workaround
+// puts the PHY in test mode Force Enable for 100 ms, disconnects for 510 ms
+// and connects again; the host then resets the bus at high speed. NXP also
+// reads the frame number to tell the host speed, both results end the same
+// way. The USB interrupt stays off meanwhile.
+static void Lpc546xxUsbChirp(Lpc546xxUsbDev_t *pDev)
+{
+	const uint32_t enabled = NVIC_GetEnableIRQ(pDev->Irq);
+	NVIC_DisableIRQ(pDev->Irq);
+	LpcUsbFsEp0Command(&pDev->Ep0, 0U, LPCUSB_TEST_FORCE_ENABLE, 0U);
+	msDelay(LPCUSB_CHIRP_TEST_MS);
+	// A command write leaves the test mode
+	LpcUsbFsEp0Command(&pDev->Ep0, 0U, 0U, 0U);
+	LpcUsbFsEp0Command(&pDev->Ep0, LPCUSB_CONNECT, 0U, 0U);
+	msDelay(LPCUSB_CHIRP_DISCONNECT_MS);
+	const uint32_t state = DisableInterrupt();
+	pDev->ChirpBusy = false;
+	pDev->Chirp = LPC546XX_USB_CHIRP_DONE;
+	if (pDev->Prepared && pDev->Ep0.Enabled && !pDev->Closing)
+	{
+		if (Lpc546xxUsbConnectAllowed(pDev))
+		{
+			LpcUsbFsEp0Command(&pDev->Ep0, 0U, 0U, LPCUSB_CONNECT_CHANGE);
+			LpcUsbFsEp0Command(&pDev->Ep0, 0U, LPCUSB_CONNECT, LPCUSB_RESET);
+		}
+		if (enabled != 0U)
+			NVIC_EnableIRQ(pDev->Irq);
+	}
 	EnableInterrupt(state);
 }
 
 void UsbCtrlrProcess(int DevNo)
 {
-	if (DevNo != 0)
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	if (dev == NULL)
 		return;
 	const uint32_t state = DisableInterrupt();
-	if (s_Prepared && s_Ep0.Enabled && !s_Closing && s_Initialized)
+	bool chirp = false;
+	if (dev->Prepared && dev->Ep0.Enabled && !dev->Closing && dev->Initialized)
 	{
-		if (UsbCtrlrVbusDetected(0))
-			s_Detached = false;
-		else if (!s_Detached)
-			Lpc546xxUsbBusReset(USB0->DEVCMDSTAT, true);
+		if (UsbCtrlrVbusDetected(DevNo))
+		{
+			dev->Detached = false;
+			chirp = dev->Chirp == LPC546XX_USB_CHIRP_PENDING && !dev->ChirpBusy;
+			dev->ChirpBusy = dev->ChirpBusy || chirp;
+		}
+		else if (!dev->Detached)
+			Lpc546xxUsbBusReset(dev, dev->Ep0.pReg->DEVCMDSTAT, true);
 	}
 	EnableInterrupt(state);
+	if (chirp)
+		Lpc546xxUsbChirp(dev);
 }
 
 bool UsbCtrlrHighSpeed(int DevNo)
 {
-	(void)DevNo;
-	return false;
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	return dev != NULL && dev->Prepared && dev->Ep0.bHighSpeed;
 }
 
 void UsbCtrlrIntEnable(int DevNo)
 {
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
 	const uint32_t state = DisableInterrupt();
-	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled)
-		NVIC_EnableIRQ(USB0_IRQn);
+	if (dev != NULL && dev->Prepared && dev->Ep0.Enabled)
+		NVIC_EnableIRQ(dev->Irq);
 	EnableInterrupt(state);
 }
 
 void UsbCtrlrIntDisable(int DevNo)
 {
-	if (DevNo == 0)
-		NVIC_DisableIRQ(USB0_IRQn);
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
+	if (dev != NULL)
+		NVIC_DisableIRQ(dev->Irq);
 }
 
 void UsbCtrlrConnect(int DevNo)
 {
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
 	const uint32_t state = DisableInterrupt();
-	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled && UsbCtrlrVbusDetected(0))
-		LpcUsbFsEp0Command(&s_Ep0, 0U, LPCUSB_CONNECT, 0U);
+	if (dev != NULL && dev->Prepared && dev->Ep0.Enabled && Lpc546xxUsbConnectAllowed(dev))
+	{
+		dev->ConnectWanted = true;
+		LpcUsbFsEp0Command(&dev->Ep0, 0U, LPCUSB_CONNECT, 0U);
+	}
 	EnableInterrupt(state);
 }
 
 void UsbCtrlrDisconnect(int DevNo)
 {
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
 	const uint32_t state = DisableInterrupt();
-	if (DevNo == 0 && s_Prepared)
+	if (dev != NULL && dev->Prepared)
 	{
-		Lpc546xxUsbWakeCancel();
-		LpcUsbFsEp0Command(&s_Ep0, LPCUSB_CONNECT, 0U, 0U);
+		dev->ConnectWanted = false;
+		Lpc546xxUsbWakeCancel(dev);
+		LpcUsbFsEp0Command(&dev->Ep0, LPCUSB_CONNECT, 0U, 0U);
 	}
 	EnableInterrupt(state);
 }
 
 
-static void Lpc546xxUsbFrameEnable(void)
+static void Lpc546xxUsbFrameEnable(Lpc546xxUsbDev_t *pDev)
 {
-	if (s_SofEnabled || (s_WakeFrames > 0 && s_WakeFrames < 4))
-		USB0->INTEN |= USB_INTEN_FRAME_INT_EN_MASK;
+	if (pDev->SofEnabled || (pDev->WakeFrames > 0 && pDev->WakeFrames < 4))
+		pDev->Ep0.pReg->INTEN |= LPCUSB_FRAME;
 	else
-		USB0->INTEN &= ~USB_INTEN_FRAME_INT_EN_MASK;
+		pDev->Ep0.pReg->INTEN &= ~LPCUSB_FRAME;
 }
 
-static void Lpc546xxUsbWakeCancel(void)
+static void Lpc546xxUsbWakeCancel(Lpc546xxUsbDev_t *pDev)
 {
-	s_WakeFrames = 0;
-	if (s_WakeAddedForce)
-		LpcUsbFsEp0Command(&s_Ep0, USB_DEVCMDSTAT_FORCE_NEEDCLK_MASK, 0U, 0U);
-	s_WakeAddedForce = false;
-	Lpc546xxUsbFrameEnable();
+	pDev->WakeFrames = 0;
+	if (pDev->WakeAddedForce)
+		LpcUsbFsEp0Command(&pDev->Ep0, LPCUSB_FORCE_NEEDCLK, 0U, 0U);
+	pDev->WakeAddedForce = false;
+	Lpc546xxUsbFrameEnable(pDev);
 }
 
 void UsbCtrlrSofEnable(int DevNo, bool Enable)
 {
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
 	const uint32_t state = DisableInterrupt();
-	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled)
+	if (dev != NULL && dev->Prepared && dev->Ep0.Enabled)
 	{
-		s_SofEnabled = Enable;
-		USB0->INTSTAT = USB_INTSTAT_FRAME_INT_MASK;
-		Lpc546xxUsbFrameEnable();
+		dev->SofEnabled = Enable;
+		dev->Ep0.pReg->INTSTAT = LPCUSB_FRAME;
+		Lpc546xxUsbFrameEnable(dev);
 	}
 	EnableInterrupt(state);
 }
 
+// USB1: errata USB.3 and USB.4 (ES_LPC546XX), the host can see a
+// disconnection at the end of the resume signalling and enumerate again.
 void UsbCtrlrRemoteWakeup(int DevNo)
 {
+	Lpc546xxUsbDev_t *dev = Lpc546xxUsbDev(DevNo);
 	const uint32_t state = DisableInterrupt();
-	if (DevNo == 0 && Lpc546xxUsbControlReady() && s_Ep0.Enabled &&
-		s_WakeFrames == 0 && UsbCtrlrVbusDetected(0))
+	if (dev != NULL && Lpc546xxUsbReady(dev) && dev->Ep0.Enabled &&
+		dev->WakeFrames == 0 && UsbCtrlrVbusDetected(DevNo))
 	{
-		const uint32_t status = USB0->DEVCMDSTAT;
-		if ((status & (LPCUSB_CONNECT | USB_DEVCMDSTAT_DSUS_MASK)) ==
-			(LPCUSB_CONNECT | USB_DEVCMDSTAT_DSUS_MASK) &&
+		const uint32_t status = dev->Ep0.pReg->DEVCMDSTAT;
+		if ((status & (LPCUSB_CONNECT | LPCUSB_SUSPEND)) == (LPCUSB_CONNECT | LPCUSB_SUSPEND) &&
 			(status & (LPCUSB_RESET | LPCUSB_CONNECT_CHANGE | LPCUSB_SUSPEND_CHANGE)) == 0U)
 		{
 			// The generic core checks host permission. DSUS proves 3 ms idle;
 			// three fresh 1 ms timer edges add at least 2 ms before signalling.
 			// UM10912 table 817: FRAME_INT runs while VBUS and DCON are set.
-			USB0->INTSTAT = USB_INTSTAT_FRAME_INT_MASK;
-			s_WakeFrames = 3;
-			Lpc546xxUsbFrameEnable();
+			dev->Ep0.pReg->INTSTAT = LPCUSB_FRAME;
+			dev->WakeFrames = 3;
+			Lpc546xxUsbFrameEnable(dev);
 		}
 	}
 	EnableInterrupt(state);
 }
 
-static void Lpc546xxUsbWakeFrame(void)
+static void Lpc546xxUsbWakeFrame(Lpc546xxUsbDev_t *pDev)
 {
-	if (s_WakeFrames == 0 || s_WakeFrames == 4)
+	if (pDev->WakeFrames == 0 || pDev->WakeFrames == 4)
 		return;
-	const uint32_t status = USB0->DEVCMDSTAT;
-	if (!UsbCtrlrVbusDetected(0) ||
-		(status & (LPCUSB_CONNECT | USB_DEVCMDSTAT_DSUS_MASK)) !=
-		(LPCUSB_CONNECT | USB_DEVCMDSTAT_DSUS_MASK) ||
+	const uint32_t status = pDev->Ep0.pReg->DEVCMDSTAT;
+	if (!UsbCtrlrVbusDetected(pDev->DevNo) ||
+		(status & (LPCUSB_CONNECT | LPCUSB_SUSPEND)) != (LPCUSB_CONNECT | LPCUSB_SUSPEND) ||
 		(status & (LPCUSB_RESET | LPCUSB_CONNECT_CHANGE | LPCUSB_SUSPEND_CHANGE)) != 0U)
 	{
-		Lpc546xxUsbWakeCancel();
+		Lpc546xxUsbWakeCancel(pDev);
 		return;
 	}
-	if (--s_WakeFrames != 0)
+	if (--pDev->WakeFrames != 0)
 		return;
-	// Hardware preparation keeps FRO, USB0 clocks and PHY powered during
+	// Hardware preparation keeps the USB clocks and PHY powered during
 	// suspend. UM10912 34.7.6.2 requires FORCE_NEEDCLK before clearing DSUS.
-	s_WakeAddedForce = (status & USB_DEVCMDSTAT_FORCE_NEEDCLK_MASK) == 0U;
-	LpcUsbFsEp0Command(&s_Ep0, 0U, USB_DEVCMDSTAT_FORCE_NEEDCLK_MASK, 0U);
+	pDev->WakeAddedForce = (status & LPCUSB_FORCE_NEEDCLK) == 0U;
+	LpcUsbFsEp0Command(&pDev->Ep0, 0U, LPCUSB_FORCE_NEEDCLK, 0U);
 	__DSB();
-	s_WakeFrames = 4;
+	pDev->WakeFrames = 4;
 	// Preserve command bits, never acknowledge W1C flags, and leave LPM_SUS
 	// set. Clearing DSUS triggers the controller's timed resume signalling.
-	USB0->DEVCMDSTAT = (USB0->DEVCMDSTAT &
-		(0xFFU | USB_DEVCMDSTAT_FORCE_NEEDCLK_MASK | (1U << 11) | (0x1FU << 12))) |
-		USB_DEVCMDSTAT_LPM_SUS_MASK;
-	Lpc546xxUsbFrameEnable();
+	pDev->Ep0.pReg->DEVCMDSTAT = (pDev->Ep0.pReg->DEVCMDSTAT & LPCUSB_COMMANDS) |
+		LPCUSB_LPM_SUSPEND;
+	Lpc546xxUsbFrameEnable(pDev);
 }
 
+// Both controllers report the same ROM UID
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
 	if (pBuff == NULL || BuffLen == 0U)
 		return 0U;
 	pBuff[0] = '\0';
-	if (DevNo != 0 || BuffLen == 1U)
+	if (Lpc546xxUsbDev(DevNo) == NULL || BuffLen == 1U)
 		return 0U;
 	IAP_CMD_STATUS result;
 	const uint32_t state = DisableInterrupt();

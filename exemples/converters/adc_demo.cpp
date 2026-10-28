@@ -15,7 +15,7 @@ and prints each in volt. board.h gives:
 	ADC_OVERSAMPLE		optional, oversampling ratio, 0 when not given
 
 With UART_RETARGET and the UART pins, the Release build prints on the UART at
-115200 8N1, the Debug build uses semihosting.
+1000000 baud 8N1, the Debug build uses semihosting.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 21, 2026
@@ -53,6 +53,11 @@ SOFTWARE.
 #include "idelay.h"
 #include "stddev.h"
 #include "board.h"
+
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
 #include ADC_DRIVER_HEADER
 
 #ifdef MCUOSC
@@ -77,7 +82,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

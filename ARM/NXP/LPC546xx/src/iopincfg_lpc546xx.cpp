@@ -15,7 +15,9 @@
 		I2CDRIVE in bit 10 and I2CFILTER in bit 11 instead of slew rate and
 		open drain. On them IOPinConfig leaves I2CSLEW at 0, I2C mode, keeps
 		I2CDRIVE, and IOPINTYPE_OPENDRAIN sets I2CFILTER, the 50 ns glitch
-		filter off, which is also the NXP SDK setting for these pins.
+		filter off, which is also the NXP SDK setting for these pins. They
+		have no pull resistor, the MODE bits stay 0 whatever the requested
+		resistor.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 10, 2026
@@ -63,6 +65,11 @@ SOFTWARE.
 #define LPC546XX_IOCON_MODE_PULLDOWN	1U
 #define LPC546XX_IOCON_MODE_PULLUP		2U
 #define LPC546XX_IOCON_MODE_REPEATER	3U
+
+// IOCON type I pins, the true open drain I2C pins P3_23 and P3_24
+#define LPC546XX_IOCON_TYPEI_PORT	3
+#define LPC546XX_IOCON_TYPEI_PIN0	23
+#define LPC546XX_IOCON_TYPEI_PIN1	24
 
 // GPIO0 to GPIO3 clocks are in AHBCLKCTRL0, GPIO4 and GPIO5 in AHBCLKCTRL2.
 #define LPC546XX_GPIO_CLKREG_SPLIT	4
@@ -145,6 +152,13 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 			break;
 		default:
 			break;
+	}
+
+	if (PortNo == LPC546XX_IOCON_TYPEI_PORT &&
+		(PinNo == LPC546XX_IOCON_TYPEI_PIN0 || PinNo == LPC546XX_IOCON_TYPEI_PIN1))
+	{
+		// No pull resistor on the I2C pins
+		mode = LPC546XX_IOCON_MODE_INACTIVE;
 	}
 
 	// Digital mode with the input filter off, slew rate kept.

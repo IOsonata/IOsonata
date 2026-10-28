@@ -45,7 +45,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "stm32_boards.h"
 
-// Output on USART1, the ST-LINK virtual COM port, 115200 8N1
+// Output on USART1, the ST-LINK virtual COM port, 1000000 baud 8N1
 #define NVM_DEMO_UART_DEVNO	BOARD_VCP_DEVNO
 #define UART_PINS			BOARD_VCP_PINS
 

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	wm8904.h
 
-@brief	WM8904 digital microphone control
+@brief	WM8904 digital microphone, line input and headphone control
 
 
 @author	Hoang Nguyen Hoan
@@ -39,7 +39,8 @@ SOFTWARE.
 #include "device.h"
 #include "coredev/i2s.h"
 
-// Digital microphone capture and optional stereo headphone playback. The codec is the I2S slave; its external MCLK
+// Digital microphone or stereo line input capture, and optional stereo
+// headphone playback. The codec is the I2S slave; its external MCLK
 // must be 256 times the actual frame rate returned by the audio interface.
 // SYSCLK uses MCLK directly and must be at least 3 MHz. Double DAC OSR
 // is selected only with MCLK >= 6 MHz; lower clocks use normal DAC OSR.
@@ -58,6 +59,10 @@ typedef struct __Wm8904_Config
 	int Gain;		   //!< ADC digital gain in milli-dB, rounded to 375 milli-dB.
 	bool bHeadphoneEn; //!< Enable stereo headphone playback.
 	int HeadphoneGain; //!< Headphone gain in milli-dB, -57000 to 6000, 1000 steps.
+	//! Single ended stereo line input: 0 = off, IN1L/IN1R = 1, IN2L/IN2R = 2,
+	//! IN3L/IN3R = 3. Input PGAs at 0 dB, Gain sets the ADC digital gain. Not
+	//! with MicInput.
+	unsigned LineInput;
 } Wm8904Cfg_t;
 
 // Control uses the injected DeviceIntrf. PCM travels through the application's
@@ -89,6 +94,7 @@ public:
 
 private:
 	uint16_t DacControl(bool bMute) const;
+	uint16_t ConverterPower() const;
 	bool StartHeadphones();
 	bool StopHeadphones();
 	bool ReadReg(uint8_t Reg, uint16_t &Value);

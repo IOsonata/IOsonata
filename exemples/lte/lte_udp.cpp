@@ -70,6 +70,11 @@ SOFTWARE.
 
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #ifndef LTE_UDP_HOST
 #define LTE_UDP_HOST			"udp.example.com"
 #endif
@@ -121,7 +126,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

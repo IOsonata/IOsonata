@@ -37,6 +37,17 @@ SOFTWARE.
 #include <stdint.h>
 #include <inttypes.h>
 #define BYTE_ORDER LITTLE_ENDIAN
+
+// A library defines IOSONATA_LWIP_POOL_SECTION, a section name without
+// quotes such as .ram2, to put the lwIP pools in a RAM region of its own.
+// memp_init sets up the pools, the startup does not need to clear them.
+#ifdef IOSONATA_LWIP_POOL_SECTION
+#define IOSONATA_LWIP_STR2(x)	#x
+#define IOSONATA_LWIP_STR(x)	IOSONATA_LWIP_STR2(x)
+#define LWIP_DECLARE_MEMORY_ALIGNED(variable_name, size) \
+	u8_t variable_name[LWIP_MEM_ALIGN_BUFFER(size)] \
+	__attribute__((section(IOSONATA_LWIP_STR(IOSONATA_LWIP_POOL_SECTION))))
+#endif
 #define LWIP_PLATFORM_DIAG(x) \
 	do \
 	{ \

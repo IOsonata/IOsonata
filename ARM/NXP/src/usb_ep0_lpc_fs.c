@@ -1,6 +1,7 @@
 /**-------------------------------------------------------------------------
 @file usb_ep0_lpc_fs.c
-@brief Shared LPC full-speed USB control endpoint state machine.
+@brief Shared LPC USB device (IP3511) control endpoint state machine, full
+and high speed. See usb_ep0_lpc_fs.h.
 
 @author Hoang Nguyen Hoan
 @date Oct. 13, 2026
@@ -51,18 +52,62 @@ void LpcUsbFsEp0Command(LpcUsbFsEp0_t *pEp0, uint32_t Clear, uint32_t Set, uint3
 		Set | LPCUSB_NO_WAKE | (Ack & LPCUSB_STATUS_W1C);
 }
 
+// List word fields of the full-speed and high-speed layouts
+#define LPCUSB_FS_OFFSET_MASK 0xFFFFU
+#define LPCUSB_FS_LENGTH_POS 16
+#define LPCUSB_FS_LENGTH_MASK 0x3FFU
+#define LPCUSB_HS_OFFSET_MASK 0x7FFU
+#define LPCUSB_HS_LENGTH_POS 11
+#define LPCUSB_HS_LENGTH_MASK 0x7FFFU
+#define LPCUSB_EP0_BUF_SIZE 64U
+// Errata USB.15: OUT packets of 4 + 16 x N bytes
+#define LPCUSB_QUIRK_LEN_MASK 15U
+#define LPCUSB_QUIRK_LEN 4U
+
+uint8_t *LpcUsbFsEp0Packet(LpcUsbFsEp0_t *pEp0, unsigned Physical)
+{
+	return Physical < 2U ? pEp0->pBuf + Physical * LPCUSB_EP0_BUF_SIZE :
+		pEp0->pBuf + 2U * LPCUSB_EP0_BUF_SIZE + (Physical - 2U) * pEp0->BufSize;
+}
+
+// The offset from DATABUFSTART, which the port aligns on the offset range
 uint32_t LpcUsbFsEp0BufferAddress(LpcUsbFsEp0_t *pEp0, unsigned Physical)
 {
-	return ((uint32_t)(uintptr_t)pEp0->pMemory->Packet[Physical] >> 6) & 0xFFFFU;
+	return ((uint32_t)(uintptr_t)LpcUsbFsEp0Packet(pEp0, Physical) >> 6) &
+		(pEp0->bHsList ? LPCUSB_HS_OFFSET_MASK : LPCUSB_FS_OFFSET_MASK);
+}
+
+uint32_t LpcUsbFsEp0Entry(LpcUsbFsEp0_t *pEp0, unsigned Physical, uint32_t Length)
+{
+	return LpcUsbFsEp0BufferAddress(pEp0, Physical) |
+		(Length << (pEp0->bHsList ? LPCUSB_HS_LENGTH_POS : LPCUSB_FS_LENGTH_POS));
+}
+
+uint16_t LpcUsbFsEp0Length(LpcUsbFsEp0_t *pEp0, uint32_t Word)
+{
+	return pEp0->bHsList ? (Word >> LPCUSB_HS_LENGTH_POS) & LPCUSB_HS_LENGTH_MASK :
+		(Word >> LPCUSB_FS_LENGTH_POS) & LPCUSB_FS_LENGTH_MASK;
+}
+
+// A zero length IN packet sends no data byte and keeps the OUT state
+void LpcUsbFsEp0Quirk(LpcUsbFsEp0_t *pEp0, bool In, uint16_t Length)
+{
+	if (!pEp0->bHsErrata)
+		return;
+	if (!In)
+		pEp0->OutQuirk = (Length & LPCUSB_QUIRK_LEN_MASK) == LPCUSB_QUIRK_LEN;
+	else if (Length != 0U)
+		pEp0->OutQuirk = false;
 }
 
 bool LpcUsbFsEp0Retire(LpcUsbFsEp0_t *pEp0, uint32_t Mask)
 {
 	uint32_t active = 0U;
-	for (unsigned physical = 0U; physical < 10U; ++physical)
+	const unsigned nbPhy = 2U * pEp0->NbEp;
+	for (unsigned physical = 0U; physical < nbPhy; ++physical)
 	{
 		if ((Mask & (1U << physical)) != 0U &&
-			(pEp0->pMemory->Command[physical * 2U] & LPCUSB_ACTIVE) != 0U)
+			(pEp0->pList[physical * 2U] & LPCUSB_ACTIVE) != 0U)
 			active |= 1U << physical;
 	}
 	if (active != 0U)
@@ -75,10 +120,10 @@ bool LpcUsbFsEp0Retire(LpcUsbFsEp0_t *pEp0, uint32_t Mask)
 			return false;
 	}
 	__DMB();
-	for (unsigned physical = 0U; physical < 10U; ++physical)
+	for (unsigned physical = 0U; physical < nbPhy; ++physical)
 	{
 		if ((Mask & (1U << physical)) != 0U &&
-			(pEp0->pMemory->Command[physical * 2U] & LPCUSB_ACTIVE) != 0U)
+			(pEp0->pList[physical * 2U] & LPCUSB_ACTIVE) != 0U)
 			return false;
 	}
 	return true;
@@ -90,8 +135,8 @@ void LpcUsbFsEp0Reset(LpcUsbFsEp0_t *pEp0)
 	memset(pEp0, 0, offsetof(LpcUsbFsEp0_t, pReg));
 	pEp0->Generation = generation;
 	pEp0->Enabled = true;
-	pEp0->pMemory->Command[0] = LpcUsbFsEp0BufferAddress(pEp0, 0U);
-	pEp0->pMemory->Command[2] = LpcUsbFsEp0BufferAddress(pEp0, 1U);
+	pEp0->pList[0] = LpcUsbFsEp0BufferAddress(pEp0, 0U);
+	pEp0->pList[2] = LpcUsbFsEp0BufferAddress(pEp0, 1U);
 	__DMB();
 }
 
@@ -106,24 +151,23 @@ static void LpcUsbFsEp0ArmOut(LpcUsbFsEp0_t *pEp0, uint16_t Length)
 	pEp0->OutLength = Length;
 	pEp0->OutBusy = true;
 	__DMB();
-	pEp0->pMemory->Command[0] = LpcUsbFsEp0BufferAddress(pEp0, 0U) |
-		((uint32_t)Length << 16) | LPCUSB_ACTIVE;
+	pEp0->pList[0] = LpcUsbFsEp0Entry(pEp0, 0U, Length) | LPCUSB_ACTIVE;
 }
 
-int LpcUsbFsEp0Send(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t *pBuffer, int Length)
+int LpcUsbFsEp0Send(LpcUsbFsEp0_t *pEp0, uint8_t *pBuffer, int Length)
 {
-	if (DevNo != 0 || Length < 0 || (Length != 0 && pBuffer == NULL))
+	if (Length < 0 || (Length != 0 && pBuffer == NULL))
 		return -1;
 	const uint32_t state = DisableInterrupt();
 	if (!LpcUsbFsEp0Current(pEp0) || pEp0->InBusy ||
-		(pEp0->pMemory->Command[2] & LPCUSB_ACTIVE) != 0U)
+		(pEp0->pList[2] & LPCUSB_ACTIVE) != 0U)
 	{
 		EnableInterrupt(state);
 		return -1;
 	}
 	const uint16_t length = Length > 64 ? 64U : (uint16_t)Length;
 	if (length != 0U)
-		memcpy(pEp0->pMemory->Packet[1], pBuffer, length);
+		memcpy(LpcUsbFsEp0Packet(pEp0, 1U), pBuffer, length);
 	if (!LpcUsbFsEp0Current(pEp0))
 	{
 		EnableInterrupt(state);
@@ -133,15 +177,14 @@ int LpcUsbFsEp0Send(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t *pBuffer, int Length
 	pEp0->InBusy = true;
 	pEp0->pReg->INTSTAT = 2U;
 	__DMB();
-	pEp0->pMemory->Command[2] = LpcUsbFsEp0BufferAddress(pEp0, 1U) |
-		((uint32_t)length << 16) | LPCUSB_ACTIVE;
+	pEp0->pList[2] = LpcUsbFsEp0Entry(pEp0, 1U, length) | LPCUSB_ACTIVE;
 	EnableInterrupt(state);
 	return length;
 }
 
-bool LpcUsbFsEp0Status(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t EpAddr)
+bool LpcUsbFsEp0Status(LpcUsbFsEp0_t *pEp0, uint8_t EpAddr)
 {
-	if (DevNo != 0 || (EpAddr != 0U && EpAddr != 0x80U))
+	if (EpAddr != 0U && EpAddr != 0x80U)
 		return false;
 	const uint32_t state = DisableInterrupt();
 	if (!LpcUsbFsEp0Current(pEp0))
@@ -152,7 +195,7 @@ bool LpcUsbFsEp0Status(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t EpAddr)
 	bool accepted = false;
 	if (EpAddr == 0x80U && !pEp0->OutBusy)
 	{
-		accepted = LpcUsbFsEp0Send(pEp0, 0, NULL, 0) == 0;
+		accepted = LpcUsbFsEp0Send(pEp0, NULL, 0) == 0;
 		if (accepted)
 		{
 			pEp0->RemainingOut = 0U;
@@ -160,7 +203,7 @@ bool LpcUsbFsEp0Status(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t EpAddr)
 		}
 	}
 	else if (EpAddr == 0U && !pEp0->OutBusy && !pEp0->InBusy &&
-		(pEp0->pMemory->Command[0] & LPCUSB_ACTIVE) == 0U)
+		(pEp0->pList[0] & LPCUSB_ACTIVE) == 0U)
 	{
 		pEp0->StatusOut = true;
 		LpcUsbFsEp0Command(pEp0, LPCUSB_NAK_CONTROL, 0U, 0U);
@@ -171,9 +214,9 @@ bool LpcUsbFsEp0Status(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t EpAddr)
 	return accepted;
 }
 
-void LpcUsbFsEp0SetAddress(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t Address)
+void LpcUsbFsEp0SetAddress(LpcUsbFsEp0_t *pEp0, uint8_t Address)
 {
-	if (DevNo != 0 || Address > 127U)
+	if (Address > 127U)
 		return;
 	const uint32_t state = DisableInterrupt();
 	if (LpcUsbFsEp0Current(pEp0))
@@ -194,7 +237,7 @@ static void LpcUsbFsEp0Complete(LpcUsbFsEp0_t *pEp0, bool In, uint16_t Length, b
 	event.Xfer.EpAddr = In ? 0x80U : 0U;
 	event.Xfer.Length = Length;
 	event.Xfer.Result = Cancelled ? USB_CTRLR_XFER_CANCELLED : USB_CTRLR_XFER_SUCCESS;
-	event.Xfer.pBuffer = In ? NULL : pEp0->pMemory->Packet[0];
+	event.Xfer.pBuffer = In ? NULL : LpcUsbFsEp0Packet(pEp0, 0U);
 	pEp0->Event(&event);
 }
 
@@ -206,7 +249,7 @@ static void LpcUsbFsEp0Setup(LpcUsbFsEp0_t *pEp0, uint32_t Pending)
 	// ZLP is not a status ACK and must not take this path.
 	if (!pEp0->DirectionIn && pEp0->RemainingOut == 0U &&
 		pEp0->InBusy && pEp0->InLength == 0U &&
-		(Pending & 2U) != 0U && (pEp0->pMemory->Command[2] & LPCUSB_ACTIVE) == 0U)
+		(Pending & 2U) != 0U && (pEp0->pList[2] & LPCUSB_ACTIVE) == 0U)
 	{
 		const uint32_t generation = pEp0->Generation;
 		pEp0->AddressPending = false;
@@ -216,13 +259,13 @@ static void LpcUsbFsEp0Setup(LpcUsbFsEp0_t *pEp0, uint32_t Pending)
 			return;
 	}
 	else if (pEp0->StatusOut && pEp0->OutBusy &&
-		(Pending & 1U) != 0U && (pEp0->pMemory->Command[0] & LPCUSB_ACTIVE) == 0U)
+		(Pending & 1U) != 0U && (pEp0->pList[0] & LPCUSB_ACTIVE) == 0U)
 	{
 		// OUT status shares the SETUP interrupt. Preserve its completion
 		// before the new request replaces the active class callback.
 		const uint32_t generation = pEp0->Generation;
 		__DMB();
-		const bool invalid = ((pEp0->pMemory->Command[0] >> 16) & 0x3FFU) != 0U;
+		const bool invalid = LpcUsbFsEp0Length(pEp0, pEp0->pList[0]) != 0U;
 		pEp0->OutBusy = false;
 		LpcUsbFsEp0Complete(pEp0, false, 0U, invalid || pEp0->Aborted);
 		if (!pEp0->Ready() || !pEp0->Enabled || pEp0->Generation != generation)
@@ -231,7 +274,7 @@ static void LpcUsbFsEp0Setup(LpcUsbFsEp0_t *pEp0, uint32_t Pending)
 	UsbCtrlrEvt_t event = {0};
 	event.Type = USB_CTRLR_EVT_SETUP;
 	__DMB();
-	memcpy(&event.Setup, pEp0->pMemory->Setup, sizeof(event.Setup));
+	memcpy(&event.Setup, pEp0->pSetup, sizeof(event.Setup));
 	if (pEp0->AddressPending)
 		LpcUsbFsEp0Command(pEp0, 0x7FU, pEp0->OldAddress, 0U);
 	// Figure 21 explicitly requires clearing both EP0 ACTIVE/STALL words
@@ -269,17 +312,18 @@ void LpcUsbFsEp0Interrupt(LpcUsbFsEp0_t *pEp0, uint32_t Pending)
 	// interrupt already latched for that OUT must not complete the new bank.
 	if ((Pending & 2U) != 0U)
 	{
-		if (pEp0->InBusy && (pEp0->pMemory->Command[2] & LPCUSB_ACTIVE) == 0U)
+		if (pEp0->InBusy && (pEp0->pList[2] & LPCUSB_ACTIVE) == 0U)
 		{
 			const uint16_t length = pEp0->InLength;
 			pEp0->InBusy = false;
+			LpcUsbFsEp0Quirk(pEp0, true, length);
 			if (pEp0->AddressPending && length == 0U)
 				pEp0->AddressPending = false;
 			LpcUsbFsEp0Complete(pEp0, true, length, pEp0->Aborted);
 		}
 		else if (!pEp0->InBusy && pEp0->RemainingOut != 0U &&
 			!((Pending & 1U) != 0U && pEp0->OutBusy &&
-			  (pEp0->pMemory->Command[0] & LPCUSB_ACTIVE) == 0U))
+			  (pEp0->pList[0] & LPCUSB_ACTIVE) == 0U))
 		{
 			// Host ends a control write early. Retire OUT before acknowledging
 			// its IN status request. Notify the core after the status ACK.
@@ -294,22 +338,24 @@ void LpcUsbFsEp0Interrupt(LpcUsbFsEp0_t *pEp0, uint32_t Pending)
 			pEp0->RemainingOut = 0U;
 			pEp0->Aborted = true;
 			LpcUsbFsEp0Command(pEp0, LPCUSB_NAK_CONTROL, 0U, 0U);
-			(void)LpcUsbFsEp0Send(pEp0, 0, NULL, 0);
+			(void)LpcUsbFsEp0Send(pEp0, NULL, 0);
 		}
 	}
 	if (!LpcUsbFsEp0Current(pEp0) || pEp0->Generation != generation)
 		return;
 	if ((Pending & 1U) != 0U)
 	{
-		if (pEp0->OutBusy && (pEp0->pMemory->Command[0] & LPCUSB_ACTIVE) == 0U)
+		if (pEp0->OutBusy && (pEp0->pList[0] & LPCUSB_ACTIVE) == 0U)
 		{
 			__DMB();
-			const uint16_t remaining = (pEp0->pMemory->Command[0] >> 16) & 0x3FFU;
+			const uint16_t remaining = LpcUsbFsEp0Length(pEp0, pEp0->pList[0]);
 			const uint16_t length = remaining <= pEp0->OutLength ?
 				(uint16_t)(pEp0->OutLength - remaining) : 0U;
 			const bool invalid = remaining > pEp0->OutLength ||
 				(!pEp0->StatusOut && length > pEp0->RemainingOut);
 			pEp0->OutBusy = false;
+			if (!invalid)
+				LpcUsbFsEp0Quirk(pEp0, false, length);
 			if (!invalid && !pEp0->StatusOut)
 				pEp0->RemainingOut -= length;
 			if (invalid || length < 64U)
@@ -352,8 +398,8 @@ void LpcUsbFsEp0Stall(LpcUsbFsEp0_t *pEp0)
 			pEp0->Halted = true;
 			pEp0->RemainingOut = 0U;
 			LpcUsbFsEp0Command(pEp0, LPCUSB_NAK_CONTROL, 0U, 0U);
-			pEp0->pMemory->Command[0] = LpcUsbFsEp0BufferAddress(pEp0, 0U) | LPCUSB_STALL;
-			pEp0->pMemory->Command[2] = LpcUsbFsEp0BufferAddress(pEp0, 1U) | LPCUSB_STALL;
+			pEp0->pList[0] = LpcUsbFsEp0BufferAddress(pEp0, 0U) | LPCUSB_STALL;
+			pEp0->pList[2] = LpcUsbFsEp0BufferAddress(pEp0, 1U) | LPCUSB_STALL;
 			pEp0->pReg->INTSTAT = 2U;
 		}
 	}

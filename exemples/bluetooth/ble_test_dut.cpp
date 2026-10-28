@@ -109,6 +109,11 @@ SOFTWARE.
 
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #ifdef CORE_PINS
 static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
 #endif
@@ -234,7 +239,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = 0,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

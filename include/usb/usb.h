@@ -66,6 +66,17 @@ SOFTWARE.
   * @{
   */
 
+/// Largest packet of a transfer type and largest endpoint count over the
+/// controllers of the MCU, for the buffers of the classes. The port gives 0
+/// for a controller number it does not have.
+#define USB_MAX2(a, b)				((a) > (b) ? (a) : (b))
+#define USB_CTRLR_PKT_LEN_MAX_ALL(TransType) \
+	USB_MAX2(USB_MAX2(USB_CTRLR_PKT_LEN_MAX(0, TransType), USB_CTRLR_PKT_LEN_MAX(1, TransType)), \
+			 USB_MAX2(USB_CTRLR_PKT_LEN_MAX(2, TransType), USB_CTRLR_PKT_LEN_MAX(3, TransType)))
+#define USB_EP_CNT_MAX_ALL \
+	USB_MAX2(USB_MAX2(USB_MAX2(USB_EPIN_CNT(0), USB_EPOUT_CNT(0)), USB_MAX2(USB_EPIN_CNT(1), USB_EPOUT_CNT(1))), \
+			 USB_MAX2(USB_MAX2(USB_EPIN_CNT(2), USB_EPOUT_CNT(2)), USB_MAX2(USB_EPIN_CNT(3), USB_EPOUT_CNT(3))))
+
 /// Bus signaling rate in bits per second, what DeviceIntrf Rate reports. This
 /// is the line rate, not a payload figure. Bulk moves less because the host
 /// schedules the bus and every transaction pays token and handshake overhead.

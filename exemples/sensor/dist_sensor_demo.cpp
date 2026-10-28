@@ -12,8 +12,8 @@ the sensor by its name:
 and gives the I2C bus with I2C_DEVNO and I2C_PINS. When the shutdown pin of
 the sensor is on the MCU, DIST_XSHUT_PORT, DIST_XSHUT_PIN and DIST_XSHUT_PINOP
 give it and the demo takes the sensor out of shutdown. With UART_RETARGET and
-the UART pins, the Release build prints on the UART at 115200 8N1, the Debug
-build uses semihosting.
+the UART pins, the Release build prints on the UART at 1000000 baud 8N1,
+the Debug build uses semihosting.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 21, 2026
@@ -54,6 +54,11 @@ SOFTWARE.
 #include "sensors/dist_vl53l0x.h"
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -76,7 +81,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

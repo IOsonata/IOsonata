@@ -9,6 +9,16 @@
 #define SETUP (1U << 8)
 #define RESET (1U << 26)
 
+// The register block, physical endpoint count, command bits and number of
+// the controller a fixture runs: USB0 unless it says otherwise
+#ifndef TEST_USB
+#define TEST_USB USB0
+#define TEST_USB_DEVNO 0
+#define TEST_USB_PHYSICAL 10U
+#define TEST_USB_COMMANDS 0x1FAFFU
+#define TEST_USB_IRQHandler USB0_IRQHandler
+#endif
+
 static LpcUsbFsMemory_t *s_Memory;
 static UsbCtrlrEvt_t s_Events[32];
 static unsigned s_Count;
@@ -19,7 +29,7 @@ static unsigned s_WakeCount;
 
 void TestDeviceWrite(uint32_t Value)
 {
-	const uint32_t old = USB0->DEVCMDSTAT;
+	const uint32_t old = TEST_USB->DEVCMDSTAT;
 	if ((old & ((1U << 16) | (1U << 17))) == ((1U << 16) | (1U << 17)) &&
 		(Value & (1U << 17)) == 0U)
 	{
@@ -28,51 +38,53 @@ void TestDeviceWrite(uint32_t Value)
 		assert((SYSCON->PDRUNCFG[0] & SYSCON_PDRUNCFG_PDEN_USB0_PHY_MASK) == 0);
 		++s_WakeCount;
 	}
-	const uint32_t commands = 0x1FAFFU;
+	const uint32_t commands = TEST_USB_COMMANDS;
 	const uint32_t w1c = SETUP | (7U << 24);
 	if ((old & Value & SETUP) != 0U && s_Memory != NULL)
 	{
 		assert((s_Memory->Command[0] & (ACTIVE | (1U << 29))) == 0U);
 		assert((s_Memory->Command[2] & (ACTIVE | (1U << 29))) == 0U);
 	}
-	USB0->DEVCMDSTAT = (old & ~(commands | w1c)) |
+	TEST_USB->DEVCMDSTAT = (old & ~(commands | w1c)) |
 		(Value & commands) | (old & w1c & ~Value);
 }
 
 void TestInterruptWrite(uint32_t Value)
 {
-	USB0->INTSTAT &= ~Value;
+	TEST_USB->INTSTAT &= ~Value;
 }
 
 void TestInterruptSet(uint32_t Value)
 {
-	USB0->INTSTAT |= Value;
+	TEST_USB->INTSTAT |= Value;
 }
 
 void TestSkipWrite(uint32_t Value)
 {
-	USB0->EPSKIP = Value;
+	TEST_USB->EPSKIP = Value;
 	if (s_AutoSkip)
 	{
-		for (unsigned physical = 0; physical < 10; physical++)
+		// The list of either layout starts the storage
+		volatile uint32_t *list = s_Memory->Command;
+		for (unsigned physical = 0; physical < TEST_USB_PHYSICAL; physical++)
 		{
 			if (Value & (1U << physical))
-				s_Memory->Command[physical * 2] &= ~ACTIVE;
+				list[physical * 2] &= ~ACTIVE;
 		}
-		USB0->EPSKIP = 0;
-		USB0->INTSTAT |= Value;
+		TEST_USB->EPSKIP = 0;
+		TEST_USB->INTSTAT |= Value;
 	}
 }
 
 void NVIC_SetPendingIRQ(IRQn_Type Irq)
 {
-	assert(Irq == USB0_IRQn);
+	assert(Irq == TEST_USB_IRQ);
 }
 
 #ifndef LPC546_USB_INTEGRATION
 void UsbProcessQue(int DevNo)
 {
-	assert(DevNo == 0);
+	assert(DevNo == TEST_USB_DEVNO);
 }
 
 #endif
@@ -83,24 +95,24 @@ static void Event(const UsbCtrlrEvt_t *pEvent)
 	s_Events[s_Count++] = *pEvent;
 	if (s_Restart || s_Stop)
 	{
-		assert(Lpc546xxUsbControlRelease());
+		assert(Lpc546xxUsbControlRelease(TEST_USB_DEVNO));
 		if (s_Restart)
 		{
-			assert(Lpc546xxUsbControlPrepare(6, Event));
-			s_Memory = (LpcUsbFsMemory_t *)(uintptr_t)USB0->EPLISTSTART;
+			assert(Lpc546xxUsbControlPrepare(TEST_USB_DEVNO, 6, Event));
+			s_Memory = (LpcUsbFsMemory_t *)(uintptr_t)TEST_USB->EPLISTSTART;
 		}
 	}
 }
 
 static void Fresh(void)
 {
-	assert(Lpc546xxUsbControlRelease());
+	assert(Lpc546xxUsbControlRelease(TEST_USB_DEVNO));
 	Reset();
 	s_Memory = NULL;
-	assert(Lpc546xxUsbControlPrepare(6, Event));
-	assert(!Lpc546xxUsbControlPrepare(6, Event));
-	s_Memory = (LpcUsbFsMemory_t *)(uintptr_t)USB0->EPLISTSTART;
-	assert(!s_Enabled && (USB0->DEVCMDSTAT & (1U << 16)) == 0);
+	assert(Lpc546xxUsbControlPrepare(TEST_USB_DEVNO, 6, Event));
+	assert(!Lpc546xxUsbControlPrepare(TEST_USB_DEVNO, 6, Event));
+	s_Memory = (LpcUsbFsMemory_t *)(uintptr_t)TEST_USB->EPLISTSTART;
+	assert(!s_Enabled && (TEST_USB->DEVCMDSTAT & (1U << 16)) == 0);
 	s_Count = 0;
 	s_Restart = false;
 	s_Stop = false;
@@ -131,11 +143,9 @@ static void Done(bool In, unsigned Remaining)
 #ifndef LPC546_USB_EP0_FIXTURE_ONLY
 int main(void)
 {
-	Map(SYSCON_BASE);
-	Map(USB0_BASE);
-	Map(USBFSH_BASE);
+	MapAll();
 	Reset();
-	assert(!Lpc546xxUsbControlPrepare(6, NULL));
+	assert(!Lpc546xxUsbControlPrepare(TEST_USB_DEVNO, 6, NULL));
 	assert(UsbCtrlrEp0Send(0, NULL, 0) == -1);
 	USB0_IRQHandler();
 	Fresh();
@@ -239,10 +249,10 @@ int main(void)
 	assert(USB0->INTEN == 0 && !s_Enabled);
 	assert(s_Memory->Command[2] & ACTIVE);
 	assert(UsbCtrlrEp0Send(0, bytes, 1) == -1);
-	assert(!Lpc546xxUsbControlRelease());
-	assert(!Lpc546xxUsbControlPrepare(6, Event));
+	assert(!Lpc546xxUsbControlRelease(TEST_USB_DEVNO));
+	assert(!Lpc546xxUsbControlPrepare(TEST_USB_DEVNO, 6, Event));
 	s_AutoSkip = true;
-	assert(Lpc546xxUsbControlRelease());
+	assert(Lpc546xxUsbControlRelease(TEST_USB_DEVNO));
 	assert(g_IrqMasked == 0);
 	puts("LPC546xx EP0, reset, IRQ ordering and DMA ownership: PASS");
 	return 0;

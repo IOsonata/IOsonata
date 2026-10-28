@@ -1,8 +1,8 @@
 # Shared networking protocols and connected sockets
 
 `SockIntrf` presents connected UDP and TCP through `DeviceIntrf`, with C helpers
-and a C++ wrapper. nRF91 uses its modem's IP stack. STM32H753 now uses the shared
-`src/net/ip_lwip.cpp` service over an injected `EthernetDev_t`. Protocol clients
+and a C++ wrapper. nRF91 uses its modem's IP stack. STM32H753 and LPC54628 use the
+shared `src/net/ip_lwip.cpp` service over an injected `EthernetDev_t`. Protocol clients
 can use the same socket interface on either target. Public socket signatures
 are unchanged.
 
@@ -92,7 +92,7 @@ modem socket port. Their projects select the target library and board pins.
 | nRF9160, Thingy:91 | `IOsonata_nRF9160` | [LteMqttDemo](../ARM/Nordic/nRF91/nRF9160/exemples/LteMqttDemo/README.md) | [LteCoapDemo](../ARM/Nordic/nRF91/nRF9160/exemples/LteCoapDemo/README.md) | RX P0.19 / TX P0.18 through the nRF52840 USB bridge |
 | nRF9151 DK or nRF9161 DK | `IOsonata_nRF91x1` | [LteMqttDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/LteMqttDemo/README.md) | [LteCoapDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/LteCoapDemo/README.md) | RX P0.26 / TX P0.27 through VCOM0 |
 
-The consoles use 115200 baud, 8N1 and no flow control. The nRF9160 projects also
+The consoles use 1000000 baud, 8N1 and no flow control. The nRF9160 projects also
 provide an nRF9160 DK pin selection. The nRF91x1 projects follow that target's
 existing LteUdp settings, including `NRF9120_XXAA`, its `nrf9120` linker script
 and hard-float modem library. The maintainer's nRF91x1 hardware results for
@@ -108,6 +108,7 @@ No fresh automated ARM compile/link result is claimed.
 | `src/net/ip_lwip.cpp` | Shared IPv4, ARP, ICMP echo, DHCP, DNS, UDP and TCP using lwIP raw callbacks |
 | `include/net/ethernet.h` | Portable Ethernet frame interface, C structure/functions and C++ wrapper |
 | `ARM/ST/STM32H7xx/src/ethernet_stm32h7.cpp` | H753 MAC, DMA, cache maintenance, MDIO and LAN8742A RMII negotiation |
+| `ARM/NXP/LPC546xx/src/ethernet_lpc546xx.cpp` | LPC54628 ENET MAC, DMA, MDIO and LAN8720A or LAN8742A RMII negotiation |
 | Example `board.h` | Pins, PHY address, MAC address and console configuration |
 
 The lwIP profile uses `NO_SYS=1`, fixed packet/PCB pools and no libc heap.
@@ -171,6 +172,15 @@ line. The driver maintains descriptor/buffer cache lines if D-cache is enabled.
 An application linker script must retain this section in DMA-accessible SRAM.
 The supplied H753 linker script already does this. The MCU's normal data/stack
 remain in DTCM; callers may pass DTCM buffers because transfers copy frames.
+
+LPC54628 driver: the same MAC and DMA design (DevNo 0, RMII, auto-negotiated
+10/100 Mbit/s, four RX and four TX descriptors, a fatal DMA bus error requires
+Reset), with a LAN8720A (LPCXpresso54628) or LAN8742A PHY. Its descriptors and
+buffers (12,416 bytes) and the lwIP pools are in the `.ram2` section, SRAM1 to
+SRAM3, which `gcc_lpc54628.ld` places in RAM2: the LPC54628 library defines
+`IOSONATA_LWIP_POOL_SECTION=.ram2` for `include/net/lwip/arch/cc.h`. SRAM0
+keeps the data, the heap and the stack. The tail pointers follow the NXP SDK
+examples. No hardware result yet.
 
 ## Secure socket implementation status
 
@@ -507,7 +517,7 @@ library projects now include the shared MQTT header and source.
 [LteMqttDemo](../ARM/Nordic/nRF91/nRF9160/exemples/LteMqttDemo/README.md)
 links `exemples/lte/lte_mqtt.cpp` and runs the same shared MQTT client over the
 nRF9160 TCP socket. Its default board is Thingy:91 with the existing
-115200-baud UART0 console bridge. The default peer is `test.mosquitto.org:1883`;
+UART0 console bridge, at 1000000 baud. The default peer is `test.mosquitto.org:1883`;
 the [broker's published settings](https://test.mosquitto.org/) identify this as
 an unauthenticated plaintext MQTT listener.
 
@@ -701,8 +711,8 @@ the build settings, PC command and expected console lines.
 
 [LteCoapDemo](../ARM/Nordic/nRF91/nRF9160/exemples/LteCoapDemo/README.md)
 links `exemples/lte/lte_coap.cpp` through the existing nRF9160 modem UDP socket.
-Its default board is Thingy:91, with the existing 115200-baud UART0 USB console
-bridge. `COAP_DEMO_PUBLIC_TEST = 1` sends read-only CON GET requests to
+Its default board is Thingy:91, with the existing UART0 USB console bridge,
+at 1000000 baud. `COAP_DEMO_PUBLIC_TEST = 1` sends read-only CON GET requests to
 `coap.me:5683/test`; this public client-test service is described at
 [coap.me/about](https://coap.me/about). It checks 2.05 Content and reports the
 payload length without requiring a fixed public response body. This checks

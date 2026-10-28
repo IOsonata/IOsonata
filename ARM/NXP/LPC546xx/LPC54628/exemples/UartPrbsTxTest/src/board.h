@@ -49,8 +49,8 @@ SOFTWARE.
 #define UART_TX_PIN			30
 #define UART_TX_PINOP		IOPINOP_FUNC1
 
-// Polling mode. Set UART_INT_MODE to true for the interrupt mode. The UART
-// has no TX DMA support yet.
+// Polling mode. Set UART_INT_MODE to true for the interrupt mode, and
+// UART_DMA_MODE to true for TX DMA in either mode.
 #define UART_INT_MODE		false
 #define UART_DMA_MODE		false
 

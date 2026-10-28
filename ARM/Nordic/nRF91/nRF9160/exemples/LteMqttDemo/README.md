@@ -74,7 +74,7 @@ Edit `src/board.h` beside this README:
 | `LTE_MQTT_RAT` | `LTE_RAT_LTEM` | LTE-M radio access |
 | `LTE_MQTT_RAT_PREF` | `LTE_RAT_LTEM` | LTE-M preference |
 
-The Thingy:91 console is nRF9160 UART0, RX P0.19 and TX P0.18, at **115200 baud,
+The Thingy:91 console is nRF9160 UART0, RX P0.19 and TX P0.18, at **1000000 baud,
 8N1, no flow control**. Use the USB serial port that its nRF52840 Connectivity
 Bridge or HciController firmware forwards from UART0. The demo does not start
 BLE or an HCI host; retain the working companion console firmware.

@@ -29,7 +29,7 @@ Do not link a library built for a different flash-size selection.
 3. Edit the application's `src/board.h` for your wiring before flashing.
    The example LED uses PC07, active low, with an external series resistor.
    TimerDemo uses USART1: PC26 RX and PC27 TX, peripheral A.
-   Connect a 3.3 V UART adapter with common ground and open 115200 8N1.
+   Connect a 3.3 V UART adapter with common ground and open 1000000 baud 8N1.
    These pin choices are example wiring, not a claim about a SAM4LS board.
 4. The shared startup defaults to internal oscillators. Define `MCUOSC`
    in the application board file if your board uses external clocks.

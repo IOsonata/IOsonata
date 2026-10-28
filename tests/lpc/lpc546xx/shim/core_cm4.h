@@ -15,6 +15,7 @@ void NVIC_SetPendingIRQ(IRQn_Type IRQn);
 void NVIC_SetPriority(IRQn_Type IRQn, uint32_t Priority);
 void NVIC_EnableIRQ(IRQn_Type IRQn);
 void NVIC_DisableIRQ(IRQn_Type IRQn);
+uint32_t NVIC_GetEnableIRQ(IRQn_Type IRQn);
 
 void __DSB(void);
 void __DMB(void);

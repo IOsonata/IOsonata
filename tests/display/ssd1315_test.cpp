@@ -206,7 +206,7 @@ int main()
 		{ -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
 		{ 0, 2, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL }
 	};
-	DisplayCfg_t cfg = { 0, pins, 3, 16, 128, 64, 1, DISPL_ORIENT_LANDSCAPE };
+	DisplayCfg_t cfg = { 0, pins, 3, 16, 128, 64, 1, DISPL_ORIENT_LANDSCAPE, nullptr, nullptr };
 	Bus bus;
 	LcdSSD1315 oled;
 	assert(!oled.Init(cfg, nullptr));

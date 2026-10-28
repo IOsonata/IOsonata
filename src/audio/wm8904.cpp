@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	wm8904.cpp
 
-@brief	WM8904 digital microphone and headphone control
+@brief	WM8904 digital microphone, line input and headphone control
 
 
 @author	Hoang Nguyen Hoan
@@ -57,6 +57,10 @@ SOFTWARE.
 #define WM8904_ADC_LEFT_VOLUME 0x24
 #define WM8904_ADC_RIGHT_VOLUME 0x25
 #define WM8904_DMIC 0x27
+#define WM8904_LEFT_INPUT_VOLUME 0x2C
+#define WM8904_RIGHT_INPUT_VOLUME 0x2D
+#define WM8904_LEFT_INPUT_SELECT 0x2E
+#define WM8904_RIGHT_INPUT_SELECT 0x2F
 #define WM8904_HP_LEFT_VOLUME 0x39
 #define WM8904_HP_RIGHT_VOLUME 0x3A
 #define WM8904_SERVO_ENABLE 0x43
@@ -133,7 +137,8 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 	if (!pIntrf || Cfg.DevAddr > 0x7F || !Cfg.Freq || Cfg.MClkFreq < 3000000 ||
 		(Cfg.SampleWidth != I2SSWIDTH_16BITS && Cfg.SampleWidth != I2SSWIDTH_24BITS) ||
 		(Cfg.Format != I2SFMT_NORMAL && Cfg.Format != I2SFMT_ALIGN_LEFT && Cfg.Format != I2SFMT_ALIGN_RIGHT) ||
-		(Cfg.MicInput > 2 || (!Cfg.MicInput && !Cfg.bHeadphoneEn)) ||
+		Cfg.MicInput > 2 || Cfg.LineInput > 3 || (Cfg.MicInput && Cfg.LineInput) ||
+		(!Cfg.MicInput && !Cfg.LineInput && !Cfg.bHeadphoneEn) ||
 		uint64_t(Cfg.Freq) * 256 > Cfg.MClkFreq || uint64_t(Cfg.Freq) * 256 + 255 < Cfg.MClkFreq)
 	{
 		return false;
@@ -172,7 +177,11 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 	{
 		format |= 2U << 2;
 	}
-	// Analogue input PGAs stay off. Output stages are enabled separately.
+	// AIFADCR_SRC: the right ADC on the right channel for the line input,
+	// the left one on both for a microphone. AIFDACR_SRC: right DAC.
+	uint16_t source = Cfg.LineInput ? 0x50 : 0x10;
+	// Analogue input PGAs stay off until Enable. Output stages are enabled
+	// separately.
 	if (!WriteReg(WM8904_BIAS, 0x18) ||
 		!WriteReg(WM8904_VMID, 0x47))
 	{
@@ -187,19 +196,46 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 		!WriteReg(WM8904_INPUT_POWER, 0) ||
 		!WriteReg(WM8904_CLOCK_RATE, 0x0C00 | rate) ||
 		!WriteReg(WM8904_AUDIO_FORMAT, format) ||
-		!WriteReg(WM8904_AUDIO_SOURCE, 0x10) ||
+		!WriteReg(WM8904_AUDIO_SOURCE, source) ||
 		!WriteReg(WM8904_ADC_OSR, Cfg.Freq < 32000 ? 1 : 0) ||
 		!WriteReg(WM8904_GPIO1, Cfg.MicInput ? 8 : 0x14) ||
 		!VerifyReg(WM8904_CLOCK_RATE, 0x0C00 | rate, 0x3C07) ||
 		!VerifyReg(WM8904_AUDIO_FORMAT, format, 0x000F) ||
-		!VerifyReg(WM8904_AUDIO_SOURCE, 0x10, 0x00F0) ||
+		!VerifyReg(WM8904_AUDIO_SOURCE, source, 0x00F0) ||
 		!VerifyReg(WM8904_GPIO1, Cfg.MicInput ? 8 : 0x14, 0x001F))
 	{
 		PowerOff();
 		return false;
 	}
+	if (Cfg.LineInput)
+	{
+		// Rev 4.1 R44 to R47, as the NXP SDK line input: PGAs unmuted at 0 dB,
+		// single ended mode, both PGA inputs on INnL and INnR. INL_CM_ENA
+		// and INR_CM_ENA keep their value.
+		uint16_t sel = uint16_t((Cfg.LineInput - 1) << 4 | (Cfg.LineInput - 1) << 2);
+		uint16_t left;
+		uint16_t right;
+
+		if (!WriteReg(WM8904_LEFT_INPUT_VOLUME, 5) || !WriteReg(WM8904_RIGHT_INPUT_VOLUME, 5) ||
+			!ReadReg(WM8904_LEFT_INPUT_SELECT, left) || !ReadReg(WM8904_RIGHT_INPUT_SELECT, right) ||
+			!WriteReg(WM8904_LEFT_INPUT_SELECT, (left & ~0x3FU) | sel) ||
+			!WriteReg(WM8904_RIGHT_INPUT_SELECT, (right & ~0x3FU) | sel) ||
+			!VerifyReg(WM8904_LEFT_INPUT_VOLUME, 5, 0x009F) || !VerifyReg(WM8904_RIGHT_INPUT_VOLUME, 5, 0x009F) ||
+			!VerifyReg(WM8904_LEFT_INPUT_SELECT, sel, 0x003F) || !VerifyReg(WM8904_RIGHT_INPUT_SELECT, sel, 0x003F))
+		{
+			PowerOff();
+			return false;
+		}
+	}
 	Valid(true);
 	return Enable();
+}
+
+// R18: ADCL for a microphone, both ADCs for the line input, both DACs for
+// the headphones
+uint16_t Wm8904::ConverterPower() const
+{
+	return (vCfg.MicInput ? 2 : 0) | (vCfg.LineInput ? 3 : 0) | (vCfg.bHeadphoneEn ? 0x0C : 0);
 }
 
 uint16_t Wm8904::DacControl(bool bMute) const
@@ -303,14 +339,15 @@ uint32_t Wm8904::MicrophoneClockOnly(uint32_t Freq)
 bool Wm8904::StartHeadphones()
 {
 	uint16_t status = 0;
-	// Compare volume-register pump control during microphone capture with
-	// the previous signal-dependent Class W mode. Playback-only keeps Class W.
-	uint16_t dynamicPower = vCfg.MicInput ? 0 : 1;
+	// Compare volume-register pump control during microphone or line capture
+	// with the previous signal-dependent Class W mode. Playback-only keeps
+	// Class W.
+	uint16_t dynamicPower = vCfg.MicInput || vCfg.LineInput ? 0 : 1;
 
 	HeadphoneGain(vCfg.HeadphoneGain);
 	if (!Device::Valid() ||
 		!VerifyReg(WM8904_HP_LEFT_VOLUME, 57 + vCfg.HeadphoneGain / 1000, 0x003F) ||
-		!VerifyReg(WM8904_CONVERTER_POWER, vCfg.MicInput ? 0x0E : 0x0C, 0x000F) ||
+		!VerifyReg(WM8904_CONVERTER_POWER, ConverterPower(), 0x000F) ||
 		!WriteReg(WM8904_HEADPHONE_POWER, 3) ||
 		!WriteReg(WM8904_CHARGE_PUMP, 1) ||
 		!WriteReg(WM8904_HP_CONTROL, 0x11) ||
@@ -359,7 +396,9 @@ bool Wm8904::StopHeadphones()
 bool Wm8904::Enable()
 {
 	uint16_t dmic = vCfg.MicInput ? (vCfg.MicInput == 2 ? 0x1800 : 0x1000) : 0;
-	uint16_t power = (vCfg.MicInput ? 2 : 0) | (vCfg.bHeadphoneEn ? 0x0C : 0);
+	uint16_t power = ConverterPower();
+	// R12 INL_ENA and INR_ENA: the input PGAs of the line input
+	uint16_t input = vCfg.LineInput ? 3 : 0;
 
 	if (!Device::Valid())
 	{
@@ -374,6 +413,7 @@ bool Wm8904::Enable()
 	if (!WriteReg(WM8904_CLOCK_ENABLE, 0) ||
 		!WriteReg(WM8904_GPIO1, vCfg.MicInput ? 8 : 0x14) ||
 		!WriteReg(WM8904_DMIC, dmic) ||
+		!WriteReg(WM8904_INPUT_POWER, input) ||
 		!WriteReg(WM8904_CONVERTER_POWER, power))
 	{
 		PowerOff();
@@ -392,6 +432,7 @@ bool Wm8904::Enable()
 	if (!Device::Valid() ||
 		!VerifyReg(WM8904_DMIC, dmic, 0x1800) ||
 		!VerifyReg(WM8904_GPIO1, vCfg.MicInput ? 8 : 0x14, 0x003F) ||
+		!VerifyReg(WM8904_INPUT_POWER, input, 0x0003) ||
 		!VerifyReg(WM8904_CONVERTER_POWER, power, 0x000F) ||
 		!VerifyReg(WM8904_ADC_LEFT_VOLUME, 192 + vCfg.Gain / 375, 0x00FF) ||
 		!WriteReg(WM8904_CLOCK_ENABLE, 6) ||
@@ -415,7 +456,8 @@ void Wm8904::Disable()
 		(vCfg.bHeadphoneEn && !StopHeadphones()) ||
 		!WriteReg(WM8904_ADC_LEFT_VOLUME, 0x100) ||
 		!WriteReg(WM8904_ADC_RIGHT_VOLUME, 0x100) ||
-		!WriteReg(WM8904_CONVERTER_POWER, 0) || !WriteReg(WM8904_DMIC, 0))
+		!WriteReg(WM8904_CONVERTER_POWER, 0) || !WriteReg(WM8904_INPUT_POWER, 0) ||
+		!WriteReg(WM8904_DMIC, 0))
 	{
 		PowerOff();
 	}

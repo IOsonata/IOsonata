@@ -1,6 +1,8 @@
 /**-------------------------------------------------------------------------
 @file usb_hw_lpc546xx.h
-@brief Private LPC546xx USB0 full-speed hardware preparation.
+@brief Private LPC546xx USB0 full-speed and USB1 high-speed hardware preparation.
+
+Both controllers use the same storage in the USB RAM, one at a time.
 
 @author Hoang Nguyen Hoan
 @date Oct. 13, 2026
@@ -35,6 +37,18 @@ SOFTWARE.
 #include <stdbool.h>
 #include "usb_mem_lpc_fs.h"
 
+// USB1 storage: twelve physical endpoints, two command words each in the
+// high-speed list layout. EP0 OUT word 1 holds the SETUP buffer address.
+// Buffers start on 64-byte boundaries: 64-byte EP0 packets, 512-byte data
+// packets. This layout implements control, bulk and interrupt, not ISO.
+typedef struct __Lpc546xx_Usb_Hs_Memory {
+	volatile uint32_t Command[24];
+	uint8_t Reserved[32];
+	uint8_t Setup[64];
+	uint8_t Packet0[2][64];
+	uint8_t Packet[10][512];
+} Lpc546xxUsbHsMemory_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,7 +56,7 @@ extern "C" {
 // Starts and calibrates the FRO HF output through ROM if it is off, keeping
 // the selected 48/96 MHz rate. Selects a 48 MHz USB clock and enables SOF trim.
 // The system clock owner must not change the FRO while USB owns it.
-// No host or USB1 controller may be active.
+// No host or other device controller may be active.
 // Returns storage with DEV_EN, DCON, USB interrupts and NVIC disabled.
 // Does not initialize the generic USB core or connect to the host.
 LpcUsbFsMemory_t *Lpc546xxUsbHwPrepare(int IntPrio);
@@ -51,6 +65,18 @@ LpcUsbFsMemory_t *Lpc546xxUsbHwPrepare(int IntPrio);
 // buffers first. Refuses release while hardware may still own a buffer.
 // Restores the resources acquired by Prepare; a refusal retains ownership.
 bool Lpc546xxUsbHwRelease(void);
+
+// USB1: powers the PHY supply, starts the USB PLL at 48 MHz from the 12 MHz
+// system oscillator, which g_McuOsc must give as the core oscillator (crystal
+// or TCXO), and selects it as the USB1 clock. The PLL supply stays powered
+// after release: the other PLLs use it too.
+// No host or other device controller may be active.
+// Returns storage with DEV_EN, DCON, USB interrupts and NVIC disabled.
+// Does not initialize the generic USB core or connect to the host.
+Lpc546xxUsbHsMemory_t *Lpc546xxUsbHsHwPrepare(int IntPrio);
+
+// Same conditions and behavior as Lpc546xxUsbHwRelease, for USB1.
+bool Lpc546xxUsbHsHwRelease(void);
 
 #ifdef __cplusplus
 }

@@ -195,7 +195,8 @@ static bool HardwareInit()
 		.MicInput = AUDIO_MIC_INPUT,
 		.Gain = 18000,
 		.bHeadphoneEn = false,
-		.HeadphoneGain = -24000
+		.HeadphoneGain = -24000,
+		.LineInput = 0
 	};
 	if (!s_Codec.Init(codecCfg, &s_Control))
 	{

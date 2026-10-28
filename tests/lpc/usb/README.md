@@ -3,7 +3,8 @@
 The supported full-speed CDC/HID/vendor-bulk example set is complete for
 LPC11U35, LPC1769 and LPC54628, including shared composite loopback projects.
 The commands below passed with GNU Arm 13.2.1. Debug uses semihosting; Release
-uses nosys. There are 34 firmware links: 10 LPC11U35, 12 LPC1769, 12 LPC54628.
+uses nosys. There are 40 firmware links: 10 LPC11U35, 12 LPC1769, 18 LPC54628
+(6 of them the USB1 high-speed examples).
 
 ```sh
 python3 tests/lpc/usb/run.py
@@ -23,9 +24,11 @@ handshakes are modeled in this integration test; the existing register and
 EP0 suites test those operations independently. Host checks run at -O0/-O2
 with UBSan. They do not establish physical USB validation.
 
-Current firmware sizes follow. LPC11U35/LPC54628 also reserve 832 bytes in
-dedicated USB SRAM. LPC1769 reserves hardware endpoint RAM separately; these
-RAM columns describe the main RAM image, not runtime stack usage.
+Current firmware sizes follow. LPC11U35 also reserves 832 bytes in dedicated
+USB SRAM; LPC54628 reserves 5440 bytes there, the storage USB0 and USB1 share.
+LPC1769 reserves hardware endpoint RAM separately; these RAM columns describe
+the main RAM image, not runtime stack usage. The LPC54628 rows were measured
+on Oct. 27, 2026 with GNU Arm 15.2.1, after the USB1 port.
 
 | MCU | Application | Mode | Flash bytes | Main RAM bytes |
 | --- | --- | --- | ---: | ---: |
@@ -39,18 +42,24 @@ RAM columns describe the main RAM image, not runtime stack usage.
 | LPC11U35 | UsbCdcPrbsTx | Release | 22080 | 4768 |
 | LPC11U35 | UsbCompositeLoopback | Debug | 56756 | 4528 |
 | LPC11U35 | UsbCompositeLoopback | Release | 25004 | 3736 |
-| LPC54628 | EP0 | Debug | 30064 | 2792 |
-| LPC54628 | UsbCdcLoopback | Debug | 48524 | 4572 |
-| LPC54628 | UsbCdcPrbsTx | Debug | 48464 | 5552 |
-| LPC54628 | UsbHidLoopback | Debug | 50152 | 3444 |
-| LPC54628 | UsbCustomBulkLoopback | Debug | 46880 | 4544 |
-| LPC54628 | UsbCompositeLoopback | Debug | 54104 | 4520 |
-| LPC54628 | EP0 | Release | 13316 | 1896 |
-| LPC54628 | UsbCdcLoopback | Release | 21912 | 3776 |
-| LPC54628 | UsbCdcPrbsTx | Release | 21900 | 4756 |
-| LPC54628 | UsbHidLoopback | Release | 22504 | 2648 |
-| LPC54628 | UsbCustomBulkLoopback | Release | 21352 | 3748 |
-| LPC54628 | UsbCompositeLoopback | Release | 24608 | 3724 |
+| LPC54628 | EP0 | Debug | 31396 | 3308 |
+| LPC54628 | UsbCdcLoopback | Debug | 54424 | 5092 |
+| LPC54628 | UsbCdcPrbsTx | Debug | 54364 | 6072 |
+| LPC54628 | UsbHidLoopback | Debug | 57004 | 4944 |
+| LPC54628 | UsbCustomBulkLoopback | Debug | 52780 | 6856 |
+| LPC54628 | UsbCompositeLoopback | Debug | 61276 | 6916 |
+| LPC54628 | EP0 | Release | 15680 | 2420 |
+| LPC54628 | UsbCdcLoopback | Release | 23944 | 4281 |
+| LPC54628 | UsbCdcPrbsTx | Release | 23928 | 5261 |
+| LPC54628 | UsbHidLoopback | Release | 24976 | 4133 |
+| LPC54628 | UsbCustomBulkLoopback | Release | 23380 | 6041 |
+| LPC54628 | UsbCompositeLoopback | Release | 27180 | 6105 |
+| LPC54628 | UsbCdcLoopbackHs | Debug | 54408 | 7332 |
+| LPC54628 | UsbCdcPrbsTxHs | Debug | 54348 | 7864 |
+| LPC54628 | UsbCustomBulkLoopbackHs | Debug | 52764 | 7304 |
+| LPC54628 | UsbCdcLoopbackHs | Release | 23928 | 6521 |
+| LPC54628 | UsbCdcPrbsTxHs | Release | 23912 | 7053 |
+| LPC54628 | UsbCustomBulkLoopbackHs | Release | 23368 | 6489 |
 | LPC1769 | UsbEp0Demo | Debug | 38372 | 4536 |
 | LPC1769 | UsbCdcLoopback | Debug | 52668 | 6136 |
 | LPC1769 | UsbHidLoopback | Debug | 54288 | 5008 |
@@ -397,10 +406,11 @@ PLL. It leaves DEV_EN, DCON and interrupts disabled. The system clock
 owner must keep that source stable until release. USB0 host and USB1 must
 remain unused while this helper owns the shared USB resources.
 
-The shared `LpcUsbFsMemory_t` layout is used by LPC11U35 and LPC54628.
-LPC54628 places its 832-byte allocation in the 8 KB dedicated USB RAM using
-NOLOAD, outside startup .data/.bss. Only the owned allocation is initialized;
-unused USB storage is discarded by the linker.
+The shared `LpcUsbFsMemory_t` layout is used by LPC11U35 and LPC54628 USB0.
+LPC54628 USB1 uses `Lpc546xxUsbHsMemory_t`, the high-speed list of twelve
+physical endpoints with 512-byte data packets. Both layouts are one 5440-byte
+allocation in the 8 KB dedicated USB RAM, NOLOAD, outside startup .data/.bss;
+USB0 and USB1 run one at a time. Only the owned layout is initialized.
 
 The LPC54628 port now integrates with the generic USB core and provides EP0,
 four bulk/interrupt endpoint pairs, direct endpoint callbacks in the USB0 ISR,
@@ -414,7 +424,7 @@ Init requires P0.22 FUNC7 VBUS input, no pull, normal type. A GPIO edge queues
 ordinary USB processing even while USB clocks are stopped. The PHY provides
 its pull-up and dedicated DM/DP pads. Other VBUS routes are not supported yet.
 The ROM UID call temporarily powers ROM/OTP and restores their prior state.
-USB1 high-speed, ISO and low-power suspend are not implemented.
+ISO and low-power suspend are not implemented.
 Configure `bLowPowerSuspend=false`. Remote wakeup supports normal clock-on
 suspend and retains the generic core's host-permission checks. A request
 discards stale FRAME_INT and waits for three local millisecond edges after
@@ -444,9 +454,10 @@ the 16-entry AppEvt queue; it does not call the controller.
 
 `python3 tests/lpc/usb/link546.py --prefix arm-none-eabi-` checks the managed
 project links, then builds the CDC application and EP0 fixture with real
-startup. It verifies the strong USB0 vector, LPC checksum and 832-byte NOLOAD
-USB RAM allocation. Debug retains semihosting; Release uses nosys. GNU Arm
-13.2.1 produces a CDC image of 48396 bytes flash in Debug and 21860 in Release.
+startup. It verifies the strong USB0 and USB1 vectors, LPC checksum and the
+5440-byte NOLOAD USB RAM allocation (832 bytes before the USB1 port). Debug
+retains semihosting; Release uses nosys. GNU Arm 13.2.1 produced a CDC image
+of 48396 bytes flash in Debug and 21860 in Release before the USB1 port.
 The ten LPC11U35 firmware links also pass after sharing data endpoints; the
 largest composite Debug image uses 56424 of 65536 flash bytes. Earlier size
 measurements above describe earlier builds.
@@ -457,6 +468,42 @@ require board testing. Host register models do not establish hardware results.
 Reference sequences: NXP's LPC54628 `CLOCK_EnableUsbfs0DeviceClock` in
 [MCUXpresso SDK](https://github.com/nxp-mcuxpresso/legacy-mcux-sdk/blob/main/devices/LPC54628/drivers/fsl_clock.c),
 and the USB register definitions in `LPC54628.h` / `LPC54628_features.h`.
+
+## LPC54628 USB1 high speed
+
+USB1 is DevNo 1 of the same port, with the shared EP0 and data code in its
+high-speed list layout (byte count in bits 25:11, buffer offset in bits 10:0).
+`run546.py` runs these checks at -O0 and -O2 with UBSan:
+
+- `hardware546_test.c`: `Lpc546xxUsbHsHwPrepare` refuses an RC core
+  oscillator, a crystal other than 12 MHz, a stopped system oscillator, a
+  prepared USB0 and any active USB0, USB0 host or USB1 host clock. It starts
+  the USB PLL at 48 MHz (MSEL 63, PSEL 1, NSEL 3, as NXP's
+  `CLOCK_EnableUsbhs0DeviceClock`), powers VD5, VD3, the USB RAM and the PHY,
+  selects the USB1 clock, sets device mode and resets the controller, then
+  builds the list. A PLL already at 48 MHz is used and left running; one at
+  another rate, or without lock, is refused. A PLL that does not lock, VD3 or
+  VD5 not ready and a stuck divider are bounded and restore everything.
+  Release refuses while DEV_EN, DCON, a skip or an active buffer remains, and
+  restores clocks, power and PLL; VD3 stays powered.
+- `hs546_test.c`: VBUS by default from the controller without a pin map
+  (start without a cable, connection kept requested, the host reset as the
+  attachment, DCON_C as the detachment, a disconnection by the application
+  kept, nothing read once stopped) and, as the override, on any GPIO input
+  with its interrupt; start, the bus speed at each reset
+  (`UsbCtrlrHighSpeed`), EP0 in the high-speed layout,
+  512-byte bulk and interrupt packets at high speed and 64-byte ones at full
+  speed, errata USB.2 (IN byte count not checked), USB.15 (an IN after an OUT
+  of 4 + 16 x N bytes waits for an IN NAK; zero length IN, SETUP, other OUT
+  lengths, two waiting endpoints, halt and close) and USB.6 (the sequence at
+  the first full-speed reset of an attachment, once, again after detachment
+  or restart, never after a high-speed reset first; the interrupt stays off
+  during the sequence and Release is refused while it runs).
+
+Reference sequences: NXP's LPC54628 `CLOCK_EnableUsbhs0DeviceClock` and
+`CLOCK_SetUsbPLLFreq` in the MCUXpresso SDK, `USB_DeviceHsPhyChirpIssueWorkaround`
+of its LPCXpresso54628 USB device examples, and ES_LPC546XX for the errata.
+Physical operation at high speed still needs board testing.
 
 ## LPC54628 HID application
 
@@ -469,8 +516,8 @@ Remote wakeup and low-power suspend are disabled in this application.
 `link546.py` now builds EP0, CDC and HID in Debug and Release, checks both
 example project source links and settings, and verifies that the HID class
 and interrupt transport remain linked. All images use the production startup
-and linker script, including the USB0 vector, checksum and 832-byte NOLOAD
-USB SRAM checks. Debug keeps semihosting and Release uses nosys.
+and linker script, including the USB0 vector, checksum and NOLOAD USB SRAM
+checks. Debug keeps semihosting and Release uses nosys.
 Hardware enumeration and report traffic still require board testing.
 
 ## LPC54628 custom bulk application

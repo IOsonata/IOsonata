@@ -66,7 +66,7 @@ SOFTWARE.
   * @{
   */
 
-#define USB_ISO_INTRF_MAX_MPS		((uint16_t)USB_CTRLR_PKT_LEN_MAX(0, ISO))
+#define USB_ISO_INTRF_MAX_MPS		((uint16_t)USB_CTRLR_PKT_LEN_MAX_ALL(ISO))
 
 // Frames queued per direction. Full speed moves one packet per direction
 // per frame, so two slots hold the frame the controller is sending and the

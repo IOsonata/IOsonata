@@ -185,9 +185,7 @@ int main(void)
 #if defined(LPC54628_SERIES)
 	(void)Setup;
 	(void)Done;
-	Map(SYSCON_BASE);
-	Map(USB0_BASE);
-	Map(USBFSH_BASE);
+	MapAll();
 #else
 	(void)Setup;
 	(void)InDone;

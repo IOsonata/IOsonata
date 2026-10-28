@@ -20,8 +20,9 @@ CDC baud rate is host metadata; it does not set USB bus speed. This port support
 full-speed bulk and interrupt transfers, plus remote wakeup with clocks kept
 on during suspend. The board header advertises remote wakeup; the host must
 enable it before an application can request it through `UsbRemoteWakeup(0)`.
-The loopback application does not generate wake requests on its own. USB1
-high-speed, ISO and low-power suspend are not implemented.
+The loopback application does not generate wake requests on its own. ISO and
+low-power suspend are not implemented. USB1, the high-speed controller, is
+DevNo 1 of the same port (see `ARM/NXP/README.md`).
 
 Host register-model tests and ARM Debug/Release links have been checked.
 Physical enumeration, cable behavior and throughput still need board testing.

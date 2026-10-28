@@ -56,7 +56,7 @@ SOFTWARE.
 // Optional register read after scanning: define both I2C_SCAN_REG_DEVADDR
 // (7-bit address) and I2C_SCAN_REG (8-bit register address) for your device.
 
-// Same UART pins as TimerDemo; output at 115200 baud, no flow control.
+// Same UART pins as TimerDemo; output at 1000000 baud, no flow control.
 // UART0: RX P0.3, TX P0.2.
 #ifndef DEBUG
 #define UART_RETARGET

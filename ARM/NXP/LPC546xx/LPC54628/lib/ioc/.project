@@ -211,6 +211,21 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/display</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/display</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/prbs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
@@ -221,9 +236,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/sdmmc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/sdmmc.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/sdram.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/sdram.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/pwm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/wdt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/wdt.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt</name>
@@ -616,6 +646,21 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/buzzer.h</locationURI>
 		</link>
 		<link>
+			<name>include/audio/wm8904.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/wm8904.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/i2s.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2s.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/rtc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/rtc.h</locationURI>
+		</link>
+		<link>
 			<name>include/miscdev/led.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/led.h</locationURI>
@@ -854,6 +899,16 @@
 			<name>src/audio/buzzer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/audio/buzzer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/audio/wm8904.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/wm8904.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/rtc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/rtc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/led_apa102.cpp</name>
@@ -1161,6 +1216,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/flexcomm_lpc546xx.h</locationURI>
 		</link>
 		<link>
+			<name>include/dma_lpc546xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/dma_lpc546xx.h</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/shared_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.cpp</locationURI>
@@ -1169,6 +1229,136 @@
 			<name>src/flexcomm_lpc546xx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/flexcomm_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dma_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/dma_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/wdt_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/wdt_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rtc_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/rtc_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/rtc_lpc546xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/rtc_lpc546xx.h</locationURI>
+		</link>
+		<link>
+			<name>src/adc_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/adc_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/adc_lpc546xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/adc_lpc546xx.h</locationURI>
+		</link>
+		<link>
+			<name>src/pwm_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/pwm_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/emc_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/emc_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/spifi_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spifi_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/spifi_lpc546xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/spifi_lpc546xx.h</locationURI>
+		</link>
+		<link>
+			<name>src/sdmmc_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/sdmmc_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/i2s_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/i2s_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/i2s_lpc546xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/i2s_lpc546xx.h</locationURI>
+		</link>
+		<link>
+			<name>include/clock_lpc546xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/clock_lpc546xx.h</locationURI>
+		</link>
+		<link>
+			<name>src/lcd_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/lcd_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/display/display.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/ifont.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/ifont.h</locationURI>
+		</link>
+		<link>
+			<name>src/display/display.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/syst5x7.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/syst5x7.c</locationURI>
+		</link>
+		<link>
+			<name>include/lcd_lpc546xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/lcd_lpc546xx.h</locationURI>
+		</link>
+		<link>
+			<name>src/nvm_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nvm_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm_region.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_region.h</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_region.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_lpc546xx.cpp</name>
@@ -1419,6 +1609,246 @@
 			<name>include/crypto/crypto.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/net</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/net</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/net/ethernet.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/ethernet.h</locationURI>
+		</link>
+		<link>
+			<name>include/net/ip.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/ip.h</locationURI>
+		</link>
+		<link>
+			<name>include/net/lwip</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/net/sock_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/sock_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>src/net/ip_lwip.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/net/ip_lwip.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/net/lwip/arch</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/net/lwip/lwipopts.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/lwip/lwipopts.h</locationURI>
+		</link>
+		<link>
+			<name>include/net/lwip/lwippools.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/lwip/lwippools.h</locationURI>
+		</link>
+		<link>
+			<name>include/net/lwip/arch/cc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/lwip/arch/cc.h</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_altcp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/altcp.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_altcp_alloc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/altcp_alloc.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_altcp_tcp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/altcp_tcp.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_def.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/def.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_dns.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/dns.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_inet_chksum.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/inet_chksum.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_init.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/init.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_ip.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ip.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_mem.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/mem.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_memp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/memp.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_netif.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/netif.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_pbuf.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/pbuf.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_raw.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/raw.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_stats.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/stats.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_sys.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/sys.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_tcp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/tcp.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_tcp_in.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/tcp_in.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_tcp_out.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/tcp_out.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_timeouts.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/timeouts.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_udp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/udp.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_acd.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ipv4/acd.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_autoip.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ipv4/autoip.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_dhcp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ipv4/dhcp.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_etharp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ipv4/etharp.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_icmp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ipv4/icmp.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_igmp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ipv4/igmp.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_ip4.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ipv4/ip4.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_ip4_addr.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ipv4/ip4_addr.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_ip4_frag.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/core/ipv4/ip4_frag.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/lwip_ethernet.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/lwip/src/netif/ethernet.c</locationURI>
+		</link>
+		<link>
+			<name>src/net/ethernet_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/ethernet_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/display/touch.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/touch.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/touch_ft5406.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/touch_ft5406.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/touch_gt911.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/touch_gt911.h</locationURI>
+		</link>
+		<link>
+			<name>src/display/touch.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/touch.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/touch_ft5406.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/touch_ft5406.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/touch_gt911.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/touch_gt911.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

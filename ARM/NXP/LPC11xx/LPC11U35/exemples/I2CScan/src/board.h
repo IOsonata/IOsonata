@@ -56,7 +56,7 @@ SOFTWARE.
 // Optional register read after scanning: define both I2C_SCAN_REG_DEVADDR
 // (7-bit address) and I2C_SCAN_REG (8-bit register address) for your device.
 
-// Same UART pins as UartPrbsTxTest; output at 115200 baud, no flow control.
+// Same UART pins as UartPrbsTxTest; output at 1000000 baud, no flow control.
 // UART0: RX P2.3 (P0.18), TX P2.4 (P0.19).
 #ifndef DEBUG
 #define UART_RETARGET

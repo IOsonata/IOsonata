@@ -34,7 +34,7 @@ int main(void)
 	assert(SYSCON->PDRUNCFG[0] == power && SYSCON->AHBCLKCTRL[0] == 0);
 	IOPinCfg_t pin = {0, 22, IOPINOP_FUNC7, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
 	UsbCtrlrCfg_t cfg = {INT_MAX, &pin, 1, false};
-	assert(!UsbCtrlrInit(1, &cfg) && !UsbCtrlrInit(0, NULL));
+	assert(!UsbCtrlrInit(2, &cfg) && !UsbCtrlrInit(-1, &cfg) && !UsbCtrlrInit(0, NULL));
 	pin.PinNo = 21;
 	assert(!UsbCtrlrInit(0, &cfg));
 	pin.PinNo = 22;

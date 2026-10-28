@@ -26,7 +26,7 @@ console output. Release uses UART without semihosting. The wiring and terminal
 settings below apply to Release.
 
 Connect a 3.3 V UART adapter RX to P0.19 and connect ground. P0.18 is UART RX.
-Open the terminal at 115200 baud, 8-N-1, without flow control. Expect three
+Open the terminal at 1000000 baud, 8-N-1, without flow control. Expect three
 startup lines reporting 100, 1000 and 250 ms, followed by measured periods
 near 100000, 1000000 and 250000 us. A trigger's measured period is initially
 zero until its first callback. Small variations reflect interrupt latency.

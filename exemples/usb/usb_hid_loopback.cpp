@@ -54,7 +54,10 @@ McuOsc_t g_McuOsc = MCUOSC;
 static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #endif
 
+// board.h can select another controller
+#ifndef USB_DEVNO
 #define USB_DEVNO			0
+#endif
 #define HID_STR_INTERFACE	4U
 #define HID_REPORT_SIZE		64U
 

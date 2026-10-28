@@ -126,7 +126,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - `FlashMemoryDemo` uses the existing Nvm/NvmDiskIO path and erases the entire flash before sector read/write checks. The filesystem demos use the existing FlashDiskIO path.
 - FatFs and LittleFS format the flash when mounting fails and then write/read test files. They use the same flash area, so switching filesystem demos can replace its contents.
 - Run `FlashLittleFsDemo` once before `FlashStdFSDemo` to create the LittleFS volume. The standard file I/O demo mounts that volume, writes a file, closes it, reopens it and verifies the contents. It reports a mount failure without formatting.
-- Console output uses UART0 on P0.01 TX / P0.00 RX: 1 Mbaud for FlashMemoryDemo and 115200 baud for the filesystem demos. The nRF5340 must provide the matching UART bridge if using USB for the console.
+- Console output uses UART0 on P0.01 TX / P0.00 RX: 1 Mbaud for FlashMemoryDemo and the filesystem demos. The nRF5340 must provide the matching UART bridge if using USB for the console.
 - Host C++ syntax and project-link checks passed. ARM compilation/linking and board validation remain pending.
 
 

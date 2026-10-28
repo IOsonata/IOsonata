@@ -85,7 +85,12 @@ static void Lpc11UsbControlEvent(const UsbCtrlrEvt_t *pEvent);
 
 static LpcUsbFsEp0_t s_Ep0 = {
 	.pReg = LPC_USB,
-	.pMemory = &s_Memory,
+	.pList = s_Memory.Command,
+	.pSetup = s_Memory.Setup,
+	.pBuf = s_Memory.Packet[0],
+	.BufSize = sizeof(s_Memory.Packet[0]),
+	.NbEp = 5,
+	.bHsList = false,
 	.Ready = Lpc11UsbControlReady,
 	.Fault = Lpc11UsbEp0Fault,
 };
@@ -239,7 +244,7 @@ bool Lpc11UsbHwRelease(void)
 		(LPC11_USB_ENABLE | 0x7FU)) | LPC11_USB_PLL_ON | LPC11_USB_NO_WAKE;
 	if (!Lpc11UsbRetire(0x3FFU))
 		return false;
-	LpcUsbFsDataForget(0x3FCU);
+	LpcUsbFsDataForget(&s_Data, 0x3FCU);
 	LPC_USB->DEVCMDSTAT = LPC11_USB_NO_WAKE | LPC11_USB_STATUS_W1C;
 	LPC_USB->INTSTAT = LPC11_USB_INTERRUPTS;
 	__DSB();
@@ -281,7 +286,7 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 		return false;
 	}
 	s_Initialized = false;
-	LpcUsbFsDataInit();
+	LpcUsbFsDataInit(&s_Data);
 	if (s_VbusInt >= 0)
 		IOPinDisableInterrupt(s_VbusInt);
 	const int maxprio = (1 << __NVIC_PRIO_BITS) - 1;
@@ -535,17 +540,18 @@ bool Lpc11UsbEp0Enable(void)
 
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
-	return LpcUsbFsEp0Send(&s_Ep0, DevNo, pBuffer, Length);
+	return DevNo == 0 ? LpcUsbFsEp0Send(&s_Ep0, pBuffer, Length) : -1;
 }
 
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 {
-	return LpcUsbFsEp0Status(&s_Ep0, DevNo, EpAddr);
+	return DevNo == 0 && LpcUsbFsEp0Status(&s_Ep0, EpAddr);
 }
 
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 {
-	LpcUsbFsEp0SetAddress(&s_Ep0, DevNo, Address);
+	if (DevNo == 0)
+		LpcUsbFsEp0SetAddress(&s_Ep0, Address);
 }
 
 // Reset and cable loss share the ownership sequence. Do not reset the generic
@@ -562,7 +568,7 @@ static void Lpc11UsbBusReset(uint32_t Status, bool Detached)
 		Lpc11UsbEp0Fault();
 		return;
 	}
-	LpcUsbFsDataForget(0x3FCU);
+	LpcUsbFsDataForget(&s_Data, 0x3FCU);
 	LPC_USB->INTEN &= ~0x3FCU;
 	LpcUsbFsEp0Reset(&s_Ep0);
 	for (unsigned physical = 2U; physical < 10U; ++physical)
@@ -630,8 +636,8 @@ void USB_IRQHandler(void)
 	if (s_Prepared && s_Ep0.Enabled && !s_Detached && s_Ep0.Generation == generation &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U && (pending & 3U) != 0U)
 		LpcUsbFsEp0Interrupt(&s_Ep0, pending);
-	for (unsigned physical = 2U; physical < 10U && LpcUsbFsDataCurrent(); ++physical)
-		LpcUsbFsDataInterrupt(physical);
+	for (unsigned physical = 2U; physical < 10U && LpcUsbFsDataCurrent(&s_Data); ++physical)
+		LpcUsbFsDataInterrupt(&s_Data, physical);
 	if (s_Prepared && s_Ep0.Enabled && !s_Detached && s_Ep0.Generation == generation &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U &&
 		(LPC_USB->INTSTAT & LPC_USB->INTEN & LPC11_USB_SOF_INTERRUPT) != 0U)
@@ -660,7 +666,7 @@ static void Lpc11UsbControlEvent(const UsbCtrlrEvt_t *pEvent)
 	UsbDevProcessEvent(0, pEvent);
 }
 
-LpcUsbFsData_t *LpcUsbFsDataContext(void)
+LpcUsbFsData_t *LpcUsbFsDataContext(int DevNo)
 {
-	return &s_Data;
+	return DevNo == 0 ? &s_Data : NULL;
 }

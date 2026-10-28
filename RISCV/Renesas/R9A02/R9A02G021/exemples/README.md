@@ -59,9 +59,9 @@ an input filename and causes a "no such file or directory" error.
 | --- | --- | --- | --- |
 | `Blinky` | `exemples/misc/blinky.c` | `gcc_R9A02G021.ld` | LED1, LED2, switch S1 on IRQ4 |
 | `TimerDemo` | `exemples/timer/timer_demo.cpp` | `gcc_R9A02G021.ld` | Timer DevNo 0, default frequency |
-| `UartLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UART0, 115200 8N1, interrupt mode |
-| `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | `gcc_R9A02G021.ld` | UART0, 115200 8N1, interrupt mode |
-| `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UARTA1 (DevNo 4), 115200 8N1; optional UARTA driver linked as project source, no linker flag |
+| `UartLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UART0, 1000000 baud 8N1, interrupt mode |
+| `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | `gcc_R9A02G021.ld` | UART0, 1000000 baud 8N1, interrupt mode |
+| `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UARTA1 (DevNo 4), 1000000 baud 8N1; optional UARTA driver linked as project source, no linker flag |
 | `SpiLoopback` | `exemples/spi/spi_loopback.cpp` | `gcc_R9A02G021.ld` | SPI20 (DevNo 4) at 1 MHz, the four modes, interrupt and DTC reception, console on UART0 |
 | `SpiMasterSlave` | `exemples/spi/spi_master_slave.cpp` | `gcc_R9A02G021.ld` | SPI20 master (DevNo 4) at 1 MHz wired to the SPI21 slave (DevNo 5), the four modes, DTC on both, console on UART0 |
 | `CryptoTest` | `exemples/crypto/crypto_engine_test.cpp` | `gcc_R9A02G021.ld` | Generic crypto self-tests, software reference and target TRNG, UART0 console in Release |
@@ -126,8 +126,8 @@ Pressing S1 stops the sequence (`g_bBut1Pressed`). The shared example prints
 from the button handler through semihosting in Debug. No UART console is
 configured, so that output is dropped in Release.
 
-**TimerDemo:** Release prints on the J-Link OB virtual COM port at 115200 8N1,
-no flow control; Debug keeps semihosted `printf`. The first line reports the
+**TimerDemo:** Release prints on the J-Link OB virtual COM port at 1000000 baud
+8N1, no flow control; Debug keeps semihosted `printf`. The first line reports the
 accepted trigger period and subsequent lines report `Count` and `T0`. Also
 see `g_TimerInitOk`, `g_TriggerPeriod[]`, `g_Period[]` and
 `g_TriggerCount[]` in the debugger. LED1 toggles on trigger 0. DevNo 0 (machine
@@ -143,15 +143,15 @@ DevNo 1 (TAU0) and DevNo 8 (TAU7) reported 100010 us for 18 callbacks
 each, all with steady 100 ms `Count` steps. All three continuous-trigger
 runs PASS. Other timer modes and channels remain untested on hardware.
 
-**UartLoopback:** terminal at 115200 8N1, no flow control, on the J-Link OB
+**UartLoopback:** terminal at 1000000 baud 8N1, no flow control, on the J-Link OB
 virtual COM port. The firmware prints nothing by itself, it echoes what it
 receives.
 
-**UartPrbsTxTest:** sends the `Prbs8` sequence at 115200 8N1, starting with
+**UartPrbsTxTest:** sends the `Prbs8` sequence at 1000000 baud 8N1, starting with
 0xFF, no banner.
 
 **UartaLoopback:** connect a 3.3 V serial adapter to P008 (RX) and P403
-(TX), terminal at 115200 8N1. The firmware echoes what it receives. The `UartaLoopback/ioc` project links `uarta_r9a02.cpp` as an optional
+(TX), terminal at 1000000 baud 8N1. The firmware echoes what it receives. The `UartaLoopback/ioc` project links `uarta_r9a02.cpp` as an optional
 project source; `UART::Init` still selects DevNo 4 and no internal-symbol
 linker flag is required.
 

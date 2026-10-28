@@ -93,10 +93,16 @@ bool DisplayDotMatrix::SetFont(FontDesc_t const *pFont)
 		return false;
 	}
 
-	vpFont = pFont;
 	uint32_t h = (uint32_t)vHeight;
+	uint32_t t = h / (uint32_t)(pFont->Height + 1);
 
-	uint32_t t = h / (uint32_t)(vpFont->Height + 1);
+	// No line of this font on the screen
+	if (t == 0)
+	{
+		return false;
+	}
+
+	vpFont = pFont;
 	vLineHeight = (h + (t>>1)) / t;
 	vCurLine = ((vCurLine + (vLineHeight >> 1))/ vLineHeight) * vLineHeight;// + vLineHeight;
 	if (vCurLine < vLineHeight)

@@ -117,7 +117,7 @@ request/response exchanges. This keeps the initial validation separate from
 low-power scheduling, including the delayed separate response. It does not
 change these settings in other examples.
 
-The Thingy:91 console uses nRF9160 UART0, RX P0.19 and TX P0.18, at **115200
+The Thingy:91 console uses nRF9160 UART0, RX P0.19 and TX P0.18, at **1000000
 baud, 8N1, no flow control**. Its companion nRF52840 must forward this UART to
 USB, using the existing Connectivity Bridge or HciController CDC bridge.
 Select the USB serial port carrying that console. The application does not

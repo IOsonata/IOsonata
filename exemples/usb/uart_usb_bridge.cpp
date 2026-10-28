@@ -87,7 +87,10 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define UART_FLOWCTRL			UART_FLWCTRL_NONE
 #endif
 
+// board.h can select another controller
+#ifndef USB_DEVNO
 #define USB_DEVNO				0
+#endif
 
 // One USB packet per transfer in each direction
 #define BRIDGE_BUFF_SIZE		USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK)

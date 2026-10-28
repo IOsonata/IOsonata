@@ -55,7 +55,7 @@ SOFTWARE.
 #define LTE_COAP_RAT_PREF	LTE_RAT_LTEM
 
 // Both DKs use UART0 on the interface MCU's VCOM0.
-// Diagnostic console: 115200 baud, 8N1, no flow control.
+// Diagnostic console: 1000000 baud, 8N1, no flow control.
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			26

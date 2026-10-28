@@ -62,7 +62,10 @@ SOFTWARE.
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
+// board.h can select another controller
+#ifndef USB_DEVNO
 #define USB_DEVNO			0
+#endif
 #define ISO_ALT_COUNT		6U
 #define ISO_MAX_MPS		63U
 #define ISO_REQ_GET_DIAG	0x5AU

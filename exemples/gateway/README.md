@@ -5,13 +5,13 @@ These examples reuse the IOsonata LTE, UDP socket and BLE host implementations;
 HciController runs independently on the companion nRF52840 of Thingy:91.
 No Zephyr or NCS driver code is included.
 
-## BleGateway — first integration milestone
+## BleGateway: first integration milestone
 
 Project: `ARM/Nordic/nRF91/nRF9160/exemples/BleGateway/ioc`
 Application: `exemples/gateway/ble_gateway.cpp`.
 
 - nRF9160 board configuration currently selects `NORDIC_THINGY91`.
-- UART0 (115200) is the diagnostic console through HciController's CDC bridge.
+- UART0 (1000000 baud) is the diagnostic console through HciController's CDC bridge.
 - UART2 (1000000, RTS/CTS) connects to the nRF52840 HCI controller.
 - BLE runs in observer mode, with active scanning and the latest advertising
   address, RSSI and cumulative report count sampled at the UDP send interval.
@@ -24,7 +24,7 @@ Application: `exemples/gateway/ble_gateway.cpp`.
 **Status: built and hardware validated on Nordic Thingy:91 (October 16, 2026).**
 The nRF9160 (modem firmware 1.3.6) with HciController on the nRF52840
 successfully scanned BLE advertisers while sending and receiving LTE-M UDP
-echo telemetry. Four consecutive messages (sequences 0–3) were echoed;
+echo telemetry. Four consecutive messages (sequences 0 to 3) were echoed;
 BLE report counts increased 552, 1044, 1217, 1676. Observed LTE-M network
 registration was roaming, with intermittent unregistered/registered events.
 This confirms the advertisement-observer UDP milestone only.
@@ -33,7 +33,7 @@ persistence and secure cloud delivery are not implemented by this milestone.
 An observer reports advertisements; it is not equivalent to a connected
 sensor gateway yet.
 
-## AssetTracker — next application
+## AssetTracker: next application
 
 The tracker should reuse `exemples/lte/lte_udp.cpp` for LTE/UDP and
 `exemples/gnss/gnss_demo.cpp` for GNSS. It will need timestamped location

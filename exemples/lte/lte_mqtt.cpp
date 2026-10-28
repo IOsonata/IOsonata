@@ -12,6 +12,11 @@
 #include "net/sock_intrf.h"
 #include "syslog.h"
 #include "board.h"
+
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
 #include MQTT_DEMO_RNG_HEADER
 
 #define LTE_MQTT_TRIG_MODEM	0
@@ -34,7 +39,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(s_UartPins[0]),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

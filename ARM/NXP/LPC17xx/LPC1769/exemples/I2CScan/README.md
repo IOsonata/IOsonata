@@ -15,7 +15,7 @@ waits. Reset to scan again. Leave I2C_SCAN_INT_ENABLE false: this driver
 supports polling master operation without I2C interrupts or DMA.
 
 Debug prints through semihosting; attach a debugger with semihosting enabled.
-Release uses nosys without semihosting and prints through UART0 at 115200
+Release uses nosys without semihosting and prints through UART0 at 1000000
 baud, 8N1, no flow control. Connect a 3.3 V USB-UART adapter RX to P0.2
 (UART0 TX) and ground. P0.3 is reserved for UART0 RX.
 

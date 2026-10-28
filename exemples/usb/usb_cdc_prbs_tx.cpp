@@ -107,7 +107,10 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 
 // #define BYTE_MODE
 
+// board.h can select another controller
+#ifndef USB_DEVNO
 #define USB_DEVNO				0
+#endif
 
 #define TEST_BUFSIZE			16
 

@@ -16,7 +16,7 @@ Each subfolder has its own `run.py` and README for focused checks:
 | `ssp` | Shared LPC11Uxx/LPC17xx SSP rates, pin validation and polling transfers |
 | `i2c` | Shared LPC11Uxx/LPC17xx polling I2C master |
 | `timer` | Shared LPC11Uxx/LPC17xx timers and generic helpers |
-| `lpc546xx` | LPC546xx CTIMER, Flexcomm I2C and SPI |
+| `lpc546xx` | LPC546xx CTIMER, IOCON, DMA channels, Flexcomm UART TX DMA, I2C and SPI master/slave buses, WWDT, RTC, ADC0, SCT0 PWM, internal flash Nvm, SPIFI, EMC SDRAM, SDIF SD card, Flexcomm I2S, audio PLL, LCD controller, ENET Ethernet, ROM RNG and SHA block |
 | `startup` | LPC11U35/LPC17xx linker checksums, LPC17xx vectors and AHB startup data |
 | `iap` | LPC11Uxx IAP compatibility and interrupt state |
 | `iap_shared` | Shared IAP commands and interrupt state |

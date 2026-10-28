@@ -1,6 +1,6 @@
 /**-------------------------------------------------------------------------
 @file usb_control_lpc546xx.h
-@brief Private LPC546xx USB0 full-speed control endpoint preparation.
+@brief Private LPC546xx USB0 and USB1 control endpoint preparation.
 
 @author Hoang Nguyen Hoan
 @date Oct. 13, 2026
@@ -38,13 +38,15 @@ SOFTWARE.
 extern "C" {
 #endif
 
-// Private port bring-up: prepare EP0 and its event sink. Leaves DCON and NVIC
-// disabled. Used by UsbCtrlrStart; applications use the generic USB API.
-bool Lpc546xxUsbControlPrepare(int IntPrio, void (*Event)(const UsbCtrlrEvt_t *));
+// Private port bring-up of controller DevNo, 0 USB0 or 1 USB1: prepare EP0
+// and its event sink. Leaves DCON and NVIC disabled. Used by UsbCtrlrStart;
+// applications use the generic USB API.
+bool Lpc546xxUsbControlPrepare(int DevNo, int IntPrio, void (*Event)(const UsbCtrlrEvt_t *));
 // Disconnect and retire DMA before returning clocks/storage. Failure retains
 // ownership; the caller may retry after the controller completes the skip.
-bool Lpc546xxUsbControlRelease(void);
+bool Lpc546xxUsbControlRelease(int DevNo);
 void USB0_IRQHandler(void);
+void USB1_IRQHandler(void);
 
 #ifdef __cplusplus
 }

@@ -44,7 +44,7 @@ tests cover those operations; they do not replace hardware timing tests.
 2. The board file selects the SAM4L8 Xplained Pro yellow LED0 on PC07,
    active low, and USART1 RX PC26 / TX PC27, peripheral A. Adjust these pins
    and, if needed, define `MCUOSC` in TimerDemo's `src/board.h` for another board.
-   Open the UART console at 115200 8N1, no flow control.
+   Open the UART console at 1000000 baud 8N1, no flow control.
    `TIMER_DEMO_UART` enables the shared demo's UART retargeting.
 3. Start with `TIMER_DEVNO 0` in that board file. Flash and run continuously.
    `g_TimerInitOk` must become true, `g_TriggerCount[0]` must advance about ten
@@ -59,7 +59,7 @@ tests cover those operations; they do not replace hardware timing tests.
    tolerance. TC's 1-second trigger crosses multiple 16-bit rollovers.
 
 Both project configurations use nosys instead of semihosting. printf is
-retargeted to USART1 at 115200 baud; a semihosting console is not required.
+retargeted to USART1 at 1000000 baud; a semihosting console is not required.
 The debugger variables and LEDs remain available.
 Do not use debugger halts as a timing measurement: AST can continue while halted.
 AST also survives debugger, external and watchdog resets (datasheet table 10-12).

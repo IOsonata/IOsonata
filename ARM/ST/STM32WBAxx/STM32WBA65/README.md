@@ -58,10 +58,10 @@ Application entry is the shared source's standard `main()`.
 | Project | Shared source | UART baud | Purpose |
 |---|---|---|---|
 | UartBleDemo | uart_ble.cpp | 1000000 | Open-link peripheral, BlueIO UART writes and notifications |
-| BleIntrfPrbsTx | bleintrf_prbs_tx.cpp | 115200 | BtIntrf PRBS notification stream, advertised name BlePrbs |
+| BleIntrfPrbsTx | bleintrf_prbs_tx.cpp | 1000000 | BtIntrf PRBS notification stream, advertised name BlePrbs |
 | BleCentralScanDemo | ble_central_scan.cpp | 1000000 | Advertising reports, device names and RSSI |
 | UartBleCentral | uart_ble_central.cpp | 1000000 | Find UARTDemo, connect, discover its service and CCCD, subscribe and exchange UART data |
-| BleSecurityDemo | ble_security_demo.cpp | 115200 | LE Secure Connections, MITM, Numeric Comparison, bonding and protected UART service, advertised name BLESec |
+| BleSecurityDemo | ble_security_demo.cpp | 1000000 | LE Secure Connections, MITM, Numeric Comparison, bonding and protected UART service, advertised name BLESec |
 
 UartBleCentral sets `BLE_SC_METHOD=0` in both configurations for the first
 open-link test against UartBleDemo. Security belongs to the stack; this does
@@ -306,7 +306,7 @@ LPTIM1, from the LSI at 32 kHz (`TIMER_DEMO_DEVNO` 1 for LPTIM2, 2 to 7 for
 TIM16, TIM17, TIM2, TIM3, TIM4 and TIM1 at 100 kHz), trigger 0 every 100 ms
 toggles LD6 (PD8), trigger 1 every 1 s toggles LD5 (PD9). The
 demo prints on the first ST-LINK virtual COM port, USART1 DevNo 1, RX PA8 and
-TX PB12, AF7, 115200 8N1, interrupt mode. It links `nosys`, not semihosting.
+TX PB12, AF7, 1000000 baud 8N1, interrupt mode. It links `nosys`, not semihosting.
 Expected output:
 
 ```
@@ -672,7 +672,7 @@ them; pairing and a bonded reconnect ran on the DK1 with BleSecurityDemo.
 
 1. Build the library project (Debug), then BleAdvertiser (Debug), flash the
    DK1 through the ST-LINK.
-2. Open the first virtual COM port at 115200 baud. The example prints the
+2. Open the first virtual COM port at 1000000 baud. The example prints the
    `BleStack_Init` result and advertising state through SysLog.
 3. A phone scanner (nRF Connect or similar) should show the advertiser with
    manufacturer data that increments on the advertising timeout.
@@ -689,7 +689,7 @@ them; pairing and a bonded reconnect ran on the DK1 with BleSecurityDemo.
 
 Both Debug and Release select LE Secure Connections with MITM and bonding
 (`BTGAP_SECTYPE_LESC_MITM`), with DisplayYesNo capability. Legacy pairing
-fallback is disabled. Open the ST-LINK USART1 VCP at 115200 baud. Compare the
+fallback is disabled. Open the ST-LINK USART1 VCP at 1000000 baud. Compare the
 six-digit number printed there with the central's number; type `y` to accept
 only when they match, or `n` to reject, and answer on the central as well.
 UART confirmation bytes are consumed by the demo while a decision is pending.

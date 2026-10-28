@@ -48,6 +48,11 @@ SOFTWARE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #define TIMER_TRIG_ID0			0
 #define TIMER_TRIG_ID0_PERIOD	1000UL		// 1 second
 
@@ -72,7 +77,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = 0,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

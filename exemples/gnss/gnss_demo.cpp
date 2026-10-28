@@ -60,6 +60,11 @@ SOFTWARE.
 
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #if !defined(GNSS_RECEIVER) || !defined(GNSS_INTRF) || !defined(GNSS_INTRF_CFG_T) || !defined(GNSS_INTRF_CFG)
 #error "board.h gives the receiver: GNSS_RECEIVER, GNSS_INTRF, GNSS_INTRF_CFG_T and GNSS_INTRF_CFG"
 #endif
@@ -97,7 +102,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

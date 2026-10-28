@@ -13,7 +13,7 @@ the antenna reads the records. board.h selects the tag by its name:
 and gives the I2C bus with I2C_DEVNO and I2C_PINS. When the RF disable pin of
 the tag is on the MCU, NFC_RFDIS_PORT, NFC_RFDIS_PIN and NFC_RFDIS_PINOP give
 it and the demo holds it low, RF on. With UART_RETARGET and the UART pins, the
-Release build prints on the UART at 115200 8N1, the Debug build uses
+Release build prints on the UART at 1000000 baud 8N1, the Debug build uses
 semihosting.
 
 @author	Hoang Nguyen Hoan
@@ -57,6 +57,11 @@ SOFTWARE.
 #include "rftag/rftag_ndef.h"
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -79,7 +84,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

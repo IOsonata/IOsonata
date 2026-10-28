@@ -1,6 +1,7 @@
 /**-------------------------------------------------------------------------
 @file usb_data_lpc_fs.h
-@brief Private shared LPC full-speed bulk and interrupt endpoint state.
+@brief Private shared LPC USB device (IP3511) bulk and interrupt endpoint
+state, full and high speed.
 
 @author Hoang Nguyen Hoan
 @date Oct. 13, 2026
@@ -45,14 +46,18 @@ typedef struct __Lpc_Usb_Fs_Data_Endpoint {
 	uint16_t Transferred;
 	bool Busy;
 	bool Halted;
+	bool NakWait;				//!< IN armed at the next IN NAK, USB.15
 } LpcUsbFsDataEndpoint_t;
+
+// Data physical endpoints of the largest controller: 5 IN and 5 OUT
+#define LPCUSB_DATA_EP_MAX	10
 
 typedef struct __Lpc_Usb_Fs_Data {
 	LpcUsbFsEp0_t *pEp0;
 	bool *pPrepared;
 	bool *pClosing;
 	IRQn_Type Irq;
-	LpcUsbFsDataEndpoint_t Endpoint[8];
+	LpcUsbFsDataEndpoint_t Endpoint[LPCUSB_DATA_EP_MAX];
 	uint32_t RxReady;
 } LpcUsbFsData_t;
 
@@ -60,12 +65,15 @@ typedef struct __Lpc_Usb_Fs_Data {
 extern "C" {
 #endif
 
-// Each family supplies its statically allocated context.
-LpcUsbFsData_t *LpcUsbFsDataContext(void);
-void LpcUsbFsDataInit(void);
-bool LpcUsbFsDataCurrent(void);
-void LpcUsbFsDataForget(uint32_t Mask);
-void LpcUsbFsDataInterrupt(unsigned Physical);
+// Each family supplies the statically allocated context of a controller,
+// NULL for a DevNo it does not have.
+LpcUsbFsData_t *LpcUsbFsDataContext(int DevNo);
+void LpcUsbFsDataInit(LpcUsbFsData_t *pData);
+bool LpcUsbFsDataCurrent(LpcUsbFsData_t *pData);
+void LpcUsbFsDataForget(LpcUsbFsData_t *pData, uint32_t Mask);
+void LpcUsbFsDataInterrupt(LpcUsbFsData_t *pData, unsigned Physical);
+// Physical endpoint mask of the data endpoints of the controller
+uint32_t LpcUsbFsDataMask(LpcUsbFsData_t *pData);
 
 #ifdef __cplusplus
 }

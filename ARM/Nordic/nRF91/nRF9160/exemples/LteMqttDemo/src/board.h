@@ -55,7 +55,7 @@ SOFTWARE.
 //#define NRF9160_DK
 #define NORDIC_THINGY91
 
-// Diagnostic console: UART0, 115200 baud, 8N1, no flow control.
+// Diagnostic console: UART0, 1000000 baud, 8N1, no flow control.
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PINOP		1

@@ -16,10 +16,14 @@ source = (root / 'ARM/NXP/LPC546xx/src/usb_hw_lpc546xx.c').read_text()
 source, count = re.subn(r'SYSCON->USB0CLKDIV = ([^;]+);',
                         r'TestUsbDivider(\1);', source)
 assert count == 2
+source, count = re.subn(r'SYSCON->USB1CLKDIV = ([^;]+);',
+                        r'TestUsb1Divider(\1);', source)
+assert count == 2
 assert source.count('((void (*)(uint32_t))LPCUSB_FRO_ROM_ENTRY)(frequency);') == 1
 source = source.replace('((void (*)(uint32_t))LPCUSB_FRO_ROM_ENTRY)(frequency);',
                         'TestFroSetup(frequency);')
-source = '#include <stdint.h>\nvoid TestUsbDivider(uint32_t);\nvoid TestFroSetup(uint32_t);\n' + source
+source = ('#include <stdint.h>\nvoid TestUsbDivider(uint32_t);\nvoid TestUsb1Divider(uint32_t);\n'
+          'void TestFroSetup(uint32_t);\n' + source)
 for opt in ['-O0', '-O2']:
     for good_layout in [True, False]:
         with tempfile.TemporaryDirectory() as tmp:
@@ -48,12 +52,13 @@ for opt in ['-O0', '-O2']:
                                   ('INTSTAT', 'TestInterruptWrite'),
                                   ('INTSETSTAT', 'TestInterruptSet'),
                                   ('EPSKIP', 'TestSkipWrite')]:
-                code = re.sub(r'(?:USB0|pEp0->pReg|pData->pEp0->pReg)->' + reg + r'\s*=\s*([^;]+);',
+                code = re.sub(r'(?:USB0|USBHSD|pEp0->pReg|pData->pEp0->pReg|p?[Dd]ev->Ep0\.pReg)->' + reg +
+                              r'\s*=\s*([^;]+);',
                               lambda m: function + '(' + m[1] + ');', code)
             path = tmp / ('usb' + str(index) + '.c')
             path.write_text(code)
             paths.append(str(path))
-        for fixture in ['ep0546_test', 'data_test', 'lifecycle546_test', 'wakeup546_test']:
+        for fixture in ['ep0546_test', 'data_test', 'lifecycle546_test', 'wakeup546_test', 'hs546_test']:
             exe = tmp / fixture
             subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
                             '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',

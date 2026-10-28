@@ -54,6 +54,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -78,7 +83,7 @@ static const UARTCfg_t s_UartCfg = {
 	UART_DEVNO,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	115200,			// Rate
+	UART_BAUDRATE,		// Rate
 	8,
 	UART_PARITY_NONE,
 	1,					// Stop bit

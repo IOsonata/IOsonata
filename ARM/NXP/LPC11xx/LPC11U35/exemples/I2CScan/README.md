@@ -19,7 +19,7 @@ SDA and SCL need external pull-ups to the board's I/O supply. P0.4 is also
 listed as an LED pin in the Blinky example; ensure that any attached LED
 circuit does not load SCL. The scanner does not configure LED outputs.
 
-Connect a 3.3 V UART adapter RX to P0.19. Open the terminal at 115200 baud,
+Connect a 3.3 V UART adapter RX to P0.19. Open the terminal at 1000000 baud,
 8-N-1, without flow control before resetting the board. The scan runs once,
 then waits. It probes 7-bit addresses 0x08 through 0x77 using START,
 address+write and STOP, without writing data bytes.

@@ -84,3 +84,8 @@ prints stop and resume messages, and microphone reporting continues.
 
 Define `AUDIO_TEST_SD_CARD` to enable the SD card probe. It is disabled by
 default so absence of removable media does not block the audio test.
+
+SPIM4 sends 0xFF while it reads (`DummyByte`, the SPIM ORC): the SD card in
+SPI mode needs the data line high, and the CS47L63 ignores MOSI after the
+register address of a read (DS1249F2 section 4.13.1, Fig. 4-58). The probe
+selects the card with `AUDIO_CARD_CS`.

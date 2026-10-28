@@ -45,7 +45,7 @@ project. Program the application using the normal nRF9161 or nRF9151 DK setup.
 ## Board and peer configuration
 
 Both DKs use UART0 through the interface MCU's VCOM0: **RX P0.26, TX P0.27,
-115200 baud, 8N1, no flow control**. The pins use operation 1. RTC0 supplies
+1000000 baud, 8N1, no flow control**. The pins use operation 1. RTC0 supplies
 modem wait trigger 0 and application pump trigger 1.
 
 Defaults in `src/board.h` are:

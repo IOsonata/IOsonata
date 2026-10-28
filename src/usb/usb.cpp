@@ -14,8 +14,9 @@ already on a cable at reset never produces an edge, and reports
 USB_EVT_ATTACHED and USB_EVT_DETACHED to the application itself.
 
 DevNo is stored at init and passed to every UsbCtrlr call. The state here is
-still file scope, so one controller is initialized at a time. That matches
-every part shipped so far, where USB_CTRLR_CNT is 1.
+still file scope, so one controller is initialized at a time. On a part with
+more than one controller (USB_CTRLR_CNT above 1), UsbInit selects the one that
+runs.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -59,9 +60,7 @@ SOFTWARE.
 #define USB_CORE_TRACE(...) ((void)0)
 #endif
 
-#define USB_CORE_CLASS_MAXCNT \
-	(USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ? \
-	 USB_EPIN_CNT(0) : USB_EPOUT_CNT(0))
+#define USB_CORE_CLASS_MAXCNT		USB_EP_CNT_MAX_ALL
 #define USB_CORE_INTRF_MAXCNT		16
 
 #define USBD_CORE_EP0_MPS_DEFAULT		64U

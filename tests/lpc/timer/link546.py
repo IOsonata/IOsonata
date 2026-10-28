@@ -26,6 +26,7 @@ SOURCES = [
     'src/coredev/uart.cpp',
     'src/coredev/shared_intrf.cpp',
     'ARM/NXP/LPC546xx/src/flexcomm_lpc546xx.cpp',
+    'ARM/NXP/LPC546xx/src/dma_lpc546xx.cpp',
     'ARM/NXP/LPC546xx/src/uart_lpc546xx.cpp',
     'src/uart_retarget.c',
     'src/stddev.c',

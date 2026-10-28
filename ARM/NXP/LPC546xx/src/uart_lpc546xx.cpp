@@ -4,10 +4,25 @@
 @brief	LPC546xx Flexcomm USART implementation
 
 		DevNo is the Flexcomm number, 0 to 9. The function clock is the
-		12 MHz FRO, independent of the core clock. Polling and interrupt
-		modes. Both use the 16 entry hardware FIFOs. In interrupt mode the
-		CFIFOs are filled and drained by the Flexcomm interrupt. TX DMA is not
-		supported, a configuration with bDMAMode fails UARTInit.
+		12 MHz FRO, independent of the core clock. Both modes use the 16 entry
+		hardware FIFOs.
+
+		bIntMode false : polling, TxData and RxData move the data to and from
+		                 the hardware FIFOs
+		bIntMode true  : the Flexcomm interrupt drains the TX CFIFO and fills
+		                 the RX CFIFO
+		bDMAMode true  : TX DMA sends blocks from the TX CFIFO, in place with a
+		                 blocking CFIFO, from a copy with a non-blocking one.
+		                 The block done is handled by the DMA interrupt with
+		                 bIntMode, by the next TxData or RxData call without
+		                 it: in that mode the application keeps calling
+		                 UARTTx or UARTRx until the CFIFO is empty, as with
+		                 the STM32 polling DMA. TX ready is reported when the
+		                 last block is taken by the hardware FIFO, up to 16
+		                 characters before they are on the line. RX is not
+		                 changed by bDMAMode: the USART has no RX idle or RX
+		                 timeout, a DMA RX ring could not deliver the end of a
+		                 message, so RX stays on the RX FIFO.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 10, 2026
@@ -48,6 +63,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 #include "flexcomm_lpc546xx.h"
+#include "dma_lpc546xx.h"
 
 // Default CFIFO memory of each instance, used when the configuration does
 // not supply its own
@@ -70,8 +86,17 @@ SOFTWARE.
 #define LPC546XX_USART_TXLVL		8U
 #define LPC546XX_USART_RXLVL		0U
 
+// TX level of the DMA mode. DMATX asks for the DMA while the TX FIFO is not
+// full, and the TXLVLENA description makes the level trigger the DMA trigger
+// with DMATX. With 15, one less than the FIFO size, both are the same.
+#define LPC546XX_USART_TXLVL_DMA	15U
+
 // Receive errors reported with each character in FIFORD
 #define LPC546XX_USART_FIFORD_ERR	(USART_FIFORD_FRAMERR_MASK | USART_FIFORD_PARITYERR_MASK)
+
+// Most bytes of a TX DMA block taken out of a non-blocking TX CFIFO, see
+// Lpc546xxUartDmaTxStart
+#define LPC546XX_UART_DMA_TX_COPY	64
 
 #pragma pack(push, 4)
 
@@ -83,30 +108,33 @@ typedef struct __Lpc546xx_Uart_Dev {
 	UARTDev_t *pUartDev;			//!< Pointer to generic UART dev. data
 	const IOPinCfg_t *pIOPinMap;	//!< Pins configured again by Enable
 	int NbIOPins;					//!< Number of pins in pIOPinMap
+	bool bTxDmaClaimed;				//!< TX DMA channel taken by this instance
+	bool bTxDmaActive;				//!< TX DMA block running
+	uint32_t TxDmaLength;			//!< TX CFIFO bytes owned by the running block
 	alignas(4) uint8_t RxFifoMem[LPC546XX_UART_CFIFO_SIZE];	//!< Default RX CFIFO memory
 	alignas(4) uint8_t TxFifoMem[LPC546XX_UART_CFIFO_SIZE];	//!< Default TX CFIFO memory
+	alignas(4) uint8_t TxDmaCopy[LPC546XX_UART_DMA_TX_COPY];	//!< TX block copied from a non-blocking CFIFO
 } Lpc546xxUartDev_t;
 
 #pragma pack(pop)
 
-static Lpc546xxUartDev_t s_Lpc546xxUartDev[] = {
-	{ .pReg = USART0, .DevNo = 0, },
-	{ .pReg = USART1, .DevNo = 1, },
-	{ .pReg = USART2, .DevNo = 2, },
-	{ .pReg = USART3, .DevNo = 3, },
-	{ .pReg = USART4, .DevNo = 4, },
-	{ .pReg = USART5, .DevNo = 5, },
-	{ .pReg = USART6, .DevNo = 6, },
-	{ .pReg = USART7, .DevNo = 7, },
-	{ .pReg = USART8, .DevNo = 8, },
-	{ .pReg = USART9, .DevNo = 9, },
+// Registers of each Flexcomm, the instance data is set by UARTInit. The
+// instance table is zero initialized, its FIFO memories take no flash.
+static USART_Type * const s_Lpc546xxUartReg[] = {
+	USART0, USART1, USART2, USART3, USART4, USART5, USART6, USART7, USART8, USART9,
 };
 
-static const int s_NbUartDev = sizeof(s_Lpc546xxUartDev) / sizeof(Lpc546xxUartDev_t);
+static const int s_NbUartDev = sizeof(s_Lpc546xxUartReg) / sizeof(USART_Type *);
+
+static Lpc546xxUartDev_t s_Lpc546xxUartDev[sizeof(s_Lpc546xxUartReg) / sizeof(USART_Type *)];
 
 static uint8_t Lpc546xxUartRxRead(Lpc546xxUartDev_t * const pDev, uint32_t *pData);
 static void Lpc546xxUartTxFill(Lpc546xxUartDev_t * const pDev);
 static void Lpc546xxUartIrqHandler(int DevNo, DevIntrf_t * const pDev);
+static bool Lpc546xxUartDmaTxStart(Lpc546xxUartDev_t * const pDev);
+static bool Lpc546xxUartDmaService(Lpc546xxUartDev_t * const pDev);
+static void Lpc546xxUartDmaStop(Lpc546xxUartDev_t * const pDev);
+static void Lpc546xxUartDmaIrq(int Ch, void *pCtx);
 
 static uint32_t Lpc546xxUartGetRate(DevIntrf_t * const pDev);
 static uint32_t Lpc546xxUartSetRate(DevIntrf_t * const pDev, uint32_t Rate);
@@ -217,10 +245,158 @@ static void Lpc546xxUartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			udev->bTxReady = true;
 			if (udev->EvtCallback)
 			{
-				udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, 0);
+				// Length is the free space in the TX CFIFO
+				udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
 			}
 		}
 	}
+}
+
+// Start a DMA block from the TX CFIFO. Called with interrupts disabled.
+// Returns false when the CFIFO is empty.
+//
+// Blocking CFIFO: the block is the first contiguous run of the CFIFO, sent in
+// place. The bytes stay in the CFIFO, so the producer cannot write over them,
+// until the block is done. Byte transfers have no alignment requirement.
+//
+// Non-blocking CFIFO: a put on a full CFIFO drops the oldest bytes and writes
+// over them, the bytes of a block sent in place. The block is taken out of the
+// CFIFO and copied to TxDmaCopy, at most LPC546XX_UART_DMA_TX_COPY bytes, the
+// DMA sends the copy.
+static bool Lpc546xxUartDmaTxStart(Lpc546xxUartDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+	hCFifo_t fifo = udev->hTxFifo;
+	uint8_t *p;
+	uint32_t len;
+
+	if (CFifoIsBlocking(fifo))
+	{
+		int cnt = LPC546XX_DMA_XFER_MAX;
+
+		p = CFifoPeekMultiple(fifo, &cnt);
+		if (p == NULL)
+		{
+			return false;
+		}
+		len = (uint32_t)cnt;
+
+		// Released when the block is done
+		pDev->TxDmaLength = len;
+	}
+	else
+	{
+		len = 0;
+		while (len < LPC546XX_UART_DMA_TX_COPY)
+		{
+			// A piece ends where the CFIFO data wraps
+			int cnt = LPC546XX_UART_DMA_TX_COPY - len;
+			uint8_t *s = CFifoGetMultiple(fifo, &cnt);
+
+			if (s == NULL)
+			{
+				break;
+			}
+			memcpy(&pDev->TxDmaCopy[len], s, cnt);
+			len += (uint32_t)cnt;
+		}
+		if (len == 0U)
+		{
+			return false;
+		}
+		p = pDev->TxDmaCopy;
+
+		// Already out of the CFIFO
+		pDev->TxDmaLength = 0;
+	}
+
+	if (Lpc546xxDmaChStart(LPC546XX_DMA_CH_FC_TX(pDev->DevNo), p, len) == false)
+	{
+		// The channel refused the block, its bytes are dropped
+		udev->TxDropCnt += len;
+		CFifoRelease(fifo, (int)pDev->TxDmaLength);
+		pDev->TxDmaLength = 0;
+
+		return false;
+	}
+
+	pDev->bTxDmaActive = true;
+	udev->bTxReady = false;
+
+	return true;
+}
+
+// End of a DMA block: release its CFIFO bytes, start the next block or report
+// TX ready. Called with interrupts disabled, from the DMA interrupt with
+// bIntMode, from TxData without it. Returns false if no block was done.
+static bool Lpc546xxUartDmaService(Lpc546xxUartDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+	int ch = LPC546XX_DMA_CH_FC_TX(pDev->DevNo);
+
+	if (udev == NULL || pDev->bTxDmaActive == false)
+	{
+		return false;
+	}
+
+	uint32_t flags = Lpc546xxDmaChFlags(ch);
+
+	if ((flags & (LPC546XX_DMA_FLAG_DONE | LPC546XX_DMA_FLAG_ERR)) == 0U)
+	{
+		return false;
+	}
+
+	// Not sent when an error stopped the block
+	if (flags & LPC546XX_DMA_FLAG_ERR)
+	{
+		udev->TxDropCnt += Lpc546xxDmaChStopRemain(ch);
+	}
+	else
+	{
+		Lpc546xxDmaChClear(ch);
+	}
+
+	pDev->bTxDmaActive = false;
+	CFifoRelease(udev->hTxFifo, (int)pDev->TxDmaLength);
+	pDev->TxDmaLength = 0;
+
+	if (Lpc546xxUartDmaTxStart(pDev))
+	{
+		return true;
+	}
+
+	udev->bTxReady = true;
+	if (udev->DevIntrf.bIntEn && udev->EvtCallback)
+	{
+		// Length is the free space in the TX CFIFO
+		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+	}
+
+	return true;
+}
+
+// Stop the running block. Its bytes are not sent, Enable flushes the TX
+// CFIFO.
+static void Lpc546xxUartDmaStop(Lpc546xxUartDev_t * const pDev)
+{
+	if (pDev->bTxDmaClaimed)
+	{
+		Lpc546xxDmaChStop(LPC546XX_DMA_CH_FC_TX(pDev->DevNo));
+	}
+	pDev->bTxDmaActive = false;
+	pDev->TxDmaLength = 0;
+}
+
+// DMA interrupt of the TX channel, the context is the instance
+static void Lpc546xxUartDmaIrq(int Ch, void *pCtx)
+{
+	Lpc546xxUartDev_t *dev = (Lpc546xxUartDev_t *)pCtx;
+	uint32_t state = DisableInterrupt();
+
+	(void)Ch;
+	Lpc546xxUartDmaService(dev);
+
+	EnableInterrupt(state);
 }
 
 static uint32_t Lpc546xxUartGetRate(DevIntrf_t * const pDev)
@@ -307,6 +483,16 @@ static int Lpc546xxUartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Buffl
 
 	if (!pDev->bIntEn)
 	{
+		// Without the interrupt, RxData also handles a TX DMA block done
+		if (pDev->bDma)
+		{
+			uint32_t state = DisableInterrupt();
+
+			Lpc546xxUartDmaService(dev);
+
+			EnableInterrupt(state);
+		}
+
 		if (reg->FIFOSTAT & USART_FIFOSTAT_RXERR_MASK)
 		{
 			dev->pUartDev->RxOvrErrCnt++;
@@ -367,7 +553,7 @@ static int Lpc546xxUartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int
 		return 0;
 	}
 
-	if (!pDev->bIntEn)
+	if (!pDev->bIntEn && !pDev->bDma)
 	{
 		while (cnt < Datalen && (reg->FIFOSTAT & USART_FIFOSTAT_TXNOTFULL_MASK))
 		{
@@ -387,6 +573,12 @@ static int Lpc546xxUartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int
 		EnableInterrupt(state);
 
 		return 0;
+	}
+
+	// Without the interrupt, the block done is handled here
+	if (pDev->bDma && !pDev->bIntEn)
+	{
+		Lpc546xxUartDmaService(dev);
 	}
 
 	while (Datalen > 0)
@@ -409,6 +601,19 @@ static int Lpc546xxUartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int
 		Datalen -= l;
 		pData += l;
 		cnt += l;
+	}
+
+	if (pDev->bDma)
+	{
+		// The running block takes the next one at its end
+		if (dev->bTxDmaActive == false)
+		{
+			Lpc546xxUartDmaTxStart(dev);
+		}
+
+		EnableInterrupt(state);
+
+		return cnt;
 	}
 
 	// With the TX level interrupt off, the hardware FIFO is filled here.
@@ -441,6 +646,7 @@ static void Lpc546xxUartDisable(DevIntrf_t * const pDev)
 	uint32_t state = DisableInterrupt();
 
 	dev->pReg->FIFOINTENCLR = USART_FIFOINTENCLR_TXLVL_MASK;
+	Lpc546xxUartDmaStop(dev);
 	dev->pReg->CFG &= ~USART_CFG_ENABLE_MASK;
 	Lpc546xxFlexcommClock(dev->DevNo, false);
 
@@ -460,6 +666,7 @@ static void Lpc546xxUartEnable(DevIntrf_t * const pDev)
 	dev->pUartDev->RxDropCnt = 0;
 	dev->pUartDev->TxDropCnt = 0;
 
+	Lpc546xxUartDmaStop(dev);
 	CFifoFlush(dev->pUartDev->hTxFifo);
 	dev->pUartDev->bTxReady = true;
 
@@ -481,6 +688,7 @@ static void Lpc546xxUartReset(DevIntrf_t * const pDev)
 	Lpc546xxUartDev_t *dev = (Lpc546xxUartDev_t *)pDev->pDevData;
 	uint32_t state = DisableInterrupt();
 
+	Lpc546xxUartDmaStop(dev);
 	Lpc546xxFlexcommSelect(dev->DevNo, LPC546XX_FLEXCOMM_USART);
 	dev->pUartDev->bTxReady = true;
 
@@ -514,10 +722,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-	// Polling and interrupt modes, 7 or 8 data bits, no IrDA, no single wire
-	// half duplex. RTS and CTS are handled by the USART with
+	// Polling, interrupt and TX DMA, 7 or 8 data bits, no IrDA, no single
+	// wire half duplex. RTS and CTS are handled by the USART with
 	// UART_FLWCTRL_HW.
-	if (pCfg->bDMAMode || pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
+	if (pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
 		pCfg->Duplex != UART_DUPLEX_FULL ||
 		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
 		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
@@ -528,6 +736,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	}
 
 	Lpc546xxUartDev_t *dev = &s_Lpc546xxUartDev[pCfg->DevNo];
+
+	dev->pReg = s_Lpc546xxUartReg[pCfg->DevNo];
+	dev->DevNo = pCfg->DevNo;
+
 	USART_Type *reg = dev->pReg;
 	IRQn_Type irq = Lpc546xxFlexcommIrqNo(dev->DevNo);
 	uint32_t state = DisableInterrupt();
@@ -542,6 +754,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+	// A block of an earlier configuration is stopped before the Flexcomm
+	// reset, a DMA write to the FIFO during the reset could end in an error
+	Lpc546xxUartDmaStop(dev);
+
 	// Bus clock on, Flexcomm reset with the USART function selected. Fails
 	// if the Flexcomm is locked to SPI or I2C.
 	dev->FClk = Lpc546xxFlexcommSelect(dev->DevNo, LPC546XX_FLEXCOMM_USART);
@@ -553,6 +769,26 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	}
 
 	NVIC_DisableIRQ(irq);
+
+	int dmach = LPC546XX_DMA_CH_FC_TX(dev->DevNo);
+
+	if (pCfg->bDMAMode)
+	{
+		if (Lpc546xxDmaChClaim(dmach, Lpc546xxUartDmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode) == false)
+		{
+			Lpc546xxFlexcommClock(dev->DevNo, false);
+			EnableInterrupt(state);
+
+			return false;
+		}
+		dev->bTxDmaClaimed = true;
+		Lpc546xxDmaChSetup(dmach, true, &reg->FIFOWR, 0);
+	}
+	else if (dev->bTxDmaClaimed)
+	{
+		Lpc546xxDmaChFree(dmach);
+		dev->bTxDmaClaimed = false;
+	}
 
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
@@ -580,6 +816,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	// CFifoInit returns NULL when the supplied memory is too small.
 	if (pDev->hRxFifo == NULL || pDev->hTxFifo == NULL)
 	{
+		if (dev->bTxDmaClaimed)
+		{
+			Lpc546xxDmaChFree(dmach);
+			dev->bTxDmaClaimed = false;
+		}
 		Lpc546xxFlexcommClock(dev->DevNo, false);
 		EnableInterrupt(state);
 
@@ -630,7 +871,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->TxDropCnt = 0;
 	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
-	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.EvtCB = NULL;
@@ -652,10 +893,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	// Both FIFOs on and empty, level triggers for the interrupt mode
+	// Both FIFOs on and empty, level triggers for the interrupt mode. With
+	// DMATX the TX DMA request is on while the TX FIFO is not full.
 	reg->FIFOCFG = USART_FIFOCFG_ENABLETX_MASK | USART_FIFOCFG_ENABLERX_MASK |
-				   USART_FIFOCFG_EMPTYTX_MASK | USART_FIFOCFG_EMPTYRX_MASK;
-	reg->FIFOTRIG = USART_FIFOTRIG_TXLVLENA_MASK | USART_FIFOTRIG_TXLVL(LPC546XX_USART_TXLVL) |
+				   USART_FIFOCFG_EMPTYTX_MASK | USART_FIFOCFG_EMPTYRX_MASK |
+				   (pCfg->bDMAMode ? USART_FIFOCFG_DMATX_MASK : 0U);
+	reg->FIFOTRIG = USART_FIFOTRIG_TXLVLENA_MASK |
+					USART_FIFOTRIG_TXLVL(pCfg->bDMAMode ? LPC546XX_USART_TXLVL_DMA : LPC546XX_USART_TXLVL) |
 					USART_FIFOTRIG_RXLVLENA_MASK | USART_FIFOTRIG_RXLVL(LPC546XX_USART_RXLVL);
 	reg->FIFOINTENCLR = USART_FIFOINTENCLR_TXERR_MASK | USART_FIFOINTENCLR_RXERR_MASK |
 						USART_FIFOINTENCLR_TXLVL_MASK | USART_FIFOINTENCLR_RXLVL_MASK;
@@ -664,7 +908,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	if (pCfg->bIntMode)
 	{
 		// The TX level interrupt is enabled by Lpc546xxUartTxData when the TX
-		// CFIFO has data.
+		// CFIFO has data, never in DMA mode.
 		SharedIntrfSetIrqHandler(dev->DevNo, &pDev->DevIntrf, Lpc546xxUartIrqHandler);
 		reg->FIFOINTENSET = USART_FIFOINTENSET_RXLVL_MASK | USART_FIFOINTENSET_RXERR_MASK |
 							USART_FIFOINTENSET_TXERR_MASK;

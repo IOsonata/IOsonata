@@ -57,7 +57,10 @@ SOFTWARE.
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
+// board.h can select another controller
+#ifndef USB_DEVNO
 #define USB_DEVNO				0
+#endif
 
 #define BUFFER_SIZE				USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK)
 

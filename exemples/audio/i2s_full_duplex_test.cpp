@@ -104,7 +104,10 @@ static const SPICfg_t s_SpiCfg = {
 	.bDmaEn = true,
 	.bIntEn = false,
 	.IntPrio = 6,
-	.DummyByte = 0,
+	// 0xFF on MOSI while reading: an SD card in SPI mode needs it, the
+	// CS47L63 ignores MOSI after the register address of a read (DS1249F2
+	// 4.13.1)
+	.DummyByte = 0xFF,
 	.EvtCB = NULL
 };
 static const IOPinCfg_t s_I2sPins[] = AUDIO_I2S_PINS;
@@ -306,11 +309,11 @@ int main()
 		puts("Device test FAIL");
 		return 1;
 	}
-	// SD card probing is opt-in: the generic driver performs lengthy
-	// synchronous command retries when no card answers. Audio streaming
-	// must not depend on optional removable storage.
+	// SD card probing is opt-in: audio streaming must not depend on optional
+	// removable storage.
 #ifdef AUDIO_TEST_SD_CARD
 	puts("SD card probe starting");
+	s_Card.DeviceAddress(AUDIO_CARD_CS);
 	if (s_Card.Init(&s_Spi, (uint8_t *)NULL, 0))
 	{
 		printf("SD card sectors: %lu\n", (unsigned long)s_Card.GetNbSect());

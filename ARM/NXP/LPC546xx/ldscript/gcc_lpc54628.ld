@@ -83,3 +83,14 @@ SECTIONS
 		*(.usb_ram .usb_ram.*)
 	} > USBRAM
 }
+
+/* SRAM1 to SRAM3, clocked by SystemInit after startup .bss: storage the
+ * startup does not clear, set up by its driver (Ethernet buffers, lwIP
+ * pools). */
+SECTIONS
+{
+	.ram2 (NOLOAD) : ALIGN(16)
+	{
+		*(.ram2 .ram2.*)
+	} > RAM2
+}

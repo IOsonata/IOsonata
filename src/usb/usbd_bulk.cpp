@@ -189,7 +189,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	pBulk->HsMps = pCfg->HsMps != 0U ? pCfg->HsMps : USBD_BULK_HS_MPS;
 
 	if (pBulk->FsMps > USBD_BULK_MAX_MPS ||
-		(USB_HIGHSPEED_CAPABLE(0) && pBulk->HsMps > USBD_BULK_MAX_MPS))
+		(USB_HIGHSPEED_CAPABLE(pBulk->DevNo) && pBulk->HsMps > USBD_BULK_MAX_MPS))
 	{
 		return false;
 	}

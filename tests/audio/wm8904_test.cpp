@@ -134,6 +134,10 @@ public:
 		{
 			assert(value == 0);
 			memset(Registers, 0, sizeof(Registers));
+			// Rev 4.1 reset values of the analogue inputs: PGAs muted at
+			// 0 dB, common mode rejection on, IN1 on the positive input
+			Registers[0x2C] = Registers[0x2D] = 0x85;
+			Registers[0x2E] = Registers[0x2F] = 0x44;
 			ServoReads = 0;
 		}
 		else
@@ -162,7 +166,8 @@ int main()
 		.MicInput = 2,
 		.Gain = 18000,
 		.bHeadphoneEn = false,
-		.HeadphoneGain = -24000
+		.HeadphoneGain = -24000,
+		.LineInput = 0
 	};
 
 	assert(!codec.Valid() && !codec.Enable());
@@ -437,5 +442,67 @@ int main()
 	assert(!codec.Mute(true) && !codec.Valid());
 	assert(control.Registers[0x12] == 0 && control.Registers[0x62] == 0);
 	control.MclkPresent = true;
-	puts("WM8904 capture/playback, clock, gain, servo ordering/timeout and failures PASS");
+	codec.PowerOff();
+
+	// Stereo line input IN2 with headphones, as the LPCXpresso54628
+	cfg.MicInput = 0;
+	cfg.LineInput = 2;
+	cfg.bHeadphoneEn = true;
+	cfg.Gain = 0;
+	control.Writes = 0;
+	assert(codec.Init(cfg, &control));
+	unsigned lineWrites = control.Writes;
+
+	assert(control.Registers[0x0C] == 3 && control.Registers[0x12] == 0x0F && control.Registers[0x27] == 0);
+	assert(control.Registers[0x2C] == 5 && control.Registers[0x2D] == 5);
+	assert(control.Registers[0x2E] == 0x54 && control.Registers[0x2F] == 0x54);
+	assert(control.Registers[0x18] == 0x50 && control.Registers[0x79] == 0x14);
+	assert(control.Registers[0x68] == 0 && control.Registers[0x62] == 1 && control.Registers[0x5A] == 0xFF);
+	assert(control.Registers[0x24] == 192 && control.Registers[0x25] == 0x1C0);
+	assert(!codec.MicrophoneClock(false) && !codec.MicrophoneClockOnly() && codec.Valid());
+	control.MclkPresent = false;
+	codec.Disable();
+	assert(codec.Valid() && control.Registers[0x0C] == 0 && control.Registers[0x12] == 0);
+	control.MclkPresent = true;
+	assert(codec.Enable() && control.Registers[0x0C] == 3 && control.Registers[0x12] == 0x0F);
+	// IN1 and IN3, capture only
+	cfg.bHeadphoneEn = false;
+	cfg.LineInput = 1;
+	assert(codec.Init(cfg, &control) && control.Registers[0x2E] == 0x40 && control.Registers[0x2F] == 0x40);
+	assert(control.Registers[0x0C] == 3 && control.Registers[0x12] == 3 && control.Registers[0x0E] == 0);
+	cfg.LineInput = 3;
+	assert(codec.Init(cfg, &control) && control.Registers[0x2E] == 0x68 && control.Registers[0x2F] == 0x68);
+	// Not both inputs, no fourth input
+	cfg.MicInput = 1;
+	assert(!codec.Init(cfg, &control) && !codec.Valid());
+	cfg.MicInput = 0;
+	cfg.LineInput = 4;
+	assert(!codec.Init(cfg, &control) && !codec.Valid());
+	cfg.LineInput = 2;
+	cfg.bHeadphoneEn = true;
+	// Every write failing, every register not taken
+	for (unsigned failure = 1; failure <= lineWrites; failure++)
+	{
+		control.Writes = 0;
+		control.FailAt = failure;
+		assert(!codec.Init(cfg, &control) && !codec.Valid());
+		assert(control.Registers[0x62] == 0 && control.Registers[0x5A] == 0);
+		codec.PowerOff();
+	}
+	control.FailAt = 0;
+	const int lineDropped[] = { 0x2C, 0x2D, 0x2E, 0x2F, 0x0C, 0x12, 0x18 };
+
+	for (int reg : lineDropped)
+	{
+		control.DropReg = reg;
+		assert(!codec.Init(cfg, &control) && !codec.Valid());
+		control.DropReg = -1;
+		codec.PowerOff();
+	}
+	control.ReadFailure = true;
+	assert(!codec.Init(cfg, &control) && !codec.Valid());
+	control.ReadFailure = false;
+	assert(codec.Init(cfg, &control));
+	codec.PowerOff();
+	puts("WM8904 capture/playback, line input, clock, gain, servo ordering/timeout and failures PASS");
 }

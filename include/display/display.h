@@ -65,7 +65,27 @@ typedef enum __Display_Scroll_Direction {
 // NOTE: variable length font, first byte of character encoding is indicate the
 // width in pixel of that character
 
+/// Polarities of DisplayTiming_t::Flags
+#define DISPL_TIMING_VSYNC_LOW			(1U << 0)	//!< VSYNC active low
+#define DISPL_TIMING_HSYNC_LOW			(1U << 1)	//!< HSYNC active low
+#define DISPL_TIMING_DE_LOW				(1U << 2)	//!< Data enable active low
+#define DISPL_TIMING_CLK_FALLING		(1U << 3)	//!< Data driven on the falling edge of the pixel clock
+#define DISPL_TIMING_BGR				(1U << 4)	//!< Red and blue data lines swapped on the panel
+
 #pragma pack(push,4)
+/// Timings of a parallel RGB panel (pixel clock, HSYNC, VSYNC, DE), as its
+/// data sheet gives them, for a display controller that scans a frame buffer
+typedef struct __Display_Timing {
+	uint32_t PixelClock;	//!< Pixel clock, Hz
+	uint16_t HSync;			//!< HSYNC width, pixel clocks
+	uint16_t HFront;		//!< Horizontal front porch, pixel clocks
+	uint16_t HBack;			//!< Horizontal back porch, pixel clocks
+	uint16_t VSync;			//!< VSYNC width, lines
+	uint16_t VFront;		//!< Vertical front porch, lines
+	uint16_t VBack;			//!< Vertical back porch, lines
+	uint32_t Flags;			//!< DISPL_TIMING_ polarities
+} DisplayTiming_t;
+
 typedef struct __Display_Cfg {
 	uint32_t DevAddr;		//!< Device address (or SPI device CS index)
 	IOPinCfg_t const *pPins;
@@ -75,6 +95,8 @@ typedef struct __Display_Cfg {
 	uint16_t Height;		//!< Vertical length in pixels
 	uint8_t PixelSize;		//!< Pixel size in bits/pixel
 	DISPL_ORIENT Orient;	//!< Display orientation
+	DisplayTiming_t const *pTiming;	//!< RGB panel timings, frame buffer displays. nullptr for the others
+	void *pFrameBuffer;		//!< Frame buffer memory, frame buffer displays. nullptr for the others
 } DisplayCfg_t;
 #pragma pack(pop)
 

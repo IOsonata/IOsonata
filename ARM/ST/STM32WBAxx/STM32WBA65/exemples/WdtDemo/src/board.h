@@ -46,8 +46,8 @@ SOFTWARE.
 #include "stm32_boards.h"
 
 // Output on USART1, the first ST-LINK virtual COM port, RX PA8, TX PB12, AF7,
-// 115200 8N1. The Release build prints there, the Debug build uses
-// semihosting.
+// 1000000 baud 8N1. The Release build prints there, the Debug build
+// uses semihosting.
 #define UART_RETARGET
 #define UART_DEVNO			BOARD_VCP_DEVNO
 #define UART_RX_PORT		IOPORTA

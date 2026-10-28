@@ -49,6 +49,11 @@ SOFTWARE.
 
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #ifndef UART_DEVNO
 #define UART_DEVNO 0
 #endif
@@ -215,7 +220,7 @@ const UARTCfg_t g_UartCfg = {
 	.DevNo = UART_DEVNO,							// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
-	.Rate = 115200,						// Baudrate
+	.Rate = UART_BAUDRATE,						// Baudrate
 	.DataBits = 8,						// Data bits
 	.Parity = UART_PARITY_NONE,			// Parity
 	.StopBits = 1,						// Stop bit

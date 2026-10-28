@@ -388,7 +388,7 @@ counter extension. Frequency changes, single-shot callbacks, disable/enable,
 reset, and other TAU channels remain unvalidated on hardware.
 
 TimerDemo Release enables high-level UART output through the J-Link OB
-virtual COM port (UART0, 115200 8N1) with no semihosting; Debug uses
+virtual COM port (UART0, 1000000 baud 8N1) with no semihosting; Debug uses
 semihosting. The UART console is an observation path only.
 
 ## ADC12 hardware validation (2026-10-14)

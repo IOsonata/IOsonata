@@ -391,8 +391,9 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	dataCfg.DevNo = pCdc->DevNo;
 	dataCfg.EvtCB = pCfg->EvtCB;
 	dataCfg.EpNo = pCdc->DataEpNo;
-	dataCfg.BufferSize =
-		(uint16_t)(USBD_CDC_TRANS_WORDS * sizeof(uint32_t));
+	// The packets of the controller in use: the application sizes the
+	// receive FIFO with USB_CTRLR_PKT_LEN_MAX(DevNo, BULK).
+	dataCfg.BufferSize = (uint16_t)USB_CTRLR_PKT_LEN_MAX(pCdc->DevNo, BULK);
 
 	if (!UsbIntrfInit(pCdc->pData, &dataCfg))
 	{

@@ -13,7 +13,7 @@ StartTx only selects an address, so an address-only scan would report every
 address. A read may advance a device's current register pointer or consume
 queued data. Devices that do not accept reads may not be found.
 
-Release output uses UART0 at 115200 baud, 8N1, no flow control. Debug output
+Release output uses UART0 at 1000000 baud, 8N1, no flow control. Debug output
 uses the debugger's semihosting console, following the shared example.
 The default Nordic DK UART pins are RX P0.08 and TX P0.06. Remove
 NORDIC_DK in board.h to use the BLUEIO_UART mappings.

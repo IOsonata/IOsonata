@@ -35,6 +35,10 @@ APPLICATIONS = {
     'UsbHidLoopback': 'exemples/usb/usb_hid_loopback.cpp',
     'UsbCustomBulkLoopback': 'exemples/usb/usb_custom_bulk_loopback.cpp',
     'UsbCompositeLoopback': 'exemples/usb/usb_composite_loopback.cpp',
+    # USB1 high speed: USB_DEVNO 1 and the 12 MHz crystal in board.h
+    'UsbCdcLoopbackHs': 'exemples/usb/usb_cdc_loopback.cpp',
+    'UsbCdcPrbsTxHs': 'exemples/usb/usb_cdc_prbs_tx.cpp',
+    'UsbCustomBulkLoopbackHs': 'exemples/usb/usb_custom_bulk_loopback.cpp',
 }
 
 
@@ -63,7 +67,7 @@ static void Event(const UsbCtrlrEvt_t *pEvent)
 }
 int main(void)
 {
-    return Lpc546xxUsbControlPrepare(6, Event) ? 0 : 1;
+    return Lpc546xxUsbControlPrepare(0, 6, Event) ? 0 : 1;
 }
 ''')
     if example:
@@ -92,13 +96,27 @@ int main(void)
     assert ('initialise_monitor_handles' in addresses) == (mode == 'Debug')
     assert re.search(r'^[0-9a-fA-F]+ T USB0_IRQHandler$', symbols, re.M)
     assert struct.unpack_from('<I', data, (16 + 28) * 4)[0] == addresses['USB0_IRQHandler'] | 1
-    if example == 'UsbHidLoopback':
+    assert re.search(r'^[0-9a-fA-F]+ T USB1_IRQHandler$', symbols, re.M)
+    assert struct.unpack_from('<I', data, (16 + 47) * 4)[0] == addresses['USB1_IRQHandler'] | 1
+    base = example[:-2] if example and example.endswith('Hs') else example
+    if base != example:
+        # board.h of the USB1 examples: the 12 MHz crystal as core oscillator
+        assert re.search(r'^[0-9a-fA-F]+ D g_McuOsc$', symbols, re.M)
+        data_section = output / 'data.bin'
+        subprocess.run([prefix + 'objcopy', '-O', 'binary', '--only-section=.data', str(image),
+                        str(data_section)], check=True)
+        heads = subprocess.check_output([prefix + 'readelf', '-SW', str(image)], text=True)
+        # .data also holds the init arrays: its type can be INIT_ARRAY
+        start = int(re.search(r'\]\s+\.data\s+\S+\s+([0-9a-f]+)', heads)[1], 16)
+        osc = struct.unpack_from('<II', data_section.read_bytes(), addresses['g_McuOsc'] - start)
+        assert osc == (1, 12000000), osc
+    if base == 'UsbHidLoopback':
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
         assert 'UsbdHid::Init(' in demangled and 'UsbIntIntrfInit' in addresses
-    if example == 'UsbCustomBulkLoopback':
+    if base == 'UsbCustomBulkLoopback':
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
         assert 'UsbdBulk::Init(' in demangled
-    if example == 'UsbCdcPrbsTx':
+    if base == 'UsbCdcPrbsTx':
         assert 'Prbs8' in addresses
     if example in ['Composite', 'UsbCompositeLoopback']:
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
@@ -106,13 +124,14 @@ int main(void)
             assert name + '::Init(' in demangled, name + ' initialization discarded'
         assert 'UsbIntIntrfInit' in addresses
     sections = subprocess.check_output([prefix + 'readelf', '-SW', str(image)], text=True)
-    assert re.search(r'\.usb_ram\s+NOBITS\s+40100000\s+\w+\s+000340', sections)
+    # USB0 and USB1 share one storage, the size of the USB1 layout
+    assert re.search(r'\.usb_ram\s+NOBITS\s+40100000\s+\w+\s+001540', sections)
     ram = addresses['__bss_end__'] - addresses['__data_start__']
     stack = addresses['__StackTop'] - addresses['__StackLimit']
     assert struct.unpack_from('<I', data)[0] == 0x20010000 - 32
     assert ram < 64 * 1024 - 32 and stack > 0
-    print(f'LPC54628 {example or "EP0"} {mode}: {len(data)} bytes flash, 832 bytes USB RAM; '
-          f'{ram} bytes main RAM; {stack} bytes linker stack allowance; USB0 vector: PASS')
+    print(f'LPC54628 {example or "EP0"} {mode}: {len(data)} bytes flash, 5440 bytes USB RAM; '
+          f'{ram} bytes main RAM; {stack} bytes linker stack allowance; USB0 and USB1 vectors: PASS')
 
 
 def main():

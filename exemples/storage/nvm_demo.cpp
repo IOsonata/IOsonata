@@ -79,6 +79,11 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #include "storage/nvm.h"
 
 // What is underneath: 0 the MCU internal memory, 1 a SPI NOR flash
@@ -156,7 +161,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = NVM_DEMO_UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -197,13 +202,18 @@ static const char s_MediumName[] = "SPI NOR flash";
 
 static const IOPinCfg_t s_SpiPins[] = SPI_PINS_CFG;
 
+// SPI clock, the board can set it
+#ifndef NVM_DEMO_SPI_RATE
+#define NVM_DEMO_SPI_RATE		8000000
+#endif
+
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
 	.Phy = SPI_PHY,
 	.Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-	.Rate = 8000000,
+	.Rate = NVM_DEMO_SPI_RATE,
 	.DataSize = 8,
 	.MaxRetry = 5,
 	.BitOrder = SPIDATABIT_MSB,

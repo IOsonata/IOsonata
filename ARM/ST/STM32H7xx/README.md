@@ -39,7 +39,7 @@ when using those configurations.
 
 1. Run `Blinky`: the three user LEDs cycle.
 2. Run `TimerDemo` in Release: USART3 on the ST-LINK virtual COM port prints
-   at 115200 baud, 8N1. Default DevNo 8 selects TIM2 at 100 kHz, with trigger
+   at 1000000 baud, 8N1. Default DevNo 8 selects TIM2 at 100 kHz, with trigger
    periods of 100, 1000, 250 and 500 ms. Debug uses semihosting; add
    `monitor arm semihosting enable` to the GDB startup commands before resume.
    Debug output appears in the OpenOCD console. Semihosting delays interrupt
@@ -325,7 +325,7 @@ A clock/seed error or data-ready timeout fails the request, clears its output
 and disables the RNG; call Enable or Reset explicitly before trying again.
 The HSI48 oscillator remains on because USB can share it.
 
-Build `CryptoTest` in Release and open ST-LINK VCP at **115200 baud, 8N1**.
+Build `CryptoTest` in Release and open ST-LINK VCP at **1000000 baud, 8N1**.
 Debug uses semihosting. No Ethernet cable is needed. See the
 [CryptoTest instructions](STM32H753/exemples/CryptoTest/README.md).
 Run `python3 tests/stm32h7/run_crypto.py` for RNG register fault tests and

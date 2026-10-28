@@ -27,8 +27,8 @@ check below covers the seven applications in this table.
 ## Pin assignments and peer setup
 
 The following are sample MCU pin assignments, not a board connector map. Match
-each application's `board.h` to your wiring before flashing. The UART console, I2CMasterDemo and TimerDemo use SCI4 at 115200 baud.
-SPIMasterDemo retains the shared example's 1000000-baud console. All use 8-N-1
+each application's `board.h` to your wiring before flashing. UartRetargetDemo uses SCI4 at 115200 baud (its project setting).
+I2CMasterDemo, TimerDemo and SPIMasterDemo use the 1000000-baud console of the shared examples. All use 8-N-1
 without flow control or DMA. Connect the adapter's TX to RXD4, RX to TXD4 and
 common ground. UartPrbsTxTest retains its existing, separate pin map.
 

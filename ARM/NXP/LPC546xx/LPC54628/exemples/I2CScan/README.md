@@ -6,8 +6,8 @@ SDA P3.23 FUNC1 and SCL P3.24 FUNC1, with external board pull-ups. Verify those
 routes against your board. The optional register check reads device 0x1D,
 register 0x0D (the configured MMA8652FC WHO_AM_I register).
 
-The scanner defaults to 100 kHz and probes addresses 0x08 through 0x77. I2C
-slave, interrupt and DMA operation are not supported by this driver.
-Debug prints through semihosting. Release uses Flexcomm 0 UART at 115200 baud,
+The scanner defaults to 100 kHz and probes addresses 0x08 through 0x77. The
+interrupt, DMA and slave modes of the driver are tested by I2CMasterSlave.
+Debug prints through semihosting. Release uses Flexcomm 0 UART at 1000000 baud,
 P0.30 TX/P0.29 RX, no flow control. Both firmware configurations link; physical
 bus scanning and electrical timing still require board validation.

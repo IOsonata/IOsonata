@@ -36,7 +36,7 @@ A hardware peripheral listed as pending is not claimed as implemented.
 | SAM4E16E | New AES-128/256 ECB/CBC/CTR; AES-128 CMAC/CCM/GCM use its block hook | SHA/P-256 software. No on-chip TRNG used; software RNG is not secure. |
 | SAM4LCxC, SAM4LSxC | New AES-128 and TRNG, AESA clock/countermeasure setup | AES-256 inherited software; SAM4L AESA supports 128-bit keys. SHA/P-256 software. |
 | LPC11U35, LPC1769 | Generic software | No secure entropy implementation. |
-| LPC54605, LPC54628 | New ROM RNG override, software algorithms | Discards 32 ROM RNG words between returned words, following the NXP driver. Production LPC546xx does not provide the AES/SHA acceleration implied by old register headers. |
+| LPC54605, LPC54628 | ROM RNG override; LPC54628 SHA block for SHA-256, other algorithms software | Discards 32 ROM RNG words between returned words, following the NXP driver. No AES hardware. The LPC54628 SHA block is used after a known-answer test at Init, the processor writes the blocks (no AHB master mode, erratum SHA.1), one stream at a time owns it and other streams use software. The other parts hash in software. |
 | nRF52805, nRF52810, nRF52832 | New default binding of ECB-128 override; existing RNG | SoftDevice ECB service used when enabled; otherwise peripheral DMA. AES-256 and decrypt modes inherit software. |
 | nRF52840 | CC3xx AES-128/256, SHA-256/HMAC, P-256/RNG | Shared ARM AES/SHA CPU FIFO driver; board validation pending. |
 | nRF5340 network | Existing ECB-128/RNG | AES-256, SHA and P-256 software. |
@@ -68,6 +68,8 @@ at `-O0` and `-O2` with address and undefined-behavior sanitizers. Their Timer
 fixture is synthetic; displayed timing values are not measured performance.
 
 - SAM4L, R9A02 and LPC546xx: 101 passed, 0 failed, 0 skipped per model run.
+- LPC54628 SHA block model (`tests/lpc/lpc546xx/crypto_test.cpp`): the same
+  test on the block, 101 passed, 0 failed, 0 skipped.
 - SAM4E and ESP32-C3/C6: 59 passed, 0 failed, 1 explicit secure-entropy skip.
   AES-256 tests run. Key generation/signing with an insecure RNG are rejected.
 - STM32H753 and L4S9 accelerator models: 101 passed, 0 failed, 0 skipped;
@@ -138,7 +140,15 @@ software remains selected for those operations.
 - Microchip SAM4E AES component header and ASF AES unit tests: 128/256-bit
   key modes, manual start and data-ready/access-error handling.
 - NXP legacy-mcux-sdk `drivers/rng/fsl_rng.c`: LPC546xx ROM API and 32-word
-  discard interval. LPC546xx datasheet revision history removes AES/SHA.
+  discard interval. LPC546xx datasheet revision history removes AES/SHA, but
+  the LPC54628 SDK device features (`FSL_FEATURE_SOC_SHA_COUNT` 1), the
+  LPC546xx errata sheet (SHA.1) and the SDK `sha` example for the
+  LPCXpresso54628 keep a SHA block on the LPC54628. The port uses it only when
+  it passes its known-answer test, and hashes in software otherwise.
+- NXP MCUXpresso SDK `drivers/sha/fsl_sha.c`: SHA-256 mode 2 with NEW,
+  WAITING before each 64-byte block written to INDATA and ALIAS, words loaded
+  little endian, padding in software, DIGEST status and digest words read
+  most significant byte first.
 - ST STM32L4S9 CMSIS device header and AES key derivation/decrypt sequencing.
 - Espressif ESP-IDF v5.4.2 `hal/esp32c3/include/hal/aes_ll.h` and
   `hal/esp32c6/include/hal/aes_ll.h`, with their SYSTEM/PCR register headers:

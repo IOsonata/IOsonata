@@ -14,7 +14,7 @@ The peripheral is a Just Works RESPONDER: it does not push a Security
 Request, it reacts when the central starts pairing. To test:
 
   1. Flash this to the board (SDC build, e.g. nRF52832 Debug_SDC).
-  2. Open the UART at 115200 8N1 (CoolTerm). You should see "advertising".
+  2. Open the UART at 1000000 baud 8N1 (CoolTerm). You should see "advertising".
   3. From a phone (nRF Connect app) scan for "SmpTest" and Connect.
   4. In nRF Connect, tap the bond/pair action (three-dot menu -> Bond),
      or trigger pairing by reading the protected characteristic.
@@ -71,6 +71,11 @@ SOFTWARE.
 
 #include "board.h"
 
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE		1000000
+#endif
+
 #ifdef MCU_OSC
 McuOsc_t g_McuOsc = MCU_OSC;
 #endif
@@ -114,7 +119,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,

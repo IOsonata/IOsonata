@@ -41,6 +41,9 @@ SPIM4 is shared by the SD card and CS47L63:
 - CS47L63 GPIO9: P0.20
 - codec-interface select: P0.21, drive low for the onboard codec
 - both onboard SPI devices are limited to 8 MHz
+- 0xFF sent on MOSI while reading (`DummyByte`): needed by the SD card in SPI
+  mode, ignored by the CS47L63 after the register address of a read
+  (DS1249F2 section 4.13.1)
 
 Audio serial pins are MCLK P0.12, SCK P0.14, LRCK P0.16, SDOUT P0.13 and SDIN P0.15. The onboard microphone is wired to the CS47L63 PDM input; the codec sends microphone samples to the nRF5340 over the audio serial port.
 

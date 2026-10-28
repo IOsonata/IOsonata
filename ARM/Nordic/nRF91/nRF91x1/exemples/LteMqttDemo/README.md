@@ -54,7 +54,7 @@ Both DKs use the existing nRF91x1 console mapping:
 | Console | UART0 through the interface MCU's VCOM0 |
 | RX | P0.26, pin operation 1 |
 | TX | P0.27, pin operation 1 |
-| Serial settings | **115200 baud, 8N1, no flow control** |
+| Serial settings | **1000000 baud, 8N1, no flow control** |
 | Timer | RTC0, modem wait trigger 0 and application pump trigger 1 |
 
 Edit `src/board.h` for `MQTT_DEMO_HOST`, `MQTT_DEMO_PORT`, and

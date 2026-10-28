@@ -26,7 +26,7 @@ openocd -f board/st_nucleo_l1.cfg
    `python3 Python/uartprbs_rx.py --baud 1000000 --port <serial-port>`.
 3. Run UartLoopback in Release, then:
    `python3 Python/uartprbs_lb.py --baud 1000000 --port <serial-port>`.
-4. Run TimerDemo in Release. Open the ST-LINK virtual COM port at 115200
+4. Run TimerDemo in Release. Open the ST-LINK virtual COM port at 1000000
    baud, 8N1. Default DevNo 5 selects TIM2 at 100 kHz, with trigger periods
    of 100, 1000, 250 and 500 ms. Override `TIMER_DEMO_DEVNO` to test other TIMs.
 

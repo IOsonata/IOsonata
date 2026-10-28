@@ -38,6 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "LPC546xx.h"
 #include "coredev/system_core_clock.h"
+#include "clock_lpc546xx.h"
 
 #define NVALMAX (0x100)
 #define PVALMAX (0x20)
@@ -62,6 +63,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LPC546XX_PLL_CCO_MAX		550000000UL
 #define LPC546XX_PLL_REF_MIN		1000000UL		// Lowest Fin / N used, keeps the PLL reference high
 #define LPC546XX_PLL_LOCK_WAIT		100000UL		// SYSPLLSTAT reads before giving up
+#define LPC546XX_AUDPLL_REF_MIN		10000UL			// Lowest Fin / N of the audio PLL (NXP SDK)
+#define LPC546XX_AUDPLL_LOCK_WAIT	10000000UL		// AUDPLLSTAT reads before giving up, the reference can be slow
 #define LPC546XX_PLLCLKSEL_FRO12M	0U
 #define LPC546XX_PLLCLKSEL_CLKIN	1U
 #define LPC546XX_MAINCLKSELB_MAINA	0U
@@ -776,4 +779,140 @@ uint32_t clkRate = 0;
 
 __attribute__ ((weak)) void SystemInitHook (void) {
   /* Void implementation of the weak function. */
+}
+
+// ---- Audio PLL ----
+
+static uint32_t s_Lpc546xxAudioPllFreq = 0;
+
+// The audio PLL setting with the output closest to Fout: P from 1, N from 1,
+// M rounded and kept in the CCO range. The first exact one is taken. A Fout
+// out of the PLL range gets its lowest or highest output.
+static bool Lpc546xxAudioPllFind(uint32_t Fin, uint32_t Fout, Lpc546xxPll_t *pPll)
+{
+	uint64_t best = UINT64_MAX;
+
+	pPll->N = 1;
+	pPll->M = 1;
+	pPll->P = 1;
+	pPll->Freq = 0;
+
+	for (uint32_t p = 1; p <= PVALMAX; p++)
+	{
+		uint64_t div = (uint64_t)p << 1;
+
+		for (uint32_t n = 1; n <= NVALMAX && Fin / n >= LPC546XX_AUDPLL_REF_MIN; n++)
+		{
+			uint64_t fin2 = (uint64_t)Fin << 1;
+			// M from the CCO Fout x 2P, rounded, then the M range of the CCO.
+			// With Fin / N 10 kHz or more, M is 27500 or less.
+			uint64_t m = ((uint64_t)Fout * div * n + Fin) / fin2;
+			uint64_t mlo = ((uint64_t)LPC546XX_PLL_CCO_MIN * n + fin2 - 1U) / fin2;
+			uint64_t mhi = (uint64_t)LPC546XX_PLL_CCO_MAX * n / fin2;
+
+			if (mlo > mhi)
+			{
+				continue;
+			}
+			if (m < mlo)
+			{
+				m = mlo;
+			}
+			else if (m > mhi)
+			{
+				m = mhi;
+			}
+
+			uint64_t f = (uint64_t)Fin * (m << 1) / n / div;
+			uint64_t diff = f > Fout ? f - Fout : Fout - f;
+
+			if (diff < best)
+			{
+				best = diff;
+				pPll->N = n;
+				pPll->M = (uint32_t)m;
+				pPll->P = p;
+				pPll->Freq = (uint32_t)f;
+				if (diff == 0U)
+				{
+					return true;
+				}
+			}
+		}
+	}
+
+	return pPll->Freq != 0U;
+}
+
+uint32_t Lpc546xxAudioPllStart(uint32_t Freq)
+{
+	uint32_t fin = Lpc546xxClkInFreq();
+	uint32_t clksel = LPC546XX_PLLCLKSEL_CLKIN;
+	Lpc546xxPll_t pll;
+
+	if (fin == 0U)
+	{
+		fin = CLK_FRO_12MHZ;
+		clksel = LPC546XX_PLLCLKSEL_FRO12M;
+	}
+
+	Lpc546xxAudioPllStop();
+
+	if (Freq == 0U || Lpc546xxAudioPllFind(fin, Freq, &pll) == false)
+	{
+		return 0;
+	}
+
+	// VD3 supplies the PLLs
+	uint32_t cnt = LPC546XX_VD_STATUS_WAIT;
+
+	SYSCON->PDRUNCFGCLR[0] = SYSCON_PDRUNCFG_PDEN_VD3_MASK;
+	while ((LPC546XX_VD_STATUS & LPC546XX_VD_STATUS_VD3_RDY) == 0U && --cnt > 0U);
+	if (cnt == 0U)
+	{
+		return 0;
+	}
+
+	// The PLL is powered down while it is changed. A divider value is taken
+	// when its REQ bit is written. The fractional divider is off (SEL_EXT).
+	SYSCON->AUDPLLCLKSEL = SYSCON_AUDPLLCLKSEL_SEL(clksel);
+	SYSCON->AUDPLLCTRL = Lpc546xxPllCtrl(pll.M, false);
+
+	uint32_t ndec = SYSCON_AUDPLLNDEC_NDEC(pllEncodeN(pll.N));
+	uint32_t pdec = SYSCON_AUDPLLPDEC_PDEC(pllEncodeP(pll.P));
+	uint32_t mdec = SYSCON_AUDPLLMDEC_MDEC(pllEncodeM(pll.M));
+
+	SYSCON->AUDPLLNDEC = ndec;
+	SYSCON->AUDPLLNDEC = ndec | SYSCON_AUDPLLNDEC_NREQ_MASK;
+	SYSCON->AUDPLLPDEC = pdec;
+	SYSCON->AUDPLLPDEC = pdec | SYSCON_AUDPLLPDEC_PREQ_MASK;
+	SYSCON->AUDPLLMDEC = mdec;
+	SYSCON->AUDPLLMDEC = mdec | SYSCON_AUDPLLMDEC_MREQ_MASK;
+	SYSCON->AUDPLLFRAC = SYSCON_AUDPLLFRAC_SEL_EXT_MASK;
+
+	SYSCON->PDRUNCFGCLR[1] = SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK;
+
+	cnt = LPC546XX_AUDPLL_LOCK_WAIT;
+	while ((SYSCON->AUDPLLSTAT & SYSCON_AUDPLLSTAT_LOCK_MASK) == 0U && --cnt > 0U);
+	if (cnt == 0U)
+	{
+		SYSCON->PDRUNCFGSET[1] = SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK;
+
+		return 0;
+	}
+
+	s_Lpc546xxAudioPllFreq = pll.Freq;
+
+	return pll.Freq;
+}
+
+void Lpc546xxAudioPllStop(void)
+{
+	SYSCON->PDRUNCFGSET[1] = SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK;
+	s_Lpc546xxAudioPllFreq = 0;
+}
+
+uint32_t Lpc546xxAudioPllFreq(void)
+{
+	return s_Lpc546xxAudioPllFreq;
 }

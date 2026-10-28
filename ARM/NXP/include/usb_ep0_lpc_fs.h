@@ -1,6 +1,23 @@
 /**-------------------------------------------------------------------------
 @file usb_ep0_lpc_fs.h
-@brief Private shared LPC full-speed control endpoint state.
+@brief Private shared LPC USB device (IP3511) control endpoint state.
+
+One state per controller, full or high speed. The port fills the fields kept
+across a reset: the registers, the endpoint list and buffers, the list
+layout and the number of endpoints. The list holds two words per physical
+endpoint (OUT, then IN, of each endpoint number). Buffers are 64 byte
+aligned: EP0 OUT, EP0 IN, then one buffer of BufSize bytes per data
+physical endpoint. A list word holds the buffer offset (address / 64) and the
+byte count: bits 15:0 and 25:16 on a full-speed controller, bits 10:0 and
+25:11 on a high-speed one (bHsList).
+
+bHsErrata enables the handling of the LPC546xx high-speed device errata
+(ES_LPC546XX): USB.2, the byte count of a list word is not correct after an
+IN packet, it is not checked; USB.15, the first byte of an IN packet that
+follows an OUT packet of 4 + 16 x N bytes is sent as 0: after such an OUT
+(OutQuirk) a data IN endpoint is armed only once an IN token has been NAKed
+(DEVCMDSTAT INTONNAK_AI). A SETUP or an IN packet with data clears OutQuirk.
+An IN packet already armed when such an OUT packet arrives is not covered.
 
 @author Hoang Nguyen Hoan
 @date Oct. 13, 2026
@@ -50,9 +67,17 @@ typedef struct __Lpc_Usb_Fs_Ep0 {
 	bool Halted;
 	bool Aborted;
 	bool AddressPending;
+	bool OutQuirk;				//!< Last OUT packet of 4 + 16 x N bytes, bHsErrata
 	// Kept across a control-transfer reset.
 	LpcUsbFsReg_t *pReg;
-	LpcUsbFsMemory_t *pMemory;
+	volatile uint32_t *pList;	//!< Endpoint command list, 256 byte aligned
+	uint8_t *pSetup;			//!< SETUP buffer
+	uint8_t *pBuf;				//!< EP0 OUT and IN buffers, then the data endpoint buffers
+	uint16_t BufSize;			//!< Buffer of a data endpoint: 64 or more, a multiple of 64
+	uint8_t NbEp;				//!< Endpoint numbers, EP0 included
+	bool bHsList;				//!< High-speed list layout
+	bool bHighSpeed;			//!< Bus at high speed, set by the port at the bus reset
+	bool bHsErrata;				//!< LPC546xx high-speed device errata USB.2 and USB.15
 	bool (*Ready)(void);
 	void (*Fault)(void);
 	void (*Event)(const UsbCtrlrEvt_t *pEvent);
@@ -63,12 +88,19 @@ extern "C" {
 #endif
 
 void LpcUsbFsEp0Command(LpcUsbFsEp0_t *pEp0, uint32_t Clear, uint32_t Set, uint32_t Ack);
+// Buffer of a physical endpoint, its list word with a byte count, and the
+// byte count of a list word.
+uint8_t *LpcUsbFsEp0Packet(LpcUsbFsEp0_t *pEp0, unsigned Physical);
 uint32_t LpcUsbFsEp0BufferAddress(LpcUsbFsEp0_t *pEp0, unsigned Physical);
+uint32_t LpcUsbFsEp0Entry(LpcUsbFsEp0_t *pEp0, unsigned Physical, uint32_t Length);
+uint16_t LpcUsbFsEp0Length(LpcUsbFsEp0_t *pEp0, uint32_t Word);
 bool LpcUsbFsEp0Retire(LpcUsbFsEp0_t *pEp0, uint32_t Mask);
+// Record the length of an OUT packet received or an IN packet sent (USB.15)
+void LpcUsbFsEp0Quirk(LpcUsbFsEp0_t *pEp0, bool In, uint16_t Length);
 void LpcUsbFsEp0Reset(LpcUsbFsEp0_t *pEp0);
-int LpcUsbFsEp0Send(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t *pBuffer, int Length);
-bool LpcUsbFsEp0Status(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t EpAddr);
-void LpcUsbFsEp0SetAddress(LpcUsbFsEp0_t *pEp0, int DevNo, uint8_t Address);
+int LpcUsbFsEp0Send(LpcUsbFsEp0_t *pEp0, uint8_t *pBuffer, int Length);
+bool LpcUsbFsEp0Status(LpcUsbFsEp0_t *pEp0, uint8_t EpAddr);
+void LpcUsbFsEp0SetAddress(LpcUsbFsEp0_t *pEp0, uint8_t Address);
 void LpcUsbFsEp0Stall(LpcUsbFsEp0_t *pEp0);
 void LpcUsbFsEp0Interrupt(LpcUsbFsEp0_t *pEp0, uint32_t Pending);
 

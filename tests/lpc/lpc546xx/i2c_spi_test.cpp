@@ -9,6 +9,7 @@
 #include <string>
 
 #include "LPC546xx.h"
+#include "dma_model.h"
 
 // Flexcomm PSELID, the present bits and the ID are read only
 struct Psel {
@@ -41,6 +42,7 @@ struct I2cRegs {
 	uint32_t INTENSET = 0, INTENCLR = 0, TIMEOUT = 0, CLKDIV = 0, INTSTAT = 0;
 	MstCtl MSTCTL;
 	uint32_t MSTTIME = 0, MSTDAT = 0;
+	uint32_t SLVCTL = 0, SLVDAT = 0, SLVADR[4] = {}, SLVQUAL0 = 0;
 };
 
 struct I2cModel {
@@ -224,7 +226,6 @@ static I2cRegs s_I2cRegs[10];
 static SpiRegs s_SpiRegs[10];
 static GpioRegs s_Gpio;
 uint32_t g_IrqMasked = 0;
-static uint32_t s_NvicEn = 0;
 
 void NVIC_ClearPendingIRQ(IRQn_Type n) { (void)n; }
 void NVIC_SetPendingIRQ(IRQn_Type n) { (void)n; }
@@ -299,6 +300,15 @@ void NVIC_DisableIRQ(IRQn_Type n) { s_NvicEn &= ~(1UL << (n & 31)); }
 #define SPI8 (&s_SpiRegs[8])
 #define SPI9 (&s_SpiRegs[9])
 #define GPIO (&s_Gpio)
+#undef DMA0
+#define DMA_Type DmaRegs
+#define DMA0 (&s_DmaRegs)
+
+// The polled drivers do not use the DMA, no request is ever on
+static bool DmaReqOn(int Ch) { (void)Ch; return false; }
+static bool DmaPeriphRead(uint32_t Addr, uint32_t *pVal) { (void)Addr; (void)pVal; return false; }
+static bool DmaPeriphWrite(uint32_t Addr, uint32_t Val) { (void)Addr; (void)Val; return false; }
+void __DMB(void) {}
 
 #include "coredev/iopincfg.h"
 #include "coredev/i2c.h"
@@ -316,9 +326,19 @@ void I2CBusReset(I2CDev_t * const pDev) { (void)pDev; }
 
 #include "../../../src/coredev/shared_intrf.cpp"
 #include "../../../ARM/NXP/LPC546xx/src/flexcomm_lpc546xx.cpp"
+#include "../../../ARM/NXP/LPC546xx/src/dma_lpc546xx.cpp"
 #include "../../../ARM/NXP/LPC546xx/src/i2c_lpc546xx.cpp"
 #include "../../../ARM/NXP/LPC546xx/src/spi_lpc546xx.cpp"
 #include "../../../src/device_intrf.cpp"
+
+// SPIInit hands DevNo 10 to the SPIFI driver, not linked here
+static const SPICfg_t *s_SpifiCfg = NULL;
+bool Lpc546xxSpifiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
+{
+	(void)pDev;
+	s_SpifiCfg = pCfgData;
+	return true;
+}
 
 // SPI chip select on P3_30, active low
 static const IOPinCfg_t s_SpiPins[] = {
@@ -350,15 +370,17 @@ static void I2cTest(void)
 	cfg.NbIOPins = 2;
 	cfg.Rate = 100000;
 
-	// Configurations not supported
+	// Configurations not supported: a slave without address or with an
+	// address over 7 bits, 10 bit addresses, SMBus. The interrupt and DMA
+	// modes are checked by i2c_bus_test.cpp.
+	DmaModelInit();
 	I2CCfg_t bad = cfg;
 	bad.Mode = I2CMODE_SLAVE;
 	assert(!I2CInit(&i2c, &bad));
-	bad = cfg;
-	bad.bIntEn = true;
+	bad.NbSlaveAddr = 5;
 	assert(!I2CInit(&i2c, &bad));
-	bad = cfg;
-	bad.bDmaEn = true;
+	bad.NbSlaveAddr = 1;
+	bad.SlaveAddr[0] = 0x80;
 	assert(!I2CInit(&i2c, &bad));
 	bad = cfg;
 	bad.AddrType = I2CADDR_TYPE_EXT;
@@ -457,14 +479,18 @@ static void SpiTest(void)
 	cfg.ChipSel = SPICSEL_AUTO;
 	cfg.DummyByte = 0xA5;
 
+	// Configurations not supported: multi master, a slave without its SSEL
+	// pin, other PHY, frames over 8 bits or under 4. The slave, interrupt
+	// and DMA modes are checked by spi_bus_test.cpp.
 	SPICfg_t bad = cfg;
+	bad.Mode = SPIMODE_MMASTER;
+	assert(!SPIInit(&spi, &bad));
+	bad = cfg;
 	bad.Mode = SPIMODE_SLAVE;
+	bad.NbIOPins = 3;
 	assert(!SPIInit(&spi, &bad));
 	bad = cfg;
-	bad.bIntEn = true;
-	assert(!SPIInit(&spi, &bad));
-	bad = cfg;
-	bad.bDmaEn = true;
+	bad.DataSize = 3;
 	assert(!SPIInit(&spi, &bad));
 	bad = cfg;
 	bad.Phy = SPIPHY_3WIRE;
@@ -475,6 +501,14 @@ static void SpiTest(void)
 	bad = cfg;
 	bad.NbIOPins = 3;
 	assert(!SPIInit(&spi, &bad));
+	bad = cfg;
+	bad.DevNo = 11;
+	assert(!SPIInit(&spi, &bad) && s_SpifiCfg == NULL);
+
+	// DevNo 10 is the SPIFI
+	bad = cfg;
+	bad.DevNo = LPC546XX_SPIFI_DEVNO;
+	assert(SPIInit(&spi, &bad) && s_SpifiCfg == &bad);
 
 	// SPI after I2C on the same Flexcomm changes the function
 	assert(SPIInit(&spi, &cfg));

@@ -50,7 +50,8 @@ SOFTWARE.
 #define UART_TX_PIN			30
 #define UART_TX_PINOP		IOPINOP_FUNC1
 
-// Interrupt-driven RX/TX FIFOs. The LPC546xx UART driver has no DMA support.
+// Interrupt-driven RX/TX FIFOs. Set UART_DMA_MODE to true for TX DMA, RX
+// stays on the RX FIFO interrupt.
 #ifndef UART_INT_MODE
 #define UART_INT_MODE		true
 #endif

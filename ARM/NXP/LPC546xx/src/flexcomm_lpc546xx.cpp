@@ -91,7 +91,7 @@ int Lpc546xxFlexcommCount(void)
 
 uint32_t Lpc546xxFlexcommSelect(int FcNo, LPC546XX_FLEXCOMM_FUNC Func)
 {
-	if (FcNo < 0 || FcNo >= LPC546XX_FLEXCOMM_CNT || Func < LPC546XX_FLEXCOMM_USART || Func > LPC546XX_FLEXCOMM_I2C)
+	if (FcNo < 0 || FcNo >= LPC546XX_FLEXCOMM_CNT || Func < LPC546XX_FLEXCOMM_USART || Func > LPC546XX_FLEXCOMM_I2S_RX)
 	{
 		return 0;
 	}
@@ -100,11 +100,14 @@ uint32_t Lpc546xxFlexcommSelect(int FcNo, LPC546XX_FLEXCOMM_FUNC Func)
 
 	Lpc546xxFlexcommClock(FcNo, true);
 
-	// USARTPRESENT, SPIPRESENT and I2CPRESENT are consecutive bits. The lock
-	// is checked before the reset, which would clear it.
+	// USARTPRESENT, SPIPRESENT and I2CPRESENT are consecutive bits,
+	// I2SPRESENT is for both I2S functions. The lock is checked before the
+	// reset, which would clear it.
 	uint32_t psel = fc->pReg->PSELID;
+	uint32_t present = Func >= LPC546XX_FLEXCOMM_I2S_TX ? FLEXCOMM_PSELID_I2SPRESENT_MASK :
+					   FLEXCOMM_PSELID_USARTPRESENT_MASK << ((uint32_t)Func - 1U);
 
-	if ((psel & (FLEXCOMM_PSELID_USARTPRESENT_MASK << ((uint32_t)Func - 1U))) == 0U ||
+	if ((psel & present) == 0U ||
 		((psel & FLEXCOMM_PSELID_LOCK_MASK) != 0U && (psel & FLEXCOMM_PSELID_PERSEL_MASK) != (uint32_t)Func))
 	{
 		return 0;

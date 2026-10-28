@@ -48,7 +48,10 @@ SOFTWARE.
 
 #include "board.h"
 
+// board.h can select another controller
+#ifndef USB_DEVNO
 #define USB_DEVNO			0
+#endif
 #define HID_STR_INTERFACE	4U
 #define HID_CENTER_SAMPLES	64U
 #define HID_ACCEL_DEAD_ZONE	700

@@ -194,7 +194,7 @@ The rate scale is not checked against a known rotation rate.
 The STM32L476 example EnvSensorDemo (`exemples/sensor/env_sensor_demo.cpp`)
 reads the onboard HTS221 (`src/sensors/humi_hts221.cpp`) on the same bus at
 0x5F, 1 Hz, and prints the humidity and the temperature on the ST-LINK virtual
-COM port at 115200 8N1 in Release, with semihosting in Debug.
+COM port at 1000000 baud 8N1 in Release, with semihosting in Debug.
 `tests/sensors/run.py` also runs this driver against a register model.
 B-L475E-IOT01A2 run (2026-10-21), Release: the HTS221 is found and prints one
 reading per second, 13.49 % and 30.93 C for the first one, then about 17.8 %
@@ -308,7 +308,7 @@ The STM32L476 library builds the STM32 RNG, `ARM/ST/src/rng_stm32.cpp`
 the 48 MHz clock. The STM32L475VG and STM32L476 have no AES, HASH or PKA. The
 STM32L476 example CryptoTest runs `exemples/crypto/crypto_engine_test.cpp`
 with the hardware RNG and the software AES, SHA-256 and P-256 engines; the
-Release build prints on the ST-LINK virtual COM port at 115200 8N1, the Debug
+Release build prints on the ST-LINK virtual COM port at 1000000 baud 8N1, the Debug
 build uses semihosting. B-L475E-IOT01A2 run (2026-10-21): 72 passed, 0
 failed, the RNG sample checks, AES-128 known answers, CMAC, CCM, GCM, software
 ECB/CBC decryption, 200 AES rounds against the software engine and the P-256
@@ -333,7 +333,7 @@ L4R5, L412, G474 and G431 in Unicorn against a model of the ADC registers that
 checks the waits of RM0351 and of the datasheets. The STM32L476 example
 AdcDemo (`exemples/converters/adc_demo.cpp`) prints VREFINT, the temperature
 sensor, VBAT and Arduino A0 (PC5) once per second, on the ST-LINK virtual COM
-port at 115200 8N1 in Release, with semihosting in Debug. B-L475E-IOT01A2 run
+port at 1000000 baud 8N1 in Release, with semihosting in Debug. B-L475E-IOT01A2 run
 (2026-10-21), reference given as 3.3 V, 11 scans: VREFINT 1.202 to 1.203 V,
 in its datasheet range of 1.182 to 1.232 V; temperature sensor 0.748 to
 0.750 V, about 25.6 C with the typical datasheet values (0.76 V at 30 C,
@@ -363,7 +363,7 @@ the L412, L422, L4P5 and L4Q5), window, software reload channels, freeze
 while a debugger halts the core. The L4 IWDG has no interrupt: no timeout
 event. See [STM32 watchdog](../WDT.md). The STM32L476 example WdtDemo
 (`exemples/misc/wdt_demo.cpp`) prints on the ST-LINK virtual COM port
-(USART1, 115200 8N1) in Release, with semihosting in Debug: timeout 2000 ms,
+(USART1, 1000000 baud 8N1) in Release, with semihosting in Debug: timeout 2000 ms,
 ten reloads every 500 ms, then the IWDG resets the MCU and the demo starts
 again. Not run on hardware yet.
 
@@ -378,7 +378,7 @@ L4Q5). `SystemInit` starts the LSE on a board with the low frequency crystal
 only when it is not ready, and does not reset the backup domain (before
 2026-10-22 it did at each boot on the L4+). See [STM32 RTC](../RTC.md). The
 STM32L476 example RtcDemo (`exemples/misc/rtc_demo.cpp`) prints on the ST-LINK
-virtual COM port (USART1, 115200 8N1) in Release, with semihosting in Debug:
+virtual COM port (USART1, 1000000 baud 8N1) in Release, with semihosting in Debug:
 the clock in use, a boot count in backup register 0, the date and time every
 second from the wakeup event, an alarm event each minute. Not run on hardware
 yet.

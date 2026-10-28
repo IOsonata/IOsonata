@@ -4,17 +4,24 @@
 #include "ep0546_test.c"
 #include "lpc_iap.h"
 
+// VBUS pin of the controller under test
+#ifndef TEST_VBUS_PORT
+#define TEST_VBUS_PORT 0
+#define TEST_VBUS_PIN 22
+#define TEST_VBUS_OP IOPINOP_FUNC7
+#endif
+
 static IOPinEvtHandler_t s_VbusHandler;
+static void *s_VbusContext;
 
 void NVIC_EnableIRQ(IRQn_Type Irq)
 {
-	assert(Irq == USB0_IRQn);
-	s_Enabled = true;
+	*TestIrqEnabled(Irq) = true;
 }
 
 void IOPinConfig(int Port, int Pin, int Op, IOPINDIR Dir, IOPINRES Res, IOPINTYPE Type)
 {
-	assert(Port == 0 && Pin == 22 && Op == IOPINOP_FUNC7);
+	assert(Port == TEST_VBUS_PORT && Pin == TEST_VBUS_PIN && Op == TEST_VBUS_OP);
 	assert(Dir == IOPINDIR_INPUT && Res == IOPINRES_NONE && Type == IOPINTYPE_NORMAL);
 }
 
@@ -22,8 +29,10 @@ int IOPinAllocateInterrupt(int Priority, int Port, int Pin, IOPINSENSE Sense,
 	IOPinEvtHandler_t Handler, void *pContext)
 {
 	assert(Priority >= 0 && Priority < (1 << __NVIC_PRIO_BITS));
-	assert(Port == 0 && Pin == 22 && Sense == IOPINSENSE_TOGGLE && pContext == NULL);
+	assert(Port == TEST_VBUS_PORT && Pin == TEST_VBUS_PIN && Sense == IOPINSENSE_TOGGLE);
+	assert(pContext != NULL);
 	s_VbusHandler = Handler;
+	s_VbusContext = pContext;
 	return 5;
 }
 
@@ -44,15 +53,13 @@ IAPSTATUS IAPReadUID(IAP_CMD_STATUS *pResult)
 
 void TestUsbInitialize(void)
 {
-	Map(SYSCON_BASE);
-	Map(USB0_BASE);
-	Map(USBFSH_BASE);
+	MapAll();
 	assert(mmap((void *)GPIO_BASE, sizeof(*GPIO), PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
 	Reset();
 	s_Memory = (LpcUsbFsMemory_t *)0x40100000;
 	s_AutoSkip = true;
-	GPIO->B[0][22] = 1;
+	GPIO->B[TEST_VBUS_PORT][TEST_VBUS_PIN] = 1;
 }
 
 LpcUsbFsMemory_t *TestUsbMemory(void)
@@ -89,19 +96,19 @@ void TestUsbSetup(const UsbSetupData_t *pSetup)
 
 void TestUsbCable(bool Connected, bool DeviceInterrupt)
 {
-	GPIO->B[0][22] = Connected ? 1 : 0;
+	GPIO->B[TEST_VBUS_PORT][TEST_VBUS_PIN] = Connected ? 1 : 0;
 	if (DeviceInterrupt)
 	{
-		USB0->DEVCMDSTAT |= 1U << 24;
-		USB0->INTSTAT |= DEVICE | 0x3FFU;
-		USB0_IRQHandler();
+		TEST_USB->DEVCMDSTAT |= 1U << 24;
+		TEST_USB->INTSTAT |= DEVICE | ((1U << TEST_USB_PHYSICAL) - 1U);
+		TEST_USB_IRQHandler();
 	}
 }
 
 void TestUsbVbusInterrupt(void)
 {
 	assert(s_VbusHandler != NULL);
-	s_VbusHandler(5, NULL);
+	s_VbusHandler(5, s_VbusContext);
 }
 
 void TestUsbSuspend(bool Suspended)
