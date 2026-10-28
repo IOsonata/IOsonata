@@ -1,0 +1,42 @@
+name: 0.13 crypto and networking host regressions
+
+on:
+  push:
+    branches:
+      - release_0_13_final_prep
+    paths:
+      - 'include/**'
+      - 'src/**'
+      - 'ARM/**'
+      - 'RISCV/**'
+      - 'tests/crypto/**'
+      - 'tests/net/**'
+      - 'tests/pwrmgnt/**'
+      - '.github/workflows/release-0_13-crypto-net.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [crypto, net, pwrmgnt]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run isolated host regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          for runner in tests/${{ matrix.suite }}/run*.py; do
+            if [[ "$runner" == tests/net/run.py ]]; then
+              echo "SKIP external lwIP packet suite: $runner"
+              continue
+            fi
+            echo "=== $runner ==="
+            timeout --signal=TERM --kill-after=10s 600s python3 -u "$runner"
+          done
