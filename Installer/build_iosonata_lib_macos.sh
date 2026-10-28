@@ -389,16 +389,31 @@ if [[ ! -d "$TAKTOS_DIR" || ${#taktos_paths[@]} -eq 0 ]]; then
   exit 1
 fi
 
-echo "Building all ${#taktos_paths[@]} TaktOS library projects..."
+echo "Building supported TaktOS library projects..."
+skipped_builds=()
 for i in "${!taktos_paths[@]}"; do
-  total_builds=$((total_builds + 1))
   name="TaktOS/${taktos_families[$i]}"
+  case "${taktos_families[$i]}" in
+    ARM/cm55/ioc)
+      skipped_builds+=("$name: Cortex-M55 is not supported by Embedded CDT")
+      continue
+      ;;
+    RISCV/esp32c3/ioc)
+      skipped_builds+=("$name: ESP32-C3 support is incomplete")
+      continue
+      ;;
+  esac
+  total_builds=$((total_builds + 1))
   if build_project "${taktos_paths[$i]}" "$name" "libTaktOS*.a"; then
     successful_builds+=("$name")
   else
     failed_builds+=("$name")
   fi
 done
+if [[ ${#skipped_builds[@]} -gt 0 ]]; then
+  echo "Skipped TaktOS projects:"
+  printf '  %s\\n' "${skipped_builds[@]}"
+fi
 if [[ ${#failed_builds[@]} -ne 0 ]]; then
   echo "Failed TaktOS projects:" >&2
   printf '  %s\n' "${failed_builds[@]}" >&2
@@ -509,6 +524,7 @@ else
 fi
 echo "========================================================="
 echo "Successful: ${#successful_builds[@]}/$total_builds"
+echo "Skipped TaktOS: ${#skipped_builds[@]}"
 for proj in "${successful_builds[@]:-}"; do
   [[ -n "$proj" ]] && echo "   + $proj"
 done
