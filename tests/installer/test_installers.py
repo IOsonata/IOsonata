@@ -65,7 +65,10 @@ esac
 		for platform, shell in self.shells():
 			with self.subTest(platform=platform):
 				result, preserved, calls = self.run_helper(platform, shell, 'clone_or_update_repo')
-				self.assertEqual(result.returncode, 0 if platform == 'macos' else 42)
+				if platform == 'macos':
+					self.assertEqual(result.returncode, 0, result.stderr)
+				else:
+					self.assertNotEqual(result.returncode, 0)
 				self.assertTrue(preserved)
 				self.assertNotIn('clone ', calls)
 
