@@ -26,6 +26,6 @@ jobs:
           set -euo pipefail
           for opt in -O0 -O2; do
             arm-none-eabi-g++ -mcpu=cortex-m4 -mthumb -std=gnu++23 -fno-exceptions -fno-rtti -Wall -Wextra -Werror "$opt" \
-              -Iinclude -IARM/include -c src/video/cam_arducam_mega.cpp \
+              -Iinclude -IARM/include -IARM/CMSIS/Core/Include -c src/video/cam_arducam_mega.cpp \
               -o "/tmp/arducam_mega_${opt#-}.o"
           done
