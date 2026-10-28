@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - release_0_13_final_prep
+    paths:
+      - 'include/**'
+      - 'src/**'
+      - 'ARM/**'
+      - 'RISCV/**'
+      - 'tests/crypto/**'
+      - 'tests/net/**'
+      - 'tests/pwrmgnt/**'
+      - '.github/workflows/release-0_13-crypto-net.yml'
   workflow_dispatch:
 
 permissions:
