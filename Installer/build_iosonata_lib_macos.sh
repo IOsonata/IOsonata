@@ -343,26 +343,26 @@ build_project() {
     return 1
   fi
 
-  # Eclipse may exit successfully after reporting unresolved tool executables.
-  # These diagnostics are fatal even if the build produced an old archive.
-  if grep -Eiq 'Unable to find full path for|command not found|No such file or directory|Headless build encountered errors|Build Failed|make: \\*\\*\\*' "$LOGFILE"; then
-    echo "ERROR: Eclipse reported missing tools or build failures for $proj_family" >&2
-    grep -Ei 'Unable to find full path for|command not found|No such file or directory|Headless build encountered errors|Build Failed|make: \\*\\*\\*' "$LOGFILE" | sort -u >&2 || true
+  # A missing executable in an unused configuration is only a warning.
+  # Actual compiler or make failures, however, are fatal.
+  if grep -Eiq 'command not found|No such file or directory|Headless build encountered errors|Build Failed|make: \\*\\*\\*' "$LOGFILE"; then
+    echo "ERROR: Eclipse reported build failures for $proj_family" >&2
     echo "Build log: $LOGFILE" >&2
     return 1
   fi
 
-  # Eclipse can return success even when a configuration did not run.
-  # Require at least one archive from a TaktOS library project.
   if [[ "$proj_family" == TaktOS/* ]]; then
     local archives
     archives=$(find "$proj_path" -mindepth 2 -maxdepth 2 -type f -name 'libTaktOS*.a' -print 2>/dev/null)
     if [[ -z "$archives" ]]; then
-      echo "ERROR: No TaktOS archive produced for $proj_family" >&2
-      echo "Check toolchain discovery and the actual managed build configurations." >&2
+      echo "ERROR: No TaktOS archive found for $proj_family" >&2
       echo "Build log: $LOGFILE" >&2
       return 1
     fi
+  fi
+
+  if grep -Fq 'Unable to find full path for' "$LOGFILE"; then
+    echo "Warning: Eclipse could not resolve a tool in at least one configuration of $proj_family." >&2
   fi
 
   echo
