@@ -12,7 +12,8 @@ to JPEG files. board.h selects the device by its name:
 and gives the SPI bus with SPI_DEVNO and SPI_PINS (SCK, MISO, MOSI, CS), the
 console UART with UART_DEVNO and the UART_RX_ and UART_TX_ pins. board.h can
 change VIDEO_DEMO_WIDTH, VIDEO_DEMO_HEIGHT (640x480 by default) and
-VIDEO_DEMO_SPI_RATE (8 MHz by default).
+VIDEO_DEMO_SPI_RATE (8 MHz by default). The SPI rate in effect is lowered when
+it is above the maximum of the device.
 
 Frame on the UART : the 4 characters VFRM, the frame length in bytes 32 bits
 little endian, then the frame data. Everything else on the UART is text. The
@@ -154,6 +155,7 @@ static const VideoDevCfg_t s_VideoCfg = {
 };
 
 #if defined(ARDUCAM_MEGA)
+#define VIDEO_DEMO_SPI_RATE_MAX	ARDUCAM_MEGA_SPI_RATE_MAX
 static CamArducamMega s_Video;
 static const char s_VideoName[] = "ArduCAM Mega";
 #else
@@ -196,6 +198,18 @@ int main()
 
 		return 1;
 	}
+
+	// The rate in effect is the closest the SPI gives, keep it within the device maximum
+	while (s_Spi.Rate() > VIDEO_DEMO_SPI_RATE_MAX)
+	{
+		uint32_t r = s_Spi.Rate();
+
+		if (s_Spi.Rate(r / 2) >= r)
+		{
+			break;
+		}
+	}
+	printf("SPI %lu Hz\r\n", (unsigned long)s_Spi.Rate());
 
 	if (s_Video.Init(s_VideoCfg, &s_Spi) == false)
 	{
