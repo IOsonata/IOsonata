@@ -7,8 +7,10 @@ set -euo pipefail
 #  Purpose: Build IOsonata libraries for selected MCU
 #           and all TaktOS ARM + RISCV libraries
 #  Platform: macOS
-#  Version: v2.4.1
+#  Version: v2.4.2
 #
+#  v2.4.2: Skip the TaktOS cm55 and esp32c3 library projects;
+#          those cores are not supported yet.
 #  v2.4.1: Skip the RP2040 and RISC-V nRF54H20 library
 #          projects; they have no MCU sources yet.
 #  v2.4.0: Build all TaktOS lib projects (ARM + RISCV) by
@@ -32,7 +34,7 @@ set -euo pipefail
 #
 # =========================================================
 
-SCRIPT_VERSION="v2.4.1"
+SCRIPT_VERSION="v2.4.2"
 ROOT="${HOME}/IOcomposer"
 IOCOMPOSER_APP="/Applications/IOcomposer.app"
 ECLIPSE_APP="/Applications/Eclipse.app"
@@ -279,6 +281,10 @@ else
     # Keep only top level ARM/<core>/ioc or RISCV/<core>/ioc
     if [[ "$rel" =~ ^ARM/[^/]+/ioc$ ]] || \
        [[ "$rel" =~ ^RISCV/[^/]+/ioc$ ]]; then
+      # TaktOS cm55 and esp32c3 are not supported yet
+      if [[ "$rel" == "ARM/cm55/ioc" ]] || [[ "$rel" == "RISCV/esp32c3/ioc" ]]; then
+        continue
+      fi
       taktos_families+=("$rel")
       taktos_paths+=("$proj_root")
     fi

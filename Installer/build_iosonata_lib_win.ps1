@@ -38,9 +38,11 @@
     Build with custom IOcomposer location
 
 .NOTES
-    Version: v2.4.1
+    Version: v2.4.2
     Platform: Windows
 
+    v2.4.2: Skip the TaktOS cm55 and esp32c3 library projects; those cores
+            are not supported yet.
     v2.4.1: Skip the RP2040 and RISC-V nRF54H20 library projects; they
             have no MCU sources yet.
     v2.4.0: Build all TaktOS lib projects (ARM + RISCV) by default
@@ -57,7 +59,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v2.4.1"
+$SCRIPT_VERSION = "v2.4.2"
 
 # --- Helper: Print Banner ---
 function Show-Banner {
@@ -236,6 +238,10 @@ if ($NoTaktos) {
         $rel = $projRoot.Replace("$TaktosDir\", "")
         # Keep only top level ARM\<core>\ioc or RISCV\<core>\ioc
         if ($rel -match '^(ARM|RISCV)\\[^\\]+\\ioc$') {
+            # TaktOS cm55 and esp32c3 are not supported yet
+            if ($rel -eq "ARM\cm55\ioc" -or $rel -eq "RISCV\esp32c3\ioc") {
+                return
+            }
             $taktosFamilies += $rel
             $taktosPaths += $projRoot
         }
