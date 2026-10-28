@@ -137,11 +137,24 @@ clone_or_update_repo() {
         git clone --depth=1 "$repo_url" "$target_dir"
       fi
     else
+      # Existing developer checkouts may contain local edits. Never stash,
+      # reset or overwrite those changes as part of IDE installation.
+      if [[ -n "$(git -C "$target_dir" status --porcelain --untracked-files=normal)" ]]; then
+        echo "${YELLOW}⚠️  Local changes found; preserving checkout without pulling:${RESET} $target_dir"
+        echo "   Commit or stash the changes manually to update this repository later."
+        return 0
+      fi
       echo "${YELLOW}🔄 Updating${RESET} $target_dir ..."
-      (cd "$target_dir" && git pull --rebase)
+      if ! (cd "$target_dir" && git pull --rebase); then
+        echo "${YELLOW}⚠️  Repository update failed; keeping existing checkout:${RESET} $target_dir" >&2
+        echo "   Inspect the Git state and update this repository manually." >&2
+        return 0
+      fi
       if [[ "$recurse_submodules" == "true" ]]; then
         echo "${BLUE}   ↳ Updating submodules...${RESET}"
-        (cd "$target_dir" && git submodule update --init --recursive)
+        if ! (cd "$target_dir" && git submodule update --init --recursive); then
+          echo "${YELLOW}⚠️  Submodule update failed; preserving existing checkout:${RESET} $target_dir" >&2
+        fi
       fi
     fi
   else

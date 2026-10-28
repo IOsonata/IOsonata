@@ -1075,8 +1075,7 @@ fi
 
 chmod +x "$TMP_CLONE"
 
-# Prefer --no-build if supported by the clone script (newer versions). If not supported,
-# retry without it. We capture output so we can detect whether the builder ran.
+# Synchronize sources only. Compilation starts after IOcomposer installation.
 CLONE_ARGS=(--home "$ROOT" --no-build)
 if [[ "$MODE" == "force" ]]; then
   CLONE_ARGS+=(--mode force)
@@ -1094,12 +1093,6 @@ if ! run_clone "${CLONE_ARGS[@]}"; then
 fi
 
 rm -f "$TMP_CLONE" || true
-
-# Detect whether the clone script already invoked the IOsonata library builder.
-CLONE_INVOKED_BUILD=0
-if grep -qE "IOsonata Library (Auto-)?Build|IOsonata Library Builder|Available IOsonata library projects|Select project to build" "$CLONE_LOG"; then
-  CLONE_INVOKED_BUILD=1
-fi
 
 rm -f "$CLONE_LOG" || true
 
@@ -1280,29 +1273,17 @@ echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.m
 # ---------------------------------------------------------
 # IOsonata Library Build (run exactly once)
 # ---------------------------------------------------------
-# If the clone script already invoked the builder, do NOT run it again.
-# If it did NOT invoke the builder (e.g., clone supports --no-build), run it here.
-if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
-  BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
-  if [[ -f "$BUILD_SCRIPT" ]]; then
-    echo ""
-    echo "========================================================="
-    echo "  IOsonata Library Build"
-    echo "========================================================="
-    echo ""
-    chmod +x "$BUILD_SCRIPT"
-    "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_DIR"
-  else
-    echo ""
-    echo "ℹ️  IOsonata library builder not found:"
-    echo "   $BUILD_SCRIPT"
-    echo "   Library build not run: builder script is missing."
-    echo ""
+# Compile only after completed IOcomposer setup; build failures are nonfatal.
+BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
+if [[ -f "$BUILD_SCRIPT" ]]; then
+  echo "========================================================="
+  echo "  TaktOS and IOsonata Library Build"
+  echo "========================================================="
+  if ! bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_DIR"; then
+    echo "Warning: Library build failed; installation continues." >&2
   fi
 else
-  echo ""
-  echo "IOsonata library build was invoked by the SDK synchronization step; not running it again."
-  echo ""
+  echo "Warning: Library builder not found: $BUILD_SCRIPT" >&2
 fi
 
 # ---------------------------------------------------------

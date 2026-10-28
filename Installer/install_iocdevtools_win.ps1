@@ -940,17 +940,8 @@ try {
     exit 1
 }
 
-# Prefer -NoBuild when supported. Capture output to detect whether the builder ran.
-$CLONE_INVOKED_BUILD = $false
-
-# First, check if the clone script supports -NoBuild by examining its content
-$cloneScriptContent = Get-Content $TMP_CLONE -Raw -ErrorAction SilentlyContinue
-$supportsNoBuild = $cloneScriptContent -match '\$NoBuild|\-NoBuild'
-
-$cloneArgs = @("-SdkHome", $ROOT)
-if ($supportsNoBuild) {
-    $cloneArgs += "-NoBuild"
-}
+# SDK synchronization is source-only. Library builds run after IDE setup.
+$cloneArgs = @("-SdkHome", $ROOT, "-NoBuild")
 if ($MODE -eq "force") {
     $cloneArgs += @("-Mode", "force")
 }
@@ -968,12 +959,7 @@ if ($cloneExitCode -ne 0) {
 
 Remove-Item $TMP_CLONE -Force -ErrorAction SilentlyContinue
 
-# Detect whether the clone script already invoked the IOsonata library builder.
 if (Test-Path $CLONE_LOG) {
-    $logContent = Get-Content $CLONE_LOG -Raw -ErrorAction SilentlyContinue
-    if ($logContent -match "IOsonata Library (Auto-)?Build|IOsonata Library Builder|Available IOsonata library projects|Select project to build") {
-        $CLONE_INVOKED_BUILD = $true
-    }
     Remove-Item $CLONE_LOG -Force -ErrorAction SilentlyContinue
 }
 
@@ -1170,29 +1156,20 @@ Write-Host "   Projects can include it with: include `$(IOSONATA_ROOT)/makefile_
 # ---------------------------------------------------------
 # IOsonata Library Build (run exactly once)
 # ---------------------------------------------------------
-# If the clone script already invoked the builder, do NOT run it again.
-# If it did NOT invoke the builder (e.g., clone supports -NoBuild), run it here.
-if (-not $CLONE_INVOKED_BUILD) {
-    $BS = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
-    if (Test-Path $BS) {
-        Write-Host
-        Write-Host "=========================================================" -ForegroundColor Cyan
-        Write-Host "  IOsonata Library Build" -ForegroundColor Cyan
-        Write-Host "=========================================================" -ForegroundColor Cyan
-        Write-Host
+# Build after IOcomposer setup. Source compilation errors do not stop installation.
+$BS = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
+if (Test-Path $BS) {
+    Write-Host "  TaktOS and IOsonata Library Build" -ForegroundColor Cyan
+    try {
         & $BS -SdkHome $ROOT -IocomposerDir $ECLIPSE_DIR
-		if ($LASTEXITCODE -ne 0) { throw "Library build failed with exit code $LASTEXITCODE" }
-    } else { 
-        Write-Host
-        Write-Host "   [INFO] IOsonata library builder not found:" -ForegroundColor Yellow
-        Write-Host "   $BS" -ForegroundColor Yellow
-        Write-Host "   Library build not run: builder script is missing." -ForegroundColor Yellow
-        Write-Host
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Library build returned exit code $LASTEXITCODE; installation continues."
+        }
+    } catch {
+        Write-Warning "Library build failed; installation continues: $_"
     }
 } else {
-    Write-Host
-    Write-Host "   IOsonata library build was invoked by SDK synchronization; not running it again."
-    Write-Host
+    Write-Warning "Library builder not found: $BS"
 }
 
 Build-IOcomposerIndex

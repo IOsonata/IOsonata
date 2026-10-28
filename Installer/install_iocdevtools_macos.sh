@@ -833,39 +833,127 @@ echo "✅ Eclipse Path Variables configured in plugin_customization.ini:"
 echo "   IOSONATA_LOC=$ROOT"
 echo
 
-# Step 1: Ensure Eclipse has initialized its instance folder
-if [[ -d "$ECLIPSE_APP" ]]; then
-  echo "⏳ Initializing Eclipse to create instance configuration..."
-  "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize || true
+# ---------------------------------------------------------
+# Sync IOsonata + external SDKs (single source of truth)
+# ---------------------------------------------------------
+echo
+echo "📦 Syncing IOsonata + external SDKs..."
+
+LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+LOCAL_CLONE="$LOCAL_INSTALLER_DIR/clone_iosonata_sdk_macos.sh"
+TMP_CLONE=""
+CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.log.XXXXXX)
+
+if [[ -f "$LOCAL_CLONE" ]]; then
+	CLONE_SCRIPT="$LOCAL_CLONE"
+	echo "SDK clone script: $CLONE_SCRIPT"
+else
+	CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_macos.sh"
+	TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.sh.XXXXXX)
+	if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
+		echo "Failed to download SDK clone script: $CLONE_URL" >&2
+		[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" "$CLONE_LOG"
+		exit 1
+	fi
+	CLONE_SCRIPT="$TMP_CLONE"
+	echo "SDK clone script: $CLONE_URL"
 fi
 
-# Step 2: Find the newest instance configuration folder under ~/.eclipse
-INSTANCE_CFG=""
-if [[ -x "$PYTHON3" ]]; then
-  INSTANCE_CFG=$("$PYTHON3" - <<'PY'
-import os, sys
-base = os.path.expanduser("~/.eclipse")
-cands = []
-if os.path.isdir(base):
-  for root, dirs, _ in os.walk(base):
-    for d in dirs:
-      if d == "configuration":
-        p = os.path.join(root, d)
-        try:
-          cands.append((os.path.getmtime(p), p))
-        except OSError:
-          pass
-if not cands:
-  sys.exit(1)
-cands.sort(reverse=True)
-print(cands[0][1])
-PY
-) || INSTANCE_CFG=""
+# SDK synchronization is source-only. Compilation belongs to the final
+# installer phase, after IOcomposer has been installed, signed and configured.
+CLONE_ARGS=(--home "$ROOT" --no-build)
+if [[ "$MODE" == "force" ]]; then
+  CLONE_ARGS+=(--mode force)
 fi
+
+if ! zsh "$CLONE_SCRIPT" "${CLONE_ARGS[@]}" > >(tee -a "$CLONE_LOG") 2> >(tee -a "$CLONE_LOG" >&2); then
+  echo "SDK synchronization failed. See $CLONE_LOG" >&2
+  [[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE"
+  exit 1
+fi
+
+[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" || true
+rm -f "$CLONE_LOG" || true
+
+# ---------------------------------------------------------
+# Install IOsonata Eclipse Plugin
+# ---------------------------------------------------------
+echo
+install_iosonata_plugin
+
+install_iocomposer "$ECLIPSE_APP/Contents/Eclipse"
+
+sudo /usr/libexec/PlistBuddy -c "Set :CFBundleName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
+sudo /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist" 2>/dev/null || \
+	sudo /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
+
+# The downloaded app was modified by the installer. Sign it before any launch.
+sudo xattr -cr "$ECLIPSE_APP"
+sudo codesign --force --deep --sign - "$ECLIPSE_APP"
+sudo codesign --verify --deep --strict "$ECLIPSE_APP" || {
+	echo "Error: IOcomposer application signature verification failed." >&2
+	exit 1
+}
+
+# The installed app and plugins are complete and signed before initialization.
+# Signing/renaming can change the Eclipse instance identity under ~/.eclipse.
+# Seed user-level MCU preferences only after the final signed instance exists.
+# Snapshot instance configuration state before launching the signed app.
+# A pre-existing Eclipse instance may be newer than IOcomposer's instance.
+INSTANCE_SNAPSHOT=$(mktemp /tmp/iocomposer_instance.XXXXXXXX)
+capture_instances() {
+  "$PYTHON3" - "$1" <<'PY'
+import json
+import os
+import sys
+
+root = os.path.expanduser("~/.eclipse")
+result = {}
+if os.path.isdir(root):
+  for directory, subdirs, _ in os.walk(root):
+    if os.path.basename(directory) != "configuration":
+      continue
+    subdirs[:] = []
+    paths = [directory, os.path.join(directory, "config.ini"),
+             os.path.join(directory, "org.eclipse.osgi"),
+             os.path.join(directory, ".settings")]
+    stamps = []
+    for path in paths:
+      try:
+        stat = os.stat(path)
+        stamps.append([stat.st_mtime_ns, stat.st_ctime_ns])
+      except OSError:
+        stamps.append(None)
+    result[os.path.realpath(directory)] = stamps
+if sys.argv[1] == "snapshot":
+  print(json.dumps(result))
+else:
+  with open(sys.argv[1], encoding="utf-8") as stream:
+    previous = json.load(stream)
+  changed = [path for path, stamps in result.items()
+             if previous.get(path) != stamps]
+  if len(changed) != 1:
+    sys.stderr.write("Expected exactly one IOcomposer instance changed during initialization; found %d.\\n" % len(changed))
+    sys.exit(1)
+  print(changed[0])
+PY
+}
+capture_instances snapshot > "$INSTANCE_SNAPSHOT"
+echo "Initializing signed IOcomposer Eclipse configuration..."
+INIT_OK=1
+if ! "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize; then
+  INIT_OK=0
+  echo "Warning: Signed IOcomposer initialization failed." >&2
+fi
+INSTANCE_CFG=""
+if [[ "$INIT_OK" -eq 1 ]]; then
+  INSTANCE_CFG=$(capture_instances "$INSTANCE_SNAPSHOT") || INSTANCE_CFG=""
+fi
+rm -f "$INSTANCE_SNAPSHOT"
 
 if [[ -z "$INSTANCE_CFG" ]]; then
-  echo "⚠️ Could not find Eclipse instance configuration folder under ~/.eclipse."
-  echo "   Eclipse may not have been started yet."
+  echo "Warning: Could not identify the IOcomposer instance initialized under ~/.eclipse." >&2
+  echo "Not writing MCU preferences to an unrelated Eclipse instance." >&2
 else
   echo "📂 Found Eclipse settings: $INSTANCE_CFG"
   mkdir -p "$INSTANCE_CFG/.settings"
@@ -934,87 +1022,6 @@ for pref in org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs \
 	}
 done
 echo "Embedded CDT global compiler preferences created in $ECLIPSE_SETTINGS"
-
-# ---------------------------------------------------------
-# Sync IOsonata + external SDKs (single source of truth)
-# ---------------------------------------------------------
-echo
-echo "📦 Syncing IOsonata + external SDKs..."
-
-LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-LOCAL_CLONE="$LOCAL_INSTALLER_DIR/clone_iosonata_sdk_macos.sh"
-TMP_CLONE=""
-CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.log.XXXXXX)
-
-if [[ -f "$LOCAL_CLONE" ]]; then
-	CLONE_SCRIPT="$LOCAL_CLONE"
-	echo "SDK clone script: $CLONE_SCRIPT"
-else
-	CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/clone_iosonata_sdk_macos.sh"
-	TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.sh.XXXXXX)
-	if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
-		echo "Failed to download SDK clone script: $CLONE_URL" >&2
-		[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" "$CLONE_LOG"
-		exit 1
-	fi
-	CLONE_SCRIPT="$TMP_CLONE"
-	echo "SDK clone script: $CLONE_URL"
-fi
-
-# Prefer --no-build if supported by the clone script (newer versions). If not supported,
-# retry without it. We capture output so we can detect whether the builder ran.
-CLONE_ARGS=(--home "$ROOT" --no-build)
-if [[ "$MODE" == "force" ]]; then
-  CLONE_ARGS+=(--mode force)
-fi
-
-run_clone() {
-  # shellcheck disable=SC2068
-  zsh "$CLONE_SCRIPT" "$@" 2>&1 | tee -a "$CLONE_LOG"
-}
-
-if ! run_clone "${CLONE_ARGS[@]}"; then
-	echo "SDK synchronization failed. See $CLONE_LOG" >&2
-	[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE"
-	exit 1
-fi
-
-[[ -z "$TMP_CLONE" ]] || rm -f "$TMP_CLONE" || true
-
-# Detect whether the clone script already invoked the IOsonata library builder.
-CLONE_INVOKED_BUILD=0
-if grep -qE "IOsonata Library (Auto-)?Build|IOsonata Library Builder|Available IOsonata library projects|Select project to build" "$CLONE_LOG"; then
-  CLONE_INVOKED_BUILD=1
-fi
-
-rm -f "$CLONE_LOG" || true
-
-# ---------------------------------------------------------
-# Install IOsonata Eclipse Plugin
-# ---------------------------------------------------------
-echo
-install_iosonata_plugin
-
-install_iocomposer "$ECLIPSE_APP/Contents/Eclipse"
-
-sudo /usr/libexec/PlistBuddy -c "Set :CFBundleName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
-sudo /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist" 2>/dev/null || \
-	sudo /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
-
-# The downloaded app was modified by the installer. Sign it before any launch.
-sudo xattr -cr "$ECLIPSE_APP"
-sudo codesign --force --deep --sign - "$ECLIPSE_APP"
-sudo codesign --verify --deep --strict "$ECLIPSE_APP" || {
-	echo "Error: IOcomposer application signature verification failed." >&2
-	exit 1
-}
-
-# MCU global preferences are written in the installation configuration scope
-# above; creating a user instance is independent of optional library builds.
-echo "Initializing IOcomposer Eclipse configuration..."
-if ! "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize; then
-	echo "Warning: Eclipse instance initialization failed; global MCU preferences remain in $ECLIPSE_SETTINGS." >&2
-fi
 
 # ---------------------------------------------------------
 # Generate makefile_path.mk
@@ -1171,41 +1178,35 @@ echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.m
 # ---------------------------------------------------------
 # IOsonata Library Build (run exactly once)
 # ---------------------------------------------------------
-# If the clone script already invoked the builder, do NOT run it again.
-# If it did NOT invoke the builder (e.g., clone supports --no-build), run it here.
-if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
-	# A locally executed installer must use its adjacent builder, not the
-	# potentially older builder in the installed SDK checkout.
-	LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-	LOCAL_BUILDER="$LOCAL_INSTALLER_DIR/build_iosonata_lib_macos.sh"
-	BUILD_STAGE=""
-	if [[ -f "$LOCAL_BUILDER" ]]; then
-		BUILD_SCRIPT="$LOCAL_BUILDER"
-		echo "Library builder: local installer checkout ($BUILD_SCRIPT)"
-	else
-		BUILD_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/build_iosonata_lib_macos.sh"
-		BUILD_STAGE=$(mktemp -d)
-		BUILD_SCRIPT="$BUILD_STAGE/build_iosonata_lib_macos.sh"
-		if ! curl -fsSL "$BUILD_URL" -o "$BUILD_SCRIPT"; then
-			rm -rf "$BUILD_STAGE"
-			echo "Failed to download library builder: $BUILD_URL" >&2
-			exit 1
-		fi
-		echo "Library builder: $BUILD_URL"
-	fi
-	echo ""
-	echo "========================================================="
-	echo "  TaktOS and IOsonata Library Build"
-	echo "========================================================="
-	echo ""
-	if ! bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
-		[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
-		echo "Warning: Library build failed; installation continues. Rebuild later after correcting the errors." >&2
-	fi
-	[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
+# Build only after the completed signed IDE has been initialized and
+# its MCU preferences have been written. Compilation failures are nonfatal.
+LOCAL_INSTALLER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+LOCAL_BUILDER="$LOCAL_INSTALLER_DIR/build_iosonata_lib_macos.sh"
+BUILD_STAGE=""
+if [[ -f "$LOCAL_BUILDER" ]]; then
+  BUILD_SCRIPT="$LOCAL_BUILDER"
+  echo "Library builder: local installer checkout ($BUILD_SCRIPT)"
 else
-	echo "SDK synchronization already invoked the library builder."
+  BUILD_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/build_iosonata_lib_macos.sh"
+  BUILD_STAGE=$(mktemp -d)
+  BUILD_SCRIPT="$BUILD_STAGE/build_iosonata_lib_macos.sh"
+  if ! curl -fsSL "$BUILD_URL" -o "$BUILD_SCRIPT"; then
+    rm -rf "$BUILD_STAGE"
+    echo "Warning: Could not download library builder: $BUILD_URL" >&2
+    BUILD_SCRIPT=""
+    BUILD_STAGE=""
+  fi
 fi
+
+if [[ -n "$BUILD_SCRIPT" ]]; then
+  echo "========================================================="
+  echo "  TaktOS and IOsonata Library Build"
+  echo "========================================================="
+  if ! bash "$BUILD_SCRIPT" --home "$ROOT" --iocomposer "$ECLIPSE_APP"; then
+    echo "Warning: Library build failed; installation continues." >&2
+  fi
+fi
+[[ -z "$BUILD_STAGE" ]] || rm -rf "$BUILD_STAGE"
 
 # ---------------------------------------------------------
 build_iocomposer_index
