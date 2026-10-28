@@ -1,0 +1,29 @@
+name: 0.13 camera driver compile check
+
+on:
+  push:
+    branches:
+      - release_0_13_final_prep
+    paths:
+      - 'include/video/**'
+      - 'src/video/**'
+      - '.github/workflows/release-0_13-camera.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Arducam Mega driver with IOsonata headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for opt in -O0 -O2; do
+            g++ -std=gnu++23 -fno-exceptions -fno-rtti -Wall -Wextra -Werror "$opt" \
+              -Iinclude -IARM/include -c src/video/cam_arducam_mega.cpp \
+              -o "/tmp/arducam_mega_${opt#-}.o"
+          done
