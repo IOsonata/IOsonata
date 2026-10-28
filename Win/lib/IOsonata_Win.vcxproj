@@ -123,7 +123,7 @@
     <ClCompile Include="..\..\src\utf8.c" />
     <ClCompile Include="..\..\src\utf8cvt.cpp" />
     <ClCompile Include="src\usb_hidhost_impl.cpp" />
-    <ClCompile Include="..\\..\\src\\video\\cam_arducam_mega.cpp" />
+    <ClCompile Include="..\..\src\video\cam_arducam_mega.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\video\videodev.h" />
