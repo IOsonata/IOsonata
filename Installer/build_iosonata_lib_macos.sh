@@ -356,6 +356,19 @@ build_project() {
     return 1
   fi
 
+  # Eclipse can return success even when a configuration did not run.
+  # Require at least one archive from a TaktOS library project.
+  if [[ "$proj_family" == TaktOS/* ]]; then
+    local archives
+    archives=$(find "$proj_path" -mindepth 2 -maxdepth 2 -type f -name 'libTaktOS*.a' -print 2>/dev/null)
+    if [[ -z "$archives" ]]; then
+      echo "ERROR: No TaktOS archive produced for $proj_family" >&2
+      echo "Check toolchain discovery and the actual managed build configurations." >&2
+      echo "Build log: $LOGFILE" >&2
+      return 1
+    fi
+  fi
+
   echo
   echo "✅ Library build completed for $proj_family"
   echo
@@ -391,6 +404,8 @@ for i in "${!taktos_paths[@]}"; do
   fi
 done
 if [[ ${#failed_builds[@]} -ne 0 ]]; then
+  echo "Failed TaktOS projects:" >&2
+  printf '  %s\n' "${failed_builds[@]}" >&2
   echo "TaktOS library build failed; IOsonata target selection is not started." >&2
   exit 1
 fi
