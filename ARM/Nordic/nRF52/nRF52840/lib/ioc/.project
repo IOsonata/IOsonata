@@ -5490,5 +5490,20 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/ioexp_sx1509.cpp</locationURI>
 		</link>
+			<link>
+			<name>include/video/videodev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
+		</link>
+		<link>
+			<name>include/video/cam_arducam_mega.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
+		</link>
+		<link>
+			<name>src/video/cam_arducam_mega.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
