@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - release_0_13_final_prep
+    paths:
+      - 'Installer/**'
+      - 'tests/installer/**'
+      - '.github/workflows/installer-regressions.yml'
   pull_request:
     paths:
       - 'Installer/**'
