@@ -224,6 +224,40 @@ void BtGapScanStop()
 	sd_ble_gap_scan_stop();
 }
 
+// --- Link procedures on an established connection ---
+
+// The SoftDevice PHY bits are the LE Set PHY bits of BT_GAP_PHY_*, 0 is
+// BLE_GAP_PHY_AUTO, no preference
+static_assert(BLE_GAP_PHY_1MBPS == BT_GAP_PHY_1MBITS && BLE_GAP_PHY_2MBPS == BT_GAP_PHY_2MBITS &&
+			  BLE_GAP_PHY_CODED == BT_GAP_PHY_CODED && BLE_GAP_PHY_AUTO == 0,
+			  "SoftDevice PHY bits differ from BT_GAP_PHY_*");
+
+bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
+				 uint16_t PhyOptions)
+{
+	if ((TxPhys & ~BT_GAP_PHY_ALL) != 0 || (RxPhys & ~BT_GAP_PHY_ALL) != 0 ||
+		PhyOptions > BT_GAP_PHY_OPT_MAX)
+	{
+		return false;
+	}
+
+	// The SoftDevice chooses the coding of the coded PHY, a required coding
+	// cannot be honored. A preferred one leaves the choice to it.
+	if ((TxPhys & BT_GAP_PHY_CODED) &&
+		(PhyOptions == BT_GAP_PHY_OPT_REQUIRE_S2 || PhyOptions == BT_GAP_PHY_OPT_REQUIRE_S8))
+	{
+		return false;
+	}
+
+	const ble_gap_phys_t phys = {
+		.tx_phys = TxPhys,
+		.rx_phys = RxPhys,
+	};
+
+	// The result arrives as BLE_GAP_EVT_PHY_UPDATE
+	return sd_ble_gap_phy_update(ConnHdl, &phys) == NRF_SUCCESS;
+}
+
 // BtGapConnSecGet for this port is in bt_sec_nrf52.cpp. It reads the Peer
 // Manager, which is linked only when the application uses security. Without
 // it the generic default in bt_gap.cpp reports the link as not secured.
