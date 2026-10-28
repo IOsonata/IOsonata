@@ -1038,7 +1038,10 @@ install_iocomposer "$ECLIPSE_APP/Contents/Eclipse"
 # Bind GUI and headless Eclipse to one user-owned configuration scope.
 # This configuration is independent of whether libraries are compiled.
 ECLIPSE_INI="$ECLIPSE_APP/Contents/Eclipse/eclipse.ini"
-"$PYTHON3" - "$ECLIPSE_INI" "$ECLIPSE_CONFIG" <<'PY'
+ECLIPSE_INI_STAGE=$(mktemp)
+sudo cp "$ECLIPSE_INI" "$ECLIPSE_INI_STAGE"
+sudo chown "$(id -un)" "$ECLIPSE_INI_STAGE"
+"$PYTHON3" - "$ECLIPSE_INI_STAGE" "$ECLIPSE_CONFIG" <<'PY'
 from pathlib import Path
 import sys
 path = Path(sys.argv[1])
@@ -1056,6 +1059,8 @@ index = result.index("-vmargs") if "-vmargs" in result else len(result)
 result[index:index] = ["-configuration", configuration]
 path.write_text("\n".join(result) + "\n")
 PY
+sudo cp "$ECLIPSE_INI_STAGE" "$ECLIPSE_INI"
+rm -f "$ECLIPSE_INI_STAGE"
 
 sudo /usr/libexec/PlistBuddy -c "Set :CFBundleName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist"
 sudo /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName IOcomposer" "$ECLIPSE_APP/Contents/Info.plist" 2>/dev/null || \
