@@ -20,8 +20,8 @@ the SAMD21J18A linker script for other SAMD21 package/memory variants.
 - [x] MCU-specific flash/RAM linker memory maps
 - [ ] Microchip device CMSIS headers and core/part definitions
 - [x] Cortex-M0+ IRQ vector tables using IOsonata `ResetEntry` (source added; build and device validation pending)
-- [ ] Clock source and GCLK setup, synchronization and clock reporting
-- [ ] PORT GPIO, mux and external interrupts
+- [ ] Clock source and GCLK setup, synchronization and clock reporting (reset-time 1 MHz system-clock API added; peripheral clock control and 48 MHz setup pending)
+- [ ] PORT GPIO, mux and external interrupts (basic GPIO/mux source added; interrupt API, device definitions and validation pending)
 - [ ] SERCOM UART, SPI and I2C drivers
 - [ ] TC/TCC hardware timers
 - [ ] Embedded CDT managed static-library projects and generic examples
@@ -38,3 +38,11 @@ and pin capabilities must remain distinct.
 
 A minimal working port must pass the existing generic Blinky, UART PRBS and
 timer examples on physical hardware before it is described as supported.
+
+## Current clock limitation
+
+The initial `system_samd.c` retains the reset-time OSC8M/8 configuration
+(1 MHz CPU clock). It does not configure peripheral GCLK channels or clocks
+needed by SERCOM, USB or timers. Oscillator overrides and the generic clock
+selection functions are not yet implemented. Do not use this stage to validate
+UART baud rate, high-speed timing or USB.
