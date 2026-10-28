@@ -20,7 +20,7 @@ the SAMD21J18A linker script for other SAMD21 package/memory variants.
 - [x] MCU-specific flash/RAM linker memory maps
 - [ ] Microchip device CMSIS headers and core/part definitions
 - [x] Cortex-M0+ IRQ vector tables using IOsonata `ResetEntry` (source added; build and device validation pending)
-- [ ] Clock source and GCLK setup, synchronization and clock reporting (reset-time 1 MHz clock plus selectable 8 MHz OSC8M/GCLK0 path added; peripheral clock control and 48 MHz setup pending)
+- [ ] Clock source and GCLK setup, synchronization and clock reporting (reset-time 1 MHz clock plus selectable 8 MHz OSC8M/GCLK0 path added; channel enable/disable added; peripheral bus gates and 48 MHz setup pending)
 - [ ] PORT GPIO, mux and external interrupts (basic GPIO/mux source added; interrupt API, device definitions and validation pending)
 - [ ] SERCOM UART, SPI and I2C drivers
 - [ ] TC/TCC hardware timers
@@ -43,7 +43,8 @@ timer examples on physical hardware before it is described as supported.
 
 The initial `system_samd.c` retains the reset-time OSC8M/8 configuration
 (1 MHz CPU clock) unless the application selects OSC8M at 8 MHz using
-`SystemCoreClockSelect(OSC_TYPE_RC, 8000000)`. It does not configure peripheral GCLK channels or clocks
-needed by SERCOM, USB or timers. External oscillator selection, 48 MHz DFLL configuration and peripheral
-clock routing are not yet implemented. Do not use this stage to validate
+`SystemCoreClockSelect(OSC_TYPE_RC, 8000000)`. The internal SamdGclkChannelEnable/Disable functions now select peripheral
+GCLK channels, but peripheral bus clock gates, device-specific channel IDs,
+and the 48 MHz clock source must still be integrated with the drivers. External oscillator selection, 48 MHz DFLL configuration and peripheral
+clock routing is not yet integrated with SERCOM or timer drivers. Do not use this stage to validate
 UART baud rate, high-speed timing or USB.
