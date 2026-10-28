@@ -960,6 +960,95 @@ echo "✅ Eclipse Path Variables configured in plugin_customization.ini:"
 echo "   IOSONATA_LOC=$ROOT"
 echo
 
+# Step 1: Ensure Eclipse has initialized its instance folder
+if [[ -d "$ECLIPSE_APP" ]]; then
+  echo "⏳ Initializing Eclipse to create instance configuration..."
+  "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize || true
+fi
+
+# Step 2: Find the newest instance configuration folder under ~/.eclipse
+INSTANCE_CFG=""
+if [[ -x "$PYTHON3" ]]; then
+  INSTANCE_CFG=$("$PYTHON3" - <<'PY'
+import os, sys
+base = os.path.expanduser("~/.eclipse")
+cands = []
+if os.path.isdir(base):
+  for root, dirs, _ in os.walk(base):
+    for d in dirs:
+      if d == "configuration":
+        p = os.path.join(root, d)
+        try:
+          cands.append((os.path.getmtime(p), p))
+        except OSError:
+          pass
+if not cands:
+  sys.exit(1)
+cands.sort(reverse=True)
+print(cands[0][1])
+PY
+) || INSTANCE_CFG=""
+fi
+
+if [[ -z "$INSTANCE_CFG" ]]; then
+  echo "⚠️ Could not find Eclipse instance configuration folder under ~/.eclipse."
+  echo "   Eclipse may not have been started yet."
+else
+  echo "📂 Found Eclipse settings: $INSTANCE_CFG"
+  mkdir -p "$INSTANCE_CFG/.settings"
+
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.core.prefs" <<EOF
+eclipse.preferences.version=1
+xpack.arm.toolchain.path=$ARM_DIR/bin
+xpack.riscv.toolchain.path=$RISCV_DIR/bin
+xpack.openocd.path=$OPENOCD_DIR/bin
+xpack.strict=true
+EOF
+
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
+eclipse.preferences.version=1
+toolchain.path.$ARM_HASH=$ARM_DIR/bin
+toolchain.path.1287942917=$ARM_DIR/bin
+global.toolchain.path.strict=true
+workspace.toolchain.path.strict=true
+EOF
+
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
+eclipse.preferences.version=1
+toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
+toolchain.path.2273142912=$RISCV_DIR/bin
+toolchain.path.2021824384=$RISCV_DIR/bin
+global.toolchain.path.strict=true
+workspace.toolchain.path.strict=true
+EOF
+
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
+eclipse.preferences.version=1
+install.folder=$OPENOCD_DIR/bin
+install.folder.strict=true
+EOF
+
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.pyocd.core.prefs" <<EOF
+eclipse.preferences.version=1
+install.folder=$TOOL_BIN
+executable.name=pyocd
+folder.strict=true
+EOF
+
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.core.runtime.prefs" <<EOF
+eclipse.preferences.version=1
+environment/project/IOCOMPOSER_HOME/value=$ROOT
+environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
+environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
+environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
+environment/project/NRFX_HOME/value=$EXT/nrfx
+environment/project/NRFXLIB_HOME/value=$EXT/sdk-nrfxlib
+environment/project/NRF5_SDK_HOME/value=$EXT/nRF5_SDK
+environment/project/NRF5_SDK_MESH_HOME/value=$EXT/nRF5_SDK_Mesh
+environment/project/BSEC_HOME/value=$EXT/BSEC
+EOF
+fi
+
 # The global compiler paths are seeded in the IOcomposer configuration scope.
 # Do not write to an unrelated or arbitrarily selected ~/.eclipse instance.
 for pref in org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs \
