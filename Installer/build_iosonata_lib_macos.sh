@@ -356,6 +356,15 @@ build_project() {
     return 1
   fi
 
+  # Eclipse may exit successfully after reporting unresolved tool executables.
+  # These diagnostics are fatal even if the build produced an old archive.
+  if grep -Eiq 'Unable to find full path for|command not found|No such file or directory|Headless build encountered errors|Build Failed|make: \\*\\*\\*' "$LOGFILE"; then
+    echo "ERROR: Eclipse reported missing tools or build failures for $proj_family" >&2
+    grep -Ei 'Unable to find full path for|command not found|No such file or directory|Headless build encountered errors|Build Failed|make: \\*\\*\\*' "$LOGFILE" | sort -u >&2 || true
+    echo "Build log: $LOGFILE" >&2
+    return 1
+  fi
+
   # Eclipse can return success even when a configuration did not run.
   # Require at least one archive from a TaktOS library project.
   if [[ "$proj_family" == TaktOS/* ]]; then
