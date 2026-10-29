@@ -541,7 +541,7 @@ The build script discovers current IOsonata library projects from `*/lib/ioc/.pr
 ```
 =========================================================
   IOsonata + TaktOS Library Builder (macOS)
-  Version: v2.4.0
+  Version: v2.4.2
 =========================================================
 
 ✓ IOcomposer found at: /Applications/IOcomposer.app

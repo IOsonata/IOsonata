@@ -4,7 +4,7 @@
 # ---------------------------------------------------------
 #  Purpose: Clone IOsonata SDK and dependencies with colors
 #  Platform: macOS (zsh)
-#  Version: v1.1.0
+#  Version: v1.3.1
 # =========================================================
 
 set -e  # Exit on first error
