@@ -1,4 +1,4 @@
-name: SAMD Cortex-M0+ compile
+name: SAMD source compile (not CDT library build)
 on:
   push:
     branches: [samd11_samd21_port]
@@ -17,7 +17,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
-      - name: Compile SAM D sources
+      - name: Compile individual SAM D sources
         shell: bash
         run: |
           set -eu
