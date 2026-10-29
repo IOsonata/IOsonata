@@ -576,11 +576,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_uc8151x.h</locationURI>
 		</link>
 		<link>
-			<name>include/display/display_uc8151x.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_uc8151x.h</locationURI>
-		</link>
-		<link>
 			<name>include/display/eink_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
