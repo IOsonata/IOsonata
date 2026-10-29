@@ -30,11 +30,12 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdbool.h>
 #include <stdint.h>
+#include "samdxxx.h"
 
 #include "coredev/system_core_clock.h"
 #include "clock_samd.h"
 
-#if !defined(__SAMD11D14A__) && !defined(__SAMD21J18A__)
+#if !defined(__SAMD11D14AM__) && !defined(__SAMD21J18A__)
 #error Unsupported SAM D device
 #endif
 
