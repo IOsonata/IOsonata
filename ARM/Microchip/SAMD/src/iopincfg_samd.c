@@ -30,10 +30,11 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdbool.h>
 #include <stdint.h>
+#include "samdxxx.h"
 
 #include "coredev/iopincfg.h"
 
-#if defined(__SAMD11D14A__)
+#if defined(__SAMD11D14AM__)
 #define SAMD_PORT_COUNT	1
 #elif defined(__SAMD21J18A__)
 #define SAMD_PORT_COUNT	2
