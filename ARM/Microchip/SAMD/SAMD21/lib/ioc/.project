@@ -26,6 +26,21 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>include</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/coredev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/cfifo.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/cfifo.c</locationURI>
