@@ -29,6 +29,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include "samd11d14am.h"
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);
@@ -101,3 +102,6 @@ void (* const __Vectors[35])(void) = {
 
 _Static_assert(sizeof(__Vectors) == 35U * sizeof(void (*)(void)),
 	"SAMD11 vector table must contain 16 core and 19 external entries");
+
+_Static_assert(PERIPH_MAX_IRQn + 17 == 35,
+	"Vector table does not match CMSIS interrupt numbering");
