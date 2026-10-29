@@ -73,8 +73,9 @@ bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
 
 Select the MCU library you need. The builder discovers managed projects under
 `lib/ioc` and reports each configuration's result. It also builds supported
-TaktOS library projects when present; cm55 and esp32c3 are skipped. Use
-`--no-taktos` on macOS/Linux or `-NoTaktos` on Windows to omit that step.
+TaktOS library projects; cm55 and esp32c3 are skipped. The macOS builder
+requires TaktOS and builds it before the IOsonata selection menu. Linux and
+Windows accept `--no-taktos` and `-NoTaktos`, respectively, to omit that step.
 A listed MCU project does not establish hardware support for every peripheral;
 check [Supported Targets](../docs/supported-targets.md).
 

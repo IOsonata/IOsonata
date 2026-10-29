@@ -193,7 +193,7 @@ consumer is curve-blind and key-blind:
 | `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` | `ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp` | Hardware P-256 import, generation, agreement and ECDSA. Shares the key-context type with `CryptoUecc`, without inheriting its software methods. |
 | `CryptoSoftAes` | `CipherEngine`, `MacEngine`, `AeadEngine` | `src/crypto/crypto_aes_modes.cpp` | Software AES-128/256 cipher (FIPS-197) and AES-128 CMAC. CMAC/CCM/GCM use protected virtual block hooks, which hardware subclasses override. |
 | `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128/256 encryption and decryption on Silex BA411e. Inherits CMAC/CCM/GCM composition from `CryptoAesModes`, without software AES. |
-| `CryptoSoftSha256` | `HashEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4). Unkeyed digest; serves DFU image verification and any hashing consumer. |
+| `CryptoSoftSha256` | `HashEngine`, `MacEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4) and HMAC-SHA-256. Serves DFU image verification and other hashing or MAC consumers. |
 | `CryptoSoftRng` | `RngEngine` | `src/crypto/crypto_softrng.cpp` | Software PRNG base. Statistical use only; not a security random source. |
 | `CryptoRngNrf` | `RngEngine` | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG (conditioned CRACEN TRNG on nRF54L/H, NRF_RNG on nRF52/network core, CC3xx on nRF5340 application/nRF91). Platform singleton `CryptoRngNrfInstance`. |
 | `CryptoRngStm32` | `RngEngine` | `ARM/ST/src/rng_stm32.cpp` | STM32 hardware RNG peripheral. Platform singleton `CryptoRngStm32Instance`. |
