@@ -108,11 +108,10 @@ The command below runs from the Blinky `ioc` folder after a Debug build:
 
 ```sh
 openocd -f interface/cmsis-dap.cfg -f target/at91samdXX.cfg \
-    -c "adapter speed 400; program Debug/Blinky_<PART>.elf verify reset exit"
+    -c "adapter speed 400; program Debug/Blinky.elf verify reset exit"
 ```
 
-Replace `<PART>` with `SAMD11D14AM` or `SAMD21J18A`.
-Use the actual artifact filename shown by Eclipse if it differs.
+The Eclipse project and artifact are named `Blinky` on both targets, matching the existing IOsonata example convention.
 The expected first result is a blinking yellow LED0. There is no serial
 output in this GPIO smoke test.
 
