@@ -32,7 +32,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 
-#include "samd21j18a.h"
+#include "samdxxx.h"
 
 #include "coredev/iopincfg.h"
 #include "coredev/interrupt.h"
