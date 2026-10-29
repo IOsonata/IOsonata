@@ -8,8 +8,8 @@ separate cipher, hash or key-agreement pointers.
 
 The capability interfaces below describe the class hierarchy used by the
 implementations. They do not require application-level provider selection.
-See [the MCU port audit](crypto-port-audit.md) for hardware coverage, remaining
-gaps and validation evidence.
+See [the crypto example guide](../../exemples/crypto/README.md) for test
+coverage and recorded hardware measurements.
 
 ## Interfaces
 

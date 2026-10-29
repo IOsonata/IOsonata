@@ -95,8 +95,7 @@ must be serialized before concurrent operation access begins. Copy construction 
 Existing consumers accepting capability pointers can receive `&g_Crypto` through
 ordinary base conversion. Software-only objects have independent RNG state.
 
-The [MCU port audit](crypto-port-audit.md) lists hardware acceleration and required
-software operations for every port. AES-128/256 ECB/CBC/CTR and P-256 import are
+AES-128/256 ECB/CBC/CTR and P-256 import are
 required generic operations. Missing hardware support selects the software
 implementation inside the library; a hardware error never triggers a software
 retry. AES-256 is not an optional CryptoTest capability.
