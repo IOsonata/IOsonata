@@ -15,14 +15,14 @@ The book remains useful for the object-design model and historical background, b
 
 ## Start here
 
-1. [Project README](../README.md) — project scope, precompiled-library model, benchmarks and hardware references.
-2. [Getting Started](getting-started.md) — install IOcomposer, build an MCU library, open an example, flash and debug.
-3. [Quick Reference](quick-reference.md) — commands, project actions and common configuration examples.
-4. [Buzzer User Guide](buzzer.md) — continuous tones, note/tempo melodies, sound effects and PWM-backed audio output.
-5. [USB User Guide](usb-user-guide.md) — build, configure and test the supported USB device functions.
-6. [FAQ](FAQ.md) — concise answers about the architecture, target projects and build model.
-7. [Supported Targets](supported-targets.md) — MCU support, implementation limits, hardware-validation baselines and target-status rules.
-8. [Dependencies](dependencies.md) — tool, SDK and optional-library boundaries.
+1. [Project README](../README.md): project scope, precompiled-library model, benchmarks and hardware references.
+2. [Getting Started](getting-started.md): install IOcomposer, build an MCU library, open an example, flash and debug.
+3. [Quick Reference](quick-reference.md): commands, project actions and common configuration examples.
+4. [Buzzer User Guide](buzzer.md): continuous tones, note/tempo melodies, sound effects and PWM-backed audio output.
+5. [USB User Guide](usb-user-guide.md): build, configure and test the supported USB device functions.
+6. [FAQ](FAQ.md): concise answers about the architecture, target projects and build model.
+7. [Supported Targets](supported-targets.md): MCU support, implementation limits, hardware-validation baselines and target-status rules.
+8. [Dependencies](dependencies.md): tool, SDK and optional-library boundaries.
 
 ## Release preparation
 

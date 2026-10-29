@@ -413,7 +413,7 @@ The [BleGateway example](../exemples/gateway/ble_gateway.cpp) on nRF91
 observes BlueIO manufacturer-specific TPH and GAS advertisements, initiates
 central-role connections to matching TPH tags, discovers the Thingy-compatible
 environmental service (UUID `0x0200`), and subscribes to temperature,
-pressure, and humidity (`0x0201`–`0x0203`). The application does not send
+pressure, and humidity (`0x0201` to `0x0203`). The application does not send
 HCI commands itself: it uses the GAP/GATT application APIs, and defers scanning
 and connection initiation until outside HCI event callbacks.
 

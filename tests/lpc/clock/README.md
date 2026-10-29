@@ -426,7 +426,7 @@ coverage catches the previously missing SystemPeriphClockSet symbol.
 
 LPC17xx startup now uses the application's overridable `g_McuOsc.CoreOsc`.
 The weak default remains the 4 MHz IRC. `SystemCoreClockSelect` supports
-IRC at 4 MHz and main crystals or external oscillators at 1–25 MHz, choosing the closest supported
+IRC at 4 MHz and main crystals or external oscillators at 1 to 25 MHz, choosing the closest supported
 CPU rate to CORE_FREQ. Explicit selection distinguishes a 4 MHz crystal
 from IRC; the legacy frequency API retains its original interpretation.
 Unsupported types, invalid physical frequencies and hardware
