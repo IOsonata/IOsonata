@@ -1,4 +1,4 @@
-# BLE Security Demo — nRF52840
+# BLE Security Demo, nRF52840
 
 This example uses **declarative security configuration**. There is no pairing
 console, command interpreter, or application-managed SMP state machine.

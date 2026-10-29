@@ -2726,11 +2726,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/sdk-nrf-bm/include/bm/settings/bluetooth_name.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/settings/bluetooth_name.h</locationURI>
-		</link>
-		<link>
 			<name>src/sdk-nrf-bm/include/bm/softdevice_handler/nrf_sdh.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/softdevice_handler/nrf_sdh.h</locationURI>
@@ -2749,11 +2744,6 @@
 			<name>src/sdk-nrf-bm/include/bm/storage/bm_storage.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/storage/bm_storage.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/storage/bm_storage_backend.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/storage/bm_storage_backend.h</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/lib/bluetooth/ble_adv/ble_adv.c</name>
@@ -2826,9 +2816,9 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_cgms.h</locationURI>
 		</link>
 		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_date_time.h</name>
+			<name>src/sdk-nrf-bm/include/bm/bluetooth/ble_date_time.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_date_time.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/ble_date_time.h</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_hids.h</name>
@@ -2859,11 +2849,6 @@
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_nus.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_nus.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/common.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/common.h</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/uuid.h</name>

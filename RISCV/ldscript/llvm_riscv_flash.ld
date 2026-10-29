@@ -38,7 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------
 Modified by        	Date        	Description
-Hoan				July 3, 2015	Add Freescale Flash security config area	
+Hoan				July 3, 2015	Add Freescale Flash security config area
 ----------------------------------------------------------------------------*/
 
 /*
@@ -63,7 +63,7 @@ SECTIONS {
 		__isr_vector = .;
 		KEEP(*(.vectors*))
 	} > FLASH
-	
+
 	/* This is where the firmware informaton is stored. Usefull for bootloader */
 
 	.Version : ALIGN(4)
@@ -73,19 +73,19 @@ SECTIONS {
 		FILL(0xff)  /* fill unsused area to have consistant checksum */
 /*		. = 0x400 - SIZEOF(.ivector);/* - SIZEOF(.Version);*/
 	} > FLASH
-		
+
 	.AppStart : ALIGN(4)
 	{
-		/* Application Entry point starts here.  Normaly is the ResetEntry function */ 
+		/* Application Entry point starts here.  Normaly is the ResetEntry function */
 		KEEP(*(.AppStart))
 	} > FLASH
-	
+
 	/* Code region starts here */
 	.text : ALIGN(4)
-	{	
+	{
 		KEEP(*(.init))
 		KEEP(*(.fini))
-		
+
 		/* .ctors */
 		KEEP(*crtbegin.o (.ctors))
 		KEEP(*crtbegin?.o(.ctors))
@@ -102,9 +102,9 @@ SECTIONS {
 		*(.text*)
 		*(.gnu.linkonce.r.*)
 	} > FLASH
-    
-	.rodata : ALIGN(4) 
-	{ 
+
+	.rodata : ALIGN(4)
+	{
 		*(.rodata .rodata.* .rodata1)
 		/* Small constants, -msmall-data-limit */
 		*(.srodata .srodata.*)
@@ -135,26 +135,26 @@ SECTIONS {
 	PROVIDE(__iram_data_start__ = __iram_start__);
 
 	.eh_frame_hdr : ALIGN(4)
-	{ 
-		*(.eh_frame_hdr) 
+	{
+		*(.eh_frame_hdr)
 	} > FLASH
-	
-	.eh_frame : 
-	{ 
+
+	.eh_frame :
+	{
 /*		. = ALIGN(4);*/
 		*(.eh_frame)
 	} > FLASH
-	
-	.gcc_except_table : 
-	{ 
+
+	.gcc_except_table :
+	{
 		. = ALIGN(4);
-		*(.gcc_except_table .gcc_except_table.*) 
+		*(.gcc_except_table .gcc_except_table.*)
 	} > FLASH
-	
+
 	. = ALIGN(4);
 	__text_end__ = .;
     __etext = .;
-	
+
 
 	.data : ALIGN(4)
 	{
@@ -177,7 +177,7 @@ SECTIONS {
 		KEEP(*(.fini_array))
 		PROVIDE (__fini_array_end = .);
 
-		. = ALIGN(4);        
+		. = ALIGN(4);
 
 		*(vtable)
 		*(.data*)
@@ -194,14 +194,14 @@ SECTIONS {
 		__data_end__ = .;
 
 	} > RAM AT > FLASH
-	
+
 	__data_start__ = ADDR(.data);
    	__data_loc__ = LOADADDR(.data);
 
    	/* calculate size to take full range from .data to .bss in case other data sections
    	   were inserted in between from outside of this file */
    	__data_size__ = __bss_start__ - __data_start__ ; /* SIZEOF(.data);*/
-	
+
 
 	.bss : ALIGN(4)
 	{
@@ -212,11 +212,11 @@ SECTIONS {
 		*(COMMON)
       	*(.gnu.linkonce.b.*)
 		__bss_end__ = .;
-		PROVIDE(_end = .);		              
+		PROVIDE(_end = .);
 	} > RAM
-	
+
    __bss_size__ = SIZEOF(.bss);
-	
+
 	.heap : ALIGN(4)
 	{
       __HeapBase = .;
@@ -246,7 +246,7 @@ SECTIONS {
 	 * size of stack_dummy section */
 	__StackLimit = __HeapLimit + 4;/*__StackTop - SIZEOF(.stack_dummy);*/
 	PROVIDE(__stack = __StackTop);
-	
+
 	/* Check if data + heap + stack exceeds RAM limit */
 	ASSERT(__StackLimit < __StackTop, "region RAM overflowed with stack")
 	ASSERT(__heap_start__ < __StackTop, "region RAM overflowed with heap")
