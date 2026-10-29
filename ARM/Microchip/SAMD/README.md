@@ -75,3 +75,15 @@ USART enabled, waits for ENABLE synchronization, and checks received data
 for framing, parity and buffer overflow errors. The device clock source and
 register behavior have not been confirmed on hardware. Build, waveform and
 UART PRBS tests remain required. No hardware results are claimed.
+
+## CMSIS device selection
+
+The managed projects select the exact Microchip device header through
+`include/samdxxx.h`:
+
+- SAMD11D14AM: `__SAMD11D14AM__` selects `samd11d14am.h`.
+- SAMD21J18A: `__SAMD21J18A__` selects `samd21j18a.h`.
+
+The SAMD11D14A name without the AM package suffix is not the device
+identifier of the imported header. Drivers use the vendor CMSIS header
+for register and interrupt definitions; no vendor HAL is linked.
