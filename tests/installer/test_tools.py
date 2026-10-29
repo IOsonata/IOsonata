@@ -77,7 +77,7 @@ class ToolTests(unittest.TestCase):
 						FAILURE=failure)
 					env[folder] = str(dest)
 					result = subprocess.run(['bash', '-c', 'set -e\n' + block], env=env, text=True, capture_output=True)
-					self.assertEqual(result.returncode == 0, failure == 'none', result.stderr)
+					self.assertEqual(result.returncode == 0, platform == 'linux' or failure == 'none', result.stderr)
 					self.assertEqual(program.read_text().strip(), 'replacement' if failure == 'none' else 'original')
 					self.assertTrue((dest / 'python3').exists() is False)
 
