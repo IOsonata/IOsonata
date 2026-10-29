@@ -80,5 +80,30 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
 		</link>
+		<link>
+			<name>include/video</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/video</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/video/videodev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
+		</link>
+		<link>
+			<name>include/video/cam_arducam_mega.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
+		</link>
+		<link>
+			<name>src/video/cam_arducam_mega.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
