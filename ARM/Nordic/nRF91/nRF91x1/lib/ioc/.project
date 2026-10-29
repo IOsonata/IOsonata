@@ -241,16 +241,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatusdef.h</locationURI>
 		</link>
 		<link>
-			<name>include/system_core_clock.h</name>
-			<type>1</type>
-			<locationURI>copy_PARENT/include/system_core_clock.h</locationURI>
-		</link>
-		<link>
-			<name>include/system_nrf9120.h</name>
-			<type>1</type>
-			<locationURI>copy_PARENT/include/system_nrf9120.h</locationURI>
-		</link>
-		<link>
 			<name>include/utf8.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/utf8.h</locationURI>
