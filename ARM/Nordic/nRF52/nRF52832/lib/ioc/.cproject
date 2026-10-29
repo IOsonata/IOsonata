@@ -86,6 +86,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -259,6 +260,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -478,6 +480,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -652,6 +655,8 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -870,6 +875,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -931,6 +937,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -1104,6 +1111,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/vqf/vqf/cpp&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
@@ -1112,6 +1120,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -1233,6 +1242,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -1408,6 +1418,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -1627,6 +1638,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -1803,6 +1815,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/nrf_fuel_gauge/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
