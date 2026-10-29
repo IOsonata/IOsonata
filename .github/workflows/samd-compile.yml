@@ -1,0 +1,44 @@
+name: SAMD Cortex-M0+ compile
+on:
+  push:
+    branches: [samd11_samd21_port]
+    paths:
+      - 'ARM/Microchip/SAMD/**'
+      - 'tests/samd/**'
+      - '.github/workflows/samd-compile.yml'
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Arm GNU compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi g++-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Compile SAM D sources
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p /tmp/samd-objects
+          FLAGS="-mcpu=cortex-m0plus -mthumb -ffreestanding -Wall -Wextra -Werror"
+          for device in SAMD11 SAMD21; do
+            if [ "$device" = SAMD11 ]; then
+              part=__SAMD11D14A__
+              target=ARM/Microchip/SAMD/SAMD11
+              vector="$target/src/vectors_samd11.c"
+            else
+              part=__SAMD21J18A__
+              target=ARM/Microchip/SAMD/SAMD21
+              vector="$target/src/vectors_samd21.c"
+            fi
+            includes="-Iinclude -IARM/CMSIS/Core/Include -IARM/Microchip/SAMD/include -I$target/include"
+            arm-none-eabi-gcc $FLAGS -std=c11 -D"$part" $includes -c "$vector" -o "/tmp/samd-objects/$device-vectors.o"
+            arm-none-eabi-gcc $FLAGS -std=c11 -D"$part" $includes -c ARM/Microchip/SAMD/src/system_samd.c -o "/tmp/samd-objects/$device-system.o"
+            arm-none-eabi-gcc $FLAGS -std=c11 -D"$part" $includes -c ARM/Microchip/SAMD/src/iopincfg_samd.c -o "/tmp/samd-objects/$device-gpio.o"
+            if [ "$device" = SAMD21 ]; then
+              arm-none-eabi-gcc $FLAGS -std=c11 -D"$part" $includes -c "$target/src/sercom_clock_samd21.c" -o /tmp/samd-objects/SAMD21-sercom-clock.o
+              arm-none-eabi-g++ $FLAGS -std=c++17 -fno-rtti -fno-exceptions -D"$part" $includes -c "$target/src/uart_samd21.cpp" -o /tmp/samd-objects/SAMD21-uart.o
+            fi
+          done
