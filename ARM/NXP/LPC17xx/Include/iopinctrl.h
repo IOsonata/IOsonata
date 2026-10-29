@@ -3,7 +3,7 @@ File   : iopinctrl.h
 
 Author : Hoang Nguyen Hoan          Nov. 20, 2011
 
-Desc   : General I/O pin control implementation specific 
+Desc   : General I/O pin control implementation specific
 		 This file must be named iopinctrl.h no matter which target
 
 		 This is LPC17xx implementation

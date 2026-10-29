@@ -163,7 +163,7 @@ static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo)
 static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uint32_t Data)
 {
 	uint32_t mask = Ra4m1OutputMask(PortNo);
-	if (mask) Ra4m1PortRegs(PortNo)->PCNTR3 = 
+	if (mask) Ra4m1PortRegs(PortNo)->PCNTR3 =
 		(Data & mask) | ((~Data & mask) << 16);
 }
 #endif
