@@ -3,8 +3,8 @@
 The current software baseline covers LPC11U35, LPC1769 and LPC54628. Startup,
 GPIO, UART, timers, polling-master I2C/SPI and full-speed USB device examples
 are integrated. Other NXP directories are not covered by this validation.
-Hardware validation is a separate gate: the LPC11U35 board is being replaced,
-and host models/builds do not establish physical operation on any board.
+Host models and builds do not establish physical operation. Consult the
+peripheral examples for the tested configurations and hardware limits.
 
 ## Supported modes
 

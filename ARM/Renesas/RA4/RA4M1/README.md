@@ -11,53 +11,19 @@ general DTC, or NMI driver is included yet. UART TX uses native DMAC.
 The IIC master (polling and interrupt) and slave are rewritten and checked
 against a host model of the IIC, not yet hardware-validated.
 
-## IOsonata 0.13 release scope
+## Supported operation and limits
 
-RA4M1 I2C (IIC) master/slave hardware validation is deferred beyond 0.13
-by maintainer decision on October 18, 2026. Software regression fixes have
-since been applied, but IIC remains excluded from the hardware-validated
-functionality claimed for this release. This deferral removes RA4M1 I2C
-hardware validation from the 0.13 merge requirements.
+The port uses Renesas CMSIS peripheral structures and the existing IOsonata
+interfaces. Startup, GPIO output, SCI UART, timer callbacks and USB have
+hardware results on EK-RA4M1. Timer DevNo 3 (GPT1) produced four compare
+callbacks at configured periods of 100, 1000, 250 and 500 ms. Semihosted
+printing in that run does not establish interrupt latency or clock accuracy.
 
-On October 26, 2026, the maintainer confirmed that suitable external bus
-pull-ups are unavailable, so the EK-RA4M1 loopback cannot currently be tested.
-The earlier SCL-low observation is retained as an unresolved hardware result;
-its cause has not been established. Passing host tests do not establish
-electrical operation or resolve that observation. Startup, GPIO, timer, UART
-and USB hardware results remain unchanged.
-
-## Implementation status (October 13, 2026)
-
-Target: `prerelease_0.13`. The RA4M1 register-access migration uses Renesas
-CMSIS peripheral structures rather than handwritten base addresses and
-register-offset wrappers. The existing IOsonata interfaces remain unchanged.
-This is an MCU-level implementation, not an EK-RA4M1 board support package.
-
-The user has confirmed successful firmware compilation and execution on an
-EK-RA4M1: **Blinky PASS** (startup and GPIO output) and **TimerDemo PASS**
-(initialization and timer callback operation). A subsequent hardware log
-exercised Timer DevNo 3 (GPT1), with four compare callbacks configured for
-100 ms, 1000 ms, 250 ms and 500 ms. All four generated callbacks; sustained
-T0/T1/T2 measured intervals largely matched their requested periods.
-The printed T3 callback intervals varied; the test used J-Link `rdimon`
-semihosting, which can halt the CPU and distort callback timestamps.
-Therefore the log is **functional evidence, not a bound on GPT interrupt
-latency or period accuracy**. For timing measurement, collect timestamps in
-RAM without semihosting inside the measurement loop.
-
-**Not yet confirmed on hardware:** the rewritten IIC master and slave paths, the RSPI master and slave (new, see RSPI master and slave), GPIO edge interrupts,
-other AGT/GPT channels and all six GPT compare routes, long-run rollover/pause/resume,
-stop/start recovery, low-power operation, general DMA/DTC and ELC integration.
-See USBFS supply and validation below for current USB hardware results.
-SCI UART is complete and hardware-tested. The October 26, 2026 host
-regression pass repaired the moved port paths and updated the startup model
-for the current USB clock selector and HOCO access. IIC passed 1,060
-assertions and startup passed 59 scenarios at -O0, -Os, -O2 and with
-AddressSanitizer/UndefinedBehaviorSanitizer. UART and RSPI host models also
-passed those four build modes; the USB clock regression passed at -O0, -Os
-and -O2. These are host results, not MCU execution. Full production-header
-ARM builds and ELF layout checks were not run in that review environment
-because the required ARM/LLVM toolchains were unavailable.
+IIC master/slave hardware validation is deferred beyond 0.13. The earlier
+SCL-low observation remains unresolved; host-model results do not establish
+electrical operation. RSPI, GPIO edge interrupts, other timer channels,
+long-run rollover/pause/resume and low-power modes need separate hardware
+validation. See the peripheral sections for supported modes and results.
 
 ### Interrupt architecture
 
@@ -77,15 +43,6 @@ event and each enabled GPT compare event may consume separate CPU slots;
 Timer DevNo 3 with four compare triggers can use five slots. GPIO's fixed
 external pin IRQ *line* is distinct from the dynamically allocated NVIC slot.
 The ICU driver is not a replacement for the ARM NVIC.
-
-### Remaining engineering work
-
-Complete the RA4M1 coding-style pass (file headers, declaration placement,
-one statement per line, explicit multi-line control-flow blocks), run
-production-header Cortex-M4 Debug and Release checks and ELF layout checks,
-and validate GPIO interrupts on hardware. IIC master/slave hardware testing
-remains deferred as described in the release scope above.
-No merge into `main` is authorized by this documentation update.
 
 ## IOsonata integration
 
@@ -274,7 +231,7 @@ LVD0 remains disabled by these initial option values; production voltage and
 watchdog policy must be selected deliberately for the final product.
 The security-MPU region is disabled. Debug-ID/access-window configuration at
 `0x01010000` is not emitted or altered. Boot-swap/bootloader layouts are not
-provided in this increment.
+provided in this port.
 
 The linker reserves 2 KiB stack and 1 KiB heap by default. Override with
 `--defsym=__STACK_SIZE=<bytes>` and `--defsym=__HEAP_SIZE=<bytes>` as appropriate.
@@ -512,7 +469,7 @@ remain alive until the callback returns, including across higher-priority
 preemption. NMI, DMA/DTC activation and general ELC routing are not implemented.
 
 The event header records the manual's event IDs, not a promise to route every
-ELC event to the CPU. This increment deliberately rejects the source IDs for
+ELC event to the CPU. This port deliberately rejects the source IDs for
 Snooze entry, USB/SSI FIFO transfers, and ELC software events. Reserved holes and
 IDs outside the manual's implemented range are also rejected. Future transfer
 and low-power drivers can extend that supported subset after validating their
@@ -552,7 +509,7 @@ interrupt registration does not change low-power wake policy.
 Like RE01, `IOPinSetSense` configures port-group EOF/EOR events, not the IRQCR
 mode of a registered pin interrupt. It applies to ports 1-4 and requires the
 consumer to disconnect its ELC route while changing sense. General ELC consumers
-remain outside this increment.
+remain outside this port.
 
 The vector object now has unresolved references to the weak IEL entries supplied
 by the interrupt manager. This ensures normal static-library extraction brings
@@ -720,10 +677,6 @@ particular LED, button, test-pin pairing, or evaluation-board project is assumed
 
 ## Sources
 
-IOsonata patterns were read from `sam4l_usb_debug` commit
-`721b361401b1db64ce7ccd2ebc532f88bbfb48b8`: the RE01 startup/vectors, shared
-ResetEntry, generic clock and interrupt interfaces, and common ARM linker script.
-
 Hardware basis: Renesas RA4M1 Group User's Manual: Hardware,
 **R01UH0887EJ0110, Rev. 1.10, September 29, 2023**. Relevant sections are chapter
 6 (option-setting memory), chapter 8 (clocks), chapter 10 (operating modes),
@@ -731,11 +684,8 @@ chapter 12 (write protection), chapter 13 (ICU), chapter 44 (Flash/cache), and
 chapter 48 (electrical limits). GPIO/ICU additionally uses sections 1.7 (pin
 assignments), 13.2/13.3 (IRQCR, IELSR/DELSR and request handling), chapter 19
 (I/O ports, package bonding, PFS/PWPR and usage notes), and chapter 11 (battery
-backup and retained pin controls). The Renesas-authored manual text was read
-through a public document mirror when the official PDF exceeded the fetch limit.
-Renesas FSP `v6.6.0` RA4M1 event definitions and `r_ioport.c` were secondary
-cross-checks, not a runtime dependency. GPIO API/project patterns were read from
-IOsonata `main` at `eef99dc82cb3936e5c0f796563a3a58104e50ead`.
+backup and retained pin controls). Renesas FSP `v6.6.0` RA4M1 event definitions and `r_ioport.c` were secondary
+cross-checks, not a runtime dependency.
 
 UART hardware basis: the same Rev.1.10 manual, chapter 28 (SCI), chapter 10
 (module stop) and section 13.3 (interrupt request handling). Renesas FSP

@@ -23,7 +23,7 @@ host supports it.
 SDC and SoftDevice are different stack arrangements. Do not combine their
 libraries, memory layouts or initialization code. On STM32WBA65I-DK1,
 Numeric Comparison, encrypted transfer and bonded reconnect after reset have
-recorded hardware results. See [WBA security integration](../ARM/ST/STM32WBAxx/SECURITY_REVIEW.md)
+recorded hardware results. See [WBA security integration](../ARM/ST/STM32WBAxx/SECURITY.md)
 and [Supported Targets](supported-targets.md) for their scope and remaining limits.
 
 In IOcomposer, open the target's `ioc/` directory, build its matching MCU
