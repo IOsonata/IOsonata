@@ -47,7 +47,12 @@ The application image changes. The IOsonata library artifact does not.
 
 IOsonata does not generate another HAL binary for each combination of board, RTOS, I2C, SPI, sensor, storage, Bluetooth or security option.
 
-A library rebuild is required when IOsonata source for that MCU changes. It is not required when an application changes its board data, object composition or scheduler.
+A library rebuild is required when IOsonata source, library compile options or
+public object layouts change. An application change to board data or object
+composition normally needs only an application rebuild. Select a compatible
+existing MCU/stack profile, including the nRF91 modem variants described above.
+Library-level buffer-size defines must be applied when building the library;
+defining them only in the application does not resize precompiled storage.
 
 ## Object architecture
 
@@ -145,6 +150,10 @@ See [IOcomposer workflow](iocomposer-workflow.md).
 - [USB architecture](usb.md)
 - [Bluetooth architecture](bluetooth.md)
 - [NVM architecture](nvm.md)
+- [DFU architecture](dfu.md)
+- [DFU wire protocol](dfu_wire.md)
+- [Crypto engine architecture](../../src/crypto/crypto-engine.md)
+- [Crypto capabilities](../../src/crypto/crypto-caps.md)
 - [Getting started](../getting-started.md)
 - [USB user guide](../usb-user-guide.md)
 - [Bluetooth user guide](../bluetooth-user-guide.md)

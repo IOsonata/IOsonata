@@ -112,9 +112,21 @@ supported by the selected build. Geometry comes from the target; RRAM's
 no-erase behavior must not be replaced with a flash assumption.
 
 [STM32 nvm_stm32.cpp](../../ARM/ST/src/nvm_stm32.cpp) supports the selected
-WBA/L4 families. Its transfers complete in the call. It retains an arbiter
+WBA/L4 families and H753. Its transfers complete in the call. It retains an arbiter
 registration hook, but the current operation path does not consume that hook.
 It is therefore not an architectural reference for deferred radio arbitration.
+
+Additional synchronous controller ports are:
+
+- [LPC546xx](../../ARM/NXP/LPC546xx/src/nvm_lpc546xx.cpp): ROM IAP with
+  256-byte page read/modify/erase/program. Interrupts are masked during ROM
+  operations; power loss can affect the whole page.
+- [RA4M1](../../ARM/Renesas/RA4/RA4M1/src/nvm_ra4m1.cpp): internal data flash.
+- [STM32L152xE](../../ARM/ST/STM32L1xx/src/nvm_stm32l1xx.cpp): data EEPROM,
+  with zero erase size and byte overwrite support.
+
+These three ports reject interrupt-mode initialization and refuse operations
+when an arbiter is registered; they do not implement deferred arbitration.
 
 A generic declaration is not evidence that every target implements it.
 Review the actual port and stack integration before enabling a new operating

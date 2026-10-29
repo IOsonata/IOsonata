@@ -65,7 +65,12 @@ The builder:
 <MCU library project>/Release/libIOsonata_<MCU>.a
 ```
 
-When TaktOS is installed, the builder also builds the detected TaktOS architecture libraries. Use `--no-taktos` on macOS/Linux or `-NoTaktos` on Windows to build IOsonata only.
+The macOS builder requires TaktOS and builds its supported architecture
+libraries before presenting the IOsonata selection menu. Its `--no-taktos`
+option is rejected. The Linux and Windows builders also include detected
+TaktOS projects; those builders accept `--no-taktos` and `-NoTaktos`,
+respectively, to build IOsonata only. Check each builder's help for its current
+options rather than assuming all platforms accept the same switches.
 
 ## Step 2: Create or open an application
 

@@ -127,6 +127,20 @@ A positive UART return does not necessarily mean every byte is already on the wi
 
 An interface event reports transport activity or transport completion. A higher-level device operation may continue after the transfer completes. For example, NVM programming or erase completion is separate from the SPI/I2C transfer that issued the command.
 
+## Combined-write buffer lifetime
+
+`DeviceIntrfWrite()` concatenates command and data into a temporary stack
+buffer and calls `DeviceIntrfTx()`. Its return value excludes command bytes;
+a negative deferred result is converted to zero. A target used through this
+helper must consume or copy that buffer before returning. Do not retain its
+pointer for later DMA. Deferred callers need caller-owned storage and a
+transfer path whose completion and buffer lifetime are explicitly supported.
+
+`DeviceIntrfRead()` waits for a deferred command phase with an iteration
+budget. The current helper does not propagate that wait result or the raw
+`StartRx` result. Drivers must handle their own command/restart failures; the
+helper is not a general asynchronous transaction state machine.
+
 ## Events
 
 The callback can receive:
@@ -160,6 +174,12 @@ Execution mode is chosen by the actual controller, direction, transfer length, l
 - Slave operation normally requires interrupt handling because the external master controls progress.
 
 A configuration field does not prove that every target path is complete. Read the initializer, transfer functions and interrupt handler before documenting or changing a mode.
+
+## Rate selection
+
+`SetRate` returns the closest supported rate. The target selects the nearest
+representable value; the application decides whether that result is suitable.
+Preserve documented special values, such as zero for automatic selection.
 
 ## Chunking and transfer limits
 

@@ -129,23 +129,29 @@ and application scripts both stop their RAM at `__dfu_flag`.
 | nRF5340 application | 0x0, 48 KB | 0xD000, 972 KB | none | wire |
 | nRF5340 network | 0x1000000, 36 KB | 106 KB | 110 KB | BLE, wire |
 | nRF54L15 S145 | 0x0, 48 KB | 0xD000, 660 KB | 666 KB | BLE, wire |
-| nRF54LM20A S145 | 0x0, 48 KB | 0xD000, 916 KB | 922 KB | BLE, wire (UART until the USB port is complete) |
+| nRF54LM20A S145 | 0x0, 48 KB | 0xD000, 916 KB | 922 KB | BLE, wire (supplied DfuBoot selects UART) |
 | nRF54H20 application | 0xE0A0000, 40 KB | 212 KB | none | wire |
 | nRF54H20 radio core | 0xE120000, 48 KB | 228 KB | 232 KB | BLE |
 | nRF9160, nRF91x1 | 0x0, 48 KB | 0xD000, 484 KB | 488 KB | LTE, wire |
 | STM32F030x8 | 0x8000000, 35 KB | 25 KB | none | wire |
-| STM32F401xC | 0x8000000, 48 KB | 192 KB | none | wire (no UART driver yet) |
+| STM32F401xC | 0x8000000, 48 KB | 192 KB | none | wire |
 | STM32L476, L496 | 0x8000000, 48 KB | 956 KB | none | wire |
 | STM32L4S9 | 0x8000000, 48 KB | 1960 KB | none | wire |
 | STM32WBA5x | 0x8000000, 48 KB | 464 KB | 472 KB | BLE (no lib project, no UART driver yet) |
 | SAM4E16E | 0x400000, 48 KB | 968 KB | none | wire |
 | SAM4L x2 / x4 / x8 | 0x0, 35 / 48 / 48 KB | 88 / 204 / 460 KB | none | wire |
 | LPC1769 | 0x0, 48 KB | 460 KB | none | wire |
-| LPC54605 | 0x0, 64 KB | 416 KB | none | wire (no UART driver yet) |
+| LPC54605 | 0x0, 64 KB | 416 KB | none | wire |
 | RE01 1500 KB | 0x0, 64 KB | 1440 KB | none | wire |
 | R9A02G021 | 0x0, 36 KB | 88 KB | none | wire |
 
-Stage 0 with the wire protocol measures 24.8 to 30.4 KB at -Os over UART
+The layout table describes supplied DFU layouts, not every MCU supported by
+IOsonata. A working UART or USB port alone does not establish a tested DFU
+boot. In particular, LM20 has a USB device implementation, but its supplied
+DfuBoot still selects UART. Changing that selection requires checking its
+USB setup, linked image size and recovery behavior.
+
+Previously recorded stage 0 builds with the wire protocol measured 24.8 to 30.4 KB at -Os over UART
 and 36.2 KB over USB CDC (nRF52840); with SMP it was
 35 to 37 KB and 45 KB. The boot regions in the table still have the room
 the SMP boot needed. The Debug configurations of the small parts must be

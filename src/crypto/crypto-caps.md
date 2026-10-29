@@ -61,7 +61,8 @@ bit.
 | `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` |
 | `CryptoSoftSha256` | `HashEngine`, `MacEngine` (HMAC-SHA-256) |
 | `CryptoSoftRng`, `CryptoRngNrf`, `CryptoRngStm32` | `RngEngine` |
-| `CryptoCtlrSdc` | `CipherEngine` (Bluetooth-owned, controller AES) |
+| `CryptoCtlrAes`, `CryptoCtlrRng` | `CipherEngine`, `RngEngine`, respectively (Bluetooth-owned HCI adapters) |
+| `CryptoCtlrMac`, `CryptoCtlrAead`, `CryptoCtlrHash`, `CryptoCtlrSign` | Controller extensions for MAC, AEAD, hash/HMAC and signatures; available only when the selected controller supplies the required commands |
 
 ## AES and HMAC composition
 
