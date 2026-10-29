@@ -87,3 +87,34 @@ The managed projects select the exact Microchip device header through
 The SAMD11D14A name without the AM package suffix is not the device
 identifier of the imported header. Drivers use the vendor CMSIS header
 for register and interrupt definitions; no vendor HAL is linked.
+
+## Xplained Pro Blinky hardware check
+
+Managed Eclipse Embedded CDT applications:
+
+- `SAMD11/exemples/Blinky/ioc` uses the shared `exemples/misc/blinky.c`.
+  LED0 is PA16 (active low).
+- `SAMD21/exemples/Blinky/ioc` uses the same application source.
+  LED0 is PB30 (active low).
+
+Import the matching `lib/ioc` project first, then the Blinky project.
+Build the library and Blinky in the same configuration (Debug or Release).
+The Blinky application uses the internal OSC8M clock at 8 MHz; no
+external oscillator is required for this check.
+
+Both boards include an EDBG CMSIS-DAP probe. With the Xplained Pro board
+connected to the EDBG USB port, program the ELF output with OpenOCD.
+The command below runs from the Blinky `ioc` folder after a Debug build:
+
+```sh
+openocd -f interface/cmsis-dap.cfg -f target/at91samdXX.cfg \
+    -c "adapter speed 400; program Debug/Blinky_<PART>.elf verify reset exit"
+```
+
+Replace `<PART>` with `SAMD11D14AM` or `SAMD21J18A`.
+Use the actual artifact filename shown by Eclipse if it differs.
+The expected first result is a blinking yellow LED0. There is no serial
+output in this GPIO smoke test.
+
+These application projects have not yet been compiled or run on either board.
+UART and hardware timer examples still require driver completion.
