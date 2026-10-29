@@ -33,7 +33,7 @@
 		<link>
 			<name>src/board.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/src/board.h</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
 			<name>src/uart_loopback.cpp</name>
