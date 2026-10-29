@@ -1,4 +1,4 @@
-# SD cards
+# SD Card User Guide
 
 `SDCard` (`include/storage/sdcard.h`, `src/storage/sdcard_impl.cpp`) is the SD
 memory card driver: a `DiskIO` of 512 byte sectors on the interface given to
@@ -14,13 +14,21 @@ Cards: SDSC version 1 and 2, SDHC and SDXC, MMC in SPI mode only.
 ## Use
 
 ```cpp
-static Sdmmc s_SdHost;		// or an SPI, see below
-static SDCard s_Card;
+#include "coredev/sdmmc.h"
+#include "storage/sdcard.h"
 
-// s_SdHost initialized with its SdmmcCfg_t, Rate the highest clock wanted
-if (s_Card.Init(&s_SdHost)) {
-    s_Card.ReadSect(100, buff, 8);		// 8 sectors, one multiple block command
-    s_Card.WriteSect(100, buff, 8);		// returns once the card programmed them
+static Sdmmc s_SdHost;
+static SDCard s_Card;
+alignas(4) static uint8_t s_Data[8 * SDCARD_SECT_SIZE];
+
+// Call after s_SdHost.Init(boardHostCfg) succeeds.
+static bool ReadCard()
+{
+	if (!s_Card.Init(&s_SdHost))
+	{
+		return false;
+	}
+	return s_Card.ReadSect(100, s_Data, 8) == 8;
 }
 ```
 
@@ -34,6 +42,25 @@ byte access (`Read`, `Write` by offset) is given to `Init` as memory or as
 `ReadSect` and `WriteSect` return the number of sectors moved, 0 on failure.
 `Status()` reads the card status (CMD13). `Type()`, `GetNbSect()`,
 `GetSize()` (KB), `Rate()`, `Cid()` and `Csd()` give the card found.
+
+For a write, `WriteSect(sector, data, count)` must return the requested sector
+count. It replaces existing contents. Use a disposable card for the supplied
+write test; it attempts restoration but cannot guarantee it after a card error,
+power loss or reset. Keep the host interface, card and any cache storage alive
+for all operations.
+
+## Build and run
+
+1. Build `ARM/NXP/LPC546xx/LPC54628/lib/ioc` in Debug or Release.
+2. Import `ARM/NXP/LPC546xx/LPC54628/exemples/SdCardTest/ioc`.
+3. Check `src/board.h` for the card wiring and selected bus.
+4. Build the matching configuration and insert a disposable card.
+5. Run Debug with semihosting enabled, or use the Release UART console at
+   1000000 baud, 8N1. Inspect every check and the final `ALL PASS` result.
+
+For another target, select a supported SPI or SD/MMC interface and supply its
+board pin map. SD/MMC host mode currently has an LPC546xx implementation.
+The existence of `SDCard` alone does not add an SD/MMC host to another MCU.
 
 ## SPI mode
 

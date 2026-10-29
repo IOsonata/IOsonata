@@ -17,15 +17,22 @@ the constructor does not touch GPIOs. Keep the pin map alive for the object's
 lifetime and stop transfers before reinitializing or changing configuration.
 
 ```cpp
-SPISoft master;
+#include "coredev/spi_soft.h"
+
+static SPISoft master;
+
 // cfg is an SPICfg_t with a persistent GPIO map.
-if (!master.Init(cfg)) {
-    // Configuration is unsupported or invalid.
+static bool ReadRegister(const SPICfg_t &cfg)
+{
+	uint8_t command = 0x80;
+	uint8_t data[4];
+
+	if (!master.Init(cfg))
+	{
+		return false;
+	}
+	return master.Read(0, &command, 1, data, sizeof(data)) == sizeof(data);
 }
-DeviceIntrf *bus = &master;
-uint8_t command = 0x80;
-uint8_t data[4];
-bus->Read(0, &command, 1, data, sizeof(data));
 ```
 
 `Rx`, `Tx`, `Read`, `Write`, `StartRx/Tx`, `RxData/TxData` and `StopRx/Tx`

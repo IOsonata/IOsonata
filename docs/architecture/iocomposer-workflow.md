@@ -148,7 +148,10 @@ There is no separate HAL rebuild for every board, product, RTOS or peripheral co
 
 ## RTOS use
 
-Bare-metal, TaktOS, FreeRTOS and ThreadX applications use the same selected IOsonata library binary.
+Most MCU ports share the selected library between bare-metal and RTOS
+applications. nRF91 modem applications use the matching `Debug_TaktOS` or
+`Release_TaktOS` variant for the modem OS adapter; see
+[modem build selection](../bluetooth-user-guide.md#nrf91-modem-os-library-build-selection).
 
 ```text
 TaktOS application   ─┐
@@ -157,7 +160,8 @@ ThreadX application  ─┤
 bare-metal app       ─┘
 ```
 
-Only the application and optional kernel change at the final link.
+With a compatible selected library, only the application and optional kernel
+change at the final link.
 
 ## CI/CD scope
 

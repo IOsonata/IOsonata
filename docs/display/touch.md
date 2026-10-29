@@ -86,3 +86,8 @@ each transfer, the contacts, their ids and the limits, the axes settings in
 the four orientations against the frame buffer mapping of `LcdLpc546xx`,
 Disable, Enable and Reset, and the detection of the LcdDemo board. All 131
 mutants of the three sources are killed. No hardware result yet.
+
+## Related guides
+
+- [SDRAM](../sdram-user-guide.md): external framebuffer memory setup.
+- [Getting Started](../getting-started.md): IOcomposer library and application builds.

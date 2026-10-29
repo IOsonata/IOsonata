@@ -75,3 +75,9 @@ recorded limitations; playback/capture recovery does not establish transient-fre
 capture. The tested local checkout SHA was not supplied. See the
 [AudioDkTest hardware record](../ARM/Nordic/nRF53/nRF5340_App/exemples/AudioDkTest/README.md)
 for the test configuration and evidence.
+
+## Related guides
+
+- [Getting Started](getting-started.md): library and application builds.
+- [Buzzer](buzzer.md): PWM tones and melodies.
+- [SD cards](sdcard-user-guide.md): the shared SPI card driver.

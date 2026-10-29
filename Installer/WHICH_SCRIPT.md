@@ -156,8 +156,7 @@ vim ~/IOcomposer/IOsonata/src/iopincfg.cpp  # Make changes
 ```bash
 cd ~/IOcomposer/IOsonata
 git pull
-cd ..
-./build_iosonata_lib_macos.sh
+bash Installer/build_iosonata_lib_macos.sh
 ```
 
 **What Happens**:
@@ -348,10 +347,10 @@ cd ..
 ./install_iocdevtools_macos.sh
 
 # Update periodically
-cd ~/IOcomposer/IOsonata && git pull && cd ..
+cd ~/IOcomposer/IOsonata && git pull
 
 # Rebuild as needed
-./build_iosonata_lib_macos.sh  # Run N times for N MCUs
+bash Installer/build_iosonata_lib_macos.sh  # Select the required MCU
 ```
 
 ---

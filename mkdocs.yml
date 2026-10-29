@@ -12,6 +12,14 @@ nav:
       - USB: usb-user-guide.md
       - USB on nRF54LM20: usb-nrf54lm20x.md
       - NVM: nvm-user-guide.md
+      - SD cards: sdcard-user-guide.md
+      - SDRAM: sdram-user-guide.md
+      - Networking: networking.md
+      - MQTT and CoAP: network-protocol-examples.md
+      - Audio DK: nrf5340-audio-dk.md
+      - nPM1300: npm1300.md
+      - SSD1315: display/ssd1315.md
+      - Touch: display/touch.md
       - Buzzer: buzzer.md
       - Software SPI: spi_soft.md
   - Architecture:

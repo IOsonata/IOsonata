@@ -1087,4 +1087,8 @@ ARM compile/link validation.
 - [ST AN4839: Cortex-M7 cache and DMA](https://www.st.com/resource/en/application_note/an4839-level-1-cache-on-stm32f7-series-and-stm32h7-series-stmicroelectronics.pdf)
 - [lwIP raw API](https://www.nongnu.org/lwip/2_2_x/raw_api.html)
 
+## Related guides
 
+- [MQTT and CoAP examples](network-protocol-examples.md): medium selection, target projects and peer setup.
+- [Bluetooth](bluetooth-user-guide.md): BLE gateway and nRF91 modem build variants.
+- [Getting Started](getting-started.md): IOcomposer setup and library builds.

@@ -1055,3 +1055,9 @@ H753 MQTT/TLS results likewise belong to the original Ethernet example.
 These records do not substitute for testing the new `MqttDemo` and `CoapDemo`
 applications. The earlier intermittent H753 TLS issue remains unresolved;
 the confirmed port-mismatch incident did not establish its cause or fix.
+
+## Related guides
+
+- [Networking](networking.md): sockets and protocol implementation limits.
+- [Bluetooth](bluetooth-user-guide.md): gateway applications and nRF91 modem build variants.
+- [Getting Started](getting-started.md): library and application builds.

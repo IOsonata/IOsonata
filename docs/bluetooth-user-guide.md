@@ -21,9 +21,10 @@ host supports it.
 | STM32WBA | ST vendor stack through the IOsonata port | Inspect the target project and vendor dependencies |
 
 SDC and SoftDevice are different stack arrangements. Do not combine their
-libraries, memory layouts or initialization code. The STM32WBA source is an
-integration reference, not a hardware-validation claim for this release.
-Check [Supported Targets](supported-targets.md) for recorded board status.
+libraries, memory layouts or initialization code. On STM32WBA65I-DK1,
+Numeric Comparison, encrypted transfer and bonded reconnect after reset have
+recorded hardware results. See [WBA security integration](../ARM/ST/STM32WBAxx/SECURITY_REVIEW.md)
+and [Supported Targets](supported-targets.md) for their scope and remaining limits.
 
 In IOcomposer, open the target's `ioc/` directory, build its matching MCU
 library, then clean-build, flash and run the application. Keep pins and board
@@ -270,6 +271,20 @@ The periodic interval fields use 1.25 ms units; sync timeout uses 10 ms units.
 They do not use the same units as application advertising intervals.
 The PAwR example switch additionally requires a controller and board
 configuration that reserve response resources.
+
+## USB and BLE in one application
+
+Start with [usb_ble.cpp](../exemples/bluetooth/usb_ble.cpp) and the target's
+`UsbBleDemo/ioc` project for a USB CDC/BLE peripheral bridge. For central-role
+connection and discovery use `UsbCdcBleCentralDemo`. Build the matching USB-capable
+MCU and Bluetooth stack configuration; S145 builds also require its SoftDevice
+image and memory layout.
+
+Use one 16-entry AppEvt queue in the bare-metal application and keep it running
+for both stacks. Initialize USB and its class objects before `UsbEnable()`;
+initialize Bluetooth with `BtAppInit()`. Follow the shared example for callback
+ordering and retained data when either link cannot accept a write. USB connection
+and BLE connection are independent states. See the [USB guide](usb-user-guide.md).
 
 ## Static memory and 0.13 migration
 

@@ -40,7 +40,7 @@ Do not rebuild it merely because you changed:
 - board pins;
 - an application feature;
 - the selected sensor or interface object;
-- bare metal versus an RTOS;
+- bare metal versus an RTOS when the selected target library supports both;
 - application source.
 
 ## Does the library contain every supported driver for the MCU?
@@ -211,7 +211,11 @@ IOsonata does not own the scheduler.
 
 ## Is the library rebuilt for each RTOS?
 
-No. For a selected MCU and build profile, bare-metal, TaktOS, FreeRTOS and ThreadX applications link the same IOsonata library binary. The application and optional kernel change at the final link.
+Normally the application and optional kernel change at the final link, while
+using the same MCU library. The nRF9160 and nRF91x1 modem OS adapter is an
+exception: their `Debug_TaktOS` and `Release_TaktOS` configurations select the
+TaktOS implementation. Build and link the matching variant for modem applications.
+See [nRF91 modem build selection](bluetooth-user-guide.md#nrf91-modem-os-library-build-selection).
 
 ## Does IOsonata own `main()`?
 

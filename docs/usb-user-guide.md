@@ -47,6 +47,20 @@ projects validate reusable transports; they are not standard USB device
 classes. Bluetooth HCI over USB is provided by `BtHciUsb` for Bluetooth
 controller applications.
 
+## Select the MCU project
+
+The nRF52840 paths above are one reference set. Use a project supplied for
+your MCU; controller speed and endpoint limits differ.
+
+| Target | Starting point / port notes |
+|---|---|
+| nRF52840 | Full-speed native USB; projects listed above |
+| nRF54LM20 | [USBHS guide](usb-nrf54lm20x.md), full/high speed |
+| SAM4L | [SAM4L setup](#sam4l), full speed |
+| STM32 L4, H753 and WBA65 | [STM32 USB](../ARM/ST/USB.md) and each target's examples |
+| Renesas RA4M1 | [RA4M1](../ARM/Renesas/RA4/RA4M1/README.md), USBFS |
+| LPC11U35, LPC1769, LPC54628 | [NXP setup](#nxp-lpc); LPC54628 also has USB1 high-speed projects |
+
 ## Build and run an example
 
 1. Build the nRF52840 IOsonata library as described in
@@ -56,7 +70,18 @@ controller applications.
 4. Flash the nRF52840 and connect its native USB port to the host.
 5. Run the corresponding host runner from the repository root.
 
-The Python runners require only the host packages used by their transport:
+Create a host environment from the repository root before using the commands
+below:
+
+```sh
+python3 -m venv .venv
+./.venv/bin/python3 -m pip install pyserial pyusb hidapi libusb1
+```
+
+On Windows, use `py -3 -m venv .venv` and `.venv\Scripts\python.exe` in
+place of `./.venv/bin/python3`. CDC port names are `COM*` on Windows,
+`/dev/ttyACM*` on Linux and `/dev/cu.usbmodem*` on macOS.
+Install only the packages needed by the selected runner:
 
 - CDC runners use `pyserial`;
 - raw USB Bulk, Interrupt and MSC runners use `pyusb` with libusb;
@@ -152,6 +177,13 @@ reattachment. Automatic reattachment and remote wake are unsupported there.
 LPC11U35/LPC54628 support remote wake with clocks kept on during suspend.
 ISO, USB host and low-power suspend are outside this LPC baseline.
 
+For LPC54628 USB1, use `UsbCdcLoopbackHs/ioc`, `UsbCdcPrbsTxHs/ioc` or
+`UsbCustomBulkLoopbackHs/ioc` with controller number 1 and the USB1 connector.
+The USB0 and host controllers must remain unused. Read the
+[USB1 setup and errata notes](../ARM/NXP/LPC546xx/LPC54628/exemples/UsbCdcLoopbackHs/README.md)
+for the crystal, VBUS and remote-wakeup requirements. USB1 hardware validation
+remains pending.
+
 Host models and selected Debug/Release links pass; physical board testing
 remains pending. See [NXP port notes](../ARM/NXP/README.md) and
 [LPC USB validation](../tests/lpc/usb/README.md) for memory use and limits.
@@ -163,21 +195,28 @@ USB configuration, class objects, FIFO memory, report descriptors and storage
 buffers in static or caller-owned storage.
 
 ```cpp
+#include "app_evt_handler.h"
+#include "usb/usb.h"
+#include "usb/usbd_bulk.h"
+
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 static UsbdBulk s_Bulk;
 
+// Define s_UsbCfg and s_BulkCfg as in the complete target example.
 int main(void)
 {
-    if (!UsbInit(&s_UsbCfg) || !s_Bulk.Init(s_BulkCfg))
-    {
-        return -1;
-    }
+	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+	if (!UsbInit(&s_UsbCfg) || !s_Bulk.Init(s_BulkCfg))
+	{
+		return -1;
+	}
 
-    // A board can start without VBUS. The stack connects when it appears.
-    (void)UsbEnable(s_UsbCfg.DevNo);
+	// A board can start without VBUS. The stack connects when it appears.
+	(void)UsbEnable(s_UsbCfg.DevNo);
 
-    // Runs the queued USB work and waits for the next interrupt. An
-    // application with its own loop calls AppEvtHandlerExec() in it instead.
-    AppRun();
+	// Runs the queued USB work and waits for the next interrupt. An
+	// application with its own loop calls AppEvtHandlerExec() in it instead.
+	AppRun();
 }
 ```
 
@@ -268,19 +307,19 @@ alignas(4) static uint8_t s_TxMem[BULK_TX_MEM_SIZE];
 static UsbdBulk s_Bulk;
 
 static const UsbdBulkCfg_t s_BulkCfg = {
-    .DevNo = 0,
-    .bBlocking = true,
-    .RxFifoMemSize = sizeof(s_RxMem),
-    .pRxFifoMem = s_RxMem,
-    .TxFifoMemSize = sizeof(s_TxMem),
-    .pTxFifoMem = s_TxMem,
-    .SubClass = 0,
-    .Protocol = 0,
-    .InterfaceString = 4,
-    .FsMps = 0,
-    .HsMps = 0,
-    .Mode = USBD_BULK_MODE_BYTE,
-    .EvtCB = nullptr,
+	.DevNo = 0,
+	.bBlocking = true,
+	.RxFifoMemSize = sizeof(s_RxMem),
+	.pRxFifoMem = s_RxMem,
+	.TxFifoMemSize = sizeof(s_TxMem),
+	.pTxFifoMem = s_TxMem,
+	.SubClass = 0,
+	.Protocol = 0,
+	.InterfaceString = 4,
+	.FsMps = 0,
+	.HsMps = 0,
+	.Mode = USBD_BULK_MODE_BYTE,
+	.EvtCB = nullptr,
 };
 ```
 
@@ -544,9 +583,10 @@ Isochronous endpoint pair. This is separate from the IOsonata Bluetooth
 host stack and its pairing/security configuration.
 
 Use [bt_hci_usb.h](../include/bluetooth/bt_hci_usb.h) for the transport
-configuration. The maintainer validated the HCI/MSC storage optimization
-with HciController for HCI and UsbMscRamDisk for MSC. HciController is not
-included as a target project in this repository.
+configuration. The maintainer tested HCI with HciController and MSC with
+UsbMscRamDisk. Those results predate the later MSC object-layout optimization;
+rebuild the library and application together and retest the affected MSC build.
+HciController is not included as a target project in this repository.
 
 ## Interrupt and Isochronous functions
 
@@ -578,7 +618,10 @@ static const UsbdIntCfg_t s_IntCfg = {
 };
 
 // After initializing the application event queue:
-if (!UsbInit(&s_UsbCfg) || !s_Int.Init(s_IntCfg)) return -1;
+if (!UsbInit(&s_UsbCfg) || !s_Int.Init(s_IntCfg))
+{
+	return -1;
+}
 (void)UsbEnable(0);
 AppRun();
 ```
@@ -606,7 +649,10 @@ static const UsbdIsoCfg_t s_IsoCfg = {
 	.EvtCB = IsoEvent,
 };
 // Between UsbInit and UsbEnable:
-if (!s_Iso.Init(s_IsoCfg)) return -1;
+if (!s_Iso.Init(s_IsoCfg))
+{
+	return -1;
+}
 ```
 
 Table entries are active settings 1..AltCount. Alternate 0 disables transfers.
@@ -643,11 +689,10 @@ runner checks scheduled packet flow and diagnostic counters. Use
 ### HID report definitions
 
 `UsbdHid` continues to generate the USB interface, HID and endpoint descriptors.
-Applications supply their report definition because it describes their actual
-input/output data. The keyboard, vendor loopback and six-axis mouse have distinct
-report layouts and report handling. A general descriptor generator would add
-more API than these short definitions remove, so this change retains the existing
-report API and examples rather than adding presets with implicit report layouts.
+Use `InitKeyboard()`, `InitMouse()` or `Init3dMouse()` for the predefined layouts
+described above. Supply an application-owned report descriptor to `Init()` for
+custom layouts such as the vendor loopback. The application supplies the report
+contents and handles its input devices in either case.
 
 ## Composite devices
 
@@ -758,7 +803,7 @@ physical USB host connection. The workflow in
 
 ### The device does not enumerate
 
-- Confirm that the nRF52840 library and application use matching Debug or
+- Confirm that the selected MCU library and application use matching Debug or
   Release configurations.
 - Check every return from `UsbInit()` and class `Init()`.
 - Initialize all classes before calling `UsbEnable()`.

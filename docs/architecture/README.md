@@ -16,7 +16,11 @@ Application sources + board.h + optional kernel
                        MCU
 ```
 
-For a selected Debug or Release profile, bare-metal applications, TaktOS, FreeRTOS and ThreadX link the same IOsonata library binary. IOsonata is not rebuilt for the board, application, peripheral set or operating system.
+For a compatible selected profile, bare-metal applications, TaktOS, FreeRTOS
+and ThreadX link the same MCU library. Board and application changes do not
+create another HAL build. The nRF91 modem integration provides explicit
+`Debug_TaktOS` and `Release_TaktOS` variants for its modem OS adapter; match
+those to the application. See [modem build selection](../bluetooth-user-guide.md#nrf91-modem-os-library-build-selection).
 
 ## Core design rules
 

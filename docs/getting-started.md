@@ -55,6 +55,11 @@ The installation provides:
 - supported SDK checkouts;
 - the MCU-library builders.
 
+The installer completes IOcomposer setup before invoking library compilation.
+A library build failure is reported with its log and does not undo the IDE
+installation. Fix the selected target's dependencies or source, then rerun the
+builder. LLVM is not installed by this workflow.
+
 Standalone environment scripts are also kept under [`Installer/`](../Installer/).
 
 ## 2. Build the MCU library
@@ -168,18 +173,11 @@ Feature selection configures the application project. It does not generate anoth
 
 Reusable source lives under [`exemples/`](../exemples/):
 
-```text
-exemples/
-├── audio/
-├── misc/
-├── uart/
-├── i2c/
-├── spi/
-├── storage/
-├── bluetooth/
-├── sensor/
-└── usb/
-```
+- `audio/` and `misc/`
+- `uart/`, `i2c/` and `spi/`
+- `storage/` and `sensor/`
+- `bluetooth/` and `usb/`
+- `net/` and `gateway/`
 
 Each supported MCU normally has target projects that reference the shared source and provide target-specific build and board configuration. Current migrated projects use an `ioc/` directory below the example, such as `ARM/Nordic/nRF52/nRF52832/exemples/Blinky/ioc/`. Source belongs inside a target project only when the example is genuinely target-specific.
 
@@ -200,19 +198,28 @@ Use the [Quick Reference](quick-reference.md) for interface configuration exampl
 
 ## USB first run
 
-USB device examples currently use the nRF52840 native USB controller. Build
-the nRF52840 IOsonata library, then open one of the target projects below
-`ARM/Nordic/nRF52/nRF52840/exemples/`.
+The nRF52840 is one starting point for USB. Build its IOsonata library, then
+open a target project below `ARM/Nordic/nRF52/nRF52840/exemples/`.
+USB projects are also supplied for nRF54LM20, SAM4L, supported STM32 parts,
+RA4M1 and NXP LPC parts. Select the project for your MCU and read its pin,
+clock, connector and controller limitations in the [USB guide](usb-user-guide.md).
 
 For a first enumeration test, use `UsbCdcLoopback/ioc`. Flash the application,
 connect the target's native USB port, identify the serial port assigned by the
 host, and run:
 
 ```bash
+python3 -m venv .venv
+./.venv/bin/python3 -m pip install pyserial
 ./.venv/bin/python3 Python/usb_cdc_loopback.py --port /dev/cu.usbmodemXXXX
 ```
 
-USB applications call `UsbInit()`, initialize every class object, call
+Run these commands from the IOsonata repository root. On Linux use the assigned
+`/dev/ttyACM*` port; on Windows use `.venv\Scripts\python.exe` and the assigned
+`COM` port.
+
+USB applications initialize a 16-entry application event queue, call
+`UsbInit()`, initialize every class object, call
 `UsbEnable()`, then run the application event queue with `AppRun()` or with
 `AppEvtHandlerExec()` in their own loop. The controller connects
 only after the registered classes have produced a valid configuration
@@ -223,9 +230,13 @@ host dependencies, Mass Storage safety and hardware-test commands.
 
 ## Using an RTOS
 
-Bare-metal, TaktOS, FreeRTOS and ThreadX applications can link the same selected `libIOsonata_<MCU>.a`.
+Bare-metal, TaktOS, FreeRTOS and ThreadX applications normally link the same
+selected MCU library. The nRF91 modem integration has explicit `Debug_TaktOS`
+and `Release_TaktOS` library configurations; match those to the application's
+TaktOS configuration. See [nRF91 modem build selection](bluetooth-user-guide.md#nrf91-modem-os-library-build-selection).
 
-The application and optional kernel change at the final link. IOsonata is not rebuilt with scheduler-specific macros.
+For other targets, the application and optional kernel change at the final link.
+Use the configuration supplied by the target project.
 
 ## Updating IOsonata
 
