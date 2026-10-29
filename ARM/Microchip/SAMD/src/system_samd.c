@@ -61,7 +61,7 @@ uint32_t SystemCoreClock = 1000000UL;
 uint32_t SystemnsDelayFactor = 1UL;
 
 __attribute__((weak)) McuOsc_t g_McuOsc = {
-	{ OSC_TYPE_RC, 1000000UL, 0UL, 0UL },
+	{ OSC_TYPE_RC, 8000000UL, 0UL, 0UL },
 	{ OSC_TYPE_RC, 32768UL, 0UL, 0UL },
 	false
 };
@@ -152,8 +152,9 @@ bool SamdGclkChannelDisable(uint8_t Channel)
 
 void SystemInit(void)
 {
-	// The initial implementation retains the reset clock configuration.
+	// Use the internal 8 MHz oscillator for the initial MCU tests.
 	// External oscillators and USB clocks are not configured here.
+	(void)SystemCoreClockSelect(OSC_TYPE_RC, SAMD_OSC8M_FREQ);
 }
 
 void SystemCoreClockUpdate(void)
