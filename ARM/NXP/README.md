@@ -47,6 +47,9 @@ shared across all three; endpoint allocation respects LPC1769 fixed types.
 
 ## Examples and builds
 
+[LPC11U35 wiring and example instructions](LPC11xx/LPC11U35/exemples/README.md)
+are collected in one guide.
+
 Each MCU's `exemples` folder provides TimerDemo, UartLoopback, UartPrbsTxTest,
 SpiLoopback, I2CScan, UsbCdcLoopback, UsbCdcPrbsTx, UsbHidLoopback,
 UsbCustomBulkLoopback and UsbCompositeLoopback. LPC54628 also has
