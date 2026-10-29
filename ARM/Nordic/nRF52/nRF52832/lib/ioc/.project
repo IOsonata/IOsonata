@@ -1556,11 +1556,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.h</locationURI>
 		</link>
 		<link>
-			<name>src/Xiot/FusionAxes.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAxes.h</locationURI>
-		</link>
-		<link>
 			<name>src/Xiot/FusionBias.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.c</locationURI>
@@ -1569,11 +1564,6 @@
 			<name>src/Xiot/FusionBias.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.h</locationURI>
-		</link>
-		<link>
-			<name>src/Xiot/FusionCalibration.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCalibration.h</locationURI>
 		</link>
 		<link>
 			<name>src/Xiot/FusionCompass.c</name>
