@@ -44,7 +44,8 @@ files = ['src/CppRuntimeOverload.cpp', 'ARM/src/ResetEntry.c',
          'ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp',
          'src/coredev/timer.cpp', 'src/coredev/uart.cpp',
          'ARM/Microchip/SAM4L/src/uart_sam4l.cpp', 'src/uart_retarget.c',
-         'src/stddev.c', 'src/cfifo.c', 'src/device_intrf.cpp']
+         'src/stddev.c', 'src/cfifo.c', 'src/device_intrf.cpp',
+         'src/video/cam_arducam_mega.cpp']
 includes = ['-I' + str(root / s) for s in ['include', 'ARM/include',
             'ARM/Microchip/SAM4L/include', 'ARM/CMSIS/Core/Include']]
 def run(cmd):
@@ -65,6 +66,8 @@ for mode, opt in [('Debug', '-O0'), ('Release', '-Os')]:
     objs = [compile(root / path) for path in files]
     lib = out / ('libIOsonata_' + family + '.a')
     run([a.toolchain_prefix + 'ar', 'rcs', str(lib), *objs])
+    members = subprocess.check_output([a.toolchain_prefix + 'ar', 't', str(lib)], text=True)
+    assert 'cam_arducam_mega.cpp.o' in members.splitlines(), 'Camera driver absent from archive'
     for dev in range(7):
         app = compile(root / 'exemples/timer/timer_demo.cpp',
                       ['-I' + str(project.parent / 'src'), '-DTIMER_DEMO_DEVNO=' + str(dev)])

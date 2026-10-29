@@ -17,7 +17,7 @@ class InstallerTests(unittest.TestCase):
 			if shutil.which(shell):
 				yield platform, shell
 
-	def run_helper(self, platform, shell, helper, mode='normal', tag='', fail='', cube_state=''):
+	def run_helper(self, platform, shell, helper, mode='normal', tag='', fail='', cube_state='', dirty=False):
 		with tempfile.TemporaryDirectory() as directory:
 			root = Path(directory)
 			target = root / 'STM32CubeWBA'
@@ -39,6 +39,10 @@ class InstallerTests(unittest.TestCase):
 printf '%s\\n' "$*" >> "$CALLS"
 case "$1" in
  describe) printf '%s\\n' "$TAG" ;;
+ -C)
+   if [[ "$3" == "status" ]]; then
+     [[ "$DIRTY" != "true" ]] || echo " M local-change.cpp"
+   fi ;;
  pull) exit 42 ;;
  clone) mkdir -p "${@: -1}" ;;
 esac
@@ -51,7 +55,7 @@ esac
 				'clone_pinned_repo': 'url "$EXT/STM32CubeWBA" v1.10.0',
 				'clone_cube_wba': ''}[helper]
 			env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'],
-				EXT=str(root), MODE=mode, TAG=tag, FAIL=fail, CALLS=str(root / 'calls'))
+				EXT=str(root), MODE=mode, TAG=tag, FAIL=fail, DIRTY='true' if dirty else 'false', CALLS=str(root / 'calls'))
 			result = subprocess.run([shell, '-c', 'set -e\n' + functions + '\n' + helper + ' ' + args],
 				env=env, text=True, capture_output=True)
 			calls = (root / 'calls').read_text() if (root / 'calls').exists() else ''
@@ -61,9 +65,21 @@ esac
 		for platform, shell in self.shells():
 			with self.subTest(platform=platform):
 				result, preserved, calls = self.run_helper(platform, shell, 'clone_or_update_repo')
-				self.assertNotEqual(result.returncode, 0)
+				if platform == 'macos':
+					self.assertEqual(result.returncode, 0, result.stderr)
+				else:
+					self.assertNotEqual(result.returncode, 0)
 				self.assertTrue(preserved)
 				self.assertNotIn('clone ', calls)
+
+	def test_dirty_macos_checkout_is_preserved_without_pull(self):
+		if not shutil.which('zsh'):
+			self.skipTest('zsh is not installed')
+		result, preserved, calls = self.run_helper('macos', 'zsh', 'clone_or_update_repo', dirty=True)
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertTrue(preserved)
+		self.assertNotIn('pull ', calls)
+		self.assertNotIn('clone ', calls)
 
 	def test_pinned_mismatch_and_incomplete_cube_preserve_checkout(self):
 		for platform, shell in self.shells():
@@ -134,6 +150,25 @@ esac
 				finally:
 					for log in logs:
 						Path(log).unlink(missing_ok=True)
+
+	def test_installers_sync_sources_before_post_setup_builds(self):
+		for platform in ['macos', 'linux', 'win']:
+			name = f'install_iocdevtools_{platform}.' + ('ps1' if platform == 'win' else 'sh')
+			source = (INSTALLER / name).read_text()
+			with self.subTest(platform=platform):
+				self.assertNotIn('CLONE_INVOKED_BUILD', source)
+				if platform == 'win':
+					self.assertIn('"-NoBuild"', source)
+					self.assertLess(source.index('Install-IOcomposer -Runtime'), source.index('& $BS -SdkHome'))
+					self.assertIn('Write-Warning "Library build', source)
+				else:
+					self.assertIn('CLONE_ARGS=(--home "$ROOT" --no-build)', source)
+					self.assertLess(source.index('install_iocomposer '), source.index('bash "$BUILD_SCRIPT"'))
+					self.assertIn('if ! bash "$BUILD_SCRIPT"', source)
+				if platform == 'macos':
+					self.assertLess(source.index('sudo codesign --verify'), source.index('capture_instances snapshot'))
+					self.assertLess(source.index('capture_instances snapshot'), source.index('Initializing signed IOcomposer'))
+					self.assertLess(source.index('Initializing signed IOcomposer'), source.index('Found Eclipse settings: $INSTANCE_CFG'))
 
 	def test_help_and_invalid_arguments_have_no_side_effects(self):
 		for platform, shell in self.shells():

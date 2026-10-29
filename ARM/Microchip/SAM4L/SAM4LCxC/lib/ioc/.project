@@ -1380,5 +1380,20 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/rng_sam4l.cpp</locationURI>
 		</link>
+			<link>
+			<name>include/video/videodev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
+		</link>
+		<link>
+			<name>include/video/cam_arducam_mega.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
+		</link>
+		<link>
+			<name>src/video/cam_arducam_mega.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

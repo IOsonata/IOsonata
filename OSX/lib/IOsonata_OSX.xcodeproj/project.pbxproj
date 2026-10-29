@@ -77,6 +77,9 @@
 		406FC7F0233A00C400106BCA /* utf8cvt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC75C233A00C400106BCA /* utf8cvt.cpp */; };
 		406FC801233A016300106BCA /* usb_hidhost_impl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC7FF233A016300106BCA /* usb_hidhost_impl.cpp */; };
 		406FC802233A016300106BCA /* uart_osx.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC800233A016300106BCA /* uart_osx.cpp */; };
+		A01300000000000000000011 /* videodev.h in Headers */ = {isa = PBXBuildFile; fileRef = A01300000000000000000001 /* videodev.h */; };
+		A01300000000000000000012 /* cam_arducam_mega.h in Headers */ = {isa = PBXBuildFile; fileRef = A01300000000000000000002 /* cam_arducam_mega.h */; };
+		A01300000000000000000013 /* cam_arducam_mega.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A01300000000000000000003 /* cam_arducam_mega.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -151,6 +154,9 @@
 		406FC75C233A00C400106BCA /* utf8cvt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = utf8cvt.cpp; sourceTree = "<group>"; };
 		406FC7FF233A016300106BCA /* usb_hidhost_impl.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = usb_hidhost_impl.cpp; path = src/usb_hidhost_impl.cpp; sourceTree = SOURCE_ROOT; };
 		406FC800233A016300106BCA /* uart_osx.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = uart_osx.cpp; path = src/uart_osx.cpp; sourceTree = SOURCE_ROOT; };
+		A01300000000000000000001 /* videodev.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ../../include/video/videodev.h; sourceTree = "<group>"; };
+		A01300000000000000000002 /* cam_arducam_mega.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ../../include/video/cam_arducam_mega.h; sourceTree = "<group>"; };
+		A01300000000000000000003 /* cam_arducam_mega.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ../../src/video/cam_arducam_mega.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -164,9 +170,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		A01300000000000000000021 /* video */ = {
+			isa = PBXGroup;
+			children = (
+				A01300000000000000000001 /* videodev.h */,
+				A01300000000000000000002 /* cam_arducam_mega.h */,
+				A01300000000000000000003 /* cam_arducam_mega.cpp */,
+			);
+			name = video;
+			sourceTree = "<group>";
+		};
 		406FC6642339FDA800106BCA = {
 			isa = PBXGroup;
 			children = (
+				A01300000000000000000021 /* video */,
 				406FC6B8233A00C400106BCA /* include */,
 				406FC718233A00C400106BCA /* src */,
 				406FC66E2339FDA800106BCA /* Products */,
@@ -322,6 +339,8 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A01300000000000000000011 /* videodev.h in Headers */,
+				A01300000000000000000012 /* cam_arducam_mega.h in Headers */,
 				4028DD0A2FBE7C2500450A9D /* idelay.h in Headers */,
 				406FC7AB233A00C400106BCA /* buzzer.h in Headers */,
 				406FC7B0233A00C400106BCA /* intelhex.h in Headers */,
@@ -431,6 +450,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A01300000000000000000013 /* cam_arducam_mega.cpp in Sources */,
 				406FC7DC233A00C400106BCA /* prbs.c in Sources */,
 				406FC7ED233A00C400106BCA /* crc.c in Sources */,
 				406FC7CF233A00C400106BCA /* device.cpp in Sources */,
