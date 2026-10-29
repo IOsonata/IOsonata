@@ -55,5 +55,15 @@
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/src/vectors_samd11.c</locationURI>
 		</link>
+		<link>
+			<name>src/coredev/uart.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/uart_retarget.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
