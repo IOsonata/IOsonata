@@ -228,7 +228,7 @@ function Add-DefenderExclusion {
     param([string]$Path)
     try {
         if ((Get-MpPreference).ExclusionPath -notcontains $Path) {
-            Set-MpPreference -ExclusionPath $Path
+            Add-MpPreference -ExclusionPath $Path
             Write-Host "   [OK] Added Defender exclusion: $Path" -ForegroundColor Green
         }
     } catch { Write-Host "[WARN] Failed to set Defender exclusion (requires Admin)." -ForegroundColor Yellow }
