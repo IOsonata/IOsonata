@@ -16,7 +16,7 @@ jobs:
       - name: Install Arm GNU compiler
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi g++-arm-none-eabi libnewlib-arm-none-eabi
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
       - name: Compile SAM D sources
         shell: bash
         run: |
