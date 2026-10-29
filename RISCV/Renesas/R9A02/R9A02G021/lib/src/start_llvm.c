@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	start_llvm.c
 
-@brief	C runtime entry for the R9A02G021 e2 studio LLVM library.
+@brief	C runtime entry for R9A02G021 LLVM emulator test builds.
 
 ResetEntryInit has initialized RAM and the MCU before calling
 _start. Run the C/C++ initializers without clearing RAM again.

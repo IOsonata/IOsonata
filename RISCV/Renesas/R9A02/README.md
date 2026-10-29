@@ -114,9 +114,9 @@ place of the `-if jtag` the launch puts first, the server console then shows
 
 With the Startup speeds left at their defaults (1000 kHz, Auto) the reset
 before the download loses the target: `Target connection lost`, then
-`Verify failed` on each block. e2 studio connects the same way, with its own
-GDB server: cJTAG at 4000 kHz, reset at the start of the connection. OpenOCD
-has not been tried: the probe and its driver must support cJTAG.
+`Verify failed` on each block. Use cJTAG at 4000 kHz and reset at the start
+of the connection. OpenOCD has not been tried: the probe and its driver must
+support cJTAG.
 
 ## Clocks
 
@@ -760,32 +760,6 @@ linked into it (see UART).
 
 `dfu_r9a02.cpp` programs the code flash in 8-byte units and erases 2 KB
 blocks from routines in `.iram.text`, and resets through SWRCR.
-
-## e2 studio
-
-`R9A02G021/lib/e2` is the library as an e2 studio project, `IOsonata_R9A02G021_e2`,
-built with LLVM for Renesas RISC-V (19.1.7) for the R9A02G0214CNE on the
-FPB-R9A02G021. It links the same sources as the IOC project `lib/ioc`, with
-the same defines and include directories, `-march` with Zba, Zbb, Zbs, Zicsr
-and Zifencei, C and C++ gnu17. Debug is built for debugging, Release for code
-size (Optimization Level `codeSize`).
-
-All fourteen examples have native LLVM projects in their `e2` directories,
-named `<example>_e2`. Build the matching Debug or Release library before the
-example. The archive keeps the name `libIOsonata_R9A02G021.a`, in `lib/e2`;
-the `_e2` project names allow these projects to coexist with `ioc` projects.
-The library has one Debug and one Release configuration. Its LLVM-only
-`start_llvm.c` runs the C/C++ initializers and main without clearing the RAM
-that `ResetEntryInit` and `SystemInit` have already initialized. The examples
-use the LLVM linker scripts, the same flash/RAM layout and option-setting
-words, and LLVM's runtime libraries. See the examples README for import
-instructions and native LLVM build results.
-
-The library sources were compiled with clang 19.1.7 and these settings, and
-the examples linked from them with GNU ld (October 13, 2026); the DFU boot
-then passes the emulator tests. Do not mix objects of the two compilers: GCC
-for riscv-none-elf makes `uint32_t` an `unsigned long`, clang an
-`unsigned int`, so C++ functions taking one get different symbol names.
 
 ## Examples
 
