@@ -55,6 +55,7 @@ SOFTWARE.
 #include "nrf_dfu_settings.h"
 #include "nrf_bootloader_info.h"
 
+#include "nrf_ble_scan.h"
 #include "nrf_drv_rng.h"
 
 #include "istddef.h"
