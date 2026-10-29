@@ -2,8 +2,7 @@
 
 This document describes the Renesas RA4M1 interrupt architecture, the role of
 `interrupt_ra4m1.cpp`, and the invariants that peripheral-driver maintainers
-must preserve. It describes the IOsonata implementation on
-`prerelease_0.13` as of October 11, 2026. See [README.md](README.md) for port
+must preserve. See [README.md](README.md) for port
 status and [TIMER.md](TIMER.md) for timer-specific constraints.
 
 ## Two distinct classes of vectors

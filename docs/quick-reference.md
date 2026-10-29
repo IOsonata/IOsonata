@@ -49,11 +49,12 @@ Select one MCU or **Build All**. The builder discovers current library projects 
 <MCU project>/lib/ioc/Release/libIOsonata_<MCU>.a
 ```
 
-The selected binary is reused across boards, products, bare metal, TaktOS, FreeRTOS and ThreadX.
+The selected binary is reused across boards and products using that MCU and
+configuration. Match any stack or modem OS suffix in the application and library.
 
 ## Open an example
 
-1. Select **File → Open Projects from File System...**
+1. Select **File -> Open Projects from File System...**
 2. Browse directly to the target project, for example:
    `~/IOcomposer/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/Blinky/ioc/`
 3. Select the project.
@@ -61,7 +62,7 @@ The selected binary is reused across boards, products, bare metal, TaktOS, FreeR
 
 ## Create a project
 
-1. Select **File → New → Project → IOsonata Project**.
+1. Select **File -> New -> Project -> IOsonata Project**.
 2. Enter the project name.
 3. Select C++ or C.
 4. Select the Arm or RISC-V toolchain.
@@ -104,55 +105,74 @@ Changing board data does not rebuild the MCU library.
 
 ## I2C configuration
 
+The pin numbers below illustrate an nRF52 wiring choice. Replace them with
+pins and function selections for your board. I2C pin order is SDA, SCL;
+provide the bus pull-ups required by the connected devices. Call `InitI2c()`
+from application initialization and handle a false result.
+
 ```cpp
 #include "coredev/i2c.h"
 
 static const IOPinCfg_t s_I2cPins[] = {
-    {0, 26, 0, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL},
-    {0, 27, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 26, 0, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 27, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
 static const I2CCfg_t s_I2cCfg = {
-    .DevNo = 0,
-    .Type = I2CTYPE_STANDARD,
-    .Mode = I2CMODE_MASTER,
-    .pIOPinMap = s_I2cPins,
-    .NbIOPins = sizeof(s_I2cPins) / sizeof(IOPinCfg_t),
-    .Rate = 100000,
+	.DevNo = 0,
+	.Type = I2CTYPE_STANDARD,
+	.Mode = I2CMODE_MASTER,
+	.pIOPinMap = s_I2cPins,
+	.NbIOPins = sizeof(s_I2cPins) / sizeof(IOPinCfg_t),
+	.Rate = 100000,
+	.MaxRetry = 5,
 };
 
-I2C g_I2c;
-g_I2c.Init(s_I2cCfg);
+static I2C g_I2c;
+
+static bool InitI2c()
+{
+	return g_I2c.Init(s_I2cCfg);
+}
 ```
 
 ## SPI configuration
+
+Pin order is SCK, MISO, MOSI, then CS. This polling example has one automatic
+chip select, addressed as selector 0. Call `InitSpi()` from application
+initialization and check its result.
 
 ```cpp
 #include "coredev/spi.h"
 
 static const IOPinCfg_t s_SpiPins[] = {
-    {0, 25, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-    {0, 24, 0, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-    {0, 23, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 25, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 24, 0, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 23, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 22, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
 static const SPICfg_t s_SpiCfg = {
-    .DevNo = 0,
-    .Phy = SPIPHY_NORMAL,
-    .Mode = SPIMODE_MASTER,
-    .pIOPinMap = s_SpiPins,
-    .NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    .Rate = 4000000,
-    .DataSize = 8,
-    .MaxRetry = 5,
-    .BitOrder = SPIDATABIT_MSB,
-    .DataPhase = SPIDATAPHASE_FIRST_CLK,
-    .ClkPol = SPICLKPOL_LOW,
-    .ChipSel = SPICSEL_AUTO,
+	.DevNo = 0,
+	.Phy = SPIPHY_NORMAL,
+	.Mode = SPIMODE_MASTER,
+	.pIOPinMap = s_SpiPins,
+	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
+	.Rate = 4000000,
+	.DataSize = 8,
+	.MaxRetry = 5,
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_FIRST_CLK,
+	.ClkPol = SPICLKPOL_LOW,
+	.ChipSel = SPICSEL_AUTO,
 };
 
-SPI g_Spi;
-g_Spi.Init(s_SpiCfg);
+static SPI g_Spi;
+
+static bool InitSpi()
+{
+	return g_Spi.Init(s_SpiCfg);
+}
 ```
 
 ## Inject an interface into a device
@@ -164,8 +184,8 @@ Timer timer;
 AccelLsm303agr accel;
 
 DeviceIntrf *intrf = useSpi
-    ? static_cast<DeviceIntrf *>(&spi)
-    : static_cast<DeviceIntrf *>(&i2c);
+	? static_cast<DeviceIntrf *>(&spi)
+	: static_cast<DeviceIntrf *>(&i2c);
 
 accel.Init(accelCfg, intrf, &timer);
 ```
@@ -179,12 +199,15 @@ The sensor implementation remains the same. Only the injected interface changes.
 printf("Value: %d\n", value);
 ```
 
-Use a serial terminal at the configured rate.
+Initialize and retarget the UART first, as shown in
+[UartRetargetDemo](../exemples/uart/uart_retarget_demo.cpp). Use the rate in the
+example configuration, normally 1000000 baud, 8N1. Debug projects using rdimon
+send `printf` through debugger semihosting instead; enable it in the launch.
 
 ## Build and debug
 
-- Build: right-click project → **Build Project**.
-- Clean: right-click project → **Clean Project**.
+- Build: right-click project -> **Build Project**.
+- Clean: right-click project -> **Clean Project**.
 - Start debug: select the configured OpenOCD or probe launch.
 - Resume: **F8**.
 - Step into: **F5**.
@@ -227,10 +250,10 @@ using Note = BuzzerPitch;
 using Length = BuzzerDuration;
 
 static const BuzzerNote_t melody[] = {
-    {Note::C5, Length::Quarter},
-    {Note::E5, Length::DottedQuarter},
-    {Note::Rest, Length::Eighth},
-    {Note::G5, Length::Half}
+	{Note::C5, Length::Quarter},
+	{Note::E5, Length::DottedQuarter},
+	{Note::Rest, Length::Eighth},
+	{Note::G5, Length::Half}
 };
 
 BuzzerPlayer player;
@@ -245,9 +268,9 @@ Call `Process()` from the main loop or one worker thread, not from the timer
 ISR. See the [Buzzer User Guide](buzzer.md) for custom sweeps/fades, repeats,
 volume restoration and timer requirements.
 
-USB device examples currently target the nRF52840 native USB controller. See
-the [USB User Guide](usb-user-guide.md) for initialization, host dependencies and test
-commands.
+USB device projects cover several MCU families, with different endpoint and
+speed limits. See the [USB User Guide](usb-user-guide.md) for target selection,
+initialization, host dependencies and test commands.
 
 ## Change board, MCU or RTOS
 
@@ -261,7 +284,9 @@ Run the library builder and select the new MCU. Create or open the corresponding
 
 ### Different execution model
 
-Compile the application with bare metal, TaktOS, FreeRTOS or ThreadX and link the same selected IOsonata library.
+Normally only the application and kernel change. For nRF91 modem applications,
+select matching `Debug_TaktOS` or `Release_TaktOS` library and application
+configurations; the modem OS adapter differs from the bare-metal variant.
 
 ## Update IOsonata
 

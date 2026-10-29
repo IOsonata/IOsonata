@@ -17,7 +17,6 @@ ARM/Renesas/
             src/
             ldscript/
             lib/ioc/
-            lib/e2/
             exemples/
     RA6/
         <MCU-group>/
@@ -47,35 +46,20 @@ peripheral IP differs.
 
 Keep IOsonata's existing public interfaces, native MCU startup and
 device-header selection, with no FSP dependency. MCU library projects select
-hardware backends; applications never select crypto or other MCU drivers.
+MCU drivers; applications never select crypto or other MCU drivers.
 Board headers define pin mapping, not peripheral register initialization.
 
-## Sharing audit: RA4M1 and RE01
+## Current shared implementation
 
-The current RA4M1 and RE01 ports were compared before completing the USB work.
-Their public IOsonata interfaces are common, but their GPIO/PFS, ICU, SCI/DMAC,
-clock, I2C and startup implementations are not register-compatible enough to
-justify a Renesas-wide source. The vector files have superficial table
-boilerplate in common, but the event layout and startup ownership are
-target-specific. The audit also found stale e2 workspace paths in the RA4M1 and
-RE01 library `.cproject` files; those paths now match their `_e2` project names.
+RA4M1 and RE01 use common IOsonata interfaces, but their peripheral register
+implementations remain target-specific. `ARM/Renesas/src` is reserved for
+implementations shared by compatible targets. Common declarations, including
+`ARM/Renesas/include/usb_ctrlr.h`, do not imply a common register implementation.
 
-Therefore `ARM/Renesas/src` is intentionally sparse. Renesas-wide code goes
-there only after at least two supported targets prove compatible peripheral IP.
-The shared `ARM/Renesas/include/usb_ctrlr.h` is an ABI, while the RA4M1 USBFS
-register implementation remains under `RA4/RA4M1/src`. This avoids compile-time
-MCU conditionals in a nominally common source.
+The RA4M1 library is `RA4/RA4M1/lib/ioc`; its project name remains
+`IOsonata_RA4M1`. See [the port guide](RA4/RA4M1/README.md) for setup and
+peripheral limits.
 
-## RA4M1 migration checklist
-
-The RA4M1 port has been relocated to `ARM/Renesas/RA4/RA4M1`.
-The Eclipse resource links and project search paths were adjusted for the
-additional directory level. Rebuild both Debug and Release library and
-example configurations on a configured Arm toolchain to verify the move.
-Keep the existing `IOsonata_RA4M1` project and its library dependencies.
-Preserve the working GPIO, UART, timer, startup and crypto configuration.
-RA4M1 IIC master/slave remains unvalidated on physical hardware.
-
-Verify IOC and e2 studio Debug/Release library projects and all RA4M1
-examples before removing the old path. Do not copy common drivers or
-leave two competing target source trees.
+Use IOcomposer for all Renesas targets. Import the MCU library and desired
+example `ioc` projects, then build the library first with the matching
+Debug or Release configuration.

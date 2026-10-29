@@ -1,180 +1,109 @@
-# IOsonata Quick Start Guide
+# IOcomposer installation quick start
 
-Get up and running with IOsonata in minutes!
+IOcomposer uses Eclipse Embedded CDT managed projects. Install the IDE,
+toolchains and SDK checkouts, then build the MCU library used by your application.
+The [Getting Started guide](../docs/getting-started.md) continues through
+Blinky, board configuration, flashing and debugging.
 
+## Install
 
-## 🌐 Fastest Way: Run Directly from GitHub
-
-Don't want to clone the repository? Run the installer directly from GitHub!
+Download and run the development-tool installer for your platform.
 
 ### macOS
-```bash
-curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_macos.sh | bash
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_macos.sh -o /tmp/install_iocdevtools_macos.sh
+bash /tmp/install_iocdevtools_macos.sh
 ```
 
 ### Linux
-```bash
-curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_linux.sh | bash
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_linux.sh -o /tmp/install_iocdevtools_linux.sh
+bash /tmp/install_iocdevtools_linux.sh
 ```
 
-### Windows (PowerShell as Administrator)
-```powershell
-iwr -useb https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_win.ps1 | iex
-```
-
-> **💡 Pro Tip**: For better security, download the script first, review it, then run it. See [ONLINE_INSTALLATION.md](ONLINE_INSTALLATION.md) for details.
-
----
-
-## 📦 Alternative: Download Scripts First
-
-If you prefer to review before running (recommended):
-
-## 📦 Downloaded Scripts Setup
-
-Choose your platform and run:
-
-### macOS
-```bash
-./install_iocdevtools_macos.sh
-```
-
-### Linux
-```bash
-./install_iocdevtools_linux.sh
-```
-
-### Windows (as Administrator)
-```powershell
-.\install_iocdevtools_win.ps1
-```
-
-**That's it!** This installs Eclipse, toolchains, clones repositories, and prompts you to build libraries.
-
----
-
-## 🎯 What Do These Scripts Do?
-
-### Installation Scripts → Complete Setup
-- ✅ Install Eclipse IDE
-- ✅ Install ARM & RISC-V toolchains
-- ✅ Clone IOsonata & dependencies
-- ✅ Build libraries for your MCU
-
-**Use when**: Setting up for the first time
-
-### Clone Scripts → Code Only
-- ✅ Clone IOsonata & dependencies
-- ✅ Configure Eclipse (optional)
-
-**Use when**: You already have Eclipse and toolchains
-
-### Build Scripts → Compile Libraries
-- ✅ Build IOsonata library for any MCU
-- ✅ Can run multiple times for different MCUs
-
-**Use when**: You need to build or rebuild libraries
-
----
-
-## 🚀 Common Tasks
-
-### Build for Multiple MCUs
-
-Supporting nRF52840, nRF52832, and STM32F4?
-
-```bash
-./build_iosonata_lib_macos.sh  # Select nRF52840
-./build_iosonata_lib_macos.sh  # Select nRF52832
-./build_iosonata_lib_macos.sh  # Select STM32F4
-```
-
-Done! Three libraries ready to use.
-
-### Update IOsonata
-
-```bash
-cd ~/IOcomposer/IOsonata
-git pull
-cd ..
-./build_iosonata_lib_macos.sh  # Rebuild your libraries
-```
-
-### Rebuild After Changes
-
-Made changes to IOsonata source?
-
-```bash
-./build_iosonata_lib_macos.sh  # Rebuild
-```
-
----
-
-## 📁 Where Everything Lives
-
-### macOS
-- Eclipse: `/Applications/Eclipse.app`
-- IOsonata: `~/IOcomposer/IOsonata`
-- Libraries: `~/IOcomposer/IOsonata/ARM/.../lib/ioc/Debug|Release/`
-
-### Linux
-- Eclipse: `/opt/eclipse`
-- IOsonata: `~/IOcomposer/IOsonata`
-- Libraries: `~/IOcomposer/IOsonata/ARM/.../lib/ioc/Debug|Release/`
+Linux needs Python 3.9 or newer with venv support. See the
+[installer requirements](README.md) for distribution dependencies.
 
 ### Windows
-- Eclipse: `C:\Program Files\Eclipse Embedded CDT`
-- IOsonata: `%USERPROFILE%\IOcomposer\IOsonata`
-- Libraries: `%USERPROFILE%\IOcomposer\IOsonata\ARM\...\lib\ioc\Debug|Release\`
 
----
+Run PowerShell as Administrator:
 
-## ⚠️ Troubleshooting
-
-### Permission Denied (macOS/Linux)
-```bash
-chmod +x *.sh
-```
-
-### Windows Execution Policy Error
 ```powershell
-# Run PowerShell as Administrator
-Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+Invoke-WebRequest https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_win.ps1 -OutFile "$env:TEMP\install_iocdevtools_win.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\install_iocdevtools_win.ps1"
 ```
 
-### Eclipse Not Found
-```bash
-# Just run the installer - it will install Eclipse
-./install_iocdevtools_macos.sh
+The website launchers at iocomposer.io delegate to these scripts. IOcomposer,
+plugins and preferences are set up before library compilation. On macOS,
+signing precedes instance initialization and MCU preference setup.
+A reported library compilation failure does not prevent IDE installation from
+completing. Keep the reported log, fix the failed target and rerun its builder.
+
+## Default locations
+
+| Platform | IDE | SDK root |
+|---|---|---|
+| macOS | `/Applications/IOcomposer.app` | `~/IOcomposer` |
+| Linux | `~/iocomposer` | `~/IOcomposer` |
+| Windows | `C:\Program Files\IOcomposer` | `%USERPROFILE%\IOcomposer` |
+
+The SDK root contains `IOsonata`, `external`, `TaktOS` when installed, and
+`Tools`. Firmware utilities are under `Tools/bin`; managed Python packages
+are under `Tools/Python`. HEX merging uses IntelHex. LLVM and SRecord are
+not installed. Use the actual paths printed by the installer for a custom setup.
+
+## Build or rebuild libraries
+
+Run the builder from any directory:
+
+```sh
+# macOS
+bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_macos.sh
+
+# Linux
+bash ~/IOcomposer/IOsonata/Installer/build_iosonata_lib_linux.sh
 ```
 
-### Build Fails
-```bash
-# Check the log
-cat /tmp/build_iosonata_lib.log
+```powershell
+# Windows
+& "$env:USERPROFILE\IOcomposer\IOsonata\Installer\build_iosonata_lib_win.ps1"
 ```
 
----
+Select the MCU library you need. The builder discovers managed projects under
+`lib/ioc` and reports each configuration's result. It also builds supported
+TaktOS library projects; cm55 and esp32c3 are skipped. The macOS builder
+requires TaktOS and builds it before the IOsonata selection menu. Linux and
+Windows accept `--no-taktos` and `-NoTaktos`, respectively, to omit that step.
+A listed MCU project does not establish hardware support for every peripheral;
+check [Supported Targets](../docs/supported-targets.md).
 
-## 📖 Need More Help?
+Libraries are written under each project configuration, for example
+`ARM/Nordic/nRF52/nRF52840/lib/ioc/Release/`. Match the application's target,
+Debug/Release profile and any stack or modem OS suffix to the library.
 
-See the full [README.md](README.md) for:
-- Detailed usage instructions
-- All command-line options
-- Platform-specific notes
-- Advanced workflows
-- Complete troubleshooting guide
+## Update an existing checkout
 
----
+```sh
+cd ~/IOcomposer/IOsonata
+git pull
+bash Installer/build_iosonata_lib_macos.sh
+```
 
-## ⏱️ Time Estimates
+Use the Linux or Windows builder on that platform. Then clean and rebuild
+applications that link the changed library. For local modifications, resolve
+Git's update result before building; do not discard application changes.
 
-- **Installation**: 10-20 minutes
-- **Clone only**: 2-5 minutes  
-- **Build library**: 3-5 minutes per MCU
+## Troubleshooting
 
----
+| Problem | Action |
+|---|---|
+| IDE or wizard missing | Rerun the development-tool installer |
+| Compiler missing | Check the installed tool paths and IOcomposer MCU preferences |
+| Vendor header or library missing | Check the selected project's dependencies under `external` |
+| Library build failed | Read the exact log path printed by the builder; rebuild that target |
+| Firmware links against an older API | Rebuild the library, clean the application and relink |
+| Debug output stops outside the debugger | Check whether the configuration uses rdimon semihosting; use Release for standalone tests where provided |
 
-**Ready to develop!** 🎉
-
-For documentation and examples, see: [https://github.com/IOsonata/IOsonata](https://github.com/IOsonata/IOsonata)
+For custom paths and all script options, use [Installer README](README.md).

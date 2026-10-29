@@ -294,7 +294,7 @@ UsbIsoIntrf
         |
         v
 UsbIntrf
-(DIRECT mode)
+(PACKET mode)
         |
         v
 Isochronous OUT/IN endpoints
@@ -365,8 +365,7 @@ DIRECT describes only software storage: one current RX slot, one current TX
 slot and no CFifo. The nRF52 controller queues every regular OUT packet for
 DMA, including Interrupt endpoints, without a blocking/DRDY split. DIRECT
 completion replaces any unread RX packet and increments `RxDropCnt` for that
-replacement. ISO also publishes received packets directly from its scheduled
-DMA path. There is no separate RX arm or re-arm API.
+replacement. ISO uses its scheduled DMA path to publish into its packet FIFO. There is no separate RX arm or re-arm API.
 
 The regular DMA queue rejects an enqueue when full, preserving queued and
 active transfers. An OUT request that cannot enter the queue is deferred to
@@ -474,6 +473,8 @@ not be pushed into those role-neutral layers.
 ### Endpoint configuration
 
 `UsbCtrlrEpOpen()` receives an endpoint descriptor in the current device port.
+`UsbIsoIntrf` uses `UsbCtrlrIsoOpen()` for its ISO endpoint pair; this is a
+controller configuration helper, not a separate transfer engine.
 The descriptor establishes:
 
 ```text

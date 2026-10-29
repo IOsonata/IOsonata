@@ -1,6 +1,6 @@
 # STM32F03x linker script coverage
 
-The uploaded gcc_stm32f030x.ld uses:
+`gcc_stm32f030x.ld` uses:
 
 - FLASH origin 0x08000000, length 64K
 - RAM origin 0x20000000, length 8K

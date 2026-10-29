@@ -1,6 +1,7 @@
 # DFU wire protocol (stage 0 recovery)
 
-Status: implemented, host tested; not yet on hardware. Sep. 21, 2026.
+Status: implemented with host tests. Hardware validation is not established
+by this document. Source references describe the 0.13 implementation.
 
 This replaces SMP/CBOR in the stage 0 boot. SMP stays in the application
 for over the air updates (nRF Connect Device Manager, nRF52/53/54, STM32WBA).
@@ -16,7 +17,7 @@ path in stage 0: UART, or USB CDC ACM on parts with a USB device port.
 2. No general purpose parser in stage 0. No CBOR, no protobuf, no base64,
    no nesting. Fixed opcodes, fixed field layout, little endian.
 3. Works without a driver install on macOS, Windows 10+ and Linux, from a
-   Python script and from a web page.
+   Python script. A Web Serial client is not supplied.
 4. Stage 0 fits 32 KB over UART and 40 KB over USB CDC, software crypto.
 5. Same code on every IOsonata MCU port; only the byte transport differs.
 
@@ -25,13 +26,6 @@ address, running code from RAM. Stage 0 offers none of these.
 
 ## 2. Why these choices
 
-- Every other vendor ROM or boot loader (NXP blhost, ST AN3155, Espressif
-  esptool, Silicon Labs XMODEM, Infineon DFU) uses a fixed binary protocol
-  in the boot. Only Zephyr MCUboot serial recovery parses CBOR there.
-- The nRF5 SDK Secure DFU was small because its protocol was fixed opcodes
-  and objects checked by CRC. Its weak spot was a protobuf init packet
-  decoded before the signature check. This design keeps the first part and
-  removes the second.
 - MCUboot signs the SHA-256 digest of header + payload + protected TLVs.
   The signature can therefore be checked against the digest the image
   claims before any payload arrives; the payload is then hashed as it
@@ -49,18 +43,17 @@ The interface is set at Init and can be replaced at run time with SetIntrf
 (state kept, so an upload started on one link can continue on another after
 INFO).
 
-The stage 0 boot links one interface, chosen by the MCU: UsbdCdc on a part
-with USB and a complete IOsonata USB device port (nRF52840 today), UART
-on every other part. A part with USB but no IOsonata USB driver yet uses
-UART until the driver exists. BLE is not in stage 0 (stack size); the same
-core can run in the application over BtIntrf.
+The stage 0 boot links one interface selected by `DFU_TRANSPORT` in
+`board.h`. The supplied nRF52840 DfuBoot selects CDC; the other supplied
+DfuBoot configurations select UART, including LM20. USB driver availability
+does not automatically change this selection. BLE is not accepted by the
+stage 0 example; the same protocol can use BtIntrf in an application.
 
 ## 4. Layers: transport, protocol, core
 
 Three layers, each swappable without touching the others:
 
-    protocol   DfuWire (this document)   DfuNrfDfu (nRF5 SDK DFU opcodes)
-               DfuSmp (SMP)              ... any other
+    protocol   DfuWire (this document), DfuSmp (SMP)
                  |  calls DfuMgr only, never the flash or the crypto
     core       DfuMgr: manifest check, image writer, hash, record, reset
                  |  DfuStore_t, DfuTgt*, HashEngine, SignEngine
@@ -84,7 +77,7 @@ DfuMgr (include/dfu/dfu_mgr.h), over DfuWriter and the boot checks:
 
 Two entry modes because the protocols differ:
 
-- Manifest first (DfuWire; nRF5 DFU with our signed init object): nothing
+- Manifest first (DfuWire): nothing
   is erased or written before the signature checks.
 - Image in order (SMP): the header arrives with the first chunk and the
   TLVs last, so the signature can only be checked at Finish. Writes before
@@ -103,19 +96,19 @@ A protocol is an object initialised with a DfuMgr and a DeviceIntrf, with
 SetIntrf and Poll (DfuWire; DfuSmp goes through DfuSerial or BtDfuSmp). Each MCU target selects its protocol and transport in the board.h of
 its DfuBoot (and OTA) project:
 
-    DFU_PROTO       DFU_PROTO_WIRE, DFU_PROTO_SMP, DFU_PROTO_NRFDFU
+    DFU_PROTO       DFU_PROTO_WIRE, DFU_PROTO_SMP
     DFU_TRANSPORT   DFU_TRANSPORT_UART, DFU_TRANSPORT_CDC, DFU_TRANSPORT_BLE
 
-Stage 0 defaults: DFU_PROTO_WIRE, with DFU_TRANSPORT_CDC on parts with an
-IOsonata USB device driver and DFU_TRANSPORT_UART elsewhere. The boot
+`DFU_PROTO_NRFDFU` is reserved in the header and has no implementation.
+The stage 0 example rejects it. Stage 0 defaults to DFU_PROTO_WIRE and UART
+unless board configuration selects CDC. The boot
 region must hold the build: 32 KB for UART, 40 KB for CDC (section 12).
 
 Which ones a build has:
 
 - Stage 0: one protocol, one transport, chosen at build time (size).
-- Application: any set. More than one can share a transport: the first
-  frame picks the handler (0xC0 SLIP start for DfuWire and nRF5 DFU over
-  serial, SMP serial marker 0x06 0x09, GATT service for BLE).
+- Application: initializes the chosen protocol objects and routes their
+  input. There is no automatic multi-protocol stream dispatcher.
 - Swapping at run time: Poll of the active protocol stops, SetIntrf or a
   new protocol object takes over; DfuMgr state (offset, hash) is kept.
 
@@ -130,30 +123,32 @@ frame CRC is crc32_ieee from crc.h:
     ESC_END  0xDB 0xDC  stands for 0xC0 in the frame
     ESC_ESC  0xDB 0xDD  stands for 0xDB in the frame
 
-As in RFC 1055, the byte after ESC is taken as data whatever it is, END
-included: a frame that follows line noise ending in ESC joins the noise and
-is dropped (bad CRC), and the host's resend is served. The library Slip is
-used unchanged.
+The existing Slip decoder handles escaping; DfuWire then checks frame size,
+opcode and CRC. There is no separate strict escape-validation stage in
+DfuWire. Do not rely on malformed escape bytes alone causing rejection.
 
 Decoded frame:
 
     offset size field
     0      1    Op      request opcode, response = Op | 0x80
     1      1    Seq     copied from request to response
-    2      n    Body    per opcode, n <= max(MaxBody + 4, ManifestMax)
+    2      n    Body    per opcode, within the configured receive buffer
     2+n    4    Crc     CRC-32 (IEEE 802.3, zlib crc32) over Op..Body, LE
 
 Rules:
 
-- A frame with a bad CRC, a bad escape, a length over the limit, or an
+- A frame with a bad CRC, a length over the receive-buffer limit, or an
   unknown opcode is dropped with no response. Bytes outside frames (console
   text, line noise, a terminal left open) are dropped the same way.
-- One request in flight. The host resends after its timeout with the same
-  Seq; every request is idempotent (see WRITE), so a resend is safe.
+- One request in flight. The host retries with the same Seq. Seq is echoed,
+  not used as a duplicate cache. WRITE skips accepted bytes and FINISH
+  remembers success. BEGIN at offset zero restarts manifest collection;
+  retrying BEGIN after final acceptance is not universally idempotent.
 - The device never depends on DTR, RTS or a break. Host tools still set DTR
   on open, because the IOsonata CDC class treats DTR as "port open".
-- MaxBody is reported by INFO, 512 by default, a power of 2 and a multiple
-  of the target write unit.
+- MaxBody is reported by INFO. The stage 0 default is 512 bytes, overridden
+  by `DFU_BOOT_BUFSIZE`. DfuWire requires a power of two of at least 16;
+  the writer handles target program-unit staging.
 
 Frame CRC is only for the link. Image integrity comes from SHA-256 and the
 signature.
@@ -218,7 +213,8 @@ to about a second (Cortex-M0); hosts wait up to 5 s for the BEGIN response.
 Request body: Offset u32, then 1..MaxBody payload bytes. Only in receiving.
 
 - Offset == device Offset: erase ahead as needed, program, hash, advance.
-- Offset < device Offset: nothing written (a resend of data already taken).
+- Offset < device Offset: skip the accepted prefix; write any remaining
+  suffix. A fully accepted resend writes nothing.
 - Offset > device Offset: error ERR_OFFSET.
 - Offset + length > ImgSize: error ERR_SIZE.
 
@@ -240,13 +236,21 @@ Response body: Status.
 
 ### 0x05 RESET
 
-Request body: Mode u8, 0 reset, 1 start the application if valid.
-Response is sent first, then the device resets or starts the image after
-the transport has drained.
+Request body: Mode u8, 0 reset into recovery, 1 reset for normal boot.
+The response is handed to the transport before the reset callback. The
+stage 0 callback waits `DFU_BOOT_RESET_DELAY_MS` (20 ms by default), then
+resets. This is a fixed delay, not a check that the transport has drained.
 
 ### 0x06 ABORT
 
 Back to idle. What was written stays, the record stays erased.
+
+### 0x07 ENTER
+
+Request body: empty. Send OK, then request a reset into recovery through the
+same callback as RESET. An application must initialize and poll DfuWire to
+serve this operation; declaring the opcode alone does not add an application
+recovery service. The host script exposes it with `--enter`.
 
 ## 7. Status codes
 
@@ -278,8 +282,10 @@ Back to idle. What was written stays, the record stays erased.
     RESET 1         ------------------> starts the new image
 
 Resume: after a port loss (USB replug renames the port on macOS), the host
-sends INFO; if State is receiving it sends WRITE at the device Offset once
-the Crc matches, else it starts again with BEGIN. After a device reset
+sends INFO. If State is receiving, it probes with an already accepted WRITE
+to obtain Offset and Crc; INFO itself contains no Crc field. It resumes at
+Offset only when that checksum matches its payload, otherwise it starts
+again with BEGIN. After a device reset
 everything starts again from BEGIN; the image was never startable meanwhile.
 
 Power loss at any point leaves either the old record intact (before BEGIN
@@ -292,17 +298,17 @@ host tests count every memory operation). It cannot prove the payload
 before the payload is there: a genuine manifest, freely available in any
 signed release, followed by other bytes, erases the record and slot 0 and
 is refused at FINISH, leaving no startable image until a good one is sent.
-Whoever holds the wire can wipe the application, never replace it; this
-is the case of every wired recovery. The same holds for a genuine manifest
+A peer with access to recovery and a valid manifest can invalidate the
+application. Starting replacement code still requires successful image
+verification. The same holds for a genuine manifest
 with its header edited, the edit is found at FINISH; editing the version
 field cannot make an older image install.
 
 ## 9. Entering recovery
 
 As today: no valid image, the button (DFU_BUT_PORT/PIN), or the RAM flag
-DFU_FLAG_RECOVERY set by the application before a reset. Optional: the
-application answers INFO and a 0x07 ENTER request on its own CDC/UART port
-by setting the flag and resetting, so the host tool needs no button.
+DFU_FLAG_RECOVERY set by the application before a reset. An application may initialize DfuWire on its CDC/UART port to answer INFO
+and the implemented 0x07 ENTER request, allowing recovery without a button.
 
 ## 10. USB identity
 
@@ -310,22 +316,23 @@ by setting the flag and resetting, so the host tool needs no button.
 - iSerialNumber: meant to be the device id in hex, as INFO DevId. Not
   filled yet: stage 0 passes no serial string and DevId is zero until the
   target layer gives a device id.
-- The host tool finds the device by VID, PID and serial number, never by
-  port name, so a macOS rename (usbmodem1101 to usbmodem1102) or a Windows
-  COM number change does not matter.
-- Examples use the pid.codes test VID/PID; a product sets its own.
+- The host accepts either `--port` or `--vid` / `--pid`, with optional
+  `--serial`. USB identity lookup can rediscover a renamed port; a fixed
+  port path cannot. Without a unique serial number, identical devices
+  cannot be distinguished by VID/PID alone.
+- The supplied nRF52840 DfuBoot uses VID 0x1915 / PID 0x5300. A product
+  supplies its own USB identity.
 
 ## 11. Host tools
 
-- Python/dfu_wire.py: pyserial only. Reads a signed .bin or .hex, splits
+- Python/dfu_wire.py: requires pyserial; .hex input also requires intelhex.
+  Reads a signed .bin or .hex, splits
   manifest and payload itself, no package file. Opens /dev/cu.* on macOS
   (not /dev/tty.*, which waits for carrier), sets DTR, raw mode.
   Timeout per WRITE = EraseMaxMs + transfer time + margin.
-- docs/tools/dfu_web.html (not written yet): one static page, Web Serial
-  API (Chrome, Edge on macOS, Windows, Linux). Same steps as the script.
-  Safari and Firefox have no Web Serial; the script is the fallback there.
+No Web Serial client is supplied. Use the Python tool.
 
-## 12. Size, measured, -Os
+## 12. Previously recorded size, -Os
 
     nRF52840 stage 0, USB CDC     SMP 44.5 KB   wire 36.2 KB
     nRF52832 stage 0, UART        SMP 35.3 KB   wire 26.6 KB
@@ -363,9 +370,12 @@ carry only the check); exit handlers and the heap. What came: DfuWire
 - Still to do: hardware, nRF52840 USB CDC and UART on macOS, Windows 11,
   Linux; one STM32 and one LPC over a USB serial bridge.
 
-## 15. Open decisions
+## 15. Configuration and remaining work
 
-1. Downgrade: refuse by default, allow by build option?
-2. Application side ENTER handler: include in the examples?
-3. USB DFU class as a later option for dfu-util users, or never?
-4. MaxBody default 512, or 1024 on USB parts?
+- Downgrade is refused by default. Stage 0 maps `DFU_BOOT_ALLOW_DOWNGRADE`
+  to `DfuMgrCfg_t::bAllowDowngrade`.
+- ENTER is implemented; applications must supply its transport and polling.
+- MaxBody defaults to 512 through `DFU_BOOT_BUFSIZE`.
+- A USB DFU-class protocol and Web Serial client are not supplied.
+- The recorded sizes and host results do not replace target builds and
+  hardware recovery tests for the selected MCU, transport and memory layout.

@@ -1,8 +1,6 @@
 # SAM D11/D21 MCU port
 
-Work in progress. This is an **MCU port**, not an Xplained Pro board
-support package. Applications retain control of pin and oscillator
-configuration.
+Applications supply pin and oscillator configuration for these MCU targets.
 
 ## Targets
 
@@ -15,66 +13,18 @@ The linker scripts reuse `ARM/ldscript/gcc_arm_flash.ld`.
 The linker search path must contain `ARM/ldscript`. Do not use
 the SAMD21J18A linker script for other SAMD21 package/memory variants.
 
-## Implementation status
+## Port limits
 
-- [x] MCU-specific flash/RAM linker memory maps
-- [ ] Microchip device CMSIS headers and core/part definitions
-- [x] Cortex-M0+ IRQ vector tables using IOsonata `ResetEntry` (source added; build and device validation pending)
-- [ ] Clock source and GCLK setup, synchronization and clock reporting (reset-time 1 MHz clock plus selectable 8 MHz OSC8M/GCLK0 path added; channel enable/disable added; peripheral bus gates and 48 MHz setup pending)
-- [ ] PORT GPIO, mux and external interrupts (basic GPIO/mux source added; interrupt API, device definitions and validation pending)
-- [ ] SERCOM UART, SPI and I2C drivers (D21 polling 8N1 UART source added; pad routing and hardware tests pending; enabled baud changes and RX error checks added; interrupts, DMA, SPI and I2C not implemented)
-- [ ] TC/TCC hardware timers
-- [ ] Embedded CDT managed static-library projects and generic examples
-- [ ] Build and Xplained Pro hardware validation
-- [ ] USB device support (separate milestone)
+This port is incomplete. The supplied startup, GPIO and clock sources and
+SAMD21 polling UART do not establish a hardware-validated port. Hardware
+timers, SPI, I2C and USB device support are not implemented in this revision.
 
-## Implementation rules
-
-Follow the existing IOsonata interfaces and coding style; no independent
-ASF/START/Harmony application architecture, new board abstraction, or
-board-specific source files. Shared SAM D drivers belong in this family
-directory when hardware behavior actually matches. MCU-specific definitions
-and pin capabilities must remain distinct.
-
-A minimal working port must pass the existing generic Blinky, UART PRBS and
-timer examples on physical hardware before it is described as supported.
-
-## Current clock limitation
-
-The initial `system_samd.c` retains the reset-time OSC8M/8 configuration
-(1 MHz CPU clock) unless the application selects OSC8M at 8 MHz using
-`SystemCoreClockSelect(OSC_TYPE_RC, 8000000)`. The internal SamdGclkChannelEnable/Disable functions now select peripheral
-GCLK channels, but peripheral bus clock gates, device-specific channel IDs,
-and the 48 MHz clock source must still be integrated with the drivers. External oscillator selection, 48 MHz DFLL configuration and peripheral
-clock routing is not yet integrated with SERCOM or timer drivers. Do not use this stage to validate
-UART baud rate, high-speed timing or USB.
-
-## SAM D21 SERCOM clocks
-
-`Samd21SercomClockEnable(DevNo)` enables the APBC bus clock and the
-SERCOM core GCLK channel for device 0..5, using generator 0. This is an
-internal MCU helper; application source does not configure SERCOM clocks.
-The helper is not a UART driver and has not been compiled or hardware-tested.
-The SAM D11 peripheral clock mapping will be verified separately.
-
-## SAM D21 UART bring-up
-
-The initial `uart_samd21.cpp` is restricted to asynchronous 8N1 with polling
-Rx/Tx, no DMA, no hardware flow control and no interrupt mode. It currently
-uses USART RXPO=1 (PAD1) and TXPO=0 (PAD0); the application pin map must
-select pins matching those SERCOM pad assignments. It is not a general
-SERCOM pad-routing implementation. At 8 MHz, 16x oversampling limits the
-maximum baud rate to 500000; the 1 MHz reset clock is insufficient for
-common high baud rates. The driver still needs a target build and hardware
-verification, including initialization failure paths and error flags.
-
-## UART review status
-
-The polling UART source now checks TXC before changing baud rate with the
-USART enabled, waits for ENABLE synchronization, and checks received data
-for framing, parity and buffer overflow errors. The device clock source and
-register behavior have not been confirmed on hardware. Build, waveform and
-UART PRBS tests remain required. No hardware results are claimed.
+The clock source is OSC8M: reset-time division gives 1 MHz; applications can
+select 8 MHz with `SystemCoreClockSelect(OSC_TYPE_RC, 8000000)`. External
+oscillators and the 48 MHz DFLL path are not integrated. The SAMD21 UART is
+restricted to polling 8N1, RX on PAD1 and TX on PAD0, without flow control,
+interrupt or DMA operation. At 8 MHz, 16x oversampling limits its baud rate
+to 500000. Select pins matching those pad assignments in the application.
 
 ## CMSIS device selection
 
@@ -88,7 +38,7 @@ The SAMD11D14A name without the AM package suffix is not the device
 identifier of the imported header. Drivers use the vendor CMSIS header
 for register and interrupt definitions; no vendor HAL is linked.
 
-## Xplained Pro Blinky hardware check
+## Build and run Blinky
 
 Managed Eclipse Embedded CDT applications:
 

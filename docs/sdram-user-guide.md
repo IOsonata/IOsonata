@@ -1,4 +1,4 @@
-# SDRAM
+# SDRAM User Guide
 
 `Sdram` (`include/coredev/sdram.h`) sets up an SDRAM on the external memory
 controller of the MCU: the controller for the part, the power up sequence of
@@ -8,32 +8,23 @@ C init `SdramInit()` in the MCU port, C++ class `Sdram`.
 ## Use
 
 ```cpp
-static const IOPinCfg_t s_SdramPins[] = { ... };	// address, data, bank, DQM, RAS, CAS, WE, CLK, CKE, CS
-
-static const SdramCfg_t s_SdramCfg = {
-	.DevNo = 0,						// chip select of the controller
-	.pIOPinMap = s_SdramPins,
-	.NbIOPins = sizeof(s_SdramPins) / sizeof(IOPinCfg_t),
-	.Rate = 75000000,				// SDRAM clock asked
-	.BusWidth = 16,					// data bus
-	.DevWidth = 16,					// data width of one part
-	.NbBanks = 4,
-	.RowBits = 12,
-	.ColBits = 9,
-	.CasLatency = 3,
-	.TwrClk = 1,					// tWR = 1 clock + TwrNs
-	.TmrdClk = 2,
-	.RefreshNs = 64000000 / 4096,	// refresh period / rows
-	.TrcdNs = 18,
-	...
-};
+#include "coredev/sdram.h"
 
 static Sdram s_Sdram;
 
-if (s_Sdram.Init(s_SdramCfg)) {
-	uint32_t *p = (uint32_t *)s_Sdram.Base();	// s_Sdram.Size() bytes
+// cfg contains the complete pin map and timings for the fitted memory.
+static bool InitSdram(const SdramCfg_t &cfg)
+{
+	return s_Sdram.Init(cfg);
 }
 ```
+
+Use the complete configuration in
+[ext_ram_test.cpp](../exemples/misc/ext_ram_test.cpp) with the target's
+[board.h](../ARM/NXP/LPC546xx/LPC54628/exemples/SdramTest/src/board.h).
+After successful initialization, `Base()` returns the mapped address,
+`Size()` its byte capacity and `Rate()` the selected clock. Keep the pin map
+alive. Do not use a partially initialized timing structure as a board setup.
 
 The configuration is the organization and the timings of the data sheet of
 the part: banks, row and column address bits, data width, CAS latency, and
@@ -61,6 +52,20 @@ checks the data lines, the address lines, the byte lanes and the whole
 memory. `exemples/display/fb_display_demo.cpp` sets up the SDRAM of the frame
 buffer from the same macros. See the LPCXpresso54628
 [SdramTest](../ARM/NXP/LPC546xx/LPC54628/exemples/SdramTest/README.md).
+
+## Build and run
+
+1. Build `ARM/NXP/LPC546xx/LPC54628/lib/ioc` in the desired configuration.
+2. Import `ARM/NXP/LPC546xx/LPC54628/exemples/SdramTest/ioc` and use the
+   matching Debug or Release configuration.
+3. Keep startup code, stack and test buffers in internal memory until SDRAM
+   initialization succeeds. A linker placement alone does not initialize SDRAM.
+4. Enable semihosting for Debug. Release reports over UART at 1000000 baud, 8N1.
+5. Check the reported address, capacity and clock, then the final test result.
+
+The supplied memory test overwrites the entire SDRAM. Do not run it over a
+live framebuffer, stack, heap or another application's data. For a product,
+reserve non-overlapping regions for each user of the mapped memory.
 
 ## Validation
 

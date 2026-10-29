@@ -165,21 +165,12 @@ file, plus the managed build's flash image and size report. The linker retains
 `ResetEntry` and `__Vectors` from the archive and uses the MCU's option-memory
 layout; no alternative reset handler or bootloader layout is supplied.
 
-## Hardware bring-up status (October 11, 2026)
+## Hardware coverage
 
-On the EK-RA4M1, the user verified compilation and successful execution of
-Blinky and TimerDemo after migrating the port to vendor CMSIS registers.
-A Timer DevNo 3 (GPT1) run produced callbacks from four compare triggers at
-100, 1000, 250 and 500 ms. The printed periods are not reliable jitter
-measurements because the run used J-Link `rdimon` semihosting; acquire timing
-samples in RAM or use a nonblocking logging path before measuring latency.
-SCI UART is complete and hardware-tested. The new IIC master/slave loopback,
-GPIO edge interrupts and the remaining untested timer channels still require
-hardware validation.
-
-The 32 peripheral NVIC slots are assigned dynamically through the RA4M1 ICU,
-not fixed to a peripheral. See [INTERRUPTS.md](../INTERRUPTS.md) for the
-routing model, callback ownership and registration restrictions.
+See [the port guide](../README.md#supported-operation-and-limits) for tested
+peripherals and hardware limits. Timer timestamps printed through semihosting
+are not reliable jitter measurements. The 32 peripheral NVIC slots are
+assigned dynamically through the ICU; see [interrupt routing](../INTERRUPTS.md).
 
 ## Validation
 

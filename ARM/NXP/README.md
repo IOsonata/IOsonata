@@ -3,8 +3,8 @@
 The current software baseline covers LPC11U35, LPC1769 and LPC54628. Startup,
 GPIO, UART, timers, polling-master I2C/SPI and full-speed USB device examples
 are integrated. Other NXP directories are not covered by this validation.
-Hardware validation is a separate gate: the LPC11U35 board is being replaced,
-and host models/builds do not establish physical operation on any board.
+Host models and builds do not establish physical operation. Consult the
+peripheral examples for the tested configurations and hardware limits.
 
 ## Supported modes
 
@@ -46,6 +46,9 @@ and remains a family implementation. The generic USB core and classes are
 shared across all three; endpoint allocation respects LPC1769 fixed types.
 
 ## Examples and builds
+
+[LPC11U35 wiring and example instructions](LPC11xx/LPC11U35/exemples/README.md)
+are collected in one guide.
 
 Each MCU's `exemples` folder provides TimerDemo, UartLoopback, UartPrbsTxTest,
 SpiLoopback, I2CScan, UsbCdcLoopback, UsbCdcPrbsTx, UsbHidLoopback,

@@ -8,7 +8,7 @@ USBHS controller. Build the MCU library and applications from the same revision.
 | nRF52 USBD | Full-speed reference; nRF52840 bare-metal and TaktOS combo builds and 2,000-second hardware runs pass |
 | nRF54LM20x USBHS | Device-mode implementation; bare-metal and TaktOS combo builds and 2,000-second hardware runs pass, with host register-model coverage |
 | nRF54H20 | Not covered by this port integration; its NRFS power service requires a separate implementation |
-| Legacy LPC / host USB | Different controller APIs; unchanged |
+| NXP LPC / USB host | LPC device ports are documented in the [USB guide](usb-user-guide.md#nxp-lpc); host mode is outside this LM20 port |
 
 ## Supported transfers
 
@@ -73,7 +73,7 @@ Build `ARM/Nordic/nRF54/nRF54LM20x/lib/ioc`, then one of these projects:
 - `exemples/UsbComboStressTaktOS/ioc`: composite stress with separate service,
   loopback, PRBS and heartbeat threads.
 
-The nine added projects provide Debug and Release builds. Build the matching
+The USB-only projects provide Debug and Release builds. Build the matching
 Debug or Release LM20 library configuration first. The applications use the
 USB stack from that library; they do not enable a Bluetooth stack. The two
 TaktOS projects also link `TaktOS_M33` from the matching Debug or Release build
@@ -85,9 +85,10 @@ The keyboard pin map follows the existing LM20 Nordic DK examples: A on
 P1.26, Caps Lock on P1.09 and the Caps Lock LED on P1.22, all active low.
 Adapt `src/board.h` for another board.
 
-`UsbHid3dMouse` still needs an LM20 SPI driver and a BMI323 board pin map.
-The LM20 library currently links only the generic SPI helpers, which do not
-define `SPIInit`; the existing Nordic SPI driver is not ported to LM20.
+The LM20 library now links `spi_nrfx.cpp`, including the LM20 target selection.
+A BMI323-based `UsbHid3dMouse` still needs a matching target project, board pin
+map and sensor validation; the nRF52840 board configuration cannot be reused
+without adapting the wiring.
 The legacy nRF5 SDK USB demos and TinyUSB comparison projects are separate
 integrations and are not part of this portable USB project set.
 `exemples/TinyUsbComboStress/ioc` runs the combo workload on TinyUSB's DWC2
@@ -111,6 +112,15 @@ unplug/replug with traffic active, suspend/resume, remote wake, and simultaneous
 IN/OUT traffic. Check CDC PRBS continuity and ISO diagnostics across these cases.
 The register model cannot establish PHY timing, electrical compliance or host
 interoperability.
+
+### USB CDC to BLE peripheral bridge
+
+`exemples/UsbBleDemo/ioc` links the shared
+[usb_ble.cpp](../exemples/bluetooth/usb_ble.cpp). Use this example for a simple
+USB CDC/BLE peripheral bridge. Match the library's Debug/Release or SDC
+configuration and program the required S145 image for non-SDC builds, as
+outlined below. See the [Bluetooth guide](bluetooth-user-guide.md) for security
+and event processing.
 
 ### USB CDC to BLE central bridge
 

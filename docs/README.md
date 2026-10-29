@@ -24,6 +24,25 @@ The book remains useful for the object-design model and historical background, b
 7. [Supported Targets](supported-targets.md): MCU support, implementation limits, hardware-validation baselines and target-status rules.
 8. [Dependencies](dependencies.md): tool, SDK and optional-library boundaries.
 
+## User guides
+
+| Topic | Guide |
+|---|---|
+| Bluetooth | [Bluetooth](bluetooth-user-guide.md) |
+| USB device classes | [USB](usb-user-guide.md), [nRF54LM20 USBHS](usb-nrf54lm20x.md) |
+| Internal and serial memory | [NVM](nvm-user-guide.md) |
+| SD cards over SPI or SD/MMC | [SD cards](sdcard-user-guide.md) |
+| External SDRAM | [SDRAM](sdram-user-guide.md) |
+| PWM sound | [Buzzer](buzzer.md) |
+| I2S and codec audio | [nRF5340 Audio DK](nrf5340-audio-dk.md) |
+| GPIO SPI master | [Software SPI](spi_soft.md) |
+| TCP/UDP, TLS, MQTT and CoAP | [Networking](networking.md), [protocol examples](network-protocol-examples.md) |
+| Power management | [nPM1300](npm1300.md) |
+| Displays | [SSD1315](display/ssd1315.md), [touch](display/touch.md) |
+
+Use matching library and application configurations. Public layout changes in
+0.13 require rebuilding both, including applications using USB HID or MSC.
+
 ## Release preparation
 
 [0.13 changes and migration notes](releases/0.13.md) record the release scope,
@@ -62,6 +81,10 @@ Documents behavioural inheritance, shared virtual `Device` state, multi-function
 
 - [NVM User Guide](nvm-user-guide.md): geometry, linker regions, internal and
   external memory, deferred operations, block/filesystem integration and tests.
+- [SD Card User Guide](sdcard-user-guide.md): SPI and SD/MMC setup, sector access
+  and the supplied card test.
+- [SDRAM User Guide](sdram-user-guide.md): controller setup, timing configuration
+  and the external-memory test.
 - [NVM architecture](architecture/nvm.md): device/transport ownership,
   completion state, controller ports and sector adaptation.
 

@@ -53,8 +53,7 @@ optional `UsbCtrlrCfg_t::pIOPinMap` and does not hard-code EK-RA4M1 pins.
 ## Build integration
 
 The RA4M1 IOC library already links the generic USB headers and sources. The
-RA4M1 USBFS controller source is now linked into it. The e2 library project
-links the same generic USB headers/sources and the RA4M1 controller source.
+RA4M1 USBFS controller source is linked into the same IOcomposer library.
 `RA4/RA4M1/exemples/UsbCdcLoopback/ioc` builds the existing generic CDC
 loopback application for the EK-RA4M1 device USB connector.
 `RA4/RA4M1/exemples/UsbCdcIsoStress/ioc` builds the CDC loopback plus

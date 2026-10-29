@@ -2116,11 +2116,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto-engine.md</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto-port-audit.md</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto-port-audit.md</locationURI>
-		</link>
-		<link>
 			<name>src/crypto/crypto.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
@@ -2134,11 +2129,6 @@
 			<name>src/crypto/crypto_aes_soft.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_arch_design_note.md</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_arch_design_note.md</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_p256.cpp</name>

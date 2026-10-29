@@ -16,19 +16,27 @@ application `board.h`, then use those definitions when opening the PWM
 channel:
 
 ```cpp
+#include "audio/buzzer.h"
+
 static const PwmChanCfg_t toneChannel = {
-    .Chan = 0,
-    .Pol = PWM_POL_HIGH,
-    .Port = TONE_PORT,
-    .Pin = TONE_PIN
+	.Chan = 0,
+	.Pol = PWM_POL_HIGH,
+	.Port = TONE_PORT,
+	.Pin = TONE_PIN
 };
 
 Pwm pwm;
 Buzzer buzzer;
 
-pwm.Init(pwmCfg);
-pwm.OpenChannel(&toneChannel, 1);
-buzzer.Init(&pwm, toneChannel.Chan);
+// Run during application initialization, after defining pwmCfg.
+static bool InitBuzzer(const PwmCfg_t &pwmCfg)
+{
+	if (!pwm.Init(pwmCfg) || !pwm.OpenChannel(&toneChannel, 1))
+	{
+		return false;
+	}
+	return buzzer.Init(&pwm, toneChannel.Chan);
+}
 ```
 
 Do not put board pin assignments in the generic buzzer or MCU PWM driver.
@@ -57,9 +65,9 @@ using Note = BuzzerPitch;
 using Length = BuzzerDuration;
 
 static const BuzzerNote_t notes[] = {
-    {Note::C5,   Length::Quarter},
-    {Note::Rest, Length::Eighth},
-    {Note::G5,   Length::Half}
+	{Note::C5,   Length::Quarter},
+	{Note::Rest, Length::Eighth},
+	{Note::G5,   Length::Half}
 };
 
 BuzzerPlayer player;
@@ -124,9 +132,9 @@ Custom effects use notes, milliseconds and optional volume endpoints:
 
 ```cpp
 static const BuzzerEffectStep_t effect[] = {
-    {Note::C8,   Note::G8,   300},          // Rising pitch
-    {Note::G8,   Note::G8,   200, 100, 0},  // Fade out
-    {Note::Rest, Note::Rest, 100}            // Silence
+	{Note::C8,   Note::G8,   300},          // Rising pitch
+	{Note::G8,   Note::G8,   200, 100, 0},  // Fade out
+	{Note::Rest, Note::Rest, 100}            // Silence
 };
 player.PlayEffect(effect, 3, 2); // Play the sequence twice; zero repeats forever
 ```
@@ -189,6 +197,16 @@ loop every 5 ms and the ISR performs no melody or PWM work.
 The demo plays Jingle Bells at 120 BPM, then Chirp, Laser, Siren, Warble, Pulse
 and Fade for two seconds each, then repeats. Keep `TONE_PORT` and `TONE_PIN`
 in the application's `board.h`.
+
+## Build and run
+
+Build `ARM/Nordic/nRF52/nRF52840/lib/ioc`, then import
+`ARM/Nordic/nRF52/nRF52840/exemples/BuzzerDemo/ioc` in IOcomposer. Match the
+Debug or Release configuration. Configure the buzzer pin and its active
+polarity for the actual output circuit before programming the application.
+Check PWM, timer, buzzer and player initialization results before starting
+playback. Use [Getting Started](getting-started.md) for library builds and
+[the Audio DK guide](nrf5340-audio-dk.md) for I2S/codec playback instead of PWM.
 
 ## Validation status
 

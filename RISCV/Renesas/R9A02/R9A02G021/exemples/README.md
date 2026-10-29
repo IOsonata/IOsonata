@@ -1,59 +1,27 @@
 # R9A02G021 examples
 
-Each example has an `ioc` project and a native Renesas e2 studio `e2` project.
-Import the library and examples with **Existing Projects into Workspace**,
-leaving **Copy projects into workspace** unchecked so relative source links
-continue to resolve inside the repository.
+Use IOcomposer with the xPack GNU RISC-V toolchain. Import `../lib/ioc`
+(project `IOsonata_R9A02G021`) and the desired `<example>/ioc` project with
+**Existing Projects into Workspace**. Leave **Copy projects into workspace**
+unchecked so relative source links continue to resolve inside the repository.
+Build the library first, then the example with the same Debug or Release
+configuration.
 
-| IDE | Library directory and project | Example directory and project |
-| --- | --- | --- |
-| IOcomposer, xPack GCC | `../lib/ioc`, `IOsonata_R9A02G021` | `<example>/ioc`, `<example>` |
-| e2 studio, Renesas LLVM | `../lib/e2`, `IOsonata_R9A02G021_e2` | `<example>/e2`, `<example>_e2` |
+The projects use RV32IMAC with Zba, Zbb, Zbs, Zicsr and Zifencei, the ilp32
+ABI, GNU C17/C++23 and newlib-nano.
 
-Build the same library configuration (Debug or Release) before the example.
-The e2 projects link only `lib/e2/Debug` or `lib/e2/Release`; GCC and LLVM
-archives must not be mixed. Project references name the e2 library.
-
-Both use RV32IMAC with Zba, Zbb, Zbs, Zicsr and Zifencei and the ilp32 ABI.
-The ioc projects use GNU C17/C++23 and newlib-nano. The e2 projects use
-LLVM for Renesas RISC-V 19.1.7.202501, GNU C17/C++17 and its prebuilt runtime.
-Select that compiler in e2 studio Toolchain Management. They use
-the native Renesas LLVM managed-build integration for R9A02G0214CNE on the
-FPB-R9A02G021; no Smart Configurator generated startup is required.
-
-Debug enables semihosting and leaves `NDEBUG` undefined. These RISC-V
-toolchains call the library `semihost`, the equivalent of Arm `rdimon`:
-GCC uses `--specs=semihost.specs`, and both toolchains link `libsemihost`
-with `--whole-archive` / `--no-whole-archive` so its syscalls replace the
-weak startup stubs. The e2 linker command places this library before the
-application libraries to avoid extracting the UART syscall implementation.
-The runtime constructor initializes the host streams. Run Debug with
-debugger semihosting enabled; the examples enable UART console retargeting
-only in Release.
+Debug enables semihosting and leaves `NDEBUG` undefined. The RISC-V toolchain
+uses `--specs=semihost.specs` and links `libsemihost` with `--whole-archive` /
+`--no-whole-archive` so its syscalls replace the weak startup stubs. Run Debug
+with debugger semihosting enabled; the examples enable UART console
+retargeting only in Release.
 
 Release uses nosys without semihosting and defines `NDEBUG` in the C and
 C++ compiler settings of both the examples and the matching library.
 Use Release for standalone operation and UART performance measurements.
 
-The C, C++, assembler and linker command patterns explicitly place
-`-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32` after `${FLAGS}`.
-This keeps Zicsr and Zifencei enabled when e2 studio supplies its default
-device architecture without them. The setting applies to both library
-configurations and all examples; `__riscv_zicsr` is supplied by the compiler.
-The C, C++ and assembler patterns also include `-c` to produce object files;
-linking is performed only by the separate linker step.
 After updating an imported project, refresh it and clean/rebuild the library
-and example. The build command must contain the explicit architecture above.
-
-The linker-script column below lists the ioc scripts. The e2 projects use
-`llvm_R9A02G021.ld`, or `llvm_dfu_boot_r9a02g021.ld` for DfuBoot. Their memory
-maps and option-setting words match the ioc scripts. They use LLVM runtime
-libraries and `llvm_riscv_flash.ld` sections accepted by LLD. The e2 library's
-`start_llvm.c` runs C/C++ initializers and main after `ResetEntryInit` has
-initialized RAM and the MCU. The executable names remain `<example>.elf`.
-The linker Entry point field is empty: `llvm_riscv_flash.ld` already declares
-`ENTRY(ResetEntry)`. A bare `ResetEntry` in that field is passed to clang as
-an input filename and causes a "no such file or directory" error.
+and example. Executable names are `<example>.elf`.
 
 | Directory | Shared application source | Linker script | Setting |
 | --- | --- | --- | --- |

@@ -70,7 +70,7 @@ resetting or pausing the configuration. The software count origin preserves
 elapsed ticks during period changes. A single shot delivers one trigger callback
 but leaves the timer counting with that reload period for timekeeping; explicitly
 disabling the trigger restores the 65536-tick cycle. Both AGT compare registers
-are deliberately unused in this increment: immediate compare updates require
+are deliberately unused in this implementation: immediate compare updates require
 stopping, and running writes are buffered until underflow.
 
 GPT exposes six independent compare triggers with buffering, capture, dead time
@@ -95,7 +95,7 @@ A trigger-specific handler takes precedence. When it is null, the timer's event
 handler receives `TIMER_EVT_TRIGGER(n)`. Counter overflow notification uses
 `TIMER_EVT_COUNTER_OVR`; AGT reload events can therefore produce an overflow
 notification and a trigger notification. `bTickInt=true` is rejected: this
-increment does not synthesize an interrupt for each counter increment.
+implementation does not synthesize an interrupt for each counter increment.
 
 ## Start, stop, reset, and error handling
 
@@ -129,7 +129,7 @@ a caller's object pointer; unconfirmed hardware stop blocks reuse until MCU rese
 
 External clock input, external capture/trigger, PWM outputs, general ELC routing,
 DMA/DTC activation and automatic software-standby wake configuration are outside
-this increment. Their absence is explicit; external trigger enable returns false.
+this implementation. Their absence is explicit; external trigger enable returns false.
 No application GPIO is selected or changed. Only AGT1 is a software-standby wake
 source in the hardware manual; this port does not configure that wake policy.
 
@@ -148,48 +148,13 @@ reset and frequency change; compare observed intervals with the returned rate.
 Use explicit trigger indices and check `nsTimerEnableTrigger`/`EnableTrigger`
 return values so allocation or period failures are not hidden by a wrapper.
 
-## Reproducible validation
+## Validation
 
-Run from the repository root:
-
-```sh
-python3 tests/ra4m1/run_timer_validation.py
-```
-
-The runner contains historical host-model coverage for startup, GPIO/ICU,
-UART, timer and ARM object compilation. **Its published assertion counts
-predate the migration to the Renesas CMSIS peripheral structures.** The
-simplified register-model tests must be refreshed and rerun before reporting
-those counts as results for the current branch. These models are not a
-substitute for a production-header firmware build or hardware execution.
-
-**The tests use simplified headers, not the production headers.** The UART regression uses its
-existing CFifo test double in the standalone source package; its runner also
-uses production CFifo when that source is present in a full checkout. The
-inherited ARM link probe validates startup/vector archive extraction, not a
-complete timer application link. The user subsequently confirmed that RA4M1 firmware compiles and that
-Blinky and TimerDemo run on an EK-RA4M1. Timing accuracy, interrupt latency,
-UART, standby, and the refreshed host regression suite remain unverified.
-
-## EK-RA4M1 bring-up (October 11, 2026)
-
-The user confirmed successful firmware compilation and operation of Blinky
-and TimerDemo following the vendor CMSIS register migration. The AGT0
-`TimerInit()` failure is no longer observed in that hardware test.
-
-Timer DevNo 3 (GPT1) was tested with four compare triggers at 100, 1000,
-250 and 500 ms. All four produced callbacks. After initial arming, triggers
-0, 1 and 2 largely reported their requested periods. Trigger 3's reported
-intervals varied in the captured debugger output. That output used J-Link
-`rdimon` semihosting; debugger-mediated printing can halt the core and
-distort callback timestamps. It does not establish a GPT hardware-clock or
-compare-register timing defect. Capture timestamps in RAM, without
-semihosted printing during measurement, before assessing jitter.
-
-The driver accesses `R_AGTn->AGT16` and `R_GPTn` through Renesas CMSIS
-peripheral structures, and routes each event through the MCU ICU manager.
-See [INTERRUPTS.md](INTERRUPTS.md) for the difference between ARM system
-exceptions, NVIC slot numbers, peripheral event IDs and their lifecycles.
+Run `python3 tests/ra4m1/run_timer_validation.py` from the repository root.
+The runner uses register models and build checks; it does not measure hardware
+timing. See [the port guide](README.md#supported-operation-and-limits) for
+recorded EK-RA4M1 results and remaining hardware limits. Collect timestamps
+in RAM without semihosted printing when measuring callback jitter.
 
 ## Hardware basis
 
@@ -198,5 +163,3 @@ September 29, 2023: chapters 10/12 (module stop and protection), 13 (ICU),
 22 (GPT registers, compare sources and usage notes), and 23 (AGT registers,
 reload operation and usage notes 23.4.1, 23.4.3 and 23.4.10). Renesas FSP
 v6.6.0 `r_gpt.c` and `r_agt.c` were secondary cross-checks, not dependencies.
-IOsonata interfaces and Renesas RE01 patterns were read at UART base commit
-`9db6fae7ea6b5a06db56f5381c4e2069c2a69e22`.

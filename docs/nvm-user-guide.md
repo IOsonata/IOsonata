@@ -18,8 +18,11 @@ See [NVM architecture](architecture/nvm.md) for implementation boundaries.
 
 The shared demo selects its medium with `NVM_DEMO_MEDIUM`, operation mode
 with `NVM_DEMO_ASYNC`, and Bluetooth activity with `NVM_DEMO_BLE`.
-It is source to integrate into a matching target application; this repository
-does not provide a dedicated NvmDemo `ioc/` project.
+Supplied `NvmDemo/ioc` projects include STM32L476, LPC54628, nRF9160,
+nRF91x1 and RA4M1. Inspect each project's linked source and medium selection:
+the RA4M1 project uses [data_nvm_demo.cpp](../exemples/storage/data_nvm_demo.cpp)
+for data flash, while other projects may use the shared demo or target-specific
+setup. A matching project name does not imply the same physical memory.
 
 The hardware demo writes and erases scratch storage. Its current internal
 setup chooses space below `NvmMcuCeiling()`, prints linker regions, but does
@@ -112,11 +115,11 @@ static Nvm s_Memory;
 static bool StorageInit()
 {
 	NvmCfg_t cfg = {};
-	NvmMcuCfg(cfg);
 	const uint64_t start = NvmRegionAddr(0);
 	const uint64_t size = NvmRegionSize(0);
 	const uint64_t ceiling = NvmMcuCeiling();
 
+	NvmMcuCfg(cfg);
 	if (size == 0 || start < cfg.BaseAddr ||
 		start - cfg.BaseAddr > cfg.TotalSize ||
 		size > cfg.TotalSize - (start - cfg.BaseAddr) ||
@@ -199,13 +202,23 @@ while waiting. Drain work before replacing buffers or shutting down storage.
 
 ## Internal-memory ports and radio coexistence
 
-The current implementations are
-[Nordic](../ARM/Nordic/src/nvm_nrfx.cpp) and
-[STM32](../ARM/ST/src/nvm_stm32.cpp). They have different capabilities:
+Internal-memory implementations differ by MCU and memory type:
+
+| Port | Memory |
+|---|---|
+| [Nordic](../ARM/Nordic/src/nvm_nrfx.cpp) | Target flash or RRAM, with stack-specific arbitration |
+| [STM32 WBA/L4/H753](../ARM/ST/src/nvm_stm32.cpp) | Internal flash |
+| [STM32L152](../ARM/ST/STM32L1xx/src/nvm_stm32l1xx.cpp) | True data EEPROM; byte overwrite, no erase step |
+| [RA4M1](../ARM/Renesas/RA4/RA4M1/src/nvm_ra4m1.cpp) | Data flash; byte programming, explicit 1 KiB erase |
+| [LPC546xx](../ARM/NXP/LPC546xx/src/nvm_lpc546xx.cpp) | Internal flash through IAP |
+
+Use the geometry from the selected port; internal data EEPROM and data flash
+are separate from application code flash. The code-flash linker example above
+must not be copied unchanged to those media.
 
 - Nordic selects internal-controller access, SoftDevice submission or an
   MPSL-timeslot route according to its build and active stack integration.
-- The current STM32 source supports WBA/L4 selections. Its operations finish
+- The shared STM32 flash source supports WBA, L4 and H753. Its operations finish
   in the call; requesting interface interrupt mode does not make them
   asynchronously arbitrated.
 - A declared arbiter hook does not prove every port uses it. Do not infer

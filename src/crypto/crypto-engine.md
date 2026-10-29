@@ -3,7 +3,7 @@
 IOsonata's cryptographic primitives are modeled the same way as every other
 device in the framework: as objects on the `Device` base. A crypto engine is a
 `Device`, so it carries the same lifecycle (`Enable` / `Disable` / `Reset`) and
-event model as a bus or a sensor. On top of `Device` sit the crypto interfaces, each
+event model as a sensor. Buses derive from the separate `DeviceIntrf` family. On top of `Device` sit the crypto interfaces, each
 a small abstract interface for one family of operations.
 
 ## Crypto interfaces
@@ -14,7 +14,8 @@ states what operation is wanted, never how or where it runs:
 - `CryptoEngine` : the common base, `virtual public Device`. Holds the async
   completion handler (see below).
 - `CipherEngine` : symmetric cipher (`Cipher`, AES-128/256 ECB/CTR/CBC).
-- `MacEngine` : keyed message authentication (`Mac`, AES-CMAC).
+- `MacEngine` : keyed message authentication (`Mac`, AES-CMAC or HMAC-SHA-256).
+- `AeadEngine` : authenticated encryption (`Seal` / `Open`, AES-CCM/GCM).
 - `HashEngine` : unkeyed message digest (`Hash`, SHA-256).
 - `KeyAgreeEngine` : key generation and key agreement (`KeyGen`, `Agree`, P-256
   ECDH).
@@ -95,8 +96,7 @@ must be serialized before concurrent operation access begins. Copy construction 
 Existing consumers accepting capability pointers can receive `&g_Crypto` through
 ordinary base conversion. Software-only objects have independent RNG state.
 
-The [MCU port audit](crypto-port-audit.md) lists hardware acceleration and required
-software operations for every port. AES-128/256 ECB/CBC/CTR and P-256 import are
+AES-128/256 ECB/CBC/CTR and P-256 import are
 required generic operations. Missing hardware support selects the software
 implementation inside the library; a hardware error never triggers a software
 retry. AES-256 is not an optional CryptoTest capability.
@@ -168,8 +168,9 @@ consumer is curve-blind and key-blind:
   on the curve before the agreement, closing the invalid-curve attack
   (CVE-2018-5383). The software engine checks with `uECC_valid_public_key`; the PKA
   engines validate the point on the accelerator.
-- **Single-use ephemeral key**: `Agree` wipes the shared secret on every exit
-  and, by default, wipes the private key too, so a second `Agree` without a fresh
+- **Single-use ephemeral key**: successful `Agree` returns the shared secret
+  to the caller and wipes temporary secret storage. By default it consumes
+  the private key too, so a second `Agree` without a fresh
   `KeyGen` fails rather than reusing a spent key. A caller that needs one
   ephemeral pair for several concurrent peers passes `bKeepKey = true`, which
   keeps the key after a success. A failure wipes it; transient busy status
@@ -190,9 +191,9 @@ consumer is curve-blind and key-blind:
 | `Ba414ep` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/ba414ep.cpp` | Hardware P-256 key generation/ECDH over the injected CRACEN interface. Inherits software key import and ECDSA. The Nordic interface loads PKE microcode. |
 | `CryptoCc3xx` | `KeyAgreeEngine`, `SignEngine` | `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 key generation/ECDH on CC3xx. Inherits software key import and ECDSA. `Cc3xxIntrf` supplies register access and arbitration. |
 | `CryptoWbaPka` | `KeyAgreeEngine`, `SignEngine` | `ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp` | Hardware P-256 import, generation, agreement and ECDSA. Shares the key-context type with `CryptoUecc`, without inheriting its software methods. |
-| `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_aes_modes.cpp` | Software AES-128/256 cipher (FIPS-197) and AES-128 CMAC. CMAC/CCM/GCM use protected virtual block hooks, which hardware subclasses override. |
+| `CryptoSoftAes` | `CipherEngine`, `MacEngine`, `AeadEngine` | `src/crypto/crypto_aes_modes.cpp` | Software AES-128/256 cipher (FIPS-197) and AES-128 CMAC. CMAC/CCM/GCM use protected virtual block hooks, which hardware subclasses override. |
 | `CryptoMaster` | `CipherEngine`, `MacEngine`, `AeadEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128/256 encryption and decryption on Silex BA411e. Inherits CMAC/CCM/GCM composition from `CryptoAesModes`, without software AES. |
-| `CryptoSoftSha256` | `HashEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4). Unkeyed digest; serves DFU image verification and any hashing consumer. |
+| `CryptoSoftSha256` | `HashEngine`, `MacEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4) and HMAC-SHA-256. Serves DFU image verification and other hashing or MAC consumers. |
 | `CryptoSoftRng` | `RngEngine` | `src/crypto/crypto_softrng.cpp` | Software PRNG base. Statistical use only; not a security random source. |
 | `CryptoRngNrf` | `RngEngine` | `ARM/Nordic/src/rng_nrfx.cpp` | Nordic hardware RNG (conditioned CRACEN TRNG on nRF54L/H, NRF_RNG on nRF52/network core, CC3xx on nRF5340 application/nRF91). Platform singleton `CryptoRngNrfInstance`. |
 | `CryptoRngStm32` | `RngEngine` | `ARM/ST/src/rng_stm32.cpp` | STM32 hardware RNG peripheral. Platform singleton `CryptoRngStm32Instance`. |
@@ -224,17 +225,20 @@ controller supplies those operations; this change does not alter their setup.
 The engine composition applies only where IOsonata's `bt_smp.cpp` runs the SMP
 state machine in-host:
 
-- **Host-driven** (SDC; sdk-nrf-bm / nRF54 in-host): construct the engines and
-  fill the slots.
-- **Stack-owned** (STM32WB): the co-processor firmware owns pairing through the
-  `ACI_GAP` vendor interface, with the on-die PKA handling ECDH below the API.
-  `bt_smp.cpp` is not in the pairing path and no engine is injected.
+- **IOsonata host over HCI**: `bt_sec_hci.cpp` initializes SMP with the
+  controller key-agreement, AES and RNG interfaces. This includes SDC and
+  external HCI controllers.
+- **Vendor-host ports**: nRF52 SoftDevice, nRF54 S145/sdk-nrf-bm and STM32WBA
+  use their vendor pairing procedures. `bt_smp.cpp` does not run pairing for
+  these links. Their bond-storage integration is a separate concern.
+
+See [Bluetooth architecture](../../docs/architecture/bluetooth.md).
 
 ## Reuse beyond Bluetooth
 
 The interfaces are not Bluetooth-scoped. The same engines serve any consumer: secure
-DFU (`CryptoSoftSha256` + `CryptoUecc::Verify` validate a signed image), and TLS
-or encrypted storage as those consumers arrive. New primitives are added by
+DFU (`CryptoSoftSha256` + `CryptoUecc::Verify` validate a signed image), and the existing TLS implementation. Other consumers can reuse them without
+adding Bluetooth dependencies. New primitives are added by
 appending an interface or an algorithm value, never by renumbering existing ones.
 
 ## File layout

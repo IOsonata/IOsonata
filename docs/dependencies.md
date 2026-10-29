@@ -6,12 +6,13 @@ This document defines which tools, SDKs and optional libraries belong to IOcompo
 
 The default layout is:
 
-```text
-~/IOcomposer/
-├── IOsonata/
-├── external/
-└── workspaces/
-```
+| Directory under `~/IOcomposer` | Purpose |
+|---|---|
+| `IOsonata/` | Source and managed projects |
+| `external/` | Vendor SDKs and optional dependencies |
+| `Tools/` | Firmware utilities and managed Python |
+| `TaktOS/` | Kernel checkout when installed |
+| `workspaces/` | Default workspace area |
 
 On Windows, use `%USERPROFILE%\IOcomposer`.
 
@@ -26,6 +27,11 @@ The installed environment provides the tools required by the selected installati
 - project and debug integration;
 - the MCU-library builders;
 - supported SDK checkouts used by installed targets.
+
+Firmware utilities are installed under `Tools/bin`, with Python packages in
+`Tools/Python` under the SDK root. HEX merging uses Python IntelHex. The
+installers do not install LLVM or SRecord. Keep `Tools` when preserving an
+offline installation.
 
 The installer output records the exact versions and locations used by that installation.
 
@@ -71,7 +77,9 @@ IOsonata does not own the scheduler.
 
 - TaktOS can be installed and built by the library builder.
 - FreeRTOS and ThreadX are application/kernel dependencies.
-- Bare metal, TaktOS, FreeRTOS and ThreadX can link the same selected IOsonata MCU library binary.
+- Most targets share one selected MCU library across execution models.
+- nRF91 modem applications require the matching bare-metal or `_TaktOS`
+  library configuration; see [modem OS selection](bluetooth-user-guide.md#nrf91-modem-os-library-build-selection).
 
 ## Ownership boundary
 
