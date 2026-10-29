@@ -58,17 +58,17 @@
 		<link>
 			<name>src/FreeRTOS/croutine.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/croutine.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/freertos/source/croutine.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/event_groups.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/event_groups.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/freertos/source/event_groups.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/list.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/list.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/freertos/source/list.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/nrf52</name>
@@ -83,22 +83,22 @@
 		<link>
 			<name>src/FreeRTOS/queue.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/queue.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/freertos/source/queue.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/stream_buffer.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/stream_buffer.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/freertos/source/stream_buffer.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/tasks.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/tasks.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/freertos/source/tasks.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/timers.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/timers.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/freertos/source/timers.c</locationURI>
 		</link>
 		<link>
 			<name>src/libraries/util</name>
@@ -131,11 +131,6 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52/portmacro_cmsis.h</locationURI>
 		</link>
 		<link>
-			<name>src/FreeRTOS/portable/Common</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/FreeRTOS/portable/MemMang</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -146,14 +141,9 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_util_platform.c</locationURI>
 		</link>
 		<link>
-			<name>src/FreeRTOS/portable/Common/mpu_wrappers.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/portable/Common/mpu_wrappers.c</locationURI>
-		</link>
-		<link>
 			<name>src/FreeRTOS/portable/MemMang/heap_3.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/portable/MemMang/heap_3.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/freertos/source/portable/MemMang/heap_3.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
