@@ -32,6 +32,8 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 
+#include "samd21j18a.h"
+
 #include "coredev/iopincfg.h"
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
@@ -596,9 +598,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		*Samd21UartReg8(pHw, SAMD21_SERCOM_INTENCLR) = 0xFFU;
 		*Samd21UartReg8(pHw, SAMD21_SERCOM_INTENSET) =
 			SAMD21_USART_RXC | SAMD21_USART_ERROR;
-		NVIC_ClearPendingIRQ((IRQn_Type)(9 + pCfg->DevNo));
-		NVIC_SetPriority((IRQn_Type)(9 + pCfg->DevNo), pCfg->IntPrio);
-		NVIC_EnableIRQ((IRQn_Type)(9 + pCfg->DevNo));
+		NVIC_ClearPendingIRQ((IRQn_Type)(SERCOM0_IRQn + pCfg->DevNo));
+		NVIC_SetPriority((IRQn_Type)(SERCOM0_IRQn + pCfg->DevNo), pCfg->IntPrio);
+		NVIC_EnableIRQ((IRQn_Type)(SERCOM0_IRQn + pCfg->DevNo));
 	}
 
 	return true;
