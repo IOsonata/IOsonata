@@ -30,6 +30,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdbool.h>
 #include <stdint.h>
+#include "samdxxx.h"
 
 #include "clock_samd.h"
 
