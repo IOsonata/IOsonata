@@ -633,8 +633,8 @@ cat > "$UDEV_SRC" <<'EOF'
 # IDAP-Link for Linux
 # Copyright (c) 2018 I-SYST inc. All rights reserved.
 # https://www.i-syst.com
-KERNEL=="hidraw*", ATTRS{idVendor}=="1fc9", ATTRS{idProduct}=="80d1", MODE="0666", GROUP="wheel"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="1fc9", ATTRS{idProduct}=="80d1", MODE="0666", GROUP="wheel"
+KERNEL=="hidraw*", ATTRS{idVendor}=="1fc9", ATTRS{idProduct}=="80d1", MODE="0666"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1fc9", ATTRS{idProduct}=="80d1", MODE="0666"
 EOF
 
 echo
@@ -646,26 +646,23 @@ if [[ ! -x "$IDAP_PROG" || "$MODE" == "force" ]]; then
   echo
   echo ">>> Downloading IDAPnRFProg tool..."
   IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/Linux/IDAPnRFProg_Linux_2_1_240807.zip/download"
-	IDAP_STAGE=$(mktemp -d)
-	if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
-		rm -rf "$IDAP_STAGE"
-		echo "IDAP download failed; existing executables preserved." >&2
-		exit 1
-	fi
-	if ! unzip -o -j "$IDAP_STAGE/archive.zip" -d "$IDAP_STAGE/unpacked" \
-		|| [[ ! -s "$IDAP_STAGE/unpacked/IDAPnRFProg" ]]; then
-		rm -rf "$IDAP_STAGE"
-		echo "Invalid IDAP archive." >&2
-		exit 1
-	fi
-	for tool in IDAPnRFProg IDAPSetTarget; do
-		if [[ -s "$IDAP_STAGE/unpacked/$tool" ]]; then
-			chmod +x "$IDAP_STAGE/unpacked/$tool" || exit 1
-			cp "$IDAP_STAGE/unpacked/$tool" "$TOOLS_DIR/$tool" || exit 1
-		fi
-	done
-	rm -rf "$IDAP_STAGE"
-	echo "IDAP executables installed in $TOOLS_DIR"
+  IDAP_STAGE=$(mktemp -d)
+  if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
+    echo "Warning: IDAP download failed; existing executables preserved." >&2
+  elif ! unzip -o -j "$IDAP_STAGE/archive.zip" -d "$IDAP_STAGE/unpacked" \
+    || [[ ! -s "$IDAP_STAGE/unpacked/IDAPnRFProg" ]]; then
+    echo "Warning: Invalid IDAP archive; installation continues." >&2
+  else
+    for tool in IDAPnRFProg IDAPSetTarget; do
+      if [[ -s "$IDAP_STAGE/unpacked/$tool" ]]; then
+        if ! chmod +x "$IDAP_STAGE/unpacked/$tool" || ! cp "$IDAP_STAGE/unpacked/$tool" "$TOOLS_DIR/$tool"; then
+          echo "Warning: Could not install $tool; installation continues." >&2
+        fi
+      fi
+    done
+    echo "IDAP tools download processed in $TOOLS_DIR"
+  fi
+  rm -rf "$IDAP_STAGE"
 else
   echo "✅ IDAPnRFProg already installed (skipping)"
 fi
@@ -1095,19 +1092,6 @@ fi
 rm -f "$TMP_CLONE" || true
 
 rm -f "$CLONE_LOG" || true
-
-echo ">>> Fixing Eclipse project paths for Linux compatibility..."
-
-# Fix nrfx MDK path (nrfx repo restructured: mdk moved to bsp/stable/mdk)
-find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|nrfx/mdk|nrfx/bsp/stable/mdk|g' {} \; 2>/dev/null || true
-
-# Fix Fusion case sensitivity (Linux filesystems are case-sensitive)
-find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|external/fusion|external/Fusion|g' {} \; 2>/dev/null || true
-
-# Fix CMSIS case sensitivity (folder is "Include" not "include")
-find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|CMSIS/Core/include|CMSIS/Core/Include|g' {} \; 2>/dev/null || true
-
-echo "Eclipse project path substitutions completed for Linux"
 
 # ---------------------------------------------------------
 # Install IOsonata Eclipse Plugin
