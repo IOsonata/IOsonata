@@ -861,8 +861,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		uint16_t maxTxTime   = (uint16_t)(maxlen[2] | (maxlen[3] << 8));
 
 		// The link-layer payload includes the four-byte L2CAP header.
-		uint32_t mtu = max((uint32_t)pCfg->MaxMtu, 23U);
-		uint16_t txOctets = (uint16_t)min((uint32_t)maxTxOctets, min(mtu + 4U, 251U));
+		uint32_t mtu = max((uint32_t)pCfg->MaxMtu, (uint32_t)23U);
+		uint16_t txOctets = (uint16_t)min((uint32_t)maxTxOctets, min(mtu + 4U, (uint32_t)251U));
 		uint8_t datalen[4];
 		datalen[0] = (uint8_t)(txOctets & 0xff);
 		datalen[1] = (uint8_t)(txOctets >> 8);

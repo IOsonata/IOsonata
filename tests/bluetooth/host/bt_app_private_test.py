@@ -194,6 +194,17 @@ int main() {
 }
 """
 	build(directory, 'data_length', code, flags)
+	# Arm GCC defines uint32_t as unsigned long. Linux uses unsigned int and
+	# excludes the target min/max overloads, hiding mixed-operand ambiguity.
+	overloads = r"""
+static unsigned min(unsigned a, unsigned b) { return a < b ? a : b; }
+static unsigned long min(unsigned long a, unsigned long b) { return a < b ? a : b; }
+static unsigned max(unsigned a, unsigned b) { return a > b ? a : b; }
+static unsigned long max(unsigned long a, unsigned long b) { return a > b ? a : b; }
+"""
+	arm_types = code.replace('uint32_t', 'unsigned long')
+	arm_types = arm_types.replace('struct Config', overloads + '\nstruct Config', 1)
+	build(directory, 'data_length_arm_types', arm_types, flags + ['-Wno-unused-function'])
 	print('PASS HCI and S132 data length bounds', flush=True)
 
 

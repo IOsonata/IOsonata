@@ -1145,7 +1145,7 @@ void BtGattInit(void)
 		if (s_BtAppData.MaxMtu >= 23)
     	{
 			// Clamp before narrowing: ATT MTU 512 must request 251, not 4.
-			uint8_t dlen = (uint8_t)min((uint32_t)s_BtAppData.MaxMtu + 4U, 251U);
+			uint8_t dlen = (uint8_t)min((uint32_t)s_BtAppData.MaxMtu + 4U, (uint32_t)251U);
     		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
     		APP_ERROR_CHECK(err_code);
     	}
