@@ -1301,13 +1301,13 @@ bool BtAppStackInit(int MaxMtu, int PeriphDevMax, int CentralDevMax, bool bConne
     ble_cfg.gatts_cfg.service_changed.service_changed = 1;
     err_code = sd_ble_cfg_set(BLE_GATTS_CFG_SERVICE_CHANGED, &ble_cfg, ram_start);
     APP_ERROR_CHECK(err_code);
-#if 0
-    memset(&ble_cfg, 0, sizeof ble_cfg);
-    ble_cfg.conn_cfg.conn_cfg_tag 					= BLEAPP_CONN_CFG_TAG;
-    ble_cfg.conn_cfg.params.gatts_conn_cfg.hvn_tx_queue_size = 10;
-    err_code = sd_ble_cfg_set(BLE_CONN_CFG_GATTS, &ble_cfg, ram_start);
-    APP_ERROR_CHECK(err_code);
-#endif
+	// Keep notifications queued in the SoftDevice while the application
+	// handles transmit completions. The BtIntrf FIFO is separate storage.
+	memset(&ble_cfg, 0, sizeof(ble_cfg));
+	ble_cfg.conn_cfg.conn_cfg_tag = BTAPP_CONN_CFG_TAG;
+	ble_cfg.conn_cfg.params.gatts_conn_cfg.hvn_tx_queue_size = 10;
+	err_code = sd_ble_cfg_set(BLE_CONN_CFG_GATTS, &ble_cfg, ram_start);
+	APP_ERROR_CHECK(err_code);
     // Enable BLE stack.
     err_code = nrf_sdh_ble_enable(&ram_start);
 	APP_ERROR_CHECK(err_code);

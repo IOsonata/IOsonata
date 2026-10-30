@@ -104,6 +104,45 @@ class PrbsReceiverTest(unittest.TestCase):
         rx.configure_phy(self.link, '2M')
         self.assertEqual(self.link.required_phy, 2)
 
+    def test_matching_phy_does_not_start_another_procedure(self):
+        commands = []
+        def command(opcode, *args, **kwargs):
+            commands.append(opcode)
+            return 0, struct.pack('<HBB', 1, 1, 1)
+        self.wire.command = command
+        rx.configure_phy(self.link, '1M')
+        self.assertEqual(commands, [0x2030])
+
+    def test_changed_phy_waits_for_completion_before_readback(self):
+        commands = []
+        def command(opcode, *args, **kwargs):
+            commands.append(opcode)
+            if opcode == 0x2032:
+                self.wire.packets.append((API.H4_EVENT, API.EVT_LE_META,
+                                         struct.pack('<BBHBB', 0x0C, 0, 1, 2, 2)))
+                return 0, b''
+            if len(commands) == 1:
+                return 0, struct.pack('<HBB', 1, 1, 1)
+            self.assertEqual(self.link.phy, (2, 2))
+            return 0, struct.pack('<HBB', 1, 2, 2)
+        self.wire.command = command
+        rx.configure_phy(self.link, '2M')
+        self.assertEqual(commands, [0x2030, 0x2032, 0x2030])
+        self.assertEqual(self.link.required_phy, 2)
+
+    def test_readback_cannot_replace_missing_completion(self):
+        reads = []
+        def command(opcode, *args, **kwargs):
+            if opcode == 0x2030:
+                reads.append(opcode)
+                return 0, struct.pack('<HBB', 1, 1 if len(reads) == 1 else 2, 1 if len(reads) == 1 else 2)
+            return 0, b''
+        self.wire.command = command
+        with patch.object(rx.time, 'monotonic', side_effect=[0, 0, 6]):
+            with self.assertRaisesRegex(RuntimeError, 'not negotiated'):
+                rx.configure_phy(self.link, '2M')
+        self.assertEqual(len(reads), 1)
+
     def test_phy_fallback_cannot_pass(self):
         self.wire.command = lambda opcode, *args, **kwargs: (0, struct.pack('<HBB', 1, 1, 1))
         with patch.object(rx.time, 'monotonic', side_effect=[0, 0, 6]):

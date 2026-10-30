@@ -306,18 +306,39 @@ def connect(hci, api, args):
 
 def configure_phy(link, phy):
     number = 1 if phy == '1M' else 2
-    link.hci.command(0x2032, struct.pack('<HBBBH', link.handle, 0, number, number, 0))
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        link.pump(0.1)
-        if link.down is not None:
-            raise RuntimeError('disconnected during PHY negotiation, reason 0x%02X' % link.down)
-        status, data = link.hci.command(0x2030, struct.pack('<H', link.handle), allow_fail=True)
-        if status == 0 and len(data) == 4 and tuple(data[2:]) == (number, number):
-            link.required_phy = number
-            print('Verified PHY: %s in both directions' % phy)
-            return
-    raise RuntimeError('%s PHY was not negotiated; refusing a mislabeled result' % phy)
+    payload = struct.pack('<H', link.handle)
+
+    def read_phy():
+        _, data = link.hci.command(0x2030, payload)
+        if len(data) != 4 or struct.unpack_from('<H', data)[0] != link.handle:
+            raise RuntimeError('invalid LE Read PHY response')
+        return tuple(data[2:])
+
+    link.pump(0)
+    if link.down is not None:
+        raise RuntimeError('disconnected during PHY negotiation, reason 0x%02X' % link.down)
+    current = read_phy()
+    if current != (number, number):
+        # Consume earlier events before starting a new procedure. Read PHY
+        # alone cannot establish that an accepted Set PHY has completed.
+        link.pump(0)
+        link.phy = None
+        link.hci.command(0x2032, struct.pack('<HBBBH', link.handle, 0, number, number, 0))
+        deadline = time.monotonic() + 5
+        while link.phy is None and time.monotonic() < deadline:
+            link.pump(0.1)
+            if link.down is not None:
+                raise RuntimeError('disconnected during PHY negotiation, reason 0x%02X' % link.down)
+        if link.phy != (number, number):
+            raise RuntimeError('%s PHY was not negotiated; refusing a mislabeled result' % phy)
+        current = read_phy()
+    link.pump(0)
+    if link.down is not None:
+        raise RuntimeError('disconnected during PHY negotiation, reason 0x%02X' % link.down)
+    if current != (number, number):
+        raise RuntimeError('%s PHY was not negotiated; refusing a mislabeled result' % phy)
+    link.required_phy = number
+    print('Verified PHY: %s in both directions' % phy)
 
 
 class Receiver:
