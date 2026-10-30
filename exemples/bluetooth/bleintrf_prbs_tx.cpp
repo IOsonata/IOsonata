@@ -49,6 +49,10 @@ SOFTWARE.
 
 #include "board.h"
 
+#if defined(NRFXLIB_SDC)
+#include "bluetooth/bt_hci_ctlr.h"
+#endif
+
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE		1000000
@@ -242,6 +246,7 @@ int g_DelayCnt = 0;
 
 // Pending stays set through queue refusal until the callback runs.
 static volatile bool s_bPrbsPending = false;
+static bool s_bServiceOk = false;
 
 void PrbsChedHandler(uint32_t Evt, void *pCtx);
 
@@ -319,8 +324,11 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppInitUserServices()
 {
-	bool res;
-	res = BtGattSrvcAdd(&g_UartBleSrvc);
+	s_bServiceOk = BtGattSrvcAdd(&g_UartBleSrvc);
+	if (s_bServiceOk == false)
+	{
+		g_Uart.printf("PRBS service registration failed\r\n");
+	}
 }
 
 void BtAppInitUserData()
@@ -378,9 +386,26 @@ int main()
 {
 	HardwareInit();
 
-	BtAppInit(&s_BleAppCfg);
+	g_Uart.printf("PRBS initializing %s\r\n", DEVICE_NAME);
+	if (BtAppInit(&s_BleAppCfg) == false || s_bServiceOk == false)
+	{
+		g_Uart.printf("PRBS Bluetooth initialization failed\r\n");
+#if defined(NRFXLIB_SDC)
+		g_Uart.printf("SDC error=%d value=%d pool_needed=%d pool_size=%u\r\n",
+			(int)BtHciCtlrErrorGet(), (int)BtHciCtlrErrorValueGet(),
+			(int)BtHciCtlrMemPoolSizeNeeded(), (unsigned)g_BtHciCtlrMemPool.Size);
+#endif
+		BtAdvStop();
+		return -1;
+	}
 
-	g_BtIntrf.Init(s_BleInrfCfg);
+	if (g_BtIntrf.Init(s_BleInrfCfg) == false)
+	{
+		g_Uart.printf("PRBS interface initialization failed\r\n");
+		BtAdvStop();
+		return -1;
+	}
+	g_Uart.printf("PRBS initialized %s\r\n", DEVICE_NAME);
 
 	//AppEvtHandlerQue(0, 0, PrbsChedHandler);
 	AppRun();
