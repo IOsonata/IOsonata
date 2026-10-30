@@ -9,6 +9,8 @@
 
 #include "sdc_hci_cmd_stub.h"
 
+void (*g_SdcHciCmdHook)(void);
+
 const char *g_SdcHciCmdLast;
 int g_SdcHciCmdCount;
 uint8_t g_SdcHciCmdStatus;
@@ -24,6 +26,7 @@ void SdcHciCmdStubReset(void)
 #define SDC_CMD_RECORD(name) \
 	g_SdcHciCmdLast = #name; \
 	g_SdcHciCmdCount++; \
+	if (g_SdcHciCmdHook != nullptr) g_SdcHciCmdHook(); \
 	return g_SdcHciCmdStatus
 
 extern "C" uint8_t sdc_hci_cmd_cb_reset(void)

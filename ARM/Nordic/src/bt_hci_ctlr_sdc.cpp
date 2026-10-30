@@ -104,12 +104,54 @@ SOFTWARE.
 // PCD-side controller device pointer, set by BtHciCtlrSdcInit.
 static BtHciCtlrDev_t *s_pBtHciCtlrSdc = nullptr;
 
+// SDC HCI calls and MPSL low priority processing must not preempt one
+// another. Mask only that priority and lower; the high-priority radio/timer IRQs
+// remain enabled. Callers above the MPSL low priority cannot safely enter
+// the controller and must defer their work to application context.
+static bool BtHciSdcEnter(uint32_t *pState)
+{
+#if defined(NRF54L_SERIES)
+	IRQn_Type irq = SWI00_IRQn;
+#else
+	IRQn_Type irq = MPSL_LOW_PRIO_IRQn;
+#endif
+	uint32_t priority = NVIC_GetPriority(irq);
+	uint32_t exception = __get_IPSR();
+
+	if (priority == 0 || (exception != 0 &&
+		(exception < 4 || NVIC_GetPriority((IRQn_Type)((int)exception - 16)) < priority)))
+	{
+		return false;
+	}
+
+	*pState = __get_BASEPRI();
+	__set_BASEPRI_MAX(priority << (8 - __NVIC_PRIO_BITS));
+	__DSB();
+	__ISB();
+	return true;
+}
+
+static void BtHciSdcLeave(uint32_t State)
+{
+	__set_BASEPRI(State);
+	__ISB();
+}
+
 static inline size_t BtHciCtlrSendData(BtHciCtlrDev_t * const pDev, void *pData, size_t Len) {
 	// The signature is the generic transmit one. This transport reaches the
 	// controller through the linked library rather than through a device.
+	uint32_t state;
+	int32_t res;
+
 	(void)pDev;
 
-	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
+	if (!BtHciSdcEnter(&state))
+	{
+		return 0;
+	}
+	res = sdc_hci_data_put((uint8_t*)pData);
+	BtHciSdcLeave(state);
+	return res == 0 ? Len : 0;
 }
 
 void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev)
@@ -138,8 +180,21 @@ void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev)
 	// Drain every queued message. The controller can queue several at once,
 	// for example a command completion followed by an Encryption Change event
 	// during pairing; stopping after one strands the later packets.
-	while (sdc_hci_get(buf, &mtype) == 0)
+	for (;;)
 	{
+		uint32_t state;
+		int32_t res;
+
+		if (!BtHciSdcEnter(&state))
+		{
+			return;
+		}
+		res = sdc_hci_get(buf, &mtype);
+		BtHciSdcLeave(state);
+		if (res != 0)
+		{
+			break;
+		}
 		pDev->RxHandler(pDev, mtype == SDC_HCI_MSG_TYPE_EVT, buf);
 	}
 }
@@ -374,7 +429,7 @@ static int32_t BtHciCmdSdcPadv(uint16_t OpCode, const void *pParam, void *pRet, 
 // command struct, so they cast directly. The wrappers are synchronous, so this
 // returns the status inline; the generic command credit and match path is used
 // only by a controller behind a link.
-uint8_t BtHciCtlrCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
+static uint8_t BtHciSdcCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
 {
 	// The wrappers below take the parameter block whole and know its length
 	// from its type, and they reach the controller through the linked library,
@@ -560,6 +615,20 @@ uint8_t BtHciCtlrCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void
 	// only a value that is not a status byte, which the uint8_t return already
 	// bounds, so 0xFF here means an out of range internal result.
 	return (res >= 0 && res <= 0xFF) ? (uint8_t)res : 0xFF;
+}
+
+uint8_t BtHciCtlrCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
+{
+	uint32_t state;
+	uint8_t res;
+
+	if (!BtHciSdcEnter(&state))
+	{
+		return BT_HCI_ERR_COMMAND_DISALLOWED;
+	}
+	res = BtHciSdcCommand(pDev, OpCode, pParam, ParamLen, pRet, RetLen);
+	BtHciSdcLeave(state);
+	return res;
 }
 
 // Buffer sizing for the periodic advertising resources above. These are counts
@@ -1150,7 +1219,14 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 	SDC_INIT_PRINTF("sdc_enable\r\n");
 
+	uint32_t state;
+	if (!BtHciSdcEnter(&state))
+	{
+		MpslNvmArbiterStop();
+		return false;
+	}
 	res = sdc_enable(BtStackSdcCB, g_BtHciCtlrMemPool.pMem);
+	BtHciSdcLeave(state);
 	if (res != 0)
 	{
 		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_ENABLE, (int32_t)res);
@@ -1172,16 +1248,21 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	sdc_hci_cmd_vs_conn_event_extend_t extend = {
 		.enable = 1,
 	};
+	// Same caller context as the successful enter above.
+	(void)BtHciSdcEnter(&state);
 	uint8_t hcistat = sdc_hci_cmd_vs_event_length_set(&evlen);
 	if (hcistat == 0)
 	{
 		hcistat = sdc_hci_cmd_vs_conn_event_extend(&extend);
 	}
+	BtHciSdcLeave(state);
 	if (hcistat != 0)
 	{
 		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_INIT, hcistat);
 		SDC_INIT_PRINTF("SDC event configuration failed 0x%02x\r\n", hcistat);
+		(void)BtHciSdcEnter(&state);
 		sdc_disable();
+		BtHciSdcLeave(state);
 		MpslNvmArbiterStop();
 		return false;
 	}
@@ -1189,7 +1270,9 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 	// Default TX power of advertising and links. The SDC has its own entry
 	// point for it; a controller behind a link needs a vendor command.
+	(void)BtHciSdcEnter(&state);
 	sdc_default_tx_power_set(pCfg->TxPower);
+	BtHciSdcLeave(state);
 
 // No FPU exception interrupt on the nRF54L and on the nRF54H20 radio core
 #if !defined(NRF54L15_XXAA) && !defined(NRF54LM20A_XXAA) && !defined(NRF54LM20B_XXAA) && \

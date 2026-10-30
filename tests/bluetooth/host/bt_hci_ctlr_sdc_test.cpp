@@ -20,6 +20,9 @@
 #include <cstring>
 
 #include "sdc.h"
+#include "nrf.h"
+
+extern void (*g_SdcHciCmdHook)(void);
 #include "sdc_hci_vs.h"
 #include "sdc_hci_cmd_stub.h"
 
@@ -35,6 +38,17 @@
 #endif
 
 namespace {
+
+uint32_t s_Basepri;
+uint32_t s_Exception;
+uint32_t s_LowPriority = 7;
+void (*s_PendingIrq)(void);
+int s_IrqCalls;
+int s_DataPutCalls;
+int s_GetCalls;
+int32_t s_DataPutResult;
+int s_RxRemaining;
+bool s_InCommand;
 
 int s_Failures = 0;
 int s_Checks = 0;
@@ -92,6 +106,17 @@ int32_t s_CfgRam;
 
 void Reset(void)
 {
+	s_Basepri = 0;
+	s_Exception = 0;
+	s_LowPriority = 7;
+	s_PendingIrq = nullptr;
+	g_SdcHciCmdHook = nullptr;
+	s_IrqCalls = 0;
+	s_DataPutCalls = 0;
+	s_GetCalls = 0;
+	s_DataPutResult = 0;
+	s_RxRemaining = 0;
+	s_InCommand = false;
 	std::memset(s_Cfg, 0, sizeof(s_Cfg));
 	std::memset(s_Support, 0, sizeof(s_Support));
 	s_CfgCount = 0;
@@ -697,6 +722,102 @@ void TestHostStartCommandsAreAnswered(void)
 	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_BASEBAND_RESET, nullptr, 0, nullptr, 0) == 0xFF);
 }
 
+void LowIrq(void)
+{
+	CHECK(!s_InCommand);
+	s_IrqCalls++;
+}
+
+void CommandInterrupt(void)
+{
+	s_InCommand = true;
+	// A pending MPSL software interrupt must wait until the vendor call exits.
+	CHECK(s_Basepri != 0 && s_Basepri <= (s_LowPriority << 5));
+	if (s_Basepri == 0 || s_Basepri > (s_LowPriority << 5))
+	{
+		LowIrq();
+	}
+	else
+	{
+		s_PendingIrq = LowIrq;
+	}
+	s_InCommand = false;
+}
+
+void ReconnectRx(BtHciCtlrDev_t *, bool bEvent, uint8_t *pPacket)
+{
+	uint8_t *p = (uint8_t *)pPacket;
+	uint16_t opcode = p[0] == 5 ? BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE :
+		BT_HCI_CMD_CTLR_SET_PHY;
+
+	CHECK(bEvent);
+	CHECK(s_Basepri == 0);
+	CHECK(BtHciCtlrCommand(nullptr, opcode, nullptr, 0, nullptr, 0) == 0);
+}
+
+void TestControllerSerialization(void)
+{
+	BtHciCtlrCfg_t cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
+	BtHciCtlrDev_t dev = {};
+	uint8_t data[4] = {};
+	int before;
+
+	Reset();
+	BtHciCtlrPeripheralSupport();
+	BtHciCtlrLinkSupport();
+	CHECK(BtHciCtlrStart(&dev, &cfg));
+	g_SdcHciCmdHook = CommandInterrupt;
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_SET_PHY, data, sizeof(data), nullptr, 0) == 0);
+	CHECK(s_IrqCalls == 1);
+	CHECK(s_Basepri == 0);
+	g_SdcHciCmdStatus = 0x0c;
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_SET_PHY, data, sizeof(data), nullptr, 0) == 0x0c);
+	CHECK(s_Basepri == 0);
+	g_SdcHciCmdStatus = 0;
+
+	// A stronger caller mask must survive success and unsupported commands.
+	s_Basepri = 3 << 5;
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_SET_PHY, data, sizeof(data), nullptr, 0) == 0);
+	CHECK(s_Basepri == (3 << 5));
+	CHECK(BtHciCtlrCommand(nullptr, 0xffff, nullptr, 0, nullptr, 0) == 0xff);
+	CHECK(s_Basepri == (3 << 5));
+	__set_BASEPRI(0);
+	g_SdcHciCmdHook = nullptr;
+
+	CHECK(dev.Send(&dev, data, sizeof(data)) == sizeof(data));
+	s_DataPutResult = -1;
+	CHECK(dev.Send(&dev, data, sizeof(data)) == 0);
+	CHECK(s_Basepri == 0);
+
+	// Higher priority application IRQs cannot reenter a suspended MPSL call.
+	before = g_SdcHciCmdCount;
+	s_Exception = 16 + 2;
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_SET_PHY, data, sizeof(data), nullptr, 0) == BT_HCI_ERR_COMMAND_DISALLOWED);
+	CHECK(g_SdcHciCmdCount == before);
+	before = s_DataPutCalls;
+	CHECK(dev.Send(&dev, data, sizeof(data)) == 0);
+	CHECK(s_DataPutCalls == before);
+	s_Exception = 16 + SWI5_EGU5_IRQn;
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_SET_PHY, data, sizeof(data), nullptr, 0) == 0);
+	s_Exception = 0;
+
+	// Deliver disconnect/reconnect events; host callbacks can restart
+	// advertising and request PHY without retaining the receive-call mask.
+	dev.RxHandler = ReconnectRx;
+	s_RxRemaining = 2;
+	BtHciCtlrProcess(&dev);
+	CHECK(s_RxRemaining == 0);
+	CHECK(s_GetCalls == 3);
+	CHECK(s_Basepri == 0);
+
+	// The guard follows the configured priority, including the nRF54L value.
+	s_LowPriority = 4;
+	g_SdcHciCmdHook = CommandInterrupt;
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_SET_PHY, data, sizeof(data), nullptr, 0) == 0);
+	CHECK(s_Basepri == 0);
+	g_SdcHciCmdHook = nullptr;
+}
+
 #ifdef SDC_TEST_NO_FEATURE_MODULES
 // The same setup in an application that links neither the scan module nor the
 // periodic advertising module. The controller port finds no reference to
@@ -807,14 +928,25 @@ extern "C" bool nRFxLFTimerInit(TimerDev_t * const, const TimerCfg_t * const)
 	return false;
 }
 
-extern "C" int32_t sdc_hci_get(uint8_t *, uint8_t *)
+extern "C" int32_t sdc_hci_get(uint8_t *pData, uint8_t *pType)
 {
-	return kVendorRefused;
+	s_GetCalls++;
+	CHECK(s_Basepri != 0 && s_Basepri <= (s_LowPriority << 5));
+	if (s_RxRemaining == 0)
+	{
+		return kVendorRefused;
+	}
+	*pType = 1;
+	pData[0] = s_RxRemaining == 2 ? 5 : 0x3e;
+	s_RxRemaining--;
+	return 0;
 }
 
 extern "C" int32_t sdc_hci_data_put(uint8_t *)
 {
-	return 0;
+	s_DataPutCalls++;
+	CHECK(s_Basepri != 0 && s_Basepri <= (s_LowPriority << 5));
+	return s_DataPutResult;
 }
 
 extern "C" uint8_t sdc_hci_cmd_vs_conn_event_extend(const sdc_hci_cmd_vs_conn_event_extend_t *pParams)
@@ -959,6 +1091,7 @@ int main(void)
 	TestBringUpOrderAndFailures();
 	TestNullArgumentsAreRefused();
 	TestHostStartCommandsAreAnswered();
+	TestControllerSerialization();
 
 	if (s_Failures != 0)
 	{
@@ -977,3 +1110,29 @@ int main(void)
 #include "syslog.h"
 extern "C" SysLog_t *SysLogGet(void) { return nullptr; }
 extern "C" int SysLogPrintf(SysLog_t * const, const char *, ...) { return 0; }
+
+uint32_t NVIC_GetPriority(IRQn_Type Irq)
+{
+	return Irq == SWI5_EGU5_IRQn ? s_LowPriority : 2;
+}
+
+uint32_t __get_IPSR(void) { return s_Exception; }
+uint32_t __get_BASEPRI(void) { return s_Basepri; }
+void __set_BASEPRI_MAX(uint32_t Value)
+{
+	if (s_Basepri == 0 || (Value != 0 && Value < s_Basepri))
+	{
+		s_Basepri = Value;
+	}
+}
+void __set_BASEPRI(uint32_t Value)
+{
+	s_Basepri = Value;
+	if (s_PendingIrq != nullptr &&
+		(Value == 0 || Value > (s_LowPriority << 5)))
+	{
+		void (*irq)(void) = s_PendingIrq;
+		s_PendingIrq = nullptr;
+		irq();
+	}
+}
