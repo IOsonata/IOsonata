@@ -24,17 +24,22 @@ def function(source, signature):
 class VideoBleStream(unittest.TestCase):
     def test_refill_and_dma_boundaries(self):
         spi = (ROOT / 'ARM/Nordic/src/spi_nrfx.cpp').read_text()
-        for demo_name in ('video_ble_demo.cpp', 'video_usb_demo.cpp'):
-            with self.subTest(demo=demo_name):
+        for demo_name, profiling in (('video_ble_demo.cpp', 1), ('video_ble_demo.cpp', 0), ('video_usb_demo.cpp', 0)):
+            with self.subTest(demo=demo_name, profiling=profiling):
                 demo = (ROOT / 'exemples/video' / demo_name).read_text()
                 declarations = demo[demo.index('typedef struct {\n\tuint8_t Data'):]
                 declarations = declarations[:declarations.index('static int s_ReadHeader = 0;')]
                 declarations += 'static int s_ReadHeader = 0;\n'
                 defines = '\n'.join(re.findall(r'^#define (?:PACKET_SIZE|VIDEO_DEMO_BUFSIZE)\s+[^\n]+', demo, re.M))
+                profile = ''
+                if demo_name == 'video_ble_demo.cpp':
+                    profile = '#define VIDEO_DEMO_PROFILE %d\n' % profiling + demo[demo.index('#ifndef VIDEO_DEMO_PROFILE'):demo.index('void ReadCharSetNotif(', demo.index('#ifndef VIDEO_DEMO_PROFILE'))]
                 source = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
+#include <string>
 #include <algorithm>
 #include <vector>
 using std::min;
@@ -44,6 +49,8 @@ using std::min;
 bool errata = true;
 bool nrf52_errata_58() { return errata; }
 ''' + function(spi, 'static int nRFxSPIRxBlockSize(') + '\n' + defines + r'''
+uint32_t clockMs = 0;
+uint32_t BtGattMsTick() { return clockMs; }
 bool connected = true, events = false;
 bool s_bNotif = true, s_bRun = true, s_bSession = false, s_bFrame = false;
 const uint8_t s_FrameTag[4] = {'V','F','R','M'};
@@ -99,6 +106,7 @@ void BtAppCheckStatus() {}
 void UsbCheckStatus() {}
 bool isConnected() { return connected; }
 bool AppEvtHandlerPending() { return events; }
+''' + profile + r'''
 void VideoOpen() {
     assert(!s_Video.pending);
     for (auto &b : s_Buff) { b.Len = 0; b.Offset = 0; }
@@ -106,6 +114,9 @@ void VideoOpen() {
     s_Buff[0].Data[0] = 'S'; s_Buff[0].Len = 1;
     s_bSession = s_bRun = true; s_bFrame = false;
     s_Video.Start();
+#if VIDEO_DEMO_PROFILE
+    VideoProfileReset();
+#endif
 }
 ''' + function(demo, 'static void VideoFill()') + '\n' + function(demo, 'bool AppCheckStatus(void)') + r'''
 int main() {
@@ -128,6 +139,31 @@ int main() {
         if (!inlineRead) assert(overlap);
         assert(!s_Video.pending);
     }
+#if VIDEO_DEMO_PROFILE
+    assert(s_Profile.Frames == 2 && s_Profile.Bytes == 5000);
+    // Report insertion preserves JPEG ordering and is emitted as plain text.
+    clockMs = 6000;
+    AppCheckStatus();
+    std::string report(sent.begin() + expected.size(), sent.end());
+    assert(report.find("Video profile ms=6000 frames=2 bytes=5000 ") == 0);
+    assert(report.substr(report.size() - 2) == "\r\n");
+    // Millisecond wrap and repeated failed attempts count one stall interval.
+    VideoProfileReset();
+    clockMs = 0xfffffff0U;
+    VideoProfileBle(true);
+    VideoProfileCapture(false);
+    clockMs = 4;
+    VideoProfileBle(true);
+    VideoProfileBle(false);
+    VideoProfileCapture(true);
+    assert(s_Profile.BleWait == 20 && s_Profile.Stalls == 1);
+    assert(s_Profile.CaptureWait == 20);
+    s_Profile.SpiStart = clockMs;
+    clockMs += 7;
+    VideoProfileRead(0);
+    assert(s_Profile.SpiWait == 7);
+    clockMs = 0;
+#endif
     // Disconnect/reconnect cannot reuse an in-flight DMA destination.
     s_Video.inlineRead = false;
     s_bSession = false;
