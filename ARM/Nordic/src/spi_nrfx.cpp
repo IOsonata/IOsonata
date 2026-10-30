@@ -590,6 +590,21 @@ int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 }
 
 #ifdef SPIM_PRESENT
+// Avoid a final one-byte SPIM receive on nRF52832 (anomaly 58).
+// A transfer of exactly one byte uses nRFxSPIRxByteNoDma instead.
+static int nRFxSPIRxBlockSize(int Remaining)
+{
+	int count = min(Remaining, NRFX_SPI_DMA_MAXCNT);
+
+#if defined(NRF52_SERIES) && defined(SPI_PRESENT)
+	if (Remaining > count && Remaining - count == 1 && nrf52_errata_58())
+	{
+		count--;
+	}
+#endif
+	return count;
+}
+
 // Start the next DMA block of the pending interrupt driven master transfer.
 // The receive state is used when RxBufflen is not zero, the transmit state
 // otherwise. The pointer is loaded for every block.
@@ -598,7 +613,7 @@ static void nRFxSPIDmaNextBlock(nRFSpiDev_t * const pDev)
 	if (pDev->RxBufflen > 0)
 	{
 		NRFX_SPI_RX(pDev->pDmaReg).PTR = (uint32_t)&pDev->pRxBuff[pDev->RxIdx];
-		NRFX_SPI_RX(pDev->pDmaReg).MAXCNT = min(pDev->RxBufflen, NRFX_SPI_DMA_MAXCNT);
+		NRFX_SPI_RX(pDev->pDmaReg).MAXCNT = nRFxSPIRxBlockSize(pDev->RxBufflen);
 	}
 	else
 	{
@@ -772,7 +787,7 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 
 	while (BuffLen > 0)
 	{
-		int l = min(BuffLen, NRFX_SPI_DMA_MAXCNT);
+		int l = nRFxSPIRxBlockSize(BuffLen);
 #if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 		uint32_t timeout = nRFxSPIDmaTimeout(l, dev->pSpiDev->Cfg.Rate);
 #else
@@ -1395,11 +1410,7 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 
 		if (pDev->DevIntrf.bDma)
 		{
-#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 			reg->ORC = pDev->Cfg.DummyByte;
-#else
-			reg->ORC = 0xFF;
-#endif
 			reg->ENABLE = (SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos);
 	        if (pDev->DevIntrf.bIntEn == true)
 	        {

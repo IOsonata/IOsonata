@@ -63,7 +63,7 @@ static bool BtIntrfFifoMemValid(const uint8_t *pMem, int MemSize,
 	return (uint32_t)MemSize >= sizeof(CFifo_t) + BlockSize;
 }
 
-static uint16_t BtIntrfNotifyHandle(BtGattChar_t *pChar)
+static uint16_t BtIntrfNotifyHandle(BtGattChar_t *pChar, int *pPayloadMax)
 {
 	if (pChar == nullptr)
 	{
@@ -76,6 +76,7 @@ static uint16_t BtIntrfNotifyHandle(BtGattChar_t *pChar)
 		if (pPeer != nullptr && pPeer->Conn.Hdl != BT_CONN_HDL_INVALID &&
 			BtGattCharNotifyEnabled(pPeer->Conn.Hdl, pChar))
 		{
+			*pPayloadMax = (pPeer->Conn.MaxMtu >= 23 ? pPeer->Conn.MaxMtu : 23) - 3;
 			return pPeer->Conn.Hdl;
 		}
 	}
@@ -169,7 +170,8 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 	}
 
 	BtGattChar_t *pChar = &pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx];
-	uint16_t connHdl = BtIntrfNotifyHandle(pChar);
+	int payloadMax = 0;
+	uint16_t connHdl = BtIntrfNotifyHandle(pChar, &payloadMax);
 	if (connHdl == BT_CONN_HDL_INVALID)
 	{
 		return false;
@@ -206,6 +208,7 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 				{
 					memcpy(pIntrf->TransBuff, pPkt->Data, pPkt->Len);
 					pIntrf->TransBuffLen = pPkt->Len;
+					pIntrf->TransBuffOffset = 0;
 				}
 				else
 				{
@@ -221,10 +224,16 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 		}
 		EnableInterrupt(state);
 
-		res = BtGattCharNotify(connHdl, pChar, pIntrf->TransBuff,
-			(size_t)pIntrf->TransBuffLen);
+		int len = min(pIntrf->TransBuffLen, payloadMax);
+		res = BtGattCharNotify(connHdl, pChar,
+			pIntrf->TransBuff + pIntrf->TransBuffOffset, (size_t)len);
 		state = DisableInterrupt();
-		if (res || pIntrf->TxReset)
+		if (res)
+		{
+			pIntrf->TransBuffOffset += len;
+			pIntrf->TransBuffLen -= len;
+		}
+		if (pIntrf->TxReset)
 		{
 			pIntrf->TransBuffLen = 0;
 			pIntrf->TxReset = false;
@@ -496,6 +505,7 @@ bool BtIntrfInit(BtDevIntrf_t *pIntrf, const BtIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.bDma = false;
 	pIntrf->DevIntrf.bIntEn = true;
 	pIntrf->TransBuffLen = 0;
+	pIntrf->TransBuffOffset = 0;
 	pIntrf->TxDraining = false;
 	pIntrf->TxRetry = false;
 	pIntrf->TxReset = false;

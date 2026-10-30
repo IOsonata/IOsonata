@@ -213,7 +213,7 @@ BtIntrf g_BtIntrf;
 
 static const IOPinCfg_t s_SpiPins[] = SPI_PINS;
 
-// SPI mode 0, 0 shifted out while reading as the vendor library does
+// SPI mode 0, synchronous DMA reads, 0 shifted out as the vendor library does
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
 	.Phy = SPIPHY_NORMAL,
@@ -227,7 +227,7 @@ static const SPICfg_t s_SpiCfg = {
 	.DataPhase = SPIDATAPHASE_FIRST_CLK,
 	.ClkPol = SPICLKPOL_HIGH,
 	.ChipSel = SPICSEL_AUTO,
-	.bDmaEn = false,
+	.bDmaEn = true,
 	.bIntEn = false,
 	.IntPrio = IRQ_PRIO_LOW,
 	.DummyByte = 0,
@@ -352,6 +352,8 @@ static void VideoOpen()
 
 bool AppCheckStatus(void)
 {
+	bool blocked = false;
+
 	BtAppCheckStatus();
 
 	if (isConnected() == false || s_bNotif == false)
@@ -380,19 +382,29 @@ bool AppCheckStatus(void)
 			break;
 		}
 
+		// BtIntrf owns the queue and retries. Wait for BLE progress when
+		// it cannot accept another byte instead of repeatedly calling Tx.
+		if (g_BtIntrf.RequestToSend(1) == false)
+		{
+			blocked = true;
+			break;
+		}
+
 		int n = g_BtIntrf.Tx(0, &s_Buff[s_Offset], s_Pending);
 
 		if (n <= 0)
 		{
-			// Tx FIFO full, the next loop continues
+			// Another sender may have taken the available space.
+			blocked = true;
 			break;
 		}
 		s_Offset += n;
 		s_Pending -= n;
 	}
 
-	// Stay active while streaming
-	return s_bRun == false && s_Pending == 0 && !AppEvtHandlerPending();
+	// BLE interrupts wake AppRun to refill through BtIntrf. Capture itself
+	// still needs polling because this camera has no frame-ready interrupt.
+	return (blocked || (s_bRun == false && s_Pending == 0)) && !AppEvtHandlerPending();
 }
 
 int main()

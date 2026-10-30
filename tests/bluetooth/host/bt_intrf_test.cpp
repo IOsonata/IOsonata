@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 #include "bt_test_harness.h"
 #include "bluetooth/bt_intrf.h"
@@ -24,6 +25,7 @@ int s_RxEventCount;
 BtDevIntrf_t *s_EnqueueDuringSend;
 uint8_t s_Enqueued[16];
 bool s_RefuseOnce = false;
+int s_RefuseOnCall = -1;
 bool s_Reenter = false;
 BtGattChar_t *s_ReenterChar = nullptr;
 
@@ -266,6 +268,46 @@ void TestTxRetryAndReset()
 	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 0);
 }
 
+void TestNegotiatedMtuAndPartialRetry()
+{
+	for (int mtu : {23, 104, 247})
+	{
+		ResetLink();
+		Fixture f;
+		alignas(CFifo_t) uint8_t txMem[BTINTRF_CFIFO_TOTAL_MEMSIZE(2, 244)];
+		alignas(CFifo_t) uint8_t rxMem[BTINTRF_CFIFO_TOTAL_MEMSIZE(2, 244)];
+		uint8_t data[244];
+		BtIntrfCfg_t cfg = f.Config();
+		cfg.PacketSize = 244;
+		cfg.pTxFifoMem = txMem;
+		cfg.TxFifoMemSize = sizeof(txMem);
+		cfg.pRxFifoMem = rxMem;
+		cfg.RxFifoMemSize = sizeof(rxMem);
+		f.Char[1].MaxDataLen = 244;
+		BT_CHECK(s_Test, BtIntrfInit(&f.Intrf, &cfg));
+		s_Peer.Conn.MaxMtu = mtu;
+		for (int i = 0; i < 244; i++) data[i] = (uint8_t)i;
+		int size = mtu == 23 ? 50 : 244;
+		int payload = mtu - 3;
+		s_RefuseOnCall = mtu == 247 ? 0 : 1;
+		BT_CHECK(s_Test, f.Intrf.DevIntrf.TxData(&f.Intrf.DevIntrf, data, size) == size);
+		int accepted = s_RefuseOnCall * payload;
+		BT_CHECK(s_Test, f.Intrf.TransBuffLen == size - accepted);
+		BT_CHECK(s_Test, f.Intrf.TransBuffOffset == accepted);
+		int retry = s_NotifyCount;
+		s_RefuseOnCall = -1;
+		f.Char[1].TxCompleteCB(&f.Char[1], 1);
+		for (int i = retry; i < s_NotifyCount; i++)
+		{
+			BT_CHECK(s_Test, s_NotifiedLen[i] <= (size_t)payload);
+			BT_CHECK(s_Test, std::memcmp(s_Notified[i], data + accepted, s_NotifiedLen[i]) == 0);
+			accepted += s_NotifiedLen[i];
+		}
+		BT_CHECK(s_Test, accepted == size);
+		BT_CHECK(s_Test, f.Intrf.TransBuffLen == 0);
+	}
+}
+
 void TestNoSubscribedPeerKeepsQueue()
 {
 	ResetLink();
@@ -377,6 +419,7 @@ extern "C" bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
 			std::memcpy(s_Notified[idx], pVal, Len);
 		}
 	}
+	if (idx == s_RefuseOnCall) return false;
 	if (s_RefuseOnce)
 	{
 		s_RefuseOnce = false;
@@ -388,6 +431,7 @@ extern "C" bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
 
 int main()
 {
+	s_Test.Run("negotiated MTU and partial retry", TestNegotiatedMtuAndPartialRetry);
 	s_Test.Run("FIFO reuse during send", TestProducerReusesFifoDuringSend);
 	s_Test.Run("completion during refused send", TestCompletionDuringRefusedSend);
 	s_Test.Run("reentrant retry", TestReentrantRetry);
