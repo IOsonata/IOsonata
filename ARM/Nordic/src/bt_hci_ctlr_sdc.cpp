@@ -921,11 +921,13 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	}
 
 
+	// Allow six full 251-byte exchanges at 2M PHY (about 8.4 ms).
+	// This is an event time budget, not a guaranteed packet count.
 	// Vendor specific command, answered with an HCI status. A refusal leaves
 	// the controller default event length in place, which costs throughput but
 	// still gives a working link, so report it and carry on.
 	sdc_hci_cmd_vs_event_length_set_t evlen = {
-		.event_length_us = 7500,
+		.event_length_us = 10000,
 	};
 
 	uint8_t hcistat = sdc_hci_cmd_vs_event_length_set(&evlen);
