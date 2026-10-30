@@ -407,7 +407,7 @@ int main()
 	if (BtAppInit(&s_BleAppCfg) == false || s_bServiceOk == false ||
 		g_BtIntrf.Init(s_BleIntrfCfg) == false)
 	{
-		BtAppAdvStop();
+		BtAdvStop();
 
 		return -1;
 	}
