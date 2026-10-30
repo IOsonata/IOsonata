@@ -1061,6 +1061,7 @@ __attribute__((weak)) void BtGattEvtHandler(uint32_t Evt,
 // DFU is optional. Its response may have been refused before any of its own
 // packets were accepted, so its characteristic has no completion due.
 extern void BtDfuSmpTxReady(void) __attribute__((weak));
+extern void BtIntrfTxReady(void) __attribute__((weak));
 
 void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 {
@@ -1093,7 +1094,12 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 	}
 
 	// Shared controller credits can be released by another connection, even
-	// one whose peer entry was already removed. Only queue work in this hook.
+	// one whose peer entry was already removed. Retry blocked interfaces without
+	// reporting completion for packets that were never accepted.
+	if (BtIntrfTxReady != nullptr)
+	{
+		BtIntrfTxReady();
+	}
 	if (BtDfuSmpTxReady != nullptr)
 	{
 		BtDfuSmpTxReady();

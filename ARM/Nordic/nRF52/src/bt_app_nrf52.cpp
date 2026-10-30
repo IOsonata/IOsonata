@@ -1142,13 +1142,10 @@ void BtGattInit(void)
     	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, s_BtAppData.MaxMtu);
     	APP_ERROR_CHECK(err_code);
 
-    	if (s_BtAppData.MaxMtu >= 27)
+		if (s_BtAppData.MaxMtu >= 23)
     	{
-    		// 251 bytes is max dat length as per Bluetooth core spec 5, vol 6, part b, section 4.5.10
-    		// 27 - 251 bytes is hardcoded in nrf_ble_gat of the SDK.
-    		// It is very confusing in the SDK. According to the Specs, it should be ATT MTU + 4
-    		// where Max length cannot be more than 251. Which means ATT MTU max is no more than 247.
-    		uint8_t dlen = s_BtAppData.MaxMtu + 4;//> 254 ? 251: s_BtAppData.MaxMtu - 3;
+			// Clamp before narrowing: ATT MTU 512 must request 251, not 4.
+			uint8_t dlen = (uint8_t)min((uint32_t)s_BtAppData.MaxMtu + 4U, 251U);
     		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
     		APP_ERROR_CHECK(err_code);
     	}

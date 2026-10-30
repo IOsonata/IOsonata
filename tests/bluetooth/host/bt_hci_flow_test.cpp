@@ -11,8 +11,13 @@
 #include "bluetooth/bt_smp.h"
 #include "syslog.h"
 
+extern bool g_BtTestTxRingAvailable;
+extern void BtHciTxCheckStatus(BtHciDevice_t *pDev);
+
 namespace {
 
+bool s_AttRespond = false;
+int s_AttRequests = 0;
 int s_Failures = 0;
 int s_Checks = 0;
 
@@ -351,11 +356,99 @@ void TestAclFragmentSendFailure()
 	CHECK(s_AclCreditAtSend[2] == 0);
 }
 
+void TestDisconnectRestoresCredits()
+{
+	ResetAclCapture();
+	BtHciDevice_t dev = {};
+	dev.SendData = CaptureAcl;
+	BtHciSetLeAclBuffer(&dev, 251, 3);
+	alignas(4) uint8_t raw[16] = {};
+	auto *acl = reinterpret_cast<BtHciACLDataPacket_t *>(raw);
+	acl->Hdr.ConnHdl = 0x42;
+	acl->Hdr.Len = 4;
+	for (int i=0; i<3; ++i) CHECK(BtHciSendAcl(&dev, acl) != 0);
+	CHECK(dev.AclCredit == 0);
+	uint8_t event[] = { BT_HCI_EVT_DISCONN_COMPLETE, 4, 0, 0x42, 0, 0x13 };
+	BtHciProcessEvent(&dev, reinterpret_cast<BtHciEvtPacket_t *>(event));
+	CHECK(dev.AclCredit == 3);
+	acl->Hdr.ConnHdl = 0x43;
+	CHECK(BtHciSendAcl(&dev, acl) != 0);
+	uint8_t late[] = {BT_HCI_EVT_NB_COMPLETED_PACKET, 5, 1, 0x42, 0, 3, 0};
+	BtHciProcessEvent(&dev, reinterpret_cast<BtHciEvtPacket_t *>(late));
+	CHECK(dev.AclCredit == 2);
+	// A failed Disconnect Complete must leave the other link's credit spent.
+	event[2] = 1;
+	event[3] = 0x43;
+	BtHciProcessEvent(&dev, reinterpret_cast<BtHciEvtPacket_t *>(event));
+	CHECK(dev.AclCredit == 2);
+}
+
+void TestDeferredAttResponse()
+{
+	ResetAclCapture();
+	BtHciDevice_t dev = {};
+	dev.SendData = CaptureAcl;
+	BtHciSetLeAclBuffer(&dev, 251, 1);
+	alignas(4) uint8_t raw[16] = {};
+	auto *acl = reinterpret_cast<BtHciACLDataPacket_t *>(raw);
+	acl->Hdr.ConnHdl = 0x42;
+	acl->Hdr.Len = 4;
+	CHECK(BtHciSendAcl(&dev, acl) != 0);
+	s_AttRespond = true;
+	s_AttRequests = 0;
+	uint8_t request[] = {3, 0, 4, 0, 0x12, 1, 0};
+	FeedAclFragment(&dev, 0x42, BT_HCI_PBFLAG_START_NONFLUSHABLE, request, sizeof(request));
+	CHECK(s_AttRequests == 1);
+	CHECK(s_AclPacketCount == 1);
+	uint8_t event[] = {BT_HCI_EVT_NB_COMPLETED_PACKET, 5, 1, 0x42, 0, 1, 0};
+	BtHciProcessEvent(&dev, reinterpret_cast<BtHciEvtPacket_t *>(event));
+	CHECK(s_AclPacketCount == 2);
+	CHECK(s_AttRequests == 1);
+	CHECK(s_AclPackets[1].Len == 9);
+	CHECK(s_AclPackets[1].Data[8] == 0x13);
+	CHECK(dev.AclCredit == 0);
+	s_AttRespond = false;
+	BtHciSetLeAclBuffer(&dev, 251, 1);
+}
+
+void TestDeferredResponseRingFull()
+{
+	ResetAclCapture();
+	BtHciDevice_t dev = {};
+	dev.SendData = CaptureAcl;
+	dev.Command = CaptureDevCommand;
+	BtHciSetLeAclBuffer(&dev, 251, 3);
+	s_AttRespond = true;
+	s_AttRequests = 0;
+	g_BtTestTxRingAvailable = false;
+	uint8_t request[] = {3, 0, 4, 0, 0x12, 1, 0};
+	FeedAclFragment(&dev, 0x42, BT_HCI_PBFLAG_START_NONFLUSHABLE, request, sizeof(request));
+	CHECK(s_AclPacketCount == 0);
+	g_BtTestTxRingAvailable = true;
+	BtHciTxCheckStatus(&dev);
+	CHECK(s_AclPacketCount == 1);
+	CHECK(s_AttRequests == 1);
+	CHECK(s_AclPackets[0].Data[8] == 0x13);
+
+	// A queued response must not survive disconnect and handle reuse.
+	g_BtTestTxRingAvailable = false;
+	FeedAclFragment(&dev, 0x42, BT_HCI_PBFLAG_START_NONFLUSHABLE, request, sizeof(request));
+	uint8_t event[] = {BT_HCI_EVT_DISCONN_COMPLETE, 4, 0, 0x42, 0, 0x13};
+	BtHciProcessEvent(&dev, reinterpret_cast<BtHciEvtPacket_t *>(event));
+	g_BtTestTxRingAvailable = true;
+	BtHciTxCheckStatus(&dev);
+	CHECK(s_AclPacketCount == 1);
+	CHECK(dev.AclCredit == 3);
+	s_AttRespond = false;
+	BtHciSetLeAclBuffer(&dev, 251, 3);
+}
+
 void TestAclCompletionCredits()
 {
 	BtHciDevice_t dev = {};
 	dev.AclCreditMax = 3;
 	dev.AclCredit = 0;
+	dev.AclPending[0] = {0x123, 3};
 	dev.SendCompleted = CaptureCompleted;
 	s_CompletedCallbacks = 0;
 
@@ -388,6 +481,7 @@ void TestCompletedPacketsBounded()
 	BtHciDevice_t dev = {};
 	dev.AclCreditMax = 20;
 	dev.AclCredit = 0;
+	dev.AclPending[0] = {0x321, 20};
 	dev.SendCompleted = CaptureCompleted;
 	s_CompletedCallbacks = 0;
 
@@ -744,8 +838,14 @@ void TestShortFixedEventsDropped()
 
 
 extern "C" uint32_t BtAttProcessReq(uint16_t, BtAttReqRsp_t * const, int,
-						 BtAttReqRsp_t * const)
+						 BtAttReqRsp_t * const pRsp)
 {
+	++s_AttRequests;
+	if (s_AttRespond)
+	{
+		pRsp->OpCode = 0x13; // Write response
+		return 1;
+	}
 	return 0;
 }
 
@@ -896,6 +996,9 @@ int main()
 	TestCommandFraming();
 	TestAclFragmentationAndCredits();
 	TestAclFragmentSendFailure();
+	TestDisconnectRestoresCredits();
+	TestDeferredAttResponse();
+	TestDeferredResponseRingFull();
 	TestAclCompletionCredits();
 	TestCompletedPacketsBounded();
 	TestCommandCreditsAndCompletion();

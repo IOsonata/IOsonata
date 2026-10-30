@@ -302,6 +302,7 @@ void BtGattIndicationTimeout(uint16_t ConnHdl)
 extern "C" void BtSmpCheckStatus(void) __attribute__((weak));
 extern "C" void BtSmpBondNvmCheckStatus(void) __attribute__((weak));
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
+extern void BtHciTxCheckStatus(BtHciDevice_t *pDev) __attribute__((weak));
 
 // Called from the application status check (AppRun when its queue is empty,
 // the Bluetooth worker of an RTOS before it blocks). Retries the work the
@@ -309,6 +310,7 @@ extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
 void BtAppCheckStatus(void)
 {
 	BtHciCtlrCheckStatus();
+	if (BtHciTxCheckStatus) BtHciTxCheckStatus(&s_BtHciDev);
 
 	// Once a second when a millisecond clock is available, each pass when it
 	// is not: without a clock the timeouts these checks serve are inert and
@@ -858,7 +860,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		uint16_t maxTxOctets = (uint16_t)(maxlen[0] | (maxlen[1] << 8));
 		uint16_t maxTxTime   = (uint16_t)(maxlen[2] | (maxlen[3] << 8));
 
-		uint16_t txOctets = (uint16_t)min(maxTxOctets, pCfg->MaxMtu);
+		// The link-layer payload includes the four-byte L2CAP header.
+		uint32_t mtu = max((uint32_t)pCfg->MaxMtu, 23U);
+		uint16_t txOctets = (uint16_t)min((uint32_t)maxTxOctets, min(mtu + 4U, 251U));
 		uint8_t datalen[4];
 		datalen[0] = (uint8_t)(txOctets & 0xff);
 		datalen[1] = (uint8_t)(txOctets >> 8);

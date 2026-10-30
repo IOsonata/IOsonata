@@ -50,6 +50,9 @@ extern "C" void BtHciCtlrCheckStatus(void) { ++ctlrChecks; }
 extern "C" void BtSmpCheckStatus(void) __attribute__((weak));
 extern "C" void BtSmpBondNvmCheckStatus(void) __attribute__((weak));
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
+struct BtHciDevice_t {};
+static BtHciDevice_t s_BtHciDev;
+extern void BtHciTxCheckStatus(BtHciDevice_t *) __attribute__((weak));
 """
 hci += function(hci_source, 'BtAppCheckStatus') + '\n'
 hci += r"""

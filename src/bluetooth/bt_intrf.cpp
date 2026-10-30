@@ -175,42 +175,77 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 		return false;
 	}
 
-	// A packet left stashed by a previous refused send goes out first.
-	bool res = true;
-	if (pIntrf->TransBuffLen > 0)
+	uint32_t state = DisableInterrupt();
+	if (pIntrf->TxDraining)
 	{
-		res = BtGattCharNotify(connHdl, pChar, pIntrf->TransBuff,
-				(size_t)pIntrf->TransBuffLen);
-	}
-
-	// Drain the TxFifo. Each packet is sent straight from its FIFO slot, so the
-	// shared TransBuff is written only to stash a packet whose send was refused.
-	// This runs from both the Tx path and the TX-complete callback, so sending
-	// from the slot means a re-entrant call cannot resend or overwrite a buffer
-	// that is in flight. A FIFO packet never exceeds PacketSize, which
-	// BtIntrfInit bounds to TransBuff, so the stash copy cannot overflow.
-	BtIntrfPkt_t *pPkt = nullptr;
-	while (res == true)
-	{
-		pIntrf->TransBuffLen = 0;
-		uint32_t state = DisableInterrupt();
-		pPkt = (BtIntrfPkt_t *)CFifoGet(pIntrf->hTxFifo);
+		pIntrf->TxRetry = true;
 		EnableInterrupt(state);
-		if (pPkt == nullptr)
-		{
-			return true;
-		}
-		res = BtGattCharNotify(connHdl, pChar, pPkt->Data, (size_t)pPkt->Len);
+		return false;
 	}
+	pIntrf->TxDraining = true;
+	pIntrf->TxRetry = false;
+	EnableInterrupt(state);
 
-	// The send was refused. Hold the popped packet for the next call.
-	if (pPkt != nullptr)
+	bool res = true;
+	bool retried = false;
+	for (;;)
 	{
-		memcpy(pIntrf->TransBuff, pPkt->Data, pPkt->Len);
-		pIntrf->TransBuffLen = pPkt->Len;
-	}
+		state = DisableInterrupt();
+		if (pIntrf->TxReset)
+		{
+			pIntrf->TransBuffLen = 0;
+			pIntrf->TxReset = false;
+		}
+		if (pIntrf->TransBuffLen == 0)
+		{
+			BtIntrfPkt_t *pPkt = (BtIntrfPkt_t *)CFifoGet(pIntrf->hTxFifo);
+			if (pPkt != nullptr)
+			{
+				// Copy before a producer can reuse the released FIFO slot.
+				if (pPkt->Len <= pIntrf->PacketSize - BTINTRF_PKHDR_LEN)
+				{
+					memcpy(pIntrf->TransBuff, pPkt->Data, pPkt->Len);
+					pIntrf->TransBuffLen = pPkt->Len;
+				}
+				else
+				{
+					pIntrf->TxDropCnt++;
+				}
+			}
+		}
+		if (pIntrf->TransBuffLen == 0)
+		{
+			pIntrf->TxDraining = false;
+			EnableInterrupt(state);
+			return res;
+		}
+		EnableInterrupt(state);
 
-	return false;
+		res = BtGattCharNotify(connHdl, pChar, pIntrf->TransBuff,
+			(size_t)pIntrf->TransBuffLen);
+		state = DisableInterrupt();
+		if (res || pIntrf->TxReset)
+		{
+			pIntrf->TransBuffLen = 0;
+			pIntrf->TxReset = false;
+		}
+		if (!res)
+		{
+			// A completion can arrive during a refused send. Preserve that
+			// wakeup, but bound retries if the controller still refuses.
+			if (pIntrf->TxRetry && !retried)
+			{
+				pIntrf->TxRetry = false;
+				retried = true;
+				EnableInterrupt(state);
+				continue;
+			}
+			pIntrf->TxDraining = false;
+			EnableInterrupt(state);
+			return false;
+		}
+		EnableInterrupt(state);
+	}
 }
 
 int BtIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int DataLen)
@@ -277,7 +312,14 @@ void BtIntrfReset(DevIntrf_t *pDevIntrf)
 	uint32_t state = DisableInterrupt();
 	CFifoFlush(pIntrf->hRxFifo);
 	CFifoFlush(pIntrf->hTxFifo);
-	pIntrf->TransBuffLen = 0;
+	if (pIntrf->TxDraining)
+	{
+		pIntrf->TxReset = true;
+	}
+	else
+	{
+		pIntrf->TransBuffLen = 0;
+	}
 	EnableInterrupt(state);
 }
 
@@ -454,6 +496,9 @@ bool BtIntrfInit(BtDevIntrf_t *pIntrf, const BtIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.bDma = false;
 	pIntrf->DevIntrf.bIntEn = true;
 	pIntrf->TransBuffLen = 0;
+	pIntrf->TxDraining = false;
+	pIntrf->TxRetry = false;
+	pIntrf->TxReset = false;
 	pIntrf->RxDropCnt = 0;
 	pIntrf->TxDropCnt = 0;
 	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
@@ -485,4 +530,25 @@ bool BtIntrf::RequestToSend(int NbBytes)
 	int avail = CFifoAvail(vBtDevIntrf.hTxFifo);
 	int payloadSize = vBtDevIntrf.PacketSize - (int)BTINTRF_PKHDR_LEN;
 	return (int64_t)avail * payloadSize >= NbBytes;
+}
+
+// Use the existing registered service list and its application-owned lifetime.
+void BtIntrfTxReady(void)
+{
+	for (BtGattSrvc_t *p = BtGattGetSrvcList(); p != nullptr; p = p->pNext)
+	{
+		for (int i = 0; i < p->NbChar; i++)
+		{
+			if (p->pCharArray[i].TxCompleteCB == BtIntrfTxComplete)
+			{
+				BtDevIntrf_t *intrf = (BtDevIntrf_t *)p->pContext;
+				if (intrf != nullptr && (intrf->TransBuffLen > 0 ||
+					CFifoUsed(intrf->hTxFifo) > 0))
+				{
+					BtIntrfNotify(intrf);
+				}
+				break;
+			}
+		}
+	}
 }

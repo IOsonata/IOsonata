@@ -161,6 +161,42 @@ int main()
 		print('PASS failed scan/retry/controller stop:', path, flush=True)
 
 
+def check_data_length(directory, flags):
+	hci = (ROOT / 'src/bluetooth/bt_app_hci.cpp').read_text()
+	nrf = (ROOT / 'ARM/Nordic/nRF52/src/bt_app_nrf52.cpp').read_text()
+	hci_calc = hci[hci.index('uint32_t mtu = max('):hci.index('uint8_t datalen[4];')]
+	nrf_calc = re.search(r'uint8_t dlen = [^;]+;', nrf).group(0)
+	code = r"""
+#include <cstdint>
+#include <cstdlib>
+#include "istddef.h"
+struct Config { uint16_t MaxMtu; };
+static uint16_t hciLength(uint16_t requested, uint16_t maxTxOctets) {
+	Config cfg = {requested};
+	Config *pCfg = &cfg;
+""" + hci_calc + r"""
+	return txOctets;
+}
+static uint8_t sdLength(uint16_t requested) {
+	Config s_BtAppData = {requested};
+""" + nrf_calc + r"""
+	return dlen;
+}
+int main() {
+	const uint16_t mtus[] = {23, 27, 247, 248, 512, 65535};
+	const uint16_t octets[] = {27, 31, 251, 251, 251, 251};
+	for (unsigned i = 0; i < sizeof(mtus) / sizeof(mtus[0]); i++) {
+		if (hciLength(mtus[i], 251) != octets[i]) std::abort();
+		if (sdLength(mtus[i]) != octets[i]) std::abort();
+		if (hciLength(mtus[i], 27) != 27) std::abort();
+	}
+	if (hciLength(0, 251) != 27) std::abort();
+}
+"""
+	build(directory, 'data_length', code, flags)
+	print('PASS HCI and S132 data length bounds', flush=True)
+
+
 # Check complete source files too: extracted functions do not cover every init
 # and event path. Value-returning accessors cannot replace state assignments.
 VALUE_ACCESSORS = (
@@ -184,3 +220,4 @@ with tempfile.TemporaryDirectory(prefix='bt-private-') as temporary:
 		print(mode, flush=True)
 		check_ports(directory, flags)
 		check_scans(directory, flags)
+		check_data_length(directory, flags)

@@ -12,6 +12,7 @@
 #include <cstring>
 
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_intrf.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_hci.h"
@@ -324,6 +325,45 @@ void TestSendOrderPreserved()
 	CHECK(Peer()->TxPendCount == 0);
 }
 
+
+void TestBlockedInterfaceWakes(bool OtherLink)
+{
+	Setup(251);
+	s_HciDev.AclCreditMax = 1;
+	s_HciDev.AclCredit = 1;
+	BtDevIntrf_t intrf = {};
+	alignas(CFifo_t) uint8_t rx[BTINTRF_CFIFO_TOTAL_MEMSIZE(2, 8)];
+	alignas(CFifo_t) uint8_t tx[BTINTRF_CFIFO_TOTAL_MEMSIZE(2, 8)];
+	BtIntrfCfg_t cfg = {};
+	cfg.pSrvc = &s_Srvc;
+	cfg.RxCharIdx = -1;
+	cfg.TxCharIdx = 1;
+	cfg.PacketSize = 8;
+	cfg.bBlocking = true;
+	cfg.pRxFifoMem = rx; cfg.RxFifoMemSize = sizeof(rx);
+	cfg.pTxFifoMem = tx; cfg.TxFifoMemSize = sizeof(tx);
+	CHECK(BtIntrfInit(&intrf, &cfg));
+	uint16_t owner = OtherLink ? kConnHdl + 1 : kConnHdl;
+	if (OtherLink)
+	{
+		BtDevice_t *peer = BtPeerAlloc(owner);
+		CHECK(peer != nullptr);
+		peer->pHciDev = &s_HciDev;
+		peer->Conn.MaxMtu = 247;
+		BtGattCccdSet(owner, s_Char[0].CccdHdl, BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION);
+	}
+	CHECK(BtGattCharNotify(owner, &s_Char[0], s_Value, 8));
+	CHECK(intrf.DevIntrf.TxData(&intrf.DevIntrf, s_Value, 8) == 8);
+	CHECK(intrf.TransBuffLen == 8);
+	s_HciDev.AclCredit = 1;
+	BtGattSendCompleted(owner, 1);
+	CHECK(intrf.TransBuffLen == 0);
+	CHECK(s_HciPacketCount == 2);
+	CHECK(s_TxCompleteCount == 1);
+	s_Char[1].TxCompleteCB = nullptr;
+	s_Srvc.pContext = nullptr;
+}
+
 } // namespace
 
 // The optional DFU hook only schedules work; it is separate from the
@@ -337,12 +377,13 @@ void BtDfuSmpTxReady(void)
 
 extern "C" uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const pAcl)
 {
-	if (s_SendResult == 0)
+	if (s_SendResult == 0 || (s_HciDev.AclCreditMax > 0 && s_HciDev.AclCredit == 0))
 	{
 		return 0;
 	}
 
 	++s_HciPacketCount;
+	if (s_HciDev.AclCreditMax > 0) --s_HciDev.AclCredit;
 
 	return (uint32_t)pAcl->Hdr.Len + sizeof(BtHciACLDataPacketHdr_t);
 }
@@ -364,6 +405,8 @@ int main()
 	TestFailedSendReleasesReservation();
 	TestNoCallbackCharStillTracked();
 	TestSendOrderPreserved();
+	TestBlockedInterfaceWakes(false);
+	TestBlockedInterfaceWakes(true);
 
 	if (s_Failures != 0)
 	{

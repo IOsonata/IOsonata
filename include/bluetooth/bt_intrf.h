@@ -97,6 +97,9 @@ typedef struct __Bt_Dev_Interf {
     uint32_t	TxDropCnt;
     uint8_t     TransBuff[BTINTRF_TRANSBUFF_MAXLEN];  //
     int         TransBuffLen;   //!< Data length
+	bool TxDraining;
+	bool TxRetry;
+	bool TxReset;
 } BtDevIntrf_t;
 
 #pragma pack(pop)

@@ -342,6 +342,9 @@ bt_gatt_cccd_test_SOURCES := \
 
 bt_gatt_txcomplete_test_SOURCES := \
 	bt_gatt_txcomplete_test.cpp \
+	$(ROOT)/src/bluetooth/bt_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(BUILD_DIR)/cfifo.o \
 	$(ROOT)/src/bluetooth/bt_gatt.cpp \
 	$(ROOT)/src/bluetooth/bt_peer.cpp
 
