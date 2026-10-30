@@ -65,6 +65,11 @@ const char *s_Support[kMaxSupport];
 int s_SupportCount;
 int s_InitCalls;
 int s_EnableCalls;
+bool s_Enabled;
+int s_DisableCalls;
+uint8_t s_FailEventConfig;
+uint32_t s_EventLength;
+bool s_EventExtended;
 int s_RandSourceCalls;
 int s_MpslInitCalls;
 int s_ArbiterStartCalls;
@@ -93,6 +98,11 @@ void Reset(void)
 	s_SupportCount = 0;
 	s_InitCalls = 0;
 	s_EnableCalls = 0;
+	s_Enabled = false;
+	s_DisableCalls = 0;
+	s_FailEventConfig = 0;
+	s_EventLength = 0;
+	s_EventExtended = false;
 	s_RandSourceCalls = 0;
 	s_MpslInitCalls = 0;
 	s_ArbiterStartCalls = 0;
@@ -572,6 +582,8 @@ void TestBringUpOrderAndFailures(void)
 	CHECK(s_ArbiterStartCalls == 1);
 	CHECK(s_EnableCalls == 1);
 	CHECK(s_ArbiterStopCalls == 0);
+	CHECK(s_EventLength == 10000);
+	CHECK(s_EventExtended);
 
 	// MPSL first, and nothing after it if it fails.
 	Reset();
@@ -611,6 +623,19 @@ void TestBringUpOrderAndFailures(void)
 	CHECK(Start(&cfg) == false);
 	CHECK(s_ArbiterStartCalls == 1);
 	CHECK(s_ArbiterStopCalls == 1);
+	// Failed post-enable HCI configuration must tear down the live controller.
+	for (uint8_t failure = 1; failure <= 2; failure++)
+	{
+		Reset();
+		s_FailEventConfig = failure;
+		CHECK(Start(&cfg) == false);
+		CHECK(s_EnableCalls == 1);
+		CHECK(s_DisableCalls == 1);
+		CHECK(!s_Enabled);
+		CHECK(s_ArbiterStopCalls == 1);
+		CHECK(BtHciCtlrErrorGet() == BT_HCI_CTLR_ERROR_CTLR_INIT);
+	}
+
 }
 
 // The deliberate negative, so the checks above are known to be able to fail.
@@ -759,12 +784,15 @@ extern "C" int32_t sdc_cfg_set(uint8_t, uint8_t Type, const sdc_cfg_t *pCfg)
 extern "C" int32_t sdc_enable(sdc_callback_t, uint8_t *)
 {
 	s_EnableCalls++;
+	s_Enabled = !s_FailEnable;
 
 	return s_FailEnable ? kVendorRefused : 0;
 }
 
 extern "C" int32_t sdc_disable(void)
 {
+	s_Enabled = false;
+	s_DisableCalls++;
 	return 0;
 }
 
@@ -791,11 +819,21 @@ extern "C" int32_t sdc_hci_data_put(uint8_t *)
 
 extern "C" uint8_t sdc_hci_cmd_vs_conn_event_extend(const sdc_hci_cmd_vs_conn_event_extend_t *pParams)
 {
-	return pParams->enable == 1 ? 0 : 0x12;
+	if (!s_Enabled || s_FailEventConfig == 1)
+	{
+		return 0x0c;
+	}
+	s_EventExtended = pParams->enable == 1;
+	return s_EventExtended ? 0 : 0x12;
 }
 
-extern "C" uint8_t sdc_hci_cmd_vs_event_length_set(const sdc_hci_cmd_vs_event_length_set_t *)
+extern "C" uint8_t sdc_hci_cmd_vs_event_length_set(const sdc_hci_cmd_vs_event_length_set_t *pParams)
 {
+	if (!s_Enabled || s_FailEventConfig == 2)
+	{
+		return 0x0c;
+	}
+	s_EventLength = pParams->event_length_us;
 	return 0;
 }
 

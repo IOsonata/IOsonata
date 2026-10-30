@@ -934,45 +934,6 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	}
 
 
-	// Base event allocation; extension below permits the eight-packet target.
-	// This is an event time budget, not a guaranteed packet count.
-	// Vendor specific command, answered with an HCI status. A refusal leaves
-	// the controller default event length in place, which costs throughput but
-	// still gives a working link, so report it and carry on.
-	sdc_hci_cmd_vs_event_length_set_t evlen = {
-		.event_length_us = 10000,
-	};
-
-	sdc_hci_cmd_vs_conn_event_extend_t extend = {
-		.enable = 1,
-	};
-	uint8_t extendStatus = sdc_hci_cmd_vs_conn_event_extend(&extend);
-	if (extendStatus != 0)
-	{
-		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_INIT, extendStatus);
-		SDC_INIT_PRINTF("SDC event extension failed 0x%02x\r\n", extendStatus);
-		return false;
-	}
-
-	uint8_t hcistat = sdc_hci_cmd_vs_event_length_set(&evlen);
-	if (hcistat != 0)
-	{
-		SDC_INIT_PRINTF("sdc_hci_cmd_vs_event_length_set status 0x%02x\r\n", hcistat);
-	}
-
-	/*
-	cfg.event_length.event_length_us = 7500;
-	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-				       	  SDC_CFG_TYPE_EVENT_LENGTH,
-						  &cfg);
-	if (ram < 0)
-	{
-		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CFG_SET, (int32_t)SDC_CFG_TYPE_EVENT_LENGTH);
-		SDC_INIT_PRINTF("sdc_cfg_set SDC_CFG_TYPE_EVENT_LENGTH failed %d\r\n", (int)ram);
-
-		return false;
-	}
-*/
 	if (pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
@@ -1202,6 +1163,29 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 		return false;
 	}
+
+	// HCI APIs are valid only after sdc_enable. Apply scheduling settings
+	// before advertising or creating a connection, and check both commands.
+	sdc_hci_cmd_vs_event_length_set_t evlen = {
+		.event_length_us = 10000,
+	};
+	sdc_hci_cmd_vs_conn_event_extend_t extend = {
+		.enable = 1,
+	};
+	uint8_t hcistat = sdc_hci_cmd_vs_event_length_set(&evlen);
+	if (hcistat == 0)
+	{
+		hcistat = sdc_hci_cmd_vs_conn_event_extend(&extend);
+	}
+	if (hcistat != 0)
+	{
+		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_INIT, hcistat);
+		SDC_INIT_PRINTF("SDC event configuration failed 0x%02x\r\n", hcistat);
+		sdc_disable();
+		MpslNvmArbiterStop();
+		return false;
+	}
+	SDC_INIT_PRINTF("SDC: event budget 10000 us, extension enabled\r\n");
 
 	// Default TX power of advertising and links. The SDC has its own entry
 	// point for it; a controller behind a link needs a vendor command.
