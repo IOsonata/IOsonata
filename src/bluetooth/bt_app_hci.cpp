@@ -560,6 +560,7 @@ static bool BtAppHciSrvcDone(const BtAppCfg_t *pCfg)
 	// info. Generic bt_dis adds it to the same ATT DB as user services.
 	if (pCfg->pDevInfo != NULL && !BtDisInit(pCfg))
 	{
+		STORE_PRINTF("BtAppInit FAIL: Device Information service initialization\r\n");
 		return false;
 	}
 

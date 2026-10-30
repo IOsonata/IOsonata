@@ -51,6 +51,7 @@ SOFTWARE.
 
 #if defined(NRFXLIB_SDC)
 #include "bluetooth/bt_hci_ctlr.h"
+#include "bluetooth/bt_att.h"
 #include "syslog.h"
 #endif
 
@@ -244,6 +245,13 @@ const UARTCfg_t g_UartCfg = {
 UART g_Uart;
 
 #if defined(NRFXLIB_SDC)
+// GAP, GATT, PRBS and Device Information exceed the default 2048-byte pool.
+alignas(BtAttDBEntry_t) static uint8_t s_AttDBMem[3072];
+
+extern "C" const BtAttDBMemCfg_t g_BtAttDBMemCfg = {
+	s_AttDBMem, sizeof(s_AttDBMem)
+};
+
 alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(4, 128)];
 
 static const SysLogCfg_t s_SysLogCfg = {
