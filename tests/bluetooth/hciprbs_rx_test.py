@@ -110,6 +110,17 @@ class PrbsReceiverTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'not negotiated'):
                 rx.configure_phy(self.link, '2M')
 
+    def test_att_disconnect_reports_reason(self):
+        self.link.down = 0x08
+        with self.assertRaisesRegex(RuntimeError, 'ATT request, reason 0x08'):
+            self.link.request(b'\x02\xf7\x00', 3)
+
+    def test_phy_disconnect_reports_reason(self):
+        self.wire.command = lambda *args, **kwargs: (0, b'')
+        self.link.down = 0x3E
+        with self.assertRaisesRegex(RuntimeError, 'PHY negotiation, reason 0x3E'):
+            rx.configure_phy(self.link, '2M')
+
     def test_orphan_fragment_fails(self):
         with self.assertRaisesRegex(RuntimeError, 'continuation'):
             self.link.packet(acl(b'bad', continuing=True))
@@ -134,7 +145,7 @@ class PrbsReceiverTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'CCCD not found'):
             self.link.subscribe()
 
-    def test_event_budgets_for_both_phys(self):
+    def test_both_phys_preserve_controller_event_budget(self):
         for phy in ('1M', '2M'):
             with self.subTest(phy=phy):
                 self.check_scan_name('BlePrbs_S132', ['--phy', phy])
@@ -164,9 +175,7 @@ class PrbsReceiverTest(unittest.TestCase):
         with patch.object(API, 'parse_connection', return_value=(0, 1, 0, peer, 12, 0, 400)):
             self.assertEqual(rx.connect(self.wire, API, rx.parse_args(argv or [])), (1, 15))
         self.assertFalse(self.wire.packets)
-        phy = rx.parse_args(argv or []).phy
-        budget = 10000 if phy == '1M' else 12000
-        self.assertIn((0xFD05, struct.pack('<I', budget)), commands)
+        self.assertFalse(any(command[0] == 0xFD05 for command in commands))
 
     def test_defaults_compare_both_phys(self):
         args = rx.parse_args([])
