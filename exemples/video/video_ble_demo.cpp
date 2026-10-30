@@ -116,8 +116,8 @@ static const char s_VideoName[] = "ArduCAM Mega";
 #define BLESRV_READ_CHAR_IDX			0
 #define BLESRV_WRITE_CHAR_IDX			1
 
-// Frame data read per SPI burst
-#define VIDEO_DEMO_BUFSIZE				1024
+// Whole notification payloads per SPI burst; avoid a short packet each burst.
+#define VIDEO_DEMO_BUFSIZE				(PACKET_SIZE * 4)
 
 void ReadCharSetNotif(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
 
@@ -282,9 +282,11 @@ void BtAppInitUserData()
 // Next part of the stream into s_Buff : frame header, frame data
 static bool VideoFill()
 {
+	int n;
+
 	if (s_bFrame)
 	{
-		int n = s_Video.ReadFrame(s_Buff, sizeof(s_Buff));
+		n = s_Video.ReadFrame(s_Buff, sizeof(s_Buff));
 
 		if (n > 0)
 		{
@@ -311,6 +313,13 @@ static bool VideoFill()
 	s_Pending = 8;
 	s_Offset = 0;
 	s_bFrame = true;
+
+	// Include image data with the header instead of sending an 8-byte notification.
+	n = s_Video.ReadFrame(&s_Buff[s_Pending], sizeof(s_Buff) - s_Pending);
+	if (n > 0)
+	{
+		s_Pending += n;
+	}
 
 	return true;
 }
