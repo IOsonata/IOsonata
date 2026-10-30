@@ -134,8 +134,34 @@ class PrbsReceiverTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'CCCD not found'):
             self.link.subscribe()
 
+    def test_scanning_accepts_all_prbs_variants(self):
+        for name in rx.PRBS_NAMES:
+            with self.subTest(name=name):
+                self.check_scan_name(name)
+
+    def test_explicit_name_filters_other_variants(self):
+        self.check_scan_name('BlePrbs_S132', ['--name', 'BlePrbs_S132'],
+                             ignored='BlePrbs_SDC')
+
+    def check_scan_name(self, name, argv=None, ignored='Unrelated'):
+        peer = bytes.fromhex('0102030405c0')
+        def advertisement(label):
+            data = bytes([len(label) + 1, 9]) + label.encode()
+            body = bytes([2, 1, 0, 1]) + peer + bytes([len(data)]) + data + bytes([200])
+            return API.H4_EVENT, API.EVT_LE_META, body
+        self.wire.setup = lambda: None
+        self.wire.identity = lambda: (peer, 1, None)
+        self.wire.pending = []
+        self.wire.command = lambda *args, **kwargs: (0, b'')
+        self.wire.packets.extend([advertisement(ignored), advertisement(name),
+                                 (API.H4_EVENT, API.EVT_LE_META, b'connection')])
+        with patch.object(API, 'parse_connection', return_value=(0, 1, 0, peer, 12, 0, 400)):
+            self.assertEqual(rx.connect(self.wire, API, rx.parse_args(argv or [])), (1, 15))
+        self.assertFalse(self.wire.packets)
+
     def test_defaults_compare_both_phys(self):
         args = rx.parse_args([])
+        self.assertIsNone(args.name)
         self.assertEqual(args.phy, 'both')
         self.assertEqual(args.duration, 60)
         self.assertEqual(args.interval, 15)

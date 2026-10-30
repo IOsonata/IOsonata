@@ -4,7 +4,7 @@
 @brief  Receive and validate BleIntrfPrbsTx through HciController.
 
 Run from IOsonata:
-    python3 Python/hciprbs_rx.py --name BlePrbs_SDC --duration 60
+    python3 Python/hciprbs_rx.py --duration 60
     python3 Python/hciprbs_rx.py --name BlePrbs_S140 --interval 15
     python3 Python/hciprbs_rx.py --hci /dev/cu.usbmodemXXXX
 
@@ -33,6 +33,7 @@ import time
 # HCI framing, transport, command completion and ACL credits belong to the
 # hcicontroller package. This client supplies only the PRBS GATT procedure.
 DATA_UUID = '00000102-287c-11e4-ab74-0002a5d5c51b'
+PRBS_NAMES = ('BlePrbs', 'BlePrbs_S132', 'BlePrbs_S140', 'BlePrbs_SDC')
 
 
 def hci_library():
@@ -242,7 +243,8 @@ def connect(hci, api, args):
     if args.address:
         peer_type, peer = int(args.address_type == 'random'), args.address
     else:
-        print('Scanning for %s' % args.name)
+        names = (args.name,) if args.name else PRBS_NAMES
+        print('Scanning for %s' % ', '.join(names))
         hci.command(api.OP_LE_SET_SCAN_PARAMS, struct.pack('<BHHBB', 1, 96, 48, own_type, 0))
         hci.command(api.OP_LE_SET_SCAN_ENABLE, bytes([1, 0]))
         peer = None
@@ -263,14 +265,16 @@ def connect(hci, api, args):
                     if offset + 10 + length > len(body):
                         break
                     data = body[offset + 9:offset + 9 + length]
-                    if api.local_name(data) == args.name:
+                    name = api.local_name(data)
+                    if name in names:
+                        print('Found %s' % name)
                         peer_type, peer = body[offset + 1], bytes(body[offset + 2:offset + 8])
                         break
                     offset += 10 + length
         finally:
             hci.command(api.OP_LE_SET_SCAN_ENABLE, bytes([0, 0]), allow_fail=True)
         if peer is None:
-            raise RuntimeError('%s not found' % args.name)
+            raise RuntimeError('%s not found' % ', '.join(names))
     print('Connecting to %s; requesting %s, %.2f ms' % (api.addr_str(peer), args.phy, args.interval))
     interval = int(args.interval / 1.25)
     params = struct.pack('<HHBB', 96, 48, 0, peer_type) + peer + bytes([own_type])
@@ -372,7 +376,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description='BLE PRBS receiver through HciController')
     parser.add_argument('--hci', nargs='?', const='usb', default='usb',
                         help='usb (default), auto, serial, or a serial port')
-    parser.add_argument('--name', default='BlePrbs_SDC', help='exact advertised device name')
+    parser.add_argument('--name', help='exact advertised name (default: any BlePrbs variant)')
     parser.add_argument('--address', help='BLE address, skips scanning')
     parser.add_argument('--address-type', choices=('random', 'public'), default='random')
     parser.add_argument('--phy', choices=('1M', '2M', 'both'), default='both')
