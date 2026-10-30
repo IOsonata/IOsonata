@@ -51,6 +51,7 @@ SOFTWARE.
 
 #if defined(NRFXLIB_SDC)
 #include "bluetooth/bt_hci_ctlr.h"
+#include "syslog.h"
 #endif
 
 // Console rate, board.h can give another one
@@ -242,6 +243,17 @@ const UARTCfg_t g_UartCfg = {
 /// UART object instance
 UART g_Uart;
 
+#if defined(NRFXLIB_SDC)
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(4, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = true
+};
+#endif
+
 int g_DelayCnt = 0;
 
 // Pending stays set through queue refusal until the callback runs.
@@ -359,6 +371,12 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
+#if defined(NRFXLIB_SDC)
+	if (SysLogGetInstance()->Init(s_SysLogCfg, &g_Uart) == false)
+	{
+		g_Uart.printf("PRBS logger initialization failed\r\n");
+	}
+#endif
 
 #ifdef S132
 	g_Uart.printf("BleIntrfPrbsTx_SoftDevice132\r\n");
@@ -396,6 +414,8 @@ int main()
 			(int)BtHciCtlrMemPoolSizeNeeded(), (unsigned)g_BtHciCtlrMemPool.Size);
 #endif
 		BtAdvStop();
+		// Allow the 256-byte UART FIFO to drain before exit halts the CPU.
+		msDelay(20);
 		return -1;
 	}
 
@@ -403,6 +423,8 @@ int main()
 	{
 		g_Uart.printf("PRBS interface initialization failed\r\n");
 		BtAdvStop();
+		// Allow the 256-byte UART FIFO to drain before exit halts the CPU.
+		msDelay(20);
 		return -1;
 	}
 	g_Uart.printf("PRBS initialized %s\r\n", DEVICE_NAME);
