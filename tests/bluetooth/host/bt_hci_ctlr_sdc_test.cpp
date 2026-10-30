@@ -607,7 +607,7 @@ void TestBringUpOrderAndFailures(void)
 	CHECK(s_ArbiterStartCalls == 1);
 	CHECK(s_EnableCalls == 1);
 	CHECK(s_ArbiterStopCalls == 0);
-	CHECK(s_EventLength == 10000);
+	CHECK(s_EventLength == 11250);
 	CHECK(s_EventExtended);
 
 	// MPSL first, and nothing after it if it fails.

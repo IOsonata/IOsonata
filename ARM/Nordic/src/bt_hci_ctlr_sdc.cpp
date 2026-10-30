@@ -1243,7 +1243,8 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	// HCI APIs are valid only after sdc_enable. Apply scheduling settings
 	// before advertising or creating a connection, and check both commands.
 	sdc_hci_cmd_vs_event_length_set_t evlen = {
-		.event_length_us = 10000,
+		// Eight full 251-byte LL exchanges at 2M need about 11.2 ms.
+		.event_length_us = 11250,
 	};
 	sdc_hci_cmd_vs_conn_event_extend_t extend = {
 		.enable = 1,
@@ -1266,7 +1267,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		MpslNvmArbiterStop();
 		return false;
 	}
-	SDC_INIT_PRINTF("SDC: event budget 10000 us, extension enabled\r\n");
+	SDC_INIT_PRINTF("SDC: event budget 11250 us, extension enabled\r\n");
 
 	// Default TX power of advertising and links. The SDC has its own entry
 	// point for it; a controller behind a link needs a vendor command.
