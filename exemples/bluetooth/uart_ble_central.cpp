@@ -315,6 +315,9 @@ static bool s_UartBlePeerOobValid = false;
 // Pending stays set through queue refusal until the callback runs.
 static volatile bool s_bUartRxPending = false;
 static volatile bool s_bBleTxPending = false;
+#if defined(S132) || defined(S140)
+static bool s_bDiscoveryPending = false;
+#endif
 
 void UartRxSchedHandler(uint32_t Evt, void *pCtx);
 void BleTxSchedHandler(uint32_t Evt, void *pCtx);
@@ -383,6 +386,9 @@ static void BleTxQue(void)
 
 static void StartPeerDiscovery(uint16_t ConnHdl)
 {
+#if defined(S132) || defined(S140)
+	s_bDiscoveryPending = false;
+#endif
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer)
 	{
@@ -390,6 +396,10 @@ static void StartPeerDiscovery(uint16_t ConnHdl)
 		if (BtAppDiscoverDevice(pPeer) == false)
 		{
 			g_Uart.printf("Discovery start failed: handle=%u\r\n", ConnHdl);
+#if defined(S132) || defined(S140)
+			// Nordic's GATT handler can have an MTU exchange in progress.
+			s_bDiscoveryPending = true;
+#endif
 		}
 		else
 		{
@@ -434,6 +444,9 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
 	g_Uart.printf("BtAppEvtDisconnected ConnHdl = %d (0x%x) \r\n", ConnHdl, ConnHdl);
 
 	g_ConnectedDev.Conn.Hdl = BT_CONN_HDL_INVALID;
+#if defined(S132) || defined(S140)
+	s_bDiscoveryPending = false;
+#endif
 	g_BleTxCharHdl = BT_ATT_HANDLE_INVALID;
 	g_BleRxCharHdl = BT_ATT_HANDLE_INVALID;
 
@@ -507,6 +520,15 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 
 	switch (Evt)
 	{
+		case BLE_GATTC_EVT_EXCHANGE_MTU_RSP:
+			g_Uart.printf("MTU exchange response: status=0x%04X\r\n",
+				pEvt->evt.gattc_evt.gatt_status);
+			if (s_bDiscoveryPending &&
+				pEvt->evt.gattc_evt.conn_handle == g_ConnectedDev.Conn.Hdl)
+			{
+				StartPeerDiscovery(pEvt->evt.gattc_evt.conn_handle);
+			}
+			break;
 		case BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP:
 			g_Uart.printf("Discovery services: status=0x%04X count=%u\r\n",
 				pEvt->evt.gattc_evt.gatt_status,
