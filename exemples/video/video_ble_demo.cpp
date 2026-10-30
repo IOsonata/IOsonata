@@ -59,6 +59,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
+#include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_intrf.h"
@@ -138,6 +139,15 @@ static BtGattChar_t s_VideoChars[] = {
 };
 
 uint8_t g_LWrBuffer[512];
+
+// GAP, GATT, the video characteristics and DIS exceed the default 2 KB pool.
+alignas(BtAttDBEntry_t) static uint8_t s_AttDBMem[3072];
+
+const BtAttDBMemCfg_t g_BtAttDBMemCfg = {
+	s_AttDBMem, sizeof(s_AttDBMem)
+};
+
+static bool s_bServiceOk = false;
 
 BtGattSrvc_t g_VideoBleSrvc = BT_SRVC_CUSTOM(BLUEIO_UUID_BASE,
 											 BLUEIO_UUID_UART_SERVICE,
@@ -262,7 +272,7 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppInitUserServices()
 {
-	BtGattSrvcAdd(&g_VideoBleSrvc);
+	s_bServiceOk = BtGattSrvcAdd(&g_VideoBleSrvc);
 }
 
 void BtAppInitUserData()
@@ -394,9 +404,13 @@ int main()
 		s_bVideoOk = s_Video.Init(s_VideoCfg, &s_Spi);
 	}
 
-	BtAppInit(&s_BleAppCfg);
+	if (BtAppInit(&s_BleAppCfg) == false || s_bServiceOk == false ||
+		g_BtIntrf.Init(s_BleIntrfCfg) == false)
+	{
+		BtAppAdvStop();
 
-	g_BtIntrf.Init(s_BleIntrfCfg);
+		return -1;
+	}
 
 	AppRun();
 
