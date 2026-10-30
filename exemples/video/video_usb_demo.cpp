@@ -104,6 +104,12 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 static const IOPinCfg_t s_SpiPins[] = SPI_PINS;
 
 // SPI mode 0, 0 shifted out while reading as the vendor library does
+static int VideoSpiEvent(DevIntrf_t *, DEVINTRF_EVT Evt, uint8_t *, int Len)
+{
+	s_Video.IntrfEvent(Evt, Len);
+	return 0;
+}
+
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
 	.Phy = SPIPHY_NORMAL,
@@ -121,7 +127,7 @@ static const SPICfg_t s_SpiCfg = {
 	.bIntEn = false,
 	.IntPrio = IRQ_PRIO_LOW,
 	.DummyByte = 0,
-	.EvtCB = NULL,
+	.EvtCB = VideoSpiEvent,
 };
 
 static SPI s_Spi;

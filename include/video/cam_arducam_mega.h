@@ -193,6 +193,9 @@ public:
 	 *
 	 * @param	Cfg		: Configuration data
 	 * @param	pIntrf	: SPI interface, mode 0, ARDUCAM_MEGA_SPI_RATE_MAX maximum
+	 *                    For interrupt mode, its configured callback must forward
+	 *                    events and byte counts to IntrfEvent. Call camera
+	 *                    operations from foreground context, with IRQs enabled.
 	 * @param	pTimer	: Timer for the frame time stamp, nullptr if not used
 	 *
 	 * @return	true - Camera found and initialized
@@ -220,6 +223,10 @@ public:
 	virtual void Stop();
 	virtual bool UpdateData();
 	virtual int ReadFrame(uint8_t *pBuff, int Len);
+
+	// Forward the configured SPI callback here. Camera calls remain synchronous;
+	// interrupt transfers finish before their data is returned to the caller.
+	void IntrfEvent(DEVINTRF_EVT Evt, int Len);
 
 	using VideoDevice::Format;
 	virtual const VideoFmt_t &Format(VIDEO_STREAM Stream, const VideoFmt_t &Fmt);
@@ -292,6 +299,9 @@ public:
 	uint8_t SensorId() { return vSensorId; }
 
 private:
+	bool TransferReady();
+	int TransferWait(int Result);
+	int ReadTransfer(const uint8_t *pCmd, int CmdLen, uint8_t *pBuff, int Len);
 	uint8_t RegRead(uint8_t Reg);
 	bool RegWrite(uint8_t Reg, uint8_t Val);
 	bool CtrlWrite(uint8_t Reg, uint8_t Val);
@@ -301,6 +311,12 @@ private:
 	bool LowPower(bool bEn);
 	bool SensorReset();
 	bool StartFrame();
+
+	alignas(4) uint8_t vTransferBuff[255];
+	volatile bool vbTransferPending;
+	volatile bool vbTransferDone;
+	volatile int vTransferCount;
+	volatile bool vbTransferFailed;
 
 	uint8_t vSensorId;			//!< ARDUCAM_MEGA_SENSOR_ID_..., 0 none
 	uint8_t vResMask;			//!< Sensor bit of the resolution table, 0 none

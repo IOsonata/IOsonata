@@ -223,9 +223,11 @@ static const uint8_t *nRFxSPIAsyncTxBuff(nRFSpiDev_t * const pDev, const uint8_t
 	return pData;
 }
 
+// A command retaining CS must finish or enter cancellation before Read can
+// start RX, even when its bytes fit in TxBuf.
 static void nRFxSPIAsyncTxWait(nRFSpiDev_t * const pDev, int DataLen, volatile bool &Done)
 {
-	if (DataLen <= NRFX_SPI_TXBUF_SIZE)
+	if (DataLen <= NRFX_SPI_TXBUF_SIZE && !pDev->pSpiDev->DevIntrf.bNoStop)
 	{
 		return;
 	}
@@ -894,7 +896,7 @@ int nRFxSPITxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 		// or keeps the bus when bNoStop is set.
 		dev->pTxData = nRFxSPIAsyncTxBuff(dev, pData, DataLen);
 		volatile bool done = false;
-		dev->pTxWait = DataLen > NRFX_SPI_TXBUF_SIZE ? &done : NULL;
+		dev->pTxWait = (DataLen > NRFX_SPI_TXBUF_SIZE || pDev->bNoStop) ? &done : NULL;
 		dev->bTxAbort = false;
 		dev->TxDatalen = DataLen;
 		dev->TxIdx = 0;
@@ -954,7 +956,7 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		pDev->bTxReady = false;
 		dev->pTxData = nRFxSPIAsyncTxBuff(dev, pData, DataLen);
 		volatile bool done = false;
-		dev->pTxWait = DataLen > NRFX_SPI_TXBUF_SIZE ? &done : NULL;
+		dev->pTxWait = (DataLen > NRFX_SPI_TXBUF_SIZE || pDev->bNoStop) ? &done : NULL;
 		dev->bTxAbort = false;
 		dev->TxIdx = 0;
 		dev->RxBufflen = 0;
