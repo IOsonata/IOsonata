@@ -789,6 +789,11 @@ extern "C" int32_t sdc_hci_data_put(uint8_t *)
 	return 0;
 }
 
+extern "C" uint8_t sdc_hci_cmd_vs_conn_event_extend(const sdc_hci_cmd_vs_conn_event_extend_t *pParams)
+{
+	return pParams->enable == 1 ? 0 : 0x12;
+}
+
 extern "C" uint8_t sdc_hci_cmd_vs_event_length_set(const sdc_hci_cmd_vs_event_length_set_t *)
 {
 	return 0;
@@ -929,3 +934,8 @@ int main(void)
 	return 0;
 #endif
 }
+
+// Startup trace is enabled in the diagnostic build; this test has no sink.
+#include "syslog.h"
+extern "C" SysLog_t *SysLogGet(void) { return nullptr; }
+extern "C" int SysLogPrintf(SysLog_t * const, const char *, ...) { return 0; }

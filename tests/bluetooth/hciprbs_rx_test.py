@@ -215,6 +215,25 @@ class PrbsReceiverTest(unittest.TestCase):
             self.assertEqual(rx.connect(self.wire, API, rx.parse_args(argv or [])), (1, 15))
         self.assertFalse(self.wire.packets)
         self.assertEqual(commands[0], (0xFD05, struct.pack('<I', 7500)))
+        self.assertEqual(commands[1], (0xFD03, bytes([1])))
+        phy = rx.parse_args(argv or []).phy
+        create = next(c for c in commands if c[0] == API.OP_LE_CREATE_CONNECTION)
+        units = rx.target_event_units(phy, 15)
+        self.assertEqual(struct.unpack('<HH', create[1][-4:]), (units, units))
+
+    def test_notification_targets(self):
+        self.assertEqual(rx.notification_target('1M'), 4)
+        self.assertEqual(rx.notification_target('2M'), 8)
+        self.assertEqual(rx.target_event_units('1M', 15), 16)
+        self.assertEqual(rx.target_event_units('2M', 15), 18)
+        with self.assertRaises(ValueError):
+            rx.target_event_units('2M', 7.5)
+
+    def test_target_result_does_not_pass_half_rate(self):
+        self.assertEqual(rx.target_result(8000, 60, 15, '1M'), (2, False))
+        self.assertEqual(rx.target_result(16000, 60, 15, '1M'), (4, True))
+        self.assertEqual(rx.target_result(16000, 60, 15, '2M'), (4, False))
+        self.assertEqual(rx.target_result(32000, 60, 15, '2M'), (8, True))
 
     def test_defaults_compare_both_phys(self):
         args = rx.parse_args([])

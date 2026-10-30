@@ -16,6 +16,9 @@ Rates count received characteristic payload only. PRBS repeats every 127
 bytes: sequence checking cannot detect removal of complete 127-byte periods.
 Reported loss is an estimate, not an exact missing-byte count. Host arrival
 bursts do not establish packets per radio connection event.
+Targets are 4 notifications/interval at 1M and 8 at 2M. Event-time hints
+and event extension request capacity; controllers choose the actual count.
+Exit status fails if either PRBS integrity or the average target fails.
 
 @author Hoang Nguyen Hoan
 @date   Oct. 30, 2026
@@ -232,12 +235,35 @@ class PrbsLink:
                 self.pump(0.05)
 
 
+def notification_target(phy):
+    return 4 if phy == '1M' else 8
+
+
+def target_event_units(phy, interval):
+    # 251-byte LL payload plus the empty reverse packet and inter-frame gaps.
+    # Allow 2.5 ms per notification at 1M and 1.4 ms at 2M.
+    budget_ms = notification_target(phy) * (2.5 if phy == '1M' else 1.4)
+    units = math.ceil(budget_ms / 0.625)
+    if units * 0.625 > interval:
+        raise ValueError('connection interval too short for the %s notification target' % phy)
+    return units
+
+
+def target_result(notifications, elapsed, interval, phy):
+    average = notifications * interval / (elapsed * 1000) if elapsed > 0 else 0
+    return average, average >= notification_target(phy)
+
+
 def connect(hci, api, args):
+    event_units = target_event_units(args.phy, args.interval)
     hci.setup()
     # Nordic VS event length survives HCI Reset. Restore its documented
     # default so a previous experiment cannot change subsequent test runs.
     hci.command(0xFD05, struct.pack('<I', 7500))
-    print('Controller event budget restored: 7.50 ms')
+    hci.command(0xFD03, bytes([1]))
+    print('Controller base event budget: 7.50 ms; event extension enabled')
+    print('Target: %d notifications/interval; requested event time %.3f ms' %
+          (notification_target(args.phy), event_units * 0.625))
     identity, own_type, _ = hci.identity()
     if own_type == 1:
         hci.command(api.OP_LE_SET_RANDOM_ADDRESS, identity)
@@ -282,7 +308,7 @@ def connect(hci, api, args):
     print('Connecting to %s; requesting %s, %.2f ms' % (api.addr_str(peer), args.phy, args.interval))
     interval = int(args.interval / 1.25)
     params = struct.pack('<HHBB', 96, 48, 0, peer_type) + peer + bytes([own_type])
-    params += struct.pack('<HHHHHH', interval, interval, 0, 400, 0, 0)
+    params += struct.pack('<HHHHHH', interval, interval, 0, 400, event_units, event_units)
     hci.command(api.OP_LE_CREATE_CONNECTION, params)
     early = []
     deadline = time.monotonic() + 10
@@ -444,6 +470,7 @@ def run(args):
     subscribed = False
     failure = False
     interrupted = False
+    start = None
     print('HciController on %s' % spec)
     try:
         handle, interval = connect(hci, hb, args)
@@ -478,8 +505,17 @@ def run(args):
     finally:
         receiver.check.finish()
         receiver.report(final=True)
-        result = failure or receiver.failed()
-        print('%s RESULT: %s' % (args.phy, ('FAIL' if result else 'PASS (received PRBS sequence)')))
+        integrity_failed = failure or receiver.failed()
+        target_met = False
+        if start is not None:
+            average, target_met = target_result(receiver.notifications,
+                time.monotonic() - start, link.interval, args.phy)
+            print('Average notifications/interval: %.3f; target: %d; %s' %
+                  (average, notification_target(args.phy),
+                   'TARGET MET (average only)' if target_met else 'TARGET NOT MET'))
+        print('PRBS integrity: %s' % ('FAIL' if integrity_failed else 'PASS'))
+        result = integrity_failed or not target_met
+        print('%s RESULT: %s' % (args.phy, ('FAIL' if result else 'PASS (PRBS and average notification target)')))
         try:
             if link is not None:
                 receiver.handle = None

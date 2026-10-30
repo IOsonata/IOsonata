@@ -10,6 +10,13 @@ extern "C" {
 #endif
 
 typedef struct {
+	uint8_t enable;
+} sdc_hci_cmd_vs_conn_event_extend_t;
+
+uint8_t sdc_hci_cmd_vs_conn_event_extend(
+		const sdc_hci_cmd_vs_conn_event_extend_t *p_params);
+
+typedef struct {
 	uint32_t event_length_us;
 } sdc_hci_cmd_vs_event_length_set_t;
 

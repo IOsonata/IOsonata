@@ -104,9 +104,9 @@ SOFTWARE.
 
 // Controller ACL buffers asked for. The controller answers what it has
 // through LE Read Buffer Size, which is what the host sizes itself from.
-// Six TX buffers can keep a six-notification connection event supplied.
+// Eight TX buffers provide capacity for the eight-notification 2M target.
 #define BT_APP_HCI_RX_MAX_PACKET_COUNT		2
-#define BT_APP_HCI_TX_MAX_PACKET_COUNT		6
+#define BT_APP_HCI_TX_MAX_PACKET_COUNT		8
 
 // Period of the link checks run from BtAppCheckStatus when a millisecond
 // clock is available. The checks they pace are the 30 s transaction

@@ -934,7 +934,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	}
 
 
-	// Allow six full 251-byte exchanges at 2M PHY (about 8.4 ms).
+	// Base event allocation; extension below permits the eight-packet target.
 	// This is an event time budget, not a guaranteed packet count.
 	// Vendor specific command, answered with an HCI status. A refusal leaves
 	// the controller default event length in place, which costs throughput but
@@ -942,6 +942,17 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	sdc_hci_cmd_vs_event_length_set_t evlen = {
 		.event_length_us = 10000,
 	};
+
+	sdc_hci_cmd_vs_conn_event_extend_t extend = {
+		.enable = 1,
+	};
+	uint8_t extendStatus = sdc_hci_cmd_vs_conn_event_extend(&extend);
+	if (extendStatus != 0)
+	{
+		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_INIT, extendStatus);
+		SDC_INIT_PRINTF("SDC event extension failed 0x%02x\r\n", extendStatus);
+		return false;
+	}
 
 	uint8_t hcistat = sdc_hci_cmd_vs_event_length_set(&evlen);
 	if (hcistat != 0)
