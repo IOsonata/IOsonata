@@ -234,6 +234,10 @@ class PrbsLink:
 
 def connect(hci, api, args):
     hci.setup()
+    # Nordic VS event length survives HCI Reset. Restore its documented
+    # default so a previous experiment cannot change subsequent test runs.
+    hci.command(0xFD05, struct.pack('<I', 7500))
+    print('Controller event budget restored: 7.50 ms')
     identity, own_type, _ = hci.identity()
     if own_type == 1:
         hci.command(api.OP_LE_SET_RANDOM_ADDRESS, identity)

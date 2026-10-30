@@ -145,7 +145,7 @@ class PrbsReceiverTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'CCCD not found'):
             self.link.subscribe()
 
-    def test_both_phys_preserve_controller_event_budget(self):
+    def test_both_phys_restore_controller_event_budget(self):
         for phy in ('1M', '2M'):
             with self.subTest(phy=phy):
                 self.check_scan_name('BlePrbs_S132', ['--phy', phy])
@@ -175,7 +175,7 @@ class PrbsReceiverTest(unittest.TestCase):
         with patch.object(API, 'parse_connection', return_value=(0, 1, 0, peer, 12, 0, 400)):
             self.assertEqual(rx.connect(self.wire, API, rx.parse_args(argv or [])), (1, 15))
         self.assertFalse(self.wire.packets)
-        self.assertFalse(any(command[0] == 0xFD05 for command in commands))
+        self.assertEqual(commands[0], (0xFD05, struct.pack('<I', 7500)))
 
     def test_defaults_compare_both_phys(self):
         args = rx.parse_args([])
