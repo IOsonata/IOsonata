@@ -192,6 +192,15 @@ alignas(4) uint8_t g_UartRx2BleBuff[BLEFIFOSIZE];//FIFO buffer for UART-to-BLE
 std::atomic<int> g_UartRx2BleBuffLen(0);//buffer counter for g_UartRx2BleBuff
 hCFifo_t g_UartRx2BleFifo;
 
+// Notifications can exceed the UART FIFO and arrive in connection-event bursts.
+#define BLE_TO_UART_FIFO_SIZE CFIFO_MEMSIZE(4096)
+alignas(4) static uint8_t s_BleToUartMem[BLE_TO_UART_FIFO_SIZE];
+static hCFifo_t s_hBleToUartFifo;
+static volatile uint32_t s_BleToUartReceived = 0;
+static volatile uint32_t s_BleToUartAccepted = 0;
+static volatile uint32_t s_BleToUartDropped = 0;
+
+
 alignas(4) uint8_t g_UartRxExtBuff[PACKET_SIZE * 2];//external buffer for Uart Rx data
 volatile int g_UartRxExtBuffLen = 0;
 
@@ -570,7 +579,47 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 	(void)ConnHdl;
 	if (ValHdl == g_BleRxCharHdl && pData != nullptr && Len > 0)
 	{
-		g_Uart.Tx(pData, Len);
+		s_BleToUartReceived += Len;
+		if (CFifoAvail(s_hBleToUartFifo) < Len)
+		{
+			s_BleToUartDropped += Len;
+			return;
+		}
+
+		while (Len > 0)
+		{
+			int count = Len;
+			uint8_t *p = CFifoPutMultiple(s_hBleToUartFifo, &count);
+
+			if (p == nullptr || count <= 0)
+			{
+				s_BleToUartDropped += Len;
+				break;
+			}
+			memcpy(p, pData, count);
+			pData += count;
+			Len -= count;
+		}
+	}
+}
+
+// Run outside the BLE callback. A short UART write leaves the suffix queued.
+static void BleToUartDrain(void)
+{
+	int count = 64;
+	uint8_t *p = CFifoPeekMultiple(s_hBleToUartFifo, &count);
+	int sent;
+
+	if (p == nullptr || count <= 0)
+	{
+		return;
+	}
+
+	sent = g_Uart.Tx(p, count);
+	if (sent > 0)
+	{
+		(void)CFifoGetMultiple(s_hBleToUartFifo, &sent);
+		s_BleToUartAccepted += sent;
 	}
 }
 
@@ -1141,6 +1190,7 @@ void HardwareInit()
 
 	// Init CFIFO instance
 	g_UartRx2BleFifo = CFifoInit(g_UartRx2BleBuff, BLEFIFOSIZE, 1, true);
+	s_hBleToUartFifo = CFifoInit(s_BleToUartMem, BLE_TO_UART_FIFO_SIZE, 1, true);
 }
 
 //
@@ -1198,6 +1248,7 @@ int main()
 bool AppCheckStatus(void)
 {
 	BtAppCheckStatus();
+	BleToUartDrain();
 
 	// A pending callback on an empty queue was refused. Keep the check and
 	// retry together so an interrupt cannot queue the same callback between them.
@@ -1213,7 +1264,8 @@ bool AppCheckStatus(void)
 			(void)AppEvtHandlerQue(0, nullptr, BleTxSchedHandler);
 		}
 	}
-	const bool idle = s_bUartRxPending == false &&
+	const bool idle = CFifoPeek(s_hBleToUartFifo) == nullptr &&
+		s_bUartRxPending == false &&
 		s_bBleTxPending == false &&
 		AppEvtHandlerPending() == false;
 	EnableInterrupt(state);
