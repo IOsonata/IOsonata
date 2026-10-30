@@ -53,6 +53,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
+#if defined(S132) || defined(S140)
+#include "ble.h"
+#endif
+
 #ifndef UART_DEVNO
 #define UART_DEVNO 0
 #endif
@@ -382,7 +386,15 @@ static void StartPeerDiscovery(uint16_t ConnHdl)
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer)
 	{
-		BtAppDiscoverDevice(pPeer);
+		g_Uart.printf("Starting discovery: handle=%u\r\n", ConnHdl);
+		if (BtAppDiscoverDevice(pPeer) == false)
+		{
+			g_Uart.printf("Discovery start failed: handle=%u\r\n", ConnHdl);
+		}
+		else
+		{
+			g_Uart.printf("Discovery request accepted\r\n");
+		}
 	}
 	else
 	{
@@ -485,8 +497,48 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 {
+#if defined(S132) || defined(S140)
+	const ble_evt_t *pEvt = (const ble_evt_t *)pCtx;
+
+	if (pEvt == nullptr)
+	{
+		return;
+	}
+
+	switch (Evt)
+	{
+		case BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP:
+			g_Uart.printf("Discovery services: status=0x%04X count=%u\r\n",
+				pEvt->evt.gattc_evt.gatt_status,
+				pEvt->evt.gattc_evt.gatt_status == BLE_GATT_STATUS_SUCCESS ?
+				pEvt->evt.gattc_evt.params.prim_srvc_disc_rsp.count : 0);
+			break;
+		case BLE_GATTC_EVT_CHAR_DISC_RSP:
+			g_Uart.printf("Discovery characteristics: status=0x%04X count=%u\r\n",
+				pEvt->evt.gattc_evt.gatt_status,
+				pEvt->evt.gattc_evt.gatt_status == BLE_GATT_STATUS_SUCCESS ?
+				pEvt->evt.gattc_evt.params.char_disc_rsp.count : 0);
+			break;
+		case BLE_GATTC_EVT_DESC_DISC_RSP:
+			g_Uart.printf("Discovery descriptors: status=0x%04X count=%u\r\n",
+				pEvt->evt.gattc_evt.gatt_status,
+				pEvt->evt.gattc_evt.gatt_status == BLE_GATT_STATUS_SUCCESS ?
+				pEvt->evt.gattc_evt.params.desc_disc_rsp.count : 0);
+			break;
+		case BLE_GATTC_EVT_TIMEOUT:
+			g_Uart.printf("Discovery/GATT timeout\r\n");
+			break;
+		case BLE_GATTC_EVT_WRITE_RSP:
+			g_Uart.printf("GATT write response: status=0x%04X\r\n",
+				pEvt->evt.gattc_evt.gatt_status);
+			break;
+		default:
+			break;
+	}
+#else
 	(void)Evt;
 	(void)pCtx;
+#endif
 }
 
 // Peripheral -> central data stream. Forward the notified/indicated value from
