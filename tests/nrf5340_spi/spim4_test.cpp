@@ -55,6 +55,7 @@ static uint8_t s_Rx[70000], s_Tx[800];
 static SPI s_Spi;
 static CamArducamMega s_Camera;
 static bool s_CameraMode;
+static bool s_DeferCameraRx;
 static uint8_t s_CameraReg;
 static int s_CameraOffset;
 void usDelay(uint32_t) {}
@@ -116,6 +117,10 @@ void TestTask::operator=(uint32_t value)
 	++s_Blocks;
 	s_LastPtr = r.RXD.MAXCNT ? r.RXD.PTR : r.TXD.PTR;
 	r.RXD.AMOUNT = r.TXD.AMOUNT = 0;
+	if (s_CameraMode && s_DeferCameraRx && r.RXD.MAXCNT)
+	{
+		return;
+	}
 	if ((s_Poll || s_AutoIrq) && !s_Timeout)
 	{
 		Complete();
@@ -282,6 +287,22 @@ int main()
 	assert(s_Camera.ReadFrame(s_Rx, 976) == 700);
 	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
 	assert(g_CsHigh && s_Camera.Brightness(1));
+	assert(s_Camera.Start() && s_Camera.UpdateData());
+	s_CameraOffset = 0;
+	assert(s_Camera.ReadFrameAsync(s_Rx, 976) == 700);
+	assert(g_CsHigh && s_Camera.ReadFrameComplete() == 0);
+	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
+	assert(s_Camera.Start() && s_Camera.UpdateData());
+	s_CameraOffset = 0;
+	s_DeferCameraRx = true;
+	assert(s_Camera.ReadFrameAsync(s_Rx, 976) == -1);
+	assert(!g_CsHigh && s_CameraOffset == 0);
+	assert(s_Camera.ReadFrameComplete() == -1);
+	s_DeferCameraRx = false;
+	Complete();
+	SPIM4_IRQHandler();
+	assert(g_CsHigh && s_Camera.ReadFrameComplete() == 700);
+	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
 	s_CameraMode = false;
 	s_AutoIrq = false;
 	cfg = Config(false); cfg.DevNo = 5; cfg.Phy = SPIPHY_QUAD_SDR;

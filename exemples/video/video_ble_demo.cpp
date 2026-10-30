@@ -213,7 +213,7 @@ BtIntrf g_BtIntrf;
 
 static const IOPinCfg_t s_SpiPins[] = SPI_PINS;
 
-// SPI mode 0, synchronous DMA reads, 0 shifted out as the vendor library does
+// SPI mode 0, interrupt-driven DMA, 0 shifted out as the vendor library does
 static int VideoSpiEvent(DevIntrf_t *, DEVINTRF_EVT Evt, uint8_t *, int Len)
 {
 	s_Video.IntrfEvent(Evt, Len);
@@ -258,9 +258,18 @@ static bool s_bVideoOk = false;			// Device found
 static bool s_bSession = false;			// Streaming session, status line sent
 static bool s_bRun = false;				// Capture running
 static bool s_bFrame = false;			// A frame is being sent
-static uint8_t s_Buff[VIDEO_DEMO_BUFSIZE];
-static int s_Pending = 0;				// Bytes of s_Buff not taken by the BtIntrf yet
-static int s_Offset = 0;
+typedef struct {
+	uint8_t Data[VIDEO_DEMO_BUFSIZE];
+	int Len;
+	int Offset;
+} VideoBuffer_t;
+
+static VideoBuffer_t s_Buff[2];
+static int s_TxIdx = 0;
+static int s_FillIdx = 0;
+static int s_ReadIdx = -1;
+static int s_ReadHeader = 0;
+
 
 void ReadCharSetNotif(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
@@ -285,62 +294,95 @@ void BtAppInitUserData()
 {
 }
 
-// Next part of the stream into s_Buff : frame header, frame data
-static bool VideoFill()
+// Only foreground code changes buffer ownership. The SPI callback records
+// completion in the camera; BtIntrf/CDC copies each accepted transmit portion.
+static void VideoFill()
 {
+	VideoBuffer_t *buff;
+	int header = 0;
 	int n;
+	uint32_t len;
 
-	if (s_bFrame)
+	if (s_ReadIdx >= 0)
 	{
-		n = s_Video.ReadFrame(s_Buff, sizeof(s_Buff));
-
-		if (n > 0)
+		n = s_Video.ReadFrameComplete();
+		if (n < 0)
 		{
-			s_Pending = n;
-			s_Offset = 0;
-
-			return true;
+			return;
 		}
-		s_bFrame = false;
+		buff = &s_Buff[s_ReadIdx];
+		s_ReadIdx = -1;
+		if (n == 0)
+		{
+			s_Video.Stop();
+			s_bRun = false;
+			s_bFrame = false;
+			return;
+		}
+		buff->Len = s_ReadHeader + n;
+		s_ReadHeader = 0;
+		buff->Offset = 0;
+		s_FillIdx ^= 1;
+		s_bFrame = s_Video.FrameLength() != 0;
 	}
-
-	if (s_Video.UpdateData() == false)
+	buff = &s_Buff[s_FillIdx];
+	if (!s_bRun || buff->Len != 0)
 	{
-		return false;
+		return;
 	}
-
-	uint32_t len = s_Video.FrameLength();
-
-	memcpy(s_Buff, s_FrameTag, sizeof(s_FrameTag));
-	s_Buff[4] = len & 0xFF;
-	s_Buff[5] = (len >> 8) & 0xFF;
-	s_Buff[6] = (len >> 16) & 0xFF;
-	s_Buff[7] = (len >> 24) & 0xFF;
-	s_Pending = 8;
-	s_Offset = 0;
-	s_bFrame = true;
-
-	// Include image data with the header instead of sending an 8-byte notification.
-	n = s_Video.ReadFrame(&s_Buff[s_Pending], sizeof(s_Buff) - s_Pending);
-	if (n > 0)
+	if (!s_bFrame)
 	{
-		s_Pending += n;
+		if (!s_Video.UpdateData())
+		{
+			return;
+		}
+		len = s_Video.FrameLength();
+		memcpy(buff->Data, s_FrameTag, sizeof(s_FrameTag));
+		buff->Data[4] = len & 0xFF;
+		buff->Data[5] = (len >> 8) & 0xFF;
+		buff->Data[6] = (len >> 16) & 0xFF;
+		buff->Data[7] = (len >> 24) & 0xFF;
+		s_ReadHeader = 8;
+		s_bFrame = true;
 	}
-
-	return true;
+	header = s_ReadHeader;
+	n = s_Video.ReadFrameAsync(buff->Data + header, sizeof(buff->Data) - header);
+	if (n < 0)
+	{
+		s_ReadIdx = s_FillIdx;
+		s_ReadHeader = header;
+	}
+	else if (n > 0)
+	{
+		buff->Len = header + n;
+		s_ReadHeader = 0;
+		buff->Offset = 0;
+		s_FillIdx ^= 1;
+		s_bFrame = s_Video.FrameLength() != 0;
+	}
 }
 
 // Notification just enabled : 2M PHY request, status line first, then start
 // the capture
 static void VideoOpen()
 {
+	VideoBuffer_t *buff = &s_Buff[0];
+
+	for (int i = 0; i < 2; i++)
+	{
+		s_Buff[i].Len = 0;
+		s_Buff[i].Offset = 0;
+	}
+	s_TxIdx = 0;
+	s_FillIdx = 1;
+	s_ReadHeader = 0;
 	bool phy = BtGapSetPhy(s_ConnHdl, BT_GAP_PHY_2MBITS, BT_GAP_PHY_2MBITS, BT_GAP_PHY_OPT_NONE);
 
 	if (s_bVideoOk)
 	{
 		const VideoFmt_t &fmt = s_Video.Format(VIDEO_STREAM_OUT);
 
-		s_Pending = snprintf((char*)s_Buff, sizeof(s_Buff),
+		buff->Len = snprintf((char*)buff->Data, sizeof(buff->Data),
 							 "Video BLE, %s sensor 0x%02X, JPEG %ux%u, SPI %lu Hz, 2M PHY %s\r\n",
 							 s_VideoName, (unsigned)(s_Video.DeviceID() & 0xFF),
 							 fmt.Width, fmt.Height, (unsigned long)s_Spi.Rate(),
@@ -349,9 +391,9 @@ static void VideoOpen()
 	}
 	else
 	{
-		s_Pending = snprintf((char*)s_Buff, sizeof(s_Buff), "Video BLE, %s not found\r\n", s_VideoName);
+		buff->Len = snprintf((char*)buff->Data, sizeof(buff->Data), "Video BLE, %s not found\r\n", s_VideoName);
 	}
-	s_Offset = 0;
+	buff->Offset = 0;
 	s_bFrame = false;
 	s_bSession = true;
 }
@@ -359,58 +401,74 @@ static void VideoOpen()
 bool AppCheckStatus(void)
 {
 	bool blocked = false;
+	VideoBuffer_t *buff;
+	int n;
 
 	BtAppCheckStatus();
 
 	if (isConnected() == false || s_bNotif == false)
 	{
-		if (s_bRun)
-		{
-			s_Video.Stop();
-			s_bRun = false;
-		}
+		s_Video.Stop();
+		s_bRun = false;
 		s_bSession = false;
-		s_Pending = 0;
 		s_bFrame = false;
-
+		// DMA still owns its buffer after disconnect. Collect its completion
+		// before clearing storage or allowing a new streaming session.
+		if (s_ReadIdx >= 0 && s_Video.ReadFrameComplete() < 0)
+		{
+			return !AppEvtHandlerPending();
+		}
+		s_ReadIdx = -1;
+		for (int i = 0; i < 2; i++)
+		{
+			s_Buff[i].Len = 0;
+			s_Buff[i].Offset = 0;
+		}
 		return !AppEvtHandlerPending();
 	}
 
-	if (s_bSession == false)
+	if (!s_bSession)
 	{
+		if (s_ReadIdx >= 0 && s_Video.ReadFrameComplete() < 0)
+		{
+			return !AppEvtHandlerPending();
+		}
+		s_ReadIdx = -1;
 		VideoOpen();
 	}
 
 	while (true)
 	{
-		if (s_Pending == 0 && (s_bRun == false || VideoFill() == false))
+		// Start the next SPI burst before submitting the preceding buffer.
+		VideoFill();
+		buff = &s_Buff[s_TxIdx];
+		if (buff->Len == 0)
 		{
 			break;
 		}
-
-		// BtIntrf owns the queue and retries. Wait for BLE progress when
-		// it cannot accept another byte instead of repeatedly calling Tx.
-		if (g_BtIntrf.RequestToSend(1) == false)
+		if (!g_BtIntrf.RequestToSend(1))
 		{
 			blocked = true;
 			break;
 		}
-
-		int n = g_BtIntrf.Tx(0, &s_Buff[s_Offset], s_Pending);
-
+		n = g_BtIntrf.Tx(0, buff->Data + buff->Offset, buff->Len);
 		if (n <= 0)
 		{
-			// Another sender may have taken the available space.
 			blocked = true;
 			break;
 		}
-		s_Offset += n;
-		s_Pending -= n;
+		buff->Offset += n;
+		buff->Len -= n;
+		if (buff->Len == 0)
+		{
+			buff->Offset = 0;
+			s_TxIdx ^= 1;
+		}
 	}
 
-	// BLE interrupts wake AppRun to refill through BtIntrf. Capture itself
-	// still needs polling because this camera has no frame-ready interrupt.
-	return (blocked || (s_bRun == false && s_Pending == 0)) && !AppEvtHandlerPending();
+	// SPI and transport interrupts wake the loop. Camera capture readiness
+	// still needs polling whenever no SPI read or transmit is blocking us.
+	return (blocked || s_ReadIdx >= 0 || !s_bRun) && !AppEvtHandlerPending();
 }
 
 int main()

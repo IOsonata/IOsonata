@@ -206,54 +206,105 @@ static bool s_bVideoOk = false;		// Device found
 static bool s_bSession = false;		// Port open, status line sent
 static bool s_bRun = false;			// Capture running
 static bool s_bFrame = false;		// A frame is being sent
-static uint8_t s_Buff[VIDEO_DEMO_BUFSIZE];
-static int s_Pending = 0;			// Bytes of s_Buff not taken by the CDC yet
-static int s_Offset = 0;
+typedef struct {
+	uint8_t Data[VIDEO_DEMO_BUFSIZE];
+	int Len;
+	int Offset;
+} VideoBuffer_t;
 
-// Next part of the stream into s_Buff : frame header, frame data
-static bool VideoFill()
+static VideoBuffer_t s_Buff[2];
+static int s_TxIdx = 0;
+static int s_FillIdx = 0;
+static int s_ReadIdx = -1;
+static int s_ReadHeader = 0;
+
+
+// Only foreground code changes buffer ownership. The SPI callback records
+// completion in the camera; BtIntrf/CDC copies each accepted transmit portion.
+static void VideoFill()
 {
-	if (s_bFrame)
-	{
-		int n = s_Video.ReadFrame(s_Buff, sizeof(s_Buff));
+	VideoBuffer_t *buff;
+	int header = 0;
+	int n;
+	uint32_t len;
 
-		if (n > 0)
+	if (s_ReadIdx >= 0)
+	{
+		n = s_Video.ReadFrameComplete();
+		if (n < 0)
 		{
-			s_Pending = n;
-			s_Offset = 0;
-
-			return true;
+			return;
 		}
-		s_bFrame = false;
+		buff = &s_Buff[s_ReadIdx];
+		s_ReadIdx = -1;
+		if (n == 0)
+		{
+			s_Video.Stop();
+			s_bRun = false;
+			s_bFrame = false;
+			return;
+		}
+		buff->Len = s_ReadHeader + n;
+		s_ReadHeader = 0;
+		buff->Offset = 0;
+		s_FillIdx ^= 1;
+		s_bFrame = s_Video.FrameLength() != 0;
 	}
-
-	if (s_Video.UpdateData() == false)
+	buff = &s_Buff[s_FillIdx];
+	if (!s_bRun || buff->Len != 0)
 	{
-		return false;
+		return;
 	}
-
-	uint32_t len = s_Video.FrameLength();
-
-	memcpy(s_Buff, s_FrameTag, sizeof(s_FrameTag));
-	s_Buff[4] = len & 0xFF;
-	s_Buff[5] = (len >> 8) & 0xFF;
-	s_Buff[6] = (len >> 16) & 0xFF;
-	s_Buff[7] = (len >> 24) & 0xFF;
-	s_Pending = 8;
-	s_Offset = 0;
-	s_bFrame = true;
-
-	return true;
+	if (!s_bFrame)
+	{
+		if (!s_Video.UpdateData())
+		{
+			return;
+		}
+		len = s_Video.FrameLength();
+		memcpy(buff->Data, s_FrameTag, sizeof(s_FrameTag));
+		buff->Data[4] = len & 0xFF;
+		buff->Data[5] = (len >> 8) & 0xFF;
+		buff->Data[6] = (len >> 16) & 0xFF;
+		buff->Data[7] = (len >> 24) & 0xFF;
+		s_ReadHeader = 8;
+		s_bFrame = true;
+	}
+	header = s_ReadHeader;
+	n = s_Video.ReadFrameAsync(buff->Data + header, sizeof(buff->Data) - header);
+	if (n < 0)
+	{
+		s_ReadIdx = s_FillIdx;
+		s_ReadHeader = header;
+	}
+	else if (n > 0)
+	{
+		buff->Len = header + n;
+		s_ReadHeader = 0;
+		buff->Offset = 0;
+		s_FillIdx ^= 1;
+		s_bFrame = s_Video.FrameLength() != 0;
+	}
 }
 
 // Port just opened : status line first, then start the capture
 static void VideoOpen()
 {
+	VideoBuffer_t *buff = &s_Buff[0];
+
+	for (int i = 0; i < 2; i++)
+	{
+		s_Buff[i].Len = 0;
+		s_Buff[i].Offset = 0;
+	}
+	s_TxIdx = 0;
+	s_FillIdx = 1;
+	s_ReadHeader = 0;
 	if (s_bVideoOk)
 	{
 		const VideoFmt_t &fmt = s_Video.Format(VIDEO_STREAM_OUT);
 
-		s_Pending = snprintf((char*)s_Buff, sizeof(s_Buff),
+		buff->Len = snprintf((char*)buff->Data, sizeof(buff->Data),
 							 "Video USB, %s sensor 0x%02X, JPEG %ux%u, SPI %lu Hz\r\n",
 							 s_VideoName, (unsigned)(s_Video.DeviceID() & 0xFF),
 							 fmt.Width, fmt.Height, (unsigned long)s_Spi.Rate());
@@ -261,56 +312,79 @@ static void VideoOpen()
 	}
 	else
 	{
-		s_Pending = snprintf((char*)s_Buff, sizeof(s_Buff), "Video USB, %s not found\r\n", s_VideoName);
+		buff->Len = snprintf((char*)buff->Data, sizeof(buff->Data), "Video USB, %s not found\r\n", s_VideoName);
 	}
-	s_Offset = 0;
+	buff->Offset = 0;
 	s_bFrame = false;
 	s_bSession = true;
 }
 
 bool AppCheckStatus(void)
 {
+	bool blocked = false;
+	VideoBuffer_t *buff;
+	int n;
+
 	UsbCheckStatus();
 
 	if (g_Cdc.IsPortOpen() == false)
 	{
-		if (s_bRun)
-		{
-			s_Video.Stop();
-			s_bRun = false;
-		}
+		s_Video.Stop();
+		s_bRun = false;
 		s_bSession = false;
-		s_Pending = 0;
 		s_bFrame = false;
-
+		// DMA still owns its buffer after disconnect. Collect its completion
+		// before clearing storage or allowing a new streaming session.
+		if (s_ReadIdx >= 0 && s_Video.ReadFrameComplete() < 0)
+		{
+			return !AppEvtHandlerPending();
+		}
+		s_ReadIdx = -1;
+		for (int i = 0; i < 2; i++)
+		{
+			s_Buff[i].Len = 0;
+			s_Buff[i].Offset = 0;
+		}
 		return !AppEvtHandlerPending();
 	}
 
-	if (s_bSession == false)
+	if (!s_bSession)
 	{
+		if (s_ReadIdx >= 0 && s_Video.ReadFrameComplete() < 0)
+		{
+			return !AppEvtHandlerPending();
+		}
+		s_ReadIdx = -1;
 		VideoOpen();
 	}
 
 	while (true)
 	{
-		if (s_Pending == 0 && (s_bRun == false || VideoFill() == false))
+		// Start the next SPI burst before submitting the preceding buffer.
+		VideoFill();
+		buff = &s_Buff[s_TxIdx];
+		if (buff->Len == 0)
 		{
 			break;
 		}
-
-		int n = g_Cdc.Tx(0, &s_Buff[s_Offset], s_Pending);
-
+		n = g_Cdc.Tx(0, buff->Data + buff->Offset, buff->Len);
 		if (n <= 0)
 		{
-			// Tx FIFO full, the next loop continues
+			blocked = true;
 			break;
 		}
-		s_Offset += n;
-		s_Pending -= n;
+		buff->Offset += n;
+		buff->Len -= n;
+		if (buff->Len == 0)
+		{
+			buff->Offset = 0;
+			s_TxIdx ^= 1;
+		}
 	}
 
-	// Stay active while the port is open
-	return s_bRun == false && s_Pending == 0 && !AppEvtHandlerPending();
+	// SPI and transport interrupts wake the loop. Camera capture readiness
+	// still needs polling whenever no SPI read or transmit is blocking us.
+	return (blocked || s_ReadIdx >= 0 || !s_bRun) && !AppEvtHandlerPending();
 }
 
 int main()

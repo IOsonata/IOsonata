@@ -119,6 +119,40 @@ int main()
 		assert(!s_Pending && s_Camera.ReadFrame(frame, sizeof(frame)) == 0);
 		assert(s_Camera.Brightness(1));
 	}
+	// Frame DMA returns immediately and writes directly to caller storage.
+	s_Inline = false;
+	s_OneByteSync = false;
+	spi.Dev.bIntEn = true;
+	assert(s_Camera.Init(cfg, &spi));
+	assert(s_Camera.Start() && s_Camera.UpdateData());
+	s_FrameOffset = 0;
+	uint8_t first[300] = {};
+	uint8_t second[400] = {};
+	assert(s_Camera.ReadFrameAsync(first, sizeof(first)) == -1);
+	assert(s_Pending && s_Target == first && s_FrameOffset == 0);
+	assert(s_Camera.ReadFrameComplete() == -1);
+	assert(s_Camera.ReadFrameAsync(second, sizeof(second)) == 0);
+	assert(!s_Camera.Start() && !s_Camera.Brightness(1));
+	Complete();
+	assert(s_Camera.FrameLength() == 700); // IRQ does not advance camera state.
+	assert(!s_Camera.Brightness(1)); // Completion must be collected first.
+	assert(s_Camera.ReadFrameComplete() == 300);
+	assert(s_Camera.ReadFrameComplete() == 0);
+	for (int i = 0; i < 300; i++) assert(first[i] == (uint8_t)i);
+	assert(s_Camera.ReadFrameAsync(second, sizeof(second)) == -1);
+	s_Camera.Stop();
+	assert(!s_Camera.Init(cfg, &spi));
+	assert(s_Camera.ReadFrameComplete() == -1);
+	Complete();
+	assert(s_Camera.ReadFrameComplete() == 400 && s_Camera.FrameLength() == 0);
+	for (int i = 0; i < 400; i++) assert(second[i] == (uint8_t)(i + 300));
+	assert(s_Camera.Init(cfg, &spi));
+	assert(s_Camera.Start() && s_Camera.UpdateData());
+	s_FrameOffset = 0;
+	s_Inline = true;
+	assert(s_Camera.ReadFrameAsync(first, sizeof(first)) == 300);
+	assert(!s_Pending && s_Camera.ReadFrameComplete() == 0);
+	s_Inline = false;
 	// No callback cannot support interrupt transfers.
 	spi.Dev.EvtCB = nullptr;
 	assert(!s_Camera.Init(cfg, &spi));

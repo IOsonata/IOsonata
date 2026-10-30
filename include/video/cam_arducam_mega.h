@@ -224,8 +224,18 @@ public:
 	virtual bool UpdateData();
 	virtual int ReadFrame(uint8_t *pBuff, int Len);
 
-	// Forward the configured SPI callback here. Camera calls remain synchronous;
-	// interrupt transfers finish before their data is returned to the caller.
+	// Start a frame burst directly into caller storage. Returns -1 while an
+	// accepted read is pending, or its completed byte count (0 on refusal).
+	// Keep the buffer untouched until ReadFrameComplete returns >= 0. Only
+	// one read may be outstanding. Polling SPI also works and returns inline.
+	int ReadFrameAsync(uint8_t *pBuff, int Len);
+
+	// Collect the outstanding burst in foreground context; -1 until its IRQ
+	// completes. Advances the frame and starts the next capture when needed.
+	// Stop does not cancel DMA: collect completion before reusing its buffer.
+	int ReadFrameComplete();
+
+	// Forward the configured SPI callback here. It only records completion.
 	void IntrfEvent(DEVINTRF_EVT Evt, int Len);
 
 	using VideoDevice::Format;
@@ -317,6 +327,8 @@ private:
 	volatile bool vbTransferDone;
 	volatile int vTransferCount;
 	volatile bool vbTransferFailed;
+	bool vbFrameRead;
+	int vFrameReadLen;
 
 	uint8_t vSensorId;			//!< ARDUCAM_MEGA_SENSOR_ID_..., 0 none
 	uint8_t vResMask;			//!< Sensor bit of the resolution table, 0 none

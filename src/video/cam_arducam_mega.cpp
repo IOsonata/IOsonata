@@ -103,6 +103,8 @@ static const int s_NbArduCamMegaLowPower = sizeof(s_ArduCamMegaLowPower) / sizeo
 
 CamArducamMega::CamArducamMega()
 {
+	vbFrameRead = false;
+	vFrameReadLen = 0;
 	vbTransferPending = false;
 	vbTransferDone = false;
 	vTransferCount = 0;
@@ -120,7 +122,7 @@ CamArducamMega::CamArducamMega()
 
 bool CamArducamMega::Init(const VideoDevCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (pIntrf == nullptr || (vbTransferPending && !vbTransferDone))
+	if (pIntrf == nullptr || vbFrameRead || (vbTransferPending && !vbTransferDone))
 	{
 		return false;
 	}
@@ -226,6 +228,10 @@ void CamArducamMega::Disable()
 
 void CamArducamMega::Reset()
 {
+	if (!TransferReady())
+	{
+		return;
+	}
 	Stop();
 	SensorReset();
 
@@ -237,7 +243,7 @@ void CamArducamMega::Reset()
 
 bool CamArducamMega::Start()
 {
-	if (Valid() == false)
+	if (Valid() == false || !TransferReady())
 	{
 		return false;
 	}
@@ -300,7 +306,7 @@ void CamArducamMega::Stop()
 
 bool CamArducamMega::UpdateData()
 {
-	if (vbCapture == false)
+	if (vbCapture == false || !TransferReady())
 	{
 		return false;
 	}
@@ -378,6 +384,61 @@ int CamArducamMega::ReadFrame(uint8_t *pBuff, int Len)
 	}
 
 	return cnt;
+}
+
+int CamArducamMega::ReadFrameAsync(uint8_t *pBuff, int Len)
+{
+	uint8_t cmd[2] = { ARDUCAM_MEGA_BURST_FIFO_READ, 0 };
+	int count;
+
+	if (pBuff == nullptr || Len <= 0 || vRemain == 0 || !TransferReady())
+	{
+		return 0;
+	}
+	Len = min((uint32_t)Len, vRemain);
+	vbFrameRead = true;
+	vFrameReadLen = Len;
+	vbTransferDone = false;
+	vbTransferPending = true;
+	count = vpIntrf->Read(vDevAddr, cmd, vbFirstBurst ? 2 : 1, pBuff, Len);
+	if (count >= 0)
+	{
+		vTransferCount = count;
+		vbTransferDone = true;
+	}
+	return ReadFrameComplete();
+}
+
+int CamArducamMega::ReadFrameComplete()
+{
+	int count;
+
+	if (!vbFrameRead)
+	{
+		return 0;
+	}
+	if (!vbTransferDone)
+	{
+		return -1;
+	}
+	count = vTransferCount;
+	vbFrameRead = false;
+	vbTransferPending = false;
+	if (vbTransferFailed || count <= 0 || count > vFrameReadLen)
+	{
+		return 0;
+	}
+	vbFirstBurst = false;
+	vRemain -= count;
+	if (vRemain == 0)
+	{
+		vFrameLen = 0;
+		if (vbRun && vOpMode == VIDEO_OPMODE_CONTINUOUS)
+		{
+			StartFrame();
+		}
+	}
+	return count;
 }
 
 const VideoFmt_t &CamArducamMega::Format(VIDEO_STREAM Stream, const VideoFmt_t &Fmt)
