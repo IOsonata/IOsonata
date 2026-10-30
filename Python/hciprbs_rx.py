@@ -234,6 +234,14 @@ class PrbsLink:
 
 def connect(hci, api, args):
     hci.setup()
+    # Nordic VS event length is a scheduling budget, not a packet-count limit.
+    # Allow time for four full notifications at 1M or eight at 2M, including
+    # link-layer replies and inter-frame spacing. The peer must keep TX fed.
+    target, budget = (4, 10000) if args.phy == '1M' else (8, 12000)
+    budget = min(budget, int(args.interval * 1000))
+    hci.command(0xFD05, struct.pack('<I', budget))
+    print('Requested event budget: %.2f ms; target %d notifications/interval'
+          % (budget / 1000, target))
     identity, own_type, _ = hci.identity()
     if own_type == 1:
         hci.command(api.OP_LE_SET_RANDOM_ADDRESS, identity)
