@@ -18,7 +18,6 @@ code = r'''
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
 #define PRBS_RX_NOTIF_COUNT 12
-#define NRFXLIB_SDC 1
 #define PRBS_RX_DURATION_MS 60000U
 #define PRBS_RX_REPORT_MS 1000U
 #define BLE_MTU_SIZE 247
@@ -260,12 +259,13 @@ int main()
 '''
 with tempfile.TemporaryDirectory(prefix='ble-prbs-rx-') as temp:
     cpp = Path(temp) / 'test.cpp'
-    cpp.write_text(code)
     binary = Path(temp) / 'test'
-    subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O2',
-                    '-Wall', '-Wextra', '-fsanitize=undefined',
-                    '-fno-sanitize-recover=all', '-I' + str(ROOT / 'include'),
-                    str(cpp), str(ROOT / 'src/cfifo.c'),
-                    str(ROOT / 'src/app_evt_handler.cpp'), '-o', str(binary)], check=True)
-    subprocess.run([str(binary)], check=True)
+    for port in ['NRFXLIB_SDC', 'IOSONATA_STM32_WBA']:
+        cpp.write_text('#define ' + port + ' 1\n' + code)
+        subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O2',
+                        '-Wall', '-Wextra', '-fsanitize=undefined',
+                        '-fno-sanitize-recover=all', '-I' + str(ROOT / 'include'),
+                        str(cpp), str(ROOT / 'src/cfifo.c'),
+                        str(ROOT / 'src/app_evt_handler.cpp'), '-o', str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
 print('PASS firmware PRBS: 60s 1M + 60s 2M, 1s reports, PHY check, corruption, clock wrap')

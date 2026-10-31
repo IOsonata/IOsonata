@@ -729,6 +729,19 @@ bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy)
 	return true;
 }
 
+bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime)
+{
+	if (TxOctets < BT_GAP_DATA_LEN_OCTETS_MIN ||
+		TxOctets > BT_GAP_DATA_LEN_OCTETS_MAX ||
+		TxTime < BT_GAP_DATA_LEN_TIME_MIN ||
+		TxTime > BT_GAP_DATA_LEN_TIME_MAX)
+	{
+		return false;
+	}
+
+	return hci_le_set_data_length(ConnHdl, TxOctets, TxTime) == BLE_STATUS_SUCCESS;
+}
+
 // Strong override of the weak generic BtGapConnSecGet. The ST host owns link
 // security on this port, so query it through aci_gap_get_security_level and map
 // the reported security level (1 to 4) into BtConnSec_t.

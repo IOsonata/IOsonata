@@ -337,20 +337,22 @@ extern "C" void HostStack_Process(void)
 // BleStack_Process.
 static void BtAppEvtDrain(uint32_t Evt, void *pCtx)
 {
+	uint32_t state;
+	bool bFreed = false;
+
 	(void)Evt;
 	(void)pCtx;
 
 	s_bEvtDrainQueued = false;
 
-	bool bFreed = false;
-
 	while (s_EvtCnt > 0)
 	{
 		BtWbaEventRouterRun(s_EvtRing[s_EvtTail].Data);
 		s_EvtTail = (uint8_t)((s_EvtTail + 1) % BT_APP_WBA_EVT_SLOTS);
+		state = __get_PRIMASK();
 		__disable_irq();
 		s_EvtCnt--;
-		__enable_irq();
+		__set_PRIMASK(state);
 		bFreed = true;
 	}
 
@@ -378,33 +380,42 @@ static void BtAppEvtDrainQue(void)
 // data is not used by this port. Returns a failure when the ring is full and
 // the stack offers the event again after the next BleStackCB_Process.
 extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
-									   const uint8_t *pExtData, uint16_t ExtLength)
+								   const uint8_t *pExtData, uint16_t ExtLength)
 {
-	(void)pExtData;
-	(void)ExtLength;
+	BtAppWbaEvt_t *event;
+	uint32_t state;
+	uint32_t total;
 
+	if (pData == nullptr || Length == 0)
+	{
+		return BLE_STATUS_FAILED;
+	}
 	if (pData[0] != HCI_EVENT_PKT_TYPE)
 	{
 		return BLE_STATUS_SUCCESS;
 	}
-
+	total = (uint32_t)Length + ExtLength;
 	if (s_EvtCnt >= BT_APP_WBA_EVT_SLOTS || Length < 3 ||
-		Length > BT_APP_WBA_EVT_MAXLEN)
+		total > BT_APP_WBA_EVT_MAXLEN || total != (uint32_t)pData[2] + 3 ||
+		(ExtLength > 0 && pExtData == nullptr))
 	{
 		return BLE_STATUS_FAILED;
 	}
 
-	BtAppWbaEvt_t *pEvt = &s_EvtRing[s_EvtHead];
-
-	pEvt->Len = Length;
-	memcpy(pEvt->Data, pData, Length);
+	event = &s_EvtRing[s_EvtHead];
+	event->Len = (uint16_t)total;
+	memcpy(event->Data, pData, Length);
+	if (ExtLength > 0)
+	{
+		memcpy(event->Data + Length, pExtData, ExtLength);
+	}
 	s_EvtHead = (uint8_t)((s_EvtHead + 1) % BT_APP_WBA_EVT_SLOTS);
+	state = __get_PRIMASK();
 	__disable_irq();
 	s_EvtCnt++;
-	__enable_irq();
+	__set_PRIMASK(state);
 
 	BtAppEvtDrainQue();
-
 	return BLE_STATUS_SUCCESS;
 }
 
@@ -412,6 +423,7 @@ extern "C" void BtSmpBondWbaFlush(void);
 extern "C" void BtSmpBondWbaPoll(void);
 
 static void BtAppTickQue(void);
+static void BtAppDiscoveryRetry(void);
 
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
 
@@ -426,6 +438,7 @@ void BtAppCheckStatus(void)
 	{
 		BleStackCB_Process();
 	}
+	BtAppDiscoveryRetry();
 	BtWbaPlatformRetry();
 	BtSmpBondWbaFlush();
 	if (BtDfuSmpCheckStatus != nullptr)
@@ -472,7 +485,11 @@ enum {
 	DISC_IDLE = 0,
 	DISC_SERVICES,
 	DISC_CHARS,
-	DISC_DESCS
+	DISC_DESCS,
+	DISC_MTU,
+	DISC_SERVICES_PENDING,
+	DISC_CHARS_PENDING,
+	DISC_DESCS_PENDING
 };
 
 // Discovery progress lives in the peer record, one cursor per link
@@ -817,12 +834,20 @@ static void BtAppOobPeerDataPush(uint16_t ConnHdl, uint8_t AddrType,
 static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 							  uint8_t PeerAddrType, uint8_t *pPeerAddr)
 {
+	BtDevice_t *pPeer;
+	uint8_t secStatus;
+#ifndef NDEBUG
+	uint8_t identityType = 0;
+	uint8_t identity[6] = {};
+	uint8_t bondStatus;
+#endif
+
 	if (Status == BLE_STATUS_SUCCESS)
 	{
 		// Own address not stamped: SMP runs in the ST host, not
 		// the IOsonata toolbox, so the record is left for the
 		// BtSmpLocalAddrGet fallback.
-		BtDevice_t *pPeer = BtPeerConnected(ConnHdl,
+		pPeer = BtPeerConnected(ConnHdl,
 		                   Role,
 		                   PeerAddrType,
 		                   pPeerAddr,
@@ -843,12 +868,14 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 			return;
 		}
 		BtAppConnLedOn();
+		// Central discovery owns its MTU exchange before any discovery request.
 		BtAppEvtConnected(ConnHdl);
 
 		// The link starts at the default ATT MTU of 23. Ask for the larger one
 		// the application configured. The server answer raises the link MTU, see
 		// ACI_ATT_EXCHANGE_MTU_RESP below.
-		if (s_BtAppData.MaxMtu > GATT_MTU_SIZE_DEFAULT)
+		if (Role == BT_CONN_ROLE_PERIPHERAL &&
+			s_BtAppData.MaxMtu > GATT_MTU_SIZE_DEFAULT)
 		{
 			(void)aci_gatt_exchange_config(ConnHdl);
 		}
@@ -860,9 +887,7 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 		if (s_BtAppData.bSecure)
 		{
 #ifndef NDEBUG
-			uint8_t identityType = 0;
-			uint8_t identity[6] = {};
-			uint8_t bondStatus = aci_gap_check_bonded_device(
+			bondStatus = aci_gap_check_bonded_device(
 					PeerAddrType & 1U, pPeerAddr, &identityType, identity);
 			STATUS_PRINTF("WBA bond: peer lookup hdl=%u status=0x%02x\r\n",
 					(unsigned)ConnHdl, (unsigned)bondStatus);
@@ -876,7 +901,7 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 				                     pPeerAddr);
 			}
 
-			uint8_t secStatus = BLE_STATUS_SUCCESS;
+			secStatus = BLE_STATUS_SUCCESS;
 			switch (Role)
 			{
 				case BT_CONN_ROLE_CENTRAL:
@@ -905,6 +930,10 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 		{
 			BtAdvStart();
 		}
+	}
+	else
+	{
+		BtAppEvtConnectFailed();
 	}
 }
 
@@ -1687,7 +1716,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	s_BtAppData.MaxMtu = GATT_MTU_SIZE_DEFAULT;
 	if (pCfg->MaxMtu > GATT_MTU_SIZE_DEFAULT)
 	{
-		s_BtAppData.MaxMtu = pCfg->MaxMtu;
+		s_BtAppData.MaxMtu = pCfg->MaxMtu > CFG_BLE_ATT_MTU_MAX ?
+			CFG_BLE_ATT_MTU_MAX : pCfg->MaxMtu;
 	}
 
 	// Connection LED.
@@ -2132,11 +2162,15 @@ static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p)
 // services. When every service has been covered, move on to descriptors.
 static void BtAppDiscStartChar(BtDevice_t *pDev)
 {
+	BtGattDBSrvc_t *pSrvc;
+	uint16_t start;
+	uint16_t end;
+
 	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
-		uint16_t start = (uint16_t)(pSrvc->handle_range.StartHdl + 1); // skip decl
-		uint16_t end   = pSrvc->handle_range.EndHdl;
+		pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
+		start = (uint16_t)(pSrvc->handle_range.StartHdl + 1);
+		end = pSrvc->handle_range.EndHdl;
 
 		if (start <= end)
 		{
@@ -2146,6 +2180,8 @@ static void BtAppDiscStartChar(BtDevice_t *pDev)
 			{
 				return;
 			}
+			pDev->Discovery.Phase = DISC_CHARS_PENDING;
+			return;
 		}
 		pDev->Discovery.SrvIdx++;
 	}
@@ -2160,16 +2196,21 @@ static void BtAppDiscStartChar(BtDevice_t *pDev)
 // complete.
 static void BtAppDiscStartDesc(BtDevice_t *pDev)
 {
+	BtGattDBSrvc_t *pSrvc;
+	BtGattDBChar_t *pCh;
+	uint16_t valHdl;
+	uint16_t start;
+	uint16_t end;
+
 	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
+		pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
 
 		while (pDev->Discovery.CharIdx < pSrvc->char_count)
 		{
-			BtGattDBChar_t *pCh    = &pSrvc->characteristics[pDev->Discovery.CharIdx];
-			uint16_t        valHdl = pCh->characteristic.handle_value;
-			uint16_t        start  = (uint16_t)(valHdl + 1);
-			uint16_t        end;
+			pCh = &pSrvc->characteristics[pDev->Discovery.CharIdx];
+			valHdl = pCh->characteristic.handle_value;
+			start = (uint16_t)(valHdl + 1);
 
 			if ((uint8_t)(pDev->Discovery.CharIdx + 1) < pSrvc->char_count)
 			{
@@ -2191,6 +2232,8 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 				{
 					return;
 				}
+				pDev->Discovery.Phase = DISC_DESCS_PENDING;
+				return;
 			}
 			pDev->Discovery.CharIdx++;
 		}
@@ -2214,6 +2257,11 @@ static void WbaDiscProcComplete(const aci_gatt_proc_complete_event_rp0 *p)
 
 	switch (pDev->Discovery.Phase)
 	{
+		case DISC_MTU:
+			pDev->Discovery.Phase = DISC_SERVICES_PENDING;
+			(void)BtAppDiscoverDevice(pDev);
+			break;
+
 		case DISC_SERVICES:
 			pDev->Discovery.SrvIdx = 0;
 			BtAppDiscStartChar(pDev);
@@ -2236,24 +2284,74 @@ static void WbaDiscProcComplete(const aci_gatt_proc_complete_event_rp0 *p)
 
 bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 {
-	if (pDev == nullptr)
+	if (pDev == nullptr || pDev->Conn.Hdl == BT_CONN_HDL_INVALID)
 	{
 		return false;
 	}
-
-	pDev->Discovery.SrvIdx  = 0;
-	pDev->Discovery.CharIdx = 0;
-	pDev->Discovery.Phase   = DISC_SERVICES;
-
-	pDev->NbSrvc = 0;
+	if (pDev->Discovery.Phase != DISC_IDLE &&
+		pDev->Discovery.Phase != DISC_SERVICES_PENDING)
+	{
+		// The accepted procedure still owns this peer's ATT bearer.
+		return true;
+	}
 	if (BtDeviceSrvcCacheAttach(pDev) == false)
 	{
-		// No free discovery cache, see g_BtDevSrvcCacheCfg
 		return false;
 	}
-	memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
+	if (pDev->Discovery.Phase == DISC_IDLE &&
+		pDev->Conn.MaxMtu == GATT_MTU_SIZE_DEFAULT &&
+		s_BtAppData.MaxMtu > GATT_MTU_SIZE_DEFAULT)
+	{
+		if (aci_gatt_exchange_config(pDev->Conn.Hdl) != BLE_STATUS_SUCCESS)
+		{
+			return false;
+		}
+		pDev->Discovery.Phase = DISC_MTU;
+		return true;
+	}
 
-	return aci_gatt_disc_all_primary_services(pDev->Conn.Hdl) == BLE_STATUS_SUCCESS;
+	pDev->Discovery.SrvIdx = 0;
+	pDev->Discovery.CharIdx = 0;
+	pDev->Discovery.Phase = DISC_SERVICES_PENDING;
+	pDev->NbSrvc = 0;
+	memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
+	if (aci_gatt_disc_all_primary_services(pDev->Conn.Hdl) != BLE_STATUS_SUCCESS)
+	{
+		// Accepted by this port; the status check retries native admission.
+		return true;
+	}
+	pDev->Discovery.Phase = DISC_SERVICES;
+	return true;
+}
+
+// Retain the cursor when ST temporarily refuses a discovery command.
+static void BtAppDiscoveryRetry(void)
+{
+	BtDevice_t *peer;
+	uint16_t idx;
+
+	for (idx = 0; idx < BtPeerCount(); idx++)
+	{
+		peer = BtPeerSlot(idx);
+		if (peer == nullptr || peer->Conn.Hdl == BT_CONN_HDL_INVALID)
+		{
+			continue;
+		}
+		switch (peer->Discovery.Phase)
+		{
+			case DISC_SERVICES_PENDING:
+				(void)BtAppDiscoverDevice(peer);
+				break;
+			case DISC_CHARS_PENDING:
+				BtAppDiscStartChar(peer);
+				break;
+			case DISC_DESCS_PENDING:
+				BtAppDiscStartDesc(peer);
+				break;
+			default:
+				break;
+		}
+	}
 }
 
 bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle,

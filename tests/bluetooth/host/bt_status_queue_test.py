@@ -280,6 +280,7 @@ extern "C" void BtSmpBondWbaFlush(void)
 static bool s_bEvtDrainOwed, s_bBleHostOwed;
 static void BtAppTickQue() {}
 static void BtAppEvtDrainQue() {}
+static void BtAppDiscoveryRetry() {}
 extern "C" void BleStackCB_Process(void) {}
 extern "C" void BtWbaPlatformRetry(void) {}
 extern "C" void BtWbaPlatformInit(void) {}

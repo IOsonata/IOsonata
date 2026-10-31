@@ -391,7 +391,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	{
 		g_Uart.printf("PHY request not accepted; retry pending\r\n");
 	}
-#if defined(NRFXLIB_SDC)
+#if defined(NRFXLIB_SDC) || defined(IOSONATA_STM32_WBA)
 	if (!BtGapSetDataLength(ConnHdl, 251, 2120))
 	{
 		s_Failed = true;
@@ -648,7 +648,7 @@ bool AppCheckStatus(void)
 {
 	uint32_t now;
 	BtDevice_t *peer;
-#if defined(NRFXLIB_SDC)
+#if defined(NRFXLIB_SDC) || defined(IOSONATA_STM32_WBA)
 	uint8_t txPhy;
 	uint8_t rxPhy;
 #endif
@@ -677,7 +677,7 @@ bool AppCheckStatus(void)
 		{
 			StartDiscovery(s_ConnHdl);
 		}
-#if defined(NRFXLIB_SDC)
+#if defined(NRFXLIB_SDC) || defined(IOSONATA_STM32_WBA)
 		if (BtGapReadPhy(s_ConnHdl, &txPhy, &rxPhy))
 		{
 			s_TxPhy = txPhy;
