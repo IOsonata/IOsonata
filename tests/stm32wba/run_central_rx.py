@@ -30,7 +30,7 @@ code = r'''
 #define BT_APP_WBA_EVT_SLOTS 8
 #define BT_APP_WBA_EVT_MAXLEN 258
 #define HCI_EVENT_PKT_TYPE 4
-static struct { uint16_t MaxMtu; } s_BtAppData = {247};
+static struct { uint16_t MaxMtu; bool bSecure; } s_BtAppData = {247, false};
 static BtDevice_t peers[2];
 static BtGattDBSrvc_t services[2][BT_DEV_SERVICE_MAXCNT];
 static unsigned mtuCalls, serviceCalls, charCalls, descCalls, discovered;
@@ -91,6 +91,37 @@ for name in ['BtAppDiscStartChar', 'BtAppDiscStartDesc', 'WbaDiscProcComplete',
              'BtAppDiscoverDevice', 'BtAppDiscoveryRetry']:
     code += extract_function(source, name) + '\n'
 code += extract_function(gap, 'BtGapSetDataLength') + '\n'
+code += r"""
+#define NDEBUG
+#define STATUS_PRINTF(...) ((void)0)
+static struct { bool bOobEnabled; } s_WbaData;
+BtDevice_t *BtPeerConnected(uint16_t hdl, uint8_t role, uint8_t,
+	const uint8_t *, uint8_t, const uint8_t *)
+{
+	memset(&peers[hdl], 0, sizeof(peers[hdl]));
+	peers[hdl].Conn.Hdl = hdl;
+	peers[hdl].Conn.Role = role;
+	return &peers[hdl];
+}
+static void BtAdvWbaConnected() {}
+static void BtAppConnLedOn() {}
+static void BtAppOobPeerDataPush(uint16_t, uint8_t, uint8_t *) {}
+static uint8_t aci_gap_send_pairing_req(uint16_t, uint8_t) { return 0; }
+static uint8_t aci_gap_peripheral_security_req(uint16_t) { return 0; }
+#define SysLogPrintf(...) ((void)0)
+static bool connectDiscover;
+void BtAppEvtConnected(uint16_t hdl)
+{
+	assert(peers[hdl].Conn.MaxMtu == GATT_MTU_SIZE_DEFAULT);
+	if (connectDiscover)
+	{
+		assert(BtAppDiscoverDevice(&peers[hdl]));
+	}
+}
+"""
+code += extract_function(source, 'BtAppWbaConnected') + '\n'
+code += 'void BtAppEvtConnectFailed() {}\nvoid BtAdvStart() {}\n'
+
 a = source.index('typedef struct __Bt_App_Wba_Evt')
 code += source[a:source.index('static BtWbaEvtFlow_t BtAppHciEvtHandler', a)]
 code += r'''
@@ -123,10 +154,15 @@ int main()
 	uint8_t packet[254];
 	unsigned idx;
 
-	peers[0].Conn.Hdl = 0;
-	peers[1].Conn.Hdl = 1;
-	peers[0].Conn.MaxMtu = 23;
-	peers[1].Conn.MaxMtu = 23;
+	// Exercise the real connection handler, including discovery from its callback.
+	connectDiscover = true;
+	BtAppWbaConnected(0, 0, BT_CONN_ROLE_CENTRAL, 0, nullptr);
+	assert(mtuCalls == 1 && serviceCalls == 0);
+	assert(peers[0].Discovery.Phase == DISC_MTU);
+	connectDiscover = false;
+	BtAppWbaConnected(0, 0, BT_CONN_ROLE_CENTRAL, 0, nullptr);
+	BtAppWbaConnected(0, 1, BT_CONN_ROLE_CENTRAL, 0, nullptr);
+	mtuCalls = 0;
 	refusals = 1;
 	assert(!BtAppDiscoverDevice(&peers[0]));
 	assert(peers[0].Discovery.Phase == DISC_IDLE);

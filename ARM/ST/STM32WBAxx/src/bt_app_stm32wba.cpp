@@ -867,6 +867,8 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 			// BtPeerConnectionRejected, which terminates the link.
 			return;
 		}
+		// A new ATT bearer starts at 23 until MTU exchange completes.
+		pPeer->Conn.MaxMtu = GATT_MTU_SIZE_DEFAULT;
 		BtAppConnLedOn();
 		// Central discovery owns its MTU exchange before any discovery request.
 		BtAppEvtConnected(ConnHdl);
