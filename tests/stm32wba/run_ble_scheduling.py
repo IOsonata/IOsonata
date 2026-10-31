@@ -33,6 +33,7 @@ static int processResult = 1;
 using Handler = void (*)(uint32_t, void *);
 static Handler events[4];
 static volatile bool s_bBleHostQueued, s_bBleHostOwed;
+static uint32_t s_HostProcessCount;
 static void (*s_SeqTask[32])(void);
 static volatile uint32_t s_SeqPend;
 static volatile bool s_SeqQueued, s_SeqOwed;

@@ -280,6 +280,8 @@ static volatile uint8_t s_EvtHead = 0;		// next slot to write
 static volatile uint8_t s_EvtTail = 0;		// next slot to read
 static volatile uint8_t s_EvtCnt = 0;
 static bool s_bEvtFlowBlocked = false;
+static uint32_t s_HostProcessCount;
+static uint32_t s_StatusCheckCount;
 
 static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload);
 extern "C" void BleStackCB_Process(void);
@@ -293,6 +295,7 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 	(void)pCtx;
 
 	s_bBleHostQueued = false;
+	s_HostProcessCount++;
 #ifndef NDEBUG
 	uint32_t start = BtSmpMsTick();
 #endif
@@ -457,6 +460,7 @@ extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
 
 void BtAppCheckStatus(void)
 {
+	s_StatusCheckCount++;
 	BtAppTickQue();
 	if (s_bEvtDrainOwed)
 	{
@@ -1061,7 +1065,8 @@ static void BtAppWbaLinkTrace(const hci_event_pckt *pEvt)
 			if (available >= sizeof(*phy))
 			{
 				phy = (const hci_le_phy_update_complete_event_rp0 *)meta->data;
-				SysLogPrintf(SysLogGet(), "WBA PHY complete: hdl=%u status=0x%02x tx=%u rx=%u\r\n",
+				SysLogPrintf(SysLogGet(), "ms=%lu WBA PHY complete: hdl=%u status=0x%02x tx=%u rx=%u\r\n",
+						(unsigned long)BtSmpMsTick(),
 						(unsigned)phy->Connection_Handle, (unsigned)phy->Status,
 						(unsigned)phy->TX_PHY, (unsigned)phy->RX_PHY);
 			}
@@ -1070,7 +1075,8 @@ static void BtAppWbaLinkTrace(const hci_event_pckt *pEvt)
 			if (available >= sizeof(*length))
 			{
 				length = (const hci_le_data_length_change_event_rp0 *)meta->data;
-				SysLogPrintf(SysLogGet(), "WBA DLE changed: hdl=%u tx=%u/%u rx=%u/%u\r\n",
+				SysLogPrintf(SysLogGet(), "ms=%lu WBA DLE changed: hdl=%u tx=%u/%u rx=%u/%u\r\n",
+						(unsigned long)BtSmpMsTick(),
 						(unsigned)length->Connection_Handle,
 						(unsigned)length->MaxTxOctets, (unsigned)length->MaxTxTime,
 						(unsigned)length->MaxRxOctets, (unsigned)length->MaxRxTime);
@@ -1080,7 +1086,8 @@ static void BtAppWbaLinkTrace(const hci_event_pckt *pEvt)
 			if (available >= sizeof(*connected))
 			{
 				connected = (const hci_le_connection_complete_event_rp0 *)meta->data;
-				SysLogPrintf(SysLogGet(), "WBA link: hdl=%u status=0x%02x interval=%u latency=%u timeout=%u\r\n",
+				SysLogPrintf(SysLogGet(), "ms=%lu WBA link: hdl=%u status=0x%02x interval=%u latency=%u timeout=%u\r\n",
+						(unsigned long)BtSmpMsTick(),
 						(unsigned)connected->Connection_Handle, (unsigned)connected->Status,
 						(unsigned)connected->Conn_Interval, (unsigned)connected->Conn_Latency,
 						(unsigned)connected->Supervision_Timeout);
@@ -1090,7 +1097,8 @@ static void BtAppWbaLinkTrace(const hci_event_pckt *pEvt)
 			if (available >= sizeof(*enhanced))
 			{
 				enhanced = (const hci_le_enhanced_connection_complete_event_rp0 *)meta->data;
-				SysLogPrintf(SysLogGet(), "WBA enhanced link: hdl=%u status=0x%02x interval=%u latency=%u timeout=%u\r\n",
+				SysLogPrintf(SysLogGet(), "ms=%lu WBA enhanced link: hdl=%u status=0x%02x interval=%u latency=%u timeout=%u\r\n",
+						(unsigned long)BtSmpMsTick(),
 						(unsigned)enhanced->Connection_Handle, (unsigned)enhanced->Status,
 						(unsigned)enhanced->Conn_Interval, (unsigned)enhanced->Conn_Latency,
 						(unsigned)enhanced->Supervision_Timeout);
@@ -1100,7 +1108,8 @@ static void BtAppWbaLinkTrace(const hci_event_pckt *pEvt)
 			if (available >= sizeof(*updated))
 			{
 				updated = (const hci_le_connection_update_complete_event_rp0 *)meta->data;
-				SysLogPrintf(SysLogGet(), "WBA interval complete: hdl=%u status=0x%02x interval=%u latency=%u timeout=%u\r\n",
+				SysLogPrintf(SysLogGet(), "ms=%lu WBA interval complete: hdl=%u status=0x%02x interval=%u latency=%u timeout=%u\r\n",
+						(unsigned long)BtSmpMsTick(),
 						(unsigned)updated->Connection_Handle, (unsigned)updated->Status,
 						(unsigned)updated->Conn_Interval, (unsigned)updated->Conn_Latency,
 						(unsigned)updated->Supervision_Timeout);
@@ -1126,7 +1135,8 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_disconnection_complete_event_rp0 *p =
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
-			SysLogPrintf(SysLogGet(), "WBA link: disconnected hdl=%u status=0x%02x reason=0x%02x\r\n",
+			SysLogPrintf(SysLogGet(), "ms=%lu WBA link: disconnected hdl=%u status=0x%02x reason=0x%02x\r\n",
+						(unsigned long)BtSmpMsTick(),
 					(unsigned)p->Connection_Handle, (unsigned)p->Status,
 					(unsigned)p->Reason);
 			if (p->Status == BLE_STATUS_SUCCESS)
@@ -1267,6 +1277,9 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 						(aci_att_exchange_mtu_resp_event_rp0 *)pAci->data;
 					BtDevice_t *pPeer = BtPeerFindByHdl(pMtu->Connection_Handle);
 
+					SysLogPrintf(SysLogGet(), "ms=%lu WBA MTU response: hdl=%u mtu=%u\r\n",
+							(unsigned long)BtSmpMsTick(), (unsigned)pMtu->Connection_Handle,
+							(unsigned)pMtu->Server_RX_MTU);
 					if (pPeer != nullptr)
 					{
 						uint16_t mtu = pMtu->Server_RX_MTU;
@@ -1990,6 +2003,9 @@ static volatile uint8_t s_BtAppTickState = BT_APP_TICK_IDLE;
 // pairing timeout, so there is no generic SMP check here.
 static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 {
+	BtDevice_t *peer;
+	uint16_t idx;
+
 	(void)Evt;
 	(void)pCtx;
 
@@ -1997,6 +2013,19 @@ static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 	BtGapWbaConnParamProcess();
 	BtGattIndicationTimeoutCheck();
 	BtSmpBondWbaPoll();
+	for (idx = 0; idx < BtPeerCount(); idx++)
+	{
+		peer = BtPeerSlot(idx);
+		if (peer != nullptr && peer->Conn.Hdl != BT_CONN_HDL_INVALID &&
+			peer->Discovery.Phase != DISC_IDLE)
+		{
+			SysLogPrintf(SysLogGet(), "ms=%lu WBA discovery: hdl=%u phase=%u mtu=%u host=%lu checks=%lu ring=%u\r\n",
+					(unsigned long)BtSmpMsTick(), (unsigned)peer->Conn.Hdl,
+					(unsigned)peer->Discovery.Phase, (unsigned)peer->Conn.MaxMtu,
+					(unsigned long)s_HostProcessCount, (unsigned long)s_StatusCheckCount,
+					(unsigned)s_EvtCnt);
+		}
+	}
 }
 
 static void BtAppTickQue(void)
@@ -2361,6 +2390,10 @@ static void WbaDiscProcComplete(const aci_gatt_proc_complete_event_rp0 *p)
 		return;
 	}
 
+	SysLogPrintf(SysLogGet(), "ms=%lu WBA GATT complete: hdl=%u phase=%u status=0x%02x\r\n",
+			(unsigned long)BtSmpMsTick(), (unsigned)p->Connection_Handle,
+			(unsigned)pDev->Discovery.Phase, (unsigned)p->Error_Code);
+
 	switch (pDev->Discovery.Phase)
 	{
 		case DISC_MTU:
@@ -2390,6 +2423,8 @@ static void WbaDiscProcComplete(const aci_gatt_proc_complete_event_rp0 *p)
 
 bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 {
+	tBleStatus status;
+
 	if (pDev == nullptr || pDev->Conn.Hdl == BT_CONN_HDL_INVALID)
 	{
 		return false;
@@ -2408,7 +2443,10 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 		pDev->Conn.MaxMtu == GATT_MTU_SIZE_DEFAULT &&
 		s_BtAppData.MaxMtu > GATT_MTU_SIZE_DEFAULT)
 	{
-		if (aci_gatt_exchange_config(pDev->Conn.Hdl) != BLE_STATUS_SUCCESS)
+		status = aci_gatt_exchange_config(pDev->Conn.Hdl);
+		SysLogPrintf(SysLogGet(), "ms=%lu WBA MTU request: hdl=%u status=0x%02x\r\n",
+				(unsigned long)BtSmpMsTick(), (unsigned)pDev->Conn.Hdl, (unsigned)status);
+		if (status != BLE_STATUS_SUCCESS)
 		{
 			return false;
 		}
