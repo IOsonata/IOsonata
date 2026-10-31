@@ -215,53 +215,82 @@ static void PrbsReset(void)
 
 static void PrbsReceive(const uint8_t *pData, uint16_t Len, uint32_t Now)
 {
+	uint32_t breaks;
+	uint32_t outOfFrame;
 	uint16_t idx;
 	uint8_t expected;
+	uint8_t previous;
+	uint8_t validRun;
+	uint8_t value;
+	bool started;
+	bool synced;
+	bool validByte;
 
 	if (s_Finished || Len == 0 || pData == nullptr)
 	{
 		return;
 	}
-	if (s_Rx.Started && (uint32_t)(Now - s_Rx.FirstMs) >= PRBS_RX_DURATION_MS)
+	started = s_Rx.Started;
+	if (started && (uint32_t)(Now - s_Rx.FirstMs) >= PRBS_RX_DURATION_MS)
 	{
 		s_Finished = true;
 		return;
 	}
-	if (s_Rx.Started == false)
+	if (started == false)
 	{
 		s_Rx.FirstMs = Now;
 	}
+
+	// The BLE callback is the only writer. Keep byte-by-byte state local;
+	// the main-loop snapshot cannot run until this callback returns.
+	previous = s_Rx.Previous;
+	validRun = s_Rx.ValidRun;
+	synced = s_Rx.Synced;
+	breaks = s_Rx.Breaks;
+	outOfFrame = s_Rx.OutOfFrame;
 	for (idx = 0; idx < Len; idx++)
 	{
-		expected = ((s_Rx.Previous << 1) |
-			(((s_Rx.Previous >> 6) ^ (s_Rx.Previous >> 5)) & 1)) & 0x7f;
-		if (s_Rx.Started && pData[idx] != expected)
+		value = pData[idx];
+		expected = ((previous << 1) | (((previous >> 6) ^ (previous >> 5)) & 1)) & 0x7f;
+		if (started && value != expected)
 		{
-			s_Rx.Breaks++;
+			breaks++;
 		}
-		if (pData[idx] > 0x7f && pData[idx] != 0xff)
+		if (value > 0x7f && value != 0xff)
 		{
-			s_Rx.OutOfFrame++;
+			outOfFrame++;
 		}
-		if (pData[idx] == 0 || (pData[idx] > 0x7f && pData[idx] != 0xff))
+		// Synced records that a valid eight-byte run has occurred. Later
+		// damage still increments breaks; reacquisition cannot erase it.
+		if (!synced)
 		{
-			s_Rx.ValidRun = 0;
+			validByte = (value > 0 && value <= 0x7f) || value == 0xff;
+			if (!validByte)
+			{
+				validRun = 0;
+			}
+			else if (!started || value != expected)
+			{
+				validRun = 1;
+			}
+			else if (validRun < 8)
+			{
+				validRun++;
+			}
+			if (validRun >= 8)
+			{
+				synced = true;
+			}
 		}
-		else if (!s_Rx.Started || pData[idx] != expected)
-		{
-			s_Rx.ValidRun = 1;
-		}
-		else if (s_Rx.ValidRun < 8)
-		{
-			s_Rx.ValidRun++;
-		}
-		if (s_Rx.ValidRun >= 8)
-		{
-			s_Rx.Synced = true;
-		}
-		s_Rx.Previous = pData[idx];
-		s_Rx.Started = true;
+		previous = value;
+		started = true;
 	}
+	s_Rx.Previous = previous;
+	s_Rx.ValidRun = validRun;
+	s_Rx.Synced = synced;
+	s_Rx.Started = started;
+	s_Rx.Breaks = breaks;
+	s_Rx.OutOfFrame = outOfFrame;
 	s_Rx.Bytes += Len;
 	s_Rx.Notifications++;
 	if (Len < s_Rx.MinLen)
@@ -479,6 +508,24 @@ static void PrbsReport(uint32_t Now)
 	{
 		return;
 	}
+	// Most main-loop passes are between reports. Do not mask interrupts
+	// or copy every counter until a report or the final result is due.
+	if (!s_Finished && !s_Failed)
+	{
+		if (!s_Rx.Started)
+		{
+			return;
+		}
+		if (s_LastReportMs == 0)
+		{
+			s_LastReportMs = s_Rx.FirstMs;
+		}
+		if ((uint32_t)(Now - s_LastReportMs) < PRBS_RX_REPORT_MS &&
+			(uint32_t)(Now - s_Rx.FirstMs) < PRBS_RX_DURATION_MS)
+		{
+			return;
+		}
+	}
 	state = DisableInterrupt();
 	Now = BtGattMsTick();
 	stats.Bytes = s_Rx.Bytes;
@@ -608,6 +655,11 @@ int main(void)
 	g_Uart.Init(g_UartCfg);
 	g_Uart.printf("BlePrbsRx: target=%s requested_PHY=%u\r\n", TARGET_NAME, s_TestPhy);
 	g_Uart.printf("Interval=15 ms MTU=247; 60 s at 1M then 60 s at 2M\r\n");
+#if defined(__OPTIMIZE__)
+	g_Uart.printf("Compiler optimization: enabled\r\n");
+#else
+	g_Uart.printf("Compiler optimization: disabled; use Release for throughput\r\n");
+#endif
 	if (!BtAppInit(&s_BleAppCfg))
 	{
 		g_Uart.printf("BtAppInit failed\r\n");
