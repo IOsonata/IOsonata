@@ -55,6 +55,10 @@ SOFTWARE.
 #endif
 /*******************************/
 
+// Optional HCI application discovery continuation; no dependency for users
+// of the ATT client that manage their own discovery sequence.
+extern void BtAppHciMtuExchanged(uint16_t ConnHdl) __attribute__((weak));
+
 static inline uint16_t BtAttRspLe16(const uint8_t *p)
 {
 	return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
@@ -536,6 +540,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 	}
 
 	const bool writeRequest = pPeer->AttReqOpcode == BT_ATT_OPCODE_ATT_WRITE_REQ;
+	const bool mtuRequest = pPeer->AttReqOpcode == BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ;
 
 	// A structurally valid matching response completes the request. Release
 	// before dispatch so discovery can issue the next request immediately.
@@ -612,5 +617,10 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		case BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP:
 		default:
 			break;
+	}
+
+	if (mtuRequest && BtAppHciMtuExchanged != nullptr)
+	{
+		BtAppHciMtuExchanged(ConnHdl);
 	}
 }

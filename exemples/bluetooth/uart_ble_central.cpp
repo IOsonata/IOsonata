@@ -606,20 +606,39 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 // Run outside the BLE callback. A short UART write leaves the suffix queued.
 static void BleToUartDrain(void)
 {
-	int count = 64;
-	uint8_t *p = CFifoPeekMultiple(s_hBleToUartFifo, &count);
+	int budget = 256;
+	int count;
 	int sent;
+	uint8_t *p;
 
-	if (p == nullptr || count <= 0)
+	// Keep the UART supplied without waiting for serial transmission here.
+	// Blocking in AppCheckStatus delays the next queued Bluetooth receive job.
+	while (budget > 0)
 	{
-		return;
-	}
+		count = budget < UART_MAX_DATA_LEN ? budget : UART_MAX_DATA_LEN;
+		p = CFifoPeekMultiple(s_hBleToUartFifo, &count);
+		if (p == nullptr || count <= 0)
+		{
+			return;
+		}
 
-	sent = g_Uart.Tx(p, count);
-	if (sent > 0)
-	{
+		while (count > 0 && !g_Uart.RequestToSend(count))
+		{
+			count /= 2;
+		}
+		if (count == 0)
+		{
+			return;
+		}
+
+		sent = g_Uart.Tx(p, count);
+		if (sent <= 0)
+		{
+			return;
+		}
 		(void)CFifoGetMultiple(s_hBleToUartFifo, &sent);
 		s_BleToUartAccepted += sent;
+		budget -= sent;
 	}
 }
 

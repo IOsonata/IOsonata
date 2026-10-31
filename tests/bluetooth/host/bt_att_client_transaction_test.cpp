@@ -36,6 +36,7 @@ int s_ReserveCount;
 int s_ReleaseCount;
 int s_DisconnectCount;
 int s_WriteCompleteCount;
+int s_MtuCompleteCount;
 uint16_t s_WriteCompleteHdl;
 bool s_WriteCompleteSuccess;
 bool s_ReserveOk;
@@ -91,6 +92,7 @@ void Setup()
 	s_ReleaseCount = 0;
 	s_DisconnectCount = 0;
 	s_WriteCompleteCount = 0;
+	s_MtuCompleteCount = 0;
 	s_WriteCompleteHdl = BT_CONN_HDL_INVALID;
 	s_WriteCompleteSuccess = false;
 	s_ReserveOk = true;
@@ -354,11 +356,46 @@ extern "C" void BtAppEvtWriteCompleted(uint16_t ConnHdl, bool Success)
 	CHECK(!s_Peer.bAttReqPending);
 }
 
+void BtAppHciMtuExchanged(uint16_t ConnHdl)
+{
+	CHECK(ConnHdl == kConnHdl);
+	CHECK(!s_Peer.bAttReqPending);
+	++s_MtuCompleteCount;
+}
+
 extern "C" void BtDeviceDiscovered(BtDevice_t *) {}
 
 
+static void TestMtuContinuation()
+{
+	BtAttReqRsp_t rsp = {};
+
+	Setup();
+	s_Peer.Conn.MaxMtu = 23;
+	CHECK(BtAttExchangeMtuRequest(&s_Hci, kConnHdl, 247));
+	rsp.OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
+	rsp.ExchgMtuReqRsp.RxMtu = 247;
+	BtAttProcessRsp(kConnHdl, &rsp, 1);
+	CHECK(s_MtuCompleteCount == 0);
+	BtAttProcessRsp(kConnHdl, &rsp, 3);
+	CHECK(s_MtuCompleteCount == 1 && s_Peer.Conn.MaxMtu == 247);
+	BtAttProcessRsp(kConnHdl, &rsp, 3);
+	CHECK(s_MtuCompleteCount == 1);
+
+	Setup();
+	s_Peer.Conn.MaxMtu = 23;
+	CHECK(BtAttExchangeMtuRequest(&s_Hci, kConnHdl, 247));
+	rsp = {};
+	rsp.OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
+	rsp.ErrorRsp.ReqOpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ;
+	rsp.ErrorRsp.Error = BT_ATT_ERROR_REQUEST_NOT_SUPP;
+	BtAttProcessRsp(kConnHdl, &rsp, 5);
+	CHECK(s_MtuCompleteCount == 1 && s_Peer.Conn.MaxMtu == 23);
+}
+
 int main()
 {
+	TestMtuContinuation();
 	TestMatchingResponseOwnsBearer();
 	TestMatchingErrorResponseReleasesBearer();
 	TestMalformedMatchedResponseKeepsBearer();

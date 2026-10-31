@@ -36,12 +36,13 @@ extern "C" bool BtEvtQue(uint32_t e, void *p, AppEvtHandler_t h)
 hci_source = (ROOT / 'src/bluetooth/bt_app_hci.cpp').read_text()
 hci = COMMON + r"""
 #define BT_APP_HCI_TICK_MSEC 1000
-struct Conn { void (*Tick)(); };
-static unsigned ticks, polls, ctlrChecks;
+struct Conn { void (*Tick)(); void (*DiscoveryRetry)(); };
+static unsigned ticks, polls, ctlrChecks, discoveryChecks;
 static uint32_t clock;
 static void tick() { ++ticks; }
 static void poll() { ++polls; }
-static Conn conn = { tick };
+static void discovery() { ++discoveryChecks; }
+static Conn conn = { tick, discovery };
 static const Conn *s_pBtAppHciConn = &conn;
 static void (*s_pBtAppSecPoll)() = poll;
 static uint32_t s_BtAppTickMs = 0;
@@ -67,6 +68,7 @@ int main() {
 	clock = 10;
 	for (int i = 0; i < 100; ++i) BtAppCheckStatus();
 	assert(ticks == 2 && polls == 2 && ctlrChecks == 102);
+	assert(discoveryChecks == ctlrChecks);
 	clock = BT_APP_HCI_TICK_MSEC - 1;
 	BtAppCheckStatus();
 	assert(ticks == 2);

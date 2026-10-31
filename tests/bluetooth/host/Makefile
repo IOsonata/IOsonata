@@ -485,6 +485,7 @@ test: $(TARGETS)
 		$(TEST_ENV) ./$$target; \
 	done
 	CXX="$(CXX)" $(PYTHON) bt_app_private_test.py
+	CXX="$(CXX)" $(PYTHON) bt_central_stream_test.py
 	CXX="$(CXX)" $(PYTHON) bt_status_queue_test.py
 	CXX="$(CXX)" $(PYTHON) bt_example_work_test.py
 	$(TEST_ENV) CXX="$(CXX)" $(PYTHON) test_video_ble_services.py
