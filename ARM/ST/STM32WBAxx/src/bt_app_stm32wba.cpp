@@ -629,7 +629,9 @@ static void WbaGattAttrModified(uint16_t ConnHdl, uint16_t AttrHdl,
 
 			if (AttrHdl == pChar->ValHdl && pChar->WrCB != nullptr)
 			{
-				pChar->WrCB(pChar, pData, (int)Offset, (int)Len);
+				// ST splits long attribute events; the callback receives each
+				// fragment at its byte offset, without ST's continuation bit.
+				pChar->WrCB(pChar, pData, (int)(Offset & 0x7FFFU), (int)Len);
 				return;
 			}
 		}

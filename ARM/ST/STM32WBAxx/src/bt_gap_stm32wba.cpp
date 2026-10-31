@@ -111,6 +111,10 @@ typedef struct __Bt_Gap_WbaState {
 	bool		bLegacyNameUpdatePending;	//!< Old app helper already performed native update
 } BtGapWbaState_t;
 
+static uint8_t s_OwnAddrType;
+static bool s_bRandomAddrSet;
+extern void BtScanEnded(void);
+
 static BtGapWbaState_t s_GapWba = {
 	.ScanInterval  = (uint16_t)BT_GAP_MSEC_TO_0_625(BT_GAP_SCAN_INTERVAL),
 	.ScanWindow    = (uint16_t)BT_GAP_MSEC_TO_0_625(BT_GAP_SCAN_WINDOW),
@@ -703,7 +707,7 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr,
 		s_GapWba.ScanWindow,
 		pPeerAddr->Type,
 		pPeerAddr->Addr,
-		0,							// own address type = public
+		s_OwnAddrType,				// configured local address type
 		intervalMin,
 		intervalMax,
 		pConnParam->Latency,
@@ -716,19 +720,47 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr,
 
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
+	uint8_t addr[6];
+	tBleStatus status;
+	uint16_t interval;
+	uint16_t window;
+
 	if (pCfg == NULL)
 	{
 		return false;
 	}
 
-	uint16_t interval;
-	uint16_t window;
 	if (!BtGapWbaScanParamsConvert(
 			pCfg->Param.Interval, pCfg->Param.Duration, &interval, &window))
 	{
 		return false;
 	}
 
+	// Privacy is disabled in this port. Do not reinterpret identity-address
+	// enum values as ST privacy modes.
+	if (pCfg->Param.OwnAddrType != BTADDR_TYPE_PUBLIC &&
+		pCfg->Param.OwnAddrType != BTADDR_TYPE_RAND)
+	{
+		return false;
+	}
+	if (pCfg->Param.OwnAddrType == BTADDR_TYPE_RAND && !s_bRandomAddrSet)
+	{
+		status = hci_read_bd_addr(addr);
+		if (status != BLE_STATUS_SUCCESS)
+		{
+			return false;
+		}
+		// Stable static-random identity derived from the configured device ID.
+		addr[5] |= 0xC0U;
+		status = aci_hal_write_config_data(CONFIG_DATA_RANDOM_ADDRESS_OFFSET,
+			CONFIG_DATA_RANDOM_ADDRESS_LEN, addr);
+		if (status != BLE_STATUS_SUCCESS)
+		{
+			return false;
+		}
+		s_bRandomAddrSet = true;
+	}
+	s_OwnAddrType = (uint8_t)pCfg->Param.OwnAddrType;
 	s_GapWba.ScanType = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ?
 		BT_GAP_HCI_SCAN_ACTIVE : BT_GAP_HCI_SCAN_PASSIVE;
 	s_GapWba.ScanInterval = interval;
@@ -750,7 +782,7 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 	scanparam[0].Scan_Window = s_GapWba.ScanWindow;
 
 	uint8_t ret = aci_gap_start_scan(0, GAP_OBSERVATION_PROC,
-		0,							// own address type = public
+		s_OwnAddrType,				// configured local address type
 		s_GapWba.ScanFilterDup, 0, 0,
 		0,							// scanning filter policy = accept all
 		HCI_SCANNING_PHYS_LE_1M, scanparam);
@@ -770,7 +802,10 @@ bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 
 void BtGapScanStop(void)
 {
-	(void)aci_gap_terminate_gap_proc(GAP_OBSERVATION_PROC);
+	if (aci_gap_terminate_gap_proc(GAP_OBSERVATION_PROC) == BLE_STATUS_SUCCESS)
+	{
+		BtScanEnded();
+	}
 }
 
 // --- Link procedures on an established connection ---

@@ -12,10 +12,37 @@ connection CCCD machinery can resolve a characteristic from its CCCD handle.
 This is the ST equivalent of bt_gatt_nrf52.cpp / bt_gatt_bm.cpp. The generic
 BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 
-@author	Nguyen Hoan Hoang
+@author	Hoang Nguyen Hoan
+@date	Oct. 31, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 #include <string.h>
 #include <stdint.h>
+#include "syslog.h"
 
 #include "stm32wbaxx.h"
 #include "bt_wba_stack.h"
@@ -38,9 +65,12 @@ static uint8_t WbaSecPerm(uint32_t SecType)
 	switch (SecType)
 	{
 		case BTGAP_SECTYPE_STATICKEY_MITM:
-		case BTGAP_SECTYPE_LESC_MITM:
 		case BTGAP_SECTYPE_SIGNED_MITM:
 			return ATTR_PERMISSION_AUTHEN_READ | ATTR_PERMISSION_AUTHEN_WRITE;
+
+		case BTGAP_SECTYPE_LESC_MITM:
+			return ATTR_PERMISSION_AUTHEN_READ | ATTR_PERMISSION_AUTHEN_WRITE |
+				ATTR_PERMISSION_SC_READ | ATTR_PERMISSION_SC_WRITE;
 
 		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
 		case BTGAP_SECTYPE_SIGNED_NO_MITM:
@@ -104,6 +134,11 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 	Char_UUID_t uuid;
 	uint8_t uuidType;
 	uint8_t baseidx = pSrvc->Uuid.BaseIdx;
+	uint32_t secType;
+	uint16_t charHdl = BT_ATT_HANDLE_INVALID;
+	uint8_t eventMask = GATT_NOTIFY_ATTRIBUTE_WRITE;
+	tBleStatus st;
+	int idx;
 
 	// This native backend does not yet translate application authorization
 	// callbacks into vendor read/write authorization events. Refuse such a
@@ -115,7 +150,7 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 
 	if (pChar->pUuidBase != nullptr)
 	{
-		int idx = BtUuidAddBase(pChar->pUuidBase);
+		idx = BtUuidAddBase(pChar->pUuidBase);
 		if (idx < 0)
 		{
 			return false;
@@ -139,20 +174,18 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 		uuid.Char_UUID_16 = pChar->Uuid;
 	}
 
-	uint32_t secType = WbaCharSecType(pSrvc, pChar);
+	secType = WbaCharSecType(pSrvc, pChar);
 	if (!WbaSecTypeSupported(secType))
 	{
 		return false;
 	}
 
-	uint16_t charHdl = BT_ATT_HANDLE_INVALID;
-	uint8_t eventMask = GATT_NOTIFY_ATTRIBUTE_WRITE;
 	if (pChar->Property & BT_GATT_CHAR_PROP_NOTIFY)
 	{
 		eventMask |= GATT_NOTIFY_NOTIFICATION_COMPLETION;
 	}
 
-	tBleStatus st = aci_gatt_add_char(pSrvc->Hdl, uuidType, &uuid,
+	st = aci_gatt_add_char(pSrvc->Hdl, uuidType, &uuid,
 									  pChar->MaxDataLen, (uint8_t)pChar->Property,
 									  WbaSecPerm(secType), eventMask,
 									  MIN_ENCRY_KEY_SIZE,
@@ -169,6 +202,10 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 		(BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
 	{
 		pChar->CccdHdl = charHdl + WBA_CHAR_CCCD_OFFSET;
+		if (pChar->Property & BT_GATT_CHAR_PROP_BROADCAST)
+		{
+			pChar->CccdHdl++;
+		}
 	}
 	else
 	{
@@ -183,6 +220,16 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
+	Service_UUID_t uuid;
+	uint8_t uuidType;
+	uint8_t baseidx = 0;
+	uint32_t records = 1;
+	uint16_t srvcHdl = BT_ATT_HANDLE_INVALID;
+	tBleStatus st;
+	int idx;
+	int i;
+	int j;
+
 	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr || pSrvc->NbChar <= 0)
 	{
 		return false;
@@ -198,13 +245,9 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		return true;
 	}
 
-	Service_UUID_t uuid;
-	uint8_t uuidType;
-	uint8_t baseidx = 0;
-
 	if (pSrvc->bCustom)
 	{
-		int idx = BtUuidAddBase(pSrvc->UuidBase);
+		idx = BtUuidAddBase(pSrvc->UuidBase);
 		if (idx < 0)
 		{
 			return false;
@@ -221,10 +264,17 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		uuid.Service_UUID_16 = pSrvc->UuidSrvc;
 	}
 
-	uint8_t records = 1;
-	for (int i = 0; i < pSrvc->NbChar; i++)
+	for (i = 0; i < pSrvc->NbChar; i++)
 	{
 		records += 2;
+		if (pSrvc->pCharArray[i].Property & BT_GATT_CHAR_PROP_BROADCAST)
+		{
+			records++;
+		}
+		if (pSrvc->pCharArray[i].Property & BT_GATT_CHAR_PROP_EXT_PROP)
+		{
+			records++;
+		}
 		if (pSrvc->pCharArray[i].Property &
 			(BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
 		{
@@ -232,8 +282,12 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		}
 	}
 
-	uint16_t srvcHdl = BT_ATT_HANDLE_INVALID;
-	tBleStatus st = aci_gatt_add_service(uuidType, &uuid, PRIMARY_SERVICE,
+	if (records > UINT8_MAX)
+	{
+		return false;
+	}
+
+	st = aci_gatt_add_service(uuidType, &uuid, PRIMARY_SERVICE,
 										 records, &srvcHdl);
 	if (st != BLE_STATUS_SUCCESS)
 	{
@@ -242,10 +296,23 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	pSrvc->Uuid = {baseidx, BT_UUID_TYPE_16, {pSrvc->UuidSrvc}};
 	pSrvc->Hdl = srvcHdl;
 
-	for (int i = 0; i < pSrvc->NbChar; i++)
+	for (i = 0; i < pSrvc->NbChar; i++)
 	{
 		if (!WbaGattCharAdd(pSrvc, &pSrvc->pCharArray[i]))
 		{
+			st = aci_gatt_del_service(srvcHdl);
+			if (st != BLE_STATUS_SUCCESS)
+			{
+				SysLogPrintf(SysLogGet(), "WBA GATT service cleanup failed: status=0x%02x\r\n", (unsigned)st);
+			}
+			pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
+			for (j = 0; j < pSrvc->NbChar; j++)
+			{
+				pSrvc->pCharArray[j].Hdl = BT_ATT_HANDLE_INVALID;
+				pSrvc->pCharArray[j].ValHdl = BT_ATT_HANDLE_INVALID;
+				pSrvc->pCharArray[j].CccdHdl = BT_ATT_HANDLE_INVALID;
+				pSrvc->pCharArray[j].pSrvc = nullptr;
+			}
 			return false;
 		}
 	}

@@ -24,6 +24,9 @@ code = r'''
 #include "ble_core.h"
 #include "bt_wba_event_router.h"
 static unsigned delivered;
+static unsigned txReady, dfuReady;
+void BtIntrfTxReady() { txReady++; }
+void BtDfuSmpTxReady() { dfuReady++; }
 void BtGapWbaConnParamsDisconnected(uint16_t) {}
 static unsigned phyCompleted;
 void BtGapWbaPhyUpdateComplete(uint16_t hdl) { assert(hdl == 0x123); phyCompleted++; }
@@ -156,6 +159,25 @@ static void ModifiedEvent()
 	BtWbaEventRouterRun(packet);
 	assert(delivered == before + 1);
 }
+static void PoolEvent()
+{
+	uint8_t packet[9] = {4, HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, 6,
+		(uint8_t)ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE,
+		(uint8_t)(ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE >> 8), 0xff, 0xff, 1, 0};
+	unsigned before = delivered;
+	for (unsigned len = 0; len < 6; len++)
+	{
+		packet[2] = len;
+		BtWbaEventRouterRun(packet);
+		assert(txReady == 0 && dfuReady == 0);
+	}
+	packet[2] = 6;
+	BtWbaEventRouterRun(packet);
+	assert(txReady == 1 && dfuReady == 1 && delivered == before);
+	packet[7] = 0;
+	BtWbaEventRouterRun(packet);
+	assert(txReady == 1 && dfuReady == 1);
+}
 static void FixedEvent(uint8_t event, uint16_t vendor, unsigned size)
 {
 	uint8_t packet[258] = {};
@@ -193,6 +215,7 @@ int main()
 	FixedEvent(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, ACI_GAP_PAIRING_COMPLETE_VSEVT_CODE, sizeof(aci_gap_pairing_complete_event_rp0));
 	FixedEvent(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, ACI_GAP_NUMERIC_COMPARISON_VALUE_VSEVT_CODE, sizeof(aci_gap_numeric_comparison_value_event_rp0));
 	FixedEvent(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, ACI_GAP_PASS_KEY_REQ_VSEVT_CODE, sizeof(aci_gap_pass_key_req_event_rp0));
+	PoolEvent();
 	ModifiedEvent();
 	EnhancedConnectionEvent();
 	PhyCompleteEvent();

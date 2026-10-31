@@ -52,6 +52,9 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"
 
+extern void BtIntrfTxReady(void) __attribute__((weak));
+extern void BtDfuSmpTxReady(void) __attribute__((weak));
+
 // HCI packet layouts as the stack gives them in BLECB_Indication. The Cube
 // svc_ctl.h declares the same structures, it is not needed here.
 typedef struct __attribute__((packed)) {
@@ -481,6 +484,22 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 				return BTWBA_EVT_FLOW_ENABLE;
 			}
 #endif
+
+			case ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE:
+				if (available >= sizeof(aci_gatt_tx_pool_available_event_rp0) &&
+					BtWbaEvtLe16(pAci->data + 2) != 0)
+				{
+					// This event releases shared capacity, not a sent packet.
+					if (BtIntrfTxReady != nullptr)
+					{
+						BtIntrfTxReady();
+					}
+					if (BtDfuSmpTxReady != nullptr)
+					{
+						BtDfuSmpTxReady();
+					}
+				}
+				return BTWBA_EVT_FLOW_ENABLE;
 
 			case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
 				if (available >= 2)
