@@ -1046,6 +1046,7 @@ static void BtAppWbaLinkTrace(const hci_event_pckt *pEvt)
 	const hci_le_data_length_change_event_rp0 *length;
 	const hci_le_connection_complete_event_rp0 *connected;
 	const hci_le_connection_update_complete_event_rp0 *updated;
+	const hci_le_enhanced_connection_complete_event_rp0 *enhanced;
 	size_t available;
 
 	if (pEvt->evt != HCI_LE_META_EVT_CODE || pEvt->plen < 1)
@@ -1083,6 +1084,16 @@ static void BtAppWbaLinkTrace(const hci_event_pckt *pEvt)
 						(unsigned)connected->Connection_Handle, (unsigned)connected->Status,
 						(unsigned)connected->Conn_Interval, (unsigned)connected->Conn_Latency,
 						(unsigned)connected->Supervision_Timeout);
+			}
+			break;
+		case HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE:
+			if (available >= sizeof(*enhanced))
+			{
+				enhanced = (const hci_le_enhanced_connection_complete_event_rp0 *)meta->data;
+				SysLogPrintf(SysLogGet(), "WBA enhanced link: hdl=%u status=0x%02x interval=%u latency=%u timeout=%u\r\n",
+						(unsigned)enhanced->Connection_Handle, (unsigned)enhanced->Status,
+						(unsigned)enhanced->Conn_Interval, (unsigned)enhanced->Conn_Latency,
+						(unsigned)enhanced->Supervision_Timeout);
 			}
 			break;
 		case HCI_LE_CONNECTION_UPDATE_COMPLETE_SUBEVT_CODE:

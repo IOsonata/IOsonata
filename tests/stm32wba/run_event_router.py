@@ -25,7 +25,17 @@ code = r'''
 #include "bt_wba_event_router.h"
 static unsigned delivered;
 void BtGapWbaConnParamsDisconnected(uint16_t) {}
-void BtGapWbaConnParamsConnected(uint16_t, uint8_t, uint16_t, uint16_t, uint16_t) {}
+static unsigned connected;
+void BtGapWbaConnParamsConnected(uint16_t handle, uint8_t role,
+		uint16_t interval, uint16_t latency, uint16_t timeout)
+{
+	assert(handle == 0x123);
+	assert(role == 0);
+	assert(interval == 12);
+	assert(latency == 0);
+	assert(timeout == 500);
+	connected++;
+}
 void BtGapWbaConnParamsUpdateComplete(uint16_t, uint8_t, uint16_t, uint16_t, uint16_t) {}
 void BtGapWbaConnParamsL2capResponse(uint16_t, uint16_t) {}
 void BtGattWbaNotificationComplete(uint16_t, uint16_t) {}
@@ -62,6 +72,40 @@ static void ValueEvent(uint16_t code)
 	BtWbaEventRouterRun(packet);
 	assert(delivered == before + 1);
 }
+static void EnhancedConnectionEvent()
+{
+	uint8_t packet[4 + sizeof(hci_le_enhanced_connection_complete_event_rp0)] = {};
+	hci_le_enhanced_connection_complete_event_rp0 event = {};
+	unsigned before;
+	unsigned len;
+
+	packet[0] = 4;
+	packet[1] = HCI_LE_META_EVT_CODE;
+	packet[2] = sizeof(event) + 1;
+	packet[3] = HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE;
+	event.Connection_Handle = 0x123;
+	event.Conn_Interval = 12;
+	event.Supervision_Timeout = 500;
+	memcpy(packet + 4, &event, sizeof(event));
+	before = delivered;
+	BtWbaEventRouterRun(packet);
+	assert(connected == 1);
+	assert(delivered == before + 1);
+	// Failed connection attempts still reach the application, not GAP state.
+	packet[4] = 0x3e;
+	BtWbaEventRouterRun(packet);
+	assert(connected == 1);
+	assert(delivered == before + 2);
+	packet[4] = 0;
+	before = delivered;
+	for (len = 1; len < sizeof(event) + 1; len++)
+	{
+		packet[2] = (uint8_t)len;
+		BtWbaEventRouterRun(packet);
+		assert(connected == 1);
+		assert(delivered == before);
+	}
+}
 int main()
 {
 	// Fixed prefixes must be checked before reading their declared lengths.
@@ -73,6 +117,7 @@ int main()
 	assert(!BtWbaDiscInfoEventValid(
 		(aci_att_find_info_resp_event_rp0 *)tiny, sizeof(tiny)));
 	BtWbaEventRouterRegister(Receive);
+	EnhancedConnectionEvent();
 	ValueEvent(ACI_GATT_NOTIFICATION_VSEVT_CODE);
 	ValueEvent(ACI_GATT_INDICATION_VSEVT_CODE);
 }

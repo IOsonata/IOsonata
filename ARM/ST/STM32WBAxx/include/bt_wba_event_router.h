@@ -273,6 +273,24 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 					}
 					break;
 
+				case HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE:
+				{
+					const hci_le_enhanced_connection_complete_event_rp0 *p;
+
+					if (available < sizeof(*p))
+					{
+						return BTWBA_EVT_FLOW_ENABLE;
+					}
+					p = (const hci_le_enhanced_connection_complete_event_rp0 *)pMeta->data;
+					if (p->Status == BLE_STATUS_SUCCESS)
+					{
+						BtGapWbaConnParamsConnected(
+							p->Connection_Handle, p->Role, p->Conn_Interval,
+							p->Conn_Latency, p->Supervision_Timeout);
+					}
+					break;
+				}
+
 				case HCI_LE_CONNECTION_UPDATE_COMPLETE_SUBEVT_CODE:
 					if (available >= sizeof(
 							hci_le_connection_update_complete_event_rp0))
