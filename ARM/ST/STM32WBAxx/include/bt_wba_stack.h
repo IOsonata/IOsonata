@@ -53,6 +53,7 @@ extern "C" {
 #include "bleplat.h"
 #include "pka_ctrl.h"
 #include "ll_intf_cmn.h"
+#include "ll_intf.h"
 
 #ifdef __cplusplus
 }

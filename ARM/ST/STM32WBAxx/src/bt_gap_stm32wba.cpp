@@ -49,6 +49,7 @@ SOFTWARE.
 #include "bt_wba_stack.h"
 
 #include "istddef.h"
+#include "syslog.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
@@ -679,6 +680,9 @@ static_assert(HCI_TX_PHYS_LE_1M_PREF == BT_GAP_PHY_1MBITS && HCI_TX_PHYS_LE_2M_P
 bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
 				 uint16_t PhyOptions)
 {
+	uint8_t allphys = 0;
+	tBleStatus status;
+
 	if ((TxPhys & ~BT_GAP_PHY_ALL) != 0 || (RxPhys & ~BT_GAP_PHY_ALL) != 0 ||
 		PhyOptions > BT_GAP_PHY_OPT_MAX)
 	{
@@ -686,8 +690,6 @@ bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
 	}
 
 	// An empty mask is no preference, which LE Set PHY gives in ALL_PHYS
-	uint8_t allphys = 0;
-
 	if (TxPhys == 0)
 	{
 		allphys |= HCI_ALL_PHYS_TX_NO_PREF;
@@ -698,7 +700,10 @@ bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
 	}
 
 	// The result arrives as the LE PHY Update Complete event
-	return hci_le_set_phy(ConnHdl, allphys, TxPhys, RxPhys, PhyOptions) == BLE_STATUS_SUCCESS;
+	status = hci_le_set_phy(ConnHdl, allphys, TxPhys, RxPhys, PhyOptions);
+	SysLogPrintf(SysLogGet(), "WBA PHY request: hdl=%u tx=%u rx=%u status=0x%02x\r\n",
+			(unsigned)ConnHdl, (unsigned)TxPhys, (unsigned)RxPhys, (unsigned)status);
+	return status == BLE_STATUS_SUCCESS;
 }
 
 bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy)
@@ -731,6 +736,8 @@ bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy)
 
 bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime)
 {
+	tBleStatus status;
+
 	if (TxOctets < BT_GAP_DATA_LEN_OCTETS_MIN ||
 		TxOctets > BT_GAP_DATA_LEN_OCTETS_MAX ||
 		TxTime < BT_GAP_DATA_LEN_TIME_MIN ||
@@ -739,7 +746,10 @@ bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime)
 		return false;
 	}
 
-	return hci_le_set_data_length(ConnHdl, TxOctets, TxTime) == BLE_STATUS_SUCCESS;
+	status = hci_le_set_data_length(ConnHdl, TxOctets, TxTime);
+	SysLogPrintf(SysLogGet(), "WBA DLE request: hdl=%u octets=%u time=%u status=0x%02x\r\n",
+			(unsigned)ConnHdl, (unsigned)TxOctets, (unsigned)TxTime, (unsigned)status);
+	return status == BLE_STATUS_SUCCESS;
 }
 
 // Strong override of the weak generic BtGapConnSecGet. The ST host owns link

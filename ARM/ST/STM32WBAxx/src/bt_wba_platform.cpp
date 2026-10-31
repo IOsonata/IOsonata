@@ -290,30 +290,27 @@ static void BtWbaSeqQue(void)
 
 static void BtWbaSeqEvt(uint32_t Evt, void *pCtx)
 {
+	uint32_t pm;
+	uint32_t pend;
+	uint32_t i;
+
 	(void)Evt;
 	(void)pCtx;
 
+	pm = BtWbaIrqSave();
+	pend = s_SeqPend;
+	s_SeqPend = 0;
 	s_SeqQueued = false;
+	s_SeqOwed = false;
+	BtWbaIrqRestore(pm);
 
-	while (true)
+	// Run one snapshot. A task can request another pass, but that pass must
+	// yield to queued host work and application notification processing.
+	for (i = 0; i < 32U; i++)
 	{
-		uint32_t pm = BtWbaIrqSave();
-		uint32_t pend = s_SeqPend;
-
-		s_SeqPend = 0;
-		BtWbaIrqRestore(pm);
-
-		if (pend == 0U)
+		if ((pend & (1UL << i)) != 0U && s_SeqTask[i] != nullptr)
 		{
-			break;
-		}
-
-		for (uint32_t i = 0; i < 32U; i++)
-		{
-			if ((pend & (1UL << i)) != 0U && s_SeqTask[i] != nullptr)
-			{
-				s_SeqTask[i]();
-			}
+			s_SeqTask[i]();
 		}
 	}
 }

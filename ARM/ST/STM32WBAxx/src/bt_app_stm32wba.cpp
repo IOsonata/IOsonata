@@ -279,6 +279,7 @@ static BtAppWbaEvt_t s_EvtRing[BT_APP_WBA_EVT_SLOTS];
 static volatile uint8_t s_EvtHead = 0;		// next slot to write
 static volatile uint8_t s_EvtTail = 0;		// next slot to read
 static volatile uint8_t s_EvtCnt = 0;
+static bool s_bEvtFlowBlocked = false;
 
 static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload);
 extern "C" void BleStackCB_Process(void);
@@ -316,14 +317,28 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 // host_stack_if.c, which uses the Cube sequencer.
 extern "C" void BleStackCB_Process(void)
 {
-	if (s_bBleHostQueued == false)
+	uint32_t state;
+	bool queue;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	queue = s_bBleHostQueued == false;
+	if (queue)
 	{
 		s_bBleHostQueued = true;
-		s_bBleHostOwed = BtEvtQue(0, nullptr, BleHostEvt) == false;
-		if (s_bBleHostOwed)
-		{
-			s_bBleHostQueued = false;
-		}
+		s_bBleHostOwed = false;
+	}
+	__set_PRIMASK(state);
+
+	// The reservation covers interrupt requests during BtEvtQue. Keep the
+	// queue call outside the critical section for ISR-safe RTOS overrides.
+	if (queue && BtEvtQue(0, nullptr, BleHostEvt) == false)
+	{
+		state = __get_PRIMASK();
+		__disable_irq();
+		s_bBleHostOwed = true;
+		s_bBleHostQueued = false;
+		__set_PRIMASK(state);
 	}
 }
 
@@ -339,6 +354,7 @@ static void BtAppEvtDrain(uint32_t Evt, void *pCtx)
 {
 	uint32_t state;
 	bool bFreed = false;
+	change_state_options_t options;
 
 	(void)Evt;
 	(void)pCtx;
@@ -358,7 +374,14 @@ static void BtAppEvtDrain(uint32_t Evt, void *pCtx)
 
 	if (bFreed)
 	{
-		// A refused indication stays in the stack until it runs again
+		if (s_bEvtFlowBlocked)
+		{
+			// Match Cube BLE_ResumeFlowProcessCallback: reopen LL event,
+			// ACL, ISO and report delivery after local backpressure.
+			s_bEvtFlowBlocked = false;
+			options.combined_value = 0x0F;
+			ll_intf_chng_evnt_hndlr_state(options);
+		}
 		BleStackCB_Process();
 	}
 }
@@ -378,7 +401,7 @@ static void BtAppEvtDrainQue(void)
 
 // Event indication from the host stack, called inside BleStack_Process. ACL
 // data is not used by this port. Returns a failure when the ring is full and
-// the stack offers the event again after the next BleStackCB_Process.
+// delivery resumes after the drain reopens LL flow and schedules the host.
 extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 								   const uint8_t *pExtData, uint16_t ExtLength)
 {
@@ -395,7 +418,12 @@ extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 		return BLE_STATUS_SUCCESS;
 	}
 	total = (uint32_t)Length + ExtLength;
-	if (s_EvtCnt >= BT_APP_WBA_EVT_SLOTS || Length < 3 ||
+	if (s_EvtCnt >= BT_APP_WBA_EVT_SLOTS)
+	{
+		s_bEvtFlowBlocked = true;
+		return BLE_STATUS_FAILED;
+	}
+	if (Length < 3 ||
 		total > BT_APP_WBA_EVT_MAXLEN || total != (uint32_t)pData[2] + 3 ||
 		(ExtLength > 0 && pExtData == nullptr))
 	{
@@ -1009,6 +1037,69 @@ static void BtAppWbaExtScanReport(const uint8_t *pData, size_t Len)
 	}
 }
 
+// Low-rate link diagnostics stay available in Release. These are completion
+// events, separate from the command-admission status in the GAP functions.
+static void BtAppWbaLinkTrace(const hci_event_pckt *pEvt)
+{
+	const evt_le_meta_event *meta;
+	const hci_le_phy_update_complete_event_rp0 *phy;
+	const hci_le_data_length_change_event_rp0 *length;
+	const hci_le_connection_complete_event_rp0 *connected;
+	const hci_le_connection_update_complete_event_rp0 *updated;
+	size_t available;
+
+	if (pEvt->evt != HCI_LE_META_EVT_CODE || pEvt->plen < 1)
+	{
+		return;
+	}
+	meta = (const evt_le_meta_event *)pEvt->data;
+	available = pEvt->plen - 1;
+	switch (meta->subevent)
+	{
+		case HCI_LE_PHY_UPDATE_COMPLETE_SUBEVT_CODE:
+			if (available >= sizeof(*phy))
+			{
+				phy = (const hci_le_phy_update_complete_event_rp0 *)meta->data;
+				SysLogPrintf(SysLogGet(), "WBA PHY complete: hdl=%u status=0x%02x tx=%u rx=%u\r\n",
+						(unsigned)phy->Connection_Handle, (unsigned)phy->Status,
+						(unsigned)phy->TX_PHY, (unsigned)phy->RX_PHY);
+			}
+			break;
+		case HCI_LE_DATA_LENGTH_CHANGE_SUBEVT_CODE:
+			if (available >= sizeof(*length))
+			{
+				length = (const hci_le_data_length_change_event_rp0 *)meta->data;
+				SysLogPrintf(SysLogGet(), "WBA DLE changed: hdl=%u tx=%u/%u rx=%u/%u\r\n",
+						(unsigned)length->Connection_Handle,
+						(unsigned)length->MaxTxOctets, (unsigned)length->MaxTxTime,
+						(unsigned)length->MaxRxOctets, (unsigned)length->MaxRxTime);
+			}
+			break;
+		case HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE:
+			if (available >= sizeof(*connected))
+			{
+				connected = (const hci_le_connection_complete_event_rp0 *)meta->data;
+				SysLogPrintf(SysLogGet(), "WBA link: hdl=%u status=0x%02x interval=%u latency=%u timeout=%u\r\n",
+						(unsigned)connected->Connection_Handle, (unsigned)connected->Status,
+						(unsigned)connected->Conn_Interval, (unsigned)connected->Conn_Latency,
+						(unsigned)connected->Supervision_Timeout);
+			}
+			break;
+		case HCI_LE_CONNECTION_UPDATE_COMPLETE_SUBEVT_CODE:
+			if (available >= sizeof(*updated))
+			{
+				updated = (const hci_le_connection_update_complete_event_rp0 *)meta->data;
+				SysLogPrintf(SysLogGet(), "WBA interval complete: hdl=%u status=0x%02x interval=%u latency=%u timeout=%u\r\n",
+						(unsigned)updated->Connection_Handle, (unsigned)updated->Status,
+						(unsigned)updated->Conn_Interval, (unsigned)updated->Conn_Latency,
+						(unsigned)updated->Supervision_Timeout);
+			}
+			break;
+		default:
+			break;
+	}
+}
+
 // HCI event callback registered with the stack. ST's stack invokes this
 // for every HCI / vendor event; we route by type to the appropriate
 // handler. Adv-report events go to the scan path (handled in
@@ -1017,6 +1108,7 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 {
 	hci_event_pckt *pEvtPkt = (hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
 
+	BtAppWbaLinkTrace(pEvtPkt);
 	switch (pEvtPkt->evt)
 	{
 		case HCI_DISCONNECTION_COMPLETE_EVT_CODE:

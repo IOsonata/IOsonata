@@ -24,6 +24,8 @@ code = r'''
 #include <cassert>
 #include <cstring>
 #include "bluetooth/bt_app.h"
+#define SysLogPrintf(...) ((void)0)
+using tBleStatus = uint8_t;
 #define BLE_STATUS_SUCCESS 0
 #define BLE_STATUS_FAILED 1
 #define GATT_MTU_SIZE_DEFAULT 23
@@ -125,7 +127,13 @@ code += 'void BtAppEvtConnectFailed() {}\nvoid BtAdvStart() {}\n'
 a = source.index('typedef struct __Bt_App_Wba_Evt')
 code += source[a:source.index('static BtWbaEvtFlow_t BtAppHciEvtHandler', a)]
 code += r'''
-static unsigned irqState, routed, queued, hostWake;
+static unsigned irqState, routed, queued, hostWake, flowResume;
+struct change_state_options_t { uint8_t combined_value; };
+static void ll_intf_chng_evnt_hndlr_state(change_state_options_t options)
+{
+	assert(options.combined_value == 0x0F && s_EvtCnt == 0);
+	flowResume++;
+}
 static bool s_bEvtDrainQueued;
 static uint32_t __get_PRIMASK() { return irqState; }
 static void __disable_irq() { irqState = 1; }
@@ -224,6 +232,9 @@ int main()
 	memset(packet + 3, 0, sizeof(packet) - 3); // queued payload has its own storage
 	BtAppEvtDrain(0, nullptr);
 	assert(routed == 8 && hostWake == 1 && irqState == 1 && s_EvtCnt == 0);
+	assert(flowResume == 1 && !s_bEvtFlowBlocked);
+	BtAppEvtDrain(0, nullptr);
+	assert(flowResume == 1);
 }
 '''
 with tempfile.TemporaryDirectory(prefix='wba-central-') as temp:
