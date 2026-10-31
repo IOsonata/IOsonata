@@ -72,7 +72,6 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/BasicAES&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Flash&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/MemoryManager&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Nvm&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/RTDebug&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/SerialCmdInterpreter&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Log&quot;" />
@@ -87,9 +86,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/_40nm_reg_files&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/ot_inc&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/porting&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_sys/inc&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/src/shrd_utils/inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/stack/include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/stack/include/auto&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/svc/Inc&quot;" />
@@ -130,7 +127,6 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/BasicAES&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Flash&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/MemoryManager&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Nvm&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/RTDebug&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/SerialCmdInterpreter&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Log&quot;" />
@@ -145,9 +141,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/_40nm_reg_files&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/ot_inc&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/porting&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_sys/inc&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/src/shrd_utils/inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/stack/include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/stack/include/auto&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/svc/Inc&quot;" />
@@ -297,7 +291,6 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/BasicAES&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Flash&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/MemoryManager&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Nvm&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/RTDebug&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/SerialCmdInterpreter&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Log&quot;" />
@@ -312,9 +305,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/_40nm_reg_files&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/ot_inc&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/porting&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_sys/inc&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/src/shrd_utils/inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/stack/include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/stack/include/auto&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/svc/Inc&quot;" />
@@ -354,7 +345,6 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/BasicAES&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Flash&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/MemoryManager&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Nvm&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/RTDebug&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/SerialCmdInterpreter&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/Common/WPAN/Modules/Log&quot;" />
@@ -369,9 +359,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/_40nm_reg_files&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/ot_inc&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/porting&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_sys/inc&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/src/shrd_utils/inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/stack/include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/stack/include/auto&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/svc/Inc&quot;" />
