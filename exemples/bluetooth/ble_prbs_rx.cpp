@@ -48,6 +48,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/interrupt.h"
 #include "app_evt_handler.h"
 #include "board.h"
+#if defined(IOSONATA_STM32_WBA)
+#include "syslog.h"
+#endif
 
 #if defined(S132) || defined(S140)
 #include "ble.h"
@@ -188,6 +191,16 @@ typedef struct {
 	bool Synced;
 	bool Started;
 } PrbsRxStats_t;
+
+#if defined(IOSONATA_STM32_WBA)
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(4, 128)];
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = true
+};
+#endif
 
 static volatile PrbsRxStats_t s_Rx;
 static uint8_t s_TestPhy = BT_GAP_PHY_1MBITS;
@@ -396,6 +409,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 #if defined(NRFXLIB_SDC) || defined(IOSONATA_STM32_WBA)
 	if (!BtGapSetDataLength(ConnHdl, 251, 2120))
 	{
+		g_Uart.printf("Data-length request refused; aborting setup\r\n");
 		s_Failed = true;
 	}
 #endif
@@ -649,6 +663,7 @@ static void PrbsReport(uint32_t Now)
 		s_FinalPrinted = true;
 		if (s_ConnHdl != BT_CONN_HDL_INVALID)
 		{
+			g_Uart.printf("Requesting disconnect after trial result\r\n");
 			BtAppDisconnectConn(s_ConnHdl);
 		}
 	}
@@ -695,6 +710,7 @@ bool AppCheckStatus(void)
 		}
 		else
 		{
+			g_Uart.printf("PHY read failed; aborting setup\r\n");
 			s_Failed = true;
 		}
 #endif
@@ -747,6 +763,9 @@ int main(void)
 		return 1;
 	}
 	g_Uart.Init(g_UartCfg);
+#if defined(IOSONATA_STM32_WBA)
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0, nullptr, 0);
+#endif
 	g_Uart.printf("BlePrbsRx: target=%s requested_PHY=%u\r\n", TARGET_NAME, s_TestPhy);
 	g_Uart.printf("Interval=15 ms MTU=247; 60 s at 1M then 60 s at 2M\r\n");
 #if defined(__OPTIMIZE__)

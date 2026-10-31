@@ -1023,7 +1023,7 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_disconnection_complete_event_rp0 *p =
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
-			STATUS_PRINTF("WBA link: disconnected hdl=%u status=0x%02x reason=0x%02x\r\n",
+			SysLogPrintf(SysLogGet(), "WBA link: disconnected hdl=%u status=0x%02x reason=0x%02x\r\n",
 					(unsigned)p->Connection_Handle, (unsigned)p->Status,
 					(unsigned)p->Reason);
 			if (p->Status == BLE_STATUS_SUCCESS)

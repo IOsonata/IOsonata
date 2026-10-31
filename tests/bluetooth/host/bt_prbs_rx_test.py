@@ -17,6 +17,7 @@ code = r'''
 #include <cstring>
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
+#include "syslog.h"
 #define PRBS_RX_NOTIF_COUNT 12
 #define PRBS_RX_DURATION_MS 60000U
 #define PRBS_RX_REPORT_MS 1000U
