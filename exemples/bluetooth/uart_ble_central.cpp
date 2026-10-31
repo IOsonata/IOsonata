@@ -95,14 +95,10 @@ extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
 #define BLE_SC_PASSKEY_INPUT	4
 #define BLE_SC_OOB				5
 
-// Must match the row selected in uart_ble.cpp. The two defaults used to
-// disagree, this side OOB and the peer Numeric Comparison, which cannot pair:
-// the models differ, the IO capabilities resolve to Just Works so the MITM both
-// sides ask for cannot be met, and the peer built for Numeric Comparison
-// compiles its OOB console commands out entirely, so the "paste this line on
-// peer" step has nothing to accept it.
+// Default to an open link for streaming. Override BLE_SC_METHOD to test
+// security, and select the compatible method on the peripheral as listed above.
 #ifndef BLE_SC_METHOD
-#define BLE_SC_METHOD			BLE_SC_NUMCOMP
+#define BLE_SC_METHOD			BLE_SC_NONE
 #endif
 
 #if BLE_SC_METHOD != BLE_SC_NONE
