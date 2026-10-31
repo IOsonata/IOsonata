@@ -1336,9 +1336,10 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 #define CFG_BLE_NVM_MAX_SIZE			512
 #endif
 
-// Host event FIFO, in 16 bit words.
+// Host event FIFO, in 16-bit words. Allow a burst of eight full-size
+// notifications plus stack bookkeeping and control events before host service.
 #ifndef CFG_BLE_HOST_EVT_FIFO_SIZE
-#define CFG_BLE_HOST_EVT_FIFO_SIZE		256
+#define CFG_BLE_HOST_EVT_FIFO_SIZE		2048
 #endif
 
 // The RAM the stack runs in, sized by the middleware's own arithmetic from
