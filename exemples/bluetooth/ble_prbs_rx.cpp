@@ -387,11 +387,6 @@ static void StartDiscovery(uint16_t ConnHdl)
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
-#if defined(IOSONATA_STM32_WBA)
-	uint8_t txPhy;
-	uint8_t rxPhy;
-#endif
-
 	PrbsReset();
 	s_ConnHdl = ConnHdl;
 	s_ValueHdl = BT_ATT_HANDLE_INVALID;
@@ -406,24 +401,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	s_ConnectMs = BtGattMsTick();
 	s_LastPollMs = s_ConnectMs;
 	g_Uart.printf("Connected handle=%u; requesting PHY=%u\r\n", ConnHdl, s_TestPhy);
-	s_PhyPending = true;
-#if defined(IOSONATA_STM32_WBA)
-	// Do not initiate a PHY procedure when the current link already matches.
-	if (BtGapReadPhy(ConnHdl, &txPhy, &rxPhy))
-	{
-		s_TxPhy = txPhy;
-		s_RxPhy = rxPhy;
-		if (txPhy == s_TestPhy && rxPhy == s_TestPhy)
-		{
-			s_PhyPending = false;
-			g_Uart.printf("Current PHY tx=%u rx=%u; no update needed\r\n", txPhy, rxPhy);
-		}
-	}
-#endif
-	if (s_PhyPending)
-	{
-		s_PhyPending = !BtGapSetPhy(ConnHdl, s_TestPhy, s_TestPhy, 0);
-	}
+	s_PhyPending = !BtGapSetPhy(ConnHdl, s_TestPhy, s_TestPhy, 0);
 	if (s_PhyPending)
 	{
 		g_Uart.printf("PHY request not accepted; retry pending\r\n");
