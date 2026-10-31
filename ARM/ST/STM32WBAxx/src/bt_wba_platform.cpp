@@ -13,7 +13,7 @@ power_table.c:
 - HAL_NVIC_* and the radio baseband clock: direct NVIC and RCC access.
 - Sequencer (UTIL_SEQ_RegTask, UTIL_SEQ_SetTask): the tasks are run from the
   Bluetooth event queue, BtEvtQue.
-- BLE_TIMER_Start/Stop: software timer slots over one IOsonata LPTIM trigger.
+- BLE_TIMER_Start/Stop: fixed host timer slots over the ST controller timer service.
 - HW_RNG_Get and the RNG clock requests: RNG peripheral, polled.
 - BAES_*: the STM32WBA AES block through CryptoWbaAes (ECB, CMAC and CCM).
   A call that arrives while another one holds the block, an interrupt that
@@ -64,7 +64,6 @@ SOFTWARE.
 #include "bt_wba_stack.h"
 
 #include "istddef.h"
-#include "coredev/timer.h"
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_stm32wba.h"
 #include "bluetooth/bt_app.h"
@@ -362,8 +361,9 @@ extern "C" void UTIL_SEQ_SetTask(uint32_t TaskBm, uint32_t Prio)
 }
 
 //----------------------------------------------------------------------------
-// BLE stack timers: slots over one LPTIM trigger. The trigger is set to the
-// nearest due time. The expiry callbacks run from the event queue.
+// BLE host deadlines and the application tick use ST controller software timers.
+// os_timer_create reserves from the controller's fixed pool, once per adapter.
+// Callbacks only queue work; host expiry processing stays outside the LL ISR.
 //----------------------------------------------------------------------------
 
 enum {
@@ -378,8 +378,11 @@ typedef struct {
 } BtWbaTimerSlot_t;
 
 static BtWbaTimerSlot_t s_BleTimer[BT_WBA_TIMER_SLOTS];
-static TimerDev_t s_BleTimerDev;
-static bool s_BleTimerInit;
+static os_timer_id s_BleTimerId;
+static os_timer_id s_AppTickTimer;
+static bool s_ClockReady;
+static uint32_t s_ClockLast;
+static uint64_t s_ClockSteps;
 static volatile bool s_BleTimerQueued;
 static volatile bool s_BleTimerOwed;
 
@@ -406,39 +409,83 @@ static void BtWbaTimerQue(void)
 	}
 }
 
-// Timer trigger, interrupt context
-static void BtWbaTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
+// Read the controller time atomically as required by ll_intf.h. Extend its
+// 32-bit counter before conversion, so a raw counter wrap does not reset ms.
+uint32_t BtWbaMsTick(void)
 {
-	(void)pTimer;
+	uint32_t pm;
+	uint32_t steps;
+	uint32_t multiplier;
+	uint32_t divider;
+	uint64_t total;
 
-	if (Evt & TIMER_EVT_TRIGGER(0))
+	if (s_ClockReady == false)
 	{
-		BtWbaTimerQue();
+		return 0;
 	}
+	pm = BtWbaIrqSave();
+	steps = ll_intf_get_aligned_us_now(&multiplier, &divider);
+	s_ClockSteps += (uint32_t)(steps - s_ClockLast);
+	s_ClockLast = steps;
+	total = s_ClockSteps;
+	BtWbaIrqRestore(pm);
+	return (uint32_t)(total * multiplier / ((uint64_t)divider * 1000U));
 }
 
-static const TimerCfg_t s_BleTimerCfg = {
-	.DevNo = 0,
-	.ClkSrc = TIMER_CLKSRC_DEFAULT,
-	.Freq = 0,			// 0 => Default frequency
-	.IntPrio = 6,
-	.EvtHandler = BtWbaTimerHandler
-};
+static void BtWbaClockStart(void)
+{
+	uint32_t pm;
+	uint32_t multiplier;
+	uint32_t divider;
+
+	pm = BtWbaIrqSave();
+	if (s_ClockReady == false)
+	{
+		s_ClockLast = ll_intf_get_aligned_us_now(&multiplier, &divider);
+		s_ClockSteps = 0;
+		s_ClockReady = true;
+	}
+	BtWbaIrqRestore(pm);
+}
+
+// Controller timer callback, interrupt context.
+static void BtWbaTimerHandler(const void *pCtx)
+{
+	(void)pCtx;
+	(void)BtWbaMsTick();
+	BtWbaTimerQue();
+}
+
+bool BtWbaTickStart(void (*Callback)(const void *))
+{
+	if (s_AppTickTimer == nullptr)
+	{
+		s_AppTickTimer = os_timer_create(Callback, os_timer_periodic, nullptr);
+		if (s_AppTickTimer == nullptr)
+		{
+			return false;
+		}
+	}
+	BtWbaClockStart();
+	// os_timer_start/set use controller steps of 31.25 us, including on LSE.
+	return os_timer_set(s_AppTickTimer, 32000U) == 0;
+}
 
 // Set the trigger to the nearest due time, or stop it when no slot runs.
 static void BtWbaTimerArm(void)
 {
-	uint32_t now = TimerGetMilisecond(&s_BleTimerDev);
+	uint32_t now = BtWbaMsTick();
 	bool bAny = false;
 	uint32_t delay = 0;
-
+	uint32_t i;
+	int32_t d;
 	uint32_t pm = BtWbaIrqSave();
 
-	for (uint32_t i = 0; i < BT_WBA_TIMER_SLOTS; i++)
+	for (i = 0; i < BT_WBA_TIMER_SLOTS; i++)
 	{
 		if (s_BleTimer[i].State == BT_WBA_TMR_RUN)
 		{
-			int32_t d = (int32_t)(s_BleTimer[i].Due - now);
+			d = (int32_t)(s_BleTimer[i].Due - now);
 
 			if (d < 1)
 			{
@@ -453,20 +500,19 @@ static void BtWbaTimerArm(void)
 	}
 	BtWbaIrqRestore(pm);
 
-	TimerDisableTrigger(&s_BleTimerDev, 0);
+	(void)os_timer_stop(s_BleTimerId);
 	if (bAny)
 	{
-		// LPTIM compares are limited to 65535 counts. One second fits both
-		// the 32 kHz LSI and 32768 Hz LSE. Keep Due unchanged: intermediate
-		// wakeups only re-arm the trigger until the actual deadline is due.
+		// Sample the controller counter at least once per second while a
+		// host deadline is active, including before the application tick starts.
+		// Keep Due unchanged across these intermediate wakeups.
 		if (delay > 1000U)
 		{
 			delay = 1000U;
 		}
-		if (msTimerEnableTrigger(&s_BleTimerDev, 0, delay, TIMER_TRIG_TYPE_SINGLE,
-							 nullptr, nullptr) == 0)
+		if (os_timer_start(s_BleTimerId, delay * 32U) != 0)
 		{
-			// A failed compare write must not strand the software timers.
+			// A refused controller arm must not strand the software timers.
 			// The existing status retry queues a deadline check and re-arm.
 			s_BleTimerOwed = true;
 		}
@@ -475,20 +521,24 @@ static void BtWbaTimerArm(void)
 
 static void BtWbaTimerEvt(uint32_t Evt, void *pCtx)
 {
+	uint32_t now;
+	uint32_t i;
+	uint16_t id;
+	bool bFired = false;
+
 	(void)Evt;
 	(void)pCtx;
 
 	s_BleTimerQueued = false;
 
-	uint32_t now = TimerGetMilisecond(&s_BleTimerDev);
-	bool bFired = false;
+	now = BtWbaMsTick();
 
-	for (uint32_t i = 0; i < BT_WBA_TIMER_SLOTS; i++)
+	for (i = 0; i < BT_WBA_TIMER_SLOTS; i++)
 	{
 		if (s_BleTimer[i].State == BT_WBA_TMR_RUN &&
 			(int32_t)(now - s_BleTimer[i].Due) >= 0)
 		{
-			uint16_t id = s_BleTimer[i].Id;
+			id = s_BleTimer[i].Id;
 
 			s_BleTimer[i].State = BT_WBA_TMR_FREE;
 			BLEPLATCB_TimerExpiry(id);
@@ -506,18 +556,19 @@ static void BtWbaTimerEvt(uint32_t Evt, void *pCtx)
 
 extern "C" uint8_t BLE_TIMER_Start(uint16_t id, uint32_t timeout)
 {
-	if (s_BleTimerInit == false)
+	uint32_t now;
+	uint32_t pm;
+	uint32_t i;
+	int slot = -1;
+
+	if (s_BleTimerId == nullptr)
 	{
-		if (TimerInit(&s_BleTimerDev, &s_BleTimerCfg) == false)
+		s_BleTimerId = os_timer_create(BtWbaTimerHandler, os_timer_once, nullptr);
+		if (s_BleTimerId == nullptr)
 		{
-			SysLogPrintf(SysLogGet(), "WBA LPTIM1 init failed: BDCR1=0x%08lx CCIPR3=0x%08lx\r\n",
-				(unsigned long)RCC->BDCR1, (unsigned long)RCC->CCIPR3);
-			SysLogPrintf(SysLogGet(), "WBA LPTIM1: CR=0x%08lx ISR=0x%08lx CFGR=0x%08lx\r\n",
-				(unsigned long)LPTIM1->CR, (unsigned long)LPTIM1->ISR,
-				(unsigned long)LPTIM1->CFGR);
-			return BLE_STATUS_FAILED;
+			return BLE_STATUS_INSUFFICIENT_RESOURCES;
 		}
-		s_BleTimerInit = true;
+		BtWbaClockStart();
 	}
 
 	if (timeout == 0U)
@@ -525,13 +576,11 @@ extern "C" uint8_t BLE_TIMER_Start(uint16_t id, uint32_t timeout)
 		timeout = 1;
 	}
 
-	uint32_t now = TimerGetMilisecond(&s_BleTimerDev);
-	int slot = -1;
-
-	uint32_t pm = BtWbaIrqSave();
+	now = BtWbaMsTick();
+	pm = BtWbaIrqSave();
 
 	// A timer with the same id is restarted
-	for (uint32_t i = 0; i < BT_WBA_TIMER_SLOTS; i++)
+	for (i = 0; i < BT_WBA_TIMER_SLOTS; i++)
 	{
 		if (s_BleTimer[i].State == BT_WBA_TMR_RUN && s_BleTimer[i].Id == id)
 		{
@@ -541,7 +590,7 @@ extern "C" uint8_t BLE_TIMER_Start(uint16_t id, uint32_t timeout)
 	}
 	if (slot < 0)
 	{
-		for (uint32_t i = 0; i < BT_WBA_TIMER_SLOTS; i++)
+		for (i = 0; i < BT_WBA_TIMER_SLOTS; i++)
 		{
 			if (s_BleTimer[i].State == BT_WBA_TMR_FREE)
 			{
@@ -570,14 +619,17 @@ extern "C" uint8_t BLE_TIMER_Start(uint16_t id, uint32_t timeout)
 
 extern "C" void BLE_TIMER_Stop(uint16_t id)
 {
-	if (s_BleTimerInit == false)
+	uint32_t pm;
+	uint32_t i;
+
+	if (s_BleTimerId == nullptr)
 	{
 		return;
 	}
 
-	uint32_t pm = BtWbaIrqSave();
+	pm = BtWbaIrqSave();
 
-	for (uint32_t i = 0; i < BT_WBA_TIMER_SLOTS; i++)
+	for (i = 0; i < BT_WBA_TIMER_SLOTS; i++)
 	{
 		if (s_BleTimer[i].State == BT_WBA_TMR_RUN && s_BleTimer[i].Id == id)
 		{

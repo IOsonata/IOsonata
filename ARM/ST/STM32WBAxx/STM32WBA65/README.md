@@ -541,9 +541,10 @@ How the adapter works with the 1.10.0 stack:
 - `BleStackCB_Process` and `HostStack_Process` are defined in `bt_app_stm32wba.cpp`
   and run `BleStack_Process` from the event queue. Do not build the Cube
   `host_stack_if.c`.
-- The 1 second timeout check and the millisecond clock use LPTIM2 (Timer DevNo 1)
-  through the IOsonata timer driver. The Cube timer server and the System Clock
-  Manager are not used.
+- The 1 second timeout check uses a periodic ST controller software timer.
+  The millisecond clock reads `ll_intf_get_aligned_us_now`, extends counter wrap,
+  and applies the returned conversion factors. The Cube RTC timer server and
+  System Clock Manager are not used. Bluetooth reserves no IOsonata LPTIM.
 - `BtAppCfg_t::TxPower` is in dBm and is mapped to the closest PA level of the
   table in the STM32WBA BLE Wireless Interface document.
 - The public address, identity root and encryption root are written to the
@@ -562,8 +563,12 @@ server, RTC, memory manager or flash manager:
 
 - `HAL_NVIC_*` and the radio baseband clock: NVIC and RCC registers.
 - `UTIL_SEQ_RegTask` and `UTIL_SEQ_SetTask`: the tasks run from `BtEvtQue`.
-- `BLE_TIMER_Start` and `BLE_TIMER_Stop`: 8 software slots on one LPTIM1 trigger
-  (Timer DevNo 0). The expiry callbacks run from `BtEvtQue`.
+- `BLE_TIMER_Start` and `BLE_TIMER_Stop`: 8 fixed software slots driven by one
+  ST controller one-shot timer (`os_timer_*`). A second controller timer drives
+  the periodic timeout checks. Both objects are reserved once from the fixed
+  controller pool. Expiry callbacks run from `BtEvtQue`, with queue refusal
+  retried. Host tests cover deadlines, cancel/restart, pool/arm refusal and
+  counter wrap; hardware validation of this timer integration is pending.
 - `HW_RNG_Get` and the RNG clock requests: RNG peripheral, HSI16 kernel clock,
   polled.
 - `BAES_*`: the IOsonata `CryptoWbaAes` engine (AES peripheral, polled). Only
@@ -810,7 +815,7 @@ The timer queues a display refresh every 250 ms through AppEvt. No display
 transfer is done in the timer interrupt or scan-report callback.
 
 The board uses the working OLED SPI3 mapping and TIM16 (Timer DevNo 2),
-leaving LPTIM1/2 to Bluetooth. UART reports remain on the ST-LINK USART1 VCP
+while Bluetooth uses controller software timers. UART reports remain on the ST-LINK USART1 VCP
 at 1 Mbaud. Rebuild the matching Debug/Release MCU library first. Both the
 OLED and original UART-only scan projects compile and link. Display-model
 tests cover device identity, name preservation, RSSI bars, expiry, clock wrap

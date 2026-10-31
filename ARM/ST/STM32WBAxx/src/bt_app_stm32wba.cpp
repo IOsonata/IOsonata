@@ -71,7 +71,6 @@ SOFTWARE.
 #include "istddef.h"
 #include "idelay.h"
 #include "coredev/iopincfg.h"
-#include "coredev/timer.h"
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
@@ -189,9 +188,6 @@ extern UART g_Uart;
 #ifndef GATT_MTU_SIZE_DEFAULT
 #define GATT_MTU_SIZE_DEFAULT			23
 #endif
-
-// Period of the timeout check event, in ms
-#define BT_APP_TICK_PERIOD_MS			1000U
 
 // Connection-parameter update timing knobs - same intent as the BM port.
 #define BT_APP_CONN_PARAMS_FIRST_DELAY_MS	5000
@@ -2063,12 +2059,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	return true;
 }
 
-// Application tick: the millisecond clock of the SMP and GATT transaction
-// timeouts and their one second check. It is the timer device and not the Timer
-// class, the same as the Nordic port. DevNo 1 is the second low power timer
-// (LPTIM2), see timer_stm32.h.
-static TimerDev_t s_BtAppTimer;
-
+// Application timeout checks, driven by the ST controller timer service.
 enum {
 	BT_APP_TICK_IDLE,
 	BT_APP_TICK_PENDING,
@@ -2121,41 +2112,21 @@ static void BtAppTickQue(void)
 	}
 }
 
-// Timer trigger, interrupt context
-static void BtAppTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
+// Controller timer callback. Keep the timebase sampled even if the queue is full.
+static void BtAppTimerHandler(const void *pCtx)
 {
-	(void)pTimer;
-
-	if (Evt & TIMER_EVT_TRIGGER(0))
+	(void)pCtx;
+	(void)BtWbaMsTick();
+	if (s_BtAppTickState == BT_APP_TICK_IDLE)
 	{
-		if (s_BtAppTickState == BT_APP_TICK_IDLE)
-		{
-			s_BtAppTickState = BT_APP_TICK_PENDING;
-		}
-		BtAppTickQue();
+		s_BtAppTickState = BT_APP_TICK_PENDING;
 	}
+	BtAppTickQue();
 }
 
-static const TimerCfg_t s_BtAppTimerCfg = {
-	.DevNo = 1,
-	.ClkSrc = TIMER_CLKSRC_DEFAULT,
-	.Freq = 0,			// 0 => Default frequency
-	.IntPrio = 6,
-	.EvtHandler = BtAppTimerHandler
-};
-
-// Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
-// the weak BtSmpMsTick/BtGattMsTick defaults. Declared in bt_smp.h / bt_gatt.h,
-// so no linkage specifier is needed here.
 uint32_t BtSmpMsTick(void)
 {
-	if (s_BtAppTimer.GetTickCount == nullptr)
-	{
-		// Timer not started
-		return 0;
-	}
-
-	return TimerGetMilisecond(&s_BtAppTimer);
+	return BtWbaMsTick();
 }
 
 uint32_t BtGattMsTick(void)
@@ -2174,20 +2145,7 @@ void BtGattIndicationTimeout(uint16_t ConnHdl)
 // Start the periodic timeout check.
 static bool BtAppTickStart(void)
 {
-	if (TimerInit(&s_BtAppTimer, &s_BtAppTimerCfg) == false)
-	{
-		SysLogPrintf(SysLogGet(), "WBA LPTIM2 init failed: BDCR1=0x%08lx CCIPR1=0x%08lx\r\n",
-			(unsigned long)RCC->BDCR1, (unsigned long)RCC->CCIPR1);
-		SysLogPrintf(SysLogGet(), "WBA LPTIM2: CR=0x%08lx ISR=0x%08lx CFGR=0x%08lx\r\n",
-			(unsigned long)LPTIM2->CR, (unsigned long)LPTIM2->ISR,
-			(unsigned long)LPTIM2->CFGR);
-		return false;
-	}
-
-	msTimerEnableTrigger(&s_BtAppTimer, 0, BT_APP_TICK_PERIOD_MS,
-						 TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
-
-	return true;
+	return BtWbaTickStart(BtAppTimerHandler);
 }
 
 // BtAppNotify/BtAppIndicate, their Conn and All forms are the shared weak

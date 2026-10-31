@@ -56,8 +56,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // LD6 green PD8 and LD5 red PD9
 #define LED_PINS_MAP		BOARD_LED_PINS
 
-// Timer DevNo 0 (LPTIM1) and 1 (LPTIM2) are used by the Bluetooth port. This
-// is the free one the example would use for its own timing, TIM16.
+// TIM16 for application timing. Bluetooth uses ST controller software timers
+// and does not reserve an IOsonata timer device.
 #define TIMER_DEVNO			2
 
 // Log output on the first ST-LINK virtual COM port, USART1, RX PA8, TX PB12.

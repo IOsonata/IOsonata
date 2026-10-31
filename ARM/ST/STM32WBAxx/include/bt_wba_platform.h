@@ -37,6 +37,9 @@ SOFTWARE.
 #ifndef __BT_WBA_PLATFORM_H__
 #define __BT_WBA_PLATFORM_H__
 
+#include <stdint.h>
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -47,6 +50,13 @@ void BtWbaPlatformRetry(void);
 
 /// Start HSE32 and select the radio sleep timer clock. Call before BleStack_Init.
 void BtWbaPlatformInit(void);
+
+/// Controller time in milliseconds, starting when the first port timer is created.
+uint32_t BtWbaMsTick(void);
+
+/// Reserve one periodic controller timer for one-second timeout checks.
+/// Call after BleStack_Init. Callback runs in controller interrupt context.
+bool BtWbaTickStart(void (*Callback)(const void *));
 
 #ifdef __cplusplus
 }
