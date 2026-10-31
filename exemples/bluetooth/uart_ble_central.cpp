@@ -1152,6 +1152,26 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 	// Flush data ExternalUartRxBuffer -> g_UartRx2BleFifo
 	if (flush)
 	{
+		if ((g_UartRxExtBuffLen == 6 &&
+			(memcmp(g_UartRxExtBuff, "stats\n", 6) == 0 ||
+			 memcmp(g_UartRxExtBuff, "stats\r", 6) == 0)) ||
+			(g_UartRxExtBuffLen == 7 && memcmp(g_UartRxExtBuff, "stats\r\n", 7) == 0))
+		{
+			uint32_t state = DisableInterrupt();
+			uint32_t received = s_BleToUartReceived;
+			uint32_t accepted = s_BleToUartAccepted;
+			uint32_t dropped = s_BleToUartDropped;
+			int queued = CFifoUsed(s_hBleToUartFifo);
+			const UARTDev_t *uart = UARTGetInstance(UART_DEVNO);
+			uint32_t uartDrop = uart != nullptr ? uart->TxDropCnt : 0;
+
+			EnableInterrupt(state);
+			g_UartRxExtBuffLen = 0;
+			g_Uart.printf("\r\nStream: ble_rx=%lu uart_accepted=%lu queued=%d ble_drop=%lu uart_refused=%lu\r\n",
+				(unsigned long)received, (unsigned long)accepted, queued,
+				(unsigned long)dropped, (unsigned long)uartDrop);
+			return;
+		}
 		if (UartBleSecTryCommand(g_UartRxExtBuff, g_UartRxExtBuffLen))
 		{
 			g_UartRxExtBuffLen = 0;
