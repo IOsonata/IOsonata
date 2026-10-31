@@ -16,6 +16,8 @@ code = r'''
 #include <cstdio>
 #include <cstring>
 #include "bluetooth/bt_app.h"
+#include "app_evt_handler.h"
+#define PRBS_RX_NOTIF_COUNT 12
 #define NRFXLIB_SDC 1
 #define PRBS_RX_DURATION_MS 60000U
 #define PRBS_RX_REPORT_MS 1000U
@@ -96,7 +98,7 @@ static void StartDiscovery(uint16_t)
 }
 '''
 code += source[start:end]
-for signature in [r'^static void PrbsReset\(', r'^static void PrbsReceive\(',
+for signature in [r'^static void PrbsReset\(', r'^static void PrbsCheck\(', r'^static void PrbsReceive\(',
                   r'^void BtGattClientNotified\(', r'^void BtAppEvtConnected\(',
                   r'^void BtAppEvtDisconnected\(', r'^void BtAppEvtConnectFailed\(',
                   r'^static void PrbsReport\(', r'^bool AppCheckStatus\(']:
@@ -127,6 +129,9 @@ static void RunTrial(unsigned packets)
 				BtGattClientNotified(s_ConnHdl, s_ValueHdl, data, sizeof(data));
 			}
 		}
+		while (AppEvtHandlerExec())
+		{
+		}
 		AppCheckStatus();
 		assert(reportCount - before == elapsed / 1000);
 	}
@@ -138,14 +143,18 @@ static void RunTrial(unsigned packets)
 	assert(s_Rx.Notifications == packets * 4000);
 	assert(s_Rx.Breaks == 0 && s_Rx.OutOfFrame == 0);
 	assert(s_Rx.MinLen == 244 && s_Rx.MaxLen == 244);
-	PrbsReceive(data, sizeof(data), nowMs + 1);
+	BtGattClientNotified(s_ConnHdl, s_ValueHdl, data, sizeof(data));
 	assert(s_Rx.Notifications == packets * 4000);
 }
 int main()
 {
 	uint8_t invalid[] = {1, 0x80, 3};
 	uint8_t zeros[16] = {};
+	unsigned idx;
 
+	assert(AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)));
+	s_NotifQue = CFifoInit(s_NotifMem, sizeof(s_NotifMem), sizeof(PrbsNotification_t), true);
+	assert(s_NotifQue != nullptr && CFifoAvail(s_NotifQue) == 12);
 	peer.Conn.MaxMtu = 247;
 	BtAppEvtConnected(0);
 	s_ValueHdl = 0x12;
@@ -181,14 +190,65 @@ int main()
 	// Damage is counted locally, with no UART payload API in this harness.
 	PrbsReset();
 	s_Finished = false;
-	PrbsReceive(invalid, sizeof(invalid), UINT32_MAX - 100);
+	PrbsCheck(invalid, sizeof(invalid), UINT32_MAX - 100);
 	assert(s_Rx.Breaks == 2 && s_Rx.OutOfFrame == 1);
-	PrbsReceive(invalid, sizeof(invalid), 59900);
+	PrbsCheck(invalid, sizeof(invalid), 59900);
 	assert(s_Finished && s_Rx.Bytes == 3); // Duration check survives clock wrap.
 	PrbsReset();
 	s_Finished = false;
-	PrbsReceive(zeros, sizeof(zeros), 0);
+	PrbsCheck(zeros, sizeof(zeros), 0);
 	assert(!s_Rx.Synced); // Zero has a zero successor but is not valid PRBS.
+	// Payload ownership: callback must not check data or retain its pointer.
+	PrbsReset();
+	s_Finished = false;
+	s_Failed = false;
+	s_ConnHdl = 0;
+	s_ValueHdl = 0x12;
+	nowMs = 100;
+	BtGattClientNotified(0, 0x12, invalid, sizeof(invalid));
+	assert(s_Rx.Bytes == 0 && CFifoUsed(s_NotifQue) == 1);
+	memset(invalid, 0, sizeof(invalid));
+	nowMs = 200;
+	AppEvtHandlerExec();
+	assert(s_Rx.Bytes == 3 && s_Rx.OutOfFrame == 1 && s_Rx.FirstMs == 100);
+	// Fill all 12 event slots; a refused receive event must be retried.
+	PrbsReset();
+	for (idx = 0; idx < 12; idx++)
+	{
+		assert(AppEvtHandlerQue(0, nullptr, [](uint32_t, void *) {}));
+	}
+	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
+	assert(s_Rx.Bytes == 0 && CFifoUsed(s_NotifQue) == 1);
+	while (AppEvtHandlerExec())
+	{
+	}
+	assert(s_Rx.Bytes == sizeof(zeros) && CFifoUsed(s_NotifQue) == 0);
+	// Delayed processing still uses arrival time at the 60-second boundary.
+	PrbsReset();
+	s_Finished = false;
+	nowMs = 100;
+	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
+	AppEvtHandlerExec();
+	nowMs = 60099;
+	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
+	nowMs = 60100;
+	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
+	nowMs = 60110;
+	AppEvtHandlerExec();
+	assert(s_Rx.Notifications == 2 && s_Finished);
+	s_Finished = false;
+	// Full notification FIFO refuses new data without overwriting old data.
+	PrbsReset();
+	for (idx = 0; idx < 13; idx++)
+	{
+		BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
+	}
+	assert(CFifoUsed(s_NotifQue) == 12 && s_NotifDropped == 1 && s_Failed);
+	while (AppEvtHandlerExec())
+	{
+	}
+	assert(s_Rx.Notifications == 12);
+
 }
 '''
 with tempfile.TemporaryDirectory(prefix='ble-prbs-rx-') as temp:
@@ -198,6 +258,7 @@ with tempfile.TemporaryDirectory(prefix='ble-prbs-rx-') as temp:
     subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O2',
                     '-Wall', '-Wextra', '-fsanitize=undefined',
                     '-fno-sanitize-recover=all', '-I' + str(ROOT / 'include'),
-                    str(cpp), '-o', str(binary)], check=True)
+                    str(cpp), str(ROOT / 'src/cfifo.c'),
+                    str(ROOT / 'src/app_evt_handler.cpp'), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 print('PASS firmware PRBS: 60s 1M + 60s 2M, 1s reports, PHY check, corruption, clock wrap')

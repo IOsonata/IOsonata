@@ -44,8 +44,12 @@ The generic SDC application API does not expose the negotiated interval here.
 
 `drop` uses the same adjacent-byte PRBS successor check as the Python receiver.
 There are no missing-byte estimates: PRBS repeats every 127 bytes and cannot
-uniquely determine long losses. No payload copies or UART payload writes are
-performed. UART reporting runs from the main loop.
+uniquely determine long losses. The BLE callback copies each notification, its length, and arrival timestamp
+into a 12-packet CFIFO, then queues `PrbsReceive` through AppEvt. The AppEvt
+queue is explicitly initialized with 12 entries. PRBS checking and UART
+reporting run from the main loop; no payload is forwarded to UART. A refused
+AppEvt is retried without discarding the queued payload. Notification FIFO
+overflow fails the trial and is reported in the final queue-drop counter.
 
 The minimum average notification targets match the Python test: four per
 15 ms at 1M, eight at 2M. These are minimum thresholds, not the measured HCI

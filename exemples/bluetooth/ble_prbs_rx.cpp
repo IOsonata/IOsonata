@@ -53,6 +53,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble.h"
 #endif
 
+#define PRBS_RX_NOTIF_COUNT 12
 #define PRBS_RX_DURATION_MS 60000U
 #define PRBS_RX_REPORT_MS 1000U
 #define DEVICE_NAME "BlePrbsRx"
@@ -164,6 +165,17 @@ static BtGapConnParams_t s_ConnParams = {
 
 
 typedef struct {
+	uint32_t ReceivedMs;
+	uint16_t Len;
+	uint8_t Data[BLE_MTU_SIZE - 3];
+} PrbsNotification_t;
+
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(12)];
+alignas(4) static uint8_t s_NotifMem[CFIFO_TOTAL_MEMSIZE(PRBS_RX_NOTIF_COUNT, sizeof(PrbsNotification_t))];
+static hCFifo_t s_NotifQue;
+static volatile uint32_t s_NotifDropped;
+
+typedef struct {
 	uint32_t Bytes;
 	uint32_t Notifications;
 	uint32_t Breaks;
@@ -197,6 +209,8 @@ static bool s_FinalPrinted;
 
 static void PrbsReset(void)
 {
+	CFifoFlush(s_NotifQue);
+	s_NotifDropped = 0;
 	s_Rx.Bytes = 0;
 	s_Rx.Notifications = 0;
 	s_Rx.Breaks = 0;
@@ -213,7 +227,7 @@ static void PrbsReset(void)
 	s_FinalPrinted = false;
 }
 
-static void PrbsReceive(const uint8_t *pData, uint16_t Len, uint32_t Now)
+static void PrbsCheck(const uint8_t *pData, uint16_t Len, uint32_t Now)
 {
 	uint32_t breaks;
 	uint32_t outOfFrame;
@@ -241,8 +255,8 @@ static void PrbsReceive(const uint8_t *pData, uint16_t Len, uint32_t Now)
 		s_Rx.FirstMs = Now;
 	}
 
-	// The BLE callback is the only writer. Keep byte-by-byte state local;
-	// the main-loop snapshot cannot run until this callback returns.
+	// The AppEvt handler checks the payload in main-loop context.
+	// Keep byte-by-byte state local until the notification is checked.
 	previous = s_Rx.Previous;
 	validRun = s_Rx.ValidRun;
 	synced = s_Rx.Synced;
@@ -303,12 +317,46 @@ static void PrbsReceive(const uint8_t *pData, uint16_t Len, uint32_t Now)
 	}
 }
 
+static void PrbsReceive(uint32_t Evt, void *pCtx)
+{
+	PrbsNotification_t *notification;
+
+	(void)Evt;
+	(void)pCtx;
+	notification = (PrbsNotification_t *)CFifoPeek(s_NotifQue);
+	if (notification != nullptr)
+	{
+		// Keep the slot owned until processing finishes, so an IRQ cannot
+		// reuse its payload while the checker is reading it.
+		PrbsCheck(notification->Data, notification->Len, notification->ReceivedMs);
+		CFifoRelease(s_NotifQue, 1);
+	}
+}
+
 void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uint16_t Len)
 {
-	if (ConnHdl == s_ConnHdl && ValHdl == s_ValueHdl)
+	PrbsNotification_t *notification;
+	uint32_t now;
+
+	if (ConnHdl != s_ConnHdl || ValHdl != s_ValueHdl || s_Finished ||
+		pData == nullptr || Len == 0)
 	{
-		PrbsReceive(pData, Len, BtGattMsTick());
+		return;
 	}
+	now = BtGattMsTick();
+	notification = (PrbsNotification_t *)CFifoResv(s_NotifQue);
+	if (notification == nullptr || Len > sizeof(notification->Data))
+	{
+		s_NotifDropped++;
+		s_Failed = true;
+		return;
+	}
+	notification->ReceivedMs = now;
+	notification->Len = Len;
+	memcpy(notification->Data, pData, Len);
+	CFifoPut(s_NotifQue);
+	// A refused AppEvt leaves its payload queued. AppCheckStatus retries.
+	(void)AppEvtHandlerQue(0, nullptr, PrbsReceive);
 }
 
 static void StartDiscovery(uint16_t ConnHdl)
@@ -575,6 +623,7 @@ static void PrbsReport(uint32_t Now)
 	s_LastReportBytes = stats.Bytes;
 	if (final)
 	{
+		g_Uart.printf("Notification queue dropped=%lu\r\n", (unsigned long)s_NotifDropped);
 		valid = stats.Synced && stats.Breaks == 0 && stats.OutOfFrame == 0 && !s_Failed;
 		g_Uart.printf("PRBS integrity: %s\r\n", valid ? "PASS" : "FAIL");
 		g_Uart.printf("Notification target=%lu: %s (average only)\r\n",
@@ -646,12 +695,30 @@ bool AppCheckStatus(void)
 			s_Failed = true;
 		}
 	}
+	// Drain queued notifications before reporting or ending the trial.
+	if (CFifoUsed(s_NotifQue) > 0)
+	{
+		if (!AppEvtHandlerPending())
+		{
+			(void)AppEvtHandlerQue(0, nullptr, PrbsReceive);
+		}
+		return false;
+	}
 	PrbsReport(now);
 	return true;
 }
 
 int main(void)
 {
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)))
+	{
+		return 1;
+	}
+	s_NotifQue = CFifoInit(s_NotifMem, sizeof(s_NotifMem), sizeof(PrbsNotification_t), true);
+	if (s_NotifQue == nullptr)
+	{
+		return 1;
+	}
 	g_Uart.Init(g_UartCfg);
 	g_Uart.printf("BlePrbsRx: target=%s requested_PHY=%u\r\n", TARGET_NAME, s_TestPhy);
 	g_Uart.printf("Interval=15 ms MTU=247; 60 s at 1M then 60 s at 2M\r\n");
