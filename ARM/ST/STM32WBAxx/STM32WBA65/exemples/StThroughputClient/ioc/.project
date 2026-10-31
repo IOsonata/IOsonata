@@ -537,7 +537,7 @@
 		<link>
 			<name>Application/User/STM32_WPAN/App/app_ble.c</name>
 			<type>1</type>
-			<locationURI>CUBE_WBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/STM32_WPAN/App/app_ble.c</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/app_ble.c</locationURI>
 		</link>
 		<link>
 			<name>Application/User/STM32_WPAN/App/gatt_client_app.c</name>
@@ -698,6 +698,11 @@
 			<name>CubeRoot</name>
 			<type>2</type>
 			<locationURI>CUBE_WBA</locationURI>
+		</link>
+		<link>
+			<name>Board/prbs_client.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/prbs_client.c</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>

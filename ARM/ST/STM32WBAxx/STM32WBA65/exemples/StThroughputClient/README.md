@@ -32,52 +32,80 @@ physical SDK filenames even when the project links use `.S` names.
 link excluded from compilation; the individual source links select exactly
 which ST files are built. Debug and Release configurations are supplied.
 
-## DK1 controls
+## Automatic comparison
 
-USART1 is PB12 TX / PA8 RX on the first ST-LINK virtual COM port, as in the
-IOsonata DK1 examples. Open it at 115200 baud, 8N1, without flow control.
-Wait for initialization to finish, then send commands terminated by CR:
+Use the existing BlePrbs_SDC streamer. No ST throughput server, button action,
+serial command or Python payload receiver is required. Open the first DK1
+ST-LINK virtual COM port at 115200 baud, 8N1, without flow control. USART1
+uses PB12 TX / PA8 RX. Start the streamer before resetting this client.
 
-- `B1`: start scanning when disconnected; toggle client-to-server writes
-  when connected.
-- `B2`: clear ST bonds when disconnected; request security when connected.
-- `B3`: retained for compatibility; ST's current handler does nothing.
+The client automatically:
 
-These are ST's existing button actions. The small local adapter schedules
-commands through the ST sequencer because serial reception can run in an IRQ.
-It disables the Nucleo LED/button pins; DK1 LEDs and joystick are not used.
-The forced `dk1_config.h` includes ST's configuration first, then disables
-those board features consistently for all C compilation units. UART pins,
-LSE, HSE tuning, power setup and the Bluetooth implementation remain ST's.
+1. Scans for the complete advertised name `BlePrbs_SDC`.
+2. Connects at 15 ms with zero latency, explicitly requests 1M PHY, and waits
+   for PHY completion before requesting data length 251 / 2120 us.
+3. Exchanges MTU (247), discovers the full BlueIO service and notification
+   characteristic UUIDs, locates its CCCD, and subscribes.
+4. Measures 60 seconds from the first notification, checking PRBS7 in firmware
+   and printing status every second. UART carries results only.
+5. Prints the final result, disconnects, and repeats for 60 seconds at 2M.
 
-## Peer and comparison limits
+An incomplete trial stops the benchmark. A complete trial whose throughput
+misses the target still advances to the next PHY. The targets are four and
+eight notifications per 15 ms at 1M and 2M respectively; these are averages,
+not measurements of individual connection events. Reset the receiver to rerun.
+A setup or first-notification timeout of 30 seconds reports an aborted trial.
 
-Use ST's matching BLE_DataThroughput_Server on a supported board. The client
-expects service 0xFE80 and characteristics 0xFE81/0xFE82/0xFE83, including ST's
-control and payload protocol. It cannot subscribe to BlePrbs_SDC as supplied.
-For server-to-client notification testing, start transmission using the
-matching server's controls; the client's connected `B1` enables the opposite
-direction and should remain off for a receive-only comparison.
+After startup, expect:
 
-The reference client requests a 7.5 ms connection interval, supports ATT MTU
-251, and prefers 2M PHY. It is not the IOsonata 15 ms / MTU 247 / 60-second
-PRBS benchmark. Record negotiated parameters and traffic direction with the
-result. A difference between these tests alone does not establish the cause
-of IOsonata's throughput deficit.
+```text
+ST PRBS comparison: BlePrbs_SDC; 60 s at 1M then 60 s at 2M
+Interval=15 ms MTU=247; firmware PRBS, UART results only
+Starting 60-second 1M trial; target=BlePrbs_SDC
+```
 
-Source reference: STM32CubeWBA v1.10.0, commit
+## What is being compared
+
+This is ST's integration with a replacement benchmark application, not the
+unmodified interactive ST throughput demo. Startup, HAL, radio scheduling,
+clock configuration, host/controller libraries, ST sequencer, ST timers and
+ST AMM event storage remain from CubeWBA. No IOsonata library is linked.
+The application uses a fixed 12-entry notification queue and an ST sequencer
+consumer for firmware PRBS checking, rather than IOsonata CFIFO/AppEvt.
+
+`dk1_config.h` disables Nucleo buttons/LEDs, selects one link, MTU 247,
+a 4096-byte host-event FIFO and initial default 1M PHY. It enables the general
+SVCCTL event callback needed for automatic GAP procedure handling. ST's host
+memory-block margin, Basic controller library and native clock/power setup
+remain in use. The connection request retains ST's CE length hints (0/80,
+in 0.625 ms units); actual throughput must be measured on hardware.
+
+`src/app_ble.c` is copied from STM32CubeWBA v1.10.0, commit
 `4ccfd1526870263657ec8e0854c64cda6ed2b5da`, directory
-`Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client`.
-ST source files are linked from the installed SDK and retain its licenses.
+`Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/STM32_WPAN/App`.
+It retains ST's license notice. Its changes select `PrbsClientInit` and copy
+both spans of host event payloads into ST's event storage with length checks.
+Other ST sources are linked from the installed SDK and retain their licenses.
+The original GATT demo source remains available for ST application symbol
+references, but its initialization and interactive event handling are not run.
 
-Validation: project XML and source selection checked; local command adapter
-checked with host mocks. All 98 C/assembly files compiled and the complete
-firmware linked for Debug and Release using Arm GNU GCC 13.2.1 and the
-v1.10.0 pinned dependencies. These checks invoked the compiler directly using
-the project's source links, include paths, defines and library selection.
-Eclipse Embedded CDT 2025-12 headless import and managed Debug/Release builds
-were also tested on Linux. Both generated makefiles compile the ST startup
-assembly, and both firmware images define Reset_Handler and g_pfnVectors.
-IOcomposer on macOS and DK1 radio operation still require confirmation.
-ST's unchanged app_ble.c and ble_timer.c emit packed-list pointer alignment
-warnings during compilation; neither configuration has linker errors.
+## Validation
+
+Run the application regression test with the complete pinned SDK:
+
+```sh
+python3 tests/stm32wba/run_st_comparison.py /path/to/STM32CubeWBA
+```
+
+It compiles the real benchmark application and ST SVCCTL event router against
+ST's command/event headers, with mocked commands, timer and sequencer hooks.
+It checks automatic two-trial sequencing, discovery, command parameters,
+notification ownership, PRBS, measurement boundaries, aborts and retries at
+O0/O2 with UBSan. It does not emulate the closed ST host/controller libraries.
+
+Eclipse Embedded CDT 2025-12 managed Debug/Release builds are checked on Linux
+with Arm GNU GCC 13.2.1 and the v1.10.0 pinned dependencies. Both images include
+ST startup assembly and define Reset_Handler and g_pfnVectors. ST's packed-list
+pointer alignment warnings remain in app_ble.c and ble_timer.c.
+The automatic benchmark still requires DK1 radio validation. Its measured
+results, rather than host tests, determine the comparison with IOsonata.
