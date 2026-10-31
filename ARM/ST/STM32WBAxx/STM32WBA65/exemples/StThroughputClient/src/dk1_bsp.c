@@ -1,6 +1,7 @@
 /* DK1 serial controls for ST's throughput client. No IOsonata stack calls. */
 #include "app_common.h"
 #include "app_bsp.h"
+#include "ble_core.h"
 #include "gatt_client_app.h"
 #include "stm32_seq.h"
 

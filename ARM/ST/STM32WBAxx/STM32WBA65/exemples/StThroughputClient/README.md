@@ -67,5 +67,10 @@ Source reference: STM32CubeWBA v1.10.0, commit
 ST source files are linked from the installed SDK and retain its licenses.
 
 Validation: project XML and source selection checked; local command adapter
-checked with host mocks. No full Arm target build, Eclipse import, or DK1
-radio test has been performed for this project.
+checked with host mocks. All 98 C/assembly files compiled and the complete
+firmware linked for Debug and Release using Arm GNU GCC 13.2.1 and the
+v1.10.0 pinned dependencies. These checks invoked the compiler directly using
+the project's source links, include paths, defines and library selection.
+Eclipse import/managed-build generation and DK1 radio operation remain untested.
+ST's unchanged app_ble.c and ble_timer.c emit packed-list pointer alignment
+warnings during compilation; neither configuration has linker errors.
