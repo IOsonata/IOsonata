@@ -24,7 +24,11 @@ ST reference integration with the IOsonata integration.
    this firmware does not preserve IOsonata bond-storage compatibility.
 
 The project uses the same GNU ARM managed toolchain as the other `ioc`
-examples, rather than requiring STM32CubeIDE plugins. `CubeRoot` is a browsing
+examples, rather than requiring STM32CubeIDE plugins. The tracked
+`ioc/.settings/org.eclipse.core.runtime.prefs` associates lowercase `.s` files
+with CDT assembly sources. Keep this file: the managed builder checks the
+physical SDK filenames even when the project links use `.S` names.
+`CubeRoot` is a browsing
 link excluded from compilation; the individual source links select exactly
 which ST files are built. Debug and Release configurations are supplied.
 
@@ -71,6 +75,9 @@ checked with host mocks. All 98 C/assembly files compiled and the complete
 firmware linked for Debug and Release using Arm GNU GCC 13.2.1 and the
 v1.10.0 pinned dependencies. These checks invoked the compiler directly using
 the project's source links, include paths, defines and library selection.
-Eclipse import/managed-build generation and DK1 radio operation remain untested.
+Eclipse Embedded CDT 2025-12 headless import and managed Debug/Release builds
+were also tested on Linux. Both generated makefiles compile the ST startup
+assembly, and both firmware images define Reset_Handler and g_pfnVectors.
+IOcomposer on macOS and DK1 radio operation still require confirmation.
 ST's unchanged app_ble.c and ble_timer.c emit packed-list pointer alignment
 warnings during compilation; neither configuration has linker errors.
