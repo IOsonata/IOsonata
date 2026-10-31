@@ -505,7 +505,7 @@
 			<locationURI>CUBE_WBA/Projects/Common/WPAN/Modules/wpan_utils.c</locationURI>
 		</link>
 		<link>
-			<name>Common/WPAN/Startup/stm32wbaxx_ResetHandler_GCC.s</name>
+			<name>Common/WPAN/Startup/stm32wbaxx_ResetHandler_GCC.S</name>
 			<type>1</type>
 			<locationURI>CUBE_WBA/Projects/Common/WPAN/Startup/stm32wbaxx_ResetHandler_GCC.s</locationURI>
 		</link>
@@ -675,7 +675,7 @@
 			<locationURI>CUBE_WBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/System/Config/LowPower/user_low_power_config.c</locationURI>
 		</link>
 		<link>
-			<name>Application/User/Startup/startup_stm32wba65rivx.s</name>
+			<name>Application/User/Startup/startup_stm32wba65rivx.S</name>
 			<type>1</type>
 			<locationURI>CUBE_WBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/STM32CubeIDE/Application/User/Startup/startup_stm32wba65rivx.s</locationURI>
 		</link>

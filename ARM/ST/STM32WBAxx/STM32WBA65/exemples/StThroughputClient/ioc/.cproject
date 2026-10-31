@@ -48,7 +48,7 @@
 							<builder buildPath="${workspace_loc:/StThroughputClient}/Debug" id="ilg.gnuarmeclipse.managedbuild.cross.builder.295793098" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder" />
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.193196907" name="GNU ARM Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor.1409104364" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean" />
-								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.216460956" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input" />
+								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.216460956" sourceContentType="org.eclipse.cdt.core.asmSource" sources="s,S,asm" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input" />
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.1199315341" name="GNU ARM Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.437497086" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
@@ -163,7 +163,7 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.1753580572" name="GNU ARM Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections.2004235595" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" value="true" valueType="boolean" />
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other.1093860728" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="--specs=nosys.specs -Wl,-z,noexecstack" valueType="string" />
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other.1093860728" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="--specs=nosys.specs -Wl,-z,noexecstack -Wl,--require-defined=Reset_Handler -Wl,--require-defined=g_pfnVectors" valueType="string" />
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile.1319206280" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/STM32CubeIDE/STM32WBA65RIVX_FLASH.ld&quot;" />
 								</option>
@@ -181,7 +181,7 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.1136902653" name="GNU ARM Cross C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections.1959618557" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean" />
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other.1332829412" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="--specs=nosys.specs -Wl,-z,noexecstack" valueType="string" />
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other.1332829412" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="--specs=nosys.specs -Wl,-z,noexecstack -Wl,--require-defined=Reset_Handler -Wl,--require-defined=g_pfnVectors" valueType="string" />
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile.603557065" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/STM32CubeIDE/STM32WBA65RIVX_FLASH.ld&quot;" />
 								</option>
@@ -267,7 +267,7 @@
 							<builder buildPath="${workspace_loc:/StThroughputClient}/Release" id="ilg.gnuarmeclipse.managedbuild.cross.builder.371725153" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder" />
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.515444700" name="GNU ARM Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor.435224572" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean" />
-								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.881016212" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input" />
+								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.881016212" sourceContentType="org.eclipse.cdt.core.asmSource" sources="s,S,asm" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input" />
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.680926118" name="GNU ARM Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.210556193" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
@@ -380,7 +380,7 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.1753374116" name="GNU ARM Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections.2077441724" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" value="true" valueType="boolean" />
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other.1522524417" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="--specs=nosys.specs -Wl,-z,noexecstack" valueType="string" />
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other.1522524417" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="--specs=nosys.specs -Wl,-z,noexecstack -Wl,--require-defined=Reset_Handler -Wl,--require-defined=g_pfnVectors" valueType="string" />
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile.1491620429" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/STM32CubeIDE/STM32WBA65RIVX_FLASH.ld&quot;" />
 								</option>
@@ -398,7 +398,7 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.428389970" name="GNU ARM Cross C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections.1470849602" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean" />
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other.1955641148" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="--specs=nosys.specs -Wl,-z,noexecstack" valueType="string" />
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other.1955641148" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="--specs=nosys.specs -Wl,-z,noexecstack -Wl,--require-defined=Reset_Handler -Wl,--require-defined=g_pfnVectors" valueType="string" />
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile.1521740177" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/STM32CubeIDE/STM32WBA65RIVX_FLASH.ld&quot;" />
 								</option>
