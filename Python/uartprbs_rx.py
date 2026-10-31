@@ -238,7 +238,7 @@ def parse_args() -> argparse.Namespace:
 def central_stats(comm, clock=time.perf_counter):
     """Read the existing central stats reply amongst the continuing PRBS stream."""
     patterns = {
-        "BLE": rb"BLE: notifications=\d+ bytes=\d+ elapsed_ms=\d+ len_min=\d+ len_max=\d+ mtu=\d+\r\n",
+        "BLE": rb"BLE: notifications=\d+ bytes=\d+ elapsed_ms=\d+ len_min=\d+ len_max=\d+ mtu=\d+(?: prbs_check=\d+ prbs_breaks=\d+)?\r\n",
         "Stream": rb"Stream: ble_rx=\d+ uart_accepted=\d+ queued=\d+ ble_drop=\d+ uart_refused=\d+\r\n",
     }
     pending = dict(patterns)

@@ -196,6 +196,12 @@ extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
 //  - MAC address of the device
 #define TARGET_BRIDGE_DEV_NAME	"BlePrbs_SDC"	//!< Name of BLE peripheral device to be scanned
 
+// Enable only when receiving the PRBS test stream. Ordinary UART payloads
+// do not follow this sequence.
+#ifndef CENTRAL_PRBS_CHECK
+#define CENTRAL_PRBS_CHECK 1
+#endif
+
 #define Nordic_PCA10040_DK		{0x25, 0xD3, 0x83, 0x6A, 0xEA, 0xDE}
 #define BlueIO832_01			{0x7C, 0x75, 0x96, 0x65, 0x28, 0xF1}
 #define BlueIO832_02			{0xC3, 0x84, 0xC0, 0x8C, 0x2A, 0xC2}
@@ -218,6 +224,11 @@ static volatile uint32_t s_BleNotifications = 0;
 static volatile uint32_t s_BleFirstRxMs = 0;
 static volatile uint16_t s_BleNotifyMinLen = UINT16_MAX;
 static volatile uint16_t s_BleNotifyMaxLen = 0;
+static volatile uint32_t s_BlePrbsBreaks = 0;
+#if CENTRAL_PRBS_CHECK
+static bool s_BlePrbsStarted = false;
+static uint8_t s_BlePrbsPrevious = 0;
+#endif
 static volatile uint32_t s_BleToUartAccepted = 0;
 static volatile uint32_t s_BleToUartDropped = 0;
 static volatile bool s_bBleToUartPending = false;
@@ -459,6 +470,9 @@ static void StartPeerDiscovery(uint16_t ConnHdl)
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
+#if CENTRAL_PRBS_CHECK
+	s_BlePrbsStarted = false;
+#endif
 	g_ConnectedDev.Conn.Hdl = ConnHdl;
 	g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
 
@@ -631,9 +645,31 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 // the BlueIO UART RX characteristic out the local UART.
 void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uint16_t Len)
 {
+#if CENTRAL_PRBS_CHECK
+	uint16_t idx;
+	uint8_t expected;
+#endif
+	int count;
+	uint8_t *p;
+
 	if (ConnHdl == g_ConnectedDev.Conn.Hdl &&
 		ValHdl == g_BleRxCharHdl && pData != nullptr && Len > 0)
 	{
+#if CENTRAL_PRBS_CHECK
+		// Check before copying or rejecting a notification. This is the same
+		// adjacent-byte check as uartprbs_rx.py, including packet boundaries.
+		for (idx = 0; idx < Len; idx++)
+		{
+			expected = ((s_BlePrbsPrevious << 1) |
+				(((s_BlePrbsPrevious >> 6) ^ (s_BlePrbsPrevious >> 5)) & 1)) & 0x7f;
+			if (s_BlePrbsStarted && pData[idx] != expected)
+			{
+				s_BlePrbsBreaks++;
+			}
+			s_BlePrbsPrevious = pData[idx];
+			s_BlePrbsStarted = true;
+		}
+#endif
 		// Count at BLE delivery, before any forwarding queue can refuse data.
 		if (s_BleNotifications == 0)
 		{
@@ -657,8 +693,8 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 
 		while (Len > 0)
 		{
-			int count = Len;
-			uint8_t *p = CFifoPutMultiple(s_hBleToUartFifo, &count);
+			count = Len;
+			p = CFifoPutMultiple(s_hBleToUartFifo, &count);
 
 			if (p == nullptr || count <= 0)
 			{
@@ -1147,8 +1183,74 @@ static bool UartBleSecTryCommand(const uint8_t *pData, int Len)
 }
 #endif
 
+static void UartBlePrintStats(void)
+{
+	uint32_t elapsedMs;
+	BtDevice_t *peer;
+	uint16_t mtu;
+#if defined(NRFXLIB_SDC)
+	uint8_t txPhy;
+	uint8_t rxPhy;
+#endif
+	uint32_t state;
+	uint32_t received;
+	uint32_t accepted;
+	uint32_t dropped;
+	uint32_t notifications;
+	uint32_t prbsBreaks;
+	uint32_t firstRxMs;
+	uint16_t minLen;
+	uint16_t maxLen;
+	int queued;
+	const UARTDev_t *uart;
+	uint32_t uartDrop;
+
+	state = DisableInterrupt();
+	received = s_BleToUartReceived;
+	accepted = s_BleToUartAccepted;
+	dropped = s_BleToUartDropped;
+	notifications = s_BleNotifications;
+	prbsBreaks = s_BlePrbsBreaks;
+	firstRxMs = s_BleFirstRxMs;
+	minLen = notifications ? s_BleNotifyMinLen : 0;
+	maxLen = s_BleNotifyMaxLen;
+	queued = CFifoUsed(s_hBleToUartFifo);
+	uart = UARTGetInstance(UART_DEVNO);
+	uartDrop = uart != nullptr ? uart->TxDropCnt : 0;
+
+	EnableInterrupt(state);
+	elapsedMs = notifications ? BtGattMsTick() - firstRxMs : 0;
+	peer = BtPeerFindByHdl(g_ConnectedDev.Conn.Hdl);
+	mtu = peer != nullptr ? peer->Conn.MaxMtu : 0;
+	// UARTprintf formats at most 79 characters per call. Keep each part
+	// within that limit, including maximum-width counter values.
+	g_Uart.printf("\r\nBLE: notifications=%lu bytes=%lu ",
+		(unsigned long)notifications, (unsigned long)received);
+	g_Uart.printf("elapsed_ms=%lu len_min=%u len_max=%u mtu=%u ",
+		(unsigned long)elapsedMs, minLen, maxLen, mtu);
+	g_Uart.printf("prbs_check=%u prbs_breaks=%lu\r\n",
+		(unsigned)CENTRAL_PRBS_CHECK, (unsigned long)prbsBreaks);
+#if defined(NRFXLIB_SDC)
+	if (BtGapReadPhy(g_ConnectedDev.Conn.Hdl, &txPhy, &rxPhy))
+	{
+		g_Uart.printf("BLE PHY tx=%u rx=%u\r\n", txPhy, rxPhy);
+	}
+#endif
+	g_Uart.printf("\r\nStream: ble_rx=%lu uart_accepted=%lu ",
+		(unsigned long)received, (unsigned long)accepted);
+	g_Uart.printf("queued=%d ble_drop=%lu uart_refused=%lu\r\n", queued,
+		(unsigned long)dropped, (unsigned long)uartDrop);
+}
+
 void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 {
+	bool flush = false;
+	uint8_t *p = NULL;
+	int l1;
+	int l2;
+	int start;
+	int i;
+
 	s_bUartRxPending = false;
 
 	(void)Evt;
@@ -1161,15 +1263,12 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 	}
 #endif
 
-	bool flush = false;
-	uint8_t *p = NULL;
-
 	// Internal UartRxBuffer -> External Uart Rx Buffer
-	int l1 = g_Uart.Rx(&g_UartRxExtBuff[g_UartRxExtBuffLen], PACKET_SIZE - g_UartRxExtBuffLen);
+	l1 = g_Uart.Rx(&g_UartRxExtBuff[g_UartRxExtBuffLen], PACKET_SIZE - g_UartRxExtBuffLen);
 
 	if (l1 > 0)
 	{
-		int start = g_UartRxExtBuffLen;
+		start = g_UartRxExtBuffLen;
 
 		g_UartRxExtBuffLen += l1;
 		if (g_UartRxExtBuffLen >= PACKET_SIZE)
@@ -1179,7 +1278,7 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 
 		// A console line ends at CR or LF. Flushing on it makes a short
 		// command act at once instead of waiting for the buffer to fill.
-		for (int i = start; i < g_UartRxExtBuffLen; i++)
+		for (i = start; i < g_UartRxExtBuffLen; i++)
 		{
 			if (g_UartRxExtBuff[i] == '\r' || g_UartRxExtBuff[i] == '\n')
 			{
@@ -1196,6 +1295,14 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 		}
 	}
 
+	// A short console prefix may span RX callbacks. Keep it until the line
+	// arrives; an immediate empty read must not forward it to the streamer.
+	if (g_UartRxExtBuffLen > 0 && g_UartRxExtBuffLen <= 5 &&
+		memcmp(g_UartRxExtBuff, "stats", g_UartRxExtBuffLen) == 0)
+	{
+		return;
+	}
+
 	// Flush data ExternalUartRxBuffer -> g_UartRx2BleFifo
 	if (flush)
 	{
@@ -1204,42 +1311,8 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 			 memcmp(g_UartRxExtBuff, "stats\r", 6) == 0)) ||
 			(g_UartRxExtBuffLen == 7 && memcmp(g_UartRxExtBuff, "stats\r\n", 7) == 0))
 		{
-			uint32_t elapsedMs;
-			BtDevice_t *peer;
-			uint16_t mtu;
-#if defined(NRFXLIB_SDC)
-			uint8_t txPhy;
-			uint8_t rxPhy;
-#endif
-			uint32_t state = DisableInterrupt();
-			uint32_t received = s_BleToUartReceived;
-			uint32_t accepted = s_BleToUartAccepted;
-			uint32_t dropped = s_BleToUartDropped;
-			uint32_t notifications = s_BleNotifications;
-			uint32_t firstRxMs = s_BleFirstRxMs;
-			uint16_t minLen = notifications ? s_BleNotifyMinLen : 0;
-			uint16_t maxLen = s_BleNotifyMaxLen;
-			int queued = CFifoUsed(s_hBleToUartFifo);
-			const UARTDev_t *uart = UARTGetInstance(UART_DEVNO);
-			uint32_t uartDrop = uart != nullptr ? uart->TxDropCnt : 0;
-
-			EnableInterrupt(state);
-			elapsedMs = notifications ? BtGattMsTick() - firstRxMs : 0;
-			peer = BtPeerFindByHdl(g_ConnectedDev.Conn.Hdl);
-			mtu = peer != nullptr ? peer->Conn.MaxMtu : 0;
 			g_UartRxExtBuffLen = 0;
-			g_Uart.printf("\r\nBLE: notifications=%lu bytes=%lu elapsed_ms=%lu len_min=%u len_max=%u mtu=%u\r\n",
-				(unsigned long)notifications, (unsigned long)received,
-				(unsigned long)elapsedMs, minLen, maxLen, mtu);
-#if defined(NRFXLIB_SDC)
-			if (BtGapReadPhy(g_ConnectedDev.Conn.Hdl, &txPhy, &rxPhy))
-			{
-				g_Uart.printf("BLE PHY tx=%u rx=%u\r\n", txPhy, rxPhy);
-			}
-#endif
-			g_Uart.printf("\r\nStream: ble_rx=%lu uart_accepted=%lu queued=%d ble_drop=%lu uart_refused=%lu\r\n",
-				(unsigned long)received, (unsigned long)accepted, queued,
-				(unsigned long)dropped, (unsigned long)uartDrop);
+			UartBlePrintStats();
 			return;
 		}
 		if (UartBleSecTryCommand(g_UartRxExtBuff, g_UartRxExtBuffLen))
@@ -1252,7 +1325,7 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 			g_UartRxExtBuffLen = 0;
 			return;
 		}
-		int l2 = g_UartRxExtBuffLen;
+		l2 = g_UartRxExtBuffLen;
 		p = CFifoPutMultiple(g_UartRx2BleFifo, &l2);
 		if (p == NULL)
 		{
@@ -1281,20 +1354,17 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
+	int cnt = 0;
+
 	(void)pDev;
 	(void)pBuffer;
 	(void)BufferLen;
-
-	int cnt = 0;
 
 	switch (EvtId)
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			if (g_UartRxExtBuffLen <= 0)
-			{
-				UartRxQue();
-			}
+			UartRxQue();
 			break;
 		case UART_EVT_TXREADY:
 			BleToUartQue();
