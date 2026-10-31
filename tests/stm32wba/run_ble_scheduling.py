@@ -26,6 +26,8 @@ code = r'''
 #include <cassert>
 #include <cstdint>
 #define NDEBUG
+#define SysLogPrintf(...) ((void)0)
+static uint32_t BtSmpMsTick() { return 0; }
 static uint32_t irq;
 static unsigned hostRuns, taskRuns, count, head, tail;
 static bool refuse, interruptRequest, requestWhileRunning;

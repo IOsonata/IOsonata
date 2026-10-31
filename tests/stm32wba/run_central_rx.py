@@ -32,6 +32,11 @@ using tBleStatus = uint8_t;
 #define BT_APP_WBA_EVT_SLOTS 8
 #define BT_APP_WBA_EVT_MAXLEN 258
 #define HCI_EVENT_PKT_TYPE 4
+#define HCI_DISCONNECTION_COMPLETE_EVT_CODE 5
+#define HCI_LE_META_EVT_CODE 0x3e
+#define HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE 1
+#define HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE 10
+uint32_t BtSmpMsTick() { return 123; }
 static struct { uint16_t MaxMtu; bool bSecure; } s_BtAppData = {247, false};
 static BtDevice_t peers[2];
 static BtGattDBSrvc_t services[2][BT_DEV_SERVICE_MAXCNT];
@@ -235,6 +240,16 @@ int main()
 	assert(flowResume == 1 && !s_bEvtFlowBlocked);
 	BtAppEvtDrain(0, nullptr);
 	assert(flowResume == 1);
+	packet[1] = HCI_LE_META_EVT_CODE;
+	packet[2] = 1;
+	packet[3] = HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE;
+	idx = s_EvtHead;
+	assert(BLECB_Indication(packet, 4, nullptr, 0) == 0);
+	assert(s_EvtRing[idx].bTraceTime && s_EvtRing[idx].ReceivedMs == 123);
+	packet[1] = HCI_DISCONNECTION_COMPLETE_EVT_CODE;
+	idx = s_EvtHead;
+	assert(BLECB_Indication(packet, 4, nullptr, 0) == 0);
+	assert(s_EvtRing[idx].bTraceTime && s_EvtRing[idx].ReceivedMs == 123);
 }
 '''
 with tempfile.TemporaryDirectory(prefix='wba-central-') as temp:

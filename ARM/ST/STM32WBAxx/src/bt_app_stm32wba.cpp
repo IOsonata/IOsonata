@@ -272,6 +272,8 @@ static volatile bool s_bEvtDrainOwed = false;
 
 typedef struct __Bt_App_Wba_Evt {
 	uint16_t	Len;
+	bool		bTraceTime;
+	uint32_t	ReceivedMs;
 	uint8_t		Data[BT_APP_WBA_EVT_MAXLEN];
 } BtAppWbaEvt_t;
 
@@ -291,23 +293,24 @@ extern "C" void BleStackCB_Process(void);
 
 static void BleHostEvt(uint32_t Evt, void *pCtx)
 {
+	uint32_t start;
+	uint32_t elapsed;
+	int result;
+
 	(void)Evt;
 	(void)pCtx;
 
 	s_bBleHostQueued = false;
 	s_HostProcessCount++;
-#ifndef NDEBUG
-	uint32_t start = BtSmpMsTick();
-#endif
-	int result = BleStack_Process();
-#ifndef NDEBUG
-	uint32_t elapsed = BtSmpMsTick() - start;
+	start = BtSmpMsTick();
+	result = BleStack_Process();
+	elapsed = BtSmpMsTick() - start;
 	if (elapsed >= 100)
 	{
-		STATUS_PRINTF("WBA host: process %lu ms, result %d\r\n",
-				(unsigned long)elapsed, result);
+		SysLogPrintf(SysLogGet(), "ms=%lu WBA host: process=%lu ms result=%d ring=%u\r\n",
+				(unsigned long)BtSmpMsTick(), (unsigned long)elapsed,
+				result, (unsigned)s_EvtCnt);
 	}
-#endif
 	if (result == 0)
 	{
 		// The stack has more to do
@@ -358,6 +361,7 @@ static void BtAppEvtDrain(uint32_t Evt, void *pCtx)
 	uint32_t state;
 	bool bFreed = false;
 	change_state_options_t options;
+	BtAppWbaEvt_t *event;
 
 	(void)Evt;
 	(void)pCtx;
@@ -366,7 +370,15 @@ static void BtAppEvtDrain(uint32_t Evt, void *pCtx)
 
 	while (s_EvtCnt > 0)
 	{
-		BtWbaEventRouterRun(s_EvtRing[s_EvtTail].Data);
+		event = &s_EvtRing[s_EvtTail];
+		if (event->bTraceTime)
+		{
+			SysLogPrintf(SysLogGet(), "ms=%lu WBA event delivery: evt=0x%02x received_ms=%lu queued_ms=%lu\r\n",
+					(unsigned long)BtSmpMsTick(), (unsigned)event->Data[1],
+					(unsigned long)event->ReceivedMs,
+					(unsigned long)(BtSmpMsTick() - event->ReceivedMs));
+		}
+		BtWbaEventRouterRun(event->Data);
 		s_EvtTail = (uint8_t)((s_EvtTail + 1) % BT_APP_WBA_EVT_SLOTS);
 		state = __get_PRIMASK();
 		__disable_irq();
@@ -439,6 +451,16 @@ extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 	if (ExtLength > 0)
 	{
 		memcpy(event->Data + Length, pExtData, ExtLength);
+	}
+	// Capture control-event arrival without logging or stack calls in the
+	// host callback. Notification processing does not read the clock here.
+	event->bTraceTime = event->Data[1] == HCI_DISCONNECTION_COMPLETE_EVT_CODE ||
+		(event->Data[1] == HCI_LE_META_EVT_CODE && total >= 4 &&
+		 (event->Data[3] == HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE ||
+		  event->Data[3] == HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE));
+	if (event->bTraceTime)
+	{
+		event->ReceivedMs = BtSmpMsTick();
 	}
 	s_EvtHead = (uint8_t)((s_EvtHead + 1) % BT_APP_WBA_EVT_SLOTS);
 	state = __get_PRIMASK();
