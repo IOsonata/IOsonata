@@ -421,7 +421,8 @@ static void PrbsWork(void)
 			}
 			break;
 		case PRBS_DESCRIPTORS:
-			status = aci_gatt_disc_all_char_desc(s_Connection, s_Value + 1, s_DescEnd);
+			/* ST starts after Char_Handle; pass the value handle itself. */
+			status = aci_gatt_disc_all_char_desc(s_Connection, s_Value, s_DescEnd);
 			if (status == 0)
 			{
 				PrbsPhase(PRBS_DESCRIPTORS_WAIT);
@@ -452,6 +453,8 @@ static void PrbsWork(void)
 			PrbsPhase(PRBS_DONE);
 		}
 	}
+	/* Commands and reporting can advance time after PrbsPhase records it. */
+	now = UTIL_TIMER_GetCurrentTime();
 	if (s_Final && (s_Phase == PRBS_DISCONNECT || s_Phase == PRBS_DISCONNECT_WAIT) &&
 		(uint32_t)(now - s_PhaseMs) >= 5000)
 	{

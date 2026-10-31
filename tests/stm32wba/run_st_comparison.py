@@ -30,11 +30,13 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
         (temp / name).write_text(content)
     code = '#include <assert.h>\n#include <stdarg.h>\n#include <stdio.h>\n'
     code += '#include "' + str(project / "src/prbs_client.c") + '"\n'
-    code += 'static unsigned calls; static const char *lastCommand; static uint8_t reply; static int inEvent;\n'
+    code += 'static uint32_t clockMs; static unsigned commandDelay; static unsigned calls; static const char *lastCommand; static uint8_t reply; static int inEvent;\n'
     checks = {
         "aci_gap_create_connection": "assert(Conn_Interval_Min == 12 && Conn_Interval_Max == 12 && Conn_Latency == 0);",
         "hci_le_set_phy": "assert(ALL_PHYS == 0 && TX_PHYS == s_Phy && RX_PHYS == s_Phy);",
         "hci_le_set_data_length": "assert(TxOctets == 251 && TxTime == 2120);",
+        "aci_gatt_disc_all_char_desc": "assert(Char_Handle == 3 && End_Handle == 9);",
+        "aci_gap_terminate": "clockMs += commandDelay;",
         "aci_gatt_write_char_value": "assert(Attr_Handle == 4 && Attribute_Val_Length == 2 && Attribute_Val[0] == 1 && Attribute_Val[1] == 0);",
     }
     for name in commands:

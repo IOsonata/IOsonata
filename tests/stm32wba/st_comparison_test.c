@@ -1,5 +1,4 @@
 /* Included after the production client and command mocks by run_st_comparison.py. */
-static uint32_t clockMs;
 static unsigned reports;
 static uint8_t pattern = 0x7f;
 
@@ -169,6 +168,8 @@ int main(void)
 	unsigned i;
 	unsigned before;
 
+	/* The first disconnect command crosses the 32-bit millisecond wrap. */
+	clockMs = UINT32_MAX - 60000;
 	SVCCTL_Init();
 	PrbsClientInit();
 	Connect();
@@ -187,6 +188,8 @@ int main(void)
 		PrbsWork();
 		assert(!s_Final);
 		clockMs++;
+		/* A real command can return after a tick or a timer wrap. */
+		commandDelay = 2;
 		Notification();
 		PrbsWork();
 		assert(s_Final && s_Complete && s_Stats.Bytes == 732);
@@ -218,6 +221,13 @@ int main(void)
 	assert(s_Count == 12 && s_Dropped == 1 && s_Failed);
 	PrbsWork();
 	assert(!s_Complete);
+	assert(s_Phase == PRBS_DISCONNECT_WAIT);
+	clockMs += 4999;
+	PrbsWork();
+	assert(s_Phase == PRBS_DISCONNECT_WAIT);
+	clockMs++;
+	PrbsWork();
+	assert(s_Phase == PRBS_DONE);
 	/* Temporary command refusal is retried; timer callback never calls BLE. */
 	s_Connection = PRBS_INVALID;
 	PrbsReset();
