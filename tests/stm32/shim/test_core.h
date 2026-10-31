@@ -31,12 +31,14 @@ extern "C" {
 #endif
 // Op : 0 enable, 1 disable, 2 clear pending, 3 set priority, 4 set pending
 void TestNvic(int Op, int IrqNo, uint32_t Prio);
+uint32_t TestNvicGetEnable(int IrqNo);
 #ifdef __cplusplus
 }
 #endif
 
 #define NVIC_EnableIRQ(n)			TestNvic(0, (int)(n), 0)
 #define NVIC_DisableIRQ(n)			TestNvic(1, (int)(n), 0)
+#define NVIC_GetEnableIRQ(n)		TestNvicGetEnable((int)(n))
 #define NVIC_ClearPendingIRQ(n)		TestNvic(2, (int)(n), 0)
 #define NVIC_SetPriority(n, p)		TestNvic(3, (int)(n), (uint32_t)(p))
 #define NVIC_SetPendingIRQ(n)		TestNvic(4, (int)(n), 0)
