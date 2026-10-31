@@ -28,6 +28,7 @@ static unsigned subscribes;
 static unsigned disconnects;
 static unsigned reportCount;
 static uint8_t actualPhy = 1;
+static unsigned phyRefused = 1;
 static BtDevice_t peer;
 static char output[65536];
 static unsigned outputSize;
@@ -76,6 +77,11 @@ bool BtGapReadPhy(uint16_t, uint8_t *tx, uint8_t *rx)
 bool BtGapSetPhy(uint16_t, uint8_t tx, uint8_t rx, uint16_t)
 {
 	assert(tx == rx && (tx == 1 || tx == 2));
+	if (phyRefused > 0)
+	{
+		phyRefused--;
+		return false;
+	}
 	return true;
 }
 bool BtGapSetDataLength(uint16_t, uint16_t octets, uint16_t time)
@@ -157,11 +163,12 @@ int main()
 	assert(s_NotifQue != nullptr && CFifoAvail(s_NotifQue) == 12);
 	peer.Conn.MaxMtu = 247;
 	BtAppEvtConnected(0);
+	assert(s_PhyPending && !s_Failed);
 	s_ValueHdl = 0x12;
 	s_CccdHdl = 0x13;
 	nowMs = 1000;
 	AppCheckStatus();
-	assert(subscribes == 1);
+	assert(subscribes == 1 && !s_PhyPending);
 	BtGattClientNotified(1, 0x12, invalid, sizeof(invalid));
 	BtGattClientNotified(0, 0x14, invalid, sizeof(invalid));
 	assert(s_Rx.Bytes == 0);
