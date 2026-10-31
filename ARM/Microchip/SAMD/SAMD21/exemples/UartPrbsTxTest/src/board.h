@@ -1,13 +1,20 @@
 /**-------------------------------------------------------------------------
 @file	board.h
 
-@brief	SAM D21 Xplained Pro UART PRBS TX pin configuration
+@brief	Board specific definitions
+
+This file contains the I/O definitions for this application firmware.
+Keep it in the application project and modify it for the hardware in use.
+The pins are those of the SAM D21 Xplained Pro.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 28, 2026
 
 @license
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -31,16 +38,21 @@ SOFTWARE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-// EDBG virtual COM port: SERCOM3 PAD0 TX PA22, PAD1 RX PA23.
-// Internal 8 MHz clock; 16x USART oversampling limits the baud rate.
-#define UART_DEVNO			3
-#define UART_BAUDRATE		115200
-#define UART_INT_MODE		false
-#define UART_DMA_MODE		false
+#include "coredev/iopincfg.h"
 
-#define UART_PINS { \
-	{IOPORTA, 23, IOPINOP_PERIPHC, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-	{IOPORTA, 22, IOPINOP_PERIPHC, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+// EDBG virtual COM port on SERCOM3, function C: RX PA23 pad 1, TX PA22 pad 0.
+// Configure RX before TX in the pin map.
+#define UART_DEVNO			3
+#define UART_RX_PORT		IOPORTA
+#define UART_RX_PIN			23
+#define UART_RX_PINOP		IOPINOP_PERIPHC
+#define UART_TX_PORT		IOPORTA
+#define UART_TX_PIN			22
+#define UART_TX_PINOP		IOPINOP_PERIPHC
+
+#define UART_PINS			{ \
+	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-#endif
+#endif // __BOARD_H__

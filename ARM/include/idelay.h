@@ -64,7 +64,7 @@ extern uint32_t SystemnsDelayFactor;
  * @param	cnt : microsecond delay count
  */
 static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
-	asm volatile (
+	__asm__ volatile (
 #ifdef __GNUC__
 		".syntax unified\n"
 #endif
@@ -106,7 +106,7 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
  * @param	cnt : nanosecond count
  */
 static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt) {
-	asm volatile (
+	__asm__ volatile (
 #ifdef __GNUC__
 		".syntax unified\n"
 #endif

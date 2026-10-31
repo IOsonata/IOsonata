@@ -312,7 +312,7 @@ bool UsbIsoIntrfOpen(UsbIsoIntrf_t *pIntrf, uint16_t Mps, uint8_t Interval)
 {
 	if (pIntrf == nullptr || pIntrf->pData == nullptr ||
 		Mps == 0U || Mps > USB_ISO_INTRF_MAX_MPS ||
-		Mps > pIntrf->pData->BufferSize ||
+		USB_CTRLR_RX_CAPACITY(pIntrf->pData->DevNo, Mps) > pIntrf->pData->BufferSize ||
 		Interval == 0U || Interval > 16U)
 	{
 		return false;

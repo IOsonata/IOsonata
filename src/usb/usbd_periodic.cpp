@@ -52,11 +52,13 @@ bool UsbdPeriodic::Register(const UsbdPeriodicCfg_t &Cfg, uint8_t Type,
 	{
 		const UsbdPeriodicAlt_t &alt = Cfg.pAlternates[i];
 		if (alt.FsMps == 0U || alt.FsMps > fsLimit ||
-			alt.FsMps > BufferSize || alt.FsInterval == 0U ||
+			USB_CTRLR_RX_CAPACITY(Cfg.DevNo, alt.FsMps) > BufferSize ||
+			alt.FsInterval == 0U ||
 			(iso && alt.FsInterval > 16U) ||
 			(USB_HIGHSPEED_CAPABLE(Cfg.DevNo) &&
 			 (alt.HsMps == 0U || alt.HsMps > 1024U ||
-			  alt.HsMps > BufferSize || alt.HsInterval == 0U ||
+			  USB_CTRLR_RX_CAPACITY(Cfg.DevNo, alt.HsMps) > BufferSize ||
+			  alt.HsInterval == 0U ||
 			  alt.HsInterval > 16U)))
 		{
 			return false;

@@ -1,13 +1,18 @@
 /**-------------------------------------------------------------------------
-@file	sercom_clock_samd21.c
+@file	board.h
 
-@brief	SAM D21 SERCOM peripheral clock control
+@brief	SAM D21 Xplained Pro UART stdio retarget demo
+
+printf and the standard input go to the EDBG COM port at 115200 baud.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 29, 2026
 
 @license
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -28,38 +33,31 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include <stdbool.h>
-#include <stdint.h>
-#include "samdxxx.h"
+#ifndef __BOARD_H__
+#define __BOARD_H__
 
-#include "clock_samd.h"
+#include "coredev/iopincfg.h"
 
-#if !defined(__SAMD21J18A__)
-#error Unsupported SAM D device
-#endif
+// EDBG virtual COM port on SERCOM3, function C: RX PA23 pad 1, TX PA22 pad 0.
+// Configure RX before TX in the pin map.
+#define UART_DEVNO			3
+#define UART_RX_PORT		IOPORTA
+#define UART_RX_PIN			23
+#define UART_RX_PINOP		IOPINOP_PERIPHC
+#define UART_TX_PORT		IOPORTA
+#define UART_TX_PIN			22
+#define UART_TX_PINOP		IOPINOP_PERIPHC
+// No flow control
+#define UART_CTS_PORT		-1
+#define UART_CTS_PIN		-1
+#define UART_CTS_PINOP		IOPINOP_GPIO
+#define UART_RTS_PORT		-1
+#define UART_RTS_PIN		-1
+#define UART_RTS_PINOP		IOPINOP_GPIO
+#define UART_BAUDRATE		115200
+// Interrupt mode, no DMA path on SAM D
+#define UART_INT_MODE		true
+#define UART_DMA_MODE		false
+#define UART_INT_PRIO		2
 
-#define SAMD21_PM_APBCMASK	(*(volatile uint32_t *)0x40000420UL)
-#define SAMD21_SERCOM_MASK(n)	(1UL << ((n) + 2U))
-#define SAMD21_SERCOM_GCLK(n)	((uint8_t)((n) + 20U))
-
-bool Samd21SercomClockEnable(int DevNo)
-{
-	uint32_t mask;
-
-	if (DevNo < 0 || DevNo >= 6)
-	{
-		return false;
-	}
-
-	mask = SAMD21_SERCOM_MASK(DevNo);
-
-	// SERCOM register access requires the APBC bus clock.
-	SAMD21_PM_APBCMASK |= mask;
-
-	if (!SamdGclkChannelEnable(SAMD21_SERCOM_GCLK(DevNo), 0U))
-	{
-		return false;
-	}
-
-	return (SAMD21_PM_APBCMASK & mask) != 0U;
-}
+#endif // __BOARD_H__

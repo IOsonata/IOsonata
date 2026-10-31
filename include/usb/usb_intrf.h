@@ -26,7 +26,8 @@ with its Data portion and capacity. The controller accepts one OUT transfer
 and schedules DMA. At completion, UsbIntrf writes the packet header, publishes
 the block with CFifoPut, then reports DEVINTRF_EVT_RX_DATA to the application.
 Only this producer moves PutIdx; the reserved block remains owned until DMA
-completes. BufferSize sizes the RX blocks and must cover the endpoint MPS.
+completes. BufferSize sizes the RX blocks and must cover
+USB_CTRLR_RX_CAPACITY of the endpoint MPS, the MPS itself on most controllers.
 Byte and packet modes use the TX CFifo as the transfer source.
 
 Direct mode supplies RX and TX slots, each with UsbPktHdr_t followed by the

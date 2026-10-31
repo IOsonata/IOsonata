@@ -140,6 +140,8 @@ static const UsbCfg_t s_UsbCfg = {
 UsbdCdc g_LoopbackCdc;
 UsbdCdc g_PrbsCdc;
 static atomic_bool s_LoopbackSessionStart = true;
+static atomic_bool s_LoopbackBannerPending = false;
+static const char s_LoopbackBanner[] = "\r\nIOsonata USB Dual CDC Loopback\r\n";
 
 static int LoopbackEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 							  uint8_t *pBuffer, int Len)
@@ -147,13 +149,13 @@ static int LoopbackEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 	(void)pDev;
 	(void)pBuffer;
 
+	// The banner is written by the main loop: this callback runs in the USB
+	// interrupt, which can come while the main loop is in Rx on the same
+	// interface, and the interface busy flag then refuses the Tx
 	if (EvtId == DEVINTRF_EVT_STATECHG && Len)
 	{
-		const char *msg = "\r\nIOsonata USB Dual CDC Loopback\r\n";
-
 		atomic_store(&s_LoopbackSessionStart, true);
-		g_LoopbackCdc.Tx(0, reinterpret_cast<const uint8_t *>(msg),
-						 (int)strlen(msg));
+		atomic_store(&s_LoopbackBannerPending, true);
 	}
 
 	return 0;
@@ -167,6 +169,7 @@ int main()
 	uint32_t loopbackRxErrorNotify = 0;
 	int loopbackPending = 0;
 	int loopbackOffset = 0;
+	int bannerOffset = -1;
 
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
 		!UsbInit(&s_UsbCfg) ||
@@ -184,9 +187,30 @@ int main()
 	{
 		AppEvtHandlerExec();
 
+		if (atomic_exchange(&s_LoopbackBannerPending, false))
+		{
+			bannerOffset = 0;
+		}
+
 		// Service at most one loopback operation per pass so the PRBS producer
-		// below always gets a chance to queue data as well.
-		if (loopbackPending > 0)
+		// below always gets a chance to queue data as well. The banner of a
+		// new session goes before its loopback data.
+		if (bannerOffset >= 0)
+		{
+			int length = g_LoopbackCdc.Tx(0,
+				reinterpret_cast<const uint8_t *>(&s_LoopbackBanner[bannerOffset]),
+				(int)(sizeof(s_LoopbackBanner) - 1U) - bannerOffset);
+
+			if (length > 0)
+			{
+				bannerOffset += length;
+			}
+			if (bannerOffset >= (int)(sizeof(s_LoopbackBanner) - 1U))
+			{
+				bannerOffset = -1;
+			}
+		}
+		else if (loopbackPending > 0)
 		{
 			int length = g_LoopbackCdc.Tx(
 				0, &loopbackBuffer[loopbackOffset], loopbackPending);

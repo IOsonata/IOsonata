@@ -673,7 +673,8 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps)
 {
-	if (pIntrf == nullptr || Mps == 0U || Mps > pIntrf->BufferSize)
+	if (pIntrf == nullptr || Mps == 0U ||
+		USB_CTRLR_RX_CAPACITY(pIntrf->DevNo, Mps) > pIntrf->BufferSize)
 	{
 		return false;
 	}

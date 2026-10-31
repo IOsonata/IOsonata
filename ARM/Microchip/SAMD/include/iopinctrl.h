@@ -1,13 +1,18 @@
 /**-------------------------------------------------------------------------
 @file	iopinctrl.h
 
-@brief	SAM D GPIO pin access
+@brief	SAM D11/D21 GPIO pin access
+
+Inline functions for the fast access to the PORT registers.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 28, 2026
 
 @license
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -78,4 +83,4 @@ static inline void IOPinWritePort(int PortNo, uint32_t Data)
 	PORT_REGS->GROUP[PortNo].PORT_OUT = Data;
 }
 
-#endif
+#endif // __IOPINCTRL_H__

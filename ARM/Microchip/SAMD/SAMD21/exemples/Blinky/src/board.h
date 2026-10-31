@@ -1,13 +1,20 @@
 /**-------------------------------------------------------------------------
 @file	board.h
 
-@brief	SAMD21 Xplained Pro Blinky pin configuration
+@brief	SAM D21 Xplained Pro LED and button
+
+This file contains the I/O definitions for this application firmware.
+Keep it in the application project and modify it for the hardware in use.
+The pins are those of the SAM D21 Xplained Pro.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 29, 2026
 
 @license
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -31,9 +38,19 @@ SOFTWARE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-// Xplained Pro LED0 is active low.
-#define LED_PINS_MAP { \
+#include "coredev/iopincfg.h"
+
+// LED0 on PB30, active low
+#define LED_PINS_MAP		{ \
 	{ IOPORTB, 30, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL } \
 }
 
-#endif
+// SW0 on PA15, active low, EXTINT 15 of the EIC on the press
+#define BUTTON_PINS_MAP		{ \
+	{ IOPORTA, 15, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL } \
+}
+#define BUT1_INT			15
+#define BUT1_INT_PRIO		3
+#define BUT1_SENSE			IOPINSENSE_LOW_TRANSITION
+
+#endif // __BOARD_H__

@@ -6,6 +6,11 @@
 
 This example demonstrate how to use the generic timer
 
+The results are printed on the board UART. board.h can define
+TIMER_DEMO_NO_UART for a device whose flash does not hold the UART and
+printf (SAM D11): the triggers then only toggle the LEDs, the counts and
+periods are in g_TriggerCount and g_Period for the debugger.
+
 @author	Hoang Nguyen Hoan
 @date	Sep. 7, 2017
 
@@ -45,7 +50,9 @@ SOFTWARE.
 
 #include "board.h"
 
+#if !defined(TIMER_DEMO_UART) && !defined(TIMER_DEMO_NO_UART)
 #define TIMER_DEMO_UART
+#endif
 
 #ifdef TIMER_DEMO_UART
 #include "coredev/uart.h"
@@ -197,14 +204,18 @@ int main(void)
 #endif
 	if (!g_TimerInitOk)
 	{
+#ifdef TIMER_DEMO_UART
 		printf("Timer %d initialization failed\r\n", s_TimerCfg.DevNo);
+#endif
 		return 1;
 	}
 
 	triggers = TimerGetMaxTrigger(dev);
 	if (triggers < 1)
 	{
+#ifdef TIMER_DEMO_UART
 		printf("No timer triggers available\r\n");
+#endif
 		TimerDisable(dev);
 		return 1;
 	}
@@ -223,7 +234,9 @@ int main(void)
 			ns, TIMER_TRIG_TYPE_CONTINUOUS);
 #endif
 		g_TriggerPeriod[i] = period;
+#ifdef TIMER_DEMO_UART
 		printf("Timer %d trigger %d: %lu ms\r\n", s_TimerCfg.DevNo, i, (unsigned long)(period / 1000000ULL));
+#endif
 		if (period == 0)
 		{
 			for (n = 0; n < i; n++)
@@ -254,9 +267,13 @@ int main(void)
 		{
 			continue;
 		}
+#ifdef TIMER_DEMO_UART
 		printf("Count = %lu ms", (unsigned long)TimerGetMilisecond(dev));
 		for (i = 0; i < triggers; i++)
 			printf(", T%d = %lu us", i, (unsigned long)(periods[i] / 1000));
 		printf("\r\n");
+#else
+		(void)periods;
+#endif
 	}
 }

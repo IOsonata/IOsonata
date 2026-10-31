@@ -156,6 +156,8 @@ See [RE01 tests](../tests/re01/README.md) and
 | [SAM4LCxC](../ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc/) | GPIO, UART, I2C, SPI, AST and six TC timer channels, native USB device | [Examples](../ARM/Microchip/SAM4L/SAM4LCxC/exemples/): UART PRBS/retargeting, I2C master/slave, SPI master/slave/loopback, timers, CDC, HID, bulk, interrupt, ISO, MSC and dual CDC; CDC with TaktOS | Supported; SAM4LC8C hardware validated on SAM4L8 Xplained Pro for startup, GPIO, UART, timers, I2C, SPI and USB. |
 | [SAM4LSxC](../ARM/Microchip/SAM4L/SAM4LSxC/README.md) | Same shared SAM4L GPIO, UART, I2C, SPI, AST/TC and USB device drivers | [Examples](../ARM/Microchip/SAM4L/SAM4LSxC/exemples/): matching serial, bus, timer and USB applications, including CDC with TaktOS | Supported; build-tested shared implementation and supplied IOcomposer projects. Not hardware validated; users can build and try the port. |
 | [SAM4E16E](../ARM/Microchip/SAM4E/SAM4E16E/lib/ioc/) | Startup, GPIO, UART and polling I2C master implementation | [Examples](../ARM/Microchip/SAM4E/SAM4E16E/exemples/): Blinky, UART PRBS, UART retargeting and DFU project | Partial port. No target IOsonata Timer implementation. I2C slave/interrupt/DMA paths are unfinished; native SPI is not implemented. |
+| [SAMD21J18A](../ARM/Microchip/SAMD/SAMD21/lib/ioc/) | GPIO with EIC pin interrupts, SERCOM UART (TX by DMA), I2C and SPI master/slave (master DMA), DMAC, RTC, five TC and three TCC timers (RTC tick interrupt, TC and TCC external trigger capture through the event system), full speed USB device, ADC, DAC | [Examples](../ARM/Microchip/SAMD/SAMD21/exemples/): Blinky, pulse train, timers, UART PRBS TX/RX, loopback, SLIP PRBS TX/RX, retargeting, PRBS TX with TaktOS, I2C scan, master, slave and master/slave, SPI loopback, master, slave and master/slave, USB CDC, dual CDC, vendor bulk, interrupt and isochronous loopbacks, HID, mass storage, UART to USB bridge, ADC, DAC | Supported. Startup at 48 MHz and UART PRBS TX at the 1 Mbaud line rate validated on SAM D21 Xplained Pro; timers, I2C, SPI, DMA, USB, ADC and DAC run on a peripheral model only. No UART RX or slave DMA, USB host, PWM or crypto. |
+| [SAMD11D14AM](../ARM/Microchip/SAMD/SAMD11/lib/ioc/) | Same shared GPIO/EIC, UART, I2C, SPI, timer, USB device, ADC and DAC drivers: RTC, two TC and one TCC. The library is built without DMA (`SAMD_DMAC_NONE`) to keep the UART examples in the 16 KB flash. | [Examples](../ARM/Microchip/SAMD/SAMD11/exemples/): Blinky, pulse train, timers (no console), UART PRBS TX/RX, loopback, SLIP PRBS TX, PRBS TX with TaktOS. The examples that print with `printf`, I2C, SPI, ADC and DAC, and the USB examples exceed the 16 KB flash. | Supported. Startup at 48 MHz and UART PRBS TX at the 1 Mbaud line rate validated on SAM D11 Xplained Pro; timers run on a peripheral model only. |
 
 The SAM4L [UART](../ARM/Microchip/SAM4L/src/uart_sam4l.cpp),
 [I2C](../ARM/Microchip/SAM4L/src/i2c_sam4l.cpp),
@@ -164,6 +166,17 @@ The SAM4L [UART](../ARM/Microchip/SAM4L/src/uart_sam4l.cpp),
 and LS. Application pin maps and selected flash/RAM sizes distinguish projects.
 SAM4E has its own [I2C implementation](../ARM/Microchip/SAM4E/src/i2c_sam4e.cpp);
 its current transfer and interrupt code does not supply the same modes as SAM4L.
+
+The SAM D11 and SAM D21 drivers in [`ARM/Microchip/SAMD/src`](../ARM/Microchip/SAMD/src/)
+are shared by both MCUs. DevNo of the UART, I2C and SPI is the SERCOM number;
+timer device 0 is the RTC, then the TC (TC1 and TC2 on SAM D11, TC3 to TC7
+on SAM D21), then the TCC (TCC0 on SAM D11, TCC0 to TCC2 on SAM D21). The
+USB device port is [`usb_ctrlr_samd.cpp`](../ARM/Microchip/SAMD/src/usb_ctrlr_samd.cpp).
+The ADC driver is `AdcSamd` of [`adc_samd.h`](../ARM/Microchip/SAMD/include/adc_samd.h), the DAC driver
+`DacSamd` of [`dac_samd.h`](../ARM/Microchip/SAMD/include/dac_samd.h).
+The examples ran on a register model of the two devices; on the boards, the
+startup and the UART transmit test. See the
+[port notes](../ARM/Microchip/SAMD/README.md).
 
 SAM4L is hardware validated, confirmed by the maintainer on 2026-10-08.
 The [AST driver](../ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp) provides

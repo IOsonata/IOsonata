@@ -90,6 +90,14 @@ SOFTWARE.
 #define USB_CONFIG_DESC_MAXLEN		1024U
 #endif
 
+/// Bytes an OUT receive buffer holds for packets of up to Mps bytes. The
+/// packet size, unless the controller writes past the packet (CRC bytes): its
+/// usb_ctrlr.h then gives the size. Interfaces are opened only with a buffer
+/// of that size.
+#ifndef USB_CTRLR_RX_CAPACITY
+#define USB_CTRLR_RX_CAPACITY(CtrlrNo, Mps)	((uint16_t)(Mps))
+#endif
+
 /// Bus speed. What the controller can do is USB_HIGHSPEED_CAPABLE() at compile
 /// time. This is what enumeration actually negotiated.
 typedef enum __Usb_Speed {
