@@ -28,8 +28,21 @@ code = r'''
 #define NDEBUG
 #define SysLogPrintf(...) ((void)0)
 static uint32_t now, processMs;
-static uint32_t BtSmpMsTick() { return now; }
 static uint32_t irq;
+static uint32_t expectedClockMask;
+static bool interruptClockRequest;
+extern "C" void BleStackCB_Process(void);
+static uint32_t BtSmpMsTick()
+{
+	// Port clock conversion must not inherit an extra queue-state IRQ mask.
+	assert(irq == expectedClockMask);
+	if (interruptClockRequest)
+	{
+		interruptClockRequest = false;
+		BleStackCB_Process();
+	}
+	return now;
+}
 static unsigned hostRuns, taskRuns, count, head, tail;
 static bool refuse, interruptRequest, requestWhileRunning;
 static int processResult = 1;
@@ -116,6 +129,13 @@ int main()
 	RunOne();
 	assert(hostRuns == 1 && taskRuns == 2 && count == 0);
 
+	// An IRQ during timestamp capture must see the reserved host work.
+	interruptClockRequest = true;
+	BleStackCB_Process();
+	assert(count == 1);
+	RunOne();
+	assert(count == 0);
+
 	// A request during queue admission coalesces with its reservation.
 	interruptRequest = true;
 	BleStackCB_Process();
@@ -128,6 +148,7 @@ int main()
 
 	// A full queue retains work for the status retry, including masked callers.
 	irq = 1;
+	expectedClockMask = 1;
 	refuse = true;
 	now = 100;
 	BleStackCB_Process();

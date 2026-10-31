@@ -107,5 +107,16 @@ Eclipse Embedded CDT 2025-12 managed Debug/Release builds are checked on Linux
 with Arm GNU GCC 13.2.1 and the v1.10.0 pinned dependencies. Both images include
 ST startup assembly and define Reset_Handler and g_pfnVectors. ST's packed-list
 pointer alignment warnings remain in app_ble.c and ble_timer.c.
-The automatic benchmark still requires DK1 radio validation. Its measured
-results, rather than host tests, determine the comparison with IOsonata.
+Maintainer DK1 runs on 2026-10-31 completed both 60-second trials against
+BlePrbs_SDC at 15 ms / MTU 247, with 244-byte notifications, zero PRBS errors
+and zero application queue drops:
+
+| ST comparison build | 1M bytes/s | 2M bytes/s | 2M notifications/15 ms |
+| --- | ---: | ---: | ---: |
+| Debug | 77,803 | 109,759 | 6.747 |
+| Release | 78,535 | 109,877 | 6.754 |
+
+Both passed the 1M target and missed the eight-notification 2M target.
+These are single runs, not a controlled estimate of run-to-run variation.
+They validate the automatic comparison application; they do not validate
+subsequent changes to IOsonata's startup or Bluetooth integration.

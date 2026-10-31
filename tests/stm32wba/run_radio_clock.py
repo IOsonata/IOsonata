@@ -67,10 +67,17 @@ static uint8_t testOtp[512];
 #define RCC_ECSCR1_HSETRIM (0x3fU << 16)
 #define PWR (&pwr)
 static uint32_t SystemCoreClock = 100000000;
+static struct { uint32_t CR; } icache = {1};
+#define ICACHE (&icache)
+#define ICACHE_CR_EN 1U
 McuOsc_t g_McuOsc;
 static const char *clockName;
 static void *SysLogGet() { return nullptr; }
 static void SysLogPrintf(void *, const char *, const char *name) { clockName = name; }
+static void SysLogPrintf(void *, const char *, unsigned long hz, const char *cache)
+{
+	assert(hz == SystemCoreClock && strcmp(cache, "enabled") == 0);
+}
 '''
 code += source[start:end]
 code += r'''

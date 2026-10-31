@@ -273,6 +273,9 @@ extern "C" void BtWbaPlatformInit(void)
 	MODIFY_REG(RCC->BDCR1, RCC_BDCR1_RADIOSTSEL, src);
 	SysLogPrintf(SysLogGet(), "WBA radio sleep clock: %s\r\n",
 				 bLse ? "LSE 32768 Hz" : "LSI1");
+	SysLogPrintf(SysLogGet(), "WBA core clock: %lu Hz; ICACHE: %s\r\n",
+				 (unsigned long)SystemCoreClock,
+				 (ICACHE->CR & ICACHE_CR_EN) != 0U ? "enabled" : "disabled");
 }
 
 extern "C" void scm_notifyradiostate(uint32_t State)

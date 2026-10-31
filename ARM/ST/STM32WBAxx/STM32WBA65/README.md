@@ -280,6 +280,13 @@ sets the core clock to 100 MHz from PLL1R, following `HAL_RCC_OscConfig` and
 5. The switch goes through the PLL1R two step divider as the ST HAL does, then
    the divider is released. HCLK, PCLK1, PCLK2 and PCLK7 are not divided.
 
+Startup enables the instruction cache in the direct-mapped mode used by
+CubeWBA's throughput client and retains its RAM in Stop mode. A cache already
+enabled by a boot loader or an earlier clock selection keeps its existing mode.
+The NVM and DFU drivers invalidate enabled cache lines after flash changes.
+Bluetooth startup reports the actual core frequency and cache enable state.
+Flash prefetch remains enabled; it does not replace the instruction cache.
+
 If PLL1 does not lock the clock stays on HSI16. Startup also stops clock
 reconfiguration when HSI readiness, the switch back to HSI, PLL shutdown or
 either voltage-ready acknowledgement times out. It leaves the current clock
@@ -291,9 +298,10 @@ the RCC registers. `SystemCoreClockSelect(OSC_TYPE_RC, 0)` or
 Validation: `tests/stm32wba/run_clock.py` runs the setup in an instruction set
 emulator with a model of the RCC, PWR and flash registers that checks the order
 of the steps, the PLL limits, the flash wait states against the frequency, the
-switch rules of the PLL1R divider and the fall back when HSE does not start (36
-checks, including failed voltage acknowledgements, a refused switch to HSI
-and a PLL that does not stop). It does not model lock time. Not tested on hardware.
+switch rules of the PLL1R divider and the fall back when HSE does not start (40
+checks, including cache enable, retention and preservation across clock changes,
+failed voltage acknowledgements, a refused switch to HSI and a PLL that does
+not stop). It does not model lock time. Not tested on hardware.
 
 ## Timer example project
 

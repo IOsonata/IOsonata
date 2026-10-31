@@ -310,9 +310,11 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 
+	// BtSmpMsTick protects its controller read internally. Keep its 64-bit
+	// time conversion outside our queue-state critical section.
+	start = BtSmpMsTick();
 	state = __get_PRIMASK();
 	__disable_irq();
-	start = BtSmpMsTick();
 	wait = start - s_HostRequestedMs;
 	s_bBleHostQueued = false;
 	__set_PRIMASK(state);
@@ -355,6 +357,7 @@ extern "C" void BleStackCB_Process(void)
 {
 	uint32_t state;
 	bool queue;
+	bool stamp = false;
 
 	state = __get_PRIMASK();
 	__disable_irq();
@@ -362,14 +365,19 @@ extern "C" void BleStackCB_Process(void)
 	if (queue)
 	{
 		// Preserve the first request across coalescing and queue-full retries.
-		if (s_bBleHostOwed == false)
-		{
-			s_HostRequestedMs = BtSmpMsTick();
-		}
+		stamp = s_bBleHostOwed == false;
 		s_bBleHostQueued = true;
 		s_bBleHostOwed = false;
 	}
 	__set_PRIMASK(state);
+
+	// The reservation coalesces IRQ requests while the timestamp is captured.
+	// Publish it before BtEvtQue can make the consumer runnable. The clock
+	// reader masks only the raw controller read, not its 64-bit conversion.
+	if (stamp)
+	{
+		s_HostRequestedMs = BtSmpMsTick();
+	}
 
 	// The reservation covers interrupt requests during BtEvtQue. Keep the
 	// queue call outside the critical section for ISR-safe RTOS overrides.

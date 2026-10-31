@@ -46,7 +46,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stm32_boards.h"
 
 // Use the DK1 LSE crystal for host timers and the radio sleep timer.
-// Keep the existing HSI16 core-clock source for this comparison.
+// Keep HSI16 as the PLL source; SystemInit selects a 100 MHz core clock.
 #define MCUOSC { \
 	{OSC_TYPE_RC, 16000000, 20, 0}, \
 	{OSC_TYPE_XTAL, 32768, 500, 0}, \

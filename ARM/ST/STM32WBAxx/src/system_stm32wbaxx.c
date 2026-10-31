@@ -251,6 +251,19 @@ void SystemInit(void)
 	RCC->AHB4ENR |= RCC_AHB4ENR_PWREN;
 	(void)RCC->AHB4ENR;
 
+	// Match CubeWBA's MX_ICACHE_Init: retain the cache RAM and use the
+	// direct-mapped mode. Flash prefetch alone does not cache host/LL code.
+	// Preserve a cache already enabled by a boot loader or an earlier call
+	// to SystemCoreClockSelect; changing its mode while running is unsafe.
+	PWR->CR2 &= ~PWR_CR2_ICRAMPDS;
+	if ((ICACHE->CR & ICACHE_CR_EN) == 0U)
+	{
+		ICACHE->CR &= ~ICACHE_CR_WAYSEL;
+		ICACHE->CR |= ICACHE_CR_EN;
+		__DSB();
+		__ISB();
+	}
+
 	// Run from HSI16 with PLL1 off, the reset state, also after a boot loader
 	// or an earlier call left another clock running
 	RCC->CR |= RCC_CR_HSION;
