@@ -74,6 +74,11 @@ extern "C" uint8_t sdc_hci_cmd_le_add_device_to_periodic_adv_list(const sdc_hci_
 	SDC_CMD_RECORD(le_add_device_to_periodic_adv_list);
 }
 
+extern "C" uint8_t sdc_hci_cmd_le_ext_create_conn(const sdc_hci_cmd_le_ext_create_conn_t *)
+{
+	SDC_CMD_RECORD(le_ext_create_conn);
+}
+
 extern "C" uint8_t sdc_hci_cmd_le_create_conn(const sdc_hci_cmd_le_create_conn_t *)
 {
 	SDC_CMD_RECORD(le_create_conn);

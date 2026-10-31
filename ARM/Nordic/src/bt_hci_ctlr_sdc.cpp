@@ -359,6 +359,10 @@ static int32_t BtHciCmdSdcScan(uint16_t OpCode, const void *pParam, void *pRet, 
 			res = sdc_hci_cmd_le_create_conn((const sdc_hci_cmd_le_create_conn_t*)pParam);
 			break;
 
+		case BT_HCI_CMD_CTLR_EXT_CREATE_CONN:
+			res = sdc_hci_cmd_le_ext_create_conn((const sdc_hci_cmd_le_ext_create_conn_t*)pParam);
+			break;
+
 		default:
 			return BT_HCI_CMD_SDC_NOT_FOUND;
 	}

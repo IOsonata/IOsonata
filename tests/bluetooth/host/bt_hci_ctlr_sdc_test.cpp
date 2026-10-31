@@ -755,6 +755,28 @@ void ReconnectRx(BtHciCtlrDev_t *, bool bEvent, uint8_t *pPacket)
 	CHECK(BtHciCtlrCommand(nullptr, opcode, nullptr, 0, nullptr, 0) == 0);
 }
 
+void TestExtendedConnectionCommand(void)
+{
+	BtHciCtlrCfg_t cfg = MakeCfg(BT_GAP_ROLE_CENTRAL);
+	BtHciCtlrDev_t dev = {};
+	uint8_t parameters[26] = {};
+	int before;
+
+	Reset();
+	CHECK(BtHciCtlrStart(&dev, &cfg));
+	before = g_SdcHciCmdCount;
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_EXT_CREATE_CONN,
+		parameters, sizeof(parameters), nullptr, 0) == 0);
+	CHECK(g_SdcHciCmdCount == before + 1);
+	CHECK(g_SdcHciCmdLast != nullptr && std::strcmp(g_SdcHciCmdLast, "le_ext_create_conn") == 0);
+	CHECK(s_Basepri == 0);
+	g_SdcHciCmdStatus = 0x12;
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_EXT_CREATE_CONN,
+		parameters, sizeof(parameters), nullptr, 0) == 0x12);
+	CHECK(s_Basepri == 0);
+	g_SdcHciCmdStatus = 0;
+}
+
 void TestControllerSerialization(void)
 {
 	BtHciCtlrCfg_t cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
@@ -1091,6 +1113,7 @@ int main(void)
 	TestBringUpOrderAndFailures();
 	TestNullArgumentsAreRefused();
 	TestHostStartCommandsAreAnswered();
+	TestExtendedConnectionCommand();
 	TestControllerSerialization();
 
 	if (s_Failures != 0)
