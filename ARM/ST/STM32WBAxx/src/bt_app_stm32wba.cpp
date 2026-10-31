@@ -583,7 +583,8 @@ enum {
 	DISC_MTU,
 	DISC_SERVICES_PENDING,
 	DISC_CHARS_PENDING,
-	DISC_DESCS_PENDING
+	DISC_DESCS_PENDING,
+	DISC_FAILED
 };
 
 // Discovery progress lives in the peer record, one cursor per link
@@ -617,7 +618,7 @@ static void WbaGattAttrModified(uint16_t ConnHdl, uint16_t AttrHdl,
 
 			if (AttrHdl == pChar->CccdHdl)
 			{
-				if (Len == 2 && pData != nullptr)
+				if (Offset == 0 && Len == 2 && pData != nullptr)
 				{
 					uint16_t cccd = (uint16_t)(pData[0] | (pData[1] << 8));
 					BtGattCccdSet(ConnHdl, pChar->CccdHdl, cccd);
@@ -1388,16 +1389,6 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					break;
 				}
 
-				case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
-				{
-					// The client confirmed our indication. Clear the pending state
-					// and drain the send-order ring so TxCompleteCB fires.
-					uint16_t ch = *(uint16_t*)pAci->data;
-					BtGattHandleValueConfirm(ch);
-					BtGattSendCompleted(ch, 1);
-					break;
-				}
-
 				case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:
 				{
 					aci_gatt_attribute_modified_event_rp0 *pM =
@@ -2089,7 +2080,7 @@ static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 	{
 		peer = BtPeerSlot(idx);
 		if (peer != nullptr && peer->Conn.Hdl != BT_CONN_HDL_INVALID &&
-			peer->Discovery.Phase != DISC_IDLE)
+			peer->Discovery.Phase != DISC_IDLE && peer->Discovery.Phase != DISC_FAILED)
 		{
 			SysLogPrintf(SysLogGet(), "ms=%lu WBA discovery: hdl=%u phase=%u mtu=%u host=%lu checks=%lu ring=%u\r\n",
 					(unsigned long)BtSmpMsTick(), (unsigned)peer->Conn.Hdl,
@@ -2203,7 +2194,8 @@ static uint16_t WbaUuid16(const uint8_t *pUuid, uint8_t Len)
 static void WbaDiscSrvc(const aci_att_read_by_group_type_resp_event_rp0 *p)
 {
 	BtDevice_t *pDev = BtPeerFindByHdl(p->Connection_Handle);
-	if (pDev == nullptr || pDev->pServices == nullptr)
+	if (pDev == nullptr || pDev->pServices == nullptr ||
+		pDev->Discovery.Phase != DISC_SERVICES)
 	{
 		// Unknown link, or discovery not started by BtAppDiscoverDevice
 		return;
@@ -2241,7 +2233,9 @@ static void WbaDiscSrvc(const aci_att_read_by_group_type_resp_event_rp0 *p)
 static void WbaDiscChar(const aci_att_read_by_type_resp_event_rp0 *p)
 {
 	BtDevice_t *pDev = BtPeerFindByHdl(p->Connection_Handle);
-	if (pDev == nullptr || pDev->Discovery.SrvIdx >= pDev->NbSrvc)
+	if (pDev == nullptr || pDev->pServices == nullptr ||
+		pDev->Discovery.Phase != DISC_CHARS ||
+		pDev->Discovery.SrvIdx >= pDev->NbSrvc)
 	{
 		return;
 	}
@@ -2297,7 +2291,9 @@ static void WbaDiscChar(const aci_att_read_by_type_resp_event_rp0 *p)
 static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p)
 {
 	BtDevice_t *pDev = BtPeerFindByHdl(p->Connection_Handle);
-	if (pDev == nullptr || pDev->Discovery.SrvIdx >= pDev->NbSrvc)
+	if (pDev == nullptr || pDev->pServices == nullptr ||
+		pDev->Discovery.Phase != DISC_DESCS ||
+		pDev->Discovery.SrvIdx >= pDev->NbSrvc)
 	{
 		return;
 	}
@@ -2337,10 +2333,33 @@ static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p)
 	}
 }
 
+// Retry only temporary admission failures. A completed procedure error is
+// terminal for this discovery attempt, not a command-admission retry.
+static bool WbaDiscRetryable(tBleStatus Status)
+{
+	return Status == BLE_STATUS_BUSY || Status == BLE_STATUS_PENDING ||
+		Status == BLE_STATUS_INSUFFICIENT_RESOURCES;
+}
+
+static void WbaDiscFailed(BtDevice_t *pDev, tBleStatus Status)
+{
+	SysLogPrintf(SysLogGet(), "WBA discovery failed: hdl=%u phase=%u status=0x%02x\r\n",
+		(unsigned)pDev->Conn.Hdl, (unsigned)pDev->Discovery.Phase, (unsigned)Status);
+	pDev->Discovery.Phase = DISC_FAILED;
+	pDev->Discovery.SrvIdx = 0;
+	pDev->Discovery.CharIdx = 0;
+	pDev->NbSrvc = 0;
+	if (pDev->pServices != nullptr)
+	{
+		memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
+	}
+}
+
 // Issue characteristic discovery for the current service, skipping empty
 // services. When every service has been covered, move on to descriptors.
 static void BtAppDiscStartChar(BtDevice_t *pDev)
 {
+	tBleStatus status;
 	BtGattDBSrvc_t *pSrvc;
 	uint16_t start;
 	uint16_t end;
@@ -2351,15 +2370,19 @@ static void BtAppDiscStartChar(BtDevice_t *pDev)
 		start = (uint16_t)(pSrvc->handle_range.StartHdl + 1);
 		end = pSrvc->handle_range.EndHdl;
 
-		if (start <= end)
+		if (pSrvc->handle_range.StartHdl < end && start <= end)
 		{
 			pDev->Discovery.Phase = DISC_CHARS;
-			if (aci_gatt_disc_all_char_of_service(pDev->Conn.Hdl, start, end) ==
-				BLE_STATUS_SUCCESS)
+			status = aci_gatt_disc_all_char_of_service(pDev->Conn.Hdl, start, end);
+			if (status == BLE_STATUS_SUCCESS)
 			{
 				return;
 			}
 			pDev->Discovery.Phase = DISC_CHARS_PENDING;
+			if (!WbaDiscRetryable(status))
+			{
+				WbaDiscFailed(pDev, status);
+			}
 			return;
 		}
 		pDev->Discovery.SrvIdx++;
@@ -2375,6 +2398,7 @@ static void BtAppDiscStartChar(BtDevice_t *pDev)
 // complete.
 static void BtAppDiscStartDesc(BtDevice_t *pDev)
 {
+	tBleStatus status;
 	BtGattDBSrvc_t *pSrvc;
 	BtGattDBChar_t *pCh;
 	uint16_t valHdl;
@@ -2401,17 +2425,21 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 				end = pSrvc->handle_range.EndHdl;
 			}
 
-			if (valHdl != BT_ATT_HANDLE_INVALID && start <= end)
+			if (valHdl != BT_ATT_HANDLE_INVALID && valHdl < end && start <= end)
 			{
 				pDev->Discovery.Phase = DISC_DESCS;
 				// ST takes the characteristic value handle and walks the Find
 				// Information range internally up to End_Handle.
-				if (aci_gatt_disc_all_char_desc(pDev->Conn.Hdl, valHdl, end) ==
-					BLE_STATUS_SUCCESS)
+				status = aci_gatt_disc_all_char_desc(pDev->Conn.Hdl, valHdl, end);
+				if (status == BLE_STATUS_SUCCESS)
 				{
 					return;
 				}
 				pDev->Discovery.Phase = DISC_DESCS_PENDING;
+				if (!WbaDiscRetryable(status))
+				{
+					WbaDiscFailed(pDev, status);
+				}
 				return;
 			}
 			pDev->Discovery.CharIdx++;
@@ -2437,6 +2465,13 @@ static void WbaDiscProcComplete(const aci_gatt_proc_complete_event_rp0 *p)
 	SysLogPrintf(SysLogGet(), "ms=%lu WBA GATT complete: hdl=%u phase=%u status=0x%02x\r\n",
 			(unsigned long)BtSmpMsTick(), (unsigned)p->Connection_Handle,
 			(unsigned)pDev->Discovery.Phase, (unsigned)p->Error_Code);
+
+	if (pDev->Discovery.Phase >= DISC_SERVICES && pDev->Discovery.Phase <= DISC_MTU &&
+		p->Error_Code != BLE_STATUS_SUCCESS)
+	{
+		WbaDiscFailed(pDev, p->Error_Code);
+		return;
+	}
 
 	switch (pDev->Discovery.Phase)
 	{
@@ -2473,6 +2508,11 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 	{
 		return false;
 	}
+	// Only an explicit new request restarts a failed attempt.
+	if (pDev->Discovery.Phase == DISC_FAILED)
+	{
+		pDev->Discovery.Phase = DISC_IDLE;
+	}
 	if (pDev->Discovery.Phase != DISC_IDLE &&
 		pDev->Discovery.Phase != DISC_SERVICES_PENDING)
 	{
@@ -2492,6 +2532,10 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 				(unsigned long)BtSmpMsTick(), (unsigned)pDev->Conn.Hdl, (unsigned)status);
 		if (status != BLE_STATUS_SUCCESS)
 		{
+			if (!WbaDiscRetryable(status))
+			{
+				WbaDiscFailed(pDev, status);
+			}
 			return false;
 		}
 		pDev->Discovery.Phase = DISC_MTU;
@@ -2503,8 +2547,14 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 	pDev->Discovery.Phase = DISC_SERVICES_PENDING;
 	pDev->NbSrvc = 0;
 	memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
-	if (aci_gatt_disc_all_primary_services(pDev->Conn.Hdl) != BLE_STATUS_SUCCESS)
+	status = aci_gatt_disc_all_primary_services(pDev->Conn.Hdl);
+	if (status != BLE_STATUS_SUCCESS)
 	{
+		if (!WbaDiscRetryable(status))
+		{
+			WbaDiscFailed(pDev, status);
+			return false;
+		}
 		// Accepted by this port; the status check retries native admission.
 		return true;
 	}

@@ -8,7 +8,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 def extract_function(text, name):
-    match = re.search(r'^(?:extern "C" )?(?:static )?(?:void|bool|uint8_t) ' +
+    match = re.search(r'^(?:extern "C" )?(?:static )?(?:void|bool|uint8_t|uint16_t) ' +
                       name + r'\([^;]*?\)\s*\{', text, re.M)
     assert match, name
     end, depth = match.end(), 1
@@ -28,6 +28,9 @@ code = r'''
 using tBleStatus = uint8_t;
 #define BLE_STATUS_SUCCESS 0
 #define BLE_STATUS_FAILED 1
+#define BLE_STATUS_BUSY 0x93
+#define BLE_STATUS_PENDING 0x95
+#define BLE_STATUS_INSUFFICIENT_RESOURCES 0x64
 #define GATT_MTU_SIZE_DEFAULT 23
 #define BT_APP_WBA_EVT_SLOTS 8
 #define BT_APP_WBA_EVT_MAXLEN 258
@@ -43,14 +46,15 @@ static BtGattDBSrvc_t services[2][BT_DEV_SERVICE_MAXCNT];
 static unsigned mtuCalls, serviceCalls, charCalls, descCalls, discovered;
 static unsigned refusals;
 static uint8_t commandStatus;
+static uint8_t admissionStatus;
 static uint8_t Admit()
 {
 	if (refusals)
 	{
 		refusals--;
-		return 1;
+		return BLE_STATUS_BUSY;
 	}
-	return 0;
+	return admissionStatus;
 }
 BtDevice_t *BtPeerFindByHdl(uint16_t hdl)
 {
@@ -90,13 +94,22 @@ static uint8_t hci_le_set_data_length(uint16_t hdl, uint16_t octets, uint16_t ti
 	return commandStatus;
 }
 struct aci_gatt_proc_complete_event_rp0 { uint16_t Connection_Handle; uint8_t Error_Code; };
+struct aci_att_read_by_group_type_resp_event_rp0 {
+	uint16_t Connection_Handle; uint8_t Attribute_Data_Length, Data_Length, Attribute_Data_List[255];
+};
+struct aci_att_read_by_type_resp_event_rp0 {
+	uint16_t Connection_Handle; uint8_t Handle_Value_Pair_Length, Data_Length, Handle_Value_Pair_Data[255];
+};
+struct aci_att_find_info_resp_event_rp0 {
+	uint16_t Connection_Handle; uint8_t Format, Event_Data_Length, Handle_UUID_Pair[255];
+};
 static void BtAppDiscStartDesc(BtDevice_t *);
 '''
 a = gap.index('// ST v2.10.0 queues')
 code += '#define CFG_BLE_NUM_LINK 2\n' + gap[a:gap.index('// aci_gap_init returns the service', a)]
 a = source.index('enum {\n\tDISC_IDLE')
 code += source[a:source.index('};', a) + 3]
-for name in ['BtAppDiscStartChar', 'BtAppDiscStartDesc', 'WbaDiscProcComplete',
+for name in ['WbaDiscRetryable', 'WbaDiscFailed', 'WbaUuid16', 'WbaDiscSrvc', 'WbaDiscChar', 'WbaDiscDesc', 'BtAppDiscStartChar', 'BtAppDiscStartDesc', 'WbaDiscProcComplete',
              'BtAppDiscoverDevice', 'BtAppDiscoveryRetry']:
     code += extract_function(source, name) + '\n'
 code += extract_function(gap, 'BtGapSetDataLength') + '\n'
@@ -212,6 +225,49 @@ int main()
 	assert(discovered == 1);
 	assert(BtAppDiscoverDevice(&peers[0]));
 	assert(mtuCalls == 3); // rediscovery does not exchange again
+	// An asynchronous error in every active phase stops this attempt.
+	for (unsigned phase = DISC_SERVICES; phase <= DISC_MTU; phase++)
+	{
+		peers[0].Discovery.Phase = phase;
+		peers[0].NbSrvc = 1;
+		done.Error_Code = 0x91;
+		WbaDiscProcComplete(&done);
+		assert(peers[0].Discovery.Phase == DISC_FAILED && peers[0].NbSrvc == 0);
+		unsigned calls = serviceCalls + charCalls + descCalls;
+		BtAppDiscoveryRetry();
+		done.Error_Code = 0;
+		WbaDiscProcComplete(&done);
+		assert(calls == serviceCalls + charCalls + descCalls && discovered == 1);
+	}
+	// An explicit restart is allowed. Permanent admission errors are not retried.
+	admissionStatus = 0x92;
+	assert(!BtAppDiscoverDevice(&peers[0]));
+	assert(peers[0].Discovery.Phase == DISC_FAILED);
+	admissionStatus = 0;
+	assert(BtAppDiscoverDevice(&peers[0]));
+	assert(peers[0].Discovery.Phase == DISC_SERVICES);
+	peers[0].NbSrvc = 1;
+	services[0][0].handle_range = {1, 10};
+	admissionStatus = 0x92;
+	WbaDiscProcComplete(&done);
+	assert(peers[0].Discovery.Phase == DISC_FAILED);
+	admissionStatus = 0;
+	// Stale discovery data may not repopulate a failed attempt's cache.
+	aci_att_read_by_group_type_resp_event_rp0 srvc = {};
+	srvc.Attribute_Data_Length = 6;
+	srvc.Data_Length = 6;
+	WbaDiscSrvc(&srvc);
+	assert(peers[0].NbSrvc == 0);
+	// Handle 0xffff must not wrap a descriptor start to zero.
+	peers[0].NbSrvc = 1;
+	peers[0].Discovery.SrvIdx = 0;
+	peers[0].Discovery.CharIdx = 0;
+	services[0][0].handle_range = {1, 0xffff};
+	services[0][0].char_count = 1;
+	services[0][0].characteristics[0].characteristic.handle_value = 0xffff;
+	unsigned oldDesc = descCalls;
+	BtAppDiscStartDesc(&peers[0]);
+	assert(descCalls == oldDesc && discovered == 2);
 	assert(BtGapSetDataLength(1, 251, 2120));
 	commandStatus = 1;
 	assert(!BtGapSetDataLength(1, 251, 2120));

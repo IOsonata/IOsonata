@@ -555,6 +555,14 @@ How the adapter works with the 1.10.0 stack:
   reports are handled. A central or peripheral with `MaxMtu` above 23 starts the
   ATT MTU exchange.
 
+Discovery retries only temporary ST command-admission failures (busy, pending
+or insufficient resources). A failed asynchronous procedure or permanent command
+error stops the attempt, logs the status and clears the partial cache. It does
+not call the successful discovery callback; an explicit `BtAppDiscoverDevice`
+call can start another attempt. Response data is accepted only in its active
+discovery phase. The event router validates payload lengths before dispatching
+completion, security and attribute-modified events.
+
 Platform layer under the stack:
 
 `src/bt_wba_platform.cpp` supplies the functions that the stack and the link
@@ -568,7 +576,10 @@ server, RTC, memory manager or flash manager:
   the periodic timeout checks. Both objects are reserved once from the fixed
   controller pool. Expiry callbacks run from `BtEvtQue`, with queue refusal
   retried. Host tests cover deadlines, cancel/restart, pool/arm refusal and
-  counter wrap; hardware validation of this timer integration is pending.
+  counter wrap. The DK1 completed both 60-second PRBS trials with LSE and
+  controller timers: 72195 B/s at 1M and 99850 B/s at 2M, with zero PRBS errors
+  and zero application queue drops. The 2M eight-notification target remains
+  unmet (6.138 notifications per 15 ms).
 - `HW_RNG_Get` and the RNG clock requests: RNG peripheral, HSI16 kernel clock,
   polled.
 - `BAES_*`: the IOsonata `CryptoWbaAes` engine (AES peripheral, polled). Only

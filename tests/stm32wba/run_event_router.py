@@ -100,7 +100,7 @@ static void EnhancedConnectionEvent()
 	assert(delivered == before + 2);
 	packet[4] = 0;
 	before = delivered;
-	for (len = 1; len < sizeof(event) + 1; len++)
+	for (len = 0; len < sizeof(event) + 1; len++)
 	{
 		packet[2] = (uint8_t)len;
 		BtWbaEventRouterRun(packet);
@@ -119,7 +119,7 @@ static void PhyCompleteEvent()
 	packet[3] = HCI_LE_PHY_UPDATE_COMPLETE_SUBEVT_CODE;
 	event.Connection_Handle = 0x123;
 	memcpy(packet + 4, &event, sizeof(event));
-	for (len = 1; len < sizeof(event) + 1; len++)
+	for (len = 0; len < sizeof(event) + 1; len++)
 	{
 		packet[2] = (uint8_t)len;
 		BtWbaEventRouterRun(packet);
@@ -132,6 +132,49 @@ static void PhyCompleteEvent()
 	BtWbaEventRouterRun(packet);
 	assert(phyCompleted == 2);
 }
+static void ModifiedEvent()
+{
+	uint8_t packet[258] = {};
+	aci_gatt_attribute_modified_event_rp0 event = {};
+	unsigned before = delivered;
+	unsigned fixed = offsetof(aci_gatt_attribute_modified_event_rp0, Attr_Data);
+	unsigned len;
+
+	packet[0] = 4;
+	packet[1] = HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE;
+	packet[3] = (uint8_t)ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE;
+	packet[4] = (uint8_t)(ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE >> 8);
+	event.Attr_Data_Length = 2;
+	memcpy(packet + 5, &event, fixed);
+	for (len = 0; len < 2 + fixed + 2; len++)
+	{
+		packet[2] = len;
+		BtWbaEventRouterRun(packet);
+		assert(delivered == before);
+	}
+	packet[2] = 2 + fixed + 2;
+	BtWbaEventRouterRun(packet);
+	assert(delivered == before + 1);
+}
+static void FixedEvent(uint8_t event, uint16_t vendor, unsigned size)
+{
+	uint8_t packet[258] = {};
+	unsigned before = delivered;
+	unsigned prefix = event == HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE ? 2 : 0;
+	packet[0] = 4;
+	packet[1] = event;
+	packet[3] = (uint8_t)vendor;
+	packet[4] = (uint8_t)(vendor >> 8);
+	for (unsigned len = 0; len < prefix + size; len++)
+	{
+		packet[2] = len;
+		BtWbaEventRouterRun(packet);
+		assert(delivered == before);
+	}
+	packet[2] = prefix + size;
+	BtWbaEventRouterRun(packet);
+	assert(delivered == before + 1);
+}
 int main()
 {
 	// Fixed prefixes must be checked before reading their declared lengths.
@@ -143,6 +186,14 @@ int main()
 	assert(!BtWbaDiscInfoEventValid(
 		(aci_att_find_info_resp_event_rp0 *)tiny, sizeof(tiny)));
 	BtWbaEventRouterRegister(Receive);
+	FixedEvent(HCI_DISCONNECTION_COMPLETE_EVT_CODE, 0, sizeof(hci_disconnection_complete_event_rp0));
+	FixedEvent(HCI_ENCRYPTION_CHANGE_EVT_CODE, 0, sizeof(hci_encryption_change_event_rp0));
+	FixedEvent(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, ACI_GATT_PROC_COMPLETE_VSEVT_CODE, sizeof(aci_gatt_proc_complete_event_rp0));
+	FixedEvent(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, ACI_ATT_EXCHANGE_MTU_RESP_VSEVT_CODE, sizeof(aci_att_exchange_mtu_resp_event_rp0));
+	FixedEvent(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, ACI_GAP_PAIRING_COMPLETE_VSEVT_CODE, sizeof(aci_gap_pairing_complete_event_rp0));
+	FixedEvent(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, ACI_GAP_NUMERIC_COMPARISON_VALUE_VSEVT_CODE, sizeof(aci_gap_numeric_comparison_value_event_rp0));
+	FixedEvent(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, ACI_GAP_PASS_KEY_REQ_VSEVT_CODE, sizeof(aci_gap_pass_key_req_event_rp0));
+	ModifiedEvent();
 	EnhancedConnectionEvent();
 	PhyCompleteEvent();
 	ValueEvent(ACI_GATT_NOTIFICATION_VSEVT_CODE);

@@ -241,18 +241,30 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 	hci_event_pckt *pEvt =
 		(hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
 
-	if (pEvt->evt == HCI_DISCONNECTION_COMPLETE_EVT_CODE &&
-		pEvt->plen >= sizeof(hci_disconnection_complete_event_rp0))
+	if (pEvt->evt == HCI_DISCONNECTION_COMPLETE_EVT_CODE)
 	{
+		if (pEvt->plen < sizeof(hci_disconnection_complete_event_rp0))
+		{
+			return BTWBA_EVT_FLOW_ENABLE;
+		}
 		auto *p = (hci_disconnection_complete_event_rp0 *)pEvt->data;
 		if (p->Status == 0)
 		{
 			BtGapWbaConnParamsDisconnected(p->Connection_Handle);
 		}
 	}
+	else if (pEvt->evt == HCI_ENCRYPTION_CHANGE_EVT_CODE &&
+		pEvt->plen < sizeof(hci_encryption_change_event_rp0))
+	{
+		return BTWBA_EVT_FLOW_ENABLE;
+	}
 	else if (pEvt->evt == HCI_LE_META_EVT_CODE)
 	{
 		const size_t fixed = offsetof(evt_le_meta_event, data);
+		if (pEvt->plen < fixed)
+		{
+			return BTWBA_EVT_FLOW_ENABLE;
+		}
 		if (pEvt->plen >= fixed)
 		{
 			evt_le_meta_event *pMeta = (evt_le_meta_event *)pEvt->data;
@@ -261,6 +273,10 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 			switch (pMeta->subevent)
 			{
 				case HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE:
+					if (available < sizeof(hci_le_connection_complete_event_rp0))
+					{
+						return BTWBA_EVT_FLOW_ENABLE;
+					}
 					if (available >= sizeof(
 							hci_le_connection_complete_event_rp0))
 					{
@@ -336,6 +352,55 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 
 		switch (pAci->ecode)
 		{
+			case ACI_GATT_PROC_COMPLETE_VSEVT_CODE:
+				if (available < sizeof(aci_gatt_proc_complete_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_ATT_EXCHANGE_MTU_RESP_VSEVT_CODE:
+				if (available < sizeof(aci_att_exchange_mtu_resp_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_GAP_PAIRING_COMPLETE_VSEVT_CODE:
+				if (available < sizeof(aci_gap_pairing_complete_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_GAP_NUMERIC_COMPARISON_VALUE_VSEVT_CODE:
+				if (available < sizeof(aci_gap_numeric_comparison_value_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_GAP_PASS_KEY_REQ_VSEVT_CODE:
+				if (available < sizeof(aci_gap_pass_key_req_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:
+			{
+				const size_t fixed = offsetof(aci_gatt_attribute_modified_event_rp0, Attr_Data);
+				const aci_gatt_attribute_modified_event_rp0 *p =
+					(const aci_gatt_attribute_modified_event_rp0 *)pAci->data;
+
+				if (available < fixed ||
+					!BtWbaEvtRangeValid(fixed, p->Attr_Data_Length, available))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+			}
+
 			case ACI_GATT_NOTIFICATION_VSEVT_CODE:
 			{
 				const size_t fixed = offsetof(aci_gatt_notification_event_rp0, Attribute_Value);
