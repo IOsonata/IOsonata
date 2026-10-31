@@ -1459,9 +1459,17 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 #ifndef CFG_BLE_PREPARE_WRITE_LIST_SIZE
 #define CFG_BLE_PREPARE_WRITE_LIST_SIZE	BLE_DEFAULT_PREP_WRITE_LIST_SIZE
 #endif
+// BLE_MBLOCKS_CALC supplies the minimum for protocol operation. Reserve
+// additional packet blocks for bursts, as in CubeWBA's throughput client.
+// These blocks are separate from the host event FIFO below. Each costs
+// BLE_MEM_BLOCK_SIZE + 8 bytes in s_BleStackRam (3200 bytes for 80 blocks).
+#ifndef CFG_BLE_MBLOCK_COUNT_MARGIN
+#define CFG_BLE_MBLOCK_COUNT_MARGIN		80
+#endif
 #ifndef CFG_BLE_MBLOCK_COUNT
-#define CFG_BLE_MBLOCK_COUNT			BLE_MBLOCKS_CALC(CFG_BLE_PREPARE_WRITE_LIST_SIZE, \
-										CFG_BLE_ATT_MTU_MAX, CFG_BLE_NUM_LINK)
+#define CFG_BLE_MBLOCK_COUNT			(BLE_MBLOCKS_CALC(CFG_BLE_PREPARE_WRITE_LIST_SIZE, \
+										CFG_BLE_ATT_MTU_MAX, CFG_BLE_NUM_LINK) + \
+										CFG_BLE_MBLOCK_COUNT_MARGIN)
 #endif
 #ifndef CFG_BLE_OPTIONS
 #define CFG_BLE_OPTIONS					0
