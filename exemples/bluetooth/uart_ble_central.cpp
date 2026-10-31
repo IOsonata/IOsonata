@@ -53,6 +53,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
+#ifdef MCUOSC
+#include "coredev/system_core_clock.h"
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
+
 #if defined(NRFXLIB_SDC)
 #include "bluetooth/bt_hci_ctlr.h"
 

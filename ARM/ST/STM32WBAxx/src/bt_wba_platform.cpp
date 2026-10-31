@@ -71,6 +71,7 @@ SOFTWARE.
 
 #include "coredev/system_core_clock.h"
 #include "bt_wba_platform.h"
+#include "syslog.h"
 
 // Defined by the port in bt_app_stm32wba.cpp: runs the host stack
 extern "C" void BleStackCB_Process(void);
@@ -193,17 +194,32 @@ extern "C" void SCM_HSE_WaitUntilReady(void)
  */
 extern "C" void BtWbaPlatformInit(void)
 {
-	uint32_t n = BT_WBA_HSE_POLL_MAX;
+	uint32_t n;
 	uint32_t src;
+	bool bLse = false;
 
 	SCM_HSE_WaitUntilReady();
 
 	SET_BIT(PWR->DBPR, PWR_DBPR_DBP);
 
-	bool bLse = false;
-
 	if (g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC)
 	{
+		if ((RCC->BDCR1 & RCC_BDCR1_LSEON) == 0U)
+		{
+			// Match Cube WBA crystal startup. Preserve an already running LSE.
+			MODIFY_REG(RCC->BDCR1, RCC_BDCR1_LSEDRV, RCC_BDCR1_LSEDRV_0);
+			if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_TCXO)
+			{
+				SET_BIT(RCC->BDCR1, RCC_BDCR1_LSEBYP);
+			}
+			else
+			{
+				CLEAR_BIT(RCC->BDCR1, RCC_BDCR1_LSEBYP);
+			}
+		}
+		// LSE starts much more slowly than HSE. Use the LPTIM driver's
+		// clock-scaled allowance (at least 2 s at four cycles per poll).
+		n = SystemCoreClock / 2U;
 		SET_BIT(RCC->BDCR1, RCC_BDCR1_LSEON);
 		while ((RCC->BDCR1 & RCC_BDCR1_LSERDY) == 0U && n > 0U)
 		{
@@ -233,6 +249,8 @@ extern "C" void BtWbaPlatformInit(void)
 	}
 
 	MODIFY_REG(RCC->BDCR1, RCC_BDCR1_RADIOSTSEL, src);
+	SysLogPrintf(SysLogGet(), "WBA radio sleep clock: %s\r\n",
+				 bLse ? "LSE 32768 Hz" : "LSI1");
 }
 
 extern "C" void scm_notifyradiostate(uint32_t State)

@@ -45,6 +45,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "stm32_boards.h"
 
+// Use the DK1 LSE crystal for host timers and the radio sleep timer.
+// Keep the existing HSI16 core-clock source for this comparison.
+#define MCUOSC { \
+	{OSC_TYPE_RC, 16000000, 20, 0}, \
+	{OSC_TYPE_XTAL, 32768, 500, 0}, \
+	false \
+}
+
 // LD6 green PD8 and LD5 red PD9
 #define LED_PINS_MAP		BOARD_LED_PINS
 

@@ -48,6 +48,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/interrupt.h"
 #include "app_evt_handler.h"
 #include "board.h"
+
+#ifdef MCUOSC
+#include "coredev/system_core_clock.h"
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
 #if defined(IOSONATA_STM32_WBA)
 #include "syslog.h"
 #endif
