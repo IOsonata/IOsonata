@@ -55,6 +55,18 @@ drain = r"""
 #define UART_MAX_DATA_LEN 128
 static hCFifo_t s_hBleToUartFifo;
 static unsigned s_BleToUartAccepted;
+static volatile bool s_bBleToUartPending;
+static void (*queued)(uint32_t, void *);
+static bool queueFull;
+static uint32_t DisableInterrupt() { return 0; }
+static void EnableInterrupt(uint32_t) {}
+static bool AppEvtHandlerQue(uint32_t, void *, void (*handler)(uint32_t, void *)) {
+	if (queueFull) return false;
+	assert(queued == nullptr);
+	queued = handler;
+	return true;
+}
+static void BleToUartSchedHandler(uint32_t, void *);
 struct FakeUart {
 	int room = 0;
 	int limit = 1000;
@@ -70,7 +82,9 @@ struct FakeUart {
 		return n;
 	}
 } g_Uart;
-""" + extract_function(central, r'^static void BleToUartDrain\(') + r"""
+""" + extract_function(central, r'^static void BleToUartDrain\(') + '\n' \
+ + extract_function(central, r'^static void BleToUartQue\(') + '\n' \
+ + extract_function(central, r'^static void BleToUartSchedHandler\([^;]+\)(?=\n\{)') + r"""
 int main() {
 	alignas(8) uint8_t mem[CFIFO_MEMSIZE(512)];
 	s_hBleToUartFifo = CFifoInit(mem, sizeof(mem), 1, true);
@@ -90,6 +104,22 @@ int main() {
 	assert(g_Uart.used == 400 && s_BleToUartAccepted == 400);
 	assert(CFifoUsed(s_hBleToUartFifo) == 0);
 	for (unsigned i = 0; i < 400; ++i) assert(g_Uart.data[i] == uint8_t(i));
+	// Keep application work queued: forwarding must not require an idle pass.
+	for (unsigned i = 0; i < 200; ++i) *CFifoPut(s_hBleToUartFifo) = uint8_t(i);
+	queueFull = true;
+	BleToUartQue();
+	assert(!s_bBleToUartPending && queued == nullptr);
+	queueFull = false;
+	for (unsigned i = 0; i < 10; ++i) BleToUartQue();
+	assert(s_bBleToUartPending && queued != nullptr);
+	auto handler = queued;
+	queued = nullptr;
+	handler(0, nullptr);
+	assert(!s_bBleToUartPending && CFifoUsed(s_hBleToUartFifo) == 0);
+	assert(g_Uart.used == 600);
+	for (unsigned i = 0; i < 200; ++i) assert(g_Uart.data[400 + i] == uint8_t(i));
+	BleToUartQue();
+	assert(queued == nullptr); // Empty completion must not create a busy loop.
 }
 """
 discovery = r"""

@@ -206,6 +206,21 @@ static hCFifo_t s_hBleToUartFifo;
 static volatile uint32_t s_BleToUartReceived = 0;
 static volatile uint32_t s_BleToUartAccepted = 0;
 static volatile uint32_t s_BleToUartDropped = 0;
+static volatile bool s_bBleToUartPending = false;
+
+static void BleToUartSchedHandler(uint32_t Evt, void *pCtx);
+
+static void BleToUartQue(void)
+{
+	uint32_t state = DisableInterrupt();
+
+	if (s_bBleToUartPending == false && s_hBleToUartFifo != nullptr &&
+		CFifoPeek(s_hBleToUartFifo) != nullptr)
+	{
+		s_bBleToUartPending = AppEvtHandlerQue(0, nullptr, BleToUartSchedHandler);
+	}
+	EnableInterrupt(state);
+}
 
 
 alignas(4) uint8_t g_UartRxExtBuff[PACKET_SIZE * 2];//external buffer for Uart Rx data
@@ -259,7 +274,7 @@ static IOPinCfg_t s_UartPins[] = {
 
 // UART configuration
 alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];//internal Uart_Rx buffer
-alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];//internal Uart_Tx buffer
+alignas(4) static uint8_t s_UartTxFifo[CFIFO_MEMSIZE(1024)];
 
 UARTCfg_t g_UartCfg = {
 	.DevNo = UART_DEVNO,									// Device number zero based
@@ -276,7 +291,7 @@ UARTCfg_t g_UartCfg = {
 	.bFifoBlocking = true,						// Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
-	.TxMemSize = UARTFIFOSIZE,
+	.TxMemSize = sizeof(s_UartTxFifo),
 	.pTxMem = s_UartTxFifo,
 	.bDMAMode = true,
 };
@@ -607,6 +622,7 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 			pData += count;
 			Len -= count;
 		}
+		BleToUartQue();
 	}
 }
 
@@ -647,6 +663,14 @@ static void BleToUartDrain(void)
 		s_BleToUartAccepted += sent;
 		budget -= sent;
 	}
+}
+
+static void BleToUartSchedHandler(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+	s_bBleToUartPending = false;
+	BleToUartDrain();
 }
 
 void BtDeviceDiscovered(BtDevice_t *pDev)
@@ -1183,6 +1207,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 			}
 			break;
 		case UART_EVT_TXREADY:
+			BleToUartQue();
 			break;
 		case UART_EVT_LINESTATE:
 			break;
