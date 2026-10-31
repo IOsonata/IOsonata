@@ -23,6 +23,7 @@ code = r'''
 struct UARTDev_t
 {
 	unsigned TxDropCnt;
+	hCFifo_t hTxFifo;
 } uart;
 
 enum UART_EVT
@@ -53,7 +54,6 @@ static bool s_bUartRxPending;
 static int g_UartRxExtBuffLen;
 static uint8_t g_UartRxExtBuff[256];
 static hCFifo_t g_UartRx2BleFifo;
-static hCFifo_t s_hBleToUartFifo;
 static unsigned g_DropCnt;
 static unsigned rxQueued;
 static unsigned txQueued;
@@ -148,9 +148,6 @@ static void UartRxQue()
 	++rxQueued;
 }
 
-static void BleToUartQue()
-{
-}
 '''
 for signature in [r'^static void UartBlePrintStats\(',
                   r'^void UartRxSchedHandler\([^;]+\)(?=\n\{)',
@@ -178,7 +175,7 @@ int main()
 	uart.TxDropCnt = UINT32_MAX;
 
 	g_UartRx2BleFifo = CFifoInit(mem, sizeof(mem), 1, true);
-	s_hBleToUartFifo = CFifoInit(forward, sizeof(forward), 1, true);
+	uart.hTxFifo = CFifoInit(forward, sizeof(forward), 1, true);
 	// Every split of the command, with an empty read between fragments.
 	for (split = 1; split <= 5; ++split)
 	{

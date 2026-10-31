@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise production central buffer setup and UART draining with fake I/O."""
+"""Exercise production central controller setup and discovery with fake I/O."""
 import os
 from pathlib import Path
 import re
@@ -46,80 +46,6 @@ int main() {
 	}
 	enabled = false;
 	assert(!BtAppStackInit(&cfg));
-}
-"""
-drain = r"""
-#include <cassert>
-#include <cstring>
-#include "cfifo.h"
-#define UART_MAX_DATA_LEN 128
-static hCFifo_t s_hBleToUartFifo;
-static unsigned s_BleToUartAccepted;
-static volatile bool s_bBleToUartPending;
-static void (*queued)(uint32_t, void *);
-static bool queueFull;
-static uint32_t DisableInterrupt() { return 0; }
-static void EnableInterrupt(uint32_t) {}
-static bool AppEvtHandlerQue(uint32_t, void *, void (*handler)(uint32_t, void *)) {
-	if (queueFull) return false;
-	assert(queued == nullptr);
-	queued = handler;
-	return true;
-}
-static void BleToUartSchedHandler(uint32_t, void *);
-struct FakeUart {
-	int room = 0;
-	int limit = 1000;
-	int used = 0;
-	unsigned calls = 0;
-	uint8_t data[1024];
-	bool RequestToSend(int n) { return n <= room; }
-	int Tx(uint8_t *p, int n) {
-		++calls;
-		assert(n <= room); // A blocking UART would wait if this fails.
-		if (n > limit) n = limit;
-		memcpy(data + used, p, n); used += n; room -= n;
-		return n;
-	}
-} g_Uart;
-""" + extract_function(central, r'^static void BleToUartDrain\(') + '\n' \
- + extract_function(central, r'^static void BleToUartQue\(') + '\n' \
- + extract_function(central, r'^static void BleToUartSchedHandler\([^;]+\)(?=\n\{)') + r"""
-int main() {
-	alignas(8) uint8_t mem[CFIFO_MEMSIZE(512)];
-	s_hBleToUartFifo = CFifoInit(mem, sizeof(mem), 1, true);
-	int n = 400;
-	assert(CFifoPutMultiple(s_hBleToUartFifo, &n));
-	assert(CFifoGetMultiple(s_hBleToUartFifo, &n));
-	for (unsigned i = 0; i < 400; ++i) *CFifoPut(s_hBleToUartFifo) = uint8_t(i);
-	BleToUartDrain();
-	assert(g_Uart.calls == 0 && CFifoUsed(s_hBleToUartFifo) == 400);
-	g_Uart.room = 37; g_Uart.limit = 7; // partial writes and FIFO wrap
-	BleToUartDrain();
-	assert(g_Uart.used == 37 && CFifoUsed(s_hBleToUartFifo) == 363);
-	g_Uart.room = 1000; g_Uart.limit = 1000;
-	BleToUartDrain();
-	assert(g_Uart.used == 293); // bounded work: 256 bytes this pass
-	BleToUartDrain();
-	assert(g_Uart.used == 400 && s_BleToUartAccepted == 400);
-	assert(CFifoUsed(s_hBleToUartFifo) == 0);
-	for (unsigned i = 0; i < 400; ++i) assert(g_Uart.data[i] == uint8_t(i));
-	// Keep application work queued: forwarding must not require an idle pass.
-	for (unsigned i = 0; i < 200; ++i) *CFifoPut(s_hBleToUartFifo) = uint8_t(i);
-	queueFull = true;
-	BleToUartQue();
-	assert(!s_bBleToUartPending && queued == nullptr);
-	queueFull = false;
-	for (unsigned i = 0; i < 10; ++i) BleToUartQue();
-	assert(s_bBleToUartPending && queued != nullptr);
-	auto handler = queued;
-	queued = nullptr;
-	handler(0, nullptr);
-	assert(!s_bBleToUartPending && CFifoUsed(s_hBleToUartFifo) == 0);
-	assert(g_Uart.used == 600);
-	for (unsigned i = 0; i < 200; ++i) assert(g_Uart.data[400 + i] == uint8_t(i));
-	BleToUartQue();
-	assert(queued == nullptr); // Empty completion must not create a busy loop.
 }
 """
 discovery = r"""
@@ -196,7 +122,6 @@ with tempfile.TemporaryDirectory(prefix='central-stream-') as temp:
 	for name, code, extra in [
 		('buffers', setup, []),
 		('discovery', discovery, []),
-		('uart', drain, [str(ROOT / 'src/cfifo.c')]),
 	]:
 		cpp = Path(temp) / (name + '.cpp')
 		cpp.write_text(code)

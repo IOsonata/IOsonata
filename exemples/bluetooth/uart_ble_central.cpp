@@ -215,10 +215,6 @@ alignas(4) uint8_t g_UartRx2BleBuff[BLEFIFOSIZE];//FIFO buffer for UART-to-BLE
 std::atomic<int> g_UartRx2BleBuffLen(0);//buffer counter for g_UartRx2BleBuff
 hCFifo_t g_UartRx2BleFifo;
 
-// Notifications can exceed the UART FIFO and arrive in connection-event bursts.
-#define BLE_TO_UART_FIFO_SIZE CFIFO_MEMSIZE(4096)
-alignas(4) static uint8_t s_BleToUartMem[BLE_TO_UART_FIFO_SIZE];
-static hCFifo_t s_hBleToUartFifo;
 static volatile uint32_t s_BleToUartReceived = 0;
 static volatile uint32_t s_BleNotifications = 0;
 static volatile uint32_t s_BleFirstRxMs = 0;
@@ -231,23 +227,6 @@ static uint8_t s_BlePrbsPrevious = 0;
 #endif
 static volatile uint32_t s_BleToUartAccepted = 0;
 static volatile uint32_t s_BleToUartDropped = 0;
-static volatile bool s_bBleToUartPending = false;
-
-static void BleToUartSchedHandler(uint32_t Evt, void *pCtx);
-
-static void BleToUartQue(void)
-{
-	uint32_t state = DisableInterrupt();
-
-	if (s_bBleToUartPending == false && s_hBleToUartFifo != nullptr &&
-		CFifoPeek(s_hBleToUartFifo) != nullptr)
-	{
-		s_bBleToUartPending = AppEvtHandlerQue(0, nullptr, BleToUartSchedHandler);
-	}
-	EnableInterrupt(state);
-}
-
-
 alignas(4) uint8_t g_UartRxExtBuff[PACKET_SIZE * 2];//external buffer for Uart Rx data
 volatile int g_UartRxExtBuffLen = 0;
 
@@ -299,7 +278,8 @@ static IOPinCfg_t s_UartPins[] = {
 
 // UART configuration
 alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];//internal Uart_Rx buffer
-alignas(4) static uint8_t s_UartTxFifo[CFIFO_MEMSIZE(1024)];
+// Ten notification payloads, excluding the three-byte ATT header.
+alignas(4) static uint8_t s_UartTxFifo[CFIFO_MEMSIZE(10 * (BLE_MTU_SIZE - 3))];
 
 UARTCfg_t g_UartCfg = {
 	.DevNo = UART_DEVNO,									// Device number zero based
@@ -649,8 +629,7 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 	uint16_t idx;
 	uint8_t expected;
 #endif
-	int count;
-	uint8_t *p;
+	int sent;
 
 	if (ConnHdl == g_ConnectedDev.Conn.Hdl &&
 		ValHdl == g_BleRxCharHdl && pData != nullptr && Len > 0)
@@ -685,75 +664,17 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 			s_BleNotifyMaxLen = Len;
 		}
 		s_BleToUartReceived += Len;
-		if (CFifoAvail(s_hBleToUartFifo) < Len)
+		sent = g_Uart.Tx(pData, Len);
+		if (sent > 0)
 		{
-			s_BleToUartDropped += Len;
-			return;
+			s_BleToUartAccepted += sent;
 		}
-
-		while (Len > 0)
+		else
 		{
-			count = Len;
-			p = CFifoPutMultiple(s_hBleToUartFifo, &count);
-
-			if (p == nullptr || count <= 0)
-			{
-				s_BleToUartDropped += Len;
-				break;
-			}
-			memcpy(p, pData, count);
-			pData += count;
-			Len -= count;
+			sent = 0;
 		}
-		BleToUartQue();
+		s_BleToUartDropped += Len - sent;
 	}
-}
-
-// Run outside the BLE callback. A short UART write leaves the suffix queued.
-static void BleToUartDrain(void)
-{
-	int budget = 256;
-	int count;
-	int sent;
-	uint8_t *p;
-
-	// Keep the UART supplied without waiting for serial transmission here.
-	// Blocking in AppCheckStatus delays the next queued Bluetooth receive job.
-	while (budget > 0)
-	{
-		count = budget < UART_MAX_DATA_LEN ? budget : UART_MAX_DATA_LEN;
-		p = CFifoPeekMultiple(s_hBleToUartFifo, &count);
-		if (p == nullptr || count <= 0)
-		{
-			return;
-		}
-
-		while (count > 0 && !g_Uart.RequestToSend(count))
-		{
-			count /= 2;
-		}
-		if (count == 0)
-		{
-			return;
-		}
-
-		sent = g_Uart.Tx(p, count);
-		if (sent <= 0)
-		{
-			return;
-		}
-		(void)CFifoGetMultiple(s_hBleToUartFifo, &sent);
-		s_BleToUartAccepted += sent;
-		budget -= sent;
-	}
-}
-
-static void BleToUartSchedHandler(uint32_t Evt, void *pCtx)
-{
-	(void)Evt;
-	(void)pCtx;
-	s_bBleToUartPending = false;
-	BleToUartDrain();
 }
 
 void BtDeviceDiscovered(BtDevice_t *pDev)
@@ -1214,8 +1135,8 @@ static void UartBlePrintStats(void)
 	firstRxMs = s_BleFirstRxMs;
 	minLen = notifications ? s_BleNotifyMinLen : 0;
 	maxLen = s_BleNotifyMaxLen;
-	queued = CFifoUsed(s_hBleToUartFifo);
 	uart = UARTGetInstance(UART_DEVNO);
+	queued = uart != nullptr ? CFifoUsed(uart->hTxFifo) : 0;
 	uartDrop = uart != nullptr ? uart->TxDropCnt : 0;
 
 	EnableInterrupt(state);
@@ -1367,7 +1288,6 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 			UartRxQue();
 			break;
 		case UART_EVT_TXREADY:
-			BleToUartQue();
 			break;
 		case UART_EVT_LINESTATE:
 			break;
@@ -1401,7 +1321,6 @@ void HardwareInit()
 
 	// Init CFIFO instance
 	g_UartRx2BleFifo = CFifoInit(g_UartRx2BleBuff, BLEFIFOSIZE, 1, true);
-	s_hBleToUartFifo = CFifoInit(s_BleToUartMem, BLE_TO_UART_FIFO_SIZE, 1, true);
 }
 
 //
@@ -1463,12 +1382,14 @@ int main()
 
 bool AppCheckStatus(void)
 {
+	uint32_t state;
+	bool idle;
+
 	BtAppCheckStatus();
-	BleToUartDrain();
 
 	// A pending callback on an empty queue was refused. Keep the check and
 	// retry together so an interrupt cannot queue the same callback between them.
-	uint32_t state = DisableInterrupt();
+	state = DisableInterrupt();
 	if (AppEvtHandlerPending() == false)
 	{
 		if (s_bUartRxPending)
@@ -1480,8 +1401,7 @@ bool AppCheckStatus(void)
 			(void)AppEvtHandlerQue(0, nullptr, BleTxSchedHandler);
 		}
 	}
-	const bool idle = CFifoPeek(s_hBleToUartFifo) == nullptr &&
-		s_bUartRxPending == false &&
+	idle = s_bUartRxPending == false &&
 		s_bBleTxPending == false &&
 		AppEvtHandlerPending() == false;
 	EnableInterrupt(state);

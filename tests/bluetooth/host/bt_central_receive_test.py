@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check central link setup and notification accounting before forwarding."""
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -25,10 +26,41 @@ struct
 		uint16_t Hdl;
 	} Conn;
 } g_ConnectedDev;
+static hCFifo_t s_hUartTxFifo;
 struct
 {
+	unsigned calls = 0;
+	int result = 1;
+
 	void printf(const char *, ...)
 	{
+	}
+
+	int Tx(uint8_t *data, uint32_t length)
+	{
+		int accepted = 0;
+		int count;
+		uint8_t *p;
+
+		calls++;
+		if (result <= 0)
+		{
+			return result;
+		}
+		while (length > 0)
+		{
+			count = length;
+			p = CFifoPutMultiple(s_hUartTxFifo, &count);
+			if (p == nullptr)
+			{
+				break;
+			}
+			memcpy(p, data, count);
+			data += count;
+			length -= count;
+			accepted += count;
+		}
+		return accepted;
 	}
 } g_Uart;
 static bool phyAccepted = true;
@@ -36,8 +68,8 @@ static unsigned phyCalls;
 static unsigned discoveryCalls;
 static uint16_t discoveryHandle;
 static uint16_t g_BleRxCharHdl = 0x12;
-static hCFifo_t s_hBleToUartFifo;
 static volatile uint32_t s_BleToUartReceived;
+static volatile uint32_t s_BleToUartAccepted;
 static volatile uint32_t s_BleToUartDropped;
 static volatile uint32_t s_BleNotifications;
 static volatile uint32_t s_BleFirstRxMs;
@@ -46,7 +78,6 @@ static bool s_BlePrbsStarted;
 static uint8_t s_BlePrbsPrevious;
 static volatile uint16_t s_BleNotifyMinLen = UINT16_MAX;
 static volatile uint16_t s_BleNotifyMaxLen;
-static unsigned queued;
 static uint32_t nowMs;
 
 bool BtGapSetPhy(uint16_t h, uint8_t tx, uint8_t rx, uint16_t opt)
@@ -65,20 +96,19 @@ uint32_t BtGattMsTick()
 {
 	return nowMs;
 }
-static void BleToUartQue()
-{
-	++queued;
-}
 '''
 config_start = source.index('#ifndef CENTRAL_PHY')
 config_end = source.index('#endif', config_start) + len('#endif')
 code = code.replace('CENTRAL_PHY_CONFIG', source[config_start:config_end])
 for signature in [r'^void BtAppEvtConnected\(', r'^void BtGattClientNotified\(']:
     code += extract_function(source, signature) + '\n'
+code += '\n#define BLE_MTU_SIZE 247\n'
+code += re.search(r'^alignas\(4\) static uint8_t s_UartTxFifo.*;', source, re.M).group() + '\n'
 code += r'''
+static_assert(sizeof(s_UartTxFifo) == CFIFO_MEMSIZE(2440));
+
 int main()
 {
-	alignas(8) uint8_t mem[CFIFO_MEMSIZE(4096)];
 	uint8_t data[244];
 	uint8_t previous = 0xff;
 	uint8_t *p;
@@ -96,23 +126,23 @@ int main()
 	{
 		data[i] = uint8_t(i);
 	}
-	s_hBleToUartFifo = CFifoInit(mem, sizeof(mem), 1, true);
+	s_hUartTxFifo = CFifoInit(s_UartTxFifo, sizeof(s_UartTxFifo), 1, true);
 	nowMs = 100;
 	BtGattClientNotified(8, 0x12, data, sizeof(data));
 	BtGattClientNotified(9, 0x13, data, sizeof(data));
 	BtGattClientNotified(9, 0x12, nullptr, sizeof(data));
 	BtGattClientNotified(9, 0x12, data, 0);
-	assert(s_BleNotifications == 0 && queued == 0);
+	assert(s_BleNotifications == 0 && g_Uart.calls == 0);
 	for (burst = 0; burst < 3; ++burst)
 	{
 		for (i = 0; i < 8; ++i)
 		{
 			BtGattClientNotified(9, 0x12, data, sizeof(data));
 		}
-		assert(CFifoUsed(s_hBleToUartFifo) == 1952);
+		assert(CFifoUsed(s_hUartTxFifo) == 1952);
 		for (i = 0; i < 1952; ++i)
 		{
-			p = CFifoGet(s_hBleToUartFifo);
+			p = CFifoGet(s_hUartTxFifo);
 			assert(p && *p == data[i % 244]);
 		}
 		nowMs += 15;
@@ -120,16 +150,26 @@ int main()
 	assert(s_BleNotifications == 24 && s_BleToUartReceived == 5856);
 	assert(s_BleNotifyMinLen == 244 && s_BleNotifyMaxLen == 244);
 	assert(s_BleFirstRxMs == 100 && s_BleToUartDropped == 0);
-	// A full forwarding FIFO must not hide notifications received over BLE.
+	assert(s_BleToUartAccepted == 5856 && g_Uart.calls == 24);
+	// A full UART TX FIFO must not hide notifications received over BLE.
 	n = 4096;
-	while (CFifoPutMultiple(s_hBleToUartFifo, &n))
+	while (CFifoPutMultiple(s_hUartTxFifo, &n))
 	{
 		n = 4096;
 	}
 	BtGattClientNotified(9, 0x12, data, 20);
 	assert(s_BleNotifications == 25 && s_BleToUartReceived == 5876);
 	assert(s_BleToUartDropped == 20 && s_BleNotifyMinLen == 20);
-	// Validate continuity at BLE entry even when the forwarding FIFO is full.
+	// Account for only the accepted bytes on a partial write.
+	n = 7;
+	CFifoGetMultiple(s_hUartTxFifo, &n);
+	BtGattClientNotified(9, 0x12, data, 20);
+	assert(s_BleToUartAccepted == 5863 && s_BleToUartDropped == 33);
+	g_Uart.result = -1;
+	BtGattClientNotified(9, 0x12, data, 20);
+	assert(s_BleToUartAccepted == 5863 && s_BleToUartDropped == 53);
+	g_Uart.result = 1;
+	// Validate continuity at BLE entry even when the UART TX FIFO is full.
 	s_BlePrbsStarted = false;
 	s_BlePrbsBreaks = 0;
 	for (packet = 0; packet < 2; ++packet)
@@ -165,4 +205,4 @@ with tempfile.TemporaryDirectory(prefix='central-receive-') as temp:
             *defines, '-I' + str(ROOT / 'include'), str(cpp), str(ROOT / 'src/cfifo.c'),
             '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
-        print('PASS central PHY request, bursts, FIFO wrap and receive counts:', name)
+        print('PASS central PHY request, direct UART writes, FIFO wrap and receive counts:', name)
