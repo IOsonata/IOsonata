@@ -157,8 +157,16 @@ extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
 #define MANUFACTURER_ID         ISYST_BLUETOOTH_ID     //!< Manufacturer ID, part of System ID. Will be passed to Device Information Service.
 #define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID     //!< Organizational Unique ID, part of System ID. Will be passed to Device Information Service.
 
-#define MIN_CONN_INTERVAL       7.5	//!< Minimum acceptable connection interval (ms), Will be converted to units of 1.25ms
-#define MAX_CONN_INTERVAL       40	//!< Maximum acceptable connection interval (ms), Will be converted to units of 1.25ms
+// Match the PRBS HCI receiver's interval. Keep both bounds equal so the
+// controller cannot select a different interval within a wide range.
+#ifndef CENTRAL_CONN_INTERVAL
+#define CENTRAL_CONN_INTERVAL   15
+#endif
+#ifndef CENTRAL_PHY
+#define CENTRAL_PHY             BT_GAP_PHY_2MBITS
+#endif
+#define MIN_CONN_INTERVAL       CENTRAL_CONN_INTERVAL
+#define MAX_CONN_INTERVAL       CENTRAL_CONN_INTERVAL
 
 #define SCAN_INTERVAL           1000 //!< Determines scan interval (ms). Will be converted to units of 0.625ms
 #define SCAN_WINDOW             100  //!< Determines scan interval (ms). Will be converted to units of 0.625ms
@@ -204,6 +212,10 @@ hCFifo_t g_UartRx2BleFifo;
 alignas(4) static uint8_t s_BleToUartMem[BLE_TO_UART_FIFO_SIZE];
 static hCFifo_t s_hBleToUartFifo;
 static volatile uint32_t s_BleToUartReceived = 0;
+static volatile uint32_t s_BleNotifications = 0;
+static volatile uint32_t s_BleFirstRxMs = 0;
+static volatile uint16_t s_BleNotifyMinLen = UINT16_MAX;
+static volatile uint16_t s_BleNotifyMaxLen = 0;
 static volatile uint32_t s_BleToUartAccepted = 0;
 static volatile uint32_t s_BleToUartDropped = 0;
 static volatile bool s_bBleToUartPending = false;
@@ -448,6 +460,14 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	g_ConnectedDev.Conn.Hdl = ConnHdl;
 	g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
 
+	// The streamer need not initiate a PHY procedure. An accepted request
+	// does not mean negotiation has completed; SoftDevice reports its result
+	// through BtAppCentralEvtHandler, and SDC can be queried with stats.
+	if (!BtGapSetPhy(ConnHdl, CENTRAL_PHY, CENTRAL_PHY, 0))
+	{
+		g_Uart.printf("Central PHY request refused; retaining current PHY\r\n");
+	}
+
 #if BLE_SC_METHOD != BLE_SC_NONE
 	// Secure mode: the stack starts pairing now. Do not touch the peer GATT
 	// server yet; its characteristics may be encryption gated. Discovery runs
@@ -551,6 +571,17 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 
 	switch (Evt)
 	{
+		case BLE_GAP_EVT_CONNECTED:
+			g_Uart.printf("BLE interval_units=%u latency=%u\r\n",
+				pEvt->evt.gap_evt.params.connected.conn_params.max_conn_interval,
+				pEvt->evt.gap_evt.params.connected.conn_params.slave_latency);
+			break;
+		case BLE_GAP_EVT_PHY_UPDATE:
+			g_Uart.printf("BLE PHY status=%u tx=%u rx=%u\r\n",
+				pEvt->evt.gap_evt.params.phy_update.status,
+				pEvt->evt.gap_evt.params.phy_update.tx_phy,
+				pEvt->evt.gap_evt.params.phy_update.rx_phy);
+			break;
 		case BLE_GATTC_EVT_EXCHANGE_MTU_RSP:
 			g_Uart.printf("MTU exchange response: status=0x%04X\r\n",
 				pEvt->evt.gattc_evt.gatt_status);
@@ -598,9 +629,23 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 // the BlueIO UART RX characteristic out the local UART.
 void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uint16_t Len)
 {
-	(void)ConnHdl;
-	if (ValHdl == g_BleRxCharHdl && pData != nullptr && Len > 0)
+	if (ConnHdl == g_ConnectedDev.Conn.Hdl &&
+		ValHdl == g_BleRxCharHdl && pData != nullptr && Len > 0)
 	{
+		// Count at BLE delivery, before any forwarding queue can refuse data.
+		if (s_BleNotifications == 0)
+		{
+			s_BleFirstRxMs = BtGattMsTick();
+		}
+		s_BleNotifications++;
+		if (Len < s_BleNotifyMinLen)
+		{
+			s_BleNotifyMinLen = Len;
+		}
+		if (Len > s_BleNotifyMaxLen)
+		{
+			s_BleNotifyMaxLen = Len;
+		}
 		s_BleToUartReceived += Len;
 		if (CFifoAvail(s_hBleToUartFifo) < Len)
 		{
@@ -1157,16 +1202,39 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 			 memcmp(g_UartRxExtBuff, "stats\r", 6) == 0)) ||
 			(g_UartRxExtBuffLen == 7 && memcmp(g_UartRxExtBuff, "stats\r\n", 7) == 0))
 		{
+			uint32_t elapsedMs;
+			BtDevice_t *peer;
+			uint16_t mtu;
+#if defined(NRFXLIB_SDC)
+			uint8_t txPhy;
+			uint8_t rxPhy;
+#endif
 			uint32_t state = DisableInterrupt();
 			uint32_t received = s_BleToUartReceived;
 			uint32_t accepted = s_BleToUartAccepted;
 			uint32_t dropped = s_BleToUartDropped;
+			uint32_t notifications = s_BleNotifications;
+			uint32_t firstRxMs = s_BleFirstRxMs;
+			uint16_t minLen = notifications ? s_BleNotifyMinLen : 0;
+			uint16_t maxLen = s_BleNotifyMaxLen;
 			int queued = CFifoUsed(s_hBleToUartFifo);
 			const UARTDev_t *uart = UARTGetInstance(UART_DEVNO);
 			uint32_t uartDrop = uart != nullptr ? uart->TxDropCnt : 0;
 
 			EnableInterrupt(state);
+			elapsedMs = notifications ? BtGattMsTick() - firstRxMs : 0;
+			peer = BtPeerFindByHdl(g_ConnectedDev.Conn.Hdl);
+			mtu = peer != nullptr ? peer->Conn.MaxMtu : 0;
 			g_UartRxExtBuffLen = 0;
+			g_Uart.printf("\r\nBLE: notifications=%lu bytes=%lu elapsed_ms=%lu len_min=%u len_max=%u mtu=%u\r\n",
+				(unsigned long)notifications, (unsigned long)received,
+				(unsigned long)elapsedMs, minLen, maxLen, mtu);
+#if defined(NRFXLIB_SDC)
+			if (BtGapReadPhy(g_ConnectedDev.Conn.Hdl, &txPhy, &rxPhy))
+			{
+				g_Uart.printf("BLE PHY tx=%u rx=%u\r\n", txPhy, rxPhy);
+			}
+#endif
 			g_Uart.printf("\r\nStream: ble_rx=%lu uart_accepted=%lu queued=%d ble_drop=%lu uart_refused=%lu\r\n",
 				(unsigned long)received, (unsigned long)accepted, queued,
 				(unsigned long)dropped, (unsigned long)uartDrop);
