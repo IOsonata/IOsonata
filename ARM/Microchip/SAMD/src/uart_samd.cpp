@@ -25,8 +25,7 @@
 		                 RX CFIFO
 		bDMAMode true  : TX by a DMAC channel on the SERCOM TX trigger (DRE),
 		                 taken at UARTInit (UARTInit fails without a free
-		                 channel, and with SAMD_DMAC_NONE in the library
-		                 project), given back at PowerOff: TxData returns 0
+		                 channel), given back at PowerOff: TxData returns 0
 		                 until UARTInit. The CPU writes what DATA takes when the
 		                 channel is idle, the channel sends the rest of the
 		                 TX CFIFO in blocks of at most half its size: in
@@ -134,12 +133,6 @@ typedef struct {
 } SamdUartDev_t;
 
 #pragma pack(pop)
-
-// TX by DMA, false with SAMD_DMAC_NONE: the DMA code is left out
-static inline __attribute__((always_inline)) bool SamdUartDmaOn(const SamdUartDev_t * const pDev)
-{
-	return SAMD_DMAC_ON && pDev->DmaChan >= 0;
-}
 
 static SamdUartDev_t s_SamdUartDev[SAMD_SERCOM_CNT] = {
 	{ .DevNo = 0, .pReg = &SERCOM0_REGS->USART_INT, .DmaChan = -1, },
@@ -273,8 +266,8 @@ static inline __attribute__((always_inline)) bool SamdUartPollTx(SamdUartDev_t *
 // TX DMA block from the TX CFIFO: the first contiguous run, at most DmaMax
 // bytes, in place with a blocking CFIFO (released when the block is done);
 // with a non-blocking one, up to SAMD_UART_DMA_COPY bytes taken out of the
-// FIFO and copied, in pieces of at most SAMD_UART_COPY_MAX bytes. Interrupts
-// disabled. False when the FIFO is empty.
+// FIFO and copied, two runs at the FIFO end. Interrupts disabled. False when
+// the FIFO is empty.
 static bool SamdUartDmaTxStart(SamdUartDev_t * const pDev)
 {
 	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
@@ -296,7 +289,7 @@ static bool SamdUartDmaTxStart(SamdUartDev_t * const pDev)
 		len = 0;
 		while (len < SAMD_UART_DMA_COPY)
 		{
-			int l = SAMD_UART_DMA_COPY - len < SAMD_UART_COPY_MAX ? SAMD_UART_DMA_COPY - len : SAMD_UART_COPY_MAX;
+			int l = SAMD_UART_DMA_COPY - len;
 			uint8_t *s = CFifoGetMultiple(fifo, &l);
 
 			if (s == NULL)
@@ -383,7 +376,7 @@ static void SamdUartDmaHandler(int Chan, uint32_t Flags, void *pCtx)
 // TX CFIFO
 static void SamdUartDmaStop(SamdUartDev_t * const pDev)
 {
-	if (SamdUartDmaOn(pDev))
+	if (pDev->DmaChan >= 0)
 	{
 		(void)SamdDmacStop(pDev->DmaChan);
 	}
@@ -394,7 +387,7 @@ static void SamdUartDmaStop(SamdUartDev_t * const pDev)
 // TX channel given back
 static void SamdUartDmaClose(SamdUartDev_t * const pDev)
 {
-	if (SamdUartDmaOn(pDev))
+	if (pDev->DmaChan >= 0)
 	{
 		SamdDmacClose(pDev->DmaChan);
 	}
@@ -571,7 +564,7 @@ static inline __attribute__((always_inline)) void SamdUartPollInline(SamdUartDev
 	// characters. With DMA the channel sends the TX CFIFO bytes DATA does
 	// not take.
 	SamdUartPollRx(pDev);
-	if (!SamdUartDmaOn(pDev))
+	if (pDev->DmaChan < 0)
 	{
 		(void)SamdUartPollTx(pDev);
 	}
@@ -713,7 +706,7 @@ static int SamdUartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Dat
 	int cnt;
 
 	// bDMAMode without the channel: given back by PowerOff
-	if (pData == NULL || Datalen <= 0 || (pDev->bDma && !SamdUartDmaOn(dev)))
+	if (pData == NULL || Datalen <= 0 || (pDev->bDma && dev->DmaChan < 0))
 	{
 		return 0;
 	}
@@ -745,7 +738,7 @@ static int SamdUartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Dat
 		// may be called from an interrupt.
 		uint32_t state = DisableInterrupt();
 
-		if (udev->bTxReady && SamdUartDmaOn(dev))
+		if (udev->bTxReady && dev->DmaChan >= 0)
 		{
 			// DMA: the CPU fills DATA, a block for the rest, ended by the
 			// DMAC interrupt
@@ -974,18 +967,14 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-	// A channel of an earlier UARTInit given back, a new one taken. None with
-	// SAMD_DMAC_NONE: the init fails.
+	// A channel of an earlier UARTInit given back, a new one taken
 	SamdUartDmaClose(dev);
 	dev->bDmaActive = false;
 	dev->DmaLen = 0;
 	if (pCfg->bDMAMode)
 	{
-		if (SAMD_DMAC_ON)
-		{
-			dev->DmaChan = (int8_t)SamdDmacOpen(SAMD_DMAC_TRIG_SERCOM_TX(pCfg->DevNo),
-												pCfg->bIntMode ? SamdUartDmaHandler : NULL, dev, pCfg->IntPrio);
-		}
+		dev->DmaChan = (int8_t)SamdDmacOpen(SAMD_DMAC_TRIG_SERCOM_TX(pCfg->DevNo),
+											pCfg->bIntMode ? SamdUartDmaHandler : NULL, dev, pCfg->IntPrio);
 		if (dev->DmaChan < 0)
 		{
 			SamdSercomClockDisable(pCfg->DevNo);

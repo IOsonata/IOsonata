@@ -32,9 +32,8 @@ Microchip device CMSIS headers; no vendor driver library is linked.
 | ADC | `adc_samd.cpp`, `include/adc_samd.h` | Single conversions by polling: AIN pins, temperature sensor, bandgap, scaled supplies, DAC output; single ended or differential; gain 1/2 to 16; INT1V, supply and external references; averaging |
 
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
-configuration asking for it fails init; on SAM D11 the library is built
-without DMA, see Peripherals), USB host mode, PWM (the TCC are timers only),
-watchdog, sleep modes and the NVM controller. The ADC has no interrupt, event or continuous mode, the DAC no
+configuration asking for it fails init), USB host mode, PWM (the TCC are
+timers only), watchdog, sleep modes and the NVM controller. The ADC has no interrupt, event or continuous mode, the DAC no
 event start (DATABUF).
 Crypto is not supported: the devices have no crypto hardware and their
 flash and RAM are too small for the software engines, so the libraries do
@@ -170,13 +169,12 @@ gives the channels back: transfers return 0 until the next init.
   the refused byte). A transfer the CPU waits for is bounded at about 15 ms
   plus a few times its length at the SCL rate.
 
-The SAM D11 library project defines `SAMD_DMAC_NONE`: the drivers are built
-without their DMA paths and an init asking for DMA fails. With a UART in the
-image the DMA code is linked whether the application asks for DMA or not,
-about 1.7 KB of flash and 200 bytes of RAM (UartPrbsTxTest Release on SAM
-D11: 1732 and 200 bytes), and UartPrbsRxTest, UartPrbsTxTestTaktOS and
-UartSlipPrbsTxTest no longer fit the 16 KB flash. Remove the define from the
-library project, both configurations, to have DMA on SAM D11.
+With a UART in the image the DMA code is linked whether the application
+asks for DMA or not: UARTInit, which can open a channel, refers to it. On SAM
+D11 that is about 1.7 KB of flash and 200 bytes of RAM (UartPrbsTxTest
+Release), and UartSlipPrbsTxTest Release and the Debug builds of
+UartPrbsRxTest, UartPrbsTxTestTaktOS and UartSlipPrbsTxTest exceed the 16 KB
+flash.
 
 Timers, virtual DevNo from low to high frequency:
 
@@ -493,8 +491,7 @@ registers; the first conversion after an enable or a reference change gives
 a wrong value, and a pin input reads 0 V when the pin is not on function B. The
 DAC model gives DATA / 1023 x reference to the ADC DAC input through the
 output buffer (EOEN), and flags a read within 10 us of the enable and a
-CTRLB write with the DAC enabled. The SAM D11 DMA results are from images
-linked with the library built without `SAMD_DMAC_NONE`. The DMAC model reads the descriptor at the
+CTRLB write with the DAC enabled. The DMAC model reads the descriptor at the
 channel enable, moves one beat per SERCOM request (DRE or RXC of the USART
 and SPI, MB or SB of the I2C master), writes the descriptor back at the end
 of the block and at a disable, and sets TCMPL with BLOCKACT INT; the SPI

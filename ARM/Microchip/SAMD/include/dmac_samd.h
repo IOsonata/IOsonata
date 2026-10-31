@@ -8,7 +8,7 @@ peripheral trigger (TRIGACT BEAT), one block per start, then disables
 itself. The UART, SPI and I2C drivers take their channels at init. The
 descriptors and the write-back section are in this module, one per channel:
 12 channels on SAM D21, 6 on SAM D11. One DMAC interrupt serves all the
-channels, at the most urgent priority asked by the open channels.
+channels, at the most urgent priority asked by a channel with a handler.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 30, 2026
@@ -45,16 +45,6 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "samdxxx.h"
-
-// SAMD_DMAC_NONE, defined by a library project: the drivers have no DMA and
-// an init asking for it fails. The DMA code then stays out of the images,
-// about 1.7 KB of flash and 200 bytes of RAM with a UART: the SAM D11 library
-// defines it for its 16 KB flash.
-#ifdef SAMD_DMAC_NONE
-#define SAMD_DMAC_ON					0
-#else
-#define SAMD_DMAC_ON					1
-#endif
 
 // Trigger sources of the SERCOM, CHCTRLB.TRIGSRC
 #define SAMD_DMAC_TRIG_SERCOM_RX(n)		(SERCOM0_DMAC_ID_RX + 2 * (n))

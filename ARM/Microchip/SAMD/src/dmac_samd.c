@@ -54,7 +54,7 @@ static dmac_descriptor_registers_t s_SamdDmacWrb[DMAC_CH_NUM] __attribute__((ali
 
 static SamdDmacHandler_t s_SamdDmacHandler[DMAC_CH_NUM];
 static void *s_pSamdDmacCtx[DMAC_CH_NUM];
-static int8_t s_SamdDmacPrio[DMAC_CH_NUM];
+static int s_SamdDmacIrqLvl = -1;		// Priority of the DMAC interrupt, -1 before the first handler
 static uint16_t s_SamdDmacUsed;
 
 // Bits of CHCTRLA of the selected channel cleared, bounded wait
@@ -94,23 +94,14 @@ static void SamdDmacOn(void)
 						   DMAC_CTRL_LVLEN2_Msk | DMAC_CTRL_LVLEN3_Msk;
 }
 
-// Most urgent priority of the open channels with a handler, a closed
-// channel has none
-static void SamdDmacIrqPrio(void)
+// DMAC interrupt on, at the most urgent priority a channel with a handler
+// asked for since reset: a priority stays when its channel is closed
+static void SamdDmacIrqPrio(int IntPrio)
 {
-	int prio = -1;
-
-	for (int i = 0; i < DMAC_CH_NUM; i++)
+	if (s_SamdDmacIrqLvl < 0 || IntPrio < s_SamdDmacIrqLvl)
 	{
-		if (s_SamdDmacHandler[i] != NULL && (prio < 0 || s_SamdDmacPrio[i] < prio))
-		{
-			prio = s_SamdDmacPrio[i];
-		}
-	}
-
-	if (prio >= 0)
-	{
-		NVIC_SetPriority(DMAC_IRQn, SamdIrqPrio(prio));
+		s_SamdDmacIrqLvl = IntPrio;
+		NVIC_SetPriority(DMAC_IRQn, SamdIrqPrio(IntPrio));
 		NVIC_EnableIRQ(DMAC_IRQn);
 	}
 }
@@ -119,7 +110,7 @@ int SamdDmacOpen(int Trig, SamdDmacHandler_t Handler, void *pCtx, int IntPrio)
 {
 	int chan = -1;
 
-	if (Trig <= 0 || Trig >= DMAC_TRIG_NUM || (Handler != NULL && (IntPrio < 0 || IntPrio > INT8_MAX)))
+	if (Trig <= 0 || Trig >= DMAC_TRIG_NUM || (Handler != NULL && IntPrio < 0))
 	{
 		return -1;
 	}
@@ -142,27 +133,21 @@ int SamdDmacOpen(int Trig, SamdDmacHandler_t Handler, void *pCtx, int IntPrio)
 
 		s_SamdDmacHandler[chan] = Handler;
 		s_pSamdDmacCtx[chan] = pCtx;
-		s_SamdDmacPrio[chan] = (int8_t)(Handler != NULL ? IntPrio : 0);
 		s_SamdDmacWrb[chan].DMAC_BTCNT = 0;
 
-		// Channel reset, ignored while ENABLE reads 1, then a beat per
-		// trigger at the lowest level
+		// Channel disabled, CHCTRLB, the flags and their interrupt set in
+		// full: a beat per trigger at the lowest level
 		DMAC_REGS->DMAC_CHID = (uint8_t)chan;
 		DMAC_REGS->DMAC_CHCTRLA = 0;
 		SamdDmacChanWait(DMAC_CHCTRLA_ENABLE_Msk);
-		DMAC_REGS->DMAC_CHCTRLA = DMAC_CHCTRLA_SWRST_Msk;
-		SamdDmacChanWait(DMAC_CHCTRLA_SWRST_Msk);
 		DMAC_REGS->DMAC_CHCTRLB = DMAC_CHCTRLB_TRIGSRC((uint32_t)Trig) | DMAC_CHCTRLB_TRIGACT_BEAT;
 		DMAC_REGS->DMAC_CHINTFLAG = SAMD_DMAC_CH_INTS;
+		DMAC_REGS->DMAC_CHINTENCLR = SAMD_DMAC_CH_INTS;
 		if (Handler != NULL)
 		{
 			DMAC_REGS->DMAC_CHINTENSET = DMAC_CHINTENSET_TCMPL_Msk | DMAC_CHINTENSET_TERR_Msk;
+			SamdDmacIrqPrio(IntPrio);
 		}
-		else
-		{
-			DMAC_REGS->DMAC_CHINTENCLR = SAMD_DMAC_CH_INTS;
-		}
-		SamdDmacIrqPrio();
 	}
 
 	EnableInterrupt(state);
@@ -186,7 +171,6 @@ void SamdDmacClose(int Chan)
 	DMAC_REGS->DMAC_CHINTFLAG = SAMD_DMAC_CH_INTS;
 	s_SamdDmacHandler[Chan] = NULL;
 	s_SamdDmacUsed &= (uint16_t)~(1U << Chan);
-	SamdDmacIrqPrio();
 
 	EnableInterrupt(state);
 }

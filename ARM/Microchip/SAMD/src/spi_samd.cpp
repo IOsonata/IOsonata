@@ -19,9 +19,8 @@
 
 		Master with bDmaEn: two DMAC channels, on the SERCOM RX (RXC) and TX
 		(DRE) triggers, move the bytes in place of the CPU, taken at SPIInit
-		(SPIInit fails without two free channels, and with SAMD_DMAC_NONE in
-		the library project), given back at PowerOff: transfers return 0
-		until SPIInit is called again.
+		(SPIInit fails without two free channels), given back at PowerOff:
+		transfers return 0 until SPIInit is called again.
 		The receive channel is armed first, a direction without data of the
 		application runs from the DummyByte or into a sink byte. The transfer
 		ends when the receive channel has its last byte. Same modes as without
@@ -140,12 +139,6 @@ typedef struct {
 } SamdSpiDev_t;
 
 #pragma pack(pop)
-
-// Master DMA, false with SAMD_DMAC_NONE: the DMA code is left out
-static inline __attribute__((always_inline)) bool SamdSpiDmaOn(const SamdSpiDev_t *pDev)
-{
-	return SAMD_DMAC_ON && pDev->bDma;
-}
 
 static SamdSpiDev_t s_SamdSpiDev[SAMD_SERCOM_CNT];
 
@@ -552,7 +545,7 @@ static int SamdSpimDmaWait(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx,
 // Transfer with the CPU waiting: DMA with bDmaEn, polling otherwise
 static int SamdSpimSync(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int Length)
 {
-	if (SamdSpiDmaOn(pDev))
+	if (pDev->bDma)
 	{
 		return SamdSpimDmaWait(pDev, pTx, pRx, Length);
 	}
@@ -571,7 +564,7 @@ static SAMD_SPI_OP SamdSpimTake(SamdSpiDev_t *pDev)
 	if (op != SAMD_SPI_OP_NONE)
 	{
 		pDev->pReg->SERCOM_INTENCLR = SAMD_SPI_ALL_INTS;
-		if (SAMD_DMAC_ON && pDev->bDmaRun)
+		if (pDev->bDmaRun)
 		{
 			pDev->bDmaRun = false;
 			pDev->Count = pDev->Length - SamdSpimDmaEnd(pDev);
@@ -652,7 +645,7 @@ static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int
 		memcpy(s_SamdSpiTxBuf, pTx, (size_t)Length);
 		pTx = s_SamdSpiTxBuf;
 	}
-	else if (SamdSpiDmaOn(pDev) && Length > SAMD_DMAC_COUNT_MAX)
+	else if (pDev->bDma && Length > SAMD_DMAC_COUNT_MAX)
 	{
 		// Longer than a block
 		pDev->Count = SamdSpimSync(pDev, NULL, pRx, Length);
@@ -668,7 +661,7 @@ static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int
 	pDev->Count = 0;
 	pDev->Op = pTx != NULL ? SAMD_SPI_OP_TX : SAMD_SPI_OP_RX;
 
-	if (SamdSpiDmaOn(pDev))
+	if (pDev->bDma)
 	{
 		// The DMAC interrupt of the receive channel ends it
 		pDev->bDmaRun = true;
@@ -793,7 +786,7 @@ static bool SamdSpiDmaTake(SamdSpiDev_t *pDev)
 
 static void SamdSpiDmaGive(SamdSpiDev_t *pDev)
 {
-	if (SamdSpiDmaOn(pDev))
+	if (pDev->bDma)
 	{
 		pDev->bDma = false;
 		pDev->bDmaRun = false;
@@ -949,7 +942,7 @@ static void SamdSpiDisable(DevIntrf_t * const pDev)
 	uint32_t state = DisableInterrupt();
 
 	reg->SERCOM_INTENCLR = SAMD_SPI_ALL_INTS;
-	if (SamdSpiDmaOn(dev))
+	if (dev->bDma)
 	{
 		// Channels stopped, a transfer started with the interrupt is not
 		// reported: Reset ends it
@@ -992,7 +985,7 @@ static void SamdSpiReset(DevIntrf_t * const pDev)
 	uint32_t state = DisableInterrupt();
 
 	dev->pReg->SERCOM_INTENCLR = SAMD_SPI_ALL_INTS;
-	if (SamdSpiDmaOn(dev))
+	if (dev->bDma)
 	{
 		dev->bDmaRun = false;
 		(void)SamdSpimDmaEnd(dev);
@@ -1095,8 +1088,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	memcpy(&pDev->Cfg, pCfgData, sizeof(SPICfg_t));
 	pDev->Cfg.bIntEn = intEn;
 
-	// No channel with SAMD_DMAC_NONE
-	if (pCfgData->bDmaEn && (!SAMD_DMAC_ON || !SamdSpiDmaTake(dev)))
+	if (pCfgData->bDmaEn && !SamdSpiDmaTake(dev))
 	{
 		// The SERCOM released as by a failed configuration below
 		SharedIntrfSetIrqHandler(pCfgData->DevNo, NULL, NULL);

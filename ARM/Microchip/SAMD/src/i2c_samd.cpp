@@ -20,9 +20,8 @@
 
 		Master with bDmaEn: one DMAC channel, on the SERCOM TX (MB) or RX (SB)
 		trigger, moves the data bytes in place of the CPU, taken at I2CInit
-		(I2CInit fails without a free channel, and with SAMD_DMAC_NONE in the
-		library project), given back at PowerOff: transfers return 0 until
-		I2CInit is called again.
+		(I2CInit fails without a free channel), given back at PowerOff:
+		transfers return 0 until I2CInit is called again.
 		The CPU sends the address and checks its acknowledge, the channel
 		the bytes of a transmit, then the CPU waits for the end of the last
 		one; the channel reads all the bytes of a receive but the last one,
@@ -159,12 +158,6 @@ typedef struct {
 } SamdI2cDev_t;
 
 #pragma pack(pop)
-
-// Master DMA, false with SAMD_DMAC_NONE: the DMA code is left out
-static inline __attribute__((always_inline)) bool SamdI2cDmaOn(const SamdI2cDev_t *pDev)
-{
-	return SAMD_DMAC_ON && pDev->bDma;
-}
 
 static SamdI2cDev_t s_SamdI2cDev[SAMD_SERCOM_CNT];
 
@@ -556,12 +549,12 @@ static int SamdI2cmRxDma(SamdI2cDev_t *pDev, uint8_t *pBuff, int BuffLen)
 // Transfers with the CPU waiting: DMA with bDmaEn, polling otherwise
 static int SamdI2cmTxSync(SamdI2cDev_t *pDev, const uint8_t *pData, int DataLen)
 {
-	return SamdI2cDmaOn(pDev) ? SamdI2cmTxDma(pDev, pData, DataLen) : SamdI2cmTxPolling(pDev, pData, DataLen);
+	return pDev->bDma ? SamdI2cmTxDma(pDev, pData, DataLen) : SamdI2cmTxPolling(pDev, pData, DataLen);
 }
 
 static int SamdI2cmRxSync(SamdI2cDev_t *pDev, uint8_t *pBuff, int BuffLen)
 {
-	return SamdI2cDmaOn(pDev) ? SamdI2cmRxDma(pDev, pBuff, BuffLen) : SamdI2cmRxPolling(pDev, pBuff, BuffLen);
+	return pDev->bDma ? SamdI2cmRxDma(pDev, pBuff, BuffLen) : SamdI2cmRxPolling(pDev, pBuff, BuffLen);
 }
 
 // Running DMA block of an interrupt transfer stopped, the bytes it moved
@@ -570,7 +563,7 @@ static void SamdI2cmDmaEnd(SamdI2cDev_t *pDev, bool bError)
 {
 	uint32_t state = DisableInterrupt();
 
-	if (SAMD_DMAC_ON && pDev->bDmaRun)
+	if (pDev->bDmaRun)
 	{
 		pDev->bDmaRun = false;
 
@@ -726,7 +719,7 @@ static int SamdI2cmTxInt(SamdI2cDev_t *pDev, const uint8_t *pData, int DataLen)
 		SamdI2cmCtrlb(pDev, 0, false);
 		SamdI2cmSendAddress(pDev, false);
 	}
-	else if (SamdI2cDmaOn(pDev))
+	else if (pDev->bDma)
 	{
 		// Bus held, MB set by the last byte: the channel starts at once
 		uint32_t state = DisableInterrupt();
@@ -752,7 +745,7 @@ static int SamdI2cmTxInt(SamdI2cDev_t *pDev, const uint8_t *pData, int DataLen)
 
 static int SamdI2cmRxInt(SamdI2cDev_t *pDev, uint8_t *pBuff, int BuffLen)
 {
-	if (SamdI2cDmaOn(pDev) && BuffLen - 1 > SAMD_DMAC_COUNT_MAX)
+	if (pDev->bDma && BuffLen - 1 > SAMD_DMAC_COUNT_MAX)
 	{
 		// Longer than a block
 		pDev->Count = SamdI2cmRxSync(pDev, pBuff, BuffLen);
@@ -854,7 +847,7 @@ static void SamdI2cmIrq(SamdI2cDev_t *pDev)
 		if (pDev->bAddrPhase)
 		{
 			pDev->bAddrPhase = false;
-			if (SamdI2cDmaOn(pDev))
+			if (pDev->bDma)
 			{
 				SamdI2cmDmaRun(pDev);
 
@@ -895,7 +888,7 @@ static void SamdI2cmIrq(SamdI2cDev_t *pDev)
 		pDev->bBusHeld = true;
 
 		// First byte in: the channel reads all but the last one
-		if (SamdI2cDmaOn(pDev) && pDev->Count == 0 && pDev->Remain >= 2)
+		if (pDev->bDma && pDev->Count == 0 && pDev->Remain >= 2)
 		{
 			SamdI2cmDmaRun(pDev);
 
@@ -1063,7 +1056,7 @@ static bool SamdI2cDmaTake(SamdI2cDev_t *pDev)
 
 static void SamdI2cDmaGive(SamdI2cDev_t *pDev)
 {
-	if (SamdI2cDmaOn(pDev))
+	if (pDev->bDma)
 	{
 		pDev->bDma = false;
 		pDev->bDmaRun = false;
@@ -1524,8 +1517,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	memcpy(&pDev->Cfg, pCfgData, sizeof(I2CCfg_t));
 	pDev->Cfg.bIntEn = intEn;
 
-	// No channel with SAMD_DMAC_NONE
-	if (pCfgData->bDmaEn && (!SAMD_DMAC_ON || !SamdI2cDmaTake(dev)))
+	if (pCfgData->bDmaEn && !SamdI2cDmaTake(dev))
 	{
 		// The SERCOM released as by a failed configuration below
 		SharedIntrfSetIrqHandler(pCfgData->DevNo, NULL, NULL);
