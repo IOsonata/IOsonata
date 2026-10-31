@@ -163,7 +163,9 @@ extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
 #define CENTRAL_CONN_INTERVAL   15
 #endif
 #ifndef CENTRAL_PHY
-#define CENTRAL_PHY             BT_GAP_PHY_2MBITS
+// Establish the 1M baseline first. Override CENTRAL_PHY in the application
+// project with BT_GAP_PHY_2MBITS for the separate 2M test.
+#define CENTRAL_PHY             BT_GAP_PHY_1MBITS
 #endif
 #define MIN_CONN_INTERVAL       CENTRAL_CONN_INTERVAL
 #define MAX_CONN_INTERVAL       CENTRAL_CONN_INTERVAL
@@ -192,7 +194,7 @@ extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
 // Target BLE peripheral device, which requires 2 pieces of info
 //  - Name : the advertising name of the device
 //  - MAC address of the device
-#define TARGET_BRIDGE_DEV_NAME	"UARTDemo"	//!< Name of BLE peripheral device to be scanned
+#define TARGET_BRIDGE_DEV_NAME	"BlePrbs_SDC"	//!< Name of BLE peripheral device to be scanned
 
 #define Nordic_PCA10040_DK		{0x25, 0xD3, 0x83, 0x6A, 0xEA, 0xDE}
 #define BlueIO832_01			{0x7C, 0x75, 0x96, 0x65, 0x28, 0xF1}

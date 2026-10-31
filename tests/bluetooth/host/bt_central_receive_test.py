@@ -13,7 +13,8 @@ code = r'''
 #include <cstdint>
 #include <cstring>
 #include "cfifo.h"
-#define CENTRAL_PHY 2
+#include "bluetooth/bt_gap.h"
+CENTRAL_PHY_CONFIG
 #define BLE_SC_METHOD 0
 #define BLE_SC_NONE 0
 struct { struct { uint16_t Hdl; } Conn; } g_ConnectedDev;
@@ -21,8 +22,8 @@ struct { void printf(const char *, ...) {} } g_Uart;
 static bool phyAccepted = true;
 static unsigned phyCalls, discoveryCalls;
 static uint16_t discoveryHandle;
-static bool BtGapSetPhy(uint16_t h, uint8_t tx, uint8_t rx, uint16_t opt) {
- assert(h == g_ConnectedDev.Conn.Hdl && tx == 2 && rx == 2 && opt == 0);
+bool BtGapSetPhy(uint16_t h, uint8_t tx, uint8_t rx, uint16_t opt) {
+ assert(h == g_ConnectedDev.Conn.Hdl && tx == EXPECTED_PHY && rx == EXPECTED_PHY && opt == 0);
  ++phyCalls; return phyAccepted;
 }
 static void StartPeerDiscovery(uint16_t h) { ++discoveryCalls; discoveryHandle = h; }
@@ -33,9 +34,12 @@ static volatile uint32_t s_BleNotifications, s_BleFirstRxMs;
 static volatile uint16_t s_BleNotifyMinLen = UINT16_MAX, s_BleNotifyMaxLen;
 static unsigned queued;
 static uint32_t nowMs;
-static uint32_t BtGattMsTick() { return nowMs; }
+uint32_t BtGattMsTick() { return nowMs; }
 static void BleToUartQue() { ++queued; }
 '''
+config_start = source.index('#ifndef CENTRAL_PHY')
+config_end = source.index('#endif', config_start) + len('#endif')
+code = code.replace('CENTRAL_PHY_CONFIG', source[config_start:config_end])
 for signature in [r'^void BtAppEvtConnected\(', r'^void BtGattClientNotified\(']:
  code += extract_function(source, signature) + '\n'
 code += r'''
@@ -79,9 +83,14 @@ with tempfile.TemporaryDirectory(prefix='central-receive-') as temp:
  cpp = Path(temp) / 'test.cpp'
  cpp.write_text(code)
  binary = Path(temp) / 'test'
- subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O2',
-  '-Wall', '-Wextra', '-fsanitize=undefined', '-fno-sanitize-recover=all',
-  '-I' + str(ROOT / 'include'), str(cpp), str(ROOT / 'src/cfifo.c'),
-  '-o', str(binary)], check=True)
- subprocess.run([str(binary)], check=True)
- print('PASS central PHY request, notification bursts, FIFO wrap and pre-forwarding counts')
+ for name, defines in [
+  ('default 1M', ['-DEXPECTED_PHY=1']),
+  ('2M', ['-DCENTRAL_PHY=BT_GAP_PHY_2MBITS', '-DEXPECTED_PHY=2']),
+  ('both', ['-DCENTRAL_PHY=3', '-DEXPECTED_PHY=3']),
+ ]:
+  subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O2',
+   '-Wall', '-Wextra', '-fsanitize=undefined', '-fno-sanitize-recover=all',
+   *defines, '-I' + str(ROOT / 'include'), str(cpp), str(ROOT / 'src/cfifo.c'),
+   '-o', str(binary)], check=True)
+  subprocess.run([str(binary)], check=True)
+  print('PASS central PHY request, bursts, FIFO wrap and receive counts:', name)
