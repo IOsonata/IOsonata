@@ -25,6 +25,8 @@ code = r'''
 #include "bt_wba_event_router.h"
 static unsigned delivered;
 void BtGapWbaConnParamsDisconnected(uint16_t) {}
+static unsigned phyCompleted;
+void BtGapWbaPhyUpdateComplete(uint16_t hdl) { assert(hdl == 0x123); phyCompleted++; }
 static unsigned connected;
 void BtGapWbaConnParamsConnected(uint16_t handle, uint8_t role,
 		uint16_t interval, uint16_t latency, uint16_t timeout)
@@ -106,6 +108,30 @@ static void EnhancedConnectionEvent()
 		assert(delivered == before);
 	}
 }
+static void PhyCompleteEvent()
+{
+	uint8_t packet[4 + sizeof(hci_le_phy_update_complete_event_rp0)] = {};
+	hci_le_phy_update_complete_event_rp0 event = {};
+	unsigned len;
+
+	packet[0] = 4;
+	packet[1] = HCI_LE_META_EVT_CODE;
+	packet[3] = HCI_LE_PHY_UPDATE_COMPLETE_SUBEVT_CODE;
+	event.Connection_Handle = 0x123;
+	memcpy(packet + 4, &event, sizeof(event));
+	for (len = 1; len < sizeof(event) + 1; len++)
+	{
+		packet[2] = (uint8_t)len;
+		BtWbaEventRouterRun(packet);
+		assert(phyCompleted == 0);
+	}
+	packet[2] = sizeof(event) + 1;
+	BtWbaEventRouterRun(packet);
+	assert(phyCompleted == 1);
+	packet[4] = 0x0c;
+	BtWbaEventRouterRun(packet);
+	assert(phyCompleted == 2);
+}
 int main()
 {
 	// Fixed prefixes must be checked before reading their declared lengths.
@@ -118,6 +144,7 @@ int main()
 		(aci_att_find_info_resp_event_rp0 *)tiny, sizeof(tiny)));
 	BtWbaEventRouterRegister(Receive);
 	EnhancedConnectionEvent();
+	PhyCompleteEvent();
 	ValueEvent(ACI_GATT_NOTIFICATION_VSEVT_CODE);
 	ValueEvent(ACI_GATT_INDICATION_VSEVT_CODE);
 }

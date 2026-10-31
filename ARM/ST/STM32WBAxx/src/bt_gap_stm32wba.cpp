@@ -127,6 +127,99 @@ static BtGapWbaState_t s_GapWba = {
 
 static BtGapWbaConnParamLink_t s_ConnParamLink[CFG_BLE_NUM_LINK];
 
+// ST v2.10.0 queues no-change PHY completion by reference to a connection
+// event record also reused by DLE's LL timer. In Basic Plus V3_0,
+// llcp_le_set_phy_cmd posts type 9 at context + 0x68; llcp_cntrl_pkt_init
+// changes that same record to type 1, which the dispatcher treats as an LL
+// response timeout. Keep it owned until PHY Update Complete is dispatched;
+// command acceptance is not completion.
+typedef struct {
+	uint16_t ConnHdl;
+	uint16_t TxOctets;
+	uint16_t TxTime;
+	bool bUsed;
+	bool bPhyPending;
+	bool bDlePending;
+} BtGapWbaLinkProc_t;
+
+static BtGapWbaLinkProc_t s_LinkProc[CFG_BLE_NUM_LINK];
+
+static BtGapWbaLinkProc_t *BtGapWbaLinkProcFind(uint16_t ConnHdl, bool Allocate)
+{
+	BtGapWbaLinkProc_t *freeSlot = nullptr;
+	size_t idx;
+
+	for (idx = 0; idx < CFG_BLE_NUM_LINK; idx++)
+	{
+		if (s_LinkProc[idx].bUsed && s_LinkProc[idx].ConnHdl == ConnHdl)
+		{
+			return &s_LinkProc[idx];
+		}
+		if (!s_LinkProc[idx].bUsed && freeSlot == nullptr)
+		{
+			freeSlot = &s_LinkProc[idx];
+		}
+	}
+	if (Allocate && freeSlot != nullptr)
+	{
+		memset(freeSlot, 0, sizeof(*freeSlot));
+		freeSlot->ConnHdl = ConnHdl;
+		freeSlot->bUsed = true;
+		return freeSlot;
+	}
+	return nullptr;
+}
+
+static void BtGapWbaLinkProcClear(uint16_t ConnHdl)
+{
+	BtGapWbaLinkProc_t *link;
+
+	link = BtGapWbaLinkProcFind(ConnHdl, false);
+	if (link != nullptr)
+	{
+		memset(link, 0, sizeof(*link));
+	}
+}
+
+static bool BtGapWbaLinkProcBusy(uint16_t ConnHdl)
+{
+	return BtGapWbaLinkProcFind(ConnHdl, false) != nullptr;
+}
+
+static void BtGapWbaLinkProcProcess(void)
+{
+	BtGapWbaLinkProc_t *link;
+	size_t idx;
+
+	for (idx = 0; idx < CFG_BLE_NUM_LINK; idx++)
+	{
+		link = &s_LinkProc[idx];
+		if (link->bUsed && !link->bPhyPending && link->bDlePending &&
+			BtGapSetDataLength(link->ConnHdl, link->TxOctets, link->TxTime))
+		{
+			memset(link, 0, sizeof(*link));
+		}
+	}
+}
+
+void BtGapWbaPhyUpdateComplete(uint16_t ConnHdl)
+{
+	BtGapWbaLinkProc_t *link;
+
+	link = BtGapWbaLinkProcFind(ConnHdl, false);
+	if (link == nullptr)
+	{
+		return;
+	}
+	// Success or failure releases ownership of the local PHY procedure.
+	link->bPhyPending = false;
+	if (!link->bDlePending)
+	{
+		memset(link, 0, sizeof(*link));
+	}
+	BtGapWbaLinkProcProcess();
+}
+
 // aci_gap_init returns the service, Device Name characteristic and Appearance
 // characteristic handles. ST creates Peripheral Preferred Connection Parameters
 // immediately after Appearance when the peripheral role is enabled, so its
@@ -333,6 +426,11 @@ static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
 		return;
 	}
 
+	if (BtGapWbaLinkProcBusy(pLink->ConnHdl))
+	{
+		return;
+	}
+
 	pLink->Attempts++;
 	tBleStatus status;
 	if (pLink->Role == BT_CONN_ROLE_PERIPHERAL)
@@ -377,6 +475,7 @@ static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
 // event of bt_app_stm32wba.cpp.
 void BtGapWbaConnParamProcess(void)
 {
+	BtGapWbaLinkProcProcess();
 	if (!s_GapWba.bConnParamsValid)
 	{
 		return;
@@ -411,6 +510,8 @@ void BtGapWbaConnParamProcess(void)
 void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
 		uint16_t Interval, uint16_t Latency, uint16_t Timeout)
 {
+	BtGapWbaLinkProcClear(ConnHdl);
+
 	// A controller handle may be reused after a lost disconnect event. Remove
 	// any stale state before deciding whether this new link needs an update.
 	BtGapWbaConnParamClear(BtGapWbaConnParamFind(ConnHdl));
@@ -436,6 +537,7 @@ void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
 
 void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl)
 {
+	BtGapWbaLinkProcClear(ConnHdl);
 	BtGapWbaConnParamClear(BtGapWbaConnParamFind(ConnHdl));
 }
 
@@ -492,6 +594,7 @@ void BtGapParamInit(const BtGapCfg_t *pCfg)
 	}
 
 	BtGapWbaConnParamResetAll();
+	memset(s_LinkProc, 0, sizeof(s_LinkProc));
 	s_GapWba.ConnIntervalMin = BtGapWbaMsecTo1_25(pCfg->ConnIntervalMin);
 	s_GapWba.ConnIntervalMax = BtGapWbaMsecTo1_25(pCfg->ConnIntervalMax);
 	s_GapWba.ConnLatency = pCfg->SlaveLatency;
@@ -682,6 +785,7 @@ bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
 {
 	uint8_t allphys = 0;
 	tBleStatus status;
+	BtGapWbaLinkProc_t *link;
 
 	if ((TxPhys & ~BT_GAP_PHY_ALL) != 0 || (RxPhys & ~BT_GAP_PHY_ALL) != 0 ||
 		PhyOptions > BT_GAP_PHY_OPT_MAX)
@@ -699,10 +803,25 @@ bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
 		allphys |= HCI_ALL_PHYS_RX_NO_PREF;
 	}
 
+	if (BtGapWbaLinkProcBusy(ConnHdl))
+	{
+		return false;
+	}
+	link = BtGapWbaLinkProcFind(ConnHdl, true);
+	if (link == nullptr)
+	{
+		return false;
+	}
+	link->bPhyPending = true;
+
 	// The result arrives as the LE PHY Update Complete event
 	status = hci_le_set_phy(ConnHdl, allphys, TxPhys, RxPhys, PhyOptions);
 	SysLogPrintf(SysLogGet(), "WBA PHY request: hdl=%u tx=%u rx=%u status=0x%02x\r\n",
 			(unsigned)ConnHdl, (unsigned)TxPhys, (unsigned)RxPhys, (unsigned)status);
+	if (status != BLE_STATUS_SUCCESS)
+	{
+		memset(link, 0, sizeof(*link));
+	}
 	return status == BLE_STATUS_SUCCESS;
 }
 
@@ -737,6 +856,7 @@ bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy)
 bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime)
 {
 	tBleStatus status;
+	BtGapWbaLinkProc_t *link;
 
 	if (TxOctets < BT_GAP_DATA_LEN_OCTETS_MIN ||
 		TxOctets > BT_GAP_DATA_LEN_OCTETS_MAX ||
@@ -744,6 +864,17 @@ bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime)
 		TxTime > BT_GAP_DATA_LEN_TIME_MAX)
 	{
 		return false;
+	}
+
+	link = BtGapWbaLinkProcFind(ConnHdl, false);
+	if (link != nullptr && link->bPhyPending)
+	{
+		link->TxOctets = TxOctets;
+		link->TxTime = TxTime;
+		link->bDlePending = true;
+		SysLogPrintf(SysLogGet(), "WBA DLE queued for PHY completion: hdl=%u\r\n",
+				(unsigned)ConnHdl);
+		return true;
 	}
 
 	status = hci_le_set_data_length(ConnHdl, TxOctets, TxTime);

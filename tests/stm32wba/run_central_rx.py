@@ -92,6 +92,8 @@ static uint8_t hci_le_set_data_length(uint16_t hdl, uint16_t octets, uint16_t ti
 struct aci_gatt_proc_complete_event_rp0 { uint16_t Connection_Handle; uint8_t Error_Code; };
 static void BtAppDiscStartDesc(BtDevice_t *);
 '''
+a = gap.index('// ST v2.10.0 queues')
+code += '#define CFG_BLE_NUM_LINK 2\n' + gap[a:gap.index('// aci_gap_init returns the service', a)]
 a = source.index('enum {\n\tDISC_IDLE')
 code += source[a:source.index('};', a) + 3]
 for name in ['BtAppDiscStartChar', 'BtAppDiscStartDesc', 'WbaDiscProcComplete',

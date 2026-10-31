@@ -97,6 +97,7 @@ void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status,
 		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
 void BtGapWbaConnParamsL2capResponse(uint16_t ConnHdl, uint16_t Result);
 void BtGapWbaConnParamProcess(void);
+void BtGapWbaPhyUpdateComplete(uint16_t ConnHdl);
 
 void BtGapWbaNativeHandlesSet(uint8_t Role, uint8_t DeviceNameMaxLen,
 		uint16_t GapSrvcHdl, uint16_t DevNameCharHdl,
@@ -288,6 +289,19 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 							p->Connection_Handle, p->Role, p->Conn_Interval,
 							p->Conn_Latency, p->Supervision_Timeout);
 					}
+					break;
+				}
+
+				case HCI_LE_PHY_UPDATE_COMPLETE_SUBEVT_CODE:
+				{
+					const hci_le_phy_update_complete_event_rp0 *p;
+
+					if (available < sizeof(*p))
+					{
+						return BTWBA_EVT_FLOW_ENABLE;
+					}
+					p = (const hci_le_phy_update_complete_event_rp0 *)pMeta->data;
+					BtGapWbaPhyUpdateComplete(p->Connection_Handle);
 					break;
 				}
 
