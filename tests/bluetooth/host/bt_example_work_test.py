@@ -323,6 +323,10 @@ static int g_UartRxExtBuffLen, g_DropCnt;
 static hCFifo_t g_UartRx2BleFifo;
 static void BleTxQue() {}
 static void UartRxQue() {}
+static void UartBlePrintStats()
+{
+	assert(false && "ordinary UART data must not request stats");
+}
 static bool UartBleSecTryCommand(const uint8_t *, int) { return false; }
 static bool UartBleOobTryCommand(const uint8_t *, int) { return false; }
 struct Uart { int Rx(uint8_t *, int) { return 0; } } g_Uart;
