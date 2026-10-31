@@ -566,6 +566,39 @@ characteristic UUIDs retain their 128-bit base in the generic fixed UUID table;
 table exhaustion fails discovery. Only descriptors with the Bluetooth SIG base
 can populate standard descriptor handles such as the CCCD.
 
+GATT server registration reserves the descriptors ST adds for broadcast and
+extended properties, and removes a partially registered service on failure.
+LESC characteristics require Secure Connections even when optional legacy
+pairing is enabled. Attribute-write callbacks receive each fragment's byte
+offset without ST's continuation flag. TX-pool availability wakes blocked
+Bluetooth interfaces and DFU senders without consuming notification completions.
+
+Advertising reconfiguration first stops the active set and refuses to continue
+if that stop fails. Intervals are clamped to the ST command range. Central scan
+and connect honor public or static-random addressing; unsupported privacy modes
+are refused. The static-random address is derived from the configured public
+identity, so existing bonds made while the port ignored that selection may need
+to be paired again.
+
+The default ST bond cache is 384 64-bit words (3072 bytes). PDS initialization
+checks that two images and record/collection overhead fit an erase sector.
+Shorter saves remove unused chunks from the inactive bank in descending order,
+so interrupted deletion leaves a contiguous prefix. A stored image larger than
+the configured cache refuses Bluetooth initialization without erasing the image.
+Build overrides must fit the actual NVM geometry. Host tests exercise full-size
+saves, shrinking images and power loss; target flash validation of these changes
+is still pending.
+
+AES and PKA instances share a per-peripheral operation lock and keep the clock
+enabled until the last enabled instance releases it. Private-only PKA import
+avoids an unused public-key multiplication, and failed Bluetooth PKA operations
+wipe retained input. These changes pass host ownership and AES adapter tests;
+concurrent application crypto and pairing still need hardware validation.
+
+Radio startup reads the newest index-zero HSE trim record from OTP using the
+CubeWBA record layout, or applies Cube's 0x0C default when absent or invalid.
+OTP reads and register masking are host tested; radio validation remains pending.
+
 Platform layer under the stack:
 
 `src/bt_wba_platform.cpp` supplies the functions that the stack and the link
@@ -596,8 +629,9 @@ server, RTC, memory manager or flash manager:
 Limits: the temperature given to the link layer for radio calibration is fixed
 at 25 degrees C (set `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 0 in
 `app_conf.h`, then it is not used). The RNG, timer, sequencer
-and PKA hooks are exercised by the BLE examples. Separate failure-path tests
-for these hooks remain pending.
+and PKA hooks are exercised by the BLE examples. Host tests cover timer
+admission/queue failures, AES fallback and PKA input cleanup. Peripheral fault
+injection and concurrent application crypto with pairing remain hardware work.
 
 Cube sources that remain in a Bluetooth build (all from the STM32CubeWBA 1.10.0
 package and the WPAN middleware commit 7e764835):

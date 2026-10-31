@@ -183,6 +183,24 @@ extern "C" void SCM_HSE_WaitUntilReady(void)
 	}
 }
 
+// CubeWBA otp.c searches 16-byte records backwards for index zero.
+// Byte 14 is HSE load-capacitance trim; byte 15 is the record index.
+static uint32_t BtWbaHseTrimGet(void)
+{
+	const volatile uint8_t *otp = (const volatile uint8_t *)FLASH_OTP_BASE;
+	size_t offset = FLASH_OTP_SIZE;
+
+	while (offset >= 16U)
+	{
+		offset -= 16U;
+		if (otp[offset + 15U] == 0)
+		{
+			return otp[offset + 14U] <= 0x3FU ? otp[offset + 14U] : 0x0CU;
+		}
+	}
+	return 0x0CU;
+}
+
 /**
  * @brief	Start HSE32 and select the radio sleep timer clock.
  *
@@ -198,6 +216,8 @@ extern "C" void BtWbaPlatformInit(void)
 	uint32_t ready = RCC_BDCR1_LSERDY | RCC_BDCR1_LSESYSRDY;
 	bool bLse = false;
 
+	MODIFY_REG(RCC->ECSCR1, RCC_ECSCR1_HSETRIM,
+		BtWbaHseTrimGet() << RCC_ECSCR1_HSETRIM_Pos);
 	SCM_HSE_WaitUntilReady();
 
 	SET_BIT(PWR->DBPR, PWR_DBPR_DBP);

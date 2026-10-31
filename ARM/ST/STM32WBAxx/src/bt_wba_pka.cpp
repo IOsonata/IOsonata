@@ -19,8 +19,8 @@ which keeps the RNG clock and start state in one place.
 Known limits:
 - The operation runs in the event queue context. A multiplication takes about
   31 ms on the PKA at the DK1 clock.
-- The hardware engine has run in the crypto engine test on the DK1 only. The
-  Bluetooth use of it is not tested on hardware.
+- DK1 crypto and Numeric Comparison pairing have passed. The later shared
+  ownership and failure-cleanup changes have host tests only.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 16, 2026

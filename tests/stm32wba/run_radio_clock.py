@@ -57,9 +57,14 @@ struct Register
 	void operator|=(uint32_t v) { value |= v; }
 	void operator&=(uint32_t v) { value &= v; }
 };
-static struct { uint32_t CR; Register BDCR1; } rcc;
+static struct { uint32_t CR, ECSCR1; Register BDCR1; } rcc;
 static struct { uint32_t DBPR; } pwr;
 #define RCC (&rcc)
+static uint8_t testOtp[512];
+#define FLASH_OTP_BASE ((uintptr_t)testOtp)
+#define FLASH_OTP_SIZE sizeof(testOtp)
+#define RCC_ECSCR1_HSETRIM_Pos 16
+#define RCC_ECSCR1_HSETRIM (0x3fU << 16)
 #define PWR (&pwr)
 static uint32_t SystemCoreClock = 100000000;
 McuOsc_t g_McuOsc;
@@ -71,6 +76,8 @@ code += source[start:end]
 code += r'''
 static void Reset(OSC_TYPE type, uint32_t delay)
 {
+	memset(testOtp, 0xff, sizeof(testOtp));
+	rcc.ECSCR1 = 0xa5000005;
 	rcc.CR = RCC_CR_HSERDY;
 	rcc.BDCR1.value = RCC_BDCR1_LSI1RDY;
 	pwr.DBPR = 0;
@@ -81,6 +88,19 @@ static void Reset(OSC_TYPE type, uint32_t delay)
 }
 int main()
 {
+	// OTP selection follows Cube: newest matching record wins, with a
+	// bounded fallback for missing or invalid calibration.
+	Reset(OSC_TYPE_RC, 1);
+	BtWbaPlatformInit();
+	assert(rcc.ECSCR1 == (0xa5000005U | (0xcU << 16)));
+	testOtp[14] = 9;
+	testOtp[15] = 0;
+	testOtp[510] = 17;
+	testOtp[511] = 0;
+	BtWbaPlatformInit();
+	assert((rcc.ECSCR1 & RCC_ECSCR1_HSETRIM) == (17U << 16));
+	testOtp[510] = 0xff;
+	assert(BtWbaHseTrimGet() == 0xc);
 	// The old HSE-sized budget expired before this crystal became ready.
 	Reset(OSC_TYPE_XTAL, 3000000);
 	rcc.BDCR1.value |= RCC_BDCR1_LSEBYP;
