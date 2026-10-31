@@ -178,6 +178,9 @@ extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
 #define APP_ADV_TIMEOUT			0	//!< The advertising timeout (ms), Will be converted to units of 10ms
 
 // UART
+#ifndef CENTRAL_UART_BAUD
+#define CENTRAL_UART_BAUD 1000000
+#endif
 #define BLE_MTU_SIZE			247//byte
 #define PACKET_SIZE				128
 
@@ -196,10 +199,11 @@ extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
 //  - MAC address of the device
 #define TARGET_BRIDGE_DEV_NAME	"BlePrbs_SDC"	//!< Name of BLE peripheral device to be scanned
 
+// Diagnostic only; the bridge forwards without checking by default.
 // Enable only when receiving the PRBS test stream. Ordinary UART payloads
 // do not follow this sequence.
 #ifndef CENTRAL_PRBS_CHECK
-#define CENTRAL_PRBS_CHECK 1
+#define CENTRAL_PRBS_CHECK 0
 #endif
 
 #define Nordic_PCA10040_DK		{0x25, 0xD3, 0x83, 0x6A, 0xEA, 0xDE}
@@ -215,6 +219,8 @@ alignas(4) uint8_t g_UartRx2BleBuff[BLEFIFOSIZE];//FIFO buffer for UART-to-BLE
 std::atomic<int> g_UartRx2BleBuffLen(0);//buffer counter for g_UartRx2BleBuff
 hCFifo_t g_UartRx2BleFifo;
 
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(12)];
+static volatile bool s_StreamActive = false;
 static volatile uint32_t s_BleToUartReceived = 0;
 static volatile uint32_t s_BleNotifications = 0;
 static volatile uint32_t s_BleFirstRxMs = 0;
@@ -285,7 +291,7 @@ UARTCfg_t g_UartCfg = {
 	.DevNo = UART_DEVNO,									// Device number zero based
 	.pIOPinMap = s_UartPins,					// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),					// Total number of UART pins used
-	.Rate = 1000000,								// Baudrate
+	.Rate = CENTRAL_UART_BAUD,								// Baudrate
 	.DataBits = 8,								// Data bits
 	.Parity = UART_PARITY_NONE,					// Parity
 	.StopBits = 1,								// Stop bit
@@ -450,6 +456,7 @@ static void StartPeerDiscovery(uint16_t ConnHdl)
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
+	s_StreamActive = false;
 #if CENTRAL_PRBS_CHECK
 	s_BlePrbsStarted = false;
 #endif
@@ -463,6 +470,13 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	{
 		g_Uart.printf("Central PHY request refused; retaining current PHY\r\n");
 	}
+
+#if defined(NRFXLIB_SDC)
+	if (!BtGapSetDataLength(ConnHdl, 251, 2120))
+	{
+		g_Uart.printf("Central data-length request refused\r\n");
+	}
+#endif
 
 #if BLE_SC_METHOD != BLE_SC_NONE
 	// Secure mode: the stack starts pairing now. Do not touch the peer GATT
@@ -488,6 +502,7 @@ void BtAppEvtSecured(uint16_t ConnHdl)
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
+	s_StreamActive = false;
 	g_Uart.printf("BtAppEvtDisconnected ConnHdl = %d (0x%x) \r\n", ConnHdl, ConnHdl);
 
 	g_ConnectedDev.Conn.Hdl = BT_CONN_HDL_INVALID;
@@ -560,7 +575,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 #if defined(S132) || defined(S140)
 	const ble_evt_t *pEvt = (const ble_evt_t *)pCtx;
 
-	if (pEvt == nullptr)
+	if (pEvt == nullptr || s_StreamActive)
 	{
 		return;
 	}
@@ -628,26 +643,36 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 #if CENTRAL_PRBS_CHECK
 	uint16_t idx;
 	uint8_t expected;
+	uint8_t previous;
+	bool started;
+	uint32_t breaks;
 #endif
 	int sent;
 
 	if (ConnHdl == g_ConnectedDev.Conn.Hdl &&
 		ValHdl == g_BleRxCharHdl && pData != nullptr && Len > 0)
 	{
+		s_StreamActive = true;
 #if CENTRAL_PRBS_CHECK
 		// Check before copying or rejecting a notification. This is the same
 		// adjacent-byte check as uartprbs_rx.py, including packet boundaries.
+		previous = s_BlePrbsPrevious;
+		started = s_BlePrbsStarted;
+		breaks = s_BlePrbsBreaks;
 		for (idx = 0; idx < Len; idx++)
 		{
-			expected = ((s_BlePrbsPrevious << 1) |
-				(((s_BlePrbsPrevious >> 6) ^ (s_BlePrbsPrevious >> 5)) & 1)) & 0x7f;
-			if (s_BlePrbsStarted && pData[idx] != expected)
+			expected = ((previous << 1) |
+				(((previous >> 6) ^ (previous >> 5)) & 1)) & 0x7f;
+			if (started && pData[idx] != expected)
 			{
-				s_BlePrbsBreaks++;
+				breaks++;
 			}
-			s_BlePrbsPrevious = pData[idx];
-			s_BlePrbsStarted = true;
+			previous = pData[idx];
+			started = true;
 		}
+		s_BlePrbsPrevious = previous;
+		s_BlePrbsStarted = started;
+		s_BlePrbsBreaks = breaks;
 #endif
 		// Count at BLE delivery, before any forwarding queue can refuse data.
 		if (s_BleNotifications == 0)
@@ -1347,6 +1372,10 @@ void BtAppInitUserData()
 
 int main()
 {
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)))
+	{
+		return 1;
+	}
 	HardwareInit();
 
 	if (!BtAppInit(&s_BleAppCfg))

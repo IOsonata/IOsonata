@@ -16,7 +16,9 @@ code = r'''
 #include "cfifo.h"
 #include "bluetooth/bt_gap.h"
 CENTRAL_PHY_CONFIG
+#ifndef CENTRAL_PRBS_CHECK
 #define CENTRAL_PRBS_CHECK 1
+#endif
 #define BLE_SC_METHOD 0
 #define BLE_SC_NONE 0
 struct
@@ -63,8 +65,10 @@ struct
 		return accepted;
 	}
 } g_Uart;
+static volatile bool s_StreamActive;
 static bool phyAccepted = true;
 static unsigned phyCalls;
+static unsigned dataLengthCalls;
 static unsigned discoveryCalls;
 static uint16_t discoveryHandle;
 static uint16_t g_BleRxCharHdl = 0x12;
@@ -85,6 +89,12 @@ bool BtGapSetPhy(uint16_t h, uint8_t tx, uint8_t rx, uint16_t opt)
 	assert(h == g_ConnectedDev.Conn.Hdl && tx == EXPECTED_PHY && rx == EXPECTED_PHY && opt == 0);
 	++phyCalls;
 	return phyAccepted;
+}
+bool BtGapSetDataLength(uint16_t h, uint16_t octets, uint16_t time)
+{
+	assert(h == g_ConnectedDev.Conn.Hdl && octets == 251 && time == 2120);
+	dataLengthCalls++;
+	return true;
 }
 static void StartPeerDiscovery(uint16_t h)
 {
@@ -122,6 +132,10 @@ int main()
 	phyAccepted = false;
 	BtAppEvtConnected(9);
 	assert(phyCalls == 2 && discoveryCalls == 2 && discoveryHandle == 9);
+#if defined(NRFXLIB_SDC)
+	assert(dataLengthCalls == 2);
+#endif
+	assert(!s_StreamActive);
 	for (i = 0; i < sizeof(data); ++i)
 	{
 		data[i] = uint8_t(i);
@@ -147,6 +161,7 @@ int main()
 		}
 		nowMs += 15;
 	}
+	assert(s_StreamActive);
 	assert(s_BleNotifications == 24 && s_BleToUartReceived == 5856);
 	assert(s_BleNotifyMinLen == 244 && s_BleNotifyMaxLen == 244);
 	assert(s_BleFirstRxMs == 100 && s_BleToUartDropped == 0);
@@ -184,10 +199,10 @@ int main()
 	assert(s_BlePrbsBreaks == 0);
 	// Repeating a whole packet breaks only its first adjacent-byte transition.
 	BtGattClientNotified(9, 0x12, data, sizeof(data));
-	assert(s_BlePrbsBreaks == 1);
+	assert(s_BlePrbsBreaks == (CENTRAL_PRBS_CHECK ? 1U : 0U));
 	BtAppEvtConnected(9);
 	BtGattClientNotified(9, 0x12, data, sizeof(data));
-	assert(s_BlePrbsBreaks == 1); // Reconnection starts a new sequence.
+	assert(s_BlePrbsBreaks == (CENTRAL_PRBS_CHECK ? 1U : 0U)); // Reconnection starts a new sequence.
 
 }
 '''
@@ -199,6 +214,8 @@ with tempfile.TemporaryDirectory(prefix='central-receive-') as temp:
         ('default 1M', ['-DEXPECTED_PHY=1']),
         ('2M', ['-DCENTRAL_PHY=BT_GAP_PHY_2MBITS', '-DEXPECTED_PHY=2']),
         ('both', ['-DCENTRAL_PHY=3', '-DEXPECTED_PHY=3']),
+        ('SDC bridge 1M', ['-DNRFXLIB_SDC', '-DCENTRAL_PRBS_CHECK=0', '-DEXPECTED_PHY=1']),
+        ('SDC bridge 2M', ['-DNRFXLIB_SDC', '-DCENTRAL_PRBS_CHECK=0', '-DCENTRAL_PHY=2', '-DEXPECTED_PHY=2']),
     ]:
         subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O2',
             '-Wall', '-Wextra', '-fsanitize=undefined', '-fno-sanitize-recover=all',
