@@ -207,6 +207,7 @@ static uint32_t s_LastPollMs;
 static uint32_t s_LastReportMs;
 static uint32_t s_LastReportBytes;
 static bool s_FinalPrinted;
+static bool s_TrialComplete;
 
 static void PrbsReset(void)
 {
@@ -226,6 +227,7 @@ static void PrbsReset(void)
 	s_LastReportMs = 0;
 	s_LastReportBytes = 0;
 	s_FinalPrinted = false;
+	s_TrialComplete = false;
 }
 
 static void PrbsCheck(const uint8_t *pData, uint16_t Len, uint32_t Now)
@@ -635,7 +637,15 @@ static void PrbsReport(uint32_t Now)
 			(unsigned long)target, notificationsPerInterval >= target * 1000 ? "MET" : "NOT MET");
 		g_Uart.printf("PHY=%u RESULT: %s\r\n", s_TestPhy,
 			valid && elapsed >= PRBS_RX_DURATION_MS && notificationsPerInterval >= target * 1000 ? "PASS" : "FAIL");
-		g_Uart.printf("PHY=%u trial complete.\r\n", s_TestPhy);
+		s_TrialComplete = stats.Started && elapsed >= PRBS_RX_DURATION_MS && !s_Failed;
+		if (s_TrialComplete)
+		{
+			g_Uart.printf("PHY=%u trial complete.\r\n", s_TestPhy);
+		}
+		else
+		{
+			g_Uart.printf("PHY=%u trial aborted; benchmark stopped.\r\n", s_TestPhy);
+		}
 		s_FinalPrinted = true;
 		if (s_ConnHdl != BT_CONN_HDL_INVALID)
 		{
@@ -654,7 +664,7 @@ bool AppCheckStatus(void)
 #endif
 
 	BtAppCheckStatus();
-	if (s_FinalPrinted && s_Disconnected && s_TestPhy == BT_GAP_PHY_1MBITS)
+	if (s_FinalPrinted && s_TrialComplete && s_Disconnected && s_TestPhy == BT_GAP_PHY_1MBITS)
 	{
 		s_TestPhy = BT_GAP_PHY_2MBITS;
 		PrbsReset();

@@ -193,6 +193,29 @@ int main()
 	assert(strstr(output, "PRBS integrity: FAIL") == nullptr);
 	assert(strstr(output, "PHY=1 RESULT: PASS") != nullptr);
 	assert(strstr(output, "PHY=2 RESULT: PASS") != nullptr);
+	// Aborted 1M startup must not silently advance to the 2M trial.
+	s_TestPhy = 1;
+	actualPhy = 1;
+	BtAppEvtConnected(0);
+	BtAppEvtDisconnected(0);
+	AppCheckStatus();
+	AppCheckStatus();
+	assert(s_FinalPrinted && !s_TrialComplete && s_TestPhy == 1 && scans == 1);
+	assert(strstr(output, "PHY=1 trial aborted; benchmark stopped.") != nullptr);
+	// A startup timeout has the same stop behavior.
+	BtAppEvtConnected(0);
+	nowMs += 10000;
+	AppCheckStatus();
+	AppCheckStatus();
+	assert(s_FinalPrinted && !s_TrialComplete && s_TestPhy == 1 && scans == 1);
+	// Disconnect after some data also stops instead of skipping the trial.
+	BtAppEvtConnected(0);
+	PrbsCheck(zeros, sizeof(zeros), nowMs);
+	nowMs += 1000;
+	BtAppEvtDisconnected(0);
+	AppCheckStatus();
+	AppCheckStatus();
+	assert(s_FinalPrinted && !s_TrialComplete && s_TestPhy == 1 && scans == 1);
 	// Damage is counted locally, with no UART payload API in this harness.
 	PrbsReset();
 	s_Finished = false;
