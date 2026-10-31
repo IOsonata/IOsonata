@@ -35,6 +35,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "idelay.h"
+#include "istddef.h"
 #include "video/cam_arducam_mega.h"
 
 // Status polling, 1 s bound. A sensor reset loads the whole sensor setup.
@@ -43,6 +44,8 @@ SOFTWARE.
 
 // Bound of the wait for the module to start after power up, 100 ms specified
 #define ARDUCAM_MEGA_BOOT_POLL_MAX		2000
+
+#define ARDUCAM_MEGA_TRANSFER_POLL_MAX	100000
 
 // Sensor bits of the resolution table
 #define ARDUCAM_MEGA_RES_2MP			(1<<0)
@@ -100,6 +103,12 @@ static const int s_NbArduCamMegaLowPower = sizeof(s_ArduCamMegaLowPower) / sizeo
 
 CamArducamMega::CamArducamMega()
 {
+	vbFrameRead = false;
+	vFrameReadLen = 0;
+	vbTransferPending = false;
+	vbTransferDone = false;
+	vTransferCount = 0;
+	vbTransferFailed = false;
 	vSensorId = 0;
 	vResMask = 0;
 	vResIdx = 0;
@@ -113,11 +122,18 @@ CamArducamMega::CamArducamMega()
 
 bool CamArducamMega::Init(const VideoDevCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (pIntrf == nullptr)
+	if (pIntrf == nullptr || vbFrameRead || (vbTransferPending && !vbTransferDone))
 	{
 		return false;
 	}
 
+	DevIntrf_t *intrf = *pIntrf;
+	if (intrf->bIntEn && intrf->EvtCB == nullptr)
+	{
+		return false;
+	}
+	vbTransferPending = false;
+	vbTransferFailed = false;
 	Valid(false);
 	Interface(pIntrf);
 	DeviceAddress(Cfg.DevAddr);
@@ -212,6 +228,10 @@ void CamArducamMega::Disable()
 
 void CamArducamMega::Reset()
 {
+	if (!TransferReady())
+	{
+		return;
+	}
 	Stop();
 	SensorReset();
 
@@ -223,7 +243,7 @@ void CamArducamMega::Reset()
 
 bool CamArducamMega::Start()
 {
-	if (Valid() == false)
+	if (Valid() == false || !TransferReady())
 	{
 		return false;
 	}
@@ -286,7 +306,7 @@ void CamArducamMega::Stop()
 
 bool CamArducamMega::UpdateData()
 {
-	if (vbCapture == false)
+	if (vbCapture == false || !TransferReady())
 	{
 		return false;
 	}
@@ -325,7 +345,11 @@ bool CamArducamMega::UpdateData()
 
 int CamArducamMega::ReadFrame(uint8_t *pBuff, int Len)
 {
-	if (vRemain == 0 || Len <= 0)
+	int cnt = 0;
+	int n;
+	uint8_t cmd[2] = { ARDUCAM_MEGA_BURST_FIFO_READ, 0 };
+
+	if (pBuff == nullptr || vRemain == 0 || Len <= 0)
 	{
 		return 0;
 	}
@@ -335,17 +359,19 @@ int CamArducamMega::ReadFrame(uint8_t *pBuff, int Len)
 		Len = (int)vRemain;
 	}
 
-	// A dummy byte precedes the data on the first burst of a frame
-	uint8_t cmd[2] = { ARDUCAM_MEGA_BURST_FIFO_READ, 0 };
-	int cnt = vpIntrf->Read(vDevAddr, cmd, vbFirstBurst ? 2 : 1, pBuff, Len);
-
-	if (cnt <= 0)
+	while (cnt < Len)
 	{
-		return 0;
+		// Keep DMA storage in the camera until its completion, including a
+		// late completion after timeout. The first burst alone has a dummy.
+		n = ReadTransfer(cmd, vbFirstBurst ? 2 : 1, pBuff + cnt, Len - cnt);
+		if (n <= 0)
+		{
+			break;
+		}
+		vbFirstBurst = false;
+		vRemain -= n;
+		cnt += n;
 	}
-
-	vbFirstBurst = false;
-	vRemain -= cnt;
 
 	if (vRemain == 0)
 	{
@@ -358,6 +384,61 @@ int CamArducamMega::ReadFrame(uint8_t *pBuff, int Len)
 	}
 
 	return cnt;
+}
+
+int CamArducamMega::ReadFrameAsync(uint8_t *pBuff, int Len)
+{
+	uint8_t cmd[2] = { ARDUCAM_MEGA_BURST_FIFO_READ, 0 };
+	int count;
+
+	if (pBuff == nullptr || Len <= 0 || vRemain == 0 || !TransferReady())
+	{
+		return 0;
+	}
+	Len = min((uint32_t)Len, vRemain);
+	vbFrameRead = true;
+	vFrameReadLen = Len;
+	vbTransferDone = false;
+	vbTransferPending = true;
+	count = vpIntrf->Read(vDevAddr, cmd, vbFirstBurst ? 2 : 1, pBuff, Len);
+	if (count >= 0)
+	{
+		vTransferCount = count;
+		vbTransferDone = true;
+	}
+	return ReadFrameComplete();
+}
+
+int CamArducamMega::ReadFrameComplete()
+{
+	int count;
+
+	if (!vbFrameRead)
+	{
+		return 0;
+	}
+	if (!vbTransferDone)
+	{
+		return -1;
+	}
+	count = vTransferCount;
+	vbFrameRead = false;
+	vbTransferPending = false;
+	if (vbTransferFailed || count <= 0 || count > vFrameReadLen)
+	{
+		return 0;
+	}
+	vbFirstBurst = false;
+	vRemain -= count;
+	if (vRemain == 0)
+	{
+		vFrameLen = 0;
+		if (vbRun && vOpMode == VIDEO_OPMODE_CONTINUOUS)
+		{
+			StartFrame();
+		}
+	}
+	return count;
 }
 
 const VideoFmt_t &CamArducamMega::Format(VIDEO_STREAM Stream, const VideoFmt_t &Fmt)
@@ -419,20 +500,101 @@ const VideoFmt_t &CamArducamMega::Format(VIDEO_STREAM Stream, const VideoFmt_t &
 
 int CamArducamMega::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
-	(void)CmdAddrLen;
+	if (pCmdAddr == nullptr || CmdAddrLen <= 0)
+	{
+		return 0;
+	}
 
 	uint8_t cmd[2] = { (uint8_t)(pCmdAddr[0] & ~ARDUCAM_MEGA_REG_WR), 0 };
 
-	return vpIntrf->Read(vDevAddr, cmd, 2, pBuff, BuffLen);
+	return ReadTransfer(cmd, 2, pBuff, BuffLen);
 }
 
 int CamArducamMega::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
-	(void)CmdAddrLen;
+	int n;
 
-	uint8_t reg = pCmdAddr[0] | ARDUCAM_MEGA_REG_WR;
+	if (pCmdAddr == nullptr || CmdAddrLen <= 0 || pData == nullptr || DataLen <= 0 ||
+		DataLen >= (int)sizeof(vTransferBuff) || !TransferReady())
+	{
+		return 0;
+	}
+	vTransferBuff[0] = pCmdAddr[0] | ARDUCAM_MEGA_REG_WR;
+	memcpy(vTransferBuff + 1, pData, DataLen);
+	vbTransferPending = true;
+	vbTransferDone = false;
+	n = TransferWait(vpIntrf->Tx(vDevAddr, vTransferBuff, DataLen + 1));
+	return n > 1 ? n - 1 : 0;
+}
 
-	return vpIntrf->Write(vDevAddr, &reg, 1, pData, DataLen);
+// The owner of the SPI supplies the callback; the camera never replaces it.
+void CamArducamMega::IntrfEvent(DEVINTRF_EVT Evt, int Len)
+{
+	if (!vbTransferPending)
+	{
+		return;
+	}
+	if (Evt == DEVINTRF_EVT_COMPLETED || Evt == DEVINTRF_EVT_TX_TIMEOUT ||
+		Evt == DEVINTRF_EVT_RX_TIMEOUT)
+	{
+		vTransferCount = Evt == DEVINTRF_EVT_COMPLETED ? Len : 0;
+		if (Evt != DEVINTRF_EVT_COMPLETED)
+		{
+			vbTransferFailed = true;
+		}
+		vbTransferDone = true;
+	}
+}
+
+bool CamArducamMega::TransferReady()
+{
+	return !vbTransferFailed && !vbTransferPending;
+}
+
+int CamArducamMega::TransferWait(int Result)
+{
+	if (Result < 0)
+	{
+		for (int i = 0; i < ARDUCAM_MEGA_TRANSFER_POLL_MAX && !vbTransferDone; i++)
+		{
+			usDelay(1);
+		}
+		if (!vbTransferDone)
+		{
+			// Keep the buffer reserved. Reinitialization is allowed only after
+			// completion; returning must not expose caller memory to late DMA.
+			vbTransferFailed = true;
+			return 0;
+		}
+		Result = vTransferCount;
+	}
+	vbTransferPending = false;
+	return Result;
+}
+
+int CamArducamMega::ReadTransfer(const uint8_t *pCmd, int CmdLen, uint8_t *pBuff, int Len)
+{
+	DevIntrf_t *intrf = *vpIntrf;
+	int count;
+
+	if (pBuff == nullptr || Len <= 0 || !TransferReady())
+	{
+		return 0;
+	}
+	if (!intrf->bIntEn)
+	{
+		return vpIntrf->Read(vDevAddr, pCmd, CmdLen, pBuff, Len);
+	}
+	Len = min(Len, (int)sizeof(vTransferBuff));
+	vbTransferPending = true;
+	vbTransferDone = false;
+	count = TransferWait(vpIntrf->Read(vDevAddr, pCmd, CmdLen, vTransferBuff, Len));
+	if (count > 0 && count <= Len)
+	{
+		memcpy(pBuff, vTransferBuff, count);
+		return count;
+	}
+	return 0;
 }
 
 uint8_t CamArducamMega::RegRead(uint8_t Reg)

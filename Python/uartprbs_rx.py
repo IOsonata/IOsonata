@@ -31,6 +31,7 @@ A report is printed even when no data arrives.
         --report-interval : Status report interval in seconds (default 1.0)
         --dtr : DTR state while the port is open, on or off (default on)
         --rts : RTS state while the port is open, on or off (default on)
+        --central-stats : Fetch UartBleCentral counters after Ctrl-C
 
 @author Hoang Nguyen Hoan
 @date   July 27, 2019
@@ -62,6 +63,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------
 """
 import argparse
+import re
 import sys
 import time
 
@@ -228,7 +230,35 @@ def parse_args() -> argparse.Namespace:
                    help="DTR state while the port is open (default: on)")
     p.add_argument("--rts", choices=("on", "off"), default="on",
                    help="RTS state while the port is open (default: on)")
+    p.add_argument("--central-stats", action="store_true",
+                   help="Request UartBleCentral counters after Ctrl-C; exclude replies from PRBS checking")
     return p.parse_args()
+
+
+def central_stats(comm, clock=time.perf_counter):
+    """Read the existing central stats reply amongst the continuing PRBS stream."""
+    patterns = {
+        "BLE": rb"BLE: notifications=\d+ bytes=\d+ elapsed_ms=\d+ len_min=\d+ len_max=\d+ mtu=\d+(?: prbs_check=\d+ prbs_breaks=\d+)?\r\n",
+        "Stream": rb"Stream: ble_rx=\d+ uart_accepted=\d+ queued=\d+ ble_drop=\d+ uart_refused=\d+\r\n",
+    }
+    pending = dict(patterns)
+    buffer = bytearray()
+    deadline = clock() + 3.0
+    # Do not feed this reply to PrbsCheck: it deliberately adds console text.
+    comm.write(b"stats\n")
+    while pending and clock() < deadline:
+        buffer.extend(comm.read(4096))
+        for name, pattern in list(pending.items()):
+            match = re.search(pattern, buffer)
+            if match:
+                print(match.group().decode("ascii").strip())
+                del pending[name]
+        # Keep split replies across reads, without retaining the binary stream.
+        if len(buffer) > 8192:
+            del buffer[:-4096]
+    if pending:
+        print("Central stats incomplete: missing " + ", ".join(pending), file=sys.stderr)
+    return not pending
 
 
 def report(chk, rate, average, oof_interval, count_interval):
@@ -327,6 +357,9 @@ def main():
             if elapsed > 0:
                 average = (chk.count - start_count) / elapsed
         report(chk, 0.0, average, 0, None)
+        if args.central_stats:
+            print("Central counters (PRBS measurement stopped):")
+            central_stats(comm)
     finally:
         comm.close()
 

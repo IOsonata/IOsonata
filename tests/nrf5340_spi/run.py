@@ -17,6 +17,7 @@ with tempfile.TemporaryDirectory(prefix="spim4-") as temp:
             "-I"+str(HERE/"shim"), "-I"+str(ROOT/"include"),
             "-I"+str(ROOT/"include/coredev"), "-I"+str(ROOT/"ARM/Nordic/include"),
             *[str(ROOT/p) for p in ("ARM/Nordic/src/spi_nrfx.cpp", "src/device_intrf.cpp",
-                "src/coredev/spi.cpp", "src/coredev/shared_intrf.cpp", "tests/nrf5340_spi/spim4_test.cpp")],
+                "src/coredev/spi.cpp", "src/coredev/shared_intrf.cpp",
+                "src/device.cpp", "src/video/cam_arducam_mega.cpp", "tests/nrf5340_spi/spim4_test.cpp")],
             "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True, env={**os.environ, "ASAN_OPTIONS":"detect_leaks=0"})

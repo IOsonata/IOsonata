@@ -342,6 +342,9 @@ bt_gatt_cccd_test_SOURCES := \
 
 bt_gatt_txcomplete_test_SOURCES := \
 	bt_gatt_txcomplete_test.cpp \
+	$(ROOT)/src/bluetooth/bt_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(BUILD_DIR)/cfifo.o \
 	$(ROOT)/src/bluetooth/bt_gatt.cpp \
 	$(ROOT)/src/bluetooth/bt_peer.cpp
 
@@ -482,8 +485,14 @@ test: $(TARGETS)
 		$(TEST_ENV) ./$$target; \
 	done
 	CXX="$(CXX)" $(PYTHON) bt_app_private_test.py
+	CXX="$(CXX)" $(PYTHON) bt_central_stream_test.py
+	CXX="$(CXX)" $(PYTHON) bt_central_receive_test.py
+	CXX="$(CXX)" $(PYTHON) bt_central_command_test.py
+	CXX="$(CXX)" $(PYTHON) bt_prbs_rx_test.py
 	CXX="$(CXX)" $(PYTHON) bt_status_queue_test.py
 	CXX="$(CXX)" $(PYTHON) bt_example_work_test.py
+	$(TEST_ENV) CXX="$(CXX)" $(PYTHON) test_video_ble_services.py
+	$(TEST_ENV) CXX="$(CXX)" $(PYTHON) test_video_ble_stream.py
 
 test-gcc:
 	$(MAKE) clean

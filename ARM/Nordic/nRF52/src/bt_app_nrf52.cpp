@@ -1132,46 +1132,46 @@ void BtGattEvtHandler(nrf_ble_gatt_t * p_gatt, const nrf_ble_gatt_evt_t * p_evt)
 /**@brief Function for initializing the GATT library. */
 void BtGattInit(void)
 {
-    ret_code_t err_code;
+	ret_code_t err_code;
+	ble_opt_t opt;
+	uint8_t dlen = (uint8_t)min((uint32_t)s_BtAppData.MaxMtu + 4U, (uint32_t)251U);
 
-    err_code = nrf_ble_gatt_init(&s_Gatt, BtGattEvtHandler);
-    APP_ERROR_CHECK(err_code);
+	err_code = nrf_ble_gatt_init(&s_Gatt, BtGattEvtHandler);
+	APP_ERROR_CHECK(err_code);
 
-    if (s_BtAppData.Role & BT_GAP_ROLE_PERIPHERAL)
-    {
-    	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, s_BtAppData.MaxMtu);
-    	APP_ERROR_CHECK(err_code);
+	if (s_BtAppData.Role & BT_GAP_ROLE_PERIPHERAL)
+	{
+		err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, s_BtAppData.MaxMtu);
+		APP_ERROR_CHECK(err_code);
+	}
 
-    	if (s_BtAppData.MaxMtu >= 27)
-    	{
-    		// 251 bytes is max dat length as per Bluetooth core spec 5, vol 6, part b, section 4.5.10
-    		// 27 - 251 bytes is hardcoded in nrf_ble_gat of the SDK.
-    		// It is very confusing in the SDK. According to the Specs, it should be ATT MTU + 4
-    		// where Max length cannot be more than 251. Which means ATT MTU max is no more than 247.
-    		uint8_t dlen = s_BtAppData.MaxMtu + 4;//> 254 ? 251: s_BtAppData.MaxMtu - 3;
-    		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
-    		APP_ERROR_CHECK(err_code);
-    	}
-      	ble_opt_t opt;
+	if (s_BtAppData.Role & BT_GAP_ROLE_CENTRAL)
+	{
+		err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, s_BtAppData.MaxMtu);
+		APP_ERROR_CHECK(err_code);
 
-      	memset(&opt, 0x00, sizeof(opt));
-      	opt.common_opt.conn_evt_ext.enable = 1;
+		memset(&opt, 0, sizeof(opt));
+		opt.gattc_opt.uuid_disc.auto_add_vs_enable = 1;
+		err_code = sd_ble_opt_set(BLE_GATTC_OPT_UUID_DISC, &opt);
+		APP_ERROR_CHECK(err_code);
+	}
 
-      	err_code = sd_ble_opt_set(BLE_COMMON_OPT_CONN_EVT_EXT, &opt);
-      	APP_ERROR_CHECK(err_code);
-    }
+	// These settings apply to either end of a streaming link. A central-only
+	// build must not retain the short data length or skip event extension.
+	if (s_BtAppData.Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL))
+	{
+		if (s_BtAppData.MaxMtu >= 23)
+		{
+			// Clamp before narrowing: ATT MTU 512 must request 251, not 4.
+			err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
+			APP_ERROR_CHECK(err_code);
+		}
 
-    if (s_BtAppData.Role & BT_GAP_ROLE_CENTRAL)
-    {
-    	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, s_BtAppData.MaxMtu);
-    	APP_ERROR_CHECK(err_code);
-
-    	ble_opt_t opt;
-    	memset(&opt, 0x00, sizeof(opt));
-    	opt.gattc_opt.uuid_disc.auto_add_vs_enable = 1;
-    	err_code = sd_ble_opt_set(BLE_GATTC_OPT_UUID_DISC, &opt);
-    	APP_ERROR_CHECK(err_code);
-    }
+		memset(&opt, 0, sizeof(opt));
+		opt.common_opt.conn_evt_ext.enable = 1;
+		err_code = sd_ble_opt_set(BLE_COMMON_OPT_CONN_EVT_EXT, &opt);
+		APP_ERROR_CHECK(err_code);
+	}
 }
 
 void BtDisInit(const BtAppCfg_t *pCfg)
@@ -1304,13 +1304,13 @@ bool BtAppStackInit(int MaxMtu, int PeriphDevMax, int CentralDevMax, bool bConne
     ble_cfg.gatts_cfg.service_changed.service_changed = 1;
     err_code = sd_ble_cfg_set(BLE_GATTS_CFG_SERVICE_CHANGED, &ble_cfg, ram_start);
     APP_ERROR_CHECK(err_code);
-#if 0
-    memset(&ble_cfg, 0, sizeof ble_cfg);
-    ble_cfg.conn_cfg.conn_cfg_tag 					= BLEAPP_CONN_CFG_TAG;
-    ble_cfg.conn_cfg.params.gatts_conn_cfg.hvn_tx_queue_size = 10;
-    err_code = sd_ble_cfg_set(BLE_CONN_CFG_GATTS, &ble_cfg, ram_start);
-    APP_ERROR_CHECK(err_code);
-#endif
+	// Keep notifications queued in the SoftDevice while the application
+	// handles transmit completions. The BtIntrf FIFO is separate storage.
+	memset(&ble_cfg, 0, sizeof(ble_cfg));
+	ble_cfg.conn_cfg.conn_cfg_tag = BTAPP_CONN_CFG_TAG;
+	ble_cfg.conn_cfg.params.gatts_conn_cfg.hvn_tx_queue_size = 10;
+	err_code = sd_ble_cfg_set(BLE_CONN_CFG_GATTS, &ble_cfg, ram_start);
+	APP_ERROR_CHECK(err_code);
     // Enable BLE stack.
     err_code = nrf_sdh_ble_enable(&ram_start);
 	APP_ERROR_CHECK(err_code);

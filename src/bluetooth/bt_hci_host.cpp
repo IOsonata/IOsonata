@@ -816,6 +816,59 @@ static void BtHciReasmReset(uint16_t ConnHdl)
 	}
 }
 
+static uint16_t BtHciAclPktCount(BtHciDevice_t * const pDev, uint16_t AclLen)
+{
+	if (pDev == nullptr || pDev->AclMaxLen == 0 || AclLen == 0)
+	{
+		return 1;
+	}
+
+	return (uint16_t)((AclLen + pDev->AclMaxLen - 1) / pDev->AclMaxLen);
+}
+
+#ifndef BT_HCI_RESPONSE_COUNT
+#define BT_HCI_RESPONSE_COUNT 2
+#endif
+
+struct BtHciResponse {
+	BtHciDevice_t *pDev;
+	uint16_t Len;
+	alignas(4) uint8_t Data[BT_HCI_BUFFER_MAX_SIZE];
+};
+static BtHciResponse s_ResponseMem[BT_HCI_RESPONSE_COUNT];
+// Only the ACL receive path links the response storage into the image.
+static BtHciResponse *s_pResponses;
+static bool s_ResponseSending;
+static BtHciACLDataPacket_t *s_pResponseSending;
+static void (*s_ResponseRetry)(BtHciDevice_t *pDev);
+extern void BtIntrfTxReady(void) __attribute__((weak));
+
+void BtHciTxCheckStatus(BtHciDevice_t *pDev)
+{
+	if (s_ResponseRetry) s_ResponseRetry(pDev);
+	if (BtIntrfTxReady) BtIntrfTxReady();
+}
+
+static void BtHciResponseClear(BtHciDevice_t *pDev, uint16_t Hdl)
+{
+	if (!s_pResponses) return;
+	for (int i = 0; i < BT_HCI_RESPONSE_COUNT; i++)
+	{
+		auto &r = s_pResponses[i];
+		if (r.pDev == pDev && (Hdl == UINT16_MAX ||
+			((BtHciACLDataPacket_t *)r.Data)->Hdr.ConnHdl == Hdl))
+			r.Len = 0;
+	}
+}
+
+static bool BtHciResponsePending(BtHciDevice_t *pDev)
+{
+	if (!s_pResponses) return false;
+	for (int i = 0; i < BT_HCI_RESPONSE_COUNT; i++)
+		if (s_pResponses[i].pDev == pDev && s_pResponses[i].Len) return true;
+	return false;
+}
+
 // Configure the controller's LE ACL buffer parameters. Clamps the packet
 // length to what a single host buffer can hold.
 void BtHciSetLeAclBuffer(BtHciDevice_t * const pDev, uint16_t MaxLen, uint8_t PktCount)
@@ -831,6 +884,8 @@ void BtHciSetLeAclBuffer(BtHciDevice_t * const pDev, uint16_t MaxLen, uint8_t Pk
 		MaxLen = cap;
 	}
 
+	BtHciResponseClear(pDev, UINT16_MAX);
+	memset(pDev->AclPending, 0, sizeof(pDev->AclPending));
 	pDev->AclMaxLen = MaxLen;
 	pDev->AclCreditMax = PktCount;
 	pDev->AclCredit = (int16_t)PktCount;
@@ -858,6 +913,36 @@ static void BtHciDropLink(BtHciDevice_t * const pDev, uint16_t ConnHdl)
 	pDev->Command(pDev, BT_HCI_CMD_LINKCTRL_DISCONNECT, param, sizeof(param), nullptr, 0);
 }
 
+// Count accepted packets independently of GATT ownership. Disconnect can flush
+// them without a Number Of Completed Packets event (Core Vol 4 E 4.3).
+static int BtHciTxSlot(BtHciDevice_t *pDev, uint16_t Hdl)
+{
+	int freeSlot = -1;
+	for (int i = 0; i < BT_HCI_TX_LINK_COUNT; i++)
+	{
+		if (pDev->AclPending[i].Count && pDev->AclPending[i].Hdl == Hdl)
+			return i;
+		if (!pDev->AclPending[i].Count)
+			freeSlot = i;
+	}
+	return freeSlot;
+}
+
+static uint16_t BtHciTxRelease(BtHciDevice_t *pDev, uint16_t Hdl, uint16_t Count)
+{
+	for (auto &pending : pDev->AclPending)
+	{
+		if (pending.Hdl == Hdl && pending.Count)
+		{
+			uint16_t n = min(Count, pending.Count);
+			pending.Count -= n;
+			pDev->AclCredit = min((int)pDev->AclCreditMax, pDev->AclCredit + n);
+			return n;
+		}
+	}
+	return 0;
+}
+
 uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pAcl)
 {
 	if (pDev == nullptr || pDev->SendData == nullptr || pAcl == nullptr)
@@ -878,7 +963,8 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 	// order used by GATT. SMP previously bypassed this queue, so its completion
 	// could consume a later notification entry and fire that callback early.
 	// Reserve the whole PDU before any fragment can enter the controller.
-	if (pDev->AclCreditMax > 0 && pDev->AclCredit < (int16_t)nFrag)
+	if ((pAcl != s_pResponseSending && BtHciResponsePending(pDev)) ||
+		(pDev->AclCreditMax > 0 && pDev->AclCredit < (int16_t)nFrag))
 	{
 		if (bSmp)
 		{
@@ -898,14 +984,40 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		return 0;
 	}
 
+	int slot = -1;
+	if (pDev->AclCreditMax > 0)
+	{
+		slot = BtHciTxSlot(pDev, pAcl->Hdr.ConnHdl);
+		if (slot < 0)
+		{
+			if (bSmp)
+			{
+				BtGattTxPendRelease(pAcl->Hdr.ConnHdl);
+				BtHciDropLink(pDev, pAcl->Hdr.ConnHdl);
+			}
+			return 0;
+		}
+		pDev->AclPending[slot].Hdl = pAcl->Hdr.ConnHdl;
+	}
+
 	// Single-packet path: used when fragmentation is not configured or the PDU
 	// already fits one ACL data packet.
 	if (nFrag == 1)
 	{
+		if (slot >= 0)
+		{
+			pDev->AclCredit--;
+			pDev->AclPending[slot].Count++;
+		}
 		uint32_t txLen = (uint32_t)l2Len + sizeof(pAcl->Hdr);
 		uint32_t sent = pDev->SendData((uint8_t*)pAcl, txLen);
 		if (sent != txLen)
 		{
+			if (slot >= 0)
+			{
+				pDev->AclCredit++;
+				pDev->AclPending[slot].Count--;
+			}
 			if (bSmp)
 			{
 				// No controller packet was accepted, so remove the reservation
@@ -914,10 +1026,6 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 				BtHciDropLink(pDev, pAcl->Hdr.ConnHdl);
 			}
 			return 0;
-		}
-		if (pDev->AclCreditMax > 0)
-		{
-			pDev->AclCredit--;
 		}
 		return sent;
 	}
@@ -928,6 +1036,7 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 	if (pDev->AclCreditMax > 0)
 	{
 		pDev->AclCredit = (int16_t)(pDev->AclCredit - (int16_t)nFrag);
+		pDev->AclPending[slot].Count += nFrag;
 	}
 
 	uint8_t fbuf[BT_HCI_BUFFER_MAX_SIZE];
@@ -961,6 +1070,7 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			{
 				pDev->AclCredit = (int16_t)(pDev->AclCredit +
 						(int16_t)(nFrag - nSent));
+				pDev->AclPending[slot].Count -= nFrag - nSent;
 			}
 
 			if (bSmp && nSent == 0)
@@ -983,6 +1093,53 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 	}
 
 	return (uint32_t)l2Len + sizeof(pAcl->Hdr);
+}
+
+static void BtHciResponseRetry(BtHciDevice_t *pDev)
+{
+	if (!s_pResponses || s_ResponseSending) return;
+	s_ResponseSending = true;
+	for (int i = 0; i < BT_HCI_RESPONSE_COUNT; i++)
+	{
+		auto &r = s_pResponses[i];
+		if (r.pDev != pDev || !r.Len) continue;
+		auto *acl = (BtHciACLDataPacket_t *)r.Data;
+		uint16_t count = BtHciAclPktCount(pDev, acl->Hdr.Len);
+		if (pDev->AclCreditMax && pDev->AclCredit < count) continue;
+		if (!BtGattTxPendUntracked(acl->Hdr.ConnHdl, count)) continue;
+		int16_t before = pDev->AclCredit;
+		s_pResponseSending = acl;
+		if (BtHciSendAcl(pDev, acl))
+		{
+			r.Len = 0;
+		}
+		else
+		{
+			BtGattTxPendRelease(acl->Hdr.ConnHdl);
+			// A partial PDU has already caused Disconnect. Do not retry it.
+			if (pDev->AclCredit != before) r.Len = 0;
+		}
+	}
+	s_pResponseSending = nullptr;
+	s_ResponseSending = false;
+}
+
+static void BtHciResponseQueue(BtHciDevice_t *pDev, BtHciACLDataPacket_t *acl)
+{
+	s_pResponses = s_ResponseMem;
+	s_ResponseRetry = BtHciResponseRetry;
+	for (auto &r : s_ResponseMem)
+	{
+		if (r.Len) continue;
+		r.pDev = pDev;
+		r.Len = sizeof(acl->Hdr) + acl->Hdr.Len;
+		memcpy(r.Data, acl, r.Len);
+		BtHciResponseRetry(pDev);
+		return;
+	}
+	// Close the link rather than silently lose a response to an operation
+	// the ATT server has already performed when bounded storage is exhausted.
+	BtHciDropLink(pDev, acl->Hdr.ConnHdl);
 }
 
 void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
@@ -1031,6 +1188,12 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				DEBUG_PRINTF("BtHciProcessEvent: Disconnected, Status = %d (0x%x) \r\n",
 						p->Status, p->Status);
 
+				if (p->Status != 0)
+				{
+					break;
+				}
+				BtHciResponseClear(pDev, p->ConnHdl);
+				BtHciTxRelease(pDev, p->ConnHdl, UINT16_MAX);
 				if (pDev->Disconnected)
 				{
 					pDev->Disconnected(p->ConnHdl, p->Reason);
@@ -1047,6 +1210,8 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				}
 
 				BtHciReasmReset(p->ConnHdl);
+				if (s_ResponseRetry) s_ResponseRetry(pDev);
+				if (BtIntrfTxReady) BtIntrfTxReady();
 			}
 			break;
 		case BT_HCI_EVT_AUTHEN_COMPLETE:
@@ -1175,22 +1340,17 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				}
 				for (int i = 0; i < nbHdl; i++)
 				{
-					// Replenish ACL TX credits for completed packets when flow
-					// control is configured. Independent of SendCompleted so
-					// credits recover even with no completion callback wired.
+					uint16_t completed = p->Completed[i].NbPkt;
 					if (pDev->AclCreditMax > 0)
 					{
-						pDev->AclCredit += p->Completed[i].NbPkt;
-						if (pDev->AclCredit > pDev->AclCreditMax)
-						{
-							pDev->AclCredit = pDev->AclCreditMax;
-						}
+						completed = BtHciTxRelease(pDev, p->Completed[i].Hdl, completed);
 					}
-
-					if (pDev->SendCompleted)
+					if (s_ResponseRetry) s_ResponseRetry(pDev);
+					if (pDev->SendCompleted && completed > 0)
 					{
-						pDev->SendCompleted(p->Completed[i].Hdl, p->Completed[i].NbPkt);
+						pDev->SendCompleted(p->Completed[i].Hdl, completed);
 					}
+					if (s_ResponseRetry) s_ResponseRetry(pDev);
 				}
 
 			}
@@ -1301,15 +1461,7 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 
 
 // HCI ACL packets a PDU of AclLen octets goes out as.
-static uint16_t BtHciAclPktCount(BtHciDevice_t * const pDev, uint16_t AclLen)
-{
-	if (pDev == nullptr || pDev->AclMaxLen == 0 || AclLen == 0)
-	{
-		return 1;
-	}
 
-	return (uint16_t)((AclLen + pDev->AclMaxLen - 1) / pDev->AclMaxLen);
-}
 
 void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt)
 {
@@ -1475,20 +1627,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 				DEBUG_PRINTF("ATT TX rsp=0x%02x (req=0x%02x) len=%d\r\n",
 					l2pdu->Att.OpCode, l2rcv->Att.OpCode, l2pdu->Hdr.Len);
 
-				uint16_t nbpkt = BtHciAclPktCount(pDev, acl->Hdr.Len);
-				if (BtGattTxPendUntracked(pPkt->Hdr.ConnHdl, nbpkt) == false)
-				{
-					SysLogPrintf(SysLogGet(),
-						"ATT TX DEFERRED completion ring full opcode=0x%02x len=%u\r\n",
-						l2pdu->Att.OpCode, acl->Hdr.Len);
-				}
-				else if (BtHciSendAcl(pDev, acl) == 0)
-				{
-					BtGattTxPendRelease(pPkt->Hdr.ConnHdl);
-					SysLogPrintf(SysLogGet(),
-						"ATT TX FAILED opcode=0x%02x rsp=0x%02x len=%u\r\n",
-						l2rcv->Att.OpCode, l2pdu->Att.OpCode, acl->Hdr.Len);
-				}
+				BtHciResponseQueue(pDev, acl);
 			}
 			else
 			{
@@ -1521,20 +1660,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 				l2pdu->Hdr.Cid = BT_L2CAP_CID_SIGNAL;
 				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-				uint16_t nbpkt = BtHciAclPktCount(pDev, acl->Hdr.Len);
-				if (BtGattTxPendUntracked(pPkt->Hdr.ConnHdl, nbpkt) == false)
-				{
-					SysLogPrintf(SysLogGet(),
-						"L2CAP SIG TX DEFERRED completion ring full code=0x%02x len=%u\r\n",
-						l2rcv->CFrame.Code, acl->Hdr.Len);
-				}
-				else if (BtHciSendAcl(pDev, acl) == 0)
-				{
-					BtGattTxPendRelease(pPkt->Hdr.ConnHdl);
-					SysLogPrintf(SysLogGet(),
-						"L2CAP SIG TX FAILED code=0x%02x len=%u\r\n",
-						l2rcv->CFrame.Code, acl->Hdr.Len);
-				}
+				BtHciResponseQueue(pDev, acl);
 			}
 		}
 			break;

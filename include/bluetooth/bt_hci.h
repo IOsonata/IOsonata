@@ -732,12 +732,18 @@ typedef struct __Bt_Hci_Device		BtHciDevice_t;
 #endif
 
 
+// Bounds connections with outstanding controller packets, not paired devices.
+#ifndef BT_HCI_TX_LINK_COUNT
+#define BT_HCI_TX_LINK_COUNT 8
+#endif
+
 struct __Bt_Hci_Device {
 	void *pCtx;
 	uint32_t RxDataLen;
 	uint32_t TxDataLen;
 	uint16_t AclMaxLen;		//!< Controller LE ACL data packet length. 0 leaves TX fragmentation and flow control disabled (single-packet pass-through).
 	uint8_t  AclCreditMax;	//!< Controller total LE ACL data buffers. 0 disables flow control.
+	struct { uint16_t Hdl; uint16_t Count; } AclPending[BT_HCI_TX_LINK_COUNT];
 	int16_t  AclCredit;		//!< Available ACL TX credits (decremented per packet sent, replenished by Number-Of-Completed-Packets).
 	//!< HCI command credits (Num_HCI_Command_Packets). Set absolute from
 	//!< Command Complete/Status, starts at 1 per spec. Not enforced on send,

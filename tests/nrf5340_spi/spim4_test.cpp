@@ -35,6 +35,7 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "spi_nrfx.h"
 #include "coredev/shared_intrf.h"
+#include "video/cam_arducam_mega.h"
 
 NRF_SPIM_Type g_Regs[5] = {};
 NRF_QSPI_Type g_Qspi = {};
@@ -52,6 +53,12 @@ static uint8_t *s_Buffer;
 static uint32_t s_LastPtr;
 static uint8_t s_Rx[70000], s_Tx[800];
 static SPI s_Spi;
+static CamArducamMega s_Camera;
+static bool s_CameraMode;
+static bool s_DeferCameraRx;
+static uint8_t s_CameraReg;
+static int s_CameraOffset;
+void usDelay(uint32_t) {}
 
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
@@ -68,7 +75,30 @@ static void Complete()
 	r.RXD.AMOUNT = r.RXD.MAXCNT;
 	r.TXD.AMOUNT = r.TXD.MAXCNT;
 	if (r.RXD.MAXCNT)
-		memset((void *)(uintptr_t)r.RXD.PTR, 0x5a, r.RXD.MAXCNT);
+	{
+		uint8_t *data = (uint8_t *)(uintptr_t)r.RXD.PTR;
+		memset(data, 0x5a, r.RXD.MAXCNT);
+		if (s_CameraMode)
+		{
+			for (unsigned i = 0; i < r.RXD.MAXCNT; i++)
+			{
+				int value = 0;
+				switch (s_CameraReg)
+				{
+					case 0x44: value = 6; break;
+					case 0x40: value = 0x85; break;
+					case 0x45: value = 700 & 255; break;
+					case 0x46: value = 700 >> 8; break;
+					case 0x3c: value = s_CameraOffset++; break;
+				}
+				data[i] = value;
+			}
+		}
+	}
+	else if (s_CameraMode && r.TXD.MAXCNT)
+	{
+		s_CameraReg = *(uint8_t *)(uintptr_t)r.TXD.PTR;
+	}
 	r.EVENTS_ENDRX = r.EVENTS_ENDTX = r.EVENTS_END = 1;
 }
 
@@ -87,6 +117,10 @@ void TestTask::operator=(uint32_t value)
 	++s_Blocks;
 	s_LastPtr = r.RXD.MAXCNT ? r.RXD.PTR : r.TXD.PTR;
 	r.RXD.AMOUNT = r.TXD.AMOUNT = 0;
+	if (s_CameraMode && s_DeferCameraRx && r.RXD.MAXCNT)
+	{
+		return;
+	}
 	if ((s_Poll || s_AutoIrq) && !s_Timeout)
 	{
 		Complete();
@@ -97,6 +131,11 @@ void TestTask::operator=(uint32_t value)
 
 static int Event(DevIntrf_t *dev, DEVINTRF_EVT event, uint8_t *buffer, int count)
 {
+	if (s_CameraMode)
+	{
+		s_Camera.IntrfEvent(event, count);
+		return 0;
+	}
 	++s_Events; s_Event = event; s_Buffer = buffer; s_Count = count;
 	assert(g_CsHigh);
 	// Generic completion must release serialization before calling the client.
@@ -160,8 +199,9 @@ int main()
 
 	// Command-phase completion retains CS and the generic transaction lock.
 	assert(s_Spi.StartTx(0)); intrf->bNoStop = true;
+	s_AutoIrq = true;
 	assert(s_Spi.TxData(s_Tx, 2) == -1);
-	Complete(); SPIM4_IRQHandler();
+	s_AutoIrq = false;
 	assert(!g_CsHigh && intrf->bTxReady && s_Events == 2);
 	intrf->bNoStop = false;
 	assert(intrf->StartRx(intrf, 0));
@@ -179,6 +219,16 @@ int main()
 	assert(g_nRFxSPIDev[4].bTxAbort && g_nRFxSPIDev[4].pTxData == nullptr);
 	SPIM4_IRQHandler();
 	assert(s_Event == DEVINTRF_EVT_TX_TIMEOUT && !g_nRFxSPIDev[4].bTxAbort);
+
+	// A short command that never completes must not start the read phase.
+	cfg = Config(true);
+	cfg.EvtCB = nullptr;
+	assert(s_Spi.Init(cfg));
+	s_Blocks = 0;
+	assert(s_Spi.Read(0, s_Tx, 2, s_Rx, 16) == -1);
+	assert(s_Blocks == 1 && g_nRFxSPIDev[4].bTxAbort);
+	SPIM4_IRQHandler();
+	assert(g_CsHigh && !g_nRFxSPIDev[4].bTxAbort);
 
 	cfg = Config(false); assert(s_Spi.Init(cfg)); s_Poll = true;
 	s_Blocks = 0;
@@ -225,6 +275,36 @@ int main()
 	cfg = Config(false); cfg.pIOPinMap = nullptr; assert(!s_Spi.Init(cfg));
 	cfg = Config(false); cfg.DataSize = 16; assert(!s_Spi.Init(cfg));
 	cfg = Config(false); cfg.NbIOPins = 3; assert(!s_Spi.Init(cfg));
+	// Actual camera + generic DeviceIntrf + Nordic SPIM driver, IRQ mode.
+	s_CameraMode = true;
+	s_AutoIrq = true;
+	cfg = Config(true);
+	assert(s_Spi.Init(cfg));
+	VideoDevCfg_t video = {};
+	video.OutFmt = {VIDEO_FMT_JPEG, 320, 240, 0};
+	assert(s_Camera.Init(video, &s_Spi));
+	assert(s_Camera.Start() && s_Camera.UpdateData());
+	assert(s_Camera.ReadFrame(s_Rx, 976) == 700);
+	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
+	assert(g_CsHigh && s_Camera.Brightness(1));
+	assert(s_Camera.Start() && s_Camera.UpdateData());
+	s_CameraOffset = 0;
+	assert(s_Camera.ReadFrameAsync(s_Rx, 976) == 700);
+	assert(g_CsHigh && s_Camera.ReadFrameComplete() == 0);
+	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
+	assert(s_Camera.Start() && s_Camera.UpdateData());
+	s_CameraOffset = 0;
+	s_DeferCameraRx = true;
+	assert(s_Camera.ReadFrameAsync(s_Rx, 976) == -1);
+	assert(!g_CsHigh && s_CameraOffset == 0);
+	assert(s_Camera.ReadFrameComplete() == -1);
+	s_DeferCameraRx = false;
+	Complete();
+	SPIM4_IRQHandler();
+	assert(g_CsHigh && s_Camera.ReadFrameComplete() == 700);
+	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
+	s_CameraMode = false;
+	s_AutoIrq = false;
 	cfg = Config(false); cfg.DevNo = 5; cfg.Phy = SPIPHY_QUAD_SDR;
 	assert(s_Spi.Init(cfg) && s_QspiCalled);
 	puts("nRF5340 SPIM4 production driver: PASS");

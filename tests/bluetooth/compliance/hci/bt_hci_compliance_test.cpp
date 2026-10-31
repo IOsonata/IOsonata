@@ -312,6 +312,7 @@ void TestCompletedPacketBoundaries(Context &ctx)
 	BT_CHECK(ctx, controller.Attach(&host));
 	BtHciSetLeAclBuffer(&host, 20, 4);
 	host.AclCredit = 1;
+	host.AclPending[0] = {0x0021, 3};
 
 	BT_CHECK(ctx, controller.InjectEventHeaderOnly(BT_HCI_EVT_NB_COMPLETED_PACKET));
 	BT_CHECK(ctx, s_CompletedCalls == 0);

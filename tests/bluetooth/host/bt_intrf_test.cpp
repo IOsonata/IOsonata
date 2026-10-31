@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 #include "bt_test_harness.h"
 #include "bluetooth/bt_intrf.h"
@@ -21,6 +22,12 @@ int s_NotifyCount;
 uint8_t s_Notified[8][BTINTRF_TRANSBUFF_MAXLEN];
 size_t s_NotifiedLen[8];
 int s_RxEventCount;
+BtDevIntrf_t *s_EnqueueDuringSend;
+uint8_t s_Enqueued[16];
+bool s_RefuseOnce = false;
+int s_RefuseOnCall = -1;
+bool s_Reenter = false;
+BtGattChar_t *s_ReenterChar = nullptr;
 
 int RxEvent(DevIntrf_t *, DEVINTRF_EVT Evt, uint8_t *, int)
 {
@@ -261,6 +268,46 @@ void TestTxRetryAndReset()
 	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hRxFifo) == 0);
 }
 
+void TestNegotiatedMtuAndPartialRetry()
+{
+	for (int mtu : {23, 104, 247})
+	{
+		ResetLink();
+		Fixture f;
+		alignas(CFifo_t) uint8_t txMem[BTINTRF_CFIFO_TOTAL_MEMSIZE(2, 244)];
+		alignas(CFifo_t) uint8_t rxMem[BTINTRF_CFIFO_TOTAL_MEMSIZE(2, 244)];
+		uint8_t data[244];
+		BtIntrfCfg_t cfg = f.Config();
+		cfg.PacketSize = 244;
+		cfg.pTxFifoMem = txMem;
+		cfg.TxFifoMemSize = sizeof(txMem);
+		cfg.pRxFifoMem = rxMem;
+		cfg.RxFifoMemSize = sizeof(rxMem);
+		f.Char[1].MaxDataLen = 244;
+		BT_CHECK(s_Test, BtIntrfInit(&f.Intrf, &cfg));
+		s_Peer.Conn.MaxMtu = mtu;
+		for (int i = 0; i < 244; i++) data[i] = (uint8_t)i;
+		int size = mtu == 23 ? 50 : 244;
+		int payload = mtu - 3;
+		s_RefuseOnCall = mtu == 247 ? 0 : 1;
+		BT_CHECK(s_Test, f.Intrf.DevIntrf.TxData(&f.Intrf.DevIntrf, data, size) == size);
+		int accepted = s_RefuseOnCall * payload;
+		BT_CHECK(s_Test, f.Intrf.TransBuffLen == size - accepted);
+		BT_CHECK(s_Test, f.Intrf.TransBuffOffset == accepted);
+		int retry = s_NotifyCount;
+		s_RefuseOnCall = -1;
+		f.Char[1].TxCompleteCB(&f.Char[1], 1);
+		for (int i = retry; i < s_NotifyCount; i++)
+		{
+			BT_CHECK(s_Test, s_NotifiedLen[i] <= (size_t)payload);
+			BT_CHECK(s_Test, std::memcmp(s_Notified[i], data + accepted, s_NotifiedLen[i]) == 0);
+			accepted += s_NotifiedLen[i];
+		}
+		BT_CHECK(s_Test, accepted == size);
+		BT_CHECK(s_Test, f.Intrf.TransBuffLen == 0);
+	}
+}
+
 void TestNoSubscribedPeerKeepsQueue()
 {
 	ResetLink();
@@ -274,6 +321,55 @@ void TestNoSubscribedPeerKeepsQueue()
 		f.Intrf.DevIntrf.TxData(&f.Intrf.DevIntrf, data, sizeof(data)) == 8);
 	BT_CHECK(s_Test, s_NotifyCount == 0);
 	BT_CHECK(s_Test, CFifoUsed(f.Intrf.hTxFifo) == 1);
+}
+
+
+void TestProducerReusesFifoDuringSend()
+{
+	ResetLink();
+	Fixture f;
+	BtIntrfCfg_t cfg = f.Config();
+	BT_CHECK(s_Test, BtIntrfInit(&f.Intrf, &cfg));
+	uint8_t first[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+	std::memset(s_Enqueued, 0xA5, sizeof(s_Enqueued));
+	s_EnqueueDuringSend = &f.Intrf;
+	BT_CHECK(s_Test, f.Intrf.DevIntrf.TxData(&f.Intrf.DevIntrf, first, 8) == 8);
+	BT_CHECK(s_Test, s_NotifyCount == 3);
+	BT_CHECK(s_Test, std::memcmp(s_Notified[0], first, 8) == 0);
+	BT_CHECK(s_Test, std::memcmp(s_Notified[1], s_Enqueued, 8) == 0);
+	BT_CHECK(s_Test, std::memcmp(s_Notified[2], s_Enqueued + 8, 8) == 0);
+}
+
+void TestReentrantRetry()
+{
+	ResetLink();
+	Fixture f;
+	BtIntrfCfg_t cfg = f.Config();
+	BT_CHECK(s_Test, BtIntrfInit(&f.Intrf, &cfg));
+	uint8_t data[8] = {1,2,3,4,5,6,7,8};
+	s_NotifyResult = false;
+	f.Intrf.DevIntrf.TxData(&f.Intrf.DevIntrf, data, 8);
+	s_NotifyCount = 0;
+	s_NotifyResult = true;
+	s_ReenterChar = &f.Char[1];
+	s_Reenter = true;
+	f.Char[1].TxCompleteCB(&f.Char[1], 1);
+	BT_CHECK(s_Test, s_NotifyCount == 1);
+}
+
+void TestCompletionDuringRefusedSend()
+{
+	ResetLink();
+	Fixture f;
+	BtIntrfCfg_t cfg = f.Config();
+	BT_CHECK(s_Test, BtIntrfInit(&f.Intrf, &cfg));
+	uint8_t data[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+	s_ReenterChar = &f.Char[1];
+	s_Reenter = true;
+	s_RefuseOnce = true;
+	BT_CHECK(s_Test, f.Intrf.DevIntrf.TxData(&f.Intrf.DevIntrf, data, 8) == 8);
+	BT_CHECK(s_Test, s_NotifyCount == 2);
+	BT_CHECK(s_Test, f.Intrf.TransBuffLen == 0);
 }
 
 } // namespace
@@ -302,6 +398,18 @@ extern "C" bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
 		return false;
 	}
 
+	if (s_EnqueueDuringSend)
+	{
+		BtDevIntrf_t *intrf = s_EnqueueDuringSend;
+		s_EnqueueDuringSend = nullptr;
+		BT_CHECK(s_Test, intrf->DevIntrf.TxData(&intrf->DevIntrf,
+			s_Enqueued, sizeof(s_Enqueued)) == sizeof(s_Enqueued));
+	}
+	if (s_Reenter)
+	{
+		s_Reenter = false;
+		s_ReenterChar->TxCompleteCB(s_ReenterChar, 1);
+	}
 	int idx = s_NotifyCount++;
 	if (idx < (int)(sizeof(s_NotifiedLen) / sizeof(s_NotifiedLen[0])))
 	{
@@ -311,12 +419,22 @@ extern "C" bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
 			std::memcpy(s_Notified[idx], pVal, Len);
 		}
 	}
+	if (idx == s_RefuseOnCall) return false;
+	if (s_RefuseOnce)
+	{
+		s_RefuseOnce = false;
+		return false;
+	}
 	return s_NotifyResult;
 }
 
 
 int main()
 {
+	s_Test.Run("negotiated MTU and partial retry", TestNegotiatedMtuAndPartialRetry);
+	s_Test.Run("FIFO reuse during send", TestProducerReusesFifoDuringSend);
+	s_Test.Run("completion during refused send", TestCompletionDuringRefusedSend);
+	s_Test.Run("reentrant retry", TestReentrantRetry);
 	s_Test.Run("initialization validation", TestInitializationValidation);
 	s_Test.Run("invalid data arguments", TestInvalidDataArguments);
 	s_Test.Run("RX short read consumes block", TestRxShortReadConsumesBlock);

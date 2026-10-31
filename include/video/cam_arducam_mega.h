@@ -193,6 +193,9 @@ public:
 	 *
 	 * @param	Cfg		: Configuration data
 	 * @param	pIntrf	: SPI interface, mode 0, ARDUCAM_MEGA_SPI_RATE_MAX maximum
+	 *                    For interrupt mode, its configured callback must forward
+	 *                    events and byte counts to IntrfEvent. Call camera
+	 *                    operations from foreground context, with IRQs enabled.
 	 * @param	pTimer	: Timer for the frame time stamp, nullptr if not used
 	 *
 	 * @return	true - Camera found and initialized
@@ -220,6 +223,20 @@ public:
 	virtual void Stop();
 	virtual bool UpdateData();
 	virtual int ReadFrame(uint8_t *pBuff, int Len);
+
+	// Start a frame burst directly into caller storage. Returns -1 while an
+	// accepted read is pending, or its completed byte count (0 on refusal).
+	// Keep the buffer untouched until ReadFrameComplete returns >= 0. Only
+	// one read may be outstanding. Polling SPI also works and returns inline.
+	int ReadFrameAsync(uint8_t *pBuff, int Len);
+
+	// Collect the outstanding burst in foreground context; -1 until its IRQ
+	// completes. Advances the frame and starts the next capture when needed.
+	// Stop does not cancel DMA: collect completion before reusing its buffer.
+	int ReadFrameComplete();
+
+	// Forward the configured SPI callback here. It only records completion.
+	void IntrfEvent(DEVINTRF_EVT Evt, int Len);
 
 	using VideoDevice::Format;
 	virtual const VideoFmt_t &Format(VIDEO_STREAM Stream, const VideoFmt_t &Fmt);
@@ -292,6 +309,9 @@ public:
 	uint8_t SensorId() { return vSensorId; }
 
 private:
+	bool TransferReady();
+	int TransferWait(int Result);
+	int ReadTransfer(const uint8_t *pCmd, int CmdLen, uint8_t *pBuff, int Len);
 	uint8_t RegRead(uint8_t Reg);
 	bool RegWrite(uint8_t Reg, uint8_t Val);
 	bool CtrlWrite(uint8_t Reg, uint8_t Val);
@@ -301,6 +321,14 @@ private:
 	bool LowPower(bool bEn);
 	bool SensorReset();
 	bool StartFrame();
+
+	alignas(4) uint8_t vTransferBuff[255];
+	volatile bool vbTransferPending;
+	volatile bool vbTransferDone;
+	volatile int vTransferCount;
+	volatile bool vbTransferFailed;
+	bool vbFrameRead;
+	int vFrameReadLen;
 
 	uint8_t vSensorId;			//!< ARDUCAM_MEGA_SENSOR_ID_..., 0 none
 	uint8_t vResMask;			//!< Sensor bit of the resolution table, 0 none

@@ -36,12 +36,13 @@ extern "C" bool BtEvtQue(uint32_t e, void *p, AppEvtHandler_t h)
 hci_source = (ROOT / 'src/bluetooth/bt_app_hci.cpp').read_text()
 hci = COMMON + r"""
 #define BT_APP_HCI_TICK_MSEC 1000
-struct Conn { void (*Tick)(); };
-static unsigned ticks, polls, ctlrChecks;
+struct Conn { void (*Tick)(); void (*DiscoveryRetry)(); };
+static unsigned ticks, polls, ctlrChecks, discoveryChecks;
 static uint32_t clock;
 static void tick() { ++ticks; }
 static void poll() { ++polls; }
-static Conn conn = { tick };
+static void discovery() { ++discoveryChecks; }
+static Conn conn = { tick, discovery };
 static const Conn *s_pBtAppHciConn = &conn;
 static void (*s_pBtAppSecPoll)() = poll;
 static uint32_t s_BtAppTickMs = 0;
@@ -50,6 +51,9 @@ extern "C" void BtHciCtlrCheckStatus(void) { ++ctlrChecks; }
 extern "C" void BtSmpCheckStatus(void) __attribute__((weak));
 extern "C" void BtSmpBondNvmCheckStatus(void) __attribute__((weak));
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
+struct BtHciDevice_t {};
+static BtHciDevice_t s_BtHciDev;
+extern void BtHciTxCheckStatus(BtHciDevice_t *) __attribute__((weak));
 """
 hci += function(hci_source, 'BtAppCheckStatus') + '\n'
 hci += r"""
@@ -64,6 +68,7 @@ int main() {
 	clock = 10;
 	for (int i = 0; i < 100; ++i) BtAppCheckStatus();
 	assert(ticks == 2 && polls == 2 && ctlrChecks == 102);
+	assert(discoveryChecks == ctlrChecks);
 	clock = BT_APP_HCI_TICK_MSEC - 1;
 	BtAppCheckStatus();
 	assert(ticks == 2);

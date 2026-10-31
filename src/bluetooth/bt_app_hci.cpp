@@ -104,8 +104,16 @@ SOFTWARE.
 
 // Controller ACL buffers asked for. The controller answers what it has
 // through LE Read Buffer Size, which is what the host sizes itself from.
+// Keep two buffers beyond the eight-notification 2M target so completion
+// processing can refill the controller before the queued data runs out.
 #define BT_APP_HCI_RX_MAX_PACKET_COUNT		2
-#define BT_APP_HCI_TX_MAX_PACKET_COUNT		3
+#define BT_APP_HCI_CENTRAL_RX_PACKET_COUNT	10
+#define BT_APP_HCI_TX_MAX_PACKET_COUNT		10
+
+// HCI-only use of the existing per-peer discovery phase.
+#define BT_APP_HCI_DISC_MTU_PENDING		1
+#define BT_APP_HCI_DISC_SERVICES_PENDING	2
+#define BT_APP_HCI_DISC_SERVICES_STARTED	3
 
 // Period of the link checks run from BtAppCheckStatus when a millisecond
 // clock is available. The checks they pace are the 30 s transaction
@@ -230,6 +238,7 @@ static BtHciCtlrDev_t s_BtHciCtlr;
 typedef struct {
 	void (*AclData)(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt);
 	void (*Tick)(void);
+	void (*DiscoveryRetry)(void);
 	bool (*SrvcDone)(const BtAppCfg_t *pCfg);
 } BtAppHciConn_t;
 
@@ -302,6 +311,7 @@ void BtGattIndicationTimeout(uint16_t ConnHdl)
 extern "C" void BtSmpCheckStatus(void) __attribute__((weak));
 extern "C" void BtSmpBondNvmCheckStatus(void) __attribute__((weak));
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
+extern void BtHciTxCheckStatus(BtHciDevice_t *pDev) __attribute__((weak));
 
 // Called from the application status check (AppRun when its queue is empty,
 // the Bluetooth worker of an RTOS before it blocks). Retries the work the
@@ -309,6 +319,11 @@ extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
 void BtAppCheckStatus(void)
 {
 	BtHciCtlrCheckStatus();
+	if (BtHciTxCheckStatus) BtHciTxCheckStatus(&s_BtHciDev);
+	if (s_pBtAppHciConn != nullptr)
+	{
+		s_pBtAppHciConn->DiscoveryRetry();
+	}
 
 	// Once a second when a millisecond clock is available, each pass when it
 	// is not: without a clock the timeouts these checks serve are inert and
@@ -396,25 +411,74 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 
 bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 {
-	DEBUG_PRINTF("Start discovering device\r\n");
-
-	// Reset counter and Service list
-	pDev->NbSrvc = 0;
-	if (BtDeviceSrvcCacheAttach(pDev) == false)
-	{
-		// No free discovery cache, see g_BtDevSrvcCacheCfg
-		return false;
-	}
-	memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
-
-	// Start the discover process by discovering the Primary services
-	BtUuid_t Uuid = {
-			.BaseIdx = 0, // Standard bluetooth
-			.Type = BT_UUID_TYPE_16,
-			.Uuid16 = BT_UUID_DECLARATIONS_PRIMARY_SERVICE,
+	BtUuid_t uuid = {
+		.BaseIdx = 0,
+		.Type = BT_UUID_TYPE_16,
+		.Uuid16 = BT_UUID_DECLARATIONS_PRIMARY_SERVICE,
 	};
 
-	return BtAttStartReadByGroupTypeRequest(pDev->pHciDev, pDev->Conn.Hdl, 1, 0xFFFF, &Uuid);
+	if (pDev == nullptr || pDev->pHciDev == nullptr ||
+		pDev->bAttReqPending || pDev->bAttTimedOut)
+	{
+		return false;
+	}
+	if (BtDeviceSrvcCacheAttach(pDev) == false)
+	{
+		return false;
+	}
+
+	// Setting the local MTU does not negotiate it with the remote server.
+	// Serialize the exchange and discovery on this peer's ATT bearer.
+	if (pDev->Discovery.Phase == 0 && BtAttGetMtu() > BT_ATT_MTU_MIN)
+	{
+		pDev->Discovery.Phase = BT_APP_HCI_DISC_MTU_PENDING;
+		if (!BtAttExchangeMtuRequest(pDev->pHciDev, pDev->Conn.Hdl, BtAttGetMtu()))
+		{
+			pDev->Discovery.Phase = 0;
+			return false;
+		}
+		return true;
+	}
+
+	pDev->NbSrvc = 0;
+	memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
+	pDev->Discovery.Phase = BT_APP_HCI_DISC_SERVICES_PENDING;
+	if (!BtAttStartReadByGroupTypeRequest(pDev->pHciDev, pDev->Conn.Hdl,
+			1, 0xFFFF, &uuid))
+	{
+		return false;
+	}
+	pDev->Discovery.Phase = BT_APP_HCI_DISC_SERVICES_STARTED;
+	return true;
+}
+
+// Called only after a validated response releases the MTU transaction.
+// An ATT Error Response also continues discovery, using the current MTU.
+void BtAppHciMtuExchanged(uint16_t ConnHdl)
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+
+	if (pPeer != nullptr && pPeer->Discovery.Phase == BT_APP_HCI_DISC_MTU_PENDING)
+	{
+		pPeer->Discovery.Phase = BT_APP_HCI_DISC_SERVICES_PENDING;
+		(void)BtAppDiscoverDevice(pPeer);
+	}
+}
+
+static void BtAppHciDiscoveryRetry(void)
+{
+	uint16_t count = BtPeerCount();
+	BtDevice_t *pPeer;
+
+	for (uint16_t i = 0; i < count; i++)
+	{
+		pPeer = BtPeerSlot(i);
+		if (pPeer != nullptr && pPeer->Conn.Hdl != BT_CONN_HDL_INVALID &&
+			pPeer->Discovery.Phase == BT_APP_HCI_DISC_SERVICES_PENDING)
+		{
+			(void)BtAppDiscoverDevice(pPeer);
+		}
+	}
 }
 
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
@@ -513,7 +577,10 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	ctlrcfg.Role = pCfg->Role;
 	ctlrcfg.CentralDevMax = pCfg->CentralDevMax;
 	ctlrcfg.PeriphDevMax = pCfg->PeriphDevMax;
-	ctlrcfg.RxPktCount = BT_APP_HCI_RX_MAX_PACKET_COUNT;
+	// Central receivers need room for the same eight-packet burst as the
+	// streaming transmitter, plus headroom while the host drains the data.
+	ctlrcfg.RxPktCount = (pCfg->Role & BTAPP_ROLE_CENTRAL) ?
+			BT_APP_HCI_CENTRAL_RX_PACKET_COUNT : BT_APP_HCI_RX_MAX_PACKET_COUNT;
 	ctlrcfg.TxPktCount = BT_APP_HCI_TX_MAX_PACKET_COUNT;
 	ctlrcfg.MaxDataLen = BTAPP_DEFAULT_MAX_DATA_LEN;
 	// What the application asked for reaches the controller here. Without this
@@ -557,6 +624,7 @@ static bool BtAppHciSrvcDone(const BtAppCfg_t *pCfg)
 	// info. Generic bt_dis adds it to the same ATT DB as user services.
 	if (pCfg->pDevInfo != NULL && !BtDisInit(pCfg))
 	{
+		STORE_PRINTF("BtAppInit FAIL: Device Information service initialization\r\n");
 		return false;
 	}
 
@@ -573,6 +641,7 @@ static bool BtAppHciSrvcDone(const BtAppCfg_t *pCfg)
 static const BtAppHciConn_t s_BtAppHciConn = {
 	.AclData = BtHciProcessData,
 	.Tick = BtGattIndicationTimeoutCheck,
+	.DiscoveryRetry = BtAppHciDiscoveryRetry,
 	.SrvcDone = BtAppHciSrvcDone,
 };
 
@@ -858,7 +927,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		uint16_t maxTxOctets = (uint16_t)(maxlen[0] | (maxlen[1] << 8));
 		uint16_t maxTxTime   = (uint16_t)(maxlen[2] | (maxlen[3] << 8));
 
-		uint16_t txOctets = (uint16_t)min(maxTxOctets, pCfg->MaxMtu);
+		// The link-layer payload includes the four-byte L2CAP header.
+		uint32_t mtu = max((uint32_t)pCfg->MaxMtu, (uint32_t)23U);
+		uint16_t txOctets = (uint16_t)min((uint32_t)maxTxOctets, min(mtu + 4U, (uint32_t)251U));
 		uint8_t datalen[4];
 		datalen[0] = (uint8_t)(txOctets & 0xff);
 		datalen[1] = (uint8_t)(txOctets >> 8);

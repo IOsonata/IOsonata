@@ -9,6 +9,8 @@
 
 #include "sdc_hci_cmd_stub.h"
 
+void (*g_SdcHciCmdHook)(void);
+
 const char *g_SdcHciCmdLast;
 int g_SdcHciCmdCount;
 uint8_t g_SdcHciCmdStatus;
@@ -24,6 +26,7 @@ void SdcHciCmdStubReset(void)
 #define SDC_CMD_RECORD(name) \
 	g_SdcHciCmdLast = #name; \
 	g_SdcHciCmdCount++; \
+	if (g_SdcHciCmdHook != nullptr) g_SdcHciCmdHook(); \
 	return g_SdcHciCmdStatus
 
 extern "C" uint8_t sdc_hci_cmd_cb_reset(void)
@@ -69,6 +72,11 @@ extern "C" uint8_t sdc_hci_cmd_lc_disconnect(const sdc_hci_cmd_lc_disconnect_t *
 extern "C" uint8_t sdc_hci_cmd_le_add_device_to_periodic_adv_list(const sdc_hci_cmd_le_add_device_to_periodic_adv_list_t *)
 {
 	SDC_CMD_RECORD(le_add_device_to_periodic_adv_list);
+}
+
+extern "C" uint8_t sdc_hci_cmd_le_ext_create_conn(const sdc_hci_cmd_le_ext_create_conn_t *)
+{
+	SDC_CMD_RECORD(le_ext_create_conn);
 }
 
 extern "C" uint8_t sdc_hci_cmd_le_create_conn(const sdc_hci_cmd_le_create_conn_t *)

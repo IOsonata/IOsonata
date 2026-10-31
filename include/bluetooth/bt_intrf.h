@@ -96,7 +96,11 @@ typedef struct __Bt_Dev_Interf {
     uint32_t	RxDropCnt;
     uint32_t	TxDropCnt;
     uint8_t     TransBuff[BTINTRF_TRANSBUFF_MAXLEN];  //
-    int         TransBuffLen;   //!< Data length
+    int         TransBuffLen;   //!< Unsent data length
+	int TransBuffOffset;		//!< Next byte of a partially sent FIFO packet
+	bool TxDraining;
+	bool TxRetry;
+	bool TxReset;
 } BtDevIntrf_t;
 
 #pragma pack(pop)

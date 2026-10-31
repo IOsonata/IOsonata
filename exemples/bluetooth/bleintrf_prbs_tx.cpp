@@ -49,6 +49,12 @@ SOFTWARE.
 
 #include "board.h"
 
+#if defined(NRFXLIB_SDC)
+#include "bluetooth/bt_hci_ctlr.h"
+#include "bluetooth/bt_att.h"
+#include "syslog.h"
+#endif
+
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE		1000000
@@ -238,10 +244,29 @@ const UARTCfg_t g_UartCfg = {
 /// UART object instance
 UART g_Uart;
 
+#if defined(NRFXLIB_SDC)
+// GAP, GATT, PRBS and Device Information exceed the default 2048-byte pool.
+alignas(BtAttDBEntry_t) static uint8_t s_AttDBMem[3072];
+
+extern "C" const BtAttDBMemCfg_t g_BtAttDBMemCfg = {
+	s_AttDBMem, sizeof(s_AttDBMem)
+};
+
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(4, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = true
+};
+#endif
+
 int g_DelayCnt = 0;
 
 // Pending stays set through queue refusal until the callback runs.
 static volatile bool s_bPrbsPending = false;
+static bool s_bServiceOk = false;
 
 void PrbsChedHandler(uint32_t Evt, void *pCtx);
 
@@ -319,8 +344,11 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppInitUserServices()
 {
-	bool res;
-	res = BtGattSrvcAdd(&g_UartBleSrvc);
+	s_bServiceOk = BtGattSrvcAdd(&g_UartBleSrvc);
+	if (s_bServiceOk == false)
+	{
+		g_Uart.printf("PRBS service registration failed\r\n");
+	}
 }
 
 void BtAppInitUserData()
@@ -351,6 +379,12 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
+#if defined(NRFXLIB_SDC)
+	if (SysLogGetInstance()->Init(s_SysLogCfg, &g_Uart) == false)
+	{
+		g_Uart.printf("PRBS logger initialization failed\r\n");
+	}
+#endif
 
 #ifdef S132
 	g_Uart.printf("BleIntrfPrbsTx_SoftDevice132\r\n");
@@ -378,9 +412,30 @@ int main()
 {
 	HardwareInit();
 
-	BtAppInit(&s_BleAppCfg);
+	g_Uart.printf("PRBS initializing %s\r\n", DEVICE_NAME);
+	if (BtAppInit(&s_BleAppCfg) == false || s_bServiceOk == false)
+	{
+		g_Uart.printf("PRBS Bluetooth initialization failed\r\n");
+#if defined(NRFXLIB_SDC)
+		g_Uart.printf("SDC error=%d value=%d pool_needed=%d pool_size=%u\r\n",
+			(int)BtHciCtlrErrorGet(), (int)BtHciCtlrErrorValueGet(),
+			(int)BtHciCtlrMemPoolSizeNeeded(), (unsigned)g_BtHciCtlrMemPool.Size);
+#endif
+		BtAdvStop();
+		// Allow the 256-byte UART FIFO to drain before exit halts the CPU.
+		msDelay(20);
+		return -1;
+	}
 
-	g_BtIntrf.Init(s_BleInrfCfg);
+	if (g_BtIntrf.Init(s_BleInrfCfg) == false)
+	{
+		g_Uart.printf("PRBS interface initialization failed\r\n");
+		BtAdvStop();
+		// Allow the 256-byte UART FIFO to drain before exit halts the CPU.
+		msDelay(20);
+		return -1;
+	}
+	g_Uart.printf("PRBS initialized %s\r\n", DEVICE_NAME);
 
 	//AppEvtHandlerQue(0, 0, PrbsChedHandler);
 	AppRun();

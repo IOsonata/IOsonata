@@ -17,6 +17,8 @@
 
 #include "bluetooth/bt_gatt.h"
 
+bool g_BtTestTxRingAvailable = true;
+
 void BtGattTxPendRelease(uint16_t ConnHdl)
 {
 	(void)ConnHdl;
@@ -25,5 +27,5 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 bool BtGattTxPendUntracked(uint16_t ConnHdl, uint16_t NbPkt)
 {
 	(void)ConnHdl;
-	return NbPkt > 0;
+	return g_BtTestTxRingAvailable && NbPkt > 0;
 }
