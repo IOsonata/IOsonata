@@ -14,6 +14,7 @@ code = r'''
 #include <cstdint>
 #include <cstring>
 #include "coredev/timer.h"
+#define SysLogPrintf(...) ((void)0)
 #define BT_WBA_TIMER_SLOTS 8U
 #define BLE_STATUS_SUCCESS 0
 #define BLE_STATUS_FAILED 1

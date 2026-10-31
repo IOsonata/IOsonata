@@ -1751,7 +1751,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	uint8_t ret = BleStack_Init(&init);
 	if (ret != BLE_STATUS_SUCCESS)
 	{
-		DEBUG_PRINTF("BleStack_Init failed: 0x%02x\r\n", ret);
+		SysLogPrintf(SysLogGet(), "BleStack_Init failed: 0x%02x\r\n", ret);
 		return false;
 	}
 
@@ -1930,7 +1930,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Bring up the stack.
 	if (BtAppStackInit(pCfg) == false)
 	{
-		DEBUG_PRINTF("BtAppStackInit failed\r\n");
+		SysLogPrintf(SysLogGet(), "BtAppStackInit failed\r\n");
 		return false;
 	}
 
@@ -1939,7 +1939,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	uint8_t ret = aci_gatt_init();
 	if (ret != BLE_STATUS_SUCCESS)
 	{
-		DEBUG_PRINTF("aci_gatt_init: 0x%02x\r\n", ret);
+		SysLogPrintf(SysLogGet(), "aci_gatt_init: 0x%02x\r\n", ret);
 		return false;
 	}
 
@@ -1958,7 +1958,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	                   &gapSrvcHdl, &devNameHdl, &appearanceHdl);
 	if (ret != BLE_STATUS_SUCCESS)
 	{
-		DEBUG_PRINTF("aci_gap_init: 0x%02x\r\n", ret);
+		SysLogPrintf(SysLogGet(), "aci_gap_init: 0x%02x\r\n", ret);
 		return false;
 	}
 	s_WbaData.GattSrvcStartHdl = gapSrvcHdl;
@@ -2000,6 +2000,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// them there is nothing to advertise, so this stops here.
 	if (BtGapInit(&gapcfg) == false)
 	{
+		SysLogPrintf(SysLogGet(), "BtAppInit: generic GAP initialization failed\r\n");
 		return false;
 	}
 
@@ -2026,7 +2027,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// security without starting it must not run unprotected.
 	if (pCfg->SecType != BTGAP_SECTYPE_NONE && s_BtAppData.bSecInit == false)
 	{
-		DEBUG_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
+		SysLogPrintf(SysLogGet(), "BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
 					 (int)pCfg->SecType);
 		return false;
 	}
@@ -2038,14 +2039,14 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	{
 		if (BtAppAdvInit(pCfg) == false)
 		{
-			DEBUG_PRINTF("BtAppAdvInit failed\r\n");
+			SysLogPrintf(SysLogGet(), "BtAppAdvInit failed\r\n");
 			return false;
 		}
 	}
 
 	if (BtAppTickStart() == false)
 	{
-		DEBUG_PRINTF("BtAppInit: timeout check timer failed\r\n");
+		SysLogPrintf(SysLogGet(), "BtAppInit: timeout check timer failed\r\n");
 		return false;
 	}
 
@@ -2175,6 +2176,11 @@ static bool BtAppTickStart(void)
 {
 	if (TimerInit(&s_BtAppTimer, &s_BtAppTimerCfg) == false)
 	{
+		SysLogPrintf(SysLogGet(), "WBA LPTIM2 init failed: BDCR1=0x%08lx CCIPR1=0x%08lx\r\n",
+			(unsigned long)RCC->BDCR1, (unsigned long)RCC->CCIPR1);
+		SysLogPrintf(SysLogGet(), "WBA LPTIM2: CR=0x%08lx ISR=0x%08lx CFGR=0x%08lx\r\n",
+			(unsigned long)LPTIM2->CR, (unsigned long)LPTIM2->ISR,
+			(unsigned long)LPTIM2->CFGR);
 		return false;
 	}
 

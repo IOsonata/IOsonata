@@ -196,6 +196,7 @@ extern "C" void BtWbaPlatformInit(void)
 {
 	uint32_t n;
 	uint32_t src;
+	uint32_t ready = RCC_BDCR1_LSERDY | RCC_BDCR1_LSESYSRDY;
 	bool bLse = false;
 
 	SCM_HSE_WaitUntilReady();
@@ -220,16 +221,18 @@ extern "C" void BtWbaPlatformInit(void)
 		// LSE starts much more slowly than HSE. Use the LPTIM driver's
 		// clock-scaled allowance (at least 2 s at four cycles per poll).
 		n = SystemCoreClock / 2U;
-		SET_BIT(RCC->BDCR1, RCC_BDCR1_LSEON);
-		while ((RCC->BDCR1 & RCC_BDCR1_LSERDY) == 0U && n > 0U)
+		// Cube RCC_LSE_ON enables both the oscillator and its system output.
+		// Complete both before entering BleStack_Init.
+		SET_BIT(RCC->BDCR1, RCC_BDCR1_LSEON | RCC_BDCR1_LSESYSEN);
+		while ((RCC->BDCR1 & ready) != ready && n > 0U)
 		{
 			n--;
 		}
-		bLse = (RCC->BDCR1 & RCC_BDCR1_LSERDY) != 0U;
+		bLse = (RCC->BDCR1 & ready) == ready;
 		if (bLse == false)
 		{
 			// No crystal answered, use the internal oscillator.
-			CLEAR_BIT(RCC->BDCR1, RCC_BDCR1_LSEON);
+			CLEAR_BIT(RCC->BDCR1, RCC_BDCR1_LSEON | RCC_BDCR1_LSESYSEN);
 		}
 	}
 
@@ -507,6 +510,11 @@ extern "C" uint8_t BLE_TIMER_Start(uint16_t id, uint32_t timeout)
 	{
 		if (TimerInit(&s_BleTimerDev, &s_BleTimerCfg) == false)
 		{
+			SysLogPrintf(SysLogGet(), "WBA LPTIM1 init failed: BDCR1=0x%08lx CCIPR3=0x%08lx\r\n",
+				(unsigned long)RCC->BDCR1, (unsigned long)RCC->CCIPR3);
+			SysLogPrintf(SysLogGet(), "WBA LPTIM1: CR=0x%08lx ISR=0x%08lx CFGR=0x%08lx\r\n",
+				(unsigned long)LPTIM1->CR, (unsigned long)LPTIM1->ISR,
+				(unsigned long)LPTIM1->CFGR);
 			return BLE_STATUS_FAILED;
 		}
 		s_BleTimerInit = true;

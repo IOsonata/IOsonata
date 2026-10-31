@@ -18,6 +18,8 @@ code = r'''
 #define RCC_CR_HSERDY (1U << 17)
 #define RCC_BDCR1_LSEON 1U
 #define RCC_BDCR1_LSERDY 2U
+#define RCC_BDCR1_LSESYSEN (1U << 7)
+#define RCC_BDCR1_LSESYSRDY (1U << 11)
 #define RCC_BDCR1_LSEBYP 4U
 #define RCC_BDCR1_LSEDRV (3U << 3)
 #define RCC_BDCR1_LSEDRV_0 (1U << 3)
@@ -32,6 +34,7 @@ code = r'''
 #define CLEAR_BIT(r,b) ((r) &= ~(b))
 #define MODIFY_REG(r,c,s) ((r) = ((r) & ~(c)) | (s))
 static uint32_t reads, readyAfter;
+static bool failSystem;
 struct Register
 {
 	uint32_t value;
@@ -42,6 +45,10 @@ struct Register
 			if (++reads >= readyAfter)
 			{
 				value |= RCC_BDCR1_LSERDY;
+				if ((value & RCC_BDCR1_LSESYSEN) && !failSystem && reads > readyAfter + 10U)
+				{
+					value |= RCC_BDCR1_LSESYSRDY;
+				}
 			}
 		}
 		return value;
@@ -68,6 +75,7 @@ static void Reset(OSC_TYPE type, uint32_t delay)
 	rcc.BDCR1.value = RCC_BDCR1_LSI1RDY;
 	pwr.DBPR = 0;
 	reads = 0;
+	failSystem = false;
 	readyAfter = delay;
 	g_McuOsc.LowPwrOsc.Type = type;
 }
@@ -81,6 +89,7 @@ int main()
 	assert((rcc.BDCR1.value & RCC_BDCR1_LSEDRV) == RCC_BDCR1_LSEDRV_0);
 	assert(!(rcc.BDCR1.value & RCC_BDCR1_LSEBYP));
 	assert(strcmp(clockName, "LSE 32768 Hz") == 0);
+	assert(rcc.BDCR1.value & RCC_BDCR1_LSESYSRDY);
 	// Preserve drive and bypass of a clock already in use by another timer.
 	Reset(OSC_TYPE_XTAL, 1);
 	rcc.BDCR1.value |= RCC_BDCR1_LSEON | RCC_BDCR1_LSERDY | RCC_BDCR1_LSEDRV;
@@ -89,6 +98,12 @@ int main()
 	Reset(OSC_TYPE_TCXO, 1);
 	BtWbaPlatformInit();
 	assert(rcc.BDCR1.value & RCC_BDCR1_LSEBYP);
+	// An oscillator ready flag alone is insufficient: system propagation may fail.
+	Reset(OSC_TYPE_XTAL, 1);
+	failSystem = true;
+	BtWbaPlatformInit();
+	assert((rcc.BDCR1.value & RCC_BDCR1_RADIOSTSEL) == RCC_BDCR1_RADIOSTSEL_1);
+	assert(!(rcc.BDCR1.value & RCC_BDCR1_LSESYSEN));
 	// RC boards do not attempt crystal startup.
 	Reset(OSC_TYPE_RC, 1);
 	BtWbaPlatformInit();
