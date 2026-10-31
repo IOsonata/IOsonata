@@ -122,7 +122,8 @@ static bool BtWbaDiscServiceEventValid(
 {
 	const size_t fixed = offsetof(
 			aci_att_read_by_group_type_resp_event_rp0, Attribute_Data_List);
-	if (p == nullptr || !BtWbaEvtRangeValid(fixed, p->Data_Length, Available))
+	if (p == nullptr || Available < fixed ||
+		!BtWbaEvtRangeValid(fixed, p->Data_Length, Available))
 	{
 		return false;
 	}
@@ -156,7 +157,8 @@ static bool BtWbaDiscCharEventValid(
 {
 	const size_t fixed = offsetof(
 			aci_att_read_by_type_resp_event_rp0, Handle_Value_Pair_Data);
-	if (p == nullptr || !BtWbaEvtRangeValid(fixed, p->Data_Length, Available))
+	if (p == nullptr || Available < fixed ||
+		!BtWbaEvtRangeValid(fixed, p->Data_Length, Available))
 	{
 		return false;
 	}
@@ -190,7 +192,7 @@ static bool BtWbaDiscInfoEventValid(
 {
 	const size_t fixed = offsetof(
 			aci_att_find_info_resp_event_rp0, Handle_UUID_Pair);
-	if (p == nullptr || !BtWbaEvtRangeValid(
+	if (p == nullptr || Available < fixed || !BtWbaEvtRangeValid(
 			fixed, p->Event_Data_Length, Available))
 	{
 		return false;
@@ -302,6 +304,32 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 
 		switch (pAci->ecode)
 		{
+			case ACI_GATT_NOTIFICATION_VSEVT_CODE:
+			{
+				const size_t fixed = offsetof(aci_gatt_notification_event_rp0, Attribute_Value);
+				const aci_gatt_notification_event_rp0 *p =
+						(const aci_gatt_notification_event_rp0 *)pAci->data;
+
+				if (available < fixed ||
+					!BtWbaEvtRangeValid(fixed, p->Attribute_Value_Length, available))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+			}
+			case ACI_GATT_INDICATION_VSEVT_CODE:
+			{
+				const size_t fixed = offsetof(aci_gatt_indication_event_rp0, Attribute_Value);
+				const aci_gatt_indication_event_rp0 *p =
+						(const aci_gatt_indication_event_rp0 *)pAci->data;
+
+				if (available < fixed ||
+					!BtWbaEvtRangeValid(fixed, p->Attribute_Value_Length, available))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+			}
 			case ACI_ATT_READ_BY_GROUP_TYPE_RESP_VSEVT_CODE:
 				if (!BtWbaDiscServiceEventValid(
 						(aci_att_read_by_group_type_resp_event_rp0 *)pAci->data,
