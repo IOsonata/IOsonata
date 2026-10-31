@@ -29,6 +29,7 @@ static unsigned disconnects;
 static unsigned reportCount;
 static uint8_t actualPhy = 1;
 static unsigned phyRefused = 1;
+static unsigned phyRequests;
 static BtDevice_t peer;
 static char output[65536];
 static unsigned outputSize;
@@ -76,6 +77,7 @@ bool BtGapReadPhy(uint16_t, uint8_t *tx, uint8_t *rx)
 }
 bool BtGapSetPhy(uint16_t, uint8_t tx, uint8_t rx, uint16_t)
 {
+	phyRequests++;
 	assert(tx == rx && (tx == 1 || tx == 2));
 	if (phyRefused > 0)
 	{
@@ -162,10 +164,14 @@ int main()
 	s_NotifQue = CFifoInit(s_NotifMem, sizeof(s_NotifMem), sizeof(PrbsNotification_t), true);
 	assert(s_NotifQue != nullptr && CFifoAvail(s_NotifQue) == 12);
 	peer.Conn.MaxMtu = 247;
+#if defined(IOSONATA_STM32_WBA)
+	actualPhy = 2; // Exercise a required change and command refusal first.
+#endif
 	BtAppEvtConnected(0);
 	assert(s_PhyPending && !s_Failed);
 	s_ValueHdl = 0x12;
 	s_CccdHdl = 0x13;
+	actualPhy = 1;
 	nowMs = 1000;
 	AppCheckStatus();
 	assert(subscribes == 1 && !s_PhyPending);
@@ -194,6 +200,15 @@ int main()
 	assert(strstr(output, "PRBS integrity: FAIL") == nullptr);
 	assert(strstr(output, "PHY=1 RESULT: PASS") != nullptr);
 	assert(strstr(output, "PHY=2 RESULT: PASS") != nullptr);
+#if defined(IOSONATA_STM32_WBA)
+	// A connection already at 1M must not launch a redundant LL PHY procedure.
+	s_TestPhy = 1;
+	actualPhy = 1;
+	phyRequests = 0;
+	BtAppEvtConnected(0);
+	assert(phyRequests == 0 && !s_PhyPending);
+	assert(s_TxPhy == 1 && s_RxPhy == 1);
+#endif
 	// Aborted 1M startup must not silently advance to the 2M trial.
 	s_TestPhy = 1;
 	actualPhy = 1;
