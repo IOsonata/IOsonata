@@ -345,7 +345,7 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 		return;
 	}
 	now = BtGattMsTick();
-	notification = (PrbsNotification_t *)CFifoResv(s_NotifQue);
+	notification = (PrbsNotification_t *)CFifoPut(s_NotifQue);
 	if (notification == nullptr || Len > sizeof(notification->Data))
 	{
 		s_NotifDropped++;
@@ -355,7 +355,6 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 	notification->ReceivedMs = now;
 	notification->Len = Len;
 	memcpy(notification->Data, pData, Len);
-	CFifoPut(s_NotifQue);
 	// A refused AppEvt leaves its payload queued. AppCheckStatus retries.
 	(void)AppEvtHandlerQue(0, nullptr, PrbsReceive);
 }
