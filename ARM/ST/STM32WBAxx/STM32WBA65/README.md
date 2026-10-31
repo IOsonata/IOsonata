@@ -561,7 +561,10 @@ error stops the attempt, logs the status and clears the partial cache. It does
 not call the successful discovery callback; an explicit `BtAppDiscoverDevice`
 call can start another attempt. Response data is accepted only in its active
 discovery phase. The event router validates payload lengths before dispatching
-completion, security and attribute-modified events.
+completion, security and attribute-modified events. Vendor service and
+characteristic UUIDs retain their 128-bit base in the generic fixed UUID table;
+table exhaustion fails discovery. Only descriptors with the Bluetooth SIG base
+can populate standard descriptor handles such as the CCCD.
 
 Platform layer under the stack:
 

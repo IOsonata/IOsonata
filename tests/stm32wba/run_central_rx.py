@@ -109,7 +109,7 @@ a = gap.index('// ST v2.10.0 queues')
 code += '#define CFG_BLE_NUM_LINK 2\n' + gap[a:gap.index('// aci_gap_init returns the service', a)]
 a = source.index('enum {\n\tDISC_IDLE')
 code += source[a:source.index('};', a) + 3]
-for name in ['WbaDiscRetryable', 'WbaDiscFailed', 'WbaUuid16', 'WbaDiscSrvc', 'WbaDiscChar', 'WbaDiscDesc', 'BtAppDiscStartChar', 'BtAppDiscStartDesc', 'WbaDiscProcComplete',
+for name in ['WbaDiscRetryable', 'WbaDiscFailed', 'WbaDiscUuid', 'WbaDiscSrvc', 'WbaDiscChar', 'WbaDiscDesc', 'BtAppDiscStartChar', 'BtAppDiscStartDesc', 'WbaDiscProcComplete',
              'BtAppDiscoverDevice', 'BtAppDiscoveryRetry']:
     code += extract_function(source, name) + '\n'
 code += extract_function(gap, 'BtGapSetDataLength') + '\n'
@@ -268,6 +268,56 @@ int main()
 	unsigned oldDesc = descCalls;
 	BtAppDiscStartDesc(&peers[0]);
 	assert(descCalls == oldDesc && discovered == 2);
+	// Vendor service/characteristic UUIDs retain their base and round-trip.
+	uint8_t vendor[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 2, 0x29, 15, 16};
+	uint8_t restored[16];
+	peers[0].NbSrvc = 0;
+	peers[0].Discovery.Phase = DISC_SERVICES;
+	srvc.Attribute_Data_Length = 20;
+	srvc.Data_Length = 20;
+	memcpy(srvc.Attribute_Data_List + 4, vendor, 16);
+	WbaDiscSrvc(&srvc);
+	assert(peers[0].NbSrvc == 1 && services[0][0].srv_uuid.BaseIdx != 0);
+	assert(BtUuid16To128(&services[0][0].srv_uuid, restored));
+	assert(memcmp(vendor, restored, 16) == 0);
+	aci_att_read_by_type_resp_event_rp0 chr = {};
+	chr.Handle_Value_Pair_Length = 21;
+	chr.Data_Length = 21;
+	memcpy(chr.Handle_Value_Pair_Data + 5, vendor, 16);
+	peers[0].Discovery.Phase = DISC_CHARS;
+	peers[0].Discovery.SrvIdx = 0;
+	WbaDiscChar(&chr);
+	assert(services[0][0].char_count == 1);
+	assert(BtUuid16To128(&services[0][0].characteristics[0].characteristic.uuid, restored));
+	assert(memcmp(vendor, restored, 16) == 0);
+	// A vendor UUID whose short portion is 0x2902 is not a CCCD.
+	aci_att_find_info_resp_event_rp0 info = {};
+	info.Format = 2;
+	info.Event_Data_Length = 18;
+	info.Handle_UUID_Pair[0] = 9;
+	memcpy(info.Handle_UUID_Pair + 2, vendor, 16);
+	peers[0].Discovery.Phase = DISC_DESCS;
+	peers[0].Discovery.CharIdx = 0;
+	WbaDiscDesc(&info);
+	assert(services[0][0].characteristics[0].cccd_handle == BT_ATT_HANDLE_INVALID);
+	uint8_t sig[16] = BLUETOOTH_SIG_BASE_UUID;
+	sig[12] = 2;
+	sig[13] = 0x29;
+	memcpy(info.Handle_UUID_Pair + 2, sig, 16);
+	WbaDiscDesc(&info);
+	assert(services[0][0].characteristics[0].cccd_handle == 9);
+	// Exhaustion fails discovery instead of aliasing a new base onto SIG.
+	BtUuid16_t converted;
+	for (unsigned n = 2; n < 20; n++)
+	{
+		vendor[0] = n;
+		(void)WbaDiscUuid(&converted, vendor, 16);
+	}
+	vendor[0] = 21;
+	memcpy(srvc.Attribute_Data_List + 4, vendor, 16);
+	peers[0].Discovery.Phase = DISC_SERVICES;
+	WbaDiscSrvc(&srvc);
+	assert(peers[0].Discovery.Phase == DISC_FAILED && peers[0].NbSrvc == 0);
 	assert(BtGapSetDataLength(1, 251, 2120));
 	commandStatus = 1;
 	assert(!BtGapSetDataLength(1, 251, 2120));
@@ -318,6 +368,7 @@ with tempfile.TemporaryDirectory(prefix='wba-central-') as temp:
         binary = Path(temp) / 'test'
         subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', opt,
                         '-fsanitize=undefined', '-fno-sanitize-recover=all',
-                        '-I' + str(ROOT / 'include'), str(cpp), '-o', str(binary)], check=True)
+                        '-I' + str(ROOT / 'include'), str(cpp),
+                        str(ROOT / 'src/bluetooth/bt_uuid.cpp'), '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
         print('PASS WBA central:', opt, 'MTU sequencing, per-peer retries, DLE, event ownership/backpressure')

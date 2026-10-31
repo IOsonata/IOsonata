@@ -2175,18 +2175,27 @@ void BtAppEnterDfu(void)
 	// is board-specific - left to the app.
 }
 
-// Extract a 16-bit UUID (or the 16-bit alias of a 128-bit UUID) from an event
-// field that is Len bytes long, little-endian on air. A 128-bit UUID holds
-// its 16-bit alias at byte offset 12..13 (standard base layout, also used by
-// the BlueIO base), matching the 16-bit storage the GATT DB uses.
-static uint16_t WbaUuid16(const uint8_t *pUuid, uint8_t Len)
+// Preserve the base of vendor UUIDs using the generic fixed UUID table.
+static bool WbaDiscUuid(BtUuid16_t *pDest, const uint8_t *pUuid, uint8_t Len)
 {
-	if (Len <= 2)
+	uint8_t uuid128[16];
+
+	if (Len == 2)
 	{
-		return (uint16_t)(pUuid[0] | (pUuid[1] << 8));
+		pDest->BaseIdx = 0;
+		pDest->Type = BT_UUID_TYPE_16;
+		pDest->Uuid = (uint16_t)(pUuid[0] | (pUuid[1] << 8));
+		return true;
 	}
-	return (uint16_t)(pUuid[12] | (pUuid[13] << 8));
+	if (Len != sizeof(uuid128))
+	{
+		return false;
+	}
+	memcpy(uuid128, pUuid, sizeof(uuid128));
+	return BtUuid128To16(pDest, uuid128) >= 0;
 }
+
+static void WbaDiscFailed(BtDevice_t *pDev, tBleStatus Status);
 
 // Parse one ACI_ATT_READ_BY_GROUP_TYPE_RESP (primary service discovery). Each
 // entry is Start(2) End(2) UUID(2 or 16); entry length is Attribute_Data_Length
@@ -2217,9 +2226,11 @@ static void WbaDiscSrvc(const aci_att_read_by_group_type_resp_event_rp0 *p)
 		}
 		const uint8_t *e = &p->Attribute_Data_List[off];
 		BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->NbSrvc];
-		pSrvc->srv_uuid.BaseIdx = 0;
-		pSrvc->srv_uuid.Type    = BT_UUID_TYPE_16;
-		pSrvc->srv_uuid.Uuid    = WbaUuid16(&e[4], uuidLen);
+		if (!WbaDiscUuid(&pSrvc->srv_uuid, &e[4], uuidLen))
+		{
+			WbaDiscFailed(pDev, BLE_STATUS_INSUFFICIENT_RESOURCES);
+			return;
+		}
 		pSrvc->handle_range.StartHdl = (uint16_t)(e[0] | (e[1] << 8));
 		pSrvc->handle_range.EndHdl   = (uint16_t)(e[2] | (e[3] << 8));
 		pSrvc->char_count = 0;
@@ -2259,9 +2270,11 @@ static void WbaDiscChar(const aci_att_read_by_type_resp_event_rp0 *p)
 		BtGattDBChar_t *pCh = &pSrvc->characteristics[pSrvc->char_count];
 		uint8_t props = e[2];
 
-		pCh->characteristic.uuid.BaseIdx = 0;
-		pCh->characteristic.uuid.Type    = BT_UUID_TYPE_16;
-		pCh->characteristic.uuid.Uuid    = WbaUuid16(&e[5], uuidLen);
+		if (!WbaDiscUuid(&pCh->characteristic.uuid, &e[5], uuidLen))
+		{
+			WbaDiscFailed(pDev, BLE_STATUS_INSUFFICIENT_RESOURCES);
+			return;
+		}
 
 		pCh->characteristic.char_props.broadcast      = (props >> 0) & 1;
 		pCh->characteristic.char_props.read           = (props >> 1) & 1;
@@ -2290,6 +2303,8 @@ static void WbaDiscChar(const aci_att_read_by_type_resp_event_rp0 *p)
 // characteristic.
 static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p)
 {
+	uint8_t base[16];
+	uint16_t uuid;
 	BtDevice_t *pDev = BtPeerFindByHdl(p->Connection_Handle);
 	if (pDev == nullptr || pDev->pServices == nullptr ||
 		pDev->Discovery.Phase != DISC_DESCS ||
@@ -2311,7 +2326,23 @@ static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p)
 	{
 		const uint8_t *e = &p->Handle_UUID_Pair[off];
 		uint16_t hdl  = (uint16_t)(e[0] | (e[1] << 8));
-		uint16_t uuid = WbaUuid16(&e[2], (uint8_t)(pairLen - 2));
+		if (pairLen == 18)
+		{
+			memcpy(base, &e[2], sizeof(base));
+			uuid = (uint16_t)(base[12] | (base[13] << 8));
+			base[12] = 0;
+			base[13] = 0;
+			// Vendor descriptors must not alias standard descriptor handles.
+			// Do not consume UUID table slots for descriptors we do not store.
+			if (BtUuidFindBase(base) != 0)
+			{
+				continue;
+			}
+		}
+		else
+		{
+			uuid = (uint16_t)(e[2] | (e[3] << 8));
+		}
 
 		switch (uuid)
 		{
