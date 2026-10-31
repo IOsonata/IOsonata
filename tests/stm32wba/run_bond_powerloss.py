@@ -222,6 +222,21 @@ int main()
 	CutEveryWrite(first, second, false);
 	puts("PASS legacy migration retains the old image until commit");
 
+	// The new default must support repeated full-cache saves and shrinking.
+	flash.fill(0xFF);
+	assert(Boot() == 0);
+	auto maximum = Image(3072, 0x44);
+	Save(maximum);
+	assert(!s_bStorePending && Matches(Boot(), maximum));
+	CutEveryWrite(maximum, Image(3072, 0x55), false);
+	CutEveryWrite(Image(3072, 0x55), maximum, true);
+	CutEveryWrite(maximum, first, false);
+	Save(first);
+	assert(!s_bStorePending && Matches(Boot(), first));
+	assert(BtPdsRead(BondChunkKey(0, 2), filler, sizeof(filler)) == -ENOENT);
+	assert(BtPdsRead(BondChunkKey(1, 2), filler, sizeof(filler)) == -ENOENT);
+	puts("PASS default maximum, repeated saves and surplus chunk deletion");
+
 	// Two full 4 KB banks do not fit the live set of a two-sector PDS.
 	// Exhaustion must preserve the last committed bond, including after retry.
 	flash.fill(0xFF);

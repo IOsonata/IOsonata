@@ -54,6 +54,7 @@ SOFTWARE.
 #include "storage/nvm_intrf.h"
 #include "storage/nvm_region.h"
 #include "bluetooth/bt_pds.h"
+#include "bt_wba_bond.h"
 
 // Store trace, unconditional for the same reason the Nordic stores' is: a
 // release build is where bond data has to survive a reset, and a mount that
@@ -81,6 +82,9 @@ static bool s_bPdsMounted;
 // once; the first caller does the work.
 extern "C" int BtPdsWbaInit(void)
 {
+	uint64_t chunks;
+	uint64_t unit;
+	uint64_t record;
 	if (s_bPdsMounted)
 	{
 		return 0;
@@ -129,6 +133,22 @@ extern "C" int BtPdsWbaInit(void)
 			   (unsigned long)s_PdsMem.Size(),
 			   (unsigned long)s_PdsMem.LogicalSectorSize(),
 			   (unsigned long)s_PdsMem.WriteGran());
+
+	// Conservative PDS budget: 32-byte record headers, full final chunks,
+	// and four additional records for manifest, sector/GC markers and append.
+	chunks = ((uint64_t)CFG_BLE_NVM_MAX_SIZE * sizeof(uint64_t) +
+		BT_PDS_RECORD_DATA_MAX - 1U) / BT_PDS_RECORD_DATA_MAX;
+	unit = s_PdsMem.WriteGran();
+	if (unit == 0)
+	{
+		return -EINVAL;
+	}
+	record = ((BT_PDS_RECORD_DATA_MAX + 32U + unit - 1U) / unit) * unit;
+	if ((2U * chunks + 4U) * record > s_PdsMem.LogicalSectorSize())
+	{
+		PDS_PRINTF("PDS: WBA bond cache exceeds the erase-sector budget\r\n");
+		return -ENOMEM;
+	}
 
 	int r = BtPdsInit(&s_PdsMem);
 	if (r != 0)

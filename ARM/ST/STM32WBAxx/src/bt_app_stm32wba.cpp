@@ -66,6 +66,7 @@ SOFTWARE.
 // HostStack_Process are defined here and run the host stack from the
 // Bluetooth event queue.
 #include "bt_wba_stack.h"
+#include "bt_wba_bond.h"
 #include "bt_wba_platform.h"
 
 #include "istddef.h"
@@ -1515,9 +1516,6 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 // The stack's NVM cache: bonds and GATT server state, preloaded from the
 // PDS before init and persisted through BLEPLAT_NvmStore. In 64 bit words,
 // 1..1024 per blestack.h.
-#ifndef CFG_BLE_NVM_MAX_SIZE
-#define CFG_BLE_NVM_MAX_SIZE			512
-#endif
 
 // Host event FIFO, in 16-bit words. Allow a burst of eight full-size
 // notifications plus stack bookkeeping and control events before host service.
@@ -1703,7 +1701,10 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		{
 			return false;
 		}
-		(void)BtSmpBondWbaCacheInit(s_BleNvmCache, CFG_BLE_NVM_MAX_SIZE);
+		if (BtSmpBondWbaCacheInit(s_BleNvmCache, CFG_BLE_NVM_MAX_SIZE) == UINT16_MAX)
+		{
+			return false;
+		}
 	}
 
 	// Host stack bring-up, sized by the numbers above; an app_conf.h that
