@@ -236,6 +236,7 @@ int main()
 	}
 	assert(irqState == 1 && queued == 8);
 	assert(BLECB_Indication(packet, sizeof(packet), nullptr, 0) == BLE_STATUS_FAILED);
+	assert(s_EvtRingFull == 1 && s_EvtRingPeak == 8);
 	memset(packet + 3, 0, sizeof(packet) - 3); // queued payload has its own storage
 	BtAppEvtDrain(0, nullptr);
 	assert(routed == 8 && hostWake == 1 && irqState == 1 && s_EvtCnt == 0);

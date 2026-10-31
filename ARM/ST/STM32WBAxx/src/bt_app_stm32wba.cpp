@@ -285,6 +285,17 @@ static bool s_bEvtFlowBlocked = false;
 static uint32_t s_HostProcessCount;
 static uint32_t s_StatusCheckCount;
 
+// Port-wide counters since boot. Report at disconnect, never per packet.
+// Queue refusals and ring-full attempts are backpressure, not packet loss.
+static volatile uint32_t s_HostRequestedMs;
+static volatile uint32_t s_HostQueueRefused;
+static uint32_t s_HostWaitMaxMs;
+static uint32_t s_HostWaitOver1Ms;
+static uint32_t s_HostWaitOver15Ms;
+static uint32_t s_HostRunMaxMs;
+static uint32_t s_EvtRingFull;
+static uint32_t s_EvtRingPeak;
+
 static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload);
 extern "C" void BleStackCB_Process(void);
 
@@ -295,16 +306,38 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 {
 	uint32_t start;
 	uint32_t elapsed;
+	uint32_t state;
+	uint32_t wait;
 	int result;
 
 	(void)Evt;
 	(void)pCtx;
 
-	s_bBleHostQueued = false;
-	s_HostProcessCount++;
+	state = __get_PRIMASK();
+	__disable_irq();
 	start = BtSmpMsTick();
+	wait = start - s_HostRequestedMs;
+	s_bBleHostQueued = false;
+	__set_PRIMASK(state);
+	s_HostProcessCount++;
+	if (wait > s_HostWaitMaxMs)
+	{
+		s_HostWaitMaxMs = wait;
+	}
+	if (wait >= 1)
+	{
+		s_HostWaitOver1Ms++;
+	}
+	if (wait >= 15)
+	{
+		s_HostWaitOver15Ms++;
+	}
 	result = BleStack_Process();
 	elapsed = BtSmpMsTick() - start;
+	if (elapsed > s_HostRunMaxMs)
+	{
+		s_HostRunMaxMs = elapsed;
+	}
 	if (elapsed >= 100)
 	{
 		SysLogPrintf(SysLogGet(), "ms=%lu WBA host: process=%lu ms result=%d ring=%u\r\n",
@@ -331,6 +364,11 @@ extern "C" void BleStackCB_Process(void)
 	queue = s_bBleHostQueued == false;
 	if (queue)
 	{
+		// Preserve the first request across coalescing and queue-full retries.
+		if (s_bBleHostOwed == false)
+		{
+			s_HostRequestedMs = BtSmpMsTick();
+		}
 		s_bBleHostQueued = true;
 		s_bBleHostOwed = false;
 	}
@@ -342,6 +380,7 @@ extern "C" void BleStackCB_Process(void)
 	{
 		state = __get_PRIMASK();
 		__disable_irq();
+		s_HostQueueRefused++;
 		s_bBleHostOwed = true;
 		s_bBleHostQueued = false;
 		__set_PRIMASK(state);
@@ -435,6 +474,7 @@ extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 	total = (uint32_t)Length + ExtLength;
 	if (s_EvtCnt >= BT_APP_WBA_EVT_SLOTS)
 	{
+		s_EvtRingFull++;
 		s_bEvtFlowBlocked = true;
 		return BLE_STATUS_FAILED;
 	}
@@ -466,6 +506,10 @@ extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 	state = __get_PRIMASK();
 	__disable_irq();
 	s_EvtCnt++;
+	if (s_EvtCnt > s_EvtRingPeak)
+	{
+		s_EvtRingPeak = s_EvtCnt;
+	}
 	__set_PRIMASK(state);
 
 	BtAppEvtDrainQue();
@@ -1163,6 +1207,12 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					(unsigned)p->Reason);
 			if (p->Status == BLE_STATUS_SUCCESS)
 			{
+				SysLogPrintf(SysLogGet(), "WBA host totals since boot: calls=%lu queue_refused=%lu ring_full=%lu ring_peak=%lu\r\n",
+						(unsigned long)s_HostProcessCount, (unsigned long)s_HostQueueRefused,
+						(unsigned long)s_EvtRingFull, (unsigned long)s_EvtRingPeak);
+				SysLogPrintf(SysLogGet(), "WBA host timing since boot: wait_max_ms=%lu wait_ge_1ms=%lu wait_ge_15ms=%lu run_max_ms=%lu\r\n",
+						(unsigned long)s_HostWaitMaxMs, (unsigned long)s_HostWaitOver1Ms,
+						(unsigned long)s_HostWaitOver15Ms, (unsigned long)s_HostRunMaxMs);
 				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
 				{
 					s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;

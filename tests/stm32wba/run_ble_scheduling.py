@@ -27,7 +27,8 @@ code = r'''
 #include <cstdint>
 #define NDEBUG
 #define SysLogPrintf(...) ((void)0)
-static uint32_t BtSmpMsTick() { return 0; }
+static uint32_t now, processMs;
+static uint32_t BtSmpMsTick() { return now; }
 static uint32_t irq;
 static unsigned hostRuns, taskRuns, count, head, tail;
 static bool refuse, interruptRequest, requestWhileRunning;
@@ -70,6 +71,7 @@ static bool BtEvtQue(uint32_t, void *, Handler handler)
 static int BleStack_Process()
 {
 	hostRuns++;
+	now += processMs;
 	if (requestWhileRunning)
 	{
 		requestWhileRunning = false;
@@ -85,6 +87,8 @@ static void RunOne()
 	handler(0, nullptr);
 }
 '''
+start = app.index('// Port-wide counters since boot.')
+code += app[start:app.index('static BtWbaEvtFlow_t BtAppHciEvtHandler', start)]
 for name in ['BleHostEvt', 'BleStackCB_Process']:
     code += function(app, name)
 for name in ['BtWbaSeqQue', 'BtWbaSeqEvt', 'UTIL_SEQ_SetTask']:
@@ -125,13 +129,30 @@ int main()
 	// A full queue retains work for the status retry, including masked callers.
 	irq = 1;
 	refuse = true;
+	now = 100;
 	BleStackCB_Process();
+	assert(s_HostQueueRefused == 1);
+	now = 110;
 	assert(irq == 1 && s_bBleHostOwed && !s_bBleHostQueued);
 	refuse = false;
 	BleStackCB_Process();
 	assert(irq == 1 && !s_bBleHostOwed && s_bBleHostQueued && count == 1);
+	now = 116;
+	processMs = 2;
 	RunOne();
 	assert(!count);
+	assert(s_HostWaitMaxMs == 16 && s_HostWaitOver15Ms == 1);
+	assert(s_HostWaitOver1Ms == 1 && s_HostRunMaxMs == 2);
+	processMs = 0;
+
+	// Coalescing preserves the first timestamp across clock wrap.
+	now = 0xfffffffeu;
+	BleStackCB_Process();
+	now = 1;
+	BleStackCB_Process();
+	RunOne();
+	assert(s_HostWaitMaxMs == 16 && s_HostWaitOver1Ms == 2);
+	assert(s_HostWaitOver15Ms == 1 && !count);
 
 	processResult = 0;
 	BleStackCB_Process();
