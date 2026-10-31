@@ -305,6 +305,7 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 	uint32_t elapsed;
 	uint32_t state;
 	uint32_t wait;
+	uint32_t passes;
 	int result;
 
 	(void)Evt;
@@ -318,7 +319,6 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 	wait = start - s_HostRequestedMs;
 	s_bBleHostQueued = false;
 	__set_PRIMASK(state);
-	s_HostProcessCount++;
 	if (wait > s_HostWaitMaxMs)
 	{
 		s_HostWaitMaxMs = wait;
@@ -331,7 +331,20 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 	{
 		s_HostWaitOver15Ms++;
 	}
-	result = BleStack_Process();
+	// Drain pending host work without a queue round trip for every pass.
+	// Bound the burst independently of PHY: a call need not produce a packet.
+	// Yield when the event ring fills so its queued consumer can free slots.
+	result = 0;
+	for (passes = 0; passes < BT_APP_WBA_EVT_SLOTS &&
+		s_EvtCnt < BT_APP_WBA_EVT_SLOTS; passes++)
+	{
+		s_HostProcessCount++;
+		result = BleStack_Process();
+		if (result != 0 || s_bEvtFlowBlocked)
+		{
+			break;
+		}
+	}
 	elapsed = BtSmpMsTick() - start;
 	if (elapsed > s_HostRunMaxMs)
 	{

@@ -25,6 +25,7 @@ platform = (ROOT / 'ARM/ST/STM32WBAxx/src/bt_wba_platform.cpp').read_text()
 code = r'''
 #include <cassert>
 #include <cstdint>
+#include <initializer_list>
 #define NDEBUG
 #define SysLogPrintf(...) ((void)0)
 static uint32_t now, processMs;
@@ -46,6 +47,11 @@ static uint32_t BtSmpMsTick()
 static unsigned hostRuns, taskRuns, count, head, tail;
 static bool refuse, interruptRequest, requestWhileRunning;
 static int processResult = 1;
+#define BT_APP_WBA_EVT_SLOTS 8
+static unsigned s_EvtCnt;
+static bool s_bEvtFlowBlocked;
+static unsigned burstRemaining;
+static bool emitEvent;
 using Handler = void (*)(uint32_t, void *);
 static Handler events[4];
 static volatile bool s_bBleHostQueued, s_bBleHostOwed;
@@ -89,6 +95,16 @@ static int BleStack_Process()
 	{
 		requestWhileRunning = false;
 		BleStackCB_Process();
+	}
+	if (emitEvent)
+	{
+		assert(s_EvtCnt < BT_APP_WBA_EVT_SLOTS);
+		s_EvtCnt++;
+	}
+	if (burstRemaining)
+	{
+		burstRemaining--;
+		return burstRemaining ? 0 : 1;
 	}
 	return processResult;
 }
@@ -175,10 +191,37 @@ int main()
 	assert(s_HostWaitMaxMs == 16 && s_HostWaitOver1Ms == 2);
 	assert(s_HostWaitOver15Ms == 1 && !count);
 
+	// Four- and eight-event bursts complete in one dispatch.
+	for (unsigned size : {4U, 8U})
+	{
+		unsigned before = hostRuns;
+		burstRemaining = size;
+		emitEvent = true;
+		BleStackCB_Process();
+		RunOne();
+		assert(hostRuns - before == size && s_EvtCnt == size && !count);
+		s_EvtCnt = 0;
+	}
+	// A partly occupied ring yields before another host call can overflow it.
+	s_EvtCnt = 6;
+	burstRemaining = 4;
+	BleStackCB_Process();
+	RunOne();
+	assert(s_EvtCnt == 8 && burstRemaining == 2 && count == 1);
+	RunOne();
+	assert(s_EvtCnt == 8 && burstRemaining == 2 && count == 1);
+	s_EvtCnt = 0;
+	RunOne();
+	assert(s_EvtCnt == 2 && !burstRemaining && !count);
+	s_EvtCnt = 0;
+	emitEvent = false;
+
+	// Busy host work with no events is bounded, allowing other tasks to run.
+	unsigned before = hostRuns;
 	processResult = 0;
 	BleStackCB_Process();
 	RunOne();
-	assert(count == 1);
+	assert(hostRuns - before == 8 && count == 1);
 	processResult = 1;
 	RunOne();
 	assert(!count);
