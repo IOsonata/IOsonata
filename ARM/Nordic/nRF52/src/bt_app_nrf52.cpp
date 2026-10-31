@@ -1132,43 +1132,46 @@ void BtGattEvtHandler(nrf_ble_gatt_t * p_gatt, const nrf_ble_gatt_evt_t * p_evt)
 /**@brief Function for initializing the GATT library. */
 void BtGattInit(void)
 {
-    ret_code_t err_code;
+	ret_code_t err_code;
+	ble_opt_t opt;
+	uint8_t dlen = (uint8_t)min((uint32_t)s_BtAppData.MaxMtu + 4U, (uint32_t)251U);
 
-    err_code = nrf_ble_gatt_init(&s_Gatt, BtGattEvtHandler);
-    APP_ERROR_CHECK(err_code);
+	err_code = nrf_ble_gatt_init(&s_Gatt, BtGattEvtHandler);
+	APP_ERROR_CHECK(err_code);
 
-    if (s_BtAppData.Role & BT_GAP_ROLE_PERIPHERAL)
-    {
-    	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, s_BtAppData.MaxMtu);
-    	APP_ERROR_CHECK(err_code);
+	if (s_BtAppData.Role & BT_GAP_ROLE_PERIPHERAL)
+	{
+		err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, s_BtAppData.MaxMtu);
+		APP_ERROR_CHECK(err_code);
+	}
 
+	if (s_BtAppData.Role & BT_GAP_ROLE_CENTRAL)
+	{
+		err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, s_BtAppData.MaxMtu);
+		APP_ERROR_CHECK(err_code);
+
+		memset(&opt, 0, sizeof(opt));
+		opt.gattc_opt.uuid_disc.auto_add_vs_enable = 1;
+		err_code = sd_ble_opt_set(BLE_GATTC_OPT_UUID_DISC, &opt);
+		APP_ERROR_CHECK(err_code);
+	}
+
+	// These settings apply to either end of a streaming link. A central-only
+	// build must not retain the short data length or skip event extension.
+	if (s_BtAppData.Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL))
+	{
 		if (s_BtAppData.MaxMtu >= 23)
-    	{
+		{
 			// Clamp before narrowing: ATT MTU 512 must request 251, not 4.
-			uint8_t dlen = (uint8_t)min((uint32_t)s_BtAppData.MaxMtu + 4U, (uint32_t)251U);
-    		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
-    		APP_ERROR_CHECK(err_code);
-    	}
-      	ble_opt_t opt;
+			err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
+			APP_ERROR_CHECK(err_code);
+		}
 
-      	memset(&opt, 0x00, sizeof(opt));
-      	opt.common_opt.conn_evt_ext.enable = 1;
-
-      	err_code = sd_ble_opt_set(BLE_COMMON_OPT_CONN_EVT_EXT, &opt);
-      	APP_ERROR_CHECK(err_code);
-    }
-
-    if (s_BtAppData.Role & BT_GAP_ROLE_CENTRAL)
-    {
-    	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, s_BtAppData.MaxMtu);
-    	APP_ERROR_CHECK(err_code);
-
-    	ble_opt_t opt;
-    	memset(&opt, 0x00, sizeof(opt));
-    	opt.gattc_opt.uuid_disc.auto_add_vs_enable = 1;
-    	err_code = sd_ble_opt_set(BLE_GATTC_OPT_UUID_DISC, &opt);
-    	APP_ERROR_CHECK(err_code);
-    }
+		memset(&opt, 0, sizeof(opt));
+		opt.common_opt.conn_evt_ext.enable = 1;
+		err_code = sd_ble_opt_set(BLE_COMMON_OPT_CONN_EVT_EXT, &opt);
+		APP_ERROR_CHECK(err_code);
+	}
 }
 
 void BtDisInit(const BtAppCfg_t *pCfg)

@@ -208,6 +208,73 @@ static unsigned long max(unsigned long a, unsigned long b) { return a > b ? a : 
 	print('PASS HCI and S132 data length bounds', flush=True)
 
 
+def check_softdevice_streaming(directory, flags):
+	source = (ROOT / 'ARM/Nordic/nRF52/src/bt_app_nrf52.cpp').read_text()
+	code = r"""
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include "istddef.h"
+#include "bluetooth/bt_gap.h"
+#define CHECK(x) do { if (!(x)) std::abort(); } while (0)
+#define APP_ERROR_CHECK(x) CHECK((x) == 0)
+#define BLE_CONN_HANDLE_INVALID 0xffff
+#define BLE_COMMON_OPT_CONN_EVT_EXT 1
+#define BLE_GATTC_OPT_UUID_DISC 2
+using ret_code_t = int;
+struct Options {
+ struct { struct { unsigned enable; } conn_evt_ext; } common_opt;
+ struct { struct { unsigned auto_add_vs_enable; } uuid_disc; } gattc_opt;
+};
+using ble_opt_t = Options;
+static int s_Gatt;
+static struct { unsigned Role; uint16_t MaxMtu; } s_BtAppData;
+static unsigned central, peripheral, dataCalls, extendCalls, uuidCalls;
+static uint8_t dataLength;
+static void BtGattEvtHandler() {}
+static int nrf_ble_gatt_init(int *, void (*)()) { return 0; }
+static int nrf_ble_gatt_att_mtu_periph_set(int *, uint16_t mtu) {
+ CHECK(mtu == s_BtAppData.MaxMtu); ++peripheral; return 0;
+}
+static int nrf_ble_gatt_att_mtu_central_set(int *, uint16_t mtu) {
+ CHECK(mtu == s_BtAppData.MaxMtu); ++central; return 0;
+}
+static int nrf_ble_gatt_data_length_set(int *, uint16_t hdl, uint8_t len) {
+ CHECK(hdl == BLE_CONN_HANDLE_INVALID); ++dataCalls; dataLength = len; return 0;
+}
+static int sd_ble_opt_set(unsigned id, const ble_opt_t *opt) {
+ if (id == BLE_COMMON_OPT_CONN_EVT_EXT) {
+  CHECK(opt->common_opt.conn_evt_ext.enable == 1); ++extendCalls;
+ } else {
+  CHECK(id == BLE_GATTC_OPT_UUID_DISC);
+  CHECK(opt->gattc_opt.uuid_disc.auto_add_vs_enable == 1); ++uuidCalls;
+ }
+ return 0;
+}
+""" + extract_function(source, r'^void BtGattInit\(') + r"""
+int main() {
+ const unsigned roles[] = {BT_GAP_ROLE_CENTRAL, BT_GAP_ROLE_PERIPHERAL,
+  BT_GAP_ROLE_CENTRAL | BT_GAP_ROLE_PERIPHERAL, BT_GAP_ROLE_OBSERVER};
+ const uint16_t mtus[] = {23, 247, 512};
+ for (auto role : roles) {
+  for (auto mtu : mtus) {
+   central = peripheral = dataCalls = extendCalls = uuidCalls = 0;
+   s_BtAppData.Role = role; s_BtAppData.MaxMtu = mtu;
+   BtGattInit();
+   CHECK(central == !!(role & BT_GAP_ROLE_CENTRAL));
+   CHECK(uuidCalls == central);
+   CHECK(peripheral == !!(role & BT_GAP_ROLE_PERIPHERAL));
+   CHECK(dataCalls == !!(central || peripheral));
+   CHECK(extendCalls == dataCalls);
+   if (dataCalls) CHECK(dataLength == (mtu == 23 ? 27 : 251));
+  }
+ }
+}
+"""
+	build(directory, 'softdevice_streaming', code, flags)
+	print('PASS SoftDevice central/peripheral/mixed streaming settings', flush=True)
+
+
 # Check complete source files too: extracted functions do not cover every init
 # and event path. Value-returning accessors cannot replace state assignments.
 VALUE_ACCESSORS = (
@@ -232,3 +299,4 @@ with tempfile.TemporaryDirectory(prefix='bt-private-') as temporary:
 		check_ports(directory, flags)
 		check_scans(directory, flags)
 		check_data_length(directory, flags)
+		check_softdevice_streaming(directory, flags)
