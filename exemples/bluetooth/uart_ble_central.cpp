@@ -53,6 +53,17 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
+#if defined(NRFXLIB_SDC)
+#include "bluetooth/bt_hci_ctlr.h"
+
+// Central streaming reserves ten RX/TX packets and scanning buffers.
+// Keep this application allocation separate from the smaller default pool.
+alignas(8) static uint8_t s_CentralCtlrMem[16384];
+extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
+	s_CentralCtlrMem, sizeof(s_CentralCtlrMem)
+};
+#endif
+
 #if defined(S132) || defined(S140)
 #include "ble.h"
 #endif
@@ -1241,6 +1252,11 @@ int main()
 	if (!BtAppInit(&s_BleAppCfg))
 	{
 		g_Uart.printf("BtAppInit failed\r\n");
+#if defined(NRFXLIB_SDC)
+		g_Uart.printf("SDC error=%d value=%d pool_needed=%d pool_size=%u\r\n",
+			(int)BtHciCtlrErrorGet(), (int)BtHciCtlrErrorValueGet(),
+			(int)BtHciCtlrMemPoolSizeNeeded(), (unsigned)g_BtHciCtlrMemPool.Size);
+#endif
 		while (true)
 		{
 			__NOP();
