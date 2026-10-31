@@ -435,8 +435,20 @@ static void BtWbaTimerArm(void)
 	TimerDisableTrigger(&s_BleTimerDev, 0);
 	if (bAny)
 	{
-		msTimerEnableTrigger(&s_BleTimerDev, 0, delay, TIMER_TRIG_TYPE_SINGLE,
-							 nullptr, nullptr);
+		// LPTIM compares are limited to 65535 counts. One second fits both
+		// the 32 kHz LSI and 32768 Hz LSE. Keep Due unchanged: intermediate
+		// wakeups only re-arm the trigger until the actual deadline is due.
+		if (delay > 1000U)
+		{
+			delay = 1000U;
+		}
+		if (msTimerEnableTrigger(&s_BleTimerDev, 0, delay, TIMER_TRIG_TYPE_SINGLE,
+							 nullptr, nullptr) == 0)
+		{
+			// A failed compare write must not strand the software timers.
+			// The existing status retry queues a deadline check and re-arm.
+			s_BleTimerOwed = true;
+		}
 	}
 }
 
