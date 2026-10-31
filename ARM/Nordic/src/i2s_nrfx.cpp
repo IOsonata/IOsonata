@@ -37,30 +37,71 @@ SOFTWARE.
 #include "nrf.h"
 #include "nrf_peripherals.h"
 
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#include "nrf_tdm.h"
+#endif
+
 #include "istddef.h"
 #include "idelay.h"
 #include "coredev/i2s.h"
 
-// The MDK indexes the I2S instance on nRF53 but not on nRF91, the same split
-// the PDM has. nRF52 needs no alias, its register block is named NRF_I2S.
-#if defined(NRF53_SERIES)
-#define NRF_I2S			NRF_I2S0_S
-#define NRF_I2S_BASE	NRF_I2S0_S_BASE
-#define I2S_IRQn		I2S0_IRQn
-#elif !defined(NRF52_SERIES)
-#define NRF_I2S			NRF_I2S_S
-#define NRF_I2S_BASE	NRF_I2S_S_BASE
+// nRF54LM20 replaces the I2S peripheral with TDM. Keep the generic I2S
+// interface and map only the hardware backend for these parts.
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#define IOSONATA_NRF_TDM_AUDIO	1
+#define NRF_AUDIO				NRF_TDM
+#define AUDIO_IRQn				TDM_IRQn
+#elif defined(NRF53_SERIES)
+#define IOSONATA_NRF_TDM_AUDIO	0
+#define NRF_AUDIO				NRF_I2S0_S
+#define NRF_AUDIO_BASE			NRF_I2S0_S_BASE
+#define AUDIO_IRQn				I2S0_IRQn
+#elif defined(NRF52_SERIES)
+#define IOSONATA_NRF_TDM_AUDIO	0
+#define NRF_AUDIO				NRF_I2S
+#define NRF_AUDIO_BASE			NRF_I2S_BASE
+#define AUDIO_IRQn				I2S_IRQn
+#else
+#define IOSONATA_NRF_TDM_AUDIO	0
+#define NRF_AUDIO				NRF_I2S_S
+#define NRF_AUDIO_BASE			NRF_I2S_S_BASE
+#define AUDIO_IRQn				I2S_IRQn
 #endif
 
 #pragma pack(push, 4)
 typedef struct
 {
-	uint32_t Freq;		//!< Freq in Hz
+	uint32_t Freq;		//!< Clock frequency in Hz
+#if IOSONATA_NRF_TDM_AUDIO
+	nrf_tdm_mck_div_t MckDiv;
+	nrf_tdm_sck_div_t SckDiv;
+#else
 	uint32_t RegVal;	//!< Register value
+#endif
 } MCLK_FREQ;
 #pragma pack(pop)
 
 static const MCLK_FREQ s_MClkFreqTable[] = {
+#if IOSONATA_NRF_TDM_AUDIO
+	{256000, NRF_TDM_MCK_DIV_125, NRF_TDM_SCK_DIV_125},
+	{507937, NRF_TDM_MCK_DIV_63, NRF_TDM_SCK_DIV_63},
+	{761905, NRF_TDM_MCK_DIV_42, NRF_TDM_SCK_DIV_42},
+	{1000000, NRF_TDM_MCK_DIV_32, NRF_TDM_SCK_DIV_32},
+	{1032258, NRF_TDM_MCK_DIV_31, NRF_TDM_SCK_DIV_31},
+	{1066667, NRF_TDM_MCK_DIV_30, NRF_TDM_SCK_DIV_30},
+	{1391304, NRF_TDM_MCK_DIV_23, NRF_TDM_SCK_DIV_23},
+	{1523810, NRF_TDM_MCK_DIV_21, NRF_TDM_SCK_DIV_21},
+	{2000000, NRF_TDM_MCK_DIV_16, NRF_TDM_SCK_DIV_16},
+	{2133333, NRF_TDM_MCK_DIV_15, NRF_TDM_SCK_DIV_15},
+	{2909091, NRF_TDM_MCK_DIV_11, NRF_TDM_SCK_DIV_11},
+	{3200000, NRF_TDM_MCK_DIV_10, NRF_TDM_SCK_DIV_10},
+	{4000000, NRF_TDM_MCK_DIV_8, NRF_TDM_SCK_DIV_8},
+	{5333333, NRF_TDM_MCK_DIV_6, NRF_TDM_SCK_DIV_6},
+	{6400000, NRF_TDM_MCK_DIV_5, NRF_TDM_SCK_DIV_5},
+	{8000000, NRF_TDM_MCK_DIV_4, NRF_TDM_SCK_DIV_4},
+	{10666667, NRF_TDM_MCK_DIV_3, NRF_TDM_SCK_DIV_3},
+	{16000000, NRF_TDM_MCK_DIV_2, NRF_TDM_SCK_DIV_2},
+#else
 	{256000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV125},	// 256 KHz
 	{507937, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV63},	// 0.5079365 MHz
 	{761905, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV42},	// 0.7619048 MHz
@@ -74,12 +115,6 @@ static const MCLK_FREQ s_MClkFreqTable[] = {
 	{2909091, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV11},	// 2.9090909 MHz
 	{3200000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV10},	// 3.2 MHz
 	{4000000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV8},	// 4.0 MHz
-// The high rate dividers are an nRF53 feature. This block used to be keyed on
-// NRF52_SERIES, which is exactly backwards: no nRF52 part defines 32MDIV6
-// through 32MDIV2 and the file could not compile for any of them, while the
-// nRF5340 that does have them was excluded. The nRF91 does not have them
-// either. Key it on the MDK symbol so it follows the target rather than a
-// family name.
 #if defined(I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV6)
 	{5333333, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV6},	// 5.3333333 MHz
 	{6400000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV5},	// 6.4 MHz
@@ -87,15 +122,18 @@ static const MCLK_FREQ s_MClkFreqTable[] = {
 	{10666667, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV3},	// 10.6666667 MHz
 	{16000000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV2},	// 16.0 MHz
 #endif
+#endif
 };
 
 static const int s_NbFreq = sizeof(s_MClkFreqTable) / sizeof(MCLK_FREQ);
 
+#if !IOSONATA_NRF_TDM_AUDIO
 static const uint32_t s_Ratio[] = {
 	32, 48, 64, 96, 128, 192, 256, 384, 512
 };
 
 alignas(4) static const int s_NbRatio = sizeof(s_Ratio) / sizeof(uint32_t);
+#endif
 
 alignas(4) static I2SDev_t *s_pI2SDev = nullptr;
 
@@ -112,6 +150,41 @@ static volatile bool s_TxPending;
 static uint32_t s_BlockWords;
 static bool s_Running;
 static bool s_IntEnabled;
+
+#if IOSONATA_NRF_TDM_AUDIO
+static nrf_tdm_config_t s_TdmCfg;
+#define NRF_AUDIO_INT_MASK	(NRF_TDM_INT_RXPTRUPD_MASK_MASK | \
+	NRF_TDM_INT_TXPTRUPD_MASK_MASK | NRF_TDM_INT_STOPPED_MASK_MASK)
+#endif
+
+static void nRFxAudioInterruptsDisable(void)
+{
+#if IOSONATA_NRF_TDM_AUDIO
+	nrf_tdm_int_disable(NRF_AUDIO, NRF_AUDIO_INT_MASK);
+#else
+	NRF_AUDIO->INTEN = 0;
+#endif
+}
+
+static void nRFxAudioInterruptsEnable(void)
+{
+#if IOSONATA_NRF_TDM_AUDIO
+	nrf_tdm_int_enable(NRF_AUDIO, NRF_AUDIO_INT_MASK);
+#else
+	NRF_AUDIO->INTEN = I2S_INTEN_RXPTRUPD_Msk |
+		I2S_INTEN_TXPTRUPD_Msk | I2S_INTEN_STOPPED_Msk;
+#endif
+}
+
+static bool nRFxAudioRxInterruptEnabled(void)
+{
+#if IOSONATA_NRF_TDM_AUDIO
+	return nrf_tdm_int_enable_check(NRF_AUDIO,
+		NRF_TDM_INT_RXPTRUPD_MASK_MASK) != 0;
+#else
+	return (NRF_AUDIO->INTEN & I2S_INTEN_RXPTRUPD_Msk) != 0;
+#endif
+}
 
 #if defined(NRF53_SERIES)
 // HFCLKAUDIO synthesizes exact integer-family and 44.1-kHz-family sample
@@ -178,9 +251,9 @@ static void nRF53AudioClockStop(void)
 bool nRFxI2SWaitStop(I2SDev_t * const pDev, int32_t Timeout)
 {
 	do {
-		if (NRF_I2S->EVENTS_STOPPED)
+		if (NRF_AUDIO->EVENTS_STOPPED)
 		{
-			NRF_I2S->EVENTS_STOPPED = 0;
+			NRF_AUDIO->EVENTS_STOPPED = 0;
 
 			return true;
 		}
@@ -192,9 +265,9 @@ bool nRFxI2SWaitStop(I2SDev_t * const pDev, int32_t Timeout)
 bool nRFxI2SWaitRx(I2SDev_t * const pDev, int32_t Timeout)
 {
 	do {
-		if (NRF_I2S->EVENTS_RXPTRUPD)
+		if (NRF_AUDIO->EVENTS_RXPTRUPD)
 		{
-			NRF_I2S->EVENTS_RXPTRUPD = 0;
+			NRF_AUDIO->EVENTS_RXPTRUPD = 0;
 
 			return true;
 		}
@@ -206,9 +279,9 @@ bool nRFxI2SWaitRx(I2SDev_t * const pDev, int32_t Timeout)
 bool nRFxI2SWaitTx(I2SDev_t * const pDev, int32_t Timeout)
 {
 	do {
-		if (NRF_I2S->EVENTS_TXPTRUPD)
+		if (NRF_AUDIO->EVENTS_TXPTRUPD)
 		{
-			NRF_I2S->EVENTS_TXPTRUPD = 0;
+			NRF_AUDIO->EVENTS_TXPTRUPD = 0;
 
 			return true;
 		}
@@ -219,22 +292,24 @@ bool nRFxI2SWaitTx(I2SDev_t * const pDev, int32_t Timeout)
 
 static void nRFxI2SDisable(DevIntrf_t * const pDev)
 {
-	// Keep the IRQ handler from clearing STOPPED or changing DMA pointers
-	// while stopping the peripheral and reclaiming its buffers.
-	NVIC_DisableIRQ(I2S_IRQn);
-	NRF_I2S->INTEN = 0;
+	NVIC_DisableIRQ(AUDIO_IRQn);
+	nRFxAudioInterruptsDisable();
 	if (s_Running)
 	{
 		s_Running = false;
-		NRF_I2S->EVENTS_STOPPED = 0;
-		NRF_I2S->TASKS_STOP = 1;
+		NRF_AUDIO->EVENTS_STOPPED = 0;
+		NRF_AUDIO->TASKS_STOP = 1;
 		nRFxI2SWaitStop(s_pI2SDev, 100000);
 	}
-	NRF_I2S->ENABLE = 0;
-	NRF_I2S->EVENTS_RXPTRUPD = 0;
-	NRF_I2S->EVENTS_TXPTRUPD = 0;
-	NRF_I2S->EVENTS_STOPPED = 0;
-	NVIC_ClearPendingIRQ(I2S_IRQn);
+#if IOSONATA_NRF_TDM_AUDIO
+	nrf_tdm_disable(NRF_AUDIO);
+#else
+	NRF_AUDIO->ENABLE = 0;
+#endif
+	NRF_AUDIO->EVENTS_RXPTRUPD = 0;
+	NRF_AUDIO->EVENTS_TXPTRUPD = 0;
+	NRF_AUDIO->EVENTS_STOPPED = 0;
+	NVIC_ClearPendingIRQ(AUDIO_IRQn);
 #if defined(NRF53_SERIES)
 	nRF53AudioClockStop();
 #endif
@@ -242,6 +317,11 @@ static void nRFxI2SDisable(DevIntrf_t * const pDev)
 
 static void nRFxI2SEnable(DevIntrf_t * const pDev)
 {
+#if IOSONATA_NRF_TDM_AUDIO
+	bool rxEnabled;
+	bool txEnabled;
+#endif
+
 #if defined(NRF53_SERIES)
 	if (!nRF53AudioClockStart())
 	{
@@ -249,8 +329,6 @@ static void nRFxI2SEnable(DevIntrf_t * const pDev)
 		return;
 	}
 #endif
-	// Restart with empty application queues. DMA buffers are reset below;
-	// retaining queued blocks would replay stale audio after a stop.
 	if (s_pI2SDev->hRxFifo != NULL)
 	{
 		CFifoFlush(s_pI2SDev->hRxFifo);
@@ -259,39 +337,71 @@ static void nRFxI2SEnable(DevIntrf_t * const pDev)
 	{
 		CFifoFlush(s_pI2SDev->hTxFifo);
 	}
-	NRF_I2S->CONFIG.RXEN = (NRF_I2S->PSEL.SDIN != 0xFFFFFFFFUL) ? 1 : 0;
-	NRF_I2S->CONFIG.TXEN = (NRF_I2S->PSEL.SDOUT != 0xFFFFFFFFUL) ? 1 : 0;
-	NRF_I2S->CONFIG.MCKEN = (NRF_I2S->PSEL.MCK != 0xFFFFFFFFUL) ? 1 : 0;
-	NRF_I2S->RXD.PTR = (uint32_t)s_I2S_RxBuffer[0];
-	NRF_I2S->TXD.PTR = (uint32_t)s_I2S_TxBuffer[0];
-	NRF_I2S->RXTXD.MAXCNT = s_BlockWords;
+#if IOSONATA_NRF_TDM_AUDIO
+	rxEnabled = NRF_AUDIO->PSEL.SDIN != UINT32_MAX;
+	txEnabled = NRF_AUDIO->PSEL.SDOUT != UINT32_MAX;
+	if (rxEnabled && txEnabled)
+	{
+		nrf_tdm_transfer_direction_set(NRF_AUDIO, NRF_TDM_RXTXEN_DUPLEX);
+	}
+	else if (rxEnabled)
+	{
+		nrf_tdm_transfer_direction_set(NRF_AUDIO, NRF_TDM_RXTXEN_RX);
+	}
+	else if (txEnabled)
+	{
+		nrf_tdm_transfer_direction_set(NRF_AUDIO, NRF_TDM_RXTXEN_TX);
+	}
+	else
+	{
+		s_Running = false;
+		return;
+	}
+	nrf_tdm_mck_set(NRF_AUDIO, NRF_AUDIO->PSEL.MCK != UINT32_MAX);
+	nrf_tdm_rx_buffer_set(NRF_AUDIO, s_I2S_RxBuffer[0]);
+	nrf_tdm_tx_buffer_set(NRF_AUDIO, s_I2S_TxBuffer[0]);
+	nrf_tdm_rx_count_set(NRF_AUDIO, s_BlockWords);
+	nrf_tdm_tx_count_set(NRF_AUDIO, s_BlockWords);
+#else
+	NRF_AUDIO->CONFIG.RXEN = (NRF_AUDIO->PSEL.SDIN != 0xFFFFFFFFUL) ? 1 : 0;
+	NRF_AUDIO->CONFIG.TXEN = (NRF_AUDIO->PSEL.SDOUT != 0xFFFFFFFFUL) ? 1 : 0;
+	NRF_AUDIO->CONFIG.MCKEN = (NRF_AUDIO->PSEL.MCK != 0xFFFFFFFFUL) ? 1 : 0;
+	NRF_AUDIO->RXD.PTR = (uint32_t)s_I2S_RxBuffer[0];
+	NRF_AUDIO->TXD.PTR = (uint32_t)s_I2S_TxBuffer[0];
+	NRF_AUDIO->RXTXD.MAXCNT = s_BlockWords;
+#endif
 	s_RxEventCount = 0;
 	s_TxEventCount = 0;
 	s_RxReady = false;
 	s_TxPending = false;
 	memset(s_I2S_RxBuffer, 0, sizeof(s_I2S_RxBuffer));
 	memset(s_I2S_TxBuffer, 0, sizeof(s_I2S_TxBuffer));
-	NRF_I2S->EVENTS_RXPTRUPD = 0;
-	NRF_I2S->EVENTS_TXPTRUPD = 0;
-	NRF_I2S->EVENTS_STOPPED = 0;
-	NRF_I2S->ENABLE = I2S_ENABLE_ENABLE_Msk;
+	NRF_AUDIO->EVENTS_RXPTRUPD = 0;
+	NRF_AUDIO->EVENTS_TXPTRUPD = 0;
+	NRF_AUDIO->EVENTS_STOPPED = 0;
+#if IOSONATA_NRF_TDM_AUDIO
+	nrf_tdm_enable(NRF_AUDIO);
+#else
+	NRF_AUDIO->ENABLE = I2S_ENABLE_ENABLE_Msk;
+#endif
 	if (s_IntEnabled)
 	{
-		NRF_I2S->INTEN = I2S_INTEN_RXPTRUPD_Msk |
-			I2S_INTEN_TXPTRUPD_Msk | I2S_INTEN_STOPPED_Msk;
-		NVIC_ClearPendingIRQ(I2S_IRQn);
-		NVIC_EnableIRQ(I2S_IRQn);
+		nRFxAudioInterruptsEnable();
+		NVIC_ClearPendingIRQ(AUDIO_IRQn);
+		NVIC_EnableIRQ(AUDIO_IRQn);
 	}
 	s_Running = true;
-	NRF_I2S->TASKS_START = 1;
+	NRF_AUDIO->TASKS_START = 1;
 }
 
 static void nRFxI2SPowerOff(DevIntrf_t * const pDev)
 {
 	nRFxI2SDisable(pDev);
-	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC);
-	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC) = 1;
-	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC) = 0;
+#if !IOSONATA_NRF_TDM_AUDIO
+	*(volatile uint32_t *)((uint32_t)NRF_AUDIO_BASE + 0xFFC);
+	*(volatile uint32_t *)((uint32_t)NRF_AUDIO_BASE + 0xFFC) = 1;
+	*(volatile uint32_t *)((uint32_t)NRF_AUDIO_BASE + 0xFFC) = 0;
+#endif
 }
 
 static uint32_t nRFxI2SGetRate(DevIntrf_t * const pDev)
@@ -304,17 +414,48 @@ static uint32_t nRFxI2SGetRate(DevIntrf_t * const pDev)
 static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	I2SDev_t *dev;
+#if IOSONATA_NRF_TDM_AUDIO
+	uint32_t diff;
+	uint32_t target;
+	uint32_t width;
+	int idx;
+#endif
 
 	dev = (I2SDev_t *)pDev->pDevData;
 	if (dev == nullptr || Rate == 0 || s_Running)
 	{
 		return 0;
 	}
-#if defined(NRF53_SERIES)
+#if IOSONATA_NRF_TDM_AUDIO
+	diff = UINT32_MAX;
+	idx = 0;
+	width = dev->SampleWidth << 4;
+	target = Rate * width;
+	for (int i = 0; i < s_NbFreq; i++)
+	{
+		uint32_t actual;
+		uint32_t d;
+
+		actual = s_MClkFreqTable[i].Freq;
+		d = actual > target ? actual - target : target - actual;
+		if (d < diff)
+		{
+			idx = i;
+			diff = d;
+		}
+	}
+	s_TdmCfg.mck_setup = s_MClkFreqTable[idx].MckDiv;
+	s_TdmCfg.sck_setup = s_MClkFreqTable[idx].SckDiv;
+	nrf_tdm_configure(NRF_AUDIO, &s_TdmCfg);
+	nrf_tdm_mck_configure(NRF_AUDIO, NRF_TDM_SRC_PCLK32M, false);
+	nrf_tdm_sck_configure(NRF_AUDIO, NRF_TDM_SRC_PCLK32M, false);
+	dev->MClkFreq = s_MClkFreqTable[idx].Freq;
+	dev->Freq = s_MClkFreqTable[idx].Freq / width;
+	return dev->Freq;
+#elif defined(NRF53_SERIES)
 	unsigned idx = 0;
 	uint32_t diff = UINT32_MAX;
 
-	// Keep the first (lower) rate when two entries are equally close.
 	for (unsigned i = 0; i < sizeof(s_AudioRates) / sizeof(s_AudioRates[0]); i++)
 	{
 		uint32_t actual = s_AudioRates[i].Rate;
@@ -336,9 +477,9 @@ static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	{
 		return 0;
 	}
-	NRF_I2S->CONFIG.CLKCONFIG = I2S_CONFIG_CLKCONFIG_CLKSRC_ACLK;
-	NRF_I2S->CONFIG.MCKFREQ = s_AudioRates[idx].MckReg;
-	NRF_I2S->CONFIG.RATIO = s_AudioRates[idx].RatioReg;
+	NRF_AUDIO->CONFIG.CLKCONFIG = I2S_CONFIG_CLKCONFIG_CLKSRC_ACLK;
+	NRF_AUDIO->CONFIG.MCKFREQ = s_AudioRates[idx].MckReg;
+	NRF_AUDIO->CONFIG.RATIO = s_AudioRates[idx].RatioReg;
 	dev->MClkFreq = s_AudioRates[idx].Mclk;
 	dev->Freq = s_AudioRates[idx].Rate;
 	return dev->Freq;
@@ -390,12 +531,12 @@ static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		return 0;
 	}
 	dev->MClkFreq = s_MClkFreqTable[idx].Freq;
-	NRF_I2S->CONFIG.MCKFREQ = s_MClkFreqTable[idx].RegVal;
+	NRF_AUDIO->CONFIG.MCKFREQ = s_MClkFreqTable[idx].RegVal;
 	for (int i = 0; i < s_NbRatio; i++)
 	{
 		if (s_Ratio[i] == (uint32_t)ratio)
 		{
-			NRF_I2S->CONFIG.RATIO = i;
+			NRF_AUDIO->CONFIG.RATIO = i;
 			break;
 		}
 	}
@@ -418,14 +559,14 @@ static void nRFxI2SService(void)
 	}
 
 	byteCount = s_BlockWords * sizeof(uint32_t);
-	event = NRF_I2S->EVENTS_RXPTRUPD;
+	event = NRF_AUDIO->EVENTS_RXPTRUPD;
 	if (event != 0)
 	{
-		NRF_I2S->EVENTS_RXPTRUPD = 0;
+		NRF_AUDIO->EVENTS_RXPTRUPD = 0;
 		complete = s_RxEventCount;
 		next = (complete + 1U) & 1U;
-		NRF_I2S->RXD.PTR = (uint32_t)s_I2S_RxBuffer[next];
-		s_RxEventCount++;
+		NRF_AUDIO->RXD.PTR = (uint32_t)s_I2S_RxBuffer[next];
+		s_RxEventCount = s_RxEventCount + 1U;
 		if (complete > 0)
 		{
 			complete = (complete - 1U) & 1U;
@@ -450,10 +591,10 @@ static void nRFxI2SService(void)
 		}
 	}
 
-	event = NRF_I2S->EVENTS_TXPTRUPD;
+	event = NRF_AUDIO->EVENTS_TXPTRUPD;
 	if (event != 0)
 	{
-		NRF_I2S->EVENTS_TXPTRUPD = 0;
+		NRF_AUDIO->EVENTS_TXPTRUPD = 0;
 		next = (s_TxEventCount + 1U) & 1U;
 		pFifo = nullptr;
 		if (s_pI2SDev->hTxFifo != NULL &&
@@ -474,13 +615,13 @@ static void nRFxI2SService(void)
 		{
 			memset(s_I2S_TxBuffer[next], 0, byteCount);
 		}
-		NRF_I2S->TXD.PTR = (uint32_t)s_I2S_TxBuffer[next];
-		s_TxEventCount++;
+		NRF_AUDIO->TXD.PTR = (uint32_t)s_I2S_TxBuffer[next];
+		s_TxEventCount = s_TxEventCount + 1U;
 	}
 
-	if (NRF_I2S->EVENTS_STOPPED != 0)
+	if (NRF_AUDIO->EVENTS_STOPPED != 0)
 	{
-		NRF_I2S->EVENTS_STOPPED = 0;
+		NRF_AUDIO->EVENTS_STOPPED = 0;
 		s_Running = false;
 	}
 }
@@ -525,7 +666,7 @@ int nRFxI2SRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 			memcpy(pBuff, s_I2S_RxReady, blockBytes);
 			return blockBytes;
 		}
-		if ((NRF_I2S->INTEN & I2S_INTEN_RXPTRUPD_Msk) == 0)
+		if (!nRFxAudioRxInterruptEnabled())
 		{
 			nRFxI2SService();
 		}
@@ -605,6 +746,10 @@ void nRFxI2SReset(DevIntrf_t * const pDev)
  */
 bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 {
+#if IOSONATA_NRF_TDM_AUDIO
+	nrf_tdm_pins_t pins;
+#endif
+
 	if (pDev == nullptr || pCfgData == nullptr ||
 		pCfgData->pIOPinMap == nullptr || pCfgData->NbIOPins < 3 ||
 		pCfgData->NbIOPins > 5 || pCfgData->Freq == 0 ||
@@ -619,9 +764,11 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 
 	pDev->DevIntrf.pDevData = pDev;
 
+#if !IOSONATA_NRF_TDM_AUDIO
 	// Force power on in case it was powered off previously
-	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC);
-	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC) = 1;
+	*(volatile uint32_t *)((uint32_t)NRF_AUDIO_BASE + 0xFFC);
+	*(volatile uint32_t *)((uint32_t)NRF_AUDIO_BASE + 0xFFC) = 1;
+#endif
 
 	pDev->hRxFifo = NULL;
 	pDev->hTxFifo = NULL;
@@ -653,46 +800,112 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 
 	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
 
-	NRF_I2S->PSEL.SCK = (pDev->pIOPinMap[I2S_SCK_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_SCK_IOPIN_IDX].PinNo;
-	NRF_I2S->PSEL.LRCK = (pDev->pIOPinMap[I2S_WS_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_WS_IOPIN_IDX].PinNo;
-	NRF_I2S->PSEL.SDIN = pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PinNo >= 0 ?
+#if IOSONATA_NRF_TDM_AUDIO
+	pins.sck_pin = (pDev->pIOPinMap[I2S_SCK_IOPIN_IDX].PortNo << 5) |
+		pDev->pIOPinMap[I2S_SCK_IOPIN_IDX].PinNo;
+	pins.fsync_pin = (pDev->pIOPinMap[I2S_WS_IOPIN_IDX].PortNo << 5) |
+		pDev->pIOPinMap[I2S_WS_IOPIN_IDX].PinNo;
+	pins.sdin_pin = pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PinNo >= 0 ?
+		((pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PortNo << 5) |
+		 pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PinNo) :
+		NRF_TDM_PIN_NOT_CONNECTED;
+	pins.sdout_pin = NRF_TDM_PIN_NOT_CONNECTED;
+	pins.mck_pin = NRF_TDM_PIN_NOT_CONNECTED;
+	if (pDev->NbIOPins > 3 && pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PinNo >= 0)
+	{
+		pins.sdout_pin = (pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PortNo << 5) |
+			pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PinNo;
+	}
+	if (pDev->NbIOPins > 4 && pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PinNo >= 0)
+	{
+		pins.mck_pin = (pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PortNo << 5) |
+			pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PinNo;
+	}
+	nrf_tdm_pins_set(NRF_AUDIO, &pins);
+
+	memset(&s_TdmCfg, 0, sizeof(s_TdmCfg));
+	s_TdmCfg.mode = pCfgData->Mode == I2SMODE_SLAVE ?
+		NRF_TDM_MODE_SLAVE : NRF_TDM_MODE_MASTER;
+	s_TdmCfg.sample_width = pDev->SampleWidth == 2 ?
+		NRF_TDM_SWIDTH_16BIT : NRF_TDM_SWIDTH_24BIT;
+	s_TdmCfg.num_of_channels = NRF_TDM_CHANNELS_COUNT_2;
+	s_TdmCfg.sck_polarity = NRF_TDM_POLARITY_POSEDGE;
+#if NRF_TDM_HAS_CONFIG_FSYNC_DURATION_ENUM
+	s_TdmCfg.fsync_duration = NRF_TDM_FSYNC_DURATION_CHANNEL;
+#else
+	s_TdmCfg.fsync_duration = pCfgData->SampleWidth;
+#endif
+	if (pCfgData->Format == I2SFMT_NORMAL)
+	{
+		s_TdmCfg.alignment = NRF_TDM_ALIGN_LEFT;
+		s_TdmCfg.fsync_polarity = NRF_TDM_POLARITY_NEGEDGE;
+		s_TdmCfg.channel_delay = NRF_TDM_CHANNEL_DELAY_1CK;
+	}
+	else
+	{
+		s_TdmCfg.alignment = pCfgData->Format == I2SFMT_ALIGN_RIGHT ?
+			NRF_TDM_ALIGN_RIGHT : NRF_TDM_ALIGN_LEFT;
+		s_TdmCfg.fsync_polarity = NRF_TDM_POLARITY_POSEDGE;
+		s_TdmCfg.channel_delay = NRF_TDM_CHANNEL_DELAY_NONE;
+	}
+	if (pCfgData->Chan == I2SCHAN_LEFT)
+	{
+		s_TdmCfg.channels = (nrf_tdm_channel_mask_t)(
+			NRF_TDM_CHANNEL_RX0_MASK | NRF_TDM_CHANNEL_TX0_MASK);
+	}
+	else if (pCfgData->Chan == I2SCHAN_RIGHT)
+	{
+		s_TdmCfg.channels = (nrf_tdm_channel_mask_t)(
+			NRF_TDM_CHANNEL_RX1_MASK | NRF_TDM_CHANNEL_TX1_MASK);
+	}
+	else
+	{
+		s_TdmCfg.channels = (nrf_tdm_channel_mask_t)(
+			NRF_TDM_CHANNEL_RX0_MASK | NRF_TDM_CHANNEL_RX1_MASK |
+			NRF_TDM_CHANNEL_TX0_MASK | NRF_TDM_CHANNEL_TX1_MASK);
+	}
+#else
+	NRF_AUDIO->PSEL.SCK = (pDev->pIOPinMap[I2S_SCK_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_SCK_IOPIN_IDX].PinNo;
+	NRF_AUDIO->PSEL.LRCK = (pDev->pIOPinMap[I2S_WS_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_WS_IOPIN_IDX].PinNo;
+	NRF_AUDIO->PSEL.SDIN = pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PinNo >= 0 ?
 		((pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_SDI_IOPIN_IDX].PinNo) :
 		0xFFFFFFFFUL;
-	NRF_I2S->PSEL.SDOUT = -1;
-	NRF_I2S->PSEL.MCK = -1;
+	NRF_AUDIO->PSEL.SDOUT = -1;
+	NRF_AUDIO->PSEL.MCK = -1;
 
 	if (pDev->NbIOPins > 3)
 	{
-		NRF_I2S->PSEL.SDOUT = pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PinNo >= 0 ?
+		NRF_AUDIO->PSEL.SDOUT = pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PinNo >= 0 ?
 			((pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_SDO_IOPIN_IDX].PinNo) :
 			0xFFFFFFFFUL;
 	}
 
 	if (pDev->NbIOPins > 4)
 	{
-		NRF_I2S->PSEL.MCK = pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PinNo >= 0 ?
+		NRF_AUDIO->PSEL.MCK = pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PinNo >= 0 ?
 			((pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PortNo << 5) | pDev->pIOPinMap[I2S_MCK_IOPIN_IDX].PinNo) :
 			0xFFFFFFFFUL;
 	}
 
 	if (pCfgData->Mode == I2SMODE_SLAVE)
 	{
-		NRF_I2S->CONFIG.MODE = I2S_CONFIG_MODE_MODE_Slave;
+		NRF_AUDIO->CONFIG.MODE = I2S_CONFIG_MODE_MODE_Slave;
 	}
 	else
 	{
-		NRF_I2S->CONFIG.MODE = I2S_CONFIG_MODE_MODE_Master;
+		NRF_AUDIO->CONFIG.MODE = I2S_CONFIG_MODE_MODE_Master;
 	}
 
-	NRF_I2S->CONFIG.FORMAT = 0;
-	NRF_I2S->CONFIG.SWIDTH = pDev->SampleWidth == 2 ? 1U : 2U;
-	NRF_I2S->CONFIG.CHANNELS = pCfgData->Chan;
+	NRF_AUDIO->CONFIG.FORMAT = 0;
+	NRF_AUDIO->CONFIG.SWIDTH = pDev->SampleWidth == 2 ? 1U : 2U;
+	NRF_AUDIO->CONFIG.CHANNELS = pCfgData->Chan;
 
 	if (pCfgData->Format != I2SFMT_NORMAL)
 	{
-		NRF_I2S->CONFIG.FORMAT = 1;
-		NRF_I2S->CONFIG.ALIGN = pCfgData->Format == I2SFMT_ALIGN_RIGHT ? 1 : 0;
+		NRF_AUDIO->CONFIG.FORMAT = 1;
+		NRF_AUDIO->CONFIG.ALIGN = pCfgData->Format == I2SFMT_ALIGN_RIGHT ? 1 : 0;
 	}
+#endif
 
 	if (nRFxI2SSetRate(&pDev->DevIntrf, pCfgData->Freq) == 0)
 	{
@@ -721,29 +934,36 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	s_BlockWords = I2S_BUFF_MAX;
-	NRF_I2S->RXD.PTR = (uint32_t)s_I2S_RxBuffer[0];
-	NRF_I2S->TXD.PTR = (uint32_t)s_I2S_TxBuffer[0];
-	NRF_I2S->RXTXD.MAXCNT = s_BlockWords;
-	NRF_I2S->INTEN = 0;
-	NRF_I2S->EVENTS_RXPTRUPD = 0;
-	NRF_I2S->EVENTS_STOPPED = 0;
-	NRF_I2S->EVENTS_TXPTRUPD = 0;
+#if IOSONATA_NRF_TDM_AUDIO
+	nrf_tdm_rx_buffer_set(NRF_AUDIO, s_I2S_RxBuffer[0]);
+	nrf_tdm_tx_buffer_set(NRF_AUDIO, s_I2S_TxBuffer[0]);
+	nrf_tdm_rx_count_set(NRF_AUDIO, s_BlockWords);
+	nrf_tdm_tx_count_set(NRF_AUDIO, s_BlockWords);
+#else
+	NRF_AUDIO->RXD.PTR = (uint32_t)s_I2S_RxBuffer[0];
+	NRF_AUDIO->TXD.PTR = (uint32_t)s_I2S_TxBuffer[0];
+	NRF_AUDIO->RXTXD.MAXCNT = s_BlockWords;
+#endif
+	nRFxAudioInterruptsDisable();
+	NRF_AUDIO->EVENTS_RXPTRUPD = 0;
+	NRF_AUDIO->EVENTS_STOPPED = 0;
+	NRF_AUDIO->EVENTS_TXPTRUPD = 0;
 
 	s_IntEnabled = pCfgData->bIntEn;
-	NVIC_DisableIRQ(I2S_IRQn);
-	NVIC_ClearPendingIRQ(I2S_IRQn);
+	NVIC_DisableIRQ(AUDIO_IRQn);
+	NVIC_ClearPendingIRQ(AUDIO_IRQn);
 	if (s_IntEnabled)
 	{
-		NVIC_SetPriority(I2S_IRQn, pCfgData->IntPrio);
+		NVIC_SetPriority(AUDIO_IRQn, pCfgData->IntPrio);
 	}
 
 	nRFxI2SEnable(&pDev->DevIntrf);
 	if (!s_Running)
 	{
 		// Audio clock startup failed. Do not report a usable I2S device.
-		NRF_I2S->INTEN = 0;
-		NVIC_DisableIRQ(I2S_IRQn);
-		NVIC_ClearPendingIRQ(I2S_IRQn);
+		nRFxAudioInterruptsDisable();
+		NVIC_DisableIRQ(AUDIO_IRQn);
+		NVIC_ClearPendingIRQ(AUDIO_IRQn);
 		nRFxI2SDisable(&pDev->DevIntrf);
 		return false;
 	}
@@ -751,7 +971,9 @@ bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 	return true;
 }
 
-#if defined(NRF53_SERIES)
+#if IOSONATA_NRF_TDM_AUDIO
+extern "C" void TDM_IRQHandler()
+#elif defined(NRF53_SERIES)
 extern "C" void I2S0_IRQHandler()
 #else
 extern "C" void I2S_IRQHandler()
