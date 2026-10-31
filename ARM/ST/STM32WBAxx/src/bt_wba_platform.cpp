@@ -870,7 +870,7 @@ extern "C" void BAES_EcbCrypt(const uint8_t *pKey, const uint8_t *pIn,
 
 		if (p == nullptr)
 		{
-			break;
+			continue;
 		}
 		st = p->Cipher(CRYPTO_CIPHER_ECB, bEnc, key, nullptr, 0,
 					   input, sizeof(input), output);
@@ -905,7 +905,7 @@ static bool BtWbaCmacEncrypt(const uint8_t *pIn, uint8_t *pOut)
 
 		if (p == nullptr)
 		{
-			break;
+			continue;
 		}
 		st = p->Cipher(CRYPTO_CIPHER_ECB, 1, key, nullptr, 0, pIn, 16, pOut);
 	}
@@ -1020,7 +1020,7 @@ extern "C" int BAES_CcmCrypt(uint8_t Mode, const uint8_t *pKey,
 
 		if (p == nullptr)
 		{
-			break;
+			continue;
 		}
 		if (Mode == 0U)
 		{

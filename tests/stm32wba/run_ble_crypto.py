@@ -92,8 +92,13 @@ public:
 	}
 };
 #define CRYPTO_WBA_AES_MEMSIZE sizeof(CryptoWbaAes)
+static bool s_TestCreateFail;
 static CryptoWbaAes *CryptoWbaAesCreate(void *pMem, size_t)
 {
+	if (s_TestCreateFail)
+	{
+		return nullptr;
+	}
 	CryptoWbaAes *p = new (pMem) CryptoWbaAes;
 	p->Enable();
 	return p;
@@ -290,6 +295,9 @@ static void FailureChecks()
 
 int main()
 {
+	s_TestCreateFail = true;
+	KnownAnswers();
+	s_TestCreateFail = false;
 	for (int busy = 0; busy < 2; busy++)
 	{
 		s_TestBusy = busy;

@@ -97,7 +97,7 @@ CryptoWbaRng *CryptoWbaRngCreate(void *pMem, size_t MemSize);
 /// primitive, held under one acquisition per operation.
 class CryptoWbaAes : public CryptoSoftAes {
 public:
-	CryptoWbaAes() { vbValid = false; std::atomic_flag_clear(&vOpBusy); }
+	CryptoWbaAes() { vbValid = false; }
 
 	bool Enable() override;
 	void Disable() override;
@@ -120,10 +120,14 @@ protected:
 					   uint8_t Out[16]) override;
 
 private:
+	CryptoWbaAes(const CryptoWbaAes &) = delete;
+	CryptoWbaAes &operator=(const CryptoWbaAes &) = delete;
+
 	bool OpAcquire() { return std::atomic_flag_test_and_set(&vOpBusy) == false; }
 	void OpRelease() { std::atomic_flag_clear(&vOpBusy); }
 
-	std::atomic_flag vOpBusy;
+	static std::atomic_flag vOpBusy;
+	static unsigned s_EnabledCount;
 };
 
 #define CRYPTO_WBA_AES_MEMSIZE		sizeof(CryptoWbaAes)
@@ -146,7 +150,6 @@ public:
 	CryptoWbaPka() {
 		vbValid = false;
 		vpRng = nullptr;
-		std::atomic_flag_clear(&vOpBusy);
 	}
 
 	void SetRng(RngEngine *pRng) { vpRng = pRng; }
@@ -182,10 +185,14 @@ protected:
 	RngEngine *vpRng;
 
 private:
+	CryptoWbaPka(const CryptoWbaPka &) = delete;
+	CryptoWbaPka &operator=(const CryptoWbaPka &) = delete;
+
 	bool OpAcquire() { return std::atomic_flag_test_and_set(&vOpBusy) == false; }
 	void OpRelease() { std::atomic_flag_clear(&vOpBusy); }
 
-	std::atomic_flag vOpBusy;
+	static std::atomic_flag vOpBusy;
+	static unsigned s_EnabledCount;
 };
 
 static_assert(sizeof(CryptoWbaPka::KeyCtx) <= CRYPTO_KEYCTX_MAX,

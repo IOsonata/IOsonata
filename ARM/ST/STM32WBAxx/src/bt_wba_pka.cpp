@@ -239,6 +239,10 @@ static void BtWbaPkaTask(void)
 		return;
 	}
 
+	if (!bOk)
+	{
+		CryptoSecureWipe(s_PkaBuf, sizeof(s_PkaBuf));
+	}
 	s_PkaErr = bOk ? 0 : 1;
 	s_PkaOp = BT_WBA_PKA_NONE;
 	PKACTRL_CB_Complete();
