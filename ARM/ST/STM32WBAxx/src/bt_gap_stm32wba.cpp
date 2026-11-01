@@ -713,7 +713,7 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr,
 		pConnParam->Latency,
 		timeout,
 		0,							// min CE length
-		0);							// max CE length
+		80);						// max CE hint: 50 ms, matching ST central sample
 
 	return ret == BLE_STATUS_SUCCESS;
 }
