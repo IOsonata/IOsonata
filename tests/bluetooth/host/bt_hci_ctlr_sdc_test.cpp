@@ -83,6 +83,7 @@ bool s_Enabled;
 int s_DisableCalls;
 uint8_t s_FailEventConfig;
 uint32_t s_EventLength;
+unsigned s_EventConfigCalls;
 bool s_EventExtended;
 int s_RandSourceCalls;
 int s_MpslInitCalls;
@@ -106,6 +107,7 @@ int32_t s_CfgRam;
 
 void Reset(void)
 {
+	BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_NONE, 0);
 	s_Basepri = 0;
 	s_Exception = 0;
 	s_LowPriority = 7;
@@ -127,6 +129,7 @@ void Reset(void)
 	s_DisableCalls = 0;
 	s_FailEventConfig = 0;
 	s_EventLength = 0;
+	s_EventConfigCalls = 0;
 	s_EventExtended = false;
 	s_RandSourceCalls = 0;
 	s_MpslInitCalls = 0;
@@ -255,6 +258,7 @@ void TestPeripheralSupportIsOnRequest(void)
 	CHECK(Supported("ext_adv"));
 	CHECK(Supported("peripheral") == false);
 	CHECK(s_EnableCalls == 1);
+	CHECK(s_EventConfigCalls == 0);
 
 	Reset();
 	cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
@@ -597,9 +601,12 @@ void TestAnUndersizedPoolStopsTheBringUp(void)
 // on every boot while the result went unread.
 void TestBringUpOrderAndFailures(void)
 {
-	Reset();
+	BtHciCtlrCfg_t cfg;
+	uint8_t advEnable[] = {1, 1, 0, 0, 0, 0};
+	uint8_t failure;
 
-	BtHciCtlrCfg_t cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
+	Reset();
+	cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
 	CHECK(Start(&cfg));
 	CHECK(s_MpslInitCalls == 1);
 	CHECK(s_InitCalls == 1);
@@ -648,17 +655,21 @@ void TestBringUpOrderAndFailures(void)
 	CHECK(Start(&cfg) == false);
 	CHECK(s_ArbiterStartCalls == 1);
 	CHECK(s_ArbiterStopCalls == 1);
-	// Failed post-enable HCI configuration must tear down the live controller.
-	for (uint8_t failure = 1; failure <= 2; failure++)
+	// Optional scheduling rejection must not disable an initialized controller.
+	for (failure = 1; failure <= 2; failure++)
 	{
 		Reset();
 		s_FailEventConfig = failure;
-		CHECK(Start(&cfg) == false);
+		CHECK(Start(&cfg));
 		CHECK(s_EnableCalls == 1);
-		CHECK(s_DisableCalls == 1);
-		CHECK(!s_Enabled);
-		CHECK(s_ArbiterStopCalls == 1);
-		CHECK(BtHciCtlrErrorGet() == BT_HCI_CTLR_ERROR_CTLR_INIT);
+		CHECK(s_DisableCalls == 0);
+		CHECK(s_Enabled);
+		CHECK(s_ArbiterStopCalls == 0);
+		CHECK(s_EventConfigCalls == 2);
+		CHECK(BtHciCtlrErrorGet() == BT_HCI_CTLR_ERROR_NONE);
+		CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE,
+			advEnable, sizeof(advEnable), nullptr, 0) == 0);
+		CHECK(std::strcmp(g_SdcHciCmdLast, "le_set_ext_adv_enable") == 0);
 	}
 
 }
@@ -973,6 +984,7 @@ extern "C" int32_t sdc_hci_data_put(uint8_t *)
 
 extern "C" uint8_t sdc_hci_cmd_vs_conn_event_extend(const sdc_hci_cmd_vs_conn_event_extend_t *pParams)
 {
+	s_EventConfigCalls++;
 	if (!s_Enabled || s_FailEventConfig == 1)
 	{
 		return 0x0c;
@@ -983,6 +995,7 @@ extern "C" uint8_t sdc_hci_cmd_vs_conn_event_extend(const sdc_hci_cmd_vs_conn_ev
 
 extern "C" uint8_t sdc_hci_cmd_vs_event_length_set(const sdc_hci_cmd_vs_event_length_set_t *pParams)
 {
+	s_EventConfigCalls++;
 	if (!s_Enabled || s_FailEventConfig == 2)
 	{
 		return 0x0c;
