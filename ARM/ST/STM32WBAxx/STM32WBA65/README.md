@@ -676,6 +676,19 @@ sleep timer clock before `BleStack_Init`: LSE when `g_McuOsc.LowPwrOsc.Type`
 is not `OSC_TYPE_RC`, LSI1 otherwise. Without it the link layer stops on a
 missing sleep clock source.
 
+`src/bt_app_stm32wba.cpp` replaces the `AppWait` of `AppRun` once the stack is
+initialized. Between radio events the link layer clears RADIOSMEN, so a sleep
+stops the radio bus clock, and after the wake up the sleep timer register keeps
+its value from before the sleep until the next sleep clock edge. The link layer
+waits for that edge in its time reads only when the sleep is reported with
+`LINKLAYER_PLAT_NotifyWFIEnter` and `LINKLAYER_PLAT_NotifyWFIExit`. `AppWait`
+reports it as the Cube sleep mode entry does: interrupts masked, application
+queue checked again, WFI, exit report, mask restored. Before that change the
+port slept with WFE and never reported the sleep, so the link layer scheduler
+could read the sleep timer from before the sleep at the start of a radio event.
+`tests/stm32wba/run_app_wait.py` checks the order; the throughput effect needs
+the DK1 BlePrbsRx run.
+
 ## Bluetooth in the library
 
 The Debug and Release configurations of `lib/ioc` include everything the ST

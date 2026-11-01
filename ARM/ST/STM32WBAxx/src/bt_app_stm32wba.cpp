@@ -70,6 +70,7 @@ SOFTWARE.
 #include "bt_wba_platform.h"
 
 #include "istddef.h"
+#include "app_evt_handler.h"
 #include "idelay.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
@@ -479,6 +480,43 @@ void BtAppCheckStatus(void)
 	{
 		BtDfuSmpCheckStatus();
 	}
+}
+
+// Wait of AppRun once the BLE stack runs. Between radio events the link layer
+// clears RADIOSMEN (LINKLAYER_PLAT_StopRadioEvt), so a sleep stops the radio
+// bus clock. After the wake up, the sleep timer register keeps its value from
+// before the sleep until the next sleep clock edge. The link layer scheduler
+// reads the time through llhwc_slptmr_get, which waits for that edge
+// (LINKLAYER_PLAT_WaitHclkRdy) only when the sleep was reported with
+// LINKLAYER_PLAT_NotifyWFIEnter and LINKLAYER_PLAT_NotifyWFIExit, as the Cube
+// sleep mode entry does around its WFI.
+//
+// Same order as the Cube sequencer idle: interrupts masked, queue checked
+// again, then WFI. WFI wakes on a pending interrupt while masked, so the exit
+// report samples the sleep timer before the radio interrupt reads it. On this
+// port, interrupt work reaches the loop through BtEvtQue, and the retry flags
+// are only left when the queue is full, so the queue check covers what the WFE
+// event register covers in the default wait.
+// Overrides the weak WFE default. C linkage, as declared in app_evt_handler.h.
+void AppWait(void)
+{
+	uint32_t state;
+
+	if (s_BtAppData.bInitialized == false)
+	{
+		__WFE();
+		return;
+	}
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (AppEvtHandlerPending() == false)
+	{
+		LINKLAYER_PLAT_NotifyWFIEnter();
+		__WFI();
+		LINKLAYER_PLAT_NotifyWFIExit();
+	}
+	__set_PRIMASK(state);
 }
 
 extern "C" void BtSmpBondWbaEraseBegin(void);
