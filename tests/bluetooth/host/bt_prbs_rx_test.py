@@ -29,9 +29,10 @@ static unsigned subscribes;
 static unsigned disconnects;
 static unsigned reportCount;
 static uint8_t actualPhy = 1;
-static unsigned phyRefused = 1;
+static unsigned phyRefused;
+static unsigned phyReads;
 static unsigned phyRequests;
-static unsigned dleRefused = 1;
+static unsigned dleRefused;
 static BtDevice_t peer;
 static char output[65536];
 static unsigned outputSize;
@@ -85,6 +86,7 @@ BtDevice_t *BtPeerFindByHdl(uint16_t)
 }
 bool BtGapReadPhy(uint16_t, uint8_t *tx, uint8_t *rx)
 {
+	phyReads++;
 	*tx = actualPhy;
 	*rx = actualPhy;
 	return true;
@@ -120,8 +122,9 @@ void BtAppDisconnectConn(uint16_t handle)
 	disconnects++;
 	BtAppEvtDisconnected(handle);
 }
-static void StartDiscovery(uint16_t)
+bool BtAppDiscoverDevice(BtDevice_t *)
 {
+	return true;
 }
 '''
 code += source[start:end]
@@ -145,6 +148,8 @@ static void RunTrial(unsigned packets)
 	unsigned idx;
 	unsigned start = nowMs;
 	unsigned before = reportCount;
+	unsigned readsBefore = phyReads;
+	unsigned requestsBefore = phyRequests;
 
 	for (elapsed = 0; elapsed < PRBS_RX_DURATION_MS; elapsed++)
 	{
@@ -170,6 +175,7 @@ static void RunTrial(unsigned packets)
 	nowMs = start + PRBS_RX_DURATION_MS;
 	AppCheckStatus();
 	assert(reportCount - before == 60);
+	assert(phyReads == readsBefore && phyRequests == requestsBefore);
 	assert(s_Benchmark.FinalPrinted && s_Benchmark.Finished && s_Disconnected);
 	assert(s_Benchmark.Stats.Bytes == packets * 4000 * 244);
 	assert(s_Benchmark.Stats.Notifications == packets * 4000);
@@ -191,12 +197,12 @@ int main()
 	assert(s_Benchmark.Queue != nullptr && CFifoAvail(s_Benchmark.Queue) == 12);
 	peer.Conn.MaxMtu = 247;
 	BtAppEvtConnected(0);
-	assert(s_PhyPending && s_DlePending && !s_Benchmark.Failed);
+	assert(!s_Benchmark.Failed);
 	s_ValueHdl = 0x12;
 	s_CccdHdl = 0x13;
 	nowMs = 1000;
 	AppCheckStatus();
-	assert(subscribes == 1 && !s_PhyPending && !s_DlePending);
+	assert(subscribes == 1 && !s_Benchmark.Failed);
 	BtGattClientNotified(1, 0x12, invalid, sizeof(invalid));
 	BtGattClientNotified(0, 0x14, invalid, sizeof(invalid));
 	assert(s_Benchmark.Stats.Bytes == 0);
@@ -227,7 +233,17 @@ int main()
 	actualPhy = 1;
 	phyRequests = 0;
 	BtAppEvtConnected(0);
-	assert(phyRequests == 1 && !s_PhyPending);
+	assert(phyRequests == 1 && !s_Benchmark.Failed);
+	phyRefused = 1;
+	BtAppEvtConnected(0);
+	assert(s_Benchmark.Failed);
+	AppCheckStatus();
+	assert(s_Benchmark.FinalPrinted && !s_Benchmark.Complete);
+	dleRefused = 1;
+	BtAppEvtConnected(0);
+	assert(s_Benchmark.Failed);
+	AppCheckStatus();
+	assert(s_Benchmark.FinalPrinted && !s_Benchmark.Complete);
 	// Aborted 1M startup must not silently advance to the 2M trial.
 	s_TestPhy = 1;
 	actualPhy = 1;
