@@ -95,8 +95,8 @@ The benchmark uses one connection, negotiates MTU 247 and starts at 1M PHY. It e
 SVCCTL event callback needed for automatic GAP procedure handling. ST's host
 80-block memory margin is retained. Debug and Release use the Basic Plus
 controller library and matching `ble_basic_plus` headers, as IOsonata does.
-The host NVM cache is 384 64-bit words, with ST's two management words
-reserved separately. Unused long-write/extra-data pointers are NULL.
+The host NVM cache is 384 64-bit words, registered at its actual size with
+ST's NVM manager, which accounts for its own metadata. Unused long-write/extra-data pointers are NULL.
 RF power table 0 and the controller's default TX power match BlePrbsRx.
 ST's native clock/power setup and NVM persistence implementation remain in use. The middleware
 still comes from `CubeRoot`; use the same middleware revision as IOsonata

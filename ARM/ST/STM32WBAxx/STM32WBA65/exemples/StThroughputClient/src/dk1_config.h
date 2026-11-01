@@ -4,7 +4,6 @@
 
 #include "app_conf.h"
 #include "ble_conf.h"
-#include "simple_nvm_arbiter_conf.h"
 
 /* GAP events must reach the automatic client, not the interactive sample. */
 #undef BLE_CFG_MAX_NBR_CB
@@ -41,9 +40,8 @@
 #define CFG_BLE_EXTRA_DATA_BUF_SIZE 0
 #undef CFG_BLE_LONG_WRITE_DATA_BUF_SIZE
 #define CFG_BLE_LONG_WRITE_DATA_BUF_SIZE 0
-/* 384 host cache words plus the two words reserved by ST's NVM manager. */
-#undef SNVMA_NVM_ID_1_BUFFER_1_SIZE
-#define SNVMA_NVM_ID_1_BUFFER_1_SIZE ((384U + 2U) * 8U)
+/* Host cache capacity in 64-bit words, registered with ST's NVM manager. */
+#define CFG_BLE_NVM_MAX_SIZE 384
 #undef CFG_RF_TX_POWER_TABLE_ID
 #define CFG_RF_TX_POWER_TABLE_ID 0
 #undef CFG_BLE_ATT_MTU_MAX

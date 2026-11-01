@@ -136,8 +136,8 @@ typedef struct
 #define BLE_DYN_ALLOC_SIZE \
         (BLE_TOTAL_BUFFER_SIZE(CFG_BLE_NUM_LINK, MBLOCK_COUNT, (CFG_BLE_EATT_BEARER_PER_LINK * CFG_BLE_NUM_LINK)))
 
-/* 2 words are reserved for SNVMA management */
-#define BLE_HOST_NVM_SIZE_U64          ((SNVMA_NVM_ID_1_BUFFER_1_SIZE / sizeof(uint64_t) ) - 2)
+/* SNVMA_Register receives the actual cache size and accounts for metadata. */
+#define BLE_HOST_NVM_SIZE_U64          CFG_BLE_NVM_MAX_SIZE
 
 #define BLE_DEFAULT_PIN            (111111) /* Default PIN code for pairing */
 
@@ -294,8 +294,6 @@ void APP_BLE_Deinit(void)
   memset(&gatt_buffer[0], 0, sizeof(gatt_buffer));
   memset(&host_event_buffer[0], 0, sizeof(host_event_buffer));
   memset(&host_nvm_buffer[0], 0, sizeof(host_nvm_buffer));
-  memset(&long_write_buffer[0], 0, sizeof(long_write_buffer));
-  memset(&extra_data_buffer[0], 0, sizeof(extra_data_buffer));
 
   /* De-initialize BLE related modules */
   BAES_Reset( );

@@ -19,7 +19,6 @@ headers = "\n".join(f.read_text() for f in (wpan / "stack/include/auto").glob("*
 with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
     temp = Path(tmp)
     mocks = {
-        "simple_nvm_arbiter_conf.h": "",
         "app_conf.h": "#include \"cmsis_compiler.h\"\n#define CFG_BD_ADDRESS_TYPE 0\n",
         "app_common.h": "#include <stdint.h>\n#define CFG_TASK_DISCOVER_SERVICES_ID 2\n#define CFG_TASK_DATA_FROM_SERVER_ID 14\n#define CFG_SEQ_PRIO_0 0\n",
         "cmsis_compiler.h": "#include <stdint.h>\n#define __PACKED_STRUCT struct __attribute__((packed))\n#define __PACKED_UNION union __attribute__((packed))\n#define __STATIC_INLINE static inline\n",
@@ -69,10 +68,17 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
     cfg += "".join("#undef " + name + "\n" for name in re.findall(r"#ifndef (CFG_BLE_\w+)", defaults))
     cfg += defaults
     cfg += ios[ios.index("static uint32_t s_BleStackRam"):ios.index("// A strong reference must pull")]
+    # Compile the complete deinitializer too, so removed buffers cannot leave
+    # stale references outside HOST_BLE_Init.
+    cfg += 'typedef struct { int unused; } tListNode; static tListNode BleAsynchEventQueue;\n'
+    cfg += '#define TRUE 1\n#define aci_reset(a,b) ((void)0)\n#define BAES_Reset() ((void)0)\n#define PKACTRL_Reset() ((void)0)\n#define BLE_TIMER_Deinit() ((void)0)\n'
+    cfg += '#define LST_is_empty(q) 1\n#define LST_remove_tail(q,p) (*(p) = NULL)\n#define AMM_Free(p) 0\n'
+    start = native.index("void APP_BLE_Deinit(void)\n{")
+    cfg += native[start:native.index("SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification", start)]
     start = ios.index("BleStack_init_t init;")
     cfg += 'static void TestIosInit(void) {\n' + ios[start:ios.index("BtWbaPlatformInit();", start)]
     cfg += 'assert(BleStack_Init(&init) == 0); }\n'
-    cfg += 'int main(void) { TestIosInit(); assert(HOST_BLE_Init() == 0); assert(initCalls == 2); return 0; }\n'
+    cfg += 'int main(void) { TestIosInit(); assert(HOST_BLE_Init() == 0); assert(initCalls == 2); APP_BLE_Deinit(); return 0; }\n'
     (temp / "config.c").write_text(cfg)
     for opt in ("-O0", "-O2"):
         exe = temp / "test"
