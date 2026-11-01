@@ -29,6 +29,7 @@ static bool failArm, refuseQueue, failCreate;
 static sw_timer_t timers[2];
 static unsigned created;
 static uint32_t rawBase;
+static bool alternateRatio;
 static void (*queued)(uint32_t, void *);
 static uint32_t BtWbaIrqSave() { uint32_t saved = irq; irq = 1; return saved; }
 static void BtWbaIrqRestore(uint32_t saved) { irq = saved; }
@@ -47,6 +48,11 @@ static uint32_t ll_intf_get_aligned_us_now(uint32_t *multiplier, uint32_t *divid
 	assert(irq == 1);
 	*multiplier = frequency == 32768 ? 15625 : 125;
 	*divider = frequency == 32768 ? 512 : 4;
+	if (alternateRatio)
+	{
+		*multiplier *= 3;
+		*divider *= 3;
+	}
 	return rawBase + (uint32_t)(((uint64_t)now * frequency + 999) / 1000);
 }
 void *os_timer_create(t_timer_callbk callback, os_timer_type type, void *arg)
@@ -142,6 +148,30 @@ int main()
 {
 	for (uint32_t freq : {32000U, 32768U})
 	{
+		Reset(freq);
+		// Compare fast and fallback conversions with the original formula.
+		// Include sub-ms boundaries, raw wraps and the 32-bit ms wrap.
+		BtWbaClockStart();
+		uint64_t samples[] = {0, 1, 31, 32, 33, 4095, 4096, 4097,
+			0xffffffffULL, 0x100000000ULL,
+			((uint64_t)0xffffffffU * freq) / 1000};
+		for (bool alternate : {false, true})
+		{
+			alternateRatio = alternate;
+			for (uint64_t base : samples)
+			{
+				for (unsigned offset = 0; offset < 128; offset++)
+				{
+					s_ClockSteps = base + offset;
+					uint64_t mult = freq == 32768 ? 15625 : 125;
+					uint64_t div = freq == 32768 ? 512 : 4;
+					irq = offset & 1;
+					assert(BtWbaMsTick() == (uint32_t)((base + offset) * mult / (div * 1000)));
+					assert(irq == (offset & 1));
+				}
+			}
+		}
+		alternateRatio = false;
 		Reset(freq);
 		irq = 1;
 		failCreate = true;

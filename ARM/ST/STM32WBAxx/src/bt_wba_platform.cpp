@@ -452,6 +452,16 @@ uint32_t BtWbaMsTick(void)
 	s_ClockLast = steps;
 	total = s_ClockSteps;
 	BtWbaIrqRestore(pm);
+	// Reduce the controller clock ratios before converting to milliseconds.
+	// These exact forms avoid a software 64-bit divide on every tick read.
+	if (multiplier == 125U && divider == 4U)
+	{
+		return (uint32_t)(total >> 5);
+	}
+	if (multiplier == 15625U && divider == 512U)
+	{
+		return (uint32_t)((total * 125U) >> 12);
+	}
 	return (uint32_t)(total * multiplier / ((uint64_t)divider * 1000U));
 }
 
