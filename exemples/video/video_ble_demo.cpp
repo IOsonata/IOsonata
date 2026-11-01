@@ -81,9 +81,6 @@ SOFTWARE.
 #include "video/cam_arducam_mega.h"
 #include "board.h"
 
-#ifndef BLUEIO_CONNECT_LED_PORT
-#include "blueio_board.h"
-#endif
 
 #ifndef VIDEO_DEMO_WIDTH
 #define VIDEO_DEMO_WIDTH		320

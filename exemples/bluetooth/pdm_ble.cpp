@@ -44,7 +44,6 @@ SOFTWARE.
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
-#include "blueio_board.h"
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"

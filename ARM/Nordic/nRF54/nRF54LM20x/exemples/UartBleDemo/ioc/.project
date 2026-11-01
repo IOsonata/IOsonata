@@ -38,7 +38,7 @@
 		<link>
 			<name>src/ba414ep_test.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/ba414ep_test.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/crypto/ba414ep_test.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>
@@ -68,7 +68,7 @@
 		<link>
 			<name>src/cryptomaster_test.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/cryptomaster_test.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/crypto/cryptomaster_test.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/nvm_demo.cpp</name>
@@ -78,7 +78,7 @@
 		<link>
 			<name>src/rng_test.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/crypto/rng_test.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/crypto/rng_test.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_ble.cpp</name>

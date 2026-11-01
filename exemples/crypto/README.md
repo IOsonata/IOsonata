@@ -265,3 +265,10 @@ on STM32WBA65I-DK1 (2026-10-25). The AES, SHA-256/HMAC, P-256,
 RNG and randomized cross-engine checks passed. At 1024 bytes AES ECB
 measured 137,078 ns versus 12,542,937 ns in software, while hardware
 P-256 key import averaged 31,074 us versus 194,190 us in software.
+
+## Target hardware tests
+
+The Nordic RNG, BA414EP, CryptoMaster and hardware-suite runners are in
+[ARM/Nordic/exemples/crypto](../../ARM/Nordic/exemples/crypto).
+They exercise Nordic hardware interfaces directly. Portable applications use
+`crypto_engine_test.cpp` and the generic crypto provider.

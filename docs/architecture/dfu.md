@@ -254,7 +254,7 @@ the upload, before the record is written.
 | LTE | `src/dfu/dfu_http.cpp` | HTTP/1.1 GET of the signed image from a web server, Content-Length bodies, `Range` resume on a new connection; TLS by the modem socket |
 
 `exemples/bluetooth/ble_ota.cpp` is the BLE OTA application,
-`exemples/lte/lte_ota.cpp` the nRF91 LTE one. The LTE example needs the
+`ARM/Nordic/exemples/lte/lte_ota.cpp` the nRF91 LTE one. The LTE example needs the
 Modem library with its IOsonata OS glue (`modem_nrf91.h`).
 
 ## Keys, signing and production

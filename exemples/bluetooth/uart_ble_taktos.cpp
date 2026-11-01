@@ -59,6 +59,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "coredev/interrupt.h"
+#include "coredev/system_core_clock.h"
 #include "iopinctrl.h"
 
 #include "board.h"
@@ -101,10 +102,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 #ifndef TAKTOS_APP_CORE_CLOCK_HZ
-// Default to the CMSIS-standard runtime value populated by SystemInit().
+// Use the core clock reported by the IOsonata MCU port.
 // Override at build time (-DTAKTOS_APP_CORE_CLOCK_HZ=<Hz>) when a compile-time
 // constant is preferred.
-#define TAKTOS_APP_CORE_CLOCK_HZ        SystemCoreClock
+#define TAKTOS_APP_CORE_CLOCK_HZ        SystemCoreClockGet()
 #endif
 
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);

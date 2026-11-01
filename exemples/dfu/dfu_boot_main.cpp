@@ -85,6 +85,7 @@ SOFTWARE.
 #include "board.h"
 #include "cfifo.h"
 #include "coredev/iopincfg.h"
+#include "coredev/interrupt.h"
 #include "iopinctrl.h"
 #include "idelay.h"
 #include "dfu/dfu_boot.h"
@@ -355,7 +356,7 @@ static bool DfuBootButton(void)
 				IOPINTYPE_NORMAL);
 	for (i = 0; i < 1000; i++)
 	{
-		__asm volatile("nop");
+		__NOP();
 	}
 	return IOPinRead(DFU_BUT_PORT, DFU_BUT_PIN) == 0;
 #else
@@ -459,13 +460,13 @@ int main()
 			if (s_Proto.Poll() == false)
 			{
 				// The link interrupt wakes the core.
-				__asm volatile("wfi");
+				__WFI();
 			}
 		}
 	}
 
 	for (;;)
 	{
-		__asm volatile("wfi");
+		__WFI();
 	}
 }

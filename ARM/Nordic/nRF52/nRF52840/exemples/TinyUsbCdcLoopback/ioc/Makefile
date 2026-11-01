@@ -3,8 +3,8 @@ CONFIG ?= Release
 
 IO_ROOT := $(abspath $(CURDIR)/../../../../../../..)
 WORKSPACE_ROOT := $(abspath $(IO_ROOT)/..)
-APP_DIR := $(IO_ROOT)/exemples/usb/tinyusb_cdc_loopback
-COMMON_DIR := $(IO_ROOT)/exemples/usb/tinyusb_common
+APP_DIR := $(IO_ROOT)/ARM/Nordic/exemples/usb/tinyusb_cdc_loopback
+COMMON_DIR := $(IO_ROOT)/ARM/Nordic/exemples/usb/tinyusb_common
 TINYUSB_DIR := $(WORKSPACE_ROOT)/external/tinyusb
 NRFX_DIR := $(WORKSPACE_ROOT)/external/nrfx
 

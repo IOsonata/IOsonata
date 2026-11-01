@@ -30,12 +30,12 @@
 		<link>
 			<name>src/main.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_dual_cdc_stress/main.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/usb/tinyusb_dual_cdc_stress/main.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/tusb_config.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_dual_cdc_stress/tusb_config.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/usb/tinyusb_dual_cdc_stress/tusb_config.h</locationURI>
 		</link>
 		<link>
 			<name>src/tusb.c</name>
