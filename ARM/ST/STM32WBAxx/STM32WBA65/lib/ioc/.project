@@ -266,11 +266,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
 		</link>
 		<link>
-			<name>include/stm32_rtos.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/include/stm32_rtos.h</locationURI>
-		</link>
-		<link>
 			<name>include/stm32wba65xx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/stm32wba65xx.h</locationURI>
@@ -2444,11 +2439,6 @@
 			<name>src/stm32wba_ble/ll_sys_dp_slp.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_dp_slp.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/ll_sys_if.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/ll_sys_if.c</locationURI>
 		</link>
 		<link>
 			<name>src/stm32wba_ble/ll_sys_intf.c</name>

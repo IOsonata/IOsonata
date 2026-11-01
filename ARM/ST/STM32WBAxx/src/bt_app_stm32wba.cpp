@@ -60,11 +60,11 @@ SOFTWARE.
 #include "stm32wbaxx.h"
 
 // STM32CubeWBA BLE middleware, release 1.10.0 (WPAN middleware commit
-// 7e764835). The project provides the Target files of the Cube reference
-// application (bleplat.c, linklayer_plat.c, ll_sys_if.c, bpka.c, power_table.c)
-// and its app_conf.h set. host_stack_if.c is not used: BleStackCB_Process and
-// HostStack_Process are defined here and run the host stack from the
-// Bluetooth event queue.
+// 7e764835). The library builds the Target files bleplat.c, linklayer_plat.c
+// and power_table.c of the Cube reference application, with the IOsonata
+// app_conf.h set. ll_sys_if.c is replaced by bt_wba_platform.cpp.
+// host_stack_if.c is not used: BleStackCB_Process and HostStack_Process are
+// defined here and run the host stack from the Bluetooth event queue.
 #include "bt_wba_stack.h"
 #include "bt_wba_bond.h"
 #include "bt_wba_platform.h"

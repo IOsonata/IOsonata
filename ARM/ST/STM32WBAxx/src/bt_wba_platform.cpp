@@ -7,12 +7,15 @@ The STM32CubeWBA BLE host stack and its link layer library call a small set of
 platform functions. A Cube project supplies them with its HAL, the sequencer,
 the timer server, the RTC, the memory manager and the flash manager. This file
 supplies them with IOsonata code instead, so the Cube project files that remain
-in a build are bleplat.c, linklayer_plat.c, ll_sys_if.c, ll_sys_startup.c,
-power_table.c:
+in a build are bleplat.c, linklayer_plat.c, power_table.c, and the WPAN
+ll_sys_startup.c, ll_sys_intf.c, ll_sys_cs.c, ll_sys_dp_slp.c:
 
 - HAL_NVIC_* and the radio baseband clock: direct NVIC and RCC access.
 - Sequencer (UTIL_SEQ_RegTask, UTIL_SEQ_SetTask): the tasks are run from the
   Bluetooth event queue, BtEvtQue.
+- Link layer system hooks (ll_sys_config_params, ll_sys_reset, the background
+  process scheduling and the temperature request), in place of the Cube
+  ll_sys_if.c.
 - BLE_TIMER_Start/Stop: fixed host timer slots over the ST controller timer service.
 - HW_RNG_Get and the RNG clock requests: RNG peripheral, polled.
 - BAES_*: the STM32WBA AES block through CryptoWbaAes (ECB, CMAC and CCM).
@@ -290,15 +293,6 @@ extern "C" void scm_setsystemclock(uint32_t User, uint32_t Clock)
 }
 
 //----------------------------------------------------------------------------
-// Temperature for the radio calibration
-//----------------------------------------------------------------------------
-
-extern "C" void TEMPMEAS_RequestTemperatureMeasurement(void)
-{
-	ll_intf_cmn_set_temperature_value((uint32_t)(BT_WBA_TEMPERATURE_C + BT_WBA_TEMPERATURE_OFS));
-}
-
-//----------------------------------------------------------------------------
 // Sequencer: the stack and the link layer register tasks and set them. The
 // tasks run from the Bluetooth event queue.
 //----------------------------------------------------------------------------
@@ -310,15 +304,15 @@ static volatile bool s_SeqOwed;
 
 static void BtWbaSeqEvt(uint32_t Evt, void *pCtx);
 
-static void BtWbaSeqQue(void)
+// Mark tasks pending and queue one run for all of them. Can be called from
+// interrupt context, the link layer sets its background task from its ISR.
+static void BtWbaSeqSet(uint32_t TaskBm)
 {
 	uint32_t pm = BtWbaIrqSave();
 	bool bQue = s_SeqQueued == false;
 
-	if (bQue)
-	{
-		s_SeqQueued = true;
-	}
+	s_SeqPend |= TaskBm;
+	s_SeqQueued = true;
 	BtWbaIrqRestore(pm);
 
 	if (bQue)
@@ -329,6 +323,11 @@ static void BtWbaSeqQue(void)
 			s_SeqOwed = true;
 		}
 	}
+}
+
+static void BtWbaSeqQue(void)
+{
+	BtWbaSeqSet(0);
 }
 
 static void BtWbaSeqEvt(uint32_t Evt, void *pCtx)
@@ -375,12 +374,137 @@ extern "C" void UTIL_SEQ_SetTask(uint32_t TaskBm, uint32_t Prio)
 {
 	(void)Prio;
 
-	uint32_t pm = BtWbaIrqSave();
+	BtWbaSeqSet(TaskBm);
+}
 
-	s_SeqPend |= TaskBm;
-	BtWbaIrqRestore(pm);
+//----------------------------------------------------------------------------
+// Link layer system hooks, in place of the Cube ll_sys_if.c. They call the
+// link layer configuration functions; the only register read is the radio
+// sleep timer clock selection in RCC_BDCR1.
+// - ll_sys_startup.c calls ll_sys_bg_process_init and ll_sys_config_params
+//   when the link layer starts.
+// - The link layer calls ll_sys_schedule_bg_process and its _isr version to
+//   run ll_sys_bg_process.
+// - The host stack calls ll_sys_reset on an HCI reset (le_ctrl.o).
+// - linklayer_plat.c calls ll_sys_bg_temperature_measurement.
+//----------------------------------------------------------------------------
 
-	BtWbaSeqQue();
+// Link layer scheduler margins (ll_sys_config_BLE_schldr_timings units), Cube
+// values. The link layer starts with the defaults.
+#define BT_WBA_LL_DRIFT_TIME			14U
+#define BT_WBA_LL_EXEC_TIME				28U
+#define BT_WBA_LL_DRIFT_TIME_LSI		9U
+#define BT_WBA_LL_EXEC_TIME_LSI			3U
+#define BT_WBA_LL_DRIFT_TIME_DEBUG		6U
+#define BT_WBA_LL_EXEC_TIME_DEBUG		4U
+
+// LSI1 calibration: event length in sleep timer cycles, period in ms
+#define BT_WBA_LL_RCO_CLBR_CYCLES		24U
+#define BT_WBA_LL_RCO_CLBR_PERIOD_MS	15000U
+
+// Give the link layer the sleep timer clock that BtWbaPlatformInit selected,
+// and return the RCC_BDCR1 RADIOSTSEL field. The table is indexed by that
+// field: none, LSE, LSI, HSE / 1000. With none, 0 is passed, as Cube does,
+// which BtWbaPlatformInit never leaves.
+static uint32_t BtWbaSleepClockSelect(void)
+{
+	static const uint8_t s_SlpTmrSrc[4] = {
+		0, RTC_SLPTMR, RCO_SLPTMR, CRYSTAL_OSCILLATOR_SLPTMR
+	};
+	uint32_t sel = RCC->BDCR1 & RCC_BDCR1_RADIOSTSEL;
+	uint16_t freq;
+
+	ll_intf_cmn_le_select_slp_clk_src(s_SlpTmrSrc[sel >> RCC_BDCR1_RADIOSTSEL_Pos], &freq);
+
+	return sel;
+}
+
+// Temperature report for the radio calibration
+static void BtWbaTemperatureReport(void)
+{
+	ll_intf_cmn_set_temperature_value((uint32_t)(BT_WBA_TEMPERATURE_C + BT_WBA_TEMPERATURE_OFS));
+}
+
+extern "C" void ll_sys_bg_process_init(void)
+{
+	s_SeqTask[CFG_TASK_LINK_LAYER] = ll_sys_bg_process;
+}
+
+extern "C" void ll_sys_schedule_bg_process(void)
+{
+	BtWbaSeqSet(1UL << CFG_TASK_LINK_LAYER);
+}
+
+extern "C" void ll_sys_schedule_bg_process_isr(void)
+{
+	BtWbaSeqSet(1UL << CFG_TASK_LINK_LAYER);
+}
+
+extern "C" void ll_sys_config_params(void)
+{
+	// Radio low ISR used, next event scheduled from the ISR. The link layer
+	// is built for these two settings.
+	ll_intf_cmn_config_ll_ctx_params(1, 1);
+	BtWbaSleepClockSelect();
+#if (USE_TEMPERATURE_BASED_RADIO_CALIBRATION == 1)
+	// Recalibrate on temperature reports in place of the periodic calibration
+	// every 10 s. The first temperature request comes from this call.
+	s_SeqTask[CFG_TASK_TEMP_MEAS] = BtWbaTemperatureReport;
+	ll_intf_cmn_set_temperature_sensor_state();
+#endif
+	ll_intf_cmn_select_tx_power_table(CFG_RF_TX_POWER_TABLE_ID);
+}
+
+extern "C" void ll_sys_reset(void)
+{
+	uint32_t sel = BtWbaSleepClockSelect();
+	uint8_t drift = BT_WBA_LL_DRIFT_TIME;
+	uint8_t exec = BT_WBA_LL_EXEC_TIME;
+
+	// Sleep clock accuracy 0 (251 to 500 ppm): the Cube value for every WBA5
+	// revision and WBA6, with any sleep timer clock
+	ll_intf_le_set_sleep_clock_accuracy(0);
+
+	if (sel == RCC_BDCR1_RADIOSTSEL_1)
+	{
+		// LSI1
+		ll_intf_le_set_rco_clbr_evnt_params(BT_WBA_LL_RCO_CLBR_CYCLES,
+											BT_WBA_LL_RCO_CLBR_PERIOD_MS);
+		drift += BT_WBA_LL_DRIFT_TIME_LSI;
+		exec += BT_WBA_LL_EXEC_TIME_LSI;
+	}
+#ifdef DEBUG
+	else
+	{
+		// Unoptimized platform code needs a larger margin
+		drift += BT_WBA_LL_DRIFT_TIME_DEBUG;
+		exec += BT_WBA_LL_EXEC_TIME_DEBUG;
+	}
+#endif
+
+	if (drift != BT_WBA_LL_DRIFT_TIME || exec != BT_WBA_LL_EXEC_TIME)
+	{
+		ll_sys_config_BLE_schldr_timings(drift, exec);
+	}
+}
+
+// Link layer temperature request. The first one comes from
+// ll_intf_cmn_set_temperature_sensor_state in ll_sys_config_params and is
+// answered at once. The next ones come from the event scheduler and are
+// answered from the event queue, as the Cube code does.
+extern "C" void ll_sys_bg_temperature_measurement(void)
+{
+	static bool s_bReported = false;
+
+	if (s_bReported == false)
+	{
+		s_bReported = true;
+		BtWbaTemperatureReport();
+	}
+	else
+	{
+		BtWbaSeqSet(1UL << CFG_TASK_TEMP_MEAS);
+	}
 }
 
 //----------------------------------------------------------------------------

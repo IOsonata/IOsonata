@@ -3,10 +3,10 @@
 
 @brief	Configuration of the STM32CubeWBA platform files built with the STM32WBA65 BLE library.
 
-The ST platform files (linklayer_plat.c, ll_sys_if.c, power_table.c and
-the ST stack headers) include this file by name. It holds the interrupt
-numbers and priorities of the radio and PKA, the link layer task identifiers
-and the power table selection. The BLE stack sizes (CFG_BLE_*) have defaults in
+The ST platform files (linklayer_plat.c, power_table.c and the ST stack
+headers) and bt_wba_platform.cpp include this file by name. It holds the
+interrupt numbers and priorities of the radio and PKA, the link layer task
+identifiers and the power table selection. The BLE stack sizes (CFG_BLE_*) have defaults in
 bt_app_stm32wba.cpp, a project can define them before the adapter is built.
 
 @author	Hoang Nguyen Hoan
@@ -77,18 +77,15 @@ SOFTWARE.
 #define CFG_RF_TX_POWER_TABLE_ID	0
 
 // Radio calibration driven by temperature reports, as in the Cube BLE
-// applications. ll_sys_if.c then declares a temperature sensor to the link
-// layer and the link layer requests the temperature through
-// TEMPMEAS_RequestTemperatureMeasurement (bt_wba_platform.cpp). With 0 the
+// applications. ll_sys_config_params (bt_wba_platform.cpp) then declares a
+// temperature sensor to the link layer, and linklayer_plat.c passes the link
+// layer temperature requests to ll_sys_bg_temperature_measurement. With 0 the
 // link layer runs its periodic PHY calibration every 10 s, which takes radio
 // time from active connections.
 #define USE_TEMPERATURE_BASED_RADIO_CALIBRATION	1
 
-// Sequencer priority used by ll_sys_if.c. The port runs every sequencer task
-// from the Bluetooth event queue, the priority value is not used.
-#define CFG_SEQ_PRIO_0				0
-
-// Sequencer tasks used by the link layer and the RNG
+// Sequencer task numbers. bt_wba_platform.cpp runs the link layer background
+// process and the temperature report as tasks.
 typedef enum {
 	CFG_TASK_HW_RNG,
 	CFG_TASK_LINK_LAYER,

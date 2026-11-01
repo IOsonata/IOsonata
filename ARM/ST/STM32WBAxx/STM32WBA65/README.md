@@ -501,8 +501,8 @@ in the same image or two startup/vector definitions will conflict.
 ## External middleware checkout
 
 The ST Bluetooth link layer is a closed library. Its platform files (`bleplat.c`,
-`linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`) are ST sources under the ST license, so they stay in the ST
-repositories and are not copied into IOsonata. The library builds them from the
+`linklayer_plat.c`, `power_table.c`) are ST sources under the ST license, so
+they stay in the ST repositories and are not copied into IOsonata. The library builds them from the
 STM32CubeWBA checkout.
 
 The IOsonata clone scripts in `Installer` clone both repositories at matching
@@ -634,6 +634,17 @@ server, RTC, memory manager or flash manager:
   level CCM for example, runs on `CryptoSoftAes` for that call. The host test
   vectors (FIPS-197, RFC 4493 and RFC 3610 packet vector 1) pass.
 - PKA controller hooks (`PKACTRL_CB_Process`, mutex, semaphore, `PKA_IRQHandler`).
+- The link layer system hooks of the Cube `ll_sys_if.c`: `ll_sys_config_params`
+  and `ll_sys_reset` (radio low ISR mode, sleep timer clock source from RCC
+  RADIOSTSEL, sleep clock accuracy, LSI1 calibration, scheduler margins,
+  temperature sensor, power table), `ll_sys_bg_process_init` and the
+  background process scheduling (the link layer task of the sequencer above),
+  and `ll_sys_bg_temperature_measurement`. They are calls into the link layer
+  library; RADIOSTSEL is the only register read. `tests/stm32wba/run_ll_sys.py`
+  builds the Cube file from the STM32CubeWBA checkout and these functions
+  against the same mocks and compares the calls for each sleep timer clock,
+  with and without `DEBUG`. The CTE and profile statistics functions of the
+  Cube file have no caller and are not provided.
 - `SCM_HSE_WaitUntilReady`, `scm_*` and the link layer debug signals.
 
 Limits: `app_conf.h` sets `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 1, as
@@ -651,8 +662,9 @@ Cube sources that remain in a Bluetooth build (all from the STM32CubeWBA 1.10.0
 package and the WPAN middleware commit 7e764835):
 
 - Project Target files `bleplat.c` (it includes `ble_wrap.c`, so do not compile
-  that one), `linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`. Take them from
-  the BLE only project (BLE_p2pServer), not from the audio projects.
+  that one), `linklayer_plat.c`, `power_table.c`. Take them from the BLE only
+  project (BLE_p2pServer), not from the audio projects. `ll_sys_if.c` is not
+  built: `bt_wba_platform.cpp` provides its functions (see below).
 - `link_layer/ll_sys/src/ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`,
   `ll_sys_dp_slp.c`.
 - Libraries `ble/stack/lib/stm32wba_ble_stack_full.a` and
@@ -701,9 +713,8 @@ ST prebuilt archives and holds only its own sources:
 - `nvm_stm32.cpp` for the bond storage;
 - `src/bleplat_wrap.c`, which renames the Cube `BLEPLAT_NvmStore` and includes
   `bleplat.c`, so no per file compiler option is needed;
-- the Cube and WPAN platform files `linklayer_plat.c`, `ll_sys_if.c`,
-  `power_table.c` and the WPAN
-  `ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`, `ll_sys_dp_slp.c`, found
+- the Cube and WPAN platform files `linklayer_plat.c`, `power_table.c` and
+  the WPAN `ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`, `ll_sys_dp_slp.c`, found
   through the `external` folder (see External middleware checkout);
 - `src/bluetooth/bt_wba_pka.cpp`, which answers the P-256 key requests of the
   stack (public key and Diffie-Hellman) with the IOsonata `CryptoWbaPka` engine
@@ -711,18 +722,17 @@ ST prebuilt archives and holds only its own sources:
   `hw_pka_p256.c`) is not built. The operation runs in the event queue
   context;
 - the headers `include/app_conf.h`, `app_common.h`, `utilities_conf.h`,
-  `stm32_rtos.h`, `common_wpan_conf.h` and `main.h`. The ST platform files
-  include them by name. They are written for IOsonata (MIT) and define only
-  what the built files use: the radio and PKA interrupt numbers and
-  priorities, the link layer task identifiers, the power table selection and
-  the sequencer prototypes that `bt_wba_platform.cpp` implements. They are not
+  `common_wpan_conf.h` and `main.h`. The ST platform files include them by
+  name. They are written for IOsonata (MIT) and define only what the built
+  files use: the radio and PKA interrupt numbers and priorities, the link
+  layer task identifiers and the power table selection. They are not
   copies of the ST BLE_p2pServer files, which are under the ST license;
 - in place of the ST HAL, the headers `include/stm32wbaxx_hal.h`,
   `stm32wbaxx_hal_conf.h` and `stm32wbaxx_ll_rcc.h`, also included by name.
-  They hold only the HAL and LL items `linklayer_plat.c` and `ll_sys_if.c`
-  use, with CMSIS register access: the radio bus clock macros, the radio mode,
-  voltage scaling, sleep timer clock source and HSE ready reads, the unique
-  device number, the ST company ID, the revision ID, `assert_param` and the
+  They hold only the HAL and LL items `linklayer_plat.c` uses, with CMSIS
+  register access: the radio bus clock macros, the radio mode, voltage
+  scaling, sleep timer clock source and HSE ready reads, the unique device
+  number, the ST company ID, `assert_param` and the
   `HAL_NVIC_*` and radio baseband clock prototypes that `bt_wba_platform.cpp`
   implements. A Release build gives the same code as one with the ST HAL
   headers.

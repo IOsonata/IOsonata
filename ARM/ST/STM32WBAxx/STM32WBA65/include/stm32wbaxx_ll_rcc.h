@@ -3,10 +3,9 @@
 
 @brief	RCC LL names used by the STM32CubeWBA BLE platform files.
 
-linklayer_plat.c includes stm32wbaxx_ll_rcc.h by name, and ll_sys_if.c uses the
-same items through main.h. IOsonata does not use the ST LL drivers. This
-header gives those files the radio sleep timer clock source and the HSE ready
-flag with CMSIS register access. See stm32wbaxx_hal.h.
+linklayer_plat.c includes stm32wbaxx_ll_rcc.h by name. IOsonata does not use
+the ST LL drivers. This header gives that file the radio sleep timer clock
+source and the HSE ready flag with CMSIS register access. See stm32wbaxx_hal.h.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 28, 2026
