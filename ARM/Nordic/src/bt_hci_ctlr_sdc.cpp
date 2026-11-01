@@ -653,11 +653,12 @@ uint8_t BtHciCtlrCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void
 // number it wants when this is too small, so a device that turns the feature on
 // finds out here rather than on air.
 //
-// What the controller needs depends on the role and the link counts: a
-// broadcaster needs about a tenth of this default, a central with several
-// links needs more. The application sizes it by defining its own
-// g_BtHciCtlrMemPool, in which case this default is not linked.
-// BtHciCtlrMemPoolSizeNeeded reports the size the configuration asked for.
+// UART over BLE requires 12496 bytes with the standard ACL buffers on the
+// tested SDK. The 16 KB default covers that configuration. Larger link or
+// periodic configurations can provide g_BtHciCtlrMemPool in target sources;
+// generic examples do not need controller-specific storage.
+// BtHciCtlrMemPoolSizeNeeded reports the actual SDK requirement, which is
+// checked before sdc_enable below.
 alignas(8) static uint8_t s_BtStackSdcMemPool[BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE];
 
 extern "C" __attribute__((weak)) const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {

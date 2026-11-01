@@ -293,6 +293,20 @@ void TestBroadcasterDefaultPool(void)
 	CHECK(s_EventConfigCalls == 0);
 }
 
+// UART over BLE reported this requirement with the standard ACL buffers.
+void TestPeripheralDefaultPool(void)
+{
+	BtHciCtlrCfg_t cfg;
+
+	Reset();
+	s_CfgRam = 12496;
+	cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
+	CHECK(g_BtHciCtlrMemPool.Size >= (size_t)s_CfgRam);
+	CHECK(Start(&cfg));
+	CHECK(s_Enabled);
+	CHECK(s_EnableCalls == 1);
+}
+
 // --- the checks -------------------------------------------------------------
 
 // A broadcaster or peripheral enables the advertising states, an observer or
@@ -584,7 +598,7 @@ void TestAnUndersizedPoolStopsTheBringUp(void)
 {
 	Reset();
 	// One octet more than the pool holds.
-	s_CfgRam = 10001;
+	s_CfgRam = (int32_t)g_BtHciCtlrMemPool.Size + 1;
 
 	BtHciCtlrCfg_t cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
 	cfg.PeriodicAdvCount = 1;
@@ -599,11 +613,11 @@ void TestAnUndersizedPoolStopsTheBringUp(void)
 	// size to set the pool from, since the traces here are compiled out unless
 	// the build defines DEBUG_ENABLE and no project does.
 	CHECK(BtHciCtlrErrorGet() == BT_HCI_CTLR_ERROR_MEM_POOL);
-	CHECK(BtHciCtlrErrorValueGet() == 10001);
+	CHECK(BtHciCtlrErrorValueGet() == (int32_t)g_BtHciCtlrMemPool.Size + 1);
 
 	// Exactly the pool size is enough.
 	Reset();
-	s_CfgRam = 10000;
+	s_CfgRam = (int32_t)g_BtHciCtlrMemPool.Size;
 	cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
 	cfg.PeriodicAdvCount = 1;
 
@@ -1116,6 +1130,7 @@ int main(void)
 {
 	TestPeripheralSupportIsOnRequest();
 	TestBroadcasterDefaultPool();
+	TestPeripheralDefaultPool();
 
 #ifdef SDC_TEST_NO_FEATURE_MODULES
 	TestFeatureModulesNotLinked();
