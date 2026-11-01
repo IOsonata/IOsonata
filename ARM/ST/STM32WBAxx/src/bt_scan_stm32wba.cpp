@@ -73,6 +73,9 @@ void BtAppScan(void)
 
 void BtAppScanStop(void)
 {
-	BtGapScanStop();
-	s_bScanning = false;
+	if (s_bScanning)
+	{
+		// The GAP port clears the state only when ST accepts the stop.
+		BtGapScanStop();
+	}
 }

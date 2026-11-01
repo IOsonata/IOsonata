@@ -278,8 +278,10 @@ extern "C" void BtSmpBondWbaFlush(void)
 	++bondFlushes;
 }
 static bool s_bEvtDrainOwed, s_bBleHostOwed;
+static uint32_t s_StatusCheckCount;
 static void BtAppTickQue() {}
 static void BtAppEvtDrainQue() {}
+static void BtAppDiscoveryRetry() {}
 extern "C" void BleStackCB_Process(void) {}
 extern "C" void BtWbaPlatformRetry(void) {}
 extern "C" void BtWbaPlatformInit(void) {}

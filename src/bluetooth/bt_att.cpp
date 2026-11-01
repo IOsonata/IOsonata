@@ -153,8 +153,14 @@ static uint16_t BtAttGetMtuForConn(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 
-	if (pConn != nullptr && pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN)
+	if (pConn != nullptr)
 	{
+		if (pConn->Conn.MaxMtu < BT_ATT_MTU_MIN)
+		{
+			// Local capacity does not negotiate this peer's ATT MTU.
+			return BT_ATT_MTU_MIN;
+		}
+
 		// Clamp here rather than trusting every writer of Conn.MaxMtu. This
 		// value bounds both the size of a response written into the caller's
 		// buffer and the largest request accepted, so the bound has to hold
@@ -210,6 +216,10 @@ void BtAttDBInit(size_t MemSize)
 
 BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
 {
+	size_t entrySize;
+	size_t remaining;
+	BtAttDBEntry_t *entry;
+
 	if (pUuid == nullptr || MaxDataLen < 0 || MaxDataLen > 0xFFFF)
 	{
 		return nullptr;
@@ -220,7 +230,14 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 		return nullptr;
 	}
 
-	size_t entrySize = sizeof(BtAttDBEntry_t) + (size_t)MaxDataLen;
+	// Data[1] and trailing padding are part of sizeof, not the header.
+	// Reserve the payload from its actual offset, retaining a full object
+	// for zero-length and short values.
+	entrySize = offsetof(BtAttDBEntry_t, Data) + (size_t)MaxDataLen;
+	if (entrySize < sizeof(BtAttDBEntry_t))
+	{
+		entrySize = sizeof(BtAttDBEntry_t);
+	}
 	entrySize = (entrySize + alignof(BtAttDBEntry_t) - 1U) &
 				~(size_t)(alignof(BtAttDBEntry_t) - 1U);
 
@@ -229,7 +246,7 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 		return nullptr;
 	}
 
-	size_t remaining = s_BtAttDBMemSize - s_BtAttDBMemUsed;
+	remaining = s_BtAttDBMemSize - s_BtAttDBMemUsed;
 
 	// We will write pNext/pPrev into the slot after this entry to seed the
 	// next tail entry. That seed write touches the first few bytes of a
@@ -241,8 +258,7 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 		return nullptr;
 	}
 
-	BtAttDBEntry_t *entry =
-		(BtAttDBEntry_t*)(s_pBtAttDBMem + s_BtAttDBMemUsed);
+	entry = (BtAttDBEntry_t*)(s_pBtAttDBMem + s_BtAttDBMemUsed);
 
 	entry->TypeUuid = *pUuid;
 	entry->Hdl = ++s_LastHdl;
@@ -1914,9 +1930,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				uint8_t fmt = 0;
 				uint8_t *p = (uint8_t*)pRspAtt->FindInfoRsp.HdlUuid16;
 
-				for (uint16_t hdl = req->StartHdl; hdl <= req->EndHdl; hdl++)
+				// The counter must advance past 0xFFFF even when no attribute
+				// exists there and the lookup takes the continue path below.
+				for (uint32_t hdl = req->StartHdl; hdl <= req->EndHdl; hdl++)
 				{
-					BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
+					BtAttDBEntry_t *entry = BtAttDBFindHandle((uint16_t)hdl);
 					if (entry == nullptr)
 					{
 						continue;

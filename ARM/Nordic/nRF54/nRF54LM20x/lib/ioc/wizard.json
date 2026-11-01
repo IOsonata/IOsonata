@@ -5,7 +5,7 @@
   "fpu": true,
   "fpu_unit": "fpv5spd16",
   "defines": [
-	"NRF_APPLICATION"
+    "NRF_APPLICATION"
   ],
   "includes": [
     "${iosonata}/ARM/Nordic/include",
@@ -15,7 +15,10 @@
     "${external}/nrfx/drivers/include",
     "${external}/nrfx/bsp/stable",
     "${external}/nrfx/bsp/stable/mdk",
-    "${external}/nrfx/hal"
+    "${external}/nrfx/bsp/stable/mdk/common",
+    "${external}/nrfx/bsp/stable/mdk/nrf54l",
+    "${external}/nrfx/hal",
+    "${external}/nrfx/bsp/stable/soc"
   ],
   "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/nrf54lm20a_xxaa_application.ld",
   "lib_path": "${iosonata}/ARM/Nordic/nRF54/nRF54LM20x/lib/ioc/${config}",

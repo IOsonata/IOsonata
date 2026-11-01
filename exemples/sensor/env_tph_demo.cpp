@@ -57,7 +57,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/tphg_bme680.h"
 #include "sensors/tph_ms8607.h"
 #include "sensors/gas_sensor.h"
-#include "blueio_board.h"
 #include "idelay.h"
 
 #include "sensors/bsec_interface.h"

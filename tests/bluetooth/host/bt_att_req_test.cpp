@@ -1217,10 +1217,137 @@ void TestExecuteWriteAtomicFailure()
 	g_PeerEnabled = false;
 }
 
+// Descriptor discovery commonly ends at 0xFFFF for the final service.
+// Missing handles must still advance past that limit without wrapping.
+void TestFindInformationFinalService()
+{
+	uint8_t req[5] = { BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ, 0, 0, 0xFF, 0xFF };
+	uint8_t rsp[BT_ATT_MTU_MAX];
+	BtUuid16_t uuid = { 0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION };
+	BtAttDBEntry_t *entry;
+	uint32_t len;
+
+	BtAttDBInit(512);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+	entry = BtAttDBAddEntry(&uuid, 0);
+	CHECK(entry != nullptr);
+	if (entry == nullptr)
+	{
+		return;
+	}
+
+	PutLe16(req + 1, entry->Hdl);
+	len = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, sizeof(req),
+		(BtAttReqRsp_t *)rsp);
+	CHECK(len == 6);
+	CHECK(rsp[0] == BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP);
+	CHECK(rsp[1] == BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16);
+	CHECK(GetLe16(rsp + 2) == entry->Hdl);
+	CHECK(GetLe16(rsp + 4) == uuid.Uuid);
+
+	// The continuation after the final descriptor must return Not Found.
+	PutLe16(req + 1, entry->Hdl + 1);
+	len = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, sizeof(req),
+		(BtAttReqRsp_t *)rsp);
+	CHECK(len == 5);
+	CHECK(rsp[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rsp[kErrReqOp] == BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ);
+	CHECK(GetLe16(rsp + 2) == entry->Hdl + 1);
+	CHECK(rsp[kErrCode] == BT_ATT_ERROR_ATT_NOT_FOUND);
+
+	// The single-handle boundary must also terminate on an empty database.
+	BtAttDBInit(512);
+	PutLe16(req + 1, 0xFFFF);
+	len = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, sizeof(req),
+		(BtAttReqRsp_t *)rsp);
+	CHECK(len == 5);
+	CHECK(GetLe16(rsp + 2) == 0xFFFF);
+	CHECK(rsp[kErrCode] == BT_ATT_ERROR_ATT_NOT_FOUND);
+}
+
+// Local capacity and negotiated link MTU are different. DLE does not
+// authorize a larger ATT response before the client exchanges its MTU.
+void TestDiscoveryBeforeMtuExchange()
+{
+	static const uint8_t base[16] = {
+		0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+		0x99, 0xAA, 0xBB, 0xCC, 0, 0, 0xDD, 0xEE
+	};
+	BtUuid16_t type = { 0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_CHARACTERISTIC };
+	BtChar_t chars[2] = {};
+	BtUuid16_t valueType;
+	BtAttDBEntry_t *entry;
+	BtAttCharDeclar_t *decl;
+	uint8_t req[7];
+	uint8_t rsp[BT_ATT_MTU_MAX];
+	uint32_t len;
+	int idx;
+	int i;
+
+	BtAttDBInit(1024);
+	BtAttSetMtu(247);
+	idx = BtUuidAddBase(base);
+	CHECK(idx > 0);
+	for (i = 0; i < 2; i++)
+	{
+		entry = BtAttDBAddEntry(&type, sizeof(BtAttCharDeclar_t));
+		CHECK(entry != nullptr);
+		if (entry == nullptr)
+		{
+			return;
+		}
+		chars[i].ValHdl = entry->Hdl + 1;
+		chars[i].Property = BT_GATT_CHAR_PROP_READ;
+		decl = (BtAttCharDeclar_t *)entry->Data;
+		decl->Uuid = { (uint8_t)idx, BT_UUID_TYPE_16, { (uint16_t)(0x100 + i) } };
+		decl->pChar = &chars[i];
+		valueType = { (uint8_t)idx, BT_UUID_TYPE_16, (uint16_t)(0x100 + i) };
+		entry = BtAttDBAddEntry(&valueType, sizeof(BtAttCharValue_t));
+		CHECK(entry != nullptr);
+		if (entry == nullptr)
+		{
+			return;
+		}
+		((BtAttCharValue_t *)entry->Data)->pChar = &chars[i];
+	}
+
+	g_PeerEnabled = true;
+	s_StubPeer.Conn.MaxMtu = 0;
+	BuildReadByType(req, 1, 0xFFFF, BT_UUID_DECLARATIONS_CHARACTERISTIC);
+	len = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, sizeof(req),
+		(BtAttReqRsp_t *)rsp);
+	CHECK(len == 23);
+	CHECK(rsp[0] == BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP);
+	CHECK(rsp[1] == 21);
+	CHECK(GetLe16(rsp + 2) == 1);
+	CHECK(GetLe16(rsp + 5) == 2);
+	CHECK(GetLe16(rsp + 19) == 0x100);
+
+	// Continue at the next handle: the second declaration must not be lost.
+	BuildReadByType(req, 2, 0xFFFF, BT_UUID_DECLARATIONS_CHARACTERISTIC);
+	len = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, sizeof(req),
+		(BtAttReqRsp_t *)rsp);
+	CHECK(len == 23);
+	CHECK(GetLe16(rsp + 2) == 3);
+	CHECK(GetLe16(rsp + 5) == 4);
+	CHECK(GetLe16(rsp + 19) == 0x101);
+
+	// An exchanged MTU permits both declarations in one response.
+	s_StubPeer.Conn.MaxMtu = 247;
+	BuildReadByType(req, 1, 0xFFFF, BT_UUID_DECLARATIONS_CHARACTERISTIC);
+	len = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, sizeof(req),
+		(BtAttReqRsp_t *)rsp);
+	CHECK(len == 44);
+	g_PeerEnabled = false;
+	s_StubPeer.Conn.MaxMtu = 0;
+}
+
 } // namespace
 
 int main()
 {
+	TestDiscoveryBeforeMtuExchange();
+	TestFindInformationFinalService();
 	TestMtuNegotiationRule();
 	TestExchangeMtuRequestRecordsTheLink();
 	TestInvalidStartHandleAndWriteHandle();

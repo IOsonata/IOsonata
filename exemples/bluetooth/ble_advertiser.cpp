@@ -42,10 +42,6 @@ SOFTWARE.
 
 #include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
-#include "bluetooth/bt_hci_ctlr.h"
-//#ifndef NRFXLIB_SDC
-//#include "ble_app_nrf5.h"
-//#endif
 #include "bluetooth/bt_appearance.h"
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
@@ -112,15 +108,6 @@ UART g_Uart;
 
 uint32_t g_AdvCnt = 0;
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
-
-// Controller memory pool. A broadcaster has no link, so it needs far less
-// than the library default, which is sized for several links. Used by the
-// ports that run the controller in the application (SDC), not linked
-// otherwise. BtHciCtlrMemPoolSizeNeeded gives the size the configuration
-// asked for.
-alignas(8) static uint8_t s_BtCtlrMemPool[2400];
-
-const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
 
 const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
@@ -236,7 +223,13 @@ int main()
 
 	IOPinSet(s_Leds[0].PortNo, s_Leds[0].PinNo);
 
-	BtAppInit(&s_BtAppCfg);
+	if (BtAppInit(&s_BtAppCfg) == false)
+	{
+#ifdef UART_PINS
+		g_Uart.printf("BleAdvertiser: Bluetooth initialization failed\r\n");
+#endif
+		return 1;
+	}
 
 	IOPinSet(s_Leds[1].PortNo, s_Leds[1].PinNo);
 

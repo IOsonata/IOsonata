@@ -44,6 +44,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_att.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_uuid.h"
@@ -225,6 +226,8 @@ BtDevice_t * BtPeerAlloc(uint16_t ConnHdl)
 			BtDevice_t *p = &slots[i];
 			memset(p, 0, sizeof(*p));
 			p->Conn.Hdl = ConnHdl;
+			// A new ATT bearer uses 23 octets until MTU exchange completes.
+			p->Conn.MaxMtu = BT_ATT_MTU_MIN;
 			p->bIsLocal = false;
 			// BT_CONN_ROLE_CENTRAL is 0, so a zeroed record reads as a central
 			// link rather than as an unset one, and BtPeerRole cannot tell the

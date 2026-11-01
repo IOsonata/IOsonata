@@ -58,9 +58,6 @@ SOFTWARE.
 #define UART_DEVNO 0
 #endif
 
-#ifndef BLUEIO_CONNECT_LED_PORT
-#include "blueio_board.h"
-#endif
 
 //#define DUMP_MAN_SPEC_DATA
 

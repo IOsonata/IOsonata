@@ -246,6 +246,40 @@ static int BondStoreErase(void)
 	return r == -ENODEV ? 0 : r;
 }
 
+// Remove only the inactive bank's surplus chunks, highest index first.
+// Descending deletion preserves a contiguous prefix after a power cut.
+static int BondTrimBank(uint32_t Bank, uint32_t Keep)
+{
+	uint32_t end = Keep;
+	uint8_t value;
+	ssize_t result;
+	int status;
+
+	while (end < BT_WBA_BANK_STRIDE - 1U)
+	{
+		result = BtPdsRead(BondChunkKey(Bank, end), &value, sizeof(value));
+		if (result == -ENOENT)
+		{
+			break;
+		}
+		if (result < 0)
+		{
+			return (int)result;
+		}
+		end++;
+	}
+	while (end > Keep)
+	{
+		end--;
+		status = BtPdsDelete(BondChunkKey(Bank, end));
+		if (status != 0)
+		{
+			return status;
+		}
+	}
+	return 0;
+}
+
 extern "C" void BtSmpBondWbaFlush(void)
 {
 	if ((s_bStorePending == false && s_bErasePending == false) || s_RetryWait != 0)
@@ -305,6 +339,12 @@ extern "C" void BtSmpBondWbaFlush(void)
 	size_t len = (size_t)size * sizeof(uint64_t);
 	uint32_t idx = 0;
 
+	r = BondTrimBank(bank, (uint32_t)((len + BT_WBA_CHUNK_SIZE - 1U) / BT_WBA_CHUNK_SIZE));
+	if (r != 0)
+	{
+		BondStoreFailed(r);
+		return;
+	}
 	for (size_t off = 0; off < len; off += BT_WBA_CHUNK_SIZE, idx++)
 	{
 		size_t n = len - off < BT_WBA_CHUNK_SIZE ? len - off : BT_WBA_CHUNK_SIZE;
@@ -409,16 +449,6 @@ extern "C" size_t BtSmpBondWbaRestore(void *pCacheBuf, size_t Capacity)
 }
 
 // ---------------------------------------------------------------------------
-// Commit trigger from the pairing complete handler. The stack flushes
-// through BLEPLAT_NvmStore on its own schedule, so this is a marker kept so
-// the integration point is explicit and greppable.
-// ---------------------------------------------------------------------------
-extern "C" void BtSmpBondWbaCommit(uint16_t ConnHdl)
-{
-	(void)ConnHdl;
-}
-
-// ---------------------------------------------------------------------------
 // Bond deletion, around aci_gap_clear_security_db in BtSmpBondErase.
 //
 // Begin takes back a store request not yet written: it names the cache as it
@@ -459,19 +489,31 @@ extern "C" void BtSmpBondWbaEraseEnd(bool bCleared)
 // ---------------------------------------------------------------------------
 // Register the stack's NVM cache and preload it, before BleStack_Init:
 // BleStack_init_t takes the buffer, its capacity and the words already
-// valid, and nvm_cache_size is exactly what this returns. Also the entry
+// valid, and its own record headers. The return value reports restored words for
+// diagnostics; Cube offers capacity minus one to the host. Also the entry
 // that pulls this object from the archive, so the strong BLEPLAT_NvmStore
 // here wins over any weak stub.
 //
-// Returns the preloaded 64 bit words, 0 on a first boot, corrupt data, or
+// Returns UINT16_MAX if a stored image exceeds capacity; otherwise the
+// preloaded 64 bit words, 0 on a first boot, corrupt data, or
 // a store that would not mount; the stack then starts empty, which is the
 // same recovery either way.
 // ---------------------------------------------------------------------------
 extern "C" uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords)
 {
+	BtWbaNvmManifest_t manifest;
+
 	if (pCache == NULL || MaxWords == 0)
 	{
 		return 0;
+	}
+
+	// A smaller firmware cache must not silently discard existing bonds.
+	if (PdsEnsureReady() == 0 && BondManifestRead(&manifest) == 0 &&
+		manifest.Len > (size_t)MaxWords * sizeof(uint64_t))
+	{
+		SysLogPrintf(SysLogGet(), "WBA bond: stored image exceeds configured cache\r\n");
+		return UINT16_MAX;
 	}
 
 	s_pCache = pCache;

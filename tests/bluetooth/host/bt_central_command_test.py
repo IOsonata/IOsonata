@@ -113,6 +113,13 @@ static void EnableInterrupt(unsigned)
 {
 }
 
+static bool BtGapReadPhy(uint16_t, uint8_t *tx, uint8_t *rx)
+{
+	*tx = 2;
+	*rx = 2;
+	return true;
+}
+
 static unsigned BtGattMsTick()
 {
 	return 0;

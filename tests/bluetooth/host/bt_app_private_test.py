@@ -130,6 +130,8 @@ extern "C" bool BtGapScanNext(uint8_t *, uint16_t) { ++s_Next; return true; }
 extern "C" void BtGapScanStop(void) {}
 extern "C" void BtHciScanReportEnable(void) {}
 '''
+		if path.endswith('bt_scan_stm32wba.cpp'):
+			code = code.replace('void BtGapScanStop(void) {}', 'void BtGapScanStop(void) { s_bScanning = false; }')
 		for name in ['BtScanIsActive', 'BtScanEnded', 'BtAppScanInit', 'BtAppScan', 'BtAppScanStop']:
 			code += extract_function(source, r'^(?:bool|void) ' + name + r'\(') + '\n'
 		code += '''

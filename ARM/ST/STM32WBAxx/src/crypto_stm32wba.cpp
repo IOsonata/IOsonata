@@ -43,6 +43,12 @@ SOFTWARE.
 
 #include "crypto/crypto_stm32wba.h"
 
+// One operation owner per hardware block, shared by every driver instance.
+std::atomic_flag CryptoWbaAes::vOpBusy = ATOMIC_FLAG_INIT;
+std::atomic_flag CryptoWbaPka::vOpBusy = ATOMIC_FLAG_INIT;
+unsigned CryptoWbaAes::s_EnabledCount;
+unsigned CryptoWbaPka::s_EnabledCount;
+
 #define AES_BLOCK				16U
 
 // Loop counts of the busy waits. Each loop is a few cycles, the limits are far
@@ -464,20 +470,23 @@ static void WbaCtrAdd(uint8_t Ctr[AES_BLOCK], uint32_t Blocks)
 
 bool CryptoWbaAes::Enable()
 {
-	if (vbValid)
-	{
-		return true;
-	}
 	if (!OpAcquire())
 	{
 		return false;
 	}
-	SET_BIT(RCC->AHB2ENR, RCC_AHB2ENR_AESEN);
-	(void)RCC->AHB2ENR;
-	SET_BIT(RCC->AHB2RSTR, RCC_AHB2RSTR_AESRST);
-	CLEAR_BIT(RCC->AHB2RSTR, RCC_AHB2RSTR_AESRST);
-	AES->CR = 0U;
-	vbValid = true;
+	if (!vbValid)
+	{
+		if (s_EnabledCount == 0)
+		{
+			SET_BIT(RCC->AHB2ENR, RCC_AHB2ENR_AESEN);
+			(void)RCC->AHB2ENR;
+			SET_BIT(RCC->AHB2RSTR, RCC_AHB2RSTR_AESRST);
+			CLEAR_BIT(RCC->AHB2RSTR, RCC_AHB2RSTR_AESRST);
+			AES->CR = 0U;
+		}
+		s_EnabledCount++;
+		vbValid = true;
+	}
 	OpRelease();
 	return true;
 }
@@ -488,10 +497,17 @@ void CryptoWbaAes::Disable()
 	{
 		return;
 	}
-	vbValid = false;
-	AES->CR = 0U;
-	WbaAesWipeRegs();
-	CLEAR_BIT(RCC->AHB2ENR, RCC_AHB2ENR_AESEN);
+	if (vbValid)
+	{
+		vbValid = false;
+		s_EnabledCount--;
+		if (s_EnabledCount == 0)
+		{
+			AES->CR = 0U;
+			WbaAesWipeRegs();
+			CLEAR_BIT(RCC->AHB2ENR, RCC_AHB2ENR_AESEN);
+		}
+	}
 	OpRelease();
 }
 
@@ -728,7 +744,11 @@ CryptoWbaAes *CryptoWbaAesCreate(void *pMem, size_t MemSize)
 		return nullptr;
 	}
 	CryptoWbaAes *p = new (pMem) CryptoWbaAes();
-	p->Enable();
+	if (!p->Enable())
+	{
+		p->~CryptoWbaAes();
+		return nullptr;
+	}
 	return p;
 }
 
@@ -1052,17 +1072,24 @@ static int WbaPkaVerify(const uint8_t Pub[64], const uint8_t E[32],
 
 bool CryptoWbaPka::Enable()
 {
-	if (vbValid)
-	{
-		return true;
-	}
+	bool ok;
+
 	if (!OpAcquire())
 	{
 		return false;
 	}
-	vbValid = WbaPkaStart();
+	ok = vbValid;
+	if (!ok)
+	{
+		ok = s_EnabledCount != 0 || WbaPkaStart();
+		if (ok)
+		{
+			s_EnabledCount++;
+			vbValid = true;
+		}
+	}
 	OpRelease();
-	return vbValid;
+	return ok;
 }
 
 void CryptoWbaPka::Disable()
@@ -1071,20 +1098,36 @@ void CryptoWbaPka::Disable()
 	{
 		return;
 	}
-	vbValid = false;
-	WbaPkaWipeRam();
-	PKA->CR = 0U;
-	CLEAR_BIT(RCC->AHB2ENR, RCC_AHB2ENR_PKAEN);
+	if (vbValid)
+	{
+		vbValid = false;
+		s_EnabledCount--;
+		if (s_EnabledCount == 0)
+		{
+			WbaPkaWipeRam();
+			PKA->CR = 0U;
+			CLEAR_BIT(RCC->AHB2ENR, RCC_AHB2ENR_PKAEN);
+		}
+	}
 	OpRelease();
 }
 
 void CryptoWbaPka::Reset()
 {
+	if (!vbValid)
+	{
+		(void)Enable();
+		return;
+	}
 	if (!OpAcquire())
 	{
 		return;
 	}
-	vbValid = WbaPkaStart();
+	if (!WbaPkaStart())
+	{
+		vbValid = false;
+		s_EnabledCount--;
+	}
 	OpRelease();
 }
 
@@ -1172,6 +1215,13 @@ CRYPTO_STATUS CryptoWbaPka::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
 	if (!vbValid)
 	{
 		return CRYPTO_STATUS_FAIL;
+	}
+	// Importing only the private scalar does not require a multiplication.
+	if (pPubKey == nullptr)
+	{
+		memcpy(pk->PrivKey, pPrivKey, 32U);
+		pk->bKeyValid = true;
+		return CRYPTO_STATUS_OK;
 	}
 	if (!OpAcquire())
 	{

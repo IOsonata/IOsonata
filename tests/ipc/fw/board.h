@@ -9,6 +9,8 @@
 #endif
 
 extern uint8_t g_HostIpcMem[];
+void IpcTestPeerRun(bool bRun);
+#define __WFE() ((void)0)
 
 #define IPCTEST_MEM_ADDR		((uintptr_t)g_HostIpcMem)
 #define IPCTEST_MEM_SIZE		0x2000U

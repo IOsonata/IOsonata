@@ -63,6 +63,20 @@ extern "C" ssize_t BtPdsRead(uint32_t Id, void *pData, size_t Len)
 	return it->second.size();
 }
 
+extern "C" int BtPdsDelete(uint32_t Id)
+{
+	if (records.find(Id) != records.end())
+	{
+		writes++;
+		if (writes == failWrite)
+		{
+			return -EIO;
+		}
+		records.erase(Id);
+	}
+	return 0;
+}
+
 // The bond deletion erases the store; tests/stm32wba/run_bond_flash.py covers
 // it over the real PDS and flash driver.
 extern "C" int BtPdsClear(void)
@@ -275,6 +289,9 @@ int main()
 	assert(!s_bStorePending);
 	CheckRestored(312);
 	puts("PASS successful save resets the retry wait");
+	assert(BtSmpBondWbaCacheInit(restored, 1) == UINT16_MAX);
+	CheckRestored(312);
+	puts("PASS smaller cache refuses startup without erasing stored bonds");
 }
 '''
 

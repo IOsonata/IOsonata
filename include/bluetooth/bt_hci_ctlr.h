@@ -247,7 +247,7 @@ void BtHciCtlrPeriodicAdvSupport(void);
 extern void (* const g_pBtHciCtlrPeriodicAdvSupport)(void);
 
 /// Size in bytes of the library default controller memory pool
-#define BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE		10000
+#define BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE		16384
 
 /// Controller memory pool descriptor
 typedef struct __Bt_Hci_Ctlr_Mem_Pool {
@@ -258,7 +258,7 @@ typedef struct __Bt_Hci_Ctlr_Mem_Pool {
 /// Memory pool the controller carves its configuration out of. The library
 /// defines a weak default of BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE bytes. What a
 /// controller needs depends on the role and the number of links, so an
-/// application sizes it by defining its own
+/// target configuration sizes it by defining its own
 ///
 ///   alignas(8) static uint8_t s_CtlrMem[MY_SIZE];
 ///   const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_CtlrMem, sizeof(s_CtlrMem) };

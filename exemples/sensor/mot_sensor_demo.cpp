@@ -457,8 +457,6 @@ int main()
 	while (1)
 	{
 //		uint32_t t = g_Timer.uSecond();
-
-		//NRF_POWER->SYSTEMOFF = POWER_SYSTEMOFF_SYSTEMOFF_Enter;
 		__WFE();
 		//g_MotSensor.UpdateData();
 

@@ -145,6 +145,8 @@ class Clocks:
         self.actvosrdy = 0
         # Reset state: 16 MHz runs in voltage range 2 with one wait state
         self.acr = 1
+        self.icache_cr = hdr('ICACHE_CR_WAYSEL')
+        self.reg[('PWR', reg_off('PWR_TypeDef', 'CR2'))] = hdr('PWR_CR2_ICRAMPDS')
         self.pll_cfg = None
         self.pll_up = False
         self.max_freq = 0
@@ -200,6 +202,8 @@ class Clocks:
 
     # ---- register access ---------------------------------------------------
     def rd(self, off, base):
+        if base == 'ICACHE':
+            return self.icache_cr if off == 0 else 0
         if base == 'RCC':
             if off == self.o['CR']:
                 return self.cr
@@ -222,7 +226,14 @@ class Clocks:
         return self.reg[(base, off)] if base != 'RCC' else self.reg[off]
 
     def wr(self, off, base, val):
-        if base == 'RCC':
+        if base == 'ICACHE':
+            if off != 0:
+                self.v('unexpected ICACHE register write')
+            if self.icache_cr & hdr('ICACHE_CR_EN'):
+                self.v('reconfigured an already enabled cache')
+            self.icache_cr = val
+            self.log.add(('ICACHE', val))
+        elif base == 'RCC':
             self.wr_rcc(off, val)
         elif base == 'PWR':
             if off == self.po['VOSR']:
@@ -380,7 +391,8 @@ def main():
         plain = collections.defaultdict(int)
 
         def where(a):
-            for name, base, size in (('RCC', rcc, 0x400), ('PWR', pwr, 0x400), ('FLASH', fla, 0x400)):
+            for name, base, size in (('RCC', rcc, 0x400), ('PWR', pwr, 0x400), ('FLASH', fla, 0x400),
+                                     ('ICACHE', hdr('ICACHE_BASE_NS'), 0x400)):
                 if base <= a < base + size:
                     return name, a - base
             return None, 0
@@ -406,6 +418,9 @@ def main():
         def on_mark(uc, addr, size, user):
             log.mark = uc.reg_read(UC_ARM_REG_R0)
             clk.hse_works = log.mark != 4
+            if log.mark == 1:
+                # A boot loader/application's enabled two-way mode is retained.
+                clk.icache_cr |= hdr('ICACHE_CR_WAYSEL')
 
         state = {'done': False}
 
@@ -459,6 +474,15 @@ def main():
     pre = [x[1] for x in e if x[0] == 'PRE']
     expect(pre and pre[-1] == 0 and 1 in pre, f'PLL1R pre divider sequence {pre}')
     expect(kinds.index('SW') < len(kinds) - 1 and e[-1] == ('PRE', 0), 'pre divider not released after the switch')
+
+    expect([x[1] for x in P(0) if x[0] == 'ICACHE'] == [0, hdr('ICACHE_CR_EN')],
+           'cold start must select direct-mapped mode before enabling ICACHE')
+    expect(clk.reg[('PWR', reg_off('PWR_TypeDef', 'CR2'))] & hdr('PWR_CR2_ICRAMPDS') == 0,
+           'ICACHE RAM retention not enabled')
+    expect(clk.icache_cr == hdr('ICACHE_CR_EN') | hdr('ICACHE_CR_WAYSEL'),
+           'enabled cache mode was not preserved across clock changes')
+    expect(not any(x[0] == 'ICACHE' for mark in range(1, 11) for x in P(mark)),
+           'clock changes or fallback reconfigured an enabled cache')
 
     # 1 crystal: HSE into PLL1
     expect(res[5] == 1, 'SystemCoreClockSelect(XTAL, 32 MHz) failed')

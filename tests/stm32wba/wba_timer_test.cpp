@@ -79,6 +79,11 @@ static int s_Checks;
 static bool s_NvicEn[128];
 static uint32_t s_NvicPrio[128];
 
+extern "C" uint32_t TestNvicGetEnable(int IrqNo)
+{
+	return IrqNo >= 0 && IrqNo < 128 && s_NvicEn[IrqNo];
+}
+
 extern "C" void TestNvic(int Op, int IrqNo, uint32_t Prio)
 {
 	if (IrqNo < 0 || IrqNo >= 128)

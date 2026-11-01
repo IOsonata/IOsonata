@@ -51,6 +51,7 @@ SOFTWARE.
 #include <time.h>
 
 #include "coredev/iopincfg.h"
+#include "coredev/interrupt.h"
 #include "coredev/uart.h"
 #include "syslog.h"
 #include "miscdev/rtc.h"
@@ -195,6 +196,9 @@ static void RtcDemoPrintTime(void)
 
 int main()
 {
+	uintptr_t state;
+	uint32_t evt;
+
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 
@@ -264,10 +268,10 @@ int main()
 			msDelay(1000);
 		}
 
-		__disable_irq();
-		uint32_t evt = s_RtcDemoEvt;
+		state = DisableInterrupt();
+		evt = s_RtcDemoEvt;
 		s_RtcDemoEvt = 0;
-		__enable_irq();
+		EnableInterrupt(state);
 
 		if (evt & RTC_EVT_ALARM0)
 		{

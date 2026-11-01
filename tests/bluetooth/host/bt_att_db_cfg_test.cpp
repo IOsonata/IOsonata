@@ -67,7 +67,7 @@ void TestApplicationMemoryIsUsed(void)
 	// Asking for more than the descriptor gives is held to the descriptor
 	BtAttDBInit(1024U * 1024U);
 
-	size_t entrySize = (sizeof(BtAttDBEntry_t) + kDataLen +
+	size_t entrySize = (offsetof(BtAttDBEntry_t, Data) + kDataLen +
 		alignof(BtAttDBEntry_t) - 1U) & ~(size_t)(alignof(BtAttDBEntry_t) - 1U);
 	int expected = (int)((kAppMemSize - sizeof(BtAttDBEntry_t)) / entrySize);
 
@@ -89,7 +89,7 @@ void TestSmallerSizeIsHonored(void)
 {
 	BtAttDBInit(1024);
 
-	size_t entrySize = (sizeof(BtAttDBEntry_t) + kDataLen +
+	size_t entrySize = (offsetof(BtAttDBEntry_t, Data) + kDataLen +
 		alignof(BtAttDBEntry_t) - 1U) & ~(size_t)(alignof(BtAttDBEntry_t) - 1U);
 	int expected = (int)((1024U - sizeof(BtAttDBEntry_t)) / entrySize);
 

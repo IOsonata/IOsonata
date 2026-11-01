@@ -15,6 +15,7 @@
     "${external}/nrfx/drivers/include",
     "${external}/nrfx/bsp/stable",
     "${external}/nrfx/bsp/stable/mdk",
+    "${external}/nrfx/bsp/stable/mdk/common",
     "${external}/nrfx/bsp/stable/mdk/nrf53",
     "${external}/nrfx/hal"
   ],

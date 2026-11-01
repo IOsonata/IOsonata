@@ -85,7 +85,8 @@ FW_FLAGS_pkt_w6 := -DIPCTEST_PACKET=1 -DIPCTEST_WINDOW=6U
 FW_FLAGS_pkt_w12 := -DIPCTEST_PACKET=1 -DIPCTEST_WINDOW=12U
 FW_FLAGS_byte_w1 := -DIPCTEST_PACKET=0 -DIPCTEST_WINDOW=1U
 FW_FLAGS_byte_w6 := -DIPCTEST_PACKET=0 -DIPCTEST_WINDOW=6U
-FW_SRC := $(FW_DIR)/fw_logic_test.cpp $(FW_DIR)/owner_tu.cpp $(FW_DIR)/peer_tu.cpp \
+FW_TARGET := $(ROOT)/ARM/Nordic/nRF53/nRF5340_App/exemples/IpcIntrfTest/src/ipc_test_target.cpp
+FW_SRC := $(FW_TARGET) $(FW_DIR)/fw_logic_test.cpp $(FW_DIR)/owner_tu.cpp $(FW_DIR)/peer_tu.cpp \
 	$(ROOT)/exemples/ipc/ipc_intrf_test.cpp $(FW_DIR)/board.h $(FW_DIR)/nrf.h \
 	$(FW_DIR)/idelay.h $(FW_DIR)/iopinctrl.h $(HEADERS) \
 	$(ROOT)/tests/bluetooth/host/ipc_sync_port.h
@@ -100,7 +101,7 @@ $(BUILD_DIR)/fw_%: $(FW_SRC) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $(ROOT)/src/cfifo.c -o $(BUILD_DIR)/cfifo_fw.o
 	$(CXX) -I$(FW_DIR) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		-DIPCTEST_COUNT=$(FW_COUNT)UL $(FW_FLAGS_$*) \
-		$(FW_DIR)/fw_logic_test.cpp $(FW_DIR)/owner_tu.cpp $(FW_DIR)/peer_tu.cpp \
+		$(FW_DIR)/fw_logic_test.cpp $(FW_DIR)/owner_tu.cpp $(FW_DIR)/peer_tu.cpp $(FW_TARGET) \
 		$(ROOT)/src/ipc/ipc_intrf.cpp $(ROOT)/src/device_intrf.cpp \
 		$(BUILD_DIR)/cfifo_fw.o $(LDFLAGS) -o $@
 

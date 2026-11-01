@@ -52,6 +52,9 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"
 
+extern void BtIntrfTxReady(void) __attribute__((weak));
+extern void BtDfuSmpTxReady(void) __attribute__((weak));
+
 // HCI packet layouts as the stack gives them in BLECB_Indication. The Cube
 // svc_ctl.h declares the same structures, it is not needed here.
 typedef struct __attribute__((packed)) {
@@ -97,6 +100,7 @@ void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status,
 		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
 void BtGapWbaConnParamsL2capResponse(uint16_t ConnHdl, uint16_t Result);
 void BtGapWbaConnParamProcess(void);
+void BtGapWbaPhyUpdateComplete(uint16_t ConnHdl);
 
 void BtGapWbaNativeHandlesSet(uint8_t Role, uint8_t DeviceNameMaxLen,
 		uint16_t GapSrvcHdl, uint16_t DevNameCharHdl,
@@ -122,7 +126,8 @@ static bool BtWbaDiscServiceEventValid(
 {
 	const size_t fixed = offsetof(
 			aci_att_read_by_group_type_resp_event_rp0, Attribute_Data_List);
-	if (p == nullptr || !BtWbaEvtRangeValid(fixed, p->Data_Length, Available))
+	if (p == nullptr || Available < fixed ||
+		!BtWbaEvtRangeValid(fixed, p->Data_Length, Available))
 	{
 		return false;
 	}
@@ -156,7 +161,8 @@ static bool BtWbaDiscCharEventValid(
 {
 	const size_t fixed = offsetof(
 			aci_att_read_by_type_resp_event_rp0, Handle_Value_Pair_Data);
-	if (p == nullptr || !BtWbaEvtRangeValid(fixed, p->Data_Length, Available))
+	if (p == nullptr || Available < fixed ||
+		!BtWbaEvtRangeValid(fixed, p->Data_Length, Available))
 	{
 		return false;
 	}
@@ -190,7 +196,7 @@ static bool BtWbaDiscInfoEventValid(
 {
 	const size_t fixed = offsetof(
 			aci_att_find_info_resp_event_rp0, Handle_UUID_Pair);
-	if (p == nullptr || !BtWbaEvtRangeValid(
+	if (p == nullptr || Available < fixed || !BtWbaEvtRangeValid(
 			fixed, p->Event_Data_Length, Available))
 	{
 		return false;
@@ -238,18 +244,30 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 	hci_event_pckt *pEvt =
 		(hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
 
-	if (pEvt->evt == HCI_DISCONNECTION_COMPLETE_EVT_CODE &&
-		pEvt->plen >= sizeof(hci_disconnection_complete_event_rp0))
+	if (pEvt->evt == HCI_DISCONNECTION_COMPLETE_EVT_CODE)
 	{
+		if (pEvt->plen < sizeof(hci_disconnection_complete_event_rp0))
+		{
+			return BTWBA_EVT_FLOW_ENABLE;
+		}
 		auto *p = (hci_disconnection_complete_event_rp0 *)pEvt->data;
 		if (p->Status == 0)
 		{
 			BtGapWbaConnParamsDisconnected(p->Connection_Handle);
 		}
 	}
+	else if (pEvt->evt == HCI_ENCRYPTION_CHANGE_EVT_CODE &&
+		pEvt->plen < sizeof(hci_encryption_change_event_rp0))
+	{
+		return BTWBA_EVT_FLOW_ENABLE;
+	}
 	else if (pEvt->evt == HCI_LE_META_EVT_CODE)
 	{
 		const size_t fixed = offsetof(evt_le_meta_event, data);
+		if (pEvt->plen < fixed)
+		{
+			return BTWBA_EVT_FLOW_ENABLE;
+		}
 		if (pEvt->plen >= fixed)
 		{
 			evt_le_meta_event *pMeta = (evt_le_meta_event *)pEvt->data;
@@ -258,6 +276,10 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 			switch (pMeta->subevent)
 			{
 				case HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE:
+					if (available < sizeof(hci_le_connection_complete_event_rp0))
+					{
+						return BTWBA_EVT_FLOW_ENABLE;
+					}
 					if (available >= sizeof(
 							hci_le_connection_complete_event_rp0))
 					{
@@ -270,6 +292,37 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 						}
 					}
 					break;
+
+				case HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE:
+				{
+					const hci_le_enhanced_connection_complete_event_rp0 *p;
+
+					if (available < sizeof(*p))
+					{
+						return BTWBA_EVT_FLOW_ENABLE;
+					}
+					p = (const hci_le_enhanced_connection_complete_event_rp0 *)pMeta->data;
+					if (p->Status == BLE_STATUS_SUCCESS)
+					{
+						BtGapWbaConnParamsConnected(
+							p->Connection_Handle, p->Role, p->Conn_Interval,
+							p->Conn_Latency, p->Supervision_Timeout);
+					}
+					break;
+				}
+
+				case HCI_LE_PHY_UPDATE_COMPLETE_SUBEVT_CODE:
+				{
+					const hci_le_phy_update_complete_event_rp0 *p;
+
+					if (available < sizeof(*p))
+					{
+						return BTWBA_EVT_FLOW_ENABLE;
+					}
+					p = (const hci_le_phy_update_complete_event_rp0 *)pMeta->data;
+					BtGapWbaPhyUpdateComplete(p->Connection_Handle);
+					break;
+				}
 
 				case HCI_LE_CONNECTION_UPDATE_COMPLETE_SUBEVT_CODE:
 					if (available >= sizeof(
@@ -302,6 +355,81 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 
 		switch (pAci->ecode)
 		{
+			case ACI_GATT_PROC_COMPLETE_VSEVT_CODE:
+				if (available < sizeof(aci_gatt_proc_complete_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_ATT_EXCHANGE_MTU_RESP_VSEVT_CODE:
+				if (available < sizeof(aci_att_exchange_mtu_resp_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_GAP_PAIRING_COMPLETE_VSEVT_CODE:
+				if (available < sizeof(aci_gap_pairing_complete_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_GAP_NUMERIC_COMPARISON_VALUE_VSEVT_CODE:
+				if (available < sizeof(aci_gap_numeric_comparison_value_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_GAP_PASS_KEY_REQ_VSEVT_CODE:
+				if (available < sizeof(aci_gap_pass_key_req_event_rp0))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+
+			case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:
+			{
+				const size_t fixed = offsetof(aci_gatt_attribute_modified_event_rp0, Attr_Data);
+				const aci_gatt_attribute_modified_event_rp0 *p =
+					(const aci_gatt_attribute_modified_event_rp0 *)pAci->data;
+
+				if (available < fixed ||
+					!BtWbaEvtRangeValid(fixed, p->Attr_Data_Length, available))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+			}
+
+			case ACI_GATT_NOTIFICATION_VSEVT_CODE:
+			{
+				const size_t fixed = offsetof(aci_gatt_notification_event_rp0, Attribute_Value);
+				const aci_gatt_notification_event_rp0 *p =
+						(const aci_gatt_notification_event_rp0 *)pAci->data;
+
+				if (available < fixed ||
+					!BtWbaEvtRangeValid(fixed, p->Attribute_Value_Length, available))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+			}
+			case ACI_GATT_INDICATION_VSEVT_CODE:
+			{
+				const size_t fixed = offsetof(aci_gatt_indication_event_rp0, Attribute_Value);
+				const aci_gatt_indication_event_rp0 *p =
+						(const aci_gatt_indication_event_rp0 *)pAci->data;
+
+				if (available < fixed ||
+					!BtWbaEvtRangeValid(fixed, p->Attribute_Value_Length, available))
+				{
+					return BTWBA_EVT_FLOW_ENABLE;
+				}
+				break;
+			}
 			case ACI_ATT_READ_BY_GROUP_TYPE_RESP_VSEVT_CODE:
 				if (!BtWbaDiscServiceEventValid(
 						(aci_att_read_by_group_type_resp_event_rp0 *)pAci->data,
@@ -356,6 +484,22 @@ static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 				return BTWBA_EVT_FLOW_ENABLE;
 			}
 #endif
+
+			case ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE:
+				if (available >= sizeof(aci_gatt_tx_pool_available_event_rp0) &&
+					BtWbaEvtLe16(pAci->data + 2) != 0)
+				{
+					// This event releases shared capacity, not a sent packet.
+					if (BtIntrfTxReady != nullptr)
+					{
+						BtIntrfTxReady();
+					}
+					if (BtDfuSmpTxReady != nullptr)
+					{
+						BtDfuSmpTxReady();
+					}
+				}
+				return BTWBA_EVT_FLOW_ENABLE;
 
 			case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
 				if (available >= 2)

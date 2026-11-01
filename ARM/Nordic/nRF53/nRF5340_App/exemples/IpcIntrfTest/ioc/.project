@@ -40,5 +40,10 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/ipc/ipc_intrf_test.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/ipc_test_target.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/ipc_test_target.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

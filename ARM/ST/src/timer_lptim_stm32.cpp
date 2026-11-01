@@ -158,7 +158,8 @@ typedef struct {
 	uint32_t Cfgr;					//!< CFGR value, prescaler
 	uint32_t CC[ST_LPTIM_TRIG_MAXCNT];		//!< Compare periods in counts
 	uint32_t Next[ST_LPTIM_TRIG_MAXCNT];	//!< Compare values written
-	bool bTrigEn[ST_LPTIM_TRIG_MAXCNT];		//!< Trigger callback enabled
+	volatile bool bTrigEn[ST_LPTIM_TRIG_MAXCNT];	//!< Trigger callback enabled
+	volatile bool bTrigWrite;			//!< Compare programming in progress
 	TimerTrig_t Trigger[ST_LPTIM_TRIG_MAXCNT];
 } StLptDev_t;
 
@@ -498,15 +499,22 @@ static uint64_t StLptEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64
 								   void * const pContext)
 {
 	int devno = StLptDevNo(pTimer);
+	StLptDev_t *dev;
+	LPTIM_TypeDef *reg;
+	uint64_t cc;
+	uint64_t period;
+	uint32_t state;
+	bool irqEnabled;
+	bool res;
 
 	if (devno < 0 || TrigNo < 0 || TrigNo >= ST_LPTIM_TRIG_MAXCNT)
 	{
 		return 0;
 	}
 
-	StLptDev_t *dev = &s_StLptDev[devno];
-	LPTIM_TypeDef *reg = s_StLptInfo[devno].pReg;
-	uint64_t cc = (nsPeriod + (pTimer->nsPeriod >> 1ULL)) / pTimer->nsPeriod;
+	dev = &s_StLptDev[devno];
+	reg = s_StLptInfo[devno].pReg;
+	cc = (nsPeriod + (pTimer->nsPeriod >> 1ULL)) / pTimer->nsPeriod;
 
 	// The compare register is written with the timer enabled
 	if (cc <= 2ULL || cc >= 0x10000ULL || (reg->CR & LPTIM_CR_ENABLE) == 0)
@@ -514,26 +522,49 @@ static uint64_t StLptEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64
 		return 0;
 	}
 
-	uint32_t state = DisableInterrupt();
+	state = DisableInterrupt();
+	if (dev->bTrigWrite)
+	{
+		EnableInterrupt(state);
+		return 0;
+	}
+	dev->bTrigWrite = true;
+	irqEnabled = NVIC_GetEnableIRQ(s_StLptInfo[devno].IrqNo) != 0;
+	NVIC_DisableIRQ(s_StLptInfo[devno].IrqNo);
 
-	dev->bTrigEn[TrigNo] = false;
+	// The timer vector cannot observe these fields until the write finishes.
+	// A higher-priority interrupt may cancel by clearing bTrigEn while we wait.
+	dev->bTrigEn[TrigNo] = true;
 	dev->CC[TrigNo] = (uint32_t)cc;
 	dev->Trigger[TrigNo].Type = Type;
 	dev->Trigger[TrigNo].nsPeriod = pTimer->nsPeriod * cc;
 	dev->Trigger[TrigNo].Handler = Handler;
 	dev->Trigger[TrigNo].pContext = pContext;
+	period = dev->Trigger[TrigNo].nsPeriod;
 
 	dev->Next[TrigNo] = (StLptCount(reg) + dev->CC[TrigNo]) & 0xFFFF;
 
-	bool res = StLptWrite(reg, StLptCmpReg(reg, TrigNo), dev->Next[TrigNo], s_StLptCmpOk[TrigNo]);
+	EnableInterrupt(state);
+
+	// Synchronization takes several LPTIM clock cycles. Leave other vectors,
+	// including the priority-zero radio interrupt, in their caller's state.
+	res = StLptWrite(reg, StLptCmpReg(reg, TrigNo), dev->Next[TrigNo], s_StLptCmpOk[TrigNo]);
+
+	state = DisableInterrupt();
 
 	// A match of the old compare value is not this trigger
 	reg->ICR = s_StLptCmpIf[TrigNo];
+	res = res && dev->bTrigEn[TrigNo];
 	dev->bTrigEn[TrigNo] = res;
+	dev->bTrigWrite = false;
+	if (irqEnabled)
+	{
+		NVIC_EnableIRQ(s_StLptInfo[devno].IrqNo);
+	}
 
 	EnableInterrupt(state);
 
-	return res ? dev->Trigger[TrigNo].nsPeriod : 0;
+	return res ? period : 0;
 }
 
 static void StLptDisableTrigger(TimerDev_t * const pTimer, int TrigNo)

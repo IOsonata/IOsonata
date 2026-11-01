@@ -30,17 +30,17 @@
 		<link>
 			<name>src/main.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_cdc_loopback/main.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/usb/tinyusb_cdc_loopback/main.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/tusb_config.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_cdc_loopback/tusb_config.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/usb/tinyusb_cdc_loopback/tusb_config.h</locationURI>
 		</link>
 		<link>
 			<name>src/tinyusb_cdc_bench.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_common/tinyusb_cdc_bench.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/usb/tinyusb_common/tinyusb_cdc_bench.h</locationURI>
 		</link>
 		<link>
 			<name>src/tusb.c</name>

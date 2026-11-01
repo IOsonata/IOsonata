@@ -628,8 +628,9 @@ typedef struct __Bt_Att_DB_Mem_Cfg {
 ///   const BtAttDBMemCfg_t g_BtAttDBMemCfg = { s_AttDBMem, sizeof(s_AttDBMem) };
 ///
 /// in which case the library default memory is not linked. Each attribute
-/// takes sizeof(BtAttDBEntry_t) plus its data, rounded up to the alignment
-/// of the entry, and one more entry is kept for the end of the database.
+/// takes offsetof(BtAttDBEntry_t, Data) plus its data, at least one complete
+/// entry, rounded up to the entry alignment. One complete tail entry is
+/// also reserved.
 /// Adding a service fails when the memory is full.
 extern const BtAttDBMemCfg_t g_BtAttDBMemCfg;
 

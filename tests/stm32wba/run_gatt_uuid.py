@@ -14,6 +14,7 @@ source = (ROOT / 'ARM/ST/STM32WBAxx/src/bt_gatt_stm32wba.cpp').read_text()
 registration = source[source.index('static uint8_t WbaSecPerm'):source.index('bool BtGattCharSetValue')]
 code = r'''
 #include <cstdlib>
+#define SysLogPrintf(...) ((void)0)
 #define CHECK(x) do { if (!(x)) std::abort(); } while (0)
 #include <cstring>
 #include "bluetooth/bt_app.h"
@@ -26,6 +27,8 @@ code = r'''
 #define ATTR_PERMISSION_ENCRY_READ 4
 #define ATTR_PERMISSION_ENCRY_WRITE 8
 #define ATTR_PERMISSION_NONE 0
+#define ATTR_PERMISSION_SC_READ 0x40
+#define ATTR_PERMISSION_SC_WRITE 0x80
 #define UUID_TYPE_128 2
 #define UUID_TYPE_16 1
 #define PRIMARY_SERVICE 1
@@ -38,19 +41,34 @@ using tBleStatus = unsigned char;
 union Char_UUID_t { uint8_t Char_UUID_128[16]; uint16_t Char_UUID_16; };
 union Service_UUID_t { uint8_t Service_UUID_128[16]; uint16_t Service_UUID_16; };
 BTGAP_SECTYPE BtAppSecTypeGet() { return BTGAP_SECTYPE_NONE; }
-static tBleStatus aci_gatt_add_service(uint8_t, Service_UUID_t *, uint8_t, uint8_t, uint16_t *h)
+static unsigned deleted;
+static unsigned recordCount;
+static bool refuseChar;
+static tBleStatus aci_gatt_del_service(uint16_t h) { CHECK(h == 10); deleted++; return 0; }
+static tBleStatus aci_gatt_add_service(uint8_t, Service_UUID_t *, uint8_t, uint8_t records, uint16_t *h)
 {
+ recordCount = records;
  *h = 10;
  return 0;
 }
 static tBleStatus aci_gatt_add_char(uint16_t, uint8_t, Char_UUID_t *, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t *h)
 {
  *h = 11;
- return 0;
+ return refuseChar ? 1 : 0;
 }
-void BtGattInsertSrvcList(BtGattSrvc_t *) {}
+static BtGattSrvc_t *registered;
+static int writeOffset, writeLen;
+static unsigned cccdWrites;
+void BtGattInsertSrvcList(BtGattSrvc_t *p) { registered = p; }
+BtGattSrvc_t *BtGattGetSrvcList() { return registered; }
+bool BtGattCccdSet(uint16_t, uint16_t, uint16_t) { cccdWrites++; return true; }
+static void Write(BtGattChar_t *, uint8_t *, int offset, int len) { writeOffset = offset; writeLen = len; }
 '''
 code += registration
+app = (ROOT / 'ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp').read_text()
+a = app.index('static void WbaGattAttrModified(')
+b = app.index('\n}\n', a) + 3
+code += app[a:b]
 code += r'''
 int main()
 {
@@ -62,6 +80,22 @@ int main()
  CHECK(std::memcmp(base, service.UuidBase, 16) == 0);
  CHECK(service.Uuid.BaseIdx == 1);
  CHECK(chars[0].BaseUuidIdx == 1);
+ CHECK(WbaSecPerm(BTGAP_SECTYPE_LESC_MITM) == 0xc3);
+ chars[0].Property = BT_GATT_CHAR_PROP_BROADCAST | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_EXT_PROP;
+ CHECK(BtGattSrvcAdd(&service));
+ CHECK(recordCount == 6 && chars[0].CccdHdl == 14);
+ chars[0].WrCB = Write;
+ uint8_t value[2] = {1, 0};
+ WbaGattAttrModified(0, chars[0].ValHdl, 0x8003, value, 2);
+ CHECK(writeOffset == 3 && writeLen == 2);
+ WbaGattAttrModified(0, chars[0].CccdHdl, 0x8000, value, 2);
+ CHECK(cccdWrites == 0);
+ WbaGattAttrModified(0, chars[0].CccdHdl, 0, value, 2);
+ CHECK(cccdWrites == 1);
+ refuseChar = true;
+ CHECK(!BtGattSrvcAdd(&service));
+ CHECK(deleted == 1 && service.Hdl == BT_ATT_HANDLE_INVALID);
+ CHECK(chars[0].pSrvc == nullptr && chars[0].CccdHdl == BT_ATT_HANDLE_INVALID);
  BtUuidArr_t uuids = {.BaseIdx = 1, .Type = BT_UUID_TYPE_16, .Count = 1, .Uuid16 = {BLUEIO_UUID_UART_SERVICE}};
  uint8_t manufacturer[8] = {};
  BtAppCfg_t cfg = {};

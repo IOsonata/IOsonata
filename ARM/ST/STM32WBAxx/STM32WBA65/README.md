@@ -280,6 +280,13 @@ sets the core clock to 100 MHz from PLL1R, following `HAL_RCC_OscConfig` and
 5. The switch goes through the PLL1R two step divider as the ST HAL does, then
    the divider is released. HCLK, PCLK1, PCLK2 and PCLK7 are not divided.
 
+Startup enables the instruction cache in the direct-mapped mode used by
+CubeWBA's throughput client and retains its RAM in Stop mode. A cache already
+enabled by a boot loader or an earlier clock selection keeps its existing mode.
+The NVM and DFU drivers invalidate enabled cache lines after flash changes.
+Bluetooth startup reports the actual core frequency and cache enable state.
+Flash prefetch remains enabled; it does not replace the instruction cache.
+
 If PLL1 does not lock the clock stays on HSI16. Startup also stops clock
 reconfiguration when HSI readiness, the switch back to HSI, PLL shutdown or
 either voltage-ready acknowledgement times out. It leaves the current clock
@@ -291,9 +298,10 @@ the RCC registers. `SystemCoreClockSelect(OSC_TYPE_RC, 0)` or
 Validation: `tests/stm32wba/run_clock.py` runs the setup in an instruction set
 emulator with a model of the RCC, PWR and flash registers that checks the order
 of the steps, the PLL limits, the flash wait states against the frequency, the
-switch rules of the PLL1R divider and the fall back when HSE does not start (36
-checks, including failed voltage acknowledgements, a refused switch to HSI
-and a PLL that does not stop). It does not model lock time. Not tested on hardware.
+switch rules of the PLL1R divider and the fall back when HSE does not start (40
+checks, including cache enable, retention and preservation across clock changes,
+failed voltage acknowledgements, a refused switch to HSI and a PLL that does
+not stop). It does not model lock time. Not tested on hardware.
 
 ## Timer example project
 
@@ -541,9 +549,10 @@ How the adapter works with the 1.10.0 stack:
 - `BleStackCB_Process` and `HostStack_Process` are defined in `bt_app_stm32wba.cpp`
   and run `BleStack_Process` from the event queue. Do not build the Cube
   `host_stack_if.c`.
-- The 1 second timeout check and the millisecond clock use LPTIM2 (Timer DevNo 1)
-  through the IOsonata timer driver. The Cube timer server and the System Clock
-  Manager are not used.
+- The 1 second timeout check uses a periodic ST controller software timer.
+  The millisecond clock reads `ll_intf_get_aligned_us_now`, extends counter wrap,
+  and applies the returned conversion factors. The Cube RTC timer server and
+  System Clock Manager are not used. Bluetooth reserves no IOsonata LPTIM.
 - `BtAppCfg_t::TxPower` is in dBm and is mapped to the closest PA level of the
   table in the STM32WBA BLE Wireless Interface document.
 - The public address, identity root and encryption root are written to the
@@ -554,6 +563,50 @@ How the adapter works with the 1.10.0 stack:
   reports are handled. A central or peripheral with `MaxMtu` above 23 starts the
   ATT MTU exchange.
 
+Discovery retries only temporary ST command-admission failures (busy, pending
+or insufficient resources). A failed asynchronous procedure or permanent command
+error stops the attempt, logs the status and clears the partial cache. It does
+not call the successful discovery callback; an explicit `BtAppDiscoverDevice`
+call can start another attempt. Response data is accepted only in its active
+discovery phase. The event router validates payload lengths before dispatching
+completion, security and attribute-modified events. Vendor service and
+characteristic UUIDs retain their 128-bit base in the generic fixed UUID table;
+table exhaustion fails discovery. Only descriptors with the Bluetooth SIG base
+can populate standard descriptor handles such as the CCCD.
+
+GATT server registration reserves the descriptors ST adds for broadcast and
+extended properties, and removes a partially registered service on failure.
+LESC characteristics require Secure Connections even when optional legacy
+pairing is enabled. Attribute-write callbacks receive each fragment's byte
+offset without ST's continuation flag. TX-pool availability wakes blocked
+Bluetooth interfaces and DFU senders without consuming notification completions.
+
+Advertising reconfiguration first stops the active set and refuses to continue
+if that stop fails. Intervals are clamped to the ST command range. Central scan
+and connect honor public or static-random addressing; unsupported privacy modes
+are refused. The static-random address is derived from the configured public
+identity, so existing bonds made while the port ignored that selection may need
+to be paired again.
+
+The default ST bond cache is 384 64-bit words (3072 bytes). PDS initialization
+checks that two images and record/collection overhead fit an erase sector.
+Shorter saves remove unused chunks from the inactive bank in descending order,
+so interrupted deletion leaves a contiguous prefix. A stored image larger than
+the configured cache refuses Bluetooth initialization without erasing the image.
+Build overrides must fit the actual NVM geometry. Host tests exercise full-size
+saves, shrinking images and power loss; target flash validation of these changes
+is still pending.
+
+AES and PKA instances share a per-peripheral operation lock and keep the clock
+enabled until the last enabled instance releases it. Private-only PKA import
+avoids an unused public-key multiplication, and failed Bluetooth PKA operations
+wipe retained input. These changes pass host ownership and AES adapter tests;
+concurrent application crypto and pairing still need hardware validation.
+
+Radio startup reads the newest index-zero HSE trim record from OTP using the
+CubeWBA record layout, or applies Cube's 0x0C default when absent or invalid.
+OTP reads and register masking are host tested; radio validation remains pending.
+
 Platform layer under the stack:
 
 `src/bt_wba_platform.cpp` supplies the functions that the stack and the link
@@ -562,8 +615,15 @@ server, RTC, memory manager or flash manager:
 
 - `HAL_NVIC_*` and the radio baseband clock: NVIC and RCC registers.
 - `UTIL_SEQ_RegTask` and `UTIL_SEQ_SetTask`: the tasks run from `BtEvtQue`.
-- `BLE_TIMER_Start` and `BLE_TIMER_Stop`: 8 software slots on one LPTIM1 trigger
-  (Timer DevNo 0). The expiry callbacks run from `BtEvtQue`.
+- `BLE_TIMER_Start` and `BLE_TIMER_Stop`: 8 fixed software slots driven by one
+  ST controller one-shot timer (`os_timer_*`). A second controller timer drives
+  the periodic timeout checks. Both objects are reserved once from the fixed
+  controller pool. Expiry callbacks run from `BtEvtQue`, with queue refusal
+  retried. Host tests cover deadlines, cancel/restart, pool/arm refusal and
+  counter wrap. The DK1 completed both 60-second PRBS trials with LSE and
+  controller timers: 72195 B/s at 1M and 99850 B/s at 2M, with zero PRBS errors
+  and zero application queue drops. The 2M eight-notification target remains
+  unmet (6.138 notifications per 15 ms).
 - `HW_RNG_Get` and the RNG clock requests: RNG peripheral, HSI16 kernel clock,
   polled.
 - `BAES_*`: the IOsonata `CryptoWbaAes` engine (AES peripheral, polled). Only
@@ -577,8 +637,9 @@ server, RTC, memory manager or flash manager:
 Limits: the temperature given to the link layer for radio calibration is fixed
 at 25 degrees C (set `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 0 in
 `app_conf.h`, then it is not used). The RNG, timer, sequencer
-and PKA hooks are exercised by the BLE examples. Separate failure-path tests
-for these hooks remain pending.
+and PKA hooks are exercised by the BLE examples. Host tests cover timer
+admission/queue failures, AES fallback and PKA input cleanup. Peripheral fault
+injection and concurrent application crypto with pairing remain hardware work.
 
 Cube sources that remain in a Bluetooth build (all from the STM32CubeWBA 1.10.0
 package and the WPAN middleware commit 7e764835):
@@ -810,7 +871,7 @@ The timer queues a display refresh every 250 ms through AppEvt. No display
 transfer is done in the timer interrupt or scan-report callback.
 
 The board uses the working OLED SPI3 mapping and TIM16 (Timer DevNo 2),
-leaving LPTIM1/2 to Bluetooth. UART reports remain on the ST-LINK USART1 VCP
+while Bluetooth uses controller software timers. UART reports remain on the ST-LINK USART1 VCP
 at 1 Mbaud. Rebuild the matching Debug/Release MCU library first. Both the
 OLED and original UART-only scan projects compile and link. Display-model
 tests cover device identity, name preservation, RSSI bars, expiry, clock wrap

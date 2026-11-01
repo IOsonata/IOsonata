@@ -49,6 +49,7 @@ SOFTWARE.
 #include "bt_wba_stack.h"
 
 #include "istddef.h"
+#include "syslog.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
@@ -110,6 +111,10 @@ typedef struct __Bt_Gap_WbaState {
 	bool		bLegacyNameUpdatePending;	//!< Old app helper already performed native update
 } BtGapWbaState_t;
 
+static uint8_t s_OwnAddrType;
+static bool s_bRandomAddrSet;
+extern void BtScanEnded(void);
+
 static BtGapWbaState_t s_GapWba = {
 	.ScanInterval  = (uint16_t)BT_GAP_MSEC_TO_0_625(BT_GAP_SCAN_INTERVAL),
 	.ScanWindow    = (uint16_t)BT_GAP_MSEC_TO_0_625(BT_GAP_SCAN_WINDOW),
@@ -125,6 +130,99 @@ static BtGapWbaState_t s_GapWba = {
 };
 
 static BtGapWbaConnParamLink_t s_ConnParamLink[CFG_BLE_NUM_LINK];
+
+// ST v2.10.0 queues no-change PHY completion by reference to a connection
+// event record also reused by DLE's LL timer. In Basic Plus V3_0,
+// llcp_le_set_phy_cmd posts type 9 at context + 0x68; llcp_cntrl_pkt_init
+// changes that same record to type 1, which the dispatcher treats as an LL
+// response timeout. Keep it owned until PHY Update Complete is dispatched;
+// command acceptance is not completion.
+typedef struct {
+	uint16_t ConnHdl;
+	uint16_t TxOctets;
+	uint16_t TxTime;
+	bool bUsed;
+	bool bPhyPending;
+	bool bDlePending;
+} BtGapWbaLinkProc_t;
+
+static BtGapWbaLinkProc_t s_LinkProc[CFG_BLE_NUM_LINK];
+
+static BtGapWbaLinkProc_t *BtGapWbaLinkProcFind(uint16_t ConnHdl, bool Allocate)
+{
+	BtGapWbaLinkProc_t *freeSlot = nullptr;
+	size_t idx;
+
+	for (idx = 0; idx < CFG_BLE_NUM_LINK; idx++)
+	{
+		if (s_LinkProc[idx].bUsed && s_LinkProc[idx].ConnHdl == ConnHdl)
+		{
+			return &s_LinkProc[idx];
+		}
+		if (!s_LinkProc[idx].bUsed && freeSlot == nullptr)
+		{
+			freeSlot = &s_LinkProc[idx];
+		}
+	}
+	if (Allocate && freeSlot != nullptr)
+	{
+		memset(freeSlot, 0, sizeof(*freeSlot));
+		freeSlot->ConnHdl = ConnHdl;
+		freeSlot->bUsed = true;
+		return freeSlot;
+	}
+	return nullptr;
+}
+
+static void BtGapWbaLinkProcClear(uint16_t ConnHdl)
+{
+	BtGapWbaLinkProc_t *link;
+
+	link = BtGapWbaLinkProcFind(ConnHdl, false);
+	if (link != nullptr)
+	{
+		memset(link, 0, sizeof(*link));
+	}
+}
+
+static bool BtGapWbaLinkProcBusy(uint16_t ConnHdl)
+{
+	return BtGapWbaLinkProcFind(ConnHdl, false) != nullptr;
+}
+
+static void BtGapWbaLinkProcProcess(void)
+{
+	BtGapWbaLinkProc_t *link;
+	size_t idx;
+
+	for (idx = 0; idx < CFG_BLE_NUM_LINK; idx++)
+	{
+		link = &s_LinkProc[idx];
+		if (link->bUsed && !link->bPhyPending && link->bDlePending &&
+			BtGapSetDataLength(link->ConnHdl, link->TxOctets, link->TxTime))
+		{
+			memset(link, 0, sizeof(*link));
+		}
+	}
+}
+
+void BtGapWbaPhyUpdateComplete(uint16_t ConnHdl)
+{
+	BtGapWbaLinkProc_t *link;
+
+	link = BtGapWbaLinkProcFind(ConnHdl, false);
+	if (link == nullptr)
+	{
+		return;
+	}
+	// Success or failure releases ownership of the local PHY procedure.
+	link->bPhyPending = false;
+	if (!link->bDlePending)
+	{
+		memset(link, 0, sizeof(*link));
+	}
+	BtGapWbaLinkProcProcess();
+}
 
 // aci_gap_init returns the service, Device Name characteristic and Appearance
 // characteristic handles. ST creates Peripheral Preferred Connection Parameters
@@ -332,6 +430,11 @@ static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
 		return;
 	}
 
+	if (BtGapWbaLinkProcBusy(pLink->ConnHdl))
+	{
+		return;
+	}
+
 	pLink->Attempts++;
 	tBleStatus status;
 	if (pLink->Role == BT_CONN_ROLE_PERIPHERAL)
@@ -376,6 +479,7 @@ static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
 // event of bt_app_stm32wba.cpp.
 void BtGapWbaConnParamProcess(void)
 {
+	BtGapWbaLinkProcProcess();
 	if (!s_GapWba.bConnParamsValid)
 	{
 		return;
@@ -410,6 +514,8 @@ void BtGapWbaConnParamProcess(void)
 void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
 		uint16_t Interval, uint16_t Latency, uint16_t Timeout)
 {
+	BtGapWbaLinkProcClear(ConnHdl);
+
 	// A controller handle may be reused after a lost disconnect event. Remove
 	// any stale state before deciding whether this new link needs an update.
 	BtGapWbaConnParamClear(BtGapWbaConnParamFind(ConnHdl));
@@ -435,6 +541,7 @@ void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
 
 void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl)
 {
+	BtGapWbaLinkProcClear(ConnHdl);
 	BtGapWbaConnParamClear(BtGapWbaConnParamFind(ConnHdl));
 }
 
@@ -491,6 +598,7 @@ void BtGapParamInit(const BtGapCfg_t *pCfg)
 	}
 
 	BtGapWbaConnParamResetAll();
+	memset(s_LinkProc, 0, sizeof(s_LinkProc));
 	s_GapWba.ConnIntervalMin = BtGapWbaMsecTo1_25(pCfg->ConnIntervalMin);
 	s_GapWba.ConnIntervalMax = BtGapWbaMsecTo1_25(pCfg->ConnIntervalMax);
 	s_GapWba.ConnLatency = pCfg->SlaveLatency;
@@ -599,32 +707,60 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr,
 		s_GapWba.ScanWindow,
 		pPeerAddr->Type,
 		pPeerAddr->Addr,
-		0,							// own address type = public
+		s_OwnAddrType,				// configured local address type
 		intervalMin,
 		intervalMax,
 		pConnParam->Latency,
 		timeout,
 		0,							// min CE length
-		0);							// max CE length
+		80);						// max CE hint: 50 ms, matching ST central sample
 
 	return ret == BLE_STATUS_SUCCESS;
 }
 
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
+	uint8_t addr[6];
+	tBleStatus status;
+	uint16_t interval;
+	uint16_t window;
+
 	if (pCfg == NULL)
 	{
 		return false;
 	}
 
-	uint16_t interval;
-	uint16_t window;
 	if (!BtGapWbaScanParamsConvert(
 			pCfg->Param.Interval, pCfg->Param.Duration, &interval, &window))
 	{
 		return false;
 	}
 
+	// Privacy is disabled in this port. Do not reinterpret identity-address
+	// enum values as ST privacy modes.
+	if (pCfg->Param.OwnAddrType != BTADDR_TYPE_PUBLIC &&
+		pCfg->Param.OwnAddrType != BTADDR_TYPE_RAND)
+	{
+		return false;
+	}
+	if (pCfg->Param.OwnAddrType == BTADDR_TYPE_RAND && !s_bRandomAddrSet)
+	{
+		status = hci_read_bd_addr(addr);
+		if (status != BLE_STATUS_SUCCESS)
+		{
+			return false;
+		}
+		// Stable static-random identity derived from the configured device ID.
+		addr[5] |= 0xC0U;
+		status = aci_hal_write_config_data(CONFIG_DATA_RANDOM_ADDRESS_OFFSET,
+			CONFIG_DATA_RANDOM_ADDRESS_LEN, addr);
+		if (status != BLE_STATUS_SUCCESS)
+		{
+			return false;
+		}
+		s_bRandomAddrSet = true;
+	}
+	s_OwnAddrType = (uint8_t)pCfg->Param.OwnAddrType;
 	s_GapWba.ScanType = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ?
 		BT_GAP_HCI_SCAN_ACTIVE : BT_GAP_HCI_SCAN_PASSIVE;
 	s_GapWba.ScanInterval = interval;
@@ -646,7 +782,7 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 	scanparam[0].Scan_Window = s_GapWba.ScanWindow;
 
 	uint8_t ret = aci_gap_start_scan(0, GAP_OBSERVATION_PROC,
-		0,							// own address type = public
+		s_OwnAddrType,				// configured local address type
 		s_GapWba.ScanFilterDup, 0, 0,
 		0,							// scanning filter policy = accept all
 		HCI_SCANNING_PHYS_LE_1M, scanparam);
@@ -666,7 +802,10 @@ bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 
 void BtGapScanStop(void)
 {
-	(void)aci_gap_terminate_gap_proc(GAP_OBSERVATION_PROC);
+	if (aci_gap_terminate_gap_proc(GAP_OBSERVATION_PROC) == BLE_STATUS_SUCCESS)
+	{
+		BtScanEnded();
+	}
 }
 
 // --- Link procedures on an established connection ---
@@ -679,6 +818,10 @@ static_assert(HCI_TX_PHYS_LE_1M_PREF == BT_GAP_PHY_1MBITS && HCI_TX_PHYS_LE_2M_P
 bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
 				 uint16_t PhyOptions)
 {
+	uint8_t allphys = 0;
+	tBleStatus status;
+	BtGapWbaLinkProc_t *link;
+
 	if ((TxPhys & ~BT_GAP_PHY_ALL) != 0 || (RxPhys & ~BT_GAP_PHY_ALL) != 0 ||
 		PhyOptions > BT_GAP_PHY_OPT_MAX)
 	{
@@ -686,8 +829,6 @@ bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
 	}
 
 	// An empty mask is no preference, which LE Set PHY gives in ALL_PHYS
-	uint8_t allphys = 0;
-
 	if (TxPhys == 0)
 	{
 		allphys |= HCI_ALL_PHYS_TX_NO_PREF;
@@ -697,8 +838,26 @@ bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
 		allphys |= HCI_ALL_PHYS_RX_NO_PREF;
 	}
 
+	if (BtGapWbaLinkProcBusy(ConnHdl))
+	{
+		return false;
+	}
+	link = BtGapWbaLinkProcFind(ConnHdl, true);
+	if (link == nullptr)
+	{
+		return false;
+	}
+	link->bPhyPending = true;
+
 	// The result arrives as the LE PHY Update Complete event
-	return hci_le_set_phy(ConnHdl, allphys, TxPhys, RxPhys, PhyOptions) == BLE_STATUS_SUCCESS;
+	status = hci_le_set_phy(ConnHdl, allphys, TxPhys, RxPhys, PhyOptions);
+	SysLogPrintf(SysLogGet(), "WBA PHY request: hdl=%u tx=%u rx=%u status=0x%02x\r\n",
+			(unsigned)ConnHdl, (unsigned)TxPhys, (unsigned)RxPhys, (unsigned)status);
+	if (status != BLE_STATUS_SUCCESS)
+	{
+		memset(link, 0, sizeof(*link));
+	}
+	return status == BLE_STATUS_SUCCESS;
 }
 
 bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy)
@@ -727,6 +886,36 @@ bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy)
 	*pRxPhy = (uint8_t)(1 << (rx - 1));
 
 	return true;
+}
+
+bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime)
+{
+	tBleStatus status;
+	BtGapWbaLinkProc_t *link;
+
+	if (TxOctets < BT_GAP_DATA_LEN_OCTETS_MIN ||
+		TxOctets > BT_GAP_DATA_LEN_OCTETS_MAX ||
+		TxTime < BT_GAP_DATA_LEN_TIME_MIN ||
+		TxTime > BT_GAP_DATA_LEN_TIME_MAX)
+	{
+		return false;
+	}
+
+	link = BtGapWbaLinkProcFind(ConnHdl, false);
+	if (link != nullptr && link->bPhyPending)
+	{
+		link->TxOctets = TxOctets;
+		link->TxTime = TxTime;
+		link->bDlePending = true;
+		SysLogPrintf(SysLogGet(), "WBA DLE queued for PHY completion: hdl=%u\r\n",
+				(unsigned)ConnHdl);
+		return true;
+	}
+
+	status = hci_le_set_data_length(ConnHdl, TxOctets, TxTime);
+	SysLogPrintf(SysLogGet(), "WBA DLE request: hdl=%u octets=%u time=%u status=0x%02x\r\n",
+			(unsigned)ConnHdl, (unsigned)TxOctets, (unsigned)TxTime, (unsigned)status);
+	return status == BLE_STATUS_SUCCESS;
 }
 
 // Strong override of the weak generic BtGapConnSecGet. The ST host owns link

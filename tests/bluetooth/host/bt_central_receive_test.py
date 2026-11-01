@@ -132,9 +132,7 @@ int main()
 	phyAccepted = false;
 	BtAppEvtConnected(9);
 	assert(phyCalls == 2 && discoveryCalls == 2 && discoveryHandle == 9);
-#if defined(NRFXLIB_SDC)
 	assert(dataLengthCalls == 2);
-#endif
 	assert(!s_StreamActive);
 	for (i = 0; i < sizeof(data); ++i)
 	{
@@ -214,6 +212,9 @@ with tempfile.TemporaryDirectory(prefix='central-receive-') as temp:
         ('default 1M', ['-DEXPECTED_PHY=1']),
         ('2M', ['-DCENTRAL_PHY=BT_GAP_PHY_2MBITS', '-DEXPECTED_PHY=2']),
         ('both', ['-DCENTRAL_PHY=3', '-DEXPECTED_PHY=3']),
+        ('SoftDevice S132', ['-DS132', '-DEXPECTED_PHY=1']),
+        ('SoftDevice S140', ['-DS140', '-DEXPECTED_PHY=1']),
+        ('WBA', ['-DIOSONATA_STM32_WBA', '-DEXPECTED_PHY=1']),
         ('SDC bridge 1M', ['-DNRFXLIB_SDC', '-DCENTRAL_PRBS_CHECK=0', '-DEXPECTED_PHY=1']),
         ('SDC bridge 2M', ['-DNRFXLIB_SDC', '-DCENTRAL_PRBS_CHECK=0', '-DCENTRAL_PHY=2', '-DEXPECTED_PHY=2']),
     ]:

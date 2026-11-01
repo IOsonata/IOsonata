@@ -653,11 +653,12 @@ uint8_t BtHciCtlrCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void
 // number it wants when this is too small, so a device that turns the feature on
 // finds out here rather than on air.
 //
-// What the controller needs depends on the role and the link counts: a
-// broadcaster needs about a tenth of this default, a central with several
-// links needs more. The application sizes it by defining its own
-// g_BtHciCtlrMemPool, in which case this default is not linked.
-// BtHciCtlrMemPoolSizeNeeded reports the size the configuration asked for.
+// UART over BLE requires 12496 bytes with the standard ACL buffers on the
+// tested SDK. The 16 KB default covers that configuration. Larger link or
+// periodic configurations can provide g_BtHciCtlrMemPool in target sources;
+// generic examples do not need controller-specific storage.
+// BtHciCtlrMemPoolSizeNeeded reports the actual SDK requirement, which is
+// checked before sdc_enable below.
 alignas(8) static uint8_t s_BtStackSdcMemPool[BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE];
 
 extern "C" __attribute__((weak)) const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
@@ -868,6 +869,37 @@ static void BtStackSdcCB()
 	}
 
 	BtHciCtlrProcess(s_pBtHciCtlrSdc);
+}
+
+static void BtHciCtlrSdcEventConfig(void)
+{
+	sdc_hci_cmd_vs_event_length_set_t eventLength = {
+		.event_length_us = 11250,
+	};
+	sdc_hci_cmd_vs_conn_event_extend_t extend = {
+		.enable = 1,
+	};
+	uint32_t state;
+	uint8_t lengthStatus;
+	uint8_t extendStatus;
+
+	if (BtHciSdcEnter(&state) == false)
+	{
+		SDC_INIT_PRINTF("SDC: event tuning unavailable; keeping controller defaults\r\n");
+		return;
+	}
+	lengthStatus = sdc_hci_cmd_vs_event_length_set(&eventLength);
+	extendStatus = sdc_hci_cmd_vs_conn_event_extend(&extend);
+	BtHciSdcLeave(state);
+	if (lengthStatus != 0 || extendStatus != 0)
+	{
+		SDC_INIT_PRINTF("SDC: event tuning status length=0x%02x extension=0x%02x\r\n",
+			lengthStatus, extendStatus);
+	}
+	else
+	{
+		SDC_INIT_PRINTF("SDC: event budget 11250 us, extension enabled\r\n");
+	}
 }
 
 // SDC bring-up, reached from the generic BtHciCtlrEnable once BtHciCtlrInit
@@ -1244,34 +1276,13 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		return false;
 	}
 
-	// HCI APIs are valid only after sdc_enable. Apply scheduling settings
-	// before advertising or creating a connection, and check both commands.
-	sdc_hci_cmd_vs_event_length_set_t evlen = {
-		// Eight full 251-byte LL exchanges at 2M need about 11.2 ms.
-		.event_length_us = 11250,
-	};
-	sdc_hci_cmd_vs_conn_event_extend_t extend = {
-		.enable = 1,
-	};
-	// Same caller context as the successful enter above.
-	(void)BtHciSdcEnter(&state);
-	uint8_t hcistat = sdc_hci_cmd_vs_event_length_set(&evlen);
-	if (hcistat == 0)
+	// Connection scheduling is optional tuning, not controller initialization.
+	// Broadcasters and observers have no ACL connection events to configure.
+	// A refused hint leaves the controller's existing setting in use.
+	if (pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL))
 	{
-		hcistat = sdc_hci_cmd_vs_conn_event_extend(&extend);
+		BtHciCtlrSdcEventConfig();
 	}
-	BtHciSdcLeave(state);
-	if (hcistat != 0)
-	{
-		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_INIT, hcistat);
-		SDC_INIT_PRINTF("SDC event configuration failed 0x%02x\r\n", hcistat);
-		(void)BtHciSdcEnter(&state);
-		sdc_disable();
-		BtHciSdcLeave(state);
-		MpslNvmArbiterStop();
-		return false;
-	}
-	SDC_INIT_PRINTF("SDC: event budget 11250 us, extension enabled\r\n");
 
 	// Default TX power of advertising and links. The SDC has its own entry
 	// point for it; a controller behind a link needs a vendor command.

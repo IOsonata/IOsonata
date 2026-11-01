@@ -11,7 +11,9 @@ library as the corresponding IOsonata examples.
 | Composite | `usb_combo_stress.cpp` | `tinyusb_combo_stress/main.cpp` | nRF52840 TinyUsbComboStress/ioc |
 | Composite | `usb_combo_stress.cpp` | `tinyusb_combo_stress/main.cpp` | nRF54LM20x TinyUsbComboStress/ioc |
 
-Sources are relative to [exemples/usb](../).
+IOsonata sources and the portable composite TinyUSB application are relative
+to [exemples/usb](../). The Nordic-only single and dual CDC sources are in
+[ARM/Nordic/exemples/usb](../../../ARM/Nordic/exemples/usb).
 Target projects are below
 [ARM/Nordic/nRF52/nRF52840/exemples](../../../ARM/Nordic/nRF52/nRF52840/exemples)
 and

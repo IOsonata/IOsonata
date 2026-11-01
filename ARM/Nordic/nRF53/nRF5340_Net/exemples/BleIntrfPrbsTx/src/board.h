@@ -39,6 +39,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
+#if defined(S132)
+#define DEVICE_NAME "BlePrbs_S132"
+#elif defined(S140)
+#define DEVICE_NAME "BlePrbs_S140"
+#elif defined(NRFXLIB_SDC)
+#define DEVICE_NAME "BlePrbs_SDC"
+#else
+#define DEVICE_NAME "BlePrbs"
+#endif
+
 #include "blueio_board.h"
 
 //#define NORDIC_DK

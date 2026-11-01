@@ -9,8 +9,7 @@
   ],
   "includes": [
     "${iosonata}/ARM/ST/include",
-    "${iosonata}/ARM/ST/STM32F4xx/include",
-    "${iosonata}/ARM/ST/STM32F4xx/STM32F401/lib/include"
+    "${iosonata}/ARM/ST/STM32F4xx/include"
   ],
   "linker_script": "${iosonata}/ARM/ST/STM32F4xx/ldscript/gcc_stm32f401xe.ld",
   "lib_path": "${iosonata}/ARM/ST/STM32F4xx/STM32F401/lib/ioc/${config}",

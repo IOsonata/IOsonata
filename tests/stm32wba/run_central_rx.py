@@ -1,0 +1,377 @@
+#!/usr/bin/env python3
+"""Exercise WBA discovery admission and owned event payloads without radio hardware."""
+from pathlib import Path
+import os
+import subprocess
+import re
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[2]
+def extract_function(text, name):
+    match = re.search(r'^(?:extern "C" )?(?:static )?(?:void|bool|uint8_t|uint16_t) ' +
+                      name + r'\([^;]*?\)\s*\{', text, re.M)
+    assert match, name
+    end, depth = match.end(), 1
+    while depth:
+        depth += (text[end] == '{') - (text[end] == '}')
+        end += 1
+    return text[match.start():end]
+
+
+source = (ROOT / 'ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp').read_text()
+gap = (ROOT / 'ARM/ST/STM32WBAxx/src/bt_gap_stm32wba.cpp').read_text()
+code = r'''
+#include <cassert>
+#include <cstring>
+#include "bluetooth/bt_app.h"
+#define SysLogPrintf(...) ((void)0)
+using tBleStatus = uint8_t;
+#define BLE_STATUS_SUCCESS 0
+#define BLE_STATUS_FAILED 1
+#define BLE_STATUS_BUSY 0x93
+#define BLE_STATUS_PENDING 0x95
+#define BLE_STATUS_INSUFFICIENT_RESOURCES 0x64
+#define GATT_MTU_SIZE_DEFAULT 23
+#define BT_APP_WBA_EVT_SLOTS 8
+#define BT_APP_WBA_EVT_MAXLEN 258
+#define HCI_EVENT_PKT_TYPE 4
+#define HCI_DISCONNECTION_COMPLETE_EVT_CODE 5
+#define HCI_LE_META_EVT_CODE 0x3e
+#define HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE 1
+#define HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE 10
+static unsigned clockReads;
+uint32_t BtSmpMsTick() { clockReads++; return 123; }
+static struct { uint16_t MaxMtu; bool bSecure; } s_BtAppData = {247, false};
+static BtDevice_t peers[2];
+static BtGattDBSrvc_t services[2][BT_DEV_SERVICE_MAXCNT];
+static unsigned mtuCalls, serviceCalls, charCalls, descCalls, discovered;
+static unsigned refusals;
+static uint8_t commandStatus;
+static uint8_t admissionStatus;
+static uint8_t Admit()
+{
+	if (refusals)
+	{
+		refusals--;
+		return BLE_STATUS_BUSY;
+	}
+	return admissionStatus;
+}
+BtDevice_t *BtPeerFindByHdl(uint16_t hdl)
+{
+	return hdl < 2 ? &peers[hdl] : nullptr;
+}
+uint16_t BtPeerCount() { return 2; }
+BtDevice_t *BtPeerSlot(uint16_t idx) { return &peers[idx]; }
+bool BtDeviceSrvcCacheAttach(BtDevice_t *peer)
+{
+	peer->pServices = services[peer->Conn.Hdl];
+	return true;
+}
+void BtDeviceDiscovered(BtDevice_t *) { discovered++; }
+static uint8_t aci_gatt_exchange_config(uint16_t)
+{
+	mtuCalls++;
+	return Admit();
+}
+static uint8_t aci_gatt_disc_all_primary_services(uint16_t)
+{
+	serviceCalls++;
+	return Admit();
+}
+static uint8_t aci_gatt_disc_all_char_of_service(uint16_t, uint16_t, uint16_t)
+{
+	charCalls++;
+	return Admit();
+}
+static uint8_t aci_gatt_disc_all_char_desc(uint16_t, uint16_t, uint16_t)
+{
+	descCalls++;
+	return Admit();
+}
+static uint8_t hci_le_set_data_length(uint16_t hdl, uint16_t octets, uint16_t time)
+{
+	assert(hdl == 1 && octets == 251 && time == 2120);
+	return commandStatus;
+}
+struct aci_gatt_proc_complete_event_rp0 { uint16_t Connection_Handle; uint8_t Error_Code; };
+struct aci_att_read_by_group_type_resp_event_rp0 {
+	uint16_t Connection_Handle; uint8_t Attribute_Data_Length, Data_Length, Attribute_Data_List[255];
+};
+struct aci_att_read_by_type_resp_event_rp0 {
+	uint16_t Connection_Handle; uint8_t Handle_Value_Pair_Length, Data_Length, Handle_Value_Pair_Data[255];
+};
+struct aci_att_find_info_resp_event_rp0 {
+	uint16_t Connection_Handle; uint8_t Format, Event_Data_Length, Handle_UUID_Pair[255];
+};
+static void BtAppDiscStartDesc(BtDevice_t *);
+'''
+a = gap.index('// ST v2.10.0 queues')
+code += '#define CFG_BLE_NUM_LINK 2\n' + gap[a:gap.index('// aci_gap_init returns the service', a)]
+a = source.index('enum {\n\tDISC_IDLE')
+code += source[a:source.index('};', a) + 3]
+for name in ['WbaDiscRetryable', 'WbaDiscFailed', 'WbaDiscUuid', 'WbaDiscSrvc', 'WbaDiscChar', 'WbaDiscDesc', 'BtAppDiscStartChar', 'BtAppDiscStartDesc', 'WbaDiscProcComplete',
+             'BtAppDiscoverDevice', 'BtAppDiscoveryRetry']:
+    code += extract_function(source, name) + '\n'
+code += extract_function(gap, 'BtGapSetDataLength') + '\n'
+code += r"""
+#define NDEBUG
+#define STATUS_PRINTF(...) ((void)0)
+static struct { bool bOobEnabled; } s_WbaData;
+BtDevice_t *BtPeerConnected(uint16_t hdl, uint8_t role, uint8_t,
+	const uint8_t *, uint8_t, const uint8_t *)
+{
+	memset(&peers[hdl], 0, sizeof(peers[hdl]));
+	peers[hdl].Conn.Hdl = hdl;
+	peers[hdl].Conn.Role = role;
+	return &peers[hdl];
+}
+static void BtAdvWbaConnected() {}
+static void BtAppConnLedOn() {}
+static void BtAppOobPeerDataPush(uint16_t, uint8_t, uint8_t *) {}
+static uint8_t aci_gap_send_pairing_req(uint16_t, uint8_t) { return 0; }
+static uint8_t aci_gap_peripheral_security_req(uint16_t) { return 0; }
+#define SysLogPrintf(...) ((void)0)
+static bool connectDiscover;
+void BtAppEvtConnected(uint16_t hdl)
+{
+	assert(peers[hdl].Conn.MaxMtu == GATT_MTU_SIZE_DEFAULT);
+	if (connectDiscover)
+	{
+		assert(BtAppDiscoverDevice(&peers[hdl]));
+	}
+}
+"""
+code += extract_function(source, 'BtAppWbaConnected') + '\n'
+code += 'void BtAppEvtConnectFailed() {}\nvoid BtAdvStart() {}\n'
+
+a = source.index('typedef struct __Bt_App_Wba_Evt')
+code += source[a:source.index('static BtWbaEvtFlow_t BtAppHciEvtHandler', a)]
+code += r'''
+static unsigned irqState, routed, queued, hostWake, flowResume;
+struct change_state_options_t { uint8_t combined_value; };
+static void ll_intf_chng_evnt_hndlr_state(change_state_options_t options)
+{
+	assert(options.combined_value == 0x0F && s_EvtCnt == 0);
+	flowResume++;
+}
+static bool s_bEvtDrainQueued;
+static uint32_t __get_PRIMASK() { return irqState; }
+static void __disable_irq() { irqState = 1; }
+static void __set_PRIMASK(uint32_t state) { irqState = state; }
+static void BtAppEvtDrainQue() { queued++; }
+static void BleStackCB_Process() { hostWake++; }
+static void BtWbaEventRouterRun(void *data)
+{
+	uint8_t *p = (uint8_t *)data;
+	unsigned idx;
+
+	assert(p[0] == 4 && p[1] == 255 && p[2] == 251);
+	for (idx = 3; idx < 254; idx++)
+	{
+		assert(p[idx] == uint8_t(idx));
+	}
+	routed++;
+}
+'''
+code += extract_function(source, 'BLECB_Indication') + '\n'
+code += extract_function(source, 'BtAppEvtDrain') + '\n'
+code += r'''
+int main()
+{
+	aci_gatt_proc_complete_event_rp0 done = {0, 0};
+	uint8_t packet[254];
+	unsigned idx;
+
+	// Exercise the real connection handler, including discovery from its callback.
+	connectDiscover = true;
+	BtAppWbaConnected(0, 0, BT_CONN_ROLE_CENTRAL, 0, nullptr);
+	assert(mtuCalls == 1 && serviceCalls == 0);
+	assert(peers[0].Discovery.Phase == DISC_MTU);
+	connectDiscover = false;
+	BtAppWbaConnected(0, 0, BT_CONN_ROLE_CENTRAL, 0, nullptr);
+	BtAppWbaConnected(0, 1, BT_CONN_ROLE_CENTRAL, 0, nullptr);
+	mtuCalls = 0;
+	refusals = 1;
+	assert(!BtAppDiscoverDevice(&peers[0]));
+	assert(peers[0].Discovery.Phase == DISC_IDLE);
+	assert(BtAppDiscoverDevice(&peers[0]));
+	assert(BtAppDiscoverDevice(&peers[0]));
+	assert(mtuCalls == 2 && serviceCalls == 0);
+	assert(BtAppDiscoverDevice(&peers[1]));
+	peers[0].Conn.MaxMtu = 247;
+	refusals = 1;
+	WbaDiscProcComplete(&done);
+	assert(peers[0].Discovery.Phase == DISC_SERVICES_PENDING);
+	assert(peers[1].Discovery.Phase == DISC_MTU);
+	BtAppDiscoveryRetry();
+	assert(serviceCalls == 2 && peers[0].Discovery.Phase == DISC_SERVICES);
+	peers[0].NbSrvc = 1;
+	services[0][0].handle_range = {1, 10};
+	refusals = 1;
+	WbaDiscProcComplete(&done);
+	assert(peers[0].Discovery.Phase == DISC_CHARS_PENDING);
+	assert(peers[0].Discovery.SrvIdx == 0 && !discovered);
+	BtAppDiscoveryRetry();
+	assert(charCalls == 2 && peers[0].Discovery.Phase == DISC_CHARS);
+	services[0][0].char_count = 1;
+	services[0][0].characteristics[0].characteristic.handle_value = 3;
+	refusals = 1;
+	WbaDiscProcComplete(&done);
+	assert(peers[0].Discovery.Phase == DISC_DESCS_PENDING);
+	assert(peers[0].Discovery.CharIdx == 0 && !discovered);
+	BtAppDiscoveryRetry();
+	assert(descCalls == 2 && peers[0].Discovery.Phase == DISC_DESCS);
+	WbaDiscProcComplete(&done);
+	assert(discovered == 1);
+	assert(BtAppDiscoverDevice(&peers[0]));
+	assert(mtuCalls == 3); // rediscovery does not exchange again
+	// An asynchronous error in every active phase stops this attempt.
+	for (unsigned phase = DISC_SERVICES; phase <= DISC_MTU; phase++)
+	{
+		peers[0].Discovery.Phase = phase;
+		peers[0].NbSrvc = 1;
+		done.Error_Code = 0x91;
+		WbaDiscProcComplete(&done);
+		assert(peers[0].Discovery.Phase == DISC_FAILED && peers[0].NbSrvc == 0);
+		unsigned calls = serviceCalls + charCalls + descCalls;
+		BtAppDiscoveryRetry();
+		done.Error_Code = 0;
+		WbaDiscProcComplete(&done);
+		assert(calls == serviceCalls + charCalls + descCalls && discovered == 1);
+	}
+	// An explicit restart is allowed. Permanent admission errors are not retried.
+	admissionStatus = 0x92;
+	assert(!BtAppDiscoverDevice(&peers[0]));
+	assert(peers[0].Discovery.Phase == DISC_FAILED);
+	admissionStatus = 0;
+	assert(BtAppDiscoverDevice(&peers[0]));
+	assert(peers[0].Discovery.Phase == DISC_SERVICES);
+	peers[0].NbSrvc = 1;
+	services[0][0].handle_range = {1, 10};
+	admissionStatus = 0x92;
+	WbaDiscProcComplete(&done);
+	assert(peers[0].Discovery.Phase == DISC_FAILED);
+	admissionStatus = 0;
+	// Stale discovery data may not repopulate a failed attempt's cache.
+	aci_att_read_by_group_type_resp_event_rp0 srvc = {};
+	srvc.Attribute_Data_Length = 6;
+	srvc.Data_Length = 6;
+	WbaDiscSrvc(&srvc);
+	assert(peers[0].NbSrvc == 0);
+	// Handle 0xffff must not wrap a descriptor start to zero.
+	peers[0].NbSrvc = 1;
+	peers[0].Discovery.SrvIdx = 0;
+	peers[0].Discovery.CharIdx = 0;
+	services[0][0].handle_range = {1, 0xffff};
+	services[0][0].char_count = 1;
+	services[0][0].characteristics[0].characteristic.handle_value = 0xffff;
+	unsigned oldDesc = descCalls;
+	BtAppDiscStartDesc(&peers[0]);
+	assert(descCalls == oldDesc && discovered == 2);
+	// Vendor service/characteristic UUIDs retain their base and round-trip.
+	uint8_t vendor[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 2, 0x29, 15, 16};
+	uint8_t restored[16];
+	peers[0].NbSrvc = 0;
+	peers[0].Discovery.Phase = DISC_SERVICES;
+	srvc.Attribute_Data_Length = 20;
+	srvc.Data_Length = 20;
+	memcpy(srvc.Attribute_Data_List + 4, vendor, 16);
+	WbaDiscSrvc(&srvc);
+	assert(peers[0].NbSrvc == 1 && services[0][0].srv_uuid.BaseIdx != 0);
+	assert(BtUuid16To128(&services[0][0].srv_uuid, restored));
+	assert(memcmp(vendor, restored, 16) == 0);
+	aci_att_read_by_type_resp_event_rp0 chr = {};
+	chr.Handle_Value_Pair_Length = 21;
+	chr.Data_Length = 21;
+	memcpy(chr.Handle_Value_Pair_Data + 5, vendor, 16);
+	peers[0].Discovery.Phase = DISC_CHARS;
+	peers[0].Discovery.SrvIdx = 0;
+	WbaDiscChar(&chr);
+	assert(services[0][0].char_count == 1);
+	assert(BtUuid16To128(&services[0][0].characteristics[0].characteristic.uuid, restored));
+	assert(memcmp(vendor, restored, 16) == 0);
+	// A vendor UUID whose short portion is 0x2902 is not a CCCD.
+	aci_att_find_info_resp_event_rp0 info = {};
+	info.Format = 2;
+	info.Event_Data_Length = 18;
+	info.Handle_UUID_Pair[0] = 9;
+	memcpy(info.Handle_UUID_Pair + 2, vendor, 16);
+	peers[0].Discovery.Phase = DISC_DESCS;
+	peers[0].Discovery.CharIdx = 0;
+	WbaDiscDesc(&info);
+	assert(services[0][0].characteristics[0].cccd_handle == BT_ATT_HANDLE_INVALID);
+	uint8_t sig[16] = BLUETOOTH_SIG_BASE_UUID;
+	sig[12] = 2;
+	sig[13] = 0x29;
+	memcpy(info.Handle_UUID_Pair + 2, sig, 16);
+	WbaDiscDesc(&info);
+	assert(services[0][0].characteristics[0].cccd_handle == 9);
+	// Exhaustion fails discovery instead of aliasing a new base onto SIG.
+	BtUuid16_t converted;
+	for (unsigned n = 2; n < 20; n++)
+	{
+		vendor[0] = n;
+		(void)WbaDiscUuid(&converted, vendor, 16);
+	}
+	vendor[0] = 21;
+	memcpy(srvc.Attribute_Data_List + 4, vendor, 16);
+	peers[0].Discovery.Phase = DISC_SERVICES;
+	WbaDiscSrvc(&srvc);
+	assert(peers[0].Discovery.Phase == DISC_FAILED && peers[0].NbSrvc == 0);
+	assert(BtGapSetDataLength(1, 251, 2120));
+	commandStatus = 1;
+	assert(!BtGapSetDataLength(1, 251, 2120));
+	assert(!BtGapSetDataLength(1, 252, 2120));
+	assert(!BtGapSetDataLength(1, 251, 0));
+
+	for (idx = 0; idx < sizeof(packet); idx++)
+	{
+		packet[idx] = uint8_t(idx);
+	}
+	unsigned clockBefore = clockReads;
+	packet[0] = 4;
+	packet[1] = 255;
+	packet[2] = 251;
+	assert(BLECB_Indication(nullptr, 0, nullptr, 0) == BLE_STATUS_FAILED);
+	assert(BLECB_Indication(packet, 2, nullptr, 0) == BLE_STATUS_FAILED);
+	assert(BLECB_Indication(packet, 10, nullptr, 244) == BLE_STATUS_FAILED);
+	assert(BLECB_Indication(packet, 10, nullptr, 0) == BLE_STATUS_FAILED);
+	irqState = 1;
+	for (idx = 0; idx < 8; idx++)
+	{
+		assert(BLECB_Indication(packet, 10, packet + 10, 244) == 0);
+	}
+	assert(irqState == 1 && queued == 8);
+	assert(BLECB_Indication(packet, sizeof(packet), nullptr, 0) == BLE_STATUS_FAILED);
+	assert(s_EvtCnt == 8 && s_bEvtFlowBlocked);
+	memset(packet + 3, 0, sizeof(packet) - 3); // queued payload has its own storage
+	BtAppEvtDrain(0, nullptr);
+	assert(routed == 8 && hostWake == 1 && irqState == 1 && s_EvtCnt == 0);
+	assert(flowResume == 1 && !s_bEvtFlowBlocked);
+	BtAppEvtDrain(0, nullptr);
+	assert(flowResume == 1);
+	packet[1] = HCI_LE_META_EVT_CODE;
+	packet[2] = 1;
+	packet[3] = HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE;
+	idx = s_EvtHead;
+	assert(BLECB_Indication(packet, 4, nullptr, 0) == 0);
+	assert(s_EvtRing[idx].Len == 4 && memcmp(s_EvtRing[idx].Data, packet, 4) == 0);
+	packet[1] = HCI_DISCONNECTION_COMPLETE_EVT_CODE;
+	idx = s_EvtHead;
+	assert(BLECB_Indication(packet, 4, nullptr, 0) == 0);
+	assert(s_EvtRing[idx].Len == 4 && memcmp(s_EvtRing[idx].Data, packet, 4) == 0);
+	assert(clockReads == clockBefore);
+}
+'''
+with tempfile.TemporaryDirectory(prefix='wba-central-') as temp:
+    cpp = Path(temp) / 'test.cpp'
+    cpp.write_text(code)
+    for opt in ['-O0', '-O2']:
+        binary = Path(temp) / 'test'
+        subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', opt,
+                        '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                        '-I' + str(ROOT / 'include'), str(cpp),
+                        str(ROOT / 'src/bluetooth/bt_uuid.cpp'), '-o', str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
+        print('PASS WBA central:', opt, 'MTU sequencing, per-peer retries, DLE, event ownership/backpressure')

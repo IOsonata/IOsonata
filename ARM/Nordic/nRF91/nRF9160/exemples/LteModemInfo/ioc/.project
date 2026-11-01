@@ -38,7 +38,7 @@
 		<link>
 			<name>src/lte_modem_info.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/lte/lte_modem_info.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/lte/lte_modem_info.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -49,12 +49,6 @@ SOFTWARE.
 
 #include "board.h"
 
-#if defined(NRFXLIB_SDC)
-#include "bluetooth/bt_hci_ctlr.h"
-#include "bluetooth/bt_att.h"
-#include "syslog.h"
-#endif
-
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE		1000000
@@ -64,24 +58,14 @@ SOFTWARE.
 #define UART_DEVNO 0
 #endif
 
-#ifndef BLUEIO_CONNECT_LED_PORT
-#include "blueio_board.h"
-#endif
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
 
-//#define NORDIC_NUS_SERVICE
-#ifdef S132
-#define DEVICE_NAME                     "BlePrbs_S132"                            //!< Name of device. Will be included in the advertising data.
-#elif defined(S140)
-#define DEVICE_NAME                     "BlePrbs_S140"                            //!< Name of device. Will be included in the advertising data.
-#elif defined(NRFXLIB_SDC)
-#define DEVICE_NAME                     "BlePrbs_SDC"                            //!< Name of device. Will be included in the advertising data.
-#else
-#define DEVICE_NAME                     "BlePrbs"
+#ifndef DEVICE_NAME
+#define DEVICE_NAME "BlePrbs"
 #endif
 
 #define PACKET_SIZE						244
@@ -244,29 +228,11 @@ const UARTCfg_t g_UartCfg = {
 /// UART object instance
 UART g_Uart;
 
-#if defined(NRFXLIB_SDC)
-// GAP, GATT, PRBS and Device Information exceed the default 2048-byte pool.
-alignas(BtAttDBEntry_t) static uint8_t s_AttDBMem[3072];
-
-extern "C" const BtAttDBMemCfg_t g_BtAttDBMemCfg = {
-	s_AttDBMem, sizeof(s_AttDBMem)
-};
-
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(4, 128)];
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem = s_SysLogMem,
-	.MemSize = sizeof(s_SysLogMem),
-	.RecordLen = 128,
-	.bBlocking = true
-};
-#endif
-
 int g_DelayCnt = 0;
 
 // Pending stays set through queue refusal until the callback runs.
 static volatile bool s_bPrbsPending = false;
-static bool s_bServiceOk = false;
+static bool s_bServiceReady = false;
 
 void PrbsChedHandler(uint32_t Evt, void *pCtx);
 
@@ -277,12 +243,12 @@ static uint8_t s_PrbsVal = 0xff;
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
+	uint8_t buff[128];
+	int l;
 
 	if (EvtId == DEVINTRF_EVT_RX_DATA)
 	{
-		uint8_t buff[128];
-
-		int l = g_BtIntrf.Rx(0, buff, 128);
+		l = g_BtIntrf.Rx(0, buff, 128);
 		if (l > 0)
 		{
 			g_Uart.Tx(buff, l);
@@ -344,8 +310,8 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppInitUserServices()
 {
-	s_bServiceOk = BtGattSrvcAdd(&g_UartBleSrvc);
-	if (s_bServiceOk == false)
+	s_bServiceReady = BtGattSrvcAdd(&g_UartBleSrvc);
+	if (s_bServiceReady == false)
 	{
 		g_Uart.printf("PRBS service registration failed\r\n");
 	}
@@ -379,20 +345,8 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
-#if defined(NRFXLIB_SDC)
-	if (SysLogGetInstance()->Init(s_SysLogCfg, &g_Uart) == false)
-	{
-		g_Uart.printf("PRBS logger initialization failed\r\n");
-	}
-#endif
 
-#ifdef S132
-	g_Uart.printf("BleIntrfPrbsTx_SoftDevice132\r\n");
-#elif defined(S140)
-	g_Uart.printf("BleIntrfPrbsTx_SoftDevice140\r\n");
-#else
-	g_Uart.printf("BleIntrfPrbsTx_SDC\r\n");
-#endif
+	g_Uart.printf("%s\r\n", DEVICE_NAME);
 }
 
 //
@@ -412,17 +366,10 @@ int main()
 {
 	HardwareInit();
 
-	g_Uart.printf("PRBS initializing %s\r\n", DEVICE_NAME);
-	if (BtAppInit(&s_BleAppCfg) == false || s_bServiceOk == false)
+	if (BtAppInit(&s_BleAppCfg) == false || s_bServiceReady == false)
 	{
 		g_Uart.printf("PRBS Bluetooth initialization failed\r\n");
-#if defined(NRFXLIB_SDC)
-		g_Uart.printf("SDC error=%d value=%d pool_needed=%d pool_size=%u\r\n",
-			(int)BtHciCtlrErrorGet(), (int)BtHciCtlrErrorValueGet(),
-			(int)BtHciCtlrMemPoolSizeNeeded(), (unsigned)g_BtHciCtlrMemPool.Size);
-#endif
 		BtAdvStop();
-		// Allow the 256-byte UART FIFO to drain before exit halts the CPU.
 		msDelay(20);
 		return -1;
 	}
@@ -431,7 +378,6 @@ int main()
 	{
 		g_Uart.printf("PRBS interface initialization failed\r\n");
 		BtAdvStop();
-		// Allow the 256-byte UART FIFO to drain before exit halts the CPU.
 		msDelay(20);
 		return -1;
 	}
@@ -445,11 +391,14 @@ int main()
 
 bool AppCheckStatus(void)
 {
+	uint32_t state;
+	bool idle;
+
 	BtAppCheckStatus();
 
 	// A pending callback on an empty queue was refused. Keep the check and
 	// retry together so an interrupt cannot queue the same callback between them.
-	uint32_t state = DisableInterrupt();
+	state = DisableInterrupt();
 	if (AppEvtHandlerPending() == false)
 	{
 		if (s_bPrbsPending)
@@ -457,7 +406,7 @@ bool AppCheckStatus(void)
 			(void)AppEvtHandlerQue(0, nullptr, PrbsChedHandler);
 		}
 	}
-	const bool idle = s_bPrbsPending == false &&
+	idle = s_bPrbsPending == false &&
 		AppEvtHandlerPending() == false;
 	EnableInterrupt(state);
 	return idle;
