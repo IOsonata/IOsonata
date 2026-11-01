@@ -1645,6 +1645,24 @@ static void BtAppWbaIdentitySet(void)
 	memset(er, 0, sizeof(er));
 }
 
+// RSSI golden range of the link layer LE power control, see app_conf.h.
+// Byte 0 is the lower limit, byte 1 the upper limit.
+static void BtAppWbaGoldenRangeSet(void)
+{
+	const uint8_t range[CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_LEN] = {
+		(uint8_t)(int8_t)CFG_BLE_RSSI_GOLDEN_RANGE_MIN,
+		(uint8_t)(int8_t)CFG_BLE_RSSI_GOLDEN_RANGE_MAX,
+	};
+	tBleStatus status = aci_hal_write_config_data(
+		CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_OFFSET,
+		CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_LEN, range);
+
+	if (status != BLE_STATUS_SUCCESS)
+	{
+		SysLogPrintf(SysLogGet(), "RSSI golden range not set: 0x%02x\r\n", status);
+	}
+}
+
 // --- Public API ---
 
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
@@ -1722,6 +1740,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	// Device identity: public address and the identity and encryption roots.
 	// The stack is reset by BleStack_Init, so they are written after it.
 	BtAppWbaIdentitySet();
+	BtAppWbaGoldenRangeSet();
 
 	// TX power in dBm, mapped to the closest PA level of the stack. Zero keeps
 	// the stack default, which is the maximum level.

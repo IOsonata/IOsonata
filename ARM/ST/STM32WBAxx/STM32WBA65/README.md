@@ -701,6 +701,20 @@ could read the sleep timer from before the sleep at the start of a radio event.
 `tests/stm32wba/run_app_wait.py` checks the order; the throughput effect needs
 the DK1 BlePrbsRx run.
 
+LE power control: the Basic Plus link layer (needed for extended advertising)
+includes autonomous LE power control. The ST host sets its RSSI golden range
+to -77 to -68 dBm on each HCI reset (`LECTRL_Reset`), and the link layer then
+asks a peer that supports LE power control to lower its TX power until the
+received level is in that range: 30 dB or more for a peer at short range. The
+DK1 BlePrbsRx and ST throughput client runs against the nRF52840 SDC peer,
+which supports LE power control, were about 10% slower with Basic Plus than
+with Basic, with packets lost in bursts. After `BleStack_Init` the port writes
+`CFG_BLE_RSSI_GOLDEN_RANGE_MIN`/`MAX` from `app_conf.h` (default -100 to
++20 dBm) with `ACI_HAL_WRITE_CONFIG_DATA`, so no request is made and the peer
+keeps its power, as with the other IOsonata Bluetooth ports. A project that
+wants the ST behavior defines the two values as -77 and -68.
+`tests/stm32wba/run_golden_range.py` checks the written range.
+
 ## Bluetooth in the library
 
 The Debug and Release configurations of `lib/ioc` include everything the ST

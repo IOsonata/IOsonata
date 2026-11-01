@@ -76,6 +76,20 @@ SOFTWARE.
 
 #define CFG_RF_TX_POWER_TABLE_ID	0
 
+// RSSI golden range of the link layer LE power control, in dBm. The Basic Plus
+// link layer asks a peer that supports LE power control to change its TX
+// power until the received level is inside this range. Its own range, -77 to
+// -68 dBm, makes a peer at short range lower its power by 30 dB or more. This
+// range holds every received level, so no request is made and the peer keeps
+// its power, as with the other IOsonata Bluetooth ports. bt_app_stm32wba.cpp
+// writes it after BleStack_Init.
+#ifndef CFG_BLE_RSSI_GOLDEN_RANGE_MIN
+#define CFG_BLE_RSSI_GOLDEN_RANGE_MIN	(-100)
+#endif
+#ifndef CFG_BLE_RSSI_GOLDEN_RANGE_MAX
+#define CFG_BLE_RSSI_GOLDEN_RANGE_MAX	20
+#endif
+
 // Radio calibration driven by temperature reports, as in the Cube BLE
 // applications. ll_sys_config_params (bt_wba_platform.cpp) then declares a
 // temperature sensor to the link layer, and linklayer_plat.c passes the link
