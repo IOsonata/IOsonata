@@ -9,7 +9,7 @@ from extract_bt_app_init import extract_function
 ROOT = Path(__file__).resolve().parents[3]
 source = (ROOT / 'exemples/bluetooth/ble_prbs_rx.cpp').read_text()
 start = source.index('typedef struct {')
-end = source.index('static void PrbsReset(void)', start)
+end = source.index('static void PrbsResetMeasurement(void)', start)
 code = r'''
 #include <cassert>
 #include <cstdarg>
@@ -38,7 +38,7 @@ struct
 {
 	void printf(const char *format, ...)
 	{
-		char buffer[80];
+		char buffer[160];
 		va_list args;
 		int length;
 
@@ -107,7 +107,7 @@ static void StartDiscovery(uint16_t)
 }
 '''
 code += source[start:end]
-for signature in [r'^static void PrbsReset\(', r'^static void PrbsCheck\(', r'^static void PrbsReceive\(',
+for signature in [r'^static void PrbsResetMeasurement\(', r'^static void PrbsReset\(', r'^static void PrbsCheck\(', r'^static void PrbsReceive\(',
                   r'^void BtGattClientNotified\(', r'^void BtAppEvtConnected\(',
                   r'^void BtAppEvtDisconnected\(', r'^void BtAppEvtConnectFailed\(',
                   r'^static void PrbsReport\(', r'^bool AppCheckStatus\(']:
@@ -287,6 +287,35 @@ int main()
 	{
 	}
 	assert(s_Rx.Notifications == 12);
+
+	// A connection callback only requests reset; it cannot mutate the
+	// main-loop statistics. A notification queued before status polling
+	// must survive the measurement reset and be checked exactly once.
+	BtAppEvtConnected(0);
+	assert(s_ResetPending && s_Rx.Notifications == 12);
+	s_ValueHdl = 0x12;
+	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
+	assert(CFifoUsed(s_NotifQue) == 1);
+	AppEvtHandlerExec();
+	assert(!s_ResetPending && s_Rx.Notifications == 1);
+	assert(s_Rx.Bytes == sizeof(zeros) && CFifoUsed(s_NotifQue) == 0);
+
+	// Reports use the same exact 60-second window even if the task runs late.
+	PrbsRxStats_t reportStats = {};
+	PrbsReportValues_t report;
+	reportStats.Started = true;
+	reportStats.Synced = true;
+	reportStats.FirstMs = 0xfffffff0u;
+	reportStats.Bytes = 7808000;
+	reportStats.Notifications = 32000;
+	PrbsReportValues(&reportStats, reportStats.FirstMs + 60009u,
+		reportStats.FirstMs + 59000u, 7677948, 60000, 2, false, 0, &report);
+	assert(report.Elapsed == 60000 && report.Time == reportStats.FirstMs + 60000u);
+	assert(report.Rate == 130052 && report.Average == 130133);
+	assert(report.PerInterval == 8000 && report.Complete && report.Valid && report.Passed);
+	PrbsReportValues(&reportStats, reportStats.FirstMs + 60000u,
+		reportStats.FirstMs, 0, 60000, 2, false, 1, &report);
+	assert(!report.Valid && !report.Passed);
 
 }
 '''

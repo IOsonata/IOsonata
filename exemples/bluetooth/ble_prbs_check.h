@@ -92,4 +92,40 @@ static inline bool PrbsCheckPacket(PrbsRxStats_t *pStats,
 	return true;
 }
 
+typedef struct {
+	uint32_t Elapsed;
+	uint32_t Time;
+	uint32_t Rate;
+	uint32_t Average;
+	uint32_t PerInterval;
+	uint32_t Target;
+	bool Complete;
+	bool Valid;
+	bool Passed;
+} PrbsReportValues_t;
+
+static inline void PrbsReportValues(const PrbsRxStats_t *pStats,
+	uint32_t Now, uint32_t LastTime, uint32_t LastBytes,
+	uint32_t Duration, uint8_t Phy, bool Failed, uint32_t Dropped,
+	PrbsReportValues_t *pValues)
+{
+	uint32_t interval;
+
+	pValues->Elapsed = pStats->Started ? (uint32_t)(Now - pStats->FirstMs) : 0;
+	if (pValues->Elapsed > Duration)
+	{
+		pValues->Elapsed = Duration;
+	}
+	pValues->Time = pStats->FirstMs + pValues->Elapsed;
+	interval = pStats->Started ? (uint32_t)(pValues->Time - LastTime) : 0;
+	pValues->Rate = interval ? (uint32_t)((uint64_t)(pStats->Bytes - LastBytes) * 1000 / interval) : 0;
+	pValues->Average = pValues->Elapsed ? (uint32_t)((uint64_t)pStats->Bytes * 1000 / pValues->Elapsed) : 0;
+	pValues->PerInterval = pValues->Elapsed ? (uint32_t)((uint64_t)pStats->Notifications * 15000 / pValues->Elapsed) : 0;
+	pValues->Target = Phy == 1 ? 4 : 8;
+	pValues->Complete = pStats->Started && pValues->Elapsed == Duration && !Failed;
+	pValues->Valid = pValues->Complete && pStats->Synced && pStats->Breaks == 0 &&
+		pStats->OutOfFrame == 0 && Dropped == 0;
+	pValues->Passed = pValues->Valid && pValues->PerInterval >= pValues->Target * 1000;
+}
+
 #endif

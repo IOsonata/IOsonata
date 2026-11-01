@@ -76,6 +76,15 @@ ST AMM event storage remain from CubeWBA. No IOsonata library is linked.
 The application uses a fixed 12-entry notification queue and an ST sequencer
 consumer for firmware PRBS checking, rather than IOsonata CFIFO/AppEvt.
 
+Nordic BlePrbsRx, WBA BlePrbsRx and this client use the same
+`exemples/bluetooth/ble_prbs_check.h` checker and report calculations with
+main-loop-owned, non-volatile statistics. Packets timestamped at or after
+60000 ms are excluded; final report rates use exactly that measurement window.
+All receivers print the same three status lines once per second at 1000000 baud.
+The native stack event delivery and UART drivers remain different. Earlier
+measurements with separate checkers or UART rates do not isolate stack cost.
+
+
 `dk1_config.h` disables Nucleo buttons/LEDs, selects one link, MTU 247,
 a 4096-byte host-event FIFO and initial default 1M PHY. It enables the general
 SVCCTL event callback needed for automatic GAP procedure handling. ST's host

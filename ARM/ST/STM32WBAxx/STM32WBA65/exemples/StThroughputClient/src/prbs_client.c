@@ -199,24 +199,21 @@ static void PrbsReceive(void)
 
 static void PrbsReport(uint32_t Now, bool Final)
 {
+	PrbsReportValues_t values;
 	uint32_t elapsed;
-	uint32_t interval;
 	uint32_t rate;
 	uint32_t average;
 	uint32_t perInterval;
 	uint32_t target;
 	bool valid;
 
-	elapsed = s_Stats.Started ? (uint32_t)(Now - s_Stats.FirstMs) : 0;
-	if (elapsed > PRBS_DURATION)
-	{
-		elapsed = PRBS_DURATION;
-	}
-	interval = s_Stats.Started ? (uint32_t)(s_Stats.FirstMs + elapsed - s_LastReport) : 0;
-	rate = interval ? (uint32_t)((uint64_t)(s_Stats.Bytes - s_LastBytes) * 1000 / interval) : 0;
-	average = elapsed ? (uint32_t)((uint64_t)s_Stats.Bytes * 1000 / elapsed) : 0;
-	perInterval = elapsed ? (uint32_t)((uint64_t)s_Stats.Notifications * 15000 / elapsed) : 0;
-	target = s_Phy == 1 ? 4 : 8;
+	PrbsReportValues(&s_Stats, Now, s_LastReport, s_LastBytes,
+		PRBS_DURATION, s_Phy, s_Failed, s_Dropped, &values);
+	elapsed = values.Elapsed;
+	rate = values.Rate;
+	average = values.Average;
+	perInterval = values.PerInterval;
+	target = values.Target;
 	LOG_INFO_APP("%sPHY=%u Bytes/sec=%lu average=%lu elapsed_ms=%lu\n",
 		Final ? "Final " : "", s_Phy, (unsigned long)rate, (unsigned long)average, (unsigned long)elapsed);
 	LOG_INFO_APP("bytes=%lu notifications=%lu drop=%lu out_of_frame=%lu\n",
@@ -225,20 +222,19 @@ static void PrbsReport(uint32_t Now, bool Final)
 	LOG_INFO_APP("len_min=%u len_max=%u notifications/15ms=%lu.%03lu\n",
 		s_Stats.Notifications ? s_Stats.MinLen : 0, s_Stats.MaxLen,
 		(unsigned long)(perInterval / 1000), (unsigned long)(perInterval % 1000));
-	s_LastReport = s_Stats.FirstMs + elapsed;
+	s_LastReport = values.Time;
 	s_LastBytes = s_Stats.Bytes;
 	if (Final)
 	{
 		s_Final = true;
-		s_Complete = s_Stats.Started && elapsed == PRBS_DURATION && !s_Failed;
-		valid = s_Complete && s_Stats.Synced && s_Stats.Breaks == 0 &&
-			s_Stats.OutOfFrame == 0 && s_Dropped == 0;
+		s_Complete = values.Complete;
+		valid = values.Valid;
 		LOG_INFO_APP("Notification queue dropped=%lu\n", (unsigned long)s_Dropped);
 		LOG_INFO_APP("PRBS integrity: %s\n", valid ? "PASS" : "FAIL");
 		LOG_INFO_APP("Notification target=%lu: %s (average only)\n", (unsigned long)target,
 			perInterval >= target * 1000 ? "MET" : "NOT MET");
 		LOG_INFO_APP("PHY=%u RESULT: %s\n", s_Phy,
-			valid && perInterval >= target * 1000 ? "PASS" : "FAIL");
+			values.Passed ? "PASS" : "FAIL");
 		LOG_INFO_APP("PHY=%u %s\n", s_Phy,
 			s_Complete ? "trial complete." : "trial aborted; benchmark stopped.");
 	}

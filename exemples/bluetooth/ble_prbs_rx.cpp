@@ -196,12 +196,9 @@ static const SysLogCfg_t s_SysLogCfg = {
 };
 #endif
 
-#if defined(IOSONATA_STM32_WBA)
-// WBA events and PRBS processing run in the main loop.
+// Only AppEvt/main-loop code owns the PRBS statistics.
 static PrbsRxStats_t s_Rx;
-#else
-static volatile PrbsRxStats_t s_Rx;
-#endif
+static volatile bool s_ResetPending;
 static uint8_t s_TestPhy = BT_GAP_PHY_1MBITS;
 static volatile uint16_t s_ConnHdl = BT_CONN_HDL_INVALID;
 static volatile uint16_t s_ValueHdl = BT_ATT_HANDLE_INVALID;
@@ -221,10 +218,9 @@ static uint32_t s_LastReportBytes;
 static bool s_FinalPrinted;
 static bool s_TrialComplete;
 
-static void PrbsReset(void)
+static void PrbsResetMeasurement(void)
 {
-	CFifoFlush(s_NotifQue);
-	s_NotifDropped = 0;
+	s_ResetPending = false;
 	s_Rx.Bytes = 0;
 	s_Rx.Notifications = 0;
 	s_Rx.Breaks = 0;
@@ -242,9 +238,15 @@ static void PrbsReset(void)
 	s_TrialComplete = false;
 }
 
+static void PrbsReset(void)
+{
+	CFifoFlush(s_NotifQue);
+	s_NotifDropped = 0;
+	PrbsResetMeasurement();
+}
+
 static void PrbsCheck(const uint8_t *pData, uint16_t Len, uint32_t Now)
 {
-#if defined(IOSONATA_STM32_WBA)
 	if (s_Finished || Len == 0 || pData == nullptr)
 	{
 		return;
@@ -253,94 +255,6 @@ static void PrbsCheck(const uint8_t *pData, uint16_t Len, uint32_t Now)
 	{
 		s_Finished = true;
 	}
-#else
-	uint32_t breaks;
-	uint32_t outOfFrame;
-	uint16_t idx;
-	uint8_t expected;
-	uint8_t previous;
-	uint8_t validRun;
-	uint8_t value;
-	bool started;
-	bool synced;
-	bool validByte;
-
-	if (s_Finished || Len == 0 || pData == nullptr)
-	{
-		return;
-	}
-	started = s_Rx.Started;
-	if (started && (uint32_t)(Now - s_Rx.FirstMs) >= PRBS_RX_DURATION_MS)
-	{
-		s_Finished = true;
-		return;
-	}
-	if (started == false)
-	{
-		s_Rx.FirstMs = Now;
-	}
-
-	// The AppEvt handler checks the payload in main-loop context.
-	// Keep byte-by-byte state local until the notification is checked.
-	previous = s_Rx.Previous;
-	validRun = s_Rx.ValidRun;
-	synced = s_Rx.Synced;
-	breaks = s_Rx.Breaks;
-	outOfFrame = s_Rx.OutOfFrame;
-	for (idx = 0; idx < Len; idx++)
-	{
-		value = pData[idx];
-		expected = ((previous << 1) | (((previous >> 6) ^ (previous >> 5)) & 1)) & 0x7f;
-		if (started && value != expected)
-		{
-			breaks++;
-		}
-		if (value > 0x7f && value != 0xff)
-		{
-			outOfFrame++;
-		}
-		// Synced records that a valid eight-byte run has occurred. Later
-		// damage still increments breaks; reacquisition cannot erase it.
-		if (!synced)
-		{
-			validByte = (value > 0 && value <= 0x7f) || value == 0xff;
-			if (!validByte)
-			{
-				validRun = 0;
-			}
-			else if (!started || value != expected)
-			{
-				validRun = 1;
-			}
-			else if (validRun < 8)
-			{
-				validRun++;
-			}
-			if (validRun >= 8)
-			{
-				synced = true;
-			}
-		}
-		previous = value;
-		started = true;
-	}
-	s_Rx.Previous = previous;
-	s_Rx.ValidRun = validRun;
-	s_Rx.Synced = synced;
-	s_Rx.Started = started;
-	s_Rx.Breaks = breaks;
-	s_Rx.OutOfFrame = outOfFrame;
-	s_Rx.Bytes += Len;
-	s_Rx.Notifications++;
-	if (Len < s_Rx.MinLen)
-	{
-		s_Rx.MinLen = Len;
-	}
-	if (Len > s_Rx.MaxLen)
-	{
-		s_Rx.MaxLen = Len;
-	}
-#endif
 }
 
 static void PrbsReceive(uint32_t Evt, void *pCtx)
@@ -349,6 +263,10 @@ static void PrbsReceive(uint32_t Evt, void *pCtx)
 
 	(void)Evt;
 	(void)pCtx;
+	if (s_ResetPending)
+	{
+		PrbsResetMeasurement();
+	}
 	notification = (PrbsNotification_t *)CFifoPeek(s_NotifQue);
 	if (notification != nullptr)
 	{
@@ -397,7 +315,10 @@ static void StartDiscovery(uint16_t ConnHdl)
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
-	PrbsReset();
+	// Some ports deliver this callback from an interrupt. Reset measurement
+	// in the consumer before checking the first queued notification.
+	s_ResetPending = true;
+	s_NotifDropped = 0;
 	s_ConnHdl = ConnHdl;
 	s_ValueHdl = BT_ATT_HANDLE_INVALID;
 	s_CccdHdl = BT_ATT_HANDLE_INVALID;
@@ -572,12 +493,8 @@ void BtAppInitUserData(void)
 
 static void PrbsReport(uint32_t Now)
 {
-#if defined(IOSONATA_STM32_WBA)
 	const PrbsRxStats_t &stats = s_Rx;
-#else
-	PrbsRxStats_t stats;
-	uint32_t state;
-#endif
+	PrbsReportValues_t values;
 	uint32_t elapsed;
 	uint32_t interval;
 	uint32_t rate;
@@ -609,28 +526,12 @@ static void PrbsReport(uint32_t Now)
 			return;
 		}
 	}
-#if !defined(IOSONATA_STM32_WBA)
-	state = DisableInterrupt();
-	Now = BtGattMsTick();
-	stats.Bytes = s_Rx.Bytes;
-	stats.Notifications = s_Rx.Notifications;
-	stats.Breaks = s_Rx.Breaks;
-	stats.OutOfFrame = s_Rx.OutOfFrame;
-	stats.FirstMs = s_Rx.FirstMs;
-	stats.MinLen = s_Rx.MinLen;
-	stats.MaxLen = s_Rx.MaxLen;
-	stats.Started = s_Rx.Started;
-	stats.Synced = s_Rx.Synced;
-#endif
 	elapsed = stats.Started ? (uint32_t)(Now - stats.FirstMs) : 0;
 	if (elapsed >= PRBS_RX_DURATION_MS || s_Failed)
 	{
 		s_Finished = true;
 	}
 	final = s_Finished;
-#if !defined(IOSONATA_STM32_WBA)
-	EnableInterrupt(state);
-#endif
 	if (!stats.Started && !final)
 	{
 		return;
@@ -644,32 +545,34 @@ static void PrbsReport(uint32_t Now)
 	{
 		return;
 	}
-	rate = interval ? (uint32_t)((uint64_t)(stats.Bytes - s_LastReportBytes) * 1000 / interval) : 0;
-	average = elapsed ? (uint32_t)((uint64_t)stats.Bytes * 1000 / elapsed) : 0;
-	notificationsPerInterval = elapsed ? (uint32_t)((uint64_t)stats.Notifications * 15000 / elapsed) : 0;
-	target = s_TestPhy == BT_GAP_PHY_1MBITS ? 4 : 8;
-	g_Uart.printf("%sPHY=%u Bytes/sec=%lu average=%lu ",
-		final ? "Final " : "", s_TestPhy, (unsigned long)rate, (unsigned long)average);
-	g_Uart.printf("elapsed_ms=%lu\r\n", (unsigned long)elapsed);
-	g_Uart.printf("bytes=%lu notifications=%lu ",
-		(unsigned long)stats.Bytes, (unsigned long)stats.Notifications);
-	g_Uart.printf("drop=%lu out_of_frame=%lu\r\n",
+	PrbsReportValues(&stats, Now, s_LastReportMs, s_LastReportBytes,
+		PRBS_RX_DURATION_MS, s_TestPhy, s_Failed, s_NotifDropped, &values);
+	elapsed = values.Elapsed;
+	rate = values.Rate;
+	average = values.Average;
+	notificationsPerInterval = values.PerInterval;
+	target = values.Target;
+	g_Uart.printf("%sPHY=%u Bytes/sec=%lu average=%lu elapsed_ms=%lu\r\n",
+		final ? "Final " : "", s_TestPhy, (unsigned long)rate,
+		(unsigned long)average, (unsigned long)elapsed);
+	g_Uart.printf("bytes=%lu notifications=%lu drop=%lu out_of_frame=%lu\r\n",
+		(unsigned long)stats.Bytes, (unsigned long)stats.Notifications,
 		(unsigned long)stats.Breaks, (unsigned long)stats.OutOfFrame);
 	g_Uart.printf("len_min=%u len_max=%u notifications/15ms=%lu.%03lu\r\n",
 		stats.Notifications ? stats.MinLen : 0, stats.MaxLen,
 		(unsigned long)(notificationsPerInterval / 1000), (unsigned long)(notificationsPerInterval % 1000));
-	s_LastReportMs = Now;
+	s_LastReportMs = values.Time;
 	s_LastReportBytes = stats.Bytes;
 	if (final)
 	{
 		g_Uart.printf("Notification queue dropped=%lu\r\n", (unsigned long)s_NotifDropped);
-		valid = stats.Synced && stats.Breaks == 0 && stats.OutOfFrame == 0 && !s_Failed;
+		valid = values.Valid;
 		g_Uart.printf("PRBS integrity: %s\r\n", valid ? "PASS" : "FAIL");
 		g_Uart.printf("Notification target=%lu: %s (average only)\r\n",
 			(unsigned long)target, notificationsPerInterval >= target * 1000 ? "MET" : "NOT MET");
 		g_Uart.printf("PHY=%u RESULT: %s\r\n", s_TestPhy,
-			valid && elapsed >= PRBS_RX_DURATION_MS && notificationsPerInterval >= target * 1000 ? "PASS" : "FAIL");
-		s_TrialComplete = stats.Started && elapsed >= PRBS_RX_DURATION_MS && !s_Failed;
+			values.Passed ? "PASS" : "FAIL");
+		s_TrialComplete = values.Complete;
 		if (s_TrialComplete)
 		{
 			g_Uart.printf("PHY=%u trial complete.\r\n", s_TestPhy);
@@ -697,6 +600,10 @@ bool AppCheckStatus(void)
 #endif
 
 	BtAppCheckStatus();
+	if (s_ResetPending)
+	{
+		PrbsResetMeasurement();
+	}
 	if (s_FinalPrinted && s_TrialComplete && s_Disconnected && s_TestPhy == BT_GAP_PHY_1MBITS)
 	{
 		s_TestPhy = BT_GAP_PHY_2MBITS;
