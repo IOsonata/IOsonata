@@ -33,6 +33,8 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
     code += '#include "' + str(project / "src/prbs_client.c") + '"\n'
     code += 'static uint32_t clockMs; static unsigned commandDelay; static unsigned calls; static const char *lastCommand; static uint8_t reply; static int inEvent;\n'
     checks = {
+        "aci_gap_start_scan": "assert(Procedure == GAP_OBSERVATION_PROC && Filter_Duplicates == 1);",
+        "aci_gap_terminate_gap_proc": "assert(Procedure_Code == GAP_OBSERVATION_PROC || Procedure_Code == GAP_DIRECT_CONNECTION_ESTABLISHMENT_PROC);",
         "aci_gap_create_connection": "assert(Conn_Interval_Min == 12 && Conn_Interval_Max == 12 && Conn_Latency == 0);",
         "hci_le_set_phy": "assert(ALL_PHYS == 0 && TX_PHYS == s_Phy && RX_PHYS == s_Phy);",
         "hci_le_set_data_length": "assert(TxOctets == 251 && TxTime == 2120);",

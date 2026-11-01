@@ -104,7 +104,8 @@ static void Connect(void)
 {
 	uint8_t adv[] = {2, 1, 4, 0, 1, 2, 3, 4, 5, 6, 13,
 		12, 9, 'B', 'l', 'e', 'P', 'r', 'b', 's', '_', 'S', 'D', 'C', 220};
-	const uint8_t stopped[] = {GAP_GENERAL_DISCOVERY_PROC, 0, 0};
+	uint8_t extended[39] = {0x0d, 1, 0x13, 0, 0, 1, 2, 3, 4, 5, 6};
+	const uint8_t stopped[] = {GAP_OBSERVATION_PROC, 0, 0};
 	uint8_t connected[31] = {10, 0, 0, 0, 0};
 	uint8_t phy[] = {12, 0, 0, 0, 1, 1};
 	const uint8_t dle[] = {7, 0, 0, 251, 0, 0x48, 8, 251, 0, 0x48, 8};
@@ -119,7 +120,23 @@ static void Connect(void)
 	/* Truncated advertisements must not read outside their payload. */
 	Event(0x3e, adv, 8);
 	assert(s_Phase == PRBS_SCANNING);
-	Event(0x3e, adv, sizeof(adv));
+	if (s_Phy == 1)
+	{
+		extended[15] = 220;
+		extended[25] = 13;
+		memcpy(extended + 26, adv + 11, 13);
+		Event(0x3e, extended, sizeof(extended) - 1);
+		assert(s_Phase == PRBS_SCANNING);
+		extended[2] |= 0x20;
+		Event(0x3e, extended, sizeof(extended));
+		assert(s_Phase == PRBS_SCANNING);
+		extended[2] &= ~0x20;
+		Event(0x3e, extended, sizeof(extended));
+	}
+	else
+	{
+		Event(0x3e, adv, sizeof(adv));
+	}
 	assert(s_Phase == PRBS_STOP_SCAN);
 	PumpWork();
 	assert(s_Phase == PRBS_SCAN_STOPPING);
