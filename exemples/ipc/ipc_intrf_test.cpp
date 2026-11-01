@@ -59,7 +59,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 
-#include "nrf.h"
+#include "coredev/interrupt.h"
 
 #include "idelay.h"
 #include "coredev/iopincfg.h"
@@ -393,16 +393,6 @@ static void LedInit(void)
 	}
 }
 
-static void NetCore(bool bRun)
-{
-#if defined(NRF_RESET_S) && !defined(NRF_TRUSTZONE_NONSECURE)
-	NRF_RESET_S->NETWORK.FORCEOFF = bRun ? RESET_NETWORK_FORCEOFF_FORCEOFF_Release
-										  : RESET_NETWORK_FORCEOFF_FORCEOFF_Hold;
-#else
-	NRF_RESET_NS->NETWORK.FORCEOFF = bRun ? RESET_NETWORK_FORCEOFF_FORCEOFF_Release
-										   : RESET_NETWORK_FORCEOFF_FORCEOFF_Hold;
-#endif
-}
 
 static void Report(const char *pTag)
 {
@@ -438,7 +428,7 @@ int main()
 
 	// The network core stays off while the block is cleared, so the owner
 	// never meets leftovers of an earlier run.
-	NetCore(false);
+	IpcTestPeerRun(false);
 	memset(reinterpret_cast<void*>(IPCTEST_MEM_ADDR), 0, IPCTEST_MEM_SIZE);
 #ifdef CORE_PINS
 	if (!IOPinCoreCfg(s_CorePins, sizeof(s_CorePins) / sizeof(s_CorePins[0])))
@@ -478,13 +468,8 @@ int main()
 	// Flash availability is not guaranteed by this core's memory permissions.
 	// The IPC handshake below checks whether the network image is running.
 
-	NetCore(true);
-	LOG("network core released, FORCEOFF reads %lu\r\n",
-#if defined(NRF_RESET_S) && !defined(NRF_TRUSTZONE_NONSECURE)
-		(unsigned long)NRF_RESET_S->NETWORK.FORCEOFF);
-#else
-		(unsigned long)NRF_RESET_NS->NETWORK.FORCEOFF);
-#endif
+	IpcTestPeerRun(true);
+	LOG("peer core released\r\n");
 
 	// Wait for the owner to format the block
 	uint32_t waitMs = 0;

@@ -132,4 +132,7 @@ SOFTWARE.
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
+// Hold the echo core while preparing shared memory, then release it.
+void IpcTestPeerRun(bool bRun);
+
 #endif // __BOARD_H__

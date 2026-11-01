@@ -58,21 +58,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
-#if defined(NRFXLIB_SDC)
-#include "bluetooth/bt_hci_ctlr.h"
-
-// Central streaming reserves ten RX/TX packets and scanning buffers.
-// Keep this application allocation separate from the smaller default pool.
-alignas(8) static uint8_t s_CentralCtlrMem[16384];
-extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
-	s_CentralCtlrMem, sizeof(s_CentralCtlrMem)
-};
-#endif
-
-#if defined(S132) || defined(S140)
-#include "ble.h"
-#endif
-
 #ifndef UART_DEVNO
 #define UART_DEVNO 0
 #endif
@@ -362,9 +347,6 @@ static bool s_UartBlePeerOobValid = false;
 // Pending stays set through queue refusal until the callback runs.
 static volatile bool s_bUartRxPending = false;
 static volatile bool s_bBleTxPending = false;
-#if defined(S132) || defined(S140)
-static bool s_bDiscoveryPending = false;
-#endif
 
 void UartRxSchedHandler(uint32_t Evt, void *pCtx);
 void BleTxSchedHandler(uint32_t Evt, void *pCtx);
@@ -433,9 +415,6 @@ static void BleTxQue(void)
 
 static void StartPeerDiscovery(uint16_t ConnHdl)
 {
-#if defined(S132) || defined(S140)
-	s_bDiscoveryPending = false;
-#endif
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer)
 	{
@@ -443,10 +422,6 @@ static void StartPeerDiscovery(uint16_t ConnHdl)
 		if (BtAppDiscoverDevice(pPeer) == false)
 		{
 			g_Uart.printf("Discovery start failed: handle=%u\r\n", ConnHdl);
-#if defined(S132) || defined(S140)
-			// Nordic's GATT handler can have an MTU exchange in progress.
-			s_bDiscoveryPending = true;
-#endif
 		}
 		else
 		{
@@ -468,20 +443,16 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	g_ConnectedDev.Conn.Hdl = ConnHdl;
 	g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
 
-	// The streamer need not initiate a PHY procedure. An accepted request
-	// does not mean negotiation has completed; SoftDevice reports its result
-	// through BtAppCentralEvtHandler, and SDC can be queried with stats.
+	// An accepted request starts negotiation. The stats command reads the PHY.
 	if (!BtGapSetPhy(ConnHdl, CENTRAL_PHY, CENTRAL_PHY, 0))
 	{
 		g_Uart.printf("Central PHY request refused; retaining current PHY\r\n");
 	}
 
-#if defined(NRFXLIB_SDC)
 	if (!BtGapSetDataLength(ConnHdl, 251, 2120))
 	{
 		g_Uart.printf("Central data-length request refused\r\n");
 	}
-#endif
 
 #if BLE_SC_METHOD != BLE_SC_NONE
 	// Secure mode: the stack starts pairing now. Do not touch the peer GATT
@@ -511,9 +482,6 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
 	g_Uart.printf("BtAppEvtDisconnected ConnHdl = %d (0x%x) \r\n", ConnHdl, ConnHdl);
 
 	g_ConnectedDev.Conn.Hdl = BT_CONN_HDL_INVALID;
-#if defined(S132) || defined(S140)
-	s_bDiscoveryPending = false;
-#endif
 	g_BleTxCharHdl = BT_ATT_HANDLE_INVALID;
 	g_BleRxCharHdl = BT_ATT_HANDLE_INVALID;
 
@@ -554,15 +522,6 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 	return true; // keep scanning
 }
 
-void BleAppInitUserData()
-{
-//	// Add passkey pairing
-//	ble_opt_t opt;
-//	opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
-//	uint32_t err_code =  sd_ble_opt_set(BLE_GAP_OPT_PASSKEY, &opt);
-//	APP_ERROR_CHECK(err_code);
-}
-
 void BtAppInitUserServices(void)
 {
 	// Central bridge app does not host local custom GATT services.
@@ -573,72 +532,6 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 	// Not used in central-only demo.
-}
-
-void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
-{
-#if defined(S132) || defined(S140)
-	const ble_evt_t *pEvt = (const ble_evt_t *)pCtx;
-
-	if (pEvt == nullptr || s_StreamActive)
-	{
-		return;
-	}
-
-	switch (Evt)
-	{
-		case BLE_GAP_EVT_CONNECTED:
-			g_Uart.printf("BLE interval_units=%u latency=%u\r\n",
-				pEvt->evt.gap_evt.params.connected.conn_params.max_conn_interval,
-				pEvt->evt.gap_evt.params.connected.conn_params.slave_latency);
-			break;
-		case BLE_GAP_EVT_PHY_UPDATE:
-			g_Uart.printf("BLE PHY status=%u tx=%u rx=%u\r\n",
-				pEvt->evt.gap_evt.params.phy_update.status,
-				pEvt->evt.gap_evt.params.phy_update.tx_phy,
-				pEvt->evt.gap_evt.params.phy_update.rx_phy);
-			break;
-		case BLE_GATTC_EVT_EXCHANGE_MTU_RSP:
-			g_Uart.printf("MTU exchange response: status=0x%04X\r\n",
-				pEvt->evt.gattc_evt.gatt_status);
-			if (s_bDiscoveryPending &&
-				pEvt->evt.gattc_evt.conn_handle == g_ConnectedDev.Conn.Hdl)
-			{
-				StartPeerDiscovery(pEvt->evt.gattc_evt.conn_handle);
-			}
-			break;
-		case BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP:
-			g_Uart.printf("Discovery services: status=0x%04X count=%u\r\n",
-				pEvt->evt.gattc_evt.gatt_status,
-				pEvt->evt.gattc_evt.gatt_status == BLE_GATT_STATUS_SUCCESS ?
-				pEvt->evt.gattc_evt.params.prim_srvc_disc_rsp.count : 0);
-			break;
-		case BLE_GATTC_EVT_CHAR_DISC_RSP:
-			g_Uart.printf("Discovery characteristics: status=0x%04X count=%u\r\n",
-				pEvt->evt.gattc_evt.gatt_status,
-				pEvt->evt.gattc_evt.gatt_status == BLE_GATT_STATUS_SUCCESS ?
-				pEvt->evt.gattc_evt.params.char_disc_rsp.count : 0);
-			break;
-		case BLE_GATTC_EVT_DESC_DISC_RSP:
-			g_Uart.printf("Discovery descriptors: status=0x%04X count=%u\r\n",
-				pEvt->evt.gattc_evt.gatt_status,
-				pEvt->evt.gattc_evt.gatt_status == BLE_GATT_STATUS_SUCCESS ?
-				pEvt->evt.gattc_evt.params.desc_disc_rsp.count : 0);
-			break;
-		case BLE_GATTC_EVT_TIMEOUT:
-			g_Uart.printf("Discovery/GATT timeout\r\n");
-			break;
-		case BLE_GATTC_EVT_WRITE_RSP:
-			g_Uart.printf("GATT write response: status=0x%04X\r\n",
-				pEvt->evt.gattc_evt.gatt_status);
-			break;
-		default:
-			break;
-	}
-#else
-	(void)Evt;
-	(void)pCtx;
-#endif
 }
 
 // Peripheral -> central data stream. Forward the notified/indicated value from
@@ -1139,10 +1032,8 @@ static void UartBlePrintStats(void)
 	uint32_t elapsedMs;
 	BtDevice_t *peer;
 	uint16_t mtu;
-#if defined(NRFXLIB_SDC)
 	uint8_t txPhy;
 	uint8_t rxPhy;
-#endif
 	uint32_t state;
 	uint32_t received;
 	uint32_t accepted;
@@ -1181,12 +1072,10 @@ static void UartBlePrintStats(void)
 		(unsigned long)elapsedMs, minLen, maxLen, mtu);
 	g_Uart.printf("prbs_check=%u prbs_breaks=%lu\r\n",
 		(unsigned)CENTRAL_PRBS_CHECK, (unsigned long)prbsBreaks);
-#if defined(NRFXLIB_SDC)
 	if (BtGapReadPhy(g_ConnectedDev.Conn.Hdl, &txPhy, &rxPhy))
 	{
 		g_Uart.printf("BLE PHY tx=%u rx=%u\r\n", txPhy, rxPhy);
 	}
-#endif
 	g_Uart.printf("\r\nStream: ble_rx=%lu uart_accepted=%lu ",
 		(unsigned long)received, (unsigned long)accepted);
 	g_Uart.printf("queued=%d ble_drop=%lu uart_refused=%lu\r\n", queued,
@@ -1386,11 +1275,6 @@ int main()
 	if (!BtAppInit(&s_BleAppCfg))
 	{
 		g_Uart.printf("BtAppInit failed\r\n");
-#if defined(NRFXLIB_SDC)
-		g_Uart.printf("SDC error=%d value=%d pool_needed=%d pool_size=%u\r\n",
-			(int)BtHciCtlrErrorGet(), (int)BtHciCtlrErrorValueGet(),
-			(int)BtHciCtlrMemPoolSizeNeeded(), (unsigned)g_BtHciCtlrMemPool.Size);
-#endif
 		while (true)
 		{
 			__NOP();

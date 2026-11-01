@@ -38,7 +38,7 @@
 		<link>
 			<name>src/netcore_start.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/misc/netcore_start.cpp</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/netcore_start.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -69,7 +69,6 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
-#include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_intrf.h"
@@ -149,13 +148,6 @@ static BtGattChar_t s_VideoChars[] = {
 };
 
 uint8_t g_LWrBuffer[512];
-
-// GAP, GATT, the video characteristics and DIS exceed the default 2 KB pool.
-alignas(BtAttDBEntry_t) static uint8_t s_AttDBMem[3072];
-
-const BtAttDBMemCfg_t g_BtAttDBMemCfg = {
-	s_AttDBMem, sizeof(s_AttDBMem)
-};
 
 static bool s_bServiceOk = false;
 

@@ -40,5 +40,10 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/uart_ble_central.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/uart_ble_target.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/uart_ble_target.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

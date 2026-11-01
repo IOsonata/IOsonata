@@ -349,14 +349,23 @@ static bool s_bBtAppSrvcDone = false;
 // which is the only thing that says which procedure the response belongs to.
 // =====================================================================
 
+enum { BTAPP_DISC_IDLE, BTAPP_DISC_PENDING, BTAPP_DISC_ACTIVE };
+
 static void BtAppDiscStartChar(BtDevice_t *pDev);
 static void BtAppDiscStartDesc(BtDevice_t *pDev);
 
 bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 {
-	if (pDev == NULL)
+	uint32_t status;
+
+	if (pDev == NULL || pDev->Conn.Hdl == BT_CONN_HDL_INVALID)
 	{
 		return false;
+	}
+
+	if (pDev->Discovery.Phase == BTAPP_DISC_ACTIVE)
+	{
+		return true;
 	}
 
 	pDev->Discovery.SrvIdx  = 0;
@@ -371,7 +380,36 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 	memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
 
 	// NULL uuid filter discovers every primary service from handle 1.
-	return sd_ble_gattc_primary_services_discover(pDev->Conn.Hdl, 0x0001, NULL) == NRF_SUCCESS;
+	status = sd_ble_gattc_primary_services_discover(pDev->Conn.Hdl, 0x0001, NULL);
+	if (status == NRF_ERROR_BUSY)
+	{
+		// The SDK GATT module may still own the connect-time MTU exchange.
+		// Accept the discovery request and resume it from the port.
+		pDev->Discovery.Phase = BTAPP_DISC_PENDING;
+		return true;
+	}
+	pDev->Discovery.Phase = status == NRF_SUCCESS ? BTAPP_DISC_ACTIVE : BTAPP_DISC_IDLE;
+	return status == NRF_SUCCESS;
+}
+
+static void BtAppDiscoveryRetry(void)
+{
+	BtDevice_t *pPeer;
+	uint16_t idx;
+
+	for (idx = 0; idx < BtPeerCount(); idx++)
+	{
+		pPeer = BtPeerSlot(idx);
+		if (pPeer != nullptr && pPeer->Conn.Hdl != BT_CONN_HDL_INVALID &&
+			pPeer->Discovery.Phase == BTAPP_DISC_PENDING)
+		{
+			if (!BtAppDiscoverDevice(pPeer))
+			{
+				// An accepted discovery cannot complete after a permanent error.
+				BtAppDisconnectConn(pPeer->Conn.Hdl);
+			}
+		}
+	}
 }
 
 static void BtAppDiscStartChar(BtDevice_t *pDev)
@@ -437,6 +475,7 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 	}
 
 	// Every service and characteristic processed. Discovery complete.
+	pDev->Discovery.Phase = BTAPP_DISC_IDLE;
 	BtDeviceDiscovered(pDev);
 }
 
@@ -1081,6 +1120,10 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
     		// scan observer in bt_scan_nrf52.cpp. Keeping them out of this
     		// dispatcher lets a build that never scans leave the scan module
     		// and its report buffer out of the link.
+			case BLE_GATTC_EVT_EXCHANGE_MTU_RSP:
+				BtAppDiscoveryRetry();
+				break;
+
             case BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP:
                 BtAppDiscPrimSrvcRsp(&p_ble_evt->evt.gattc_evt);
                 break;
@@ -1580,9 +1623,15 @@ static void BtAppNrf52SrvcDone(const BtAppCfg_t *pCfg)
 	BtGattInit();
 }
 
+static void BtAppNrf52ConnTick(void)
+{
+	BtGattIndicationTimeoutCheck();
+	BtAppDiscoveryRetry();
+}
+
 static const BtAppNrf52Conn_t s_BtAppNrf52Conn = {
 	.Evt = BtAppNrf52ConnEvt,
-	.Tick = BtGattIndicationTimeoutCheck,
+	.Tick = BtAppNrf52ConnTick,
 	.SrvcDone = BtAppNrf52SrvcDone,
 };
 

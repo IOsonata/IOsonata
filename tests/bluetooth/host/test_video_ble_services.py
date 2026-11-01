@@ -65,7 +65,8 @@ int main()
                 os.environ.get("CXX", "g++"), "-std=gnu++20", "-O1", "-g",
                 "-ffunction-sections", "-fdata-sections",
                 "-fsanitize=address,undefined", "-fno-sanitize-recover=all",
-                "-I" + str(ROOT / "include"), str(cpp),
+                "-I" + str(ROOT / "include"), "-DNRFXLIB_SDC", str(cpp),
+                str(ROOT / "ARM/Nordic/nRF52/nRF52832/exemples/VideoBleDemo/src/video_ble_target.cpp"),
                 *[str(ROOT / "src/bluetooth" / name) for name in sources],
                 "-Wl,--gc-sections", "-o", str(exe)
             ], check=True)
