@@ -17,7 +17,7 @@ code = r'''
 #include <cstring>
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
-#include "syslog.h"
+#include "bluetooth/blueio_blesrvc.h"
 #include "ble_prbs_benchmark.h"
 #define PRBS_RX_SETUP_TIMEOUT_MS 10000U
 #define PRBS_RX_DURATION_MS 60000U
@@ -34,6 +34,7 @@ static unsigned phyReads;
 static unsigned phyRequests;
 static unsigned dleRefused;
 static BtDevice_t peer;
+static BtGattDBSrvc_t service;
 static char output[65536];
 static unsigned outputSize;
 struct
@@ -112,8 +113,9 @@ bool BtGapSetDataLength(uint16_t, uint16_t octets, uint16_t time)
 	}
 	return true;
 }
-bool BtAppEnableNotify(uint16_t, uint16_t)
+bool BtAppEnableNotify(uint16_t handle, uint16_t cccd)
 {
+	assert(handle == peer.Conn.Hdl && cccd == 0x13);
 	subscribes++;
 	return true;
 }
@@ -121,6 +123,14 @@ void BtAppDisconnectConn(uint16_t handle)
 {
 	disconnects++;
 	BtAppEvtDisconnected(handle);
+}
+int BtDeviceFindService(BtDevice_t *, uint16_t)
+{
+	return 0;
+}
+int BtDeviceFindCharacteristic(BtDevice_t *, int, uint16_t)
+{
+	return 0;
 }
 bool BtAppDiscoverDevice(BtDevice_t *)
 {
@@ -132,11 +142,11 @@ code += 'static void PrbsReceive(uint32_t, void *);\n'
 for signature in [r'^static bool PrbsSchedule\(', r'^static bool PrbsWrite\(', r'^static void PrbsDone\(']:
     code += extract_function(source, signature) + '\n'
 a = source.index('static const PrbsBenchAdapters_t s_BenchAdapters')
-code += source[a:source.index('static void PrbsReset(void)', a)]
-for signature in [r'^static void PrbsReset\(', r'^static void PrbsReceive\([^;]*?\)\s*(?=\{)',
+code += source[a:source.index('static void PrbsReceive(uint32_t Evt, void *pCtx)\n{', a)]
+for signature in [r'^static void PrbsReceive\([^;]*?\)\s*(?=\{)',
                   r'^void BtGattClientNotified\(', r'^void BtAppEvtConnected\(',
                   r'^void BtAppEvtDisconnected\(', r'^void BtAppEvtConnectFailed\(',
-                  r'^bool AppCheckStatus\(']:
+                  r'^void BtDeviceDiscovered\(', r'^bool AppCheckStatus\(']:
     code += extract_function(source, signature) + '\n'
 code += r'''
 static void RunTrial(unsigned packets)
@@ -196,12 +206,13 @@ int main()
 	assert(PrbsBenchInit(&s_Benchmark, &s_BenchAdapters, s_TestPhy));
 	assert(s_Benchmark.Queue != nullptr && CFifoAvail(s_Benchmark.Queue) == 12);
 	peer.Conn.MaxMtu = 247;
+	peer.Conn.Hdl = 0;
+	peer.pServices = &service;
+	service.characteristics[0].characteristic.handle_value = 0x12;
+	service.characteristics[0].cccd_handle = 0x13;
 	BtAppEvtConnected(0);
 	assert(!s_Benchmark.Failed);
-	s_ValueHdl = 0x12;
-	s_CccdHdl = 0x13;
-	nowMs = 1000;
-	AppCheckStatus();
+	BtDeviceDiscovered(&peer);
 	assert(subscribes == 1 && !s_Benchmark.Failed);
 	BtGattClientNotified(1, 0x12, invalid, sizeof(invalid));
 	BtGattClientNotified(0, 0x14, invalid, sizeof(invalid));
@@ -210,15 +221,10 @@ int main()
 	assert(disconnects == 1);
 	AppCheckStatus();
 	assert(s_TestPhy == 2 && scans == 1 && !s_Benchmark.Stats.Started);
-	BtAppEvtConnected(1);
-	s_ValueHdl = 0x12;
-	s_CccdHdl = 0x13;
-	nowMs += 1000;
-	AppCheckStatus();
-	assert(subscribes == 1); // Wrong actual PHY must not start the 2M stream.
+	peer.Conn.Hdl = 1;
 	actualPhy = 2;
-	nowMs += 1000;
-	AppCheckStatus();
+	BtAppEvtConnected(1);
+	BtDeviceDiscovered(&peer);
 	assert(subscribes == 2);
 	RunTrial(8);
 	AppCheckStatus();
@@ -228,6 +234,24 @@ int main()
 	assert(strstr(output, "PRBS integrity: FAIL") == nullptr);
 	assert(strstr(output, "PHY=1 RESULT: PASS") != nullptr);
 	assert(strstr(output, "PHY=2 RESULT: PASS") != nullptr);
+	// Discovery subscribes directly, without a status poll. Invalid negotiated
+	// settings must abort rather than print a result for the requested PHY.
+	peer.Conn.Hdl = 0;
+	actualPhy = 1;
+	BtAppEvtConnected(0);
+	BtDeviceDiscovered(&peer);
+	assert(s_Benchmark.Failed && subscribes == 2);
+	actualPhy = 2;
+	BtAppEvtConnected(0);
+	peer.Conn.MaxMtu = 23;
+	BtDeviceDiscovered(&peer);
+	assert(s_Benchmark.Failed && subscribes == 2);
+	peer.Conn.MaxMtu = 247;
+	BtAppEvtConnected(0);
+	service.characteristics[0].cccd_handle = BT_ATT_HANDLE_INVALID;
+	BtDeviceDiscovered(&peer);
+	assert(s_Benchmark.Failed && subscribes == 2);
+	service.characteristics[0].cccd_handle = 0x13;
 	// Explicit 1M preference must reach the stack even on a matching link.
 	s_TestPhy = 1;
 	actualPhy = 1;
@@ -268,24 +292,23 @@ int main()
 	AppCheckStatus();
 	assert(s_Benchmark.FinalPrinted && !s_Benchmark.Complete && s_TestPhy == 1 && scans == 1);
 	// Damage is counted locally, with no UART payload API in this harness.
-	PrbsReset();
+	PrbsBenchReset(&s_Benchmark, s_TestPhy);
 	s_Benchmark.Finished = false;
 	PrbsBenchCheck(&s_Benchmark, invalid, sizeof(invalid), UINT32_MAX - 100);
 	assert(s_Benchmark.Stats.Breaks == 2 && s_Benchmark.Stats.OutOfFrame == 1);
 	PrbsBenchCheck(&s_Benchmark, invalid, sizeof(invalid), 59900);
 	assert(s_Benchmark.Finished && s_Benchmark.Stats.Bytes == 3); // Duration check survives clock wrap.
-	PrbsReset();
+	PrbsBenchReset(&s_Benchmark, s_TestPhy);
 	s_Benchmark.Finished = false;
 	PrbsBenchCheck(&s_Benchmark, zeros, sizeof(zeros), 0);
 	assert(!s_Benchmark.Stats.Synced); // Zero has a zero successor but is not valid PRBS.
 	// Payload ownership: callback must not check data or retain its pointer.
-	PrbsReset();
+	PrbsBenchReset(&s_Benchmark, s_TestPhy);
 	s_Benchmark.Finished = false;
 	s_Benchmark.Failed = false;
 	s_ConnHdl = 0;
 	s_ValueHdl = 0x12;
 	s_ConnectMs = 100;
-	s_LastPollMs = 100;
 	nowMs = 100;
 	BtGattClientNotified(0, 0x12, invalid, sizeof(invalid));
 	assert(s_Benchmark.Stats.Bytes == 0 && CFifoUsed(s_Benchmark.Queue) == 1);
@@ -294,7 +317,7 @@ int main()
 	AppEvtHandlerExec();
 	assert(s_Benchmark.Stats.Bytes == 3 && s_Benchmark.Stats.OutOfFrame == 1 && s_Benchmark.Stats.FirstMs == 100);
 	// Fill all 12 event slots; a refused receive event must be retried.
-	PrbsReset();
+	PrbsBenchReset(&s_Benchmark, s_TestPhy);
 	for (idx = 0; idx < 12; idx++)
 	{
 		assert(AppEvtHandlerQue(0, nullptr, [](uint32_t, void *) {}));
@@ -307,7 +330,7 @@ int main()
 	assert(s_Benchmark.Stats.Bytes == sizeof(zeros) && CFifoUsed(s_Benchmark.Queue) == 0);
 	// Delayed processing still uses arrival time at the 60-second boundary.
 	s_TestPhy = 2;
-	PrbsReset();
+	PrbsBenchReset(&s_Benchmark, s_TestPhy);
 	s_Benchmark.Finished = false;
 	nowMs = 100;
 	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
@@ -321,7 +344,7 @@ int main()
 	assert(s_Benchmark.Stats.Notifications == 2 && s_Benchmark.Finished);
 	s_Benchmark.Finished = false;
 	// Full notification FIFO refuses new data without overwriting old data.
-	PrbsReset();
+	PrbsBenchReset(&s_Benchmark, s_TestPhy);
 	s_ConnHdl = 0;
 	s_ValueHdl = 0x12;
 	for (idx = 0; idx < 13; idx++)

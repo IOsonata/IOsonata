@@ -158,10 +158,8 @@ static PrbsBenchmark_t s_Benchmark;
 static uint8_t s_TestPhy = BT_GAP_PHY_1MBITS;
 static volatile uint16_t s_ConnHdl = BT_CONN_HDL_INVALID;
 static volatile uint16_t s_ValueHdl = BT_ATT_HANDLE_INVALID;
-static volatile uint16_t s_CccdHdl = BT_ATT_HANDLE_INVALID;
 static volatile bool s_Disconnected;
 static volatile uint32_t s_ConnectMs;
-static volatile uint32_t s_LastPollMs;
 
 static void PrbsReceive(uint32_t Evt, void *pCtx);
 
@@ -190,11 +188,6 @@ static const PrbsBenchAdapters_t s_BenchAdapters = {
 	PrbsDone
 };
 
-static void PrbsReset(void)
-{
-	PrbsBenchReset(&s_Benchmark, s_TestPhy);
-}
-
 static void PrbsReceive(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
@@ -221,12 +214,10 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	s_Benchmark.Dropped = 0;
 	s_ConnHdl = ConnHdl;
 	s_ValueHdl = BT_ATT_HANDLE_INVALID;
-	s_CccdHdl = BT_ATT_HANDLE_INVALID;
 	s_Benchmark.Failed = false;
 	s_Benchmark.Finished = false;
 	s_Disconnected = false;
 	s_ConnectMs = BtGattMsTick();
-	s_LastPollMs = s_ConnectMs;
 	g_Uart.printf("Connected handle=%u; requesting PHY=%u\r\n", ConnHdl, s_TestPhy);
 	pPeer = BtPeerFindByHdl(ConnHdl);
 	if (!BtGapSetPhy(ConnHdl, s_TestPhy, s_TestPhy, 0) ||
@@ -293,6 +284,9 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 {
 	int service;
 	int characteristic;
+	uint16_t cccd;
+	uint8_t txPhy;
+	uint8_t rxPhy;
 
 	if (pDev == nullptr || pDev->Conn.Hdl != s_ConnHdl)
 	{
@@ -311,8 +305,11 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 		return;
 	}
 	s_ValueHdl = pDev->pServices[service].characteristics[characteristic].characteristic.handle_value;
-	s_CccdHdl = pDev->pServices[service].characteristics[characteristic].cccd_handle;
-	if (s_CccdHdl == BT_ATT_HANDLE_INVALID || pDev->Conn.MaxMtu != BLE_MTU_SIZE)
+	cccd = pDev->pServices[service].characteristics[characteristic].cccd_handle;
+	if (cccd == BT_ATT_HANDLE_INVALID || pDev->Conn.MaxMtu != BLE_MTU_SIZE ||
+		!BtGapReadPhy(s_ConnHdl, &txPhy, &rxPhy) ||
+		txPhy != s_TestPhy || rxPhy != s_TestPhy ||
+		!BtAppEnableNotify(s_ConnHdl, cccd))
 	{
 		s_Benchmark.Failed = true;
 	}
@@ -329,46 +326,22 @@ void BtAppInitUserData(void)
 bool AppCheckStatus(void)
 {
 	uint32_t now;
-	uint8_t txPhy;
-	uint8_t rxPhy;
 
 	BtAppCheckStatus();
-	if (s_Benchmark.ResetPending)
-	{
-		PrbsBenchResetMeasurement(&s_Benchmark);
-	}
 	if (s_Benchmark.FinalPrinted && s_Benchmark.Complete && s_Disconnected && s_TestPhy == BT_GAP_PHY_1MBITS)
 	{
 		s_TestPhy = BT_GAP_PHY_2MBITS;
-		PrbsReset();
+		PrbsBenchReset(&s_Benchmark, s_TestPhy);
 		s_Disconnected = false;
 		g_Uart.printf("Starting 60-second 2M trial\r\n");
 		BtAppScan();
 	}
 	now = BtGattMsTick();
-	// Setup checks stop as soon as notifications start. No PHY commands or
-	// diagnostic polling run during the measured stream.
 	if (s_ConnHdl != BT_CONN_HDL_INVALID && !s_Benchmark.Finished &&
-		!s_Benchmark.Failed && !s_Benchmark.Stats.Started)
+		!s_Benchmark.Stats.Started &&
+		(uint32_t)(now - s_ConnectMs) >= PRBS_RX_SETUP_TIMEOUT_MS)
 	{
-		if ((uint32_t)(now - s_ConnectMs) >= PRBS_RX_SETUP_TIMEOUT_MS)
-		{
-			s_Benchmark.Failed = true;
-		}
-		else if (s_CccdHdl != BT_ATT_HANDLE_INVALID &&
-			(uint32_t)(now - s_LastPollMs) >= PRBS_BENCH_REPORT_MS)
-		{
-			s_LastPollMs = now;
-			if (!BtGapReadPhy(s_ConnHdl, &txPhy, &rxPhy))
-			{
-				s_Benchmark.Failed = true;
-			}
-			else if (txPhy == s_TestPhy && rxPhy == s_TestPhy)
-			{
-				s_Benchmark.Failed = !BtAppEnableNotify(s_ConnHdl, s_CccdHdl);
-				s_CccdHdl = BT_ATT_HANDLE_INVALID;
-			}
-		}
+		s_Benchmark.Failed = true;
 	}
 	PrbsBenchPoll(&s_Benchmark, now);
 	return true;
