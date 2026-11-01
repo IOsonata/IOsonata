@@ -43,7 +43,7 @@ tasks = 'enum {' + tasks + '};\n'
 slptmr = ''.join('#define %s %s\n' % m for m in
                  re.findall(r'\b(\w+_SLPTMR)\s*=\s*(0x[0-9a-fA-F]+)', types))
 temp = ''.join(re.findall(r'#define BT_WBA_TEMPERATURE_\w+\s+\d+\n', platform))
-assert 'RTC_SLPTMR' in slptmr and 'RCO_SLPTMR' in slptmr and temp.count('#define') == 2
+assert 'RTC_SLPTMR' in slptmr and 'RCO_SLPTMR' in slptmr and temp.count('#define') == 1
 
 start = platform.index('// Link layer scheduler margins')
 end = platform.index('\n//----', start)
@@ -207,12 +207,13 @@ void UTIL_SEQ_SetTask(uint32_t TaskBm, uint32_t Prio)
 }
 void TEMPMEAS_RequestTemperatureMeasurement(void)
 {
-	ll_intf_cmn_set_temperature_value(BT_WBA_TEMPERATURE_C + BT_WBA_TEMPERATURE_OFS);
+	ll_intf_cmn_set_temperature_value(25 + BT_WBA_TEMPERATURE_OFS);
 }
 void (*TestTask(unsigned Bit))(void) { return s_Task[Bit]; }
 '''
 
 ours_cpp = r'''
+#include <cstdlib>
 #include "app_conf.h"
 #include "mocks.h"
 static struct { uint32_t BDCR1; } s_Rcc;
@@ -225,6 +226,16 @@ static void BtWbaSeqSet(uint32_t TaskBm)
 {
 	Log("SetTask 0x%x", (unsigned)TaskBm);
 }
+struct TempSensorCfg_t { int a, b, c, d, e, f, g, h; void *p; };
+struct TempSensorData_t { int32_t Temperature; };
+#define SENSOR_OPMODE_SINGLE 0
+#define DEVINTR_POL_LOW 0
+class TempSTM32WBA {
+public:
+    bool Init(const TempSensorCfg_t &) { return true; }
+    bool UpdateData() { return std::getenv("WBA_TEMP_FAIL") == nullptr; }
+    void Read(TempSensorData_t &data) { data.Temperature = 2500; }
+};
 static uint32_t BtWbaSleepClockSelect(void);
 ''' + ours.replace('uint32_t sel = RCC->BDCR1', 'RCC->BDCR1 = g_Bdcr1;\n\tuint32_t sel = RCC->BDCR1') + r'''
 extern "C" void (*TestTask(unsigned Bit))(void) { return s_SeqTask[Bit]; }
@@ -268,4 +279,10 @@ with tempfile.TemporaryDirectory(prefix='wba-ll-sys-') as temp:
                 print('--- Cube ll_sys_if.c\n' + a + '--- bt_wba_platform.cpp\n' + b)
             else:
                 print('PASS WBA ll_sys hooks:', label, name, 'sleep clock,', len(a.splitlines()), 'calls same as Cube')
+        output = subprocess.run([str(mine), '1'], check=True, capture_output=True,
+                                text=True, timeout=10,
+                                env={**os.environ, 'WBA_TEMP_FAIL': '1'}).stdout
+        assert 'set_temperature_sensor_state' not in output
+        assert 'set_temperature_value' not in output
+        print('PASS WBA temperature failure: periodic calibration retained, no fabricated reading')
 sys.exit(1 if failed else 0)

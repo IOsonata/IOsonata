@@ -37,6 +37,8 @@ SOFTWARE.
 #include <stdint.h>
 #include <stddef.h>
 #include "adc_stm32wba.h"
+#include "temp_stm32wba.h"
+#include "stm32.h"
 #include "coredev/iopincfg.h"
 
 static volatile uint32_t *const io = (volatile uint32_t *)0x500FF000;
@@ -96,6 +98,15 @@ void operator delete(void *, size_t) noexcept
 {
 }
 
+// Bare-metal test never exits; no destructor registration runtime is linked.
+extern "C" {
+void *__dso_handle;
+int __aeabi_atexit(void *, void (*)(void *), void *)
+{
+	return 0;
+}
+}
+
 static void Check(bool ok)
 {
 	io[1] = ++checks | (ok ? 0 : 0x80000000U);
@@ -118,6 +129,9 @@ extern "C" void ResetHandler()
 	AdcCfg_t cfg = { ADC_CONV_MODE_SINGLE, &ref, 1, 0, 12, 0, 0, false, 6, nullptr };
 	AdcChanCfg_t ch = { 0, 0, ADC_CHAN_TYPE_SINGLE_ENDED, 0x100, 10, false, { 6, ADC_PIN_CONN_NONE }, { -1, ADC_PIN_CONN_NONE }, 0, nullptr };
 	AdcData_t data;
+	TempSTM32WBA sensor;
+	TempSensorCfg_t sensorCfg = { 0, SENSOR_OPMODE_SINGLE, 0, 0, 0, DEVINTR_POL_LOW, 0, 0, nullptr };
+	Check(sensor.Init(sensorCfg));
 	Check(!adc.Read(0, &data) && !adc.StartConversion());
 	cfg.bInterrupt = true;
 	Check(!adc.Init(cfg));
@@ -130,12 +144,25 @@ extern "C" void ResetHandler()
 	clockHz = 16000000;
 	Check(adc.Init(cfg) && adc.Valid());
 	Check(!other.Init(cfg));
+	ch.Chan = 7;
+	ch.PinP.PinNo = ADC_STM32WBA_INPUT_VREFINT;
+	Check(adc.OpenChannel(&ch, 1) && configured == 0 && analog == 0);
+	Check((ADC4_COMMON->CCR & ADC_CCR_VREFEN) != 0 && adc.Read(7, &data));
+	adc.CloseChannel(7);
+	Check((ADC4_COMMON->CCR & ADC_CCR_VREFEN) == 0);
+	ch.Chan = 0;
+	ch.PinP.PinNo = 6;
+	Check(sensor.UpdateData() && sensor.ReadTemperature() == 80.0f);
+	Check(!other.Init(cfg));
 	Check(!adc.StartConversion());
 	Check(adc.OpenChannel(&ch, 1) && configured == 1 && analog == 1);
 	Check(adc.Read(0, &data) && data.Chan == 0 && data.Timestamp == 0 && data.Data > 1.64f && data.Data < 1.66f);
 	Check(!adc.UpdateData());
 	Check(adc.StartConversion() && adc.UpdateData());
+	Check(sensor.UpdateData() && adc.UpdateData());
 	Check(adc.Read(&data, 1) == 1 && !adc.UpdateData());
+	Check(adc.Resolution(9) == 10);
+	Check(sensor.UpdateData() && adc.Resolution() == 10);
 	Check(adc.Resolution(9) == 10 && adc.Read(0, &data) && data.Data > 1.64f && data.Data < 1.66f);
 	Check(adc.Resolution(1) == 6 && adc.Resolution(99) == 12);
 	ch.PinP.PinNo = 18;
@@ -156,6 +183,7 @@ extern "C" void ResetHandler()
 	Check(adc.Read(round, 2) == 2 && round[0].Chan == 0 && round[1].Chan == 3 && !adc.UpdateData());
 	adc.CloseChannel(3);
 	io[0] = 1;
+	Check(!sensor.UpdateData() && sensor.ReadTemperature() == 80.0f);
 	Check(!adc.Read(0, &data) && !adc.UpdateData()); // Conversion timeout
 	io[0] = 0;
 	Check(adc.Read(0, &data)); // Next conversion recovers
@@ -186,6 +214,16 @@ extern "C" void ResetHandler()
 	io[0] = 0;
 	Check(other.Init(cfg) && other.OpenChannel(&ch, 1) && other.Read(0, &data));
 	other.PowerOff();
+	Check(sensor.UpdateData() && sensor.ReadTemperature() == 80.0f);
+	Check(other.Init(cfg));
+	other.PowerOff();
+	io[0] = 7;
+	Check(!sensor.UpdateData() && sensor.ReadTemperature() == 80.0f);
+	io[0] = 8;
+	Check(!sensor.UpdateData());
+	io[0] = 9;
+	Check(sensor.UpdateData());
+	io[0] = 0;
 	io[2] = checks;
 	while (1)
 	{

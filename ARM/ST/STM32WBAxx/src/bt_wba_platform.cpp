@@ -74,12 +74,11 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "bt_wba_platform.h"
 #include "syslog.h"
+#include "temp_stm32wba.h"
 
 // Defined by the port in bt_app_stm32wba.cpp: runs the host stack
 extern "C" void BleStackCB_Process(void);
 
-// Temperature, in degrees C, given to the link layer for radio calibration
-#define BT_WBA_TEMPERATURE_C	25
 // Offset the link layer adds to the temperature (TEMPMEAS_MIN_TEMP_LIMIT)
 #define BT_WBA_TEMPERATURE_OFS	40
 
@@ -419,10 +418,20 @@ static uint32_t BtWbaSleepClockSelect(void)
 	return sel;
 }
 
-// Temperature report for the radio calibration
+// Initial measurement is taken before declaring the sensor to the LL.
+static TempSTM32WBA s_TemperatureSensor;
+static int32_t s_Temperature;
+static bool s_TemperatureInitial;
+
 static void BtWbaTemperatureReport(void)
 {
-	ll_intf_cmn_set_temperature_value((uint32_t)(BT_WBA_TEMPERATURE_C + BT_WBA_TEMPERATURE_OFS));
+	TempSensorData_t data;
+
+	if (s_TemperatureSensor.UpdateData())
+	{
+		s_TemperatureSensor.Read(data);
+		ll_intf_cmn_set_temperature_value((uint32_t)(data.Temperature / 100 + BT_WBA_TEMPERATURE_OFS));
+	}
 }
 
 extern "C" void ll_sys_bg_process_init(void)
@@ -442,6 +451,11 @@ extern "C" void ll_sys_schedule_bg_process_isr(void)
 
 extern "C" void ll_sys_config_params(void)
 {
+	static const TempSensorCfg_t cfg = {
+		0, SENSOR_OPMODE_SINGLE, 0, 0, 0, DEVINTR_POL_LOW, 0, 0, nullptr
+	};
+	TempSensorData_t data;
+
 	// Radio low ISR used, next event scheduled from the ISR. The link layer
 	// is built for these two settings.
 	ll_intf_cmn_config_ll_ctx_params(1, 1);
@@ -450,7 +464,14 @@ extern "C" void ll_sys_config_params(void)
 	// Recalibrate on temperature reports in place of the periodic calibration
 	// every 10 s. The first temperature request comes from this call.
 	s_SeqTask[CFG_TASK_TEMP_MEAS] = BtWbaTemperatureReport;
-	ll_intf_cmn_set_temperature_sensor_state();
+	s_TemperatureInitial = s_TemperatureSensor.Init(cfg) && s_TemperatureSensor.UpdateData();
+	if (s_TemperatureInitial)
+	{
+		s_TemperatureSensor.Read(data);
+		s_Temperature = data.Temperature;
+		ll_intf_cmn_set_temperature_sensor_state();
+	}
+	// Without a valid initial measurement leave periodic calibration active.
 #endif
 	ll_intf_cmn_select_tx_power_table(CFG_RF_TX_POWER_TABLE_ID);
 }
@@ -494,12 +515,10 @@ extern "C" void ll_sys_reset(void)
 // answered from the event queue, as the Cube code does.
 extern "C" void ll_sys_bg_temperature_measurement(void)
 {
-	static bool s_bReported = false;
-
-	if (s_bReported == false)
+	if (s_TemperatureInitial)
 	{
-		s_bReported = true;
-		BtWbaTemperatureReport();
+		s_TemperatureInitial = false;
+		ll_intf_cmn_set_temperature_value((uint32_t)(s_Temperature / 100 + BT_WBA_TEMPERATURE_OFS));
 	}
 	else
 	{

@@ -54,7 +54,9 @@ class Model:
             self.reg[0] |= 1
         else:
             bits = 12 - 2 * ((self.reg[12] >> 2) & 3)
-            self.reg[64] = 1 << (bits - 1)
+            self.reg[64] = (1500 if self.reg[40] == 1 else 1250 if self.reg[40] == (1 << 13) else 2048) >> (12 - bits)
+            if self.fault == 7 and self.reg[40] == 1:
+                self.reg[64] = 0
             self.reg[0] |= 12 | (16 if self.fault == 2 else 0)
             self.reg[8] &= ~4
 
@@ -70,6 +72,8 @@ class Model:
     def write(self, uc, access, addr, size, value, _):
         if addr == CONTROL:
             self.fault = value
+            if value in (8, 9):
+                uc.mem_write(0x0BFA07A5, struct.pack('<H', 0xffff if value == 8 else 1500))
             return
         if addr == CONTROL + 4:
             assert not value & 0x80000000, f'firmware check {value & 0x7fffffff} failed'
@@ -136,6 +140,9 @@ def emulate(path):
     uc = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
     uc.mem_map(0x08000000, 0x200000)
     uc.mem_map(0x20000000, 0x80000)
+    uc.mem_map(0x0BFA0000, 0x1000)
+    for offset, value in [(0x710, 1000), (0x742, 1500), (0x7A5, 1500)]:
+        uc.mem_write(0x0BFA0000 + offset, struct.pack('<H', value))
     uc.mem_map(0x46020000, 0x10000)
     uc.mem_map(0x50000000, 0x100000)
     with path.open('rb') as f:
@@ -150,7 +157,7 @@ def emulate(path):
     uc.reg_write(UC_ARM_REG_SP, 0x2007FFF0)
     uc.emu_start(start | 1, 0, count=40_000_000)
     assert model.done and model.checked >= 30, f'incomplete: {model.checked} checks'
-    assert model.inputs and set(model.inputs) == {5, 6}, model.inputs
+    assert model.inputs and set(model.inputs) == {0, 5, 6, 13}, model.inputs
     return model.checked
 
 
@@ -163,13 +170,13 @@ def main():
         for opt in ('-O0', '-Os'):
             flags = ['-mcpu=cortex-m33', '-mthumb', '-mfloat-abi=soft', opt,
                      '-std=gnu++23', '-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
-                     '-fno-rtti', '-fno-exceptions', '-fno-builtin', '-Wall', '-Wextra',
+                     '-fno-threadsafe-statics', '-fno-rtti', '-fno-exceptions', '-fno-builtin', '-Wall', '-Wextra',
                      '-Wno-overloaded-virtual']
             flags += ['-I' + str(ROOT / d) for d in ('include', 'ARM/include', 'ARM/CMSIS/Core/Include',
                       'ARM/ST/include', 'ARM/ST/STM32WBAxx/include')]
             objects = []
             for src in ('tests/stm32wba/adc_fw.cpp', 'ARM/ST/STM32WBAxx/src/adc_stm32wba.cpp',
-                        'src/device.cpp', 'src/device_intrf.cpp'):
+                        'ARM/ST/STM32WBAxx/src/temp_stm32wba.cpp', 'src/device.cpp', 'src/device_intrf.cpp'):
                 obj = td / (Path(src).stem + '.o')
                 run([cxx, *flags, '-c', str(ROOT / src), '-o', str(obj)])
                 objects.append(str(obj))

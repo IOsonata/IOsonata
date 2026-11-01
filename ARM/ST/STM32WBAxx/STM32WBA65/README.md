@@ -647,13 +647,15 @@ server, RTC, memory manager or flash manager:
   Cube file have no caller and are not provided.
 - `SCM_HSE_WaitUntilReady`, `scm_*` and the link layer debug signals.
 
-Limits: `app_conf.h` sets `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 1, as
-the Cube BLE applications do, and the temperature given to the link layer is
-fixed at 25 degrees C. The link layer then recalibrates the radio only when
-the reported temperature changes, so no recalibration follows temperature
-drift until an ADC temperature measurement is added. With the setting at 0 the
-link layer runs its periodic PHY calibration every 10 s instead, which takes
-radio time from active connections. The RNG, timer, sequencer
+`app_conf.h` enables temperature-based calibration when the initial sensor
+reading succeeds. `TempSTM32WBA` reads VREFINT and the internal temperature
+input through IOsonata's ADC channel API, compensates for supply voltage,
+and applies the factory 30 C / 130 C calibration. It borrows an idle ADC4
+owner and restores its channels, resolution and unread samples. ADC and
+sensor calls are main-loop polling operations, not interrupt operations.
+A busy converter or failed reading is not reported as a temperature. If the
+initial reading fails, the link layer retains periodic calibration. No ST
+ADCCTRL or TEMPMEAS module is used. The RNG, timer, sequencer
 and PKA hooks are exercised by the BLE examples. Host tests cover timer
 admission/queue failures, AES fallback and PKA input cleanup. Peripheral fault
 injection and concurrent application crypto with pairing remain hardware work.
@@ -773,7 +775,7 @@ pins (PB1, PB2 AF4) and the VCP pins match the ST board support package. The SPI
 pins (PB10, PA9, PC3 AF5, CS PB9) and the second I2C and SPI pins of the
 MasterSlave examples come from the ST pin data for the STM32WBA65RI and UM3462 table 8.
 
-Remaining work: ADC-based radio temperature measurement and explicit BLE
+Remaining work: hardware validation of ADC-based radio temperature measurement and explicit BLE
 characteristic-read tests.
 The standalone crypto engines are hardware validated. The ST BLE adapter uses
 them; pairing and a bonded reconnect ran on the DK1 with BleSecurityDemo.
@@ -896,7 +898,8 @@ adjust a bar and select to return. Each press requires a release.
 single rounds in polling mode. Its initial support is intentionally limited:
 external inputs 1..10, single-ended, unity gain, 6/8/10/12-bit resolution,
 VREF+ supplied by the caller. Continuous conversion, interrupt, DMA, FIFO,
-oversampling and internal radio temperature measurement are not implemented.
+oversampling are not implemented. Internal VREFINT and temperature inputs are
+selected through `AdcChanCfg_t::PinP.PinNo` using the WBA input constants.
 Rebuild the matching Debug or Release MCU library first.
 
 The example builds and links in Debug and Release. ADC register simulation

@@ -37,11 +37,15 @@ SOFTWARE.
 #define __ADC_STM32WBA_H__
 #include "converters/adc_device.h"
 
+#define ADC_STM32WBA_INPUT_VREFINT	0
+#define ADC_STM32WBA_INPUT_TEMP		13
+
 // ADC4, software-triggered single rounds, polling. No interrupt, DMA,
 // oversampling, differential inputs or FIFO. Unsupported requests fail Init
 // or OpenChannel. One object owns ADC4 until PowerOff or destruction.
 // Logical Chan 0..7 maps to PinP.PinNo = ADC4 input 1..10:
 // PA8, PA7, PA6, PA5, PA4, PA3, PA2, PA1, PA0, PB9 (DS14736 table 23).
+// PinP.PinNo also selects VREFINT (0) and temperature (13), without GPIO.
 // Reference is VREF+: supply or external, caller supplies its voltage.
 // HCLK/16 and 814.5 sampling cycles; OpenChannel checks AcqTime fits.
 class AdcSTM32WBA : public AdcDevice {
@@ -57,6 +61,7 @@ public:
 	int Read(AdcData_t *pBuff, int Len) override;
 	bool Read(int Chan, AdcData_t *pBuff) override;
 	bool Calibrate() override;
+
 	bool Enable() override;
 	void Disable() override;
 	void Reset() override;
@@ -91,6 +96,9 @@ private:
 	AdcSTM32WBA(const AdcSTM32WBA &) = delete;
 	AdcSTM32WBA &operator=(const AdcSTM32WBA &) = delete;
 	bool Convert(int Chan);
+	void InternalPaths();
+	friend class TempSTM32WBA;
+	static AdcSTM32WBA *Owner();
 	bool Owned();
 	uint8_t vInput[8];
 	bool vbNew[8];
