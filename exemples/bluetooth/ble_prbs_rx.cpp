@@ -36,6 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
+#include "ble_prbs_check.h"
 #include <string.h>
 
 #include "istddef.h"
@@ -183,19 +184,7 @@ alignas(4) static uint8_t s_NotifMem[CFIFO_TOTAL_MEMSIZE(PRBS_RX_NOTIF_COUNT, si
 static hCFifo_t s_NotifQue;
 static volatile uint32_t s_NotifDropped;
 
-typedef struct {
-	uint32_t Bytes;
-	uint32_t Notifications;
-	uint32_t Breaks;
-	uint32_t OutOfFrame;
-	uint32_t FirstMs;
-	uint16_t MinLen;
-	uint16_t MaxLen;
-	uint8_t Previous;
-	uint8_t ValidRun;
-	bool Synced;
-	bool Started;
-} PrbsRxStats_t;
+
 
 #if defined(IOSONATA_STM32_WBA)
 alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(4, 128)];
@@ -207,7 +196,12 @@ static const SysLogCfg_t s_SysLogCfg = {
 };
 #endif
 
+#if defined(IOSONATA_STM32_WBA)
+// WBA events and PRBS processing run in the main loop.
+static PrbsRxStats_t s_Rx;
+#else
 static volatile PrbsRxStats_t s_Rx;
+#endif
 static uint8_t s_TestPhy = BT_GAP_PHY_1MBITS;
 static volatile uint16_t s_ConnHdl = BT_CONN_HDL_INVALID;
 static volatile uint16_t s_ValueHdl = BT_ATT_HANDLE_INVALID;
@@ -250,6 +244,16 @@ static void PrbsReset(void)
 
 static void PrbsCheck(const uint8_t *pData, uint16_t Len, uint32_t Now)
 {
+#if defined(IOSONATA_STM32_WBA)
+	if (s_Finished || Len == 0 || pData == nullptr)
+	{
+		return;
+	}
+	if (!PrbsCheckPacket(&s_Rx, pData, Len, Now, PRBS_RX_DURATION_MS))
+	{
+		s_Finished = true;
+	}
+#else
 	uint32_t breaks;
 	uint32_t outOfFrame;
 	uint16_t idx;
@@ -336,6 +340,7 @@ static void PrbsCheck(const uint8_t *pData, uint16_t Len, uint32_t Now)
 	{
 		s_Rx.MaxLen = Len;
 	}
+#endif
 }
 
 static void PrbsReceive(uint32_t Evt, void *pCtx)

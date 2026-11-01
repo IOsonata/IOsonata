@@ -18,6 +18,7 @@ code = r'''
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
 #include "syslog.h"
+#include "ble_prbs_check.h"
 #define PRBS_RX_NOTIF_COUNT 12
 #define PRBS_RX_DURATION_MS 60000U
 #define PRBS_RX_REPORT_MS 1000U
@@ -297,6 +298,7 @@ with tempfile.TemporaryDirectory(prefix='ble-prbs-rx-') as temp:
         subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O2',
                         '-Wall', '-Wextra', '-fsanitize=undefined',
                         '-fno-sanitize-recover=all', '-I' + str(ROOT / 'include'),
+                        '-I' + str(ROOT / 'exemples/bluetooth'),
                         str(cpp), str(ROOT / 'src/cfifo.c'),
                         str(ROOT / 'src/app_evt_handler.cpp'), '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True)

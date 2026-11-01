@@ -8,6 +8,7 @@
  * PRBS comparison application. ST owns startup, radio, host, timers and event
  * delivery. Only application procedures and measurement are implemented here.
  */
+#include "../../../../../../../exemples/bluetooth/ble_prbs_check.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -72,19 +73,7 @@ typedef struct {
 	uint8_t Data[PRBS_PAYLOAD];
 } PrbsPacket_t;
 
-typedef struct {
-	uint32_t Bytes;
-	uint32_t Notifications;
-	uint32_t Breaks;
-	uint32_t OutOfFrame;
-	uint32_t FirstMs;
-	uint16_t MinLen;
-	uint16_t MaxLen;
-	uint8_t Previous;
-	uint8_t ValidRun;
-	bool Started;
-	bool Synced;
-} PrbsStats_t;
+typedef PrbsRxStats_t PrbsStats_t;
 
 static PrbsPhase_t s_Phase;
 static UTIL_TIMER_Object_t s_Timer;
@@ -181,70 +170,16 @@ static void PrbsReset(void)
 
 static void PrbsCheck(const PrbsPacket_t *pPacket)
 {
-	uint16_t i;
-	uint8_t value;
-	uint8_t expected;
-	bool valid;
-
-	if (s_Final || pPacket->Len == 0)
-	{
-		return;
-	}
-	if (s_Stats.Started && (uint32_t)(pPacket->Time - s_Stats.FirstMs) >= PRBS_DURATION)
+	if (s_Final)
 	{
 		return;
 	}
 	if (!s_Stats.Started)
 	{
-		s_Stats.FirstMs = pPacket->Time;
 		s_LastReport = pPacket->Time;
 	}
-	for (i = 0; i < pPacket->Len; i++)
-	{
-		value = pPacket->Data[i];
-		expected = ((s_Stats.Previous << 1) |
-			(((s_Stats.Previous >> 6) ^ (s_Stats.Previous >> 5)) & 1)) & 0x7f;
-		if (s_Stats.Started && value != expected)
-		{
-			s_Stats.Breaks++;
-		}
-		if (value > 0x7f && value != 0xff)
-		{
-			s_Stats.OutOfFrame++;
-		}
-		if (!s_Stats.Synced)
-		{
-			valid = (value > 0 && value <= 0x7f) || value == 0xff;
-			if (!valid)
-			{
-				s_Stats.ValidRun = 0;
-			}
-			else if (!s_Stats.Started || value != expected)
-			{
-				s_Stats.ValidRun = 1;
-			}
-			else if (s_Stats.ValidRun < 8)
-			{
-				s_Stats.ValidRun++;
-			}
-			if (s_Stats.ValidRun >= 8)
-			{
-				s_Stats.Synced = true;
-			}
-		}
-		s_Stats.Previous = value;
-		s_Stats.Started = true;
-	}
-	s_Stats.Bytes += pPacket->Len;
-	s_Stats.Notifications++;
-	if (pPacket->Len < s_Stats.MinLen)
-	{
-		s_Stats.MinLen = pPacket->Len;
-	}
-	if (pPacket->Len > s_Stats.MaxLen)
-	{
-		s_Stats.MaxLen = pPacket->Len;
-	}
+	(void)PrbsCheckPacket(&s_Stats, pPacket->Data, pPacket->Len,
+		pPacket->Time, PRBS_DURATION);
 }
 
 static void PrbsReceive(void)
