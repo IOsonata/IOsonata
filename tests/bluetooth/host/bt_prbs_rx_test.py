@@ -8,8 +8,8 @@ from extract_bt_app_init import extract_function
 
 ROOT = Path(__file__).resolve().parents[3]
 source = (ROOT / 'exemples/bluetooth/ble_prbs_rx.cpp').read_text()
-start = source.index('typedef struct {')
-end = source.index('static void PrbsResetMeasurement(void)', start)
+start = source.index('alignas(4) uint8_t g_AppEvtHandlerQueMem')
+end = source.index('static void PrbsReceive(uint32_t Evt, void *pCtx);', start)
 code = r'''
 #include <cassert>
 #include <cstdarg>
@@ -18,8 +18,8 @@ code = r'''
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
 #include "syslog.h"
-#include "ble_prbs_check.h"
-#define PRBS_RX_NOTIF_COUNT 12
+#include "ble_prbs_benchmark.h"
+#define PRBS_RX_SETUP_TIMEOUT_MS 10000U
 #define PRBS_RX_DURATION_MS 60000U
 #define PRBS_RX_REPORT_MS 1000U
 #define BLE_MTU_SIZE 247
@@ -31,6 +31,7 @@ static unsigned reportCount;
 static uint8_t actualPhy = 1;
 static unsigned phyRefused = 1;
 static unsigned phyRequests;
+static unsigned dleRefused = 1;
 static BtDevice_t peer;
 static char output[65536];
 static unsigned outputSize;
@@ -53,6 +54,18 @@ struct
 		{
 			reportCount++;
 		}
+	}
+	int Tx(uint8_t *data, uint32_t len)
+	{
+		assert(outputSize + len < sizeof(output));
+		memcpy(output + outputSize, data, len);
+		output[outputSize + len] = 0;
+		if (strstr(output + outputSize, "Bytes/sec="))
+		{
+			reportCount++;
+		}
+		outputSize += len;
+		return len;
 	}
 } g_Uart;
 uint32_t BtGattMsTick()
@@ -90,6 +103,11 @@ bool BtGapSetPhy(uint16_t, uint8_t tx, uint8_t rx, uint16_t)
 bool BtGapSetDataLength(uint16_t, uint16_t octets, uint16_t time)
 {
 	assert(octets == 251 && time == 2120);
+	if (dleRefused > 0)
+	{
+		dleRefused--;
+		return false;
+	}
 	return true;
 }
 bool BtAppEnableNotify(uint16_t, uint16_t)
@@ -107,10 +125,15 @@ static void StartDiscovery(uint16_t)
 }
 '''
 code += source[start:end]
-for signature in [r'^static void PrbsResetMeasurement\(', r'^static void PrbsReset\(', r'^static void PrbsCheck\(', r'^static void PrbsReceive\(',
+code += 'static void PrbsReceive(uint32_t, void *);\n'
+for signature in [r'^static bool PrbsSchedule\(', r'^static bool PrbsWrite\(', r'^static void PrbsDone\(']:
+    code += extract_function(source, signature) + '\n'
+a = source.index('static const PrbsBenchAdapters_t s_BenchAdapters')
+code += source[a:source.index('static void PrbsReset(void)', a)]
+for signature in [r'^static void PrbsReset\(', r'^static void PrbsReceive\([^;]*?\)\s*(?=\{)',
                   r'^void BtGattClientNotified\(', r'^void BtAppEvtConnected\(',
                   r'^void BtAppEvtDisconnected\(', r'^void BtAppEvtConnectFailed\(',
-                  r'^static void PrbsReport\(', r'^bool AppCheckStatus\(']:
+                  r'^bool AppCheckStatus\(']:
     code += extract_function(source, signature) + '\n'
 code += r'''
 static void RunTrial(unsigned packets)
@@ -147,38 +170,40 @@ static void RunTrial(unsigned packets)
 	nowMs = start + PRBS_RX_DURATION_MS;
 	AppCheckStatus();
 	assert(reportCount - before == 60);
-	assert(s_FinalPrinted && s_Finished && s_Disconnected);
-	assert(s_Rx.Bytes == packets * 4000 * 244);
-	assert(s_Rx.Notifications == packets * 4000);
-	assert(s_Rx.Breaks == 0 && s_Rx.OutOfFrame == 0);
-	assert(s_Rx.MinLen == 244 && s_Rx.MaxLen == 244);
+	assert(s_Benchmark.FinalPrinted && s_Benchmark.Finished && s_Disconnected);
+	assert(s_Benchmark.Stats.Bytes == packets * 4000 * 244);
+	assert(s_Benchmark.Stats.Notifications == packets * 4000);
+	assert(s_Benchmark.Stats.Breaks == 0 && s_Benchmark.Stats.OutOfFrame == 0);
+	assert(s_Benchmark.Stats.MinLen == 244 && s_Benchmark.Stats.MaxLen == 244);
 	BtGattClientNotified(s_ConnHdl, s_ValueHdl, data, sizeof(data));
-	assert(s_Rx.Notifications == packets * 4000);
+	assert(s_Benchmark.Stats.Notifications == packets * 4000);
 }
 int main()
 {
 	uint8_t invalid[] = {1, 0x80, 3};
 	uint8_t zeros[16] = {};
 	unsigned idx;
+	PrbsRxStats_t reportStats = {};
+	PrbsReportValues_t report;
 
 	assert(AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)));
-	s_NotifQue = CFifoInit(s_NotifMem, sizeof(s_NotifMem), sizeof(PrbsNotification_t), true);
-	assert(s_NotifQue != nullptr && CFifoAvail(s_NotifQue) == 12);
+	assert(PrbsBenchInit(&s_Benchmark, &s_BenchAdapters, s_TestPhy));
+	assert(s_Benchmark.Queue != nullptr && CFifoAvail(s_Benchmark.Queue) == 12);
 	peer.Conn.MaxMtu = 247;
 	BtAppEvtConnected(0);
-	assert(s_PhyPending && !s_Failed);
+	assert(s_PhyPending && s_DlePending && !s_Benchmark.Failed);
 	s_ValueHdl = 0x12;
 	s_CccdHdl = 0x13;
 	nowMs = 1000;
 	AppCheckStatus();
-	assert(subscribes == 1 && !s_PhyPending);
+	assert(subscribes == 1 && !s_PhyPending && !s_DlePending);
 	BtGattClientNotified(1, 0x12, invalid, sizeof(invalid));
 	BtGattClientNotified(0, 0x14, invalid, sizeof(invalid));
-	assert(s_Rx.Bytes == 0);
+	assert(s_Benchmark.Stats.Bytes == 0);
 	RunTrial(4);
 	assert(disconnects == 1);
 	AppCheckStatus();
-	assert(s_TestPhy == 2 && scans == 1 && !s_Rx.Started);
+	assert(s_TestPhy == 2 && scans == 1 && !s_Benchmark.Stats.Started);
 	BtAppEvtConnected(1);
 	s_ValueHdl = 0x12;
 	s_CccdHdl = 0x13;
@@ -210,46 +235,48 @@ int main()
 	BtAppEvtDisconnected(0);
 	AppCheckStatus();
 	AppCheckStatus();
-	assert(s_FinalPrinted && !s_TrialComplete && s_TestPhy == 1 && scans == 1);
+	assert(s_Benchmark.FinalPrinted && !s_Benchmark.Complete && s_TestPhy == 1 && scans == 1);
 	assert(strstr(output, "PHY=1 trial aborted; benchmark stopped.") != nullptr);
 	// A startup timeout has the same stop behavior.
 	BtAppEvtConnected(0);
 	nowMs += 10000;
 	AppCheckStatus();
 	AppCheckStatus();
-	assert(s_FinalPrinted && !s_TrialComplete && s_TestPhy == 1 && scans == 1);
+	assert(s_Benchmark.FinalPrinted && !s_Benchmark.Complete && s_TestPhy == 1 && scans == 1);
 	// Disconnect after some data also stops instead of skipping the trial.
 	BtAppEvtConnected(0);
-	PrbsCheck(zeros, sizeof(zeros), nowMs);
+	PrbsBenchCheck(&s_Benchmark, zeros, sizeof(zeros), nowMs);
 	nowMs += 1000;
 	BtAppEvtDisconnected(0);
 	AppCheckStatus();
 	AppCheckStatus();
-	assert(s_FinalPrinted && !s_TrialComplete && s_TestPhy == 1 && scans == 1);
+	assert(s_Benchmark.FinalPrinted && !s_Benchmark.Complete && s_TestPhy == 1 && scans == 1);
 	// Damage is counted locally, with no UART payload API in this harness.
 	PrbsReset();
-	s_Finished = false;
-	PrbsCheck(invalid, sizeof(invalid), UINT32_MAX - 100);
-	assert(s_Rx.Breaks == 2 && s_Rx.OutOfFrame == 1);
-	PrbsCheck(invalid, sizeof(invalid), 59900);
-	assert(s_Finished && s_Rx.Bytes == 3); // Duration check survives clock wrap.
+	s_Benchmark.Finished = false;
+	PrbsBenchCheck(&s_Benchmark, invalid, sizeof(invalid), UINT32_MAX - 100);
+	assert(s_Benchmark.Stats.Breaks == 2 && s_Benchmark.Stats.OutOfFrame == 1);
+	PrbsBenchCheck(&s_Benchmark, invalid, sizeof(invalid), 59900);
+	assert(s_Benchmark.Finished && s_Benchmark.Stats.Bytes == 3); // Duration check survives clock wrap.
 	PrbsReset();
-	s_Finished = false;
-	PrbsCheck(zeros, sizeof(zeros), 0);
-	assert(!s_Rx.Synced); // Zero has a zero successor but is not valid PRBS.
+	s_Benchmark.Finished = false;
+	PrbsBenchCheck(&s_Benchmark, zeros, sizeof(zeros), 0);
+	assert(!s_Benchmark.Stats.Synced); // Zero has a zero successor but is not valid PRBS.
 	// Payload ownership: callback must not check data or retain its pointer.
 	PrbsReset();
-	s_Finished = false;
-	s_Failed = false;
+	s_Benchmark.Finished = false;
+	s_Benchmark.Failed = false;
 	s_ConnHdl = 0;
 	s_ValueHdl = 0x12;
+	s_ConnectMs = 100;
+	s_LastPollMs = 100;
 	nowMs = 100;
 	BtGattClientNotified(0, 0x12, invalid, sizeof(invalid));
-	assert(s_Rx.Bytes == 0 && CFifoUsed(s_NotifQue) == 1);
+	assert(s_Benchmark.Stats.Bytes == 0 && CFifoUsed(s_Benchmark.Queue) == 1);
 	memset(invalid, 0, sizeof(invalid));
 	nowMs = 200;
 	AppEvtHandlerExec();
-	assert(s_Rx.Bytes == 3 && s_Rx.OutOfFrame == 1 && s_Rx.FirstMs == 100);
+	assert(s_Benchmark.Stats.Bytes == 3 && s_Benchmark.Stats.OutOfFrame == 1 && s_Benchmark.Stats.FirstMs == 100);
 	// Fill all 12 event slots; a refused receive event must be retried.
 	PrbsReset();
 	for (idx = 0; idx < 12; idx++)
@@ -257,14 +284,15 @@ int main()
 		assert(AppEvtHandlerQue(0, nullptr, [](uint32_t, void *) {}));
 	}
 	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
-	assert(s_Rx.Bytes == 0 && CFifoUsed(s_NotifQue) == 1);
+	assert(s_Benchmark.Stats.Bytes == 0 && CFifoUsed(s_Benchmark.Queue) == 1);
 	while (AppEvtHandlerExec())
 	{
 	}
-	assert(s_Rx.Bytes == sizeof(zeros) && CFifoUsed(s_NotifQue) == 0);
+	assert(s_Benchmark.Stats.Bytes == sizeof(zeros) && CFifoUsed(s_Benchmark.Queue) == 0);
 	// Delayed processing still uses arrival time at the 60-second boundary.
+	s_TestPhy = 2;
 	PrbsReset();
-	s_Finished = false;
+	s_Benchmark.Finished = false;
 	nowMs = 100;
 	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
 	AppEvtHandlerExec();
@@ -274,35 +302,35 @@ int main()
 	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
 	nowMs = 60110;
 	AppEvtHandlerExec();
-	assert(s_Rx.Notifications == 2 && s_Finished);
-	s_Finished = false;
+	assert(s_Benchmark.Stats.Notifications == 2 && s_Benchmark.Finished);
+	s_Benchmark.Finished = false;
 	// Full notification FIFO refuses new data without overwriting old data.
 	PrbsReset();
+	s_ConnHdl = 0;
+	s_ValueHdl = 0x12;
 	for (idx = 0; idx < 13; idx++)
 	{
 		BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
 	}
-	assert(CFifoUsed(s_NotifQue) == 12 && s_NotifDropped == 1 && s_Failed);
+	assert(CFifoUsed(s_Benchmark.Queue) == 12 && s_Benchmark.Dropped == 1 && s_Benchmark.Failed);
 	while (AppEvtHandlerExec())
 	{
 	}
-	assert(s_Rx.Notifications == 12);
+	assert(s_Benchmark.Stats.Notifications == 12);
 
 	// A connection callback only requests reset; it cannot mutate the
 	// main-loop statistics. A notification queued before status polling
 	// must survive the measurement reset and be checked exactly once.
 	BtAppEvtConnected(0);
-	assert(s_ResetPending && s_Rx.Notifications == 12);
+	assert(s_Benchmark.ResetPending && s_Benchmark.Stats.Notifications == 12);
 	s_ValueHdl = 0x12;
 	BtGattClientNotified(0, 0x12, zeros, sizeof(zeros));
-	assert(CFifoUsed(s_NotifQue) == 1);
+	assert(CFifoUsed(s_Benchmark.Queue) == 1);
 	AppEvtHandlerExec();
-	assert(!s_ResetPending && s_Rx.Notifications == 1);
-	assert(s_Rx.Bytes == sizeof(zeros) && CFifoUsed(s_NotifQue) == 0);
+	assert(!s_Benchmark.ResetPending && s_Benchmark.Stats.Notifications == 1);
+	assert(s_Benchmark.Stats.Bytes == sizeof(zeros) && CFifoUsed(s_Benchmark.Queue) == 0);
 
 	// Reports use the same exact 60-second window even if the task runs late.
-	PrbsRxStats_t reportStats = {};
-	PrbsReportValues_t report;
 	reportStats.Started = true;
 	reportStats.Synced = true;
 	reportStats.FirstMs = 0xfffffff0u;
@@ -322,7 +350,17 @@ int main()
 with tempfile.TemporaryDirectory(prefix='ble-prbs-rx-') as temp:
     cpp = Path(temp) / 'test.cpp'
     binary = Path(temp) / 'test'
-    for port in ['NRFXLIB_SDC', 'IOSONATA_STM32_WBA']:
+    board = Path(temp) / 'board.h'
+    board.write_text('\n'.join([
+        '#define CONNECT_LED_PORT 0', '#define CONNECT_LED_PIN 0',
+        '#define CONNECT_LED_LOGIC 1',
+    ] + [f'#define UART_{pin}_{suffix} {value}'
+         for pin in ('RX', 'TX', 'CTS', 'RTS')
+         for suffix, value in [('PORT', '0'), ('PIN', '0'), ('PINOP', 'IOPINOP_GPIO')]]))
+    subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-fsyntax-only',
+                    '-I' + str(ROOT / 'include'), '-I' + temp,
+                    str(ROOT / 'exemples/bluetooth/ble_prbs_rx.cpp')], check=True)
+    for port in ['NRFXLIB_SDC', 'IOSONATA_STM32_WBA', 'S132', 'S140']:
         cpp.write_text('#define ' + port + ' 1\n' + code)
         subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O2',
                         '-Wall', '-Wextra', '-fsanitize=undefined',

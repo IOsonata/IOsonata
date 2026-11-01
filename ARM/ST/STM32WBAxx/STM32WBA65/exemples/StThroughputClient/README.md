@@ -3,7 +3,7 @@
 This is an Eclipse managed ARM GCC application for STM32WBA65I-DK1.
 It builds ST's STM32CubeWBA v1.10.0 BLE_DataThroughput_Client sources,
 HAL, sequencer, host timers, host library and Basic controller library.
-It does not link IOsonata. This is a separate firmware for comparing the
+It does not link the IOsonata Bluetooth or MCU libraries. This is a separate firmware for comparing the
 ST reference integration with the IOsonata integration.
 
 ## Setup
@@ -72,13 +72,16 @@ Starting 60-second 1M trial; target=BlePrbs_SDC
 This is ST's integration with a replacement benchmark application, not the
 unmodified interactive ST throughput demo. Startup, HAL, radio scheduling,
 clock configuration, host/controller libraries, ST sequencer, ST timers and
-ST AMM event storage remain from CubeWBA. No IOsonata library is linked.
-The application uses a fixed 12-entry notification queue and an ST sequencer
-consumer for firmware PRBS checking, rather than IOsonata CFIFO/AppEvt.
+ST AMM event storage remain from CubeWBA. The project compiles the standalone
+IOsonata `src/cfifo.c` for the same fixed 12-entry notification queue used by
+BlePrbsRx. ST dispatches the consumer through its sequencer; IOsonata uses AppEvt.
 
 Nordic BlePrbsRx, WBA BlePrbsRx and this client use the same
-`exemples/bluetooth/ble_prbs_check.h` checker and report calculations with
-main-loop-owned, non-volatile statistics. Packets timestamped at or after
+`exemples/bluetooth/ble_prbs_benchmark.h` notification processing and reporting.
+It timestamps and copies each payload, publishes it to CFIFO, schedules the
+consumer, checks PRBS using `ble_prbs_check.h`, and formats identical report
+lines with `vsnprintf`. Statistics belong to the main loop. Only clock access,
+task scheduling, raw UART writes, and trial completion use application callbacks. Packets timestamped at or after
 60000 ms are excluded; final report rates use exactly that measurement window.
 All receivers print the same three status lines once per second at 1000000 baud.
 The native stack event delivery and UART drivers remain different. Earlier
@@ -115,7 +118,7 @@ It checks automatic two-trial sequencing, discovery, command parameters,
 notification ownership, PRBS, measurement boundaries, aborts and retries at
 O0/O2 with UBSan. It does not emulate the closed ST host/controller libraries.
 
-Eclipse Embedded CDT 2025-12 managed Debug/Release builds are checked on Linux
+Earlier Eclipse Embedded CDT 2025-12 managed Debug/Release builds were checked on Linux
 with Arm GNU GCC 13.2.1 and the v1.10.0 pinned dependencies. Both images include
 ST startup assembly and define Reset_Handler and g_pfnVectors. ST's packed-list
 pointer alignment warnings remain in app_ble.c and ble_timer.c.
@@ -129,6 +132,9 @@ and zero application queue drops:
 | Release | 78,535 | 109,877 | 6.754 |
 
 Both passed the 1M target and missed the eight-notification 2M target.
-These are single runs, not a controlled estimate of run-to-run variation.
+These measurements predate the shared notification queue and reporting code.
+The current changes have host-test coverage; target builds and new hardware
+measurements are still required. These are single runs, not a controlled
+estimate of run-to-run variation.
 They validate the automatic comparison application; they do not validate
 subsequent changes to IOsonata's startup or Bluetooth integration.

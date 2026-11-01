@@ -36,35 +36,26 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
-#include "ble_prbs_check.h"
 #include <string.h>
+
+#include "ble_prbs_benchmark.h"
 
 #include "istddef.h"
 
 #include "bluetooth/bt_app.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "bluetooth/bt_dev.h"
-#include "bluetooth/bt_hci_ctlr.h"
 #include "coredev/uart.h"
-#include "coredev/interrupt.h"
 #include "app_evt_handler.h"
 #include "board.h"
+#include "syslog.h"
 
 #ifdef MCUOSC
 #include "coredev/system_core_clock.h"
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
-#if defined(IOSONATA_STM32_WBA)
-#include "syslog.h"
-#endif
 
-#if defined(S132) || defined(S140)
-#include "ble.h"
-#endif
-
-#define PRBS_RX_NOTIF_COUNT 12
-#define PRBS_RX_DURATION_MS 60000U
-#define PRBS_RX_REPORT_MS 1000U
+#define PRBS_RX_SETUP_TIMEOUT_MS 10000U
 #define DEVICE_NAME "BlePrbsRx"
 #define TARGET_NAME "BlePrbs_SDC"
 #define BLE_MTU_SIZE 247
@@ -80,69 +71,61 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define UART_DEVNO 0
 #endif
 
-#if defined(NRFXLIB_SDC)
-alignas(8) static uint8_t s_CentralCtlrMem[16384];
-extern "C" const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
-	s_CentralCtlrMem, sizeof(s_CentralCtlrMem)
-};
-#endif
+static const BtAppCfg_t s_BleAppCfg = {
+	.Role = BTAPP_ROLE_CENTRAL,
+	.PeriphDevMax = 1,
+	.CentralDevMax = 0,
+	.pDevName = DEVICE_NAME,
+	.VendorId = ISYST_BLUETOOTH_ID,
+	.ProductId = 1,
+	.ProductVer = 0,
+	.Appearance = 0,
+	.pDevInfo = NULL,
+	.pAdvManData = NULL,
+	.AdvManDataLen = 0,
+	.pSrManData = NULL,
+	.SrManDataLen = 0,
+	.SecType = BTGAP_SECTYPE_NONE,
+	.SecExchg = BTAPP_SECEXCHG_NONE,
+	.bCompleteUuidList = false,
+	.pAdvUuid = NULL,
+	.AdvInterval = APP_ADV_INTERVAL,
+	.AdvTimeout = APP_ADV_TIMEOUT,
+	.AdvSlowInterval = 0,
 
-const BtAppCfg_t s_BleAppCfg = {
-	.Role = BTAPP_ROLE_CENTRAL,				// Device role, ref: BTAPP_ROLE
-	.PeriphDevMax = 1, 					// Max peripheral devices we connect to as central
-	.CentralDevMax = 0, 					// Max central devices we serve as peripheral
-	.pDevName = DEVICE_NAME,				// Device name
-	.VendorId = ISYST_BLUETOOTH_ID,			// PnP Bluetooth/USB vendor id
-	.ProductId = 1,							// PnP Product ID
-	.ProductVer = 0,						// Pnp prod version
-	.Appearance = 0,						// 16 bits Bluetooth appearance value
-	.pDevInfo = NULL,//&s_BleDevDesc,		// App description
-	.pAdvManData = NULL,//g_ManData,		// Manufacture specific data to advertise
-	.AdvManDataLen = 0,//sizeof(g_ManData),	// Length of manufacture specific data
-	.pSrManData = NULL,						// Addition Manufacture specific data to advertise in scan response
-	.SrManDataLen = 0,						// Length of manufacture specific data in scan response
-	.SecType = BTGAP_SECTYPE_NONE,					// Open link
-	.SecExchg = BTAPP_SECEXCHG_NONE,					// No pairing
-	.bCompleteUuidList = false,				// true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
-	.pAdvUuid = NULL,      					// Service uuids to advertise
-	.AdvInterval = APP_ADV_INTERVAL,		// Advertising interval in msec
-	.AdvTimeout = APP_ADV_TIMEOUT,			// Advertising timeout in sec
-	.AdvSlowInterval = 0,					// Slow advertising interval, if > 0, fallback to
-											// slow interval on adv timeout and advertise until connected
 	.ConnIntervalMin = MIN_CONN_INTERVAL,
 	.ConnIntervalMax = MAX_CONN_INTERVAL,
-	.ConnLedPort = CONNECT_LED_PORT,			// Led port nuber
-	.ConnLedPin = CONNECT_LED_PIN,				// Led pin number
+	.ConnLedPort = CONNECT_LED_PORT,
+	.ConnLedPin = CONNECT_LED_PIN,
 	.ConnLedActLevel = CONNECT_LED_LOGIC,
-	.TxPower = 0,							// Tx power
+	.TxPower = 0,
 	.MaxMtu = BLE_MTU_SIZE,
 };
 
-static IOPinCfg_t s_UartPins[] = {
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
+static const IOPinCfg_t s_UartPins[] = {
+	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
-// UART configuration
-alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];//internal Uart_Rx buffer
-// UART carries short result lines only.
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+
 alignas(4) static uint8_t s_UartTxFifo[CFIFO_MEMSIZE(1024)];
 
 UARTCfg_t g_UartCfg = {
-	.DevNo = UART_DEVNO,									// Device number zero based
-	.pIOPinMap = s_UartPins,					// UART assigned pins
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),					// Total number of UART pins used
-	.Rate = 1000000,								// Baudrate
-	.DataBits = 8,								// Data bits
-	.Parity = UART_PARITY_NONE,					// Parity
-	.StopBits = 1,								// Stop bit
-	.FlowControl = UART_FLWCTRL_NONE,			// Flow control
-	.bIntMode = true,							// Interrupt mode
-	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,		// Interrupt priority
-	.EvtCallback = nullptr,			// UART event handler
-	.bFifoBlocking = true,						// Blocking FIFO
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = 1000000,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 6,
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
 	.TxMemSize = sizeof(s_UartTxFifo),
@@ -150,7 +133,6 @@ UARTCfg_t g_UartCfg = {
 	.bDMAMode = true,
 };
 
-// UART object instance
 UART g_Uart;
 
 static const BtGapScanCfg_t s_ScanParams = {
@@ -172,21 +154,8 @@ static BtGapConnParams_t s_ConnParams = {
 	.Timeout = 4000,
 };
 
-
-typedef struct {
-	uint32_t ReceivedMs;
-	uint16_t Len;
-	uint8_t Data[BLE_MTU_SIZE - 3];
-} PrbsNotification_t;
-
-alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(12)];
-alignas(4) static uint8_t s_NotifMem[CFIFO_TOTAL_MEMSIZE(PRBS_RX_NOTIF_COUNT, sizeof(PrbsNotification_t))];
-static hCFifo_t s_NotifQue;
-static volatile uint32_t s_NotifDropped;
-
-
-
-#if defined(IOSONATA_STM32_WBA)
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(PRBS_BENCH_QUEUE_COUNT)];
+static PrbsBenchmark_t s_Benchmark;
 alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(4, 128)];
 static const SysLogCfg_t s_SysLogCfg = {
 	.pMem = s_SysLogMem,
@@ -194,11 +163,6 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.RecordLen = 128,
 	.bBlocking = true
 };
-#endif
-
-// Only AppEvt/main-loop code owns the PRBS statistics.
-static PrbsRxStats_t s_Rx;
-static volatile bool s_ResetPending;
 static uint8_t s_TestPhy = BT_GAP_PHY_1MBITS;
 static volatile uint16_t s_ConnHdl = BT_CONN_HDL_INVALID;
 static volatile uint16_t s_ValueHdl = BT_ATT_HANDLE_INVALID;
@@ -206,110 +170,68 @@ static volatile uint16_t s_CccdHdl = BT_ATT_HANDLE_INVALID;
 static volatile uint8_t s_TxPhy;
 static volatile uint8_t s_RxPhy;
 static volatile bool s_DiscoveryPending;
-static bool s_PhyPending;
+static volatile bool s_PhyPending;
+static volatile bool s_DlePending;
 static volatile bool s_Subscribed;
-static volatile bool s_Failed;
-static volatile bool s_Finished;
 static volatile bool s_Disconnected;
-static uint32_t s_ConnectMs;
-static uint32_t s_LastPollMs;
-static uint32_t s_LastReportMs;
-static uint32_t s_LastReportBytes;
-static bool s_FinalPrinted;
-static bool s_TrialComplete;
+static volatile uint32_t s_ConnectMs;
+static volatile uint32_t s_LastPollMs;
 
-static void PrbsResetMeasurement(void)
+static void PrbsReceive(uint32_t Evt, void *pCtx);
+
+static bool PrbsSchedule(void)
 {
-	s_ResetPending = false;
-	s_Rx.Bytes = 0;
-	s_Rx.Notifications = 0;
-	s_Rx.Breaks = 0;
-	s_Rx.OutOfFrame = 0;
-	s_Rx.FirstMs = 0;
-	s_Rx.MinLen = UINT16_MAX;
-	s_Rx.MaxLen = 0;
-	s_Rx.Previous = 0;
-	s_Rx.ValidRun = 0;
-	s_Rx.Synced = false;
-	s_Rx.Started = false;
-	s_LastReportMs = 0;
-	s_LastReportBytes = 0;
-	s_FinalPrinted = false;
-	s_TrialComplete = false;
+	return AppEvtHandlerQue(0, nullptr, PrbsReceive);
 }
+
+static bool PrbsWrite(const uint8_t *pData, uint16_t Len)
+{
+	return g_Uart.Tx((uint8_t *)pData, Len) == Len;
+}
+
+static void PrbsDone(void)
+{
+	if (s_ConnHdl != BT_CONN_HDL_INVALID)
+	{
+		BtAppDisconnectConn(s_ConnHdl);
+	}
+}
+
+static const PrbsBenchAdapters_t s_BenchAdapters = {
+	BtGattMsTick,
+	PrbsSchedule,
+	PrbsWrite,
+	PrbsDone
+};
 
 static void PrbsReset(void)
 {
-	CFifoFlush(s_NotifQue);
-	s_NotifDropped = 0;
-	PrbsResetMeasurement();
-}
-
-static void PrbsCheck(const uint8_t *pData, uint16_t Len, uint32_t Now)
-{
-	if (s_Finished || Len == 0 || pData == nullptr)
-	{
-		return;
-	}
-	if (!PrbsCheckPacket(&s_Rx, pData, Len, Now, PRBS_RX_DURATION_MS))
-	{
-		s_Finished = true;
-	}
+	PrbsBenchReset(&s_Benchmark, s_TestPhy);
 }
 
 static void PrbsReceive(uint32_t Evt, void *pCtx)
 {
-	PrbsNotification_t *notification;
-
 	(void)Evt;
 	(void)pCtx;
-	if (s_ResetPending)
-	{
-		PrbsResetMeasurement();
-	}
-	notification = (PrbsNotification_t *)CFifoPeek(s_NotifQue);
-	if (notification != nullptr)
-	{
-		// Keep the slot owned until processing finishes, so an IRQ cannot
-		// reuse its payload while the checker is reading it.
-		PrbsCheck(notification->Data, notification->Len, notification->ReceivedMs);
-		CFifoRelease(s_NotifQue, 1);
-	}
+	PrbsBenchReceive(&s_Benchmark);
 }
 
 void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uint16_t Len)
 {
-	PrbsNotification_t *notification;
-	uint32_t now;
-
-	if (ConnHdl != s_ConnHdl || ValHdl != s_ValueHdl || s_Finished ||
-		pData == nullptr || Len == 0)
+	if (ConnHdl == s_ConnHdl && ValHdl == s_ValueHdl)
 	{
-		return;
+		PrbsBenchNotify(&s_Benchmark, pData, Len);
 	}
-	now = BtGattMsTick();
-	notification = (PrbsNotification_t *)CFifoPut(s_NotifQue);
-	if (notification == nullptr || Len > sizeof(notification->Data))
-	{
-		s_NotifDropped++;
-		s_Failed = true;
-		return;
-	}
-	notification->ReceivedMs = now;
-	notification->Len = Len;
-	memcpy(notification->Data, pData, Len);
-	// A refused AppEvt leaves its payload queued. AppCheckStatus retries.
-	(void)AppEvtHandlerQue(0, nullptr, PrbsReceive);
 }
 
 static void StartDiscovery(uint16_t ConnHdl)
 {
-	BtDevice_t *peer;
+	BtDevice_t *pPeer;
 
-	peer = BtPeerFindByHdl(ConnHdl);
-	if (peer != nullptr)
+	pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer != nullptr)
 	{
-		s_DiscoveryPending = !BtAppDiscoverDevice(peer);
+		s_DiscoveryPending = !BtAppDiscoverDevice(pPeer);
 	}
 }
 
@@ -317,8 +239,9 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 {
 	// Some ports deliver this callback from an interrupt. Reset measurement
 	// in the consumer before checking the first queued notification.
-	s_ResetPending = true;
-	s_NotifDropped = 0;
+	s_Benchmark.Phy = s_TestPhy;
+	s_Benchmark.ResetPending = true;
+	s_Benchmark.Dropped = 0;
 	s_ConnHdl = ConnHdl;
 	s_ValueHdl = BT_ATT_HANDLE_INVALID;
 	s_CccdHdl = BT_ATT_HANDLE_INVALID;
@@ -326,8 +249,8 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	s_RxPhy = BT_GAP_PHY_1MBITS;
 	s_Subscribed = false;
 	s_DiscoveryPending = true;
-	s_Failed = false;
-	s_Finished = false;
+	s_Benchmark.Failed = false;
+	s_Benchmark.Finished = false;
 	s_Disconnected = false;
 	s_ConnectMs = BtGattMsTick();
 	s_LastPollMs = s_ConnectMs;
@@ -337,33 +260,34 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	{
 		g_Uart.printf("PHY request not accepted; retry pending\r\n");
 	}
-#if defined(NRFXLIB_SDC) || defined(IOSONATA_STM32_WBA)
-	if (!BtGapSetDataLength(ConnHdl, 251, 2120))
+	s_DlePending = !BtGapSetDataLength(ConnHdl, 251, 2120);
+	if (s_DlePending)
 	{
-		g_Uart.printf("Data-length request refused; aborting setup\r\n");
-		s_Failed = true;
+		g_Uart.printf("Data-length request not accepted; retry pending\r\n");
 	}
-#endif
 	StartDiscovery(ConnHdl);
 }
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
-	(void)ConnHdl;
+	if (ConnHdl != s_ConnHdl)
+	{
+		return;
+	}
 	s_ConnHdl = BT_CONN_HDL_INVALID;
 	s_Disconnected = true;
-	if (!s_Finished)
+	if (!s_Benchmark.Finished)
 	{
 		g_Uart.printf("Disconnected before trial completion\r\n");
-		s_Failed = true;
-		s_Finished = true;
+		s_Benchmark.Failed = true;
+		s_Benchmark.Finished = true;
 	}
 }
 
 void BtAppEvtConnectFailed(void)
 {
-	s_Failed = true;
-	s_Finished = true;
+	s_Benchmark.Failed = true;
+	s_Benchmark.Finished = true;
 	s_Disconnected = true;
 }
 
@@ -389,8 +313,8 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 	memcpy(address.Addr, Addr, sizeof(address.Addr));
 	if (!BtGapConnect(&address, &s_ConnParams))
 	{
-		s_Failed = true;
-		s_Finished = true;
+		s_Benchmark.Failed = true;
+		s_Benchmark.Finished = true;
 		s_Disconnected = true;
 	}
 	return false;
@@ -408,79 +332,21 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 	service = BtDeviceFindService(pDev, BLUEIO_UUID_UART_SERVICE);
 	if (service < 0)
 	{
-		s_Failed = true;
+		s_Benchmark.Failed = true;
 		return;
 	}
 	characteristic = BtDeviceFindCharacteristic(pDev, service, BLUEIO_UUID_UART_RX_CHAR);
 	if (characteristic < 0)
 	{
-		s_Failed = true;
+		s_Benchmark.Failed = true;
 		return;
 	}
 	s_ValueHdl = pDev->pServices[service].characteristics[characteristic].characteristic.handle_value;
 	s_CccdHdl = pDev->pServices[service].characteristics[characteristic].cccd_handle;
 	if (s_CccdHdl == BT_ATT_HANDLE_INVALID)
 	{
-		s_Failed = true;
+		s_Benchmark.Failed = true;
 	}
-}
-
-void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
-{
-#if defined(S132) || defined(S140)
-	const ble_evt_t *evt = (const ble_evt_t *)pCtx;
-
-	if (evt == nullptr)
-	{
-		return;
-	}
-	switch (Evt)
-	{
-		case BLE_GAP_EVT_CONNECTED:
-			if (evt->evt.gap_evt.params.connected.conn_params.max_conn_interval != 12 ||
-				evt->evt.gap_evt.params.connected.conn_params.slave_latency != 0)
-			{
-				s_Failed = true;
-			}
-			g_Uart.printf("Interval units=%u latency=%u\r\n",
-				evt->evt.gap_evt.params.connected.conn_params.max_conn_interval,
-				evt->evt.gap_evt.params.connected.conn_params.slave_latency);
-			break;
-		case BLE_GAP_EVT_CONN_PARAM_UPDATE:
-			if (evt->evt.gap_evt.params.conn_param_update.conn_params.max_conn_interval != 12 ||
-				evt->evt.gap_evt.params.conn_param_update.conn_params.slave_latency != 0)
-			{
-				s_Failed = true;
-			}
-			break;
-		case BLE_GAP_EVT_PHY_UPDATE:
-			s_TxPhy = evt->evt.gap_evt.params.phy_update.tx_phy;
-			s_RxPhy = evt->evt.gap_evt.params.phy_update.rx_phy;
-			if (evt->evt.gap_evt.params.phy_update.status != 0)
-			{
-				g_Uart.printf("PHY update failed: status=0x%02x\r\n",
-					evt->evt.gap_evt.params.phy_update.status);
-				s_Failed = true;
-			}
-			break;
-		case BLE_GAP_EVT_DATA_LENGTH_UPDATE:
-			g_Uart.printf("LL octets tx=%u rx=%u\r\n",
-				evt->evt.gap_evt.params.data_length_update.effective_params.max_tx_octets,
-				evt->evt.gap_evt.params.data_length_update.effective_params.max_rx_octets);
-			break;
-		case BLE_GATTC_EVT_EXCHANGE_MTU_RSP:
-			if (s_DiscoveryPending)
-			{
-				StartDiscovery(evt->evt.gattc_evt.conn_handle);
-			}
-			break;
-		default:
-			break;
-	}
-#else
-	(void)Evt;
-	(void)pCtx;
-#endif
 }
 
 void BtAppInitUserServices(void)
@@ -491,143 +357,43 @@ void BtAppInitUserData(void)
 {
 }
 
-static void PrbsReport(uint32_t Now)
-{
-	const PrbsRxStats_t &stats = s_Rx;
-	PrbsReportValues_t values;
-	uint32_t elapsed;
-	uint32_t interval;
-	uint32_t rate;
-	uint32_t average;
-	uint32_t notificationsPerInterval;
-	uint32_t target;
-	bool final;
-	bool valid;
-
-	if (s_FinalPrinted)
-	{
-		return;
-	}
-	// Most main-loop passes are between reports. Do not mask interrupts
-	// or copy every counter until a report or the final result is due.
-	if (!s_Finished && !s_Failed)
-	{
-		if (!s_Rx.Started)
-		{
-			return;
-		}
-		if (s_LastReportMs == 0)
-		{
-			s_LastReportMs = s_Rx.FirstMs;
-		}
-		if ((uint32_t)(Now - s_LastReportMs) < PRBS_RX_REPORT_MS &&
-			(uint32_t)(Now - s_Rx.FirstMs) < PRBS_RX_DURATION_MS)
-		{
-			return;
-		}
-	}
-	elapsed = stats.Started ? (uint32_t)(Now - stats.FirstMs) : 0;
-	if (elapsed >= PRBS_RX_DURATION_MS || s_Failed)
-	{
-		s_Finished = true;
-	}
-	final = s_Finished;
-	if (!stats.Started && !final)
-	{
-		return;
-	}
-	if (s_LastReportMs == 0)
-	{
-		s_LastReportMs = stats.FirstMs;
-	}
-	interval = (uint32_t)(Now - s_LastReportMs);
-	if (interval < PRBS_RX_REPORT_MS && !final)
-	{
-		return;
-	}
-	PrbsReportValues(&stats, Now, s_LastReportMs, s_LastReportBytes,
-		PRBS_RX_DURATION_MS, s_TestPhy, s_Failed, s_NotifDropped, &values);
-	elapsed = values.Elapsed;
-	rate = values.Rate;
-	average = values.Average;
-	notificationsPerInterval = values.PerInterval;
-	target = values.Target;
-	g_Uart.printf("%sPHY=%u Bytes/sec=%lu average=%lu elapsed_ms=%lu\r\n",
-		final ? "Final " : "", s_TestPhy, (unsigned long)rate,
-		(unsigned long)average, (unsigned long)elapsed);
-	g_Uart.printf("bytes=%lu notifications=%lu drop=%lu out_of_frame=%lu\r\n",
-		(unsigned long)stats.Bytes, (unsigned long)stats.Notifications,
-		(unsigned long)stats.Breaks, (unsigned long)stats.OutOfFrame);
-	g_Uart.printf("len_min=%u len_max=%u notifications/15ms=%lu.%03lu\r\n",
-		stats.Notifications ? stats.MinLen : 0, stats.MaxLen,
-		(unsigned long)(notificationsPerInterval / 1000), (unsigned long)(notificationsPerInterval % 1000));
-	s_LastReportMs = values.Time;
-	s_LastReportBytes = stats.Bytes;
-	if (final)
-	{
-		g_Uart.printf("Notification queue dropped=%lu\r\n", (unsigned long)s_NotifDropped);
-		valid = values.Valid;
-		g_Uart.printf("PRBS integrity: %s\r\n", valid ? "PASS" : "FAIL");
-		g_Uart.printf("Notification target=%lu: %s (average only)\r\n",
-			(unsigned long)target, notificationsPerInterval >= target * 1000 ? "MET" : "NOT MET");
-		g_Uart.printf("PHY=%u RESULT: %s\r\n", s_TestPhy,
-			values.Passed ? "PASS" : "FAIL");
-		s_TrialComplete = values.Complete;
-		if (s_TrialComplete)
-		{
-			g_Uart.printf("PHY=%u trial complete.\r\n", s_TestPhy);
-		}
-		else
-		{
-			g_Uart.printf("PHY=%u trial aborted; benchmark stopped.\r\n", s_TestPhy);
-		}
-		s_FinalPrinted = true;
-		if (s_ConnHdl != BT_CONN_HDL_INVALID)
-		{
-			g_Uart.printf("Requesting disconnect after trial result\r\n");
-			BtAppDisconnectConn(s_ConnHdl);
-		}
-	}
-}
-
 bool AppCheckStatus(void)
 {
 	uint32_t now;
-	BtDevice_t *peer;
-#if defined(NRFXLIB_SDC) || defined(IOSONATA_STM32_WBA)
+	BtDevice_t *pPeer;
 	uint8_t txPhy;
 	uint8_t rxPhy;
-#endif
 
 	BtAppCheckStatus();
-	if (s_ResetPending)
+	if (s_Benchmark.ResetPending)
 	{
-		PrbsResetMeasurement();
+		PrbsBenchResetMeasurement(&s_Benchmark);
 	}
-	if (s_FinalPrinted && s_TrialComplete && s_Disconnected && s_TestPhy == BT_GAP_PHY_1MBITS)
+	if (s_Benchmark.FinalPrinted && s_Benchmark.Complete && s_Disconnected && s_TestPhy == BT_GAP_PHY_1MBITS)
 	{
 		s_TestPhy = BT_GAP_PHY_2MBITS;
 		PrbsReset();
-		s_Failed = false;
-		s_Finished = false;
 		s_Disconnected = false;
 		g_Uart.printf("Starting 60-second 2M trial\r\n");
 		BtAppScan();
 	}
 	now = BtGattMsTick();
-	if (s_ConnHdl != BT_CONN_HDL_INVALID && !s_Finished &&
-		(uint32_t)(now - s_LastPollMs) >= PRBS_RX_REPORT_MS)
+	if (s_ConnHdl != BT_CONN_HDL_INVALID && !s_Benchmark.Finished &&
+		(uint32_t)(now - s_LastPollMs) >= PRBS_BENCH_REPORT_MS)
 	{
 		s_LastPollMs = now;
 		if (s_PhyPending)
 		{
 			s_PhyPending = !BtGapSetPhy(s_ConnHdl, s_TestPhy, s_TestPhy, 0);
 		}
+		if (s_DlePending)
+		{
+			s_DlePending = !BtGapSetDataLength(s_ConnHdl, 251, 2120);
+		}
 		if (s_DiscoveryPending)
 		{
 			StartDiscovery(s_ConnHdl);
 		}
-#if defined(NRFXLIB_SDC) || defined(IOSONATA_STM32_WBA)
 		if (BtGapReadPhy(s_ConnHdl, &txPhy, &rxPhy))
 		{
 			s_TxPhy = txPhy;
@@ -636,43 +402,33 @@ bool AppCheckStatus(void)
 		else
 		{
 			g_Uart.printf("PHY read failed; aborting setup\r\n");
-			s_Failed = true;
+			s_Benchmark.Failed = true;
 		}
-#endif
-		if (!s_Failed && !s_PhyPending && !s_Subscribed && s_CccdHdl != BT_ATT_HANDLE_INVALID &&
+		if (!s_Benchmark.Failed && !s_PhyPending && !s_DlePending && !s_Subscribed && s_CccdHdl != BT_ATT_HANDLE_INVALID &&
 			s_TxPhy == s_TestPhy && s_RxPhy == s_TestPhy)
 		{
-			peer = BtPeerFindByHdl(s_ConnHdl);
-			if (peer != nullptr && peer->Conn.MaxMtu == BLE_MTU_SIZE)
+			pPeer = BtPeerFindByHdl(s_ConnHdl);
+			if (pPeer != nullptr && pPeer->Conn.MaxMtu == BLE_MTU_SIZE)
 			{
 				g_Uart.printf("Verified PHY tx=%u rx=%u MTU=%u\r\n",
-					s_TxPhy, s_RxPhy, peer->Conn.MaxMtu);
+					s_TxPhy, s_RxPhy, pPeer->Conn.MaxMtu);
 				s_Subscribed = BtAppEnableNotify(s_ConnHdl, s_CccdHdl);
 			}
 		}
 		if (s_Subscribed && (s_TxPhy != s_TestPhy || s_RxPhy != s_TestPhy))
 		{
-			s_Failed = true;
+			s_Benchmark.Failed = true;
 		}
-		if (!s_Rx.Started && (uint32_t)(now - s_ConnectMs) >= 10000)
+		if (!s_Benchmark.Stats.Started && (uint32_t)(now - s_ConnectMs) >= PRBS_RX_SETUP_TIMEOUT_MS)
 		{
 			g_Uart.printf("Startup timeout: phy_pending=%u discovery_pending=%u\r\n",
 				s_PhyPending, s_DiscoveryPending);
 			g_Uart.printf("PHY tx=%u rx=%u subscribed=%u CCCD=0x%04x\r\n",
 				s_TxPhy, s_RxPhy, s_Subscribed, s_CccdHdl);
-			s_Failed = true;
+			s_Benchmark.Failed = true;
 		}
 	}
-	// Drain queued notifications before reporting or ending the trial.
-	if (CFifoUsed(s_NotifQue) > 0)
-	{
-		if (!AppEvtHandlerPending())
-		{
-			(void)AppEvtHandlerQue(0, nullptr, PrbsReceive);
-		}
-		return false;
-	}
-	PrbsReport(now);
+	PrbsBenchPoll(&s_Benchmark, now);
 	return true;
 }
 
@@ -682,15 +438,15 @@ int main(void)
 	{
 		return 1;
 	}
-	s_NotifQue = CFifoInit(s_NotifMem, sizeof(s_NotifMem), sizeof(PrbsNotification_t), true);
-	if (s_NotifQue == nullptr)
+	if (!PrbsBenchInit(&s_Benchmark, &s_BenchAdapters, s_TestPhy))
 	{
 		return 1;
 	}
-	g_Uart.Init(g_UartCfg);
-#if defined(IOSONATA_STM32_WBA)
+	if (!g_Uart.Init(g_UartCfg))
+	{
+		return 1;
+	}
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0, nullptr, 0);
-#endif
 	g_Uart.printf("BlePrbsRx: target=%s requested_PHY=%u\r\n", TARGET_NAME, s_TestPhy);
 	g_Uart.printf("Interval=15 ms MTU=247; 60 s at 1M then 60 s at 2M\r\n");
 #if defined(__OPTIMIZE__)
@@ -701,11 +457,6 @@ int main(void)
 	if (!BtAppInit(&s_BleAppCfg))
 	{
 		g_Uart.printf("BtAppInit failed\r\n");
-#if defined(NRFXLIB_SDC)
-		g_Uart.printf("SDC error=%d value=%d needed=%d pool=%u\r\n",
-			(int)BtHciCtlrErrorGet(), (int)BtHciCtlrErrorValueGet(),
-			(int)BtHciCtlrMemPoolSizeNeeded(), (unsigned)g_BtHciCtlrMemPool.Size);
-#endif
 		return 1;
 	}
 	BtAppScanInit((BtGapScanCfg_t *)&s_ScanParams);

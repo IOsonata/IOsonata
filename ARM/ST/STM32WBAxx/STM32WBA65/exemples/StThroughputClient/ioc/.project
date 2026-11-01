@@ -704,6 +704,11 @@
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/prbs_client.c</locationURI>
 		</link>
+		<link>
+			<name>Board/cfifo.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/cfifo.c</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

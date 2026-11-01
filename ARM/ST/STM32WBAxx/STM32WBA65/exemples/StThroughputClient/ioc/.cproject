@@ -52,6 +52,7 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.1199315341" name="GNU ARM Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.437497086" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/Core/Inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/System/Interfaces&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/System/Modules&quot;" />
@@ -107,6 +108,7 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.474533069" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.796996073" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/Core/Inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/System/Interfaces&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/System/Modules&quot;" />
@@ -271,6 +273,7 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.680926118" name="GNU ARM Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.210556193" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/Core/Inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/System/Interfaces&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/System/Modules&quot;" />
@@ -325,6 +328,7 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.863660763" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1326063256" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/Core/Inc&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/System/Interfaces&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/System/Modules&quot;" />

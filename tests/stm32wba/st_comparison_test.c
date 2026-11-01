@@ -1,5 +1,27 @@
+static void PumpWork(void)
+{
+	while (CFifoUsed(s_Benchmark.Queue) != 0)
+	{
+		PrbsReceive();
+	}
+	PrbsWork();
+}
+
 /* Included after the production client and command mocks by run_st_comparison.py. */
 static unsigned reports;
+int UTIL_ADV_TRACE_Send(const uint8_t *Data, uint16_t Len)
+{
+	char line[160];
+	assert(Len < sizeof(line));
+	memcpy(line, Data, Len);
+	line[Len] = 0;
+	if (strstr(line, "Bytes/sec="))
+	{
+		reports++;
+	}
+	return UTIL_ADV_TRACE_OK;
+}
+
 static uint8_t pattern = 0x7f;
 
 uint32_t UTIL_TIMER_GetCurrentTime(void)
@@ -91,7 +113,7 @@ static void Connect(void)
 	uint8_t chars[46] = {0, 0, 21, 42, 2, 0, 0x10, 3, 0};
 	const uint8_t descriptors[] = {0, 0, 1, 4, 4, 0, 2, 0x29};
 
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_SCANNING);
 	assert(strcmp(lastCommand, "aci_gap_start_scan") == 0);
 	/* Truncated advertisements must not read outside their payload. */
@@ -99,36 +121,36 @@ static void Connect(void)
 	assert(s_Phase == PRBS_SCANNING);
 	Event(0x3e, adv, sizeof(adv));
 	assert(s_Phase == PRBS_STOP_SCAN);
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_SCAN_STOPPING);
 	Vendor(ACI_GAP_PROC_COMPLETE_VSEVT_CODE, stopped, sizeof(stopped));
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_CONNECTING);
 	connected[24] = 12;
 	connected[28] = 0x90;
 	connected[29] = 1;
 	Event(0x3e, connected, sizeof(connected));
 	assert(s_Phase == PRBS_PHY);
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_PHY_WAIT);
 	assert(strcmp(lastCommand, "hci_le_set_phy") == 0);
-	PrbsWork();
+	PumpWork();
 	assert(strcmp(lastCommand, "hci_le_set_phy") == 0);
 	phy[4] = s_Phy;
 	phy[5] = s_Phy;
 	Event(0x3e, phy, sizeof(phy));
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_DLE_WAIT);
 	Event(0x3e, dle, sizeof(dle));
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_MTU_WAIT);
 	Vendor(ACI_ATT_EXCHANGE_MTU_RESP_VSEVT_CODE, mtu, sizeof(mtu));
 	Complete();
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_SERVICE_WAIT);
 	Vendor(ACI_ATT_FIND_BY_TYPE_VALUE_RESP_VSEVT_CODE, service, sizeof(service));
 	Complete();
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_CHARS_WAIT);
 	memcpy(chars + 9, s_ValueUuid, 16);
 	chars[25] = 10;
@@ -137,14 +159,14 @@ static void Connect(void)
 	Vendor(ACI_ATT_READ_BY_TYPE_RESP_VSEVT_CODE, chars, sizeof(chars));
 	Complete();
 	assert(s_Value == 3 && s_DescEnd == 9);
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_DESCRIPTORS_WAIT);
 	Vendor(ACI_ATT_FIND_INFO_RESP_VSEVT_CODE, descriptors, sizeof(descriptors));
 	Complete();
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_SUBSCRIBE_WAIT && s_Cccd == 4);
 	Complete();
-	assert(s_Phase == PRBS_RECEIVE && !s_Failed);
+	assert(s_Phase == PRBS_RECEIVE && !s_Benchmark.Failed);
 }
 
 static void Notification(void)
@@ -177,27 +199,27 @@ int main(void)
 	{
 		start = clockMs;
 		Notification();
-		PrbsWork();
-		assert(s_Stats.Bytes == 244 && s_Stats.Breaks == 0);
+		PumpWork();
+		assert(s_Benchmark.Stats.Bytes == 244 && s_Benchmark.Stats.Breaks == 0);
 		clockMs += 1000;
 		Notification();
-		PrbsWork();
-		assert(s_Stats.Synced && s_Stats.Breaks == 0);
+		PumpWork();
+		assert(s_Benchmark.Stats.Synced && s_Benchmark.Stats.Breaks == 0);
 		clockMs = start + 59999;
 		Notification();
-		PrbsWork();
-		assert(!s_Final);
+		PumpWork();
+		assert(!s_Benchmark.FinalPrinted);
 		clockMs++;
 		/* A real command can return after a tick or a timer wrap. */
 		commandDelay = 2;
 		Notification();
-		PrbsWork();
-		assert(s_Final && s_Complete && s_Stats.Bytes == 732);
+		PumpWork();
+		assert(s_Benchmark.FinalPrinted && s_Benchmark.Complete && s_Benchmark.Stats.Bytes == 732);
 		assert(s_Phase == PRBS_DISCONNECT_WAIT);
 		Event(5, disconnected, sizeof(disconnected));
 		if (i == 0)
 		{
-			assert(s_Phy == 2 && s_Phase == PRBS_SCAN && s_Stats.Bytes == 0);
+			assert(s_Phy == 2 && s_Phase == PRBS_SCAN && s_Benchmark.Stats.Bytes == 0);
 			Connect();
 		}
 	}
@@ -207,10 +229,10 @@ int main(void)
 	PrbsReset();
 	Connect();
 	Notification();
-	PrbsWork();
+	PumpWork();
 	Event(5, disconnected, sizeof(disconnected));
-	PrbsWork();
-	assert(s_Phy == 1 && !s_Complete && s_Final && s_Phase == PRBS_DONE);
+	PumpWork();
+	assert(s_Phy == 1 && !s_Benchmark.Complete && s_Benchmark.FinalPrinted && s_Phase == PRBS_DONE);
 	/* Fixed ownership queue accepts 12 and detects the thirteenth. */
 	PrbsReset();
 	Connect();
@@ -218,31 +240,31 @@ int main(void)
 	{
 		Notification();
 	}
-	assert(s_Count == 12 && s_Dropped == 1 && s_Failed);
-	PrbsWork();
-	assert(!s_Complete);
+	assert(CFifoUsed(s_Benchmark.Queue) == 12 && s_Benchmark.Dropped == 1 && s_Benchmark.Failed);
+	PumpWork();
+	assert(!s_Benchmark.Complete);
 	assert(s_Phase == PRBS_DISCONNECT_WAIT);
 	clockMs += 4999;
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_DISCONNECT_WAIT);
 	clockMs++;
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_DONE);
 	/* Temporary command refusal is retried; timer callback never calls BLE. */
 	s_Connection = PRBS_INVALID;
 	PrbsReset();
 	reply = BLE_STATUS_BUSY;
-	PrbsWork();
-	assert(s_Phase == PRBS_SCAN && !s_Failed);
+	PumpWork();
+	assert(s_Phase == PRBS_SCAN && !s_Benchmark.Failed);
 	before = calls;
 	PrbsTick(NULL);
 	assert(calls == before);
 	reply = 0;
-	PrbsWork();
+	PumpWork();
 	assert(s_Phase == PRBS_SCANNING);
 	clockMs += 30000;
-	PrbsWork();
-	assert(s_Final && !s_Complete && s_Phase == PRBS_DONE);
+	PumpWork();
+	assert(s_Benchmark.FinalPrinted && !s_Benchmark.Complete && s_Phase == PRBS_DONE);
 	puts("automatic 1M/2M, discovery, PRBS ownership, duration, abort and retries passed");
 	return 0;
 }

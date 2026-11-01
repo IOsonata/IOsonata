@@ -24,6 +24,7 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
         "cmsis_compiler.h": "#include <stdint.h>\n#define __PACKED_STRUCT struct __attribute__((packed))\n#define __PACKED_UNION union __attribute__((packed))\n#define __STATIC_INLINE static inline\n",
         "stm32_seq.h": "#define UTIL_SEQ_RFU 0\nvoid UTIL_SEQ_SetTask(uint32_t, unsigned);\nvoid UTIL_SEQ_RegTask(uint32_t, unsigned, void (*)(void));\n",
         "stm32_timer.h": "typedef struct { int unused; } UTIL_TIMER_Object_t;\n#define UTIL_TIMER_OK 0\n#define UTIL_TIMER_PERIODIC 1\nuint32_t UTIL_TIMER_GetCurrentTime(void);\nint UTIL_TIMER_Create(UTIL_TIMER_Object_t *, unsigned, unsigned, void (*)(void *), void *);\nint UTIL_TIMER_Start(UTIL_TIMER_Object_t *);\n",
+        "stm32_adv_trace.h": "#define UTIL_ADV_TRACE_OK 0\nint UTIL_ADV_TRACE_Send(const uint8_t *, uint16_t);\n",
         "log_module.h": "void TestLog(const char *, ...);\n#define LOG_INFO_APP(...) TestLog(__VA_ARGS__)\n",
     }
     for name, content in mocks.items():
@@ -56,6 +57,7 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
                         "-include", str(project / "src/dk1_config.h"),
                         "-I" + str(temp), "-I" + str(wpan / "stack/include"),
                         "-I" + str(wpan / "svc/Inc"), "-I" + str(sample / "STM32_WPAN/App"),
+                        "-I" + str(ROOT / "include"), str(ROOT / "src/cfifo.c"),
                         str(temp / "test.c"), str(wpan / "svc/Src/svc_ctl.c"), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
         subprocess.run(["cc", "-std=c11", opt, "-g", "-fsanitize=undefined",

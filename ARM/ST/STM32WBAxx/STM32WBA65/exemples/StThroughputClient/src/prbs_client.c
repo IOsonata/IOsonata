@@ -8,7 +8,7 @@
  * PRBS comparison application. ST owns startup, radio, host, timers and event
  * delivery. Only application procedures and measurement are implemented here.
  */
-#include "../../../../../../../exemples/bluetooth/ble_prbs_check.h"
+#include "../../../../../../../exemples/bluetooth/ble_prbs_benchmark.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -19,14 +19,15 @@
 #include "stm32_seq.h"
 #include "stm32_timer.h"
 #include "log_module.h"
+#include "stm32_adv_trace.h"
 #include "prbs_client.h"
 
 #define PRBS_TASK CFG_TASK_DISCOVER_SERVICES_ID
 #define PRBS_RX_TASK CFG_TASK_DATA_FROM_SERVER_ID
-#define PRBS_DURATION 60000U
+#define PRBS_DURATION PRBS_BENCH_DURATION
 #define PRBS_SETUP_TIMEOUT 30000U
-#define PRBS_QUEUE_COUNT 12U
-#define PRBS_PAYLOAD 244U
+#define PRBS_QUEUE_COUNT PRBS_BENCH_QUEUE_COUNT
+#define PRBS_PAYLOAD PRBS_BENCH_PAYLOAD
 #define PRBS_INVALID 0xffffU
 
 /* BlueIO UUIDs in ATT little-endian order. Compare the entire UUID. */
@@ -67,21 +68,9 @@ typedef enum {
 	PRBS_DONE
 } PrbsPhase_t;
 
-typedef struct {
-	uint32_t Time;
-	uint16_t Len;
-	uint8_t Data[PRBS_PAYLOAD];
-} PrbsPacket_t;
-
-typedef PrbsRxStats_t PrbsStats_t;
-
 static PrbsPhase_t s_Phase;
 static UTIL_TIMER_Object_t s_Timer;
-static PrbsPacket_t s_Queue[PRBS_QUEUE_COUNT];
-static PrbsStats_t s_Stats;
-static uint8_t s_Head;
-static uint8_t s_Tail;
-static uint8_t s_Count;
+static PrbsBenchmark_t s_Benchmark;
 static uint8_t s_Phy = 1;
 static uint8_t s_TxPhy;
 static uint8_t s_RxPhy;
@@ -98,12 +87,6 @@ static uint16_t s_RxOctets;
 static uint16_t s_TxOctets;
 static uint32_t s_SetupMs;
 static uint32_t s_PhaseMs;
-static uint32_t s_LastReport;
-static uint32_t s_LastBytes;
-static uint32_t s_Dropped;
-static bool s_Failed;
-static bool s_Final;
-static bool s_Complete;
 
 static void PrbsWork(void);
 static void PrbsReceive(void);
@@ -127,11 +110,11 @@ static void PrbsPhase(PrbsPhase_t Phase)
 
 static void PrbsFail(const char *pReason, uint8_t Status)
 {
-	if (!s_Failed)
+	if (!s_Benchmark.Failed)
 	{
 		LOG_INFO_APP("ST PRBS: %s phase=%u status=0x%02x\n", pReason, s_Phase, Status);
 	}
-	s_Failed = true;
+	s_Benchmark.Failed = true;
 	PrbsSchedule();
 }
 
@@ -143,14 +126,7 @@ static bool PrbsRetry(uint8_t Status)
 
 static void PrbsReset(void)
 {
-	memset(&s_Stats, 0, sizeof(s_Stats));
-	s_Stats.MinLen = UINT16_MAX;
-	s_Head = 0;
-	s_Tail = 0;
-	s_Count = 0;
-	s_Dropped = 0;
-	s_LastReport = 0;
-	s_LastBytes = 0;
+	PrbsBenchReset(&s_Benchmark, s_Phy);
 	s_ServiceStart = 0;
 	s_ServiceEnd = 0;
 	s_Value = 0;
@@ -161,83 +137,45 @@ static void PrbsReset(void)
 	s_TxOctets = 0;
 	s_TxPhy = 0;
 	s_RxPhy = 0;
-	s_Failed = false;
-	s_Final = false;
-	s_Complete = false;
 	s_SetupMs = UTIL_TIMER_GetCurrentTime();
 	PrbsPhase(PRBS_SCAN);
 }
 
-static void PrbsCheck(const PrbsPacket_t *pPacket)
+static bool PrbsRxSchedule(void)
 {
-	if (s_Final)
-	{
-		return;
-	}
-	if (!s_Stats.Started)
-	{
-		s_LastReport = pPacket->Time;
-	}
-	(void)PrbsCheckPacket(&s_Stats, pPacket->Data, pPacket->Len,
-		pPacket->Time, PRBS_DURATION);
+	UTIL_SEQ_SetTask(1U << PRBS_RX_TASK, CFG_SEQ_PRIO_0);
+	return true;
 }
+
+static bool PrbsWrite(const uint8_t *pData, uint16_t Len)
+{
+	return UTIL_ADV_TRACE_Send(pData, Len) == UTIL_ADV_TRACE_OK;
+}
+
+static void PrbsDone(void)
+{
+	if (s_Connection != PRBS_INVALID)
+	{
+		PrbsPhase(PRBS_DISCONNECT);
+	}
+	else
+	{
+		(void)aci_gap_terminate_gap_proc(s_Phase == PRBS_CONNECTING ?
+			GAP_DIRECT_CONNECTION_ESTABLISHMENT_PROC : GAP_GENERAL_DISCOVERY_PROC);
+		PrbsPhase(PRBS_DONE);
+	}
+}
+
+static const PrbsBenchAdapters_t s_BenchAdapters = {
+	UTIL_TIMER_GetCurrentTime,
+	PrbsRxSchedule,
+	PrbsWrite,
+	PrbsDone
+};
 
 static void PrbsReceive(void)
 {
-	/* Producer and consumer are ST sequencer tasks, never IRQ callbacks. */
-	if (s_Count != 0)
-	{
-		PrbsCheck(&s_Queue[s_Tail]);
-		s_Tail = (s_Tail + 1) % PRBS_QUEUE_COUNT;
-		s_Count--;
-	}
-	if (s_Count != 0)
-	{
-		UTIL_SEQ_SetTask(1U << PRBS_RX_TASK, CFG_SEQ_PRIO_0);
-	}
-}
-
-static void PrbsReport(uint32_t Now, bool Final)
-{
-	PrbsReportValues_t values;
-	uint32_t elapsed;
-	uint32_t rate;
-	uint32_t average;
-	uint32_t perInterval;
-	uint32_t target;
-	bool valid;
-
-	PrbsReportValues(&s_Stats, Now, s_LastReport, s_LastBytes,
-		PRBS_DURATION, s_Phy, s_Failed, s_Dropped, &values);
-	elapsed = values.Elapsed;
-	rate = values.Rate;
-	average = values.Average;
-	perInterval = values.PerInterval;
-	target = values.Target;
-	LOG_INFO_APP("%sPHY=%u Bytes/sec=%lu average=%lu elapsed_ms=%lu\n",
-		Final ? "Final " : "", s_Phy, (unsigned long)rate, (unsigned long)average, (unsigned long)elapsed);
-	LOG_INFO_APP("bytes=%lu notifications=%lu drop=%lu out_of_frame=%lu\n",
-		(unsigned long)s_Stats.Bytes, (unsigned long)s_Stats.Notifications,
-		(unsigned long)s_Stats.Breaks, (unsigned long)s_Stats.OutOfFrame);
-	LOG_INFO_APP("len_min=%u len_max=%u notifications/15ms=%lu.%03lu\n",
-		s_Stats.Notifications ? s_Stats.MinLen : 0, s_Stats.MaxLen,
-		(unsigned long)(perInterval / 1000), (unsigned long)(perInterval % 1000));
-	s_LastReport = values.Time;
-	s_LastBytes = s_Stats.Bytes;
-	if (Final)
-	{
-		s_Final = true;
-		s_Complete = values.Complete;
-		valid = values.Valid;
-		LOG_INFO_APP("Notification queue dropped=%lu\n", (unsigned long)s_Dropped);
-		LOG_INFO_APP("PRBS integrity: %s\n", valid ? "PASS" : "FAIL");
-		LOG_INFO_APP("Notification target=%lu: %s (average only)\n", (unsigned long)target,
-			perInterval >= target * 1000 ? "MET" : "NOT MET");
-		LOG_INFO_APP("PHY=%u RESULT: %s\n", s_Phy,
-			values.Passed ? "PASS" : "FAIL");
-		LOG_INFO_APP("PHY=%u %s\n", s_Phy,
-			s_Complete ? "trial complete." : "trial aborted; benchmark stopped.");
-	}
+	PrbsBenchReceive(&s_Benchmark);
 }
 
 static void PrbsTick(void *pContext)
@@ -260,33 +198,14 @@ static void PrbsWork(void)
 	{
 		return;
 	}
-	while (s_Count != 0)
-	{
-		PrbsReceive();
-	}
-	if (!s_Final && !s_Stats.Started && (uint32_t)(now - s_SetupMs) >= PRBS_SETUP_TIMEOUT)
+	if (!s_Benchmark.FinalPrinted && !s_Benchmark.Stats.Started && (uint32_t)(now - s_SetupMs) >= PRBS_SETUP_TIMEOUT)
 	{
 		PrbsFail("setup/first notification timeout", 0);
 	}
-	if (!s_Final && (s_Failed || (s_Stats.Started &&
-		(uint32_t)(now - s_Stats.FirstMs) >= PRBS_DURATION)))
+	PrbsBenchPoll(&s_Benchmark, now);
+	if (s_Phase == PRBS_DONE)
 	{
-		PrbsReport(now, true);
-		if (s_Connection != PRBS_INVALID)
-		{
-			PrbsPhase(PRBS_DISCONNECT);
-		}
-		else
-		{
-			(void)aci_gap_terminate_gap_proc(s_Phase == PRBS_CONNECTING ?
-				GAP_DIRECT_CONNECTION_ESTABLISHMENT_PROC : GAP_GENERAL_DISCOVERY_PROC);
-			PrbsPhase(PRBS_DONE);
-			return;
-		}
-	}
-	else if (!s_Final && s_Stats.Started && (uint32_t)(now - s_LastReport) >= 1000)
-	{
-		PrbsReport(now, false);
+		return;
 	}
 	phase = s_Phase;
 	status = BLE_STATUS_SUCCESS;
@@ -379,14 +298,14 @@ static void PrbsWork(void)
 	if (status != 0 && !PrbsRetry(status))
 	{
 		PrbsFail("command rejected", status);
-		if (s_Final)
+		if (s_Benchmark.FinalPrinted)
 		{
 			PrbsPhase(PRBS_DONE);
 		}
 	}
 	/* Commands and reporting can advance time after PrbsPhase records it. */
 	now = UTIL_TIMER_GetCurrentTime();
-	if (s_Final && (s_Phase == PRBS_DISCONNECT || s_Phase == PRBS_DISCONNECT_WAIT) &&
+	if (s_Benchmark.FinalPrinted && (s_Phase == PRBS_DISCONNECT || s_Phase == PRBS_DISCONNECT_WAIT) &&
 		(uint32_t)(now - s_PhaseMs) >= 5000)
 	{
 		LOG_INFO_APP("Disconnect timeout; benchmark stopped.\n");
@@ -526,7 +445,6 @@ static void PrbsGatt(uint16_t Code, const uint8_t *pData, uint16_t Len)
 	uint16_t handle;
 	uint16_t value;
 	uint8_t stride;
-	PrbsPacket_t *packet;
 
 	if (Len < 2 || PrbsU16(pData) != s_Connection || s_Connection == PRBS_INVALID)
 	{
@@ -619,25 +537,19 @@ static void PrbsGatt(uint16_t Code, const uint8_t *pData, uint16_t Len)
 			}
 			break;
 		case ACI_GATT_NOTIFICATION_VSEVT_CODE:
-			if (s_Final || (s_Phase != PRBS_RECEIVE && s_Phase != PRBS_SUBSCRIBE_WAIT) ||
+			if (s_Benchmark.FinalPrinted || (s_Phase != PRBS_RECEIVE && s_Phase != PRBS_SUBSCRIBE_WAIT) ||
 				Len < 5 || PrbsU16(pData + 2) != s_Value)
 			{
 				break;
 			}
-			if (pData[4] == 0 || pData[4] > PRBS_PAYLOAD || pData[4] != Len - 5 ||
-				s_Count == PRBS_QUEUE_COUNT)
+			if (pData[4] != Len - 5)
 			{
-				s_Dropped++;
-				PrbsFail("notification malformed or queue full", 0);
-				return;
+				PrbsBenchNotify(&s_Benchmark, NULL, 0);
 			}
-			packet = &s_Queue[s_Head];
-			packet->Time = UTIL_TIMER_GetCurrentTime();
-			packet->Len = pData[4];
-			memcpy(packet->Data, pData + 5, packet->Len);
-			s_Head = (s_Head + 1) % PRBS_QUEUE_COUNT;
-			s_Count++;
-			UTIL_SEQ_SetTask(1U << PRBS_RX_TASK, CFG_SEQ_PRIO_0);
+			else
+			{
+				PrbsBenchNotify(&s_Benchmark, pData + 5, pData[4]);
+			}
 			break;
 		default:
 			break;
@@ -660,12 +572,12 @@ static SVCCTL_EvtAckStatus_t PrbsEvent(void *pEvent)
 	{
 		LOG_INFO_APP("Disconnected hdl=%u status=0x%02x reason=0x%02x\n", s_Connection, data[0], data[3]);
 		s_Connection = PRBS_INVALID;
-		if (s_Phase == PRBS_DISCONNECT_WAIT && s_Complete && s_Phy == 1 && data[0] == 0)
+		if (s_Phase == PRBS_DISCONNECT_WAIT && s_Benchmark.Complete && s_Phy == 1 && data[0] == 0)
 		{
 			s_Phy = 2;
 			PrbsReset();
 		}
-		else if (!s_Final)
+		else if (!s_Benchmark.FinalPrinted)
 		{
 			PrbsFail("disconnected before trial completion", data[3]);
 		}
@@ -767,6 +679,11 @@ void PrbsClientInit(void)
 #endif
 	s_Phy = 1;
 	s_Connection = PRBS_INVALID;
+	if (!PrbsBenchInit(&s_Benchmark, &s_BenchAdapters, s_Phy))
+	{
+		PrbsFail("benchmark initialization failed", 0);
+		return;
+	}
 	PrbsReset();
 	if (UTIL_TIMER_Create(&s_Timer, 20, UTIL_TIMER_PERIODIC, PrbsTick, NULL) != UTIL_TIMER_OK ||
 		UTIL_TIMER_Start(&s_Timer) != UTIL_TIMER_OK)
