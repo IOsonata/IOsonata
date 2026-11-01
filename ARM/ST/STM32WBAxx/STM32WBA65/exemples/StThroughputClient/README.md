@@ -2,7 +2,7 @@
 
 This is an Eclipse managed ARM GCC application for STM32WBA65I-DK1.
 It builds ST's STM32CubeWBA v1.10.0 BLE_DataThroughput_Client sources,
-HAL, sequencer, host timers, host library and Basic controller library.
+HAL, sequencer, host timers, host library and Basic Plus controller library.
 It does not link the IOsonata Bluetooth or MCU libraries. This is a separate firmware for comparing the
 ST reference integration with the IOsonata integration.
 
@@ -88,11 +88,16 @@ The native stack event delivery and UART drivers remain different. Earlier
 measurements with separate checkers or UART rates do not isolate stack cost.
 
 
-`dk1_config.h` disables Nucleo buttons/LEDs, selects one link, MTU 247,
-a 4096-byte host-event FIFO and initial default 1M PHY. It enables the general
+`dk1_config.h` disables Nucleo buttons/LEDs and matches IOsonata WBA host
+capacity: two links, maximum MTU 251, a 4096-byte host-event FIFO, extended
+advertising support, the default prepare-write list and no CoC channels.
+The benchmark uses one connection, negotiates MTU 247 and starts at 1M PHY. It enables the general
 SVCCTL event callback needed for automatic GAP procedure handling. ST's host
-memory-block margin, Basic controller library and native clock/power setup
-remain in use. The connection request retains ST's CE length hints (0/80,
+80-block memory margin is retained. Debug and Release use the Basic Plus
+controller library and matching `ble_basic_plus` headers, as IOsonata does.
+ST's native clock/power setup and NVM storage remain in use. The middleware
+still comes from `CubeRoot`; use the same middleware revision as IOsonata
+when comparing results. The connection request retains ST's CE length hints (0/80,
 in 0.625 ms units); actual throughput must be measured on hardware.
 
 `src/app_ble.c` is copied from STM32CubeWBA v1.10.0, commit
@@ -132,7 +137,8 @@ and zero application queue drops:
 | Release | 78,535 | 109,877 | 6.754 |
 
 Both passed the 1M target and missed the eight-notification 2M target.
-These measurements predate the shared notification queue and reporting code.
+These measurements used the Basic controller and predate both the shared
+notification queue/reporting code and the matched host configuration.
 The current changes have host-test coverage; target builds and new hardware
 measurements are still required. These are single runs, not a controlled
 estimate of run-to-run variation.
