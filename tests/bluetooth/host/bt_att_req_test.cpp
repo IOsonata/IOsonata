@@ -1217,10 +1217,59 @@ void TestExecuteWriteAtomicFailure()
 	g_PeerEnabled = false;
 }
 
+// Descriptor discovery commonly ends at 0xFFFF for the final service.
+// Missing handles must still advance past that limit without wrapping.
+void TestFindInformationFinalService()
+{
+	uint8_t req[5] = { BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ, 0, 0, 0xFF, 0xFF };
+	uint8_t rsp[BT_ATT_MTU_MAX];
+	BtUuid16_t uuid = { 0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION };
+	BtAttDBEntry_t *entry;
+	uint32_t len;
+
+	BtAttDBInit(512);
+	BtAttSetMtu(BT_ATT_MTU_MIN);
+	entry = BtAttDBAddEntry(&uuid, 0);
+	CHECK(entry != nullptr);
+	if (entry == nullptr)
+	{
+		return;
+	}
+
+	PutLe16(req + 1, entry->Hdl);
+	len = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, sizeof(req),
+		(BtAttReqRsp_t *)rsp);
+	CHECK(len == 6);
+	CHECK(rsp[0] == BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP);
+	CHECK(rsp[1] == BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16);
+	CHECK(GetLe16(rsp + 2) == entry->Hdl);
+	CHECK(GetLe16(rsp + 4) == uuid.Uuid);
+
+	// The continuation after the final descriptor must return Not Found.
+	PutLe16(req + 1, entry->Hdl + 1);
+	len = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, sizeof(req),
+		(BtAttReqRsp_t *)rsp);
+	CHECK(len == 5);
+	CHECK(rsp[0] == BT_ATT_OPCODE_ATT_ERROR_RSP);
+	CHECK(rsp[kErrReqOp] == BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ);
+	CHECK(GetLe16(rsp + 2) == entry->Hdl + 1);
+	CHECK(rsp[kErrCode] == BT_ATT_ERROR_ATT_NOT_FOUND);
+
+	// The single-handle boundary must also terminate on an empty database.
+	BtAttDBInit(512);
+	PutLe16(req + 1, 0xFFFF);
+	len = BtAttProcessReq(kConnHdl, (BtAttReqRsp_t *)req, sizeof(req),
+		(BtAttReqRsp_t *)rsp);
+	CHECK(len == 5);
+	CHECK(GetLe16(rsp + 2) == 0xFFFF);
+	CHECK(rsp[kErrCode] == BT_ATT_ERROR_ATT_NOT_FOUND);
+}
+
 } // namespace
 
 int main()
 {
+	TestFindInformationFinalService();
 	TestMtuNegotiationRule();
 	TestExchangeMtuRequestRecordsTheLink();
 	TestInvalidStartHandleAndWriteHandle();

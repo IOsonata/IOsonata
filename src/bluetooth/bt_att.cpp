@@ -1924,9 +1924,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				uint8_t fmt = 0;
 				uint8_t *p = (uint8_t*)pRspAtt->FindInfoRsp.HdlUuid16;
 
-				for (uint16_t hdl = req->StartHdl; hdl <= req->EndHdl; hdl++)
+				// The counter must advance past 0xFFFF even when no attribute
+				// exists there and the lookup takes the continue path below.
+				for (uint32_t hdl = req->StartHdl; hdl <= req->EndHdl; hdl++)
 				{
-					BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
+					BtAttDBEntry_t *entry = BtAttDBFindHandle((uint16_t)hdl);
 					if (entry == nullptr)
 					{
 						continue;
