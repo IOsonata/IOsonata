@@ -417,7 +417,7 @@
 		<link>
 			<name>Application/User/Core/main.c</name>
 			<type>1</type>
-			<locationURI>CUBE_WBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/Core/Src/main.c</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/main.c</locationURI>
 		</link>
 		<link>
 			<name>Application/User/Core/stm32wbaxx_hal_msp.c</name>

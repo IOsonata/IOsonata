@@ -23,6 +23,9 @@ ST reference integration with the IOsonata integration.
    The ST linker script reserves the last 16 KB of flash for ST NVM;
    this firmware does not preserve IOsonata bond-storage compatibility.
 
+The local `src/main.c` is the CubeWBA v1.10.0 sample with only the USART1
+baud rate changed to 1000000, matching IOsonata BlePrbsRx.
+
 The project uses the same GNU ARM managed toolchain as the other `ioc`
 examples, rather than requiring STM32CubeIDE plugins. The tracked
 `ioc/.settings/org.eclipse.core.runtime.prefs` associates lowercase `.s` files
@@ -36,7 +39,7 @@ which ST files are built. Debug and Release configurations are supplied.
 
 Use the existing BlePrbs_SDC streamer. No ST throughput server, button action,
 serial command or Python payload receiver is required. Open the first DK1
-ST-LINK virtual COM port at 115200 baud, 8N1, without flow control. USART1
+ST-LINK virtual COM port at 1000000 baud, 8N1, without flow control. USART1
 uses PB12 TX / PA8 RX. Start the streamer before resetting this client.
 
 The client automatically:

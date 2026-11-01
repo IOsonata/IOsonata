@@ -572,8 +572,12 @@ void BtAppInitUserData(void)
 
 static void PrbsReport(uint32_t Now)
 {
+#if defined(IOSONATA_STM32_WBA)
+	const PrbsRxStats_t &stats = s_Rx;
+#else
 	PrbsRxStats_t stats;
 	uint32_t state;
+#endif
 	uint32_t elapsed;
 	uint32_t interval;
 	uint32_t rate;
@@ -605,6 +609,7 @@ static void PrbsReport(uint32_t Now)
 			return;
 		}
 	}
+#if !defined(IOSONATA_STM32_WBA)
 	state = DisableInterrupt();
 	Now = BtGattMsTick();
 	stats.Bytes = s_Rx.Bytes;
@@ -616,13 +621,16 @@ static void PrbsReport(uint32_t Now)
 	stats.MaxLen = s_Rx.MaxLen;
 	stats.Started = s_Rx.Started;
 	stats.Synced = s_Rx.Synced;
+#endif
 	elapsed = stats.Started ? (uint32_t)(Now - stats.FirstMs) : 0;
 	if (elapsed >= PRBS_RX_DURATION_MS || s_Failed)
 	{
 		s_Finished = true;
 	}
 	final = s_Finished;
+#if !defined(IOSONATA_STM32_WBA)
 	EnableInterrupt(state);
+#endif
 	if (!stats.Started && !final)
 	{
 		return;
