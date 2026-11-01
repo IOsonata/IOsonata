@@ -169,7 +169,7 @@ extern UART g_Uart;
 #define DEBUG_PRINTF(...)
 #endif
 
-// Link, security and host timing status on SysLog for bench runs. A release
+// Link and security status on SysLog for bench runs. A release
 // build defines NDEBUG, which removes these lines. Errors are always printed.
 #ifndef NDEBUG
 #define STATUS_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
@@ -284,12 +284,7 @@ static uint32_t s_StatusCheckCount;
 
 // Port-wide counters since boot. Report at disconnect, never per packet.
 // Queue refusals and ring-full attempts are backpressure, not packet loss.
-static volatile uint32_t s_HostRequestedMs;
 static volatile uint32_t s_HostQueueRefused;
-static uint32_t s_HostWaitMaxMs;
-static uint32_t s_HostWaitOver1Ms;
-static uint32_t s_HostWaitOver15Ms;
-static uint32_t s_HostRunMaxMs;
 static uint32_t s_EvtRingFull;
 static uint32_t s_EvtRingPeak;
 
@@ -301,36 +296,17 @@ extern "C" void BleStackCB_Process(void);
 
 static void BleHostEvt(uint32_t Evt, void *pCtx)
 {
-	uint32_t start;
-	uint32_t elapsed;
 	uint32_t state;
-	uint32_t wait;
 	uint32_t passes;
 	int result;
 
 	(void)Evt;
 	(void)pCtx;
 
-	// BtSmpMsTick protects its controller read internally. Keep its 64-bit
-	// time conversion outside our queue-state critical section.
-	start = BtSmpMsTick();
 	state = __get_PRIMASK();
 	__disable_irq();
-	wait = start - s_HostRequestedMs;
 	s_bBleHostQueued = false;
 	__set_PRIMASK(state);
-	if (wait > s_HostWaitMaxMs)
-	{
-		s_HostWaitMaxMs = wait;
-	}
-	if (wait >= 1)
-	{
-		s_HostWaitOver1Ms++;
-	}
-	if (wait >= 15)
-	{
-		s_HostWaitOver15Ms++;
-	}
 	// Drain pending host work without a queue round trip for every pass.
 	// Bound the burst independently of PHY: a call need not produce a packet.
 	// Yield when the event ring fills so its queued consumer can free slots.
@@ -344,17 +320,6 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 		{
 			break;
 		}
-	}
-	elapsed = BtSmpMsTick() - start;
-	if (elapsed > s_HostRunMaxMs)
-	{
-		s_HostRunMaxMs = elapsed;
-	}
-	if (elapsed >= 100)
-	{
-		SysLogPrintf(SysLogGet(), "ms=%lu WBA host: process=%lu ms result=%d ring=%u\r\n",
-				(unsigned long)BtSmpMsTick(), (unsigned long)elapsed,
-				result, (unsigned)s_EvtCnt);
 	}
 	if (result == 0)
 	{
@@ -370,27 +335,16 @@ extern "C" void BleStackCB_Process(void)
 {
 	uint32_t state;
 	bool queue;
-	bool stamp = false;
 
 	state = __get_PRIMASK();
 	__disable_irq();
 	queue = s_bBleHostQueued == false;
 	if (queue)
 	{
-		// Preserve the first request across coalescing and queue-full retries.
-		stamp = s_bBleHostOwed == false;
 		s_bBleHostQueued = true;
 		s_bBleHostOwed = false;
 	}
 	__set_PRIMASK(state);
-
-	// The reservation coalesces IRQ requests while the timestamp is captured.
-	// Publish it before BtEvtQue can make the consumer runnable. The clock
-	// reader masks only the raw controller read, not its 64-bit conversion.
-	if (stamp)
-	{
-		s_HostRequestedMs = BtSmpMsTick();
-	}
 
 	// The reservation covers interrupt requests during BtEvtQue. Keep the
 	// queue call outside the critical section for ISR-safe RTOS overrides.
@@ -1231,9 +1185,7 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 				SysLogPrintf(SysLogGet(), "WBA host totals since boot: calls=%lu queue_refused=%lu ring_full=%lu ring_peak=%lu\r\n",
 						(unsigned long)s_HostProcessCount, (unsigned long)s_HostQueueRefused,
 						(unsigned long)s_EvtRingFull, (unsigned long)s_EvtRingPeak);
-				SysLogPrintf(SysLogGet(), "WBA host timing since boot: wait_max_ms=%lu wait_ge_1ms=%lu wait_ge_15ms=%lu run_max_ms=%lu\r\n",
-						(unsigned long)s_HostWaitMaxMs, (unsigned long)s_HostWaitOver1Ms,
-						(unsigned long)s_HostWaitOver15Ms, (unsigned long)s_HostRunMaxMs);
+
 				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
 				{
 					s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
