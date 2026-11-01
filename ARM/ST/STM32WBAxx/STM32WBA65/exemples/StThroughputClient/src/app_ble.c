@@ -136,8 +136,8 @@ typedef struct
 #define BLE_DYN_ALLOC_SIZE \
         (BLE_TOTAL_BUFFER_SIZE(CFG_BLE_NUM_LINK, MBLOCK_COUNT, (CFG_BLE_EATT_BEARER_PER_LINK * CFG_BLE_NUM_LINK)))
 
-/* SNVMA_Register receives the actual cache size and accounts for metadata. */
-#define BLE_HOST_NVM_SIZE_U64          CFG_BLE_NVM_MAX_SIZE
+/* 2 words are reserved for SNVMA management */
+#define BLE_HOST_NVM_SIZE_U64          ((SNVMA_NVM_ID_1_BUFFER_1_SIZE / sizeof(uint64_t) ) - 2)
 
 #define BLE_DEFAULT_PIN            (111111) /* Default PIN code for pairing */
 
@@ -174,6 +174,8 @@ PLACE_IN_SECTION("TAG_HostStack") static uint32_t host_buffer[DIVC(BLE_DYN_ALLOC
 PLACE_IN_SECTION("TAG_HostStack") static uint32_t gatt_buffer[DIVC(BLE_GATT_BUF_SIZE, 4)];
 PLACE_IN_SECTION("TAG_HostStack") static uint16_t host_event_buffer[DIVC(BLE_HOST_EVENT_BUF_SIZE, 2)];
 PLACE_IN_SECTION("TAG_HostStack") static uint64_t host_nvm_buffer[BLE_HOST_NVM_SIZE_U64];
+PLACE_IN_SECTION("TAG_HostStack") static uint8_t long_write_buffer[CFG_BLE_LONG_WRITE_DATA_BUF_SIZE];
+PLACE_IN_SECTION("TAG_HostStack") static uint8_t extra_data_buffer[CFG_BLE_EXTRA_DATA_BUF_SIZE];
 
 /* USER CODE BEGIN PV */
 
@@ -294,6 +296,8 @@ void APP_BLE_Deinit(void)
   memset(&gatt_buffer[0], 0, sizeof(gatt_buffer));
   memset(&host_event_buffer[0], 0, sizeof(host_event_buffer));
   memset(&host_nvm_buffer[0], 0, sizeof(host_nvm_buffer));
+  memset(&long_write_buffer[0], 0, sizeof(long_write_buffer));
+  memset(&extra_data_buffer[0], 0, sizeof(extra_data_buffer));
 
   /* De-initialize BLE related modules */
   BAES_Reset( );
@@ -1105,12 +1109,12 @@ static uint8_t HOST_BLE_Init(void)
   pInitParams.numOfLinks              = CFG_BLE_NUM_LINK;
   pInitParams.mblockCount             = CFG_BLE_MBLOCK_COUNT;
   pInitParams.bleStartRamAddress      = (uint8_t*)host_buffer;
-  pInitParams.total_buffer_size       = sizeof(host_buffer);
+  pInitParams.total_buffer_size       = BLE_DYN_ALLOC_SIZE;
   pInitParams.bleStartRamAddress_GATT = (uint8_t*)gatt_buffer;
-  pInitParams.total_buffer_size_GATT  = sizeof(gatt_buffer);
+  pInitParams.total_buffer_size_GATT  = BLE_GATT_BUF_SIZE;
   pInitParams.extra_data_buffer_size  = CFG_BLE_EXTRA_DATA_BUF_SIZE;
-  pInitParams.extra_data_buffer       = NULL;
-  pInitParams.gatt_long_write_buffer  = NULL;
+  pInitParams.extra_data_buffer       = (uint8_t*)extra_data_buffer;
+  pInitParams.gatt_long_write_buffer  = (uint8_t*)long_write_buffer;
   pInitParams.host_event_fifo_buffer  = host_event_buffer;
   pInitParams.host_event_fifo_buffer_size = DIVC(BLE_HOST_EVENT_BUF_SIZE, 2);
   pInitParams.nvm_cache_buffer        = host_nvm_buffer;
@@ -1121,10 +1125,6 @@ static uint8_t HOST_BLE_Init(void)
 /* USER CODE BEGIN HOST_BLE_Init_Params */
 
 /* USER CODE END HOST_BLE_Init_Params */
-	LOG_INFO_APP("ST comparison config v2: BasicPlus=%u options=0x%04x links=%u MTUmax=%u blocks=%u FIFOwords=%u NVMwords=%u\n",
-		BLE_STACK_BASIC_PLUS, pInitParams.options, pInitParams.numOfLinks,
-		pInitParams.attMtu, pInitParams.mblockCount,
-		pInitParams.host_event_fifo_buffer_size, pInitParams.nvm_cache_max_size);
   return_status = BleStack_Init(&pInitParams);
 /* USER CODE BEGIN HOST_BLE_Init */
 
@@ -1196,7 +1196,16 @@ static void Ble_Hci_Gap_Gatt_Init(void)
     LOG_INFO_APP("  Success: aci_hal_write_config_data command - CONFIG_DATA_ER_OFFSET\n");
   }
 
-	/* BlePrbsRx uses TxPower = 0 and retains the controller default. */
+  /* Set Transmission RF Power. */
+  ret = aci_hal_set_tx_power_level(1, CFG_TX_POWER);
+  if (ret != BLE_STATUS_SUCCESS)
+  {
+    LOG_INFO_APP("  Fail   : aci_hal_set_tx_power_level command, result: 0x%02X\n", ret);
+  }
+  else
+  {
+    LOG_INFO_APP("  Success: aci_hal_set_tx_power_level command\n");
+  }
 
   /* Initialize GATT interface */
   ret = aci_gatt_init();

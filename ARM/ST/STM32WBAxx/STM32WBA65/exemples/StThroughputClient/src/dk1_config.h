@@ -2,14 +2,6 @@
 #ifndef ST_THROUGHPUT_DK1_CONFIG_H
 #define ST_THROUGHPUT_DK1_CONFIG_H
 
-/* bleplat.c compiles ble_wrap.c using these managed-project definitions. */
-#if !defined(BLE_STACK_BASIC_PLUS) || BLE_STACK_BASIC_PLUS != 1
-#error StThroughputClient requires BLE_STACK_BASIC_PLUS=1; reload the managed project settings
-#endif
-#if defined(BLE_STACK_BASIC_FEATURES) && BLE_STACK_BASIC_FEATURES
-#error Remove BLE_STACK_BASIC_FEATURES from StThroughputClient compiler definitions
-#endif
-
 #include "app_conf.h"
 #include "ble_conf.h"
 
@@ -48,8 +40,6 @@
 #define CFG_BLE_EXTRA_DATA_BUF_SIZE 0
 #undef CFG_BLE_LONG_WRITE_DATA_BUF_SIZE
 #define CFG_BLE_LONG_WRITE_DATA_BUF_SIZE 0
-/* Host cache capacity in 64-bit words, registered with ST's NVM manager. */
-#define CFG_BLE_NVM_MAX_SIZE 384
 #undef CFG_RF_TX_POWER_TABLE_ID
 #define CFG_RF_TX_POWER_TABLE_ID 0
 #undef CFG_BLE_ATT_MTU_MAX
@@ -58,8 +48,9 @@
 #define CFG_BLE_NUM_LINK 2
 #undef CFG_BLE_HOST_EVENT_BUF_SIZE
 #define CFG_BLE_HOST_EVENT_BUF_SIZE 4096
+/* Preserve legacy advertising reports handled by the original application. */
 #undef CFG_BLE_OPTIONS
-#define CFG_BLE_OPTIONS BLE_OPTIONS_EXTENDED_ADV
+#define CFG_BLE_OPTIONS 0
 #undef CFG_BLE_ATTR_PREPARE_WRITE_VALUE_SIZE
 #define CFG_BLE_ATTR_PREPARE_WRITE_VALUE_SIZE BLE_DEFAULT_PREP_WRITE_LIST_SIZE
 #undef CFG_BLE_COC_NBR_MAX

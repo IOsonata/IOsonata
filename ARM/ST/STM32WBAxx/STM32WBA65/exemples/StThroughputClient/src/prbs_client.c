@@ -161,7 +161,7 @@ static void PrbsDone(void)
 	else
 	{
 		(void)aci_gap_terminate_gap_proc(s_Phase == PRBS_CONNECTING ?
-			GAP_DIRECT_CONNECTION_ESTABLISHMENT_PROC : GAP_OBSERVATION_PROC);
+			GAP_DIRECT_CONNECTION_ESTABLISHMENT_PROC : GAP_GENERAL_DISCOVERY_PROC);
 		PrbsPhase(PRBS_DONE);
 	}
 }
@@ -213,15 +213,15 @@ static void PrbsWork(void)
 	{
 		case PRBS_SCAN:
 			LOG_INFO_APP("Starting 60-second %uM trial; target=BlePrbs_SDC\n", s_Phy);
-			status = aci_gap_start_scan(0, GAP_OBSERVATION_PROC, CFG_BD_ADDRESS_TYPE,
-				1, 0, 0, HCI_SCAN_FILTER_NO, HCI_SCANNING_PHYS_LE_1M, scan);
+			status = aci_gap_start_scan(0, GAP_GENERAL_DISCOVERY_PROC, CFG_BD_ADDRESS_TYPE,
+				0, 0, 0, HCI_SCAN_FILTER_NO, HCI_SCANNING_PHYS_LE_1M, scan);
 			if (status == 0)
 			{
 				PrbsPhase(PRBS_SCANNING);
 			}
 			break;
 		case PRBS_STOP_SCAN:
-			status = aci_gap_terminate_gap_proc(GAP_OBSERVATION_PROC);
+			status = aci_gap_terminate_gap_proc(GAP_GENERAL_DISCOVERY_PROC);
 			if (status == 0)
 			{
 				PrbsPhase(PRBS_SCAN_STOPPING);
@@ -313,14 +313,11 @@ static void PrbsWork(void)
 	}
 }
 
-static void PrbsAdvertising(const uint8_t *pData, uint16_t Len, bool Extended)
+static void PrbsAdvertising(const uint8_t *pData, uint16_t Len)
 {
 	uint16_t pos;
 	uint16_t end;
 	uint16_t ad;
-	uint16_t header;
-	uint16_t address;
-	uint16_t rssi;
 	uint8_t count;
 	uint8_t size;
 
@@ -332,25 +329,16 @@ static void PrbsAdvertising(const uint8_t *pData, uint16_t Len, bool Extended)
 	pos = 1;
 	while (count-- != 0)
 	{
-		header = Extended ? 24 : 9;
-		if (pos > Len || Len - pos < header + (Extended ? 0 : 1))
+		if (Len - pos < 10)
 		{
 			return;
 		}
-		end = pos + header + pData[pos + header - 1];
-		if (end > Len || (!Extended && end == Len))
+		end = pos + 9 + pData[pos + 8];
+		if (end >= Len)
 		{
 			return;
 		}
-		/* Ignore incomplete extended data; the target uses complete legacy PDUs. */
-		if (Extended && (PrbsU16(pData + pos) & 0x60) != 0)
-		{
-			pos = end;
-			continue;
-		}
-		address = pos + (Extended ? 3 : 2);
-		rssi = Extended ? pos + 13 : end;
-		ad = pos + header;
+		ad = pos + 9;
 		while (ad < end)
 		{
 			size = pData[ad];
@@ -361,15 +349,15 @@ static void PrbsAdvertising(const uint8_t *pData, uint16_t Len, bool Extended)
 			if (pData[ad + 1] == 9 && size == sizeof(s_Target) &&
 				memcmp(&pData[ad + 2], s_Target, sizeof(s_Target) - 1) == 0)
 			{
-				s_AddressType = pData[address - 1];
-				memcpy(s_Address, &pData[address], 6);
-				LOG_INFO_APP("Found BlePrbs_SDC RSSI=%d\n", (int8_t)pData[rssi]);
+				s_AddressType = pData[pos + 1];
+				memcpy(s_Address, &pData[pos + 2], 6);
+				LOG_INFO_APP("Found BlePrbs_SDC RSSI=%d\n", (int8_t)pData[end]);
 				PrbsPhase(PRBS_STOP_SCAN);
 				return;
 			}
 			ad += size + 1;
 		}
-		pos = end + (Extended ? 0 : 1);
+		pos = end + 1;
 	}
 }
 
@@ -605,10 +593,7 @@ static SVCCTL_EvtAckStatus_t PrbsEvent(void *pEvent)
 		switch (code)
 		{
 			case HCI_LE_ADVERTISING_REPORT_SUBEVT_CODE:
-				PrbsAdvertising(data, len, false);
-				break;
-			case HCI_LE_EXTENDED_ADVERTISING_REPORT_SUBEVT_CODE:
-				PrbsAdvertising(data, len, true);
+				PrbsAdvertising(data, len);
 				break;
 			case HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE:
 				PrbsConnected(data, len, true);
@@ -659,7 +644,7 @@ static SVCCTL_EvtAckStatus_t PrbsEvent(void *pEvent)
 		data += 2;
 		len -= 2;
 		if (code == ACI_GAP_PROC_COMPLETE_VSEVT_CODE && len >= 2 &&
-			data[0] == GAP_OBSERVATION_PROC && s_Phase == PRBS_SCAN_STOPPING)
+			data[0] == GAP_GENERAL_DISCOVERY_PROC && s_Phase == PRBS_SCAN_STOPPING)
 		{
 			if (data[1] != 0)
 			{

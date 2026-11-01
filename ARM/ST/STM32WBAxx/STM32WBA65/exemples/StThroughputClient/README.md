@@ -88,20 +88,17 @@ The native stack event delivery and UART drivers remain different. Earlier
 measurements with separate checkers or UART rates do not isolate stack cost.
 
 
-`dk1_config.h` disables Nucleo buttons/LEDs and matches IOsonata WBA host
-capacity: two links, maximum MTU 251, a 4096-byte host-event FIFO, extended
-advertising support, the default prepare-write list and no CoC channels.
-The benchmark uses one connection, negotiates MTU 247 and starts at 1M PHY. It enables the general
-SVCCTL event callback needed for automatic GAP procedure handling. ST's host
-80-block memory margin is retained. Debug and Release use the Basic Plus
-controller library and matching `ble_basic_plus` headers, as IOsonata does.
-The host NVM cache is 384 64-bit words, registered at its actual size with
-ST's NVM manager, which accounts for its own metadata. Unused long-write/extra-data pointers are NULL.
-RF power table 0 and the controller's default TX power match BlePrbsRx.
-ST's native clock/power setup and NVM persistence implementation remain in use. The middleware
-still comes from `CubeRoot`; use the same middleware revision as IOsonata
-when comparing results. The connection request retains ST's CE length hints (0/80,
-in 0.625 ms units); actual throughput must be measured on hardware.
+The application sources are unchanged from the working comparison at commit
+`6bfba38a`. Only configuration and managed-project settings differ: Basic Plus
+controller/library headers and compiler feature selection, two-link capacity,
+maximum MTU 251, the default prepare-write list, no CoC channels, and RF power
+table 0. The host FIFO remains 4096 bytes and the memory-block margin remains 80.
+
+Extended advertising stays disabled because the original application handles
+legacy advertising reports only. The benchmark still requests one connection
+at 15 ms, negotiates MTU 247 and runs both PHY trials. ST's original NVM sizing
+and explicit TX-power command remain unchanged. This is a configuration-only
+comparison, not an exact match of every IOsonata initialization parameter.
 
 `src/app_ble.c` is copied from STM32CubeWBA v1.10.0, commit
 `4ccfd1526870263657ec8e0854c64cda6ed2b5da`, directory
@@ -140,8 +137,7 @@ and zero application queue drops:
 | Release | 78,535 | 109,877 | 6.754 |
 
 Both passed the 1M target and missed the eight-notification 2M target.
-These measurements used the Basic controller and predate both the shared
-notification queue/reporting code and the matched host configuration.
+These measurements predate the shared notification queue and reporting code.
 The current changes have host-test coverage; target builds and new hardware
 measurements are still required. These are single runs, not a controlled
 estimate of run-to-run variation.
