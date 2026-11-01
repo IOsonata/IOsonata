@@ -1334,7 +1334,29 @@ static void Ble_Hci_Gap_Gatt_Init(void)
   }
 
   /* USER CODE BEGIN Ble_Hci_Gap_Gatt_Init_2 */
+  // IOsonata comparison: the WBA port writes the LE power control RSSI golden
+  // range after BleStack_Init (bt_app_stm32wba.cpp). The same range here, from
+  // dk1_config.h, so the link layer of either build asks no TX power change
+  // from the peer.
+  {
+    const uint8_t golden_range[CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_LEN] = {
+      (uint8_t)(int8_t)CFG_BLE_RSSI_GOLDEN_RANGE_MIN,
+      (uint8_t)(int8_t)CFG_BLE_RSSI_GOLDEN_RANGE_MAX
+    };
 
+    ret = aci_hal_write_config_data(CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_OFFSET,
+                                    CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_LEN,
+                                    golden_range);
+    if (ret != BLE_STATUS_SUCCESS)
+    {
+      LOG_INFO_APP("  Fail   : aci_hal_write_config_data command - CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_OFFSET, result: 0x%02X\n", ret);
+    }
+    else
+    {
+      LOG_INFO_APP("  Success: aci_hal_write_config_data command - CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_OFFSET %d to %d dBm\n",
+                   CFG_BLE_RSSI_GOLDEN_RANGE_MIN, CFG_BLE_RSSI_GOLDEN_RANGE_MAX);
+    }
+  }
   /* USER CODE END Ble_Hci_Gap_Gatt_Init_2 */
 
   LOG_INFO_APP("==>> End Ble_Hci_Gap_Gatt_Init function\n");

@@ -64,4 +64,14 @@
 #undef CFG_PHY_PREF_RX
 #define CFG_PHY_PREF_RX HCI_RX_PHYS_LE_1M_PREF
 
+/* Match the IOsonata WBA LE power control RSSI golden range (app_conf.h of
+ * the library). The ST host default, -77 to -68 dBm, makes the Basic Plus
+ * link layer ask a peer at short range to lower its TX power by 30 dB or
+ * more. This range holds every received level, so no request is made.
+ * Written in Ble_Hci_Gap_Gatt_Init after BleStack_Init. */
+#undef CFG_BLE_RSSI_GOLDEN_RANGE_MIN
+#define CFG_BLE_RSSI_GOLDEN_RANGE_MIN (-100)
+#undef CFG_BLE_RSSI_GOLDEN_RANGE_MAX
+#define CFG_BLE_RSSI_GOLDEN_RANGE_MAX 20
+
 #endif
