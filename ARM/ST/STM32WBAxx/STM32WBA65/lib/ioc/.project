@@ -36,6 +36,21 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/adc_stm32wba.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/adc_stm32wba.h</locationURI>
+		</link>
+		<link>
+			<name>include/app_common.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/app_common.h</locationURI>
+		</link>
+		<link>
+			<name>include/app_conf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/app_conf.h</locationURI>
+		</link>
+		<link>
 			<name>include/app_evt_handler.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
@@ -74,6 +89,11 @@
 			<name>include/cli</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/common_wpan_conf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/common_wpan_conf.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters</name>
@@ -131,6 +151,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/excelitas_serlink.h</locationURI>
 		</link>
 		<link>
+			<name>include/gpdma_stm32wba.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/gpdma_stm32wba.h</locationURI>
+		</link>
+		<link>
 			<name>include/hiddef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/hiddef.h</locationURI>
@@ -164,6 +189,11 @@
 			<name>include/istddef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/istddef.h</locationURI>
+		</link>
+		<link>
+			<name>include/main.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/main.h</locationURI>
 		</link>
 		<link>
 			<name>include/math_linalg.h</name>
@@ -216,6 +246,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/sai_stm32wba.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/sai_stm32wba.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -229,6 +264,11 @@
 			<name>include/stddev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
+		</link>
+		<link>
+			<name>include/stm32_rtos.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/stm32_rtos.h</locationURI>
 		</link>
 		<link>
 			<name>include/stm32wba65xx.h</name>
@@ -286,6 +326,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+		<link>
 			<name>include/utf8.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/utf8.h</locationURI>
@@ -296,6 +341,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/utf8cvt.h</locationURI>
 		</link>
 		<link>
+			<name>include/utilities_conf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/utilities_conf.h</locationURI>
+		</link>
+		<link>
+			<name>include/video</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/CppRuntimeOverload.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
@@ -304,6 +359,11 @@
 			<name>src/ResetEntry.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
+		</link>
+		<link>
+			<name>src/adc_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/adc_stm32wba.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/app_evt_handler.cpp</name>
@@ -359,21 +419,6 @@
 			<name>src/coredev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/pwm_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/wdt_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/rtc_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/rtc_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crc.c</name>
@@ -461,6 +506,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/memcpy_fast.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/miscdev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -511,6 +561,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/stddev.c</locationURI>
 		</link>
 		<link>
+			<name>src/stm32wba_ble</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/storage</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -536,6 +591,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/usb_ctrlr_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/utf8.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/utf8.c</locationURI>
@@ -549,6 +609,11 @@
 			<name>src/vectors_stm32wba65.c</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/src/vectors_stm32wba65.c</locationURI>
+		</link>
+		<link>
+			<name>src/video</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/audio/audiodev.h</name>
@@ -569,6 +634,16 @@
 			<name>include/audio/buzzer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/buzzer.h</locationURI>
+		</link>
+		<link>
+			<name>include/audio/pdm_filter.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/pdm_filter.h</locationURI>
+		</link>
+		<link>
+			<name>include/audio/wm8904.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/wm8904.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>
@@ -826,6 +901,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/ba414ep.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto/crypto_softaes.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
@@ -1011,11 +1091,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/modem.h</locationURI>
 		</link>
 		<link>
-			<name>include/miscdev/tca6424a.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
-		</link>
-		<link>
 			<name>include/miscdev/rtc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/rtc.h</locationURI>
@@ -1024,6 +1099,11 @@
 			<name>include/miscdev/rtc_stm32.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/rtc_stm32.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/tca6424a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
 		</link>
 		<link>
 			<name>include/motion/act.h</name>
@@ -1511,9 +1591,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_msc.h</locationURI>
 		</link>
 		<link>
+			<name>include/video/cam_arducam_mega.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
+		</link>
+		<link>
+			<name>include/video/videodev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
+		</link>
+		<link>
 			<name>src/audio/buzzer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/audio/buzzer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/audio/pdm_filter.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/pdm_filter.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/audio/wm8904.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/wm8904.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_adv.cpp</name>
@@ -1716,6 +1816,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_wba_pka.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_wba_pka.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_wba_platform.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_wba_platform.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/services</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1736,6 +1846,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_nau7802.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/gpdma_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/gpdma_stm32wba.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
@@ -1746,24 +1861,34 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_stm32v2.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/gpdma_stm32wba.cpp</name>
+			<name>src/coredev/i2s_stm32wba.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/gpdma_stm32wba.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/gpdma_stm32wba.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/gpdma_stm32wba.h</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/spi_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/spi_stm32.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/i2s_stm32wba.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/iopincfg_stm32.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pdm_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/pdm_stm32wba.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pwm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/rtc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rtc_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/sai_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/sai_stm32wba.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.cpp</name>
@@ -1781,19 +1906,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi_soft.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/spi_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/timer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/timer_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_stm32.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/coredev/timer_lptim_stm32.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lptim_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer_tim_stm32.cpp</name>
@@ -1811,14 +1941,19 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_stm32.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/ba414ep.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/ba414ep.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_p256.cpp</name>
+			<name>src/crypto/crypto.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_aes_modes.cpp</name>
@@ -1829,6 +1964,16 @@
 			<name>src/crypto/crypto_aes_soft.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/crypto_default_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_p256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
@@ -1844,11 +1989,6 @@
 			<name>src/crypto/crypto_stm32wba.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_stm32wba.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/uECC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>
@@ -1941,6 +2081,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_lcdmtrx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/display/display_ssd1315.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_ssd1315.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/display/display_ssd1351.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_ssd1351.cpp</locationURI>
@@ -1969,6 +2114,11 @@
 			<name>src/display/igfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/igfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/micro-ecc/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/button.cpp</name>
@@ -2276,6 +2426,46 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/tphg_bme680.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/stm32wba_ble/bleplat_wrap.c</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/bleplat_wrap.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/linklayer_plat.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_cs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_cs.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_dp_slp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_dp_slp.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_if.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/ll_sys_if.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_intf.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_intf.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_startup.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_startup.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/power_table.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/power_table.c</locationURI>
+		</link>
+		<link>
 			<name>src/storage/diskio_flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_flash.cpp</locationURI>
@@ -2321,6 +2511,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/nvm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/storage/sdcard_impl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/sdcard_impl.cpp</locationURI>
@@ -2351,16 +2546,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_int.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usbd_int.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_int.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_periodic.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_periodic.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/usb/usb_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
@@ -2369,11 +2554,6 @@
 			<name>src/usb/usb_iso.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_iso.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_iso.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_bulk.cpp</name>
@@ -2401,9 +2581,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_hid.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/usb/usbd_int.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_int.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_iso.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usbd_msc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_msc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_periodic.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_periodic.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/video/cam_arducam_mega.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/services/bt_bas.h</name>
@@ -2764,196 +2964,6 @@
 			<name>src/display/fonts/FreeSerif/FreeSerifIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_wba_pka.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/bt_wba_pka.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_wba_platform.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/bt_wba_platform.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/storage/nvm_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/bleplat_wrap.c</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/bleplat_wrap.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/linklayer_plat.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/ll_sys_if.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/ll_sys_if.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/power_table.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/power_table.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/ll_sys_startup.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_startup.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/ll_sys_intf.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_intf.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/ll_sys_cs.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_cs.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/ll_sys_dp_slp.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_dp_slp.c</locationURI>
-		</link>
-		<link>
-			<name>include/app_common.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/include/app_common.h</locationURI>
-		</link>
-		<link>
-			<name>include/app_conf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/include/app_conf.h</locationURI>
-		</link>
-		<link>
-			<name>include/common_wpan_conf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/include/common_wpan_conf.h</locationURI>
-		</link>
-		<link>
-			<name>include/main.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/include/main.h</locationURI>
-		</link>
-		<link>
-			<name>include/stm32_rtos.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/include/stm32_rtos.h</locationURI>
-		</link>
-		<link>
-			<name>include/utilities_conf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/include/utilities_conf.h</locationURI>
-		</link>
-		<link>
-			<name>src/usb_ctrlr_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/usb_ctrlr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
-		</link>
-		<link>
-			<name>src/display/display_ssd1315.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_ssd1315.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/adc_stm32wba.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/adc_stm32wba.h</locationURI>
-		</link>
-		<link>
-			<name>src/adc_stm32wba.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/adc_stm32wba.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/audio/pdm_filter.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/audio/pdm_filter.h</locationURI>
-		</link>
-		<link>
-			<name>src/audio/pdm_filter.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/audio/pdm_filter.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/pdm_stm32wba.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/pdm_stm32wba.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/sai_stm32wba.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/sai_stm32wba.h</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/sai_stm32wba.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/sai_stm32wba.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/i2s_stm32wba.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/i2s_stm32wba.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/audio/wm8904.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/audio/wm8904.h</locationURI>
-		</link>
-		<link>
-			<name>src/audio/wm8904.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/audio/wm8904.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_default_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/crypto_default_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
-		</link>
-			<link>
-			<name>include/video/videodev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
-		</link>
-		<link>
-			<name>include/video/cam_arducam_mega.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
-		</link>
-		<link>
-			<name>src/video/cam_arducam_mega.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
