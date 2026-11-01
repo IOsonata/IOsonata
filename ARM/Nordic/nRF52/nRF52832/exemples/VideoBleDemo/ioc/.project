@@ -40,10 +40,5 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/video/video_ble_demo.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/video_ble_target.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/video_ble_target.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>

@@ -40,10 +40,5 @@
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
-		<link>
-			<name>src/ble_prbs_target.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/ble_prbs_target.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>

@@ -210,6 +210,10 @@ void BtAttDBInit(size_t MemSize)
 
 BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
 {
+	size_t entrySize;
+	size_t remaining;
+	BtAttDBEntry_t *entry;
+
 	if (pUuid == nullptr || MaxDataLen < 0 || MaxDataLen > 0xFFFF)
 	{
 		return nullptr;
@@ -220,7 +224,14 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 		return nullptr;
 	}
 
-	size_t entrySize = sizeof(BtAttDBEntry_t) + (size_t)MaxDataLen;
+	// Data[1] and trailing padding are part of sizeof, not the header.
+	// Reserve the payload from its actual offset, retaining a full object
+	// for zero-length and short values.
+	entrySize = offsetof(BtAttDBEntry_t, Data) + (size_t)MaxDataLen;
+	if (entrySize < sizeof(BtAttDBEntry_t))
+	{
+		entrySize = sizeof(BtAttDBEntry_t);
+	}
 	entrySize = (entrySize + alignof(BtAttDBEntry_t) - 1U) &
 				~(size_t)(alignof(BtAttDBEntry_t) - 1U);
 
@@ -229,7 +240,7 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 		return nullptr;
 	}
 
-	size_t remaining = s_BtAttDBMemSize - s_BtAttDBMemUsed;
+	remaining = s_BtAttDBMemSize - s_BtAttDBMemUsed;
 
 	// We will write pNext/pPrev into the slot after this entry to seed the
 	// next tail entry. That seed write touches the first few bytes of a
@@ -241,8 +252,7 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 		return nullptr;
 	}
 
-	BtAttDBEntry_t *entry =
-		(BtAttDBEntry_t*)(s_pBtAttDBMem + s_BtAttDBMemUsed);
+	entry = (BtAttDBEntry_t*)(s_pBtAttDBMem + s_BtAttDBMemUsed);
 
 	entry->TypeUuid = *pUuid;
 	entry->Hdl = ++s_LastHdl;

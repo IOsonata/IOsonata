@@ -45,6 +45,40 @@ void TestInvalidArguments()
 	}
 }
 
+void TestPayloadUsesTrailingArrayStorage()
+{
+	BtUuid16_t uuid = { 0, BT_UUID_TYPE_16, 0xFFF1 };
+	BtAttDBEntry_t *entry;
+	BtAttDBMark_t mark;
+	size_t payload = 12;
+	size_t used = offsetof(BtAttDBEntry_t, Data) + payload;
+	size_t capacity = used + sizeof(BtAttDBEntry_t);
+
+	// Exactly enough for the header, payload and intact sentinel.
+	BtAttDBInit(capacity);
+	entry = BtAttDBAddEntry(&uuid, payload);
+	CHECK(entry != nullptr);
+	if (entry == nullptr)
+	{
+		return;
+	}
+	std::memset(entry->Data, 0xA5, payload);
+	BtAttDBMark(&mark);
+	CHECK(mark.MemUsed == used);
+	CHECK(entry->pNext->pPrev == entry);
+	CHECK(entry->pNext->pNext == nullptr);
+	CHECK(BtAttDBAddEntry(&uuid, 0) == nullptr);
+	CHECK(entry->Data[payload - 1] == 0xA5);
+
+	// Zero-length entries still have storage for the complete C++ object.
+	BtAttDBInit(sizeof(BtAttDBEntry_t) * 2);
+	entry = BtAttDBAddEntry(&uuid, 0);
+	CHECK(entry != nullptr);
+	BtAttDBMark(&mark);
+	CHECK(mark.MemUsed == sizeof(BtAttDBEntry_t));
+	CHECK(BtAttDBAddEntry(&uuid, 0) == nullptr);
+}
+
 void TestNativePointerLinks()
 {
 	BtAttDBInit(512);
@@ -89,9 +123,9 @@ void TestNativePointerLinks()
 	CHECK(Address(second) < Address(third));
 	CHECK(Address(third) < Address(tail));
 
-	CHECK(Address(second) - Address(first) >= sizeof(BtAttDBEntry_t) + 1U);
-	CHECK(Address(third) - Address(second) >= sizeof(BtAttDBEntry_t) + 7U);
-	CHECK(Address(tail) - Address(third) >= sizeof(BtAttDBEntry_t) + 19U);
+	CHECK(Address(second) - Address(first) >= offsetof(BtAttDBEntry_t, Data) + 1U);
+	CHECK(Address(third) - Address(second) >= offsetof(BtAttDBEntry_t, Data) + 7U);
+	CHECK(Address(tail) - Address(third) >= offsetof(BtAttDBEntry_t, Data) + 19U);
 
 	std::memset(first->Data, 0x11, first->DataLen);
 	std::memset(second->Data, 0x22, second->DataLen);
@@ -248,6 +282,7 @@ void TestInitMemSizeClamped()
 int main()
 {
 	TestInvalidArguments();
+	TestPayloadUsesTrailingArrayStorage();
 	TestNativePointerLinks();
 	TestExhaustionDoesNotCorruptTail();
 	TestReinitialization();
