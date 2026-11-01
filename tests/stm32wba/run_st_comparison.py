@@ -19,6 +19,7 @@ headers = "\n".join(f.read_text() for f in (wpan / "stack/include/auto").glob("*
 with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
     temp = Path(tmp)
     mocks = {
+        "simple_nvm_arbiter_conf.h": "",
         "app_conf.h": "#include \"cmsis_compiler.h\"\n#define CFG_BD_ADDRESS_TYPE 0\n",
         "app_common.h": "#include <stdint.h>\n#define CFG_TASK_DISCOVER_SERVICES_ID 2\n#define CFG_TASK_DATA_FROM_SERVER_ID 14\n#define CFG_SEQ_PRIO_0 0\n",
         "cmsis_compiler.h": "#include <stdint.h>\n#define __PACKED_STRUCT struct __attribute__((packed))\n#define __PACKED_UNION union __attribute__((packed))\n#define __STATIC_INLINE static inline\n",
@@ -51,6 +52,28 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
     end = native.index("/* USER CODE BEGIN FD_WRAP_FUNCTIONS */", start)
     event_test = (ROOT / "tests/stm32wba/st_comparison_event_test.c").read_text()
     (temp / "event.c").write_text(event_test.replace("/* CALLBACK */", native[start:end]))
+    # Compile both real host initializers against the same SDK and compare every
+    # configuration field, normalizing only addresses of their static buffers.
+    ios = (ROOT / "ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp").read_text()
+    cfg = '#include <assert.h>\n#include <string.h>\n#include "ble_core.h"\n#include "ble_bufsize.h"\n#include "blestack.h"\n'
+    cfg += '#define PLACE_IN_SECTION(x)\n#define CFG_BLE_NVM_MAX_SIZE 384\n#define DIVC(x, y) (((x) + (y) - 1) / (y))\n#define MAX(x, y) ((x) > (y) ? (x) : (y))\n'
+    cfg += native[native.index("#define BLE_GATT_BUF_SIZE"):native.index("#define BLE_DEFAULT_PIN")]
+    cfg += native[native.index("static BleStack_init_t pInitParams;"):native.index("/* USER CODE BEGIN PV */")]
+    cfg += 'static BleStack_init_t reference; static unsigned initCalls;\n'
+    cfg += 'tBleStatus BleStack_Init(const BleStack_init_t *p) { BleStack_init_t v = *p;\n'
+    cfg += 'v.bleStartRamAddress = NULL; v.bleStartRamAddress_GATT = NULL; v.nvm_cache_buffer = NULL; v.host_event_fifo_buffer = NULL;\n'
+    cfg += 'if (initCalls++ == 0) reference = v; else assert(memcmp(&reference, &v, sizeof(v)) == 0); return 0; }\n'
+    start = native.index("static uint8_t HOST_BLE_Init(void)\n{")
+    cfg += native[start:native.index("static void Ble_Hci_Gap_Gatt_Init(void)\n{", start)]
+    defaults = ios[ios.index("#ifndef CFG_BLE_NUM_LINK"):ios.index("// The RAM the stack runs in")]
+    cfg += "".join("#undef " + name + "\n" for name in re.findall(r"#ifndef (CFG_BLE_\w+)", defaults))
+    cfg += defaults
+    cfg += ios[ios.index("static uint32_t s_BleStackRam"):ios.index("// A strong reference must pull")]
+    start = ios.index("BleStack_init_t init;")
+    cfg += 'static void TestIosInit(void) {\n' + ios[start:ios.index("BtWbaPlatformInit();", start)]
+    cfg += 'assert(BleStack_Init(&init) == 0); }\n'
+    cfg += 'int main(void) { TestIosInit(); assert(HOST_BLE_Init() == 0); assert(initCalls == 2); return 0; }\n'
+    (temp / "config.c").write_text(cfg)
     for opt in ("-O0", "-O2"):
         exe = temp / "test"
         subprocess.run(["cc", "-std=c11", opt, "-g", "-fsanitize=undefined", "-fno-sanitize-recover=all",
@@ -63,4 +86,10 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
         subprocess.run(["cc", "-std=c11", opt, "-g", "-fsanitize=undefined",
                         "-fno-sanitize-recover=all", str(temp / "event.c"), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
-        print("ST comparison and split event copy", opt, "UBSan: PASS")
+        subprocess.run(["cc", "-std=c11", opt, "-g", "-fsanitize=undefined",
+                        "-fno-sanitize-recover=all", "-include", str(project / "src/dk1_config.h"),
+                        "-I" + str(temp), "-I" + str(wpan / "stack/include"),
+                        "-I" + str(wpan / "svc/Inc"), "-I" + str(sample / "STM32_WPAN/App"),
+                        str(temp / "config.c"), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+        print("ST comparison, split event copy and matching host configuration", opt, "UBSan: PASS")
