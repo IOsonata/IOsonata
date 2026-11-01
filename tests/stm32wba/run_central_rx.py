@@ -39,7 +39,8 @@ using tBleStatus = uint8_t;
 #define HCI_LE_META_EVT_CODE 0x3e
 #define HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE 1
 #define HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE 10
-uint32_t BtSmpMsTick() { return 123; }
+static unsigned clockReads;
+uint32_t BtSmpMsTick() { clockReads++; return 123; }
 static struct { uint16_t MaxMtu; bool bSecure; } s_BtAppData = {247, false};
 static BtDevice_t peers[2];
 static BtGattDBSrvc_t services[2][BT_DEV_SERVICE_MAXCNT];
@@ -328,6 +329,7 @@ int main()
 	{
 		packet[idx] = uint8_t(idx);
 	}
+	unsigned clockBefore = clockReads;
 	packet[0] = 4;
 	packet[1] = 255;
 	packet[2] = 251;
@@ -342,7 +344,7 @@ int main()
 	}
 	assert(irqState == 1 && queued == 8);
 	assert(BLECB_Indication(packet, sizeof(packet), nullptr, 0) == BLE_STATUS_FAILED);
-	assert(s_EvtRingFull == 1 && s_EvtRingPeak == 8);
+	assert(s_EvtCnt == 8 && s_bEvtFlowBlocked);
 	memset(packet + 3, 0, sizeof(packet) - 3); // queued payload has its own storage
 	BtAppEvtDrain(0, nullptr);
 	assert(routed == 8 && hostWake == 1 && irqState == 1 && s_EvtCnt == 0);
@@ -354,11 +356,12 @@ int main()
 	packet[3] = HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE;
 	idx = s_EvtHead;
 	assert(BLECB_Indication(packet, 4, nullptr, 0) == 0);
-	assert(s_EvtRing[idx].bTraceTime && s_EvtRing[idx].ReceivedMs == 123);
+	assert(s_EvtRing[idx].Len == 4 && memcmp(s_EvtRing[idx].Data, packet, 4) == 0);
 	packet[1] = HCI_DISCONNECTION_COMPLETE_EVT_CODE;
 	idx = s_EvtHead;
 	assert(BLECB_Indication(packet, 4, nullptr, 0) == 0);
-	assert(s_EvtRing[idx].bTraceTime && s_EvtRing[idx].ReceivedMs == 123);
+	assert(s_EvtRing[idx].Len == 4 && memcmp(s_EvtRing[idx].Data, packet, 4) == 0);
+	assert(clockReads == clockBefore);
 }
 '''
 with tempfile.TemporaryDirectory(prefix='wba-central-') as temp:

@@ -269,8 +269,6 @@ static volatile bool s_bEvtDrainOwed = false;
 
 typedef struct __Bt_App_Wba_Evt {
 	uint16_t	Len;
-	bool		bTraceTime;
-	uint32_t	ReceivedMs;
 	uint8_t		Data[BT_APP_WBA_EVT_MAXLEN];
 } BtAppWbaEvt_t;
 
@@ -279,20 +277,6 @@ static volatile uint8_t s_EvtHead = 0;		// next slot to write
 static volatile uint8_t s_EvtTail = 0;		// next slot to read
 static volatile uint8_t s_EvtCnt = 0;
 static bool s_bEvtFlowBlocked = false;
-static uint32_t s_HostProcessCount;
-static uint32_t s_StatusCheckCount;
-
-// Port-wide counters since boot. Report at disconnect, never per packet.
-// Queue refusals and ring-full attempts are backpressure, not packet loss.
-static volatile uint32_t s_HostRequestedMs;
-static volatile uint32_t s_HostQueueRefused;
-static uint32_t s_HostWaitMaxMs;
-static uint32_t s_HostWaitOver1Ms;
-static uint32_t s_HostWaitOver15Ms;
-static uint32_t s_HostRunMaxMs;
-static uint32_t s_EvtRingFull;
-static uint32_t s_EvtRingPeak;
-
 static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload);
 extern "C" void BleStackCB_Process(void);
 
@@ -301,36 +285,17 @@ extern "C" void BleStackCB_Process(void);
 
 static void BleHostEvt(uint32_t Evt, void *pCtx)
 {
-	uint32_t start;
-	uint32_t elapsed;
 	uint32_t state;
-	uint32_t wait;
 	uint32_t passes;
 	int result;
 
 	(void)Evt;
 	(void)pCtx;
 
-	// BtSmpMsTick protects its controller read internally. Keep its 64-bit
-	// time conversion outside our queue-state critical section.
-	start = BtSmpMsTick();
 	state = __get_PRIMASK();
 	__disable_irq();
-	wait = start - s_HostRequestedMs;
 	s_bBleHostQueued = false;
 	__set_PRIMASK(state);
-	if (wait > s_HostWaitMaxMs)
-	{
-		s_HostWaitMaxMs = wait;
-	}
-	if (wait >= 1)
-	{
-		s_HostWaitOver1Ms++;
-	}
-	if (wait >= 15)
-	{
-		s_HostWaitOver15Ms++;
-	}
 	// Drain pending host work without a queue round trip for every pass.
 	// Bound the burst independently of PHY: a call need not produce a packet.
 	// Yield when the event ring fills so its queued consumer can free slots.
@@ -338,23 +303,11 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 	for (passes = 0; passes < BT_APP_WBA_EVT_SLOTS &&
 		s_EvtCnt < BT_APP_WBA_EVT_SLOTS; passes++)
 	{
-		s_HostProcessCount++;
 		result = BleStack_Process();
 		if (result != 0 || s_bEvtFlowBlocked)
 		{
 			break;
 		}
-	}
-	elapsed = BtSmpMsTick() - start;
-	if (elapsed > s_HostRunMaxMs)
-	{
-		s_HostRunMaxMs = elapsed;
-	}
-	if (elapsed >= 100)
-	{
-		SysLogPrintf(SysLogGet(), "ms=%lu WBA host: process=%lu ms result=%d ring=%u\r\n",
-				(unsigned long)BtSmpMsTick(), (unsigned long)elapsed,
-				result, (unsigned)s_EvtCnt);
 	}
 	if (result == 0)
 	{
@@ -370,27 +323,16 @@ extern "C" void BleStackCB_Process(void)
 {
 	uint32_t state;
 	bool queue;
-	bool stamp = false;
 
 	state = __get_PRIMASK();
 	__disable_irq();
 	queue = s_bBleHostQueued == false;
 	if (queue)
 	{
-		// Preserve the first request across coalescing and queue-full retries.
-		stamp = s_bBleHostOwed == false;
 		s_bBleHostQueued = true;
 		s_bBleHostOwed = false;
 	}
 	__set_PRIMASK(state);
-
-	// The reservation coalesces IRQ requests while the timestamp is captured.
-	// Publish it before BtEvtQue can make the consumer runnable. The clock
-	// reader masks only the raw controller read, not its 64-bit conversion.
-	if (stamp)
-	{
-		s_HostRequestedMs = BtSmpMsTick();
-	}
 
 	// The reservation covers interrupt requests during BtEvtQue. Keep the
 	// queue call outside the critical section for ISR-safe RTOS overrides.
@@ -398,7 +340,6 @@ extern "C" void BleStackCB_Process(void)
 	{
 		state = __get_PRIMASK();
 		__disable_irq();
-		s_HostQueueRefused++;
 		s_bBleHostOwed = true;
 		s_bBleHostQueued = false;
 		__set_PRIMASK(state);
@@ -428,13 +369,6 @@ static void BtAppEvtDrain(uint32_t Evt, void *pCtx)
 	while (s_EvtCnt > 0)
 	{
 		event = &s_EvtRing[s_EvtTail];
-		if (event->bTraceTime)
-		{
-			SysLogPrintf(SysLogGet(), "ms=%lu WBA event delivery: evt=0x%02x received_ms=%lu queued_ms=%lu\r\n",
-					(unsigned long)BtSmpMsTick(), (unsigned)event->Data[1],
-					(unsigned long)event->ReceivedMs,
-					(unsigned long)(BtSmpMsTick() - event->ReceivedMs));
-		}
 		BtWbaEventRouterRun(event->Data);
 		s_EvtTail = (uint8_t)((s_EvtTail + 1) % BT_APP_WBA_EVT_SLOTS);
 		state = __get_PRIMASK();
@@ -492,7 +426,6 @@ extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 	total = (uint32_t)Length + ExtLength;
 	if (s_EvtCnt >= BT_APP_WBA_EVT_SLOTS)
 	{
-		s_EvtRingFull++;
 		s_bEvtFlowBlocked = true;
 		return BLE_STATUS_FAILED;
 	}
@@ -510,24 +443,10 @@ extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 	{
 		memcpy(event->Data + Length, pExtData, ExtLength);
 	}
-	// Capture control-event arrival without logging or stack calls in the
-	// host callback. Notification processing does not read the clock here.
-	event->bTraceTime = event->Data[1] == HCI_DISCONNECTION_COMPLETE_EVT_CODE ||
-		(event->Data[1] == HCI_LE_META_EVT_CODE && total >= 4 &&
-		 (event->Data[3] == HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE ||
-		  event->Data[3] == HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE));
-	if (event->bTraceTime)
-	{
-		event->ReceivedMs = BtSmpMsTick();
-	}
 	s_EvtHead = (uint8_t)((s_EvtHead + 1) % BT_APP_WBA_EVT_SLOTS);
 	state = __get_PRIMASK();
 	__disable_irq();
 	s_EvtCnt++;
-	if (s_EvtCnt > s_EvtRingPeak)
-	{
-		s_EvtRingPeak = s_EvtCnt;
-	}
 	__set_PRIMASK(state);
 
 	BtAppEvtDrainQue();
@@ -544,7 +463,6 @@ extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
 
 void BtAppCheckStatus(void)
 {
-	s_StatusCheckCount++;
 	BtAppTickQue();
 	if (s_bEvtDrainOwed)
 	{
@@ -1228,12 +1146,6 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					(unsigned)p->Reason);
 			if (p->Status == BLE_STATUS_SUCCESS)
 			{
-				SysLogPrintf(SysLogGet(), "WBA host totals since boot: calls=%lu queue_refused=%lu ring_full=%lu ring_peak=%lu\r\n",
-						(unsigned long)s_HostProcessCount, (unsigned long)s_HostQueueRefused,
-						(unsigned long)s_EvtRingFull, (unsigned long)s_EvtRingPeak);
-				SysLogPrintf(SysLogGet(), "WBA host timing since boot: wait_max_ms=%lu wait_ge_1ms=%lu wait_ge_15ms=%lu run_max_ms=%lu\r\n",
-						(unsigned long)s_HostWaitMaxMs, (unsigned long)s_HostWaitOver1Ms,
-						(unsigned long)s_HostWaitOver15Ms, (unsigned long)s_HostRunMaxMs);
 				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
 				{
 					s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
@@ -2090,9 +2002,6 @@ static volatile uint8_t s_BtAppTickState = BT_APP_TICK_IDLE;
 // pairing timeout, so there is no generic SMP check here.
 static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 {
-	BtDevice_t *peer;
-	uint16_t idx;
-
 	(void)Evt;
 	(void)pCtx;
 
@@ -2100,19 +2009,6 @@ static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 	BtGapWbaConnParamProcess();
 	BtGattIndicationTimeoutCheck();
 	BtSmpBondWbaPoll();
-	for (idx = 0; idx < BtPeerCount(); idx++)
-	{
-		peer = BtPeerSlot(idx);
-		if (peer != nullptr && peer->Conn.Hdl != BT_CONN_HDL_INVALID &&
-			peer->Discovery.Phase != DISC_IDLE && peer->Discovery.Phase != DISC_FAILED)
-		{
-			SysLogPrintf(SysLogGet(), "ms=%lu WBA discovery: hdl=%u phase=%u mtu=%u host=%lu checks=%lu ring=%u\r\n",
-					(unsigned long)BtSmpMsTick(), (unsigned)peer->Conn.Hdl,
-					(unsigned)peer->Discovery.Phase, (unsigned)peer->Conn.MaxMtu,
-					(unsigned long)s_HostProcessCount, (unsigned long)s_StatusCheckCount,
-					(unsigned)s_EvtCnt);
-		}
-	}
 }
 
 static void BtAppTickQue(void)

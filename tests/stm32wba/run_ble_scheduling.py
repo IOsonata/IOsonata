@@ -28,21 +28,11 @@ code = r'''
 #include <initializer_list>
 #define NDEBUG
 #define SysLogPrintf(...) ((void)0)
-static uint32_t now, processMs;
 static uint32_t irq;
-static uint32_t expectedClockMask;
-static bool interruptClockRequest;
-extern "C" void BleStackCB_Process(void);
 static uint32_t BtSmpMsTick()
 {
-	// Port clock conversion must not inherit an extra queue-state IRQ mask.
-	assert(irq == expectedClockMask);
-	if (interruptClockRequest)
-	{
-		interruptClockRequest = false;
-		BleStackCB_Process();
-	}
-	return now;
+	assert(false && "Host scheduling must not read the diagnostic clock");
+	return 0;
 }
 static unsigned hostRuns, taskRuns, count, head, tail;
 static bool refuse, interruptRequest, requestWhileRunning;
@@ -55,7 +45,6 @@ static bool emitEvent;
 using Handler = void (*)(uint32_t, void *);
 static Handler events[4];
 static volatile bool s_bBleHostQueued, s_bBleHostOwed;
-static uint32_t s_HostProcessCount;
 static void (*s_SeqTask[32])(void);
 static volatile uint32_t s_SeqPend;
 static volatile bool s_SeqQueued, s_SeqOwed;
@@ -90,7 +79,6 @@ static bool BtEvtQue(uint32_t, void *, Handler handler)
 static int BleStack_Process()
 {
 	hostRuns++;
-	now += processMs;
 	if (requestWhileRunning)
 	{
 		requestWhileRunning = false;
@@ -116,8 +104,6 @@ static void RunOne()
 	handler(0, nullptr);
 }
 '''
-start = app.index('// Port-wide counters since boot.')
-code += app[start:app.index('static BtWbaEvtFlow_t BtAppHciEvtHandler', start)]
 for name in ['BleHostEvt', 'BleStackCB_Process']:
     code += function(app, name)
 for name in ['BtWbaSeqQue', 'BtWbaSeqEvt', 'UTIL_SEQ_SetTask']:
@@ -145,13 +131,6 @@ int main()
 	RunOne();
 	assert(hostRuns == 1 && taskRuns == 2 && count == 0);
 
-	// An IRQ during timestamp capture must see the reserved host work.
-	interruptClockRequest = true;
-	BleStackCB_Process();
-	assert(count == 1);
-	RunOne();
-	assert(count == 0);
-
 	// A request during queue admission coalesces with its reservation.
 	interruptRequest = true;
 	BleStackCB_Process();
@@ -164,32 +143,21 @@ int main()
 
 	// A full queue retains work for the status retry, including masked callers.
 	irq = 1;
-	expectedClockMask = 1;
 	refuse = true;
-	now = 100;
 	BleStackCB_Process();
-	assert(s_HostQueueRefused == 1);
-	now = 110;
 	assert(irq == 1 && s_bBleHostOwed && !s_bBleHostQueued);
 	refuse = false;
 	BleStackCB_Process();
 	assert(irq == 1 && !s_bBleHostOwed && s_bBleHostQueued && count == 1);
-	now = 116;
-	processMs = 2;
 	RunOne();
 	assert(!count);
-	assert(s_HostWaitMaxMs == 16 && s_HostWaitOver15Ms == 1);
-	assert(s_HostWaitOver1Ms == 1 && s_HostRunMaxMs == 2);
-	processMs = 0;
 
-	// Coalescing preserves the first timestamp across clock wrap.
-	now = 0xfffffffeu;
+	// Repeated requests still coalesce without diagnostic timestamps.
 	BleStackCB_Process();
-	now = 1;
 	BleStackCB_Process();
+	assert(count == 1);
 	RunOne();
-	assert(s_HostWaitMaxMs == 16 && s_HostWaitOver1Ms == 2);
-	assert(s_HostWaitOver15Ms == 1 && !count);
+	assert(!count && irq == 1);
 
 	// Four- and eight-event bursts complete in one dispatch.
 	for (unsigned size : {4U, 8U})
