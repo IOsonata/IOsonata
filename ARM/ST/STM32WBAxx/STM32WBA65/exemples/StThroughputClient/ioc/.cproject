@@ -81,7 +81,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Utilities/tim_serv&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Utilities/lpm/tiny_lpm&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;" />
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/config/ble_basic&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/svc/Src&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc&quot;" />
@@ -99,7 +99,7 @@
 									<listOptionValue builtIn="false" value="USE_HAL_DRIVER" />
 									<listOptionValue builtIn="false" value="STM32WBA65xx" />
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a" />
-									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1" />
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_FEATURES" />
 									<listOptionValue builtIn="false" value="DEBUG" />
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other.5001" name="Other compiler flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other" value="-include ../../src/dk1_config.h" valueType="string" />
@@ -137,7 +137,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Utilities/tim_serv&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Utilities/lpm/tiny_lpm&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;" />
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/config/ble_basic&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/svc/Src&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc&quot;" />
@@ -155,7 +155,7 @@
 									<listOptionValue builtIn="false" value="USE_HAL_DRIVER" />
 									<listOptionValue builtIn="false" value="STM32WBA65xx" />
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a" />
-									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1" />
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_FEATURES" />
 									<listOptionValue builtIn="false" value="DEBUG" />
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.773595059" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean" />
@@ -302,7 +302,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Utilities/tim_serv&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Utilities/lpm/tiny_lpm&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;" />
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/config/ble_basic&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/svc/Src&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc&quot;" />
@@ -320,7 +320,7 @@
 									<listOptionValue builtIn="false" value="USE_HAL_DRIVER" />
 									<listOptionValue builtIn="false" value="STM32WBA65xx" />
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a" />
-									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1" />
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_FEATURES" />
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other.5002" name="Other compiler flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other" value="-include ../../src/dk1_config.h" valueType="string" />
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.77347841" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated" />
@@ -357,7 +357,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Utilities/tim_serv&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Utilities/lpm/tiny_lpm&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN&quot;" />
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;" />
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/config/ble_basic&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/ble/svc/Src&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CubeRoot}/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc&quot;" />
@@ -375,7 +375,7 @@
 									<listOptionValue builtIn="false" value="USE_HAL_DRIVER" />
 									<listOptionValue builtIn="false" value="STM32WBA65xx" />
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a" />
-									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1" />
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_FEATURES" />
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1870897350" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean" />
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.736013882" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean" />
