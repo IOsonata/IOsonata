@@ -153,8 +153,14 @@ static uint16_t BtAttGetMtuForConn(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 
-	if (pConn != nullptr && pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN)
+	if (pConn != nullptr)
 	{
+		if (pConn->Conn.MaxMtu < BT_ATT_MTU_MIN)
+		{
+			// Local capacity does not negotiate this peer's ATT MTU.
+			return BT_ATT_MTU_MIN;
+		}
+
 		// Clamp here rather than trusting every writer of Conn.MaxMtu. This
 		// value bounds both the size of a response written into the caller's
 		// buffer and the largest request accepted, so the bound has to hold

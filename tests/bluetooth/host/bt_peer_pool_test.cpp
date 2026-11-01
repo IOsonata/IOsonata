@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_att.h"
 
 namespace {
 
@@ -107,6 +108,10 @@ void TestAllocationAndLongWriteSlices()
 
 	if (first != nullptr && second != nullptr && third != nullptr)
 	{
+		CHECK(first->Conn.MaxMtu == BT_ATT_MTU_MIN);
+		CHECK(second->Conn.MaxMtu == BT_ATT_MTU_MIN);
+		first->Conn.MaxMtu = 100;
+		CHECK(BtPeerAlloc(0x10)->Conn.MaxMtu == 100);
 		CHECK(first->Conn.pLongWrBuff == longWrite.data());
 		CHECK(second->Conn.pLongWrBuff == longWrite.data() + 32);
 		CHECK(third->Conn.pLongWrBuff == longWrite.data() + 64);
@@ -133,6 +138,7 @@ void TestAllocationAndLongWriteSlices()
 	CHECK(replacement == second);
 	if (replacement != nullptr)
 	{
+		CHECK(replacement->Conn.MaxMtu == BT_ATT_MTU_MIN);
 		CHECK(replacement->Conn.pLongWrBuff == longWrite.data() + 32);
 		CHECK(replacement->Conn.LongWrBuffSize == 32);
 	}
