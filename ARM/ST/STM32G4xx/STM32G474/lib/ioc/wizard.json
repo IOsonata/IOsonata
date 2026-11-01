@@ -9,8 +9,7 @@
   ],
   "includes": [
     "${iosonata}/ARM/ST/include",
-    "${iosonata}/ARM/ST/STM32G4xx/include",
-    "${iosonata}/ARM/ST/STM32G4xx/STM32G474/lib/include"
+    "${iosonata}/ARM/ST/STM32G4xx/include"
   ],
   "linker_script": "${iosonata}/ARM/ST/STM32G4xx/ldscript/gcc_stm32g474xx.ld",
   "lib_path": "${iosonata}/ARM/ST/STM32G4xx/STM32G474/lib/ioc/${config}",

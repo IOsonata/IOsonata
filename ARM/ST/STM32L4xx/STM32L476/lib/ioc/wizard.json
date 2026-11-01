@@ -9,8 +9,7 @@
   ],
   "includes": [
     "${iosonata}/ARM/ST/include",
-    "${iosonata}/ARM/ST/STM32L4xx/include",
-    "${iosonata}/ARM/ST/STM32L4xx/STM32L476/lib/include"
+    "${iosonata}/ARM/ST/STM32L4xx/include"
   ],
   "linker_script": "${iosonata}/ARM/ST/STM32L4xx/ldscript/gcc_stm32l476xx.ld",
   "lib_path": "${iosonata}/ARM/ST/STM32L4xx/STM32L476/lib/ioc/${config}",

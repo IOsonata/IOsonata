@@ -9,11 +9,9 @@
   ],
   "includes": [
     "${iosonata}/ARM/ST/include",
-    "${iosonata}/ARM/ST/STM32H7xx/include",
-    "${iosonata}/ARM/ST/STM32H7xx/STM32H753/lib/include"
+    "${iosonata}/ARM/ST/STM32H7xx/include"
   ],
   "linker_script": "${iosonata}/ARM/ST/STM32H7xx/ldscript/gcc_stm32h753xx.ld",
   "lib_path": "${iosonata}/ARM/ST/STM32H7xx/STM32H753/lib/ioc/${config}",
   "lib": "IOsonata_STM32H753"
 }
-

@@ -7,7 +7,8 @@
   "defines": [],
   "includes": [
     "${iosonata}/ARM/Renesas/include",
-    "${iosonata}/ARM/Renesas/RE01/include"
+    "${iosonata}/ARM/Renesas/RE01/include",
+    "${iosonata}/ARM/Renesas/RE01/RE01_1500KB/lib/include"
   ],
   "linker_script": "${iosonata}/ARM/Renesas/RE01/ldscript/gcc_re01_1500kb.ld",
   "lib_path": "${iosonata}/ARM/Renesas/RE01/RE01_1500KB/lib/ioc/${config}",
