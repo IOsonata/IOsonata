@@ -160,7 +160,7 @@ static void __disable_irq() { irqState = 1; }
 static void __set_PRIMASK(uint32_t state) { irqState = state; }
 static void BtAppEvtDrainQue() { queued++; }
 static void BleStackCB_Process() { hostWake++; }
-static void BtWbaEventRouterRun(void *data)
+static void BtAppHciEvtHandler(void *data)
 {
 	uint8_t *p = (uint8_t *)data;
 	unsigned idx;
