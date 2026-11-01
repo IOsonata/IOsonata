@@ -169,7 +169,7 @@ extern UART g_Uart;
 #define DEBUG_PRINTF(...)
 #endif
 
-// Link and security status on SysLog for bench runs. A release
+// Link, security and host timing status on SysLog for bench runs. A release
 // build defines NDEBUG, which removes these lines. Errors are always printed.
 #ifndef NDEBUG
 #define STATUS_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
@@ -284,7 +284,12 @@ static uint32_t s_StatusCheckCount;
 
 // Port-wide counters since boot. Report at disconnect, never per packet.
 // Queue refusals and ring-full attempts are backpressure, not packet loss.
+static volatile uint32_t s_HostRequestedMs;
 static volatile uint32_t s_HostQueueRefused;
+static uint32_t s_HostWaitMaxMs;
+static uint32_t s_HostWaitOver1Ms;
+static uint32_t s_HostWaitOver15Ms;
+static uint32_t s_HostRunMaxMs;
 static uint32_t s_EvtRingFull;
 static uint32_t s_EvtRingPeak;
 
@@ -296,17 +301,36 @@ extern "C" void BleStackCB_Process(void);
 
 static void BleHostEvt(uint32_t Evt, void *pCtx)
 {
+	uint32_t start;
+	uint32_t elapsed;
 	uint32_t state;
+	uint32_t wait;
 	uint32_t passes;
 	int result;
 
 	(void)Evt;
 	(void)pCtx;
 
+	// BtSmpMsTick protects its controller read internally. Keep its 64-bit
+	// time conversion outside our queue-state critical section.
+	start = BtSmpMsTick();
 	state = __get_PRIMASK();
 	__disable_irq();
+	wait = start - s_HostRequestedMs;
 	s_bBleHostQueued = false;
 	__set_PRIMASK(state);
+	if (wait > s_HostWaitMaxMs)
+	{
+		s_HostWaitMaxMs = wait;
+	}
+	if (wait >= 1)
+	{
+		s_HostWaitOver1Ms++;
+	}
+	if (wait >= 15)
+	{
+		s_HostWaitOver15Ms++;
+	}
 	// Drain pending host work without a queue round trip for every pass.
 	// Bound the burst independently of PHY: a call need not produce a packet.
 	// Yield when the event ring fills so its queued consumer can free slots.
@@ -320,6 +344,17 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 		{
 			break;
 		}
+	}
+	elapsed = BtSmpMsTick() - start;
+	if (elapsed > s_HostRunMaxMs)
+	{
+		s_HostRunMaxMs = elapsed;
+	}
+	if (elapsed >= 100)
+	{
+		SysLogPrintf(SysLogGet(), "ms=%lu WBA host: process=%lu ms result=%d ring=%u\r\n",
+				(unsigned long)BtSmpMsTick(), (unsigned long)elapsed,
+				result, (unsigned)s_EvtCnt);
 	}
 	if (result == 0)
 	{
@@ -335,16 +370,27 @@ extern "C" void BleStackCB_Process(void)
 {
 	uint32_t state;
 	bool queue;
+	bool stamp = false;
 
 	state = __get_PRIMASK();
 	__disable_irq();
 	queue = s_bBleHostQueued == false;
 	if (queue)
 	{
+		// Preserve the first request across coalescing and queue-full retries.
+		stamp = s_bBleHostOwed == false;
 		s_bBleHostQueued = true;
 		s_bBleHostOwed = false;
 	}
 	__set_PRIMASK(state);
+
+	// The reservation coalesces IRQ requests while the timestamp is captured.
+	// Publish it before BtEvtQue can make the consumer runnable. The clock
+	// reader masks only the raw controller read, not its 64-bit conversion.
+	if (stamp)
+	{
+		s_HostRequestedMs = BtSmpMsTick();
+	}
 
 	// The reservation covers interrupt requests during BtEvtQue. Keep the
 	// queue call outside the critical section for ISR-safe RTOS overrides.
@@ -389,7 +435,7 @@ static void BtAppEvtDrain(uint32_t Evt, void *pCtx)
 					(unsigned long)event->ReceivedMs,
 					(unsigned long)(BtSmpMsTick() - event->ReceivedMs));
 		}
-		(void)BtAppHciEvtHandler(event->Data);
+		BtWbaEventRouterRun(event->Data);
 		s_EvtTail = (uint8_t)((s_EvtTail + 1) % BT_APP_WBA_EVT_SLOTS);
 		state = __get_PRIMASK();
 		__disable_irq();
@@ -1167,290 +1213,7 @@ static void BtAppWbaLinkTrace(const hci_event_pckt *pEvt)
 // bt_scan_stm32wba.cpp via a separately registered observer).
 static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 {
-	hci_event_pckt *pEvt;
-	hci_event_pckt *pEvtPkt;
-
-	if (pPayload == nullptr)
-	{
-		return BTWBA_EVT_FLOW_ENABLE;
-	}
-
-	pEvt =
-		(hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
-
-	if (pEvt->evt == HCI_DISCONNECTION_COMPLETE_EVT_CODE)
-	{
-		if (pEvt->plen < sizeof(hci_disconnection_complete_event_rp0))
-		{
-			return BTWBA_EVT_FLOW_ENABLE;
-		}
-		auto *p = (hci_disconnection_complete_event_rp0 *)pEvt->data;
-		if (p->Status == 0)
-		{
-			BtGapWbaConnParamsDisconnected(p->Connection_Handle);
-		}
-	}
-	else if (pEvt->evt == HCI_ENCRYPTION_CHANGE_EVT_CODE &&
-		pEvt->plen < sizeof(hci_encryption_change_event_rp0))
-	{
-		return BTWBA_EVT_FLOW_ENABLE;
-	}
-	else if (pEvt->evt == HCI_LE_META_EVT_CODE)
-	{
-		const size_t fixed = offsetof(evt_le_meta_event, data);
-		if (pEvt->plen < fixed)
-		{
-			return BTWBA_EVT_FLOW_ENABLE;
-		}
-		if (pEvt->plen >= fixed)
-		{
-			evt_le_meta_event *pMeta = (evt_le_meta_event *)pEvt->data;
-			size_t available = (size_t)pEvt->plen - fixed;
-
-			switch (pMeta->subevent)
-			{
-				case HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE:
-					if (available < sizeof(hci_le_connection_complete_event_rp0))
-					{
-						return BTWBA_EVT_FLOW_ENABLE;
-					}
-					if (available >= sizeof(
-							hci_le_connection_complete_event_rp0))
-					{
-						auto *p = (hci_le_connection_complete_event_rp0 *)pMeta->data;
-						if (p->Status == 0)
-						{
-							BtGapWbaConnParamsConnected(
-								p->Connection_Handle, p->Role, p->Conn_Interval,
-								p->Conn_Latency, p->Supervision_Timeout);
-						}
-					}
-					break;
-
-				case HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE:
-				{
-					const hci_le_enhanced_connection_complete_event_rp0 *p;
-
-					if (available < sizeof(*p))
-					{
-						return BTWBA_EVT_FLOW_ENABLE;
-					}
-					p = (const hci_le_enhanced_connection_complete_event_rp0 *)pMeta->data;
-					if (p->Status == BLE_STATUS_SUCCESS)
-					{
-						BtGapWbaConnParamsConnected(
-							p->Connection_Handle, p->Role, p->Conn_Interval,
-							p->Conn_Latency, p->Supervision_Timeout);
-					}
-					break;
-				}
-
-				case HCI_LE_PHY_UPDATE_COMPLETE_SUBEVT_CODE:
-				{
-					const hci_le_phy_update_complete_event_rp0 *p;
-
-					if (available < sizeof(*p))
-					{
-						return BTWBA_EVT_FLOW_ENABLE;
-					}
-					p = (const hci_le_phy_update_complete_event_rp0 *)pMeta->data;
-					BtGapWbaPhyUpdateComplete(p->Connection_Handle);
-					break;
-				}
-
-				case HCI_LE_CONNECTION_UPDATE_COMPLETE_SUBEVT_CODE:
-					if (available >= sizeof(
-							hci_le_connection_update_complete_event_rp0))
-					{
-						auto *p =
-							(hci_le_connection_update_complete_event_rp0 *)pMeta->data;
-						BtGapWbaConnParamsUpdateComplete(
-							p->Connection_Handle, p->Status, p->Conn_Interval,
-							p->Conn_Latency, p->Supervision_Timeout);
-					}
-					break;
-
-				default:
-					break;
-			}
-		}
-	}
-
-	if (pEvt->evt == HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE)
-	{
-		if (pEvt->plen < offsetof(evt_blecore_aci, data))
-		{
-			return BTWBA_EVT_FLOW_ENABLE;
-		}
-
-		evt_blecore_aci *pAci = (evt_blecore_aci *)pEvt->data;
-		size_t available =
-			(size_t)pEvt->plen - offsetof(evt_blecore_aci, data);
-
-		switch (pAci->ecode)
-		{
-			case ACI_GATT_PROC_COMPLETE_VSEVT_CODE:
-				if (available < sizeof(aci_gatt_proc_complete_event_rp0))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-
-			case ACI_ATT_EXCHANGE_MTU_RESP_VSEVT_CODE:
-				if (available < sizeof(aci_att_exchange_mtu_resp_event_rp0))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-
-			case ACI_GAP_PAIRING_COMPLETE_VSEVT_CODE:
-				if (available < sizeof(aci_gap_pairing_complete_event_rp0))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-
-			case ACI_GAP_NUMERIC_COMPARISON_VALUE_VSEVT_CODE:
-				if (available < sizeof(aci_gap_numeric_comparison_value_event_rp0))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-
-			case ACI_GAP_PASS_KEY_REQ_VSEVT_CODE:
-				if (available < sizeof(aci_gap_pass_key_req_event_rp0))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-
-			case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:
-			{
-				const size_t fixed = offsetof(aci_gatt_attribute_modified_event_rp0, Attr_Data);
-				const aci_gatt_attribute_modified_event_rp0 *p =
-					(const aci_gatt_attribute_modified_event_rp0 *)pAci->data;
-
-				if (available < fixed ||
-					!BtWbaEvtRangeValid(fixed, p->Attr_Data_Length, available))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-			}
-
-			case ACI_GATT_NOTIFICATION_VSEVT_CODE:
-			{
-				const size_t fixed = offsetof(aci_gatt_notification_event_rp0, Attribute_Value);
-				const aci_gatt_notification_event_rp0 *p =
-						(const aci_gatt_notification_event_rp0 *)pAci->data;
-
-				if (available < fixed ||
-					!BtWbaEvtRangeValid(fixed, p->Attribute_Value_Length, available))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				BtGattClientNotified(p->Connection_Handle, p->Attribute_Handle,
-					(uint8_t *)p->Attribute_Value, p->Attribute_Value_Length);
-				return BTWBA_EVT_FLOW_ENABLE;
-			}
-			case ACI_GATT_INDICATION_VSEVT_CODE:
-			{
-				const size_t fixed = offsetof(aci_gatt_indication_event_rp0, Attribute_Value);
-				const aci_gatt_indication_event_rp0 *p =
-						(const aci_gatt_indication_event_rp0 *)pAci->data;
-
-				if (available < fixed ||
-					!BtWbaEvtRangeValid(fixed, p->Attribute_Value_Length, available))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-			}
-			case ACI_ATT_READ_BY_GROUP_TYPE_RESP_VSEVT_CODE:
-				if (!BtWbaDiscServiceEventValid(
-						(aci_att_read_by_group_type_resp_event_rp0 *)pAci->data,
-						available))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-
-			case ACI_ATT_READ_BY_TYPE_RESP_VSEVT_CODE:
-				if (!BtWbaDiscCharEventValid(
-						(aci_att_read_by_type_resp_event_rp0 *)pAci->data,
-						available))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-
-			case ACI_ATT_FIND_INFO_RESP_VSEVT_CODE:
-				if (!BtWbaDiscInfoEventValid(
-						(aci_att_find_info_resp_event_rp0 *)pAci->data,
-						available))
-				{
-					return BTWBA_EVT_FLOW_ENABLE;
-				}
-				break;
-
-#ifdef ACI_L2CAP_CONNECTION_UPDATE_RESP_VSEVT_CODE
-			case ACI_L2CAP_CONNECTION_UPDATE_RESP_VSEVT_CODE:
-				if (available >= sizeof(
-						aci_l2cap_connection_update_resp_event_rp0))
-				{
-					auto *p =
-						(aci_l2cap_connection_update_resp_event_rp0 *)pAci->data;
-					BtGapWbaConnParamsL2capResponse(
-						p->Connection_Handle, p->Result);
-				}
-				break;
-#endif
-
-#ifdef ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE
-			case ACI_GATT_NOTIFICATION_COMPLETE_VSEVT_CODE:
-			{
-				if (available >= sizeof(
-						aci_gatt_notification_complete_event_rp0))
-				{
-					auto *p =
-						(aci_gatt_notification_complete_event_rp0 *)pAci->data;
-					BtGattWbaNotificationComplete(
-						BT_CONN_HDL_INVALID, p->Attr_Handle);
-				}
-				return BTWBA_EVT_FLOW_ENABLE;
-			}
-#endif
-
-			case ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE:
-				if (available >= sizeof(aci_gatt_tx_pool_available_event_rp0) &&
-					BtWbaEvtLe16(pAci->data + 2) != 0)
-				{
-					// This event releases shared capacity, not a sent packet.
-					if (BtIntrfTxReady != nullptr)
-					{
-						BtIntrfTxReady();
-					}
-					if (BtDfuSmpTxReady != nullptr)
-					{
-						BtDfuSmpTxReady();
-					}
-				}
-				return BTWBA_EVT_FLOW_ENABLE;
-
-			case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
-				if (available >= 2)
-				{
-					BtGattHandleValueConfirm(BtWbaEvtLe16(pAci->data));
-				}
-				return BTWBA_EVT_FLOW_ENABLE;
-
-			default:
-				break;
-		}
-	}
-
-	// Validated control events continue through the existing handler.
-	pEvtPkt = pEvt;
+	hci_event_pckt *pEvtPkt = (hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
 
 	BtAppWbaLinkTrace(pEvtPkt);
 	switch (pEvtPkt->evt)
@@ -1468,7 +1231,9 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 				SysLogPrintf(SysLogGet(), "WBA host totals since boot: calls=%lu queue_refused=%lu ring_full=%lu ring_peak=%lu\r\n",
 						(unsigned long)s_HostProcessCount, (unsigned long)s_HostQueueRefused,
 						(unsigned long)s_EvtRingFull, (unsigned long)s_EvtRingPeak);
-
+				SysLogPrintf(SysLogGet(), "WBA host timing since boot: wait_max_ms=%lu wait_ge_1ms=%lu wait_ge_15ms=%lu run_max_ms=%lu\r\n",
+						(unsigned long)s_HostWaitMaxMs, (unsigned long)s_HostWaitOver1Ms,
+						(unsigned long)s_HostWaitOver15Ms, (unsigned long)s_HostRunMaxMs);
 				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
 				{
 					s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
@@ -1627,6 +1392,15 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 				case ACI_GATT_PROC_COMPLETE_VSEVT_CODE:
 					WbaDiscProcComplete((aci_gatt_proc_complete_event_rp0 *)pAci->data);
 					break;
+
+				case ACI_GATT_NOTIFICATION_VSEVT_CODE:
+				{
+					aci_gatt_notification_event_rp0 *pN =
+						(aci_gatt_notification_event_rp0 *)pAci->data;
+					BtGattClientNotified(pN->Connection_Handle, pN->Attribute_Handle,
+										 pN->Attribute_Value, pN->Attribute_Value_Length);
+					break;
+				}
 
 				case ACI_GATT_INDICATION_VSEVT_CODE:
 				{
@@ -1993,6 +1767,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	}
 
 	// Register the central HCI event handler behind the event router.
+	BtWbaEventRouterRegister(BtAppHciEvtHandler);
 
 	// Device identity: public address and the identity and encryption roots.
 	// The stack is reset by BleStack_Init, so they are written after it.

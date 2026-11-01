@@ -45,11 +45,11 @@ void BtGapWbaConnParamsUpdateComplete(uint16_t, uint8_t, uint16_t, uint16_t, uin
 void BtGapWbaConnParamsL2capResponse(uint16_t, uint16_t) {}
 void BtGattWbaNotificationComplete(uint16_t, uint16_t) {}
 void BtGattHandleValueConfirm(uint16_t) {}
-void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t)
+static BtWbaEvtFlow_t Receive(void *)
 {
 	delivered++;
+	return BTWBA_EVT_FLOW_ENABLE;
 }
-// EVENT_HANDLER_VALIDATION
 static void ValueEvent(uint16_t code)
 {
 	uint8_t packet[258] = {};
@@ -63,18 +63,18 @@ static void ValueEvent(uint16_t code)
 	// Both vendor value events: handle(2), attribute(2), length(1), value.
 	packet[9] = 244;
 	packet[2] = 251;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(delivered == before + 1);
 	before = delivered;
 	for (len = 0; len < 251; len++)
 	{
 		packet[2] = (uint8_t)len;
-		BtAppHciEvtHandler(packet);
+		BtWbaEventRouterRun(packet);
 		assert(delivered == before);
 	}
 	packet[9] = 0;
 	packet[2] = 7;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(delivered == before + 1);
 }
 static void EnhancedConnectionEvent()
@@ -93,12 +93,12 @@ static void EnhancedConnectionEvent()
 	event.Supervision_Timeout = 500;
 	memcpy(packet + 4, &event, sizeof(event));
 	before = delivered;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(connected == 1);
 	assert(delivered == before + 1);
 	// Failed connection attempts still reach the application, not GAP state.
 	packet[4] = 0x3e;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(connected == 1);
 	assert(delivered == before + 2);
 	packet[4] = 0;
@@ -106,7 +106,7 @@ static void EnhancedConnectionEvent()
 	for (len = 0; len < sizeof(event) + 1; len++)
 	{
 		packet[2] = (uint8_t)len;
-		BtAppHciEvtHandler(packet);
+		BtWbaEventRouterRun(packet);
 		assert(connected == 1);
 		assert(delivered == before);
 	}
@@ -125,14 +125,14 @@ static void PhyCompleteEvent()
 	for (len = 0; len < sizeof(event) + 1; len++)
 	{
 		packet[2] = (uint8_t)len;
-		BtAppHciEvtHandler(packet);
+		BtWbaEventRouterRun(packet);
 		assert(phyCompleted == 0);
 	}
 	packet[2] = sizeof(event) + 1;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(phyCompleted == 1);
 	packet[4] = 0x0c;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(phyCompleted == 2);
 }
 static void ModifiedEvent()
@@ -152,11 +152,11 @@ static void ModifiedEvent()
 	for (len = 0; len < 2 + fixed + 2; len++)
 	{
 		packet[2] = len;
-		BtAppHciEvtHandler(packet);
+		BtWbaEventRouterRun(packet);
 		assert(delivered == before);
 	}
 	packet[2] = 2 + fixed + 2;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(delivered == before + 1);
 }
 static void PoolEvent()
@@ -168,14 +168,14 @@ static void PoolEvent()
 	for (unsigned len = 0; len < 6; len++)
 	{
 		packet[2] = len;
-		BtAppHciEvtHandler(packet);
+		BtWbaEventRouterRun(packet);
 		assert(txReady == 0 && dfuReady == 0);
 	}
 	packet[2] = 6;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(txReady == 1 && dfuReady == 1 && delivered == before);
 	packet[7] = 0;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(txReady == 1 && dfuReady == 1);
 }
 static void FixedEvent(uint8_t event, uint16_t vendor, unsigned size)
@@ -190,11 +190,11 @@ static void FixedEvent(uint8_t event, uint16_t vendor, unsigned size)
 	for (unsigned len = 0; len < prefix + size; len++)
 	{
 		packet[2] = len;
-		BtAppHciEvtHandler(packet);
+		BtWbaEventRouterRun(packet);
 		assert(delivered == before);
 	}
 	packet[2] = prefix + size;
-	BtAppHciEvtHandler(packet);
+	BtWbaEventRouterRun(packet);
 	assert(delivered == before + 1);
 }
 int main()
@@ -207,6 +207,7 @@ int main()
 		(aci_att_read_by_type_resp_event_rp0 *)tiny, sizeof(tiny)));
 	assert(!BtWbaDiscInfoEventValid(
 		(aci_att_find_info_resp_event_rp0 *)tiny, sizeof(tiny)));
+	BtWbaEventRouterRegister(Receive);
 	FixedEvent(HCI_DISCONNECTION_COMPLETE_EVT_CODE, 0, sizeof(hci_disconnection_complete_event_rp0));
 	FixedEvent(HCI_ENCRYPTION_CHANGE_EVT_CODE, 0, sizeof(hci_encryption_change_event_rp0));
 	FixedEvent(HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE, ACI_GATT_PROC_COMPLETE_VSEVT_CODE, sizeof(aci_gatt_proc_complete_event_rp0));
@@ -222,13 +223,6 @@ int main()
 	ValueEvent(ACI_GATT_INDICATION_VSEVT_CODE);
 }
 '''
-# Exercise the actual handler's validation and direct notification path.
-# Unrelated control processing is replaced by a delivery counter.
-app = (ROOT / 'ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp').read_text()
-a = app.index('static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)\n{')
-b = app.index('\t// Validated control events continue', a)
-handler = app[a:b] + '\tdelivered++;\n\treturn BTWBA_EVT_FLOW_ENABLE;\n}\n'
-code = code.replace('// EVENT_HANDLER_VALIDATION', handler)
 with tempfile.TemporaryDirectory(prefix='wba-router-') as temp:
     cpp = Path(temp) / 'test.cpp'
     cpp.write_text(code)
