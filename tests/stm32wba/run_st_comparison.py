@@ -5,6 +5,7 @@ import argparse
 import re
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
@@ -29,6 +30,25 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
     }
     for name, content in mocks.items():
         (temp / name).write_text(content)
+    # Use the actual managed-project feature defines: these select real SDK
+    # implementations versus 0xff stubs independently of the linked archive.
+    project_xml = ET.parse(project / "ioc/.cproject")
+    for config in project_xml.findall("./storageModule/cconfiguration"):
+        for tool in config.findall(".//tool"):
+            definitions = [value.get("value") for option in tool.findall("option")
+                           if option.get("valueType") == "definedSymbols"
+                           for value in option.findall("listOptionValue")]
+            if not definitions:
+                continue
+            variants = [value for value in definitions if value.startswith("BLE_STACK_")]
+            assert variants == ["BLE_STACK_BASIC_PLUS=1"], variants
+            preprocessed = subprocess.check_output([
+                "cc", "-E", "-P", "-I" + str(temp), "-I" + str(wpan / "stack/include"),
+                *["-D" + value for value in variants],
+                str(wpan / "stack/include/auto/ble_wrap.c")], text=True)
+            for name in ("GAP_Ext_Scan_Parameters", "GAP_Ext_Scan_Enable", "GAP_Ext_Connect"):
+                assert not re.search(r"int " + name + r"\([^)]*\)\s*\{", preprocessed), name
+    print("Managed Debug/Release SDK wrappers: extended scan/connect stubs absent")
     code = '#include <assert.h>\n#include <stdarg.h>\n#include <stdio.h>\n'
     code += '#include "' + str(project / "src/prbs_client.c") + '"\n'
     code += 'static uint32_t clockMs; static unsigned commandDelay; static unsigned calls; static const char *lastCommand; static uint8_t reply; static int inEvent;\n'
