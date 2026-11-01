@@ -278,6 +278,21 @@ void TestPeripheralSupportIsOnRequest(void)
 	CHECK(Supported("peripheral") == false);
 }
 
+// BleAdvertiser's target reported 4224 bytes. The port default must supply
+// that storage without an application-specific controller pool override.
+void TestBroadcasterDefaultPool(void)
+{
+	BtHciCtlrCfg_t cfg;
+
+	Reset();
+	s_CfgRam = 4224;
+	cfg = MakeCfg(BT_GAP_ROLE_BROADCASTER);
+	CHECK(g_BtHciCtlrMemPool.Size >= (size_t)s_CfgRam);
+	CHECK(StartNoConn(&cfg));
+	CHECK(s_Enabled);
+	CHECK(s_EventConfigCalls == 0);
+}
+
 // --- the checks -------------------------------------------------------------
 
 // A broadcaster or peripheral enables the advertising states, an observer or
@@ -1100,6 +1115,7 @@ CryptoRngNrf *CryptoRngNrfInstance(void)
 int main(void)
 {
 	TestPeripheralSupportIsOnRequest();
+	TestBroadcasterDefaultPool();
 
 #ifdef SDC_TEST_NO_FEATURE_MODULES
 	TestFeatureModulesNotLinked();
