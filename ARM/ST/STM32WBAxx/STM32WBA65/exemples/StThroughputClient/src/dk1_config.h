@@ -2,6 +2,14 @@
 #ifndef ST_THROUGHPUT_DK1_CONFIG_H
 #define ST_THROUGHPUT_DK1_CONFIG_H
 
+/* bleplat.c compiles ble_wrap.c using these managed-project definitions. */
+#if !defined(BLE_STACK_BASIC_PLUS) || BLE_STACK_BASIC_PLUS != 1
+#error StThroughputClient requires BLE_STACK_BASIC_PLUS=1; reload the managed project settings
+#endif
+#if defined(BLE_STACK_BASIC_FEATURES) && BLE_STACK_BASIC_FEATURES
+#error Remove BLE_STACK_BASIC_FEATURES from StThroughputClient compiler definitions
+#endif
+
 #include "app_conf.h"
 #include "ble_conf.h"
 

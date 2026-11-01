@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
     # configuration field, normalizing only addresses of their static buffers.
     ios = (ROOT / "ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp").read_text()
     cfg = '#include <assert.h>\n#include <string.h>\n#include "ble_core.h"\n#include "ble_bufsize.h"\n#include "blestack.h"\n'
-    cfg += '#define PLACE_IN_SECTION(x)\n#define CFG_BLE_NVM_MAX_SIZE 384\n#define DIVC(x, y) (((x) + (y) - 1) / (y))\n#define MAX(x, y) ((x) > (y) ? (x) : (y))\n'
+    cfg += '#define LOG_INFO_APP(...) ((void)0)\n#define PLACE_IN_SECTION(x)\n#define CFG_BLE_NVM_MAX_SIZE 384\n#define DIVC(x, y) (((x) + (y) - 1) / (y))\n#define MAX(x, y) ((x) > (y) ? (x) : (y))\n'
     cfg += native[native.index("#define BLE_GATT_BUF_SIZE"):native.index("#define BLE_DEFAULT_PIN")]
     cfg += native[native.index("static BleStack_init_t pInitParams;"):native.index("/* USER CODE BEGIN PV */")]
     cfg += 'static BleStack_init_t reference; static unsigned initCalls;\n'
@@ -105,7 +105,7 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
     for opt in ("-O0", "-O2"):
         exe = temp / "test"
         subprocess.run(["cc", "-std=c11", opt, "-g", "-fsanitize=undefined", "-fno-sanitize-recover=all",
-                        "-include", str(project / "src/dk1_config.h"),
+                        "-DBLE_STACK_BASIC_PLUS=1", "-include", str(project / "src/dk1_config.h"),
                         "-I" + str(temp), "-I" + str(wpan / "stack/include"),
                         "-I" + str(wpan / "svc/Inc"), "-I" + str(sample / "STM32_WPAN/App"),
                         "-I" + str(ROOT / "include"), str(ROOT / "src/cfifo.c"),
@@ -115,7 +115,7 @@ with tempfile.TemporaryDirectory(prefix="st-comparison-") as tmp:
                         "-fno-sanitize-recover=all", str(temp / "event.c"), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
         subprocess.run(["cc", "-std=c11", opt, "-g", "-fsanitize=undefined",
-                        "-fno-sanitize-recover=all", "-include", str(project / "src/dk1_config.h"),
+                        "-fno-sanitize-recover=all", "-DBLE_STACK_BASIC_PLUS=1", "-include", str(project / "src/dk1_config.h"),
                         "-I" + str(temp), "-I" + str(wpan / "stack/include"),
                         "-I" + str(wpan / "svc/Inc"), "-I" + str(sample / "STM32_WPAN/App"),
                         str(temp / "config.c"), "-o", str(exe)], check=True)

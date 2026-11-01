@@ -1121,6 +1121,10 @@ static uint8_t HOST_BLE_Init(void)
 /* USER CODE BEGIN HOST_BLE_Init_Params */
 
 /* USER CODE END HOST_BLE_Init_Params */
+	LOG_INFO_APP("ST comparison config v2: BasicPlus=%u options=0x%04x links=%u MTUmax=%u blocks=%u FIFOwords=%u NVMwords=%u\n",
+		BLE_STACK_BASIC_PLUS, pInitParams.options, pInitParams.numOfLinks,
+		pInitParams.attMtu, pInitParams.mblockCount,
+		pInitParams.host_event_fifo_buffer_size, pInitParams.nvm_cache_max_size);
   return_status = BleStack_Init(&pInitParams);
 /* USER CODE BEGIN HOST_BLE_Init */
 
