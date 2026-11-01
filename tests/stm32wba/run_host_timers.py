@@ -30,9 +30,11 @@ static sw_timer_t timers[2];
 static unsigned created;
 static uint32_t rawBase;
 static bool alternateRatio;
+static unsigned depth, alignedCalls;
+static uint32_t staleSteps;
 static void (*queued)(uint32_t, void *);
-static uint32_t BtWbaIrqSave() { uint32_t saved = irq; irq = 1; return saved; }
-static void BtWbaIrqRestore(uint32_t saved) { irq = saved; }
+static uint32_t BtWbaIrqSave() { uint32_t saved = irq; irq = 1; depth++; return saved; }
+static void BtWbaIrqRestore(uint32_t saved) { assert(depth > 0); depth--; irq = saved; }
 static bool BtEvtQue(uint32_t, void *, void (*handler)(uint32_t, void *))
 {
 	if (refuseQueue)
@@ -43,9 +45,12 @@ static bool BtEvtQue(uint32_t, void *, void (*handler)(uint32_t, void *))
 	queued = handler;
 	return true;
 }
+// The aligned read waits up to one sleep timer step for an edge. It must never
+// run inside the port critical section, which would hold off the radio IRQ.
 static uint32_t ll_intf_get_aligned_us_now(uint32_t *multiplier, uint32_t *divider)
 {
-	assert(irq == 1);
+	assert(depth == 0);
+	alignedCalls++;
 	*multiplier = frequency == 32768 ? 15625 : 125;
 	*divider = frequency == 32768 ? 512 : 4;
 	if (alternateRatio)
@@ -54,6 +59,11 @@ static uint32_t ll_intf_get_aligned_us_now(uint32_t *multiplier, uint32_t *divid
 		*divider *= 3;
 	}
 	return rawBase + (uint32_t)(((uint64_t)now * frequency + 999) / 1000);
+}
+static uint32_t ll_intf_cmn_get_slptmr_value(void)
+{
+	assert(depth > 0);
+	return rawBase + (uint32_t)(((uint64_t)now * frequency + 999) / 1000) - staleSteps;
 }
 void *os_timer_create(t_timer_callbk callback, os_timer_type type, void *arg)
 {
@@ -134,6 +144,8 @@ static void Reset(uint32_t freq)
 	created = 0;
 	rawBase = 0xfffffff0U;
 	s_ClockReady = false;
+	depth = 0;
+	alignedCalls = 0;
 	s_BleTimerId = nullptr;
 	s_AppTickTimer = nullptr;
 	period = 0;
@@ -158,6 +170,8 @@ int main()
 		for (bool alternate : {false, true})
 		{
 			alternateRatio = alternate;
+			// The port keeps the scale from the last aligned read
+			BtWbaClockScaleUpdate();
 			for (uint64_t base : samples)
 			{
 				for (unsigned offset = 0; offset < 128; offset++)
@@ -178,6 +192,25 @@ int main()
 		assert(BLE_TIMER_Start(1, 30000) == BLE_STATUS_INSUFFICIENT_RESOURCES);
 		failCreate = false;
 		assert(BLE_TIMER_Start(1, 30000) == 0 && irq == 1);
+		// After start, the millisecond clock never waits for a sleep timer edge
+		{
+			unsigned aligned = alignedCalls;
+			uint32_t t0 = BtWbaMsTick();
+			now += 7;
+			assert(BtWbaMsTick() == t0 + 7 && alignedCalls == aligned);
+			// A stale read behind the last one does not move the clock
+			staleSteps = 100;
+			assert(BtWbaMsTick() == t0 + 7);
+			staleSteps = 0;
+			now += 3;
+			assert(BtWbaMsTick() == t0 + 10);
+			now -= 3;
+			now -= 7;
+			s_ClockSteps = 0;
+			s_ClockLast = rawBase;
+			BtWbaClockScaleUpdate();
+			assert(alignedCalls == aligned + 1 && depth == 0 && irq == 1);
+		}
 		assert(BLE_TIMER_Start(2, 2000) == 0);
 		Wake();
 		assert(now == 1000 && expiredCount == 0 && hostCalls == 0);

@@ -20,6 +20,8 @@ HAL_RCC_ClockConfig):
 - flash wait states and voltage scaling range 1 checked at every clock
   change against the frequency, the HCLK frequency never above what the
   wait states and the scaling allow
+- HCLK5, the 2.4 GHz RADIO bus clock, never above 32 MHz in range 1 or
+  12 MHz in range 2: HPRE5 divides PLL1, HDIV5 divides HSI16 and HSE32
 - the order of the register writes is recorded and checked
 
 Not hardware validation: no PLL lock time, no electrical behavior.
@@ -150,7 +152,10 @@ class Clocks:
         self.pll_cfg = None
         self.pll_up = False
         self.max_freq = 0
-        self.o = {n: reg_off('RCC_TypeDef', n) for n in ('CR', 'CFGR1', 'CFGR2', 'CFGR3', 'PLL1CFGR', 'PLL1DIVR')}
+        self.o = {n: reg_off('RCC_TypeDef', n) for n in ('CR', 'CFGR1', 'CFGR2', 'CFGR3', 'CFGR4', 'PLL1CFGR', 'PLL1DIVR')}
+        # Reset value: HPRE5 PLL1 not divided, HDIV5 HSI16 or HSE32 divided by 2
+        self.reg[self.o['CFGR4']] = self.bit('RCC_CFGR4_HDIV5_Pos')
+        self.max_hclk5 = 0
         self.po = {n: reg_off('PWR_TypeDef', n) for n in ('VOSR', 'SVMSR')}
         self.fo = reg_off('FLASH_TypeDef', 'ACR')
 
@@ -187,6 +192,12 @@ class Clocks:
         shift = {0: 0, 1: 0, 2: 0, 3: 0, 4: 1, 5: 2, 6: 3, 7: 4}[h]
         return self.sysclk() >> shift
 
+    def hclk5(self):
+        cfgr4 = self.reg[self.o['CFGR4']]
+        if self.sw == 3:
+            return self.sysclk() // [1, 1, 1, 1, 2, 3, 4, 6][cfgr4 & 7]
+        return self.sysclk() >> (1 if cfgr4 & self.bit('RCC_CFGR4_HDIV5_Pos') else 0)
+
     def allowed(self):
         """Highest HCLK the wait states and the voltage scaling allow."""
         ws = self.acr & 0xF
@@ -199,6 +210,11 @@ class Clocks:
         self.max_freq = max(self.max_freq, h)
         if h > self.allowed():
             self.v(f'{what}: HCLK {h} above {self.allowed()} allowed by wait states {self.acr & 0xF} and voltage scaling')
+        h5 = self.hclk5()
+        self.max_hclk5 = max(self.max_hclk5, h5)
+        limit5 = 32_000_000 if self.vosr & self.bit('PWR_VOSR_VOS_Pos') and self.actvosrdy else 12_000_000
+        if h5 > limit5:
+            self.v(f'{what}: HCLK5 {h5} above {limit5}')
 
     # ---- register access ---------------------------------------------------
     def rd(self, off, base):
@@ -321,7 +337,7 @@ class Clocks:
             self.reg[off] = val
         else:
             self.reg[off] = val
-            if off in (o['CFGR2'], o['CFGR3']):
+            if off in (o['CFGR2'], o['CFGR3'], o['CFGR4']):
                 self.log.add(('CFG', off, val))
                 self.check_speed('bus divider')
 
@@ -531,6 +547,13 @@ def main():
     # SystemCoreClockUpdate decodes the registers: the value matches the model
     expect(clk.sysclk() == HSI, f'model sysclk {clk.sysclk()}')
     expect(clk.max_freq <= f100, f'peak HCLK {clk.max_freq}')
+    expect(0 < clk.max_hclk5 <= 32_000_000, f'peak HCLK5 {clk.max_hclk5}')
+    for mark in (0, 1, 3, 4):
+        e = P(mark)
+        h5 = [i for i, x in enumerate(e) if x[0] == 'CFG' and x[1] == clk.o['CFGR4']]
+        sw = [i for i, x in enumerate(e) if x == ('SW', 3)]
+        expect(h5 and sw and h5[-1] < sw[0] and e[h5[-1]][2] & 7 == 6,
+               f'HPRE5 divide by 4 before the switch to 100 MHz PLL1R at mark {mark}: {[e[i] for i in h5]}')
 
     expect(not viol, f'model violations: {viol[:6]}')
 

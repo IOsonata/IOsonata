@@ -2006,6 +2006,7 @@ static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 	(void)pCtx;
 
 	s_BtAppTickState = BT_APP_TICK_IDLE;
+	BtWbaClockScaleUpdate();
 	BtGapWbaConnParamProcess();
 	BtGattIndicationTimeoutCheck();
 	BtSmpBondWbaPoll();

@@ -279,6 +279,8 @@ sets the core clock to 100 MHz from PLL1R, following `HAL_RCC_OscConfig` and
    32 MHz, 1 up to 64, 2 up to 96, 3 up to 100), then PLL1 on.
 5. The switch goes through the PLL1R two step divider as the ST HAL does, then
    the divider is released. HCLK, PCLK1, PCLK2 and PCLK7 are not divided.
+   HCLK5, the 2.4 GHz RADIO bus clock, is limited to 32 MHz in range 1:
+   HPRE5 is set before the switch, divide by 4 (25 MHz) at 100 MHz.
 
 Startup enables the instruction cache in the direct-mapped mode used by
 CubeWBA's throughput client and retains its RAM in Stop mode. A cache already
@@ -634,9 +636,13 @@ server, RTC, memory manager or flash manager:
 - PKA controller hooks (`PKACTRL_CB_Process`, mutex, semaphore, `PKA_IRQHandler`).
 - `SCM_HSE_WaitUntilReady`, `scm_*` and the link layer debug signals.
 
-Limits: the temperature given to the link layer for radio calibration is fixed
-at 25 degrees C (set `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 0 in
-`app_conf.h`, then it is not used). The RNG, timer, sequencer
+Limits: `app_conf.h` sets `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 1, as
+the Cube BLE applications do, and the temperature given to the link layer is
+fixed at 25 degrees C. The link layer then recalibrates the radio only when
+the reported temperature changes, so no recalibration follows temperature
+drift until an ADC temperature measurement is added. With the setting at 0 the
+link layer runs its periodic PHY calibration every 10 s instead, which takes
+radio time from active connections. The RNG, timer, sequencer
 and PKA hooks are exercised by the BLE examples. Host tests cover timer
 admission/queue failures, AES fallback and PKA input cleanup. Peripheral fault
 injection and concurrent application crypto with pairing remain hardware work.

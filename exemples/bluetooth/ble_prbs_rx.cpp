@@ -46,6 +46,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/blueio_blesrvc.h"
 #include "bluetooth/bt_dev.h"
 #include "coredev/uart.h"
+#include "coredev/interrupt.h"
 #include "app_evt_handler.h"
 #include "board.h"
 
@@ -160,12 +161,29 @@ static volatile uint16_t s_ConnHdl = BT_CONN_HDL_INVALID;
 static volatile uint16_t s_ValueHdl = BT_ATT_HANDLE_INVALID;
 static volatile bool s_Disconnected;
 static volatile uint32_t s_ConnectMs;
+// Set while PrbsReceive is in the AppEvt queue. The Bluetooth stack queues its
+// own work in the same queue, so the consumer takes one entry however many
+// notifications wait, as a sequencer task bit does in the ST client.
+static volatile bool s_RxQueued;
 
 static void PrbsReceive(uint32_t Evt, void *pCtx);
 
+// Called from the notification callback, which runs in interrupt context on
+// some ports, and from the consumer itself.
 static bool PrbsSchedule(void)
 {
-	return AppEvtHandlerQue(0, nullptr, PrbsReceive);
+	uint32_t state = DisableInterrupt();
+	bool queue = s_RxQueued == false;
+
+	s_RxQueued = true;
+	EnableInterrupt(state);
+	if (queue && AppEvtHandlerQue(0, nullptr, PrbsReceive) == false)
+	{
+		// The packets stay in the CFIFO; AppCheckStatus schedules again.
+		s_RxQueued = false;
+		return false;
+	}
+	return true;
 }
 
 static bool PrbsWrite(const uint8_t *pData, uint16_t Len)
@@ -192,6 +210,8 @@ static void PrbsReceive(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
 	(void)pCtx;
+	// Clear first: a notification during the check queues the next pass.
+	s_RxQueued = false;
 	PrbsBenchReceive(&s_Benchmark);
 }
 

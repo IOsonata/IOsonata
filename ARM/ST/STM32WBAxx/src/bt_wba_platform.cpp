@@ -406,6 +406,8 @@ static os_timer_id s_AppTickTimer;
 static bool s_ClockReady;
 static uint32_t s_ClockLast;
 static uint64_t s_ClockSteps;
+static uint32_t s_ClockMul;			//!< Sleep timer step to us, multiplier
+static uint32_t s_ClockDiv;			//!< Sleep timer step to us, divider
 static volatile bool s_BleTimerQueued;
 static volatile bool s_BleTimerOwed;
 
@@ -432,8 +434,12 @@ static void BtWbaTimerQue(void)
 	}
 }
 
-// Read the controller time atomically as required by ll_intf.h. Extend its
-// 32-bit counter before conversion, so a raw counter wrap does not reset ms.
+// Controller time in milliseconds. ll_intf_get_aligned_us_now spins until the
+// next sleep timer edge, up to one step (30.5 us on LSE), so it only supplies
+// the step scale. Each call here reads the sleep timer once with
+// ll_intf_cmn_get_slptmr_value (ll_sys.h), the read Cube linklayer_plat.c
+// uses, and extends its 32-bit count in a short critical section. The radio
+// interrupt is never held off for a sleep timer edge.
 uint32_t BtWbaMsTick(void)
 {
 	uint32_t pm;
@@ -447,10 +453,18 @@ uint32_t BtWbaMsTick(void)
 		return 0;
 	}
 	pm = BtWbaIrqSave();
-	steps = ll_intf_get_aligned_us_now(&multiplier, &divider);
-	s_ClockSteps += (uint32_t)(steps - s_ClockLast);
-	s_ClockLast = steps;
+	steps = ll_intf_cmn_get_slptmr_value();
+	// Only move forward. A read can be stale while the radio bus clock
+	// resynchronizes after sleep (LINKLAYER_PLAT_WaitHclkRdy); a value behind
+	// the last one must not become a 2^32 step jump.
+	if ((int32_t)(steps - s_ClockLast) > 0)
+	{
+		s_ClockSteps += (uint32_t)(steps - s_ClockLast);
+		s_ClockLast = steps;
+	}
 	total = s_ClockSteps;
+	multiplier = s_ClockMul;
+	divider = s_ClockDiv;
 	BtWbaIrqRestore(pm);
 	// Reduce the controller clock ratios before converting to milliseconds.
 	// These exact forms avoid a software 64-bit divide on every tick read.
@@ -465,17 +479,52 @@ uint32_t BtWbaMsTick(void)
 	return (uint32_t)(total * multiplier / ((uint64_t)divider * 1000U));
 }
 
+// Refresh the step scale. The link layer recalibrates it on LSI; it is fixed on
+// LSE. Thread context only: the aligned read waits for a sleep timer edge.
+void BtWbaClockScaleUpdate(void)
+{
+	uint32_t pm;
+	uint32_t multiplier;
+	uint32_t divider;
+
+	if (s_ClockReady == false)
+	{
+		return;
+	}
+	(void)ll_intf_get_aligned_us_now(&multiplier, &divider);
+	if (multiplier == 0U || divider == 0U)
+	{
+		return;
+	}
+	pm = BtWbaIrqSave();
+	s_ClockMul = multiplier;
+	s_ClockDiv = divider;
+	BtWbaIrqRestore(pm);
+}
+
 static void BtWbaClockStart(void)
 {
 	uint32_t pm;
 	uint32_t multiplier;
 	uint32_t divider;
 
+	if (s_ClockReady)
+	{
+		return;
+	}
+	// The edge wait stays outside the critical section
+	(void)ll_intf_get_aligned_us_now(&multiplier, &divider);
+	if (multiplier == 0U || divider == 0U)
+	{
+		return;
+	}
 	pm = BtWbaIrqSave();
 	if (s_ClockReady == false)
 	{
-		s_ClockLast = ll_intf_get_aligned_us_now(&multiplier, &divider);
+		s_ClockLast = ll_intf_cmn_get_slptmr_value();
 		s_ClockSteps = 0;
+		s_ClockMul = multiplier;
+		s_ClockDiv = divider;
 		s_ClockReady = true;
 	}
 	BtWbaIrqRestore(pm);

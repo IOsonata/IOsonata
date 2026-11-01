@@ -76,11 +76,24 @@ SOFTWARE.
 
 #define CFG_RF_TX_POWER_TABLE_ID	0
 
+// Radio calibration driven by temperature reports, as in the Cube BLE
+// applications. ll_sys_if.c then declares a temperature sensor to the link
+// layer and the link layer requests the temperature through
+// TEMPMEAS_RequestTemperatureMeasurement (bt_wba_platform.cpp). With 0 the
+// link layer runs its periodic PHY calibration every 10 s, which takes radio
+// time from active connections.
+#define USE_TEMPERATURE_BASED_RADIO_CALIBRATION	1
+
+// Sequencer priority used by ll_sys_if.c. The port runs every sequencer task
+// from the Bluetooth event queue, the priority value is not used.
+#define CFG_SEQ_PRIO_0				0
+
 // Sequencer tasks used by the link layer and the RNG
 typedef enum {
 	CFG_TASK_HW_RNG,
 	CFG_TASK_LINK_LAYER,
 	CFG_TASK_PKACTRL,
+	CFG_TASK_TEMP_MEAS,
 	CFG_TASK_NBR
 } CFG_Task_Id_t;
 
