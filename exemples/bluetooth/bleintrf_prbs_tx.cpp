@@ -235,6 +235,7 @@ int g_DelayCnt = 0;
 
 // Pending stays set through queue refusal until the callback runs.
 static volatile bool s_bPrbsPending = false;
+static bool s_bServiceReady = false;
 
 void PrbsChedHandler(uint32_t Evt, void *pCtx);
 
@@ -312,8 +313,11 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppInitUserServices()
 {
-	bool res;
-	res = BtGattSrvcAdd(&g_UartBleSrvc);
+	s_bServiceReady = BtGattSrvcAdd(&g_UartBleSrvc);
+	if (s_bServiceReady == false)
+	{
+		g_Uart.printf("PRBS service registration failed\r\n");
+	}
 }
 
 void BtAppInitUserData()
@@ -365,9 +369,22 @@ int main()
 {
 	HardwareInit();
 
-	BtAppInit(&s_BleAppCfg);
+	if (BtAppInit(&s_BleAppCfg) == false || s_bServiceReady == false)
+	{
+		g_Uart.printf("PRBS Bluetooth initialization failed\r\n");
+		BtAdvStop();
+		msDelay(20);
+		return -1;
+	}
 
-	g_BtIntrf.Init(s_BleInrfCfg);
+	if (g_BtIntrf.Init(s_BleInrfCfg) == false)
+	{
+		g_Uart.printf("PRBS interface initialization failed\r\n");
+		BtAdvStop();
+		msDelay(20);
+		return -1;
+	}
+	g_Uart.printf("PRBS initialized %s\r\n", DEVICE_NAME);
 
 	//AppEvtHandlerQue(0, 0, PrbsChedHandler);
 	AppRun();
