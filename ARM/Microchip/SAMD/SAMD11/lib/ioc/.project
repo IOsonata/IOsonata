@@ -1236,11 +1236,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
 		</link>
 		<link>
-			<name>include/usb/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/.DS_Store</locationURI>
-		</link>
-		<link>
 			<name>include/usb/usb.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb.h</locationURI>
