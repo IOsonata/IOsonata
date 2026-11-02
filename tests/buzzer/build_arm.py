@@ -38,6 +38,6 @@ for opt,name in [('-O0','Debug'),('-Os','Release')]:
   elf=out/(Path(source).stem+'.elf')
   subprocess.run([a.tool_prefix+'g++',*flags,'--specs=nano.specs','--specs=nosys.specs',
    '-Wl,--gc-sections','-L'+str(root/'ARM/ldscript'),
-   '-T'+str(root/'ARM/Nordic/nRF52/nRF52840/ldscript/gcc_nrf52840_xxaa.ld'),
+   '-T'+str(root/'ARM/Nordic/nRF52/ldscript/gcc_nrf52840_xxaa.ld'),
    *objects,obj,'-o',str(elf)],check=True)
   subprocess.run([a.tool_prefix+'size',str(elf)],check=True)
