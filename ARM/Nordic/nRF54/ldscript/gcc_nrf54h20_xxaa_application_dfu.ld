@@ -1,6 +1,6 @@
 /* Application with DFU, nRF54H20 application core.
  *
- * nrf54h20_xxaa_application.ld with FLASH cut down to slot 0, from the layout
+ * gcc_nrf54h20_xxaa_application.ld with FLASH cut down to slot 0, from the layout
  * the stage 0 boot shares, and RAM stopped short of the recovery request
  * word. The sections come from gcc_arm_flash.ld, the script ResetEntry.c is
  * written for. The stage 0 boot sets VTOR to slot 0 before it starts the
