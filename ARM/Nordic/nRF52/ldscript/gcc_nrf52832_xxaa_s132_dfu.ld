@@ -16,7 +16,7 @@ SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lgcc -lc)
 
-INCLUDE "gcc_nrf52832_xxaa_s132_dfulayout.ld"
+INCLUDE "gcc_nrf52832_xxaa_s132_dfu_layout.ld"
 
 MEMORY
 {
