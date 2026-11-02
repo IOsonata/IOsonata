@@ -12,10 +12,21 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-	FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0x7f000
+	FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0x7c000
+	NVM0 (rw) : ORIGIN = 0x7d000, LENGTH = 0x2000
 	RAM (rwx) :  ORIGIN = 0x20000008, LENGTH = 0xfff8
 }
 
+SECTIONS
+{
+	nvm0 (NOLOAD) :
+	{
+		__start_nvm0 = .;
+		KEEP(*(nvm0))
+		. = ORIGIN(NVM0) + LENGTH(NVM0);
+		__stop_nvm0 = .;
+	} > NVM0
+}
 SECTIONS
 {
 	. = ALIGN(4);
