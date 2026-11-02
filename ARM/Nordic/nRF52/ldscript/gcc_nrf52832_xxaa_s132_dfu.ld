@@ -1,6 +1,6 @@
 /* Application with DFU, nRF52832 xxAA with MBR and S132.
  *
- * Same as nrf52832_xxaa_s132.ld with FLASH cut down to slot 0 and the two
+ * Based on gcc_nrf52832_xxaa_s132.ld with FLASH cut down to slot 0 and the two
  * NVM regions named, from the layout the stage 0 boot shares. An image that
  * outgrows slot 0 fails to link.
  */
