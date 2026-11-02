@@ -28,7 +28,7 @@ SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP( -lstdc++ -lgcc -lc)
 
-INCLUDE "dfu_layout_re01_1500kb.ld"
+INCLUDE "gcc_re01_1500kb_dfu_layout.ld"
 
 MEMORY
 {

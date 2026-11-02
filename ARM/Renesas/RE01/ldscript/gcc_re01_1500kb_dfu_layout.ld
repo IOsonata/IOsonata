@@ -1,6 +1,6 @@
 /* DFU flash layout, Renesas RE01 1500KB.
  *
- * Included by the stage 0 boot script (dfu_boot_re01_1500kb.ld) and the
+ * Included by the stage 0 boot script (gcc_re01_1500kb_dfu_boot.ld) and the
  * application script (gcc_re01_1500kb_dfu.ld), so both agree on where
  * everything is. Code reads these symbols through DfuLayoutGet; no C define
  * repeats an address. See docs/architecture/dfu.md.
