@@ -14,6 +14,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 LINK_RE = re.compile(r'(?<![A-Za-z0-9_])([A-Za-z0-9_./\\-]+\.ld)(?![A-Za-z0-9_])')
 INCLUDE_RE = re.compile(r'^\s*INCLUDE\s+["\']?([^"\'\s]+\.ld)', re.MULTILINE)
+ICF_RE = re.compile(r'([A-Za-z0-9_./\\-]+\.icf)', re.IGNORECASE)
 WIZARD_KEY = "linker_script"
 
 
@@ -92,6 +93,20 @@ def check():
             if issue:
                 failures.append("%s linker %s: %s" %
                     (project.relative_to(ROOT), name, issue))
+
+    # Validate repository IAR linker script references in project files.
+    icf_index = script_index(ROOT.rglob("*.icf"))
+    for project in ROOT.rglob("*.ewp"):
+        content = project.read_text(encoding="utf-8", errors="replace")
+        for ref in sorted(set(ICF_RE.findall(content))):
+            name = pathlib.PurePosixPath(ref.replace("\\", "/")).name
+            if name in icf_index:
+                if len(icf_index[name]) > 1:
+                    failures.append("%s IAR linker %s: ambiguous" %
+                        (project.relative_to(ROOT), ref))
+            elif "/" in ref or "\\" in ref:
+                failures.append("%s IAR linker %s: missing" %
+                    (project.relative_to(ROOT), ref))
 
     for issue in failures:
         print(issue)
