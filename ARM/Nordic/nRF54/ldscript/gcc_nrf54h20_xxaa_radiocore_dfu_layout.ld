@@ -14,7 +14,7 @@
  * trailer that come with a slot 0 sized payload.
  *
  * The regions are those of the radio core partition in
- * nrf54h20_xxaa_radiocore.ld. The secure domain firmware decides where this
+ * gcc_nrf54h20_xxaa_radiocore.ld. The secure domain firmware decides where this
  * core starts and what it may write: the layout assumes it starts the core
  * at the start of its partition, where the boot is, and lets it write the
  * whole partition.
