@@ -1,6 +1,6 @@
 /* Application with DFU, nRF5340 application core.
  *
- * Same as nrf5340_xxaa_application.ld with FLASH cut down to slot 0, from the
+ * Same as gcc_nrf5340_xxaa_application.ld with FLASH cut down to slot 0, from the
  * layout the stage 0 boot shares, and RAM1 stopped short of the recovery
  * request word. An image that outgrows slot 0 fails to link. The stage 0
  * boot sets VTOR to slot 0 before it starts the image.
