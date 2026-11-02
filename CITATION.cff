@@ -10,9 +10,10 @@ abstract: >-
   microcontrollers. It uses object-oriented design with runtime polymorphism,
   ships one precompiled static library per MCU, and includes a Bluetooth LE
   host, a composable USB device stack, NVM storage, crypto, and sensor and
-  display drivers. Hardware-validated targets are Nordic nRF52832 and
-  nRF54L15; the repository also contains ports for other Nordic, STM32,
-  Renesas, Microchip, NXP and RISC-V MCUs.
+  display drivers. Hardware results are recorded for Nordic nRF52, nRF53,
+  nRF54L and nRF91, STM32F0, L4, G4, H7 and WBA, Renesas RA4M1, Microchip
+  SAM4L and SAM D, and NXP LPC54628 parts; the repository also contains
+  ports for other Nordic, STM32, Renesas, NXP and RISC-V MCUs.
 authors:
   - given-names: "Nguyen Hoan"
     family-names: "Hoang"
