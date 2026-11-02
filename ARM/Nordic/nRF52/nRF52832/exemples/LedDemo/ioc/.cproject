@@ -91,7 +91,7 @@
 									<listOptionValue builtIn="false" value="IOsonata_nRF52832"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile.1804002945" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
-									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_nrf52_xxaa.ld&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_gcc_nrf52832_xxaa.ld&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths.1534968646" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;"/>
@@ -104,7 +104,7 @@
 									<listOptionValue builtIn="false" value="IOsonata_nRF52832"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile.610159974" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
-									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_nrf52_xxaa.ld&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_gcc_nrf52832_xxaa.ld&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths.65937499" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" useByScannerDiscovery="false" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;"/>
@@ -227,7 +227,7 @@
 									<listOptionValue builtIn="false" value="IOsonata_nRF52832"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile.915648260" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
-									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_nrf52_xxaa.ld&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_gcc_nrf52832_xxaa.ld&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths.987736689" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;"/>
@@ -240,7 +240,7 @@
 									<listOptionValue builtIn="false" value="IOsonata_nRF52832"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile.512243438" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" valueType="stringList">
-									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_nrf52_xxaa.ld&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_gcc_nrf52832_xxaa.ld&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths.134093412" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" useByScannerDiscovery="false" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release&quot;"/>
