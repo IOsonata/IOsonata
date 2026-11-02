@@ -13,3 +13,15 @@ MEMORY
 
 
 INCLUDE "nrf_common.ld"
+
+
+SECTIONS
+{
+	nvm0 (NOLOAD) :
+	{
+		__start_nvm0 = .;
+		KEEP(*(nvm0))
+		. = ORIGIN(NVM0) + LENGTH(NVM0);
+		__stop_nvm0 = .;
+	} > NVM0
+}
