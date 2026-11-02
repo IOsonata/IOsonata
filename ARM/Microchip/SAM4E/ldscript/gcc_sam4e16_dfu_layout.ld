@@ -1,6 +1,6 @@
 /* DFU flash layout, SAM4E16E (1 MB flash, 128 KB RAM).
  *
- * Included by the stage 0 boot script (dfu_boot_sam4e16.ld) and the
+ * Included by the stage 0 boot script (gcc_sam4e16_dfu_boot.ld) and the
  * application script (gcc_sam4e16_dfu.ld), so both agree on where
  * everything is. Code reads these symbols through DfuLayoutGet; no C define
  * repeats an address. See docs/architecture/dfu.md.
