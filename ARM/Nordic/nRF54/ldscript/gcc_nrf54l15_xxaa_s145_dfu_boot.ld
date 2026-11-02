@@ -16,7 +16,7 @@ SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lgcc -lc -lnosys)
 
-INCLUDE "dfu_layout_nrf54l15_s145.ld"
+INCLUDE "gcc_nrf54l15_xxaa_s145_dfu_layout.ld"
 
 MEMORY
 {

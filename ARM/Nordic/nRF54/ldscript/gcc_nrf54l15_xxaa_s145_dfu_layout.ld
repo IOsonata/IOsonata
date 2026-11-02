@@ -1,6 +1,6 @@
 /* DFU RRAM layout, nRF54L15 with S145.
  *
- * Included by the stage 0 boot script (dfu_boot_nrf54l15_s145.ld) and the
+ * Included by the stage 0 boot script (gcc_nrf54l15_xxaa_s145_dfu_boot.ld) and the
  * application script (gcc_nrf54l15_xxaa_s145_dfu.ld), so both agree on where
  * everything is. Code reads these symbols through DfuLayoutGet; no C define
  * repeats an address. See docs/architecture/dfu.md.
