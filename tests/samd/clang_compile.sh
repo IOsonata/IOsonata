@@ -30,16 +30,16 @@ then
 	exit 1
 fi
 
-COMMON="-target arm-none-eabi -mcpu=cortex-m0plus -mthumb $SYSROOT_ARGS -ffreestanding -fno-builtin -Wall -Wextra -Werror"
+COMMON="-target arm-none-eabi -mcpu=cortex-m0plus -mthumb $SYSROOT_ARGS -D__PROGRAM_START -ffreestanding -fno-builtin -Wall -Wextra -Werror"
 CMSIS="-I$ROOT/ARM/CMSIS/Core/Include"
-GENERIC="-I$ROOT/include"
+GENERIC="-I$ROOT/include -I$ROOT/ARM/include"
 FAMILY="-I$ROOT/ARM/Microchip/SAMD/include"
 
 for DEVICE in SAMD11 SAMD21
 do
 	case "$DEVICE" in
 		SAMD11)
-			PART=__SAMD11D14A__
+			PART=__SAMD11D14AM__
 			PART_INC="$ROOT/ARM/Microchip/SAMD/SAMD11/include"
 			VECTORS="$ROOT/ARM/Microchip/SAMD/SAMD11/src/vectors_samd11.c"
 			;;
@@ -58,15 +58,13 @@ do
 	"$CLANG" $COMMON -std=c11 -D"$PART" $CMSIS $GENERIC $FAMILY -I"$PART_INC" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/iopincfg_samd.c" -o "$OUT/$DEVICE-gpio.o"
 
-	if [ "$DEVICE" = SAMD21 ]
-	then
-		"$CLANG" $COMMON -std=c11 -D"$PART" $CMSIS $GENERIC $FAMILY -I"$PART_INC" \
-			-c "$ROOT/ARM/Microchip/SAMD/SAMD21/src/sercom_clock_samd21.c" \
-			-o "$OUT/$DEVICE-sercom-clock.o"
-	fi
+	"$CLANG" $COMMON -std=c11 -D"$PART" $CMSIS $GENERIC $FAMILY -I"$PART_INC" \
+		-c "$ROOT/ARM/Microchip/SAMD/src/sercom_samd.c" \
+		-o "$OUT/$DEVICE-sercom.o"
+	# UART tables initialize hardware fields; remaining static fields are zero.
+	"$CLANGXX" $COMMON -Wno-missing-field-initializers -std=gnu++23 -fno-exceptions -fno-rtti -D"$PART" \
+		$CMSIS $GENERIC $FAMILY -I"$PART_INC" \
+		-c "$ROOT/ARM/Microchip/SAMD/src/uart_samd.cpp" \
+		-o "$OUT/$DEVICE-uart.o"
 done
-"$CLANGXX" $COMMON -std=c++17 -fno-exceptions -fno-rtti -D__SAMD21J18A__ \
-	$CMSIS $GENERIC $FAMILY -I"$ROOT/ARM/Microchip/SAMD/SAMD21/include" \
-	-c "$ROOT/ARM/Microchip/SAMD/SAMD21/src/uart_samd21.cpp" \
-	-o "$OUT/SAMD21-uart.o"
 echo "SAMD C and C++ source compile completed"

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
 parser.add_argument("cube", type=Path, help="Complete STM32CubeWBA v1.10.0 checkout")
 args = parser.parse_args()
-project = ROOT / "ARM/ST/STM32WBAxx/STM32WBA65/exemples/StThroughputClient"
+project = ROOT / "ARM/ST/STM32WBAxx/STM32WBA65/exemples/BlePrbsRxStmCube"
 wpan = args.cube / "Middlewares/ST/STM32_WPAN/ble"
 sample = args.cube / "Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client"
 source = (project / "src/prbs_client.c").read_text()
