@@ -21,12 +21,12 @@
     "${external}/Invn",
     "${external}/Fusion"
   ],
-  "linker_script": "${iosonata}/ARM/Nordic/nRF52/ldscript/gcc_nrf52840.ld",
+  "linker_script": "${iosonata}/ARM/Nordic/nRF52/nRF52840/ldscript/nrf52840_xxaa.ld",
   "lib_path": "${iosonata}/ARM/Nordic/nRF52/nRF52840/lib/ioc/${config}",
   "lib": "IOsonata_nRF52840",
   "features": {
     "ble": {
-      "linker_script": "${iosonata}/ARM/Nordic/nRF52/ldscript/gcc_nrf52840_s140.ld",
+      "linker_script": "${iosonata}/ARM/Nordic/nRF52/nRF52840/ldscript/s140_nrf52840_xxaa.ld",
       "defines": [
         "FDS_BACKEND=NRF_FSTORAGE_SD",
         "NRF_SD_BLE_API_VERSION=7",
