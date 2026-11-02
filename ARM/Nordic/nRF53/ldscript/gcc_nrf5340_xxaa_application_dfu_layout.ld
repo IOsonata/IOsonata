@@ -1,7 +1,7 @@
 /* DFU flash layout, nRF5340 application core.
  *
- * Included by the stage 0 boot script (dfu_boot_nrf5340_application.ld) and
- * the application script (nrf5340_xxaa_application_dfu.ld), so both agree on
+ * Included by the stage 0 boot script (gcc_nrf5340_xxaa_application_dfu_boot.ld) and
+ * the application script (gcc_nrf5340_xxaa_application_dfu.ld), so both agree on
  * where everything is. Code reads these symbols through DfuLayoutGet; no C
  * define repeats an address. See docs/architecture/dfu.md.
  *
