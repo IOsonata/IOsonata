@@ -13,7 +13,8 @@ GROUP(-lgcc -lc -lnosys)
 
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x0, LENGTH = 0x100000
+  FLASH (rx) : ORIGIN = 0x0, LENGTH = 0xFD000
+  NVM0 (rw) : ORIGIN = 0xFD000, LENGTH = 0x3000
   RAM (rwx) :  ORIGIN = 0x20000000, LENGTH = 0x40000
 }
 
@@ -110,5 +111,16 @@ SECTIONS
 	} > FLASH
 } INSERT AFTER .text
 
+
+SECTIONS
+{
+	nvm0 (NOLOAD) :
+	{
+		__start_nvm0 = .;
+		KEEP(*(nvm0))
+		. = ORIGIN(NVM0) + LENGTH(NVM0);
+		__stop_nvm0 = .;
+	} > NVM0
+}
 
 INCLUDE "gcc_arm_flash.ld"
