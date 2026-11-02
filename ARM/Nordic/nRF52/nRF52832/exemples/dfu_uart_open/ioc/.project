@@ -51,9 +51,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/open_bootloader_gcc_nrf52.ld</name>
+			<name>src/gcc_nrf52832_xxaa_sdk_uart_open_dfuboot.ld</name>
 			<type>1</type>
-			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/open_bootloader_gcc_nrf52.ld</locationURI>
+			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/gcc_nrf52832_xxaa_sdk_uart_open_dfuboot.ld</locationURI>
 		</link>
 		<link>
 			<name>src/sdk_config.h</name>
