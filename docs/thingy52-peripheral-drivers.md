@@ -171,7 +171,7 @@ Import these two IOcomposer/Eclipse projects:
 
 Build the library and application using the matching Debug or Release
 configuration. The application uses `NRF52832_XXAA` and the existing
-`gcc_nrf52_xxaa.ld` full-flash linker script. It is a standalone test, without
+`gcc_nrf52832_xxaa.ld` linker script, which reserves NVM in flash by default. It is a standalone test, without
 SoftDevice or the old Thingy52 firmware. Program it through an external SWD
 probe. Both configurations use the external UART console, without semihosting.
 
