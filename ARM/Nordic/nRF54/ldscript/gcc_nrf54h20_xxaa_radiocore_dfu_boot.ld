@@ -18,7 +18,7 @@ SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lgcc -lc -lnosys)
 
-INCLUDE "dfu_layout_nrf54h20_radiocore.ld"
+INCLUDE "gcc_nrf54h20_xxaa_radiocore_dfu_layout.ld"
 
 MEMORY
 {

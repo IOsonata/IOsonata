@@ -1,7 +1,7 @@
 /* DFU MRAM layout, nRF54H20 radio core.
  *
- * Included by the stage 0 boot script (dfu_boot_nrf54h20_radiocore.ld) and
- * the application script (nrf54h20_xxaa_radiocore_dfu.ld), so both agree on
+ * Included by the stage 0 boot script (gcc_nrf54h20_xxaa_radiocore_dfu_boot.ld) and
+ * the application script (gcc_nrf54h20_xxaa_radiocore_dfu.ld), so both agree on
  * where everything is. Code reads these symbols through DfuLayoutGet; no C
  * define repeats an address. See docs/architecture/dfu.md.
  *
