@@ -101,7 +101,7 @@ if [[ "$MODE" == "uninstall" ]]; then
 	fi
 	rm -rf "$PYOCD_DIR"
   echo ">>> Removing IDAP tools..."
-  
+
 
   # Prompt for IOsonata and external SDK removal
   echo

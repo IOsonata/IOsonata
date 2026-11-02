@@ -533,7 +533,7 @@ if ($MODE -eq "force" -or -not (Test-Path "$ECLIPSE_DIR\eclipse.exe")) {
 		Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 	}
 } else { 
-    Write-Host "   [OK] IOcomposer runtime already installed (use -ForceUpdate to reinstall)." -ForegroundColor Green 
+    Write-Host "   [OK] IOcomposer runtime already installed (use -ForceUpdate to reinstall)." -ForegroundColor Green
 }
 
 # --- Eclipse Shortcuts ---

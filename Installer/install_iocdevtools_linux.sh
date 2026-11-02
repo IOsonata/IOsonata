@@ -161,7 +161,7 @@ if [[ "$MODE" == "uninstall" ]]; then
 	fi
 	rm -rf "$PYOCD_DIR"
   echo ">>> Removing IDAP tools..."
-  
+
 
   echo ">>> Removing desktop entry..."
   rm -f "$HOME/.local/share/applications/iocomposer.desktop" || true

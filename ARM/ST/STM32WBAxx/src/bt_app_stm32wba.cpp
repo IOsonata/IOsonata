@@ -1742,12 +1742,9 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	BtAppWbaIdentitySet();
 	BtAppWbaGoldenRangeSet();
 
-	// TX power in dBm, mapped to the closest PA level of the stack. Zero keeps
-	// the stack default, which is the maximum level.
-	if (pCfg->TxPower != 0)
-	{
-		aci_hal_set_tx_power_level(0, BtAppWbaPaLevel(pCfg->TxPower));
-	}
+	// TX power in dBm, mapped to the closest PA level of the stack. 0 is 0 dBm,
+	// as on the other ports; the stack default would be the maximum level.
+	aci_hal_set_tx_power_level(0, BtAppWbaPaLevel(pCfg->TxPower));
 
 	s_WbaData.bStackInited = true;
 	return true;

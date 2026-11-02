@@ -556,7 +556,9 @@ How the adapter works with the 1.10.0 stack:
   and applies the returned conversion factors. The Cube RTC timer server and
   System Clock Manager are not used. Bluetooth reserves no IOsonata LPTIM.
 - `BtAppCfg_t::TxPower` is in dBm and is mapped to the closest PA level of the
-  table in the STM32WBA BLE Wireless Interface document.
+  table in the STM32WBA BLE Wireless Interface document, and is always set:
+  0 is 0 dBm (PA level 0x19, -0.3 dBm), as on the other ports. Without the
+  call the ST stack would use its maximum level (+10 dBm with power table 0).
 - The public address, identity root and encryption root are written to the
   stack at start. The default (`BtAppWbaIdentityGet`, weak) derives them from the
   chip unique number, so each chip has its own address, but the two keys are not
