@@ -54,6 +54,8 @@ extern "C" {
 #include "pka_ctrl.h"
 #include "ll_intf_cmn.h"
 #include "ll_intf.h"
+#include "ll_sys.h"
+#include "linklayer_plat.h"
 #include "os_wrapper.h"
 
 #ifdef __cplusplus

@@ -106,7 +106,7 @@ static void RunOne()
 '''
 for name in ['BleHostEvt', 'BleStackCB_Process']:
     code += function(app, name)
-for name in ['BtWbaSeqQue', 'BtWbaSeqEvt', 'UTIL_SEQ_SetTask']:
+for name in ['BtWbaSeqSet', 'BtWbaSeqQue', 'BtWbaSeqEvt', 'UTIL_SEQ_SetTask']:
     code += function(platform, name)
 code += r'''
 static void LinkTask()

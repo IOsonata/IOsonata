@@ -17,6 +17,7 @@ code = r'''
 #include <cstring>
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
+#include "coredev/interrupt.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "ble_prbs_benchmark.h"
 #define PRBS_RX_SETUP_TIMEOUT_MS 10000U
@@ -174,6 +175,18 @@ static void RunTrial(unsigned packets)
 					data[idx] = previous;
 				}
 				BtGattClientNotified(s_ConnHdl, s_ValueHdl, data, sizeof(data));
+				// One consumer entry however many notifications wait
+				assert(s_RxQueued && AppEvtHandlerPending());
+			}
+			{
+				unsigned entries = 0;
+				while (AppEvtHandlerPending())
+				{
+					AppEvtHandlerDispatch();
+					entries++;
+				}
+				assert(entries <= packets && !s_RxQueued);
+				assert(CFifoUsed(s_Benchmark.Queue) == 0);
 			}
 		}
 		while (AppEvtHandlerExec())

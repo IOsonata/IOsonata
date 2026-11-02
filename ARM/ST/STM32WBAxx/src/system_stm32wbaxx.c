@@ -61,6 +61,10 @@ SOFTWARE.
 // Voltage scaling range 1 is needed above 16 MHz
 #define VOS_RANGE1_MIN_FREQ		16000000UL
 
+// Highest HCLK5, the 2.4 GHz RADIO bus clock, in voltage scaling range 1 and 2
+#define HCLK5_FREQ_MAX_RANGE1	32000000UL
+#define HCLK5_FREQ_MAX_RANGE2	12000000UL
+
 // Polls of a ready flag before giving up on an oscillator, at least 50 ms
 // at 16 MHz
 #define OSC_READY_POLLS			200000
@@ -112,6 +116,22 @@ static uint32_t FlashWaitState(uint32_t CoreFreq)
 	}
 
 	return ws;
+}
+
+// HPRE5 value for PLL1R as system clock at CoreFreq: the smallest AHB5 divider
+// that keeps HCLK5 within its limit for the voltage scaling range. Values 0 to
+// 3 do not divide, 4 to 7 divide by 2, 3, 4 and 6 (AHB5PrescTable).
+static uint32_t Ahb5PllPresc(uint32_t CoreFreq)
+{
+	uint32_t limit = CoreFreq > VOS_RANGE1_MIN_FREQ ? HCLK5_FREQ_MAX_RANGE1 : HCLK5_FREQ_MAX_RANGE2;
+	uint32_t presc = 0;
+
+	while (presc < 7U && CoreFreq > limit * AHB5PrescTable[presc])
+	{
+		presc = presc < 4U ? 4U : presc + 1U;
+	}
+
+	return presc << RCC_CFGR4_HPRE5_Pos;
 }
 
 static bool SetFlashWaitState(uint32_t CoreFreq)
@@ -235,7 +255,8 @@ void SystemCoreClockUpdate(void)
  * HAL one (HAL_RCC_OscConfig, HAL_RCC_ClockConfig): voltage scaling range 1
  * and the flash wait states first, then PLL1, the switch through the PLL1R
  * two step divider, and the divider released. HCLK, PCLK1, PCLK2 and PCLK7 are
- * not divided. If the PLL does not lock the clock stays on HSI16.
+ * not divided. HCLK5, the radio bus clock, is divided to 32 MHz or less. If the
+ * PLL does not lock the clock stays on HSI16.
  */
 void SystemInit(void)
 {
@@ -350,6 +371,11 @@ void SystemInit(void)
 		SystemCoreClockUpdate();
 		return;
 	}
+
+	// HCLK5 follows SYSCLK through HPRE5 once PLL1R is the system clock, and
+	// shall not exceed 32 MHz in range 1 (ST HAL HAL_RCC_ClockConfig). The reset
+	// value does not divide, so set it before the switch.
+	RCC->CFGR4 = (RCC->CFGR4 & ~RCC_CFGR4_HPRE5) | Ahb5PllPresc(freq);
 
 	// Switch through the PLL1R two step divider: select the 2 step mode, enable
 	// the divider with the 2 extra pulses of the ST HAL for early silicon, then

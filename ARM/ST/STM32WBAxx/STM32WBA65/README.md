@@ -279,6 +279,8 @@ sets the core clock to 100 MHz from PLL1R, following `HAL_RCC_OscConfig` and
    32 MHz, 1 up to 64, 2 up to 96, 3 up to 100), then PLL1 on.
 5. The switch goes through the PLL1R two step divider as the ST HAL does, then
    the divider is released. HCLK, PCLK1, PCLK2 and PCLK7 are not divided.
+   HCLK5, the 2.4 GHz RADIO bus clock, is limited to 32 MHz in range 1:
+   HPRE5 is set before the switch, divide by 4 (25 MHz) at 100 MHz.
 
 Startup enables the instruction cache in the direct-mapped mode used by
 CubeWBA's throughput client and retains its RAM in Stop mode. A cache already
@@ -499,8 +501,8 @@ in the same image or two startup/vector definitions will conflict.
 ## External middleware checkout
 
 The ST Bluetooth link layer is a closed library. Its platform files (`bleplat.c`,
-`linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`) are ST sources under the ST license, so they stay in the ST
-repositories and are not copied into IOsonata. The library builds them from the
+`linklayer_plat.c`, `power_table.c`) are ST sources under the ST license, so
+they stay in the ST repositories and are not copied into IOsonata. The library builds them from the
 STM32CubeWBA checkout.
 
 The IOsonata clone scripts in `Installer` clone both repositories at matching
@@ -632,11 +634,28 @@ server, RTC, memory manager or flash manager:
   level CCM for example, runs on `CryptoSoftAes` for that call. The host test
   vectors (FIPS-197, RFC 4493 and RFC 3610 packet vector 1) pass.
 - PKA controller hooks (`PKACTRL_CB_Process`, mutex, semaphore, `PKA_IRQHandler`).
+- The link layer system hooks of the Cube `ll_sys_if.c`: `ll_sys_config_params`
+  and `ll_sys_reset` (radio low ISR mode, sleep timer clock source from RCC
+  RADIOSTSEL, sleep clock accuracy, LSI1 calibration, scheduler margins,
+  temperature sensor, power table), `ll_sys_bg_process_init` and the
+  background process scheduling (the link layer task of the sequencer above),
+  and `ll_sys_bg_temperature_measurement`. They are calls into the link layer
+  library; RADIOSTSEL is the only register read. `tests/stm32wba/run_ll_sys.py`
+  builds the Cube file from the STM32CubeWBA checkout and these functions
+  against the same mocks and compares the calls for each sleep timer clock,
+  with and without `DEBUG`. The CTE and profile statistics functions of the
+  Cube file have no caller and are not provided.
 - `SCM_HSE_WaitUntilReady`, `scm_*` and the link layer debug signals.
 
-Limits: the temperature given to the link layer for radio calibration is fixed
-at 25 degrees C (set `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 0 in
-`app_conf.h`, then it is not used). The RNG, timer, sequencer
+`app_conf.h` enables temperature-based calibration when the initial sensor
+reading succeeds. `TempSTM32WBA` reads VREFINT and the internal temperature
+input through IOsonata's ADC channel API, compensates for supply voltage,
+and applies the factory 30 C / 130 C calibration. It borrows an idle ADC4
+owner and restores its channels, resolution and unread samples. ADC and
+sensor calls are main-loop polling operations, not interrupt operations.
+A busy converter or failed reading is not reported as a temperature. If the
+initial reading fails, the link layer retains periodic calibration. No ST
+ADCCTRL or TEMPMEAS module is used. The RNG, timer, sequencer
 and PKA hooks are exercised by the BLE examples. Host tests cover timer
 admission/queue failures, AES fallback and PKA input cleanup. Peripheral fault
 injection and concurrent application crypto with pairing remain hardware work.
@@ -645,8 +664,9 @@ Cube sources that remain in a Bluetooth build (all from the STM32CubeWBA 1.10.0
 package and the WPAN middleware commit 7e764835):
 
 - Project Target files `bleplat.c` (it includes `ble_wrap.c`, so do not compile
-  that one), `linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`. Take them from
-  the BLE only project (BLE_p2pServer), not from the audio projects.
+  that one), `linklayer_plat.c`, `power_table.c`. Take them from the BLE only
+  project (BLE_p2pServer), not from the audio projects. `ll_sys_if.c` is not
+  built: `bt_wba_platform.cpp` provides its functions (see below).
 - `link_layer/ll_sys/src/ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`,
   `ll_sys_dp_slp.c`.
 - Libraries `ble/stack/lib/stm32wba_ble_stack_full.a` and
@@ -670,6 +690,33 @@ sleep timer clock before `BleStack_Init`: LSE when `g_McuOsc.LowPwrOsc.Type`
 is not `OSC_TYPE_RC`, LSI1 otherwise. Without it the link layer stops on a
 missing sleep clock source.
 
+`src/bt_app_stm32wba.cpp` replaces the `AppWait` of `AppRun` once the stack is
+initialized. Between radio events the link layer clears RADIOSMEN, so a sleep
+stops the radio bus clock, and after the wake up the sleep timer register keeps
+its value from before the sleep until the next sleep clock edge. The link layer
+waits for that edge in its time reads only when the sleep is reported with
+`LINKLAYER_PLAT_NotifyWFIEnter` and `LINKLAYER_PLAT_NotifyWFIExit`. `AppWait`
+reports it as the Cube sleep mode entry does: interrupts masked, application
+queue checked again, WFI, exit report, mask restored. Before that change the
+port slept with WFE and never reported the sleep, so the link layer scheduler
+could read the sleep timer from before the sleep at the start of a radio event.
+`tests/stm32wba/run_app_wait.py` checks the order; the throughput effect needs
+the DK1 BlePrbsRx run.
+
+LE power control: the Basic Plus link layer (needed for extended advertising)
+includes autonomous LE power control. The ST host sets its RSSI golden range
+to -77 to -68 dBm on each HCI reset (`LECTRL_Reset`), and the link layer then
+asks a peer that supports LE power control to lower its TX power until the
+received level is in that range: 30 dB or more for a peer at short range. The
+DK1 BlePrbsRx and ST throughput client runs against the nRF52840 SDC peer,
+which supports LE power control, were about 10% slower with Basic Plus than
+with Basic, with packets lost in bursts. After `BleStack_Init` the port writes
+`CFG_BLE_RSSI_GOLDEN_RANGE_MIN`/`MAX` from `app_conf.h` (default -100 to
++20 dBm) with `ACI_HAL_WRITE_CONFIG_DATA`, so no request is made and the peer
+keeps its power, as with the other IOsonata Bluetooth ports. A project that
+wants the ST behavior defines the two values as -77 and -68.
+`tests/stm32wba/run_golden_range.py` checks the written range.
+
 ## Bluetooth in the library
 
 The Debug and Release configurations of `lib/ioc` include everything the ST
@@ -682,9 +729,8 @@ ST prebuilt archives and holds only its own sources:
 - `nvm_stm32.cpp` for the bond storage;
 - `src/bleplat_wrap.c`, which renames the Cube `BLEPLAT_NvmStore` and includes
   `bleplat.c`, so no per file compiler option is needed;
-- the Cube and WPAN platform files `linklayer_plat.c`, `ll_sys_if.c`,
-  `power_table.c` and the WPAN
-  `ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`, `ll_sys_dp_slp.c`, found
+- the Cube and WPAN platform files `linklayer_plat.c`, `power_table.c` and
+  the WPAN `ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`, `ll_sys_dp_slp.c`, found
   through the `external` folder (see External middleware checkout);
 - `src/bluetooth/bt_wba_pka.cpp`, which answers the P-256 key requests of the
   stack (public key and Diffie-Hellman) with the IOsonata `CryptoWbaPka` engine
@@ -692,18 +738,17 @@ ST prebuilt archives and holds only its own sources:
   `hw_pka_p256.c`) is not built. The operation runs in the event queue
   context;
 - the headers `include/app_conf.h`, `app_common.h`, `utilities_conf.h`,
-  `stm32_rtos.h`, `common_wpan_conf.h` and `main.h`. The ST platform files
-  include them by name. They are written for IOsonata (MIT) and define only
-  what the built files use: the radio and PKA interrupt numbers and
-  priorities, the link layer task identifiers, the power table selection and
-  the sequencer prototypes that `bt_wba_platform.cpp` implements. They are not
+  `common_wpan_conf.h` and `main.h`. The ST platform files include them by
+  name. They are written for IOsonata (MIT) and define only what the built
+  files use: the radio and PKA interrupt numbers and priorities, the link
+  layer task identifiers and the power table selection. They are not
   copies of the ST BLE_p2pServer files, which are under the ST license;
 - in place of the ST HAL, the headers `include/stm32wbaxx_hal.h`,
   `stm32wbaxx_hal_conf.h` and `stm32wbaxx_ll_rcc.h`, also included by name.
-  They hold only the HAL and LL items `linklayer_plat.c` and `ll_sys_if.c`
-  use, with CMSIS register access: the radio bus clock macros, the radio mode,
-  voltage scaling, sleep timer clock source and HSE ready reads, the unique
-  device number, the ST company ID, the revision ID, `assert_param` and the
+  They hold only the HAL and LL items `linklayer_plat.c` uses, with CMSIS
+  register access: the radio bus clock macros, the radio mode, voltage
+  scaling, sleep timer clock source and HSE ready reads, the unique device
+  number, the ST company ID, `assert_param` and the
   `HAL_NVIC_*` and radio baseband clock prototypes that `bt_wba_platform.cpp`
   implements. A Release build gives the same code as one with the ST HAL
   headers.
@@ -730,7 +775,7 @@ pins (PB1, PB2 AF4) and the VCP pins match the ST board support package. The SPI
 pins (PB10, PA9, PC3 AF5, CS PB9) and the second I2C and SPI pins of the
 MasterSlave examples come from the ST pin data for the STM32WBA65RI and UM3462 table 8.
 
-Remaining work: ADC-based radio temperature measurement and explicit BLE
+Remaining work: hardware validation of ADC-based radio temperature measurement and explicit BLE
 characteristic-read tests.
 The standalone crypto engines are hardware validated. The ST BLE adapter uses
 them; pairing and a bonded reconnect ran on the DK1 with BleSecurityDemo.
@@ -853,7 +898,8 @@ adjust a bar and select to return. Each press requires a release.
 single rounds in polling mode. Its initial support is intentionally limited:
 external inputs 1..10, single-ended, unity gain, 6/8/10/12-bit resolution,
 VREF+ supplied by the caller. Continuous conversion, interrupt, DMA, FIFO,
-oversampling and internal radio temperature measurement are not implemented.
+oversampling are not implemented. Internal VREFINT and temperature inputs are
+selected through `AdcChanCfg_t::PinP.PinNo` using the WBA input constants.
 Rebuild the matching Debug or Release MCU library first.
 
 The example builds and links in Debug and Release. ADC register simulation

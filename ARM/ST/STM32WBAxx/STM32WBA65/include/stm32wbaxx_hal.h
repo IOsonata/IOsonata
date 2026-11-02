@@ -3,16 +3,15 @@
 
 @brief	HAL names used by the STM32CubeWBA BLE platform files.
 
-The STM32CubeWBA files built into the STM32WBA65 library, linklayer_plat.c and
-ll_sys_if.c (through main.h), include stm32wbaxx_hal.h by name. IOsonata does
-not use the ST HAL. This header gives those files the few HAL and LL items
-they use, with CMSIS register access:
+The STM32CubeWBA file built into the STM32WBA65 library, linklayer_plat.c,
+includes stm32wbaxx_hal.h by name. IOsonata does not use the ST HAL. This
+header gives that file the few HAL and LL items it uses, with CMSIS register
+access:
 
 - HAL_NVIC_* and HAL_RCCEx_Enable/DisableRadioBBClock (bt_wba_platform.cpp)
 - the AHB5 clock macros of the 2.4 GHz RADIO
 - the PWR radio mode and voltage scaling flag
 - the unique device number and ST company ID (flash engineering bytes)
-- the DBGMCU revision ID
 - UNUSED
 
 The RCC radio sleep timer and HSE items are in stm32wbaxx_ll_rcc.h, the
@@ -121,12 +120,6 @@ static inline uint32_t LL_FLASH_GetUDN(void)
 static inline uint32_t LL_FLASH_GetSTCompanyID(void)
 {
 	return (READ_REG(*((uint32_t *)UID64_BASE + 1U)) >> 8U) & 0x00FFFFFFU;
-}
-
-// Device revision ID, DBGMCU_IDCODE REV_ID
-static inline uint32_t LL_DBGMCU_GetRevisionID(void)
-{
-	return READ_BIT(DBGMCU->IDCODE, DBGMCU_IDCODE_REV_ID) >> DBGMCU_IDCODE_REV_ID_Pos;
 }
 
 #ifdef __cplusplus

@@ -1,13 +1,11 @@
 /**-------------------------------------------------------------------------
-@file	stm32_rtos.h
+@file	temp_stm32wba.h
 
-@brief	Sequencer declarations expected by the STM32CubeWBA platform files.
+@brief	STM32WBA internal temperature sensor over the IOsonata ADC
 
-The sequencer is not built. bt_wba_platform.cpp implements UTIL_SEQ_RegTask and
-UTIL_SEQ_SetTask over the IOsonata Bluetooth event queue.
 
 @author	Hoang Nguyen Hoan
-@date	Oct. 16, 2026
+@date	Oct. 19, 2026
 
 @license
 
@@ -19,8 +17,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished
-to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -34,25 +32,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __STM32_RTOS_H__
-#define __STM32_RTOS_H__
 
-#include <stdint.h>
-#include "app_conf.h"
+#ifndef __TEMP_STM32WBA_H__
+#define __TEMP_STM32WBA_H__
 
-#define TASK_PRIO_RNG				0
-#define TASK_PRIO_LINK_LAYER		0
-#define UTIL_SEQ_RFU				0
+#include "sensors/temp_sensor.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-void UTIL_SEQ_RegTask(uint32_t TaskBm, uint32_t Flags, void (*Task)(void));
-void UTIL_SEQ_SetTask(uint32_t TaskBm, uint32_t Prio);
-
-#ifdef __cplusplus
-}
-#endif
+// Polling, main-loop use. Shares ADC4 through AdcSTM32WBA; no ST ADCCTRL.
+class TempSTM32WBA : public TempSensor {
+public:
+	bool Init(const TempSensorCfg_t &Cfg, DeviceIntrf *pIntrf = nullptr, Timer *pTimer = nullptr) override;
+	bool StartSampling() override;
+	bool UpdateData() override;
+	bool Enable() override;
+	void Disable() override;
+	void Reset() override;
+	void PowerOff() override;
+};
 
 #endif

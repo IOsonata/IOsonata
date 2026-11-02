@@ -19,16 +19,59 @@
 #undef CFG_BUTTON_SUPPORTED
 #define CFG_BUTTON_SUPPORTED 0
 
-/* Match the IOsonata receive benchmark; the host FIFO size is in bytes. */
+/* Match IOsonata WBA host capacity; the benchmark still requests MTU 247.
+ * The host FIFO size here is in bytes. */
+#undef CFG_BLE_NUM_GATT_SERVICES
+#define CFG_BLE_NUM_GATT_SERVICES 8
+#undef CFG_BLE_NUM_GATT_ATTRIBUTES
+#define CFG_BLE_NUM_GATT_ATTRIBUTES 68
+#undef CFG_BLE_ATT_VALUE_ARRAY_SIZE
+#define CFG_BLE_ATT_VALUE_ARRAY_SIZE 1344
+#undef PREP_WRITE_LIST_SIZE
+#define PREP_WRITE_LIST_SIZE BLE_DEFAULT_PREP_WRITE_LIST_SIZE
+#undef CFG_BLE_MBLOCK_COUNT_MARGIN
+#define CFG_BLE_MBLOCK_COUNT_MARGIN 80
+#undef CFG_BLE_MBLOCK_COUNT
+#define CFG_BLE_MBLOCK_COUNT (BLE_MBLOCKS_CALC(PREP_WRITE_LIST_SIZE, \
+	CFG_BLE_ATT_MTU_MAX, CFG_BLE_NUM_LINK) + CFG_BLE_MBLOCK_COUNT_MARGIN)
+#undef CFG_BLE_EATT_BEARER_PER_LINK
+#define CFG_BLE_EATT_BEARER_PER_LINK 0
+#undef CFG_BLE_EXTRA_DATA_BUF_SIZE
+#define CFG_BLE_EXTRA_DATA_BUF_SIZE 0
+#undef CFG_BLE_LONG_WRITE_DATA_BUF_SIZE
+#define CFG_BLE_LONG_WRITE_DATA_BUF_SIZE 0
+#undef CFG_RF_TX_POWER_TABLE_ID
+#define CFG_RF_TX_POWER_TABLE_ID 0
 #undef CFG_BLE_ATT_MTU_MAX
-#define CFG_BLE_ATT_MTU_MAX 247
+#define CFG_BLE_ATT_MTU_MAX 251
 #undef CFG_BLE_NUM_LINK
-#define CFG_BLE_NUM_LINK 1
+#define CFG_BLE_NUM_LINK 2
 #undef CFG_BLE_HOST_EVENT_BUF_SIZE
 #define CFG_BLE_HOST_EVENT_BUF_SIZE 4096
+/* Preserve legacy advertising reports handled by the original application. */
+#undef CFG_BLE_OPTIONS
+#define CFG_BLE_OPTIONS 0
+#undef CFG_BLE_ATTR_PREPARE_WRITE_VALUE_SIZE
+#define CFG_BLE_ATTR_PREPARE_WRITE_VALUE_SIZE BLE_DEFAULT_PREP_WRITE_LIST_SIZE
+#undef CFG_BLE_COC_NBR_MAX
+#define CFG_BLE_COC_NBR_MAX 0
+#undef CFG_BLE_COC_MPS_MAX
+#define CFG_BLE_COC_MPS_MAX 0
+#undef CFG_BLE_COC_INITIATOR_NBR_MAX
+#define CFG_BLE_COC_INITIATOR_NBR_MAX 0
 #undef CFG_PHY_PREF_TX
 #define CFG_PHY_PREF_TX HCI_TX_PHYS_LE_1M_PREF
 #undef CFG_PHY_PREF_RX
 #define CFG_PHY_PREF_RX HCI_RX_PHYS_LE_1M_PREF
+
+/* Match the IOsonata WBA LE power control RSSI golden range (app_conf.h of
+ * the library). The ST host default, -77 to -68 dBm, makes the Basic Plus
+ * link layer ask a peer at short range to lower its TX power by 30 dB or
+ * more. This range holds every received level, so no request is made.
+ * Written in Ble_Hci_Gap_Gatt_Init after BleStack_Init. */
+#undef CFG_BLE_RSSI_GOLDEN_RANGE_MIN
+#define CFG_BLE_RSSI_GOLDEN_RANGE_MIN (-100)
+#undef CFG_BLE_RSSI_GOLDEN_RANGE_MAX
+#define CFG_BLE_RSSI_GOLDEN_RANGE_MAX 20
 
 #endif

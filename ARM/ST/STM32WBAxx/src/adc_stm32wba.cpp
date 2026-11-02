@@ -159,49 +159,91 @@ uint16_t AdcSTM32WBA::Resolution(uint16_t Val)
 
 bool AdcSTM32WBA::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
 {
+	const AdcChanCfg_t *c;
+	int i;
+	int j;
+	int input;
+	int port;
+
 	if (!Owned() || !Valid() || !pCfg || Count <= 0 || Count > 8 ||
 		(ADC4->CR & ADC_CR_ADSTART))
 	{
 		return false;
 	}
-	for (int i = 0; i < Count; i++)
+	for (i = 0; i < Count; i++)
 	{
-		const AdcChanCfg_t &c = pCfg[i];
-		if (c.Chan < 0 || c.Chan >= 8 || c.PinP.PinNo < 1 || c.PinP.PinNo > 10 ||
-			c.RefVoltIdx != 0 || c.Type != ADC_CHAN_TYPE_SINGLE_ENDED || c.Gain != 0x100 ||
-			c.PinP.Conn != ADC_PIN_CONN_NONE || c.BurstMode || c.pFifoMem || c.FifoMemSize ||
-			c.AcqTime < 0 || (uint64_t)c.AcqTime * (SystemCoreClockGet() / 16) * 2 > 1629000000ULL)
+		c = &pCfg[i];
+		if (c->Chan < 0 || c->Chan >= 8 || c->PinP.PinNo < 0 ||
+			(c->PinP.PinNo > 10 && c->PinP.PinNo != ADC_STM32WBA_INPUT_TEMP) ||
+			c->RefVoltIdx != 0 || c->Type != ADC_CHAN_TYPE_SINGLE_ENDED || c->Gain != 0x100 ||
+			c->PinP.Conn != ADC_PIN_CONN_NONE || c->BurstMode || c->pFifoMem || c->FifoMemSize ||
+			c->AcqTime < 0 || (uint64_t)c->AcqTime * (SystemCoreClockGet() / 16) * 2 > 1629000000ULL)
 		{
 			return false;
 		}
-		for (int j = 0; j < i; j++)
+		for (j = 0; j < i; j++)
 		{
-			if (pCfg[j].Chan == c.Chan)
+			if (pCfg[j].Chan == c->Chan)
 			{
 				return false;
 			}
 		}
 	}
-	for (int i = 0; i < Count; i++)
+	for (i = 0; i < Count; i++)
 	{
-		const AdcChanCfg_t &c = pCfg[i];
-		int input = c.PinP.PinNo;
-		int port = input == 10 ? IOPORTB : IOPORTA;
+		c = &pCfg[i];
+		input = c->PinP.PinNo;
+		port = input == 10 ? IOPORTB : IOPORTA;
 		// Config enables the port clock; Disable selects analog/no pulls.
-		IOPinConfig(port, s_Pin[input - 1], IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-		IOPinDisable(port, s_Pin[input - 1]);
-		vInput[c.Chan] = input;
-		vbNew[c.Chan] = false;
+		if (input >= 1 && input <= 10)
+		{
+			IOPinConfig(port, s_Pin[input - 1], IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+			IOPinDisable(port, s_Pin[input - 1]);
+		}
+		vInput[c->Chan] = input + 1;
+		vbNew[c->Chan] = false;
 	}
+	InternalPaths();
+
 	return true;
+}
+
+AdcSTM32WBA *AdcSTM32WBA::Owner()
+{
+	return s_Owner;
+}
+
+void AdcSTM32WBA::InternalPaths()
+{
+	uint32_t paths = 0;
+	uint32_t previous = ADC4_COMMON->CCR;
+	int i;
+
+	for (i = 0; i < 8; i++)
+	{
+		if (vInput[i] == ADC_STM32WBA_INPUT_VREFINT + 1)
+		{
+			paths |= ADC_CCR_VREFEN;
+		}
+		if (vInput[i] == ADC_STM32WBA_INPUT_TEMP + 1)
+		{
+			paths |= ADC_CCR_TSEN;
+		}
+	}
+	ADC4_COMMON->CCR = (previous & ~(ADC_CCR_TSEN | ADC_CCR_VREFEN)) | paths;
+	if (paths & ~previous)
+	{
+		usDelay(120);
+	}
 }
 
 void AdcSTM32WBA::CloseChannel(int Chan)
 {
-	if (Owned() && Chan >= 0 && Chan < 8)
+	if (Owned() && Chan >= 0 && Chan < 8 && !(ADC4->CR & ADC_CR_ADSTART))
 	{
 		vInput[Chan] = 0;
 		vbNew[Chan] = false;
+		InternalPaths();
 	}
 }
 
@@ -323,7 +365,7 @@ bool AdcSTM32WBA::Convert(int Chan)
 	{
 		return false;
 	}
-	ADC4->CHSELR = 1U << vInput[Chan];
+	ADC4->CHSELR = 1U << (vInput[Chan] - 1);
 	ADC4->ISR = ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR;
 	Command(ADC_CR_ADSTART);
 	if (!Wait(&ADC4->ISR, ADC_ISR_EOC, ADC_ISR_EOC) || (ADC4->ISR & ADC_ISR_OVR) ||

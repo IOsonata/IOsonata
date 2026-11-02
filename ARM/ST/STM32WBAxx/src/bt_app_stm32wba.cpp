@@ -60,16 +60,17 @@ SOFTWARE.
 #include "stm32wbaxx.h"
 
 // STM32CubeWBA BLE middleware, release 1.10.0 (WPAN middleware commit
-// 7e764835). The project provides the Target files of the Cube reference
-// application (bleplat.c, linklayer_plat.c, ll_sys_if.c, bpka.c, power_table.c)
-// and its app_conf.h set. host_stack_if.c is not used: BleStackCB_Process and
-// HostStack_Process are defined here and run the host stack from the
-// Bluetooth event queue.
+// 7e764835). The library builds the Target files bleplat.c, linklayer_plat.c
+// and power_table.c of the Cube reference application, with the IOsonata
+// app_conf.h set. ll_sys_if.c is replaced by bt_wba_platform.cpp.
+// host_stack_if.c is not used: BleStackCB_Process and HostStack_Process are
+// defined here and run the host stack from the Bluetooth event queue.
 #include "bt_wba_stack.h"
 #include "bt_wba_bond.h"
 #include "bt_wba_platform.h"
 
 #include "istddef.h"
+#include "app_evt_handler.h"
 #include "idelay.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
@@ -479,6 +480,43 @@ void BtAppCheckStatus(void)
 	{
 		BtDfuSmpCheckStatus();
 	}
+}
+
+// Wait of AppRun once the BLE stack runs. Between radio events the link layer
+// clears RADIOSMEN (LINKLAYER_PLAT_StopRadioEvt), so a sleep stops the radio
+// bus clock. After the wake up, the sleep timer register keeps its value from
+// before the sleep until the next sleep clock edge. The link layer scheduler
+// reads the time through llhwc_slptmr_get, which waits for that edge
+// (LINKLAYER_PLAT_WaitHclkRdy) only when the sleep was reported with
+// LINKLAYER_PLAT_NotifyWFIEnter and LINKLAYER_PLAT_NotifyWFIExit, as the Cube
+// sleep mode entry does around its WFI.
+//
+// Same order as the Cube sequencer idle: interrupts masked, queue checked
+// again, then WFI. WFI wakes on a pending interrupt while masked, so the exit
+// report samples the sleep timer before the radio interrupt reads it. On this
+// port, interrupt work reaches the loop through BtEvtQue, and the retry flags
+// are only left when the queue is full, so the queue check covers what the WFE
+// event register covers in the default wait.
+// Overrides the weak WFE default. C linkage, as declared in app_evt_handler.h.
+void AppWait(void)
+{
+	uint32_t state;
+
+	if (s_BtAppData.bInitialized == false)
+	{
+		__WFE();
+		return;
+	}
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (AppEvtHandlerPending() == false)
+	{
+		LINKLAYER_PLAT_NotifyWFIEnter();
+		__WFI();
+		LINKLAYER_PLAT_NotifyWFIExit();
+	}
+	__set_PRIMASK(state);
 }
 
 extern "C" void BtSmpBondWbaEraseBegin(void);
@@ -1607,6 +1645,24 @@ static void BtAppWbaIdentitySet(void)
 	memset(er, 0, sizeof(er));
 }
 
+// RSSI golden range of the link layer LE power control, see app_conf.h.
+// Byte 0 is the lower limit, byte 1 the upper limit.
+static void BtAppWbaGoldenRangeSet(void)
+{
+	const uint8_t range[CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_LEN] = {
+		(uint8_t)(int8_t)CFG_BLE_RSSI_GOLDEN_RANGE_MIN,
+		(uint8_t)(int8_t)CFG_BLE_RSSI_GOLDEN_RANGE_MAX,
+	};
+	tBleStatus status = aci_hal_write_config_data(
+		CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_OFFSET,
+		CONFIG_DATA_LL_RSSI_GOLDEN_RANGE_LEN, range);
+
+	if (status != BLE_STATUS_SUCCESS)
+	{
+		SysLogPrintf(SysLogGet(), "RSSI golden range not set: 0x%02x\r\n", status);
+	}
+}
+
 // --- Public API ---
 
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
@@ -1684,6 +1740,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	// Device identity: public address and the identity and encryption roots.
 	// The stack is reset by BleStack_Init, so they are written after it.
 	BtAppWbaIdentitySet();
+	BtAppWbaGoldenRangeSet();
 
 	// TX power in dBm, mapped to the closest PA level of the stack. Zero keeps
 	// the stack default, which is the maximum level.
@@ -2006,6 +2063,7 @@ static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 	(void)pCtx;
 
 	s_BtAppTickState = BT_APP_TICK_IDLE;
+	BtWbaClockScaleUpdate();
 	BtGapWbaConnParamProcess();
 	BtGattIndicationTimeoutCheck();
 	BtSmpBondWbaPoll();

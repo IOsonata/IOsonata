@@ -2,7 +2,7 @@
 
 This is an Eclipse managed ARM GCC application for STM32WBA65I-DK1.
 It builds ST's STM32CubeWBA v1.10.0 BLE_DataThroughput_Client sources,
-HAL, sequencer, host timers, host library and Basic controller library.
+HAL, sequencer, host timers, host library and Basic Plus controller library.
 It does not link the IOsonata Bluetooth or MCU libraries. This is a separate firmware for comparing the
 ST reference integration with the IOsonata integration.
 
@@ -88,12 +88,17 @@ The native stack event delivery and UART drivers remain different. Earlier
 measurements with separate checkers or UART rates do not isolate stack cost.
 
 
-`dk1_config.h` disables Nucleo buttons/LEDs, selects one link, MTU 247,
-a 4096-byte host-event FIFO and initial default 1M PHY. It enables the general
-SVCCTL event callback needed for automatic GAP procedure handling. ST's host
-memory-block margin, Basic controller library and native clock/power setup
-remain in use. The connection request retains ST's CE length hints (0/80,
-in 0.625 ms units); actual throughput must be measured on hardware.
+The application sources are unchanged from the working comparison at commit
+`6bfba38a`. Only configuration and managed-project settings differ: Basic Plus
+controller/library headers and compiler feature selection, two-link capacity,
+maximum MTU 251, the default prepare-write list, no CoC channels, and RF power
+table 0. The host FIFO remains 4096 bytes and the memory-block margin remains 80.
+
+Extended advertising stays disabled because the original application handles
+legacy advertising reports only. The benchmark still requests one connection
+at 15 ms, negotiates MTU 247 and runs both PHY trials. ST's original NVM sizing
+and explicit TX-power command remain unchanged. This is a configuration-only
+comparison, not an exact match of every IOsonata initialization parameter.
 
 `src/app_ble.c` is copied from STM32CubeWBA v1.10.0, commit
 `4ccfd1526870263657ec8e0854c64cda6ed2b5da`, directory

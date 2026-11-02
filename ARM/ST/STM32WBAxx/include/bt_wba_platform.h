@@ -54,6 +54,10 @@ void BtWbaPlatformInit(void);
 /// Controller time in milliseconds, starting when the first port timer is created.
 uint32_t BtWbaMsTick(void);
 
+/// Refresh the controller time scale, which the link layer recalibrates on LSI.
+/// Thread context only: it waits for the next sleep timer edge.
+void BtWbaClockScaleUpdate(void);
+
 /// Reserve one periodic controller timer for one-second timeout checks.
 /// Call after BleStack_Init. Callback runs in controller interrupt context.
 bool BtWbaTickStart(void (*Callback)(const void *));
