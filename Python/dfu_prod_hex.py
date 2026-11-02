@@ -17,7 +17,7 @@ and the application link with, so the addresses cannot drift:
 
 Merge the output with the boot hex (and the SoftDevice where there is one).
 
-    dfu_prod_hex.py --layout ARM/Nordic/nRF52/nRF52840/ldscript/dfu_layout_nrf52840_s140.ld \\
+    dfu_prod_hex.py --layout ARM/Nordic/nRF52/ldscript/gcc_nrf52840_xxaa_s140_dfu_layout.ld \\
         app_signed.bin app_prod.hex
     dfu_prod_hex.py --layout .../dfu_layout_lpc11u35.ld app_signed.bin out.hex
 
