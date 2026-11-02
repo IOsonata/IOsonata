@@ -24,10 +24,11 @@ ll_sys_startup.c, ll_sys_intf.c, ll_sys_cs.c, ll_sys_dp_slp.c:
 - The P-256 operations are in bt_wba_pka.cpp.
 - Link layer interrupts (RADIO and HASH vectors), HSE32 wait, system clock
   manager entries, debug signals: small functions.
+- Radio calibration temperature: TempSTM32WBA (temp_stm32wba.cpp) reads the
+  internal temperature sensor through ADC4. If the first reading fails, the
+  link layer keeps its periodic calibration.
 
 Known limits:
-- The temperature used by the link layer for radio calibration is fixed at 25
-  degrees C. There is no ADC based measurement yet.
 - The AES block is polled. The secure AES (SAES) is not used.
 
 @author	Hoang Nguyen Hoan
