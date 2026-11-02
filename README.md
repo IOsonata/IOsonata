@@ -6,9 +6,9 @@
 
 ### Port once. Compile once. Link only what you use.
 
-IOsonata is an open-source, bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for microcontrollers. It includes a Bluetooth LE host, a composable USB device stack, NVM storage, crypto, and sensor and display drivers.
+IOsonata is an open-source, bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for microcontrollers. It includes a Bluetooth LE host, a composable USB device stack, shared networking (sockets, lwIP, TLS 1.3, MQTT and CoAP), LTE and GNSS on nRF91, NVM storage, crypto, and sensor and display drivers.
 
-MCU support varies by target and peripheral. The [MCU support matrix](docs/supported-targets.md) covers Nordic, STM32, Renesas, Microchip SAM, NXP LPC, Espressif and RP2040 projects, separating implemented core drivers, incomplete integration and recorded hardware results. Maintainer hardware evidence includes nRF52832, nRF52840, nRF54L15, nRF54LM20, SAM4LC8C, STM32F030x8 and STM32L476/L496/L4S9, with different tested functions on each.
+MCU support varies by target and peripheral. The [MCU support matrix](docs/supported-targets.md) covers Nordic, STM32, Renesas, Microchip SAM, NXP LPC, Espressif and RP2040 projects, separating implemented core drivers, incomplete integration and recorded hardware results. Hardware results are recorded for Nordic nRF52, nRF53, nRF54L and nRF91, STM32F0, L1, L4, G4, H7 and WBA, Renesas RA4M1 and R9A02G021, Microchip SAM4L and SAM D, and NXP LPC54628 parts, with different tested functions on each.
 
 It uses real object-oriented design—encapsulation, inheritance, runtime polymorphism and object composition—while matching or exceeding the performance of tested C-only HALs and frameworks in published on-target benchmarks.
 
@@ -34,8 +34,30 @@ The application owns `main()`, its board configuration, its memory layout and it
 - **IOsonata UART on nRF54L15:** 102.2 KB/s, compared with nrfx at 87.0 KB/s and Zephyr at 82.9 KB/s.
 - **TaktOS on nRF54L15 KVB:** up to 3.12× Zephyr and 2.88× ThreadX across the reported scheduler, synchronization and IPC operations.
 - **Controlled kernel comparison:** TaktOS, FreeRTOS and ThreadX all link the exact same precompiled IOsonata library binary.
+- **Bluetooth on STM32WBA65:** 79,304 / 109,657 B/s notification receive at 1M / 2M PHY, compared with 79,157 / 109,198 B/s for ST's reference client under the same settings.
+- **USB on nRF52840 and nRF54LM20:** 2,000-second composite runs, bare metal and TaktOS, with no data errors.
 
 Detailed benchmark tables, configurations and methodology appear below.
+
+---
+
+## Release 0.13
+
+[IOsonata 0.13](https://github.com/IOsonata/IOsonata/releases/tag/0.13) completes the USB device stack started in 0.12, adds new MCU ports, moves USB and Bluetooth to one application event queue and adds shared networking.
+
+- **USB device stack:** CDC, custom bulk, HID, MSC and Bluetooth HCI functions, with interrupt and isochronous transports. Device classes register with the common USB core, which allocates interfaces and endpoints.
+- **USB device ports:** nRF52840, nRF54LM20 (full and high speed), SAM4L, RA4M1, STM32L4, STM32H753, STM32WBA65, LPC11U35, LPC1769, LPC54628 (USB1 high speed), SAM D11 and SAM D21.
+- **New MCU ports:** RA4M1, LPC11U35, LPC1769, LPC54628, SAM D11, SAM D21, SAM4LS, STM32F030x8, STM32L432, STM32G474, STM32H753 and an initial STM32L152RE port.
+- **Bluetooth on more targets:** STM32WBA65 on the ST host and Basic Plus link layer, without the ST HAL. The IOsonata HCI host runs over UART on nRF91 and over IPC on the nRF5340 application core, both to HciController.
+- **Nordic Bluetooth security:** no nRF5 SDK or sdk-nrf-bm Peer Manager, with shared bond storage across SoftDevice and SDC builds.
+- **One application event queue:** `AppRun()` replaces `BtAppRun()` and runs the USB, Bluetooth and LTE work.
+- **Networking:** `SockIntrf`, lwIP over Ethernet on STM32H753 and LPC54628, TLS 1.3, MQTT 3.1.1 and CoAP. nRF91 adds modem and LTE integration.
+- **STM32 timers:** one driver for F0, L4, G4 and WBA.
+- **Installer:** clones and builds everything the projects need.
+
+A clean build in the installer layout with xPack Arm GNU 15.2.1 and RISC-V GNU 15.2.0 builds all 122 library configurations and 1,333 of 1,428 example configurations.
+
+Applications moving from 0.12 need source changes and a rebuilt MCU library. The [release notes](https://github.com/IOsonata/IOsonata/releases/tag/0.13) list the upgrade steps, the examples that do not build and the functions not yet run on hardware.
 
 ---
 
@@ -150,8 +172,10 @@ Its design is built around two primary object families.
 - I2C
 - SPI
 - UART
+- USB
 - Bluetooth
-- SLIP
+- TCP and UDP sockets
+- SLIP and TLS
 - another hardware or software interface
 
 A device driver depends on the interface role, not a specific bus implementation.
@@ -182,7 +206,7 @@ accel.Init(accelCfg, interface, &timer);
 
 This is one sensor driver. The selected interface changes; the driver implementation does not.
 
-The same model also allows protocol composition. A `Slip` object can wrap a UART or Bluetooth interface while the application continues to use `DeviceIntrf`.
+The same model also allows protocol composition. A `Slip` object can wrap a UART or Bluetooth interface while the application continues to use `DeviceIntrf`. A `Tls` object wraps a TCP `SockIntrf` the same way, and `Mqtt` accepts either one as its `DeviceIntrf`.
 
 Low-level operations that do not benefit from object state remain lightweight C/C++ functions. GPIO pin control, for example, is not forced into a class hierarchy.
 
@@ -263,6 +287,36 @@ See the [TaktOS on-target benchmark results](https://github.com/IOsonata/TaktOS#
 
 ---
 
+## Bluetooth and USB measurements
+
+### Bluetooth notification receive
+
+[`BlePrbsRx`](exemples/bluetooth/ble_prbs_rx.md) checks a PRBS notification stream in firmware over 60-second trials, with a 15 ms connection interval and ATT MTU 247. These runs report no PRBS errors.
+
+| Target and stack | 1M PHY | 2M PHY |
+|---|---:|---:|
+| nRF52, SoftDevice Controller | 75,194 B/s | 132,894 B/s |
+| nRF52, SoftDevice | 60,833 B/s | 132,931 B/s |
+| STM32WBA65, IOsonata | 79,304 B/s | 109,657 B/s |
+| STM32WBA65, ST reference client | 79,157 B/s | 109,198 B/s |
+
+Both STM32WBA65 clients use the same settings and stay below the 2M target of eight notifications per connection interval.
+
+### Composite USB endurance
+
+`UsbComboStress` and `UsbComboStressTaktOS` run CDC loopback, CDC PRBS TX, HID, interrupt and isochronous traffic at the same time. Each run lasted 2,000 seconds with no loopback, PRBS, HID, interrupt or isochronous data errors.
+
+| Target and mode | CDC loopback, each direction | All traffic |
+|---|---:|---:|
+| nRF52840 bare metal | 349,239 B/s | 824,175 B/s |
+| nRF52840 TaktOS | 362,100 B/s | 851,937 B/s |
+| nRF54LM20 bare metal | 2,426,717 B/s | 5,012,791 B/s |
+| nRF54LM20 TaktOS | 2,649,511 B/s | 5,474,970 B/s |
+
+These results show sustained composite traffic on the tested builds. They are not a speed comparison: the firmware revision and compiler were not recorded with the runs, and the nRF54LM20 bare-metal run had two host pauses totalling 33.2 seconds. See the [USB User Guide](docs/usb-user-guide.md) for the test procedure.
+
+---
+
 ## Design model at a glance
 
 | Design property | Template-generated C++ HAL | Zephyr / NCS | IOsonata |
@@ -284,12 +338,16 @@ See the [TaktOS on-target benchmark results](https://github.com/IOsonata/TaktOS#
 IOsonata includes generic and target-specific implementations across:
 
 - ARM Cortex-M and RISC-V
-- GPIO, UART, I2C, SPI, ADC, PWM and timers
-- Bluetooth interfaces, security and standard services
-- storage, flash, EEPROM, NVM and filesystem integration
+- GPIO, UART, I2C, SPI, ADC, DAC, PWM, DMA, RTC, watchdog and timers
+- Bluetooth LE host, HCI transports, security and standard services
+- USB device stack: CDC, HID, MSC, custom bulk, interrupt, isochronous and Bluetooth HCI functions
+- networking: sockets, lwIP over Ethernet, TLS 1.3, MQTT and CoAP
+- LTE modem and GNSS on nRF91
+- storage, flash, EEPROM, NVM, SD card and filesystem integration
 - hardware and software crypto providers
-- sensors, IMUs, displays and touch controllers
-- USB and host-side interfaces
+- sensors, IMUs, displays, touch controllers, audio devices and cameras
+- firmware update (DFU)
+- macOS, Linux and Windows host interfaces
 - bare-metal, TaktOS, FreeRTOS and ThreadX applications
 
 Nordic ports are IOsonata's most developed and most complete MCU family, with
@@ -320,15 +378,22 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 | nRF54L15 | UART, Bluetooth and TaktOS benchmarks |
 | nRF52840 | Bare-metal and TaktOS composite USB endurance |
 | nRF54LM20 | Bare-metal and TaktOS high-speed composite USB endurance |
-| SAM4LC8C | Hardware validated on SAM4L8 Xplained Pro: startup, GPIO, UART, AST/TC timers, I2C, SPI, CDC, ISO and manual suspend/wake |
-| RA4M1 | EK-RA4M1 startup/GPIO, timer callbacks and SCI UART; IIC hardware validation remains pending |
+| nRF5340 | Audio DK Release playback, microphone capture and I2S restart recovery |
+| nRF9160 | Modem AT communication, LTE-M registration and UDP echo with TaktOS |
+| nRF9161 | LTE-M registration and UDP echo with TaktOS |
+| SAM4LC8C | Hardware validated on SAM4L8 Xplained Pro: startup, GPIO, UART, AST/TC timers, I2C, SPI, CDC, ISO, manual suspend/wake and CryptoTest with AESA |
+| SAM D21 / SAM D11 | SAM D21 and SAM D11 Xplained Pro: startup at 48 MHz and UART PRBS TX at the 1 Mbaud line rate |
+| RA4M1 | EK-RA4M1: startup/GPIO, timer callbacks, SCI UART, USB (CDC, CDC plus ISO, interrupt loopback, MSC) and CryptoTest with SCE5. IIC hardware validation is deferred beyond 0.13 |
+| R9A02G021 | FPB-R9A02G021: UART0, IICA and SAU SPI master/slave, timer callbacks, ADC12, RTC, Sleep and Software Standby wake-up |
 | STM32F030x8 | Hardware validated on STM32F0308-DISCO; startup, GPIO, USART1, TIM6/TIM16 and UART DMA PRBS |
 | STM32L476 / STM32L496 / STM32L4S9 | Hardware validated and used in existing projects, confirmed by the maintainer |
 | STM32L476 (B-L475E-IOT01A2) | Shared drivers: GPIO, UART in all modes, I2C, QUADSPI flash through Nvm in single line and quad mode, USB CDC device |
 | STM32L432 | NUCLEO-L432KC: GPIO, timers, UART TX, I2C and SPI master/slave |
+| STM32L152RE | NUCLEO-L152RE: Blinky and UART TX |
 | STM32G474 | NUCLEO-G474RE: GPIO/EXTI, UART in all modes at 1 Mbaud, LPTIM1 and TIM |
-| STM32H753 | NUCLEO-H753ZI: startup, GPIO, USART3 interrupt TX/RX, TIM2 and USB CDC device |
-| STM32WBA65 | STM32WBA65I-DK1: GPIO/EXTI, UART, timers, I2C/SPI master/slave, BLE advertising/security, crypto and USB CDC |
+| STM32H753 | NUCLEO-H753ZI: startup, GPIO, USART3 interrupt and DMA TX/RX, TIM2, USB CDC device, Ethernet (DHCP, UDP, TCP, DNS, HTTP) and CryptoTest |
+| STM32WBA65 | STM32WBA65I-DK1: GPIO/EXTI, UART, timers, I2C/SPI master/slave, BLE peripheral, central and security, notification throughput, crypto and USB CDC |
+| LPC54628 | LPCXpresso54628: UART TX at 1 Mbaud in polling mode, CTIMER triggers and CryptoTest |
 
 These are function-specific maintainer results, not a claim that every
 peripheral or the latest commit has passed hardware validation.
@@ -342,6 +407,7 @@ project integration, build results and hardware scope.
 
 - [TaktOS](https://github.com/IOsonata/TaktOS), including the KVB and Thread-Metric cross-kernel benchmarks
 - [SlimeVRFirmware](https://github.com/IOsonata/SlimeVRFirmware)
+- [HciController](https://github.com/IOsonata/HciController), Bluetooth HCI controller firmware for nRF5x parts
 - Bluetooth UART bridges running bare metal, with FreeRTOS and with TaktOS
 - I-SYST BLYST, BlueIO and sensor reference applications
 - Storage, NVM, crypto, IMU and standard Bluetooth-service implementations in this repository
@@ -352,15 +418,27 @@ project integration, build results and hardware scope.
 
 ### Is IOsonata a C++ alternative to the nRF5 SDK on nRF54L15?
 
-Nordic has placed the nRF5 SDK in maintenance mode, and it does not support the nRF54 series. IOsonata supports nRF52 and nRF54L15 with the same `Device`/`DeviceIntrf` object model, and shared application source under `exemples/` builds for both. On nRF54L15 it runs over the Nordic SoftDevice Controller or the bare-metal SDK S145 SoftDevice, without Zephyr, CMake, Kconfig or Devicetree.
+Nordic has placed the nRF5 SDK in maintenance mode, and it does not support the nRF54 series. IOsonata supports nRF52 and nRF54L15 with the same `Device`/`DeviceIntrf` object model, and shared application source under `exemples/` builds for both. On nRF54L15 it runs over the Nordic SoftDevice Controller or the bare-metal SDK S145 SoftDevice, without Zephyr, CMake, Kconfig or Devicetree. Bluetooth security does not use the nRF5 SDK or sdk-nrf-bm Peer Manager, and SoftDevice and SDC builds share one bond storage.
 
 ### Can I write Bluetooth LE firmware for nRF52 or nRF54 without Zephyr?
 
-Yes. A bare-metal application calls `BtAppInit()` and then `AppRun()`. The Bluetooth stack supports broadcaster, observer, peripheral and central roles, GATT services, pairing with bond persistence, and periodic advertising. See the [Bluetooth User Guide](docs/bluetooth-user-guide.md).
+Yes. A bare-metal application calls `BtAppInit()` and then `AppRun()`; an application using pairing or bonding also calls `BtAppSecInit()` from `BtAppInitUserData()`. The Bluetooth stack supports broadcaster, observer, peripheral and central roles, GATT services, pairing with bond persistence, periodic advertising and synchronization. The IOsonata HCI host adds periodic advertising with responses (PAwR) and Encrypted Advertising Data where the controller supports them. See the [Bluetooth User Guide](docs/bluetooth-user-guide.md).
+
+### Can Bluetooth run on an STM32 or on an MCU without a radio?
+
+Yes. STM32WBA65 uses ST's host and Basic Plus link layer through the IOsonata port, without the ST HAL. On nRF91 and other MCUs without a radio, the IOsonata HCI host runs over UART to an nRF5x running [HciController](https://github.com/IOsonata/HciController). The nRF5340 application core uses the same host over IPC to HciController on the network core.
 
 ### Is IOsonata event-driven? Does it need an RTOS?
 
-It does not need an RTOS. Interrupts do the time-critical work and queue deferred work to one application event queue (`AppEvtHandlerQue()`). `AppRun()` runs that queue first in first out and sleeps until the next interrupt when it is empty. Bluetooth, USB and LTE share the same queue and loop. The same precompiled library also runs under TaktOS, FreeRTOS or ThreadX.
+It does not need an RTOS. Interrupts do the time-critical work and queue deferred work to one application event queue (`AppEvtHandlerQue()`). `AppRun()` runs that queue first in first out and sleeps until the next interrupt when it is empty. Bluetooth, USB and LTE share the same queue and loop. The same precompiled library also runs under TaktOS, FreeRTOS or ThreadX; an RTOS application overrides `UsbEvtQue()` and `BtEvtQue()` to pass that work to its subsystem thread.
+
+### Does IOsonata include a USB device stack?
+
+Yes. An application combines CDC ACM, HID, mass storage, custom bulk, interrupt, isochronous and Bluetooth HCI functions, and the stack assigns the interface and endpoint numbers. Native ports cover nRF52840, nRF54LM20, SAM4L, SAM D11/D21, RA4M1, STM32L4, STM32H753, STM32WBA65, LPC11U35, LPC1769 and LPC54628. USB host mode is not available in 0.13. See the [USB User Guide](docs/usb-user-guide.md).
+
+### Does IOsonata support networking?
+
+Yes. `SockIntrf` presents connected TCP and UDP through `DeviceIntrf`. STM32H753 and LPC54628 use lwIP over Ethernet, and nRF91 uses the IP stack of its modem. TLS 1.3, MQTT 3.1.1 and CoAP are shared implementations that run over a connected socket. See [Networking](docs/networking.md).
 
 ### Is object-oriented C++ too slow or too large for a microcontroller?
 
@@ -460,8 +538,10 @@ Generic reusable examples are under [`exemples/`](exemples/). Buildable MCU proj
 
 See [Getting Started](docs/getting-started.md), the
 [Quick Reference](docs/quick-reference.md), the
-[Buzzer User Guide](docs/buzzer.md) and the
-[USB User Guide](docs/usb-user-guide.md) for additional workflows.
+[Bluetooth User Guide](docs/bluetooth-user-guide.md), the
+[USB User Guide](docs/usb-user-guide.md), [Networking](docs/networking.md) and the
+[Buzzer User Guide](docs/buzzer.md) for additional workflows. The
+[documentation index](docs/README.md) lists the other guides.
 
 ---
 
@@ -473,6 +553,10 @@ src/                             Generic implementations
 exemples/                        Reusable application examples
 ARM/                             ARM architecture and MCU targets
 RISCV/                           RISC-V architecture and MCU targets
+Linux/, OSX/, Win/               Host interfaces and libraries
+fatfs/, littlefs/, micro-ecc/    Third-party source used by the libraries
+Python/                          Host test runners and tools
+tests/                           Host, model and target test suites
 docs/                            Architecture, porting and usage documentation
 Installer/                       Cross-platform development-environment installers
 ```
@@ -498,6 +582,7 @@ The book explains the object model, `DeviceIntrf`, `Device`, driver portability,
 - [TaktOS](https://github.com/IOsonata/TaktOS) — deterministic kernel using the same IOsonata HAL library
 - [IOcomposer](https://iocomposer.io) — embedded development environment and AI-assisted engineering tools
 - [SlimeVRFirmware](https://github.com/IOsonata/SlimeVRFirmware) — motion-tracking firmware built on IOsonata
+- [HciController](https://github.com/IOsonata/HciController) - Bluetooth HCI controller firmware used with the IOsonata HCI host
 
 ---
 
@@ -523,6 +608,6 @@ IOsonata is released under the MIT License. See [LICENSE](LICENSE).
 
 ## Maintainer
 
-IOsonata is maintained by [I-SYST inc.](https://i-syst.com), Brossard, Québec, Canada.
+IOsonata is maintained by [I-SYST inc.](https://i-syst.com), Boucherville, Quebec, Canada.
 
 **Make your IO sing!**
