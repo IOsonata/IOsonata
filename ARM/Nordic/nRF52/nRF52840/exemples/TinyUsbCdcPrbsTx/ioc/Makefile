@@ -45,7 +45,7 @@ INCLUDES := \
 
 CFLAGS := $(COMMON_FLAGS) $(OPTFLAGS) -std=gnu17 -MMD -MP $(INCLUDES)
 CXXFLAGS := $(COMMON_FLAGS) $(OPTFLAGS) -std=gnu++23 -fno-rtti -fno-exceptions -MMD -MP $(INCLUDES)
-LDFLAGS := $(CPUFLAGS) --specs=nano.specs -T$(IO_ROOT)/ARM/Nordic/nRF52/nRF52840/ldscript/gcc_nrf52840_xxaa.ld -Wl,--gc-sections -Wl,-Map,$(MAP)
+LDFLAGS := $(CPUFLAGS) --specs=nano.specs -T$(IO_ROOT)/ARM/Nordic/nRF52/ldscript/gcc_nrf52840_xxaa.ld -Wl,--gc-sections -Wl,-Map,$(MAP)
 LDLIBS := -L$(IO_ROOT)/ARM/Nordic/nRF52/nRF52840/lib/ioc/$(CONFIG) -Wl,--start-group -lIOsonata_nRF52840 -lgcc -lc -lm -Wl,--end-group
 
 OBJS := \
