@@ -1,7 +1,7 @@
 /* DFU flash layout, nRF52810 with MBR and S112 7.x.
  *
- * Included by the stage 0 boot script (dfu_boot_nrf52810_s112.ld) and the
- * application script (s112_nrf52810_xxaa_dfu.ld), so both agree on where
+ * Included by the stage 0 boot script (gcc_nrf52810_xxaa_s112_dfuboot.ld) and the
+ * application script (gcc_nrf52810_xxaa_s112_dfu.ld), so both agree on where
  * everything is. Code reads these symbols through DfuLayoutGet; no C define
  * repeats an address. See docs/architecture/dfu.md.
  *
