@@ -464,8 +464,8 @@ See [Getting Started](docs/getting-started.md), the
 [Buzzer User Guide](docs/buzzer.md) and the
 [USB User Guide](docs/usb-user-guide.md) for additional workflows.
 
-See [0.13 changes and migration notes](docs/releases/0.13.md) for the upcoming
-USB, MCU-port, Bluetooth and memory-footprint release.
+See [0.13 changes and migration notes](docs/releases/0.13.md) for the USB,
+MCU-port, Bluetooth and memory-footprint release.
 
 ---
 
