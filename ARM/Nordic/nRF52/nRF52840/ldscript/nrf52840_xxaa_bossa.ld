@@ -21,7 +21,7 @@ MEMORY
 	   overlapping it. */
 	FLASH (rx) : ORIGIN = 0x00010000, LENGTH = 0xED000
 	EXTFLASH (rx) : ORIGIN = 0x12000000, LENGTH = 0x8000000
-	/* The bond store, same place as nrf52840_xxaa_sdc.ld. NvmRegionAddr(0)
+	/* The bond store, same place as nrf52840_xxaa.ld. NvmRegionAddr(0)
 	   reads the section below, so nothing states the address twice. */
 	NVM0 (rw) : ORIGIN = 0x000FD000, LENGTH = 0x00003000
 	RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x40000
