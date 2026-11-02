@@ -182,10 +182,6 @@ totalling 33.2 seconds; TaktOS reported none. These results validate concurrent
 traffic for the tested builds; they do not establish every lifecycle case or
 every project configuration above.
 
-The [0.13 release notes](releases/0.13.md#recorded-validation) record firmware
-sizes, per-stream throughput and host diagnostics. Exact firmware SHAs and
-compiler versions were not supplied with those results.
-
 ## Automated validation
 
 `make -C tests/usb test-combo-init` links the production combo example and

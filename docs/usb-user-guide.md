@@ -140,8 +140,7 @@ python3 tests/usb/sam4l_cdc_build_test.py --config Debug --taktos ../TaktOS
 
 Omit `--taktos` to build just bare metal. The script compiles the examples'
 source dependencies and checks project links; it does not build unrelated
-peripherals in the library project. Maintainer CDC loopback, ISO packet-size
-and ISO suspend/wake results are recorded in the [0.13 notes](releases/0.13.md).
+peripherals in the library project.
 For final-release validation, check enumeration, short/64-byte binary echo,
 backpressure, repeated CDC open/close, unplug/replug while EDBG remains powered,
 and host suspend/resume. For TaktOS, also check that `g_UsbTaktOSHeartbeat`

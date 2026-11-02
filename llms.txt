@@ -48,7 +48,6 @@ Key facts:
 
 ## Optional
 
-- [Release 0.13 notes](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/releases/0.13.md)
 - [Beyond Blinky, free edition text (Dec. 2025 snapshot)](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/beyond_blinky_free_edition_2025_raw.md): book on the object model; current docs take precedence
 - [TaktOS](https://github.com/IOsonata/TaktOS): deterministic RTOS kernel built on the same IOsonata library, with KVB and Thread-Metric benchmarks
 - [IOcomposer](https://iocomposer.io): official IDE and installer

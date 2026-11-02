@@ -119,8 +119,6 @@ Hardware/software crypto selection remains entirely in the MCU library.
 The nRF5340 Audio DK run on 2026-10-24 passed all 101 checks, including the
 benchmark timer at 1 MHz. HciController also restored a bond and enabled
 encryption after reset and reconnection with BleSecurityDemo on the App core.
-See [crypto size measurements](../../tests/crypto/size_notes.md) for the measured
-688-byte HciController flash reduction and the separate CryptoTest footprint.
 
 CryptoCell performance changes retain the generic test and automatic selection.
 AES keys are loaded once per complete operation; contiguous key/hash register

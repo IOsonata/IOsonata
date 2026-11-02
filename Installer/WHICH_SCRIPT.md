@@ -372,7 +372,6 @@ bash Installer/build_iosonata_lib_macos.sh  # Select the required MCU
 - Read [README.md](README.md) for detailed usage
 - Read [QUICKSTART.md](QUICKSTART.md) for quick start
 - Check the [IOcomposer workflow](../docs/architecture/iocomposer-workflow.md) for technical details
-- See the [0.13 release notes](../docs/releases/0.13.md) for upcoming changes
 
 ---
 

@@ -64,36 +64,3 @@ baseline. Compare actual rates against the supplied HCI results: about
 Validation: host tests simulate the two complete trials, check one-second
 reports, reject the wrong PHY before subscription, detect damaged PRBS, and
 check timer wraparound. These tests are not radio throughput measurements.
-
-## STM32WBA central receive review
-
-The WBA port uses ST's native host, not the IOsonata HCI host. Received events
-are copied from `BLECB_Indication` into the port event ring, then routed from
-`BtEvtQue` to `BtGattClientNotified`. The receiver copies the notification to
-its CFIFO and checks it in `PrbsReceive`.
-
-The central now exchanges MTU before starting primary-service discovery. This
-avoids the previous ordering where the application started discovery in its
-connected callback and the subsequent MTU command could be refused. Discovery
-waits for ST's procedure-complete event, keeps its cursor on command refusal,
-and retries from the status check. WBA also implements the existing data-length
-request and the receiver reads the actual PHY for both trials.
-
-The event copy includes a separately supplied event tail and restores the
-previous interrupt mask. A full event ring returns refusal so the ST host can
-retry after the ring drains. The copy and application callbacks run outside
-`BleStack_Process`; stack calls are not made from its indication callback.
-
-The existing host event FIFO is 256 16-bit words and the port ring holds eight
-events. These are possible burst limits, not measured causes of reduced
-throughput. `CFG_BLE_HOST_EVT_FIFO_SIZE` and `BT_APP_WBA_EVT_SLOTS` are library
-build settings; defining them only in the application does not resize the
-compiled library. Connection-event length hints remain automatic (zero).
-Measure the two trials before changing these budgets.
-
-Validation includes host tests for MTU/discovery ordering, command refusal,
-independent peers, data-length bounds, split event copying, full-ring refusal,
-and saved interrupt state at -O0 and -O2. The shared PRBS test runs with both
-SDC and WBA selected. The complete receiver source also passes a host syntax check using the WBA
-board definitions. A full port build requires the Arm toolchain and CubeWBA
-headers; neither a firmware link nor hardware throughput was tested here.

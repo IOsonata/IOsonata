@@ -5,8 +5,6 @@ nav:
   - Getting started: getting-started.md
   - Quick reference: quick-reference.md
   - Supported targets: supported-targets.md
-  - Release notes:
-      - "0.13": releases/0.13.md
   - User guides:
       - Bluetooth: bluetooth-user-guide.md
       - USB: usb-user-guide.md

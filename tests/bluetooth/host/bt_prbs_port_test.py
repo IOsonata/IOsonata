@@ -6,9 +6,12 @@ import tempfile
 from extract_bt_app_init import extract_function
 
 ROOT = Path(__file__).resolve().parents[3]
-app = (ROOT / 'ARM/Nordic/nRF52/src/bt_app_nrf52.cpp').read_text()
-gap = (ROOT / 'ARM/Nordic/nRF52/src/bt_gap_nrf52.cpp').read_text()
-code = r'''
+# nRF52 and nRF54 SoftDevice ports
+PORTS = (
+    ('nRF52', 'ARM/Nordic/nRF52/src/bt_app_nrf52.cpp', 'ARM/Nordic/nRF52/src/bt_gap_nrf52.cpp'),
+    ('nRF54', 'ARM/Nordic/nRF54/src/bt_app_bm.cpp', 'ARM/Nordic/nRF54/src/bt_gap_bm.cpp'),
+)
+head = r'''
 #include <cassert>
 #include <cstring>
 #include "bluetooth/bt_app.h"
@@ -33,10 +36,7 @@ static unsigned sd_ble_gap_data_length_update(uint16_t ConnHdl,
 	return result;
 }
 '''
-code += extract_function(app, r'^static void BtAppPhySet\(')
-code += extract_function(app, r'^bool BtGapReadPhy\(')
-code += extract_function(gap, r'^bool BtGapSetDataLength\(')
-code += r'''
+test = r'''
 int main(void)
 {
 	uint8_t tx = 9;
@@ -80,13 +80,21 @@ int main(void)
 	assert(requests == 2);
 }
 '''
-with tempfile.TemporaryDirectory(prefix='prbs-port-') as tmp:
-    cpp = Path(tmp) / 'test.cpp'
-    exe = Path(tmp) / 'test'
-    cpp.write_text(code)
-    for opt in ('-O0', '-O2'):
-        subprocess.run(['g++', '-std=gnu++17', opt, '-Wall', '-Wextra',
-                        '-fsanitize=undefined', '-fno-sanitize-recover=all',
-                        '-I' + str(ROOT / 'include'), str(cpp), '-o', str(exe)], check=True)
-        subprocess.run([str(exe)], check=True)
-print('PASS SoftDevice PHY records, handle reuse, DLE arguments and errors (O0/O2 UBSan)')
+for name, app_path, gap_path in PORTS:
+    app = (ROOT / app_path).read_text()
+    gap = (ROOT / gap_path).read_text()
+    code = head
+    code += extract_function(app, r'^static void BtAppPhySet\(')
+    code += extract_function(app, r'^bool BtGapReadPhy\(')
+    code += extract_function(gap, r'^bool BtGapSetDataLength\(')
+    code += test
+    with tempfile.TemporaryDirectory(prefix='prbs-port-') as tmp:
+        cpp = Path(tmp) / 'test.cpp'
+        exe = Path(tmp) / 'test'
+        cpp.write_text(code)
+        for opt in ('-O0', '-O2'):
+            subprocess.run(['g++', '-std=gnu++17', opt, '-Wall', '-Wextra',
+                            '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                            '-I' + str(ROOT / 'include'), str(cpp), '-o', str(exe)], check=True)
+            subprocess.run([str(exe)], check=True)
+    print('PASS %s SoftDevice PHY records, handle reuse, DLE arguments and errors (O0/O2 UBSan)' % name)

@@ -272,3 +272,21 @@ bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys, uint8_t RxPhys,
 	return sd_ble_gap_phy_update(ConnHdl, &phys) == NRF_SUCCESS;
 }
 
+// RX limits remain automatic; this API suggests the local transmit limits.
+bool BtGapSetDataLength(uint16_t ConnHdl, uint16_t TxOctets, uint16_t TxTime)
+{
+	ble_gap_data_length_params_t params;
+
+	if (TxOctets < BT_GAP_DATA_LEN_OCTETS_MIN ||
+		TxOctets > BT_GAP_DATA_LEN_OCTETS_MAX ||
+		TxTime < BT_GAP_DATA_LEN_TIME_MIN ||
+		TxTime > BT_GAP_DATA_LEN_TIME_MAX)
+	{
+		return false;
+	}
+	memset(&params, 0, sizeof(params));
+	params.max_tx_octets = TxOctets;
+	params.max_tx_time_us = TxTime;
+	return sd_ble_gap_data_length_update(ConnHdl, &params, nullptr) == NRF_SUCCESS;
+}
+

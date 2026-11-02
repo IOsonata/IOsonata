@@ -12,5 +12,3 @@ Start with the [documentation index](README.md),
 For network applications, see [Networking](networking.md) and the
 [MQTT/CoAP examples](network-protocol-examples.md). For audio, see the
 [nRF5340 Audio DK guide](nrf5340-audio-dk.md).
-
-For the upcoming release, see [0.13 changes and migration notes](releases/0.13.md).

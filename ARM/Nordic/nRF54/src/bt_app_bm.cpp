@@ -109,6 +109,60 @@ static struct {
 	.ConnLedActLevel = 0,
 };
 
+// SoftDevice reports the negotiated PHY in events; it has no Read PHY call.
+// Each word publishes the handle and both PHYs together. Zero is an empty slot.
+static uint32_t s_BtAppPhy[BT_DEV_CONN_MAX];
+
+static void BtAppPhySet(uint16_t ConnHdl, uint8_t TxPhy, uint8_t RxPhy)
+{
+	uint32_t value;
+	uint32_t record;
+	int freeSlot;
+	int i;
+
+	value = ((uint32_t)ConnHdl << 16) | ((uint32_t)TxPhy << 8) | RxPhy;
+	freeSlot = -1;
+	for (i = 0; i < BT_DEV_CONN_MAX; i++)
+	{
+		record = __atomic_load_n(&s_BtAppPhy[i], __ATOMIC_RELAXED);
+		if (record != 0 && (uint16_t)(record >> 16) == ConnHdl)
+		{
+			__atomic_store_n(&s_BtAppPhy[i], TxPhy != 0 ? value : 0, __ATOMIC_RELEASE);
+			return;
+		}
+		if (record == 0 && freeSlot < 0)
+		{
+			freeSlot = i;
+		}
+	}
+	if (freeSlot >= 0 && TxPhy != 0)
+	{
+		__atomic_store_n(&s_BtAppPhy[freeSlot], value, __ATOMIC_RELEASE);
+	}
+}
+
+bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy, uint8_t *pRxPhy)
+{
+	uint32_t record;
+	int i;
+
+	if (pTxPhy == nullptr || pRxPhy == nullptr || ConnHdl == BT_CONN_HDL_INVALID)
+	{
+		return false;
+	}
+	for (i = 0; i < BT_DEV_CONN_MAX; i++)
+	{
+		record = __atomic_load_n(&s_BtAppPhy[i], __ATOMIC_ACQUIRE);
+		if (record != 0 && (uint16_t)(record >> 16) == ConnHdl)
+		{
+			*pTxPhy = (uint8_t)(record >> 8);
+			*pRxPhy = (uint8_t)record;
+			return true;
+		}
+	}
+	return false;
+}
+
 bool BtInitialized(void)
 {
 	return s_BtAppData.bInitialized;
@@ -647,6 +701,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			{
 				BtSecBmBleEvt(p_ble_evt);
 			}
+			BtAppPhySet(p_gap_evt->conn_handle, BT_GAP_PHY_1MBITS, BT_GAP_PHY_1MBITS);
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
 			// Start security from a queued event. Peer Manager and LESC work
@@ -686,6 +741,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			}
 			SecurePendingRemove(connHdl);
 			BtSmpOobDataClearConn(connHdl);
+			BtAppPhySet(connHdl, 0, 0);
 			BtPeerFree(pPeer);
 
 			if (!BtConnected())
@@ -748,6 +804,14 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 		case BLE_GAP_EVT_ADV_SET_TERMINATED:
 			BtAdvBmTerminated();
 			BtAppAdvTimeoutHandler();
+			break;
+
+		case BLE_GAP_EVT_PHY_UPDATE:
+			if (p_gap_evt->params.phy_update.status == 0)
+			{
+				BtAppPhySet(p_gap_evt->conn_handle, p_gap_evt->params.phy_update.tx_phy,
+					p_gap_evt->params.phy_update.rx_phy);
+			}
 			break;
 
 		case BLE_GAP_EVT_PHY_UPDATE_REQUEST:

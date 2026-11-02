@@ -334,7 +334,6 @@ These are function-specific maintainer results, not a claim that every
 peripheral or the latest commit has passed hardware validation.
 [Supported MCUs](docs/supported-targets.md) records peripheral coverage, examples,
 project integration, build results and hardware scope.
-[0.13 release notes](docs/releases/0.13.md) retain the detailed USB measurements.
 
 
 ---
@@ -463,9 +462,6 @@ See [Getting Started](docs/getting-started.md), the
 [Quick Reference](docs/quick-reference.md), the
 [Buzzer User Guide](docs/buzzer.md) and the
 [USB User Guide](docs/usb-user-guide.md) for additional workflows.
-
-See [0.13 changes and migration notes](docs/releases/0.13.md) for the USB,
-MCU-port, Bluetooth and memory-footprint release.
 
 ---
 
