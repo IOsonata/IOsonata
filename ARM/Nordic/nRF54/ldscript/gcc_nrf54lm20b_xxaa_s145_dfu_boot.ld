@@ -1,4 +1,4 @@
-/* Stage 0 DFU boot, nRF54LM20A with S145.
+/* Stage 0 DFU boot, nRF54LM20B with S145.
  *
  * The boot is at 0 and runs out of reset. The SoftDevice is not running while
  * the boot is, so all of RAM is the boot's.
@@ -16,7 +16,7 @@ SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lgcc -lc -lnosys)
 
-INCLUDE "dfu_layout_nrf54lm20a_s145.ld"
+INCLUDE "gcc_nrf54lm20b_xxaa_s145_dfu_layout.ld"
 
 MEMORY
 {
