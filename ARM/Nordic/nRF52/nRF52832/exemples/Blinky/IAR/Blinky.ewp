@@ -774,7 +774,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFile</name>
-                    <state>Z:\swdev\IOsonata\ARM\Nordic\nRF52\nRF52832\ldscript\nrf52832_xxaa.icf</state>
+                    <state>..\..\..\..\ldscript\iar_nrf52832_xxaa_irom.icf</state>
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
