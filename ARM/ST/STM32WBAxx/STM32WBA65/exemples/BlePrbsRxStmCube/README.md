@@ -1,4 +1,4 @@
-# ST throughput client in IOcomposer
+# BlePrbsRxStmCube: STM32Cube PRBS receiver comparison
 
 This is an Eclipse managed ARM GCC application for STM32WBA65I-DK1.
 It builds ST's STM32CubeWBA v1.10.0 BLE_DataThroughput_Client sources,
@@ -18,7 +18,7 @@ ST reference integration with the IOsonata integration.
 3. In IOcomposer, use File > Import > General > Existing Projects into
    Workspace and select this `ioc` directory. Do not copy the project into
    the workspace: its local board files are in the adjacent `src` directory.
-4. Select Release and build `StThroughputClient`. No IOsonata library build
+4. Select Release and build `BlePrbsRxStmCube`. No IOsonata library build
    is required. Use the existing DK1 ST-LINK/OpenOCD setup to program it.
    The ST linker script reserves the last 16 KB of flash for ST NVM;
    this firmware does not preserve IOsonata bond-storage compatibility.
