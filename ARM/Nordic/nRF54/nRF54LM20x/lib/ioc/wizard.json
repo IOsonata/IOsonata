@@ -20,7 +20,7 @@
     "${external}/nrfx/hal",
     "${external}/nrfx/bsp/stable/soc"
   ],
-  "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54lm20a_xxaa_application.ld",
+  "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54lm20a_xxaa.ld",
   "lib_path": "${iosonata}/ARM/Nordic/nRF54/nRF54LM20x/lib/ioc/${config}",
   "lib": "IOsonata_nRF54LM20x",
   "features": {
