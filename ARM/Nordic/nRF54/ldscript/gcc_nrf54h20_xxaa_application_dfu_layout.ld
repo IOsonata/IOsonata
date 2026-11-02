@@ -14,7 +14,7 @@
  * Bluetooth update goes to the radio core.
  *
  * The regions are those of the application core partition in
- * nrf54h20_xxaa_application.ld. The secure domain firmware decides where
+ * gcc_nrf54h20_xxaa_application.ld. The secure domain firmware decides where
  * this core starts and what it may write: the layout assumes it starts the
  * core at the start of its partition, where the boot is, and lets it write
  * the whole partition.
