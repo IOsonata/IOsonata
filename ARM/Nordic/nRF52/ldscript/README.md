@@ -12,6 +12,9 @@ definitions. Reference status does not determine whether to retain them.
 | Script | Purpose / observed memory difference | Classification |
 | --- | --- | --- |
 | `gcc_nrf52832_xxaa.ld` | Bare-metal flash starts at 0x00000000; RAM at 0x20000000 | Available variant |
+| `gcc_nrf52832_xxab.ld` | 256 KB flash, 32 KB RAM; different package memory capacity from XXAA | Available variant |
+| `gcc_nrf52811_xxaa.ld` | 192 KB flash, 24 KB RAM; 4 KB NVM0 | Available variant |
+| `gcc_nrf52820_xxaa.ld` | 256 KB flash, 32 KB RAM; 4 KB NVM0 | Available variant |
 | `gcc_nrf52832_xxaa_s132.ld` | S132 application flash starts at 0x00026000; RAM at 0x20004000 | Available variant |
 | `gcc_nrf52832_xxaa_s132_central.ld` | Same flash start as S132, but RAM starts at 0x20004300 | Available variant; distinct RAM reservation |
 | `gcc_nrf52832_xxaa_s212.ld` | Flash starts at 0x00012000; RAM at 0x20000A00 | Available variant; different SoftDevice |
@@ -24,6 +27,23 @@ definitions. Reference status does not determine whether to retain them.
 These classifications establish that the scripts should **not** be removed
 because of an absent `.cproject` or `.ewp` reference. They do not assert that
 every layout has been hardware validated.
+
+## GNU and IAR memory-map compatibility
+
+The `gcc_nrf52832_xxaa.ld` script reserves the upper flash pages for
+`NVM0`: application FLASH ends at 0x0007CFFF, with NVM0 beginning at
+0x0007D000. The current `iar_nrf52832_xxaa.icf` and
+`iar_nrf52832_xxaa_irom.icf` instead define an application ROM region
+through 0x0007FFFF. **These are not equivalent layouts.** Do not consolidate
+these IAR files into the GCC script or claim cross-compiler memory-layout
+parity without explicitly reserving the intended NVM region and verifying
+application placement. This is a follow-up compatibility item, not proof
+that either IAR script is obsolete.
+
+The `gcc_nrf52832_xxab.ld`, `gcc_nrf52811_xxaa.ld`, and
+`gcc_nrf52820_xxaa.ld` scripts represent different device capacities.
+They must not be collapsed into XXAA or another part's map on the basis
+of current project references.
 
 ## Criteria for removal
 
