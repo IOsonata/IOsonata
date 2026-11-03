@@ -38,7 +38,7 @@ foreground application pump.
 The projects retain `NRF9160_XXAA`, Cortex-M33 Thumb hard-float, GNU C++23,
 no exceptions and no RTTI. They link the existing Nordic modem library from
 `external/sdk-nrfxlib/nrf_modem/lib/cellular/nrf9160/hard-float` and use
-`ARM/Nordic/nRF91/ldscript/nrf9160_xxaa.ld`. Preserve the existing SDK layout
+`ARM/Nordic/nRF91/ldscript/gcc_nrf9160_xxaa.ld`. Preserve the existing SDK layout
 with `external/nrfx` and `external/sdk-nrfxlib` beside IOsonata.
 
 Use the bare-metal library configurations, not the TaktOS variants. The board
