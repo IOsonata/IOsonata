@@ -85,6 +85,33 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         self.assertEqual((checked, skipped), (1, 0))
         self.assertIn("nonportable absolute", errors[0])
 
+
+    def write_iar_project(self, reference):
+        iar = self.project / "exemples" / "Blinky" / "IAR"
+        iar.mkdir()
+        path = iar / "Blinky.ewp"
+        from xml.sax.saxutils import escape
+        path.write_text(
+            "<project><configuration><settings><data><option>"
+            "<name>IlinkIcfFile</name><state>" + escape(reference) +
+            "</state></option></data></settings></configuration></project>",
+            encoding="utf-8",
+        )
+        return path
+
+    def test_iar_linker_reference(self):
+        iar = self.project / "exemples" / "Blinky" / "IAR"
+        reference = "../../../../../ldscript/gcc_part.icf"
+        (self.linkers / "gcc_part.icf").write_text("define memory mem with size = 4G;")
+        path = self.write_iar_project(reference.replace("/", chr(92)))
+        self.assertEqual(audit.check_iar_project(path), (1, 0, []))
+
+    def test_iar_missing_linker_reference(self):
+        path = self.write_iar_project("../../../../../ldscript/missing.icf")
+        count, skipped, errors = audit.check_iar_project(path)
+        self.assertEqual((count, skipped), (1, 0))
+        self.assertIn("missing IAR linker script", errors[0])
+
     def test_malformed_xml_is_reported(self):
         path = self.ioc / ".cproject"
         path.write_text("<cproject>", encoding="utf-8")
