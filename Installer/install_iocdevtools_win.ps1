@@ -824,7 +824,7 @@ function Install-IOcomposer {
 			Accept = 'application/vnd.github+json'
 			'User-Agent' = 'iocomposer-installer'
 		}
-		$ids = @('com.iocomposer.embedcdt.ai', 'com.iocomposer.embedcdt.ui')
+		$ids = @('org.iosonata.embedcdt.templates.wizard', 'com.iocomposer.embedcdt.ai', 'com.iocomposer.embedcdt.ui', 'com.iocomposer.embedcdt.bletest')
 		foreach ($id in $ids) {
 			$url = $null
 			if ($id -eq 'com.iocomposer.embedcdt.ai') { $url = $env:IOCOMPOSER_AI_PLUGIN_URL }
@@ -837,6 +837,412 @@ function Install-IOcomposer {
 				}
 				$latest = $candidates | Sort-Object Key -Descending | Select-Object -First 1
 				if (-not $latest) { throw "No published IOcomposer plugin found: $id" }
+				if ($id -eq 'org.iosonata.embedcdt.templates.wizard') {
+					$version = [version](($latest.Name -replace '^org\.iosonata\.embedcdt\.templates\.wizard_([0-9.]+)\.jar
+			}
+			$jar = Join-Path $stage "$id.jar"
+			Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $jar
+			& $SEVENZIP_EXE t $jar | Out-Null
+			if ($LASTEXITCODE -ne 0) { throw "Invalid IOcomposer plugin archive: $id" }
+		}
+		# Stage all four required plugins before replacing any installed plugin.
+		$dropins = Join-Path $Runtime 'dropins'
+		New-Item $dropins -ItemType Directory -Force | Out-Null
+		foreach ($id in $ids) {
+			Copy-Item (Join-Path $stage "$id.jar") (Join-Path $dropins "$id.jar") -Force
+			Get-ChildItem $dropins -Filter "${id}_*.jar" | Remove-Item -Force
+		}
+		$ini = Join-Path $Runtime 'eclipse.ini'
+		$lines = Get-Content $ini
+		$out = [System.Collections.Generic.List[string]]::new()
+		$skip = $false
+		foreach ($line in $lines) {
+			if ($skip) { $skip = $false; continue }
+			if ($line -in @('-name', '-pluginCustomization')) { $skip = $true; continue }
+			$out.Add($line)
+		}
+		if (-not $out.Contains('-vmargs')) { $out.Add('-vmargs') }
+		$index = $out.IndexOf('-vmargs')
+		$out.InsertRange($index, [string[]]@('-name', 'IOcomposer', '-pluginCustomization', 'plugin_customization.ini'))
+		[IO.File]::WriteAllLines($ini, $out, [Text.UTF8Encoding]::new($false))
+		$custom = Join-Path $Runtime 'plugin_customization.ini'
+		$preferences = [ordered]@{
+			'org.eclipse.ui/showIntro' = 'false'
+			'org.eclipse.ui/defaultPerspectiveId' = 'com.iocomposer.embedcdt.ui.perspective'
+			'org.eclipse.epp.package.embedcpp/showNewsOnStartup' = 'false'
+			'org.eclipse.epp.package.embedcpp.ui/showNewsOnStartup' = 'false'
+			'org.eclipse.epp.package.cpp/showNewsOnStartup' = 'false'
+			'org.eclipse.epp.package.common/showNewsOnStartup' = 'false'
+			'org.eclipse.epp.mpc.ui/showNewsOnStartup' = 'false'
+		}
+		$existing = @(Get-Content $custom | Where-Object { -not $preferences.Contains(($_ -split '=', 2)[0]) })
+		foreach ($key in $preferences.Keys) { $existing += "$key=$($preferences[$key])" }
+		[IO.File]::WriteAllLines($custom, [string[]]$existing, [Text.UTF8Encoding]::new($false))
+		try {
+			$splash = Join-Path $stage 'splash.bmp'
+			Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/splash.bmp' -OutFile $splash
+			Copy-Item $splash (Join-Path $Runtime 'splash.bmp') -Force
+			Get-ChildItem (Join-Path $Runtime 'plugins') -Recurse -Filter splash.bmp | ForEach-Object {
+				Copy-Item $splash $_.FullName -Force
+			}
+		} catch { Write-Warning "IOcomposer splash installation failed: $_" }
+		Write-Host "IOcomposer wizard, AI, UI and BLE test plugins installed at $Runtime"
+	} finally {
+		Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+	}
+}
+
+function Build-IOcomposerIndex {
+	$index = Join-Path $ROOT 'IOsonata\Installer\build_external_index.py'
+	if ($PythonExecutablePath -and (Test-Path $index)) {
+		& "$PYOCD_DIR\Scripts\python.exe" $index --sdk-root "$ROOT\external"
+		if ($LASTEXITCODE -ne 0) { Write-Warning "SDK index failed. Retry: python $index --sdk-root $ROOT\external" }
+	} else { Write-Warning "Python or SDK index script missing; index was not built." }
+}
+
+# --- Plugin ---
+function Install-Plugin {
+    Write-Host; Write-Host ">>> Installing IOsonata Eclipse Plugin..." -ForegroundColor Cyan
+    $PDIR = "$ROOT\IOsonata\Installer\eclipse_plugin"
+    if (-not (Test-Path $PDIR)) { 
+        Write-Host "   [WARN] Plugin directory not found at $PDIR" -ForegroundColor Yellow
+        return 
+    }
+    $JAR = Get-ChildItem $PDIR "org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+    if ($JAR) {
+        $DEST = "$ECLIPSE_DIR\dropins"
+        New-Item $DEST -ItemType Directory -Force | Out-Null
+        # Remove old versions
+        Get-ChildItem "$DEST\org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Remove-Item -Force
+        Copy-Item $JAR.FullName $DEST -Force
+        Write-Host "   [OK] Plugin installed: $($JAR.Name)" -ForegroundColor Green
+    } else {
+        Write-Host "   [WARN] No plugin jar found in $PDIR" -ForegroundColor Yellow
+    }
+}
+
+# ---------------------------------------------------------
+# Sync IOsonata + external SDKs (single source of truth)
+# ---------------------------------------------------------
+Write-Host; Write-Host ">>> Syncing IOsonata + external SDKs..." -ForegroundColor Cyan
+
+$installerRef = $env:IOSONATA_INSTALLER_REF
+if (-not $installerRef) { $installerRef = "main" }
+$CLONE_URL = "https://raw.githubusercontent.com/IOsonata/IOsonata/$installerRef/Installer/clone_iosonata_sdk_win.ps1"
+$TMP_CLONE = Join-Path $env:TEMP "clone_iosonata_sdk_win.ps1"
+$CLONE_LOG = Join-Path $env:TEMP "clone_iosonata_sdk_win.log"
+
+try {
+    curl.exe -fsSL $CLONE_URL -o $TMP_CLONE
+    if ($LASTEXITCODE -ne 0) { throw "Download failed" }
+} catch {
+    Write-Host "[ERROR] Failed to download clone script:" -ForegroundColor Red
+    Write-Host "   $CLONE_URL" -ForegroundColor Red
+    exit 1
+}
+
+# SDK synchronization is source-only. Library builds run after IDE setup.
+$cloneArgs = @("-SdkHome", $ROOT, "-NoBuild")
+if ($MODE -eq "force") {
+    $cloneArgs += @("-Mode", "force")
+}
+
+# Run clone script and capture output
+$ErrorActionPreference = 'Continue'
+$cloneOutput = & powershell.exe -ExecutionPolicy Bypass -File $TMP_CLONE @cloneArgs 2>&1 | Tee-Object -FilePath $CLONE_LOG
+$cloneExitCode = $LASTEXITCODE
+$cloneOutput | Write-Host
+$ErrorActionPreference = 'Stop'
+
+if ($cloneExitCode -ne 0) {
+	throw "SDK synchronization failed with exit code $cloneExitCode. See $CLONE_LOG"
+}
+
+Remove-Item $TMP_CLONE -Force -ErrorAction SilentlyContinue
+
+if (Test-Path $CLONE_LOG) {
+    Remove-Item $CLONE_LOG -Force -ErrorAction SilentlyContinue
+}
+
+# --- Install IDAP Tools ---
+$IDAP_DIR = "$TOOL_BIN"
+$IDAP_PROG = "$IDAP_DIR\IDAPnRFProg.exe"
+$IDAP_PARENT = Split-Path $IDAP_DIR -Parent
+New-Item -Path $IDAP_PARENT -ItemType Directory -Force | Out-Null
+
+if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
+	Write-Host
+	Write-Host ">>> Downloading IDAPnRFProg tool..."
+	$IDAP_URL = "https://sourceforge.net/projects/idaplinkfirmware/files/Windows/IDAPnRFProg_Win_2_1_240807.zip/download"
+	$IDAP_STAGE = Join-Path $IDAP_PARENT (".idap-stage-" + [guid]::NewGuid().ToString('N'))
+	$IDAP_BACKUP = Join-Path $IDAP_PARENT (".idap-backup-" + [guid]::NewGuid().ToString('N'))
+	New-Item $IDAP_STAGE -ItemType Directory | Out-Null
+
+	try {
+		$archive = Join-Path $IDAP_STAGE "archive.zip"
+		curl.exe -fL $IDAP_URL -o $archive --silent --show-error
+		if ($LASTEXITCODE -ne 0) { throw "IDAPnRFProg download failed." }
+
+		$candidate = Join-Path $IDAP_STAGE "candidate"
+		New-Item $candidate -ItemType Directory | Out-Null
+		& $SEVENZIP_EXE e $archive -o"$candidate" -y | Out-Null
+		if ($LASTEXITCODE -ne 0) { throw "IDAPnRFProg extraction failed." }
+		$stagedProgram = Join-Path $candidate "IDAPnRFProg.exe"
+		if (-not (Test-Path $stagedProgram) -or (Get-Item $stagedProgram).Length -le 0) {
+			throw "Invalid IDAPnRFProg archive: missing or empty IDAPnRFProg.exe."
+		}
+		foreach ($tool in @('IDAPnRFProg.exe', 'IDAPSetTarget.exe')) {
+			$stagedTool = Join-Path $candidate $tool
+			if (Test-Path $stagedTool) { Copy-Item $stagedTool $IDAP_DIR -Force }
+		}
+		Write-Host "   [OK] IDAPnRFProg installed at: $IDAP_PROG" -ForegroundColor Green
+	} finally {
+		Remove-Item $IDAP_STAGE -Recurse -Force -ErrorAction SilentlyContinue
+	}
+} else {
+	Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
+}
+
+# Wizard is installed in the same staged set as AI/UI/BLE test plugins.
+Install-IOcomposer -Runtime $ECLIPSE_DIR
+
+# --- Makefile (aligned with macOS/Linux) ---
+Write-Host; Write-Host ">>> Generating makefile_path.mk..." -ForegroundColor Cyan
+$MK = "$ROOT\IOsonata\makefile_path.mk"
+$MK_CONTENT = @"
+# makefile_path.mk
+# Auto-generated by install_iocdevtools_win.ps1 $SCRIPT_VERSION
+# This file contains all path macros required to compile IOsonata projects using Makefiles
+# Include this file in your project Makefile: include `$(IOSONATA_ROOT)/makefile_path.mk
+
+# ============================================
+# Toolchain Paths
+# ============================================
+SDK_TOOLS_ROOT = $RT/Tools
+PYTHON = $RT/Tools/bin/python.cmd
+HEXMERGE = $RT/Tools/bin/hexmerge.cmd
+PYOCD_ROOT = $RT/Tools/Python
+PYOCD = $RT/Tools/bin/pyocd.cmd
+ARM_GCC_ROOT = $AD
+ARM_GCC_BIN = $AD/bin
+ARM_GCC = `$(ARM_GCC_BIN)/arm-none-eabi-gcc
+ARM_GPP = `$(ARM_GCC_BIN)/arm-none-eabi-g++
+ARM_AS = `$(ARM_GCC_BIN)/arm-none-eabi-as
+ARM_LD = `$(ARM_GCC_BIN)/arm-none-eabi-ld
+ARM_AR = `$(ARM_GCC_BIN)/arm-none-eabi-ar
+ARM_OBJCOPY = `$(ARM_GCC_BIN)/arm-none-eabi-objcopy
+ARM_OBJDUMP = `$(ARM_GCC_BIN)/arm-none-eabi-objdump
+ARM_SIZE = `$(ARM_GCC_BIN)/arm-none-eabi-size
+ARM_GDB = `$(ARM_GCC_BIN)/arm-none-eabi-gdb
+
+RISCV_GCC_ROOT = $RD
+RISCV_GCC_BIN = $RD/bin
+RISCV_GCC = `$(RISCV_GCC_BIN)/riscv-none-elf-gcc
+RISCV_GPP = `$(RISCV_GCC_BIN)/riscv-none-elf-g++
+RISCV_AS = `$(RISCV_GCC_BIN)/riscv-none-elf-as
+RISCV_LD = `$(RISCV_GCC_BIN)/riscv-none-elf-ld
+RISCV_AR = `$(RISCV_GCC_BIN)/riscv-none-elf-ar
+RISCV_OBJCOPY = `$(RISCV_GCC_BIN)/riscv-none-elf-objcopy
+RISCV_OBJDUMP = `$(RISCV_GCC_BIN)/riscv-none-elf-objdump
+RISCV_SIZE = `$(RISCV_GCC_BIN)/riscv-none-elf-size
+RISCV_GDB = `$(RISCV_GCC_BIN)/riscv-none-elf-gdb
+
+OPENOCD_ROOT = $OD
+OPENOCD = $OD/bin/openocd
+
+# ============================================
+# IOsonata Paths
+# ============================================
+# IOCOMPOSER_HOME must be set to your IOcomposer root directory
+ifndef IOCOMPOSER_HOME
+`$(error IOCOMPOSER_HOME is not set. Please set it to your IOcomposer root directory)
+endif
+
+IOSONATA_ROOT = `$(IOCOMPOSER_HOME)/IOsonata
+IOSONATA_INCLUDE = `$(IOSONATA_ROOT)/include
+IOSONATA_SRC = `$(IOSONATA_ROOT)/src
+
+# ============================================
+# ARM-specific Paths
+# ============================================
+ARM_ROOT = `$(IOSONATA_ROOT)/ARM
+ARM_CMSIS = `$(ARM_ROOT)/CMSIS
+ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Core/Include
+ARM_INCLUDE = `$(ARM_ROOT)/include
+ARM_SRC = `$(ARM_ROOT)/src
+ARM_LDSCRIPT = `$(ARM_ROOT)/ldscript
+
+# Vendor-specific paths
+ARM_NORDIC = `$(ARM_ROOT)/Nordic
+ARM_NXP = `$(ARM_ROOT)/NXP
+ARM_ST = `$(ARM_ROOT)/ST
+ARM_MICROCHIP = `$(ARM_ROOT)/Microchip
+ARM_RENESAS = `$(ARM_ROOT)/Renesas
+
+# ============================================
+# RISC-V-specific Paths
+# ============================================
+RISCV_ROOT = `$(IOSONATA_ROOT)/RISCV
+RISCV_INCLUDE = `$(RISCV_ROOT)/include
+RISCV_SRC = `$(RISCV_ROOT)/src
+RISCV_LDSCRIPT = `$(RISCV_ROOT)/ldscript
+
+# Vendor-specific paths
+RISCV_ESPRESSIF = `$(RISCV_ROOT)/Espressif
+RISCV_NORDIC = `$(RISCV_ROOT)/Nordic
+RISCV_RENESAS = `$(RISCV_ROOT)/Renesas
+
+# ============================================
+# External Libraries
+# ============================================
+EXTERNAL_ROOT = `$(IOCOMPOSER_HOME)/external
+NRFX_ROOT = `$(EXTERNAL_ROOT)/nrfx
+SDK_NRF_BM_ROOT = `$(EXTERNAL_ROOT)/sdk-nrf-bm
+SDK_NRFXLIB_ROOT = `$(EXTERNAL_ROOT)/sdk-nrfxlib
+NRF5_SDK_ROOT = `$(EXTERNAL_ROOT)/nRF5_SDK
+NRF5_SDK_MESH_ROOT = `$(EXTERNAL_ROOT)/nRF5_SDK_Mesh
+BSEC_ROOT = `$(EXTERNAL_ROOT)/BSEC
+FUSION_ROOT = `$(EXTERNAL_ROOT)/Fusion
+VQF_ROOT = `$(EXTERNAL_ROOT)/vqf
+LVGL_ROOT = `$(EXTERNAL_ROOT)/lvgl
+LWIP_ROOT = `$(EXTERNAL_ROOT)/lwip
+FREERTOS_KERNEL_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS-Kernel
+TINYUSB_ROOT = `$(EXTERNAL_ROOT)/tinyusb
+
+# ============================================
+# Additional IOsonata Modules
+# ============================================
+FATFS_ROOT = `$(IOSONATA_ROOT)/fatfs
+LITTLEFS_ROOT = `$(IOSONATA_ROOT)/littlefs
+MICRO_ECC_ROOT = `$(IOSONATA_ROOT)/micro-ecc
+
+# ============================================
+# Common Include Paths (for -I flags)
+# ============================================
+IOSONATA_INCLUDES = -I`$(IOSONATA_INCLUDE) \
+                    -I`$(IOSONATA_INCLUDE)/bluetooth \
+                    -I`$(IOSONATA_INCLUDE)/audio \
+                    -I`$(IOSONATA_INCLUDE)/converters \
+                    -I`$(IOSONATA_INCLUDE)/coredev \
+                    -I`$(IOSONATA_INCLUDE)/display \
+                    -I`$(IOSONATA_INCLUDE)/imu \
+                    -I`$(IOSONATA_INCLUDE)/miscdev \
+                    -I`$(IOSONATA_INCLUDE)/pwrmgnt \
+                    -I`$(IOSONATA_INCLUDE)/sensors \
+                    -I`$(IOSONATA_INCLUDE)/storage \
+                    -I`$(IOSONATA_INCLUDE)/sys \
+                    -I`$(IOSONATA_INCLUDE)/usb
+
+ARM_INCLUDES = -I`$(ARM_INCLUDE) \
+               -I`$(ARM_CMSIS_INCLUDE)
+
+RISCV_INCLUDES = -I`$(RISCV_INCLUDE)
+
+# ============================================
+# Environment Variables (optional)
+# ============================================
+export ARM_GCC_HOME := $AD/bin
+export RISCV_GCC_HOME := $RD/bin
+export OPENOCD_HOME := $OD/bin
+export NRFX_HOME := `$(NRFX_ROOT)
+export NRFXLIB_HOME := `$(SDK_NRFXLIB_ROOT)
+export NRF5_SDK_HOME := `$(NRF5_SDK_ROOT)
+export NRF5_SDK_MESH_HOME := `$(NRF5_SDK_MESH_ROOT)
+export BSEC_HOME := `$(BSEC_ROOT)
+"@
+Set-Content $MK $MK_CONTENT -Encoding UTF8
+Write-Host "   [OK] makefile_path.mk generated." -ForegroundColor Green
+Write-Host "   Projects can include it with: include `$(IOSONATA_ROOT)/makefile_path.mk" -ForegroundColor Green
+
+# ---------------------------------------------------------
+# IOsonata Library Build (run exactly once)
+# ---------------------------------------------------------
+# Build after IOcomposer setup. Source compilation errors do not stop installation.
+$BS = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
+if (Test-Path $BS) {
+    Write-Host "  TaktOS and IOsonata Library Build" -ForegroundColor Cyan
+    try {
+        & $BS -SdkHome $ROOT -IocomposerDir $ECLIPSE_DIR
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Library build returned exit code $LASTEXITCODE; installation continues."
+        }
+    } catch {
+        Write-Warning "Library build failed; installation continues: $_"
+    }
+} else {
+    Write-Warning "Library builder not found: $BS"
+}
+
+Build-IOcomposerIndex
+
+# --- Summary ---
+Write-Host
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host " IOcomposer MCU Dev Tools Installation Summary" -ForegroundColor Green
+Write-Host "==============================================" -ForegroundColor Green
+
+$ECLIPSE_VER = "Not installed"
+$eclipseProduct = "$ECLIPSE_DIR\.eclipseproduct"
+if (Test-Path $eclipseProduct) {
+    $prodContent = Get-Content $eclipseProduct -Raw
+    if ($prodContent -match 'version=(.+)') { $ECLIPSE_VER = $Matches[1].Trim() }
+}
+
+$ARM_VER = "Not found"
+if ($ARM_DIR -and (Test-Path "$ARM_DIR\bin\arm-none-eabi-gcc.exe")) {
+    try {
+        $verOut = (& "$ARM_DIR\bin\arm-none-eabi-gcc.exe" --version 2>&1) | Out-String -Stream | Select-Object -First 1
+        if ($verOut -match '(\d+\.\d+\.\d+)') { $ARM_VER = $Matches[1] }
+    } catch {
+        $ARM_VER = "Installed"
+    }
+}
+
+$RISCV_VER = "Not found"
+if ($RISCV_DIR -and (Test-Path "$RISCV_DIR\bin\riscv-none-elf-gcc.exe")) {
+    try {
+        $verOut = (& "$RISCV_DIR\bin\riscv-none-elf-gcc.exe" --version 2>&1) | Out-String -Stream | Select-Object -First 1
+        if ($verOut -match '(\d+\.\d+\.\d+)') { $RISCV_VER = $Matches[1] }
+    } catch {
+        $RISCV_VER = "Installed"
+    }
+}
+
+$OPENOCD_VER = "Not found"
+if ($OPENOCD_DIR -and (Test-Path "$OPENOCD_DIR\bin\openocd.exe")) {
+    try {
+        $verOut = (& "$OPENOCD_DIR\bin\openocd.exe" --version 2>&1) | Out-String -Stream | Select-Object -First 1
+        if ($verOut -match '(\d+\.\d+\.\d+)') { $OPENOCD_VER = $Matches[1] }
+    } catch {
+        $OPENOCD_VER = "Installed"
+    }
+}
+
+Write-Host ("{0,-25} {1}" -f "IOcomposer runtime:", $ECLIPSE_VER)
+Write-Host ("{0,-25} {1}" -f "ARM GCC:", $ARM_VER)
+Write-Host ("{0,-25} {1}" -f "RISC-V GCC:", $RISCV_VER)
+Write-Host ("{0,-25} {1}" -f "OpenOCD:", $OPENOCD_VER)
+Write-Host
+Write-Host ("{0,-25} {1}" -f "iocomposer_home:", $RT)
+Write-Host ("{0,-25} {1}" -f "iosonata_loc:", $RT)
+
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host " IOcomposer development tools setup completed" -ForegroundColor Green
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host
+Write-Host "Usage in .cproject files:"
+Write-Host "  `${system_property:iosonata_loc}/IOsonata/include"
+Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/include"
+Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Core/Include"
+Write-Host
+Write-Host "Python environment: $PYOCD_DIR"
+Write-Host "pyOCD: $PYOCD"
+Write-Host "IntelHex (HEX merge): $TOOL_BIN\hexmerge.cmd"
+Write-Host "Tool binaries: $TOOL_BIN"
+exit 0
+, '$1'))
+					if ($version -lt [version]'0.1.7') { throw 'IOcomposer requires wizard 0.1.7 or newer' }
+				}
 				$url = "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/$($latest.Name)"
 			}
 			$jar = Join-Path $stage "$id.jar"
