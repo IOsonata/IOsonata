@@ -6,33 +6,28 @@ an obsolete script.
 
 ## Reviewed nRF54L bare-metal layouts
 
-| Script | Application FLASH | NVM0 | RAM | Classification |
-| --- | --- | --- | --- | --- |
-| `gcc_nrf54l15_xxaa.ld` | 0x000000-0x17CFFF | 0x17D000-0x17FFFF (12 KB) | RAM0 and RAM1 retained | Bare-metal variant |
-| `gcc_nrf54lm20a_xxaa.ld` | 0x000000-0x1FCFFF | 0x1FD000-0x1FFFFF (12 KB) | RAM0 and RAM1 retained | Bare-metal variant |
+The RRAM capacity, not the rounded address-space boundary, defines the
+last valid byte. Nordic specifies 1524 KB for nRF54L15, 2036 KB for
+nRF54LM20A, 500 KB for nRF54L05, 1012 KB for nRF54L10 and nRF54LV10A,
+and 508 KB for nRF54LS05B. NVM0 is now reserved *inside* physical RRAM.
 
-Additional preserved bare-metal and engineering variants now expose the
-flash area already excluded by their existing FLASH lengths:
+| Script | Application FLASH | NVM0 | Physical RRAM end |
+| --- | --- | --- | --- |
+| `gcc_nrf54l15_xxaa.ld` | 0x000000–0x179FFF | 0x17A000–0x17CFFF (12 KB) | 0x17D000 |
+| `gcc_nrf54lm20a_xxaa.ld` | 0x000000–0x1F9FFF | 0x1FA000–0x1FCFFF (12 KB) | 0x1FD000 |
+| `gcc_nrf54l05_xxaa.ld` | 0x000000–0x079FFF | 0x07A000–0x07CFFF (12 KB) | 0x07D000 |
+| `gcc_nrf54l10_xxaa.ld` | 0x000000–0x0F9FFF | 0x0FA000–0x0FCFFF (12 KB) | 0x0FD000 |
+| `gcc_nrf54lm20a_enga_xxaa.ld` | 0x000000–0x1F9FFF | 0x1FA000–0x1FCFFF (12 KB) | 0x1FD000 |
+| `gcc_nrf54ls05b_enga_xxaa.ld` | 0x000000–0x07DFFF | 0x07E000–0x07EFFF (4 KB) | 0x07F000 |
+| `gcc_nrf54lv10a_enga_xxaa.ld` | 0x000000–0x0F9FFF | 0x0FA000–0x0FCFFF (12 KB) | 0x0FD000 |
 
-| Script | NVM0 start | Size |
-| --- | --- | --- |
-| `gcc_nrf54l05_xxaa.ld` | `0x7D000` | 12 KB |
-| `gcc_nrf54l10_xxaa.ld` | `0xFD000` | 12 KB |
-| `gcc_nrf54lm20a_enga_xxaa.ld` | `0x1FD000` | 12 KB |
-| `gcc_nrf54ls05b_enga_xxaa.ld` | `0x7F000` | 4 KB |
-| `gcc_nrf54lv10a_enga_xxaa.ld` | `0xFD000` | 12 KB |
-
-All nRF54 IOsonata GCC linker variants now use the IOsonata
-`gcc_arm_flash.ld` shared sections, not Nordic's `nrf_common.ld`. The
-converted legacy variants have linker search paths for the shared IOsonata
-`ARM/ldscript` directory. Confirm the expected startup and section
-behavior by building the affected Eclipse Embedded CDT projects; static
-reference checks do not replace linking.
-
-The two bare-metal scripts already ended FLASH before the final 12 KB of
-RRAM. They now declare the omitted NVM0 region and export
-`__start_nvm0`/`__stop_nvm0` in an `nvm0 (NOLOAD)` section. Existing FLASH
-and RAM boundaries were not moved.
+All nRF54 IOsonata GCC linker variants use `gcc_arm_flash.ld`, not
+Nordic's `nrf_common.ld`. The bare-metal and engineering variants
+export `__start_nvm0` and `__stop_nvm0` from an `nvm0 (NOLOAD)`
+section. FLASH lengths were reduced to reserve real RRAM for NVM0;
+RAM regions were not changed. Rebuild affected configurations and
+verify the linker map. This change moves persistent storage; preserve
+or migrate existing on-device contents before firmware updates.
 
 The S145 scripts are **different layouts**. For example,
 `gcc_nrf54l15_xxaa_s145.ld` reserves two distinct 4 KB NVM regions,
