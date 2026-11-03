@@ -96,6 +96,10 @@ class RiscvLinkerNamingTests(unittest.TestCase):
             for project in projects:
                 selected = script_selections(project)
                 with self.subTest(part=part, project=project.parents[1].name):
+                    if part == "ESP32C6" and project.parents[1].name == "qemutest":
+                        # Deliberately incomplete skeleton; not a linkable example.
+                        self.assertEqual(selected, [])
+                        continue
                     self.assertEqual(len(selected), 2)
                     for config, references in selected:
                         self.assertEqual(len(references), 2)
