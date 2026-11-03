@@ -1,6 +1,6 @@
 /* Application with DFU, nRF9160.
  *
- * Same as nrf9160_xxaa.ld with FLASH cut down to slot 0, from the layout the
+ * Same as gcc_nrf9160_xxaa.ld with FLASH cut down to slot 0, from the layout the
  * stage 0 boot shares, and RAM stopped short of the recovery request
  * word. An image that outgrows slot 0 fails to link. The stage 0 boot sets
  * VTOR to slot 0 before it starts the image.
