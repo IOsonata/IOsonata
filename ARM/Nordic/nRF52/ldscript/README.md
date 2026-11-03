@@ -16,6 +16,46 @@ directory and retains `nrf_common.ld`. Debug and Release configurations
 reference that local file; it is **not** an IOsonata linker script.
 Keep this distinction for other upstream SDK comparison examples.
 
+## nRF52832/nRF52840 application storage
+
+The standard layout reserves **two separate linker NVM regions**:
+
+- `NVM0`: 0x2000 bytes (8 KB), dedicated to Bluetooth PDS. This is
+  two independently erasable nRF52 flash pages, required by PDS for
+  transactional garbage collection.
+- `NVM1`: 0x1000 bytes (4 KB), reserved for user application data.
+  It is not part of PDS garbage collection.
+
+With **no DFU**, there is no MBR reservation and NVM occupies the last
+12 KB of the device flash:
+
+| Device | Application FLASH end (exclusive) | NVM0 | NVM1 |
+| --- | --- | --- | --- |
+| nRF52832 | 0x7D000 | 0x7D000..0x7EFFF | 0x7F000..0x7FFFF |
+| nRF52840 | 0xFD000 | 0xFD000..0xFEFFF | 0xFF000..0xFFFFF |
+
+With **MBR + Nordic DFU**, the same NVM regions move directly below the
+bootloader without overlapping the two bootloader metadata pages:
+
+| Device | App origin | App FLASH end (exclusive) | NVM0 | NVM1 | DFU bootloader | MBR parameters | DFU settings |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| nRF52832 | 0x1000 | 0x74000 | 0x74000..0x75FFF | 0x76000..0x76FFF | 0x77000..0x7DFFF | 0x7E000..0x7EFFF | 0x7F000..0x7FFFF |
+| nRF52840 | 0x1000 | 0xDD000 | 0xDD000..0xDEFFF | 0xDF000..0xDFFFF | 0xE0000..0xFDFFF | 0xFE000..0xFEFFF | 0xFF000..0xFFFFF |
+
+MBR and DFU are coupled in these layouts. SDC does not need a distinct
+linker map. IOsonata NVM replaces Nordic FDS; no separate FDS flash
+allocation is made.
+
+The linker exports `__start_nvm0`, `__stop_nvm0`,
+`__start_nvm1`, and `__stop_nvm1`; `NvmRegionAddr()` and
+`NvmRegionSize()` expose both regions. The `NVM0` region index remains
+0, preserving the default Bluetooth bond store selection.
+
+These boundaries match the documented Nordic DFU bootloader variants.
+They require validation against the actual programmed bootloader and
+generated ELF/HEX before flashing an MBR+DFU image. Existing NVM data
+will not automatically migrate when a storage region moves.
+
 ## Reviewed variants
 
 The following scripts are **distinct layouts** based on their current MEMORY
