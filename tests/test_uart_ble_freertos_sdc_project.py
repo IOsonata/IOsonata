@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT = (ROOT / "ARM" / "Nordic" / "nRF52" / "nRF52832"
            / "exemples" / "UartBleFreeRTOS" / "ioc" / ".cproject")
 SCRIPT = ROOT / "ARM" / "Nordic" / "nRF52" / "ldscript" / "gcc_nrf52832_xxaa.ld"
+SOURCE_PROJECT = PROJECT.with_name(".project")
 SDC_PATHS = (
     "mpsl/lib/nrf52/hard-float",
     "mpsl/fem/common/lib/nrf52/hard-float",
@@ -34,9 +35,28 @@ class UartBleFreeRtosSdcProjectTests(unittest.TestCase):
             if config is not None:
                 configurations[config.get("name")] = cfg
 
+        linked = {
+            item.findtext("name", ""): item.findtext("locationURI", "")
+            for item in ET.parse(SOURCE_PROJECT).findall(".//linkedResources/link")
+        }
+        sdk_compat = "src/FreeRTOS/sdk_compat"
+        self.assertEqual(linked[sdk_compat], "virtual:/virtual")
+        for src in ("app_error_weak.c", "nrf_drv_clock.c"):
+            name = sdk_compat + "/" + src
+            self.assertIn(name, linked)
+            self.assertIn("external/nRF5_SDK/", linked[name])
+        for name in ("Debug", "Release"):
+            cfg = configurations[name]
+            excludes = [item for entry in cfg.findall(".//sourceEntries/entry")
+                        for item in entry.get("excluding", "").split("|")]
+            self.assertIn(sdk_compat, excludes)
+
         for name in ("Debug_SDC", "Release_SDC"):
             with self.subTest(config=name):
                 cfg = configurations[name]
+                exclusions = [item for entry in cfg.findall(".//sourceEntries/entry")
+                              for item in entry.get("excluding", "").split("|")]
+                self.assertNotIn(sdk_compat, exclusions)
                 builder = cfg.find(".//builder")
                 self.assertIsNotNone(builder)
                 self.assertTrue(builder.get("buildPath", "").endswith("/" + name))
