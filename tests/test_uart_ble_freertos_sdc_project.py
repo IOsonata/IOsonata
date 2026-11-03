@@ -47,6 +47,24 @@ class UartBleFreeRtosSdcProjectTests(unittest.TestCase):
                     for outdated in ("S132", "SOFTDEVICE_PRESENT"):
                         self.assertNotIn(outdated, defs)
 
+                    # The SDK FreeRTOS port still requires Nordic utility,
+                    # scheduling, logging and S132 header declarations even
+                    # when the linked radio controller is NRFXLIB_SDC.
+                    include_paths = option_values(cfg, "." + kind + ".compiler.include.paths")
+                    for suffix in (
+                        "components/device",
+                        "components/libraries/util",
+                        "components/libraries/strerror",
+                        "components/libraries/scheduler",
+                        "components/libraries/log",
+                        "components/libraries/log/src",
+                        "components/libraries/experimental_section_vars",
+                        "components/softdevice/s132/headers",
+                        "components/softdevice/common",
+                    ):
+                        self.assertTrue(any(p.endswith("/external/nRF5_SDK/" + suffix)
+                                            for p in include_paths), (name, kind, suffix))
+
                     scripts = option_values(cfg, "." + kind + ".linker.scriptfile")
                     self.assertEqual(scripts, ["../../../../../ldscript/gcc_nrf52832_xxaa.ld"])
                     self.assertEqual(
