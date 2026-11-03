@@ -176,7 +176,7 @@ __attribute__((section(".modem_shm.ctrl"), aligned(8)))
 static uint8_t s_nRF91ModemShmCtrl[NRF91_MODEM_SHM_CTRL_MAXSIZE];
 
 // The .modem_shm section: first in RAM, in whole SPU RAM regions below
-// 128 KB (nrf9160_xxaa.ld, nrf9120_xxaa.ld)
+// 128 KB (gcc_nrf9160_xxaa.ld, gcc_nrf9120_xxaa.ld)
 extern const uint8_t __start_modem_shm[];
 extern const uint8_t __stop_modem_shm[];
 
