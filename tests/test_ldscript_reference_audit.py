@@ -125,6 +125,22 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         path = self.write_iar_project(reference.replace("/", chr(92)))
         self.assertEqual(audit.check_iar_project(path), (1, 0, []))
 
+    def test_iar_projdirpath_existing_icf(self):
+        reference = "$PROJ_DIR$\\\\..\\\\..\\\\..\\\\..\\\\ldscript\\\\gcc_part.icf"
+        script = self.linkers / "gcc_part.icf"
+        script.write_text("define memory mem with size = 4G;\\n", encoding="utf-8")
+        path = self.write_iar_project(reference)
+        self.assertEqual(audit.check_iar_project(path), (1, 0, []))
+        self.assertIn(script.resolve(), audit.referenced_scripts(self.root))
+
+    def test_iar_projdirpath_missing_icf(self):
+        reference = "$PROJ_DIR$\\\\..\\\\..\\\\..\\\\..\\\\ldscript\\\\missing.icf"
+        path = self.write_iar_project(reference)
+        checked, skipped, errors = audit.check_iar_project(path)
+        self.assertEqual((checked, skipped), (1, 0))
+        self.assertEqual(len(errors), 1)
+        self.assertIn("missing.icf", errors[0])
+
     def test_iar_missing_linker_reference(self):
         path = self.write_iar_project("../../../../ldscript/missing.icf")
         count, skipped, errors = audit.check_iar_project(path)
