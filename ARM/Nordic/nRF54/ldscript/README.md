@@ -11,6 +11,23 @@ an obsolete script.
 | `gcc_nrf54l15_xxaa.ld` | 0x000000-0x17CFFF | 0x17D000-0x17FFFF (12 KB) | RAM0 and RAM1 retained | Bare-metal variant |
 | `gcc_nrf54lm20a_xxaa.ld` | 0x000000-0x1FCFFF | 0x1FD000-0x1FFFFF (12 KB) | RAM0 and RAM1 retained | Bare-metal variant |
 
+Additional preserved bare-metal and engineering variants now expose the
+flash area already excluded by their existing FLASH lengths:
+
+| Script | NVM0 start | Size |
+| --- | --- | --- |
+| `gcc_nrf54l05_xxaa.ld` | `0x7D000` | 12 KB |
+| `gcc_nrf54l10_xxaa.ld` | `0xFD000` | 12 KB |
+| `gcc_nrf54lm20a_enga_xxaa.ld` | `0x1FD000` | 12 KB |
+| `gcc_nrf54ls05b_enga_xxaa.ld` | `0x7F000` | 4 KB |
+| `gcc_nrf54lv10a_enga_xxaa.ld` | `0xFD000` | 12 KB |
+
+These older variants retain their existing `INCLUDE "nrf_common.ld"`
+dependency. Unlike the standardized GCC scripts, this shared file may be
+supplied by an external SDK. Confirm that it is present at link time and
+review compatibility with `gcc_arm_flash.ld` before changing the include.
+The reference audit does not check these indirect SDK dependencies.
+
 The two bare-metal scripts already ended FLASH before the final 12 KB of
 RRAM. They now declare the omitted NVM0 region and export
 `__start_nvm0`/`__stop_nvm0` in an `nvm0 (NOLOAD)` section. Existing FLASH
