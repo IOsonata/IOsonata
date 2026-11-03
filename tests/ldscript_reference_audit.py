@@ -223,8 +223,17 @@ def report_unreferenced(root):
     included = included_scripts(scripts)
     candidates = [path for path in scripts if path not in referenced and path not in included]
     for path in candidates:
-        print(f"CANDIDATE (not directly selected by .cproject/.ewp): {path}")
-    print(f"Included dependencies: {len(included)}; unreferenced candidates: {len(candidates)}; no files deleted")
+        print(f"UNSELECTED (not verified unused): {path}")
+    print(
+        f"Directly selected: {len(set(scripts) & referenced)}; "
+        f"include dependencies: {len(set(scripts) & included)}; "
+        f"unselected: {len(candidates)}; no files deleted"
+    )
+    print(
+        "WARNING: unselected scripts may be used by DFU, bootloaders, "
+        "source-controlled build recipes, and external consumers. "
+        "Do not delete based on this report."
+    )
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
