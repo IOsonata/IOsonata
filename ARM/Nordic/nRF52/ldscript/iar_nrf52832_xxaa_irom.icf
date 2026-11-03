@@ -5,7 +5,7 @@
 define symbol __ICFEDIT_intvec_start__ = 0x00000000;
 /*-Memory Regions-*/
 define symbol __ICFEDIT_region_IROM1_start__ = 0x00000000;
-define symbol __ICFEDIT_region_IROM1_end__   = 0x0007FFFF;
+define symbol __ICFEDIT_region_IROM1_end__   = 0x0007CFFF;
 define symbol __ICFEDIT_region_IROM2_start__ = 0x0;
 define symbol __ICFEDIT_region_IROM2_end__   = 0x0;
 define symbol __ICFEDIT_region_EROM1_start__ = 0x0;
@@ -29,6 +29,12 @@ define symbol __ICFEDIT_size_cstack__     = 0x2000;
 define symbol __ICFEDIT_size_proc_stack__ = 0x0;
 define symbol __ICFEDIT_size_heap__       = 0x2000;
 /**** End of ICF editor section. ###ICF###*/
+
+/* Reserve the same 8 KB NVM0 area as gcc_nrf52832_xxaa.ld. */
+define symbol __start_nvm0 = 0x0007D000;
+define symbol __stop_nvm0 = 0x0007F000;
+export symbol __start_nvm0;
+export symbol __stop_nvm0;
 
 define memory mem with size = 4G;
 define region IROM_region   =   mem:[from __ICFEDIT_region_IROM1_start__ to __ICFEDIT_region_IROM1_end__]
