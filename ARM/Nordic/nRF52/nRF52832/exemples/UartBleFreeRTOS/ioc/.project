@@ -180,5 +180,15 @@
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_clock.c</locationURI>
 		</link>
+		<link>
+			<name>src/FreeRTOS/sdk_compat/app_error.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_error.c</locationURI>
+		</link>
+		<link>
+			<name>src/FreeRTOS/sdk_compat/nrfx_clock_lfclk.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_clock_lfclk.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
