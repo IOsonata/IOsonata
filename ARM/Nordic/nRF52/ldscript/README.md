@@ -35,7 +35,7 @@ With **no DFU**, there is no MBR reservation and NVM occupies the last
 | nRF52840 | 0xFD000 | 0xFD000..0xFEFFF | 0xFF000..0xFFFFF |
 
 For the **standard MBR + SDK bootloader origins used by the generic MBR
-scripts** (nRF52832 S132 BLE DFU and nRF52840 USB DFU), the same NVM
+scripts** (nRF52832 SDK DFU bootloader at 0x77000 and nRF52840 USB DFU), the same NVM
 regions move directly below the bootloader without overlapping metadata:
 
 | Device | App origin | App FLASH end (exclusive) | NVM0 | NVM1 | DFU bootloader | MBR parameters | DFU settings |
@@ -75,7 +75,37 @@ For each protected range, NVM0 occupies the first 8 KB and NVM1 occupies
 its final 4 KB. In particular, the nRF52840 USB DFU map must **not** be
 reused for BLE DFU: the latter bootloader starts at `0xF7000`, not
 `0xE0000`. The basic `_s132.ld` and `_s140.ld` scripts are not these
-SDK DFU application maps; select the appropriate variant explicitly.
+SDK DFU application maps. Existing non-DFU and IOsonata stage-0 DFU
+projects must keep their own linker selections. The two new SDK BLE DFU
+application scripts are selectable variants for firmware intended to run
+with Nordic's SDK DFU bootloaders; do not change an unrelated example
+solely because it uses a SoftDevice. The existing BleOta projects use
+IOsonata DFU and deliberately select the separate `_dfu.ld` scripts.
+
+### Storage migration on existing nRF52 devices
+
+The change from a single 12 KB NVM0 to 8 KB NVM0 + 4 KB NVM1
+**changes the format/ownership of the third flash page**, even when
+the starting address does not move. Existing PDS logs may have live bond
+records in that page; simply flashing new firmware may lose those bonds.
+The new NVM1 page may contain old PDS records and must not be treated
+as initialized application storage.
+
+An OTA upgrade cannot be described as persistent-data-preserving until
+an on-device migration has been designed, implemented, and tested against
+old 12 KB PDS images. For a clean installation, explicitly erase all three
+pages before first use and re-pair Bluetooth devices. Do not erase them
+automatically at every boot or during ordinary application updates.
+
+### Small S112 DFU application slots
+
+The nRF52805 and nRF52810 have 192 KB total FLASH. Their dedicated
+S112 + IOsonata DFU layouts reserve 40 KB application FLASH
+(`0x19000..0x22FFF`), 8 KB NVM0 (`0x23000..0x24FFF`), and
+4 KB NVM1 (`0x25000..0x25FFF`). The record remains at
+`0x26000` and the stage-0 bootloader starts at `0x27000`.
+These DFU variants are **Release-only**. The reduced application slot
+must be recompiled and checked for overflow before deployment.
 
 ## Reviewed variants
 
