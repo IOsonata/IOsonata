@@ -11,6 +11,7 @@ No compiler, SDK or Eclipse installation is required.
 """
 
 import argparse
+import re
 from pathlib import PureWindowsPath
 from pathlib import Path
 import sys
@@ -100,7 +101,7 @@ def check_iar_project(path):
                 checked += 1
                 errors.append(f"{path}: nonportable absolute IAR linker script: {reference}")
                 continue
-            normalized = reference.replace("\\\\", "/")
+            normalized = reference.replace(chr(92), "/")
             if Path(normalized).suffix.lower() != ".icf":
                 skipped += 1
                 continue
@@ -144,14 +145,38 @@ def referenced_scripts(root):
                     continue
                 if Path(value).is_absolute() or PureWindowsPath(value).is_absolute():
                     continue
-                normalized = value.replace("\\\\", "/")
+                normalized = value.replace(chr(92), "/")
                 if Path(normalized).suffix.lower() == ".icf":
                     referenced.add((project.parent / normalized).resolve())
     return referenced
 
 
+def included_scripts(scripts):
+    """Find literal GNU LD INCLUDE and IAR ICF include dependencies."""
+    dependencies = set()
+    pattern = re.compile(
+        r'^\\s*(?:INCLUDE\\s+|include\\s+)(?:"([^"]+)"|<([^>]+)>|([^\\s;/]+))',
+        re.MULTILINE,
+    )
+    for script in scripts:
+        if script.suffix.lower() not in (".ld", ".icf"):
+            continue
+        try:
+            content = script.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        for match in pattern.finditer(content):
+            name = next(group for group in match.groups() if group is not None)
+            if "$" in name or "%" in name:
+                continue
+            dependency = (script.parent / name.replace(chr(92), "/")).resolve()
+            if dependency.is_file():
+                dependencies.add(dependency)
+    return dependencies
+
+
 def report_unreferenced(root):
-    """Report candidates only: includes/imports and external builds may use them."""
+    """Report candidates only; external references may still exist."""
     referenced = referenced_scripts(root)
     scripts = sorted(
         path.resolve()
@@ -160,10 +185,11 @@ def report_unreferenced(root):
         and path.suffix.lower() in (".ld", ".icf", ".sct")
         and "ldscript" in path.parts
     )
-    candidates = [path for path in scripts if path not in referenced]
+    included = included_scripts(scripts)
+    candidates = [path for path in scripts if path not in referenced and path not in included]
     for path in candidates:
         print(f"CANDIDATE (not directly selected by .cproject/.ewp): {path}")
-    print(f"Unreferenced candidates: {len(candidates)}; no files deleted")
+    print(f"Included dependencies: {len(included)}; unreferenced candidates: {len(candidates)}; no files deleted")
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
