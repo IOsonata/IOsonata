@@ -112,6 +112,18 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         self.assertEqual((count, skipped), (1, 0))
         self.assertIn("missing IAR linker script", errors[0])
 
+    def test_inventory_identifies_referenced_script(self):
+        self.write_project()
+        referenced = audit.referenced_scripts(self.root)
+        self.assertIn(self.script.resolve(), referenced)
+
+    def test_inventory_keeps_unselected_script_as_candidate(self):
+        self.write_project()
+        unselected = self.linkers / "gcc_unused.ld"
+        unselected.write_text("SECTIONS {}")
+        referenced = audit.referenced_scripts(self.root)
+        self.assertNotIn(unselected.resolve(), referenced)
+
     def test_malformed_xml_is_reported(self):
         path = self.ioc / ".cproject"
         path.write_text("<cproject>", encoding="utf-8")
