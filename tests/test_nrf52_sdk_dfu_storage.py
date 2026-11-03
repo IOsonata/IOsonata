@@ -12,6 +12,10 @@ SIZE = 0x3000
 CASES = (
     ("nRF52832", "dfu_ble", "gcc_nrf52832_xxaa_s132_sdk_dfu_boot.ld",
      "gcc_nrf52832_xxaa_s132_sdk_ble_dfu.ld", 0x77000),
+    ("nRF52832", "dfu_uart", "gcc_nrf52832_xxaa_sdk_uart_dfu_boot.ld",
+     "gcc_nrf52832_xxaa_s132_sdk_ble_dfu.ld", 0x77000),
+    ("nRF52832", "dfu_uart_open", "gcc_nrf52832_xxaa_sdk_uart_open_dfu_boot.ld",
+     "gcc_nrf52832_xxaa_s132_sdk_ble_dfu.ld", 0x77000),
     ("nRF52840", "dfu_ble", "gcc_nrf52840_xxaa_sdk_ble_dfu_boot.ld",
      "gcc_nrf52840_xxaa_s140_sdk_ble_dfu.ld", 0xF7000),
     ("nRF52840", "dfu_usb", "gcc_nrf52840_xxaa_sdk_usb_dfu_boot.ld",
