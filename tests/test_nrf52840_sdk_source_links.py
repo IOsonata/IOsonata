@@ -134,6 +134,32 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
                 self.assertTrue(disabled.issubset(exclusions))
                 self.assertEqual(definitions.count("BOARD_PCA10056"), 2)
 
+    def test_usb_cdc_release_has_no_softdevice_or_dfu_definitions(self):
+        folder = TARGET / "exemples" / "UsbCdcAcmDemo" / "ioc"
+        configurations = ET.parse(folder / ".cproject")
+        for cfg in configurations.findall(".//cconfiguration"):
+            name = cfg.find(".//configuration").get("name")
+            definitions = [
+                item.get("value", "")
+                for option in cfg.findall(".//option")
+                if option.get("name", "").startswith("Defined symbols")
+                for item in option.findall("listOptionValue")
+            ]
+            scripts = [
+                item.get("value", "").strip('"')
+                for option in cfg.findall(".//option")
+                if option.get("name", "").startswith("Script files")
+                for item in option.findall("listOptionValue")
+            ]
+            with self.subTest(configuration=name):
+                for symbol in ("SOFTDEVICE_PRESENT", "S140",
+                               "BLE_STACK_SUPPORT_REQD", "BL_SETTINGS_ACCESS_ONLY",
+                               "NRF_DFU_SETTINGS_VERSION=1"):
+                    self.assertNotIn(symbol, definitions)
+                self.assertTrue(scripts)
+                self.assertTrue(all(path.endswith("gcc_nrf52840_xxaa.ld")
+                                    for path in scripts))
+
     def test_usb_cdc_cpp_backend_is_linked(self):
         project = TARGET / "exemples" / "UsbCdcAcmDemo" / "ioc" / ".project"
         linked = linked_sources(project)
