@@ -198,6 +198,25 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         self.assertIn("__start_ipc0 = .;", script)
         self.assertIn("__stop_ipc0 = .;", script)
 
+    def test_nrf5340_dfu_ipc_block_fits_both_core_examples(self):
+        root = Path(__file__).resolve().parents[1]
+        ipc_start = 0x20070000
+        recovery_flag = 0x2007EFF0
+        available = recovery_flag - ipc_start
+        for core in ("nRF5340_App", "nRF5340_Net"):
+            path = (
+                root / "ARM" / "Nordic" / "nRF53" / core
+                / "exemples" / "IpcIntrfTest" / "src" / "board.h"
+            )
+            board = path.read_text(encoding="utf-8")
+            addr = re.search(r"^#define\s+IPCTEST_MEM_ADDR\s+(0x[0-9A-Fa-f]+)UL", board, re.MULTILINE)
+            size = re.search(r"^#define\s+IPCTEST_MEM_SIZE\s+(0x[0-9A-Fa-f]+)U", board, re.MULTILINE)
+            with self.subTest(core=core):
+                self.assertIsNotNone(addr)
+                self.assertIsNotNone(size)
+                self.assertEqual(int(addr.group(1), 16), ipc_start)
+                self.assertLessEqual(int(size.group(1), 16), available)
+
     def test_nrf52840_s140c_flash_does_not_overlap_storage(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF52" / "ldscript"
         content = (family / "gcc_nrf52840_xxaa_s140c.ld").read_text(encoding="utf-8")
