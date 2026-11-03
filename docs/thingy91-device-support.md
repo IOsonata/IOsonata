@@ -21,7 +21,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 
 | Device | Interface | IOsonata status |
 | --- | --- | --- |
-| nRF9151 LTE/GNSS | Modem | nRF91x1 library uses MCU target nRF9120 (`NRF9120_XXAA`, `nrf9120_xxaa.ld`) |
+| nRF9151 LTE/GNSS | Modem | nRF91x1 library uses MCU target nRF9120 (`NRF9120_XXAA`, `gcc_nrf9120_xxaa.ld`) |
 | nRF5340 application/network cores | IPC/radio | BleSecurity has run on the application core (maintainer-confirmed); Thingy:91 X board integration remains separate |
 | nRF7002 Wi-Fi | SPI/coexistence | Development paused; existing experimental code retained; do not continue until explicitly resumed |
 | ADXL367 low-power accelerometer | I2C | `accel_adxl367` integrated in the nRF91x1 library; Thingy:91 X sensor-rail-aware test project added; hardware validation pending |
@@ -111,7 +111,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 
 ## Build and host validation
 
-- All nRF91x1 modules use `NRF9120_XXAA` and `nrf9120_xxaa.ld`, including Thingy:91 X.
+- All nRF91x1 modules use `NRF9120_XXAA` and `gcc_nrf9120_xxaa.ld`, including Thingy:91 X.
 - Shared board helpers are linked as source files in the Eclipse projects. C and C++ Debug/Release include paths must contain `../../../common` relative to the build directory.
 - `python3 tests/pwrmgnt/run_npm1300.py` and `python3 tests/sensors/run_bmm350.py` exercise the production drivers at O0/O2 with address and undefined-behavior sanitizers.
 - `python3 tests/pwrmgnt/run_board_pmic.py` checks ADP5360 and nPM6001 initialization, enable/disable, bus failures and software reset. ADP5360 enable/disable controls charging; nPM6001 enable/disable controls BUCK3. Reset invalidates software initialization without resetting hardware or switching board rails; call Init again before use.
