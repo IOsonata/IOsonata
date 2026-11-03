@@ -7,6 +7,7 @@ Run from the repository root:
 
 Relative -T paths are interpreted from ioc/<configuration>, where the
 generated makefile runs, rather than from the .cproject file itself.
+The Eclipse ProjDirPath macro resolves to the ioc project directory.
 No compiler, SDK or Eclipse installation is required.
 """
 
@@ -32,6 +33,18 @@ def script_values(config):
                 yield value
 
 
+def resolve_eclipse_script(path, name, reference):
+    """Resolve a linker reference; return None for unsupported macros."""
+    prefix = "${ProjDirPath}/"
+    if reference.startswith(prefix):
+        remainder = reference[len(prefix):]
+        if "$" in remainder or "%" in remainder:
+            return None
+        return (path.parent / remainder).resolve()
+    if "$" in reference or "%" in reference:
+        return None
+    return (path.parent / name / reference).resolve()
+
 def check_project(path):
     errors = []
     checked = 0
@@ -55,19 +68,22 @@ def check_project(path):
             reference = raw.strip().strip('"').strip("'")
             if not reference:
                 continue
-            if "$" in reference or "%" in reference:
-                skipped += 1
-                continue
-            script = Path(reference)
-            if script.is_absolute() or PureWindowsPath(reference).is_absolute():
-                checked += 1
-                errors.append(f"{path} [{name}]: nonportable absolute linker script: {reference}")
-                continue
+            if reference.startswith("${ProjDirPath}/"):
+                script = Path(reference[len("${ProjDirPath}/"):])
+            else:
+                script = Path(reference)
+                if script.is_absolute() or PureWindowsPath(reference).is_absolute():
+                    checked += 1
+                    errors.append(f"{path} [{name}]: nonportable absolute linker script: {reference}")
+                    continue
             if script.suffix.lower() not in (".ld", ".icf", ".sct"):
                 skipped += 1
                 continue
+            target = resolve_eclipse_script(path, name, reference)
+            if target is None:
+                skipped += 1
+                continue
             checked += 1
-            target = (workdir / script).resolve()
             if not target.is_file():
                 errors.append(
                     f"{path} [{name}]: missing {reference} "
@@ -140,10 +156,15 @@ def referenced_scripts(root):
                 continue
             for raw in script_values(config):
                 value = raw.strip().strip('"').strip("'")
-                if "$" in value or "%" in value or Path(value).is_absolute():
+                if not value or Path(value).suffix.lower() not in (".ld", ".icf", ".sct"):
                     continue
-                if Path(value).suffix.lower() in (".ld", ".icf", ".sct"):
-                    referenced.add((project.parent / name / value).resolve())
+                if not value.startswith("${ProjDirPath}/") and (
+                    Path(value).is_absolute() or PureWindowsPath(value).is_absolute()
+                ):
+                    continue
+                target = resolve_eclipse_script(project, name, value)
+                if target is not None:
+                    referenced.add(target)
     for project in root.rglob("*.ewp"):
         try:
             xml = ET.parse(project)
