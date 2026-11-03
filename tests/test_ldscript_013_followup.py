@@ -32,7 +32,7 @@ class LinkerFollowupTests(unittest.TestCase):
                 for symbol in ("__dfu_slot0_end", "__dfu_slot1_start",
                                "__dfu_slot1_end", "__dfu_nvm0_start",
                                "__dfu_nvm1_start"):
-                    pattern = rf"(?m)^\\s*{symbol}\\s*=\\s*(0x[0-9A-Fa-f]+);"
+                    pattern = rf"(?m)^\s*{symbol}\s*=\s*(0x[0-9A-Fa-f]+);"
                     a_value = re.search(pattern, a)
                     b_value = re.search(pattern, b)
                     self.assertIsNotNone(a_value, symbol)
