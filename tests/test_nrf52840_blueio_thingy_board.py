@@ -10,8 +10,12 @@ BOARD = TARGET / "nRF52840" / "exemples" / "BlueIOThingy" / "src" / "board.h"
 REFERENCE = TARGET / "nRF52832" / "exemples" / "BlueIOThingy" / "src" / "board.h"
 EVIM = TARGET / "include" / "board_blueio_tag_evim.h"
 
-def macros(path):
-    return dict(re.findall(r"(?m)^#define\s+(\w+)\s+([^\n]+)", path.read_text()))
+def macros(path, section=None):
+    text = path.read_text()
+    if section == "evim":
+        text = text.split("#elif BOARD == BLUEIO_TAG_EVIM", 1)[1]
+        text = text.split("#elif BOARD == BLYST_NANO_DK", 1)[0]
+    return dict(re.findall(r"(?m)^#define\s+(\w+)\s+([^\n]+)", text))
 
 
 class BlueIoThingyBoardTests(unittest.TestCase):
@@ -25,7 +29,7 @@ class BlueIoThingyBoardTests(unittest.TestCase):
                     self.assertEqual(board[macro].strip(), reference[macro].strip())
 
     def test_application_board_aliases_match_evim_reference(self):
-        board, reference = macros(BOARD), macros(REFERENCE)
+        board, reference = macros(BOARD), macros(REFERENCE, "evim")
         roles = ("CONNECT_LED_PORT", "CONNECT_LED_PIN", "CONNECT_LED_LOGIC",
                  "LED_RED_PORT", "LED_RED_PIN", "LED_RED_PINOP", "LED_RED_LOGIC",
                  "LED_GREEN_PORT", "LED_GREEN_PIN", "LED_GREEN_PINOP", "LED_GREEN_LOGIC",
