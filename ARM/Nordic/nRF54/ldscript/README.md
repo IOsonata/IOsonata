@@ -61,8 +61,39 @@ changing the existing memory map. The cross-variant regression checks
 the boundaries and recovery words, but does not replace actual target
 linking and DFU hardware validation.
 
-The nRF54H20 Application and Radio core scripts describe separate cores and
-MRAM/RAM allocations. They are not duplicates of nRF54L layouts.
+## nRF54H20 Application and Radio core layouts
+
+The H20 cores have separate primary MRAM and local RAM partitions, while the
+linker scripts also expose shared MRAM-adjacent resources such as OTP, external
+flash, and multiple global RAM banks. Those common entries are *physical shared
+resources*, not separate allocations for each core. Multi-core firmware must
+coordinate use and permissions; these scripts do not establish isolation.
+
+| Core | Primary MRAM | Stage-0 boot | Recovery record | Slot 0 | Slot 1 | Local recovery word |
+| --- | --- | --- | --- | --- | --- | --- |
+| Application | `0x0E0A0000–0x0E0DFFFF` (256 KB) | 40 KB | 4 KB | 212 KB | none | `0x22007FF0` |
+| Radio | `0x0E120000–0x0E19FFFF` (512 KB) | 48 KB | 4 KB | 228 KB | 232 KB | `0x2300FFF0` |
+
+Application DFU is a single-slot wired-update layout; Radio DFU uses two
+slots. In both cases the bootloader and application include the same
+target-specific layout, and reserve the last 16 bytes of local RAM outside
+their linker-allocated RAM region.
+
+Unlike the nRF54L bare-metal scripts, the current nRF54H20 scripts allocate
+their entire designated primary MRAM partitions to executable FLASH or DFU
+slots. There is **no unused upper MRAM tail** to expose as NVM0 without
+reducing a firmware slot or allocating a separately defined storage area.
+Do not invent an NVM0 partition for these cores without a target-specific
+storage decision. The non-DFU scripts retain their `nrf_common.ld` include;
+DFU scripts use `gcc_arm_flash.ld`. Compatibility needs actual target
+linking and review of the startup implementation.
+
+The nRF54H20 library project configurations still describe port integration
+as pending. DFU layout boundary tests are static checks only; compilation,
+multi-core RAM permissions, DFU image handling, and boot behavior remain
+unverified.
+
+
 
 ## Validation
 
