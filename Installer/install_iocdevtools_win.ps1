@@ -838,8 +838,15 @@ function Install-IOcomposer {
 				$latest = $candidates | Sort-Object Key -Descending | Select-Object -First 1
 				if (-not $latest) { throw "No published IOcomposer plugin found: $id" }
 				if ($id -eq 'org.iosonata.embedcdt.templates.wizard') {
-					$version = [version](($latest.Name -replace '^org\.iosonata\.embedcdt\.templates\.wizard_([0-9.]+)\.jar
+					if ($latest.Name -notmatch '^org\.iosonata\.embedcdt\.templates\.wizard_([0-9]+)\.([0-9]+)\.([0-9]+)(?:\.[0-9]+)*\.jar$') {
+						throw "Invalid wizard bundle version: $($latest.Name)"
+					}
+					$wizardVersion = [version]("$($Matches[1]).$($Matches[2]).$($Matches[3])")
+					if ($wizardVersion -lt [version]'0.1.7') { throw 'IOcomposer requires wizard 0.1.7 or newer' }
+				}
+				$url = "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/$($latest.Name)"
 			}
+
 			$jar = Join-Path $stage "$id.jar"
 			Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $jar
 			& $SEVENZIP_EXE t $jar | Out-Null
