@@ -36,11 +36,10 @@ uses this capacity and reserves 12 KB of NVM0 at the physical end.
 Existing LM20B bare-metal images had no linker NVM0 reservation; this
 changes the available linker FLASH range and requires rebuild validation.
 
-**Separate follow-up:** The LM20B S145 and DFU scripts retain their
-existing approximately 1012 KB partitions, including fixed storage
-addresses. Those partitions are smaller than the documented physical
-capacity. They must be audited against the actual S145 memory requirements
-before changing them; this bare-metal update does not move their storage.
+The LM20B S145 and DFU scripts now use the same memory partitions as LM20A:
+NVM0 at 0x1D8800, NVM1 at 0x1D9800, and S145 at 0x1DA800.
+The layouts follow the common nRF54LM20 S145 image. Hardware validation
+and storage migration remain necessary for previously provisioned LM20B devices.
 
 The S145 scripts are **different layouts**. For example,
 `gcc_nrf54l15_xxaa_s145.ld` reserves two distinct 4 KB NVM regions,
@@ -60,7 +59,7 @@ The upload slot ends where NVM0 begins; NVM0 and NVM1 remain separate
 | --- | --- | --- | --- | --- |
 | nRF54L15 | `0x0D000–0xB1FFF` | `0xB2000–0x1587FF` | `0x158800` | `0x2003FFF0` |
 | nRF54LM20A | `0x0D000–0xF1FFF` | `0xF2000–0x1D87FF` | `0x1D8800` | `0x2007FCB0` |
-| nRF54LM20B | `0x0D000–0x71FFF` | `0x72000–0xD87FF` | `0x0D8800` | `0x2007FCB0` |
+| nRF54LM20B | `0x0D000–0xF1FFF` | `0xF2000–0x1D87FF` | `0x1D8800` | `0x2007FCB0` |
 
 All three use a 48 KB stage-0 boot region and a 4 KB recovery-record
 region. Application and boot scripts include the same target-specific DFU
