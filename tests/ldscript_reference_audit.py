@@ -211,7 +211,7 @@ def included_scripts(scripts):
 
 
 def report_unreferenced(root):
-    """Report candidates only; external references may still exist."""
+    """Inventory unselected variants, never classify them as obsolete."""
     referenced = referenced_scripts(root)
     scripts = sorted(
         path.resolve()
@@ -223,16 +223,16 @@ def report_unreferenced(root):
     included = included_scripts(scripts)
     candidates = [path for path in scripts if path not in referenced and path not in included]
     for path in candidates:
-        print(f"UNSELECTED (not verified unused): {path}")
+        print(f"AVAILABLE/UNCLASSIFIED (not directly selected): {path}")
     print(
         f"Directly selected: {len(set(scripts) & referenced)}; "
         f"include dependencies: {len(set(scripts) & included)}; "
-        f"unselected: {len(candidates)}; no files deleted"
+        f"available/unclassified: {len(candidates)}; obsolete confirmed: 0; no files deleted"
     )
     print(
-        "WARNING: unselected scripts may be used by DFU, bootloaders, "
-        "source-controlled build recipes, and external consumers. "
-        "Do not delete based on this report."
+        "A script is obsolete only after separate verification of its MCU support, "
+        "memory layout, superseding replacement, and all consumers. "
+        "Reference count alone never establishes obsolescence."
     )
 
 def main():
