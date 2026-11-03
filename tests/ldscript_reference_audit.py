@@ -11,6 +11,7 @@ No compiler, SDK or Eclipse installation is required.
 """
 
 import argparse
+from pathlib import PureWindowsPath
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
@@ -56,7 +57,7 @@ def check_project(path):
                 skipped += 1
                 continue
             script = Path(reference)
-            if script.is_absolute() or (len(reference) > 2 and reference[1] == ":" and reference[2] in ("\\\\", "/")):
+            if script.is_absolute() or PureWindowsPath(reference).is_absolute():
                 checked += 1
                 errors.append(f"{path} [{name}]: nonportable absolute linker script: {reference}")
                 continue
