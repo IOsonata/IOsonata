@@ -10,6 +10,6 @@
     "${iosonata}/ARM/Microchip/include"
   ],
   "linker_script": "${iosonata}/ARM/Microchip/SAM4L/ldscript/gcc_sam4lx8.ld",
-  "lib_path": "${iosonata}/ARM/Microchip/SAM4L/SAM4LCXC/lib/ioc/${config}",
+  "lib_path": "${iosonata}/ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc/${config}",
   "lib": "IOsonata_SAM4LCXC"
 }

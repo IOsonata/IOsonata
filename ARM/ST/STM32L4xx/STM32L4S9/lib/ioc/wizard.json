@@ -11,7 +11,7 @@
     "${iosonata}/ARM/ST/include",
     "${iosonata}/ARM/ST/STM32L4xx/include"
   ],
-  "linker_script": "${iosonata}/ARM/ST/STM32L4xx/ldscript/gcc_stm32l4s9xx.ld",
+  "linker_script": "${iosonata}/ARM/ST/STM32L4xx/ldscript/gcc_stm32l4s9.ld",
   "lib_path": "${iosonata}/ARM/ST/STM32L4xx/STM32L4S9/lib/ioc/${config}",
   "lib": "IOsonata_STM32L4S9"
 }
