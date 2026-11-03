@@ -222,6 +222,10 @@ function Sync-CubeWba {
         if (($current -eq $Ref) -and
 			(Test-Path "$Target\Projects\Common\WPAN\Interfaces" -PathType Container) -and
 			(Test-Path "$Target\Utilities\lpm\tiny_lpm" -PathType Container) -and
+						(Test-Path "$Target\Projects\NUCLEO-WBA65RI\Applications\BLE\BLE_DataThroughput_Client\Core\Src\app_entry.c" -PathType Leaf) -and
+			(Test-Path "$Target\Drivers\STM32WBAxx_HAL_Driver\Inc\stm32wbaxx_hal.h" -PathType Leaf) -and
+			(Test-Path "$Target\Drivers\CMSIS\Device\ST\STM32WBAxx\Include\stm32wbaxx.h" -PathType Leaf) -and
+			(Test-Path "$Target\Middlewares\ST\STM32_WPAN\link_layer\ll_sys\src\ll_sys_cs.c" -PathType Leaf) -and
 			(Test-Path "$Target\Projects\NUCLEO-WBA65RI\Applications\BLE\BLE_p2pServer\STM32_WPAN\Target\linklayer_plat.c" -PathType Leaf)) {
             Write-Host "   `[INFO`] Keeping $Target at $Ref" -ForegroundColor Yellow
             return
@@ -235,7 +239,8 @@ function Sync-CubeWba {
     Invoke-Git clone --depth=1 --branch $Ref --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git $Target
     Push-Location $Target
     try {
-        Invoke-Git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities
+        Invoke-Git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client Drivers/CMSIS Drivers/STM32WBAxx_HAL_Driver Middlewares/ST/STM32_WPAN Utilities
+		Invoke-Git submodule update --init --depth=1 -- Drivers/CMSIS/Device/ST/STM32WBAxx Drivers/STM32WBAxx_HAL_Driver Middlewares/ST/STM32_WPAN
     } finally {
         Pop-Location
     }

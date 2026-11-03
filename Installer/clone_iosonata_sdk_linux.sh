@@ -291,7 +291,11 @@ clone_cube_wba() {
     if [[ "$current" == "$ref" \
       && -d "$target_dir/Projects/Common/WPAN/Interfaces" \
       && -d "$target_dir/Utilities/lpm/tiny_lpm" \
-      && -f "$target_dir/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c" ]]; then
+      && -f "$target_dir/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c" \
+      && -f "$target_dir/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/Core/Src/app_entry.c" \
+      && -f "$target_dir/Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h" \
+      && -f "$target_dir/Drivers/CMSIS/Device/ST/STM32WBAxx/Include/stm32wbaxx.h" \
+      && -f "$target_dir/Middlewares/ST/STM32_WPAN/link_layer/ll_sys/src/ll_sys_cs.c" ]]; then
       echo "Keeping $target_dir at $ref"
       return 0
     fi
@@ -305,7 +309,13 @@ clone_cube_wba() {
     https://github.com/STMicroelectronics/STM32CubeWBA.git "$target_dir"
   (cd "$target_dir" \
     && git sparse-checkout set Projects/Common/WPAN \
-         Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities)
+          Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer \
+          Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client \
+          Drivers/CMSIS Drivers/STM32WBAxx_HAL_Driver \
+          Middlewares/ST/STM32_WPAN Utilities \
+     && git submodule update --init --depth=1 -- \
+          Drivers/CMSIS/Device/ST/STM32WBAxx \
+          Drivers/STM32WBAxx_HAL_Driver Middlewares/ST/STM32_WPAN)
 }
 
 # ---------------------------------------------------------

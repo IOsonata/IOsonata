@@ -32,6 +32,15 @@ class InstallerTests(unittest.TestCase):
 				platform_file = target / 'Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c'
 				platform_file.parent.mkdir(parents=True)
 				platform_file.touch()
+				for extra_file in [
+					'Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/Core/Src/app_entry.c',
+					'Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h',
+					'Drivers/CMSIS/Device/ST/STM32WBAxx/Include/stm32wbaxx.h',
+					'Middlewares/ST/STM32_WPAN/link_layer/ll_sys/src/ll_sys_cs.c',
+				]:
+					candidate = target / extra_file
+					candidate.parent.mkdir(parents=True, exist_ok=True)
+					candidate.touch()
 			sentinel = target / 'user-work.txt'
 			sentinel.write_text('keep me')
 			git = root / 'git'
@@ -102,13 +111,15 @@ esac
 					self.assertTrue(preserved)
 					self.assertNotIn('clone ', calls)
 
-	def test_cube_clone_downloads_no_driver_submodules(self):
+	def test_cube_clone_includes_reference_drivers_and_middleware(self):
 		for platform, shell in self.shells():
 			result, preserved, calls = self.run_helper(platform, shell, 'clone_cube_wba', mode='force')
 			self.assertEqual(result.returncode, 0, result.stderr)
 			self.assertIn('sparse-checkout set Projects/Common/WPAN', calls)
-			self.assertNotIn('Drivers', calls)
-			self.assertNotIn('submodule', calls)
+			self.assertIn('BLE_DataThroughput_Client', calls)
+			self.assertIn('Drivers/CMSIS', calls)
+			self.assertIn('submodule update --init --depth=1 --', calls)
+			self.assertIn('Middlewares/ST/STM32_WPAN', calls)
 
 
 	def test_matching_pin_is_kept(self):
