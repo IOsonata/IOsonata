@@ -403,6 +403,7 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         cases = (
             ("gcc_nrf54l15_xxaa.ld", 0x17D000),
             ("gcc_nrf54lm20a_xxaa.ld", 0x1FD000),
+            ("gcc_nrf54lm20b_xxaa.ld", 0x1FD000),
             ("gcc_nrf54l05_xxaa.ld", 0x7D000),
             ("gcc_nrf54l10_xxaa.ld", 0xFD000),
             ("gcc_nrf54lm20a_enga_xxaa.ld", 0x1FD000),
