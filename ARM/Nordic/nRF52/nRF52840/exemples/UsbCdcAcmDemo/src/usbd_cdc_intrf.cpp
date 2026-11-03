@@ -40,7 +40,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "cfifo.h"
-#include "usb/usbd_cdc_intrf.h"
+#include "usbd_cdc_intrf.h"
 #include "coredev/interrupt.h"
 
 #define USBD_CDC_PACKET_SIZE			(64)
