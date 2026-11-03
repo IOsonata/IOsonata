@@ -94,6 +94,13 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
                             (name, title, relative),
                         )
 
+    def test_uart_cli_builtin_commands_sources_are_linked(self):
+        project = TARGET / "exemples" / "UartCliDemo" / "ioc" / ".project"
+        linked = linked_sources(project)
+        self.assertIn("nrf_cli.c", linked.values())
+        self.assertIn("fnmatch.c", linked.values())
+        self.assertIn("cli_utils_cmds.c", linked.values())
+
     def test_usb_cdc_cpp_backend_is_linked(self):
         project = TARGET / "exemples" / "UsbCdcAcmDemo" / "ioc" / ".project"
         linked = linked_sources(project)
