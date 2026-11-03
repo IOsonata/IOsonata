@@ -773,7 +773,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFile</name>
-                    <state>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</state>
+                    <state>$PROJ_DIR$\..\..\..\..\ldscript\iar_stm32l4s9xx_flash.icf</state>
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
@@ -1834,7 +1834,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFile</name>
-                    <state>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</state>
+                    <state>$PROJ_DIR$\..\..\..\..\ldscript\iar_stm32l4s9xx_flash.icf</state>
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
