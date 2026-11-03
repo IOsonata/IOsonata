@@ -20,6 +20,25 @@ class WinLibraryIncludeTests(unittest.TestCase):
         ):
             self.assertNotIn(source, linked)
 
+    def test_win_sources_do_not_include_embedded_pin_control(self):
+        linked = {
+            item.findtext("name", "")
+            for item in ET.parse(PROJECT.with_name(".project"))
+            .findall(".//linkedResources/link")
+        }
+        for source in (
+            "src/pulse_train.c",
+            "src/miscdev/led_ncp5623b.cpp",
+            "src/miscdev/led_gpio.cpp",
+            "src/coredev/i2c.cpp",
+            "src/miscdev/led_apa102.cpp",
+            "src/miscdev/led_pwm.cpp",
+            "src/storage/seep_impl.cpp",
+            "src/display/eink_intrf.cpp",
+        ):
+            with self.subTest(source=source):
+                self.assertNotIn(source, linked)
+
     def test_win_hid_header_uses_case_sensitive_mingw_include(self):
         header = ROOT / "Win" / "include" / "usb_hidhost_impl.h"
         content = header.read_text()
