@@ -292,6 +292,48 @@ void TestPeerFirst(void)
 	CHECK(Tx(peer, b, 3) == 3);
 }
 
+void TestUnequalReservation(void)
+{
+	printf("owner and peer use different shared memory limits\\n");
+	PortReset();
+	FillShm(0xA5);
+
+	IpcIntrfDev_t own, peer;
+	IpcIntrfCfg_t oc = MakeCfg(true, RING_BYTES, RING_BYTES);
+	IpcIntrfCfg_t pc = MakeCfg(false, 0, 0);
+	const uint32_t need = IPC_INTRF_MEMSIZE(RING_BYTES, 0, RING_BYTES, 0);
+
+	// The controller can declare a larger block while the DFU application
+	// reserves only the actual rings. No part of the recovery area is used.
+	oc.MemSize = SHM_BYTES;
+	pc.MemSize = need;
+
+	t_Core = CORE_OWNER;
+	CHECK(IpcIntrfInit(&own, &oc));
+	t_Core = CORE_PEER;
+	CHECK(IpcIntrfInit(&peer, &pc));
+	CHECK(IpcIntrfIsUp(&peer));
+
+	uint8_t out[8] = { 1, 3, 5, 7, 9, 11, 13, 15 };
+	uint8_t in[8] = {};
+	t_Core = CORE_OWNER;
+	CHECK(Tx(own, out, sizeof(out)) == (int)sizeof(out));
+	t_Core = CORE_PEER;
+	CHECK(Rx(peer, in, sizeof(in)) == (int)sizeof(in));
+	CHECK(memcmp(out, in, sizeof(out)) == 0);
+
+	bool intact = true;
+	for (uint32_t i = need; i < SHM_BYTES; i++)
+	{
+		if (g_Shm[i] != 0xA5)
+		{
+			intact = false;
+			break;
+		}
+	}
+	CHECK(intact);
+}
+
 void TestRoundTrip(void)
 {
 	printf("round trip\n");
@@ -1195,6 +1237,7 @@ int main(int argc, char **argv)
 	TestConfig();
 	TestPeerFirst();
 	TestRoundTrip();
+	TestUnequalReservation();
 	TestWrap();
 	TestFull();
 	TestEpoch();
