@@ -14,7 +14,8 @@ GROUP(-lgcc -lc -lnosys)
 MEMORY
 {
   FLASH (rx) : ORIGIN = 0x0, LENGTH = 0x7D000
-	NVM0 (rw) : ORIGIN = 0x0007D000, LENGTH = 0x00002000
+	NVM0 (rw) : ORIGIN = 0x0007D000, LENGTH = 0x2000
+	NVM1 (rw) : ORIGIN = 0x7F000, LENGTH = 0x1000
   RAM (rwx) :  ORIGIN = 0x20000000, LENGTH = 0x10000
 }
 
@@ -27,6 +28,13 @@ SECTIONS
 		. = ORIGIN(NVM0) + LENGTH(NVM0);
 		__stop_nvm0 = .;
 	} > NVM0
+	nvm1 (NOLOAD) :
+	{
+		__start_nvm1 = .;
+		KEEP(*(nvm1))
+		. = ORIGIN(NVM1) + LENGTH(NVM1);
+		__stop_nvm1 = .;
+	} > NVM1
 }
 SECTIONS
 {
