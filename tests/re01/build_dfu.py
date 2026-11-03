@@ -97,7 +97,7 @@ elf = out / 'DfuBoot.elf'
 run([args.tool_prefix + 'g++', '-mcpu=cortex-m0plus', '-mthumb',
      '--specs=nano.specs', '--specs=nosys.specs', '-Wl,--gc-sections',
      '-L' + str(root / 'ARM/ldscript'), '-L' + str(lddir),
-     '-T' + str(lddir / 'dfu_boot_re01_1500kb.ld'), *map(str, objects), '-o', str(elf)])
+     '-T' + str(lddir / 'gcc_re01_1500kb_dfu_boot.ld'), *map(str, objects), '-o', str(elf)])
 sections = {}
 with elf.open('rb') as f:
     allocated = {s.name for s in ELFFile(f).iter_sections() if s['sh_flags'] & 2}
