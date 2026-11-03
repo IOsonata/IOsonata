@@ -101,6 +101,39 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
         self.assertIn("fnmatch.c", linked.values())
         self.assertIn("cli_utils_cmds.c", linked.values())
 
+    def test_usb_cdc_demo_build_configuration_uses_supported_sdk_sources(self):
+        folder = TARGET / "exemples" / "UsbCdcAcmDemo" / "ioc"
+        project = ET.parse(folder / ".project")
+        config = ET.parse(folder / ".cproject")
+        links = {
+            entry.findtext("name"): entry.findtext("locationURI", "")
+            for entry in project.findall(".//linkedResources/link")
+        }
+        self.assertEqual(links["src/main.cpp"], "PARENT-1-PROJECT_LOC/src/main.cpp")
+        disabled = {
+            "nRF5_SDK/nrfx/soc/nrfx_atomic.c",
+            "nRF5_SDK/nrfx/legacy/nrf_drv_uart.c",
+            "nRF5_SDK/nrfx/drivers/src/nrfx_uart.c",
+            "nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c",
+            "nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c",
+        }
+        for cfg in config.findall(".//cconfiguration"):
+            name = cfg.find(".//configuration").get("name")
+            exclusions = {
+                item
+                for entry in cfg.findall(".//sourceEntries/entry")
+                for item in entry.get("excluding", "").split("|")
+            }
+            definitions = [
+                item.get("value", "")
+                for option in cfg.findall(".//option")
+                if option.get("name", "").startswith("Defined symbols")
+                for item in option.findall("listOptionValue")
+            ]
+            with self.subTest(configuration=name):
+                self.assertTrue(disabled.issubset(exclusions))
+                self.assertEqual(definitions.count("BOARD_PCA10056"), 2)
+
     def test_usb_cdc_cpp_backend_is_linked(self):
         project = TARGET / "exemples" / "UsbCdcAcmDemo" / "ioc" / ".project"
         linked = linked_sources(project)
