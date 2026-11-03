@@ -48,6 +48,28 @@ HCI ring buffers and any direct/shared memory consumers. Run real
 Application/Network core DFU builds, flash-layout checks, and a staged
 update/recovery test before release.
 
+## Production HCI controller IPC configuration
+
+The separate `IOsonata/HciController` repository currently configures its
+nRF5340 Network core with `HCI_IPC_MEM_ADDR = 0x20070000`,
+`HCI_IPC_MEM_SIZE = 0x10000`, and `HCI_IPC_NB_PKT = 8` in
+`nRF5340_Net/src/board.h`. The Application core DFU linker region instead
+exports `0xEFF0` bytes at that address, ending immediately before
+`__dfu_flag`.
+
+These sizes are **not identical**. However, the IPC owner checks that
+`MemSize` accommodates the configured ring geometry, and initializes the
+header and rings rather than clearing the entire declared block. Thus a
+smaller peer reservation can work if the actual header and both rings fit
+within `0xEFF0`. No assertion of production compatibility should be made
+without checking `BT_HCI_IPC_MEMSIZE(8)` and the owner/peer initialization
+on the exact HciController build.
+
+Do **not** expand the DFU Application IPC0 region through the recovery flag
+to match the controller's nominal `0x10000` size. Any future change to the
+controller's declared IPC capacity must be coordinated with that repository,
+while preserving the recovery word and SystemInit/FICR copy area.
+
 ## Cleanup policy
 
 Keep all valid MCU, core, DFU, bootloader, storage, and shared-memory
