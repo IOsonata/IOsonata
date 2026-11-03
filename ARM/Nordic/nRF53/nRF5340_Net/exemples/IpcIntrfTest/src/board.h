@@ -39,7 +39,7 @@ SOFTWARE.
 
 // Shared memory block of the IPC link. Same values on both cores.
 // The block is the top of the application core RAM, the IPC0 region of
-// nrf5340_xxaa_application.ld, which keeps it out of the RAM the image uses.
+// gcc_nrf5340_xxaa_application.ld, which keeps it out of the RAM the image uses.
 #define IPCTEST_MEM_ADDR		0x20070000UL
 #define IPCTEST_MEM_SIZE		0x2000U
 
