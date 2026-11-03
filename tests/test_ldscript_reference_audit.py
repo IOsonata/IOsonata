@@ -101,13 +101,13 @@ class LinkerReferenceAuditTests(unittest.TestCase):
 
     def test_iar_linker_reference(self):
         iar = self.project / "exemples" / "Blinky" / "IAR"
-        reference = "../../../../../ldscript/gcc_part.icf"
+        reference = "../../../../ldscript/gcc_part.icf"
         (self.linkers / "gcc_part.icf").write_text("define memory mem with size = 4G;")
         path = self.write_iar_project(reference.replace("/", chr(92)))
         self.assertEqual(audit.check_iar_project(path), (1, 0, []))
 
     def test_iar_missing_linker_reference(self):
-        path = self.write_iar_project("../../../../../ldscript/missing.icf")
+        path = self.write_iar_project("../../../../ldscript/missing.icf")
         count, skipped, errors = audit.check_iar_project(path)
         self.assertEqual((count, skipped), (1, 0))
         self.assertIn("missing IAR linker script", errors[0])
