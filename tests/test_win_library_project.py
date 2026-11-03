@@ -39,6 +39,33 @@ class WinLibraryIncludeTests(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertNotIn(source, linked)
 
+    def test_win_sources_avoid_indirect_gpio_and_newlib(self):
+        linked = {
+            link.findtext("name", "")
+            for link in ET.parse(PROJECT.with_name(".project")).findall(".//linkedResources/link")
+        }
+        # The first two sources include iopinctrl.h through public headers.
+        for source in (
+            "src/excelitas_serlink.cpp",
+            "src/miscdev/button.cpp",
+            "src/CppRuntimeOverload.cpp",
+            "src/storage/fatfs.cpp",
+            "src/stddev.c",
+        ):
+            with self.subTest(source=source):
+                self.assertNotIn(source, linked)
+
+        # Keep generic device drivers and the Windows HID implementation.
+        for source in (
+            "src/device.cpp",
+            "src/device_intrf.cpp",
+            "src/coredev/spi.cpp",
+            "src/coredev/uart.cpp",
+            "src/usb_hidhost_impl.cpp",
+        ):
+            with self.subTest(source=source):
+                self.assertIn(source, linked)
+
     def test_win_hid_header_uses_case_sensitive_mingw_include(self):
         header = ROOT / "Win" / "include" / "usb_hidhost_impl.h"
         content = header.read_text()
