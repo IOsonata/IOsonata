@@ -61,9 +61,13 @@ These sizes are **not identical**. However, the IPC owner checks that
 `MemSize` accommodates the configured ring geometry, and initializes the
 header and rings rather than clearing the entire declared block. Thus a
 smaller peer reservation can work if the actual header and both rings fit
-within `0xEFF0`. No assertion of production compatibility should be made
-without checking `BT_HCI_IPC_MEMSIZE(8)` and the owner/peer initialization
-on the exact HciController build.
+within `0xEFF0`. The IOsonata host HCI IPC test now has a compile-time check of
+`BT_HCI_IPC_MEMSIZE(8)` against the `0xEFF0` DFU limit. The IPC host
+regression also exercises an owner with a larger declared block and a
+peer with a smaller reservation, checking two-way data transfer and an
+untouched guard area. These tests still require execution. Production
+compatibility additionally requires running the exact HciController and
+Application core images together.
 
 Do **not** expand the DFU Application IPC0 region through the recovery flag
 to match the controller's nominal `0x10000` size. Any future change to the
