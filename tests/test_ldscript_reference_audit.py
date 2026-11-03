@@ -176,9 +176,9 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         content = (family / "gcc_nrf52840_xxaa_s140c.ld").read_text(encoding="utf-8")
         regions = {}
         pattern = re.compile(
-            r"^\\s*(FLASH|NVM0|BOOTLOADER_SETTINGS)\\s*\\([^)]*\\)\\s*:"
-            r"\\s*ORIGIN\\s*=\\s*(0x[0-9a-fA-F]+)\\s*,\\s*"
-            r"LENGTH\\s*=\\s*(0x[0-9a-fA-F]+)",
+            r"^\s*(FLASH|NVM0|BOOTLOADER_SETTINGS)\s*\([^)]*\)\s*:"
+            r"\s*ORIGIN\s*=\s*(0x[0-9a-fA-F]+)\s*,\s*"
+            r"LENGTH\s*=\s*(0x[0-9a-fA-F]+)",
             re.MULTILINE,
         )
         for name, origin, length in pattern.findall(content):
