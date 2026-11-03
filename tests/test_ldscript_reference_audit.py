@@ -130,6 +130,17 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         self.script.write_text('INCLUDE "shared_memory.ld"\n', encoding="utf-8")
         self.assertIn(child.resolve(), audit.included_scripts([self.script, child]))
 
+    def test_architecture_shared_ld_include_is_retained(self):
+        architecture = self.root / "ARM" / "ldscript"
+        architecture.mkdir()
+        shared = architecture / "gcc_arm_flash.ld"
+        shared.write_text("SECTIONS {}\n", encoding="utf-8")
+        self.script.write_text('INCLUDE "gcc_arm_flash.ld"\n', encoding="utf-8")
+        self.assertIn(
+            shared.resolve(),
+            audit.included_scripts([self.script, shared]),
+        )
+
     def test_iar_include_is_retained(self):
         primary = self.linkers / "iar_part.icf"
         child = self.linkers / "iar_memory.icf"
