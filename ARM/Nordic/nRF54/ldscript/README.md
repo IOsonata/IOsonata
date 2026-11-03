@@ -40,6 +40,27 @@ the SoftDevice reservation. Their DFU scripts additionally use slot layouts
 and recovery flags. Preserve these variants; do not apply bare-metal NVM
 boundaries to S145 or DFU configurations without reviewing those requirements.
 
+## S145 DFU layouts reviewed
+
+The nRF54L15, nRF54LM20A and nRF54LM20B DFU layouts use contiguous
+stage-0 boot, recovery-record, application-slot and upload-slot boundaries.
+The upload slot ends where NVM0 begins; NVM0 and NVM1 remain separate
+4 KB partitions at their non-DFU S145 addresses.
+
+| Target | Slot 0 | Slot 1 | NVM0 | Recovery flag |
+| --- | --- | --- | --- | --- |
+| nRF54L15 | `0x0D000–0xB1FFF` | `0xB2000–0x1587FF` | `0x158800` | `0x2003FFF0` |
+| nRF54LM20A | `0x0D000–0xF1FFF` | `0xF2000–0x1D87FF` | `0x1D8800` | `0x2007FCB0` |
+| nRF54LM20B | `0x0D000–0x71FFF` | `0x72000–0xD87FF` | `0x0D8800` | `0x2007FCB0` |
+
+All three use a 48 KB stage-0 boot region and a 4 KB recovery-record
+region. Application and boot scripts include the same target-specific DFU
+layout. The nRF54L15 S145 linker scripts start application RAM at
+`0x20004900`, not `0x20004780`; comments were corrected without
+changing the existing memory map. The cross-variant regression checks
+the boundaries and recovery words, but does not replace actual target
+linking and DFU hardware validation.
+
 The nRF54H20 Application and Radio core scripts describe separate cores and
 MRAM/RAM allocations. They are not duplicates of nRF54L layouts.
 
