@@ -1,6 +1,6 @@
 /* DFU flash layout, STM32WBA52/55, 1 MB flash, 128 KB SRAM.
  *
- * Included by the stage 0 boot script (dfu_boot_stm32wba5xxx.ld) and the
+ * Included by the stage 0 boot script (gcc_stm32wba5xxx_dfu_boot.ld) and the
  * application script (gcc_stm32wba5xxx_dfu.ld), so both agree on where
  * everything is. Code reads these symbols through DfuLayoutGet; no C define
  * repeats an address. See docs/architecture/dfu.md.
