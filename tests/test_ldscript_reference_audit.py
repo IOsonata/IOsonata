@@ -146,6 +146,19 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         )
         self.assertEqual(audit.check_project(path), (0, 0, []))
 
+    def test_iar_disabled_linker_override_is_ignored(self):
+        iar = self.project / "exemples" / "Blinky" / "IAR"
+        iar.mkdir()
+        path = iar / "Library.ewp"
+        path.write_text(
+            '<project><configuration><settings><name>ILINK</name><data>'
+            '<option><name>IlinkIcfOverride</name><state>0</state></option>'
+            '<option><name>IlinkIcfFile</name><state>lnk0t.icf</state></option>'
+            '</data></settings></configuration></project>',
+            encoding="utf-8",
+        )
+        self.assertEqual(audit.check_iar_project(path), (0, 0, []))
+
     def test_malformed_xml_is_reported(self):
         path = self.ioc / ".cproject"
         path.write_text("<cproject>", encoding="utf-8")
