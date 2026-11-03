@@ -64,7 +64,8 @@ class UartBleFreeRtosSdcProjectTests(unittest.TestCase):
         }
         sdk_compat = "src/FreeRTOS/sdk_compat"
         self.assertEqual(linked[sdk_compat], "virtual:/virtual")
-        for src in ("app_error_weak.c", "nrf_drv_clock.c"):
+        for src in ("app_error_weak.c", "app_error.c",
+                    "nrf_drv_clock.c", "nrfx_clock_lfclk.c"):
             name = sdk_compat + "/" + src
             self.assertIn(name, linked)
             self.assertIn("external/nRF5_SDK/", linked[name])
@@ -104,6 +105,8 @@ class UartBleFreeRtosSdcProjectTests(unittest.TestCase):
                         "components/libraries/experimental_section_vars",
                         "components/softdevice/s132/headers",
                         "components/softdevice/common",
+                        "modules/nrfx",
+                        "integration/nrfx/legacy",
                     ):
                         self.assertTrue(any(p.endswith("/external/nRF5_SDK/" + suffix)
                                             for p in include_paths), (name, kind, suffix))
