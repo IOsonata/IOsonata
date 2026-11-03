@@ -180,7 +180,7 @@ def included_scripts(scripts):
     """Find literal GNU LD INCLUDE and IAR ICF include dependencies."""
     dependencies = set()
     pattern = re.compile(
-        r'^\\s*(?:INCLUDE\\s+|include\\s+)(?:"([^"]+)"|<([^>]+)>|([^\\s;/]+))',
+        r'^\s*(?:INCLUDE\s+|include\s+)(?:"([^"]+)"|<([^>]+)>|([^\s;/]+))',
         re.MULTILINE,
     )
     for script in scripts:
