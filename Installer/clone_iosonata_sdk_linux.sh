@@ -249,6 +249,38 @@ clone_pinned_repo() {
 # STM32CubeWBA holds the platform files of the ST BLE link layer that the
 # STM32WBA examples build. Only their platform and utility folders are checked
 # out. IOsonata does not require separate HAL or CMSIS downloads.
+# Exact legacy example revisions live beside, not over, shared SDK checkouts.
+clone_pinned_commit_repo() {
+  local repo_url="$1"
+  local target_dir="$2"
+  local revision="$3"
+  local current=""
+  if [[ -e "$target_dir" || -L "$target_dir" ]]; then
+    current=$(git -C "$target_dir" rev-parse HEAD 2>/dev/null || true)
+    if [[ "$current" == "$revision" ]]; then
+      echo "Keeping $target_dir at $revision"
+      return 0
+    fi
+    if [[ "$MODE" != "force" ]]; then
+      echo "Pinned checkout preserved: $target_dir (required commit $revision). Use force mode to replace it." >&2
+      return 1
+    fi
+  fi
+  local stage
+  stage=$(mktemp -d "${target_dir}.stage.XXXXXXXX")
+  if ! git -C "$stage" init -q \
+    || ! git -C "$stage" remote add origin "$repo_url" \
+    || ! git -C "$stage" fetch -q --depth=1 origin "$revision" \
+    || ! git -C "$stage" checkout -q --detach FETCH_HEAD; then
+    rm -rf "$stage"
+    return 1
+  fi
+  if [[ -e "$target_dir" || -L "$target_dir" ]]; then
+    rm -rf "$target_dir"
+  fi
+  mv "$stage" "$target_dir"
+}
+
 clone_cube_wba() {
   local target_dir="$EXT/STM32CubeWBA"
   local ref="v1.10.0"
@@ -315,6 +347,11 @@ for repo in "${repos[@]}"; do
   clone_or_update_repo "$repo" "$target" false
 done
 
+
+# Legacy LVGL graphics and LM20 TinyUSB ISO builds use validated revisions.
+# Shared external/lvgl and external/tinyusb continue to track current SDKs.
+clone_pinned_commit_repo "https://github.com/lvgl/lvgl.git" "$EXT/lvgl_legacy" "69aa421acd78e0d3809200b9bc1f21c8586f5cf0"
+clone_pinned_commit_repo "https://github.com/hathach/tinyusb.git" "$EXT/tinyusb_lm20" "064afa3774cbbb2093d6af9805bdaa15b4e0f751"
 
 # Clone FreeRTOS-Kernel
 echo ""

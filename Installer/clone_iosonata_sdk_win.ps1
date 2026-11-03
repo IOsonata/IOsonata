@@ -167,6 +167,45 @@ function Sync-PinnedRepository {
 # STM32CubeWBA holds the platform files of the ST BLE link layer that the
 # STM32WBA examples build. Only their platform and utility folders are checked
 # out. IOsonata does not require separate HAL or CMSIS downloads.
+# Exact example-only SDK revisions; preserve existing checkouts in normal mode.
+function Sync-PinnedCommitRepository {
+	param(
+		[string]$Url,
+		[string]$Target,
+		[string]$Commit
+	)
+	if (Test-Path $Target) {
+		$current = & git -C $Target rev-parse HEAD 2>$null
+		if ($LASTEXITCODE -eq 0 -and $current -eq $Commit) {
+			Write-Host "   [INFO] Keeping $Target at $Commit"
+			return
+		}
+		if ($Mode -ne "force") {
+			throw "Pinned checkout preserved: $Target (required commit $Commit). Use force mode to replace it."
+		}
+	}
+	$stage = "$Target.stage-$([guid]::NewGuid().ToString('N'))"
+	New-Item -ItemType Directory -Path $stage | Out-Null
+	try {
+		& git -C $stage init -q
+		if ($LASTEXITCODE -ne 0) { throw "Failed to initialize $stage" }
+		& git -C $stage remote add origin $Url
+		if ($LASTEXITCODE -ne 0) { throw "Failed to configure $Url" }
+		& git -C $stage fetch -q --depth=1 origin $Commit
+		if ($LASTEXITCODE -ne 0) { throw "Failed to fetch pinned commit $Commit" }
+		& git -C $stage checkout -q --detach FETCH_HEAD
+		if ($LASTEXITCODE -ne 0) { throw "Failed to checkout $Commit" }
+		if (Test-Path $Target) {
+			Remove-Item -Path $Target -Recurse -Force
+		}
+		Move-Item -Path $stage -Destination $Target
+	} finally {
+		if (Test-Path $stage) {
+			Remove-Item -Path $stage -Recurse -Force
+		}
+	}
+}
+
 function Sync-CubeWba {
     $Target = Join-Path $EXT "STM32CubeWBA"
     $Ref = "v1.10.0"
@@ -241,6 +280,10 @@ foreach ($repo in $repos.GetEnumerator()) {
 }
 
 # ---------------------------------------------------------
+# Preserve current shared SDKs while installing example-specific revisions.
+Sync-PinnedCommitRepository -Url "https://github.com/lvgl/lvgl.git" -Target "$EXT\lvgl_legacy" -Commit "69aa421acd78e0d3809200b9bc1f21c8586f5cf0"
+Sync-PinnedCommitRepository -Url "https://github.com/hathach/tinyusb.git" -Target "$EXT\tinyusb_lm20" -Commit "064afa3774cbbb2093d6af9805bdaa15b4e0f751"
+
 # Clone FreeRTOS-Kernel
 # ---------------------------------------------------------
 Write-Host ""

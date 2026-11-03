@@ -65,8 +65,8 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/nrf54l&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb/src&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb/src/portable/synopsys/dwc2&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb_lm20/src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb_lm20/src/portable/synopsys/dwc2&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.541090038" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.541090039" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -93,8 +93,8 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/nrf54l&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb/src&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb/src/portable/synopsys/dwc2&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb_lm20/src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb_lm20/src/portable/synopsys/dwc2&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.541090045" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.541090046" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
@@ -209,8 +209,8 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/nrf54l&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb/src&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb/src/portable/synopsys/dwc2&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb_lm20/src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb_lm20/src/portable/synopsys/dwc2&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.541091038" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.541091039" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -238,8 +238,8 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/nrf54l&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb/src&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb/src/portable/synopsys/dwc2&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb_lm20/src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/tinyusb_lm20/src/portable/synopsys/dwc2&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.541091045" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.541091046" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>

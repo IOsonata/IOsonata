@@ -53,32 +53,32 @@
 		<link>
 			<name>src/tusb.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/tusb.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb_lm20/src/tusb.c</locationURI>
 		</link>
 		<link>
 			<name>src/tusb_fifo.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/common/tusb_fifo.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb_lm20/src/common/tusb_fifo.c</locationURI>
 		</link>
 		<link>
 			<name>src/usbd.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/device/usbd.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb_lm20/src/device/usbd.c</locationURI>
 		</link>
 		<link>
 			<name>src/cdc_device.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/class/cdc/cdc_device.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb_lm20/src/class/cdc/cdc_device.c</locationURI>
 		</link>
 		<link>
 			<name>src/hid_device.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/class/hid/hid_device.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb_lm20/src/class/hid/hid_device.c</locationURI>
 		</link>
 		<link>
 			<name>src/vendor_device.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/class/vendor/vendor_device.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb_lm20/src/class/vendor/vendor_device.c</locationURI>
 		</link>
 		<link>
 			<name>src/dcd_dwc2.c</name>
@@ -88,7 +88,7 @@
 		<link>
 			<name>src/dwc2_common.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb/src/portable/synopsys/dwc2/dwc2_common.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/tinyusb_lm20/src/portable/synopsys/dwc2/dwc2_common.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
