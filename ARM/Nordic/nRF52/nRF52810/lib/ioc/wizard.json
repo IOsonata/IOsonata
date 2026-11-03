@@ -21,7 +21,7 @@
     "${external}/Invn",
     "${external}/Fusion"
   ],
-  "linker_script": "${iosonata}/ARM/Nordic/nRF52/ldscript/gcc_nrf52810.ld",
+  "linker_script": "${iosonata}/ARM/Nordic/nRF52/ldscript/nrf52810_xxaa.ld",
   "lib_path": "${iosonata}/ARM/Nordic/nRF52/nRF52810/lib/ioc/${config}",
   "lib": "IOsonata_nRF52810",
   "features": {
