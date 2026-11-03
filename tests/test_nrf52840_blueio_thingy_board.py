@@ -24,6 +24,23 @@ class BlueIoThingyBoardTests(unittest.TestCase):
                     self.assertIn(macro, board)
                     self.assertEqual(board[macro].strip(), reference[macro].strip())
 
+    def test_application_board_aliases_match_evim_reference(self):
+        board, reference = macros(BOARD), macros(REFERENCE)
+        roles = ("CONNECT_LED_PORT", "CONNECT_LED_PIN", "CONNECT_LED_LOGIC",
+                 "LED_RED_PORT", "LED_RED_PIN", "LED_RED_PINOP", "LED_RED_LOGIC",
+                 "LED_GREEN_PORT", "LED_GREEN_PIN", "LED_GREEN_PINOP", "LED_GREEN_LOGIC",
+                 "LED_BLUE_PORT", "LED_BLUE_PIN", "LED_BLUE_PINOP", "LED_BLUE_LOGIC",
+                 "I2C_DEVNO", "I2C_SDA_PORT", "I2C_SDA_PIN", "I2C_SDA_PINOP",
+                 "I2C_SCL_PORT", "I2C_SCL_PIN", "I2C_SCL_PINOP",
+                 "IMU_INT_PORT", "IMU_INT_PIN", "IMU_INT_PINOP",
+                 "IMU_CS_PORT", "IMU_CS_PIN", "IMU_CS_PINOP", "SPI_PINS")
+        for name in roles:
+            with self.subTest(alias=name):
+                self.assertIn(name, board)
+                self.assertIn(name, reference)
+                if name != "I2C_DEVNO":
+                    self.assertEqual(board[name].strip(), reference[name].strip())
+
     def test_led_alias_uses_defined_logic(self):
         board = macros(BOARD)
         evim = macros(EVIM)
