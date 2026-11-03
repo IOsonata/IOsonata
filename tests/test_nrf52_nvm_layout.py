@@ -74,6 +74,25 @@ class Nrf52NvmLayoutTests(unittest.TestCase):
                     self.assertEqual(flash_end - 2 * PAGE,
                                      0x7E000 if part.startswith("nrf52832") else 0xFE000)
 
+    def test_special_no_dfu_variants_preserve_two_nvm_regions(self):
+        cases = (
+            ("gcc_nrf52832_xxaa_cli.ld", 0x7D000),
+            ("gcc_nrf52840_xxaa_bossa.ld", 0xFD000),
+            ("gcc_nrf52840_xxaa_cli.ld", 0xFD000),
+            ("gcc_nrf52840_xxaa_ram40k.ld", 0xFD000),
+        )
+        for filename, start in cases:
+            content, layout = regions(DIR / filename)
+            with self.subTest(filename=filename):
+                self.assertEqual(layout["NVM0"], (start, 0x2000))
+                self.assertEqual(layout["NVM1"], (start + 0x2000, 0x1000))
+                flash_start, flash_size = layout["FLASH"]
+                self.assertEqual(flash_start + flash_size, start)
+                self.assertIn("__start_nvm0 = .;", content)
+                self.assertIn("__stop_nvm0 = .;", content)
+                self.assertIn("__start_nvm1 = .;", content)
+                self.assertIn("__stop_nvm1 = .;", content)
+
     def test_small_s112_dfu_releases_reserve_pds_and_user_data(self):
         for part in ("nrf52805_xxaa", "nrf52810_xxaa"):
             layout = (DIR / ("gcc_" + part + "_s112_dfu_layout.ld")).read_text(
