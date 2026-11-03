@@ -22,11 +22,12 @@ flash area already excluded by their existing FLASH lengths:
 | `gcc_nrf54ls05b_enga_xxaa.ld` | `0x7F000` | 4 KB |
 | `gcc_nrf54lv10a_enga_xxaa.ld` | `0xFD000` | 12 KB |
 
-These older variants retain their existing `INCLUDE "nrf_common.ld"`
-dependency. Unlike the standardized GCC scripts, this shared file may be
-supplied by an external SDK. Confirm that it is present at link time and
-review compatibility with `gcc_arm_flash.ld` before changing the include.
-The reference audit does not check these indirect SDK dependencies.
+All nRF54 IOsonata GCC linker variants now use the IOsonata
+`gcc_arm_flash.ld` shared sections, not Nordic's `nrf_common.ld`. The
+converted legacy variants have linker search paths for the shared IOsonata
+`ARM/ldscript` directory. Confirm the expected startup and section
+behavior by building the affected Eclipse Embedded CDT projects; static
+reference checks do not replace linking.
 
 The two bare-metal scripts already ended FLASH before the final 12 KB of
 RRAM. They now declare the omitted NVM0 region and export
@@ -84,9 +85,8 @@ their entire designated primary MRAM partitions to executable FLASH or DFU
 slots. There is **no unused upper MRAM tail** to expose as NVM0 without
 reducing a firmware slot or allocating a separately defined storage area.
 Do not invent an NVM0 partition for these cores without a target-specific
-storage decision. The non-DFU scripts retain their `nrf_common.ld` include;
-DFU scripts use `gcc_arm_flash.ld`. Compatibility needs actual target
-linking and review of the startup implementation.
+storage decision. Both non-DFU and DFU IOsonata scripts include `gcc_arm_flash.ld`.
+Target linking and review of the startup implementation remain required.
 
 The nRF54H20 library project configurations still describe port integration
 as pending. DFU layout boundary tests are static checks only; compilation,
