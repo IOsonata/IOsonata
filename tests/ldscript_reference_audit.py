@@ -93,6 +93,19 @@ def check_project(path):
 
 
 
+def resolve_iar_script(path, reference):
+    """Resolve $PROJ_DIR$ and relative IAR ICF paths."""
+    normalized = reference.replace(chr(92), "/")
+    prefix = "$PROJ_DIR$/"
+    if normalized.startswith(prefix):
+        normalized = normalized[len(prefix):]
+    elif "$" in normalized or "%" in normalized:
+        return None
+    if "$" in normalized or "%" in normalized:
+        return None
+    return (path.parent / normalized).resolve()
+
+
 def check_iar_project(path):
     """Validate IlinkIcfFile values relative to the IAR project directory."""
     errors = []
@@ -123,19 +136,19 @@ def check_iar_project(path):
                 reference = (state.text or "").strip().strip('"')
                 if not reference:
                     continue
-                if "$" in reference or "%" in reference:
-                    skipped += 1
-                    continue
-                if Path(reference).is_absolute() or PureWindowsPath(reference).is_absolute():
+                normalized = reference.replace(chr(92), "/")
+                if Path(normalized).is_absolute() or PureWindowsPath(reference).is_absolute():
                     checked += 1
                     errors.append(f"{path}: nonportable absolute IAR linker script: {reference}")
                     continue
-                normalized = reference.replace(chr(92), "/")
                 if Path(normalized).suffix.lower() != ".icf":
                     skipped += 1
                     continue
+                target = resolve_iar_script(path, reference)
+                if target is None:
+                    skipped += 1
+                    continue
                 checked += 1
-                target = (path.parent / normalized).resolve()
                 if not target.is_file():
                     errors.append(f"{path}: missing IAR linker script {reference} (resolved to {target})")
     return checked, skipped, errors
@@ -187,13 +200,15 @@ def referenced_scripts(root):
                     continue
                 for state in option.findall("state"):
                     value = (state.text or "").strip().strip('"')
-                    if not value or "$" in value or "%" in value:
+                    if not value:
                         continue
                     if Path(value).is_absolute() or PureWindowsPath(value).is_absolute():
                         continue
                     normalized = value.replace(chr(92), "/")
                     if Path(normalized).suffix.lower() == ".icf":
-                        referenced.add((project.parent / normalized).resolve())
+                        target = resolve_iar_script(project, value)
+                        if target is not None:
+                            referenced.add(target)
     return referenced
 
 
