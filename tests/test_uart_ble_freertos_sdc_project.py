@@ -9,6 +9,7 @@ PROJECT = (ROOT / "ARM" / "Nordic" / "nRF52" / "nRF52832"
            / "exemples" / "UartBleFreeRTOS" / "ioc" / ".cproject")
 SCRIPT = ROOT / "ARM" / "Nordic" / "nRF52" / "ldscript" / "gcc_nrf52832_xxaa.ld"
 SOURCE_PROJECT = PROJECT.with_name(".project")
+LIBRARY_PROJECT = PROJECT.parents[3] / "lib" / "ioc" / ".cproject"
 SDC_PATHS = (
     "mpsl/lib/nrf52/hard-float",
     "mpsl/fem/common/lib/nrf52/hard-float",
@@ -26,6 +27,28 @@ def option_values(config, suffix):
 
 
 class UartBleFreeRtosSdcProjectTests(unittest.TestCase):
+    def test_sdc_sdk_source_has_single_owner(self):
+        """Local SDK compatibility objects must not duplicate library objects."""
+        library = ET.parse(LIBRARY_PROJECT)
+        application = ET.parse(PROJECT)
+        for config in ("Debug_SDC", "Release_SDC"):
+            selected = {}
+            for label, tree in (("library", library), ("application", application)):
+                cfg = next(
+                    item for item in tree.findall(".//cconfiguration")
+                    if item.find(".//configuration").get("name") == config
+                )
+                excluded = {
+                    item for entry in cfg.findall(".//sourceEntries/entry")
+                    for item in entry.get("excluding", "").split("|")
+                }
+                selected[label] = excluded
+            with self.subTest(config=config):
+                self.assertIn("src/nRF5_SDK", selected["library"])
+                self.assertIn("src/nrfx", selected["library"])
+                self.assertNotIn("src/FreeRTOS/sdk_compat",
+                                 selected["application"])
+
     def test_sdc_build_configurations(self):
         self.assertTrue(SCRIPT.is_file())
         root = ET.parse(PROJECT).getroot()
