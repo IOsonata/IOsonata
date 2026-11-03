@@ -181,7 +181,7 @@ class LinkerReferenceAuditTests(unittest.TestCase):
                 content = (family / filename).read_text(encoding="utf-8")
                 self.assertRegex(
                     content,
-                    end_symbol + r"\\s*=\\s*0x0*7CFFF\\s*;",
+                    end_symbol + r"\s*=\s*0x0*7CFFF\s*;",
                 )
                 self.assertIn("define symbol __start_nvm0 = 0x0007D000;", content)
                 self.assertIn("define symbol __stop_nvm0 = 0x0007F000;", content)
