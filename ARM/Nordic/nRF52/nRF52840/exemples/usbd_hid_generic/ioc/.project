@@ -189,5 +189,15 @@
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/hid/mouse/app_usbd_hid_mouse.c</locationURI>
 		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/class/hid/app_usbd_hid.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/hid/app_usbd_hid.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/modules/nrfx/drivers/src/nrfx_usbd.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_usbd.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
