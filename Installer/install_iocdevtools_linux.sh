@@ -297,7 +297,10 @@ for item in items:
 		versions.append((tuple(int(part) for part in match[1].split(".")), name))
 if not versions:
 	raise SystemExit("No published IOcomposer plugin found: " + plugin_id)
-print("https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/" + max(versions)[1])
+version, filename = max(versions)
+if plugin_id == "org.iosonata.embedcdt.templates.wizard" and version < (0, 1, 7):
+	raise SystemExit("IOcomposer requires wizard 0.1.7 or newer; published wizard is " + filename)
+print("https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/" + filename)
 PY
 }
 
@@ -309,7 +312,7 @@ install_iocomposer() (
 	trap 'rm -rf "$stage"' EXIT
 	local plugin url
 	curl -fsSL "https://api.github.com/repos/I-SYST/iocomposer.io/contents/plugin?ref=main" -o "$stage/plugins.json"
-	for plugin in com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
+	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui com.iocomposer.embedcdt.bletest; do
 		url=""
 		if [[ "$plugin" == "com.iocomposer.embedcdt.ai" ]]; then
 			url="${IOCOMPOSER_AI_PLUGIN_URL:-}"
@@ -323,7 +326,7 @@ install_iocomposer() (
 	done
 	# Both required plugins have downloaded successfully before either is replaced.
 	sudo mkdir -p "$runtime/dropins"
-	for plugin in com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
+	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui com.iocomposer.embedcdt.bletest; do
 		sudo cp "$stage/$plugin.jar" "$runtime/dropins/$plugin.jar"
 		sudo chmod 644 "$runtime/dropins/$plugin.jar"
 		sudo find "$runtime/dropins" -maxdepth 1 -type f -name "${plugin}_*.jar" -delete
@@ -1097,7 +1100,7 @@ rm -f "$CLONE_LOG" || true
 # Install IOsonata Eclipse Plugin
 # ---------------------------------------------------------
 echo
-install_iosonata_plugin
+# All four compatible bundles are staged and installed together by install_iocomposer.
 
 install_iocomposer "$ECLIPSE_DIR"
 
