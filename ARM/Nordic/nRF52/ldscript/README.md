@@ -56,6 +56,26 @@ They require validation against the actual programmed bootloader and
 generated ELF/HEX before flashing an MBR+DFU image. Existing NVM data
 will not automatically migrate when a storage region moves.
 
+### Nordic SDK DFU transports and protected storage
+
+`NRF_DFU_APP_DATA_AREA_SIZE` is **12288** in the Nordic SDK bootloader
+`sdk_config.h` files. The SDK computes the protected region immediately
+below the actual bootloader origin, so BLE and USB DFU have different maps.
+The IOsonata stage-0 DFU linker scripts are separate and are **not** used
+with the Nordic SDK `dfu_ble` or `dfu_usb` bootloaders.
+
+| SDK bootloader project | Bootloader FLASH origin | SDK protected region | Matching application linker script |
+| --- | --- | --- | --- |
+| nRF52832 `dfu_ble` (S132) | `0x77000` | `0x74000..0x76FFF` | `gcc_nrf52832_xxaa_s132_sdk_ble_dfu.ld` |
+| nRF52840 `dfu_ble` (S140) | `0xF7000` | `0xF4000..0xF6FFF` | `gcc_nrf52840_xxaa_s140_sdk_ble_dfu.ld` |
+| nRF52840 `dfu_usb` or `dfu_usb_open` | `0xE0000` | `0xDD000..0xDFFFF` | `gcc_nrf52840_xxaa_mbr.ld` (no SoftDevice) |
+
+For each protected range, NVM0 occupies the first 8 KB and NVM1 occupies
+its final 4 KB. In particular, the nRF52840 USB DFU map must **not** be
+reused for BLE DFU: the latter bootloader starts at `0xF7000`, not
+`0xE0000`. The basic `_s132.ld` and `_s140.ld` scripts are not these
+SDK DFU application maps; select the appropriate variant explicitly.
+
 ## Reviewed variants
 
 The following scripts are **distinct layouts** based on their current MEMORY
