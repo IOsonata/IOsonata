@@ -171,6 +171,35 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         )
         self.assertEqual(audit.check_iar_project(path), (0, 0, []))
 
+    def test_nrf54_bare_metal_reserved_nvm_is_declared(self):
+        family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
+        cases = (
+            ("gcc_nrf54l15_xxaa.ld", 0x180000),
+            ("gcc_nrf54lm20a_xxaa.ld", 0x200000),
+        )
+        for filename, flash_end in cases:
+            with self.subTest(filename=filename):
+                content = (family / filename).read_text(encoding="utf-8")
+                flash = re.search(
+                    r"^\s*FLASH\s*\([^)]*\)\s*:\s*ORIGIN\s*=\s*(0x[0-9a-fA-F]+),"
+                    r"\s*LENGTH\s*=\s*(0x[0-9a-fA-F]+)",
+                    content, re.MULTILINE,
+                )
+                nvm = re.search(
+                    r"^\s*NVM0\s*\([^)]*\)\s*:\s*ORIGIN\s*=\s*(0x[0-9a-fA-F]+),"
+                    r"\s*LENGTH\s*=\s*(0x[0-9a-fA-F]+)",
+                    content, re.MULTILINE,
+                )
+                self.assertIsNotNone(flash)
+                self.assertIsNotNone(nvm)
+                flash_start, flash_length = (int(value, 16) for value in flash.groups())
+                nvm_start, nvm_length = (int(value, 16) for value in nvm.groups())
+                self.assertEqual(flash_start + flash_length, nvm_start)
+                self.assertEqual(nvm_start + nvm_length, flash_end)
+                self.assertEqual(nvm_length, 0x3000)
+                self.assertIn("__start_nvm0 = .;", content)
+                self.assertIn("__stop_nvm0 = .;", content)
+
     def test_nrf5340_application_dfu_preserves_nvm_and_ipc(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF53" / "ldscript"
         layout = (family / "gcc_nrf5340_xxaa_application_dfu_layout.ld").read_text(encoding="utf-8")
