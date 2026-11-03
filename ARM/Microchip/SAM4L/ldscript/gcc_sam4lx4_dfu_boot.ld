@@ -20,7 +20,7 @@ SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lgcc -lc -lnosys)
 
-INCLUDE "dfu_layout_sam4lx4.ld"
+INCLUDE "gcc_sam4lx4_dfu_layout.ld"
 
 MEMORY
 {

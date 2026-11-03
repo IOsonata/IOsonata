@@ -1,4 +1,4 @@
-/* Stage 0 DFU boot, SAM4LC8 and SAM4LS8.
+/* Stage 0 DFU boot, SAM4LC2 and SAM4LS2.
  *
  * At the start of the flash, where the core starts. Nothing else the chip
  * needs sits in the main flash array: the fuses and the security bit are
@@ -14,15 +14,13 @@ SEARCH_DIR("../../../../ldscript")
 SEARCH_DIR("../../../../../ldscript")
 SEARCH_DIR("../../../../../../ldscript")
 SEARCH_DIR("../../../../../../../ldscript")
-SEARCH_DIR("../../../../../../../../ldscript")
 SEARCH_DIR("../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
-SEARCH_DIR("../../../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lgcc -lc -lnosys)
 
-INCLUDE "dfu_layout_sam4lx8.ld"
+INCLUDE "gcc_sam4lx2_dfu_layout.ld"
 
 MEMORY
 {
