@@ -160,6 +160,13 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
                 self.assertTrue(all(path.endswith("gcc_nrf52840_xxaa.ld")
                                     for path in scripts))
 
+    def test_usb_cdc_cpp_backend_uses_local_header(self):
+        base = TARGET / "exemples" / "UsbCdcAcmDemo" / "src"
+        self.assertTrue((base / "usbd_cdc_intrf.h").is_file())
+        impl = (base / "usbd_cdc_intrf.cpp").read_text()
+        self.assertIn('#include "usbd_cdc_intrf.h"', impl)
+        self.assertNotIn('#include "usb/usbd_cdc_intrf.h"', impl)
+
     def test_usb_cdc_cpp_backend_is_linked(self):
         project = TARGET / "exemples" / "UsbCdcAcmDemo" / "ioc" / ".project"
         linked = linked_sources(project)
