@@ -182,16 +182,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_uart.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/soc/nrfx_atomic.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/soc/nrfx_atomic.c</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</locationURI>
@@ -227,16 +217,6 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_systick.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uart.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uarte.c</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_usbd.c</locationURI>
@@ -250,11 +230,6 @@
 			<name>src/nRF5_SDK/libraries/usbd/class/cdc/acm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/prs/nrfx_prs.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c</name>
