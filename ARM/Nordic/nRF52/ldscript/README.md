@@ -4,6 +4,18 @@ Scripts in this directory are grouped by MCU family. A script is not obsolete
 merely because no managed project currently selects it. Different memory maps
 are supported variants and must remain selectable by future projects.
 
+## IOsonata versus Nordic SDK linker scripts
+
+All IOsonata GNU linker scripts in this family directory use
+`gcc_arm_flash.ld`, not the Nordic SDK `nrf_common.ld`.
+
+The standalone `nRF52832/exemples/UartPrbsTxnrfx` comparison uses Nordic's
+`gcc_startup_nrf52.S` and `system_nrf52.c`, so its Nordic-specific
+`nrf52_xxaa_nrfx_prbs.ld` stays local to the reference example's `src`
+directory and retains `nrf_common.ld`. Debug and Release configurations
+reference that local file; it is **not** an IOsonata linker script.
+Keep this distinction for other upstream SDK comparison examples.
+
 ## Reviewed variants
 
 The following scripts are **distinct layouts** based on their current MEMORY
