@@ -176,6 +176,11 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         cases = (
             ("gcc_nrf54l15_xxaa.ld", 0x180000),
             ("gcc_nrf54lm20a_xxaa.ld", 0x200000),
+            ("gcc_nrf54l05_xxaa.ld", 0x80000),
+            ("gcc_nrf54l10_xxaa.ld", 0x100000),
+            ("gcc_nrf54lm20a_enga_xxaa.ld", 0x200000),
+            ("gcc_nrf54ls05b_enga_xxaa.ld", 0x80000),
+            ("gcc_nrf54lv10a_enga_xxaa.ld", 0x100000),
         )
         for filename, flash_end in cases:
             with self.subTest(filename=filename):
@@ -196,7 +201,8 @@ class LinkerReferenceAuditTests(unittest.TestCase):
                 nvm_start, nvm_length = (int(value, 16) for value in nvm.groups())
                 self.assertEqual(flash_start + flash_length, nvm_start)
                 self.assertEqual(nvm_start + nvm_length, flash_end)
-                self.assertEqual(nvm_length, 0x3000)
+                expected_size = 0x1000 if filename == "gcc_nrf54ls05b_enga_xxaa.ld" else 0x3000
+                self.assertEqual(nvm_length, expected_size)
                 self.assertIn("__start_nvm0 = .;", content)
                 self.assertIn("__stop_nvm0 = .;", content)
 
