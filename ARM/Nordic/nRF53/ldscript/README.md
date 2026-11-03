@@ -12,7 +12,7 @@ Eclipse project selects it.
 | `gcc_nrf5340_xxaa_application.ld` | Application flash 0x00000000-0x000FCFFF, NVM0 at 0x000FD000-0x000FFFFF; application RAM and shared RAM/IPC regions | Normal application variant |
 | `gcc_nrf5340_xxaa_network.ld` | Network flash 0x01000000-0x0103FFFF and network RAM at 0x21000000 | Normal network variant |
 | `gcc_nrf5340_xxaa_application_dfu_boot.ld` | Boot flash 0x00000000-0x0000BFFF | DFU boot variant |
-| `gcc_nrf5340_xxaa_application_dfu.ld` | Slot 0 flash 0x0000D000-0x000FFFFF | DFU application variant |
+| `gcc_nrf5340_xxaa_application_dfu.ld` | Slot 0 0x0000D000-0x000FCFFF; NVM0 0x000FD000-0x000FFFFF; IPC0 reserved below recovery flag | DFU application variant |
 | `gcc_nrf5340_xxaa_network_dfu_boot.ld` | Boot flash 0x01000000-0x01008FFF | DFU boot variant |
 | `gcc_nrf5340_xxaa_network_dfu.ld` | Slot 0 flash 0x0100A000-0x010247FF | DFU application variant |
 
@@ -20,26 +20,27 @@ The `*_dfu_layout.ld` files are shared dependencies of their corresponding
 boot and application scripts. The network DFU layout also declares slot 1
 (0x01024800-0x0103FFFF). Preserve both files and both MCU-core configurations.
 
-## DFU/NVM0 follow-up
+## Application DFU NVM and IPC reservations
 
-The normal Application core linker script reserves the top 12 KB of internal
-flash at 0x000FD000-0x000FFFFF for NVM0. In contrast,
-`gcc_nrf5340_xxaa_application_dfu_layout.ld` sets
-`__dfu_slot0_end = 0x00100000`, and the DFU application script gives that
-entire range to `FLASH` with no NVM0 region.
+The application DFU layout now ends slot 0 at 0x000FD000 and reserves
+0x000FD000-0x000FFFFF as NVM0. This matches the normal Application core
+flash/NVM partition and prevents the DFU application from occupying the
+persistent storage pages. Boot and application DFU scripts share the layout
+symbols, so the slot-0 boundary is updated for both.
 
-These are **different storage layouts**, not interchangeable variants.
-The DFU slot overlaps the location reserved as NVM0 by the normal layout.
-Before changing this boundary, review the DFU image size, slot protocol,
-bootloader/application storage compatibility, and upgrade behavior. A future
-decision to reserve NVM0 in DFU mode must update the shared DFU layout,
-bootloader and application expectations together. Do not shrink or move
-slots based only on a file-name convention.
+The Application core DFU script now keeps RAM1 to
+0x20040000-0x2006FFFF and declares a separate IPC0 region starting at
+0x20070000. IPC0 ends at 0x2007EFEF, immediately before the recovery
+flag at 0x2007EFF0. The normal layout gives IPC0 the full upper 64 KB,
+while the DFU variant reserves the recovery flag and the adjacent
+0x2007F000 SystemInit/FICR copy area. The DFU region exports
+`__start_ipc0` and `__stop_ipc0`, like the normal layout.
 
-The normal Application core has a separate IPC0 region at
-0x20070000-0x2007FFFF, whereas the DFU application script uses a continuous
-RAM1 region up to the recovery flag at 0x2007EFF0. Review IPC/shared-RAM
-ownership for DFU firmware before treating those as equivalent RAM layouts.
+This is a source-level layout correction, **not** a completed DFU system
+validation. Confirm the reduced IPC block is large enough for configured
+HCI ring buffers and any direct/shared memory consumers. Run real
+Application/Network core DFU builds, flash-layout checks, and a staged
+update/recovery test before release.
 
 ## Cleanup policy
 
