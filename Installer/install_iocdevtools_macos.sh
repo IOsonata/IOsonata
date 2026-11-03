@@ -284,7 +284,7 @@ install_iocomposer() (
 	trap 'rm -rf "$stage"' EXIT
 	local plugin url
 	curl -fsSL "https://api.github.com/repos/I-SYST/iocomposer.io/contents/plugin?ref=main" -o "$stage/plugins.json"
-	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui com.iocomposer.embedcdt.bletest; do
+	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
 		url=""
 		if [[ "$plugin" == "com.iocomposer.embedcdt.ai" ]]; then
 			url="${IOCOMPOSER_AI_PLUGIN_URL:-}"
@@ -298,7 +298,7 @@ install_iocomposer() (
 	done
 	# Both required plugins have downloaded successfully before either is replaced.
 	sudo mkdir -p "$runtime/dropins"
-	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui com.iocomposer.embedcdt.bletest; do
+	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
 		sudo cp "$stage/$plugin.jar" "$runtime/dropins/$plugin.jar"
 		sudo chmod 644 "$runtime/dropins/$plugin.jar"
 		sudo find "$runtime/dropins" -maxdepth 1 -type f -name "${plugin}_*.jar" -delete
@@ -826,7 +826,7 @@ rm -f "$CLONE_LOG" || true
 # Install IOsonata Eclipse Plugin
 # ---------------------------------------------------------
 echo
-# All four compatible bundles are staged and installed together by install_iocomposer.
+# All three release bundles are staged and installed together by install_iocomposer.
 
 install_iocomposer "$ECLIPSE_APP/Contents/Eclipse"
 
