@@ -396,54 +396,6 @@ build_iocomposer_index() {
 }
 
 # ---------------------------------------------------------
-# Install IOsonata Eclipse Plugin
-# ---------------------------------------------------------
-install_iosonata_plugin() {
-  echo ">>> Installing IOsonata Eclipse Plugin..."
-
-  local plugin_dir="$ROOT/IOsonata/Installer/eclipse_plugin"
-  local dropins_dir="$ECLIPSE_DIR/dropins"
-
-  if [[ ! -d "$plugin_dir" ]]; then
-    echo "⚠️ Plugin directory not found at $plugin_dir"
-    echo "   Skipping plugin installation."
-    return 0
-  fi
-
-  local latest_plugin
-  latest_plugin=$(ls -1 "$plugin_dir"/org.iosonata.embedcdt.templates.wizard_*.jar 2>/dev/null | sort -V | tail -n1)
-
-  if [[ -z "$latest_plugin" ]]; then
-    echo "⚠️ No IOsonata plugin jar file found in $plugin_dir"
-    echo "   Skipping plugin installation."
-    return 0
-  fi
-
-  echo "   → Found plugin: $(basename "$latest_plugin")"
-
-  sudo mkdir -p "$dropins_dir"
-
-  local old_plugins
-  old_plugins=$(find "$dropins_dir" -name "org.iosonata.embedcdt.templates.wizard_*.jar" 2>/dev/null || true)
-
-  if [[ -n "$old_plugins" ]]; then
-    echo "   → Removing old plugin versions..."
-    echo "$old_plugins" | while read -r old_plugin; do
-      if [[ -f "$old_plugin" ]]; then
-        echo "     - Removing: $(basename "$old_plugin")"
-        sudo rm -f "$old_plugin"
-      fi
-    done
-  fi
-
-  echo "   → Installing plugin to $dropins_dir"
-  sudo cp "$latest_plugin" "$dropins_dir/"
-  sudo chmod 644 "$dropins_dir/$(basename "$latest_plugin")"
-
-  echo "✅ IOsonata Eclipse Plugin installed: $(basename "$latest_plugin")"
-}
-
-# ---------------------------------------------------------
 # Install xPack toolchain
 # ---------------------------------------------------------
 install_xpack() {
