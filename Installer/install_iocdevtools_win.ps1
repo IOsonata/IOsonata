@@ -900,26 +900,6 @@ function Build-IOcomposerIndex {
 	} else { Write-Warning "Python or SDK index script missing; index was not built." }
 }
 
-# --- Plugin ---
-function Install-Plugin {
-    Write-Host; Write-Host ">>> Installing IOsonata Eclipse Plugin..." -ForegroundColor Cyan
-    $PDIR = "$ROOT\IOsonata\Installer\eclipse_plugin"
-    if (-not (Test-Path $PDIR)) { 
-        Write-Host "   [WARN] Plugin directory not found at $PDIR" -ForegroundColor Yellow
-        return 
-    }
-    $JAR = Get-ChildItem $PDIR "org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
-    if ($JAR) {
-        $DEST = "$ECLIPSE_DIR\dropins"
-        New-Item $DEST -ItemType Directory -Force | Out-Null
-        # Remove old versions
-        Get-ChildItem "$DEST\org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Remove-Item -Force
-        Copy-Item $JAR.FullName $DEST -Force
-        Write-Host "   [OK] Plugin installed: $($JAR.Name)" -ForegroundColor Green
-    } else {
-        Write-Host "   [WARN] No plugin jar found in $PDIR" -ForegroundColor Yellow
-    }
-}
 
 # ---------------------------------------------------------
 # Sync IOsonata + external SDKs (single source of truth)
