@@ -171,6 +171,60 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         )
         self.assertEqual(audit.check_iar_project(path), (0, 0, []))
 
+    def test_nrf54h20_dfu_respects_core_mram_and_recovery_ram(self):
+        family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
+        cases = (
+            ("application", 0x0E0A0000, 0x40000, 0x22000000, 0x8000, False),
+            ("radiocore", 0x0E120000, 0x80000, 0x23000000, 0x10000, True),
+        )
+        primary_ranges = []
+        for core, mram_start, mram_size, ram_start, ram_size, has_slot1 in cases:
+            with self.subTest(core=core):
+                stem = "gcc_nrf54h20_xxaa_" + core
+                bare = (family / (stem + ".ld")).read_text(encoding="utf-8")
+                boot = (family / (stem + "_dfu_boot.ld")).read_text(encoding="utf-8")
+                app = (family / (stem + "_dfu.ld")).read_text(encoding="utf-8")
+                layout = (family / (stem + "_dfu_layout.ld")).read_text(encoding="utf-8")
+                symbols = {
+                    name: int(value, 16)
+                    for name, value in re.findall(
+                        r"^(__dfu_\w+)\s*=\s*(0x[0-9A-Fa-f]+);", layout, re.MULTILINE
+                    )
+                }
+                self.assertIn(
+                    "FLASH (rx) : ORIGIN = 0x{:X}, LENGTH = 0x{:X}".format(mram_start, mram_size),
+                    bare,
+                )
+                self.assertEqual(symbols["__dfu_boot_start"], mram_start)
+                self.assertEqual(symbols["__dfu_boot_end"], symbols["__dfu_rec_start"])
+                self.assertEqual(symbols["__dfu_rec_end"], symbols["__dfu_slot0_start"])
+                self.assertLess(symbols["__dfu_boot_start"], symbols["__dfu_boot_end"])
+                self.assertLess(symbols["__dfu_rec_start"], symbols["__dfu_rec_end"])
+                self.assertLess(symbols["__dfu_slot0_start"], symbols["__dfu_slot0_end"])
+                self.assertEqual(symbols["__dfu_flag"], ram_start + ram_size - 16)
+                for value in symbols.values():
+                    if mram_start <= value <= mram_start + mram_size:
+                        self.assertEqual(value % 0x1000, 0)
+                if has_slot1:
+                    self.assertEqual(symbols["__dfu_slot0_end"], symbols["__dfu_slot1_start"])
+                    self.assertEqual(symbols["__dfu_slot1_end"], mram_start + mram_size)
+                    self.assertGreater(
+                        symbols["__dfu_slot1_end"] - symbols["__dfu_slot1_start"],
+                        symbols["__dfu_slot0_end"] - symbols["__dfu_slot0_start"],
+                    )
+                else:
+                    self.assertNotIn("__dfu_slot1_start", symbols)
+                    self.assertNotIn("__dfu_slot1_end", symbols)
+                    self.assertEqual(symbols["__dfu_slot0_end"], mram_start + mram_size)
+                for script in (app, boot):
+                    self.assertIn('INCLUDE "' + stem + '_dfu_layout.ld"', script)
+                    self.assertIn("LENGTH = __dfu_flag - 0x{:08X}".format(ram_start), script)
+                    self.assertIn('INCLUDE "gcc_arm_flash.ld"', script)
+                self.assertIn("ORIGIN = __dfu_slot0_start", app)
+                self.assertIn("ORIGIN = __dfu_boot_start", boot)
+                primary_ranges.append((mram_start, mram_start + mram_size))
+        self.assertLessEqual(primary_ranges[0][1], primary_ranges[1][0])
+
     def test_nrf54_s145_dfu_slot_and_storage_boundaries(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
         cases = (
