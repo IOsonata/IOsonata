@@ -74,6 +74,42 @@ def check_project(path):
     return checked, skipped, errors
 
 
+
+def check_iar_project(path):
+    """Validate IlinkIcfFile values relative to the IAR project directory."""
+    errors = []
+    checked = 0
+    skipped = 0
+    try:
+        xml = ET.parse(path)
+    except ET.ParseError as exc:
+        return 0, 0, [f"{path}: invalid XML: {exc}"]
+
+    for option in xml.findall(".//option"):
+        name = option.findtext("name", default="")
+        if name not in ("IlinkIcfFile", "IlinkIcfFileSlave"):
+            continue
+        for state in option.findall("state"):
+            reference = (state.text or "").strip().strip('"')
+            if not reference:
+                continue
+            if "$" in reference or "%" in reference:
+                skipped += 1
+                continue
+            if Path(reference).is_absolute() or PureWindowsPath(reference).is_absolute():
+                checked += 1
+                errors.append(f"{path}: nonportable absolute IAR linker script: {reference}")
+                continue
+            normalized = reference.replace("\\\\", "/")
+            if Path(normalized).suffix.lower() != ".icf":
+                skipped += 1
+                continue
+            checked += 1
+            target = (path.parent / normalized).resolve()
+            if not target.is_file():
+                errors.append(f"{path}: missing IAR linker script {reference} (resolved to {target})")
+    return checked, skipped, errors
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -86,8 +122,9 @@ def main():
         parser.error(f"not a directory: {root}")
 
     projects = sorted(root.rglob(".cproject"))
-    if not projects:
-        print(f"No .cproject files under {root}", file=sys.stderr)
+    iar_projects = sorted(root.rglob("*.ewp"))
+    if not projects and not iar_projects:
+        print(f"No Eclipse or IAR project files under {root}", file=sys.stderr)
         return 2
 
     checked = 0
@@ -99,10 +136,17 @@ def main():
         skipped += ignored
         problems.extend(errors)
 
+    for path in iar_projects:
+        count, ignored, errors = check_iar_project(path)
+        checked += count
+        skipped += ignored
+        problems.extend(errors)
+
     for problem in problems:
         print(f"FAIL: {problem}", file=sys.stderr)
     print(
-        f"Projects: {len(projects)}; literal linker references: {checked}; "
+        f"Eclipse projects: {len(projects)}; IAR projects: {len(iar_projects)}; "
+        f"literal linker references: {checked}; "
         f"dynamic/external references skipped: {skipped}; "
         f"errors: {len(problems)}"
     )
