@@ -7,7 +7,8 @@
  *
  *   0x000000 - 0x00BFFF  stage 0 boot            48 KB
  *   0x00C000 - 0x00CFFF  record of slot 0         4 KB
- *   0x00D000 - 0x0FFFFF  slot 0, application    972 KB
+ *   0x00D000 - 0x0FCFFF  slot 0, application    960 KB
+ *   0x0FD000 - 0x0FFFFF  persistent NVM0       12 KB
  *
  * Wired update only, no slot 1: the boot takes a signed image over the UART
  * straight into slot 0. The application core has no radio; a
@@ -28,4 +29,6 @@ __dfu_boot_end		= 0x0000C000;
 __dfu_rec_start		= 0x0000C000;
 __dfu_rec_end		= 0x0000D000;
 __dfu_slot0_start	= 0x0000D000;
-__dfu_slot0_end		= 0x00100000;
+__dfu_slot0_end		= 0x000FD000;
+__dfu_nvm0_start	= 0x000FD000;
+__dfu_nvm0_end		= 0x00100000;
