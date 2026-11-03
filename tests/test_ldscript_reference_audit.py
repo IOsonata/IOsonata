@@ -92,7 +92,7 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         path = iar / "Blinky.ewp"
         from xml.sax.saxutils import escape
         path.write_text(
-            "<project><configuration><settings><data><option>"
+            "<project><configuration><settings><name>ILINK</name><data><option>"
             "<name>IlinkIcfFile</name><state>" + escape(reference) +
             "</state></option></data></settings></configuration></project>",
             encoding="utf-8",
