@@ -115,7 +115,7 @@ class Nrf52NvmLayoutTests(unittest.TestCase):
             symbols = {
                 name: int(value, 16)
                 for name, value in re.findall(
-                    r"(?m)^(__dfu_\\w+)\\s*=\\s*(0x[0-9a-fA-F]+);", layout
+                    r"(?m)^(__dfu_\w+)\s*=\s*(0x[0-9a-fA-F]+);", layout
                 )
             }
             with self.subTest(part=part):
