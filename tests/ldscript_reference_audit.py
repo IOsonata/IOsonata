@@ -110,11 +110,70 @@ def check_iar_project(path):
                 errors.append(f"{path}: missing IAR linker script {reference} (resolved to {target})")
     return checked, skipped, errors
 
+
+def referenced_scripts(root):
+    """Collect literal script paths from managed projects and IAR projects."""
+    referenced = set()
+    for project in root.rglob(".cproject"):
+        try:
+            xml = ET.parse(project)
+        except ET.ParseError:
+            continue
+        for config in xml.findall(".//cconfiguration"):
+            settings = config.find(".//configuration")
+            name = settings.get("name") if settings is not None else None
+            if not name:
+                continue
+            for raw in script_values(config):
+                value = raw.strip().strip('"').strip("'")
+                if "$" in value or "%" in value or Path(value).is_absolute():
+                    continue
+                if Path(value).suffix.lower() in (".ld", ".icf", ".sct"):
+                    referenced.add((project.parent / name / value).resolve())
+    for project in root.rglob("*.ewp"):
+        try:
+            xml = ET.parse(project)
+        except ET.ParseError:
+            continue
+        for option in xml.findall(".//option"):
+            if option.findtext("name", default="") not in ("IlinkIcfFile", "IlinkIcfFileSlave"):
+                continue
+            for state in option.findall("state"):
+                value = (state.text or "").strip().strip('"')
+                if not value or "$" in value or "%" in value:
+                    continue
+                if Path(value).is_absolute() or PureWindowsPath(value).is_absolute():
+                    continue
+                normalized = value.replace("\\\\", "/")
+                if Path(normalized).suffix.lower() == ".icf":
+                    referenced.add((project.parent / normalized).resolve())
+    return referenced
+
+
+def report_unreferenced(root):
+    """Report candidates only: includes/imports and external builds may use them."""
+    referenced = referenced_scripts(root)
+    scripts = sorted(
+        path.resolve()
+        for path in root.rglob("*")
+        if path.is_file()
+        and path.suffix.lower() in (".ld", ".icf", ".sct")
+        and "ldscript" in path.parts
+    )
+    candidates = [path for path in scripts if path not in referenced]
+    for path in candidates:
+        print(f"CANDIDATE (not directly selected by .cproject/.ewp): {path}")
+    print(f"Unreferenced candidates: {len(candidates)}; no files deleted")
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "directory", nargs="?", default=".",
         help="Repository directory or MCU-family subtree to audit",
+    )
+    parser.add_argument(
+        "--report-unreferenced", action="store_true",
+        help="Report linker scripts not directly selected by Eclipse or IAR projects; never delete",
     )
     args = parser.parse_args()
     root = Path(args.directory).resolve()
@@ -150,6 +209,8 @@ def main():
         f"dynamic/external references skipped: {skipped}; "
         f"errors: {len(problems)}"
     )
+    if args.report_unreferenced:
+        report_unreferenced(root)
     return 1 if problems else 0
 
 
