@@ -75,8 +75,8 @@ substantial protocol work is not performed in the timer interrupt.
 
 Nordic projects retain the existing `external/nrfx` and
 `external/sdk-nrfxlib` layout, Cortex-M33 hard-float settings and modem library.
-The nRF9160 project selects `nrf9160_xxaa.ld` and the `nrf9160/hard-float`
-modem library; nRF91x1 selects `nrf9120_xxaa.ld` and `nrf9120/hard-float`.
+The nRF9160 project selects `gcc_nrf9160_xxaa.ld` and the `nrf9160/hard-float`
+modem library; nRF91x1 selects `gcc_nrf9120_xxaa.ld` and `nrf9120/hard-float`.
 The selected `CryptoRngNrfInstance()` requires the existing secure-image
 configuration. Do not define `NRF_TRUSTZONE_NONSECURE` in the library or example.
 
