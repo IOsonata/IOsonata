@@ -5,7 +5,7 @@
 define symbol __ICFEDIT_intvec_start__ = 0x0;
 /*-Memory Regions-*/
 define symbol __ICFEDIT_region_ROM_start__   = 0x0;
-define symbol __ICFEDIT_region_ROM_end__     = 0x7ffff;
+define symbol __ICFEDIT_region_ROM_end__     = 0x7CFFF;
 define symbol __ICFEDIT_region_RAM_start__   = 0x20000000;
 define symbol __ICFEDIT_region_RAM_end__     = 0x2000ffff;
 export symbol __ICFEDIT_region_RAM_start__;
@@ -17,6 +17,12 @@ define symbol __ICFEDIT_size_heap__     = 8192;
 
 define symbol __StackTop = 0x20010000 - 4;
 export symbol __StackTop;
+
+/* Reserve the same 8 KB NVM0 area as gcc_nrf52832_xxaa.ld. */
+define symbol __start_nvm0 = 0x0007D000;
+define symbol __stop_nvm0 = 0x0007F000;
+export symbol __start_nvm0;
+export symbol __stop_nvm0;
 
 define memory mem with size = 4G;
 define region ROM_region   = mem:[from __ICFEDIT_region_ROM_start__   to __ICFEDIT_region_ROM_end__];
