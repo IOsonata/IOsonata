@@ -264,6 +264,22 @@ class LinkerReferenceAuditTests(unittest.TestCase):
                 selected = "gcc_sam4e16_dfu_boot.ld" if name == "DfuBoot" else "gcc_sam4e16.ld"
                 self.assertEqual(content.count("ldscript/" + selected), 4)
 
+    def test_stm32f030_dfu_application_slot_is_elf_page_aligned(self):
+        root = Path(__file__).resolve().parents[1]
+        layout = (root / "ARM" / "ST" / "STM32F0xx" / "ldscript"
+                  / "gcc_stm32f030x8_dfu_layout.ld").read_text(encoding="utf-8")
+        symbols = {
+            name: int(value, 16)
+            for name, value in re.findall(
+                r"(?m)^(__dfu_\\w+)\\s*=\\s*(0x[0-9A-Fa-f]+);", layout
+            )
+        }
+        self.assertEqual(symbols["__dfu_boot_end"], symbols["__dfu_rec_start"])
+        self.assertEqual(symbols["__dfu_rec_end"], symbols["__dfu_slot0_start"])
+        self.assertEqual(symbols["__dfu_slot0_start"], 0x0800A000)
+        self.assertEqual(symbols["__dfu_slot0_start"] % 0x1000, 0)
+        self.assertEqual(symbols["__dfu_slot0_end"], 0x08010000)
+
     def test_nrf52832_nrfx_prbs_uses_local_nordic_linker(self):
         nordic = Path(__file__).resolve().parents[1] / "ARM" / "Nordic"
         example = nordic / "nRF52" / "nRF52832" / "exemples" / "UartPrbsTxnrfx"
