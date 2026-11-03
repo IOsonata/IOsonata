@@ -171,6 +171,22 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         )
         self.assertEqual(audit.check_iar_project(path), (0, 0, []))
 
+    def test_all_nordic_linker_scripts_are_iosonata_layouts(self):
+        nordic = Path(__file__).resolve().parents[1] / "ARM" / "Nordic"
+        scripts = sorted(nordic.rglob("*.ld"))
+        self.assertTrue(scripts)
+        for script in scripts:
+            with self.subTest(script=str(script.relative_to(nordic))):
+                content = script.read_text(encoding="utf-8")
+                self.assertNotRegex(
+                    content,
+                    r'(?m)^\s*INCLUDE\s+["\']?nrf_common\.ld\b',
+                )
+                self.assertEqual(script.parent.name, "ldscript")
+                self.assertTrue(script.name.startswith("gcc_"), script.name)
+                if re.search(r"(?m)^\s*MEMORY\s*$", content):
+                    self.assertIn('INCLUDE "gcc_arm_flash.ld"', content)
+
     def test_nrf54_iosonata_gcc_scripts_use_generic_linker(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
         scripts = list(family.glob("gcc_*.ld"))
