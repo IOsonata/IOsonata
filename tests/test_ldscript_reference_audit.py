@@ -264,6 +264,21 @@ class LinkerReferenceAuditTests(unittest.TestCase):
                 selected = "gcc_sam4e16_dfu_boot.ld" if name == "DfuBoot" else "gcc_sam4e16.ld"
                 self.assertEqual(content.count("ldscript/" + selected), 4)
 
+    def test_re01_dfu_harness_uses_current_linker_scripts(self):
+        root = Path(__file__).resolve().parents[1]
+        harness = (root / "tests" / "re01" / "build_dfu.py").read_text(
+            encoding="utf-8"
+        )
+        family = root / "ARM" / "Renesas" / "RE01" / "ldscript"
+        for filename in (
+            "gcc_re01_1500kb_dfu_boot.ld",
+            "gcc_re01_1500kb_dfu.ld",
+        ):
+            with self.subTest(filename=filename):
+                self.assertTrue((family / filename).is_file())
+                self.assertIn("lddir / '" + filename + "'", harness)
+        self.assertNotIn("dfu_boot_re01_1500kb.ld", harness)
+
     def test_stm32f030_dfu_application_slot_is_elf_page_aligned(self):
         root = Path(__file__).resolve().parents[1]
         layout = (root / "ARM" / "ST" / "STM32F0xx" / "ldscript"
