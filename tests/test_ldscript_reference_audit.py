@@ -62,6 +62,24 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         checked, skipped, errors = audit.check_project(path)
         self.assertEqual((checked, skipped, errors), (0, 1, []))
 
+    def test_projdirpath_existing_script(self):
+        reference = "${ProjDirPath}/../../../../ldscript/gcc_part.ld"
+        path = self.write_project(reference)
+        self.assertEqual(audit.check_project(path), (1, 0, []))
+        self.assertIn(self.script.resolve(), audit.referenced_scripts(self.root))
+
+    def test_projdirpath_wrong_directory_depth_is_reported(self):
+        reference = "${ProjDirPath}/../../../../../ldscript/gcc_part.ld"
+        path = self.write_project(reference)
+        checked, skipped, errors = audit.check_project(path)
+        self.assertEqual((checked, skipped), (1, 0))
+        self.assertEqual(len(errors), 1)
+        self.assertIn("gcc_part.ld", errors[0])
+
+    def test_unsupported_eclipse_macro_is_skipped(self):
+        path = self.write_project("${UnknownMacro}/gcc_part.ld")
+        self.assertEqual(audit.check_project(path), (0, 1, []))
+
     def test_absolute_linker_script_is_rejected(self):
         path = self.write_project("/opt/vendor/part.ld")
         checked, skipped, errors = audit.check_project(path)
