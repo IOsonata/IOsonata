@@ -858,6 +858,13 @@ function Install-IOcomposer {
 			Copy-Item (Join-Path $stage "$id.jar") (Join-Path $dropins "$id.jar") -Force
 			Get-ChildItem $dropins -Filter "${id}_*.jar" | Remove-Item -Force
 		}
+		# Grant modify access only to the installing account so the Eclipse
+		# plugin updater can replace verified JARs after the IDE exits.
+		$installUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+		& icacls.exe $dropins /grant "${installUser}:(OI)(CI)M" /T | Out-Null
+		if ($LASTEXITCODE -ne 0) {
+			Write-Warning "Unable to enable IOcomposer in-app updates for $installUser"
+		}
 		$ini = Join-Path $Runtime 'eclipse.ini'
 		$lines = Get-Content $ini
 		$out = [System.Collections.Generic.List[string]]::new()
