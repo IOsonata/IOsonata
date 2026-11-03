@@ -10,8 +10,8 @@ modem. IOsonata implements this glue in modem_nrf91.c. The library's
 Debug and Release configurations use bare-metal waits, semaphores and mutexes;
 Debug_TaktOS and Release_TaktOS select the TaktOS versions in the same file.
 
-The application is a single secure image, linked with nrf9160_xxaa.ld or
-nrf9120_xxaa.ld (or their _dfu variant) and the library, as any other nRF91
+The application is a single secure image, linked with gcc_nrf9160_xxaa.ld or
+gcc_nrf9120_xxaa.ld (or their _dfu variant) and the library, as any other nRF91
 application, and links the Modem library variant of its modem firmware, for
 the nRF91x1 cellular firmware:
 
