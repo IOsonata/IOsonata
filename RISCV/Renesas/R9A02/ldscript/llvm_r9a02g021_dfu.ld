@@ -28,8 +28,6 @@ SEARCH_DIR("../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/RISCV/ldscript")
-GROUP( -lstdc++ -lgcc -lc)
-
 INCLUDE "gcc_r9a02g021_dfu_layout.ld"
 
 RESET_VECTOR = __dfu_slot0_start;
