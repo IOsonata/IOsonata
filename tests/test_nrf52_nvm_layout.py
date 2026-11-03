@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""Static nRF52 NVM partition regression checks for normal and MBR+DFU layouts."""
+
+from pathlib import Path
+import re
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DIR = ROOT / "ARM" / "Nordic" / "nRF52" / "ldscript"
+PAGE = 0x1000
+
+# (part, DFU enabled, flash origin, nvm0 origin, dfu bootloader origin, flash end)
+LAYOUTS = (
+    ("nrf52832_xxaa", False, 0x00000, 0x7D000, None, 0x80000),
+    ("nrf52832_xxaa", True,  0x01000, 0x74000, 0x77000, 0x80000),
+    ("nrf52840_xxaa", False, 0x00000, 0xFD000, None, 0x100000),
+    ("nrf52840_xxaa", True,  0x01000, 0xDD000, 0xE0000, 0x100000),
+)
+
+
+def regions(script):
+    content = script.read_text(encoding="utf-8")
+    entries = {}
+    pattern = re.compile(
+        r"(?m)^\s*(FLASH|NVM0|NVM1)\s*\([^)]*\)\s*:\s*"
+        r"ORIGIN\s*=\s*(0x[0-9A-Fa-f]+)\s*,\s*"
+        r"LENGTH\s*=\s*(0x[0-9A-Fa-f]+)"
+    )
+    for match in pattern.finditer(content):
+        name, origin, length = match.groups()
+        if name in entries:
+            raise AssertionError("duplicate region " + name)
+        entries[name] = (int(origin, 16), int(length, 16))
+    return content, entries
+
+
+class Nrf52NvmLayoutTests(unittest.TestCase):
+    def test_nvm_geometry_and_bootloader_bounds(self):
+        for part, dfu, app_start, nvm_start, boot_start, flash_end in LAYOUTS:
+            filename = "gcc_" + part + ("_mbr" if dfu else "") + ".ld"
+            content, layout = regions(DIR / filename)
+            with self.subTest(filename=filename):
+                self.assertEqual(set(layout), {"FLASH", "NVM0", "NVM1"})
+                flash, bond, app = (layout[key] for key in ("FLASH", "NVM0", "NVM1"))
+                self.assertEqual(flash, (app_start, nvm_start - app_start))
+                self.assertEqual(bond, (nvm_start, 2 * PAGE))
+                self.assertEqual(app, (nvm_start + 2 * PAGE, PAGE))
+                storage_end = app[0] + app[1]
+                self.assertEqual(storage_end, boot_start if dfu else flash_end)
+
+                for origin, size in layout.values():
+                    self.assertEqual(origin % PAGE, 0)
+                    self.assertEqual(size % PAGE, 0)
+
+                for index in (0, 1):
+                    lower = index
+                    self.assertIn("__start_nvm%d = .;" % lower, content)
+                    self.assertIn("__stop_nvm%d = .;" % lower, content)
+                    self.assertIn(
+                        ". = ORIGIN(NVM%d) + LENGTH(NVM%d);" % (lower, lower),
+                        content,
+                    )
+                    self.assertRegex(
+                        content,
+                        r"(?s)nvm%d \(NOLOAD\).*?\}\s*> NVM%d" % (lower, lower)
+                    )
+
+                if dfu:
+                    self.assertIn("MBR + Nordic DFU", content)
+                    self.assertEqual(boot_start,
+                                     0x77000 if part.startswith("nrf52832") else 0xE0000)
+                    # Nordic reserves the two highest 4 KB pages for metadata.
+                    self.assertEqual(flash_end - 2 * PAGE,
+                                     0x7E000 if part.startswith("nrf52832") else 0xFE000)
+
+    def test_no_dfu_does_not_reserve_mbr(self):
+        for part in ("nrf52832_xxaa", "nrf52840_xxaa"):
+            content, layout = regions(DIR / ("gcc_" + part + ".ld"))
+            with self.subTest(part=part):
+                self.assertEqual(layout["FLASH"][0], 0)
+                self.assertIn("No MBR/DFU", content)
+
+
+if __name__ == "__main__":
+    unittest.main()
