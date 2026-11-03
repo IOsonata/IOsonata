@@ -68,6 +68,7 @@ with the Nordic SDK `dfu_ble` or `dfu_usb` bootloaders.
 | SDK bootloader project | Bootloader FLASH origin | SDK protected region | Matching application linker script |
 | --- | --- | --- | --- |
 | nRF52832 `dfu_ble` (S132) | `0x77000` | `0x74000..0x76FFF` | `gcc_nrf52832_xxaa_s132_sdk_ble_dfu.ld` |
+| nRF52832 `dfu_uart`, `dfu_uart_open` (S132) | `0x77000` | `0x74000..0x76FFF` | `gcc_nrf52832_xxaa_s132_sdk_ble_dfu.ld` (same app-memory layout) |
 | nRF52840 `dfu_ble` (S140) | `0xF7000` | `0xF4000..0xF6FFF` | `gcc_nrf52840_xxaa_s140_sdk_ble_dfu.ld` |
 | nRF52840 `dfu_usb` or `dfu_usb_open` | `0xE0000` | `0xDD000..0xDFFFF` | `gcc_nrf52840_xxaa_mbr.ld` (no SoftDevice) |
 
