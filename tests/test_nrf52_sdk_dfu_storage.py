@@ -74,7 +74,7 @@ class SdkDfuStorageTests(unittest.TestCase):
              "gcc_nrf52840_xxaa_s140_sdk_usb_dfu.ld"),
         )
         for part, name, script in cases:
-            project = ROOT / "ARM" / "Nordic" / "nRF52" / part
+            project = ROOT / part
             project /= "exemples/BleSecurityDemo/ioc/.cproject"
             xml = ET.parse(project)
             configs = xml.findall(".//cconfiguration")
