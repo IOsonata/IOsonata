@@ -38,7 +38,7 @@
 		<link>
 			<name>src/main.cpp</name>
 			<type>1</type>
-			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/main.cpp</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
 		</link>
 	
 		<link>
