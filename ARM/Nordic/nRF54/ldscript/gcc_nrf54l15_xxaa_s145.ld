@@ -9,10 +9,9 @@
  *     0x159800 - 0x15a7FF  storage0_partition     — 4K
  *   0x15a800 - 0x17CBFF  softdevice_partition  — 137K
  *
- * SRAM layout (128K at 0x20000000):
- *   0x20000000 - 0x200017FF  softdevice_static_ram  — 6K
- *   0x20001780 - 0x200047FF  softdevice_dynamic_ram — 12K
- *   0x20004780 - 0x2001FFFF  app_ram                — ~237K (spans into RAM1)
+ * SRAM layout (256 KB total, 0x20000000 - 0x2003FFFF):
+ *   0x20000000 - 0x200048FF  reserved for S145 (0x4900 bytes)
+ *   0x20004900 - 0x2003FFFF  application RAM (0x3B700 bytes)
  */
 
 SEARCH_DIR(.)
@@ -36,7 +35,7 @@ MEMORY
 	   nothing states the addresses twice. 1 KB RRAM sectors. */
 	NVM0  (rw)  : ORIGIN = 0x158800, LENGTH = 0x1000    /* peer manager */
 	NVM1  (rw)  : ORIGIN = 0x159800, LENGTH = 0x1000    /* application */
-	RAM   (rwx) : ORIGIN = 0x20004900, LENGTH = 0x3B700   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
+	RAM   (rwx) : ORIGIN = 0x20004900, LENGTH = 0x3B700   /* after S145 reserved (0x4900), spans RAM0+RAM1 */
 }
 
 /* === FLASH observer sections ===
