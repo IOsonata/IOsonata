@@ -54,4 +54,25 @@ SECTIONS
   } > NVM1
 }
 
+SECTIONS
+{
+	. = ALIGN(4);
+	.cli_sorted_cmd_ptrs :
+	{
+		PROVIDE(__start_cli_sorted_cmd_ptrs = .);
+		KEEP(*(.cli_sorted_cmd_ptrs))
+		PROVIDE(__stop_cli_sorted_cmd_ptrs = .);
+	} > RAM AT > FLASH
+} INSERT AFTER .data;
+
+SECTIONS
+{
+	.cli_command :
+	{
+		PROVIDE(__start_cli_command = .);
+		KEEP(*(.cli_command))
+		PROVIDE(__stop_cli_command = .);
+	} > FLASH
+} INSERT AFTER .text;
+
 INCLUDE "gcc_arm_flash.ld"
