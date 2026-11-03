@@ -62,6 +62,7 @@ SOFTWARE.
 #include <vector>
 
 #include "ipc/ipc_intrf.h"
+#include "bluetooth/bt_hci_ipc.h"
 
 // Fake target port ----------------------------------------------------------
 
@@ -294,7 +295,7 @@ void TestPeerFirst(void)
 
 void TestUnequalReservation(void)
 {
-	printf("owner and peer use different shared memory limits\\n");
+	printf("owner and peer use different shared memory limits\n");
 	PortReset();
 	FillShm(0xA5);
 
@@ -326,6 +327,58 @@ void TestUnequalReservation(void)
 	for (uint32_t i = need; i < SHM_BYTES; i++)
 	{
 		if (g_Shm[i] != 0xA5)
+		{
+			intact = false;
+			break;
+		}
+	}
+	CHECK(intact);
+}
+
+void TestHciDfuIpcCapacity(void)
+{
+	printf("nRF5340 HCI IPC DFU reservation\\n");
+	PortReset();
+
+	// Match the production network controller's eight packet slots and
+	// the DFU application peer's IPC0 region below the recovery flag.
+	const uint32_t ownerSize = 0x10000U;
+	const uint32_t peerSize = 0xEFF0U;
+	const uint32_t needed = BT_HCI_IPC_MEMSIZE(8U);
+	alignas(8) static uint8_t mem[0x10000U];
+
+	memset(mem, 0xA5, sizeof(mem));
+	CHECK(needed <= peerSize);
+
+	IpcIntrfDev_t own, peer;
+	IpcIntrfCfg_t oc = MakeCfg(true, 8U, 8U);
+	IpcIntrfCfg_t pc = MakeCfg(false, 0U, 0U);
+	oc.pMemBlk = mem;
+	oc.MemSize = ownerSize;
+	oc.TxBlkSize = BT_HCI_IPC_BLKSIZE;
+	oc.RxBlkSize = BT_HCI_IPC_BLKSIZE;
+	pc.pMemBlk = mem;
+	pc.MemSize = peerSize;
+
+	t_Core = CORE_OWNER;
+	CHECK(IpcIntrfInit(&own, &oc));
+	t_Core = CORE_PEER;
+	CHECK(IpcIntrfInit(&peer, &pc));
+	CHECK(IpcIntrfIsUp(&peer));
+
+	uint8_t data[16] = { 0x04, 0x0E, 0x02, 0x01, 0x00 };
+	uint8_t received[sizeof(data)] = {};
+
+	t_Core = CORE_OWNER;
+	CHECK(Tx(own, data, sizeof(data)) == (int)sizeof(data));
+	t_Core = CORE_PEER;
+	CHECK(Rx(peer, received, sizeof(received)) == (int)sizeof(received));
+	CHECK(memcmp(received, data, sizeof(data)) == 0);
+
+	bool intact = true;
+	for (uint32_t i = needed; i < ownerSize; i++)
+	{
+		if (mem[i] != 0xA5U)
 		{
 			intact = false;
 			break;
@@ -1238,6 +1291,7 @@ int main(int argc, char **argv)
 	TestPeerFirst();
 	TestRoundTrip();
 	TestUnequalReservation();
+	TestHciDfuIpcCapacity();
 	TestWrap();
 	TestFull();
 	TestEpoch();
