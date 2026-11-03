@@ -251,7 +251,7 @@ void EInkIntrfSetDataMode(EInkIntrfDev_t *pDev, bool bDataMode)
 	}
 }
 
-int EInkIntrfWrite(EInkIntrfDev_t * const pDev, uint8_t *pCmd, int CmdLen, uint8_t *pData, int DataLen)
+int EInkIntrfWrite(EInkIntrfDev_t * const pDev, uint8_t *pCmd, int CmdLen, const uint8_t *pData, int DataLen)
 {
     int count = 0;
 
@@ -279,7 +279,21 @@ int EInkIntrfWrite(EInkIntrfDev_t * const pDev, uint8_t *pCmd, int CmdLen, uint8
 
 bool EInkIntrfInit(EInkIntrfDev_t * const pDev, const EInkIntrfCfg_t *pCfgData)
 {
-	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
+	if (pDev == NULL || pCfgData == NULL || pCfgData->pIOPinMap == NULL ||
+		pCfgData->NbIOPins <= EIINTRF_RST_PIN_IDX)
+	{
+		return false;
+	}
+
+	if (pCfgData->Type == EIINTRF_TYPE_BITBANG &&
+		pCfgData->NbIOPins <= EIINTRF_CS_PIN_IDX)
+	{
+		return false;
+	}
+
+	pDev->pIOPinMap = pCfgData->pIOPinMap;
+	pDev->NbIOPins = pCfgData->NbIOPins;
+	IOPinCfg(pDev->pIOPinMap, pDev->NbIOPins);
 	IOPinSet(pDev->pIOPinMap[EIINTRF_RST_PIN_IDX].PortNo, pDev->pIOPinMap[EIINTRF_RST_PIN_IDX].PinNo);
 
 	if (pCfgData->Type == EIINTRF_TYPE_SPI)
@@ -293,10 +307,6 @@ bool EInkIntrfInit(EInkIntrfDev_t * const pDev, const EInkIntrfCfg_t *pCfgData)
 	}
 	else
 	{
-		if (pCfgData->NbIOPins <= EIINTRF_CS_PIN_IDX)
-		{
-			return false;
-		}
 		IOPinClear(pDev->pIOPinMap[EIINTRF_SCL_PIN_IDX].PortNo, pDev->pIOPinMap[EIINTRF_SCL_PIN_IDX].PinNo);
 		IOPinSet(pDev->pIOPinMap[EIINTRF_SDA_PIN_IDX].PortNo, pDev->pIOPinMap[EIINTRF_SDA_PIN_IDX].PinNo);
 		IOPinSet(pDev->pIOPinMap[EIINTRF_CS_PIN_IDX].PortNo, pDev->pIOPinMap[EIINTRF_CS_PIN_IDX].PinNo);
@@ -309,8 +319,6 @@ bool EInkIntrfInit(EInkIntrfDev_t * const pDev, const EInkIntrfCfg_t *pCfgData)
 	}
 
 	pDev->Type = pCfgData->Type;
-	pDev->pIOPinMap = pCfgData->pIOPinMap;
-	pDev->NbIOPins = pCfgData->NbIOPins;
 	pDev->DevIntrf.pDevData = (void*)pDev;
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UNKOWN;
