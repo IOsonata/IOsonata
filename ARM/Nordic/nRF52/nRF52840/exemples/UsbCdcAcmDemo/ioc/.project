@@ -236,10 +236,5 @@
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c</locationURI>
 		</link>
-		<link>
-			<name>src/usbd_cdc_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/usbd_cdc_intrf.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>
