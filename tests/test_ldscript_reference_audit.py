@@ -170,6 +170,24 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         )
         self.assertEqual(audit.check_iar_project(path), (0, 0, []))
 
+    def test_nrf52832_iar_nvm_reservation_matches_gcc(self):
+        family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF52" / "ldscript"
+        expected = (
+            ("iar_nrf52832_xxaa.icf", "__ICFEDIT_region_ROM_end__"),
+            ("iar_nrf52832_xxaa_irom.icf", "__ICFEDIT_region_IROM1_end__"),
+        )
+        for filename, end_symbol in expected:
+            with self.subTest(filename=filename):
+                content = (family / filename).read_text(encoding="utf-8")
+                self.assertRegex(
+                    content,
+                    end_symbol + r"\\s*=\\s*0x0*7CFFF\\s*;",
+                )
+                self.assertIn("define symbol __start_nvm0 = 0x0007D000;", content)
+                self.assertIn("define symbol __stop_nvm0 = 0x0007F000;", content)
+                self.assertIn("export symbol __start_nvm0;", content)
+                self.assertIn("export symbol __stop_nvm0;", content)
+
     def test_malformed_xml_is_reported(self):
         path = self.ioc / ".cproject"
         path.write_text("<cproject>", encoding="utf-8")
