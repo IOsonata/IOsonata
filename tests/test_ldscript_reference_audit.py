@@ -171,6 +171,18 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         )
         self.assertEqual(audit.check_iar_project(path), (0, 0, []))
 
+    def test_nrf54_iosonata_gcc_scripts_use_generic_linker(self):
+        family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
+        scripts = list(family.glob("gcc_*.ld"))
+        self.assertTrue(scripts)
+        for script in scripts:
+            with self.subTest(script=script.name):
+                content = script.read_text(encoding="utf-8")
+                self.assertNotIn('INCLUDE "nrf_common.ld"', content)
+                if re.search(r"^\s*MEMORY\s*$", content, re.MULTILINE):
+                    if "_dfu_layout" not in script.name:
+                        self.assertIn('INCLUDE "gcc_arm_flash.ld"', content)
+
     def test_nrf54h20_dfu_respects_core_mram_and_recovery_ram(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
         cases = (
