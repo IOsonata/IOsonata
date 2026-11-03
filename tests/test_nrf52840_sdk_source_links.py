@@ -41,6 +41,51 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
                 overlap = sorted(set(linked) & set(library))
                 self.assertFalse(overlap, overlap)
 
+    def test_usb_cpp_demos_compile_required_sdk_sources(self):
+        expected = {
+            "UsbCdcAcmDemo": ("app_usbd.c", "app_usbd_core.c",
+                              "app_usbd_cdc_acm.c", "nrfx_usbd.c"),
+            "UsbHidGeneric": ("app_usbd.c", "app_usbd_core.c",
+                              "app_usbd_hid_generic.c",
+                              "app_usbd_hid_mouse.c", "app_usbd_hid_kbd.c"),
+        }
+        for name, required in expected.items():
+            folder = TARGET / "exemples" / name / "ioc"
+            linked = linked_sources(folder / ".project")
+            config_root = ET.parse(folder / ".cproject").getroot()
+            configurations = config_root.findall(".//cconfiguration")
+            self.assertEqual(len(configurations), 2)
+            for config in configurations:
+                title = config.find(".//configuration").get("name")
+                exclusions = [
+                    entry.get("excluding", "").split("|")
+                    for entry in config.findall(".//sourceEntries/entry")
+                    if entry.get("kind") == "sourcePath"
+                ]
+                ignored = {item for group in exclusions for item in group if item}
+                with self.subTest(example=name, configuration=title):
+                    self.assertTrue(set(required).issubset(linked.values()))
+                    for src in linked:
+                        if not src.startswith("external/"):
+                            continue
+                        source_name = next(
+                            (k for k, v in linked.items() if k == src), None)
+                        self.assertIsNotNone(source_name)
+                    # Resolve workspace source names through the linked
+                    # Eclipse resources. An excluded parent folder disables
+                    # every C source beneath it.
+                    project_tree = ET.parse(folder / ".project").getroot()
+                    for resource in project_tree.findall(".//linkedResources/link"):
+                        resource_name = resource.findtext("name", "")
+                        if not resource_name.endswith(".c"):
+                            continue
+                        relative = resource_name.removeprefix("src/")
+                        self.assertFalse(
+                            any(relative == e or relative.startswith(e + "/")
+                                for e in ignored),
+                            (name, title, relative),
+                        )
+
     def test_nordic_usb_class_sources_remain_linked(self):
         for example, required in (
             ("usbd_hid_composite", ("app_usbd.c", "app_usbd_core.c",
