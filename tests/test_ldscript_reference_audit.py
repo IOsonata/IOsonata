@@ -271,7 +271,7 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         symbols = {
             name: int(value, 16)
             for name, value in re.findall(
-                r"(?m)^(__dfu_\\w+)\\s*=\\s*(0x[0-9A-Fa-f]+);", layout
+                r"(?m)^(__dfu_\w+)\s*=\s*(0x[0-9A-Fa-f]+);", layout
             )
         }
         self.assertEqual(symbols["__dfu_boot_end"], symbols["__dfu_rec_start"])
