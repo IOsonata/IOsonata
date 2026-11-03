@@ -36,6 +36,12 @@ while the DFU variant reserves the recovery flag and the adjacent
 0x2007F000 SystemInit/FICR copy area. The DFU region exports
 `__start_ipc0` and `__stop_ipc0`, like the normal layout.
 
+The IpcIntrfTest application and network projects each configure an IPC
+block at 0x20070000 of size 0x2000 (8 KB). The DFU IPC0 region is
+0xEFF0 bytes (61,424 bytes), so those example buffers fit within it.
+The HCI controller's actual ring geometry and shared memory assumptions
+have not yet been verified against the DFU region.
+
 This is a source-level layout correction, **not** a completed DFU system
 validation. Confirm the reduced IPC block is large enough for configured
 HCI ring buffers and any direct/shared memory consumers. Run real
