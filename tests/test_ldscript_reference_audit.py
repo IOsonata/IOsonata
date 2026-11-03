@@ -171,21 +171,36 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         )
         self.assertEqual(audit.check_iar_project(path), (0, 0, []))
 
-    def test_all_nordic_linker_scripts_are_iosonata_layouts(self):
+    def test_all_nordic_linker_scripts_are_classified(self):
         nordic = Path(__file__).resolve().parents[1] / "ARM" / "Nordic"
         scripts = sorted(nordic.rglob("*.ld"))
         self.assertTrue(scripts)
         for script in scripts:
             with self.subTest(script=str(script.relative_to(nordic))):
                 content = script.read_text(encoding="utf-8")
-                self.assertNotRegex(
-                    content,
-                    r'(?m)^\s*INCLUDE\s+["\']?nrf_common\.ld\b',
+                sdk_include = re.search(
+                    r'(?m)^\s*INCLUDE\s+["\']?nrf_common\.ld\b', content
                 )
+                if sdk_include:
+                    # Nordic SDK linker scripts belong only to isolated nrfx
+                    # reference examples, never to IOsonata's family directory.
+                    self.assertNotEqual(script.parent.name, "ldscript")
+                    self.assertIn("nrfx", str(script).lower())
+                    continue
                 self.assertEqual(script.parent.name, "ldscript")
                 self.assertTrue(script.name.startswith("gcc_"), script.name)
                 if re.search(r"(?m)^\s*MEMORY\s*$", content):
                     self.assertIn('INCLUDE "gcc_arm_flash.ld"', content)
+
+    def test_nrf52832_nrfx_prbs_uses_local_nordic_linker(self):
+        nordic = Path(__file__).resolve().parents[1] / "ARM" / "Nordic"
+        example = nordic / "nRF52" / "nRF52832" / "exemples" / "UartPrbsTxnrfx"
+        project = (example / "ioc" / ".cproject").read_text(encoding="utf-8")
+        script = example / "src" / "nrf52_xxaa_nrfx_prbs.ld"
+        self.assertTrue(script.exists())
+        self.assertIn('INCLUDE "nrf_common.ld"', script.read_text(encoding="utf-8"))
+        self.assertNotIn("gcc_nrf52832_xxaa_nrfx_prbs.ld", project)
+        self.assertEqual(project.count("../../src/nrf52_xxaa_nrfx_prbs.ld"), 4)
 
     def test_nrf54_iosonata_gcc_scripts_use_generic_linker(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
