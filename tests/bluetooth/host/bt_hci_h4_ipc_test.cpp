@@ -41,6 +41,7 @@ SOFTWARE.
 #include <vector>
 
 #include "bluetooth/bt_hci_h4.h"
+#include "bluetooth/bt_hci_ipc.h"
 #include "bluetooth/bt_hcievt.h"
 #include "ipc/ipc_intrf.h"
 #include "syslog.h"
@@ -57,6 +58,11 @@ bttest::Context s_Ctx("bt_hci_h4_ipc_test");
 #define RING_BYTES			1024U
 #define SHMEM_SIZE			IPC_INTRF_MEMSIZE(RING_BYTES, 0, RING_BYTES, 0)
 #define PKT_QUEUE			4U
+
+// nRF5340 Network HciController uses eight slots per direction. The DFU
+// application peer reserves IPC0 through 0x2007EFEF, below its recovery flag.
+static_assert(BT_HCI_IPC_MEMSIZE(8U) <= 0xEFF0U,
+	"nRF5340 production HCI IPC rings overlap the DFU recovery area");
 
 struct RxPkt {
 	uint8_t Type;
