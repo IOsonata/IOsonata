@@ -171,6 +171,48 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         )
         self.assertEqual(audit.check_iar_project(path), (0, 0, []))
 
+    def test_nrf54_s145_dfu_slot_and_storage_boundaries(self):
+        family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
+        cases = (
+            ("nrf54l15_xxaa", 0x158800, 0x20004900, 0x2003FFF0),
+            ("nrf54lm20a_xxaa", 0x1D8800, 0x20004780, 0x2007FCB0),
+            ("nrf54lm20b_xxaa", 0x0D8800, 0x20004780, 0x2007FCB0),
+        )
+        for target, storage, ram_start, recovery_flag in cases:
+            with self.subTest(target=target):
+                layout = (family / ("gcc_" + target + "_s145_dfu_layout.ld")).read_text(encoding="utf-8")
+                app = (family / ("gcc_" + target + "_s145_dfu.ld")).read_text(encoding="utf-8")
+                boot = (family / ("gcc_" + target + "_s145_dfu_boot.ld")).read_text(encoding="utf-8")
+                normal = (family / ("gcc_" + target + "_s145.ld")).read_text(encoding="utf-8")
+                symbols = {}
+                for name, value in re.findall(
+                    r"^(__dfu_\w+)\s*=\s*(0x[0-9a-fA-F]+);", layout, re.MULTILINE
+                ):
+                    symbols[name] = int(value, 16)
+
+                self.assertEqual(symbols["__dfu_boot_start"], 0)
+                self.assertEqual(symbols["__dfu_boot_end"], symbols["__dfu_rec_start"])
+                self.assertEqual(symbols["__dfu_rec_end"], symbols["__dfu_slot0_start"])
+                self.assertEqual(symbols["__dfu_slot0_end"], symbols["__dfu_slot1_start"])
+                self.assertEqual(symbols["__dfu_slot1_end"], symbols["__dfu_nvm0_start"])
+                self.assertEqual(symbols["__dfu_nvm0_start"], storage)
+                self.assertEqual(symbols["__dfu_nvm0_start"] + symbols["__dfu_nvm_size"], symbols["__dfu_nvm1_start"])
+                self.assertEqual(symbols["__dfu_nvm_size"], 0x1000)
+                self.assertEqual(symbols["__dfu_flag"], recovery_flag)
+                self.assertEqual(symbols["__dfu_flag"] % 16, 0)
+                self.assertGreater(symbols["__dfu_slot1_end"] - symbols["__dfu_slot1_start"],
+                                   symbols["__dfu_slot0_end"] - symbols["__dfu_slot0_start"])
+                for script in (app, boot):
+                    self.assertIn('INCLUDE "gcc_' + target + '_s145_dfu_layout.ld"', script)
+                    self.assertIn("LENGTH = __dfu_flag - ", script)
+                self.assertIn("ORIGIN = __dfu_slot0_start", app)
+                self.assertIn("ORIGIN = __dfu_boot_start", boot)
+                self.assertIn("ORIGIN = __dfu_nvm0_start", app)
+                self.assertIn("ORIGIN = __dfu_nvm1_start", app)
+                self.assertIn("ORIGIN = 0x{:08X}".format(ram_start), app)
+                self.assertIn("NVM0  (rw)  : ORIGIN = 0x{:06X}".format(storage), normal)
+                self.assertIn("NVM1  (rw)  : ORIGIN = 0x{:06X}".format(storage + 0x1000), normal)
+
     def test_nrf54_bare_metal_reserved_nvm_is_declared(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
         cases = (
