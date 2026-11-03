@@ -1,7 +1,7 @@
 /* DFU flash layout, LPC1769 (512 KB flash: 16 sectors of 4 KB, then 14 of
  * 32 KB; 32 KB local SRAM, 2 x 16 KB AHB SRAM).
  *
- * Included by the stage 0 boot script (dfu_boot_lpc1769.ld) and the
+ * Included by the stage 0 boot script (gcc_lpc1769_dfu_boot.ld) and the
  * application script (gcc_lpc1767_9_dfu.ld), so both agree on where
  * everything is. Code reads these symbols through DfuLayoutGet; no C define
  * repeats an address. See docs/architecture/dfu.md.

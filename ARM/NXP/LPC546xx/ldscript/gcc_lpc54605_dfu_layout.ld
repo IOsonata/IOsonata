@@ -1,7 +1,7 @@
 /* DFU flash layout, LPC54605J512 (512 KB flash in 32 KB sectors; SRAMX
  * 32 KB, SRAM0 64 KB, SRAM1 to SRAM3 96 KB).
  *
- * Included by the stage 0 boot script (dfu_boot_lpc54605.ld) and the
+ * Included by the stage 0 boot script (gcc_lpc54605_dfu_boot.ld) and the
  * application script (gcc_lpc54605_dfu.ld), so both agree on where
  * everything is. Code reads these symbols through DfuLayoutGet; no C define
  * repeats an address. See docs/architecture/dfu.md.
