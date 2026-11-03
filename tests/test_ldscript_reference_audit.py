@@ -500,6 +500,10 @@ class LinkerReferenceAuditTests(unittest.TestCase):
                 self.assertIn("define symbol __stop_nvm0 = 0x0007F000;", content)
                 self.assertIn("export symbol __start_nvm0;", content)
                 self.assertIn("export symbol __stop_nvm0;", content)
+                self.assertIn("define symbol __start_nvm1 = 0x0007F000;", content)
+                self.assertIn("define symbol __stop_nvm1 = 0x00080000;", content)
+                self.assertIn("export symbol __start_nvm1;", content)
+                self.assertIn("export symbol __stop_nvm1;", content)
 
     def test_malformed_xml_is_reported(self):
         path = self.ioc / ".cproject"
