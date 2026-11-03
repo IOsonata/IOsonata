@@ -99,7 +99,11 @@ class SdkDfuStorageTests(unittest.TestCase):
                 self.assertTrue(builder.get("buildPath", "").endswith("/" + name))
 
     def test_ble_usb_maps_are_distinct(self):
-        self.assertNotEqual(CASES[1][4], CASES[2][4])
+        ble = next(item[4] for item in CASES
+                   if item[0] == "nRF52840" and item[1] == "dfu_ble")
+        usb = next(item[4] for item in CASES
+                   if item[0] == "nRF52840" and item[1] == "dfu_usb")
+        self.assertNotEqual(ble, usb)
 
 
 if __name__ == "__main__":
