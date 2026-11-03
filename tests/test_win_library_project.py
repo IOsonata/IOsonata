@@ -9,6 +9,23 @@ PROJECT = ROOT / "Win" / "lib" / "ioc" / ".cproject"
 
 
 class WinLibraryIncludeTests(unittest.TestCase):
+    def test_win_sources_do_not_require_proprietary_invensense_sdk(self):
+        linked = {
+            link.findtext("name", "")
+            for link in ET.parse(PROJECT.with_name(".project")).findall(".//linkedResources/link")
+        }
+        for source in (
+            "src/motion/mot_invn_icm20948.cpp",
+            "src/sensors/agm_invn_icm20948.cpp",
+        ):
+            self.assertNotIn(source, linked)
+
+    def test_win_hid_header_uses_case_sensitive_mingw_include(self):
+        header = ROOT / "Win" / "include" / "usb_hidhost_impl.h"
+        content = header.read_text()
+        self.assertIn("#include <windows.h>", content)
+        self.assertNotIn('#include "Windows.h"', content)
+
     def test_debug_and_release_include_paths(self):
         root = ET.parse(PROJECT).getroot()
         configs = {}
