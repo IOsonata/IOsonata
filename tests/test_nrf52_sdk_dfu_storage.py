@@ -4,6 +4,7 @@
 from pathlib import Path
 import re
 import unittest
+import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF52"
@@ -19,9 +20,9 @@ CASES = (
     ("nRF52840", "dfu_ble", "gcc_nrf52840_xxaa_sdk_ble_dfu_boot.ld",
      "gcc_nrf52840_xxaa_s140_sdk_ble_dfu.ld", 0xF7000),
     ("nRF52840", "dfu_usb", "gcc_nrf52840_xxaa_sdk_usb_dfu_boot.ld",
-     "gcc_nrf52840_xxaa_mbr.ld", 0xE0000),
+     "gcc_nrf52840_xxaa_s140_sdk_usb_dfu.ld", 0xE0000),
     ("nRF52840", "dfu_usb_open", "gcc_nrf52840_xxaa_sdk_usb_open_dfu_boot.ld",
-     "gcc_nrf52840_xxaa_mbr.ld", 0xE0000),
+     "gcc_nrf52840_xxaa_s140_sdk_usb_dfu.ld", 0xE0000),
 )
 
 
@@ -62,6 +63,40 @@ class SdkDfuStorageTests(unittest.TestCase):
                 for idx in (0, 1):
                     self.assertIn("__start_nvm%d = .;" % idx, application)
                     self.assertIn("__stop_nvm%d = .;" % idx, application)
+
+    def test_representative_eclipse_release_dfu_projects(self):
+        cases = (
+            ("nRF52832", "Release_SDK_BLE_DFU",
+             "gcc_nrf52832_xxaa_s132_sdk_ble_dfu.ld"),
+            ("nRF52840", "Release_SDK_BLE_DFU",
+             "gcc_nrf52840_xxaa_s140_sdk_ble_dfu.ld"),
+            ("nRF52840", "Release_SDK_USB_DFU",
+             "gcc_nrf52840_xxaa_s140_sdk_usb_dfu.ld"),
+        )
+        for part, name, script in cases:
+            project = ROOT / "ARM" / "Nordic" / "nRF52" / part
+            project /= "exemples/BleSecurityDemo/ioc/.cproject"
+            xml = ET.parse(project)
+            configs = xml.findall(".//cconfiguration")
+            matches = [
+                item for item in configs
+                if item.find(".//storageModule[@name='%s']" % name)
+                is not None
+            ]
+            with self.subTest(part=part, name=name):
+                self.assertEqual(len(matches), 1)
+                options = matches[0].findall(".//option")
+                selected = [
+                    value.get("value", "")
+                    for option in options
+                    if "linker.scriptfile" in option.get("superClass", "")
+                    for value in option.findall("listOptionValue")
+                ]
+                self.assertEqual(len(selected), 2)
+                self.assertTrue(all(script in item for item in selected))
+                builder = matches[0].find(".//builder")
+                self.assertIsNotNone(builder)
+                self.assertTrue(builder.get("buildPath", "").endswith("/" + name))
 
     def test_ble_usb_maps_are_distinct(self):
         self.assertNotEqual(CASES[1][4], CASES[2][4])
