@@ -1,11 +1,11 @@
 /*--------------------------------------------------------------------------
-File   : llvm_R9A02G021.ld
+File   : gcc_r9a02g021.ld
 
 Author : Hoang Nguyen Hoan          Aug. 2025
 
 Desc   : Renesas R9A02G021 linker script, normal boot.
          Includes r9a02g021_head.ld for the start of the code flash and the
-         shared llvm_riscv_flash.ld for the standard sections.
+         shared gcc_riscv_flash.ld for the standard sections.
 
 Memory map, R9A02G021 User's Manual R01UH1036EJ0110, 4.1 and 34.1. Every
 part has the same memories:
@@ -38,6 +38,7 @@ SEARCH_DIR("../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/RISCV/ldscript")
+GROUP( -lstdc++ -lgcc -lc)
 
 MEMORY
 {
@@ -57,7 +58,7 @@ __global_pointer$ = ORIGIN(RAM) + 0x800;
 INCLUDE "r9a02g021_head.ld"
 
 /* DTC vector table of dtc_r9a02.cpp, 1 KB aligned. First in IRAM, ahead of
- * the .iram.text of llvm_riscv_flash.ld, the alignment then costs nothing. */
+ * the .iram.text of gcc_riscv_flash.ld, the alignment then costs nothing. */
 SECTIONS
 {
 	.dtc_vector (NOLOAD) : ALIGN(1024)
@@ -66,4 +67,4 @@ SECTIONS
 	} > IRAM
 }
 
-INCLUDE "llvm_riscv_flash.ld"
+INCLUDE "gcc_riscv_flash.ld"

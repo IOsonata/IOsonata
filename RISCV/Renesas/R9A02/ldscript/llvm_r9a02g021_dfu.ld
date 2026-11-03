@@ -1,7 +1,7 @@
 /*--------------------------------------------------------------------------
-Application with DFU, Renesas R9A02G021.
+Application with DFU, Renesas R9A02G021 (LLVM section layout).
 
-Same memories as gcc_R9A02G021.ld with FLASH cut down to slot 0 and RAM
+Same memories as gcc_r9a02g021.ld with FLASH cut down to slot 0 and RAM
 stopped short of the recovery request word, from the layout the stage 0
 boot shares. An image that outgrows slot 0 fails to link.
 
@@ -30,7 +30,7 @@ SEARCH_DIR("../../../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/RISCV/ldscript")
 GROUP( -lstdc++ -lgcc -lc)
 
-INCLUDE "dfu_layout_r9a02g021.ld"
+INCLUDE "gcc_r9a02g021_dfu_layout.ld"
 
 RESET_VECTOR = __dfu_slot0_start;
 
@@ -45,7 +45,7 @@ MEMORY
 __global_pointer$ = ORIGIN(RAM) + 0x800;
 
 /* DTC vector table of dtc_r9a02.cpp, 1 KB aligned. First in IRAM, ahead of
- * the .iram.text of gcc_riscv_flash.ld, the alignment then costs nothing. */
+ * the .iram.text of llvm_riscv_flash.ld, the alignment then costs nothing. */
 SECTIONS
 {
 	.dtc_vector (NOLOAD) : ALIGN(1024)
@@ -54,6 +54,6 @@ SECTIONS
 	} > IRAM
 }
 
-INCLUDE "gcc_riscv_flash.ld"
+INCLUDE "llvm_riscv_flash.ld"
 
 ASSERT(ADDR(.reset) == __dfu_slot0_start, "reset entry not at the start of slot 0")

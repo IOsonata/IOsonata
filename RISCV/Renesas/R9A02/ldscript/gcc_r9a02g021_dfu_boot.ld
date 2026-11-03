@@ -4,7 +4,7 @@ Stage 0 DFU boot, Renesas R9A02G021.
 The core starts at address 0, the start of the boot. The start of the code
 flash, with the reset entry, the CLIC vector table, the trap entries, the
 option-setting memory and OSIS, is laid out by r9a02g021_head.ld, as in
-gcc_R9A02G021.ld. The application image leaves it out.
+gcc_r9a02g021.ld. The application image leaves it out.
 
 RAM: the 12 KB SRAM0 parity area, stopped at the recovery request word.
 IRAM: the 4 KB SRAM0 ECC area.
@@ -27,7 +27,7 @@ SEARCH_DIR("../../../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/RISCV/ldscript")
 GROUP( -lstdc++ -lgcc -lc)
 
-INCLUDE "dfu_layout_r9a02g021.ld"
+INCLUDE "gcc_r9a02g021_dfu_layout.ld"
 
 MEMORY
 {

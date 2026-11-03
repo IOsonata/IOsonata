@@ -1,7 +1,7 @@
 /* DFU flash layout, Renesas R9A02G021.
  *
- * Included by the stage 0 boot script (dfu_boot_r9a02g021.ld) and the
- * application script (gcc_R9A02G021_dfu.ld), so both agree on where
+ * Included by the stage 0 boot script (gcc_r9a02g021_dfu_boot.ld) and the
+ * application script (gcc_r9a02g021_dfu.ld), so both agree on where
  * everything is. Code reads these symbols through DfuLayoutGet; no C define
  * repeats an address. See docs/architecture/dfu.md.
  *
