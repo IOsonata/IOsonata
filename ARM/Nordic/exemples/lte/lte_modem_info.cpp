@@ -8,7 +8,7 @@ the modem firmware version, the IMEI, the hardware version and the
 functional mode with SysLog on the console UART. It does not attach to a
 network.
 
-A plain secure image: link it with nrf9160_xxaa.ld or nrf9120_xxaa.ld, the
+A plain secure image: link it with gcc_nrf9160_xxaa.ld or gcc_nrf9120_xxaa.ld, the
 library and the Modem library, cellular variant:
 
 	sdk-nrfxlib/nrf_modem/lib/cellular/<nrf9160 or nrf9120>/hard-float/libmodem.a
