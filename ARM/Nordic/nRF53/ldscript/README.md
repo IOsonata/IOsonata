@@ -62,10 +62,11 @@ These sizes are **not identical**. However, the IPC owner checks that
 header and rings rather than clearing the entire declared block. Thus a
 smaller peer reservation can work if the actual header and both rings fit
 within `0xEFF0`. The IOsonata host HCI IPC test now has a compile-time check of
-`BT_HCI_IPC_MEMSIZE(8)` against the `0xEFF0` DFU limit. The IPC host
-regression also exercises an owner with a larger declared block and a
-peer with a smaller reservation, checking two-way data transfer and an
-untouched guard area. These tests still require execution. Production
+`BT_HCI_IPC_MEMSIZE(8)` against the `0xEFF0` DFU limit. The IPC host regression exercises an owner with a larger declared block
+and a peer with a smaller reservation. It now also exercises the production
+HCI geometry (8 packet slots per direction, `BT_HCI_IPC_BLKSIZE`), using
+the DFU peer limit of 0xEFF0 and verifying the memory past the rings remains
+unchanged. These tests still require execution. Production
 compatibility additionally requires running the exact HciController and
 Application core images together.
 
