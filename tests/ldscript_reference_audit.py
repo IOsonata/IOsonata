@@ -87,29 +87,41 @@ def check_iar_project(path):
     except ET.ParseError as exc:
         return 0, 0, [f"{path}: invalid XML: {exc}"]
 
-    for option in xml.findall(".//option"):
-        name = option.findtext("name", default="")
-        if name not in ("IlinkIcfFile", "IlinkIcfFileSlave"):
+    for settings in xml.findall(".//settings"):
+        if settings.findtext("name", default="") != "ILINK":
             continue
-        for state in option.findall("state"):
-            reference = (state.text or "").strip().strip('"')
-            if not reference:
+        options = settings.findall(".//option")
+        override = next(
+            (option.findtext("state", default="").strip()
+             for option in options
+             if option.findtext("name", default="") == "IlinkIcfOverride"),
+            "1",
+        )
+        if override == "0":
+            continue
+        for option in options:
+            name = option.findtext("name", default="")
+            if name not in ("IlinkIcfFile", "IlinkIcfFileSlave"):
                 continue
-            if "$" in reference or "%" in reference:
-                skipped += 1
-                continue
-            if Path(reference).is_absolute() or PureWindowsPath(reference).is_absolute():
+            for state in option.findall("state"):
+                reference = (state.text or "").strip().strip('"')
+                if not reference:
+                    continue
+                if "$" in reference or "%" in reference:
+                    skipped += 1
+                    continue
+                if Path(reference).is_absolute() or PureWindowsPath(reference).is_absolute():
+                    checked += 1
+                    errors.append(f"{path}: nonportable absolute IAR linker script: {reference}")
+                    continue
+                normalized = reference.replace(chr(92), "/")
+                if Path(normalized).suffix.lower() != ".icf":
+                    skipped += 1
+                    continue
                 checked += 1
-                errors.append(f"{path}: nonportable absolute IAR linker script: {reference}")
-                continue
-            normalized = reference.replace(chr(92), "/")
-            if Path(normalized).suffix.lower() != ".icf":
-                skipped += 1
-                continue
-            checked += 1
-            target = (path.parent / normalized).resolve()
-            if not target.is_file():
-                errors.append(f"{path}: missing IAR linker script {reference} (resolved to {target})")
+                target = (path.parent / normalized).resolve()
+                if not target.is_file():
+                    errors.append(f"{path}: missing IAR linker script {reference} (resolved to {target})")
     return checked, skipped, errors
 
 
