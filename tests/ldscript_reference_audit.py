@@ -149,18 +149,30 @@ def referenced_scripts(root):
             xml = ET.parse(project)
         except ET.ParseError:
             continue
-        for option in xml.findall(".//option"):
-            if option.findtext("name", default="") not in ("IlinkIcfFile", "IlinkIcfFileSlave"):
+        for settings in xml.findall(".//settings"):
+            if settings.findtext("name", default="") != "ILINK":
                 continue
-            for state in option.findall("state"):
-                value = (state.text or "").strip().strip('"')
-                if not value or "$" in value or "%" in value:
+            options = settings.findall(".//option")
+            override = next(
+                (option.findtext("state", default="").strip()
+                 for option in options
+                 if option.findtext("name", default="") == "IlinkIcfOverride"),
+                "1",
+            )
+            if override == "0":
+                continue
+            for option in options:
+                if option.findtext("name", default="") not in ("IlinkIcfFile", "IlinkIcfFileSlave"):
                     continue
-                if Path(value).is_absolute() or PureWindowsPath(value).is_absolute():
-                    continue
-                normalized = value.replace(chr(92), "/")
-                if Path(normalized).suffix.lower() == ".icf":
-                    referenced.add((project.parent / normalized).resolve())
+                for state in option.findall("state"):
+                    value = (state.text or "").strip().strip('"')
+                    if not value or "$" in value or "%" in value:
+                        continue
+                    if Path(value).is_absolute() or PureWindowsPath(value).is_absolute():
+                        continue
+                    normalized = value.replace(chr(92), "/")
+                    if Path(normalized).suffix.lower() == ".icf":
+                        referenced.add((project.parent / normalized).resolve())
     return referenced
 
 
