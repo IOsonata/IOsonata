@@ -31,7 +31,8 @@ flags = ['-mcpu=cortex-m0plus', '-mthumb', '-DRE01_1500KB',
          '-DuECC_SUPPORTS_secp160r1=0', '-DuECC_SUPPORTS_secp192r1=0',
          '-DuECC_SUPPORTS_secp224r1=0', '-DuECC_SUPPORTS_secp256k1=0',
          '-DuECC_SUPPORT_COMPRESSED_POINT=0', '-DuECC_OPTIMIZATION_LEVEL=2',
-         '-DuECC_PLATFORM=0', '-DuECC_WORD_SIZE=4', '-Os', '-g',
+         '-DuECC_PLATFORM=0', '-DuECC_WORD_SIZE=4', '-DuECC_ENABLE_VLI_API=1',
+         '-Os', '-g',
          '-ffunction-sections', '-fdata-sections', '-Wall', '-Wextra',
          '-Wno-unused-parameter', '-Wno-missing-field-initializers']
 flags += ['-I' + str(root / p) for p in includes]
