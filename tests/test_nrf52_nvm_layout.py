@@ -4,6 +4,7 @@
 from pathlib import Path
 import re
 import unittest
+import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,6 +93,16 @@ class Nrf52NvmLayoutTests(unittest.TestCase):
                 self.assertIn("__stop_nvm0 = .;", content)
                 self.assertIn("__start_nvm1 = .;", content)
                 self.assertIn("__stop_nvm1 = .;", content)
+
+    def test_small_s112_dfu_boot_is_release_only(self):
+        for part in ("nRF52805", "nRF52810"):
+            project = (ROOT / "ARM" / "Nordic" / "nRF52" / part /
+                       "exemples" / "DfuBoot" / "ioc" / ".cproject")
+            xml = ET.parse(project)
+            configs = xml.findall(".//cconfiguration")
+            names = [config.find(".//storageModule").get("name") for config in configs]
+            with self.subTest(part=part):
+                self.assertEqual(names, ["Release"])
 
     def test_small_s112_dfu_releases_reserve_pds_and_user_data(self):
         for part in ("nrf52805_xxaa", "nrf52810_xxaa"):
