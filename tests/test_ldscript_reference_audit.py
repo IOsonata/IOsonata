@@ -137,6 +137,15 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         child.write_text("define memory mem with size = 4G;\n", encoding="utf-8")
         self.assertIn(child.resolve(), audit.included_scripts([primary, child]))
 
+    def test_ncs_metadata_without_linker_settings(self):
+        path = self.ioc / ".cproject"
+        path.write_text(
+            '<cproject><cconfiguration id="org.eclipse.cdt.core.default.config"/>'
+            '</cproject>',
+            encoding="utf-8",
+        )
+        self.assertEqual(audit.check_project(path), (0, 0, []))
+
     def test_malformed_xml_is_reported(self):
         path = self.ioc / ".cproject"
         path.write_text("<cproject>", encoding="utf-8")
