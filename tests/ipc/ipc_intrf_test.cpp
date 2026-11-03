@@ -337,7 +337,7 @@ void TestUnequalReservation(void)
 
 void TestHciDfuIpcCapacity(void)
 {
-	printf("nRF5340 HCI IPC DFU reservation\\n");
+	printf("nRF5340 HCI IPC DFU reservation\n");
 	PortReset();
 
 	// Match the production network controller's eight packet slots and
