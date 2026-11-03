@@ -70,7 +70,7 @@ with the Nordic SDK `dfu_ble` or `dfu_usb` bootloaders.
 | nRF52832 `dfu_ble` (S132) | `0x77000` | `0x74000..0x76FFF` | `gcc_nrf52832_xxaa_s132_sdk_ble_dfu.ld` |
 | nRF52832 `dfu_uart`, `dfu_uart_open` (S132) | `0x77000` | `0x74000..0x76FFF` | `gcc_nrf52832_xxaa_s132_sdk_ble_dfu.ld` (same app-memory layout) |
 | nRF52840 `dfu_ble` (S140) | `0xF7000` | `0xF4000..0xF6FFF` | `gcc_nrf52840_xxaa_s140_sdk_ble_dfu.ld` |
-| nRF52840 `dfu_usb` or `dfu_usb_open` | `0xE0000` | `0xDD000..0xDFFFF` | `gcc_nrf52840_xxaa_mbr.ld` (no SoftDevice) |
+| nRF52840 `dfu_usb` or `dfu_usb_open` | `0xE0000` | `0xDD000..0xDFFFF` | `gcc_nrf52840_xxaa_s140_sdk_usb_dfu.ld` (S140); `gcc_nrf52840_xxaa_mbr.ld` (no SoftDevice) |
 
 For each protected range, NVM0 occupies the first 8 KB and NVM1 occupies
 its final 4 KB. In particular, the nRF52840 USB DFU map must **not** be
@@ -82,6 +82,15 @@ application scripts are selectable variants for firmware intended to run
 with Nordic's SDK DFU bootloaders; do not change an unrelated example
 solely because it uses a SoftDevice. The existing BleOta projects use
 IOsonata DFU and deliberately select the separate `_dfu.ld` scripts.
+
+### Managed SDK DFU application builds
+
+`BleSecurityDemo` provides explicit `Release_SDK_BLE_DFU` configurations
+for nRF52832/S132 and nRF52840/S140, plus
+`Release_SDK_USB_DFU` on nRF52840/S140. The standard `Release`
+configuration remains a non-DFU build. The SDK DFU configuration
+must match the *actual installed* bootloader and SoftDevice; changing
+the application linker script alone does not install a bootloader.
 
 ### Storage migration on existing nRF52 devices
 
