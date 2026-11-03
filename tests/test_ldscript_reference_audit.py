@@ -126,7 +126,7 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         self.assertEqual(audit.check_iar_project(path), (1, 0, []))
 
     def test_iar_projdirpath_existing_icf(self):
-        reference = "$PROJ_DIR$\\\\..\\\\..\\\\..\\\\..\\\\ldscript\\\\gcc_part.icf"
+        reference = "$PROJ_DIR$\\..\\..\\..\\..\\ldscript\\gcc_part.icf"
         script = self.linkers / "gcc_part.icf"
         script.write_text("define memory mem with size = 4G;\\n", encoding="utf-8")
         path = self.write_iar_project(reference)
