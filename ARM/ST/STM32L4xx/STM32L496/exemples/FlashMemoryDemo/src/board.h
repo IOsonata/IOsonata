@@ -79,6 +79,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // The legacy Flash driver drives QUADSPI with QuadSPISendCmd
 #define NVM_MODE			0
 
+#define FLASH_SECTOR_SIZE		FLASH_MX25R6435F_SECTSIZE
+
 // MX25R6435F with the single line read and page program commands: the quad
 // commands need the QE bit of the flash status register, which this demo
 // does not set

@@ -49,4 +49,19 @@ SOFTWARE.
 	 IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
+// EK-RA4M1: the two keys are external active-low switches to GND.
+// P100 and P101 are exposed on J1-1 and J3-8 respectively.
+// The USB keyboard demo enables their input pull-ups.
+#define HID_BUTTON_PORT		1
+#define HID_BUTTON_PIN			0
+#define HID_BUTTON_PINOP		IOPINOP_GPIO
+#define HID_CAPS_BUTTON_PORT	1
+#define HID_CAPS_BUTTON_PIN		1
+#define HID_CAPS_BUTTON_PINOP	IOPINOP_GPIO
+
+// Use an external active-low LED at P111: VDD -- resistor -- LED -- P111.
+// The shared keyboard demo drives the Caps Lock indicator low when on.
+#define HID_LED_PORT			1
+#define HID_LED_PIN			11
+#define HID_LED_PINOP			IOPINOP_GPIO
 #endif
