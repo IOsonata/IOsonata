@@ -12,7 +12,7 @@
     "${iosonata}/ARM/ST/STM32WBAxx/include",
     "${iosonata}/ARM/ST/STM32WBAxx/STM32WBA65/include"
   ],
-  "linker_script": "${iosonata}/ARM/ST/STM32WBAxx/STM32WBA65/ldscript/gcc_stm32wba65_i.ld",
+  "linker_script": "${iosonata}/ARM/ST/STM32WBAxx/ldscript/gcc_stm32wba65_i.ld",
   "lib_path": "${iosonata}/ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/${config}",
   "lib": "IOsonata_STM32WBA65"
 }
