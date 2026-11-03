@@ -385,13 +385,13 @@ class LinkerReferenceAuditTests(unittest.TestCase):
     def test_nrf54_bare_metal_reserved_nvm_is_declared(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF54" / "ldscript"
         cases = (
-            ("gcc_nrf54l15_xxaa.ld", 0x180000),
-            ("gcc_nrf54lm20a_xxaa.ld", 0x200000),
-            ("gcc_nrf54l05_xxaa.ld", 0x80000),
-            ("gcc_nrf54l10_xxaa.ld", 0x100000),
-            ("gcc_nrf54lm20a_enga_xxaa.ld", 0x200000),
-            ("gcc_nrf54ls05b_enga_xxaa.ld", 0x80000),
-            ("gcc_nrf54lv10a_enga_xxaa.ld", 0x100000),
+            ("gcc_nrf54l15_xxaa.ld", 0x17D000),
+            ("gcc_nrf54lm20a_xxaa.ld", 0x1FD000),
+            ("gcc_nrf54l05_xxaa.ld", 0x7D000),
+            ("gcc_nrf54l10_xxaa.ld", 0xFD000),
+            ("gcc_nrf54lm20a_enga_xxaa.ld", 0x1FD000),
+            ("gcc_nrf54ls05b_enga_xxaa.ld", 0x7F000),
+            ("gcc_nrf54lv10a_enga_xxaa.ld", 0xFD000),
         )
         for filename, flash_end in cases:
             with self.subTest(filename=filename):
