@@ -824,7 +824,7 @@ function Install-IOcomposer {
 			Accept = 'application/vnd.github+json'
 			'User-Agent' = 'iocomposer-installer'
 		}
-		$ids = @('org.iosonata.embedcdt.templates.wizard', 'com.iocomposer.embedcdt.ai', 'com.iocomposer.embedcdt.ui', 'com.iocomposer.embedcdt.bletest')
+		$ids = @('org.iosonata.embedcdt.templates.wizard', 'com.iocomposer.embedcdt.ai', 'com.iocomposer.embedcdt.ui')
 		foreach ($id in $ids) {
 			$url = $null
 			if ($id -eq 'com.iocomposer.embedcdt.ai') { $url = $env:IOCOMPOSER_AI_PLUGIN_URL }
@@ -851,7 +851,7 @@ function Install-IOcomposer {
 			& $SEVENZIP_EXE t $jar | Out-Null
 			if ($LASTEXITCODE -ne 0) { throw "Invalid IOcomposer plugin archive: $id" }
 		}
-		# Stage all four required plugins before replacing any installed plugin.
+		# Stage all three required plugins before replacing any installed plugin.
 		$dropins = Join-Path $Runtime 'dropins'
 		New-Item $dropins -ItemType Directory -Force | Out-Null
 		foreach ($id in $ids) {
@@ -892,7 +892,7 @@ function Install-IOcomposer {
 				Copy-Item $splash $_.FullName -Force
 			}
 		} catch { Write-Warning "IOcomposer splash installation failed: $_" }
-		Write-Host "IOcomposer wizard, AI, UI and BLE test plugins installed at $Runtime"
+		Write-Host "IOcomposer wizard, AI and UI plugins installed at $Runtime"
 	} finally {
 		Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 	}
@@ -988,7 +988,7 @@ if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
 	Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
 }
 
-# Wizard is installed together with the three IOcomposer plugins.
+# Wizard is installed together with the AI and UI plugins.
 Install-IOcomposer -Runtime $ECLIPSE_DIR
 
 # --- Makefile (aligned with macOS/Linux) ---
