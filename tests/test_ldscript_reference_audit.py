@@ -25,7 +25,7 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         self.linkers.mkdir()
         self.script = self.linkers / "gcc_part.ld"
         self.script.write_text("SECTIONS { .text : { *(.text*) } }\n", encoding="utf-8")
-        self.reference = "../../../../ldscript/gcc_part.ld"
+        self.reference = "../../../../../ldscript/gcc_part.ld"
 
     def write_project(self, reference=None):
         if reference is None:
@@ -50,7 +50,7 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         self.assertEqual((checked, skipped, errors), (1, 0, []))
 
     def test_missing_script_is_reported(self):
-        path = self.write_project("../../../../ldscript/not_found.ld")
+        path = self.write_project("../../../../../ldscript/not_found.ld")
         checked, skipped, errors = audit.check_project(path)
         self.assertEqual((checked, skipped), (1, 0))
         self.assertEqual(len(errors), 1)
