@@ -34,8 +34,9 @@ With **no DFU**, there is no MBR reservation and NVM occupies the last
 | nRF52832 | 0x7D000 | 0x7D000..0x7EFFF | 0x7F000..0x7FFFF |
 | nRF52840 | 0xFD000 | 0xFD000..0xFEFFF | 0xFF000..0xFFFFF |
 
-With **MBR + Nordic DFU**, the same NVM regions move directly below the
-bootloader without overlapping the two bootloader metadata pages:
+For the **standard MBR + SDK bootloader origins used by the generic MBR
+scripts** (nRF52832 S132 BLE DFU and nRF52840 USB DFU), the same NVM
+regions move directly below the bootloader without overlapping metadata:
 
 | Device | App origin | App FLASH end (exclusive) | NVM0 | NVM1 | DFU bootloader | MBR parameters | DFU settings |
 | --- | --- | --- | --- | --- | --- | --- | --- |
