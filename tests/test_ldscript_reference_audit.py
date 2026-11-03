@@ -376,7 +376,7 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         cases = (
             ("nrf54l15_xxaa", 0x158800, 0x20004900, 0x2003FFF0),
             ("nrf54lm20a_xxaa", 0x1D8800, 0x20004780, 0x2007FCB0),
-            ("nrf54lm20b_xxaa", 0x0D8800, 0x20004780, 0x2007FCB0),
+            ("nrf54lm20b_xxaa", 0x1D8800, 0x20004780, 0x2007FCB0),
         )
         for target, storage, ram_start, recovery_flag in cases:
             with self.subTest(target=target):
