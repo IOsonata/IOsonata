@@ -11,7 +11,7 @@
     "${iosonata}/ARM/Renesas/include",
     "${iosonata}/ARM/Renesas/RA4/RA4M1/include"
   ],
-  "linker_script": "${iosonata}/ARM/Renesas/RA4M1/ldscript/gcc_ra4m1.ld",
-  "lib_path": "${iosonata}/ARM/Renesas/RA4M1/lib/ioc/${config}",
+  "linker_script": "${iosonata}/ARM/Renesas/RA4/RA4M1/ldscript/gcc_ra4m1.ld",
+  "lib_path": "${iosonata}/ARM/Renesas/RA4/RA4M1/lib/ioc/${config}",
   "lib": "IOsonata_RA4M1"
 }
