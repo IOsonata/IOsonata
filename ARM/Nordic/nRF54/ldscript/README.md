@@ -15,6 +15,7 @@ and 508 KB for nRF54LS05B. NVM0 is now reserved *inside* physical RRAM.
 | --- | --- | --- | --- |
 | `gcc_nrf54l15_xxaa.ld` | 0x000000–0x179FFF | 0x17A000–0x17CFFF (12 KB) | 0x17D000 |
 | `gcc_nrf54lm20a_xxaa.ld` | 0x000000–0x1F9FFF | 0x1FA000–0x1FCFFF (12 KB) | 0x1FD000 |
+| `gcc_nrf54lm20b_xxaa.ld` | 0x000000–0x1F9FFF | 0x1FA000–0x1FCFFF (12 KB) | 0x1FD000 |
 | `gcc_nrf54l05_xxaa.ld` | 0x000000–0x079FFF | 0x07A000–0x07CFFF (12 KB) | 0x07D000 |
 | `gcc_nrf54l10_xxaa.ld` | 0x000000–0x0F9FFF | 0x0FA000–0x0FCFFF (12 KB) | 0x0FD000 |
 | `gcc_nrf54lm20a_enga_xxaa.ld` | 0x000000–0x1F9FFF | 0x1FA000–0x1FCFFF (12 KB) | 0x1FD000 |
@@ -28,6 +29,18 @@ section. FLASH lengths were reduced to reserve real RRAM for NVM0;
 RAM regions were not changed. Rebuild affected configurations and
 verify the linker map. This change moves persistent storage; preserve
 or migrate existing on-device contents before firmware updates.
+
+Nordic documents 2036 KB of physical RRAM for both nRF54LM20A and
+nRF54LM20B (FICR INFO.RRAM K2036). The LM20B bare-metal script now
+uses this capacity and reserves 12 KB of NVM0 at the physical end.
+Existing LM20B bare-metal images had no linker NVM0 reservation; this
+changes the available linker FLASH range and requires rebuild validation.
+
+**Separate follow-up:** The LM20B S145 and DFU scripts retain their
+existing approximately 1012 KB partitions, including fixed storage
+addresses. Those partitions are smaller than the documented physical
+capacity. They must be audited against the actual S145 memory requirements
+before changing them; this bare-metal update does not move their storage.
 
 The S145 scripts are **different layouts**. For example,
 `gcc_nrf54l15_xxaa_s145.ld` reserves two distinct 4 KB NVM regions,
