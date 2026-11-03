@@ -171,6 +171,33 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         )
         self.assertEqual(audit.check_iar_project(path), (0, 0, []))
 
+    def test_nrf5340_application_dfu_preserves_nvm_and_ipc(self):
+        family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF53" / "ldscript"
+        layout = (family / "gcc_nrf5340_xxaa_application_dfu_layout.ld").read_text(encoding="utf-8")
+        script = (family / "gcc_nrf5340_xxaa_application_dfu.ld").read_text(encoding="utf-8")
+        symbols = {}
+        for line in layout.splitlines():
+            line = line.split("/*", 1)[0].strip()
+            if "=" not in line or not line.endswith(";"):
+                continue
+            name, value = line[:-1].split("=", 1)
+            name = name.strip()
+            value = value.strip()
+            if value.startswith("0x"):
+                symbols[name] = int(value, 16)
+
+        self.assertEqual(symbols["__dfu_slot0_end"], 0xFD000)
+        self.assertEqual(symbols["__dfu_nvm0_start"], 0xFD000)
+        self.assertEqual(symbols["__dfu_nvm0_end"], 0x100000)
+        self.assertEqual(symbols["__dfu_flag"], 0x2007EFF0)
+        self.assertIn("NVM0 (rw)", script)
+        self.assertIn("__start_nvm0 = .;", script)
+        self.assertIn("__stop_nvm0 = .;", script)
+        self.assertIn("RAM1 (rwx)\t: ORIGIN = 0x20040000, LENGTH = 0x30000", script)
+        self.assertIn("IPC0 (rw)\t: ORIGIN = 0x20070000, LENGTH = __dfu_flag - 0x20070000", script)
+        self.assertIn("__start_ipc0 = .;", script)
+        self.assertIn("__stop_ipc0 = .;", script)
+
     def test_nrf52840_s140c_flash_does_not_overlap_storage(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF52" / "ldscript"
         content = (family / "gcc_nrf52840_xxaa_s140c.ld").read_text(encoding="utf-8")
