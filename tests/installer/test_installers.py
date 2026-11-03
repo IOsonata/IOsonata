@@ -170,11 +170,10 @@ esac
 					self.assertLess(source.index('capture_instances snapshot'), source.index('Initializing signed IOcomposer'))
 					self.assertLess(source.index('Initializing signed IOcomposer'), source.index('Found Eclipse settings: $INSTANCE_CFG'))
 
-	def test_iocomposer_plugin_distribution_requires_complete_set(self):
+	def test_iocomposer_release_plugin_distribution_requires_complete_set(self):
 		plugins = ('org.iosonata.embedcdt.templates.wizard',
 			'com.iocomposer.embedcdt.ai',
-			'com.iocomposer.embedcdt.ui',
-			'com.iocomposer.embedcdt.bletest')
+			'com.iocomposer.embedcdt.ui')
 		for platform in ['macos', 'linux', 'win']:
 			path = INSTALLER / ('install_iocdevtools_win.ps1' if platform == 'win'
 				else f'install_iocdevtools_{platform}.sh')
@@ -183,11 +182,12 @@ esac
 				for plugin in plugins:
 					self.assertIn(plugin, source)
 				self.assertIn('0.1.7', source)
+				self.assertNotIn('com.iocomposer.embedcdt.bletest', source)
 				self.assertNotIn('install_iosonata_plugin()', source)
 				self.assertNotIn('function Install-Plugin {', source)
 				if platform == 'win':
 					self.assertLess(source.index('foreach ($id in $ids)'),
-						source.index('# Stage all four required plugins'))
+						source.index('# Stage all three required plugins'))
 				else:
 					self.assertIn('unzip -tq "$stage/$plugin.jar"', source)
 					self.assertIn('No published IOcomposer plugin found:', source)
