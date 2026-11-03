@@ -6,8 +6,9 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "ARM" / "Nordic" / "nRF52" / "nRF52840"
-EXAMPLES = ("UsbCdcAcmDemo", "UsbHidGeneric", "usbd_hid_composite",
-            "cli", "usb_cdc_acm", "usbd_hid_generic")
+EXAMPLES = ("UsbCdcAcmDemo", "UsbHidGeneric", "UsbHidKeyboard",
+            "UartCliDemo", "usbd_hid_composite", "cli",
+            "usb_cdc_acm", "usbd_hid_generic")
 
 
 def linked_sources(path):
@@ -35,7 +36,7 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
             project = TARGET / "exemples" / name / "ioc" / ".project"
             linked = linked_sources(project)
             with self.subTest(example=name):
-                self.assertIn("main.cpp" if name in ("UsbCdcAcmDemo", "UsbHidGeneric")
+                self.assertIn("main.cpp" if name in ("UsbCdcAcmDemo", "UsbHidGeneric", "UsbHidKeyboard")
                               else "main.c", linked.values())
                 overlap = sorted(set(linked) & set(library))
                 self.assertFalse(overlap, overlap)
