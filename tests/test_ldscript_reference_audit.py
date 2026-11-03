@@ -2,6 +2,7 @@
 """Offline regression tests for Eclipse linker-script reference validation."""
 
 import importlib.util
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -169,6 +170,26 @@ class LinkerReferenceAuditTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.assertEqual(audit.check_iar_project(path), (0, 0, []))
+
+    def test_nrf52840_s140c_flash_does_not_overlap_storage(self):
+        family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF52" / "ldscript"
+        content = (family / "gcc_nrf52840_xxaa_s140c.ld").read_text(encoding="utf-8")
+        regions = {}
+        pattern = re.compile(
+            r"^\\s*(FLASH|NVM0|BOOTLOADER_SETTINGS)\\s*\\([^)]*\\)\\s*:"
+            r"\\s*ORIGIN\\s*=\\s*(0x[0-9a-fA-F]+)\\s*,\\s*"
+            r"LENGTH\\s*=\\s*(0x[0-9a-fA-F]+)",
+            re.MULTILINE,
+        )
+        for name, origin, length in pattern.findall(content):
+            regions[name] = (int(origin, 16), int(length, 16))
+        self.assertEqual(regions["FLASH"], (0x27000, 0xD6000))
+        self.assertEqual(regions["NVM0"], (0xFD000, 0x2000))
+        self.assertEqual(regions["BOOTLOADER_SETTINGS"], (0xFF000, 0x1000))
+        self.assertEqual(regions["FLASH"][0] + regions["FLASH"][1], regions["NVM0"][0])
+        self.assertEqual(regions["NVM0"][0] + regions["NVM0"][1], regions["BOOTLOADER_SETTINGS"][0])
+        self.assertIn("__start_nvm0 = .;", content)
+        self.assertIn("__stop_nvm0 = .;", content)
 
     def test_nrf52832_iar_nvm_reservation_matches_gcc(self):
         family = Path(__file__).resolve().parents[1] / "ARM" / "Nordic" / "nRF52" / "ldscript"
