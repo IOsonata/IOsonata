@@ -104,7 +104,7 @@ for name in examples:
         label = name if devno is None else name + '_dev' + str(devno)
         options = defines + (['TIMER_DEMO_DEVNO=' + str(devno)] if devno is not None else [])
         obj = compile_source(source, label, board, options)
-        for script in ('gcc_re01_1500kb.ld', 'RE01_1500KB.ld'):
+        for script in ('gcc_re01_1500kb.ld',):
             elf = out / (label + '_' + Path(script).stem + '.elf')
             run([args.tool_prefix + 'g++', '-mcpu=cortex-m0plus', '-mthumb',
                  '--specs=nano.specs', '--specs=nosys.specs', '-Wl,--gc-sections',
