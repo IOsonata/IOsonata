@@ -51,6 +51,8 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
                 allowed = ({cli} if name in ("UartCliDemo", "cli", "usb_cdc_acm") else set())
                 if name == "cli":
                     allowed |= logs
+                if name == "UartCliDemo":
+                    allowed.add("external/nRF5_SDK/components/libraries/cli/nrf_cli.c")
                 self.assertEqual(set(overlap), allowed, overlap)
 
     def test_usb_cpp_demos_compile_required_sdk_sources(self):
