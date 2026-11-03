@@ -296,13 +296,19 @@ install_iocomposer() (
 		# Reject HTML/error responses before replacing installed plugins.
 		unzip -tq "$stage/$plugin.jar" >/dev/null
 	done
-	# Both required plugins have downloaded successfully before either is replaced.
+	# All three plugins are verified before the installation changes.
 	sudo mkdir -p "$runtime/dropins"
 	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
 		sudo cp "$stage/$plugin.jar" "$runtime/dropins/$plugin.jar"
 		sudo chmod 644 "$runtime/dropins/$plugin.jar"
 		sudo find "$runtime/dropins" -maxdepth 1 -type f -name "${plugin}_*.jar" -delete
 	done
+
+	# The IDE's built-in updater runs as the installing user, not root.
+	# Keep write access limited to that user (never make dropins world-writable).
+	local install_user="${SUDO_USER:-$(id -un)}"
+	sudo chown "$install_user" "$runtime/dropins"
+	sudo chmod 755 "$runtime/dropins"
 
 	# Keep SDK path preferences and one customization hook in the runtime ini.
 	"$PYTHON3" - "$runtime" "$stage" <<'PY'
