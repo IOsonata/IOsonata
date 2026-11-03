@@ -199,5 +199,60 @@
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cli_utils_cmds.c</locationURI>
 		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_nvmc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_nvmc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/fds/fds.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fds/fds.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/log/src/nrf_log_frontend.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/log/src/nrf_log_frontend.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/log/src/nrf_log_backend_flash.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/log/src/nrf_log_backend_flash.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/log/src/nrf_log_str_formatter.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/app_usbd.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/app_usbd.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/app_usbd_core.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/app_usbd_core.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/app_usbd_string_desc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/modules/nrfx/drivers/src/nrfx_usbd.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_usbd.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
