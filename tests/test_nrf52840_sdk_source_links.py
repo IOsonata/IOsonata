@@ -65,12 +65,6 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
                 ignored = {item for group in exclusions for item in group if item}
                 with self.subTest(example=name, configuration=title):
                     self.assertTrue(set(required).issubset(linked.values()))
-                    for src in linked:
-                        if not src.startswith("external/"):
-                            continue
-                        source_name = next(
-                            (k for k, v in linked.items() if k == src), None)
-                        self.assertIsNotNone(source_name)
                     # Resolve workspace source names through the linked
                     # Eclipse resources. An excluded parent folder disables
                     # every C source beneath it.
