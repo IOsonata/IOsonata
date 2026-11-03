@@ -41,6 +41,19 @@ class LinkerFollowupTests(unittest.TestCase):
                 self.assertNotIn("0x000D8800", b)
                 self.assertIn("gcc_nrf54lm20b_xxaa_s145_dfu_boot.ld", b)
 
+    def test_nrf5340_readmes_name_shared_family_linker(self):
+        script = ROOT / "ARM" / "Nordic" / "nRF53" / "ldscript" / "gcc_nrf5340_xxaa_application.ld"
+        self.assertTrue(script.is_file())
+        for readme_path in (
+            ROOT / "ARM" / "Nordic" / "nRF53" / "nRF5340_App"
+                / "exemples" / "BleSecurityDemo" / "README.md",
+            ROOT / "exemples" / "ipc" / "README.md",
+        ):
+            with self.subTest(readme=readme_path):
+                readme = readme_path.read_text()
+                self.assertIn("`gcc_nrf5340_xxaa_application.ld`", readme)
+                self.assertNotIn("`nrf5340_xxaa_application.ld`", readme)
+
     def test_nrf91_example_readmes_point_to_existing_scripts(self):
         examples = (
             ("nRF9160", "CoapDemo"), ("nRF9160", "MqttDemo"),

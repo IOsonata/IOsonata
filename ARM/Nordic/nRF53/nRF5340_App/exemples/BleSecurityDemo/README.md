@@ -14,7 +14,7 @@ flow control.
 | Audio DK | P1.05 | P1.04 |
 | Standard DK | P0.20 | P0.22 |
 
-Both Debug and Release use `nrf5340_xxaa_application.ld`. It reserves
+Both Debug and Release use `gcc_nrf5340_xxaa_application.ld`. It reserves
 `NVM0` at `0x000FD000`, size `0x3000`, for Bluetooth bonds and local
 identity records. Code flash ends before this region. The store is a
 `NOLOAD` section; the image does not contain initial bond data.
