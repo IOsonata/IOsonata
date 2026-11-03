@@ -1,4 +1,4 @@
-/* Stage 0 DFU boot, STM32L476xG, 1 MB flash, 96 KB SRAM1.
+/* Stage 0 DFU boot, STM32L496xG, 1 MB flash, 320 KB SRAM.
  *
  * The part starts from the start of main flash (BOOT0 low), aliased at 0,
  * so the boot sits there. Nothing else sits at a fixed flash address: the
@@ -20,7 +20,7 @@ SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP( -lstdc++ -lgcc -lc)
 
-INCLUDE "dfu_layout_stm32l476.ld"
+INCLUDE "gcc_stm32l496_dfu_layout.ld"
 
 MEMORY
 {
