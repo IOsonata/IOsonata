@@ -46,7 +46,8 @@ def check_project(path):
         settings = config.find(".//configuration")
         name = settings.get("name") if settings is not None else None
         if not name:
-            errors.append(f"{path}: configuration without build-directory name")
+            if list(script_values(config)):
+                errors.append(f"{path}: linker script configured without build-directory name")
             continue
 
         workdir = path.parent / name
