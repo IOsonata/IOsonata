@@ -92,6 +92,11 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
                             (name, title, relative),
                         )
 
+    def test_usb_cdc_cpp_backend_is_linked(self):
+        project = TARGET / "exemples" / "UsbCdcAcmDemo" / "ioc" / ".project"
+        linked = linked_sources(project)
+        self.assertIn("usbd_cdc_intrf.cpp", linked.values())
+
     def test_nordic_usb_class_sources_remain_linked(self):
         for example, required in (
             ("usbd_hid_composite", ("app_usbd.c", "app_usbd_core.c",
