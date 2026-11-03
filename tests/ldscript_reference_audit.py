@@ -194,9 +194,19 @@ def included_scripts(scripts):
             name = next(group for group in match.groups() if group is not None)
             if "$" in name or "%" in name:
                 continue
-            dependency = (script.parent / name.replace(chr(92), "/")).resolve()
+            normalized = name.replace(chr(92), "/")
+            dependency = (script.parent / normalized).resolve()
             if dependency.is_file():
                 dependencies.add(dependency)
+                continue
+            # Shared fragments live in architecture-level ldscript directories.
+            # Search only ancestor ldscript directories; never guess a sibling
+            # MCU's similarly named memory layout.
+            for parent in script.parents:
+                shared = (parent / "ldscript" / normalized).resolve()
+                if shared.is_file():
+                    dependencies.add(shared)
+                    break
     return dependencies
 
 
