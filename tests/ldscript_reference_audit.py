@@ -56,8 +56,9 @@ def check_project(path):
                 skipped += 1
                 continue
             script = Path(reference)
-            if script.is_absolute():
-                skipped += 1
+            if script.is_absolute() or (len(reference) > 2 and reference[1] == ":" and reference[2] in ("\\\\", "/")):
+                checked += 1
+                errors.append(f"{path} [{name}]: nonportable absolute linker script: {reference}")
                 continue
             if script.suffix.lower() not in (".ld", ".icf", ".sct"):
                 skipped += 1
