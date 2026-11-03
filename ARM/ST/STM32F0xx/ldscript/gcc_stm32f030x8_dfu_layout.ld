@@ -12,11 +12,16 @@
  * The boot is 48 KB on larger parts; here it gets the fewest pages it fits
  * in. Built at -Os with arm-none-eabi-gcc 13.2 it is 35312 bytes of flash.
  *
- * The 4 KB-aligned slot start prevents ELF PT_LOAD headers/segments from\n * extending backward into the recovery record with default GNU ld alignment.\n * Release application size must be rechecked against the smaller 24 KB slot.\n *\n * Wired only: no slot 1. The boot writes slot 0 and the record directly
+ * The 4 KB-aligned slot start prevents ELF PT_LOAD headers/segments from
+ * extending backward into the recovery record with default GNU ld alignment.
+ * The Release application trial links within the smaller 24 KB slot.
+ *
+ * Wired only: no slot 1. The boot writes slot 0 and the record directly
  * over the UART.
  *
  * Record: one 16 byte state unit, the record information, up to 0x800 of
- * image header and 0x400 of TLVs, 0xC14 bytes, so five 1 KB pages are reserved to align the application to 4 KB.
+ * image header and 0x400 of TLVs, 0xC14 bytes. Five 1 KB pages are
+ * reserved to align the application to 4 KB.
  *
  * Cortex-M0 has no VTOR. The boot copies the application vector table, 48
  * words, to the start of SRAM and maps SRAM at 0; the application script
