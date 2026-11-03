@@ -3,11 +3,11 @@
  * nRF54LM20B with SoftDevice S145
  *
  * RRAM layout:
- *   0x000000 - 0x0D87FF  slot0_partition (app) -- 866K
- *   0x0D8800 - 0x0DA7FF  storage_partition     -- 8K
- *     0x0D8800 - 0x0D97FF  peer_manager_partition -- 4K
- *     0x0D9800 - 0x0DA7FF  storage0_partition     -- 4K
- *   0x0DA800 - 0x0FCBFF  softdevice_partition  -- 137K
+ *   0x000000 - 0x1D87FF  slot0_partition (app) -- 1890K
+ *   0x1D8800 - 0x1DA7FF  storage_partition     -- 8K
+ *     0x1D8800 - 0x1D97FF  peer_manager_partition -- 4K
+ *     0x1D9800 - 0x1DA7FF  storage0_partition     -- 4K
+ *   0x1DA800 - 0x1FCBFF  softdevice_partition  -- 137K
  *
  * SRAM layout (512K at 0x20000000):
  *   0x20000000 - 0x2000477F  softdevice reserved (static + dynamic)
@@ -28,13 +28,13 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x0D8800  /* slot0 only, stops at the store */
+	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x1D8800  /* slot0 only, stops at the store */
 	/* The two storage partitions above, named so the linker owns the
 	   layout: FLASH stops short of them, so an image that grows into a
 	   store fails to link. NvmRegionAddr reads the sections below, so
 	   nothing states the addresses twice. 1 KB RRAM sectors. */
-	NVM0  (rw)  : ORIGIN = 0x0D8800, LENGTH = 0x1000    /* peer manager */
-	NVM1  (rw)  : ORIGIN = 0x0D9800, LENGTH = 0x1000    /* application */
+	NVM0  (rw)  : ORIGIN = 0x1D8800, LENGTH = 0x1000    /* peer manager */
+	NVM1  (rw)  : ORIGIN = 0x1D9800, LENGTH = 0x1000    /* application */
 	RAM   (rwx) : ORIGIN = 0x20004780, LENGTH = 0x7B540   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
 }
 
