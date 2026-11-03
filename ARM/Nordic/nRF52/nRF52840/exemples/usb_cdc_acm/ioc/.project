@@ -85,11 +85,6 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/boards/boards.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/fnmatch/fnmatch.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/fnmatch/fnmatch.c</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/bsp</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
