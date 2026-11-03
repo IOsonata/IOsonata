@@ -124,6 +124,19 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         referenced = audit.referenced_scripts(self.root)
         self.assertNotIn(unselected.resolve(), referenced)
 
+    def test_gnu_ld_include_is_retained(self):
+        child = self.linkers / "shared_memory.ld"
+        child.write_text("MEMORY {}\n", encoding="utf-8")
+        self.script.write_text('INCLUDE "shared_memory.ld"\n', encoding="utf-8")
+        self.assertIn(child.resolve(), audit.included_scripts([self.script, child]))
+
+    def test_iar_include_is_retained(self):
+        primary = self.linkers / "iar_part.icf"
+        child = self.linkers / "iar_memory.icf"
+        primary.write_text('include "iar_memory.icf";\n', encoding="utf-8")
+        child.write_text("define memory mem with size = 4G;\n", encoding="utf-8")
+        self.assertIn(child.resolve(), audit.included_scripts([primary, child]))
+
     def test_malformed_xml_is_reported(self):
         path = self.ioc / ".cproject"
         path.write_text("<cproject>", encoding="utf-8")
