@@ -39,7 +39,19 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
                 self.assertIn("main.cpp" if name in ("UsbCdcAcmDemo", "UsbHidGeneric")
                               else "main.c", linked.values())
                 overlap = sorted(set(linked) & set(library))
-                self.assertFalse(overlap, overlap)
+                # These SDK sources intentionally need direct inclusion:
+                # CLI commands register via linker sections, while the
+                # precompiled library logging objects are disabled.
+                cli = "external/nRF5_SDK/components/libraries/cli/cli_utils_cmds.c"
+                logs = {
+                    "external/nRF5_SDK/components/libraries/log/src/nrf_log_frontend.c",
+                    "external/nRF5_SDK/components/libraries/log/src/nrf_log_backend_flash.c",
+                    "external/nRF5_SDK/components/libraries/log/src/nrf_log_str_formatter.c",
+                }
+                allowed = ({cli} if name in ("UartCliDemo", "cli", "usb_cdc_acm") else set())
+                if name == "cli":
+                    allowed |= logs
+                self.assertEqual(set(overlap), allowed, overlap)
 
     def test_usb_cpp_demos_compile_required_sdk_sources(self):
         expected = {
