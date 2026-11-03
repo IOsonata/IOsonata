@@ -125,7 +125,7 @@ and application scripts both stop their RAM at `__dfu_flag`.
 |---|---|---|---|---|
 | nRF52832 xxAA S132 | 0x74000, 48 KB | 0x26000, 148 KB | 152 KB | BLE, wire |
 | nRF52840 S140 | 0xF4000, 48 KB | 0x27000, 400 KB | 408 KB | BLE, wire, USB |
-| nRF52805 / nRF52810 S112 | 0x27000, 36 KB | 0x19000, 52 KB | none | wire |
+| nRF52805 / nRF52810 S112 | 0x27000, 36 KB | 0x19000, 40 KB | none | wire |
 | nRF5340 application | 0x0, 48 KB | 0xD000, 972 KB | none | wire |
 | nRF5340 network | 0x1000000, 36 KB | 106 KB | 110 KB | BLE, wire |
 | nRF54L15 S145 | 0x0, 48 KB | 0xD000, 660 KB | 666 KB | BLE, wire |
@@ -144,6 +144,11 @@ and application scripts both stop their RAM at `__dfu_flag`.
 | LPC54605 | 0x0, 64 KB | 416 KB | none | wire |
 | RE01 1500 KB | 0x0, 64 KB | 1440 KB | none | wire |
 | R9A02G021 | 0x0, 36 KB | 88 KB | none | wire |
+
+The nRF52805/nRF52810 S112 DFU application slots are limited to 40 KB to reserve
+8 KB PDS NVM0 at 0x23000 and 4 KB application NVM1 at 0x25000, before
+the DFU record at 0x26000. Their DFU bootloader is Release-only; validate
+Release application size against the reduced slot.
 
 The layout table describes supplied DFU layouts, not every MCU supported by
 IOsonata. A working UART or USB port alone does not establish a tested DFU
