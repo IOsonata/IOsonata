@@ -74,6 +74,33 @@ class Nrf52NvmLayoutTests(unittest.TestCase):
                     self.assertEqual(flash_end - 2 * PAGE,
                                      0x7E000 if part.startswith("nrf52832") else 0xFE000)
 
+    def test_small_s112_dfu_releases_reserve_pds_and_user_data(self):
+        for part in ("nrf52805_xxaa", "nrf52810_xxaa"):
+            layout = (DIR / ("gcc_" + part + "_s112_dfu_layout.ld")).read_text(
+                encoding="utf-8"
+            )
+            app = (DIR / ("gcc_" + part + "_s112_dfu.ld")).read_text(
+                encoding="utf-8"
+            )
+            symbols = {
+                name: int(value, 16)
+                for name, value in re.findall(
+                    r"(?m)^(__dfu_\\w+)\\s*=\\s*(0x[0-9a-fA-F]+);", layout
+                )
+            }
+            with self.subTest(part=part):
+                self.assertEqual(symbols["__dfu_slot0_start"], 0x19000)
+                self.assertEqual(symbols["__dfu_slot0_end"], 0x23000)
+                self.assertEqual(symbols["__dfu_nvm0_start"], 0x23000)
+                self.assertEqual(symbols["__dfu_nvm0_size"], 0x2000)
+                self.assertEqual(symbols["__dfu_nvm1_start"], 0x25000)
+                self.assertEqual(symbols["__dfu_nvm1_size"], 0x1000)
+                self.assertEqual(symbols["__dfu_rec_start"], 0x26000)
+                self.assertEqual(symbols["__dfu_boot_start"], 0x27000)
+                for name in ("nvm0", "nvm1"):
+                    self.assertIn("__start_" + name + " = .;", app)
+                    self.assertIn("__stop_" + name + " = .;", app)
+
     def test_no_dfu_does_not_reserve_mbr(self):
         for part in ("nrf52832_xxaa", "nrf52840_xxaa"):
             content, layout = regions(DIR / ("gcc_" + part + ".ld"))
