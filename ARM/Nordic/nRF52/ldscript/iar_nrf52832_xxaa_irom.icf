@@ -30,11 +30,15 @@ define symbol __ICFEDIT_size_proc_stack__ = 0x0;
 define symbol __ICFEDIT_size_heap__       = 0x2000;
 /**** End of ICF editor section. ###ICF###*/
 
-/* Reserve the same 8 KB NVM0 area as gcc_nrf52832_xxaa.ld. */
+/* Match gcc_nrf52832_xxaa.ld: 8 KB Bluetooth PDS and 4 KB user NVM. */
 define symbol __start_nvm0 = 0x0007D000;
 define symbol __stop_nvm0 = 0x0007F000;
 export symbol __start_nvm0;
 export symbol __stop_nvm0;
+define symbol __start_nvm1 = 0x0007F000;
+define symbol __stop_nvm1 = 0x00080000;
+export symbol __start_nvm1;
+export symbol __stop_nvm1;
 
 define memory mem with size = 4G;
 define region IROM_region   =   mem:[from __ICFEDIT_region_IROM1_start__ to __ICFEDIT_region_IROM1_end__]
