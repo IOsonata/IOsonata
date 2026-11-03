@@ -20,7 +20,7 @@ SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP( -lstdc++ -lgcc -lc)
 
-INCLUDE "dfu_layout_stm32f030x8.ld"
+INCLUDE "gcc_stm32f030x8_dfu_layout.ld"
 
 MEMORY
 {
