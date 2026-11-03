@@ -61,6 +61,18 @@ class LinkerReferenceAuditTests(unittest.TestCase):
         checked, skipped, errors = audit.check_project(path)
         self.assertEqual((checked, skipped, errors), (0, 1, []))
 
+    def test_absolute_linker_script_is_rejected(self):
+        path = self.write_project("/opt/vendor/part.ld")
+        checked, skipped, errors = audit.check_project(path)
+        self.assertEqual((checked, skipped), (1, 0))
+        self.assertIn("nonportable absolute", errors[0])
+
+    def test_windows_absolute_linker_script_is_rejected(self):
+        path = self.write_project("C:/vendor/part.ld")
+        checked, skipped, errors = audit.check_project(path)
+        self.assertEqual((checked, skipped), (1, 0))
+        self.assertIn("nonportable absolute", errors[0])
+
     def test_malformed_xml_is_reported(self):
         path = self.ioc / ".cproject"
         path.write_text("<cproject>", encoding="utf-8")
