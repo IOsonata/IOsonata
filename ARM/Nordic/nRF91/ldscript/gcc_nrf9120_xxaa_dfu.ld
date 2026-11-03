@@ -1,6 +1,6 @@
 /* Application with DFU, nRF91x1 (nRF9120 die: nRF9131, nRF9151, nRF9161).
  *
- * Same as nrf9120_xxaa.ld with FLASH cut down to slot 0, from the layout the
+ * Same as gcc_nrf9120_xxaa.ld with FLASH cut down to slot 0, from the layout the
  * stage 0 boot shares, and RAM stopped short of the recovery request
  * word. An image that outgrows slot 0 fails to link. The stage 0 boot sets
  * VTOR to slot 0 before it starts the image.
