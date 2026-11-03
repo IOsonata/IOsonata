@@ -48,7 +48,7 @@ class UartBleFreeRtosSdcProjectTests(unittest.TestCase):
                         self.assertNotIn(outdated, defs)
 
                     scripts = option_values(cfg, "." + kind + ".linker.scriptfile")
-                    self.assertEqual(scripts, ["../../../../ldscript/gcc_nrf52832_xxaa.ld"])
+                    self.assertEqual(scripts, ["../../../../../ldscript/gcc_nrf52832_xxaa.ld"])
                     self.assertEqual(
                         (PROJECT.parent / name / scripts[0]).resolve(),
                         SCRIPT.resolve(),
