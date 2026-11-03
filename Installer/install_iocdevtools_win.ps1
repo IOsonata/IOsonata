@@ -838,15 +838,9 @@ function Install-IOcomposer {
 				$latest = $candidates | Sort-Object Key -Descending | Select-Object -First 1
 				if (-not $latest) { throw "No published IOcomposer plugin found: $id" }
 				if ($id -eq 'org.iosonata.embedcdt.templates.wizard') {
-					if ($latest.Name -notmatch '^org\.iosonata\.embedcdt\.templates\.wizard_([0-9]+)\.([0-9]+)\.([0-9]+)(?:\.[0-9]+)*\.jar$') {
-						throw "Invalid wizard bundle version: $($latest.Name)"
-					}
-					$wizardVersion = [version]("$($Matches[1]).$($Matches[2]).$($Matches[3])")
-					if ($wizardVersion -lt [version]'0.1.7') { throw 'IOcomposer requires wizard 0.1.7 or newer' }
-				}
+					if ($latest.Name -notmatch '^org\.iosonata\.embedcdt\.templates\.wizard_([0-9]+)\.([0-9]+)\.([0-9]+)(?:\.[0-9]+)*\.jar
 				$url = "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/$($latest.Name)"
 			}
-
 			$jar = Join-Path $stage "$id.jar"
 			Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $jar
 			& $SEVENZIP_EXE t $jar | Out-Null
@@ -906,7 +900,6 @@ function Build-IOcomposerIndex {
 		if ($LASTEXITCODE -ne 0) { Write-Warning "SDK index failed. Retry: python $index --sdk-root $ROOT\external" }
 	} else { Write-Warning "Python or SDK index script missing; index was not built." }
 }
-
 
 # ---------------------------------------------------------
 # Sync IOsonata + external SDKs (single source of truth)
@@ -990,7 +983,7 @@ if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
 	Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
 }
 
-# Wizard is installed in the same staged set as AI/UI/BLE test plugins.
+Install-Plugin
 Install-IOcomposer -Runtime $ECLIPSE_DIR
 
 # --- Makefile (aligned with macOS/Linux) ---
@@ -1227,8 +1220,11 @@ Write-Host "pyOCD: $PYOCD"
 Write-Host "IntelHex (HEX merge): $TOOL_BIN\hexmerge.cmd"
 Write-Host "Tool binaries: $TOOL_BIN"
 exit 0
-, '$1'))
-					if ($version -lt [version]'0.1.7') { throw 'IOcomposer requires wizard 0.1.7 or newer' }
+) {
+						throw "Invalid wizard bundle version: $($latest.Name)"
+					}
+					$wizardVersion = [version]("$($Matches[1]).$($Matches[2]).$($Matches[3])")
+					if ($wizardVersion -lt [version]'0.1.7') { throw 'IOcomposer requires wizard 0.1.7 or newer' }
 				}
 				$url = "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/$($latest.Name)"
 			}
@@ -1290,6 +1286,27 @@ function Build-IOcomposerIndex {
 		& "$PYOCD_DIR\Scripts\python.exe" $index --sdk-root "$ROOT\external"
 		if ($LASTEXITCODE -ne 0) { Write-Warning "SDK index failed. Retry: python $index --sdk-root $ROOT\external" }
 	} else { Write-Warning "Python or SDK index script missing; index was not built." }
+}
+
+# --- Plugin ---
+function Install-Plugin {
+    Write-Host; Write-Host ">>> Installing IOsonata Eclipse Plugin..." -ForegroundColor Cyan
+    $PDIR = "$ROOT\IOsonata\Installer\eclipse_plugin"
+    if (-not (Test-Path $PDIR)) { 
+        Write-Host "   [WARN] Plugin directory not found at $PDIR" -ForegroundColor Yellow
+        return 
+    }
+    $JAR = Get-ChildItem $PDIR "org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+    if ($JAR) {
+        $DEST = "$ECLIPSE_DIR\dropins"
+        New-Item $DEST -ItemType Directory -Force | Out-Null
+        # Remove old versions
+        Get-ChildItem "$DEST\org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Remove-Item -Force
+        Copy-Item $JAR.FullName $DEST -Force
+        Write-Host "   [OK] Plugin installed: $($JAR.Name)" -ForegroundColor Green
+    } else {
+        Write-Host "   [WARN] No plugin jar found in $PDIR" -ForegroundColor Yellow
+    }
 }
 
 # ---------------------------------------------------------
@@ -1374,7 +1391,7 @@ if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
 	Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
 }
 
-Install-Plugin
+# Wizard is installed together with the three IOcomposer plugins.
 Install-IOcomposer -Runtime $ECLIPSE_DIR
 
 # --- Makefile (aligned with macOS/Linux) ---
