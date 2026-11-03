@@ -1,3 +1,7 @@
+/* NVM0: 8 KB Bluetooth PDS; NVM1: 4 KB user storage.
+ * No MBR/DFU: storage occupies the top 12 KB of flash.
+ * Flash reservations are page-aligned (nRF52 4 KB erase pages).
+ */
 OUTPUT_FORMAT ("elf32-littlearm", "elf32-bigarm", "elf32-littlearm")
 SEARCH_DIR(.)
 SEARCH_DIR("../../../../ldscript")
@@ -17,8 +21,9 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-	FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0x7d000
-	NVM0 (rw) : ORIGIN = 0x0007D000, LENGTH = 0x00002000
+	FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0x7D000
+	NVM0 (rw) : ORIGIN = 0x0007D000, LENGTH = 0x2000
+  NVM1 (rw) : ORIGIN = 0x0007F000, LENGTH = 0x1000
 	RAM (rwx) :  ORIGIN = 0x20000000, LENGTH = 0x10000
 }
 
@@ -31,6 +36,13 @@ SECTIONS
 		. = ORIGIN(NVM0) + LENGTH(NVM0);
 		__stop_nvm0 = .;
 	} > NVM0
+  nvm1 (NOLOAD) :
+  {
+    __start_nvm1 = .;
+    KEEP(*(nvm1))
+    . = ORIGIN(NVM1) + LENGTH(NVM1);
+    __stop_nvm1 = .;
+  } > NVM1
 }
 
 SECTIONS
