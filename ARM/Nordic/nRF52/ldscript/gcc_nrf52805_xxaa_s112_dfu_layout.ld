@@ -7,7 +7,9 @@
  *
  *   0x000000 - 0x000FFF  MBR
  *   0x001000 - 0x018FFF  S112                   96 KB
- *   0x019000 - 0x025FFF  slot 0, application    52 KB
+ *   0x019000 - 0x022FFF  slot 0, application    40 KB
+ *   0x023000 - 0x024FFF  NVM0, PDS              8 KB
+ *   0x025000 - 0x025FFF  NVM1, user data        4 KB
  *   0x026000 - 0x026FFF  record of slot 0        4 KB
  *   0x027000 - 0x02FFFF  stage 0 boot           36 KB, UICR.NRFFW[0]
  *
@@ -28,7 +30,11 @@
 
 __dfu_flag			= 0x20005FF0;
 __dfu_slot0_start	= 0x00019000;
-__dfu_slot0_end		= 0x00026000;
+__dfu_slot0_end		= 0x00023000;
+__dfu_nvm0_start	= 0x00023000;
+__dfu_nvm1_start	= 0x00025000;
+__dfu_nvm0_size	= 0x00002000;
+__dfu_nvm1_size	= 0x00001000;
 __dfu_rec_start		= 0x00026000;
 __dfu_rec_end		= 0x00027000;
 __dfu_boot_start	= 0x00027000;

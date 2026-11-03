@@ -25,7 +25,27 @@ INCLUDE "gcc_nrf52805_xxaa_s112_dfu_layout.ld"
 MEMORY
 {
 	FLASH (rx)	: ORIGIN = __dfu_slot0_start, LENGTH = __dfu_slot0_end - __dfu_slot0_start
+	NVM0 (rw)	: ORIGIN = __dfu_nvm0_start, LENGTH = __dfu_nvm0_size
+	NVM1 (rw)	: ORIGIN = __dfu_nvm1_start, LENGTH = __dfu_nvm1_size
 	RAM (rwx)	: ORIGIN = 0x20003000, LENGTH = __dfu_flag - 0x20003000
+}
+
+SECTIONS
+{
+	nvm0 (NOLOAD) :
+	{
+		__start_nvm0 = .;
+		KEEP(*(nvm0))
+		. = ORIGIN(NVM0) + LENGTH(NVM0);
+		__stop_nvm0 = .;
+	} > NVM0
+	nvm1 (NOLOAD) :
+	{
+		__start_nvm1 = .;
+		KEEP(*(nvm1))
+		. = ORIGIN(NVM1) + LENGTH(NVM1);
+		__stop_nvm1 = .;
+	} > NVM1
 }
 
 SECTIONS
