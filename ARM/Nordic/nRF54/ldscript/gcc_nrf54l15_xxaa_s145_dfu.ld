@@ -24,7 +24,7 @@ MEMORY
 	FLASH (rx)  : ORIGIN = __dfu_slot0_start, LENGTH = __dfu_slot0_end - __dfu_slot0_start
 	NVM0  (rw)  : ORIGIN = __dfu_nvm0_start, LENGTH = __dfu_nvm_size	/* peer manager */
 	NVM1  (rw)  : ORIGIN = __dfu_nvm1_start, LENGTH = __dfu_nvm_size	/* application */
-	RAM   (rwx) : ORIGIN = 0x20004900, LENGTH = __dfu_flag - 0x20004900   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
+	RAM   (rwx) : ORIGIN = 0x20004900, LENGTH = __dfu_flag - 0x20004900   /* after S145 reserved (0x4900), spans RAM0+RAM1 */
 }
 
 /* === FLASH observer sections ===
