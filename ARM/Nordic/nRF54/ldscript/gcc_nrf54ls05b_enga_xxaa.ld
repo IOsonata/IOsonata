@@ -14,8 +14,8 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0x7F000 /* Inside global RRAM0 */
-  NVM0 (rw) : ORIGIN = 0x07F000, LENGTH = 0x1000
+  FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0x7E000 /* Inside global RRAM0 */
+  NVM0 (rw) : ORIGIN = 0x7E000, LENGTH = 0x1000
   RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x8000
   RAM1 (rwx) : ORIGIN = 0x20008000, LENGTH = 0x10000
 }
