@@ -192,6 +192,44 @@ class LinkerReferenceAuditTests(unittest.TestCase):
                 if re.search(r"(?m)^\s*MEMORY\s*$", content):
                     self.assertIn('INCLUDE "gcc_arm_flash.ld"', content)
 
+    def test_sam4e16_dfu_memory_and_project_selections(self):
+        root = Path(__file__).resolve().parents[1]
+        family = root / "ARM" / "Microchip" / "SAM4E" / "ldscript"
+        base = (family / "gcc_sam4e16.ld").read_text(encoding="utf-8")
+        layout = (family / "gcc_sam4e16_dfu_layout.ld").read_text(encoding="utf-8")
+        app = (family / "gcc_sam4e16_dfu.ld").read_text(encoding="utf-8")
+        boot = (family / "gcc_sam4e16_dfu_boot.ld").read_text(encoding="utf-8")
+        symbols = {
+            name: int(value, 0)
+            for name, value in re.findall(
+                r"(?m)^(__dfu_\w+)\s*=\s*(0x[0-9A-Fa-f]+|\d+);", layout
+            )
+        }
+        self.assertIn("FLASH (rx)  : ORIGIN = 0x00400000, LENGTH = 0x00100000", base)
+        self.assertIn("RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00020000", base)
+        self.assertEqual(symbols["__dfu_boot_start"], 0x00400000)
+        self.assertEqual(symbols["__dfu_boot_end"], symbols["__dfu_rec_start"])
+        self.assertEqual(symbols["__dfu_rec_end"], symbols["__dfu_slot0_start"])
+        self.assertEqual(symbols["__dfu_slot0_end"], 0x00500000)
+        self.assertEqual(symbols["__dfu_flag"], 0x2001FFF0)
+        self.assertEqual(symbols["__dfu_state_unit"], 512)
+        self.assertEqual(symbols["__dfu_rec_end"] - symbols["__dfu_rec_start"], 0x2000)
+        for key in ("__dfu_boot_start", "__dfu_boot_end", "__dfu_rec_start",
+                    "__dfu_rec_end", "__dfu_slot0_start", "__dfu_slot0_end"):
+            self.assertEqual(symbols[key] % 0x2000, 0)
+        for script in (app, boot):
+            self.assertIn('INCLUDE "gcc_sam4e16_dfu_layout.ld"', script)
+            self.assertIn('INCLUDE "gcc_arm_flash.ld"', script)
+            self.assertIn("LENGTH = __dfu_flag - 0x20000000", script)
+        self.assertIn("ORIGIN = __dfu_slot0_start", app)
+        self.assertIn("ORIGIN = __dfu_boot_start", boot)
+        projects = root / "ARM" / "Microchip" / "SAM4E" / "SAM4E16E" / "exemples"
+        for name in ("Blinky", "CryptoTest", "UartPrbsTxTest", "UartRetargetDemo", "DfuBoot"):
+            with self.subTest(project=name):
+                content = (projects / name / "ioc" / ".cproject").read_text(encoding="utf-8")
+                selected = "gcc_sam4e16_dfu_boot.ld" if name == "DfuBoot" else "gcc_sam4e16.ld"
+                self.assertEqual(content.count("ldscript/" + selected), 4)
+
     def test_nrf52832_nrfx_prbs_uses_local_nordic_linker(self):
         nordic = Path(__file__).resolve().parents[1] / "ARM" / "Nordic"
         example = nordic / "nRF52" / "nRF52832" / "exemples" / "UartPrbsTxnrfx"
