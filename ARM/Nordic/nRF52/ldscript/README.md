@@ -11,6 +11,8 @@ definitions. Reference status does not determine whether to retain them.
 
 | Script | Purpose / observed memory difference | Classification |
 | --- | --- | --- |
+| `gcc_nrf52805_xxaa_s112.ld` | S112 application at 0x19000, 4 KB NVM0 at 0x2F000, RAM from 0x20003000 | Available variant; nRF52805 target |
+| `gcc_nrf52810_xxaa_s112.ld` | Same currently defined S112 memory regions as nRF52805, but separate MCU target | Available variant; nRF52810 target |
 | `gcc_nrf52832_xxaa.ld` | Bare-metal flash starts at 0x00000000; RAM at 0x20000000 | Available variant |
 | `gcc_nrf52832_xxab.ld` | 256 KB flash, 32 KB RAM; different package memory capacity from XXAA | Available variant |
 | `gcc_nrf52811_xxaa.ld` | 192 KB flash, 24 KB RAM; 4 KB NVM0 | Available variant |
@@ -33,6 +35,17 @@ are still required.
 These classifications establish that the scripts should **not** be removed
 because of an absent `.cproject` or `.ewp` reference. They do not assert that
 every layout has been hardware validated.
+
+## Same layout, different MCU targets
+
+The nRF52805 and nRF52810 S112 scripts currently have identical MEMORY
+regions and section placement. They are **not obsolete duplicates**: the names
+identify different supported MCU targets. Consolidation would require an
+explicit shared layout and verified project references for both devices.
+
+The BOSSA nRF52840 variant intentionally reserves 12 KB at the top of flash
+as NVM0, unlike the S140 layouts which reserve 8 KB NVM0 plus a separate
+4 KB bootloader-settings page. Keep the bootloader-specific layout distinct.
 
 ## GNU and IAR memory-map compatibility
 
