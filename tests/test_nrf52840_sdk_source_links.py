@@ -160,17 +160,19 @@ class Nrf52840SdkSourceTests(unittest.TestCase):
                 self.assertTrue(all(path.endswith("gcc_nrf52840_xxaa.ld")
                                     for path in scripts))
 
-    def test_usb_cdc_cpp_backend_uses_local_header(self):
-        base = TARGET / "exemples" / "UsbCdcAcmDemo" / "src"
-        self.assertTrue((base / "usbd_cdc_intrf.h").is_file())
-        impl = (base / "usbd_cdc_intrf.cpp").read_text()
-        self.assertIn('#include "usbd_cdc_intrf.h"', impl)
-        self.assertNotIn('#include "usb/usbd_cdc_intrf.h"', impl)
-
-    def test_usb_cdc_cpp_backend_is_linked(self):
-        project = TARGET / "exemples" / "UsbCdcAcmDemo" / "ioc" / ".project"
-        linked = linked_sources(project)
-        self.assertIn("usbd_cdc_intrf.cpp", linked.values())
+    def test_usb_cdc_has_one_application_owned_class(self):
+        base = TARGET / "exemples" / "UsbCdcAcmDemo"
+        linked = linked_sources(base / "ioc" / ".project")
+        self.assertIn("main.cpp", linked.values())
+        self.assertNotIn("usbd_cdc_intrf.cpp", linked.values())
+        main = (base / "src" / "main.cpp").read_text()
+        self.assertEqual(main.count("app_usbd_class_append(class_cdc_acm)"), 1)
+        self.assertEqual(main.count("const app_usbd_cdc_acm_t m_app_cdc_acm"), 1)
+        self.assertNotIn("g_UsbIntrf.Init(", main)
+        self.assertNotIn("UsbdCdcIntrf g_UsbIntrf", main)
+        # Keep the alternate driver source for future use, but never
+        # compile both CDC class implementations into this example.
+        self.assertTrue((base / "src" / "usbd_cdc_intrf.cpp").is_file())
 
     def test_nordic_usb_class_sources_remain_linked(self):
         for example, required in (
