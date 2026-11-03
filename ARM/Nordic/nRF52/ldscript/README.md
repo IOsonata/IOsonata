@@ -30,15 +30,17 @@ every layout has been hardware validated.
 
 ## GNU and IAR memory-map compatibility
 
-The `gcc_nrf52832_xxaa.ld` script reserves the upper flash pages for
-`NVM0`: application FLASH ends at 0x0007CFFF, with NVM0 beginning at
-0x0007D000. The current `iar_nrf52832_xxaa.icf` and
-`iar_nrf52832_xxaa_irom.icf` instead define an application ROM region
-through 0x0007FFFF. **These are not equivalent layouts.** Do not consolidate
-these IAR files into the GCC script or claim cross-compiler memory-layout
-parity without explicitly reserving the intended NVM region and verifying
-application placement. This is a follow-up compatibility item, not proof
-that either IAR script is obsolete.
+The `gcc_nrf52832_xxaa.ld` script reserves 0x0007D000-0x0007EFFF
+for `NVM0`, with application FLASH ending at 0x0007CFFF. Both
+`iar_nrf52832_xxaa.icf` and `iar_nrf52832_xxaa_irom.icf` now
+limit application ROM to 0x0007CFFF and export `__start_nvm0` =
+0x0007D000 and `__stop_nvm0` = 0x0007F000. The final 4 KB
+(0x0007F000-0x0007FFFF) remains outside the application ROM.
+
+These are static linker-layout corrections. IAR build, symbol
+compatibility with the IAR compiler, and hardware behavior still
+require validation; different IAR section-placement models remain
+intentionally separate.
 
 The `gcc_nrf52832_xxab.ld`, `gcc_nrf52811_xxaa.ld`, and
 `gcc_nrf52820_xxaa.ld` scripts represent different device capacities.
