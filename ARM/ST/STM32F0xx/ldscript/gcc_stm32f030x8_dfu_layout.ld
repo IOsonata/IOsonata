@@ -6,17 +6,17 @@
  * repeats an address. See docs/architecture/dfu.md.
  *
  *   0x08000000 - 0x08008BFF  stage 0 boot          35 KB, where the part starts
- *   0x08008C00 - 0x08009BFF  record of slot 0       4 KB
- *   0x08009C00 - 0x0800FFFF  slot 0, application   25 KB
+ *   0x08008C00 - 0x08009FFF  record of slot 0       5 KB
+ *   0x0800A000 - 0x0800FFFF  slot 0, application   24 KB
  *
  * The boot is 48 KB on larger parts; here it gets the fewest pages it fits
  * in. Built at -Os with arm-none-eabi-gcc 13.2 it is 35312 bytes of flash.
  *
- * Wired only: no slot 1. The boot writes slot 0 and the record directly
+ * The 4 KB-aligned slot start prevents ELF PT_LOAD headers/segments from\n * extending backward into the recovery record with default GNU ld alignment.\n * Release application size must be rechecked against the smaller 24 KB slot.\n *\n * Wired only: no slot 1. The boot writes slot 0 and the record directly
  * over the UART.
  *
  * Record: one 16 byte state unit, the record information, up to 0x800 of
- * image header and 0x400 of TLVs, 0xC14 bytes, so four 1 KB pages.
+ * image header and 0x400 of TLVs, 0xC14 bytes, so five 1 KB pages are reserved to align the application to 4 KB.
  *
  * Cortex-M0 has no VTOR. The boot copies the application vector table, 48
  * words, to the start of SRAM and maps SRAM at 0; the application script
@@ -36,8 +36,8 @@ __dfu_flag			= 0x20001FF0;
 __dfu_boot_start	= 0x08000000;
 __dfu_boot_end		= 0x08008C00;
 __dfu_rec_start		= 0x08008C00;
-__dfu_rec_end		= 0x08009C00;
-__dfu_slot0_start	= 0x08009C00;
+__dfu_rec_end		= 0x0800A000;
+__dfu_slot0_start	= 0x0800A000;
 __dfu_slot0_end		= 0x08010000;
 __dfu_vec_ram		= 0x20000000;
 __dfu_vec_ram_size	= 0x000000C0;
