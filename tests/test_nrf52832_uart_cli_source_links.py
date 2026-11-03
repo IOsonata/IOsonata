@@ -30,7 +30,16 @@ class Nrf52832UartCliTests(unittest.TestCase):
         project = linked_source_paths(PROJECT)
         self.assertIn("src/main.c", project.values())
         overlap = sorted(set(library) & set(project))
-        self.assertEqual(overlap, [], overlap)
+        # SDK CLI registration and enabled logging are linked directly by this
+        # example. The precompiled library versions are either disabled by
+        # its configuration or not extracted from the static archive.
+        intentional = {
+            "external/nRF5_SDK/components/libraries/cli/cli_utils_cmds.c",
+            "external/nRF5_SDK/components/libraries/log/src/nrf_log_frontend.c",
+            "external/nRF5_SDK/components/libraries/log/src/nrf_log_backend_flash.c",
+            "external/nRF5_SDK/components/libraries/log/src/nrf_log_str_formatter.c",
+        }
+        self.assertEqual(set(overlap), intentional, overlap)
         self.assertIn("src/nRF5_SDK/libraries/mpu/nrf_mpu_lib.c",
                       project.values())
         self.assertIn("src/nRF5_SDK/libraries/stack_guard/nrf_stack_guard.c",
