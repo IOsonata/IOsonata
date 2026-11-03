@@ -49,7 +49,7 @@ TML32 8-bit channels and capture, REMC, KINT, DOC, CRC, TRNG.
 
 ## Memory layout
 
-`ldscript/gcc_R9A02G021.ld`, every R9A02G021 part:
+`ldscript/gcc_r9a02g021.ld`, every R9A02G021 part:
 
 | Region | Address | Size | Use |
 | --- | --- | --- | --- |
@@ -750,9 +750,9 @@ channels are not yet hardware validated. See `tests/r9a02/README.md`.
 
 ## DFU
 
-`ldscript/dfu_layout_r9a02g021.ld`: boot 0x0 to 0x8FFF, record 0x9000 to
+`ldscript/gcc_r9a02g021_dfu_layout.ld`: boot 0x0 to 0x8FFF, record 0x9000 to
 0x9FFF, application slot 0 0xA000 to 0x1FFFF, recovery flag at 0x20006FF0.
-`dfu_boot_r9a02g021.ld` links the boot (with HEAD), `gcc_R9A02G021_dfu.ld`
+`gcc_r9a02g021_dfu_boot.ld` links the boot (with HEAD), `gcc_r9a02g021_dfu.ld`
 an application for slot 0. The GCC Release DfuBoot image now links using LTO within the existing 36 KB
 boot partition (2026-10-15: text 35636, data 464, bss 6705 bytes in the
 reported build). The Debug configuration is not validated to fit. UARTA is not

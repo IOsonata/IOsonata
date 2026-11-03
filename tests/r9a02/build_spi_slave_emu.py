@@ -43,7 +43,7 @@ exports = ['EmuInit', 'EmuInit20', 'EmuSnooze', 'EmuOtherSnooze', 'EmuStandby', 
            'SystemPeriphClockGet']
 linker = 'clang++' if args.llvm else 'g++'
 specs = [] if args.llvm else ['--specs=nano.specs', '--specs=nosys.specs']
-script = 'llvm_R9A02G021.ld' if args.llvm else 'gcc_R9A02G021.ld'
+script = 'llvm_r9a02g021.ld' if args.llvm else 'gcc_r9a02g021.ld'
 subprocess.run([args.tool_prefix + linker, *arch, *specs,
                 '-Wl,--gc-sections', *['-Wl,--undefined=' + name for name in exports],
                 '-L' + str(root / port / 'ldscript'), '-L' + str(root / 'RISCV/ldscript'),
