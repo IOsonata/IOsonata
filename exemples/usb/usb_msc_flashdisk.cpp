@@ -114,15 +114,36 @@ static const UsbdMscCfg_t s_MscCfg = {
 
 int main(void)
 {
-	if (!s_Disk.InitMcu(s_Nvm, s_MemIntrf, MSC_NVM_REGION) ||
-		!FatFsFormatIfBlank(s_Disk, s_SectorBuffer, sizeof(s_SectorBuffer)) ||
-		!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
-		!UsbInit(&s_UsbCfg) || !s_Msc.Init(s_MscCfg))
+	if (s_Disk.InitMcu(s_Nvm, s_MemIntrf, MSC_NVM_REGION) == false)
 	{
 		return -1;
 	}
+
+	if (FatFsFormatIfBlank(s_Disk, s_SectorBuffer,
+			sizeof(s_SectorBuffer)) == false)
+	{
+		return -1;
+	}
+
+	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem,
+			sizeof(g_AppEvtHandlerQueMem)) == false)
+	{
+		return -1;
+	}
+
+	if (UsbInit(&s_UsbCfg) == false)
+	{
+		return -1;
+	}
+
+	if (s_Msc.Init(s_MscCfg) == false)
+	{
+		return -1;
+	}
+
 	(void)UsbEnable(USB_DEVNO);
 
 	AppRun();
+
 	return 0;
 }
