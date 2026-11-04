@@ -46,6 +46,12 @@ build findings are reviewed.
    Release: two configurations). It depends on a different Nordic SDK
    generation and missing original application modules. Retain its files
    unchanged; do not port or build it for release 0.13.
+   Exclude the unfinished RP2040 MCU library (Debug and Release), the
+   nRF54H20 RISC-V MCU library (Debug and Release), and the ESP32C6
+   qemutest example (Debug and Release): six configurations total.
+   These ports/projects lack required implementations or application
+   sources. Keep their files untouched; do not build or count them
+   for release 0.13. Revisit when the ports are complete.
 2. Enumerate every enabled configuration in each in-scope project. Compile
    and link all supported GNU Eclipse managed-project configurations
    (including Debug and Release) using their own checked-in settings,
@@ -116,7 +122,8 @@ For **every in-scope** project/configuration, record:
 - For BLOCKED: missing prerequisites and the exact reason the
   configuration could not run; do not count it as PASS.
 
-Exclude NCS, IAR, Keil, Nordic Mesh, unfinished BleOta, and Nordic Thingy52 configurations
+Exclude NCS, IAR, Keil, Nordic Mesh, unfinished BleOta, Nordic Thingy52,
+and the six unfinished RP2040/nRF54H20 RISC-V/ESP32C6 qemutest configurations
 entirely from the denominator and from PASS, FAIL and BLOCKED totals. Record
 out-of-scope configurations separately if needed. Exclusion does not authorize
 deleting their source files, project metadata or linker scripts; the reference
