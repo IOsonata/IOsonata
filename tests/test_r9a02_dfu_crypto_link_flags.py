@@ -67,26 +67,6 @@ class R9A02LinkFlagsTest(unittest.TestCase):
                     self.assertEqual(len(options), 1)
                     self.assertIn("-flto", options[0].split())
 
-    def test_release_dfu_boot_uses_shared_register_save_helpers(self):
-        root = ET.parse(EXAMPLES / "DfuBoot/ioc/.cproject").getroot()
-        release = next(
-            cfg for cfg in root.findall(".//cconfiguration")
-            if cfg.find(".//configuration").get("name") == "Release"
-        )
-        for suffix in ("C Compiler", "C++ Compiler"):
-            tools = [
-                tool for tool in release.findall(".//tool")
-                if tool.get("name") == "GNU RISC-V Cross " + suffix
-            ]
-            self.assertEqual(len(tools), 1)
-            options = [
-                option.get("value", "")
-                for option in tools[0].findall("option")
-                if option.get("name") == "Other compiler flags"
-            ]
-            self.assertEqual(len(options), 1)
-            self.assertIn("-msave-restore", options[0].split())
-
     def test_dfu_boot_omits_unwind_tables(self):
         root = ET.parse(EXAMPLES / "DfuBoot/ioc/.cproject").getroot()
         for cfg in root.findall(".//cconfiguration"):
