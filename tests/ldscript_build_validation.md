@@ -33,9 +33,11 @@ Actions workflow. No push-triggered CI. Do not merge or retag release
    eight configurations). Nordic Mesh is deferred; IOsonata will implement
    its own Mesh support in a future release. Preserve these project files
    and sources, but do not compile or count their configurations in 0.13.
-   Exclude unfinished BleOta projects as well. In the last measured matrix,
-   nRF5340_Net BleOta Debug and Release account for two excluded FAIL
-   configurations. Preserve BleOta source and project metadata unchanged.
+   Exclude all five unfinished BleOta example projects (nRF52832,
+   nRF52840, nRF5340_Net, nRF54L15, nRF54LM20x), Debug and Release:
+   ten configurations. In the last measured matrix, eight were PASS and
+   nRF5340_Net Debug and Release were FAIL. Exclude all ten from the
+   denominator; preserve their source and project metadata unchanged.
    Do not spend 0.13 remediation effort on BleOta.
 2. Enumerate every enabled configuration in each in-scope project. Compile
    and link all supported GNU Eclipse managed-project configurations
