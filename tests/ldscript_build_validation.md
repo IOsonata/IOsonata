@@ -9,8 +9,8 @@ tests are prerequisites, not substitutes for a compiler/linker run.
 
 Use Eclipse Embedded CDT **managed projects**, retaining the checked-in
 `.project` and `.cproject` files. Install the cross-compilers and SDK
-versions required by each port, including GNU Arm Embedded, RISC-V, IAR
-where supported, vendor SDKs, and libraries. Build configurations should
+versions required by each in-scope port, including GNU Arm Embedded,
+RISC-V, vendor SDKs, and libraries. IAR and Keil toolchains are not required. Build configurations should
 be read from the checked-in projects, not guessed from directory names.
 
 Do not introduce CMake, Ninja, VS Code/Theia, or an automatic GitHub
@@ -19,15 +19,19 @@ Actions workflow. No push-triggered CI. Do not merge or retag release
 
 ## Scope
 
-1. Enumerate **every** `.cproject` and `.ewp` from the repository tree.
+1. Enumerate every Eclipse CDT `.cproject` from the repository tree.
    Include libraries and examples across **all** MCU vendors and
    architectures, not only Nordic or the scripts modified most recently.
-   Exclude Nordic Connect SDK (NCS) projects from the build matrix,
-   acceptance totals, and BLOCKED counts. NCS/CMake projects are outside
-   the Eclipse managed-project validation scope; do not attempt to build them.
-2. Enumerate every enabled configuration in each project. Compile and link
-   all supported non-NCS configurations (including Debug and Release) using their
-   own managed-project settings, toolchains, and linked resources.
+   Exclude Nordic Connect SDK (NCS), IAR (`.ewp`, `.eww`, `.icf`) and
+   Keil (`.uvproj`, `.uvprojx`, `.uvopt`, `.uvoptx`, `.sct`) projects from
+   compilation, the build matrix, acceptance totals, and BLOCKED counts.
+   These project formats are outside the GNU Eclipse managed-project build
+   scope. Do not require their proprietary toolchains or treat their
+   configurations as failed, blocked or untested GNU builds.
+2. Enumerate every enabled configuration in each in-scope project. Compile
+   and link all supported GNU Eclipse managed-project configurations
+   (including Debug and Release) using their own checked-in settings,
+   toolchains, and linked resources.
 3. Keep real SDK-dependent reference examples separate from IOsonata
    projects. In particular, the nRF52832 `UartPrbsTxnrfx` project
    intentionally uses a local Nordic `nrf_common.ld` and Nordic startup,
@@ -68,7 +72,7 @@ its output does not authorize deletion.
 
 ## Required build result record
 
-For **every** project/configuration, record:
+For **every in-scope** project/configuration, record:
 
 - Repository-relative `.cproject` or `.ewp` path and configuration
   name, selected target MCU, toolchain and SDK version.
@@ -80,8 +84,10 @@ For **every** project/configuration, record:
 - For BLOCKED: missing prerequisites and the exact reason the
   configuration could not run; do not count it as PASS.
 
-Exclude NCS configurations entirely from the denominator and from PASS,
-FAIL and BLOCKED totals. Record them separately as out of scope if needed.
+Exclude NCS, IAR and Keil configurations entirely from the denominator and
+from PASS, FAIL and BLOCKED totals. Record them separately as out of scope
+if needed. Exclusion does not authorize deleting their source files, project
+metadata or linker scripts; the reference audit may still inspect them.
 
 Report totals separately for compiled, linked, hardware-tested, failed,
 and blocked configurations. Do not combine static audit PASS with build
