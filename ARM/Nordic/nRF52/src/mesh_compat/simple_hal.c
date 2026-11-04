@@ -51,6 +51,7 @@
 #include "timer.h"
 #include "app_timer.h"
 #include "app_error.h"
+#include "app_util_platform.h"
 #include "nrfx_gpiote.h"
 
 /* nrfx 4.x uses explicit driver instances and input/output configuration. */
@@ -237,8 +238,6 @@ uint32_t hal_buttons_init(hal_button_handler_cb_t cb)
     }
     m_button_handler_cb = cb;
 
-    mesh_gpiote_init();
-
     nrf_gpio_pin_pull_t pull_config = BUTTON_PULL;
     nrfx_gpiote_trigger_config_t trigger_config = {
         .trigger = NRFX_GPIOTE_TRIGGER_HITOLO,
@@ -253,6 +252,8 @@ uint32_t hal_buttons_init(hal_button_handler_cb_t cb)
         .p_trigger_config = &trigger_config,
         .p_handler_config = &handler_config
     };
+
+    mesh_gpiote_init();
     for (uint32_t i = 0; i < BUTTONS_NUMBER; ++i)
     {
         APP_ERROR_CHECK(nrfx_gpiote_input_configure(&m_gpiote, m_buttons_list[i], &in_config));
