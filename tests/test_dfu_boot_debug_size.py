@@ -15,6 +15,33 @@ OPTIMIZE_SIZE = "ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.
 
 
 class DfuBootDebugSizeTest(unittest.TestCase):
+    def test_debug_lto_for_overflowing_boot_images(self):
+        for project in PROJECTS[1:]:
+            with self.subTest(project=project):
+                root = ET.parse(ROOT / project).getroot()
+                configs = root.findall(".//cconfiguration")
+                self.assertEqual(len(configs), 2)
+                debug = next(
+                    cfg for cfg in configs
+                    if cfg.find(".//configuration").get("name") == "Debug"
+                )
+                for suffix in ("C Compiler", "C++ Compiler", "C Linker", "C++ Linker"):
+                    matches = [
+                        tool for tool in debug.findall(".//tool")
+                        if tool.get("name", "").endswith(suffix)
+                        and "Assembler" not in tool.get("name", "")
+                    ]
+                    self.assertEqual(len(matches), 1)
+                    name = ("Other compiler flags" if "Compiler" in suffix
+                            else "Other linker flags")
+                    values = [
+                        opt.get("value", "")
+                        for opt in matches[0].findall("option")
+                        if opt.get("name") == name
+                    ]
+                    self.assertEqual(len(values), 1)
+                    self.assertIn("-flto", values[0].split())
+
     def test_boot_debug_uses_size_optimization(self):
         for project in PROJECTS:
             with self.subTest(project=project):
