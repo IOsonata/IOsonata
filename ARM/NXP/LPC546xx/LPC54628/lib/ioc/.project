@@ -1626,6 +1626,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/net/ethernet.h</locationURI>
 		</link>
 		<link>
+			<name>include/net/http_server.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/http_server.h</locationURI>
+		</link>
+		<link>
 			<name>include/net/ip.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/net/ip.h</locationURI>
@@ -1639,6 +1644,11 @@
 			<name>include/net/sock_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/net/sock_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>src/net/http_server.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/net/http_server.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/net/ip_lwip.cpp</name>
