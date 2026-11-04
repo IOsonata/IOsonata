@@ -794,9 +794,9 @@ make -C tests/usb clean test \
   ASAN_RUNTIME_OPTIONS=detect_leaks=0:strict_string_checks=1
 ```
 
-Hardware runners are separate because they require flashed firmware and a
-physical USB host connection. The workflow in
-`.github/workflows/usb-host-tests.yml` records the host-only regression paths.
+Hardware tests are separate because they require flashed firmware and a
+physical USB host connection. Run the host-only regression suite locally with
+the command above; no GitHub Actions workflow is required.
 
 ## Troubleshooting
 
