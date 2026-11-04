@@ -232,10 +232,7 @@ uint32_t hal_buttons_init(hal_button_handler_cb_t cb)
         return NRF_ERROR_NULL;
     }
 
-    if (GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS < BUTTONS_NUMBER)
-    {
-        return NRF_ERROR_NOT_SUPPORTED;
-    }
+    /* nrfx 4 checks input resource capacity in input_configure(). */
     m_button_handler_cb = cb;
 
     nrf_gpio_pin_pull_t pull_config = BUTTON_PULL;
