@@ -32,7 +32,7 @@ LINKED_FOLDER = "${workspace_loc:"
 # Linker scripts that vendor packages in external/ provide for INCLUDE, with
 # the folders under external/ that hold them (nrfx 3 and nrfx 4 layouts).
 EXTERNAL_INCLUDES = {
-    "nrf_common.ld": ("nrfx/mdk", "nrfx/bsp/stable/mdk"),
+    "nrf_common.ld": ("nrfx/mdk", "nrfx/bsp/stable/mdk", "nrfx/bsp/stable/mdk/common"),
 }
 
 
