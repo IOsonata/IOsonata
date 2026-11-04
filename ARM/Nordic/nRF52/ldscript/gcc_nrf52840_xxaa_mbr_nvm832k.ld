@@ -1,4 +1,4 @@
-/* NVM1: 768 KB user storage, a USB MSC flash disk. No NVM0, no Bluetooth PDS.
+/* NVM1: 832 KB user storage, a USB MSC flash disk. No NVM0, no Bluetooth PDS.
  * MBR + Nordic USB DFU: the region ends where the bootloader starts.
  * Flash reservations are page-aligned (nRF52 4 KB erase pages).
  */
@@ -22,11 +22,12 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-  /* A bootloader doing dual bank updates writes the new image right after the
-     current one, so two images must fit here for the update to stay off the
-     disk. An image that grows into the disk fails to link. */
-  FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0x1F000
-  NVM1 (rw) : ORIGIN = 0x00020000, LENGTH = 0xC0000
+  /* The MBR and the application share the first 64 KB. An image that grows into
+     the disk fails to link. A bootloader doing single bank updates writes the new
+     image here. One doing dual bank updates writes it right after the current one,
+     so unless two images fit here the update overwrites the start of the disk. */
+  FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0xF000
+  NVM1 (rw) : ORIGIN = 0x00010000, LENGTH = 0xD0000
   RAM (rwx) :  ORIGIN = 0x20000008, LENGTH = 0x3fff8
 }
 
