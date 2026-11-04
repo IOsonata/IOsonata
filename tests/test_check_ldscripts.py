@@ -63,7 +63,7 @@ class CheckLdscriptsTests(unittest.TestCase):
 
     def test_vendor_references_are_checked_in_external(self):
         external = self.home / "external"
-        self.write("nrfx/bsp/stable/mdk/nrf_common.ld", "", external)
+        self.write("nrfx/bsp/stable/mdk/common/nrf_common.ld", "", external)
         self.write("nRF5_SDK/modules/nrfx/mdk/nrf52_xxaa.ld", "", external)
         result, out = self.run_check(external)
         self.assertEqual(result, 0, out)
