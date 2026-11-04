@@ -297,7 +297,10 @@ for item in items:
 		versions.append((tuple(int(part) for part in match[1].split(".")), name))
 if not versions:
 	raise SystemExit("No published IOcomposer plugin found: " + plugin_id)
-print("https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/" + max(versions)[1])
+version, filename = max(versions)
+if plugin_id == "org.iosonata.embedcdt.templates.wizard" and version < (0, 1, 7):
+	raise SystemExit("IOcomposer requires wizard 0.1.7 or newer; published wizard is " + filename)
+print("https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/" + filename)
 PY
 }
 
@@ -309,7 +312,7 @@ install_iocomposer() (
 	trap 'rm -rf "$stage"' EXIT
 	local plugin url
 	curl -fsSL "https://api.github.com/repos/I-SYST/iocomposer.io/contents/plugin?ref=main" -o "$stage/plugins.json"
-	for plugin in com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
+	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
 		url=""
 		if [[ "$plugin" == "com.iocomposer.embedcdt.ai" ]]; then
 			url="${IOCOMPOSER_AI_PLUGIN_URL:-}"
@@ -321,13 +324,19 @@ install_iocomposer() (
 		# Reject HTML/error responses before replacing installed plugins.
 		unzip -tq "$stage/$plugin.jar" >/dev/null
 	done
-	# Both required plugins have downloaded successfully before either is replaced.
+	# All three plugins are verified before the installation changes.
 	sudo mkdir -p "$runtime/dropins"
-	for plugin in com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
+	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
 		sudo cp "$stage/$plugin.jar" "$runtime/dropins/$plugin.jar"
 		sudo chmod 644 "$runtime/dropins/$plugin.jar"
 		sudo find "$runtime/dropins" -maxdepth 1 -type f -name "${plugin}_*.jar" -delete
 	done
+
+	# The IDE's built-in updater runs as the installing user, not root.
+	# Keep write access limited to that user (never make dropins world-writable).
+	local install_user="${SUDO_USER:-$(id -un)}"
+	sudo chown "$install_user" "$runtime/dropins"
+	sudo chmod 755 "$runtime/dropins"
 
 	# Keep SDK path preferences and one customization hook in the runtime ini.
 	"$PYTHON3" - "$runtime" "$stage" <<'PY'
@@ -390,54 +399,6 @@ build_iocomposer_index() {
 	else
 		echo "Warning: SDK index script not found: $index" >&2
 	fi
-}
-
-# ---------------------------------------------------------
-# Install IOsonata Eclipse Plugin
-# ---------------------------------------------------------
-install_iosonata_plugin() {
-  echo ">>> Installing IOsonata Eclipse Plugin..."
-
-  local plugin_dir="$ROOT/IOsonata/Installer/eclipse_plugin"
-  local dropins_dir="$ECLIPSE_DIR/dropins"
-
-  if [[ ! -d "$plugin_dir" ]]; then
-    echo "⚠️ Plugin directory not found at $plugin_dir"
-    echo "   Skipping plugin installation."
-    return 0
-  fi
-
-  local latest_plugin
-  latest_plugin=$(ls -1 "$plugin_dir"/org.iosonata.embedcdt.templates.wizard_*.jar 2>/dev/null | sort -V | tail -n1)
-
-  if [[ -z "$latest_plugin" ]]; then
-    echo "⚠️ No IOsonata plugin jar file found in $plugin_dir"
-    echo "   Skipping plugin installation."
-    return 0
-  fi
-
-  echo "   → Found plugin: $(basename "$latest_plugin")"
-
-  sudo mkdir -p "$dropins_dir"
-
-  local old_plugins
-  old_plugins=$(find "$dropins_dir" -name "org.iosonata.embedcdt.templates.wizard_*.jar" 2>/dev/null || true)
-
-  if [[ -n "$old_plugins" ]]; then
-    echo "   → Removing old plugin versions..."
-    echo "$old_plugins" | while read -r old_plugin; do
-      if [[ -f "$old_plugin" ]]; then
-        echo "     - Removing: $(basename "$old_plugin")"
-        sudo rm -f "$old_plugin"
-      fi
-    done
-  fi
-
-  echo "   → Installing plugin to $dropins_dir"
-  sudo cp "$latest_plugin" "$dropins_dir/"
-  sudo chmod 644 "$dropins_dir/$(basename "$latest_plugin")"
-
-  echo "✅ IOsonata Eclipse Plugin installed: $(basename "$latest_plugin")"
 }
 
 # ---------------------------------------------------------
@@ -1097,7 +1058,7 @@ rm -f "$CLONE_LOG" || true
 # Install IOsonata Eclipse Plugin
 # ---------------------------------------------------------
 echo
-install_iosonata_plugin
+# All three release bundles are staged and installed together by install_iocomposer.
 
 install_iocomposer "$ECLIPSE_DIR"
 

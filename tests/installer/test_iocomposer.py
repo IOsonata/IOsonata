@@ -47,6 +47,8 @@ esac
 		(root / 'listing.json').write_text(json.dumps([
 			{'name': f'com.iocomposer.embedcdt.{kind}_{version}.jar'}
 			for kind in ['ai', 'ui'] for version in ['0.0.9', '0.0.10', '0.0.2']
+		] + [
+			{'name': 'org.iosonata.embedcdt.templates.wizard_0.1.7.20261103.jar'},
 		]))
 		return dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'],
 			FIXTURE=str(root), FAIL_URL='', IOCOMPOSER_AI_PLUGIN_URL='', PYTHON3=sys.executable)
@@ -66,7 +68,7 @@ esac
 	def run_setup(self, platform, runtime, env):
 		source = (INSTALLER / f'install_iocdevtools_{platform}.sh').read_text()
 		start = source.index('iocomposer_plugin_url() {')
-		end = source.index('\n# ---------------------------------------------------------\n# Install IOsonata Eclipse Plugin', start)
+		end = source.index('\n# ---------------------------------------------------------\n# Install xPack toolchain', start)
 		return subprocess.run(['bash', '-c', 'set -euo pipefail\n' + source[start:end] + '\ninstall_iocomposer "$RUNTIME"'],
 			env=dict(env, RUNTIME=str(runtime)), text=True, capture_output=True)
 
@@ -88,6 +90,8 @@ esac
 				self.assertIn('IOSONATA_LOC=/my/sdk', prefs)
 				self.assertEqual(prefs.count('defaultPerspectiveId='), 1)
 				self.assertIn('_0.0.10.jar', (root / 'calls').read_text())
+				self.assertIn('templates.wizard_0.1.7.20261103.jar', (root / 'calls').read_text())
+				self.assertNotIn('embedcdt.bletest', (root / 'calls').read_text())
 				if platform == 'macos':
 					self.assertIn('../Eclipse/plugin_customization.ini', ini)
 

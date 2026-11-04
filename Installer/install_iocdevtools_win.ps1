@@ -824,7 +824,7 @@ function Install-IOcomposer {
 			Accept = 'application/vnd.github+json'
 			'User-Agent' = 'iocomposer-installer'
 		}
-		$ids = @('com.iocomposer.embedcdt.ai', 'com.iocomposer.embedcdt.ui')
+		$ids = @('org.iosonata.embedcdt.templates.wizard', 'com.iocomposer.embedcdt.ai', 'com.iocomposer.embedcdt.ui')
 		foreach ($id in $ids) {
 			$url = $null
 			if ($id -eq 'com.iocomposer.embedcdt.ai') { $url = $env:IOCOMPOSER_AI_PLUGIN_URL }
@@ -837,6 +837,13 @@ function Install-IOcomposer {
 				}
 				$latest = $candidates | Sort-Object Key -Descending | Select-Object -First 1
 				if (-not $latest) { throw "No published IOcomposer plugin found: $id" }
+				if ($id -eq 'org.iosonata.embedcdt.templates.wizard') {
+					if ($latest.Name -notmatch '^org\.iosonata\.embedcdt\.templates\.wizard_([0-9]+)\.([0-9]+)\.([0-9]+)(?:\.[0-9]+)*\.jar$') {
+						throw "Invalid wizard bundle version: $($latest.Name)"
+					}
+					$wizardVersion = [version]("$($Matches[1]).$($Matches[2]).$($Matches[3])")
+					if ($wizardVersion -lt [version]'0.1.7') { throw 'IOcomposer requires wizard 0.1.7 or newer' }
+				}
 				$url = "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/$($latest.Name)"
 			}
 			$jar = Join-Path $stage "$id.jar"
@@ -844,12 +851,19 @@ function Install-IOcomposer {
 			& $SEVENZIP_EXE t $jar | Out-Null
 			if ($LASTEXITCODE -ne 0) { throw "Invalid IOcomposer plugin archive: $id" }
 		}
-		# Stage both required plugins before replacing either installed plugin.
+		# Stage all three required plugins before replacing any installed plugin.
 		$dropins = Join-Path $Runtime 'dropins'
 		New-Item $dropins -ItemType Directory -Force | Out-Null
 		foreach ($id in $ids) {
 			Copy-Item (Join-Path $stage "$id.jar") (Join-Path $dropins "$id.jar") -Force
 			Get-ChildItem $dropins -Filter "${id}_*.jar" | Remove-Item -Force
+		}
+		# Grant modify access only to the installing account so the Eclipse
+		# plugin updater can replace verified JARs after the IDE exits.
+		$installUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+		& icacls.exe $dropins /grant "${installUser}:(OI)(CI)M" /T | Out-Null
+		if ($LASTEXITCODE -ne 0) {
+			Write-Warning "Unable to enable IOcomposer in-app updates for $installUser"
 		}
 		$ini = Join-Path $Runtime 'eclipse.ini'
 		$lines = Get-Content $ini
@@ -885,7 +899,7 @@ function Install-IOcomposer {
 				Copy-Item $splash $_.FullName -Force
 			}
 		} catch { Write-Warning "IOcomposer splash installation failed: $_" }
-		Write-Host "IOcomposer AI and UI plugins installed at $Runtime"
+		Write-Host "IOcomposer wizard, AI and UI plugins installed at $Runtime"
 	} finally {
 		Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 	}
@@ -897,27 +911,6 @@ function Build-IOcomposerIndex {
 		& "$PYOCD_DIR\Scripts\python.exe" $index --sdk-root "$ROOT\external"
 		if ($LASTEXITCODE -ne 0) { Write-Warning "SDK index failed. Retry: python $index --sdk-root $ROOT\external" }
 	} else { Write-Warning "Python or SDK index script missing; index was not built." }
-}
-
-# --- Plugin ---
-function Install-Plugin {
-    Write-Host; Write-Host ">>> Installing IOsonata Eclipse Plugin..." -ForegroundColor Cyan
-    $PDIR = "$ROOT\IOsonata\Installer\eclipse_plugin"
-    if (-not (Test-Path $PDIR)) { 
-        Write-Host "   [WARN] Plugin directory not found at $PDIR" -ForegroundColor Yellow
-        return 
-    }
-    $JAR = Get-ChildItem $PDIR "org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
-    if ($JAR) {
-        $DEST = "$ECLIPSE_DIR\dropins"
-        New-Item $DEST -ItemType Directory -Force | Out-Null
-        # Remove old versions
-        Get-ChildItem "$DEST\org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Remove-Item -Force
-        Copy-Item $JAR.FullName $DEST -Force
-        Write-Host "   [OK] Plugin installed: $($JAR.Name)" -ForegroundColor Green
-    } else {
-        Write-Host "   [WARN] No plugin jar found in $PDIR" -ForegroundColor Yellow
-    }
 }
 
 # ---------------------------------------------------------
@@ -1002,7 +995,7 @@ if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
 	Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
 }
 
-Install-Plugin
+# Wizard is installed together with the AI and UI plugins.
 Install-IOcomposer -Runtime $ECLIPSE_DIR
 
 # --- Makefile (aligned with macOS/Linux) ---
