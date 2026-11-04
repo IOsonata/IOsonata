@@ -11,6 +11,27 @@ PROJECTS = ("UartPrbsRxTest", "UartPrbsTxTestTaktOS", "UartSlipPrbsTxTest")
 
 
 class Samd11PrbsLtoTest(unittest.TestCase):
+    def test_slip_release_omits_progress_printf(self):
+        project = EXAMPLES / "UartSlipPrbsTxTest/ioc/.cproject"
+        root = ET.parse(project).getroot()
+        configs = root.findall(".//cconfiguration")
+        self.assertEqual(len(configs), 2)
+        for cfg in configs:
+            name = cfg.find(".//configuration").get("name")
+            values = [
+                value.get("value", "")
+                for tool in cfg.findall(".//tool")
+                if tool.get("name", "").endswith(("C Compiler", "C++ Compiler"))
+                for option in tool.findall("option")
+                if option.get("name") == "Defined symbols (-D)"
+                for value in option.findall("listOptionValue")
+            ]
+            count = values.count("SLIP_PRBS_NO_PROGRESS")
+            self.assertEqual(count, 2 if name == "Release" else 0)
+        source = (ROOT / "exemples/uart/uart_slip_prbs_tx.cpp").read_text()
+        self.assertEqual(source.count("#ifndef SLIP_PRBS_NO_PROGRESS"), 2)
+        self.assertIn("SlipTx(&g_SlipDev, buff, SLIPTEST_BUFSIZE);", source)
+
     def test_mcu_library_debug_optimizes_for_size(self):
         project = ROOT / "ARM/Microchip/SAMD/SAMD11/lib/ioc/.cproject"
         root = ET.parse(project).getroot()
