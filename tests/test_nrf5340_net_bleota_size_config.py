@@ -25,6 +25,23 @@ class Nrf5340NetBleOtaSizeTest(unittest.TestCase):
             "ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.size"
         ])
 
+    def test_debug_does_not_force_semihosting(self):
+        root = ET.parse(PROJECT).getroot()
+        debug = next(
+            cfg for cfg in root.findall(".//configuration")
+            if cfg.get("name") == "Debug"
+        )
+        linker_flags = [
+            opt.get("value", "")
+            for opt in debug.findall(".//option")
+            if opt.get("name") == "Other linker flags"
+        ]
+        self.assertEqual(len(linker_flags), 2)
+        for flags in linker_flags:
+            self.assertIn("--specs=nosys.specs", flags)
+            self.assertNotIn("rdimon", flags)
+            self.assertNotIn("-lrdimon", flags)
+
     def test_release_keeps_workaround_for_gcc_lto_failure(self):
         root = ET.parse(PROJECT).getroot()
         release = next(
