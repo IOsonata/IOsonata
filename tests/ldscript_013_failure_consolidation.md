@@ -11,6 +11,23 @@ matrix must establish which failures actually disappear. Do not reduce the 68
 failure count by adding proposed fixes, excluding failures from the accounting,
 or enlarging a production DFU partition to fit a Debug image.
 
+## Release 0.13 scope update: Nordic Mesh deferred
+
+Nordic Mesh support is deferred to a future release in favor of an IOsonata
+Mesh implementation. The four vendor Mesh light-switch examples
+(`MeshLgtSwClient` and `MeshLgtSwServer`, nRF52832 and nRF52840, Debug and
+Release) are **out of scope** for the 0.13 GNU build matrix. Do not attempt
+to repair or build them for 0.13, and do not count their eight configurations
+as PASS, FAIL or BLOCKED. Keep their project/source files unchanged.
+
+The historical 68-FAIL matrix below remains as recorded and is not rewritten.
+For the latest separately reported 1487 PASS / 50 FAIL / 36 BLOCKED matrix,
+removing 32 IAR, two NCS and eight Nordic Mesh configurations gives the
+reclassified **0.13 in-scope historical baseline: 1487 PASS / 42 FAIL /
+2 BLOCKED (1531 configurations)**. This is an accounting change, not a newly
+observed successful build. A complete rebuild at the current branch head is
+still required for final acceptance.
+
 ## Status by root cause
 
 | Cause | Last FAIL | Correction candidates | Still requires implementation or dependencies |
@@ -27,7 +44,7 @@ Linux library fixes and all fixes after `afac5e95` have not been compiled
 in the full matrix. Previous Windows Debug and Release improvements are already
 included in the 1469 PASS baseline and are not counted again.
 
-## Correction candidates (49 configurations)
+## Historical correction candidates (49 configurations; eight Mesh configurations now excluded)
 
 | Configurations | Scope | Commits | Required confirmation |
 | ---: | --- | --- | --- |
@@ -35,7 +52,7 @@ included in the 1469 PASS baseline and are not counted again.
 | 2 | RA4M1 UsbHidKeyboard, Debug/Release | `ff32ebe2` | Compile, pin-map and USB runtime verification |
 | 4 | STM32L476/L496 FlashMemoryDemo, Debug/Release | `ff32ebe2` | Compile, external flash geometry and hardware |
 | 8 | nRF52832/nRF52840 LvglDemo and LvglDualDIsplayDemo | `21f6d501` | Compile against separate pinned LVGL revision |
-| 8 | nRF52832/nRF52840 MeshLgtSwClient and MeshLgtSwServer, Debug/Release | this Mesh source-selection change | Compile 102/115 Mesh implementation C units plus SDK sources; check SoftDevice API 7, memory limits and actual Mesh operation |
+
 | 2 | nRF54LM20x TinyUsbComboStress, Debug/Release | `21f6d501` | Compile against separate pinned TinyUSB revision |
 | 2 | nRF52840 QSpiTest, Debug/Release | `fe92dea6` | Compile/link against nrfx 4, QSPI read/write on board |
 | 2 | nRF52840 radio_test, Debug/Release | `fe92dea6` | Compile/link against nrfx 4, radio operation on board |
@@ -67,7 +84,7 @@ These corrections are substantive port work, **not** observed boot, ISR or
 link results. The previous C6 Blinky Release ELF entry failure remains an
 acceptance test. Do not infer it is resolved from linker option inspection.
 
-## Nordic Mesh source reconciliation (8 correction candidates)
+## Nordic Mesh source reconciliation (historical; deferred from 0.13)
 
 The four Eclipse managed projects previously linked only 14-37 Mesh-related
 resources, mostly headers and example helpers. Nordic Mesh 5.0.0's upstream
@@ -140,10 +157,11 @@ A code-size fix requires map/symbol attribution, not linker-space inflation.
    `python3 tests/ldscript_reference_audit.py`.
 3. Provision pinned vendor SDK versions, keeping the normal SDK versions
    alongside the example-specific checkouts. Report missing publications.
-4. Clean build **all 1573 counted configurations** from their checked-in
-   Eclipse CDT project settings in one pass; capture diagnostics for every
-   remaining FAIL and compare configuration-by-configuration against
-   `afac5e95`.
+4. Clean build every **in-scope GNU Eclipse managed-project configuration**
+   (1531 in the historical matrix after IAR, NCS and Nordic Mesh exclusions;
+   recompute against the current repository inventory). Capture diagnostics
+   for every remaining FAIL and compare configuration-by-configuration against
+   `afac5e95` without treating exclusions as build passes.
 5. Inspect every ELF/map, vector/entry, NVM and DFU boundary; separately report
    IAR, missing SDKs and hardware-only limitations. Zero hardware results remain
    zero, regardless of compile/link success.
