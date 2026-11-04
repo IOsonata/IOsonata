@@ -30,35 +30,31 @@ still required for final acceptance.
 
 ## Current 0.13 acceptance scope (November 3, 2026)
 
-The maintainer has deferred unfinished BleOta work. All BleOta example
-configurations are excluded from release 0.13 build validation and remediation;
-the last measured matrix contains nRF5340_Net BleOta Debug and Release, both
-failing, and neither is included in the revised acceptance denominator.
+All five unfinished BleOta example projects are excluded from release 0.13:
+nRF52832, nRF52840, nRF5340_Net, nRF54L15 and nRF54LM20x, with Debug
+and Release on each (10 configurations). Their source and project metadata
+remain untouched; do not attempt to repair them for this release.
 
-A **Debug DfuBoot** image that fails *only* because it exceeds its fixed FLASH
-region is **WAIVED**, not a PASS and not an actionable FAIL. No further
-Debug-size work is required. This does not waive compile errors, undefined
-symbols, invalid ELF regions, other memory violations or Release failures.
-Keep the partition boundaries unchanged. The last measured Debug overflow
-cases are RE01, nRF5340_Net and R9A02G021 DfuBoot; nRF52840 already passes.
+A **Debug DfuBoot** image that fails *only* because it exceeds its fixed
+FLASH region is **WAIVED**, not PASS and not an actionable FAIL. Other
+errors and Release overflows remain FAIL. Keep DFU partitions unchanged.
+The measured waived Debug images are RE01, nRF5340_Net and R9A02G021.
 
-From the user-reported build at `4baa5f36` (1,511 PASS / 18 FAIL /
-2 BLOCKED / 1,531 attempted), exclusion of two BleOta FAIL configurations
-and classification of three Debug DfuBoot FLASH overflows as WAIVED gives:
+The latest measured record at `99fd95a5` (emulated GNU managed build)
+applies these rules to the 1,531 configurations counted before excluding
+BleOta. The exclusion removes eight PASS and two FAIL, not just two FAIL:
 
 | Classification | Configurations |
 | --- | ---: |
-| PASS (measured) | 1511 |
+| PASS (measured) | 1503 |
 | FAIL (still actionable in scope) | 13 |
 | BLOCKED | 2 |
 | WAIVED (Debug DfuBoot FLASH capacity) | 3 |
-| **In-scope total** | **1529** |
+| **In-scope total** | **1521** |
 
-This is a scope and disposition change applied to a previous build report,
-not new compilation or verification of the later optimization commits.
-Historical 68-failure figures and earlier build results below are retained
-for traceability. Future build runs should use the current scope, and report
-WAIVED separately rather than silently dropping Debug failures.
+All 1,393 linked example images passed static ELF checks in that record.
+These figures precede later Thingy52 and R9A02 fixes, which require their
+own builds before changing counts. Historical figures below remain intact.
 
 ## Status by root cause
 
@@ -190,7 +186,7 @@ A code-size fix requires map/symbol attribution, not linker-space inflation.
 3. Provision pinned vendor SDK versions, keeping the normal SDK versions
    alongside the example-specific checkouts. Report missing publications.
 4. Clean build every **in-scope GNU Eclipse managed-project configuration**
-   (1529 in the latest scoped matrix after IAR, NCS, Nordic Mesh and BleOta exclusions;
+   (1521 in the latest scoped matrix after IAR, NCS, Nordic Mesh and all BleOta exclusions;
    recompute against the current repository inventory). Capture diagnostics
    for every remaining FAIL and compare configuration-by-configuration against
    `afac5e95` without treating exclusions as build passes.
