@@ -308,7 +308,10 @@ static inline bool NRFX_IRQ_IS_PENDING(IRQn_Type irq_number)
  *         If x is 0, the result is undefined.
  */
 // nrfx v4 TIMER uses this operation to determine the prescaler.
-// Keep it compiler-independent for GCC, Clang, and IAR builds.
+// Input zero has undefined results, as specified by nrfx.
+#if defined(__GNUC__) || defined(__clang__)
+#define NRFX_CTZ(value) ((uint32_t)__builtin_ctz((unsigned int)(value)))
+#else
 static inline uint32_t NRFX_TrailingZeros(uint32_t Value)
 {
 	uint32_t count;
@@ -322,6 +325,7 @@ static inline uint32_t NRFX_TrailingZeros(uint32_t Value)
 	return count;
 }
 #define NRFX_CTZ(value) NRFX_TrailingZeros((uint32_t)(value))
+#endif
 
 //------------------------------------------------------------------------------
 
