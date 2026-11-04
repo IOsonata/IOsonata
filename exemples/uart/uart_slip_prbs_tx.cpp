@@ -120,7 +120,9 @@ int main()
 {
 	bool res;
 
+#ifndef SLIP_PRBS_NO_PROGRESS
 	printf("UART Slip PRBS Demo\n");
+#endif
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &g_UartCfg);
@@ -151,7 +153,9 @@ int main()
 		lcnt++;
 		if ((lcnt & 0xff) == 0)
 		{
+#ifndef SLIP_PRBS_NO_PROGRESS
 			printf("cnt %u\n", lcnt);
+#endif
 		}
 	}
 	return 0;
