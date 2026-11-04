@@ -8,8 +8,9 @@ linker script, so its size is set there and nowhere else, and the image fails
 to link if it grows into the disk. It does not expose firmware, filesystem,
 settings or Bluetooth bond-storage regions.
 
-The content stays across resets and power cycles. An erased disk is formatted automatically. Existing signed volumes are preserved.
-Unrecognized nonblank media are never reformatted.
+The content stays across resets and power cycles. An erased disk is formatted
+automatically. Existing signed volumes are preserved. Unrecognized nonblank
+media are never reformatted.
 
 A sector is one erase unit, the smallest sector NvmDiskIO accepts, so the host
 sees that block size in READ CAPACITY rather than 512 bytes. Each sector the
@@ -114,7 +115,12 @@ static const UsbdMscCfg_t s_MscCfg = {
 
 int main(void)
 {
-	if (s_Disk.InitMcu(s_Nvm, s_MemIntrf, MSC_NVM_REGION) == false)
+	if (NvmMcuRegionInit(s_Nvm, s_MemIntrf, MSC_NVM_REGION) == false)
+	{
+		return -1;
+	}
+
+	if (s_Disk.Init(s_Nvm) == false)
 	{
 		return -1;
 	}

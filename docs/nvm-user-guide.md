@@ -156,19 +156,29 @@ static NvmDiskIO s_Disk;
 alignas(4) static uint8_t s_Sector[4096];
 
 // In application initialization, before exposing s_Disk to USB MSC:
-if (!s_Disk.InitMcu(s_Nvm, s_NvmIntrf, 1) ||
-	!FatFsFormatIfBlank(s_Disk, s_Sector, sizeof(s_Sector)))
+if (NvmMcuRegionInit(s_Nvm, s_NvmIntrf, 1) == false)
+{
+	return false;
+}
+
+if (s_Disk.Init(s_Nvm) == false)
+{
+	return false;
+}
+
+if (FatFsFormatIfBlank(s_Disk, s_Sector, sizeof(s_Sector)) == false)
 {
 	return false;
 }
 ```
 
-`InitMcu()` initializes the internal-memory controller, obtains the target's
-memory geometry with `NvmMcuCfg()`, verifies the chosen linker NVM region lies
-inside the MCU's memory and application ceiling with aligned erase boundaries,
-and initializes `Nvm` and `NvmDiskIO`. Region index 1 selects NVM1 when the
-linker script defines it. This helper applies to MCU internal memory only;
-external memories continue to use `Nvm::Init()` and `NvmDiskIO::Init()`.
+`NvmMcuRegionInit()` initializes the internal-memory controller, obtains the
+target's memory geometry with `NvmMcuCfg()`, and verifies the chosen linker NVM
+region lies inside the MCU's memory and application ceiling with aligned erase
+boundaries. It initializes `Nvm`, not `NvmDiskIO`. The disk is attached through
+the existing, generic `NvmDiskIO::Init()`. Region index 1 selects NVM1 when
+the linker script defines it. External memories continue to use `Nvm::Init()`
+with their actual interface and geometry.
 
 `FatFsFormatIfBlank()` accepts any `DiskIO`, regardless of USB, RAM or flash.
 It creates FAT12 only when sector 0 is completely erased or zero-filled, or

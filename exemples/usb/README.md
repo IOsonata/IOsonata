@@ -126,8 +126,9 @@ removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
 USB descriptors; filesystem initialization belongs to the storage layer.
 
 The flash disk example runs the same class on `NvmDiskIO` over the NVM1 region
-of its linker script. `NvmDiskIO::InitMcu()` obtains the flash geometry from
-`NvmMcuCfg()`, checks the reserved NVM1 region and initializes the disk.
+of its linker script. `NvmMcuRegionInit()` obtains the flash geometry from
+`NvmMcuCfg()` and initializes `Nvm` in the reserved NVM1 region. The generic
+`NvmDiskIO::Init()` then attaches the initialized memory.
 `FatFsFormatIfBlank()` uses the existing MSC sector buffer to format an erased
 region with FAT12, while preserving signed existing volumes and refusing to
 overwrite unknown nonblank media. No FAT formatting code is needed in `main()`.

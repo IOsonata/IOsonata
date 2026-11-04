@@ -321,6 +321,23 @@ public:
 
 
 /**
+ * @brief	Initialize an Nvm in a linker-reserved internal-memory region.
+ *
+ * Uses NvmMcuCfg() to obtain MCU geometry, checks that the linker region
+ * lies within the memory and application ceiling, then initializes the
+ * controller interface and Nvm. This is an MCU-memory helper, not part of
+ * NvmDiskIO. The caller owns both objects.
+ *
+ * @param	Mem		: Nvm to initialize
+ * @param	Intrf	: MCU NVM controller interface
+ * @param	RegionNo: Linker-defined NVM region number
+ *
+ * @return	true when initialization succeeds
+ */
+bool NvmMcuRegionInit(Nvm &Mem, NvmIntrf &Intrf, int RegionNo);
+
+
+/**
  * @brief	Register who decides when the memory may be touched.
  *
  * On a part with a radio, writing the memory has to be arbitrated against it,
