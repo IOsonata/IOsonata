@@ -147,7 +147,7 @@
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/simple_hal.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/simple_hal.c</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/mesh_compat/simple_hal.c</locationURI>
 		</link>
 			<link>
 			<name>src/Mesh5/examples/common/src/app_dtt.c</name>
