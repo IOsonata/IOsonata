@@ -41,6 +41,32 @@ class R9A02LinkFlagsTest(unittest.TestCase):
                         "ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.level.size"
                     ])
 
+    def test_r9a02_debug_lto_is_enabled_in_compilers_and_linkers(self):
+        for example in ("DfuBoot", "CryptoTest"):
+            with self.subTest(example=example):
+                root = ET.parse(EXAMPLES / example / "ioc/.cproject").getroot()
+                configs = root.findall(".//cconfiguration")
+                debug = next(
+                    cfg for cfg in configs
+                    if cfg.find(".//configuration").get("name") == "Debug"
+                )
+                tools = debug.findall(".//tool")
+                for kind in ("C Compiler", "C++ Compiler", "C Linker", "C++ Linker"):
+                    matches = [
+                        tool for tool in tools
+                        if tool.get("name") == "GNU RISC-V Cross " + kind
+                    ]
+                    self.assertEqual(len(matches), 1)
+                    flags_name = ("Other compiler flags"
+                                  if "Compiler" in kind else "Other linker flags")
+                    options = [
+                        opt.get("value", "")
+                        for opt in matches[0].findall("option")
+                        if opt.get("name") == flags_name
+                    ]
+                    self.assertEqual(len(options), 1)
+                    self.assertIn("-flto", options[0].split())
+
     def test_dfu_boot_never_forces_semihost_archive(self):
         flags = self.linker_flags("DfuBoot")
         for config, options in flags.items():
