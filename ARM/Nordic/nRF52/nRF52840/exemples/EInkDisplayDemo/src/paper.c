@@ -9,6 +9,8 @@
 #include "ED037TC2nRF52.h"
 //#include "ED037TC1.h"
 #include "board.h"
+#include "app_util_platform.h"
+#include "nordic_common.h"
 
 #define PAPER_RST_PIN EINK_RESET_PIN
 #define PAPER_DC_PIN  EINK_DC_PIN
@@ -181,7 +183,7 @@ static void paper_reset(void) {
   msDelay(200);
 }
 
-void Upload_Temperature_LUT();
+void Upload_Temperature_LUT(void);
 
 static ret_code_t paper_tx_lut(void) {
   ret_code_t ret = 0;

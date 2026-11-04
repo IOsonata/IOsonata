@@ -26,6 +26,17 @@ class EinkExampleTests(unittest.TestCase):
                         init.index("IOPinCfg(pDev->pIOPinMap"))
         self.assertIn("pCfgData->pIOPinMap == NULL", init)
 
+    def test_legacy_paper_nordic_macros(self):
+        example = ROOT / "ARM" / "Nordic" / "nRF52" / "nRF52840" / "exemples" / "EInkDisplayDemo" / "src"
+        paper = (example / "paper.c").read_text()
+        controller = (example / "ED037TC1.c").read_text()
+        self.assertIn('#include "app_util_platform.h"', paper)
+        self.assertIn('#include "nordic_common.h"', paper)
+        self.assertIn("void Upload_Temperature_LUT(void);", paper)
+        self.assertIn("void InitialDisplay(void);", controller)
+        self.assertIn("void Upload_Temperature_LUT(void);", controller)
+        self.assertIn("void Upload_Temperature_LUT(void)", controller)
+
     def test_c_implementation_matches_public_write_signature(self):
         header = (ROOT / "include" / "display" / "eink_intrf.h").read_text()
         source = (ROOT / "src" / "display" / "eink_intrf.cpp").read_text()

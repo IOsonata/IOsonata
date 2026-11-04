@@ -29,6 +29,14 @@ class Nrf52840NrfxV4Tests(unittest.TestCase):
         )
         self.assertIn('#include "nrf_gpio.h"', (demo / "src" / "board.h").read_text())
 
+    def test_radio_sdk_legacy_includes_and_glue(self):
+        demo = DEMOS / "radio_test"
+        settings = (demo / "ioc" / ".cproject").read_text()
+        self.assertEqual(settings.count("external/nRF5_SDK/integration/nrfx/legacy"), 4)
+        glue = (ROOT / "ARM" / "Nordic" / "include" / "nrfx_glue.h").read_text()
+        self.assertIn("#define NRFX_CTZ(value) NRFX_TrailingZeros(", glue)
+        self.assertIn("static inline uint32_t NRFX_TrailingZeros(", glue)
+
     def test_radio_timer_nrfx_v4_instance(self):
         demo = DEMOS / "radio_test"
         source = (demo / "src" / "radio_test.c").read_text()
