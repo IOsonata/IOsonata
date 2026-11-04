@@ -79,6 +79,13 @@ class RadioTestDependencies(unittest.TestCase):
         self.assertNotIn("src/nrf_cli_cdc_acm.c", links)
         self.assertIn("src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c", links)
         settings = ET.parse(PROJECT / "ioc/.cproject")
+        source_configs = settings.findall(".//cconfiguration")
+        self.assertEqual(len(source_configs), 2)
+        for cfg in source_configs:
+            entries = cfg.findall(".//sourceEntries/entry")
+            self.assertEqual(len(entries), 1)
+            excluded = entries[0].get("excluding", "").split("|")
+            self.assertIn("src/nrf_cli_cdc_acm.c", excluded)
         configs = settings.findall(".//configuration")
         self.assertEqual({cfg.get("name") for cfg in configs},
                          {"Debug", "Release"})
