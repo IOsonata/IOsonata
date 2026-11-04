@@ -46,6 +46,23 @@ class Esp32c6StartupTests(unittest.TestCase):
                                  "PARENT-4-PROJECT_LOC/src/" + source)
                 self.assertTrue((ESP / "src" / source).is_file())
 
+    def test_c6_applications_pull_reset_entry_from_archive(self):
+        shared = (ROOT / "RISCV" / "ldscript" / "gcc_riscv_flash.ld").read_text()
+        self.assertIn("ENTRY(ResetEntry)", shared)
+        for name in ("Blinky", "CryptoTest"):
+            project = (C6 / "exemples" / name / "ioc" / ".cproject")
+            tree = ET.parse(project)
+            for cfg in tree.findall(".//cconfiguration"):
+                config = cfg.find(".//configuration").get("name")
+                flags = [
+                    option.get("value", "")
+                    for option in cfg.findall(".//option")
+                    if option.get("name") == "Other linker flags"
+                ]
+                with self.subTest(name=name, configuration=config):
+                    self.assertEqual(len(flags), 2)
+                    self.assertTrue(all("-Wl,--undefined=ResetEntry" in x for x in flags))
+
     def test_cpu_local_interrupts_reserved_on_c6_only(self):
         uart = (ESP / "src" / "uart_esp32.cpp").read_text()
         pins = (ESP / "include" / "esp32xx_intmtx.h").read_text()
