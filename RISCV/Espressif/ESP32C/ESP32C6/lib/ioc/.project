@@ -241,11 +241,6 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
 		</link>
 		<link>
-			<name>src/Vectors_esp32_clic.c</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/Vectors_esp32_clic.c</locationURI>
-		</link>
-		<link>
 			<name>src/Vectors_esp32c6.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_esp32c6.c</locationURI>
@@ -1159,6 +1154,26 @@
 			<name>src/coredev/uart.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/esp32xx_irq.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/esp32xx_irq.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/iopincfg_esp32.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_esp32.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/system_esp32_uart_clock.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_esp32_uart_clock.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_esp32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/uart_esp32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>

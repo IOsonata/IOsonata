@@ -53,16 +53,16 @@ __global_pointer$ = ORIGIN(RAM) + 0x800;
 SECTIONS
 {
   /*
-   * IRAM: CLIC interrupt vector table + time-critical ISR code.
-   * g_Esp32C6Vectors is placed here via __attribute__((section(".iram.text"))).
-   * The 512-byte alignment satisfies the CLIC mtvec alignment requirement
-   * (96 entries x 4 bytes = 384 bytes -> next power-of-2 = 512).
+   * IRAM: CPU interrupt vector table followed by cache-miss-safe handlers.
+   * Keep the 32-entry 4-byte jump table first with 256-byte alignment,
+   * as required by the RISC-V mtvec base address.
    */
   .iram.text :
   {
-    . = ALIGN(512);
+    . = ALIGN(256);
     __iram_start__ = .;
     _iram_text_start = ABSOLUTE(.);
+    KEEP(*(.iram.text.vectors))
     KEEP(*(.iram.text))
     *(.iram.text.*)
     . = ALIGN(4);

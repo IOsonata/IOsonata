@@ -145,7 +145,11 @@ SOFTWARE.
  * driver's CPU INT 1.  Override per-board if needed.
  *---------------------------------------------------------------------------*/
 #ifndef ESP32_GPIO_INTR_CPU_INT_ID
-#  define ESP32_GPIO_INTR_CPU_INT_ID        4U
+#  if defined(ESP32C6)
+#    define ESP32_GPIO_INTR_CPU_INT_ID      6U
+#  else
+#    define ESP32_GPIO_INTR_CPU_INT_ID      4U
+#  endif
 #endif
 
 #ifndef ESP32_GPIO_INTR_CPU_INT_PRIO
