@@ -112,6 +112,9 @@ class RadioTestDependencies(unittest.TestCase):
     def test_iosonata_nrfx_glue_supports_v4_timer(self):
         text = NRFX_GLUE.read_text(encoding="utf-8")
         self.assertIn("#define NRFX_CTZ(value)", text)
+        self.assertIn("__builtin_ctz", text)
+        self.assertIn("#if defined(__GNUC__) || defined(__clang__)", text)
+        self.assertIn("NRFX_TrailingZeros", text)
 
 
 if __name__ == "__main__":
