@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "storage/diskio.h"
+#include "storage/fatfs_format.h"
 #include "usb/usbd_msc.h"
 
 #define EP_NO		1U
@@ -83,6 +84,40 @@ public:
 	bool FailRead = false;
 	bool FailWrite = false;
 	int ResetCount = 0;
+};
+
+#define FAT12_TEST_SECTOR_SIZE	512U
+#define FAT12_TEST_SECTOR_COUNT	64U
+
+class FormattedDisk : public DiskIO {
+public:
+	void Clear(void) { memset(vData, 0xFF, sizeof(vData)); }
+	uint16_t GetSectSize(void) override { return FAT12_TEST_SECTOR_SIZE; }
+	uint32_t GetNbSect(void) override { return FAT12_TEST_SECTOR_COUNT; }
+	uint32_t GetSize(void) override {
+		return FAT12_TEST_SECTOR_SIZE * FAT12_TEST_SECTOR_COUNT / 1024U;
+	}
+	bool SectRead(uint32_t SectNo, uint8_t *pBuff) override
+	{
+		if (pBuff == nullptr || SectNo >= FAT12_TEST_SECTOR_COUNT)
+		{
+			return false;
+		}
+		memcpy(pBuff, vData[SectNo], FAT12_TEST_SECTOR_SIZE);
+		return true;
+	}
+	bool SectWrite(uint32_t SectNo, uint8_t *pData) override
+	{
+		if (pData == nullptr || SectNo >= FAT12_TEST_SECTOR_COUNT)
+		{
+			return false;
+		}
+		memcpy(vData[SectNo], pData, FAT12_TEST_SECTOR_SIZE);
+		return true;
+	}
+
+private:
+	uint8_t vData[FAT12_TEST_SECTOR_COUNT][FAT12_TEST_SECTOR_SIZE];
 };
 
 static void ReceiveDma(void)
@@ -419,6 +454,26 @@ static void TestInitDescriptorAndControl(void)
 	CHECK(msc.SelectConfig(0U));
 	CHECK(s_CloseCount == 2);
 	CHECK(msc.Rate() == 0U);
+}
+
+static void TestFormattedDiskMscInit(void)
+{
+	ResetFake();
+	static FormattedDisk disk;
+	alignas(4) static uint8_t sector[FAT12_TEST_SECTOR_SIZE];
+	UsbdMscCfg_t cfg = {};
+	UsbdMsc msc;
+
+	disk.Clear();
+	CHECK(FatFsFormatIfBlank(disk, sector, sizeof(sector)));
+	cfg.DevNo = 0;
+	cfg.pDisk = &disk;
+	cfg.pSectorBuffer = sector;
+	cfg.SectorBufferSize = sizeof(sector);
+	CHECK(msc.Init(cfg));
+	CHECK(static_cast<UsbdMscDev_t *>(msc)->SectorSize == FAT12_TEST_SECTOR_SIZE);
+	CHECK(static_cast<UsbdMscDev_t *>(msc)->SectorCount == FAT12_TEST_SECTOR_COUNT);
+	CHECK(sector[510] == 0x55U && sector[511] == 0xAAU);
 }
 
 static void TestInquiryStrings(void)
@@ -1138,6 +1193,7 @@ static void TestProcessOnRequestOnly(void)
 int main(void)
 {
 	TestInitDescriptorAndControl();
+	TestFormattedDiskMscInit();
 	TestInquiryStrings();
 	TestReadOnlyCommands();
 	TestReadWriteAndRepeatedCommands();

@@ -123,8 +123,17 @@ Neither mouse preset has a wheel or report IDs. Custom layouts still use
 MSC needs an initialized `DiskIO`, a caller-owned sector work buffer and its
 size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
 removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
-USB descriptors; the example's FAT12 formatting only defines the disk contents.
+USB descriptors; filesystem initialization belongs to the storage layer.
 
 The flash disk example runs the same class on `NvmDiskIO` over the NVM1 region
-of its linker script. Its sector is one 4 KiB erase unit and its volume stays
-across resets and power cycles.
+of its linker script. `NvmDiskIO::InitMcu()` obtains the flash geometry from
+`NvmMcuCfg()`, checks the reserved NVM1 region and initializes the disk.
+`FatFsFormatIfBlank()` uses the existing MSC sector buffer to format an erased
+region with FAT12, while preserving signed existing volumes and refusing to
+overwrite unknown nonblank media. No FAT formatting code is needed in `main()`.
+
+The disk continues to use 4 KiB sectors (the flash erase size), synchronous
+writes, and no wear levelling. The 256 KiB standard build reserves NVM1 at the
+top of flash; `Release_mbr` reserves 832 KiB between 0x10000 and 0xE0000.
+A dual-bank DFU update may overwrite the beginning of the `Release_mbr` disk
+region. Persistence through firmware updates is not guaranteed.

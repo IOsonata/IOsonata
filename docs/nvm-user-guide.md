@@ -141,6 +141,49 @@ Align the reserved region to the target's erase and write requirements.
 `NvmIntrf` wraps the port's single controller interface; declaring another
 wrapper does not create an independent controller or callback registration.
 
+## DiskIO and blank FAT12 volumes
+
+An MCU internal-memory disk can use the linker-reserved region directly:
+
+```cpp
+#include "storage/diskio_nvm.h"
+#include "storage/fatfs_format.h"
+#include "storage/nvm_intrf.h"
+
+static NvmIntrf s_NvmIntrf;
+static Nvm s_Nvm;
+static NvmDiskIO s_Disk;
+alignas(4) static uint8_t s_Sector[4096];
+
+// In application initialization, before exposing s_Disk to USB MSC:
+if (!s_Disk.InitMcu(s_Nvm, s_NvmIntrf, 1) ||
+	!FatFsFormatIfBlank(s_Disk, s_Sector, sizeof(s_Sector)))
+{
+	return false;
+}
+```
+
+`InitMcu()` initializes the internal-memory controller, obtains the target's
+memory geometry with `NvmMcuCfg()`, verifies the chosen linker NVM region lies
+inside the MCU's memory and application ceiling with aligned erase boundaries,
+and initializes `Nvm` and `NvmDiskIO`. Region index 1 selects NVM1 when the
+linker script defines it. This helper applies to MCU internal memory only;
+external memories continue to use `Nvm::Init()` and `NvmDiskIO::Init()`.
+
+`FatFsFormatIfBlank()` accepts any `DiskIO`, regardless of USB, RAM or flash.
+It creates FAT12 only when sector 0 is completely erased or zero-filled, or
+repairs a recognizable interrupted IOsonata boot-sector write. An existing
+sector-0 55AA signature is preserved, including MBR and other FAT layouts.
+Unknown nonblank media are rejected, not erased. Newly created volumes have
+two FAT copies, one root-directory sector and one sector per cluster; the
+formatter rejects geometry outside FAT12 limits and writes sector 0 last.
+The caller owns a buffer of at least the disk's logical-sector size.
+
+The nRF52840 USB flash-disk example uses a 4096-byte logical sector matching
+the flash erase unit. Sector writes erase and program the entire sector,
+synchronously, without wear levelling or 512-byte sector emulation. Flash has
+limited program/erase endurance; this is not suitable for write-heavy use.
+
 ## Read, write, erase and synchronization
 
 | Operation | Successful return | Meaning |

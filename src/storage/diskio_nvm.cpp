@@ -44,6 +44,10 @@ NvmDiskIO::NvmDiskIO()
 bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize)
 {
 	uint32_t sect = SectSize;
+	uint32_t esize = Mem.EraseSize();
+
+	vpNvm = nullptr;
+	vSectSize = 0;
 
 	if (sect == 0)
 	{
@@ -59,7 +63,6 @@ bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize)
 
 	// The sector has to be a whole number of erase units, or an erase would
 	// take out more than the sector being written.
-	uint32_t esize = Mem.EraseSize();
 	if (esize != 0 && (sect % esize) != 0)
 	{
 		return false;
@@ -67,7 +70,8 @@ bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize)
 
 	// DiskIO exposes only whole sectors. A tail shorter than one sector would
 	// be unreachable and would make the reported geometry ambiguous.
-	if (Mem.Size() < sect || (Mem.Size() % sect) != 0)
+	if (Mem.Size() < sect || (Mem.Size() % sect) != 0 ||
+		(Mem.Size() / sect) > 0xFFFFFFFFULL)
 	{
 		return false;
 	}
@@ -76,6 +80,15 @@ bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize)
 	vSectSize = sect;
 
 	return true;
+}
+
+uint32_t NvmDiskIO::GetNbSect(void)
+{
+	if (vpNvm == nullptr || vSectSize == 0U)
+	{
+		return 0;
+	}
+	return (uint32_t)(vpNvm->Size() / vSectSize);
 }
 
 uint32_t NvmDiskIO::GetSize(void)
@@ -105,7 +118,7 @@ uint32_t NvmDiskIO::GetMinEraseSize(void)
 
 bool NvmDiskIO::SectRead(uint32_t SectNo, uint8_t *pBuff)
 {
-	if (vpNvm == nullptr || pBuff == nullptr)
+	if (vpNvm == nullptr || pBuff == nullptr || SectNo >= GetNbSect())
 	{
 		return false;
 	}
@@ -117,7 +130,7 @@ bool NvmDiskIO::SectRead(uint32_t SectNo, uint8_t *pBuff)
 
 bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 {
-	if (vpNvm == nullptr || pData == nullptr)
+	if (vpNvm == nullptr || pData == nullptr || SectNo >= GetNbSect())
 	{
 		return false;
 	}
@@ -153,7 +166,8 @@ bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 
 void NvmDiskIO::Erase(void)
 {
-	if (vpNvm == nullptr || vpNvm->EraseSize() == 0)
+	if (vpNvm == nullptr || vpNvm->EraseSize() == 0 ||
+		vpNvm->Size() > 0xFFFFFFFFULL)
 	{
 		return;
 	}
@@ -168,7 +182,9 @@ void NvmDiskIO::Erase(void)
 
 void NvmDiskIO::EraseSector(uint32_t SectNo, int NbSect)
 {
-	if (vpNvm == nullptr || vpNvm->EraseSize() == 0 || NbSect <= 0)
+	if (vpNvm == nullptr || vpNvm->EraseSize() == 0 || NbSect <= 0 ||
+		SectNo >= GetNbSect() || (uint32_t)NbSect > GetNbSect() - SectNo ||
+		(uint64_t)NbSect * vSectSize > 0xFFFFFFFFULL)
 	{
 		return;
 	}

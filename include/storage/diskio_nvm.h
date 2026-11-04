@@ -59,6 +59,8 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
+class NvmIntrf;
+
 /// @brief	Block device over any Nvm.
 class NvmDiskIO : public DiskIO {
 public:
@@ -79,9 +81,24 @@ public:
 	 */
 	bool Init(Nvm &Mem, uint32_t SectSize = 0);
 
+	/**
+	 * @brief	Attach MCU internal memory reserved by the linker.
+	 *
+	 * Initializes the controller, derives memory geometry from NvmMcuCfg(),
+	 * checks the selected NvmRegion against the MCU bounds and erase units,
+	 * then initializes Mem and this DiskIO. Caller owns all three objects.
+	 *
+	 * @param Mem		Caller-owned Nvm
+	 * @param Intrf		Caller-owned NvmIntrf
+	 * @param RegionNo	Linker-defined NVM region index
+	 * @return	true on success
+	 */
+	bool InitMcu(Nvm &Mem, NvmIntrf &Intrf, int RegionNo);
+
 	// *** DiskIO ***
 
 	uint16_t GetSectSize(void) override { return (uint16_t)vSectSize; }
+	uint32_t GetNbSect(void) override;
 	uint32_t GetSize(void) override;
 	uint32_t GetMinEraseSize(void) override;
 	bool SectRead(uint32_t SectNo, uint8_t *pBuff) override;

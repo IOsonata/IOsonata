@@ -75,9 +75,15 @@ HID_SOURCES := \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
+FAT12_TARGET := $(BUILD_DIR)/fat12_format_test
+FAT12_SOURCES := fat12_format_test.cpp \
+	$(ROOT)/src/storage/fatfs_format.cpp \
+	$(ROOT)/src/storage/diskio_impl.cpp
+
 MSC_TARGET := $(BUILD_DIR)/usbd_msc_test
 MSC_SOURCES := \
 	usbd_msc_test.cpp \
+	$(ROOT)/src/storage/fatfs_format.cpp \
 	$(ROOT)/src/usb/usbd_msc.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
@@ -216,7 +222,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 	$(DIRECT_TARGET) $(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(INT_TARGET) \
 	$(BULK_TARGET) $(HID_TARGET) $(LINK_TARGET)
 
-TARGETS += $(MSC_TARGET) $(MULTICONFIG_TARGET)
+TARGETS += $(MSC_TARGET) $(MULTICONFIG_TARGET) $(FAT12_TARGET)
 
 .PHONY: all test test-combo-init test-combo-prbs test-combo-shutdown test-combo-host-pause test-iso-host-sched test-c-header test-gcc test-clang test-matrix test-nrf-out test-nrf-endpoints test-nrf-out-appevt test-nrf-appevt \
 	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf-vbus test-nrf54-data \
@@ -253,6 +259,7 @@ test: $(TARGETS) examples-build
 	$(TEST_ENV) ./$(BULK_TARGET)
 	$(TEST_ENV) ./$(HID_TARGET)
 	$(TEST_ENV) ./$(MSC_TARGET)
+	$(TEST_ENV) ./$(FAT12_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
 
 test-combo-init:
@@ -423,6 +430,11 @@ $(HID_TARGET): $(HID_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
 		$(HID_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+$(FAT12_TARGET): $(FAT12_SOURCES) $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
+		$(FAT12_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 $(MSC_TARGET): $(MSC_SOURCES) $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
