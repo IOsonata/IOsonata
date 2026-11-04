@@ -31,6 +31,21 @@ class RadioTestDependencies(unittest.TestCase):
                         "external/nrfx/drivers/include" in value
                         for value in values))
 
+    def test_sdk_mdk_compiler_abstraction_header_path(self):
+        tree = ET.parse(PROJECT / "ioc/.cproject")
+        for cfg in tree.findall(".//configuration"):
+            with self.subTest(config=cfg.get("name")):
+                path_options = [opt for opt in cfg.findall(".//option")
+                                if opt.get("name") == "Include paths (-I)"]
+                self.assertEqual(len(path_options), 2)
+                for option in path_options:
+                    values = [item.get("value", "")
+                              for item in option.findall("listOptionValue")]
+                    self.assertTrue(any(
+                        value.strip('"').endswith("external/nRF5_SDK/modules/nrfx/mdk")
+                        for value in values
+                    ))
+
     def test_radio_test_includes_usb_driver_header(self):
         text = (PROJECT / "src/main.c").read_text(encoding="utf-8")
         self.assertIn('#include "nrf_drv_usbd.h"', text)
