@@ -26,6 +26,18 @@ class LegacySdkDependencyTests(unittest.TestCase):
                     settings = (project / ".cproject").read_text()
                     self.assertIn("external/lvgl_legacy/", settings)
                     self.assertNotIn("external/lvgl/", settings)
+                    # The include root has no trailing slash. Resolve it as
+                    # an XML value, not a substring of lvgl_legacy.
+                    cfg = ET.parse(project / ".cproject")
+                    include_values = [
+                        item.get("value", "").strip('"')
+                        for option in cfg.findall(".//option")
+                        if option.get("valueType") == "includePath"
+                        for item in option.findall("listOptionValue")
+                    ]
+                    roots = [v for v in include_values if v.endswith("/external/lvgl_legacy")]
+                    self.assertEqual(len(roots), 4)
+                    self.assertFalse(any(v.endswith("/external/lvgl") for v in include_values))
 
     def test_tinyusb_lm20_uses_isolated_iso_revision(self):
         project = LM20 / "exemples" / "TinyUsbComboStress" / "ioc"

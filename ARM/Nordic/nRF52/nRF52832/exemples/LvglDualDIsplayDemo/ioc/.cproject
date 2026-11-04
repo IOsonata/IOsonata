@@ -61,7 +61,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy/demos&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy/examples&quot;"/>
 								</option>
@@ -80,7 +80,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy/demos&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy/examples&quot;"/>
 								</option>
@@ -203,7 +203,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy/demos&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy/examples&quot;"/>
 								</option>
@@ -223,7 +223,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy/demos&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/lvgl_legacy/examples&quot;"/>
 								</option>

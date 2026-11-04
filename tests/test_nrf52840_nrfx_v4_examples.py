@@ -24,6 +24,10 @@ class Nrf52840NrfxV4Tests(unittest.TestCase):
         settings = (demo / "ioc" / ".cproject").read_text()
         self.assertIn("external/nrfx/bsp/stable/mdk/common", settings)
         self.assertNotIn("external/nrfx/mdk", settings)
+        self.assertEqual(
+            settings.count('external/nrfx/bsp/stable&quot;'), 4
+        )
+        self.assertIn('#include "nrf_gpio.h"', (demo / "src" / "board.h").read_text())
 
     def test_radio_timer_nrfx_v4_instance(self):
         demo = DEMOS / "radio_test"
