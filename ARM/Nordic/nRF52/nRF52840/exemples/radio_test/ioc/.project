@@ -231,11 +231,6 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/app_usbd_core.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/app_usbd_serial_num.c</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/app_usbd_string_desc.c</locationURI>
