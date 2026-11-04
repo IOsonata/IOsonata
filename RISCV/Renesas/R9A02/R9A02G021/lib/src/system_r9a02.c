@@ -209,6 +209,17 @@ uint32_t R9a02ExtalClockGet(void)
 void R9a02DelayUs(uint32_t Us)
 {
 	uint32_t hz = R9a02IclkHz();
+	uint32_t mhz;
+	uint32_t rhz;
+	uint32_t sec;
+	uint32_t rem;
+	uint32_t a;
+	uint32_t b;
+	uint32_t c;
+	uint32_t d;
+	uint32_t frac;
+	uint32_t start;
+	uint64_t cycles;
 
 	if (hz == 0U)
 	{
@@ -216,8 +227,21 @@ void R9a02DelayUs(uint32_t Us)
 		hz = R9A02_ICLK_MAX;
 	}
 
-	uint64_t cycles = ((uint64_t)Us * hz + 999999ULL) / 1000000ULL;
-	uint32_t start = R9a02Mcycle();
+	// Exact ceil(Us * hz / 1000000), using only 32-bit divisions.
+	// Avoid pulling the large 64-bit division helper into a DFU image.
+	mhz = hz / 1000000U;
+	rhz = hz % 1000000U;
+	sec = Us / 1000000U;
+	rem = Us % 1000000U;
+	a = rem / 1000U;
+	b = rem % 1000U;
+	c = rhz / 1000U;
+	d = rhz % 1000U;
+	// frac + 999999 is below 2^31 for all a,b,c,d <= 999.
+	frac = (a * d + b * c) * 1000U + b * d;
+	cycles = (uint64_t)Us * mhz + (uint64_t)sec * rhz;
+	cycles += (uint64_t)a * c + (frac + 999999U) / 1000000U;
+	start = R9a02Mcycle();
 
 	// Wait in parts so the 32-bit counter difference never wraps
 	while (cycles > 0U)
