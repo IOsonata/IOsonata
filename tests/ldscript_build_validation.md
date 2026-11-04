@@ -13,9 +13,12 @@ versions required by each in-scope port, including GNU Arm Embedded,
 RISC-V, vendor SDKs, and libraries. IAR and Keil toolchains are not required. Build configurations should
 be read from the checked-in projects, not guessed from directory names.
 
-Do not introduce CMake, Ninja, VS Code/Theia, or an automatic GitHub
-Actions workflow. No push-triggered CI. Do not merge or retag release
-0.13 until build findings are reviewed.
+Do not introduce CMake, Ninja, VS Code/Theia, or GitHub Actions CI.
+No push-triggered or pull-request-triggered build/test workflows.
+The existing `.github/workflows/build-rag-index.yml` is the sole exception:
+it maintains the RAG index on its own schedule or by manual dispatch.
+Do not remove or repurpose it. Do not merge or retag release 0.13 until
+build findings are reviewed.
 
 ## Scope
 
@@ -129,4 +132,4 @@ PASS, or claim that a skipped configuration compiled.
 The migration can be considered build-validated only after the full
 managed-project matrix has been attempted and failures attributed.
 Release 0.13 merge/retag decisions must follow review of those results.
-Avoid enabling any automatic GitHub Actions workflow.
+Do not add GitHub Actions build/test workflows; retain only the RAG index updater.
