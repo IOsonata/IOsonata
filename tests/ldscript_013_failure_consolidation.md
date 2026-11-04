@@ -16,18 +16,18 @@ or enlarging a production DFU partition to fit a Debug image.
 | Cause | Last FAIL | Correction candidates | Still requires implementation or dependencies |
 | --- | ---: | ---: | ---: |
 | Vendor SDK revision and missing components | 24 | 16 | 8 |
-| MCU ports and example source defects | 24 | 12 | 12 |
+| MCU ports and example source defects | 24 | 22 | 2 |
 | Memory region capacity | 11 | 0 | 11 |
 | Project source and configuration gaps | 6 | 0 | 6 |
 | GCC 15.2.1 LTO internal error | 3 | 3 | 0 |
-| **Total** | **68** | **31** | **37** |
+| **Total** | **68** | **41** | **27** |
 
 "Correction candidate" is deliberately not a PASS. In particular, the
 Linux library fixes and all fixes after `afac5e95` have not been compiled
 in the full matrix. Previous Windows Debug and Release improvements are already
 included in the 1469 PASS baseline and are not counted again.
 
-## Correction candidates (31 configurations)
+## Correction candidates (41 configurations)
 
 | Configurations | Scope | Commits | Required confirmation |
 | ---: | --- | --- | --- |
@@ -41,10 +41,30 @@ included in the 1469 PASS baseline and are not counted again.
 | 3 | nRF5340_Net BleAdvertiser, BleIntrfPrbsTx, BleOta Release | `f7ffddad` | Confirm GCC no longer ICEs and images fit unchanged regions |
 | 2 | STM32WBA65 BlePrbsRxStmCube, Debug/Release | `e838b77c` | Populate STM32CubeWBA v1.10.0 app, HAL, CMSIS and WPAN submodules; compile |
 | 2 | nRF52840 EInkDisplayDemo, Debug/Release | `aa66ae4c` | Compile/link, exercise E-Ink bitbang and reset on hardware |
+| 2 | nRF52832 DistMeasureRxDemo, Debug/Release | `8013904b` | Compile/link with Nordic nrf_dm and match reflector/initiator synchronization |
+| 2 | SAM4E CryptoTest, Debug/Release | `d35d5fa2` | Compile/link SAM4E TC0..TC8, count/compare and callback tests on board |
+| 2 | ESP32C3 CryptoTest, Debug/Release | `2f80c332` | Compile/link TG0/TG1 timers, alarm and interrupt tests |
+| 4 | ESP32C6 Blinky and CryptoTest, Debug/Release | `9e4af006`, `0d1e503f`, `37db5fc8` | Compile/link minimum GPIO/UART/TIMG drivers, check ELF ResetEntry and CPU vector order; runtime ISR tests required |
 
 The original `git clone` paths for shared `lvgl` and `tinyusb` remain in
 place. Only the legacy example projects select their separate checked-out
 revisions. STM32CubeWBA remains pinned at v1.10.0.
+
+
+## ESP32-C6 interrupt architecture correction
+
+ESP32-C6 has an interrupt matrix mapping peripheral sources to 32 CPU
+interrupt inputs (0, 3, 4 and 7 reserved for core-local use). The old C6
+startup incorrectly selected CLIC mode and installed a 96-entry source vector.
+The C6 project now links the cross-chip INTMTX, GPIO, UART, UART-clock and
+Timer Group implementations, routes UART1/GPIO/TG0/TG1 to CPU lines 5/6/8/9,
+and keeps a 32-entry CPU vector at the start of IRAM. The two application
+projects explicitly require `ResetEntry` from the static library. The C6
+source ID mappings follow ESP-IDF v5.5.1 (TG0/T0=51 and TG1/T0=54).
+
+These corrections are substantive port work, **not** observed boot, ISR or
+link results. The previous C6 Blinky Release ELF entry failure remains an
+acceptance test. Do not infer it is resolved from linker option inspection.
 
 ## Remaining dependency work (8 configurations)
 
@@ -55,14 +75,10 @@ libraries and versions are available and compiled. They are identified as
 post-0.13 in the prior build report. Do not add placeholder source files or
 silently skip those configurations.
 
-## Remaining MCU/example implementations (12 configurations)
+## Remaining MCU/example implementations (2 configurations)
 
 | Configurations | Project | Current blocker |
 | ---: | --- | --- |
-| 2 | nRF52832 DistMeasureRxDemo | WIP example with an incomplete `nrf_dm_init` call; needs actual PPI, antenna, timer and ranging-library integration |
-| 2 | SAM4E CryptoTest | Required timer implementation absent |
-| 2 | ESP32C3 CryptoTest | Required timer implementation absent |
-| 4 | ESP32C6 Blinky and CryptoTest | Startup/application entry, GPIO, UART and timer minimum port incomplete |
 | 2 | RP2040 library | MCU library port incomplete |
 
 These require real MCU implementations and the repository's normal cross-port
@@ -117,9 +133,10 @@ A code-size fix requires map/symbol attribution, not linker-space inflation.
 5. Inspect every ELF/map, vector/entry, NVM and DFU boundary; separately report
    IAR, missing SDKs and hardware-only limitations. Zero hardware results remain
    zero, regardless of compile/link success.
-6. Update the build counts only after observed results. Keep draft PR #111,
-   draft PR #112, and the 0.13 release tag unchanged pending approval.
+6. Update the build counts only after observed results. Keep draft PR #111
+   unmerged and the 0.13 release tag unchanged pending approval.
 
-PR #112 depends on publication of the IOcomposer wizard 0.1.7+ and BLE test
-plugin. Its separate installer changes must not be merged merely to complete
-this build exercise.
+PR #112 is now closed following integration of the three-plugin IOcomposer
+installer changes into this working branch at `01fc0642`. Do not reapply its
+commits or try to merge the closed PR again. PR #111 remains the only open
+release integration PR.
