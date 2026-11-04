@@ -110,14 +110,21 @@ static bool Fat12Blank(const uint8_t *pSector, uint16_t SectorSize)
 static bool Fat12Recoverable(DiskIO &Disk, uint8_t *pSector,
 						uint32_t FatSectors, uint32_t RootSector)
 {
+	static const uint8_t s_Header[] = {
+		0xEBU, 0x3CU, 0x90U, 'I', 'O', 's', 'o', 'n', 'a', 't', 'a'
+	};
 	uint32_t i;
 
-	// A partial boot write is recognizable only after its identifying header
-	// was programmed. The FATs and root were completed before that write.
-	if (pSector[0] != 0xEBU || pSector[1] != 0x3CU ||
-		pSector[2] != 0x90U || memcmp(&pSector[3], "IOsonata", 8U) != 0)
+	// Flash programs bits from 1 to 0. A reset may leave only part of the
+	// first program word committed, so accept a partially programmed header
+	// provided that no bits contradict the expected IOsonata header. The
+	// FATs and root must also match: they were written before sector zero.
+	for (i = 0U; i < sizeof(s_Header); i++)
 	{
-		return false;
+		if ((pSector[i] & s_Header[i]) != s_Header[i])
+		{
+			return false;
+		}
 	}
 	for (i = 0U; i < FATFS_NBFAT; i++)
 	{
