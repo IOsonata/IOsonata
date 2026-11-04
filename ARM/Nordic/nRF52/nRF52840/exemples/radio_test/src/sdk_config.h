@@ -51,6 +51,10 @@
 #ifndef APP_USBD_CDC_ACM_ENABLED
 #define APP_USBD_CDC_ACM_ENABLED 1
 #endif
+
+#ifndef APP_USBD_CDC_ACM_ZLP_ON_EPSIZE_WRITE
+#define APP_USBD_CDC_ACM_ZLP_ON_EPSIZE_WRITE 1
+#endif
 // <<< Use Configuration Wizard in Context Menu >>>\n
 #ifdef USE_APP_CONFIG
 #include "app_config.h"
