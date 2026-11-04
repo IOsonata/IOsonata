@@ -39,8 +39,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdbool.h>
 
+extern "C" {
 #include "nrf_lcd.h"
 #include "nrf_gfx.h"
+}
 
 #include "coredev/iopincfg.h"
 #include "coredev/spi.h"
