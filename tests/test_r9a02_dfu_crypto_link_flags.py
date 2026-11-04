@@ -24,6 +24,23 @@ class R9A02LinkFlagsTest(unittest.TestCase):
         self.assertEqual(set(results), {"Debug", "Release"})
         return results
 
+    def test_constrained_debug_builds_optimize_for_size(self):
+        for example in ("DfuBoot", "CryptoTest"):
+            with self.subTest(example=example):
+                root = ET.parse(EXAMPLES / example / "ioc/.cproject").getroot()
+                configs = root.findall(".//configuration")
+                self.assertEqual({cfg.get("name") for cfg in configs},
+                                 {"Debug", "Release"})
+                for cfg in configs:
+                    options = [
+                        option.get("value", "")
+                        for option in cfg.findall(".//option")
+                        if option.get("name") == "Optimization Level"
+                    ]
+                    self.assertEqual(options, [
+                        "ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.level.size"
+                    ])
+
     def test_dfu_boot_never_forces_semihost_archive(self):
         flags = self.linker_flags("DfuBoot")
         for config, options in flags.items():
