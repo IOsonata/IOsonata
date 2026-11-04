@@ -89,6 +89,7 @@ SECTIONS
   {
     . = ALIGN(4);
     _irom_text_start = ABSOLUTE(.);
+    KEEP(*(.reset))
     *(.irom.text)
     *(.irom.text.*)
     . = ALIGN(4);
