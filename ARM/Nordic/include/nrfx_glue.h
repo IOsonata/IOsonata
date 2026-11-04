@@ -307,7 +307,25 @@ static inline bool NRFX_IRQ_IS_PENDING(IRQn_Type irq_number)
  * @return Number of trailing 0-bits in @p value, starting at the least significant bit position.
  *         If x is 0, the result is undefined.
  */
-//#define NRFX_CTZ(value)
+// nrfx v4 TIMER uses this operation to determine the prescaler.
+// Input zero has undefined results, as specified by nrfx.
+#if defined(__GNUC__) || defined(__clang__)
+#define NRFX_CTZ(value) ((uint32_t)__builtin_ctz((unsigned int)(value)))
+#else
+static inline uint32_t NRFX_TrailingZeros(uint32_t Value)
+{
+	uint32_t count;
+
+	count = 0;
+	while ((Value & 1U) == 0U && count < 32U)
+	{
+		Value >>= 1;
+		count++;
+	}
+	return count;
+}
+#define NRFX_CTZ(value) NRFX_TrailingZeros((uint32_t)(value))
+#endif
 
 //------------------------------------------------------------------------------
 

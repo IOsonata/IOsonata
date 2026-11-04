@@ -5,7 +5,7 @@
 
 Port and pin of every signal the board routes. D and A numbers follow the
 Arduino core numbering. The applications built for the stock Arduino
-bootloader link with nrf52840_xxaa_bossa.ld.
+bootloader link with gcc_nrf52840_xxaa_bossa.ld.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2026

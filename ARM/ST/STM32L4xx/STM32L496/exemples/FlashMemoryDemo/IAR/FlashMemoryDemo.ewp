@@ -773,7 +773,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFile</name>
-                    <state>Z:\swdev\IOsonata\ARM\ST\STM32L4xx\ldscript\stm32l476xx_flash.icf</state>
+                    <state>$PROJ_DIR$\..\..\..\..\ldscript\iar_stm32l496xx_flash.icf</state>
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>

@@ -52,7 +52,7 @@
 #include <stdlib.h>
 
 #include "nrfx_qspi.h"
-//#include "nrf_drv_qspi.h"
+
 #include "idelay.h"
 //#include "app_util_platform.h"
 //#include "app_error.h"
@@ -65,6 +65,28 @@
 #include "sdk_config.h"
 
 #define NRF_LOG_INFO	printf
+
+// SDK QSPI pins remain the fallback on non-BlueIO board variants.
+#ifndef BSP_QSPI_SCK_PIN
+#define BSP_QSPI_SCK_PIN NRFX_QSPI_PIN_SCK
+#define BSP_QSPI_CSN_PIN NRFX_QSPI_PIN_CSN
+#define BSP_QSPI_IO0_PIN NRFX_QSPI_PIN_IO0
+#define BSP_QSPI_IO1_PIN NRFX_QSPI_PIN_IO1
+#define BSP_QSPI_IO2_PIN NRFX_QSPI_PIN_IO2
+#define BSP_QSPI_IO3_PIN NRFX_QSPI_PIN_IO3
+#endif
+
+// nrfx v4 returns zero on success; don't compare against legacy SDK codes.
+static void QspiCheck(int Result)
+{
+    if (Result != 0)
+    {
+        printf("QSPI error %d\r\n", Result);
+        for (;;)
+        {
+        }
+    }
+}
 
 #define QSPI_STD_CMD_WRSR   0x01
 #define QSPI_STD_CMD_RSTEN  0x66
@@ -81,17 +103,17 @@ static volatile bool m_finished = false;
 static uint8_t m_buffer_tx[QSPI_TEST_DATA_SIZE];
 static uint8_t m_buffer_rx[QSPI_TEST_DATA_SIZE];
 
-static void qspi_handler(nrf_drv_qspi_evt_t event, void * p_context)
+static void qspi_handler(nrfx_qspi_evt_t event, void * p_context)
 {
-    UNUSED_PARAMETER(event);
-    UNUSED_PARAMETER(p_context);
+    (void)event;
+    (void)p_context;
     m_finished = true;
 }
 
 static void configure_memory()
 {
     uint8_t temporary = 0x40;
-    uint32_t err_code;
+    int err_code;
     nrf_qspi_cinstr_conf_t cinstr_cfg = {
         .opcode    = QSPI_STD_CMD_RSTEN,
         .length    = NRF_QSPI_CINSTR_LEN_1B,
@@ -102,29 +124,29 @@ static void configure_memory()
     };
 
     // Send reset enable
-    err_code = nrf_drv_qspi_cinstr_xfer(&cinstr_cfg, NULL, NULL);
-    APP_ERROR_CHECK(err_code);
+    err_code = nrfx_qspi_cinstr_xfer(&cinstr_cfg, NULL, NULL);
+    QspiCheck(err_code);
 
     // Send reset command
     cinstr_cfg.opcode = QSPI_STD_CMD_RST;
-    err_code = nrf_drv_qspi_cinstr_xfer(&cinstr_cfg, NULL, NULL);
-    APP_ERROR_CHECK(err_code);
+    err_code = nrfx_qspi_cinstr_xfer(&cinstr_cfg, NULL, NULL);
+    QspiCheck(err_code);
 
     // Switch to qspi mode
     cinstr_cfg.opcode = QSPI_STD_CMD_WRSR;
     cinstr_cfg.length = NRF_QSPI_CINSTR_LEN_2B;
-    err_code = nrf_drv_qspi_cinstr_xfer(&cinstr_cfg, &temporary, NULL);
-    APP_ERROR_CHECK(err_code);
+    err_code = nrfx_qspi_cinstr_xfer(&cinstr_cfg, &temporary, NULL);
+    QspiCheck(err_code);
 }
 
 
 int main(void)
 {
     uint32_t i;
-    uint32_t err_code;
+    int err_code;
 
     //err_code = NRF_LOG_INIT(NULL);
-    //APP_ERROR_CHECK(err_code);
+    //QspiCheck(err_code);
 
     //NRF_LOG_DEFAULT_BACKENDS_INIT();
 
@@ -138,27 +160,30 @@ int main(void)
         p[i] = 255-i;//(uint8_t)rand();
     }
 
-    nrf_drv_qspi_config_t config = NRF_DRV_QSPI_DEFAULT_CONFIG;
+    nrfx_qspi_config_t config = NRFX_QSPI_DEFAULT_CONFIG(
+        BSP_QSPI_SCK_PIN, BSP_QSPI_CSN_PIN,
+        BSP_QSPI_IO0_PIN, BSP_QSPI_IO1_PIN,
+        BSP_QSPI_IO2_PIN, BSP_QSPI_IO3_PIN);
 
-    err_code = nrf_drv_qspi_init(&config, qspi_handler, NULL);
-    APP_ERROR_CHECK(err_code);
+    err_code = nrfx_qspi_init(&config, qspi_handler, NULL);
+    QspiCheck(err_code);
     NRF_LOG_INFO("QSPI example started.");
 
     configure_memory();
 
     m_finished = false;
-    err_code = nrf_drv_qspi_erase(NRF_QSPI_ERASE_LEN_64KB, 0);
-    APP_ERROR_CHECK(err_code);
+    err_code = nrfx_qspi_erase(NRF_QSPI_ERASE_LEN_64KB, 0);
+    QspiCheck(err_code);
     WAIT_FOR_PERIPH();
     NRF_LOG_INFO("Process of erasing first block start");
 
-    err_code = nrf_drv_qspi_write(m_buffer_tx, QSPI_TEST_DATA_SIZE, 0);
-    APP_ERROR_CHECK(err_code);
+    err_code = nrfx_qspi_write(m_buffer_tx, QSPI_TEST_DATA_SIZE, 0);
+    QspiCheck(err_code);
     WAIT_FOR_PERIPH();
     NRF_LOG_INFO("Process of writing data start");
 
     memset(m_buffer_rx, 0, QSPI_TEST_DATA_SIZE);
-    err_code = nrf_drv_qspi_read(m_buffer_rx, QSPI_TEST_DATA_SIZE, 0);
+    err_code = nrfx_qspi_read(m_buffer_rx, QSPI_TEST_DATA_SIZE, 0);
     WAIT_FOR_PERIPH();
     NRF_LOG_INFO("Data read");
 
@@ -172,7 +197,7 @@ int main(void)
         NRF_LOG_INFO("Data inconsistent");
     }
 
-    nrf_drv_qspi_uninit();
+    nrfx_qspi_uninit();
 
     for (;;)
     {

@@ -236,11 +236,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/utf8cvt.h</locationURI>
 		</link>
 		<link>
-			<name>src/CppRuntimeOverload.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/base64.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/base64.c</locationURI>
@@ -289,16 +284,6 @@
 			<name>src/display</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/excelitas_serlink.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/excelitas_serlink.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/storage/fatfs.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/storage/fatfs.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/fatfs_vdisk.cpp</name>
@@ -351,11 +336,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/prbs.c</locationURI>
 		</link>
 		<link>
-			<name>src/pulse_train.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/pulse_train.c</locationURI>
-		</link>
-		<link>
 			<name>src/pwrmgnt</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -371,11 +351,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/storage/sdcard_impl.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/storage/seep_impl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/storage/seep_impl.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/sensors</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -384,11 +359,6 @@
 			<name>src/slip_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/slip_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/stddev.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/stddev.c</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>
@@ -766,11 +736,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/converters/adc_nau7802.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/i2c.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/coredev/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
@@ -786,11 +751,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/eink_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/motion/att.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/motion/att.cpp</locationURI>
@@ -801,44 +761,14 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/mot_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/motion/mot_invn_icm20948.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/motion/mot_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/miscdev/button.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/miscdev/button.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/audio/buzzer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/audio/buzzer.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/miscdev/led_apa102.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/miscdev/led_apa102.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/miscdev/led_gpio.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/miscdev/led_gpio.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/miscdev/led_ncp5623b.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/miscdev/led_ncp5623b.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/miscdev/led_pwm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/miscdev/led_pwm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/ledmx.c</name>
@@ -894,11 +824,6 @@
 			<name>src/sensors/agm_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/sensors/agm_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/agm_mpu9250.cpp</name>

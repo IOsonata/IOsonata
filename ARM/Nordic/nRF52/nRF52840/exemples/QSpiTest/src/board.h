@@ -39,6 +39,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __BOARD_H__
 
 #include "nrf.h"
+#include "nrf_gpio.h"
 #include "blueio_board.h"
 
 //#define NORDIC_DK			// For Nordic DevKit

@@ -36,7 +36,7 @@ Modified by          		Date              Description
 #define __USB_HIDHOST_IMPL_H__
 
 #include <string>
-#include "Windows.h"
+#include <windows.h>
 #include <wchar.h>
 
 /** @addtogroup USB

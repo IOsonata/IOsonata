@@ -1,0 +1,324 @@
+#!/usr/bin/env python3
+"""Validate literal linker-script references in Eclipse managed projects.
+
+Run from the repository root:
+    python3 tests/ldscript_reference_audit.py
+    python3 tests/ldscript_reference_audit.py ARM/ST/STM32WBAxx
+
+Relative -T paths are interpreted from ioc/<configuration>, where the
+generated makefile runs, rather than from the .cproject file itself.
+The Eclipse ProjDirPath macro resolves to the ioc project directory.
+No compiler, SDK or Eclipse installation is required.
+"""
+
+import argparse
+import re
+from pathlib import PureWindowsPath
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+
+
+def script_values(config):
+    for option in config.iter("option"):
+        identifier = option.get("superClass", "") + " " + option.get("id", "")
+        if "linker.scriptfile" not in identifier:
+            continue
+        value = option.get("value")
+        if value:
+            yield value
+        for item in option.iter("listOptionValue"):
+            value = item.get("value")
+            if value:
+                yield value
+
+
+def resolve_eclipse_script(path, name, reference):
+    """Resolve a linker reference; return None for unsupported macros."""
+    prefix = "${ProjDirPath}/"
+    if reference.startswith(prefix):
+        remainder = reference[len(prefix):]
+        if "$" in remainder or "%" in remainder:
+            return None
+        return (path.parent / remainder).resolve()
+    if "$" in reference or "%" in reference:
+        return None
+    return (path.parent / name / reference).resolve()
+
+def check_project(path):
+    errors = []
+    checked = 0
+    skipped = 0
+    try:
+        xml = ET.parse(path)
+    except ET.ParseError as exc:
+        return 0, 0, [f"{path}: invalid XML: {exc}"]
+
+    configs = xml.findall(".//cconfiguration")
+    for config in configs:
+        settings = config.find(".//configuration")
+        name = settings.get("name") if settings is not None else None
+        if not name:
+            if list(script_values(config)):
+                errors.append(f"{path}: linker script configured without build-directory name")
+            continue
+
+        workdir = path.parent / name
+        for raw in script_values(config):
+            reference = raw.strip().strip('"').strip("'")
+            if not reference:
+                continue
+            if reference.startswith("${ProjDirPath}/"):
+                script = Path(reference[len("${ProjDirPath}/"):])
+            else:
+                script = Path(reference)
+                if script.is_absolute() or PureWindowsPath(reference).is_absolute():
+                    checked += 1
+                    errors.append(f"{path} [{name}]: nonportable absolute linker script: {reference}")
+                    continue
+            if script.suffix.lower() not in (".ld", ".icf", ".sct"):
+                skipped += 1
+                continue
+            target = resolve_eclipse_script(path, name, reference)
+            if target is None:
+                skipped += 1
+                continue
+            checked += 1
+            if not target.is_file():
+                errors.append(
+                    f"{path} [{name}]: missing {reference} "
+                    f"(resolved to {target})"
+                )
+    return checked, skipped, errors
+
+
+
+def resolve_iar_script(path, reference):
+    """Resolve $PROJ_DIR$ and relative IAR ICF paths."""
+    normalized = reference.replace(chr(92), "/")
+    prefix = "$PROJ_DIR$/"
+    if normalized.startswith(prefix):
+        normalized = normalized[len(prefix):]
+    elif "$" in normalized or "%" in normalized:
+        return None
+    if "$" in normalized or "%" in normalized:
+        return None
+    return (path.parent / normalized).resolve()
+
+
+def check_iar_project(path):
+    """Validate IlinkIcfFile values relative to the IAR project directory."""
+    errors = []
+    checked = 0
+    skipped = 0
+    try:
+        xml = ET.parse(path)
+    except ET.ParseError as exc:
+        return 0, 0, [f"{path}: invalid XML: {exc}"]
+
+    for settings in xml.findall(".//settings"):
+        if settings.findtext("name", default="") != "ILINK":
+            continue
+        options = settings.findall(".//option")
+        override = next(
+            (option.findtext("state", default="").strip()
+             for option in options
+             if option.findtext("name", default="") == "IlinkIcfOverride"),
+            "1",
+        )
+        if override == "0":
+            continue
+        for option in options:
+            name = option.findtext("name", default="")
+            if name not in ("IlinkIcfFile", "IlinkIcfFileSlave"):
+                continue
+            for state in option.findall("state"):
+                reference = (state.text or "").strip().strip('"')
+                if not reference:
+                    continue
+                normalized = reference.replace(chr(92), "/")
+                if Path(normalized).is_absolute() or PureWindowsPath(reference).is_absolute():
+                    checked += 1
+                    errors.append(f"{path}: nonportable absolute IAR linker script: {reference}")
+                    continue
+                if Path(normalized).suffix.lower() != ".icf":
+                    skipped += 1
+                    continue
+                target = resolve_iar_script(path, reference)
+                if target is None:
+                    skipped += 1
+                    continue
+                checked += 1
+                if not target.is_file():
+                    errors.append(f"{path}: missing IAR linker script {reference} (resolved to {target})")
+    return checked, skipped, errors
+
+
+def referenced_scripts(root):
+    """Collect literal script paths from managed projects and IAR projects."""
+    referenced = set()
+    for project in root.rglob(".cproject"):
+        try:
+            xml = ET.parse(project)
+        except ET.ParseError:
+            continue
+        for config in xml.findall(".//cconfiguration"):
+            settings = config.find(".//configuration")
+            name = settings.get("name") if settings is not None else None
+            if not name:
+                continue
+            for raw in script_values(config):
+                value = raw.strip().strip('"').strip("'")
+                if not value or Path(value).suffix.lower() not in (".ld", ".icf", ".sct"):
+                    continue
+                if not value.startswith("${ProjDirPath}/") and (
+                    Path(value).is_absolute() or PureWindowsPath(value).is_absolute()
+                ):
+                    continue
+                target = resolve_eclipse_script(project, name, value)
+                if target is not None:
+                    referenced.add(target)
+    for project in root.rglob("*.ewp"):
+        try:
+            xml = ET.parse(project)
+        except ET.ParseError:
+            continue
+        for settings in xml.findall(".//settings"):
+            if settings.findtext("name", default="") != "ILINK":
+                continue
+            options = settings.findall(".//option")
+            override = next(
+                (option.findtext("state", default="").strip()
+                 for option in options
+                 if option.findtext("name", default="") == "IlinkIcfOverride"),
+                "1",
+            )
+            if override == "0":
+                continue
+            for option in options:
+                if option.findtext("name", default="") not in ("IlinkIcfFile", "IlinkIcfFileSlave"):
+                    continue
+                for state in option.findall("state"):
+                    value = (state.text or "").strip().strip('"')
+                    if not value:
+                        continue
+                    if Path(value).is_absolute() or PureWindowsPath(value).is_absolute():
+                        continue
+                    normalized = value.replace(chr(92), "/")
+                    if Path(normalized).suffix.lower() == ".icf":
+                        target = resolve_iar_script(project, value)
+                        if target is not None:
+                            referenced.add(target)
+    return referenced
+
+
+def included_scripts(scripts):
+    """Find literal GNU LD INCLUDE and IAR ICF include dependencies."""
+    dependencies = set()
+    pattern = re.compile(
+        r'^\s*(?:INCLUDE\s+|include\s+)(?:"([^"]+)"|<([^>]+)>|([^\s;/]+))',
+        re.MULTILINE,
+    )
+    for script in scripts:
+        if script.suffix.lower() not in (".ld", ".icf"):
+            continue
+        try:
+            content = script.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        for match in pattern.finditer(content):
+            name = next(group for group in match.groups() if group is not None)
+            if "$" in name or "%" in name:
+                continue
+            normalized = name.replace(chr(92), "/")
+            dependency = (script.parent / normalized).resolve()
+            if dependency.is_file():
+                dependencies.add(dependency)
+                continue
+            # Shared fragments live in architecture-level ldscript directories.
+            # Search only ancestor ldscript directories; never guess a sibling
+            # MCU's similarly named memory layout.
+            for parent in script.parents:
+                shared = (parent / "ldscript" / normalized).resolve()
+                if shared.is_file():
+                    dependencies.add(shared)
+                    break
+    return dependencies
+
+
+def report_unreferenced(root):
+    """Inventory unselected variants, never classify them as obsolete."""
+    referenced = referenced_scripts(root)
+    scripts = sorted(
+        path.resolve()
+        for path in root.rglob("*")
+        if path.is_file()
+        and path.suffix.lower() in (".ld", ".icf", ".sct")
+        and "ldscript" in path.parts
+    )
+    included = included_scripts(scripts)
+    candidates = [path for path in scripts if path not in referenced and path not in included]
+    for path in candidates:
+        print(f"AVAILABLE/UNCLASSIFIED (not directly selected): {path}")
+    print(
+        f"Directly selected: {len(set(scripts) & referenced)}; "
+        f"include dependencies: {len(set(scripts) & included)}; "
+        f"available/unclassified: {len(candidates)}; obsolete confirmed: 0; no files deleted"
+    )
+    print(
+        "A script is obsolete only after separate verification of its MCU support, "
+        "memory layout, superseding replacement, and all consumers. "
+        "Reference count alone never establishes obsolescence."
+    )
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "directory", nargs="?", default=".",
+        help="Repository directory or MCU-family subtree to audit",
+    )
+    parser.add_argument(
+        "--report-unreferenced", action="store_true",
+        help="Report linker scripts not directly selected by Eclipse or IAR projects; never delete",
+    )
+    args = parser.parse_args()
+    root = Path(args.directory).resolve()
+    if not root.is_dir():
+        parser.error(f"not a directory: {root}")
+
+    projects = sorted(root.rglob(".cproject"))
+    iar_projects = sorted(root.rglob("*.ewp"))
+    if not projects and not iar_projects:
+        print(f"No Eclipse or IAR project files under {root}", file=sys.stderr)
+        return 2
+
+    checked = 0
+    skipped = 0
+    problems = []
+    for path in projects:
+        count, ignored, errors = check_project(path)
+        checked += count
+        skipped += ignored
+        problems.extend(errors)
+
+    for path in iar_projects:
+        count, ignored, errors = check_iar_project(path)
+        checked += count
+        skipped += ignored
+        problems.extend(errors)
+
+    for problem in problems:
+        print(f"FAIL: {problem}", file=sys.stderr)
+    print(
+        f"Eclipse projects: {len(projects)}; IAR projects: {len(iar_projects)}; "
+        f"literal linker references: {checked}; "
+        f"dynamic/external references skipped: {skipped}; "
+        f"errors: {len(problems)}"
+    )
+    if args.report_unreferenced:
+        report_unreferenced(root)
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

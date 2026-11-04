@@ -69,7 +69,7 @@ static uint8_t m_rx_packet[RADIO_MAX_PAYLOAD_LEN];                              
 static uint32_t m_tx_packet_cnt;                                                         /**< Number of transmitted packets. */
 static uint32_t m_rx_packet_cnt;                                                         /**< Number of received packets with valid CRC. */
 static uint8_t m_current_channel;                                                        /**< Radio current channel (frequency). */
-static const nrfx_timer_t m_timer = NRFX_TIMER_INSTANCE(0);                              /**< Timer used for channel sweeps and tx with duty cycle. */
+static nrfx_timer_t m_timer = NRFX_TIMER_INSTANCE(NRF_TIMER0);                              /**< Timer used for channel sweeps and tx with duty cycle. */
 static const radio_test_config_t * m_p_test_config = NULL;                               /**< Test configuration descriptor. */
 
 /**
@@ -639,10 +639,10 @@ static void timer_handler(nrf_timer_event_t event_type, void * p_context)
 
 static void timer_init(const radio_test_config_t * p_config)
 {
-    nrfx_err_t          err;
+    int                 err;
     nrfx_timer_config_t timer_cfg =
     {
-        .frequency = NRF_TIMER_FREQ_1MHz,
+        .frequency = 1000000UL,
         .mode      = NRF_TIMER_MODE_TIMER,
         .bit_width = NRF_TIMER_BIT_WIDTH_24,
         .p_context = (void *) p_config,
@@ -655,7 +655,7 @@ static void timer_init(const radio_test_config_t * p_config)
     };
 
     err = nrfx_timer_init(&m_timer, &timer_cfg, timer_handler);
-    if (err != NRFX_SUCCESS)
+    if (err != 0)
     {
         NRF_LOG_ERROR("nrfx_timer_init failed with: %d\n", err);
     }

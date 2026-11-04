@@ -60,6 +60,7 @@
 #include "app_error.h"
 #include "nordic_common.h"
 #include "nrf_drv_clock.h"
+#include "nrf_drv_usbd.h"
 #include "app_usbd_core.h"
 #include "app_usbd.h"
 #include "app_usbd_string_desc.h"

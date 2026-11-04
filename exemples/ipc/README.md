@@ -58,7 +58,7 @@ outstanding. The network core has no console, its counters are in
 | `IPCTEST_MEM_SIZE` | 0x2000 | size of the block, checked against the ring geometry at build time |
 | `IPCTEST_COUNT` | 200000 | messages of one run |
 
-The application linker script `nrf5340_xxaa_application.ld` declares the
+The application linker script `gcc_nrf5340_xxaa_application.ld` declares the
 block as its `IPC0` region (0x20070000 to 0x20080000, exported as
 `__start_ipc0` and `__stop_ipc0`), so the linker never places data on it.
 

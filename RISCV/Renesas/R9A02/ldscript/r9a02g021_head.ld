@@ -3,8 +3,8 @@ File   : r9a02g021_head.ld
 
 Author : Hoang Nguyen Hoan          Oct. 12, 2026
 
-Desc   : Start of the R9A02G021 code flash, shared by gcc_R9A02G021.ld and
-         dfu_boot_r9a02g021.ld. The including script defines the HEAD
+Desc   : Start of the R9A02G021 code flash, shared by gcc_r9a02g021.ld and
+         gcc_r9a02g021_dfu_boot.ld. The including script defines the HEAD
          memory region at 0, 0x810 bytes long.
 
 The CPU starts at address 0 (R01UH1036EJ0110, 2.7.2.2). The option-setting

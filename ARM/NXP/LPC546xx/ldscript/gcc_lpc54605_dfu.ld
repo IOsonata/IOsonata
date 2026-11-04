@@ -23,7 +23,7 @@ SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lstdc++ -lgcc -lc -lnosys)
 
-INCLUDE "dfu_layout_lpc54605.ld"
+INCLUDE "gcc_lpc54605_dfu_layout.ld"
 
 MEMORY
 {

@@ -62,6 +62,7 @@ SOFTWARE.
 #include <vector>
 
 #include "ipc/ipc_intrf.h"
+#include "bluetooth/bt_hci_ipc.h"
 
 // Fake target port ----------------------------------------------------------
 
@@ -290,6 +291,100 @@ void TestPeerFirst(void)
 
 	CHECK(IpcIntrfIsUp(&peer));
 	CHECK(Tx(peer, b, 3) == 3);
+}
+
+void TestUnequalReservation(void)
+{
+	printf("owner and peer use different shared memory limits\n");
+	PortReset();
+	FillShm(0xA5);
+
+	IpcIntrfDev_t own, peer;
+	IpcIntrfCfg_t oc = MakeCfg(true, RING_BYTES, RING_BYTES);
+	IpcIntrfCfg_t pc = MakeCfg(false, 0, 0);
+	const uint32_t need = IPC_INTRF_MEMSIZE(RING_BYTES, 0, RING_BYTES, 0);
+
+	// The controller can declare a larger block while the DFU application
+	// reserves only the actual rings. No part of the recovery area is used.
+	oc.MemSize = SHM_BYTES;
+	pc.MemSize = need;
+
+	t_Core = CORE_OWNER;
+	CHECK(IpcIntrfInit(&own, &oc));
+	t_Core = CORE_PEER;
+	CHECK(IpcIntrfInit(&peer, &pc));
+	CHECK(IpcIntrfIsUp(&peer));
+
+	uint8_t out[8] = { 1, 3, 5, 7, 9, 11, 13, 15 };
+	uint8_t in[8] = {};
+	t_Core = CORE_OWNER;
+	CHECK(Tx(own, out, sizeof(out)) == (int)sizeof(out));
+	t_Core = CORE_PEER;
+	CHECK(Rx(peer, in, sizeof(in)) == (int)sizeof(in));
+	CHECK(memcmp(out, in, sizeof(out)) == 0);
+
+	bool intact = true;
+	for (uint32_t i = need; i < SHM_BYTES; i++)
+	{
+		if (g_Shm[i] != 0xA5)
+		{
+			intact = false;
+			break;
+		}
+	}
+	CHECK(intact);
+}
+
+void TestHciDfuIpcCapacity(void)
+{
+	printf("nRF5340 HCI IPC DFU reservation\n");
+	PortReset();
+
+	// Match the production network controller's eight packet slots and
+	// the DFU application peer's IPC0 region below the recovery flag.
+	const uint32_t ownerSize = 0x10000U;
+	const uint32_t peerSize = 0xEFF0U;
+	const uint32_t needed = BT_HCI_IPC_MEMSIZE(8U);
+	alignas(8) static uint8_t mem[0x10000U];
+
+	memset(mem, 0xA5, sizeof(mem));
+	CHECK(needed <= peerSize);
+
+	IpcIntrfDev_t own, peer;
+	IpcIntrfCfg_t oc = MakeCfg(true, 8U, 8U);
+	IpcIntrfCfg_t pc = MakeCfg(false, 0U, 0U);
+	oc.pMemBlk = mem;
+	oc.MemSize = ownerSize;
+	oc.TxBlkSize = BT_HCI_IPC_BLKSIZE;
+	oc.RxBlkSize = BT_HCI_IPC_BLKSIZE;
+	pc.pMemBlk = mem;
+	pc.MemSize = peerSize;
+
+	t_Core = CORE_OWNER;
+	CHECK(IpcIntrfInit(&own, &oc));
+	t_Core = CORE_PEER;
+	CHECK(IpcIntrfInit(&peer, &pc));
+	CHECK(IpcIntrfIsUp(&peer));
+
+	uint8_t data[16] = { 0x04, 0x0E, 0x02, 0x01, 0x00 };
+	uint8_t received[sizeof(data)] = {};
+
+	t_Core = CORE_OWNER;
+	CHECK(Tx(own, data, sizeof(data)) == (int)sizeof(data));
+	t_Core = CORE_PEER;
+	CHECK(Rx(peer, received, sizeof(received)) == (int)sizeof(received));
+	CHECK(memcmp(received, data, sizeof(data)) == 0);
+
+	bool intact = true;
+	for (uint32_t i = needed; i < ownerSize; i++)
+	{
+		if (mem[i] != 0xA5U)
+		{
+			intact = false;
+			break;
+		}
+	}
+	CHECK(intact);
 }
 
 void TestRoundTrip(void)
@@ -1195,6 +1290,8 @@ int main(int argc, char **argv)
 	TestConfig();
 	TestPeerFirst();
 	TestRoundTrip();
+	TestUnequalReservation();
+	TestHciDfuIpcCapacity();
 	TestWrap();
 	TestFull();
 	TestEpoch();

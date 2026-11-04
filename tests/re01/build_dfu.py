@@ -31,7 +31,8 @@ flags = ['-mcpu=cortex-m0plus', '-mthumb', '-DRE01_1500KB',
          '-DuECC_SUPPORTS_secp160r1=0', '-DuECC_SUPPORTS_secp192r1=0',
          '-DuECC_SUPPORTS_secp224r1=0', '-DuECC_SUPPORTS_secp256k1=0',
          '-DuECC_SUPPORT_COMPRESSED_POINT=0', '-DuECC_OPTIMIZATION_LEVEL=2',
-         '-DuECC_PLATFORM=0', '-DuECC_WORD_SIZE=4', '-Os', '-g',
+         '-DuECC_PLATFORM=0', '-DuECC_WORD_SIZE=4', '-DuECC_ENABLE_VLI_API=1',
+         '-Os', '-g',
          '-ffunction-sections', '-fdata-sections', '-Wall', '-Wextra',
          '-Wno-unused-parameter', '-Wno-missing-field-initializers']
 flags += ['-I' + str(root / p) for p in includes]
@@ -85,7 +86,8 @@ common = ['ARM/src/ResetEntry.c', 'ARM/src/iatomic.c', 'src/cfifo.c',
           'src/coredev/i2c.cpp', 'src/device_intrf.cpp',
           'src/device.cpp', 'src/crc.c', 'src/pulse_train.c',
           'src/slip_intrf.cpp', 'src/crypto/crypto_softsha256.cpp',
-          'src/crypto/crypto_uecc.cpp', 'micro-ecc/uECC.c',
+          'src/crypto/crypto_uecc.cpp', 'src/crypto/crypto_p256.cpp',
+          'micro-ecc/uECC.c',
           'src/dfu/dfu_image.cpp', 'src/dfu/dfu_layout.cpp', 'src/dfu/dfu_writer.cpp',
           'src/dfu/dfu_boot.cpp', 'src/dfu/dfu_mgr.cpp', 'src/dfu/dfu_wire.cpp',
           'exemples/dfu/dfu_boot_main.cpp']
@@ -97,7 +99,7 @@ elf = out / 'DfuBoot.elf'
 run([args.tool_prefix + 'g++', '-mcpu=cortex-m0plus', '-mthumb',
      '--specs=nano.specs', '--specs=nosys.specs', '-Wl,--gc-sections',
      '-L' + str(root / 'ARM/ldscript'), '-L' + str(lddir),
-     '-T' + str(lddir / 'dfu_boot_re01_1500kb.ld'), *map(str, objects), '-o', str(elf)])
+     '-T' + str(lddir / 'gcc_re01_1500kb_dfu_boot.ld'), *map(str, objects), '-o', str(elf)])
 sections = {}
 with elf.open('rb') as f:
     allocated = {s.name for s in ELFFile(f).iter_sections() if s['sh_flags'] & 2}

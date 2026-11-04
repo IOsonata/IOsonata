@@ -120,7 +120,9 @@ int main()
 {
 	bool res;
 
+#ifndef SLIP_PRBS_NO_PROGRESS
 	printf("UART Slip PRBS Demo\n");
+#endif
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &g_UartCfg);
@@ -134,7 +136,9 @@ int main()
 
 	uint8_t d = 0xff;
 	uint8_t buff[SLIPTEST_BUFSIZE];
+#ifndef SLIP_PRBS_NO_PROGRESS
 	uint32_t lcnt = 0;
+#endif
 	
 	while(1)
 	{
@@ -148,11 +152,13 @@ int main()
 #else
 		g_Slip.Tx(0, buff, SLIPTEST_BUFSIZE);
 #endif
+#ifndef SLIP_PRBS_NO_PROGRESS
 		lcnt++;
 		if ((lcnt & 0xff) == 0)
 		{
 			printf("cnt %u\n", lcnt);
 		}
+#endif
 	}
 	return 0;
 }

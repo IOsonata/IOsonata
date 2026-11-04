@@ -39,12 +39,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdbool.h>
 
+extern "C" {
 #include "nrf_lcd.h"
 #include "nrf_gfx.h"
+}
 
 #include "coredev/iopincfg.h"
 #include "coredev/spi.h"
-#include "display/eink_vb3300.h"
+#include "display/eink_intrf.h"
 #include "iopinctrl.h"
 #include "idelay.h"
 #include "pulse_train.h"
@@ -97,7 +99,7 @@ const EInkIntrfCfg_t s_EInkIntrfCfg = {
 	.Type = EIINTRF_TYPE_BITBANG,
 	.pIOPinMap = s_DispPins,
 	.NbIOPins = s_NbDispPins,
-	.pSpiDev = g_Spi,
+	.pSpiDev = nullptr,   // Bitbang mode does not use a hardware SPI instance.
 	.SpiCsIdx = 0,
 };
 

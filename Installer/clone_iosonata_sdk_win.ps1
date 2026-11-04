@@ -167,6 +167,45 @@ function Sync-PinnedRepository {
 # STM32CubeWBA holds the platform files of the ST BLE link layer that the
 # STM32WBA examples build. Only their platform and utility folders are checked
 # out. IOsonata does not require separate HAL or CMSIS downloads.
+# Exact example-only SDK revisions; preserve existing checkouts in normal mode.
+function Sync-PinnedCommitRepository {
+	param(
+		[string]$Url,
+		[string]$Target,
+		[string]$Commit
+	)
+	if (Test-Path $Target) {
+		$current = & git -C $Target rev-parse HEAD 2>$null
+		if ($LASTEXITCODE -eq 0 -and $current -eq $Commit) {
+			Write-Host "   [INFO] Keeping $Target at $Commit"
+			return
+		}
+		if ($Mode -ne "force") {
+			throw "Pinned checkout preserved: $Target (required commit $Commit). Use force mode to replace it."
+		}
+	}
+	$stage = "$Target.stage-$([guid]::NewGuid().ToString('N'))"
+	New-Item -ItemType Directory -Path $stage | Out-Null
+	try {
+		& git -C $stage init -q
+		if ($LASTEXITCODE -ne 0) { throw "Failed to initialize $stage" }
+		& git -C $stage remote add origin $Url
+		if ($LASTEXITCODE -ne 0) { throw "Failed to configure $Url" }
+		& git -C $stage fetch -q --depth=1 origin $Commit
+		if ($LASTEXITCODE -ne 0) { throw "Failed to fetch pinned commit $Commit" }
+		& git -C $stage checkout -q --detach FETCH_HEAD
+		if ($LASTEXITCODE -ne 0) { throw "Failed to checkout $Commit" }
+		if (Test-Path $Target) {
+			Remove-Item -Path $Target -Recurse -Force
+		}
+		Move-Item -Path $stage -Destination $Target
+	} finally {
+		if (Test-Path $stage) {
+			Remove-Item -Path $stage -Recurse -Force
+		}
+	}
+}
+
 function Sync-CubeWba {
     $Target = Join-Path $EXT "STM32CubeWBA"
     $Ref = "v1.10.0"
@@ -183,6 +222,10 @@ function Sync-CubeWba {
         if (($current -eq $Ref) -and
 			(Test-Path "$Target\Projects\Common\WPAN\Interfaces" -PathType Container) -and
 			(Test-Path "$Target\Utilities\lpm\tiny_lpm" -PathType Container) -and
+						(Test-Path "$Target\Projects\NUCLEO-WBA65RI\Applications\BLE\BLE_DataThroughput_Client\Core\Src\app_entry.c" -PathType Leaf) -and
+			(Test-Path "$Target\Drivers\STM32WBAxx_HAL_Driver\Inc\stm32wbaxx_hal.h" -PathType Leaf) -and
+			(Test-Path "$Target\Drivers\CMSIS\Device\ST\STM32WBAxx\Include\stm32wbaxx.h" -PathType Leaf) -and
+			(Test-Path "$Target\Middlewares\ST\STM32_WPAN\link_layer\ll_sys\src\ll_sys_cs.c" -PathType Leaf) -and
 			(Test-Path "$Target\Projects\NUCLEO-WBA65RI\Applications\BLE\BLE_p2pServer\STM32_WPAN\Target\linklayer_plat.c" -PathType Leaf)) {
             Write-Host "   `[INFO`] Keeping $Target at $Ref" -ForegroundColor Yellow
             return
@@ -196,7 +239,8 @@ function Sync-CubeWba {
     Invoke-Git clone --depth=1 --branch $Ref --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git $Target
     Push-Location $Target
     try {
-        Invoke-Git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities
+        Invoke-Git sparse-checkout set --skip-checks Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client Drivers/CMSIS Drivers/STM32WBAxx_HAL_Driver Middlewares/ST/STM32_WPAN Utilities
+		Invoke-Git submodule update --init --depth=1 -- Drivers/CMSIS/Device/ST/STM32WBAxx Drivers/STM32WBAxx_HAL_Driver Middlewares/ST/STM32_WPAN
     } finally {
         Pop-Location
     }
@@ -241,6 +285,10 @@ foreach ($repo in $repos.GetEnumerator()) {
 }
 
 # ---------------------------------------------------------
+# Preserve current shared SDKs while installing example-specific revisions.
+Sync-PinnedCommitRepository -Url "https://github.com/lvgl/lvgl.git" -Target "$EXT\lvgl_legacy" -Commit "69aa421acd78e0d3809200b9bc1f21c8586f5cf0"
+Sync-PinnedCommitRepository -Url "https://github.com/hathach/tinyusb.git" -Target "$EXT\tinyusb_lm20" -Commit "064afa3774cbbb2093d6af9805bdaa15b4e0f751"
+
 # Clone FreeRTOS-Kernel
 # ---------------------------------------------------------
 Write-Host ""

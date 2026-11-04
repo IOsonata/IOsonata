@@ -51,9 +51,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/sdk_config.h</locationURI>
 		</link>
 		<link>
-			<name>src/secure_bootloader_gcc_nrf52.ld</name>
+			<name>src/gcc_nrf52832_xxaa_sdk_uart_dfuboot.ld</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/secure_bootloader_gcc_nrf52.ld</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/gcc_nrf52832_xxaa_sdk_uart_dfuboot.ld</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/drivers_nrf</name>

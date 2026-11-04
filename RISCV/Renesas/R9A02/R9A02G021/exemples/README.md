@@ -25,22 +25,22 @@ and example. Executable names are `<example>.elf`.
 
 | Directory | Shared application source | Linker script | Setting |
 | --- | --- | --- | --- |
-| `Blinky` | `exemples/misc/blinky.c` | `gcc_R9A02G021.ld` | LED1, LED2, switch S1 on IRQ4 |
-| `TimerDemo` | `exemples/timer/timer_demo.cpp` | `gcc_R9A02G021.ld` | Timer DevNo 0, default frequency |
-| `UartLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UART0, 1000000 baud 8N1, interrupt mode |
-| `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | `gcc_R9A02G021.ld` | UART0, 1000000 baud 8N1, interrupt mode |
-| `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UARTA1 (DevNo 4), 1000000 baud 8N1; optional UARTA driver linked as project source, no linker flag |
-| `SpiLoopback` | `exemples/spi/spi_loopback.cpp` | `gcc_R9A02G021.ld` | SPI20 (DevNo 4) at 1 MHz, the four modes, interrupt and DTC reception, console on UART0 |
-| `SpiMasterSlave` | `exemples/spi/spi_master_slave.cpp` | `gcc_R9A02G021.ld` | SPI20 master (DevNo 4) at 1 MHz wired to the SPI21 slave (DevNo 5), the four modes, DTC on both, console on UART0 |
-| `CryptoTest` | `exemples/crypto/crypto_engine_test.cpp` | `gcc_R9A02G021.ld` | Generic crypto self-tests, software reference and target TRNG, UART0 console in Release |
-| `I2CScan` | `exemples/i2c/i2c_scan.cpp` | `gcc_R9A02G021.ld` | IICA1 (DevNo 1) at 100 kHz, HOCO 32 MHz, console on UART0 |
-| `I2CMasterSlave` | `exemples/i2c/i2c_master_slave.cpp` | `gcc_R9A02G021.ld` | IICA1 master (DevNo 1) at 100 kHz wired to the IICA0 slave (DevNo 0) at 0x22, HOCO 32 MHz, console on UART0 at 1 Mbaud |
-| `ADCDemo` | `src/adc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | ANI2, ANI3, internal reference, temperature sensor, console on UART0 |
-| `RtcDemo` | `src/rtc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | RTC on the 32.768 kHz crystal, Software Standby, console on UART0 |
-| `AnalogDemo` | `src/analog_demo.cpp` (this port) | `gcc_R9A02G021.ld` | TML32 interval, DAC8 channel 1 ramp, comparator 0 on the internal reference, console on UART0 |
-| `AdcSnoozeDemo` | `src/adc_snooze_demo.cpp` (this port) | `gcc_R9A02G021.ld` | ANI2 converted in Snooze every 100 ms, TML32, DTC, ELC, wake-up above 1.65 V, console on UART0 |
-| `SelfTest` | `src/self_test.cpp` (this port) | `gcc_R9A02G021.ld` | Hardware self-test, 12 tests with PASS, FAIL or SKIP, console on UART0 |
-| `DfuBoot` | `exemples/dfu/dfu_boot_main.cpp`, `dfu_boot_key.c` | `dfu_boot_r9a02g021.ld` | UART0, button P108 |
+| `Blinky` | `exemples/misc/blinky.c` | `gcc_r9a02g021.ld` | LED1, LED2, switch S1 on IRQ4 |
+| `TimerDemo` | `exemples/timer/timer_demo.cpp` | `gcc_r9a02g021.ld` | Timer DevNo 0, default frequency |
+| `UartLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_r9a02g021.ld` | UART0, 1000000 baud 8N1, interrupt mode |
+| `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | `gcc_r9a02g021.ld` | UART0, 1000000 baud 8N1, interrupt mode |
+| `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_r9a02g021.ld` | UARTA1 (DevNo 4), 1000000 baud 8N1; optional UARTA driver linked as project source, no linker flag |
+| `SpiLoopback` | `exemples/spi/spi_loopback.cpp` | `gcc_r9a02g021.ld` | SPI20 (DevNo 4) at 1 MHz, the four modes, interrupt and DTC reception, console on UART0 |
+| `SpiMasterSlave` | `exemples/spi/spi_master_slave.cpp` | `gcc_r9a02g021.ld` | SPI20 master (DevNo 4) at 1 MHz wired to the SPI21 slave (DevNo 5), the four modes, DTC on both, console on UART0 |
+| `CryptoTest` | `exemples/crypto/crypto_engine_test.cpp` | `gcc_r9a02g021.ld` | Generic crypto self-tests, software reference and target TRNG, UART0 console in Release |
+| `I2CScan` | `exemples/i2c/i2c_scan.cpp` | `gcc_r9a02g021.ld` | IICA1 (DevNo 1) at 100 kHz, HOCO 32 MHz, console on UART0 |
+| `I2CMasterSlave` | `exemples/i2c/i2c_master_slave.cpp` | `gcc_r9a02g021.ld` | IICA1 master (DevNo 1) at 100 kHz wired to the IICA0 slave (DevNo 0) at 0x22, HOCO 32 MHz, console on UART0 at 1 Mbaud |
+| `ADCDemo` | `src/adc_demo.cpp` (this port) | `gcc_r9a02g021.ld` | ANI2, ANI3, internal reference, temperature sensor, console on UART0 |
+| `RtcDemo` | `src/rtc_demo.cpp` (this port) | `gcc_r9a02g021.ld` | RTC on the 32.768 kHz crystal, Software Standby, console on UART0 |
+| `AnalogDemo` | `src/analog_demo.cpp` (this port) | `gcc_r9a02g021.ld` | TML32 interval, DAC8 channel 1 ramp, comparator 0 on the internal reference, console on UART0 |
+| `AdcSnoozeDemo` | `src/adc_snooze_demo.cpp` (this port) | `gcc_r9a02g021.ld` | ANI2 converted in Snooze every 100 ms, TML32, DTC, ELC, wake-up above 1.65 V, console on UART0 |
+| `SelfTest` | `src/self_test.cpp` (this port) | `gcc_r9a02g021.ld` | Hardware self-test, 12 tests with PASS, FAIL or SKIP, console on UART0 |
+| `DfuBoot` | `exemples/dfu/dfu_boot_main.cpp`, `dfu_boot_key.c` | `gcc_r9a02g021_dfu_boot.ld` | UART0, button P108 |
 
 Application sources are linked resources, not copies. Each example's
 `src/board.h` holds its pin and clock settings.
@@ -265,11 +265,11 @@ and alarm events at 23:29:00 and 23:31:00, each successfully rearming.
 UART output continued afterward; J-Link's 0xDEADBEEF indication was not
 accompanied by a confirmed firmware crash.
 
-**DfuBoot:** stage 0 boot for the layout of `ldscript/dfu_layout_r9a02g021.ld`
+**DfuBoot:** stage 0 boot for the layout of `ldscript/gcc_r9a02g021_dfu_layout.ld`
 (boot 36 KB, record 4 KB, application slot from 0xA000). Build the Release
 configuration for deployment; the current LLVM size limitation is recorded
 below. The Debug configuration defines `DFU_BOOT_ALLOW_UNSIGNED`.
-An application for the slot links with `gcc_R9A02G021_dfu.ld`.
+An application for the slot links with `gcc_r9a02g021_dfu.ld`.
 
 ## Status
 

@@ -38,6 +38,7 @@ IPC_SOURCES := \
 	$(ROOT)/src/cfifo.c
 
 HEADERS := \
+	$(ROOT)/include/bluetooth/bt_hci_ipc.h \
 	$(ROOT)/include/ipc/ipc_intrf.h \
 	$(ROOT)/include/cfifo.h \
 	$(ROOT)/include/device_intrf.h

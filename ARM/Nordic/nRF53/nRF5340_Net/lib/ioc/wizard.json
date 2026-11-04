@@ -18,7 +18,7 @@
     "${external}/nrfx/bsp/stable/mdk/nrf53",
     "${external}/nrfx/hal"
   ],
-  "linker_script": "${iosonata}/ARM/Nordic/nRF53/nRF5340_Net/ldscript/nrf5340_xxaa_network.ld",
+  "linker_script": "${iosonata}/ARM/Nordic/nRF53/ldscript/gcc_nrf5340_xxaa_network.ld",
   "lib_path": "${iosonata}/ARM/Nordic/nRF53/nRF5340_Net/lib/ioc/${config}",
   "lib": "IOsonata_nRF5340_Net",
   "features": {

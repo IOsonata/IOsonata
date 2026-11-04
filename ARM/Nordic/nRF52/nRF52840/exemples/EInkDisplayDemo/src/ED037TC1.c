@@ -12,6 +12,10 @@
 //#include "SPI.h"
 #include "board.h"
 
+// These operations are defined below, after EPD_Init() uses them.
+void InitialDisplay(void);
+void Upload_Temperature_LUT(void);
+
 void check_busy_high(void)// If BUSYN=0 then waiting
 {
     usDelay( 2000 );
@@ -308,7 +312,7 @@ void EPD_Load_LUT(unsigned int LUT, unsigned char const *LUT_Value, unsigned int
   //CSB_H;
 	IOPinSet(EINK_CS_PORT, EINK_CS_PIN);
 }
-void Upload_Temperature_LUT()
+void Upload_Temperature_LUT(void)
 {
   EPD_Load_LUT(LUT_REG, lut_vcom_gc, 105); 
 }

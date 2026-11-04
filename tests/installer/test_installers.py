@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -32,6 +33,15 @@ class InstallerTests(unittest.TestCase):
 				platform_file = target / 'Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c'
 				platform_file.parent.mkdir(parents=True)
 				platform_file.touch()
+				for extra_file in [
+					'Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client/Core/Src/app_entry.c',
+					'Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h',
+					'Drivers/CMSIS/Device/ST/STM32WBAxx/Include/stm32wbaxx.h',
+					'Middlewares/ST/STM32_WPAN/link_layer/ll_sys/src/ll_sys_cs.c',
+				]:
+					candidate = target / extra_file
+					candidate.parent.mkdir(parents=True, exist_ok=True)
+					candidate.touch()
 			sentinel = target / 'user-work.txt'
 			sentinel.write_text('keep me')
 			git = root / 'git'
@@ -102,14 +112,24 @@ esac
 					self.assertTrue(preserved)
 					self.assertNotIn('clone ', calls)
 
-	def test_cube_clone_downloads_no_driver_submodules(self):
+	def test_cube_clone_includes_reference_drivers_and_middleware(self):
 		for platform, shell in self.shells():
 			result, preserved, calls = self.run_helper(platform, shell, 'clone_cube_wba', mode='force')
 			self.assertEqual(result.returncode, 0, result.stderr)
-			self.assertIn('sparse-checkout set Projects/Common/WPAN', calls)
-			self.assertNotIn('Drivers', calls)
-			self.assertNotIn('submodule', calls)
+			self.assertIn('sparse-checkout set --skip-checks Projects/Common/WPAN', calls)
+			self.assertIn('BLE_DataThroughput_Client', calls)
+			self.assertIn('Drivers/CMSIS', calls)
+			self.assertIn('submodule update --init --depth=1 --', calls)
+			self.assertIn('Middlewares/ST/STM32_WPAN', calls)
 
+
+	def test_unix_cloner_files_remain_executable(self):
+		if os.name == 'nt':
+			self.skipTest('Windows checkout does not preserve Unix file modes')
+		for name in ('linux', 'macos'):
+			with self.subTest(platform=name):
+				path = INSTALLER / ('clone_iosonata_sdk_' + name + '.sh')
+				self.assertTrue(path.stat().st_mode & stat.S_IXUSR)
 
 	def test_matching_pin_is_kept(self):
 		for platform, shell in self.shells():
@@ -169,6 +189,28 @@ esac
 					self.assertLess(source.index('sudo codesign --verify'), source.index('capture_instances snapshot'))
 					self.assertLess(source.index('capture_instances snapshot'), source.index('Initializing signed IOcomposer'))
 					self.assertLess(source.index('Initializing signed IOcomposer'), source.index('Found Eclipse settings: $INSTANCE_CFG'))
+
+	def test_iocomposer_release_plugin_distribution_requires_complete_set(self):
+		plugins = ('org.iosonata.embedcdt.templates.wizard',
+			'com.iocomposer.embedcdt.ai',
+			'com.iocomposer.embedcdt.ui')
+		for platform in ['macos', 'linux', 'win']:
+			path = INSTALLER / ('install_iocdevtools_win.ps1' if platform == 'win'
+				else f'install_iocdevtools_{platform}.sh')
+			source = path.read_text()
+			with self.subTest(platform=platform):
+				for plugin in plugins:
+					self.assertIn(plugin, source)
+				self.assertIn('0.1.7', source)
+				self.assertNotIn('com.iocomposer.embedcdt.bletest', source)
+				self.assertNotIn('install_iosonata_plugin()', source)
+				self.assertNotIn('function Install-Plugin {', source)
+				if platform == 'win':
+					self.assertLess(source.index('foreach ($id in $ids)'),
+						source.index('# Stage all three required plugins'))
+				else:
+					self.assertIn('unzip -tq "$stage/$plugin.jar"', source)
+					self.assertIn('No published IOcomposer plugin found:', source)
 
 	def test_help_and_invalid_arguments_have_no_side_effects(self):
 		for platform, shell in self.shells():

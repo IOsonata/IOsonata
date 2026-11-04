@@ -39,7 +39,7 @@ The project retains the existing nRF91x1 `LteUdp` target settings:
 | --- | --- |
 | Target definition | `NRF9120_XXAA` |
 | CPU and ABI | Cortex-M33, Thumb, hard-float |
-| Linker script | `ARM/Nordic/nRF91/ldscript/nrf9120_xxaa.ld` |
+| Linker script | `ARM/Nordic/nRF91/ldscript/gcc_nrf9120_xxaa.ld` |
 | Modem library | `external/sdk-nrfxlib/nrf_modem/lib/cellular/nrf9120/hard-float` |
 | C++ | GNU C++23, no exceptions, no RTTI |
 

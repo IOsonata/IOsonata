@@ -132,6 +132,7 @@ SOFTWARE.
  *---------------------------------------------------------------------------*/
 
 uint32_t SystemCoreClock __attribute__((used)) = 80000000UL;
+uint64_t SystemCoreClockPeriodus __attribute__((used)) = 80ULL;
 
 /**
  * Default oscillator descriptor for 40 MHz XTAL targets (C5, C6).
@@ -267,6 +268,8 @@ void SystemCoreClockUpdate(void)
             SystemCoreClock = 80000000UL;
             break;
     }
+
+    SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
 }
 
 /*---------------------------------------------------------------------------

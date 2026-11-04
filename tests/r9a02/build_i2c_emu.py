@@ -45,7 +45,7 @@ exports = ['EmuI2cInit', 'EmuI2cProbe', 'EmuI2cProbeRx', 'EmuI2cWrite', 'EmuI2cR
            'EmuI2cSlaveAsMaster', 'R9a02IrqDispatch', 'SystemPeriphClockGet']
 linker = args.tool_prefix + ('clang++' if args.llvm else 'g++')
 specs = [] if args.llvm else ['--specs=nano.specs', '--specs=nosys.specs']
-script = 'llvm_R9A02G021.ld' if args.llvm else 'gcc_R9A02G021.ld'
+script = 'llvm_r9a02g021.ld' if args.llvm else 'gcc_r9a02g021.ld'
 subprocess.run([linker, *arch, *specs,
                 '-Wl,--gc-sections', *['-Wl,--undefined=' + name for name in exports],
                 '-L' + str(root / port / 'ldscript'), '-L' + str(root / 'RISCV/ldscript'),

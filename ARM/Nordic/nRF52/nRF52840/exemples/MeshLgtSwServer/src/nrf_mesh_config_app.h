@@ -89,6 +89,11 @@
  */
 #define ACCESS_ELEMENT_COUNT (1)
 
+/* Model instances used by the light switch server. */
+#define GENERIC_ONOFF_SERVER_INSTANCES_MAX (1)
+#define GENERIC_DTT_SERVER_INSTANCES_MAX (1)
+#define HEALTH_SERVER_ELEMENT_COUNT (1)
+
 /**
  * The number of allocated subscription lists for the application.
  *

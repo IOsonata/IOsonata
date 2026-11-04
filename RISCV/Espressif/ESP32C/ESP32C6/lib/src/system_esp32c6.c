@@ -3,7 +3,7 @@
 
 @brief	ESP32-C6 chip-specific SystemInit()
 
-Installs the CLIC vector table and delegates everything else to the shared
+Installs the INTMTX CPU vector table and delegates everything else to the shared
 PCR init layer (system_esp32_pcr.c).
 
 Clock parameters (ESP32-C6 TRM Rev 0.6 §7):
@@ -44,30 +44,59 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 
-/* Tell system_esp32_pcr.c the SPLL output for SystemCoreClockUpdate() */
-#define ESP32_PLL_FREQ  480000000UL
+#include "esp32xx.h"
+#include "esp32xx_intmtx.h"
+#include "esp32xx_uart.h"
 
 extern void Esp32PcrSystemInit(uint32_t CpuHz);
+extern void RISCV_VectorTable(void);
 
-/* Vector table defined in Vectors_esp32c6.c */
-extern void (* const g_Esp32C6Vectors[])(void);
+volatile uintptr_t g_Esp32C6VectorBase;
+volatile uintptr_t g_Esp32C6MtvecWritten;
+volatile uintptr_t g_Esp32C6MtvecReadback;
+volatile uint32_t g_Esp32C6VectorRangeError;
 
-/**
- * @brief   System initialisation — called by ResetEntry.c before _start().
- *
- * Stack is valid; .data/.bss/.iram.text are already initialised by ResetEntry.
- */
 void SystemInit(void)
 {
+    uintptr_t vt;
+    uintptr_t vector;
+
 #if defined(ESP32C6_CPU_160MHZ)
     Esp32PcrSystemInit(160000000UL);
 #else
-    Esp32PcrSystemInit(0U);     /* 0 = leave clock at ROM bootloader default */
+    Esp32PcrSystemInit(0U);
 #endif
 
-    /* Install CLIC vectored interrupt table.
-     * mtvec[1:0] = 0b11 selects CLIC vectored mode.
-     * g_Esp32C6Vectors is aligned to 512 bytes in .iram.text.          */
-    uintptr_t vt = (uintptr_t)g_Esp32C6Vectors;
-    __asm volatile("csrw mtvec, %0" : : "r"(vt | 0x3U) : "memory");
+    vt = (uintptr_t)RISCV_VectorTable;
+    g_Esp32C6VectorBase = vt;
+    // The 32-entry CPU trap table must reside in the 64 KiB IRAM region.
+    if ((vt & 0xFFUL) != 0U || vt < 0x40800000UL || vt >= 0x40810000UL)
+    {
+        g_Esp32C6VectorRangeError = 1U;
+        for (;;)
+        {
+            __asm volatile("nop");
+        }
+    }
+
+    __asm volatile("csrci mstatus, 0x8" ::: "memory");
+
+    // Clear ROM routing and CPU priorities before installing drivers.
+    ESP32_INTMTX_CLOCK_GATE_REG = 1U;
+    ESP32_CPU_INT_ENABLE_REG = 0U;
+    ESP32_CPU_INT_TYPE_REG = 0U;
+    ESP32_CPU_INT_CLEAR_REG = 0xFFFFFFFFUL;
+    ESP32_CPU_INT_CLEAR_REG = 0U;
+    ESP32_CPU_INT_THRESH_REG = 0U;
+    ESP32_INTMTX_SOURCE_MAP_REG(ESP32_UART_INTR_SOURCE_UART0) = 0U;
+    ESP32_INTMTX_SOURCE_MAP_REG(ESP32_UART_INTR_SOURCE_UART1) = 0U;
+    ESP32_INTMTX_SOURCE_MAP_REG(ESP32_GPIO_INTR_SOURCE_ID) = 0U;
+    __asm volatile("fence iorw, iorw" ::: "memory");
+
+    // ESP32-C6 uses basic RISC-V CPU interrupt vectoring (mtvec.MODE = 1),
+    // not the CLIC-only mtvec.MODE = 3 used by ESP32-C5/C61.
+    vector = vt | 1UL;
+    g_Esp32C6MtvecWritten = vector;
+    __asm volatile("csrw mtvec, %0" : : "r"(vector) : "memory");
+    __asm volatile("csrr %0, mtvec" : "=r"(g_Esp32C6MtvecReadback));
 }

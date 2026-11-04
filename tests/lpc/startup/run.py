@@ -80,7 +80,7 @@ for opt in ['-O0', '-O2']:
 
 # LPC17xx Cortex-M3 checksum includes all six core exception addresses.
 scripts = root / 'ARM/NXP/LPC17xx/ldscript'
-layouts = ['gcc_lpc1767_9.ld', 'gcc_lpc1767_9_dfu.ld', 'dfu_boot_lpc1769.ld']
+layouts = ['gcc_lpc1767_9.ld', 'gcc_lpc1767_9_dfu.ld', 'gcc_lpc1769_dfu_boot.ld']
 for name in layouts:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -98,13 +98,13 @@ for name in layouts:
             for index, handler in enumerate(handlers):
                 asm += f'.global {handler}\n{handler}:\n.space {4 * (index + 1)}\n'
             # AHB initialized data must not displace the vectors from origin.
-            if name != 'dfu_boot_lpc1769.ld':
+            if name != 'gcc_lpc1769_dfu_boot.ld':
                 asm += '.section .data.RAMAHB,"aw"\n.global ahb_data\nahb_data:\n.long 0x12345678\n'
             (tmp / 'vectors.s').write_text(asm)
             subprocess.run(['as', '--32', 'vectors.s', '-o', 'vectors.o'], cwd=tmp, check=True)
             subprocess.run(['ld', '-m', 'elf_i386', '-L', str(scripts),
                             '-L', str(root / 'ARM/ldscript'), '-T', 'image.ld',
-                            '--gc-sections', '-u', 'ahb_data' if name != 'dfu_boot_lpc1769.ld' else 'ResetEntry',
+                            '--gc-sections', '-u', 'ahb_data' if name != 'gcc_lpc1769_dfu_boot.ld' else 'ResetEntry',
                             'vectors.o', '-o', 'image.elf'], cwd=tmp, check=True)
             subprocess.run(['objcopy', '-O', 'binary', 'image.elf', 'image.bin'], cwd=tmp, check=True)
             words = struct.unpack('<8I', (tmp / 'image.bin').read_bytes()[:32])
@@ -114,7 +114,7 @@ for name in layouts:
             assert words[0] == 0x10007fe0
             origin = 0xd000 if name == layouts[1] else 0
             assert origin + padding <= words[1] < origin + padding + 64
-            if name != 'dfu_boot_lpc1769.ld':
+            if name != 'gcc_lpc1769_dfu_boot.ld':
                 symbols = subprocess.check_output(['nm', 'image.elf'], cwd=tmp, text=True)
                 address = int(next(line.split()[0] for line in symbols.splitlines()
                                    if line.split()[-1] == 'ahb_data'), 16)

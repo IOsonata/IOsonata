@@ -104,7 +104,11 @@ extern "C" volatile uint32_t g_Esp32C3Uart1IrqCount;
 // inputs.  UART_CPU_INT_PRIO = 1..15, must be > THRESH (which we set to 0).
 // ===========================================================================
 #define UART0_CPU_INT_LEVEL             2U
+#if defined(ESP32C6)
+#define UART1_CPU_INT_LEVEL             5U
+#else
 #define UART1_CPU_INT_LEVEL             3U
+#endif
 #define UART_CPU_INT_PRIO               1U
 
 /*---------------------------------------------------------------------------
