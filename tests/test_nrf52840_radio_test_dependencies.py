@@ -63,7 +63,6 @@ class RadioTestDependencies(unittest.TestCase):
         required = (
             "app_usbd.c",
             "app_usbd_core.c",
-            "app_usbd_serial_num.c",
             "app_usbd_string_desc.c",
         )
         for name in required:
@@ -76,6 +75,7 @@ class RadioTestDependencies(unittest.TestCase):
             "PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c"
         )
         self.assertNotIn("src/nRF5_SDK/libraries/util/app_util_platform.c", links)
+        self.assertNotIn("src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c", links)
         self.assertNotIn("src/nrf_cli_cdc_acm.c", links)
         self.assertIn("src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c", links)
         settings = ET.parse(PROJECT / "ioc/.cproject")
