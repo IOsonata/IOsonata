@@ -33,6 +33,10 @@ Actions workflow. No push-triggered CI. Do not merge or retag release
    eight configurations). Nordic Mesh is deferred; IOsonata will implement
    its own Mesh support in a future release. Preserve these project files
    and sources, but do not compile or count their configurations in 0.13.
+   Exclude unfinished BleOta projects as well. In the last measured matrix,
+   nRF5340_Net BleOta Debug and Release account for two excluded FAIL
+   configurations. Preserve BleOta source and project metadata unchanged.
+   Do not spend 0.13 remediation effort on BleOta.
 2. Enumerate every enabled configuration in each in-scope project. Compile
    and link all supported GNU Eclipse managed-project configurations
    (including Debug and Release) using their own checked-in settings,
@@ -75,28 +79,43 @@ python3 tests/ldscript_reference_audit.py --report-unreferenced
 The inventory command reports selectable-but-unreferenced scripts;
 its output does not authorize deletion.
 
+## DFU bootloader Debug FLASH overflow policy
+
+A DFU bootloader **Debug** configuration whose only failure is exceeding its
+fixed FLASH region is an accepted size exception for release 0.13. Do not
+optimize it further solely to fit, enlarge its partition, or mark it PASS.
+Keep the attempted result and linker diagnostic in the detailed build record,
+but report it separately as **WAIVED (Debug DFU FLASH overflow)** instead of
+an actionable FAIL. A Debug compile error, undefined symbol, RAM overflow,
+invalid section placement, or failing Release configuration remains a FAIL.
+Release DfuBoot images must compile, link and pass the usual ELF and DFU checks.
+
+In the last measured matrix, the affected Debug images are RE01, nRF5340_Net
+and R9A02G021 DfuBoot (three WAIVED). nRF52840 DfuBoot Debug already PASSes.
+
 ## Required build result record
 
 For **every in-scope** project/configuration, record:
 
 - Repository-relative `.cproject` path and configuration name,
   selected target MCU, GNU toolchain and SDK version.
-- Build command or managed-builder invocation, result (PASS, FAIL, or
-  BLOCKED), complete compiler/linker diagnostics, and the referenced
+- Build command or managed-builder invocation, result (PASS, FAIL, BLOCKED, or
+  WAIVED), complete compiler/linker diagnostics, and the referenced
   `-T`/`--config` linker file.
 - ELF, map file, FLASH and RAM usage, key region-boundary checks, and
   whether the output ran on hardware.
 - For BLOCKED: missing prerequisites and the exact reason the
   configuration could not run; do not count it as PASS.
 
-Exclude NCS, IAR, Keil and the eight Nordic Mesh example configurations
+Exclude NCS, IAR, Keil, Nordic Mesh, and unfinished BleOta configurations
 entirely from the denominator and from PASS, FAIL and BLOCKED totals. Record
 out-of-scope configurations separately if needed. Exclusion does not authorize
 deleting their source files, project metadata or linker scripts; the reference
 audit may still inspect them.
 
 Report totals separately for compiled, linked, hardware-tested, failed,
-and blocked configurations. Do not combine static audit PASS with build
+blocked, and WAIVED configurations. A WAIVED image is neither a PASS nor an
+exclusion from the in-scope denominator. Do not combine static audit PASS with build
 PASS, or claim that a skipped configuration compiled.
 
 ## Acceptance and release
