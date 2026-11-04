@@ -16,17 +16,20 @@ class FlashMemoryDemoSpecsTests(unittest.TestCase):
                 self.assertEqual(len(configs), 2)
                 for cfg in configs:
                     name = cfg.find(".//configuration").get("name")
+                    linkers = [
+                        tool for tool in cfg.findall(".//tool")
+                        if tool.get("name") == "GNU ARM Cross C++ Linker"
+                    ]
+                    self.assertEqual(len(linkers), 1)
                     options = [
                         opt.get("value", "")
-                        for opt in cfg.findall(".//option")
+                        for opt in linkers[0].findall("option")
                         if opt.get("name") == "Other linker flags"
                     ]
+                    self.assertEqual(len(options), 1)
                     if name == "Debug":
-                        self.assertEqual(len(options), 1)
                         self.assertIn("--specs=nosys.specs", options[0])
-                        self.assertNotIn("rdimon", options[0])
-                    else:
-                        self.assertFalse(any("rdimon" in v for v in options))
+                    self.assertNotIn("rdimon", options[0])
 
 
 if __name__ == "__main__":
