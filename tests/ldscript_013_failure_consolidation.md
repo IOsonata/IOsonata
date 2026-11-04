@@ -78,6 +78,37 @@ optimization and the newer R9A02 delay implementation need measured builds.
 These figures precede later Thingy52 and R9A02 fixes, which require their
 own builds before changing counts. Historical figures below remain intact.
 
+## Current validation update: incomplete ports excluded
+
+The latest build-agent report at `5adbabd9` measured **1507 PASS /
+7 FAIL / 2 BLOCKED / 3 WAIVED** across 1519 configurations (after
+Nordic Thingy52 and unfinished BleOta exclusions). All 1397 linked
+example images passed static ELF checks. The RP2040 wizard descriptor
+test was stale and has been corrected.
+
+The maintainer additionally excluded these unfinished configurations
+from 0.13, without changing their port/example sources:
+
+- RP2040 MCU library: Debug and Release (2)
+- nRF54H20 RISC-V MCU library: Debug and Release (2)
+- ESP32C6 qemutest: Debug and Release (2)
+
+The resulting **reclassified** acceptance matrix is:
+
+| Classification | Configurations |
+| --- | ---: |
+| PASS (measured) | 1507 |
+| FAIL (actionable): SAMD11 UartSlipPrbsTxTest Debug | 1 |
+| BLOCKED: nRF52840 zigbee_lightswitch | 2 |
+| WAIVED: DFU Debug FLASH overflow | 3 |
+| **In-scope total** | **1513** |
+
+The SAMD11 Debug failure was a 100-byte FLASH overflow in the last
+measured build. The same `SLIP_PRBS_NO_PROGRESS` selection already
+made Release PASS; Debug now selects it too, and must be rebuilt and
+checked before marking it PASS. Excluded projects are not counted
+as PASS or BLOCKED. All prior build counts remain historical.
+
 ## Status by root cause
 
 | Cause | Last FAIL | Correction candidates | Still requires implementation or dependencies |
@@ -208,7 +239,7 @@ A code-size fix requires map/symbol attribution, not linker-space inflation.
 3. Provision pinned vendor SDK versions, keeping the normal SDK versions
    alongside the example-specific checkouts. Report missing publications.
 4. Clean build every **in-scope GNU Eclipse managed-project configuration**
-   (1519 after IAR, NCS, Nordic Mesh, all BleOta and Thingy52 exclusions;
+   (1513 after IAR, NCS, Nordic Mesh, all BleOta, Thingy52 and the six incomplete-port exclusions;
    recompute against the current repository inventory). Capture diagnostics
    for every remaining FAIL and compare configuration-by-configuration against
    `afac5e95` without treating exclusions as build passes.
