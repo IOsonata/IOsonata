@@ -27,7 +27,7 @@ class Samd11PrbsLtoTest(unittest.TestCase):
                 for value in option.findall("listOptionValue")
             ]
             count = values.count("SLIP_PRBS_NO_PROGRESS")
-            self.assertEqual(count, 2 if name == "Release" else 0)
+            self.assertEqual(count, 2, "Both SAMD11 build variants omit progress output")
         source = (ROOT / "exemples/uart/uart_slip_prbs_tx.cpp").read_text()
         self.assertEqual(source.count("#ifndef SLIP_PRBS_NO_PROGRESS"), 3)
         self.assertIn("#ifndef SLIP_PRBS_NO_PROGRESS\n\tuint32_t lcnt = 0;\n#endif", source)
