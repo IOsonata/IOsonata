@@ -36,6 +36,11 @@ bool NvmDiskIO::InitMcu(Nvm &Mem, NvmIntrf &Intrf, int RegionNo)
 	uint32_t unit;
 	uint32_t writeGran;
 
+	// A failed reinitialization must not leave a previously attached medium
+	// available through this disk.
+	vpNvm = nullptr;
+	vSectSize = 0;
+
 	if (RegionNo < 0 || RegionNo >= NVM_REGION_MAX)
 	{
 		return false;
