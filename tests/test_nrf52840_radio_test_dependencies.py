@@ -86,7 +86,7 @@ class RadioTestDependencies(unittest.TestCase):
             scripts = [
                 item.get("value", "")
                 for opt in cfg.findall(".//option")
-                if "linker.scripts" in opt.get("superClass", "")
+                if opt.get("name") == "Script files (-T)"
                 for item in opt.findall("listOptionValue")
             ]
             self.assertTrue(scripts)
