@@ -28,6 +28,11 @@ Actions workflow. No push-triggered CI. Do not merge or retag release
    These project formats are outside the GNU Eclipse managed-project build
    scope. Do not require their proprietary toolchains or treat their
    configurations as failed, blocked or untested GNU builds.
+   Also exclude the four Nordic Mesh reference examples, `MeshLgtSwClient`
+   and `MeshLgtSwServer` for nRF52832 and nRF52840 (Debug and Release:
+   eight configurations). Nordic Mesh is deferred; IOsonata will implement
+   its own Mesh support in a future release. Preserve these project files
+   and sources, but do not compile or count their configurations in 0.13.
 2. Enumerate every enabled configuration in each in-scope project. Compile
    and link all supported GNU Eclipse managed-project configurations
    (including Debug and Release) using their own checked-in settings,
@@ -84,10 +89,11 @@ For **every in-scope** project/configuration, record:
 - For BLOCKED: missing prerequisites and the exact reason the
   configuration could not run; do not count it as PASS.
 
-Exclude NCS, IAR and Keil configurations entirely from the denominator and
-from PASS, FAIL and BLOCKED totals. Record them separately as out of scope
-if needed. Exclusion does not authorize deleting their source files, project
-metadata or linker scripts; the reference audit may still inspect them.
+Exclude NCS, IAR, Keil and the eight Nordic Mesh example configurations
+entirely from the denominator and from PASS, FAIL and BLOCKED totals. Record
+out-of-scope configurations separately if needed. Exclusion does not authorize
+deleting their source files, project metadata or linker scripts; the reference
+audit may still inspect them.
 
 Report totals separately for compiled, linked, hardware-tested, failed,
 and blocked configurations. Do not combine static audit PASS with build
