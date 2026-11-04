@@ -31,7 +31,7 @@ class RadioTestDependencies(unittest.TestCase):
                         "external/nrfx/drivers/include" in value
                         for value in values))
 
-    def test_sdk_mdk_compiler_abstraction_header_path(self):
+    def test_nrfx_stable_mdk_compiler_abstraction_header_path(self):
         tree = ET.parse(PROJECT / "ioc/.cproject")
         for cfg in tree.findall(".//configuration"):
             with self.subTest(config=cfg.get("name")):
@@ -42,7 +42,7 @@ class RadioTestDependencies(unittest.TestCase):
                     values = [item.get("value", "")
                               for item in option.findall("listOptionValue")]
                     self.assertTrue(any(
-                        value.strip('"').endswith("external/nRF5_SDK/modules/nrfx/mdk")
+                        value.strip('"').endswith("external/nrfx/bsp/stable/mdk")
                         for value in values
                     ))
 
