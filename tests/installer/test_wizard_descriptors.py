@@ -7,10 +7,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Source ports that do not yet provide these linker variants.
-KNOWN_INCOMPLETE = {
-    "ARM/RPI/RP20/RP2040/lib/ioc/wizard.json": {"base"},
-}
+# Incomplete ports must not advertise a wizard descriptor with missing
+# linker scripts. Keep the port sources for future implementation.
+KNOWN_INCOMPLETE = {}
 
 
 class WizardDescriptorTests(unittest.TestCase):
@@ -50,10 +49,11 @@ class WizardDescriptorTests(unittest.TestCase):
                     self.assertTrue(linker.is_file(),
                                     f"Missing {name} linker script: {linker}")
 
-    def test_known_incomplete_targets_are_explicit(self):
-        for descriptor, features in KNOWN_INCOMPLETE.items():
-            self.assertTrue((ROOT / descriptor).is_file(), descriptor)
-            self.assertTrue(features)
+    def test_incomplete_rp2040_has_no_wizard_descriptor(self):
+        self.assertFalse(
+            (ROOT / "ARM/RPI/RP20/RP2040/lib/ioc/wizard.json").exists(),
+            "RP2040 wizard must not advertise an unimplemented linker layout"
+        )
 
 
 if __name__ == "__main__":
