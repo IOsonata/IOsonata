@@ -39,6 +39,10 @@ Actions workflow. No push-triggered CI. Do not merge or retag release
    nRF5340_Net Debug and Release were FAIL. Exclude all ten from the
    denominator; preserve their source and project metadata unchanged.
    Do not spend 0.13 remediation effort on BleOta.
+   Exclude the nRF52832 Thingy52 vendor firmware reference project (Debug and
+   Release: two configurations). It depends on a different Nordic SDK
+   generation and missing original application modules. Retain its files
+   unchanged; do not port or build it for release 0.13.
 2. Enumerate every enabled configuration in each in-scope project. Compile
    and link all supported GNU Eclipse managed-project configurations
    (including Debug and Release) using their own checked-in settings,
@@ -109,7 +113,7 @@ For **every in-scope** project/configuration, record:
 - For BLOCKED: missing prerequisites and the exact reason the
   configuration could not run; do not count it as PASS.
 
-Exclude NCS, IAR, Keil, Nordic Mesh, and unfinished BleOta configurations
+Exclude NCS, IAR, Keil, Nordic Mesh, unfinished BleOta, and Nordic Thingy52 configurations
 entirely from the denominator and from PASS, FAIL and BLOCKED totals. Record
 out-of-scope configurations separately if needed. Exclusion does not authorize
 deleting their source files, project metadata or linker scripts; the reference
