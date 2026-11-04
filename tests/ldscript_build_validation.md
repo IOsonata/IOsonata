@@ -74,8 +74,8 @@ its output does not authorize deletion.
 
 For **every in-scope** project/configuration, record:
 
-- Repository-relative `.cproject` or `.ewp` path and configuration
-  name, selected target MCU, toolchain and SDK version.
+- Repository-relative `.cproject` path and configuration name,
+  selected target MCU, GNU toolchain and SDK version.
 - Build command or managed-builder invocation, result (PASS, FAIL, or
   BLOCKED), complete compiler/linker diagnostics, and the referenced
   `-T`/`--config` linker file.
