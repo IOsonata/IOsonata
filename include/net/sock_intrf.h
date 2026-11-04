@@ -42,9 +42,10 @@ so:
 	}
 
 Ethernet uses the shared raw lwIP implementation after IpInit (net/ip.h).
-Its initial IPv4 profile supports connected TCP/UDP; TLS/DTLS and credential
-operations return false. UDP does not fragment: its transmit limit is 1472
-bytes. Socket calls and IP processing have one foreground owner.
+Its initial IPv4 profile supports connected TCP/UDP and TCP sockets that wait
+for a peer; TLS/DTLS and credential operations return false. UDP does not
+fragment: its transmit limit is 1472 bytes. Socket calls and IP processing have
+one foreground owner.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2026
@@ -133,6 +134,7 @@ typedef struct __Sock_Intrf_Dev {
 	int Hdl;							//!< Socket handle of the port, -1 when closed
 	SOCKINTRF_PROTO Proto;				//!< Transport protocol
 	volatile bool bConnected;			//!< Open and not closed by the peer or the network
+	volatile bool bListening;			//!< Waiting for a peer, see SockIntrfListen
 } SockIntrfDev_t;
 
 #pragma pack(pop)
@@ -154,11 +156,36 @@ extern "C" {
  */
 bool SockIntrfInit(SockIntrfDev_t * const pDev, const SockIntrfCfg_t * const pCfg);
 
-/// Close the socket. Init opens it again.
+/**
+ * @brief	Open a TCP socket that waits for one peer to connect to it.
+ *
+ * Returns without waiting. The configuration gives Proto (TCP only), LocalPort,
+ * Timeout and EvtCB; pHost and Port are not used. When a peer connects,
+ * bListening goes false and bConnected true, and the socket works as one opened
+ * with SockIntrfInit. bListening and bConnected both false after that mean the
+ * connection has ended. Close the socket, then listen again for the next peer.
+ *
+ * Several sockets can listen on one port, each takes one peer. A peer arriving
+ * while all of them are in use is left to retry its connection. Listening does
+ * not need the network to be up and it continues across a link loss. Not from
+ * an interrupt or a socket event.
+ *
+ * @param	pDev	: Socket interface to initialize
+ * @param	pCfg	: Configuration
+ *
+ * @return	true - listening. false - refused or no free socket. A network
+ * 			implementation that cannot listen, as the nRF91 modem, returns false.
+ */
+bool SockIntrfListen(SockIntrfDev_t * const pDev, const SockIntrfCfg_t * const pCfg);
+
+/// Close the socket. Init or Listen opens it again.
 void SockIntrfClose(SockIntrfDev_t * const pDev);
 
 /// true while the socket is open and connected
 static inline bool SockIntrfConnected(SockIntrfDev_t * const pDev) { return pDev->bConnected; }
+
+/// true while the socket waits for a peer
+static inline bool SockIntrfListening(SockIntrfDev_t * const pDev) { return pDev->bListening; }
 
 /**
  * @brief	Release assistance hint for the next send.
@@ -211,8 +238,10 @@ public:
 	virtual ~SockIntrf() { Close(); }
 
 	bool Init(const SockIntrfCfg_t &Cfg) { return SockIntrfInit(&vDevData, &Cfg); }
+	bool Listen(const SockIntrfCfg_t &Cfg) { return SockIntrfListen(&vDevData, &Cfg); }
 	void Close(void) { SockIntrfClose(&vDevData); }
 	bool Connected(void) { return SockIntrfConnected(&vDevData); }
+	bool Listening(void) { return SockIntrfListening(&vDevData); }
 	bool Rai(SOCKINTRF_RAI Hint) { return SockIntrfRai(&vDevData, Hint); }
 
 	operator DevIntrf_t * () { return &vDevData.DevIntrf; }
