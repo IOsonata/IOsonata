@@ -11,6 +11,23 @@ PROJECTS = ("UartPrbsRxTest", "UartPrbsTxTestTaktOS", "UartSlipPrbsTxTest")
 
 
 class Samd11PrbsLtoTest(unittest.TestCase):
+    def test_mcu_library_debug_optimizes_for_size(self):
+        project = ROOT / "ARM/Microchip/SAMD/SAMD11/lib/ioc/.cproject"
+        root = ET.parse(project).getroot()
+        configs = root.findall(".//configuration")
+        self.assertEqual({cfg.get("name") for cfg in configs},
+                         {"Debug", "Release"})
+        for cfg in configs:
+            with self.subTest(config=cfg.get("name")):
+                levels = [
+                    option.get("value", "")
+                    for option in cfg.findall(".//option")
+                    if option.get("name") == "Optimization Level"
+                ]
+                self.assertEqual(levels, [
+                    "ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.size"
+                ])
+
     def test_prbs_examples_compile_and_link_with_lto(self):
         for project in PROJECTS:
             with self.subTest(project=project):
