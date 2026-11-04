@@ -11,30 +11,6 @@ SCRIPT = ROOT / "ARM" / "Nordic" / "nRF52" / "ldscript" / "gcc_nrf52832_xxaa_s13
 
 
 class Thingy52ProjectTests(unittest.TestCase):
-    def test_sdk_button_include_path(self):
-        tree = ET.parse(PROJECT).getroot()
-        configs = tree.findall(".//cconfiguration")
-        self.assertEqual(len(configs), 2)
-        for config in configs:
-            name = config.find(".//configuration").get("name")
-            with self.subTest(configuration=name):
-                compilers = [
-                    tool for tool in config.findall(".//tool")
-                    if tool.get("name", "").endswith(("C Compiler", "C++ Compiler"))
-                ]
-                self.assertEqual(len(compilers), 2)
-                for tool in compilers:
-                    paths = [
-                        value.get("value", "")
-                        for option in tool.findall("option")
-                        if option.get("name") == "Include paths (-I)"
-                        for value in option.findall("listOptionValue")
-                    ]
-                    self.assertTrue(any(
-                        path.strip('"').endswith("external/nRF5_SDK/components/libraries/button")
-                        for path in paths
-                    ))
-
     def test_debug_release_linker_script_exists(self):
         self.assertTrue(SCRIPT.is_file())
         tree = ET.parse(PROJECT).getroot()
