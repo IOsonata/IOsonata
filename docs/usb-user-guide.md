@@ -38,6 +38,7 @@ loopback so its 64-byte host protocol is visible in the application.
 | Custom Bulk | `UsbdBulk` | `exemples/usb/usb_custom_bulk_loopback.cpp` | `UsbCustomBulkLoopback/ioc` | `Python/usb_custom_bulk_loopback.py` |
 | HID | `UsbdHid` | `exemples/usb/usb_hid_loopback.cpp` | `UsbHidLoopback/ioc` | `Python/usb_hid_loopback.py` |
 | Mass Storage | `UsbdMsc` | `exemples/usb/usb_msc_ramdisk.cpp` | `UsbMscRamDisk/ioc` | `Python/usb_msc_test.py` |
+| Mass Storage on internal flash | `UsbdMsc`, `NvmDiskIO` | `exemples/usb/usb_msc_flashdisk.cpp` | `UsbMscFlashDisk/ioc` | `Python/usb_msc_test.py` |
 | Vendor Interrupt | `UsbdInt` | `exemples/usb/usb_int_loopback.cpp` | `UsbIntLoopback/ioc` | `Python/usb_int_loopback.py` |
 | Vendor Isochronous | `UsbdIso` | `exemples/usb/usb_iso_loopback.cpp` | `UsbIsoLoopback/ioc` | `Python/usb_iso_loopback.py` |
 
@@ -555,6 +556,18 @@ SYNCHRONIZE CACHE.
 `UsbMscRamDisk` exposes a dedicated 64 KiB FAT12 RAM disk. It does not expose
 firmware, settings, a production filesystem or Bluetooth bond storage. RAM-disk
 contents are lost when USB bus power is removed.
+
+`UsbMscFlashDisk` exposes a 256 KiB FAT12 volume on the nRF52840 internal flash:
+the NVM1 region of `gcc_nrf52840_xxaa_nvm256k.ld`, and nothing else. Change the
+size in that script; the volume geometry follows the region. The example formats
+the region when sector 0 has no 55AA signature. Otherwise the content stays
+across resets, power cycles and any reflash that does not erase that region.
+
+The sector is one flash page, so the host reads a 4096 byte block in READ
+CAPACITY rather than 512. `NvmDiskIO` does not accept a sector smaller than the
+erase unit. Each sector the host writes is one page erase and one program with
+no wear levelling, and the main loop waits for both. `--write-test` works here
+too; it overwrites and restores the last 16 sectors, 64 KiB of flash.
 
 Unmount the volume before running the raw write test:
 

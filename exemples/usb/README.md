@@ -7,7 +7,8 @@ or [ARM/Nordic/nRF54/nRF54LM20x/exemples](../../ARM/Nordic/nRF54/nRF54LM20x/exem
 Build the matching MCU IOsonata library first, then clean-build the application
 with matching Debug or Release settings.
 
-The LM20 set includes all entries below except the SPI-dependent 3D mouse.
+The LM20 set includes all entries below except the SPI-dependent 3D mouse and
+the flash disk, which is an nRF52840 project.
 See [LM20 project setup](../../docs/usb-nrf54lm20x.md) for available build
 configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 
@@ -27,6 +28,7 @@ configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 | [usb_int_loopback.cpp](usb_int_loopback.cpp) | UsbIntLoopback/ioc | `UsbdInt` alternate settings |
 | [usb_iso_loopback.cpp](usb_iso_loopback.cpp) | UsbIsoLoopback/ioc | `UsbdIso` alternate settings |
 | [usb_msc_ramdisk.cpp](usb_msc_ramdisk.cpp) | UsbMscRamDisk/ioc | Disposable 64 KiB FAT12 RAM disk |
+| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | 256 KiB FAT12 disk on the internal flash |
 
 Use the [USB User Guide](../../docs/usb-user-guide.md) for dependency
 installation, host commands, buffer ownership and reconnect behavior.
@@ -122,3 +124,7 @@ MSC needs an initialized `DiskIO`, a caller-owned sector work buffer and its
 size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
 removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
 USB descriptors; the example's FAT12 formatting only defines the disk contents.
+
+The flash disk example runs the same class on `NvmDiskIO` over the NVM1 region
+of its linker script. Its sector is one 4 KiB erase unit and its volume stays
+across resets and power cycles.
