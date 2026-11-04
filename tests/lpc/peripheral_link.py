@@ -3,8 +3,9 @@
 
 Copyright (c) 2026, I-SYST inc. MIT License.
 Uses the timer suite's verified startup/runtime source lists and the managed
-project board headers. No hardware is exercised. The LPC54628 EthernetDemo is
-built when lwIP is in external/lwip beside IOsonata, else it is skipped.
+project board headers. No hardware is exercised. The LPC54628 EthernetDemo and
+EthernetHttpServer are built when lwIP is in external/lwip beside IOsonata, else
+they are skipped.
 """
 from pathlib import Path
 import argparse
@@ -67,6 +68,7 @@ SYMBOLS = {
                 '_ZN10TouchGt9114InitERK14__Touch_ConfigP11DeviceIntrf',
                 '_ZN11TouchFt54064InitERK14__Touch_ConfigP11DeviceIntrf'],
     'EthernetDemo': ['EthernetInit', 'EthernetPollLink', 'ETHERNET_IRQHandler', 'IpInit'],
+    'EthernetHttpServer': ['EthernetInit', 'ETHERNET_IRQHandler', 'IpInit', 'SockIntrfListen', 'HttpServerInit'],
 }
 
 
@@ -114,11 +116,13 @@ def build(target, prefix, directory):
     if target == '546':
         if LWIP.is_dir():
             sources += ['ARM/NXP/LPC546xx/src/ethernet_lpc546xx.cpp', 'src/net/ip_lwip.cpp',
+                        'src/net/http_server.cpp',
                         'src/app_evt_handler.cpp', 'src/app_run.cpp', 'src/app_wait.cpp']
             sources += sorted(str(path) for path in linked if LWIP in path.parents)
             net_includes = ['-I' + str(ROOT / 'include/net/lwip'), '-I' + str(LWIP / 'src/include'),
                             '-DIOSONATA_LWIP_POOL_SECTION=.ram2']
             applications['EthernetDemo'] = 'exemples/net/ethernet_demo.cpp'
+            applications['EthernetHttpServer'] = 'exemples/net/http_server.cpp'
         else:
             print(f'{mcu} EthernetDemo: SKIP, no {LWIP}', flush=True)
     for source in sources:

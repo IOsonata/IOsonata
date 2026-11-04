@@ -3,8 +3,9 @@
 `SockIntrf` presents connected UDP and TCP through `DeviceIntrf`, with C helpers
 and a C++ wrapper. nRF91 uses its modem's IP stack. STM32H753 and LPC54628 use the
 shared `src/net/ip_lwip.cpp` service over an injected `EthernetDev_t`. Protocol clients
-can use the same socket interface on either target. Public socket signatures
-are unchanged.
+can use the same socket interface on either target. On the lwIP service a TCP
+socket can also wait for a peer (`SockIntrfListen`), which is what the
+[small web server](#small-web-server) uses.
 
 NUCLEO-H753ZI hardware tests confirm DHCP, ping, UDP/TCP integrity, public
 DNS/HTTP and TCP recovery after server restart and cable reconnection. See the
@@ -24,6 +25,7 @@ controller or LTE modem, and neither contains board or MCU register access.
 | --- | --- |
 | MQTT 3.1.1 | Shared `src/net/mqtt.cpp` over an already-connected stream |
 | CoAP | Shared `src/net/coap.cpp` over an already-connected UDP interface |
+| HTTP server | Shared `src/net/http_server.cpp` over TCP sockets that wait for a peer |
 | Native TLS 1.3 | Shared `Tls : DeviceIntrf` over TCP; external PSK or the P-256 server-certificate profile, authenticated before MQTT starts |
 | Ethernet socket | `SockIntrf` implemented by shared `src/net/ip_lwip.cpp` over the MCU Ethernet driver |
 | nRF91 socket | `SockIntrf` implemented by `ARM/Nordic/nRF91/src/sock_intrf_nrf91.cpp` through the modem |
@@ -150,9 +152,11 @@ Other applications do not link the IP stack or DMA storage unless they use it.
 
 ## Current limits
 
-- One Ethernet interface and four connected TCP/UDP socket objects.
+- One Ethernet interface and four TCP/UDP socket objects, connected or waiting
+  for a peer, on at most two listening ports at a time.
 - IPv4 only; Ethernet MTU 1500, maximum UDP payload 1472 bytes. No IP
-  fragmentation/reassembly, IPv6, multicast membership or listening sockets.
+  fragmentation/reassembly, IPv6 or multicast membership.
+- nRF91: `SockIntrfListen` returns false, the modem port only connects to a peer.
 - Four received packet chains per socket. TCP applies receive backpressure;
   UDP drops new datagrams when its receive queue is full.
 - Four asynchronous DNS query contexts. A timed-out query remains detached
@@ -447,6 +451,76 @@ UTC parser and timer wrap, pending/failed TLS setup and MQTT startup ordering
 at O0/O2 with ASan/UBSan. Its setup tests substitute TLS and hardware operations;
 they do not perform a cryptographic handshake. No fresh ARM compile/link or
 native certificate hardware result is claimed by these host checks.
+
+## Small web server
+
+`HttpServer` (`include/net/http_server.h`, `src/net/http_server.cpp`) serves HTTP/1.1
+on `SockIntrf`. It knows nothing of Ethernet: a network needs only a `SockIntrf`
+port that implements `SockIntrfListen`. The application gives a table of routes
+and the memory; it uses no heap. `exemples/net/http_server.cpp` is the example,
+with the projects `EthernetHttpServer` for NUCLEO-H753ZI and LPCXpresso54628.
+
+```cpp
+static void StatusHandler(const HttpRequest_t *pReq, HttpResponse_t *pRsp, void *pCtx)
+{
+	pRsp->pType = "application/json";
+	HttpPrintf(pRsp, "{\"uptime_ms\":%lu}\n", (unsigned long)TimerGetMilisecond(&s_Timer));
+}
+
+static const HttpRoute_t s_Routes[] = {
+	// Path, methods (0 for GET), type, fixed body, its length, headers, handler, context
+	{ "/", 0, "text/html", s_IndexPage, sizeof(s_IndexPage) - 1, nullptr, nullptr, nullptr },
+	{ "/status", 0, nullptr, nullptr, 0, nullptr, StatusHandler, nullptr },
+};
+
+alignas(4) static uint8_t s_HttpMem[HTTP_SERVER_MEMSIZE(2, 1536)];
+static const HttpServerCfg_t s_HttpCfg = {
+	.Port = 80,
+	.pRoutes = s_Routes,
+	.NbRoute = sizeof(s_Routes) / sizeof(s_Routes[0]),
+	.pMem = s_HttpMem,
+	.MemSize = sizeof(s_HttpMem),
+	.NbConn = 2,
+	.Timeout = 0,
+};
+
+s_Http.Init(s_HttpCfg);
+// Then, from the foreground, every 10 ms for example
+s_Http.Process(TimerGetMilisecond(&s_Timer));
+```
+
+- A route matches the exact path of the request. A `nullptr` path matches any and
+  goes last. It serves its fixed body, or a handler builds the response.
+- GET routes also answer HEAD. A path with no route gets 404, a method the route
+  does not list gets 405 with `Allow`.
+- A handler builds its body in the free part of the connection buffer with
+  `HttpPrintf`, or points `pData` at its own memory. It can set the status, the
+  type and more header lines. `HttpParamGet` reads a query or a form body,
+  `HttpHeaderGet` a header.
+- It holds up the foreground while it runs, as any other event.
+
+How it behaves:
+
+- `BuffSize` limits one request, head and body together. Too long a head gets 431,
+  too long a body 413. Browsers send 500 to 1000 bytes of head.
+- Each connection answers one request and closes. `NbConn` requests are in progress
+  at once and each uses a socket; four exist. When all are in use, the connection
+  attempt of another client gets no answer and TCP tries again about a second later.
+  A browser loading a page with many parts will show that delay.
+- A peer sending no complete request by the time limit gets 408. One not taking
+  the response is dropped at the same limit, without holding up the others.
+- A pass sends at most one TCP window, about 5.8 KB, so the time between
+  `Process` calls sets the rate. At 10 ms that is about 580 KB/s.
+- When the network goes down, connections end and the server takes new ones when
+  it returns, with nothing for the application to do.
+
+It is plain HTTP, with no TLS and no authentication. Anyone reaching the port can
+call the routes, so use it only on a network that is trusted. Not supported:
+keep-alive, chunked transfers, and a client that closes its sending side before
+reading the response (it gets none).
+
+Memory for two connections of 1536 bytes is about 4 KB. `EthernetHttpServer` is
+57.5 KB of code and constants on H753 in Release, against 49 KB for `EthernetDemo`.
 
 ## Shared MQTT client
 
@@ -896,6 +970,8 @@ unicast DNS and does not enable mDNS name resolution.
 
 ```sh
 python3 tests/net/run.py
+python3 tests/net/run_http.py
+sudo python3 tests/net/run_http_tap.py
 python3 tests/net/run_echo.py
 python3 tests/stm32h7/run_ethernet.py
 python3 tests/stm32h7/run.py
@@ -921,7 +997,22 @@ close/reopen, event-queue refusal and a late DNS result after socket reuse.
 They also cover deferred callbacks during DNS/connect/send waits, receive
 callbacks after TCP send-buffer exhaustion, and DHCP lease expiry/recovery
 while the physical link remains up.
+The listening tests connect to the port from the packet peer: data both ways,
+connections in turn, a peer finding all sockets in use, a reset, unread data at
+close, peers gone without answering the close, link loss and `IpClose`.
 They do not emulate the physical Ethernet controller.
+
+`run_http.py` runs `HttpServer` on a model of the socket at O0/O2 with ASan and
+UBSan: bad requests, the limits of the buffer, requests and responses in small
+pieces, time limits across timer wrap and 200000 damaged or random requests.
+
+`run_http_tap.py` needs Linux, root and `/dev/net/tun`. It builds
+`exemples/net/http_server.cpp` for the computer with the real server, IP service
+and lwIP under ASan and UBSan, on a TAP interface in place of the Ethernet driver.
+`http.client` and `curl` then connect over the kernel TCP stack: a 300000 byte page
+compared byte for byte, a POST refused while the client is still sending, eight
+clients at once, 400 connections in turn, slow and stalled clients and resets. It
+checks the server, not an MCU or its driver, and its timing says nothing of an MCU.
 
 The separate H753 register model executes the production driver at O0/Os with
 cache maintenance enabled and disabled. It checks descriptors, ring exhaustion

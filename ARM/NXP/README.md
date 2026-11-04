@@ -61,7 +61,8 @@ SD card slot), AudioToneDemo and AudioLineLoopback (the WM8904 codec:
 a tone on the headphones, the line input to the headphones), LcdDemo (the
 4.3 inch TFT panel, a test pattern from a frame buffer in the SDRAM, then
 its touch panel, GT911 or FT5406 found at startup),
-EthernetDemo (DHCP and ping on the RJ45 jack, lwIP 2.2.0 in `external/lwip`
+EthernetHttpServer (small web server, see the networking guide), EthernetDemo
+(DHCP and ping on the RJ45 jack, lwIP 2.2.0 in `external/lwip`
 beside IOsonata), CryptoTest, and UsbCdcLoopbackHs, UsbCdcPrbsTxHs and
 UsbCustomBulkLoopbackHs (the same USB applications on USB1 at high speed,
 `USB_DEVNO 1` and the 12 MHz crystal in board.h, VBUS read by the controller;
