@@ -31,7 +31,7 @@ class Thingy52ProjectTests(unittest.TestCase):
                         for value in option.findall("listOptionValue")
                     ]
                     self.assertTrue(any(
-                        path.endswith("external/nRF5_SDK/components/libraries/button&quot;")
+                        path.strip('"').endswith("external/nRF5_SDK/components/libraries/button")
                         for path in paths
                     ))
 
