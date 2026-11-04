@@ -15,19 +15,19 @@ or enlarging a production DFU partition to fit a Debug image.
 
 | Cause | Last FAIL | Correction candidates | Still requires implementation or dependencies |
 | --- | ---: | ---: | ---: |
-| Vendor SDK revision and missing components | 24 | 16 | 8 |
+| Vendor SDK revision and missing components | 24 | 24 | 0 |
 | MCU ports and example source defects | 24 | 22 | 2 |
 | Memory region capacity | 11 | 0 | 11 |
 | Project source and configuration gaps | 6 | 0 | 6 |
 | GCC 15.2.1 LTO internal error | 3 | 3 | 0 |
-| **Total** | **68** | **41** | **27** |
+| **Total** | **68** | **49** | **19** |
 
 "Correction candidate" is deliberately not a PASS. In particular, the
 Linux library fixes and all fixes after `afac5e95` have not been compiled
 in the full matrix. Previous Windows Debug and Release improvements are already
 included in the 1469 PASS baseline and are not counted again.
 
-## Correction candidates (41 configurations)
+## Correction candidates (49 configurations)
 
 | Configurations | Scope | Commits | Required confirmation |
 | ---: | --- | --- | --- |
@@ -35,6 +35,7 @@ included in the 1469 PASS baseline and are not counted again.
 | 2 | RA4M1 UsbHidKeyboard, Debug/Release | `ff32ebe2` | Compile, pin-map and USB runtime verification |
 | 4 | STM32L476/L496 FlashMemoryDemo, Debug/Release | `ff32ebe2` | Compile, external flash geometry and hardware |
 | 8 | nRF52832/nRF52840 LvglDemo and LvglDualDIsplayDemo | `21f6d501` | Compile against separate pinned LVGL revision |
+| 8 | nRF52832/nRF52840 MeshLgtSwClient and MeshLgtSwServer, Debug/Release | this Mesh source-selection change | Compile 102/115 Mesh implementation C units plus SDK sources; check SoftDevice API 7, memory limits and actual Mesh operation |
 | 2 | nRF54LM20x TinyUsbComboStress, Debug/Release | `21f6d501` | Compile against separate pinned TinyUSB revision |
 | 2 | nRF52840 QSpiTest, Debug/Release | `fe92dea6` | Compile/link against nrfx 4, QSPI read/write on board |
 | 2 | nRF52840 radio_test, Debug/Release | `fe92dea6` | Compile/link against nrfx 4, radio operation on board |
@@ -66,14 +67,27 @@ These corrections are substantive port work, **not** observed boot, ISR or
 link results. The previous C6 Blinky Release ELF entry failure remains an
 acceptance test. Do not infer it is resolved from linker option inspection.
 
-## Remaining dependency work (8 configurations)
+## Nordic Mesh source reconciliation (8 correction candidates)
 
-Eight Nordic Mesh reference configurations require vendor SDK content and
-source compatibility that have not been demonstrated for the installed SDK
-set. Keep these in FAIL (SDK) until the exact project source trees, headers,
-libraries and versions are available and compiled. They are identified as
-post-0.13 in the prior build report. Do not add placeholder source files or
-silently skip those configurations.
+The four Eclipse managed projects previously linked only 14-37 Mesh-related
+resources, mostly headers and example helpers. Nordic Mesh 5.0.0's upstream
+Segger Embedded Studio build manifests specify **102 C units for the client**
+and **115 C units for the server**, excluding their app-owned main.c files;
+each also lists 13 Nordic SDK C units, with chip system startup owned by the
+MCU library.
+
+The corrected projects link those missing Mesh/core/stack/access/bearer/
+provisioning/model units and app-owned SDK sources, add the upstream include
+directories, and use SoftDevice API level 7 in each Debug/Release config.
+Existing application main.c and board selections are retained; the shared
+IOsonata nRF52 libraries and linker scripts are unchanged.
+
+Vendor manifest: `IOsonata/nRF5_SDK_Mesh` commit `526975f6` (Nordic Mesh
+5.0.0), `examples/light_switch/{client,server}/*.emProject`. Its SES
+configuration targets nRF5 SDK 17.0.2; the installed IOsonata fork uses
+commit `77a3de1`. Source path existence is checked, but API/ABI compatibility,
+duplicate definitions against existing archives, and actual firmware behavior
+are **not** verified until the final managed-build and board tests.
 
 ## Remaining MCU/example implementations (2 configurations)
 
