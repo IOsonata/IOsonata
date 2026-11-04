@@ -26,7 +26,7 @@ public:
 		vCount = Count;
 		vWrites = 0;
 		vFailSector = -1;
-		vbPartialBoot = false;
+		vPartialBootBytes = 0U;
 		memset(s_Storage, 0xFF, (size_t)SectorSize * Count);
 	}
 	uint16_t GetSectSize(void) override { return vSectorSize; }
@@ -50,9 +50,9 @@ public:
 		vWrites++;
 		if ((int)SectNo == vFailSector)
 		{
-			if (vbPartialBoot && SectNo == 0U)
+			if (SectNo == 0U && vPartialBootBytes != 0U)
 			{
-				memcpy(s_Storage, pData, 64U);
+				memcpy(s_Storage, pData, vPartialBootBytes);
 			}
 			return false;
 		}
@@ -64,7 +64,7 @@ public:
 	uint32_t vCount;
 	int vWrites;
 	int vFailSector;
-	bool vbPartialBoot;
+	uint32_t vPartialBootBytes;
 };
 
 static uint16_t Le16(const uint8_t *pData)
@@ -115,20 +115,36 @@ static void TestPowerLoss(void)
 
 static void TestPartialBootRepair(void)
 {
-	TestDisk disk(4096U, 64U);
+	static const uint16_t s_WriteBeforeReset[] = {
+		0U, 1U, 2U, 4U, 10U, 11U, 12U, 31U, 64U, 128U, 511U
+	};
+	uint32_t i;
 	uint32_t rootSector;
 	uint8_t previous;
+	int writes;
 
-	disk.vFailSector = 0;
-	disk.vbPartialBoot = true;
-	CHECK(!FatFsFormatIfBlank(disk, s_Sector, sizeof(s_Sector)));
-	CHECK(s_Storage[510] == 0xFFU);
-	rootSector = 1U + 2U * 1U;
-	previous = s_Storage[rootSector * 4096U + 20U];
-	disk.vFailSector = -1;
-	CHECK(FatFsFormatIfBlank(disk, s_Sector, sizeof(s_Sector)));
-	CHECK(s_Storage[510] == 0x55U && s_Storage[511] == 0xAAU);
-	CHECK(s_Storage[rootSector * 4096U + 20U] == previous);
+	for (i = 0U; i < sizeof(s_WriteBeforeReset) /
+		sizeof(s_WriteBeforeReset[0]); i++)
+	{
+		TestDisk disk(4096U, 64U);
+
+		disk.vFailSector = 0;
+		disk.vPartialBootBytes = s_WriteBeforeReset[i];
+		CHECK(!FatFsFormatIfBlank(disk, s_Sector, sizeof(s_Sector)));
+		CHECK(s_Storage[511] == 0xFFU);
+		rootSector = 1U + 2U * 1U;
+		previous = s_Storage[rootSector * 4096U + 20U];
+		disk.vFailSector = -1;
+		writes = disk.vWrites;
+		CHECK(FatFsFormatIfBlank(disk, s_Sector, sizeof(s_Sector)));
+		CHECK(s_Storage[510] == 0x55U && s_Storage[511] == 0xAAU);
+		CHECK(s_Storage[rootSector * 4096U + 20U] == previous);
+		if (s_WriteBeforeReset[i] != 0U)
+		{
+			// Only the interrupted boot write needs repeating.
+			CHECK(disk.vWrites == writes + 1);
+		}
+	}
 }
 
 static void TestPreservation(void)
