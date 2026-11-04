@@ -54,6 +54,11 @@ class CheckLdscriptsTests(unittest.TestCase):
             result = check_ldscripts.check(self.root, external)
         return result, out.getvalue()
 
+    def test_incomplete_rp2040_port_has_no_wizard_descriptor(self):
+        wizard = (ROOT / "ARM/RPI/RP20/RP2040/lib/ioc/wizard.json")
+        self.assertFalse(wizard.exists(),
+                         "RP2040 wizard must not advertise a missing linker script")
+
     def test_vendor_references_without_external_are_listed(self):
         result, out = self.run_check(None)
         self.assertEqual(result, 0, out)
