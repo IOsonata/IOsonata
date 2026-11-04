@@ -45,6 +45,57 @@ class RadioTestDependencies(unittest.TestCase):
                         value.strip('"').endswith("external/nrfx/bsp/stable/mdk")
                         for value in values
                     ))
+                    self.assertTrue(any(
+                        value.strip('"').endswith("external/nrfx/bsp/stable/mdk/common")
+                        for value in values
+                    ))
+                    self.assertTrue(any(
+                        value.strip('"').endswith("external/nrfx/bsp/stable")
+                        for value in values
+                    ))
+
+    def test_usb_sources_and_cli_linker_layout(self):
+        project = ET.parse(PROJECT / "ioc/.project")
+        links = {
+            link.findtext("name", ""): link.findtext("locationURI", "")
+            for link in project.findall(".//linkedResources/link")
+        }
+        required = (
+            "app_usbd.c",
+            "app_usbd_core.c",
+            "app_usbd_serial_num.c",
+            "app_usbd_string_desc.c",
+        )
+        for name in required:
+            self.assertEqual(
+                links.get("src/nRF5_SDK/libraries/usbd/" + name),
+                "PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/" + name
+            )
+        self.assertEqual(
+            links.get("src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c"),
+            "PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c"
+        )
+        self.assertNotIn("src/nRF5_SDK/libraries/util/app_util_platform.c", links)
+        self.assertNotIn("src/nrf_cli_cdc_acm.c", links)
+        self.assertIn("src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c", links)
+        settings = ET.parse(PROJECT / "ioc/.cproject")
+        configs = settings.findall(".//configuration")
+        self.assertEqual({cfg.get("name") for cfg in configs},
+                         {"Debug", "Release"})
+        for cfg in configs:
+            scripts = [
+                item.get("value", "")
+                for opt in cfg.findall(".//option")
+                if "linker.scripts" in opt.get("superClass", "")
+                for item in opt.findall("listOptionValue")
+            ]
+            self.assertTrue(scripts)
+            self.assertTrue(all("gcc_nrf52840_xxaa_cli.ld" in v for v in scripts))
+
+    def test_sdk_usb_cdc_acm_configuration(self):
+        source = (PROJECT / "src/sdk_config.h").read_text(encoding="utf-8")
+        self.assertIn("#define USBD_CONFIG_IRQ_PRIORITY 6", source)
+        self.assertIn("#define APP_USBD_CDC_ACM_ENABLED 1", source)
 
     def test_radio_test_includes_usb_driver_header(self):
         text = (PROJECT / "src/main.c").read_text(encoding="utf-8")
