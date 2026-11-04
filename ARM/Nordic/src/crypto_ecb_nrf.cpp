@@ -35,9 +35,9 @@ SOFTWARE.
 #include "crypto_ecb_nrf.h"
 #include "crypto/icrypto.h"
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+#include "nrf_mbr.h"
 #include "nrf_soc.h"
 #include "nrf_sdm.h"
-extern "C" void ResetEntry(void);
 #endif
 
 #if !defined(NRF5340_XXAA_NETWORK) && !defined(NRF52_SERIES) && \
@@ -84,10 +84,13 @@ bool CryptoEcbNrf::AesEcbEncrypt(const uint8_t Key[16],
 	uint32_t status;
 	nrf_ecb_hal_data_t data;
 
-	// The standalone image owns the vector table at zero. In that case
-	// no SoftDevice SVC handler exists; use the ECB peripheral directly.
-	if (*(volatile const uint32_t *)(uintptr_t)4U !=
-		(uint32_t)(uintptr_t)&ResetEntry)
+	// sd_softdevice_is_enabled is an SVC that only a programmed SoftDevice
+	// implements. Its magic number follows the MBR; without it, use the ECB
+	// peripheral directly.
+	const volatile uint32_t *pMagic = (const volatile uint32_t *)(
+		MBR_SIZE + SOFTDEVICE_INFO_STRUCT_OFFSET + 4U);
+
+	if (*pMagic == 0x51B1E5DBUL)
 	{
 		if (sd_softdevice_is_enabled(&enabled) != NRF_SUCCESS)
 		{

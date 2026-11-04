@@ -57,5 +57,4 @@ struct nrf_ecb_hal_data_t
 uint32_t sd_softdevice_is_enabled(uint8_t *enabled);
 uint32_t sd_ecb_block_encrypt(nrf_ecb_hal_data_t *data);
 
-extern "C" void ResetEntry(void);
-extern uint32_t g_EcbResetVector;
+extern uint32_t g_EcbSdMagic;
