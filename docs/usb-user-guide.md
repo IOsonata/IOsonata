@@ -563,6 +563,21 @@ size in that script; the volume geometry follows the region. The example formats
 the region when sector 0 has no 55AA signature. Otherwise the content stays
 across resets, power cycles and any reflash that does not erase that region.
 
+The `Release_mbr` configuration is for a part with the MBR and the Nordic USB DFU
+bootloader installed, such as the UDG-NRF52840 dongle. It links
+`gcc_nrf52840_xxaa_mbr_nvm768k.ld`: the application from 0x1000 and a 768 KiB
+volume from 0x20000 up to the bootloader at 0xE0000. Check that address against
+the bootloader installed before flashing. On the UDG-NRF52840, press SW2 (RESET)
+to enter DFU mode and program `UsbMscFlashDisk.hex` with nRF Connect Programmer.
+
+A DFU update erases only the pages it writes, so it leaves the volume alone while
+the new image stays below 0x20000. A bootloader doing single bank updates writes
+the new image at 0x1000, which allows up to 126976 bytes. One doing dual bank
+updates writes it right after the current image, which allows two images of up to
+61440 bytes. The Release image is about 33 KB. After loading a different firmware,
+the example formats the region if the old content has no signature at the end of
+its first 512 bytes.
+
 The sector is one flash page, so the host reads a 4096 byte block in READ
 CAPACITY rather than 512. `NvmDiskIO` does not accept a sector smaller than the
 erase unit. Each sector the host writes is one page erase and one program with

@@ -137,6 +137,7 @@ definitions. Reference status does not determine whether to retain them.
 | `gcc_nrf52832_xxaa_s132_sdk_debug_dfu_boot.ld` | Bootloader image starts at 0x00075A00; reserves UICR and settings regions | Available variant; distinct bootloader layout |
 | `gcc_nrf52840_xxaa_bossa.ld` | Application flash starts at 0x00010000 after an Arduino/BOSSA bootloader | Available variant; distinct bootloader offset |
 | `gcc_nrf52840_xxaa_nvm256k.ld` | No MBR/DFU; application flash ends at 0xBE000, 8 KB NVM0 at 0xBE000, 256 KB NVM1 at 0xC0000 | Available variant; larger user storage, selected by `UsbMscFlashDisk` |
+| `gcc_nrf52840_xxaa_mbr_nvm768k.ld` | MBR + Nordic USB DFU; application flash 0x1000..0x1FFFF, no NVM0, 768 KB NVM1 from 0x20000 up to the bootloader at 0xE0000 | Available variant; selected by the `UsbMscFlashDisk` `Release_mbr` configuration |
 | `gcc_nrf52840_xxaa_s140.ld` | S140 flash starts at 0x00027000; RAM at 0x20003DC0; has NVM0 | Available variant |
 | `gcc_nrf52840_xxaa_s140c.ld` | Flash 0x27000-0xFCFFF, NVM0 0xFD000-0xFEFFF, settings 0xFF000-0xFFFFF; RAM at 0x20005400 | Available variant; distinct RAM reservation |
 
