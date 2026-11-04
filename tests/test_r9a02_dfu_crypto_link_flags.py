@@ -67,6 +67,26 @@ class R9A02LinkFlagsTest(unittest.TestCase):
                     self.assertEqual(len(options), 1)
                     self.assertIn("-flto", options[0].split())
 
+    def test_dfu_boot_omits_unwind_tables(self):
+        root = ET.parse(EXAMPLES / "DfuBoot/ioc/.cproject").getroot()
+        for cfg in root.findall(".//cconfiguration"):
+            name = cfg.find(".//configuration").get("name")
+            with self.subTest(config=name):
+                for suffix in ("C Compiler", "C++ Compiler"):
+                    tools = [
+                        tool for tool in cfg.findall(".//tool")
+                        if tool.get("name") == "GNU RISC-V Cross " + suffix
+                    ]
+                    self.assertEqual(len(tools), 1)
+                    flags = [
+                        option.get("value", "")
+                        for option in tools[0].findall("option")
+                        if option.get("name") == "Other compiler flags"
+                    ]
+                    self.assertEqual(len(flags), 1)
+                    self.assertIn("-fno-unwind-tables", flags[0].split())
+                    self.assertIn("-fno-asynchronous-unwind-tables", flags[0].split())
+
     def test_dfu_boot_never_forces_semihost_archive(self):
         flags = self.linker_flags("DfuBoot")
         for config, options in flags.items():
