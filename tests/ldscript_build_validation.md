@@ -22,8 +22,11 @@ Actions workflow. No push-triggered CI. Do not merge or retag release
 1. Enumerate **every** `.cproject` and `.ewp` from the repository tree.
    Include libraries and examples across **all** MCU vendors and
    architectures, not only Nordic or the scripts modified most recently.
+   Exclude Nordic Connect SDK (NCS) projects from the build matrix,
+   acceptance totals, and BLOCKED counts. NCS/CMake projects are outside
+   the Eclipse managed-project validation scope; do not attempt to build them.
 2. Enumerate every enabled configuration in each project. Compile and link
-   all supported configurations (including Debug and Release) using their
+   all supported non-NCS configurations (including Debug and Release) using their
    own managed-project settings, toolchains, and linked resources.
 3. Keep real SDK-dependent reference examples separate from IOsonata
    projects. In particular, the nRF52832 `UartPrbsTxnrfx` project
@@ -76,6 +79,9 @@ For **every** project/configuration, record:
   whether the output ran on hardware.
 - For BLOCKED: missing prerequisites and the exact reason the
   configuration could not run; do not count it as PASS.
+
+Exclude NCS configurations entirely from the denominator and from PASS,
+FAIL and BLOCKED totals. Record them separately as out of scope if needed.
 
 Report totals separately for compiled, linked, hardware-tested, failed,
 and blocked configurations. Do not combine static audit PASS with build
