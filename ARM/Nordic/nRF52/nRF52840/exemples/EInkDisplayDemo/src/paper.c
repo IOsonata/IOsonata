@@ -11,6 +11,10 @@
 #include "board.h"
 #include "app_util_platform.h"
 #include "nordic_common.h"
+#include "nrf_error.h"
+#include "nrf_assert.h"
+#include "app_error.h"
+#include "app_util.h"
 
 #define PAPER_RST_PIN EINK_RESET_PIN
 #define PAPER_DC_PIN  EINK_DC_PIN
