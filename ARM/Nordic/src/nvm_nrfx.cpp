@@ -536,11 +536,14 @@ static bool SdRunning(void)
 // whether it is; calling into one that is not there faults.
 static bool SdPresent(void)
 {
-#if defined(SD_MAGIC_NUMBER) && defined(MBR_SIZE)
-	return SD_MAGIC_NUMBER_GET(MBR_SIZE) == SD_MAGIC_NUMBER;
-#else
-	return true;
-#endif
+	// SD_MAGIC_NUMBER is only in the bootloader header, which is not part of
+	// this build: an #if on it was always false, and an application with no
+	// SoftDevice stopped in the SVC default handler on its first write or
+	// erase. The magic number follows the MBR.
+	const volatile uint32_t *pMagic = (const volatile uint32_t *)(
+		MBR_SIZE + SOFTDEVICE_INFO_STRUCT_OFFSET + 4U);
+
+	return *pMagic == 0x51B1E5DBUL;
 }
 
 static bool SdRunning(void)
