@@ -143,20 +143,54 @@ wrapper does not create an independent controller or callback registration.
 
 ## DiskIO and blank FAT12 volumes
 
-An MCU internal-memory disk can use the linker-reserved region directly:
+An MCU internal-memory disk uses the existing `Nvm::Init()` and
+`NvmDiskIO::Init()` methods. The target supplies memory geometry; the linker
+provides the disk's address and size:
 
 ```cpp
 #include "storage/diskio_nvm.h"
 #include "storage/fatfs_format.h"
 #include "storage/nvm_intrf.h"
+#include "storage/nvm_region.h"
 
 static NvmIntrf s_NvmIntrf;
 static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
 alignas(4) static uint8_t s_Sector[4096];
 
-// In application initialization, before exposing s_Disk to USB MSC:
-if (NvmMcuRegionInit(s_Nvm, s_NvmIntrf, 1) == false)
+// At function entry:
+NvmCfg_t cfg = {};
+uint64_t regionAddr;
+uint64_t regionSize;
+uint64_t ceiling;
+
+NvmMcuCfg(cfg);
+regionAddr = NvmRegionAddr(1);
+regionSize = NvmRegionSize(1);
+ceiling = NvmMcuCeiling();
+
+if (regionSize == 0U)
+{
+	return false;
+}
+
+if (regionAddr < cfg.BaseAddr || regionAddr > ceiling)
+{
+	return false;
+}
+
+if (regionSize > ceiling - regionAddr)
+{
+	return false;
+}
+
+if (s_NvmIntrf.Init() == false)
+{
+	return false;
+}
+
+if (s_Nvm.Init(cfg, &s_NvmIntrf, regionAddr - cfg.BaseAddr,
+		regionSize) == false)
 {
 	return false;
 }
@@ -172,13 +206,12 @@ if (FatFsFormatIfBlank(s_Disk, s_Sector, sizeof(s_Sector)) == false)
 }
 ```
 
-`NvmMcuRegionInit()` initializes the internal-memory controller, obtains the
-target's memory geometry with `NvmMcuCfg()`, and verifies the chosen linker NVM
-region lies inside the MCU's memory and application ceiling with aligned erase
-boundaries. It initializes `Nvm`, not `NvmDiskIO`. The disk is attached through
-the existing, generic `NvmDiskIO::Init()`. Region index 1 selects NVM1 when
-the linker script defines it. External memories continue to use `Nvm::Init()`
-with their actual interface and geometry.
+The region offset passed to `Nvm::Init()` is relative to the MCU memory
+base supplied by `NvmMcuCfg()`. `Nvm::Init()` checks that the region fits
+the device and that its start is aligned to the erase unit.
+`NvmDiskIO::Init()` checks sector size and region divisibility. No additional
+NVM initialization API is required. External memories use the same `Nvm`
+and `NvmDiskIO` methods with their own interface and geometry.
 
 `FatFsFormatIfBlank()` accepts any `DiskIO`, regardless of USB, RAM or flash.
 It creates FAT12 only when sector 0 is completely erased or zero-filled, or

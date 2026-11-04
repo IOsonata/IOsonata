@@ -50,6 +50,7 @@ SOFTWARE.
 #include "storage/diskio_nvm.h"
 #include "storage/fatfs_format.h"
 #include "storage/nvm_intrf.h"
+#include "storage/nvm_region.h"
 #include "app_evt_handler.h"
 #include "usb/usb.h"
 #if __has_include("board.h")
@@ -115,7 +116,38 @@ static const UsbdMscCfg_t s_MscCfg = {
 
 int main(void)
 {
-	if (NvmMcuRegionInit(s_Nvm, s_MemIntrf, MSC_NVM_REGION) == false)
+	NvmCfg_t cfg = {};
+	uint64_t regionAddr;
+	uint64_t regionSize;
+	uint64_t ceiling;
+
+	NvmMcuCfg(cfg);
+	regionAddr = NvmRegionAddr(MSC_NVM_REGION);
+	regionSize = NvmRegionSize(MSC_NVM_REGION);
+	ceiling = NvmMcuCeiling();
+
+	if (regionSize == 0U)
+	{
+		return -1;
+	}
+
+	if (regionAddr < cfg.BaseAddr || regionAddr > ceiling)
+	{
+		return -1;
+	}
+
+	if (regionSize > ceiling - regionAddr)
+	{
+		return -1;
+	}
+
+	if (s_MemIntrf.Init() == false)
+	{
+		return -1;
+	}
+
+	if (s_Nvm.Init(cfg, &s_MemIntrf, regionAddr - cfg.BaseAddr,
+			regionSize) == false)
 	{
 		return -1;
 	}
