@@ -53,6 +53,28 @@ BleOta. The exclusion removes eight PASS and two FAIL, not just two FAIL:
 | **In-scope total** | **1521** |
 
 All 1,393 linked example images passed static ELF checks in that record.
+
+## Thingy52 vendor firmware deferred
+
+The maintainer excluded Nordic Thingy52's Debug and Release configurations
+from release 0.13. Its firmware comes from an older SDK generation and the
+application's original modules are not present. Do not port it, change its
+project or source files, or attempt to count these builds as release passes.
+
+After removing its two previously failing configurations from the latest
+reported 1,521-row matrix, the **reclassified** figures are:
+
+| Classification | Configurations |
+| --- | ---: |
+| PASS (measured) | 1503 |
+| FAIL (actionable) | 11 |
+| BLOCKED | 2 |
+| WAIVED (Debug DfuBoot FLASH) | 3 |
+| **In-scope total** | **1519** |
+
+This classification is not a new compilation. SAMD11 Debug library
+optimization and the newer R9A02 delay implementation need measured builds.
+
 These figures precede later Thingy52 and R9A02 fixes, which require their
 own builds before changing counts. Historical figures below remain intact.
 
@@ -186,7 +208,7 @@ A code-size fix requires map/symbol attribution, not linker-space inflation.
 3. Provision pinned vendor SDK versions, keeping the normal SDK versions
    alongside the example-specific checkouts. Report missing publications.
 4. Clean build every **in-scope GNU Eclipse managed-project configuration**
-   (1521 in the latest scoped matrix after IAR, NCS, Nordic Mesh and all BleOta exclusions;
+   (1519 after IAR, NCS, Nordic Mesh, all BleOta and Thingy52 exclusions;
    recompute against the current repository inventory). Capture diagnostics
    for every remaining FAIL and compare configuration-by-configuration against
    `afac5e95` without treating exclusions as build passes.
