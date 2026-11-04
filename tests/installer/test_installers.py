@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -115,12 +116,20 @@ esac
 		for platform, shell in self.shells():
 			result, preserved, calls = self.run_helper(platform, shell, 'clone_cube_wba', mode='force')
 			self.assertEqual(result.returncode, 0, result.stderr)
-			self.assertIn('sparse-checkout set Projects/Common/WPAN', calls)
+			self.assertIn('sparse-checkout set --skip-checks Projects/Common/WPAN', calls)
 			self.assertIn('BLE_DataThroughput_Client', calls)
 			self.assertIn('Drivers/CMSIS', calls)
 			self.assertIn('submodule update --init --depth=1 --', calls)
 			self.assertIn('Middlewares/ST/STM32_WPAN', calls)
 
+
+	def test_unix_cloner_files_remain_executable(self):
+		if os.name == 'nt':
+			self.skipTest('Windows checkout does not preserve Unix file modes')
+		for name in ('linux', 'macos'):
+			with self.subTest(platform=name):
+				path = INSTALLER / ('clone_iosonata_sdk_' + name + '.sh')
+				self.assertTrue(path.stat().st_mode & stat.S_IXUSR)
 
 	def test_matching_pin_is_kept(self):
 		for platform, shell in self.shells():

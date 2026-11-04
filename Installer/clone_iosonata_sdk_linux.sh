@@ -308,7 +308,7 @@ clone_cube_wba() {
   git clone --depth=1 --branch "$ref" --filter=blob:none --sparse \
     https://github.com/STMicroelectronics/STM32CubeWBA.git "$target_dir"
   (cd "$target_dir" \
-    && git sparse-checkout set Projects/Common/WPAN \
+    && git sparse-checkout set --skip-checks Projects/Common/WPAN \
           Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer \
           Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_DataThroughput_Client \
           Drivers/CMSIS Drivers/STM32WBAxx_HAL_Driver \
