@@ -103,6 +103,7 @@ class RadioTestDependencies(unittest.TestCase):
         source = (PROJECT / "src/sdk_config.h").read_text(encoding="utf-8")
         self.assertIn("#define USBD_CONFIG_IRQ_PRIORITY 6", source)
         self.assertIn("#define APP_USBD_CDC_ACM_ENABLED 1", source)
+        self.assertIn("#define APP_USBD_CDC_ACM_ZLP_ON_EPSIZE_WRITE 1", source)
 
     def test_radio_test_includes_usb_driver_header(self):
         text = (PROJECT / "src/main.c").read_text(encoding="utf-8")
