@@ -33,6 +33,19 @@ class EInkProjectTest(unittest.TestCase):
                             "void Upload_Temperature_LUT(void);"):
             self.assertIn(declaration, source)
 
+    def test_gfx_api_uses_c_linkage_and_links_sdk_source(self):
+        source = (DEMO / "src/eink_display_demo.cpp").read_text(encoding="utf-8")
+        self.assertIn('extern "C" {\n#include "nrf_lcd.h"\n#include "nrf_gfx.h"\n}', source)
+        project = ET.parse(DEMO / "ioc/.project")
+        links = {
+            link.findtext("name", ""): link.findtext("locationURI", "")
+            for link in project.findall(".//linkedResources/link")
+        }
+        self.assertEqual(
+            links.get("src/libraries/gfx/nrf_gfx.c"),
+            "PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/gfx/nrf_gfx.c"
+        )
+
     def test_paper_error_and_assert_headers(self):
         source = (DEMO / "src/paper.c").read_text(encoding="utf-8")
         for header in ("nrf_error.h", "nrf_assert.h", "app_error.h", "app_util.h"):
