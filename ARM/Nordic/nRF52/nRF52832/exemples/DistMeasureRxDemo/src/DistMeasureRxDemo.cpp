@@ -31,33 +31,50 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
 #include "nrf_dm.h"
 
-nrf_dm_config_t s_DmCfg = NRF_DM_DEFAULT_CONFIG;
-nrf_dm_ppi_config_t s_PpiCfg = {
+// The two PPI channels and TIMER2 belong exclusively to this bare-metal
+// ranging example. Do not start the SoftDevice at the same time.
+static uint8_t s_PpiChannels[] = { 0, 1 };
+static nrf_dm_ppi_config_t s_PpiCfg = { 2, s_PpiChannels };
+static nrf_dm_antenna_config_t s_AntennaCfg = { 0, NULL, 0, NULL };
 
+// The initiator must use the same seed and MCPD ranging mode.
+static nrf_dm_config_t s_DmCfg = {
+	NRF_DM_ROLE_REFLECTOR,
+	NRF_DM_RANGING_MODE_MCPD,
+	0x12345678UL,
+	NRF_DM_DEFAULT_TX_POWER,
+	NRF_DM_DEFAULT_ANTENNA_COMP
 };
 
-//
-// Print a greeting message on standard output and exit.
-//
-// On embedded platforms this might require semi-hosting or similar.
-//
-// For example, for toolchains derived from GNU Tools for Embedded,
-// to enable semi-hosting, the following was added to the linker:
-//
-// `--specs=rdimon.specs -Wl,--start-group -lgcc -lc -lc -lm -lrdimon -Wl,--end-group`
-//
-// Adjust it for other toolchains.
-//
-// If functionality is not required, to only pass the build, use
-// `--specs=nosys.specs`.
-//
+static nrf_dm_report_t s_LastReport;
+static volatile uint32_t s_MeasurementCount;
+static volatile uint32_t s_ErrorCount;
+static volatile nrf_dm_status_t s_LastStatus;
 
 int main()
 {
+	nrf_dm_init(&s_PpiCfg, &s_AntennaCfg, NRF_TIMER2);
+	s_LastStatus = nrf_dm_configure(&s_DmCfg);
+	if (s_LastStatus != NRF_DM_STATUS_SUCCESS)
+	{
+		return 1;
+	}
 
-	nrf_dm_init(&s_PpiCfg, );
-
-	return 0;
+	for (;;)
+	{
+		// The reflector waits up to one second for an initiator to start.
+		s_LastStatus = nrf_dm_proc_execute(1000000UL);
+		if (s_LastStatus == NRF_DM_STATUS_SUCCESS)
+		{
+			nrf_dm_populate_report(&s_LastReport);
+			s_MeasurementCount++;
+		}
+		else
+		{
+			s_ErrorCount++;
+		}
+	}
 }
