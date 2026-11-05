@@ -285,10 +285,23 @@ static bool DiskInit(Nvm &memory)
 }
 ```
 
-The selected sector must divide the region and, for erase-capable media, be
-a whole number of erase units. It must fit the DiskIO 16-bit sector-size API.
-A 512-byte sector over a 4 KiB erase unit is therefore not accepted by this
-adapter. Supply an explicit size when the medium reports no logical sector.
+The selected sector must divide the region and fit the DiskIO 16-bit
+sector-size API. By default an erase-capable medium presents one or more
+complete erase units per sector. Smaller logical sectors are supported
+when a caller provides one complete erase unit of scratch memory:
+
+```cpp
+alignas(4) static uint8_t s_EraseWork[4096];
+// Configure the NVM device first. The scratch size must match EraseSize().
+bool ok = s_Disk.Init(s_Nvm, 512, s_EraseWork, sizeof(s_EraseWork));
+```
+
+Each 512-byte write reads the entire physical erase unit, patches the
+requested portion, erases the full unit and writes it back. The scratch
+must not alias the caller's sector input buffer. The disk's minimum erase
+size remains 4096 bytes even when it presents 512-byte logical sectors.
+The full region must contain complete physical erase units. Supply an
+explicit sector size when the medium reports no logical sector.
 
 `Nvm::Size()` is bytes; `DiskIO::GetSize()` is KiB.
 `SectWrite()` erases when required, writes a complete sector and calls
@@ -359,10 +372,13 @@ other addressed memory. `SDCard` and other `DiskIO` devices work through
 the same `FatFsMount` interface declared in `ff_diskio.h`.
 
 The FatFs configuration supports 512, 1024, 2048 and 4096-byte sectors
-(`FF_MAX_SS=4096`). FatFs reads and writes whole sectors reported by
-`DiskIO::GetSectSize()`, matching the physical sector size USB MSC exposes
-for the same disk. In particular, a 4 KiB `NvmDiskIO` volume uses 4 KiB FAT
-sectors, not a separate emulated 512-byte layout.
+(`FF_MAX_SS=4096`). FatFs and USB MSC use the same logical sector size
+reported by `DiskIO::GetSectSize()`. A 256 KiB raw flash region contains
+only 64 physical 4 KiB erase units, fewer than FatFs `f_mkfs()` permits
+(128 sectors minimum). The USB flash example therefore configures
+`NvmDiskIO` with 512-byte logical sectors and a separate caller-owned
+4 KiB erase buffer. An existing volume made with 4 KiB sectors can be
+recognized through the original, unmodified physical-sector layout.
 
 ```cpp
 #include "ff.h"
@@ -385,8 +401,9 @@ mount.WorkSize = sizeof(s_FormatWork);
 FRESULT res = FatFsMount(mount);
 ```
 
-Format work memory must be at least one physical sector; a disk that is
-already formatted can be mounted with no work buffer. The volume is only
+Format work memory must be at least one logical sector; a disk that is
+already formatted can be mounted with no work buffer. An NVM erase buffer,
+when required, must be separate from the FatFs format work buffer. The volume is only
 formatted if `bFormatIfBlank` is explicitly set, `f_mount` reports
 `FR_NO_FILESYSTEM` and a complete read of the disk confirms all bytes are
 `0xFF`. Neither disk errors nor unrecognized nonblank contents trigger

@@ -22,15 +22,16 @@ static unsigned s_Fails;
 
 class TestDisk : public DiskIO {
 public:
-	explicit TestDisk(uint16_t Size)
-		: vSectorSize(Size), vReadFail(false), vWriteFail(false), vWrites(0)
+	explicit TestDisk(uint16_t Size, uint32_t VolumeSize = MEDIA_SIZE)
+		: vSectorSize(Size), vVolumeSize(VolumeSize),
+		  vReadFail(false), vWriteFail(false), vWrites(0)
 	{
 		Blank();
 	}
 
 	uint16_t GetSectSize(void) override { return vSectorSize; }
-	uint32_t GetNbSect(void) override { return MEDIA_SIZE / vSectorSize; }
-	uint32_t GetSize(void) override { return MEDIA_SIZE / 1024U; }
+	uint32_t GetNbSect(void) override { return vVolumeSize / vSectorSize; }
+	uint32_t GetSize(void) override { return vVolumeSize / 1024U; }
 	uint32_t GetMinEraseSize(void) override { return vSectorSize; }
 
 	bool SectRead(uint32_t SectNo, uint8_t *pData) override
@@ -66,6 +67,7 @@ public:
 
 	alignas(4) uint8_t vMedia[MEDIA_SIZE];
 	uint16_t vSectorSize;
+	uint32_t vVolumeSize;
 	bool vReadFail;
 	bool vWriteFail;
 	uint32_t vWrites;
@@ -73,6 +75,7 @@ public:
 
 static TestDisk s_Flash(4096);
 static TestDisk s_Direct(512);
+static TestDisk s_Small(512, 256U * 1024U);
 static FATFS s_Fs;
 alignas(4) static uint8_t s_Work[4096];
 alignas(4) static uint8_t s_Data[4096];
@@ -185,6 +188,9 @@ int main(void)
 {
 	TestMedium(s_Flash);
 	TestMedium(s_Direct);
+	// Regression: 256 KiB must have 512 logical sectors to meet the
+	// FatFs mkfs minimum of 128 sectors.
+	TestMedium(s_Small);
 	TestBlankOnly();
 	printf("FatFs DiskIO: %u checks, %u failures\n", s_Checks, s_Fails);
 	return s_Fails == 0U ? 0 : 1;

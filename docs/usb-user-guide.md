@@ -557,33 +557,37 @@ SYNCHRONIZE CACHE.
 firmware, settings, a production filesystem or Bluetooth bond storage. RAM-disk
 contents are lost when USB bus power is removed.
 
-`UsbMscFlashDisk` exposes a 256 KiB FAT12 volume on the nRF52840 internal flash:
-the NVM1 region of `gcc_nrf52840_xxaa_nvm256k.ld`, and nothing else. Change the
-size in that script; the volume geometry follows the region. The example formats
-the region only when FatFs reports no filesystem and a full-media scan
-confirms that the reserved storage region is entirely erased. Existing
-volumes are preserved; invalid nonblank contents are never reformatted.
+The `UsbMscFlashDisk` example reserves 256 KiB in NVM1 using
+`gcc_nrf52840_xxaa_nvm256k.ld`. After initializing the medium through
+`NvmDiskIO`, it uses `FatFsMount()` with format-if-blank enabled,
+unmounts the volume and hands the same disk to USB MSC. If mounting or
+formatting fails, USB still enumerates the raw medium; it is not
+automatically erased. An unrecognized or corrupted volume may require
+explicit recovery on the PC.
 
-The `Release_mbr` configuration is for a part with the MBR and the Nordic USB DFU
-bootloader installed, such as the UDG-NRF52840 dongle. It links
-`gcc_nrf52840_xxaa_mbr_nvm832k.ld`: the MBR and the application in the first 64 KB
-and an 832 KiB volume from 0x10000 up to the bootloader at 0xE0000. Check that
-address against the bootloader installed before flashing. On the UDG-NRF52840, press SW2 (RESET)
-to enter DFU mode and program `UsbMscFlashDisk.hex` with nRF Connect Programmer.
+The physical erase unit is 4096 bytes. New volumes expose 512-byte
+logical sectors through a caller-owned 4096-byte read/modify/write
+buffer; 256 KiB then presents 512 sectors, sufficient for FatFs
+`f_mkfs()`. Without this mapping it would present only 64 sectors,
+and `f_mkfs()` refuses volumes smaller than 128 sectors. The same
+logical sector geometry is used for firmware file access and USB MSC.
+USB and FatFs never mount the volume simultaneously.
 
-A DFU update erases only the pages it writes. A bootloader doing single bank
-updates writes the new image at 0x1000, so the volume stays. One doing dual bank
-updates writes it right after the current image, which keeps the volume only if
-two images of up to 28672 bytes fit below 0x10000. The Release image is about
-33 KB, so such an update overwrites the start of the volume and can corrupt the filesystem. In that case the example refuses to
-format a nonblank volume automatically. Restore the data, or explicitly
-erase the reserved storage region before reinitializing it.
+Previously formatted disks may have 4096-byte FAT sectors. When a
+512-byte view cannot mount an existing nonblank volume, the example
+attempts the original 4096-byte view without formatting it. This
+preserves access to those disks. Unknown nonblank contents are never
+formatted automatically.
 
-The sector is one flash page, so the host reads a 4096 byte block in READ
-CAPACITY rather than 512. `NvmDiskIO` does not accept a sector smaller than the
-erase unit. Each sector the host writes is one page erase and one program with
-no wear levelling, and the main loop waits for both. `--write-test` works here
-too; it overwrites and restores the last 16 sectors, 64 KiB of flash.
+The `Release_mbr` build reserves 832 KiB between 0x10000 and the
+bootloader at 0xE0000. DFU images are placed according to the
+bootloader's update strategy; a dual-bank update can overwrite storage
+near the beginning of this region. The example does not silently
+reformat that data following an update.
+
+Raw flash FAT updates entail erase/write amplification and have no
+wear levelling or power-loss guarantee. USB MSC uses the same `DiskIO`
+and performs I/O in the foreground, outside USB interrupts.
 
 Unmount the volume before running the raw write test:
 

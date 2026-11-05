@@ -74,10 +74,17 @@ public:
 	 * 						  the medium reports, which a medium with no erase
 	 * 						  step gives as 0, so those need a size here.
 	 *
-	 * @return	true on success. Fails when the sector size is absent, does not
-	 * 			divide the region, or is not a whole number of erase units.
+	 * @param	pEraseWork	: Caller-owned scratch for logical sectors smaller
+	 * 						  than the erase unit. Must be aligned for NVM writes
+	 * 						  and must not alias a sector source buffer.
+	 * @param	WorkSize	: Scratch size in bytes, at least Mem.EraseSize().
+	 *
+	 * @return	true on success. A sector smaller than the erase unit is
+	 * 			supported only with an entire erase unit of scratch memory.
+	 * 			The region must contain whole logical and erase units.
 	 */
-	bool Init(Nvm &Mem, uint32_t SectSize = 0);
+	bool Init(Nvm &Mem, uint32_t SectSize = 0, uint8_t *pEraseWork = nullptr,
+			  uint32_t WorkSize = 0);
 
 	// *** DiskIO ***
 
@@ -93,6 +100,7 @@ public:
 private:
 	Nvm			*vpNvm;			//!< The memory this disk sits on
 	uint32_t	vSectSize;		//!< Sector size in bytes
+	uint8_t		*vpEraseWork;	//!< One erase unit for read/modify/write
 };
 
 #endif	// __cplusplus

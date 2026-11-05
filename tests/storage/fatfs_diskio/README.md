@@ -7,7 +7,9 @@ make -C tests/storage/fatfs_diskio test
 ```
 
 This builds the production FatFs and DiskIO code against simulated 512-byte
-sector media (SD-style) and 4096-byte sector media (raw flash). It checks
+sector media (including a 256 KiB volume) and 4096-byte sector media.
+The separate `exemples/storage/nvm_diskio_test.cpp` exercises logical
+512-byte writes on erase-before-write NVM with a 4096-byte scratch buffer. It checks
 blank formatting, file I/O, remount persistence, geometry, error propagation
 and refusal to format partially used or unreadable storage.
 

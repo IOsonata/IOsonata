@@ -12,10 +12,10 @@ The content stays across resets and power cycles. FatFs mounts the volume
 and formats it only if the entire medium is erased. A nonblank unrecognized
 filesystem is never reformatted.
 
-A sector is one erase unit, the smallest sector NvmDiskIO accepts, so the host
-sees that block size in READ CAPACITY rather than 512 bytes. Each sector the
-host writes is one erase and one program, with no wear levelling. It runs from
-the USB process event, which holds the main loop until the memory has finished.
+Newly formatted volumes use 512-byte logical sectors with 4 KiB physical
+erase units. NvmDiskIO preserves neighbouring sectors in its caller-owned
+erase buffer. Existing 4 KiB-sector volumes remain readable by the host.
+There is no wear levelling. Flash writes execute outside USB interrupts.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 4, 2026
@@ -83,6 +83,8 @@ static NvmDiskIO s_Disk;
 static FATFS s_FatFs;
 static UsbdMsc s_Msc;
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_BUFF_SIZE];
+// Separate from USB / FatFs input: one physical erase unit for partial writes.
+alignas(4) static uint8_t s_EraseBuffer[MSC_SECTOR_BUFF_SIZE];
 
 // Application event queue memory, replaces the 4 event library default. The
 // USB controller port queues its deferred endpoint events there.
@@ -135,7 +137,10 @@ int main(void)
 		return -1;
 	}
 
-	if (s_Disk.Init(s_Nvm) == false)
+	// The reserved 256 KiB region has only 64 physical 4 KiB sectors.
+	// FatFs requires at least 128 sectors for f_mkfs, so present 512-byte
+	// logical sectors and preserve whole erase units during each write.
+	if (!s_Disk.Init(s_Nvm, 512U, s_EraseBuffer, sizeof(s_EraseBuffer)))
 	{
 		return -1;
 	}
@@ -150,15 +155,27 @@ int main(void)
 	mount.pWork = s_SectorBuffer;
 	mount.WorkSize = sizeof(s_SectorBuffer);
 
-	if (FatFsMount(mount) != FR_OK)
+	FRESULT res = FatFsMount(mount);
+
+	if (res == FR_NO_FILESYSTEM)
 	{
-		return -1;
+		// A pre-existing USB flash disk may use 4 KiB FAT sectors from
+		// the previous firmware. Try that original layout, read-only
+		// from the mount routine's perspective: never reformat it.
+		(void)FatFsUnmount("0:");
+		if (!s_Disk.Init(s_Nvm))
+		{
+			return -1;
+		}
+		mount.bFormatIfBlank = false;
+		res = FatFsMount(mount);
 	}
 
-	if (FatFsUnmount("0:") != FR_OK)
-	{
-		return -1;
-	}
+	// Filesystem initialization must not prevent the USB device from
+	// enumerating. On a damaged/unrecognized volume, the host still sees
+	// the raw disk, without silently destroying its contents.
+	(void)res;
+	(void)FatFsUnmount("0:");
 
 	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem,
 			sizeof(g_AppEvtHandlerQueMem)) == false)

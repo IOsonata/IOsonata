@@ -134,9 +134,11 @@ region. The application calls the existing `Nvm::Init()` and
 a completely erased volume. `FatFsUnmount()` releases the filesystem
 before USB MSC exposes the volume. `UsbdMsc` itself is filesystem-independent.
 
-The disk continues to use 4 KiB sectors (the flash erase size), synchronous
-writes, and no wear levelling. The 256 KiB standard build reserves NVM1 at the
-top of flash; `Release_mbr` reserves 832 KiB between 0x10000 and 0xE0000.
+The 256 KiB standard build presents 512-byte logical sectors over 4 KiB
+physical erase units. A separate caller-owned buffer preserves adjacent
+logical sectors during writes. Existing 4 KiB-sector FAT volumes use their
+original geometry. `Release_mbr` reserves 832 KiB between 0x10000 and
+0xE0000. Neither configuration provides wear levelling.
 A dual-bank DFU update may overwrite the beginning of the `Release_mbr` disk
 region. Persistence through firmware updates is not guaranteed.
 
