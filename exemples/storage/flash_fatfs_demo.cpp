@@ -173,11 +173,7 @@ int main()
 	if (!g_Spi.Init(s_SpiCfg))
 		return 1;
 
-	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi) == true)
-	{
-		// The storage device is ready without USB MSC.
-	}
-	else
+	if (!g_FlashDiskIO.Init(s_FlashCfg, &g_Spi))
 	{
 		printf("Init Flash failed\n");
 		return 1;

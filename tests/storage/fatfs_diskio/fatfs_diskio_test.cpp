@@ -140,6 +140,26 @@ static void TestAdapter(void)
 		CHECK(s_Out[i] == 0xFF);
 	}
 
+	// A single FatFs write crossing the physical erase-sector boundary
+	// must preserve the untouched 512-byte sectors on either side.
+	for (unsigned i = 0; i < sizeof(s_In); i++)
+	{
+		s_In[i] = (uint8_t)(i * 11U + 5U);
+	}
+	CHECK(disk_write(0, s_In, 7, 2) == RES_OK);
+	CHECK(disk_read(0, s_Out, 7, 2) == RES_OK);
+	CHECK(memcmp(s_In, s_Out, sizeof(s_In)) == 0);
+	CHECK(disk_read(0, s_Out, 6, 1) == RES_OK);
+	for (unsigned i = 0; i < FAT_SECTOR; i++)
+	{
+		CHECK(s_Out[i] == (uint8_t)(i * 7U + 3U));
+	}
+	CHECK(disk_read(0, s_Out, 9, 1) == RES_OK);
+	for (unsigned i = 0; i < FAT_SECTOR; i++)
+	{
+		CHECK(s_Out[i] == 0xFF);
+	}
+
 	s_Flash.vReadFail = true;
 	CHECK(disk_read(0, s_Out, 3, 1) == RES_ERROR);
 	CHECK(disk_write(0, s_In, 3, 1) == RES_ERROR);

@@ -277,7 +277,7 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff)
 
 static FRESULT FFDiskIsErased(bool *pErased)
 {
-	uint8_t local[FF_MIN_SS];
+	alignas(4) uint8_t local[FF_MIN_SS];
 	uint8_t *pData = s_pFFSectorBuffer != nullptr ? s_pFFSectorBuffer : local;
 
 	*pErased = false;
