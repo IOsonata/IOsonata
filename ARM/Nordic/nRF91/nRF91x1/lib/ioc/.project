@@ -806,6 +806,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tphg_bme680.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/fatfs_format.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs_format.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/diskio.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio.h</locationURI>
@@ -1189,6 +1194,11 @@
 			<name>src/storage/diskio_flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/fatfs_format.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs_format.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/diskio_impl.cpp</name>

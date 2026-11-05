@@ -443,6 +443,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_hid.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/fatfs_format.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs_format.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usbd_msc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_msc.h</locationURI>
@@ -506,6 +511,11 @@
 			<name>src/usb/usbd_hid.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_hid.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/fatfs_format.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs_format.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_msc.cpp</name>
