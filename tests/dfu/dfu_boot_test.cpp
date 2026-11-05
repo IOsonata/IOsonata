@@ -81,6 +81,7 @@ static void Install(const std::vector<uint8_t> &File)
 
 static void TestBasic(HostMem Kind)
 {
+	s_Cfg.bAllowDowngrade = true;
 	HostFlashInit(Kind);
 
 	DfuLayout_t lay;
@@ -113,6 +114,11 @@ static void TestBasic(HostMem Kind)
 	CHECK(*(const uint32_t *)HostFlash(HOST_REC) == DFU_REC_MAGIC);
 	std::vector<uint8_t> vp = Img("v2_prot.bin");
 	Install(vp);
+	s_Cfg.bAllowDowngrade = false;
+	HostPutSlot1(v1, true);
+	CHECK(Boot() == 1 && Slot0Is(vp));
+	CHECK(HostDone() == DFU_TRAILER_DONE);
+	s_Cfg.bAllowDowngrade = true;
 	Install(v1);
 
 	// Refused images: marked done, slot 0 untouched, old image starts.
@@ -198,6 +204,7 @@ static void TestBasic(HostMem Kind)
 // end it must be v2.
 static void TestPowerLoss(HostMem Kind)
 {
+	s_Cfg.bAllowDowngrade = false;
 	std::vector<uint8_t> v1 = Img("v1.bin"), v2 = Img("v2.bin");
 	int cuts = 0;
 

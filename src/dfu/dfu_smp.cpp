@@ -367,7 +367,12 @@ int DfuSmp::ImgState(const uint8_t *p, uint32_t Len, CborWr_t &Wr, int &GrpRc)
 		return DFUSMP_ERR_EINVAL;
 	}
 
-	if (vCfg.pMgr->Commit() == false)
+	res = vCfg.pMgr->MarkPending();
+	if (res == DFU_MGR_ERR_VERSION)
+	{
+		return DFUSMP_ERR_EINVAL;
+	}
+	if (res != DFU_IMG_OK)
 	{
 		GrpRc = DFUSMP_IMG_ERR_WRITE_FAILED;
 		return DFUSMP_ERR_EBADSTATE;

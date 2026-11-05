@@ -153,6 +153,7 @@ int main(int argc, char **argv)
 	s_Boot.pKey = &s_Key;
 	s_Boot.NbKey = 1;
 	s_Boot.bVerifySlot0 = true;
+	s_Boot.bAllowDowngrade = true;
 
 	HostFlashInit(HOST_MEM_NOR);
 	DfuLayout_t lay = HostLayout();

@@ -295,7 +295,7 @@ def run(proc=None, app=None, settle=0.0, limit=120.0, power_cut=None):
 
 
 def wire(*args):
-	return subprocess.Popen([sys.executable, "-I", TOOL, "--port", PORT, *args],
+	return subprocess.Popen([sys.executable, TOOL, "--port", PORT, "--quiet", *args],
 							stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
 
@@ -364,12 +364,14 @@ with tempfile.TemporaryDirectory() as tmp:
 
 	print("image signed with another key")
 	rc, out, res = tool_run(badkey)
-	check(rc != 0 and stats["writes"] == 0 and stats["erases"] == 0,
-		  "refused, nothing written or erased: %s" % out.strip().splitlines()[-1][:60])
+	check(rc == 1 and "error: BEGIN: key not the boot's" in out.splitlines() and
+		  stats["writes"] == 0 and stats["erases"] == 0,
+		  "wrong key refused before erase or write: %s" % out.strip())
 
 	print("payload changed after signing")
 	rc, out, res = tool_run(bad)
-	check(rc != 0, "refused at the end: %s" % out.strip().splitlines()[-1][:60])
+	check(rc == 1 and "error: FINISH: hash, the payload is not the one signed" in out.splitlines() and
+		  stats["writes"] > 0, "changed payload refused at FINISH: %s" % out.strip())
 	check(rd32(REC) != REC_MAGIC, "no record")
 	check(boot(entry) == "recovery", "after a reset the boot stays in recovery")
 
@@ -395,8 +397,9 @@ with tempfile.TemporaryDirectory() as tmp:
 	w0, e0 = stats["writes"], stats["erases"]
 	print("older image, in recovery")
 	rc, out, res = tool_run(v090, app=entry)
-	check(rc != 0 and stats["writes"] == w0 and stats["erases"] == e0,
-		  "refused, nothing written or erased: %s" % out.strip().splitlines()[-1][:60])
+	check(rc == 1 and "error: BEGIN: older than the image in place" in out.splitlines() and
+		  stats["writes"] == w0 and stats["erases"] == e0,
+		  "older image refused before erase or write: %s" % out.strip())
 	wr32(GPIO_IN, 0xFFFFFFFF)
 	check(boot(entry) == "app", "button released: the application still starts")
 

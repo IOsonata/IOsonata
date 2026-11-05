@@ -54,6 +54,29 @@ static bool DfuImgReadTlv(DfuImgRead_t Read, void *pCtx, uint32_t Off,
 	return Read(pCtx, Off, &Tlv, sizeof(Tlv));
 }
 
+// Negative when A is older than B.
+int DfuImgVerCmp(const DfuImgVer_t &A, const DfuImgVer_t &B)
+{
+	if (A.Major != B.Major)
+	{
+		return A.Major < B.Major ? -1 : 1;
+	}
+	if (A.Minor != B.Minor)
+	{
+		return A.Minor < B.Minor ? -1 : 1;
+	}
+	if (A.Rev != B.Rev)
+	{
+		return A.Rev < B.Rev ? -1 : 1;
+	}
+	if (A.Build != B.Build)
+	{
+		return A.Build < B.Build ? -1 : 1;
+	}
+
+	return 0;
+}
+
 // One DER INTEGER into a 32 byte big endian field, left padded.
 static bool DfuImgDerInt(const uint8_t *&p, const uint8_t *pEnd, uint8_t *pOut)
 {

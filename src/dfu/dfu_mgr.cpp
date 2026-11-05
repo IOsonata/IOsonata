@@ -77,29 +77,6 @@ static bool DfuMgrManRead(void *pCtx, uint32_t Off, void *pBuf, uint32_t Len)
 	return false;
 }
 
-// Negative when A is older than B.
-static int DfuMgrVerCmp(const DfuImgVer_t &A, const DfuImgVer_t &B)
-{
-	if (A.Major != B.Major)
-	{
-		return A.Major < B.Major ? -1 : 1;
-	}
-	if (A.Minor != B.Minor)
-	{
-		return A.Minor < B.Minor ? -1 : 1;
-	}
-	if (A.Rev != B.Rev)
-	{
-		return A.Rev < B.Rev ? -1 : 1;
-	}
-	if (A.Build != B.Build)
-	{
-		return A.Build < B.Build ? -1 : 1;
-	}
-
-	return 0;
-}
-
 DfuMgr::DfuMgr()
 {
 	memset(&vCfg, 0, sizeof(vCfg));
@@ -220,7 +197,7 @@ int DfuMgr::BeginManifest(const uint8_t *pMan, uint32_t Len)
 		}
 	}
 
-	if (vCfg.bAllowDowngrade == false && DfuMgrVerCmp(h.Ver, vCurVer) < 0)
+	if (vCfg.bAllowDowngrade == false && DfuImgVerCmp(h.Ver, vCurVer) < 0)
 	{
 		return DFU_MGR_ERR_VERSION;
 	}
@@ -359,7 +336,7 @@ int DfuMgr::Finish(DfuImgInfo_t *pInfo)
 			}
 		}
 		if (vCfg.bAllowDowngrade == false &&
-			DfuMgrVerCmp(info.Hdr.Ver, vCurVer) < 0)
+			DfuImgVerCmp(info.Hdr.Ver, vCurVer) < 0)
 		{
 			return Fail(DFU_MGR_ERR_VERSION);
 		}
@@ -374,6 +351,32 @@ int DfuMgr::Finish(DfuImgInfo_t *pInfo)
 	return DFU_IMG_OK;
 }
 
+int DfuMgr::MarkPending(void)
+{
+	DfuImgInfo_t info;
+
+	if (vbInit == false || vCfg.bDirect || Active())
+	{
+		return DFU_MGR_ERR_STATE;
+	}
+	int res = vWr.Slot1Parse(&info);
+	if (res != DFU_IMG_OK)
+	{
+		return res;
+	}
+	if (vCfg.bAllowDowngrade == false && DfuImgVerCmp(info.Hdr.Ver, vCurVer) < 0)
+	{
+		return DFU_MGR_ERR_VERSION;
+	}
+	if (vWr.Commit() == false)
+	{
+		return DFU_IMG_ERR_READ;
+	}
+	vState = DFU_MGR_STATE_IDLE;
+
+	return DFU_IMG_OK;
+}
+
 bool DfuMgr::Commit(void)
 {
 	if (vbInit == false || vState == DFU_MGR_STATE_RECV)
@@ -382,7 +385,11 @@ bool DfuMgr::Commit(void)
 	}
 	// In place, only the image just checked. In slot 1 the boot checks
 	// again, so an image left there by an earlier session may be marked.
-	if (vCfg.bDirect && vState != DFU_MGR_STATE_DONE)
+	if (vCfg.bDirect == false)
+	{
+		return MarkPending() == DFU_IMG_OK;
+	}
+	if (vState != DFU_MGR_STATE_DONE)
 	{
 		return false;
 	}
@@ -391,14 +398,10 @@ bool DfuMgr::Commit(void)
 		return false;
 	}
 
-	if (vCfg.bDirect)
+	DfuImgInfo_t info;
+	if (DfuSlot0Parse(vLay, &info) == DFU_IMG_OK)
 	{
-		DfuImgInfo_t info;
-
-		if (DfuSlot0Parse(vLay, &info) == DFU_IMG_OK)
-		{
-			vCurVer = info.Hdr.Ver;
-		}
+		vCurVer = info.Hdr.Ver;
 	}
 	vState = DFU_MGR_STATE_IDLE;
 

@@ -250,6 +250,12 @@ entry before it accepts them; the signature is checked by stage 0, so the
 key lives in one place. In recovery the signature is checked at the end of
 the upload, before the record is written.
 
+With downgrade disabled, the manager checks the staged version before marking
+it pending, including after reconnect. Stage 0 checks it again against the
+version in the slot 0 record before replacing the application. An interrupted
+install can resume after erasing the old record. Direct recovery that erases
+the record also clears the stored version floor.
+
 ## Transports
 
 | Transport | File | Notes |

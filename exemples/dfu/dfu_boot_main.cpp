@@ -429,6 +429,7 @@ int main()
 		.NbKey = 1,
 		.bVerifySlot0 = true,
 		.bAllowNoRec = DFU_BOOT_NO_REC,
+		.bAllowDowngrade = DFU_BOOT_ALLOW_DOWNGRADE != 0,
 	};
 	DfuLayout_t lay;
 	DfuMgrCfg_t mcfg;

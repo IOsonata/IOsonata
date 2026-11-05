@@ -72,10 +72,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_RTS_PIN		5//11
 #define UART_RTS_PINOP		0
 
-#define BUTTON1_PORT		0
-#define BUTTON1_PIN			13
-#define BUTTON2_PORT		0
-#define BUTTON2_PIN			14
+#define BUT1_PORT		0
+#define BUT1_PIN			13
+#define BUT2_PORT		0
+#define BUT2_PIN			14
 
 #else
 // IBK_NRF52840 board

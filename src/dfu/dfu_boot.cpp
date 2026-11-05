@@ -103,6 +103,18 @@ static int DfuBootInstall(const DfuBootCfg_t &Cfg, const DfuLayout_t &Lay)
 		}
 	}
 
+	if (res == DFU_IMG_OK && Cfg.bAllowDowngrade == false)
+	{
+		DfuImgInfo_t current;
+
+		// After an interrupted install the old record may already be erased.
+		if (DfuSlot0Parse(Lay, &current) == DFU_IMG_OK &&
+			DfuImgVerCmp(info.Hdr.Ver, current.Hdr.Ver) < 0)
+		{
+			res = DFU_IMG_ERR_VERSION;
+		}
+	}
+
 	if (res != DFU_IMG_OK)
 	{
 		// Refused for good: nothing about this image changes by retrying,

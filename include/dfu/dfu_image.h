@@ -111,6 +111,8 @@ SOFTWARE.
 #define DFU_IMG_ERR_VECTOR			-10		//!< Vector table not for here
 #define DFU_IMG_ERR_CRYPTO			-11		//!< Engine refused the work
 
+#define DFU_IMG_ERR_VERSION			-22		//!< Older than slot 0
+
 #pragma pack(push, 1)
 
 typedef struct __Dfu_Img_Version {
@@ -169,6 +171,9 @@ typedef struct __Dfu_Img_Key {
 } DfuImgKey_t;
 
 #ifdef __cplusplus
+
+/// Compare major, minor, revision and build. Negative when A is older.
+int DfuImgVerCmp(const DfuImgVer_t &A, const DfuImgVer_t &B);
 
 /**
  * @brief	Read and check an image header and its TLV areas.

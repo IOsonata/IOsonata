@@ -294,6 +294,7 @@ typedef struct __Dfu_Boot_Cfg {
 								//!< an install
 	bool bAllowNoRec;			//!< Start slot 0 with no record. Debugger
 								//!< development only: it starts unsigned code
+	bool bAllowDowngrade = false;		//!< Install a staged image older than slot 0
 } DfuBootCfg_t;
 
 /**

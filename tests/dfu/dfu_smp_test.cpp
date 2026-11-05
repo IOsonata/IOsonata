@@ -513,6 +513,24 @@ static void TestImg(HostMem Kind, bool bTgt)
 	l = List(mgr);
 	CHECK(l.size() == 1 && l[0].Ver == "2.2.0" && l[0].Hash == hp);
 
+	// A rejected upload leaves its bytes in slot 1. A new session must
+	// still refuse an image-state write for that version.
+	dcfg.bAllowDowngrade = false;
+	CHECK(dm.Init(dcfg));
+	CHECK(mgr.Init(cfg));
+	CHECK(Upload(mgr, v1, rng, 300, &match) == false);
+	CHECK(dm.Init(dcfg));
+	CHECK(mgr.Init(cfg));
+	r = SetState(mgr, &h1, false);
+	CHECK(Rc(r) == DFUSMP_ERR_EINVAL);
+	CHECK(dm.Commit() == false);
+	CHECK(Reboot());
+	l = List(mgr);
+	CHECK(l[0].Hash == hp);
+	dcfg.bAllowDowngrade = true;
+	CHECK(dm.Init(dcfg));
+	CHECK(mgr.Init(cfg));
+
 	// Errors, version 2 and version 1.
 	r = Chunk(mgr, v2, 0, 64, false);
 	std::vector<uint8_t> junk(v2);
@@ -807,6 +825,7 @@ int main(int argc, char **argv)
 	s_BootCfg.pKey = &s_Key;
 	s_BootCfg.NbKey = 1;
 	s_BootCfg.bVerifySlot0 = true;
+	s_BootCfg.bAllowDowngrade = true;
 	s_BootCfg.bAllowNoRec = false;
 
 	const HostMem kinds[] = {
