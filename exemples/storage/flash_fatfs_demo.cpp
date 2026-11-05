@@ -124,29 +124,7 @@ static FlashCfg_t s_FlashCfg = FLASH_CFG(NULL, FlashWriteDelayCallback);
 
 FlashDiskIO g_FlashDiskIO;
 
-static uint8_t s_FlashCacheMem[FLASH_SECTOR_SIZE];
-static DiskIOCache_t s_FlashCache[] = {
-	{-1, 0xFFFFFFFF, s_FlashCacheMem},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 512},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 1024},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 1536},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 2048},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 2560},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 3072},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 3584},
-};
-
-static const int s_NbFlashCache = sizeof(s_FlashCache) / sizeof(DiskIOCache_t);
-
-static bool s_bInitialized = false;
-
-const MKFS_PARM s_MkFsParm = {
-	.fmt = FM_ANY,
-	.n_fat = 0,
-	.align = 4096,
-	.n_root = 0,
-	.au_size = 0
-};
+alignas(4) static uint8_t s_DiskSectorBuffer[FLASH_SECTOR_SIZE];
 
 uint8_t g_Data[4096];
 uint8_t g_Temp[4096];
@@ -195,9 +173,9 @@ int main()
 	if (!g_Spi.Init(s_SpiCfg))
 		return 1;
 
-	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache) == true)
+	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi) == true)
 	{
-		disk_ioctl(0, SET_DEVICE, &g_FlashDiskIO);
+		// The storage device is ready without USB MSC.
 	}
 	else
 	{
@@ -212,13 +190,22 @@ int main()
 		p[i] = i;
 	}
 
-	FRESULT fres = f_mount(&s_FatFs, "0:", 1);
+	const FatFsMountCfg_t mount = {
+		.pDisk = &g_FlashDiskIO,
+		.pFatFs = &s_FatFs,
+		.pPath = "0:",
+		.pSectorBuffer = s_DiskSectorBuffer,
+		.SectorBufferSize = sizeof(s_DiskSectorBuffer),
+		.bFormatIfBlank = true,
+		.pFormatWork = g_FFBuf,
+		.FormatWorkSize = sizeof(g_FFBuf),
+	};
+	FRESULT fres = FatFsMount(mount);
 
 	if (fres != FR_OK)
 	{
-		printf("formating wait...\n");
-		fres = f_mkfs ("0:", &s_MkFsParm, g_FFBuf, 4096);
-		printf("Fres = %d\n", fres);
+		printf("FatFs mount failed: %d\n", fres);
+		return 1;
 	}
 
 	FIL fp;
@@ -271,248 +258,4 @@ int main()
 
 	return 0;
 }
-
-#if 0
-//-----------------------------------------------------------------------
-// Get Drive Status
-//-----------------------------------------------------------------------
-
-DSTATUS disk_status (
-	BYTE pdrv		// Physical drive nmuber to identify the drive
-)
-{
-	DSTATUS stat;
-	int result;
-
-	if (pdrv > 0)
-	{
-		return RES_PARERR;
-	}
-
-	return RES_OK;
-
-	switch (pdrv) {
-	case DEV_RAM :
-		//result = RAM_disk_status();
-
-		// translate the reslut code here
-
-		return stat;
-
-	case DEV_MMC :
-		//result = MMC_disk_status();
-
-		// translate the reslut code here
-
-		return stat;
-
-	case DEV_USB :
-		//result = USB_disk_status();
-
-		// translate the reslut code here
-
-		return stat;
-	}
-	return STA_NOINIT;
-}
-
-
-
-//-----------------------------------------------------------------------
-// Inidialize a Drive
-//-----------------------------------------------------------------------
-
-DSTATUS disk_initialize (
-	BYTE pdrv				// Physical drive nmuber to identify the drive
-)
-{
-	if (pdrv > 0)
-	{
-		return RES_PARERR;
-	}
-
-	if (s_bInitialized == false)
-	{
-		g_Spi.Init(s_SpiCfg);
-
-		if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache) == false)
-		{
-			return STA_NOINIT;
-		}
-		s_bInitialized = true;
-	}
-	return RES_OK;
-}
-
-
-
-//-----------------------------------------------------------------------
-// Read Sector(s)
-//-----------------------------------------------------------------------
-
-DRESULT disk_read (
-	BYTE pdrv,		// Physical drive nmuber to identify the drive
-	BYTE *buff,		// Data buffer to store read data
-	LBA_t sector,	// Start sector in LBA
-	UINT count		// Number of sectors to read
-)
-{
-	DRESULT res;
-	int result;
-
-	if (pdrv > 0)
-	{
-		return RES_PARERR;
-	}
-
-	uint64_t offset = (uint64_t)sector * FF_MIN_SS;
-	printf("read sect : %d\n", sector);
-
-	while (count > 0)
-	{
-		int size = FF_MIN_SS;
-
-		while (size > 0)
-		{
-			int l = g_FlashDiskIO.Read(offset, (uint8_t*)buff, size);
-			buff += l;
-			offset += l;
-			size -= l;
-		}
-		count--;
-	}
-
-	return RES_OK;
-}
-
-
-
-//-----------------------------------------------------------------------
-// Write Sector(s)
-//-----------------------------------------------------------------------
-
-#if FF_FS_READONLY == 0
-
-DRESULT disk_write (
-	BYTE pdrv,			// Physical drive nmuber to identify the drive
-	const BYTE *buff,	// Data to be written
-	LBA_t sector,		// Start sector in LBA
-	UINT count			// Number of sectors to write
-)
-{
-	DRESULT res;
-	int result;
-
-	if (pdrv > 0)
-	{
-		return RES_PARERR;
-	}
-
-	if (count <= 0)
-	{
-		return RES_OK;
-	}
-
-	uint32_t offs = sector * FF_MIN_SS;
-
-	printf("write sect : %d %d\n", sector, offs);
-
-	g_FlashDiskIO.Write(offs, (uint8_t*)buff, count * FF_MIN_SS);
-
-#if 0
-	uint32_t sz = g_FlashDiskIO.GetSectSize();
-	uint8_t blkbuf[sz];
-	uint8_t *p = (uint8_t *)buff;
-	uint32_t blk = (sector >> 3);
-	uint32_t boff = (sector % 8) * 512;
-	uint64_t offs = blk << 12;//* 512;
-
-	printf("write sect : %d %d %d %d\n", sector, count, blk, boff);
-
-	g_FlashDiskIO.Read(offs, blkbuf, 4096);
-	//g_FlashDiskIO.EraseSector(blk, 1);
-
-	while (count > 0)
-	{
-		memcpy(&blkbuf[boff], p, 512);
-		boff += 512;
-		count--;
-
-		if (count > 0 && boff >= 4096)
-		{
-			g_FlashDiskIO.Write(offs, blkbuf, 4096);
-			boff = 0;
-			blk++;
-			offs = blk << 12;//* 512;
-			g_FlashDiskIO.Read(offs, blkbuf, 4096);
-			//g_FlashDiskIO.EraseSector(blk, 1);
-		}
-		p += 512;
-	}
-	g_FlashDiskIO.Write(offs, blkbuf, 4096);
-
-#endif
-
-	return RES_OK;
-}
-
-#endif
-
-
-//-----------------------------------------------------------------------
-// Miscellaneous Functions
-//-----------------------------------------------------------------------
-
-DRESULT disk_ioctl (
-	BYTE pdrv,		// Physical drive nmuber (0..)
-	BYTE cmd,		// Control code
-	void *buff		// Buffer to send/receive control data
-)
-{
-	DRESULT res = RES_OK;
-	int result;
-
-	if (pdrv > 0)
-	{
-		return RES_PARERR;
-	}
-
-	switch (cmd)
-	{
-		case CTRL_SYNC :
-
-			g_FlashDiskIO.Flush();
-
-			return RES_OK;
-
-		case GET_SECTOR_COUNT :
-
-			// Process of the command for the MMC/SD card
-			*(uint32_t *)buff = g_FlashDiskIO.GetSize() * 1024U / 512U;
-			printf("Nb Sector %u\r\n", *(uint32_t *)buff);
-			return RES_OK;
-
-		case GET_SECTOR_SIZE :
-			*(uint32_t *)buff = 512;//g_FlashDiskIO.GetSectSize();
-			return RES_OK;
-		case GET_BLOCK_SIZE:
-			*(uint32_t *)buff = g_FlashDiskIO.GetSectSize();
-			return RES_OK;
-		case CTRL_TRIM:
-			{
-				uint32_t *p = (uint32_t*)buff;
-				uint32_t st = p[0] * 512 / 4096;
-				uint32_t end = p[1] * 512 / 4096;
-
-				g_FlashDiskIO.EraseSector(st, end - st);
-			}
-
-			return RES_OK;
-	}
-
-	return RES_PARERR;
-}
-#endif
-
-
 

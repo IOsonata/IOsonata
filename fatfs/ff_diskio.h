@@ -79,6 +79,31 @@ DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff);
 
 #ifdef __cplusplus
 }
+
+// FatFs has one logical drive (0:) in this repository. Attach any DiskIO:
+// internal NVM, external NVM, SDCard or another sector device.
+class DiskIO;
+
+typedef struct __FatFs_Mount_Config {
+	DiskIO *pDisk;
+	FATFS *pFatFs;
+	const TCHAR *pPath;				//!< Null selects "0:"
+	uint8_t *pSectorBuffer;			//!< Physical-sector scratch, null for 512-byte disks
+	uint32_t SectorBufferSize;		//!< At least pDisk->GetSectSize() when required
+	bool bFormatIfBlank;			//!< Only format a wholly erased (0xFF) volume
+	void *pFormatWork;				//!< Separate FatFs mkfs work buffer
+	UINT FormatWorkSize;
+	const MKFS_PARM *pFormatOptions;	//!< Null uses FAT/SFD defaults
+} FatFsMountCfg_t;
+
+// Mount an existing volume, optionally format only if every sector is erased.
+// Neither a failed read nor a nonblank invalid filesystem triggers formatting.
+FRESULT FatFsMount(const FatFsMountCfg_t &Cfg);
+FRESULT FatFsUnmount(const TCHAR *pPath = "0:");
+
+// Legacy setter for 512-byte physical sectors. Larger physical sectors
+// require FatFsMountCfg_t::pSectorBuffer.
+void FFDiskSetDevice(DiskIO * const pDev);
 #endif
 
 #endif

@@ -122,3 +122,7 @@ MSC needs an initialized `DiskIO`, a caller-owned sector work buffer and its
 size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
 removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
 USB descriptors; the example's FAT12 formatting only defines the disk contents.
+
+Firmware may mount the same `DiskIO` through `FatFsMount` without USB.
+Unmount and transfer exclusive ownership before exporting a writable
+volume through MSC.

@@ -309,3 +309,63 @@ interpreting the persistence result.
 | IsBusy clears but data is wrong | Sync/error result, erase requirement and source lifetime |
 | Block adapter rejects geometry | Sector divisibility, erase unit and sector-size limit |
 | Data vanishes after reset | Cache flush, operation completion and reserved storage layout |
+
+
+## FatFs on any DiskIO
+
+FatFs and USB MSC are independent consumers of `DiskIO`. Use
+`NvmDiskIO` with `Nvm` for internal program/data flash, serial NOR flash,
+EEPROM, FRAM or other configured memory. Use `SDCard` for an SD/MMC medium
+or another existing `DiskIO` implementation.
+
+`FatFsMount` in `ff_diskio.h` attaches drive `0:` and mounts its volume.
+It does not need USB. A physical sector larger than FatFs' 512-byte logical
+sector needs a caller-owned buffer at least as large as the physical sector.
+The adapter reads a physical sector, changes the requested 512-byte range,
+then writes the whole sector through `DiskIO::SectWrite`. For `NvmDiskIO`,
+that method handles erase and completion.
+
+```cpp
+#include "ff.h"
+#include "ff_diskio.h"
+#include "storage/diskio_nvm.h"
+
+static NvmDiskIO s_Disk;
+static FATFS s_Fs;
+alignas(4) static uint8_t s_PhysicalSector[4096];
+alignas(4) static uint8_t s_FormatWork[4096];
+
+// Initialize Nvm and its transport first, then:
+// s_Disk.Init(s_Nvm);
+const FatFsMountCfg_t mount = {
+	.pDisk = &s_Disk,
+	.pFatFs = &s_Fs,
+	.pPath = "0:",
+	.pSectorBuffer = s_PhysicalSector,
+	.SectorBufferSize = sizeof(s_PhysicalSector),
+	.bFormatIfBlank = true,
+	.pFormatWork = s_FormatWork,
+	.FormatWorkSize = sizeof(s_FormatWork),
+};
+FRESULT res = FatFsMount(mount);
+```
+
+The two work buffers must be distinct. Supply a correctly sized physical
+sector buffer for the selected medium rather than assuming 4096 bytes.
+On a disk with 512-byte physical sectors, `pSectorBuffer` may be null.
+
+Formatting is disabled by default. When enabled, it is attempted only if
+`f_mount` returned `FR_NO_FILESYSTEM` and a full scan confirms every
+physical sector contains `0xFF`. An I/O error or a nonblank unrecognized
+volume is never formatted. Large blank disks require a full-media scan.
+Use `FatFsUnmount()` after closing files, before handing the volume to a
+USB host. Do not allow firmware FatFs and a USB host to write the same FAT
+volume concurrently.
+
+FatFs is configured for one drive (`FF_VOLUMES=1`) and 512-byte logical
+sectors. The adapter uses `SectRead` / `SectWrite` for checked, synchronous
+physical-sector operations. `DiskIO::Flush` currently returns no status, so
+`CTRL_SYNC` cannot report a cached write failure. Avoid unverified write-back
+caches when storage integrity matters. Repeated FAT updates to the same
+erase block also cause write amplification; this adapter is not a wear-leveling
+layer.
