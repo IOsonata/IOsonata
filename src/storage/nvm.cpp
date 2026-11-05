@@ -37,7 +37,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/spi.h"
 #include "storage/nvm.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 
 /******** For DEBUG Trace ************/
 //#define DEBUG_ENABLE

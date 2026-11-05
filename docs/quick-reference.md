@@ -230,6 +230,7 @@ Supported probes depend on the target configuration and can include IDAP-Link, J
 | USB custom Bulk | `UsbCustomBulkLoopback` / `exemples/usb/usb_custom_bulk_loopback.cpp` |
 | USB HID | `UsbHidLoopback` / `exemples/usb/usb_hid_loopback.cpp` |
 | USB Mass Storage | `UsbMscRamDisk` / `exemples/usb/usb_msc_ramdisk.cpp` |
+| USB Mass Storage on internal flash | `UsbMscFlashDisk` / `exemples/usb/usb_msc_flashdisk.cpp` |
 | Web server on Ethernet | `EthernetHttpServer` / `exemples/net/http_server.cpp` |
 | Bluetooth advertising | `BleAdvertiser` |
 | UART over Bluetooth | `UartBleDemo` |

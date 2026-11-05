@@ -85,6 +85,21 @@ public:
 	int ResetCount = 0;
 };
 
+// USB MSC does not depend on the on-disk filesystem.
+#define LARGE_SECTOR_SIZE	4096U
+#define LARGE_SECTOR_COUNT	208U
+
+class LargeSectorDisk : public DiskIO {
+public:
+	uint16_t GetSectSize(void) override { return LARGE_SECTOR_SIZE; }
+	uint32_t GetNbSect(void) override { return LARGE_SECTOR_COUNT; }
+	uint32_t GetSize(void) override {
+		return LARGE_SECTOR_SIZE * LARGE_SECTOR_COUNT / 1024U;
+	}
+	bool SectRead(uint32_t, uint8_t *) override { return false; }
+	bool SectWrite(uint32_t, uint8_t *) override { return false; }
+};
+
 static void ReceiveDma(void)
 {
 	if (s_OutReady && !s_OutDma && s_OutBuffer != nullptr && !s_HaltOut)
@@ -419,6 +434,23 @@ static void TestInitDescriptorAndControl(void)
 	CHECK(msc.SelectConfig(0U));
 	CHECK(s_CloseCount == 2);
 	CHECK(msc.Rate() == 0U);
+}
+
+static void TestLargeSectorMscInit(void)
+{
+	ResetFake();
+	static LargeSectorDisk disk;
+	alignas(4) static uint8_t sector[LARGE_SECTOR_SIZE];
+	UsbdMscCfg_t cfg = {};
+	UsbdMsc msc;
+
+	cfg.DevNo = 0;
+	cfg.pDisk = &disk;
+	cfg.pSectorBuffer = sector;
+	cfg.SectorBufferSize = sizeof(sector);
+	CHECK(msc.Init(cfg));
+	CHECK(static_cast<UsbdMscDev_t *>(msc)->SectorSize == LARGE_SECTOR_SIZE);
+	CHECK(static_cast<UsbdMscDev_t *>(msc)->SectorCount == LARGE_SECTOR_COUNT);
 }
 
 static void TestInquiryStrings(void)
@@ -1138,6 +1170,7 @@ static void TestProcessOnRequestOnly(void)
 int main(void)
 {
 	TestInitDescriptorAndControl();
+	TestLargeSectorMscInit();
 	TestInquiryStrings();
 	TestReadOnlyCommands();
 	TestReadWriteAndRepeatedCommands();

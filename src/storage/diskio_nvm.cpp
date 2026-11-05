@@ -39,11 +39,18 @@ NvmDiskIO::NvmDiskIO()
 {
 	vpNvm = nullptr;
 	vSectSize = 0;
+	vpEraseWork = nullptr;
 }
 
-bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize)
+bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize,
+					uint8_t *pEraseWork, uint32_t WorkSize)
 {
 	uint32_t sect = SectSize;
+	uint32_t esize = Mem.EraseSize();
+
+	vpNvm = nullptr;
+	vSectSize = 0;
+	vpEraseWork = nullptr;
 
 	if (sect == 0)
 	{
@@ -57,17 +64,22 @@ bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize)
 		return false;
 	}
 
-	// The sector has to be a whole number of erase units, or an erase would
-	// take out more than the sector being written.
-	uint32_t esize = Mem.EraseSize();
+	// Normal writes replace complete erase units. Smaller logical sectors
+	// require a caller-owned erase-unit buffer so neighbouring sectors survive.
 	if (esize != 0 && (sect % esize) != 0)
 	{
-		return false;
+		if ((esize % sect) != 0 || pEraseWork == nullptr ||
+			WorkSize < esize || (Mem.Size() % esize) != 0)
+		{
+			return false;
+		}
+		vpEraseWork = pEraseWork;
 	}
 
 	// DiskIO exposes only whole sectors. A tail shorter than one sector would
 	// be unreachable and would make the reported geometry ambiguous.
-	if (Mem.Size() < sect || (Mem.Size() % sect) != 0)
+	if (Mem.Size() < sect || (Mem.Size() % sect) != 0 ||
+		(Mem.Size() / sect) > 0xFFFFFFFFULL)
 	{
 		return false;
 	}
@@ -76,6 +88,15 @@ bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize)
 	vSectSize = sect;
 
 	return true;
+}
+
+uint32_t NvmDiskIO::GetNbSect(void)
+{
+	if (vpNvm == nullptr || vSectSize == 0U)
+	{
+		return 0;
+	}
+	return (uint32_t)(vpNvm->Size() / vSectSize);
 }
 
 uint32_t NvmDiskIO::GetSize(void)
@@ -105,7 +126,7 @@ uint32_t NvmDiskIO::GetMinEraseSize(void)
 
 bool NvmDiskIO::SectRead(uint32_t SectNo, uint8_t *pBuff)
 {
-	if (vpNvm == nullptr || pBuff == nullptr)
+	if (vpNvm == nullptr || pBuff == nullptr || SectNo >= GetNbSect())
 	{
 		return false;
 	}
@@ -117,24 +138,57 @@ bool NvmDiskIO::SectRead(uint32_t SectNo, uint8_t *pBuff)
 
 bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 {
-	if (vpNvm == nullptr || pData == nullptr)
+	if (vpNvm == nullptr || pData == nullptr || SectNo >= GetNbSect())
 	{
 		return false;
 	}
 
 	uint64_t off = (uint64_t)SectNo * vSectSize;
+	uint64_t writeOff = off;
+	uint32_t writeLen = vSectSize;
+	const uint8_t *pWriteData = pData;
+	uint32_t eraseSize = vpNvm->EraseSize();
 
-	// Only an erase-write medium needs the sector cleared first. One that
-	// overwrites directly is written as it is.
-	if (vpNvm->EraseSize() != 0)
+	if (eraseSize != 0 && vSectSize < eraseSize)
 	{
-		if (vpNvm->Erase(off, vSectSize) != 0)
+		// Preserve all the other logical sectors of the same physical
+		// erase unit. The caller must keep its sector input separate from
+		// the scratch buffer, which Nvm reads into before the copy.
+		if (vpEraseWork == nullptr)
 		{
 			return false;
 		}
+
+		// Reject overlapping work/input memory before the read overwrites
+		// part of the sector being supplied by the caller.
+		uintptr_t src = (uintptr_t)pData;
+		uintptr_t work = (uintptr_t)vpEraseWork;
+
+		if ((src >= work && src - work < eraseSize) ||
+			(src < work && work - src < vSectSize))
+		{
+			return false;
+		}
+
+		writeOff = off - off % eraseSize;
+		writeLen = eraseSize;
+
+		if (vpNvm->Read(writeOff, vpEraseWork, eraseSize) != (int)eraseSize)
+		{
+			return false;
+		}
+		memcpy(vpEraseWork + (uint32_t)(off - writeOff), pData, vSectSize);
+		pWriteData = vpEraseWork;
 	}
 
-	if (vpNvm->Write(off, pData, vSectSize) != (int)vSectSize)
+	// On erase-write media replace the full aligned erase region. Media
+	// without an erase step are simply written over.
+	if (eraseSize != 0 && vpNvm->Erase(writeOff, writeLen) != 0)
+	{
+		return false;
+	}
+
+	if (vpNvm->Write(writeOff, pWriteData, writeLen) != (int)writeLen)
 	{
 		return false;
 	}
@@ -153,7 +207,8 @@ bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 
 void NvmDiskIO::Erase(void)
 {
-	if (vpNvm == nullptr || vpNvm->EraseSize() == 0)
+	if (vpNvm == nullptr || vpNvm->EraseSize() == 0 ||
+		vpNvm->Size() > 0xFFFFFFFFULL)
 	{
 		return;
 	}
@@ -168,14 +223,24 @@ void NvmDiskIO::Erase(void)
 
 void NvmDiskIO::EraseSector(uint32_t SectNo, int NbSect)
 {
-	if (vpNvm == nullptr || vpNvm->EraseSize() == 0 || NbSect <= 0)
+	if (vpNvm == nullptr || vpNvm->EraseSize() == 0 || NbSect <= 0 ||
+		SectNo >= GetNbSect() || (uint32_t)NbSect > GetNbSect() - SectNo ||
+		(uint64_t)NbSect * vSectSize > 0xFFFFFFFFULL)
 	{
 		return;
 	}
 
 	uint64_t off = (uint64_t)SectNo * vSectSize;
+	uint32_t len = vSectSize * (uint32_t)NbSect;
+	uint32_t eraseSize = vpNvm->EraseSize();
 
-	if (vpNvm->Erase(off, vSectSize * (uint32_t)NbSect) == 0)
+	// Never erase a neighbouring logical sector through a partial TRIM.
+	if ((off % eraseSize) != 0 || (len % eraseSize) != 0)
+	{
+		return;
+	}
+
+	if (vpNvm->Erase(off, len) == 0)
 	{
 		(void)vpNvm->Sync();
 	}

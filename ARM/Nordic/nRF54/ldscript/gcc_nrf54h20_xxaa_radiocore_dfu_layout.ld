@@ -22,7 +22,7 @@
  * MRAM has no erase and a 16 byte write unit; the target layer writes ones
  * in 2 KB units. Regions are kept on 4 KB boundaries, the MRAM page.
  *
- * There is no NvmIntrf port for this core: the application writes slot 1
+ * There is no NvmMcuIntrf port for this core: the application writes slot 1
  * through the target layer, with DFU_SLOT1_TGT defined (see
  * exemples/bluetooth/ble_ota.cpp).
  *

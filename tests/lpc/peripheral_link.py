@@ -55,7 +55,7 @@ SYMBOLS = {
     'RtcDemo': ['RTC_IRQHandler', '_ZN11RtcLpc546xx4InitERK12__Rtc_ConfigP11DeviceIntrf'],
     'AdcDemo': ['_ZN11AdcLpc546xx4InitERK12__ADC_ConfigP5TimerP11DeviceIntrf'],
     'PwmDemo': ['PWMInit', 'PWMSetDutyCycle'],
-    'NvmDemo': ['NvmMcuErase', '_Z9NvmMcuCfgR9__Nvm_Cfg', 'IAPCopyRamToFlash'],
+    'NvmDemo': ['NvmMcuErase', '_Z13NvmMcuCfgInitR9__Nvm_Cfgjj', 'IAPCopyRamToFlash'],
     'SpifiFlashDemo': ['Lpc546xxSpifiInit', 'QuadSPISendCmd', 'QuadSPISetMemSize'],
     'SdramTest': ['SdramInit'],
     'SdCardTest': ['SdmmcInit', '_ZN6SDCard4InitEP11DeviceIntrfP19__DiskIO_Cache_Desci',

@@ -2,7 +2,7 @@
 @file	dfu_store_nvm.cpp
 
 @brief	A DFU store over an Nvm, for an application whose memory a radio
-		stack arbitrates. The Nvm's NvmIntrf asks the stack for each
+		stack arbitrates. The Nvm's NvmMcuIntrf asks the stack for each
 		operation; a refusal for the moment is retried here.
 
 @author	Hoang Nguyen Hoan

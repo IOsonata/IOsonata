@@ -35,8 +35,7 @@ SOFTWARE.
 #include <string.h>
 #include <stdio.h>
 NRF_ECB_Type g_Ecb;
-extern "C" void ResetEntry(void) {}
-uint32_t g_EcbResetVector;
+uint32_t g_EcbSdMagic;
 static bool s_SoftDevice, s_Fail, s_StopFail;
 static unsigned s_DmaCalls, s_SvcCalls, s_ProbeCalls;
 static bool s_ProbeFail;
@@ -85,7 +84,7 @@ int main()
 	uint8_t key[16] = {}, input[16] = {}, output[16];
 	const uint8_t expected[16] = {0x66,0xe9,0x4b,0xd4,0xef,0x8a,0x2c,0x3b,0x88,0x4c,0xfa,0x59,0xca,0x34,0x2b,0x2e};
 	CryptoKey k = {};
-	g_EcbResetVector = (uint32_t)(uintptr_t)&ResetEntry;
+	g_EcbSdMagic = 0xFFFFFFFFU; // No SoftDevice image.
 	assert(crypto.Enable());
 	k.Type = CRYPTO_KEY_AES_128;
 	k.Loc = CRYPTO_KEY_LOC_PLAIN;
@@ -95,8 +94,8 @@ int main()
 	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, output) == CRYPTO_STATUS_OK);
 	assert(memcmp(output, expected, 16) == 0 && s_DmaCalls == 1);
 #ifdef SOFTDEVICE_PRESENT
-	assert(s_ProbeCalls == 0 && s_SvcCalls == 0); // Standalone image never issues SVC.
-	g_EcbResetVector = 0; // A different reset owner (MBR/SoftDevice).
+	assert(s_ProbeCalls == 0 && s_SvcCalls == 0); // No image, no SVC.
+	g_EcbSdMagic = 0x51B1E5DBU; // SoftDevice image programmed.
 	s_ProbeFail = true;
 	memset(output, 0xA5, sizeof(output));
 	assert(crypto.Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, input, 16, output) == CRYPTO_STATUS_FAIL);

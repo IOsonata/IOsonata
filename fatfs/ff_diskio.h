@@ -5,6 +5,8 @@
 #ifndef _DISKIO_DEFINED
 #define _DISKIO_DEFINED
 
+#include "ff.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -79,6 +81,31 @@ DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff);
 
 #ifdef __cplusplus
 }
+
+// FatFs uses an existing DiskIO. The same medium can be internal or external
+// NvmDiskIO, SDCard, FlashDiskIO, or another sector device.
+class DiskIO;
+
+typedef struct __FatFs_Mount_Config {
+	DiskIO *pDisk;
+	FATFS *pFatFs;
+	const TCHAR *pPath;			//!< Null selects "0:"
+	bool bFormatIfBlank;		//!< Format only when the entire medium is 0xFF
+	void *pWork;				//!< Caller-owned format/blank-scan buffer
+	UINT WorkSize;				//!< At least the physical sector size
+	const MKFS_PARM *pFormatOptions;	//!< Null uses FAT/SFD defaults
+	const TCHAR *pLabelIfUnnamed;	//!< E.g. "0:IOSONATA"; only if no volume label
+} FatFsMountCfg_t;
+
+// Mount firmware FatFs independently of USB MSC. Formatting is optional and
+// never attempted for an I/O error or unrecognized nonblank volume.
+// If pLabelIfUnnamed is supplied, assign it to a mounted volume only when
+// no label entry exists. Existing custom labels and file contents are kept.
+FRESULT FatFsMount(const FatFsMountCfg_t &Cfg);
+FRESULT FatFsUnmount(const TCHAR *pPath = "0:");
+
+// Existing 512/1024/2048/4096-byte sector media may also be attached directly.
+void FFDiskSetDevice(DiskIO * const pDev);
 #endif
 
 #endif

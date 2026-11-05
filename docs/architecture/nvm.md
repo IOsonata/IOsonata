@@ -16,7 +16,7 @@ flowchart TD
     Fs["Filesystem"] --> Disk["NvmDiskIO: sector adapter"]
     Disk --> Nvm
     Nvm --> Bus["SPI, I2C, QSPI or OSPI"]
-    Nvm --> Internal["NvmIntrf: internal controller"]
+    Nvm --> Internal["NvmMcuIntrf: internal controller"]
 ```
 
 `NvmDiskIO` is an adapter to a different behavior, sector access. It owns a
@@ -30,7 +30,7 @@ reference to an NVM device; it is not a new memory technology. This follows
 | Application / linker | Region allocation, objects, buffers, interface setup and callback wiring |
 | `Nvm` | Region-relative addressing, range/alignment checks, page splitting, medium readiness and operation result |
 | `DeviceIntrf` | Transfer serialization, command/data movement and transport completion |
-| `NvmIntrf` port | Internal controller access, staged transfer data and supported arbitration routes |
+| `NvmMcuIntrf` port | Internal controller access, staged transfer data and supported arbitration routes |
 | Stack arbiter | When an internal-memory operation may run alongside radio activity |
 | `NvmDiskIO` | Sector geometry, erase-before-sector-write and synchronization before buffer reuse |
 | Filesystem / record store | Files or records, caching policy, recovery, and which writes survive a reset |
@@ -41,18 +41,26 @@ interface configuration but does not replace its event callback or mode.
 
 ## Address and region model
 
-A device address is formed from mapped base, region offset and operation
-offset. The application API bounds operations to the configured region.
-A serial chip normally has base zero; internal memory may have a nonzero
-mapped base, such as STM32 flash.
+A device address is formed from mapped base, optional region offset and
+operation offset. A serial chip normally has base zero; internal memory may
+have a nonzero mapped base, such as STM32 flash. For MCU memory,
+`NvmMcuCfgInit()` sets `BaseAddr` and `TotalSize` to the selected
+linker-reserved allocation, not the full program flash. Additional region
+offsets are normally unnecessary for MCU storage.
 
 Linker regions are represented by `__start_nvm0` / `__stop_nvm0` and the
 corresponding region-1 symbols. `nvm_region.cpp` derives the size from those
 bounds. Missing symbols yield no usable region; it does not guess free space.
 
 The linker must exclude the region from executable allocation.
-`NvmMcuCeiling()` is a target/stack upper boundary, not an allocator or proof
-that a range is free. Partition ownership remains above the device.
+`NvmMcuCfgInit(cfg, RegionNo)` resolves the linker symbols, rejects an absent
+or invalid region, and checks the region against the MCU's programming geometry.
+For another separately reserved allocation, such as a DFU slot,
+`NvmMcuCfgInit(cfg, BaseAddr, Size)` uses its declared bounds. Neither
+path advertises unrelated MCU flash as an Nvm device.
+`NvmMcuCeiling()` remains a target/stack upper boundary, not a storage
+allocator or proof that a range is free. Partition ownership remains above
+the device.
 
 Although public offsets are 64 bits, the current generic command frame uses
 32-bit addresses and rejects a configured range beyond that address space.
@@ -102,7 +110,7 @@ the existing foreground processing.
 ## Internal controller ports
 
 The generic driver and the controller interface are distinct objects.
-`NvmIntrf` wraps the single port-owned controller interface returned by
+`NvmMcuIntrf` wraps the single port-owned controller interface returned by
 `NvmMcuDevIntrf()`. Multiple wrappers do not provide independent instances
 of controller state or callback ownership.
 
@@ -110,6 +118,15 @@ of controller state or callback ownership.
 RRAM paths and integrates direct, SoftDevice and MPSL-timeslot operation as
 supported by the selected build. Geometry comes from the target; RRAM's
 no-erase behavior must not be replaced with a flash assumption.
+
+Only the Nordic MPSL route uses an NVM timeslot operation descriptor.
+`NvmTimeslotOp_t` is private to
+[the Nordic controller sources](../../ARM/Nordic/src/nvm_timeslot_op.h);
+it supplies a bounded step, time budget, persistent context and optional
+completion callback. The shared `NvmDevIntrf_t` no longer contains the
+MPSL descriptor. The controller registers an arbiter callback with an opaque
+request pointer; synchronous non-Nordic ports use the registration only to
+refuse operations while a different component owns the memory.
 
 [STM32 nvm_stm32.cpp](../../ARM/ST/src/nvm_stm32.cpp) supports the selected
 WBA/L4 families and H753. Its transfers complete in the call. It retains an arbiter

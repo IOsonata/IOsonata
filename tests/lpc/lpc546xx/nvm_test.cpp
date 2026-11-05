@@ -122,7 +122,7 @@ bool QuadSPISendCmd(SPIDev_t * const, uint8_t, uint32_t, uint8_t, uint32_t, uint
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) { assert(false); }
 void ModelDelayUs(uint32_t) {}
 
-static int Arbiter(NvmIntrfOp_t *) { return -EBUSY; }
+static int Arbiter(void *) { return -EBUSY; }
 
 static void Pattern(uint8_t *p, uint32_t Len, uint8_t Seed)
 {
@@ -136,24 +136,27 @@ int main()
 {
 	memset(s_Flash, 0xFF, sizeof(s_Flash));
 
+	// The test owns only this explicitly selected part of modeled flash.
+	const uint32_t region = 15 * SECT_SIZE - 4 * PAGE_SIZE;
+	const uint32_t regionSize = 8 * PAGE_SIZE;
 	NvmCfg_t cfg = {};
 
-	NvmMcuCfg(cfg);
-	assert(cfg.BaseAddr == 0 && cfg.TotalSize == FLASH_SIZE && cfg.EraseSize == PAGE_SIZE);
+	assert(!NvmMcuCfgInit(cfg, FLASH_SIZE - PAGE_SIZE, 2 * PAGE_SIZE));
+	assert(!NvmMcuCfgInit(cfg, region + 1, regionSize));
+	assert(NvmMcuCfgInit(cfg, region, regionSize));
+	assert(cfg.BaseAddr == region && cfg.TotalSize == regionSize &&
+		cfg.EraseSize == PAGE_SIZE);
 	assert(cfg.PageSize == PAGE_SIZE && cfg.WriteGran == 1 && cfg.AddrSize == 4);
 	assert(cfg.SectorSize == SECT_SIZE && NvmMcuCeiling() == FLASH_SIZE);
 
-	NvmIntrf intrf;
+	NvmMcuIntrf intrf;
 	Nvm mem;
 
 	assert(!intrf.Init(nullptr, true));
 	assert(intrf.Init());
 	assert(intrf.Type() == DEVINTRF_TYPE_MEMCTRL);
 
-	// Region: the last 4 pages of sector 14 and 4 pages of sector 15
-	const uint32_t region = 15 * SECT_SIZE - 4 * PAGE_SIZE;
-
-	assert(mem.Init(cfg, &intrf, region, 8 * PAGE_SIZE));
+	assert(mem.Init(cfg, &intrf));
 
 	// Writes into erased pages, across a page and a sector boundary
 	uint8_t data[1100], back[1100];
@@ -244,17 +247,17 @@ int main()
 	assert(mem.Write(8 * PAGE_SIZE - 2, data, 4) < 0);
 
 	// A registered arbiter: refused, the port has none to call
-	NvmIntrfStat_t st;
+	NvmMcuIntrfStat_t st;
 
-	NvmIntrfGetStat(&st);
+	NvmMcuIntrfGetStat(&st);
 	uint32_t busy = st.Busy;
 
-	NvmIntrfSetArbiter(Arbiter);
+	NvmMcuIntrfSetArbiter(Arbiter);
 	assert(mem.Write(0, data, 4) < 0);
 	assert(mem.Read(0, back, 4) < 0);
 	assert(NvmMcuErase(region) == -EBUSY);
-	NvmIntrfSetArbiter(nullptr);
-	NvmIntrfGetStat(&st);
+	NvmMcuIntrfSetArbiter(nullptr);
+	NvmMcuIntrfGetStat(&st);
 	assert(st.Busy > busy && st.Ops > 0 && st.Direct == st.Ops);
 
 	// One operation for each page program and each erase
@@ -262,10 +265,10 @@ int main()
 
 	data[0] ^= 0xFF;
 	assert(mem.Write(0, data, 4) == 4);
-	NvmIntrfGetStat(&st);
+	NvmMcuIntrfGetStat(&st);
 	assert(st.Ops == ops + 1 && st.Direct == st.Ops);
 	assert(NvmMcuErase(region) == 0);
-	NvmIntrfGetStat(&st);
+	NvmMcuIntrfGetStat(&st);
 	assert(st.Ops == ops + 2 && st.Direct == st.Ops);
 
 	// The port alone: frames as Nvm sends them, opcode and range checked

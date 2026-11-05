@@ -18,10 +18,10 @@ boot uses, see docs/architecture/dfu.md. Build this application, sign it:
 The last 32 bytes of slot 1 are its trailer, two 16 byte state units; on a
 part whose program unit is larger, two of those units.
 
-Slot 1 is written through the MCU memory controller interface, NvmIntrf,
+Slot 1 is written through the MCU memory controller interface, NvmMcuIntrf,
 where the port has one: on a SoftDevice or MPSL build its erases and writes
 are arbitrated with the radio like any other store. A project for a part
-whose radio runs on another core and has no NvmIntrf port (nRF53 and nRF54H
+whose radio runs on another core and has no NvmMcuIntrf port (nRF53 and nRF54H
 network cores) defines DFU_SLOT1_TGT and writes through the target layer.
 
 and upload BleOta_signed.bin from the phone.
@@ -66,7 +66,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dfu_smp.h"
 #include "storage/nvm.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "dfu/dfu_smp.h"
 #include "crypto/crypto_softsha256.h"
 
@@ -144,7 +144,7 @@ static const BtAppCfg_t s_BtAppCfg = {
 #ifndef DFU_SLOT1_TGT
 // Slot 1, through the memory controller interface: on a radio build its
 // erases and writes are arbitrated with the stack like any other store.
-static NvmIntrf s_NvmIntrf;
+static NvmMcuIntrf s_NvmMcuIntrf;
 static Nvm s_Slot1;
 #endif
 static DfuStore_t s_Slot1Store;
@@ -159,7 +159,7 @@ static volatile bool s_bResetReq = false;
 static DfuMgr s_DfuMgr;
 
 #ifndef DFU_SLOT1_TGT
-static int NvmIntrfEvtCB(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+static int NvmMcuIntrfEvtCB(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 						 uint8_t *pBuffer, int Len)
 {
 	(void)pDev;
@@ -238,13 +238,23 @@ static bool OtaInit(void)
 	}
 
 #ifndef DFU_SLOT1_TGT
-	NvmCfg_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
-	NvmMcuCfg(cfg);
+	NvmCfg_t cfg = {};
 
-	if (s_NvmIntrf.Init(NvmIntrfEvtCB) == false ||
-		s_Slot1.Init(cfg, &s_NvmIntrf, lay.Slot1, lay.Slot1Size) == false ||
-		DfuStoreNvm(&s_Slot1Store, &s_Slot1) == false)
+	// Slot 1 has a separate linker reservation, not an NVM0/NVM1 number.
+	if (NvmMcuCfgInit(cfg, (uintptr_t)lay.Slot1,
+			(size_t)lay.Slot1Size) == false)
+	{
+		return false;
+	}
+	if (s_NvmMcuIntrf.Init(NvmMcuIntrfEvtCB) == false)
+	{
+		return false;
+	}
+	if (s_Slot1.Init(cfg, &s_NvmMcuIntrf) == false)
+	{
+		return false;
+	}
+	if (DfuStoreNvm(&s_Slot1Store, &s_Slot1) == false)
 	{
 		return false;
 	}

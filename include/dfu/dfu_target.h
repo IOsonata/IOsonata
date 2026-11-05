@@ -19,7 +19,7 @@ cache) keeps the mapped view current itself after an erase or a write.
 The functions run from the stage 0 boot, before any stack, and from the
 application when no radio stack owns the memory. Where a stack arbitrates
 the memory (nRF52 SoftDevice, nRF54L MPSL), the application writes slot 1
-through Nvm and NvmIntrf instead and uses only the pure functions here:
+through Nvm and NvmMcuIntrf instead and uses only the pure functions here:
 DfuTgtWriteUnit and DfuTgtEntryValid.
 
 Each library configuration links exactly one dfu_<mcu> file.

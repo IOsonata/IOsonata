@@ -211,6 +211,56 @@ static void RunDisk(DiskIO &Disk, const char *pWhat)
 		  "%s: buffered round trip across the edge", pWhat);
 }
 
+static void TestSubEraseLogicalSectors(void)
+{
+	static uint8_t s_EraseWork[DISK_SECT];
+	NvmDiskIO disk;
+	uint8_t data[512];
+	uint8_t back[512];
+
+	CHECK(!disk.Init(s_Erase, 512), "sub-erase without scratch rejected");
+	CHECK(!disk.Init(s_Erase, 512, s_EraseWork, 512),
+		  "insufficient scratch rejected");
+	CHECK(disk.Init(s_Erase, 512, s_EraseWork, sizeof(s_EraseWork)),
+		  "512-byte sectors over 4K erase memory");
+	CHECK(disk.GetSectSize() == 512, "512-byte logical sectors");
+	CHECK(disk.GetMinEraseSize() == DISK_SECT, "physical 4K erase");
+	CHECK(disk.GetNbSect() == DISK_SIZE / 512, "logical sector count");
+
+	// Discard earlier test data, then write two logical sectors in the
+	// same erase page; the second write must preserve the first.
+	CHECK(s_Erase.Erase(0, DISK_SIZE) == 0, "erase mock flash");
+	for (unsigned i = 0; i < sizeof(data); i++)
+	{
+		data[i] = (uint8_t)(i + 17);
+	}
+
+	CHECK(!disk.SectWrite(6, s_EraseWork),
+		  "scratch cannot also be the input buffer");
+	CHECK(disk.SectWrite(6, data), "write logical sector 6");
+	memset(data, 0xA5, sizeof(data));
+	CHECK(disk.SectWrite(7, data), "write logical sector 7");
+	memset(back, 0, sizeof(back));
+	CHECK(disk.SectRead(6, back), "read previous logical sector");
+	for (unsigned i = 0; i < sizeof(back); i++)
+	{
+		CHECK(back[i] == (uint8_t)(i + 17), "sector 6 preserved");
+	}
+	CHECK(disk.SectRead(7, back), "read current logical sector");
+	CHECK(memcmp(back, data, sizeof(back)) == 0, "sector 7 updated");
+
+	// A 512-byte TRIM cannot erase a whole page containing other sectors.
+	disk.EraseSector(7, 1);
+	CHECK(disk.SectRead(7, back), "read after partial erase request");
+	CHECK(memcmp(back, data, sizeof(back)) == 0, "partial erase refused");
+
+	// Crossing from physical erase page 0 to 1 is safe.
+	memset(data, 0x5A, sizeof(data));
+	CHECK(disk.SectWrite(8, data), "write next physical erase page");
+	CHECK(disk.SectRead(7, back), "read previous physical erase page");
+	CHECK(back[0] == 0xA5, "previous physical page preserved");
+}
+
 int main(void)
 {
 	NvmDiskIO diskErase;
@@ -224,15 +274,17 @@ int main(void)
 	CHECK(diskErase.GetMinEraseSize() == DISK_SECT, "erase medium min erase");
 	CHECK(diskDirect.GetMinEraseSize() == DISK_SECT, "direct medium min erase");
 
-	// A sector that is not a whole number of erase units is refused.
+	// Sub-erase sectors require a scratch buffer spanning an erase unit.
 	NvmDiskIO bad;
-	CHECK(bad.Init(s_Erase, DISK_SECT / 2) == false, "part of an erase unit refused");
+	CHECK(bad.Init(s_Erase, DISK_SECT / 2) == false,
+		  "sub-erase without scratch refused");
 
 	diskErase.SetCache(&s_Cache1, 1);
 	diskDirect.SetCache(&s_Cache2, 1);
 
 	RunDisk(diskErase, "erase-write medium");
 	RunDisk(diskDirect, "direct write medium");
+	TestSubEraseLogicalSectors();
 
 	printf("\nChecks run: %d\n", s_Checks);
 	if (s_Fail == 0)
