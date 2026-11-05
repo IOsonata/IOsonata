@@ -7,8 +7,9 @@ The flash is mapped at 0, sectors of 32 KB made of 256 byte pages, erased
 and programmed by the IAP ROM (lpc_iap.c): prepare the sector, then erase a
 page or copy a 256 byte page from RAM. The ROM programs whole pages only.
 
-Nvm geometry (NvmMcuCfg): base 0, the flash size of the part, erase unit
-and transfer page 256 bytes, write granularity 1 byte. A write updates its
+Nvm geometry (NvmMcuCfgInit): the caller's reserved flash region is
+bounded by the physical flash; erase and transfer units are 256-byte pages,
+with 1-byte write granularity. A write updates its
 page: the page is read into RAM, the new bytes merged, the page erased and
 programmed with the merged content, then compared. A write of the content
 the page already holds programs nothing. A page is never programmed twice
@@ -204,11 +205,22 @@ int NvmMcuErase(uintptr_t Addr)
 	return res;
 }
 
-void NvmMcuCfg(NvmCfg_t &Cfg)
+bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 {
+	if (Size == 0 || (uint64_t)BaseAddr > LPC546XX_NVM_SIZE ||
+		(uint64_t)Size > LPC546XX_NVM_SIZE - (uint64_t)BaseAddr ||
+		(BaseAddr % LPC546XX_NVM_PAGE) != 0 ||
+		(Size % LPC546XX_NVM_PAGE) != 0)
+	{
+		Cfg = {};
+
+		return false;
+	}
+
+	Cfg = {};
 	Cfg.DevNo = 0;
-	Cfg.BaseAddr = 0;
-	Cfg.TotalSize = LPC546XX_NVM_SIZE;
+	Cfg.BaseAddr = BaseAddr;
+	Cfg.TotalSize = Size;
 	Cfg.EraseSize = LPC546XX_NVM_PAGE;
 	Cfg.SectorSize = LPC546XX_NVM_SECT;
 	Cfg.PageSize = LPC546XX_NVM_PAGE;
@@ -217,6 +229,8 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 	Cfg.RdCmd = { LPC546XX_NVM_CMD_READ, 0 };
 	Cfg.WrCmd = { LPC546XX_NVM_CMD_WRITE, 0 };
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	return true;
 }
 
 // The whole flash belongs to the application. Weak, a build with a reserved

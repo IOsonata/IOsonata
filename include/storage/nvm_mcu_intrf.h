@@ -16,16 +16,19 @@ stack runs.
 
 Usage :
 
+	NvmCfg_t cfg = {};
 	NvmMcuIntrf g_MemIntrf;
-	NvmCfg_t cfg;
-
-	g_MemIntrf.Init();
-
-	memset(&cfg, 0, sizeof(cfg));
-	NvmMcuCfg(cfg);
-
 	Nvm g_Nvm;
-	g_Nvm.Init(cfg, &g_MemIntrf, RegionAddr, RegionSize);
+
+	if (NvmMcuCfgInit(cfg, 1) == false)
+	{
+		return false;
+	}
+	if (g_MemIntrf.Init() == false)
+	{
+		return false;
+	}
+	return g_Nvm.Init(cfg, &g_MemIntrf);
 
 What the target knows about its own memory is at the end of this file rather
 than in the class: geometry, where the application's slice of it ends, and
@@ -67,6 +70,7 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "storage/nvm.h"
+#include "storage/nvm_region.h"
 
 /** @addtogroup Storage
   * @{
@@ -178,14 +182,39 @@ typedef struct __Nvm_Dev_Intrf {
 // ---------------------------------------------------------------------------
 
 /**
- * @brief	Fill a config for the MCU internal memory.
+ * @brief	Initialize a config for a reserved MCU NVM allocation.
  *
- * Sets the geometry, which the part states or its FICR reports. The remaining
- * fields are left untouched.
+ * BaseAddr and TotalSize describe only that allocation, never the entire
+ * program flash. The port supplies the MCU's programming geometry and
+ * rejects invalid or unaligned bounds.
  *
- * @param	Cfg	: Config to fill
+ * @param	Cfg		: Config to initialize
+ * @param	BaseAddr: Address of a separately reserved allocation (e.g. DFU slot)
+ * @param	Size	: Size of that allocation in bytes
+ *
+ * @return	true if the reserved allocation is valid for this controller
  */
-void NvmMcuCfg(NvmCfg_t &Cfg);
+bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size);
+
+/**
+ * @brief	Initialize a config for a linker-reserved NVM region.
+ *
+ * The region number is storage-specific, not USB MSC-specific. An absent
+ * or invalid region is rejected rather than exposing other program flash.
+ */
+inline bool NvmMcuCfgInit(NvmCfg_t &Cfg, int RegionNo)
+{
+	size_t size = NvmRegionSize(RegionNo);
+
+	if (size == 0)
+	{
+		Cfg = {};
+
+		return false;
+	}
+
+	return NvmMcuCfgInit(Cfg, NvmRegionAddr(RegionNo), size);
+}
 
 // C linkage: a target can answer either of these from a C file, which is what
 // nrf_sdh.c does for the ceiling on an S145 build.

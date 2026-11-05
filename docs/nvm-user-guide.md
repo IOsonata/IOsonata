@@ -31,26 +31,26 @@ the RA4M1 project uses [data_nvm_demo.cpp](../exemples/storage/data_nvm_demo.cpp
 for data flash, while other projects may use the shared demo or target-specific
 setup. A matching project name does not imply the same physical memory.
 
-The hardware demo writes and erases scratch storage. Its current internal
-setup chooses space below `NvmMcuCeiling()`, prints linker regions, but does
-not use those regions to choose its scratch window. Verify the printed range
-against the application map and other storage before running it. Product
-storage should use an explicitly reserved region.
+The hardware demo writes and erases scratch storage. Its internal-memory
+mode uses the linker-reserved NVM1 test region and fails if it is absent.
+Never run the destructive checks against NVM0 bond storage or program flash.
 
 Build the MCU library and application with matching target/stack settings.
 Use [Getting Started](getting-started.md) for the IOcomposer workflow.
 
 ## Geometry and addressing
 
-Initialize the interface first, then call
-`Nvm::Init(cfg, &interface, regionOffset, regionSize)`.
+For MCU memory, initialize the reserved region with `NvmMcuCfgInit(cfg, RegionNo)`,
+then initialize the controller interface and call `Nvm::Init(cfg, &interface)`.
 The interface, NVM object and any asynchronous buffers must outlive operations.
+External memory may also use `Nvm::Init(cfg, &interface, regionOffset, regionSize)`
+to select a smaller area of an otherwise dedicated memory chip.
 
 | Field | Meaning |
 |---|---|
 | `DevNo` | Interface selector: for example SPI chip-select index or I2C address |
-| `BaseAddr` | Memory's mapped base; normally zero for a serial chip |
-| `TotalSize` | Configured device capacity in bytes |
+| `BaseAddr` | Reserved MCU region's mapped address; normally zero for a serial chip |
+| `TotalSize` | Capacity allocated to this Nvm device, not the MCU's program flash |
 | `EraseSize` | Erase unit; zero for a medium that overwrites directly |
 | `SectorSize` | Logical sector size, if supplied |
 | `PageSize` | Programming boundary / maximum configured chunk size |
@@ -68,10 +68,14 @@ The addressed location is:
 region. A zero region size means the remainder of the configured device,
 not an empty region. Reject an absent linker region before initialization.
 
-Use `NvmMcuCfg()` to fill internal-memory geometry; zero-initialize the
-configuration first because this helper leaves non-geometry fields untouched.
-Do not copy nRF52 erase geometry to nRF54 RRAM, which overwrites without an
-erase step. STM32 internal flash has a nonzero mapped base.
+Use `NvmMcuCfgInit(cfg, RegionNo)` to fill the complete configuration for a
+linker-reserved MCU NVM region. It returns `false` if that region is absent,
+outside the MCU memory controller's address range, or incorrectly aligned.
+For a separately reserved allocation, such as a DFU upload slot,
+`NvmMcuCfgInit(cfg, BaseAddr, Size)` provides the same geometry and range
+checks without misidentifying the allocation as NVM0/NVM1.
+The function clears the config before filling it. Do not copy nRF52 erase
+geometry to nRF54 RRAM, which overwrites without an erase step.
 
 For external memory, use the actual part's geometry and supported protocol.
 The generic serial-NOR erase path currently selects 4 KiB, 32 KiB or 64 KiB
@@ -104,9 +108,10 @@ This belongs inside `SECTIONS`; define a non-overlapping `NVM0` entry in
 `MEMORY` using the selected target's addresses. See
 [nvm_region.h](../include/storage/nvm_region.h). Check the final map file.
 
-`NvmRegionAddr(0)` and `NvmRegionSize(0)` read those symbols. Missing or
-invalid bounds yield a zero size. `NvmMcuCeiling()` identifies the upper
-application boundary; it does not prove that a proposed range is unoccupied.
+`NvmMcuCfgInit(cfg, 0)` reads those linker symbols and checks the reserved
+region against the MCU's physical geometry. Missing or invalid bounds cause
+initialization to fail. Only the reserved address and capacity are placed in
+`NvmCfg_t`; no other program flash is exposed to the Nvm device.
 
 The following polling setup uses a linker region as the entire NVM device
 window. It avoids treating a mapped STM32 address as an offset a second time:
@@ -122,24 +127,16 @@ static Nvm s_Memory;
 static bool StorageInit()
 {
 	NvmCfg_t cfg = {};
-	const uint64_t start = NvmRegionAddr(0);
-	const uint64_t size = NvmRegionSize(0);
-	const uint64_t ceiling = NvmMcuCeiling();
 
-	NvmMcuCfg(cfg);
-	if (size == 0 || start < cfg.BaseAddr ||
-		start - cfg.BaseAddr > cfg.TotalSize ||
-		size > cfg.TotalSize - (start - cfg.BaseAddr) ||
-		start > ceiling || size > ceiling - start)
+	if (NvmMcuCfgInit(cfg, 0) == false)
 	{
 		return false;
 	}
-	if (!s_MemoryInterface.Init())
+	if (s_MemoryInterface.Init() == false)
 	{
 		return false;
 	}
-	return s_Memory.Init(cfg, &s_MemoryInterface,
-		start - cfg.BaseAddr, size);
+	return s_Memory.Init(cfg, &s_MemoryInterface);
 }
 ```
 
@@ -150,8 +147,8 @@ wrapper does not create an independent controller or callback registration.
 ## DiskIO and blank FAT12 volumes
 
 An MCU internal-memory disk uses the existing `Nvm::Init()` and
-`NvmDiskIO::Init()` methods. `NvmMcuCfg()` supplies the memory geometry,
-and the linker defines the reserved disk address and size:
+`NvmDiskIO::Init()` methods. `NvmMcuCfgInit()` fills the memory geometry,
+address and size from the selected linker-reserved NVM region:
 
 ```cpp
 #include "storage/diskio_nvm.h"
@@ -167,9 +164,10 @@ alignas(4) static uint8_t s_Sector[4096];
 // At function entry:
 NvmCfg_t cfg = {};
 
-NvmMcuCfg(cfg);
-cfg.BaseAddr = NvmRegionAddr(1);
-cfg.TotalSize = NvmRegionSize(1);
+if (NvmMcuCfgInit(cfg, 1) == false)
+{
+	return false;
+}
 
 if (s_NvmMcuIntrf.Init() == false)
 {

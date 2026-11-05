@@ -136,10 +136,16 @@ int main()
 {
 	memset(s_Flash, 0xFF, sizeof(s_Flash));
 
+	// The test owns only this explicitly selected part of modeled flash.
+	const uint32_t region = 15 * SECT_SIZE - 4 * PAGE_SIZE;
+	const uint32_t regionSize = 8 * PAGE_SIZE;
 	NvmCfg_t cfg = {};
 
-	NvmMcuCfg(cfg);
-	assert(cfg.BaseAddr == 0 && cfg.TotalSize == FLASH_SIZE && cfg.EraseSize == PAGE_SIZE);
+	assert(!NvmMcuCfgInit(cfg, FLASH_SIZE - PAGE_SIZE, 2 * PAGE_SIZE));
+	assert(!NvmMcuCfgInit(cfg, region + 1, regionSize));
+	assert(NvmMcuCfgInit(cfg, region, regionSize));
+	assert(cfg.BaseAddr == region && cfg.TotalSize == regionSize &&
+		cfg.EraseSize == PAGE_SIZE);
 	assert(cfg.PageSize == PAGE_SIZE && cfg.WriteGran == 1 && cfg.AddrSize == 4);
 	assert(cfg.SectorSize == SECT_SIZE && NvmMcuCeiling() == FLASH_SIZE);
 
@@ -150,10 +156,7 @@ int main()
 	assert(intrf.Init());
 	assert(intrf.Type() == DEVINTRF_TYPE_MEMCTRL);
 
-	// Region: the last 4 pages of sector 14 and 4 pages of sector 15
-	const uint32_t region = 15 * SECT_SIZE - 4 * PAGE_SIZE;
-
-	assert(mem.Init(cfg, &intrf, region, 8 * PAGE_SIZE));
+	assert(mem.Init(cfg, &intrf));
 
 	// Writes into erased pages, across a page and a sector boundary
 	uint8_t data[1100], back[1100];

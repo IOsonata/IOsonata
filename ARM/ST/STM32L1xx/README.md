@@ -116,7 +116,7 @@ are included in the single library project.
 
 ## Data EEPROM
 
-`NvmMcuCfg` describes the STM32L152xE 16 KiB EEPROM at 0x08080000:
+`NvmMcuCfgInit(cfg, 0)` configures the linker-reserved 16 KiB EEPROM region at 0x08080000:
 byte writes, 64-byte transfer chunks and `EraseSize=0`. `Nvm::Write` overwrites
 bytes, including zeros and ones. `Nvm::Erase` is a no-op for this geometry;
 write the desired fill bytes to clear a region. Program flash and option

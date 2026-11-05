@@ -41,18 +41,26 @@ interface configuration but does not replace its event callback or mode.
 
 ## Address and region model
 
-A device address is formed from mapped base, region offset and operation
-offset. The application API bounds operations to the configured region.
-A serial chip normally has base zero; internal memory may have a nonzero
-mapped base, such as STM32 flash.
+A device address is formed from mapped base, optional region offset and
+operation offset. A serial chip normally has base zero; internal memory may
+have a nonzero mapped base, such as STM32 flash. For MCU memory,
+`NvmMcuCfgInit()` sets `BaseAddr` and `TotalSize` to the selected
+linker-reserved allocation, not the full program flash. Additional region
+offsets are normally unnecessary for MCU storage.
 
 Linker regions are represented by `__start_nvm0` / `__stop_nvm0` and the
 corresponding region-1 symbols. `nvm_region.cpp` derives the size from those
 bounds. Missing symbols yield no usable region; it does not guess free space.
 
 The linker must exclude the region from executable allocation.
-`NvmMcuCeiling()` is a target/stack upper boundary, not an allocator or proof
-that a range is free. Partition ownership remains above the device.
+`NvmMcuCfgInit(cfg, RegionNo)` resolves the linker symbols, rejects an absent
+or invalid region, and checks the region against the MCU's programming geometry.
+For another separately reserved allocation, such as a DFU slot,
+`NvmMcuCfgInit(cfg, BaseAddr, Size)` uses its declared bounds. Neither
+path advertises unrelated MCU flash as an Nvm device.
+`NvmMcuCeiling()` remains a target/stack upper boundary, not a storage
+allocator or proof that a range is free. Partition ownership remains above
+the device.
 
 Although public offsets are 64 bits, the current generic command frame uses
 32-bit addresses and rejects a configured range beyond that address space.

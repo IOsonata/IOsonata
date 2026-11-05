@@ -13,7 +13,8 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0x100000
+  FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0xFD000
+  NVM1 (rw) : ORIGIN = 0x000FD000, LENGTH = 0x3000  /* destructive NvmDemo test */
   RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x40000
 }
 
@@ -35,5 +36,17 @@ SECTIONS
 }
 
 ASSERT(__stop_modem_shm <= 0x20020000, "modem shared memory must be in the lower 128 KB of RAM")
+
+
+SECTIONS
+{
+	nvm1 (NOLOAD) :
+	{
+		__start_nvm1 = .;
+		KEEP(*(nvm1))
+		. = ORIGIN(NVM1) + LENGTH(NVM1);
+		__stop_nvm1 = .;
+	} > NVM1
+}
 
 INCLUDE "gcc_arm_flash.ld"

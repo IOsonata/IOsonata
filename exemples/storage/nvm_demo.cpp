@@ -31,16 +31,12 @@
 		puts the radio in contention for the memory. Everything above the main
 		function is shared between the two.
 
-		The region is three pages placed at the top of the memory the
-		application owns, below a few reserved pages. The ceiling comes from
-		NvmMcuCeiling(), because the application area does not always run to
-		the end of the device: a stack image or a reserved partition can sit
-		at the top, and the target implementation knows where. The first two
-		pages are the scratch the checks use, so a write can cross a
-		boundary; the third holds the stamp and is never erased by the
-		checks. The region must hold nothing else: check it against the
-		application image end in the map file. The demo prints the region
-		before it erases anything.
+		For internal memory, the destructive test uses the linker-reserved
+		NVM1 region only. NvmMcuCfgInit fills the geometry and address/size of
+		that allocation, not the MCU's entire program flash. The first two
+		pages of the test window are scratch; the third holds a boot stamp.
+		External SPI and I2C tests continue to use the configured chip and
+		choose a smaller test window inside that chip.
 
 @author	Hoang Nguyen Hoan
 @date	July 23, 2026
@@ -136,6 +132,11 @@ McuOsc_t g_McuOsc = MCU_OSC;
 #endif
 
 #define NVM_DEMO_REGION_PAGES	(NVM_DEMO_SCRATCH_PAGES + 1)
+
+// Destructive MCU test region, separate from NVM0 bond storage.
+#ifndef NVM_DEMO_REGION_NO
+#define NVM_DEMO_REGION_NO		1
+#endif
 
 // Pages at the top of the memory the demo stays away from.
 #ifndef NVM_DEMO_TOP_RESERVE_PAGES
@@ -757,26 +758,25 @@ static void NvmDemoVerify(Nvm &Mem)
 // Work out the region and mount it. Shared by both builds.
 static bool NvmDemoSetup(void)
 {
-	NvmCfg_t cfg;
-
-	memset(&cfg, 0, sizeof(cfg));
+	NvmCfg_t cfg = {};
 
 #if NVM_DEMO_MEDIUM == 0
-	NvmMcuCfg(cfg);
+	if (NvmMcuCfgInit(cfg, NVM_DEMO_REGION_NO) == false)
+	{
+		SysLogPrintf(SysLogGet(), "no valid reserved NVM%d test region\r\n",
+				NVM_DEMO_REGION_NO);
 
-	// The application area does not always run to the end of the device; the
-	// target implementation knows where it ends.
-	uint64_t ceiling = NvmMcuCeiling();
+		return false;
+	}
 #else
 	cfg = s_ChipCfg;
-
-	// A chip is all ours; the region rides at its top.
-	uint64_t ceiling = cfg.TotalSize;
 #endif
+
+	uint64_t ceiling = cfg.TotalSize;
 
 	uint32_t unit = cfg.EraseSize != 0 ? cfg.EraseSize : 256;
 
-	SysLogPrintf(SysLogGet(), "device  : %lu bytes, unit %lu\r\n",
+	SysLogPrintf(SysLogGet(), "NVM size: %lu bytes, unit %lu\r\n",
 							  (unsigned long)cfg.TotalSize, (unsigned long)unit);
 
 	// Which completion mode was built, so a log says it rather than the reader
@@ -786,9 +786,7 @@ static bool NvmDemoSetup(void)
 								 : "polling, the call finishes the operation");
 
 #if NVM_DEMO_MEDIUM == 0
-	// What the linker script set aside, if anything. The demo carves its own
-	// scratch out of the top of the application area, so it does not use this,
-	// but a store that does needs to see the numbers arrive.
+	// Print the selected linker allocation and the other NVM regions.
 	for (int i = 0; i < NVM_REGION_MAX; i++)
 	{
 		uintptr_t ra = NvmRegionAddr(i);
@@ -807,8 +805,13 @@ static bool NvmDemoSetup(void)
 
 #endif
 
+#if NVM_DEMO_MEDIUM == 0
+	// The linker already reserved this storage; no additional guard pages.
+	uint64_t below = (uint64_t)unit * NVM_DEMO_REGION_PAGES;
+#else
 	uint64_t below = (uint64_t)unit * (NVM_DEMO_TOP_RESERVE_PAGES
 									   + NVM_DEMO_REGION_PAGES);
+#endif
 
 	if (ceiling < below)
 	{

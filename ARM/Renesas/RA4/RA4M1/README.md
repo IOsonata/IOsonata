@@ -694,7 +694,7 @@ UART hardware basis: the same Rev.1.10 manual, chapter 28 (SCI), chapter 10
 ## Data flash NVM
 
 `nvm_ra4m1.cpp` exposes the 8 KiB data flash at 0x40100000 through the existing
-`NvmMcuIntrf` and `Nvm`. `NvmMcuCfg` reports byte programming, 64-byte transfer
+`NvmMcuIntrf` and `Nvm`. `NvmMcuCfgInit(cfg, 0)` reports the reserved data-flash region, byte programming, 64-byte transfer
 chunks and 1 KiB erase blocks. Call `Nvm::Erase` before reusing a programmed
 range. The driver uses the FACI blank-check command before programming and
 rejects nonblank destinations. It does not emulate EEPROM or erase implicitly.

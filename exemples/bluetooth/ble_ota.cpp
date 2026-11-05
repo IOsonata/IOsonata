@@ -238,13 +238,23 @@ static bool OtaInit(void)
 	}
 
 #ifndef DFU_SLOT1_TGT
-	NvmCfg_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
-	NvmMcuCfg(cfg);
+	NvmCfg_t cfg = {};
 
-	if (s_NvmMcuIntrf.Init(NvmMcuIntrfEvtCB) == false ||
-		s_Slot1.Init(cfg, &s_NvmMcuIntrf, lay.Slot1, lay.Slot1Size) == false ||
-		DfuStoreNvm(&s_Slot1Store, &s_Slot1) == false)
+	// Slot 1 has a separate linker reservation, not an NVM0/NVM1 number.
+	if (NvmMcuCfgInit(cfg, (uintptr_t)lay.Slot1,
+			(size_t)lay.Slot1Size) == false)
+	{
+		return false;
+	}
+	if (s_NvmMcuIntrf.Init(NvmMcuIntrfEvtCB) == false)
+	{
+		return false;
+	}
+	if (s_Slot1.Init(cfg, &s_NvmMcuIntrf) == false)
+	{
+		return false;
+	}
+	if (DfuStoreNvm(&s_Slot1Store, &s_Slot1) == false)
 	{
 		return false;
 	}

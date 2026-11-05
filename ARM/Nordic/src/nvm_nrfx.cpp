@@ -162,10 +162,20 @@ SOFTWARE.
 #define NVM_INTRF_ERASE_SIZE		0x00000400UL	// 1 KB
 #endif
 
-// Total RRAM. It cannot be read from the device the way the nRF52 page size
-// comes from FICR, so override this for a part other than the nRF54L15.
+// Usable RRAM ends at each part's linker-reserved storage boundary.
+// The last 12 KB of physical RRAM are not an application NVM allocation.
 #ifndef NVM_INTRF_TOTAL_SIZE
-#define NVM_INTRF_TOTAL_SIZE		0x0017D000UL	// 1524 KB
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#define NVM_INTRF_TOTAL_SIZE		0x001FD000UL	// LM20: 2 MB minus 12 KB
+#elif defined(NRF54L10_XXAA) || defined(NRF54LV10A_XXAA) || defined(NRF54LC10A_XXAA)
+#define NVM_INTRF_TOTAL_SIZE		0x000FD000UL	// 1 MB minus 12 KB
+#elif defined(NRF54LS05A_XXAA) || defined(NRF54LS05B_XXAA)
+#define NVM_INTRF_TOTAL_SIZE		0x0007F000UL	// engineering 512 KB layout
+#elif defined(NRF54L05_XXAA)
+#define NVM_INTRF_TOTAL_SIZE		0x0007D000UL	// L05: 512 KB minus 12 KB
+#else
+#define NVM_INTRF_TOTAL_SIZE		0x0017D000UL	// L15: 1536 KB minus 12 KB
+#endif
 #endif
 
 #ifndef NVM_INTRF_ERASE_SLICE_MS
@@ -1230,27 +1240,49 @@ bool NvmMcuIsReady(void)
 }
 #endif
 
-void NvmMcuCfg(NvmCfg_t &Cfg)
+bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 {
-	Cfg.DevNo = 0;
-
-	// Both parts map their memory from 0, so the frame address and the offset
-	// within the device are the same number here. A part mapped elsewhere
-	// puts its base in here and the driver adds it.
-	Cfg.BaseAddr = 0;
+	uint64_t deviceSize;
 
 #if defined(NVM_INTRF_NVMC)
-	// Geometry from the device itself. The getters resolve the FICR layout:
-	// flat on the nRF52, inside INFO on the nRF91.
-	uint32_t pagesize = nrf_ficr_codepagesize_get(NRF_FICR);
-	uint32_t pagecnt = nrf_ficr_codesize_get(NRF_FICR);
+	uint32_t pageSize = nrf_ficr_codepagesize_get(NRF_FICR);
+	uint32_t pageCount = nrf_ficr_codesize_get(NRF_FICR);
 
-	Cfg.TotalSize = (uint64_t)pagesize * (uint64_t)pagecnt;
-	Cfg.EraseSize = pagesize;
+	deviceSize = (uint64_t)pageSize * (uint64_t)pageCount;
+	if (pageSize == 0 || pageCount == 0 ||
+		(BaseAddr % pageSize) != 0 || (Size % pageSize) != 0)
+	{
+		Cfg = {};
+
+		return false;
+	}
+#else
+	deviceSize = NVM_INTRF_TOTAL_SIZE;
+#endif
+
+	if (Size == 0 || (uint64_t)BaseAddr > deviceSize ||
+		(uint64_t)Size > deviceSize - (uint64_t)BaseAddr ||
+		(BaseAddr % NVM_INTRF_WRITE_GRAN) != 0 ||
+		(Size % NVM_INTRF_WRITE_GRAN) != 0)
+	{
+		Cfg = {};
+
+		return false;
+	}
+
+	Cfg = {};
+	Cfg.DevNo = 0;
+
+	// Expose only the selected reserved allocation.
+	Cfg.BaseAddr = BaseAddr;
+	Cfg.TotalSize = Size;
+
+#if defined(NVM_INTRF_NVMC)
+	// Physical erase geometry was read above for validation.
+	Cfg.EraseSize = pageSize;
 #else
 	// RRAM overwrites in place: a direct read write medium with no erase.
 	// The logical sector is what a block consumer replaces at once.
-	Cfg.TotalSize = NVM_INTRF_TOTAL_SIZE;
 	Cfg.EraseSize = 0;
 	Cfg.SectorSize = NVM_INTRF_ERASE_SIZE;
 #endif
@@ -1268,6 +1300,8 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 	Cfg.WrCmd = { NVM_INTRF_CMD_WRITE, 0 };
 
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	return true;
 }
 
 // Where the memory the application owns ends. The default is the whole

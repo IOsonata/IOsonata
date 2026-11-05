@@ -74,7 +74,6 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 // Largest sector FAT allows. UsbdMsc refuses a medium with a larger one.
 #define MSC_SECTOR_BUFF_SIZE	4096U
 // Linker region holding the disk. NVM0 is the Bluetooth bond store.
-#define MSC_NVM_REGION		1
 #define MSC_STR_INTERFACE	4U
 
 static NvmMcuIntrf s_MemIntrf;
@@ -118,9 +117,11 @@ int main(void)
 {
 	NvmCfg_t cfg = {};
 
-	NvmMcuCfg(cfg);
-	cfg.BaseAddr = NvmRegionAddr(MSC_NVM_REGION);
-	cfg.TotalSize = NvmRegionSize(MSC_NVM_REGION);
+	// NVM1 is the linker-reserved USB disk, not the whole MCU flash.
+	if (NvmMcuCfgInit(cfg, 1) == false)
+	{
+		return -1;
+	}
 
 	if (s_MemIntrf.Init() == false)
 	{

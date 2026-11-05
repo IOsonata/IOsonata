@@ -185,11 +185,21 @@ int NvmMcuErase(uintptr_t)
 	return -ENOTSUP;
 }
 
-void NvmMcuCfg(NvmCfg_t &Cfg)
+bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 {
+	if (Size == 0 || BaseAddr < NVM_BASE ||
+		(uint64_t)(BaseAddr - NVM_BASE) > NVM_SIZE ||
+		(uint64_t)Size > NVM_SIZE - (uint64_t)(BaseAddr - NVM_BASE))
+	{
+		Cfg = {};
+
+		return false;
+	}
+
+	Cfg = {};
 	Cfg.DevNo = 0;
-	Cfg.BaseAddr = NVM_BASE;
-	Cfg.TotalSize = NVM_SIZE;
+	Cfg.BaseAddr = BaseAddr;
+	Cfg.TotalSize = Size;
 	Cfg.EraseSize = NVM_ERASE_SIZE;
 	Cfg.SectorSize = NVM_ERASE_SIZE;
 	Cfg.PageSize = NVM_INTRF_XFER_SIZE;
@@ -198,6 +208,8 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 	Cfg.RdCmd = { 0x03, 0 };
 	Cfg.WrCmd = { 0x02, 0 };
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	return true;
 }
 
 __attribute__((weak)) uint64_t NvmMcuCeiling(void)

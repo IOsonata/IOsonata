@@ -545,9 +545,10 @@ static bool TestMemInit(void)
 	NvmCfg_t cfg;
 
 	memset(&cfg, 0, sizeof(cfg));
-	NvmMcuCfg(cfg);
-	cfg.BaseAddr = NvmRegionAddr(0);
-	cfg.TotalSize = NvmRegionSize(0);
+	if (NvmMcuCfgInit(cfg, 0) == false)
+	{
+		return false;
+	}
 
 	return s_TestIntrf.Init() && s_TestMem.Init(cfg, &s_TestIntrf, 0, 0);
 }

@@ -748,16 +748,27 @@ bool NvmMcuIsReady(void)
 #endif
 }
 
-void NvmMcuCfg(NvmCfg_t &Cfg)
+bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 {
+	uint64_t capacity = StFlashSize();
+
+	if (Size == 0 || capacity == 0 || BaseAddr < FLASH_BASE ||
+		(uint64_t)(BaseAddr - FLASH_BASE) > capacity ||
+		(uint64_t)Size > capacity - (uint64_t)(BaseAddr - FLASH_BASE) ||
+		(BaseAddr % NVM_INTRF_PAGE_SIZE) != 0 ||
+		(Size % NVM_INTRF_PAGE_SIZE) != 0)
+	{
+		Cfg = {};
+
+		return false;
+	}
+
+	Cfg = {};
 	Cfg.DevNo = 0;
 
-	// The flash is mapped at FLASH_BASE, not at 0, so the base goes in here
-	// and every address this port sees is the mapped bus address. A creator
-	// that reserves a region through the linker script puts that region's
-	// base and size in instead, the way the Nordic bond stores do.
-	Cfg.BaseAddr = FLASH_BASE;
-	Cfg.TotalSize = StFlashSize();
+	// The reserved region, not the whole mapped flash, is the Nvm device.
+	Cfg.BaseAddr = BaseAddr;
+	Cfg.TotalSize = Size;
 	Cfg.EraseSize = NVM_INTRF_PAGE_SIZE;
 	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// largest bytes per transfer
 	Cfg.WriteGran = NVM_INTRF_WRITE_GRAN;
@@ -769,6 +780,8 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 	Cfg.WrCmd = { NVM_INTRF_CMD_WRITE, 0 };
 
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	return true;
 }
 
 // Where the memory the application owns ends. The default is the whole

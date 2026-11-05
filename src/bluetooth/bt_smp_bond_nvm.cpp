@@ -70,25 +70,19 @@ static int PdsEnsureReady(void)
 		return -EIO;
 	}
 
-	uintptr_t base = NvmRegionAddr(BT_SMP_BOND_REGION_NO);
-	size_t size = NvmRegionSize(BT_SMP_BOND_REGION_NO);
+	NvmCfg_t cfg = {};
 
-	BOND_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
-				BT_SMP_BOND_REGION_NO, (unsigned long)base,
-				(unsigned long)size);
-
-	if (base == 0 || size == 0)
+	if (NvmMcuCfgInit(cfg, BT_SMP_BOND_REGION_NO) == false)
 	{
-		BOND_PRINTF("PDS: no NVM%d region in the linker script, "
-					"bonds will not persist\r\n", BT_SMP_BOND_REGION_NO);
+		BOND_PRINTF("PDS: invalid or absent reserved NVM%d region\r\n",
+					BT_SMP_BOND_REGION_NO);
+
 		return -ENODEV;
 	}
 
-	NvmCfg_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
-	NvmMcuCfg(cfg);
-	cfg.BaseAddr = base;
-	cfg.TotalSize = size;
+	BOND_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
+				BT_SMP_BOND_REGION_NO, (unsigned long)cfg.BaseAddr,
+				(unsigned long)cfg.TotalSize);
 
 	BOND_PRINTF("PDS: dev %lu bytes, erase %lu, sect %lu, page %lu, wr %lu, addr %lu\r\n",
 				(unsigned long)cfg.TotalSize, (unsigned long)cfg.EraseSize,

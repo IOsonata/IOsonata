@@ -62,7 +62,11 @@ extern "C" int RunTest(int Test)
 	NvmMcuIntrf intrf;
 	Nvm mem;
 	NvmCfg_t cfg = {};
-	NvmMcuCfg(cfg);
+#ifdef RA4M1
+	CHECK(NvmMcuCfgInit(cfg, 0x40100000UL, 0x2000UL));
+#else
+	CHECK(NvmMcuCfgInit(cfg, FLASH_EEPROM_BASE, 0x4000UL));
+#endif
 	CHECK(!intrf.Init(nullptr, true));
 	CHECK(intrf.Init());
 	CHECK(cfg.WriteGran == 1 && cfg.AddrSize == 4);
