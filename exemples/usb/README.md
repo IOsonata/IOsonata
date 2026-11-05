@@ -125,27 +125,22 @@ size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
 removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
 USB descriptors; filesystem initialization belongs to the storage layer.
 
-The flash disk example runs the same class on `NvmDiskIO` over the NVM1 region
-of its linker script. `NvmMcuCfg()` supplies the target's memory geometry,
-while `NvmRegionAddr()` and `NvmRegionSize()` select the reserved NVM1
-region. The application calls the existing `Nvm::Init()` and
-`NvmDiskIO::Init()` methods; no MCU-specific disk initialization API is needed.
-`FatFsMount()` uses the existing MSC sector buffer to initialize only
-a completely erased volume. `FatFsUnmount()` releases the filesystem
-before USB MSC exposes the volume. Unlabeled volumes are named
-`IOSONATA` through FatFs, preserving all existing custom volume labels
-and files. `UsbdMsc` itself is filesystem-independent.
+The flash disk example uses `NvmDiskIO` over linker-reserved NVM1.
+`Debug` reserves 832 KiB at 0x30000-0xFFFFF, `Release` reserves
+256 KiB at 0xC0000-0xFFFFF, and `Release_mbr` reserves 832 KiB
+at 0x10000-0xDFFFF. Its flash controller uses a separate caller-owned
+4 KiB buffer to preserve neighboring 512-byte logical sectors.
 
-`Debug` reserves 832 KiB in NVM1 (0x30000-0xFFFFF); `Release`
-reserves 256 KiB (0xC0000-0xFFFFF), while `Release_mbr` reserves
-832 KiB (0x10000-0xDFFFF) below the USB DFU bootloader. All use
-512-byte logical sectors over 4 KiB physical erase units. A separate caller-owned buffer preserves adjacent
-logical sectors during writes. Existing 4 KiB-sector FAT volumes use their
-original geometry. `Release_mbr` reserves 832 KiB between 0x10000 and
-0xE0000. Neither configuration provides wear levelling.
-A dual-bank DFU update may overwrite the beginning of the `Release_mbr` disk
-region. Persistence through firmware updates is not guaranteed.
-
+This is a **disposable USB test disk**. Valid FAT volumes survive
+reboots. If FatFs cannot recognize the filesystem, the example
+explicitly erases only its reserved NVM1 region using `Nvm::Erase()`
+and `Sync()`, then mounts again to initialize it as a new
+`IOSONATA` volume. This discards old data after layout changes.
+Generic `FatFsMount()` never erases unrecognized nonblank media,
+and I/O failures do not cause erasure. `FatFsUnmount()` releases the
+filesystem before USB MSC takes ownership. Do not use this example's
+destructive initialization for valuable data, or with a bootloader
+overlapping the selected NVM1 region. No wear leveling is provided.
 Firmware can mount the same `DiskIO` using `FatFsMount` without enabling
 USB MSC. The filesystem sector size must match the exposed USB sector size.
 Unmount the firmware volume before writable MSC host access; do not let
