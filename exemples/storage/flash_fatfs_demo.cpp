@@ -124,23 +124,9 @@ static FlashCfg_t s_FlashCfg = FLASH_CFG(NULL, FlashWriteDelayCallback);
 
 FlashDiskIO g_FlashDiskIO;
 
-static uint8_t s_FlashCacheMem[FLASH_SECTOR_SIZE];
-static DiskIOCache_t s_FlashCache[] = {
-	{-1, 0xFFFFFFFF, s_FlashCacheMem},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 512},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 1024},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 1536},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 2048},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 2560},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 3072},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 3584},
-};
-
-static const int s_NbFlashCache = sizeof(s_FlashCache) / sizeof(DiskIOCache_t);
-
 uint8_t g_Data[4096];
 uint8_t g_Temp[4096];
-uint8_t g_FFBuf[4096];
+alignas(4) uint8_t g_FFBuf[4096];
 static FATFS s_FatFs;
 
 bool FlashWriteDelayCallback(int DevNo, DevIntrf_t *pInterf)
@@ -185,11 +171,7 @@ int main()
 	if (!g_Spi.Init(s_SpiCfg))
 		return 1;
 
-	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache) == true)
-	{
-		// FatFsMount installs the existing disk.
-	}
-	else
+	if (!g_FlashDiskIO.Init(s_FlashCfg, &g_Spi))
 	{
 		printf("Init Flash failed\n");
 		return 1;
