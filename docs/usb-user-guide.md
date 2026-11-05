@@ -557,51 +557,39 @@ SYNCHRONIZE CACHE.
 firmware, settings, a production filesystem or Bluetooth bond storage. RAM-disk
 contents are lost when USB bus power is removed.
 
-The bare-metal `Debug` build reserves 832 KiB at 0x30000-0xFFFFF
-using `gcc_nrf52840_xxaa_nvm832k.ld`, leaving 192 KiB below the disk
-for the application. `Release` retains 256 KiB using
-`gcc_nrf52840_xxaa_nvm256k.ld`. After initializing the medium through
-`NvmDiskIO`, it uses `FatFsMount()` with format-if-blank enabled,
-unmounts the volume and hands the same disk to USB MSC. If mounting or
-formatting fails, USB still enumerates the raw medium; it is not
-automatically erased. An unrecognized or corrupted volume may require
-explicit recovery on the PC. New and previously unlabeled FatFs volumes
-receive the `IOSONATA` volume label. An existing custom label is not
-overwritten, and adding a label does not reformat the filesystem.
+The bare-metal `Debug` build reserves 832 KiB of internal flash
+(0x30000-0xFFFFF) for NVM1 with `gcc_nrf52840_xxaa_nvm832k.ld`,
+leaving 192 KiB for the application. `Release` uses 256 KiB at
+0xC0000-0xFFFFF, while `Release_mbr` uses 832 KiB at
+0x10000-0xDFFFF below the USB DFU bootloader. These layouts do not
+point to the same physical disk.
 
-The physical erase unit is 4096 bytes. New volumes expose 512-byte
-logical sectors through a caller-owned 4096-byte read/modify/write
-buffer. The 832 KiB Debug disk presents 1664 logical sectors;
-the 256 KiB Release disk presents 512 logical sectors. Both meet
-FatFs' minimum of 128 sectors. The same
-logical sector geometry is used for firmware file access and USB MSC.
-USB and FatFs never mount the volume simultaneously.
+The flash disk exposes 512-byte FAT sectors over 4 KiB erase pages.
+An 832 KiB disk has 1664 logical sectors, and a 256 KiB disk has
+512 sectors. `NvmDiskIO` uses a separate 4 KiB erase buffer to preserve
+other logical sectors whenever a 512-byte sector is changed.
 
-Previously formatted disks may have 4096-byte FAT sectors. When a
-512-byte view cannot mount an existing nonblank volume, the example
-attempts the original 4096-byte view without formatting it. This
-preserves access to those disks. Unknown nonblank contents are never
-formatted automatically.
+This **USB test example** owns a disposable NVM1 region. A valid
+filesystem is mounted and preserved; if `FatFsMount()` reports
+`FR_NO_FILESYSTEM`, the application explicitly erases only the
+linker-reserved NVM1 region with `Nvm::Erase()`, waits for `Sync()`,
+then calls `FatFsMount()` again. This handles old 256 KiB FAT data
+left inside the expanded 832 KiB Debug disk. Once formatted, FatFs
+assigns the `IOSONATA` volume label. The volume is unmounted before
+USB MSC exposes it, and subsequent boots preserve existing files.
 
-The `Release_mbr` build reserves 832 KiB at 0x10000-0xDFFFF, below
-the USB DFU bootloader at 0xE0000. Its capacity matches Debug but
-its disk address differs. Do not use the bare-metal Debug layout on
-a device with an upper-flash bootloader. Switching from the 256 KiB
-layout does not migrate existing files. When an old 256 KiB FAT
-volume remains near the end of flash, the new 832 KiB disk has no
-filesystem at its first sector. FatFs refuses to overwrite those
-nonblank old sectors, and macOS may report the disk as unreadable.
-This is not a USB enumeration fault. Back up files using the prior
-256 KiB firmware/layout before explicitly erasing the new NVM1 region
-and starting with a blank volume. Do not perform a full-chip erase
-on a device whose installed bootloader must be preserved.
-The fallback to the old 4 KiB FAT sector size applies only when
-that filesystem can be mounted at the current NVM1 address; otherwise
-the firmware returns to 512-byte logical sectors. DFU images are placed according to the
-bootloader's update strategy; a dual-bank update can overwrite storage
-near the beginning of this region. The example does not silently
-reformat that data following an update.
+The generic `FatFsMount()` remains non-destructive: it only formats
+media that is wholly erased when `bFormatIfBlank` is requested.
+The application performs the explicit erase, **not** the FatFs
+mount helper. Disk I/O failures do not trigger erasure.
+An unsuccessful filesystem initialization is not exported as a
+USB disk ready for file access.
 
+This test-board initialization is deliberately destructive to
+unrecognized data. Do not reuse it with files that must be preserved.
+Do not use bare-metal Debug on a device with an installed upper-flash
+bootloader: its NVM1 region overlaps that bootloader. Switching
+Debug, Release and Release_mbr does not migrate any existing files.
 Raw flash FAT updates entail erase/write amplification and have no
 wear levelling or power-loss guarantee. USB MSC uses the same `DiskIO`
 and performs I/O in the foreground, outside USB interrupts.
