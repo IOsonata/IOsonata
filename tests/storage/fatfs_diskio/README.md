@@ -14,8 +14,12 @@ blank formatting, file I/O, remount persistence, optional label assignment,
 preservation of existing custom labels, geometry, error propagation
 and refusal to format partially used or unreadable storage. A dedicated
 migration regression models an old 256 KiB filesystem remaining inside the
-expanded 832 KiB Debug disk. The new volume is intentionally not formatted
-in that case, so the user can back up existing contents first.
+expanded 832 KiB Debug disk. The reusable mount refuses to format that nonblank volume. The
+test then simulates the example's explicit reserved-region erase,
+formats a fresh `IOSONATA` filesystem, and checks that files and
+the label survive remount without an additional erase. The erase
+policy belongs only to this disposable USB example; the generic
+mount helper remains non-destructive.
 
 Both the firmware and the USB MSC flash example use the generic FatFs
 mount/format operation for initialized DiskIO media. The example unmounts
