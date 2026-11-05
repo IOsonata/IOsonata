@@ -293,6 +293,7 @@ the boot and the SoftDevice.
 | `make serial` | stage 0 recovery with DFU_PROTO_SMP driven by `smpclient` over its serial transport, on a pty |
 | `make http` | download from Python's `http.server` with dropped connections |
 | Boot machine code | `tests/dfu/boot_emu*.py`: the cross built `DfuBoot` ELF run in an ARM or RISC-V emulator with a model of the memory controller, per family (Nordic, STM32, SAM4, LPC, Renesas) |
+| Boot recovery, machine code | `tests/dfu/boot_emu_wire.py`: the nRF52832 `DfuBoot` ELF in the emulator with its UART interrupt, driven by `Python/dfu_wire.py` on a pty: refused images, upload, start, button, application request, power lost during an upload |
 
 Nothing here has been run on hardware.
 
