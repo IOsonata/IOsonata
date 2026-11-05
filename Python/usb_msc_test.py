@@ -36,11 +36,17 @@ def main():
                         help="read-only INQUIRY, READ CAPACITY, and boot-sector check")
     parser.add_argument("--verbose", action="store_true",
                         help="print the current SCSI command and USB transfer stage")
+    parser.add_argument("--repeat", type=int, default=1,
+                        help="repeat the read-only probe within one USB claim")
+    parser.add_argument("--reset-first", action="store_true",
+                        help="send a USB MSC Bulk-Only Reset before testing")
     args = parser.parse_args()
     if args.write_blocks < 1 or args.write_blocks > 16:
         parser.error("--write-blocks must be between 1 and 16")
     if args.probe_only and args.write_test:
         parser.error("--probe-only and --write-test cannot be used together")
+    if args.repeat < 1 or (args.repeat != 1 and not args.probe_only):
+        parser.error("--repeat requires --probe-only and a positive count")
 
     dev, cfg, intf = find_msc(args.vid, args.pid)
     if dev is None:
@@ -125,6 +131,18 @@ def main():
             raise RuntimeError(f"{operation}, {phase}: {exc}") from exc
 
     try:
+        if args.reset_first:
+            print("Bulk-Only Reset: resetting interface and clearing halts",
+                  flush=True)
+            try:
+                dev.ctrl_transfer(0x21, 0xFF, 0, intf.bInterfaceNumber,
+                                  None, timeout=2000)
+                ep_in.clear_halt()
+                ep_out.clear_halt()
+            except usb.core.USBError as exc:
+                raise RuntimeError(
+                    f"initial Bulk-Only Reset or clear halt: {exc}") from exc
+
         def rw_cdb(opcode, lba, blocks):
             return [opcode, 0, (lba >> 24) & 0xFF, (lba >> 16) & 0xFF,
                     (lba >> 8) & 0xFF, lba & 0xFF, 0,
@@ -138,10 +156,27 @@ def main():
         if boot[-2:] != b"\x55\xaa":
             raise RuntimeError("boot-sector signature mismatch")
         if args.probe_only:
+            for probe in range(2, args.repeat + 1):
+                if args.verbose:
+                    print(f"Probe {probe}/{args.repeat}", flush=True)
+                check_inquiry = command([0x12, 0, 0, 0, 36, 0], 36, True)
+                if check_inquiry != inquiry:
+                    raise RuntimeError(
+                        f"probe {probe}: INQUIRY response changed")
+                check_capacity = command([0x25] + [0] * 9, 8, True)
+                if check_capacity != capacity:
+                    raise RuntimeError(
+                        f"probe {probe}: READ CAPACITY response changed")
+                check_boot = command(
+                    [0x28, 0, 0, 0, 0, 0, 0, 0, 1, 0], sector_size, True)
+                if check_boot != boot:
+                    raise RuntimeError(
+                        f"probe {probe}: boot-sector read changed")
             print("Vendor/Product :", inquiry[8:32].decode("ascii").rstrip())
             print("Capacity       :", (last_lba + 1) * sector_size, "bytes")
             print("Sector size    :", sector_size)
             print("Boot read      : PASS")
+            print("Repeated probe :", args.repeat, "PASS")
             print("Result         : PASS (read-only probe)")
             return 0
         if args.write_test:
