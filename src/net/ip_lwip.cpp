@@ -51,9 +51,19 @@ SOFTWARE.
 #define IP_RX_QUEUE_COUNT	4
 #define IP_PROCESS_FRAMES	8
 #define IP_SERVICE_MS		10
+#define IP_LISTEN_COUNT		MEMP_NUM_TCP_PCB_LISTEN
+
+// A listening port. It stays open once used, until IpClose: lwIP refuses to bind
+// the port again while connections made on it are still in TIME_WAIT.
+typedef struct {
+	struct tcp_pcb *pPcb;
+	uint16_t Port;
+	uint8_t SockCnt;			// Sockets using the port, its backlog
+} IpListen_t;
 
 typedef struct {
 	SockIntrfDev_t *pDev;
+	IpListen_t *pListen;
 	struct tcp_pcb *pTcp;
 	struct udp_pcb *pUdp;
 	struct pbuf *Rx[IP_RX_QUEUE_COUNT];
@@ -78,6 +88,7 @@ typedef struct {
 static IpDns_t s_IpDns[4];
 static struct netif s_IpNetif;
 static IpSocket_t s_IpSockets[IP_SOCKET_COUNT];
+static IpListen_t s_IpListen[IP_LISTEN_COUNT];
 static EthernetDev_t *s_pIpEthernet;
 static TimerDev_t *s_pIpTimer;
 static int s_IpTrig;
@@ -241,6 +252,42 @@ static err_t IpTcpReceived(void *pArg, struct tcp_pcb *pPcb, struct pbuf *pData,
 	return ERR_OK;
 }
 
+static err_t IpTcpAccept(void *pArg, struct tcp_pcb *pPcb, err_t Err)
+{
+	IpListen_t *listen = (IpListen_t *)pArg;
+
+	if (Err != ERR_OK || pPcb == nullptr)
+	{
+		return ERR_VAL;
+	}
+	for (int i = 0; i < IP_SOCKET_COUNT; i++)
+	{
+		IpSocket_t *sock = &s_IpSockets[i];
+
+		if (sock->pListen == listen && sock->pDev != nullptr && sock->pDev->bListening)
+		{
+			// Counts against the backlog until closed, so that a peer finding
+			// every socket of the port in use gets no answer and tries again.
+			tcp_backlog_delayed(pPcb);
+			// A head and a short body are two writes. Do not hold the second
+			// until the peer has acknowledged the first.
+			tcp_nagle_disable(pPcb);
+			sock->pTcp = pPcb;
+			tcp_arg(pPcb, sock);
+			tcp_err(pPcb, IpTcpError);
+			tcp_recv(pPcb, IpTcpReceived);
+			sock->pDev->bListening = false;
+			sock->pDev->bConnected = true;
+			sock->bStateEvent = true;
+
+			return ERR_OK;
+		}
+	}
+
+	// lwIP aborts the connection on this return.
+	return ERR_MEM;
+}
+
 static void IpUdpReceived(void *pArg, struct udp_pcb *pPcb, struct pbuf *pData,
 		const ip_addr_t *pAddr, u16_t Port)
 {
@@ -323,7 +370,12 @@ static void IpAbort(IpSocket_t *pSock)
 		udp_remove(pSock->pUdp);
 		pSock->pUdp = nullptr;
 	}
-	IpSocketDown(pSock);
+	// A socket still waiting for a peer keeps waiting. The port has no address
+	// to lose and takes connections again when the network returns.
+	if (pSock->pDev != nullptr && pSock->pDev->bListening == false)
+	{
+		IpSocketDown(pSock);
+	}
 }
 
 static void IpNetifStatus(struct netif *pNetif)
@@ -450,6 +502,14 @@ void IpClose(void)
 		{
 			SockIntrfClose(s_IpSockets[i].pDev);
 		}
+	}
+	for (int i = 0; i < IP_LISTEN_COUNT; i++)
+	{
+		if (s_IpListen[i].pPcb != nullptr)
+		{
+			tcp_close(s_IpListen[i].pPcb);
+		}
+		memset(&s_IpListen[i], 0, sizeof(s_IpListen[i]));
 	}
 	if (s_IpDhcp)
 	{
@@ -724,6 +784,7 @@ void SockIntrfClose(SockIntrfDev_t *pDev)
 			tcp_arg(pcb, nullptr);
 			tcp_err(pcb, nullptr);
 			tcp_recv(pcb, nullptr);
+			tcp_backlog_accepted(pcb);
 			if (tcp_close(pcb) != ERR_OK)
 			{
 				tcp_abort(pcb);
@@ -733,6 +794,11 @@ void SockIntrfClose(SockIntrfDev_t *pDev)
 		if (sock->pUdp != nullptr)
 		{
 			udp_remove(sock->pUdp);
+		}
+		if (sock->pListen != nullptr)
+		{
+			sock->pListen->SockCnt--;
+			tcp_backlog_set(sock->pListen->pPcb, sock->pListen->SockCnt);
 		}
 		while (sock->RxCount > 0)
 		{
@@ -755,27 +821,14 @@ void SockIntrfClose(SockIntrfDev_t *pDev)
 	}
 	pDev->Hdl = -1;
 	pDev->bConnected = false;
+	pDev->bListening = false;
 }
 
-bool SockIntrfInit(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
+static IpSocket_t *IpSockOpen(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
 {
 	IpSocket_t *sock = nullptr;
 	DevIntrf_t *dev;
-	err_t res;
-	uint32_t start;
-	IpDns_t *query = nullptr;
 
-	if (pDev == nullptr || pCfg == nullptr || pCfg->pHost == nullptr || pCfg->pHost[0] == 0 ||
-		pCfg->Port == 0 || (pCfg->Proto != SOCKINTRF_PROTO_UDP && pCfg->Proto != SOCKINTRF_PROTO_TCP) ||
-		pCfg->Timeout > 0x7FFFFFFFUL || s_IpProcessing)
-	{
-		return false;
-	}
-	SockIntrfClose(pDev);
-	if (IpReady() == false)
-	{
-		return false;
-	}
 	for (int i = 0; i < IP_SOCKET_COUNT; i++)
 	{
 		if (s_IpSockets[i].pDev == nullptr)
@@ -787,7 +840,7 @@ bool SockIntrfInit(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
 	}
 	if (sock == nullptr)
 	{
-		return false;
+		return nullptr;
 	}
 	sock->pDev = pDev;
 	sock->Timeout = pCfg->Timeout != 0 ? pCfg->Timeout : SOCKINTRF_TIMEOUT_DEFAULT;
@@ -818,6 +871,126 @@ bool SockIntrfInit(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
 	dev->bTxReady = true;
 	dev->bNoStop = false;
 	atomic_flag_clear(&dev->bBusy);
+
+	return sock;
+}
+
+static IpListen_t *IpListenPort(uint16_t Port)
+{
+	IpListen_t *listen = nullptr;
+	struct tcp_pcb *pcb;
+	struct tcp_pcb *pcbl;
+
+	for (int i = 0; i < IP_LISTEN_COUNT; i++)
+	{
+		if (s_IpListen[i].pPcb != nullptr && s_IpListen[i].Port == Port)
+		{
+			return &s_IpListen[i];
+		}
+		if (s_IpListen[i].pPcb == nullptr && listen == nullptr)
+		{
+			listen = &s_IpListen[i];
+		}
+	}
+	if (listen == nullptr)
+	{
+		// All in use: a port no socket uses now gives its entry up.
+		for (int i = 0; i < IP_LISTEN_COUNT && listen == nullptr; i++)
+		{
+			if (s_IpListen[i].SockCnt == 0)
+			{
+				listen = &s_IpListen[i];
+				tcp_close(listen->pPcb);
+				listen->pPcb = nullptr;
+			}
+		}
+		if (listen == nullptr)
+		{
+			return nullptr;
+		}
+	}
+	pcb = tcp_new();
+	if (pcb == nullptr)
+	{
+		return nullptr;
+	}
+	if (tcp_bind(pcb, IP_ADDR_ANY, Port) != ERR_OK)
+	{
+		tcp_close(pcb);
+
+		return nullptr;
+	}
+	pcbl = tcp_listen_with_backlog(pcb, 1);
+	if (pcbl == nullptr)
+	{
+		tcp_close(pcb);
+
+		return nullptr;
+	}
+	listen->pPcb = pcbl;
+	listen->Port = Port;
+	listen->SockCnt = 0;
+	tcp_arg(pcbl, listen);
+	tcp_accept(pcbl, IpTcpAccept);
+
+	return listen;
+}
+
+bool SockIntrfListen(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
+{
+	IpSocket_t *sock;
+	IpListen_t *listen;
+
+	if (pDev == nullptr || pCfg == nullptr || pCfg->Proto != SOCKINTRF_PROTO_TCP ||
+		pCfg->LocalPort == 0 || pCfg->Timeout > 0x7FFFFFFFUL || s_IpInitialized == false ||
+		s_IpProcessing)
+	{
+		return false;
+	}
+	SockIntrfClose(pDev);
+	sock = IpSockOpen(pDev, pCfg);
+	if (sock == nullptr)
+	{
+		return false;
+	}
+	listen = IpListenPort(pCfg->LocalPort);
+	if (listen == nullptr)
+	{
+		SockIntrfClose(pDev);
+
+		return false;
+	}
+	sock->pListen = listen;
+	listen->SockCnt++;
+	tcp_backlog_set(listen->pPcb, listen->SockCnt);
+	pDev->bListening = true;
+
+	return true;
+}
+
+bool SockIntrfInit(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
+{
+	IpSocket_t *sock;
+	err_t res;
+	uint32_t start;
+	IpDns_t *query = nullptr;
+
+	if (pDev == nullptr || pCfg == nullptr || pCfg->pHost == nullptr || pCfg->pHost[0] == 0 ||
+		pCfg->Port == 0 || (pCfg->Proto != SOCKINTRF_PROTO_UDP && pCfg->Proto != SOCKINTRF_PROTO_TCP) ||
+		pCfg->Timeout > 0x7FFFFFFFUL || s_IpProcessing)
+	{
+		return false;
+	}
+	SockIntrfClose(pDev);
+	if (IpReady() == false)
+	{
+		return false;
+	}
+	sock = IpSockOpen(pDev, pCfg);
+	if (sock == nullptr)
+	{
+		return false;
+	}
 
 	start = sys_now();
 	for (int i = 0; i < 4; i++)

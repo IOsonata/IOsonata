@@ -44,6 +44,7 @@ EXAMPLES = {
     'EthernetDemo': 'exemples/net/ethernet_demo.cpp',
     'EthernetUdpDemo': 'exemples/net/ethernet_demo.cpp',
     'EthernetTcpDemo': 'exemples/net/ethernet_demo.cpp',
+    'EthernetHttpServer': 'exemples/net/http_server.cpp',
 }
 
 
@@ -200,7 +201,9 @@ def main():
                         assert 0x24000000 <= dma['sh_addr'] < dma['sh_addr'] + dma['sh_size'] <= 0x24080000
                         handler = symbols['ETH_IRQHandler']
                         assert handler['st_info']['bind'] == 'STB_GLOBAL'
-                        if name != 'EthernetDemo':
+                        if name == 'EthernetHttpServer':
+                            assert symbols['SockIntrfListen']['st_info']['bind'] == 'STB_GLOBAL'
+                        elif name != 'EthernetDemo':
                             assert symbols['SockIntrfInit']['st_info']['bind'] == 'STB_GLOBAL'
                         for segment in elf.iter_segments():
                             offset = 0x08000000 + (16 + 61) * 4 - segment['p_vaddr']

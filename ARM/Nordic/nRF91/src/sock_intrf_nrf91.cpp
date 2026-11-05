@@ -528,6 +528,15 @@ bool SockIntrfInit(SockIntrfDev_t * const pDev, const SockIntrfCfg_t * const pCf
 	return true;
 }
 
+bool SockIntrfListen(SockIntrfDev_t * const pDev, const SockIntrfCfg_t * const pCfg)
+{
+	(void)pDev;
+	(void)pCfg;
+
+	// This port only connects to a peer.
+	return false;
+}
+
 void SockIntrfClose(SockIntrfDev_t * const pDev)
 {
 	if (pDev == nullptr)

@@ -277,6 +277,8 @@ ISO-containing combo stress examples are not included.
 
 ## Ethernet examples
 
+`EthernetHttpServer` is a small web server, see the
+[networking guide](../../../docs/networking.md#small-web-server).
 `EthernetDemo`, `EthernetUdpDemo` and `EthernetTcpDemo` are configured for the
 NUCLEO-H753ZI's onboard
 LAN8742A PHY and RJ45 CN14. They share the generic Ethernet frame interface,

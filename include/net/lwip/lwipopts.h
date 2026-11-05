@@ -63,8 +63,11 @@ SOFTWARE.
 #define MEM_USE_POOLS_TRY_BIGGER_POOL 1
 #define MEMP_MEM_MALLOC			0
 #define MEMP_NUM_UDP_PCB			8
-#define MEMP_NUM_TCP_PCB			4
-#define MEMP_NUM_TCP_PCB_LISTEN	0
+// Four sockets, and room for connections the listening side has closed. Those wait
+// for the peer and lwIP cannot take them back as it can a connection in TIME_WAIT.
+#define MEMP_NUM_TCP_PCB			8
+#define MEMP_NUM_TCP_PCB_LISTEN	2
+#define TCP_LISTEN_BACKLOG		1
 #define MEMP_NUM_TCP_SEG			32
 #define MEMP_NUM_PBUF			32
 #define PBUF_POOL_SIZE			24

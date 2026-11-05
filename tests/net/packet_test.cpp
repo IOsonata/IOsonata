@@ -287,8 +287,113 @@ static void DhcpReply(const uint8_t *p, int Len)
 	Enqueue(reply, size);
 }
 
+// TCP clients at the packet peer, connecting to a listening socket.
+typedef struct {
+	uint16_t Port;
+	uint16_t SrvPort;
+	uint32_t Seq;
+	uint32_t Ack;
+	int SynAcks;
+	int Fins;
+	int Resets;
+	int RxLen;
+	bool bMute;			// Gone without a word
+	uint8_t Rx[32768];
+} Client_t;
+
+static Client_t s_Clients[4];
+
+static void ClientSend(Client_t *pCli, uint8_t Flags, const void *pData = nullptr, int Len = 0)
+{
+	uint8_t frame[1514] = {};
+	int tcpHdr = (Flags & 2) ? 24 : 20;
+	uint32_t pseudo;
+
+	IpHeader(frame, 34 + tcpHdr + Len, 6);
+	W16(frame + 34, pCli->Port);
+	W16(frame + 36, pCli->SrvPort);
+	W32(frame + 38, pCli->Seq);
+	W32(frame + 42, pCli->Ack);
+	frame[46] = (uint8_t)((tcpHdr / 4) << 4);
+	frame[47] = Flags;
+	W16(frame + 48, 8192);
+	if (Flags & 2)
+	{
+		frame[54] = 2;
+		frame[55] = 4;
+		W16(frame + 56, 1460);
+	}
+	if (Len != 0)
+	{
+		memcpy(frame + 34 + tcpHdr, pData, Len);
+	}
+	pseudo = R16(frame + 26) + R16(frame + 28) + R16(frame + 30) + R16(frame + 32) + 6 + tcpHdr + Len;
+	W16(frame + 50, Sum(frame + 34, tcpHdr + Len, pseudo));
+	Enqueue(frame, 34 + tcpHdr + Len);
+	pCli->Seq += (uint32_t)Len + ((Flags & 3) ? 1 : 0);
+}
+
+static Client_t *ClientFind(uint16_t Port)
+{
+	for (int i = 0; i < 4; i++)
+	{
+		if (s_Clients[i].Port == Port)
+		{
+			return &s_Clients[i];
+		}
+	}
+
+	return nullptr;
+}
+
+static void ClientInput(Client_t *pCli, const uint8_t *p, int Len)
+{
+	uint8_t flags = p[47];
+	uint32_t seq = R32(p + 38);
+	int hdr = (p[46] >> 4) * 4;
+	int data = Len - 34 - hdr;
+
+	if (pCli->bMute)
+	{
+		return;
+	}
+	if (flags & 4)
+	{
+		pCli->Resets++;
+
+		return;
+	}
+	if (flags & 2)
+	{
+		pCli->SynAcks++;
+		pCli->Ack = seq + 1;
+		ClientSend(pCli, 0x10);
+
+		return;
+	}
+	if (data > 0 && seq == pCli->Ack && pCli->RxLen + data <= (int)sizeof(pCli->Rx))
+	{
+		memcpy(pCli->Rx + pCli->RxLen, p + 34 + hdr, data);
+		pCli->RxLen += data;
+		pCli->Ack += (uint32_t)data;
+		ClientSend(pCli, 0x10);
+	}
+	if ((flags & 1) && seq + (uint32_t)data == pCli->Ack)
+	{
+		pCli->Fins++;
+		pCli->Ack++;
+		ClientSend(pCli, 0x11);
+	}
+}
+
 static int FrameTx(DevIntrf_t *, const uint8_t *p, int Len)
 {
+	if (R16(p + 12) == 0x0800 && p[23] == 6 && ClientFind(R16(p + 36)) != nullptr)
+	{
+		ClientInput(ClientFind(R16(p + 36)), p, Len);
+
+		return Len;
+	}
 	if (R16(p + 12) == 0x0806 && R16(p + 20) == 1 && memcmp(p + 38, s_Ip, 4) == 0)
 	{
 		uint8_t reply[42];
@@ -460,6 +565,293 @@ static void Pump(int Count = 10)
 		g_NetTestMs += 10;
 		IpProcess();
 	}
+}
+
+// A client connecting to the port, with its three way handshake
+static Client_t *ClientOpen(int Idx, uint16_t Port, uint16_t SrvPort)
+{
+	Client_t *cli = &s_Clients[Idx];
+
+	memset(cli, 0, sizeof(*cli));
+	cli->Port = Port;
+	cli->SrvPort = SrvPort;
+	cli->Seq = 70000U + Port;
+	ClientSend(cli, 2);
+	Pump(2);
+
+	return cli;
+}
+
+static int TestListen()
+{
+	SockIntrfDev_t srv[4] = {};
+	SockIntrfDev_t other = {};
+	SockIntrfCfg_t cfg = {SOCKINTRF_PROTO_TCP, nullptr, 0, 8080, 0, false, 1, Event};
+	uint8_t rx[4096];
+	uint8_t tx[4096];
+	Client_t *cli;
+	Client_t *cli2;
+
+	// Before the network service runs
+	CHECK(!SockIntrfListen(&srv[0], &cfg));
+	CHECK(IpInit(&s_Cfg, &s_Ethernet, &s_Timer, 0));
+	Pump();
+
+	cfg.Proto = SOCKINTRF_PROTO_UDP;
+	CHECK(!SockIntrfListen(&srv[0], &cfg));
+	cfg.Proto = SOCKINTRF_PROTO_TLS;
+	CHECK(!SockIntrfListen(&srv[0], &cfg));
+	cfg.Proto = SOCKINTRF_PROTO_TCP;
+	cfg.LocalPort = 0;
+	CHECK(!SockIntrfListen(&srv[0], &cfg));
+	cfg.LocalPort = 8080;
+	CHECK(!SockIntrfListen(nullptr, &cfg));
+	CHECK(!SockIntrfListen(&srv[0], nullptr));
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	CHECK(SockIntrfListening(&srv[0]) && !SockIntrfConnected(&srv[0]));
+	CHECK(SockIntrfRx(&srv[0], rx, sizeof(rx)) == 0);
+	CHECK(SockIntrfTx(&srv[0], (const uint8_t *)"x", 1) == 0);
+	SockIntrfClose(&srv[0]);
+	CHECK(!SockIntrfListening(&srv[0]) && srv[0].Hdl == -1);
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+
+	// A port nobody listens on is refused
+	cli = ClientOpen(0, 41000, 8081);
+	CHECK(cli->Resets == 1 && cli->SynAcks == 0);
+
+	// A peer connects, data both ways, then the server closes
+	cli = ClientOpen(0, 41001, 8080);
+	CHECK(cli->SynAcks == 1 && cli->Resets == 0);
+	Pump(2);
+	CHECK(!SockIntrfListening(&srv[0]) && SockIntrfConnected(&srv[0]));
+	CHECK(s_Events > 0);
+	ClientSend(cli, 0x18, "hello", 5);
+	Pump(2);
+	CHECK(SockIntrfRx(&srv[0], rx, sizeof(rx)) == 5 && memcmp(rx, "hello", 5) == 0);
+	for (int i = 0; i < (int)sizeof(tx); i++)
+	{
+		tx[i] = (uint8_t)(i * 13);
+	}
+	CHECK(SockIntrfTx(&srv[0], tx, sizeof(tx)) == (int)sizeof(tx));
+	Pump(5);
+	CHECK(cli->RxLen == (int)sizeof(tx) && memcmp(cli->Rx, tx, sizeof(tx)) == 0);
+	SockIntrfClose(&srv[0]);
+	CHECK(!SockIntrfConnected(&srv[0]) && !SockIntrfListening(&srv[0]));
+	Pump(2);
+	CHECK(cli->Fins == 1 && cli->Resets == 0);
+	Pump(2);
+	CHECK(cli->Resets == 0);
+
+	// Many connections in turn on the same socket. TIME_WAIT must not use up the
+	// connection pool, and the port stays open.
+	for (int i = 0; i < 40; i++)
+	{
+		CHECK(SockIntrfListen(&srv[0], &cfg));
+		cli = ClientOpen(0, (uint16_t)(42000 + i), 8080);
+		CHECK(cli->SynAcks == 1);
+		Pump(2);
+		CHECK(SockIntrfConnected(&srv[0]));
+		ClientSend(cli, 0x18, "ping", 4);
+		Pump(2);
+		CHECK(SockIntrfRx(&srv[0], rx, sizeof(rx)) == 4);
+		CHECK(SockIntrfTx(&srv[0], (const uint8_t *)"pong", 4) == 4);
+		Pump(2);
+		CHECK(cli->RxLen == 4);
+		SockIntrfClose(&srv[0]);
+		Pump(2);
+		CHECK(cli->Fins == 1 && cli->Resets == 0);
+	}
+
+	// Two sockets on one port take one peer each. A third peer gets no answer, not
+	// a reset, and gets in with its next attempt once a socket is free.
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	CHECK(SockIntrfListen(&srv[1], &cfg));
+	cli = ClientOpen(0, 43001, 8080);
+	cli2 = ClientOpen(1, 43002, 8080);
+	Pump(2);
+	CHECK(cli->SynAcks == 1 && cli2->SynAcks == 1);
+	CHECK(SockIntrfConnected(&srv[0]) && SockIntrfConnected(&srv[1]));
+	Client_t *cli3 = ClientOpen(2, 43003, 8080);
+
+	CHECK(cli3->SynAcks == 0 && cli3->Resets == 0);
+	ClientSend(cli, 0x18, "one", 3);
+	ClientSend(cli2, 0x18, "two", 3);
+	Pump(2);
+	CHECK(SockIntrfRx(&srv[0], rx, sizeof(rx)) == 3 && memcmp(rx, "one", 3) == 0);
+	CHECK(SockIntrfRx(&srv[1], rx, sizeof(rx)) == 3 && memcmp(rx, "two", 3) == 0);
+	SockIntrfClose(&srv[0]);
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	Pump(2);
+	CHECK(cli->Fins == 1);
+	cli3->Seq--;
+	ClientSend(cli3, 2);
+	Pump(2);
+	CHECK(cli3->SynAcks == 1 && cli3->Resets == 0);
+	Pump(2);
+	CHECK(SockIntrfConnected(&srv[0]));
+	SockIntrfClose(&srv[0]);
+	SockIntrfClose(&srv[1]);
+	Pump(4);
+	memset(s_Clients, 0, sizeof(s_Clients));
+
+	// One socket closed and listening again before the stack runs: the port stays
+	// open with the backlog back to what it was.
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	for (int i = 0; i < 3; i++)
+	{
+		cli = ClientOpen(0, (uint16_t)(44000 + i), 8080);
+		CHECK(cli->SynAcks == 1 && cli->Resets == 0);
+		Pump(2);
+		CHECK(SockIntrfListen(&srv[0], &cfg));
+		Pump(2);
+		CHECK(cli->Fins == 1 && cli->Resets == 0);
+	}
+
+	// Data arriving with the handshake ACK, and the peer leaving before the
+	// application looks: the socket is no longer listening and not connected.
+	cli = ClientOpen(0, 44100, 8080);
+	ClientSend(cli, 0x18, "fast", 4);
+	ClientSend(cli, 0x11);
+	Pump(3);
+	CHECK(!SockIntrfListening(&srv[0]) && !SockIntrfConnected(&srv[0]));
+	CHECK(SockIntrfRx(&srv[0], rx, sizeof(rx)) == 4 && memcmp(rx, "fast", 4) == 0);
+	CHECK(SockIntrfTx(&srv[0], (const uint8_t *)"late", 4) == 0);
+	SockIntrfClose(&srv[0]);
+	Pump(2);
+
+	// A reset from the peer frees the place in the backlog
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	cli = ClientOpen(0, 44200, 8080);
+	Pump(2);
+	CHECK(SockIntrfConnected(&srv[0]));
+	ClientSend(cli, 0x14);
+	Pump(2);
+	CHECK(!SockIntrfConnected(&srv[0]) && !SockIntrfListening(&srv[0]));
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	cli = ClientOpen(0, 44201, 8080);
+	CHECK(cli->SynAcks == 1 && cli->Resets == 0);
+	Pump(2);
+	CHECK(SockIntrfConnected(&srv[0]));
+
+	// Unread data at close resets the peer. Read first and it does not.
+	ClientSend(cli, 0x18, "unread", 6);
+	Pump(2);
+	SockIntrfClose(&srv[0]);
+	Pump(2);
+	CHECK(cli->Resets == 1);
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	cli = ClientOpen(0, 44202, 8080);
+	Pump(2);
+	ClientSend(cli, 0x18, "read", 4);
+	Pump(2);
+	CHECK(SockIntrfRx(&srv[0], rx, sizeof(rx)) == 4);
+	SockIntrfClose(&srv[0]);
+	Pump(2);
+	CHECK(cli->Resets == 0 && cli->Fins == 1);
+
+	// Peers gone without answering the close do not stop the next one getting in
+	for (int i = 0; i < 4; i++)
+	{
+		CHECK(SockIntrfListen(&srv[0], &cfg));
+		cli = ClientOpen(0, (uint16_t)(44250 + i), 8080);
+		CHECK(cli->SynAcks == 1 && cli->Resets == 0);
+		Pump(2);
+		CHECK(SockIntrfConnected(&srv[0]));
+		cli->bMute = true;
+		SockIntrfClose(&srv[0]);
+		Pump(2);
+	}
+
+	// A socket only waiting sees nothing of the link going down
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	int events = s_Events;
+
+	s_Link = false;
+	Pump(30);
+	CHECK(s_Events == events && SockIntrfListening(&srv[0]));
+	s_Link = true;
+	Pump(30);
+	CHECK(IpReady() && s_Events == events && SockIntrfListening(&srv[0]));
+
+	// The link going down ends a connection and leaves a waiting socket waiting
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	CHECK(SockIntrfListen(&srv[1], &cfg));
+	cli = ClientOpen(0, 44300, 8080);
+	Pump(2);
+	CHECK(SockIntrfConnected(&srv[0]) && SockIntrfListening(&srv[1]));
+	s_Link = false;
+	Pump(30);
+	CHECK(!IpReady());
+	CHECK(!SockIntrfConnected(&srv[0]) && !SockIntrfListening(&srv[0]));
+	CHECK(!SockIntrfConnected(&srv[1]) && SockIntrfListening(&srv[1]));
+	CHECK(SockIntrfRx(&srv[0], rx, sizeof(rx)) == 0);
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	s_Link = true;
+	Pump(30);
+	CHECK(IpReady());
+	CHECK(SockIntrfListening(&srv[0]) && SockIntrfListening(&srv[1]));
+	cli = ClientOpen(0, 44301, 8080);
+	CHECK(cli->SynAcks == 1);
+	Pump(2);
+	CHECK(SockIntrfConnected(&srv[0]) || SockIntrfConnected(&srv[1]));
+	SockIntrfClose(&srv[0]);
+	SockIntrfClose(&srv[1]);
+	Pump(2);
+
+	// A client socket and listening sockets together, and the limit on sockets
+	cfg.pHost = "192.168.1.10";
+	cfg.Port = 2469;
+	cfg.LocalPort = 0;
+	CHECK(SockIntrfInit(&other, &cfg));
+	cfg.LocalPort = 8080;
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	CHECK(SockIntrfListen(&srv[1], &cfg));
+	CHECK(SockIntrfListen(&srv[2], &cfg));
+	CHECK(!SockIntrfListen(&srv[3], &cfg));
+	CHECK(srv[3].Hdl == -1 && !SockIntrfListening(&srv[3]));
+	SockIntrfClose(&other);
+	SockIntrfClose(&srv[1]);
+	SockIntrfClose(&srv[2]);
+
+	// Two ports at once. A third takes the entry of a port no longer in use.
+	cfg.LocalPort = 8081;
+	CHECK(SockIntrfListen(&srv[1], &cfg));
+	cfg.LocalPort = 8082;
+	CHECK(!SockIntrfListen(&srv[2], &cfg));
+	CHECK(srv[2].Hdl == -1);
+	cli = ClientOpen(0, 44400, 8081);
+	CHECK(cli->SynAcks == 1);
+	Pump(2);
+	CHECK(SockIntrfConnected(&srv[1]));
+	SockIntrfClose(&srv[1]);
+	Pump(2);
+	CHECK(SockIntrfListen(&srv[2], &cfg));
+	cli = ClientOpen(0, 44401, 8082);
+	CHECK(cli->SynAcks == 1);
+	Pump(2);
+	CHECK(SockIntrfConnected(&srv[2]));
+	cli = ClientOpen(1, 44402, 8080);
+	CHECK(cli->SynAcks == 1);
+	Pump(2);
+	CHECK(SockIntrfConnected(&srv[0]));
+
+	// IpClose ends it all, and the same port opens again after IpInit
+	IpClose();
+	CHECK(!SockIntrfConnected(&srv[0]) && !SockIntrfConnected(&srv[2]));
+	CHECK(srv[0].Hdl == -1 && srv[2].Hdl == -1);
+	CHECK(!SockIntrfListen(&srv[0], &cfg));
+	CHECK(IpInit(&s_Cfg, &s_Ethernet, &s_Timer, 0));
+	Pump();
+	cfg.LocalPort = 8090;
+	CHECK(SockIntrfListen(&srv[0], &cfg));
+	cli = ClientOpen(0, 44500, 8090);
+	CHECK(cli->SynAcks == 1);
+	Pump(2);
+	CHECK(SockIntrfConnected(&srv[0]));
+	IpClose();
+	memset(s_Clients, 0, sizeof(s_Clients));
+
+	return 0;
 }
 
 int main()
@@ -676,6 +1068,10 @@ int main()
 	SockIntrfClose(&udp);
 	IpClose();
 	CHECK(s_Events > 0);
+	if (TestListen() != 0)
+	{
+		return 1;
+	}
 	printf("Real lwIP packet tests: %d checks PASS\n", s_Checks);
 
 	return 0;
