@@ -94,7 +94,7 @@ The internal memory is read memory mapped. Shared helpers:
 | `RISCV/Renesas/R9A02/src/dfu_r9a02.cpp` | R9A02G021 (FLCN flash sequencer) |
 
 On nRF52 with a SoftDevice, and on nRF54L with MPSL, the application writes
-slot 1 through `Nvm` and `NvmIntrf` so the radio arbitrates each operation
+slot 1 through `Nvm` and `NvmMcuIntrf` so the radio arbitrates each operation
 (`DfuStoreNvm`). Everywhere else the application writes through the target
 layer (`DfuStoreTgt`), as the boot does.
 

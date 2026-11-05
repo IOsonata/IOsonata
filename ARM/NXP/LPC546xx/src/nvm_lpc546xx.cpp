@@ -19,7 +19,7 @@ that it reads all ones.
 Each ROM call runs with interrupts masked, prepare and erase or program
 together: nothing may read the flash while the ROM works on it. A page erase
 or program keeps interrupts off for the time the flash needs. Reads are
-memory mapped. Every operation finishes inside its call: NvmIntrf::Init
+memory mapped. Every operation finishes inside its call: NvmMcuIntrf::Init
 with bIntEn fails, and an operation is refused while an arbiter is
 registered, the port has none to call.
 
@@ -58,7 +58,7 @@ SOFTWARE.
 
 #include "coredev/interrupt.h"
 #include "lpc_iap.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 
 #define LPC546XX_NVM_SIZE			FSL_FEATURE_SYSCON_FLASH_SIZE_BYTES
 #define LPC546XX_NVM_SECT			FSL_FEATURE_SYSCON_FLASH_SECTOR_SIZE_BYTES
@@ -72,8 +72,8 @@ SOFTWARE.
 #endif
 
 static NvmDevIntrf_t s_NvmDev;
-static NvmIntrfStat_t s_Stat;
-static NvmIntrfArb_t s_Arbiter;
+static NvmMcuIntrfStat_t s_Stat;
+static NvmMcuIntrfArb_t s_Arbiter;
 
 // The page the ROM copies from, in RAM, word aligned
 static uint32_t s_Lpc546xxNvmPage[LPC546XX_NVM_PAGE / 4];
@@ -333,7 +333,7 @@ static void *NvmGetHandle(DevIntrf_t *pDev)
 	return pDev->pDevData;
 }
 
-bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
+bool NvmMcuIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
 	DevIntrf_t &dev = s_NvmDev.DevIntrf;
 
@@ -374,12 +374,12 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	return true;
 }
 
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
+void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb)
 {
 	s_Arbiter = pArb;
 }
 
-void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
+void NvmMcuIntrfGetStat(NvmMcuIntrfStat_t *pStat)
 {
 	if (pStat)
 	{

@@ -49,7 +49,7 @@ SOFTWARE.
 
 #include "storage/diskio_nvm.h"
 #include "storage/fatfs_format.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 #include "app_evt_handler.h"
 #include "usb/usb.h"
@@ -77,7 +77,7 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #define MSC_NVM_REGION		1
 #define MSC_STR_INTERFACE	4U
 
-static NvmIntrf s_MemIntrf;
+static NvmMcuIntrf s_MemIntrf;
 static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
 static UsbdMsc s_Msc;

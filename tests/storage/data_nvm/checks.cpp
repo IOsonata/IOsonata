@@ -36,7 +36,7 @@ SOFTWARE.
 
 #include <string.h>
 #include <stddef.h>
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #ifdef RA4M1
 #include "ra4m1xxx.h"
 extern "C" uint32_t SystemFlashClockGet(void) { return 24000000; }
@@ -55,11 +55,11 @@ extern "C" const uintptr_t g_Regs[] = {
 };
 #endif
 
-static int Arbiter(NvmIntrfOp_t *) { return -EBUSY; }
+static int Arbiter(NvmMcuIntrfOp_t *) { return -EBUSY; }
 #define CHECK(x) do { if (!(x)) return __LINE__; } while (0)
 extern "C" int RunTest(int Test)
 {
-	NvmIntrf intrf;
+	NvmMcuIntrf intrf;
 	Nvm mem;
 	NvmCfg_t cfg = {};
 	NvmMcuCfg(cfg);
@@ -107,9 +107,9 @@ extern "C" int RunTest(int Test)
 	CHECK(intrf.StartTx(0));
 	CHECK(!intrf.Init()); // don't reset an active transfer's busy latch
 	intrf.StopTx();
-	NvmIntrfSetArbiter(Arbiter);
+	NvmMcuIntrfSetArbiter(Arbiter);
 	CHECK(mem.Write(0, data, 1) < 0);
-	NvmIntrfSetArbiter(nullptr);
+	NvmMcuIntrfSetArbiter(nullptr);
 	if (!cfg.EraseSize)
 	{
 		memset(data, 0, sizeof(data));

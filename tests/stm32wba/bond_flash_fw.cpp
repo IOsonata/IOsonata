@@ -67,7 +67,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "bluetooth/bt_pds.h"
 #include "storage/nvm.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 
 // Image of the stack's NVM cache: 39 words, 312 bytes, two PDS chunks
@@ -537,7 +537,7 @@ static void BootCutEraseCheck(void)
 // The flash driver alone, through an Nvm over the store region: a program
 // the controller refuses (PROGERR, the quad word is not erased) must fail
 // the write, for a full 64 byte block as for a shorter one.
-static NvmIntrf s_TestIntrf;
+static NvmMcuIntrf s_TestIntrf;
 static Nvm s_TestMem;
 
 static bool TestMemInit(void)

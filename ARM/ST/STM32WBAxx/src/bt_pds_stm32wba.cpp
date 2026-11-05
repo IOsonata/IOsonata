@@ -16,7 +16,7 @@
 		    BLEPLAT_NvmStore / restore (bt_smp_bond_stm32wba.cpp)
 		      -> bt_pds.cpp (log structured KV over a region)
 		        -> Nvm (src/storage/nvm.cpp)
-		          -> NvmIntrf (nvm_stm32wba.cpp, the WBA flash controller)
+		          -> NvmMcuIntrf (nvm_stm32wba.cpp, the WBA flash controller)
 
 @author	Hoang Nguyen Hoan
 @date	July 29, 2026
@@ -51,7 +51,7 @@ SOFTWARE.
 #include <errno.h>
 
 #include "storage/nvm.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 #include "bluetooth/bt_pds.h"
 #include "bt_wba_bond.h"
@@ -74,7 +74,7 @@ SOFTWARE.
 #define BT_PDS_WBA_REGION_NO	0
 #endif
 
-static NvmIntrf s_PdsIntrf;
+static NvmMcuIntrf s_PdsIntrf;
 static Nvm s_PdsMem;
 static bool s_bPdsMounted;
 

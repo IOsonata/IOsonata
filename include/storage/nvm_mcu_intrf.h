@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	nvm_intrf.h
+@file	nvm_mcu_intrf.h
 
 @brief	The MCU internal memory as a DeviceIntrf.
 
@@ -16,7 +16,7 @@ stack runs.
 
 Usage :
 
-	NvmIntrf g_MemIntrf;
+	NvmMcuIntrf g_MemIntrf;
 	NvmCfg_t cfg;
 
 	g_MemIntrf.Init();
@@ -62,8 +62,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __NVM_INTRF_H__
-#define __NVM_INTRF_H__
+#ifndef __NVM_MCU_INTRF_H__
+#define __NVM_MCU_INTRF_H__
 
 #include "device_intrf.h"
 #include "storage/nvm.h"
@@ -94,7 +94,7 @@ typedef struct __Nvm_Intrf_Op {
 	/// The operation and its context outlive the call in that case, so
 	/// neither may be a local.
 	void (*Done)(void *pCtx, int Res);
-} NvmIntrfOp_t;
+} NvmMcuIntrfOp_t;
 
 /// The arbiter answers this when the operation is under way and Done will
 /// report it. Positive, so a check for a negative errno is unchanged.
@@ -103,7 +103,7 @@ typedef struct __Nvm_Intrf_Op {
 /// Runs an operation where the memory is safe to touch. Returns 0 when it
 /// completed in the call, NVM_INTRF_OP_STARTED when Done will report it, or
 /// a negative errno when it could not be started.
-typedef int (*NvmIntrfArb_t)(NvmIntrfOp_t *pOp);
+typedef int (*NvmMcuIntrfArb_t)(NvmMcuIntrfOp_t *pOp);
 
 /// Counts of what the interface did, for a test to show which path ran.
 typedef struct __Nvm_Intrf_Stat {
@@ -126,7 +126,7 @@ typedef struct __Nvm_Intrf_Stat {
 	uint32_t	RepDone;	//!< Passed on to the driver
 	uint32_t	RepNoWant;	//!< Dropped, nothing asked to be told
 	uint32_t	RepNoPend;	//!< Dropped, nothing was outstanding
-} NvmIntrfStat_t;
+} NvmMcuIntrfStat_t;
 
 /// Command byte plus a 32 bit address. The frame the driver puts in front of
 /// a transfer, the way FlashEraseSector does.
@@ -148,14 +148,14 @@ typedef struct __Nvm_Intrf_Wr_Ctx {
 	uintptr_t		Addr;			//!< Where the words go
 	const uint32_t	*pSrc;			//!< The words
 	uint32_t		Words;			//!< How many
-} NvmIntrfWrCtx_t;
+} NvmMcuIntrfWrCtx_t;
 
 /// An erase of one unit. Addr is the address, or the page number where the
 /// stack asks for one.
 typedef struct __Nvm_Intrf_Er_Ctx {
 	uintptr_t		Addr;			//!< The unit
 	bool			bStarted;		//!< The erase has been kicked off
-} NvmIntrfErCtx_t;
+} NvmMcuIntrfErCtx_t;
 
 /// The interface and everything one transaction needs, in one object.
 ///
@@ -182,10 +182,10 @@ typedef struct __Nvm_Dev_Intrf {
 	int				HdrLen;			//!< Frame bytes taken so far
 	int				DataLen;		//!< Payload bytes staged
 
-	NvmIntrfOp_t	Op;				//!< The arbitrated operation
+	NvmMcuIntrfOp_t	Op;				//!< The arbitrated operation
 	union {
-		NvmIntrfWrCtx_t	Wr;
-		NvmIntrfErCtx_t	Er;
+		NvmMcuIntrfWrCtx_t	Wr;
+		NvmMcuIntrfErCtx_t	Er;
 	} OpCtx;						//!< One operation is in flight at a time
 
 	uint8_t			Data[NVM_INTRF_XFER_SIZE];	//!< Staged payload
@@ -269,7 +269,7 @@ int NvmMcuErase(uintptr_t Addr);
 DevIntrf_t *NvmMcuDevIntrf(void);
 
 /// @brief	The MCU memory controller as a device interface.
-class NvmIntrf : public DeviceIntrf {
+class NvmMcuIntrf : public DeviceIntrf {
 public:
 	/**
 	 * @brief	Bring the controller interface up.
@@ -333,17 +333,17 @@ public:
  *
  * @param	pArb	: The arbiter, or NULL to go back to driving directly.
  */
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb);
+void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb);
 
 /**
  * @brief	Read the operation counts.
  *
  * @param	pStat : Filled with the counts since reset
  */
-void NvmIntrfGetStat(NvmIntrfStat_t *pStat);
+void NvmMcuIntrfGetStat(NvmMcuIntrfStat_t *pStat);
 
 #endif	// __cplusplus
 
 /** @} End of group Storage */
 
-#endif	// __NVM_INTRF_H__
+#endif	// __NVM_MCU_INTRF_H__

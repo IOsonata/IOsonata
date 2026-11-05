@@ -2017,7 +2017,7 @@ static void BtAppSDDispatch(void)
 // We need this here in order for the Linker to keep the nrf_sdh_soc.c
 // which is require for Softdevice to function properly
 // Create section set "sdh_soc_observers".
-// This also delivers the SoftDevice flash completion events used by NvmIntrf.
+// This also delivers the SoftDevice flash completion events used by NvmMcuIntrf.
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 
 NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {

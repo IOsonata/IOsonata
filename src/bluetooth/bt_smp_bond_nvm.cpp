@@ -22,7 +22,7 @@
 #include "bluetooth/bt_pds.h"
 #include "crypto/icrypto.h"
 #include "storage/nvm.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 #include "bluetooth/bt_app.h"
 
@@ -48,7 +48,7 @@ static bool s_PdsArmed;
 #define BT_SMP_BOND_REGION_NO		0
 #endif
 
-static NvmIntrf s_BondIntrf;
+static NvmMcuIntrf s_BondIntrf;
 static Nvm s_BondMem;
 
 static int PdsEnsureReady(void)

@@ -16,7 +16,7 @@ flowchart TD
     Fs["Filesystem"] --> Disk["NvmDiskIO: sector adapter"]
     Disk --> Nvm
     Nvm --> Bus["SPI, I2C, QSPI or OSPI"]
-    Nvm --> Internal["NvmIntrf: internal controller"]
+    Nvm --> Internal["NvmMcuIntrf: internal controller"]
 ```
 
 `NvmDiskIO` is an adapter to a different behavior, sector access. It owns a
@@ -30,7 +30,7 @@ reference to an NVM device; it is not a new memory technology. This follows
 | Application / linker | Region allocation, objects, buffers, interface setup and callback wiring |
 | `Nvm` | Region-relative addressing, range/alignment checks, page splitting, medium readiness and operation result |
 | `DeviceIntrf` | Transfer serialization, command/data movement and transport completion |
-| `NvmIntrf` port | Internal controller access, staged transfer data and supported arbitration routes |
+| `NvmMcuIntrf` port | Internal controller access, staged transfer data and supported arbitration routes |
 | Stack arbiter | When an internal-memory operation may run alongside radio activity |
 | `NvmDiskIO` | Sector geometry, erase-before-sector-write and synchronization before buffer reuse |
 | Filesystem / record store | Files or records, caching policy, recovery, and which writes survive a reset |
@@ -102,7 +102,7 @@ the existing foreground processing.
 ## Internal controller ports
 
 The generic driver and the controller interface are distinct objects.
-`NvmIntrf` wraps the single port-owned controller interface returned by
+`NvmMcuIntrf` wraps the single port-owned controller interface returned by
 `NvmMcuDevIntrf()`. Multiple wrappers do not provide independent instances
 of controller state or callback ownership.
 
