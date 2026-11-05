@@ -130,9 +130,9 @@ of its linker script. `NvmMcuCfg()` supplies the target's memory geometry,
 while `NvmRegionAddr()` and `NvmRegionSize()` select the reserved NVM1
 region. The application calls the existing `Nvm::Init()` and
 `NvmDiskIO::Init()` methods; no MCU-specific disk initialization API is needed.
-`FatFsFormatIfBlank()` uses the existing MSC sector buffer to format an erased
-region with FAT12, while preserving signed existing volumes and refusing to
-overwrite unknown nonblank media. No FAT formatting code is needed in `main()`.
+`FatFsMount()` uses the existing MSC sector buffer to initialize only
+a completely erased volume. `FatFsUnmount()` releases the filesystem
+before USB MSC exposes the volume. `UsbdMsc` itself is filesystem-independent.
 
 The disk continues to use 4 KiB sectors (the flash erase size), synchronous
 writes, and no wear levelling. The 256 KiB standard build reserves NVM1 at the

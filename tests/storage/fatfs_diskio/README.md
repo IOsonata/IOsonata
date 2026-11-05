@@ -11,9 +11,10 @@ sector media (SD-style) and 4096-byte sector media (raw flash). It checks
 blank formatting, file I/O, remount persistence, geometry, error propagation
 and refusal to format partially used or unreadable storage.
 
-The USB MSC flash example has a separate, pre-existing FAT12 formatter.
-The FatFs disk adapter uses the same physical sector sizes as MSC rather
-than translating the disk to a second incompatible 512-byte layout.
+Both the firmware and the USB MSC flash example use the generic FatFs
+mount/format operation for initialized DiskIO media. The example unmounts
+the volume before USB MSC takes ownership. The physical sector size
+reported by DiskIO matches the sector size exposed through USB MSC.
 
 This is a host simulation; actual MCU memory endurance, power loss and USB
 ownership handoff require separate hardware validation.

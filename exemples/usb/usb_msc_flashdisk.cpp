@@ -8,9 +8,9 @@ linker script, so its size is set there and nowhere else, and the image fails
 to link if it grows into the disk. It does not expose firmware, filesystem,
 settings or Bluetooth bond-storage regions.
 
-The content stays across resets and power cycles. An erased disk is formatted
-automatically. Existing signed volumes are preserved. Unrecognized nonblank
-media are never reformatted.
+The content stays across resets and power cycles. FatFs mounts the volume
+and formats it only if the entire medium is erased. A nonblank unrecognized
+filesystem is never reformatted.
 
 A sector is one erase unit, the smallest sector NvmDiskIO accepts, so the host
 sees that block size in READ CAPACITY rather than 512 bytes. Each sector the
@@ -48,7 +48,8 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "storage/diskio_nvm.h"
-#include "storage/fatfs_format.h"
+#include "ff.h"
+#include "ff_diskio.h"
 #include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 #include "app_evt_handler.h"
@@ -79,6 +80,7 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 static NvmMcuIntrf s_MemIntrf;
 static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
+static FATFS s_FatFs;
 static UsbdMsc s_Msc;
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_BUFF_SIZE];
 
@@ -138,8 +140,22 @@ int main(void)
 		return -1;
 	}
 
-	if (FatFsFormatIfBlank(s_Disk, s_SectorBuffer,
-			sizeof(s_SectorBuffer)) == false)
+	// The firmware mounts and initializes the disk, then releases it
+	// before USB MSC makes the same volume available to the host.
+	FatFsMountCfg_t mount = {};
+	mount.pDisk = &s_Disk;
+	mount.pFatFs = &s_FatFs;
+	mount.pPath = "0:";
+	mount.bFormatIfBlank = true;
+	mount.pWork = s_SectorBuffer;
+	mount.WorkSize = sizeof(s_SectorBuffer);
+
+	if (FatFsMount(mount) != FR_OK)
+	{
+		return -1;
+	}
+
+	if (FatFsUnmount("0:") != FR_OK)
 	{
 		return -1;
 	}

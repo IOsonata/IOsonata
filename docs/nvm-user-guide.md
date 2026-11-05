@@ -144,71 +144,42 @@ Align the reserved region to the target's erase and write requirements.
 `NvmMcuIntrf` wraps the port's single controller interface; declaring another
 wrapper does not create an independent controller or callback registration.
 
-## DiskIO and blank FAT12 volumes
+## DiskIO initialization
 
-An MCU internal-memory disk uses the existing `Nvm::Init()` and
-`NvmDiskIO::Init()` methods. `NvmMcuCfgInit()` fills the memory geometry,
-address and size from the selected linker-reserved NVM region:
+An MCU internal-memory disk uses `Nvm::Init()` and `NvmDiskIO::Init()`.
+`NvmMcuCfgInit()` fills the geometry, address and size from the
+linker-reserved NVM region:
 
 ```cpp
 #include "storage/diskio_nvm.h"
-#include "storage/fatfs_format.h"
 #include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 
 static NvmMcuIntrf s_NvmMcuIntrf;
 static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
-alignas(4) static uint8_t s_Sector[4096];
 
 // At function entry:
 NvmCfg_t cfg = {};
 
-if (NvmMcuCfgInit(cfg, 1) == false)
-{
-	return false;
-}
-
-if (s_NvmMcuIntrf.Init() == false)
-{
-	return false;
-}
-
-if (s_Nvm.Init(cfg, &s_NvmMcuIntrf) == false)
-{
-	return false;
-}
-
-if (s_Disk.Init(s_Nvm) == false)
-{
-	return false;
-}
-
-if (FatFsFormatIfBlank(s_Disk, s_Sector, sizeof(s_Sector)) == false)
+if (!NvmMcuCfgInit(cfg, 1) || !s_NvmMcuIntrf.Init() ||
+	!s_Nvm.Init(cfg, &s_NvmMcuIntrf) || !s_Disk.Init(s_Nvm))
 {
 	return false;
 }
 ```
 
-The reserved region is presented to `Nvm` as the configured memory device.
-`Nvm::Init()` checks basic memory geometry; `NvmDiskIO::Init()` checks
-sector size and region divisibility. The linker must reserve a nonoverlapping
-region with correct device bounds and erase alignment. The same generic
-`Nvm` and `NvmDiskIO` APIs work with external memory and other interfaces.
+The reserved region is presented to `Nvm` as configured memory.
+The linker must reserve a disjoint area with correct erase and write
+alignment. External memory uses the same `Nvm` and `NvmDiskIO`
+with an injected SPI, I2C, QSPI or OSPI interface. Mounting and formatting
+are described in [Firmware FatFs volumes](#firmware-fatfs-volumes).
+USB MSC uses the initialized `DiskIO` directly.
 
-`FatFsFormatIfBlank()` accepts any `DiskIO`, regardless of USB, RAM or flash.
-It creates FAT12 only when sector 0 is completely erased or zero-filled, or
-repairs a recognizable interrupted IOsonata boot-sector write. An existing
-sector-0 55AA signature is preserved, including MBR and other FAT layouts.
-Unknown nonblank media are rejected, not erased. Newly created volumes have
-two FAT copies, one root-directory sector and one sector per cluster; the
-formatter rejects geometry outside FAT12 limits and writes sector 0 last.
-The caller owns a buffer of at least the disk's logical-sector size.
-
-The nRF52840 USB flash-disk example uses a 4096-byte logical sector matching
-the flash erase unit. Sector writes erase and program the entire sector,
-synchronously, without wear levelling or 512-byte sector emulation. Flash has
-limited program/erase endurance; this is not suitable for write-heavy use.
+The disk's sector size is a whole number of physical erase units.
+For a 4 KiB raw-flash medium, FatFs and USB MSC both use 4 KiB sectors.
+Writing a raw-flash sector erases and programs that erase unit, with
+no automatic wear levelling.
 
 ## Read, write, erase and synchronization
 

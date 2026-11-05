@@ -161,11 +161,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/excelitas_serlink.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/fatfs_format.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs_format.h</locationURI>
-		</link>
-		<link>
 			<name>include/storage/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
@@ -1099,11 +1094,6 @@
 			<name>src/storage/diskio_impl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_impl.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/storage/fatfs_format.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs_format.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/fatfs.cpp</name>

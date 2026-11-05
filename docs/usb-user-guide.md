@@ -560,8 +560,9 @@ contents are lost when USB bus power is removed.
 `UsbMscFlashDisk` exposes a 256 KiB FAT12 volume on the nRF52840 internal flash:
 the NVM1 region of `gcc_nrf52840_xxaa_nvm256k.ld`, and nothing else. Change the
 size in that script; the volume geometry follows the region. The example formats
-the region when sector 0 has no 55AA signature. Otherwise the content stays
-across resets, power cycles and any reflash that does not erase that region.
+the region only when FatFs reports no filesystem and a full-media scan
+confirms that the reserved storage region is entirely erased. Existing
+volumes are preserved; invalid nonblank contents are never reformatted.
 
 The `Release_mbr` configuration is for a part with the MBR and the Nordic USB DFU
 bootloader installed, such as the UDG-NRF52840 dongle. It links
@@ -574,10 +575,9 @@ A DFU update erases only the pages it writes. A bootloader doing single bank
 updates writes the new image at 0x1000, so the volume stays. One doing dual bank
 updates writes it right after the current image, which keeps the volume only if
 two images of up to 28672 bytes fit below 0x10000. The Release image is about
-33 KB, so such an update overwrites the start of the volume and the example
-formats it at the next boot, which loses the files. After loading a different
-firmware, the example formats the region if the old content has no signature at
-the end of its first 512 bytes.
+33 KB, so such an update overwrites the start of the volume and can corrupt the filesystem. In that case the example refuses to
+format a nonblank volume automatically. Restore the data, or explicitly
+erase the reserved storage region before reinitializing it.
 
 The sector is one flash page, so the host reads a 4096 byte block in READ
 CAPACITY rather than 512. `NvmDiskIO` does not accept a sector smaller than the
