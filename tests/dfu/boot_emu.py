@@ -88,6 +88,7 @@ uc.mem_map(0xE0000000, 0x100000, UC_PROT_ALL)      # system control space
 uc.mem_map(0xF0000000, 0x10000, UC_PROT_ALL)
 if N52:
     uc.mem_write(0x10000010, struct.pack("<II", PAGE, FLASH // PAGE))
+    uc.mem_write(0x50000510, b"\xff" * 4)         # GPIO inputs high, no button
 else:
     uc.mem_map(0x00FF0000, 0x10000, UC_PROT_ALL)   # FICR, UICR on nRF54L
     uc.mem_write(0x00FFD000, b"\xff" * 0x1000)
