@@ -37,9 +37,9 @@ spec.loader.exec_module(tool)
 img = open(os.path.join(IMG, "v2.bin"), "rb").read()
 hdr, size, tlv = tool.parse_image(img)
 
-layouts = sorted(glob.glob(os.path.join(ROOT, "ARM", "**", "dfu_layout_*.ld"),
+layouts = sorted(glob.glob(os.path.join(ROOT, "ARM", "**", "*_dfu_layout.ld"),
                            recursive=True) +
-                 glob.glob(os.path.join(ROOT, "RISCV", "**", "dfu_layout_*.ld"),
+                 glob.glob(os.path.join(ROOT, "RISCV", "**", "*_dfu_layout.ld"),
                            recursive=True))
 check(len(layouts) > 10, "%d layout files found" % len(layouts))
 

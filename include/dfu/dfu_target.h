@@ -5,7 +5,7 @@
 
 The generic layer (image checks, stage 0 boot, SMP server, transports) is
 the same on every MCU. What differs is in one file per MCU family,
-dfu_<mcu>, plus the flash layout in the target's dfu_layout_*.ld:
+dfu_<mcu>, plus the flash layout in the target's *_dfu_layout.ld:
 
 	internal memory	geometry, erase, program
 	start			hand the core to the application

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Production hex of a signed image, for a device with the stage 0 DFU boot.
 
-Reads the layout from the target's dfu_layout_*.ld, the same file the boot
+Reads the layout from the target's *_dfu_layout.ld, the same file the boot
 and the application link with, so the addresses cannot drift:
 
   layout with slot 1 (OTA parts)
@@ -19,7 +19,7 @@ Merge the output with the boot hex (and the SoftDevice where there is one).
 
     dfu_prod_hex.py --layout ARM/Nordic/nRF52/ldscript/gcc_nrf52840_xxaa_s140_dfu_layout.ld \\
         app_signed.bin app_prod.hex
-    dfu_prod_hex.py --layout .../dfu_layout_lpc11u35.ld app_signed.bin out.hex
+    dfu_prod_hex.py --layout .../gcc_lpc54605_dfu_layout.ld app_signed.bin out.hex
 
 The state unit, 16 or the program unit of the part's memory when that is
 larger (256 on LPC, 512 on SAM4), places the trailer words and the record
@@ -89,7 +89,7 @@ def parse_image(img):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--layout", help="dfu_layout_*.ld of the target")
+    ap.add_argument("--layout", help="*_dfu_layout.ld of the target")
     num = lambda s: int(s, 0)
     ap.add_argument("--slot0", type=num)
     ap.add_argument("--slot0-size", type=num)

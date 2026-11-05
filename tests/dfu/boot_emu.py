@@ -26,7 +26,7 @@ SCEN = sys.argv[4] if len(sys.argv) > 4 else "install"
 N52 = T in ("52", "52832")
 
 # The memory and its controller per target. The layout itself comes from the
-# ELF: the __dfu_* symbols the linker took from the target's dfu_layout_*.ld.
+# ELF: the __dfu_* symbols the linker took from the target's *_dfu_layout.ld.
 if T == "52":
     FLASH, NAME, NVMC, PAGE = 0x100000, "52840", 0x4001E000, 0x1000
 elif T == "52832":

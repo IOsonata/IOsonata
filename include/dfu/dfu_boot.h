@@ -4,7 +4,7 @@
 @brief	DFU flash layout, slot 1 trailer, slot 0 record and the stage 0 boot.
 
 The layout is what the linker script declares, as absolute symbols from the
-target's dfu_layout_*.ld, so the boot and the application agree on it by
+target's *_dfu_layout.ld, so the boot and the application agree on it by
 including the same file. No C define repeats an address.
 
 	slot 0		application payload, at its link address

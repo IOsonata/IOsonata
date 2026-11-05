@@ -8,7 +8,7 @@ Three layers, each replaced without touching the others:
 	protocol	DfuWire (stage 0 wire protocol), DfuSmp (SMP), ...
 				calls DfuMgr only, never the memory or the crypto
 	DfuMgr		manifest check, image writer, hash, record or pending mark
-	target		dfu_<mcu>, dfu_layout_*.ld
+	target		dfu_<mcu>, *_dfu_layout.ld
 
 A protocol reads its bytes from any DeviceIntrf: UART, UsbdCdc, BtIntrf.
 Each MCU target picks the protocol and the transport; nothing above the

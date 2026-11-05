@@ -14,7 +14,7 @@ generic   dfu_image     image format checks: header, TLVs, hash, signature
           bt_dfu_smp    SMP GATT service, Bluetooth LE
           dfu_http      image download over HTTP/1.1, LTE
 target    dfu_<mcu>     internal memory erase and program, start, reset
-          dfu_layout_<mcu>.ld   where everything is
+          gcc_<mcu>_dfu_layout.ld   where everything is
 ```
 
 Each target picks its protocol and transport (DFU_PROTO, DFU_TRANSPORT in
@@ -278,7 +278,7 @@ refuses a layout whose declared unit is not the target's.
 For a part without slot 1, `-S` is the slot 0 size plus the header and TLV
 room.
 
-`Python/dfu_prod_hex.py --layout <dfu_layout_*.ld> app_signed.bin out.hex`
+`Python/dfu_prod_hex.py --layout <*_dfu_layout.ld> app_signed.bin out.hex`
 writes the production hex: the image in slot 1 marked pending where the
 layout has slot 1, else the payload in slot 0 with its record. Merge it with
 the boot and the SoftDevice.

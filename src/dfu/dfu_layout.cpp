@@ -44,7 +44,7 @@ SOFTWARE.
   * @{
   */
 
-// The layout, as dfu_layout_*.ld declares it. A linker symbol's value is its
+// The layout, as *_dfu_layout.ld declares it. A linker symbol's value is its
 // address, which is why these are arrays. Weak, so a project without a DFU
 // layout links and DfuLayoutGet says there is none instead of guessing. A
 // layout with no slot 1 leaves both slot 1 symbols out, or sets them equal.
