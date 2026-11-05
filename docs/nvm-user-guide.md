@@ -379,3 +379,52 @@ interpreting the persistence result.
 | IsBusy clears but data is wrong | Sync/error result, erase requirement and source lifetime |
 | Block adapter rejects geometry | Sector divisibility, erase unit and sector-size limit |
 | Data vanishes after reset | Cache flush, operation completion and reserved storage layout |
+
+## Firmware FatFs volumes
+
+FatFs mounts the existing `DiskIO` without USB MSC. Use `NvmDiskIO` with
+`Nvm` for internal program/data flash, serial NOR flash, EEPROM, FRAM or
+other addressed memory. `SDCard` and other `DiskIO` devices work through
+the same `FatFsMount` interface declared in `ff_diskio.h`.
+
+The FatFs configuration supports 512, 1024, 2048 and 4096-byte sectors
+(`FF_MAX_SS=4096`). FatFs reads and writes whole sectors reported by
+`DiskIO::GetSectSize()`, matching the physical sector size USB MSC exposes
+for the same disk. In particular, a 4 KiB `NvmDiskIO` volume uses 4 KiB FAT
+sectors, not a separate emulated 512-byte layout.
+
+```cpp
+#include "ff.h"
+#include "ff_diskio.h"
+#include "storage/diskio_nvm.h"
+
+static NvmDiskIO s_Disk;
+static FATFS s_Fs;
+alignas(4) static uint8_t s_FormatWork[4096];
+
+// Initialize the Nvm transport, Nvm and NvmDiskIO first:
+// s_Disk.Init(s_Nvm);
+FatFsMountCfg_t mount = {};
+mount.pDisk = &s_Disk;
+mount.pFatFs = &s_Fs;
+mount.pPath = "0:";
+mount.bFormatIfBlank = true;
+mount.pWork = s_FormatWork;
+mount.WorkSize = sizeof(s_FormatWork);
+FRESULT res = FatFsMount(mount);
+```
+
+Format work memory must be at least one physical sector; a disk that is
+already formatted can be mounted with no work buffer. The volume is only
+formatted if `bFormatIfBlank` is explicitly set, `f_mount` reports
+`FR_NO_FILESYSTEM` and a complete read of the disk confirms all bytes are
+`0xFF`. Neither disk errors nor unrecognized nonblank contents trigger
+formatting. `FatFsUnmount()` releases FatFs before the application transfers
+a writable volume to a USB host. Firmware and the USB host must not mount
+the same writable filesystem concurrently.
+
+`DiskIO::Flush()` is void, so `CTRL_SYNC` cannot report a failed cache
+flush. Avoid unverified write-back caches for critical file data. A raw NOR
+FAT volume also needs wear management and power-failure testing for
+production logging. Increasing `FF_MAX_SS` to 4096 increases the space
+used by FatFs' sector buffers; budget static RAM accordingly.

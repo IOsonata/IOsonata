@@ -139,3 +139,8 @@ writes, and no wear levelling. The 256 KiB standard build reserves NVM1 at the
 top of flash; `Release_mbr` reserves 832 KiB between 0x10000 and 0xE0000.
 A dual-bank DFU update may overwrite the beginning of the `Release_mbr` disk
 region. Persistence through firmware updates is not guaranteed.
+
+Firmware can mount the same `DiskIO` using `FatFsMount` without enabling
+USB MSC. The filesystem sector size must match the exposed USB sector size.
+Unmount the firmware volume before writable MSC host access; do not let
+both sides modify a FAT volume simultaneously.
