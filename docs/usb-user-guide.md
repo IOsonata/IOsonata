@@ -565,7 +565,9 @@ for the application. `Release` retains 256 KiB using
 unmounts the volume and hands the same disk to USB MSC. If mounting or
 formatting fails, USB still enumerates the raw medium; it is not
 automatically erased. An unrecognized or corrupted volume may require
-explicit recovery on the PC.
+explicit recovery on the PC. New and previously unlabeled FatFs volumes
+receive the `IOSONATA` volume label. An existing custom label is not
+overwritten, and adding a label does not reformat the filesystem.
 
 The physical erase unit is 4096 bytes. New volumes expose 512-byte
 logical sectors through a caller-owned 4096-byte read/modify/write

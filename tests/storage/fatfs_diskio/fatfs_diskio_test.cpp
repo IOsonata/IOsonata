@@ -136,6 +136,36 @@ static void TestMedium(TestDisk &Disk)
 	CHECK(Disk.vWrites == writes);
 	CHECK(FatFsUnmount() == FR_OK);
 
+	// The original blank volume had no directory label, so computers
+	// displayed "NO NAME". A later mount can name it without formatting.
+	cfg.pLabelIfUnnamed = "0:IOSONATA";
+	TCHAR label[FF_MAX_LFN + 1] = {};
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(f_getlabel("0:", label, nullptr) == FR_OK);
+	CHECK(strcmp(label, "IOSONATA") == 0);
+	CHECK(f_open(&file, "0:/logger.txt", FA_READ) == FR_OK);
+	CHECK(f_close(&file) == FR_OK);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// An existing label is never replaced, even if the configuration
+	// subsequently requests another label.
+	writes = Disk.vWrites;
+	cfg.pLabelIfUnnamed = "0:OTHER";
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(f_getlabel("0:", label, nullptr) == FR_OK);
+	CHECK(strcmp(label, "IOSONATA") == 0);
+	CHECK(Disk.vWrites == writes);
+	CHECK(f_setlabel("0:CUSTOM") == FR_OK);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	writes = Disk.vWrites;
+	cfg.pLabelIfUnnamed = "0:IOSONATA";
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(f_getlabel("0:", label, nullptr) == FR_OK);
+	CHECK(strcmp(label, "CUSTOM") == 0);
+	CHECK(Disk.vWrites == writes);
+	CHECK(FatFsUnmount() == FR_OK);
+
 	// Errors from the physical sector driver must not be reported as OK.
 	FFDiskSetDevice(&Disk);
 	for (unsigned i = 0; i < sizeof(s_Data); i++)

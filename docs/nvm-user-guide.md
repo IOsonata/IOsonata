@@ -398,8 +398,17 @@ mount.pPath = "0:";
 mount.bFormatIfBlank = true;
 mount.pWork = s_FormatWork;
 mount.WorkSize = sizeof(s_FormatWork);
+mount.pLabelIfUnnamed = "0:IOSONATA"; // Optional; leave existing labels intact
 FRESULT res = FatFsMount(mount);
 ```
+
+If `pLabelIfUnnamed` is supplied and the volume has no directory label,
+`FatFsMount()` writes it using FatFs `f_setlabel()`. This also corrects
+existing unlabeled volumes that appear as "NO NAME" on a PC. A named
+volume, including one renamed by the user, keeps its existing label.
+The label includes the FatFs drive prefix, e.g. `"0:IOSONATA"`.
+Label support is enabled through `FF_USE_LABEL=1`. Setting a label
+does not format or erase the filesystem.
 
 Format work memory must be at least one logical sector; a disk that is
 already formatted can be mounted with no work buffer. An NVM erase buffer,

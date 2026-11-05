@@ -154,6 +154,7 @@ int main(void)
 	mount.bFormatIfBlank = true;
 	mount.pWork = s_SectorBuffer;
 	mount.WorkSize = sizeof(s_SectorBuffer);
+	mount.pLabelIfUnnamed = "0:IOSONATA";
 
 	FRESULT res = FatFsMount(mount);
 

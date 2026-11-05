@@ -132,7 +132,9 @@ region. The application calls the existing `Nvm::Init()` and
 `NvmDiskIO::Init()` methods; no MCU-specific disk initialization API is needed.
 `FatFsMount()` uses the existing MSC sector buffer to initialize only
 a completely erased volume. `FatFsUnmount()` releases the filesystem
-before USB MSC exposes the volume. `UsbdMsc` itself is filesystem-independent.
+before USB MSC exposes the volume. Unlabeled volumes are named
+`IOSONATA` through FatFs, preserving all existing custom volume labels
+and files. `UsbdMsc` itself is filesystem-independent.
 
 `Debug` reserves 832 KiB in NVM1 (0x30000-0xFFFFF); `Release`
 reserves 256 KiB (0xC0000-0xFFFFF), while `Release_mbr` reserves

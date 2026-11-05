@@ -246,6 +246,13 @@ static FRESULT FatFsDiskIsBlank(void *pWork, UINT WorkSize, bool *pBlank)
 
 FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
 {
+	FRESULT res;
+	bool blank = false;
+	TCHAR label[FF_MAX_LFN + 1];
+	const TCHAR *pPath;
+	const MKFS_PARM defaults = { FM_ANY | FM_SFD, 0, 0, 0, 0 };
+	const MKFS_PARM *pFormat;
+
 	if (Cfg.pDisk == nullptr || Cfg.pFatFs == nullptr)
 	{
 		return FR_INVALID_PARAMETER;
@@ -257,7 +264,7 @@ FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
 		return FR_INVALID_PARAMETER;
 	}
 
-	const TCHAR *pPath = Cfg.pPath != nullptr ? Cfg.pPath : "0:";
+	pPath = Cfg.pPath != nullptr ? Cfg.pPath : "0:";
 	FFDiskSetDevice(Cfg.pDisk);
 
 	if (!FFDiskReady())
@@ -265,34 +272,44 @@ FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
 		return FR_NOT_READY;
 	}
 
-	FRESULT res = f_mount(Cfg.pFatFs, pPath, 1);
+	res = f_mount(Cfg.pFatFs, pPath, 1);
 
-	if (res != FR_NO_FILESYSTEM || !Cfg.bFormatIfBlank)
+	if (res == FR_NO_FILESYSTEM && Cfg.bFormatIfBlank)
 	{
-		return res;
+		res = FatFsDiskIsBlank(Cfg.pWork, Cfg.WorkSize, &blank);
+
+		if (res != FR_OK)
+		{
+			return res;
+		}
+
+		if (!blank)
+		{
+			return FR_NO_FILESYSTEM;
+		}
+
+		pFormat = Cfg.pFormatOptions != nullptr ?
+			Cfg.pFormatOptions : &defaults;
+
+		res = f_mkfs(pPath, pFormat, Cfg.pWork, Cfg.WorkSize);
+
+		if (res == FR_OK)
+		{
+			res = f_mount(Cfg.pFatFs, pPath, 1);
+		}
 	}
 
-	bool blank = false;
-	res = FatFsDiskIsBlank(Cfg.pWork, Cfg.WorkSize, &blank);
-
-	if (res != FR_OK)
+	// FatFs mkfs creates an unnamed volume ("NO NAME" on the PC).
+	// Adding a label is independent of formatting and is also useful for
+	// disks formatted by older firmware. Never replace a custom label.
+	if (res == FR_OK && Cfg.pLabelIfUnnamed != nullptr)
 	{
-		return res;
-	}
-	if (!blank)
-	{
-		return FR_NO_FILESYSTEM;
-	}
+		res = f_getlabel(pPath, label, nullptr);
 
-	const MKFS_PARM defaults = { FM_ANY | FM_SFD, 0, 0, 0, 0 };
-	const MKFS_PARM *pFormat = Cfg.pFormatOptions != nullptr ?
-		Cfg.pFormatOptions : &defaults;
-
-	res = f_mkfs(pPath, pFormat, Cfg.pWork, Cfg.WorkSize);
-
-	if (res == FR_OK)
-	{
-		res = f_mount(Cfg.pFatFs, pPath, 1);
+		if (res == FR_OK && label[0] == 0)
+		{
+			res = f_setlabel(Cfg.pLabelIfUnnamed);
+		}
 	}
 
 	return res;

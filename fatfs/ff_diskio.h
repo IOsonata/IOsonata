@@ -94,10 +94,13 @@ typedef struct __FatFs_Mount_Config {
 	void *pWork;				//!< Caller-owned format/blank-scan buffer
 	UINT WorkSize;				//!< At least the physical sector size
 	const MKFS_PARM *pFormatOptions;	//!< Null uses FAT/SFD defaults
+	const TCHAR *pLabelIfUnnamed;	//!< E.g. "0:IOSONATA"; only if no volume label
 } FatFsMountCfg_t;
 
 // Mount firmware FatFs independently of USB MSC. Formatting is optional and
 // never attempted for an I/O error or unrecognized nonblank volume.
+// If pLabelIfUnnamed is supplied, assign it to a mounted volume only when
+// no label entry exists. Existing custom labels and file contents are kept.
 FRESULT FatFsMount(const FatFsMountCfg_t &Cfg);
 FRESULT FatFsUnmount(const TCHAR *pPath = "0:");
 
