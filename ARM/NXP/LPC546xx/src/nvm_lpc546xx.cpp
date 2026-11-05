@@ -7,8 +7,9 @@ The flash is mapped at 0, sectors of 32 KB made of 256 byte pages, erased
 and programmed by the IAP ROM (lpc_iap.c): prepare the sector, then erase a
 page or copy a 256 byte page from RAM. The ROM programs whole pages only.
 
-Nvm geometry (NvmMcuCfg): base 0, the flash size of the part, erase unit
-and transfer page 256 bytes, write granularity 1 byte. A write updates its
+Nvm geometry (NvmMcuCfgInit): the caller's reserved flash region is
+bounded by the physical flash; erase and transfer units are 256-byte pages,
+with 1-byte write granularity. A write updates its
 page: the page is read into RAM, the new bytes merged, the page erased and
 programmed with the merged content, then compared. A write of the content
 the page already holds programs nothing. A page is never programmed twice
@@ -19,7 +20,7 @@ that it reads all ones.
 Each ROM call runs with interrupts masked, prepare and erase or program
 together: nothing may read the flash while the ROM works on it. A page erase
 or program keeps interrupts off for the time the flash needs. Reads are
-memory mapped. Every operation finishes inside its call: NvmIntrf::Init
+memory mapped. Every operation finishes inside its call: NvmMcuIntrf::Init
 with bIntEn fails, and an operation is refused while an arbiter is
 registered, the port has none to call.
 
@@ -58,7 +59,7 @@ SOFTWARE.
 
 #include "coredev/interrupt.h"
 #include "lpc_iap.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 
 #define LPC546XX_NVM_SIZE			FSL_FEATURE_SYSCON_FLASH_SIZE_BYTES
 #define LPC546XX_NVM_SECT			FSL_FEATURE_SYSCON_FLASH_SECTOR_SIZE_BYTES
@@ -72,8 +73,8 @@ SOFTWARE.
 #endif
 
 static NvmDevIntrf_t s_NvmDev;
-static NvmIntrfStat_t s_Stat;
-static NvmIntrfArb_t s_Arbiter;
+static NvmMcuIntrfStat_t s_Stat;
+static NvmMcuIntrfArb_t s_Arbiter;
 
 // The page the ROM copies from, in RAM, word aligned
 static uint32_t s_Lpc546xxNvmPage[LPC546XX_NVM_PAGE / 4];
@@ -204,11 +205,22 @@ int NvmMcuErase(uintptr_t Addr)
 	return res;
 }
 
-void NvmMcuCfg(NvmCfg_t &Cfg)
+bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 {
+	if (Size == 0 || (uint64_t)BaseAddr > LPC546XX_NVM_SIZE ||
+		(uint64_t)Size > LPC546XX_NVM_SIZE - (uint64_t)BaseAddr ||
+		(BaseAddr % LPC546XX_NVM_PAGE) != 0 ||
+		(Size % LPC546XX_NVM_PAGE) != 0)
+	{
+		Cfg = {};
+
+		return false;
+	}
+
+	Cfg = {};
 	Cfg.DevNo = 0;
-	Cfg.BaseAddr = 0;
-	Cfg.TotalSize = LPC546XX_NVM_SIZE;
+	Cfg.BaseAddr = BaseAddr;
+	Cfg.TotalSize = Size;
 	Cfg.EraseSize = LPC546XX_NVM_PAGE;
 	Cfg.SectorSize = LPC546XX_NVM_SECT;
 	Cfg.PageSize = LPC546XX_NVM_PAGE;
@@ -217,6 +229,8 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 	Cfg.RdCmd = { LPC546XX_NVM_CMD_READ, 0 };
 	Cfg.WrCmd = { LPC546XX_NVM_CMD_WRITE, 0 };
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	return true;
 }
 
 // The whole flash belongs to the application. Weak, a build with a reserved
@@ -333,7 +347,7 @@ static void *NvmGetHandle(DevIntrf_t *pDev)
 	return pDev->pDevData;
 }
 
-bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
+bool NvmMcuIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
 	DevIntrf_t &dev = s_NvmDev.DevIntrf;
 
@@ -374,12 +388,12 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	return true;
 }
 
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
+void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb)
 {
 	s_Arbiter = pArb;
 }
 
-void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
+void NvmMcuIntrfGetStat(NvmMcuIntrfStat_t *pStat)
 {
 	if (pStat)
 	{

@@ -7,7 +7,8 @@ or [ARM/Nordic/nRF54/nRF54LM20x/exemples](../../ARM/Nordic/nRF54/nRF54LM20x/exem
 Build the matching MCU IOsonata library first, then clean-build the application
 with matching Debug or Release settings.
 
-The LM20 set includes all entries below except the SPI-dependent 3D mouse.
+The LM20 set includes all entries below except the SPI-dependent 3D mouse and
+the flash disk, which is an nRF52840 project.
 See [LM20 project setup](../../docs/usb-nrf54lm20x.md) for available build
 configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 
@@ -27,6 +28,7 @@ configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 | [usb_int_loopback.cpp](usb_int_loopback.cpp) | UsbIntLoopback/ioc | `UsbdInt` alternate settings |
 | [usb_iso_loopback.cpp](usb_iso_loopback.cpp) | UsbIsoLoopback/ioc | `UsbdIso` alternate settings |
 | [usb_msc_ramdisk.cpp](usb_msc_ramdisk.cpp) | UsbMscRamDisk/ioc | Disposable 64 KiB FAT12 RAM disk |
+| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT disk on internal flash: 832 KiB in bare-metal `Debug`, 256 KiB in `Release`, or 832 KiB in `Release_mbr` |
 
 Use the [USB User Guide](../../docs/usb-user-guide.md) for dependency
 installation, host commands, buffer ownership and reconnect behavior.
@@ -121,4 +123,25 @@ Neither mouse preset has a wheel or report IDs. Custom layouts still use
 MSC needs an initialized `DiskIO`, a caller-owned sector work buffer and its
 size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
 removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
-USB descriptors; the example's FAT12 formatting only defines the disk contents.
+USB descriptors; filesystem initialization belongs to the storage layer.
+
+The flash disk example uses current NvmMcuCfgInit, Nvm and NvmDiskIO
+APIs over the linker-reserved NVM1 region. Debug reserves 832 KiB
+at 0x30000-0xFFFFF; Release reserves 256 KiB at 0xC0000-0xFFFFF;
+Release_mbr reserves 832 KiB at 0x10000-0xDFFFF under the SDK USB
+DFU bootloader. These variants do not share a disk starting address.
+
+The example restores the original direct FAT12 initializer. The
+USB host sees native 4096-byte sectors in all three layouts.
+Startup reads only sector zero. An existing 55AA-signed disk is
+preserved; an uninitialized disk receives two FAT copies, an
+IOSONATA volume-label directory entry and the boot sector last.
+There is no full-disk blank scan, whole-region erase or 512-byte
+flash read/modify/write amplification. The example is intended
+for disposable data; it does not implement wear levelling.
+
+Generic FatFsMount/FatFsUnmount remains available to firmware
+through DiskIO and is independent of USB MSC. The USB disk example
+does not use FatFs during initialization; it exposes the prepared
+DiskIO directly to the PC. Do not permit firmware and the USB host
+to modify the same writable volume concurrently.

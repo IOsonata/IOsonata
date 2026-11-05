@@ -38,7 +38,7 @@ SOFTWARE.
 
 #include <string.h>
 #include "coredev/uart.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "idelay.h"
 #include "board.h"
 
@@ -63,7 +63,7 @@ static const UARTCfg_t s_UartCfg = {
 	.bDMAMode = false,
 };
 static UART s_Uart;
-static NvmIntrf s_Intrf;
+static NvmMcuIntrf s_Intrf;
 static Nvm s_Mem;
 static unsigned s_Fail;
 
@@ -76,13 +76,33 @@ static void Check(bool Ok, const char *pText)
 static void Run(void)
 {
 	NvmCfg_t cfg = {};
-	NvmMcuCfg(cfg);
+
+	// The NVM0 region is the MCU's dedicated data EEPROM/data flash.
+	if (NvmMcuCfgInit(cfg, 0) == false)
+	{
+		s_Uart.printf("FAIL: no reserved data NVM region\r\n");
+
+		return;
+	}
 	uint32_t unit = cfg.EraseSize ? cfg.EraseSize : 256;
 	uint64_t size = (uint64_t)unit * 3;
-	if (cfg.TotalSize < size || !s_Intrf.Init() ||
-		!s_Mem.Init(cfg, &s_Intrf, cfg.TotalSize - size, size))
+
+	if (cfg.TotalSize < size)
+	{
+		s_Uart.printf("FAIL: data NVM region too small\r\n");
+
+		return;
+	}
+	if (s_Intrf.Init() == false)
+	{
+		s_Uart.printf("FAIL: memory interface init\r\n");
+
+		return;
+	}
+	if (s_Mem.Init(cfg, &s_Intrf, cfg.TotalSize - size, size) == false)
 	{
 		s_Uart.printf("FAIL: memory init\r\n");
+
 		return;
 	}
 	s_Uart.printf("Data NVM: %lu bytes, erase %lu, write %lu\r\n",

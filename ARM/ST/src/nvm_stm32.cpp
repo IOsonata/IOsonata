@@ -74,7 +74,7 @@ SOFTWARE.
 #include "stm32.h"
 
 #include "coredev/interrupt.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 
 #if !defined(IOSONATA_STM32_WBA) && !defined(IOSONATA_STM32_L4) && !defined(STM32H753xx)
 #error "nvm_stm32: this STM32 family has no NVM controller support"
@@ -266,7 +266,7 @@ static_assert((NVM_INTRF_MAX_XFER % NVM_INTRF_WRITE_GRAN) == 0,
 // hardware rather than a transaction, the same reasoning as the Nordic port.
 // ---------------------------------------------------------------------------
 
-static NvmIntrfStat_t s_Stat;
+static NvmMcuIntrfStat_t s_Stat;
 
 static NvmDevIntrf_t s_NvmDev;
 
@@ -457,7 +457,7 @@ static int StFlashProgram(uintptr_t Addr, const uint8_t *pData, uint32_t Len)
 // ---------------------------------------------------------------------------
 // What the port knows about the memory itself. The C linkage of NvmMcuErase,
 // NvmMcuIsReady and NvmMcuCeiling comes from their declarations in
-// nvm_intrf.h; the definitions inherit it, so nothing is marked here.
+// nvm_mcu_intrf.h; the definitions inherit it, so nothing is marked here.
 // ---------------------------------------------------------------------------
 
 // Erase the page holding Addr. Addr is the mapped bus address, page aligned;
@@ -748,16 +748,27 @@ bool NvmMcuIsReady(void)
 #endif
 }
 
-void NvmMcuCfg(NvmCfg_t &Cfg)
+bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 {
+	uint64_t capacity = StFlashSize();
+
+	if (Size == 0 || capacity == 0 || BaseAddr < FLASH_BASE ||
+		(uint64_t)(BaseAddr - FLASH_BASE) > capacity ||
+		(uint64_t)Size > capacity - (uint64_t)(BaseAddr - FLASH_BASE) ||
+		(BaseAddr % NVM_INTRF_PAGE_SIZE) != 0 ||
+		(Size % NVM_INTRF_PAGE_SIZE) != 0)
+	{
+		Cfg = {};
+
+		return false;
+	}
+
+	Cfg = {};
 	Cfg.DevNo = 0;
 
-	// The flash is mapped at FLASH_BASE, not at 0, so the base goes in here
-	// and every address this port sees is the mapped bus address. A creator
-	// that reserves a region through the linker script puts that region's
-	// base and size in instead, the way the Nordic bond stores do.
-	Cfg.BaseAddr = FLASH_BASE;
-	Cfg.TotalSize = StFlashSize();
+	// The reserved region, not the whole mapped flash, is the Nvm device.
+	Cfg.BaseAddr = BaseAddr;
+	Cfg.TotalSize = Size;
 	Cfg.EraseSize = NVM_INTRF_PAGE_SIZE;
 	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// largest bytes per transfer
 	Cfg.WriteGran = NVM_INTRF_WRITE_GRAN;
@@ -769,6 +780,8 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 	Cfg.WrCmd = { NVM_INTRF_CMD_WRITE, 0 };
 
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	return true;
 }
 
 // Where the memory the application owns ends. The default is the whole
@@ -944,14 +957,14 @@ static int NvmRxData(DevIntrf_t *pIntrf, uint8_t *pBuff, int Len)
 
 static void NvmStopRx(DevIntrf_t *) {}
 static void NvmStopTx(DevIntrf_t *) {}
-static void NvmIntrfDisable(DevIntrf_t *) {}
-static void NvmIntrfEnable(DevIntrf_t *) {}
+static void NvmMcuIntrfDisable(DevIntrf_t *) {}
+static void NvmMcuIntrfEnable(DevIntrf_t *) {}
 static uint32_t NvmGetRate(DevIntrf_t *) { return 0; }
 static uint32_t NvmSetRate(DevIntrf_t *, uint32_t Rate) { return Rate; }
 static void NvmPowerOff(DevIntrf_t *) {}
 static void *NvmGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
 
-bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
+bool NvmMcuIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
 	memset(&s_NvmDev, 0, sizeof(s_NvmDev));
 	memset(&s_Stat, 0, sizeof(s_Stat));
@@ -961,8 +974,8 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	// without knowing anything about this class.
 	s_NvmDev.DevIntrf.pDevData = &s_NvmDev;
 	s_NvmDev.DevIntrf.Type = DEVINTRF_TYPE_MEMCTRL;
-	s_NvmDev.DevIntrf.Disable = NvmIntrfDisable;
-	s_NvmDev.DevIntrf.Enable = NvmIntrfEnable;
+	s_NvmDev.DevIntrf.Disable = NvmMcuIntrfDisable;
+	s_NvmDev.DevIntrf.Enable = NvmMcuIntrfEnable;
 	s_NvmDev.DevIntrf.GetRate = NvmGetRate;
 	s_NvmDev.DevIntrf.SetRate = NvmSetRate;
 	s_NvmDev.DevIntrf.StartRx = NvmStartRx;
@@ -990,15 +1003,15 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 
 // The arbiter hook the header declares. Nothing on these parts registers
 // one; held so a stack that ever does can, and read nowhere until then.
-static NvmIntrfArb_t s_pArbiter = nullptr;
+static NvmMcuIntrfArb_t s_pArbiter = nullptr;
 
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
+void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb)
 {
 	s_pArbiter = pArb;
 	(void)s_pArbiter;
 }
 
-void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
+void NvmMcuIntrfGetStat(NvmMcuIntrfStat_t *pStat)
 {
 	if (pStat != nullptr)
 	{

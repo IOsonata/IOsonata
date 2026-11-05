@@ -56,7 +56,7 @@ low-frequency oscillator selection are not implemented in this initial port.
 
 The linker uses all 512 KiB of flash at 0x08000000 and 80 KiB of SRAM at
 0x20000000. The separate 16 KiB data EEPROM at 0x08080000 is available through
-`NvmIntrf` and `Nvm`; program-flash storage is not exposed.
+`NvmMcuIntrf` and `Nvm`; program-flash storage is not exposed.
 
 ## Device numbers
 
@@ -116,7 +116,7 @@ are included in the single library project.
 
 ## Data EEPROM
 
-`NvmMcuCfg` describes the STM32L152xE 16 KiB EEPROM at 0x08080000:
+`NvmMcuCfgInit(cfg, 0)` configures the linker-reserved 16 KiB EEPROM region at 0x08080000:
 byte writes, 64-byte transfer chunks and `EraseSize=0`. `Nvm::Write` overwrites
 bytes, including zeros and ones. `Nvm::Erase` is a no-op for this geometry;
 write the desired fill bytes to clear a region. Program flash and option
@@ -129,9 +129,9 @@ It overwrites **0x08083D00-0x08083FFF** (the last 768 bytes of EEPROM).
 The last 256-byte unit contains a boot stamp; power cycle without erasing
 EEPROM and confirm that the reported previous boot stamp increases.
 
-The controller port is polling-only: `NvmIntrf::Init(..., true)` returns false.
+The controller port is polling-only: `NvmMcuIntrf::Init(..., true)` returns false.
 An installed arbiter blocks operations because this port does not implement
-timeslots. Access through Nvm/NvmIntrf; do not access the flash controller from
+timeslots. Access through Nvm/NvmMcuIntrf; do not access the flash controller from
 another driver concurrently. Waits are bounded. On a busy timeout, no further
 EEPROM access is allowed until BSY clears; the next readiness check relocks it.
 A failed write can leave a partially changed range and is not atomic.

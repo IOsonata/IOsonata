@@ -340,7 +340,7 @@ for supported profiles and test results. DTLS is not implemented.
 
 The H753 library includes `nvm_stm32.cpp` and `dfu_stm32.cpp`. Both use
 `flash_stm32h7xx.h` for the same register-level erase/program sequence.
-The existing `NvmIntrf` / `Nvm` and `DfuTgt*` interfaces are unchanged.
+The existing `NvmMcuIntrf` / `Nvm` and `DfuTgt*` interfaces are unchanged.
 
 - Geometry: 2 MiB, two 1 MiB banks, 128 KiB erase sectors, 32-byte writes.
 - Addresses use the mapped flash range starting at 0x08000000. Active bank

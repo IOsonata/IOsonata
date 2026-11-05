@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	nvm_intrf.h
+@file	nvm_mcu_intrf.h
 
 @brief	The MCU internal memory as a DeviceIntrf.
 
@@ -16,16 +16,19 @@ stack runs.
 
 Usage :
 
-	NvmIntrf g_MemIntrf;
-	NvmCfg_t cfg;
-
-	g_MemIntrf.Init();
-
-	memset(&cfg, 0, sizeof(cfg));
-	NvmMcuCfg(cfg);
-
+	NvmCfg_t cfg = {};
+	NvmMcuIntrf g_MemIntrf;
 	Nvm g_Nvm;
-	g_Nvm.Init(cfg, &g_MemIntrf, RegionAddr, RegionSize);
+
+	if (NvmMcuCfgInit(cfg, 1) == false)
+	{
+		return false;
+	}
+	if (g_MemIntrf.Init() == false)
+	{
+		return false;
+	}
+	return g_Nvm.Init(cfg, &g_MemIntrf);
 
 What the target knows about its own memory is at the end of this file rather
 than in the class: geometry, where the application's slice of it ends, and
@@ -62,11 +65,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __NVM_INTRF_H__
-#define __NVM_INTRF_H__
+#ifndef __NVM_MCU_INTRF_H__
+#define __NVM_MCU_INTRF_H__
 
 #include "device_intrf.h"
 #include "storage/nvm.h"
+#include "storage/nvm_region.h"
 
 /** @addtogroup Storage
   * @{
@@ -74,36 +78,15 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-/// One unit of a memory operation, run where it is safe to touch the memory.
-/// Returns 0 when the operation is finished, or the microseconds it still
-/// expects to need so the arbiter can size the next window.
-///
-/// It runs wherever the arbiter puts it, which for a radio timeslot is a high
-/// priority interrupt: short, deterministic, no blocking calls.
-typedef struct __Nvm_Intrf_Op {
-	uint32_t (*Step)(void *pCtx);	//!< One unit. 0 when done, else usec left
-	uint32_t	StepBudgetUs;		//!< Worst case for one Step, sizes the window
-	void		*pCtx;				//!< Passed back to Step
-
-	/// Where to report the result, or NULL to have the arbiter wait for it
-	/// and return it instead. Set it and the arbiter submits and returns, so
-	/// the caller is not held while the memory works. It is called from
-	/// wherever the arbiter finishes, which for a radio timeslot is a high
-	/// priority interrupt: do nothing there but hand the result over.
-	///
-	/// The operation and its context outlive the call in that case, so
-	/// neither may be a local.
-	void (*Done)(void *pCtx, int Res);
-} NvmIntrfOp_t;
-
-/// The arbiter answers this when the operation is under way and Done will
-/// report it. Positive, so a check for a negative errno is unchanged.
+/// A positive result indicates deferred completion. This is also used by
+/// controller implementations that submit work directly to a radio stack.
 #define NVM_INTRF_OP_STARTED		1
 
-/// Runs an operation where the memory is safe to touch. Returns 0 when it
-/// completed in the call, NVM_INTRF_OP_STARTED when Done will report it, or
-/// a negative errno when it could not be started.
-typedef int (*NvmIntrfArb_t)(NvmIntrfOp_t *pOp);
+/// Runs an operation where the memory is safe to touch. The request is
+/// opaque to generic MCU ports; only the controller's arbiter interprets it.
+/// Returns 0 when completed, NVM_INTRF_OP_STARTED when completion is deferred,
+/// or a negative errno when it could not be started.
+typedef int (*NvmMcuIntrfArb_t)(void *pRequest);
 
 /// Counts of what the interface did, for a test to show which path ran.
 typedef struct __Nvm_Intrf_Stat {
@@ -126,7 +109,7 @@ typedef struct __Nvm_Intrf_Stat {
 	uint32_t	RepDone;	//!< Passed on to the driver
 	uint32_t	RepNoWant;	//!< Dropped, nothing asked to be told
 	uint32_t	RepNoPend;	//!< Dropped, nothing was outstanding
-} NvmIntrfStat_t;
+} NvmMcuIntrfStat_t;
 
 /// Command byte plus a 32 bit address. The frame the driver puts in front of
 /// a transfer, the way FlashEraseSector does.
@@ -148,14 +131,14 @@ typedef struct __Nvm_Intrf_Wr_Ctx {
 	uintptr_t		Addr;			//!< Where the words go
 	const uint32_t	*pSrc;			//!< The words
 	uint32_t		Words;			//!< How many
-} NvmIntrfWrCtx_t;
+} NvmMcuIntrfWrCtx_t;
 
 /// An erase of one unit. Addr is the address, or the page number where the
 /// stack asks for one.
 typedef struct __Nvm_Intrf_Er_Ctx {
 	uintptr_t		Addr;			//!< The unit
 	bool			bStarted;		//!< The erase has been kicked off
-} NvmIntrfErCtx_t;
+} NvmMcuIntrfErCtx_t;
 
 /// The interface and everything one transaction needs, in one object.
 ///
@@ -163,10 +146,10 @@ typedef struct __Nvm_Intrf_Er_Ctx {
 /// either: a transfer callback gets the state, and a C caller can hold the
 /// whole thing without knowing about the class that owns it.
 ///
-/// The state is per transaction, so it belongs here and not at file scope,
-/// the same way nRFSpiDev_t holds a transfer's buffer and index. That takes
-/// in the arbitrated operation and its context: the stack and the arbiter
-/// both report after the call has returned, so both outlive it.
+/// The frame, payload and write/erase context belong to the controller
+/// instance rather than a local variable. An asynchronous submission can
+/// outlive the calling function. Timeslot-specific operation state belongs
+/// to the Nordic MPSL implementation, not this shared structure.
 ///
 /// Whether a submit is owed a completion is not in here, because it is not
 /// per transaction. There is one memory controller and one thing holding it
@@ -182,10 +165,9 @@ typedef struct __Nvm_Dev_Intrf {
 	int				HdrLen;			//!< Frame bytes taken so far
 	int				DataLen;		//!< Payload bytes staged
 
-	NvmIntrfOp_t	Op;				//!< The arbitrated operation
 	union {
-		NvmIntrfWrCtx_t	Wr;
-		NvmIntrfErCtx_t	Er;
+		NvmMcuIntrfWrCtx_t	Wr;
+		NvmMcuIntrfErCtx_t	Er;
 	} OpCtx;						//!< One operation is in flight at a time
 
 	uint8_t			Data[NVM_INTRF_XFER_SIZE];	//!< Staged payload
@@ -200,14 +182,39 @@ typedef struct __Nvm_Dev_Intrf {
 // ---------------------------------------------------------------------------
 
 /**
- * @brief	Fill a config for the MCU internal memory.
+ * @brief	Initialize a config for a reserved MCU NVM allocation.
  *
- * Sets the geometry, which the part states or its FICR reports. The remaining
- * fields are left untouched.
+ * BaseAddr and TotalSize describe only that allocation, never the entire
+ * program flash. The port supplies the MCU's programming geometry and
+ * rejects invalid or unaligned bounds.
  *
- * @param	Cfg	: Config to fill
+ * @param	Cfg		: Config to initialize
+ * @param	BaseAddr: Address of a separately reserved allocation (e.g. DFU slot)
+ * @param	Size	: Size of that allocation in bytes
+ *
+ * @return	true if the reserved allocation is valid for this controller
  */
-void NvmMcuCfg(NvmCfg_t &Cfg);
+bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size);
+
+/**
+ * @brief	Initialize a config for a linker-reserved NVM region.
+ *
+ * The region number is storage-specific, not USB MSC-specific. An absent
+ * or invalid region is rejected rather than exposing other program flash.
+ */
+inline bool NvmMcuCfgInit(NvmCfg_t &Cfg, int RegionNo)
+{
+	size_t size = NvmRegionSize(RegionNo);
+
+	if (size == 0)
+	{
+		Cfg = {};
+
+		return false;
+	}
+
+	return NvmMcuCfgInit(Cfg, NvmRegionAddr(RegionNo), size);
+}
 
 // C linkage: a target can answer either of these from a C file, which is what
 // nrf_sdh.c does for the ceiling on an S145 build.
@@ -269,7 +276,7 @@ int NvmMcuErase(uintptr_t Addr);
 DevIntrf_t *NvmMcuDevIntrf(void);
 
 /// @brief	The MCU memory controller as a device interface.
-class NvmIntrf : public DeviceIntrf {
+class NvmMcuIntrf : public DeviceIntrf {
 public:
 	/**
 	 * @brief	Bring the controller interface up.
@@ -333,17 +340,17 @@ public:
  *
  * @param	pArb	: The arbiter, or NULL to go back to driving directly.
  */
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb);
+void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb);
 
 /**
  * @brief	Read the operation counts.
  *
  * @param	pStat : Filled with the counts since reset
  */
-void NvmIntrfGetStat(NvmIntrfStat_t *pStat);
+void NvmMcuIntrfGetStat(NvmMcuIntrfStat_t *pStat);
 
 #endif	// __cplusplus
 
 /** @} End of group Storage */
 
-#endif	// __NVM_INTRF_H__
+#endif	// __NVM_MCU_INTRF_H__

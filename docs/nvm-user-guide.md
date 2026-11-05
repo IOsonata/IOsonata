@@ -2,8 +2,14 @@
 
 `Nvm` provides byte-addressed non-volatile storage through a supplied
 `DeviceIntrf`. The same driver uses SPI/I2C memory or the MCU's internal
-memory through `NvmIntrf`. Geometry and commands are configuration data.
+memory through `NvmMcuIntrf`. Geometry and commands are configuration data.
 See [NVM architecture](architecture/nvm.md) for implementation boundaries.
+
+**0.13 naming change:** The MCU internal-memory interface is now
+`NvmMcuIntrf` (header `storage/nvm_mcu_intrf.h`). Replace the former
+`NvmIntrf` class and header references in applications. MCU-memory
+arbitration functions and related data types use the `NvmMcuIntrf` prefix.
+The generic `Nvm`, `DeviceIntrf`, and `NvmDiskIO` APIs are unchanged.
 
 ## Choose the interface and example
 
@@ -13,6 +19,7 @@ See [NVM architecture](architecture/nvm.md) for implementation boundaries.
 | Serial NOR | Same demo, medium 1 | SPI pins, chip select, geometry and commands |
 | I2C EEPROM | Same demo, medium 2 | I2C address, geometry and write delay |
 | Block storage | [nvm_diskio_test.cpp](../exemples/storage/nvm_diskio_test.cpp) | NvmDiskIO sector geometry and cache |
+| USB disk on internal memory | [usb_msc_flashdisk.cpp](../exemples/usb/usb_msc_flashdisk.cpp) | Linker region, NvmDiskIO and UsbdMsc |
 | littlefs integration | [nvm_littlefs_test.cpp](../exemples/storage/nvm_littlefs_test.cpp) | External littlefs, block callbacks and buffers |
 | Generic driver tests | [nvm_test.cpp](../exemples/storage/nvm_test.cpp) | Desktop compiler and supplied mock interfaces |
 
@@ -24,26 +31,26 @@ the RA4M1 project uses [data_nvm_demo.cpp](../exemples/storage/data_nvm_demo.cpp
 for data flash, while other projects may use the shared demo or target-specific
 setup. A matching project name does not imply the same physical memory.
 
-The hardware demo writes and erases scratch storage. Its current internal
-setup chooses space below `NvmMcuCeiling()`, prints linker regions, but does
-not use those regions to choose its scratch window. Verify the printed range
-against the application map and other storage before running it. Product
-storage should use an explicitly reserved region.
+The hardware demo writes and erases scratch storage. Its internal-memory
+mode uses the linker-reserved NVM1 test region and fails if it is absent.
+Never run the destructive checks against NVM0 bond storage or program flash.
 
 Build the MCU library and application with matching target/stack settings.
 Use [Getting Started](getting-started.md) for the IOcomposer workflow.
 
 ## Geometry and addressing
 
-Initialize the interface first, then call
-`Nvm::Init(cfg, &interface, regionOffset, regionSize)`.
+For MCU memory, initialize the reserved region with `NvmMcuCfgInit(cfg, RegionNo)`,
+then initialize the controller interface and call `Nvm::Init(cfg, &interface)`.
 The interface, NVM object and any asynchronous buffers must outlive operations.
+External memory may also use `Nvm::Init(cfg, &interface, regionOffset, regionSize)`
+to select a smaller area of an otherwise dedicated memory chip.
 
 | Field | Meaning |
 |---|---|
 | `DevNo` | Interface selector: for example SPI chip-select index or I2C address |
-| `BaseAddr` | Memory's mapped base; normally zero for a serial chip |
-| `TotalSize` | Configured device capacity in bytes |
+| `BaseAddr` | Reserved MCU region's mapped address; normally zero for a serial chip |
+| `TotalSize` | Capacity allocated to this Nvm device, not the MCU's program flash |
 | `EraseSize` | Erase unit; zero for a medium that overwrites directly |
 | `SectorSize` | Logical sector size, if supplied |
 | `PageSize` | Programming boundary / maximum configured chunk size |
@@ -61,10 +68,14 @@ The addressed location is:
 region. A zero region size means the remainder of the configured device,
 not an empty region. Reject an absent linker region before initialization.
 
-Use `NvmMcuCfg()` to fill internal-memory geometry; zero-initialize the
-configuration first because this helper leaves non-geometry fields untouched.
-Do not copy nRF52 erase geometry to nRF54 RRAM, which overwrites without an
-erase step. STM32 internal flash has a nonzero mapped base.
+Use `NvmMcuCfgInit(cfg, RegionNo)` to fill the complete configuration for a
+linker-reserved MCU NVM region. It returns `false` if that region is absent,
+outside the MCU memory controller's address range, or incorrectly aligned.
+For a separately reserved allocation, such as a DFU upload slot,
+`NvmMcuCfgInit(cfg, BaseAddr, Size)` provides the same geometry and range
+checks without misidentifying the allocation as NVM0/NVM1.
+The function clears the config before filling it. Do not copy nRF52 erase
+geometry to nRF54 RRAM, which overwrites without an erase step.
 
 For external memory, use the actual part's geometry and supported protocol.
 The generic serial-NOR erase path currently selects 4 KiB, 32 KiB or 64 KiB
@@ -97,48 +108,78 @@ This belongs inside `SECTIONS`; define a non-overlapping `NVM0` entry in
 `MEMORY` using the selected target's addresses. See
 [nvm_region.h](../include/storage/nvm_region.h). Check the final map file.
 
-`NvmRegionAddr(0)` and `NvmRegionSize(0)` read those symbols. Missing or
-invalid bounds yield a zero size. `NvmMcuCeiling()` identifies the upper
-application boundary; it does not prove that a proposed range is unoccupied.
+`NvmMcuCfgInit(cfg, 0)` reads those linker symbols and checks the reserved
+region against the MCU's physical geometry. Missing or invalid bounds cause
+initialization to fail. Only the reserved address and capacity are placed in
+`NvmCfg_t`; no other program flash is exposed to the Nvm device.
 
 The following polling setup uses a linker region as the entire NVM device
 window. It avoids treating a mapped STM32 address as an offset a second time:
 
 ```cpp
 #include "storage/nvm.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 
-static NvmIntrf s_MemoryInterface;
+static NvmMcuIntrf s_MemoryInterface;
 static Nvm s_Memory;
 
 static bool StorageInit()
 {
 	NvmCfg_t cfg = {};
-	const uint64_t start = NvmRegionAddr(0);
-	const uint64_t size = NvmRegionSize(0);
-	const uint64_t ceiling = NvmMcuCeiling();
 
-	NvmMcuCfg(cfg);
-	if (size == 0 || start < cfg.BaseAddr ||
-		start - cfg.BaseAddr > cfg.TotalSize ||
-		size > cfg.TotalSize - (start - cfg.BaseAddr) ||
-		start > ceiling || size > ceiling - start)
+	if (NvmMcuCfgInit(cfg, 0) == false)
 	{
 		return false;
 	}
-	if (!s_MemoryInterface.Init())
+	if (s_MemoryInterface.Init() == false)
 	{
 		return false;
 	}
-	return s_Memory.Init(cfg, &s_MemoryInterface,
-		start - cfg.BaseAddr, size);
+	return s_Memory.Init(cfg, &s_MemoryInterface);
 }
 ```
 
 Align the reserved region to the target's erase and write requirements.
-`NvmIntrf` wraps the port's single controller interface; declaring another
+`NvmMcuIntrf` wraps the port's single controller interface; declaring another
 wrapper does not create an independent controller or callback registration.
+
+## DiskIO initialization
+
+An MCU internal-memory disk uses `Nvm::Init()` and `NvmDiskIO::Init()`.
+`NvmMcuCfgInit()` fills the geometry, address and size from the
+linker-reserved NVM region:
+
+```cpp
+#include "storage/diskio_nvm.h"
+#include "storage/nvm_mcu_intrf.h"
+#include "storage/nvm_region.h"
+
+static NvmMcuIntrf s_NvmMcuIntrf;
+static Nvm s_Nvm;
+static NvmDiskIO s_Disk;
+
+// At function entry:
+NvmCfg_t cfg = {};
+
+if (!NvmMcuCfgInit(cfg, 1) || !s_NvmMcuIntrf.Init() ||
+	!s_Nvm.Init(cfg, &s_NvmMcuIntrf) || !s_Disk.Init(s_Nvm))
+{
+	return false;
+}
+```
+
+The reserved region is presented to `Nvm` as configured memory.
+The linker must reserve a disjoint area with correct erase and write
+alignment. External memory uses the same `Nvm` and `NvmDiskIO`
+with an injected SPI, I2C, QSPI or OSPI interface. Mounting and formatting
+are described in [Firmware FatFs volumes](#firmware-fatfs-volumes).
+USB MSC uses the initialized `DiskIO` directly.
+
+The disk's sector size is a whole number of physical erase units.
+For a 4 KiB raw-flash medium, FatFs and USB MSC both use 4 KiB sectors.
+Writing a raw-flash sector erases and programs that erase unit, with
+no automatic wear levelling.
 
 ## Read, write, erase and synchronization
 
@@ -226,7 +267,7 @@ must not be copied unchanged to those media.
 
 Keep the stack's arbiter installed while the radio owns scheduling. Do not
 bypass it with raw flash-register writes. For Nordic testing,
-`NvmIntrfGetStat()` exposes direct, SoftDevice and timeslot counts plus
+`NvmMcuIntrfGetStat()` exposes direct, SoftDevice and timeslot counts plus
 completion statistics. Record the route actually used with radio activity.
 
 ## NvmDiskIO and filesystems
@@ -244,10 +285,23 @@ static bool DiskInit(Nvm &memory)
 }
 ```
 
-The selected sector must divide the region and, for erase-capable media, be
-a whole number of erase units. It must fit the DiskIO 16-bit sector-size API.
-A 512-byte sector over a 4 KiB erase unit is therefore not accepted by this
-adapter. Supply an explicit size when the medium reports no logical sector.
+The selected sector must divide the region and fit the DiskIO 16-bit
+sector-size API. By default an erase-capable medium presents one or more
+complete erase units per sector. Smaller logical sectors are supported
+when a caller provides one complete erase unit of scratch memory:
+
+```cpp
+alignas(4) static uint8_t s_EraseWork[4096];
+// Configure the NVM device first. The scratch size must match EraseSize().
+bool ok = s_Disk.Init(s_Nvm, 512, s_EraseWork, sizeof(s_EraseWork));
+```
+
+Each 512-byte write reads the entire physical erase unit, patches the
+requested portion, erases the full unit and writes it back. The scratch
+must not alias the caller's sector input buffer. The disk's minimum erase
+size remains 4096 bytes even when it presents 512-byte logical sectors.
+The full region must contain complete physical erase units. Supply an
+explicit sector size when the medium reports no logical sector.
 
 `Nvm::Size()` is bytes; `DiskIO::GetSize()` is KiB.
 `SectWrite()` erases when required, writes a complete sector and calls
@@ -309,3 +363,67 @@ interpreting the persistence result.
 | IsBusy clears but data is wrong | Sync/error result, erase requirement and source lifetime |
 | Block adapter rejects geometry | Sector divisibility, erase unit and sector-size limit |
 | Data vanishes after reset | Cache flush, operation completion and reserved storage layout |
+
+## Firmware FatFs volumes
+
+FatFs mounts the existing `DiskIO` without USB MSC. Use `NvmDiskIO` with
+`Nvm` for internal program/data flash, serial NOR flash, EEPROM, FRAM or
+other addressed memory. `SDCard` and other `DiskIO` devices work through
+the same `FatFsMount` interface declared in `ff_diskio.h`.
+
+The FatFs configuration supports 512, 1024, 2048 and 4096-byte
+sectors (`FF_MAX_SS=4096`). Generic FatFs uses the logical sector
+size supplied by DiskIO. A 256 KiB volume with 4 KiB sectors has
+only 64 sectors, below the 128-sector minimum in FatFs `f_mkfs()`.
+Applications using FatFs can therefore choose the 512-byte
+NvmDiskIO option with a caller-owned erase-unit buffer.
+
+The `UsbMscFlashDisk` example retains its original small FAT12
+initializer and native 4 KiB sectors. It does not call FatFsMount
+at startup. This is independent of generic FatFs support and does
+not alter Nvm, NvmMcuIntrf or NvmDiskIO.
+```cpp
+#include "ff.h"
+#include "ff_diskio.h"
+#include "storage/diskio_nvm.h"
+
+static NvmDiskIO s_Disk;
+static FATFS s_Fs;
+alignas(4) static uint8_t s_FormatWork[4096];
+
+// Initialize the Nvm transport, Nvm and NvmDiskIO first:
+// s_Disk.Init(s_Nvm);
+FatFsMountCfg_t mount = {};
+mount.pDisk = &s_Disk;
+mount.pFatFs = &s_Fs;
+mount.pPath = "0:";
+mount.bFormatIfBlank = true;
+mount.pWork = s_FormatWork;
+mount.WorkSize = sizeof(s_FormatWork);
+mount.pLabelIfUnnamed = "0:IOSONATA"; // Optional; leave existing labels intact
+FRESULT res = FatFsMount(mount);
+```
+
+If `pLabelIfUnnamed` is supplied and the volume has no directory label,
+`FatFsMount()` writes it using FatFs `f_setlabel()`. This also corrects
+existing unlabeled volumes that appear as "NO NAME" on a PC. A named
+volume, including one renamed by the user, keeps its existing label.
+The label includes the FatFs drive prefix, e.g. `"0:IOSONATA"`.
+Label support is enabled through `FF_USE_LABEL=1`. Setting a label
+does not format or erase the filesystem.
+
+Format work memory must be at least one logical sector; a disk that is
+already formatted can be mounted with no work buffer. An NVM erase buffer,
+when required, must be separate from the FatFs format work buffer. The volume is only
+formatted if `bFormatIfBlank` is explicitly set, `f_mount` reports
+`FR_NO_FILESYSTEM` and a complete read of the disk confirms all bytes are
+`0xFF`. Neither disk errors nor unrecognized nonblank contents trigger
+formatting. `FatFsUnmount()` releases FatFs before the application transfers
+a writable volume to a USB host. Firmware and the USB host must not mount
+the same writable filesystem concurrently.
+
+`DiskIO::Flush()` is void, so `CTRL_SYNC` cannot report a failed cache
+flush. Avoid unverified write-back caches for critical file data. A raw NOR
+FAT volume also needs wear management and power-failure testing for
+production logging. Increasing `FF_MAX_SS` to 4096 increases the space
+used by FatFs' sector buffers; budget static RAM accordingly.

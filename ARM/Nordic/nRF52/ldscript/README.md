@@ -117,6 +117,18 @@ S112 + IOsonata DFU layouts reserve 40 KB application FLASH
 These DFU variants are **Release-only**. The reduced application slot
 must be recompiled and checked for overflow before deployment.
 
+## USB flash-disk bare-metal Debug layout
+
+The UsbMscFlashDisk Debug build uses `gcc_nrf52840_xxaa_nvm832k.ld`.
+The first 192 KiB is application flash; NVM1 occupies the remaining
+832 KiB at 0x30000-0xFFFFF. This USB-only example needs no NVM0 PDS
+region. Linking rejects firmware exceeding the application flash allocation.
+
+The `Release` build still uses 256 KiB at 0xC0000-0xFFFFF.
+The `Release_mbr` build reserves 832 KiB at 0x10000-0xDFFFF under
+MBR and USB DFU; it is not the same physical disk region as Debug.
+Do not use bare-metal Debug on a device with a bootloader at the top
+of flash. Switching layouts does not migrate or erase old files.
 ## Reviewed variants
 
 The following scripts are **distinct layouts** based on their current MEMORY
@@ -136,6 +148,9 @@ definitions. Reference status does not determine whether to retain them.
 | `gcc_nrf52832_xxaa_s132_dfu.ld` | DFU slot defined through `gcc_nrf52832_xxaa_s132_dfu_layout.ld` | Available variant; preserve layout dependency |
 | `gcc_nrf52832_xxaa_s132_sdk_debug_dfu_boot.ld` | Bootloader image starts at 0x00075A00; reserves UICR and settings regions | Available variant; distinct bootloader layout |
 | `gcc_nrf52840_xxaa_bossa.ld` | Application flash starts at 0x00010000 after an Arduino/BOSSA bootloader | Available variant; distinct bootloader offset |
+| `gcc_nrf52840_xxaa_nvm256k.ld` | No MBR/DFU; application flash ends at 0xBE000, 8 KB NVM0 at 0xBE000, 256 KB NVM1 at 0xC0000 | Available variant; larger user storage, selected by `UsbMscFlashDisk` |
+| `gcc_nrf52840_xxaa_nvm832k.ld` | Bare metal (no MBR/DFU): FLASH 0x00000-0x2FFFF (192 KiB), NVM1 0x30000-0xFFFFF (832 KiB), no NVM0 | `UsbMscFlashDisk` Debug layout only; no bootloader |
+| `gcc_nrf52840_xxaa_mbr_nvm832k.ld` | MBR + Nordic USB DFU; application flash 0x1000..0xFFFF, no NVM0, 832 KB NVM1 from 0x10000 up to the bootloader at 0xE0000 | Available variant; selected by the `UsbMscFlashDisk` `Release_mbr` configuration |
 | `gcc_nrf52840_xxaa_s140.ld` | S140 flash starts at 0x00027000; RAM at 0x20003DC0; has NVM0 | Available variant |
 | `gcc_nrf52840_xxaa_s140c.ld` | Flash 0x27000-0xFCFFF, NVM0 0xFD000-0xFEFFF, settings 0xFF000-0xFFFFF; RAM at 0x20005400 | Available variant; distinct RAM reservation |
 

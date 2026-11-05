@@ -18,7 +18,7 @@
  * number of pages it fits in, so a slightly larger boot still fits a layout
  * already in the field. The slots get the rest of the 256 KB.
  *
- * There is no NvmIntrf port for this core: the application writes slot 1
+ * There is no NvmMcuIntrf port for this core: the application writes slot 1
  * through the target layer, with DFU_SLOT1_TGT defined (see
  * exemples/bluetooth/ble_ota.cpp).
  *

@@ -10,6 +10,7 @@ ENTRY(ResetEntry)
 MEMORY
 {
     FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 0x00040000
+    NVM0  (rw)  : ORIGIN = 0x40100000, LENGTH = 0x00002000 /* dedicated data flash */
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00008000
 }
 
@@ -154,6 +155,18 @@ SECTIONS
 
     /DISCARD/ : { *(.note.GNU-stack) }
 }
+
+SECTIONS
+{
+	nvm0 (NOLOAD) :
+	{
+		__start_nvm0 = .;
+		KEEP(*(nvm0))
+		. = ORIGIN(NVM0) + LENGTH(NVM0);
+		__stop_nvm0 = .;
+	} > NVM0
+}
+
 ASSERT(ADDR(.ivector) == 0, "RA4M1 normal-boot vector must start at zero")
 ASSERT(SIZEOF(.ivector) == 192, "RA4M1 vector must contain exactly 48 words")
 ASSERT(SIZEOF(.ivector) <= 0x400, "RA4M1 vector overlaps boot options")

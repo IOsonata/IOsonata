@@ -124,33 +124,9 @@ static FlashCfg_t s_FlashCfg = FLASH_CFG(NULL, FlashWriteDelayCallback);
 
 FlashDiskIO g_FlashDiskIO;
 
-static uint8_t s_FlashCacheMem[FLASH_SECTOR_SIZE];
-static DiskIOCache_t s_FlashCache[] = {
-	{-1, 0xFFFFFFFF, s_FlashCacheMem},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 512},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 1024},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 1536},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 2048},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 2560},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 3072},
-//	{-1, 0xFFFFFFFF, s_FlashCacheMem + 3584},
-};
-
-static const int s_NbFlashCache = sizeof(s_FlashCache) / sizeof(DiskIOCache_t);
-
-static bool s_bInitialized = false;
-
-const MKFS_PARM s_MkFsParm = {
-	.fmt = FM_ANY,
-	.n_fat = 0,
-	.align = 4096,
-	.n_root = 0,
-	.au_size = 0
-};
-
 uint8_t g_Data[4096];
 uint8_t g_Temp[4096];
-uint8_t g_FFBuf[4096];
+alignas(4) uint8_t g_FFBuf[4096];
 static FATFS s_FatFs;
 
 bool FlashWriteDelayCallback(int DevNo, DevIntrf_t *pInterf)
@@ -195,11 +171,7 @@ int main()
 	if (!g_Spi.Init(s_SpiCfg))
 		return 1;
 
-	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache) == true)
-	{
-		disk_ioctl(0, SET_DEVICE, &g_FlashDiskIO);
-	}
-	else
+	if (!g_FlashDiskIO.Init(s_FlashCfg, &g_Spi))
 	{
 		printf("Init Flash failed\n");
 		return 1;
@@ -212,13 +184,20 @@ int main()
 		p[i] = i;
 	}
 
-	FRESULT fres = f_mount(&s_FatFs, "0:", 1);
+	// The filesystem runs on the existing DiskIO, with no USB dependency.
+	FatFsMountCfg_t mount = {};
+	mount.pDisk = &g_FlashDiskIO;
+	mount.pFatFs = &s_FatFs;
+	mount.pPath = "0:";
+	mount.bFormatIfBlank = true;
+	mount.pWork = g_FFBuf;
+	mount.WorkSize = sizeof(g_FFBuf);
 
+	FRESULT fres = FatFsMount(mount);
 	if (fres != FR_OK)
 	{
-		printf("formating wait...\n");
-		fres = f_mkfs ("0:", &s_MkFsParm, g_FFBuf, 4096);
-		printf("Fres = %d\n", fres);
+		printf("FatFs mount failed: %d\n", fres);
+		return 1;
 	}
 
 	FIL fp;

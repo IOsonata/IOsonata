@@ -694,7 +694,7 @@ UART hardware basis: the same Rev.1.10 manual, chapter 28 (SCI), chapter 10
 ## Data flash NVM
 
 `nvm_ra4m1.cpp` exposes the 8 KiB data flash at 0x40100000 through the existing
-`NvmIntrf` and `Nvm`. `NvmMcuCfg` reports byte programming, 64-byte transfer
+`NvmMcuIntrf` and `Nvm`. `NvmMcuCfgInit(cfg, 0)` reports the reserved data-flash region, byte programming, 64-byte transfer
 chunks and 1 KiB erase blocks. Call `Nvm::Erase` before reusing a programmed
 range. The driver uses the FACI blank-check command before programming and
 rejects nonblank destinations. It does not emulate EEPROM or erase implicitly.
@@ -709,7 +709,7 @@ blocks. Two blocks are scratch; the last stores a boot stamp. Expect
 `ALL PASS`, then power cycle without clearing data flash and check that the
 previous boot stamp increases.
 
-This port is polling-only; `NvmIntrf::Init(..., true)` rejects interrupt mode.
+This port is polling-only; `NvmMcuIntrf::Init(..., true)` rejects interrupt mode.
 Registering an arbiter blocks accesses rather than bypassing its owner. Keep
 FCLK between 4 and 32 MHz and unchanged during an operation. Interrupts remain
 enabled during polling, but no ISR, DMA or other driver may read data flash or

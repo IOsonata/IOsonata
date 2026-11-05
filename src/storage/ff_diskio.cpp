@@ -33,231 +33,295 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
+#include <stdint.h>
 #include <string.h>
-#include <stdio.h>
 
-#include "ff.h"			/* Obtains integer types */
-#include "ff_diskio.h"		/* Declarations of device I/O functions */
-
-#include "istddef.h"
-#include "crc.h"
+#include "ff.h"
+#include "ff_diskio.h"
 #include "storage/diskio.h"
 
 static DiskIO *s_pFFDiskIO = nullptr;
+
+static bool FFDiskReady(void)
+{
+	if (s_pFFDiskIO == nullptr)
+	{
+		return false;
+	}
+
+	uint32_t size = s_pFFDiskIO->GetSectSize();
+
+	return size >= FF_MIN_SS && size <= FF_MAX_SS &&
+		(size & (size - 1U)) == 0U && s_pFFDiskIO->GetNbSect() != 0U;
+}
 
 void FFDiskSetDevice(DiskIO * const pDev)
 {
 	s_pFFDiskIO = pDev;
 }
 
-/*-----------------------------------------------------------------------*/
-/* Get Drive Status                                                      */
-/*-----------------------------------------------------------------------*/
-
-DSTATUS disk_status (
-	BYTE pdrv		/* Physical drive nmuber to identify the drive */
-)
+DSTATUS disk_status(BYTE pdrv)
 {
-	DSTATUS stat;
-	int result;
-
-	if (pdrv > 0)
-	{
-		return RES_PARERR;
-	}
-
-	return RES_OK;
-
-	switch (pdrv) {
-	case DEV_RAM :
-		//result = RAM_disk_status();
-
-		// translate the reslut code here
-
-		return stat;
-
-	case DEV_MMC :
-		//result = MMC_disk_status();
-
-		// translate the reslut code here
-
-		return stat;
-
-	case DEV_USB :
-		//result = USB_disk_status();
-
-		// translate the reslut code here
-
-		return stat;
-	}
-	return STA_NOINIT;
+	return pdrv == 0U && FFDiskReady() ? 0U : STA_NOINIT;
 }
 
-
-
-/*-----------------------------------------------------------------------*/
-/* Inidialize a Drive                                                    */
-/*-----------------------------------------------------------------------*/
-
-DSTATUS disk_initialize (
-	BYTE pdrv				/* Physical drive nmuber to identify the drive */
-)
+DSTATUS disk_initialize(BYTE pdrv)
 {
-	static bool s_bInitialized = false;
+	return disk_status(pdrv);
+}
 
-	if (pdrv > 0)
+DRESULT disk_read(BYTE pdrv, BYTE *pBuff, LBA_t Sector, UINT Count)
+{
+	if (pdrv != 0U || pBuff == nullptr || Count == 0U)
+	{
+		return RES_PARERR;
+	}
+	if (!FFDiskReady())
+	{
+		return RES_NOTRDY;
+	}
+
+	uint32_t total = s_pFFDiskIO->GetNbSect();
+
+	if ((uint64_t)Sector >= total ||
+		(uint64_t)Count > total - (uint64_t)Sector)
 	{
 		return RES_PARERR;
 	}
 
-	if (s_bInitialized == false)
+	uint16_t size = s_pFFDiskIO->GetSectSize();
+
+	while (Count > 0U)
 	{
-		if (s_pFFDiskIO == nullptr)
+		if (!s_pFFDiskIO->SectRead((uint32_t)Sector, pBuff))
 		{
-			return STA_NOINIT;
+			return RES_ERROR;
 		}
-
-		s_bInitialized = true;
+		pBuff += size;
+		Sector++;
+		Count--;
 	}
 
 	return RES_OK;
 }
-
-
-
-/*-----------------------------------------------------------------------*/
-/* Read Sector(s)                                                        */
-/*-----------------------------------------------------------------------*/
-
-DRESULT disk_read (
-	BYTE pdrv,		/* Physical drive nmuber to identify the drive */
-	BYTE *buff,		/* Data buffer to store read data */
-	LBA_t sector,	/* Start sector in LBA */
-	UINT count		/* Number of sectors to read */
-)
-{
-	DRESULT res;
-	int result;
-
-	if (pdrv > 0)
-	{
-		return RES_PARERR;
-	}
-
-	uint64_t offset = (uint64_t)sector * FF_MIN_SS;
-
-	while (count > 0)
-	{
-		int size = FF_MIN_SS;
-
-		while (size > 0)
-		{
-			int l = s_pFFDiskIO->Read(offset, (uint8_t*)buff, size);
-			buff += l;
-			offset += l;
-			size -= l;
-		}
-		count--;
-	}
-
-	return RES_OK;
-}
-
-
-
-/*-----------------------------------------------------------------------*/
-/* Write Sector(s)                                                       */
-/*-----------------------------------------------------------------------*/
 
 #if FF_FS_READONLY == 0
-
-DRESULT disk_write (
-	BYTE pdrv,			/* Physical drive nmuber to identify the drive */
-	const BYTE *buff,	/* Data to be written */
-	LBA_t sector,		/* Start sector in LBA */
-	UINT count			/* Number of sectors to write */
-)
+DRESULT disk_write(BYTE pdrv, const BYTE *pBuff, LBA_t Sector, UINT Count)
 {
-	DRESULT res;
-	int result;
+	if (pdrv != 0U || pBuff == nullptr || Count == 0U)
+	{
+		return RES_PARERR;
+	}
+	if (!FFDiskReady())
+	{
+		return RES_NOTRDY;
+	}
 
-	if (pdrv > 0)
+	uint32_t total = s_pFFDiskIO->GetNbSect();
+
+	if ((uint64_t)Sector >= total ||
+		(uint64_t)Count > total - (uint64_t)Sector)
 	{
 		return RES_PARERR;
 	}
 
-	if (count <= 0)
+	uint16_t size = s_pFFDiskIO->GetSectSize();
+
+	while (Count > 0U)
 	{
-		return RES_OK;
+		// DiskIO's historical pointer type is non-const; SectWrite
+		// consumes the input and must not change the data.
+		if (!s_pFFDiskIO->SectWrite((uint32_t)Sector,
+				const_cast<uint8_t *>(pBuff)))
+		{
+			return RES_ERROR;
+		}
+		pBuff += size;
+		Sector++;
+		Count--;
 	}
-
-	uint32_t offs = sector * FF_MIN_SS;
-
-	s_pFFDiskIO->Write(offs, (uint8_t*)buff, count * FF_MIN_SS);
 
 	return RES_OK;
 }
-
 #endif
 
-
-/*-----------------------------------------------------------------------*/
-/* Miscellaneous Functions                                               */
-/*-----------------------------------------------------------------------*/
-
-DRESULT disk_ioctl (
-	BYTE pdrv,		/* Physical drive nmuber (0..) */
-	BYTE cmd,		/* Control code */
-	void *buff		/* Buffer to send/receive control data */
-)
+DRESULT disk_ioctl(BYTE pdrv, BYTE Cmd, void *pBuff)
 {
-	DRESULT res = RES_OK;
-	int result;
-
-	if (pdrv > 0)
+	if (pdrv != 0U)
 	{
 		return RES_PARERR;
 	}
 
-	switch (cmd)
+	if (Cmd == SET_DEVICE)
 	{
-		case CTRL_SYNC :
-
-			s_pFFDiskIO->Flush();
-
-			return RES_OK;
-
-		case GET_SECTOR_COUNT :
-
-			// Process of the command for the MMC/SD card
-			*(uint32_t *)buff = s_pFFDiskIO->GetSize() * 1024U / FF_MIN_SS;
-
-			return RES_OK;
-
-		case GET_SECTOR_SIZE :
-			*(uint32_t *)buff = FF_MIN_SS;//s_pFFDiskIO->GetSectSize();
-			return RES_OK;
-		case GET_BLOCK_SIZE:
-			*(uint32_t *)buff = s_pFFDiskIO->GetSectSize();
-			return RES_OK;
-		case CTRL_TRIM:
-			{
-				uint32_t *p = (uint32_t*)buff;
-				uint32_t sz = s_pFFDiskIO->GetSectSize();
-				uint32_t st = p[0] * FF_MIN_SS / sz;
-				uint32_t end = p[1] * FF_MIN_SS / sz;
-
-				s_pFFDiskIO->EraseSector(st, end - st);
-			}
-
-			return RES_OK;
-
-		case SET_DEVICE:
-
-			s_pFFDiskIO = (DiskIO*)buff;
-
-			return RES_OK;
+		FFDiskSetDevice(static_cast<DiskIO *>(pBuff));
+		return FFDiskReady() ? RES_OK : RES_PARERR;
+	}
+	if (!FFDiskReady())
+	{
+		return RES_NOTRDY;
 	}
 
-	return RES_PARERR;
+	switch (Cmd)
+	{
+		case CTRL_SYNC:
+			// DiskIO::Flush() has no error result. Keep write-through
+			// disks for firmware files requiring reliable error reporting.
+			s_pFFDiskIO->Flush();
+			return RES_OK;
+
+		case GET_SECTOR_COUNT:
+			if (pBuff == nullptr)
+			{
+				return RES_PARERR;
+			}
+			*static_cast<LBA_t *>(pBuff) =
+				(LBA_t)s_pFFDiskIO->GetNbSect();
+			return RES_OK;
+
+		case GET_SECTOR_SIZE:
+			if (pBuff == nullptr)
+			{
+				return RES_PARERR;
+			}
+			*static_cast<WORD *>(pBuff) = s_pFFDiskIO->GetSectSize();
+			return RES_OK;
+
+		case GET_BLOCK_SIZE:
+			if (pBuff == nullptr)
+			{
+				return RES_PARERR;
+			}
+			{
+				uint32_t sector = s_pFFDiskIO->GetSectSize();
+				uint32_t erase = s_pFFDiskIO->GetMinEraseSize();
+				*static_cast<DWORD *>(pBuff) =
+					erase >= sector ? erase / sector : 1U;
+			}
+			return RES_OK;
+
+		// Avoid erasing a partially used physical sector. DiskIO erase
+		// methods return void, so failures cannot be propagated here.
+		case CTRL_TRIM:
+			return RES_PARERR;
+
+		default:
+			return RES_PARERR;
+	}
+}
+
+static FRESULT FatFsDiskIsBlank(void *pWork, UINT WorkSize, bool *pBlank)
+{
+	if (!FFDiskReady() || pBlank == nullptr || pWork == nullptr ||
+		WorkSize < s_pFFDiskIO->GetSectSize())
+	{
+		return FR_INVALID_PARAMETER;
+	}
+
+	uint8_t *pSector = static_cast<uint8_t *>(pWork);
+	uint32_t count = s_pFFDiskIO->GetNbSect();
+	uint32_t size = s_pFFDiskIO->GetSectSize();
+
+	*pBlank = false;
+
+	for (uint32_t i = 0; i < count; i++)
+	{
+		if (!s_pFFDiskIO->SectRead(i, pSector))
+		{
+			return FR_DISK_ERR;
+		}
+		for (uint32_t j = 0; j < size; j++)
+		{
+			if (pSector[j] != 0xFFU)
+			{
+				return FR_OK;
+			}
+		}
+	}
+
+	*pBlank = true;
+
+	return FR_OK;
+}
+
+FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
+{
+	FRESULT res;
+	bool blank = false;
+	TCHAR label[FF_MAX_LFN + 1];
+	const TCHAR *pPath;
+	const MKFS_PARM defaults = { FM_ANY | FM_SFD, 0, 0, 0, 0 };
+	const MKFS_PARM *pFormat;
+
+	if (Cfg.pDisk == nullptr || Cfg.pFatFs == nullptr)
+	{
+		return FR_INVALID_PARAMETER;
+	}
+
+	if (Cfg.bFormatIfBlank &&
+		(Cfg.pWork == nullptr || Cfg.WorkSize < Cfg.pDisk->GetSectSize()))
+	{
+		return FR_INVALID_PARAMETER;
+	}
+
+	pPath = Cfg.pPath != nullptr ? Cfg.pPath : "0:";
+	FFDiskSetDevice(Cfg.pDisk);
+
+	if (!FFDiskReady())
+	{
+		return FR_NOT_READY;
+	}
+
+	res = f_mount(Cfg.pFatFs, pPath, 1);
+
+	if (res == FR_NO_FILESYSTEM && Cfg.bFormatIfBlank)
+	{
+		res = FatFsDiskIsBlank(Cfg.pWork, Cfg.WorkSize, &blank);
+
+		if (res != FR_OK)
+		{
+			return res;
+		}
+
+		if (!blank)
+		{
+			return FR_NO_FILESYSTEM;
+		}
+
+		pFormat = Cfg.pFormatOptions != nullptr ?
+			Cfg.pFormatOptions : &defaults;
+
+		res = f_mkfs(pPath, pFormat, Cfg.pWork, Cfg.WorkSize);
+
+		if (res == FR_OK)
+		{
+			res = f_mount(Cfg.pFatFs, pPath, 1);
+		}
+	}
+
+	// FatFs mkfs creates an unnamed volume ("NO NAME" on the PC).
+	// Adding a label is independent of formatting and is also useful for
+	// disks formatted by older firmware. Never replace a custom label.
+	if (res == FR_OK && Cfg.pLabelIfUnnamed != nullptr)
+	{
+		res = f_getlabel(pPath, label, nullptr);
+
+		if (res == FR_OK && label[0] == 0)
+		{
+			res = f_setlabel(Cfg.pLabelIfUnnamed);
+		}
+	}
+
+	return res;
+}
+
+FRESULT FatFsUnmount(const TCHAR *pPath)
+{
+	FRESULT res = f_mount(nullptr, pPath != nullptr ? pPath : "0:", 0);
+
+	if (res == FR_OK)
+	{
+		FFDiskSetDevice(nullptr);
+	}
+	return res;
 }

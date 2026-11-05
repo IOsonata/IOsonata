@@ -62,7 +62,8 @@ SOFTWARE.
 #include "mpsl_timeslot.h"			// the timeslot session and its signals
 
 #include "idelay.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
+#include "nvm_timeslot_op.h"
 
 /******** For DEBUG ************/
 //#define DEBUG_ENABLE
@@ -96,7 +97,7 @@ static bool s_bNvmSessionOpen = false;
 
 // The operation in flight and how it ended. Written in the timeslot callback,
 // read by the caller waiting on it.
-static NvmIntrfOp_t * volatile s_pNvmOp = nullptr;
+static NvmTimeslotOp_t * volatile s_pNvmOp = nullptr;
 static volatile bool s_bNvmDone = false;
 static volatile int s_NvmResult = 0;
 
@@ -136,7 +137,7 @@ static void NvmBuildReq(mpsl_timeslot_request_t *pReq, uint32_t LengthUs)
 // it does nothing but hand the result over.
 static void NvmOpFinish(int Res)
 {
-	NvmIntrfOp_t *op = s_pNvmOp;
+	NvmTimeslotOp_t *op = s_pNvmOp;
 
 	if (op == nullptr)
 	{
@@ -229,8 +230,10 @@ static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 
 // What the memory interface calls. One operation at a time, which the
 // interface already serialises through its own busy latch.
-static int NvmArbiterRun(NvmIntrfOp_t *pOp)
+static int NvmArbiterRun(void *pRequest)
 {
+	NvmTimeslotOp_t *pOp = static_cast<NvmTimeslotOp_t *>(pRequest);
+
 	if (pOp == nullptr || pOp->Step == nullptr)
 	{
 		return -EINVAL;
@@ -294,10 +297,10 @@ static int NvmArbiterRun(NvmIntrfOp_t *pOp)
 }
 
 // Weak reference to the NVM interface. It is declared here on top of the
-// declaration in nvm_intrf.h so that this file does not pull the NVM driver
+// declaration in nvm_mcu_intrf.h so that this file does not pull the NVM driver
 // into the link: an application that does not use the driver has nothing to
 // arbitrate, and the driver and its data then stay out.
-__attribute__((weak)) void NvmIntrfSetArbiter(NvmIntrfArb_t pArb);
+__attribute__((weak)) void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb);
 
 int MpslNvmArbiterStart(void)
 {
@@ -306,7 +309,7 @@ int MpslNvmArbiterStart(void)
 		return 0;
 	}
 
-	if (&NvmIntrfSetArbiter == nullptr)
+	if (&NvmMcuIntrfSetArbiter == nullptr)
 	{
 		// The NVM driver is not part of this application. No session is
 		// opened, nothing writes the memory behind the radio.
@@ -331,7 +334,7 @@ int MpslNvmArbiterStart(void)
 
 	s_bNvmSessionOpen = true;
 
-	NvmIntrfSetArbiter(NvmArbiterRun);
+	NvmMcuIntrfSetArbiter(NvmArbiterRun);
 
 	return 0;
 }
@@ -343,7 +346,7 @@ void MpslNvmArbiterStop(void)
 		return;
 	}
 
-	NvmIntrfSetArbiter(nullptr);
+	NvmMcuIntrfSetArbiter(nullptr);
 
 	// Whatever was in flight is not going to finish now. Fail it and say so
 	// before the session goes, or the driver waits for a completion that

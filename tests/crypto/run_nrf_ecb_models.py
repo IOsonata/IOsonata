@@ -7,14 +7,14 @@ import os
 ROOT = Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix='nrf-ecb-') as temp:
     out = Path(temp)
-    for name in ('nrf.h', 'nrf_soc.h', 'nrf_sdm.h'):
+    for name in ('nrf.h', 'nrf_mbr.h', 'nrf_soc.h', 'nrf_sdm.h'):
         (out/name).write_text('#include "nrf_ecb_model.h"\n')
-    # The only substituted operation is the physical vector-word load. Keep
+    # The only substituted operation is the physical magic number address. Keep
     # the production comparison and both routing branches in the compiled driver.
     driver = (ROOT/'ARM/Nordic/src/crypto_ecb_nrf.cpp').read_text()
-    vector_load = '*(volatile const uint32_t *)(uintptr_t)4U'
-    assert driver.count(vector_load) == 1, 'Review the reset-vector model after driver changes'
-    (out/'crypto_ecb_nrf.cpp').write_text(driver.replace(vector_load, 'g_EcbResetVector'))
+    magic_addr = '(const volatile uint32_t *)(\n\t\tMBR_SIZE + SOFTDEVICE_INFO_STRUCT_OFFSET + 4U)'
+    assert driver.count(magic_addr) == 1, 'Review the magic number model after driver changes'
+    (out/'crypto_ecb_nrf.cpp').write_text(driver.replace(magic_addr, '&g_EcbSdMagic'))
     for opt in ('-O0', '-O2'):
         for defines in (['NRF52_SERIES'], ['NRF52_SERIES', 'SOFTDEVICE_PRESENT=1'], ['NRF5340_XXAA_NETWORK']):
             flags = [opt, '-std=gnu++23', '-fno-rtti', '-fno-exceptions', '-Wall', '-Wextra', '-Werror',

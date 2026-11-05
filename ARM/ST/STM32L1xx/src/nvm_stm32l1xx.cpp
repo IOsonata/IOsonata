@@ -35,7 +35,7 @@ SOFTWARE.
 #include <string.h>
 #include <errno.h>
 #include "stm32l1xx.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 
 #if !defined(STM32L152xE)
 #error "This EEPROM geometry is for STM32L152xE"
@@ -47,8 +47,8 @@ SOFTWARE.
 
 
 static NvmDevIntrf_t s_NvmDev;
-static NvmIntrfStat_t s_Stat;
-static NvmIntrfArb_t s_Arbiter;
+static NvmMcuIntrfStat_t s_Stat;
+static NvmMcuIntrfArb_t s_Arbiter;
 
 DevIntrf_t *NvmMcuDevIntrf(void)
 {
@@ -185,11 +185,21 @@ int NvmMcuErase(uintptr_t)
 	return -ENOTSUP;
 }
 
-void NvmMcuCfg(NvmCfg_t &Cfg)
+bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 {
+	if (Size == 0 || BaseAddr < NVM_BASE ||
+		(uint64_t)(BaseAddr - NVM_BASE) > NVM_SIZE ||
+		(uint64_t)Size > NVM_SIZE - (uint64_t)(BaseAddr - NVM_BASE))
+	{
+		Cfg = {};
+
+		return false;
+	}
+
+	Cfg = {};
 	Cfg.DevNo = 0;
-	Cfg.BaseAddr = NVM_BASE;
-	Cfg.TotalSize = NVM_SIZE;
+	Cfg.BaseAddr = BaseAddr;
+	Cfg.TotalSize = Size;
 	Cfg.EraseSize = NVM_ERASE_SIZE;
 	Cfg.SectorSize = NVM_ERASE_SIZE;
 	Cfg.PageSize = NVM_INTRF_XFER_SIZE;
@@ -198,6 +208,8 @@ void NvmMcuCfg(NvmCfg_t &Cfg)
 	Cfg.RdCmd = { 0x03, 0 };
 	Cfg.WrCmd = { 0x02, 0 };
 	Cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	return true;
 }
 
 __attribute__((weak)) uint64_t NvmMcuCeiling(void)
@@ -327,7 +339,7 @@ static void *NvmGetHandle(DevIntrf_t *pDev)
 	return pDev->pDevData;
 }
 
-bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
+bool NvmMcuIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
 	DevIntrf_t &dev = s_NvmDev.DevIntrf;
 
@@ -374,12 +386,12 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	return true;
 }
 
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
+void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb)
 {
 	s_Arbiter = pArb;
 }
 
-void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
+void NvmMcuIntrfGetStat(NvmMcuIntrfStat_t *pStat)
 {
 	if (pStat)
 	{

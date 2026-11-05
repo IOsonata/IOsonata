@@ -44,7 +44,7 @@ SOFTWARE.
 	{0, 30, IOPINOP_FUNC1, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// The internal flash through NvmIntrf (nvm_lpc546xx.cpp), no stack, every
+// The internal flash through NvmMcuIntrf (nvm_lpc546xx.cpp), no stack, every
 // operation finished in its call. The checks run once.
 #define NVM_DEMO_MEDIUM		0
 #define NVM_DEMO_BLE		0

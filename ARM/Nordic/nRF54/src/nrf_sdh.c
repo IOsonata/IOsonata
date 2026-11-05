@@ -436,8 +436,8 @@ bool nrf_sdh_is_suspended(void)
  * answers false and drives the controller directly; this override, present in
  * any application that links the SoftDevice handler, reports whether the
  * SoftDevice is enabled and owns the memory. */
-bool NvmIntrfSdRunning(void);
-bool NvmIntrfSdRunning(void)
+bool NvmMcuIntrfSdRunning(void);
+bool NvmMcuIntrfSdRunning(void)
 {
 	uint8_t enabled = 0;
 

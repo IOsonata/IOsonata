@@ -16,7 +16,7 @@
 		    BLEPLAT_NvmStore / restore (bt_smp_bond_stm32wba.cpp)
 		      -> bt_pds.cpp (log structured KV over a region)
 		        -> Nvm (src/storage/nvm.cpp)
-		          -> NvmIntrf (nvm_stm32wba.cpp, the WBA flash controller)
+		          -> NvmMcuIntrf (nvm_stm32wba.cpp, the WBA flash controller)
 
 @author	Hoang Nguyen Hoan
 @date	July 29, 2026
@@ -51,7 +51,7 @@ SOFTWARE.
 #include <errno.h>
 
 #include "storage/nvm.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 #include "bluetooth/bt_pds.h"
 #include "bt_wba_bond.h"
@@ -74,7 +74,7 @@ SOFTWARE.
 #define BT_PDS_WBA_REGION_NO	0
 #endif
 
-static NvmIntrf s_PdsIntrf;
+static NvmMcuIntrf s_PdsIntrf;
 static Nvm s_PdsMem;
 static bool s_bPdsMounted;
 
@@ -90,20 +90,19 @@ extern "C" int BtPdsWbaInit(void)
 		return 0;
 	}
 
-	uintptr_t base = NvmRegionAddr(BT_PDS_WBA_REGION_NO);
-	size_t size = NvmRegionSize(BT_PDS_WBA_REGION_NO);
+	NvmCfg_t cfg = {};
 
-	PDS_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
-			   BT_PDS_WBA_REGION_NO, (unsigned long)base,
-			   (unsigned long)size);
-
-	if (base == 0 || size == 0)
+	if (NvmMcuCfgInit(cfg, BT_PDS_WBA_REGION_NO) == false)
 	{
-		PDS_PRINTF("PDS: no NVM%d region in the linker script, "
-				   "bonds will not persist\r\n", BT_PDS_WBA_REGION_NO);
+		PDS_PRINTF("PDS: invalid or absent reserved NVM%d region\r\n",
+				BT_PDS_WBA_REGION_NO);
 
 		return -ENODEV;
 	}
+
+	PDS_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
+			   BT_PDS_WBA_REGION_NO, (unsigned long)cfg.BaseAddr,
+			   (unsigned long)cfg.TotalSize);
 
 	if (s_PdsIntrf.Init() == false)
 	{
@@ -111,16 +110,6 @@ extern "C" int BtPdsWbaInit(void)
 
 		return -EIO;
 	}
-
-	NvmCfg_t cfg;
-
-	memset(&cfg, 0, sizeof(cfg));
-	NvmMcuCfg(cfg);
-
-	// The region the linker set aside is the device: base and size come
-	// from it, and the geometry from the part.
-	cfg.BaseAddr = base;
-	cfg.TotalSize = size;
 
 	if (s_PdsMem.Init(cfg, &s_PdsIntrf, 0, 0) == false)
 	{
