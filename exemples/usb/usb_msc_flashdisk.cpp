@@ -8,14 +8,16 @@ linker script, so its size is set there and nowhere else, and the image fails
 to link if it grows into the disk. It does not expose firmware, filesystem,
 settings or Bluetooth bond-storage regions.
 
-The content stays across resets and power cycles. FatFs mounts the volume
-and formats it only if the entire medium is erased. A nonblank unrecognized
-filesystem is never reformatted.
+This example uses a disposable NVM1 test volume: recognized filesystems
+are preserved across resets; unrecognized contents cause an explicit
+NVM1-only erase, then FatFs formatting. The generic FatFs mount helper
+never formats a nonblank disk.
 
 Newly formatted volumes use 512-byte logical sectors with 4 KiB physical
 erase units. NvmDiskIO preserves neighbouring sectors in its caller-owned
-erase buffer. Existing 4 KiB-sector volumes remain readable by the host.
-There is no wear levelling. Flash writes execute outside USB interrupts.
+erase buffer. There is no wear levelling. Flash writes execute outside
+USB interrupts. Do not use this destructive test initialization with
+valuable data.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 4, 2026
@@ -82,6 +84,12 @@ static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
 static FATFS s_FatFs;
 static UsbdMsc s_Msc;
+
+// Match the original USB flash demo's two FAT copies. Align the data
+// region to the 4 KiB physical erase size (8 logical 512-byte sectors).
+static const MKFS_PARM s_MkFsOptions = {
+	FM_FAT | FM_SFD, 2, 8, 0, 0
+};
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_BUFF_SIZE];
 // Separate from USB / FatFs input: one physical erase unit for partial writes.
 alignas(4) static uint8_t s_EraseBuffer[MSC_SECTOR_BUFF_SIZE];
@@ -120,6 +128,10 @@ static const UsbdMscCfg_t s_MscCfg = {
 int main(void)
 {
 	NvmCfg_t cfg = {};
+	FatFsMountCfg_t mount = {};
+	FRESULT res;
+	uint64_t diskSize;
+	uint32_t eraseSize;
 
 	// NVM1 is the linker-reserved USB disk, not the whole MCU flash.
 	if (NvmMcuCfgInit(cfg, 1) == false)
@@ -147,7 +159,6 @@ int main(void)
 
 	// The firmware mounts and initializes the disk, then releases it
 	// before USB MSC makes the same volume available to the host.
-	FatFsMountCfg_t mount = {};
 	mount.pDisk = &s_Disk;
 	mount.pFatFs = &s_FatFs;
 	mount.pPath = "0:";
@@ -155,45 +166,40 @@ int main(void)
 	mount.pWork = s_SectorBuffer;
 	mount.WorkSize = sizeof(s_SectorBuffer);
 	mount.pLabelIfUnnamed = "0:IOSONATA";
+	mount.pFormatOptions = &s_MkFsOptions;
 
-	FRESULT res = FatFsMount(mount);
+	res = FatFsMount(mount);
 
 	if (res == FR_NO_FILESYSTEM)
 	{
-		// An earlier image may use 4 KiB FAT sectors at the SAME NVM1
-		// address. Try the old geometry without writing or formatting.
-		(void)FatFsUnmount("0:");
-		if (!s_Disk.Init(s_Nvm))
+		// This example owns a disposable flash disk. Old 256 KiB FAT
+		// contents remain inside the enlarged 832 KiB NVM1 allocation.
+		// Erase only NVM1 when no usable filesystem is present.
+		// Generic FatFsMount never erases nonblank storage itself.
+		if (FatFsUnmount("0:") != FR_OK)
 		{
 			return -1;
 		}
-		mount.bFormatIfBlank = false;
-		FRESULT oldRes = FatFsMount(mount);
 
-		if (oldRes == FR_OK)
+		diskSize = s_Nvm.Size();
+		eraseSize = s_Nvm.EraseSize();
+
+		if (diskSize == 0 || diskSize > UINT32_MAX || eraseSize == 0 ||
+			(diskSize % eraseSize) != 0 ||
+			s_Nvm.Erase(0, (uint32_t)diskSize) != 0 ||
+			s_Nvm.Sync() != 0)
 		{
-			res = oldRes;
+			return -1;
 		}
-		else
-		{
-			// No legacy filesystem at this address. The reserved NVM1
-			// area may have moved: stale contents from the smaller disk
-			// prevent safe formatting of the expanded region. Keep
-			// those bytes intact and expose the intended 512-byte view.
-			(void)FatFsUnmount("0:");
-			if (!s_Disk.Init(s_Nvm, 512U, s_EraseBuffer,
-					sizeof(s_EraseBuffer)))
-			{
-				return -1;
-			}
-		}
+
+		res = FatFsMount(mount);
 	}
 
-	// Filesystem initialization must not prevent the USB device from
-	// enumerating. On a damaged/unrecognized volume, the host still sees
-	// the raw disk, without silently destroying its contents.
-	(void)res;
-	(void)FatFsUnmount("0:");
+	// I/O failures must not erase the disk or expose invalid FAT to USB.
+	if (res != FR_OK || FatFsUnmount("0:") != FR_OK)
+	{
+		return -1;
+	}
 
 	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem,
 			sizeof(g_AppEvtHandlerQueMem)) == false)
