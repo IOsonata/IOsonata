@@ -7,7 +7,8 @@ make -C tests/storage/fatfs_diskio test
 ```
 
 This builds the production FatFs and DiskIO code against simulated 512-byte
-sector media (including a 256 KiB volume) and 4096-byte sector media.
+sector media (including a 256 KiB volume) and native 4096-byte sector
+media (including an 832 KiB volume of 208 physical sectors).
 The separate `exemples/storage/nvm_diskio_test.cpp` exercises logical
 512-byte writes on erase-before-write NVM with a 4096-byte scratch buffer. It checks
 blank formatting, file I/O, remount persistence, optional label assignment,
@@ -17,7 +18,9 @@ migration regression models an old 256 KiB filesystem remaining inside the
 expanded 832 KiB Debug disk. The reusable mount refuses to format that nonblank volume. The
 test then simulates the example's explicit reserved-region erase,
 formats a fresh `IOSONATA` filesystem, and checks that files and
-the label survive remount without an additional erase. The erase
+the label survive remount without an additional erase. The test also
+checks the 4 KiB boot-sector geometry, a small formatting-write count,
+and exactly one physical disk write for a native host sector. The erase
 policy belongs only to this disposable USB example; the generic
 mount helper remains non-destructive.
 

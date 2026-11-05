@@ -564,16 +564,24 @@ leaving 192 KiB for the application. `Release` uses 256 KiB at
 0x10000-0xDFFFF below the USB DFU bootloader. These layouts do not
 point to the same physical disk.
 
-The flash disk exposes 512-byte FAT sectors over 4 KiB erase pages.
-An 832 KiB disk has 1664 logical sectors, and a 256 KiB disk has
-512 sectors. `NvmDiskIO` uses a separate 4 KiB erase buffer to preserve
-other logical sectors whenever a 512-byte sector is changed.
+The 832 KiB Debug and Release_mbr layouts use native 4096-byte FAT
+sectors (208 sectors), one erase unit per host write. This avoids
+eight full-page read/erase/program cycles for every 4 KiB written
+through the earlier 512-byte sector configuration. The smaller
+256 KiB Release layout has only 64 physical erase units, so it
+continues to present 512-byte logical sectors (512 sectors) with a
+caller-owned 4 KiB buffer for read/modify/write.
+
+The same sector geometry is used by FatFs and USB MSC. Internal flash
+erase/program blocks the foreground USB MSC processing while it
+completes, so this example is not optimized for sustained writes.
 
 This **USB test example** owns a disposable NVM1 region. A valid
 filesystem is mounted and preserved; if `FatFsMount()` reports
 `FR_NO_FILESYSTEM`, the application explicitly erases only the
 linker-reserved NVM1 region with `Nvm::Erase()`, waits for `Sync()`,
-then calls `FatFsMount()` again. This handles old 256 KiB FAT data
+then calls `FatFsMount()` again. The nRF52 flash port skips erasing
+pages that already contain only 0xFF. This handles old 256 KiB FAT data
 left inside the expanded 832 KiB Debug disk. Once formatted, FatFs
 assigns the `IOSONATA` volume label. The volume is unmounted before
 USB MSC exposes it, and subsequent boots preserve existing files.

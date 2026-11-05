@@ -76,7 +76,7 @@ public:
 static TestDisk s_Flash(4096);
 static TestDisk s_Direct(512);
 static TestDisk s_Small(512, 256U * 1024U);
-static TestDisk s_Expanded(512, 832U * 1024U);
+static TestDisk s_Expanded(4096, 832U * 1024U);
 static FATFS s_Fs;
 alignas(4) static uint8_t s_Work[4096];
 alignas(4) static uint8_t s_Data[4096];
@@ -201,11 +201,12 @@ static void TestExpandedDiskWithLegacyData(void)
 	cfg.pDisk = &s_Expanded;
 	cfg.pFatFs = &s_Fs;
 	cfg.pPath = "0:";
-	cfg.bFormatIfBlank = true;
+	// Startup checks the filesystem first, without a blank-volume scan.
+	cfg.bFormatIfBlank = false;
 	cfg.pWork = s_Work;
 	cfg.WorkSize = sizeof(s_Work);
 	cfg.pLabelIfUnnamed = "0:IOSONATA";
-	MKFS_PARM format = { FM_FAT | FM_SFD, 2, 8, 0, 0 };
+	MKFS_PARM format = { FM_FAT | FM_SFD, 2, 0, 0, 0 };
 	cfg.pFormatOptions = &format;
 
 	CHECK(FatFsMount(cfg) == FR_NO_FILESYSTEM);
@@ -218,10 +219,13 @@ static void TestExpandedDiskWithLegacyData(void)
 	// explicitly erases its disposable NVM1 region after this result.
 	// Simulate that erase, then use the same FatFsMount again.
 	s_Expanded.Blank();
+	cfg.bFormatIfBlank = true;
 	CHECK(FatFsMount(cfg) == FR_OK);
 	CHECK(s_Expanded.vWrites > 0U);
-	CHECK(s_Expanded.vMedia[11] == 0x00U); // 512-byte sector in BPB
-	CHECK(s_Expanded.vMedia[12] == 0x02U);
+	CHECK(s_Expanded.vWrites < 20U);
+	CHECK(s_Expanded.GetNbSect() == 208U);
+	CHECK(s_Expanded.vMedia[11] == 0x00U); // 4 KiB sector in BPB
+	CHECK(s_Expanded.vMedia[12] == 0x10U);
 	CHECK(s_Expanded.vMedia[16] == 2U);    // Two FAT copies
 	CHECK(s_Expanded.vMedia[510] == 0x55U);
 	CHECK(s_Expanded.vMedia[511] == 0xAAU);
@@ -240,6 +244,20 @@ static void TestExpandedDiskWithLegacyData(void)
 	CHECK(transferred == sizeof(contents));
 	CHECK(f_close(&file) == FR_OK);
 	CHECK(FatFsUnmount() == FR_OK);
+
+	// Native 4 KiB sector: exactly one write reaches the flash disk,
+	// rather than eight separate read/erase/write operations.
+	FFDiskSetDevice(&s_Expanded);
+	for (unsigned i = 0; i < sizeof(s_Data); i++)
+	{
+		s_Data[i] = (uint8_t)(i * 17U + 7U);
+	}
+	uint32_t sectorWrites = s_Expanded.vWrites;
+	CHECK(disk_write(0, s_Data, 200, 1) == RES_OK);
+	CHECK(s_Expanded.vWrites == sectorWrites + 1U);
+	CHECK(disk_read(0, s_Readback, 200, 1) == RES_OK);
+	CHECK(memcmp(s_Data, s_Readback, sizeof(s_Data)) == 0);
+	FFDiskSetDevice(nullptr);
 
 	// A second boot must mount the same volume, without another format.
 	uint32_t writes = s_Expanded.vWrites;

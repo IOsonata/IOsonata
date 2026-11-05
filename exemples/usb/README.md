@@ -128,8 +128,10 @@ USB descriptors; filesystem initialization belongs to the storage layer.
 The flash disk example uses `NvmDiskIO` over linker-reserved NVM1.
 `Debug` reserves 832 KiB at 0x30000-0xFFFFF, `Release` reserves
 256 KiB at 0xC0000-0xFFFFF, and `Release_mbr` reserves 832 KiB
-at 0x10000-0xDFFFF. Its flash controller uses a separate caller-owned
-4 KiB buffer to preserve neighboring 512-byte logical sectors.
+at 0x10000-0xDFFFF. The 832 KiB layouts use native 4096-byte
+sectors, avoiding repeated full-page rewrites for 512-byte host
+writes. The smaller 256 KiB layout uses 512-byte sectors with a
+separate 4 KiB scratch buffer because it has only 64 physical pages.
 
 This is a **disposable USB test disk**. Valid FAT volumes survive
 reboots. If FatFs cannot recognize the filesystem, the example

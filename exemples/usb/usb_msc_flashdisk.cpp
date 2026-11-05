@@ -13,11 +13,10 @@ are preserved across resets; unrecognized contents cause an explicit
 NVM1-only erase, then FatFs formatting. The generic FatFs mount helper
 never formats a nonblank disk.
 
-Newly formatted volumes use 512-byte logical sectors with 4 KiB physical
-erase units. NvmDiskIO preserves neighbouring sectors in its caller-owned
-erase buffer. There is no wear levelling. Flash writes execute outside
-USB interrupts. Do not use this destructive test initialization with
-valuable data.
+The 832 KiB variants use native 4 KiB sectors to avoid repeatedly
+rewriting a full erase page for each 512-byte host write. The 256 KiB
+variant uses 512-byte sectors with erase-unit scratch because it has
+fewer than 128 physical sectors. There is no wear levelling.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 4, 2026
@@ -85,10 +84,10 @@ static NvmDiskIO s_Disk;
 static FATFS s_FatFs;
 static UsbdMsc s_Msc;
 
-// Match the original USB flash demo's two FAT copies. Align the data
-// region to the 4 KiB physical erase size (8 logical 512-byte sectors).
+// Two FAT copies. Zero alignment uses GET_BLOCK_SIZE from DiskIO:
+// one logical 4 KiB sector, or eight logical 512-byte sectors.
 static const MKFS_PARM s_MkFsOptions = {
-	FM_FAT | FM_SFD, 2, 8, 0, 0
+	FM_FAT | FM_SFD, 2, 0, 0, 0
 };
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_BUFF_SIZE];
 // Separate from USB / FatFs input: one physical erase unit for partial writes.
@@ -132,6 +131,7 @@ int main(void)
 	FRESULT res;
 	uint64_t diskSize;
 	uint32_t eraseSize;
+	uint32_t sectorSize;
 
 	// NVM1 is the linker-reserved USB disk, not the whole MCU flash.
 	if (NvmMcuCfgInit(cfg, 1) == false)
@@ -149,10 +149,23 @@ int main(void)
 		return -1;
 	}
 
-	// Use 512-byte FAT sectors for all layouts, including the smaller
-	// 256 KiB variant that has only 64 physical erase pages. Each logical
-	// write preserves the neighboring data in its erase page.
-	if (!s_Disk.Init(s_Nvm, 512U, s_EraseBuffer, sizeof(s_EraseBuffer)))
+	// On 832 KiB media, 208 native 4 KiB sectors are sufficient for
+	// FatFs (minimum 128). Avoid eight erase/program operations for
+	// each 4 KiB written by the host. The smaller 256 KiB region has
+	// 64 physical pages and needs 512-byte logical sectors instead.
+	diskSize = s_Nvm.Size();
+	eraseSize = s_Nvm.EraseSize();
+
+	if (eraseSize == 0 || eraseSize > MSC_SECTOR_BUFF_SIZE ||
+		diskSize == 0 || (diskSize % eraseSize) != 0)
+	{
+		return -1;
+	}
+
+	sectorSize = diskSize / eraseSize >= 128U ? eraseSize : 512U;
+
+	if (!s_Disk.Init(s_Nvm, sectorSize, s_EraseBuffer,
+			sizeof(s_EraseBuffer)))
 	{
 		return -1;
 	}
@@ -162,7 +175,8 @@ int main(void)
 	mount.pDisk = &s_Disk;
 	mount.pFatFs = &s_FatFs;
 	mount.pPath = "0:";
-	mount.bFormatIfBlank = true;
+	// Only scan for blank media after the normal mount has failed.
+	mount.bFormatIfBlank = false;
 	mount.pWork = s_SectorBuffer;
 	mount.WorkSize = sizeof(s_SectorBuffer);
 	mount.pLabelIfUnnamed = "0:IOSONATA";
@@ -181,17 +195,15 @@ int main(void)
 			return -1;
 		}
 
-		diskSize = s_Nvm.Size();
-		eraseSize = s_Nvm.EraseSize();
-
-		if (diskSize == 0 || diskSize > UINT32_MAX || eraseSize == 0 ||
-			(diskSize % eraseSize) != 0 ||
+		if (diskSize > UINT32_MAX ||
 			s_Nvm.Erase(0, (uint32_t)diskSize) != 0 ||
 			s_Nvm.Sync() != 0)
 		{
 			return -1;
 		}
 
+		// The nRF52 controller skips page erases that are already 0xFF.
+		mount.bFormatIfBlank = true;
 		res = FatFsMount(mount);
 	}
 
