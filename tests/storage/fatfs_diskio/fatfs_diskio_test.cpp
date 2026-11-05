@@ -205,11 +205,54 @@ static void TestExpandedDiskWithLegacyData(void)
 	cfg.pWork = s_Work;
 	cfg.WorkSize = sizeof(s_Work);
 	cfg.pLabelIfUnnamed = "0:IOSONATA";
+	MKFS_PARM format = { FM_FAT | FM_SFD, 2, 8, 0, 0 };
+	cfg.pFormatOptions = &format;
 
 	CHECK(FatFsMount(cfg) == FR_NO_FILESYSTEM);
 	CHECK(s_Expanded.vWrites == 0U);
 	CHECK(s_Expanded.vMedia[0x90000U + 510U] == 0x55U);
 	CHECK(s_Expanded.vMedia[0x90000U + 511U] == 0xAAU);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// The reusable mount is non-destructive. This USB test application
+	// explicitly erases its disposable NVM1 region after this result.
+	// Simulate that erase, then use the same FatFsMount again.
+	s_Expanded.Blank();
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Expanded.vWrites > 0U);
+	CHECK(s_Expanded.vMedia[11] == 0x00U); // 512-byte sector in BPB
+	CHECK(s_Expanded.vMedia[12] == 0x02U);
+	CHECK(s_Expanded.vMedia[16] == 2U);    // Two FAT copies
+	CHECK(s_Expanded.vMedia[510] == 0x55U);
+	CHECK(s_Expanded.vMedia[511] == 0xAAU);
+
+	TCHAR label[FF_MAX_LFN + 1] = {};
+	CHECK(f_getlabel("0:", label, nullptr) == FR_OK);
+	CHECK(strcmp(label, "IOSONATA") == 0);
+
+	const char contents[] = "test flash volume persists";
+	char readback[sizeof(contents)] = {};
+	UINT transferred = 0;
+	FIL file = {};
+
+	CHECK(f_open(&file, "0:/record.txt", FA_WRITE | FA_CREATE_ALWAYS) == FR_OK);
+	CHECK(f_write(&file, contents, sizeof(contents), &transferred) == FR_OK);
+	CHECK(transferred == sizeof(contents));
+	CHECK(f_close(&file) == FR_OK);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// A second boot must mount the same volume, without another format.
+	uint32_t writes = s_Expanded.vWrites;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Expanded.vWrites == writes);
+	CHECK(f_getlabel("0:", label, nullptr) == FR_OK);
+	CHECK(strcmp(label, "IOSONATA") == 0);
+	CHECK(f_open(&file, "0:/record.txt", FA_READ) == FR_OK);
+	transferred = 0;
+	CHECK(f_read(&file, readback, sizeof(readback), &transferred) == FR_OK);
+	CHECK(transferred == sizeof(readback));
+	CHECK(memcmp(contents, readback, sizeof(contents)) == 0);
+	CHECK(f_close(&file) == FR_OK);
 	CHECK(FatFsUnmount() == FR_OK);
 }
 
