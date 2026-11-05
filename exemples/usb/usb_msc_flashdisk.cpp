@@ -117,37 +117,17 @@ static const UsbdMscCfg_t s_MscCfg = {
 int main(void)
 {
 	NvmCfg_t cfg = {};
-	uint64_t regionAddr;
-	uint64_t regionSize;
-	uint64_t ceiling;
 
 	NvmMcuCfg(cfg);
-	regionAddr = NvmRegionAddr(MSC_NVM_REGION);
-	regionSize = NvmRegionSize(MSC_NVM_REGION);
-	ceiling = NvmMcuCeiling();
-
-	if (regionSize == 0U)
-	{
-		return -1;
-	}
-
-	if (regionAddr < cfg.BaseAddr || regionAddr > ceiling)
-	{
-		return -1;
-	}
-
-	if (regionSize > ceiling - regionAddr)
-	{
-		return -1;
-	}
+	cfg.BaseAddr = NvmRegionAddr(MSC_NVM_REGION);
+	cfg.TotalSize = NvmRegionSize(MSC_NVM_REGION);
 
 	if (s_MemIntrf.Init() == false)
 	{
 		return -1;
 	}
 
-	if (s_Nvm.Init(cfg, &s_MemIntrf, regionAddr - cfg.BaseAddr,
-			regionSize) == false)
+	if (s_Nvm.Init(cfg, &s_MemIntrf) == false)
 	{
 		return -1;
 	}
