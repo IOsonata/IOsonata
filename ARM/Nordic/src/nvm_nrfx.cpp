@@ -117,6 +117,7 @@ SOFTWARE.
 #endif
 
 #include "storage/nvm_mcu_intrf.h"
+#include "nvm_timeslot_op.h"
 
 // The command set, using the opcodes a serial flash uses so a config for
 // internal memory reads like one for a flash chip.
@@ -219,6 +220,10 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt);
 // memory controller: which device a completion belongs to is not something
 // anything has to look up or remember.
 static NvmDevIntrf_t s_NvmDev;
+
+// Only the Nordic MPSL route needs a timeslot operation descriptor.
+// One controller permits one outstanding operation, so static storage suffices.
+static NvmTimeslotOp_t s_NvmTimeslotOp;
 
 DevIntrf_t *NvmMcuDevIntrf(void)
 {
@@ -332,7 +337,7 @@ static int ArbiterIssue(uint32_t (*Step)(void *), void *pCtx)
 		return -EIO;
 	}
 
-	NvmMcuIntrfOp_t *op = &s_NvmDev.Op;
+	NvmTimeslotOp_t *op = &s_NvmTimeslotOp;
 
 	op->Step = Step;
 	op->StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;

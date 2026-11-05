@@ -111,6 +111,15 @@ RRAM paths and integrates direct, SoftDevice and MPSL-timeslot operation as
 supported by the selected build. Geometry comes from the target; RRAM's
 no-erase behavior must not be replaced with a flash assumption.
 
+Only the Nordic MPSL route uses an NVM timeslot operation descriptor.
+`NvmTimeslotOp_t` is private to
+[the Nordic controller sources](../../ARM/Nordic/src/nvm_timeslot_op.h);
+it supplies a bounded step, time budget, persistent context and optional
+completion callback. The shared `NvmDevIntrf_t` no longer contains the
+MPSL descriptor. The controller registers an arbiter callback with an opaque
+request pointer; synchronous non-Nordic ports use the registration only to
+refuse operations while a different component owns the memory.
+
 [STM32 nvm_stm32.cpp](../../ARM/ST/src/nvm_stm32.cpp) supports the selected
 WBA/L4 families and H753. Its transfers complete in the call. It retains an arbiter
 registration hook, but the current operation path does not consume that hook.

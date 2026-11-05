@@ -74,36 +74,15 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-/// One unit of a memory operation, run where it is safe to touch the memory.
-/// Returns 0 when the operation is finished, or the microseconds it still
-/// expects to need so the arbiter can size the next window.
-///
-/// It runs wherever the arbiter puts it, which for a radio timeslot is a high
-/// priority interrupt: short, deterministic, no blocking calls.
-typedef struct __Nvm_Intrf_Op {
-	uint32_t (*Step)(void *pCtx);	//!< One unit. 0 when done, else usec left
-	uint32_t	StepBudgetUs;		//!< Worst case for one Step, sizes the window
-	void		*pCtx;				//!< Passed back to Step
-
-	/// Where to report the result, or NULL to have the arbiter wait for it
-	/// and return it instead. Set it and the arbiter submits and returns, so
-	/// the caller is not held while the memory works. It is called from
-	/// wherever the arbiter finishes, which for a radio timeslot is a high
-	/// priority interrupt: do nothing there but hand the result over.
-	///
-	/// The operation and its context outlive the call in that case, so
-	/// neither may be a local.
-	void (*Done)(void *pCtx, int Res);
-} NvmMcuIntrfOp_t;
-
-/// The arbiter answers this when the operation is under way and Done will
-/// report it. Positive, so a check for a negative errno is unchanged.
+/// A positive result indicates deferred completion. This is also used by
+/// controller implementations that submit work directly to a radio stack.
 #define NVM_INTRF_OP_STARTED		1
 
-/// Runs an operation where the memory is safe to touch. Returns 0 when it
-/// completed in the call, NVM_INTRF_OP_STARTED when Done will report it, or
-/// a negative errno when it could not be started.
-typedef int (*NvmMcuIntrfArb_t)(NvmMcuIntrfOp_t *pOp);
+/// Runs an operation where the memory is safe to touch. The request is
+/// opaque to generic MCU ports; only the controller's arbiter interprets it.
+/// Returns 0 when completed, NVM_INTRF_OP_STARTED when completion is deferred,
+/// or a negative errno when it could not be started.
+typedef int (*NvmMcuIntrfArb_t)(void *pRequest);
 
 /// Counts of what the interface did, for a test to show which path ran.
 typedef struct __Nvm_Intrf_Stat {
@@ -163,10 +142,10 @@ typedef struct __Nvm_Intrf_Er_Ctx {
 /// either: a transfer callback gets the state, and a C caller can hold the
 /// whole thing without knowing about the class that owns it.
 ///
-/// The state is per transaction, so it belongs here and not at file scope,
-/// the same way nRFSpiDev_t holds a transfer's buffer and index. That takes
-/// in the arbitrated operation and its context: the stack and the arbiter
-/// both report after the call has returned, so both outlive it.
+/// The frame, payload and write/erase context belong to the controller
+/// instance rather than a local variable. An asynchronous submission can
+/// outlive the calling function. Timeslot-specific operation state belongs
+/// to the Nordic MPSL implementation, not this shared structure.
 ///
 /// Whether a submit is owed a completion is not in here, because it is not
 /// per transaction. There is one memory controller and one thing holding it
@@ -182,7 +161,6 @@ typedef struct __Nvm_Dev_Intrf {
 	int				HdrLen;			//!< Frame bytes taken so far
 	int				DataLen;		//!< Payload bytes staged
 
-	NvmMcuIntrfOp_t	Op;				//!< The arbitrated operation
 	union {
 		NvmMcuIntrfWrCtx_t	Wr;
 		NvmMcuIntrfErCtx_t	Er;

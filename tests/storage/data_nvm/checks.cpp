@@ -55,7 +55,7 @@ extern "C" const uintptr_t g_Regs[] = {
 };
 #endif
 
-static int Arbiter(NvmMcuIntrfOp_t *) { return -EBUSY; }
+static int Arbiter(void *) { return -EBUSY; }
 #define CHECK(x) do { if (!(x)) return __LINE__; } while (0)
 extern "C" int RunTest(int Test)
 {

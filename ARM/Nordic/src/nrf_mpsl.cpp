@@ -63,6 +63,7 @@ SOFTWARE.
 
 #include "idelay.h"
 #include "storage/nvm_mcu_intrf.h"
+#include "nvm_timeslot_op.h"
 
 /******** For DEBUG ************/
 //#define DEBUG_ENABLE
@@ -96,7 +97,7 @@ static bool s_bNvmSessionOpen = false;
 
 // The operation in flight and how it ended. Written in the timeslot callback,
 // read by the caller waiting on it.
-static NvmMcuIntrfOp_t * volatile s_pNvmOp = nullptr;
+static NvmTimeslotOp_t * volatile s_pNvmOp = nullptr;
 static volatile bool s_bNvmDone = false;
 static volatile int s_NvmResult = 0;
 
@@ -136,7 +137,7 @@ static void NvmBuildReq(mpsl_timeslot_request_t *pReq, uint32_t LengthUs)
 // it does nothing but hand the result over.
 static void NvmOpFinish(int Res)
 {
-	NvmMcuIntrfOp_t *op = s_pNvmOp;
+	NvmTimeslotOp_t *op = s_pNvmOp;
 
 	if (op == nullptr)
 	{
@@ -229,8 +230,10 @@ static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 
 // What the memory interface calls. One operation at a time, which the
 // interface already serialises through its own busy latch.
-static int NvmArbiterRun(NvmMcuIntrfOp_t *pOp)
+static int NvmArbiterRun(void *pRequest)
 {
+	NvmTimeslotOp_t *pOp = static_cast<NvmTimeslotOp_t *>(pRequest);
+
 	if (pOp == nullptr || pOp->Step == nullptr)
 	{
 		return -EINVAL;

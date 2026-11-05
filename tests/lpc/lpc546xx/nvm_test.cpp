@@ -122,7 +122,7 @@ bool QuadSPISendCmd(SPIDev_t * const, uint8_t, uint32_t, uint8_t, uint32_t, uint
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) { assert(false); }
 void ModelDelayUs(uint32_t) {}
 
-static int Arbiter(NvmMcuIntrfOp_t *) { return -EBUSY; }
+static int Arbiter(void *) { return -EBUSY; }
 
 static void Pattern(uint8_t *p, uint32_t Len, uint8_t Seed)
 {
