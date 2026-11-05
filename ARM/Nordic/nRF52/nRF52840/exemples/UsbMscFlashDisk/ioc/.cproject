@@ -14,7 +14,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" description="" id="iosonata.mscflash.debug.config" name="Debug" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.debug">
+				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" description="" id="iosonata.mscflash.debug.config" name="Debug" optionalBuildProperties="" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.debug">
 					<folderInfo id="iosonata.mscflash.debug.folder" name="/" resourcePath="">
 						<toolChain id="iosonata.mscflash.debug.toolchain" name="Cross ARM GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.elf.debug">
 							<option id="iosonata.mscflash.debug.opt" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.none" valueType="enumerated"/>
@@ -48,7 +48,9 @@
 								<inputType id="iosonata.mscflash.debug.asmin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
 							</tool>
 							<tool id="iosonata.mscflash.debug.ccompiler" name="Cross ARM C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols"><listOptionValue builtIn="false" value="NRF52840_XXAA"/></option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="NRF52840_XXAA"/>
+								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/>
@@ -62,7 +64,9 @@
 								<inputType id="iosonata.mscflash.debug.cin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="iosonata.mscflash.debug.cppcompiler" name="Cross ARM C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cppdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols"><listOptionValue builtIn="false" value="NRF52840_XXAA"/></option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cppdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="NRF52840_XXAA"/>
+								</option>
 								<option id="iosonata.mscflash.debug.nortti" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="iosonata.mscflash.debug.noexc" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cppinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
@@ -73,35 +77,54 @@
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
-								
-					<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../fatfs&quot;"/></option>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../fatfs&quot;"/>
+								</option>
 								<option id="iosonata.mscflash.debug.cppstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="iosonata.mscflash.debug.cppin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="iosonata.mscflash.debug.clinker" name="Cross ARM C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
 								<option id="iosonata.mscflash.debug.clinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" value="true" valueType="boolean"/>
 								<option id="iosonata.mscflash.debug.clinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.clinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_nvm256k.ld&quot;"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.clinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.libs" valueType="libs"><listOptionValue builtIn="false" value="IOsonata_nRF52840"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.clinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Debug&quot;"/></option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.clinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_nvm256k.ld&quot;"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.clinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.libs" valueType="libs">
+									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.clinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Debug&quot;"/>
+								</option>
 								<option id="iosonata.mscflash.debug.clinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano" value="true" valueType="boolean"/>
 							</tool>
 							<tool id="iosonata.mscflash.debug.cpplinker" name="Cross ARM C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
 								<option id="iosonata.mscflash.debug.cpplinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean"/>
 								<option id="iosonata.mscflash.debug.cpplinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="--specs=rdimon.specs -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group" valueType="string"/>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cpplinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_nvm256k.ld&quot;"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cpplinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" valueType="libs"><listOptionValue builtIn="false" value="IOsonata_nRF52840"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cpplinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Debug&quot;"/></option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cpplinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_nvm256k.ld&quot;"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cpplinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" valueType="libs">
+									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.debug.cpplinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Debug&quot;"/>
+								</option>
 								<option id="iosonata.mscflash.debug.cpplinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" value="true" valueType="boolean"/>
-								<inputType id="iosonata.mscflash.debug.cpplinkin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input"><additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/><additionalInput kind="additionalinput" paths="$(LIBS)"/></inputType>
+								<inputType id="iosonata.mscflash.debug.cpplinkin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
+									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
+								</inputType>
 							</tool>
 							<tool id="iosonata.mscflash.debug.archiver" name="Cross ARM GNU Archiver" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.archiver"/>
 							<tool id="iosonata.mscflash.debug.createflash" name="Cross ARM GNU Create Flash Image" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createflash"/>
-							<tool id="iosonata.mscflash.debug.listing" name="Cross ARM GNU Create Listing" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createlisting"><option id="iosonata.mscflash.debug.listsrc" name="Display source (--source|-S)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.createlisting.source" value="true" valueType="boolean"/></tool>
+							<tool id="iosonata.mscflash.debug.listing" name="Cross ARM GNU Create Listing" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createlisting">
+								<option id="iosonata.mscflash.debug.listsrc" name="Display source (--source|-S)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.createlisting.source" value="true" valueType="boolean"/>
+							</tool>
 							<tool id="iosonata.mscflash.debug.printsize" name="Cross ARM GNU Print Size" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.printsize"/>
 						</toolChain>
 					</folderInfo>
-					<sourceEntries><entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/></sourceEntries>
+					<sourceEntries>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
@@ -119,7 +142,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="" id="iosonata.mscflash.release.config" name="Release" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release">
+				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="" id="iosonata.mscflash.release.config" name="Release" optionalBuildProperties="" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release">
 					<folderInfo id="iosonata.mscflash.release.folder" name="/" resourcePath="">
 						<toolChain id="iosonata.mscflash.release.toolchain" name="Cross ARM GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.elf.release">
 							<option id="iosonata.mscflash.release.opt" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.size" valueType="enumerated"/>
@@ -147,31 +170,90 @@
 							<option id="iosonata.mscflash.release.fpu" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv4spd16" valueType="enumerated"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="iosonata.mscflash.release.target" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
 							<builder buildPath="${ProjDirPath}/Release" id="iosonata.mscflash.release.builder" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
-							<tool id="iosonata.mscflash.release.assembler" name="Cross ARM GNU Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler"><option id="iosonata.mscflash.release.asmpp" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/><inputType id="iosonata.mscflash.release.asmin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/></tool>
+							<tool id="iosonata.mscflash.release.assembler" name="Cross ARM GNU Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
+								<option id="iosonata.mscflash.release.asmpp" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
+								<inputType id="iosonata.mscflash.release.asmin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
+							</tool>
 							<tool id="iosonata.mscflash.release.ccompiler" name="Cross ARM C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
-									<listOptionValue builtIn="false" value="NDEBUG"/><listOptionValue builtIn="false" value="NRF52840_XXAA"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="NDEBUG"/>
+									<listOptionValue builtIn="false" value="NRF52840_XXAA"/>
 								</option>
-								<option id="iosonata.mscflash.release.cstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/><inputType id="iosonata.mscflash.release.cin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+								</option>
+								<option id="iosonata.mscflash.release.cstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<inputType id="iosonata.mscflash.release.cin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="iosonata.mscflash.release.cppcompiler" name="Cross ARM C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cppdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
-									<listOptionValue builtIn="false" value="NDEBUG"/><listOptionValue builtIn="false" value="NRF52840_XXAA"/></option>
-								<option id="iosonata.mscflash.release.nortti" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/><option id="iosonata.mscflash.release.noexc" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
+									<listOptionValue builtIn="false" value="NDEBUG"/>
+									<listOptionValue builtIn="false" value="NRF52840_XXAA"/>
+								</option>
+								<option id="iosonata.mscflash.release.nortti" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
+								<option id="iosonata.mscflash.release.noexc" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cppinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
-								
-					<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../fatfs&quot;"/></option>
-								<option id="iosonata.mscflash.release.cppstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/><inputType id="iosonata.mscflash.release.cppin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../fatfs&quot;"/>
+								</option>
+								<option id="iosonata.mscflash.release.cppstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<inputType id="iosonata.mscflash.release.cppin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
-							<tool id="iosonata.mscflash.release.clinker" name="Cross ARM C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker"><option id="iosonata.mscflash.release.clinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" value="true" valueType="boolean"/><option id="iosonata.mscflash.release.clinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.clinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_nvm256k.ld&quot;"/></option><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.clinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.libs" valueType="libs"><listOptionValue builtIn="false" value="IOsonata_nRF52840"/></option><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.clinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Release&quot;"/></option><option id="iosonata.mscflash.release.clinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano" value="true" valueType="boolean"/></tool>
-							<tool id="iosonata.mscflash.release.cpplinker" name="Cross ARM C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker"><option id="iosonata.mscflash.release.cpplinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean"/><option id="iosonata.mscflash.release.cpplinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cpplinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_nvm256k.ld&quot;"/></option><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cpplinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" valueType="libs"><listOptionValue builtIn="false" value="IOsonata_nRF52840"/></option><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cpplinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Release&quot;"/></option><option id="iosonata.mscflash.release.cpplinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" value="true" valueType="boolean"/><inputType id="iosonata.mscflash.release.cpplinkin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input"><additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/><additionalInput kind="additionalinput" paths="$(LIBS)"/></inputType></tool>
-							<tool id="iosonata.mscflash.release.archiver" name="Cross ARM GNU Archiver" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.archiver"/><tool id="iosonata.mscflash.release.createflash" name="Cross ARM GNU Create Flash Image" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createflash"/><tool id="iosonata.mscflash.release.listing" name="Cross ARM GNU Create Listing" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createlisting"><option id="iosonata.mscflash.release.listsrc" name="Display source (--source|-S)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.createlisting.source" value="true" valueType="boolean"/></tool><tool id="iosonata.mscflash.release.printsize" name="Cross ARM GNU Print Size" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.printsize"/>
+							<tool id="iosonata.mscflash.release.clinker" name="Cross ARM C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
+								<option id="iosonata.mscflash.release.clinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" value="true" valueType="boolean"/>
+								<option id="iosonata.mscflash.release.clinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.clinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_nvm256k.ld&quot;"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.clinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.libs" valueType="libs">
+									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.clinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Release&quot;"/>
+								</option>
+								<option id="iosonata.mscflash.release.clinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano" value="true" valueType="boolean"/>
+							</tool>
+							<tool id="iosonata.mscflash.release.cpplinker" name="Cross ARM C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
+								<option id="iosonata.mscflash.release.cpplinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean"/>
+								<option id="iosonata.mscflash.release.cpplinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cpplinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_nvm256k.ld&quot;"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cpplinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" valueType="libs">
+									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.release.cpplinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Release&quot;"/>
+								</option>
+								<option id="iosonata.mscflash.release.cpplinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" value="true" valueType="boolean"/>
+								<inputType id="iosonata.mscflash.release.cpplinkin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
+									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
+								</inputType>
+							</tool>
+							<tool id="iosonata.mscflash.release.archiver" name="Cross ARM GNU Archiver" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.archiver"/>
+							<tool id="iosonata.mscflash.release.createflash" name="Cross ARM GNU Create Flash Image" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createflash"/>
+							<tool id="iosonata.mscflash.release.listing" name="Cross ARM GNU Create Listing" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createlisting">
+								<option id="iosonata.mscflash.release.listsrc" name="Display source (--source|-S)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.createlisting.source" value="true" valueType="boolean"/>
+							</tool>
+							<tool id="iosonata.mscflash.release.printsize" name="Cross ARM GNU Print Size" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.printsize"/>
 						</toolChain>
 					</folderInfo>
-					<sourceEntries><entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/></sourceEntries>
+					<sourceEntries>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
@@ -189,7 +271,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="" id="iosonata.mscflash.releasembr.config" name="Release_mbr" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release">
+				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="" id="iosonata.mscflash.releasembr.config" name="Release_mbr" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.dockerdpath=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release" postannouncebuildStep="Merge MBR" postbuildStep="&quot;${system_property:iocomposer_home}/Tools/bin/hexmerge.py&quot; --overlap=error -o &quot;UsbMscFlashDisk_MBR.hex&quot; &quot;UsbMscFlashDisk.hex:0:&quot; &quot;${system_property:iocomposer_home}/external/nRF5_SDK/components/Softdevice/mbr/hex/mbr_nrf52_2.4.1_mbr.hex:0:&quot;">
 					<folderInfo id="iosonata.mscflash.releasembr.folder" name="/" resourcePath="">
 						<toolChain id="iosonata.mscflash.releasembr.toolchain" name="Cross ARM GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.elf.release">
 							<option id="iosonata.mscflash.releasembr.opt" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.size" valueType="enumerated"/>
@@ -217,39 +299,102 @@
 							<option id="iosonata.mscflash.releasembr.fpu" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv4spd16" valueType="enumerated"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="iosonata.mscflash.releasembr.target" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
 							<builder buildPath="${ProjDirPath}/Release" id="iosonata.mscflash.releasembr.builder" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
-							<tool id="iosonata.mscflash.releasembr.assembler" name="Cross ARM GNU Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler"><option id="iosonata.mscflash.releasembr.asmpp" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/><inputType id="iosonata.mscflash.releasembr.asmin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/></tool>
+							<tool id="iosonata.mscflash.releasembr.assembler" name="Cross ARM GNU Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
+								<option id="iosonata.mscflash.releasembr.asmpp" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
+								<inputType id="iosonata.mscflash.releasembr.asmin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
+							</tool>
 							<tool id="iosonata.mscflash.releasembr.ccompiler" name="Cross ARM C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
-									<listOptionValue builtIn="false" value="NDEBUG"/><listOptionValue builtIn="false" value="NRF52840_XXAA"/></option>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="NDEBUG"/>
+									<listOptionValue builtIn="false" value="NRF52840_XXAA"/>
 								</option>
-								<option id="iosonata.mscflash.releasembr.cstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/><inputType id="iosonata.mscflash.releasembr.cin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+								</option>
+								<option id="iosonata.mscflash.releasembr.cstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<inputType id="iosonata.mscflash.releasembr.cin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="iosonata.mscflash.releasembr.cppcompiler" name="Cross ARM C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cppdefs" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
-									<listOptionValue builtIn="false" value="NDEBUG"/><listOptionValue builtIn="false" value="NRF52840_XXAA"/></option>
-								<option id="iosonata.mscflash.releasembr.nortti" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/><option id="iosonata.mscflash.releasembr.noexc" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
+									<listOptionValue builtIn="false" value="NDEBUG"/>
+									<listOptionValue builtIn="false" value="NRF52840_XXAA"/>
+								</option>
+								<option id="iosonata.mscflash.releasembr.nortti" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
+								<option id="iosonata.mscflash.releasembr.noexc" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cppinc" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
-								
-					<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../fatfs&quot;"/></option>
-								<option id="iosonata.mscflash.releasembr.cppstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/><inputType id="iosonata.mscflash.releasembr.cppin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../../../fatfs&quot;"/>
+								</option>
+								<option id="iosonata.mscflash.releasembr.cppstd" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<inputType id="iosonata.mscflash.releasembr.cppin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
-							<tool id="iosonata.mscflash.releasembr.clinker" name="Cross ARM C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker"><option id="iosonata.mscflash.releasembr.clinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" value="true" valueType="boolean"/><option id="iosonata.mscflash.releasembr.clinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.clinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_mbr_nvm832k.ld&quot;"/></option><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.clinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.libs" valueType="libs"><listOptionValue builtIn="false" value="IOsonata_nRF52840"/></option><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.clinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Release&quot;"/></option><option id="iosonata.mscflash.releasembr.clinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano" value="true" valueType="boolean"/></tool>
-							<tool id="iosonata.mscflash.releasembr.cpplinker" name="Cross ARM C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker"><option id="iosonata.mscflash.releasembr.cpplinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean"/><option id="iosonata.mscflash.releasembr.cpplinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cpplinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_mbr_nvm832k.ld&quot;"/></option><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cpplinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" valueType="libs"><listOptionValue builtIn="false" value="IOsonata_nRF52840"/></option><option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cpplinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths"><listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Release&quot;"/></option><option id="iosonata.mscflash.releasembr.cpplinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" value="true" valueType="boolean"/><inputType id="iosonata.mscflash.releasembr.cpplinkin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input"><additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/><additionalInput kind="additionalinput" paths="$(LIBS)"/></inputType></tool>
-							<tool id="iosonata.mscflash.releasembr.archiver" name="Cross ARM GNU Archiver" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.archiver"/><tool id="iosonata.mscflash.releasembr.createflash" name="Cross ARM GNU Create Flash Image" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createflash"/><tool id="iosonata.mscflash.releasembr.listing" name="Cross ARM GNU Create Listing" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createlisting"><option id="iosonata.mscflash.releasembr.listsrc" name="Display source (--source|-S)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.createlisting.source" value="true" valueType="boolean"/></tool><tool id="iosonata.mscflash.releasembr.printsize" name="Cross ARM GNU Print Size" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.printsize"/>
+							<tool id="iosonata.mscflash.releasembr.clinker" name="Cross ARM C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
+								<option id="iosonata.mscflash.releasembr.clinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" value="true" valueType="boolean"/>
+								<option id="iosonata.mscflash.releasembr.clinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.clinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_mbr_nvm832k.ld&quot;"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.clinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.libs" valueType="libs">
+									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.clinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Release&quot;"/>
+								</option>
+								<option id="iosonata.mscflash.releasembr.clinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.usenewlibnano" value="true" valueType="boolean"/>
+							</tool>
+							<tool id="iosonata.mscflash.releasembr.cpplinker" name="Cross ARM C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
+								<option id="iosonata.mscflash.releasembr.cpplinkgc" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean"/>
+								<option id="iosonata.mscflash.releasembr.cpplinkother" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cpplinkscript" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../ldscript/gcc_nrf52840_xxaa_mbr_nvm832k.ld&quot;"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cpplinklibs" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" valueType="libs">
+									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="iosonata.mscflash.releasembr.cpplinkpath" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths">
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/ioc/Release&quot;"/>
+								</option>
+								<option id="iosonata.mscflash.releasembr.cpplinknano" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" value="true" valueType="boolean"/>
+								<inputType id="iosonata.mscflash.releasembr.cpplinkin" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
+									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
+								</inputType>
+							</tool>
+							<tool id="iosonata.mscflash.releasembr.archiver" name="Cross ARM GNU Archiver" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.archiver"/>
+							<tool id="iosonata.mscflash.releasembr.createflash" name="Cross ARM GNU Create Flash Image" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createflash"/>
+							<tool id="iosonata.mscflash.releasembr.listing" name="Cross ARM GNU Create Listing" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.createlisting">
+								<option id="iosonata.mscflash.releasembr.listsrc" name="Display source (--source|-S)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.createlisting.source" value="true" valueType="boolean"/>
+							</tool>
+							<tool id="iosonata.mscflash.releasembr.printsize" name="Cross ARM GNU Print Size" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.printsize"/>
 						</toolChain>
 					</folderInfo>
-					<sourceEntries><entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/></sourceEntries>
+					<sourceEntries>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
 	</storageModule>
-	<storageModule moduleId="cdtBuildSystem" version="4.0.0"><project id="UsbMscFlashDisk.ilg.gnuarmeclipse.managedbuild.cross.target.elf.mscflash" name="Executable" projectType="ilg.gnuarmeclipse.managedbuild.cross.target.elf"/></storageModule>
+	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+		<project id="UsbMscFlashDisk.ilg.gnuarmeclipse.managedbuild.cross.target.elf.mscflash" name="Executable" projectType="ilg.gnuarmeclipse.managedbuild.cross.target.elf"/>
+	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="refreshScope"/>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
-	<storageModule moduleId="scannerConfiguration"><autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/></storageModule>
+	<storageModule moduleId="scannerConfiguration">
+		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+	</storageModule>
 </cproject>
