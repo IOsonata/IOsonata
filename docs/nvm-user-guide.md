@@ -371,15 +371,17 @@ FatFs mounts the existing `DiskIO` without USB MSC. Use `NvmDiskIO` with
 other addressed memory. `SDCard` and other `DiskIO` devices work through
 the same `FatFsMount` interface declared in `ff_diskio.h`.
 
-The FatFs configuration supports 512, 1024, 2048 and 4096-byte sectors
-(`FF_MAX_SS=4096`). FatFs and USB MSC use the same logical sector size
-reported by `DiskIO::GetSectSize()`. A 256 KiB raw flash region contains
-only 64 physical 4 KiB erase units, fewer than FatFs `f_mkfs()` permits
-(128 sectors minimum). The USB flash example therefore configures
-`NvmDiskIO` with 512-byte logical sectors and a separate caller-owned
-4 KiB erase buffer. An existing volume made with 4 KiB sectors can be
-recognized through the original, unmodified physical-sector layout.
+The FatFs configuration supports 512, 1024, 2048 and 4096-byte
+sectors (`FF_MAX_SS=4096`). Generic FatFs uses the logical sector
+size supplied by DiskIO. A 256 KiB volume with 4 KiB sectors has
+only 64 sectors, below the 128-sector minimum in FatFs `f_mkfs()`.
+Applications using FatFs can therefore choose the 512-byte
+NvmDiskIO option with a caller-owned erase-unit buffer.
 
+The `UsbMscFlashDisk` example retains its original small FAT12
+initializer and native 4 KiB sectors. It does not call FatFsMount
+at startup. This is independent of generic FatFs support and does
+not alter Nvm, NvmMcuIntrf or NvmDiskIO.
 ```cpp
 #include "ff.h"
 #include "ff_diskio.h"

@@ -6,28 +6,21 @@ Run from the repository root:
 make -C tests/storage/fatfs_diskio test
 ```
 
-This builds the production FatFs and DiskIO code against simulated 512-byte
-sector media (including a 256 KiB volume) and native 4096-byte sector
-media (including an 832 KiB volume of 208 physical sectors).
-The separate `exemples/storage/nvm_diskio_test.cpp` exercises logical
-512-byte writes on erase-before-write NVM with a 4096-byte scratch buffer. It checks
-blank formatting, file I/O, remount persistence, optional label assignment,
-preservation of existing custom labels, geometry, error propagation
-and refusal to format partially used or unreadable storage. A dedicated
-migration regression models an old 256 KiB filesystem remaining inside the
-expanded 832 KiB Debug disk. The reusable mount refuses to format that nonblank volume. The
-test then simulates the example's explicit reserved-region erase,
-formats a fresh `IOSONATA` filesystem, and checks that files and
-the label survive remount without an additional erase. The test also
-checks the 4 KiB boot-sector geometry, a small formatting-write count,
-and exactly one physical disk write for a native host sector. The erase
-policy belongs only to this disposable USB example; the generic
-mount helper remains non-destructive.
+These host tests exercise the production generic `FatFsMount()` and
+`DiskIO` implementations using simulated 512-byte and 4096-byte
+sector media. They check blank-media formatting, file I/O, remount
+persistence, optional volume labels, sector geometry and I/O errors.
+The 832 KiB simulation verifies that a nonblank disk is not
+automatically formatted, then checks a newly initialized FAT
+volume, its label, and single-sector writes after explicit test reset.
 
-Both the firmware and the USB MSC flash example use the generic FatFs
-mount/format operation for initialized DiskIO media. The example unmounts
-the volume before USB MSC takes ownership. The physical sector size
-reported by DiskIO matches the sector size exposed through USB MSC.
+The nRF52840 `UsbMscFlashDisk` example is separate: it uses its
+original small direct FAT12 initializer and 4096-byte USB sectors
+for both 256 KiB and 832 KiB disks. It does not call `FatFsMount()`.
+The generic FatFs implementation remains available for firmware
+file access and has not been modified by this restoration.
 
-This is a host simulation; actual MCU memory endurance, power loss and USB
-ownership handoff require separate hardware validation.
+The `exemples/storage/nvm_diskio_test.cpp` host test covers the
+NVM block adapter with optional smaller logical sectors. Host
+tests do not replace target compilation or physical USB and flash
+validation.

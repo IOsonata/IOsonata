@@ -215,9 +215,9 @@ static void TestExpandedDiskWithLegacyData(void)
 	CHECK(s_Expanded.vMedia[0x90000U + 511U] == 0xAAU);
 	CHECK(FatFsUnmount() == FR_OK);
 
-	// The reusable mount is non-destructive. This USB test application
-	// explicitly erases its disposable NVM1 region after this result.
-	// Simulate that erase, then use the same FatFsMount again.
+	// The generic mount preserves nonblank data. Explicitly reset the
+	// simulated media here, then check formatting and remount separately
+	// from the USB MSC example.
 	s_Expanded.Blank();
 	cfg.bFormatIfBlank = true;
 	CHECK(FatFsMount(cfg) == FR_OK);
@@ -259,7 +259,7 @@ static void TestExpandedDiskWithLegacyData(void)
 	CHECK(memcmp(s_Data, s_Readback, sizeof(s_Data)) == 0);
 	FFDiskSetDevice(nullptr);
 
-	// A second boot must mount the same volume, without another format.
+	// A second generic mount must preserve the files without formatting.
 	uint32_t writes = s_Expanded.vWrites;
 	CHECK(FatFsMount(cfg) == FR_OK);
 	CHECK(s_Expanded.vWrites == writes);

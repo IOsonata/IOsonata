@@ -557,51 +557,32 @@ SYNCHRONIZE CACHE.
 firmware, settings, a production filesystem or Bluetooth bond storage. RAM-disk
 contents are lost when USB bus power is removed.
 
-The bare-metal `Debug` build reserves 832 KiB of internal flash
-(0x30000-0xFFFFF) for NVM1 with `gcc_nrf52840_xxaa_nvm832k.ld`,
-leaving 192 KiB for the application. `Release` uses 256 KiB at
-0xC0000-0xFFFFF, while `Release_mbr` uses 832 KiB at
-0x10000-0xDFFFF below the USB DFU bootloader. These layouts do not
-point to the same physical disk.
+The USB flash-disk example retains its original direct FAT12
+initialization. At startup it reads sector zero and preserves any
+disk with a 55AA signature. Otherwise it writes two FAT12 copies,
+the IOSONATA volume-label directory entry and the boot sector last.
+It does not scan or erase the entire disk before USB initialization.
+The generic FatFsMount interface remains available for firmware
+filesystems independently of USB MSC, but is not used by this example.
 
-The 832 KiB Debug and Release_mbr layouts use native 4096-byte FAT
-sectors (208 sectors), one erase unit per host write. This avoids
-eight full-page read/erase/program cycles for every 4 KiB written
-through the earlier 512-byte sector configuration. The smaller
-256 KiB Release layout has only 64 physical erase units, so it
-continues to present 512-byte logical sectors (512 sectors) with a
-caller-owned 4 KiB buffer for read/modify/write.
+The USB disk exposes one physical 4096-byte erase page per sector,
+both in the 256 KiB and 832 KiB configurations. This eliminates
+the repeated read/erase/program operations of the temporary 512-byte
+mapping. Flash erases and writes still block the foreground USB
+process event, and the raw internal flash has no wear levelling.
 
-The same sector geometry is used by FatFs and USB MSC. Internal flash
-erase/program blocks the foreground USB MSC processing while it
-completes, so this example is not optimized for sustained writes.
+The bare-metal Debug linker script gcc_nrf52840_xxaa_nvm832k.ld
+reserves NVM1 at 0x30000-0xFFFFF (832 KiB). The Release build uses
+NVM1 at 0xC0000-0xFFFFF (256 KiB). Release_mbr uses NVM1 from
+0x10000 to 0xDFFFF (832 KiB) below the Nordic USB DFU bootloader.
+The variants have different physical disk starting addresses.
+The bare-metal Debug layout must not be used on a device with an
+upper-flash bootloader installed. The signature check is appropriate
+for this disposable test volume, not a general filesystem recovery
+or data-preservation strategy.
 
-This **USB test example** owns a disposable NVM1 region. A valid
-filesystem is mounted and preserved; if `FatFsMount()` reports
-`FR_NO_FILESYSTEM`, the application explicitly erases only the
-linker-reserved NVM1 region with `Nvm::Erase()`, waits for `Sync()`,
-then calls `FatFsMount()` again. The nRF52 flash port skips erasing
-pages that already contain only 0xFF. This handles old 256 KiB FAT data
-left inside the expanded 832 KiB Debug disk. Once formatted, FatFs
-assigns the `IOSONATA` volume label. The volume is unmounted before
-USB MSC exposes it, and subsequent boots preserve existing files.
-
-The generic `FatFsMount()` remains non-destructive: it only formats
-media that is wholly erased when `bFormatIfBlank` is requested.
-The application performs the explicit erase, **not** the FatFs
-mount helper. Disk I/O failures do not trigger erasure.
-An unsuccessful filesystem initialization is not exported as a
-USB disk ready for file access.
-
-This test-board initialization is deliberately destructive to
-unrecognized data. Do not reuse it with files that must be preserved.
-Do not use bare-metal Debug on a device with an installed upper-flash
-bootloader: its NVM1 region overlaps that bootloader. Switching
-Debug, Release and Release_mbr does not migrate any existing files.
-Raw flash FAT updates entail erase/write amplification and have no
-wear levelling or power-loss guarantee. USB MSC uses the same `DiskIO`
-and performs I/O in the foreground, outside USB interrupts.
-
+After restoring the example, verify mount time, full-size writes,
+file contents and reset persistence on the actual nRF52840 board.
 Unmount the volume before running the raw write test:
 
 ```bash

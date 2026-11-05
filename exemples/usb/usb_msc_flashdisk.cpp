@@ -8,15 +8,13 @@ linker script, so its size is set there and nowhere else, and the image fails
 to link if it grows into the disk. It does not expose firmware, filesystem,
 settings or Bluetooth bond-storage regions.
 
-This example uses a disposable NVM1 test volume: recognized filesystems
-are preserved across resets; unrecognized contents cause an explicit
-NVM1-only erase, then FatFs formatting. The generic FatFs mount helper
-never formats a nonblank disk.
+The content stays across resets and power cycles. This disposable test disk
+is initialized with the original small FAT12 layout only when sector 0 has
+no 55AA signature. An existing volume is not formatted on startup.
 
-The 832 KiB variants use native 4 KiB sectors to avoid repeatedly
-rewriting a full erase page for each 512-byte host write. The 256 KiB
-variant uses 512-byte sectors with erase-unit scratch because it has
-fewer than 128 physical sectors. There is no wear levelling.
+A sector is one physical 4 KiB flash erase unit, independently of disk size.
+Each host sector write is one erase and one program, with no wear levelling.
+The USB process event performs flash writes synchronously.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 4, 2026
@@ -47,10 +45,10 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <string.h>
 
 #include "storage/diskio_nvm.h"
-#include "ff.h"
-#include "ff_diskio.h"
+#include "storage/fatfs.h"
 #include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 #include "app_evt_handler.h"
@@ -75,23 +73,15 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #endif
 // Largest sector FAT allows. UsbdMsc refuses a medium with a larger one.
 #define MSC_SECTOR_BUFF_SIZE	4096U
-// Linker region holding the disk. NVM0 is the Bluetooth bond store.
+// Linker-reserved USB disk region (NVM1); NVM0, if present, is PDS.
+#define MSC_NVM_REGION		1
 #define MSC_STR_INTERFACE	4U
 
 static NvmMcuIntrf s_MemIntrf;
 static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
-static FATFS s_FatFs;
 static UsbdMsc s_Msc;
-
-// Two FAT copies. Zero alignment uses GET_BLOCK_SIZE from DiskIO:
-// one logical 4 KiB sector, or eight logical 512-byte sectors.
-static const MKFS_PARM s_MkFsOptions = {
-	FM_FAT | FM_SFD, 2, 0, 0, 0
-};
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_BUFF_SIZE];
-// Separate from USB / FatFs input: one physical erase unit for partial writes.
-alignas(4) static uint8_t s_EraseBuffer[MSC_SECTOR_BUFF_SIZE];
 
 // Application event queue memory, replaces the 4 event library default. The
 // USB controller port queues its deferred endpoint events there.
@@ -124,114 +114,112 @@ static const UsbdMscCfg_t s_MscCfg = {
 	.pProduct = "IOsonata Flash",
 };
 
-int main(void)
+// Write an empty FAT12 volume with one sector per cluster and a one sector root
+// directory. The boot sector goes last, so a format cut short by a reset is
+// started over at the next power up.
+static bool MscDiskFormat(DiskIO &Disk, uint8_t *pBuff)
+{
+	const uint16_t sectSize = Disk.GetSectSize();
+	const uint32_t nbSect = Disk.GetNbSect();
+	// 12 bits per entry, two of them reserved. The sector count is a little
+	// above the cluster count, which can only round the table size up.
+	const uint16_t fatSect =
+		(uint16_t)(((nbSect + 2U) * 3U / 2U + sectSize - 1U) / sectSize);
+	const uint32_t rootSect =
+		FATFS_RSVDSECCNT_FAT16 + (uint32_t)FATFS_NBFAT * fatSect;
+
+	for (uint32_t i = 0; i < (uint32_t)FATFS_NBFAT * fatSect; i++)
+	{
+		memset(pBuff, 0, sectSize);
+		if ((i % fatSect) == 0U)
+		{
+			pBuff[0] = FATFS_MEDIA_FIXED;
+			pBuff[1] = 0xFFU;
+			pBuff[2] = 0xFFU;
+		}
+		if (!Disk.SectWrite(FATFS_RSVDSECCNT_FAT16 + i, pBuff))
+		{
+			return false;
+		}
+	}
+
+	memset(pBuff, 0, sectSize);
+	memcpy(pBuff, "IOSONATA   ", 11U);
+	pBuff[11] = FATFS_DIRATTR_VOLUME_ID;
+	if (!Disk.SectWrite(rootSect, pBuff))
+	{
+		return false;
+	}
+
+	FATFS_BSBPB *pBoot = reinterpret_cast<FATFS_BSBPB *>(pBuff);
+
+	memset(pBuff, 0, sectSize);
+	pBoot->JmpBoot[0] = 0xEBU;
+	pBoot->JmpBoot[1] = 0x3CU;
+	pBoot->JmpBoot[2] = 0x90U;
+	memcpy(pBoot->OEMName, "IOsonata", sizeof(pBoot->OEMName));
+	pBoot->BytsPerSec = sectSize;
+	pBoot->SecPerClus = 1U;
+	pBoot->RsvdSecCnt = FATFS_RSVDSECCNT_FAT16;
+	pBoot->NumFATs = FATFS_NBFAT;
+	pBoot->RootEntCnt = sectSize / 32U;
+	pBoot->TotSec16 = (uint16_t)nbSect;
+	pBoot->Media = FATFS_MEDIA_FIXED;
+	pBoot->FATSz16 = fatSect;
+	pBoot->SecPerTrk = 32U;
+	pBoot->NumHeads = 1U;
+	pBoot->BPB.Bpb16.DrvNum = 0x80U;
+	pBoot->BPB.Bpb16.BootSig = 0x29U;
+	pBoot->BPB.Bpb16.VolID = 0x4E534F49U;
+	memcpy(pBoot->BPB.Bpb16.VolLab, "IOSONATA   ", 11U);
+	memcpy(pBoot->BPB.Bpb16.FilSysType, "FAT12   ", 8U);
+	// FAT reads the signature at byte 510. It is repeated at the end of the
+	// sector, the other place tools look for it on a sector larger than 512.
+	pBoot->Signature_word[0] = 0x55U;
+	pBoot->Signature_word[1] = 0xAAU;
+	pBuff[sectSize - 2U] = 0x55U;
+	pBuff[sectSize - 1U] = 0xAAU;
+
+	return Disk.SectWrite(0U, pBuff);
+}
+
+static bool MscDiskInit(void)
 {
 	NvmCfg_t cfg = {};
-	FatFsMountCfg_t mount = {};
-	FRESULT res;
-	uint64_t diskSize;
-	uint32_t eraseSize;
-	uint32_t sectorSize;
 
-	// NVM1 is the linker-reserved USB disk, not the whole MCU flash.
-	if (NvmMcuCfgInit(cfg, 1) == false)
+	// Resolve NVM1 using the current generic MCU NVM APIs. The linker
+	// owns the disk bounds; do not select unused flash in this example.
+	if (!NvmMcuCfgInit(cfg, MSC_NVM_REGION) ||
+		!s_MemIntrf.Init() ||
+		!s_Nvm.Init(cfg, &s_MemIntrf) ||
+		!s_Disk.Init(s_Nvm) ||
+		!s_Disk.SectRead(0U, s_SectorBuffer))
+	{
+		return false;
+	}
+
+	const FATFS_BSBPB *pBoot =
+		reinterpret_cast<const FATFS_BSBPB *>(s_SectorBuffer);
+
+	// Keep whatever the host or an earlier run left, FAT or partition table.
+	if (pBoot->Signature_word[0] == 0x55U && pBoot->Signature_word[1] == 0xAAU)
+	{
+		return true;
+	}
+
+	return MscDiskFormat(s_Disk, s_SectorBuffer);
+}
+
+int main(void)
+{
+	if (!MscDiskInit() ||
+		!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) || !s_Msc.Init(s_MscCfg))
 	{
 		return -1;
 	}
-
-	if (s_MemIntrf.Init() == false)
-	{
-		return -1;
-	}
-
-	if (s_Nvm.Init(cfg, &s_MemIntrf) == false)
-	{
-		return -1;
-	}
-
-	// On 832 KiB media, 208 native 4 KiB sectors are sufficient for
-	// FatFs (minimum 128). Avoid eight erase/program operations for
-	// each 4 KiB written by the host. The smaller 256 KiB region has
-	// 64 physical pages and needs 512-byte logical sectors instead.
-	diskSize = s_Nvm.Size();
-	eraseSize = s_Nvm.EraseSize();
-
-	if (eraseSize == 0 || eraseSize > MSC_SECTOR_BUFF_SIZE ||
-		diskSize == 0 || (diskSize % eraseSize) != 0)
-	{
-		return -1;
-	}
-
-	sectorSize = diskSize / eraseSize >= 128U ? eraseSize : 512U;
-
-	if (!s_Disk.Init(s_Nvm, sectorSize, s_EraseBuffer,
-			sizeof(s_EraseBuffer)))
-	{
-		return -1;
-	}
-
-	// The firmware mounts and initializes the disk, then releases it
-	// before USB MSC makes the same volume available to the host.
-	mount.pDisk = &s_Disk;
-	mount.pFatFs = &s_FatFs;
-	mount.pPath = "0:";
-	// Only scan for blank media after the normal mount has failed.
-	mount.bFormatIfBlank = false;
-	mount.pWork = s_SectorBuffer;
-	mount.WorkSize = sizeof(s_SectorBuffer);
-	mount.pLabelIfUnnamed = "0:IOSONATA";
-	mount.pFormatOptions = &s_MkFsOptions;
-
-	res = FatFsMount(mount);
-
-	if (res == FR_NO_FILESYSTEM)
-	{
-		// This example owns a disposable flash disk. Old 256 KiB FAT
-		// contents remain inside the enlarged 832 KiB NVM1 allocation.
-		// Erase only NVM1 when no usable filesystem is present.
-		// Generic FatFsMount never erases nonblank storage itself.
-		if (FatFsUnmount("0:") != FR_OK)
-		{
-			return -1;
-		}
-
-		if (diskSize > UINT32_MAX ||
-			s_Nvm.Erase(0, (uint32_t)diskSize) != 0 ||
-			s_Nvm.Sync() != 0)
-		{
-			return -1;
-		}
-
-		// The nRF52 controller skips page erases that are already 0xFF.
-		mount.bFormatIfBlank = true;
-		res = FatFsMount(mount);
-	}
-
-	// I/O failures must not erase the disk or expose invalid FAT to USB.
-	if (res != FR_OK || FatFsUnmount("0:") != FR_OK)
-	{
-		return -1;
-	}
-
-	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem,
-			sizeof(g_AppEvtHandlerQueMem)) == false)
-	{
-		return -1;
-	}
-
-	if (UsbInit(&s_UsbCfg) == false)
-	{
-		return -1;
-	}
-
-	if (s_Msc.Init(s_MscCfg) == false)
-	{
-		return -1;
-	}
-
 	(void)UsbEnable(USB_DEVNO);
 
 	AppRun();
-
 	return 0;
 }
