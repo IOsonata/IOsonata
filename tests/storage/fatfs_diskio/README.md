@@ -12,7 +12,10 @@ The separate `exemples/storage/nvm_diskio_test.cpp` exercises logical
 512-byte writes on erase-before-write NVM with a 4096-byte scratch buffer. It checks
 blank formatting, file I/O, remount persistence, optional label assignment,
 preservation of existing custom labels, geometry, error propagation
-and refusal to format partially used or unreadable storage.
+and refusal to format partially used or unreadable storage. A dedicated
+migration regression models an old 256 KiB filesystem remaining inside the
+expanded 832 KiB Debug disk. The new volume is intentionally not formatted
+in that case, so the user can back up existing contents first.
 
 Both the firmware and the USB MSC flash example use the generic FatFs
 mount/format operation for initialized DiskIO media. The example unmounts

@@ -587,8 +587,17 @@ The `Release_mbr` build reserves 832 KiB at 0x10000-0xDFFFF, below
 the USB DFU bootloader at 0xE0000. Its capacity matches Debug but
 its disk address differs. Do not use the bare-metal Debug layout on
 a device with an upper-flash bootloader. Switching from the 256 KiB
-layout does not migrate existing files; back them up before explicitly
-reinitializing an old nonblank storage region. DFU images are placed according to the
+layout does not migrate existing files. When an old 256 KiB FAT
+volume remains near the end of flash, the new 832 KiB disk has no
+filesystem at its first sector. FatFs refuses to overwrite those
+nonblank old sectors, and macOS may report the disk as unreadable.
+This is not a USB enumeration fault. Back up files using the prior
+256 KiB firmware/layout before explicitly erasing the new NVM1 region
+and starting with a blank volume. Do not perform a full-chip erase
+on a device whose installed bootloader must be preserved.
+The fallback to the old 4 KiB FAT sector size applies only when
+that filesystem can be mounted at the current NVM1 address; otherwise
+the firmware returns to 512-byte logical sectors. DFU images are placed according to the
 bootloader's update strategy; a dual-bank update can overwrite storage
 near the beginning of this region. The example does not silently
 reformat that data following an update.

@@ -160,16 +160,33 @@ int main(void)
 
 	if (res == FR_NO_FILESYSTEM)
 	{
-		// A pre-existing USB flash disk may use 4 KiB FAT sectors from
-		// the previous firmware. Try that original layout, read-only
-		// from the mount routine's perspective: never reformat it.
+		// An earlier image may use 4 KiB FAT sectors at the SAME NVM1
+		// address. Try the old geometry without writing or formatting.
 		(void)FatFsUnmount("0:");
 		if (!s_Disk.Init(s_Nvm))
 		{
 			return -1;
 		}
 		mount.bFormatIfBlank = false;
-		res = FatFsMount(mount);
+		FRESULT oldRes = FatFsMount(mount);
+
+		if (oldRes == FR_OK)
+		{
+			res = oldRes;
+		}
+		else
+		{
+			// No legacy filesystem at this address. The reserved NVM1
+			// area may have moved: stale contents from the smaller disk
+			// prevent safe formatting of the expanded region. Keep
+			// those bytes intact and expose the intended 512-byte view.
+			(void)FatFsUnmount("0:");
+			if (!s_Disk.Init(s_Nvm, 512U, s_EraseBuffer,
+					sizeof(s_EraseBuffer)))
+			{
+				return -1;
+			}
+		}
 	}
 
 	// Filesystem initialization must not prevent the USB device from

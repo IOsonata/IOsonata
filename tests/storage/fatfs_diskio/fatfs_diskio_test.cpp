@@ -76,6 +76,7 @@ public:
 static TestDisk s_Flash(4096);
 static TestDisk s_Direct(512);
 static TestDisk s_Small(512, 256U * 1024U);
+static TestDisk s_Expanded(512, 832U * 1024U);
 static FATFS s_Fs;
 alignas(4) static uint8_t s_Work[4096];
 alignas(4) static uint8_t s_Data[4096];
@@ -185,6 +186,33 @@ static void TestMedium(TestDisk &Disk)
 	CHECK(disk_status(0) == STA_NOINIT);
 }
 
+static void TestExpandedDiskWithLegacyData(void)
+{
+	// New Debug NVM1 begins at 0x30000; the old 256 KiB NVM1 began at
+	// 0xC0000. The old filesystem is 0x90000 bytes into the new disk.
+	// Reading sector zero cannot identify the old volume, but the full
+	// blank scan must detect it and refuse to overwrite existing files.
+	s_Expanded.Blank();
+	s_Expanded.vMedia[0x90000U + 510U] = 0x55U;
+	s_Expanded.vMedia[0x90000U + 511U] = 0xAAU;
+	s_Expanded.vMedia[0x90000U + 54U] = 'F';
+
+	FatFsMountCfg_t cfg = {};
+	cfg.pDisk = &s_Expanded;
+	cfg.pFatFs = &s_Fs;
+	cfg.pPath = "0:";
+	cfg.bFormatIfBlank = true;
+	cfg.pWork = s_Work;
+	cfg.WorkSize = sizeof(s_Work);
+	cfg.pLabelIfUnnamed = "0:IOSONATA";
+
+	CHECK(FatFsMount(cfg) == FR_NO_FILESYSTEM);
+	CHECK(s_Expanded.vWrites == 0U);
+	CHECK(s_Expanded.vMedia[0x90000U + 510U] == 0x55U);
+	CHECK(s_Expanded.vMedia[0x90000U + 511U] == 0xAAU);
+	CHECK(FatFsUnmount() == FR_OK);
+}
+
 static void TestBlankOnly(void)
 {
 	s_Flash.Blank();
@@ -222,6 +250,7 @@ int main(void)
 	// FatFs mkfs minimum of 128 sectors.
 	TestMedium(s_Small);
 	TestBlankOnly();
+	TestExpandedDiskWithLegacyData();
 	printf("FatFs DiskIO: %u checks, %u failures\n", s_Checks, s_Fails);
 	return s_Fails == 0U ? 0 : 1;
 }
