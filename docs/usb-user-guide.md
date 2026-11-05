@@ -557,7 +557,9 @@ SYNCHRONIZE CACHE.
 firmware, settings, a production filesystem or Bluetooth bond storage. RAM-disk
 contents are lost when USB bus power is removed.
 
-The `UsbMscFlashDisk` example reserves 256 KiB in NVM1 using
+The bare-metal `Debug` build reserves 832 KiB at 0x30000-0xFFFFF
+using `gcc_nrf52840_xxaa_nvm832k.ld`, leaving 192 KiB below the disk
+for the application. `Release` retains 256 KiB using
 `gcc_nrf52840_xxaa_nvm256k.ld`. After initializing the medium through
 `NvmDiskIO`, it uses `FatFsMount()` with format-if-blank enabled,
 unmounts the volume and hands the same disk to USB MSC. If mounting or
@@ -567,9 +569,9 @@ explicit recovery on the PC.
 
 The physical erase unit is 4096 bytes. New volumes expose 512-byte
 logical sectors through a caller-owned 4096-byte read/modify/write
-buffer; 256 KiB then presents 512 sectors, sufficient for FatFs
-`f_mkfs()`. Without this mapping it would present only 64 sectors,
-and `f_mkfs()` refuses volumes smaller than 128 sectors. The same
+buffer. The 832 KiB Debug disk presents 1664 logical sectors;
+the 256 KiB Release disk presents 512 logical sectors. Both meet
+FatFs' minimum of 128 sectors. The same
 logical sector geometry is used for firmware file access and USB MSC.
 USB and FatFs never mount the volume simultaneously.
 
@@ -579,8 +581,12 @@ attempts the original 4096-byte view without formatting it. This
 preserves access to those disks. Unknown nonblank contents are never
 formatted automatically.
 
-The `Release_mbr` build reserves 832 KiB between 0x10000 and the
-bootloader at 0xE0000. DFU images are placed according to the
+The `Release_mbr` build reserves 832 KiB at 0x10000-0xDFFFF, below
+the USB DFU bootloader at 0xE0000. Its capacity matches Debug but
+its disk address differs. Do not use the bare-metal Debug layout on
+a device with an upper-flash bootloader. Switching from the 256 KiB
+layout does not migrate existing files; back them up before explicitly
+reinitializing an old nonblank storage region. DFU images are placed according to the
 bootloader's update strategy; a dual-bank update can overwrite storage
 near the beginning of this region. The example does not silently
 reformat that data following an update.

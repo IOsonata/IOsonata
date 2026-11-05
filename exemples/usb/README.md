@@ -28,7 +28,7 @@ configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 | [usb_int_loopback.cpp](usb_int_loopback.cpp) | UsbIntLoopback/ioc | `UsbdInt` alternate settings |
 | [usb_iso_loopback.cpp](usb_iso_loopback.cpp) | UsbIsoLoopback/ioc | `UsbdIso` alternate settings |
 | [usb_msc_ramdisk.cpp](usb_msc_ramdisk.cpp) | UsbMscRamDisk/ioc | Disposable 64 KiB FAT12 RAM disk |
-| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT12 disk on the internal flash: 256 KiB, or 832 KiB in `Release_mbr` under the MBR and USB DFU bootloader |
+| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT disk on internal flash: 832 KiB in bare-metal `Debug`, 256 KiB in `Release`, or 832 KiB in `Release_mbr` |
 
 Use the [USB User Guide](../../docs/usb-user-guide.md) for dependency
 installation, host commands, buffer ownership and reconnect behavior.
@@ -134,8 +134,10 @@ region. The application calls the existing `Nvm::Init()` and
 a completely erased volume. `FatFsUnmount()` releases the filesystem
 before USB MSC exposes the volume. `UsbdMsc` itself is filesystem-independent.
 
-The 256 KiB standard build presents 512-byte logical sectors over 4 KiB
-physical erase units. A separate caller-owned buffer preserves adjacent
+`Debug` reserves 832 KiB in NVM1 (0x30000-0xFFFFF); `Release`
+reserves 256 KiB (0xC0000-0xFFFFF), while `Release_mbr` reserves
+832 KiB (0x10000-0xDFFFF) below the USB DFU bootloader. All use
+512-byte logical sectors over 4 KiB physical erase units. A separate caller-owned buffer preserves adjacent
 logical sectors during writes. Existing 4 KiB-sector FAT volumes use their
 original geometry. `Release_mbr` reserves 832 KiB between 0x10000 and
 0xE0000. Neither configuration provides wear levelling.

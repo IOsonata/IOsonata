@@ -137,9 +137,9 @@ int main(void)
 		return -1;
 	}
 
-	// The reserved 256 KiB region has only 64 physical 4 KiB sectors.
-	// FatFs requires at least 128 sectors for f_mkfs, so present 512-byte
-	// logical sectors and preserve whole erase units during each write.
+	// Use 512-byte FAT sectors for all layouts, including the smaller
+	// 256 KiB variant that has only 64 physical erase pages. Each logical
+	// write preserves the neighboring data in its erase page.
 	if (!s_Disk.Init(s_Nvm, 512U, s_EraseBuffer, sizeof(s_EraseBuffer)))
 	{
 		return -1;
