@@ -2,8 +2,14 @@
 
 `Nvm` provides byte-addressed non-volatile storage through a supplied
 `DeviceIntrf`. The same driver uses SPI/I2C memory or the MCU's internal
-memory through `NvmIntrf`. Geometry and commands are configuration data.
+memory through `NvmMcuIntrf`. Geometry and commands are configuration data.
 See [NVM architecture](architecture/nvm.md) for implementation boundaries.
+
+**0.13 naming change:** The MCU internal-memory interface is now
+`NvmMcuIntrf` (header `storage/nvm_mcu_intrf.h`). Replace the former
+`NvmIntrf` class and header references in applications. MCU-memory
+arbitration functions and related data types use the `NvmMcuIntrf` prefix.
+The generic `Nvm`, `DeviceIntrf`, and `NvmDiskIO` APIs are unchanged.
 
 ## Choose the interface and example
 
@@ -106,10 +112,10 @@ window. It avoids treating a mapped STM32 address as an offset a second time:
 
 ```cpp
 #include "storage/nvm.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 
-static NvmIntrf s_MemoryInterface;
+static NvmMcuIntrf s_MemoryInterface;
 static Nvm s_Memory;
 
 static bool StorageInit()
@@ -137,7 +143,7 @@ static bool StorageInit()
 ```
 
 Align the reserved region to the target's erase and write requirements.
-`NvmIntrf` wraps the port's single controller interface; declaring another
+`NvmMcuIntrf` wraps the port's single controller interface; declaring another
 wrapper does not create an independent controller or callback registration.
 
 ## Read, write, erase and synchronization
@@ -226,7 +232,7 @@ must not be copied unchanged to those media.
 
 Keep the stack's arbiter installed while the radio owns scheduling. Do not
 bypass it with raw flash-register writes. For Nordic testing,
-`NvmIntrfGetStat()` exposes direct, SoftDevice and timeslot counts plus
+`NvmMcuIntrfGetStat()` exposes direct, SoftDevice and timeslot counts plus
 completion statistics. Record the route actually used with radio activity.
 
 ## NvmDiskIO and filesystems

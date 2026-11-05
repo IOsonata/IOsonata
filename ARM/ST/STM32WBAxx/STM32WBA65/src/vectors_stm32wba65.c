@@ -63,7 +63,7 @@ void Stm32TimerVector(void)
 	}
 }
 
-// NMI. With the flash driver linked (NvmIntrf), Stm32FlashEccNmi takes a
+// NMI. With the flash driver linked (NvmMcuIntrf), Stm32FlashEccNmi takes a
 // double ECC error that hit one of its own flash reads: it clears the error
 // and that read fails, so the caller sees a damaged word instead of the
 // device stopping. Any other NMI stops here as before. Weak, so an

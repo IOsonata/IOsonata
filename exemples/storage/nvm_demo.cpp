@@ -17,7 +17,7 @@
 
 		One driver serves every byte addressed memory, so one demo does too.
 		NVM_DEMO_MEDIUM picks what is underneath: 0 the MCU internal memory
-		through NvmIntrf, 1 a SPI NOR flash, 2 an I2C EEPROM. Only the
+		through NvmMcuIntrf, 1 a SPI NOR flash, 2 an I2C EEPROM. Only the
 		construction block below differs; every check is shared, and the
 		checks that need an erase condition themselves on the config, not on
 		the medium, because that is the driver model: a command value of 0
@@ -94,7 +94,7 @@ SOFTWARE.
 #endif
 
 #if NVM_DEMO_MEDIUM == 0
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "storage/nvm_region.h"
 #elif NVM_DEMO_MEDIUM == 1
 #include "coredev/spi.h"
@@ -194,7 +194,7 @@ static const SysLogCfg_t s_SysLogCfg = {
 
 static const char s_MediumName[] = "internal memory";
 
-static NvmIntrf s_MemIntrf;
+static NvmMcuIntrf s_MemIntrf;
 
 #elif NVM_DEMO_MEDIUM == 1
 
@@ -738,8 +738,8 @@ static void NvmDemoVerify(Nvm &Mem)
 #endif
 
 #if NVM_DEMO_MEDIUM == 0
-	NvmIntrfStat_t st;
-	NvmIntrfGetStat(&st);
+	NvmMcuIntrfStat_t st;
+	NvmMcuIntrfGetStat(&st);
 
 	SysLogPrintf(SysLogGet(), "\r\n%s | ops %lu busy %lu evt %lu skipped %lu\r\n",
 							  s_Fail == 0 ? "ALL PASS" : "FAILURES",
@@ -960,9 +960,9 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 		if ((s_StallRq % NVM_DEMO_STALL_STUCK) == 0)
 		{
 #if NVM_DEMO_MEDIUM == 0
-			NvmIntrfStat_t st;
+			NvmMcuIntrfStat_t st;
 
-			NvmIntrfGetStat(&st);
+			NvmMcuIntrfGetStat(&st);
 
 			SysLogPrintf(SysLogGet(), "stuck   : rq %lu ops %lu evt %lu\r\n",
 									  (unsigned long)s_StallRq, (unsigned long)st.Ops,
@@ -1106,8 +1106,8 @@ static void NvmCycleReport(void)
 	if ((s_Cycles % 5) == 0)
 	{
 #if NVM_DEMO_MEDIUM == 0
-		NvmIntrfStat_t st;
-		NvmIntrfGetStat(&st);
+		NvmMcuIntrfStat_t st;
+		NvmMcuIntrfGetStat(&st);
 
 		// With the radio up, direct is the count that must stay still: it
 		// means the controller was driven while the stack owned the memory.

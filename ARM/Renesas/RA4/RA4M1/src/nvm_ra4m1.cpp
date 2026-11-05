@@ -36,7 +36,7 @@ SOFTWARE.
 #include <errno.h>
 #include "ra4m1xxx.h"
 #include "idelay.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 
 #define NVM_BASE 0x40100000UL
 #define NVM_SIZE 0x2000UL
@@ -47,8 +47,8 @@ SOFTWARE.
 
 
 static NvmDevIntrf_t s_NvmDev;
-static NvmIntrfStat_t s_Stat;
-static NvmIntrfArb_t s_Arbiter;
+static NvmMcuIntrfStat_t s_Stat;
+static NvmMcuIntrfArb_t s_Arbiter;
 
 DevIntrf_t *NvmMcuDevIntrf(void)
 {
@@ -433,7 +433,7 @@ static void *NvmGetHandle(DevIntrf_t *pDev)
 	return pDev->pDevData;
 }
 
-bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
+bool NvmMcuIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
 	DevIntrf_t &dev = s_NvmDev.DevIntrf;
 
@@ -480,12 +480,12 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	return true;
 }
 
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
+void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb)
 {
 	s_Arbiter = pArb;
 }
 
-void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
+void NvmMcuIntrfGetStat(NvmMcuIntrfStat_t *pStat)
 {
 	if (pStat)
 	{

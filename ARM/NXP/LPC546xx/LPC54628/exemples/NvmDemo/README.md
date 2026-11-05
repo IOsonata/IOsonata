@@ -2,7 +2,7 @@
 
 Build the matching IOsonata_LPC54628 library and import `ioc`. The project
 links the shared `exemples/storage/nvm_demo.cpp` on the internal flash port
-(`ARM/NXP/LPC546xx/src/nvm_lpc546xx.cpp`, `NvmIntrf`) under the generic `Nvm`
+(`ARM/NXP/LPC546xx/src/nvm_lpc546xx.cpp`, `NvmMcuIntrf`) under the generic `Nvm`
 driver. Output on the LPC-Link2 VCOM, Flexcomm 0, 1000000 baud 8N1, in Debug
 and Release.
 

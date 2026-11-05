@@ -11,7 +11,7 @@ are provided:
 					no radio stack owns the memory.
 	DfuStoreNvm		an Nvm, dfu_store_nvm.cpp. Used by an application where
 					a stack arbitrates the memory (nRF52 SoftDevice, nRF54L
-					MPSL): its NvmIntrf asks the stack for each operation.
+					MPSL): its NvmMcuIntrf asks the stack for each operation.
 
 The writer takes an image in order, the way every transport delivers one,
 in either of two modes:

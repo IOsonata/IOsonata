@@ -17,7 +17,7 @@ peripheral examples for the tested configurations and hardware limits.
 | RTC | Not implemented | Not implemented | RtcLpc546xx (RtcDevice) |
 | ADC | Not implemented | Not implemented | AdcLpc546xx, ADC0 polling, 12 bits, 12 inputs and the temperature sensor |
 | PWM | Not implemented | Not implemented | SCT0, 8 channels on the SCT0 output pins, edge mode |
-| Internal flash Nvm | Not implemented | Not implemented | NvmIntrf on the IAP ROM, 256 byte pages, byte writes by page update |
+| Internal flash Nvm | Not implemented | Not implemented | NvmMcuIntrf on the IAP ROM, 256 byte pages, byte writes by page update |
 | Quad SPI flash | Not implemented | Not implemented | SPIFI as SPI DevNo 10, polling, command mode, 1, 2 or 4 lines, SPI mode 0 or 3 |
 | SDRAM | Not implemented | Not implemented | EMC, one SDRAM on a dynamic chip select, generic `SdramInit` (`coredev/sdram.h`), 16 or 32 bit bus |
 | SD card | Not implemented | Not implemented | SDIF as the SD/MMC host interface (`Sdmmc`, `sdmmc_lpc546xx.cpp`) of the generic `SDCard`, polling, 1 or 4 data lines |

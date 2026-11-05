@@ -78,7 +78,7 @@ Software and internal implementations can also be `DeviceIntrf` objects:
 
 - `Slip`, which layers framing over another `DeviceIntrf`;
 - `BtIntrf`, which presents a GATT service as a serial-style interface;
-- internal controller access paths such as `CracenIntrf` and `NvmIntrf`.
+- internal controller access paths such as `CracenIntrf` and `NvmMcuIntrf`.
 
 The generic transfer shape is:
 
@@ -425,7 +425,7 @@ Read together:
 
 - `include/storage/nvm.h`;
 - `src/storage/nvm.cpp`;
-- `include/storage/nvm_intrf.h`;
+- `include/storage/nvm_mcu_intrf.h`;
 - every target `nvm_*.cpp`;
 - the I2C, SPI, QSPI, and OSPI ports that may be injected into `Nvm`;
 - `include/storage/diskio_nvm.h`;

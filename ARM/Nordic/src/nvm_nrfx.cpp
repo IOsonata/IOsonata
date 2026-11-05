@@ -69,7 +69,7 @@ SOFTWARE.
 // applications alike. A compile time test can therefore never be right here:
 // it compiled this path out and the demo drove the controller directly under
 // a live S145. The path is compiled in instead and the choice is made at run
-// time through NvmIntrfSdRunning(): weak below, answering false, overridden
+// time through NvmMcuIntrfSdRunning(): weak below, answering false, overridden
 // in nrf_sdh.c, which only an application that enables a SoftDevice pulls
 // from the archive.
 #define NVM_INTRF_SOFTDEVICE		1
@@ -116,7 +116,7 @@ SOFTWARE.
 #define NVM_INTRF_NVMC				1
 #endif
 
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 
 // The command set, using the opcodes a serial flash uses so a config for
 // internal memory reads like one for a flash chip.
@@ -205,9 +205,9 @@ static_assert(NVM_INTRF_MAX_XFER <= NVM_INTRF_XFER_SIZE,
 
 // Who decides when the memory may be touched. Registered by the stack that
 // owns the radio; null means the memory is the application's alone.
-static NvmIntrfArb_t s_pArbiter = nullptr;
+static NvmMcuIntrfArb_t s_pArbiter = nullptr;
 
-static NvmIntrfStat_t s_Stat;
+static NvmMcuIntrfStat_t s_Stat;
 
 static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt);
 
@@ -332,7 +332,7 @@ static int ArbiterIssue(uint32_t (*Step)(void *), void *pCtx)
 		return -EIO;
 	}
 
-	NvmIntrfOp_t *op = &s_NvmDev.Op;
+	NvmMcuIntrfOp_t *op = &s_NvmDev.Op;
 
 	op->Step = Step;
 	op->StepBudgetUs = NVM_INTRF_STEP_BUDGET_US;
@@ -372,7 +372,7 @@ static int ArbiterIssue(uint32_t (*Step)(void *), void *pCtx)
 // stack and the arbiter both report after returning, and a local would be
 // gone by the time the work ran. Null when no transfer is in progress, which
 // means the caller reached here without a StartTx.
-static NvmIntrfWrCtx_t *OpCtxWr(uintptr_t Addr, const uint32_t *pSrc,
+static NvmMcuIntrfWrCtx_t *OpCtxWr(uintptr_t Addr, const uint32_t *pSrc,
 								uint32_t Words)
 {
 	if (false)
@@ -387,7 +387,7 @@ static NvmIntrfWrCtx_t *OpCtxWr(uintptr_t Addr, const uint32_t *pSrc,
 	return &s_NvmDev.OpCtx.Wr;
 }
 
-static NvmIntrfErCtx_t *OpCtxEr(uintptr_t Addr)
+static NvmMcuIntrfErCtx_t *OpCtxEr(uintptr_t Addr)
 {
 	if (false)
 	{
@@ -519,14 +519,14 @@ static bool CtrlIsErased(uintptr_t Addr, uint32_t Len)
 
 // Weak: an application with no SoftDevice support linked runs on this answer
 // and drives the controller itself. nrf_sdh.c has the real answer.
-extern "C" __attribute__((weak)) bool NvmIntrfSdRunning(void)
+extern "C" __attribute__((weak)) bool NvmMcuIntrfSdRunning(void)
 {
 	return false;
 }
 
 static bool SdRunning(void)
 {
-	return NvmIntrfSdRunning();
+	return NvmMcuIntrfSdRunning();
 }
 
 #else
@@ -562,7 +562,7 @@ static bool SdRunning(void)
 
 #endif	// NVM_INTRF_SD_RUNTIME
 
-static void NvmIntrfSocEvt(uint32_t SysEvt)
+static void NvmMcuIntrfSocEvt(uint32_t SysEvt)
 {
 	// The SoC flash event is broadcast to every observer and has nothing
 	// identifying in it, so the state is how this knows whether the event it
@@ -592,21 +592,21 @@ static void NvmIntrfSocEvt(uint32_t SysEvt)
 }
 
 // The SoC flash events are broadcast to every observer, so the interface
-// registers its own and the application has nothing to do. NvmIntrfSocEvt
+// registers its own and the application has nothing to do. NvmMcuIntrfSocEvt
 // stays public for an application with its own event dispatch.
-static void NvmIntrfSocObserver(uint32_t SysEvt, void *pCtx)
+static void NvmMcuIntrfSocObserver(uint32_t SysEvt, void *pCtx)
 {
 	(void)pCtx;
 
-	NvmIntrfSocEvt(SysEvt);
+	NvmMcuIntrfSocEvt(SysEvt);
 }
 
 #if defined(NRF52_SERIES)
-NRF_SDH_SOC_OBSERVER(s_NvmIntrfSocObs, 0, NvmIntrfSocObserver, NULL);
+NRF_SDH_SOC_OBSERVER(s_NvmMcuIntrfSocObs, 0, NvmMcuIntrfSocObserver, NULL);
 #else
 // The bare metal SDK orders the arguments differently and takes a symbolic
 // priority level rather than a number.
-NRF_SDH_SOC_OBSERVER(s_NvmIntrfSocObs, NvmIntrfSocObserver, NULL, HIGH);
+NRF_SDH_SOC_OBSERVER(s_NvmMcuIntrfSocObs, NvmMcuIntrfSocObserver, NULL, HIGH);
 #endif
 
 typedef uint32_t (*SdSubmit_t)(void *pArg);
@@ -697,7 +697,7 @@ static int SdRun(SdSubmit_t Submit, void *pArg)
 
 static uint32_t SdWriteSubmit(void *pArg)
 {
-	NvmIntrfWrCtx_t *a = (NvmIntrfWrCtx_t *)pArg;
+	NvmMcuIntrfWrCtx_t *a = (NvmMcuIntrfWrCtx_t *)pArg;
 
 	return sd_flash_write((uint32_t *)a->Addr, a->pSrc, a->Words);
 }
@@ -707,7 +707,7 @@ static uint32_t SdEraseSubmit(void *pArg)
 {
 	// The SoftDevice erase takes a page number, not an address, and the
 	// caller put one in Addr.
-	return sd_flash_page_erase((uint32_t)((NvmIntrfErCtx_t *)pArg)->Addr);
+	return sd_flash_page_erase((uint32_t)((NvmMcuIntrfErCtx_t *)pArg)->Addr);
 }
 #endif
 
@@ -727,7 +727,7 @@ static bool SdRunning(void) { return false; }
 
 static uint32_t SlotWriteStep(void *pv)
 {
-	NvmIntrfWrCtx_t *c = (NvmIntrfWrCtx_t *)pv;
+	NvmMcuIntrfWrCtx_t *c = (NvmMcuIntrfWrCtx_t *)pv;
 
 	CtrlWriteWords(c->Addr, c->pSrc, c->Words);
 
@@ -739,7 +739,7 @@ static uint32_t SlotWriteStep(void *pv)
 // polled in later ones while the radio keeps its slots.
 static uint32_t SlotEraseStep(void *pv)
 {
-	NvmIntrfErCtx_t *c = (NvmIntrfErCtx_t *)pv;
+	NvmMcuIntrfErCtx_t *c = (NvmMcuIntrfErCtx_t *)pv;
 
 	if (c->bStarted == false)
 	{
@@ -780,7 +780,7 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 #ifdef NVM_INTRF_SD_RUNTIME
 	if (SdRunning())
 	{
-		NvmIntrfWrCtx_t *arg = OpCtxWr(Addr, pSrc, WordCnt);
+		NvmMcuIntrfWrCtx_t *arg = OpCtxWr(Addr, pSrc, WordCnt);
 		if (arg == nullptr)
 		{
 			return -EIO;
@@ -803,7 +803,7 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 	{
 		if (SdRunning())
 		{
-			NvmIntrfWrCtx_t *arg = OpCtxWr(Addr, pSrc, WordCnt);
+			NvmMcuIntrfWrCtx_t *arg = OpCtxWr(Addr, pSrc, WordCnt);
 			if (arg == nullptr)
 			{
 				return -EIO;
@@ -834,7 +834,7 @@ static int NvmSubmit(uintptr_t Addr, const uint32_t *pSrc, uint32_t WordCnt)
 
 	if (s_pArbiter != nullptr)
 	{
-		NvmIntrfWrCtx_t *ctx = OpCtxWr(Addr, pSrc, WordCnt);
+		NvmMcuIntrfWrCtx_t *ctx = OpCtxWr(Addr, pSrc, WordCnt);
 
 		if (ctx == nullptr)
 		{
@@ -935,7 +935,7 @@ static int NvmEraseUnit(uintptr_t Addr)
 
 	if (s_pArbiter != nullptr)
 	{
-		NvmIntrfErCtx_t *ctx = OpCtxEr(Addr);
+		NvmMcuIntrfErCtx_t *ctx = OpCtxEr(Addr);
 
 		if (ctx == nullptr)
 		{
@@ -1135,14 +1135,14 @@ static void NvmStopTx(DevIntrf_t *pIntrf)
 	dev->DataLen = 0;
 }
 
-static void NvmIntrfDisable(DevIntrf_t *) {}
-static void NvmIntrfEnable(DevIntrf_t *) {}
+static void NvmMcuIntrfDisable(DevIntrf_t *) {}
+static void NvmMcuIntrfEnable(DevIntrf_t *) {}
 static uint32_t NvmGetRate(DevIntrf_t *) { return 0; }
 static uint32_t NvmSetRate(DevIntrf_t *, uint32_t Rate) { return Rate; }
 static void NvmPowerOff(DevIntrf_t *) {}
 static void *NvmGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
 
-bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
+bool NvmMcuIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
 	memset(&s_NvmDev, 0, sizeof(s_NvmDev));
 	memset(&s_Stat, 0, sizeof(s_Stat));
@@ -1152,8 +1152,8 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	// without knowing anything about this class.
 	s_NvmDev.DevIntrf.pDevData = &s_NvmDev;
 	s_NvmDev.DevIntrf.Type = DEVINTRF_TYPE_MEMCTRL;
-	s_NvmDev.DevIntrf.Disable = NvmIntrfDisable;
-	s_NvmDev.DevIntrf.Enable = NvmIntrfEnable;
+	s_NvmDev.DevIntrf.Disable = NvmMcuIntrfDisable;
+	s_NvmDev.DevIntrf.Enable = NvmMcuIntrfEnable;
 	s_NvmDev.DevIntrf.GetRate = NvmGetRate;
 	s_NvmDev.DevIntrf.SetRate = NvmSetRate;
 	s_NvmDev.DevIntrf.StartRx = NvmStartRx;
@@ -1195,12 +1195,12 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	return true;
 }
 
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
+void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb)
 {
 	s_pArbiter = pArb;
 }
 
-void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
+void NvmMcuIntrfGetStat(NvmMcuIntrfStat_t *pStat)
 {
 	if (pStat != nullptr)
 	{
@@ -1210,7 +1210,7 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 
 // Whether the memory has finished. The same question Nvm asks a serial NOR by
 // reading WIP; here it is a controller register. Nvm polls it, this only
-// answers, and NvmIntrf never sees it.
+// answers, and NvmMcuIntrf never sees it.
 //
 // The nRF54L is left on the weak true. RRAM commits inside the transfer, the
 // buffer is drained before CtrlWriteWords returns, and there is no busy period

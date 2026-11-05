@@ -38,7 +38,7 @@ SOFTWARE.
 
 #include <string.h>
 #include "coredev/uart.h"
-#include "storage/nvm_intrf.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "idelay.h"
 #include "board.h"
 
@@ -63,7 +63,7 @@ static const UARTCfg_t s_UartCfg = {
 	.bDMAMode = false,
 };
 static UART s_Uart;
-static NvmIntrf s_Intrf;
+static NvmMcuIntrf s_Intrf;
 static Nvm s_Mem;
 static unsigned s_Fail;
 
