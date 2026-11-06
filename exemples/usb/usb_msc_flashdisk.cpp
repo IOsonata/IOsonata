@@ -135,12 +135,14 @@ int main(void)
 	{
 		return -1;
 	}
-	// Provision a genuinely blank disk with the existing generic FatFs API.
+	// Provision an uninitialized volume with the existing generic FatFs API.
 	// Firmware releases ownership before the USB host mounts the volume.
 	FatFsMountCfg_t fsCfg = {};
 	fsCfg.pDisk = &s_Disk;
 	fsCfg.pFatFs = &s_FatFs;
-	fsCfg.bFormatIfBlank = true;
+	// Debug NVM1 may be blank at its start while the former Release
+	// layout still contains files farther into this reserved region.
+	fsCfg.bFormatIfBootBlank = true;
 	fsCfg.pWork = s_SectorBuffer;
 	fsCfg.WorkSize = sizeof(s_SectorBuffer);
 	fsCfg.pLabelIfUnnamed = "0:IOSONATA";
