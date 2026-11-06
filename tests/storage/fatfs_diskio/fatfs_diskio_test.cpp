@@ -76,6 +76,7 @@ public:
 static TestDisk s_Flash(4096);
 static TestDisk s_Direct(512);
 static TestDisk s_Small(512, 256U * 1024U);
+static TestDisk s_Debug(512, 832U * 1024U);
 static TestDisk s_Expanded(4096, 832U * 1024U);
 static FATFS s_Fs;
 alignas(4) static uint8_t s_Work[4096];
@@ -274,6 +275,53 @@ static void TestExpandedDiskWithLegacyData(void)
 	CHECK(FatFsUnmount() == FR_OK);
 }
 
+static void TestBootSectorBlankPolicy(void)
+{
+	// Debug NVM1 starts at 0x30000, but the old Release NVM1 starts
+	// at 0xC0000, i.e. 0x90000 bytes into this disk.
+	s_Debug.Blank();
+	s_Debug.vMedia[0x90000U + 510U] = 0x55U;
+	s_Debug.vMedia[0x90000U + 511U] = 0xAAU;
+
+	FatFsMountCfg_t cfg = {};
+	cfg.pDisk = &s_Debug;
+	cfg.pFatFs = &s_Fs;
+	cfg.bFormatIfBlank = true;
+	cfg.pWork = s_Work;
+	cfg.WorkSize = sizeof(s_Work);
+
+	// Conservative default continues to protect nonblank sectors.
+	CHECK(FatFsMount(cfg) == FR_NO_FILESYSTEM);
+	CHECK(s_Debug.vWrites == 0U);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// The example explicitly permits first-use provisioning when its own
+	// boot sector is blank; it does not erase the whole region.
+	cfg.bFormatIfBootBlank = true;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Debug.vWrites > 0U);
+	CHECK(s_Debug.vMedia[510] == 0x55U);
+	CHECK(s_Debug.vMedia[511] == 0xAAU);
+	CHECK(s_Debug.vMedia[11] == 0x00U);
+	CHECK(s_Debug.vMedia[12] == 0x02U);
+	CHECK(s_Debug.vMedia[0x90000U + 510U] == 0x55U);
+	CHECK(s_Debug.vMedia[0x90000U + 511U] == 0xAAU);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	uint32_t writes = s_Debug.vWrites;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Debug.vWrites == writes);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// A nonempty first sector is never silently reformatted, even when
+	// the opt-in boot-only policy is enabled.
+	s_Debug.Blank();
+	s_Debug.vMedia[0] = 0x12U;
+	CHECK(FatFsMount(cfg) == FR_NO_FILESYSTEM);
+	CHECK(s_Debug.vWrites == 0U);
+	CHECK(FatFsUnmount() == FR_OK);
+}
+
 static void TestBlankOnly(void)
 {
 	s_Flash.Blank();
@@ -311,6 +359,7 @@ int main(void)
 	// FatFs mkfs minimum of 128 sectors.
 	TestMedium(s_Small);
 	TestBlankOnly();
+	TestBootSectorBlankPolicy();
 	TestExpandedDiskWithLegacyData();
 	printf("FatFs DiskIO: %u checks, %u failures\n", s_Checks, s_Fails);
 	return s_Fails == 0U ? 0 : 1;
