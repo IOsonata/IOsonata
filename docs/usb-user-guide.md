@@ -569,8 +569,12 @@ The application uses the existing generic `FatFsMount()` interface with
 medium geometry; it does not hard-code FAT12 or depend on USB or internal NVM.
 Only a completely erased medium is formatted, using FatFs `f_mkfs()`.
 An existing valid filesystem is mounted without formatting. An unrecognized,
-nonblank volume is not overwritten. The firmware then calls `FatFsUnmount()`
-before enabling USB MSC, so the host has exclusive filesystem ownership.
+nonblank volume is not overwritten and no longer prevents USB MSC startup;
+the host may still be unable to mount it. In particular, the earlier Debug
+flash-disk firmware used 4096-byte logical sectors, which cannot be mounted
+through the refactored 512-byte logical-sector geometry without explicit
+migration. The firmware calls `FatFsUnmount()` before enabling USB MSC,
+so the host has exclusive filesystem ownership.
 
 The MSC logical sector is 512 bytes. nRF52840 program flash has 4096-byte
 physical erase pages. `NvmDiskIO` uses a caller-owned aligned 4096-byte
