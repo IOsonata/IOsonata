@@ -151,6 +151,7 @@ $(BUILD_DIR)/dfu_serial_host: dfu_serial_host.cpp $(ROOT)/src/dfu/dfu_serial.cpp
 		-x none $(UECC_OBJ) $(LAYOUT) -o $@
 
 test: $(TESTS) $(BUILD_DIR)/dfu_prod_boot images
+	$(PYTHON) cdc_wait_test.py
 	$(TEST_ENV) $(BUILD_DIR)/dfu_image_test $(IMG_DIR)
 	$(TEST_ENV) $(BUILD_DIR)/dfu_boot_test $(IMG_DIR)
 	$(TEST_ENV) $(BUILD_DIR)/dfu_mgr_test $(IMG_DIR)

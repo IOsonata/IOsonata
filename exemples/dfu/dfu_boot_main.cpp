@@ -335,6 +335,21 @@ static void DfuBootLinkRun(void)
 	AppEvtHandlerExec();
 }
 
+static void DfuBootLinkWait(void)
+{
+	const UsbdCdcDev_t *cdc = s_Link;
+	uint32_t state = DisableInterrupt();
+
+	// An OUT interrupt can publish the next packet after Poll's empty read.
+	// Keep it pending until after WFI if it arrives during this final check.
+	if (CFifoPeek(cdc->pData->hRxFifo) == nullptr && !AppEvtHandlerPending())
+	{
+		__DSB();
+		__WFI();
+	}
+	EnableInterrupt(state);
+}
+
 #else
 static bool DfuBootLinkInit(void)
 {
@@ -343,6 +358,11 @@ static bool DfuBootLinkInit(void)
 
 static void DfuBootLinkRun(void)
 {
+}
+
+static void DfuBootLinkWait(void)
+{
+	__WFI();
 }
 
 #endif
@@ -460,8 +480,7 @@ int main()
 			DfuBootLinkRun();
 			if (s_Proto.Poll() == false)
 			{
-				// The link interrupt wakes the core.
-				__WFI();
+				DfuBootLinkWait();
 			}
 		}
 	}
