@@ -564,14 +564,13 @@ internal NVM region through `NvmDiskIO`. It initializes `NvmMcuIntrf`,
 `Nvm` and `NvmDiskIO` through their existing APIs; there is no dedicated
 USB or MCU flash-disk helper.
 
-The application explicitly invokes `Fat12ProvisionIfBlank()` from the
-storage layer, which works with any `DiskIO` backend and does not depend on
-USB or internal NVM. The reusable helper provisions a small FAT12 superfloppy
-on first use when sector zero has no 0x55AA signature. It writes both FAT
-tables and the root directory, then commits the boot sector last. An existing
-signed FAT12 volume with compatible geometry is preserved. Other signed
-layouts are rejected rather than overwritten. The application does not
-contain boot-sector formatting logic or mount the filesystem in firmware.
+The application uses the existing generic `FatFsMount()` interface with
+`bFormatIfBlank` enabled. FatFs chooses an appropriate FAT format from the
+medium geometry; it does not hard-code FAT12 or depend on USB or internal NVM.
+Only a completely erased medium is formatted, using FatFs `f_mkfs()`.
+An existing valid filesystem is mounted without formatting. An unrecognized,
+nonblank volume is not overwritten. The firmware then calls `FatFsUnmount()`
+before enabling USB MSC, so the host has exclusive filesystem ownership.
 
 The MSC logical sector is 512 bytes. nRF52840 program flash has 4096-byte
 physical erase pages. `NvmDiskIO` uses a caller-owned aligned 4096-byte
