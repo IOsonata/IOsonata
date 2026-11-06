@@ -25,7 +25,7 @@ test-nvm-disk: $(NVM_DISK_TEST)
 
 $(NVM_DISK_TEST): $(NVM_DISK_SOURCES)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) -std=gnu++23 -O1 -I$(ROOT)/include \
+	$(CXX) -std=gnu++2b -O1 -I$(ROOT)/include \
 		-I$(ROOT)/include/storage -I$(HOST_INC) \
 		-I$(ROOT)/tests/dfu/hostport \
 		$(NVM_DISK_SOURCES) -o $@
