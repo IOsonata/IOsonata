@@ -36,7 +36,7 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>exemples/storage/flash_memory_demo.cpp</name>
+			<name>src/flash_memory_demo.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/flash_memory_demo.cpp</locationURI>
 		</link>

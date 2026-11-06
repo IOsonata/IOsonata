@@ -276,6 +276,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/utf8cvt.h</locationURI>
 		</link>
 		<link>
+			<name>include/video</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/CppRuntimeOverload.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
@@ -344,21 +349,6 @@
 			<name>src/coredev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/pwm_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/wdt_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/rtc_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/rtc_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crc.c</name>
@@ -456,6 +446,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/memcpy_fast.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/miscdev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -544,6 +539,11 @@
 			<name>src/utf8cvt.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/utf8cvt.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/video</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/audio/audiodev.h</name>
@@ -881,6 +881,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/ba414ep.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto/crypto_rng_stm32.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_rng_stm32.h</locationURI>
@@ -1091,11 +1096,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/modem.h</locationURI>
 		</link>
 		<link>
-			<name>include/miscdev/tca6424a.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
-		</link>
-		<link>
 			<name>include/miscdev/rtc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/rtc.h</locationURI>
@@ -1104,6 +1104,11 @@
 			<name>include/miscdev/rtc_stm32.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/rtc_stm32.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/tca6424a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
 		</link>
 		<link>
 			<name>include/motion/act.h</name>
@@ -1641,6 +1646,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_msc.h</locationURI>
 		</link>
 		<link>
+			<name>include/video/cam_arducam_mega.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
+		</link>
+		<link>
+			<name>include/video/videodev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
+		</link>
+		<link>
 			<name>src/audio/buzzer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/audio/buzzer.cpp</locationURI>
@@ -1866,9 +1881,19 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/octospi_stm32.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/pwm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/quadspi_stm32.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/quadspi_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/rtc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rtc_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.cpp</name>
@@ -1921,14 +1946,19 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_stm32.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/ba414ep.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/ba414ep.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_p256.cpp</name>
+			<name>src/crypto/crypto.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_aes_modes.cpp</name>
@@ -1939,6 +1969,16 @@
 			<name>src/crypto/crypto_aes_soft.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/crypto_default_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_p256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
@@ -1956,6 +1996,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/cryptomaster.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/cryptomaster.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/rng_stm32.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/rng_stm32.cpp</locationURI>
@@ -1964,11 +2009,6 @@
 			<name>src/crypto/uECC.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/cryptomaster.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/cryptomaster.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/dfu/dfu_boot.cpp</name>
@@ -2006,14 +2046,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_smp.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_store_nvm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_store_nvm.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/dfu/dfu_stm32.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/dfu_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_store_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_store_nvm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/dfu/dfu_wire.cpp</name>
@@ -2151,6 +2191,21 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/rtc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/motion/FusionAhrs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.c</locationURI>
+		</link>
+		<link>
+			<name>src/motion/FusionBias.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.c</locationURI>
+		</link>
+		<link>
+			<name>src/motion/FusionCompass.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.c</locationURI>
+		</link>
+		<link>
 			<name>src/motion/att.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
@@ -2179,21 +2234,6 @@
 			<name>src/motion/att_xiot_fusion.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/FusionAhrs.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.c</locationURI>
-		</link>
-		<link>
-			<name>src/motion/FusionBias.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.c</locationURI>
-		</link>
-		<link>
-			<name>src/motion/FusionCompass.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.c</locationURI>
 		</link>
 		<link>
 			<name>src/motion/mot_icm20948.cpp</name>
@@ -2536,16 +2576,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_int.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usbd_int.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_int.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_periodic.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_periodic.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/usb/usb_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
@@ -2554,11 +2584,6 @@
 			<name>src/usb/usb_iso.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_iso.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_iso.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_bulk.cpp</name>
@@ -2586,9 +2611,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_hid.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/usb/usbd_int.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_int.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_iso.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/usb/usbd_msc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_msc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_periodic.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_periodic.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/video/cam_arducam_mega.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/services/bt_bas.h</name>
@@ -2969,41 +3014,6 @@
 			<name>src/display/fonts/FreeSerif/FreeSerifIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_default_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/crypto_default_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
-		</link>
-			<link>
-			<name>include/video/videodev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
-		</link>
-		<link>
-			<name>include/video/cam_arducam_mega.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
-		</link>
-		<link>
-			<name>src/video/cam_arducam_mega.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>
