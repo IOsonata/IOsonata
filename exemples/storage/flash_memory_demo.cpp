@@ -75,7 +75,13 @@ SOFTWARE.
 
 uint8_t g_UarTxBuff[FIFOSIZE];
 
-// Assign UART pins
+#ifndef UART_DEVNO
+#define UART_DEVNO			0
+#endif
+
+#ifdef UART_PINS
+static IOPinCfg_t s_UartPins[] = UART_PINS;
+#else
 static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
@@ -83,9 +89,11 @@ static IOPinCfg_t s_UartPins[] = {
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
 
+#endif
+
 // UART configuration data
 static const UARTCfg_t s_UartCfg = {
-	.DevNo = 0,
+	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
 	.Rate = 1000000,			// Rate
@@ -295,7 +303,7 @@ int main()
 
 	// Retarget printf to UART
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
-	//UARTRetargetEnable(g_Uart, STDIN_FILENO);
+	setvbuf(stdout, NULL, _IONBF, 0);
 
 #if NVM_MODE == 0
 	printf("Flash Memory Demo, legacy Flash driver\r\n");
