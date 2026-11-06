@@ -138,9 +138,10 @@ command can be coalesced into a single erase/program cycle. UsbdMsc
 commits before sending success and on synchronization/eject; there is
 no wear levelling or power-fail atomicity.
 
-The example exports the raw region without formatting or modifying it
-at startup. A blank volume must be explicitly formatted on the host or
-provisioned with a filesystem image. Existing data is left untouched.
+The example provisions FAT12 metadata when sector zero has no boot
+signature; the boot sector is written last and committed before USB starts.
+A signed existing 512-byte-sector volume is preserved. Incompatible signed
+volumes are rejected rather than overwritten.
 
 Generic FatFsMount/FatFsUnmount remains available to firmware
 through DiskIO and is independent of USB MSC. The USB disk example
