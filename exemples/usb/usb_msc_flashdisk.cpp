@@ -8,13 +8,14 @@ linker script, so its size is set there and nowhere else, and the image fails
 to link if it grows into the disk. It does not expose firmware, filesystem,
 settings or Bluetooth bond-storage regions.
 
-The content stays across resets and power cycles. This disposable test disk
-is initialized with the original small FAT12 layout only when sector 0 has
-no 55AA signature. An existing volume is not formatted on startup.
+The content stays across resets and power cycles. This example exports raw
+reserved flash sectors unchanged. A filesystem is provisioned separately;
+startup never formats or erases existing data.
 
-A sector is one physical 4 KiB flash erase unit, independently of disk size.
-Each host sector write is one erase and one program, with no wear levelling.
-The USB process event performs flash writes synchronously.
+The host sees 512-byte logical sectors. NvmDiskIO preserves neighboring
+sectors with a caller-owned 4 KiB erase-page scratch buffer. Each 512-byte
+sector write currently causes a full erase-page read/modify/write; there is no
+write-back coalescing or wear levelling. USB processing writes synchronously.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 4, 2026
@@ -45,12 +46,8 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-#include <string.h>
 
-#include "storage/diskio_nvm.h"
-#include "storage/fatfs.h"
-#include "storage/nvm_mcu_intrf.h"
-#include "storage/nvm_region.h"
+#include "storage/nvm_mcu_disk.h"
 #include "app_evt_handler.h"
 #include "usb/usb.h"
 #if __has_include("board.h")
@@ -71,8 +68,9 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #ifndef USB_DEVNO
 #define USB_DEVNO			0
 #endif
-// Largest sector FAT allows. UsbdMsc refuses a medium with a larger one.
-#define MSC_SECTOR_BUFF_SIZE	4096U
+// Expose conventional 512-byte USB sectors backed by 4 KiB erase pages.
+#define MSC_SECTOR_BUFF_SIZE	512U
+#define MSC_ERASE_WORK_SIZE	4096U
 // Linker-reserved USB disk region (NVM1); NVM0, if present, is PDS.
 #define MSC_NVM_REGION		1
 #define MSC_STR_INTERFACE	4U
@@ -82,6 +80,7 @@ static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
 static UsbdMsc s_Msc;
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_BUFF_SIZE];
+alignas(4) static uint8_t s_EraseWork[MSC_ERASE_WORK_SIZE];
 
 // Application event queue memory, replaces the 4 event library default. The
 // USB controller port queues its deferred endpoint events there.
@@ -114,111 +113,29 @@ static const UsbdMscCfg_t s_MscCfg = {
 	.pProduct = "IOsonata Flash",
 };
 
-// Write an empty FAT12 volume with one sector per cluster and a one sector root
-// directory. The boot sector goes last, so a format cut short by a reset is
-// started over at the next power up.
-static bool MscDiskFormat(DiskIO &Disk, uint8_t *pBuff)
-{
-	const uint16_t sectSize = Disk.GetSectSize();
-	const uint32_t nbSect = Disk.GetNbSect();
-	// 12 bits per entry, two of them reserved. The sector count is a little
-	// above the cluster count, which can only round the table size up.
-	const uint16_t fatSect =
-		(uint16_t)(((nbSect + 2U) * 3U / 2U + sectSize - 1U) / sectSize);
-	const uint32_t rootSect =
-		FATFS_RSVDSECCNT_FAT16 + (uint32_t)FATFS_NBFAT * fatSect;
-
-	for (uint32_t i = 0; i < (uint32_t)FATFS_NBFAT * fatSect; i++)
-	{
-		memset(pBuff, 0, sectSize);
-		if ((i % fatSect) == 0U)
-		{
-			pBuff[0] = FATFS_MEDIA_FIXED;
-			pBuff[1] = 0xFFU;
-			pBuff[2] = 0xFFU;
-		}
-		if (!Disk.SectWrite(FATFS_RSVDSECCNT_FAT16 + i, pBuff))
-		{
-			return false;
-		}
-	}
-
-	memset(pBuff, 0, sectSize);
-	memcpy(pBuff, "IOSONATA   ", 11U);
-	pBuff[11] = FATFS_DIRATTR_VOLUME_ID;
-	if (!Disk.SectWrite(rootSect, pBuff))
-	{
-		return false;
-	}
-
-	FATFS_BSBPB *pBoot = reinterpret_cast<FATFS_BSBPB *>(pBuff);
-
-	memset(pBuff, 0, sectSize);
-	pBoot->JmpBoot[0] = 0xEBU;
-	pBoot->JmpBoot[1] = 0x3CU;
-	pBoot->JmpBoot[2] = 0x90U;
-	memcpy(pBoot->OEMName, "IOsonata", sizeof(pBoot->OEMName));
-	pBoot->BytsPerSec = sectSize;
-	pBoot->SecPerClus = 1U;
-	pBoot->RsvdSecCnt = FATFS_RSVDSECCNT_FAT16;
-	pBoot->NumFATs = FATFS_NBFAT;
-	pBoot->RootEntCnt = sectSize / 32U;
-	pBoot->TotSec16 = (uint16_t)nbSect;
-	pBoot->Media = FATFS_MEDIA_FIXED;
-	pBoot->FATSz16 = fatSect;
-	pBoot->SecPerTrk = 32U;
-	pBoot->NumHeads = 1U;
-	pBoot->BPB.Bpb16.DrvNum = 0x80U;
-	pBoot->BPB.Bpb16.BootSig = 0x29U;
-	pBoot->BPB.Bpb16.VolID = 0x4E534F49U;
-	memcpy(pBoot->BPB.Bpb16.VolLab, "IOSONATA   ", 11U);
-	memcpy(pBoot->BPB.Bpb16.FilSysType, "FAT12   ", 8U);
-	// FAT reads the signature at byte 510. It is repeated at the end of the
-	// sector, the other place tools look for it on a sector larger than 512.
-	pBoot->Signature_word[0] = 0x55U;
-	pBoot->Signature_word[1] = 0xAAU;
-	pBuff[sectSize - 2U] = 0x55U;
-	pBuff[sectSize - 1U] = 0xAAU;
-
-	return Disk.SectWrite(0U, pBuff);
-}
-
-static bool MscDiskInit(void)
-{
-	NvmCfg_t cfg = {};
-
-	// Resolve NVM1 using the current generic MCU NVM APIs. The linker
-	// owns the disk bounds; do not select unused flash in this example.
-	if (!NvmMcuCfgInit(cfg, MSC_NVM_REGION) ||
-		!s_MemIntrf.Init() ||
-		!s_Nvm.Init(cfg, &s_MemIntrf) ||
-		!s_Disk.Init(s_Nvm) ||
-		!s_Disk.SectRead(0U, s_SectorBuffer))
-	{
-		return false;
-	}
-
-	const FATFS_BSBPB *pBoot =
-		reinterpret_cast<const FATFS_BSBPB *>(s_SectorBuffer);
-
-	// Keep whatever the host or an earlier run left, FAT or partition table.
-	if (pBoot->Signature_word[0] == 0x55U && pBoot->Signature_word[1] == 0xAAU)
-	{
-		return true;
-	}
-
-	return MscDiskFormat(s_Disk, s_SectorBuffer);
-}
-
 int main(void)
 {
-	if (!MscDiskInit() ||
-		!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
-		!UsbInit(&s_UsbCfg) || !s_Msc.Init(s_MscCfg))
+	if (!NvmMcuDiskInit(s_Disk, s_Nvm, s_MemIntrf, MSC_NVM_REGION,
+			MSC_SECTOR_BUFF_SIZE, s_EraseWork, sizeof(s_EraseWork)))
 	{
 		return -1;
 	}
-	(void)UsbEnable(USB_DEVNO);
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)))
+	{
+		return -1;
+	}
+	if (!UsbInit(&s_UsbCfg))
+	{
+		return -1;
+	}
+	if (!s_Msc.Init(s_MscCfg))
+	{
+		return -1;
+	}
+	if (!UsbEnable(USB_DEVNO))
+	{
+		return -1;
+	}
 
 	AppRun();
 	return 0;
