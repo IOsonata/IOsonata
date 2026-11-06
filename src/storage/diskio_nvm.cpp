@@ -177,6 +177,13 @@ bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 		{
 			return false;
 		}
+		// Repeated host metadata writes are common. If the logical sector
+		// is unchanged, avoid an unnecessary full-page erase/program cycle.
+		if (memcmp(vpEraseWork + (uint32_t)(off - writeOff),
+				pData, vSectSize) == 0)
+		{
+			return true;
+		}
 		memcpy(vpEraseWork + (uint32_t)(off - writeOff), pData, vSectSize);
 		pWriteData = vpEraseWork;
 	}
