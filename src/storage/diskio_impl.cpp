@@ -137,6 +137,10 @@ int DiskIO::Read(uint32_t SectNo, uint32_t SectOffset, uint8_t *pBuff, uint32_t 
 	int idx = GetCacheSect(SectNo);
 	if (idx < 0)
 	{
+		// A configured cache may be unavailable because eviction failed.
+		// Never bypass dirty data after an unsuccessful cache operation.
+		if (vNbCache > 0)
+			return -1;
 	    // No cache, do physical read
 	    uint8_t d[sectsize];
 	    if (!SectRead(SectNo, d))
@@ -193,6 +197,10 @@ int DiskIO::Write(uint32_t SectNo, uint32_t SectOffset, uint8_t *pData, uint32_t
 	int idx = GetCacheSect(SectNo, true);
 	if (idx < 0)
 	{
+		// A configured cache may be unavailable because eviction failed.
+		// Never bypass dirty data after an unsuccessful cache operation.
+		if (vNbCache > 0)
+			return -1;
 	    // No cache, do physical write
 	    uint8_t d[sectsize];
 	    if (!SectRead(SectNo, d))
