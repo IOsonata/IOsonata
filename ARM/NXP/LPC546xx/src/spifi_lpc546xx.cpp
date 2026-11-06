@@ -513,6 +513,8 @@ bool Lpc546xxSpifiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	SPIFI0->CTRL = dev->Ctrl;
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_QSPI;
+	pDev->QuadSetMemSize = QuadSPISetMemSize;
+	pDev->QuadSendCmd = QuadSPISendCmd;
 	pDev->DevIntrf.Disable = Lpc546xxSpifiDisable;
 	pDev->DevIntrf.Enable = Lpc546xxSpifiEnable;
 	pDev->DevIntrf.GetHandle = Lpc546xxSpifiGetHandle;
