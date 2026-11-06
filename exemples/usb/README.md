@@ -125,20 +125,20 @@ size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
 removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
 USB descriptors; filesystem initialization belongs to the storage layer.
 
-The flash disk example uses current NvmMcuCfgInit, Nvm and NvmDiskIO
-APIs over the linker-reserved NVM1 region. Debug reserves 832 KiB
-at 0x30000-0xFFFFF; Release reserves 256 KiB at 0xC0000-0xFFFFF;
-Release_mbr reserves 832 KiB at 0x10000-0xDFFFF under the SDK USB
-DFU bootloader. These variants do not share a disk starting address.
+The flash disk example uses `NvmMcuDiskInit()` to attach
+`NvmMcuIntrf`, `Nvm`, and `NvmDiskIO` to linker-reserved NVM1.
+Debug reserves 832 KiB at 0x30000-0xFFFFF; Release reserves 256 KiB at
+0xC0000-0xFFFFF; Release_mbr reserves 832 KiB at 0x10000-0xDFFFF under
+the SDK USB DFU bootloader. These variants have different start addresses.
 
-The example restores the original direct FAT12 initializer. The
-USB host sees native 4096-byte sectors in all three layouts.
-Startup reads only sector zero. An existing 55AA-signed disk is
-preserved; an uninitialized disk receives two FAT copies, an
-IOSONATA volume-label directory entry and the boot sector last.
-There is no full-disk blank scan, whole-region erase or 512-byte
-flash read/modify/write amplification. The example is intended
-for disposable data; it does not implement wear levelling.
+The host sees 512-byte sectors. A caller-owned aligned 4096-byte scratch
+buffer lets `NvmDiskIO` preserve neighboring sectors in each physical
+flash erase page. This is synchronous read/modify/erase/program, without
+write coalescing or wear levelling.
+
+The example exports the raw region without formatting or modifying it
+at startup. A blank volume must be explicitly formatted on the host or
+provisioned with a filesystem image. Existing data is left untouched.
 
 Generic FatFsMount/FatFsUnmount remains available to firmware
 through DiskIO and is independent of USB MSC. The USB disk example
