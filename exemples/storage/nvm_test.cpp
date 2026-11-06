@@ -1051,6 +1051,19 @@ static void TestQspi(MockIntrf &Bus)
 	CHECK(s_QRstCnt == 1, "qspi: reset went as a phase, before the id probe");
 	CHECK(mem.ReadId(3) == QSPI_ID, "qspi id");
 
+	atomic_flag_test_and_set(&s_QDev.DevIntrf.bBusy);
+	CHECK(mem.ReadId(3) == 0, "qspi: busy controller rejects ID read");
+	CHECK(atomic_flag_test_and_set(&s_QDev.DevIntrf.bBusy),
+		  "qspi: rejected read preserves the owner's busy flag");
+	atomic_flag_clear(&s_QDev.DevIntrf.bBusy);
+
+	auto sendCmd = s_QDev.QuadSendCmd;
+	s_QDev.QuadSendCmd = [](SPIDev_t *, uint8_t, uint32_t, uint8_t,
+							uint32_t, uint8_t) { return false; };
+	CHECK(mem.ReadId(3) == 0, "qspi: rejected ID command skips data phase");
+	s_QDev.QuadSendCmd = sendCmd;
+	CHECK(mem.ReadId(3) == QSPI_ID, "qspi: read succeeds after rejected command");
+
 	RunCommon(mem, "Quad SPI NOR", QSPI_SIZE, QSPI_PAGE);
 
 	// The design's central claim: the part's own quad command and its dummy
