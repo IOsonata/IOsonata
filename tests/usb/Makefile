@@ -20,6 +20,8 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 LDFLAGS += -Wl,-dead_strip
 ASAN_RUNTIME_OPTIONS := detect_leaks=0:strict_string_checks=1
+# Mach-O host executables require definitions for optional AppRun status hooks.
+USB_TEST_OPTIONAL_SRC := hostport/optional_status_stubs.cpp
 else
 LDFLAGS += -Wl,--gc-sections
 ASAN_RUNTIME_OPTIONS := detect_leaks=1:strict_string_checks=1
@@ -35,7 +37,7 @@ CORE_SOURCES := \
 	$(ROOT)/src/usb/usb.cpp \
 	$(ROOT)/src/usb/usbd_cdc_desc.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/cfifo.c
 
 MULTICONFIG_TARGET := $(BUILD_DIR)/usb_multiconfig_test
@@ -45,7 +47,7 @@ LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
 LINK_SOURCES := \
 	usb_stack_link_test.cpp \
 	$(ROOT)/src/usb/usbd_hid.cpp $(ROOT)/src/usb/usb_int.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/usb/usb.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/usb/usbd_cdc.cpp \
@@ -60,7 +62,7 @@ BULK_SOURCES := \
 	$(ROOT)/src/usb/usbd_bulk.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -71,7 +73,7 @@ HID_SOURCES := \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -81,7 +83,7 @@ MSC_SOURCES := \
 	$(ROOT)/src/usb/usbd_msc.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/storage/diskio_impl.cpp \
 	$(ROOT)/src/cfifo.c
@@ -90,7 +92,7 @@ INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \
 	usb_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -98,7 +100,7 @@ RX_EVENT_TARGET := $(BUILD_DIR)/usb_rx_event_test
 RX_EVENT_SOURCES := \
 	usb_rx_event_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -106,7 +108,7 @@ DIRECT_TARGET := $(BUILD_DIR)/usb_direct_intrf_test
 DIRECT_SOURCES := \
 	usb_direct_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -115,7 +117,7 @@ ISO_SOURCES := \
 	usb_iso_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -124,7 +126,7 @@ ISO_DUPLEX_SOURCES := \
 	usb_iso_intrf_duplex_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -133,7 +135,7 @@ INT_SOURCES := \
 	usb_int_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -192,7 +194,7 @@ PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
 PROBE_SOURCES := \
 	tx_rate_probe.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp $(USB_TEST_OPTIONAL_SRC) \
 	$(ROOT)/src/cfifo.c
 
 SOF_TICKS ?= 500
