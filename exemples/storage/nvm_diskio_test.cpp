@@ -357,6 +357,23 @@ static void TestCheckedGenericCommit(void)
 	memcpy(back, cacheMem + 16U, sizeof(back));
 	CHECK(memcmp(data, back, sizeof(data)) == 0,
 		"generic committed data is persistent");
+
+	memset(data, 0x5C, sizeof(data));
+	CHECK(disk.Write((uint64_t)16U, data, sizeof(data)) ==
+		(int)sizeof(data), "update generic cached sector");
+	s_Erase.vbFailErase = true;
+	CHECK(disk.Write((uint64_t)DISK_SECT + 16U, data,
+		sizeof(data)) == -1, "failed eviction propagates to caller");
+	CHECK(disk.Read((uint64_t)16U, back, sizeof(back)) ==
+		(int)sizeof(back), "failed eviction retains cached sector");
+	CHECK(memcmp(data, back, sizeof(back)) == 0,
+		"failed eviction keeps modified data");
+	s_Erase.vbFailErase = false;
+	CHECK(disk.Commit(), "recover after failed generic eviction");
+	CHECK(disk.Read((uint64_t)16U, back, sizeof(back)) ==
+		(int)sizeof(back), "read recovered data");
+	CHECK(memcmp(data, back, sizeof(back)) == 0,
+		"recovered data intact");
 }
 
 int main(void)
