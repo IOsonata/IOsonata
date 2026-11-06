@@ -388,11 +388,13 @@ only 64 sectors, below the 128-sector minimum in FatFs `f_mkfs()`.
 Applications using FatFs can therefore choose the 512-byte
 NvmDiskIO option with a caller-owned erase-unit buffer.
 
-The `UsbMscFlashDisk` example provisions FAT12 when sector zero is
-unsigned. It now uses 512-byte logical sectors on 4 KiB erase pages, with
-a caller-owned physical-page cache. Its boot sector is committed last.
-It does not call FatFsMount at startup. This is independent of generic
-FatFs support.
+Reusable `Fat12ProvisionIfBlank(DiskIO&, uint8_t*, uint32_t)` in
+`storage/fat12_provision.h` provisions small 512-byte-sector FAT12 disks
+through any block backend, only when sector zero is unsigned. The caller
+must explicitly opt in; it does not mount the volume or run automatically
+for other `DiskIO` instances. `UsbMscFlashDisk` uses the helper, rather than
+implementing the FAT boot sector inside the application. Its NVM-backed disk
+uses 512-byte logical sectors with a caller-owned 4 KiB erase-page cache.
 ```cpp
 #include "ff.h"
 #include "ff_diskio.h"
