@@ -31,7 +31,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <stdio.h>
+#include "istddef.h"
+#include "stddev.h"
 #include "../storage/nvm_demo_checks.h"
+#if NVM_DEMO_MEDIUM == 0
+#include "storage/nvm_mcu_intrf.h"
+#endif
 #include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
@@ -139,14 +145,14 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx);
 // Shared by both modes so the work being measured is the same.
 static void NvmCycleSlot(void)
 {
-	uint32_t page = UnitSize(s_Nvm);
+	uint32_t page = NvmDemoUnitSize(g_Nvm);
 
 	if (s_Slot >= NVM_DEMO_SLOTS)
 	{
 		// A rewrite in place medium wraps by overwriting.
-		if (s_Nvm.EraseSize() != 0 && DemoErase(s_Nvm, 0, page) != 0)
+		if (g_Nvm.EraseSize() != 0 && NvmDemoErase(g_Nvm, 0, page) != 0)
 		{
-			s_Fail++;
+			g_NvmFailures++;
 		}
 		s_Slot = 0;
 	}
@@ -155,10 +161,10 @@ static void NvmCycleSlot(void)
 	uint32_t val = NVM_DEMO_MAGIC ^ s_Writes;
 	uint32_t rd = 0;
 
-	if (DemoWrite(s_Nvm, off, &val, 4) != 4 ||
-		s_Nvm.Read(off, &rd, 4) != 4 || rd != val)
+	if (NvmDemoWrite(g_Nvm, off, &val, 4) != 4 ||
+		g_Nvm.Read(off, &rd, 4) != 4 || rd != val)
 	{
-		s_Fail++;
+		g_NvmFailures++;
 	}
 
 	s_Slot++;
@@ -191,7 +197,7 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 
-	if (s_Nvm.IsBusy())
+	if (g_Nvm.IsBusy())
 	{
 		s_Requeues++;
 		s_StallRq++;
@@ -246,10 +252,10 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 	{
 		uint32_t rd = 0;
 
-		if (s_Nvm.Sync() != 0 ||
-			s_Nvm.Read(s_PendOff, &rd, 4) != 4 || rd != s_PendVal)
+		if (g_Nvm.Sync() != 0 ||
+			g_Nvm.Read(s_PendOff, &rd, 4) != 4 || rd != s_PendVal)
 		{
-			s_Fail++;
+			g_NvmFailures++;
 		}
 
 		s_PendCheck = false;
@@ -269,9 +275,9 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 	if (s_Slot >= NVM_DEMO_SLOTS)
 	{
 		// A rewrite in place medium wraps by overwriting.
-		if (s_Nvm.EraseSize() != 0 && s_Nvm.Erase(0, UnitSize(s_Nvm)) != 0)
+		if (g_Nvm.EraseSize() != 0 && g_Nvm.Erase(0, NvmDemoUnitSize(g_Nvm)) != 0)
 		{
-			s_Fail++;
+			g_NvmFailures++;
 		}
 		s_Slot = 0;
 
@@ -284,9 +290,9 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 	s_PendOff = s_Slot * 4;
 	s_PendVal = NVM_DEMO_MAGIC ^ s_Writes;
 
-	if (s_Nvm.Write(s_PendOff, &s_PendVal, 4) != 4)
+	if (g_Nvm.Write(s_PendOff, &s_PendVal, 4) != 4)
 	{
-		s_Fail++;
+		g_NvmFailures++;
 	}
 	else
 	{
@@ -314,7 +320,7 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 	}
 
 #if NVM_DEMO_ASYNC
-	if (s_Pending > 0 || s_Nvm.IsBusy())
+	if (s_Pending > 0 || g_Nvm.IsBusy())
 	{
 		// The previous cycle has not finished; skip rather than pile up.
 		// Which of the two matters. pend above 0 means the pump is still
@@ -374,8 +380,8 @@ static void NvmCycleReport(void)
 								  (unsigned long)s_Requeues, (unsigned long)s_Dropped,
 								  (unsigned long)((UARTDev_t*)g_Uart)->TxDropCnt);
 		printf("async   : write evt %lu erase evt %lu err %lu\r\n",
-								  (unsigned long)s_EvtWrite, (unsigned long)s_EvtErase,
-								  (unsigned long)s_EvtError);
+								  (unsigned long)g_NvmEvtWrite, (unsigned long)g_NvmEvtErase,
+								  (unsigned long)g_NvmEvtError);
 
 		// max is the longest the pump ever waited on one operation, in visits
 		// of about 1.5 msec each. long is how many waits passed the threshold.
@@ -385,7 +391,7 @@ static void NvmCycleReport(void)
 #endif
 		printf("cycles %lu writes %lu fails %lu\r\n",
 								  (unsigned long)s_Cycles, (unsigned long)s_Writes,
-								  (unsigned long)s_Fail);
+								  (unsigned long)g_NvmFailures);
 		// rep, not evt. Evt counts only the SoftDevice flash event, so on a
 		// timeslot build it stays at 0 while every operation completes
 		// normally. RepDone counts what was passed to the driver whichever
@@ -400,7 +406,7 @@ static void NvmCycleReport(void)
 #else
 		printf("cycles %lu writes %lu fails %lu\r\n",
 								  (unsigned long)s_Cycles, (unsigned long)s_Writes,
-								  (unsigned long)s_Fail);
+								  (unsigned long)g_NvmFailures);
 #endif
 	}
 }
@@ -412,7 +418,7 @@ void BtAppInitUserData()
 		return;
 	}
 
-	NvmDemoVerify(s_Nvm);
+	NvmDemoVerify(g_Nvm);
 
 	// The checks left the scratch in a known state; start the cycle after it.
 	s_Slot = 0;
@@ -441,7 +447,7 @@ int main()
 	// The queue exists before any interrupt can queue an event
 	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 
-	if (!g_Uart.Init(s_UartCfg))
+	if (!g_Uart.Init(g_NvmDemoUartCfg))
 	{
 		return 1;
 	}
@@ -450,7 +456,7 @@ int main()
 #endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 
-	printf("\r\nNvm demo on the %s, with a stack up\r\n", s_MediumName);
+	printf("\r\nNvm demo on the %s, with a stack up\r\n", g_NvmMediumName);
 
 	BtAppInit(&s_BtAppCfg);
 

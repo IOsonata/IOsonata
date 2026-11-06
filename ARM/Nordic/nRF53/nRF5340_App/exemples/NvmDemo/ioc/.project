@@ -40,5 +40,10 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/nvm_demo.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/nvm_demo_checks.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/nvm_demo_checks.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

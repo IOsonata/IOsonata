@@ -31,11 +31,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <stdio.h>
+#include "idelay.h"
+#include "stddev.h"
 #include "nvm_demo_checks.h"
 
 int main()
 {
-	if (!g_Uart.Init(s_UartCfg))
+	if (!g_Uart.Init(g_NvmDemoUartCfg))
 	{
 		return 1;
 	}
@@ -44,11 +47,11 @@ int main()
 #endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 
-	printf("\r\nNvm demo on the %s\r\n", s_MediumName);
+	printf("\r\nNvm demo on the %s\r\n", g_NvmMediumName);
 
 	if (NvmDemoSetup())
 	{
-		NvmDemoVerify(s_Nvm);
+		NvmDemoVerify(g_Nvm);
 	}
 
 	while (true)
