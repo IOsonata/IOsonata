@@ -688,7 +688,7 @@ static void QspiPowerOn(void)
 }
 
 // The two functions a real target defines in its QSPI implementation.
-void QuadSPISetMemSize(SPIDev_t * const, uint32_t Size)
+static void MockQuadSetMemSize(SPIDev_t * const, uint32_t Size)
 {
 	s_QSetMemSize = Size;
 }
@@ -1748,7 +1748,7 @@ int main(void)
 	// handle to the same handlers.
 	memcpy(&s_QDev.DevIntrf, &qspi.vDev, sizeof(DevIntrf_t));
 	s_QDev.DevIntrf.pDevData = &s_QDev;
-	s_QDev.QuadSetMemSize = QuadSPISetMemSize;
+	s_QDev.QuadSetMemSize = MockQuadSetMemSize;
 	s_QDev.QuadSendCmd = QuadSPISendCmd;
 	atomic_flag_clear(&s_QDev.DevIntrf.bBusy);
 	qspi.vDev.pDevData = &s_QDev;
