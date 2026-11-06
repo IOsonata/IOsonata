@@ -120,6 +120,10 @@ typedef struct __Nvm_Cfg {
 	NvmEvtHandler_t	EvtHandler;
 	NvmWaitCb_t		pWaitCB;
 	NvmInitCb_t		pInitCB;
+	// Optional runtime transport limit. Zero means use PageSize.
+	// The medium can reduce each write chunk while a controller is
+	// arbitrated without changing the application's NVM geometry.
+	uint32_t (*GetWriteChunkSize)(void);
 } NvmCfg_t;
 
 class Nvm : virtual public Device {
@@ -321,6 +325,7 @@ private:
 	uint32_t	vEraseSize;
 	uint32_t	vSectSize;
 	uint32_t	vPageSize;
+	uint32_t	(*vpGetWriteChunkSize)(void);
 	uint32_t	vWrGran;
 	int			vAddrSize;
 	uint32_t	vAddrSpan;
