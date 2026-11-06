@@ -92,6 +92,9 @@ typedef struct __Usbd_Msc_Config {
 	uint16_t SectorBufferSize;	//!< Required; at least pDisk->GetSectSize() bytes
 	bool bReadOnly;			//!< Zero permits writes
 	bool bRemovable;			//!< Zero selects fixed media; true enables host eject
+	bool bWriteBack;			//!< Do not Commit after each WRITE(10).
+							//!< Flush on eviction, SCSI sync, and eject.
+							//!< Unsafe on unexpected power loss without hold-up.
 	uint8_t InterfaceString;
 	uint16_t FsMps;				//!< Zero selects USBD_MSC_FS_MPS
 	uint16_t HsMps;				//!< Zero selects USBD_MSC_HS_MPS
@@ -116,6 +119,7 @@ typedef struct __Usbd_Msc_Dev {
 	uint8_t InterfaceString;
 	bool bReadOnly;
 	bool bRemovable;
+	bool bWriteBack;
 	bool bMediumPresent;
 	bool bMediumReady;
 	bool bRemovalPrevented;
