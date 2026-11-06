@@ -564,19 +564,18 @@ internal NVM region through `NvmDiskIO`. It initializes `NvmMcuIntrf`,
 `Nvm` and `NvmDiskIO` through their existing APIs; there is no dedicated
 USB or MCU flash-disk helper.
 
-The application uses the existing generic `FatFsMount()` interface with
-`bFormatIfBootBlank` explicitly enabled. FatFs chooses an appropriate FAT
-format from the medium geometry; it does not hard-code FAT12 or depend on USB.
-The flash-disk example provisions when sector zero is fully erased, even if
-other sectors contain data from an older firmware layout. The default
-`bFormatIfBlank` policy remains conservative and scans the entire disk.
-An existing valid filesystem is mounted without formatting. An unrecognized,
-nonblank sector zero is not overwritten and does not prevent USB MSC startup;
-the host may still be unable to mount it. In particular, the earlier Debug
-flash-disk firmware used 4096-byte logical sectors, which cannot be mounted
-through the refactored 512-byte logical-sector geometry without explicit
-migration. The firmware calls `FatFsUnmount()` before enabling USB MSC,
-so the host has exclusive filesystem ownership.
+The application uses the generic `FatFsMount()` interface with
+`bValidateOnMount` and `bFormatIfInvalid` explicitly enabled.
+FatFs first validates the boot sector and volume geometry, then scans the
+FAT allocation entries. For this disposable USB test disk, an invalid
+or unrecognized filesystem is explicitly reformatted with FatFs `f_mkfs()`
+and verified again before USB starts. This can destroy prior content,
+including data left in overlapping Debug and Release flash reservations.
+For normal applications leave `bFormatIfInvalid` disabled: the default
+`bFormatIfBlank` policy preserves nonblank media. The validation is not
+a full filesystem repair or directory-tree consistency check.
+The firmware calls `FatFsUnmount()` before enabling USB MSC, giving the
+host exclusive filesystem ownership.
 
 The MSC logical sector is 512 bytes. nRF52840 program flash has 4096-byte
 physical erase pages. `NvmDiskIO` uses a caller-owned aligned 4096-byte
