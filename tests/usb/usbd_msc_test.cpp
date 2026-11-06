@@ -800,6 +800,55 @@ static void TestWriteFailure(void)
 	CHECK(pCsw != nullptr && pCsw->dCSWDataResidue == 0U);
 }
 
+static void TestWriteBackAcrossCommands(void)
+{
+	ResetFake();
+	RamDisk disk;
+	disk.Fill();
+	alignas(4) uint8_t sector[SECTOR_SIZE];
+	UsbdMsc msc;
+	UsbdMscCfg_t cfg = MakeCfg(disk, sector);
+	cfg.bWriteBack = true;
+	CHECK(msc.Init(cfg));
+	CHECK(msc.SelectConfig(1U));
+
+	uint8_t data[SECTOR_SIZE] = {};
+	for (uint32_t i = 0; i < sizeof(data); i++)
+	{
+		data[i] = (uint8_t)(i ^ 0xA5U);
+	}
+
+	for (uint32_t i = 0; i < 2U; i++)
+	{
+		UsbMscCmdBlkWrapper_t cbw = MakeCbw(90U + i, SECTOR_SIZE,
+			false, USB_MSC_SCSI_WRITE_10, 10U);
+		PutBe32(&cbw.CBWCB[2], 2U + i);
+		PutBe16(&cbw.CBWCB[7], 1U);
+		s_CaptureLength = 0U;
+		SendCbw(msc, cbw);
+		DeliverOut(data, USBD_MSC_FS_MPS);
+		DeliverOut(&data[USBD_MSC_FS_MPS], USBD_MSC_FS_MPS);
+		msc.Process();
+		Pump(msc);
+		CheckPassedCsw(90U + i);
+		CHECK(disk.CommitCount == 0);
+		CHECK(memcmp(disk.Data[2U + i], data, sizeof(data)) == 0);
+	}
+
+	UsbMscCmdBlkWrapper_t sync = MakeCbw(92U, 0U, false,
+		USB_MSC_SCSI_SYNCHRONIZE_CACHE, 10U);
+	RunInCommand(msc, sync);
+	CheckPassedCsw(92U);
+	CHECK(disk.CommitCount == 1);
+
+	UsbMscCmdBlkWrapper_t eject = MakeCbw(93U, 0U, false,
+		USB_MSC_SCSI_START_STOP_UNIT, 6U);
+	eject.CBWCB[4] = 2U;
+	RunInCommand(msc, eject);
+	CheckPassedCsw(93U);
+	CHECK(disk.CommitCount == 2);
+}
+
 static void TestCommitFailure(void)
 {
 	ResetFake();
@@ -1233,6 +1282,7 @@ int main(void)
 	TestReadOnlyAndStorageFailure();
 	TestWriteFailure();
 	TestCommitFailure();
+	TestWriteBackAcrossCommands();
 	TestMediumEjectAndRestart();
 	TestMalformedCbwAndResetRecovery();
 	TestResetAcrossPhasesAndReconnect();
