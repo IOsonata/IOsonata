@@ -138,15 +138,9 @@ command can be coalesced into a single erase/program cycle. UsbdMsc
 commits before sending success and on synchronization/eject; there is
 no wear levelling or power-fail atomicity.
 
-The example explicitly calls the reusable storage-layer
-`Fat12ProvisionIfBlank()` helper before starting USB. The helper provisions
-small FAT12 volumes on any `DiskIO` backend when sector zero is unsigned;
-it commits the boot sector last. A signed compatible FAT12 volume is
-preserved, and other signed layouts are not overwritten. No FAT formatting
-logic is implemented inside the USB application.
-
-Generic FatFsMount/FatFsUnmount remains available to firmware
-through DiskIO and is independent of USB MSC. The USB disk example
-does not use FatFs during initialization; it exposes the prepared
-DiskIO directly to the PC. Do not permit firmware and the USB host
-to modify the same writable volume concurrently.
+The example uses generic `FatFsMount()` with `bFormatIfBlank` to prepare
+an entirely erased disk through any `DiskIO` backend. FatFs selects
+the filesystem type based on geometry, rather than requiring a FAT12-specific
+formatter. Existing filesystems are preserved and unrecognized nonblank
+media are not overwritten. The example calls `FatFsUnmount()` before USB
+starts, so firmware and the host do not access the volume concurrently.
