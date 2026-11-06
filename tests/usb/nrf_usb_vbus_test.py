@@ -2,7 +2,7 @@
 """USB cable interrupt of the nRF52 and its shared POWER_CLOCK vector.
 
 Builds the production power_clock_irq_nrf52.cpp and usb_ctrlr_nrf52_vbus.cpp
-(no SoftDevice) against a register stand-in and checks that:
+against a register stand-in and checks that:
 - the USB port enables the cable events and the shared vector,
 - a cable edge clears its event and queues the USB process event once,
 - the vector calls only the owners that are linked: clock and USB, clock
@@ -18,21 +18,42 @@ ROOT = Path(__file__).resolve().parents[2]
 NRF_H = r'''
 #pragma once
 #include <cstdint>
-struct NRF_POWER_Type { volatile uint32_t EVENTS_USBDETECTED, EVENTS_USBREMOVED, INTENSET; };
+struct NRF_POWER_Type { volatile uint32_t EVENTS_USBDETECTED, EVENTS_USBREMOVED, INTENSET, INTENCLR; };
 extern NRF_POWER_Type g_Power;
 #define NRF_POWER (&g_Power)
 #define POWER_INTENSET_USBDETECTED_Msk (1UL << 7)
 #define POWER_INTENSET_USBREMOVED_Msk (1UL << 8)
+#define POWER_INTENCLR_USBDETECTED_Msk POWER_INTENSET_USBDETECTED_Msk
+#define POWER_INTENCLR_USBREMOVED_Msk POWER_INTENSET_USBREMOVED_Msk
 enum IRQn_Type { POWER_CLOCK_IRQn = 0 };
 uint32_t NVIC_GetEnableIRQ(IRQn_Type);
 void NVIC_ClearPendingIRQ(IRQn_Type);
 void NVIC_SetPriority(IRQn_Type, uint32_t);
 void NVIC_EnableIRQ(IRQn_Type);
+void NVIC_DisableIRQ(IRQn_Type);
 '''
 
 USB_H = r'''
 #pragma once
 extern "C" void UsbProcessQue(int DevNo);
+'''
+
+SDH_H = r'''
+#pragma once
+extern "C" bool nrf_sdh_is_enabled(void);
+enum nrf_sdh_state_evt_t { NRF_SDH_EVT_STATE_ENABLE_PREPARE, NRF_SDH_EVT_STATE_ENABLED,
+                           NRF_SDH_EVT_STATE_DISABLED };
+struct Observer { void (*handler)(nrf_sdh_state_evt_t, void *); void *p_context; };
+#define NRF_SDH_STATE_OBSERVER(name, priority) Observer name
+'''
+
+SOC_H = r'''
+#pragma once
+#define NRF_EVT_POWER_USB_DETECTED 1
+#define NRF_EVT_POWER_USB_REMOVED 2
+void sd_power_usbdetected_enable(int);
+void sd_power_usbremoved_enable(int);
+#define NRF_SDH_SOC_OBSERVER(name, priority, fn, ctx) static_assert(sizeof(&fn) > 0)
 '''
 
 HARNESS = r'''
@@ -49,6 +70,16 @@ uint32_t NVIC_GetEnableIRQ(IRQn_Type) { return s_Enabled; }
 void NVIC_ClearPendingIRQ(IRQn_Type) {}
 void NVIC_SetPriority(IRQn_Type, uint32_t Prio) { s_Prio = Prio; }
 void NVIC_EnableIRQ(IRQn_Type) { s_Enabled = true; s_Enables++; }
+void NVIC_DisableIRQ(IRQn_Type) { s_Enabled = false; }
+#ifdef SOFTDEVICE_PRESENT
+static unsigned s_SdCalls;
+void sd_power_usbdetected_enable(int) { ++s_SdCalls; }
+void sd_power_usbremoved_enable(int) { ++s_SdCalls; }
+#ifdef WITH_SDH
+static bool s_SdEnabled;
+extern "C" bool nrf_sdh_is_enabled(void) { return s_SdEnabled; }
+#endif
+#endif
 extern "C" void UsbProcessQue(int DevNo) { assert(DevNo == 0); s_Ques++; }
 #ifdef WITH_CLOCK
 void nRFClockIrqHandler(void) { s_Clock++; }
@@ -89,6 +120,17 @@ int main()
 #ifdef WITH_CLOCK
 	assert(s_Clock >= 1);
 #endif
+	#ifdef SOFTDEVICE_PRESENT
+	assert(s_SdCalls == 0);
+#ifdef WITH_SDH
+	s_SdEnabled = true;
+	nRFUsbdVbusIntInit(6);
+	assert(s_SdCalls == 2 && s_Enables == 1);
+	s_SdEnabled = false;
+	nRFUsbdVbusIntInit(6);
+	assert(s_SdCalls == 2);
+#endif
+#endif
 	puts("PASS: " VARIANT);
 	return 0;
 }
@@ -97,6 +139,8 @@ int main()
 VARIANTS = [
     ('clock and USB owners', ['-DWITH_CLOCK', '-DWITH_USB'], True),
     ('USB owner alone', ['-DWITH_USB'], True),
+    ('SD-capable USB boot without SDH', ['-DWITH_USB', '-DSOFTDEVICE_PRESENT'], True),
+    ('SDH disabled and enabled', ['-DWITH_USB', '-DSOFTDEVICE_PRESENT', '-DWITH_SDH'], True),
     ('clock owner alone', ['-DWITH_CLOCK'], False),
 ]
 
@@ -104,6 +148,9 @@ with tempfile.TemporaryDirectory() as directory:
     d = Path(directory)
     (d / 'usb').mkdir()
     (d / 'nrf.h').write_text(NRF_H)
+    (d / 'nrf_sdh.h').write_text(SDH_H)
+    (d / 'nrf_soc.h').write_text(SOC_H)
+    (d / 'nrf_sdh_soc.h').write_text('')
     (d / 'usb' / 'usb.h').write_text(USB_H)
     (d / 'harness.cpp').write_text(HARNESS)
     for name, defs, usb in VARIANTS:

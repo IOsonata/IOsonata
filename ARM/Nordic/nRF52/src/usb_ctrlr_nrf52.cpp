@@ -64,8 +64,6 @@ SOFTWARE.
 
 #ifdef SOFTDEVICE_PRESENT
 #include "nrf_soc.h"
-#include "nrf_sdm.h"
-#include "nrf_mbr.h"
 #include "nrf_error.h"
 #endif
 
@@ -211,41 +209,7 @@ void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 }
 
 #ifdef SOFTDEVICE_PRESENT
-/**
- * Whether a SoftDevice is programmed at all.
- *
- * sd_softdevice_is_enabled is an SVC. On a part with no SoftDevice in flash
- * nothing implements that vector, so the call lands in the default handler
- * and stops there. The image has to be found before it may be asked
- * anything.
- */
-static bool UsbdSdPresent(void)
-{
-	// SD_MAGIC_NUMBER is only in the bootloader header, which is not part of
-	// this build: an #if on it was always false and the SoftDevice was never
-	// asked for the clock. The magic number follows the MBR.
-	const volatile uint32_t *pMagic = (const volatile uint32_t *)(
-		MBR_SIZE + SOFTDEVICE_INFO_STRUCT_OFFSET + 4U);
-
-	return *pMagic == 0x51B1E5DBUL;
-}
-
-static bool UsbdSdRunning(void)
-{
-	uint8_t en = 0;
-
-	if (UsbdSdPresent() == false)
-	{
-		return false;
-	}
-
-	if (sd_softdevice_is_enabled(&en) != NRF_SUCCESS)
-	{
-		return false;
-	}
-
-	return en != 0;
-}
+bool UsbdSdRunning(void);
 #endif
 
 // Bounded spin for a status bit shared by the clock, controller and
