@@ -39,7 +39,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 inline bool NvmMcuDiskInit(NvmDiskIO &Disk, Nvm &Mem,
 					NvmMcuIntrf &Intrf, int RegionNo,
 					uint32_t SectSize = 0, uint8_t *pEraseWork = nullptr,
-					uint32_t WorkSize = 0)
+					uint32_t WorkSize = 0, bool bWriteCache = false)
 {
 	NvmCfg_t cfg = {};
 
@@ -58,7 +58,7 @@ inline bool NvmMcuDiskInit(NvmDiskIO &Disk, Nvm &Mem,
 		return false;
 	}
 
-	return Disk.Init(Mem, SectSize, pEraseWork, WorkSize, true);
+	return Disk.Init(Mem, SectSize, pEraseWork, WorkSize, bWriteCache);
 }
 
 #endif // __cplusplus
