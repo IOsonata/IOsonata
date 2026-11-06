@@ -138,9 +138,10 @@ command can be coalesced into a single erase/program cycle. UsbdMsc
 commits before sending success and on synchronization/eject; there is
 no wear levelling or power-fail atomicity.
 
-The example uses generic `FatFsMount()` with `bFormatIfBlank` to prepare
-an entirely erased disk through any `DiskIO` backend. FatFs selects
-the filesystem type based on geometry, rather than requiring a FAT12-specific
-formatter. Existing filesystems are preserved and unrecognized nonblank
-media are not overwritten. The example calls `FatFsUnmount()` before USB
+The example uses generic `FatFsMount()` with the opt-in
+`bFormatIfBootBlank` policy to prepare a disk whose own boot sector is
+erased, even if other sectors contain data from the previous Release
+layout. The default `bFormatIfBlank` scans the entire medium. FatFs
+selects the filesystem type from geometry. Existing mountable filesystems
+are preserved and nonblank sector zero is not overwritten. The example calls `FatFsUnmount()` before USB
 starts, so firmware and the host do not access the volume concurrently.
