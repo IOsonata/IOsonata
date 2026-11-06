@@ -42,6 +42,13 @@ Use [Getting Started](getting-started.md) for the IOcomposer workflow.
 
 For MCU memory, initialize the reserved region with `NvmMcuCfgInit(cfg, RegionNo)`,
 then initialize the controller interface and call `Nvm::Init(cfg, &interface)`.
+
+For a sector disk on reserved internal flash, `NvmMcuDiskInit()` in
+`storage/nvm_mcu_disk.h` combines these steps and initializes `NvmDiskIO`.
+The caller owns the interface, NVM driver, disk adapter and any erase-unit
+scratch buffer for their entire use. For 512-byte logical sectors on a
+4096-byte erase-page device, pass a separate aligned 4096-byte scratch
+buffer. This helper does not format, mount, erase or initialize USB MSC.
 The interface, NVM object and any asynchronous buffers must outlive operations.
 External memory may also use `Nvm::Init(cfg, &interface, regionOffset, regionSize)`
 to select a smaller area of an otherwise dedicated memory chip.
