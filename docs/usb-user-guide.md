@@ -591,6 +591,15 @@ hardware, cable removal is not a reliable occasion to flush. Always eject
 or synchronize before disconnecting. There is no wear levelling or
 power-fail atomicity.
 
+The nRF52840 library's standard Debug/Release archives are compiled with
+SoftDevice support. For a bare-metal application with no SoftDevice image,
+`NvmMcuCfgInit()` now selects 4096-byte programming transfers instead of
+the former 32-byte chunks. When a SoftDevice image is installed, the
+controller uses the original 32-byte transfer limit. The NVMC still uses
+`READYNEXT` to pace each word and waits for final `READY` at the end.
+`NvmDiskIO::GetStats()` exposes `SectWrites`, `PagePrograms`,
+`PageEvictions` and `SyncCalls` for debugging flash write amplification.
+
 The bare-metal Debug linker script gcc_nrf52840_xxaa_nvm832k.ld
 reserves NVM1 at 0x30000-0xFFFFF (832 KiB). The Release build uses
 NVM1 at 0xC0000-0xFFFFF (256 KiB). Release_mbr uses NVM1 from
