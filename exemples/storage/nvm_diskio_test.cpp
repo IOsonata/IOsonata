@@ -79,6 +79,7 @@ public:
 	uint8_t vBuf[DISK_SIZE];
 	uint32_t vEraseCalls = 0;
 	uint32_t vWriteCalls = 0;
+	bool vbFailErase = false;
 
 	EraseNvm() { memset(vBuf, 0xFF, sizeof(vBuf)); Region(0, sizeof(vBuf)); }
 
@@ -108,6 +109,7 @@ public:
 	{
 		if (!RangeValid(Off, Len)) { return -EINVAL; }
 		if ((Off % DISK_SECT) != 0 || (Len % DISK_SECT) != 0) { return -EINVAL; }
+		if (vbFailErase) { return -EIO; }
 		vEraseCalls++;
 		memset(vBuf + Off, 0xFF, Len);
 		return 0;
@@ -317,6 +319,19 @@ static void TestWriteBackErasePage(void)
 	CHECK(disk.Commit(), "commit second erase page");
 	CHECK(s_Erase.vEraseCalls == erases + 3U,
 		"commit newly loaded dirty page");
+
+	memset(data, 0xB6, sizeof(data));
+	CHECK(disk.SectWrite(24U, data), "cache write for failure test");
+	s_Erase.vbFailErase = true;
+	CHECK(!disk.Commit(), "failed erase is reported by Commit");
+	CHECK(!disk.SectWrite(32U, data),
+		"failed eviction does not switch cache pages");
+	CHECK(disk.SectRead(24U, back), "failed commit retains dirty data");
+	CHECK(back[0] == 0xB6, "failed commit retains modified sector");
+	s_Erase.vbFailErase = false;
+	CHECK(disk.Commit(), "retry failed commit");
+	CHECK(s_Erase.vBuf[3U * DISK_SECT] == 0xB6,
+		"retried commit persists modified data");
 }
 
 int main(void)
