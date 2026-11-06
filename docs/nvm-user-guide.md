@@ -19,7 +19,7 @@ The generic `Nvm`, `DeviceIntrf`, and `NvmDiskIO` APIs are unchanged.
 | Serial NOR | Same demo, medium 1 | SPI pins, chip select, geometry and commands |
 | I2C EEPROM | Same demo, medium 2 | I2C address, geometry and write delay |
 | Block storage | [nvm_diskio_test.cpp](../exemples/storage/nvm_diskio_test.cpp) | NvmDiskIO sector geometry and cache |
-| USB disk on internal memory | [usb_msc_flashdisk.cpp](../exemples/usb/usb_msc_flashdisk.cpp) | Linker region, generic MCU disk initializer and UsbdMsc |
+| USB disk on internal memory | [usb_msc_flashdisk.cpp](../exemples/usb/usb_msc_flashdisk.cpp) | Linker region, NvmDiskIO and UsbdMsc |
 | littlefs integration | [nvm_littlefs_test.cpp](../exemples/storage/nvm_littlefs_test.cpp) | External littlefs, block callbacks and buffers |
 | Generic driver tests | [nvm_test.cpp](../exemples/storage/nvm_test.cpp) | Desktop compiler and supplied mock interfaces |
 
