@@ -592,7 +592,7 @@ The bare-metal Debug layout must not be used on a device with an
 upper-flash bootloader installed. Switching builds can expose different
 physical storage regions; back up files before changing configurations.
 
-After explicitly formatting the medium, verify mount time, full-size writes,
+After the first-use FAT12 provisioning, verify mount time, full-size writes,
 file contents and reset persistence on the actual nRF52840 board.
 Unmount the volume before running the raw write test:
 
