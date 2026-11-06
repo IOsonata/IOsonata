@@ -559,19 +559,23 @@ SYNCHRONIZE CACHE.
 firmware, settings, a production filesystem or Bluetooth bond storage. RAM-disk
 contents are lost when USB bus power is removed.
 
-The USB flash-disk example retains its original direct FAT12
-initialization. At startup it reads sector zero and preserves any
-disk with a 55AA signature. Otherwise it writes two FAT12 copies,
-the IOSONATA volume-label directory entry and the boot sector last.
-It does not scan or erase the entire disk before USB initialization.
-The generic FatFsMount interface remains available for firmware
-filesystems independently of USB MSC, but is not used by this example.
+The USB flash-disk example exposes raw sectors from a linker-reserved
+internal NVM region through `NvmDiskIO`. The generic
+`NvmMcuDiskInit()` helper binds the MCU NVM interface, driver and block
+adapter; it has no USB or filesystem dependencies.
 
-The USB disk exposes one physical 4096-byte erase page per sector,
-both in the 256 KiB and 832 KiB configurations. This eliminates
-the repeated read/erase/program operations of the temporary 512-byte
-mapping. Flash erases and writes still block the foreground USB
-process event, and the raw internal flash has no wear levelling.
+The example does not format, erase, scan or mount the volume at startup.
+A new device with erased flash must be explicitly partitioned/formatted by
+the host (or provisioned with a suitable filesystem image) before it can
+mount as a filesystem. Existing valid volumes are preserved. Do not format
+or overwrite volumes containing data you need to keep.
+
+The MSC logical sector is 512 bytes. nRF52840 program flash has 4096-byte
+physical erase pages. `NvmDiskIO` uses a caller-owned aligned 4096-byte
+scratch buffer to preserve the other seven 512-byte sectors when replacing a
+sector. This is synchronous read/modify/erase/program, not a write-back
+cache; it does not coalesce repeated writes or provide wear levelling.
+The 512-byte MSC sector buffer and 4096-byte scratch buffer must not alias.
 
 The bare-metal Debug linker script gcc_nrf52840_xxaa_nvm832k.ld
 reserves NVM1 at 0x30000-0xFFFFF (832 KiB). The Release build uses
@@ -579,11 +583,10 @@ NVM1 at 0xC0000-0xFFFFF (256 KiB). Release_mbr uses NVM1 from
 0x10000 to 0xDFFFF (832 KiB) below the Nordic USB DFU bootloader.
 The variants have different physical disk starting addresses.
 The bare-metal Debug layout must not be used on a device with an
-upper-flash bootloader installed. The signature check is appropriate
-for this disposable test volume, not a general filesystem recovery
-or data-preservation strategy.
+upper-flash bootloader installed. Switching builds can expose different
+physical storage regions; back up files before changing configurations.
 
-After restoring the example, verify mount time, full-size writes,
+After explicitly formatting the medium, verify mount time, full-size writes,
 file contents and reset persistence on the actual nRF52840 board.
 Unmount the volume before running the raw write test:
 
