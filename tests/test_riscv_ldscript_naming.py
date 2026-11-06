@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Check standardized RISC-V linker filenames, project references, and DFU layouts.
-
-Static source checks only; target compiler, linker, and hardware validation are
-tracked separately in tests/ldscript_build_validation.md.
-"""
+"""Check standardized RISC-V linker filenames, project references, and DFU layouts."""
 
 from pathlib import Path
 import re

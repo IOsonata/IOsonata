@@ -66,6 +66,4 @@ python3 tests/ldscript_reference_audit.py RISCV --report-unreferenced
 ```
 
 Static checks validate names, selected file paths, local `INCLUDE` references,
-DFU boundaries, and the deliberately unconfigured qemutest. They are not
-compiler/linker or hardware evidence. Full build results and existing build
-failures are tracked separately in `tests/ldscript_build_validation.md`.
+DFU boundaries, and the deliberately unconfigured qemutest.
