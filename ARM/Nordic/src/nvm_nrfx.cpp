@@ -136,12 +136,13 @@ SOFTWARE.
 // ---------------------------------------------------------------------------
 #if defined(NVM_INTRF_NVMC)
 
-// Direct nRF52840 flash programming can stream one full erase page
-// through READYNEXT, with a single READY drain at the end. Keep short
-// transactions on SoftDevice and MPSL builds, which must obey their
-// scheduling/arbitration limits.
+// The nRF52840 library's normal Debug/Release configurations include
+// SoftDevice support even for bare-metal applications. Permit full-page
+// transfers in those archives, but select the short transaction size at
+// run time if a SoftDevice image is actually installed. MPSL/SDC builds
+// keep short transfers for their time-slot arbitration.
 #ifndef NVM_INTRF_MAX_XFER
-#if defined(NRF52840_XXAA) && !defined(NVM_INTRF_SOFTDEVICE) && !defined(NRFXLIB_SDC)
+#if defined(NRF52840_XXAA) && !defined(NRFXLIB_SDC)
 #define NVM_INTRF_MAX_XFER			4096
 #else
 #define NVM_INTRF_MAX_XFER			32
@@ -1314,7 +1315,15 @@ bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 	Cfg.EraseSize = 0;
 	Cfg.SectorSize = NVM_INTRF_ERASE_SIZE;
 #endif
+#if defined(NRF52840_XXAA) && defined(NVM_INTRF_SOFTDEVICE)
+	// The same library serves bare-metal and SoftDevice applications.
+	// Only bare-metal NVMC owns the controller long enough for a 4 KiB
+	// transfer. A present SoftDevice keeps the original small chunks,
+	// even if it has not yet been enabled.
+	Cfg.PageSize = SdPresent() ? 32U : NVM_INTRF_MAX_XFER;
+#else
 	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// largest bytes per transfer
+#endif
 	Cfg.WriteGran = NVM_INTRF_WRITE_GRAN;
 	Cfg.AddrSize = NVM_INTRF_ADDR_SIZE;
 
