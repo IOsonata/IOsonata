@@ -2511,6 +2511,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_nvm.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/fat12_provision.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fat12_provision.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/storage/fatfs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs.cpp</locationURI>
