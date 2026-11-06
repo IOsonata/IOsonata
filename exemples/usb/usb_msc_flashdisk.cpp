@@ -8,9 +8,8 @@ linker script, so its size is set there and nowhere else, and the image fails
 to link if it grows into the disk. It does not expose firmware, filesystem,
 settings or Bluetooth bond-storage regions.
 
-The content stays across resets and power cycles. The example provisions
-FAT12 metadata only when sector zero lacks a boot signature, as the original
-example did. Existing signed volumes are preserved.
+The content stays across resets and power cycles. The example opts into generic FAT12 first-use provisioning. An existing
+signed FAT12 volume is preserved.
 
 The host sees 512-byte logical sectors. NvmDiskIO caches one 4 KiB erase
 page in caller-owned RAM. Writes to that page are coalesced and committed
@@ -45,10 +44,9 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-#include <string.h>
 
 #include "storage/diskio_nvm.h"
-#include "storage/fatfs.h"
+#include "storage/fat12_provision.h"
 #include "storage/nvm_mcu_intrf.h"
 #include "app_evt_handler.h"
 #include "usb/usb.h"
@@ -115,100 +113,6 @@ static const UsbdMscCfg_t s_MscCfg = {
 	.pProduct = "IOsonata Flash",
 };
 
-// Provision a FAT12 superfloppy only when sector 0 has no boot signature.
-// This is a one-time operation: never clear a signed existing volume.
-// Initialize the boot sector last, so an interrupted initialization retries.
-static bool MscDiskProvision(void)
-{
-	const uint16_t sectSize = s_Disk.GetSectSize();
-	const uint32_t nbSect = s_Disk.GetNbSect();
-	const uint16_t fatSect = (uint16_t)((((nbSect + 2U) * 3U + 1U) / 2U +
-		sectSize - 1U) / sectSize);
-	const uint32_t rootSect = FATFS_RSVDSECCNT_FAT16 +
-		(uint32_t)FATFS_NBFAT * fatSect;
-	const uint32_t rootCount = sectSize / 32U;
-
-	if (!s_Disk.SectRead(0, s_SectorBuffer))
-	{
-		return false;
-	}
-	if (s_SectorBuffer[510] == 0x55 && s_SectorBuffer[511] == 0xAA)
-	{
-		// Do not silently overwrite a volume with an incompatible sector size.
-		return s_SectorBuffer[11] == (uint8_t)sectSize &&
-			s_SectorBuffer[12] == (uint8_t)(sectSize >> 8);
-	}
-	if (nbSect < rootSect + 2U || nbSect > 4084U || sectSize != 512U)
-	{
-		return false;
-	}
-
-	for (uint32_t i = 0; i < (uint32_t)FATFS_NBFAT * fatSect; i++)
-	{
-		memset(s_SectorBuffer, 0, sectSize);
-		if (i % fatSect == 0)
-		{
-			s_SectorBuffer[0] = FATFS_MEDIA_FIXED;
-			s_SectorBuffer[1] = 0xFF;
-			s_SectorBuffer[2] = 0xFF;
-		}
-		if (!s_Disk.SectWrite(FATFS_RSVDSECCNT_FAT16 + i, s_SectorBuffer))
-		{
-			return false;
-		}
-	}
-
-	memset(s_SectorBuffer, 0, sectSize);
-	memcpy(s_SectorBuffer, "IOSONATA   ", 11);
-	s_SectorBuffer[11] = FATFS_DIRATTR_VOLUME_ID;
-	if (!s_Disk.SectWrite(rootSect, s_SectorBuffer))
-	{
-		return false;
-	}
-
-	FATFS_BSBPB *pBoot = reinterpret_cast<FATFS_BSBPB *>(s_SectorBuffer);
-
-	memset(s_SectorBuffer, 0, sectSize);
-	pBoot->JmpBoot[0] = 0xEB;
-	pBoot->JmpBoot[1] = 0x3C;
-	pBoot->JmpBoot[2] = 0x90;
-	memcpy(pBoot->OEMName, "IOsonata", sizeof(pBoot->OEMName));
-	pBoot->BytsPerSec = sectSize;
-	pBoot->SecPerClus = 1;
-	pBoot->RsvdSecCnt = FATFS_RSVDSECCNT_FAT16;
-	pBoot->NumFATs = FATFS_NBFAT;
-	pBoot->RootEntCnt = rootCount;
-	pBoot->TotSec16 = (uint16_t)nbSect;
-	pBoot->Media = FATFS_MEDIA_FIXED;
-	pBoot->FATSz16 = fatSect;
-	pBoot->SecPerTrk = 32;
-	pBoot->NumHeads = 1;
-	pBoot->BPB.Bpb16.DrvNum = 0x80;
-	pBoot->BPB.Bpb16.BootSig = 0x29;
-	pBoot->BPB.Bpb16.VolID = 0x4E534F49;
-	memcpy(pBoot->BPB.Bpb16.VolLab, "IOSONATA   ", 11);
-	memcpy(pBoot->BPB.Bpb16.FilSysType, "FAT12   ", 8);
-	pBoot->Signature_word[0] = 0x55;
-	pBoot->Signature_word[1] = 0xAA;
-
-	if (!s_Disk.SectWrite(0, s_SectorBuffer))
-	{
-		return false;
-	}
-	if (!s_Disk.Commit())
-	{
-		return false;
-	}
-
-	// Verify the boot sector from physical flash, bypassing the page cache.
-	uint8_t verify[512];
-	if (s_Nvm.Read(0, verify, sizeof(verify)) != (int)sizeof(verify))
-	{
-		return false;
-	}
-	return memcmp(verify, s_SectorBuffer, sizeof(verify)) == 0;
-}
-
 int main(void)
 {
 	NvmCfg_t cfg = {};
@@ -230,7 +134,7 @@ int main(void)
 	{
 		return -1;
 	}
-	if (!MscDiskProvision())
+	if (!Fat12ProvisionIfBlank(s_Disk, s_SectorBuffer, sizeof(s_SectorBuffer)))
 	{
 		return -1;
 	}
