@@ -1,6 +1,6 @@
 # Thingy:53 external flash test
 
-Build IOsonata_nRF5340_App and Thingy53NvmDemo with the same configuration
+Build IOsonata_nRF5340_App and NvmDemo with the same configuration
 in IOcomposer. Program the application-core ELF through an external SWD probe
 on P8. This standalone image replaces the application firmware.
 
