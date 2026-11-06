@@ -226,6 +226,15 @@ static std::vector<uint8_t> s_MemTx;
 static uint32_t s_MemAddr;
 static bool s_MemAddrSet;
 static int s_MemCmdBytes;
+static uint32_t s_MemChunkLimit = 64;
+static bool s_MemGrowAfterFirst = false;
+static uint32_t s_MemWriteChunks[16];
+static uint32_t s_MemWriteChunkCount = 0;
+
+static uint32_t MemWriteChunkLimit(void)
+{
+	return s_MemChunkLimit;
+}
 
 static uint8_t s_MemCtrlBig[256];
 
@@ -1440,6 +1449,15 @@ static int MemTxData(DevIntrf_t *, const uint8_t *pData, int Len)
 		return Len;
 	}
 
+	if (s_MemWriteChunkCount < 16U)
+	{
+		s_MemWriteChunks[s_MemWriteChunkCount++] = (uint32_t)Len;
+	}
+	if (s_MemGrowAfterFirst)
+	{
+		s_MemChunkLimit = 64U;
+		s_MemGrowAfterFirst = false;
+	}
 	for (int i = 0; i < Len; i++)
 	{
 		if (s_MemAddr < sizeof(s_Mem))
@@ -1512,6 +1530,33 @@ static void TestMemCtrl(void)
 	CHECK(memcmp(&s_Mem[0x400], s_MemCtrlBig, sizeof(s_MemCtrlBig)) == 0,
 		  "memctrl: every chunk landed at its own address");
 	CHECK(s_MemCmdBytes == 0, "memctrl: still no command traffic");
+
+	// The maximum transfer is storage geometry; the active bus/controller
+	// can lower its operation limit even after Nvm::Init(). Test a change
+	// during one synchronous write, without reconstructing the Nvm object.
+	cfg.GetWriteChunkSize = MemWriteChunkLimit;
+	Nvm dynamic;
+	CHECK(dynamic.Init(cfg, &bus), "memctrl: dynamic chunk init");
+	s_MemWriteChunkCount = 0;
+	s_MemChunkLimit = 16U;
+	s_MemGrowAfterFirst = true;
+	CHECK(dynamic.Write(0x800, s_MemCtrlBig, 160U) == 160,
+		"memctrl: dynamic write follows active chunk limit");
+	CHECK(s_MemWriteChunkCount == 4U,
+		"memctrl: changed chunk limit updates next transfer");
+	CHECK(s_MemWriteChunks[0] == 16U && s_MemWriteChunks[1] == 64U &&
+		s_MemWriteChunks[2] == 64U && s_MemWriteChunks[3] == 16U,
+		"memctrl: chunk lengths 16/64/64/16");
+	CHECK(memcmp(&s_Mem[0x800], s_MemCtrlBig, 160U) == 0,
+		"memctrl: changing chunk limit preserves data");
+	s_MemWriteChunkCount = 0;
+	s_MemChunkLimit = 32U;
+	CHECK(dynamic.Write(0x900, s_MemCtrlBig, 128U) == 128,
+		"memctrl: callback applies again on later write");
+	CHECK(s_MemWriteChunkCount == 4U &&
+		s_MemWriteChunks[0] == 32U && s_MemWriteChunks[3] == 32U,
+		"memctrl: later write uses 32-byte limit");
+	s_MemChunkLimit = 64U;
 
 	// A mass erase is a command and this medium has no command protocol, so
 	// there is no way to ask for one. The chip erase opcode went out as a
