@@ -48,7 +48,10 @@ For a sector disk on reserved internal flash, `NvmMcuDiskInit()` in
 The caller owns the interface, NVM driver, disk adapter and any erase-unit
 scratch buffer for their entire use. For 512-byte logical sectors on a
 4096-byte erase-page device, pass a separate aligned 4096-byte scratch
-buffer. This helper does not format, mount, erase or initialize USB MSC.
+buffer. Enable the optional write-cache parameter to coalesce writes to
+the same erase page until Commit() or page eviction. Commit() returns false
+on flash write failure; MSC invokes it before acknowledging completed writes.
+The helper does not format, mount, erase or initialize USB MSC.
 The interface, NVM object and any asynchronous buffers must outlive operations.
 External memory may also use `Nvm::Init(cfg, &interface, regionOffset, regionSize)`
 to select a smaller area of an otherwise dedicated memory chip.
