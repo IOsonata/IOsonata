@@ -20,6 +20,18 @@ source, count = re.subn(r'#define NRF54_USBD_REG\(ofs\) \\\n[^\n]+',
 assert count == 1
 source = source.replace('volatile uint32_t *pReg', 'Register *pReg')
 source = source.replace('volatile uint32_t *pCtl', 'Register *pCtl')
+# The MCU uses 32-bit DMA pointers. On a 64-bit macOS host the static EP0
+# buffer may be above 4 GiB even with -no_pie. Reconstruct the pointer from
+# the low 32-bit DMA register and the known static buffer base in this host
+# register model only. Keep the production bounds check intact.
+dma_address = 'const uintptr_t addr = (uintptr_t)NRF54_USBD_DOEPDMA(0) - sizeof(s_Setup);'
+assert source.count(dma_address) == 1
+source = source.replace(
+    dma_address,
+    'const uintptr_t addr = (uintptr_t)s_Ep0Bounce + '
+    '(uint32_t)((uint32_t)NRF54_USBD_DOEPDMA(0) - '
+    '(uint32_t)(uintptr_t)s_Ep0Bounce - sizeof(s_Setup));'
+)
 
 NRF = r'''
 #pragma once
