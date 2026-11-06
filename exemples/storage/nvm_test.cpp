@@ -1534,6 +1534,7 @@ static void TestMemCtrl(void)
 	// The maximum transfer is storage geometry; the active bus/controller
 	// can lower its operation limit even after Nvm::Init(). Test a change
 	// during one synchronous write, without reconstructing the Nvm object.
+	cfg.PageSize = 256U;
 	cfg.GetWriteChunkSize = MemWriteChunkLimit;
 	Nvm dynamic;
 	CHECK(dynamic.Init(cfg, &bus), "memctrl: dynamic chunk init");
