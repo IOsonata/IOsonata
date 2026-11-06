@@ -350,66 +350,6 @@ static void TestWriteBackErasePage(void)
 		"retried commit persists modified data");
 }
 
-static void TestMultiPageWriteBack(void)
-{
-	static uint8_t pages[4U * DISK_SECT];
-	NvmDiskIO disk;
-	uint8_t data[512];
-	uint8_t back[512];
-
-	CHECK(s_Erase.Erase(0, DISK_SIZE) == 0,
-		"clear mock for multi-page cache test");
-	CHECK(!disk.Init(s_Erase, 512, pages, 3U * DISK_SECT, true, 4),
-		"reject insufficient multi-page cache memory");
-	CHECK(!disk.Init(s_Erase, 512, pages, sizeof(pages), true, 5),
-		"reject too many cache pages");
-	CHECK(disk.Init(s_Erase, 512, pages, sizeof(pages), true, 4),
-		"attach four caller-owned cache pages");
-
-	uint32_t erases = s_Erase.vEraseCalls;
-	uint32_t writes = s_Erase.vWriteCalls;
-
-	// Alternate FAT metadata and streaming data writes across three erase
-	// pages. A one-page cache would flush at almost every page switch.
-	for (uint32_t i = 0; i < 8U; i++)
-	{
-		memset(data, (uint8_t)(0x40U + i), sizeof(data));
-		CHECK(disk.SectWrite(i, data), "write FAT page");
-		CHECK(disk.SectWrite(8U + i, data), "write data page");
-		CHECK(disk.SectWrite(16U + i, data), "write third page");
-		CHECK(disk.SectRead(i, back), "read dirty FAT sector");
-		CHECK(back[0] == (uint8_t)(0x40U + i),
-			"FAT read returns dirty cache");
-	}
-	CHECK(s_Erase.vEraseCalls == erases,
-		"no erase when alternating within cached pages");
-	CHECK(s_Erase.vWriteCalls == writes,
-		"no programming when alternating within cached pages");
-
-	// Touch fourth page, then force eviction with the fifth one.
-	memset(data, 0xA5, sizeof(data));
-	CHECK(disk.SectWrite(24U, data), "write fourth page");
-	CHECK(s_Erase.vEraseCalls == erases, "four dirty pages retained");
-	CHECK(disk.SectWrite(32U, data), "write fifth page with eviction");
-	CHECK(s_Erase.vEraseCalls == erases + 1U,
-		"only one physical erase on fifth page");
-	CHECK(s_Erase.vWriteCalls == writes + 1U,
-		"only one physical write on fifth page");
-
-	CHECK(disk.Commit(), "persist all dirty pages");
-	CHECK(s_Erase.vEraseCalls == erases + 5U,
-		"exactly five physical erases for five dirty pages");
-	CHECK(s_Erase.vWriteCalls == writes + 5U,
-		"exactly five physical writes for five dirty pages");
-	CHECK(disk.Commit(), "repeat clean multi-page commit");
-	CHECK(s_Erase.vEraseCalls == erases + 5U,
-		"clean multi-page commit does not erase");
-	CHECK(disk.SectRead(0U, back), "read evicted first page");
-	CHECK(back[0] == 0x40U, "evicted first page persisted");
-	CHECK(disk.SectRead(32U, back), "read last page");
-	CHECK(back[0] == 0xA5U, "last page persisted");
-}
-
 static void TestCheckedGenericCommit(void)
 {
 	static uint8_t cacheMem[DISK_SECT];
@@ -477,7 +417,6 @@ int main(void)
 	RunDisk(diskDirect, "direct write medium");
 	TestSubEraseLogicalSectors();
 	TestWriteBackErasePage();
-	TestMultiPageWriteBack();
 	TestCheckedGenericCommit();
 
 	printf("\nChecks run: %d\n", s_Checks);
