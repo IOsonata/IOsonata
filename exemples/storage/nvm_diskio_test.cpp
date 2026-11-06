@@ -77,6 +77,8 @@ static int s_Checks = 0;
 class EraseNvm : public Nvm {
 public:
 	uint8_t vBuf[DISK_SIZE];
+	uint32_t vEraseCalls = 0;
+	uint32_t vWriteCalls = 0;
 
 	EraseNvm() { memset(vBuf, 0xFF, sizeof(vBuf)); Region(0, sizeof(vBuf)); }
 
@@ -93,6 +95,7 @@ public:
 	int Write(uint64_t Off, const void *pData, uint32_t Len) override
 	{
 		if (!RangeValid(Off, Len)) { return -EINVAL; }
+		vWriteCalls++;
 		const uint8_t *p = (const uint8_t *)pData;
 		for (uint32_t i = 0; i < Len; i++)
 		{
@@ -105,6 +108,7 @@ public:
 	{
 		if (!RangeValid(Off, Len)) { return -EINVAL; }
 		if ((Off % DISK_SECT) != 0 || (Len % DISK_SECT) != 0) { return -EINVAL; }
+		vEraseCalls++;
 		memset(vBuf + Off, 0xFF, Len);
 		return 0;
 	}
@@ -240,6 +244,11 @@ static void TestSubEraseLogicalSectors(void)
 	CHECK(disk.SectWrite(6, data), "write logical sector 6");
 	memset(data, 0xA5, sizeof(data));
 	CHECK(disk.SectWrite(7, data), "write logical sector 7");
+	uint32_t erases = s_Erase.vEraseCalls;
+	uint32_t writes = s_Erase.vWriteCalls;
+	CHECK(disk.SectWrite(7, data), "repeat identical logical sector");
+	CHECK(s_Erase.vEraseCalls == erases, "unchanged sector does not erase");
+	CHECK(s_Erase.vWriteCalls == writes, "unchanged sector does not program");
 	memset(back, 0, sizeof(back));
 	CHECK(disk.SectRead(6, back), "read previous logical sector");
 	for (unsigned i = 0; i < sizeof(back); i++)
