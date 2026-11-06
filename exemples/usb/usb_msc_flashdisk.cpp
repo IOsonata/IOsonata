@@ -140,18 +140,18 @@ int main(void)
 	FatFsMountCfg_t fsCfg = {};
 	fsCfg.pDisk = &s_Disk;
 	fsCfg.pFatFs = &s_FatFs;
-	// Debug NVM1 may be blank at its start while the former Release
-	// layout still contains files farther into this reserved region.
-	fsCfg.bFormatIfBootBlank = true;
+	// This example's disk is disposable. Reject a corrupt FAT table and
+	// explicitly provision a new volume when the existing layout is invalid.
+	// Switching Debug/Release regions can overwrite files in their overlap.
+	fsCfg.bValidateOnMount = true;
+	fsCfg.bFormatIfInvalid = true;
 	fsCfg.pWork = s_SectorBuffer;
 	fsCfg.WorkSize = sizeof(s_SectorBuffer);
 	fsCfg.pLabelIfUnnamed = "0:IOSONATA";
 
-	// A nonblank disk with an older sector layout may not mount here.
-	// Never erase it or prevent the USB block device from enumerating.
-	// The host may inspect or migrate that volume explicitly.
+	// Do not advertise a volume whose filesystem failed verification.
 	FRESULT fsRes = FatFsMount(fsCfg);
-	if (fsRes != FR_OK && fsRes != FR_NO_FILESYSTEM)
+	if (fsRes != FR_OK)
 	{
 		return -1;
 	}
