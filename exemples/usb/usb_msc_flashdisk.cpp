@@ -12,10 +12,9 @@ The content stays across resets and power cycles. This example exports raw
 reserved flash sectors unchanged. A filesystem is provisioned separately;
 startup never formats or erases existing data.
 
-The host sees 512-byte logical sectors. NvmDiskIO preserves neighboring
-sectors with a caller-owned 4 KiB erase-page scratch buffer. Each 512-byte
-sector write currently causes a full erase-page read/modify/write; there is no
-write-back coalescing or wear levelling. USB processing writes synchronously.
+The host sees 512-byte logical sectors. NvmDiskIO caches one 4 KiB erase
+page in caller-owned RAM. Writes to that page are coalesced and committed
+before MSC acknowledges WRITE(10). There is no wear levelling.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 4, 2026
@@ -47,7 +46,8 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 
-#include "storage/nvm_mcu_disk.h"
+#include "storage/diskio_nvm.h"
+#include "storage/nvm_mcu_intrf.h"
 #include "app_evt_handler.h"
 #include "usb/usb.h"
 #if __has_include("board.h")
@@ -115,8 +115,22 @@ static const UsbdMscCfg_t s_MscCfg = {
 
 int main(void)
 {
-	if (!NvmMcuDiskInit(s_Disk, s_Nvm, s_MemIntrf, MSC_NVM_REGION,
-			MSC_SECTOR_BUFF_SIZE, s_EraseWork, sizeof(s_EraseWork), true))
+	NvmCfg_t cfg = {};
+
+	if (!NvmMcuCfgInit(cfg, MSC_NVM_REGION))
+	{
+		return -1;
+	}
+	if (!s_MemIntrf.Init())
+	{
+		return -1;
+	}
+	if (!s_Nvm.Init(cfg, &s_MemIntrf))
+	{
+		return -1;
+	}
+	if (!s_Disk.Init(s_Nvm, MSC_SECTOR_BUFF_SIZE, s_EraseWork,
+			sizeof(s_EraseWork), true))
 	{
 		return -1;
 	}
