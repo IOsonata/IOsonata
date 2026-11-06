@@ -560,9 +560,9 @@ firmware, settings, a production filesystem or Bluetooth bond storage. RAM-disk
 contents are lost when USB bus power is removed.
 
 The USB flash-disk example exposes raw sectors from a linker-reserved
-internal NVM region through `NvmDiskIO`. The generic
-`NvmMcuDiskInit()` helper binds the MCU NVM interface, driver and block
-adapter; it has no USB or filesystem dependencies.
+internal NVM region through `NvmDiskIO`. It initializes `NvmMcuIntrf`,
+`Nvm` and `NvmDiskIO` through their existing APIs; there is no dedicated
+USB or MCU flash-disk helper.
 
 The example does not format, erase, scan or mount the volume at startup.
 A new device with erased flash must be explicitly partitioned/formatted by
