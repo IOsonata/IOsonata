@@ -270,6 +270,55 @@ static void TestSubEraseLogicalSectors(void)
 	CHECK(back[0] == 0xA5, "previous physical page preserved");
 }
 
+static void TestWriteBackErasePage(void)
+{
+	static uint8_t page[DISK_SECT];
+	NvmDiskIO disk;
+	uint8_t data[512];
+	uint8_t back[512];
+	uint64_t pageOff = 2U * DISK_SECT;
+
+	CHECK(s_Erase.Erase(0, DISK_SIZE) == 0, "clear mock for cached test");
+	CHECK(disk.Init(s_Erase, 512, page, sizeof(page), true),
+		"initialize opt-in one-page cache");
+	uint32_t erases = s_Erase.vEraseCalls;
+	uint32_t writes = s_Erase.vWriteCalls;
+
+	for (int i = 0; i < 8; i++)
+	{
+		memset(data, (uint8_t)(i + 21), sizeof(data));
+		CHECK(disk.SectWrite(16U + i, data), "cache logical sector");
+	}
+	CHECK(s_Erase.vEraseCalls == erases, "no erase before commit");
+	CHECK(s_Erase.vWriteCalls == writes, "no flash write before commit");
+	CHECK(disk.SectRead(17U, back), "read dirty sector from RAM cache");
+	CHECK(back[0] == 22, "cached read sees pending write");
+	CHECK(s_Erase.vBuf[pageOff + 512U] == 0xFF,
+		"underlying flash unchanged before commit");
+
+	CHECK(disk.Commit(), "commit cached erase page");
+	CHECK(s_Erase.vEraseCalls == erases + 1U,
+		"eight logical sectors require one physical erase");
+	CHECK(s_Erase.vWriteCalls == writes + 1U,
+		"eight logical sectors require one physical write");
+	CHECK(s_Erase.vBuf[pageOff + 512U] == 22,
+		"committed contents persisted to backing store");
+	CHECK(disk.Commit(), "repeated commit succeeds");
+	CHECK(s_Erase.vEraseCalls == erases + 1U,
+		"clean commit does not erase");
+
+	memset(data, 0x99, sizeof(data));
+	CHECK(disk.SectWrite(16U, data), "cache updated sector");
+	CHECK(disk.SectWrite(24U, data), "switch to next erase page");
+	CHECK(s_Erase.vEraseCalls == erases + 2U,
+		"page eviction commits dirty previous page");
+	CHECK(s_Erase.vBuf[pageOff] == 0x99,
+		"eviction retains changed sector");
+	CHECK(disk.Commit(), "commit second erase page");
+	CHECK(s_Erase.vEraseCalls == erases + 3U,
+		"commit newly loaded dirty page");
+}
+
 int main(void)
 {
 	NvmDiskIO diskErase;
