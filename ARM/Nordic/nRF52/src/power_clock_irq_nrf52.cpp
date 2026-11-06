@@ -40,9 +40,18 @@ SOFTWARE.
 
 #include "power_clock_irq_nrf52.h"
 
-// Weak references, null when the owner is not linked
-extern "C" void nRFClockIrqHandler(void) __attribute__((weak));
-extern "C" void nRFUsbPowerIrqHandler(void) __attribute__((weak));
+// Optional owners must be importable without a definition on Mach-O.
+// ELF uses weak references, while Mach-O requires weak_import.
+#if defined(__APPLE__)
+#define NRF_OPTIONAL_IRQ __attribute__((weak_import))
+#else
+#define NRF_OPTIONAL_IRQ __attribute__((weak))
+#endif
+
+extern "C" void nRFClockIrqHandler(void) NRF_OPTIONAL_IRQ;
+extern "C" void nRFUsbPowerIrqHandler(void) NRF_OPTIONAL_IRQ;
+
+#undef NRF_OPTIONAL_IRQ
 
 void nRFPowerClockIrqEnable(uint32_t Prio)
 {

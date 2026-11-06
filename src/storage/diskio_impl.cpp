@@ -98,14 +98,24 @@ int	DiskIO::GetCacheSect(uint32_t SectNo, bool bLock)
 			// Got unused cache
 
 		    // Flush cache is dirty
-		    if (vpCacheSect[vLastIdx].UseCnt & DISKIO_CACHE_DIRTY_BIT)
-		        SectWrite(vpCacheSect[vLastIdx].SectNo, vpCacheSect[vLastIdx].pSectData);
+			if (vpCacheSect[vLastIdx].UseCnt & DISKIO_CACHE_DIRTY_BIT)
+			{
+				if (!SectWrite(vpCacheSect[vLastIdx].SectNo,
+					vpCacheSect[vLastIdx].pSectData))
+				{
+					return -1;
+				}
+				vpCacheSect[vLastIdx].UseCnt &= ~DISKIO_CACHE_DIRTY_BIT;
+			}
 
-	        vpCacheSect[vLastIdx].UseCnt = 1;
+			if (!SectRead(SectNo, vpCacheSect[vLastIdx].pSectData))
+			{
+				vpCacheSect[vLastIdx].SectNo = (uint32_t)-1;
+				vpCacheSect[vLastIdx].UseCnt = 0;
+				return -1;
+			}
 
-	        // Fill cache
-			SectRead(SectNo, vpCacheSect[vLastIdx].pSectData);
-
+			vpCacheSect[vLastIdx].UseCnt = 1;
 			vpCacheSect[vLastIdx].SectNo = SectNo;
 			return vLastIdx;
 		}
@@ -127,9 +137,14 @@ int DiskIO::Read(uint32_t SectNo, uint32_t SectOffset, uint8_t *pBuff, uint32_t 
 	int idx = GetCacheSect(SectNo);
 	if (idx < 0)
 	{
+		// A configured cache may be unavailable because eviction failed.
+		// Never bypass dirty data after an unsuccessful cache operation.
+		if (vNbCache > 0)
+			return -1;
 	    // No cache, do physical read
 	    uint8_t d[sectsize];
-	    SectRead(SectNo, d);
+	    if (!SectRead(SectNo, d))
+			return -1;
 	    memcpy(pBuff, d + SectOffset, l);
 	}
 	else
@@ -182,11 +197,17 @@ int DiskIO::Write(uint32_t SectNo, uint32_t SectOffset, uint8_t *pData, uint32_t
 	int idx = GetCacheSect(SectNo, true);
 	if (idx < 0)
 	{
+		// A configured cache may be unavailable because eviction failed.
+		// Never bypass dirty data after an unsuccessful cache operation.
+		if (vNbCache > 0)
+			return -1;
 	    // No cache, do physical write
 	    uint8_t d[sectsize];
-	    SectRead(SectNo, d);
+	    if (!SectRead(SectNo, d))
+			return -1;
 	    memcpy(d + SectOffset, pData, l);
-	    SectWrite(SectNo, d);
+	    if (!SectWrite(SectNo, d))
+			return -1;
 	}
 	else
 	{
@@ -212,8 +233,10 @@ int DiskIO::Write(uint64_t Offset, uint8_t *pData, uint32_t Len)
 	while (Len > 0)
 	{
 		int l = Write(sectno, sectoff, pData, Len);
-		if (l < 0)
-			break;
+		if (l <= 0)
+		{
+			return retval > 0 ? (int)retval : -1;
+		}
 		pData += l;
 		Len -= l;
 		retval += l;
@@ -234,8 +257,26 @@ void DiskIO::Flush()
     {
         if (vpCacheSect[i].UseCnt & DISKIO_CACHE_DIRTY_BIT)
         {
-            SectWrite(vpCacheSect[i].SectNo, vpCacheSect[i].pSectData);
-            vpCacheSect[i].UseCnt &= ~DISKIO_CACHE_DIRTY_BIT;
+            if (SectWrite(vpCacheSect[i].SectNo, vpCacheSect[i].pSectData))
+                vpCacheSect[i].UseCnt &= ~DISKIO_CACHE_DIRTY_BIT;
         }
     }
+}
+
+// Checked counterpart to Flush(). Keep dirty entries when writes fail so
+// a caller can retry instead of reporting a successful synchronization.
+bool DiskIO::Commit(void)
+{
+	for (int i = 0; i < vNbCache; i++)
+	{
+		if (vpCacheSect[i].UseCnt & DISKIO_CACHE_DIRTY_BIT)
+		{
+			if (!SectWrite(vpCacheSect[i].SectNo, vpCacheSect[i].pSectData))
+			{
+				return false;
+			}
+			vpCacheSect[i].UseCnt &= ~DISKIO_CACHE_DIRTY_BIT;
+		}
+	}
+	return true;
 }

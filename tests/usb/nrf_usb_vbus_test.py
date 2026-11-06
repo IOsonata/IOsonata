@@ -78,14 +78,24 @@ void sd_power_usbremoved_enable(int) { ++s_SdCalls; }
 #ifdef WITH_SDH
 static bool s_SdEnabled;
 extern "C" bool nrf_sdh_is_enabled(void) { return s_SdEnabled; }
+#elif defined(__APPLE__)
+// Mach-O host model of a USB-only boot without the SDK SDH owner.
+// The production symbol is optional; this fallback reports SDH disabled.
+extern "C" bool nrf_sdh_is_enabled(void) { return false; }
 #endif
 #endif
 extern "C" void UsbProcessQue(int DevNo) { assert(DevNo == 0); s_Ques++; }
 #ifdef WITH_CLOCK
 void nRFClockIrqHandler(void) { s_Clock++; }
+#else
+// Host-only absent owner: Mach-O must resolve the optional symbol.
+void nRFClockIrqHandler(void) {}
 #endif
 #ifdef WITH_USB
 void nRFUsbdVbusIntInit(uint32_t Prio);
+#else
+// The USB owner is deliberately absent in clock-only test builds.
+void nRFUsbPowerIrqHandler(void) {}
 #endif
 extern "C" void POWER_CLOCK_IRQHandler(void);
 int main()

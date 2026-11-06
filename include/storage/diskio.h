@@ -174,6 +174,9 @@ public:
 	int	GetCacheSect(uint32_t SectNo, bool bLock = false);
 	void SetCache(DiskIOCache_t * const pCacheBlk, int NbCacheBlk);
 	void Flush();
+	// Commit pending medium writes and report failures to protocol clients.
+	// Existing DiskIO implementations without deferred writes use Flush().
+	virtual bool Commit(void);
 
 protected:
 	DISKIO_TYPE vType;

@@ -366,6 +366,15 @@ static int UsbdMscDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 
 static void UsbdMscFinishCommand(UsbdMscDev_t *pMsc)
 {
+	// Finish pending WRITE(10) sectors even after a command error so a
+	// failed partial transfer cannot leave dirty data for a later command.
+	// Successful CSWs require the whole write to be committed.
+	if (pMsc->Cbw.CBWCB[0] == USB_MSC_SCSI_WRITE_10 &&
+		!pMsc->pDisk->Commit())
+	{
+		UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
+			USB_MSC_ASC_WRITE_ERROR);
+	}
 	// Copied as a word: a constant assigned to the packed field is expanded
 	// into byte stores.
 	const uint32_t signature = USB_MSC_CSW_SIGNATURE;
@@ -679,7 +688,12 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			}
 			else
 			{
-				pMsc->pDisk->Flush();
+				if (!pMsc->pDisk->Commit())
+				{
+					UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
+						USB_MSC_ASC_WRITE_ERROR);
+					return USBD_MSC_DATA_NONE;
+				}
 				pMsc->bMediumReady = false;
 				if ((cdb[4] & 2U) != 0U)
 				{
@@ -708,7 +722,11 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			}
 			else if (UsbdMscMediumReady(pMsc))
 			{
-				pMsc->pDisk->Flush();
+				if (!pMsc->pDisk->Commit())
+				{
+					UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
+						USB_MSC_ASC_WRITE_ERROR);
+				}
 			}
 			return USBD_MSC_DATA_NONE;
 
@@ -1213,7 +1231,7 @@ void UsbdMsc::Detach(void)
 {
 	if (vUsbdMsc.pDisk != nullptr)
 	{
-		vUsbdMsc.pDisk->Flush();
+		(void)vUsbdMsc.pDisk->Commit();
 		vUsbdMsc.pDisk->Reset();
 	}
 	vUsbdMsc.bMediumPresent = true;

@@ -10,6 +10,7 @@ from pathlib import Path
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +20,18 @@ source, count = re.subn(r'#define NRF54_USBD_REG\(ofs\) \\\n[^\n]+',
 assert count == 1
 source = source.replace('volatile uint32_t *pReg', 'Register *pReg')
 source = source.replace('volatile uint32_t *pCtl', 'Register *pCtl')
+# The MCU uses 32-bit DMA pointers. On a 64-bit macOS host the static EP0
+# buffer may be above 4 GiB even with -no_pie. Reconstruct the pointer from
+# the low 32-bit DMA register and the known static buffer base in this host
+# register model only. Keep the production bounds check intact.
+dma_address = 'const uintptr_t addr = (uintptr_t)NRF54_USBD_DOEPDMA(0) - sizeof(s_Setup);'
+assert source.count(dma_address) == 1
+source = source.replace(
+    dma_address,
+    'const uintptr_t addr = (uintptr_t)s_Ep0Bounce + '
+    '(uint32_t)((uint32_t)NRF54_USBD_DOEPDMA(0) - '
+    '(uint32_t)(uintptr_t)s_Ep0Bounce - sizeof(s_Setup));'
+)
 
 NRF = r'''
 #pragma once
@@ -430,10 +443,11 @@ with tempfile.TemporaryDirectory(prefix='iosonata-nrf54-usb-') as tmp:
     binary = tmp / 'test'
     path.write_text(MODEL + '\n' + source + '\n' + TEST)
     # DeviceIntrf uses GNU C++ variable-length arrays; keep that extension enabled.
-    # Non-PIE keeps static DMA pointers representable in the MCU's 32-bit registers.
+    # Select the native host linker flag for non-PIE test executables.
+    nonpie = ['-Wl,-no_pie'] if sys.platform == 'darwin' else ['-no-pie']
     subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O1', '-g',
                     '-x', 'c++', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', '-Wno-vla',
-                    '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
+                    '-fsanitize=undefined', '-fno-sanitize-recover=all', *nonpie,
                     '-I' + str(tmp), '-I' + str(ROOT / 'include'),
                     '-I' + str(ROOT / 'ARM/Nordic/include'),
                     str(path), str(ROOT / 'src/usb/usb_intrf.cpp'),

@@ -77,6 +77,9 @@ static int s_Checks = 0;
 class EraseNvm : public Nvm {
 public:
 	uint8_t vBuf[DISK_SIZE];
+	uint32_t vEraseCalls = 0;
+	uint32_t vWriteCalls = 0;
+	bool vbFailErase = false;
 
 	EraseNvm() { memset(vBuf, 0xFF, sizeof(vBuf)); Region(0, sizeof(vBuf)); }
 
@@ -93,6 +96,7 @@ public:
 	int Write(uint64_t Off, const void *pData, uint32_t Len) override
 	{
 		if (!RangeValid(Off, Len)) { return -EINVAL; }
+		vWriteCalls++;
 		const uint8_t *p = (const uint8_t *)pData;
 		for (uint32_t i = 0; i < Len; i++)
 		{
@@ -105,6 +109,8 @@ public:
 	{
 		if (!RangeValid(Off, Len)) { return -EINVAL; }
 		if ((Off % DISK_SECT) != 0 || (Len % DISK_SECT) != 0) { return -EINVAL; }
+		if (vbFailErase) { return -EIO; }
+		vEraseCalls++;
 		memset(vBuf + Off, 0xFF, Len);
 		return 0;
 	}
@@ -240,6 +246,11 @@ static void TestSubEraseLogicalSectors(void)
 	CHECK(disk.SectWrite(6, data), "write logical sector 6");
 	memset(data, 0xA5, sizeof(data));
 	CHECK(disk.SectWrite(7, data), "write logical sector 7");
+	uint32_t erases = s_Erase.vEraseCalls;
+	uint32_t writes = s_Erase.vWriteCalls;
+	CHECK(disk.SectWrite(7, data), "repeat identical logical sector");
+	CHECK(s_Erase.vEraseCalls == erases, "unchanged sector does not erase");
+	CHECK(s_Erase.vWriteCalls == writes, "unchanged sector does not program");
 	memset(back, 0, sizeof(back));
 	CHECK(disk.SectRead(6, back), "read previous logical sector");
 	for (unsigned i = 0; i < sizeof(back); i++)
@@ -259,6 +270,110 @@ static void TestSubEraseLogicalSectors(void)
 	CHECK(disk.SectWrite(8, data), "write next physical erase page");
 	CHECK(disk.SectRead(7, back), "read previous physical erase page");
 	CHECK(back[0] == 0xA5, "previous physical page preserved");
+}
+
+static void TestWriteBackErasePage(void)
+{
+	static uint8_t page[DISK_SECT];
+	NvmDiskIO disk;
+	uint8_t data[512];
+	uint8_t back[512];
+	uint64_t pageOff = 2U * DISK_SECT;
+
+	CHECK(s_Erase.Erase(0, DISK_SIZE) == 0, "clear mock for cached test");
+	CHECK(disk.Init(s_Erase, 512, page, sizeof(page), true),
+		"initialize opt-in one-page cache");
+	uint32_t erases = s_Erase.vEraseCalls;
+	uint32_t writes = s_Erase.vWriteCalls;
+
+	for (int i = 0; i < 8; i++)
+	{
+		memset(data, (uint8_t)(i + 21), sizeof(data));
+		CHECK(disk.SectWrite(16U + i, data), "cache logical sector");
+	}
+	CHECK(s_Erase.vEraseCalls == erases, "no erase before commit");
+	CHECK(s_Erase.vWriteCalls == writes, "no flash write before commit");
+	CHECK(disk.SectRead(17U, back), "read dirty sector from RAM cache");
+	CHECK(back[0] == 22, "cached read sees pending write");
+	CHECK(s_Erase.vBuf[pageOff + 512U] == 0xFF,
+		"underlying flash unchanged before commit");
+
+	CHECK(disk.Commit(), "commit cached erase page");
+	CHECK(s_Erase.vEraseCalls == erases + 1U,
+		"eight logical sectors require one physical erase");
+	CHECK(s_Erase.vWriteCalls == writes + 1U,
+		"eight logical sectors require one physical write");
+	CHECK(s_Erase.vBuf[pageOff + 512U] == 22,
+		"committed contents persisted to backing store");
+	CHECK(disk.Commit(), "repeated commit succeeds");
+	CHECK(s_Erase.vEraseCalls == erases + 1U,
+		"clean commit does not erase");
+
+	memset(data, 0x99, sizeof(data));
+	CHECK(disk.SectWrite(16U, data), "cache updated sector");
+	CHECK(disk.SectWrite(24U, data), "switch to next erase page");
+	CHECK(s_Erase.vEraseCalls == erases + 2U,
+		"page eviction commits dirty previous page");
+	CHECK(s_Erase.vBuf[pageOff] == 0x99,
+		"eviction retains changed sector");
+	CHECK(disk.Commit(), "commit second erase page");
+	CHECK(s_Erase.vEraseCalls == erases + 3U,
+		"commit newly loaded dirty page");
+
+	memset(data, 0xB6, sizeof(data));
+	CHECK(disk.SectWrite(24U, data), "cache write for failure test");
+	s_Erase.vbFailErase = true;
+	CHECK(!disk.Commit(), "failed erase is reported by Commit");
+	CHECK(!disk.SectWrite(32U, data),
+		"failed eviction does not switch cache pages");
+	CHECK(disk.SectRead(24U, back), "failed commit retains dirty data");
+	CHECK(back[0] == 0xB6, "failed commit retains modified sector");
+	s_Erase.vbFailErase = false;
+	CHECK(disk.Commit(), "retry failed commit");
+	CHECK(s_Erase.vBuf[3U * DISK_SECT] == 0xB6,
+		"retried commit persists modified data");
+}
+
+static void TestCheckedGenericCommit(void)
+{
+	static uint8_t cacheMem[DISK_SECT];
+	static DiskIOCache_t cache = { 0, 0xFFFFFFFF, cacheMem };
+	NvmDiskIO disk;
+	uint8_t data[32];
+	uint8_t back[32];
+
+	CHECK(s_Erase.Erase(0, DISK_SIZE) == 0, "clear mock for checked commit");
+	CHECK(disk.Init(s_Erase), "initialize uncached NVM sector device");
+	disk.SetCache(&cache, 1);
+	memset(data, 0x42, sizeof(data));
+	CHECK(disk.Write((uint64_t)16U, data, sizeof(data)) ==
+		(int)sizeof(data), "populate generic RAM sector cache");
+
+	s_Erase.vbFailErase = true;
+	CHECK(!disk.Commit(), "generic cached write failure reported");
+	s_Erase.vbFailErase = false;
+	CHECK(disk.Commit(), "generic failed cached write can be retried");
+	CHECK(disk.SectRead(0U, cacheMem), "read committed physical sector");
+	memcpy(back, cacheMem + 16U, sizeof(back));
+	CHECK(memcmp(data, back, sizeof(data)) == 0,
+		"generic committed data is persistent");
+
+	memset(data, 0x5C, sizeof(data));
+	CHECK(disk.Write((uint64_t)16U, data, sizeof(data)) ==
+		(int)sizeof(data), "update generic cached sector");
+	s_Erase.vbFailErase = true;
+	CHECK(disk.Write((uint64_t)DISK_SECT + 16U, data,
+		sizeof(data)) == -1, "failed eviction propagates to caller");
+	CHECK(disk.Read((uint64_t)16U, back, sizeof(back)) ==
+		(int)sizeof(back), "failed eviction retains cached sector");
+	CHECK(memcmp(data, back, sizeof(back)) == 0,
+		"failed eviction keeps modified data");
+	s_Erase.vbFailErase = false;
+	CHECK(disk.Commit(), "recover after failed generic eviction");
+	CHECK(disk.Read((uint64_t)16U, back, sizeof(back)) ==
+		(int)sizeof(back), "read recovered data");
+	CHECK(memcmp(data, back, sizeof(back)) == 0,
+		"recovered data intact");
 }
 
 int main(void)
@@ -285,6 +400,8 @@ int main(void)
 	RunDisk(diskErase, "erase-write medium");
 	RunDisk(diskDirect, "direct write medium");
 	TestSubEraseLogicalSectors();
+	TestWriteBackErasePage();
+	TestCheckedGenericCommit();
 
 	printf("\nChecks run: %d\n", s_Checks);
 	if (s_Fail == 0)

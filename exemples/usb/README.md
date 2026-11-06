@@ -28,7 +28,7 @@ configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 | [usb_int_loopback.cpp](usb_int_loopback.cpp) | UsbIntLoopback/ioc | `UsbdInt` alternate settings |
 | [usb_iso_loopback.cpp](usb_iso_loopback.cpp) | UsbIsoLoopback/ioc | `UsbdIso` alternate settings |
 | [usb_msc_ramdisk.cpp](usb_msc_ramdisk.cpp) | UsbMscRamDisk/ioc | Disposable 64 KiB FAT12 RAM disk |
-| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT disk on internal flash: 832 KiB in bare-metal `Debug`, 256 KiB in `Release`, or 832 KiB in `Release_mbr` |
+| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT12 disk with 512-byte logical sectors on reserved internal flash: 832 KiB in bare-metal `Debug`, 256 KiB in `Release`, or 832 KiB in `Release_mbr`; provisions FAT12 on first use |
 
 Use the [USB User Guide](../../docs/usb-user-guide.md) for dependency
 installation, host commands, buffer ownership and reconnect behavior.
@@ -125,20 +125,23 @@ size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
 removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
 USB descriptors; filesystem initialization belongs to the storage layer.
 
-The flash disk example uses current NvmMcuCfgInit, Nvm and NvmDiskIO
-APIs over the linker-reserved NVM1 region. Debug reserves 832 KiB
-at 0x30000-0xFFFFF; Release reserves 256 KiB at 0xC0000-0xFFFFF;
-Release_mbr reserves 832 KiB at 0x10000-0xDFFFF under the SDK USB
-DFU bootloader. These variants do not share a disk starting address.
+The flash disk example initializes `NvmMcuIntrf`, `Nvm`, and
+`NvmDiskIO` through their existing APIs over linker-reserved NVM1.
+Debug reserves 832 KiB at 0x30000-0xFFFFF; Release reserves 256 KiB at
+0xC0000-0xFFFFF; Release_mbr reserves 832 KiB at 0x10000-0xDFFFF under
+the SDK USB DFU bootloader. These variants have different start addresses.
 
-The example restores the original direct FAT12 initializer. The
-USB host sees native 4096-byte sectors in all three layouts.
-Startup reads only sector zero. An existing 55AA-signed disk is
-preserved; an uninitialized disk receives two FAT copies, an
-IOSONATA volume-label directory entry and the boot sector last.
-There is no full-disk blank scan, whole-region erase or 512-byte
-flash read/modify/write amplification. The example is intended
-for disposable data; it does not implement wear levelling.
+The host sees 512-byte sectors. A caller-owned aligned 4096-byte scratch
+buffer lets `NvmDiskIO` preserve neighboring sectors in each physical
+flash erase page. With the opt-in erase-page cache, adjacent writes in one WRITE(10)
+command can be coalesced into a single erase/program cycle. UsbdMsc
+commits before sending success and on synchronization/eject; there is
+no wear levelling or power-fail atomicity.
+
+The example provisions FAT12 metadata when sector zero has no boot
+signature; the boot sector is written last and committed before USB starts.
+A signed existing 512-byte-sector volume is preserved. Incompatible signed
+volumes are rejected rather than overwritten.
 
 Generic FatFsMount/FatFsUnmount remains available to firmware
 through DiskIO and is independent of USB MSC. The USB disk example

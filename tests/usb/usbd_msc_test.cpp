@@ -64,6 +64,10 @@ public:
 		memcpy(Data[SectNo], pData, SECTOR_SIZE);
 		return true;
 	}
+	bool Commit(void) override {
+		CommitCount++;
+		return !FailCommit;
+	}
 	void Reset(void) override { ResetCount++; }
 
 	void Fill(void) {
@@ -76,12 +80,16 @@ public:
 		}
 		FailRead = false;
 		FailWrite = false;
+		FailCommit = false;
+		CommitCount = 0;
 		ResetCount = 0;
 	}
 
 	uint8_t Data[SECTOR_COUNT][SECTOR_SIZE] = {};
 	bool FailRead = false;
 	bool FailWrite = false;
+	bool FailCommit = false;
+	int CommitCount = 0;
 	int ResetCount = 0;
 };
 
@@ -612,6 +620,7 @@ static void TestReadWriteAndRepeatedCommands(void)
 	CHECK(memcmp(disk.Data[4], writeData, SECTOR_SIZE) == 0);
 	CHECK(memcmp(disk.Data[5], &writeData[SECTOR_SIZE], SECTOR_SIZE) == 0);
 	CheckPassedCsw(11U);
+	CHECK(disk.CommitCount == 1);
 
 	cbw = MakeCbw(12U, SECTOR_SIZE, true, USB_MSC_SCSI_READ_10, 10U);
 	PutBe32(&cbw.CBWCB[2], 4U);
@@ -789,6 +798,51 @@ static void TestWriteFailure(void)
 	const UsbMscCmdStatusWrapper_t *pCsw = LastCsw();
 	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
 	CHECK(pCsw != nullptr && pCsw->dCSWDataResidue == 0U);
+}
+
+static void TestCommitFailure(void)
+{
+	ResetFake();
+	RamDisk disk;
+	disk.Fill();
+	disk.FailCommit = true;
+	alignas(4) uint8_t sector[SECTOR_SIZE];
+	UsbdMsc msc;
+	CHECK(msc.Init(MakeCfg(disk, sector)));
+	CHECK(msc.SelectConfig(1U));
+
+	uint8_t data[SECTOR_SIZE] = {};
+	UsbMscCmdBlkWrapper_t cbw = MakeCbw(81U, SECTOR_SIZE, false,
+		USB_MSC_SCSI_WRITE_10, 10U);
+	PutBe16(&cbw.CBWCB[7], 1U);
+	s_CaptureLength = 0U;
+	SendCbw(msc, cbw);
+	DeliverOut(data, USBD_MSC_FS_MPS);
+	DeliverOut(&data[USBD_MSC_FS_MPS], USBD_MSC_FS_MPS);
+	msc.Process();
+	Pump(msc);
+	const UsbMscCmdStatusWrapper_t *pCsw = LastCsw();
+	CHECK(disk.CommitCount == 1);
+	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
+
+	disk.FailCommit = false;
+	cbw = MakeCbw(82U, 0U, false, USB_MSC_SCSI_SYNCHRONIZE_CACHE, 10U);
+	RunInCommand(msc, cbw);
+	CheckPassedCsw(82U);
+	CHECK(disk.CommitCount == 2);
+
+	disk.FailCommit = true;
+	cbw = MakeCbw(83U, 0U, false, USB_MSC_SCSI_START_STOP_UNIT, 6U);
+	cbw.CBWCB[4] = 2U;
+	RunInCommand(msc, cbw);
+	pCsw = LastCsw();
+	CHECK(pCsw != nullptr && pCsw->bCSWStatus == USB_MSC_CMDSTATUS_FAILED);
+	CHECK(disk.CommitCount == 3);
+
+	disk.FailCommit = false;
+	cbw = MakeCbw(84U, 0U, false, USB_MSC_SCSI_TEST_UNIT_READY, 6U);
+	RunInCommand(msc, cbw);
+	CheckPassedCsw(84U);
 }
 
 static void BulkReset(UsbdMsc &Msc)
@@ -1178,6 +1232,7 @@ int main(void)
 	TestFailuresSenseResidueAndPhase();
 	TestReadOnlyAndStorageFailure();
 	TestWriteFailure();
+	TestCommitFailure();
 	TestMediumEjectAndRestart();
 	TestMalformedCbwAndResetRecovery();
 	TestResetAcrossPhasesAndReconnect();

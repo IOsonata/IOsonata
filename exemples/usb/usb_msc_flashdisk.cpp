@@ -8,13 +8,13 @@ linker script, so its size is set there and nowhere else, and the image fails
 to link if it grows into the disk. It does not expose firmware, filesystem,
 settings or Bluetooth bond-storage regions.
 
-The content stays across resets and power cycles. This disposable test disk
-is initialized with the original small FAT12 layout only when sector 0 has
-no 55AA signature. An existing volume is not formatted on startup.
+The content stays across resets and power cycles. The example provisions
+FAT12 metadata only when sector zero lacks a boot signature, as the original
+example did. Existing signed volumes are preserved.
 
-A sector is one physical 4 KiB flash erase unit, independently of disk size.
-Each host sector write is one erase and one program, with no wear levelling.
-The USB process event performs flash writes synchronously.
+The host sees 512-byte logical sectors. NvmDiskIO caches one 4 KiB erase
+page in caller-owned RAM. Writes to that page are coalesced and committed
+before MSC acknowledges WRITE(10). There is no wear levelling.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 4, 2026
@@ -50,7 +50,6 @@ SOFTWARE.
 #include "storage/diskio_nvm.h"
 #include "storage/fatfs.h"
 #include "storage/nvm_mcu_intrf.h"
-#include "storage/nvm_region.h"
 #include "app_evt_handler.h"
 #include "usb/usb.h"
 #if __has_include("board.h")
@@ -71,8 +70,9 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #ifndef USB_DEVNO
 #define USB_DEVNO			0
 #endif
-// Largest sector FAT allows. UsbdMsc refuses a medium with a larger one.
-#define MSC_SECTOR_BUFF_SIZE	4096U
+// Expose conventional 512-byte USB sectors backed by 4 KiB erase pages.
+#define MSC_SECTOR_BUFF_SIZE	512U
+#define MSC_ERASE_WORK_SIZE	4096U
 // Linker-reserved USB disk region (NVM1); NVM0, if present, is PDS.
 #define MSC_NVM_REGION		1
 #define MSC_STR_INTERFACE	4U
@@ -82,6 +82,7 @@ static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
 static UsbdMsc s_Msc;
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_BUFF_SIZE];
+alignas(4) static uint8_t s_EraseWork[MSC_ERASE_WORK_SIZE];
 
 // Application event queue memory, replaces the 4 event library default. The
 // USB controller port queues its deferred endpoint events there.
@@ -114,110 +115,139 @@ static const UsbdMscCfg_t s_MscCfg = {
 	.pProduct = "IOsonata Flash",
 };
 
-// Write an empty FAT12 volume with one sector per cluster and a one sector root
-// directory. The boot sector goes last, so a format cut short by a reset is
-// started over at the next power up.
-static bool MscDiskFormat(DiskIO &Disk, uint8_t *pBuff)
+// Provision a FAT12 superfloppy only when sector 0 has no boot signature.
+// This is a one-time operation: never clear a signed existing volume.
+// Initialize the boot sector last, so an interrupted initialization retries.
+static bool MscDiskProvision(void)
 {
-	const uint16_t sectSize = Disk.GetSectSize();
-	const uint32_t nbSect = Disk.GetNbSect();
-	// 12 bits per entry, two of them reserved. The sector count is a little
-	// above the cluster count, which can only round the table size up.
-	const uint16_t fatSect =
-		(uint16_t)(((nbSect + 2U) * 3U / 2U + sectSize - 1U) / sectSize);
-	const uint32_t rootSect =
-		FATFS_RSVDSECCNT_FAT16 + (uint32_t)FATFS_NBFAT * fatSect;
+	const uint16_t sectSize = s_Disk.GetSectSize();
+	const uint32_t nbSect = s_Disk.GetNbSect();
+	const uint16_t fatSect = (uint16_t)((((nbSect + 2U) * 3U + 1U) / 2U +
+		sectSize - 1U) / sectSize);
+	const uint32_t rootSect = FATFS_RSVDSECCNT_FAT16 +
+		(uint32_t)FATFS_NBFAT * fatSect;
+	const uint32_t rootCount = sectSize / 32U;
+
+	if (!s_Disk.SectRead(0, s_SectorBuffer))
+	{
+		return false;
+	}
+	if (s_SectorBuffer[510] == 0x55 && s_SectorBuffer[511] == 0xAA)
+	{
+		// Do not silently overwrite a volume with an incompatible sector size.
+		return s_SectorBuffer[11] == (uint8_t)sectSize &&
+			s_SectorBuffer[12] == (uint8_t)(sectSize >> 8);
+	}
+	if (nbSect < rootSect + 2U || nbSect > 4084U || sectSize != 512U)
+	{
+		return false;
+	}
 
 	for (uint32_t i = 0; i < (uint32_t)FATFS_NBFAT * fatSect; i++)
 	{
-		memset(pBuff, 0, sectSize);
-		if ((i % fatSect) == 0U)
+		memset(s_SectorBuffer, 0, sectSize);
+		if (i % fatSect == 0)
 		{
-			pBuff[0] = FATFS_MEDIA_FIXED;
-			pBuff[1] = 0xFFU;
-			pBuff[2] = 0xFFU;
+			s_SectorBuffer[0] = FATFS_MEDIA_FIXED;
+			s_SectorBuffer[1] = 0xFF;
+			s_SectorBuffer[2] = 0xFF;
 		}
-		if (!Disk.SectWrite(FATFS_RSVDSECCNT_FAT16 + i, pBuff))
+		if (!s_Disk.SectWrite(FATFS_RSVDSECCNT_FAT16 + i, s_SectorBuffer))
 		{
 			return false;
 		}
 	}
 
-	memset(pBuff, 0, sectSize);
-	memcpy(pBuff, "IOSONATA   ", 11U);
-	pBuff[11] = FATFS_DIRATTR_VOLUME_ID;
-	if (!Disk.SectWrite(rootSect, pBuff))
+	memset(s_SectorBuffer, 0, sectSize);
+	memcpy(s_SectorBuffer, "IOSONATA   ", 11);
+	s_SectorBuffer[11] = FATFS_DIRATTR_VOLUME_ID;
+	if (!s_Disk.SectWrite(rootSect, s_SectorBuffer))
 	{
 		return false;
 	}
 
-	FATFS_BSBPB *pBoot = reinterpret_cast<FATFS_BSBPB *>(pBuff);
+	FATFS_BSBPB *pBoot = reinterpret_cast<FATFS_BSBPB *>(s_SectorBuffer);
 
-	memset(pBuff, 0, sectSize);
-	pBoot->JmpBoot[0] = 0xEBU;
-	pBoot->JmpBoot[1] = 0x3CU;
-	pBoot->JmpBoot[2] = 0x90U;
+	memset(s_SectorBuffer, 0, sectSize);
+	pBoot->JmpBoot[0] = 0xEB;
+	pBoot->JmpBoot[1] = 0x3C;
+	pBoot->JmpBoot[2] = 0x90;
 	memcpy(pBoot->OEMName, "IOsonata", sizeof(pBoot->OEMName));
 	pBoot->BytsPerSec = sectSize;
-	pBoot->SecPerClus = 1U;
+	pBoot->SecPerClus = 1;
 	pBoot->RsvdSecCnt = FATFS_RSVDSECCNT_FAT16;
 	pBoot->NumFATs = FATFS_NBFAT;
-	pBoot->RootEntCnt = sectSize / 32U;
+	pBoot->RootEntCnt = rootCount;
 	pBoot->TotSec16 = (uint16_t)nbSect;
 	pBoot->Media = FATFS_MEDIA_FIXED;
 	pBoot->FATSz16 = fatSect;
-	pBoot->SecPerTrk = 32U;
-	pBoot->NumHeads = 1U;
-	pBoot->BPB.Bpb16.DrvNum = 0x80U;
-	pBoot->BPB.Bpb16.BootSig = 0x29U;
-	pBoot->BPB.Bpb16.VolID = 0x4E534F49U;
-	memcpy(pBoot->BPB.Bpb16.VolLab, "IOSONATA   ", 11U);
-	memcpy(pBoot->BPB.Bpb16.FilSysType, "FAT12   ", 8U);
-	// FAT reads the signature at byte 510. It is repeated at the end of the
-	// sector, the other place tools look for it on a sector larger than 512.
-	pBoot->Signature_word[0] = 0x55U;
-	pBoot->Signature_word[1] = 0xAAU;
-	pBuff[sectSize - 2U] = 0x55U;
-	pBuff[sectSize - 1U] = 0xAAU;
+	pBoot->SecPerTrk = 32;
+	pBoot->NumHeads = 1;
+	pBoot->BPB.Bpb16.DrvNum = 0x80;
+	pBoot->BPB.Bpb16.BootSig = 0x29;
+	pBoot->BPB.Bpb16.VolID = 0x4E534F49;
+	memcpy(pBoot->BPB.Bpb16.VolLab, "IOSONATA   ", 11);
+	memcpy(pBoot->BPB.Bpb16.FilSysType, "FAT12   ", 8);
+	pBoot->Signature_word[0] = 0x55;
+	pBoot->Signature_word[1] = 0xAA;
 
-	return Disk.SectWrite(0U, pBuff);
-}
-
-static bool MscDiskInit(void)
-{
-	NvmCfg_t cfg = {};
-
-	// Resolve NVM1 using the current generic MCU NVM APIs. The linker
-	// owns the disk bounds; do not select unused flash in this example.
-	if (!NvmMcuCfgInit(cfg, MSC_NVM_REGION) ||
-		!s_MemIntrf.Init() ||
-		!s_Nvm.Init(cfg, &s_MemIntrf) ||
-		!s_Disk.Init(s_Nvm) ||
-		!s_Disk.SectRead(0U, s_SectorBuffer))
+	if (!s_Disk.SectWrite(0, s_SectorBuffer))
+	{
+		return false;
+	}
+	if (!s_Disk.Commit())
 	{
 		return false;
 	}
 
-	const FATFS_BSBPB *pBoot =
-		reinterpret_cast<const FATFS_BSBPB *>(s_SectorBuffer);
-
-	// Keep whatever the host or an earlier run left, FAT or partition table.
-	if (pBoot->Signature_word[0] == 0x55U && pBoot->Signature_word[1] == 0xAAU)
+	// Verify the boot sector from physical flash, bypassing the page cache.
+	uint8_t verify[512];
+	if (s_Nvm.Read(0, verify, sizeof(verify)) != (int)sizeof(verify))
 	{
-		return true;
+		return false;
 	}
-
-	return MscDiskFormat(s_Disk, s_SectorBuffer);
+	return memcmp(verify, s_SectorBuffer, sizeof(verify)) == 0;
 }
 
 int main(void)
 {
-	if (!MscDiskInit() ||
-		!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
-		!UsbInit(&s_UsbCfg) || !s_Msc.Init(s_MscCfg))
+	NvmCfg_t cfg = {};
+
+	if (!NvmMcuCfgInit(cfg, MSC_NVM_REGION))
 	{
 		return -1;
 	}
+	if (!s_MemIntrf.Init())
+	{
+		return -1;
+	}
+	if (!s_Nvm.Init(cfg, &s_MemIntrf))
+	{
+		return -1;
+	}
+	if (!s_Disk.Init(s_Nvm, MSC_SECTOR_BUFF_SIZE, s_EraseWork,
+			sizeof(s_EraseWork), true))
+	{
+		return -1;
+	}
+	if (!MscDiskProvision())
+	{
+		return -1;
+	}
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)))
+	{
+		return -1;
+	}
+	if (!UsbInit(&s_UsbCfg))
+	{
+		return -1;
+	}
+	if (!s_Msc.Init(s_MscCfg))
+	{
+		return -1;
+	}
+	// USB may not be powered and ready at the first attempt. The USB
+	// event path retries when VBUS and the controller become available.
 	(void)UsbEnable(USB_DEVNO);
 
 	AppRun();

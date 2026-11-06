@@ -14,6 +14,7 @@ import argparse
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -986,14 +987,17 @@ with tempfile.TemporaryDirectory(prefix='iosonata-iso-') as temp:
     path = Path(temp) / 'iso_test.cpp'
     path.write_text(code)
     compiler = os.environ.get('CXX', 'g++')
+    linker_gc = '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'
+    host_stubs = ([str(ROOT / 'tests/usb/hostport/optional_status_stubs.cpp')]
+                  if sys.platform == 'darwin' else [])
     subprocess.run([compiler, '-std=c++17', '-O1', '-Wall', '-Wextra',
                     '-Wno-unused-function', '-Wno-missing-field-initializers',
                     '-fsanitize=undefined', '-fno-sanitize-recover=all',
                     '-I' + temp, '-I' + str(ROOT / 'include'),
                     '-I' + str(ROOT / 'tests/usb/hostport'),
-                    '-ffunction-sections', '-Wl,--gc-sections',
+                    '-ffunction-sections', linker_gc,
                     '-x', 'c++', str(path), str(ROOT / 'src/app_evt_handler.cpp'),
-                    str(ROOT / 'src/app_run.cpp'),
+                    str(ROOT / 'src/app_run.cpp'), *host_stubs,
                     str(ROOT / 'src/cfifo.c'), '-o', str(Path(temp) / 'iso_test')], check=True)
     subprocess.run([str(Path(temp) / 'iso_test')] +
                    (['--regular-out'] if args.regular_out else ['--regular'] if args.regular else []), check=True)

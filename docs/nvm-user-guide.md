@@ -42,6 +42,16 @@ Use [Getting Started](getting-started.md) for the IOcomposer workflow.
 
 For MCU memory, initialize the reserved region with `NvmMcuCfgInit(cfg, RegionNo)`,
 then initialize the controller interface and call `Nvm::Init(cfg, &interface)`.
+
+For a sector disk on reserved internal flash, initialize `NvmMcuIntrf`
+and `Nvm` using the existing configuration API, then call `NvmDiskIO::Init()`.
+No dedicated MCU-disk helper header is required. The caller owns the interface,
+NVM driver, disk adapter and any erase-unit scratch buffer for their entire use. For 512-byte logical sectors on a
+4096-byte erase-page device, pass a separate aligned 4096-byte scratch
+buffer. Enable the optional write-cache parameter to coalesce writes to
+the same erase page until Commit() or page eviction. Commit() returns false
+on flash write failure; MSC invokes it before acknowledging completed writes.
+The storage initialization does not format, mount, erase or initialize USB MSC.
 The interface, NVM object and any asynchronous buffers must outlive operations.
 External memory may also use `Nvm::Init(cfg, &interface, regionOffset, regionSize)`
 to select a smaller area of an otherwise dedicated memory chip.
@@ -378,10 +388,11 @@ only 64 sectors, below the 128-sector minimum in FatFs `f_mkfs()`.
 Applications using FatFs can therefore choose the 512-byte
 NvmDiskIO option with a caller-owned erase-unit buffer.
 
-The `UsbMscFlashDisk` example retains its original small FAT12
-initializer and native 4 KiB sectors. It does not call FatFsMount
-at startup. This is independent of generic FatFs support and does
-not alter Nvm, NvmMcuIntrf or NvmDiskIO.
+The `UsbMscFlashDisk` example provisions FAT12 when sector zero is
+unsigned. It now uses 512-byte logical sectors on 4 KiB erase pages, with
+a caller-owned physical-page cache. Its boot sector is committed last.
+It does not call FatFsMount at startup. This is independent of generic
+FatFs support.
 ```cpp
 #include "ff.h"
 #include "ff_diskio.h"

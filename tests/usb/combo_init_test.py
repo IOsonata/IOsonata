@@ -130,7 +130,7 @@ with tempfile.TemporaryDirectory(prefix='iosonata-combo-init-') as directory:
                        ('lm20', 'ARM/Nordic/include')]:
         output = work / name
         command = shlex.split(os.environ.get('CXX', 'g++')) + [
-            '-std=gnu++23', '-O1', '-g', '-fno-exceptions', '-fno-rtti',
+            '-std=gnu++2b', '-O1', '-g', '-fno-exceptions', '-fno-rtti',
             '-ffunction-sections', '-fdata-sections',
             '-fsanitize=undefined', '-fno-sanitize-recover=all',
             '-I' + str(ROOT), '-I' + str(ROOT / 'include'),
