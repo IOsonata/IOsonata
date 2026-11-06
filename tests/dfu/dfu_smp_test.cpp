@@ -199,7 +199,7 @@ struct ImgEntry {
 	uint64_t Slot;
 	std::string Ver;
 	std::vector<uint8_t> Hash;
-	bool bPending, bActive, bConfirmed;
+	bool bPending, bActive, bConfirmed, bBootable;
 };
 
 // Image list, parsed from its known shape: {"images": [..], "splitStatus": 0}
@@ -256,6 +256,7 @@ static std::vector<ImgEntry> List(DfuSmp &Mgr)
 		e.bPending = f[3].bFound && f[3].B;
 		e.bActive = f[4].bFound && f[4].B;
 		e.bConfirmed = f[5].bFound && f[5].B;
+		e.bBootable = f[6].bFound && f[6].B;
 		out.push_back(e);
 		q = s;
 	}
@@ -452,7 +453,19 @@ static void TestImg(HostMem Kind, bool bTgt)
 	CHECK(match);
 	l = List(mgr);
 	CHECK(l.size() == 2 && l[1].Slot == 1 && l[1].Ver == "1.0.0" &&
-		  l[1].Hash == h1 && l[1].bPending == false);
+		  l[1].Hash == h1 && l[1].bBootable && l[1].bPending == false);
+
+	// Interrupt a same-size replacement before it reaches the old TLVs.
+	std::vector<uint8_t> partial(v1);
+	((DfuImgHdr_t *)partial.data())->Ver.Minor = 2;
+	CHECK(UploadOff(Chunk(mgr, partial, 0, 700, false)) == 700);
+	CHECK(dm.Init(dcfg));
+	CHECK(mgr.Init(cfg));
+	l = List(mgr);
+	CHECK(l.size() == 2 && l[1].Ver == "1.2.0" && l[1].Hash == h1 &&
+		  !l[1].bBootable && !l[1].bPending);
+	CHECK(GrpRc(SetState(mgr, &h1, false)) == DFUSMP_IMG_ERR_INVALID_HASH);
+	CHECK(Upload(mgr, v1, rng, 300, &match));
 
 	// Test with the hash: pending. Twice is the same.
 	Rsp r = SetState(mgr, &h1, false);

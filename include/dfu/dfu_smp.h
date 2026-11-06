@@ -206,6 +206,7 @@ private:
 	int OsReset(CborWr_t &Wr);
 	int OsParams(CborWr_t &Wr);
 	int OsBootInfo(const uint8_t *p, uint32_t Len, CborWr_t &Wr, int &GrpRc);
+	int CheckSlot1(const DfuImgInfo_t &info);
 	int ImgList(CborWr_t &Wr, int &GrpRc);
 	int ImgState(const uint8_t *p, uint32_t Len, CborWr_t &Wr, int &GrpRc);
 	int ImgUpload(const uint8_t *p, uint32_t Len, CborWr_t &Wr, int &GrpRc);
