@@ -286,8 +286,9 @@ static inline bool SPIQuadSendCmd(SPIDev_t * const pDev, uint8_t Cmd,
 		pDev->QuadSendCmd(pDev, Cmd, Addr, AddrLen, DataLen, DummyCycle);
 }
 
-// QSPI custom commands can also be sent through an explicitly initialized
-// SPI controller. Generic Nvm uses the per-instance callbacks above.
+// Retain the public direct SPI API for Flash and existing QSPI callers.
+// Generic Nvm uses the per-instance callbacks above instead.
+void QuadSPISetMemSize(SPIDev_t * const pDev, uint32_t Size);
 
 /**
  * @brief	Configure and send command on Quad SPI interface
