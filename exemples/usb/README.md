@@ -132,9 +132,8 @@ Debug reserves 832 KiB at 0x30000-0xFFFFF; Release reserves 256 KiB at
 the SDK USB DFU bootloader. These variants have different start addresses.
 
 The example exposes 512-byte logical sectors over a 4096-byte physical
-erase page. NvmDiskIO retains four dirty erase pages across MSC commands; a write
-to a fifth page causes eviction and programming of the least recently
-accessed page. Reads of unrelated sectors bypass the write cache without triggering
+erase page. NvmDiskIO holds one dirty erase page across MSC commands; a write
+to another page flushes the current page before loading the next one. Reads of unrelated sectors bypass the write cache without triggering
 erase or eviction. The example opts into `UsbdMscCfg_t.bWriteBack`; SCSI SYNCHRONIZE
 CACHE and clean eject also commit. Other MSC users retain write-through
 semantics unless they enable this policy. **Do not unplug a USB-powered
