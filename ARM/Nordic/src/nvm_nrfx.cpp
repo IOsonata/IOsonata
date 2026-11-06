@@ -427,14 +427,37 @@ static void CtrlWriteWords(uintptr_t Addr, const uint32_t *pSrc,
 	nrf_nvmc_mode_set(NRF_NVMC, NRF_NVMC_MODE_WRITE);
 
 	volatile uint32_t *pDst = (volatile uint32_t *)Addr;
+
+#if defined(NRF52840_XXAA)
+	// nRF52840 has a one-word write buffer. READYNEXT indicates that the
+	// controller can accept another 32-bit word while the previous word
+	// is still being programmed. READY would unnecessarily serialize them.
+	// Wait for the previous erase/write before issuing the first word.
+	while (!nrf_nvmc_ready_check(NRF_NVMC))
+	{
+	}
+	for (uint32_t i = 0; i < WordCnt; i++)
+	{
+		while (NRF_NVMC->READYNEXT == 0U)
+		{
+		}
+		pDst[i] = pSrc[i];
+	}
+	// READYNEXT only means accepted, not persisted. Drain the controller
+	// before disabling writes or returning the source buffer to the caller.
+	while (!nrf_nvmc_ready_check(NRF_NVMC))
+	{
+	}
+#else
+	// Other NVMC variants do not necessarily implement READYNEXT.
 	for (uint32_t i = 0; i < WordCnt; i++)
 	{
 		pDst[i] = pSrc[i];
 		while (!nrf_nvmc_ready_check(NRF_NVMC))
 		{
-			// A word write takes a few hundred usec.
 		}
 	}
+#endif
 
 	nrf_nvmc_mode_set(NRF_NVMC, NRF_NVMC_MODE_READONLY);
 }
