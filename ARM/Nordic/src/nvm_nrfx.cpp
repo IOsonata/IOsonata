@@ -136,11 +136,16 @@ SOFTWARE.
 // ---------------------------------------------------------------------------
 #if defined(NVM_INTRF_NVMC)
 
-// Largest bytes one transfer may take. A word write is a few hundred usec and
-// on a timeslot build the whole transfer has to fit one slot, which is the
-// tightest of the three cases. The Nvm driver splits at this.
+// Direct nRF52840 flash programming can stream one full erase page
+// through READYNEXT, with a single READY drain at the end. Keep short
+// transactions on SoftDevice and MPSL builds, which must obey their
+// scheduling/arbitration limits.
 #ifndef NVM_INTRF_MAX_XFER
+#if defined(NRF52840_XXAA) && !defined(NVM_INTRF_SOFTDEVICE) && !defined(NRFXLIB_SDC)
+#define NVM_INTRF_MAX_XFER			4096
+#else
 #define NVM_INTRF_MAX_XFER			32
+#endif
 #endif
 
 // Erase slice per timeslot, in msec, and the worst case for one step.
