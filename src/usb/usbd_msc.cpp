@@ -692,6 +692,7 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 				{
 					UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
 						USB_MSC_ASC_WRITE_ERROR);
+					return USBD_MSC_DATA_NONE;
 				}
 				pMsc->bMediumReady = false;
 				if ((cdb[4] & 2U) != 0U)
@@ -1230,7 +1231,7 @@ void UsbdMsc::Detach(void)
 {
 	if (vUsbdMsc.pDisk != nullptr)
 	{
-		vUsbdMsc.pDisk->Flush();
+		(void)vUsbdMsc.pDisk->Commit();
 		vUsbdMsc.pDisk->Reset();
 	}
 	vUsbdMsc.bMediumPresent = true;
