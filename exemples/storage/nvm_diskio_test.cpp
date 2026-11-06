@@ -298,6 +298,22 @@ static void TestWriteBackErasePage(void)
 	CHECK(s_Erase.vBuf[pageOff + 512U] == 0xFF,
 		"underlying flash unchanged before commit");
 
+	// Reads of unrelated FAT/data pages must not evict a dirty page.
+	// The earlier implementation called LoadPage here, which flushed the
+	// write-back page for every unrelated sector read.
+	CHECK(disk.SectRead(0U, back), "read unrelated physical page");
+	CHECK(back[0] == 0xFF, "unrelated page retains flash contents");
+	CHECK(disk.SectRead(24U, back), "read second unrelated page");
+	CHECK(back[0] == 0xFF, "second unrelated page retains flash contents");
+	CHECK(s_Erase.vEraseCalls == erases,
+		"unrelated reads do not erase dirty cached page");
+	CHECK(s_Erase.vWriteCalls == writes,
+		"unrelated reads do not program dirty cached page");
+	CHECK(disk.SectRead(17U, back), "read dirty page after unrelated reads");
+	CHECK(back[0] == 22, "dirty page survives unrelated reads");
+	CHECK(s_Erase.vBuf[pageOff + 512U] == 0xFF,
+		"dirty cache still not persisted before explicit commit");
+
 	CHECK(disk.Commit(), "commit cached erase page");
 	CHECK(s_Erase.vEraseCalls == erases + 1U,
 		"eight logical sectors require one physical erase");
