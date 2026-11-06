@@ -91,6 +91,8 @@ typedef struct __FatFs_Mount_Config {
 	FATFS *pFatFs;
 	const TCHAR *pPath;			//!< Null selects "0:"
 	bool bFormatIfBlank;		//!< Format only when the entire medium is 0xFF
+	bool bFormatIfBootBlank;	//!< Opt-in: format if sector 0 is all 0xFF.
+							//!< Other sectors may contain data from a prior layout.
 	void *pWork;				//!< Caller-owned format/blank-scan buffer
 	UINT WorkSize;				//!< At least the physical sector size
 	const MKFS_PARM *pFormatOptions;	//!< Null uses FAT/SFD defaults
@@ -98,7 +100,10 @@ typedef struct __FatFs_Mount_Config {
 } FatFsMountCfg_t;
 
 // Mount firmware FatFs independently of USB MSC. Formatting is optional and
-// never attempted for an I/O error or unrecognized nonblank volume.
+// never attempted for an I/O error or unrecognized nonblank volume unless
+// bFormatIfBootBlank explicitly authorizes a blank sector zero. This option
+// may create a filesystem overlapping old data at another partition offset;
+// callers must ensure the storage region is safe to repurpose.
 // If pLabelIfUnnamed is supplied, assign it to a mounted volume only when
 // no label entry exists. Existing custom labels and file contents are kept.
 FRESULT FatFsMount(const FatFsMountCfg_t &Cfg);
