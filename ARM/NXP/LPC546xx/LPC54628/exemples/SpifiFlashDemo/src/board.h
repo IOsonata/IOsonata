@@ -48,7 +48,6 @@ SOFTWARE.
 // The quad SPI flash of the board on the SPIFI, polling, every operation
 // finished in its call. The checks run once.
 #define NVM_DEMO_MEDIUM		1
-#define NVM_DEMO_BLE		0
 #define NVM_DEMO_ASYNC		0
 
 // SPIFI (SPI DevNo LPC546XX_SPIFI_DEVNO), IOCON function 6: SCK P0_26, IO0

@@ -47,7 +47,6 @@ SOFTWARE.
 // The internal flash through NvmMcuIntrf (nvm_lpc546xx.cpp), no stack, every
 // operation finished in its call. The checks run once.
 #define NVM_DEMO_MEDIUM		0
-#define NVM_DEMO_BLE		0
 #define NVM_DEMO_ASYNC		0
 
 #endif // __BOARD_H__
