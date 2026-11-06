@@ -11,8 +11,8 @@ settings or Bluetooth bond-storage regions.
 The content stays across resets and power cycles. The example uses the generic FatFs storage interface to provision blank
 media, then unmounts it before the USB host takes ownership.
 
-The host sees 512-byte logical sectors. NvmDiskIO caches one physical
-erase page across WRITE(10) commands, flushing on page eviction and
+The host sees 512-byte logical sectors. NvmDiskIO caches four physical
+erase pages across WRITE(10) commands, flushing on page eviction and
 SCSI synchronization or eject. There is no wear levelling.
 
 @author	Hoang Nguyen Hoan
@@ -70,7 +70,7 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #endif
 // Expose 512-byte logical sectors backed by a physical flash erase page.
 #define MSC_SECTOR_BUFF_SIZE	512U
-#define MSC_ERASE_WORK_SIZE	4096U
+#define MSC_ERASE_WORK_SIZE	(4096U * 4U)
 // Linker-reserved USB disk region (NVM1); NVM0, if present, is PDS.
 #define MSC_NVM_REGION		1
 #define MSC_STR_INTERFACE	4U
@@ -132,7 +132,7 @@ int main(void)
 		return -1;
 	}
 	if (!s_Disk.Init(s_Nvm, MSC_SECTOR_BUFF_SIZE, s_EraseWork,
-			sizeof(s_EraseWork), true))
+			sizeof(s_EraseWork), true, 4U))
 	{
 		return -1;
 	}
