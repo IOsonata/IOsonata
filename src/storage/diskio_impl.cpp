@@ -233,8 +233,10 @@ int DiskIO::Write(uint64_t Offset, uint8_t *pData, uint32_t Len)
 	while (Len > 0)
 	{
 		int l = Write(sectno, sectoff, pData, Len);
-		if (l < 0)
-			break;
+		if (l <= 0)
+		{
+			return retval > 0 ? (int)retval : -1;
+		}
 		pData += l;
 		Len -= l;
 		retval += l;
