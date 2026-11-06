@@ -78,6 +78,10 @@ void sd_power_usbremoved_enable(int) { ++s_SdCalls; }
 #ifdef WITH_SDH
 static bool s_SdEnabled;
 extern "C" bool nrf_sdh_is_enabled(void) { return s_SdEnabled; }
+#elif defined(__APPLE__)
+// Mach-O host model of a USB-only boot without the SDK SDH owner.
+// The production symbol is optional; this fallback reports SDH disabled.
+extern "C" bool nrf_sdh_is_enabled(void) { return false; }
 #endif
 #endif
 extern "C" void UsbProcessQue(int DevNo) { assert(DevNo == 0); s_Ques++; }
