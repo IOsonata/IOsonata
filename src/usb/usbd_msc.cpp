@@ -366,11 +366,11 @@ static int UsbdMscDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 
 static void UsbdMscFinishCommand(UsbdMscDev_t *pMsc)
 {
-	// Finish pending WRITE(10) sectors even after a command error so a
-	// failed partial transfer cannot leave dirty data for a later command.
-	// Successful CSWs require the whole write to be committed.
+	// The default completes storage writes before acknowledging WRITE(10).
+	// Opt-in write-back keeps a dirty erase page between commands. That
+	// mode requires SCSI sync/eject or cache eviction for persistence.
 	if (pMsc->Cbw.CBWCB[0] == USB_MSC_SCSI_WRITE_10 &&
-		!pMsc->pDisk->Commit())
+		!pMsc->bWriteBack && !pMsc->pDisk->Commit())
 	{
 		UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
 			USB_MSC_ASC_WRITE_ERROR);
@@ -1085,6 +1085,7 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	pMsc->SectorCount = sectorCount;
 	pMsc->bReadOnly = pCfg->bReadOnly;
 	pMsc->bRemovable = pCfg->bRemovable;
+	pMsc->bWriteBack = pCfg->bWriteBack;
 	pMsc->bMediumPresent = true;
 	pMsc->bMediumReady = true;
 	pMsc->bRemovalPrevented = false;
