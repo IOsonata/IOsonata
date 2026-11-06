@@ -17,12 +17,12 @@ target    dfu_<mcu>     internal memory erase and program, start, reset
           gcc_<mcu>_dfu_layout.ld   where everything is
 ```
 
-Each target picks its protocol and transport (DFU_PROTO, DFU_TRANSPORT in
-board.h); nothing above the target layer differs between MCUs. Stage 0 uses
-the wire protocol (docs/architecture/dfu_wire.md) with `Python/dfu_wire.py`
-as host tool; the OTA path in the application uses SMP, for nRF Connect
-Device Manager and the other SMP tools (`nrfutil mcu-manager`, `mcumgr`,
-`smpmgr`). Images are signed with MCUboot's `imgtool`.
+Each board selects its recovery protocol and transport in `board.h`.
+The nRF52832 example uses DfuWire over UART. The nRF52840 example uses
+SMP serial over USB CDC. Its running application uses SMP over BLE to
+receive updates. Both paths use an MCUboot image signed with `imgtool`.
+For build, signing, provisioning and update commands see the
+[firmware update user guide](../dfu-user-guide.md).
 
 ## Update paths
 
@@ -124,7 +124,7 @@ and application scripts both stop their RAM at `__dfu_flag`.
 | Layout | Boot | Slot 0 | Slot 1 | Update |
 |---|---|---|---|---|
 | nRF52832 xxAA S132 | 0x74000, 48 KB | 0x26000, 148 KB | 152 KB | BLE, wire |
-| nRF52840 S140 | 0xF4000, 48 KB | 0x27000, 400 KB | 408 KB | BLE, wire, USB |
+| nRF52840 S140 | 0xF4000, 48 KB | 0x27000, 400 KB | 408 KB | BLE, USB CDC (SMP) |
 | nRF52805 / nRF52810 S112 | 0x27000, 36 KB | 0x19000, 40 KB | none | wire |
 | nRF5340 application | 0x0, 48 KB | 0xD000, 972 KB | none | wire |
 | nRF5340 network | 0x1000000, 36 KB | 106 KB | 110 KB | BLE, wire |
@@ -188,19 +188,21 @@ pending. An image must end before the trailer.
 ```text
 reset
   |
+  recovery button held? -> recovery
+  |
   slot 1 pending and not done?
   |  yes: verify slot 1 (hash, key hash, signature, entry)
   |       ok:  erase the record, copy payload to slot 0, write the record
   |            (magic last), verify slot 0 again, write DONE
   |       bad: write DONE (never retried), keep slot 0
   |
-  recovery asked by the application, or button held? -> recovery
+  recovery asked by the application? -> recovery
   |
   verify slot 0 against the record (hash, signature)
   |  ok:  start slot 0
   |  bad: recovery
   |
-recovery: the wire protocol over UART or USB CDC, direct mode
+DfuWire recovery (direct mode):
   BEGIN:  header and TLVs to RAM; key hash, signature over the signed
           digest and version checked before anything is touched; then
           the record is erased
@@ -223,8 +225,10 @@ optional `DFU_BUT_PORT`, `DFU_BUT_PIN` recovery button, `DFU_BOOT_BUFSIZE`
 and `DFU_BOOT_FIFODEPTH` for parts with little RAM, `DFU_BOOT_ERASE_MS`,
 and `DFU_BOOT_ALLOW_DOWNGRADE`.
 
+For a board built with DFU_PROTO_WIRE, use its serial port:
+
 ```sh
-python3 Python/dfu_wire.py --port /dev/cu.usbmodem1101 app_signed.bin
+python3 Python/dfu_wire.py --port /dev/cu.usbserial-example app_signed.bin
 python3 Python/dfu_wire.py --port COM7 app_signed.bin
 ```
 
@@ -301,7 +305,18 @@ the boot and the SoftDevice.
 | Boot machine code | `tests/dfu/boot_emu*.py`: the cross built `DfuBoot` ELF run in an ARM or RISC-V emulator with a model of the memory controller, per family (Nordic, STM32, SAM4, LPC, Renesas) |
 | Boot recovery, machine code | `tests/dfu/boot_emu_wire.py`: the nRF52832 `DfuBoot` ELF in the emulator with its UART interrupt, driven by `Python/dfu_wire.py` on a pty: refused images, upload, start, button, application request, power lost during an upload |
 
-Nothing here has been run on hardware.
+On nRF52840 with S140 7.2.0 and Release builds, hardware tests covered
+signed USB CDC recovery, recovery entry with Button 1 and return to BLE,
+SMP image upload and activation over BLE, downgrade refusal after reconnect,
+and an interrupted BLE upload followed by a successful retry. The one-command
+`smpmgr upgrade --confirm` installed version 1.3.0. A separate BLE state read
+reported it active and confirmed in slot 0.
+
+The interrupted-upload test also showed that old TLVs can survive behind a
+new header. The device refused activation with INVALID_HASH. The subsequent
+slot 1 bootable-reporting fix passed a host regression. Repeating that
+reporting check on hardware and cutting power during the stage 0 install
+copy are separate outstanding tests.
 
 LPC11U35 uses its ROM DFU. The software DfuBoot target and slot layouts are
 not provided because of its limited memory budget; applications use

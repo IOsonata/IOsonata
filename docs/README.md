@@ -28,6 +28,7 @@ The book remains useful for the object-design model and historical background, b
 
 | Topic | Guide |
 |---|---|
+| Firmware updates | [USB recovery and BLE OTA](dfu-user-guide.md) |
 | Bluetooth | [Bluetooth](bluetooth-user-guide.md) |
 | USB device classes | [USB](usb-user-guide.md), [nRF54LM20 USBHS](usb-nrf54lm20x.md) |
 | Internal and serial memory | [NVM](nvm-user-guide.md) |

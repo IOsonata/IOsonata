@@ -9,6 +9,8 @@ Use this guide to build and test an application. See
 [USB architecture](architecture/usb.md) for class ownership, descriptor
 composition, endpoint dispatch and controller-port rules.
 
+For nRF52840/S140 recovery and OTA, see the [Firmware Update User Guide](dfu-user-guide.md).
+
 ## Configuration defaults
 
 The examples use aggregate initializers: omitted fields are zero-initialized.

@@ -7,6 +7,7 @@ nav:
   - Supported targets: supported-targets.md
   - User guides:
       - Bluetooth: bluetooth-user-guide.md
+      - Firmware update: dfu-user-guide.md
       - USB: usb-user-guide.md
       - USB on nRF54LM20: usb-nrf54lm20x.md
       - NVM: nvm-user-guide.md

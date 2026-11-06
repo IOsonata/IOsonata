@@ -1,12 +1,9 @@
 # DFU wire protocol (stage 0 recovery)
 
-Status: implemented with host tests. Hardware validation is not established
-by this document. Source references describe the 0.13 implementation.
-
-This replaces SMP/CBOR in the stage 0 boot. SMP stays in the application
-for over the air updates (nRF Connect Device Manager, nRF52/53/54, STM32WBA).
-The image format stays MCUboot (imgtool). Everything below is about the wire
-path in stage 0: UART, or USB CDC ACM on parts with a USB device port.
+DfuWire is the manifest-first recovery protocol selected by the nRF52832
+UART boot example. The nRF52840 boot example selects SMP serial over USB CDC.
+For its hardware-tested USB and BLE commands, see the
+[firmware update user guide](../dfu-user-guide.md).
 
 ## 1. Goals
 
@@ -44,7 +41,7 @@ The interface is set at Init and can be replaced at run time with SetIntrf
 INFO).
 
 The stage 0 boot links one interface selected by `DFU_TRANSPORT` in
-`board.h`. The supplied nRF52840 DfuBoot selects CDC; the other supplied
+`board.h`. The supplied nRF52840 DfuBoot selects SMP over CDC. The other supplied
 DfuBoot configurations select UART, including LM20. USB driver availability
 does not automatically change this selection. BLE is not accepted by the
 stage 0 example; the same protocol can use BtIntrf in an application.
@@ -101,7 +98,7 @@ its DfuBoot (and OTA) project:
 
 `DFU_PROTO_NRFDFU` is reserved in the header and has no implementation.
 The stage 0 example rejects it. Stage 0 defaults to DFU_PROTO_WIRE and UART
-unless board configuration selects CDC. The boot
+unless the board overrides the protocol or transport. The boot
 region must hold the build: 32 KB for UART, 40 KB for CDC (section 12).
 
 Which ones a build has:
@@ -367,7 +364,7 @@ carry only the check); exit handlers and the heap. What came: DfuWire
   random loop under ASan and UBSan.
 - make wire: dfu_wire.py against dfu_wire_host on a pty, every memory kind,
   a link lost halfway and taken up again.
-- Still to do: hardware, nRF52840 USB CDC and UART on macOS, Windows 11,
+- DfuWire hardware checks still to run: USB CDC with a DfuWire build and UART on macOS, Windows 11,
   Linux; one STM32 and one LPC over a USB serial bridge.
 
 ## 15. Configuration and remaining work
