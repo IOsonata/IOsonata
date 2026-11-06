@@ -28,7 +28,7 @@ configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 | [usb_int_loopback.cpp](usb_int_loopback.cpp) | UsbIntLoopback/ioc | `UsbdInt` alternate settings |
 | [usb_iso_loopback.cpp](usb_iso_loopback.cpp) | UsbIsoLoopback/ioc | `UsbdIso` alternate settings |
 | [usb_msc_ramdisk.cpp](usb_msc_ramdisk.cpp) | UsbMscRamDisk/ioc | Disposable 64 KiB FAT12 RAM disk |
-| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT disk on reserved internal flash: 832 KiB Debug/Release_mbr use 4096-byte logical sectors; 256 KiB Release uses cached 512-byte sectors; FatFs provisions an invalid disposable volume |
+| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT disk on reserved internal flash: 512-byte logical sectors on 4 KiB erase pages; write-back page cache; FatFs provisions an invalid disposable volume |
 
 Use the [USB User Guide](../../docs/usb-user-guide.md) for dependency
 installation, host commands, buffer ownership and reconnect behavior.
@@ -131,15 +131,14 @@ Debug reserves 832 KiB at 0x30000-0xFFFFF; Release reserves 256 KiB at
 0xC0000-0xFFFFF; Release_mbr reserves 832 KiB at 0x10000-0xDFFFF under
 the SDK USB DFU bootloader. These variants have different start addresses.
 
-Sector geometry is derived from the NVM erase unit and volume size.
-The 832 KiB Debug and Release_mbr layouts expose native 4096-byte
-erase-page sectors, avoiding repeated read/erase/program cycles.
-The 256 KiB Release layout uses 512-byte logical sectors and a 4096-byte
-erase-page cache because FatFs needs at least 128 sectors to format.
-The cache groups writes within one MSC WRITE(10) command; a successful
-command commits immediately, so distinct 512-byte commands can still
-erase the same physical page repeatedly. There is no wear levelling or
-power-fail atomicity.
+The example exposes 512-byte logical sectors over a 4096-byte physical
+erase page. NvmDiskIO retains the dirty page across MSC commands; a write
+to a different erase page causes eviction and programming of the previous
+page. The example opts into `UsbdMscCfg_t.bWriteBack`; SCSI SYNCHRONIZE
+CACHE and clean eject also commit. Other MSC users retain write-through
+semantics unless they enable this policy. **Do not unplug a USB-powered
+device before ejecting:** the last dirty page may be lost on power loss.
+There is no wear levelling or power-fail atomicity.
 
 The example uses generic `FatFsMount()` with `bValidateOnMount` to
 check the mounted filesystem geometry and scan the FAT allocation table.
