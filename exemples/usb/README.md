@@ -133,8 +133,10 @@ the SDK USB DFU bootloader. These variants have different start addresses.
 
 The host sees 512-byte sectors. A caller-owned aligned 4096-byte scratch
 buffer lets `NvmDiskIO` preserve neighboring sectors in each physical
-flash erase page. This is synchronous read/modify/erase/program, without
-write coalescing or wear levelling.
+flash erase page. With the opt-in erase-page cache, adjacent writes in one WRITE(10)
+command can be coalesced into a single erase/program cycle. UsbdMsc
+commits before sending success and on synchronization/eject; there is
+no wear levelling or power-fail atomicity.
 
 The example exports the raw region without formatting or modifying it
 at startup. A blank volume must be explicitly formatted on the host or
