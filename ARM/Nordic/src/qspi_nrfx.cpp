@@ -485,6 +485,8 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_QSPI;
+	pDev->QuadSetMemSize = QuadSPISetMemSize;
+	pDev->QuadSendCmd = QuadSPISendCmd;
 	pDev->DevIntrf.Disable = nRFxQSPIDisable;
 	pDev->DevIntrf.Enable = nRFxQSPIEnable;
 	pDev->DevIntrf.GetRate = nRFxQSPIGetRate;
