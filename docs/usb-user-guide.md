@@ -577,17 +577,18 @@ a full filesystem repair or directory-tree consistency check.
 The firmware calls `FatFsUnmount()` before enabling USB MSC, giving the
 host exclusive filesystem ownership.
 
-The MSC logical sector is 512 bytes. nRF52840 program flash has 4096-byte
-physical erase pages. `NvmDiskIO` uses a caller-owned aligned 4096-byte
-scratch buffer to preserve the other seven 512-byte sectors when replacing a
-sector. The optional erase-page cache holds eight 512-byte sectors in a
-caller-owned 4096-byte RAM page. Writes to the same page are coalesced into
-one physical erase/program cycle on Commit() or cache eviction. UsbdMsc
-commits every WRITE(10) command before returning a successful status and
-also commits on SYNCHRONIZE CACHE and eject. A multi-sector command may
-therefore save erases; separate commands to the same erase page can still
-incur repeated cycles. There is no wear levelling or power-fail atomicity.
-The 512-byte MSC sector buffer and 4096-byte scratch buffer must not alias.
+nRF52840 internal flash has 4096-byte erase pages. The example prefers a
+native 4096-byte logical sector when the medium has at least 128 such sectors
+(the FatFs formatter minimum). The 832 KiB Debug and Release_mbr layouts
+therefore use 4096-byte logical sectors with direct erase-page writes.
+For the 256 KiB Release layout, 4096-byte sectors would provide only 64
+logical sectors, so the example instead uses 512-byte sectors with a
+caller-owned 4096-byte erase-page cache. This cache coalesces writes inside a
+single WRITE(10), but MSC commits before every successful command status;
+separate commands touching the same page still incur repeated erases.
+The MSC sector buffer and physical erase work buffer must not alias.
+Changing sector geometry may cause disposable test volumes to be reformatted.
+There is no wear levelling or power-fail atomicity.
 
 The bare-metal Debug linker script gcc_nrf52840_xxaa_nvm832k.ld
 reserves NVM1 at 0x30000-0xFFFFF (832 KiB). The Release build uses
