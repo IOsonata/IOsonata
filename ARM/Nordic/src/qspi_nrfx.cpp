@@ -377,6 +377,8 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 			ifcfg0 &= ~QSPI_IFCONFIG0_ADDRMODE_Msk;
 			dev->Cmd = Cmd;
 			dev->ParamLen = 0;
+			dev->Param[0] = 0;
+			dev->Param[1] = 0;
 
 			if (AddrLen > 0)
 			{
@@ -396,6 +398,9 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 									  QSPI_CINSTRCONF_LIO2_Msk | QSPI_CINSTRCONF_LIO3_Msk;
 
 				dev->pQSpiReg->CINSTRCONF = cinstrconf;
+				// Already submitted. Do not replay the custom opcode when
+				// a subsequent transfer starts.
+				dev->Cmd = 0;
 				dev->ParamLen = 0;
 			}
 			return true;
