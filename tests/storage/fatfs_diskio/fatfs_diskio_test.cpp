@@ -275,6 +275,64 @@ static void TestExpandedDiskWithLegacyData(void)
 	CHECK(FatFsUnmount() == FR_OK);
 }
 
+static void TestValidateAndRecover(void)
+{
+	// Invalid or incompatible filesystem metadata must be found during
+	// mount, not passed through to USB MSC as a valid volume.
+	s_Small.Blank();
+	FatFsMountCfg_t cfg = {};
+	cfg.pDisk = &s_Small;
+	cfg.pFatFs = &s_Fs;
+	cfg.pWork = s_Work;
+	cfg.WorkSize = sizeof(s_Work);
+	cfg.bValidateOnMount = true;
+	cfg.bFormatIfInvalid = true;
+
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(FatFsUnmount() == FR_OK);
+	uint32_t writes = s_Small.vWrites;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Small.vWrites == writes);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// An incompatible boot-sector sector size is not a valid filesystem.
+	s_Small.vMedia[11] = 0x00;
+	s_Small.vMedia[12] = 0x10;
+	cfg.bFormatIfInvalid = false;
+	CHECK(FatFsMount(cfg) == FR_NO_FILESYSTEM);
+	CHECK(s_Small.vWrites == writes);
+	CHECK(FatFsUnmount() == FR_OK);
+	cfg.bFormatIfInvalid = true;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Small.vMedia[11] == 0x00);
+	CHECK(s_Small.vMedia[12] == 0x02);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// For FAT12, entry 2 uses bytes 3 and 4 of the FAT. Value 1 is an
+	// invalid FAT entry; f_getfree must find it during a full FAT scan.
+	uint16_t fatsz = (uint16_t)s_Small.vMedia[22] |
+		(uint16_t)((uint16_t)s_Small.vMedia[23] << 8);
+	CHECK(fatsz > 0);
+	s_Small.vMedia[512U + 3U] = 0x01U;
+	s_Small.vMedia[512U + 4U] = 0x00U;
+	writes = s_Small.vWrites;
+	cfg.bFormatIfInvalid = false;
+	CHECK(FatFsMount(cfg) == FR_INT_ERR);
+	CHECK(s_Small.vWrites == writes);
+	CHECK(FatFsUnmount() == FR_OK);
+	cfg.bFormatIfInvalid = true;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// Never turn physical read failures into destructive recovery.
+	writes = s_Small.vWrites;
+	s_Small.vReadFail = true;
+	CHECK(FatFsMount(cfg) == FR_DISK_ERR);
+	CHECK(s_Small.vWrites == writes);
+	s_Small.vReadFail = false;
+	CHECK(FatFsUnmount() == FR_OK);
+}
+
 static void TestBootSectorBlankPolicy(void)
 {
 	// Debug NVM1 starts at 0x30000, but the old Release NVM1 starts
@@ -360,6 +418,7 @@ int main(void)
 	TestMedium(s_Small);
 	TestBlankOnly();
 	TestBootSectorBlankPolicy();
+	TestValidateAndRecover();
 	TestExpandedDiskWithLegacyData();
 	printf("FatFs DiskIO: %u checks, %u failures\n", s_Checks, s_Fails);
 	return s_Fails == 0U ? 0 : 1;
