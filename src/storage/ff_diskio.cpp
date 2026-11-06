@@ -165,10 +165,7 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE Cmd, void *pBuff)
 	switch (Cmd)
 	{
 		case CTRL_SYNC:
-			// DiskIO::Flush() has no error result. Keep write-through
-			// disks for firmware files requiring reliable error reporting.
-			s_pFFDiskIO->Flush();
-			return RES_OK;
+			return s_pFFDiskIO->Commit() ? RES_OK : RES_ERROR;
 
 		case GET_SECTOR_COUNT:
 			if (pBuff == nullptr)
