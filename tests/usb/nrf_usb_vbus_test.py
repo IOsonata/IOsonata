@@ -83,9 +83,15 @@ extern "C" bool nrf_sdh_is_enabled(void) { return s_SdEnabled; }
 extern "C" void UsbProcessQue(int DevNo) { assert(DevNo == 0); s_Ques++; }
 #ifdef WITH_CLOCK
 void nRFClockIrqHandler(void) { s_Clock++; }
+#else
+// Host-only absent owner: Mach-O must resolve the optional symbol.
+void nRFClockIrqHandler(void) {}
 #endif
 #ifdef WITH_USB
 void nRFUsbdVbusIntInit(uint32_t Prio);
+#else
+// The USB owner is deliberately absent in clock-only test builds.
+void nRFUsbPowerIrqHandler(void) {}
 #endif
 extern "C" void POWER_CLOCK_IRQHandler(void);
 int main()
