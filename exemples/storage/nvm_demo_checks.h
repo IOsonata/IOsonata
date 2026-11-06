@@ -294,13 +294,21 @@ static void NvmDemoEvtHandler(Nvm *pMem, NVM_EVT Evt, uint64_t Off,
 static int DemoWrite(Nvm &Mem, uint64_t Off, const void *pData, uint32_t Len)
 {
 	int r = Mem.Write(Off, pData, Len);
+	if (r != (int)Len)
+	{
+		printf("write   : offset 0x%lX, requested %lu bytes, Write returned %d\r\n",
+			   (unsigned long)Off, (unsigned long)Len, r);
+	}
 	if (r < 0)
 	{
 		return r;
 	}
 
 	int sr = Mem.Sync();
-
+	if (sr < 0)
+	{
+		printf("write   : offset 0x%lX, Sync returned %d\r\n", (unsigned long)Off, sr);
+	}
 	return sr < 0 ? sr : r;
 }
 
@@ -336,7 +344,7 @@ static uint32_t UnitSize(Nvm &Mem)
 	return u != 0 ? u : 256;
 }
 
-static void Check(bool Cond, const char *pMsg)
+static bool Check(bool Cond, const char *pMsg)
 {
 	if (Cond)
 	{
@@ -347,6 +355,7 @@ static void Check(bool Cond, const char *pMsg)
 		s_Fail++;
 		printf("  FAIL : %s\r\n", pMsg);
 	}
+	return Cond;
 }
 
 // Report whether the scratch pages read erased.
@@ -389,7 +398,11 @@ static void StampCheck(Nvm &Mem)
 	uintptr_t raw = RegionAddr + (uintptr_t)off;
 	uint32_t stamp[2] = { 0, 0 };
 
-	Mem.Read(off, stamp, sizeof(stamp));
+	if (Mem.Read(off, stamp, sizeof(stamp)) != (int)sizeof(stamp))
+	{
+		Check(false, "read previous boot stamp");
+		return;
+	}
 
 #if NVM_DEMO_MEDIUM == 0
 	printf("raw     : [0x%08lX] = 0x%08lX 0x%08lX before anything is touched\r\n",
@@ -420,16 +433,26 @@ static void StampCheck(Nvm &Mem)
 	if (Mem.EraseSize() != 0)
 	{
 		// A clears-bits medium needs the erase before the rewrite.
-		Check(DemoErase(Mem, off, page) == 0, "erase the stamp page");
+		if (!Check(DemoErase(Mem, off, page) == 0, "erase the stamp page"))
+		{
+			return;
+		}
 	}
-	Check(DemoWrite(Mem, off, ns, sizeof(ns)) == (int)sizeof(ns),
-		  "write the stamp");
-	Mem.Read(off, rb, sizeof(rb));
-	Check(rb[0] == NVM_DEMO_MAGIC && rb[1] == boots,
-		  "stamp reads back through the driver");
+	if (!Check(DemoWrite(Mem, off, ns, sizeof(ns)) == (int)sizeof(ns), "write the stamp"))
+	{
+		return;
+	}
+	int count = Mem.Read(off, rb, sizeof(rb));
+	if (!Check(count == (int)sizeof(rb) && rb[0] == NVM_DEMO_MAGIC && rb[1] == boots,
+			   "stamp reads back through the driver"))
+	{
+		return;
+	}
 #if NVM_DEMO_MEDIUM == 0
-	Check(RawWord(raw) == NVM_DEMO_MAGIC,
-		  "the stamp is in the memory, not only in the driver view");
+	if (!Check(RawWord(raw) == NVM_DEMO_MAGIC, "stamp verified by direct memory read"))
+	{
+		return;
+	}
 #endif
 
 	printf("persist : boot %lu stamped, power cycle and it must rise\r\n",
