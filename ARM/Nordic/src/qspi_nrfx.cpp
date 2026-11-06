@@ -485,6 +485,7 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_QSPI;
+	pDev->QuadSetMemSize = QuadSPISetMemSize;
 	pDev->QuadSendCmd = QuadSPISendCmd;
 	pDev->DevIntrf.Disable = nRFxQSPIDisable;
 	pDev->DevIntrf.Enable = nRFxQSPIEnable;
@@ -526,6 +527,13 @@ SPIPHY SPISetPhy(SPIDev_t * const pDev, SPIPHY Phy)
 	pDev->Cfg.Phy = Phy;
 
 	return pDev->Cfg.Phy;
+}
+
+// Legacy API: Nordic QSPI has no memory-size register to configure.
+void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size)
+{
+	(void)pDev;
+	(void)Size;
 }
 
 bool QuadSPISendCmd(SPIDEV * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
