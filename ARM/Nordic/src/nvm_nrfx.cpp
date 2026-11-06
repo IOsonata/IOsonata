@@ -136,13 +136,11 @@ SOFTWARE.
 // ---------------------------------------------------------------------------
 #if defined(NVM_INTRF_NVMC)
 
-// The nRF52840 library's normal Debug/Release configurations include
-// SoftDevice support even for bare-metal applications. Permit full-page
-// transfers in those archives, but select the short transaction size at
-// run time if a SoftDevice image is actually installed. MPSL/SDC builds
-// keep short transfers for their time-slot arbitration.
+// Maximum staged payload is a property of the NVMC and the allocated
+// staging buffer, not of which Bluetooth stack the library supports.
+// The active SoftDevice or MPSL arbiter limits each submission at runtime.
 #ifndef NVM_INTRF_MAX_XFER
-#if defined(NRF52840_XXAA) && !defined(NRFXLIB_SDC)
+#if defined(NRF52840_XXAA)
 #define NVM_INTRF_MAX_XFER			4096
 #else
 #define NVM_INTRF_MAX_XFER			32
@@ -1269,6 +1267,26 @@ bool NvmMcuIsReady(void)
 }
 #endif
 
+#if defined(NRF52840_XXAA)
+// Limit each transfer only while the selected flash access mechanism
+// requires arbitration. A SoftDevice image installed but not running
+// does not own the NVMC, and MPSL controls access only when registered.
+static uint32_t NvmMcuWriteChunkSize(void)
+{
+#ifdef NVM_INTRF_SOFTDEVICE
+	if (SdRunning())
+	{
+		return 32U;
+	}
+#endif
+	if (s_pArbiter != nullptr)
+	{
+		return 32U;
+	}
+	return NVM_INTRF_MAX_XFER;
+}
+#endif
+
 bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 {
 	uint64_t deviceSize;
@@ -1315,14 +1333,9 @@ bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 	Cfg.EraseSize = 0;
 	Cfg.SectorSize = NVM_INTRF_ERASE_SIZE;
 #endif
-#if defined(NRF52840_XXAA) && defined(NVM_INTRF_SOFTDEVICE)
-	// The same library serves bare-metal and SoftDevice applications.
-	// Only bare-metal NVMC owns the controller long enough for a 4 KiB
-	// transfer. A present SoftDevice keeps the original small chunks,
-	// even if it has not yet been enabled.
-	Cfg.PageSize = SdPresent() ? 32U : NVM_INTRF_MAX_XFER;
-#else
-	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// largest bytes per transfer
+	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// maximum staged payload
+#if defined(NRF52840_XXAA)
+	Cfg.GetWriteChunkSize = NvmMcuWriteChunkSize;
 #endif
 	Cfg.WriteGran = NVM_INTRF_WRITE_GRAN;
 	Cfg.AddrSize = NVM_INTRF_ADDR_SIZE;
