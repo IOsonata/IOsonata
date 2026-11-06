@@ -18,13 +18,7 @@ NVM_DISK_SOURCES := \
 	$(ROOT)/src/device.cpp \
 	$(ROOT)/src/device_intrf.cpp
 
-FAT12_TEST := $(BUILD_DIR)/fat12_provision_test
-FAT12_SOURCES := \
-	fat12_provision_test.cpp \
-	$(ROOT)/src/storage/fat12_provision.cpp \
-	$(ROOT)/src/storage/diskio_impl.cpp
-
-.PHONY: test-nvm-disk test-fat12 clean
+.PHONY: test-nvm-disk clean
 
 test-nvm-disk: $(NVM_DISK_TEST)
 	./$(NVM_DISK_TEST)
@@ -35,15 +29,6 @@ $(NVM_DISK_TEST): $(NVM_DISK_SOURCES)
 		-I$(ROOT)/include/storage -I$(HOST_INC) \
 		-I$(ROOT)/tests/dfu/hostport \
 		$(NVM_DISK_SOURCES) -o $@
-
-test-fat12: $(FAT12_TEST)
-	./$(FAT12_TEST)
-
-$(FAT12_TEST): $(FAT12_SOURCES)
-	@mkdir -p $(BUILD_DIR)
-	$(CXX) -std=gnu++2b -O1 -I$(ROOT)/include \
-		-I$(ROOT)/include/storage -I$(HOST_INC) \
-		$(FAT12_SOURCES) -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)
