@@ -116,7 +116,7 @@ static const UsbdMscCfg_t s_MscCfg = {
 int main(void)
 {
 	if (!NvmMcuDiskInit(s_Disk, s_Nvm, s_MemIntrf, MSC_NVM_REGION,
-			MSC_SECTOR_BUFF_SIZE, s_EraseWork, sizeof(s_EraseWork)))
+			MSC_SECTOR_BUFF_SIZE, s_EraseWork, sizeof(s_EraseWork), true))
 	{
 		return -1;
 	}
