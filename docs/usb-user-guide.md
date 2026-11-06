@@ -577,18 +577,19 @@ a full filesystem repair or directory-tree consistency check.
 The firmware calls `FatFsUnmount()` before enabling USB MSC, giving the
 host exclusive filesystem ownership.
 
-nRF52840 internal flash has 4096-byte erase pages. The example prefers a
-native 4096-byte logical sector when the medium has at least 128 such sectors
-(the FatFs formatter minimum). The 832 KiB Debug and Release_mbr layouts
-therefore use 4096-byte logical sectors with direct erase-page writes.
-For the 256 KiB Release layout, 4096-byte sectors would provide only 64
-logical sectors, so the example instead uses 512-byte sectors with a
-caller-owned 4096-byte erase-page cache. This cache coalesces writes inside a
-single WRITE(10), but MSC commits before every successful command status;
-separate commands touching the same page still incur repeated erases.
-The MSC sector buffer and physical erase work buffer must not alias.
-Changing sector geometry may cause disposable test volumes to be reformatted.
-There is no wear levelling or power-fail atomicity.
+The nRF52840 example exports 512-byte logical sectors backed by 4096-byte
+flash erase pages in every configuration. NvmDiskIO keeps one dirty physical
+page across MSC WRITE(10) commands. The example opts into MSC
+`bWriteBack`, so writing a second logical sector within the same erase
+page does not reprogram that page. Switching physical pages evicts the dirty
+page to flash; SYNCHRONIZE CACHE and clean eject also call Commit().
+The default MSC behavior remains write-through (Commit before successful
+WRITE(10) status) for callers that do not opt in. The MSC sector buffer and
+erase-page cache must not alias. **Write-back can lose the most recent dirty
+page if power disappears before synchronization**; on USB-bus-powered
+hardware, cable removal is not a reliable occasion to flush. Always eject
+or synchronize before disconnecting. There is no wear levelling or
+power-fail atomicity.
 
 The bare-metal Debug linker script gcc_nrf52840_xxaa_nvm832k.ld
 reserves NVM1 at 0x30000-0xFFFFF (832 KiB). The Release build uses
