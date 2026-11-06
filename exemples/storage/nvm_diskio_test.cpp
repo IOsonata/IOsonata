@@ -343,6 +343,7 @@ int main(void)
 	RunDisk(diskErase, "erase-write medium");
 	RunDisk(diskDirect, "direct write medium");
 	TestSubEraseLogicalSectors();
+	TestWriteBackErasePage();
 
 	printf("\nChecks run: %d\n", s_Checks);
 	if (s_Fail == 0)
