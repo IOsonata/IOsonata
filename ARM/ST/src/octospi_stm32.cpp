@@ -482,7 +482,7 @@ static void Stm32OspiStopTx(DevIntrf_t * const pDev)
 	Stm32OspiCsHigh(dev);
 }
 
-static void Stm32OspiSetMemSize(SPIDev_t * const pDev, uint32_t Size);
+
 
 bool Stm32QospiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 {
@@ -526,7 +526,7 @@ bool Stm32QospiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	Stm32OspiSetRate(&pDev->DevIntrf, pCfgData->Rate);
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_QSPI;
-	pDev->QuadSetMemSize = Stm32OspiSetMemSize;
+	pDev->QuadSetMemSize = QuadSPISetMemSize;
 	pDev->QuadSendCmd = QuadSPISendCmd;
 	pDev->DevIntrf.Disable = Stm32OspiDisable;
 	pDev->DevIntrf.Enable = Stm32OspiEnable;
@@ -560,7 +560,7 @@ bool Stm32QospiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 /**
  * @brief	Set Quad SPI Flash size
  */
-static void Stm32OspiSetMemSize(SPIDev_t * const pDev, uint32_t Size)
+void QuadSPISetMemSize(SPIDev_t * const pDev, uint32_t Size)
 {
 	Stm32OspiDev_t *dev = Stm32OspiDev(pDev);
 
