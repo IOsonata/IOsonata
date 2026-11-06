@@ -239,3 +239,21 @@ void DiskIO::Flush()
         }
     }
 }
+
+// Checked counterpart to Flush(). Keep dirty entries when writes fail so
+// a caller can retry instead of reporting a successful synchronization.
+bool DiskIO::Commit(void)
+{
+	for (int i = 0; i < vNbCache; i++)
+	{
+		if (vpCacheSect[i].UseCnt & DISKIO_CACHE_DIRTY_BIT)
+		{
+			if (!SectWrite(vpCacheSect[i].SectNo, vpCacheSect[i].pSectData))
+			{
+				return false;
+			}
+			vpCacheSect[i].UseCnt &= ~DISKIO_CACHE_DIRTY_BIT;
+		}
+	}
+	return true;
+}
