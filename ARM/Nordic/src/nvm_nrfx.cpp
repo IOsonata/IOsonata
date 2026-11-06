@@ -1109,7 +1109,15 @@ static int NvmTxData(DevIntrf_t *pIntrf, const uint8_t *pData, int Len)
 
 	while (n < Len)
 	{
-		dev->Data[dev->DataLen++] = pData[n++];
+		int room = (int)sizeof(dev->Data) - dev->DataLen;
+		int count = Len - n;
+		if (count > room)
+		{
+			count = room;
+		}
+		memcpy(dev->Data + dev->DataLen, pData + n, (size_t)count);
+		dev->DataLen += count;
+		n += count;
 
 		if (dev->DataLen == (int)sizeof(dev->Data))
 		{
@@ -1117,8 +1125,8 @@ static int NvmTxData(DevIntrf_t *pIntrf, const uint8_t *pData, int Len)
 
 			if (res == NVM_INTRF_STARTED)
 			{
-				// The driver bounds a transfer to the page size, so this
-				// only fires on the last of the buffer.
+				// A started operation owns the staged payload until its
+				// completion event. The caller must not submit more data.
 				return -1;
 			}
 			if (res != 0)
