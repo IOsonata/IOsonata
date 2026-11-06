@@ -9,6 +9,8 @@ provide strong implementations when present.
 ----------------------------------------------------------------------------*/
 extern "C" {
 
+__attribute__((weak)) void UsbCheckStatus(void) {}
+
 __attribute__((weak)) void BtAppCheckStatus(void) {}
 __attribute__((weak)) void LteCheckStatus(void) {}
 __attribute__((weak)) void GnssCheckStatus(void) {}
