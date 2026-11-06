@@ -32,7 +32,9 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
  * @return	true when the block disk is initialized.
  */
 inline bool NvmMcuDiskInit(NvmDiskIO &Disk, Nvm &Mem,
-					NvmMcuIntrf &Intrf, int RegionNo)
+					NvmMcuIntrf &Intrf, int RegionNo,
+					uint32_t SectSize = 0, uint8_t *pEraseWork = nullptr,
+					uint32_t WorkSize = 0)
 {
 	NvmCfg_t cfg = {};
 
@@ -51,7 +53,7 @@ inline bool NvmMcuDiskInit(NvmDiskIO &Disk, Nvm &Mem,
 		return false;
 	}
 
-	return Disk.Init(Mem);
+	return Disk.Init(Mem, SectSize, pEraseWork, WorkSize);
 }
 
 #endif // __cplusplus
