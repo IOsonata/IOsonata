@@ -74,6 +74,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NRFX_SPI_TXBUF_SIZE		256
 #endif
 
+#ifdef __cplusplus
+static inline uint32_t nRFxSPIPinSelect(const IOPinCfg_t &Pin)
+{
+	return Pin.PortNo < 0 || Pin.PinNo < 0 ? UINT32_MAX :
+		((uint32_t)Pin.PortNo << 5) | (uint32_t)Pin.PinNo;
+}
+#endif
+
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;

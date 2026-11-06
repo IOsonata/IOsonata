@@ -195,12 +195,6 @@ alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 
 static const int s_NbnRFxSPIDev = sizeof(g_nRFxSPIDev) / sizeof(nRFSpiDev_t);
 
-static uint32_t nRFxSPIPinSelect(const IOPinCfg_t &Pin)
-{
-	return Pin.PortNo < 0 || Pin.PinNo < 0 ? UINT32_MAX :
-		((uint32_t)Pin.PortNo << 5) | (uint32_t)Pin.PinNo;
-}
-
 // Allow at least one CPU cycle per polling iteration for the wire time.
 static uint32_t nRFxSPIDmaTimeout(int Length, uint32_t Rate)
 {

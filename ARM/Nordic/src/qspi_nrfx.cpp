@@ -38,6 +38,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include "nrf.h"
+#ifdef NRF5340_XXAA_APPLICATION
+#include "nrf_erratas.h"
+#endif
 
 #include "istddef.h"
 #include "coredev/spi.h"
@@ -100,14 +103,43 @@ static void nRFxQSPIEnable(DevIntrf_t * const pDev)
 	nRFxQSPIWaitEventReady(dev, 10000);
 }
 
+#ifdef NRF5340_XXAA_APPLICATION
+// Only signals actually routed to the QSPI peripheral change ownership.
+// Software-controlled chip selects remain GPIOs.
+static void nRFxQSPIPinControl(const SPICfg_t &Cfg, bool Enable)
+{
+	int count = Cfg.ChipSel == SPICSEL_AUTO && Cfg.NbIOPins == 6 ? 6 : QSPI_CS_IOPIN_IDX;
+	for (int i = 0; i < count; i++)
+	{
+		const IOPinCfg_t &pin = Cfg.pIOPinMap[i];
+		if (pin.PortNo == 0 && pin.PinNo >= 13 && pin.PinNo <= 18)
+		{
+			uint32_t cnf = NRF_P0_S->PIN_CNF[pin.PinNo] & ~GPIO_PIN_CNF_MCUSEL_Msk;
+			if (Enable)
+			{
+				cnf = (cnf & ~GPIO_PIN_CNF_DRIVE_Msk) |
+					  (GPIO_PIN_CNF_DRIVE_H0H1 << GPIO_PIN_CNF_DRIVE_Pos) |
+					  (GPIO_PIN_CNF_MCUSEL_Peripheral << GPIO_PIN_CNF_MCUSEL_Pos);
+			}
+			NRF_P0_S->PIN_CNF[pin.PinNo] = cnf;
+		}
+	}
+}
+#endif
+
 static void nRFxQSPIPowerOff(DevIntrf_t * const pDev)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
+#ifdef NRF5340_XXAA_APPLICATION
+	nRFxQSPIDisable(pDev);
+	nRFxQSPIPinControl(dev->pSpiDev->Cfg, false);
+#else
 	// Undocumented Power down.  Nordic Bug with DMA causing high current consumption
 	*(volatile uint32_t *)((uint32_t)dev->pQSpiReg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)dev->pQSpiReg + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)dev->pQSpiReg + 0xFFC) = 0;
+#endif
 
 	for (int i = 0; i < dev->pSpiDev->Cfg.NbIOPins; i++)
 	{
@@ -130,15 +162,25 @@ static uint32_t nRFxQSPIGetRate(DevIntrf_t * const pDev)
 
 static uint32_t nRFxQSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 {
-	uint32_t rate = 0;
-	uint32_t sckfreq = (32000000 + (DataRate >> 1)) / DataRate - 1;
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
-
-	dev->pQSpiReg->IFCONFIG1 &= ~QSPI_IFCONFIG1_SCKFREQ_Msk;
-	dev->pQSpiReg->IFCONFIG1 |= (sckfreq & 0xFFFF) << QSPI_IFCONFIG1_SCKFREQ_Pos;
-
-	rate = (32000000 + ((sckfreq + 1) >> 1))/ (sckfreq + 1);
-
+	uint32_t base = 32000000U;
+	if (DataRate == 0)
+	{
+		return 0;
+	}
+#ifdef NRF5340_XXAA_APPLICATION
+	uint32_t div = (NRF_CLOCK_S->HFCLK192MCTRL & CLOCK_HFCLK192MCTRL_HCLK192M_Msk) >>
+				   CLOCK_HFCLK192MCTRL_HCLK192M_Pos;
+	base = 96000000U >> div;
+#endif
+	uint32_t divider = 1U + (base - 1U) / DataRate;
+	if (divider > 16)
+	{
+		divider = 16;
+	}
+	uint32_t rate = base / divider;
+	uint32_t cfg = dev->pQSpiReg->IFCONFIG1 & ~QSPI_IFCONFIG1_SCKFREQ_Msk;
+	dev->pQSpiReg->IFCONFIG1 = cfg | ((divider - 1U) << QSPI_IFCONFIG1_SCKFREQ_Pos);
 	dev->pSpiDev->Cfg.Rate = rate;
 
 	return rate;
@@ -363,6 +405,9 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 		case FLASH_CMD_E4WRITE:
 			ifcfg0 = (ifcfg0 & ~QSPI_IFCONFIG0_WRITEOC_Msk) | (3 << QSPI_IFCONFIG0_WRITEOC_Pos);
 			break;
+		case FLASH_CMD_WRITE:
+			ifcfg0 &= ~QSPI_IFCONFIG0_WRITEOC_Msk;
+			break;
 		case FLASH_CMD_DWRITE:
 			ifcfg0 = (ifcfg0 & ~QSPI_IFCONFIG0_WRITEOC_Msk) | (1 << QSPI_IFCONFIG0_WRITEOC_Pos);
 			break;
@@ -425,9 +470,45 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 {
 	NRF_QSPI_Type *reg = g_nRFxSPIDev[pDev->Cfg.DevNo].pQSpiReg;
 
+	if (pDev->Cfg.pIOPinMap == NULL || pDev->Cfg.NbIOPins < QSPI_CS_IOPIN_IDX ||
+		(pDev->Cfg.ChipSel != SPICSEL_MAN && pDev->Cfg.NbIOPins == QSPI_CS_IOPIN_IDX) ||
+		pDev->Cfg.Rate == 0)
+	{
+		return false;
+	}
+#ifdef NRF5340_XXAA_APPLICATION
+	// Anomaly 159 requires HCLK64M and undivided HFCLK192M for QSPI.
+	if (nrf53_errata_159())
+	{
+		if ((NRF_CLOCK_S->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk) != CLOCK_HFCLKCTRL_HCLK_Div2)
+		{
+			return false;
+		}
+		NRF_CLOCK_S->HFCLK192MCTRL = CLOCK_HFCLK192MCTRL_HCLK192M_Div1;
+	}
+	// Anomaly 43: activate with pins disconnected before writing IFCONFIG1.
+	if (nrf53_errata_43())
+	{
+		reg->PSEL.SCK = UINT32_MAX;
+		reg->PSEL.CSN = UINT32_MAX;
+		reg->PSEL.IO0 = UINT32_MAX;
+		reg->PSEL.IO1 = UINT32_MAX;
+		reg->PSEL.IO2 = UINT32_MAX;
+		reg->PSEL.IO3 = UINT32_MAX;
+		reg->ENABLE = QSPI_ENABLE_ENABLE_Enabled;
+		reg->EVENTS_READY = 0;
+		reg->TASKS_ACTIVATE = 1;
+		if (!nRFxQSPIWaitEventReady(&g_nRFxSPIDev[pDev->Cfg.DevNo], 100000))
+		{
+			reg->ENABLE = QSPI_ENABLE_ENABLE_Disabled;
+			return false;
+		}
+	}
+#else
 	// Force power on in case it was powered off previously
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
+#endif
 
 	// Configure I/O pins
 	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
@@ -437,28 +518,21 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 		IOPinSet(pDev->Cfg.pIOPinMap[i].PortNo, pDev->Cfg.pIOPinMap[i].PinNo);
 	}
 
-	uint32_t ifconfig1 = reg->IFCONFIG1 & ~QSPI_IFCONFIG1_SPIMODE_Msk;
+#ifdef NRF5340_XXAA_APPLICATION
+	nRFxQSPIPinControl(pDev->Cfg, true);
+#endif
 
-	if (pDev->Cfg.BitOrder == SPIDATABIT_LSB)
-	{
-	}
-
-	if (pDev->Cfg.ClkPol == SPICLKPOL_LOW && pDev->Cfg.DataPhase == SPIDATAPHASE_SECOND_CLK)
-	{
-		ifconfig1 |= QSPI_IFCONFIG1_SPIMODE_Msk;
-	}
-
-	reg->PSEL.SCK = (pDev->Cfg.pIOPinMap[QSPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[QSPI_SCK_IOPIN_IDX].PortNo << 5);
-	reg->PSEL.IO0 = (pDev->Cfg.pIOPinMap[QSPI_D0_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[QSPI_D0_IOPIN_IDX].PortNo << 5);
-	reg->PSEL.IO1 = (pDev->Cfg.pIOPinMap[QSPI_D1_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[QSPI_D1_IOPIN_IDX].PortNo << 5);
-	reg->PSEL.IO2 = (pDev->Cfg.pIOPinMap[QSPI_D2_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[QSPI_D2_IOPIN_IDX].PortNo << 5);
-	reg->PSEL.IO3 = (pDev->Cfg.pIOPinMap[QSPI_D3_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[QSPI_D3_IOPIN_IDX].PortNo << 5);
+	reg->PSEL.SCK = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[QSPI_SCK_IOPIN_IDX]);
+	reg->PSEL.IO0 = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[QSPI_D0_IOPIN_IDX]);
+	reg->PSEL.IO1 = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[QSPI_D1_IOPIN_IDX]);
+	reg->PSEL.IO2 = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[QSPI_D2_IOPIN_IDX]);
+	reg->PSEL.IO3 = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[QSPI_D3_IOPIN_IDX]);
 
 	if (pDev->Cfg.ChipSel == SPICSEL_AUTO)
 	{
 		if (pDev->Cfg.NbIOPins == 6)
 		{
-			reg->PSEL.CSN = (pDev->Cfg.pIOPinMap[QSPI_CS_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[QSPI_CS_IOPIN_IDX].PortNo << 5);
+			reg->PSEL.CSN = nRFxSPIPinSelect(pDev->Cfg.pIOPinMap[QSPI_CS_IOPIN_IDX]);
 		}
 		else
 		{
@@ -469,6 +543,23 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 	reg->IFCONFIG0 &= ~QSPI_IFCONFIG0_ADDRMODE_Msk;
 
 	nRFxQSPISetRate(&pDev->DevIntrf, pDev->Cfg.Rate);
+
+#ifdef NRF5340_XXAA_APPLICATION
+	if (nrf53_errata_121())
+	{
+		uint32_t timing = reg->IFCONFIG0 | (1UL << 16);
+		if (reg->IFCONFIG1 & QSPI_IFCONFIG1_SCKFREQ_Msk)
+		{
+			timing &= ~(1UL << 17);
+		}
+		else
+		{
+			timing |= 1UL << 17;
+		}
+		reg->IFCONFIG0 = timing;
+		reg->IFTIMING = 6U << QSPI_IFTIMING_RXDELAY_Pos;
+	}
+#endif
 
 	switch (pDev->Cfg.Phy)
 	{
@@ -507,13 +598,14 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-#if 0
+	reg->ENABLE = QSPI_ENABLE_ENABLE_Enabled;
 	reg->EVENTS_READY = 0;
-	reg->ENABLE = 1;
 	reg->TASKS_ACTIVATE = 1;
-#else
-	nRFxQSPIEnable(&pDev->DevIntrf);
-#endif
+	if (!nRFxQSPIWaitEventReady(&g_nRFxSPIDev[pDev->Cfg.DevNo], 100000))
+	{
+		nRFxQSPIPowerOff(&pDev->DevIntrf);
+		return false;
+	}
 	return true;
 }
 
