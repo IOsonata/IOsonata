@@ -93,6 +93,9 @@ typedef struct __FatFs_Mount_Config {
 	bool bFormatIfBlank;		//!< Format only when the entire medium is 0xFF
 	bool bFormatIfBootBlank;	//!< Opt-in: format if sector 0 is all 0xFF.
 							//!< Other sectors may contain data from a prior layout.
+	bool bValidateOnMount;	//!< Scan FAT allocation table after mounting
+	bool bFormatIfInvalid;	//!< Explicitly replace an invalid filesystem.
+							//!< Destructive; use for disposable test media only.
 	void *pWork;				//!< Caller-owned format/blank-scan buffer
 	UINT WorkSize;				//!< At least the physical sector size
 	const MKFS_PARM *pFormatOptions;	//!< Null uses FAT/SFD defaults
@@ -102,8 +105,11 @@ typedef struct __FatFs_Mount_Config {
 // Mount firmware FatFs independently of USB MSC. Formatting is optional and
 // never attempted for an I/O error or unrecognized nonblank volume unless
 // bFormatIfBootBlank explicitly authorizes a blank sector zero. This option
-// may create a filesystem overlapping old data at another partition offset;
-// callers must ensure the storage region is safe to repurpose.
+// may create a filesystem overlapping old data at another partition offset.
+// bFormatIfInvalid is stronger: it reformats an unrecognized volume even when
+// sector zero is not erased. Only use it when old data may be discarded.
+// bValidateOnMount uses FatFs f_getfree to inspect the allocation table, not
+// a full filesystem-repair operation.
 // If pLabelIfUnnamed is supplied, assign it to a mounted volume only when
 // no label entry exists. Existing custom labels and file contents are kept.
 FRESULT FatFsMount(const FatFsMountCfg_t &Cfg);
