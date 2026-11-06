@@ -366,10 +366,10 @@ static int UsbdMscDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 
 static void UsbdMscFinishCommand(UsbdMscDev_t *pMsc)
 {
-	// All WRITE(10) data must reach the medium before the success CSW.
-	// The generic DiskIO::Commit() also covers optional erase-page caches.
+	// Finish pending WRITE(10) sectors even after a command error so a
+	// failed partial transfer cannot leave dirty data for a later command.
+	// Successful CSWs require the whole write to be committed.
 	if (pMsc->Cbw.CBWCB[0] == USB_MSC_SCSI_WRITE_10 &&
-		!pMsc->bCommandFailed && !pMsc->bPhaseError &&
 		!pMsc->pDisk->Commit())
 	{
 		UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
