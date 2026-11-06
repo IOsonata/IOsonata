@@ -162,20 +162,12 @@ def build(target, prefix, directory):
                             '-I' + str(project / 'exemples' / name / 'src'),
                             '-std=gnu++23', '-fno-exceptions', '-fno-rtti',
                             '-c', str(ROOT / application), '-o', str(obj)], check=True)
-            app_objects = [str(obj)]
-            if application == 'exemples/storage/nvm_demo.cpp':
-                checks = output / (name + '_checks.o')
-                subprocess.run([prefix + 'g++', *flags, *includes,
-                                '-I' + str(project / 'exemples' / name / 'src'),
-                                '-std=gnu++23', '-fno-exceptions', '-fno-rtti', '-c',
-                                str(ROOT / 'exemples/storage/nvm_demo_checks.cpp'), '-o', str(checks)], check=True)
-                app_objects.append(str(checks))
             image = output / (name + '.elf')
             subprocess.run([prefix + 'g++', *flags, '--specs=nano.specs',
                             '--specs=' + ('rdimon' if mode == 'Debug' else 'nosys') + '.specs',
                             '-L' + str(ROOT / 'ARM/ldscript'),
                             '-T' + str(ROOT / 'ARM/NXP' / family / 'ldscript' / linker),
-                            '-Wl,--gc-sections', *app_objects, str(archive), '-o', str(image)], check=True)
+                            '-Wl,--gc-sections', str(obj), str(archive), '-o', str(image)], check=True)
             binary = image.with_suffix('.bin')
             subprocess.run([prefix + 'objcopy', '-O', 'binary', str(image), str(binary)], check=True)
             assert sum(struct.unpack_from('<8I', binary.read_bytes())) & 0xffffffff == 0

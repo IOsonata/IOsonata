@@ -76,11 +76,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/ble_nvm_test.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/nvm_demo_checks.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/nvm_demo_checks.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/rng_test.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/ARM/Nordic/exemples/crypto/rng_test.cpp</locationURI>

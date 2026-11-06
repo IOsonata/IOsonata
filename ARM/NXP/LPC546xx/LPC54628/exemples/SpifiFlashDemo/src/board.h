@@ -48,7 +48,6 @@ SOFTWARE.
 // The quad SPI flash of the board on the SPIFI, polling, every operation
 // finished in its call. The checks run once.
 #define NVM_DEMO_MEDIUM		1
-#define NVM_DEMO_ASYNC		0
 
 // SPIFI (SPI DevNo LPC546XX_SPIFI_DEVNO), IOCON function 6: SCK P0_26, IO0
 // P0_24, IO1 P0_25, IO2 P0_28, IO3 P0_27, CS P0_23. The pin map order is SCK,

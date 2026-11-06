@@ -23,8 +23,7 @@ The generic `Nvm`, `DeviceIntrf`, and `NvmDiskIO` APIs are unchanged.
 | littlefs integration | [nvm_littlefs_test.cpp](../exemples/storage/nvm_littlefs_test.cpp) | External littlefs, block callbacks and buffers |
 | Generic driver tests | [nvm_test.cpp](../exemples/storage/nvm_test.cpp) | Desktop compiler and supplied mock interfaces |
 
-The standalone demo selects its medium with `NVM_DEMO_MEDIUM` and its operation
-mode with `NVM_DEMO_ASYNC`. The separate [BLE NVM test](../exemples/bluetooth/ble_nvm_test.cpp)
+The standalone demo selects its medium with `NVM_DEMO_MEDIUM` and runs in polling mode. The separate [BLE NVM test](../exemples/bluetooth/ble_nvm_test.cpp)
 repeats writes and readbacks during advertising to exercise radio arbitration.
 Supplied `NvmDemo/ioc` projects include STM32L476, LPC54628, nRF9160,
 nRF91x1 and RA4M1. Inspect each project's linked source and medium selection:

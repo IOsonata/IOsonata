@@ -178,7 +178,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/pds_test.cpp|src/ble_nvm_test.cpp|src/nvm_demo_checks.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/pds_test.cpp|src/ble_nvm_test.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -360,7 +360,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/pds_test.cpp|src/ble_nvm_test.cpp|src/nvm_demo_checks.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/pds_test.cpp|src/ble_nvm_test.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -557,7 +557,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/pds_test.cpp|src/ble_nvm_test.cpp|src/nvm_demo_checks.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/pds_test.cpp|src/ble_nvm_test.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -755,7 +755,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/pds_test.cpp|src/ble_nvm_test.cpp|src/nvm_demo_checks.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/pds_test.cpp|src/ble_nvm_test.cpp|src/ble_app_nrf52.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
