@@ -29,6 +29,9 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
  * @param	Mem	Caller-owned NVM driver.
  * @param	Intrf	Caller-owned MCU memory interface.
  * @param	RegionNo	Existing linker-reserved NVM region number.
+ * @param	SectSize	Logical sector size, or 0 for the medium default.
+ * @param	pEraseWork	Caller-owned erase-unit scratch for smaller sectors.
+ * @param	WorkSize	Number of scratch bytes, at least one erase unit.
  * @return	true when the block disk is initialized.
  */
 inline bool NvmMcuDiskInit(NvmDiskIO &Disk, Nvm &Mem,
