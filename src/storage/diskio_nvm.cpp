@@ -154,7 +154,10 @@ bool NvmDiskIO::Commit(void)
 {
 	// Generic byte-oriented DiskIO cache may feed this erase-page cache.
 	// Drain it first, then make the complete physical page persistent.
-	DiskIO::Flush();
+	if (!DiskIO::Commit())
+	{
+		return false;
+	}
 	return WritePage();
 }
 
