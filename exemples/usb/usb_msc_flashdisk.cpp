@@ -246,10 +246,9 @@ int main(void)
 	{
 		return -1;
 	}
-	if (!UsbEnable(USB_DEVNO))
-	{
-		return -1;
-	}
+	// USB may not be powered and ready at the first attempt. The USB
+	// event path retries when VBUS and the controller become available.
+	(void)UsbEnable(USB_DEVNO);
 
 	AppRun();
 	return 0;
