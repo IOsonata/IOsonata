@@ -17,10 +17,10 @@ The SPIFI clock is the main clock divided: 73.3 MHz for the 80 MHz request
 of the board header (`NVM_DEMO_SPI_RATE`). The NXP SDK example runs the
 flash at 96 MHz.
 
-The demo reads the previous boot stamp, erases the test region, writes a
-128-byte pattern across a page boundary, and reads it back. It then writes
-and verifies the next boot stamp. Power-cycle the board and check that the
-boot count increases.
+The demo erases two scratch units, writes bytes 0x00 through 0x7F across
+their boundary, and compares all 128 bytes on readback. To check retention,
+power the board off and on. Before erasing, the demo reports whether the
+same 128 bytes are still in memory.
 
 Status: Debug and Release build and link. The SPIFI driver passes the host
 test in `tests/lpc/lpc546xx/spifi_test.cpp` with a model of the SPIFI and of

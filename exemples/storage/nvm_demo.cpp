@@ -192,11 +192,9 @@ int main()
 	uint64_t reserved;
 	uint32_t offset;
 	uint64_t start;
-	uint32_t pattern[32];
-	uint32_t readback[32];
-	uint32_t stamp[2];
-	const uint32_t magic = 0x4E564D31U;
-	uint32_t boot = 1;
+	alignas(4) uint8_t pattern[128];
+	alignas(4) uint8_t readback[sizeof(pattern)];
+	unsigned i;
 	int count;
 
 	if (!s_Uart.Init(s_UartCfg))
@@ -227,9 +225,9 @@ int main()
 		return 1;
 	}
 
-	// Limit all offsets below to two scratch sectors and one boot stamp sector.
+	// Limit all offsets below to two scratch units.
 	unit = cfg.EraseSize ? cfg.EraseSize : 256;
-	reserved = 3ULL * unit;
+	reserved = 2ULL * unit;
 #if NVM_DEMO_MEDIUM != 0
 	reserved += (uint64_t)unit * NVM_DEMO_TOP_RESERVE_PAGES;
 #endif
@@ -239,49 +237,52 @@ int main()
 		return 1;
 	}
 	start = cfg.TotalSize - reserved;
-	if (!s_Nvm.Init(cfg, &s_MemIntrf, start, 3ULL * unit))
+	if (!s_Nvm.Init(cfg, &s_MemIntrf, start, 2ULL * unit))
 	{
 		printf("NVM init failed\r\n");
 		return 1;
 	}
-	printf("NVM erase, write and readback demo\r\nTest region 0x%08lX, %lu bytes\r\n",
-		   (unsigned long)(cfg.BaseAddr + start), (unsigned long)(3 * unit));
+	printf("NVM demo: write 128 bytes and check that every byte reads back correctly\r\nTest region 0x%08lX, %lu bytes\r\n",
+		   (unsigned long)(cfg.BaseAddr + start), (unsigned long)(2 * unit));
 #if NVM_DEMO_MEDIUM == 1
 	printf("Read 0x%02X, dummy %u, program 0x%02X\r\n",
 		   cfg.RdCmd.Cmd ? cfg.RdCmd.Cmd : FLASH_CMD_READ, cfg.RdCmd.DummyCycle,
 		   cfg.WrCmd.Cmd ? cfg.WrCmd.Cmd : FLASH_CMD_WRITE);
 #endif
 
-	// Read the previous stamp before erasing anything.
-	count = s_Nvm.Read(2 * unit, stamp, sizeof(stamp));
-	if (count != sizeof(stamp))
+	// Read the same addresses before changing anything, so a power cycle
+	// can be used to check whether the previous write was retained.
+	offset = unit - sizeof(pattern) / 2;
+	for (i = 0; i < sizeof(pattern); i++)
 	{
-		printf("Stamp read failed (%d)\r\n", count);
+		pattern[i] = (uint8_t)i;
+	}
+	count = s_Nvm.Read(offset, readback, sizeof(readback));
+	if (count != sizeof(readback))
+	{
+		printf("Initial read failed (%d)\r\n", count);
 		return 1;
 	}
-	if (stamp[0] == magic)
+	if (memcmp(pattern, readback, sizeof(pattern)) == 0)
 	{
-		printf("Previous boot %lu\r\n", (unsigned long)stamp[1]);
-		boot = stamp[1] + 1;
+		printf("Before writing: found all 128 bytes of the test pattern in memory.\r\n");
+	}
+	else
+	{
+		printf("Before writing: the test pattern is absent or incomplete.\r\n");
 	}
 
 	if (cfg.EraseSize)
 	{
-		printf("Erasing 3 sectors at 0x%08lX...\r\n", (unsigned long)(cfg.BaseAddr + start));
-		if (s_Nvm.Erase(0, 3 * unit) != 0)
+		printf("Erasing 2 sectors at 0x%08lX...\r\n", (unsigned long)(cfg.BaseAddr + start));
+		if (s_Nvm.Erase(0, 2 * unit) != 0)
 		{
 			printf("Erase failed\r\n");
 			return 1;
 		}
 	}
 
-	// Half the pattern goes on each side of a sector boundary.
-	for (unsigned i = 0; i < sizeof(pattern) / sizeof(pattern[0]); i++)
-	{
-		pattern[i] = 0xA5000000U + i;
-	}
-	offset = unit - sizeof(pattern) / 2;
-	printf("Writing %u bytes at 0x%08lX across the boundary at 0x%08lX\r\n",
+	printf("Writing %u bytes (0x00 through 0x7F) at 0x%08lX across the boundary at 0x%08lX\r\n",
 		   (unsigned)sizeof(pattern), (unsigned long)(cfg.BaseAddr + start + offset),
 		   (unsigned long)(cfg.BaseAddr + start + unit));
 	count = s_Nvm.Write(offset, pattern, sizeof(pattern));
@@ -297,23 +298,8 @@ int main()
 		return 1;
 	}
 
-	printf("Read back and matched all %u bytes\r\n", (unsigned)sizeof(pattern));
-
-	stamp[0] = magic;
-	stamp[1] = boot;
-	count = s_Nvm.Write(2 * unit, stamp, sizeof(stamp));
-	if (count != sizeof(stamp))
-	{
-		printf("Stamp write failed (%d)\r\n", count);
-		return 1;
-	}
-	count = s_Nvm.Read(2 * unit, readback, sizeof(stamp));
-	if (count != sizeof(stamp) || memcmp(stamp, readback, sizeof(stamp)) != 0)
-	{
-		printf("Stamp readback failed (%d)\r\n", count);
-		return 1;
-	}
-	printf("Boot %lu stamp written and verified\r\nALL PASS\r\n", (unsigned long)boot);
+	printf("PASS: all %u bytes read back exactly as written.\r\n", (unsigned)sizeof(pattern));
+	printf("To check retention, power the board off and on. Look for the test pattern before writing.\r\n");
 	while (true)
 	{
 		msDelay(1000);

@@ -17,8 +17,8 @@ For the Release UART log, connect P0.04 (expansion connector P1 SDA) to the RX i
 power pins disconnected. Open the serial port at 1000000 baud, 8N1, then
 reset the board.
 
-The demo erases and programs external flash offsets 0x7FA000 through
-0x7FCFFF. Use a board where those three sectors can be overwritten.
-Look for the 0xBB read and 0x02 write commands, the page-boundary readback,
-and ALL PASS. To test retention, switch the Thingy off and on with the same
-image. For Debug, reconnect the debugger with semihosting enabled. The next run should report the previous boot count and increment it.
+The two scratch sectors occupy 0x7FB000 through 0x7FCFFF.
+The demo erases two scratch units, writes bytes 0x00 through 0x7F across
+their boundary, and compares all 128 bytes on readback. To check retention,
+power the board off and on. Before erasing, the demo reports whether the
+same 128 bytes are still in memory.
