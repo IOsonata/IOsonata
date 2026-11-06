@@ -334,6 +334,31 @@ static void TestWriteBackErasePage(void)
 		"retried commit persists modified data");
 }
 
+static void TestCheckedGenericCommit(void)
+{
+	static uint8_t cacheMem[DISK_SECT];
+	static DiskIOCache_t cache = { 0, 0xFFFFFFFF, cacheMem };
+	NvmDiskIO disk;
+	uint8_t data[32];
+	uint8_t back[32];
+
+	CHECK(s_Erase.Erase(0, DISK_SIZE) == 0, "clear mock for checked commit");
+	CHECK(disk.Init(s_Erase), "initialize uncached NVM sector device");
+	disk.SetCache(&cache, 1);
+	memset(data, 0x42, sizeof(data));
+	CHECK(disk.Write((uint64_t)16U, data, sizeof(data)) ==
+		(int)sizeof(data), "populate generic RAM sector cache");
+
+	s_Erase.vbFailErase = true;
+	CHECK(!disk.Commit(), "generic cached write failure reported");
+	s_Erase.vbFailErase = false;
+	CHECK(disk.Commit(), "generic failed cached write can be retried");
+	CHECK(disk.SectRead(0U, cacheMem), "read committed physical sector");
+	memcpy(back, cacheMem + 16U, sizeof(back));
+	CHECK(memcmp(data, back, sizeof(data)) == 0,
+		"generic committed data is persistent");
+}
+
 int main(void)
 {
 	NvmDiskIO diskErase;
@@ -359,6 +384,7 @@ int main(void)
 	RunDisk(diskDirect, "direct write medium");
 	TestSubEraseLogicalSectors();
 	TestWriteBackErasePage();
+	TestCheckedGenericCommit();
 
 	printf("\nChecks run: %d\n", s_Checks);
 	if (s_Fail == 0)
