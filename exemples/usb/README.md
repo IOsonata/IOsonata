@@ -134,7 +134,8 @@ the SDK USB DFU bootloader. These variants have different start addresses.
 The example exposes 512-byte logical sectors over a 4096-byte physical
 erase page. NvmDiskIO retains the dirty page across MSC commands; a write
 to a different erase page causes eviction and programming of the previous
-page. The example opts into `UsbdMscCfg_t.bWriteBack`; SCSI SYNCHRONIZE
+page. Reads of unrelated sectors bypass the write cache without triggering
+erase or eviction. The example opts into `UsbdMscCfg_t.bWriteBack`; SCSI SYNCHRONIZE
 CACHE and clean eject also commit. Other MSC users retain write-through
 semantics unless they enable this policy. **Do not unplug a USB-powered
 device before ejecting:** the last dirty page may be lost on power loss.
