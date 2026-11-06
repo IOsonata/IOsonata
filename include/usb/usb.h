@@ -135,6 +135,8 @@ typedef enum __Usb_Ctrl_Stage {
 	USB_CTRL_ABORT,				//!< Transfer abandoned, drop anything staged
 } UsbCtrlStage_t;
 
+#pragma pack(push, 4)
+
 /// Everything UsbInit needs. Endpoint zero packet size and maximum speed are
 /// not here, they come from usb_ctrlr.h for this DevNo.
 typedef struct __Usb_Config {
@@ -161,6 +163,8 @@ typedef struct __Usb_Config {
 	uint16_t MaxPower;				//!< Bus current drawn in mA, ignored when self powered
 	UsbEvtHandler_t EvtHandler;		//!< Cable event callback, may be NULL
 } UsbCfg_t;
+
+#pragma pack(pop)
 
 #ifdef __cplusplus
 extern "C" {
