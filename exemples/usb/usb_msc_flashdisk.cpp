@@ -8,8 +8,8 @@ linker script, so its size is set there and nowhere else, and the image fails
 to link if it grows into the disk. It does not expose firmware, filesystem,
 settings or Bluetooth bond-storage regions.
 
-The content stays across resets and power cycles. The example opts into generic FAT12 first-use provisioning. An existing
-signed FAT12 volume is preserved.
+The content stays across resets and power cycles. The example uses the generic FatFs storage interface to provision blank
+media, then unmounts it before the USB host takes ownership.
 
 The host sees 512-byte logical sectors. NvmDiskIO caches one 4 KiB erase
 page in caller-owned RAM. Writes to that page are coalesced and committed
@@ -46,7 +46,7 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "storage/diskio_nvm.h"
-#include "storage/fat12_provision.h"
+#include "ff_diskio.h"
 #include "storage/nvm_mcu_intrf.h"
 #include "app_evt_handler.h"
 #include "usb/usb.h"
@@ -79,6 +79,7 @@ static NvmMcuIntrf s_MemIntrf;
 static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
 static UsbdMsc s_Msc;
+static FATFS s_FatFs;
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_BUFF_SIZE];
 alignas(4) static uint8_t s_EraseWork[MSC_ERASE_WORK_SIZE];
 
@@ -134,7 +135,21 @@ int main(void)
 	{
 		return -1;
 	}
-	if (!Fat12ProvisionIfBlank(s_Disk, s_SectorBuffer, sizeof(s_SectorBuffer)))
+	// Provision a genuinely blank disk with the existing generic FatFs API.
+	// Firmware releases ownership before the USB host mounts the volume.
+	FatFsMountCfg_t fsCfg = {};
+	fsCfg.pDisk = &s_Disk;
+	fsCfg.pFatFs = &s_FatFs;
+	fsCfg.bFormatIfBlank = true;
+	fsCfg.pWork = s_SectorBuffer;
+	fsCfg.WorkSize = sizeof(s_SectorBuffer);
+	fsCfg.pLabelIfUnnamed = "0:IOSONATA";
+
+	if (FatFsMount(fsCfg) != FR_OK)
+	{
+		return -1;
+	}
+	if (FatFsUnmount("0:") != FR_OK)
 	{
 		return -1;
 	}
