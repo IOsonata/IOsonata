@@ -152,12 +152,10 @@ bool NvmDiskIO::LoadPage(uint64_t PageOff)
 
 bool NvmDiskIO::Commit(void)
 {
-	if (!WritePage())
-	{
-		return false;
-	}
+	// Generic byte-oriented DiskIO cache may feed this erase-page cache.
+	// Drain it first, then make the complete physical page persistent.
 	DiskIO::Flush();
-	return true;
+	return WritePage();
 }
 
 uint32_t NvmDiskIO::GetNbSect(void)
