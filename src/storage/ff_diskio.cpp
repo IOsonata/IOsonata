@@ -246,6 +246,23 @@ static FRESULT FatFsDiskIsBlank(void *pWork, UINT WorkSize, bool *pBlank,
 	return FR_OK;
 }
 
+// FatFs f_mount verifies boot geometry. On request, also traverse the
+// allocation table so a readable boot sector alone is not considered a
+// validated volume. Force a scan rather than trusting cached FSINFO counts.
+static FRESULT FatFsValidate(const TCHAR *pPath, FATFS *pFs)
+{
+	DWORD freeClusters = 0;
+	FATFS *pMounted = nullptr;
+
+	pFs->free_clst = 0xFFFFFFFFUL;
+	FRESULT res = f_getfree(pPath, &freeClusters, &pMounted);
+	if (res == FR_OK && pMounted != pFs)
+	{
+		return FR_INT_ERR;
+	}
+	return res;
+}
+
 FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
 {
 	FRESULT res;
@@ -260,7 +277,8 @@ FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
 		return FR_INVALID_PARAMETER;
 	}
 
-	if ((Cfg.bFormatIfBlank || Cfg.bFormatIfBootBlank) &&
+	if ((Cfg.bFormatIfBlank || Cfg.bFormatIfBootBlank ||
+		 Cfg.bFormatIfInvalid) &&
 		(Cfg.pWork == nullptr || Cfg.WorkSize < Cfg.pDisk->GetSectSize()))
 	{
 		return FR_INVALID_PARAMETER;
@@ -275,31 +293,43 @@ FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
 	}
 
 	res = f_mount(Cfg.pFatFs, pPath, 1);
-
-	if (res == FR_NO_FILESYSTEM &&
-		(Cfg.bFormatIfBlank || Cfg.bFormatIfBootBlank))
+	if (res == FR_OK && Cfg.bValidateOnMount)
 	{
-		res = FatFsDiskIsBlank(Cfg.pWork, Cfg.WorkSize, &blank,
-			Cfg.bFormatIfBootBlank);
+		res = FatFsValidate(pPath, Cfg.pFatFs);
+	}
 
-		if (res != FR_OK)
+	// Never erase a volume after a read or write failure. Recovery is
+	// deliberately opt-in and distinct from checking an erased sector.
+	if (res == FR_NO_FILESYSTEM || (res == FR_INT_ERR && Cfg.bFormatIfInvalid))
+	{
+		if (Cfg.bFormatIfInvalid)
 		{
-			return res;
+			blank = true;
+		}
+		else if (Cfg.bFormatIfBlank || Cfg.bFormatIfBootBlank)
+		{
+			res = FatFsDiskIsBlank(Cfg.pWork, Cfg.WorkSize, &blank,
+				Cfg.bFormatIfBootBlank);
+			if (res != FR_OK)
+			{
+				return res;
+			}
 		}
 
-		if (!blank)
+		if (blank)
 		{
-			return FR_NO_FILESYSTEM;
-		}
+			pFormat = Cfg.pFormatOptions != nullptr ?
+				Cfg.pFormatOptions : &defaults;
 
-		pFormat = Cfg.pFormatOptions != nullptr ?
-			Cfg.pFormatOptions : &defaults;
-
-		res = f_mkfs(pPath, pFormat, Cfg.pWork, Cfg.WorkSize);
-
-		if (res == FR_OK)
-		{
-			res = f_mount(Cfg.pFatFs, pPath, 1);
+			res = f_mkfs(pPath, pFormat, Cfg.pWork, Cfg.WorkSize);
+			if (res == FR_OK)
+			{
+				res = f_mount(Cfg.pFatFs, pPath, 1);
+				if (res == FR_OK && Cfg.bValidateOnMount)
+				{
+					res = FatFsValidate(pPath, Cfg.pFatFs);
+				}
+			}
 		}
 	}
 
