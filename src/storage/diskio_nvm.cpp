@@ -203,18 +203,21 @@ bool NvmDiskIO::SectRead(uint32_t SectNo, uint8_t *pBuff)
 	}
 
 	uint64_t off = (uint64_t)SectNo * vSectSize;
-	if (vbWriteCache)
+	if (vbWriteCache && vbCacheValid)
 	{
 		uint32_t eraseSize = vpNvm->EraseSize();
 		uint64_t pageOff = off - off % eraseSize;
-		if (!LoadPage(pageOff))
+		if (vCacheOff == pageOff)
 		{
-			return false;
+			// Read our own uncommitted writes.
+			memcpy(pBuff, vpEraseWork + (uint32_t)(off - pageOff),
+				vSectSize);
+			return true;
 		}
-		memcpy(pBuff, vpEraseWork + (uint32_t)(off - pageOff), vSectSize);
-		return true;
 	}
 
+	// Reading another page must not evict or program the dirty write
+	// cache. Read that sector directly from the non-overlapping NVM page.
 	return vpNvm->Read(off, pBuff, vSectSize) == (int)vSectSize;
 }
 
