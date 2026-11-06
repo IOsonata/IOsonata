@@ -4,7 +4,7 @@
 // The memory is mapped at a fixed low address so the 32 bit vector table
 // words of a test payload can point into slot 0, the way they do on target.
 // The layout symbols come from the link line (--defsym), the way a target
-// link gets them from dfu_layout_*.ld.
+// link gets them from *_dfu_layout.ld.
 //
 // Memory kinds, as on target:
 //	NOR		nRF52, 4 byte program unit, a write only clears bits, an erase sets

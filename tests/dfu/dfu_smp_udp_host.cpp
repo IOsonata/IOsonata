@@ -63,6 +63,7 @@ int main(int argc, char **argv)
 		.NbKey = 1,
 		.bVerifySlot0 = true,
 		.bAllowNoRec = false,
+		.bAllowDowngrade = true,
 	};
 
 	HostNvm slot1(HOST_SLOT1, HOST_SLOT1_SIZE);

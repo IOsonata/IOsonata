@@ -53,9 +53,6 @@ SOFTWARE.
 
 #ifdef SOFTDEVICE_PRESENT
 #include "nrf_soc.h"
-#include "nrf_sdm.h"
-#include "nrf_mbr.h"
-#include "nrf_error.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_soc.h"
 #endif
@@ -100,25 +97,12 @@ static void nRFUsbdSocEvt(uint32_t EvtId, void *pCtx)
 
 NRF_SDH_SOC_OBSERVER(s_nRFUsbdSocObserver, 0, nRFUsbdSocEvt, nullptr);
 
-// Value at the magic number location of every SoftDevice image
-#define NRFUSBD_SD_MAGIC_NUMBER		0x51B1E5DBUL
-
-// Whether a SoftDevice is programmed and enabled. sd_softdevice_is_enabled is
-// an SVC that only a programmed SoftDevice implements, so the image is looked
-// for first: its magic number follows the MBR.
-static bool nRFUsbdVbusSdRunning(void)
+// The SDK handler keeps its enabled state in RAM. A USB-only boot can
+// link without the handler, even when S140 is programmed in flash.
+#pragma weak nrf_sdh_is_enabled
+bool UsbdSdRunning(void)
 {
-	const volatile uint32_t *pMagic = (const volatile uint32_t *)(
-		MBR_SIZE + SOFTDEVICE_INFO_STRUCT_OFFSET + 4U);
-
-	if (*pMagic != NRFUSBD_SD_MAGIC_NUMBER)
-	{
-		return false;
-	}
-
-	uint8_t en = 0;
-
-	return sd_softdevice_is_enabled(&en) == NRF_SUCCESS && en != 0;
+	return nrf_sdh_is_enabled != nullptr && nrf_sdh_is_enabled();
 }
 
 static void nRFUsbdSdEnable(void)
@@ -185,7 +169,7 @@ void nRFUsbdVbusIntInit(uint32_t Prio)
 	s_nRFUsbdVbusPrio = Prio;
 
 #ifdef SOFTDEVICE_PRESENT
-	if (nRFUsbdVbusSdRunning())
+	if (UsbdSdRunning())
 	{
 		nRFUsbdSdEnable();
 		return;

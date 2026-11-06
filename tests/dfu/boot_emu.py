@@ -26,7 +26,7 @@ SCEN = sys.argv[4] if len(sys.argv) > 4 else "install"
 N52 = T in ("52", "52832")
 
 # The memory and its controller per target. The layout itself comes from the
-# ELF: the __dfu_* symbols the linker took from the target's dfu_layout_*.ld.
+# ELF: the __dfu_* symbols the linker took from the target's *_dfu_layout.ld.
 if T == "52":
     FLASH, NAME, NVMC, PAGE = 0x100000, "52840", 0x4001E000, 0x1000
 elif T == "52832":
@@ -88,6 +88,7 @@ uc.mem_map(0xE0000000, 0x100000, UC_PROT_ALL)      # system control space
 uc.mem_map(0xF0000000, 0x10000, UC_PROT_ALL)
 if N52:
     uc.mem_write(0x10000010, struct.pack("<II", PAGE, FLASH // PAGE))
+    uc.mem_write(0x50000510, b"\xff" * 4)         # GPIO inputs high, no button
 else:
     uc.mem_map(0x00FF0000, 0x10000, UC_PROT_ALL)   # FICR, UICR on nRF54L
     uc.mem_write(0x00FFD000, b"\xff" * 0x1000)

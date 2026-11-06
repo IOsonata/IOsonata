@@ -224,6 +224,33 @@ int DfuSmp::OsBootInfo(const uint8_t *p, uint32_t Len, CborWr_t &Wr,
 	return DFUSMP_ERR_EINVAL;
 }
 
+// Validate the staged bytes for listing and activation. Stage 0 owns the key.
+int DfuSmp::CheckSlot1(const DfuImgInfo_t &info)
+{
+	uint32_t vec[2];
+	int res = DfuImgVerify(vCfg.pMgr->Hash(), nullptr, DfuImgKey_t{}, DfuMgr::Read,
+						   vCfg.pMgr, info);
+	if (res == DFU_IMG_OK)
+	{
+		if (info.Hdr.ImgSize > vCfg.pMgr->Layout().Slot0Size ||
+			vCfg.pMgr->Layout().Unit + sizeof(DfuRecInfo_t) + info.Hdr.HdrSize + info.TlvLen >
+			vCfg.pMgr->Layout().RecSize)
+		{
+			res = DFU_IMG_ERR_SIZE;
+		}
+		else if (DfuMgr::Read(vCfg.pMgr, info.Hdr.HdrSize, vec, sizeof(vec)) ==
+				 false)
+		{
+			res = DFU_IMG_ERR_READ;
+		}
+		else if (DfuTgtEntryValid(vec, vCfg.pMgr->Layout().Slot0, info.Hdr.ImgSize) == false)
+		{
+			res = DFU_IMG_ERR_VECTOR;
+		}
+	}
+	return res;
+}
+
 int DfuSmp::ImgList(CborWr_t &Wr, int &GrpRc)
 {
 	(void)GrpRc;
@@ -234,7 +261,7 @@ int DfuSmp::ImgList(CborWr_t &Wr, int &GrpRc)
 	bool b1 = false;
 
 	// Slot 1 is listed while it holds an image the boot has not dealt with.
-	// A half uploaded one is not an image yet. Direct mode has no slot 1.
+	// An interrupted upload can leave parseable TLVs from a previous image.
 	if (vCfg.pMgr->Direct() == false && vCfg.pMgr->Active() == false &&
 		vCfg.pMgr->Writer().Slot1State(&pend, &done) && done == DFU_ERASED_WORD)
 	{
@@ -281,7 +308,7 @@ int DfuSmp::ImgList(CborWr_t &Wr, int &GrpRc)
 		CborPutStr(&Wr, "hash");
 		CborPutBstr(&Wr, i1.Sha, sizeof(i1.Sha));
 		CborPutStr(&Wr, "bootable");
-		CborPutBool(&Wr, true);
+		CborPutBool(&Wr, CheckSlot1(i1) == DFU_IMG_OK);
 		// No revert: once pending it stays, which is what permanent means.
 		CborPutStr(&Wr, "pending");
 		CborPutBool(&Wr, p);
@@ -338,36 +365,19 @@ int DfuSmp::ImgState(const uint8_t *p, uint32_t Len, CborWr_t &Wr, int &GrpRc)
 		return DFUSMP_ERR_EINVAL;
 	}
 
-	// Checked in full before it is marked: the boot refuses a bad image, but
-	// a host told now can say why. The signature is the boot's to check.
-	uint32_t vec[2];
-	int res = DfuImgVerify(vCfg.pMgr->Hash(), nullptr, DfuImgKey_t{}, DfuMgr::Read,
-						   vCfg.pMgr, info);
-	if (res == DFU_IMG_OK)
-	{
-		if (info.Hdr.ImgSize > vCfg.pMgr->Layout().Slot0Size ||
-			vCfg.pMgr->Layout().Unit + sizeof(DfuRecInfo_t) + info.Hdr.HdrSize + info.TlvLen >
-			vCfg.pMgr->Layout().RecSize)
-		{
-			res = DFU_IMG_ERR_SIZE;
-		}
-		else if (DfuMgr::Read(vCfg.pMgr, info.Hdr.HdrSize, vec, sizeof(vec)) ==
-				 false)
-		{
-			res = DFU_IMG_ERR_READ;
-		}
-		else if (DfuTgtEntryValid(vec, vCfg.pMgr->Layout().Slot0, info.Hdr.ImgSize) == false)
-		{
-			res = DFU_IMG_ERR_VECTOR;
-		}
-	}
+	int res = CheckSlot1(info);
 	if (res != DFU_IMG_OK)
 	{
 		GrpRc = DfuSmpImgErr(res);
 		return DFUSMP_ERR_EINVAL;
 	}
 
-	if (vCfg.pMgr->Commit() == false)
+	res = vCfg.pMgr->MarkPending();
+	if (res == DFU_MGR_ERR_VERSION)
+	{
+		return DFUSMP_ERR_EINVAL;
+	}
+	if (res != DFU_IMG_OK)
 	{
 		GrpRc = DFUSMP_IMG_ERR_WRITE_FAILED;
 		return DFUSMP_ERR_EBADSTATE;

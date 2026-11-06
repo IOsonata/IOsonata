@@ -9,7 +9,7 @@ OPT ?= -O1
 
 CPPFLAGS += -I$(ROOT)/include -Ihostport -I$(ROOT)/micro-ecc \
 	-DuECC_SUPPORTS_secp256r1=1 -DuECC_SUPPORT_COMPRESSED_POINT=0 \
-	-DuECC_OPTIMIZATION_LEVEL=2
+	-DuECC_OPTIMIZATION_LEVEL=2 -DuECC_ENABLE_VLI_API=1
 
 CFLAGS ?= $(OPT) -g
 CFLAGS += -std=gnu17 -Wall -Wextra -fno-omit-frame-pointer
@@ -20,7 +20,7 @@ CXXFLAGS += -std=gnu++23 -Wall -Wextra -fno-omit-frame-pointer \
 SANITIZERS ?= -fsanitize=address,undefined -fno-sanitize-recover=all
 TEST_ENV := ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 
-# The layout a target gets from dfu_layout_*.ld, at the address dfu_host.cpp
+# The layout a target gets from *_dfu_layout.ld, at the address dfu_host.cpp
 # maps its memory. Must match dfu_host.h.
 LAYOUT := -no-pie \
 	-Wl,--defsym,__dfu_slot0_start=0x10000000 \
@@ -151,6 +151,7 @@ $(BUILD_DIR)/dfu_serial_host: dfu_serial_host.cpp $(ROOT)/src/dfu/dfu_serial.cpp
 		-x none $(UECC_OBJ) $(LAYOUT) -o $@
 
 test: $(TESTS) $(BUILD_DIR)/dfu_prod_boot images
+	$(PYTHON) cdc_wait_test.py
 	$(TEST_ENV) $(BUILD_DIR)/dfu_image_test $(IMG_DIR)
 	$(TEST_ENV) $(BUILD_DIR)/dfu_boot_test $(IMG_DIR)
 	$(TEST_ENV) $(BUILD_DIR)/dfu_mgr_test $(IMG_DIR)

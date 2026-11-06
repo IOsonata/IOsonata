@@ -8,7 +8,7 @@ Three layers, each replaced without touching the others:
 	protocol	DfuWire (stage 0 wire protocol), DfuSmp (SMP), ...
 				calls DfuMgr only, never the memory or the crypto
 	DfuMgr		manifest check, image writer, hash, record or pending mark
-	target		dfu_<mcu>, dfu_layout_*.ld
+	target		dfu_<mcu>, *_dfu_layout.ld
 
 A protocol reads its bytes from any DeviceIntrf: UART, UsbdCdc, BtIntrf.
 Each MCU target picks the protocol and the transport; nothing above the
@@ -76,7 +76,7 @@ SOFTWARE.
 // Results beyond the DFU_IMG_ERR_ ones
 #define DFU_MGR_ERR_STATE		-20		//!< Not valid in this state
 #define DFU_MGR_ERR_OFFSET		-21		//!< Past what was taken
-#define DFU_MGR_ERR_VERSION		-22		//!< Older than slot 0
+#define DFU_MGR_ERR_VERSION		DFU_IMG_ERR_VERSION		//!< Older than slot 0
 #define DFU_MGR_ERR_LEN			-23		//!< Manifest length wrong
 
 // Upload state
@@ -179,6 +179,9 @@ public:
 	 * also works on an image left in slot 1 by an earlier session.
 	 */
 	bool Commit(void);
+
+	/// Check the staged version and mark slot 1 pending, including after reconnect.
+	int MarkPending(void);
 
 	/// Drop the upload. What was written stays, unmarked.
 	void Abort(void);

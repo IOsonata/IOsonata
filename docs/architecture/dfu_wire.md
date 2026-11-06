@@ -373,7 +373,7 @@ carry only the check); exit handlers and the heap. What came: DfuWire
 ## 15. Configuration and remaining work
 
 - Downgrade is refused by default. Stage 0 maps `DFU_BOOT_ALLOW_DOWNGRADE`
-  to `DfuMgrCfg_t::bAllowDowngrade`.
+  to the wired recovery manager and the staged-image installer.
 - ENTER is implemented; applications must supply its transport and polling.
 - MaxBody defaults to 512 through `DFU_BOOT_BUFSIZE`.
 - A USB DFU-class protocol and Web Serial client are not supplied.
