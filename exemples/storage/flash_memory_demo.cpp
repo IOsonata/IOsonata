@@ -55,11 +55,7 @@ SOFTWARE.
 // Select the driver underneath. Both run the same test flow through the
 // common DiskIO sector api.
 // 0 : the legacy Flash driver (storage/flash.h), original behavior
-// 1 : the new unified Nvm driver behind NvmDiskIO. The board's FLASH_CFG is
-//     translated at run time with the standard single line opcodes. The
-//     legacy config does not say how to set the quad enable bit, so its
-//     quad commands are not carried over. For quad access with Nvm, set
-//     RdCmd, WrCmd and QuadEnable in an NvmCfg_t, see nvm_demo.cpp.
+// 1 : the unified Nvm driver behind NvmDiskIO, using the board flash settings.
 #ifndef NVM_MODE
 #define NVM_MODE			1
 #endif
@@ -155,20 +151,20 @@ FlashDiskIO s_Flash;
 static Nvm s_Nvm;
 static NvmDiskIO s_Flash;
 
-// The board's legacy FLASH_CFG expressed as the unified config: the values
-// that vary come over, and everything the legacy driver hardcoded or did in
-// code, the protocol, the reset, the id retry, EN4B, is driver knowledge in
-// Nvm, derived from the erase kind. Legacy TotalSize is in KBytes. RdCmd,
-// WrCmd and QuadEnable are left at their defaults, the standard single line
-// opcodes, because the legacy config has no quad enable information.
+// On ordinary SPI the driver frames single-line read and program commands.
+static const bool s_QuadBus = SPI_PHY == SPIPHY_QUAD_SDR || SPI_PHY == SPIPHY_QUAD_DDR ||
+							  SPI_PHY == SPIPHY_OCTO_SDR || SPI_PHY == SPIPHY_OCTO_DDR;
 static const NvmCfg_t s_NvmCfg = {
-	.DevNo = 0,
+	.DevNo = s_FlashCfg.DevNo,
 	.TotalSize = (uint64_t)s_FlashCfg.TotalSize * 1024ULL,	// legacy: KBytes
 	.EraseSize = s_FlashCfg.SectSize,
 	.PageSize = s_FlashCfg.PageSize,
 	.AddrSize = (uint8_t)s_FlashCfg.AddrSize,
 	.DevId = s_FlashCfg.DevId,
 	.DevIdSize = (uint8_t)s_FlashCfg.DevIdSize,
+	.RdCmd = s_QuadBus ? NvmCmd_t{ s_FlashCfg.RdCmd.Cmd, s_FlashCfg.RdCmd.DummyCycle } : NvmCmd_t{},
+	.WrCmd = s_QuadBus ? NvmCmd_t{ s_FlashCfg.WrCmd.Cmd, s_FlashCfg.WrCmd.DummyCycle } : NvmCmd_t{},
+	.QuadEnable = s_QuadBus ? NvmQe_t{ s_FlashCfg.QuadEnable.Reg, s_FlashCfg.QuadEnable.Bit } : NvmQe_t{},
 	.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
 };
 
@@ -336,6 +332,11 @@ int main()
 		return 1;
 	}
 
+	if (g_Spi.Type() == DEVINTRF_TYPE_QSPI)
+	{
+		printf("QSPI read 0x%02X dummy %u, program 0x%02X\r\n",
+			   s_FlashCfg.RdCmd.Cmd, s_FlashCfg.RdCmd.DummyCycle, s_FlashCfg.WrCmd.Cmd);
+	}
 	//g_QFlash.Init(s_QFlashCfg, &g_FlashCache, 1);
 
 	static uint8_t buff[FLASH_SECTOR_SIZE];

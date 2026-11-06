@@ -41,6 +41,83 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "storage/flash.h"
 
+static bool FlashQuadRegRead(SPIDev_t *pSpi, int DevNo, uint8_t Cmd, uint8_t &Val)
+{
+	if (!SPIStartRx(pSpi, DevNo))
+	{
+		return false;
+	}
+	bool ok = QuadSPISendCmd(pSpi, Cmd, UINT32_MAX, 0, 1, 0);
+	if (ok)
+	{
+		ok = SPIRxData(pSpi, &Val, 1) == 1;
+	}
+	SPIStopRx(pSpi);
+	return ok;
+}
+
+static bool FlashQuadRegWrite(SPIDev_t *pSpi, int DevNo, uint8_t Cmd, const uint8_t *pVal)
+{
+	int len = pVal != NULL ? 1 : 0;
+	if (!SPIStartTx(pSpi, DevNo))
+	{
+		return false;
+	}
+	bool ok = QuadSPISendCmd(pSpi, Cmd, UINT32_MAX, 0, len, 0);
+	if (ok && len)
+	{
+		ok = SPITxData(pSpi, pVal, 1) == 1;
+	}
+	SPIStopTx(pSpi);
+	return ok;
+}
+
+static bool FlashSetQuadEnable(SPIDev_t *pSpi, const FlashCfg_t *pCfg)
+{
+	int devno = pCfg->DevNo;
+	uint8_t reg = pCfg->QuadEnable.Reg;
+	uint8_t rd = reg == 1 ? FLASH_CMD_READSTATUS : 0x35;
+	uint8_t wr = reg == 1 ? FLASH_CMD_WRSR : 0x31;
+	uint8_t val, status;
+
+	if (reg > 2 || pCfg->QuadEnable.Bit > 7)
+	{
+		return false;
+	}
+	uint8_t mask = (uint8_t)(1U << pCfg->QuadEnable.Bit);
+	if (!FlashQuadRegRead(pSpi, devno, rd, val))
+	{
+		return false;
+	}
+	if (val & mask)
+	{
+		return true;
+	}
+
+	val |= mask;
+	if (!FlashQuadRegWrite(pSpi, devno, FLASH_CMD_WRENABLE, NULL))
+	{
+		return false;
+	}
+	if (!FlashQuadRegWrite(pSpi, devno, wr, &val))
+	{
+		FlashQuadRegWrite(pSpi, devno, FLASH_CMD_WRDISABLE, NULL);
+		return false;
+	}
+	for (unsigned i = 0; i < 100000; i++)
+	{
+		if (!FlashQuadRegRead(pSpi, devno, FLASH_CMD_READSTATUS, status))
+		{
+			return false;
+		}
+		if ((status & FLASH_STATUS_WIP) == 0)
+		{
+			return FlashQuadRegRead(pSpi, devno, rd, val) && (val & mask);
+		}
+	}
+	return false;
+}
+
 bool FlashInit(FlashDev_t * const pDev, const FlashCfg_t *pCfg, DevIntrf_t * const pDevIntrf)
 {
     pDev->pDevIntrf = NULL;
@@ -113,6 +190,11 @@ bool FlashInit(FlashDev_t * const pDev, const FlashCfg_t *pCfg, DevIntrf_t * con
             DeviceIntrfTx(pDevIntrf, pDev->DevNo, (uint8_t*)&cmd, 1);
         }
     }
+
+	if (pDevIntrf->Type == DEVINTRF_TYPE_QSPI && pCfg->QuadEnable.Reg != 0)
+	{
+		return FlashSetQuadEnable(SPIGetHandle(pDevIntrf), pCfg);
+	}
 
 	return true;
 }
@@ -387,10 +469,18 @@ bool FlashSectRead(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pBuff)
     {
     	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
 
-		SPIStartRx(dev, pDev->DevNo);
-    	QuadSPISendCmd(dev, pDev->RdCmd.Cmd , addr, pDev->AddrSize, pDev->SectSize, pDev->RdCmd.DummyCycle);
-		SPIRxData(dev, pBuff, pDev->SectSize);
+		if (!SPIStartRx(dev, pDev->DevNo))
+		{
+			return false;
+		}
+		bool ok = QuadSPISendCmd(dev, pDev->RdCmd.Cmd, addr, pDev->AddrSize,
+								 pDev->SectSize, pDev->RdCmd.DummyCycle);
+		if (ok)
+		{
+			ok = SPIRxData(dev, pBuff, pDev->SectSize) == pDev->SectSize;
+		}
 		SPIStopRx(dev);
+		return ok;
     }
     else
     {
@@ -435,12 +525,21 @@ bool FlashSectWrite(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pData)
 			int l = min(cnt, (int)pDev->PageSize);
 
 			FlashWriteEnable(pDev, 10000);
-			SPIStartTx(dev, pDev->DevNo);
-
-			QuadSPISendCmd(dev, pDev->WrCmd.Cmd, addr, pDev->AddrSize, l, pDev->WrCmd.DummyCycle);
-
-			l = SPITxData(dev, pData, l);
+			if (!SPIStartTx(dev, pDev->DevNo))
+			{
+				return false;
+			}
+			bool ok = QuadSPISendCmd(dev, pDev->WrCmd.Cmd, addr, pDev->AddrSize,
+									 l, pDev->WrCmd.DummyCycle);
+			if (ok)
+			{
+				ok = SPITxData(dev, pData, l) == l;
+			}
 			SPIStopTx(dev);
+			if (!ok)
+			{
+				return false;
+			}
 			cnt -= l;
 			pData += l;
 			addr += l;

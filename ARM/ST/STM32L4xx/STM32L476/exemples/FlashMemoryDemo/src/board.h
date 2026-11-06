@@ -71,21 +71,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define FLASH_SECTOR_SIZE		FLASH_MX25R6435F_SECTSIZE
 
-// MX25R6435F with the single line read and page program commands: the quad
-// commands need the QE bit of the flash status register, which this demo
-// does not set
-#define FLASH_CFG(InitCB, WaitCB)		{ \
-	.DevNo = 0, \
-	.TotalSize = 64 * 1024 / 8, \
-	.BlkSize = 64 * 1024, \
-	.SectSize = FLASH_MX25R6435F_SECTSIZE, \
-	.PageSize = 256, \
-	.AddrSize = 3, \
-	.DevId = 0x1728c2, \
-	.DevIdSize = 3, \
-	.pInitCB = InitCB, \
-	.pWaitCB = WaitCB, \
-	.RdCmd = { FLASH_CMD_READ, 0 }, \
-	.WrCmd = { FLASH_CMD_WRITE, 0 }, }
+#define FLASH_CFG(InitCB, WaitCB)	FLASH_MX25R6435F(InitCB, WaitCB)
 
 #endif // __BOARD_H__

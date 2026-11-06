@@ -1122,16 +1122,16 @@ static void TestNvm()
 	NvmRun(c, SPIPHY_DUAL, true, 0xBB, 0x02);
 }
 
-// The legacy Flash driver on the SPIFI, the part already in quad mode
-static void TestFlash()
+// Check the board's single-line and quad settings, starting with QE clear.
+static void TestFlash(uint8_t QeReg)
 {
 	SPI spi;
 	FlashDev_t fl;
 	FlashCfg_t c = {};
 	static uint8_t wr[4096], rd[4096];
 
-	Fresh();
-	s_F.Sr2 = 0x02;
+	Fresh(QeReg == 2);
+	s_F.Sr1 = 0x04;
 	assert(spi.Init(Cfg()));
 	c.TotalSize = 16U * 1024U;
 	c.SectSize = 4096;
@@ -1140,9 +1140,16 @@ static void TestFlash()
 	c.AddrSize = 3;
 	c.DevId = 0x1840EF;
 	c.DevIdSize = 3;
-	c.RdCmd = { 0x6B, 8 };
-	c.WrCmd = { 0x32, 0 };
+	c.RdCmd = QeReg ? CmdCycle_t{ 0x6B, 8 } : CmdCycle_t{ 0x03, 0 };
+	c.WrCmd = QeReg == 1 ? CmdCycle_t{ 0x38, 0 } :
+			  QeReg == 2 ? CmdCycle_t{ 0x32, 0 } : CmdCycle_t{ 0x02, 0 };
+	c.QuadEnable.Reg = QeReg;
+	c.QuadEnable.Bit = QeReg == 1 ? 6 : 1;
 	assert(FlashInit(&fl, &c, spi));
+	assert(FlashQe() == (QeReg != 0));
+	assert(s_F.Sr1 & 0x04);
+	assert(FlashInit(&fl, &c, spi));
+	assert(s_F.Ops[0x01] == (QeReg == 1) && s_F.Ops[0x31] == (QeReg == 2));
 	for (uint32_t i = 0; i < sizeof(wr); i++)
 	{
 		wr[i] = (uint8_t)(i * 3 + 11);
@@ -1152,7 +1159,7 @@ static void TestFlash()
 	assert(FlashSectWrite(&fl, 5, wr));
 	assert(FlashSectRead(&fl, 5, rd));
 	assert(memcmp(rd, wr, sizeof(rd)) == 0 && memcmp(s_Mem + 5 * 4096, wr, sizeof(wr)) == 0);
-	assert(s_F.Ops[0x6B] > 0 && s_F.Ops[0x32] == 16);
+	assert(s_F.Ops[c.RdCmd.Cmd] > 0 && s_F.Ops[c.WrCmd.Cmd] == 16);
 	printf("flash: PASS\n");
 }
 
@@ -1165,7 +1172,9 @@ int main()
 	TestFault();
 	TestPower();
 	TestNvm();
-	TestFlash();
+	TestFlash(0);
+	TestFlash(1);
+	TestFlash(2);
 	printf("spifi: PASS\n");
 
 	return 0;

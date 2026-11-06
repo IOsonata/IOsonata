@@ -253,6 +253,10 @@ typedef struct __Flash_Config {
     							//!< to perform other tasks while waiting
     CmdCycle_t	RdCmd;			//!< QSPI read cmd and dummy cycle
     CmdCycle_t	WrCmd;			//!< QSPI write cmd and dummy cycle
+	struct {
+		uint8_t Reg;			//!< 0: no QE setup, 1: SR1, 2: SR2
+		uint8_t Bit;			//!< Quad enable bit in the selected register
+	} QuadEnable;
 } FlashCfg_t;
 
 typedef struct __Flash_Device {
@@ -488,8 +492,9 @@ bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout);
 	.DevIdSize = 3, \
     .pInitCB = InitCB, \
     .pWaitCB = WaitCB, \
-	.RdCmd = { FLASH_CMD_4READ, 6}, \
-	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+	.RdCmd = { FLASH_CMD_QREAD, 8}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, \
+	.QuadEnable = { 1, 6 }, }
 
 /// MX25L25645G 256Mb
 #define FLASH_MX25L25645G_SECTSIZE		FLASH_SECTOR_ERASE_SIZE
@@ -504,8 +509,9 @@ bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout);
 	.DevIdSize = 3, \
 	.pInitCB = InitCB, \
 	.pWaitCB = WaitCB, \
-	.RdCmd = { FLASH_CMD_QREAD, 6}, \
-	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+	.RdCmd = { FLASH_CMD_QREAD, 8}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, \
+	.QuadEnable = { 1, 6 }, }
 
 /// IS25LP512M 512Mb Quad
 #define FLASH_IS25LP512_SECTSIZE		FLASH_SECTOR_ERASE_SIZE
