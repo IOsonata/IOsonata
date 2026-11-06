@@ -461,7 +461,7 @@ Generic reusable examples are under [`exemples/`](exemples/). Buildable MCU proj
 See [Getting Started](docs/getting-started.md), the
 [Quick Reference](docs/quick-reference.md), the
 [Buzzer User Guide](docs/buzzer.md) and the
-[USB User Guide](docs/usb-user-guide.md) for additional workflows.
+[USB User Guide](docs/usb-user-guide.md) for additional workflows. For signed USB recovery and BLE OTA, see the [Firmware Update User Guide](docs/dfu-user-guide.md).
 
 ---
 

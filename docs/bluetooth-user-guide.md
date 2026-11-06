@@ -5,6 +5,8 @@ application API, GATT data paths, security, memory configuration and examples.
 See [Bluetooth architecture](architecture/bluetooth.md) for the host,
 controller and port boundaries.
 
+For nRF52840/S140 recovery and OTA, see the [Firmware Update User Guide](dfu-user-guide.md).
+
 ## Choose the target and stack first
 
 Build the MCU library and application with matching stack configurations.

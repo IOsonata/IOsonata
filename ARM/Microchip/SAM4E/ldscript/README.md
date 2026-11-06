@@ -37,7 +37,4 @@ on reference count.
 ## Validation
 
 The regression tests check the flash/SRAM bounds, DFU slot continuity,
-recovery flag, and example project selections. Actual compilation and
-hardware boot/update behavior are separate validation items handled
-through the full managed-project build handoff in
-`tests/ldscript_build_validation.md`.
+recovery flag, and example project selections.

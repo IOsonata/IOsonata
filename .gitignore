@@ -137,3 +137,6 @@ __pycache__/
 *.elf
 *.map
 !site/**/*.map
+
+# MkDoxy intermediate Markdown, XML and input hashes
+/site/assets/.doxy/
