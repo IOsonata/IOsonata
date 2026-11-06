@@ -78,18 +78,15 @@ public:
 	 * 						  than the erase unit. Must be aligned for NVM writes
 	 * 						  and must not alias a sector source buffer.
 	 * @param	WorkSize	: Scratch size in bytes, at least Mem.EraseSize().
-	 * @param	bWriteCache	: Keep dirty erase pages in pEraseWork until
-	 * 					  Commit() or an occupied slot is evicted. Off by default.
-	 * @param	CachePages	: Number of erase pages to cache (1..4). Only used
-	 * 					  when bWriteCache is true. WorkSize must contain all pages.
+	 * @param	bWriteCache	: Hold one dirty erase page until Commit() or
+	 * 					  a write to a different page. Off by default.
 	 *
 	 * @return	true on success. A sector smaller than the erase unit is
 	 * 			supported only with an entire erase unit of scratch memory.
 	 * 			The region must contain whole logical and erase units.
 	 */
 	bool Init(Nvm &Mem, uint32_t SectSize = 0, uint8_t *pEraseWork = nullptr,
-			  uint32_t WorkSize = 0, bool bWriteCache = false,
-			  uint32_t CachePages = 1);
+			  uint32_t WorkSize = 0, bool bWriteCache = false);
 
 	// *** DiskIO ***
 
@@ -120,19 +117,13 @@ private:
 	Nvm			*vpNvm;			//!< The memory this disk sits on
 	uint32_t	vSectSize;		//!< Sector size in bytes
 	uint8_t		*vpEraseWork;	//!< Caller-owned erase-page work memory
-	static const uint32_t CACHE_PAGES_MAX = 4;
-	uint64_t	vCacheOff[CACHE_PAGES_MAX];
-	uint32_t	vCacheAge[CACHE_PAGES_MAX];
-	uint32_t	vCacheClock;
-	uint32_t	vCachePages;
-	bool		vbCacheValid[CACHE_PAGES_MAX];
-	bool		vbCacheDirty[CACHE_PAGES_MAX];
+	uint64_t	vCacheOff;
+	bool		vbCacheValid;
+	bool		vbCacheDirty;
 	bool		vbWriteCache;	//!< Opt-in sector write coalescing
 	Stats_t		vStats;
-	uint8_t *PageData(uint32_t Index);
-	int FindPage(uint64_t PageOff);
-	int LoadPage(uint64_t PageOff);
-	bool WritePage(uint32_t Index);
+	bool LoadPage(uint64_t PageOff);
+	bool WritePage(void);
 };
 
 #endif	// __cplusplus
