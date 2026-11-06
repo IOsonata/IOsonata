@@ -118,7 +118,11 @@ typedef struct __Nvm_Intrf_Stat {
 /// Largest payload one transfer stages. The driver splits at the page size it
 /// was configured with, which no target sets above this.
 #ifndef NVM_INTRF_XFER_SIZE
+#if defined(NRF52840_XXAA)
+#define NVM_INTRF_XFER_SIZE			4096
+#else
 #define NVM_INTRF_XFER_SIZE			64
+#endif
 #endif
 
 /// One transaction's worth of state. It belongs to the instance, not to the

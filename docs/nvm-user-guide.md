@@ -49,7 +49,9 @@ No dedicated MCU-disk helper header is required. The caller owns the interface,
 NVM driver, disk adapter and any erase-unit scratch buffer for their entire use. For 512-byte logical sectors on a
 4096-byte erase-page device, pass a separate aligned 4096-byte scratch
 buffer. Enable the optional write-cache parameter to coalesce writes to
-the same erase page until Commit() or page eviction. Commit() returns false
+the same erase page until Commit() or a write to another erase page.
+One caller-owned erase page is used; there is no multi-page cache.
+Unrelated page reads bypass write-cache eviction. Commit() returns false
 on flash write failure; MSC invokes it before acknowledging completed writes.
 The storage initialization does not format, mount, erase or initialize USB MSC.
 The interface, NVM object and any asynchronous buffers must outlive operations.
@@ -388,11 +390,18 @@ only 64 sectors, below the 128-sector minimum in FatFs `f_mkfs()`.
 Applications using FatFs can therefore choose the 512-byte
 NvmDiskIO option with a caller-owned erase-unit buffer.
 
-The `UsbMscFlashDisk` example provisions FAT12 when sector zero is
-unsigned. It now uses 512-byte logical sectors on 4 KiB erase pages, with
-a caller-owned physical-page cache. Its boot sector is committed last.
-It does not call FatFsMount at startup. This is independent of generic
-FatFs support.
+The existing generic `FatFsMount()` API supports optional first-use formatting
+via `bFormatIfBlank`, using FatFs `f_mkfs()` to choose FAT12, FAT16 or FAT32
+according to media geometry and optional `MKFS_PARM`. The conservative
+default requires a fully erased volume. `bFormatIfBootBlank` permits an
+explicitly selected boot-sector-only blank check. `bValidateOnMount` scans
+the FAT allocation entries after FatFs verifies boot geometry, but is not a
+complete filesystem checker. `bFormatIfInvalid` explicitly reformats an
+invalid volume; this is destructive and should be used only for disposable
+test media. Without it, unrecognized nonblank data is preserved.
+For USB MSC call `FatFsUnmount()` before exporting the same `DiskIO`.
+`UsbMscFlashDisk` uses this existing interface without implementing any
+filesystem metadata in the application.
 ```cpp
 #include "ff.h"
 #include "ff_diskio.h"

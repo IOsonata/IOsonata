@@ -564,24 +564,44 @@ internal NVM region through `NvmDiskIO`. It initializes `NvmMcuIntrf`,
 `Nvm` and `NvmDiskIO` through their existing APIs; there is no dedicated
 USB or MCU flash-disk helper.
 
-The example provisions a small FAT12 superfloppy on first use when sector
-zero has no 0x55AA signature. It writes both FAT tables and the root directory,
-then writes the boot sector last and commits it to flash. An existing signed
-boot sector with 512-byte geometry is preserved. Incompatible signed volumes
-are rejected rather than silently reformatted. The example does not mount
-the filesystem in firmware.
+The application uses the generic `FatFsMount()` interface with
+`bValidateOnMount` and `bFormatIfInvalid` explicitly enabled.
+FatFs first validates the boot sector and volume geometry, then scans the
+FAT allocation entries. For this disposable USB test disk, an invalid
+or unrecognized filesystem is explicitly reformatted with FatFs `f_mkfs()`
+and verified again before USB starts. This can destroy prior content,
+including data left in overlapping Debug and Release flash reservations.
+For normal applications leave `bFormatIfInvalid` disabled: the default
+`bFormatIfBlank` policy preserves nonblank media. The validation is not
+a full filesystem repair or directory-tree consistency check.
+The firmware calls `FatFsUnmount()` before enabling USB MSC, giving the
+host exclusive filesystem ownership.
 
-The MSC logical sector is 512 bytes. nRF52840 program flash has 4096-byte
-physical erase pages. `NvmDiskIO` uses a caller-owned aligned 4096-byte
-scratch buffer to preserve the other seven 512-byte sectors when replacing a
-sector. The optional erase-page cache holds eight 512-byte sectors in a
-caller-owned 4096-byte RAM page. Writes to the same page are coalesced into
-one physical erase/program cycle on Commit() or cache eviction. UsbdMsc
-commits every WRITE(10) command before returning a successful status and
-also commits on SYNCHRONIZE CACHE and eject. A multi-sector command may
-therefore save erases; separate commands to the same erase page can still
-incur repeated cycles. There is no wear levelling or power-fail atomicity.
-The 512-byte MSC sector buffer and 4096-byte scratch buffer must not alias.
+The nRF52840 example exports 512-byte logical sectors backed by 4096-byte
+flash erase pages in every configuration. NvmDiskIO holds one dirty physical
+page across MSC WRITE(10) commands. The example opts into MSC
+`bWriteBack`, so writing a second logical sector within the same erase
+page does not reprogram that page. Switching physical pages evicts the dirty
+page to flash; unrelated page reads bypass the write cache without evicting\nit. SYNCHRONIZE CACHE and clean eject also call Commit().
+The default MSC behavior remains write-through (Commit before successful
+WRITE(10) status) for callers that do not opt in. The MSC sector buffer and
+erase-page cache must not alias. **Write-back can lose dirty
+pages if power disappears before synchronization**; on USB-bus-powered
+hardware, cable removal is not a reliable occasion to flush. Always eject
+or synchronize before disconnecting. There is no wear levelling or
+power-fail atomicity.
+
+The nRF52840 library's Debug/Release archives may include SoftDevice
+support even when no Bluetooth stack owns the flash controller.
+`NvmMcuCfgInit()` now configures the physical 4096-byte maximum;
+`Nvm` queries the optional runtime write-chunk callback on each transfer.
+Direct NVMC receives full-page requests. When SoftDevice is running or an
+MPSL arbiter is registered, writes use short 32-byte chunks instead.
+This selection depends on current flash access ownership, not on whether
+a SoftDevice image is installed or the application uses an RTOS.
+The direct NVMC path uses `READYNEXT` between words and waits for final
+`READY`. `NvmDiskIO::GetStats()` exposes `SectWrites`,
+`PagePrograms`, `PageEvictions`, and `SyncCalls` for profiling.
 
 The bare-metal Debug linker script gcc_nrf52840_xxaa_nvm832k.ld
 reserves NVM1 at 0x30000-0xFFFFF (832 KiB). The Release build uses

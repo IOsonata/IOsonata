@@ -28,7 +28,7 @@ configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 | [usb_int_loopback.cpp](usb_int_loopback.cpp) | UsbIntLoopback/ioc | `UsbdInt` alternate settings |
 | [usb_iso_loopback.cpp](usb_iso_loopback.cpp) | UsbIsoLoopback/ioc | `UsbdIso` alternate settings |
 | [usb_msc_ramdisk.cpp](usb_msc_ramdisk.cpp) | UsbMscRamDisk/ioc | Disposable 64 KiB FAT12 RAM disk |
-| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT12 disk with 512-byte logical sectors on reserved internal flash: 832 KiB in bare-metal `Debug`, 256 KiB in `Release`, or 832 KiB in `Release_mbr`; provisions FAT12 on first use |
+| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT disk on reserved internal flash: 512-byte logical sectors on 4 KiB erase pages; write-back page cache; FatFs provisions an invalid disposable volume |
 
 Use the [USB User Guide](../../docs/usb-user-guide.md) for dependency
 installation, host commands, buffer ownership and reconnect behavior.
@@ -131,20 +131,21 @@ Debug reserves 832 KiB at 0x30000-0xFFFFF; Release reserves 256 KiB at
 0xC0000-0xFFFFF; Release_mbr reserves 832 KiB at 0x10000-0xDFFFF under
 the SDK USB DFU bootloader. These variants have different start addresses.
 
-The host sees 512-byte sectors. A caller-owned aligned 4096-byte scratch
-buffer lets `NvmDiskIO` preserve neighboring sectors in each physical
-flash erase page. With the opt-in erase-page cache, adjacent writes in one WRITE(10)
-command can be coalesced into a single erase/program cycle. UsbdMsc
-commits before sending success and on synchronization/eject; there is
-no wear levelling or power-fail atomicity.
+The example exposes 512-byte logical sectors over a 4096-byte physical
+erase page. NvmDiskIO holds one dirty erase page across MSC commands; a write
+to another page flushes the current page before loading the next one. Reads of unrelated sectors bypass the write cache without triggering
+erase or eviction. The example opts into `UsbdMscCfg_t.bWriteBack`; SCSI SYNCHRONIZE
+CACHE and clean eject also commit. Other MSC users retain write-through
+semantics unless they enable this policy. **Do not unplug a USB-powered
+device before ejecting:** dirty pages may be lost on power loss.
+There is no wear levelling or power-fail atomicity.
 
-The example provisions FAT12 metadata when sector zero has no boot
-signature; the boot sector is written last and committed before USB starts.
-A signed existing 512-byte-sector volume is preserved. Incompatible signed
-volumes are rejected rather than overwritten.
-
-Generic FatFsMount/FatFsUnmount remains available to firmware
-through DiskIO and is independent of USB MSC. The USB disk example
-does not use FatFs during initialization; it exposes the prepared
-DiskIO directly to the PC. Do not permit firmware and the USB host
-to modify the same writable volume concurrently.
+The example uses generic `FatFsMount()` with `bValidateOnMount` to
+check the mounted filesystem geometry and scan the FAT allocation table.
+Because the example is a disposable test disk, it explicitly enables
+`bFormatIfInvalid` to reformat invalid or incompatible volumes through
+FatFs `f_mkfs()`. This may destroy files from previous Debug/Release
+layouts, which share physical flash. Generic applications should leave
+recovery formatting disabled to protect existing data.
+The example calls `FatFsUnmount()` before USB starts so firmware and
+the host do not access the same volume concurrently.

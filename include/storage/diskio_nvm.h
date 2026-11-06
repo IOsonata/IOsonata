@@ -78,8 +78,8 @@ public:
 	 * 						  than the erase unit. Must be aligned for NVM writes
 	 * 						  and must not alias a sector source buffer.
 	 * @param	WorkSize	: Scratch size in bytes, at least Mem.EraseSize().
-	 * @param	bWriteCache	: Keep a dirty erase page in pEraseWork until
-	 * 					  Commit() or another page is accessed. Off by default.
+	 * @param	bWriteCache	: Hold one dirty erase page until Commit() or
+	 * 					  a write to a different page. Off by default.
 	 *
 	 * @return	true on success. A sector smaller than the erase unit is
 	 * 			supported only with an entire erase unit of scratch memory.
@@ -97,17 +97,31 @@ public:
 	bool SectRead(uint32_t SectNo, uint8_t *pBuff) override;
 	bool SectWrite(uint32_t SectNo, uint8_t *pData) override;
 	bool Commit(void) override;
+	// Cumulative counters for debugging write amplification.
+	// Read at a debugger breakpoint after a host transfer.
+	typedef struct __NvmDiskIO_Stats {
+		uint32_t SectReads;
+		uint32_t SectWrites;
+		uint32_t CacheHits;
+		uint32_t PageLoads;
+		uint32_t PageEvictions;
+		uint32_t PagePrograms;
+		uint32_t SyncCalls;
+	} Stats_t;
+	void GetStats(Stats_t &Stats) const { Stats = vStats; }
+	void ClearStats(void) { vStats = {}; }
 	void Erase(void) override;
 	void EraseSector(uint32_t SectNo, int NbSect) override;
 
 private:
 	Nvm			*vpNvm;			//!< The memory this disk sits on
 	uint32_t	vSectSize;		//!< Sector size in bytes
-	uint8_t		*vpEraseWork;	//!< One erase unit for read/modify/write
-	uint64_t	vCacheOff;	//!< Cached erase-page offset in the NVM region
-	bool		vbCacheValid;	//!< RAM page contains current medium data
-	bool		vbCacheDirty;	//!< RAM page needs programming
+	uint8_t		*vpEraseWork;	//!< Caller-owned erase-page work memory
+	uint64_t	vCacheOff;
+	bool		vbCacheValid;
+	bool		vbCacheDirty;
 	bool		vbWriteCache;	//!< Opt-in sector write coalescing
+	Stats_t		vStats;
 	bool LoadPage(uint64_t PageOff);
 	bool WritePage(void);
 };

@@ -8,13 +8,12 @@ linker script, so its size is set there and nowhere else, and the image fails
 to link if it grows into the disk. It does not expose firmware, filesystem,
 settings or Bluetooth bond-storage regions.
 
-The content stays across resets and power cycles. The example provisions
-FAT12 metadata only when sector zero lacks a boot signature, as the original
-example did. Existing signed volumes are preserved.
+The content stays across resets and power cycles. The example uses the generic FatFs storage interface to provision blank
+media, then unmounts it before the USB host takes ownership.
 
-The host sees 512-byte logical sectors. NvmDiskIO caches one 4 KiB erase
-page in caller-owned RAM. Writes to that page are coalesced and committed
-before MSC acknowledges WRITE(10). There is no wear levelling.
+The host sees 512-byte logical sectors. NvmDiskIO holds one 4096-byte
+erase page across WRITE(10) commands, flushing when switching write pages,
+on SCSI synchronization, or on eject. There is no wear levelling.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 4, 2026
@@ -45,10 +44,9 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-#include <string.h>
 
 #include "storage/diskio_nvm.h"
-#include "storage/fatfs.h"
+#include "ff_diskio.h"
 #include "storage/nvm_mcu_intrf.h"
 #include "app_evt_handler.h"
 #include "usb/usb.h"
@@ -70,7 +68,7 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #ifndef USB_DEVNO
 #define USB_DEVNO			0
 #endif
-// Expose conventional 512-byte USB sectors backed by 4 KiB erase pages.
+// Expose 512-byte logical sectors backed by a physical flash erase page.
 #define MSC_SECTOR_BUFF_SIZE	512U
 #define MSC_ERASE_WORK_SIZE	4096U
 // Linker-reserved USB disk region (NVM1); NVM0, if present, is PDS.
@@ -81,6 +79,7 @@ static NvmMcuIntrf s_MemIntrf;
 static Nvm s_Nvm;
 static NvmDiskIO s_Disk;
 static UsbdMsc s_Msc;
+static FATFS s_FatFs;
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_BUFF_SIZE];
 alignas(4) static uint8_t s_EraseWork[MSC_ERASE_WORK_SIZE];
 
@@ -111,103 +110,10 @@ static const UsbdMscCfg_t s_MscCfg = {
 	.pSectorBuffer = s_SectorBuffer,
 	.SectorBufferSize = sizeof(s_SectorBuffer),
 	.bRemovable = true,
+	.bWriteBack = true,
 	.InterfaceString = MSC_STR_INTERFACE,
 	.pProduct = "IOsonata Flash",
 };
-
-// Provision a FAT12 superfloppy only when sector 0 has no boot signature.
-// This is a one-time operation: never clear a signed existing volume.
-// Initialize the boot sector last, so an interrupted initialization retries.
-static bool MscDiskProvision(void)
-{
-	const uint16_t sectSize = s_Disk.GetSectSize();
-	const uint32_t nbSect = s_Disk.GetNbSect();
-	const uint16_t fatSect = (uint16_t)((((nbSect + 2U) * 3U + 1U) / 2U +
-		sectSize - 1U) / sectSize);
-	const uint32_t rootSect = FATFS_RSVDSECCNT_FAT16 +
-		(uint32_t)FATFS_NBFAT * fatSect;
-	const uint32_t rootCount = sectSize / 32U;
-
-	if (!s_Disk.SectRead(0, s_SectorBuffer))
-	{
-		return false;
-	}
-	if (s_SectorBuffer[510] == 0x55 && s_SectorBuffer[511] == 0xAA)
-	{
-		// Do not silently overwrite a volume with an incompatible sector size.
-		return s_SectorBuffer[11] == (uint8_t)sectSize &&
-			s_SectorBuffer[12] == (uint8_t)(sectSize >> 8);
-	}
-	if (nbSect < rootSect + 2U || nbSect > 4084U || sectSize != 512U)
-	{
-		return false;
-	}
-
-	for (uint32_t i = 0; i < (uint32_t)FATFS_NBFAT * fatSect; i++)
-	{
-		memset(s_SectorBuffer, 0, sectSize);
-		if (i % fatSect == 0)
-		{
-			s_SectorBuffer[0] = FATFS_MEDIA_FIXED;
-			s_SectorBuffer[1] = 0xFF;
-			s_SectorBuffer[2] = 0xFF;
-		}
-		if (!s_Disk.SectWrite(FATFS_RSVDSECCNT_FAT16 + i, s_SectorBuffer))
-		{
-			return false;
-		}
-	}
-
-	memset(s_SectorBuffer, 0, sectSize);
-	memcpy(s_SectorBuffer, "IOSONATA   ", 11);
-	s_SectorBuffer[11] = FATFS_DIRATTR_VOLUME_ID;
-	if (!s_Disk.SectWrite(rootSect, s_SectorBuffer))
-	{
-		return false;
-	}
-
-	FATFS_BSBPB *pBoot = reinterpret_cast<FATFS_BSBPB *>(s_SectorBuffer);
-
-	memset(s_SectorBuffer, 0, sectSize);
-	pBoot->JmpBoot[0] = 0xEB;
-	pBoot->JmpBoot[1] = 0x3C;
-	pBoot->JmpBoot[2] = 0x90;
-	memcpy(pBoot->OEMName, "IOsonata", sizeof(pBoot->OEMName));
-	pBoot->BytsPerSec = sectSize;
-	pBoot->SecPerClus = 1;
-	pBoot->RsvdSecCnt = FATFS_RSVDSECCNT_FAT16;
-	pBoot->NumFATs = FATFS_NBFAT;
-	pBoot->RootEntCnt = rootCount;
-	pBoot->TotSec16 = (uint16_t)nbSect;
-	pBoot->Media = FATFS_MEDIA_FIXED;
-	pBoot->FATSz16 = fatSect;
-	pBoot->SecPerTrk = 32;
-	pBoot->NumHeads = 1;
-	pBoot->BPB.Bpb16.DrvNum = 0x80;
-	pBoot->BPB.Bpb16.BootSig = 0x29;
-	pBoot->BPB.Bpb16.VolID = 0x4E534F49;
-	memcpy(pBoot->BPB.Bpb16.VolLab, "IOSONATA   ", 11);
-	memcpy(pBoot->BPB.Bpb16.FilSysType, "FAT12   ", 8);
-	pBoot->Signature_word[0] = 0x55;
-	pBoot->Signature_word[1] = 0xAA;
-
-	if (!s_Disk.SectWrite(0, s_SectorBuffer))
-	{
-		return false;
-	}
-	if (!s_Disk.Commit())
-	{
-		return false;
-	}
-
-	// Verify the boot sector from physical flash, bypassing the page cache.
-	uint8_t verify[512];
-	if (s_Nvm.Read(0, verify, sizeof(verify)) != (int)sizeof(verify))
-	{
-		return false;
-	}
-	return memcmp(verify, s_SectorBuffer, sizeof(verify)) == 0;
-}
 
 int main(void)
 {
@@ -230,7 +136,26 @@ int main(void)
 	{
 		return -1;
 	}
-	if (!MscDiskProvision())
+	// Provision an uninitialized volume with the existing generic FatFs API.
+	// Firmware releases ownership before the USB host mounts the volume.
+	FatFsMountCfg_t fsCfg = {};
+	fsCfg.pDisk = &s_Disk;
+	fsCfg.pFatFs = &s_FatFs;
+	// This example's disk is disposable. Debug and Release regions overlap.
+	// Never use this recovery policy for media containing files to retain.
+	fsCfg.bValidateOnMount = true;
+	fsCfg.bFormatIfInvalid = true;
+	fsCfg.pWork = s_SectorBuffer;
+	fsCfg.WorkSize = sizeof(s_SectorBuffer);
+	fsCfg.pLabelIfUnnamed = "0:IOSONATA";
+
+	// Do not advertise a volume whose filesystem failed verification.
+	FRESULT fsRes = FatFsMount(fsCfg);
+	if (fsRes != FR_OK)
+	{
+		return -1;
+	}
+	if (FatFsUnmount("0:") != FR_OK)
 	{
 		return -1;
 	}

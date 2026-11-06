@@ -136,11 +136,15 @@ SOFTWARE.
 // ---------------------------------------------------------------------------
 #if defined(NVM_INTRF_NVMC)
 
-// Largest bytes one transfer may take. A word write is a few hundred usec and
-// on a timeslot build the whole transfer has to fit one slot, which is the
-// tightest of the three cases. The Nvm driver splits at this.
+// Maximum staged payload is a property of the NVMC and the allocated
+// staging buffer, not of which Bluetooth stack the library supports.
+// The active SoftDevice or MPSL arbiter limits each submission at runtime.
 #ifndef NVM_INTRF_MAX_XFER
+#if defined(NRF52840_XXAA)
+#define NVM_INTRF_MAX_XFER			4096
+#else
 #define NVM_INTRF_MAX_XFER			32
+#endif
 #endif
 
 // Erase slice per timeslot, in msec, and the worst case for one step.
@@ -427,14 +431,37 @@ static void CtrlWriteWords(uintptr_t Addr, const uint32_t *pSrc,
 	nrf_nvmc_mode_set(NRF_NVMC, NRF_NVMC_MODE_WRITE);
 
 	volatile uint32_t *pDst = (volatile uint32_t *)Addr;
+
+#if defined(NRF52840_XXAA)
+	// nRF52840 has a one-word write buffer. READYNEXT indicates that the
+	// controller can accept another 32-bit word while the previous word
+	// is still being programmed. READY would unnecessarily serialize them.
+	// Wait for the previous erase/write before issuing the first word.
+	while (!nrf_nvmc_ready_check(NRF_NVMC))
+	{
+	}
+	for (uint32_t i = 0; i < WordCnt; i++)
+	{
+		while (NRF_NVMC->READYNEXT == 0U)
+		{
+		}
+		pDst[i] = pSrc[i];
+	}
+	// READYNEXT only means accepted, not persisted. Drain the controller
+	// before disabling writes or returning the source buffer to the caller.
+	while (!nrf_nvmc_ready_check(NRF_NVMC))
+	{
+	}
+#else
+	// Other NVMC variants do not necessarily implement READYNEXT.
 	for (uint32_t i = 0; i < WordCnt; i++)
 	{
 		pDst[i] = pSrc[i];
 		while (!nrf_nvmc_ready_check(NRF_NVMC))
 		{
-			// A word write takes a few hundred usec.
 		}
 	}
+#endif
 
 	nrf_nvmc_mode_set(NRF_NVMC, NRF_NVMC_MODE_READONLY);
 }
@@ -1082,7 +1109,15 @@ static int NvmTxData(DevIntrf_t *pIntrf, const uint8_t *pData, int Len)
 
 	while (n < Len)
 	{
-		dev->Data[dev->DataLen++] = pData[n++];
+		int room = (int)sizeof(dev->Data) - dev->DataLen;
+		int count = Len - n;
+		if (count > room)
+		{
+			count = room;
+		}
+		memcpy(dev->Data + dev->DataLen, pData + n, (size_t)count);
+		dev->DataLen += count;
+		n += count;
 
 		if (dev->DataLen == (int)sizeof(dev->Data))
 		{
@@ -1090,8 +1125,8 @@ static int NvmTxData(DevIntrf_t *pIntrf, const uint8_t *pData, int Len)
 
 			if (res == NVM_INTRF_STARTED)
 			{
-				// The driver bounds a transfer to the page size, so this
-				// only fires on the last of the buffer.
+				// A started operation owns the staged payload until its
+				// completion event. The caller must not submit more data.
 				return -1;
 			}
 			if (res != 0)
@@ -1240,6 +1275,26 @@ bool NvmMcuIsReady(void)
 }
 #endif
 
+#if defined(NRF52840_XXAA)
+// Limit each transfer only while the selected flash access mechanism
+// requires arbitration. A SoftDevice image installed but not running
+// does not own the NVMC, and MPSL controls access only when registered.
+static uint32_t NvmMcuWriteChunkSize(void)
+{
+#ifdef NVM_INTRF_SOFTDEVICE
+	if (SdRunning())
+	{
+		return 32U;
+	}
+#endif
+	if (s_pArbiter != nullptr)
+	{
+		return 32U;
+	}
+	return NVM_INTRF_MAX_XFER;
+}
+#endif
+
 bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 {
 	uint64_t deviceSize;
@@ -1286,7 +1341,10 @@ bool NvmMcuCfgInit(NvmCfg_t &Cfg, uintptr_t BaseAddr, size_t Size)
 	Cfg.EraseSize = 0;
 	Cfg.SectorSize = NVM_INTRF_ERASE_SIZE;
 #endif
-	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// largest bytes per transfer
+	Cfg.PageSize = NVM_INTRF_MAX_XFER;		// maximum staged payload
+#if defined(NRF52840_XXAA)
+	Cfg.GetWriteChunkSize = NvmMcuWriteChunkSize;
+#endif
 	Cfg.WriteGran = NVM_INTRF_WRITE_GRAN;
 	Cfg.AddrSize = NVM_INTRF_ADDR_SIZE;
 

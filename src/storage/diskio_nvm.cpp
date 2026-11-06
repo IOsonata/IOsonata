@@ -44,6 +44,7 @@ NvmDiskIO::NvmDiskIO()
 	vbCacheValid = false;
 	vbCacheDirty = false;
 	vbWriteCache = false;
+	vStats = {};
 }
 
 bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize,
@@ -59,21 +60,16 @@ bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize,
 	vbCacheValid = false;
 	vbCacheDirty = false;
 	vbWriteCache = false;
+	vStats = {};
 
 	if (sect == 0)
 	{
-		// A medium with an erase step reports a logical sector. One that
-		// overwrites directly reports none, so it needs a size given.
 		sect = Mem.LogicalSectorSize();
 	}
-
 	if (sect == 0 || sect > 0xFFFF)
 	{
 		return false;
 	}
-
-	// Normal writes replace complete erase units. Smaller logical sectors
-	// require a caller-owned erase-unit buffer so neighbouring sectors survive.
 	if (esize != 0 && (sect % esize) != 0)
 	{
 		if ((esize % sect) != 0 || pEraseWork == nullptr ||
@@ -83,24 +79,19 @@ bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize,
 		}
 		vpEraseWork = pEraseWork;
 	}
-
-	// DiskIO exposes only whole sectors. A tail shorter than one sector would
-	// be unreachable and would make the reported geometry ambiguous.
 	if (Mem.Size() < sect || (Mem.Size() % sect) != 0 ||
 		(Mem.Size() / sect) > 0xFFFFFFFFULL)
 	{
 		return false;
 	}
-
-	if (bWriteCache && (esize == 0 || sect >= esize || vpEraseWork == nullptr))
+	if (bWriteCache && (esize == 0 || sect >= esize ||
+		vpEraseWork == nullptr))
 	{
 		return false;
 	}
-
 	vpNvm = &Mem;
 	vSectSize = sect;
 	vbWriteCache = bWriteCache;
-
 	return true;
 }
 
@@ -111,7 +102,6 @@ bool NvmDiskIO::WritePage(void)
 		return true;
 	}
 	uint32_t eraseSize = vpNvm->EraseSize();
-
 	if (vpNvm->Erase(vCacheOff, eraseSize) != 0)
 	{
 		return false;
@@ -125,6 +115,7 @@ bool NvmDiskIO::WritePage(void)
 		return false;
 	}
 	vbCacheDirty = false;
+	vStats.PagePrograms++;
 	return true;
 }
 
@@ -132,28 +123,33 @@ bool NvmDiskIO::LoadPage(uint64_t PageOff)
 {
 	if (vbCacheValid && vCacheOff == PageOff)
 	{
+		vStats.CacheHits++;
 		return true;
+	}
+	if (vbCacheValid)
+	{
+		vStats.PageEvictions++;
 	}
 	if (!WritePage())
 	{
 		return false;
 	}
-	// Keep the old cached data until a new page has been read successfully.
 	if (vpNvm->Read(PageOff, vpEraseWork, vpNvm->EraseSize()) !=
 		(int)vpNvm->EraseSize())
 	{
 		vbCacheValid = false;
 		return false;
 	}
+	vStats.PageLoads++;
 	vCacheOff = PageOff;
 	vbCacheValid = true;
+	vbCacheDirty = false;
 	return true;
 }
 
 bool NvmDiskIO::Commit(void)
 {
-	// Generic byte-oriented DiskIO cache may feed this erase-page cache.
-	// Drain it first, then make the complete physical page persistent.
+	vStats.SyncCalls++;
 	if (!DiskIO::Commit())
 	{
 		return false;
@@ -197,6 +193,7 @@ uint32_t NvmDiskIO::GetMinEraseSize(void)
 
 bool NvmDiskIO::SectRead(uint32_t SectNo, uint8_t *pBuff)
 {
+	vStats.SectReads++;
 	if (vpNvm == nullptr || pBuff == nullptr || SectNo >= GetNbSect())
 	{
 		return false;
@@ -207,19 +204,23 @@ bool NvmDiskIO::SectRead(uint32_t SectNo, uint8_t *pBuff)
 	{
 		uint32_t eraseSize = vpNvm->EraseSize();
 		uint64_t pageOff = off - off % eraseSize;
-		if (!LoadPage(pageOff))
+		if (vbCacheValid && vCacheOff == pageOff)
 		{
-			return false;
+			vStats.CacheHits++;
+			memcpy(pBuff, vpEraseWork + (uint32_t)(off - pageOff),
+				vSectSize);
+			return true;
 		}
-		memcpy(pBuff, vpEraseWork + (uint32_t)(off - pageOff), vSectSize);
-		return true;
 	}
 
+	// Reading another page must not evict or program the dirty write
+	// cache. Read that sector directly from the non-overlapping NVM page.
 	return vpNvm->Read(off, pBuff, vSectSize) == (int)vSectSize;
 }
 
 bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 {
+	vStats.SectWrites++;
 	if (vpNvm == nullptr || pData == nullptr || SectNo >= GetNbSect())
 	{
 		return false;
@@ -234,10 +235,10 @@ bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 	if (vbWriteCache)
 	{
 		uint64_t pageOff = off - off % eraseSize;
-		if (((uintptr_t)pData >= (uintptr_t)vpEraseWork &&
-			(uintptr_t)pData - (uintptr_t)vpEraseWork < eraseSize) ||
-			((uintptr_t)pData < (uintptr_t)vpEraseWork &&
-			(uintptr_t)vpEraseWork - (uintptr_t)pData < vSectSize))
+		uintptr_t src = (uintptr_t)pData;
+		uintptr_t work = (uintptr_t)vpEraseWork;
+		if ((src >= work && (uint64_t)(src - work) < eraseSize) ||
+			(src < work && (uint64_t)(work - src) < vSectSize))
 		{
 			return false;
 		}
@@ -253,7 +254,6 @@ bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 		}
 		return true;
 	}
-
 	if (eraseSize != 0 && vSectSize < eraseSize)
 	{
 		// Preserve all the other logical sectors of the same physical
@@ -325,6 +325,7 @@ void NvmDiskIO::Erase(void)
 		return;
 	}
 	vbCacheValid = false;
+	vbCacheDirty = false;
 	if (vpNvm == nullptr || vpNvm->EraseSize() == 0 ||
 		vpNvm->Size() > 0xFFFFFFFFULL)
 	{
@@ -346,6 +347,7 @@ void NvmDiskIO::EraseSector(uint32_t SectNo, int NbSect)
 		return;
 	}
 	vbCacheValid = false;
+	vbCacheDirty = false;
 	if (vpNvm == nullptr || vpNvm->EraseSize() == 0 || NbSect <= 0 ||
 		SectNo >= GetNbSect() || (uint32_t)NbSect > GetNbSect() - SectNo ||
 		(uint64_t)NbSect * vSectSize > 0xFFFFFFFFULL)

@@ -76,6 +76,7 @@ public:
 static TestDisk s_Flash(4096);
 static TestDisk s_Direct(512);
 static TestDisk s_Small(512, 256U * 1024U);
+static TestDisk s_Debug(512, 832U * 1024U);
 static TestDisk s_Expanded(4096, 832U * 1024U);
 static FATFS s_Fs;
 alignas(4) static uint8_t s_Work[4096];
@@ -274,6 +275,111 @@ static void TestExpandedDiskWithLegacyData(void)
 	CHECK(FatFsUnmount() == FR_OK);
 }
 
+static void TestValidateAndRecover(void)
+{
+	// Invalid or incompatible filesystem metadata must be found during
+	// mount, not passed through to USB MSC as a valid volume.
+	s_Small.Blank();
+	FatFsMountCfg_t cfg = {};
+	cfg.pDisk = &s_Small;
+	cfg.pFatFs = &s_Fs;
+	cfg.pWork = s_Work;
+	cfg.WorkSize = sizeof(s_Work);
+	cfg.bValidateOnMount = true;
+	cfg.bFormatIfInvalid = true;
+
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(FatFsUnmount() == FR_OK);
+	uint32_t writes = s_Small.vWrites;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Small.vWrites == writes);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// An incompatible boot-sector sector size is not a valid filesystem.
+	s_Small.vMedia[11] = 0x00;
+	s_Small.vMedia[12] = 0x10;
+	cfg.bFormatIfInvalid = false;
+	CHECK(FatFsMount(cfg) == FR_NO_FILESYSTEM);
+	CHECK(s_Small.vWrites == writes);
+	CHECK(FatFsUnmount() == FR_OK);
+	cfg.bFormatIfInvalid = true;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Small.vMedia[11] == 0x00);
+	CHECK(s_Small.vMedia[12] == 0x02);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// For FAT12, entry 2 uses bytes 3 and 4 of the FAT. Value 1 is an
+	// invalid FAT entry; f_getfree must find it during a full FAT scan.
+	uint16_t fatsz = (uint16_t)s_Small.vMedia[22] |
+		(uint16_t)((uint16_t)s_Small.vMedia[23] << 8);
+	CHECK(fatsz > 0);
+	s_Small.vMedia[512U + 3U] = 0x01U;
+	s_Small.vMedia[512U + 4U] = 0x00U;
+	writes = s_Small.vWrites;
+	cfg.bFormatIfInvalid = false;
+	CHECK(FatFsMount(cfg) == FR_INT_ERR);
+	CHECK(s_Small.vWrites == writes);
+	CHECK(FatFsUnmount() == FR_OK);
+	cfg.bFormatIfInvalid = true;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// Never turn physical read failures into destructive recovery.
+	writes = s_Small.vWrites;
+	s_Small.vReadFail = true;
+	CHECK(FatFsMount(cfg) == FR_DISK_ERR);
+	CHECK(s_Small.vWrites == writes);
+	s_Small.vReadFail = false;
+	CHECK(FatFsUnmount() == FR_OK);
+}
+
+static void TestBootSectorBlankPolicy(void)
+{
+	// Debug NVM1 starts at 0x30000, but the old Release NVM1 starts
+	// at 0xC0000, i.e. 0x90000 bytes into this disk.
+	s_Debug.Blank();
+	s_Debug.vMedia[0x90000U + 510U] = 0x55U;
+	s_Debug.vMedia[0x90000U + 511U] = 0xAAU;
+
+	FatFsMountCfg_t cfg = {};
+	cfg.pDisk = &s_Debug;
+	cfg.pFatFs = &s_Fs;
+	cfg.bFormatIfBlank = true;
+	cfg.pWork = s_Work;
+	cfg.WorkSize = sizeof(s_Work);
+
+	// Conservative default continues to protect nonblank sectors.
+	CHECK(FatFsMount(cfg) == FR_NO_FILESYSTEM);
+	CHECK(s_Debug.vWrites == 0U);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// The example explicitly permits first-use provisioning when its own
+	// boot sector is blank; it does not erase the whole region.
+	cfg.bFormatIfBootBlank = true;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Debug.vWrites > 0U);
+	CHECK(s_Debug.vMedia[510] == 0x55U);
+	CHECK(s_Debug.vMedia[511] == 0xAAU);
+	CHECK(s_Debug.vMedia[11] == 0x00U);
+	CHECK(s_Debug.vMedia[12] == 0x02U);
+	CHECK(s_Debug.vMedia[0x90000U + 510U] == 0x55U);
+	CHECK(s_Debug.vMedia[0x90000U + 511U] == 0xAAU);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	uint32_t writes = s_Debug.vWrites;
+	CHECK(FatFsMount(cfg) == FR_OK);
+	CHECK(s_Debug.vWrites == writes);
+	CHECK(FatFsUnmount() == FR_OK);
+
+	// A nonempty first sector is never silently reformatted, even when
+	// the opt-in boot-only policy is enabled.
+	s_Debug.Blank();
+	s_Debug.vMedia[0] = 0x12U;
+	CHECK(FatFsMount(cfg) == FR_NO_FILESYSTEM);
+	CHECK(s_Debug.vWrites == 0U);
+	CHECK(FatFsUnmount() == FR_OK);
+}
+
 static void TestBlankOnly(void)
 {
 	s_Flash.Blank();
@@ -311,6 +417,8 @@ int main(void)
 	// FatFs mkfs minimum of 128 sectors.
 	TestMedium(s_Small);
 	TestBlankOnly();
+	TestBootSectorBlankPolicy();
+	TestValidateAndRecover();
 	TestExpandedDiskWithLegacyData();
 	printf("FatFs DiskIO: %u checks, %u failures\n", s_Checks, s_Fails);
 	return s_Fails == 0U ? 0 : 1;

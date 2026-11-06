@@ -137,7 +137,13 @@ with tempfile.TemporaryDirectory(prefix='iosonata-combo-init-') as directory:
             '-I' + str(work), '-I' + str(ROOT / port),
             '-I' + str(ROOT / 'tests/usb/example_hostport'),
             str(work / 'test.cpp'), *[str(ROOT / p) for p in SOURCES],
-            '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections',
+            # On macOS ARM64, chained fixups require naturally aligned
+            # relocations. The target's 4-byte-packed embedded UsbCfg_t
+            # intentionally contains pointers; use classic Mach-O fixups
+            # for this host-only executable instead of changing its ABI.
+            *(['-Wl,-dead_strip', '-Wl,-no_fixup_chains',
+               '-Wl,-unaligned_pointers,suppress']
+              if sys.platform == 'darwin' else ['-Wl,--gc-sections']),
             '-o', str(output),
         ]
         subprocess.run(command, check=True)
