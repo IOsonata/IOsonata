@@ -178,6 +178,14 @@ int nRFxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 
 	if (dev->Cmd != 0)
 	{
+		// Nordic custom instructions carry at most eight data bytes.
+		// Reject unsupported framing instead of truncating the result
+		// while still reporting a successful transfer.
+		if (BuffLen < 0 || dev->ParamLen > sizeof(dev->Param) ||
+			(uint32_t)BuffLen > sizeof(dev->Param) - dev->ParamLen)
+		{
+			return 0;
+		}
 		uint32_t cinstrconf = ((uint32_t)dev->Cmd << QSPI_CINSTRCONF_OPCODE_Pos) |
 							  ((dev->ParamLen + BuffLen + 1) << QSPI_CINSTRCONF_LENGTH_Pos) |
 							  QSPI_CINSTRCONF_LIO2_Msk | QSPI_CINSTRCONF_LIO3_Msk;
@@ -263,11 +271,15 @@ int nRFxQSPITxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 
 	if (dev->Cmd)
 	{
+		if (DataLen < 0 || dev->ParamLen > sizeof(dev->Param) ||
+			(uint32_t)DataLen > sizeof(dev->Param) - dev->ParamLen)
+		{
+			return 0;
+		}
 		if (DataLen > 0)
 		{
-			volatile uint32_t *p = &dev->pQSpiReg->CINSTRDAT0;
-
-			memcpy(&((uint8_t*)dev->Param)[dev->ParamLen], pData, DataLen);
+			memcpy(&((uint8_t*)dev->Param)[dev->ParamLen], pData,
+				(size_t)DataLen);
 
 			dev->ParamLen += DataLen;
 
