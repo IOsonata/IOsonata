@@ -100,6 +100,19 @@ public:
 	bool SectRead(uint32_t SectNo, uint8_t *pBuff) override;
 	bool SectWrite(uint32_t SectNo, uint8_t *pData) override;
 	bool Commit(void) override;
+	// Cumulative counters for debugging write amplification.
+	// Read at a debugger breakpoint after a host transfer.
+	typedef struct __NvmDiskIO_Stats {
+		uint32_t SectReads;
+		uint32_t SectWrites;
+		uint32_t CacheHits;
+		uint32_t PageLoads;
+		uint32_t PageEvictions;
+		uint32_t PagePrograms;
+		uint32_t SyncCalls;
+	} Stats_t;
+	void GetStats(Stats_t &Stats) const { Stats = vStats; }
+	void ClearStats(void) { vStats = {}; }
 	void Erase(void) override;
 	void EraseSector(uint32_t SectNo, int NbSect) override;
 
@@ -115,6 +128,7 @@ private:
 	bool		vbCacheValid[CACHE_PAGES_MAX];
 	bool		vbCacheDirty[CACHE_PAGES_MAX];
 	bool		vbWriteCache;	//!< Opt-in sector write coalescing
+	Stats_t		vStats;
 	uint8_t *PageData(uint32_t Index);
 	int FindPage(uint64_t PageOff);
 	int LoadPage(uint64_t PageOff);
