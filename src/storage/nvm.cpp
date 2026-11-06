@@ -127,6 +127,7 @@ Nvm::Nvm()
 	vEraseSize = 0;
 	vSectSize = 0;
 	vPageSize = 0;
+	vpGetWriteChunkSize = nullptr;
 	vWrGran = 1;
 	vAddrSize = 3;
 	vAddrSpan = 0;
@@ -535,6 +536,7 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vEraseSize = Cfg.EraseSize;
 	vSectSize = Cfg.SectorSize;
 	vPageSize = Cfg.PageSize;
+	vpGetWriteChunkSize = Cfg.GetWriteChunkSize;
 	vWrGran = Cfg.WriteGran != 0 ? Cfg.WriteGran : 1;
 	vAddrSize = Cfg.AddrSize != 0 ? Cfg.AddrSize : 3;
 	vBaseDevAddr = (uint32_t)Cfg.DevNo;
@@ -992,6 +994,14 @@ int Nvm::IssueNext(void)
 	}
 
 	uint32_t room = vPageSize - (vOpAddr % vPageSize);
+	if (vpGetWriteChunkSize != nullptr)
+	{
+		uint32_t limit = vpGetWriteChunkSize();
+		if (limit != 0 && limit < room)
+		{
+			room = limit;
+		}
+	}
 	uint32_t l = vOpRemain < room ? vOpRemain : room;
 	int r = Program(vOpAddr, vpOpData, l, true);
 
@@ -1432,6 +1442,14 @@ int Nvm::Write(uint64_t Off, const void *pData, uint32_t Len)
 	while (cnt > 0)
 	{
 		uint32_t room = vPageSize - (addr % vPageSize);
+		if (vpGetWriteChunkSize != nullptr)
+		{
+			uint32_t limit = vpGetWriteChunkSize();
+			if (limit != 0 && limit < room)
+			{
+				room = limit;
+			}
+		}
 		uint32_t l = cnt < room ? cnt : room;
 		int res = Program(addr, p, l, false);
 
