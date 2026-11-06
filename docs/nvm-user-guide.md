@@ -390,11 +390,14 @@ NvmDiskIO option with a caller-owned erase-unit buffer.
 
 The existing generic `FatFsMount()` API supports optional first-use formatting
 via `bFormatIfBlank`, using FatFs `f_mkfs()` to choose FAT12, FAT16 or FAT32
-according to media geometry and optional `MKFS_PARM`. It normally formats only entirely
-erased disks and preserves existing volumes. The optional
-`bFormatIfBootBlank` policy instead tests only sector zero, for explicit
-first-use provisioning when other sectors may contain old layout data. For USB MSC, call
-`FatFsUnmount()` before exposing the same `DiskIO` to the host.
+according to media geometry and optional `MKFS_PARM`. The conservative
+default requires a fully erased volume. `bFormatIfBootBlank` permits an
+explicitly selected boot-sector-only blank check. `bValidateOnMount` scans
+the FAT allocation entries after FatFs verifies boot geometry, but is not a
+complete filesystem checker. `bFormatIfInvalid` explicitly reformats an
+invalid volume; this is destructive and should be used only for disposable
+test media. Without it, unrecognized nonblank data is preserved.
+For USB MSC call `FatFsUnmount()` before exporting the same `DiskIO`.
 `UsbMscFlashDisk` uses this existing interface without implementing any
 filesystem metadata in the application.
 ```cpp
