@@ -138,10 +138,12 @@ command can be coalesced into a single erase/program cycle. UsbdMsc
 commits before sending success and on synchronization/eject; there is
 no wear levelling or power-fail atomicity.
 
-The example uses generic `FatFsMount()` with the opt-in
-`bFormatIfBootBlank` policy to prepare a disk whose own boot sector is
-erased, even if other sectors contain data from the previous Release
-layout. The default `bFormatIfBlank` scans the entire medium. FatFs
-selects the filesystem type from geometry. Existing mountable filesystems
-are preserved and nonblank sector zero is not overwritten. The example calls `FatFsUnmount()` before USB
-starts, so firmware and the host do not access the volume concurrently.
+The example uses generic `FatFsMount()` with `bValidateOnMount` to
+check the mounted filesystem geometry and scan the FAT allocation table.
+Because the example is a disposable test disk, it explicitly enables
+`bFormatIfInvalid` to reformat invalid or incompatible volumes through
+FatFs `f_mkfs()`. This may destroy files from previous Debug/Release
+layouts, which share physical flash. Generic applications should leave
+recovery formatting disabled to protect existing data.
+The example calls `FatFsUnmount()` before USB starts so firmware and
+the host do not access the same volume concurrently.
