@@ -574,7 +574,9 @@ The MSC logical sector is 512 bytes. nRF52840 program flash has 4096-byte
 physical erase pages. `NvmDiskIO` uses a caller-owned aligned 4096-byte
 scratch buffer to preserve the other seven 512-byte sectors when replacing a
 sector. This is synchronous read/modify/erase/program, not a write-back
-cache; it does not coalesce repeated writes or provide wear levelling.
+cache. Identical repeated sector writes skip physical erase/program, but
+changed sectors still cause a full-page rewrite. There is no write
+coalescing or wear levelling.
 The 512-byte MSC sector buffer and 4096-byte scratch buffer must not alias.
 
 The bare-metal Debug linker script gcc_nrf52840_xxaa_nvm832k.ld
