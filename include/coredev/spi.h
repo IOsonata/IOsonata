@@ -268,11 +268,14 @@ SPIPHY SPISetPhy(SPIDev_t * const pDev, SPIPHY Phy);
  */
 static inline bool SPIQuadSetMemSize(SPIDev_t * const pDev, uint32_t Size)
 {
-	if (pDev == NULL || pDev->QuadSetMemSize == NULL)
+	if (pDev == NULL || pDev->QuadSendCmd == NULL)
 	{
 		return false;
 	}
-	pDev->QuadSetMemSize(pDev, Size);
+	if (pDev->QuadSetMemSize != NULL)
+	{
+		pDev->QuadSetMemSize(pDev, Size);
+	}
 	return true;
 }
 
@@ -283,8 +286,8 @@ static inline bool SPIQuadSendCmd(SPIDev_t * const pDev, uint8_t Cmd,
 		pDev->QuadSendCmd(pDev, Cmd, Addr, AddrLen, DataLen, DummyCycle);
 }
 
-// Legacy direct SPI API remains available to QSPI applications.
-void QuadSPISetMemSize(SPIDev_t * const pDev, uint32_t Size);
+// QSPI custom commands can also be sent through an explicitly initialized
+// SPI controller. Generic Nvm uses the per-instance callbacks above.
 
 /**
  * @brief	Configure and send command on Quad SPI interface
