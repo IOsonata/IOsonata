@@ -28,7 +28,7 @@ configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 | [usb_int_loopback.cpp](usb_int_loopback.cpp) | UsbIntLoopback/ioc | `UsbdInt` alternate settings |
 | [usb_iso_loopback.cpp](usb_iso_loopback.cpp) | UsbIsoLoopback/ioc | `UsbdIso` alternate settings |
 | [usb_msc_ramdisk.cpp](usb_msc_ramdisk.cpp) | UsbMscRamDisk/ioc | Disposable 64 KiB FAT12 RAM disk |
-| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | FAT disk on internal flash: 832 KiB in bare-metal `Debug`, 256 KiB in `Release`, or 832 KiB in `Release_mbr` |
+| [usb_msc_flashdisk.cpp](usb_msc_flashdisk.cpp) | UsbMscFlashDisk/ioc | Raw 512-byte-sector disk on reserved internal flash: 832 KiB in bare-metal `Debug`, 256 KiB in `Release`, or 832 KiB in `Release_mbr`; format explicitly on the host |
 
 Use the [USB User Guide](../../docs/usb-user-guide.md) for dependency
 installation, host commands, buffer ownership and reconnect behavior.
