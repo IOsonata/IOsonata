@@ -49,8 +49,8 @@ No dedicated MCU-disk helper header is required. The caller owns the interface,
 NVM driver, disk adapter and any erase-unit scratch buffer for their entire use. For 512-byte logical sectors on a
 4096-byte erase-page device, pass a separate aligned 4096-byte scratch
 buffer. Enable the optional write-cache parameter to coalesce writes to
-the same erase page until Commit() or page eviction. One to four
-caller-owned erase pages can be cached with the final Init() parameter.
+the same erase page until Commit() or a write to another erase page.
+One caller-owned erase page is used; there is no multi-page cache.
 Unrelated page reads bypass write-cache eviction. Commit() returns false
 on flash write failure; MSC invokes it before acknowledging completed writes.
 The storage initialization does not format, mount, erase or initialize USB MSC.
