@@ -145,6 +145,11 @@ McuOsc_t g_McuOsc = MCU_OSC;
 
 #define NVM_DEMO_MAGIC			0x4E564D31UL	// "NVM1"
 
+#ifdef NVM_DEMO_SEMIHOSTING
+#define NvmDemoPrintf printf
+#else
+#define NvmDemoPrintf(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
+
 // UART instance of the output, 0 when board.h does not say
 #ifndef NVM_DEMO_UART_DEVNO
 #define NVM_DEMO_UART_DEVNO		0
@@ -190,6 +195,18 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.RecordLen = 128,
 	.bBlocking = false
 };
+#endif
+
+static void NvmDemoConsoleInit(void)
+{
+#ifdef NVM_DEMO_SEMIHOSTING
+	setvbuf(stdout, NULL, _IONBF, 0);
+#else
+	g_Uart.Init(s_UartCfg);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
+			   nullptr, 0);
+#endif
+}
 
 #if NVM_DEMO_MEDIUM == 0
 
@@ -493,12 +510,12 @@ static void Check(bool Cond, const char *pMsg)
 {
 	if (Cond)
 	{
-		SysLogPrintf(SysLogGet(), "  ok   : %s\r\n", pMsg);
+		NvmDemoPrintf("  ok   : %s\r\n", pMsg);
 	}
 	else
 	{
 		s_Fail++;
-		SysLogPrintf(SysLogGet(), "  FAIL : %s\r\n", pMsg);
+		NvmDemoPrintf("  FAIL : %s\r\n", pMsg);
 	}
 }
 
@@ -545,7 +562,7 @@ static void StampCheck(Nvm &Mem)
 	Mem.Read(off, stamp, sizeof(stamp));
 
 #if NVM_DEMO_MEDIUM == 0
-	SysLogPrintf(SysLogGet(), "raw     : [0x%08lX] = 0x%08lX 0x%08lX before anything is touched\r\n",
+	NvmDemoPrintf("raw     : [0x%08lX] = 0x%08lX 0x%08lX before anything is touched\r\n",
 							  (unsigned long)raw, (unsigned long)RawWord(raw),
 							  (unsigned long)RawWord(raw + 4));
 
@@ -559,12 +576,12 @@ static void StampCheck(Nvm &Mem)
 	if (stamp[0] == NVM_DEMO_MAGIC)
 	{
 		boots = stamp[1] + 1;
-		SysLogPrintf(SysLogGet(), "persist : stamp found, previous boot %lu, data survived\r\n",
+		NvmDemoPrintf("persist : stamp found, previous boot %lu, data survived\r\n",
 								  (unsigned long)stamp[1]);
 	}
 	else
 	{
-		SysLogPrintf(SysLogGet(), "persist : no stamp yet, first run on this region\r\n");
+		NvmDemoPrintf("persist : no stamp yet, first run on this region\r\n");
 	}
 
 	uint32_t ns[2] = { NVM_DEMO_MAGIC, boots };
@@ -585,7 +602,7 @@ static void StampCheck(Nvm &Mem)
 		  "the stamp is in the memory, not only in the driver view");
 #endif
 
-	SysLogPrintf(SysLogGet(), "persist : boot %lu stamped, power cycle and it must rise\r\n",
+	NvmDemoPrintf("persist : boot %lu stamped, power cycle and it must rise\r\n",
 							  (unsigned long)boots);
 }
 
@@ -596,7 +613,7 @@ static void NvmDemoVerify(Nvm &Mem)
 	uint32_t page = UnitSize(Mem);
 	uint32_t scratch = page * NVM_DEMO_SCRATCH_PAGES;
 
-	SysLogPrintf(SysLogGet(), "region  : 0x%08lX size %lu, unit %lu, write unit %lu\r\n",
+	NvmDemoPrintf("region  : 0x%08lX size %lu, unit %lu, write unit %lu\r\n",
 							  (unsigned long)RegionAddr, (unsigned long)Mem.Size(),
 							  (unsigned long)page, (unsigned long)Mem.WriteGran());
 
@@ -656,11 +673,11 @@ static void NvmDemoVerify(Nvm &Mem)
 
 	if (rd == half)
 	{
-		SysLogPrintf(SysLogGet(), "medium  : clears bits only, an erase is needed to set them\r\n");
+		NvmDemoPrintf("medium  : clears bits only, an erase is needed to set them\r\n");
 	}
 	else if (rd == ones)
 	{
-		SysLogPrintf(SysLogGet(), "medium  : replaces the word, it rewrites in place\r\n");
+		NvmDemoPrintf("medium  : replaces the word, it rewrites in place\r\n");
 	}
 	else
 	{
@@ -685,7 +702,7 @@ static void NvmDemoVerify(Nvm &Mem)
 	// What the mode is for: the call establishes the operation and returns,
 	// and something else drives it. A write bigger than one page needs several
 	// steps, so IsBusy has real work to do rather than answering false at once.
-	SysLogPrintf(SysLogGet(), "async   : the call returns, IsBusy drives the rest\r\n");
+	NvmDemoPrintf("async   : the call returns, IsBusy drives the rest\r\n");
 
 	if (Mem.EraseSize() != 0)
 	{
@@ -725,7 +742,7 @@ static void NvmDemoVerify(Nvm &Mem)
 		  memcmp(s_RBack, s_Big, sizeof(s_Big)) == 0,
 		  "async: the data landed");
 
-	SysLogPrintf(SysLogGet(), "async   : %lu steps, write evt %lu erase evt %lu err %lu\r\n",
+	NvmDemoPrintf("async   : %lu steps, write evt %lu erase evt %lu err %lu\r\n",
 							  (unsigned long)steps, (unsigned long)s_EvtWrite,
 							  (unsigned long)s_EvtErase, (unsigned long)s_EvtError);
 
@@ -742,16 +759,16 @@ static void NvmDemoVerify(Nvm &Mem)
 	NvmMcuIntrfStat_t st;
 	NvmMcuIntrfGetStat(&st);
 
-	SysLogPrintf(SysLogGet(), "\r\n%s | ops %lu busy %lu evt %lu skipped %lu\r\n",
+	NvmDemoPrintf("\r\n%s | ops %lu busy %lu evt %lu skipped %lu\r\n",
 							  s_Fail == 0 ? "ALL PASS" : "FAILURES",
 							  (unsigned long)st.Ops, (unsigned long)st.Busy,
 							  (unsigned long)st.Evt, (unsigned long)st.Skipped);
 
-	SysLogPrintf(SysLogGet(), "path    : sd %lu slot %lu direct %lu\r\n",
+	NvmDemoPrintf("path    : sd %lu slot %lu direct %lu\r\n",
 							  (unsigned long)st.Sd, (unsigned long)st.Slot,
 							  (unsigned long)st.Direct);
 #else
-	SysLogPrintf(SysLogGet(), "\r\n%s\r\n", s_Fail == 0 ? "ALL PASS" : "FAILURES");
+	NvmDemoPrintf("\r\n%s\r\n", s_Fail == 0 ? "ALL PASS" : "FAILURES");
 #endif
 }
 
@@ -763,7 +780,7 @@ static bool NvmDemoSetup(void)
 #if NVM_DEMO_MEDIUM == 0
 	if (NvmMcuCfgInit(cfg, NVM_DEMO_REGION_NO) == false)
 	{
-		SysLogPrintf(SysLogGet(), "no valid reserved NVM%d test region\r\n",
+		NvmDemoPrintf("no valid reserved NVM%d test region\r\n",
 				NVM_DEMO_REGION_NO);
 
 		return false;
@@ -776,12 +793,12 @@ static bool NvmDemoSetup(void)
 
 	uint32_t unit = cfg.EraseSize != 0 ? cfg.EraseSize : 256;
 
-	SysLogPrintf(SysLogGet(), "NVM size: %lu bytes, unit %lu\r\n",
+	NvmDemoPrintf("NVM size: %lu bytes, unit %lu\r\n",
 							  (unsigned long)cfg.TotalSize, (unsigned long)unit);
 
 	// Which completion mode was built, so a log says it rather than the reader
 	// working it out from what is missing.
-	SysLogPrintf(SysLogGet(), "mode    : %s\r\n",
+	NvmDemoPrintf("mode    : %s\r\n",
 							  NVM_DEMO_ASYNC ? "interrupt, IsBusy drives the operation"
 								 : "polling, the call finishes the operation");
 
@@ -794,11 +811,11 @@ static bool NvmDemoSetup(void)
 
 		if (ra == 0 && rs == 0)
 		{
-			SysLogPrintf(SysLogGet(), "linker  : NVM%d not declared\r\n", i);
+			NvmDemoPrintf("linker  : NVM%d not declared\r\n", i);
 		}
 		else
 		{
-			SysLogPrintf(SysLogGet(), "linker  : NVM%d at %08lX size %08lX\r\n", i,
+			NvmDemoPrintf("linker  : NVM%d at %08lX size %08lX\r\n", i,
 									  (unsigned long)ra, (unsigned long)rs);
 		}
 	}
@@ -815,7 +832,7 @@ static bool NvmDemoSetup(void)
 
 	if (ceiling < below)
 	{
-		SysLogPrintf(SysLogGet(), "device too small for the region\r\n");
+		NvmDemoPrintf("device too small for the region\r\n");
 		return false;
 	}
 
@@ -838,7 +855,7 @@ static bool NvmDemoSetup(void)
 	if (s_MemIntrf.Init(s_I2cCfg) == false)
 #endif
 	{
-		SysLogPrintf(SysLogGet(), "memory interface init failed\r\n");
+		NvmDemoPrintf("memory interface init failed\r\n");
 		return false;
 	}
 
@@ -849,14 +866,14 @@ static bool NvmDemoSetup(void)
 
 	if (s_Nvm.Init(cfg, &s_MemIntrf, s_RegionAddr, regionsize) == false)
 	{
-		SysLogPrintf(SysLogGet(), "Nvm init failed\r\n");
+		NvmDemoPrintf("Nvm init failed\r\n");
 		return false;
 	}
 
 #if NVM_DEMO_MEDIUM == 1
 	// The commands in use, and the status register with the Quad Enable bit,
 	// which a quad command needs. A command of 0 is the single line default.
-	SysLogPrintf(SysLogGet(), "commands: read 0x%02X dummy %u, write 0x%02X\r\n",
+	NvmDemoPrintf("commands: read 0x%02X dummy %u, write 0x%02X\r\n",
 							  cfg.RdCmd.Cmd != 0 ? cfg.RdCmd.Cmd : 0x03,
 							  (unsigned)cfg.RdCmd.DummyCycle,
 							  cfg.WrCmd.Cmd != 0 ? cfg.WrCmd.Cmd : 0x02);
@@ -865,13 +882,13 @@ static bool NvmDemoSetup(void)
 
 		if (cfg.QuadEnable.Reg == 1)
 		{
-			SysLogPrintf(SysLogGet(), "status  : 0x%02X, quad enable bit %u %s\r\n",
+			NvmDemoPrintf("status  : 0x%02X, quad enable bit %u %s\r\n",
 									  (unsigned)sr, (unsigned)cfg.QuadEnable.Bit,
 									  (sr >> cfg.QuadEnable.Bit) & 1 ? "set" : "clear");
 		}
 		else
 		{
-			SysLogPrintf(SysLogGet(), "status  : 0x%02X, quad enable %s\r\n",
+			NvmDemoPrintf("status  : 0x%02X, quad enable %s\r\n",
 									  (unsigned)sr, cfg.QuadEnable.Reg == 0 ?
 									  "not used" : "in status register 2");
 		}
@@ -967,20 +984,20 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 
 			NvmMcuIntrfGetStat(&st);
 
-			SysLogPrintf(SysLogGet(), "stuck   : rq %lu ops %lu evt %lu\r\n",
+			NvmDemoPrintf("stuck   : rq %lu ops %lu evt %lu\r\n",
 									  (unsigned long)s_StallRq, (unsigned long)st.Ops,
 									  (unsigned long)st.Evt);
 
 			// Passed on, dropped with nothing wanting it, dropped with nothing
 			// outstanding. Either of the last two means the driver is waiting
 			// for a completion that has already been and gone.
-			SysLogPrintf(SysLogGet(), "stuck   : rep %lu/%lu/%lu pend %lu\r\n",
+			NvmDemoPrintf("stuck   : rep %lu/%lu/%lu pend %lu\r\n",
 									  (unsigned long)st.RepDone,
 									  (unsigned long)st.RepNoWant,
 									  (unsigned long)st.RepNoPend,
 									  (unsigned long)s_Pending);
 #else
-			SysLogPrintf(SysLogGet(), "stuck   : rq %lu pend %lu\r\n",
+			NvmDemoPrintf("stuck   : rq %lu pend %lu\r\n",
 									  (unsigned long)s_StallRq, (unsigned long)s_Pending);
 #endif
 		}
@@ -1079,7 +1096,7 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 		s_Skips++;
 		if (s_Skips == 3UL || (s_Skips % 10UL) == 0)
 		{
-			SysLogPrintf(SysLogGet(), "cycle   : skip %lu pend %lu rq %lu\r\n",
+			NvmDemoPrintf("cycle   : skip %lu pend %lu rq %lu\r\n",
 									  (unsigned long)s_Skips, (unsigned long)s_Pending,
 									  (unsigned long)s_StallRq);
 		}
@@ -1123,20 +1140,25 @@ static void NvmCycleReport(void)
 		// Split in two. UARTvprintf formats into SPRT_BUFFER_SIZE, which is
 		// 80, so a line past 79 characters loses its tail before the FIFO
 		// sees it. The single line this replaced was already over.
-		SysLogPrintf(SysLogGet(), "async   : requeues %lu dropped %lu txdrop %lu\r\n",
+#ifdef NVM_DEMO_SEMIHOSTING
+		NvmDemoPrintf("async   : requeues %lu dropped %lu\r\n",
+					  (unsigned long)s_Requeues, (unsigned long)s_Dropped);
+#else
+		NvmDemoPrintf("async   : requeues %lu dropped %lu txdrop %lu\r\n",
 								  (unsigned long)s_Requeues, (unsigned long)s_Dropped,
 								  (unsigned long)((UARTDev_t*)g_Uart)->TxDropCnt);
-		SysLogPrintf(SysLogGet(), "async   : write evt %lu erase evt %lu err %lu\r\n",
+#endif
+		NvmDemoPrintf("async   : write evt %lu erase evt %lu err %lu\r\n",
 								  (unsigned long)s_EvtWrite, (unsigned long)s_EvtErase,
 								  (unsigned long)s_EvtError);
 
 		// max is the longest the pump ever waited on one operation, in visits
 		// of about 1.5 msec each. long is how many waits passed the threshold.
-		SysLogPrintf(SysLogGet(), "wait    : max %lu long %lu\r\n",
+		NvmDemoPrintf("wait    : max %lu long %lu\r\n",
 								  (unsigned long)s_StallMax, (unsigned long)s_StallLong);
 
 #endif
-		SysLogPrintf(SysLogGet(), "cycles %lu writes %lu fails %lu\r\n",
+		NvmDemoPrintf("cycles %lu writes %lu fails %lu\r\n",
 								  (unsigned long)s_Cycles, (unsigned long)s_Writes,
 								  (unsigned long)s_Fail);
 		// rep, not evt. Evt counts only the SoftDevice flash event, so on a
@@ -1144,14 +1166,14 @@ static void NvmCycleReport(void)
 		// normally. RepDone counts what was passed to the driver whichever
 		// path the operation took, so ops against rep is the check that
 		// reads the same on both.
-		SysLogPrintf(SysLogGet(), "intrf   : ops %lu busy %lu rep %lu\r\n",
+		NvmDemoPrintf("intrf   : ops %lu busy %lu rep %lu\r\n",
 								  (unsigned long)st.Ops, (unsigned long)st.Busy,
 								  (unsigned long)st.RepDone);
-		SysLogPrintf(SysLogGet(), "path    : sd %lu slot %lu direct %lu\r\n",
+		NvmDemoPrintf("path    : sd %lu slot %lu direct %lu\r\n",
 								  (unsigned long)st.Sd, (unsigned long)st.Slot,
 								  (unsigned long)st.Direct);
 #else
-		SysLogPrintf(SysLogGet(), "cycles %lu writes %lu fails %lu\r\n",
+		NvmDemoPrintf("cycles %lu writes %lu fails %lu\r\n",
 								  (unsigned long)s_Cycles, (unsigned long)s_Writes,
 								  (unsigned long)s_Fail);
 #endif
@@ -1172,7 +1194,7 @@ void BtAppInitUserData()
 	s_Writes = 0;
 	s_Ready = true;
 
-	SysLogPrintf(SysLogGet(), "advertising now, %d writes per cycle\r\n",
+	NvmDemoPrintf("advertising now, %d writes per cycle\r\n",
 							  NVM_DEMO_WRITES_PER_CYCLE);
 }
 
@@ -1185,7 +1207,7 @@ void BtAppAdvTimeoutHandler()
 
 	if (AppEvtHandlerQue(0, NULL, NvmCycleHandler) == false)
 	{
-		SysLogPrintf(SysLogGet(), "cycle   : event queue refused the cycle\r\n");
+		NvmDemoPrintf("cycle   : event queue refused the cycle\r\n");
 	}
 }
 
@@ -1194,11 +1216,9 @@ int main()
 	// The queue exists before any interrupt can queue an event
 	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 
-	g_Uart.Init(s_UartCfg);
-	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
-			   nullptr, 0);
+	NvmDemoConsoleInit();
 
-	SysLogPrintf(SysLogGet(), "\r\nNvm demo on the %s, with a stack up\r\n", s_MediumName);
+	NvmDemoPrintf("\r\nNvm demo on the %s, with a stack up\r\n", s_MediumName);
 
 	BtAppInit(&s_BtAppCfg);
 
@@ -1215,11 +1235,9 @@ int main()
 
 int main()
 {
-	g_Uart.Init(s_UartCfg);
-	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
-			   nullptr, 0);
+	NvmDemoConsoleInit();
 
-	SysLogPrintf(SysLogGet(), "\r\nNvm demo on the %s\r\n", s_MediumName);
+	NvmDemoPrintf("\r\nNvm demo on the %s\r\n", s_MediumName);
 
 	if (NvmDemoSetup())
 	{
