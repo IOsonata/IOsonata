@@ -10,6 +10,7 @@ from pathlib import Path
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -430,10 +431,11 @@ with tempfile.TemporaryDirectory(prefix='iosonata-nrf54-usb-') as tmp:
     binary = tmp / 'test'
     path.write_text(MODEL + '\n' + source + '\n' + TEST)
     # DeviceIntrf uses GNU C++ variable-length arrays; keep that extension enabled.
-    # Non-PIE keeps static DMA pointers representable in the MCU's 32-bit registers.
+    # Select the native host linker flag for non-PIE test executables.
+    nonpie = ['-Wl,-no_pie'] if sys.platform == 'darwin' else ['-no-pie']
     subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O1', '-g',
                     '-x', 'c++', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', '-Wno-vla',
-                    '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
+                    '-fsanitize=undefined', '-fno-sanitize-recover=all', *nonpie,
                     '-I' + str(tmp), '-I' + str(ROOT / 'include'),
                     '-I' + str(ROOT / 'ARM/Nordic/include'),
                     str(path), str(ROOT / 'src/usb/usb_intrf.cpp'),
