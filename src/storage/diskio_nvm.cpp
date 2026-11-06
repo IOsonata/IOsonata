@@ -233,7 +233,10 @@ bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 	if (vbWriteCache)
 	{
 		uint64_t pageOff = off - off % eraseSize;
-		if (pData >= vpEraseWork && (uintptr_t)pData - (uintptr_t)vpEraseWork < eraseSize)
+		if (((uintptr_t)pData >= (uintptr_t)vpEraseWork &&
+			(uintptr_t)pData - (uintptr_t)vpEraseWork < eraseSize) ||
+			((uintptr_t)pData < (uintptr_t)vpEraseWork &&
+			(uintptr_t)vpEraseWork - (uintptr_t)pData < vSectSize))
 		{
 			return false;
 		}
