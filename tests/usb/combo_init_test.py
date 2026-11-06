@@ -21,6 +21,11 @@ MODEL = r'''
 #include "exemples/usb/usb_combo_stress.cpp"
 #undef main
 
+// UsbCfg_t holds host pointers; unlike USB wire descriptors it must
+// retain natural pointer alignment on 64-bit host test builds.
+static_assert(alignof(UsbCfg_t) >= alignof(void*),
+              "UsbCfg_t must not force under-aligned host pointers");
+
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
 bool UsbCtrlrStart(int) { return true; }
 void UsbCtrlrStop(int) {}
