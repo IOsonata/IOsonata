@@ -207,7 +207,8 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE Cmd, void *pBuff)
 	}
 }
 
-static FRESULT FatFsDiskIsBlank(void *pWork, UINT WorkSize, bool *pBlank)
+static FRESULT FatFsDiskIsBlank(void *pWork, UINT WorkSize, bool *pBlank,
+									bool bBootOnly)
 {
 	if (!FFDiskReady() || pBlank == nullptr || pWork == nullptr ||
 		WorkSize < s_pFFDiskIO->GetSectSize())
@@ -234,6 +235,10 @@ static FRESULT FatFsDiskIsBlank(void *pWork, UINT WorkSize, bool *pBlank)
 				return FR_OK;
 			}
 		}
+		if (bBootOnly)
+		{
+			break;
+		}
 	}
 
 	*pBlank = true;
@@ -255,7 +260,7 @@ FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
 		return FR_INVALID_PARAMETER;
 	}
 
-	if (Cfg.bFormatIfBlank &&
+	if ((Cfg.bFormatIfBlank || Cfg.bFormatIfBootBlank) &&
 		(Cfg.pWork == nullptr || Cfg.WorkSize < Cfg.pDisk->GetSectSize()))
 	{
 		return FR_INVALID_PARAMETER;
@@ -271,9 +276,11 @@ FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
 
 	res = f_mount(Cfg.pFatFs, pPath, 1);
 
-	if (res == FR_NO_FILESYSTEM && Cfg.bFormatIfBlank)
+	if (res == FR_NO_FILESYSTEM &&
+		(Cfg.bFormatIfBlank || Cfg.bFormatIfBootBlank))
 	{
-		res = FatFsDiskIsBlank(Cfg.pWork, Cfg.WorkSize, &blank);
+		res = FatFsDiskIsBlank(Cfg.pWork, Cfg.WorkSize, &blank,
+			Cfg.bFormatIfBootBlank);
 
 		if (res != FR_OK)
 		{
