@@ -287,7 +287,9 @@ void isoCallback(UsbCtrlrEvtType_t event,uint16_t length,void *context){
  ++callbacks[dir];lengths[dir]=length;
  if(!dir)memcpy(lastOut,outSlot,length);
 }
-uint8_t inBuffer[512],inBuffer2[512];
+// Normal DMA buffers meet the nRF52 4-byte hardware alignment requirement.
+// Unaligned IN sources are tested separately through the scratch-copy path.
+alignas(4) uint8_t inBuffer[512],inBuffer2[512];
 void init(){
  if(!dmaBufferCnt){dmaBuffer(outSlot);dmaBuffer(inBuffer);dmaBuffer(inBuffer2);}
  regs={};memset(&s_Usbd,0,sizeof(s_Usbd));
