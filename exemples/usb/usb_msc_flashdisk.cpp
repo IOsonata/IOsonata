@@ -145,7 +145,11 @@ int main(void)
 	fsCfg.WorkSize = sizeof(s_SectorBuffer);
 	fsCfg.pLabelIfUnnamed = "0:IOSONATA";
 
-	if (FatFsMount(fsCfg) != FR_OK)
+	// A nonblank disk with an older sector layout may not mount here.
+	// Never erase it or prevent the USB block device from enumerating.
+	// The host may inspect or migrate that volume explicitly.
+	FRESULT fsRes = FatFsMount(fsCfg);
+	if (fsRes != FR_OK && fsRes != FR_NO_FILESYSTEM)
 	{
 		return -1;
 	}
