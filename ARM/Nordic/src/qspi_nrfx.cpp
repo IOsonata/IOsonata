@@ -186,7 +186,7 @@ int nRFxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 
 		if (nRFxQSPIWaitEventReady(dev, 10000) == true)
 		{
-			uint32_t buf[2];
+			uint32_t buf[2] = { 0, 0 };
 			buf[0] = dev->pQSpiReg->CINSTRDAT0;
 			if (BuffLen > 4)
 			{
@@ -194,7 +194,7 @@ int nRFxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 			}
 
 			int l = min(BuffLen, 8);
-			memcpy(pBuff, buf, BuffLen);
+			memcpy(pBuff, buf, (size_t)l);
 			cnt = l;
 		}
 
@@ -342,7 +342,7 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 			ifcfg0 = (ifcfg0 & ~QSPI_IFCONFIG0_READOC_Msk) | (2 << QSPI_IFCONFIG0_READOC_Pos);
 			break;
 		case FLASH_CMD_QWRITE:
-			ifcfg0 = (ifcfg0 & ~QSPI_IFCONFIG0_WRITEOC_Msk) | (2 << QSPI_IFCONFIG0_READOC_Pos);
+			ifcfg0 = (ifcfg0 & ~QSPI_IFCONFIG0_WRITEOC_Msk) | (2 << QSPI_IFCONFIG0_WRITEOC_Pos);
 			break;
 		case FLASH_CMD_4READ:
 			ifcfg0 = (ifcfg0 & ~QSPI_IFCONFIG0_READOC_Msk) | (4 << QSPI_IFCONFIG0_READOC_Pos);
