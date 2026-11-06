@@ -565,11 +565,13 @@ internal NVM region through `NvmDiskIO`. It initializes `NvmMcuIntrf`,
 USB or MCU flash-disk helper.
 
 The application uses the existing generic `FatFsMount()` interface with
-`bFormatIfBlank` enabled. FatFs chooses an appropriate FAT format from the
-medium geometry; it does not hard-code FAT12 or depend on USB or internal NVM.
-Only a completely erased medium is formatted, using FatFs `f_mkfs()`.
+`bFormatIfBootBlank` explicitly enabled. FatFs chooses an appropriate FAT
+format from the medium geometry; it does not hard-code FAT12 or depend on USB.
+The flash-disk example provisions when sector zero is fully erased, even if
+other sectors contain data from an older firmware layout. The default
+`bFormatIfBlank` policy remains conservative and scans the entire disk.
 An existing valid filesystem is mounted without formatting. An unrecognized,
-nonblank volume is not overwritten and no longer prevents USB MSC startup;
+nonblank sector zero is not overwritten and does not prevent USB MSC startup;
 the host may still be unable to mount it. In particular, the earlier Debug
 flash-disk firmware used 4096-byte logical sectors, which cannot be mounted
 through the refactored 512-byte logical-sector geometry without explicit
