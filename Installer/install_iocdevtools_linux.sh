@@ -297,11 +297,25 @@ for item in items:
 		versions.append((tuple(int(part) for part in match[1].split(".")), name))
 if not versions:
 	raise SystemExit("No published IOcomposer plugin found: " + plugin_id)
-version, filename = max(versions)
-if plugin_id == "org.iosonata.embedcdt.templates.wizard" and version < (0, 1, 7):
-	raise SystemExit("IOcomposer requires wizard 0.1.7 or newer; published wizard is " + filename)
-print("https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/" + filename)
+print("https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/" + max(versions)[1])
 PY
+}
+
+iosonata_wizard_jar() {
+	# The wizard ships with IOsonata, so take it from the clone the SDK sync just updated.
+	local jar version
+	jar=$(ls -1 "$ROOT/IOsonata/Installer/eclipse_plugin"/org.iosonata.embedcdt.templates.wizard_*.jar 2>/dev/null | sort -V | tail -n1 || true)
+	if [[ -z "$jar" ]]; then
+		echo "No IOsonata wizard plugin found in $ROOT/IOsonata/Installer/eclipse_plugin" >&2
+		return 1
+	fi
+	version="${jar##*_}"
+	version="${version%.jar}"
+	if [[ "$(printf '%s\n' 0.1.7 "$version" | sort -V | head -n1)" != "0.1.7" ]]; then
+		echo "IOcomposer requires wizard 0.1.7 or newer; IOsonata has $(basename "$jar")" >&2
+		return 1
+	fi
+	printf '%s\n' "$jar"
 }
 
 install_iocomposer() (
@@ -310,9 +324,12 @@ install_iocomposer() (
 	local stage
 	stage=$(mktemp -d)
 	trap 'rm -rf "$stage"' EXIT
-	local plugin url
+	local plugin url wizard
+	wizard=$(iosonata_wizard_jar)
+	cp "$wizard" "$stage/org.iosonata.embedcdt.templates.wizard.jar"
+	unzip -tq "$stage/org.iosonata.embedcdt.templates.wizard.jar" >/dev/null
 	curl -fsSL "https://api.github.com/repos/I-SYST/iocomposer.io/contents/plugin?ref=main" -o "$stage/plugins.json"
-	for plugin in org.iosonata.embedcdt.templates.wizard com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
+	for plugin in com.iocomposer.embedcdt.ai com.iocomposer.embedcdt.ui; do
 		url=""
 		if [[ "$plugin" == "com.iocomposer.embedcdt.ai" ]]; then
 			url="${IOCOMPOSER_AI_PLUGIN_URL:-}"

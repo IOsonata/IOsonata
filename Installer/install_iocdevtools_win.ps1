@@ -824,12 +824,18 @@ function Install-IOcomposer {
 			Accept = 'application/vnd.github+json'
 			'User-Agent' = 'iocomposer-installer'
 		}
+		# The wizard ships with IOsonata, so take it from the clone the SDK sync just updated.
+		$wizardDir = Join-Path $ROOT 'IOsonata\Installer\eclipse_plugin'
 		$ids = @('org.iosonata.embedcdt.templates.wizard', 'com.iocomposer.embedcdt.ai', 'com.iocomposer.embedcdt.ui')
 		foreach ($id in $ids) {
 			$url = $null
+			$isWizard = $id -eq 'org.iosonata.embedcdt.templates.wizard'
 			if ($id -eq 'com.iocomposer.embedcdt.ai') { $url = $env:IOCOMPOSER_AI_PLUGIN_URL }
 			if (-not $url) {
-				$candidates = foreach ($item in $plugins) {
+				$sources = if ($isWizard) {
+					Get-ChildItem $wizardDir -Filter "${id}_*.jar" -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ name = $_.Name } }
+				} else { $plugins }
+				$candidates = foreach ($item in $sources) {
 					if ($item.name -match ('^' + [regex]::Escape($id) + '_([0-9]+(?:\.[0-9]+)*)\.jar$')) {
 						$key = ($Matches[1].Split('.') | ForEach-Object { $_.PadLeft(10, '0') }) -join '.'
 						[pscustomobject]@{ Key = $key; Name = $item.name }
@@ -837,17 +843,17 @@ function Install-IOcomposer {
 				}
 				$latest = $candidates | Sort-Object Key -Descending | Select-Object -First 1
 				if (-not $latest) { throw "No published IOcomposer plugin found: $id" }
-				if ($id -eq 'org.iosonata.embedcdt.templates.wizard') {
+				if ($isWizard) {
 					if ($latest.Name -notmatch '^org\.iosonata\.embedcdt\.templates\.wizard_([0-9]+)\.([0-9]+)\.([0-9]+)(?:\.[0-9]+)*\.jar$') {
 						throw "Invalid wizard bundle version: $($latest.Name)"
 					}
 					$wizardVersion = [version]("$($Matches[1]).$($Matches[2]).$($Matches[3])")
 					if ($wizardVersion -lt [version]'0.1.7') { throw 'IOcomposer requires wizard 0.1.7 or newer' }
 				}
-				$url = "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/$($latest.Name)"
+				$url = if ($isWizard) { Join-Path $wizardDir $latest.Name } else { "https://raw.githubusercontent.com/I-SYST/iocomposer.io/main/plugin/$($latest.Name)" }
 			}
 			$jar = Join-Path $stage "$id.jar"
-			Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $jar
+			if ($isWizard) { Copy-Item $url $jar } else { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $jar }
 			& $SEVENZIP_EXE t $jar | Out-Null
 			if ($LASTEXITCODE -ne 0) { throw "Invalid IOcomposer plugin archive: $id" }
 		}
