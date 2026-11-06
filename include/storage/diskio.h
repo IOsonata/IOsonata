@@ -176,7 +176,7 @@ public:
 	void Flush();
 	// Commit pending medium writes and report failures to protocol clients.
 	// Existing DiskIO implementations without deferred writes use Flush().
-	virtual bool Commit(void) { Flush(); return true; }
+	virtual bool Commit(void);
 
 protected:
 	DISKIO_TYPE vType;
