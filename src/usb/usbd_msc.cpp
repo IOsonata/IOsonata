@@ -366,6 +366,15 @@ static int UsbdMscDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 
 static void UsbdMscFinishCommand(UsbdMscDev_t *pMsc)
 {
+	// All WRITE(10) data must reach the medium before the success CSW.
+	// The generic DiskIO::Commit() also covers optional erase-page caches.
+	if (pMsc->Cbw.CBWCB[0] == USB_MSC_SCSI_WRITE_10 &&
+		!pMsc->bCommandFailed && !pMsc->bPhaseError &&
+		!pMsc->pDisk->Commit())
+	{
+		UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
+			USB_MSC_ASC_WRITE_ERROR);
+	}
 	// Copied as a word: a constant assigned to the packed field is expanded
 	// into byte stores.
 	const uint32_t signature = USB_MSC_CSW_SIGNATURE;
@@ -679,7 +688,11 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			}
 			else
 			{
-				pMsc->pDisk->Flush();
+				if (!pMsc->pDisk->Commit())
+				{
+					UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
+						USB_MSC_ASC_WRITE_ERROR);
+				}
 				pMsc->bMediumReady = false;
 				if ((cdb[4] & 2U) != 0U)
 				{
@@ -708,7 +721,11 @@ static UsbdMscDataDirection_t UsbdMscPrepareScsi(UsbdMscDev_t *pMsc)
 			}
 			else if (UsbdMscMediumReady(pMsc))
 			{
-				pMsc->pDisk->Flush();
+				if (!pMsc->pDisk->Commit())
+				{
+					UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
+						USB_MSC_ASC_WRITE_ERROR);
+				}
 			}
 			return USBD_MSC_DATA_NONE;
 
