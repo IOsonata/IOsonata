@@ -244,7 +244,7 @@ int main()
 		printf("NVM init failed\r\n");
 		return 1;
 	}
-	printf("Test region 0x%08lX, %lu bytes\r\n",
+	printf("NVM erase, write and readback demo\r\nTest region 0x%08lX, %lu bytes\r\n",
 		   (unsigned long)(cfg.BaseAddr + start), (unsigned long)(3 * unit));
 #if NVM_DEMO_MEDIUM == 1
 	printf("Read 0x%02X, dummy %u, program 0x%02X\r\n",
@@ -267,6 +267,7 @@ int main()
 
 	if (cfg.EraseSize)
 	{
+		printf("Erasing 3 sectors at 0x%08lX...\r\n", (unsigned long)(cfg.BaseAddr + start));
 		if (s_Nvm.Erase(0, 3 * unit) != 0)
 		{
 			printf("Erase failed\r\n");
@@ -280,6 +281,9 @@ int main()
 		pattern[i] = 0xA5000000U + i;
 	}
 	offset = unit - sizeof(pattern) / 2;
+	printf("Writing %u bytes at 0x%08lX across the boundary at 0x%08lX\r\n",
+		   (unsigned)sizeof(pattern), (unsigned long)(cfg.BaseAddr + start + offset),
+		   (unsigned long)(cfg.BaseAddr + start + unit));
 	count = s_Nvm.Write(offset, pattern, sizeof(pattern));
 	if (count != sizeof(pattern))
 	{
@@ -292,6 +296,8 @@ int main()
 		printf("Pattern readback failed (%d)\r\n", count);
 		return 1;
 	}
+
+	printf("Read back and matched all %u bytes\r\n", (unsigned)sizeof(pattern));
 
 	stamp[0] = magic;
 	stamp[1] = boot;
@@ -307,7 +313,7 @@ int main()
 		printf("Stamp readback failed (%d)\r\n", count);
 		return 1;
 	}
-	printf("Boot %lu stamped\r\nALL PASS\r\n", (unsigned long)boot);
+	printf("Boot %lu stamp written and verified\r\nALL PASS\r\n", (unsigned long)boot);
 	while (true)
 	{
 		msDelay(1000);

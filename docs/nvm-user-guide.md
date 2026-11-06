@@ -24,7 +24,10 @@ The generic `Nvm`, `DeviceIntrf`, and `NvmDiskIO` APIs are unchanged.
 | Generic driver tests | [nvm_test.cpp](../exemples/storage/nvm_test.cpp) | Desktop compiler and supplied mock interfaces |
 
 The standalone demo selects its medium with `NVM_DEMO_MEDIUM` and runs in polling mode. The separate [BLE NVM test](../exemples/bluetooth/ble_nvm_test.cpp)
-repeats writes and readbacks during advertising to exercise radio arbitration.
+uses the nRF52832 `BleNvmStressTest/ioc` project. Build `Release_SDC` for UART output
+or `Debug_SDC` for semihosting. It erases one NVM1 sector eight times and verifies
+64 records after each batch of writes. Scan for `BleNvmStress` during the run.
+Its four-byte little-endian manufacturer payload counts verified records from 0 to 512.
 Supplied `NvmDemo/ioc` projects include STM32L476, LPC54628, nRF9160,
 nRF91x1 and RA4M1. Inspect each project's linked source and medium selection:
 the RA4M1 project uses [data_nvm_demo.cpp](../exemples/storage/data_nvm_demo.cpp)
