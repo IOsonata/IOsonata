@@ -138,10 +138,12 @@ command can be coalesced into a single erase/program cycle. UsbdMsc
 commits before sending success and on synchronization/eject; there is
 no wear levelling or power-fail atomicity.
 
-The example provisions FAT12 metadata when sector zero has no boot
-signature; the boot sector is written last and committed before USB starts.
-A signed existing 512-byte-sector volume is preserved. Incompatible signed
-volumes are rejected rather than overwritten.
+The example explicitly calls the reusable storage-layer
+`Fat12ProvisionIfBlank()` helper before starting USB. The helper provisions
+small FAT12 volumes on any `DiskIO` backend when sector zero is unsigned;
+it commits the boot sector last. A signed compatible FAT12 volume is
+preserved, and other signed layouts are not overwritten. No FAT formatting
+logic is implemented inside the USB application.
 
 Generic FatFsMount/FatFsUnmount remains available to firmware
 through DiskIO and is independent of USB MSC. The USB disk example
