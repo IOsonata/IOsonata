@@ -11,10 +11,9 @@ settings or Bluetooth bond-storage regions.
 The content stays across resets and power cycles. The example uses the generic FatFs storage interface to provision blank
 media, then unmounts it before the USB host takes ownership.
 
-Logical sector geometry is selected from the NVM erase unit and total
-capacity. Where FatFs can format native erase-page sectors, each MSC write
-directly programs a full page. Smaller media use 512-byte logical sectors
-with a caller-owned erase-page cache. There is no wear levelling.
+The host sees 512-byte logical sectors. NvmDiskIO caches one physical
+erase page across WRITE(10) commands, flushing on page eviction and
+SCSI synchronization or eject. There is no wear levelling.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 4, 2026
@@ -69,11 +68,9 @@ static const IOPinCfg_t s_UsbPins[] = USB_PINS;
 #ifndef USB_DEVNO
 #define USB_DEVNO			0
 #endif
-// Largest logical sector and MCU flash erase page supported by this example.
-#define MSC_SECTOR_BUFF_SIZE	4096U
+// Expose 512-byte logical sectors backed by a physical flash erase page.
+#define MSC_SECTOR_BUFF_SIZE	512U
 #define MSC_ERASE_WORK_SIZE	4096U
-// FatFs f_mkfs requires at least 128 logical sectors.
-#define MSC_MIN_FORMAT_SECTORS	128U
 // Linker-reserved USB disk region (NVM1); NVM0, if present, is PDS.
 #define MSC_NVM_REGION		1
 #define MSC_STR_INTERFACE	4U
@@ -113,6 +110,7 @@ static const UsbdMscCfg_t s_MscCfg = {
 	.pSectorBuffer = s_SectorBuffer,
 	.SectorBufferSize = sizeof(s_SectorBuffer),
 	.bRemovable = true,
+	.bWriteBack = true,
 	.InterfaceString = MSC_STR_INTERFACE,
 	.pProduct = "IOsonata Flash",
 };
@@ -133,18 +131,8 @@ int main(void)
 	{
 		return -1;
 	}
-	// Native erase-page sectors avoid repeated erase/program cycles for
-	// independent USB WRITE(10) commands. Small media fall back to 512-byte
-	// sectors with the cache needed for erase-page read/modify/write.
-	uint32_t sectSize = s_Nvm.EraseSize();
-	if (sectSize == 0U || sectSize > sizeof(s_SectorBuffer) ||
-		s_Nvm.Size() / sectSize < MSC_MIN_FORMAT_SECTORS)
-	{
-		sectSize = 512U;
-	}
-	bool bCache = s_Nvm.EraseSize() > sectSize;
-	if (!s_Disk.Init(s_Nvm, sectSize, s_EraseWork,
-			sizeof(s_EraseWork), bCache))
+	if (!s_Disk.Init(s_Nvm, MSC_SECTOR_BUFF_SIZE, s_EraseWork,
+			sizeof(s_EraseWork), true))
 	{
 		return -1;
 	}
@@ -153,8 +141,7 @@ int main(void)
 	FatFsMountCfg_t fsCfg = {};
 	fsCfg.pDisk = &s_Disk;
 	fsCfg.pFatFs = &s_FatFs;
-	// This example's disk is disposable. A change in logical sector size
-	// may require reformatting; Debug and Release regions also overlap.
+	// This example's disk is disposable. Debug and Release regions overlap.
 	// Never use this recovery policy for media containing files to retain.
 	fsCfg.bValidateOnMount = true;
 	fsCfg.bFormatIfInvalid = true;
