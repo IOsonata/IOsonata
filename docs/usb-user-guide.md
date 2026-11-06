@@ -578,8 +578,8 @@ The firmware calls `FatFsUnmount()` before enabling USB MSC, giving the
 host exclusive filesystem ownership.
 
 The nRF52840 example exports 512-byte logical sectors backed by 4096-byte
-flash erase pages in every configuration. NvmDiskIO keeps up to four dirty physical
-pages across MSC WRITE(10) commands. The example opts into MSC
+flash erase pages in every configuration. NvmDiskIO holds one dirty physical
+page across MSC WRITE(10) commands. The example opts into MSC
 `bWriteBack`, so writing a second logical sector within the same erase
 page does not reprogram that page. Switching physical pages evicts the dirty
 page to flash; unrelated page reads bypass the write cache without evicting\nit. SYNCHRONIZE CACHE and clean eject also call Commit().
