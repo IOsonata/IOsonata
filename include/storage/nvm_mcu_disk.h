@@ -24,7 +24,9 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 /**
  * @brief	Initialize a block disk from a linker-reserved MCU NVM region.
  *
- * Does not erase, format, mount or inspect the volume.
+ * Does not erase, format or mount the volume. With sub-erase sectors, the
+ * caller-owned buffer also caches one erase page; clients must Commit()
+ * before reporting completed writes.
  * @param	Disk	Caller-owned block adapter.
  * @param	Mem	Caller-owned NVM driver.
  * @param	Intrf	Caller-owned MCU memory interface.
@@ -56,7 +58,7 @@ inline bool NvmMcuDiskInit(NvmDiskIO &Disk, Nvm &Mem,
 		return false;
 	}
 
-	return Disk.Init(Mem, SectSize, pEraseWork, WorkSize);
+	return Disk.Init(Mem, SectSize, pEraseWork, WorkSize, true);
 }
 
 #endif // __cplusplus
