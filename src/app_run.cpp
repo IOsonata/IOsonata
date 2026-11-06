@@ -38,16 +38,25 @@ SOFTWARE.
 #include "app_evt_handler.h"
 
 // Optional subsystem checks. Weak references do not pull an unused stack
-// into an application that only needs the event queue.
-extern "C" void UsbCheckStatus(void) __attribute__((weak));
-extern "C" void BtAppCheckStatus(void) __attribute__((weak));
-extern "C" void LteCheckStatus(void) __attribute__((weak));
-extern "C" void GnssCheckStatus(void) __attribute__((weak));
-extern "C" void IpCheckStatus(void) __attribute__((weak));
-extern "C" void Nrf70WorkCheckStatus(void) __attribute__((weak));
-extern "C" void Nrf70TaskletCheckStatus(void) __attribute__((weak));
-extern "C" bool Nrf70TaskletPending(void) __attribute__((weak));
-extern "C" bool Nrf70WorkPending(void) __attribute__((weak));
+// into an application that only needs the event queue. Mach-O requires
+// weak_import for optional symbols that need not be defined at link time.
+#if defined(__APPLE__)
+#define APP_OPTIONAL_SYMBOL __attribute__((weak_import))
+#else
+#define APP_OPTIONAL_SYMBOL __attribute__((weak))
+#endif
+
+extern "C" void UsbCheckStatus(void) APP_OPTIONAL_SYMBOL;
+extern "C" void BtAppCheckStatus(void) APP_OPTIONAL_SYMBOL;
+extern "C" void LteCheckStatus(void) APP_OPTIONAL_SYMBOL;
+extern "C" void GnssCheckStatus(void) APP_OPTIONAL_SYMBOL;
+extern "C" void IpCheckStatus(void) APP_OPTIONAL_SYMBOL;
+extern "C" void Nrf70WorkCheckStatus(void) APP_OPTIONAL_SYMBOL;
+extern "C" void Nrf70TaskletCheckStatus(void) APP_OPTIONAL_SYMBOL;
+extern "C" bool Nrf70TaskletPending(void) APP_OPTIONAL_SYMBOL;
+extern "C" bool Nrf70WorkPending(void) APP_OPTIONAL_SYMBOL;
+
+#undef APP_OPTIONAL_SYMBOL
 
 __attribute__((weak)) bool AppCheckStatus(void)
 {
