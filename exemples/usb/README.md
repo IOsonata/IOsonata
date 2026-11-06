@@ -125,8 +125,8 @@ size. The RAM-disk example uses the normal `AppRun()` event loop, with optional
 removable-media and product identity settings. `UsbdMsc` supplies BOT/SCSI and
 USB descriptors; filesystem initialization belongs to the storage layer.
 
-The flash disk example uses `NvmMcuDiskInit()` to attach
-`NvmMcuIntrf`, `Nvm`, and `NvmDiskIO` to linker-reserved NVM1.
+The flash disk example initializes `NvmMcuIntrf`, `Nvm`, and
+`NvmDiskIO` through their existing APIs over linker-reserved NVM1.
 Debug reserves 832 KiB at 0x30000-0xFFFFF; Release reserves 256 KiB at
 0xC0000-0xFFFFF; Release_mbr reserves 832 KiB at 0x10000-0xDFFFF under
 the SDK USB DFU bootloader. These variants have different start addresses.
