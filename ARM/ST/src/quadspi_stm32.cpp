@@ -452,6 +452,8 @@ static void Stm32QspiStopTx(DevIntrf_t * const pDev)
 	Stm32QspiCsHigh(dev);
 }
 
+
+
 bool Stm32QospiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 {
 	if (pCfgData->DevNo != STM32_QOSPI_DEVNO_START || pCfgData->Mode != SPIMODE_MASTER ||
@@ -500,6 +502,8 @@ bool Stm32QospiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	Stm32QspiSetRate(&pDev->DevIntrf, pCfgData->Rate);
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_QSPI;
+	pDev->QuadSetMemSize = QuadSPISetMemSize;
+	pDev->QuadSendCmd = QuadSPISendCmd;
 	pDev->DevIntrf.Disable = Stm32QspiDisable;
 	pDev->DevIntrf.Enable = Stm32QspiEnable;
 	pDev->DevIntrf.GetHandle = Stm32QspiGetHandle;

@@ -45,19 +45,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "stm32_boards.h"
 
-// UART pins, not used by the demo: the Debug build prints with semihosting
-#define UART_RX_PORT		IOPORTB
-#define UART_RX_PIN			7
-#define UART_RX_PINOP		IOPINOP_FUNC7
-#define UART_TX_PORT		IOPORTB
-#define UART_TX_PIN			6
-#define UART_TX_PINOP		IOPINOP_FUNC7
-#define UART_CTS_PORT		-1
-#define UART_CTS_PIN		-1
-#define UART_CTS_PINOP		0
-#define UART_RTS_PORT		-1
-#define UART_RTS_PIN		-1
-#define UART_RTS_PINOP		0
+// USART1 on the ST-LINK virtual COM port.
+#define UART_DEVNO		BOARD_VCP_DEVNO
+#define UART_PINS		BOARD_VCP_PINS
 
 // Onboard MX25R6435F 64 Mbit flash on QUADSPI (SPI DevNo 3), AF10: CLK PE10,
 // IO0 PE12, IO1 PE13, IO2 PE14, IO3 PE15, NCS PE11. The pin map order is
@@ -81,21 +71,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define FLASH_SECTOR_SIZE		FLASH_MX25R6435F_SECTSIZE
 
-// MX25R6435F with the single line read and page program commands: the quad
-// commands need the QE bit of the flash status register, which this demo
-// does not set
-#define FLASH_CFG(InitCB, WaitCB)		{ \
-	.DevNo = 0, \
-	.TotalSize = 64 * 1024 / 8, \
-	.BlkSize = 64 * 1024, \
-	.SectSize = FLASH_MX25R6435F_SECTSIZE, \
-	.PageSize = 256, \
-	.AddrSize = 3, \
-	.DevId = 0x1728c2, \
-	.DevIdSize = 3, \
-	.pInitCB = InitCB, \
-	.pWaitCB = WaitCB, \
-	.RdCmd = { FLASH_CMD_READ, 0 }, \
-	.WrCmd = { FLASH_CMD_WRITE, 0 }, }
+#define FLASH_CFG(InitCB, WaitCB)	FLASH_MX25R6435F(InitCB, WaitCB)
 
 #endif // __BOARD_H__

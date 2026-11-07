@@ -577,6 +577,13 @@ a full filesystem repair or directory-tree consistency check.
 The firmware calls `FatFsUnmount()` before enabling USB MSC, giving the
 host exclusive filesystem ownership.
 
+The nRF52840 example builds FatFs and its DiskIO adapter with
+`FF_USE_LFN=0` and `FF_FS_EXFAT=0` in all three configurations.
+Firmware uses the ASCII volume label `IOSONATA`. The host manages file
+names, including long names, when it owns the FAT volume. A host-formatted
+exFAT volume will be treated as unrecognized and reformatted on startup
+under this example's disposable-media policy.
+
 The nRF52840 example exports 512-byte logical sectors backed by 4096-byte
 flash erase pages in every configuration. NvmDiskIO holds one dirty physical
 page across MSC WRITE(10) commands. The example opts into MSC

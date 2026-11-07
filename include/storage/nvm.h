@@ -234,6 +234,10 @@ private:
 	int Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 				bool bDefer);
 	int EraseUnit(uint32_t Addr, bool bDefer);
+	int QuadRead(const NvmCmd_t &Cmd, uint32_t Addr, uint8_t AddrLen,
+				 uint8_t *pBuf, int Len);
+	int QuadWrite(const NvmCmd_t &Cmd, uint32_t Addr, uint8_t AddrLen,
+				  const uint8_t *pData, int Len);
 	int SendCmd(const NvmCmd_t &Cmd);
 	int ReadStatus(uint8_t &Status);
 	int RegRead(uint8_t Cmd, uint8_t &Val);

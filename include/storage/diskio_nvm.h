@@ -124,6 +124,7 @@ private:
 	Stats_t		vStats;
 	bool LoadPage(uint64_t PageOff);
 	bool WritePage(void);
+	bool WriteThrough(uint64_t Off, const uint8_t *pData, uint32_t Len);
 };
 
 #endif	// __cplusplus

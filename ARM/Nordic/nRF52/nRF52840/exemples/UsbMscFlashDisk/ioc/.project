@@ -35,5 +35,15 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/usb_msc_flashdisk.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/ff.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/fatfs/ff.c</locationURI>
+		</link>
+		<link>
+			<name>src/ff_diskio.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/storage/ff_diskio.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

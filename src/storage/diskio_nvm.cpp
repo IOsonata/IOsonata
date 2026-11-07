@@ -95,22 +95,28 @@ bool NvmDiskIO::Init(Nvm &Mem, uint32_t SectSize,
 	return true;
 }
 
+bool NvmDiskIO::WriteThrough(uint64_t Off, const uint8_t *pData, uint32_t Len)
+{
+	if (vpNvm->EraseSize() != 0 && vpNvm->Erase(Off, Len) != 0)
+	{
+		return false;
+	}
+	// Write waits for a pending erase. Sync finishes the write before the
+	// caller can reuse the sector buffer.
+	if (vpNvm->Write(Off, pData, Len) != (int)Len)
+	{
+		return false;
+	}
+	return vpNvm->Sync() == 0;
+}
+
 bool NvmDiskIO::WritePage(void)
 {
 	if (!vbCacheDirty)
 	{
 		return true;
 	}
-	uint32_t eraseSize = vpNvm->EraseSize();
-	if (vpNvm->Erase(vCacheOff, eraseSize) != 0)
-	{
-		return false;
-	}
-	if (vpNvm->Write(vCacheOff, vpEraseWork, eraseSize) != (int)eraseSize)
-	{
-		return false;
-	}
-	if (vpNvm->Sync() != 0)
+	if (!WriteThrough(vCacheOff, vpEraseWork, vpNvm->EraseSize()))
 	{
 		return false;
 	}
@@ -227,94 +233,45 @@ bool NvmDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 	}
 
 	uint64_t off = (uint64_t)SectNo * vSectSize;
-	uint64_t writeOff = off;
-	uint32_t writeLen = vSectSize;
-	const uint8_t *pWriteData = pData;
 	uint32_t eraseSize = vpNvm->EraseSize();
+	if (vSectSize >= eraseSize)
+	{
+		return WriteThrough(off, pData, vSectSize);
+	}
 
+	uintptr_t src = (uintptr_t)pData;
+	uintptr_t work = (uintptr_t)vpEraseWork;
+	if ((src >= work && src - work < eraseSize) ||
+		(src < work && work - src < vSectSize))
+	{
+		return false;
+	}
+
+	uint64_t pageOff = off - off % eraseSize;
 	if (vbWriteCache)
 	{
-		uint64_t pageOff = off - off % eraseSize;
-		uintptr_t src = (uintptr_t)pData;
-		uintptr_t work = (uintptr_t)vpEraseWork;
-		if ((src >= work && (uint64_t)(src - work) < eraseSize) ||
-			(src < work && (uint64_t)(work - src) < vSectSize))
-		{
-			return false;
-		}
 		if (!LoadPage(pageOff))
 		{
 			return false;
 		}
-		uint8_t *pCached = vpEraseWork + (uint32_t)(off - pageOff);
-		if (memcmp(pCached, pData, vSectSize) != 0)
-		{
-			memcpy(pCached, pData, vSectSize);
-			vbCacheDirty = true;
-		}
+	}
+	else if (vpNvm->Read(pageOff, vpEraseWork, eraseSize) != (int)eraseSize)
+	{
+		return false;
+	}
+
+	uint8_t *pSector = vpEraseWork + (uint32_t)(off - pageOff);
+	if (memcmp(pSector, pData, vSectSize) == 0)
+	{
 		return true;
 	}
-	if (eraseSize != 0 && vSectSize < eraseSize)
+	memcpy(pSector, pData, vSectSize);
+	if (vbWriteCache)
 	{
-		// Preserve all the other logical sectors of the same physical
-		// erase unit. The caller must keep its sector input separate from
-		// the scratch buffer, which Nvm reads into before the copy.
-		if (vpEraseWork == nullptr)
-		{
-			return false;
-		}
-
-		// Reject overlapping work/input memory before the read overwrites
-		// part of the sector being supplied by the caller.
-		uintptr_t src = (uintptr_t)pData;
-		uintptr_t work = (uintptr_t)vpEraseWork;
-
-		if ((src >= work && src - work < eraseSize) ||
-			(src < work && work - src < vSectSize))
-		{
-			return false;
-		}
-
-		writeOff = off - off % eraseSize;
-		writeLen = eraseSize;
-
-		if (vpNvm->Read(writeOff, vpEraseWork, eraseSize) != (int)eraseSize)
-		{
-			return false;
-		}
-		// Repeated host metadata writes are common. If the logical sector
-		// is unchanged, avoid an unnecessary full-page erase/program cycle.
-		if (memcmp(vpEraseWork + (uint32_t)(off - writeOff),
-				pData, vSectSize) == 0)
-		{
-			return true;
-		}
-		memcpy(vpEraseWork + (uint32_t)(off - writeOff), pData, vSectSize);
-		pWriteData = vpEraseWork;
+		vbCacheDirty = true;
+		return true;
 	}
-
-	// On erase-write media replace the full aligned erase region. Media
-	// without an erase step are simply written over.
-	if (eraseSize != 0 && vpNvm->Erase(writeOff, writeLen) != 0)
-	{
-		return false;
-	}
-
-	if (vpNvm->Write(writeOff, pWriteData, writeLen) != (int)writeLen)
-	{
-		return false;
-	}
-
-	// A filesystem reuses its sector buffer the moment this answers, and an
-	// interrupt driven memory returns as soon as the first chunk is handed
-	// over, with the rest still to be read out of pData. Wait for the medium
-	// here so what is reported is what reached it. Sync returns at once on a
-	// memory that finishes in the call.
-	//
-	// The erase above needs no wait of its own: the write that follows it
-	// drains whatever is outstanding before it starts, and answers the
-	// erase's error if it had one.
-	return vpNvm->Sync() == 0;
+	return WriteThrough(pageOff, vpEraseWork, eraseSize);
 }
 
 

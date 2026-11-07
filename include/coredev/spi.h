@@ -195,6 +195,12 @@ typedef struct __SPI_Device {
 	int RxBuffLen[SPI_SLAVEMODE_MAX_DEV];	//!< Rx buffer length in bytes
 	uint8_t *pTxData[SPI_SLAVEMODE_MAX_DEV];//!< Pointer to slave mode tx data
 	int TxDataLen[SPI_SLAVEMODE_MAX_DEV];	//!< Tx data length in bytes
+	// Optional operations supplied by a QSPI/OSPI controller during SPIInit.
+	// Generic Nvm calls these through the selected SPI instance, not through
+	// global QSPI symbols that pull a controller into unrelated applications.
+	void (*QuadSetMemSize)(struct __SPI_Device * const pDev, uint32_t Size);
+	bool (*QuadSendCmd)(struct __SPI_Device * const pDev, uint8_t Cmd,
+			uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle);
 } SPIDev_t;
 
 typedef SPIDev_t	SPIDEV;
@@ -260,6 +266,28 @@ SPIPHY SPISetPhy(SPIDev_t * const pDev, SPIPHY Phy);
  * @param	pDev : Pointer SPI driver data initialized by SPIInit function
  * @param	Size : Flash memory size in KBytes
  */
+static inline bool SPIQuadSetMemSize(SPIDev_t * const pDev, uint32_t Size)
+{
+	if (pDev == NULL || pDev->QuadSendCmd == NULL)
+	{
+		return false;
+	}
+	if (pDev->QuadSetMemSize != NULL)
+	{
+		pDev->QuadSetMemSize(pDev, Size);
+	}
+	return true;
+}
+
+static inline bool SPIQuadSendCmd(SPIDev_t * const pDev, uint8_t Cmd,
+		uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
+{
+	return pDev != NULL && pDev->QuadSendCmd != NULL &&
+		pDev->QuadSendCmd(pDev, Cmd, Addr, AddrLen, DataLen, DummyCycle);
+}
+
+// Retain the public direct SPI API for Flash and existing QSPI callers.
+// Generic Nvm uses the per-instance callbacks above instead.
 void QuadSPISetMemSize(SPIDev_t * const pDev, uint32_t Size);
 
 /**

@@ -51,8 +51,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // The onboard MX25R6435F through the Nvm driver, the checks run once
 #define NVM_DEMO_MEDIUM		1
-#define NVM_DEMO_BLE		0
-#define NVM_DEMO_ASYNC		0
 
 // QUADSPI (SPI DevNo 3), AF10: CLK PE10, IO0 PE12, IO1 PE13, IO2 PE14, IO3
 // PE15, NCS PE11. The pin map order is SCK, D0 to D3, then the chip select

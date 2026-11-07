@@ -308,11 +308,11 @@ FRESULT FatFsMount(const FatFsMountCfg_t &Cfg)
 		}
 		else if (Cfg.bFormatIfBlank || Cfg.bFormatIfBootBlank)
 		{
-			res = FatFsDiskIsBlank(Cfg.pWork, Cfg.WorkSize, &blank,
+			FRESULT probe = FatFsDiskIsBlank(Cfg.pWork, Cfg.WorkSize, &blank,
 				Cfg.bFormatIfBootBlank);
-			if (res != FR_OK)
+			if (probe != FR_OK)
 			{
-				return res;
+				return probe;
 			}
 		}
 

@@ -201,6 +201,42 @@ int Nvm::FrameAddr(uint8_t *pFrame, uint8_t Cmd, uint32_t Addr,
 	return len;
 }
 
+int Nvm::QuadRead(const NvmCmd_t &Cmd, uint32_t Addr, uint8_t AddrLen,
+				  uint8_t *pBuf, int Len)
+{
+	SPIDev_t *dev = SPIGetHandle(*Interface());
+	int rd = -EIO;
+
+	if (!SPIStartRx(dev, (int)vBaseDevAddr))
+	{
+		return -EBUSY;
+	}
+	if (SPIQuadSendCmd(dev, Cmd.Cmd, Addr, AddrLen, Len, Cmd.DummyCycle))
+	{
+		rd = SPIRxData(dev, pBuf, Len);
+	}
+	SPIStopRx(dev);
+	return rd;
+}
+
+int Nvm::QuadWrite(const NvmCmd_t &Cmd, uint32_t Addr, uint8_t AddrLen,
+				   const uint8_t *pData, int Len)
+{
+	SPIDev_t *dev = SPIGetHandle(*Interface());
+	int wr = -EIO;
+
+	if (!SPIStartTx(dev, (int)vBaseDevAddr))
+	{
+		return -EBUSY;
+	}
+	if (SPIQuadSendCmd(dev, Cmd.Cmd, Addr, AddrLen, Len, Cmd.DummyCycle))
+	{
+		wr = Len == 0 ? 0 : SPITxData(dev, pData, Len);
+	}
+	SPIStopTx(dev);
+	return wr;
+}
+
 int Nvm::SendCmd(const NvmCmd_t &Cmd)
 {
 	if (Cmd.Cmd == 0)
@@ -210,14 +246,7 @@ int Nvm::SendCmd(const NvmCmd_t &Cmd)
 
 	if (vbPhased)
 	{
-		SPIDev_t *dev = SPIGetHandle(*Interface());
-
-		SPIStartTx(dev, (int)vBaseDevAddr);
-		bool ok = QuadSPISendCmd(dev, Cmd.Cmd, (uint32_t)-1, 0, 0,
-								 Cmd.DummyCycle);
-		SPIStopTx(dev);
-
-		return ok ? 0 : -EIO;
+		return QuadWrite(Cmd, UINT32_MAX, 0, nullptr, 0);
 	}
 
 	uint8_t c = Cmd.Cmd;
@@ -230,31 +259,12 @@ int Nvm::SendCmd(const NvmCmd_t &Cmd)
 
 int Nvm::ReadStatus(uint8_t &Status)
 {
-	Status = 0;
-
 	if (vbBare)
 	{
+		Status = 0;
 		return 0;
 	}
-
-	if (vbPhased)
-	{
-		SPIDev_t *dev = SPIGetHandle(*Interface());
-
-		SPIStartRx(dev, (int)vBaseDevAddr);
-		QuadSPISendCmd(dev, NVM_CMD_RDSR, (uint32_t)-1, 0, 1, 0);
-		int rd = SPIRxData(dev, &Status, 1);
-		SPIStopRx(dev);
-
-		return rd == 1 ? 0 : -EIO;
-	}
-
-	uint8_t cmd = NVM_CMD_RDSR;
-
-	XferBegin();
-	int n = Read(&cmd, 1, &Status, 1);
-
-	return XferShort(n, 1) ? 0 : -EIO;
+	return RegRead(NVM_CMD_RDSR, Status);
 }
 
 // Read a one byte register of the part with its read command
@@ -264,14 +274,7 @@ int Nvm::RegRead(uint8_t Cmd, uint8_t &Val)
 
 	if (vbPhased)
 	{
-		SPIDev_t *dev = SPIGetHandle(*Interface());
-
-		SPIStartRx(dev, (int)vBaseDevAddr);
-		QuadSPISendCmd(dev, Cmd, (uint32_t)-1, 0, 1, 0);
-		int rd = SPIRxData(dev, &Val, 1);
-		SPIStopRx(dev);
-
-		return rd == 1 ? 0 : -EIO;
+		return QuadRead({ Cmd, 0 }, UINT32_MAX, 0, &Val, 1) == 1 ? 0 : -EIO;
 	}
 
 	XferBegin();
@@ -286,14 +289,7 @@ int Nvm::RegWrite(uint8_t Cmd, uint8_t Val)
 {
 	if (vbPhased)
 	{
-		SPIDev_t *dev = SPIGetHandle(*Interface());
-
-		SPIStartTx(dev, (int)vBaseDevAddr);
-		QuadSPISendCmd(dev, Cmd, (uint32_t)-1, 0, 1, 0);
-		int wr = SPITxData(dev, &Val, 1);
-		SPIStopTx(dev);
-
-		return wr == 1 ? 0 : -EIO;
+		return QuadWrite({ Cmd, 0 }, UINT32_MAX, 0, &Val, 1) == 1 ? 0 : -EIO;
 	}
 
 	return Write(&Cmd, 1, &Val, 1) == 1 ? 0 : -EIO;
@@ -375,13 +371,7 @@ uint32_t Nvm::ReadId(int Len)
 
 	if (vbPhased)
 	{
-		SPIDev_t *dev = SPIGetHandle(*Interface());
-
-		SPIStartRx(dev, (int)vBaseDevAddr);
-		QuadSPISendCmd(dev, cmd, (uint32_t)-1, 0, Len, 0);
-		int rd = SPIRxData(dev, (uint8_t*)&id, Len);
-		SPIStopRx(dev);
-
+		int rd = QuadRead({ cmd, 0 }, UINT32_MAX, 0, (uint8_t*)&id, Len);
 		return rd == Len ? id : 0;
 	}
 
@@ -570,8 +560,13 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	if (vbPhased)
 	{
-		// The interface takes the size in KBytes
-		QuadSPISetMemSize(SPIGetHandle(*pIntrf), (uint32_t)(vDevSize / 1024U));
+		// The interface takes the size in KBytes. The QSPI controller
+		// provides its operations when it is initialized.
+		if (!SPIQuadSetMemSize(SPIGetHandle(*pIntrf),
+				(uint32_t)(vDevSize / 1024U)))
+		{
+			return fail();
+		}
 	}
 
 	if (vbBare)
@@ -769,12 +764,7 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 		int rd;
 		if (vbPhased)
 		{
-			SPIDev_t *dev = SPIGetHandle(*Interface());
-			SPIStartRx(dev, (int)vBaseDevAddr);
-			QuadSPISendCmd(dev, vRdCmd.Cmd, addr, vAddrSize, l,
-						   vRdCmd.DummyCycle);
-			rd = SPIRxData(dev, pb, (int)l);
-			SPIStopRx(dev);
+			rd = QuadRead(vRdCmd, addr, vAddrSize, pb, (int)l);
 		}
 		else
 		{
@@ -1334,12 +1324,7 @@ int Nvm::Program(uint32_t Addr, const uint8_t *pData, uint32_t Len,
 	int wr;
 	if (vbPhased)
 	{
-		SPIDev_t *dev = SPIGetHandle(*Interface());
-		SPIStartTx(dev, (int)vBaseDevAddr);
-		QuadSPISendCmd(dev, vWrCmd.Cmd, Addr, vAddrSize, Len,
-						   vWrCmd.DummyCycle);
-		wr = SPITxData(dev, pData, (int)Len);
-		SPIStopTx(dev);
+		wr = QuadWrite(vWrCmd, Addr, vAddrSize, pData, (int)Len);
 	}
 	else
 	{
@@ -1533,13 +1518,10 @@ int Nvm::EraseUnit(uint32_t Addr, bool bDefer)
 
 	if (vbPhased)
 	{
-		SPIDev_t *dev = SPIGetHandle(*Interface());
-		SPIStartTx(dev, (int)vBaseDevAddr);
-		bool ok = QuadSPISendCmd(dev, op, Addr, vAddrSize, 0, 0);
-		SPIStopTx(dev);
-		if (ok == false)
+		int res = QuadWrite({ op, 0 }, Addr, vAddrSize, nullptr, 0);
+		if (res < 0)
 		{
-			return -EIO;
+			return res;
 		}
 	}
 	else
@@ -1737,28 +1719,10 @@ int Nvm::SetWriteProtect(bool bEnable)
 		return -EBUSY;
 	}
 
-	if (vbPhased)
+	if (RegWrite(NVM_CMD_WRSR, sr) != 0)
 	{
-		SPIDev_t *dev = SPIGetHandle(*Interface());
-		SPIStartTx(dev, (int)vBaseDevAddr);
-		QuadSPISendCmd(dev, NVM_CMD_WRSR, (uint32_t)-1, 0, 1, 0);
-		int wr = SPITxData(dev, &sr, 1);
-		SPIStopTx(dev);
-		if (wr != 1)
-		{
-			WriteDisable();
-			return -EIO;
-		}
-	}
-	else
-	{
-		uint8_t wrsr = NVM_CMD_WRSR;
-
-		if (Write(&wrsr, 1, &sr, 1) != 1)
-		{
-			WriteDisable();
-			return -EIO;
-		}
+		WriteDisable();
+		return -EIO;
 	}
 
 	if (WaitReady() == false)
