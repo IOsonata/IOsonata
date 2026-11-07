@@ -137,6 +137,9 @@ nRF52 peripheral memory region are accepted. A valid register-range check
 cannot prove a particular register is implemented: callers must supply
 real peripheral event/task endpoints for their selected MCU.
 
-Run `python3 tests/pei/run.py` for host model validation. The
+Run `python3 tests/pei/run.py` for host model validation and
+`python3 tests/pei/check_nrf52_cmsis.py` to syntax-check the driver with
+the currently installed Nordic CMSIS, S132/S140 and SDC headers.
+The latter test does not link firmware or use nrfx HAL drivers. The
 `PeiTimerGpiote` nRF52832 IOcomposer example is intended for
 BLYST-NANO-DK hardware validation. Its hardware results are not recorded yet.

@@ -21,6 +21,22 @@ a global interrupt-disabled section.
 
 These are host model tests, **not** a hardware or full MCU-library build.
 
+
+## Compile against installed Nordic CMSIS headers
+
+The mock-register tests cannot catch changes in Nordic's device headers. Use
+`python3 tests/pei/check_nrf52_cmsis.py` after installing/updating IOsonata's
+external SDKs. This invokes `arm-none-eabi-gcc` with the installed nrfx MDK
+register declarations and IOsonata's S132, S140, SDC include paths for
+nRF52805, nRF52810, nRF52832 and nRF52840. It does not use nrfx HAL drivers,
+allocate hardware, or link any firmware. Real MCU-library and on-board builds
+remain separate checks.
+
+The script uses `../external/nrfx`, `../external/nRF5_SDK` and
+`../external/sdk-nrfxlib` relative to IOsonata, or corresponding environment
+variables. Custom paths can also be passed with `--nrfx`, `--nrf5-sdk` and
+`--nrfxlib`.
+
 ## BLYST-NANO-DK hardware test
 
 Import `ARM/Nordic/nRF52/nRF52832/exemples/PeiTimerGpiote/ioc` into
