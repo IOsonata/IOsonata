@@ -73,13 +73,18 @@ failed, 3 Timer event preparation/binding failed, 4 GPIO task routing
 failed and 5 enabling PEI failed. Verify in the debugger that
 TIMER2/GPIOTE do not invoke an ISR for these operations.
 
-Previously validated (November 7, 2026): the old, register-level
-`pei_timer_gpiote.c` example on nRF52832 blinked the blue LED at
-approximately 1 Hz after the SoftDevice SVC fix. This established a
-functional TIMER2 -> PPI -> GPIOTE path on the board, **not** that the
-new `PeiBlinky` C++ refactor or IRQ-free operation has been retested.
-The debugger IRQ trace and Bluetooth S132/SDC coexistence tests remain
-pending.
+Hardware observation (November 7, 2026): following the PEI C++
+backend rename, Eclipse project-link corrections and Timer/GPIO HAL
+integration, the device tester reports that the nRF52832 HAL and
+`PeiBlinky` compiled and the BLYST-NANO-DK LED flashes at approximately
+1 Hz. This is a **functional hardware PASS** for the shared C++ example:
+Timer compare -> PPI -> GPIOTE task. It does not establish a measured
+frequency or independently confirm that no Timer/GPIOTE ISR was entered.
+
+The older register-level `pei_timer_gpiote.c` example was also
+observed blinking at approximately 1 Hz before the HAL integration.
+The debugger IRQ trace, route disable/re-enable and release checks, and
+Bluetooth S132/SDC coexistence tests remain pending.
 
 ## nRF5340 DPPI host model
 
