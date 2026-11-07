@@ -120,13 +120,16 @@ with software interrupt forwarding.
 
 The matrix-owning C++ interface and nRF52 PPI/nRF5340 DPPI low-level backends are committed.
 Host-model tests exercise lifecycle and routing for both backends.
-On November 7, 2026, the standalone nRF52832/BLYST-NANO-DK example was
-observed blinking its blue LED at approximately 1 Hz, consistent with the
-hardware TIMER2 -> PPI -> GPIOTE route. This is a hardware functional PASS for
-that specific bare-metal example; zero-ISR debugger verification and Bluetooth
-coexistence tests are still pending. Full HAL-library builds, cross-compilation
-against the installed nRF53 MDK, and nRF5340 on-board validation also remain
-pending.
+On November 7, 2026, the nRF52832 HAL and the refactored
+`PeiBlinky` C++ example were reported compiled successfully on
+BLYST-NANO-DK. The LED was observed flashing at approximately 1 Hz,
+consistent with the intended 500 ms TIMER2 compare -> PPI -> GPIOTE
+task path. This is a **functional hardware PASS** for the HAL-integrated
+example, not a measured frequency or debugger proof of zero ISR entries.
+The nRF52832 compile is not a complete cross-target build validation.
+Debugger IRQ tracing, PEI disable/re-enable and release tests,
+SoftDevice/SDC coexistence, cross-compilation against installed nRF53
+MDK and nRF5340 on-board tests remain pending.
 
 
 ## nRF52 PPI driver (0.14)
@@ -237,5 +240,6 @@ triggers are not yet supported. The common
 `Timer::DisableTimerTrigger(TrigNo)` unbinds PEI before freeing its
 compare slot. GPIO task slots share allocation with GPIOTE interrupts.
 
-PEI itself still configures only the interconnect. The current HAL
-refactor has not yet been rebuilt or retested on BLYST-NANO-DK.
+PEI itself still configures only the interconnect. The updated HAL and example have been compiled and the LED has been
+observed flashing at approximately 1 Hz on BLYST-NANO-DK. IRQ absence
+and routing lifecycle checks remain to be verified.
