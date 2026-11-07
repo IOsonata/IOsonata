@@ -67,7 +67,7 @@ their PEI implementation calls SoftDevice SVC functions. Without a
 running SoftDevice, that path faults. This direct-source workaround is
 specific to the standalone test, not to Bluetooth applications.
 
-## Two-button hardware handoff (new, not yet board-validated)
+## Two-button hardware handoff (functional hardware PASS)
 
 `PeiBlinky` now wires four hardware event-to-task connections through PEI:
 
@@ -90,10 +90,14 @@ The Timer driver exposes its START and STOP hardware task endpoints;
 PEI configures only the four relationships. No application register
 access and no example-specific port adapter are required.
 
-This button-controlled, two-LED variant has **not yet been compiled or
-tested on the board**. Check the three behaviors above and use a debugger
-trace to confirm that neither TIMER2 nor GPIOTE forwards events through
-an ISR.
+Hardware observation (November 7, 2026): the device tester reports
+that the updated two-button, two-LED `PeiBlinky` works on the
+BLYST-NANO-DK (nRF52832): BUT1 starts alternating the LEDs, BUT2
+stops/freezes them, and BUT1 resumes the timer. This is a **functional
+hardware PASS** for three event sources and four event-to-task links,
+including TIMER2 compare fan-out to both LEDs. The 500 ms event period is
+the configured value, not a separately measured timing result. A debugger
+trace confirming the absence of Timer/GPIOTE ISR entries is still pending.
 
 Hardware observation (November 7, 2026): following the PEI C++
 backend rename, Eclipse project-link corrections and Timer/GPIO HAL
@@ -102,7 +106,8 @@ integration, the device tester reports that the nRF52832 HAL and
 1 Hz. This is a **functional hardware PASS** for the earlier one-LED
 shared C++ example: Timer compare -> PPI -> GPIOTE task. It does not
 establish a measured frequency, independently confirm that no
-Timer/GPIOTE ISR was entered, or validate the new two-LED fan-out variant.
+Timer/GPIOTE ISR was entered, or constitute a test of the later button-controlled variant, which
+is recorded separately above.
 
 The older register-level `pei_timer_gpiote.c` example was also
 observed blinking at approximately 1 Hz before the HAL integration.
