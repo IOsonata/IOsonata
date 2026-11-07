@@ -27,8 +27,9 @@ The standalone demo selects its medium with `NVM_DEMO_MEDIUM` and runs in pollin
 uses the nRF52832 `BleNvmStressTest/ioc` project. Build `Release_SDC` or `Release`
 for UART output; `Debug_SDC` or `Debug` use semihosting. `Debug`/`Release` use
 Nordic S132 SoftDevice and require the matching SoftDevice image programmed
-before running. The SoftDevice application uses the dedicated
-`gcc_nrf52832_xxaa_s132_nvmstress.ld` linker script, reserving NVM1 at
+before running. The SoftDevice application uses its own
+`BleNvmStressTest/src/gcc_nrf52832_xxaa_s132_nvmstress.ld` linker script,
+not a shared MCU linker script, reserving NVM1 at
 `0x0007C000` while retaining the bootloader settings page at `0x0007F000`.
 This is a destructive test layout, not a DFU-safe memory map: an installed
 bootloader may occupy `0x0007C000` even though its settings page is elsewhere.
