@@ -99,7 +99,18 @@ public:
 		}
 		if (vEvents[e].Endpoint != 0U)
 		{
-			return vEvents[e].Endpoint == Endpoint;
+			if (vEvents[e].Endpoint != Endpoint)
+			{
+				return false;
+			}
+			for (i = 0; i < PEI_MAX_CONNECTIONS; i++)
+			{
+				if (vRoutes[i].Token == Evt && vRoutes[i].Conn.Handle == 0U)
+				{
+					return false;
+				}
+			}
+			return true;
 		}
 		for (i = 0; i < PEI_MAX_EVENTS; i++)
 		{
@@ -294,12 +305,19 @@ public:
 		}
 		if (vEvents[e].Enabled)
 		{
+			for (i = 0; i < PEI_MAX_CONNECTIONS; i++)
+			{
+				if (vRoutes[i].Token == Evt && vRoutes[i].Conn.Handle == 0U)
+				{
+					return false;
+				}
+			}
 			return true;
 		}
 		for (i = 0; i < PEI_MAX_CONNECTIONS; i++)
 		{
-			if (vRoutes[i].Token == Evt && vRoutes[i].Conn.Handle != 0U &&
-				!PeiEnable(&vRoutes[i].Conn))
+			if (vRoutes[i].Token == Evt &&
+				(vRoutes[i].Conn.Handle == 0U || !PeiEnable(&vRoutes[i].Conn)))
 			{
 				for (j = 0; j < i; j++)
 				{
@@ -320,17 +338,30 @@ public:
 	{
 		int e;
 		int i;
+		int j;
 
 		e = FindEvent(Evt);
 		if (e < 0)
 		{
 			return false;
 		}
+		if (!vEvents[e].Enabled || vEvents[e].Endpoint == 0U)
+		{
+			vEvents[e].Enabled = false;
+			return true;
+		}
 		for (i = 0; i < PEI_MAX_CONNECTIONS; i++)
 		{
-			if (vRoutes[i].Token == Evt && vRoutes[i].Conn.Handle != 0U &&
-				!PeiDisable(&vRoutes[i].Conn))
+			if (vRoutes[i].Token == Evt &&
+				(vRoutes[i].Conn.Handle == 0U || !PeiDisable(&vRoutes[i].Conn)))
 			{
+				for (j = 0; j < i; j++)
+				{
+					if (vRoutes[j].Token == Evt && vRoutes[j].Conn.Handle != 0U)
+					{
+						PeiEnable(&vRoutes[j].Conn);
+					}
+				}
 				return false;
 			}
 		}
