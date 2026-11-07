@@ -45,6 +45,13 @@ Advertising runs at 50 ms intervals with a 1000 ms duration. As in the
 updates the manufacturer data, and restarts advertising when each duration
 expires. There is **no separate timer**.
 
+The example sets `CentralDevMax = 1`, matching the existing `BleAdvertiser`
+configuration. The nRF52 SoftDevice port currently configures its GAP connection
+resources from this field; leaving both connection limits at zero can cause
+`BtAppStackInit` to reject its BLE configuration before advertising starts.
+This is a port configuration requirement, not an assertion that the broadcaster
+will establish a connection.
+
 The NVM test waits until the first advertising-duration callback before
 starting destructive operations, then erases and verifies 64 records per
 round for eight rounds (512 records total). It reports the verified-record
