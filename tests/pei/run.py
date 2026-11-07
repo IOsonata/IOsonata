@@ -14,7 +14,7 @@ COMMON = [
 
 with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     temp = pathlib.Path(temp)
-    driver = ROOT / "ARM/Nordic/nRF52/src/pei_nrf52.c"
+    driver = ROOT / "ARM/Nordic/nRF52/src/pei_nrf52.cpp"
     for name, flags in [
         ("bare", []),
         ("sdc", ["-DNRFXLIB_SDC"]),
@@ -23,13 +23,20 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
         ("nrf52805", ["-DTEST_PPI_CHANNEL_COUNT=10"]),
     ]:
         output = temp / name
-        cmd = ["gcc", "-std=c11", *COMMON, *flags,
-               str(driver), str(TEST / "ppi_nrf52_test.c"), "-o", str(output)]
-        subprocess.run(cmd, check=True)
+        driver_obj = temp / (name + "_pei.o")
+        test_obj = temp / (name + "_test.o")
+        subprocess.run(["g++", "-std=c++11", *COMMON, *flags,
+                        "-c", str(driver), "-o", str(driver_obj)], check=True)
+        subprocess.run(["gcc", "-std=c11", *COMMON, *flags,
+                        "-c", str(TEST / "ppi_nrf52_test.c"),
+                        "-o", str(test_obj)], check=True)
+        subprocess.run(["g++", *COMMON, str(driver_obj), str(test_obj),
+                        "-o", str(output)], check=True)
         subprocess.run([str(output)], check=True)
 
     obj = temp / "pei_nrf52.o"
-    subprocess.run(["gcc", "-std=c11", *COMMON, "-c", str(driver), "-o", str(obj)], check=True)
+    subprocess.run(["g++", "-std=c++11", *COMMON,
+                    "-c", str(driver), "-o", str(obj)], check=True)
     cpp = temp / "cpp"
     subprocess.run(["g++", "-std=c++11", *COMMON,
                     str(TEST / "ppi_cpp_test.cpp"), str(obj), "-o", str(cpp)], check=True)

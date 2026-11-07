@@ -6,12 +6,12 @@ Run from the IOsonata repository root:
 python3 tests/pei/run.py
 ```
 
-The host tests compile the production `ARM/Nordic/nRF52/src/pei_nrf52.c`
+The host tests compile the production `ARM/Nordic/nRF52/src/pei_nrf52.cpp`
 against mock PPI registers. They test bare-metal nRF52832 (20 configurable
 channels), S132, S140, SDC, and nRF52805 (10 configurable channels). The mock
 headers intentionally omit obsolete PPI_CH_NUM, PPI_GROUP_NUM, and
 NRF_SOC_APP_PPI_CHANNELS_SD_ENABLED_MSK definitions. They also
-compile the matrix-owning C++ `Pei` object with a C driver object and
+compile the matrix-owning C++ `Pei` object with a C++ driver object and
 exercise fan-out, fan-in, source replacement, independent disconnection,
 and stale event handles.
 
@@ -28,7 +28,7 @@ These are host model tests, **not** a hardware or full MCU-library build.
 
 The mock-register tests cannot catch changes in Nordic's device headers. Use
 `python3 tests/pei/check_nrf52_cmsis.py` after installing/updating IOsonata's
-external SDKs. This invokes `arm-none-eabi-gcc` with the installed nrfx MDK
+external SDKs. This invokes `arm-none-eabi-g++` with the installed nrfx MDK
 register declarations and IOsonata's S132, S140, SDC include paths for
 nRF52805, nRF52810, nRF52832 and nRF52840. It does not use nrfx HAL drivers,
 allocate hardware, or link any firmware. Real MCU-library and on-board builds
@@ -60,7 +60,7 @@ active compare trigger or another hardware shortcut. The hardware-only
 mode is currently continuous only; existing ISR modes are unchanged.
 `DisableTimerTrigger(trig)` unbinds PEI before releasing the compare.
 
-The standalone project links the production `pei_nrf52.c` as an
+The standalone project links the production `pei_nrf52.cpp` as an
 application object compiled without `SOFTDEVICE_PRESENT`. The standard
 `IOsonata_nRF52832` Debug and Release HAL libraries are built for S132;
 their PEI implementation calls SoftDevice SVC functions. Without a

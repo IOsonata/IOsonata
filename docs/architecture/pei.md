@@ -131,7 +131,7 @@ pending.
 
 ## nRF52 PPI driver (0.14)
 
-`ARM/Nordic/nRF52/src/pei_nrf52.c` implements the initial generic PEI
+`ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI
 functions through programmable PPI channels. The nRF52805 has 10
 configurable channels; nRF52810/nRF52832/nRF52840 have 20. Channels 20-31
 have fixed endpoints and are never allocated by this implementation.
@@ -218,7 +218,7 @@ do not replace an nRF5340 MCU build or on-board timer-to-GPIOTE validation.
 `PeiBlinky` is a bare-metal application, but the nRF52832 HAL's
 standard Debug and Release library configurations are built for S132.
 To avoid a SoftDevice SVC fault, its Eclipse managed project compiles the
-production `ARM/Nordic/nRF52/src/pei_nrf52.c` as an application source,
+production `ARM/Nordic/nRF52/src/pei_nrf52.cpp` as an application source,
 without `SOFTDEVICE_PRESENT`. The linked HAL archive continues to provide
 other drivers. This does not change the SoftDevice-aware PEI backend used
 by Bluetooth applications and is not a general runtime detection solution.

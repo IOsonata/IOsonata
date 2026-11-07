@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	pei_nrf52.c
+@file	pei_nrf52.cpp
 
 @brief	Peripheral event interconnect matrix using Nordic nRF52 PPI
 

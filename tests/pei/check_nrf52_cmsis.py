@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--nrfx", type=Path, help="installed nrfx directory")
     parser.add_argument("--nrf5-sdk", type=Path, help="installed nRF5_SDK directory")
     parser.add_argument("--nrfxlib", type=Path, help="installed sdk-nrfxlib directory")
-    parser.add_argument("--compiler", default="arm-none-eabi-gcc", help="Arm GNU C compiler")
+    parser.add_argument("--compiler", default="arm-none-eabi-g++", help="Arm GNU C++ compiler")
     args = parser.parse_args()
 
     ext = ROOT.parent / "external"
@@ -32,7 +32,7 @@ def main():
     nrfxlib = (args.nrfxlib or sdk_path("NRFXLIB_HOME", ext / "sdk-nrfxlib")).resolve()
     mdk = nrfx / "bsp/stable/mdk"
     cmsis = ROOT / "ARM/CMSIS/Core/Include"
-    driver = ROOT / "ARM/Nordic/nRF52/src/pei_nrf52.c"
+    driver = ROOT / "ARM/Nordic/nRF52/src/pei_nrf52.cpp"
 
     for required in (mdk / "nrf.h", cmsis / "cmsis_compiler.h", driver):
         if not required.is_file():
@@ -42,7 +42,7 @@ def main():
         parser.error("Arm compiler not found: " + args.compiler)
 
     common = [
-        compiler, "-fsyntax-only", "-std=gnu11", "-Wall", "-Wextra", "-Werror",
+        compiler, "-fsyntax-only", "-std=gnu++11", "-fno-exceptions", "-fno-rtti", "-Wall", "-Wextra", "-Werror",
         "-mcpu=cortex-m4", "-mthumb", "-D__PROGRAM_START",
         "-I", str(ROOT / "include"),
         "-I", str(cmsis),
