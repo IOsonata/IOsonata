@@ -118,6 +118,12 @@ static void AdvHeartbeatUpdate(uint32_t Evt, void *pCtx)
 	{
 		printf("Advertising heartbeat update failed\r\n");
 	}
+	else
+	{
+		printf("Advertising heartbeat %lu, verified %lu\r\n",
+			(unsigned long)s_AdvData.Heartbeat,
+			(unsigned long)s_AdvData.Verified);
+	}
 }
 
 // The timer callback runs in an IRQ. Reconfigure advertising in the app queue.
