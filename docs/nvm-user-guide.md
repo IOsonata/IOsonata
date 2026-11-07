@@ -24,10 +24,25 @@ The generic `Nvm`, `DeviceIntrf`, and `NvmDiskIO` APIs are unchanged.
 | Generic driver tests | [nvm_test.cpp](../exemples/storage/nvm_test.cpp) | Desktop compiler and supplied mock interfaces |
 
 The standalone demo selects its medium with `NVM_DEMO_MEDIUM` and runs in polling mode. The separate [BLE NVM test](../exemples/bluetooth/ble_nvm_test.cpp)
-uses the nRF52832 `BleNvmStressTest/ioc` project. Build `Release_SDC` for UART output
-or `Debug_SDC` for semihosting. It erases one NVM1 sector eight times and verifies
-64 records after each batch of writes. Scan for `BleNvmStress` during the run.
-Its four-byte little-endian manufacturer payload counts verified records from 0 to 512.
+uses the nRF52832 `BleNvmStressTest/ioc` project. Build `Release_SDC` or `Release`
+for UART output; `Debug_SDC` or `Debug` use semihosting. `Debug`/`Release` use
+Nordic S132 SoftDevice and require the matching SoftDevice image programmed
+before running. The SoftDevice application uses the dedicated
+`gcc_nrf52832_xxaa_s132_nvmstress.ld` linker script, reserving NVM1 at
+`0x0007C000` while retaining the bootloader settings page at `0x0007F000`.
+The SDC configuration uses NVM1 at `0x0007F000`. Both configurations erase
+one NVM1 sector eight times and verify 64 records per round; the test is
+destructive within its reserved NVM1 region.
+
+Scan for `BleNvmStress`. The manufacturer-specific advertising field (`0xFF`,
+company ID `0x0177`) contains two little-endian 32-bit counters: a heartbeat
+at bytes 2-5 that increments every second independently of NVM work, and
+verified records at bytes 6-9, increasing by 64 after each round up to 512.
+The advertisement interval remains 50 ms. Observe multiple reports over time
+to verify the heartbeat changes while NVM writes are active and after the test.
+The heartbeat demonstrates that advertising updates are being processed; it
+cannot, by itself, prove that no individual over-the-air advertising events
+were missed.
 Supplied `NvmDemo/ioc` projects include STM32L476, LPC54628, nRF9160,
 nRF91x1 and RA4M1. Inspect each project's linked source and medium selection:
 the RA4M1 project uses [data_nvm_demo.cpp](../exemples/storage/data_nvm_demo.cpp)
