@@ -1165,5 +1165,15 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
 		</link>
+		<link>
+			<name>include/coredev/pei.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pei.h</locationURI>
+		</link>
+		<link>
+			<name>src/pei_nrf53.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/pei_nrf53.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

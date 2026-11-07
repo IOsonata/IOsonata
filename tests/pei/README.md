@@ -53,3 +53,17 @@ that there are no TIMER2 or GPIOTE IRQs associated with the toggles.
 The physical device test is pending. Repeat with S132 and SDC advertising
 active, using separate BLE-capable application projects, and confirm that the
 controller continues advertising while the PEI-controlled LED changes state.
+
+
+## nRF5340 DPPI host model
+
+Run `python3 tests/pei/run_nrf53.py` from the repository root. This
+compiles the real `ARM/Nordic/nRF53/src/pei_nrf53.c` against simulated
+DPPIC registers in application secure, application nonsecure, and
+network-core builds. It checks event publisher sharing, independent
+subscriber enable/disable, reserved channels/groups, duplicate task
+rejection, foreign endpoint protection, exhaustion, stale copied handles,
+and failed configurations.
+
+This is not a firmware build. Nordic MDK header compilation and on-board
+testing are separate acceptance checks.

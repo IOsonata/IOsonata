@@ -90,9 +90,10 @@ is caller-owned. Hardware resource tables must be statically allocated.
 
 ## Status
 
-The generic interface and nRF52 PPI implementation are committed. Host model
-validation covers bare-metal, S132, SDC and nRF52805 build variants. Full
-MCU builds and on-board testing remain pending.
+The generic interface, nRF52 PPI, and nRF5340 DPPI drivers are committed.
+Host-model tests exercise lifecycle and routing for both backends. Full
+MCU builds, cross-compilation against the installed nRF53 MDK, and on-board
+validation remain pending.
 
 
 ## nRF52 PPI driver (0.14)
@@ -143,3 +144,38 @@ the currently installed Nordic CMSIS, S132/S140 and SDC headers.
 The latter test does not link firmware or use nrfx HAL drivers. The
 `PeiTimerGpiote` nRF52832 IOcomposer example is intended for
 BLYST-NANO-DK hardware validation. Its hardware results are not recorded yet.
+
+
+## nRF5340 DPPI driver (0.14)
+
+`ARM/Nordic/nRF53/src/pei_nrf53.c` implements the same `PeiConnect`,
+`PeiEnable`, `PeiDisable`, and `PeiDisconnect` API on the nRF5340
+application and network cores. `DevNo` and `Options` must be zero.
+
+On nRF53, a peripheral event's `PUBLISH_*` register and a peripheral task's
+`SUBSCRIBE_*` register are each at offset +0x80 from the event/task
+register. This backend accepts event offsets 0x100..0x17C and task offsets
+0x000..0x07C within the local peripheral address space. The caller must
+supply actual implemented event/task registers; checking the address range
+alone cannot establish whether an endpoint exists.
+
+DPPI supports a single publisher to multiple subscribers on one channel.
+Connections sharing one event share the physical channel, while retaining
+independent enable/disable state. Disabling one subscriber does not interrupt
+other subscribers. A task has only one subscription register: this backend
+rejects attempting to connect two distinct events to the same task.
+
+Each core has 32 channels; the driver supports up to 32 simultaneous logical
+connections. The allocator excludes enabled channels, groups containing
+channels, and channels specified by `NRF_DPPI_CHANNELS_USED` or
+`NRFX_DPPI_CHANNELS_USED`. Disabled channels allocated by other drivers
+**must** be reserved via these build-time masks. The driver never
+reconfigures peripheral event/task producers and consumers.
+
+The application core uses its secure or nonsecure DPPIC according to
+`NRF_TRUSTZONE_NONSECURE`; the network core uses its DPPIC. Routes crossing
+security domains are rejected. No software forwarding or ISR is used.
+
+Run `python3 tests/pei/run_nrf53.py` for host-model validation of the
+application core in both security modes and the network core. These tests
+do not replace an nRF5340 MCU build or on-board timer-to-GPIOTE validation.
