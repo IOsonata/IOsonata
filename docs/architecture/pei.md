@@ -243,9 +243,13 @@ to resume counting. The two buttons require no GPIO interrupts, polling
 or DMA. The GPIO driver reserves input-event and output-task channels in
 its shared GPIOTE ownership pool.
 
-The updated two-button example has not yet been built or tested on
-hardware. The recorded approximately 1 Hz observation refers to the
-earlier one-LED implementation.
+Hardware observation (November 7, 2026): the device tester reports
+the two-button, two-LED `PeiBlinky` works on BLYST-NANO-DK (nRF52832).
+BUT1 starts the alternating LEDs, BUT2 stops/freezes them, and BUT1
+resumes the Timer. This is a **functional hardware PASS** for the
+button-to-Timer START/STOP routes and one-to-two compare fan-out.
+No debugger IRQ trace or independent timing measurement has been
+reported for this configuration.
 
 The shared `exemples/pei/pei_blinky.cpp` contains no MCU register
 access or platform adapter. It uses the existing Timer object and the
