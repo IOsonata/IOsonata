@@ -20,6 +20,26 @@ static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
 static_assert(sizeof(s_Leds) / sizeof(s_Leds[0]) >= 2,
 	"PeiBlinky requires two LEDs");
 
+// Release the PEI routes before returning GPIO tasks to the pin driver.
+static void PeiBlinkyCleanup(Pei &pei, Timer &timer, PeiEvent_t &evt,
+	int trig, const int tasks[2])
+{
+	int i;
+
+	timer.DisableTimerTrigger(trig);
+	if (!pei.ReleaseEvent(evt))
+	{
+		return;
+	}
+	for (i = 0; i < 2; i++)
+	{
+		if (tasks[i] >= 0)
+		{
+			IOPinCloseTask(tasks[i]);
+		}
+	}
+}
+
 int main(void)
 {
 	Pei pei;
@@ -67,31 +87,18 @@ int main(void)
 			s_Leds[i].PinNo, IOPIN_TASK_TOGGLE);
 		if (tasks[i] < 0)
 		{
-			goto cleanup;
+			PeiBlinkyCleanup(pei, timer, evt, trig, tasks);
+			return 1;
 		}
 	}
 	if (!pei.Enable(evt))
 	{
-		goto cleanup;
+		PeiBlinkyCleanup(pei, timer, evt, trig, tasks);
+		return 1;
 	}
 
 	for (;;)
 	{
 		__WFE();
 	}
-
-cleanup:
-	timer.DisableTimerTrigger(trig);
-	// Remove PEI routes before releasing the GPIO tasks.
-	if (pei.ReleaseEvent(evt))
-	{
-		for (i = 0; i < 2; i++)
-		{
-			if (tasks[i] >= 0)
-			{
-				IOPinCloseTask(tasks[i]);
-			}
-		}
-	}
-	return 1;
 }
