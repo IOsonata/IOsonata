@@ -90,6 +90,47 @@ is caller-owned. Hardware resource tables must be statically allocated.
 
 ## Status
 
-The first 0.14 step defines the generic connection interface and its intended
-behavior. Hardware routing, target project links and on-board validation are
-separate subsequent steps; the header alone does not provide a working PEI port.
+The generic interface and nRF52 PPI implementation are committed. Host model
+validation covers bare-metal, S132, SDC and nRF52805 build variants. Full
+MCU builds and on-board testing remain pending.
+
+
+## nRF52 PPI driver (0.14)
+
+`ARM/Nordic/nRF52/src/pei_nrf52.c` implements the initial generic PEI
+functions through programmable PPI channels. The nRF52805 has 10
+configurable channels; nRF52810/nRF52832/nRF52840 have 20. Channels 20-31
+have fixed endpoints and are never allocated by this implementation.
+
+Connection endpoints are addresses of peripheral event and task registers,
+for example `&NRF_TIMER2->EVENTS_COMPARE[0]` and
+`&NRF_GPIOTE->TASKS_OUT[0]`. The connection owns only PPI configuration:
+peripheral initialization, operating frequency, input/output pin assignment,
+and the event/task functions remain with those peripheral drivers.
+
+Allocation uses a static table and an opaque per-connection token.
+Existing enabled channels, programmed EEP/TEP/FORK endpoints, and channels
+present in any PPI group are left untouched. Channels 0 and 1 are excluded
+because the repository's Nordic Direct Test Mode code uses them directly.
+S132/S140 and SDC build profiles also exclude their reserved channels,
+including channels 17-19. The library does not wait for Bluetooth to start
+before reserving those channels. Application code cannot increase the free
+pool by defining additional macros during its own compilation.
+
+The SoftDevice build uses `sd_ppi_channel_assign()` and
+`sd_ppi_channel_enable_set()`/`clr()`; those calls are made with interrupts
+restored. SDC and bare-metal builds configure application-owned PPI registers
+directly. No ISR forwards an event. The nRF52 driver supports fan-out and
+fan-in by allocating separate channels for each connection. A connection
+object must retain its address throughout its lifetime, and callers must
+serialize operations on that same object.
+
+The nRF52 `Options` field must be zero. Only peripheral event registers
+(offset `0x100..0x1FC`) and task registers (offset `0x000..0x0FC`) in the
+nRF52 peripheral memory region are accepted. A valid register-range check
+cannot prove a particular register is implemented: callers must supply
+real peripheral event/task endpoints for their selected MCU.
+
+Run `python3 tests/pei/run.py` for host model validation. The
+`PeiTimerGpiote` nRF52832 IOcomposer example is intended for
+BLYST-NANO-DK hardware validation. Its hardware results are not recorded yet.

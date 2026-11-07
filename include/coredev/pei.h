@@ -53,6 +53,8 @@ typedef struct {
 } PeiCfg_t;
 
 // Caller-owned connection state. Zero-initialize before first use.
+// Keep its address stable until disconnect; do not copy active connections.
+// Calls operating on one connection must be serialized by the caller.
 // Handle is opaque and is not a physical PPI/DPPI/EVSYS channel number.
 typedef struct {
 	uint32_t Handle;
