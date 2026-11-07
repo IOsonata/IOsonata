@@ -1,10 +1,11 @@
 /**-------------------------------------------------------------------------
 @file	pei_blinky.cpp
 
-@brief	PEI blinky: two LEDs alternate; button 1 starts, button 2 stops.
+@brief	Two LEDs alternate; button 1 starts, button 2 stops the timer.
 
-Peripheral drivers prepare all hardware events and tasks. PEI manages
-only the event-to-task connections. No interrupt forwards any event.
+Timer and GPIO drivers prepare hardware event/task endpoints. PEI owns
+only the connections. C and C++ applications use the same PeiDev_t
+matrix; no interrupt or software callback forwards these events.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
@@ -23,14 +24,11 @@ static_assert(sizeof(s_Leds) / sizeof(s_Leds[0]) >= 2,
 static_assert(sizeof(s_Buttons) / sizeof(s_Buttons[0]) >= 2,
 	"PeiBlinky requires two buttons");
 
-// When setup fails, detach each PEI event before its peripheral driver
-// reuses the corresponding hardware task or event endpoint.
 static void PeiBlinkyCleanup(Pei &pei, Timer &timer, PeiEvent_t &blinkEvt,
-	PeiEvent_t buttonEvt[2], int trig, const int ledTasks[2],
-	const int buttonInputs[2])
+	PeiEvent_t buttonEvt[2], int trig, const bool ledReady[2],
+	const bool buttonReady[2])
 {
 	int i;
-	bool blinkReleased;
 
 	for (i = 0; i < 2; i++)
 	{
@@ -40,37 +38,32 @@ static void PeiBlinkyCleanup(Pei &pei, Timer &timer, PeiEvent_t &blinkEvt,
 		}
 	}
 	timer.ExecuteTask(TIMER_TASK_STOP);
-	timer.DisableTimerTrigger(trig);
 
-	blinkReleased = false;
-	if (blinkEvt != 0U)
-	{
-		blinkReleased = pei.ReleaseEvent(blinkEvt);
-	}
+	// Peripheral event channels are released only after PEI unbinds them.
 	for (i = 0; i < 2; i++)
 	{
-		if (buttonEvt[i] == 0U)
+		if (buttonReady[i])
 		{
-			continue;
-		}
-		if (!pei.ReleaseEvent(buttonEvt[i]))
-		{
-			continue;
-		}
-		if (buttonInputs[i] >= 0)
-		{
-			IOPinCloseEvent(buttonInputs[i]);
-		}
-	}
-	if (blinkReleased)
-	{
-		for (i = 0; i < 2; i++)
-		{
-			if (ledTasks[i] >= 0)
+			if (IOPinDisableEvent(pei, buttonEvt[i]))
 			{
-				IOPinCloseTask(ledTasks[i]);
+				pei.ReleaseEvent(buttonEvt[i]);
 			}
 		}
+	}
+	timer.DisableTimerTrigger(trig);
+
+	// Each GPIO task remains owned until its PEI relationship is removed.
+	for (i = 0; i < 2; i++)
+	{
+		if (ledReady[i])
+		{
+			IOPinDisableTask(pei, blinkEvt,
+				s_Leds[i].PortNo, s_Leds[i].PinNo);
+		}
+	}
+	if (blinkEvt != 0U)
+	{
+		pei.ReleaseEvent(blinkEvt);
 	}
 }
 
@@ -81,8 +74,8 @@ int main(void)
 	TimerCfg_t timerCfg = {};
 	PeiEvent_t blinkEvt = 0U;
 	PeiEvent_t buttonEvt[2] = {0U, 0U};
-	int ledTasks[2] = {-1, -1};
-	int buttonInputs[2] = {-1, -1};
+	bool ledReady[2] = {false, false};
+	bool buttonReady[2] = {false, false};
 	int trig;
 	int i;
 
@@ -107,57 +100,52 @@ int main(void)
 			s_Buttons[i].Res, s_Buttons[i].Type);
 	}
 
-	// Active-low LEDs start in opposite states.
+	// Opposite initial levels on active-low BLYST-NANO-DK LEDs.
 	IOPinSet(s_Leds[0].PortNo, s_Leds[0].PinNo);
 	IOPinClear(s_Leds[1].PortNo, s_Leds[1].PinNo);
 
-	// A compare event toggles both LEDs every 500 ms.
 	trig = timer.EnableTimerTrigger(pei, blinkEvt, 500U,
 		TIMER_TRIG_TYPE_CONTINUOUS);
 	if (trig < 0)
 	{
 		return 1;
 	}
-
-	// Keep the timer clock enabled, but leave the counter stopped
-	// until button 1 activates its hardware START task.
 	if (!timer.ExecuteTask(TIMER_TASK_STOP))
 	{
 		PeiBlinkyCleanup(pei, timer, blinkEvt, buttonEvt,
-			trig, ledTasks, buttonInputs);
+			trig, ledReady, buttonReady);
 		return 1;
 	}
 
 	for (i = 0; i < 2; i++)
 	{
-		ledTasks[i] = IOPinConnectTask(pei, blinkEvt,
+		ledReady[i] = IOPinEnableTask(pei, blinkEvt,
 			s_Leds[i].PortNo, s_Leds[i].PinNo, IOPIN_TASK_TOGGLE);
-		if (ledTasks[i] < 0)
+		if (!ledReady[i])
 		{
 			PeiBlinkyCleanup(pei, timer, blinkEvt, buttonEvt,
-				trig, ledTasks, buttonInputs);
+				trig, ledReady, buttonReady);
 			return 1;
 		}
 	}
 
-	// Pressing button 1 starts TIMER2; pressing button 2 stops it.
-	// GPIOTE detects the falling edges in hardware, not via a GPIO ISR.
 	for (i = 0; i < 2; i++)
 	{
-		buttonInputs[i] = IOPinConnectEvent(pei, buttonEvt[i],
+		// GPIOTE captures button presses in hardware; no GPIO ISR.
+		buttonReady[i] = IOPinEnableEvent(pei, buttonEvt[i],
 			s_Buttons[i].PortNo, s_Buttons[i].PinNo,
 			PEI_BLINKY_BUTTON_SENSE);
-		if (buttonInputs[i] < 0)
+		if (!buttonReady[i])
 		{
 			PeiBlinkyCleanup(pei, timer, blinkEvt, buttonEvt,
-				trig, ledTasks, buttonInputs);
+				trig, ledReady, buttonReady);
 			return 1;
 		}
 		if (!timer.ConnectTask(pei, buttonEvt[i],
 			i == 0 ? TIMER_TASK_START : TIMER_TASK_STOP))
 		{
 			PeiBlinkyCleanup(pei, timer, blinkEvt, buttonEvt,
-				trig, ledTasks, buttonInputs);
+				trig, ledReady, buttonReady);
 			return 1;
 		}
 	}
@@ -165,7 +153,7 @@ int main(void)
 	if (!pei.Enable(blinkEvt))
 	{
 		PeiBlinkyCleanup(pei, timer, blinkEvt, buttonEvt,
-			trig, ledTasks, buttonInputs);
+			trig, ledReady, buttonReady);
 		return 1;
 	}
 	for (i = 0; i < 2; i++)
@@ -173,7 +161,7 @@ int main(void)
 		if (!pei.Enable(buttonEvt[i]))
 		{
 			PeiBlinkyCleanup(pei, timer, blinkEvt, buttonEvt,
-				trig, ledTasks, buttonInputs);
+				trig, ledReady, buttonReady);
 			return 1;
 		}
 	}

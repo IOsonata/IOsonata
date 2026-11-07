@@ -1175,5 +1175,10 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/pei_nrf53.c</locationURI>
 		</link>
+		<link>
+			<name>src/coredev/pei.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/pei.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

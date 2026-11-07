@@ -18,10 +18,29 @@ software forwarding callback.
 
 ## Generic connection model
 
-`Pei` owns an entire **logical event-to-task matrix**, not a single
-connection. One logical event can activate multiple tasks; a task may
-be connected to multiple events when the hardware backend can realize
-those links without introducing unintended relationships.
+`PeiDev_t` owns the complete **logical event-to-task matrix** in C.
+`Pei` is a thin C++ wrapper around the same C device and operations.
+Neither application language has privileged access to PEI functionality.
+One event can activate multiple tasks; fan-in is allowed when the
+hardware backend supports it without introducing unintended connections.
+
+A C application uses caller-owned device storage:
+
+```c
+PeiDev_t pei;
+PeiEvent_t evt = 0;
+
+PeiInit(&pei, 0);
+PeiBindEvent(&pei, &evt, hardwareEvent);
+PeiConnectTask(&pei, evt, hardwareTaskA);
+PeiConnectTask(&pei, evt, hardwareTaskB);
+PeiEnableEvent(&pei, evt);
+```
+
+The equivalent C++ application uses `Pei pei;`, `pei.BindEvent()`,
+`pei.Connect()` and `pei.Enable()`. Both paths execute the same
+`src/coredev/pei.c` matrix implementation. PEI stores fixed-size event
+and route tables in `PeiDev_t`; it allocates no heap memory.
 
 A peripheral driver supplies an already-configured hardware endpoint.
 PEI owns only its relationship to other peripheral endpoints:
@@ -55,15 +74,16 @@ descriptor, peripheral clock, interrupt handler or peripheral state.
 
 The matrix uses caller-owned, fixed-size storage: 16 events and 32
 connections by default, overridable with `PEI_MAX_EVENTS` and
-`PEI_MAX_CONNECTIONS` at build time. There is no heap allocation.
-Callers must serialize operations that modify one matrix.
+`PEI_MAX_CONNECTIONS` at build time. Callers must serialize changes
+to one matrix. Live `PeiDev_t` instances must not be copied or moved.
 
-The C functions `PeiConnect`, `PeiEnable`, `PeiDisable`, and
-`PeiDisconnect` retain their original *individual connection* API.
-`PeiConn_t` is the low-level backend primitive used by the matrix and
-by C-only callers and host tests. The C++ `Pei` object is now
-the matrix owner; connection handles and physical channels are not part
-of its public interface.
+`PeiBindEvent`, `PeiConnectTask`, `PeiEnableEvent`,
+`PeiDisableEvent`, `PeiUnbindEvent`, `PeiDisconnectTask` and
+`PeiReleaseEvent` are the public C matrix operations. The older
+`PeiConnect`, `PeiEnable`, `PeiDisable` and `PeiDisconnect`
+still operate on one low-level `PeiConn_t` routing resource and are
+used internally by the C matrix and the MCU backend. Physical channel
+numbers are never part of either application interface.
 
 `PeiEndpoint_t` is the MCU-specific hardware endpoint identifier:
 a register address on Nordic, a generator/user index on SAMD, or an
@@ -230,7 +250,8 @@ by Bluetooth applications and is not a general runtime detection solution.
 
 The BLYST-NANO-DK `PeiBlinky` example also exercises peripheral-to-
 peripheral control in both directions. The GPIO driver prepares falling-
-edge GPIOTE events on BUT1 (P0.02) and BUT2 (P0.13), and the Timer driver
+edge GPIOTE events on BUT1 (P0.02) and BUT2 (P0.13) using the C
+`IOPinEnableEvent` API. The Timer driver
 exposes its START/STOP hardware tasks. PEI routes BUT1 to TIMER2.START and
 BUT2 to TIMER2.STOP. Independently, TIMER2.COMPARE fans out through PEI to
 two GPIOTE toggle tasks with opposite initial LED states.
@@ -241,7 +262,13 @@ the timer directly in hardware. Unlike `Timer::Disable()`, the initial
 STOP task leaves the timer clock enabled, allowing a hardware START event
 to resume counting. The two buttons require no GPIO interrupts, polling
 or DMA. The GPIO driver reserves input-event and output-task channels in
-its shared GPIOTE ownership pool.
+its shared GPIOTE ownership pool. `IOPinEnableEvent`,
+`IOPinDisableEvent`, `IOPinEnableTask` and `IOPinDisableTask`
+are implemented in C and use `PeiDev_t *`. The existing C Timer
+functions are extended with `TimerEnablePeiTrigger`,
+`TimerConnectTask` and `TimerExecuteTask`. Their C++ counterparts
+delegate to the same C functions and matrix. There is no public
+`IOPinOpenEvent` layer or GPIOTE channel number.
 
 Hardware observation (November 7, 2026): the device tester reports
 the two-button, two-LED `PeiBlinky` works on BLYST-NANO-DK (nRF52832).

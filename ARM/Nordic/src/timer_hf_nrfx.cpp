@@ -76,7 +76,7 @@ SOFTWARE.
 #endif
 
 typedef struct {
-	Pei *pPei;
+	PeiDev_t *pPei;
 	PeiEvent_t Event;
 } nRFTimerPei_t;
 
@@ -677,13 +677,13 @@ static bool nRFxTimerExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 // counter; it is safe only when no software compare trigger is active.
 // This path deliberately does not enable a timer compare interrupt.
 static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
-	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, void *pPei, uint32_t *pEvent)
+	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei, PeiEvent_t *pEvent)
 {
 #if defined(TIMER_SHORTS_COMPARE0_CLEAR_Msk)
 	int devno;
 	int i;
 	uint64_t ticks;
-	Pei *pei;
+	PeiDev_t *pei;
 	PeiEvent_t evt;
 	PeiEndpoint_t endpoint;
 	const nRFTimerData_t *pData;
@@ -721,9 +721,9 @@ static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 		return false;
 	}
 	endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
-	pei = static_cast<Pei *>(pPei);
+	pei = pPei;
 	evt = *pEvent;
-	if (!pei->BindEvent(evt, endpoint))
+	if (!PeiBindEvent(pei, &evt, endpoint))
 	{
 		return false;
 	}
@@ -821,13 +821,13 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 
 	if (tdata.pPei[TrigNo].pPei != nullptr)
 	{
-		Pei *pei = tdata.pPei[TrigNo].pPei;
+		PeiDev_t *pei = tdata.pPei[TrigNo].pPei;
 		PeiEvent_t evt = tdata.pPei[TrigNo].Event;
 		PeiEndpoint_t endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
 
 		// Disconnect routing before the compare register can be reused.
 		// Keep this trigger owned if the PEI backend cannot unbind.
-		if (!pei->UnbindEvent(evt, endpoint))
+		if (!PeiUnbindEvent(pei, evt, endpoint))
 		{
 			return;
 		}

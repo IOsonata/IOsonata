@@ -54,9 +54,8 @@ SOFTWARE.
 #include <string.h>
 #ifndef __cplusplus
 #include <stdbool.h>
-#else
-#include "coredev/pei.h"
 #endif
+#include "coredev/pei.h"
 
 /// Clock source used for the timer
 typedef enum __Timer_Clock_Src {
@@ -233,7 +232,7 @@ struct __Timer_Device {
 	// The Timer driver owns the compare resource and PEI binding lifetime.
 	bool (*EnablePeiTrigger)(TimerDev_t * const pTimerDev, int TrigNo,
 						 uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
-						 void *pPei, uint32_t *pEvent);
+						 PeiDev_t *pPei, PeiEvent_t *pEvent);
 
 	// Optional hardware task support. Resolving an endpoint does not
 	// execute the task. ExecuteTask runs the same action from the CPU.
@@ -323,6 +322,62 @@ static inline uint32_t TimerSetFrequency(TimerDev_t * const pTimer, uint32_t Fre
  * @param   TrigNo : Trigger number to disable. Index value starting at 0
  */
 static inline void TimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo) { pTimer->DisableTrigger(pTimer, TrigNo); }
+
+/**
+ * @brief Configure a hardware-only Timer trigger and register its PEI
+ * event source. Returns the allocated trigger index, or -1 on failure.
+ * The C++ Timer::EnableTimerTrigger overload uses this same C function.
+ */
+static inline int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, uint32_t msPeriod, TIMER_TRIG_TYPE Type)
+{
+	int trig;
+
+	if (pTimer == NULL || pPei == NULL || pEvt == NULL || msPeriod == 0U ||
+		pTimer->FindAvailTrigger == NULL || pTimer->EnablePeiTrigger == NULL)
+	{
+		return -1;
+	}
+	trig = pTimer->FindAvailTrigger(pTimer);
+	if (trig < 0)
+	{
+		return -1;
+	}
+	if (!pTimer->EnablePeiTrigger(pTimer, trig,
+		(uint64_t)msPeriod * 1000000ULL, Type, pPei, pEvt))
+	{
+		return -1;
+	}
+	return trig;
+}
+
+/** @brief Route an event to a Timer hardware START or STOP task. */
+static inline bool TimerConnectTask(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t Evt, TIMER_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pTimer == NULL || pPei == NULL || pTimer->GetTaskEndpoint == NULL)
+	{
+		return false;
+	}
+	endpoint = pTimer->GetTaskEndpoint(pTimer, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+/** @brief Execute a Timer START/STOP hardware task without clock release. */
+static inline bool TimerExecuteTask(TimerDev_t *pTimer, TIMER_TASK Task)
+{
+	if (pTimer == NULL || pTimer->ExecuteTask == NULL)
+	{
+		return false;
+	}
+	return pTimer->ExecuteTask(pTimer, Task);
+}
 static inline uint64_t nsTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod,
 										 	TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 											void * const pContext) {
@@ -646,23 +701,8 @@ public:
 	int EnableTimerTrigger(Pei &PeiDev, PeiEvent_t &Evt, uint32_t msPeriod,
 						   TIMER_TRIG_TYPE Type)
 	{
-		int trig;
-
-		if (vTimer.EnablePeiTrigger == NULL || msPeriod == 0U)
-		{
-			return -1;
-		}
-		trig = vTimer.FindAvailTrigger(&vTimer);
-		if (trig < 0)
-		{
-			return -1;
-		}
-		if (!vTimer.EnablePeiTrigger(&vTimer, trig,
-			(uint64_t)msPeriod * 1000000ULL, Type, &PeiDev, &Evt))
-		{
-			return -1;
-		}
-		return trig;
+		return TimerEnablePeiTrigger(&vTimer, PeiDev.Dev(), &Evt,
+			msPeriod, Type);
 	}
 
 
@@ -673,18 +713,7 @@ public:
 	 */
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, TIMER_TASK Task)
 	{
-		uintptr_t endpoint;
-
-		if (vTimer.GetTaskEndpoint == NULL)
-		{
-			return false;
-		}
-		endpoint = vTimer.GetTaskEndpoint(&vTimer, Task);
-		if (endpoint == 0U)
-		{
-			return false;
-		}
-		return PeiDev.Connect(Evt, (PeiEndpoint_t)endpoint);
+		return TimerConnectTask(&vTimer, PeiDev.Dev(), Evt, Task);
 	}
 
 	/**
@@ -694,7 +723,7 @@ public:
 	 */
 	bool ExecuteTask(TIMER_TASK Task)
 	{
-		return vTimer.ExecuteTask != NULL && vTimer.ExecuteTask(&vTimer, Task);
+		return TimerExecuteTask(&vTimer, Task);
 	}
 
 	/**

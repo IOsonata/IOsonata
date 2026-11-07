@@ -6,14 +6,22 @@ Run from the IOsonata repository root:
 python3 tests/pei/run.py
 ```
 
-The host tests compile the production `ARM/Nordic/nRF52/src/pei_nrf52.cpp`
-against mock PPI registers. They test bare-metal nRF52832 (20 configurable
+The host tests compile the production `src/coredev/pei.c` C matrix
+and the `ARM/Nordic/nRF52/src/pei_nrf52.cpp` PPI backend against mock
+registers. The matrix is shared by C (`PeiDev_t`) and C++ (`Pei`)
+callers. They test bare-metal nRF52832 (20 configurable
 channels), S132, S140, SDC, and nRF52805 (10 configurable channels). The mock
 headers intentionally omit obsolete PPI_CH_NUM, PPI_GROUP_NUM, and
 NRF_SOC_APP_PPI_CHANNELS_SD_ENABLED_MSK definitions. They also
 compile the matrix-owning C++ `Pei` object with a C++ driver object and
 exercise fan-out, fan-in, source replacement, independent disconnection,
 and stale event handles.
+
+The C tests exercise event allocation, fan-out, source rebinding,
+enable/disable, release, and stale event rejection through `PeiDev_t`.
+The C++ tests exercise the same matrix through the `Pei` wrapper.
+`tests/pei/pei_hal_c_api.c` also syntax-checks the public Timer and
+GPIO PEI entry points from C, without requiring an MCU build.
 
 Checks cover invalid event/task addresses, resource exhaustion, repeated
 lifecycle calls, owned-channel checks, pre-existing channel and group use,
@@ -84,10 +92,14 @@ bounce can repeat START/STOP tasks but does not invoke any ISR-based
 software forwarding or debounce logic.
 
 The GPIO driver configures and reserves two GPIOTE input event channels
-without enabling GPIOTE interrupts. It shares the GPIOTE allocation
-pool with the two output toggle tasks and conventional GPIO interrupts.
-The Timer driver exposes its START and STOP hardware task endpoints;
-PEI configures only the four relationships. No application register
+through `IOPinEnableEvent(PeiDev_t *, ...)`, implemented directly in
+`iopincfg_nrfx.c`, without enabling GPIOTE interrupts. It shares the
+GPIOTE allocation pool with the two output toggle tasks and conventional
+GPIO interrupts. `IOPinEnableTask(PeiDev_t *, ...)` directly prepares
+and connects GPIO tasks through the same C driver. The Timer driver
+exposes its START/STOP task endpoints and
+`TimerEnablePeiTrigger(TimerDev_t *, ...)` in C. C++ calls delegate to
+these APIs. PEI configures only the four relationships. No application register
 access and no example-specific port adapter are required.
 
 Hardware observation (November 7, 2026): the device tester reports

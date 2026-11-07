@@ -15,6 +15,14 @@ COMMON = [
 with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     temp = pathlib.Path(temp)
     driver = ROOT / "ARM/Nordic/nRF52/src/pei_nrf52.cpp"
+    matrix = ROOT / "src/coredev/pei.c"
+    matrix_obj = temp / "pei_matrix.o"
+    subprocess.run(["gcc", "-std=c11", *COMMON, "-c",
+                    str(matrix), "-o", str(matrix_obj)], check=True)
+    subprocess.run(["gcc", "-std=c11", *COMMON, "-fsyntax-only",
+                    str(TEST / "pei_hal_c_api.c")], check=True)
+    subprocess.run(["g++", "-std=c++11", *COMMON, "-fsyntax-only",
+                    str(TEST / "pei_hal_cpp_api.cpp")], check=True)
     for name, flags in [
         ("bare", []),
         ("sdc", ["-DNRFXLIB_SDC"]),
@@ -31,7 +39,7 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
                         "-c", str(TEST / "ppi_nrf52_test.c"),
                         "-o", str(test_obj)], check=True)
         subprocess.run(["g++", *COMMON, str(driver_obj), str(test_obj),
-                        "-o", str(output)], check=True)
+                        str(matrix_obj), "-o", str(output)], check=True)
         subprocess.run([str(output)], check=True)
 
     obj = temp / "pei_nrf52.o"
@@ -39,7 +47,8 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
                     "-c", str(driver), "-o", str(obj)], check=True)
     cpp = temp / "cpp"
     subprocess.run(["g++", "-std=c++11", *COMMON,
-                    str(TEST / "ppi_cpp_test.cpp"), str(obj), "-o", str(cpp)], check=True)
+                    str(TEST / "ppi_cpp_test.cpp"), str(obj), str(matrix_obj),
+                    "-o", str(cpp)], check=True)
     subprocess.run([str(cpp)], check=True)
 
 print("PEI nRF52 host validation: PASS")

@@ -53,7 +53,8 @@ typedef struct {
 	uint32_t Options;		//!< Zero: target default; other values are target-defined
 } PeiCfg_t;
 
-// Lower-level backend primitive, not the C++ matrix owner.
+// Lower-level hardware connection primitive, used by the C matrix.
+
 // Caller-owned connection state. Zero-initialize before first use.
 // Keep its address stable until disconnect; do not copy active connections.
 // Calls operating on one connection must be serialized by the caller.
@@ -61,6 +62,38 @@ typedef struct {
 typedef struct {
 	uint32_t Handle;
 } PeiConn_t;
+
+// Fixed-size, caller-owned PEI matrix storage. C and C++ clients use the
+// same matrix implementation. No heap allocation or MCU-specific routing
+// registers are involved here.
+#ifndef PEI_MAX_EVENTS
+#define PEI_MAX_EVENTS 16
+#endif
+#ifndef PEI_MAX_CONNECTIONS
+#define PEI_MAX_CONNECTIONS 32
+#endif
+#if PEI_MAX_EVENTS < 1 || PEI_MAX_EVENTS > 63 || PEI_MAX_CONNECTIONS < 1
+#error Invalid PEI matrix capacity
+#endif
+
+typedef struct {
+	PeiEvent_t Token;
+	PeiEndpoint_t Endpoint;
+	bool Enabled;
+} PeiEventState_t;
+
+typedef struct {
+	PeiEvent_t Token;
+	PeiEndpoint_t Task;
+	PeiConn_t Conn;
+} PeiRouteState_t;
+
+typedef struct __Pei_Device {
+	int DevNo;
+	uint32_t Generation;
+	PeiEventState_t Events[PEI_MAX_EVENTS];
+	PeiRouteState_t Routes[PEI_MAX_CONNECTIONS];
+} PeiDev_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -88,11 +121,23 @@ bool PeiDisable(PeiConn_t * const pConn);
 /** @brief Disable, disconnect and release a connection. Clears pConn->Handle. */
 void PeiDisconnect(PeiConn_t * const pConn);
 
+// C matrix API. Initialize before first use; never copy or move a live
+// device because hardware connection ownership depends on stable addresses.
+bool PeiInit(PeiDev_t *pPei, int DevNo);
+bool PeiDeinit(PeiDev_t *pPei);
+bool PeiBindEvent(PeiDev_t *pPei, PeiEvent_t *pEvt, PeiEndpoint_t Endpoint);
+bool PeiUnbindEvent(PeiDev_t *pPei, PeiEvent_t Evt, PeiEndpoint_t Endpoint);
+bool PeiConnectTask(PeiDev_t *pPei, PeiEvent_t Evt, PeiEndpoint_t Task);
+bool PeiDisconnectTask(PeiDev_t *pPei, PeiEvent_t Evt, PeiEndpoint_t Task);
+bool PeiEnableEvent(PeiDev_t *pPei, PeiEvent_t Evt);
+bool PeiDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt);
+bool PeiReleaseEvent(PeiDev_t *pPei, PeiEvent_t *pEvt);
+PeiEndpoint_t PeiGetEventEndpoint(const PeiDev_t *pPei, PeiEvent_t Evt);
+
 #ifdef __cplusplus
 }
 
-// Matrix-owning C++ interface; C functions above are backend connection
-// primitives and remain available to existing C applications.
+// Convenience wrapper for the same C matrix device.
 #include "pei_matrix.h"
 
 #endif // __cplusplus

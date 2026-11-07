@@ -404,8 +404,8 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength);
  */
 void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed);
 
-/// Hardware-controlled GPIO output operation. The GPIO driver owns the
-/// pin and prepares its hardware task; PEI owns only the event route.
+/// Hardware-controlled GPIO output operation. PEI routes only the event
+/// to the GPIO task; the GPIO driver owns its GPIOTE channel and pin.
 typedef enum __IOPin_Task {
 	IOPIN_TASK_TOGGLE,
 	IOPIN_TASK_SET,
@@ -413,81 +413,62 @@ typedef enum __IOPin_Task {
 } IOPINTASK;
 
 /**
- * @brief Allocate a peripheral hardware task to operate an already
- * configured GPIO output. No interrupt is installed and no PEI route
- * is programmed by this call.
+ * @brief Configure a GPIO edge event and bind its endpoint to the PEI matrix.
+ * The GPIO driver allocates its GPIOTE event channel internally. No GPIO
+ * interrupt is enabled. The pin must already be configured as an input.
  *
- * @param pEndpoint : Receives the MCU-specific hardware task endpoint
- * @return Task allocation ID, -1 if unavailable or unsupported
+ * @return true on success
  */
-int IOPinOpenTask(int PortNo, int PinNo, IOPINTASK Task,
-				  PeiEndpoint_t *pEndpoint);
+bool IOPinEnableEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
+	int PortNo, int PinNo, IOPINSENSE Sense);
 
 /**
- * @brief Release a GPIO task after ALL its PEI relationships are removed.
- * @return true when the peripheral task was released
+ * @brief Disconnect a GPIO event producer from PEI and free its GPIOTE
+ * event channel. Keeps the logical PEI event identity and its task links
+ * so another peripheral may be bound later.
  */
-bool IOPinCloseTask(int TaskNo);
+bool IOPinDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt);
 
 /**
- * @brief Prepare a GPIO input edge event without enabling an interrupt.
- * The pin must already be configured by IOPinConfig. The GPIO driver
- * allocates a hardware event channel and returns its PEI endpoint.
- *
- * @return Allocated event channel, -1 if unavailable or unsupported
+ * @brief Prepare a GPIO output hardware task and connect it to an
+ * existing logical PEI event. The GPIO driver allocates the task channel.
+ * @return true on success
  */
-int IOPinOpenEvent(int PortNo, int PinNo, IOPINSENSE Sense,
-	PeiEndpoint_t *pEndpoint);
+bool IOPinEnableTask(PeiDev_t *pPei, PeiEvent_t Evt,
+	int PortNo, int PinNo, IOPINTASK Task);
 
 /**
- * @brief Release a GPIO input event channel after its PEI event has
- * been unbound. Does not modify any PEI relationships.
+ * @brief Disconnect one GPIO task and release its hardware channel.
+ * Other task relationships on the same PEI event are preserved.
  */
-bool IOPinCloseEvent(int EventNo);
+bool IOPinDisableTask(PeiDev_t *pPei, PeiEvent_t Evt,
+	int PortNo, int PinNo);
 
 #ifdef __cplusplus
 }
 
-// Configure a GPIO hardware input event and register the source in PEI.
-// No CPU interrupt is enabled; PEI owns only the relationships.
-static inline int IOPinConnectEvent(Pei &PeiDev, PeiEvent_t &Evt,
+// C++ convenience overloads invoke exactly the same C implementation.
+static inline bool IOPinEnableEvent(Pei &PeiDev, PeiEvent_t &Evt,
 	int PortNo, int PinNo, IOPINSENSE Sense)
 {
-	PeiEndpoint_t endpoint;
-	int eventNo;
-
-	eventNo = IOPinOpenEvent(PortNo, PinNo, Sense, &endpoint);
-	if (eventNo < 0)
-	{
-		return -1;
-	}
-	if (!PeiDev.BindEvent(Evt, endpoint))
-	{
-		IOPinCloseEvent(eventNo);
-		return -1;
-	}
-	return eventNo;
+	return IOPinEnableEvent(PeiDev.Dev(), &Evt, PortNo, PinNo, Sense);
 }
 
-// Configure the hardware GPIO task in the GPIO driver; connect its endpoint
-// in PEI. No GPIO setup or DMA operation is performed by PEI itself.
-static inline int IOPinConnectTask(Pei &PeiDev, PeiEvent_t Evt,
+static inline bool IOPinDisableEvent(Pei &PeiDev, PeiEvent_t Evt)
+{
+	return IOPinDisableEvent(PeiDev.Dev(), Evt);
+}
+
+static inline bool IOPinEnableTask(Pei &PeiDev, PeiEvent_t Evt,
 	int PortNo, int PinNo, IOPINTASK Task)
 {
-	PeiEndpoint_t endpoint;
-	int taskNo;
+	return IOPinEnableTask(PeiDev.Dev(), Evt, PortNo, PinNo, Task);
+}
 
-	taskNo = IOPinOpenTask(PortNo, PinNo, Task, &endpoint);
-	if (taskNo < 0)
-	{
-		return -1;
-	}
-	if (!PeiDev.Connect(Evt, endpoint))
-	{
-		IOPinCloseTask(taskNo);
-		return -1;
-	}
-	return taskNo;
+static inline bool IOPinDisableTask(Pei &PeiDev, PeiEvent_t Evt,
+	int PortNo, int PinNo)
+{
+	return IOPinDisableTask(PeiDev.Dev(), Evt, PortNo, PinNo);
 }
 #endif
 

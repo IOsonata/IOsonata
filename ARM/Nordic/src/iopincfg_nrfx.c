@@ -777,7 +777,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 
 // GPIO output task setup belongs to this driver. PEI connects the
 // prepared endpoint but does not configure the pin or a GPIOTE channel.
-int IOPinOpenTask(int PortNo, int PinNo, IOPINTASK Task,
+static int IOPinOpenTask(int PortNo, int PinNo, IOPINTASK Task,
 	PeiEndpoint_t *pEndpoint)
 {
 #if defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
@@ -886,7 +886,7 @@ int IOPinOpenTask(int PortNo, int PinNo, IOPINTASK Task,
 #endif
 }
 
-bool IOPinCloseTask(int TaskNo)
+static bool IOPinCloseTask(int TaskNo)
 {
 #if defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
 	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
@@ -918,7 +918,7 @@ bool IOPinCloseTask(int TaskNo)
 
 // Hardware edge events are prepared by the GPIO driver. PEI only routes
 // the resulting event endpoint to a peripheral task.
-int IOPinOpenEvent(int PortNo, int PinNo, IOPINSENSE Sense,
+static int IOPinOpenEvent(int PortNo, int PinNo, IOPINSENSE Sense,
 	PeiEndpoint_t *pEndpoint)
 {
 #if defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
@@ -1032,7 +1032,7 @@ int IOPinOpenEvent(int PortNo, int PinNo, IOPINSENSE Sense,
 #endif
 }
 
-bool IOPinCloseEvent(int EventNo)
+static bool IOPinCloseEvent(int EventNo)
 {
 #if defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
 	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
@@ -1061,6 +1061,158 @@ bool IOPinCloseEvent(int EventNo)
 	(void)EventNo;
 	return false;
 #endif
+}
+
+// C API for both C applications and the C++ Pei wrapper.
+// All GPIOTE resource allocation stays inside this GPIO driver.
+bool IOPinEnableEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
+	int PortNo, int PinNo, IOPINSENSE Sense)
+{
+	PeiEndpoint_t endpoint;
+	int channel;
+
+	if (pPei == NULL || pEvt == NULL)
+	{
+		return false;
+	}
+	channel = IOPinOpenEvent(PortNo, PinNo, Sense, &endpoint);
+	if (channel < 0)
+	{
+		return false;
+	}
+	if (!PeiBindEvent(pPei, pEvt, endpoint))
+	{
+		IOPinCloseEvent(channel);
+		return false;
+	}
+	return true;
+}
+
+bool IOPinDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt)
+{
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+	PeiEndpoint_t endpoint;
+	NRF_GPIOTE_Type *gpiotereg;
+	int count;
+	int i;
+
+	if (pPei == NULL)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	gpiotereg = NRF_GPIOTE;
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	count = sizeof(gpiotereg->EVENTS_IN) / sizeof(gpiotereg->EVENTS_IN[0]);
+	if (count > IOPIN_MAX_INT)
+	{
+		count = IOPIN_MAX_INT;
+	}
+	for (i = 0; i < count; i++)
+	{
+		if ((s_GpIOEventUsed & (1UL << i)) == 0U ||
+			endpoint != (PeiEndpoint_t)&gpiotereg->EVENTS_IN[i])
+		{
+			continue;
+		}
+		if (!PeiUnbindEvent(pPei, Evt, endpoint))
+		{
+			return false;
+		}
+		return IOPinCloseEvent(i);
+	}
+#endif
+	return false;
+}
+
+bool IOPinEnableTask(PeiDev_t *pPei, PeiEvent_t Evt,
+	int PortNo, int PinNo, IOPINTASK Task)
+{
+	PeiEndpoint_t endpoint;
+	int channel;
+
+	if (pPei == NULL)
+	{
+		return false;
+	}
+	channel = IOPinOpenTask(PortNo, PinNo, Task, &endpoint);
+	if (channel < 0)
+	{
+		return false;
+	}
+	if (!PeiConnectTask(pPei, Evt, endpoint))
+	{
+		IOPinCloseTask(channel);
+		return false;
+	}
+	return true;
+}
+
+bool IOPinDisableTask(PeiDev_t *pPei, PeiEvent_t Evt,
+	int PortNo, int PinNo)
+{
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+	NRF_GPIOTE_Type *gpiotereg;
+	uint32_t config;
+	uint32_t pin;
+	uint32_t port;
+	int channelCount;
+	int i;
+
+	if (pPei == NULL || PortNo < 0 || PortNo >= GPIO_COUNT ||
+		PinNo < 0 || PinNo >= 32)
+	{
+		return false;
+	}
+	gpiotereg = NRF_GPIOTE;
+	channelCount = sizeof(gpiotereg->CONFIG) / sizeof(gpiotereg->CONFIG[0]);
+	if (channelCount > IOPIN_MAX_INT)
+	{
+		channelCount = IOPIN_MAX_INT;
+	}
+	for (i = 0; i < channelCount; i++)
+	{
+		if ((s_GpIOTaskUsed & (1UL << i)) == 0U)
+		{
+			continue;
+		}
+		config = gpiotereg->CONFIG[i];
+		if ((config & GPIOTE_CONFIG_MODE_Msk) !=
+			(GPIOTE_CONFIG_MODE_Task << GPIOTE_CONFIG_MODE_Pos))
+		{
+			continue;
+		}
+		pin = (config & GPIOTE_CONFIG_PSEL_Msk) >> GPIOTE_CONFIG_PSEL_Pos;
+#ifdef GPIOTE_CONFIG_PORT_Msk
+		port = (config & GPIOTE_CONFIG_PORT_Msk) >> GPIOTE_CONFIG_PORT_Pos;
+#else
+		port = 0U;
+#endif
+		if (pin != (uint32_t)PinNo || port != (uint32_t)PortNo)
+		{
+			continue;
+		}
+		if (!PeiDisconnectTask(pPei, Evt,
+			(PeiEndpoint_t)&gpiotereg->TASKS_OUT[i]))
+		{
+			return false;
+		}
+		return IOPinCloseTask(i);
+	}
+#else
+	(void)pPei;
+	(void)Evt;
+	(void)PortNo;
+	(void)PinNo;
+#endif
+	return false;
 }
 
 static int IOPinFindAvailInterrupt(void)

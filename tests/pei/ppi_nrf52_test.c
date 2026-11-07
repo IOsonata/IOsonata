@@ -241,6 +241,39 @@ static void TestSVCFailures(void)
 	assert(g_critical_depth == 0);
 }
 
+// Exercise the same public matrix API that C++ Pei wraps, from C.
+static void TestCMatrix(void)
+{
+	PeiDev_t pei;
+	PeiEvent_t event = 0U;
+	PeiEvent_t oldToken;
+	const PeiEndpoint_t source = 0x40008100U;
+	const PeiEndpoint_t replacement = 0x40009100U;
+	const PeiEndpoint_t taskA = 0x40006000U;
+	const PeiEndpoint_t taskB = 0x40007000U;
+
+	ResetMock();
+	assert(PeiInit(&pei, 0));
+	assert(PeiBindEvent(&pei, &event, source));
+	assert(event != 0U);
+	assert(PeiGetEventEndpoint(&pei, event) == source);
+	assert(PeiConnectTask(&pei, event, taskA));
+	assert(PeiConnectTask(&pei, event, taskB));
+	assert(PeiEnableEvent(&pei, event));
+	assert(PeiDisableEvent(&pei, event));
+	assert(PeiUnbindEvent(&pei, event, source));
+	assert(PeiGetEventEndpoint(&pei, event) == 0U);
+	assert(PeiBindEvent(&pei, &event, replacement));
+	assert(PeiEnableEvent(&pei, event));
+	assert(PeiDisconnectTask(&pei, event, taskA));
+	oldToken = event;
+	assert(PeiReleaseEvent(&pei, &event));
+	assert(event == 0U);
+	assert(!PeiEnableEvent(&pei, oldToken));
+	assert(PeiDeinit(&pei));
+	assert(g_critical_depth == 0);
+}
+
 int main(void)
 {
 	ResetMock();
@@ -250,6 +283,7 @@ int main(void)
 	TestOccupied();
 	TestMultipleAndExhaustion();
 	TestSVCFailures();
+	TestCMatrix();
 	printf("PEI nRF52 %d channels: PASS\n", TEST_PPI_CHANNEL_COUNT);
 	return 0;
 }
