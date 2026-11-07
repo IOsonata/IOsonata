@@ -447,29 +447,14 @@ bool IOPinDisableTask(PeiDev_t *pPei, PeiEvent_t Evt,
 #ifdef __cplusplus
 }
 
-// C++ convenience overloads invoke exactly the same C implementation.
+// Only the event-output reference needs a C++ overload; all other GPIO
+// functions accept Pei directly through operator PeiDev_t *().
 static inline bool IOPinEnableEvent(Pei &PeiDev, PeiEvent_t &Evt,
 	int PortNo, int PinNo, IOPINSENSE Sense)
 {
-	return IOPinEnableEvent(PeiDev.Dev(), &Evt, PortNo, PinNo, Sense);
+	return IOPinEnableEvent(PeiDev, &Evt, PortNo, PinNo, Sense);
 }
 
-static inline bool IOPinDisableEvent(Pei &PeiDev, PeiEvent_t Evt)
-{
-	return IOPinDisableEvent(PeiDev.Dev(), Evt);
-}
-
-static inline bool IOPinEnableTask(Pei &PeiDev, PeiEvent_t Evt,
-	int PortNo, int PinNo, IOPINTASK Task)
-{
-	return IOPinEnableTask(PeiDev.Dev(), Evt, PortNo, PinNo, Task);
-}
-
-static inline bool IOPinDisableTask(Pei &PeiDev, PeiEvent_t Evt,
-	int PortNo, int PinNo)
-{
-	return IOPinDisableTask(PeiDev.Dev(), Evt, PortNo, PinNo);
-}
 #endif
 
 #endif	// __IOPINCFG_H__

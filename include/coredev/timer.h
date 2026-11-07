@@ -701,7 +701,7 @@ public:
 	int EnableTimerTrigger(Pei &PeiDev, PeiEvent_t &Evt, uint32_t msPeriod,
 						   TIMER_TRIG_TYPE Type)
 	{
-		return TimerEnablePeiTrigger(&vTimer, PeiDev.Dev(), &Evt,
+		return TimerEnablePeiTrigger(&vTimer, PeiDev, &Evt,
 			msPeriod, Type);
 	}
 
@@ -713,7 +713,7 @@ public:
 	 */
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, TIMER_TASK Task)
 	{
-		return TimerConnectTask(&vTimer, PeiDev.Dev(), Evt, Task);
+		return TimerConnectTask(&vTimer, PeiDev, Evt, Task);
 	}
 
 	/**

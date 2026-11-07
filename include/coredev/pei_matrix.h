@@ -31,11 +31,6 @@ public:
 		return &vPei;
 	}
 
-	PeiDev_t *Dev()
-	{
-		return &vPei;
-	}
-
 	bool BindEvent(PeiEvent_t &Evt, PeiEndpoint_t Endpoint)
 	{
 		return PeiBindEvent(&vPei, &Evt, Endpoint);
