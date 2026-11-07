@@ -6825,6 +6825,16 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK_Mesh/models/vendor/rssi_monitor/doc/img/rssi_util_msc.svg</locationURI>
 		</link>
+			<link>
+			<name>include/coredev/pei.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pei.h</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pei_nrf52.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/pei_nrf52.c</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
