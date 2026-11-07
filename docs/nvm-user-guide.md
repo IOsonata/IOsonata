@@ -39,17 +39,22 @@ one NVM1 sector eight times and verify 64 records per round; the test is
 destructive within its reserved NVM1 region.
 
 Scan for `BleNvmStress`. The manufacturer-specific advertising field (`0xFF`,
-company ID `0x0177`) contains one little-endian 32-bit heartbeat counter
-in bytes 2-5. This retains the original four-byte manufacturer payload size;
-the counter now advances every second, independently of NVM activity. The
-verified-record count remains in UART output, increasing by 64 after each
-round to 512. The advertisement interval remains 50 ms. Observe multiple
-advertising reports over time and confirm the heartbeat advances during the
-NVM writes and after the test. If RTC2 heartbeat initialization fails, the
-NVM stress test continues and emits a warning rather than stopping the BLE
-event loop. The heartbeat demonstrates that advertising updates are being
-processed; it cannot prove that no individual over-the-air advertising events
-were missed.
+company ID `0x0177`) contains a little-endian 32-bit counter in bytes 2-5.
+Advertising runs at 50 ms intervals with a 1000 ms duration. As in the
+`BleAdvertiser` example, `BtAppAdvTimeoutHandler()` increments the counter,
+updates the manufacturer data, and restarts advertising when each duration
+expires. There is **no separate timer**.
+
+The NVM test waits until the first advertising-duration callback before
+starting destructive operations, then erases and verifies 64 records per
+round for eight rounds (512 records total). It reports the verified-record
+count on UART and checks for at least one additional advertising-duration
+callback *during* the NVM workload. If advertising does not progress,
+the test fails rather than reporting an unsupported coexistence result.
+Observe the counter advancing in nRF Connect Desktop during the NVM test
+and continuing after PASS. The callback demonstrates that the controller
+continued its advertising-duration lifecycle; verifying each transmitted
+advertising event still requires an independent receiver/sniffer.
 Supplied `NvmDemo/ioc` projects include STM32L476, LPC54628, nRF9160,
 nRF91x1 and RA4M1. Inspect each project's linked source and medium selection:
 the RA4M1 project uses [data_nvm_demo.cpp](../exemples/storage/data_nvm_demo.cpp)
