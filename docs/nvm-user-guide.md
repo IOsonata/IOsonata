@@ -24,10 +24,45 @@ The generic `Nvm`, `DeviceIntrf`, and `NvmDiskIO` APIs are unchanged.
 | Generic driver tests | [nvm_test.cpp](../exemples/storage/nvm_test.cpp) | Desktop compiler and supplied mock interfaces |
 
 The standalone demo selects its medium with `NVM_DEMO_MEDIUM` and runs in polling mode. The separate [BLE NVM test](../exemples/bluetooth/ble_nvm_test.cpp)
-uses the nRF52832 `BleNvmStressTest/ioc` project. Build `Release_SDC` for UART output
-or `Debug_SDC` for semihosting. It erases one NVM1 sector eight times and verifies
-64 records after each batch of writes. Scan for `BleNvmStress` during the run.
-Its four-byte little-endian manufacturer payload counts verified records from 0 to 512.
+uses the nRF52832 `BleNvmStressTest/ioc` project. Build `Release_SDC` or `Release`
+for UART output; `Debug_SDC` or `Debug` use semihosting. `Debug`/`Release` use
+Nordic S132 SoftDevice and require the matching SoftDevice image programmed
+before running. The SoftDevice application uses its own
+`BleNvmStressTest/src/gcc_nrf52832_xxaa_s132_nvmstress.ld` linker script,
+not a shared MCU linker script, reserving NVM1 at
+`0x0007C000` while retaining the bootloader settings page at `0x0007F000`.
+This is a destructive test layout, not a DFU-safe memory map: an installed
+bootloader may occupy `0x0007C000` even though its settings page is elsewhere.
+Verify the actual bootloader region before flashing/running this application;
+use a test device without overlapping bootloader firmware.
+The SDC configuration uses NVM1 at `0x0007F000`. Both configurations erase
+one NVM1 sector eight times and verify 64 records per round; the test is
+destructive within its reserved NVM1 region.
+
+Scan for `BleNvmStress`. The manufacturer-specific advertising field (`0xFF`,
+company ID `0x0177`) contains a little-endian 32-bit counter in bytes 2-5.
+Advertising runs at 50 ms intervals with a 1000 ms duration. As in the
+`BleAdvertiser` example, `BtAppAdvTimeoutHandler()` increments the counter,
+updates the manufacturer data, and restarts advertising when each duration
+expires. There is **no separate timer**.
+
+The example sets `CentralDevMax = 1`, matching the existing `BleAdvertiser`
+configuration. The nRF52 SoftDevice port currently configures its GAP connection
+resources from this field; leaving both connection limits at zero can cause
+`BtAppStackInit` to reject its BLE configuration before advertising starts.
+This is a port configuration requirement, not an assertion that the broadcaster
+will establish a connection.
+
+The NVM test waits until the first advertising-duration callback before
+starting destructive operations, then erases and verifies 64 records per
+round for eight rounds (512 records total). It reports the verified-record
+count on UART and checks for at least one additional advertising-duration
+callback *during* the NVM workload. If advertising does not progress,
+the test fails rather than reporting an unsupported coexistence result.
+Observe the counter advancing in nRF Connect Desktop during the NVM test
+and continuing after PASS. The callback demonstrates that the controller
+continued its advertising-duration lifecycle; verifying each transmitted
+advertising event still requires an independent receiver/sniffer.
 Supplied `NvmDemo/ioc` projects include STM32L476, LPC54628, nRF9160,
 nRF91x1 and RA4M1. Inspect each project's linked source and medium selection:
 the RA4M1 project uses [data_nvm_demo.cpp](../exemples/storage/data_nvm_demo.cpp)

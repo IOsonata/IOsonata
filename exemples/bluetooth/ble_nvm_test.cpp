@@ -81,23 +81,76 @@ static const UARTCfg_t s_UartCfg = {
 static UART s_Uart;
 static Nvm s_Nvm;
 static NvmMcuIntrf s_MemIntrf;
+
+// The on-air counter changes once per second, independently of NVM writes.
+// Keep the existing four-byte manufacturer field for legacy advertising.
+static uint32_t s_AdvCounter;
 static uint32_t s_Verified;
+static volatile bool s_AdvUpdateFailed;
+static volatile bool s_StressActive;
+static volatile uint32_t s_AdvDuringStress;
 alignas(4) static uint8_t s_EvtQueue[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
+	.CentralDevMax = 1,		// Match BleAdvertiser's BLE stack resource configuration
 	.pDevName = (char*)"BleNvmStress",
 	.VendorId = ISYST_BLUETOOTH_ID,
-	.pAdvManData = (uint8_t*)&s_Verified,
-	.AdvManDataLen = sizeof(s_Verified),
+	.pAdvManData = (uint8_t*)&s_AdvCounter,
+	.AdvManDataLen = sizeof(s_AdvCounter),
 	.AdvInterval = 50,
-	.AdvTimeout = 0,
+	.AdvTimeout = 1000,		// Expire/restart once per second (BleAdvertiser)
 };
+
+// This is the same advertising timeout mechanism as BleAdvertiser.
+// A completed advertising duration confirms that the radio had an active
+// advertising set before we begin the flash stress test. No extra timer.
+void BtAppAdvTimeoutHandler(void)
+{
+	s_AdvCounter++;
+	if (!BtAppAdvManDataSet((uint8_t*)&s_AdvCounter, sizeof(s_AdvCounter), NULL, 0))
+	{
+		s_AdvUpdateFailed = true;
+	}
+	BtAdvStart();
+
+	if (s_StressActive)
+	{
+		s_AdvDuringStress++;
+	}
+}
 
 static int MemIntrfEvtCB(DevIntrf_t * const, DEVINTRF_EVT Evt, uint8_t *, int)
 {
 	s_Nvm.IntrfEvent(Evt);
 	return 0;
+}
+
+// Do not start writing flash until one full advertising duration has
+// completed. BtAppInit returning true only means advertising was requested.
+static bool WaitForAdvertising(void)
+{
+	unsigned retries = 5000;
+
+	while (retries-- > 0)
+	{
+		AppEvtHandlerExec();
+		BtAppCheckStatus();
+
+		if (s_AdvUpdateFailed)
+		{
+			printf("FAIL: advertising data update rejected\r\n");
+			return false;
+		}
+		if (s_AdvCounter > 0)
+		{
+			return true;
+		}
+		msDelay(1);
+	}
+
+	printf("FAIL: no advertising timeout/event before NVM stress\r\n");
+	return false;
 }
 
 // Keep dispatching BLE events while the controller schedules flash access.
@@ -144,7 +197,6 @@ int main()
 #ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
 #endif
-	setvbuf(stdout, NULL, _IONBF, 0);
 	if (!NvmMcuCfgInit(cfg, 1))
 	{
 		printf("Missing reserved NVM1 test region\r\n");
@@ -170,10 +222,18 @@ int main()
 		printf("BLE init failed\r\n");
 		return 1;
 	}
-
-	printf("Advertising BleNvmStress, 50 ms interval. Testing NVM1 at 0x%08lX\r\n",
+	printf("Advertising BleNvmStress, 50 ms interval, 1 s timeout. Testing NVM1 at 0x%08lX\r\n",
 		   (unsigned long)cfg.BaseAddr);
+	printf("Waiting for BLE advertising before starting NVM stress...\r\n");
+	if (!WaitForAdvertising())
+	{
+		return 1;
+	}
+	printf("Advertising active, counter %lu. Starting NVM stress\r\n",
+		   (unsigned long)s_AdvCounter);
+
 	NvmMcuIntrfGetStat(&before);
+	s_StressActive = true;
 	for (round = 0; round < 8; round++)
 	{
 		if (cfg.EraseSize)
@@ -215,26 +275,31 @@ int main()
 			}
 		}
 		s_Verified += records;
-		if (!BtAppAdvManDataSet((uint8_t*)&s_Verified, sizeof(s_Verified), NULL, 0))
-		{
-			printf("Round %u advertising update failed\r\n", round + 1);
-			return 1;
-		}
-		printf("Round %u verified, advertising count %lu\r\n",
-			   round + 1, (unsigned long)s_Verified);
+		printf("Round %u verified, records %lu, heartbeat %lu\r\n",
+			   round + 1, (unsigned long)s_Verified,
+			   (unsigned long)s_AdvCounter);
 	}
+	s_StressActive = false;
 	NvmMcuIntrfGetStat(&after);
+	printf("Advertising timeout callbacks during NVM stress %lu\r\n",
+		   (unsigned long)s_AdvDuringStress);
 	printf("Flash operations via SoftDevice %lu, timeslot %lu, direct %lu\r\n",
 		   (unsigned long)(after.Sd - before.Sd), (unsigned long)(after.Slot - before.Slot),
 		   (unsigned long)(after.Direct - before.Direct));
-#if defined(NRF52832_XXAA)
-	if (after.Direct != before.Direct || (after.Slot == before.Slot && after.Sd == before.Sd))
+	// Erase-based NVM requires radio arbitration while BLE is active.
+	// Eraseless memory (such as RRAM) may write directly without this path.
+	if (cfg.EraseSize != 0 &&
+		(after.Direct != before.Direct || (after.Slot == before.Slot && after.Sd == before.Sd)))
 	{
-		printf("FAIL: radio did not arbitrate all flash access\r\n");
+		printf("FAIL: radio did not arbitrate erase-based NVM access\r\n");
 		return 1;
 	}
-#endif
-	printf("PASS: 512 NVM records verified during advertising\r\n");
+	if (s_AdvUpdateFailed || s_AdvDuringStress == 0)
+	{
+		printf("FAIL: advertising did not progress during NVM stress\r\n");
+		return 1;
+	}
+	printf("PASS: 512 NVM records verified with advertising activity\r\n");
 	AppRun();
 	return 0;
 }
