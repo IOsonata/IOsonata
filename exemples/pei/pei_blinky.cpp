@@ -1,11 +1,11 @@
 /**-------------------------------------------------------------------------
 @file	pei_blinky.cpp
 
-@brief	PEI blinky: timer compare toggles a GPIO task without any ISR.
+@brief	PEI blinky: one timer event alternates two LEDs without an ISR.
 
-All hardware preparation is handled by the IOsonata Timer and GPIO drivers.
-PEI manages only the hardware event-to-task relationship. This source
-contains no MCU-specific register access.
+Timer and GPIO drivers prepare the event and task hardware. PEI owns only
+the two event-to-task relationships. The shared application contains no
+MCU-specific register access or software event forwarding.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
@@ -17,10 +17,8 @@ contains no MCU-specific register access.
 #include "board.h"
 
 static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
-
-extern "C" {
-volatile uint32_t g_PeiStatus;
-}
+static_assert(sizeof(s_Leds) / sizeof(s_Leds[0]) >= 2,
+	"PeiBlinky requires two LEDs");
 
 int main(void)
 {
@@ -29,56 +27,71 @@ int main(void)
 	TimerCfg_t timerCfg = {};
 	PeiEvent_t evt = 0U;
 	int trig;
-	int task;
+	int tasks[2] = {-1, -1};
+	int i;
 
 	timerCfg.DevNo = PEI_BLINKY_TIMER_DEVNO;
 	timerCfg.Freq = 1000000U;
 	timerCfg.IntPrio = IRQ_PRIO_NORMAL;
 	if (!timer.Init(timerCfg))
 	{
-		g_PeiStatus = 2U;
 		return 1;
 	}
 	if (!timer.Enable())
 	{
-		g_PeiStatus = 2U;
 		return 1;
 	}
 
-	IOPinConfig(s_Leds[0].PortNo, s_Leds[0].PinNo, s_Leds[0].PinOp,
-		s_Leds[0].PinDir, s_Leds[0].Res, s_Leds[0].Type);
+	for (i = 0; i < 2; i++)
+	{
+		IOPinConfig(s_Leds[i].PortNo, s_Leds[i].PinNo, s_Leds[i].PinOp,
+			s_Leds[i].PinDir, s_Leds[i].Res, s_Leds[i].Type);
+	}
+
+	// Opposite initial levels: on active-low BLYST-NANO-DK,
+	// LED 1 starts off and LED 2 starts on.
 	IOPinSet(s_Leds[0].PortNo, s_Leds[0].PinNo);
+	IOPinClear(s_Leds[1].PortNo, s_Leds[1].PinNo);
 
 	trig = timer.EnableTimerTrigger(pei, evt, 500U,
 		TIMER_TRIG_TYPE_CONTINUOUS);
 	if (trig < 0)
 	{
-		g_PeiStatus = 3U;
-		return 1;
-	}
-	task = IOPinConnectTask(pei, evt, s_Leds[0].PortNo, s_Leds[0].PinNo,
-		IOPIN_TASK_TOGGLE);
-	if (task < 0)
-	{
-		g_PeiStatus = 4U;
-		timer.DisableTimerTrigger(trig);
-		return 1;
-	}
-	if (!pei.Enable(evt))
-	{
-		g_PeiStatus = 5U;
-		timer.DisableTimerTrigger(trig);
-		// Release the logical links before releasing the GPIO task.
-		if (pei.ReleaseEvent(evt))
-		{
-			IOPinCloseTask(task);
-		}
 		return 1;
 	}
 
-	g_PeiStatus = 1U;
+	// One event, two hardware tasks: PEI fan-out.
+	for (i = 0; i < 2; i++)
+	{
+		tasks[i] = IOPinConnectTask(pei, evt, s_Leds[i].PortNo,
+			s_Leds[i].PinNo, IOPIN_TASK_TOGGLE);
+		if (tasks[i] < 0)
+		{
+			goto cleanup;
+		}
+	}
+	if (!pei.Enable(evt))
+	{
+		goto cleanup;
+	}
+
 	for (;;)
 	{
 		__WFE();
 	}
+
+cleanup:
+	timer.DisableTimerTrigger(trig);
+	// Remove PEI routes before releasing the GPIO tasks.
+	if (pei.ReleaseEvent(evt))
+	{
+		for (i = 0; i < 2; i++)
+		{
+			if (tasks[i] >= 0)
+			{
+				IOPinCloseTask(tasks[i]);
+			}
+		}
+	}
+	return 1;
 }
