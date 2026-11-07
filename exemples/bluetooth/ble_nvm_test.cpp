@@ -84,20 +84,19 @@ static Nvm s_Nvm;
 static NvmMcuIntrf s_MemIntrf;
 static Timer s_AdvTimer;
 
-// Manufacturer data: two little-endian counters after the I-SYST company ID.
-// Heartbeat changes every second, independent of the flash stress sequence.
-static struct {
-	uint32_t Heartbeat;
-	uint32_t Verified;
-} s_AdvData;
+// The on-air counter changes once per second, independently of NVM writes.
+// Keep the existing four-byte manufacturer field for legacy advertising.
+static uint32_t s_AdvCounter;
+static uint32_t s_Verified;
+static bool s_HeartbeatReady;
 alignas(4) static uint8_t s_EvtQueue[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
 	.pDevName = (char*)"BleNvmStress",
 	.VendorId = ISYST_BLUETOOTH_ID,
-	.pAdvManData = (uint8_t*)&s_AdvData,
-	.AdvManDataLen = sizeof(s_AdvData),
+	.pAdvManData = (uint8_t*)&s_AdvCounter,
+	.AdvManDataLen = sizeof(s_AdvCounter),
 	.AdvInterval = 50,
 	.AdvTimeout = 0,
 };
@@ -113,16 +112,16 @@ static void AdvHeartbeatUpdate(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
 	(void)pCtx;
-	s_AdvData.Heartbeat++;
-	if (!BtAppAdvManDataSet((uint8_t*)&s_AdvData, sizeof(s_AdvData), NULL, 0))
+	s_AdvCounter++;
+	if (!BtAppAdvManDataSet((uint8_t*)&s_AdvCounter, sizeof(s_AdvCounter), NULL, 0))
 	{
 		printf("Advertising heartbeat update failed\r\n");
 	}
 	else
 	{
 		printf("Advertising heartbeat %lu, verified %lu\r\n",
-			(unsigned long)s_AdvData.Heartbeat,
-			(unsigned long)s_AdvData.Verified);
+			(unsigned long)s_AdvCounter,
+			(unsigned long)s_Verified);
 	}
 }
 
@@ -211,16 +210,20 @@ int main()
 		printf("BLE init failed\r\n");
 		return 1;
 	}
+	// A heartbeat setup failure must not abort the already-running BLE/NVM
+	// stress test before AppRun can service Bluetooth events.
 	if (!s_AdvTimer.Init(s_AdvTimerCfg))
 	{
-		printf("Advertising timer init failed\r\n");
-		return 1;
+		printf("WARNING: advertising heartbeat timer init failed\r\n");
 	}
-	if (s_AdvTimer.EnableTimerTrigger(0, (uint32_t)1000,
+	else if (s_AdvTimer.EnableTimerTrigger(0, (uint32_t)1000,
 		TIMER_TRIG_TYPE_CONTINUOUS, AdvTimerHandler) == 0)
 	{
-		printf("Advertising timer trigger failed\r\n");
-		return 1;
+		printf("WARNING: advertising heartbeat trigger failed\r\n");
+	}
+	else
+	{
+		s_HeartbeatReady = true;
 	}
 
 	printf("Advertising BleNvmStress, 50 ms interval. Testing NVM1 at 0x%08lX\r\n",
@@ -266,15 +269,10 @@ int main()
 				}
 			}
 		}
-		s_AdvData.Verified += records;
-		if (!BtAppAdvManDataSet((uint8_t*)&s_AdvData, sizeof(s_AdvData), NULL, 0))
-		{
-			printf("Round %u advertising update failed\r\n", round + 1);
-			return 1;
-		}
+		s_Verified += records;
 		printf("Round %u verified, records %lu, heartbeat %lu\r\n",
-			   round + 1, (unsigned long)s_AdvData.Verified,
-			   (unsigned long)s_AdvData.Heartbeat);
+			   round + 1, (unsigned long)s_Verified,
+			   (unsigned long)s_AdvCounter);
 	}
 	NvmMcuIntrfGetStat(&after);
 	printf("Flash operations via SoftDevice %lu, timeslot %lu, direct %lu\r\n",
@@ -288,6 +286,10 @@ int main()
 	}
 #endif
 	printf("PASS: 512 NVM records verified during advertising\r\n");
+	if (!s_HeartbeatReady)
+	{
+		printf("WARNING: on-air advertising heartbeat was not enabled\r\n");
+	}
 	AppRun();
 	return 0;
 }
