@@ -93,7 +93,7 @@ alignas(4) static uint8_t s_EvtQueue[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
-	.CentralDevMax = 1,		// S132 requires a nonzero configured connection count
+	.CentralDevMax = 1,		// Match BleAdvertiser's BLE stack resource configuration
 	.pDevName = (char*)"BleNvmStress",
 	.VendorId = ISYST_BLUETOOTH_ID,
 	.pAdvManData = (uint8_t*)&s_AdvCounter,
