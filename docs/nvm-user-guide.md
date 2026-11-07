@@ -30,6 +30,10 @@ Nordic S132 SoftDevice and require the matching SoftDevice image programmed
 before running. The SoftDevice application uses the dedicated
 `gcc_nrf52832_xxaa_s132_nvmstress.ld` linker script, reserving NVM1 at
 `0x0007C000` while retaining the bootloader settings page at `0x0007F000`.
+This is a destructive test layout, not a DFU-safe memory map: an installed
+bootloader may occupy `0x0007C000` even though its settings page is elsewhere.
+Verify the actual bootloader region before flashing/running this application;
+use a test device without overlapping bootloader firmware.
 The SDC configuration uses NVM1 at `0x0007F000`. Both configurations erase
 one NVM1 sector eight times and verify 64 records per round; the test is
 destructive within its reserved NVM1 region.
