@@ -47,11 +47,20 @@ esac
 		(root / 'listing.json').write_text(json.dumps([
 			{'name': f'com.iocomposer.embedcdt.{kind}_{version}.jar'}
 			for kind in ['ai', 'ui'] for version in ['0.0.9', '0.0.10', '0.0.2']
-		] + [
-			{'name': 'org.iosonata.embedcdt.templates.wizard_0.1.7.20261103.jar'},
 		]))
+		# The wizard comes from the IOsonata clone of the SDK root, not from the website
+		self.wizard(root, '0.1.7')
 		return dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'],
-			FIXTURE=str(root), FAIL_URL='', IOCOMPOSER_AI_PLUGIN_URL='', PYTHON3=sys.executable)
+			FIXTURE=str(root), FAIL_URL='', IOCOMPOSER_AI_PLUGIN_URL='', PYTHON3=sys.executable,
+			ROOT=str(root / 'sdk'))
+
+	def wizard(self, root, version):
+		folder = root / 'sdk' / 'IOsonata' / 'Installer' / 'eclipse_plugin'
+		folder.mkdir(parents=True, exist_ok=True)
+		for jar in folder.glob('org.iosonata.embedcdt.templates.wizard_*.jar'):
+			jar.unlink()
+		with zipfile.ZipFile(folder / f'org.iosonata.embedcdt.templates.wizard_{version}.jar', 'w') as archive:
+			archive.writestr('META-INF/MANIFEST.MF', f'Manifest-Version: 1.0\nBundle-Version: {version}\n')
 
 	def setup_runtime(self, root, platform):
 		runtime = root / 'custom IDE path'
@@ -90,7 +99,9 @@ esac
 				self.assertIn('IOSONATA_LOC=/my/sdk', prefs)
 				self.assertEqual(prefs.count('defaultPerspectiveId='), 1)
 				self.assertIn('_0.0.10.jar', (root / 'calls').read_text())
-				self.assertIn('templates.wizard_0.1.7.20261103.jar', (root / 'calls').read_text())
+				self.assertNotIn('templates.wizard', (root / 'calls').read_text())
+				with zipfile.ZipFile(runtime / 'dropins' / 'org.iosonata.embedcdt.templates.wizard.jar') as archive:
+					self.assertIn('Bundle-Version: 0.1.7', archive.read('META-INF/MANIFEST.MF').decode())
 				self.assertNotIn('embedcdt.bletest', (root / 'calls').read_text())
 				if platform == 'macos':
 					self.assertIn('../Eclipse/plugin_customization.ini', ini)
@@ -107,6 +118,19 @@ esac
 				for jar in (runtime / 'dropins').glob('*.jar'):
 					self.assertEqual(jar.read_text(), 'existing-plugin')
 				self.assertIn('-name\nEclipse', (runtime / 'eclipse.ini').read_text())
+
+	def test_old_wizard_keeps_existing_plugins(self):
+		for platform in ['linux', 'macos']:
+			with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory:
+				root = Path(directory)
+				env = self.fixture(root)
+				self.wizard(root, '0.1.6')
+				runtime = self.setup_runtime(root, platform)
+				result = self.run_setup(platform, runtime, env)
+				self.assertNotEqual(result.returncode, 0)
+				self.assertIn('requires wizard 0.1.7 or newer', result.stderr)
+				for jar in (runtime / 'dropins').glob('*.jar'):
+					self.assertEqual(jar.read_text(), 'existing-plugin')
 
 	def test_invalid_archive_keeps_existing_plugins(self):
 		with tempfile.TemporaryDirectory() as directory:
