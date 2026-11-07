@@ -38,12 +38,15 @@ SOFTWARE.
 #include "sdc_soc.h"
 #endif
 
-#if !defined(PPI_CH_NUM) || !defined(PPI_GROUP_NUM)
-#error nRF52 PEI requires the device PPI channel and group definitions
-#endif
-#if PPI_CH_NUM < 1 || PPI_CH_NUM > 20
-#error Unsupported number of programmable nRF52 PPI channels
-#endif
+// The Nordic MDK exposes the configurable PPI channels and groups as arrays.
+// Their lengths are compile-time constants and differ across nRF52 devices.
+enum {
+	PEI_NRF52_CHANNEL_COUNT = sizeof(NRF_PPI->CH) / sizeof(NRF_PPI->CH[0]),
+	PEI_NRF52_GROUP_COUNT = sizeof(NRF_PPI->CHG) / sizeof(NRF_PPI->CHG[0])
+};
+typedef char PeiNrf52ChannelCountCheck[
+	(PEI_NRF52_CHANNEL_COUNT > 0 && PEI_NRF52_CHANNEL_COUNT <= 20) ? 1 : -1
+];
 
 // PPI channels 20-31 have fixed endpoints and are not allocated by PEI.
 // Channels 0 and 1 are used directly by the nRF52 Direct Test Mode driver.
@@ -57,7 +60,7 @@ typedef struct {
 	uint32_t Token;
 } PeiNrf52Slot_t;
 
-static PeiNrf52Slot_t s_PeiSlot[PPI_CH_NUM];
+static PeiNrf52Slot_t s_PeiSlot[PEI_NRF52_CHANNEL_COUNT];
 static uint32_t s_PeiGeneration;
 
 // Event registers occupy 0x100-0x1FC, task registers 0x000-0x0FC.
@@ -84,10 +87,10 @@ static bool PeiNrf52EndpointValid(PeiEndpoint_t Addr, bool IsEvent)
 // Reserve channels used by the installed SoftDevice/SDC even before it starts.
 static uint32_t PeiNrf52AvailableMask(void)
 {
-	uint32_t mask = ((1UL << PPI_CH_NUM) - 1UL) & ~PEI_NRF52_DTM_RESERVED;
+	uint32_t mask = ((1UL << PEI_NRF52_CHANNEL_COUNT) - 1UL) & ~PEI_NRF52_DTM_RESERVED;
 
 #if defined(SOFTDEVICE_PRESENT)
-	mask &= NRF_SOC_APP_PPI_CHANNELS_SD_ENABLED_MSK;
+	mask &= ~NRF_SOC_SD_PPI_CHANNELS_SD_ENABLED_MSK;
 #elif defined(NRFXLIB_SDC)
 	mask &= ~SDC_PPI_CHANNELS_USED_MASK;
 #endif
@@ -115,7 +118,7 @@ static bool PeiNrf52ChannelFree(int Chan)
 		return false;
 	}
 
-	for (i = 0; i < PPI_GROUP_NUM; i++)
+	for (i = 0; i < PEI_NRF52_GROUP_COUNT; i++)
 	{
 		if ((NRF_PPI->CHG[i] & bit) != 0U)
 		{
@@ -178,7 +181,7 @@ static int PeiNrf52OwnedChannel(const PeiConn_t *pConn)
 	}
 
 	idx = pConn->Handle & PEI_NRF52_TOKEN_INDEX;
-	if (idx == 0U || idx > PPI_CH_NUM)
+	if (idx == 0U || idx > PEI_NRF52_CHANNEL_COUNT)
 	{
 		return -1;
 	}
@@ -214,7 +217,7 @@ bool PeiConnect(PeiConn_t * const pConn, const PeiCfg_t * const pCfg)
 	chan = -1;
 	state = DisableInterrupt();
 
-	for (i = 0; i < PPI_CH_NUM; i++)
+	for (i = 0; i < PEI_NRF52_CHANNEL_COUNT; i++)
 	{
 		if ((allowed & (1UL << i)) != 0U && PeiNrf52ChannelFree(i))
 		{

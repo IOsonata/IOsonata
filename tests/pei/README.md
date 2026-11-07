@@ -8,7 +8,9 @@ python3 tests/pei/run.py
 
 The host tests compile the production `ARM/Nordic/nRF52/src/pei_nrf52.c`
 against mock PPI registers. They test bare-metal nRF52832 (20 configurable
-channels), S132, SDC, and nRF52805 (10 configurable channels). They also
+channels), S132, S140, SDC, and nRF52805 (10 configurable channels). The mock
+headers intentionally omit obsolete PPI_CH_NUM, PPI_GROUP_NUM, and
+NRF_SOC_APP_PPI_CHANNELS_SD_ENABLED_MSK definitions. They also
 compile the C++ `Pei` wrapper with a C driver object.
 
 Checks cover invalid event/task addresses, resource exhaustion, repeated

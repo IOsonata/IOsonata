@@ -125,7 +125,7 @@ static void TestLifecycle(void)
 	assert(PeiConnect(&c, &cfg));
 	ch = Channel(&c);
 	first = c.Handle;
-	assert(ch >= 2 && ch < PPI_CH_NUM);
+	assert(ch >= 2 && ch < TEST_PPI_CHANNEL_COUNT);
 	assert(g_TestPpi.CH[ch].EEP == (uint32_t)cfg.Event);
 	assert(g_TestPpi.CH[ch].TEP == (uint32_t)cfg.Task);
 	assert((g_TestPpi.CHEN & (1UL << ch)) == 0U);
@@ -197,9 +197,9 @@ static void TestMultipleAndExhaustion(void)
 	}
 
 #if defined(SOFTDEVICE_PRESENT) || defined(NRFXLIB_SDC)
-	assert(count == ((PPI_CH_NUM < 17 ? PPI_CH_NUM : 17) - 2));
+	assert(count == ((TEST_PPI_CHANNEL_COUNT < 17 ? TEST_PPI_CHANNEL_COUNT : 17) - 2));
 #else
-	assert(count == PPI_CH_NUM - 2);
+	assert(count == TEST_PPI_CHANNEL_COUNT - 2);
 #endif
 	assert(!PeiConnect(&routes[i], &cfg));
 	for (i = 0; i < count; i++)
@@ -250,6 +250,6 @@ int main(void)
 	TestOccupied();
 	TestMultipleAndExhaustion();
 	TestSVCFailures();
-	printf("PEI nRF52 %d channels: PASS\n", PPI_CH_NUM);
+	printf("PEI nRF52 %d channels: PASS\n", TEST_PPI_CHANNEL_COUNT);
 	return 0;
 }

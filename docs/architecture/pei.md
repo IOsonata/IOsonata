@@ -102,6 +102,12 @@ functions through programmable PPI channels. The nRF52805 has 10
 configurable channels; nRF52810/nRF52832/nRF52840 have 20. Channels 20-31
 have fixed endpoints and are never allocated by this implementation.
 
+Channel and group counts are derived from the MCU device-header PPI register
+arrays, rather than legacy PPI_CH_NUM/PPI_GROUP_NUM macros. S132/S140
+application availability is computed by excluding
+NRF_SOC_SD_PPI_CHANNELS_SD_ENABLED_MSK, which the current SoftDevice headers
+provide.
+
 Connection endpoints are addresses of peripheral event and task registers,
 for example `&NRF_TIMER2->EVENTS_COMPARE[0]` and
 `&NRF_GPIOTE->TASKS_OUT[0]`. The connection owns only PPI configuration:

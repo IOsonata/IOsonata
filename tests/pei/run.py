@@ -19,7 +19,8 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
         ("bare", []),
         ("sdc", ["-DNRFXLIB_SDC"]),
         ("s132", ["-DSOFTDEVICE_PRESENT"]),
-        ("nrf52805", ["-DPPI_CH_NUM=10"]),
+        ("s140", ["-DSOFTDEVICE_PRESENT", "-DS140", "-DNRF52840_XXAA"]),
+        ("nrf52805", ["-DTEST_PPI_CHANNEL_COUNT=10"]),
     ]:
         output = temp / name
         cmd = ["gcc", "-std=c11", *COMMON, *flags,
