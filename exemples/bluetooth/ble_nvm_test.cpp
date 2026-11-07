@@ -196,7 +196,6 @@ int main()
 #ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
 #endif
-	setvbuf(stdout, NULL, _IONBF, 0);
 	if (!NvmMcuCfgInit(cfg, 1))
 	{
 		printf("Missing reserved NVM1 test region\r\n");
