@@ -286,13 +286,14 @@ int main()
 	printf("Flash operations via SoftDevice %lu, timeslot %lu, direct %lu\r\n",
 		   (unsigned long)(after.Sd - before.Sd), (unsigned long)(after.Slot - before.Slot),
 		   (unsigned long)(after.Direct - before.Direct));
-#if defined(NRF52832_XXAA)
-	if (after.Direct != before.Direct || (after.Slot == before.Slot && after.Sd == before.Sd))
+	// Erase-based NVM requires radio arbitration while BLE is active.
+	// Eraseless memory (such as RRAM) may write directly without this path.
+	if (cfg.EraseSize != 0 &&
+		(after.Direct != before.Direct || (after.Slot == before.Slot && after.Sd == before.Sd)))
 	{
-		printf("FAIL: radio did not arbitrate all flash access\r\n");
+		printf("FAIL: radio did not arbitrate erase-based NVM access\r\n");
 		return 1;
 	}
-#endif
 	if (s_AdvUpdateFailed || s_AdvDuringStress == 0)
 	{
 		printf("FAIL: advertising did not progress during NVM stress\r\n");
