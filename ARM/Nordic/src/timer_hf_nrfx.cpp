@@ -629,6 +629,50 @@ static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
 	return (uint64_t)pTimer->LastCount + pTimer->Rollover;
 }
 
+// Peripheral hardware task endpoints; PEI owns only the routing.
+static uintptr_t nRFxTimerTaskEndpoint(TimerDev_t * const pTimer, TIMER_TASK Task)
+{
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (pTimer == nullptr)
+	{
+		return 0U;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	if (devno < 0 || devno >= TIMER_NRFX_HF_MAX ||
+		s_pnRFxTimerDev[devno] != pTimer)
+	{
+		return 0U;
+	}
+	reg = s_nRFxTimerData[devno].pReg;
+	switch (Task)
+	{
+		case TIMER_TASK_START:
+			return (uintptr_t)&reg->TASKS_START;
+		case TIMER_TASK_STOP:
+			return (uintptr_t)&reg->TASKS_STOP;
+		default:
+			return 0U;
+	}
+}
+
+// Run a timer task from the CPU without releasing the timer clock.
+// This only prepares the initial state in PEI Blinky; buttons subsequently
+// activate the same tasks directly in hardware.
+static bool nRFxTimerExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
+{
+	uintptr_t endpoint;
+
+	endpoint = nRFxTimerTaskEndpoint(pTimer, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	*(volatile uint32_t *)endpoint = 1U;
+	return true;
+}
+
 // Hardware-only compare event. A periodic shortcut clears the whole timer
 // counter; it is safe only when no software compare trigger is active.
 // This path deliberately does not enable a timer compare interrupt.
@@ -886,6 +930,8 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	pTimer->DisableTrigger = nRFxTimerDisableTrigger;
 	pTimer->EnableTrigger = nRFxTimerEnableTrigger;
 	pTimer->EnablePeiTrigger = nRFxTimerEnablePeiTrigger;
+	pTimer->GetTaskEndpoint = nRFxTimerTaskEndpoint;
+	pTimer->ExecuteTask = nRFxTimerExecuteTask;
 	pTimer->DisableExtTrigger = nRFxTimerDisableExtTrigger;
 	pTimer->EnableExtTrigger = nRFxTimerEnableExtTrigger;
 

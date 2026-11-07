@@ -81,6 +81,13 @@ typedef enum __Timer_Trigger_Type {
     TIMER_TRIG_TYPE_CONTINUOUS	//!< Continuous trigger
 } TIMER_TRIG_TYPE;
 
+// Hardware timer tasks. Timer owns the task endpoint; PEI connects events
+// to that endpoint without changing timer configuration.
+typedef enum __Timer_Hardware_Task {
+	TIMER_TASK_START,
+	TIMER_TASK_STOP
+} TIMER_TASK;
+
 typedef enum __Timer_ExtTrig_Sense {
 	TIMER_EXTTRIG_SENSE_DISABLE,			//!< Disable external trig sense
 	TIMER_EXTTRIG_SENSE_LOW_TRANSITION,		//!< Event on falling edge
@@ -227,6 +234,11 @@ struct __Timer_Device {
 	bool (*EnablePeiTrigger)(TimerDev_t * const pTimerDev, int TrigNo,
 						 uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
 						 void *pPei, uint32_t *pEvent);
+
+	// Optional hardware task support. Resolving an endpoint does not
+	// execute the task. ExecuteTask runs the same action from the CPU.
+	uintptr_t (*GetTaskEndpoint)(TimerDev_t * const pTimerDev, TIMER_TASK Task);
+	bool (*ExecuteTask)(TimerDev_t * const pTimerDev, TIMER_TASK Task);
 
 	/**
 	 * @brief   Disable timer trigger event.
@@ -469,7 +481,13 @@ static inline uint64_t TimerTickToNanosecond(TimerDev_t * const pTimerDev, uint6
 class Timer {
 public:
 
-	Timer() { vTimer.pObj = this; vTimer.EnablePeiTrigger = NULL; }
+	Timer()
+	{
+		vTimer.pObj = this;
+		vTimer.EnablePeiTrigger = NULL;
+		vTimer.GetTaskEndpoint = NULL;
+		vTimer.ExecuteTask = NULL;
+	}
 	virtual ~Timer() {}
 
 	virtual operator TimerDev_t * () { return &vTimer; }
@@ -485,7 +503,13 @@ public:
      * 			- true 	: Success
      * 			- false : Otherwise
      */
-    virtual bool Init(const TimerCfg_t &Cfg) { vTimer.EnablePeiTrigger = NULL; return TimerInit(&vTimer, &Cfg); }
+    virtual bool Init(const TimerCfg_t &Cfg)
+	{
+		vTimer.EnablePeiTrigger = NULL;
+		vTimer.GetTaskEndpoint = NULL;
+		vTimer.ExecuteTask = NULL;
+		return TimerInit(&vTimer, &Cfg);
+	}
 
     /**
      * @brief   Turn on timer.
@@ -641,6 +665,37 @@ public:
 		return trig;
 	}
 
+
+	/**
+	 * @brief Connect a hardware event to the timer START or STOP task.
+	 * The Timer driver exposes its hardware task endpoint; PEI owns the
+	 * interconnect. No software interrupt or callback is involved.
+	 */
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, TIMER_TASK Task)
+	{
+		uintptr_t endpoint;
+
+		if (vTimer.GetTaskEndpoint == NULL)
+		{
+			return false;
+		}
+		endpoint = vTimer.GetTaskEndpoint(&vTimer, Task);
+		if (endpoint == 0U)
+		{
+			return false;
+		}
+		return PeiDev.Connect(Evt, (PeiEndpoint_t)endpoint);
+	}
+
+	/**
+	 * @brief Execute a timer hardware task from software.
+	 * In contrast to Disable(), TIMER_TASK_STOP halts the counter while
+	 * keeping the timer device and high-frequency clock enabled.
+	 */
+	bool ExecuteTask(TIMER_TASK Task)
+	{
+		return vTimer.ExecuteTask != NULL && vTimer.ExecuteTask(&vTimer, Task);
+	}
 
 	/**
 	 * @brief   Disable timer trigger event.

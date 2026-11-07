@@ -429,9 +429,44 @@ int IOPinOpenTask(int PortNo, int PinNo, IOPINTASK Task,
  */
 bool IOPinCloseTask(int TaskNo);
 
+/**
+ * @brief Prepare a GPIO input edge event without enabling an interrupt.
+ * The pin must already be configured by IOPinConfig. The GPIO driver
+ * allocates a hardware event channel and returns its PEI endpoint.
+ *
+ * @return Allocated event channel, -1 if unavailable or unsupported
+ */
+int IOPinOpenEvent(int PortNo, int PinNo, IOPINSENSE Sense,
+	PeiEndpoint_t *pEndpoint);
 
+/**
+ * @brief Release a GPIO input event channel after its PEI event has
+ * been unbound. Does not modify any PEI relationships.
+ */
+bool IOPinCloseEvent(int EventNo);
 
 #ifdef __cplusplus
+}
+
+// Configure a GPIO hardware input event and register the source in PEI.
+// No CPU interrupt is enabled; PEI owns only the relationships.
+static inline int IOPinConnectEvent(Pei &PeiDev, PeiEvent_t &Evt,
+	int PortNo, int PinNo, IOPINSENSE Sense)
+{
+	PeiEndpoint_t endpoint;
+	int eventNo;
+
+	eventNo = IOPinOpenEvent(PortNo, PinNo, Sense, &endpoint);
+	if (eventNo < 0)
+	{
+		return -1;
+	}
+	if (!PeiDev.BindEvent(Evt, endpoint))
+	{
+		IOPinCloseEvent(eventNo);
+		return -1;
+	}
+	return eventNo;
 }
 
 // Configure the hardware GPIO task in the GPIO driver; connect its endpoint

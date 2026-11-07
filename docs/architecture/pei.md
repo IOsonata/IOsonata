@@ -226,6 +226,27 @@ without `SOFTDEVICE_PRESENT`. The linked HAL archive continues to provide
 other drivers. This does not change the SoftDevice-aware PEI backend used
 by Bluetooth applications and is not a general runtime detection solution.
 
+### Hardware start/stop through button events
+
+The BLYST-NANO-DK `PeiBlinky` example also exercises peripheral-to-
+peripheral control in both directions. The GPIO driver prepares falling-
+edge GPIOTE events on BUT1 (P0.02) and BUT2 (P0.13), and the Timer driver
+exposes its START/STOP hardware tasks. PEI routes BUT1 to TIMER2.START and
+BUT2 to TIMER2.STOP. Independently, TIMER2.COMPARE fans out through PEI to
+two GPIOTE toggle tasks with opposite initial LED states.
+
+The CPU configures these relationships once, executes the timer STOP
+task for initial state, and then waits. Subsequent button events operate
+the timer directly in hardware. Unlike `Timer::Disable()`, the initial
+STOP task leaves the timer clock enabled, allowing a hardware START event
+to resume counting. The two buttons require no GPIO interrupts, polling
+or DMA. The GPIO driver reserves input-event and output-task channels in
+its shared GPIOTE ownership pool.
+
+The updated two-button example has not yet been built or tested on
+hardware. The recorded approximately 1 Hz observation refers to the
+earlier one-LED implementation.
+
 The shared `exemples/pei/pei_blinky.cpp` contains no MCU register
 access or platform adapter. It uses the existing Timer object and the
 new `Timer::EnableTimerTrigger(Pei&, PeiEvent_t&, ...)` overload to

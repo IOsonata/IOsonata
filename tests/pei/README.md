@@ -67,17 +67,33 @@ their PEI implementation calls SoftDevice SVC functions. Without a
 running SoftDevice, that path faults. This direct-source workaround is
 specific to the standalone test, not to Bluetooth applications.
 
-Expected for the new two-LED fan-out example: the first two entries
-of `LED_PINS_MAP` are initialized to opposite GPIO levels (on
-BLYST-NANO-DK, first off and second on). The single TIMER2 compare
-event connects to **two distinct GPIOTE toggle tasks**. At each
-500 ms event, the LEDs exchange states. Each LED has a complete 1 Hz
-blink cycle, alternating with the other LED. No CPU ISR forwards
-the event.
+## Two-button hardware handoff (new, not yet board-validated)
 
-The two-LED variant has **not yet been compiled or observed on the
-board**. In the debugger, verify both outputs toggle from one event
-and that TIMER2/GPIOTE do not invoke an ISR for these operations.
+`PeiBlinky` now wires four hardware event-to-task connections through PEI:
+
+- TIMER2.COMPARE -> GPIOTE toggle task for LED 1 and LED 2
+- BUT1 (P0.02, falling edge) -> TIMER2.START
+- BUT2 (P0.13, falling edge) -> TIMER2.STOP
+
+On reset, LED 1 starts off and LED 2 on (both are active-low).
+The timer counter starts stopped while its high-frequency clock remains
+enabled. Press BUT1 to begin alternating the LEDs at 500 ms per toggle;
+press BUT2 to freeze both LEDs in their current states; press BUT1 again
+to resume the counter. STOP does not reset the timer phase. Button
+bounce can repeat START/STOP tasks but does not invoke any ISR-based
+software forwarding or debounce logic.
+
+The GPIO driver configures and reserves two GPIOTE input event channels
+without enabling GPIOTE interrupts. It shares the GPIOTE allocation
+pool with the two output toggle tasks and conventional GPIO interrupts.
+The Timer driver exposes its START and STOP hardware task endpoints;
+PEI configures only the four relationships. No application register
+access and no example-specific port adapter are required.
+
+This button-controlled, two-LED variant has **not yet been compiled or
+tested on the board**. Check the three behaviors above and use a debugger
+trace to confirm that neither TIMER2 nor GPIOTE forwards events through
+an ISR.
 
 Hardware observation (November 7, 2026): following the PEI C++
 backend rename, Eclipse project-link corrections and Timer/GPIO HAL
