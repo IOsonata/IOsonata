@@ -158,6 +158,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/STM32L1xx/src/nvm_stm32l1xx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/nvm_region.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/nvm.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
