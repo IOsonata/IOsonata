@@ -33,6 +33,7 @@ SOFTWARE.
 #include "nrf.h"
 #include "coredev/pei.h"
 #include "coredev/iopincfg.h"
+#include "iopinctrl.h"
 #include "board.h"
 
 static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
@@ -55,14 +56,17 @@ int main(void)
 
 	pin = (uint32_t)s_Leds[0].PinNo;
 
-	// GPIOTE owns the output pin in task mode; initialize it HIGH (LED off).
-	NRF_P0->OUTSET = 1UL << pin;
-	NRF_P0->DIRSET = 1UL << pin;
+	// Configure GPIO through IOsonata before enabling its GPIOTE task.
+	IOPinConfig(s_Leds[0].PortNo, s_Leds[0].PinNo, IOPINOP_GPIO,
+		IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinSet(s_Leds[0].PortNo, s_Leds[0].PinNo);
+	// TODO: move GPIOTE task-mode setup to the IOsonata pin driver.
 	NRF_GPIOTE->CONFIG[0] = (GPIOTE_CONFIG_MODE_Task << GPIOTE_CONFIG_MODE_Pos) |
 		(pin << GPIOTE_CONFIG_PSEL_Pos) |
 		(GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos) |
 		(GPIOTE_CONFIG_OUTINIT_High << GPIOTE_CONFIG_OUTINIT_Pos);
 
+	// TODO: expose hardware-only periodic compare in IOsonata Timer driver.
 	// TIMER2 runs at 1 MHz, resets itself at COMPARE0 every 500 ms.
 	// Neither timer nor GPIOTE interrupts are enabled.
 	NRF_TIMER2->TASKS_STOP = 1;

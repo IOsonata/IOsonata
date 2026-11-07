@@ -179,3 +179,18 @@ security domains are rejected. No software forwarding or ISR is used.
 Run `python3 tests/pei/run_nrf53.py` for host-model validation of the
 application core in both security modes and the network core. These tests
 do not replace an nRF5340 MCU build or on-board timer-to-GPIOTE validation.
+
+## Standalone nRF52832 example configuration
+
+`PeiTimerGpiote` is a bare-metal application, but the nRF52832 HAL's
+standard Debug and Release library configurations are built for S132.
+To avoid a SoftDevice SVC fault, its Eclipse managed project compiles the
+production `ARM/Nordic/nRF52/src/pei_nrf52.c` as an application source,
+without `SOFTDEVICE_PRESENT`. The linked HAL archive continues to provide
+other drivers. This does not change the SoftDevice-aware PEI backend used
+by Bluetooth applications and is not a general runtime detection solution.
+
+GPIO initialization now uses `IOPinConfig` and `IOPinSet`. TIMER2 compare
+and GPIOTE task-mode configuration are still native register operations,
+which should move into the timer and pin drivers. The generic PEI routing
+API should not acquire responsibility for peripheral initialization.

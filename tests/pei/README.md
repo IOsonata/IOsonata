@@ -40,7 +40,13 @@ variables. Custom paths can also be passed with `--nrfx`, `--nrf5-sdk` and
 ## BLYST-NANO-DK hardware test
 
 Import `ARM/Nordic/nRF52/nRF52832/exemples/PeiTimerGpiote/ioc` into
-IOcomposer after rebuilding the nRF52832 library. The project links
+IOcomposer. The standalone example links the production `pei_nrf52.c` source
+as an application object, compiled without `SOFTDEVICE_PRESENT`. The
+standard `IOsonata_nRF52832` Debug and Release library configurations are
+built for S132; their PEI implementation makes SoftDevice SVC calls.
+Without a running SoftDevice, that path faults in the default SVC handler.
+This direct-source build workaround is specific to the standalone demo,
+not to Bluetooth applications. The project links
 `exemples/pei/pei_timer_gpiote.c` and uses the BLYST-NANO-DK's first LED.
 It uses TIMER2 compare 0 -> PPI -> GPIOTE task out 0 to toggle the LED at
 500 ms intervals. No timer/GPIOTE interrupt is enabled by the application.
@@ -67,3 +73,9 @@ and failed configurations.
 
 This is not a firmware build. Nordic MDK header compilation and on-board
 testing are separate acceptance checks.
+
+The example initializes the LED with `IOPinConfig` and `IOPinSet`.
+TIMER2 compare and GPIOTE task-mode setup remain register-level because
+the existing timer trigger API enables interrupts, and GPIO has no task-mode
+configuration method. Those features should be moved into their respective
+HAL drivers before claiming a fully abstracted PEI example.

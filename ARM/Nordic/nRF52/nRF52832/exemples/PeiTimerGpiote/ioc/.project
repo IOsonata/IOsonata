@@ -35,6 +35,11 @@
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/pei/pei_timer_gpiote.c</locationURI>
 		</link>
 		<link>
+			<name>src/pei_nrf52.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pei_nrf52.c</locationURI>
+		</link>
+		<link>
 			<name>src/board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
