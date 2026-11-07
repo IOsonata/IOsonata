@@ -67,19 +67,26 @@ their PEI implementation calls SoftDevice SVC functions. Without a
 running SoftDevice, that path faults. This direct-source workaround is
 specific to the standalone test, not to Bluetooth applications.
 
-Expected: `g_PeiStatus == 1` and the first BLYST-NANO-DK LED toggles
-every 500 ms (a complete 1 Hz blink cycle). Status 2 means Timer init
-failed, 3 Timer event preparation/binding failed, 4 GPIO task routing
-failed and 5 enabling PEI failed. Verify in the debugger that
-TIMER2/GPIOTE do not invoke an ISR for these operations.
+Expected for the new two-LED fan-out example: the first two entries
+of `LED_PINS_MAP` are initialized to opposite GPIO levels (on
+BLYST-NANO-DK, first off and second on). The single TIMER2 compare
+event connects to **two distinct GPIOTE toggle tasks**. At each
+500 ms event, the LEDs exchange states. Each LED has a complete 1 Hz
+blink cycle, alternating with the other LED. No CPU ISR forwards
+the event.
+
+The two-LED variant has **not yet been compiled or observed on the
+board**. In the debugger, verify both outputs toggle from one event
+and that TIMER2/GPIOTE do not invoke an ISR for these operations.
 
 Hardware observation (November 7, 2026): following the PEI C++
 backend rename, Eclipse project-link corrections and Timer/GPIO HAL
 integration, the device tester reports that the nRF52832 HAL and
 `PeiBlinky` compiled and the BLYST-NANO-DK LED flashes at approximately
-1 Hz. This is a **functional hardware PASS** for the shared C++ example:
-Timer compare -> PPI -> GPIOTE task. It does not establish a measured
-frequency or independently confirm that no Timer/GPIOTE ISR was entered.
+1 Hz. This is a **functional hardware PASS** for the earlier one-LED
+shared C++ example: Timer compare -> PPI -> GPIOTE task. It does not
+establish a measured frequency, independently confirm that no
+Timer/GPIOTE ISR was entered, or validate the new two-LED fan-out variant.
 
 The older register-level `pei_timer_gpiote.c` example was also
 observed blinking at approximately 1 Hz before the HAL integration.
