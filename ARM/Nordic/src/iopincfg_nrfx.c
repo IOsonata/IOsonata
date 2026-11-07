@@ -556,7 +556,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	int idx = IntNo;
 #endif
 
-	if (IntNo >= 0 && (s_GpIOTaskUsed & (1UL << IntNo)) != 0U
+	if (IntNo >= 0 && (s_GpIOTaskUsed & (1UL << IntNo)) != 0U)
 	{
 		return false;
 	}
