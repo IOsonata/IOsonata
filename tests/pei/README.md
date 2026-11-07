@@ -46,13 +46,19 @@ IOcomposer. The shared `exemples/pei/pei_blinky.cpp` is MCU independent:
 it binds the event and task endpoints into one `Pei` matrix and enables
 hardware routing, without CPU event forwarding.
 
-The nRF52832-specific `src/pei_blinky_port_nrf52.c` prepares TIMER2
-compare 0 and GPIOTE task out 0, then starts TIMER2 after PEI is enabled.
-It uses IOsonata's `IOPinConfig` and `IOPinSet` for GPIO configuration,
-but still programs timer and GPIOTE task registers directly. This is
-a temporary *platform adapter*, not part of the generic example or PEI.
-Those operations belong in the Timer and GPIO drivers when their PEI
-endpoint APIs are implemented.
+The example now uses `Timer::EnableTimerTrigger(pei, evt, ...)` to
+prepare TIMER2's hardware-only compare and bind its event to PEI.
+`IOPinConnectTask(pei, evt, ...)` asks the GPIO driver to prepare a
+GPIOTE task and connect its endpoint. Peripheral setup stays in the
+Timer and GPIO HAL drivers; PEI only programs PPI. The former
+`pei_blinky_port_nrf52.c` adapter and `pei_blinky_port.h` are removed.
+
+nRF52 uses hardware COMPARE->CLEAR to generate the 500 ms periodic
+event without an ISR. That shortcut affects the whole timer counter,
+so the Timer driver refuses PEI periodic setup when it has another
+active compare trigger or another hardware shortcut. The hardware-only
+mode is currently continuous only; existing ISR modes are unchanged.
+`DisableTimerTrigger(trig)` unbinds PEI before releasing the compare.
 
 The standalone project links the production `pei_nrf52.c` as an
 application object compiled without `SOFTDEVICE_PRESENT`. The standard
@@ -62,9 +68,10 @@ running SoftDevice, that path faults. This direct-source workaround is
 specific to the standalone test, not to Bluetooth applications.
 
 Expected: `g_PeiStatus == 1` and the first BLYST-NANO-DK LED toggles
-every 500 ms (a complete 1 Hz blink cycle). Status 2 means preparation
-failed, 3 event connection failed, 4 routing enable failed. Confirm
-there are no TIMER2 or GPIOTE IRQs in the debugger.
+every 500 ms (a complete 1 Hz blink cycle). Status 2 means Timer init
+failed, 3 Timer event preparation/binding failed, 4 GPIO task routing
+failed and 5 enabling PEI failed. Verify in the debugger that
+TIMER2/GPIOTE do not invoke an ISR for these operations.
 
 Previously validated (November 7, 2026): the old, register-level
 `pei_timer_gpiote.c` example on nRF52832 blinked the blue LED at
@@ -87,7 +94,7 @@ and failed configurations.
 This is not a firmware build. Nordic MDK header compilation and on-board
 testing are separate acceptance checks.
 
-The shared example uses no target-specific registers. The nRF52832
-platform adapter still directly prepares TIMER2 compare and GPIOTE
-task-mode registers; those belong in the Timer/GPIO HAL drivers in a
-fully abstracted version.
+The shared example uses no target-specific registers or platform
+adapter. Timer and GPIO have the endpoint preparation APIs on nRF52.
+The nRF53 DPPI backend and other MCU-specific peripheral drivers are
+separate follow-up integrations.

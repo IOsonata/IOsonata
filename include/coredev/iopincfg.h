@@ -43,6 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 
 #include "coredev/interrupt.h"
+#include "coredev/pei.h"
 
 /// Defining port name
 /// Many MCU name its GPIO port by letter starting from A instead of numerical
@@ -403,7 +404,55 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength);
  */
 void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed);
 
+/// Hardware-controlled GPIO output operation. The GPIO driver owns the
+/// pin and prepares its hardware task; PEI owns only the event route.
+typedef enum __IOPin_Task {
+	IOPIN_TASK_TOGGLE,
+	IOPIN_TASK_SET,
+	IOPIN_TASK_CLEAR
+} IOPINTASK;
+
+/**
+ * @brief Allocate a peripheral hardware task to operate an already
+ * configured GPIO output. No interrupt is installed and no PEI route
+ * is programmed by this call.
+ *
+ * @param pEndpoint : Receives the MCU-specific hardware task endpoint
+ * @return Task allocation ID, -1 if unavailable or unsupported
+ */
+int IOPinOpenTask(int PortNo, int PinNo, IOPINTASK Task,
+				  PeiEndpoint_t *pEndpoint);
+
+/**
+ * @brief Release a GPIO task after ALL its PEI relationships are removed.
+ * @return true when the peripheral task was released
+ */
+bool IOPinCloseTask(int TaskNo);
+
+
+
 #ifdef __cplusplus
+}
+
+// Configure the hardware GPIO task in the GPIO driver; connect its endpoint
+// in PEI. No GPIO setup or DMA operation is performed by PEI itself.
+static inline int IOPinConnectTask(Pei &PeiDev, PeiEvent_t Evt,
+	int PortNo, int PinNo, IOPINTASK Task)
+{
+	PeiEndpoint_t endpoint;
+	int taskNo;
+
+	taskNo = IOPinOpenTask(PortNo, PinNo, Task, &endpoint);
+	if (taskNo < 0)
+	{
+		return -1;
+	}
+	if (!PeiDev.Connect(Evt, endpoint))
+	{
+		IOPinCloseTask(taskNo);
+		return -1;
+	}
+	return taskNo;
 }
 #endif
 

@@ -54,6 +54,8 @@ SOFTWARE.
 #include <string.h>
 #ifndef __cplusplus
 #include <stdbool.h>
+#else
+#include "coredev/pei.h"
 #endif
 
 /// Clock source used for the timer
@@ -218,6 +220,13 @@ struct __Timer_Device {
 	uint64_t (*EnableTrigger)(TimerDev_t * const pTimerDev, int TrigNo, uint64_t nsPeriod,
 							  TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 							  void * const pContext);
+
+	// Optional hardware-only event endpoint. Implemented by a Timer driver
+	// when its hardware can generate this trigger without an ISR.
+	// The Timer driver owns the compare resource and PEI binding lifetime.
+	bool (*EnablePeiTrigger)(TimerDev_t * const pTimerDev, int TrigNo,
+						 uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
+						 void *pPei, uint32_t *pEvent);
 
 	/**
 	 * @brief   Disable timer trigger event.
@@ -460,7 +469,7 @@ static inline uint64_t TimerTickToNanosecond(TimerDev_t * const pTimerDev, uint6
 class Timer {
 public:
 
-	Timer() { vTimer.pObj = this; }
+	Timer() { vTimer.pObj = this; vTimer.EnablePeiTrigger = NULL; }
 	virtual ~Timer() {}
 
 	virtual operator TimerDev_t * () { return &vTimer; }
@@ -476,7 +485,7 @@ public:
      * 			- true 	: Success
      * 			- false : Otherwise
      */
-    virtual bool Init(const TimerCfg_t &Cfg) { return TimerInit(&vTimer, &Cfg); }
+    virtual bool Init(const TimerCfg_t &Cfg) { vTimer.EnablePeiTrigger = NULL; return TimerInit(&vTimer, &Cfg); }
 
     /**
      * @brief   Turn on timer.
@@ -598,6 +607,40 @@ public:
 	 */
 	int EnableTimerTrigger(uint32_t msPeriod, TIMER_TRIG_TYPE Type,
 						   TimerTrigEvtHandler_t const Handler = NULL, void * const pContext = NULL);
+
+	/**
+	 * @brief Prepare a hardware-only timer compare event for PEI.
+	 *
+	 * The Timer driver configures the compare and binds its event endpoint
+	 * to Pei. PEI owns the routing; the caller connects task destinations
+	 * and enables routing separately. No software trigger ISR is enabled.
+	 * TrigNo is returned so the existing DisableTimerTrigger works for both
+	 * ISR and PEI triggers. Unsupported hardware configurations return -1.
+	 *
+	 * @return Allocated trigger number, or -1 on failure
+	 */
+	int EnableTimerTrigger(Pei &PeiDev, PeiEvent_t &Evt, uint32_t msPeriod,
+						   TIMER_TRIG_TYPE Type)
+	{
+		int trig;
+
+		if (vTimer.EnablePeiTrigger == NULL || msPeriod == 0U)
+		{
+			return -1;
+		}
+		trig = vTimer.FindAvailTrigger(&vTimer);
+		if (trig < 0)
+		{
+			return -1;
+		}
+		if (!vTimer.EnablePeiTrigger(&vTimer, trig,
+			(uint64_t)msPeriod * 1000000ULL, Type, &PeiDev, &Evt))
+		{
+			return -1;
+		}
+		return trig;
+	}
+
 
 	/**
 	 * @brief   Disable timer trigger event.

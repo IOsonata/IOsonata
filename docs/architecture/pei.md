@@ -61,7 +61,7 @@ Callers must serialize operations that modify one matrix.
 The C functions `PeiConnect`, `PeiEnable`, `PeiDisable`, and
 `PeiDisconnect` retain their original *individual connection* API.
 `PeiConn_t` is the low-level backend primitive used by the matrix and
-by the existing C-only hardware example. The C++ `Pei` object is now
+by C-only callers and host tests. The C++ `Pei` object is now
 the matrix owner; connection handles and physical channels are not part
 of its public interface.
 
@@ -223,10 +223,19 @@ without `SOFTDEVICE_PRESENT`. The linked HAL archive continues to provide
 other drivers. This does not change the SoftDevice-aware PEI backend used
 by Bluetooth applications and is not a general runtime detection solution.
 
-The shared `exemples/pei/pei_blinky.cpp` contains no MCU register access
-and uses the matrix-owning C++ `Pei` API. The nRF52832 project links a
-temporary target-specific port adapter to prepare and start its Timer and
-GPIOTE hardware. Those operations should move into the Timer/GPIO drivers;
-PEI itself configures only the interconnect. The refactored example has
-not yet been revalidated on the board. The generic PEI routing
-API should not acquire responsibility for peripheral initialization.
+The shared `exemples/pei/pei_blinky.cpp` contains no MCU register
+access or platform adapter. It uses the existing Timer object and the
+new `Timer::EnableTimerTrigger(Pei&, PeiEvent_t&, ...)` overload to
+configure a hardware-only compare source and bind it in PEI. The GPIO
+`IOPinConnectTask` wrapper configures a task using its GPIO backend
+and registers the endpoint relationship in PEI.
+
+On nRF52, the Timer driver uses hardware COMPARE->CLEAR for continuous
+triggers and refuses conflicting ISR compare or shortcut configurations,
+because this shortcut resets the entire timer counter. SINGLE hardware
+triggers are not yet supported. The common
+`Timer::DisableTimerTrigger(TrigNo)` unbinds PEI before freeing its
+compare slot. GPIO task slots share allocation with GPIOTE interrupts.
+
+PEI itself still configures only the interconnect. The current HAL
+refactor has not yet been rebuilt or retested on BLYST-NANO-DK.

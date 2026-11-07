@@ -36,16 +36,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/pei/pei_blinky.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/pei_blinky_port.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/pei/pei_blinky_port.h</locationURI>
-		</link>
-		<link>
-			<name>src/pei_blinky_port_nrf52.c</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/pei_blinky_port_nrf52.c</locationURI>
-		</link>
-		<link>
 			<name>src/pei_nrf52.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/pei_nrf52.c</locationURI>
