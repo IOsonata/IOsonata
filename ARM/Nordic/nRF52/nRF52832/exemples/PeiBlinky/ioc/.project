@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>PeiTimerGpiote</name>
+	<name>PeiBlinky</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -20,6 +20,7 @@
 	</buildSpec>
 	<natures>
 		<nature>org.eclipse.cdt.core.cnature</nature>
+		<nature>org.eclipse.cdt.core.ccnature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
@@ -30,9 +31,19 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/pei_timer_gpiote.c</name>
+			<name>src/pei_blinky.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/pei/pei_timer_gpiote.c</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/pei/pei_blinky.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pei_blinky_port.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/pei/pei_blinky_port.h</locationURI>
+		</link>
+		<link>
+			<name>src/pei_blinky_port_nrf52.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/pei_blinky_port_nrf52.c</locationURI>
 		</link>
 		<link>
 			<name>src/pei_nrf52.c</name>

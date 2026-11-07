@@ -3,7 +3,7 @@
 
 #include "blystnano_boards.h"
 
-// BLYST-NANO-DK. The first LED is driven by TIMER2 -> PEI -> GPIOTE.
+// First LED on BLYST-NANO-DK. All PEI routing is in the shared example.
 #define LED_PINS_MAP	BLYST_NANO_DK_LED_PINS_CFG
 
 #endif // __BOARD_H__

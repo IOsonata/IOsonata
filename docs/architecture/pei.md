@@ -175,7 +175,7 @@ Run `python3 tests/pei/run.py` for host model validation and
 `python3 tests/pei/check_nrf52_cmsis.py` to syntax-check the driver with
 the currently installed Nordic CMSIS, S132/S140 and SDC headers.
 The latter test does not link firmware or use nrfx HAL drivers. The
-`PeiTimerGpiote` nRF52832 IOcomposer example is intended for
+`PeiBlinky` nRF52832 IOcomposer example is intended for
 BLYST-NANO-DK hardware validation. Its hardware results are not recorded yet.
 
 
@@ -215,7 +215,7 @@ do not replace an nRF5340 MCU build or on-board timer-to-GPIOTE validation.
 
 ## Standalone nRF52832 example configuration
 
-`PeiTimerGpiote` is a bare-metal application, but the nRF52832 HAL's
+`PeiBlinky` is a bare-metal application, but the nRF52832 HAL's
 standard Debug and Release library configurations are built for S132.
 To avoid a SoftDevice SVC fault, its Eclipse managed project compiles the
 production `ARM/Nordic/nRF52/src/pei_nrf52.c` as an application source,
@@ -223,7 +223,10 @@ without `SOFTDEVICE_PRESENT`. The linked HAL archive continues to provide
 other drivers. This does not change the SoftDevice-aware PEI backend used
 by Bluetooth applications and is not a general runtime detection solution.
 
-GPIO initialization now uses `IOPinConfig` and `IOPinSet`. TIMER2 compare
-and GPIOTE task-mode configuration are still native register operations,
-which should move into the timer and pin drivers. The generic PEI routing
+The shared `exemples/pei/pei_blinky.cpp` contains no MCU register access
+and uses the matrix-owning C++ `Pei` API. The nRF52832 project links a
+temporary target-specific port adapter to prepare and start its Timer and
+GPIOTE hardware. Those operations should move into the Timer/GPIO drivers;
+PEI itself configures only the interconnect. The refactored example has
+not yet been revalidated on the board. The generic PEI routing
 API should not acquire responsibility for peripheral initialization.

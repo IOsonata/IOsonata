@@ -41,35 +41,38 @@ variables. Custom paths can also be passed with `--nrfx`, `--nrf5-sdk` and
 
 ## BLYST-NANO-DK hardware test
 
-Import `ARM/Nordic/nRF52/nRF52832/exemples/PeiTimerGpiote/ioc` into
-IOcomposer. The standalone example links the production `pei_nrf52.c` source
-as an application object, compiled without `SOFTDEVICE_PRESENT`. The
-standard `IOsonata_nRF52832` Debug and Release library configurations are
-built for S132; their PEI implementation makes SoftDevice SVC calls.
-Without a running SoftDevice, that path faults in the default SVC handler.
-This direct-source build workaround is specific to the standalone demo,
-not to Bluetooth applications. The project links
-`exemples/pei/pei_timer_gpiote.c` and uses the BLYST-NANO-DK's first LED.
-It uses TIMER2 compare 0 -> PPI -> GPIOTE task out 0 to toggle the LED at
-500 ms intervals. No timer/GPIOTE interrupt is enabled by the application.
+Import `ARM/Nordic/nRF52/nRF52832/exemples/PeiBlinky/ioc` into
+IOcomposer. The shared `exemples/pei/pei_blinky.cpp` is MCU independent:
+it binds the event and task endpoints into one `Pei` matrix and enables
+hardware routing, without CPU event forwarding.
 
-Expected: `g_PeiStatus == 1` and the LED changes state twice per second.
-`g_PeiStatus` is `2` for an unsupported LED port, `3` when no channel can be
-allocated, and `4` when enabling the route fails. While debugging, verify
-that there are no TIMER2 or GPIOTE IRQs associated with the toggles.
+The nRF52832-specific `src/pei_blinky_port_nrf52.c` prepares TIMER2
+compare 0 and GPIOTE task out 0, then starts TIMER2 after PEI is enabled.
+It uses IOsonata's `IOPinConfig` and `IOPinSet` for GPIO configuration,
+but still programs timer and GPIOTE task registers directly. This is
+a temporary *platform adapter*, not part of the generic example or PEI.
+Those operations belong in the Timer and GPIO drivers when their PEI
+endpoint APIs are implemented.
 
-Hardware observation (November 7, 2026): on the BLYST-NANO-DK nRF52832,
-with the standalone bare-metal `PeiTimerGpiote` example after the SVC fix,
-the blue LED visibly blinks at approximately 1 Hz (one complete on/off cycle
-per second, consistent with 500 ms toggles). Reported by the device tester.
-This validates the visible TIMER2 -> PPI -> GPIOTE output path on hardware.
-The absence of TIMER2/GPIOTE IRQ entries has not yet been independently
-confirmed with a debugger trace, and `g_PeiStatus` was not separately reported.
+The standalone project links the production `pei_nrf52.c` as an
+application object compiled without `SOFTDEVICE_PRESENT`. The standard
+`IOsonata_nRF52832` Debug and Release HAL libraries are built for S132;
+their PEI implementation calls SoftDevice SVC functions. Without a
+running SoftDevice, that path faults. This direct-source workaround is
+specific to the standalone test, not to Bluetooth applications.
 
-S132 and SDC coexistence tests are still pending. Repeat with advertising
-active, using separate BLE-capable application projects, and confirm that the
-controller continues advertising while the PEI-controlled LED changes state.
+Expected: `g_PeiStatus == 1` and the first BLYST-NANO-DK LED toggles
+every 500 ms (a complete 1 Hz blink cycle). Status 2 means preparation
+failed, 3 event connection failed, 4 routing enable failed. Confirm
+there are no TIMER2 or GPIOTE IRQs in the debugger.
 
+Previously validated (November 7, 2026): the old, register-level
+`pei_timer_gpiote.c` example on nRF52832 blinked the blue LED at
+approximately 1 Hz after the SoftDevice SVC fix. This established a
+functional TIMER2 -> PPI -> GPIOTE path on the board, **not** that the
+new `PeiBlinky` C++ refactor or IRQ-free operation has been retested.
+The debugger IRQ trace and Bluetooth S132/SDC coexistence tests remain
+pending.
 
 ## nRF5340 DPPI host model
 
@@ -84,8 +87,7 @@ and failed configurations.
 This is not a firmware build. Nordic MDK header compilation and on-board
 testing are separate acceptance checks.
 
-The example initializes the LED with `IOPinConfig` and `IOPinSet`.
-TIMER2 compare and GPIOTE task-mode setup remain register-level because
-the existing timer trigger API enables interrupts, and GPIO has no task-mode
-configuration method. Those features should be moved into their respective
-HAL drivers before claiming a fully abstracted PEI example.
+The shared example uses no target-specific registers. The nRF52832
+platform adapter still directly prepares TIMER2 compare and GPIOTE
+task-mode registers; those belong in the Timer/GPIO HAL drivers in a
+fully abstracted version.
