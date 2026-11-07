@@ -39,13 +39,16 @@ one NVM1 sector eight times and verify 64 records per round; the test is
 destructive within its reserved NVM1 region.
 
 Scan for `BleNvmStress`. The manufacturer-specific advertising field (`0xFF`,
-company ID `0x0177`) contains two little-endian 32-bit counters: a heartbeat
-at bytes 2-5 that increments every second independently of NVM work, and
-verified records at bytes 6-9, increasing by 64 after each round up to 512.
-The advertisement interval remains 50 ms. Observe multiple reports over time
-to verify the heartbeat changes while NVM writes are active and after the test.
-The heartbeat demonstrates that advertising updates are being processed; it
-cannot, by itself, prove that no individual over-the-air advertising events
+company ID `0x0177`) contains one little-endian 32-bit heartbeat counter
+in bytes 2-5. This retains the original four-byte manufacturer payload size;
+the counter now advances every second, independently of NVM activity. The
+verified-record count remains in UART output, increasing by 64 after each
+round to 512. The advertisement interval remains 50 ms. Observe multiple
+advertising reports over time and confirm the heartbeat advances during the
+NVM writes and after the test. If RTC2 heartbeat initialization fails, the
+NVM stress test continues and emits a warning rather than stopping the BLE
+event loop. The heartbeat demonstrates that advertising updates are being
+processed; it cannot prove that no individual over-the-air advertising events
 were missed.
 Supplied `NvmDemo/ioc` projects include STM32L476, LPC54628, nRF9160,
 nRF91x1 and RA4M1. Inspect each project's linked source and medium selection:
