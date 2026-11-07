@@ -18,30 +18,58 @@ software forwarding callback.
 
 ## Generic connection model
 
-`include/coredev/pei.h` defines the C interface and a C++ wrapper. Each
-`PeiConn_t` or `Pei` instance owns **one logical event-to-task connection**.
-Multiple connection instances can be used to form a one-to-many or many-to-one
-routing graph if the MCU supports those connections. Application code never
-chooses a PPI, DPPI or EVSYS channel directly.
+`Pei` owns an entire **logical event-to-task matrix**, not a single
+connection. One logical event can activate multiple tasks; a task may
+be connected to multiple events when the hardware backend can realize
+those links without introducing unintended relationships.
 
-- `PeiConnect` reserves resources and connects one event to one task; the
-  connection is initially disabled.
-- `PeiEnable` and `PeiDisable` switch the connection without reallocating it.
-- `PeiDisconnect` disables the connection and releases its resources.
-- A connection state starts with `Handle == 0`; successful allocation assigns
-  an opaque handle. The target implementation clears it on disconnect.
-- Repeated enable/disable and disconnect operations are safe. Connecting an
-  already-connected object fails without affecting its current connection.
+A peripheral driver supplies an already-configured hardware endpoint.
+PEI owns only its relationship to other peripheral endpoints:
 
-`PeiCfg_t` identifies the interconnect instance (`DevNo`), one event source,
-one task destination, and optional target-specific settings (`Options == 0`
-selects the default). `PeiEndpoint_t` is an opaque endpoint identifier. On one
-MCU it may represent a peripheral register address, on another an event
-number or hardware user ID. The MCU implementation validates the identifiers.
+```cpp
+Pei pei;
+PeiEvent_t evt = 0;
 
-The C++ `Pei` object owns the connection and disconnects it when destroyed;
-it uses the same C functions as applications written in C. Connection storage
-is caller-owned. Hardware resource tables must be statically allocated.
+pei.BindEvent(evt, hardwareEvent);
+pei.Connect(evt, hardwareTaskA);
+pei.Connect(evt, hardwareTaskB);
+pei.Enable(evt);
+```
+
+These operations configure only the MCU event interconnect. They do
+**not** configure a timer period, ADC conversion, GPIO pin, DMA
+descriptor, peripheral clock, interrupt handler or peripheral state.
+
+- `BindEvent(evt, endpoint)` assigns an event source, allocating a
+  persistent `PeiEvent_t` identity when `evt == 0`.
+- `Connect(evt, task)` adds one logical relationship. A repeated pair is
+  idempotent; a backend may reject unsupported fan-in or other topology.
+- `Enable(evt)`/`Disable(evt)` change the event's routing state, not
+  the peripheral's event generation or interrupt settings.
+- `Disconnect(evt, task)` removes one relationship without affecting
+  any other task or event.
+- `UnbindEvent(evt, endpoint)` disables and releases the physical routes
+  **before** the producing driver reuses the endpoint. It retains the
+  event identity, task relationships and logical enable state.
+- `ReleaseEvent(evt)` removes the identity and all its relationships.
+
+The matrix uses caller-owned, fixed-size storage: 16 events and 32
+connections by default, overridable with `PEI_MAX_EVENTS` and
+`PEI_MAX_CONNECTIONS` at build time. There is no heap allocation.
+Callers must serialize operations that modify one matrix.
+
+The C functions `PeiConnect`, `PeiEnable`, `PeiDisable`, and
+`PeiDisconnect` retain their original *individual connection* API.
+`PeiConn_t` is the low-level backend primitive used by the matrix and
+by the existing C-only hardware example. The C++ `Pei` object is now
+the matrix owner; connection handles and physical channels are not part
+of its public interface.
+
+`PeiEndpoint_t` is the MCU-specific hardware endpoint identifier:
+a register address on Nordic, a generator/user index on SAMD, or an
+event/destination selector on R9A02. `PeiEvent_t` is **not** a hardware
+channel. An unsupported route returns failure; it is never emulated
+with software interrupt forwarding.
 
 ## MCU implementation rules
 
@@ -90,7 +118,7 @@ is caller-owned. Hardware resource tables must be statically allocated.
 
 ## Status
 
-The generic interface, nRF52 PPI, and nRF5340 DPPI drivers are committed.
+The matrix-owning C++ interface and nRF52 PPI/nRF5340 DPPI low-level backends are committed.
 Host-model tests exercise lifecycle and routing for both backends.
 On November 7, 2026, the standalone nRF52832/BLYST-NANO-DK example was
 observed blinking its blue LED at approximately 1 Hz, consistent with the

@@ -44,6 +44,7 @@ SOFTWARE.
 // Encoded by the MCU port: register address, generator/user number, or another
 // target-specific endpoint identifier. Source and destination are distinct roles.
 typedef uintptr_t PeiEndpoint_t;
+typedef uint32_t PeiEvent_t;	//!< Logical event identity within a Pei matrix
 
 typedef struct {
 	int DevNo;				//!< Hardware interconnect instance, zero on single-matrix MCUs
@@ -52,6 +53,7 @@ typedef struct {
 	uint32_t Options;		//!< Zero: target default; other values are target-defined
 } PeiCfg_t;
 
+// Lower-level backend primitive, not the C++ matrix owner.
 // Caller-owned connection state. Zero-initialize before first use.
 // Keep its address stable until disconnect; do not copy active connections.
 // Calls operating on one connection must be serialized by the caller.
@@ -89,23 +91,9 @@ void PeiDisconnect(PeiConn_t * const pConn);
 #ifdef __cplusplus
 }
 
-// A lightweight owner of one logical connection in the interconnect matrix.
-class Pei {
-public:
-	Pei() : vConn{0} {}
-	~Pei() { Disconnect(); }
-
-	Pei(const Pei &) = delete;
-	Pei &operator=(const Pei &) = delete;
-
-	bool Connect(const PeiCfg_t &Cfg) { return PeiConnect(&vConn, &Cfg); }
-	bool Enable() { return PeiEnable(&vConn); }
-	bool Disable() { return PeiDisable(&vConn); }
-	void Disconnect() { PeiDisconnect(&vConn); }
-
-private:
-	PeiConn_t vConn;
-};
+// Matrix-owning C++ interface; C functions above are backend connection
+// primitives and remain available to existing C applications.
+#include "pei_matrix.h"
 
 #endif // __cplusplus
 
