@@ -56,7 +56,15 @@ Expected: `g_PeiStatus == 1` and the LED changes state twice per second.
 allocated, and `4` when enabling the route fails. While debugging, verify
 that there are no TIMER2 or GPIOTE IRQs associated with the toggles.
 
-The physical device test is pending. Repeat with S132 and SDC advertising
+Hardware observation (November 7, 2026): on the BLYST-NANO-DK nRF52832,
+with the standalone bare-metal `PeiTimerGpiote` example after the SVC fix,
+the blue LED visibly blinks at approximately 1 Hz (one complete on/off cycle
+per second, consistent with 500 ms toggles). Reported by the device tester.
+This validates the visible TIMER2 -> PPI -> GPIOTE output path on hardware.
+The absence of TIMER2/GPIOTE IRQ entries has not yet been independently
+confirmed with a debugger trace, and `g_PeiStatus` was not separately reported.
+
+S132 and SDC coexistence tests are still pending. Repeat with advertising
 active, using separate BLE-capable application projects, and confirm that the
 controller continues advertising while the PEI-controlled LED changes state.
 

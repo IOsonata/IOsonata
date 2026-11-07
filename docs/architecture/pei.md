@@ -91,9 +91,14 @@ is caller-owned. Hardware resource tables must be statically allocated.
 ## Status
 
 The generic interface, nRF52 PPI, and nRF5340 DPPI drivers are committed.
-Host-model tests exercise lifecycle and routing for both backends. Full
-MCU builds, cross-compilation against the installed nRF53 MDK, and on-board
-validation remain pending.
+Host-model tests exercise lifecycle and routing for both backends.
+On November 7, 2026, the standalone nRF52832/BLYST-NANO-DK example was
+observed blinking its blue LED at approximately 1 Hz, consistent with the
+hardware TIMER2 -> PPI -> GPIOTE route. This is a hardware functional PASS for
+that specific bare-metal example; zero-ISR debugger verification and Bluetooth
+coexistence tests are still pending. Full HAL-library builds, cross-compilation
+against the installed nRF53 MDK, and nRF5340 on-board validation also remain
+pending.
 
 
 ## nRF52 PPI driver (0.14)
