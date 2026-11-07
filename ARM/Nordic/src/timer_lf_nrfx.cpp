@@ -342,6 +342,49 @@ static int nRFxRtcGetMaxTrigger(TimerDev_t * const pTimer)
 	return s_nRfxRtcData[pTimer->DevNo].MaxNbTrigEvt;
 }
 
+// RTC TASKS_START and TASKS_STOP are genuine hardware task endpoints.
+// They can be connected by PEI without introducing a GPIO or RTC ISR.
+// The Timer driver retains ownership of clock and RTC configuration.
+static uintptr_t nRFxRtcTaskEndpoint(TimerDev_t * const pTimer, TIMER_TASK Task)
+{
+	int devno;
+	NRF_RTC_Type *reg;
+
+	if (pTimer == nullptr)
+	{
+		return 0U;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX ||
+		s_pnRfxRtcDev[devno] != pTimer)
+	{
+		return 0U;
+	}
+	reg = s_nRfxRtcData[devno].pReg;
+	switch (Task)
+	{
+		case TIMER_TASK_START:
+			return (uintptr_t)&reg->TASKS_START;
+		case TIMER_TASK_STOP:
+			return (uintptr_t)&reg->TASKS_STOP;
+		default:
+			return 0U;
+	}
+}
+
+static bool nRFxRtcExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
+{
+	uintptr_t endpoint;
+
+	endpoint = nRFxRtcTaskEndpoint(pTimer, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	*(volatile uint32_t *)endpoint = 1U;
+	return true;
+}
+
 static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                               	  	 TimerTrigEvtHandler_t Handler, void *pContext)
 {
@@ -452,6 +495,11 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     pTimer->FindAvailTrigger = nRFxRtcFindAvailTrigger;
     pTimer->DisableTrigger = nRFxRtcDisableTrigger;
     pTimer->EnableTrigger = nRFxRtcEnableTrigger;
+	// RTC PEI compare events require separate EVTEN handling and are not
+	// yet supported by TimerEnablePeiTrigger.
+	pTimer->EnablePeiTrigger = nullptr;
+	pTimer->GetTaskEndpoint = nRFxRtcTaskEndpoint;
+	pTimer->ExecuteTask = nRFxRtcExecuteTask;
     pTimer->DisableExtTrigger = nRFxRtcDisableExtTrigger;
     pTimer->EnableExtTrigger = nRFxRtcEnableExtTrigger;
 

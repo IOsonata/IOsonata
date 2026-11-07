@@ -53,7 +53,10 @@ def main():
     variants = (
         ("nrf52805", "NRF52805_XXAA", "bare"),
         ("nrf52810", "NRF52810_XXAA", "bare"),
+        ("nrf52811", "NRF52811_XXAA", "bare"),
+        ("nrf52820", "NRF52820_XXAA", "bare"),
         ("nrf52832", "NRF52832_XXAA", "bare"),
+        ("nrf52833", "NRF52833_XXAA", "bare"),
         ("nrf52832_s132", "NRF52832_XXAA", "s132"),
         ("nrf52832_sdc", "NRF52832_XXAA", "sdc"),
         ("nrf52840", "NRF52840_XXAA", "bare"),

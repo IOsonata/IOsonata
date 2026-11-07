@@ -152,6 +152,19 @@ SoftDevice/SDC coexistence, cross-compilation against installed nRF53
 MDK and nRF5340 on-board tests remain pending.
 
 
+## nRF52 PEI completion scope
+
+Development stays on nRF52 until the product-variant peripheral event/task
+coverage and safety restrictions are recorded as complete. The detailed
+inventory, implementation order and acceptance checklist are in
+[PEI nRF52 coverage and acceptance tracker](pei_nrf52_coverage.md).
+Do not infer an available endpoint from its register address range alone.
+Peripheral ownership and the device-header register map are decisive.
+
+The nRF52 RTC Timer driver now additionally prepares START and STOP
+task endpoints for PEI. This first step is **not** complete RTC event
+support, and has not been validated by MCU compilation or hardware test.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI

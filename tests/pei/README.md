@@ -38,7 +38,8 @@ The mock-register tests cannot catch changes in Nordic's device headers. Use
 `python3 tests/pei/check_nrf52_cmsis.py` after installing/updating IOsonata's
 external SDKs. This invokes `arm-none-eabi-g++` with the installed nrfx MDK
 register declarations and IOsonata's S132, S140, SDC include paths for
-nRF52805, nRF52810, nRF52832 and nRF52840. It does not use nrfx HAL drivers,
+nRF52805, nRF52810, nRF52811, nRF52820, nRF52832, nRF52833
+and nRF52840. It does not use nrfx HAL drivers,
 allocate hardware, or link any firmware. Real MCU-library and on-board builds
 remain separate checks.
 
@@ -46,6 +47,19 @@ The script uses `../external/nrfx`, `../external/nRF5_SDK` and
 `../external/sdk-nrfxlib` relative to IOsonata, or corresponding environment
 variables. Custom paths can also be passed with `--nrfx`, `--nrf5-sdk` and
 `--nrfxlib`.
+
+## nRF52 endpoint completion tracker
+
+See [nRF52 PEI coverage and acceptance tracker](../../docs/architecture/pei_nrf52_coverage.md)
+for the remaining peripheral families, device-specific differences,
+ownership rules and acceptance criteria. Do not move PEI development
+to another MCU family until nRF52 coverage is complete.
+
+The RTC Timer backend now exposes START/STOP task endpoints through the
+same `TimerConnectTask` / `TimerExecuteTask` interface as high-frequency
+timers. RTC event source support and hardware-only continuous RTC compare
+generation are **not yet implemented**. This new RTC functionality has not
+been MCU-compiled or tested on board hardware.
 
 ## BLYST-NANO-DK hardware test
 
