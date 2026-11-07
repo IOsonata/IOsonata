@@ -36,6 +36,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "coredev/uart.h"
+#include "coredev/timer.h"
 #include "coredev/iopincfg.h"
 #include "idelay.h"
 #include "board.h"
@@ -81,18 +82,52 @@ static const UARTCfg_t s_UartCfg = {
 static UART s_Uart;
 static Nvm s_Nvm;
 static NvmMcuIntrf s_MemIntrf;
-static uint32_t s_Verified;
+static Timer s_AdvTimer;
+
+// Manufacturer data: two little-endian counters after the I-SYST company ID.
+// Heartbeat changes every second, independent of the flash stress sequence.
+static struct {
+	uint32_t Heartbeat;
+	uint32_t Verified;
+} s_AdvData;
 alignas(4) static uint8_t s_EvtQueue[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
 	.pDevName = (char*)"BleNvmStress",
 	.VendorId = ISYST_BLUETOOTH_ID,
-	.pAdvManData = (uint8_t*)&s_Verified,
-	.AdvManDataLen = sizeof(s_Verified),
+	.pAdvManData = (uint8_t*)&s_AdvData,
+	.AdvManDataLen = sizeof(s_AdvData),
 	.AdvInterval = 50,
 	.AdvTimeout = 0,
 };
+
+static const TimerCfg_t s_AdvTimerCfg = {
+	.DevNo = 2,				// nRF52832 RTC2, free of SoftDevice RTC0/RTC1
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,
+	.IntPrio = 6,
+};
+
+static void AdvHeartbeatUpdate(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+	s_AdvData.Heartbeat++;
+	if (!BtAppAdvManDataSet((uint8_t*)&s_AdvData, sizeof(s_AdvData), NULL, 0))
+	{
+		printf("Advertising heartbeat update failed\r\n");
+	}
+}
+
+// The timer callback runs in an IRQ. Reconfigure advertising in the app queue.
+static void AdvTimerHandler(TimerDev_t *pTimer, int TrigNo, void *pCtx)
+{
+	(void)pTimer;
+	(void)TrigNo;
+	(void)pCtx;
+	(void)AppEvtHandlerQue(0, NULL, AdvHeartbeatUpdate);
+}
 
 static int MemIntrfEvtCB(DevIntrf_t * const, DEVINTRF_EVT Evt, uint8_t *, int)
 {
@@ -170,6 +205,17 @@ int main()
 		printf("BLE init failed\r\n");
 		return 1;
 	}
+	if (!s_AdvTimer.Init(s_AdvTimerCfg))
+	{
+		printf("Advertising timer init failed\r\n");
+		return 1;
+	}
+	if (s_AdvTimer.EnableTimerTrigger(0, (uint32_t)1000,
+		TIMER_TRIG_TYPE_CONTINUOUS, AdvTimerHandler) == 0)
+	{
+		printf("Advertising timer trigger failed\r\n");
+		return 1;
+	}
 
 	printf("Advertising BleNvmStress, 50 ms interval. Testing NVM1 at 0x%08lX\r\n",
 		   (unsigned long)cfg.BaseAddr);
@@ -214,14 +260,15 @@ int main()
 				}
 			}
 		}
-		s_Verified += records;
-		if (!BtAppAdvManDataSet((uint8_t*)&s_Verified, sizeof(s_Verified), NULL, 0))
+		s_AdvData.Verified += records;
+		if (!BtAppAdvManDataSet((uint8_t*)&s_AdvData, sizeof(s_AdvData), NULL, 0))
 		{
 			printf("Round %u advertising update failed\r\n", round + 1);
 			return 1;
 		}
-		printf("Round %u verified, advertising count %lu\r\n",
-			   round + 1, (unsigned long)s_Verified);
+		printf("Round %u verified, records %lu, heartbeat %lu\r\n",
+			   round + 1, (unsigned long)s_AdvData.Verified,
+			   (unsigned long)s_AdvData.Heartbeat);
 	}
 	NvmMcuIntrfGetStat(&after);
 	printf("Flash operations via SoftDevice %lu, timeslot %lu, direct %lu\r\n",
