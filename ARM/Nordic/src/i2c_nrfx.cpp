@@ -453,6 +453,11 @@ uint32_t nRFxI2CGetRate(DevIntrf_t * const pDev)
 uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
+
+	if (dev->bPeiPrepared)
+	{
+		return dev->pI2cDev->Cfg.Rate;
+	}
 #ifdef NRF54L_SERIES
 	uint32_t best = 0;
 	uint32_t error = UINT32_MAX;
@@ -562,6 +567,11 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
 
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
+
 	if (pBuff == nullptr || dev->bTxRejected)
 	{
 		return 0;
@@ -629,6 +639,11 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
+
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
 
 	if (pBuff == NULL || Bufflen <= 0 || dev->bTxRejected)
 	{
@@ -755,6 +770,11 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
 
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
+
 	if (pData == nullptr)
 	{
 		return 0;
@@ -835,6 +855,11 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
+
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
 
 	if (pData == nullptr || Datalen <= 0)
 	{
@@ -947,7 +972,14 @@ void nRFxI2CStopTx(DevIntrf_t * const pDev)
 
 void nRFxI2CReset(DevIntrf_t * const pDev)
 {
-	I2CDev_t *dev = (I2CDev_t*)((nRFTwiDev_t*)pDev->pDevData)->pI2cDev;
+	nRFTwiDev_t *owner = (nRFTwiDev_t*)pDev->pDevData;
+	I2CDev_t *dev;
+
+	if (owner->bPeiPrepared)
+	{
+		return;
+	}
+	dev = owner->pI2cDev;
 
     I2CBusReset(dev);
 

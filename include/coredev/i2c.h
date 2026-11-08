@@ -133,7 +133,7 @@ typedef enum __I2C_Mode {
 } I2CMODE;
 
 // Hardware event identity depends on the initialized Nordic TWI mode.
-// These are event registers, never software-forwared IRQ callbacks.
+// These are event registers, never software-forwarded IRQ callbacks.
 typedef enum {
 	I2C_PEI_EVENT_STOPPED,
 	I2C_PEI_EVENT_ERROR,
