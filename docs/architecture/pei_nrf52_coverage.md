@@ -49,7 +49,7 @@ Status keys:
 | PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED implemented on nRF52 | START, STOP after FIFO/DMA preparation | **Initial PEI integration:** C/C++ APIs; PdmPreparePeiStart reserves the first driver-owned FIFO block and configures SAMPLE.PTR/MAXCNT; mandatory STARTED IRQ buffer refill; source/API regressions added. No device hardware test. |
 | I2S / `i2s_nrfx.cpp` | RXPTRUPD (RX configured), TXPTRUPD (TX configured), STOPPED implemented on nRF52 | START, STOP with initialized and armed driver-owned DMA | **Initial PEI integration:** C/C++ APIs; I2SPreparePeiStart re-arms existing RX/TX buffers without START after I2SDisable; IRQ pointer service required. Source/API regressions added. No device hardware test. |
 | SPI / SPIM / SPIS / `spi_nrfx.cpp` | SPI READY; SPIM STARTED/ENDRX/ENDTX/END/STOPPED; SPIS ENDRX/END/ACQUIRED | SPIM START/STOP/SUSPEND/RESUME only after driver-prepared EasyDMA; legacy SPI no tasks; SPIS ACQUIRE/RELEASE still IRQ-owned | **Initial endpoint added**: mode-specific C/C++ PEI APIs, single-block SPIM DMA preparation and release, PeiSpiDemo and static tests; MCU/hardware validation pending |
-| TWI / TWIM / TWIS / `i2c_nrfx.cpp` | Transfer ready, stopped, error and other supported events per mode | STARTRX, STARTTX, STOP, SUSPEND, RESUME and mode-specific tasks | **Pending**; bus state and DMA buffer ownership stay with I2C driver |
+| TWI / TWIM / TWIS / `i2c_nrfx.cpp` | TWI STOPPED/ERROR/SUSPENDED/RXDREADY/TXDSENT/BB; TWIM STOPPED/ERROR/SUSPENDED/RXSTARTED/TXSTARTED/LASTRX/LASTTX; TWIS STOPPED/ERROR/RXSTARTED/TXSTARTED/WRITE/READ | TWIM STARTRX/STARTTX/STOP/SUSPEND/RESUME with driver-owned prepared single-block EasyDMA. Legacy TWI/TWIS tasks remain ISR-owned | **Initial endpoint added:** C/C++ PEI API, generic I2C busy-lock ownership, no-PEI link regressions and PeiTwiDemo (NACK->ERROR->STOP); MCU compilation and hardware validation pending |
 | UART / UARTE / `uart_nrfx.cpp` | RX/TX ready, transfer end, stopped, error and mode-specific events | STARTRX, STOPRX, STARTTX, STOPTX, FLUSHRX where available | **Pending**; do not trigger unprepared EasyDMA |
 | EGU / `pei_nrf52.cpp` (owned by PEI, no standalone driver) | TRIGGERED[n] as a software event source (`PeiBindSwEvent`, `PeiTriggerSwEvent`) | TRIGGER[n] (`PeiGetSwEventTask`) | **Initial endpoint added**: host-model tests for all build profiles; PeiSwEvent example on nRF52832 not yet run on hardware. No EGU interrupt or callback |
 | QDEC (new nRF52 peripheral driver) | SAMPLERDY, REPORTRDY, ACCOF and device events | START, STOP, READCLR and device-supported tasks | **Pending**; no existing QDEC HAL driver |
@@ -329,6 +329,54 @@ and LED1, and STOPPED toggles RGB blue, all via PPI. Host API/source
 checks were added but target MCU compilation, hardware behavior,
 SPIS semaphore handoff, shared SPI/TWI lifecycle and all variants
 remain unvalidated.
+
+## TWI/TWIM/TWIS PEI event and task integration (initial nRF52 subset)
+
+The Nordic I2C driver has distinct peripheral modes on shared
+register addresses. C and C++ can bind TWI (STOPPED, ERROR, SUSPENDED,
+RXDREADY, TXDSENT, BB), TWIM (STOPPED, ERROR, SUSPENDED, RXSTARTED,
+TXSTARTED, LASTRX, LASTTX), and TWIS (STOPPED, ERROR, RXSTARTED,
+TXSTARTED, WRITE, READ) event sources, only when the corresponding
+I2C HAL mode is initialized and hardware ENABLE is valid.
+
+TWIM exposes STARTRX, STARTTX, STOP, SUSPEND and RESUME as task
+destinations after I2CPreparePeiTransfer() has armed a single
+seven-bit RX or TX EasyDMA transfer. TX uses the existing 64-byte
+driver staging buffer, bounded by the selected EasyDMA MAXCNT;
+RX memory remains caller-owned, DMA-capable RAM. The prepare method
+loads TWIM.ADDRESS, RXD/TXD.PTR and MAXCNT and either LASTTX_STOP
+or LASTRX_STOP shortcut, clears old events, and does not issue a
+START task. No I2C interrupt is needed for a one-block transaction.
+The method holds the standard DeviceIntrf busy flag until
+I2CReleasePeiTransfer(). Ordinary StartRx/StartTx, direct data
+methods, SetRate, Reset and I2CInit cannot replace DMA state while
+it is prepared.
+
+TWIM requires a STOP task after NACK/ERROR, which can be connected
+from its ERROR event over PPI. STOP while suspended cannot finish;
+the release method issues RESUME before STOP where applicable.
+The caller must first disable/disconnect all PEI task routes,
+observe STOPPED for an attempted transfer, and only then release
+the staged transfer; RX memory cannot be reused earlier. A
+single preparation is not an automatically repeating transfer.
+
+Legacy TWI and TWIS event sources can be connected to other
+peripheral tasks. Their START and semaphore PREPARERX/PREPARETX
+tasks are **not** exposed through PEI in the initial scope because
+the conventional byte-sequencing and TWIS slave request handlers
+must retain ownership of those buffers and bus transitions.
+The shared SPI/TWI peripheral is not arbitrated across drivers
+by this new API; the application must respect instance ownership.
+
+The standalone nRF52832 BLYST-NANO-DK PeiTwiDemo uses BUT1 to
+start a one-byte TWIM1 write to a nonpopulated address over PPI.
+ERROR triggers STOP and physical LED1, and STOPPED toggles RGB
+blue. A slave is not needed to exercise the error path, but the
+SDA and SCL pins need proper I2C pull-ups; internal pull-ups
+may be insufficient at 100 kHz. Neither the LEDs nor the
+setup status demonstrate successful I2C data transfer. Source
+and API regression checks are registered with tests/pei/run.py.
+No target MCU build or board result has yet been confirmed.
 
 ## Completion criteria before nRF53
 

@@ -423,6 +423,34 @@ PeiSpiDemo exercises BUT1 -> SPIM2 START, END -> STOP and LED1,
 STOPPED -> RGB blue, without any slave peripheral. Target compilation
 and hardware validation remain pending.
 
+### nRF52 TWI/TWIM/TWIS event sources and prepared TWIM task destinations
+
+The existing I2C HAL now exposes the actual legacy TWI byte events,
+TWIM EasyDMA transfer events, and TWIS slave READ/WRITE/transfer-state
+events through C and C++ PeiDev_t calls. The configured I2C mode
+determines which hardware event register may be bound; shared
+serial peripheral base addresses are not interchangeable modes.
+
+TWIM STARTRX/STARTTX/STOP/SUSPEND/RESUME are hardware PEI
+destinations only after I2CPreparePeiTransfer() reserves the
+ordinary I2C busy flag and stages one TX or RX buffer. TX is copied
+into the driver's existing private 64-byte buffer, and RX is
+caller-owned RAM. The driver configures one seven-bit address and
+LASTTX_STOP or LASTRX_STOP hardware shortcut, but no START task.
+ERROR can connect directly to STOP over PPI on NACK; no CPU
+event-forwarding ISR is introduced. All routes must be disabled
+and removed before I2CReleasePeiTransfer(), which stops the bus
+and releases DMA pointers and the busy flag.
+
+The driver retains the byte-at-a-time legacy TWI ISR and the
+TWIS READ/WRITE interrupt flow that prepares its RX/TX buffers.
+Those task destinations are not yet exposed through PEI.
+PeiTwiDemo (nRF52832 BLYST-NANO-DK) is an optional no-target
+NACK recovery test: BUT1 starts TWIM1 via PPI; ERROR triggers
+STOP and LED1, and STOPPED triggers RGB blue. SDA/SCL need
+reliable pull-up resistors. MCU build and hardware validation
+are pending.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI

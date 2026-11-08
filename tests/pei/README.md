@@ -197,6 +197,36 @@ uses BUT1 -> SPIM2 START -> END/STOP -> LED1/RGB blue over PPI,
 with no external SPI slave. MCU build and board validation remain
 pending.
 
+## nRF52 TWI/TWIM/TWIS PEI
+
+I2CDev_t and I2C expose the initialized hardware TWI, TWIM or
+TWIS event registers as PEI sources. TWIM STARTTX, STARTRX,
+STOP, SUSPEND and RESUME task destinations require a single
+prepared transaction. Initialize a 7-bit, noninterrupt EasyDMA
+master and call I2CPreparePeiTransfer() with exactly one
+nonempty TX or RX block. TX is copied into the existing private
+64-byte driver buffer; caller-owned RX memory must stay valid
+through STOPPED and release. The generic I2C busy flag is held
+while the PEI transaction is prepared. Connect an ERROR->STOP
+route for error recovery; the last-byte STOP shortcut handles
+successful transfer completion.
+
+The no-target PeiTwiDemo at
+ARM/Nordic/nRF52/nRF52832/exemples/PeiTwiDemo/ioc uses
+BUT1 -> TWIM1 STARTTX and expects a NACK from an unpopulated
+address. ERROR -> STOP + discrete LED1; STOPPED -> RGB blue.
+Internal pull-ups are configured, but external 4.7K resistors
+on SDA and SCL to VDD are recommended for reliable I2C timing.
+Press only once per prepared transaction. The setup status
+is not a hardware PASS or proof of correct I2C data.
+
+Legacy TWI's bytewise data and TWIS PREPARERX/PREPARETX
+state machine remain with their existing interrupt handlers;
+only their event sources are enabled for PEI. The host runner
+adds check_i2c_pei_contract.py, C/C++ compile checks, and
+non-PEI linker-map cases. MCU compilation, real slave
+communication and cross-variant validation remain outstanding.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or
