@@ -330,7 +330,8 @@ bool PeiDisconnectTask(PeiDev_t *pPei, PeiEvent_t Evt, PeiEndpoint_t Task)
 		pPei->Routes[i].Task = 0U;
 		return true;
 	}
-	return false;
+	// Already removed is a successful idempotent cleanup.
+	return true;
 }
 
 bool PeiEnableEvent(PeiDev_t *pPei, PeiEvent_t Evt)
