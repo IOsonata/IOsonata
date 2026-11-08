@@ -296,6 +296,42 @@ Hardware outcomes, installed Nordic CMSIS builds,
 and every unsupported PPI/QDEC/stack permutation
 remain outstanding.
 
+## WDT, POWER/CLOCK and PPI channel groups (nRF52)
+
+WDT's initialized hardware TIMEOUT event can be bound through the
+existing WdtDev_t / Wdt C/C++ PEI interface. No WDT START or RR[n]
+feed tasks are exposed. TIMEOUT is immediately followed by reset
+and is not a useful live LED demonstration.
+
+pei_nrf52_power_clock.h binds passive nRF52 POWER and CLOCK
+hardware events. It never configures POF thresholds, oscillators,
+USB IRQs, system power modes or MPSL/SoftDevice clocks. It is
+event-only by design; source availability depends on the MCU.
+
+The caller owns PeiGroup_t, initialized to zero. Create with
+PeiGroupInit() or Pei::GroupInit(); use PeiGroupAddEvent() while
+the event's hardware routes are disabled to collect every existing
+task route of that event. PeiGroupEnableTask() and
+PeiGroupDisableTask() return actual PPI task addresses and are
+legal PEI destinations. Group membership is removed when a
+route is disconnected, so a reused PPI channel cannot remain
+under an old group's EN/DIS control. Self-DIS is permitted for
+one-shot operation. SoftDevice uses its PPI group assignment
+SVC; fixed channels are not used.
+
+PeiGroupDemo is in:
+ARM/Nordic/nRF52/nRF52832/exemples/PeiGroupDemo/ioc
+
+On the BLYST-NANO-DK, press BUT2 before BUT1 (nothing), then
+BUT1 to arm and BUT2 to toggle the discrete LED1. The BUT2
+source also disables its own group in hardware. Each additional
+BUT2 press does nothing until BUT1 re-arms the group.
+
+tests/pei/run.py now runs the PPI group host cases along with
+check_system_pei_contract.py and C/C++ interface compilation.
+All changes are source and test implementations; the target
+MCU build and BLYST-NANO-DK hardware tests remain pending.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or

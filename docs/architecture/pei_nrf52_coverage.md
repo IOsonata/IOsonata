@@ -55,14 +55,14 @@ Status keys:
 | QDEC / `qdec_nrfx.cpp` | SAMPLERDY, REPORTRDY, ACCOF, DBLRDY, STOPPED implemented on nRF52 | START/STOP after initialized QDEC ENABLE; READCLRACC remains IRQ-owned | **Initial endpoint added:** C/C++ PEI APIs, preserved position folding, PeiQdecDemo button sampling/stop indicators and source/link checks. MCU build/hardware pending |
 | RNG / `rng_nrfx.cpp` | VALRDY implemented on nRF52 | START/STOP with exclusive entropy-driver lock; active SoftDevice/SDC refused | **Initial endpoint added:** C/C++ PEI API, DevIntrf ownership lock, PeiRngDemo event-to-STOP indication and source/link checks. No entropy byte export. MCU build/hardware pending |
 | TEMP / `temp_nrf5x.cpp` | DATARDY implemented on nRF52 | START/STOP after TempnRF5x initialization and Enable | **Initial endpoint added:** C PEI routing and TempnRF5x C++ wrappers, existing one-shot sensor ISR retained, PeiTempDemo DATARDY->STOP/LED and source/link checks. MCU build/hardware pending |
-| WDT / `wdt_nrfx.cpp` | TIMEOUT | START | **Restricted**; START cannot be undone without reset on nRF52 |
-| POWER / CLOCK / `power_clock_irq_nrf52.cpp` | Hardware power and clock events | Supported clock start/stop tasks | **Restricted**; shared clock ownership and power-state transitions |
+| WDT / `wdt_nrfx.cpp` | TIMEOUT bound through the configured Wdt C/C++ HAL | None; START is irreversible, RR[n] reload registers are not PPI tasks | **Source-only implemented:** WdtEnablePeiEvent/WdtDisablePeiEvent, owner checks, no unexpected PPI START/reload, no-PEI link regression. Hardware validation pending; TIMEOUT follows by reset in two LFCLK cycles |
+| POWER / CLOCK / `pei_nrf52.cpp` | POWER POFWARN/SLEEPENTER/SLEEPEXIT, optional USB VBUS events; CLOCK HFCLKSTARTED/LFCLKSTARTED/DONE/CTTO, optional CTSTARTED/CTSTOPPED | None; no PPI clock stop/start or power latency writes in the shared owner | **Passive sources implemented:** PeiNrf52BindPowerEvent/BindClockEvent and matching unbind calls; status and board validation pending. Existing POWER_CLOCK ISR, USB and MPSL/SoftDevice remain owners |
 | NFCT / `nfct_nrfx.cpp` | Field, frame, TX/RX and other device-supported events | Supported NFCT tasks | **Restricted**; nrfx NFCT stack owns its configured transfer state |
 | USBD / `usb_ctrlr_nrf52.cpp` | SOF, endpoint, bus and USB state events | Endpoint/task triggers where actually supported | **Restricted**; only nRF52820/33/40, with endpoint-buffer ownership |
 | QSPI / `qspi_nrfx.cpp` | READY and supported device events | ACTIVATE, DEACTIVATE, transfer/erase tasks | **Restricted**; nRF52840 only; never infer DMA/command descriptor from a PEI link |
 | RADIO / AAR / CCM / ECB | Radio, cryptography and packet processing events actually exposed in the selected MCU | Supported hardware tasks | **Restricted**; leave SoftDevice/SDC resources untouched. Only allow explicitly standalone-owned operations |
 | MWU and other supported event-generating blocks | Hardware events present on the selected MCU | Real hardware task registers, if any | **Pending**; do not invent tasks for event-only blocks |
-| PPI groups and fixed channels / `pei_nrf52.cpp` | Hardware group/channel events where present | CHG[n].EN/DIS and fixed-channel functionality | **Pending**; this belongs inside the PEI routing backend, not a peripheral-specific data-transfer driver |
+| PPI channel groups and fixed channels / `pei_nrf52.cpp` | Groups are hardware task destinations; no invented group event sources | CHG[n].EN/DIS implemented with caller-owned PeiGroup_t; fixed channels 20-31 not reconfigurable or dynamically allocated | **Initial group support:** reserve SoftDevice/SDC groups; add/remove existing owned event routes only while disabled; stale-handle and external-task safeguards, cleanup on disconnect, host group tests and PeiGroupDemo. MCU build/hardware pending; fixed channel routing remains intentionally excluded |
 
 There is no need to give NVMC, FICR, UICR, plain GPIO registers or
 software-only interrupt sources invented PEI endpoints. Include a peripheral
@@ -478,6 +478,62 @@ or tested on actual hardware in this session. Full QDEC
 encoder transitions, TEMP repeated one-shot lifecycle,
 RNG ownership under every stack variant, and cross-MCU
 testing remain outstanding.
+
+## WDT, POWER/CLOCK and PPI channel groups (nRF52)
+
+WDT exposes one PEI event source, TIMEOUT, through the existing
+WdtDev_t C HAL and Wdt C++ wrapper. WdtInit() must own the
+initialized peripheral. No WDT START task is exposed: once the
+watchdog is started on nRF52, it cannot stop before reset. Its
+RR[n] reload registers are not task endpoints, and PEI must
+not synthesize an automatic watchdog feed. TIMEOUT happens only
+two LFCLK periods before reset, so an LED toggle or interrupt
+there is not a reliable recovery or acceptance mechanism.
+
+POWER and CLOCK event sources live in the existing nRF52 PEI
+backend, through pei_nrf52_power_clock.h. POWER exports the
+common POFWARN, SLEEPENTER and SLEEPEXIT events and VBUS
+USBDETECTED/USBREMOVED/USBPWRRDY only when supported by
+the target CMSIS macros. CLOCK exports HFCLKSTARTED,
+LFCLKSTARTED, DONE and CTTO; CTSTARTED/CTSTOPPED are also
+conditional on the selected Nordic device. These functions
+bind passive endpoints without writing POWER/CLOCK configuration,
+clearing events, installing any IRQ or changing LF/HF clocks.
+The existing shared POWER_CLOCK IRQ, USB callbacks, MPSL and
+SoftDevice continue to own clock requests and system power state.
+CLOCK START/STOP and POWER CONSTLAT/LOWPWR are therefore
+**not** exposed as general PEI task destinations.
+
+PPI channel groups are part of the nRF52 PEI backend, not
+a new peripheral HAL. The caller owns a stable PeiGroup_t;
+PeiGroupInit() allocates an available group, excluding
+SoftDevice groups using Nordic's reserved mask and conservatively
+excluding groups 4/5 for SDC builds. GroupAddEvent() adds
+all *currently connected* task routes belonging to a logical
+PeiEvent_t, only when those routes are disabled. The group
+returns actual PPI TASKS_CHG[n].EN/DIS task addresses and
+can be driven by GPIO, TIMER or any valid event. Self-EN
+feedback is refused; self-DIS is allowed for one-shot groups.
+Existing PEI routes cannot belong to multiple groups. PPI
+channels are automatically removed from group membership
+during PeiDisconnect(), before being released for reuse.
+PeiGroupDeinit() refuses to free a group with enabled members
+or any configured PPI task destination targeting its EN/DIS
+tasks. An active SoftDevice uses sd_ppi_group_assign rather
+than direct CHG writes. Channels 20-31 remain fixed hardware
+routes and are intentionally excluded from the configurable
+PEI allocator.
+
+PeiGroupDemo on BLYST-NANO-DK is a pure hardware one-shot.
+BUT1 drives PPI group EN. BUT2 has two group-owned routes:
+LED1.TOGGLE and the same group's DIS. Pressing BUT2 before
+BUT1 does nothing; after BUT1, pressing BUT2 toggles LED1
+once and disables both routes. Further BUT2 presses do
+nothing until BUT1 re-arms. This avoids a duplicate event
+endpoint, which the generic PeiDev_t matrix intentionally
+rejects. No external hardware, UART or timer is needed.
+This demo and its C/C++ host group tests have not yet been
+run on the board or compiled against the target MDK here.
 
 ## Completion criteria before nRF53
 

@@ -509,6 +509,38 @@ sensors or encoders; each has an Eclipse managed project.
 Source checks are present, while Nordic MDK compilation
 and on-board results remain pending.
 
+### WDT, POWER/CLOCK and nRF52 PPI groups
+
+The initialized Wdt HAL exposes TIMEOUT as a PEI source
+without exposing irreversible WDT START or any watchdog reload
+operation as a PPI destination. A watchdog timeout occurs two
+LFCLK cycles before reset and is not a mechanism for recovery.
+
+The nRF52 PEI backend also exposes hardware POWER and CLOCK
+event endpoints through pei_nrf52_power_clock.h. It only binds
+sources: POFWARN, SLEEPENTER, SLEEPEXIT and supported USB VBUS
+events; HFCLKSTARTED, LFCLKSTARTED, calibration DONE/CTTO
+and supported calibration timer events. It does not change
+power, clock, IRQ or SoftDevice/MPSL resource ownership.
+
+PeiGroup_t represents an nRF52 PPI channel group with an opaque
+handle and stable caller-owned storage. PeiGroupInit,
+PeiGroupAddEvent/RemoveEvent, PeiGroupEnableTask/
+DisableTask and PeiGroupDeinit permit existing, disabled PEI
+routes to be grouped under TASKS_CHG[n].EN/DIS. Self-DIS
+creates a hardware one-shot, whereas self-EN is refused.
+Groups skip externally held resources, SoftDevice reservations
+and conservatively SDC groups 4/5. A route disconnect removes
+group membership before the channel becomes reusable; group
+destruction requires no enabled members or external routes
+targeting the group tasks.
+
+PeiGroupDemo on BLYST-NANO-DK: BUT1 -> group.EN; BUT2 ->
+LED1.TOGGLE and group.DIS, where both BUT2 links are group
+members. One BUT2 press after each BUT1 toggles LED1; subsequent
+BUT2 presses do nothing until rearmed. No CPU ISR forwards events.
+Target MCU build and physical tests remain pending.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI
