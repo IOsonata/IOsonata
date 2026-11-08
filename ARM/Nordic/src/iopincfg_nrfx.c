@@ -1371,15 +1371,16 @@ static int IOPinFindAvailInterrupt(void)
 
 	for (i = 0; i < IOPIN_MAX_INT; i++)
 	{
-		if (s_GpIOSenseEvt[i].Sense != IOPINSENSE_DISABLE ||
-			s_GpIOSenseEvt[i].SensEvtCB != NULL ||
+		if (s_GpIOSenseEvt[i].SensEvtCB != NULL ||
 			((s_GpIOTaskUsed | s_GpIOEventUsed) & (1UL << i)) != 0U)
 		{
 			continue;
 		}
 #if defined(IOPIN_NRF52_GPIOTE)
-		// Respect channels configured directly by another subsystem.
-		if (NRF_GPIOTE->CONFIG[i] != 0U)
+		// Reserve even a NULL-callback interrupt, and respect channels
+		// configured directly by another subsystem.
+		if (s_GpIOSenseEvt[i].Sense != IOPINSENSE_DISABLE ||
+			NRF_GPIOTE->CONFIG[i] != 0U)
 		{
 			continue;
 		}
@@ -1759,17 +1760,26 @@ void __WEAK GPIOTE_IRQHandler(void)
 
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
 	{
-		// An ordinary GPIOTE IRQ must not acknowledge PEI-owned events.
+		// An nRF52 conventional IRQ does not acknowledge PEI-owned
+		// events. Keep the older handler for non-nRF52 targets.
+#if defined(IOPIN_NRF52_GPIOTE)
 		if (s_pGpIOSenseEvt[i].Sense != IOPINSENSE_DISABLE &&
 			NRF_GPIOTE->EVENTS_IN[i])
+#else
+		if (NRF_GPIOTE->EVENTS_IN[i])
+#endif
 		{
 			if (s_pGpIOSenseEvt[i].SensEvtCB)
 				s_pGpIOSenseEvt[i].SensEvtCB(i, s_pGpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE->EVENTS_IN[i] = 0;
 		}
 	}
+#if defined(IOPIN_NRF52_GPIOTE)
 	if (s_pGpIOSenseEvt[IOPIN_MAX_INT].Sense != IOPINSENSE_DISABLE &&
 		NRF_GPIOTE->EVENTS_PORT)
+#else
+	if (NRF_GPIOTE->EVENTS_PORT)
+#endif
 	{
 		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
 			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
