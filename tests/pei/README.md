@@ -258,79 +258,37 @@ C/C++ compile-only clients and no-PEI link checks are added
 to tests/pei/run.py. An on-board result and a target MCU
 build are still pending.
 
-## nRF52 QDEC, TEMP and RNG PEI hardware chains
+## QDEC continuous sampling, PPI groups and excluded one-shot wrappers
 
-QdecDev_t and Qdec expose hardware SAMPLERDY/REPORTRDY/
-ACCOF/DBLRDY/STOPPED and START/STOP. Call
-QdecPreparePeiStart() after QdecInit() to enable hardware
-without starting it. The QDEC IRQ retains READCLRACC and
-position folding. On BLYST-NANO-DK, PeiQdecDemo connects
-BUT1->START and BUT2->STOP; SAMPLERDY toggles discrete
-LED1 and STOPPED toggles RGB blue. The buttons are only
-stand-ins for phase input and do not validate an encoder.
+QdecDev_t and Qdec expose SAMPLERDY, REPORTRDY, ACCOF, DBLRDY,
+STOPPED and hardware START/STOP. QdecPreparePeiStart() enables
+the configured peripheral, leaving its accumulated position and
+READCLRACC with the original QDEC ISR. The BLYST-NANO-DK
+PeiQdecDemo tests hardware START/STOP and sampling events,
+not quadrature motion accuracy.
 
-TempnRF5x uses the existing one-shot sensor and DATARDY
-interrupt handler. C PEI functions are defined in
-ARM/Nordic/include/temp_nrf_pei.h, with C++ forwarding
-methods on TempnRF5x. PeiTempDemo connects BUT1->START
-and DATARDY->STOP + discrete LED1. The hardware sensor
-does not require an external component.
+The generic PPI group backend supports repeated hardware
+enable/disable of owned routes with TASKS_CHG[n].EN/DIS.
+PeiGroupDemo exercises hardware arm/fire/disarm. The C/C++
+group APIs and mock register model are exercised by
+tests/pei/run.py and check_system_pei_contract.py.
 
-The existing RNG entropy driver shares its peripheral
-with the nRF52 SoftDevice and potentially SDC. C PEI
-functions in ARM/Nordic/include/rng_nrf_pei.h and C++
-methods on RngPeriphIntrf use the original DeviceIntrf
-busy flag, refusing runtime-enabled SoftDevice and all
-NRFXLIB_SDC builds. PeiRngDemo connects BUT1->RNG.START
-and VALRDY->RNG.STOP + discrete LED1. This test does not
-export random bytes or establish entropy quality.
+WDT, one-shot TEMP, RNG and passive POWER/CLOCK PEI interfaces
+have been **removed**. Their prior APIs did not offer meaningful
+repetitive MCU-free operation. Ordinary Wdt, TempnRF5x,
+CryptoRngNrf and platform power/clock drivers remain intact,
+including the independent TEMP interrupt fix.
 
-The Eclipse managed projects are:
-ARM/Nordic/nRF52/nRF52832/exemples/PeiQdecDemo/ioc,
-ARM/Nordic/nRF52/nRF52832/exemples/PeiTempDemo/ioc,
-and ARM/Nordic/nRF52/nRF52832/exemples/PeiRngDemo/ioc.
+check_misc_pei_contract.py now verifies both QDEC sampling
+integration and exclusion of one-shot wrappers. C/C++ API
+smoke tests and non-PEI linker map regressions no longer
+reference the removed interfaces. PeiTempDemo and
+PeiRngDemo managed projects have been deleted.
 
-The host runner includes check_misc_pei_contract.py,
-C/C++ header clients and no-PEI linker regressions.
-Hardware outcomes, installed Nordic CMSIS builds,
-and every unsupported PPI/QDEC/stack permutation
-remain outstanding.
-
-## WDT, POWER/CLOCK and PPI channel groups (nRF52)
-
-WDT's initialized hardware TIMEOUT event can be bound through the
-existing WdtDev_t / Wdt C/C++ PEI interface. No WDT START or RR[n]
-feed tasks are exposed. TIMEOUT is immediately followed by reset
-and is not a useful live LED demonstration.
-
-pei_nrf52_power_clock.h binds passive nRF52 POWER and CLOCK
-hardware events. It never configures POF thresholds, oscillators,
-USB IRQs, system power modes or MPSL/SoftDevice clocks. It is
-event-only by design; source availability depends on the MCU.
-
-The caller owns PeiGroup_t, initialized to zero. Create with
-PeiGroupInit() or Pei::GroupInit(); use PeiGroupAddEvent() while
-the event's hardware routes are disabled to collect every existing
-task route of that event. PeiGroupEnableTask() and
-PeiGroupDisableTask() return actual PPI task addresses and are
-legal PEI destinations. Group membership is removed when a
-route is disconnected, so a reused PPI channel cannot remain
-under an old group's EN/DIS control. Self-DIS is permitted for
-one-shot operation. SoftDevice uses its PPI group assignment
-SVC; fixed channels are not used.
-
-PeiGroupDemo is in:
-ARM/Nordic/nRF52/nRF52832/exemples/PeiGroupDemo/ioc
-
-On the BLYST-NANO-DK, press BUT2 before BUT1 (nothing), then
-BUT1 to arm and BUT2 to toggle the discrete LED1. The BUT2
-source also disables its own group in hardware. Each additional
-BUT2 press does nothing until BUT1 re-arms the group.
-
-tests/pei/run.py now runs the PPI group host cases along with
-check_system_pei_contract.py and C/C++ interface compilation.
-All changes are source and test implementations; the target
-MCU build and BLYST-NANO-DK hardware tests remain pending.
+PDM/I2S and serial EasyDMA PEI support is provisional;
+existing one-shot test projects do not establish repeated
+autonomous operation. Verify an actual periodic hardware
+sequence and buffer reuse before accepting those APIs.
 
 ## Non-PEI firmware link isolation
 

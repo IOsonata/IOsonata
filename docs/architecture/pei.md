@@ -479,67 +479,39 @@ and TXSTOPPED -> RGB blue at 1 Mbaud, without semihosting,
 a receiving UART device or event-forwarding ISR. Hardware
 and MCU build acceptance remain pending.
 
-### nRF52 QDEC, TEMP and RNG hardware PEI routes
+### nRF52 QDEC continuous sampling and PPI groups
 
-The existing QDEC C/C++ HAL now exposes SAMPLERDY, REPORTRDY,
-ACCOF, DBLRDY, STOPPED and hardware START/STOP. A caller can
-enable QDEC hardware without starting it by invoking
-QdecPreparePeiStart(). The driver continues owning READCLRACC
-and accumulation in its normal interrupt handler. PEI cannot
-clear the quadrature counts.
+QDEC can sample continuously with hardware START/STOP and expose
+SAMPLERDY, REPORTRDY, ACCOF, DBLRDY and STOPPED. Its IRQ keeps
+control of READCLRACC and accumulated position/error data.
+QdecPreparePeiStart() allows a hardware source to start the
+already-configured sampling engine.
 
-The existing TempnRF5x one-shot sensor exposes DATARDY and
-hardware START/STOP with no new driver, through both C PEI
-functions and C++ class methods. The normal temperature
-callback and interrupt stop the measurement and collect the
-temperature. Init clears old DATARDY, and Disable uses
-INTENCLR instead of writing zero to INTENSET.
+The PEI PPI-group mechanism can enable and disable existing
+owned routes through TASKS_CHG[n].EN/DIS, allowing repeated
+arming and conditional routing without CPU intervention for
+every event. The PeiGroupDemo illustrates the hardware
+arm/fire/disarm mechanism. Group lifecycle checks protect
+channel ownership, external task targets and SoftDevice/SDC
+resource reservations.
 
-RNG VALRDY and hardware START/STOP are exposed only under
-exclusive use of the existing RngPeriphIntrf. Preparation
-takes the generic DeviceIntrf busy lock and enables
-bias correction. The normal random-byte API is excluded
-while PEI owns the RNG peripheral. An active SoftDevice,
-or any NRFXLIB_SDC build, is not permitted. No random
-bytes leave the hardware through PEI.
+### Deliberately excluded one-shot peripheral wrappers
 
-Standalone nRF52832 demos PeiQdecDemo, PeiTempDemo and
-PeiRngDemo demonstrate hardware routing without external
-sensors or encoders; each has an Eclipse managed project.
-Source checks are present, while Nordic MDK compilation
-and on-board results remain pending.
+WDT/TEMP/RNG PEI wrappers and passive POWER/CLOCK PEI
+event bindings were removed after a use-case audit. Watchdog
+TIMEOUT already causes reset; TEMP one-shot START/DATARDY
+still needs software data processing; RNG START/VALRDY/STOP
+does not export entropy; and passive POWER/CLOCK notifications
+do not demonstrate useful recurring automation. Normal
+watchdog, temperature, entropy and platform power/clock
+drivers remain. The TEMP INTENCLR/DATARDY correctness fix
+is retained independently of PEI.
 
-### WDT, POWER/CLOCK and nRF52 PPI groups
-
-The initialized Wdt HAL exposes TIMEOUT as a PEI source
-without exposing irreversible WDT START or any watchdog reload
-operation as a PPI destination. A watchdog timeout occurs two
-LFCLK cycles before reset and is not a mechanism for recovery.
-
-The nRF52 PEI backend also exposes hardware POWER and CLOCK
-event endpoints through pei_nrf52_power_clock.h. It only binds
-sources: POFWARN, SLEEPENTER, SLEEPEXIT and supported USB VBUS
-events; HFCLKSTARTED, LFCLKSTARTED, calibration DONE/CTTO
-and supported calibration timer events. It does not change
-power, clock, IRQ or SoftDevice/MPSL resource ownership.
-
-PeiGroup_t represents an nRF52 PPI channel group with an opaque
-handle and stable caller-owned storage. PeiGroupInit,
-PeiGroupAddEvent/RemoveEvent, PeiGroupEnableTask/
-DisableTask and PeiGroupDeinit permit existing, disabled PEI
-routes to be grouped under TASKS_CHG[n].EN/DIS. Self-DIS
-creates a hardware one-shot, whereas self-EN is refused.
-Groups skip externally held resources, SoftDevice reservations
-and conservatively SDC groups 4/5. A route disconnect removes
-group membership before the channel becomes reusable; group
-destruction requires no enabled members or external routes
-targeting the group tasks.
-
-PeiGroupDemo on BLYST-NANO-DK: BUT1 -> group.EN; BUT2 ->
-LED1.TOGGLE and group.DIS, where both BUT2 links are group
-members. One BUT2 press after each BUT1 toggles LED1; subsequent
-BUT2 presses do nothing until rearmed. No CPU ISR forwards events.
-Target MCU build and physical tests remain pending.
+PDM, I2S, SPI/SPIM, TWI/TWIM and UART/UARTE PEI code is
+provisional until a repeatable hardware-driven sequence,
+including safe DMA buffer reuse and recovery, is verified.
+A single button-driven transfer or STOP event is insufficient
+for acceptance in release 0.14.
 
 ## nRF52 PPI driver (0.14)
 
