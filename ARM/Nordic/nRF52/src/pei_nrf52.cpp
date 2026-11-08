@@ -57,6 +57,9 @@ typedef char PeiNrf52ChannelCountCheck[
 #define PEI_NRF52_TOKEN_BITS		5U
 #define PEI_NRF52_TOKEN_INDEX		31UL
 #define PEI_NRF52_TOKEN_MAX_GEN	0x07FFFFFFUL
+#define PEI_NRF52_GROUP_TOKEN_BITS	3U
+#define PEI_NRF52_GROUP_TOKEN_INDEX	7UL
+#define PEI_NRF52_GROUP_TOKEN_MAX_GEN	0x1FFFFFFFUL
 
 typedef struct {
 	PeiConn_t *pOwner;
@@ -65,6 +68,14 @@ typedef struct {
 
 static PeiNrf52Slot_t s_PeiSlot[PEI_NRF52_CHANNEL_COUNT];
 static uint32_t s_PeiGeneration;
+
+typedef struct {
+	PeiGroup_t *pOwner;
+	uint32_t Token;
+} PeiNrf52GroupSlot_t;
+
+static PeiNrf52GroupSlot_t s_PeiGroupSlot[PEI_NRF52_GROUP_COUNT];
+static uint32_t s_PeiGroupGeneration;
 
 // Event registers occupy 0x100-0x1FC, task registers 0x000-0x0FC.
 // PPI endpoints must address real nRF52 peripheral registers, not RAM.
@@ -105,6 +116,47 @@ static uint32_t PeiNrf52AvailableMask(void)
 #endif
 
 	return mask;
+}
+
+// Reserve SoftDevice groups at build time even before the stack starts.
+// SDC/MPSL do not publish an application group mask, so 4/5 are
+// conservatively kept out of its group allocator as well. Applications
+// may reserve additional groups using the standard Nordic macros.
+static uint32_t PeiNrf52AvailableGroupMask(void)
+{
+	uint32_t mask = (1UL << PEI_NRF52_GROUP_COUNT) - 1UL;
+
+#if defined(SOFTDEVICE_PRESENT)
+	mask &= ~NRF_SOC_SD_PPI_GROUPS_SD_ENABLED_MSK;
+#elif defined(NRFXLIB_SDC)
+	mask &= ~((1UL << 4) | (1UL << 5));
+#endif
+#ifdef NRF_PPI_GROUPS_USED
+	mask &= ~(uint32_t)NRF_PPI_GROUPS_USED;
+#endif
+#ifdef NRFX_PPI_GROUPS_USED
+	mask &= ~(uint32_t)NRFX_PPI_GROUPS_USED;
+#endif
+	return mask;
+}
+
+static bool PeiNrf52GroupTaskInUse(int Group)
+{
+	uint32_t en;
+	uint32_t dis;
+	int i;
+
+	en = (uint32_t)(uintptr_t)&NRF_PPI->TASKS_CHG[Group].EN;
+	dis = (uint32_t)(uintptr_t)&NRF_PPI->TASKS_CHG[Group].DIS;
+	for (i = 0; i < PEI_NRF52_CHANNEL_COUNT; i++)
+	{
+		if (NRF_PPI->CH[i].TEP == en || NRF_PPI->CH[i].TEP == dis ||
+			NRF_PPI->FORK[i].TEP == en || NRF_PPI->FORK[i].TEP == dis)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 static bool PeiNrf52ChannelFree(int Chan)
@@ -198,6 +250,43 @@ static bool PeiNrf52ChannelDisable(int Chan)
 #endif
 	NRF_PPI->CHENCLR = bit;
 	return true;
+}
+
+// SoftDevice-active PPI group writes go through the SoC service, not
+// direct CHG registers; never call an SVC while PRIMASK is set.
+static bool PeiNrf52GroupAssign(int Group, uint32_t Mask)
+{
+#if defined(SOFTDEVICE_PRESENT)
+	if (PeiNrf52SdEnabled())
+	{
+		return sd_ppi_group_assign((uint8_t)Group, Mask) == 0U;
+	}
+#endif
+	NRF_PPI->CHG[Group] = Mask;
+	return true;
+}
+
+static int PeiNrf52OwnedGroup(const PeiGroup_t *pGroup)
+{
+	uint32_t idx;
+	int group;
+
+	if (pGroup == NULL || pGroup->Handle == 0U)
+	{
+		return -1;
+	}
+	idx = pGroup->Handle & PEI_NRF52_GROUP_TOKEN_INDEX;
+	if (idx == 0U || idx > PEI_NRF52_GROUP_COUNT)
+	{
+		return -1;
+	}
+	group = (int)idx - 1;
+	if (s_PeiGroupSlot[group].pOwner != pGroup ||
+		s_PeiGroupSlot[group].Token != pGroup->Handle)
+	{
+		return -1;
+	}
+	return group;
 }
 
 // A connection cannot be moved or copied: both its address and its opaque
@@ -337,6 +426,22 @@ void PeiDisconnect(PeiConn_t * const pConn)
 	if (!PeiNrf52ChannelDisable(chan))
 	{
 		return;
+	}
+	// A channel cannot stay in a group after its route is removed;
+	// otherwise a later group EN task could activate a reused channel.
+	// Refuse to release if a foreign owner changed group membership.
+	for (int i = 0; i < PEI_NRF52_GROUP_COUNT; i++)
+	{
+		uint32_t bit = 1UL << chan;
+
+		if ((NRF_PPI->CHG[i] & bit) != 0U)
+		{
+			if (s_PeiGroupSlot[i].pOwner == NULL ||
+				!PeiNrf52GroupAssign(i, NRF_PPI->CHG[i] & ~bit))
+			{
+				return;
+			}
+		}
 	}
 	if (!PeiNrf52Assign(chan, 0U, 0U))
 	{
@@ -677,4 +782,194 @@ bool PeiNrf52UnbindClockEvent(PeiDev_t *pPei, PeiEvent_t Evt)
 		}
 	}
 	return false;
+}
+
+
+// Group membership is based on owned, already-connected PEI matrix
+// routes. A source with multiple tasks contributes all of its routes.
+// The caller must configure membership while those channels are off.
+bool PeiGroupInit(PeiGroup_t *pGroup, int DevNo)
+{
+	uint32_t state;
+	uint32_t allowed;
+	uint32_t gen;
+	uint32_t token;
+	int i;
+	int group;
+
+	if (pGroup == NULL || pGroup->Handle != 0U || DevNo != 0)
+	{
+		return false;
+	}
+	allowed = PeiNrf52AvailableGroupMask();
+	group = -1;
+	state = DisableInterrupt();
+	for (i = 0; i < PEI_NRF52_GROUP_COUNT; i++)
+	{
+		if ((allowed & (1UL << i)) != 0U &&
+			s_PeiGroupSlot[i].pOwner == NULL &&
+			NRF_PPI->CHG[i] == 0U &&
+			!PeiNrf52GroupTaskInUse(i))
+		{
+			group = i;
+			break;
+		}
+	}
+	if (group >= 0)
+	{
+		s_PeiGroupGeneration =
+			(s_PeiGroupGeneration + 1U) & PEI_NRF52_GROUP_TOKEN_MAX_GEN;
+		if (s_PeiGroupGeneration == 0U)
+		{
+			s_PeiGroupGeneration = 1U;
+		}
+		gen = s_PeiGroupGeneration;
+		token = (gen << PEI_NRF52_GROUP_TOKEN_BITS) |
+			(uint32_t)(group + 1);
+		s_PeiGroupSlot[group].pOwner = pGroup;
+		s_PeiGroupSlot[group].Token = token;
+		pGroup->Handle = token;
+	}
+	EnableInterrupt(state);
+	return group >= 0;
+}
+
+bool PeiGroupAddEvent(PeiGroup_t *pGroup, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+	uint32_t mask;
+	uint32_t bit;
+	uint32_t available;
+	int group;
+	int chan;
+	int i;
+	int g;
+	bool found;
+
+	group = PeiNrf52OwnedGroup(pGroup);
+	if (group < 0 || pPei == NULL || pPei->DevNo != 0 ||
+		PeiGetEventEndpoint(pPei, Evt) == 0U)
+	{
+		return false;
+	}
+	mask = NRF_PPI->CHG[group];
+	available = PeiNrf52AvailableMask();
+	found = false;
+	for (i = 0; i < PEI_MAX_CONNECTIONS; i++)
+	{
+		if (pPei->Routes[i].Token != Evt ||
+			pPei->Routes[i].Conn.Handle == 0U)
+		{
+			continue;
+		}
+		chan = PeiNrf52OwnedChannel(&pPei->Routes[i].Conn);
+		if (chan < 0)
+		{
+			return false;
+		}
+		bit = 1UL << chan;
+		if ((available & bit) == 0U ||
+			(NRF_PPI->CHEN & bit) != 0U ||
+			NRF_PPI->CH[chan].TEP ==
+				(uint32_t)(uintptr_t)&NRF_PPI->TASKS_CHG[group].EN ||
+			NRF_PPI->CH[chan].TEP ==
+				(uint32_t)(uintptr_t)&NRF_PPI->TASKS_CHG[group].DIS)
+		{
+			return false;
+		}
+		for (g = 0; g < PEI_NRF52_GROUP_COUNT; g++)
+		{
+			if (g != group && (NRF_PPI->CHG[g] & bit) != 0U)
+			{
+				return false;
+			}
+		}
+		mask |= bit;
+		found = true;
+	}
+	if (!found)
+	{
+		return false;
+	}
+	return PeiNrf52GroupAssign(group, mask);
+}
+
+bool PeiGroupRemoveEvent(PeiGroup_t *pGroup, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+	uint32_t mask;
+	uint32_t remove;
+	int group;
+	int chan;
+	int i;
+
+	group = PeiNrf52OwnedGroup(pGroup);
+	if (group < 0 || pPei == NULL || pPei->DevNo != 0)
+	{
+		return false;
+	}
+	mask = NRF_PPI->CHG[group];
+	remove = 0U;
+	for (i = 0; i < PEI_MAX_CONNECTIONS; i++)
+	{
+		if (pPei->Routes[i].Token != Evt ||
+			pPei->Routes[i].Conn.Handle == 0U)
+		{
+			continue;
+		}
+		chan = PeiNrf52OwnedChannel(&pPei->Routes[i].Conn);
+		if (chan < 0)
+		{
+			return false;
+		}
+		remove |= 1UL << chan;
+	}
+	if ((mask & remove) == 0U ||
+		(NRF_PPI->CHEN & (mask & remove)) != 0U)
+	{
+		return false;
+	}
+	return PeiNrf52GroupAssign(group, mask & ~remove);
+}
+
+PeiEndpoint_t PeiGroupEnableTask(const PeiGroup_t *pGroup)
+{
+	int group;
+
+	group = PeiNrf52OwnedGroup(pGroup);
+	return group >= 0 ?
+		(PeiEndpoint_t)&NRF_PPI->TASKS_CHG[group].EN : 0U;
+}
+
+PeiEndpoint_t PeiGroupDisableTask(const PeiGroup_t *pGroup)
+{
+	int group;
+
+	group = PeiNrf52OwnedGroup(pGroup);
+	return group >= 0 ?
+		(PeiEndpoint_t)&NRF_PPI->TASKS_CHG[group].DIS : 0U;
+}
+
+bool PeiGroupDeinit(PeiGroup_t *pGroup)
+{
+	uint32_t state;
+	int group;
+
+	group = PeiNrf52OwnedGroup(pGroup);
+	if (group < 0 ||
+		(NRF_PPI->CHEN & NRF_PPI->CHG[group]) != 0U ||
+		PeiNrf52GroupTaskInUse(group))
+	{
+		return false;
+	}
+	if (!PeiNrf52GroupAssign(group, 0U))
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	s_PeiGroupSlot[group].pOwner = NULL;
+	s_PeiGroupSlot[group].Token = 0U;
+	pGroup->Handle = 0U;
+	EnableInterrupt(state);
+	return true;
 }
