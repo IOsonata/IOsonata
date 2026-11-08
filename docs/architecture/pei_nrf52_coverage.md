@@ -42,7 +42,7 @@ Status keys:
 | TIMER / `timer_hf_nrfx.cpp` | COMPARE[n] single-shot/continuous; other events pending | START, STOP, CLEAR; COUNT and CAPTURE[n] pending | **Mixed-CC TIMER3 hardware working** in both CC orders (user report, Nov 8); COUNT/CAPTURE endpoints pending |
 | RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Mixed-CC RTC0 hardware working** in both CC orders; **RTC2 working** with ISR-first order (user report, Nov 8); other sources and lifecycle pending |
 | GPIOTE / `iopincfg_nrfx.c` | IN[n] edge; shared PORT SENSE/DETECT source implemented on nRF52 | OUT[n] SET/CLEAR/TOGGLE through configured channels | **PeiPortDemo functional hardware PASS**; **PeiGpioteStress automatic hardware PASS** (Nov 8 screenshot: Status 2, Error 0, 64 exhaustion/reuse, 128 PPI-route, 128 IRQ rounds, IrqCount 13); BUT2 physical route confirmation and cross-variant tests pending |
-| SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED implemented; CALIBRATEDONE and limit events pending | START, SAMPLE, STOP implemented; CALIBRATEOFFSET pending | **Initial endpoint added**: single-conversion/no-IRQ driver-owned EasyDMA preparation, nRF52832 erratum 150 guard, C/C++ PEI routing; PeiSaadcDemo TIMER->SAMPLE / END->START hardware check pending |
+| SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED implemented; CALIBRATEDONE and limit events pending (limits reach the application through the driver callback) | START, SAMPLE, STOP implemented; CALIBRATEOFFSET pending | **Initial endpoint added**: single-conversion/no-IRQ driver-owned EasyDMA preparation, nRF52832 erratum 150 guard, C/C++ PEI routing; continuous mode with double-buffered blocks accepts SAMPLE only; PeiSaadcDemo TIMER->SAMPLE / END->START and AdcPeiDemo TIMER->SAMPLE hardware checks pending |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, UP, DOWN, CROSS and supported variants | START, STOP, SAMPLE where provided | **Pending**; only expose events/tasks from the configured comparator |
 | PWM / `pwm_nrfx.cpp` | SEQSTARTED[n], SEQEND[n], LOOPSDONE, PWMPERIODEND, STOPPED | SEQSTART[n], STOP and NEXTSTEP if implemented | **Pending**; requires valid sequence buffers and owner-safe start/stop |
 | PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED | START, STOP | **Pending**; must not bypass sample-buffer configuration |
@@ -146,6 +146,18 @@ No PEI callback/ISR forwards an event. To make periodic conversions,
 the new PeiSaadcDemo on nRF52832 connects TIMER3.COMPARE -> SAMPLE
 and SAADC.END -> START (rearm), with independent hardware LED tasks
 on each event. Both paths operate through PPI.
+
+Continuous mode with interrupt is the second accepted state. After
+StartConversion, when the SAADC internal timer is not used (several
+channels or Rate 0), the driver owns two EasyDMA blocks of
+BlockRounds() rounds; the END interrupt restarts the next block and
+moves the full one to the channel FIFOs. PEI may then connect any
+event to SAMPLE, each event converts one round. START and STOP are
+refused in this mode, they would work against the END interrupt.
+AdcPeiDemo (nRF52832 BLYST-NANO-DK and nRF52840 DK) connects
+TIMER3.COMPARE -> SAMPLE this way, with limits on one channel; it ran
+in an instruction set emulator with TIMER3, PPI and SAADC models, not
+yet on hardware.
 
 On nRF52832, SAADC acquisition time must be greater than 5 us
 before enabling PPI-driven START (Nordic erratum 150). The driver

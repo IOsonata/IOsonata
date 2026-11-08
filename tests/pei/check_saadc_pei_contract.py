@@ -19,7 +19,8 @@ def section(start, end):
 
 
 def main():
-    prepare = section("bool AdcnRF52::PreparePeiSampling()", "static PeiEndpoint_t")
+    prepare = section("bool AdcnRF52::PreparePeiSampling()",
+                      "static PeiEndpoint_t AdcNrf52PeiEventEndpoint(")
     ready = section("bool AdcnRF52::PeiSamplingReady() const",
                     "bool AdcnRF52::PreparePeiSampling()")
     event = section("static PeiEndpoint_t AdcNrf52PeiEventEndpoint(",
