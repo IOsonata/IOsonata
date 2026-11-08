@@ -339,6 +339,9 @@ static inline void TimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo) { 
  * @brief Configure a hardware-only Timer trigger and register its PEI
  * event source. Returns the allocated trigger index, or -1 on failure.
  * The C++ Timer::EnableTimerTrigger overload uses this same C function.
+ *
+ * On nRF52 RTC, the automatic COMPARE->CLEAR/STOP destination belongs
+ * to pPei. Enable that logical PEI event before executing RTC START.
  */
 static inline int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, uint32_t msPeriod, TIMER_TRIG_TYPE Type)

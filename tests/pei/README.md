@@ -48,12 +48,12 @@ binding functions; without a PEI application they cannot extract either
 archive member. Timer initialization leaves its optional PEI callbacks
 unset. Only a call to `TimerEnablePeiTrigger` or
 `TimerEnablePeiEvent` explicitly requests the MCU's PEI callbacks.
-HF Timer and RTC compare PEI routing state now reuse existing
-`TimerTrig_t` and compare bookkeeping. RTC's private PPI handles and
-TICK/OVRFLW binding records remain in optional PEI-only sections. The
-ordinary RTC interrupt, trigger, frequency, and initialization paths
-do not reference those sections, so `--gc-sections` removes them when
-PEI is not used.
+HF Timer and RTC compare state reuse existing `TimerTrig_t` and
+compare bookkeeping. RTC no longer contains private PPI handles or
+per-compare PEI arrays: automatic routes belong to the caller's matrix.
+RTC TICK/OVRFLW source records remain in optional PEI-only sections;
+ordinary RTC methods do not reference them, so `--gc-sections`
+should discard them from non-PEI firmware.
 
 Clean-build the nRF52832 HAL and TimerDemo, then check the new map:
 
@@ -95,18 +95,19 @@ for the remaining peripheral families, device-specific differences,
 ownership rules and acceptance criteria. Do not move PEI development
 to another MCU family until nRF52 coverage is complete.
 
-The RTC Timer backend now implements TICK/OVRFLW event sources via
+The RTC Timer backend implements TICK/OVRFLW event sources via
 `EVTEN` independently of `INTEN`, and START/STOP/CLEAR/TRIGOVRFLW
-task endpoints via the existing C Timer APIs. Hardware-only RTC COMPARE
-supports single-shot and continuous operation: a private PPI link
-routes COMPARE to STOP (single) or CLEAR (continuous). This is
-not an ISR-rescheduled software trigger.
+task endpoints through the existing C Timer APIs. Hardware-only
+COMPARE uses `PeiConnectTask` on the supplied matrix to route
+COMPARE to STOP (single) or CLEAR (continuous). No private PPI
+connection or ISR forwarding is involved.
 
-RTC exclusive ownership is required for this compare mode because
-STOP/CLEAR affects the full 24-bit RTC counter. The driver rejects
-other active compare triggers or bound RTC TICK/OVRFLW sources.
-`TimerDisableTrigger` unbinds the public event and releases the
-private PPI channel. Supported PPI channel reservations still apply.
+RTC compare requires exclusive counter ownership. The driver rejects
+other active compares and TICK/OVRFLW PEI sources. The application
+enables its logical event before issuing RTC START. Disabling an event
+also disables the rearm route, so clear and restart the counter after
+a missed compare. `TimerDisableTrigger` unbinds the source and removes
+the automatic task from the PEI matrix. Backend reservations still apply.
 
 **TIMER3 configuration needs a clean MCU build and hardware validation.**
 `PeiBlinky/src/board.h` selects `TimerCfg_t.DevNo = 6`, which is

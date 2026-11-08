@@ -94,14 +94,13 @@ only when it implements a real PPI-accessible event/task register on the SKU.
 
 ## RTC hardware-only trigger implementation notes
 
-The nRF52 RTC has no TIMER-style local compare shortcut. The new
-`TimerEnablePeiTrigger()` path uses a **separate, automatically allocated
-PPI route** from `EVENTS_COMPARE[n]` to `TASKS_CLEAR` (continuous)
-or `TASKS_STOP` (single). The Timer driver owns the compare value and
-the lifetime of the internal `PeiConn_t`; PEI alone allocates and
-programs its physical PPI channel. The external application still
-binds its own destinations to the same logical compare event via
-`PeiDev_t` / `Pei`.
+The nRF52 RTC has no TIMER-style local compare shortcut.
+`TimerEnablePeiTrigger()` binds `EVENTS_COMPARE[n]` and uses
+`PeiConnectTask()` on the supplied `PeiDev_t` / `Pei` matrix to
+request an automatic `TASKS_CLEAR` (continuous) or `TASKS_STOP`
+(single) destination. The RTC driver owns compare configuration and
+exclusive counter use; PEI owns all connections and channel state.
+No RTC-private PPI handles or per-compare PEI arrays are needed.
 
 RTC compare setup rejects: a second active trigger, an event callback,
 a TICK/OVRFLW PEI source on that same RTC, externally enabled compare
@@ -118,11 +117,12 @@ RTC overflow interrupts already configured by the Timer driver
 remain unchanged; therefore these events do **not** imply that
 the whole application is interrupt-free.
 
-The compare event's private PPI channel is kept independent of user
-PEI routes so enabling/disabling a user's event routing does not
-interrupt periodic hardware rearming. Driver teardown must unbind
-the public source and release the private connection before making
-its compare slot available again.
+The automatic rearm is a normal destination on the logical event.
+Enabling or disabling that event affects the automatic rearm as well
+as application destinations. Enable the PEI event before issuing RTC
+START. If an event is disabled while RTC runs, a compare may be missed;
+clear and restart RTC before resuming. Teardown unbinds the source and
+removes the automatic task from the matrix before reuse.
 
 Hardware test: the nRF52832 `PeiBlinky` board now selects `DevNo = 6`
 (TIMER3 at 16 MHz with `Freq = 0`) by default. Build and flash the

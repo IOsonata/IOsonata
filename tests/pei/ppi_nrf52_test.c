@@ -266,10 +266,43 @@ static void TestCMatrix(void)
 	assert(PeiBindEvent(&pei, &event, replacement));
 	assert(PeiEnableEvent(&pei, event));
 	assert(PeiDisconnectTask(&pei, event, taskA));
+	assert(PeiDisconnectTask(&pei, event, taskA));
 	oldToken = event;
 	assert(PeiReleaseEvent(&pei, &event));
 	assert(event == 0U);
 	assert(!PeiEnableEvent(&pei, oldToken));
+	assert(PeiDeinit(&pei));
+	assert(g_critical_depth == 0);
+}
+
+// The RTC's implicit COMPARE->CLEAR route is an ordinary connection in
+// the same matrix as its application destinations. The RTC driver does
+// not own a separate PeiConn_t.
+static void TestRtcMatrixRearm(void)
+{
+	PeiDev_t pei;
+	PeiEvent_t evt;
+	const PeiEndpoint_t compare = 0x40008100U;
+	const PeiEndpoint_t replacement = 0x40009100U;
+	const PeiEndpoint_t clear = 0x40006000U;
+	const PeiEndpoint_t led = 0x40007000U;
+
+	evt = 0U;
+	ResetMock();
+	assert(PeiInit(&pei, 0));
+	assert(PeiBindEvent(&pei, &evt, compare));
+	assert(PeiConnectTask(&pei, evt, clear));
+	assert(PeiConnectTask(&pei, evt, led));
+	assert(PeiEnableEvent(&pei, evt));
+	assert(PeiDisableEvent(&pei, evt));
+	assert(PeiEnableEvent(&pei, evt));
+	assert(PeiUnbindEvent(&pei, evt, compare));
+	assert(PeiDisconnectTask(&pei, evt, clear));
+	assert(PeiDisconnectTask(&pei, evt, clear));
+	assert(PeiBindEvent(&pei, &evt, replacement));
+	assert(PeiGetEventEndpoint(&pei, evt) == replacement);
+	assert(PeiEnableEvent(&pei, evt));
+	assert(PeiReleaseEvent(&pei, &evt));
 	assert(PeiDeinit(&pei));
 	assert(g_critical_depth == 0);
 }
@@ -284,6 +317,7 @@ int main(void)
 	TestMultipleAndExhaustion();
 	TestSVCFailures();
 	TestCMatrix();
+	TestRtcMatrixRearm();
 	printf("PEI nRF52 %d channels: PASS\n", TEST_PPI_CHANNEL_COUNT);
 	return 0;
 }

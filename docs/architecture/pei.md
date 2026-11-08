@@ -168,14 +168,13 @@ archive.
 `TimerInit` does not install PEI trigger callbacks. The first explicit
 PEI Timer call invokes `PeiTimerPrepare`, which installs the applicable
 MCU callback through `TimerPeiPrepareMcu`. Non-PEI Timer applications
-do not reference this optional path. HF Timer and RTC PEI compare trigger ownership reuse existing
-`TimerTrig_t` and CC bookkeeping fields. The optional RTC private
-PPI handles and TICK/OVRFLW binding records are referenced exclusively
-from PEI callbacks, allowing the linker to discard all their RAM in
-non-PEI applications. Normal RTC methods check PEI ownership indirectly
-through the optional Timer callback, retaining no PEI-specific tables.
-Hardware-only triggers still release PEI routes through
-`DisableTimerTrigger`.
+do not reference this optional path. HF Timer and RTC compare ownership
+reuse existing `TimerTrig_t` and CC bookkeeping. RTC does not allocate
+private PPI connections; its automatic compare task is connected in the
+supplied `PeiDev_t` matrix. RTC TICK/OVRFLW source bookkeeping is
+referenced only by optional PEI callbacks and should be discarded from
+non-PEI firmware. Normal RTC methods do not directly reference it.
+`DisableTimerTrigger` removes the automatic route through PEI.
 
 This depends on GCC weak references and link garbage collection, as
 used in the Eclipse managed projects. The source changes are not a
@@ -196,14 +195,18 @@ The nRF52 RTC Timer driver now exposes TICK/OVRFLW event sources
 with independent EVTEN control, and START/STOP/CLEAR/TRIGOVRFLW task
 endpoints through the existing C Timer interface. RTC compare
 supports both hardware-only single-shot and continuous operation:
-the driver requests one private PPI route from COMPARE to STOP or
-CLEAR respectively. The PEI backend owns physical channel assignment;
-the Timer driver owns the RTC compare and the lifetime of its route.
+the RTC driver requests `PeiConnectTask` on the caller's matrix for
+COMPARE->STOP or COMPARE->CLEAR respectively. PEI owns all routing,
+including automatic rearming; the Timer driver owns compare and counter
+configuration only.
 
 RTC compare mode requires exclusive RTC counter ownership and rejects
 conflicting trigger or raw-event users. Single-shot stops the counter;
-continuous mode periodically clears it without an ISR. These additions
-have **not** yet been MCU compiled or tested on hardware. The
+continuous mode periodically clears it without an ISR. The application
+must enable the logical PEI event before issuing RTC START. Disabling
+that event also disables its rearm route; after a missed compare, the
+counter must be cleared and restarted. These additions have **not**
+yet been MCU compiled or tested on hardware. The
 BLYST-NANO-DK PeiBlinky now selects `DevNo = 6` (TIMER3 at 16 MHz,
 with `Freq = 0`) for the standalone PEI test. The RTC backend remains
 unvalidated. The TIMER3 selection also requires a fresh MCU build and
