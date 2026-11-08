@@ -846,6 +846,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/wdt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/wdt.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto/cc3xx_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/include/cc3xx_intrf.h</locationURI>
@@ -1844,6 +1849,11 @@
 			<name>src/coredev/uart_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/wdt_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/cc3xx_intrf.cpp</name>
