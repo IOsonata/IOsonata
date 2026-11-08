@@ -462,7 +462,7 @@ static bool R9a02CmpInit(AnalogCompDev_t *pDev, const AnalogCompCfg_t *pCfg)
 	return true;
 }
 
-bool AnalogCompInit(AnalogCompDev_t *pDev, AnalogCompCfg_t *pCfg)
+bool AnalogCompInit(AnalogCompDev_t *pDev, const AnalogCompCfg_t *pCfg)
 {
 	return R9a02CmpInit(pDev, pCfg);
 }

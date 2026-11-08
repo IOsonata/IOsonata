@@ -6,6 +6,7 @@
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
 #include "adc_nrf52_pei.h"
+#include "converters/analog_comp.h"
 
 bool PeiHalCppApplication(Timer &timer)
 {
@@ -123,4 +124,29 @@ bool PeiSaadcCppApplication(Pei &pei, PeiEvent_t trigger)
 		return false;
 	}
 	return pei.ReleaseEvent(evt);
+}
+
+// Compile-only: the comparator wrapper uses the same Pei C matrix.
+bool PeiComparatorCppApplication(AnalogComp &comp, Pei &pei,
+	PeiEvent_t startEvent)
+{
+	PeiEvent_t cross = 0U;
+
+	if (!comp.EnablePeiEvent(pei, cross, ANALOG_COMP_PEI_EVENT_CROSS))
+	{
+		return false;
+	}
+	if (!comp.ConnectTask(pei, startEvent, ANALOG_COMP_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!comp.DisconnectTask(pei, startEvent, ANALOG_COMP_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!comp.DisablePeiEvent(pei, cross))
+	{
+		return false;
+	}
+	return pei.ReleaseEvent(cross);
 }

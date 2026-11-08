@@ -9,6 +9,7 @@ a target MCU. tests/pei/run.py compiles this as C11 with -Werror.
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
 #include "adc_nrf52_pei.h"
+#include "converters/analog_comp.h"
 
 bool PeiHalCApplication(TimerDev_t *pTimer)
 {
@@ -155,4 +156,33 @@ bool PeiSaadcCApplication(PeiDev_t *pPei, PeiEvent_t trigger)
 		return false;
 	}
 	return PeiReleaseEvent(pPei, &endEvent);
+}
+
+// Compile-only: comparator and PEI are both C-callable and independent of ISR.
+bool PeiComparatorCApplication(AnalogCompDev_t *pComp, PeiDev_t *pPei,
+	PeiEvent_t startEvent)
+{
+	PeiEvent_t evt;
+
+	evt = 0U;
+	if (!AnalogCompPeiBindEvent(pComp, pPei, &evt,
+		ANALOG_COMP_PEI_EVENT_CROSS))
+	{
+		return false;
+	}
+	if (!AnalogCompPeiConnectTask(pComp, pPei, startEvent,
+		ANALOG_COMP_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!AnalogCompPeiDisconnectTask(pComp, pPei, startEvent,
+		ANALOG_COMP_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!AnalogCompPeiUnbindEvent(pComp, pPei, evt))
+	{
+		return false;
+	}
+	return PeiReleaseEvent(pPei, &evt);
 }
