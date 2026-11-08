@@ -43,7 +43,7 @@ def main():
     assert "pDev->Cfg.DevNo < SPIM_COUNT" in ready
     assert "pDev->Cfg.DevNo < SPIS_COUNT" in ready
     assert "pDev->Cfg.DevNo < SPI_COUNT" in ready
-    assert "dev->bPeiPrepared" in PRIVATE
+    assert "bool bPeiPrepared;" in PRIVATE
     assert "dev->bPeiPrepared" in connect
     assert "SPI_PEI_TASK_START" in APP
     assert "SPI_PEI_TASK_STOP" in APP
