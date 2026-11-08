@@ -751,6 +751,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/qdec.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/qdec.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/shared_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_intrf.h</locationURI>
@@ -1374,6 +1379,11 @@
 			<name>src/coredev/iopincfg_nrfx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/qdec_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/qdec_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.cpp</name>
