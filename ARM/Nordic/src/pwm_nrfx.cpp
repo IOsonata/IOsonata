@@ -39,6 +39,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/pwm.h"
 #include "iopinctrl.h"
 
+// PWM applications do not need to link the PEI matrix or PPI backend.
+// Keep these references optional; only PEI routing functions use them.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #define NRF_PWM0		NRF_PWM0_S
 #define NRF_PWM1		NRF_PWM1_S
@@ -114,7 +124,8 @@ bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 		return false;
 	}
 
-	if (pCfg->DevNo < 0 || pCfg->DevNo >= PWM_NRF5_MAX_DEV)
+	if (pCfg->DevNo < 0 || pCfg->DevNo >= PWM_NRF5_MAX_DEV ||
+		pCfg->Freq == 0U)
 	{
 		return false;
 	}
@@ -131,6 +142,12 @@ bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 	for (int i = 0; i < PWM_NRF5_MAX_CHAN; i++)
 		dev->pReg->PSEL.OUT[i] = PWM_PSEL_OUT_CONNECT_Msk;
 	dev->OpenMask = 0;
+
+	// Release any playback shortcuts, loop or interrupts left from
+	// a previous run before preparing fresh driver-owned sequences.
+	dev->pReg->SHORTS = 0U;
+	dev->pReg->LOOP = 0U;
+	dev->pReg->INTENCLR = 0xFFFFFFFFU;
 
 	// Clear all events
 	dev->pReg->EVENTS_LOOPSDONE = 0;
@@ -209,7 +226,7 @@ bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 
 bool PWMSetFrequency(PwmDev_t *pDev, uint32_t Freq)
 {
-	if (pDev == NULL)
+	if (pDev == NULL || Freq == 0U)
 		return false;
 
 	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
@@ -572,3 +589,206 @@ void PWM3_IRQHandler()
 #endif
 
 } // extern "C"
+
+
+// Expose only PPI-accessible nRF52 endpoints. On other Nordic families
+// these entry points return false; their own routing backend is separate.
+static PeiEndpoint_t PwmPeiEventEndpoint(NRF_PWM_Type *pReg,
+	PWM_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES)
+	switch (Event)
+	{
+		case PWM_PEI_EVENT_SEQSTARTED0:
+			return (PeiEndpoint_t)&pReg->EVENTS_SEQSTARTED[0];
+		case PWM_PEI_EVENT_SEQSTARTED1:
+			return (PeiEndpoint_t)&pReg->EVENTS_SEQSTARTED[1];
+		case PWM_PEI_EVENT_SEQEND0:
+			return (PeiEndpoint_t)&pReg->EVENTS_SEQEND[0];
+		case PWM_PEI_EVENT_SEQEND1:
+			return (PeiEndpoint_t)&pReg->EVENTS_SEQEND[1];
+		case PWM_PEI_EVENT_LOOPSDONE:
+			return (PeiEndpoint_t)&pReg->EVENTS_LOOPSDONE;
+		case PWM_PEI_EVENT_PWMPERIODEND:
+			return (PeiEndpoint_t)&pReg->EVENTS_PWMPERIODEND;
+		case PWM_PEI_EVENT_STOPPED:
+			return (PeiEndpoint_t)&pReg->EVENTS_STOPPED;
+		default:
+			return 0U;
+	}
+#else
+	(void)pReg;
+	(void)Event;
+	return 0U;
+#endif
+}
+
+static PeiEndpoint_t PwmPeiTaskEndpoint(NRF_PWM_Type *pReg,
+	PWM_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES)
+	switch (Task)
+	{
+		case PWM_PEI_TASK_SEQSTART0:
+			return (PeiEndpoint_t)&pReg->TASKS_SEQSTART[0];
+		case PWM_PEI_TASK_SEQSTART1:
+			return (PeiEndpoint_t)&pReg->TASKS_SEQSTART[1];
+		case PWM_PEI_TASK_STOP:
+			return (PeiEndpoint_t)&pReg->TASKS_STOP;
+		case PWM_PEI_TASK_NEXTSTEP:
+			// The default PWM HAL uses RefreshCount, not NextStep.
+			// Expose NEXTSTEP only when the decoder is configured
+			// for it by the PWM owner.
+			if ((pReg->DECODER & PWM_DECODER_MODE_Msk) ==
+				(PWM_DECODER_MODE_NextStep << PWM_DECODER_MODE_Pos))
+			{
+				return (PeiEndpoint_t)&pReg->TASKS_NEXTSTEP;
+			}
+			return 0U;
+		default:
+			return 0U;
+	}
+#else
+	(void)pReg;
+	(void)Task;
+	return 0U;
+#endif
+}
+
+static nRFPwmDev_t *PwmPeiOwnedDevice(PwmDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	nRFPwmDev_t *dev;
+
+	if (pDev == NULL || pDev->DevNo < 0 ||
+		pDev->DevNo >= PWM_NRF5_MAX_DEV ||
+		pDev->pDevData != &s_PwmnRFDev[pDev->DevNo])
+	{
+		return NULL;
+	}
+	dev = &s_PwmnRFDev[pDev->DevNo];
+	if (dev->pDev != pDev)
+	{
+		return NULL;
+	}
+	return dev;
+#else
+	(void)pDev;
+	return NULL;
+#endif
+}
+
+static bool PwmPeiReady(PwmDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	nRFPwmDev_t *dev;
+
+	dev = PwmPeiOwnedDevice(pDev);
+	if (dev == NULL || dev->OpenMask == 0U ||
+		pDev->Freq == 0U || dev->TopCount == 0U ||
+		dev->pReg->ENABLE != PWM_ENABLE_ENABLE_Enabled ||
+		dev->pReg->SEQ[0].PTR != (uint32_t)(uintptr_t)dev->Seq0 ||
+		dev->pReg->SEQ[1].PTR != (uint32_t)(uintptr_t)dev->Seq1 ||
+		dev->pReg->SEQ[0].CNT != PWM_NRF5_MAX_CHAN ||
+		dev->pReg->SEQ[1].CNT != PWM_NRF5_MAX_CHAN)
+	{
+		return false;
+	}
+	return true;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool PWMEnablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, PWM_PEI_EVENT Event)
+{
+	nRFPwmDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || pEvt == NULL || PeiBindEvent == NULL ||
+		!PwmPeiReady(pDev))
+	{
+		return false;
+	}
+	dev = PwmPeiOwnedDevice(pDev);
+	endpoint = PwmPeiEventEndpoint(dev->pReg, Event);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt, endpoint);
+}
+
+extern "C" bool PWMDisablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+	nRFPwmDev_t *dev;
+	PeiEndpoint_t endpoint;
+	int i;
+
+	if (pPei == NULL || PeiGetEventEndpoint == NULL ||
+		PeiUnbindEvent == NULL)
+	{
+		return false;
+	}
+	dev = PwmPeiOwnedDevice(pDev);
+	if (dev == NULL)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	for (i = PWM_PEI_EVENT_SEQSTARTED0;
+		i <= PWM_PEI_EVENT_STOPPED; i++)
+	{
+		if (endpoint == PwmPeiEventEndpoint(dev->pReg,
+			(PWM_PEI_EVENT)i))
+		{
+			return PeiUnbindEvent(pPei, Evt, endpoint);
+		}
+	}
+	return false;
+}
+
+extern "C" bool PWMConnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, PWM_PEI_TASK Task)
+{
+	nRFPwmDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiConnectTask == NULL || !PwmPeiReady(pDev))
+	{
+		return false;
+	}
+	dev = PwmPeiOwnedDevice(pDev);
+	endpoint = PwmPeiTaskEndpoint(dev->pReg, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+extern "C" bool PWMDisconnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, PWM_PEI_TASK Task)
+{
+	nRFPwmDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiDisconnectTask == NULL)
+	{
+		return false;
+	}
+	dev = PwmPeiOwnedDevice(pDev);
+	if (dev == NULL)
+	{
+		return false;
+	}
+	endpoint = PwmPeiTaskEndpoint(dev->pReg, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
+}
