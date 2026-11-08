@@ -81,6 +81,13 @@ SOFTWARE.
 #define TIMER4_CC_NUM		TIMER22_CC_NUM_SIZE
 #define TIMER5_CC_NUM		TIMER23_CC_NUM_SIZE
 #define TIMER6_CC_NUM		TIMER24_CC_NUM_SIZE
+#define TIMER0_IRQn			TIMER00_IRQn
+#define TIMER1_IRQn			TIMER10_IRQn
+#define TIMER2_IRQn			TIMER20_IRQn
+#define TIMER3_IRQn			TIMER21_IRQn
+#define TIMER4_IRQn			TIMER22_IRQn
+#define TIMER5_IRQn			TIMER23_IRQn
+#define TIMER6_IRQn			TIMER24_IRQn
 #endif
 
 // PEI compare sources reuse the ordinary trigger state without extra RAM.
@@ -89,18 +96,6 @@ static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_SINGLE =
 	static_cast<TIMER_TRIG_TYPE>(2);
 static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_CONTINUOUS =
 	static_cast<TIMER_TRIG_TYPE>(3);
-
-#pragma pack(push, 4)
-typedef struct {
-	int DevNo;
-	uint32_t MaxFreq;
-	NRF_TIMER_Type *pReg;
-	int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
-	int CountCC;			//!< Index of last CC register to use for counter reading
-	uint32_t *pCC;			//!< Compare value of each trigger, MaxNbTrigEvt entries
-	TimerTrig_t *pTrigger;	//!< State of each trigger, MaxNbTrigEvt entries
-} nRFTimerData_t;
-#pragma pack(pop)
 
 // Trigger state of each timer, sized by the number of compare registers of
 // that timer less the one reserved for reading the counter.
@@ -124,15 +119,16 @@ static TimerTrig_t s_nRFxTimer6Trig[TIMER6_CC_NUM - 1];
 #endif
 
 // Timer device of each timer, set by nRFxTimerInit
-static TimerDev_t *s_pnRFxTimerDev[TIMER_NRFX_HF_MAX];
+TimerDev_t *s_pnRFxTimerDev[TIMER_NRFX_HF_MAX];
 
 // What does not change is constant, so it stays in flash. Only the trigger
 // state above and the device pointers are in RAM.
-alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
+alignas(4) const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER0,
+		.IrqNo = TIMER0_IRQn,
 		.MaxNbTrigEvt = TIMER0_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER0_CC_NUM - 1,
 		.pCC = s_nRFxTimer0CC,
@@ -142,6 +138,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 1,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER1,
+		.IrqNo = TIMER1_IRQn,
 		.MaxNbTrigEvt = TIMER1_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER1_CC_NUM - 1,
 		.pCC = s_nRFxTimer1CC,
@@ -151,6 +148,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 2,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER2,
+		.IrqNo = TIMER2_IRQn,
 		.MaxNbTrigEvt = TIMER2_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER2_CC_NUM - 1,
 		.pCC = s_nRFxTimer2CC,
@@ -161,6 +159,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 3,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER3,
+		.IrqNo = TIMER3_IRQn,
 		.MaxNbTrigEvt = TIMER3_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER3_CC_NUM - 1,
 		.pCC = s_nRFxTimer3CC,
@@ -170,6 +169,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 4,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER4,
+		.IrqNo = TIMER4_IRQn,
 		.MaxNbTrigEvt = TIMER4_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER4_CC_NUM - 1,
 		.pCC = s_nRFxTimer4CC,
@@ -181,6 +181,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 5,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER5,
+		.IrqNo = TIMER5_IRQn,
 		.MaxNbTrigEvt = TIMER5_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER5_CC_NUM - 1,
 		.pCC = s_nRFxTimer5CC,
@@ -190,6 +191,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 6,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER6,
+		.IrqNo = TIMER6_IRQn,
 		.MaxNbTrigEvt = TIMER6_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER6_CC_NUM - 1,
 		.pCC = s_nRFxTimer6CC,
@@ -206,7 +208,14 @@ static bool s_bHFClockOwned = false;
 // this file is part of a build, used or not. They reach the timer data
 // through this pointer, so that the data is linked only when a timer is
 // initialized.
-static const nRFTimerData_t *s_pnRFxTimerData = nullptr;
+const nRFTimerData_t *s_pnRFxTimerData = nullptr;
+
+// Interrupt of a TIMER in counter mode. counter_nrfx.cpp, linked by
+// CounterInit, replaces this empty default.
+__WEAK void nRFxCounterIrq(int Idx)
+{
+	(void)Idx;
+}
 
 static void TimerIRQHandler(int DevNo)
 {
@@ -217,6 +226,14 @@ static void TimerIRQHandler(int DevNo)
 	}
 
 	NRF_TIMER_Type *reg = s_pnRFxTimerData[DevNo].pReg;
+
+	// A TIMER in counter mode is the counter's
+	if (reg->MODE != TIMER_MODE_MODE_Timer)
+	{
+		nRFxCounterIrq(DevNo);
+		return;
+	}
+
 	const nRFTimerData_t &tdata = s_pnRFxTimerData[DevNo];
 	TimerDev_t *timer = s_pnRFxTimerDev[DevNo];
 	if (timer == nullptr)
@@ -964,6 +981,10 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 
 	reg->TASKS_STOP = 1;
 	reg->TASKS_CLEAR = 1;
+
+	// No short or interrupt left by a counter that had the TIMER
+	reg->SHORTS = 0;
+	reg->INTENCLR = 0xFFFFFFFFUL;
 
 	// Only support timer mode, 32-bit counter
 	reg->MODE = TIMER_MODE_MODE_Timer;

@@ -891,6 +891,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/dac_device.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/counter.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/counter.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/i2c.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2c.h</locationURI>
@@ -1879,6 +1884,11 @@
 			<name>src/converters/analog_comp_nrf5x.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/analog_comp_nrf5x.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/counter_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/counter_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/i2c.cpp</name>

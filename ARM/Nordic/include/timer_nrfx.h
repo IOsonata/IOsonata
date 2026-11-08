@@ -82,9 +82,37 @@ SOFTWARE.
 #define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER10_CC_NUM_SIZE	//!< Max number of supported counter trigger event
 #endif
 
+#pragma pack(push, 4)
+
+/// TIMER instance of the high frequency timer driver, timer_hf_nrfx.cpp. The
+/// Timer and the Counter (counter_nrfx.cpp) share the table of these.
+typedef struct {
+	int DevNo;
+	uint32_t MaxFreq;
+	NRF_TIMER_Type *pReg;
+	IRQn_Type IrqNo;
+	int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
+	int CountCC;			//!< Index of last CC register to use for counter reading
+	uint32_t *pCC;			//!< Compare value of each trigger, MaxNbTrigEvt entries
+	TimerTrig_t *pTrigger;	//!< State of each trigger, MaxNbTrigEvt entries
+} nRFTimerData_t;
+
+#pragma pack(pop)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// TIMER table, the table pointer of the interrupt handler, set when a timer
+// or a counter is initialized, and the timer bound to each TIMER
+extern const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX];
+extern const nRFTimerData_t *s_pnRFxTimerData;
+extern TimerDev_t *s_pnRFxTimerDev[TIMER_NRFX_HF_MAX];
+
+// Interrupt of a TIMER in counter mode, defined by counter_nrfx.cpp. The
+// timer driver has an empty weak default for the applications without
+// counter.
+void nRFxCounterIrq(int Idx);
 
 #if defined(NRF54L_SERIES)
 bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);

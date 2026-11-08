@@ -39,7 +39,8 @@ Status keys:
 
 | Peripheral / driver | Hardware event source coverage | Hardware task destination coverage | Current status |
 | --- | --- | --- | --- |
-| TIMER / `timer_hf_nrfx.cpp` | COMPARE[n] single-shot/continuous; other events pending | START, STOP, CLEAR; COUNT and CAPTURE[n] pending | **Mixed-CC TIMER3 hardware working** in both CC orders (user report, Nov 8); COUNT/CAPTURE endpoints pending |
+| TIMER / `timer_hf_nrfx.cpp` | COMPARE[n] single-shot/continuous; other events pending | START, STOP, CLEAR; CAPTURE[n] pending | **Mixed-CC TIMER3 hardware working** in both CC orders (user report, Nov 8); CAPTURE endpoint pending |
+| TIMER in counter mode / `counter_nrfx.cpp` (`counter.h`) | COMPARE0, the limit event of the counter | COUNT, START, STOP | **Initial endpoint added**: Counter on a TIMER of the timer driver table, low power counter mode, limit in CC[0] with the COMPARE0_CLEAR short; PeiCounterDemo (button GPIOTE IN to COUNT, limit to LED toggle) hardware check pending |
 | RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Mixed-CC RTC0 hardware working** in both CC orders; **RTC2 working** with ISR-first order (user report, Nov 8); other sources and lifecycle pending |
 | GPIOTE / `iopincfg_nrfx.c` | IN[n] edge; shared PORT SENSE/DETECT source implemented on nRF52 | OUT[n] SET/CLEAR/TOGGLE through configured channels | **PeiPortDemo functional hardware PASS**; **PeiGpioteStress automatic hardware PASS** (Nov 8 screenshot: Status 2, Error 0, 64 exhaustion/reuse, 128 PPI-route, 128 IRQ rounds, IrqCount 13); BUT2 physical route confirmation and cross-variant tests pending |
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED implemented; CALIBRATEDONE and limit events pending (limits reach the application through the driver callback) | START, SAMPLE, STOP implemented; CALIBRATEOFFSET pending | **Initial endpoint added**: single-conversion/no-IRQ driver-owned EasyDMA preparation, nRF52832 erratum 150 guard, C/C++ PEI routing; continuous mode with double-buffered blocks accepts SAMPLE only; PeiSaadcDemo TIMER->SAMPLE / END->START and PeiAdcDemo TIMER->SAMPLE hardware checks pending |
@@ -170,6 +171,31 @@ StopConversion(), CloseChannel(), Disable(), or PowerOff().
 The PeiSaadcDemo Eclipse project is added, but no MCU build or
 hardware result has been confirmed. Do not mark SAADC as fully
 covered based on static source tests.
+
+## TIMER counter mode (Counter)
+
+`counter.h` is the generic event counter. On the nRF it is a TIMER of the
+high frequency timer driver put in low power counter mode: the Counter and
+the Timer are two objects on the same TIMER instances. `CounterInit` and
+`TimerInit` each set the mode of the TIMER they are given, the last one has
+it. `counter_nrfx.cpp` uses the TIMER table of `timer_hf_nrfx.cpp`; the timer
+interrupt handler calls `nRFxCounterIrq` for a TIMER in counter mode. The
+timer driver has an empty weak `nRFxCounterIrq` that `counter_nrfx.cpp`
+replaces, so an application without `CounterInit` links no counter code, the
+same way the USB ISO support is kept out of `usb_ctrlr_nrf52.cpp`.
+
+The counted events reach the COUNT task with PEI. An input pin is routed by
+the application with the existing GPIO and PEI calls:
+
+```c
+IOPinEnableEvent(&pei, &evt, PortNo, PinNo, IOPINSENSE_LOW_TRANSITION);
+CounterConnectTask(&counter, &pei, evt, COUNTER_TASK_COUNT);
+PeiEnableEvent(&pei, evt);
+```
+
+The limit is CC[0] with the COMPARE0_CLEAR short, COMPARE0 is the limit
+event; without limit CC[0] is 0 and COMPARE0 is the 32 bit wrap. The
+interrupt folds each period into the 64 bit count.
 
 ## Comparator COMP/LPCOMP task and event integration
 
