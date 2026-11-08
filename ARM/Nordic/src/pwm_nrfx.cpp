@@ -636,15 +636,7 @@ static PeiEndpoint_t PwmPeiTaskEndpoint(NRF_PWM_Type *pReg,
 		case PWM_PEI_TASK_STOP:
 			return (PeiEndpoint_t)&pReg->TASKS_STOP;
 		case PWM_PEI_TASK_NEXTSTEP:
-			// The default PWM HAL uses RefreshCount, not NextStep.
-			// Expose NEXTSTEP only when the decoder is configured
-			// for it by the PWM owner.
-			if ((pReg->DECODER & PWM_DECODER_MODE_Msk) ==
-				(PWM_DECODER_MODE_NextStep << PWM_DECODER_MODE_Pos))
-			{
-				return (PeiEndpoint_t)&pReg->TASKS_NEXTSTEP;
-			}
-			return 0U;
+			return (PeiEndpoint_t)&pReg->TASKS_NEXTSTEP;
 		default:
 			return 0U;
 	}
@@ -762,6 +754,14 @@ extern "C" bool PWMConnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
 		return false;
 	}
 	dev = PwmPeiOwnedDevice(pDev);
+	if (Task == PWM_PEI_TASK_NEXTSTEP &&
+		(dev->pReg->DECODER & PWM_DECODER_MODE_Msk) !=
+			(PWM_DECODER_MODE_NextStep << PWM_DECODER_MODE_Pos))
+	{
+		// A NEXTSTEP task is meaningful only in NextStep decoder mode.
+		// The ordinary PWM HAL uses RefreshCount.
+		return false;
+	}
 	endpoint = PwmPeiTaskEndpoint(dev->pReg, Task);
 	if (endpoint == 0U)
 	{
