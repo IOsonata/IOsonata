@@ -30,8 +30,11 @@ RX examples. Raw PRBS and SLIP are separate wire formats.
 The new projects other than TimerDemo and UartRetargetDemo use `rdimon` semihosting: run with a
 debugger that enables semihosting. PRBS/SLIP diagnostics go to the debugger, not
 into the test UART stream. Per-byte logging is disabled for the F030 raw receiver
-to avoid stalling reception. TimerDemo and UartRetargetDemo use `nosys` with
-IOsonata's UART stdio retargeting and do not require semihosting.
+to avoid stalling reception. UartRetargetDemo uses `nosys` with
+IOsonata's UART stdio retargeting and does not require semihosting. TimerDemo
+logs with SysLog: Release to the UART, Debug to the debugger console through
+the semihosting interface of `semihost_intrf.h`, which does not depend on
+`rdimon`. Enable semihosting in the debugger for the Debug build.
 
 For UartPrbsTxTestTaktOS, place the TaktOS checkout beside IOsonata, import
 `TaktOS/ARM/cm0/ioc`, and build `TaktOS_M0` in the matching configuration before
@@ -91,7 +94,9 @@ python3 tests/stm32f0/run_slip_example.py
 The maintainer confirmed startup, LED GPIO, USART1 UART output/retargeting,
 TIM6 (virtual device 0) and TIM16 (virtual device 2) on STM32F0308-DISCO on
 2026-10-08. TIM6 printed 115 consecutive 100 ms periods over 11.5 seconds.
-TimerDemo uses UART retargeting; semihosting pauses can disturb measurements.
+That run printed through UART retargeting. Use the Release TimerDemo, UART
+output, for timing measurements; semihosting pauses in the Debug build can
+disturb them.
 If an external UART adapter uses a level shifter, power that circuit as well.
 
 The maintainer also confirmed UART TX DMA with the Release PRBS transmitter

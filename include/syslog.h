@@ -4,10 +4,10 @@
 @brief	System logger.
 
  Emits SysStatus_t records to a DeviceIntrf output. The output is any
- DeviceIntrf implementation (UART, USB CDC, SPI, BLE, SLIP). The optional
- timestamp source is any Timer implementation. The log severity is taken
- from the status type field (SYSSTATUS_TYPE_*); no separate level field is
- defined.
+ DeviceIntrf implementation (UART, USB CDC, SPI, BLE, SLIP, the semihosting
+ console of semihost_intrf.h). The optional timestamp source is any Timer
+ implementation. The log severity is taken from the status type field
+ (SYSSTATUS_TYPE_*); no separate level field is defined.
 
  A CFifo built from caller supplied memory stores complete formatted log
  records. The store and the DeviceIntrf are independent: records are kept

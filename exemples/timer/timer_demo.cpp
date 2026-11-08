@@ -6,9 +6,12 @@
 
 This example demonstrate how to use the generic timer
 
-The results are printed with printf: on the UART of board.h in a Release
-build (NDEBUG), with semihosting in a Debug build. The counts and periods are
-also in g_TriggerCount and g_Period for the debugger.
+The results are logged with SysLog: to the UART of board.h in a Release
+build (NDEBUG), to the debugger console through semihosting in a Debug build.
+The Debug build needs no UART, it works on boards that only have a debug
+connector. Enable semihosting in the debug probe software, for example
+"arm semihosting enable" in OpenOCD. The counts and periods are also in
+g_TriggerCount and g_Period for the debugger.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 7, 2017
@@ -46,12 +49,14 @@ SOFTWARE.
 #include "idelay.h"
 #include "coredev/timer.h"
 #include "iopinctrl.h"
+#include "syslog.h"
 
 #include "board.h"
 
 #ifdef NDEBUG
 #include "coredev/uart.h"
-#include "stddev.h"
+#else
+#include "semihost_intrf.h"
 #endif
 
 //#define DEMO_C
@@ -109,6 +114,20 @@ Timer g_Timer;
 
 static uint64_t s_PreCnt[5] = {0, };
 
+// One record per output line
+#define TIMER_DEMO_LINE_LEN		128
+
+alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(8, TIMER_DEMO_LINE_LEN)];
+
+// Keep the newest lines when the output does not take them, for example a
+// Debug build started with no debugger connected.
+static const SysLogCfg_t s_LogCfg = {
+	.pMem = s_LogMem,
+	.MemSize = sizeof(s_LogMem),
+	.RecordLen = TIMER_DEMO_LINE_LEN,
+	.bBlocking = false,
+};
+
 // Release output
 #ifdef NDEBUG
 static const IOPinCfg_t s_UartPins[] = {
@@ -133,6 +152,9 @@ static const UARTCfg_t s_UartCfg = {
 	.bDMAMode = false,
 };
 static UART s_Uart;
+#else
+// Debug output
+static Semihost s_Semihost;
 #endif
 
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
@@ -172,13 +194,15 @@ int main(void)
 	uint64_t periods[4];
 	bool changed;
 	uint32_t state;
+	char line[TIMER_DEMO_LINE_LEN];
+	DeviceIntrf *logOut;
 	int i;
 	int n;
 
 	IOPinCfg(s_Leds, s_NbLeds);
 
 #ifdef NDEBUG
-	// Release prints to the UART, Debug keeps semihosting
+	// Release logs to the UART
 	if (!s_Uart.Init(s_UartCfg))
 	{
 		while (1)
@@ -186,8 +210,13 @@ int main(void)
 			__WFE();
 		}
 	}
-	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+	logOut = &s_Uart;
+#else
+	// Debug logs to the debugger console
+	s_Semihost.Init();
+	logOut = &s_Semihost;
 #endif
+	SysLogGetInstance()->Init(s_LogCfg, logOut);
 
 #ifdef DEMO_C
 	g_TimerInitOk = TimerInit(&g_TimerDev, &s_TimerCfg);
@@ -198,14 +227,14 @@ int main(void)
 #endif
 	if (!g_TimerInitOk)
 	{
-		printf("Timer %d initialization failed\r\n", s_TimerCfg.DevNo);
+		SysLogGetInstance()->Printf("Timer %d initialization failed\r\n", s_TimerCfg.DevNo);
 		return 1;
 	}
 
 	triggers = TimerGetMaxTrigger(dev);
 	if (triggers < 1)
 	{
-		printf("No timer triggers available\r\n");
+		SysLogGetInstance()->Printf("No timer triggers available\r\n");
 		TimerDisable(dev);
 		return 1;
 	}
@@ -224,7 +253,8 @@ int main(void)
 			ns, TIMER_TRIG_TYPE_CONTINUOUS);
 #endif
 		g_TriggerPeriod[i] = period;
-		printf("Timer %d trigger %d: %lu ms\r\n", s_TimerCfg.DevNo, i, (unsigned long)(period / 1000000ULL));
+		SysLogGetInstance()->Printf("Timer %d trigger %d: %lu ms\r\n", s_TimerCfg.DevNo, i,
+									(unsigned long)(period / 1000000ULL));
 		if (period == 0)
 		{
 			for (n = 0; n < i; n++)
@@ -255,9 +285,13 @@ int main(void)
 		{
 			continue;
 		}
-		printf("Count = %lu ms", (unsigned long)TimerGetMilisecond(dev));
-		for (i = 0; i < triggers; i++)
-			printf(", T%d = %lu us", i, (unsigned long)(periods[i] / 1000));
-		printf("\r\n");
+		// Build the whole line, then log it as one record
+		n = snprintf(line, sizeof(line), "Count = %lu ms", (unsigned long)TimerGetMilisecond(dev));
+		for (i = 0; i < triggers && n > 0 && n < (int)sizeof(line); i++)
+		{
+			n += snprintf(&line[n], sizeof(line) - n, ", T%d = %lu us", i,
+						  (unsigned long)(periods[i] / 1000));
+		}
+		SysLogGetInstance()->Printf("%s\r\n", line);
 	}
 }
