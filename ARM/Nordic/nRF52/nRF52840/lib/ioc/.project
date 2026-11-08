@@ -831,11 +831,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/mcu_power.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/mcu_power.h</locationURI>
-		</link>
-		<link>
 			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
