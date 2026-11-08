@@ -1519,11 +1519,17 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
     if (pCfgData->bIntEn || pCfgData->Mode == SPIMODE_SLAVE)
     {
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA)
+		// SPIM0 has its own vector on these parts, separate from TWIM0, so it
+		// is not in the shared serial dispatcher. SPIM0_SPIS0_SPI0_IRQHandler
+		// below calls SPI_IRQHandler directly.
+#else
 #ifdef NRF5340_XXAA_APPLICATION
 		// SPIM4 and QSPI have dedicated vectors, not shared serial instances.
 		if (pCfgData->DevNo < 4)
 #endif
 		SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, SPI_IRQHandler);
+#endif
 
     	switch (pCfgData->DevNo)
     	{
@@ -1674,6 +1680,18 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 }
 
 #ifdef NRF52_SERIES
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA)
+extern "C" void SPIM0_SPIS0_SPI0_IRQHandler(void)
+{
+	SPIDev_t *dev = g_nRFxSPIDev[0].pSpiDev;
+
+	if (dev != NULL)
+	{
+		SPI_IRQHandler(0, &dev->DevIntrf);
+	}
+	NVIC_ClearPendingIRQ(SPIM0_SPIS0_SPI0_IRQn);
+}
+#endif
 #if !defined(NRF52805_XXAA) && !defined(NRF52810_XXAA)
 extern "C" void SPIM2_SPIS2_SPI2_IRQHandler(void)
 {
