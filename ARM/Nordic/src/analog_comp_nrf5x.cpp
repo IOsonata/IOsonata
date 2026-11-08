@@ -72,6 +72,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 #include "converters/analog_comp.h"
 
+// References to the PEI matrix remain weak. A comparator-only firmware
+// does not retain optional event/task routing sections at final link.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 alignas(4) static AnalogCompDev_t *s_pnRF5xLPCompDev = NULL;
 
 bool nRF52LPCompEnable(AnalogCompDev_t * const pDev)
@@ -139,12 +149,21 @@ extern "C" void COMP_LPCOMP_IRQHandler()
 
 bool AnalogCompInit(AnalogCompDev_t * const pDev, const AnalogCompCfg_t *pCfg)
 {
-	if (pDev == NULL)
+	if (pDev == NULL || pCfg == NULL || pCfg->DevNo != 0 ||
+		pCfg->AnalogIn < 0 || pCfg->AnalogIn >= 8 ||
+		pCfg->RefVolt <= 0 ||
+		(pCfg->Mode != ANALOG_COMP_MODE_SINGLE &&
+		 pCfg->Mode != ANALOG_COMP_MODE_CONTINUOUS))
 	{
 		return false;
 	}
 
-	s_pnRF5xLPCompDev = pDev;
+	pDev->Mode = pCfg->Mode;
+	pDev->RefSrc = pCfg->RefSrc;
+	pDev->CompVolt = pCfg->CompVolt;
+	pDev->AnalogIn = pCfg->AnalogIn;
+	pDev->bHystersys = pCfg->bHystersys;
+	pDev->EvtHandler = pCfg->EvtHandler;
 	pDev->Enable = nRF52LPCompEnable;
 	pDev->Disable = nRF52LPCompDisable;
 	pDev->Start = nRF52LPCompStart;
@@ -275,11 +294,6 @@ bool AnalogCompInit(AnalogCompDev_t * const pDev, const AnalogCompCfg_t *pCfg)
 
 #endif
 
-	if (pCfg->EvtHandler)
-	{
-		pDev->EvtHandler = pCfg->EvtHandler;
-	}
-
 	if (pCfg->Mode == ANALOG_COMP_MODE_CONTINUOUS)
 	{
 		NRF_ACOMP->SHORTS = ACOMP_SHORTS_READY_SAMPLE_Msk;
@@ -311,12 +325,23 @@ bool AnalogCompInit(AnalogCompDev_t * const pDev, const AnalogCompCfg_t *pCfg)
 	NRF_ACOMP->EVENTS_DOWN = 0;
 	NRF_ACOMP->EVENTS_UP = 0;
 
-	NRF_ACOMP->INTENSET = ACOMP_INTENSET_UP_Msk | ACOMP_INTENSET_DOWN_Msk;
-
-	NVIC_ClearPendingIRQ(ACOMP_IRQn);
-	NVIC_SetPriority(ACOMP_IRQn, pCfg->IntPrio);
-	NVIC_EnableIRQ(ACOMP_IRQn);
-
+	// Only callback users need the comparator interrupt. PEI uses the
+	// peripheral event directly, with no ISR forwarding.
+	NRF_ACOMP->INTENCLR = 0xFFFFFFFFU;
+	if (pCfg->EvtHandler != NULL)
+	{
+		NRF_ACOMP->INTENSET = ACOMP_INTENSET_UP_Msk |
+			ACOMP_INTENSET_DOWN_Msk;
+		NVIC_ClearPendingIRQ(ACOMP_IRQn);
+		NVIC_SetPriority(ACOMP_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(ACOMP_IRQn);
+	}
+	else
+	{
+		NVIC_DisableIRQ(ACOMP_IRQn);
+		NVIC_ClearPendingIRQ(ACOMP_IRQn);
+	}
+	s_pnRF5xLPCompDev = pDev;
 	return true;
 }
 
@@ -327,4 +352,149 @@ bool AnalogComp::Init(const AnalogCompCfg_t &Cfg)
 	return AnalogCompInit(&vDevData, &Cfg);
 }
 
+// Expose only configured comparator endpoints. The register maps of COMP
+// and LPCOMP share event and task offsets, but the driver selects the
+// instance using the selected nRF52 CMSIS header.
+static PeiEndpoint_t AnalogCompPeiEventEndpoint(ANALOG_COMP_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES)
+	switch (Event)
+	{
+		case ANALOG_COMP_PEI_EVENT_READY:
+			return (PeiEndpoint_t)&NRF_ACOMP->EVENTS_READY;
+		case ANALOG_COMP_PEI_EVENT_DOWN:
+			return (PeiEndpoint_t)&NRF_ACOMP->EVENTS_DOWN;
+		case ANALOG_COMP_PEI_EVENT_UP:
+			return (PeiEndpoint_t)&NRF_ACOMP->EVENTS_UP;
+		case ANALOG_COMP_PEI_EVENT_CROSS:
+			return (PeiEndpoint_t)&NRF_ACOMP->EVENTS_CROSS;
+		default:
+			return 0U;
+	}
+#else
+	(void)Event;
+	return 0U;
+#endif
+}
 
+static PeiEndpoint_t AnalogCompPeiTaskEndpoint(ANALOG_COMP_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES)
+	switch (Task)
+	{
+		case ANALOG_COMP_PEI_TASK_START:
+			return (PeiEndpoint_t)&NRF_ACOMP->TASKS_START;
+		case ANALOG_COMP_PEI_TASK_STOP:
+			return (PeiEndpoint_t)&NRF_ACOMP->TASKS_STOP;
+		case ANALOG_COMP_PEI_TASK_SAMPLE:
+			return (PeiEndpoint_t)&NRF_ACOMP->TASKS_SAMPLE;
+		default:
+			return 0U;
+	}
+#else
+	(void)Task;
+	return 0U;
+#endif
+}
+
+static bool AnalogCompPeiReady(AnalogCompDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	return pDev != NULL && s_pnRF5xLPCompDev == pDev &&
+		pDev->Enable == nRF52LPCompEnable &&
+		NRF_ACOMP->ENABLE == ACOMP_ENABLE_Enabled;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool AnalogCompPeiBindEvent(AnalogCompDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t *pEvt, ANALOG_COMP_PEI_EVENT Event)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || pEvt == NULL || PeiBindEvent == NULL ||
+		!AnalogCompPeiReady(pDev))
+	{
+		return false;
+	}
+	endpoint = AnalogCompPeiEventEndpoint(Event);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt, endpoint);
+}
+
+extern "C" bool AnalogCompPeiUnbindEvent(AnalogCompDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t Evt)
+{
+	PeiEndpoint_t endpoint;
+	int event;
+
+	if (pDev == NULL || pPei == NULL || s_pnRF5xLPCompDev != pDev ||
+		PeiGetEventEndpoint == NULL || PeiUnbindEvent == NULL)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	for (event = ANALOG_COMP_PEI_EVENT_READY;
+		event <= ANALOG_COMP_PEI_EVENT_CROSS; event++)
+	{
+		if (endpoint == AnalogCompPeiEventEndpoint(
+			(ANALOG_COMP_PEI_EVENT)event))
+		{
+			return PeiUnbindEvent(pPei, Evt, endpoint);
+		}
+	}
+	return false;
+}
+
+extern "C" bool AnalogCompPeiConnectTask(AnalogCompDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t Evt, ANALOG_COMP_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiConnectTask == NULL ||
+		!AnalogCompPeiReady(pDev))
+	{
+		return false;
+	}
+	// Continuous mode already schedules SAMPLE using READY->SAMPLE.
+	// Do not mix external PPI SAMPLE tasks with that shortcut.
+	if (Task == ANALOG_COMP_PEI_TASK_SAMPLE &&
+		pDev->Mode == ANALOG_COMP_MODE_CONTINUOUS)
+	{
+		return false;
+	}
+	endpoint = AnalogCompPeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+extern "C" bool AnalogCompPeiDisconnectTask(AnalogCompDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t Evt, ANALOG_COMP_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	// Teardown must work after the comparator is stopped or disabled.
+	if (pDev == NULL || pPei == NULL || s_pnRF5xLPCompDev != pDev ||
+		PeiDisconnectTask == NULL)
+	{
+		return false;
+	}
+	endpoint = AnalogCompPeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
+}
