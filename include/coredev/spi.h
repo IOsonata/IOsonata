@@ -39,6 +39,7 @@ SOFTWARE.
 #define __SPI_H__
 
 #include <stdint.h>
+#include "coredev/pei.h"
 #include <string.h>
 
 #ifndef __cplusplus
@@ -54,6 +55,24 @@ SOFTWARE.
 
 
 // SPI Status code
+// Hardware event sources are selected by the configured SPI mode.
+typedef enum {
+	SPI_PEI_EVENT_READY,
+	SPI_PEI_EVENT_STARTED,
+	SPI_PEI_EVENT_ENDRX,
+	SPI_PEI_EVENT_ENDTX,
+	SPI_PEI_EVENT_END,
+	SPI_PEI_EVENT_STOPPED,
+	SPI_PEI_EVENT_ACQUIRED
+} SPI_PEI_EVENT;
+
+typedef enum {
+	SPI_PEI_TASK_START,
+	SPI_PEI_TASK_STOP,
+	SPI_PEI_TASK_SUSPEND,
+	SPI_PEI_TASK_RESUME
+} SPI_PEI_TASK;
+
 typedef enum __SPI_Status {
 	SPISTATUS_OK,
 	SPISTATUS_TIMEOUT
@@ -213,6 +232,25 @@ extern "C" {
 
 // Require implementations
 bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData);
+
+// Only an initialized noninterrupt SPIM master in 8-bit manual-CS
+// mode may arm a hardware START task. TX copies into the existing
+// driver's private staging array; RX stays caller-owned and RAM-resident
+// until the transfer finishes and the PPI START route is removed.
+bool SPIPreparePeiTransfer(SPIDev_t *pDev, const uint8_t *pTx,
+	uint32_t TxLen, uint8_t *pRx, uint32_t RxLen);
+bool SPIReleasePeiTransfer(SPIDev_t *pDev);
+
+// nRF52 SPI READY; SPIM STARTED/ENDRX/ENDTX/END/STOPPED;
+// SPIS ENDRX/END/ACQUIRED. SPIS semaphore tasks remain IRQ-owned.
+bool SPIEnablePeiEvent(SPIDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, SPI_PEI_EVENT Event);
+bool SPIDisablePeiEvent(SPIDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+bool SPIConnectPeiTask(SPIDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, SPI_PEI_TASK Task);
+bool SPIDisconnectPeiTask(SPIDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, SPI_PEI_TASK Task);
 
 static inline int SPIGetRate(SPIDev_t * const pDev) { return pDev->DevIntrf.GetRate(&pDev->DevIntrf); }
 static inline int SPISetRate(SPIDev_t * const pDev, int Rate) {
@@ -395,6 +433,38 @@ public:
 	 */
 	virtual void SetSlaveTxData(int SlaveIdx, uint8_t * const pData, int DataLen) {
 		SPISetSlaveTxData(&vDevData, SlaveIdx, pData, DataLen);
+	}
+
+	bool PreparePeiTransfer(const uint8_t *pTx, uint32_t TxLen,
+		uint8_t *pRx, uint32_t RxLen)
+	{
+		return SPIPreparePeiTransfer(&vDevData, pTx, TxLen, pRx, RxLen);
+	}
+
+	bool ReleasePeiTransfer()
+	{
+		return SPIReleasePeiTransfer(&vDevData);
+	}
+
+	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
+		SPI_PEI_EVENT Event)
+	{
+		return SPIEnablePeiEvent(&vDevData, PeiDev, &Evt, Event);
+	}
+
+	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return SPIDisablePeiEvent(&vDevData, PeiDev, Evt);
+	}
+
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, SPI_PEI_TASK Task)
+	{
+		return SPIConnectPeiTask(&vDevData, PeiDev, Evt, Task);
+	}
+
+	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, SPI_PEI_TASK Task)
+	{
+		return SPIDisconnectPeiTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 	virtual SPIPHY Phy() { return vDevData.Cfg.Phy; }

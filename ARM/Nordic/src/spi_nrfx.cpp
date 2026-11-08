@@ -69,6 +69,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "spi_nrfx.h"
 #include "nrf_erratas.h"
 
+// A normal SPI-only firmware must not pull the PPI/PEI backend.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 #ifdef NRF54L_SERIES
 #define NRFX_SPI_RX(reg) ((reg)->DMA.RX)
 #define NRFX_SPI_TX(reg) ((reg)->DMA.TX)
@@ -497,7 +506,7 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
-	if (dev->bTxAbort || dev->bCmdFailed)
+	if (dev->bTxAbort || dev->bCmdFailed || dev->bPeiPrepared)
 	{
 		return false;
 	}
@@ -838,7 +847,7 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
-	if (dev->bTxAbort || dev->bCmdFailed)
+	if (dev->bTxAbort || dev->bCmdFailed || dev->bPeiPrepared)
 	{
 		return false;
 	}
@@ -1463,7 +1472,9 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	{
 		return false;
 	}
-	if (g_nRFxSPIDev[pCfgData->DevNo].bTxAbort || g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed)
+	if (g_nRFxSPIDev[pCfgData->DevNo].bTxAbort ||
+		g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed ||
+		g_nRFxSPIDev[pCfgData->DevNo].bPeiPrepared)
 	{
 		// TxBuf may still be in use by the cancelled DMA block.
 		return false;
@@ -1491,6 +1502,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	g_nRFxSPIDev[pCfgData->DevNo].pTxWait = NULL;
 	g_nRFxSPIDev[pCfgData->DevNo].bTxAbort = false;
 	g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed = false;
+	g_nRFxSPIDev[pCfgData->DevNo].bPeiPrepared = false;
 
 	pDev->DevIntrf.pDevData = (void*)&g_nRFxSPIDev[pCfgData->DevNo];
 
