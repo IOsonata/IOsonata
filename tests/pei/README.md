@@ -49,11 +49,12 @@ archive member. Timer initialization leaves its optional PEI callbacks
 unset. Only a call to `TimerEnablePeiTrigger` or
 `TimerEnablePeiEvent` explicitly requests the MCU's PEI callbacks.
 HF Timer and RTC compare state reuse existing `TimerTrig_t` and
-compare bookkeeping. RTC no longer contains private PPI handles or
-per-compare PEI arrays: automatic routes belong to the caller's matrix.
-RTC TICK/OVRFLW source records remain in optional PEI-only sections;
-ordinary RTC methods do not reference them, so `--gc-sections`
-should discard them from non-PEI firmware.
+per-CC bookkeeping. A compare event never causes an automatic STOP or
+CLEAR task, and no private PPI route is installed for rearming.
+The Timer ISR advances the selected CC for continuous operation, while
+PPI routes the event directly to its task. RTC TICK/OVRFLW bookkeeping
+remains in optional PEI-only sections; `--gc-sections` should discard
+it from non-PEI firmware.
 
 Clean-build the nRF52832 HAL and TimerDemo, then check the new map:
 
@@ -95,19 +96,18 @@ for the remaining peripheral families, device-specific differences,
 ownership rules and acceptance criteria. Do not move PEI development
 to another MCU family until nRF52 coverage is complete.
 
-The RTC Timer backend implements TICK/OVRFLW event sources via
-`EVTEN` independently of `INTEN`, and START/STOP/CLEAR/TRIGOVRFLW
-task endpoints through the existing C Timer APIs. Hardware-only
-COMPARE uses `PeiConnectTask` on the supplied matrix to route
-COMPARE to STOP (single) or CLEAR (continuous). No private PPI
-connection or ISR forwarding is involved.
+The RTC Timer backend implements TICK/OVRFLW event sources through
+`EVTEN` independently from `INTEN`. Each free compare channel may
+bind its `EVENTS_COMPARE[n]` source to PEI without stopping or clearing
+the counter. Continuous compare scheduling uses an RTC ISR to update
+only `CC[n]` relative to the current counter; PPI still routes each
+hardware event without CPU forwarding. Single-shot compare disarms
+that event after the first match.
 
-RTC compare requires exclusive counter ownership. The driver rejects
-other active compares and TICK/OVRFLW PEI sources. The application
-enables its logical event before issuing RTC START. Disabling an event
-also disables the rearm route, so clear and restart the counter after
-a missed compare. `TimerDisableTrigger` unbinds the source and removes
-the automatic task from the PEI matrix. Backend reservations still apply.
+Mixed PEI/interrupt CC channels and TICK/OVRFLW sources are permitted.
+`TimerDisableTrigger` unbinds only the selected PEI compare source.
+The counter remains free-running for elapsed-time reads. A clean MCU
+build and mixed-channel on-target test are required.
 
 **TIMER3 configuration needs a clean MCU build and hardware validation.**
 `PeiBlinky/src/board.h` selects `TimerCfg_t.DevNo = 6`, which is
@@ -127,19 +127,18 @@ it binds the event and task endpoints into one `Pei` matrix and enables
 hardware routing, without CPU event forwarding.
 
 The example now uses `Timer::EnableTimerTrigger(pei, evt, ...)` to
-prepare the configured Timer/RTC hardware-only compare and bind its event
+prepare the configured Timer/RTC compare source and bind its event
 to PEI. `IOPinEnableTask(pei, evt, ...)` asks the GPIO driver to prepare a
 GPIOTE task and connect its endpoint. Peripheral setup stays in the
 Timer and GPIO HAL drivers; PEI only programs PPI. The former
 `pei_blinky_port_nrf52.c` adapter and `pei_blinky_port.h` are removed.
 
-nRF52 uses hardware COMPARE->CLEAR to generate the 500 ms periodic
-event without an ISR. It also provides COMPARE->STOP for hardware-only
-single-shot events. Both shortcuts affect the whole timer counter, so
-the Timer driver rejects other active compare triggers and shortcuts.
-The single-shot path awaits MCU compilation and hardware validation;
-existing ISR trigger modes are unchanged.
-`DisableTimerTrigger(trig)` unbinds PEI before releasing the compare.
+nRF52 uses a free-running counter. The TIMER3 ISR advances only
+the matched CC for the next 500 ms event. PPI routes that event to
+GPIOTE in hardware and does not use an ISR to toggle either LED.
+Single-shot compares disarm only their own event; neither mode stops
+or clears the counter. Mixed interrupt and PEI CC operation requires
+hardware validation. `DisableTimerTrigger(trig)` unbinds only that CC.
 
 The standalone project links the production `pei_nrf52.cpp` as an
 application object compiled without `SOFTDEVICE_PRESENT`. The standard
@@ -188,7 +187,7 @@ hardware PASS** for three event sources and four event-to-task links,
 including compare fan-out to both LEDs. That earlier hardware observation
 does not validate the new TIMER3 selection. The 500 ms event period is
 the configured value, not a separately measured timing result. A debugger
-trace confirming the absence of Timer/GPIOTE ISR entries is still pending.
+trace confirming expected TIMER3 compare ISR entries and no event-forwarding GPIOTE ISR is still pending.
 
 Hardware observation (November 7, 2026): following the PEI C++
 backend rename, Eclipse project-link corrections and Timer/GPIO HAL

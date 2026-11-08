@@ -229,9 +229,9 @@ struct __Timer_Device {
 							  TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 							  void * const pContext);
 
-	// Optional hardware-only event endpoint. Implemented by a Timer driver
-	// when its hardware can generate this trigger without an ISR.
-	// The Timer driver owns the compare resource and PEI binding lifetime.
+	// Optional PEI compare event source. Timer owns CC programming and
+	// continuous ISR rescheduling; PEI hardware routes the event to tasks.
+	// A compare never implicitly stops or clears the elapsed counter.
 	bool (*EnablePeiTrigger)(TimerDev_t * const pTimerDev, int TrigNo,
 						 uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
 						 PeiDev_t *pPei, PeiEvent_t *pEvent);
@@ -336,12 +336,11 @@ static inline uint32_t TimerSetFrequency(TimerDev_t * const pTimer, uint32_t Fre
 static inline void TimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo) { pTimer->DisableTrigger(pTimer, TrigNo); }
 
 /**
- * @brief Configure a hardware-only Timer trigger and register its PEI
- * event source. Returns the allocated trigger index, or -1 on failure.
- * The C++ Timer::EnableTimerTrigger overload uses this same C function.
- *
- * On nRF52 RTC, the automatic COMPARE->CLEAR/STOP destination belongs
- * to pPei. Enable that logical PEI event before executing RTC START.
+ * @brief Configure a Timer CC event source and bind it to PEI.
+ * Returns the allocated trigger index, or -1 on failure. The C++
+ * Timer::EnableTimerTrigger overload uses this same C function.
+ * On nRF52, the Timer ISR reschedules continuous CC compares but never
+ * forwards an event to PEI; no compare stops or clears the counter.
  */
 static inline int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, uint32_t msPeriod, TIMER_TRIG_TYPE Type)
@@ -748,13 +747,13 @@ public:
 						   TimerTrigEvtHandler_t const Handler = NULL, void * const pContext = NULL);
 
 	/**
-	 * @brief Prepare a hardware-only timer compare event for PEI.
+	 * @brief Prepare a Timer compare event source for PEI.
 	 *
-	 * The Timer driver configures the compare and binds its event endpoint
-	 * to Pei. PEI owns the routing; the caller connects task destinations
-	 * and enables routing separately. No software trigger ISR is enabled.
-	 * TrigNo is returned so the existing DisableTimerTrigger works for both
-	 * ISR and PEI triggers. Unsupported hardware configurations return -1.
+	 * Timer owns CC configuration and continuous compare rescheduling.
+	 * PEI owns hardware event-to-task routing, with no ISR forwarding.
+	 * The elapsed counter is never stopped or cleared by a compare.
+	 * TrigNo is returned for DisableTimerTrigger. Unsupported hardware
+	 * configurations return -1.
 	 *
 	 * @return Allocated trigger number, or -1 on failure
 	 */

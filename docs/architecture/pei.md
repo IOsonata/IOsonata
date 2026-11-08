@@ -114,7 +114,7 @@ with software interrupt forwarding.
 ## Initial implementation sequence (0.14)
 
 1. nRF52 PPI: an event-to-task connection, allocation/release, enable/disable,
-   and no-ISR timer-to-GPIOTE validation on nRF52832/BLYST-NANO-DK.
+   and hardware event-to-GPIOTE validation on nRF52832/BLYST-NANO-DK.
 2. Nordic DPPI on supported nRF53 and nRF54 devices, including publisher,
    subscriber and security-domain ownership.
 3. Microchip SAMD EVSYS: adapt the existing `SamdEvsysOpen` and
@@ -168,13 +168,14 @@ archive.
 `TimerInit` does not install PEI trigger callbacks. The first explicit
 PEI Timer call invokes `PeiTimerPrepare`, which installs the applicable
 MCU callback through `TimerPeiPrepareMcu`. Non-PEI Timer applications
-do not reference this optional path. HF Timer and RTC compare ownership
-reuse existing `TimerTrig_t` and CC bookkeeping. RTC does not allocate
-private PPI connections; its automatic compare task is connected in the
-supplied `PeiDev_t` matrix. RTC TICK/OVRFLW source bookkeeping is
-referenced only by optional PEI callbacks and should be discarded from
-non-PEI firmware. Normal RTC methods do not directly reference it.
-`DisableTimerTrigger` removes the automatic route through PEI.
+do not reference this optional path. HF Timer and RTC use their existing
+`TimerTrig_t` and per-CC bookkeeping to own compare sources. No
+COMPARE-to-STOP/CLEAR shortcuts or automatic PPI routes are installed.
+Continuous compare events are rescheduled by the Timer ISR; PPI delivers
+the event to its destination independently. RTC TICK/OVRFLW source
+bookkeeping remains in optional PEI-only sections, discarded by the
+linker when PEI is unused. `DisableTimerTrigger` unbinds only the
+selected CC event.
 
 This depends on GCC weak references and link garbage collection, as
 used in the Eclipse managed projects. The source changes are not a
@@ -191,22 +192,20 @@ inventory, implementation order and acceptance checklist are in
 Do not infer an available endpoint from its register address range alone.
 Peripheral ownership and the device-header register map are decisive.
 
-The nRF52 RTC Timer driver now exposes TICK/OVRFLW event sources
-with independent EVTEN control, and START/STOP/CLEAR/TRIGOVRFLW task
-endpoints through the existing C Timer interface. RTC compare
-supports both hardware-only single-shot and continuous operation:
-the RTC driver requests `PeiConnectTask` on the caller's matrix for
-COMPARE->STOP or COMPARE->CLEAR respectively. PEI owns all routing,
-including automatic rearming; the Timer driver owns compare and counter
-configuration only.
+The nRF52 RTC Timer driver exposes TICK/OVRFLW event sources with
+independent EVTEN control, and START/STOP/CLEAR/TRIGOVRFLW hardware
+task endpoints. RTC and HF Timer CC channels may be used independently
+by interrupt-driven triggers and PEI event sources. A PEI compare event
+never stops or resets the elapsed-time counter; `TimerGetTickCount`
+and its time-conversion APIs remain available.
 
-RTC compare mode requires exclusive RTC counter ownership and rejects
-conflicting trigger or raw-event users. Single-shot stops the counter;
-continuous mode periodically clears it without an ISR. The application
-must enable the logical PEI event before issuing RTC START. Disabling
-that event also disables its rearm route; after a missed compare, the
-counter must be cleared and restarted. These additions have **not**
-yet been MCU compiled or tested on hardware. The
+In continuous mode, the existing Timer ISR advances only the matched
+CC register relative to the current counter. PEI dispatches that
+hardware event to its destination without CPU forwarding. Single-shot
+mode disarms the selected event after its first match, without affecting
+the shared counter or other CC channels. Disable/re-enable of the PEI
+route does not reset the counter or interrupt-driven CC schedule.
+These changes require a fresh MCU build and hardware revalidation. The
 BLYST-NANO-DK PeiBlinky now selects `DevNo = 6` (TIMER3 at 16 MHz,
 with `Freq = 0`) for the standalone PEI test. The RTC backend remains
 unvalidated. The TIMER3 selection also requires a fresh MCU build and
@@ -342,18 +341,21 @@ reported for this configuration.
 The shared `exemples/pei/pei_blinky.cpp` contains no MCU register
 access or platform adapter. It uses the existing Timer object and the
 new `Timer::EnableTimerTrigger(Pei&, PeiEvent_t&, ...)` overload to
-configure a hardware-only compare source and bind it in PEI. The GPIO
+configure a compare source and bind it in PEI. The GPIO
 `IOPinEnableTask` wrapper configures a task using its GPIO backend
 and registers the endpoint relationship in PEI.
 
-On nRF52, the Timer driver uses hardware COMPARE->CLEAR for continuous
-triggers and COMPARE->STOP for single-shot triggers, without a Timer ISR.
-Both shortcuts affect the entire counter and require exclusive compare
-ownership; conflicting ISR compare and shortcut configurations are refused.
-The single-shot path still needs MCU compilation and hardware validation.
-`Timer::DisableTimerTrigger(TrigNo)` unbinds PEI before freeing its
-compare slot. GPIO task slots share allocation with GPIOTE interrupts.
+On nRF52, every CC compares against the free-running Timer counter.
+The Timer ISR advances only the matched CC for continuous scheduling
+and disarms a single-shot event without stopping the counter. PEI
+routes the hardware compare event directly to GPIOTE, not through the
+ISR. Ordinary CC interrupts and PEI compare channels can coexist.
+The revised single-shot and continuous paths need a clean MCU build
+and hardware validation. `Timer::DisableTimerTrigger(TrigNo)` unbinds
+only that CC source. GPIO task slots share allocation with GPIOTE
+interrupts.
 
 PEI itself still configures only the interconnect. The updated HAL and example have been compiled and the LED has been
-observed flashing at approximately 1 Hz on BLYST-NANO-DK. IRQ absence
-and routing lifecycle checks remain to be verified.
+observed flashing at approximately 1 Hz on BLYST-NANO-DK before the
+free-running CC scheduling correction. Hardware revalidation, expected
+Timer compare IRQ activity and routing lifecycle checks remain pending.
