@@ -870,10 +870,10 @@ bool PeiGroupAddEvent(PeiGroup_t *pGroup, PeiDev_t *pPei,
 		bit = 1UL << chan;
 		if ((available & bit) == 0U ||
 			(NRF_PPI->CHEN & bit) != 0U ||
+			// A route may disable its own group for a one-shot
+			// hardware link; self-enable is refused to avoid cycles.
 			NRF_PPI->CH[chan].TEP ==
-				(uint32_t)(uintptr_t)&NRF_PPI->TASKS_CHG[group].EN ||
-			NRF_PPI->CH[chan].TEP ==
-				(uint32_t)(uintptr_t)&NRF_PPI->TASKS_CHG[group].DIS)
+				(uint32_t)(uintptr_t)&NRF_PPI->TASKS_CHG[group].EN)
 		{
 			return false;
 		}
