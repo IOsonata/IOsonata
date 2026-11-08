@@ -39,6 +39,7 @@ Modified by          Date              Description
 #include "nrf.h"
 
 #include "converters/adc_device.h"
+#include "adc_nrf52_pei.h"
 
 #define SAADC_NRF52_MAX_CHAN        8   // Max number of channels
 
@@ -140,6 +141,38 @@ public:
 	virtual void Reset();
 	virtual void PowerOff();
 	virtual bool UpdateData();
+
+	/**
+	 * @brief Arm the existing channel configuration and internal
+	 * EasyDMA buffer for hardware PEI sampling, without taking a sample.
+	 * Only the single-conversion, noninterrupt mode is supported.
+	 * Do not close channels or disable ADC while PEI routes are connected.
+	 */
+	bool PreparePeiSampling();
+	bool PeiSamplingReady() const;
+
+	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
+		ADC_NRF52_PEI_EVENT Event)
+	{
+		return PeiSamplingReady() &&
+			AdcNrf52PeiBindEvent(PeiDev, &Evt, Event);
+	}
+
+	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return AdcNrf52PeiUnbindEvent(PeiDev, Evt);
+	}
+
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, ADC_NRF52_PEI_TASK Task)
+	{
+		return PeiSamplingReady() &&
+			AdcNrf52PeiConnectTask(PeiDev, Evt, Task);
+	}
+
+	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, ADC_NRF52_PEI_TASK Task)
+	{
+		return AdcNrf52PeiDisconnectTask(PeiDev, Evt, Task);
+	}
 
 private:
 };

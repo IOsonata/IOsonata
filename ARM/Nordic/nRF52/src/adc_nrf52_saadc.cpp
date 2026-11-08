@@ -47,6 +47,17 @@ Modified by          Date              Description
 #endif
 
 #include "adc_nrf52_saadc.h"
+#include "coredev/pei.h"
+
+// PEI is optional. These weak calls cannot extract the PEI matrix
+// into a normal ADC-only firmware's static HAL link.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
 
 // The nRF91 names its peripherals by security state and the application runs
 // secure
@@ -858,4 +869,205 @@ bool AdcnRF52::Read(int Chan, AdcData_t *pBuff)
 bool AdcnRF52::UpdateData()
 {
 	return true;
+}
+
+
+// A prepared ADC owns its channel setup and fixed internal result buffer.
+// No new buffers are allocated for PEI. The caller must disconnect all PPI
+// routes before changing channels, stopping or disabling the peripheral.
+bool AdcnRF52::PeiSamplingReady() const
+{
+	if (s_AdcnRF52DevData.pDevObj != this ||
+		vMode != ADC_CONV_MODE_SINGLE || vbInterrupt ||
+		s_AdcnRF52DevData.NbChanAct <= 0 ||
+		s_AdcnRF52DevData.NbChanAct > SAADC_NRF52_MAX_CHAN ||
+		NRF_SAADC->ENABLE !=
+			(SAADC_ENABLE_ENABLE_Enabled << SAADC_ENABLE_ENABLE_Pos) ||
+		NRF_SAADC->RESULT.PTR !=
+			(uint32_t)(uintptr_t)s_AdcnRF52DevData.ResData ||
+		NRF_SAADC->RESULT.MAXCNT !=
+			(uint32_t)s_AdcnRF52DevData.NbChanAct)
+	{
+		return false;
+	}
+	return true;
+}
+
+bool AdcnRF52::PreparePeiSampling()
+{
+	int i;
+	int timeout;
+
+	if (s_AdcnRF52DevData.pDevObj != this ||
+		vMode != ADC_CONV_MODE_SINGLE || vbInterrupt ||
+		s_AdcnRF52DevData.NbChanAct <= 0 ||
+		s_AdcnRF52DevData.NbChanAct > SAADC_NRF52_MAX_CHAN ||
+		NRF_SAADC->ENABLE !=
+			(SAADC_ENABLE_ENABLE_Enabled << SAADC_ENABLE_ENABLE_Pos) ||
+		NRF_SAADC->STATUS != 0U)
+	{
+		return false;
+	}
+
+#if defined(NRF52832_XXAA)
+	// nRF52832 erratum 150: PPI-driven START may fail to raise
+	// STARTED with TACQ of 5 us or less. END->START uses PPI too.
+	for (i = 0; i < SAADC_NRF52_MAX_CHAN; i++)
+	{
+		if (s_AdcnRF52DevData.ChanState[i] != 0U &&
+			((NRF_SAADC->CH[i].CONFIG & SAADC_CH_CONFIG_TACQ_Msk) >>
+				SAADC_CH_CONFIG_TACQ_Pos) <= SAADC_CH_CONFIG_TACQ_5us)
+		{
+			return false;
+		}
+	}
+#else
+	(void)i;
+#endif
+
+	NRF_SAADC->SAMPLERATE =
+		(SAADC_SAMPLERATE_MODE_Task << SAADC_SAMPLERATE_MODE_Pos);
+	NRF_SAADC->RESULT.PTR = (uint32_t)(uintptr_t)s_AdcnRF52DevData.ResData;
+	NRF_SAADC->RESULT.MAXCNT = s_AdcnRF52DevData.NbChanAct;
+	NRF_SAADC->EVENTS_STARTED = 0U;
+	NRF_SAADC->EVENTS_END = 0U;
+	NRF_SAADC->EVENTS_DONE = 0U;
+	NRF_SAADC->EVENTS_RESULTDONE = 0U;
+	NRF_SAADC->EVENTS_STOPPED = 0U;
+	NRF_SAADC->TASKS_START = 1U;
+
+	timeout = 100000;
+	while (NRF_SAADC->EVENTS_STARTED == 0U && timeout-- > 0)
+	{
+	}
+	if (NRF_SAADC->EVENTS_STARTED == 0U)
+	{
+		NRF_SAADC->TASKS_STOP = 1U;
+		nRF52ADCWaitForStop(10000);
+		NRF_SAADC->RESULT.PTR = 0U;
+		NRF_SAADC->RESULT.MAXCNT = 0U;
+		return false;
+	}
+	NRF_SAADC->EVENTS_STARTED = 0U;
+	return PeiSamplingReady();
+}
+
+static PeiEndpoint_t AdcNrf52PeiEventEndpoint(ADC_NRF52_PEI_EVENT Event)
+{
+	switch (Event)
+	{
+		case ADC_NRF52_PEI_EVENT_STARTED:
+			return (PeiEndpoint_t)&NRF_SAADC->EVENTS_STARTED;
+		case ADC_NRF52_PEI_EVENT_END:
+			return (PeiEndpoint_t)&NRF_SAADC->EVENTS_END;
+		case ADC_NRF52_PEI_EVENT_DONE:
+			return (PeiEndpoint_t)&NRF_SAADC->EVENTS_DONE;
+		case ADC_NRF52_PEI_EVENT_RESULTDONE:
+			return (PeiEndpoint_t)&NRF_SAADC->EVENTS_RESULTDONE;
+		case ADC_NRF52_PEI_EVENT_STOPPED:
+			return (PeiEndpoint_t)&NRF_SAADC->EVENTS_STOPPED;
+		default:
+			return 0U;
+	}
+}
+
+static PeiEndpoint_t AdcNrf52PeiTaskEndpoint(ADC_NRF52_PEI_TASK Task)
+{
+	switch (Task)
+	{
+		case ADC_NRF52_PEI_TASK_START:
+			return (PeiEndpoint_t)&NRF_SAADC->TASKS_START;
+		case ADC_NRF52_PEI_TASK_SAMPLE:
+			return (PeiEndpoint_t)&NRF_SAADC->TASKS_SAMPLE;
+		case ADC_NRF52_PEI_TASK_STOP:
+			return (PeiEndpoint_t)&NRF_SAADC->TASKS_STOP;
+		default:
+			return 0U;
+	}
+}
+
+// C linkage is intentional here: these are C-callable HAL functions,
+// not debugger-visible C++ globals.
+extern "C" bool AdcNrf52PreparePeiSampling(void)
+{
+	return s_AdcnRF52DevData.pDevObj != NULL &&
+		s_AdcnRF52DevData.pDevObj->PreparePeiSampling();
+}
+
+extern "C" bool AdcNrf52PeiBindEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
+	ADC_NRF52_PEI_EVENT Event)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || pEvt == NULL || PeiBindEvent == NULL ||
+		s_AdcnRF52DevData.pDevObj == NULL ||
+		!s_AdcnRF52DevData.pDevObj->PeiSamplingReady())
+	{
+		return false;
+	}
+	endpoint = AdcNrf52PeiEventEndpoint(Event);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt, endpoint);
+}
+
+extern "C" bool AdcNrf52PeiUnbindEvent(PeiDev_t *pPei, PeiEvent_t Evt)
+{
+	PeiEndpoint_t endpoint;
+	int i;
+
+	if (pPei == NULL || PeiGetEventEndpoint == NULL ||
+		PeiUnbindEvent == NULL)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	for (i = ADC_NRF52_PEI_EVENT_STARTED;
+		i <= ADC_NRF52_PEI_EVENT_STOPPED; i++)
+	{
+		if (endpoint == AdcNrf52PeiEventEndpoint(
+			(ADC_NRF52_PEI_EVENT)i))
+		{
+			return PeiUnbindEvent(pPei, Evt, endpoint);
+		}
+	}
+	return false;
+}
+
+extern "C" bool AdcNrf52PeiConnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
+	ADC_NRF52_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiConnectTask == NULL ||
+		s_AdcnRF52DevData.pDevObj == NULL ||
+		!s_AdcnRF52DevData.pDevObj->PeiSamplingReady())
+	{
+		return false;
+	}
+	endpoint = AdcNrf52PeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+extern "C" bool AdcNrf52PeiDisconnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
+	ADC_NRF52_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiDisconnectTask == NULL)
+	{
+		return false;
+	}
+	endpoint = AdcNrf52PeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
 }
