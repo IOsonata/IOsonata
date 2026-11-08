@@ -1,0 +1,168 @@
+/**-------------------------------------------------------------------------
+@example	power_off_demo.cpp
+
+@brief	MCU power off and wake up demo
+
+Logs with SysLog on the console UART the reason of the last reset and a
+start count kept in retention register 0, then powers the MCU off. The wake
+up button of board.h starts it again: the next start logs a wake up by a pin
+and the count one higher. A power on reset starts the count over.
+
+The MCU powers off POWER_DEMO_DELAY msec after the start, once the button is
+released. With a debugger attached, power off can be emulated by the MCU and
+the demo then stays stopped instead of waking up.
+
+The board.h of the project gives the console UART pins and the wake up
+button.
+
+@author	Hoang Nguyen Hoan
+@date	Nov. 7, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
+#include <stdint.h>
+
+#include "coredev/iopincfg.h"
+#include "iopinctrl.h"
+#include "coredev/uart.h"
+#include "coredev/mcu_power.h"
+#include "syslog.h"
+#include "idelay.h"
+
+#include "board.h"
+
+// Console rate, board.h can give another one
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE			1000000
+#endif
+
+// Time before power off, in msec
+#ifndef POWER_DEMO_DELAY
+#define POWER_DEMO_DELAY		3000
+#endif
+
+static const IOPinCfg_t s_UartPins[] = {
+	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
+	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+};
+
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = UART_BAUDRATE,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 6,
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,
+	.pRxMem = nullptr,
+	.TxMemSize = 0,
+	.pTxMem = nullptr,
+	.bDMAMode = true,
+};
+
+static UART s_Uart;
+
+// SysLog on the console UART, a record goes out as soon as it is logged.
+// 16 records of 128 bytes. A record the UART does not take in full stays in
+// the store and the rest goes out at the next log call. bBlocking keeps the
+// oldest records when the store is full.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = true,
+};
+
+static const struct {
+	uint32_t Reason;
+	const char *pName;
+} s_ResetNames[] = {
+	{ MCU_RESET_POWERON, "power on" },
+	{ MCU_RESET_PIN, "reset pin" },
+	{ MCU_RESET_WDT, "watchdog" },
+	{ MCU_RESET_SOFT, "software" },
+	{ MCU_RESET_LOCKUP, "lockup" },
+	{ MCU_RESET_DEBUG, "debug interface" },
+	{ MCU_RESET_WAKE_PIN, "wake up by a pin" },
+	{ MCU_RESET_WAKE_COMP, "wake up by the comparator" },
+	{ MCU_RESET_WAKE_NFC, "wake up by NFC" },
+	{ MCU_RESET_WAKE_USB, "wake up by USB" },
+};
+
+int main()
+{
+	s_Uart.Init(s_UartCfg);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
+
+	SysLogPrintf(SysLogGet(), "PowerOffDemo\r\n");
+
+	uint32_t reason = McuResetReason();
+
+	const char *sep = " ";
+
+	SysLogPrintf(SysLogGet(), "Reset reason 0x%x:", (unsigned)reason);
+	for (unsigned i = 0; i < sizeof(s_ResetNames) / sizeof(s_ResetNames[0]); i++)
+	{
+		if (reason & s_ResetNames[i].Reason)
+		{
+			SysLogPrintf(SysLogGet(), "%s%s", sep, s_ResetNames[i].pName);
+			sep = ", ";
+		}
+	}
+	SysLogPrintf(SysLogGet(), "\r\n");
+
+	// The retention registers are cleared by a power on reset only
+	uint32_t cnt = (reason & MCU_RESET_POWERON) ? 0 : McuRetRegRead(0);
+
+	cnt++;
+	McuRetRegWrite(0, cnt);
+	SysLogPrintf(SysLogGet(), "Start count %u, %d retention registers\r\n", (unsigned)cnt, McuRetRegCount());
+
+	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+
+	msDelay(POWER_DEMO_DELAY);
+
+	// The button wakes the MCU on low level, it must be up before power off
+	while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) == 0);
+
+	SysLogPrintf(SysLogGet(), "Power off, press the button to wake up\r\n");
+
+	// Time for the UART to send the last record
+	msDelay(100);
+
+	IOPinSetSense(WAKE_BUT_PORT, WAKE_BUT_PIN, IOPINSENSE_LOW_TRANSITION);
+	McuPowerOff();
+
+	return 0;
+}
