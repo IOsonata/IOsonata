@@ -986,8 +986,6 @@ static PeiEndpoint_t AdcNrf52PeiTaskEndpoint(ADC_NRF52_PEI_TASK Task)
 	}
 }
 
-// C linkage is intentional here: these are C-callable HAL functions,
-// not debugger-visible C++ globals.
 extern "C" bool AdcNrf52PreparePeiSampling(void)
 {
 	return s_AdcnRF52DevData.pDevObj != NULL &&
