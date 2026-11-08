@@ -11,11 +11,7 @@ a target MCU. tests/pei/run.py compiles this as C11 with -Werror.
 #include "coredev/pwm.h"
 #include "coredev/spi.h"
 #include "coredev/uart.h"
-#include "coredev/wdt.h"
-#include "pei_nrf52_power_clock.h"
 #include "coredev/qdec.h"
-#include "temp_nrf_pei.h"
-#include "rng_nrf_pei.h"
 #include "coredev/i2c.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
@@ -437,7 +433,7 @@ bool PeiUartCApplication(UARTDev_t *pUart, PeiDev_t *pPei,
 }
 
 
-// Compile-only C clients of the QDEC/TEMP/RNG PEI matrix.
+// Compile-only C client of the QDEC hardware sampling matrix.
 bool PeiQdecCApplication(QdecDev_t *pQdec, PeiDev_t *pPei,
 	PeiEvent_t start)
 {
@@ -466,102 +462,6 @@ bool PeiQdecCApplication(QdecDev_t *pQdec, PeiDev_t *pPei,
 		return false;
 	}
 	return PeiReleaseEvent(pPei, &stopped);
-}
-
-bool PeiTempCApplication(PeiDev_t *pPei, PeiEvent_t start)
-{
-	PeiEvent_t ready = 0U;
-
-	if (!TempNrfPeiEnableEvent(pPei, &ready,
-		TEMP_NRF_PEI_EVENT_DATARDY))
-	{
-		return false;
-	}
-	if (!TempNrfPeiConnectTask(pPei, start,
-		TEMP_NRF_PEI_TASK_START))
-	{
-		return false;
-	}
-	if (!TempNrfPeiDisconnectTask(pPei, start,
-		TEMP_NRF_PEI_TASK_START))
-	{
-		return false;
-	}
-	if (!TempNrfPeiDisableEvent(pPei, ready))
-	{
-		return false;
-	}
-	return PeiReleaseEvent(pPei, &ready);
-}
-
-bool PeiRngCApplication(PeiDev_t *pPei, PeiEvent_t start)
-{
-	PeiEvent_t ready = 0U;
-
-	if (!RngNrfPeiPrepare())
-	{
-		return false;
-	}
-	if (!RngNrfPeiEnableEvent(pPei, &ready,
-		RNG_NRF_PEI_EVENT_VALRDY))
-	{
-		return false;
-	}
-	if (!RngNrfPeiConnectTask(pPei, start, RNG_NRF_PEI_TASK_START))
-	{
-		return false;
-	}
-	if (!RngNrfPeiDisconnectTask(pPei, start,
-		RNG_NRF_PEI_TASK_START))
-	{
-		return false;
-	}
-	if (!RngNrfPeiDisableEvent(pPei, ready))
-	{
-		return false;
-	}
-	if (!PeiReleaseEvent(pPei, &ready))
-	{
-		return false;
-	}
-	return RngNrfPeiRelease();
-}
-
-
-// Compile-only: watchdog and passive POWER/CLOCK hardware sources.
-// These calls do not start a watchdog or modify radio clock ownership.
-bool PeiSystemCApplication(WdtDev_t *pWdt, PeiDev_t *pPei)
-{
-	PeiEvent_t wdt = 0U;
-	PeiEvent_t power = 0U;
-	PeiEvent_t clock = 0U;
-
-	if (!WdtEnablePeiEvent(pWdt, pPei, &wdt, WDT_PEI_EVENT_TIMEOUT))
-	{
-		return false;
-	}
-	if (!PeiNrf52BindPowerEvent(pPei, &power,
-		PEI_NRF52_POWER_EVENT_SLEEPENTER))
-	{
-		return false;
-	}
-	if (!PeiNrf52BindClockEvent(pPei, &clock,
-		PEI_NRF52_CLOCK_EVENT_HFCLKSTARTED))
-	{
-		return false;
-	}
-	if (!PeiNrf52UnbindPowerEvent(pPei, power) ||
-		!PeiNrf52UnbindClockEvent(pPei, clock) ||
-		!WdtDisablePeiEvent(pWdt, pPei, wdt))
-	{
-		return false;
-	}
-	if (!PeiReleaseEvent(pPei, &clock) ||
-		!PeiReleaseEvent(pPei, &power))
-	{
-		return false;
-	}
-	return PeiReleaseEvent(pPei, &wdt);
 }
 
 // Compile-only: group-owned PEI routes. The application connects

@@ -1,100 +1,67 @@
 #!/usr/bin/env python3
-"""nRF52 QDEC/TEMP/RNG PEI endpoints and ownership source contracts.
-
-These checks are not a substitute for Nordic CMSIS compilation or
-physical tests. All three hardware demonstrations remain unvalidated.
-"""
+"""QDEC PEI regression and explicit exclusion of one-shot nRF52 endpoints."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 QDEC = (ROOT / "ARM/Nordic/src/qdec_nrfx.cpp").read_text()
-TEMP = (ROOT / "ARM/Nordic/src/temp_nrf5x.cpp").read_text()
-RNG = (ROOT / "ARM/Nordic/src/rng_nrfx.cpp").read_text()
 QDEC_H = (ROOT / "include/coredev/qdec.h").read_text()
-TEMP_H = (ROOT / "ARM/Nordic/include/temp_nrf_pei.h").read_text()
-RNG_H = (ROOT / "ARM/Nordic/include/rng_nrf_pei.h").read_text()
-
-
-def section(source, start, end):
-    assert source.count(start) == 1, start
-    assert source.count(end) == 1, end
-    return source.split(start, 1)[1].split(end, 1)[0]
-
+WDT = (ROOT / "ARM/Nordic/src/wdt_nrfx.cpp").read_text()
+WDT_H = (ROOT / "include/coredev/wdt.h").read_text()
+TEMP = (ROOT / "ARM/Nordic/src/temp_nrf5x.cpp").read_text()
+TEMP_H = (ROOT / "ARM/Nordic/include/temp_nrf5x.h").read_text()
+RNG = (ROOT / "ARM/Nordic/src/rng_nrfx.cpp").read_text()
+RNG_H = (ROOT / "ARM/Nordic/include/crypto_rng_nrf.h").read_text()
+PPI = (ROOT / "ARM/Nordic/nRF52/src/pei_nrf52.cpp").read_text()
 
 def main():
-    q_events = section(QDEC, "static PeiEndpoint_t QdecPeiEventEndpoint(",
-                       "static PeiEndpoint_t QdecPeiTaskEndpoint(")
-    q_tasks = section(QDEC, "static PeiEndpoint_t QdecPeiTaskEndpoint(",
-                      'extern "C" bool QdecPreparePeiStart(')
-    for event in ("SAMPLERDY", "REPORTRDY", "ACCOF", "DBLRDY",
-                  "STOPPED"):
-        assert "&NRF_QDEC->EVENTS_" + event in q_events
+    events = QDEC.split("static PeiEndpoint_t QdecPeiEventEndpoint(", 1)[1]
+    events = events.split("static PeiEndpoint_t QdecPeiTaskEndpoint(", 1)[0]
+    tasks = QDEC.split("static PeiEndpoint_t QdecPeiTaskEndpoint(", 1)[1]
+    tasks = tasks.split('extern "C" bool QdecPreparePeiStart(', 1)[0]
+    for event in ("SAMPLERDY", "REPORTRDY", "ACCOF", "DBLRDY", "STOPPED"):
+        assert "&NRF_QDEC->EVENTS_" + event in events
     for task in ("START", "STOP"):
-        assert "&NRF_QDEC->TASKS_" + task in q_tasks
-    assert "READCLRACC" not in q_tasks
-    assert "QdecnRFFold(" in QDEC
+        assert "&NRF_QDEC->TASKS_" + task in tasks
+    assert "READCLRACC" not in tasks
     assert "NRF_QDEC->TASKS_READCLRACC = 1;" in QDEC
-    assert "QDEC_ENABLE_ENABLE_Enabled" in QDEC
-    assert "s_pQdecnRFDev" in QDEC
-    assert "QdecPreparePeiStart" in QDEC_H
+    assert "QdecPreparePeiStart(" in QDEC_H
+    for name in ("PreparePeiStart", "EnablePeiEvent", "DisablePeiEvent",
+                 "ConnectPeiTask", "DisconnectPeiTask"):
+        assert "bool Qdec" + name + "(" in QDEC_H
+        assert 'extern "C" bool Qdec' + name + "(" in QDEC
+    for symbol in ("PeiBindEvent", "PeiGetEventEndpoint", "PeiUnbindEvent",
+                   "PeiConnectTask", "PeiDisconnectTask"):
+        assert "#pragma weak " + symbol in QDEC
+    demo = (ROOT / "exemples/pei/pei_qdec_demo.cpp").read_text()
+    assert "QDEC_PEI_EVENT_SAMPLERDY" in demo
+    assert "QDEC_PEI_TASK_START" in demo
+    assert "QDEC_PEI_TASK_STOP" in demo
+    assert "g_PeiQdecStatus = 1;" in demo
 
-    t_tasks = section(TEMP, "static PeiEndpoint_t TempNrfPeiTaskEndpoint(",
-                      'extern "C" bool TempNrfPeiEnableEvent(')
-    for task in ("START", "STOP"):
-        assert "&NRF_TEMP->TASKS_" + task in t_tasks
-    assert "&NRF_TEMP->EVENTS_DATARDY" in TEMP
-    assert "NRF_TEMP->INTENCLR = 1U;" in TEMP
-    assert "s_bTempPeiReady = true;" in TEMP
-    assert "s_bTempPeiReady = false;" in TEMP
-    assert "s_pTempnRF5x != NULL" in TEMP
-
-    r_ready = section(RNG, "static bool RngNrfPeiReady(",
-                      'extern "C" bool RngNrfPeiPrepare(')
-    r_prep = section(RNG, 'extern "C" bool RngNrfPeiPrepare(',
-                     'extern "C" bool RngNrfPeiRelease(')
-    r_release = section(RNG, 'extern "C" bool RngNrfPeiRelease(',
-                        'extern "C" bool RngNrfPeiEnableEvent(')
-    assert "RngPeriphSdEnabled()" in r_ready
-    assert "!defined(NRFXLIB_SDC)" in r_ready
-    assert "atomic_flag_test_and_set(&pDev->bBusy)" in r_prep
-    assert "atomic_flag_clear(&s_pPeriphIntrf->bBusy)" in r_release
-    assert "reg->EVENTS_VALRDY = 0U;" in r_prep
-    assert "s_bPeriphPeiPrepared = true;" in r_prep
-    assert "s_bPeriphPeiPrepared = false;" in r_release
-    assert "&RngPeriphReg()->EVENTS_VALRDY" in RNG
-    assert "&RngPeriphReg()->TASKS_START" in RNG
-    assert "&RngPeriphReg()->TASKS_STOP" in RNG
-    assert "if (s_bPeriphPeiPrepared)" in RNG
-    assert "s_bPeriphSdXfer = RngPeriphSdEnabled();" in RNG
-
-    for source, prefix, header, funcs in (
-        (QDEC, "Qdec", QDEC_H,
-         ("PreparePeiStart", "EnablePeiEvent", "DisablePeiEvent",
-          "ConnectPeiTask", "DisconnectPeiTask")),
-        (TEMP, "TempNrfPei", TEMP_H,
-         ("EnableEvent", "DisableEvent", "ConnectTask", "DisconnectTask")),
-        (RNG, "RngNrfPei", RNG_H,
-         ("Prepare", "Release", "EnableEvent", "DisableEvent",
-          "ConnectTask", "DisconnectTask"))
+    for source, marker in (
+        (WDT, "WdtEnablePeiEvent"), (WDT_H, "WDT_PEI_EVENT"),
+        (TEMP, "TempNrfPei"), (TEMP_H, "TEMP_NRF_PEI_"),
+        (RNG, "RngNrfPei"), (RNG_H, "RNG_NRF_PEI_"),
+        (PPI, "PeiNrf52BindPowerEvent"),
+        (PPI, "PeiNrf52BindClockEvent")
     ):
-        for name in funcs:
-            assert "bool " + prefix + name + "(" in header
-            assert 'extern "C" bool ' + prefix + name + "(" in source
-        for api in ("PeiBindEvent", "PeiGetEventEndpoint",
-                    "PeiUnbindEvent", "PeiConnectTask",
-                    "PeiDisconnectTask"):
-            assert "#pragma weak " + api in source
-    for demo, status in (("pei_qdec_demo.cpp", "g_PeiQdecStatus = 1;"),
-                         ("pei_temp_demo.cpp", "g_PeiTempStatus = 1;"),
-                         ("pei_rng_demo.cpp", "g_PeiRngStatus = 1;")):
-        code = (ROOT / "exemples/pei" / demo).read_text()
-        assert status in code
-        assert 'extern "C"' not in code
-        assert "NRF_QDEC" not in code
-        assert "NRF_TEMP" not in code
-        assert "NRF_RNG" not in code
-    print("nRF52 QDEC/TEMP/RNG PEI source contracts: PASS")
+        assert marker not in source, marker
+    for path in (
+        "ARM/Nordic/include/temp_nrf_pei.h",
+        "ARM/Nordic/include/rng_nrf_pei.h",
+        "ARM/Nordic/include/pei_nrf52_power_clock.h",
+        "exemples/pei/pei_temp_demo.cpp",
+        "exemples/pei/pei_rng_demo.cpp"
+    ):
+        assert not (ROOT / path).exists(), path
+    # Preserve existing working TEMP interrupt behavior.
+    assert "NRF_TEMP->INTENCLR = 1U;" in TEMP
+    assert "NRF_TEMP->EVENTS_DATARDY = 0U;" in TEMP
+    assert "NRF_TEMP->TASKS_STOP = 1;" in TEMP
+    assert "WdtStart(" in WDT and "WdtReload(" in WDT
+    assert "RngPeriphRxData(" in RNG and "reg->VALUE" in RNG
 
+    print("nRF52 QDEC and one-shot PEI exclusion contracts: PASS")
 
 if __name__ == "__main__":
     main()

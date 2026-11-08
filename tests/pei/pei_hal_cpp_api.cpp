@@ -8,11 +8,7 @@
 #include "coredev/pwm.h"
 #include "coredev/spi.h"
 #include "coredev/uart.h"
-#include "coredev/wdt.h"
-#include "pei_nrf52_power_clock.h"
 #include "coredev/qdec.h"
-#include "temp_nrf5x.h"
-#include "rng_nrf_pei.h"
 #include "coredev/i2c.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
@@ -367,7 +363,7 @@ bool PeiUartCppApplication(UART &uart, Pei &pei, PeiEvent_t button)
 }
 
 
-// Compile-only QDEC and TEMP C++ wrappers use the same Pei matrix.
+// Compile-only QDEC C++ wrapper uses the same Pei matrix.
 bool PeiQdecCppApplication(Qdec &qdec, Pei &pei, PeiEvent_t start)
 {
 	PeiEvent_t sample = 0U;
@@ -395,85 +391,11 @@ bool PeiQdecCppApplication(Qdec &qdec, Pei &pei, PeiEvent_t start)
 	return pei.ReleaseEvent(sample);
 }
 
-bool PeiTempCppApplication(TempnRF5x &temp, Pei &pei, PeiEvent_t start)
-{
-	PeiEvent_t ready = 0U;
-
-	if (!temp.EnablePeiEvent(pei, ready, TEMP_NRF_PEI_EVENT_DATARDY))
-	{
-		return false;
-	}
-	if (!temp.ConnectTask(pei, start, TEMP_NRF_PEI_TASK_START))
-	{
-		return false;
-	}
-	if (!temp.DisconnectTask(pei, start, TEMP_NRF_PEI_TASK_START))
-	{
-		return false;
-	}
-	if (!temp.DisablePeiEvent(pei, ready))
-	{
-		return false;
-	}
-	return pei.ReleaseEvent(ready);
-}
-
-bool PeiRngCppApplication(Pei &pei, PeiEvent_t start)
-{
-	PeiEvent_t ready = 0U;
-
-	if (!RngNrfPeiPrepare())
-	{
-		return false;
-	}
-	if (!RngNrfPeiEnableEvent(pei, &ready, RNG_NRF_PEI_EVENT_VALRDY))
-	{
-		return false;
-	}
-	if (!RngNrfPeiConnectTask(pei, start, RNG_NRF_PEI_TASK_START))
-	{
-		return false;
-	}
-	if (!RngNrfPeiDisconnectTask(pei, start, RNG_NRF_PEI_TASK_START))
-	{
-		return false;
-	}
-	if (!RngNrfPeiDisableEvent(pei, ready))
-	{
-		return false;
-	}
-	if (!pei.ReleaseEvent(ready))
-	{
-		return false;
-	}
-	return RngNrfPeiRelease();
-}
-
-
-// Compile-only: nRF52 watchdog, passive POWER/CLOCK events and
-// PPI groups use the existing Pei implicit conversion.
-bool PeiSystemCppApplication(Wdt &wdt, Pei &pei,
-	PeiEvent_t grouped, PeiEvent_t arm)
+// Compile-only: PPI group automation through the same C++ Pei matrix.
+bool PeiGroupCppApplication(Pei &pei, PeiEvent_t grouped, PeiEvent_t arm)
 {
 	PeiGroup_t group = {};
-	PeiEvent_t timeout = 0U;
-	PeiEvent_t power = 0U;
-	PeiEvent_t clock = 0U;
 
-	if (!wdt.EnablePeiEvent(pei, timeout, WDT_PEI_EVENT_TIMEOUT))
-	{
-		return false;
-	}
-	if (!PeiNrf52BindPowerEvent(pei, &power,
-		PEI_NRF52_POWER_EVENT_POFWARN))
-	{
-		return false;
-	}
-	if (!PeiNrf52BindClockEvent(pei, &clock,
-		PEI_NRF52_CLOCK_EVENT_LFCLKSTARTED))
-	{
-		return false;
-	}
 	if (!pei.GroupInit(group))
 	{
 		return false;
@@ -490,20 +412,9 @@ bool PeiSystemCppApplication(Wdt &wdt, Pei &pei,
 	{
 		return false;
 	}
-	if (!pei.GroupRemoveEvent(group, grouped) ||
-		!pei.GroupDeinit(group))
+	if (!pei.GroupRemoveEvent(group, grouped))
 	{
 		return false;
 	}
-	if (!PeiNrf52UnbindClockEvent(pei, clock) ||
-		!PeiNrf52UnbindPowerEvent(pei, power) ||
-		!wdt.DisablePeiEvent(pei, timeout))
-	{
-		return false;
-	}
-	if (!pei.ReleaseEvent(timeout) || !pei.ReleaseEvent(power))
-	{
-		return false;
-	}
-	return pei.ReleaseEvent(clock);
+	return pei.GroupDeinit(group);
 }
