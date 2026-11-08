@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/adc_nrf52_saadc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/adc_nrf52_saadc.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_dfu_smp.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dfu_smp.h</locationURI>
@@ -289,6 +294,11 @@
 			<name>include/system_nrf52810.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/include/system_nrf52810.h</locationURI>
+		</link>
+		<link>
+			<name>include/temp_nrf5x.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/temp_nrf5x.h</locationURI>
 		</link>
 		<link>
 			<name>include/usb</name>
@@ -594,6 +604,11 @@
 			<name>src/system_nrf52.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_nrf52.c</locationURI>
+		</link>
+		<link>
+			<name>src/temp_nrf5x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/temp_nrf5x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>
@@ -1121,6 +1136,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/diskio_nvm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_nvm.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
@@ -1129,6 +1149,21 @@
 			<name>include/storage/flash.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm_mcu_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_mcu_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/nvm_region.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/nvm_region.h</locationURI>
 		</link>
 		<link>
 			<name>include/storage/sdcard.h</name>
@@ -1391,6 +1426,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_nau7802.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/converters/adc_nrf52_saadc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/adc_nrf52_saadc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
@@ -1404,6 +1444,11 @@
 			<name>src/coredev/iopincfg_nrfx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pdm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.cpp</name>
@@ -1781,6 +1826,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_impl.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/diskio_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_nvm.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/storage/fatfs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs.cpp</locationURI>
@@ -1799,6 +1849,21 @@
 			<name>src/storage/flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_region.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/sdcard_impl.cpp</name>
@@ -2894,6 +2959,11 @@
 			<name>src/coredev/pei_nrf52.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/pei_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pwm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/pei.c</name>
