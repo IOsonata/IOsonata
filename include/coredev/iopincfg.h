@@ -430,6 +430,26 @@ bool IOPinEnableEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
 bool IOPinDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt);
 
 /**
+ * @brief Bind the shared nRF52 GPIOTE PORT event source to PEI.
+ *
+ * All SENSE-enabled GPIO pins contribute to the same PORT event,
+ * including pins on other GPIO ports. Unlike IOPinEnableEvent(),
+ * PORT has no per-pin identity and requires no GPIOTE IN channel.
+ * The caller configures low/high sensing with IOPinSetSense().
+ * This does not configure pins, DETECTMODE, LATCH or PORT interrupts.
+ * Unsupported targets return false.
+ */
+bool IOPinEnablePortEvent(PeiDev_t *pPei, PeiEvent_t *pEvt);
+
+/**
+ * @brief Unbind the shared PORT source from one PEI logical event.
+ *
+ * Preserves GPIO SENSE, other PORT users, and logical event destinations.
+ * The caller disables its own SENSE pins and releases the PEI token.
+ */
+bool IOPinDisablePortEvent(PeiDev_t *pPei, PeiEvent_t Evt);
+
+/**
  * @brief Prepare a GPIO output hardware task and connect it to an
  * existing logical PEI event. The GPIO driver allocates the task channel.
  * @return true on success
@@ -447,12 +467,17 @@ bool IOPinDisableTask(PeiDev_t *pPei, PeiEvent_t Evt,
 #ifdef __cplusplus
 }
 
-// Only the event-output reference needs a C++ overload; all other GPIO
-// functions accept Pei directly through operator PeiDev_t *().
+// Event producers accept a logical-event reference in C++; other GPIO
+// operations accept Pei directly through operator PeiDev_t *().
 static inline bool IOPinEnableEvent(Pei &PeiDev, PeiEvent_t &Evt,
 	int PortNo, int PinNo, IOPINSENSE Sense)
 {
 	return IOPinEnableEvent(PeiDev, &Evt, PortNo, PinNo, Sense);
+}
+
+static inline bool IOPinEnablePortEvent(Pei &PeiDev, PeiEvent_t &Evt)
+{
+	return IOPinEnablePortEvent(PeiDev, &Evt);
 }
 
 #endif

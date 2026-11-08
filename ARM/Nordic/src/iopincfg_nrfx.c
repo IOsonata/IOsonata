@@ -1142,6 +1142,54 @@ bool IOPinDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt)
 	return false;
 }
 
+// GPIOTE PORT is a shared source for GPIO SENSE/DETECT inputs.
+// It has no dedicated pin or GPIOTE IN channel. The application owns
+// pin SENSE and any existing PORT interrupt configuration.
+bool IOPinEnablePortEvent(PeiDev_t *pPei, PeiEvent_t *pEvt)
+{
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+	if (pPei == NULL || pEvt == NULL || PeiBindEvent == NULL)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt,
+		(PeiEndpoint_t)&NRF_GPIOTE->EVENTS_PORT);
+#else
+	(void)pPei;
+	(void)pEvt;
+	return false;
+#endif
+}
+
+// Unbind only this PEI source. GPIO SENSE, LATCH, PORT interrupts and
+// other hardware sources or destinations retain their own ownership.
+bool IOPinDisablePortEvent(PeiDev_t *pPei, PeiEvent_t Evt)
+{
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiGetEventEndpoint == NULL ||
+		PeiUnbindEvent == NULL)
+	{
+		return false;
+	}
+	endpoint = (PeiEndpoint_t)&NRF_GPIOTE->EVENTS_PORT;
+	if (PeiGetEventEndpoint(pPei, Evt) != endpoint)
+	{
+		return false;
+	}
+	return PeiUnbindEvent(pPei, Evt, endpoint);
+#else
+	(void)pPei;
+	(void)Evt;
+	return false;
+#endif
+}
+
 bool IOPinEnableTask(PeiDev_t *pPei, PeiEvent_t Evt,
 	int PortNo, int PinNo, IOPINTASK Task)
 {
