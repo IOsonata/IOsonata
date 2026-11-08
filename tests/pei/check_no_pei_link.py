@@ -15,6 +15,7 @@ import sys
 MEMBER = re.compile(r"\.a\([^\n)]*/pei(?:_[a-zA-Z0-9]+)?\.o\)")
 CODE = re.compile(r"^\s*\.text\.(?:Pei[A-Za-z0-9_]*|[^\s]*Pei(?:Trigger|Event|Install)[^\s]*)(?=\s|$)", re.M)
 HF_STATE = re.compile(r"^\s*\.bss\.[^\s]*s_nRFxTimer[0-9]+Pei\b", re.M)
+RTC_STATE = re.compile(r"^\s*\.bss\.[^\s]*s_nRfxRtc(?:[0-9]+Pei|Raw)\b", re.M)
 
 
 def check(path):
@@ -30,6 +31,7 @@ def check(path):
               if MEMBER.search(line)]
     code = CODE.findall(linked)
     state = HF_STATE.findall(linked)
+    rtc_state = RTC_STATE.findall(linked)
 
     if pulled:
         print("FAIL: PEI archive members were extracted:")
@@ -43,11 +45,15 @@ def check(path):
         print("FAIL: obsolete HF Timer PEI state arrays remain:")
         for line in state:
             print(" ", line.strip())
-    if pulled or code or state:
+    if rtc_state:
+        print("FAIL: RTC PEI state is retained by an ordinary Timer:")
+        for line in rtc_state:
+            print(" ", line.strip())
+    if pulled or code or state or rtc_state:
         return 1
 
     print("PASS: no PEI archive members or PEI code retained")
-    print("PASS: no redundant HF Timer PEI bookkeeping arrays")
+    print("PASS: no PEI-only HF Timer or RTC bookkeeping arrays")
     return 0
 
 

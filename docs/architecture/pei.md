@@ -168,10 +168,14 @@ archive.
 `TimerInit` does not install PEI trigger callbacks. The first explicit
 PEI Timer call invokes `PeiTimerPrepare`, which installs the applicable
 MCU callback through `TimerPeiPrepareMcu`. Non-PEI Timer applications
-do not reference this optional path. HF Timer PEI trigger ownership
-reuses the existing `TimerTrig_t` and CC bookkeeping fields, removing
-the separate per-device `s_nRFxTimer*Pei` arrays. Hardware-only
-triggers still release PEI routes through `DisableTimerTrigger`.
+do not reference this optional path. HF Timer and RTC PEI compare trigger ownership reuse existing
+`TimerTrig_t` and CC bookkeeping fields. The optional RTC private
+PPI handles and TICK/OVRFLW binding records are referenced exclusively
+from PEI callbacks, allowing the linker to discard all their RAM in
+non-PEI applications. Normal RTC methods check PEI ownership indirectly
+through the optional Timer callback, retaining no PEI-specific tables.
+Hardware-only triggers still release PEI routes through
+`DisableTimerTrigger`.
 
 This depends on GCC weak references and link garbage collection, as
 used in the Eclipse managed projects. The source changes are not a

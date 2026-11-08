@@ -48,8 +48,12 @@ binding functions; without a PEI application they cannot extract either
 archive member. Timer initialization leaves its optional PEI callbacks
 unset. Only a call to `TimerEnablePeiTrigger` or
 `TimerEnablePeiEvent` explicitly requests the MCU's PEI callbacks.
-HF Timer PEI routing state reuses the existing trigger fields rather
-than allocating additional PEI-only arrays.
+HF Timer and RTC compare PEI routing state now reuse existing
+`TimerTrig_t` and compare bookkeeping. RTC's private PPI handles and
+TICK/OVRFLW binding records remain in optional PEI-only sections. The
+ordinary RTC interrupt, trigger, frequency, and initialization paths
+do not reference those sections, so `--gc-sections` removes them when
+PEI is not used.
 
 Clean-build the nRF52832 HAL and TimerDemo, then check the new map:
 
@@ -60,7 +64,9 @@ python3 tests/pei/check_no_pei_link.py \
 
 The checker fails if the archive extracts `pei.o` or
 `pei_nrf52.o`, if PEI-specific text remains in the executable,
-or if redundant HF Timer PEI state arrays remain. It ignores
+or if any HF Timer or RTC PEI state arrays remain. The previous
+TimerDemo link retained 248 bytes in `s_nRfxRtc*Pei` and
+`s_nRfxRtcRaw`; the updated checker rejects this regression. It ignores
 discarded debug and input sections. PEI-enabled PeiBlinky must still
 pass after this change; link isolation does not establish hardware
 operation.
