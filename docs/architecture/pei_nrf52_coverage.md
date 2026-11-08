@@ -41,7 +41,7 @@ Status keys:
 | --- | --- | --- | --- |
 | TIMER / `timer_hf_nrfx.cpp` | COMPARE[n] single-shot/continuous; other events pending | START, STOP, CLEAR; COUNT and CAPTURE[n] pending | **Mixed-CC TIMER3 hardware working** in both CC orders (user report, Nov 8); COUNT/CAPTURE endpoints pending |
 | RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Mixed-CC RTC0 hardware working** in both CC orders; **RTC2 working** with ISR-first order (user report, Nov 8); other sources and lifecycle pending |
-| GPIOTE / `iopincfg_nrfx.c` | IN[n] edge, PORT event where supported | OUT[n] SET/CLEAR/TOGGLE through configured channels | IN[n] + output toggle **working hardware before C PEI refactor**; PORT and lifecycle stress pending |
+| GPIOTE / `iopincfg_nrfx.c` | IN[n] edge; shared PORT SENSE/DETECT source implemented on nRF52 | OUT[n] SET/CLEAR/TOGGLE through configured channels | IN[n] + output toggle working; **PORT bind/unbind implemented**, with no channel or GPIO ownership changes; PORT hardware test pending |
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED, CALIBRATEDONE and available limits | START, SAMPLE, STOP, CALIBRATEOFFSET | **Pending**; cannot expose SAMPLE until conversion channels and EasyDMA buffers are configured and reserved |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, UP, DOWN, CROSS and supported variants | START, STOP, SAMPLE where provided | **Pending**; only expose events/tasks from the configured comparator |
 | PWM / `pwm_nrfx.cpp` | SEQSTARTED[n], SEQEND[n], LOOPSDONE, PWMPERIODEND, STOPPED | SEQSTART[n], STOP and NEXTSTEP if implemented | **Pending**; requires valid sequence buffers and owner-safe start/stop |
@@ -75,7 +75,8 @@ only when it implements a real PPI-accessible event/task register on the SKU.
    behavior: PPI forwards compare events only to hardware tasks, not
    through an interrupt. Validate mixed PEI/ISR channels, one-shot
    disarm, teardown and elapsed-time continuity on hardware. Then finish
-   TIMER capture/counter, GPIOTE PORT and other remaining endpoints.
+   TIMER capture/counter and GPIOTE PORT lifecycle on hardware, then
+   other remaining endpoints.
 2. **SAADC and comparators.** Validate RTC/TIMER event -> ADC sampling and
    comparator threshold -> GPIO or TIMER task, with peripheral-owned
    channel/DMA configuration.

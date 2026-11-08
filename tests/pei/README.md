@@ -32,6 +32,21 @@ a global interrupt-disabled section.
 These are host model tests, **not** a hardware or full MCU-library build.
 
 
+## Shared GPIOTE PORT event source
+
+`IOPinEnablePortEvent()` exposes nRF52's combined
+`GPIOTE.EVENTS_PORT` as a PEI producer without allocating a GPIOTE
+channel, configuring pin SENSE, or enabling an interrupt. The caller
+uses `IOPinSetSense()` for low/high level detection and explicitly
+clears it when done. `IOPinDisablePortEvent()` unbinds only the
+logical event source; other PORT interrupt and pin users are untouched.
+
+The host suite includes C/C++ API compile checks and static
+non-invasive-source checks. Run the
+`ARM/Nordic/nRF52/nRF52832/exemples/PeiPortDemo/ioc` Eclipse
+managed project on BLYST-NANO-DK to test the PORT and dedicated IN[n]
+event paths concurrently. There is no hardware PASS yet.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or

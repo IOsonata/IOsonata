@@ -211,6 +211,33 @@ with `Freq = 0`) for the standalone PEI test. The RTC backend remains
 unvalidated. The TIMER3 selection also requires a fresh MCU build and
 hardware test; Bluetooth coexistence needs separate resource checks.
 
+### nRF52 shared GPIOTE PORT event source
+
+`IOPinEnablePortEvent(PeiDev_t *, PeiEvent_t *)` binds
+`GPIOTE.EVENTS_PORT` to a PEI logical event. C++ uses the same C
+implementation with `Pei &` and `PeiEvent_t &`.
+
+PORT is a single event generated on the rising edge of the GPIO DETECT
+signal combined across SENSE-enabled input pins. It is not a dedicated
+per-pin edge source, does not identify the triggering pin and does not
+consume an IN[n] GPIOTE channel. Configure low/high sensing separately
+with the existing `IOPinSetSense()` API. Do not silently substitute
+PORT for `IOPinEnableEvent()`.
+
+The new API only binds the event endpoint. It neither changes
+`PIN_CNF.SENSE`, `DETECTMODE`, `EVENTS_PORT`, `LATCH`, nor enables
+PORT interrupts. `IOPinDisablePortEvent()` unbinds that logical event
+without disturbing GPIO sensing, unrelated PORT interrupt users or
+other GPIOTE channel allocations. The caller restores SENSE and
+releases the logical PEI identity separately. Existing PEI destinations
+can be retained across unbind and rebind.
+
+A continuously asserted SENSE level, or the latch-based DETECT mode,
+may prevent the DETECT signal from producing another rising edge.
+The application remains responsible for the GPIO detect lifecycle.
+The new standalone nRF52832 `PeiPortDemo` tests PORT routing alongside
+an independent GPIOTE IN[n] source; hardware validation is pending.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI
