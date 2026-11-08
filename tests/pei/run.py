@@ -19,6 +19,8 @@ subprocess.run([sys.executable, str(TEST / "check_timer_cc_invariant.py")],
                check=True)
 subprocess.run([sys.executable, str(TEST / "check_gpio_port_contract.py")],
                check=True)
+subprocess.run([sys.executable, str(TEST / "check_gpio_lifecycle_contract.py")],
+               check=True)
 
 with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     temp = pathlib.Path(temp)
