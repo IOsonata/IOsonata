@@ -97,7 +97,7 @@ for name in examples:
     if name == 'I2CMasterDemo':
         defines = ['I2C_MASTER_DMA_ENABLE=false', 'I2C_MASTER_INT_ENABLE=false']
     if name == 'TimerDemo':
-        defines = ['TIMER_DEMO_FREQ=32768', 'TIMER_DEMO_UART']
+        defines = ['TIMER_DEMO_FREQ=32768']
     devices = range(9) if name == 'TimerDemo' and args.all_timers else (
               [args.timer_devno] if name == 'TimerDemo' else [None])
     for devno in devices:

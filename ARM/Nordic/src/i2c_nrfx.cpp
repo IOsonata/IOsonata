@@ -63,6 +63,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
+// Optional PEI routing must not extract the matrix into non-PEI I2C builds.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 #ifdef NRF54L_SERIES
 #define NRFX_TWI_RX(reg) ((reg)->DMA.RX)
 #define NRFX_TWI_STARTRX(reg) ((reg)->TASKS_DMA.RX.START)
@@ -145,6 +154,7 @@ typedef struct {
 	volatile bool bAsyncErr;// The transfer met a bus error
 	volatile bool bStopped;	// The interrupt handler has already stopped the bus
 	bool bTxRejected;		// Refused command, do not start its receive phase
+	bool bPeiPrepared;		// TWIM DMA and bBusy reserved for hardware PEI
 	alignas(4) uint8_t TxBuf[NRFX_I2C_TXBUF_SIZE];	// Copy of an interrupt driven transmit
 } nRFTwiDev_t;
 
@@ -443,6 +453,11 @@ uint32_t nRFxI2CGetRate(DevIntrf_t * const pDev)
 uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
+
+	if (dev->bPeiPrepared)
+	{
+		return dev->pI2cDev->Cfg.Rate;
+	}
 #ifdef NRF54L_SERIES
 	uint32_t best = 0;
 	uint32_t error = UINT32_MAX;
@@ -487,7 +502,7 @@ bool nRFxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
-	if (dev->bTxRejected)
+	if (dev->bTxRejected || dev->bPeiPrepared)
 	{
 		return false;
 	}
@@ -551,6 +566,11 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
+
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
 
 	if (pBuff == nullptr || dev->bTxRejected)
 	{
@@ -619,6 +639,11 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
+
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
 
 	if (pBuff == NULL || Bufflen <= 0 || dev->bTxRejected)
 	{
@@ -718,6 +743,10 @@ bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
+	if (dev->bPeiPrepared)
+	{
+		return false;
+	}
 	dev->bTxRejected = false;
 
 #ifdef TWI_PRESENT
@@ -740,6 +769,11 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
+
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
 
 	if (pData == nullptr)
 	{
@@ -821,6 +855,11 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
+
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
 
 	if (pData == nullptr || Datalen <= 0)
 	{
@@ -933,7 +972,14 @@ void nRFxI2CStopTx(DevIntrf_t * const pDev)
 
 void nRFxI2CReset(DevIntrf_t * const pDev)
 {
-	I2CDev_t *dev = (I2CDev_t*)((nRFTwiDev_t*)pDev->pDevData)->pI2cDev;
+	nRFTwiDev_t *owner = (nRFTwiDev_t*)pDev->pDevData;
+	I2CDev_t *dev;
+
+	if (owner->bPeiPrepared)
+	{
+		return;
+	}
+	dev = owner->pI2cDev;
 
     I2CBusReset(dev);
 
@@ -1313,6 +1359,10 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	{
 		return false;
 	}
+	if (s_nRFxI2CDev[pCfgData->DevNo].bPeiPrepared)
+	{
+		return false;
+	}
 
 #ifdef NRF54L_SERIES
 	if (pCfgData->DevNo == 4 || pCfgData->pIOPinMap == NULL ||
@@ -1368,6 +1418,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	s_nRFxI2CDev[pCfgData->DevNo].bAsyncErr = false;
 	s_nRFxI2CDev[pCfgData->DevNo].bStopped = false;
 	s_nRFxI2CDev[pCfgData->DevNo].bTxRejected = false;
+	s_nRFxI2CDev[pCfgData->DevNo].bPeiPrepared = false;
 	//s_nRFxI2CDev[pCfgData->DevNo].bTxReady = true;
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;
@@ -1640,4 +1691,408 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 //    reg->ENABLE = enval;
 
 	return true;
+}
+
+
+// The TWI, TWIM and TWIS modes share peripheral instances with each
+// other and with serial drivers. Select only the currently owned I2C
+// instance and its configured register map; PEI never changes the mode.
+static nRFTwiDev_t *I2CPeiDevice(I2CDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	nRFTwiDev_t *dev;
+
+	if (pDev == NULL || pDev->Cfg.DevNo < 0 ||
+		pDev->Cfg.DevNo >= NRFX_I2C_MAXDEV)
+	{
+		return NULL;
+	}
+	dev = &s_nRFxI2CDev[pDev->Cfg.DevNo];
+	if (dev->pI2cDev != pDev ||
+		pDev->DevIntrf.pDevData != dev ||
+		pDev->DevIntrf.Enable != nRFxI2CEnable)
+	{
+		return NULL;
+	}
+	return dev;
+#else
+	(void)pDev;
+	return NULL;
+#endif
+}
+
+static PeiEndpoint_t I2CPeiEventEndpoint(nRFTwiDev_t *dev,
+	I2C_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES)
+	if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
+	{
+#if defined(TWIS_PRESENT)
+		switch (Event)
+		{
+			case I2C_PEI_EVENT_STOPPED:
+				return (PeiEndpoint_t)&dev->pDmaSReg->EVENTS_STOPPED;
+			case I2C_PEI_EVENT_ERROR:
+				return (PeiEndpoint_t)&dev->pDmaSReg->EVENTS_ERROR;
+			case I2C_PEI_EVENT_RXSTARTED:
+				return (PeiEndpoint_t)&dev->pDmaSReg->EVENTS_RXSTARTED;
+			case I2C_PEI_EVENT_TXSTARTED:
+				return (PeiEndpoint_t)&dev->pDmaSReg->EVENTS_TXSTARTED;
+			case I2C_PEI_EVENT_WRITE:
+				return (PeiEndpoint_t)&dev->pDmaSReg->EVENTS_WRITE;
+			case I2C_PEI_EVENT_READ:
+				return (PeiEndpoint_t)&dev->pDmaSReg->EVENTS_READ;
+			default:
+				return 0U;
+		}
+#else
+		return 0U;
+#endif
+	}
+#ifdef TWIM_PRESENT
+	if (dev->pI2cDev->DevIntrf.bDma)
+	{
+		switch (Event)
+		{
+			case I2C_PEI_EVENT_STOPPED:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_STOPPED;
+			case I2C_PEI_EVENT_ERROR:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_ERROR;
+			case I2C_PEI_EVENT_SUSPENDED:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_SUSPENDED;
+			case I2C_PEI_EVENT_RXSTARTED:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_RXSTARTED;
+			case I2C_PEI_EVENT_TXSTARTED:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_TXSTARTED;
+			case I2C_PEI_EVENT_LASTRX:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_LASTRX;
+			case I2C_PEI_EVENT_LASTTX:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_LASTTX;
+			default:
+				return 0U;
+		}
+	}
+#endif
+#ifdef TWI_PRESENT
+	if (dev->pI2cDev->Cfg.Mode == I2CMODE_MASTER)
+	{
+		switch (Event)
+		{
+			case I2C_PEI_EVENT_STOPPED:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_STOPPED;
+			case I2C_PEI_EVENT_ERROR:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_ERROR;
+			case I2C_PEI_EVENT_SUSPENDED:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_SUSPENDED;
+			case I2C_PEI_EVENT_RXDREADY:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_RXDREADY;
+			case I2C_PEI_EVENT_TXDSENT:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_TXDSENT;
+			case I2C_PEI_EVENT_BB:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_BB;
+			default:
+				return 0U;
+		}
+	}
+#endif
+#else
+	(void)dev;
+	(void)Event;
+#endif
+	return 0U;
+}
+
+static PeiEndpoint_t I2CPeiTaskEndpoint(nRFTwiDev_t *dev,
+	I2C_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES) && defined(TWIM_PRESENT)
+	if (dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER ||
+		!dev->pI2cDev->DevIntrf.bDma)
+	{
+		// TWI byte sequencing and TWIS slave buffer preparation are
+		// owned by the existing driver/IRQ, not by PEI.
+		return 0U;
+	}
+	switch (Task)
+	{
+		case I2C_PEI_TASK_STARTRX:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_STARTRX;
+		case I2C_PEI_TASK_STARTTX:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_STARTTX;
+		case I2C_PEI_TASK_STOP:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_STOP;
+		case I2C_PEI_TASK_SUSPEND:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_SUSPEND;
+		case I2C_PEI_TASK_RESUME:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_RESUME;
+		default:
+			return 0U;
+	}
+#else
+	(void)dev;
+	(void)Task;
+	return 0U;
+#endif
+}
+
+static bool I2CPeiReady(I2CDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	nRFTwiDev_t *dev;
+
+	dev = I2CPeiDevice(pDev);
+	if (dev == NULL)
+	{
+		return false;
+	}
+#if defined(TWIS_PRESENT) && defined(TWIS_COUNT)
+	if (pDev->Cfg.Mode == I2CMODE_SLAVE &&
+		pDev->Cfg.DevNo < TWIS_COUNT)
+	{
+		return dev->pDmaSReg->ENABLE ==
+			(TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos);
+	}
+#endif
+#if defined(TWIM_PRESENT) && defined(TWIM_COUNT)
+	if (pDev->Cfg.Mode == I2CMODE_MASTER &&
+		pDev->DevIntrf.bDma &&
+		pDev->Cfg.DevNo < TWIM_COUNT)
+	{
+		return dev->pDmaReg->ENABLE ==
+			(TWIM_ENABLE_ENABLE_Enabled << TWIM_ENABLE_ENABLE_Pos);
+	}
+#endif
+#if defined(TWI_PRESENT) && defined(TWI_COUNT)
+	if (pDev->Cfg.Mode == I2CMODE_MASTER &&
+		!pDev->DevIntrf.bDma &&
+		pDev->Cfg.DevNo < TWI_COUNT)
+	{
+		return dev->pReg->ENABLE ==
+			(TWI_ENABLE_ENABLE_Enabled << TWI_ENABLE_ENABLE_Pos);
+	}
+#endif
+#else
+	(void)pDev;
+#endif
+	return false;
+}
+
+// TWIM STARTTX and STARTRX are hardware task destinations only after a
+// complete single-block transaction has been prepared. The existing
+// driver's private TxBuf owns TX DMA RAM, and the application owns RX
+// DMA RAM until the PEI transfer has stopped and been released.
+extern "C" bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
+	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
+{
+#if defined(NRF52_SERIES) && defined(TWIM_PRESENT)
+	nRFTwiDev_t *dev;
+
+	if (!I2CPeiReady(pDev) || pDev->Cfg.Mode != I2CMODE_MASTER ||
+		!pDev->DevIntrf.bDma || pDev->Cfg.AddrType != I2CADDR_TYPE_NORMAL ||
+		pDev->Cfg.bIntEn || DevAddr == 0U || DevAddr > 0x7FU ||
+		pDev->DevIntrf.bNoStop || !pDev->DevIntrf.bTxReady ||
+		TxLen > NRFX_I2C_TXBUF_SIZE ||
+		TxLen > NRFX_I2C_DMA_MAXCNT || RxLen > NRFX_I2C_DMA_MAXCNT ||
+		((TxLen == 0U) == (RxLen == 0U)) ||
+		(TxLen != 0U && pTx == NULL) ||
+		(RxLen != 0U && pRx == NULL))
+	{
+		return false;
+	}
+	dev = I2CPeiDevice(pDev);
+	if (dev == NULL || dev->bPeiPrepared || dev->bTxRejected ||
+		dev->Async != NRFX_I2C_ASYNC_IDLE)
+	{
+		return false;
+	}
+	if (atomic_flag_test_and_set(&pDev->DevIntrf.bBusy))
+	{
+		return false;
+	}
+	// Recheck the owner's state while holding the generic bus lock.
+	if (dev->bPeiPrepared || dev->bTxRejected ||
+		dev->Async != NRFX_I2C_ASYNC_IDLE)
+	{
+		atomic_flag_clear(&pDev->DevIntrf.bBusy);
+		return false;
+	}
+	if (TxLen > 0U)
+	{
+		memcpy(dev->TxBuf, pTx, TxLen);
+	}
+	dev->pDmaReg->ADDRESS = DevAddr;
+	dev->pDmaReg->TXD.PTR = TxLen != 0U ?
+		(uint32_t)(uintptr_t)dev->TxBuf : 0U;
+	dev->pDmaReg->TXD.MAXCNT = TxLen;
+	dev->pDmaReg->RXD.PTR = RxLen != 0U ?
+		(uint32_t)(uintptr_t)pRx : 0U;
+	dev->pDmaReg->RXD.MAXCNT = RxLen;
+	dev->pDmaReg->TXD.LIST = 0U;
+	dev->pDmaReg->RXD.LIST = 0U;
+	dev->pDmaReg->SHORTS = TxLen != 0U ?
+		TWIM_SHORTS_LASTTX_STOP_Msk : TWIM_SHORTS_LASTRX_STOP_Msk;
+	dev->pDmaReg->EVENTS_STOPPED = 0U;
+	dev->pDmaReg->EVENTS_ERROR = 0U;
+	dev->pDmaReg->EVENTS_SUSPENDED = 0U;
+	dev->pDmaReg->EVENTS_RXSTARTED = 0U;
+	dev->pDmaReg->EVENTS_TXSTARTED = 0U;
+	dev->pDmaReg->EVENTS_LASTRX = 0U;
+	dev->pDmaReg->EVENTS_LASTTX = 0U;
+	dev->pDmaReg->ERRORSRC = dev->pDmaReg->ERRORSRC;
+	dev->bPeiPrepared = true;
+	return true;
+#else
+	(void)pDev;
+	(void)DevAddr;
+	(void)pTx;
+	(void)TxLen;
+	(void)pRx;
+	(void)RxLen;
+	return false;
+#endif
+}
+
+// The application must disable/disconnect all PPI destinations before
+// releasing the DMA registers. An unstarted block can be released
+// without a STOP task. A started block must reach STOPPED first.
+extern "C" bool I2CReleasePeiTransfer(I2CDev_t *pDev)
+{
+#if defined(NRF52_SERIES) && defined(TWIM_PRESENT)
+	nRFTwiDev_t *dev;
+	uint32_t timeout;
+
+	dev = I2CPeiDevice(pDev);
+	if (dev == NULL || !dev->bPeiPrepared)
+	{
+		return false;
+	}
+	if (dev->pDmaReg->EVENTS_STOPPED == 0U &&
+		(dev->pDmaReg->EVENTS_RXSTARTED != 0U ||
+		 dev->pDmaReg->EVENTS_TXSTARTED != 0U ||
+		 dev->pDmaReg->EVENTS_ERROR != 0U ||
+		 dev->pDmaReg->EVENTS_SUSPENDED != 0U ||
+		 dev->pDmaReg->EVENTS_LASTRX != 0U ||
+		 dev->pDmaReg->EVENTS_LASTTX != 0U))
+	{
+		// STOP cannot complete while suspended.
+		dev->pDmaReg->TASKS_RESUME = 1U;
+		dev->pDmaReg->TASKS_STOP = 1U;
+		timeout = I2C_TIMEOUT_CNT;
+		while (dev->pDmaReg->EVENTS_STOPPED == 0U && timeout-- > 0U)
+		{
+		}
+		if (dev->pDmaReg->EVENTS_STOPPED == 0U)
+		{
+			// Keep the caller's RX buffer locked on timeout.
+			return false;
+		}
+	}
+	dev->pDmaReg->RXD.MAXCNT = 0U;
+	dev->pDmaReg->TXD.MAXCNT = 0U;
+	dev->pDmaReg->RXD.PTR = 0U;
+	dev->pDmaReg->TXD.PTR = 0U;
+	dev->pDmaReg->SHORTS = 0U;
+	dev->pDmaReg->EVENTS_STOPPED = 0U;
+	dev->bPeiPrepared = false;
+	atomic_flag_clear(&pDev->DevIntrf.bBusy);
+	return true;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool I2CEnablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, I2C_PEI_EVENT Event)
+{
+	nRFTwiDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || pEvt == NULL || PeiBindEvent == NULL ||
+		!I2CPeiReady(pDev))
+	{
+		return false;
+	}
+	dev = I2CPeiDevice(pDev);
+	endpoint = I2CPeiEventEndpoint(dev, Event);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt, endpoint);
+}
+
+extern "C" bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+	nRFTwiDev_t *dev;
+	PeiEndpoint_t endpoint;
+	int i;
+
+	dev = I2CPeiDevice(pDev);
+	if (dev == NULL || pPei == NULL || PeiUnbindEvent == NULL ||
+		PeiGetEventEndpoint == NULL)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	for (i = I2C_PEI_EVENT_STOPPED; i <= I2C_PEI_EVENT_READ; i++)
+	{
+		if (endpoint != 0U &&
+			endpoint == I2CPeiEventEndpoint(dev, (I2C_PEI_EVENT)i))
+		{
+			return PeiUnbindEvent(pPei, Evt, endpoint);
+		}
+	}
+	return false;
+}
+
+extern "C" bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, I2C_PEI_TASK Task)
+{
+	nRFTwiDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiConnectTask == NULL ||
+		!I2CPeiReady(pDev))
+	{
+		return false;
+	}
+	dev = I2CPeiDevice(pDev);
+	if (dev == NULL || !dev->bPeiPrepared)
+	{
+		return false;
+	}
+	if ((Task == I2C_PEI_TASK_STARTTX &&
+		 dev->pDmaReg->TXD.MAXCNT == 0U) ||
+		(Task == I2C_PEI_TASK_STARTRX &&
+		 dev->pDmaReg->RXD.MAXCNT == 0U))
+	{
+		return false;
+	}
+	endpoint = I2CPeiTaskEndpoint(dev, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+extern "C" bool I2CDisconnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, I2C_PEI_TASK Task)
+{
+	nRFTwiDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	dev = I2CPeiDevice(pDev);
+	if (dev == NULL || pPei == NULL || PeiDisconnectTask == NULL)
+	{
+		return false;
+	}
+	endpoint = I2CPeiTaskEndpoint(dev, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
 }

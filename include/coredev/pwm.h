@@ -35,6 +35,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __PWM_H__
 
 #include <stdint.h>
+#include <stdbool.h>
+
+#include "coredev/pei.h"
 
 typedef enum __Pwm_Event {
 	PWM_EVT_STOPPED = 0,
@@ -51,6 +54,26 @@ typedef enum __Pwm_Polarity {
 	PWM_POL_LOW,				//!< Active low __----, --__--
 	PWM_POL_HIGH				//!< Active high --____, __--__
 } PWM_POL;
+
+// Hardware PWM event sources and destinations. The PWM driver owns the
+// output pins, EasyDMA sequence buffers, decoder mode and ENABLE state.
+// PEI connects only validated peripheral register endpoints.
+typedef enum {
+	PWM_PEI_EVENT_SEQSTARTED0,
+	PWM_PEI_EVENT_SEQSTARTED1,
+	PWM_PEI_EVENT_SEQEND0,
+	PWM_PEI_EVENT_SEQEND1,
+	PWM_PEI_EVENT_LOOPSDONE,
+	PWM_PEI_EVENT_PWMPERIODEND,
+	PWM_PEI_EVENT_STOPPED
+} PWM_PEI_EVENT;
+
+typedef enum {
+	PWM_PEI_TASK_SEQSTART0,
+	PWM_PEI_TASK_SEQSTART1,
+	PWM_PEI_TASK_STOP,
+	PWM_PEI_TASK_NEXTSTEP
+} PWM_PEI_TASK;
 
 typedef struct __Pwm_Device PwmDev_t;
 //typedef PwmDev_t	PWM_DEV;
@@ -104,6 +127,18 @@ bool PWMStart(PwmDev_t *pDev, uint32_t msDur);
 void PWMStop(PwmDev_t *pDev);
 bool PWMSetFrequency(PwmDev_t *pDev, uint32_t Freq);
 bool PWMSetDutyCycle(PwmDev_t *pDev, int Chan, int Percent);
+
+// Optional nRF52 hardware PEI sources and destinations. Requires PWMInit,
+// PWMOpenChannel, and PWMEnable first; no sequence buffers are allocated.
+// All routing must be detached before PWMDisable, PWMCloseChannel or reinit.
+bool PWMEnablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, PWM_PEI_EVENT Event);
+bool PWMDisablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+bool PWMConnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, PWM_PEI_TASK Task);
+bool PWMDisconnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, PWM_PEI_TASK Task);
 
 #ifdef __cplusplus
 }
@@ -183,6 +218,27 @@ public:
 	 * @return	true - success
 	 */
 	virtual bool DutyCycle(int Chan, int Percent) { return PWMSetDutyCycle(&vDev, Chan, Percent); }
+
+	// C and C++ use the same PEI matrix and driver-owned PWM state.
+	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt, PWM_PEI_EVENT Event)
+	{
+		return PWMEnablePeiEvent(&vDev, PeiDev, &Evt, Event);
+	}
+
+	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return PWMDisablePeiEvent(&vDev, PeiDev, Evt);
+	}
+
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, PWM_PEI_TASK Task)
+	{
+		return PWMConnectPeiTask(&vDev, PeiDev, Evt, Task);
+	}
+
+	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, PWM_PEI_TASK Task)
+	{
+		return PWMDisconnectPeiTask(&vDev, PeiDev, Evt, Task);
+	}
 
 private:
 	PwmDev_t vDev;

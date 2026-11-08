@@ -1,0 +1,123 @@
+/**-------------------------------------------------------------------------
+@file	pei_matrix.h
+
+@brief	Small C++ wrapper around the C PeiDev_t matrix
+
+The matrix implementation lives in src/coredev/pei.c. C and C++ clients
+share the same routing state and lifecycle; neither implementation forwards
+hardware events through interrupts or requires dynamic allocation.
+
+----------------------------------------------------------------------------*/
+#ifndef __PEI_MATRIX_H__
+#define __PEI_MATRIX_H__
+
+class Pei {
+public:
+	explicit Pei(int DevNo = 0)
+	{
+		PeiInit(&vPei, DevNo);
+	}
+
+	~Pei()
+	{
+		PeiDeinit(&vPei);
+	}
+
+	Pei(const Pei &) = delete;
+	Pei &operator=(const Pei &) = delete;
+
+	operator PeiDev_t *()
+	{
+		return &vPei;
+	}
+
+	bool BindEvent(PeiEvent_t &Evt, PeiEndpoint_t Endpoint)
+	{
+		return PeiBindEvent(&vPei, &Evt, Endpoint);
+	}
+
+	bool UnbindEvent(PeiEvent_t Evt, PeiEndpoint_t Endpoint)
+	{
+		return PeiUnbindEvent(&vPei, Evt, Endpoint);
+	}
+
+	bool Connect(PeiEvent_t Evt, PeiEndpoint_t Task)
+	{
+		return PeiConnectTask(&vPei, Evt, Task);
+	}
+
+	bool Disconnect(PeiEvent_t Evt, PeiEndpoint_t Task)
+	{
+		return PeiDisconnectTask(&vPei, Evt, Task);
+	}
+
+	bool Enable(PeiEvent_t Evt)
+	{
+		return PeiEnableEvent(&vPei, Evt);
+	}
+
+	bool Disable(PeiEvent_t Evt)
+	{
+		return PeiDisableEvent(&vPei, Evt);
+	}
+
+	bool ReleaseEvent(PeiEvent_t &Evt)
+	{
+		return PeiReleaseEvent(&vPei, &Evt);
+	}
+
+	PeiEndpoint_t EventEndpoint(PeiEvent_t Evt) const
+	{
+		return PeiGetEventEndpoint(&vPei, Evt);
+	}
+
+	bool BindSwEvent(PeiEvent_t &Evt)
+	{
+		return PeiBindSwEvent(&vPei, &Evt);
+	}
+
+	bool Trigger(PeiEvent_t Evt)
+	{
+		return PeiTriggerSwEvent(&vPei, Evt);
+	}
+
+	PeiEndpoint_t SwEventTask(PeiEvent_t Evt) const
+	{
+		return PeiGetSwEventTask(&vPei, Evt);
+	}
+
+	bool GroupInit(PeiGroup_t &Group)
+	{
+		return PeiGroupInit(&Group, vPei.DevNo);
+	}
+
+	bool GroupAddEvent(PeiGroup_t &Group, PeiEvent_t Evt)
+	{
+		return PeiGroupAddEvent(&Group, &vPei, Evt);
+	}
+
+	bool GroupRemoveEvent(PeiGroup_t &Group, PeiEvent_t Evt)
+	{
+		return PeiGroupRemoveEvent(&Group, &vPei, Evt);
+	}
+
+	PeiEndpoint_t GroupEnableTask(const PeiGroup_t &Group) const
+	{
+		return PeiGroupEnableTask(&Group);
+	}
+
+	PeiEndpoint_t GroupDisableTask(const PeiGroup_t &Group) const
+	{
+		return PeiGroupDisableTask(&Group);
+	}
+
+	bool GroupDeinit(PeiGroup_t &Group)
+	{
+		return PeiGroupDeinit(&Group);
+	}
+
+private:
+	PeiDev_t vPei;
+};
+
+#endif // __PEI_MATRIX_H__

@@ -63,10 +63,8 @@ bool TempnRF5x::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf,
 	vDataRdyHandler = CfgData.DataRdyCB;
 
 	s_pTempnRF5x = this;
-
-   // NRF_TEMP->TASKS_STOP = 1;
-    //NRF_TEMP->EVENTS_DATARDY = 0;
-    //NRF_TEMP->INTENSET = 1;
+	NRF_TEMP->INTENCLR = 1U;
+	NRF_TEMP->EVENTS_DATARDY = 0U;
 
     NVIC_ClearPendingIRQ(TEMP_IRQn);
 	NVIC_SetPriority(TEMP_IRQn, CfgData.IntPrio);
@@ -82,7 +80,7 @@ bool TempnRF5x::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf,
  */
 bool TempnRF5x::Enable()
 {
-    NRF_TEMP->INTENSET = 1;
+    NRF_TEMP->INTENSET = 1U;
 
 	NVIC_ClearPendingIRQ(TEMP_IRQn);
 	NVIC_EnableIRQ(TEMP_IRQn);
@@ -95,7 +93,7 @@ bool TempnRF5x::Enable()
  */
 void TempnRF5x::Disable()
 {
-    NRF_TEMP->INTENSET = 0;
+    NRF_TEMP->INTENCLR = 1U;
 	NVIC_DisableIRQ(TEMP_IRQn);
 }
 
@@ -147,5 +145,3 @@ extern "C" void TEMP_IRQHandler(void)
 	}
     NVIC_ClearPendingIRQ(TEMP_IRQn);
 }
-
-

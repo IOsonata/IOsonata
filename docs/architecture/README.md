@@ -147,6 +147,7 @@ See [IOcomposer workflow](iocomposer-workflow.md).
 - [IOcomposer workflow](iocomposer-workflow.md)
 - [DeviceIntrf implementer notes](devintrf-implementer-notes.md)
 - [Device inheritance and polymorphic composition](device-composition.md)
+- [Peripheral Event Interconnect (PEI)](pei.md)
 - [USB architecture](usb.md)
 - [Bluetooth architecture](bluetooth.md)
 - [NVM architecture](nvm.md)

@@ -40,6 +40,15 @@ SOFTWARE.
 #include "nrf.h"
 
 #include "timer_nrfx.h"
+#include "coredev/pei.h"
+
+// Optional PEI references must not load the PEI matrix from a Timer-only
+// firmware. The PEI API installs compare callbacks only when requested.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiUnbindEvent
+#pragma weak PeiDisableEvent
+#endif
 
 #if defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)
 #define NRF_TIMER0			NRF_TIMER0_S
@@ -72,19 +81,21 @@ SOFTWARE.
 #define TIMER4_CC_NUM		TIMER22_CC_NUM_SIZE
 #define TIMER5_CC_NUM		TIMER23_CC_NUM_SIZE
 #define TIMER6_CC_NUM		TIMER24_CC_NUM_SIZE
+#define TIMER0_IRQn			TIMER00_IRQn
+#define TIMER1_IRQn			TIMER10_IRQn
+#define TIMER2_IRQn			TIMER20_IRQn
+#define TIMER3_IRQn			TIMER21_IRQn
+#define TIMER4_IRQn			TIMER22_IRQn
+#define TIMER5_IRQn			TIMER23_IRQn
+#define TIMER6_IRQn			TIMER24_IRQn
 #endif
 
-#pragma pack(push, 4)
-typedef struct {
-	int DevNo;
-	uint32_t MaxFreq;
-	NRF_TIMER_Type *pReg;
-	int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
-	int CountCC;			//!< Index of last CC register to use for counter reading
-	uint32_t *pCC;			//!< Compare value of each trigger, MaxNbTrigEvt entries
-	TimerTrig_t *pTrigger;	//!< State of each trigger, MaxNbTrigEvt entries
-} nRFTimerData_t;
-#pragma pack(pop)
+// PEI compare sources reuse the ordinary trigger state without extra RAM.
+// Separate markers retain the requested single/continuous CC behavior.
+static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_SINGLE =
+	static_cast<TIMER_TRIG_TYPE>(2);
+static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_CONTINUOUS =
+	static_cast<TIMER_TRIG_TYPE>(3);
 
 // Trigger state of each timer, sized by the number of compare registers of
 // that timer less the one reserved for reading the counter.
@@ -108,15 +119,16 @@ static TimerTrig_t s_nRFxTimer6Trig[TIMER6_CC_NUM - 1];
 #endif
 
 // Timer device of each timer, set by nRFxTimerInit
-static TimerDev_t *s_pnRFxTimerDev[TIMER_NRFX_HF_MAX];
+TimerDev_t *s_pnRFxTimerDev[TIMER_NRFX_HF_MAX];
 
 // What does not change is constant, so it stays in flash. Only the trigger
 // state above and the device pointers are in RAM.
-alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
+alignas(4) const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER0,
+		.IrqNo = TIMER0_IRQn,
 		.MaxNbTrigEvt = TIMER0_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER0_CC_NUM - 1,
 		.pCC = s_nRFxTimer0CC,
@@ -126,6 +138,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 1,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER1,
+		.IrqNo = TIMER1_IRQn,
 		.MaxNbTrigEvt = TIMER1_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER1_CC_NUM - 1,
 		.pCC = s_nRFxTimer1CC,
@@ -135,6 +148,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 2,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER2,
+		.IrqNo = TIMER2_IRQn,
 		.MaxNbTrigEvt = TIMER2_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER2_CC_NUM - 1,
 		.pCC = s_nRFxTimer2CC,
@@ -145,6 +159,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 3,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER3,
+		.IrqNo = TIMER3_IRQn,
 		.MaxNbTrigEvt = TIMER3_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER3_CC_NUM - 1,
 		.pCC = s_nRFxTimer3CC,
@@ -154,6 +169,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 4,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER4,
+		.IrqNo = TIMER4_IRQn,
 		.MaxNbTrigEvt = TIMER4_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER4_CC_NUM - 1,
 		.pCC = s_nRFxTimer4CC,
@@ -165,6 +181,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 5,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER5,
+		.IrqNo = TIMER5_IRQn,
 		.MaxNbTrigEvt = TIMER5_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER5_CC_NUM - 1,
 		.pCC = s_nRFxTimer5CC,
@@ -174,6 +191,7 @@ alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 6,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER6,
+		.IrqNo = TIMER6_IRQn,
 		.MaxNbTrigEvt = TIMER6_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER6_CC_NUM - 1,
 		.pCC = s_nRFxTimer6CC,
@@ -190,7 +208,14 @@ static bool s_bHFClockOwned = false;
 // this file is part of a build, used or not. They reach the timer data
 // through this pointer, so that the data is linked only when a timer is
 // initialized.
-static const nRFTimerData_t *s_pnRFxTimerData = nullptr;
+const nRFTimerData_t *s_pnRFxTimerData = nullptr;
+
+// Interrupt of a TIMER in counter mode. counter_nrfx.cpp, linked by
+// CounterInit, replaces this empty default.
+__WEAK void nRFxCounterIrq(int Idx)
+{
+	(void)Idx;
+}
 
 static void TimerIRQHandler(int DevNo)
 {
@@ -201,6 +226,14 @@ static void TimerIRQHandler(int DevNo)
 	}
 
 	NRF_TIMER_Type *reg = s_pnRFxTimerData[DevNo].pReg;
+
+	// A TIMER in counter mode is the counter's
+	if (reg->MODE != TIMER_MODE_MODE_Timer)
+	{
+		nRFxCounterIrq(DevNo);
+		return;
+	}
+
 	const nRFTimerData_t &tdata = s_pnRFxTimerData[DevNo];
 	TimerDev_t *timer = s_pnRFxTimerDev[DevNo];
 	if (timer == nullptr)
@@ -209,6 +242,7 @@ static void TimerIRQHandler(int DevNo)
 	}
 
     uint32_t evt = 0;
+	uint32_t ticks;
 	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
 
 	// Read counter value
@@ -229,19 +263,43 @@ static void TimerIRQHandler(int DevNo)
 
     for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
     {
-        if (reg->EVENTS_COMPARE[i])
-        {
-            evt |= TIMER_EVT_TRIGGER(i);
-            reg->EVENTS_COMPARE[i] = 0;
-			if (tdata.pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
-            {
-            	reg->CC[i] = count + tdata.pCC[i];;
-            }
-			if (tdata.pTrigger[i].Handler)
-            {
-            	tdata.pTrigger[i].Handler(timer, i, tdata.pTrigger[i].pContext);
-            }
-        }
+		if (reg->EVENTS_COMPARE[i])
+		{
+			reg->EVENTS_COMPARE[i] = 0U;
+			if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+			{
+				// PEI handles event-to-task routing in hardware. The
+				// ISR only advances this CC, preserving elapsed time.
+				ticks = (uint32_t)TimerNanosecondToTick(
+					timer, tdata.pTrigger[i].nsPeriod);
+				reg->CC[i] = count + ticks;
+			}
+			else if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE)
+			{
+				// HF TIMER has no EVTEN gate; disable the logical PPI
+				// event after its first compare, without stopping TIMER.
+				reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << i;
+				if (PeiDisableEvent != nullptr)
+				{
+					PeiDisableEvent(
+						static_cast<PeiDev_t *>(tdata.pTrigger[i].pContext),
+						tdata.pCC[i]);
+				}
+			}
+			else
+			{
+				evt |= TIMER_EVT_TRIGGER(i);
+				if (tdata.pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+				{
+					reg->CC[i] = count + tdata.pCC[i];
+				}
+				if (tdata.pTrigger[i].Handler != nullptr)
+				{
+					tdata.pTrigger[i].Handler(timer, i,
+						tdata.pTrigger[i].pContext);
+				}
+			}
+		}
 
     }
 
@@ -541,6 +599,18 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
+	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
+	int i;
+
+	// Frequency changes invalidate scheduled compare periods.
+	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
+	{
+		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			return pTimer->Freq;
+		}
+	}
 
 	reg->TASKS_STOP = 1;
 
@@ -597,6 +667,139 @@ static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
 	return (uint64_t)pTimer->LastCount + pTimer->Rollover;
 }
 
+// Peripheral hardware task endpoints; PEI owns only the routing.
+static uintptr_t nRFxTimerTaskEndpoint(TimerDev_t * const pTimer, TIMER_TASK Task)
+{
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (pTimer == nullptr)
+	{
+		return 0U;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	if (devno < 0 || devno >= TIMER_NRFX_HF_MAX ||
+		s_pnRFxTimerDev[devno] != pTimer)
+	{
+		return 0U;
+	}
+	reg = s_nRFxTimerData[devno].pReg;
+	switch (Task)
+	{
+		case TIMER_TASK_START:
+			return (uintptr_t)&reg->TASKS_START;
+		case TIMER_TASK_STOP:
+			return (uintptr_t)&reg->TASKS_STOP;
+		case TIMER_TASK_CLEAR:
+			return (uintptr_t)&reg->TASKS_CLEAR;
+		default:
+			return 0U;
+	}
+}
+
+// Run a timer task from the CPU without releasing the timer clock.
+// This only prepares the initial state in PEI Blinky; buttons subsequently
+// activate the same tasks directly in hardware.
+static bool nRFxTimerExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
+{
+	uintptr_t endpoint;
+
+	endpoint = nRFxTimerTaskEndpoint(pTimer, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	*(volatile uint32_t *)endpoint = 1U;
+	return true;
+}
+
+// Bind one free CC to PEI. The free-running counter is never cleared,
+// stopped or routed to counter-control tasks by a compare trigger.
+// Continuous CC rescheduling follows the original Timer ISR model.
+static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
+	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei,
+	PeiEvent_t *pEvent)
+{
+	const nRFTimerData_t *pData;
+	NRF_TIMER_Type *reg;
+	PeiEndpoint_t endpoint;
+	PeiEvent_t evt;
+	uint64_t ticks;
+	uint32_t count;
+	int devno;
+
+	if (pTimer == nullptr || pPei == nullptr || pEvent == nullptr ||
+		PeiBindEvent == nullptr || PeiUnbindEvent == nullptr ||
+		PeiDisableEvent == nullptr || nsPeriod == 0U ||
+		(Type != TIMER_TRIG_TYPE_SINGLE &&
+			Type != TIMER_TRIG_TYPE_CONTINUOUS))
+	{
+		return false;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	if (devno < 0 || devno >= TIMER_NRFX_HF_MAX || pTimer->Freq == 0U)
+	{
+		return false;
+	}
+	pData = &s_nRFxTimerData[devno];
+	reg = pData->pReg;
+	if (TrigNo < 0 || TrigNo >= pData->MaxNbTrigEvt ||
+		pData->pTrigger[TrigNo].nsPeriod != 0U ||
+		pData->pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
+		pData->pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS ||
+		reg->SHORTS != 0U)
+	{
+		return false;
+	}
+	ticks = TimerNanosecondToTick(pTimer, nsPeriod);
+	if (ticks < 2U || ticks > UINT32_MAX)
+	{
+		return false;
+	}
+	endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
+	evt = *pEvent;
+	if (!PeiBindEvent(pPei, &evt, endpoint))
+	{
+		return false;
+	}
+
+	// Capture the running counter in this newly owned CC slot.
+	reg->TASKS_CAPTURE[TrigNo] = 1U;
+	count = reg->CC[TrigNo];
+	reg->EVENTS_COMPARE[TrigNo] = 0U;
+	reg->CC[TrigNo] = count + (uint32_t)ticks;
+	pData->pTrigger[TrigNo].Type = Type == TIMER_TRIG_TYPE_CONTINUOUS ?
+		TIMER_TRIG_PEI_CONTINUOUS : TIMER_TRIG_PEI_SINGLE;
+	pData->pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, ticks);
+	pData->pTrigger[TrigNo].Handler = nullptr;
+	pData->pTrigger[TrigNo].pContext = pPei;
+	pData->pCC[TrigNo] = evt;
+	*pEvent = evt;
+	reg->INTENSET = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
+	return true;
+}
+
+// Only installed by TimerPeiPrepareMcu through the explicit PEI API.
+// The normal TimerInit function never retains the PEI compare callback.
+bool nRFxTimerInstallPei(TimerDev_t *pTimer)
+{
+	int devno;
+
+	if (pTimer == nullptr || PeiBindEvent == nullptr ||
+		PeiUnbindEvent == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	if (devno < 0 || devno >= TIMER_NRFX_HF_MAX ||
+		s_pnRFxTimerDev[devno] != pTimer)
+	{
+		return false;
+	}
+	pTimer->EnablePeiTrigger = nRFxTimerEnablePeiTrigger;
+	return true;
+}
+
 static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                                        TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
@@ -605,6 +808,14 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 	NRF_TIMER_Type *reg = tdata.pReg;
 
 	if (TrigNo < 0 || TrigNo >= tdata.MaxNbTrigEvt)
+	{
+		return 0;
+	}
+
+	// Each CC owns its compare independently; never replace an active one.
+	if (tdata.pTrigger[TrigNo].nsPeriod != 0U ||
+		tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
+		tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
 	{
 		return 0;
 	}
@@ -648,8 +859,26 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	NRF_TIMER_Type *reg = tdata.pReg;
 
 	if (TrigNo < 0 || TrigNo >= tdata.MaxNbTrigEvt)
-        return;
+	{
+		return;
+	}
 
+	if (tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
+		tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
+	{
+		PeiDev_t *pei = static_cast<PeiDev_t *>(
+			tdata.pTrigger[TrigNo].pContext);
+		PeiEvent_t evt = tdata.pCC[TrigNo];
+		PeiEndpoint_t endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
+
+		// Disarm only this CC; leave the shared counter and other CCs alone.
+		reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
+		if (PeiUnbindEvent == nullptr ||
+			!PeiUnbindEvent(pei, evt, endpoint))
+		{
+			return;
+		}
+	}
 	tdata.pCC[TrigNo] = 0;
     reg->CC[TrigNo] = 0;
     reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
@@ -719,6 +948,16 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 
+	// A live PEI endpoint must be unbound explicitly before reinitializing
+	// the underlying timer, even if a different Timer object is supplied.
+	for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
+	{
+		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			return false;
+		}
+	}
 	s_pnRFxTimerDev[devno] = pTimer;
 
 	memset(tdata.pTrigger, 0, tdata.MaxNbTrigEvt * sizeof(TimerTrig_t));
@@ -732,11 +971,20 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	pTimer->FindAvailTrigger = nRFxTimerFindAvailTrigger;
 	pTimer->DisableTrigger = nRFxTimerDisableTrigger;
 	pTimer->EnableTrigger = nRFxTimerEnableTrigger;
+	pTimer->EnablePeiTrigger = nullptr;
+	pTimer->EnablePeiEvent = nullptr;
+	pTimer->DisablePeiEvent = nullptr;
+	pTimer->GetTaskEndpoint = nRFxTimerTaskEndpoint;
+	pTimer->ExecuteTask = nRFxTimerExecuteTask;
 	pTimer->DisableExtTrigger = nRFxTimerDisableExtTrigger;
 	pTimer->EnableExtTrigger = nRFxTimerEnableExtTrigger;
 
 	reg->TASKS_STOP = 1;
 	reg->TASKS_CLEAR = 1;
+
+	// No short or interrupt left by a counter that had the TIMER
+	reg->SHORTS = 0;
+	reg->INTENCLR = 0xFFFFFFFFUL;
 
 	// Only support timer mode, 32-bit counter
 	reg->MODE = TIMER_MODE_MODE_Timer;
@@ -759,37 +1007,22 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 
 		NRF_CLOCK->EVENTS_XOSTARTED = 0;
 	}
-#else
-	if (!(NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk))
-	{
-		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
-
-		// Clock source not available.  Only 64MHz XTAL
-//		s_nRfxHFClockSem++;
-		NRF_CLOCK->TASKS_HFCLKSTART = 1;
-
-		// Check if HFCLK is running or not
-		int timout = 1000000;
-		do
-		{
-			if ((NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk)
-					&& NRF_CLOCK->EVENTS_HFCLKSTARTED)
-				break;
-
-		} while (timout-- > 0);
-
-		if (timout <= 0)
-			return false;
-
-		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-	}
-#endif
 	else
 	{
 		// Clock source already enabled externally.
 		// This is to ensure we don't disable it when all timers are disabled
 		s_nRfxHFClockSem++;
 	}
+#else
+	// Init leaves the timer running, so it goes through Enable. Enable
+	// starts HFCLK if it is not running, owns it only in that case and
+	// counts the timer once, so that Disable after Init stops the timer and
+	// releases HFCLK, and a later Enable does not count it again.
+	if (nRFxTimerEnable(pTimer) == false)
+	{
+		return false;
+	}
+#endif
 
 	// Init interrupt for TIMERs
 	switch (devno)

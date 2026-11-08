@@ -43,6 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 
 #include "coredev/interrupt.h"
+#include "coredev/pei.h"
 
 /// Defining port name
 /// Many MCU name its GPIO port by letter starting from A instead of numerical
@@ -403,8 +404,82 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength);
  */
 void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed);
 
+/// Hardware-controlled GPIO output operation. PEI routes only the event
+/// to the GPIO task; the GPIO driver owns its GPIOTE channel and pin.
+typedef enum __IOPin_Task {
+	IOPIN_TASK_TOGGLE,
+	IOPIN_TASK_SET,
+	IOPIN_TASK_CLEAR
+} IOPINTASK;
+
+/**
+ * @brief Configure a GPIO edge event and bind its endpoint to the PEI matrix.
+ * The GPIO driver allocates its GPIOTE event channel internally. No GPIO
+ * interrupt is enabled. The pin must already be configured as an input.
+ *
+ * @return true on success
+ */
+bool IOPinEnableEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
+	int PortNo, int PinNo, IOPINSENSE Sense);
+
+/**
+ * @brief Disconnect a GPIO event producer from PEI and free its GPIOTE
+ * event channel. Keeps the logical PEI event identity and its task links
+ * so another peripheral may be bound later.
+ */
+bool IOPinDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt);
+
+/**
+ * @brief Bind the shared nRF52 GPIOTE PORT event source to PEI.
+ *
+ * All SENSE-enabled GPIO pins contribute to the same PORT event,
+ * including pins on other GPIO ports. Unlike IOPinEnableEvent(),
+ * PORT has no per-pin identity and requires no GPIOTE IN channel.
+ * The caller configures low/high sensing with IOPinSetSense().
+ * This does not configure pins, DETECTMODE, LATCH or PORT interrupts.
+ * Unsupported targets return false.
+ */
+bool IOPinEnablePortEvent(PeiDev_t *pPei, PeiEvent_t *pEvt);
+
+/**
+ * @brief Unbind the shared PORT source from one PEI logical event.
+ *
+ * Preserves GPIO SENSE, other PORT users, and logical event destinations.
+ * The caller disables its own SENSE pins and releases the PEI token.
+ */
+bool IOPinDisablePortEvent(PeiDev_t *pPei, PeiEvent_t Evt);
+
+/**
+ * @brief Prepare a GPIO output hardware task and connect it to an
+ * existing logical PEI event. The GPIO driver allocates the task channel.
+ * @return true on success
+ */
+bool IOPinEnableTask(PeiDev_t *pPei, PeiEvent_t Evt,
+	int PortNo, int PinNo, IOPINTASK Task);
+
+/**
+ * @brief Disconnect one GPIO task and release its hardware channel.
+ * Other task relationships on the same PEI event are preserved.
+ */
+bool IOPinDisableTask(PeiDev_t *pPei, PeiEvent_t Evt,
+	int PortNo, int PinNo);
+
 #ifdef __cplusplus
 }
+
+// Event producers accept a logical-event reference in C++; other GPIO
+// operations accept Pei directly through operator PeiDev_t *().
+static inline bool IOPinEnableEvent(Pei &PeiDev, PeiEvent_t &Evt,
+	int PortNo, int PinNo, IOPINSENSE Sense)
+{
+	return IOPinEnableEvent(PeiDev, &Evt, PortNo, PinNo, Sense);
+}
+
+static inline bool IOPinEnablePortEvent(Pei &PeiDev, PeiEvent_t &Evt)
+{
+	return IOPinEnablePortEvent(PeiDev, &Evt);
+}
+
 #endif
 
 #endif	// __IOPINCFG_H__

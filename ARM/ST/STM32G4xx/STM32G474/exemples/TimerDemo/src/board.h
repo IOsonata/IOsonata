@@ -64,7 +64,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Output on the ST-LINK virtual COM port, 1 Mbaud 8N1 in Release (Debug prints
 // with semihosting): LPUART1 (DevNo 0) RX PA3, TX PA2, AF12, the
 // BOARD_VCP_PINS of stm32_boards.h
-#define TIMER_DEMO_UART
 #define UART_DEVNO			BOARD_VCP_DEVNO
 #define UART_RX_PORT		IOPORTA
 #define UART_RX_PIN			3

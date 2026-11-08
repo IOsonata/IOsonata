@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/semihost_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/semihost_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -551,6 +556,16 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/semihost_arm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/semihost_arm.c</locationURI>
+		</link>
+		<link>
+			<name>src/semihost_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/semihost_intrf.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sensors</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -579,6 +594,11 @@
 			<name>src/system_nrf52.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-3-PROJECT_LOC%7D/src/system_nrf52.c</locationURI>
+		</link>
+		<link>
+			<name>src/system_power_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/system_power_nrf52.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>
@@ -786,6 +806,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/dac_device.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/counter.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/counter.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/i2c.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2c.h</locationURI>
@@ -816,6 +841,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/qdec.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/qdec.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/shared_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_intrf.h</locationURI>
@@ -844,6 +874,11 @@
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/wdt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/wdt.h</locationURI>
 		</link>
 		<link>
 			<name>include/crypto/cc3xx_intrf.h</name>
@@ -1761,6 +1796,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/adc_nrf52_saadc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/counter_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/counter_nrfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
@@ -1794,6 +1834,11 @@
 			<name>src/coredev/qspi_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/qspi_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/qdec_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/qdec_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.cpp</name>
@@ -1844,6 +1889,11 @@
 			<name>src/coredev/uart_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/wdt_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/cc3xx_intrf.cpp</name>
@@ -5504,6 +5554,21 @@
 			<name>src/nRF5_SDK_Mesh/models/vendor/simple_on_off/src/simple_on_off_server.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK_Mesh/models/vendor/simple_on_off/src/simple_on_off_server.c</locationURI>
+		</link>
+			<link>
+			<name>include/coredev/pei.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pei.h</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pei_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/pei_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pei.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/pei.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

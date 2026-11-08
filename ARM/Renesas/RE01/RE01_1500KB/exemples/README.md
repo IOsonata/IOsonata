@@ -73,7 +73,8 @@ TimerDemo defaults to device 3 (GPT0). Change `TIMER_DEMO_DEVNO=3` in the
 selected project's C++ compiler defined symbols to select another device.
 `TIMER_DEMO_FREQ=32768` requests a divided clock that allows the example's
 periods to fit every 16-bit counter. The actual rate depends on the family
-and running peripheral clock. `TIMER_DEMO_UART` enables console reporting.
+and running peripheral clock. Release builds print on the UART of `board.h`,
+Debug builds print with semihosting.
 
 | Device | Hardware | Compare callbacks used |
 | --- | --- | --- |

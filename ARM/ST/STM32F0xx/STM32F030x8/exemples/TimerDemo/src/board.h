@@ -15,7 +15,6 @@
 #define TIMER_DEMO_FREQ 10000
 #define TIMER_DEMO_INT_PRIO 2
 // UART output requires an external 3.3 V USB-UART adapter, TX PA9 / RX PA10.
-#define TIMER_DEMO_UART
 #define UART_DEVNO 0
 #define UART_RX_PORT 0
 #define UART_RX_PIN 10

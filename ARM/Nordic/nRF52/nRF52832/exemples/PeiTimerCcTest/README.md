@@ -1,0 +1,54 @@
+# PeiTimerCcTest (nRF52832)
+
+This is a standalone Eclipse Embedded CDT managed project. Import the ioc
+directory in IOcomposer/Eclipse. It leaves the existing PeiBlinky unchanged.
+
+Two independent compare channels share one free-running counter:
+- PEI (500 ms): event -> PPI -> GPIOTE toggle task on LED0.
+- Ordinary Timer trigger (250 ms): interrupt callback toggles LED1.
+
+The Timer ISR advances each CC, but does not forward the PEI event.
+There is no printf or semihosting output. As in PeiBlinky, the Eclipse
+project links the standalone pei_nrf52.cpp PPI backend directly; do not
+use SoftDevice-owned PPI resources in this bare-metal test.
+
+## Four configurations
+
+Set macros in src/board.h, build, flash, and observe both LEDs.
+
+| Timer | PEI first | ISR first |
+| --- | --- | --- |
+| TIMER3 (DevNo 6, default) | Working - user report | Working - user report |
+| RTC2 (DevNo 2) | Pending separate check | Working - user report |
+
+With PEI_CC_TEST_ISR_FIRST=0, PEI claims CC0 and ISR claims CC1.
+With PEI_CC_TEST_ISR_FIRST=1, ISR claims CC0 and PEI claims CC1.
+
+## Verification
+
+Allow the application to run uninterrupted for at least 20 IRQ
+callbacks (about five seconds). Inspect the global g_PeiCcTest.
+
+- Status 2 means 250 ms ISR intervals and monotonic elapsed ticks passed.
+- Errors 0 and BadIntervals 0 are expected.
+- ExpectedIrqTicks is approximately 4,000,000 on TIMER3 and 8,192 on RTC2.
+- MinIrqTicks and MaxIrqTicks should be near ExpectedIrqTicks.
+- ElapsedTicks must keep increasing; no compare stops or clears the timer.
+- Both LEDs should toggle independently; LED0 verifies PPI/GPIOTE routing.
+
+Status 2 is NOT sufficient to prove PPI routing without observing LED0.
+The diagnostic interval tolerance is 20%; it is not a precision timing
+benchmark. Do not halt the CPU, set breakpoints or use semihosting while
+collecting timing samples: continuous CC scheduling depends on Timer IRQs.
+
+Reported hardware checks (November 8, 2026):
+- RTC0 (DevNo 0), both CC allocation orders: working. The PEI-first
+  debugger capture showed Status 2 and Errors 0 at 32768 Hz.
+- TIMER3 (DevNo 6), both allocation orders: working per user.
+- RTC2 (DevNo 2), ISR-first allocation after setting
+  PEI_CC_TEST_ISR_FIRST to 1: working per user.
+
+Exact TIMER3/RTC2 diagnostic field values were not supplied. The
+RTC2 PEI-first configuration remains to be checked separately.
+Single-shot, teardown/reuse, and other event/task sources are outside
+this particular test.

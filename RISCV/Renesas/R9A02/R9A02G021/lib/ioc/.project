@@ -66,6 +66,16 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/sau_r9a02.h</locationURI>
 		</link>
 		<link>
+			<name>include/semihost_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/semihost_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/syslog.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/syslog.h</locationURI>
+		</link>
+		<link>
 			<name>include/tml32_r9a02.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/tml32_r9a02.h</locationURI>
@@ -546,6 +556,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sbuffer.c</locationURI>
 		</link>
 		<link>
+			<name>src/semihost_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/semihost_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/semihost_riscv.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/semihost_riscv.c</locationURI>
+		</link>
+		<link>
 			<name>src/sensors</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -564,6 +584,11 @@
 			<name>src/storage</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/system_r9a02.c</name>

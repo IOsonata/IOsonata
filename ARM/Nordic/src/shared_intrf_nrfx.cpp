@@ -61,7 +61,7 @@ SharedIntrf_t g_SharedIntrf[MAX_NB_DEV] = { {0, 0},};
 // these definitions override the weak defaults declared in the vector table.
 extern "C" {
 
-#ifdef NRF52805_XXAA
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA)
 void TWIM0_TWIS0_TWI0_IRQHandler()
 #elif defined(NRF52_SERIES)
 void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)

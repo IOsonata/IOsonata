@@ -54,7 +54,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1315296849.18783e7f" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -74,7 +73,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.724798599.6637b29a" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -196,7 +194,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1998765201.8cb385d9" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -216,7 +213,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1841475837.f5dbf7fe" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -338,7 +334,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1315296849.98c06553" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -358,7 +353,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.724798599.d56e0355" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -480,7 +474,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1998765201.2d6ef096" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -500,7 +493,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1841475837.8a75c4d0" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -622,7 +614,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1315296849.30dbcadf" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -642,7 +633,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.724798599.2edb9b04" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -764,7 +754,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1998765201.e99c4091" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />
@@ -784,7 +773,6 @@
 									<listOptionValue builtIn="false" value="RE01_1500KB" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_DEVNO=3" />
 									<listOptionValue builtIn="false" value="TIMER_DEMO_FREQ=32768" />
-									<listOptionValue builtIn="false" value="TIMER_DEMO_UART" />
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1841475837.c63c1511" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src" />

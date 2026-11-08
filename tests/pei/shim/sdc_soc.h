@@ -1,0 +1,4 @@
+#ifndef SDC_SOC_H_
+#define SDC_SOC_H_
+#define SDC_PPI_CHANNELS_USED_MASK 0xFFFE0000UL
+#endif

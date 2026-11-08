@@ -45,7 +45,7 @@ tests cover those operations; they do not replace hardware timing tests.
    active low, and USART1 RX PC26 / TX PC27, peripheral A. Adjust these pins
    and, if needed, define `MCUOSC` in TimerDemo's `src/board.h` for another board.
    Open the UART console at 1000000 baud 8N1, no flow control.
-   `TIMER_DEMO_UART` enables the shared demo's UART retargeting.
+   Release builds print on this UART, Debug builds print with semihosting.
 3. Start with `TIMER_DEVNO 0` in that board file. Flash and run continuously.
    `g_TimerInitOk` must become true, `g_TriggerCount[0]` must advance about ten
    times per second, and the user LED toggles on each trigger.

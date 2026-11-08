@@ -38,6 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "device_intrf.h"
 #include "coredev/iopincfg.h"
 #include "cfifo.h"
+#include "coredev/pei.h"
 //#include "audio/audiodev_pdm.h"
 
 #if 1
@@ -53,6 +54,17 @@ typedef enum __PDM_SamplMode {
 	PDM_SMPLMODE_FALLING,	// left
 	PDM_SMPLMODE_RISING		// right
 } PDM_SMPLMODE;
+
+typedef enum {
+	PDM_PEI_EVENT_STARTED,
+	PDM_PEI_EVENT_END,
+	PDM_PEI_EVENT_STOPPED
+} PDM_PEI_EVENT;
+
+typedef enum {
+	PDM_PEI_TASK_START,
+	PDM_PEI_TASK_STOP
+} PDM_PEI_TASK;
 
 typedef struct __PDM_DevInterf	PdmDev_t;
 
@@ -98,6 +110,21 @@ bool PdmStart(PdmDev_t *pDev);
 void PdmStop(PdmDev_t *pDev);
 void PdmSetMode(PdmDev_t *pDev, PDM_OPMODE Mode);
 void PdmPowerOff(PdmDev_t * const pDev);
+
+// nRF52 PEI requires the configured PDM driver as hardware owner.
+// PdmPreparePeiStart reserves the first FIFO block and programs
+// SAMPLE.PTR/MAXCNT without starting capture. Continuous DMA must be
+// serviced by the normal PDM interrupt (CfgData.bIntEn = true).
+// Disconnect all routes before changing mode, stopping, or disabling.
+bool PdmPreparePeiStart(PdmDev_t *pDev);
+bool PdmEnablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, PDM_PEI_EVENT Event);
+bool PdmDisablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+bool PdmConnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, PDM_PEI_TASK Task);
+bool PdmDisconnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, PDM_PEI_TASK Task);
 
 #ifdef __cplusplus
 }

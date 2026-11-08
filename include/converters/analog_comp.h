@@ -37,6 +37,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __ANALOG_COMP_H__
 
 #include <inttypes.h>
+#include <stdbool.h>
+
+#include "coredev/pei.h"
 
 typedef enum __Analog_Comp_Mode {
 	ANALOG_COMP_MODE_SINGLE,		//!< Single shot
@@ -48,6 +51,21 @@ typedef enum __Analog_Comp_Evt {
 	ANALOG_COMP_EVT_LOWER,	//!< Transition lower
 	ANALOG_COMP_EVT_HIGHER	//!< Transition higher
 } ANALOG_COMP_EVT;
+
+// Hardware comparator sources and destinations for PEI. Each endpoint
+// belongs to an initialized comparator; PEI only creates connections.
+typedef enum {
+	ANALOG_COMP_PEI_EVENT_READY,
+	ANALOG_COMP_PEI_EVENT_DOWN,
+	ANALOG_COMP_PEI_EVENT_UP,
+	ANALOG_COMP_PEI_EVENT_CROSS
+} ANALOG_COMP_PEI_EVENT;
+
+typedef enum {
+	ANALOG_COMP_PEI_TASK_START,
+	ANALOG_COMP_PEI_TASK_STOP,
+	ANALOG_COMP_PEI_TASK_SAMPLE
+} ANALOG_COMP_PEI_TASK;
 
 typedef struct __Analog_Comp_Dev AnalogCompDev_t;
 
@@ -86,6 +104,27 @@ struct __Analog_Comp_Dev {
 
 #pragma pack(pop)
 
+// Optional hardware comparator event/task routing. C and C++ applications
+// use these same C entry points. Unsupported MCUs return false when their
+// comparator port implements these APIs. The comparator driver must be
+// initialized and enabled first; its configuration is never owned by PEI.
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+bool AnalogCompPeiBindEvent(AnalogCompDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, ANALOG_COMP_PEI_EVENT Event);
+bool AnalogCompPeiUnbindEvent(AnalogCompDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+bool AnalogCompPeiConnectTask(AnalogCompDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, ANALOG_COMP_PEI_TASK Task);
+bool AnalogCompPeiDisconnectTask(AnalogCompDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, ANALOG_COMP_PEI_TASK Task);
+
+#ifdef __cplusplus
+}
+#endif
+
 #ifdef __cplusplus
 
 class AnalogComp {
@@ -97,6 +136,31 @@ public:
 	virtual void Disable() { vDevData.Disable(&vDevData); }
 	virtual bool Start() { return vDevData.Start(&vDevData); };
 	virtual void PowerOff() { vDevData.PowerOff(&vDevData); };
+
+	// Keep the configured comparator as the hardware resource owner.
+	// Both C and C++ calls use the same PEI matrix implementation.
+	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
+		ANALOG_COMP_PEI_EVENT Event)
+	{
+		return AnalogCompPeiBindEvent(&vDevData, PeiDev, &Evt, Event);
+	}
+
+	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return AnalogCompPeiUnbindEvent(&vDevData, PeiDev, Evt);
+	}
+
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt,
+		ANALOG_COMP_PEI_TASK Task)
+	{
+		return AnalogCompPeiConnectTask(&vDevData, PeiDev, Evt, Task);
+	}
+
+	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt,
+		ANALOG_COMP_PEI_TASK Task)
+	{
+		return AnalogCompPeiDisconnectTask(&vDevData, PeiDev, Evt, Task);
+	}
 
 protected:
 	AnalogCompDev_t vDevData;
@@ -113,7 +177,7 @@ extern "C" {
  *
  * This function must be implemented by driver implementer
  */
-bool AnalogCompInit(AnalogCompDev_t *pDev, AnalogCompCfg_t *pCfg);
+bool AnalogCompInit(AnalogCompDev_t *pDev, const AnalogCompCfg_t *pCfg);
 
 #ifdef __cplusplus
 }

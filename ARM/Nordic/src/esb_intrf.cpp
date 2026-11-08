@@ -443,16 +443,30 @@ bool EsbIntrfInit(ESBINTRF *pEsbIntrf, const ESBINTRF_CFG *pCfg)
     esbcfg.event_irq_priority = pCfg->IntPrio;
 
     err_code = nrf_esb_init(&esbcfg);
-    VERIFY_SUCCESS(err_code);
+	// VERIFY_SUCCESS returns the error code, which is true in a bool
+	// function, so the result is checked here instead
+	if (err_code != NRF_SUCCESS)
+	{
+		return false;
+	}
 
     err_code = nrf_esb_set_base_address_0(pCfg->BaseAddr0);
-    VERIFY_SUCCESS(err_code);
+	if (err_code != NRF_SUCCESS)
+	{
+		return false;
+	}
 
     err_code = nrf_esb_set_base_address_1(pCfg->BaseAddr1);
-    VERIFY_SUCCESS(err_code);
+	if (err_code != NRF_SUCCESS)
+	{
+		return false;
+	}
 
     err_code = nrf_esb_set_prefixes(pCfg->PipePrefix, 8);
-    VERIFY_SUCCESS(err_code);
+	if (err_code != NRF_SUCCESS)
+	{
+		return false;
+	}
 
     pEsbIntrf->DevIntrf.pDevData = (void*)pEsbIntrf;
     pEsbIntrf->DevIntrf.Enable = EsbIntrfEnable;

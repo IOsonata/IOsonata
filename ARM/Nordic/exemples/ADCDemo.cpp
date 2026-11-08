@@ -146,18 +146,16 @@ static const int s_NbRefVolt = sizeof(s_RefVolt) / sizeof(AdcRefVolt_t);
 
 static uint8_t s_AdcFifoMem[ADC_CFIFO_SIZE];
 
-// Define ADC device
+// Define ADC device. One round of the four channels per StartConversion. In
+// continuous mode the rounds of several channels are started by PEI, see
+// PeiAdcDemo.
 static const AdcCfg_t s_AdcCfg = {
-#ifdef ADC_DEMO_SINGLE_SHOT
 	.Mode = ADC_CONV_MODE_SINGLE,
-#else
-	.Mode = ADC_CONV_MODE_CONTINUOUS,
-#endif
 	.pRefVolt = s_RefVolt,
 	.NbRefVolt = s_NbRefVolt,
 	.DevAddr = 0,
 	.Resolution = 12,
-	.Rate = 200000,
+	.Rate = 0,
 	.OvrSample = 0,
 #ifdef ADC_DEMO_INTERRUPT_ENABLE
 	.bInterrupt = true,

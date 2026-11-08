@@ -76,6 +76,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_writer.h</locationURI>
 		</link>
 		<link>
+			<name>include/semihost_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/semihost_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -349,6 +354,16 @@
 			<name>src/sbuffer.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sbuffer.c</locationURI>
+		</link>
+		<link>
+			<name>src/semihost_arm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/semihost_arm.c</locationURI>
+		</link>
+		<link>
+			<name>src/semihost_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/semihost_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/slip_intrf.cpp</name>
@@ -1164,6 +1179,21 @@
 			<name>src/video/cam_arducam_mega.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/pei.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pei.h</locationURI>
+		</link>
+		<link>
+			<name>src/pei_nrf53.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/pei_nrf53.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pei.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/pei.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

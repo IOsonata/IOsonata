@@ -44,6 +44,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "device_intrf.h"
 #include "cfifo.h"
+#include "coredev/pei.h"
 
 /** @addtogroup device_intrf	Device Interface
   * @{
@@ -111,6 +112,27 @@ typedef enum {
 	UART_EVT_TXREADY,
 	UART_EVT_LINESTATE,
 } UART_EVT;
+
+// Hardware UART/UARTE event registers on the configured nRF52 instance.
+// Legacy UART and EasyDMA UARTE share UART0 hardware but not task modes.
+typedef enum {
+	UART_PEI_EVENT_CTS,
+	UART_PEI_EVENT_NCTS,
+	UART_PEI_EVENT_RXDRDY,
+	UART_PEI_EVENT_TXDRDY,
+	UART_PEI_EVENT_ERROR,
+	UART_PEI_EVENT_RXTO,
+	UART_PEI_EVENT_ENDRX,
+	UART_PEI_EVENT_ENDTX,
+	UART_PEI_EVENT_RXSTARTED,
+	UART_PEI_EVENT_TXSTARTED,
+	UART_PEI_EVENT_TXSTOPPED
+} UART_PEI_EVENT;
+
+typedef enum {
+	UART_PEI_TASK_STARTTX,
+	UART_PEI_TASK_STOPTX
+} UART_PEI_TASK;
 
 typedef struct __Uart_Dev UARTDev_t;
 typedef UARTDev_t	UARTDEV;
@@ -205,6 +227,23 @@ extern "C" {
 
 // Require implementations
 bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfgData);
+
+// UARTE-only: stage one TX EasyDMA block in the driver's existing
+// static TxDmaMem without starting transmission. The normal driver
+// continues owning RX and its FIFO. Only DMA, noninterrupt TX and
+// a prepared transfer can connect the STARTTX/STOPTX hardware tasks.
+// Disconnect all PPI routes before UARTReleasePeiTx().
+bool UARTPreparePeiTx(UARTDev_t *pDev, const uint8_t *pTx, uint32_t TxLen);
+bool UARTReleasePeiTx(UARTDev_t *pDev);
+
+bool UARTEnablePeiEvent(UARTDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, UART_PEI_EVENT Event);
+bool UARTDisablePeiEvent(UARTDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+bool UARTConnectPeiTask(UARTDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, UART_PEI_TASK Task);
+bool UARTDisconnectPeiTask(UARTDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, UART_PEI_TASK Task);
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState);
 UARTDev_t const *UARTGetInstance(int DevNo);
 
@@ -254,6 +293,36 @@ public:
 	virtual uint32_t Rate(void) { return UARTGetRate(&vDevData); }
     void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
     void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
+	bool PreparePeiTx(const uint8_t *pTx, uint32_t TxLen)
+	{
+		return UARTPreparePeiTx(&vDevData, pTx, TxLen);
+	}
+
+	bool ReleasePeiTx()
+	{
+		return UARTReleasePeiTx(&vDevData);
+	}
+
+	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt, UART_PEI_EVENT Event)
+	{
+		return UARTEnablePeiEvent(&vDevData, PeiDev, &Evt, Event);
+	}
+
+	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return UARTDisablePeiEvent(&vDevData, PeiDev, Evt);
+	}
+
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, UART_PEI_TASK Task)
+	{
+		return UARTConnectPeiTask(&vDevData, PeiDev, Evt, Task);
+	}
+
+	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, UART_PEI_TASK Task)
+	{
+		return UARTDisconnectPeiTask(&vDevData, PeiDev, Evt, Task);
+	}
+
 	virtual void SetCtrlLineState(int LineState) { UARTSetCtrlLineState(&vDevData, LineState); }
 	virtual int Rx(uint8_t *pBuff, int Len) { return DeviceIntrfRx(&vDevData.DevIntrf, 0, pBuff, Len); }
 	// Initiate receive

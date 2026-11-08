@@ -1,0 +1,39 @@
+# PeiPortDemo (nRF52832)
+
+Import `ioc` into IOcomposer/Eclipse as an Eclipse Embedded CDT managed project.
+
+This example verifies two independent event-to-task routes:
+
+- **BUT1 (P0.02)**: GPIO SENSE low -> shared GPIOTE.PORT -> PPI -> LED1 task.
+- **BUT2 (P0.13)**: dedicated GPIOTE.IN[n] -> PPI -> LED2 task.
+
+Press each button separately. Each should toggle only its corresponding LED.
+`g_PeiPortDemoStatus == 1` means setup succeeded; negative values locate
+failed setup steps. It is not a hardware PASS by itself.
+
+The PORT event combines all SENSE-enabled pins, so it does **not** identify
+the source pin or guarantee a per-pin edge. This example only configures
+BUT1 SENSE, leaving BUT2 as a dedicated IN[n] source. A level held active
+or a latch-based DETECT configuration may prevent another PORT transition.
+Do not use PORT as a silent fallback for `IOPinEnableEvent()`.
+
+During setup, the example first unbinds and rebinds the PORT source
+while retaining its LED task relationship. It then disconnects that
+task, unbinds and releases the logical event, allocates a fresh
+event identity, checks the stale token cannot resolve, and reacquires
+the LED task channel. This checks both source rebind and full
+task/event release and reuse before enabling hardware routes.
+PORT SENSE and any PORT interrupt remain owned by the caller.
+
+The example uses no semihosting or UART and links the standalone
+`pei_nrf52.cpp` PPI backend directly, as the original PeiBlinky does.
+It does not enable a SoftDevice.
+
+**Hardware result (November 8, 2026): functional PASS on BLYST-NANO-DK.**
+The maintainer reports that PeiPortDemo works. A successful run exercises
+both PORT-to-LED and dedicated IN[n]-to-LED routing and the setup-time
+logical source rebind / event and task resource reuse sequence.
+
+Extended testing remains pending: repeated release/reacquire cycles,
+GPIOTE PORT interrupt-handler coexistence, multiple SENSE inputs,
+other nRF52 SKUs, and longer-duration stress testing.

@@ -19,6 +19,8 @@
 #include "crypto/icrypto.h"
 #include "crypto_rng_nrf.h"
 
+
+
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
 // SysLog transport the a configured (UART, USB, RTT, BLE, or any other
@@ -272,7 +274,7 @@ RngPeriphIntrf *RngPeriphIntrfInstance(void)
 	return initialized ? &instance : nullptr;
 }
 
-#endif
+#endif // !RNG_USE_CRACEN && !RNG_USE_CC3XX
 
 bool CryptoRngNrf::Init(DeviceIntrf * const pIntrf)
 {

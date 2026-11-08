@@ -71,6 +71,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
+// The optional PEI matrix must not be extracted by a normal UART-only
+// static HAL application.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 // Defining common bitfields for both DMA & non DMA registers
 #define NRFX_UART_ERRORSRC_BREAK_Pos (3UL) /*!< Position of BREAK field. */
 #define NRFX_UART_ERRORSRC_BREAK_Msk (0x1UL << NRFX_UART_ERRORSRC_BREAK_Pos) /*!< Bit mask of BREAK field. */
@@ -170,6 +180,7 @@ typedef struct __nRF_UART_Dev {
 	uint8_t TxFifoMem[NRFX_UART_CFIFO_SIZE];
 	uint8_t RxDmaMem[NRFX_UART_RXDMA_SIZE];
 	uint8_t TxDmaMem[NRFX_UART_TXDMA_SIZE];
+	bool bPeiTxPrepared;		// TX EasyDMA reserved for hardware PEI
 } nRFUartDev_t;
 #pragma pack(pop)
 
@@ -735,6 +746,11 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 
+	if (dev->bPeiTxPrepared)
+	{
+		return (uint32_t)dev->pUartDev->Rate;
+	}
+
 	int rate = 0;
 
 	// NOTE: Thanks to hmolesworth for the Baudrate calculation posted on devzone.
@@ -778,6 +794,26 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	if (pDev->bIntEn == false && pDev->bDma == true)
 	{
 		nRFUARTPollRx(dev);
+	}
+#endif
+#ifdef UART_PRESENT
+	if (pDev->bIntEn == false && pDev->bDma == false)
+	{
+		// Polling without dma. No handler moves the received bytes into the
+		// fifo, do it here as the handler does. A byte the fifo has no room
+		// for stays in RXD with bRxReady set, the same as in interrupt mode.
+		int n = NRFX_UART_HWFIFO_SIZE;
+		while (dev->pReg->EVENTS_RXDRDY && n-- > 0)
+		{
+			uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
+			if (p == NULL)
+			{
+				dev->pUartDev->bRxReady = true;
+				break;
+			}
+			dev->pReg->EVENTS_RXDRDY = 0;
+			*p = dev->pReg->RXD;
+		}
 	}
 #endif
 
@@ -848,12 +884,19 @@ static void nRFUARTStopRx(DevIntrf_t * const pDev)
 
 static bool nRFUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	return true;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+
+	return !dev->bPeiTxPrepared;
 }
 
 static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+
+	if (dev->bPeiTxPrepared)
+	{
+		return 0;
+	}
     int cnt = 0;
     int rtry = pDev->MaxRetry;
 
@@ -881,6 +924,15 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
         {
         	nRFUARTPollTx(dev);
         }
+#endif
+#ifdef UART_PRESENT
+		// Polling without dma. No handler sets bTxReady back once TXD is
+		// sent, so check the TXDRDY event here. Without this only the first
+		// byte goes out.
+		if (pDev->bIntEn == false && pDev->bDma == false && dev->pReg->EVENTS_TXDRDY)
+		{
+			dev->pUartDev->bTxReady = true;
+		}
 #endif
 
         if (dev->pUartDev->bTxReady)
@@ -1120,6 +1172,19 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		return false;
 	}
+	if (s_nRFxUARTDev[pCfg->DevNo].bPeiTxPrepared)
+	{
+		return false;
+	}
+
+#if defined(UART_PRESENT) && defined(UARTE_PRESENT)
+	// Only the first UART_COUNT instances have the legacy UART. The others
+	// are UARTE only (UARTE1 on nRF52833/840) and cannot run without dma.
+	if (pCfg->bDMAMode == false && pCfg->DevNo >= UART_COUNT)
+	{
+		return false;
+	}
+#endif
 
 	int devno = pCfg->DevNo;
 #ifdef UART_PRESENT
@@ -1161,6 +1226,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	pDev->DevIntrf.pDevData = &s_nRFxUARTDev[devno];
 	s_nRFxUARTDev[devno].pUartDev = pDev;
+	s_nRFxUARTDev[devno].bPeiTxPrepared = false;
 
 #ifndef UARTE_PRESENT
 	pDev->DevIntrf.bDma = false;	// DMA not avail on nRF51
@@ -1584,3 +1650,339 @@ extern "C" void UARTE1_IRQHandler()
 	UartIrqHandler(1, &s_nRFxUARTDev[1].pUartDev->DevIntrf);
 }
 #endif
+
+
+// Legacy UART and EasyDMA UARTE have different event/task sets even on
+// UART0, where they share an address. Use only the initialized owner.
+static nRFUartDev_t *UARTPeiDevice(UARTDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	nRFUartDev_t *dev;
+	int i;
+
+	if (pDev == NULL || pDev->DevIntrf.pDevData == NULL ||
+		pDev->DevIntrf.Enable != nRFUARTEnable)
+	{
+		return NULL;
+	}
+	for (i = 0; i < s_NbUartDev; i++)
+	{
+		dev = &s_nRFxUARTDev[i];
+		if (pDev->DevIntrf.pDevData == dev &&
+			dev->pUartDev == pDev && dev->DevNo == i)
+		{
+			return dev;
+		}
+	}
+	return NULL;
+#else
+	(void)pDev;
+	return NULL;
+#endif
+}
+
+static bool UARTPeiReady(UARTDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	nRFUartDev_t *dev;
+
+	dev = UARTPeiDevice(pDev);
+	if (dev == NULL || pDev->DevIntrf.Type != DEVINTRF_TYPE_UART)
+	{
+		return false;
+	}
+#ifdef UARTE_PRESENT
+	if (pDev->DevIntrf.bDma)
+	{
+		return dev->DevNo < UARTE_COUNT &&
+			dev->pDmaReg->ENABLE ==
+			(UARTE_ENABLE_ENABLE_Enabled << UARTE_ENABLE_ENABLE_Pos);
+	}
+#endif
+#ifdef UART_PRESENT
+	if (!pDev->DevIntrf.bDma)
+	{
+		return dev->DevNo < UART_COUNT &&
+			dev->pReg->ENABLE ==
+			(UART_ENABLE_ENABLE_Enabled << UART_ENABLE_ENABLE_Pos);
+	}
+#endif
+#else
+	(void)pDev;
+#endif
+	return false;
+}
+
+static PeiEndpoint_t UARTPeiEventEndpoint(nRFUartDev_t *dev,
+	UART_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES)
+#ifdef UARTE_PRESENT
+	if (dev->pUartDev->DevIntrf.bDma)
+	{
+		switch (Event)
+		{
+			case UART_PEI_EVENT_CTS:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_CTS;
+			case UART_PEI_EVENT_NCTS:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_NCTS;
+			case UART_PEI_EVENT_RXDRDY:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_RXDRDY;
+			case UART_PEI_EVENT_TXDRDY:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_TXDRDY;
+			case UART_PEI_EVENT_ERROR:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_ERROR;
+			case UART_PEI_EVENT_RXTO:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_RXTO;
+			case UART_PEI_EVENT_ENDRX:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_ENDRX;
+			case UART_PEI_EVENT_ENDTX:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_ENDTX;
+			case UART_PEI_EVENT_RXSTARTED:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_RXSTARTED;
+			case UART_PEI_EVENT_TXSTARTED:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_TXSTARTED;
+			case UART_PEI_EVENT_TXSTOPPED:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_TXSTOPPED;
+			default:
+				return 0U;
+		}
+	}
+#endif
+#ifdef UART_PRESENT
+	if (!dev->pUartDev->DevIntrf.bDma)
+	{
+		switch (Event)
+		{
+			case UART_PEI_EVENT_CTS:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_CTS;
+			case UART_PEI_EVENT_NCTS:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_NCTS;
+			case UART_PEI_EVENT_RXDRDY:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_RXDRDY;
+			case UART_PEI_EVENT_TXDRDY:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_TXDRDY;
+			case UART_PEI_EVENT_ERROR:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_ERROR;
+			case UART_PEI_EVENT_RXTO:
+				return (PeiEndpoint_t)&dev->pReg->EVENTS_RXTO;
+			default:
+				return 0U;
+		}
+	}
+#endif
+#else
+	(void)dev;
+	(void)Event;
+#endif
+	return 0U;
+}
+
+// UARTE RX starts automatically at UARTInit and its DMA pointers are
+// replenished by the UART driver. PPI may not take over RX tasks.
+// STARTTX and STOPTX are safe only with a prepared driver TX buffer.
+static PeiEndpoint_t UARTPeiTaskEndpoint(nRFUartDev_t *dev,
+	UART_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
+	if (!dev->pUartDev->DevIntrf.bDma)
+	{
+		return 0U;
+	}
+	switch (Task)
+	{
+		case UART_PEI_TASK_STARTTX:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_STARTTX;
+		case UART_PEI_TASK_STOPTX:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_STOPTX;
+		default:
+			return 0U;
+	}
+#else
+	(void)dev;
+	(void)Task;
+	return 0U;
+#endif
+}
+
+extern "C" bool UARTPreparePeiTx(UARTDev_t *pDev, const uint8_t *pTx,
+	uint32_t TxLen)
+{
+#if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
+	nRFUartDev_t *dev;
+
+	if (!UARTPeiReady(pDev) || !pDev->DevIntrf.bDma ||
+		pDev->DevIntrf.bIntEn || pDev->FlowControl != UART_FLWCTRL_NONE ||
+		pDev->hTxFifo == NULL || pTx == NULL || TxLen == 0U ||
+		!pDev->bTxReady || !pDev->DevIntrf.bTxReady)
+	{
+		return false;
+	}
+	dev = UARTPeiDevice(pDev);
+	if (dev == NULL || dev->bPeiTxPrepared ||
+		TxLen > sizeof(dev->TxDmaMem) ||
+		CFifoUsed(pDev->hTxFifo) != 0)
+	{
+		return false;
+	}
+	if (atomic_flag_test_and_set(&pDev->DevIntrf.bBusy))
+	{
+		return false;
+	}
+	if (dev->bPeiTxPrepared || CFifoUsed(pDev->hTxFifo) != 0)
+	{
+		atomic_flag_clear(&pDev->DevIntrf.bBusy);
+		return false;
+	}
+	memcpy(dev->TxDmaMem, pTx, TxLen);
+	NRFX_UARTE_TXD_PTR(dev->pDmaReg) =
+		(uint32_t)(uintptr_t)dev->TxDmaMem;
+	NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = TxLen;
+	dev->pDmaReg->EVENTS_TXSTARTED = 0U;
+	dev->pDmaReg->EVENTS_TXDRDY = 0U;
+	NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0U;
+	dev->pDmaReg->EVENTS_TXSTOPPED = 0U;
+	dev->bPeiTxPrepared = true;
+	atomic_flag_clear(&pDev->DevIntrf.bBusy);
+	return true;
+#else
+	(void)pDev;
+	(void)pTx;
+	(void)TxLen;
+	return false;
+#endif
+}
+
+// The caller must disconnect all PPI TX task routes before release.
+// A transfer that has been started must have stopped before its DMA
+// buffer can be reused. A fresh, unstarted TX can simply be released.
+extern "C" bool UARTReleasePeiTx(UARTDev_t *pDev)
+{
+#if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
+	nRFUartDev_t *dev;
+	uint32_t timeout;
+
+	dev = UARTPeiDevice(pDev);
+	if (dev == NULL || !dev->bPeiTxPrepared)
+	{
+		return false;
+	}
+	if (dev->pDmaReg->EVENTS_TXSTARTED != 0U &&
+		dev->pDmaReg->EVENTS_TXSTOPPED == 0U)
+	{
+		NRFX_UARTE_TASKS_STOPTX(dev->pDmaReg) = 1U;
+		timeout = 100000U;
+		while (dev->pDmaReg->EVENTS_TXSTOPPED == 0U && timeout-- > 0U)
+		{
+		}
+		if (dev->pDmaReg->EVENTS_TXSTOPPED == 0U)
+		{
+			// Keep the TX storage reserved if STOP did not complete.
+			return false;
+		}
+	}
+	NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = 0U;
+	NRFX_UARTE_TXD_PTR(dev->pDmaReg) = 0U;
+	dev->pDmaReg->EVENTS_TXSTOPPED = 0U;
+	dev->bPeiTxPrepared = false;
+	pDev->bTxReady = true;
+	pDev->DevIntrf.bTxReady = true;
+	return true;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool UARTEnablePeiEvent(UARTDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t *pEvt, UART_PEI_EVENT Event)
+{
+	nRFUartDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || pEvt == NULL || PeiBindEvent == NULL ||
+		!UARTPeiReady(pDev))
+	{
+		return false;
+	}
+	if ((Event == UART_PEI_EVENT_CTS ||
+		 Event == UART_PEI_EVENT_NCTS) &&
+		pDev->FlowControl != UART_FLWCTRL_HW)
+	{
+		return false;
+	}
+	dev = UARTPeiDevice(pDev);
+	endpoint = UARTPeiEventEndpoint(dev, Event);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt, endpoint);
+}
+
+extern "C" bool UARTDisablePeiEvent(UARTDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t Evt)
+{
+	nRFUartDev_t *dev;
+	PeiEndpoint_t endpoint;
+	int i;
+
+	dev = UARTPeiDevice(pDev);
+	if (dev == NULL || pPei == NULL || PeiGetEventEndpoint == NULL ||
+		PeiUnbindEvent == NULL)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	for (i = UART_PEI_EVENT_CTS; i <= UART_PEI_EVENT_TXSTOPPED; i++)
+	{
+		if (endpoint != 0U &&
+			endpoint == UARTPeiEventEndpoint(dev, (UART_PEI_EVENT)i))
+		{
+			return PeiUnbindEvent(pPei, Evt, endpoint);
+		}
+	}
+	return false;
+}
+
+extern "C" bool UARTConnectPeiTask(UARTDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t Evt, UART_PEI_TASK Task)
+{
+	nRFUartDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiConnectTask == NULL || !UARTPeiReady(pDev))
+	{
+		return false;
+	}
+	dev = UARTPeiDevice(pDev);
+	if (dev == NULL || !dev->bPeiTxPrepared)
+	{
+		return false;
+	}
+	endpoint = UARTPeiTaskEndpoint(dev, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+extern "C" bool UARTDisconnectPeiTask(UARTDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t Evt, UART_PEI_TASK Task)
+{
+	nRFUartDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	dev = UARTPeiDevice(pDev);
+	if (dev == NULL || pPei == NULL || PeiDisconnectTask == NULL)
+	{
+		return false;
+	}
+	endpoint = UARTPeiTaskEndpoint(dev, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
+}
