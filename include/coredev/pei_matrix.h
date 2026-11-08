@@ -86,6 +86,36 @@ public:
 		return PeiGetSwEventTask(&vPei, Evt);
 	}
 
+	bool GroupInit(PeiGroup_t &Group)
+	{
+		return PeiGroupInit(&Group, vPei.DevNo);
+	}
+
+	bool GroupAddEvent(PeiGroup_t &Group, PeiEvent_t Evt)
+	{
+		return PeiGroupAddEvent(&Group, &vPei, Evt);
+	}
+
+	bool GroupRemoveEvent(PeiGroup_t &Group, PeiEvent_t Evt)
+	{
+		return PeiGroupRemoveEvent(&Group, &vPei, Evt);
+	}
+
+	PeiEndpoint_t GroupEnableTask(const PeiGroup_t &Group) const
+	{
+		return PeiGroupEnableTask(&Group);
+	}
+
+	PeiEndpoint_t GroupDisableTask(const PeiGroup_t &Group) const
+	{
+		return PeiGroupDisableTask(&Group);
+	}
+
+	bool GroupDeinit(PeiGroup_t &Group)
+	{
+		return PeiGroupDeinit(&Group);
+	}
+
 private:
 	PeiDev_t vPei;
 };

@@ -63,6 +63,13 @@ typedef struct {
 	uint32_t Handle;
 } PeiConn_t;
 
+// Hardware PPI channel group (nRF52 initial implementation).
+// Caller-owned, zero initialized and kept at a stable address;
+// its token is not a physical group index. Do not copy live groups.
+typedef struct {
+	uint32_t Handle;
+} PeiGroup_t;
+
 // Fixed-size, caller-owned PEI matrix storage. C and C++ clients use the
 // same matrix implementation. No heap allocation or MCU-specific routing
 // registers are involved here.
@@ -176,6 +183,23 @@ bool PeiTriggerSwEvent(PeiDev_t *pPei, PeiEvent_t Evt);
  * @return	Task endpoint, 0 when Evt is not a software event
  */
 PeiEndpoint_t PeiGetSwEventTask(const PeiDev_t *pPei, PeiEvent_t Evt);
+
+// nRF52 hardware PPI channel-group tasks. The group owns only PEI
+// connection channels, not radio/SoftDevice or foreign PPI resources.
+// Add/remove operate on every existing task route for a logical event
+// in one PeiDev_t matrix. Routes must be disabled while group membership
+// changes. Disconnecting a route automatically removes it from groups.
+// Destroy after disabling routes and disconnecting any PPI connections
+// targeting the returned EN/DIS tasks. Unsupported ports may omit these
+// optional APIs until their interconnect backend supports groups.
+bool PeiGroupInit(PeiGroup_t *pGroup, int DevNo);
+bool PeiGroupAddEvent(PeiGroup_t *pGroup, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+bool PeiGroupRemoveEvent(PeiGroup_t *pGroup, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+PeiEndpoint_t PeiGroupEnableTask(const PeiGroup_t *pGroup);
+PeiEndpoint_t PeiGroupDisableTask(const PeiGroup_t *pGroup);
+bool PeiGroupDeinit(PeiGroup_t *pGroup);
 
 #ifdef __cplusplus
 }
