@@ -1731,3 +1731,345 @@ extern "C" void SPIM4_IRQHandler(void)
 		SPI_IRQHandler(4, &dev->DevIntrf);
 }
 #endif
+
+
+// The SPI, SPIM and SPIS modes share register blocks and sometimes
+// interrupt vectors. A PEI endpoint must match the current SPI HAL owner.
+static nRFSpiDev_t *SPIPeiDevice(SPIDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	nRFSpiDev_t *dev;
+
+	if (pDev == NULL || pDev->Cfg.DevNo < 0 ||
+		pDev->Cfg.DevNo >= NRFX_SPI_MAXDEV)
+	{
+		return NULL;
+	}
+	dev = &g_nRFxSPIDev[pDev->Cfg.DevNo];
+	if (dev->pSpiDev != pDev ||
+		pDev->DevIntrf.pDevData != dev ||
+		pDev->DevIntrf.Enable != nRFxSPIEnable)
+	{
+		return NULL;
+	}
+	return dev;
+#else
+	(void)pDev;
+	return NULL;
+#endif
+}
+
+static PeiEndpoint_t SPIPeiEventEndpoint(nRFSpiDev_t *dev,
+	SPI_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES)
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	{
+#if defined(SPIS_COUNT)
+		switch (Event)
+		{
+			case SPI_PEI_EVENT_ENDRX:
+				return (PeiEndpoint_t)&dev->pDmaSReg->EVENTS_ENDRX;
+			case SPI_PEI_EVENT_END:
+				return (PeiEndpoint_t)&dev->pDmaSReg->EVENTS_END;
+			case SPI_PEI_EVENT_ACQUIRED:
+				return (PeiEndpoint_t)&dev->pDmaSReg->EVENTS_ACQUIRED;
+			default:
+				return 0U;
+		}
+#else
+		return 0U;
+#endif
+	}
+#ifdef SPIM_PRESENT
+	if (dev->pSpiDev->DevIntrf.bDma)
+	{
+		switch (Event)
+		{
+			case SPI_PEI_EVENT_STARTED:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_STARTED;
+			case SPI_PEI_EVENT_ENDRX:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_ENDRX;
+			case SPI_PEI_EVENT_ENDTX:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_ENDTX;
+			case SPI_PEI_EVENT_END:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_END;
+			case SPI_PEI_EVENT_STOPPED:
+				return (PeiEndpoint_t)&dev->pDmaReg->EVENTS_STOPPED;
+			default:
+				return 0U;
+		}
+	}
+#endif
+#ifdef SPI_PRESENT
+	if (Event == SPI_PEI_EVENT_READY)
+	{
+		return (PeiEndpoint_t)&dev->pReg->EVENTS_READY;
+	}
+#endif
+#else
+	(void)dev;
+	(void)Event;
+#endif
+	return 0U;
+}
+
+static PeiEndpoint_t SPIPeiTaskEndpoint(nRFSpiDev_t *dev,
+	SPI_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES) && defined(SPIM_PRESENT)
+	if (dev->pSpiDev->Cfg.Mode != SPIMODE_MASTER ||
+		!dev->pSpiDev->DevIntrf.bDma)
+	{
+		return 0U;
+	}
+	switch (Task)
+	{
+		case SPI_PEI_TASK_START:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_START;
+		case SPI_PEI_TASK_STOP:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_STOP;
+		case SPI_PEI_TASK_SUSPEND:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_SUSPEND;
+		case SPI_PEI_TASK_RESUME:
+			return (PeiEndpoint_t)&dev->pDmaReg->TASKS_RESUME;
+		default:
+			return 0U;
+	}
+#else
+	(void)dev;
+	(void)Task;
+	return 0U;
+#endif
+}
+
+static bool SPIPeiReady(SPIDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	nRFSpiDev_t *dev;
+
+	dev = SPIPeiDevice(pDev);
+	if (dev == NULL || pDev->Cfg.Phy != SPIPHY_NORMAL)
+	{
+		return false;
+	}
+#if defined(SPIM_PRESENT) && defined(SPIM_COUNT)
+	if (pDev->Cfg.Mode == SPIMODE_MASTER &&
+		pDev->DevIntrf.bDma && pDev->Cfg.DevNo < SPIM_COUNT)
+	{
+		return dev->pDmaReg->ENABLE ==
+			(SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos);
+	}
+#endif
+#if defined(SPIS_COUNT)
+	if (pDev->Cfg.Mode == SPIMODE_SLAVE &&
+		pDev->Cfg.DevNo < SPIS_COUNT)
+	{
+		return dev->pDmaSReg->ENABLE ==
+			(SPIS_ENABLE_ENABLE_Enabled << SPIS_ENABLE_ENABLE_Pos);
+	}
+#endif
+#if defined(SPI_PRESENT) && defined(SPI_COUNT)
+	if (pDev->Cfg.Mode == SPIMODE_MASTER &&
+		!pDev->DevIntrf.bDma && pDev->Cfg.DevNo < SPI_COUNT)
+	{
+		return dev->pReg->ENABLE ==
+			(SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
+	}
+#endif
+#else
+	(void)pDev;
+#endif
+	return false;
+}
+
+// PPI START has no callback opportunity to set DMA pointers. Stage at
+// most one SPIM transfer using the existing driver's private TX buffer.
+// The RX buffer belongs to the caller until after STOP/END and teardown.
+extern "C" bool SPIPreparePeiTransfer(SPIDev_t *pDev,
+	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
+{
+#if defined(NRF52_SERIES) && defined(SPIM_PRESENT)
+	nRFSpiDev_t *dev;
+
+	if (!SPIPeiReady(pDev) || pDev->Cfg.Mode != SPIMODE_MASTER ||
+		!pDev->DevIntrf.bDma || pDev->Cfg.ChipSel != SPICSEL_MAN ||
+		pDev->Cfg.DataSize != 8U || pDev->Cfg.bIntEn ||
+		pDev->DevIntrf.bNoStop || !pDev->DevIntrf.bTxReady ||
+		TxLen > NRFX_SPI_TXBUF_SIZE || TxLen > NRFX_SPI_DMA_MAXCNT ||
+		RxLen > NRFX_SPI_DMA_MAXCNT ||
+		(TxLen == 0U && RxLen == 0U) ||
+		(TxLen != 0U && pTx == NULL) ||
+		(RxLen != 0U && pRx == NULL))
+	{
+		return false;
+	}
+	dev = SPIPeiDevice(pDev);
+	if (dev == NULL || dev->bPeiPrepared || dev->bTxAbort ||
+		dev->bCmdFailed || dev->pTxWait != NULL ||
+		dev->RxBufflen != 0 || dev->TxDatalen != 0)
+	{
+		return false;
+	}
+#ifdef SPI_PRESENT
+	// nRF52832 anomaly 58: one-byte RX needs a CPU SPI-mode fallback,
+	// so do not allow that unsafe transfer from hardware PPI START.
+	if (RxLen == 1U && TxLen <= 1U && nrf52_errata_58())
+	{
+		return false;
+	}
+#endif
+	if (TxLen != 0U)
+	{
+		memcpy(dev->TxBuf, pTx, TxLen);
+	}
+	dev->pDmaReg->TXD.PTR = TxLen != 0U ?
+		(uint32_t)(uintptr_t)dev->TxBuf : 0U;
+	dev->pDmaReg->TXD.MAXCNT = TxLen;
+	dev->pDmaReg->RXD.PTR = RxLen != 0U ?
+		(uint32_t)(uintptr_t)pRx : 0U;
+	dev->pDmaReg->RXD.MAXCNT = RxLen;
+	dev->pDmaReg->TXD.LIST = 0U;
+	dev->pDmaReg->RXD.LIST = 0U;
+	dev->pDmaReg->SHORTS = 0U;
+	dev->pDmaReg->EVENTS_STARTED = 0U;
+	dev->pDmaReg->EVENTS_ENDRX = 0U;
+	dev->pDmaReg->EVENTS_ENDTX = 0U;
+	dev->pDmaReg->EVENTS_END = 0U;
+	dev->pDmaReg->EVENTS_STOPPED = 0U;
+	dev->bPeiPrepared = true;
+	return true;
+#else
+	(void)pDev;
+	(void)pTx;
+	(void)TxLen;
+	(void)pRx;
+	(void)RxLen;
+	return false;
+#endif
+}
+
+extern "C" bool SPIReleasePeiTransfer(SPIDev_t *pDev)
+{
+#if defined(NRF52_SERIES) && defined(SPIM_PRESENT)
+	nRFSpiDev_t *dev;
+	uint32_t timeout;
+
+	dev = SPIPeiDevice(pDev);
+	if (dev == NULL || !dev->bPeiPrepared)
+	{
+		return false;
+	}
+	if (dev->pDmaReg->EVENTS_STOPPED == 0U)
+	{
+		dev->pDmaReg->TASKS_STOP = 1U;
+		timeout = NRFSPI_TIMEOUT;
+		while (dev->pDmaReg->EVENTS_STOPPED == 0U && timeout-- > 0U)
+		{
+		}
+		if (dev->pDmaReg->EVENTS_STOPPED == 0U)
+		{
+			return false;
+		}
+	}
+	dev->pDmaReg->TXD.MAXCNT = 0U;
+	dev->pDmaReg->RXD.MAXCNT = 0U;
+	dev->pDmaReg->TXD.PTR = 0U;
+	dev->pDmaReg->RXD.PTR = 0U;
+	dev->pDmaReg->EVENTS_STOPPED = 0U;
+	dev->bPeiPrepared = false;
+	return true;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool SPIEnablePeiEvent(SPIDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t *pEvt, SPI_PEI_EVENT Event)
+{
+	nRFSpiDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || pEvt == NULL || PeiBindEvent == NULL ||
+		!SPIPeiReady(pDev))
+	{
+		return false;
+	}
+	dev = SPIPeiDevice(pDev);
+	endpoint = SPIPeiEventEndpoint(dev, Event);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt, endpoint);
+}
+
+extern "C" bool SPIDisablePeiEvent(SPIDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t Evt)
+{
+	nRFSpiDev_t *dev;
+	PeiEndpoint_t endpoint;
+	int event;
+
+	dev = SPIPeiDevice(pDev);
+	if (dev == NULL || pPei == NULL || PeiUnbindEvent == NULL ||
+		PeiGetEventEndpoint == NULL)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	for (event = SPI_PEI_EVENT_READY;
+		event <= SPI_PEI_EVENT_ACQUIRED; event++)
+	{
+		if (endpoint != 0U &&
+			endpoint == SPIPeiEventEndpoint(dev, (SPI_PEI_EVENT)event))
+		{
+			return PeiUnbindEvent(pPei, Evt, endpoint);
+		}
+	}
+	return false;
+}
+
+extern "C" bool SPIConnectPeiTask(SPIDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t Evt, SPI_PEI_TASK Task)
+{
+	nRFSpiDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiConnectTask == NULL ||
+		!SPIPeiReady(pDev))
+	{
+		return false;
+	}
+	dev = SPIPeiDevice(pDev);
+	if (dev == NULL || !dev->bPeiPrepared)
+	{
+		return false;
+	}
+	endpoint = SPIPeiTaskEndpoint(dev, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+extern "C" bool SPIDisconnectPeiTask(SPIDev_t *pDev,
+	PeiDev_t *pPei, PeiEvent_t Evt, SPI_PEI_TASK Task)
+{
+	nRFSpiDev_t *dev;
+	PeiEndpoint_t endpoint;
+
+	dev = SPIPeiDevice(pDev);
+	if (dev == NULL || pPei == NULL || PeiDisconnectTask == NULL)
+	{
+		return false;
+	}
+	endpoint = SPIPeiTaskEndpoint(dev, Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
+}
