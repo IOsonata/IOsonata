@@ -9,6 +9,7 @@ a target MCU. tests/pei/run.py compiles this as C11 with -Werror.
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
 #include "coredev/pwm.h"
+#include "coredev/spi.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
 #include "adc_nrf52_pei.h"
@@ -278,4 +279,40 @@ bool PeiAudioCApplication(PdmDev_t *pPdm, I2SDev_t *pI2s,
 		return false;
 	}
 	return PeiReleaseEvent(pPei, &i2sRx);
+}
+
+
+// Compile-only: mode-specific events and DMA task preparation from C.
+bool PeiSpiCApplication(SPIDev_t *pSpi, PeiDev_t *pPei,
+	PeiEvent_t source, uint8_t *pRx)
+{
+	PeiEvent_t end;
+	const uint8_t tx[] = { 0xA5, 0x5A, 0x33, 0xCC };
+
+	end = 0U;
+	if (!SPIPreparePeiTransfer(pSpi, tx, sizeof(tx), pRx, sizeof(tx)))
+	{
+		return false;
+	}
+	if (!SPIEnablePeiEvent(pSpi, pPei, &end, SPI_PEI_EVENT_END))
+	{
+		return false;
+	}
+	if (!SPIConnectPeiTask(pSpi, pPei, source, SPI_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!SPIDisconnectPeiTask(pSpi, pPei, source, SPI_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!SPIDisablePeiEvent(pSpi, pPei, end))
+	{
+		return false;
+	}
+	if (!PeiReleaseEvent(pPei, &end))
+	{
+		return false;
+	}
+	return SPIReleasePeiTransfer(pSpi);
 }

@@ -6,6 +6,7 @@
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
 #include "coredev/pwm.h"
+#include "coredev/spi.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
 #include "adc_nrf52_pei.h"
@@ -237,4 +238,39 @@ bool PeiAudioCppApplication(PdmDev_t *pPdm, I2S &i2s,
 		return false;
 	}
 	return pei.ReleaseEvent(i2sStopped);
+}
+
+
+// Compile-only: C++ SPI wrapper delegates PEI to the same C matrix.
+bool PeiSpiCppApplication(SPI &spi, Pei &pei,
+	PeiEvent_t button, uint8_t *pRx)
+{
+	PeiEvent_t end = 0U;
+	const uint8_t tx[] = { 0x5A, 0xA5, 0xCC, 0x33 };
+
+	if (!spi.PreparePeiTransfer(tx, sizeof(tx), pRx, sizeof(tx)))
+	{
+		return false;
+	}
+	if (!spi.EnablePeiEvent(pei, end, SPI_PEI_EVENT_END))
+	{
+		return false;
+	}
+	if (!spi.ConnectTask(pei, button, SPI_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!spi.DisconnectTask(pei, button, SPI_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!spi.DisablePeiEvent(pei, end))
+	{
+		return false;
+	}
+	if (!pei.ReleaseEvent(end))
+	{
+		return false;
+	}
+	return spi.ReleasePeiTransfer();
 }
