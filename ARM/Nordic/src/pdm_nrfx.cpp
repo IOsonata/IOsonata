@@ -242,13 +242,6 @@ void PdmIrqHandler(PdmDev_t *pDev)
 	if (NRF_PDM->EVENTS_END)
 	{
 		// Data transfer completed
-		uint8_t *p = CFifoPut(pDev->hFifo);
-		if (p)
-		{
-			NRF_PDM->SAMPLE.PTR = (uint32_t)p;
-			NRF_PDM->SAMPLE.MAXCNT = pDev->NbSamples;
-		}
-
 		if (pDev->CfgData.EvtHandler)
 		{
 			pDev->CfgData.EvtHandler(pDev, DEVINTRF_EVT_RX_DATA);
@@ -259,6 +252,17 @@ void PdmIrqHandler(PdmDev_t *pDev)
 	if (NRF_PDM->EVENTS_STARTED)
 	{
 		NRF_PDM->EVENTS_STARTED = 0;
+
+		// SAMPLE.PTR and MAXCNT are double buffered. The PDM took the current
+		// block when it generated STARTED and continues into the values
+		// written now when that block is full. Writing them on END was too
+		// late, the next block went into the same buffer again.
+		uint8_t *p = CFifoPut(pDev->hFifo);
+		if (p)
+		{
+			NRF_PDM->SAMPLE.PTR = (uint32_t)p;
+			NRF_PDM->SAMPLE.MAXCNT = pDev->NbSamples;
+		}
 	}
 	if (NRF_PDM->EVENTS_STOPPED)
 	{
