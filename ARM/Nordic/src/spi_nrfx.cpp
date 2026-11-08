@@ -338,6 +338,11 @@ static uint32_t nRFxSPIGetRate(DevIntrf_t * const pDev)
 uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
+
+	if (dev->bPeiPrepared)
+	{
+		return dev->pSpiDev->Cfg.Rate;
+	}
 #ifdef NRF54L_SERIES
 	const uint32_t clock = (dev->DevNo == 4 ? SPIM00_CORE_FREQUENCY :
 		SPIM20_CORE_FREQUENCY) * 1000000U;
@@ -743,6 +748,11 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
+
 	if (dev->bTxAbort || dev->bCmdFailed)
 	{
 		uint32_t irq = __get_PRIMASK();
@@ -940,6 +950,11 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
+
+	if (dev->bPeiPrepared)
+	{
+		return 0;
+	}
 
 	if (pData == NULL || DataLen <= 0)
 		return 0;

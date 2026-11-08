@@ -63,6 +63,10 @@ def main():
     assert "dev->pDmaReg->TASKS_START" not in prep
     assert "nrf52_errata_58()" in prep
     assert "dev->bPeiPrepared = true;" in prep
+    for api in ("nRFxSPIRxDataDma(", "nRFxSPITxDataDma(",
+                "nRFxSPISetRate("):
+        assert api in DRIVER
+    assert DRIVER.count("if (dev->bPeiPrepared)") >= 3
     assert "dev->bPeiPrepared = false;" in DRIVER
     for api in ("PeiBindEvent", "PeiGetEventEndpoint",
                 "PeiUnbindEvent", "PeiConnectTask",
