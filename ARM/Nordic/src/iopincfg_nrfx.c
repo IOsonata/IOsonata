@@ -66,6 +66,14 @@ void __WEAK GPIOTE_IRQHandler(void);
 #define IOPIN_MAX_INT			(GPIOTE_CH_NUM)
 #endif
 
+// These legacy GPIOTE instance/channel checks apply to the nRF52 family.
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+#define IOPIN_NRF52_GPIOTE	1
+#endif
+
+
 #if defined(NRF54H20_XXAA)
 #ifndef NRF_APPLICATION
 #error "iopincfg_nrfx.c: nRF54H20 pin interrupts are written for the application core"
@@ -370,6 +378,16 @@ void IOPinDisableInterrupt(int IntNo)
     if (IntNo >= IOPIN_MAX_INT)
         return;
 
+#if defined(IOPIN_NRF52_GPIOTE)
+	// Never clear an unused IRQ slot or a PEI-owned GPIOTE channel.
+	if (IntNo >= 0 &&
+		(s_GpIOSenseEvt[IntNo].Sense == IOPINSENSE_DISABLE ||
+		 NRF_GPIOTE->CONFIG[IntNo] == 0U))
+	{
+		return;
+	}
+#endif
+
 	// A GPIOTE hardware task is not an interrupt and must never be
 	// released through the interrupt API.
 	if (IntNo >= 0 &&
@@ -438,6 +456,10 @@ void IOPinDisableInterrupt(int IntNo)
     	gpiotereg->INTENCLR = (1 << IntNo);
 #endif
         gpiotereg->CONFIG[IntNo] = 0;
+#if defined(IOPIN_NRF52_GPIOTE)
+		// Do not leave an old edge pending when this slot is reused.
+		gpiotereg->EVENTS_IN[IntNo] = 0U;
+#endif
         reg->PIN_CNF[s_GpIOSenseEvt[IntNo].PortPinNo & 0xFF] &= ~GPIO_PIN_CNF_SENSE_Msk;
     }
 
@@ -534,6 +556,16 @@ void IOPinDisableInterrupt(int IntNo)
  */
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
+#if defined(IOPIN_NRF52_GPIOTE)
+	uint32_t irqState = 0U;
+	uint32_t otherCfg;
+	uint32_t otherPin;
+	uint32_t otherPort;
+	int channelCount;
+	int i;
+	bool irqLocked = false;
+#endif
+
 	s_pGpIOSenseEvt = s_GpIOSenseEvt;
 
 	if (IntNo < -1 || IntNo >= IOPIN_MAX_INT)
@@ -574,6 +606,53 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	{
 		return false;
 	}
+
+#if defined(IOPIN_NRF52_GPIOTE)
+	// A conventional IRQ and PEI share the same physical GPIOTE
+	// channels. Never overwrite another owner, or claim the same pin
+	// through a different channel. Keep this check and setup atomic.
+	if (IntNo >= 0)
+	{
+		if (reg == NULL || gpiotereg == NULL ||
+			PortNo >= GPIO_COUNT || PinNo >= 32U ||
+			Sense == IOPINSENSE_DISABLE)
+		{
+			return false;
+		}
+		irqState = DisableInterrupt();
+		irqLocked = true;
+		if (s_GpIOSenseEvt[IntNo].Sense != IOPINSENSE_DISABLE ||
+			((s_GpIOTaskUsed | s_GpIOEventUsed) & (1UL << IntNo)) != 0U ||
+			gpiotereg->CONFIG[IntNo] != 0U)
+		{
+			EnableInterrupt(irqState);
+			return false;
+		}
+		channelCount = sizeof(gpiotereg->CONFIG) /
+			sizeof(gpiotereg->CONFIG[0]);
+		for (i = 0; i < channelCount; i++)
+		{
+			otherCfg = gpiotereg->CONFIG[i];
+			if ((otherCfg & GPIOTE_CONFIG_MODE_Msk) == 0U)
+			{
+				continue;
+			}
+			otherPin = (otherCfg & GPIOTE_CONFIG_PSEL_Msk) >>
+				GPIOTE_CONFIG_PSEL_Pos;
+#ifdef GPIOTE_CONFIG_PORT_Msk
+			otherPort = (otherCfg & GPIOTE_CONFIG_PORT_Msk) >>
+				GPIOTE_CONFIG_PORT_Pos;
+#else
+			otherPort = 0U;
+#endif
+			if (otherPort == PortNo && otherPin == PinNo)
+			{
+				EnableInterrupt(irqState);
+				return false;
+			}
+		}
+	}
+#endif
 
 	if (IntNo < 0)
 	{
@@ -684,6 +763,10 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		}
 
 		gpiotereg->CONFIG[idx] = cfg;
+#if defined(IOPIN_NRF52_GPIOTE)
+		// Prevent stale events from firing immediately after reuse.
+		gpiotereg->EVENTS_IN[idx] = 0U;
+#endif
 
 #if defined(NRF54H20_XXAA)
 		gpiotereg->H20_GPIOTE_INTENSET = (1 << IntNo);
@@ -782,6 +865,12 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_SetPriority(GPIOTE_IRQn, IntPrio);
     NVIC_EnableIRQ(GPIOTE_IRQn);
+#endif
+#if defined(IOPIN_NRF52_GPIOTE)
+	if (irqLocked)
+	{
+		EnableInterrupt(irqState);
+	}
 #endif
     return true;
 }
@@ -1278,15 +1367,25 @@ bool IOPinDisableTask(PeiDev_t *pPei, PeiEvent_t Evt,
 
 static int IOPinFindAvailInterrupt(void)
 {
-	for (int i = 0; i < IOPIN_MAX_INT; i++)
-	{
-		if (s_GpIOSenseEvt[i].SensEvtCB == NULL &&
-			((s_GpIOTaskUsed | s_GpIOEventUsed) & (1UL << i)) == 0U)
-		{
-			return i;
-		}
-	}
+	int i;
 
+	for (i = 0; i < IOPIN_MAX_INT; i++)
+	{
+		if (s_GpIOSenseEvt[i].Sense != IOPINSENSE_DISABLE ||
+			s_GpIOSenseEvt[i].SensEvtCB != NULL ||
+			((s_GpIOTaskUsed | s_GpIOEventUsed) & (1UL << i)) != 0U)
+		{
+			continue;
+		}
+#if defined(IOPIN_NRF52_GPIOTE)
+		// Respect channels configured directly by another subsystem.
+		if (NRF_GPIOTE->CONFIG[i] != 0U)
+		{
+			continue;
+		}
+#endif
+		return i;
+	}
 	return -1;
 }
 
@@ -1660,14 +1759,17 @@ void __WEAK GPIOTE_IRQHandler(void)
 
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
 	{
-		if (NRF_GPIOTE->EVENTS_IN[i])
+		// An ordinary GPIOTE IRQ must not acknowledge PEI-owned events.
+		if (s_pGpIOSenseEvt[i].Sense != IOPINSENSE_DISABLE &&
+			NRF_GPIOTE->EVENTS_IN[i])
 		{
 			if (s_pGpIOSenseEvt[i].SensEvtCB)
 				s_pGpIOSenseEvt[i].SensEvtCB(i, s_pGpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE->EVENTS_IN[i] = 0;
 		}
 	}
-	if (NRF_GPIOTE->EVENTS_PORT)
+	if (s_pGpIOSenseEvt[IOPIN_MAX_INT].Sense != IOPINSENSE_DISABLE &&
+		NRF_GPIOTE->EVENTS_PORT)
 	{
 		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
 			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
