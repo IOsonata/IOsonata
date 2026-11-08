@@ -8,6 +8,7 @@ a target MCU. tests/pei/run.py compiles this as C11 with -Werror.
 #include "coredev/pei.h"
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
+#include "adc_nrf52_pei.h"
 
 bool PeiHalCApplication(TimerDev_t *pTimer)
 {
@@ -116,4 +117,42 @@ bool PeiHalSwEventCApplication(TimerDev_t *pTimer, PeiDev_t *pPei)
 	PeiEnableEvent(pPei, sw);
 	PeiTriggerSwEvent(pPei, sw);
 	return PeiReleaseEvent(pPei, &sw);
+}
+
+// Compile-only: SAADC remains configured by the ADC HAL, not by PEI.
+// These are real C-linkage routing functions, not C++ debugger globals.
+bool PeiSaadcCApplication(PeiDev_t *pPei, PeiEvent_t trigger)
+{
+	PeiEvent_t endEvent;
+
+	endEvent = 0U;
+	if (!AdcNrf52PreparePeiSampling())
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiBindEvent(pPei, &endEvent, ADC_NRF52_PEI_EVENT_END))
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiConnectTask(pPei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiConnectTask(pPei, endEvent, ADC_NRF52_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiDisconnectTask(pPei, endEvent, ADC_NRF52_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiDisconnectTask(pPei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiUnbindEvent(pPei, endEvent))
+	{
+		return false;
+	}
+	return PeiReleaseEvent(pPei, &endEvent);
 }

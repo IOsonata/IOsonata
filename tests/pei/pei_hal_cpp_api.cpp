@@ -5,6 +5,7 @@
 #include "coredev/pei.h"
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
+#include "adc_nrf52_pei.h"
 
 bool PeiHalCppApplication(Timer &timer)
 {
@@ -94,4 +95,32 @@ bool PeiHalSwEventCppApplication(Timer &timer, Pei &pei)
 	pei.Enable(sw);
 	pei.Trigger(sw);
 	return pei.ReleaseEvent(sw);
+}
+
+// Compile-only C++ client: functions use the same C PEI matrix.
+bool PeiSaadcCppApplication(Pei &pei, PeiEvent_t trigger)
+{
+	PeiEvent_t evt = 0U;
+
+	if (!AdcNrf52PreparePeiSampling())
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiBindEvent(pei, &evt, ADC_NRF52_PEI_EVENT_END))
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiConnectTask(pei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiDisconnectTask(pei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
+	{
+		return false;
+	}
+	if (!AdcNrf52PeiUnbindEvent(pei, evt))
+	{
+		return false;
+	}
+	return pei.ReleaseEvent(evt);
 }

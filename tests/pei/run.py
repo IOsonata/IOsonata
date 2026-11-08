@@ -11,6 +11,7 @@ COMMON = [
     "-Wall", "-Wextra", "-Werror", "-pedantic", "-g", "-O1",
     "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
     "-I", str(TEST / "shim"), "-I", str(ROOT / "include"),
+    "-I", str(ROOT / "ARM/Nordic/include"),
 ]
 
 subprocess.run([sys.executable, str(TEST / "test_check_no_pei_link.py")],
@@ -20,6 +21,8 @@ subprocess.run([sys.executable, str(TEST / "check_timer_cc_invariant.py")],
 subprocess.run([sys.executable, str(TEST / "check_gpio_port_contract.py")],
                check=True)
 subprocess.run([sys.executable, str(TEST / "check_gpio_lifecycle_contract.py")],
+               check=True)
+subprocess.run([sys.executable, str(TEST / "check_saadc_pei_contract.py")],
                check=True)
 
 with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
