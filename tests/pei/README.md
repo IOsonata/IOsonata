@@ -258,6 +258,44 @@ C/C++ compile-only clients and no-PEI link checks are added
 to tests/pei/run.py. An on-board result and a target MCU
 build are still pending.
 
+## nRF52 QDEC, TEMP and RNG PEI hardware chains
+
+QdecDev_t and Qdec expose hardware SAMPLERDY/REPORTRDY/
+ACCOF/DBLRDY/STOPPED and START/STOP. Call
+QdecPreparePeiStart() after QdecInit() to enable hardware
+without starting it. The QDEC IRQ retains READCLRACC and
+position folding. On BLYST-NANO-DK, PeiQdecDemo connects
+BUT1->START and BUT2->STOP; SAMPLERDY toggles discrete
+LED1 and STOPPED toggles RGB blue. The buttons are only
+stand-ins for phase input and do not validate an encoder.
+
+TempnRF5x uses the existing one-shot sensor and DATARDY
+interrupt handler. C PEI functions are defined in
+ARM/Nordic/include/temp_nrf_pei.h, with C++ forwarding
+methods on TempnRF5x. PeiTempDemo connects BUT1->START
+and DATARDY->STOP + discrete LED1. The hardware sensor
+does not require an external component.
+
+The existing RNG entropy driver shares its peripheral
+with the nRF52 SoftDevice and potentially SDC. C PEI
+functions in ARM/Nordic/include/rng_nrf_pei.h and C++
+methods on RngPeriphIntrf use the original DeviceIntrf
+busy flag, refusing runtime-enabled SoftDevice and all
+NRFXLIB_SDC builds. PeiRngDemo connects BUT1->RNG.START
+and VALRDY->RNG.STOP + discrete LED1. This test does not
+export random bytes or establish entropy quality.
+
+The Eclipse managed projects are:
+ARM/Nordic/nRF52/nRF52832/exemples/PeiQdecDemo/ioc,
+ARM/Nordic/nRF52/nRF52832/exemples/PeiTempDemo/ioc,
+and ARM/Nordic/nRF52/nRF52832/exemples/PeiRngDemo/ioc.
+
+The host runner includes check_misc_pei_contract.py,
+C/C++ header clients and no-PEI linker regressions.
+Hardware outcomes, installed Nordic CMSIS builds,
+and every unsupported PPI/QDEC/stack permutation
+remain outstanding.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or

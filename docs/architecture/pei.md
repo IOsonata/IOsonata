@@ -479,6 +479,36 @@ and TXSTOPPED -> RGB blue at 1 Mbaud, without semihosting,
 a receiving UART device or event-forwarding ISR. Hardware
 and MCU build acceptance remain pending.
 
+### nRF52 QDEC, TEMP and RNG hardware PEI routes
+
+The existing QDEC C/C++ HAL now exposes SAMPLERDY, REPORTRDY,
+ACCOF, DBLRDY, STOPPED and hardware START/STOP. A caller can
+enable QDEC hardware without starting it by invoking
+QdecPreparePeiStart(). The driver continues owning READCLRACC
+and accumulation in its normal interrupt handler. PEI cannot
+clear the quadrature counts.
+
+The existing TempnRF5x one-shot sensor exposes DATARDY and
+hardware START/STOP with no new driver, through both C PEI
+functions and C++ class methods. The normal temperature
+callback and interrupt stop the measurement and collect the
+temperature. Init clears old DATARDY, and Disable uses
+INTENCLR instead of writing zero to INTENSET.
+
+RNG VALRDY and hardware START/STOP are exposed only under
+exclusive use of the existing RngPeriphIntrf. Preparation
+takes the generic DeviceIntrf busy lock and enables
+bias correction. The normal random-byte API is excluded
+while PEI owns the RNG peripheral. An active SoftDevice,
+or any NRFXLIB_SDC build, is not permitted. No random
+bytes leave the hardware through PEI.
+
+Standalone nRF52832 demos PeiQdecDemo, PeiTempDemo and
+PeiRngDemo demonstrate hardware routing without external
+sensors or encoders; each has an Eclipse managed project.
+Source checks are present, while Nordic MDK compilation
+and on-board results remain pending.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI

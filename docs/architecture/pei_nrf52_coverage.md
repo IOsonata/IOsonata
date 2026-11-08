@@ -52,9 +52,9 @@ Status keys:
 | TWI / TWIM / TWIS / `i2c_nrfx.cpp` | TWI STOPPED/ERROR/SUSPENDED/RXDREADY/TXDSENT/BB; TWIM STOPPED/ERROR/SUSPENDED/RXSTARTED/TXSTARTED/LASTRX/LASTTX; TWIS STOPPED/ERROR/RXSTARTED/TXSTARTED/WRITE/READ | TWIM STARTRX/STARTTX/STOP/SUSPEND/RESUME with driver-owned prepared single-block EasyDMA. Legacy TWI/TWIS tasks remain ISR-owned | **Initial endpoint added:** C/C++ PEI API, generic I2C busy-lock ownership, no-PEI link regressions and PeiTwiDemo (NACK->ERROR->STOP); MCU compilation and hardware validation pending |
 | UART / UARTE / `uart_nrfx.cpp` | Legacy UART CTS/NCTS/RXDRDY/TXDRDY/ERROR/RXTO; UARTE also ENDRX/ENDTX/RXSTARTED/TXSTARTED/TXSTOPPED | UARTE STARTTX/STOPTX after driver-prepared TX EasyDMA; legacy UART and UARTE RX task routing restricted | **Initial PEI integration:** C/C++ APIs, driver-owned TxDmaMem preparation, normal RX retained, no-PEI link regression and PeiUartDemo (BUT1->STARTTX, ENDTX->STOPTX, TXSTOPPED). MCU/hardware validation pending. |
 | EGU / `pei_nrf52.cpp` (owned by PEI, no standalone driver) | TRIGGERED[n] as a software event source (`PeiBindSwEvent`, `PeiTriggerSwEvent`) | TRIGGER[n] (`PeiGetSwEventTask`) | **Initial endpoint added**: host-model tests for all build profiles; PeiSwEvent example on nRF52832 not yet run on hardware. No EGU interrupt or callback |
-| QDEC (new nRF52 peripheral driver) | SAMPLERDY, REPORTRDY, ACCOF and device events | START, STOP, READCLR and device-supported tasks | **Pending**; no existing QDEC HAL driver |
-| RNG / `rng_nrfx.cpp` | VALRDY | START, STOP | **Pending**; respect random-driver ownership and SoftDevice RNG service |
-| TEMP / `temp_nrf5x.cpp` | DATARDY | START, STOP | **Pending**; respect temperature measurement lifecycle |
+| QDEC / `qdec_nrfx.cpp` | SAMPLERDY, REPORTRDY, ACCOF, DBLRDY, STOPPED implemented on nRF52 | START/STOP after initialized QDEC ENABLE; READCLRACC remains IRQ-owned | **Initial endpoint added:** C/C++ PEI APIs, preserved position folding, PeiQdecDemo button sampling/stop indicators and source/link checks. MCU build/hardware pending |
+| RNG / `rng_nrfx.cpp` | VALRDY implemented on nRF52 | START/STOP with exclusive entropy-driver lock; active SoftDevice/SDC refused | **Initial endpoint added:** C/C++ PEI API, DevIntrf ownership lock, PeiRngDemo event-to-STOP indication and source/link checks. No entropy byte export. MCU build/hardware pending |
+| TEMP / `temp_nrf5x.cpp` | DATARDY implemented on nRF52 | START/STOP after TempnRF5x initialization and Enable | **Initial endpoint added:** C PEI routing and TempnRF5x C++ wrappers, existing one-shot sensor ISR retained, PeiTempDemo DATARDY->STOP/LED and source/link checks. MCU build/hardware pending |
 | WDT / `wdt_nrfx.cpp` | TIMEOUT | START | **Restricted**; START cannot be undone without reset on nRF52 |
 | POWER / CLOCK / `power_clock_irq_nrf52.cpp` | Hardware power and clock events | Supported clock start/stop tasks | **Restricted**; shared clock ownership and power-state transitions |
 | NFCT / `nfct_nrfx.cpp` | Field, frame, TX/RX and other device-supported events | Supported NFCT tasks | **Restricted**; nrfx NFCT stack owns its configured transfer state |
@@ -425,6 +425,59 @@ No nRF52 target MCU compilation or hardware test has been
 reported for the new UART/UARTE feature; other nRF52 variants,
 RX task ownership/refill, repeated TX rearm and flow control
 remain pending.
+
+## QDEC, TEMP and RNG PEI integration (initial nRF52 subset)
+
+QDEC uses the existing generic QdecDev_t C HAL and Qdec C++ class,
+not a second decoder driver. QdecPreparePeiStart() enables the
+configured hardware without issuing START, so a GPIO/TIMER source
+can drive TASKS_START through PPI. START and STOP are allowed tasks.
+SAMPLERDY, REPORTRDY, ACCOF, DBLRDY and STOPPED are hardware event
+sources. The original QDEC IRQ continues to read and fold the
+accumulator and double-transition error count. READCLRACC is
+**not** connected through PEI, because an arbitrary hardware
+clear would discard unreported position/error counts. The
+PeiQdecDemo uses BUT1 and BUT2 as both A/B pins and hardware
+START/STOP events, SAMPLERDY to toggle discrete LED1 and STOPPED
+to toggle RGB blue. Its buttons are not a quadrature test source,
+so no position accuracy conclusion can be drawn.
+
+TEMP uses the existing TempnRF5x C++ sensor. An initialized and
+enabled sensor may bind DATARDY and connect START/STOP via its
+C++ methods or the C-callable TempNrfPei... functions. This
+does not introduce a second TEMP driver or change the physical
+measurement result. TEMP_IRQHandler still stops the one-shot
+conversion, reads the data, clears DATARDY and invokes the
+configured callback. The driver also now clears stale DATARDY
+at init and uses INTENCLR to disable the interrupt properly.
+PeiTempDemo tests BUT1 -> TEMP.START and TEMP.DATARDY ->
+TEMP.STOP + discrete LED1 without an external sensor.
+
+RNG uses the existing RngPeriphIntrf entropy provider, not a
+new entropy source. RngNrfPeiPrepare() obtains the provider's
+DeviceIntrf busy lock, configures hardware bias correction and
+clears VALRDY without starting. Once prepared, PEI can connect
+START or STOP tasks and bind VALRDY to other hardware tasks.
+The normal CryptoRngNrf random-byte path cannot acquire the
+busy provider while PEI owns RNG. A runtime-enabled Nordic
+SoftDevice is refused; NRFXLIB_SDC builds are refused
+unconditionally because the controller may own the RNG block.
+RngNrfPeiRelease() stops hardware and releases the provider
+after all PEI routes have been disconnected. RNG.VALUE bytes
+are never passed through PEI. PeiRngDemo tests BUT1 ->
+RNG.START -> RNG.VALRDY -> RNG.STOP + discrete LED1.
+A successful hardware event test does not by itself validate
+cryptographic entropy quality.
+
+All three demos have Eclipse Embedded CDT managed nRF52832
+projects under ARM/Nordic/nRF52/nRF52832/exemples. Their
+C/C++ header clients, source invariants and non-PEI GNU ld
+link-map checks are added to tests/pei/run.py. They have
+not been compiled against the local installed Nordic MDK
+or tested on actual hardware in this session. Full QDEC
+encoder transitions, TEMP repeated one-shot lifecycle,
+RNG ownership under every stack variant, and cross-MCU
+testing remain outstanding.
 
 ## Completion criteria before nRF53
 
