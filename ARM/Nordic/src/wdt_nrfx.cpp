@@ -46,6 +46,13 @@ SOFTWARE.
 #include "nrf.h"
 #include "coredev/wdt.h"
 
+#if defined(__GNUC__)
+// Keep the PPI matrix optional in watchdog-only applications.
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#endif
+
 // Peripherals are named by security state and instance on nRF91 and nRF53. The
 // firmware runs secure on the application cores and the nRF5340 network core
 // is non secure only. The application core of the nRF5340 uses WDT0.
@@ -210,3 +217,54 @@ void WDT_NRFX_IRQHandler(void)
 		}
 	}
 }
+
+// WDT START is irreversible and RR[n] cannot be PPI task endpoints;
+// the watchdog remains exclusively controlled by WdtStart/WdtReload.
+extern "C" bool WdtEnablePeiEvent(WdtDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, WDT_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES)
+	if (pDev == NULL || pDev != s_pWdtnRFDev ||
+		pDev->DevNo != 0 || pDev->pDevData != (void *)NRF_WDT ||
+		pPei == NULL || pEvt == NULL ||
+		Event != WDT_PEI_EVENT_TIMEOUT || PeiBindEvent == NULL)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt,
+		(PeiEndpoint_t)&NRF_WDT->EVENTS_TIMEOUT);
+#else
+	(void)pDev;
+	(void)pPei;
+	(void)pEvt;
+	(void)Event;
+	return false;
+#endif
+}
+
+extern "C" bool WdtDisablePeiEvent(WdtDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+#if defined(NRF52_SERIES)
+	PeiEndpoint_t endpoint;
+
+	if (pDev == NULL || pDev != s_pWdtnRFDev ||
+		pDev->pDevData != (void *)NRF_WDT || pPei == NULL ||
+		PeiGetEventEndpoint == NULL || PeiUnbindEvent == NULL)
+	{
+		return false;
+	}
+	endpoint = (PeiEndpoint_t)&NRF_WDT->EVENTS_TIMEOUT;
+	if (PeiGetEventEndpoint(pPei, Evt) != endpoint)
+	{
+		return false;
+	}
+	return PeiUnbindEvent(pPei, Evt, endpoint);
+#else
+	(void)pDev;
+	(void)pPei;
+	(void)Evt;
+	return false;
+#endif
+}
+
