@@ -46,8 +46,8 @@ Status keys:
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED implemented; CALIBRATEDONE and limit events pending (limits reach the application through the driver callback) | START, SAMPLE, STOP implemented; CALIBRATEOFFSET pending | **Initial endpoint added**: single-conversion/no-IRQ driver-owned EasyDMA preparation, nRF52832 erratum 150 guard, C/C++ PEI routing; continuous mode with double-buffered blocks accepts SAMPLE only; PeiSaadcDemo TIMER->SAMPLE / END->START and PeiAdcDemo TIMER->SAMPLE hardware checks pending |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, DOWN, UP, CROSS implemented for nRF52 | START, STOP, SAMPLE (single mode only) implemented | **Initial endpoint added:** common C/C++ HAL, owner/enable checks and no-IRQ PEI routing; PeiCompDemo hardware validation pending |
 | PWM / `pwm_nrfx.cpp` | SEQSTARTED[0/1], SEQEND[0/1], LOOPSDONE, PWMPERIODEND, STOPPED implemented | SEQSTART[0/1], STOP implemented; NEXTSTEP conditional on decoder mode | **PeiPwmDemo functional hardware PASS on nRF52832** (maintainer report, Nov 8, 2026): BUT1/BUT2 PWM start/stop and event indication; driver-owned static EasyDMA sequences, channel/ENABLE checks and C/C++ APIs. Additional PWM events, NEXTSTEP and lifecycle stress pending |
-| PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED | START, STOP | **Pending**; must not bypass sample-buffer configuration |
-| I2S / `i2s_nrfx.cpp` | RXPTRUPD, TXPTRUPD, STOPPED | START, STOP | **Pending**; respect DMA pointer and double-buffer ownership |
+| PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED implemented on nRF52 | START, STOP after FIFO/DMA preparation | **Initial PEI integration:** C/C++ APIs; PdmPreparePeiStart reserves the first driver-owned FIFO block and configures SAMPLE.PTR/MAXCNT; mandatory STARTED IRQ buffer refill; source/API regressions added. No device hardware test. |
+| I2S / `i2s_nrfx.cpp` | RXPTRUPD (RX configured), TXPTRUPD (TX configured), STOPPED implemented on nRF52 | START, STOP with initialized and armed driver-owned DMA | **Initial PEI integration:** C/C++ APIs; I2SPreparePeiStart re-arms existing RX/TX buffers without START after I2SDisable; IRQ pointer service required. Source/API regressions added. No device hardware test. |
 | SPI / SPIM / SPIS / `spi_nrfx.cpp` | Ready, started, ended, stopped, error/transfer events actually present in each mode | START, STOP, SUSPEND, RESUME and mode-specific tasks | **Pending**; legacy SPI and EasyDMA modes share instances and are not interchangeable |
 | TWI / TWIM / TWIS / `i2c_nrfx.cpp` | Transfer ready, stopped, error and other supported events per mode | STARTRX, STARTTX, STOP, SUSPEND, RESUME and mode-specific tasks | **Pending**; bus state and DMA buffer ownership stay with I2C driver |
 | UART / UARTE / `uart_nrfx.cpp` | RX/TX ready, transfer end, stopped, error and mode-specific events | STARTRX, STOPRX, STARTTX, STOPTX, FLUSHRX where available | **Pending**; do not trigger unprepared EasyDMA |
@@ -257,6 +257,51 @@ the demonstrated start/stop routing and indication behavior. This does
 not individually verify every supported event or task. Further lifecycle
 stress, second-sequence tests, NEXTSTEP decoder support and cross-variant
 testing remain outstanding.
+
+## PDM and I2S PEI integration (nRF52, hardware unvalidated)
+
+PDM exposes STARTED, END and STOPPED source events and START/STOP task
+destinations through the existing PdmDev_t C HAL. No second FIFO or
+DMA buffer is allocated. PdmInit must successfully create a caller-owned
+CFIFO and enable normal PDM interrupts (bIntEn = true). A caller who
+wants a GPIO or TIMER event to START capture first invokes
+PdmPreparePeiStart, which reserves one FIFO block, sets SAMPLE.PTR and
+SAMPLE.MAXCNT, and does not issue TASKS_START. Then connect and enable
+its PEI route. The normal PDM STARTED ISR replenishes the double-buffered
+DMA pointer for continuous sampling. Do not route START with no
+FIFO or no interrupt refill. Releasing and reconnecting the PEI route
+does not transfer FIFO ownership; the caller must disconnect routes
+before stopping, changing mode or disabling PDM. Do not restart a
+stopping PDM before STOPPED is observed.
+
+I2S exposes RXPTRUPD, TXPTRUPD and STOPPED source events and START/STOP
+task destinations through the existing I2SDev_t C/C++ HAL. It retains
+the two 128-word static RX and TX DMA buffers, the normal interrupt
+pointer-update service and FIFOs. RX/TX event availability is restricted
+to actually enabled transfer directions. The normal I2SInit starts
+streaming as before. An application that needs PPI-controlled START
+initializes I2S with bIntEn = true, disables it once, then calls
+I2SPreparePeiStart. This reconfigures DMA pointers, IRQ service and
+hardware ENABLE, but does **not** trigger TASKS_START. DeviceIntrf's
+enable reference count is restored so a normal I2SDisable later
+releases the prepared/started interface. PEI routes only the task
+register; I2S remains responsible for pointer updates.
+
+Neither driver introduces software interrupt event-forwarding. Routing
+functions use weak references to the optional PEI matrix, so a
+PDM/I2S-only firmware should not retain the PPI backend. Only the
+nRF52 legacy PPI endpoints are exposed; nRF53/nRF54 use other
+interconnect backends and are not covered by these APIs yet.
+
+The hardware-free tests check the C and C++ public declarations,
+register endpoint mapping, essential buffer/IRQ preparation contracts
+and non-PEI linker-section isolation. They are not a substitute for
+compiling against all supported installed Nordic CMSIS headers or a
+live microphone/I2S controller. These features remain **implemented
+but hardware-unvalidated**. Future device tests should exercise PDM
+FIFO rollover and STOPPED/restart sequencing, I2S RX-only, TX-only
+and duplex streaming, pointer-update event delivery, STOPPED, and
+repeated source/task release.
 
 ## Completion criteria before nRF53
 

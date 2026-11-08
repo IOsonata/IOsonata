@@ -149,6 +149,36 @@ the existing RefreshCount decoder never enables it. Disconnect
 routes before closing PWM channels or disabling/reinitializing.
 MCU compile and board validation are pending.
 
+## nRF52 PDM and I2S PEI support (no audio hardware)
+
+PDM and I2S now expose their existing hardware event sources and
+START/STOP destinations through common C and C++ PEI APIs. PEI
+does not own any sample DMA memory or interrupt refill state.
+
+For PDM, initialize an existing PdmDev_t with a valid caller-provided
+FIFO and bIntEn=true. Call PdmPreparePeiStart() *before* connecting
+a hardware event to PDM_PEI_TASK_START. That call allocates the
+first driver-owned FIFO sample block and programs SAMPLE.PTR/MAXCNT
+without starting. Normal PDM STARTED interrupts continue allocating
+the subsequent FIFO blocks. Do not start with bIntEn=false, and
+do not restart before STOPPED has occurred.
+
+For I2S, the existing I2SInit() behavior remains immediate start.
+For a hardware event to trigger I2S_PEI_TASK_START: initialize with
+bIntEn=true; call I2SDisable() to stop; call I2SPreparePeiStart()
+to rearm the original double DMA buffers and IRQ service *without*
+executing START. The API restores the DeviceIntrf enable count;
+I2SDisable() still cleans up after the test. RX-only or TX-only
+configurations may bind only their corresponding RXPTRUPD or
+TXPTRUPD events. STOPPED remains available for both.
+
+Run python3 tests/pei/run.py from the repository root. It includes
+check_audio_pei_contract.py, compile-only C/C++ API clients and
+linker-map isolation tests. Static source validation is available
+without a microphone or codec. No nRF52 audio board test was run;
+future tests must validate sample continuity, pointer rollover and
+routing teardown on a real attached microphone/I2S device.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or

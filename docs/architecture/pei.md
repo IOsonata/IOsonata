@@ -379,6 +379,33 @@ example's demonstrated start/stop route; remaining endpoints and
 long-term resource lifecycle are not thereby independently verified.
 No semihosting or debugger variable C-linkage wrappers are added.
 
+### nRF52 PDM and I2S audio PEI endpoints
+
+PDM (coredev/pdm.h) maps STARTED, END, STOPPED and START, STOP
+to the hardware endpoints of the initialized nRF52 PDM peripheral.
+PdmPreparePeiStart() reserves the initial sample block in the
+application's existing CFIFO and programs SAMPLE.PTR/MAXCNT without
+starting capture. It requires an enabled PDM interrupt handler because
+the STARTED interrupt supplies successive buffers. PEI does not
+prepare or exchange microphone sample buffers. The caller owns PDM
+configuration, STOPPED acknowledgement and teardown.
+
+I2S (coredev/i2s.h) maps RXPTRUPD, TXPTRUPD, STOPPED and START,
+STOP to the configured nRF52 I2S. The driver's ordinary I2SInit()
+continues to start streaming immediately. For PEI-controlled START,
+initialize with bIntEn=true, call I2SDisable(), then
+I2SPreparePeiStart(). The latter reuses the driver's two static RX/TX
+EasyDMA buffers, enables the normal pointer-update interrupt service,
+and arms without issuing the START task. A device interface enable
+count is retained so I2SDisable() continues to clean up. Only
+configured RX/TX directions can bind their pointer-update events.
+
+Both C and C++ applications use the same PEI matrix, and normal
+PDM/I2S firmware should not link unused PEI code. No microphone or
+I2S external device is currently available for this project's hardware
+validation, so the implementation is not marked as device-tested.
+The nRF53 and nRF54 DPPI/TDM ports are not implied by nRF52 support.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI
