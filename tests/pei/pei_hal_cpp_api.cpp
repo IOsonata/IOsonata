@@ -7,6 +7,7 @@
 #include "coredev/iopincfg.h"
 #include "coredev/pwm.h"
 #include "coredev/spi.h"
+#include "coredev/uart.h"
 #include "coredev/i2c.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
@@ -316,4 +317,46 @@ bool PeiTwiCppApplication(I2C &i2c, Pei &pei, PeiEvent_t button,
 		return false;
 	}
 	return i2c.ReleasePeiTransfer();
+}
+
+
+// Compile-only: UART's C++ methods use the same C interconnect matrix.
+bool PeiUartCppApplication(UART &uart, Pei &pei, PeiEvent_t button)
+{
+	const uint8_t data[] = { 0x5A, 0xA5, 0x33, 0xCC };
+	PeiEvent_t end = 0U;
+
+	if (!uart.PreparePeiTx(data, sizeof(data)))
+	{
+		return false;
+	}
+	if (!uart.EnablePeiEvent(pei, end, UART_PEI_EVENT_ENDTX))
+	{
+		return false;
+	}
+	if (!uart.ConnectTask(pei, button, UART_PEI_TASK_STARTTX))
+	{
+		return false;
+	}
+	if (!uart.ConnectTask(pei, end, UART_PEI_TASK_STOPTX))
+	{
+		return false;
+	}
+	if (!uart.DisconnectTask(pei, button, UART_PEI_TASK_STARTTX))
+	{
+		return false;
+	}
+	if (!uart.DisconnectTask(pei, end, UART_PEI_TASK_STOPTX))
+	{
+		return false;
+	}
+	if (!uart.DisablePeiEvent(pei, end))
+	{
+		return false;
+	}
+	if (!pei.ReleaseEvent(end))
+	{
+		return false;
+	}
+	return uart.ReleasePeiTx();
 }

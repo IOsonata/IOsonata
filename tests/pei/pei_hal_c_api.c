@@ -10,6 +10,7 @@ a target MCU. tests/pei/run.py compiles this as C11 with -Werror.
 #include "coredev/iopincfg.h"
 #include "coredev/pwm.h"
 #include "coredev/spi.h"
+#include "coredev/uart.h"
 #include "coredev/i2c.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
@@ -370,4 +371,62 @@ bool PeiTwiCApplication(I2CDev_t *pI2c, PeiDev_t *pPei,
 		return false;
 	}
 	return I2CReleasePeiTransfer(pI2c);
+}
+
+
+// Compile-only: a driver-owned TX EasyDMA block and C PeiDev_t matrix.
+bool PeiUartCApplication(UARTDev_t *pUart, PeiDev_t *pPei,
+	PeiEvent_t button)
+{
+	const uint8_t data[] = { 0xA5, 0x5A, 0x11, 0x22 };
+	PeiEvent_t end;
+	PeiEvent_t stopped;
+
+	end = 0U;
+	stopped = 0U;
+	if (!UARTPreparePeiTx(pUart, data, sizeof(data)))
+	{
+		return false;
+	}
+	if (!UARTEnablePeiEvent(pUart, pPei, &end,
+		UART_PEI_EVENT_ENDTX))
+	{
+		return false;
+	}
+	if (!UARTEnablePeiEvent(pUart, pPei, &stopped,
+		UART_PEI_EVENT_TXSTOPPED))
+	{
+		return false;
+	}
+	if (!UARTConnectPeiTask(pUart, pPei, button,
+		UART_PEI_TASK_STARTTX))
+	{
+		return false;
+	}
+	if (!UARTConnectPeiTask(pUart, pPei, end,
+		UART_PEI_TASK_STOPTX))
+	{
+		return false;
+	}
+	if (!UARTDisconnectPeiTask(pUart, pPei, button,
+		UART_PEI_TASK_STARTTX))
+	{
+		return false;
+	}
+	if (!UARTDisconnectPeiTask(pUart, pPei, end,
+		UART_PEI_TASK_STOPTX))
+	{
+		return false;
+	}
+	if (!UARTDisablePeiEvent(pUart, pPei, end) ||
+		!UARTDisablePeiEvent(pUart, pPei, stopped))
+	{
+		return false;
+	}
+	if (!PeiReleaseEvent(pPei, &end) ||
+		!PeiReleaseEvent(pPei, &stopped))
+	{
+		return false;
+	}
+	return UARTReleasePeiTx(pUart);
 }
