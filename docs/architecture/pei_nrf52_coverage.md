@@ -45,7 +45,7 @@ Status keys:
 | GPIOTE / `iopincfg_nrfx.c` | IN[n] edge; shared PORT SENSE/DETECT source implemented on nRF52 | OUT[n] SET/CLEAR/TOGGLE through configured channels | **PeiPortDemo functional hardware PASS**; **PeiGpioteStress automatic hardware PASS** (Nov 8 screenshot: Status 2, Error 0, 64 exhaustion/reuse, 128 PPI-route, 128 IRQ rounds, IrqCount 13); BUT2 physical route confirmation and cross-variant tests pending |
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED implemented; CALIBRATEDONE and limit events pending (limits reach the application through the driver callback) | START, SAMPLE, STOP implemented; CALIBRATEOFFSET pending | **Initial endpoint added**: single-conversion/no-IRQ driver-owned EasyDMA preparation, nRF52832 erratum 150 guard, C/C++ PEI routing; continuous mode with double-buffered blocks accepts SAMPLE only; PeiSaadcDemo TIMER->SAMPLE / END->START and PeiAdcDemo TIMER->SAMPLE hardware checks pending |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, DOWN, UP, CROSS implemented for nRF52 | START, STOP, SAMPLE (single mode only) implemented | **Initial endpoint added:** common C/C++ HAL, owner/enable checks and no-IRQ PEI routing; PeiCompDemo hardware validation pending |
-| PWM / `pwm_nrfx.cpp` | SEQSTARTED[0/1], SEQEND[0/1], LOOPSDONE, PWMPERIODEND, STOPPED implemented | SEQSTART[0/1], STOP implemented; NEXTSTEP conditional on decoder mode | **Initial endpoint added:** driver-owned static EasyDMA sequences, channel/ENABLE checks, C/C++ APIs, weak PEI references; PeiPwmDemo hardware check pending |
+| PWM / `pwm_nrfx.cpp` | SEQSTARTED[0/1], SEQEND[0/1], LOOPSDONE, PWMPERIODEND, STOPPED implemented | SEQSTART[0/1], STOP implemented; NEXTSTEP conditional on decoder mode | **PeiPwmDemo functional hardware PASS on nRF52832** (maintainer report, Nov 8, 2026): BUT1/BUT2 PWM start/stop and event indication; driver-owned static EasyDMA sequences, channel/ENABLE checks and C/C++ APIs. Additional PWM events, NEXTSTEP and lifecycle stress pending |
 | PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED | START, STOP | **Pending**; must not bypass sample-buffer configuration |
 | I2S / `i2s_nrfx.cpp` | RXPTRUPD, TXPTRUPD, STOPPED | START, STOP | **Pending**; respect DMA pointer and double-buffer ownership |
 | SPI / SPIM / SPIS / `spi_nrfx.cpp` | Ready, started, ended, stopped, error/transfer events actually present in each mode | START, STOP, SUSPEND, RESUME and mode-specific tasks | **Pending**; legacy SPI and EasyDMA modes share instances and are not interchangeable |
@@ -251,9 +251,12 @@ The standalone nRF52832 PeiPwmDemo maps BUT1 to PWM0.SEQSTART0 and
 BUT2 to PWM0.STOP, both through hardware PPI. PWM channel 0 drives
 RGB red, while PWM SEQSTARTED0 and STOPPED toggle the physically
 separate LED1 and RGB blue, respectively. C/C++ compile checks and
-source contract tests are added; MCU build and live hardware results
-are still pending. Further lifecycle stress, second-sequence tests,
-NEXTSTEP decoder support and cross-variant testing remain outstanding.
+source contract tests are added. The maintainer confirmed that
+PeiPwmDemo works on nRF52832 BLYST-NANO-DK (Nov 8, 2026), validating
+the demonstrated start/stop routing and indication behavior. This does
+not individually verify every supported event or task. Further lifecycle
+stress, second-sequence tests, NEXTSTEP decoder support and cross-variant
+testing remain outstanding.
 
 ## Completion criteria before nRF53
 

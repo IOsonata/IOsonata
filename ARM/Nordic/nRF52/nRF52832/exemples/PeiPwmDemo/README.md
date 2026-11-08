@@ -32,6 +32,12 @@ sequence or DMA buffer is allocated. Do not reconfigure PWM pins,
 duty or decoder while PEI routes are connected; disconnect source and
 task relationships before PWMDisable or re-initialization.
 
-Pending validation: physical PWM0 start/stop, both event-driven indicators,
-second sequence and multi-channel tests, NEXTSTEP decoder mode, timer
-input event sources, repeated enable/release cycles, and other nRF52 SKUs.
+Hardware result (November 8, 2026): **functional PASS** on the nRF52832
+BLYST-NANO-DK, confirmed by the maintainer. The test demonstrates the
+BUT1 PWM start and BUT2 stop hardware paths, with PWM output and event
+indications. No timing trace, waveform measurement or independent count
+for every event was supplied.
+
+Still pending: second sequence and multi-channel tests, NEXTSTEP decoder
+mode, timer input event sources, repeated enable/release cycles, and other
+nRF52 SKUs.

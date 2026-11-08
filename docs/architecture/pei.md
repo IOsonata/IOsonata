@@ -373,8 +373,11 @@ to drive PWM0 SEQSTART0 and STOP over PPI without the CPU.
 RGB red provides a PWM output (1 kHz, 30% duty);
 SEQSTARTED0 toggles the separate LED1, and STOPPED toggles RGB blue.
 It uses the ordinary PWM class and driver-owned sequence buffers.
-The hardware result is pending; no semihosting or debugger
-variable C-linkage wrappers are added.
+The maintainer reported PeiPwmDemo working on nRF52832 on
+November 8, 2026 (functional hardware PASS). This validates the
+example's demonstrated start/stop route; remaining endpoints and
+long-term resource lifecycle are not thereby independently verified.
+No semihosting or debugger variable C-linkage wrappers are added.
 
 ## nRF52 PPI driver (0.14)
 
