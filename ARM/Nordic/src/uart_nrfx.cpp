@@ -780,6 +780,26 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		nRFUARTPollRx(dev);
 	}
 #endif
+#ifdef UART_PRESENT
+	if (pDev->bIntEn == false && pDev->bDma == false)
+	{
+		// Polling without dma. No handler moves the received bytes into the
+		// fifo, do it here as the handler does. A byte the fifo has no room
+		// for stays in RXD with bRxReady set, the same as in interrupt mode.
+		int n = NRFX_UART_HWFIFO_SIZE;
+		while (dev->pReg->EVENTS_RXDRDY && n-- > 0)
+		{
+			uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
+			if (p == NULL)
+			{
+				dev->pUartDev->bRxReady = true;
+				break;
+			}
+			dev->pReg->EVENTS_RXDRDY = 0;
+			*p = dev->pReg->RXD;
+		}
+	}
+#endif
 
 	uint32_t state = DisableInterrupt();
 	while (Bufflen)
@@ -881,6 +901,15 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
         {
         	nRFUARTPollTx(dev);
         }
+#endif
+#ifdef UART_PRESENT
+		// Polling without dma. No handler sets bTxReady back once TXD is
+		// sent, so check the TXDRDY event here. Without this only the first
+		// byte goes out.
+		if (pDev->bIntEn == false && pDev->bDma == false && dev->pReg->EVENTS_TXDRDY)
+		{
+			dev->pUartDev->bTxReady = true;
+		}
 #endif
 
         if (dev->pUartDev->bTxReady)
