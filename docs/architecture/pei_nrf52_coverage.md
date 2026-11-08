@@ -1,10 +1,15 @@
 # nRF52 PEI coverage and acceptance tracker (0.14)
 
-PEI development remains on nRF52 until the peripheral event/task coverage in
-this table is complete and tested on representative hardware. Do not move
-implementation work to nRF53/nRF54 first. The nRF52 PEI backend already owns
-PPI routing; *peripheral drivers* must own endpoint configuration, lifetime,
-resource checks and task readiness. No ISR is permitted to forward a PEI event.
+PEI development remains on nRF52 until **useful autonomous hardware paths**
+in this table are selected and validated on representative hardware.
+Do not move implementation work to nRF53/nRF54 first. A peripheral's
+mere possession of EVENTS/TASKS registers is **not** sufficient
+justification for a PEI integration. A supported route must eliminate
+repetitive MCU intervention after initial configuration; one-shot
+operations without a recurring hardware benefit stay in the normal
+driver. The nRF52 PEI backend owns PPI routing; *peripheral drivers*
+must own endpoint configuration, lifetime, resource checks and
+task readiness. No ISR may forward a PEI event in software.
 
 ## Source and product scope
 
@@ -33,6 +38,10 @@ Status keys:
 - **Initial endpoint added**: only the listed subset is implemented;
   not a complete peripheral integration.
 - **Pending**: no validated endpoint API yet.
+- **Intentionally excluded**: not useful for repetitive MCU-free
+  automation, even if the hardware exposes an event or task register.
+- **Provisional**: source integration exists, but a safe autonomous
+  repetitive use case still needs hardware demonstration.
 - **Restricted**: must enforce peripheral/stack ownership, and fail safely
   when the resource is unavailable. This is not permission to configure
   stack-owned hardware.
