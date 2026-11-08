@@ -131,11 +131,22 @@ bool AnalogCompInit(AnalogCompDev_t * const pDev, const AnalogCompCfg_t *pCfg)
 	if (pCfg->RefSrc == 0)
 	{
 #ifdef NRF52_SERIES
-		int d = pCfg->CompVolt * 16 / pCfg->RefVolt;
+		// REFSEL 0 to 6 select VDD * 1/8 to 7/8 and 8 to 15 select VDD * 1/16,
+		// 3/16 to 15/16. Take the closest sixteenth from 1/16 to 15/16.
+		int d = (pCfg->CompVolt * 16 + pCfg->RefVolt / 2) / pCfg->RefVolt;
+
+		if (d < 1)
+		{
+			d = 1;
+		}
+		else if (d > 15)
+		{
+			d = 15;
+		}
 
 		if (d & 1)
 		{
-			NRF_LPCOMP->REFSEL = (d - 1) + 8;
+			NRF_LPCOMP->REFSEL = (d >> 1) + 8;
 		}
 		else
 		{
