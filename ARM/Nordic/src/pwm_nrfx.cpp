@@ -53,10 +53,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define PWM2_IRQn		PWM22_IRQn
 #endif
 
+// The nRF52810 and nRF52811 have PWM0 only
 #ifdef NRF_PWM3
 #define PWM_NRF5_MAX_DEV		4
-#else
+#elif defined(NRF_PWM1)
 #define PWM_NRF5_MAX_DEV		3
+#else
+#define PWM_NRF5_MAX_DEV		1
 #endif
 #define PWM_NRF5_MAX_CHAN		4
 
@@ -77,8 +80,10 @@ typedef struct {
 
 alignas(4) static nRFPwmDev_t s_PwmnRFDev[PWM_NRF5_MAX_DEV] = {
 	{NRF_PWM0, },
+#ifdef NRF_PWM1
 	{NRF_PWM1, },
 	{NRF_PWM2, },
+#endif
 #ifdef NRF_PWM3
 	{NRF_PWM3, },
 #endif
@@ -178,12 +183,14 @@ bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 			case 0:
 				irqno = PWM0_IRQn;
 				break;
+#ifdef NRF_PWM1
 			case 1:
 				irqno = PWM1_IRQn;
 				break;
 			case 2:
 				irqno = PWM2_IRQn;
 				break;
+#endif
 #ifdef NRF_PWM3
 			case 3:
 				irqno = PWM3_IRQn;
@@ -537,6 +544,7 @@ void PWM0_IRQHandler()
 	nRF52PWMIrqHandler(0);
 }
 
+#ifdef NRF_PWM1
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 void PWM21_IRQHandler()
 #else
@@ -554,6 +562,7 @@ void PWM2_IRQHandler()
 {
 	nRF52PWMIrqHandler(2);
 }
+#endif
 
 #ifdef NRF_PWM3
 void PWM3_IRQHandler()
