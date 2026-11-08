@@ -1658,21 +1658,23 @@ static nRFUartDev_t *UARTPeiDevice(UARTDev_t *pDev)
 {
 #if defined(NRF52_SERIES)
 	nRFUartDev_t *dev;
+	int i;
 
-	if (pDev == NULL || pDev->DevIntrf.pDevData == NULL)
-	{
-		return NULL;
-	}
-	dev = (nRFUartDev_t *)pDev->DevIntrf.pDevData;
-	if (dev < s_nRFxUARTDev || dev >= &s_nRFxUARTDev[s_NbUartDev] ||
-		dev->pUartDev != pDev ||
-		dev->DevNo < 0 || dev->DevNo >= s_NbUartDev ||
-		dev != &s_nRFxUARTDev[dev->DevNo] ||
+	if (pDev == NULL || pDev->DevIntrf.pDevData == NULL ||
 		pDev->DevIntrf.Enable != nRFUARTEnable)
 	{
 		return NULL;
 	}
-	return dev;
+	for (i = 0; i < s_NbUartDev; i++)
+	{
+		dev = &s_nRFxUARTDev[i];
+		if (pDev->DevIntrf.pDevData == dev &&
+			dev->pUartDev == pDev && dev->DevNo == i)
+		{
+			return dev;
+		}
+	}
+	return NULL;
 #else
 	(void)pDev;
 	return NULL;
