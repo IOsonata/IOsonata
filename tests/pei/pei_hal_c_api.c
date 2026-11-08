@@ -10,6 +10,7 @@ a target MCU. tests/pei/run.py compiles this as C11 with -Werror.
 #include "coredev/iopincfg.h"
 #include "coredev/pwm.h"
 #include "coredev/spi.h"
+#include "coredev/i2c.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
 #include "adc_nrf52_pei.h"
@@ -315,4 +316,58 @@ bool PeiSpiCApplication(SPIDev_t *pSpi, PeiDev_t *pPei,
 		return false;
 	}
 	return SPIReleasePeiTransfer(pSpi);
+}
+
+
+// Compile-only: TWIM hardware STARTTX and ERROR->STOP from C.
+bool PeiTwiCApplication(I2CDev_t *pI2c, PeiDev_t *pPei,
+	PeiEvent_t button)
+{
+	const uint8_t tx[] = { 0xA5, 0x5A };
+	PeiEvent_t error;
+	PeiEvent_t stopped;
+
+	error = 0U;
+	stopped = 0U;
+	if (!I2CPreparePeiTransfer(pI2c, 0x7EU, tx, sizeof(tx), NULL, 0U))
+	{
+		return false;
+	}
+	if (!I2CEnablePeiEvent(pI2c, pPei, &error, I2C_PEI_EVENT_ERROR))
+	{
+		return false;
+	}
+	if (!I2CEnablePeiEvent(pI2c, pPei, &stopped,
+		I2C_PEI_EVENT_STOPPED))
+	{
+		return false;
+	}
+	if (!I2CConnectPeiTask(pI2c, pPei, button, I2C_PEI_TASK_STARTTX))
+	{
+		return false;
+	}
+	if (!I2CConnectPeiTask(pI2c, pPei, error, I2C_PEI_TASK_STOP))
+	{
+		return false;
+	}
+	if (!I2CDisconnectPeiTask(pI2c, pPei, button,
+		I2C_PEI_TASK_STARTTX))
+	{
+		return false;
+	}
+	if (!I2CDisconnectPeiTask(pI2c, pPei, error, I2C_PEI_TASK_STOP))
+	{
+		return false;
+	}
+	if (!I2CDisablePeiEvent(pI2c, pPei, error) ||
+		!I2CDisablePeiEvent(pI2c, pPei, stopped))
+	{
+		return false;
+	}
+	if (!PeiReleaseEvent(pPei, &error) ||
+		!PeiReleaseEvent(pPei, &stopped))
+	{
+		return false;
+	}
+	return I2CReleasePeiTransfer(pI2c);
 }

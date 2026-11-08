@@ -7,6 +7,7 @@
 #include "coredev/iopincfg.h"
 #include "coredev/pwm.h"
 #include "coredev/spi.h"
+#include "coredev/i2c.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
 #include "adc_nrf52_pei.h"
@@ -273,4 +274,46 @@ bool PeiSpiCppApplication(SPI &spi, Pei &pei,
 		return false;
 	}
 	return spi.ReleasePeiTransfer();
+}
+
+
+// Compile-only: C++ I2C delegates to the same C PeiDev_t matrix.
+bool PeiTwiCppApplication(I2C &i2c, Pei &pei, PeiEvent_t button,
+	uint8_t *pRx)
+{
+	PeiEvent_t error = 0U;
+
+	if (!i2c.PreparePeiTransfer(0x42U, nullptr, 0U, pRx, 4U))
+	{
+		return false;
+	}
+	if (!i2c.EnablePeiEvent(pei, error, I2C_PEI_EVENT_ERROR))
+	{
+		return false;
+	}
+	if (!i2c.ConnectTask(pei, button, I2C_PEI_TASK_STARTRX))
+	{
+		return false;
+	}
+	if (!i2c.ConnectTask(pei, error, I2C_PEI_TASK_STOP))
+	{
+		return false;
+	}
+	if (!i2c.DisconnectTask(pei, button, I2C_PEI_TASK_STARTRX))
+	{
+		return false;
+	}
+	if (!i2c.DisconnectTask(pei, error, I2C_PEI_TASK_STOP))
+	{
+		return false;
+	}
+	if (!i2c.DisablePeiEvent(pei, error))
+	{
+		return false;
+	}
+	if (!pei.ReleaseEvent(error))
+	{
+		return false;
+	}
+	return i2c.ReleasePeiTransfer();
 }
