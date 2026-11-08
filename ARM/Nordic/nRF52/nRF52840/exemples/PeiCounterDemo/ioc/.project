@@ -40,10 +40,5 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/pei/pei_counter_demo.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/pei_nrf52.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/pei_nrf52.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>
