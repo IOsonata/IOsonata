@@ -32,6 +32,6 @@ Negative Error values locate the failure in the firmware source.
 
 BUT1 triggers a conventional GPIOTE IRQ, increments IrqCount and toggles LED2 in software. BUT2 has a GPIOTE IN event routed through PPI to toggle LED1 in hardware. Press them independently and repeatedly. Only the associated LED should respond.
 
-Status 2 verifies automatic resource tests but is not proof of physical PPI routing. Observe LED1 and the IRQ counter separately. Hardware validation is pending.
+November 8, 2026 debugger result: **automatic resource tests PASS** with Status=2, Error=0, ExhaustionRounds=64, ReusedChannels=64, RouteRounds=128, IrqRounds=128, LastIrqNo=0, IrqCount=13. This confirms ordinary IRQ activity. Status 2 alone is not proof of physical PPI routing: observe BUT2 toggling LED1 separately. That physical observation is pending.
 
 This runs bare-metal on the BLYST-NANO-DK. It does not test coexistence with a SoftDevice, SDC or a second GPIOTE owner outside the IOsonata GPIO driver.
