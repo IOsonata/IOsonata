@@ -29,6 +29,11 @@ The example uses no semihosting or UART and links the standalone
 `pei_nrf52.cpp` PPI backend directly, as the original PeiBlinky does.
 It does not enable a SoftDevice.
 
-**Hardware checks pending:** both buttons drive only their own LED,
-multiple independent presses continue to work, and PORT rebind/reuse
-has not changed the dedicated IN[n] event route.
+**Hardware result (November 8, 2026): functional PASS on BLYST-NANO-DK.**
+The maintainer reports that PeiPortDemo works. A successful run exercises
+both PORT-to-LED and dedicated IN[n]-to-LED routing and the setup-time
+logical source rebind / event and task resource reuse sequence.
+
+Extended testing remains pending: repeated release/reacquire cycles,
+GPIOTE PORT interrupt-handler coexistence, multiple SENSE inputs,
+other nRF52 SKUs, and longer-duration stress testing.
