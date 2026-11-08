@@ -47,6 +47,7 @@ SOFTWARE.
 #if defined(__GNUC__)
 #pragma weak PeiBindEvent
 #pragma weak PeiUnbindEvent
+#pragma weak PeiDisableEvent
 #endif
 
 #if defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)
@@ -82,12 +83,12 @@ SOFTWARE.
 #define TIMER6_CC_NUM		TIMER24_CC_NUM_SIZE
 #endif
 
-// A special Type value marks a hardware-only PEI trigger. Reuse
-// TimerTrig_t.pContext for PeiDev_t and pCC for the logical event token;
-// neither is needed by the ISR while its compare interrupt is disabled.
-// This removes every PEI-specific HF TIMER BSS array.
-static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI =
+// PEI compare sources reuse the ordinary trigger state without extra RAM.
+// Separate markers retain the requested single/continuous CC behavior.
+static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_SINGLE =
 	static_cast<TIMER_TRIG_TYPE>(2);
+static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_CONTINUOUS =
+	static_cast<TIMER_TRIG_TYPE>(3);
 
 #pragma pack(push, 4)
 typedef struct {
@@ -244,19 +245,43 @@ static void TimerIRQHandler(int DevNo)
 
     for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
     {
-        if (reg->EVENTS_COMPARE[i] && tdata.pTrigger[i].Type != TIMER_TRIG_PEI)
-        {
-            evt |= TIMER_EVT_TRIGGER(i);
-            reg->EVENTS_COMPARE[i] = 0;
-			if (tdata.pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
-            {
-            	reg->CC[i] = count + tdata.pCC[i];;
-            }
-			if (tdata.pTrigger[i].Handler)
-            {
-            	tdata.pTrigger[i].Handler(timer, i, tdata.pTrigger[i].pContext);
-            }
-        }
+		if (reg->EVENTS_COMPARE[i])
+		{
+			reg->EVENTS_COMPARE[i] = 0U;
+			if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+			{
+				// PEI handles event-to-task routing in hardware. The
+				// ISR only advances this CC, preserving elapsed time.
+				uint32_t ticks = (uint32_t)TimerNanosecondToTick(
+					timer, tdata.pTrigger[i].nsPeriod);
+				reg->CC[i] = count + ticks;
+			}
+			else if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE)
+			{
+				// HF TIMER has no EVTEN gate; disable the logical PPI
+				// event after its first compare, without stopping TIMER.
+				reg->INTENCLR = TIMER_INTENCLR_COMPARE0_Msk << i;
+				if (PeiDisableEvent != nullptr)
+				{
+					PeiDisableEvent(
+						static_cast<PeiDev_t *>(tdata.pTrigger[i].pContext),
+						tdata.pCC[i]);
+				}
+			}
+			else
+			{
+				evt |= TIMER_EVT_TRIGGER(i);
+				if (tdata.pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+				{
+					reg->CC[i] = count + tdata.pCC[i];
+				}
+				if (tdata.pTrigger[i].Handler != nullptr)
+				{
+					tdata.pTrigger[i].Handler(timer, i,
+						tdata.pTrigger[i].pContext);
+				}
+			}
+		}
 
     }
 
@@ -559,10 +584,11 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	int i;
 
-	// Hardware compare-to-clear depends on the current timer frequency.
+	// Frequency changes invalidate scheduled compare periods.
 	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
 	{
-		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI)
+		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
 		{
 			return pTimer->Freq;
 		}
@@ -672,32 +698,29 @@ static bool nRFxTimerExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 // Hardware-only compare event. CONTINUOUS uses COMPARE->CLEAR and SINGLE
 // uses COMPARE->STOP. Both affect the entire counter and require exclusive
 // compare ownership. This path does not enable a timer compare interrupt.
+// Bind one free CC to PEI. The free-running counter is never cleared,
+// stopped or routed to counter-control tasks by a compare trigger.
+// Continuous CC rescheduling follows the original Timer ISR model.
 static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
-	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei, PeiEvent_t *pEvent)
+	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei,
+	PeiEvent_t *pEvent)
 {
-#if defined(TIMER_SHORTS_COMPARE0_CLEAR_Msk)
-	int devno;
-	int i;
-	uint64_t ticks;
-	PeiDev_t *pei;
-	PeiEvent_t evt;
-	PeiEndpoint_t endpoint;
 	const nRFTimerData_t *pData;
 	NRF_TIMER_Type *reg;
+	PeiEndpoint_t endpoint;
+	PeiEvent_t evt;
+	uint64_t ticks;
+	uint32_t count;
+	int devno;
 
 	if (pTimer == nullptr || pPei == nullptr || pEvent == nullptr ||
-		PeiBindEvent == nullptr ||
+		PeiBindEvent == nullptr || PeiUnbindEvent == nullptr ||
+		PeiDisableEvent == nullptr || nsPeriod == 0U ||
 		(Type != TIMER_TRIG_TYPE_SINGLE &&
-		 Type != TIMER_TRIG_TYPE_CONTINUOUS) || nsPeriod == 0U)
+			Type != TIMER_TRIG_TYPE_CONTINUOUS))
 	{
 		return false;
 	}
-#ifndef TIMER_SHORTS_COMPARE0_STOP_Msk
-	if (Type == TIMER_TRIG_TYPE_SINGLE)
-	{
-		return false;
-	}
-#endif
 	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	if (devno < 0 || devno >= TIMER_NRFX_HF_MAX || pTimer->Freq == 0U)
 	{
@@ -707,17 +730,11 @@ static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 	reg = pData->pReg;
 	if (TrigNo < 0 || TrigNo >= pData->MaxNbTrigEvt ||
 		pData->pTrigger[TrigNo].nsPeriod != 0U ||
-		pData->pTrigger[TrigNo].Type == TIMER_TRIG_PEI || reg->SHORTS != 0U)
+		pData->pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
+		pData->pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS ||
+		reg->SHORTS != 0U)
 	{
 		return false;
-	}
-	for (i = 0; i < pData->MaxNbTrigEvt; i++)
-	{
-		if (pData->pTrigger[i].nsPeriod != 0U ||
-			pData->pTrigger[i].Type == TIMER_TRIG_PEI)
-		{
-			return false;
-		}
 	}
 	ticks = TimerNanosecondToTick(pTimer, nsPeriod);
 	if (ticks < 2U || ticks > UINT32_MAX)
@@ -725,46 +742,26 @@ static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 		return false;
 	}
 	endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
-	pei = pPei;
 	evt = *pEvent;
-	if (!PeiBindEvent(pei, &evt, endpoint))
+	if (!PeiBindEvent(pPei, &evt, endpoint))
 	{
 		return false;
 	}
 
-	// Only this timer trigger is active; the shortcut resets the counter.
-	reg->TASKS_STOP = 1;
-	reg->TASKS_CLEAR = 1;
-	reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
+	// Capture the running counter in this newly owned CC slot.
+	reg->TASKS_CAPTURE[TrigNo] = 1U;
+	count = reg->CC[TrigNo];
 	reg->EVENTS_COMPARE[TrigNo] = 0U;
-	reg->CC[TrigNo] = (uint32_t)ticks;
-	if (Type == TIMER_TRIG_TYPE_SINGLE)
-	{
-#ifdef TIMER_SHORTS_COMPARE0_STOP_Msk
-		reg->SHORTS |= TIMER_SHORTS_COMPARE0_STOP_Msk << TrigNo;
-#endif
-	}
-	else
-	{
-		reg->SHORTS |= TIMER_SHORTS_COMPARE0_CLEAR_Msk << TrigNo;
-	}
-	pData->pTrigger[TrigNo].Type = TIMER_TRIG_PEI;
+	reg->CC[TrigNo] = count + (uint32_t)ticks;
+	reg->INTENSET = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
+	pData->pTrigger[TrigNo].Type = Type == TIMER_TRIG_TYPE_CONTINUOUS ?
+		TIMER_TRIG_PEI_CONTINUOUS : TIMER_TRIG_PEI_SINGLE;
 	pData->pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, ticks);
-	pData->pCC[TrigNo] = evt;
 	pData->pTrigger[TrigNo].Handler = nullptr;
-	pData->pTrigger[TrigNo].pContext = pei;
+	pData->pTrigger[TrigNo].pContext = pPei;
+	pData->pCC[TrigNo] = evt;
 	*pEvent = evt;
-	reg->TASKS_START = 1;
 	return true;
-#else
-	(void)pTimer;
-	(void)TrigNo;
-	(void)nsPeriod;
-	(void)Type;
-	(void)pPei;
-	(void)pEvent;
-	return false;
-#endif
 }
 
 // Only installed by TimerPeiPrepareMcu through the explicit PEI API.
@@ -800,14 +797,12 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 		return 0;
 	}
 
-	// A hardware periodic PEI trigger uses COMPARE->CLEAR on this timer.
-	// Software-rescheduled compare triggers cannot coexist with it.
-	for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
+	// Each CC owns its compare independently; never replace an active one.
+	if (tdata.pTrigger[TrigNo].nsPeriod != 0U ||
+		tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
+		tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
 	{
-		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI)
-		{
-			return 0;
-		}
+		return 0;
 	}
 
 	uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
@@ -853,27 +848,21 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 		return;
 	}
 
-	if (tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI)
+	if (tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
+		tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
 	{
 		PeiDev_t *pei = static_cast<PeiDev_t *>(
 			tdata.pTrigger[TrigNo].pContext);
 		PeiEvent_t evt = tdata.pCC[TrigNo];
 		PeiEndpoint_t endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
 
-		// Disconnect routing before the compare register can be reused.
-		// Keep this trigger owned if the PEI backend cannot unbind.
+		// Disarm only this CC; leave the shared counter and other CCs alone.
+		reg->INTENCLR = TIMER_INTENCLR_COMPARE0_Msk << TrigNo;
 		if (PeiUnbindEvent == nullptr ||
 			!PeiUnbindEvent(pei, evt, endpoint))
 		{
 			return;
 		}
-#if defined(TIMER_SHORTS_COMPARE0_CLEAR_Msk)
-		reg->SHORTS &= ~(TIMER_SHORTS_COMPARE0_CLEAR_Msk << TrigNo);
-#endif
-#if defined(TIMER_SHORTS_COMPARE0_STOP_Msk)
-		reg->SHORTS &= ~(TIMER_SHORTS_COMPARE0_STOP_Msk << TrigNo);
-#endif
-
 	}
 	tdata.pCC[TrigNo] = 0;
     reg->CC[TrigNo] = 0;
@@ -948,7 +937,8 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	// the underlying timer, even if a different Timer object is supplied.
 	for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
 	{
-		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI)
+		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
 		{
 			return false;
 		}
