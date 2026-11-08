@@ -47,3 +47,25 @@ bool PeiHalCApplication(TimerDev_t *pTimer)
 	PeiReleaseEvent(&pei, &evt);
 	return PeiDeinit(&pei);
 }
+
+// Compile-only check of RTC event producer and hardware task endpoint.
+bool PeiHalRtcCApplication(TimerDev_t *pTimer, PeiDev_t *pPei)
+{
+	PeiEvent_t event;
+
+	event = 0U;
+	if (!TimerEnablePeiEvent(pTimer, pPei, &event, TIMER_EVT_TICK))
+	{
+		return false;
+	}
+	if (!TimerConnectTask(pTimer, pPei, event, TIMER_TASK_CLEAR))
+	{
+		TimerDisablePeiEvent(pTimer, pPei, event);
+		return false;
+	}
+	if (!TimerDisablePeiEvent(pTimer, pPei, event))
+	{
+		return false;
+	}
+	return PeiReleaseEvent(pPei, &event);
+}

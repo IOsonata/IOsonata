@@ -652,6 +652,8 @@ static uintptr_t nRFxTimerTaskEndpoint(TimerDev_t * const pTimer, TIMER_TASK Tas
 			return (uintptr_t)&reg->TASKS_START;
 		case TIMER_TASK_STOP:
 			return (uintptr_t)&reg->TASKS_STOP;
+		case TIMER_TASK_CLEAR:
+			return (uintptr_t)&reg->TASKS_CLEAR;
 		default:
 			return 0U;
 	}
@@ -930,6 +932,8 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	pTimer->DisableTrigger = nRFxTimerDisableTrigger;
 	pTimer->EnableTrigger = nRFxTimerEnableTrigger;
 	pTimer->EnablePeiTrigger = nRFxTimerEnablePeiTrigger;
+	pTimer->EnablePeiEvent = nullptr;
+	pTimer->DisablePeiEvent = nullptr;
 	pTimer->GetTaskEndpoint = nRFxTimerTaskEndpoint;
 	pTimer->ExecuteTask = nRFxTimerExecuteTask;
 	pTimer->DisableExtTrigger = nRFxTimerDisableExtTrigger;

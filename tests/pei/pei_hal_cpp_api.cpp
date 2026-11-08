@@ -38,3 +38,24 @@ bool PeiHalCppApplication(Timer &timer)
 	IOPinDisableEvent(pei, evt);
 	return pei.ReleaseEvent(evt);
 }
+
+// Compile-only proof that RTC C++ event methods delegate to the C matrix.
+bool PeiHalRtcCppApplication(Timer &timer, Pei &pei)
+{
+	PeiEvent_t event = 0U;
+
+	if (!timer.EnableTimerEvent(pei, event, TIMER_EVT_COUNTER_OVR))
+	{
+		return false;
+	}
+	if (!timer.ConnectTask(pei, event, TIMER_TASK_TRIGOVRFLW))
+	{
+		timer.DisableTimerEvent(pei, event);
+		return false;
+	}
+	if (!timer.DisableTimerEvent(pei, event))
+	{
+		return false;
+	}
+	return pei.ReleaseEvent(event);
+}

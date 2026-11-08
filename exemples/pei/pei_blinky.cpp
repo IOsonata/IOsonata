@@ -80,7 +80,7 @@ int main(void)
 	int i;
 
 	timerCfg.DevNo = PEI_BLINKY_TIMER_DEVNO;
-	timerCfg.Freq = 1000000U;
+	timerCfg.Freq = PEI_BLINKY_TIMER_FREQ;
 	timerCfg.IntPrio = IRQ_PRIO_NORMAL;
 	if (!timer.Init(timerCfg))
 	{

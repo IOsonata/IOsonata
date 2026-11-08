@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Syntax-check the nRF52 PEI driver against installed Nordic CMSIS headers.
+"""Syntax-check nRF52 PPI and RTC PEI drivers with Nordic MCU headers.
 
-This does not compile or link any nrfx HAL driver. It verifies actual nrf.h
-and SoftDevice/SDC declarations rather than mock-register definitions.
+Uses the installed Nordic MDK and SoftDevice/SDC declarations rather
+than mock registers. This does not link or execute firmware.
 """
 import argparse
 import os
@@ -33,8 +33,9 @@ def main():
     mdk = nrfx / "bsp/stable/mdk"
     cmsis = ROOT / "ARM/CMSIS/Core/Include"
     driver = ROOT / "ARM/Nordic/nRF52/src/pei_nrf52.cpp"
+    rtc_driver = ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp"
 
-    for required in (mdk / "nrf.h", cmsis / "cmsis_compiler.h", driver):
+    for required in (mdk / "nrf.h", cmsis / "cmsis_compiler.h", driver, rtc_driver):
         if not required.is_file():
             parser.error("Missing required file: " + str(required))
     compiler = shutil.which(args.compiler)
@@ -85,8 +86,17 @@ def main():
             print(label + ": FAIL", file=sys.stderr)
             print(result.stdout + result.stderr, file=sys.stderr)
             return 1
-        print(label + ": PASS")
-    print("PEI nRF52 CMSIS header compile check: PASS")
+        rtc_cmd = [*cmd[:-1], "-DNRF52_SERIES",
+                   "-I", str(ROOT / "ARM/Nordic/include"),
+                   "-I", str(ROOT / "ARM/Nordic/nRF52/include"),
+                   str(rtc_driver)]
+        rtc_result = subprocess.run(rtc_cmd, text=True, capture_output=True)
+        if rtc_result.returncode != 0:
+            print(label + " RTC: FAIL", file=sys.stderr)
+            print(rtc_result.stdout + rtc_result.stderr, file=sys.stderr)
+            return 1
+        print(label + " PPI + RTC: PASS")
+    print("PEI nRF52 PPI/RTC CMSIS compile check: PASS")
     return 0
 
 

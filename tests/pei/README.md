@@ -55,11 +55,27 @@ for the remaining peripheral families, device-specific differences,
 ownership rules and acceptance criteria. Do not move PEI development
 to another MCU family until nRF52 coverage is complete.
 
-The RTC Timer backend now exposes START/STOP task endpoints through the
-same `TimerConnectTask` / `TimerExecuteTask` interface as high-frequency
-timers. RTC event source support and hardware-only continuous RTC compare
-generation are **not yet implemented**. This new RTC functionality has not
-been MCU-compiled or tested on board hardware.
+The RTC Timer backend now implements TICK/OVRFLW event sources via
+`EVTEN` independently of `INTEN`, and START/STOP/CLEAR/TRIGOVRFLW
+task endpoints via the existing C Timer APIs. Hardware-only RTC COMPARE
+supports single-shot and continuous operation: a private PPI link
+routes COMPARE to STOP (single) or CLEAR (continuous). This is
+not an ISR-rescheduled software trigger.
+
+RTC exclusive ownership is required for this compare mode because
+STOP/CLEAR affects the full 24-bit RTC counter. The driver rejects
+other active compare triggers or bound RTC TICK/OVRFLW sources.
+`TimerDisableTrigger` unbinds the public event and releases the
+private PPI channel. Supported PPI channel reservations still apply.
+
+**RTC compilation and hardware validation remain pending.** To test
+the same two-button, two-LED example using RTC2 instead of TIMER2,
+add `PEI_BLINKY_USE_RTC` in PeiBlinky's Eclipse C++ compiler
+defined symbols, clean-rebuild, and flash BLYST-NANO-DK. The board
+configuration selects RTC2 and 32768 Hz; no application source
+changes are needed. Check 500 ms LED alternation, BUT1 start,
+BUT2 stop, BUT1 resume, and RTC/GPIOTE ISR trace. Remove this
+symbol to return to the previously tested TIMER2 configuration.
 
 ## BLYST-NANO-DK hardware test
 

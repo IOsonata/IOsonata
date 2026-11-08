@@ -34,6 +34,7 @@ SOFTWARE.
 #include <atomic>
 
 #include "timer_nrfx.h"
+#include "coredev/pei.h"
 
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
@@ -56,6 +57,23 @@ SOFTWARE.
 #define CLOCK_LFCLKSRC_SRC_Xtal		CLOCK_LFCLKSRC_SRC_LFXO
 #endif
 
+// A hardware-only RTC compare uses a separate PEI connection to
+// STOP (single shot) or CLEAR (continuous), without CPU ISR rearming.
+typedef struct {
+	PeiDev_t *pPei;
+	PeiEvent_t Event;
+	PeiConn_t Automatic;
+	bool SourceUnbound;
+} nRFRtcPei_t;
+
+typedef struct {
+	PeiDev_t *pPei;
+	PeiEvent_t Event;
+	bool EventWasEnabled;
+} nRFRtcRawPei_t;
+
+static nRFRtcRawPei_t s_nRfxRtcRaw[TIMER_NRFX_RTC_MAX][2];
+
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;
@@ -64,6 +82,7 @@ typedef struct {
     int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
 	uint32_t *pCC;			//!< Compare value of each trigger, MaxNbTrigEvt entries
 	TimerTrig_t *pTrigger;	//!< State of each trigger, MaxNbTrigEvt entries
+	nRFRtcPei_t *pPei;		//!< Hardware-only trigger ownership
 } nRFRtcData_t;
 #pragma pack(pop)
 
@@ -71,11 +90,14 @@ typedef struct {
 // that timer.
 static uint32_t s_nRfxRtc0CC[RTC0_CC_NUM];
 static TimerTrig_t s_nRfxRtc0Trig[RTC0_CC_NUM];
+static nRFRtcPei_t s_nRfxRtc0Pei[RTC0_CC_NUM];
 static uint32_t s_nRfxRtc1CC[RTC1_CC_NUM];
 static TimerTrig_t s_nRfxRtc1Trig[RTC1_CC_NUM];
+static nRFRtcPei_t s_nRfxRtc1Pei[RTC1_CC_NUM];
 #if TIMER_NRFX_RTC_MAX > 2
 static uint32_t s_nRfxRtc2CC[RTC2_CC_NUM];
 static TimerTrig_t s_nRfxRtc2Trig[RTC2_CC_NUM];
+static nRFRtcPei_t s_nRfxRtc2Pei[RTC2_CC_NUM];
 #endif
 
 // Timer device of each timer, set by nRFxRtcInit
@@ -92,6 +114,7 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 		.MaxNbTrigEvt = RTC0_CC_NUM,
 		.pCC = s_nRfxRtc0CC,
 		.pTrigger = s_nRfxRtc0Trig,
+		.pPei = s_nRfxRtc0Pei,
 	},
 	{
 		.DevNo = 1,
@@ -100,6 +123,7 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 		.MaxNbTrigEvt = RTC1_CC_NUM,
 		.pCC = s_nRfxRtc1CC,
 		.pTrigger = s_nRfxRtc1Trig,
+		.pPei = s_nRfxRtc1Pei,
 	},
 #if TIMER_NRFX_RTC_MAX > 2
 	{
@@ -109,6 +133,7 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 		.MaxNbTrigEvt = RTC2_CC_NUM,
 		.pCC = s_nRfxRtc2CC,
 		.pTrigger = s_nRfxRtc2Trig,
+		.pPei = s_nRfxRtc2Pei,
 	},
 #endif
 };
@@ -158,7 +183,8 @@ static void RtcIRQHandler(int DevNo)
 
 	for (int i = 0; i < s_pnRfxRtcData[DevNo].MaxNbTrigEvt; i++)
 	{
-        if (reg->EVENTS_COMPARE[i])
+        if (reg->EVENTS_COMPARE[i] &&
+			s_pnRfxRtcData[DevNo].pPei[i].pPei == nullptr)
 		{
             evt |= TIMER_EVT_TRIGGER(i);
             reg->EVENTS_COMPARE[i] = 0;
@@ -304,6 +330,26 @@ static void nRFxRtcReset(TimerDev_t * const pTimer)
 
 static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
+	int devno;
+	int i;
+
+	devno = pTimer->DevNo;
+	for (i = 0; i < s_nRfxRtcData[devno].MaxNbTrigEvt; i++)
+	{
+		if (s_nRfxRtcData[devno].pPei[i].pPei != nullptr ||
+			s_nRfxRtcData[devno].pPei[i].Automatic.Handle != 0U)
+		{
+			return pTimer->Freq;
+		}
+	}
+	for (i = 0; i < 2; i++)
+	{
+		if (s_nRfxRtcRaw[devno][i].pPei != nullptr)
+		{
+			return pTimer->Freq;
+		}
+	}
+
 	s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_STOP = 1;
 
     uint32_t prescaler = 1;
@@ -367,6 +413,10 @@ static uintptr_t nRFxRtcTaskEndpoint(TimerDev_t * const pTimer, TIMER_TASK Task)
 			return (uintptr_t)&reg->TASKS_START;
 		case TIMER_TASK_STOP:
 			return (uintptr_t)&reg->TASKS_STOP;
+		case TIMER_TASK_CLEAR:
+			return (uintptr_t)&reg->TASKS_CLEAR;
+		case TIMER_TASK_TRIGOVRFLW:
+			return (uintptr_t)&reg->TASKS_TRIGOVRFLW;
 		default:
 			return 0U;
 	}
@@ -385,13 +435,289 @@ static bool nRFxRtcExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 	return true;
 }
 
+// Bind an RTC TICK or OVRFLW producer without changing its interrupt
+// configuration. EVTEN is independent from INTEN on nRF52.
+static bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t *pEvent, uint32_t Event)
+{
+	nRFRtcRawPei_t *pRaw;
+	NRF_RTC_Type *reg;
+	PeiEndpoint_t endpoint;
+	uint32_t eventBit;
+	int devno;
+	int i;
+	int idx;
+
+	if (pTimer == nullptr || pPei == nullptr || pEvent == nullptr ||
+		pPei->DevNo != 0)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX ||
+		s_pnRfxRtcDev[devno] != pTimer)
+	{
+		return false;
+	}
+	idx = -1;
+	if (Event == TIMER_EVT_TICK)
+	{
+		idx = 0;
+	}
+	else if (Event == TIMER_EVT_COUNTER_OVR)
+	{
+		idx = 1;
+	}
+	if (idx < 0)
+	{
+		return false;
+	}
+	for (i = 0; i < s_nRfxRtcData[devno].MaxNbTrigEvt; i++)
+	{
+		if (s_nRfxRtcData[devno].pPei[i].pPei != nullptr ||
+			s_nRfxRtcData[devno].pPei[i].Automatic.Handle != 0U)
+		{
+			return false;
+		}
+	}
+	pRaw = &s_nRfxRtcRaw[devno][idx];
+	if (pRaw->pPei != nullptr)
+	{
+		return false;
+	}
+	reg = s_nRfxRtcData[devno].pReg;
+	if (idx == 0)
+	{
+		eventBit = RTC_EVTENSET_TICK_Msk;
+		endpoint = (PeiEndpoint_t)&reg->EVENTS_TICK;
+	}
+	else
+	{
+		eventBit = RTC_EVTENSET_OVRFLW_Msk;
+		endpoint = (PeiEndpoint_t)&reg->EVENTS_OVRFLW;
+	}
+	if (!PeiBindEvent(pPei, pEvent, endpoint))
+	{
+		return false;
+	}
+	pRaw->EventWasEnabled = (reg->EVTEN & eventBit) != 0U;
+	pRaw->pPei = pPei;
+	pRaw->Event = *pEvent;
+	reg->EVTENSET = eventBit;
+	return true;
+}
+
+static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t Event)
+{
+	nRFRtcRawPei_t *pRaw;
+	NRF_RTC_Type *reg;
+	PeiEndpoint_t endpoint;
+	uint32_t bit;
+	int devno;
+	int i;
+
+	if (pTimer == nullptr || pPei == nullptr || Event == 0U)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX ||
+		s_pnRfxRtcDev[devno] != pTimer)
+	{
+		return false;
+	}
+	reg = s_nRfxRtcData[devno].pReg;
+	for (i = 0; i < 2; i++)
+	{
+		pRaw = &s_nRfxRtcRaw[devno][i];
+		if (pRaw->pPei != pPei || pRaw->Event != Event)
+		{
+			continue;
+		}
+		if (i == 0)
+		{
+			bit = RTC_EVTENSET_TICK_Msk;
+			endpoint = (PeiEndpoint_t)&reg->EVENTS_TICK;
+		}
+		else
+		{
+			bit = RTC_EVTENSET_OVRFLW_Msk;
+			endpoint = (PeiEndpoint_t)&reg->EVENTS_OVRFLW;
+		}
+		if (!PeiUnbindEvent(pPei, Event, endpoint))
+		{
+			return false;
+		}
+		if (!pRaw->EventWasEnabled)
+		{
+			reg->EVTENCLR = bit;
+		}
+		pRaw->pPei = nullptr;
+		pRaw->Event = 0U;
+		pRaw->EventWasEnabled = false;
+		return true;
+	}
+	return false;
+}
+
+// A PEI compare does not rely on the RTC ISR. A private PEI PPI route
+// re-arms the RTC in hardware: compare -> CLEAR for continuous operation,
+// or compare -> STOP for a single-shot counter. The timer must own the
+// RTC exclusively because these tasks affect the entire counter.
+static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
+	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei,
+	PeiEvent_t *pEvent)
+{
+	nRFRtcPei_t *pRoute;
+	const nRFRtcData_t *pData;
+	NRF_RTC_Type *reg;
+	PeiCfg_t cfg;
+	PeiEvent_t evt;
+	PeiEndpoint_t endpoint;
+	uint64_t ticks;
+	bool fresh;
+	int devno;
+	int i;
+	uint32_t bit;
+
+	if (pTimer == nullptr || pPei == nullptr || pEvent == nullptr ||
+		pPei->DevNo != 0 || nsPeriod == 0U ||
+		(Type != TIMER_TRIG_TYPE_SINGLE &&
+			Type != TIMER_TRIG_TYPE_CONTINUOUS))
+	{
+		return false;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX ||
+		s_pnRfxRtcDev[devno] != pTimer || !s_bRtcEnabled[devno] ||
+		pTimer->Freq == 0U || pTimer->EvtHandler != nullptr)
+	{
+		return false;
+	}
+	pData = &s_nRfxRtcData[devno];
+	reg = pData->pReg;
+	if (TrigNo < 0 || TrigNo >= pData->MaxNbTrigEvt)
+	{
+		return false;
+	}
+	bit = RTC_EVTEN_COMPARE0_Msk << TrigNo;
+	pRoute = &pData->pPei[TrigNo];
+	if (pData->pTrigger[TrigNo].nsPeriod != 0U ||
+		pRoute->pPei != nullptr || pRoute->Automatic.Handle != 0U ||
+		(reg->EVTEN & bit) != 0U || (reg->INTENSET & (RTC_INTENSET_COMPARE0_Msk << TrigNo)) != 0U)
+	{
+		return false;
+	}
+	for (i = 0; i < pData->MaxNbTrigEvt; i++)
+	{
+		if (pData->pTrigger[i].nsPeriod != 0U ||
+			pData->pPei[i].pPei != nullptr ||
+			pData->pPei[i].Automatic.Handle != 0U)
+		{
+			return false;
+		}
+	}
+	for (i = 0; i < 2; i++)
+	{
+		if (s_nRfxRtcRaw[devno][i].pPei != nullptr)
+		{
+			return false;
+		}
+	}
+	ticks = TimerNanosecondToTick(pTimer, nsPeriod);
+	if (ticks < 3U || ticks > 0xFFFFFEULL)
+	{
+		return false;
+	}
+
+	endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
+	evt = *pEvent;
+	fresh = evt == 0U;
+	if (!PeiBindEvent(pPei, &evt, endpoint))
+	{
+		return false;
+	}
+	cfg.DevNo = pPei->DevNo;
+	cfg.Event = endpoint;
+	cfg.Options = 0U;
+	if (Type == TIMER_TRIG_TYPE_CONTINUOUS)
+	{
+		cfg.Task = (PeiEndpoint_t)&reg->TASKS_CLEAR;
+	}
+	else
+	{
+		cfg.Task = (PeiEndpoint_t)&reg->TASKS_STOP;
+	}
+	if (!PeiConnect(&pRoute->Automatic, &cfg))
+	{
+		PeiUnbindEvent(pPei, evt, endpoint);
+		if (fresh)
+		{
+			PeiReleaseEvent(pPei, &evt);
+		}
+		return false;
+	}
+	if (!PeiEnable(&pRoute->Automatic))
+	{
+		PeiDisconnect(&pRoute->Automatic);
+		if (pRoute->Automatic.Handle == 0U)
+		{
+			PeiUnbindEvent(pPei, evt, endpoint);
+			if (fresh)
+			{
+				PeiReleaseEvent(pPei, &evt);
+			}
+		}
+		return false;
+	}
+
+	// Configuration is exclusive to this RTC. PPI self-rearm is already
+	// active before EVTEN and counting are switched on.
+	reg->TASKS_STOP = 1U;
+	reg->TASKS_CLEAR = 1U;
+	reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << TrigNo;
+	reg->EVENTS_COMPARE[TrigNo] = 0U;
+	reg->CC[TrigNo] = (uint32_t)ticks;
+	pData->pCC[TrigNo] = (uint32_t)ticks;
+	pData->pTrigger[TrigNo].Type = Type;
+	pData->pTrigger[TrigNo].nsPeriod =
+		TimerTickToNanosecond(pTimer, ticks);
+	pData->pTrigger[TrigNo].Handler = nullptr;
+	pData->pTrigger[TrigNo].pContext = nullptr;
+	pRoute->pPei = pPei;
+	pRoute->Event = evt;
+	pRoute->SourceUnbound = false;
+	*pEvent = evt;
+	reg->EVTENSET = bit;
+	reg->TASKS_START = 1U;
+	return true;
+}
+
 static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                               	  	 TimerTrigEvtHandler_t Handler, void *pContext)
 {
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
+	int i;
 
-    if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
-        return 0;
+	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
+	{
+		return 0;
+	}
+	// The PEI hardware-only trigger may reset/stop the entire RTC.
+	// Do not start an ISR-based compare while it owns the counter.
+	for (i = 0; i < rtc.MaxNbTrigEvt; i++)
+	{
+		if (rtc.pPei[i].pPei != nullptr ||
+			rtc.pPei[i].Automatic.Handle != 0U)
+		{
+			return 0;
+		}
+	}
+	if (rtc.pTrigger[TrigNo].nsPeriod != 0U)
+	{
+		return 0;
+	}
 
 	uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
 
@@ -418,27 +744,68 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
+	nRFRtcPei_t *pRoute;
+	PeiEndpoint_t endpoint;
 
 	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
-        return;
+	{
+		return;
+	}
+	pRoute = &rtc.pPei[TrigNo];
+	if (pRoute->pPei != nullptr)
+	{
+		// Stop hardware event forwarding before the compare register can
+		// be reused. Keep ownership on any failed teardown.
+		rtc.pReg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << TrigNo;
+		endpoint = (PeiEndpoint_t)&rtc.pReg->EVENTS_COMPARE[TrigNo];
+		if (!pRoute->SourceUnbound)
+		{
+			if (!PeiUnbindEvent(pRoute->pPei, pRoute->Event, endpoint))
+			{
+				return;
+			}
+			pRoute->SourceUnbound = true;
+		}
+		PeiDisconnect(&pRoute->Automatic);
+		if (pRoute->Automatic.Handle != 0U)
+		{
+			return;
+		}
+		pRoute->pPei = nullptr;
+		pRoute->Event = 0U;
+		pRoute->SourceUnbound = false;
+	}
+	else if (pRoute->Automatic.Handle != 0U)
+	{
+		// A failed setup kept an internal PPI channel reserved.
+		PeiDisconnect(&pRoute->Automatic);
+		if (pRoute->Automatic.Handle != 0U)
+		{
+			return;
+		}
+	}
 
-	rtc.pCC[TrigNo] = 0;
-    rtc.pReg->CC[TrigNo] = 0;
-    rtc.pReg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << TrigNo;
-    rtc.pReg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << TrigNo;
-
+	rtc.pCC[TrigNo] = 0U;
+	rtc.pReg->CC[TrigNo] = 0U;
+	rtc.pReg->EVENTS_COMPARE[TrigNo] = 0U;
+	rtc.pReg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << TrigNo;
+	rtc.pReg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << TrigNo;
 	rtc.pTrigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
-	rtc.pTrigger[TrigNo].Handler = NULL;
-	rtc.pTrigger[TrigNo].pContext = NULL;
-	rtc.pTrigger[TrigNo].nsPeriod = 0;
+	rtc.pTrigger[TrigNo].Handler = nullptr;
+	rtc.pTrigger[TrigNo].pContext = nullptr;
+	rtc.pTrigger[TrigNo].nsPeriod = 0U;
 }
 
 static int nRFxRtcFindAvailTrigger(TimerDev_t * const pTimer)
 {
 	for (int i = 0; i < s_nRfxRtcData[pTimer->DevNo].MaxNbTrigEvt; i++)
 	{
-		if (s_nRfxRtcData[pTimer->DevNo].pTrigger[i].nsPeriod == 0)
+		if (s_nRfxRtcData[pTimer->DevNo].pTrigger[i].nsPeriod == 0U &&
+			s_nRfxRtcData[pTimer->DevNo].pPei[i].pPei == nullptr &&
+			s_nRfxRtcData[pTimer->DevNo].pPei[i].Automatic.Handle == 0U)
+		{
 			return i;
+		}
 	}
 
 	return -1;
@@ -481,9 +848,29 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 	NRF_RTC_Type *reg = s_nRfxRtcData[pTimer->DevNo].pReg;
 
+	// Never reinitialize an RTC whose PPI connections still own
+	// hardware compare registers or tick/overflow event endpoints.
+	for (int i = 0; i < rtc.MaxNbTrigEvt; i++)
+	{
+		if (rtc.pPei[i].pPei != nullptr ||
+			rtc.pPei[i].Automatic.Handle != 0U)
+		{
+			return false;
+		}
+	}
+	for (int i = 0; i < 2; i++)
+	{
+		if (s_nRfxRtcRaw[pTimer->DevNo][i].pPei != nullptr)
+		{
+			return false;
+		}
+	}
 	s_pnRfxRtcDev[pTimer->DevNo] = pTimer;
 
 	memset(rtc.pTrigger, 0, rtc.MaxNbTrigEvt * sizeof(TimerTrig_t));
+	memset(rtc.pPei, 0, rtc.MaxNbTrigEvt * sizeof(nRFRtcPei_t));
+	memset(s_nRfxRtcRaw[pTimer->DevNo], 0,
+		sizeof(s_nRfxRtcRaw[pTimer->DevNo]));
 
 
     pTimer->Disable = nRFxRtcDisable;
@@ -495,9 +882,9 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     pTimer->FindAvailTrigger = nRFxRtcFindAvailTrigger;
     pTimer->DisableTrigger = nRFxRtcDisableTrigger;
     pTimer->EnableTrigger = nRFxRtcEnableTrigger;
-	// RTC PEI compare events require separate EVTEN handling and are not
-	// yet supported by TimerEnablePeiTrigger.
-	pTimer->EnablePeiTrigger = nullptr;
+	pTimer->EnablePeiTrigger = nRFxRtcEnablePeiTrigger;
+	pTimer->EnablePeiEvent = nRFxRtcEnablePeiEvent;
+	pTimer->DisablePeiEvent = nRFxRtcDisablePeiEvent;
 	pTimer->GetTaskEndpoint = nRFxRtcTaskEndpoint;
 	pTimer->ExecuteTask = nRFxRtcExecuteTask;
     pTimer->DisableExtTrigger = nRFxRtcDisableExtTrigger;

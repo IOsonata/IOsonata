@@ -161,9 +161,20 @@ inventory, implementation order and acceptance checklist are in
 Do not infer an available endpoint from its register address range alone.
 Peripheral ownership and the device-header register map are decisive.
 
-The nRF52 RTC Timer driver now additionally prepares START and STOP
-task endpoints for PEI. This first step is **not** complete RTC event
-support, and has not been validated by MCU compilation or hardware test.
+The nRF52 RTC Timer driver now exposes TICK/OVRFLW event sources
+with independent EVTEN control, and START/STOP/CLEAR/TRIGOVRFLW task
+endpoints through the existing C Timer interface. RTC compare
+supports both hardware-only single-shot and continuous operation:
+the driver requests one private PPI route from COMPARE to STOP or
+CLEAR respectively. The PEI backend owns physical channel assignment;
+the Timer driver owns the RTC compare and the lifetime of its route.
+
+RTC compare mode requires exclusive RTC counter ownership and rejects
+conflicting trigger or raw-event users. Single-shot stops the counter;
+continuous mode periodically clears it without an ISR. These additions
+have **not** yet been MCU compiled or tested on hardware. Define
+`PEI_BLINKY_USE_RTC` in the BLYST-NANO-DK PeiBlinky Eclipse project
+to select RTC2 at 32768 Hz rather than TIMER2 at 1 MHz.
 
 ## nRF52 PPI driver (0.14)
 

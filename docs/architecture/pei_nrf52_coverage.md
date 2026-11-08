@@ -40,7 +40,7 @@ Status keys:
 | Peripheral / driver | Hardware event source coverage | Hardware task destination coverage | Current status |
 | --- | --- | --- | --- |
 | TIMER / `timer_hf_nrfx.cpp` | Compare[n], plus other events implemented by the selected TIMER | START, STOP, CLEAR, COUNT, CAPTURE[n] and device-supported tasks | Compare -> toggle and START/STOP **working hardware before C PEI refactor**; additional endpoints pending |
-| RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW, COMPARE[n]; RTC requires EVTEN independent of INTEN | START, STOP, CLEAR, TRIGOVRFLW where present | START/STOP **initial endpoint added**; event endpoints and remaining tasks pending |
+| RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Initial driver support implemented, unvalidated**: EVTEN routing independent of INTEN, hardware compare->STOP/CLEAR via internal PPI route, ownership and release; C and C++ APIs |
 | GPIOTE / `iopincfg_nrfx.c` | IN[n] edge, PORT event where supported | OUT[n] SET/CLEAR/TOGGLE through configured channels | IN[n] + output toggle **working hardware before C PEI refactor**; PORT and lifecycle stress pending |
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED, CALIBRATEDONE and available limits | START, SAMPLE, STOP, CALIBRATEOFFSET | **Pending**; cannot expose SAMPLE until conversion channels and EasyDMA buffers are configured and reserved |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, UP, DOWN, CROSS and supported variants | START, STOP, SAMPLE where provided | **Pending**; only expose events/tasks from the configured comparator |
@@ -71,9 +71,12 @@ only when it implements a real PPI-accessible event/task register on the SKU.
 
 1. **Finish TIMER + RTC + GPIOTE.** Expose their remaining hardware
    endpoints without changing the existing ISR-based Timer trigger modes.
-   RTC EVTEN must be managed separately from INTEN. Continuous RTC
-   compare events cannot be promised ISR-free until an actual hardware
-   compare-rearm method is implemented and validated.
+   RTC now has a proposed ISR-free compare rearm: the Timer driver
+   requests a private PPI link from RTC.COMPARE to RTC.CLEAR for
+   continuous mode, and RTC.STOP for single-shot. The PEI backend
+   owns the physical route, not the Timer driver. Validate the behavior,
+   teardown and timing on hardware before accepting it. Then finish
+   TIMER capture/counter, GPIOTE PORT and other remaining endpoints.
 2. **SAADC and comparators.** Validate RTC/TIMER event -> ADC sampling and
    comparator threshold -> GPIO or TIMER task, with peripheral-owned
    channel/DMA configuration.
@@ -88,6 +91,44 @@ only when it implements a real PPI-accessible event/task register on the SKU.
    NFCT, RADIO/CCM/AAR/ECB, QSPI, USBD, MWU. Return unsupported for
    stack-owned or unprepared hardware states rather than provide unsafe
    automation.
+
+## RTC hardware-only trigger implementation notes
+
+The nRF52 RTC has no TIMER-style local compare shortcut. The new
+`TimerEnablePeiTrigger()` path uses a **separate, automatically allocated
+PPI route** from `EVENTS_COMPARE[n]` to `TASKS_CLEAR` (continuous)
+or `TASKS_STOP` (single). The Timer driver owns the compare value and
+the lifetime of the internal `PeiConn_t`; PEI alone allocates and
+programs its physical PPI channel. The external application still
+binds its own destinations to the same logical compare event via
+`PeiDev_t` / `Pei`.
+
+RTC compare setup rejects: a second active trigger, an event callback,
+a TICK/OVRFLW PEI source on that same RTC, externally enabled compare
+bits, periods shorter than three RTC ticks, and periods beyond the
+24-bit compare range. The RTC is cleared once at setup. Periodic
+rearming is entirely hardware based, without an ISR callback. Single
+shot stops the RTC on its compare; do not assume it can also serve
+independent counter or periodic functions.
+
+`TimerEnablePeiEvent()` now binds RTC TICK/COUNTER_OVR events by
+setting `EVTEN`, without changing `INTEN`. `TimerDisablePeiEvent()`
+unbinds the hardware endpoint and restores the prior EVTEN state.
+RTC overflow interrupts already configured by the Timer driver
+remain unchanged; therefore these events do **not** imply that
+the whole application is interrupt-free.
+
+The compare event's private PPI channel is kept independent of user
+PEI routes so enabling/disabling a user's event routing does not
+interrupt periodic hardware rearming. Driver teardown must unbind
+the public source and release the private connection before making
+its compare slot available again.
+
+Hardware test: build `PeiBlinky` with `PEI_BLINKY_USE_RTC` defined
+in the Eclipse C++ compiler settings. This uses application RTC2 at
+32768 Hz with the same two LEDs and BUT1/BUT2, while the default
+remains TIMER2 at 1 MHz. Confirm both start/stop and 500 ms alternating
+LEDs, then test release/reuse and inspect ISR entry counts.
 
 ## Completion criteria before nRF53
 
@@ -114,6 +155,11 @@ only when it implements a real PPI-accessible event/task register on the SKU.
 The BLYST-NANO-DK Timer + two LEDs + two buttons demonstrated working
 PPI hardware prior to the conversion of `Pei` to the C `PeiDev_t`
 matrix implementation. That result must be rechecked after the C API
-refactor. RTC START/STOP task endpoints have been prepared for inclusion;
-they have **not** been MCU-compiled or hardware-tested. All other rows
-remain unimplemented for PEI unless independently marked above.
+refactor. RTC TICK/OVRFLW routing, single/continuous compare sources and
+START/STOP/CLEAR/TRIGOVRFLW tasks are implemented in the driver but
+have **not** yet been MCU-compiled or hardware-tested. The compare
+path uses a private hardware PPI route to STOP (single) or CLEAR
+(continuous), so the RTC counter must be exclusively owned by
+that trigger. The old ISR rescheduling path is unchanged. Unsupported
+concurrent use is rejected. All other rows remain unimplemented for
+PEI unless independently marked above.

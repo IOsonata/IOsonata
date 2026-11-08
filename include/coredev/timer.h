@@ -84,7 +84,9 @@ typedef enum __Timer_Trigger_Type {
 // to that endpoint without changing timer configuration.
 typedef enum __Timer_Hardware_Task {
 	TIMER_TASK_START,
-	TIMER_TASK_STOP
+	TIMER_TASK_STOP,
+	TIMER_TASK_CLEAR,
+	TIMER_TASK_TRIGOVRFLW
 } TIMER_TASK;
 
 typedef enum __Timer_ExtTrig_Sense {
@@ -234,6 +236,12 @@ struct __Timer_Device {
 						 uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
 						 PeiDev_t *pPei, PeiEvent_t *pEvent);
 
+	// Optional hardware-only event source support, separate from ISR events.
+	bool (*EnablePeiEvent)(TimerDev_t *pTimerDev, PeiDev_t *pPei,
+		PeiEvent_t *pEvent, uint32_t Event);
+	bool (*DisablePeiEvent)(TimerDev_t *pTimerDev, PeiDev_t *pPei,
+		PeiEvent_t Event);
+
 	// Optional hardware task support. Resolving an endpoint does not
 	// execute the task. ExecuteTask runs the same action from the CPU.
 	uintptr_t (*GetTaskEndpoint)(TimerDev_t * const pTimerDev, TIMER_TASK Task);
@@ -349,6 +357,32 @@ static inline int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
 		return -1;
 	}
 	return trig;
+}
+
+/**
+ * @brief Bind an RTC TICK or COUNTER_OVR hardware event to PEI.
+ * This does not enable a Timer interrupt or install an ISR callback.
+ */
+static inline bool TimerEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, uint32_t Event)
+{
+	if (pTimer == NULL || pPei == NULL || pEvt == NULL ||
+		pTimer->EnablePeiEvent == NULL)
+	{
+		return false;
+	}
+	return pTimer->EnablePeiEvent(pTimer, pPei, pEvt, Event);
+}
+
+/** @brief Unbind and release an RTC PEI event producer. */
+static inline bool TimerDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+	if (pTimer == NULL || pPei == NULL || pTimer->DisablePeiEvent == NULL)
+	{
+		return false;
+	}
+	return pTimer->DisablePeiEvent(pTimer, pPei, Evt);
 }
 
 /** @brief Route an event to a Timer hardware START or STOP task. */
@@ -540,6 +574,8 @@ public:
 	{
 		vTimer.pObj = this;
 		vTimer.EnablePeiTrigger = NULL;
+		vTimer.EnablePeiEvent = NULL;
+		vTimer.DisablePeiEvent = NULL;
 		vTimer.GetTaskEndpoint = NULL;
 		vTimer.ExecuteTask = NULL;
 	}
@@ -561,6 +597,8 @@ public:
     virtual bool Init(const TimerCfg_t &Cfg)
 	{
 		vTimer.EnablePeiTrigger = NULL;
+		vTimer.EnablePeiEvent = NULL;
+		vTimer.DisablePeiEvent = NULL;
 		vTimer.GetTaskEndpoint = NULL;
 		vTimer.ExecuteTask = NULL;
 		return TimerInit(&vTimer, &Cfg);
@@ -705,6 +743,18 @@ public:
 			msPeriod, Type);
 	}
 
+
+	/** @brief Bind an RTC TICK or COUNTER_OVR event without an ISR. */
+	bool EnableTimerEvent(Pei &PeiDev, PeiEvent_t &Evt, uint32_t Event)
+	{
+		return TimerEnablePeiEvent(&vTimer, PeiDev, &Evt, Event);
+	}
+
+	/** @brief Unbind an RTC event producer, retaining its PEI identity. */
+	bool DisableTimerEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return TimerDisablePeiEvent(&vTimer, PeiDev, Evt);
+	}
 
 	/**
 	 * @brief Connect a hardware event to the timer START or STOP task.
