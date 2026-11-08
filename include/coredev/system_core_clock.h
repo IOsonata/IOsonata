@@ -1,9 +1,28 @@
 /**-------------------------------------------------------------------------
 @file	system_core_clock.h
 
-@brief	Contains generic system clock definitions and settings
+@brief	Contains generic system core definitions: clocks, power settings and
+		power functions of the MCU
 
 These functions can be implemented per target.
+
+The power functions are those of the MCU itself, not of an external power
+management chip (see pwrmgnt/pwrmgnt.h for those):
+- reset reason;
+- power off, the lowest power mode, left only through a reset;
+- retention registers, kept through power off and software resets;
+- RAM retention in power off.
+
+Power off stops the MCU until a wake up source resets it. The wake up
+sources are set with their own drivers before power off, for example
+IOPinSetSense for a pin or the analog comparator. The reset reason of the
+next start tells which one woke the MCU.
+
+On a multi-core MCU each core has its own library. Its functions act for the
+core that calls them: its clock, its reset reason, its retention registers
+and RAM. Power off is done only by the core that controls it.
+
+A power function an MCU does not have returns false or 0.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 30, 2017
@@ -43,6 +62,23 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdint.h>
 
+/// Reset reasons, ORed, returned by SystemResetReason
+#define SYSTEM_RESET_POWERON		(1UL << 0)	//!< Power on or brown out
+#define SYSTEM_RESET_PIN			(1UL << 1)	//!< Reset pin
+#define SYSTEM_RESET_WDT			(1UL << 2)	//!< Watchdog
+#define SYSTEM_RESET_SOFT			(1UL << 3)	//!< Software reset request
+#define SYSTEM_RESET_LOCKUP			(1UL << 4)	//!< CPU lockup
+#define SYSTEM_RESET_DEBUG			(1UL << 5)	//!< Debug interface
+#define SYSTEM_RESET_WAKE_PIN		(1UL << 8)	//!< Wake up from power off by a pin
+#define SYSTEM_RESET_WAKE_COMP		(1UL << 9)	//!< Wake up from power off by the analog comparator
+#define SYSTEM_RESET_WAKE_NFC		(1UL << 10)	//!< Wake up from power off by an NFC field
+#define SYSTEM_RESET_WAKE_USB		(1UL << 11)	//!< Wake up from power off by USB power
+#define SYSTEM_RESET_WAKE_MSK		(0xFUL << 8)	//!< All wake up from power off reasons
+
+/// DC/DC regulator stages, ORed in McuOsc_t DcDc
+#define SYSTEM_DCDC_MAIN			(1U << 0)	//!< Stage supplying the core
+#define SYSTEM_DCDC_HIGHVOLT		(1U << 1)	//!< High voltage input stage, on MCU with one
+
 #pragma pack(push, 4)
 
 ///
@@ -67,11 +103,16 @@ typedef struct __Oscillator_Desc {
 } OscDesc_t;
 
 ///
-/// This structure defines the the MCU oscillators
+/// This structure defines the the MCU oscillators and the regulator setting
 ///
 /// Most MCU has 2 oscillator.
 /// The core oscillator often referred to as high frequency or main or core
 /// The low frequency is often a 32768Hz oscillator for realtime clock or low power clock
+///
+/// DcDc selects the regulator stages running in DC/DC mode, the others use the
+/// linear regulator. The DC/DC regulator needs its inductor on the board. A stage
+/// enabled on a board without one stops the MCU from running properly. 0 keeps
+/// the linear regulators, the reset setting. SystemInit applies it.
 ///
 /// Modern compiler such as the GNU GCC allow declaration of weak type global variable
 /// that can be overloaded.  In the library system startup code contains a weak global
@@ -84,6 +125,7 @@ typedef struct __Mcu_Osc {
 	OscDesc_t CoreOsc;		//!< Core high frequency oscillator descriptor
 	OscDesc_t LowPwrOsc;	//!< Low power, low frequency oscillator descriptor
 	bool bUSBClk;			//!< Enable USB clock support
+	uint8_t DcDc;			//!< DC/DC regulator stages, SYSTEM_DCDC_xxx ORed. 0 - linear regulators
 } McuOsc_t;
 
 //typedef McuOsc_t	MCU_OSC;
@@ -245,6 +287,72 @@ void SystemOscInit(void);
  * @return	Pointer to start of RAM
  */
 void *SystemRamStart(void);
+
+/**
+ * @brief	Reasons of the last reset
+ *
+ * Where the hardware adds the reasons of successive resets until they are
+ * cleared, the first call reads and clears them, later calls return the same
+ * value.
+ *
+ * @return	SYSTEM_RESET_xxx reasons, ORed
+ */
+uint32_t SystemResetReason(void);
+
+/**
+ * @brief	Power off
+ *
+ * Enters the lowest power mode. Only a reset leaves it: a wake up source set
+ * before the call, the reset pin or a power cycle. RAM is lost except for
+ * the parts kept with SystemRamRetain. The function does not return, except
+ * on a core that does not control power off.
+ */
+void SystemPowerOff(void);
+
+/**
+ * @brief	Number of retention registers
+ *
+ * Retention registers keep their value through power off and software
+ * resets, not through a power cycle.
+ *
+ * @return	Number of registers, 0 for none
+ */
+int SystemRetRegCount(void);
+
+/**
+ * @brief	Read a retention register
+ *
+ * @param	Idx : Register index, 0 to SystemRetRegCount() - 1
+ *
+ * @return	Register value, 0 for an invalid index
+ */
+uint32_t SystemRetRegRead(int Idx);
+
+/**
+ * @brief	Write a retention register
+ *
+ * Bits above the register width are dropped.
+ *
+ * @param	Idx : Register index, 0 to SystemRetRegCount() - 1
+ * @param	Val : Value to keep
+ *
+ * @return	true - success
+ */
+bool SystemRetRegWrite(int Idx, uint32_t Val);
+
+/**
+ * @brief	Keep or drop a RAM range in power off
+ *
+ * The hardware works on RAM sections, every section the range touches is
+ * changed.
+ *
+ * @param	Addr	: Start address
+ * @param	Size	: Size in bytes
+ * @param	bRetain	: true - keep the content in power off
+ *
+ * @return	true - success, false - the range is not RAM
+ */
+bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain);
 
 #ifdef __cplusplus
 }
