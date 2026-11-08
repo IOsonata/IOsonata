@@ -17,11 +17,13 @@ BUT1 SENSE, leaving BUT2 as a dedicated IN[n] source. A level held active
 or a latch-based DETECT configuration may prevent another PORT transition.
 Do not use PORT as a silent fallback for `IOPinEnableEvent()`.
 
-During setup, the example unbinds and rebinds the PORT source to the
-same logical event while keeping the LED task relationship. This tests
-logical source reuse without altering GPIO configuration or claiming
-another GPIOTE channel. PORT SENSE and any PORT interrupt are owned by
-the caller, not by the PEI binding.
+During setup, the example first unbinds and rebinds the PORT source
+while retaining its LED task relationship. It then disconnects that
+task, unbinds and releases the logical event, allocates a fresh
+event identity, checks the stale token cannot resolve, and reacquires
+the LED task channel. This checks both source rebind and full
+task/event release and reuse before enabling hardware routes.
+PORT SENSE and any PORT interrupt remain owned by the caller.
 
 The example uses no semihosting or UART and links the standalone
 `pei_nrf52.cpp` PPI backend directly, as the original PeiBlinky does.

@@ -31,6 +31,7 @@ int main(void)
 	Pei pei;
 	PeiEvent_t portEvt = 0U;
 	PeiEvent_t pinEvt = 0U;
+	PeiEvent_t staleEvt = 0U;
 	int i;
 
 	for (i = 0; i < 2; i++)
@@ -72,6 +73,42 @@ int main(void)
 	if (!IOPinEnablePortEvent(pei, portEvt))
 	{
 		g_PeiPortDemoStatus = -5;
+		return 1;
+	}
+
+	// Full lifecycle: free the task channel and source identity, then
+	// allocate both again. Stale logical event handles must stay invalid.
+	staleEvt = portEvt;
+	if (!IOPinDisableTask(pei, portEvt, s_Leds[0].PortNo,
+		s_Leds[0].PinNo))
+	{
+		g_PeiPortDemoStatus = -10;
+		return 1;
+	}
+	if (!IOPinDisablePortEvent(pei, portEvt))
+	{
+		g_PeiPortDemoStatus = -11;
+		return 1;
+	}
+	if (!pei.ReleaseEvent(portEvt))
+	{
+		g_PeiPortDemoStatus = -12;
+		return 1;
+	}
+	if (!IOPinEnablePortEvent(pei, portEvt))
+	{
+		g_PeiPortDemoStatus = -13;
+		return 1;
+	}
+	if (pei.EventEndpoint(staleEvt) != 0U)
+	{
+		g_PeiPortDemoStatus = -14;
+		return 1;
+	}
+	if (!IOPinEnableTask(pei, portEvt, s_Leds[0].PortNo,
+		s_Leds[0].PinNo, IOPIN_TASK_TOGGLE))
+	{
+		g_PeiPortDemoStatus = -15;
 		return 1;
 	}
 
