@@ -57,6 +57,7 @@ SOFTWARE.
 #include <stdbool.h>
 
 #include "coredev/iopincfg.h"
+#include "coredev/pei.h"
 
 /** @addtogroup Coredev
   * @{
@@ -66,6 +67,19 @@ SOFTWARE.
 #define QDEC_PHA_PIN_IDX		0		//!< Phase A input
 #define QDEC_PHB_PIN_IDX		1		//!< Phase B input
 #define QDEC_LED_PIN_IDX		2		//!< Optional LED output, PinNo -1 or NbPins 2 for none
+
+typedef enum {
+	QDEC_PEI_EVENT_SAMPLERDY,
+	QDEC_PEI_EVENT_REPORTRDY,
+	QDEC_PEI_EVENT_ACCOF,
+	QDEC_PEI_EVENT_DBLRDY,
+	QDEC_PEI_EVENT_STOPPED
+} QDEC_PEI_EVENT;
+
+typedef enum {
+	QDEC_PEI_TASK_START,
+	QDEC_PEI_TASK_STOP
+} QDEC_PEI_TASK;
 
 typedef struct __Qdec_Device QdecDev_t;
 
@@ -131,6 +145,18 @@ bool QdecInit(QdecDev_t * const pDev, const QdecCfg_t * const pCfg);
  * @return	true - success
  */
 bool QdecStart(QdecDev_t * const pDev);
+
+// Prepare the configured QDEC to accept a hardware START task without
+// starting sampling. The QDEC ISR still owns READCLRACC and position folding.
+bool QdecPreparePeiStart(QdecDev_t *pDev);
+bool QdecEnablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, QDEC_PEI_EVENT Event);
+bool QdecDisablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+bool QdecConnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, QDEC_PEI_TASK Task);
+bool QdecDisconnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, QDEC_PEI_TASK Task);
 
 /**
  * @brief	Stop sampling the inputs
@@ -223,6 +249,32 @@ public:
 	 * @return	Error count
 	 */
 	virtual uint32_t ErrCount() { return QdecErrCount(&vDev); }
+
+	bool PreparePeiStart()
+	{
+		return QdecPreparePeiStart(&vDev);
+	}
+
+	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
+		QDEC_PEI_EVENT Event)
+	{
+		return QdecEnablePeiEvent(&vDev, PeiDev, &Evt, Event);
+	}
+
+	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return QdecDisablePeiEvent(&vDev, PeiDev, Evt);
+	}
+
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, QDEC_PEI_TASK Task)
+	{
+		return QdecConnectPeiTask(&vDev, PeiDev, Evt, Task);
+	}
+
+	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, QDEC_PEI_TASK Task)
+	{
+		return QdecDisconnectPeiTask(&vDev, PeiDev, Evt, Task);
+	}
 
 	operator QdecDev_t * () { return &vDev; }
 

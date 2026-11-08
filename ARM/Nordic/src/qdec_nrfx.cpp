@@ -55,6 +55,15 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "coredev/qdec.h"
 
+// Optional PPI matrix: plain QDEC firmware links no PEI code.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 #ifndef NRF_QDEC
 #error "qdec_nrfx: no single QDEC instance on this MCU"
 #endif
@@ -352,4 +361,162 @@ void QDEC_IRQHandler(void)
 			}
 		}
 	}
+}
+
+
+// The driver owns QDEC's accumulator and READCLRACC task. Hardware PEI
+// may start/stop sampling and observe events, but never clears ACC.
+static bool QdecPeiOwner(const QdecDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	return pDev != NULL && pDev == s_pQdecnRFDev &&
+		pDev->pDevData == (void *)NRF_QDEC && pDev->DevNo == 0;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+static PeiEndpoint_t QdecPeiEventEndpoint(QDEC_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES)
+	switch (Event)
+	{
+		case QDEC_PEI_EVENT_SAMPLERDY:
+			return (PeiEndpoint_t)&NRF_QDEC->EVENTS_SAMPLERDY;
+		case QDEC_PEI_EVENT_REPORTRDY:
+			return (PeiEndpoint_t)&NRF_QDEC->EVENTS_REPORTRDY;
+		case QDEC_PEI_EVENT_ACCOF:
+			return (PeiEndpoint_t)&NRF_QDEC->EVENTS_ACCOF;
+		case QDEC_PEI_EVENT_DBLRDY:
+			return (PeiEndpoint_t)&NRF_QDEC->EVENTS_DBLRDY;
+		case QDEC_PEI_EVENT_STOPPED:
+			return (PeiEndpoint_t)&NRF_QDEC->EVENTS_STOPPED;
+		default:
+			return 0U;
+	}
+#else
+	(void)Event;
+	return 0U;
+#endif
+}
+
+static PeiEndpoint_t QdecPeiTaskEndpoint(QDEC_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES)
+	switch (Task)
+	{
+		case QDEC_PEI_TASK_START:
+			return (PeiEndpoint_t)&NRF_QDEC->TASKS_START;
+		case QDEC_PEI_TASK_STOP:
+			return (PeiEndpoint_t)&NRF_QDEC->TASKS_STOP;
+		default:
+			return 0U;
+	}
+#else
+	(void)Task;
+	return 0U;
+#endif
+}
+
+extern "C" bool QdecPreparePeiStart(QdecDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	if (!QdecPeiOwner(pDev))
+	{
+		return false;
+	}
+	// Initialize the hardware for a subsequent PPI-driven START task;
+	// keep the normal REPORTRDY/DBLRDY/ACCOF IRQs enabled so totals
+	// continue to be folded by the existing QDEC driver.
+	NRF_QDEC->ENABLE = QDEC_ENABLE_ENABLE_Enabled;
+	return true;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool QdecEnablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, QDEC_PEI_EVENT Event)
+{
+	PeiEndpoint_t endpoint;
+
+	if (!QdecPeiOwner(pDev) || pPei == NULL || pEvt == NULL ||
+		PeiBindEvent == NULL)
+	{
+		return false;
+	}
+	endpoint = QdecPeiEventEndpoint(Event);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt, endpoint);
+}
+
+extern "C" bool QdecDisablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+	PeiEndpoint_t endpoint;
+	int event;
+
+	if (!QdecPeiOwner(pDev) || pPei == NULL ||
+		PeiGetEventEndpoint == NULL || PeiUnbindEvent == NULL)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	for (event = QDEC_PEI_EVENT_SAMPLERDY;
+		event <= QDEC_PEI_EVENT_STOPPED; event++)
+	{
+		if (endpoint != 0U &&
+			endpoint == QdecPeiEventEndpoint((QDEC_PEI_EVENT)event))
+		{
+			return PeiUnbindEvent(pPei, Evt, endpoint);
+		}
+	}
+	return false;
+}
+
+extern "C" bool QdecConnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, QDEC_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (!QdecPeiOwner(pDev) || pPei == NULL ||
+		PeiConnectTask == NULL)
+	{
+		return false;
+	}
+#if defined(NRF52_SERIES)
+	if (NRF_QDEC->ENABLE != QDEC_ENABLE_ENABLE_Enabled)
+	{
+		return false;
+	}
+#endif
+	endpoint = QdecPeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+extern "C" bool QdecDisconnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, QDEC_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (!QdecPeiOwner(pDev) || pPei == NULL ||
+		PeiDisconnectTask == NULL)
+	{
+		return false;
+	}
+	endpoint = QdecPeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
 }
