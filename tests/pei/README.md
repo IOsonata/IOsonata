@@ -32,6 +32,39 @@ a global interrupt-disabled section.
 These are host model tests, **not** a hardware or full MCU-library build.
 
 
+## Non-PEI firmware link isolation
+
+A standard Timer or GPIO application must not pull the PEI matrix or
+nRF52 PPI backend from `libIOsonata_nRF52832.a`. The TimerDemo
+linker map previously demonstrated the regression:
+
+```text
+iopincfg_nrfx.o -> pei.o (PeiGetEventEndpoint)
+pei.o -> pei_nrf52.o (PeiConnect)
+```
+
+Normal GPIO functions now carry *weak* references to the optional PEI
+binding functions; without a PEI application they cannot extract either
+archive member. Timer initialization leaves its optional PEI callbacks
+unset. Only a call to `TimerEnablePeiTrigger` or
+`TimerEnablePeiEvent` explicitly requests the MCU's PEI callbacks.
+HF Timer PEI routing state reuses the existing trigger fields rather
+than allocating additional PEI-only arrays.
+
+Clean-build the nRF52832 HAL and TimerDemo, then check the new map:
+
+```sh
+python3 tests/pei/check_no_pei_link.py \
+  ARM/Nordic/nRF52/nRF52832/exemples/TimerDemo/ioc/Debug/TimerDemo.map
+```
+
+The checker fails if the archive extracts `pei.o` or
+`pei_nrf52.o`, if PEI-specific text remains in the executable,
+or if redundant HF Timer PEI state arrays remain. It ignores
+discarded debug and input sections. PEI-enabled PeiBlinky must still
+pass after this change; link isolation does not establish hardware
+operation.
+
 ## Compile against installed Nordic CMSIS headers
 
 The mock-register tests cannot catch changes in Nordic's device headers. Use

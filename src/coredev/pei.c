@@ -13,6 +13,25 @@ storage and is shared by C applications and the C++ Pei wrapper.
 
 #include "coredev/pei.h"
 
+// The MCU capability provider is optional. A weak reference cannot extract
+// the Timer backend from a static archive when PEI is not used.
+typedef struct __Timer_Device TimerDev_t;
+#if defined(__GNUC__)
+extern bool TimerPeiPrepareMcu(TimerDev_t *pTimer) __attribute__((weak));
+#else
+extern bool TimerPeiPrepareMcu(TimerDev_t *pTimer);
+#endif
+
+bool PeiTimerPrepare(TimerDev_t *pTimer)
+{
+	if (pTimer == NULL || TimerPeiPrepareMcu == NULL)
+	{
+		return false;
+	}
+	return TimerPeiPrepareMcu(pTimer);
+}
+
+
 static int PeiFindEvent(const PeiDev_t *pPei, PeiEvent_t Evt)
 {
 	uint32_t slot;

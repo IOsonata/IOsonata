@@ -285,6 +285,10 @@ extern "C" {
  */
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 
+// Internal opt-in: install the MCU's PEI callbacks only when a PEI
+// Timer API is used. Normal Timer initialization never loads PEI.
+bool PeiTimerPrepare(TimerDev_t *pTimer);
+
 int TimerGetLowFreqDevCount(void);
 int TimerGetHighFreqDevCount(void);
 int TimerGetHighFreqDevNo(void);
@@ -342,7 +346,15 @@ static inline int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
 	int trig;
 
 	if (pTimer == NULL || pPei == NULL || pEvt == NULL || msPeriod == 0U ||
-		pTimer->FindAvailTrigger == NULL || pTimer->EnablePeiTrigger == NULL)
+		pTimer->FindAvailTrigger == NULL)
+	{
+		return -1;
+	}
+	if (pTimer->EnablePeiTrigger == NULL && !PeiTimerPrepare(pTimer))
+	{
+		return -1;
+	}
+	if (pTimer->EnablePeiTrigger == NULL)
 	{
 		return -1;
 	}
@@ -366,8 +378,15 @@ static inline int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
 static inline bool TimerEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, uint32_t Event)
 {
-	if (pTimer == NULL || pPei == NULL || pEvt == NULL ||
-		pTimer->EnablePeiEvent == NULL)
+	if (pTimer == NULL || pPei == NULL || pEvt == NULL)
+	{
+		return false;
+	}
+	if (pTimer->EnablePeiEvent == NULL && !PeiTimerPrepare(pTimer))
+	{
+		return false;
+	}
+	if (pTimer->EnablePeiEvent == NULL)
 	{
 		return false;
 	}

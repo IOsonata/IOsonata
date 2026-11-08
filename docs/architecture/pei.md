@@ -152,6 +152,33 @@ SoftDevice/SDC coexistence, cross-compilation against installed nRF53
 MDK and nRF5340 on-board tests remain pending.
 
 
+## Optional PEI linking
+
+The standard nRF52 GPIO and Timer HAL must not pull `pei.o` or
+`pei_nrf52.o` into a firmware that does not use PEI. The previous
+TimerDemo map showed `iopincfg_nrfx.o` extracting the PEI matrix via
+`PeiGetEventEndpoint`, then that matrix extracting the PPI backend.
+
+GPIO PEI entry points remain implemented directly in
+`iopincfg_nrfx.c`, but their matrix references are weak. They check
+for the optional matrix functions before reserving hardware channels.
+Ordinary GPIO calls cannot extract the PEI matrix from a static HAL
+archive.
+
+`TimerInit` does not install PEI trigger callbacks. The first explicit
+PEI Timer call invokes `PeiTimerPrepare`, which installs the applicable
+MCU callback through `TimerPeiPrepareMcu`. Non-PEI Timer applications
+do not reference this optional path. HF Timer PEI trigger ownership
+reuses the existing `TimerTrig_t` and CC bookkeeping fields, removing
+the separate per-device `s_nRFxTimer*Pei` arrays. Hardware-only
+triggers still release PEI routes through `DisableTimerTrigger`.
+
+This depends on GCC weak references and link garbage collection, as
+used in the Eclipse managed projects. The source changes are not a
+substitute for testing the actual final link: build TimerDemo and run
+`tests/pei/check_no_pei_link.py` on its **newly generated** linker
+map. Verify separately that PeiBlinky still functions with PEI.
+
 ## nRF52 PEI completion scope
 
 Development stays on nRF52 until the product-variant peripheral event/task

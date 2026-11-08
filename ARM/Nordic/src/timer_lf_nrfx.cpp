@@ -36,6 +36,17 @@ SOFTWARE.
 #include "timer_nrfx.h"
 #include "coredev/pei.h"
 
+// PEI is an optional Timer feature. Weak references let ordinary RTC
+// applications link without the PEI matrix or nRF52 PPI backend.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiUnbindEvent
+#pragma weak PeiReleaseEvent
+#pragma weak PeiConnect
+#pragma weak PeiEnable
+#pragma weak PeiDisconnect
+#endif
+
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 #define NRF_CLOCK		NRF_CLOCK_NS
@@ -449,6 +460,7 @@ static bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	int idx;
 
 	if (pTimer == nullptr || pPei == nullptr || pEvent == nullptr ||
+		PeiBindEvent == nullptr || PeiUnbindEvent == nullptr ||
 		pPei->DevNo != 0)
 	{
 		return false;
@@ -517,7 +529,8 @@ static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	int devno;
 	int i;
 
-	if (pTimer == nullptr || pPei == nullptr || Event == 0U)
+	if (pTimer == nullptr || pPei == nullptr || Event == 0U ||
+		PeiUnbindEvent == nullptr)
 	{
 		return false;
 	}
@@ -582,6 +595,9 @@ static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 	uint32_t bit;
 
 	if (pTimer == nullptr || pPei == nullptr || pEvent == nullptr ||
+		PeiBindEvent == nullptr || PeiUnbindEvent == nullptr ||
+		PeiReleaseEvent == nullptr || PeiConnect == nullptr ||
+		PeiEnable == nullptr || PeiDisconnect == nullptr ||
 		pPei->DevNo != 0 || nsPeriod == 0U ||
 		(Type != TIMER_TRIG_TYPE_SINGLE &&
 			Type != TIMER_TRIG_TYPE_CONTINUOUS))
@@ -694,6 +710,31 @@ static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 	return true;
 }
 
+// Called only when an application explicitly uses PEI with this RTC.
+// Ordinary RTC initialization has no dependency on the PEI matrix.
+bool nRFxRtcInstallPei(TimerDev_t *pTimer)
+{
+	int devno;
+
+	if (pTimer == nullptr || PeiBindEvent == nullptr ||
+		PeiUnbindEvent == nullptr || PeiReleaseEvent == nullptr ||
+		PeiConnect == nullptr || PeiEnable == nullptr ||
+		PeiDisconnect == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX ||
+		s_pnRfxRtcDev[devno] != pTimer)
+	{
+		return false;
+	}
+	pTimer->EnablePeiTrigger = nRFxRtcEnablePeiTrigger;
+	pTimer->EnablePeiEvent = nRFxRtcEnablePeiEvent;
+	pTimer->DisablePeiEvent = nRFxRtcDisablePeiEvent;
+	return true;
+}
+
 static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                               	  	 TimerTrigEvtHandler_t Handler, void *pContext)
 {
@@ -754,6 +795,10 @@ static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	pRoute = &rtc.pPei[TrigNo];
 	if (pRoute->pPei != nullptr)
 	{
+		if (PeiUnbindEvent == nullptr || PeiDisconnect == nullptr)
+		{
+			return;
+		}
 		// Stop hardware event forwarding before the compare register can
 		// be reused. Keep ownership on any failed teardown.
 		rtc.pReg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << TrigNo;
@@ -777,6 +822,10 @@ static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	}
 	else if (pRoute->Automatic.Handle != 0U)
 	{
+		if (PeiDisconnect == nullptr)
+		{
+			return;
+		}
 		// A failed setup kept an internal PPI channel reserved.
 		PeiDisconnect(&pRoute->Automatic);
 		if (pRoute->Automatic.Handle != 0U)
@@ -882,9 +931,9 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     pTimer->FindAvailTrigger = nRFxRtcFindAvailTrigger;
     pTimer->DisableTrigger = nRFxRtcDisableTrigger;
     pTimer->EnableTrigger = nRFxRtcEnableTrigger;
-	pTimer->EnablePeiTrigger = nRFxRtcEnablePeiTrigger;
-	pTimer->EnablePeiEvent = nRFxRtcEnablePeiEvent;
-	pTimer->DisablePeiEvent = nRFxRtcDisablePeiEvent;
+	pTimer->EnablePeiTrigger = nullptr;
+	pTimer->EnablePeiEvent = nullptr;
+	pTimer->DisablePeiEvent = nullptr;
 	pTimer->GetTaskEndpoint = nRFxRtcTaskEndpoint;
 	pTimer->ExecuteTask = nRFxRtcExecuteTask;
     pTimer->DisableExtTrigger = nRFxRtcDisableExtTrigger;

@@ -40,6 +40,17 @@ SOFTWARE.
 
 #include "iopinctrl.h"
 
+// PEI is optional. These are weak references so ordinary GPIO calls
+// never extract the PEI matrix or PPI backend from the static HAL archive.
+// A PEI application initializes PeiDev_t, which supplies the definitions.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 NRF_GPIO_Type *nRFGpioGetReg(int PortNo);
 void __WEAK GPIOTE_IRQHandler(void);
 
@@ -1071,7 +1082,7 @@ bool IOPinEnableEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
 	PeiEndpoint_t endpoint;
 	int channel;
 
-	if (pPei == NULL || pEvt == NULL)
+	if (pPei == NULL || pEvt == NULL || PeiBindEvent == NULL)
 	{
 		return false;
 	}
@@ -1098,7 +1109,8 @@ bool IOPinDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt)
 	int count;
 	int i;
 
-	if (pPei == NULL)
+	if (pPei == NULL || PeiGetEventEndpoint == NULL ||
+		PeiUnbindEvent == NULL)
 	{
 		return false;
 	}
@@ -1136,7 +1148,7 @@ bool IOPinEnableTask(PeiDev_t *pPei, PeiEvent_t Evt,
 	PeiEndpoint_t endpoint;
 	int channel;
 
-	if (pPei == NULL)
+	if (pPei == NULL || PeiConnectTask == NULL)
 	{
 		return false;
 	}
@@ -1166,7 +1178,8 @@ bool IOPinDisableTask(PeiDev_t *pPei, PeiEvent_t Evt,
 	int channelCount;
 	int i;
 
-	if (pPei == NULL || PortNo < 0 || PortNo >= GPIO_COUNT ||
+	if (pPei == NULL || PeiDisconnectTask == NULL ||
+		PortNo < 0 || PortNo >= GPIO_COUNT ||
 		PinNo < 0 || PinNo >= 32)
 	{
 		return false;
