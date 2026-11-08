@@ -59,3 +59,19 @@ bool PeiHalRtcCppApplication(Timer &timer, Pei &pei)
 	}
 	return pei.ReleaseEvent(event);
 }
+
+/* Compile-only check: the shared source also accepts a Pei object. */
+bool PeiHalPortCppApplication(Pei &pei)
+{
+	PeiEvent_t evt = 0U;
+
+	if (!IOPinEnablePortEvent(pei, evt))
+	{
+		return false;
+	}
+	if (!IOPinDisablePortEvent(pei, evt))
+	{
+		return false;
+	}
+	return pei.ReleaseEvent(evt);
+}

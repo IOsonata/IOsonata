@@ -69,3 +69,22 @@ bool PeiHalRtcCApplication(TimerDev_t *pTimer, PeiDev_t *pPei)
 	}
 	return PeiReleaseEvent(pPei, &event);
 }
+
+/* Compile-only check of the shared PORT source and its lifetime. */
+bool PeiHalPortCApplication(PeiDev_t *pPei)
+{
+	PeiEvent_t evt;
+
+	evt = 0U;
+	IOPinSetSense(0, 2, IOPINSENSE_LOW_TRANSITION);
+	if (!IOPinEnablePortEvent(pPei, &evt))
+	{
+		return false;
+	}
+	if (!IOPinDisablePortEvent(pPei, evt))
+	{
+		return false;
+	}
+	IOPinSetSense(0, 2, IOPINSENSE_DISABLE);
+	return PeiReleaseEvent(pPei, &evt);
+}
