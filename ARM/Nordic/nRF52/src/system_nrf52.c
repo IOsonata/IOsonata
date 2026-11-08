@@ -115,7 +115,8 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 __WEAK McuOsc_t g_McuOsc = {
 	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, },
 	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, },
-	.bUSBClk = false
+	.bUSBClk = false,
+	.DcDc = 0,
 };
 
 
@@ -395,4 +396,15 @@ void SystemInit(void)
             NVIC_SystemReset();
         }
     #endif
+
+	// DC/DC regulator stages of the board, from g_McuOsc. The others use the
+	// linear regulator.
+	NRF_POWER->DCDCEN = (g_McuOsc.DcDc & SYSTEM_DCDC_MAIN) ?
+						(POWER_DCDCEN_DCDCEN_Enabled << POWER_DCDCEN_DCDCEN_Pos) :
+						(POWER_DCDCEN_DCDCEN_Disabled << POWER_DCDCEN_DCDCEN_Pos);
+#if defined(POWER_DCDCEN0_DCDCEN_Msk)
+	NRF_POWER->DCDCEN0 = (g_McuOsc.DcDc & SYSTEM_DCDC_HIGHVOLT) ?
+						(POWER_DCDCEN0_DCDCEN_Enabled << POWER_DCDCEN0_DCDCEN_Pos) :
+						(POWER_DCDCEN0_DCDCEN_Disabled << POWER_DCDCEN0_DCDCEN_Pos);
+#endif
 }

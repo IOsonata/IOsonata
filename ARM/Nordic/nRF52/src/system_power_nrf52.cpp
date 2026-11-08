@@ -1,13 +1,12 @@
 /**-------------------------------------------------------------------------
-@file	mcu_power_nrf52.cpp
+@file	system_power_nrf52.cpp
 
-@brief	MCU power control implementation on the nRF52
+@brief	Power functions of system_core_clock.h on the nRF52
 
 Power off is System OFF. RESETREAS keeps adding reasons until it is cleared,
 an empty value is a power on or brown out reset. The retention registers are
-GPREGRET and GPREGRET2, 8 bits each. DC/DC stages: REG1 (DCDCEN) supplies
-the core on every part, REG0 (DCDCEN0) is the high voltage input stage of
-the nRF52840.
+GPREGRET and GPREGRET2, 8 bits each. The DC/DC regulator is set by SystemInit
+from g_McuOsc.
 
 RAM is in blocks RAM[n] of sections: RAM0 to RAM7 have two 4 KB sections
 each (the first 64 KB), RAM8 of the nRF52833/840 has 32 KB sections. The
@@ -18,7 +17,7 @@ When a SoftDevice is enabled it owns POWER, the functions then go through
 its sd_power calls.
 
 With a debugger attached, System OFF is emulated: the CPU keeps running and
-McuPowerOff stays in its WFE loop.
+SystemPowerOff stays in its WFE loop.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 7, 2026
@@ -59,27 +58,27 @@ SOFTWARE.
 #include "nrf_soc.h"
 #endif
 
-#include "coredev/mcu_power.h"
+#include "coredev/system_core_clock.h"
 
-#define MCU_PWR_NRF52_NB_RETREG		2
-#define MCU_PWR_NRF52_RETREG_MSK	0xFFUL
+#define SYS_PWR_NRF52_NB_RETREG		2
+#define SYS_PWR_NRF52_RETREG_MSK	0xFFUL
 
 // RAM sections: 4 KB in the first 64 KB (RAM0 to RAM7), 32 KB above (RAM8)
-#define MCU_PWR_NRF52_RAM_DATA		0x20000000UL
-#define MCU_PWR_NRF52_RAM_CODE		0x00800000UL
-#define MCU_PWR_NRF52_SMALL_SECT	4096UL
-#define MCU_PWR_NRF52_SMALL_END		65536UL
-#define MCU_PWR_NRF52_SMALL_PERBLK	2UL
-#define MCU_PWR_NRF52_LARGE_SECT	32768UL
-#define MCU_PWR_NRF52_NB_RAMBLK		(sizeof(NRF_POWER->RAM) / sizeof(NRF_POWER->RAM[0]))
+#define SYS_PWR_NRF52_RAM_DATA		0x20000000UL
+#define SYS_PWR_NRF52_RAM_CODE		0x00800000UL
+#define SYS_PWR_NRF52_SMALL_SECT	4096UL
+#define SYS_PWR_NRF52_SMALL_END		65536UL
+#define SYS_PWR_NRF52_SMALL_PERBLK	2UL
+#define SYS_PWR_NRF52_LARGE_SECT	32768UL
+#define SYS_PWR_NRF52_NB_RAMBLK		(sizeof(NRF_POWER->RAM) / sizeof(NRF_POWER->RAM[0]))
 
-static bool s_bMcuPwrResetRead = false;
-static uint32_t s_McuPwrResetReason = 0;
+static bool s_bSysPwrResetRead = false;
+static uint32_t s_SysPwrResetReason = 0;
 
 // sd_softdevice_is_enabled is an SVC that only a programmed SoftDevice
 // implements, so the image is looked for first: its magic number follows the
 // MBR.
-static bool McuPwrSdEnabled(void)
+static bool SysPwrSdEnabled(void)
 {
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 	const volatile uint32_t *pMagic = (const volatile uint32_t *)(
@@ -100,67 +99,67 @@ static bool McuPwrSdEnabled(void)
 #endif
 }
 
-static uint32_t McuPwrResetMap(uint32_t ResetReas)
+static uint32_t SysPwrResetMap(uint32_t ResetReas)
 {
 	uint32_t r = 0;
 
 	if (ResetReas == 0)
 	{
-		return MCU_RESET_POWERON;
+		return SYSTEM_RESET_POWERON;
 	}
 	if (ResetReas & POWER_RESETREAS_RESETPIN_Msk)
 	{
-		r |= MCU_RESET_PIN;
+		r |= SYSTEM_RESET_PIN;
 	}
 	if (ResetReas & POWER_RESETREAS_DOG_Msk)
 	{
-		r |= MCU_RESET_WDT;
+		r |= SYSTEM_RESET_WDT;
 	}
 	if (ResetReas & POWER_RESETREAS_SREQ_Msk)
 	{
-		r |= MCU_RESET_SOFT;
+		r |= SYSTEM_RESET_SOFT;
 	}
 	if (ResetReas & POWER_RESETREAS_LOCKUP_Msk)
 	{
-		r |= MCU_RESET_LOCKUP;
+		r |= SYSTEM_RESET_LOCKUP;
 	}
 	if (ResetReas & POWER_RESETREAS_OFF_Msk)
 	{
-		r |= MCU_RESET_WAKE_PIN;
+		r |= SYSTEM_RESET_WAKE_PIN;
 	}
 #ifdef POWER_RESETREAS_LPCOMP_Msk
 	if (ResetReas & POWER_RESETREAS_LPCOMP_Msk)
 	{
-		r |= MCU_RESET_WAKE_COMP;
+		r |= SYSTEM_RESET_WAKE_COMP;
 	}
 #endif
 	if (ResetReas & POWER_RESETREAS_DIF_Msk)
 	{
-		r |= MCU_RESET_DEBUG;
+		r |= SYSTEM_RESET_DEBUG;
 	}
 #ifdef POWER_RESETREAS_NFC_Msk
 	if (ResetReas & POWER_RESETREAS_NFC_Msk)
 	{
-		r |= MCU_RESET_WAKE_NFC;
+		r |= SYSTEM_RESET_WAKE_NFC;
 	}
 #endif
 #ifdef POWER_RESETREAS_VBUS_Msk
 	if (ResetReas & POWER_RESETREAS_VBUS_Msk)
 	{
-		r |= MCU_RESET_WAKE_USB;
+		r |= SYSTEM_RESET_WAKE_USB;
 	}
 #endif
 
 	return r;
 }
 
-uint32_t McuResetReason(void)
+uint32_t SystemResetReason(void)
 {
-	if (s_bMcuPwrResetRead == false)
+	if (s_bSysPwrResetRead == false)
 	{
 		uint32_t reas = 0;
 
-		if (McuPwrSdEnabled())
+		if (SysPwrSdEnabled())
 		{
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 			(void)sd_power_reset_reason_get(&reas);
@@ -173,16 +172,16 @@ uint32_t McuResetReason(void)
 			NRF_POWER->RESETREAS = reas;
 		}
 
-		s_McuPwrResetReason = McuPwrResetMap(reas);
-		s_bMcuPwrResetRead = true;
+		s_SysPwrResetReason = SysPwrResetMap(reas);
+		s_bSysPwrResetRead = true;
 	}
 
-	return s_McuPwrResetReason;
+	return s_SysPwrResetReason;
 }
 
-void McuPowerOff(void)
+void SystemPowerOff(void)
 {
-	if (McuPwrSdEnabled())
+	if (SysPwrSdEnabled())
 	{
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 		(void)sd_power_system_off();
@@ -201,21 +200,21 @@ void McuPowerOff(void)
 	}
 }
 
-int McuRetRegCount(void)
+int SystemRetRegCount(void)
 {
-	return MCU_PWR_NRF52_NB_RETREG;
+	return SYS_PWR_NRF52_NB_RETREG;
 }
 
-uint32_t McuRetRegRead(int Idx)
+uint32_t SystemRetRegRead(int Idx)
 {
-	if (Idx < 0 || Idx >= MCU_PWR_NRF52_NB_RETREG)
+	if (Idx < 0 || Idx >= SYS_PWR_NRF52_NB_RETREG)
 	{
 		return 0;
 	}
 
 	uint32_t val = 0;
 
-	if (McuPwrSdEnabled())
+	if (SysPwrSdEnabled())
 	{
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 		(void)sd_power_gpregret_get((uint32_t)Idx, &val);
@@ -226,23 +225,23 @@ uint32_t McuRetRegRead(int Idx)
 		val = Idx == 0 ? NRF_POWER->GPREGRET : NRF_POWER->GPREGRET2;
 	}
 
-	return val & MCU_PWR_NRF52_RETREG_MSK;
+	return val & SYS_PWR_NRF52_RETREG_MSK;
 }
 
-bool McuRetRegWrite(int Idx, uint32_t Val)
+bool SystemRetRegWrite(int Idx, uint32_t Val)
 {
-	if (Idx < 0 || Idx >= MCU_PWR_NRF52_NB_RETREG)
+	if (Idx < 0 || Idx >= SYS_PWR_NRF52_NB_RETREG)
 	{
 		return false;
 	}
 
-	Val &= MCU_PWR_NRF52_RETREG_MSK;
+	Val &= SYS_PWR_NRF52_RETREG_MSK;
 
-	if (McuPwrSdEnabled())
+	if (SysPwrSdEnabled())
 	{
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 		// The SoftDevice only sets or clears bits
-		if (sd_power_gpregret_clr((uint32_t)Idx, MCU_PWR_NRF52_RETREG_MSK) != NRF_SUCCESS)
+		if (sd_power_gpregret_clr((uint32_t)Idx, SYS_PWR_NRF52_RETREG_MSK) != NRF_SUCCESS)
 		{
 			return false;
 		}
@@ -264,55 +263,18 @@ bool McuRetRegWrite(int Idx, uint32_t Val)
 	return true;
 }
 
-bool McuDcDcEnable(int Stage, bool bEn)
-{
-	bool sd = McuPwrSdEnabled();
-
-	if (Stage == MCU_DCDC_MAIN)
-	{
-		if (sd)
-		{
-#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
-			return sd_power_dcdc_mode_set(bEn ? NRF_POWER_DCDC_ENABLE : NRF_POWER_DCDC_DISABLE) == NRF_SUCCESS;
-#endif
-		}
-		NRF_POWER->DCDCEN = bEn ? POWER_DCDCEN_DCDCEN_Enabled : POWER_DCDCEN_DCDCEN_Disabled;
-
-		return true;
-	}
-
-#ifdef POWER_DCDCEN0_DCDCEN_Msk
-	if (Stage == MCU_DCDC_HIGHVOLT)
-	{
-		if (sd)
-		{
-#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT && defined(S140)
-			return sd_power_dcdc0_mode_set(bEn ? NRF_POWER_DCDC_ENABLE : NRF_POWER_DCDC_DISABLE) == NRF_SUCCESS;
-#else
-			return false;
-#endif
-		}
-		NRF_POWER->DCDCEN0 = bEn ? POWER_DCDCEN0_DCDCEN_Enabled : POWER_DCDCEN0_DCDCEN_Disabled;
-
-		return true;
-	}
-#endif
-
-	return false;
-}
-
-bool McuRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
+bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 {
 	uint32_t ramsize = NRF_FICR->INFO.RAM * 1024UL;
 	uintptr_t base;
 
-	if (Addr >= MCU_PWR_NRF52_RAM_DATA && Addr - MCU_PWR_NRF52_RAM_DATA < ramsize)
+	if (Addr >= SYS_PWR_NRF52_RAM_DATA && Addr - SYS_PWR_NRF52_RAM_DATA < ramsize)
 	{
-		base = MCU_PWR_NRF52_RAM_DATA;
+		base = SYS_PWR_NRF52_RAM_DATA;
 	}
-	else if (Addr >= MCU_PWR_NRF52_RAM_CODE && Addr - MCU_PWR_NRF52_RAM_CODE < ramsize)
+	else if (Addr >= SYS_PWR_NRF52_RAM_CODE && Addr - SYS_PWR_NRF52_RAM_CODE < ramsize)
 	{
-		base = MCU_PWR_NRF52_RAM_CODE;
+		base = SYS_PWR_NRF52_RAM_CODE;
 	}
 	else
 	{
@@ -327,7 +289,7 @@ bool McuRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 	}
 
 	uint32_t end = off + Size;
-	bool sd = McuPwrSdEnabled();
+	bool sd = SysPwrSdEnabled();
 
 	while (off < end)
 	{
@@ -335,20 +297,20 @@ bool McuRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 		uint32_t sect;
 		uint32_t next;
 
-		if (off < MCU_PWR_NRF52_SMALL_END)
+		if (off < SYS_PWR_NRF52_SMALL_END)
 		{
-			blk = off / (MCU_PWR_NRF52_SMALL_SECT * MCU_PWR_NRF52_SMALL_PERBLK);
-			sect = (off / MCU_PWR_NRF52_SMALL_SECT) % MCU_PWR_NRF52_SMALL_PERBLK;
-			next = (off / MCU_PWR_NRF52_SMALL_SECT + 1) * MCU_PWR_NRF52_SMALL_SECT;
+			blk = off / (SYS_PWR_NRF52_SMALL_SECT * SYS_PWR_NRF52_SMALL_PERBLK);
+			sect = (off / SYS_PWR_NRF52_SMALL_SECT) % SYS_PWR_NRF52_SMALL_PERBLK;
+			next = (off / SYS_PWR_NRF52_SMALL_SECT + 1) * SYS_PWR_NRF52_SMALL_SECT;
 		}
 		else
 		{
-			blk = MCU_PWR_NRF52_SMALL_END / (MCU_PWR_NRF52_SMALL_SECT * MCU_PWR_NRF52_SMALL_PERBLK);
-			sect = (off - MCU_PWR_NRF52_SMALL_END) / MCU_PWR_NRF52_LARGE_SECT;
-			next = MCU_PWR_NRF52_SMALL_END + (sect + 1) * MCU_PWR_NRF52_LARGE_SECT;
+			blk = SYS_PWR_NRF52_SMALL_END / (SYS_PWR_NRF52_SMALL_SECT * SYS_PWR_NRF52_SMALL_PERBLK);
+			sect = (off - SYS_PWR_NRF52_SMALL_END) / SYS_PWR_NRF52_LARGE_SECT;
+			next = SYS_PWR_NRF52_SMALL_END + (sect + 1) * SYS_PWR_NRF52_LARGE_SECT;
 		}
 
-		if (blk >= MCU_PWR_NRF52_NB_RAMBLK)
+		if (blk >= SYS_PWR_NRF52_NB_RAMBLK)
 		{
 			return false;
 		}

@@ -48,7 +48,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "coredev/uart.h"
-#include "coredev/mcu_power.h"
+#include "coredev/system_core_clock.h"
 #include "syslog.h"
 #include "idelay.h"
 
@@ -108,16 +108,16 @@ static const struct {
 	uint32_t Reason;
 	const char *pName;
 } s_ResetNames[] = {
-	{ MCU_RESET_POWERON, "power on" },
-	{ MCU_RESET_PIN, "reset pin" },
-	{ MCU_RESET_WDT, "watchdog" },
-	{ MCU_RESET_SOFT, "software" },
-	{ MCU_RESET_LOCKUP, "lockup" },
-	{ MCU_RESET_DEBUG, "debug interface" },
-	{ MCU_RESET_WAKE_PIN, "wake up by a pin" },
-	{ MCU_RESET_WAKE_COMP, "wake up by the comparator" },
-	{ MCU_RESET_WAKE_NFC, "wake up by NFC" },
-	{ MCU_RESET_WAKE_USB, "wake up by USB" },
+	{ SYSTEM_RESET_POWERON, "power on" },
+	{ SYSTEM_RESET_PIN, "reset pin" },
+	{ SYSTEM_RESET_WDT, "watchdog" },
+	{ SYSTEM_RESET_SOFT, "software" },
+	{ SYSTEM_RESET_LOCKUP, "lockup" },
+	{ SYSTEM_RESET_DEBUG, "debug interface" },
+	{ SYSTEM_RESET_WAKE_PIN, "wake up by a pin" },
+	{ SYSTEM_RESET_WAKE_COMP, "wake up by the comparator" },
+	{ SYSTEM_RESET_WAKE_NFC, "wake up by NFC" },
+	{ SYSTEM_RESET_WAKE_USB, "wake up by USB" },
 };
 
 int main()
@@ -127,7 +127,7 @@ int main()
 
 	SysLogPrintf(SysLogGet(), "PowerOffDemo\r\n");
 
-	uint32_t reason = McuResetReason();
+	uint32_t reason = SystemResetReason();
 
 	const char *sep = " ";
 
@@ -143,11 +143,11 @@ int main()
 	SysLogPrintf(SysLogGet(), "\r\n");
 
 	// The retention registers are cleared by a power on reset only
-	uint32_t cnt = (reason & MCU_RESET_POWERON) ? 0 : McuRetRegRead(0);
+	uint32_t cnt = (reason & SYSTEM_RESET_POWERON) ? 0 : SystemRetRegRead(0);
 
 	cnt++;
-	McuRetRegWrite(0, cnt);
-	SysLogPrintf(SysLogGet(), "Start count %u, %d retention registers\r\n", (unsigned)cnt, McuRetRegCount());
+	SystemRetRegWrite(0, cnt);
+	SysLogPrintf(SysLogGet(), "Start count %u, %d retention registers\r\n", (unsigned)cnt, SystemRetRegCount());
 
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 
@@ -162,7 +162,7 @@ int main()
 	msDelay(100);
 
 	IOPinSetSense(WAKE_BUT_PORT, WAKE_BUT_PIN, IOPINSENSE_LOW_TRANSITION);
-	McuPowerOff();
+	SystemPowerOff();
 
 	return 0;
 }

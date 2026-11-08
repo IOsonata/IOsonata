@@ -596,6 +596,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_nrf52.c</locationURI>
 		</link>
 		<link>
+			<name>src/system_power_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/system_power_nrf52.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/temp_nrf5x.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/temp_nrf5x.cpp</locationURI>
@@ -1394,11 +1399,6 @@
 			<name>src/coredev/iopincfg_nrfx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/mcu_power_nrf52.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/mcu_power_nrf52.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/qdec_nrfx.cpp</name>
