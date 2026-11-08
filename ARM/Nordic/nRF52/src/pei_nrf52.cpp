@@ -34,6 +34,8 @@ SOFTWARE.
 
 #if defined(SOFTDEVICE_PRESENT)
 #include "nrf_soc.h"
+#include "nrf_mbr.h"
+#include "nrf_sdm.h"
 #elif defined(NRFXLIB_SDC)
 #include "sdc_soc.h"
 #endif
@@ -129,19 +131,44 @@ static bool PeiNrf52ChannelFree(int Chan)
 	return true;
 }
 
-// On S132/S140 the SoC calls are required while the SoftDevice is enabled.
-// Do not call the SVC operations with PRIMASK set.
+#if defined(SOFTDEVICE_PRESENT)
+// True while the SoftDevice is enabled. A library built for S132/S140 also
+// runs applications with no SoftDevice programmed, linked at 0 without the
+// MBR: sd_softdevice_is_enabled is an SVC that only a programmed SoftDevice
+// implements, so its image is looked for first, its magic number is in its
+// info structure after the MBR. Do not call with PRIMASK set.
+static bool PeiNrf52SdEnabled(void)
+{
+	const volatile uint32_t *pMagic = (const volatile uint32_t *)(
+		SOFTDEVICE_INFO_STRUCT_ADDRESS + 4U);
+	uint8_t enabled = 0U;
+
+	if (*pMagic != 0x51B1E5DBUL)
+	{
+		return false;
+	}
+	(void)sd_softdevice_is_enabled(&enabled);
+
+	return enabled != 0U;
+}
+#endif
+
+// While the SoftDevice is enabled the SoC calls are required, the registers
+// are written directly otherwise. Do not call the SVC operations with PRIMASK
+// set.
 static bool PeiNrf52Assign(int Chan, PeiEndpoint_t Event, PeiEndpoint_t Task)
 {
 #if defined(SOFTDEVICE_PRESENT)
-	return sd_ppi_channel_assign((uint8_t)Chan,
-		(const volatile void *)(uintptr_t)Event,
-		(const volatile void *)(uintptr_t)Task) == 0U;
-#else
+	if (PeiNrf52SdEnabled())
+	{
+		return sd_ppi_channel_assign((uint8_t)Chan,
+			(const volatile void *)(uintptr_t)Event,
+			(const volatile void *)(uintptr_t)Task) == 0U;
+	}
+#endif
 	NRF_PPI->CH[Chan].EEP = (uint32_t)Event;
 	NRF_PPI->CH[Chan].TEP = (uint32_t)Task;
 	return true;
-#endif
 }
 
 static bool PeiNrf52ChannelEnable(int Chan)
@@ -149,11 +176,13 @@ static bool PeiNrf52ChannelEnable(int Chan)
 	uint32_t bit = 1UL << Chan;
 
 #if defined(SOFTDEVICE_PRESENT)
-	return sd_ppi_channel_enable_set(bit) == 0U;
-#else
+	if (PeiNrf52SdEnabled())
+	{
+		return sd_ppi_channel_enable_set(bit) == 0U;
+	}
+#endif
 	NRF_PPI->CHENSET = bit;
 	return true;
-#endif
 }
 
 static bool PeiNrf52ChannelDisable(int Chan)
@@ -161,11 +190,13 @@ static bool PeiNrf52ChannelDisable(int Chan)
 	uint32_t bit = 1UL << Chan;
 
 #if defined(SOFTDEVICE_PRESENT)
-	return sd_ppi_channel_enable_clr(bit) == 0U;
-#else
+	if (PeiNrf52SdEnabled())
+	{
+		return sd_ppi_channel_enable_clr(bit) == 0U;
+	}
+#endif
 	NRF_PPI->CHENCLR = bit;
 	return true;
-#endif
 }
 
 // A connection cannot be moved or copied: both its address and its opaque

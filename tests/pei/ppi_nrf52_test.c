@@ -21,6 +21,22 @@ static int g_fail_assign;
 static int g_fail_enable;
 static int g_fail_disable;
 
+#if defined(SOFTDEVICE_PRESENT)
+// SoftDevice programmed (magic number) and enabled, changed by
+// TestNoSoftDevice
+uint32_t g_TestSdInfo[2] = { 0U, 0x51B1E5DBU };
+static int g_sd_enabled = 1;
+static int g_sd_enabled_calls;
+
+uint32_t sd_softdevice_is_enabled(uint8_t *p_softdevice_enabled)
+{
+	assert(g_critical_depth == 0);
+	g_sd_enabled_calls++;
+	*p_softdevice_enabled = (uint8_t)g_sd_enabled;
+	return 0;
+}
+#endif
+
 uint32_t sd_ppi_channel_assign(uint8_t ch, const volatile void *evt, const volatile void *task)
 {
 	assert(g_critical_depth == 0);
@@ -243,6 +259,49 @@ static void TestSVCFailures(void)
 	PeiDisconnect(&c);
 	assert(c.Handle == 0U);
 	assert(g_TestPpi.CH[ch].EEP == 0U);
+#endif
+	assert(g_critical_depth == 0);
+}
+
+// S132/S140 library with the SoftDevice not enabled, or not programmed:
+// the PPI registers are written directly, no SVC. sd_softdevice_is_enabled
+// is not called when the SoftDevice image is not there.
+static void TestNoSoftDevice(void)
+{
+#if defined(SOFTDEVICE_PRESENT)
+	PeiConn_t c = {0};
+	PeiCfg_t cfg = Config(0x40008100U, 0x40006000U);
+	int ch;
+	int pass;
+
+	for (pass = 0; pass < 2; pass++)
+	{
+		ResetMock();
+		g_sd_enabled_calls = 0;
+		if (pass == 0)
+		{
+			g_sd_enabled = 0;
+		}
+		else
+		{
+			g_TestSdInfo[1] = 0U;
+		}
+		assert(PeiConnect(&c, &cfg));
+		ch = Channel(&c);
+		assert(g_TestPpi.CH[ch].EEP == 0x40008100U);
+		assert(g_TestPpi.CH[ch].TEP == 0x40006000U);
+		assert(PeiEnable(&c));
+		assert(g_TestPpi.CHENSET == (1UL << ch));
+		assert(PeiDisable(&c));
+		assert(g_TestPpi.CHENCLR == (1UL << ch));
+		PeiDisconnect(&c);
+		assert(c.Handle == 0U);
+		assert(g_TestPpi.CH[ch].EEP == 0U);
+		assert(g_assign_calls == 0 && g_enable_calls == 0 && g_disable_calls == 0);
+		assert(pass == 0 ? g_sd_enabled_calls > 0 : g_sd_enabled_calls == 0);
+	}
+	g_sd_enabled = 1;
+	g_TestSdInfo[1] = 0x51B1E5DBU;
 #endif
 	assert(g_critical_depth == 0);
 }
@@ -506,6 +565,7 @@ int main(void)
 	TestOccupied();
 	TestMultipleAndExhaustion();
 	TestSVCFailures();
+	TestNoSoftDevice();
 	TestCMatrix();
 	TestRtcMatrixRearm();
 	TestSwEvent();
