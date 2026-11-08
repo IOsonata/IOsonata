@@ -39,7 +39,7 @@ Status keys:
 
 | Peripheral / driver | Hardware event source coverage | Hardware task destination coverage | Current status |
 | --- | --- | --- | --- |
-| TIMER / `timer_hf_nrfx.cpp` | Compare[n], plus other events implemented by the selected TIMER | START, STOP, CLEAR, COUNT, CAPTURE[n] and device-supported tasks | Compare -> toggle and START/STOP **working hardware before C PEI refactor**; additional endpoints pending |
+| TIMER / `timer_hf_nrfx.cpp` | COMPARE[n] single-shot/continuous; other events pending | START, STOP, CLEAR; COUNT and CAPTURE[n] pending | **Continuous hardware PASS** on BLYST-NANO-DK after C refactor; single-shot COMPARE->STOP implemented but unvalidated; counter/capture mode pending |
 | RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Initial driver support implemented, unvalidated**: EVTEN routing independent of INTEN, hardware compare->STOP/CLEAR via internal PPI route, ownership and release; C and C++ APIs |
 | GPIOTE / `iopincfg_nrfx.c` | IN[n] edge, PORT event where supported | OUT[n] SET/CLEAR/TOGGLE through configured channels | IN[n] + output toggle **working hardware before C PEI refactor**; PORT and lifecycle stress pending |
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED, CALIBRATEDONE and available limits | START, SAMPLE, STOP, CALIBRATEOFFSET | **Pending**; cannot expose SAMPLE until conversion channels and EasyDMA buffers are configured and reserved |

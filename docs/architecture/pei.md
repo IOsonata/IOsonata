@@ -341,9 +341,10 @@ configure a hardware-only compare source and bind it in PEI. The GPIO
 and registers the endpoint relationship in PEI.
 
 On nRF52, the Timer driver uses hardware COMPARE->CLEAR for continuous
-triggers and refuses conflicting ISR compare or shortcut configurations,
-because this shortcut resets the entire timer counter. SINGLE hardware
-triggers are not yet supported. The common
+triggers and COMPARE->STOP for single-shot triggers, without a Timer ISR.
+Both shortcuts affect the entire counter and require exclusive compare
+ownership; conflicting ISR compare and shortcut configurations are refused.
+The single-shot path still needs MCU compilation and hardware validation.
 `Timer::DisableTimerTrigger(TrigNo)` unbinds PEI before freeing its
 compare slot. GPIO task slots share allocation with GPIOTE interrupts.
 

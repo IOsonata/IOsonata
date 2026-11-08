@@ -2,6 +2,7 @@
 """Compile and exercise the real nRF52 PEI source against mock PPI registers."""
 import pathlib
 import subprocess
+import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -11,6 +12,9 @@ COMMON = [
     "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
     "-I", str(TEST / "shim"), "-I", str(ROOT / "include"),
 ]
+
+subprocess.run([sys.executable, str(TEST / "test_check_no_pei_link.py")],
+               check=True)
 
 with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     temp = pathlib.Path(temp)

@@ -669,9 +669,9 @@ static bool nRFxTimerExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 	return true;
 }
 
-// Hardware-only compare event. A periodic shortcut clears the whole timer
-// counter; it is safe only when no software compare trigger is active.
-// This path deliberately does not enable a timer compare interrupt.
+// Hardware-only compare event. CONTINUOUS uses COMPARE->CLEAR and SINGLE
+// uses COMPARE->STOP. Both affect the entire counter and require exclusive
+// compare ownership. This path does not enable a timer compare interrupt.
 static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei, PeiEvent_t *pEvent)
 {
@@ -687,10 +687,17 @@ static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 
 	if (pTimer == nullptr || pPei == nullptr || pEvent == nullptr ||
 		PeiBindEvent == nullptr ||
-		Type != TIMER_TRIG_TYPE_CONTINUOUS || nsPeriod == 0U)
+		(Type != TIMER_TRIG_TYPE_SINGLE &&
+		 Type != TIMER_TRIG_TYPE_CONTINUOUS) || nsPeriod == 0U)
 	{
 		return false;
 	}
+#ifndef TIMER_SHORTS_COMPARE0_STOP_Msk
+	if (Type == TIMER_TRIG_TYPE_SINGLE)
+	{
+		return false;
+	}
+#endif
 	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	if (devno < 0 || devno >= TIMER_NRFX_HF_MAX || pTimer->Freq == 0U)
 	{
@@ -731,7 +738,16 @@ static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 	reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
 	reg->EVENTS_COMPARE[TrigNo] = 0U;
 	reg->CC[TrigNo] = (uint32_t)ticks;
-	reg->SHORTS |= TIMER_SHORTS_COMPARE0_CLEAR_Msk << TrigNo;
+	if (Type == TIMER_TRIG_TYPE_SINGLE)
+	{
+#ifdef TIMER_SHORTS_COMPARE0_STOP_Msk
+		reg->SHORTS |= TIMER_SHORTS_COMPARE0_STOP_Msk << TrigNo;
+#endif
+	}
+	else
+	{
+		reg->SHORTS |= TIMER_SHORTS_COMPARE0_CLEAR_Msk << TrigNo;
+	}
 	pData->pTrigger[TrigNo].Type = TIMER_TRIG_PEI;
 	pData->pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, ticks);
 	pData->pCC[TrigNo] = evt;
@@ -853,6 +869,9 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 		}
 #if defined(TIMER_SHORTS_COMPARE0_CLEAR_Msk)
 		reg->SHORTS &= ~(TIMER_SHORTS_COMPARE0_CLEAR_Msk << TrigNo);
+#endif
+#if defined(TIMER_SHORTS_COMPARE0_STOP_Msk)
+		reg->SHORTS &= ~(TIMER_SHORTS_COMPARE0_STOP_Msk << TrigNo);
 #endif
 
 	}

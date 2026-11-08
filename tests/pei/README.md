@@ -63,7 +63,8 @@ python3 tests/pei/check_no_pei_link.py \
 ```
 
 The checker fails if the archive extracts `pei.o` or
-`pei_nrf52.o`, if PEI-specific text remains in the executable,
+`pei_nrf52.o` (including ordinary `.a(pei.o)` linker-map entries),
+if PEI-specific text remains in the executable,
 or if any HF Timer or RTC PEI state arrays remain. The previous
 TimerDemo link retained 248 bytes in `s_nRfxRtc*Pei` and
 `s_nRfxRtcRaw`; the updated checker rejects this regression. It ignores
@@ -131,10 +132,11 @@ Timer and GPIO HAL drivers; PEI only programs PPI. The former
 `pei_blinky_port_nrf52.c` adapter and `pei_blinky_port.h` are removed.
 
 nRF52 uses hardware COMPARE->CLEAR to generate the 500 ms periodic
-event without an ISR. That shortcut affects the whole timer counter,
-so the Timer driver refuses PEI periodic setup when it has another
-active compare trigger or another hardware shortcut. The hardware-only
-mode is currently continuous only; existing ISR modes are unchanged.
+event without an ISR. It also provides COMPARE->STOP for hardware-only
+single-shot events. Both shortcuts affect the whole timer counter, so
+the Timer driver rejects other active compare triggers and shortcuts.
+The single-shot path awaits MCU compilation and hardware validation;
+existing ISR trigger modes are unchanged.
 `DisableTimerTrigger(trig)` unbinds PEI before releasing the compare.
 
 The standalone project links the production `pei_nrf52.cpp` as an
