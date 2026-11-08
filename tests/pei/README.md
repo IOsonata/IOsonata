@@ -81,6 +81,30 @@ The new check_gpio_lifecycle_contract.py in tests/pei/run.py is a
 source-level ownership regression. It does not replace MCU compilation
 or the board test. Results remain pending.
 
+## SAADC PEI event and task chain
+
+The nRF52832 PeiSaadcDemo managed project is at
+ARM/Nordic/nRF52/nRF52832/exemples/PeiSaadcDemo/ioc.
+It uses TIMER3 compare -> SAADC SAMPLE, SAADC END -> SAADC START,
+and two separate GPIOTE LED task indicators. The SAADC sample
+buffer is the existing internal AdcnRF52 EasyDMA buffer; PEI
+does not configure channels or transfer data.
+
+Preparation requires a configured single-conversion,
+noninterrupt ADC and valid enabled channel(s). On nRF52832,
+the driver rejects PPI START with TACQ <= 5 us, following
+Nordic erratum 150; the demo uses 10 us.
+A C header provides the same PEI routing operations used
+by AdcnRF52 C++ wrappers, but does not turn the C++-only
+ADC configuration driver into a C API.
+
+The host suite includes C/C++ API compile-only checks and
+check_saadc_pei_contract.py for DMA readiness, task/event
+mapping, and no ISR event forwarding. These are source checks,
+not a hardware conversion PASS. On the board, LED1 toggles
+only after SAADC END, while LED2 toggles directly from TIMER
+compare. A running status alone does not prove conversion.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or

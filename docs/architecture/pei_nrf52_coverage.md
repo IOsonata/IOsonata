@@ -42,7 +42,7 @@ Status keys:
 | TIMER / `timer_hf_nrfx.cpp` | COMPARE[n] single-shot/continuous; other events pending | START, STOP, CLEAR; COUNT and CAPTURE[n] pending | **Mixed-CC TIMER3 hardware working** in both CC orders (user report, Nov 8); COUNT/CAPTURE endpoints pending |
 | RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Mixed-CC RTC0 hardware working** in both CC orders; **RTC2 working** with ISR-first order (user report, Nov 8); other sources and lifecycle pending |
 | GPIOTE / `iopincfg_nrfx.c` | IN[n] edge; shared PORT SENSE/DETECT source implemented on nRF52 | OUT[n] SET/CLEAR/TOGGLE through configured channels | **PeiPortDemo functional hardware PASS**; **PeiGpioteStress automatic hardware PASS** (Nov 8 screenshot: Status 2, Error 0, 64 exhaustion/reuse, 128 PPI-route, 128 IRQ rounds, IrqCount 13); BUT2 physical route confirmation and cross-variant tests pending |
-| SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED, CALIBRATEDONE and available limits | START, SAMPLE, STOP, CALIBRATEOFFSET | **Pending**; cannot expose SAMPLE until conversion channels and EasyDMA buffers are configured and reserved |
+| SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED implemented; CALIBRATEDONE and limit events pending | START, SAMPLE, STOP implemented; CALIBRATEOFFSET pending | **Initial endpoint added**: single-conversion/no-IRQ driver-owned EasyDMA preparation, nRF52832 erratum 150 guard, C/C++ PEI routing; PeiSaadcDemo TIMER->SAMPLE / END->START hardware check pending |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, UP, DOWN, CROSS and supported variants | START, STOP, SAMPLE where provided | **Pending**; only expose events/tasks from the configured comparator |
 | PWM / `pwm_nrfx.cpp` | SEQSTARTED[n], SEQEND[n], LOOPSDONE, PWMPERIODEND, STOPPED | SEQSTART[n], STOP and NEXTSTEP if implemented | **Pending**; requires valid sequence buffers and owner-safe start/stop |
 | PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED | START, STOP | **Pending**; must not bypass sample-buffer configuration |
@@ -126,6 +126,38 @@ Confirm start/stop and 500 ms alternating LEDs, then test release/reuse
 and inspect ISR entries. This tests the HF TIMER backend, **not RTC**;
 a separate RTC2 (`DevNo = 2`) configuration is required to validate the
 low-frequency RTC PEI path.
+
+## SAADC task/event implementation (initial nRF52 subset)
+
+The ADC driver retains ownership of its configured SAADC channels and
+its internal, fixed EasyDMA result buffer. The new
+AdcnRF52::PreparePeiSampling() method configures RESULT.PTR and
+RESULT.MAXCNT and executes an initial START without taking a sample.
+The C API in ARM/Nordic/include/adc_nrf52_pei.h and AdcnRF52 C++
+wrappers then expose START/SAMPLE/STOP hardware tasks and
+STARTED/END/DONE/RESULTDONE/STOPPED events to PEI. The existing
+AdcDevice abstraction is still C++ only; the PEI routing functions
+are callable from C but do not provide a separate C ADC configuration
+API.
+
+For this first subset the conversion configuration must be
+single-conversion and noninterrupt, with at least one enabled channel.
+No PEI callback/ISR forwards an event. To make periodic conversions,
+the new PeiSaadcDemo on nRF52832 connects TIMER3.COMPARE -> SAMPLE
+and SAADC.END -> START (rearm), with independent hardware LED tasks
+on each event. Both paths operate through PPI.
+
+On nRF52832, SAADC acquisition time must be greater than 5 us
+before enabling PPI-driven START (Nordic erratum 150). The driver
+rejects unsafe configurations during preparation. CALIBRATEOFFSET,
+calibration completion, channel limit events, reconfiguration during
+active PEI routes, and stack-owned SAADC arbitration remain pending.
+Disconnect SAADC task destinations and event producers before
+StopConversion(), CloseChannel(), Disable(), or PowerOff().
+
+The PeiSaadcDemo Eclipse project is added, but no MCU build or
+hardware result has been confirmed. Do not mark SAADC as fully
+covered based on static source tests.
 
 ## Completion criteria before nRF53
 

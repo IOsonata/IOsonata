@@ -292,6 +292,40 @@ nRF52832 board result has not yet been reported. This does not
 authorize stealing stack-owned GPIOTE channels or imply that
 every nRF52 MCU exposes eight channels.
 
+### SAADC hardware sample chain
+
+For the initial nRF52 SAADC PEI integration, the existing
+AdcnRF52 C++ driver still owns channel configuration and the
+fixed internal EasyDMA result array. A separate C-compatible
+header, ARM/Nordic/include/adc_nrf52_pei.h, provides PEI
+event/task routing functions. AdcnRF52 also offers C++ methods
+for the same operations.
+
+After Init() and OpenChannel(), call PreparePeiSampling() in
+single-conversion mode with bInterrupt=false. This configures the
+driver's internal RESULT.PTR/MAXCNT buffer and issues one START,
+without a SAMPLE task. PEI may then connect hardware TIMER compare
+to SAADC SAMPLE and SAADC END to SAADC START. The END event can
+fan out to GPIO tasks, so actual conversion completion is visible
+without invoking an interrupt to forward the event.
+
+Supported initial events: STARTED, END, DONE, RESULTDONE, STOPPED.
+Supported tasks: START, SAMPLE, STOP. Calibration and channel limit
+endpoints require separate lifecycle validation and remain pending.
+This does not add any DMA buffer or PEI-only driver state to an
+ordinary ADC application.
+
+The nRF52832 erratum 150 requires TACQ > 5 us if SAADC START is
+triggered by PPI. The driver rejects shorter acquisition times
+for this prepared mode. All destination tasks must be disconnected
+and source events unbound before stopping or reconfiguring ADC
+channels, since the PEI matrix cannot safely operate a disabled
+DMA destination.
+
+The standalone nRF52832 PeiSaadcDemo Eclipse project validates this
+chain on BLYST-NANO-DK with a 500 ms TIMER3 compare indicator and a
+separate SAADC END indicator. Hardware testing remains pending.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI
