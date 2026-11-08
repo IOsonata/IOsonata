@@ -13,7 +13,7 @@ import re
 import sys
 
 MEMBER = re.compile(r"\.a\((?:[^()\n]*/)?pei(?:_[a-zA-Z0-9]+)?(?:\.(?:c|cpp))?\.o\)")
-CODE = re.compile(r"^\s*\.text\.(?:Pei[A-Za-z0-9_]*|[^\s]*Pei(?:Trigger|Event|Install)[^\s]*)(?=\s|$)", re.M)
+CODE = re.compile(r"^\s*\.text\.(?:Pei[A-Za-z0-9_]*|[^\s]*Pei(?:Trigger|Event|Install)[^\s]*)|IOPin(?:Enable|Disable)PortEvent)(?=\s|$)", re.M)
 HF_STATE = re.compile(r"^\s*\.bss\.[^\s]*s_nRFxTimer[0-9]+Pei\b", re.M)
 RTC_STATE = re.compile(r"^\s*\.bss\.[^\s]*s_nRfxRtc(?:[0-9]+Pei|Raw)\b", re.M)
 

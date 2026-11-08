@@ -50,6 +50,14 @@ class NoPeiLinkTests(unittest.TestCase):
         self.assertEqual(self.check_map(
             linked=" .text.PeiConnect 0x00001000 0x34"), 1)
 
+    def test_linked_gpio_port_pei_source_is_rejected(self):
+        self.assertEqual(self.check_map(
+            linked=" .text.IOPinEnablePortEvent 0x00002000 0x20"), 1)
+
+    def test_discarded_gpio_port_pei_source_is_allowed(self):
+        self.assertEqual(self.check_map(
+            discarded=" .text.IOPinDisablePortEvent 0x00000000 0x20"), 0)
+
     def test_linked_rtc_pei_state_is_rejected(self):
         self.assertEqual(self.check_map(
             linked=" .bss.s_nRfxRtcRaw 0x20000000 0x50"), 1)
