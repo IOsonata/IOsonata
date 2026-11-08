@@ -624,6 +624,25 @@ static void TestGroups(void)
 	assert(PeiConnectTask(&pei, evt, task2));
 	mask = TestGroupEventMask(&pei, evt);
 	assert(mask != 0U && (mask & (mask - 1U)) != 0U);
+	// A group that enables itself is rejected, but self-DIS is the
+	// intended one-shot behavior. Simulate a linked task endpoint
+	// because the host mock's PPI task addresses are not MCU addresses.
+	for (i = 0; i < PEI_MAX_CONNECTIONS; i++)
+	{
+		if (pei.Routes[i].Token == evt &&
+			pei.Routes[i].Task == task2)
+		{
+			int chan = Channel(&pei.Routes[i].Conn);
+
+			NRF_PPI->CH[chan].TEP =
+				(uint32_t)PeiGroupEnableTask(&group[0]);
+			assert(!PeiGroupAddEvent(&group[0], &pei, evt));
+			NRF_PPI->CH[chan].TEP =
+				(uint32_t)PeiGroupDisableTask(&group[0]);
+			break;
+		}
+	}
+	assert(i < PEI_MAX_CONNECTIONS);
 	assert(PeiGroupAddEvent(&group[0], &pei, evt));
 	assert(NRF_PPI->CHG[0] == mask);
 	assert(PeiGroupAddEvent(&group[0], &pei, evt));
