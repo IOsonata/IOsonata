@@ -8,6 +8,7 @@ a target MCU. tests/pei/run.py compiles this as C11 with -Werror.
 #include "coredev/pei.h"
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
+#include "coredev/pwm.h"
 #include "adc_nrf52_pei.h"
 #include "converters/analog_comp.h"
 
@@ -185,4 +186,33 @@ bool PeiComparatorCApplication(AnalogCompDev_t *pComp, PeiDev_t *pPei,
 		return false;
 	}
 	return PeiReleaseEvent(pPei, &evt);
+}
+
+// Compile-only: C PEI routing to a prepared PWM peripheral.
+bool PeiHalPwmCApplication(PwmDev_t *pPwm, PeiDev_t *pPei,
+	PeiEvent_t startEvent)
+{
+	PeiEvent_t stopped;
+
+	stopped = 0U;
+	if (!PWMEnablePeiEvent(pPwm, pPei, &stopped,
+		PWM_PEI_EVENT_STOPPED))
+	{
+		return false;
+	}
+	if (!PWMConnectPeiTask(pPwm, pPei, startEvent,
+		PWM_PEI_TASK_SEQSTART0))
+	{
+		return false;
+	}
+	if (!PWMDisconnectPeiTask(pPwm, pPei, startEvent,
+		PWM_PEI_TASK_SEQSTART0))
+	{
+		return false;
+	}
+	if (!PWMDisablePeiEvent(pPwm, pPei, stopped))
+	{
+		return false;
+	}
+	return PeiReleaseEvent(pPei, &stopped);
 }

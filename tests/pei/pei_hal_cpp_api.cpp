@@ -5,6 +5,7 @@
 #include "coredev/pei.h"
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
+#include "coredev/pwm.h"
 #include "adc_nrf52_pei.h"
 #include "converters/analog_comp.h"
 
@@ -149,4 +150,30 @@ bool PeiComparatorCppApplication(AnalogComp &comp, Pei &pei,
 		return false;
 	}
 	return pei.ReleaseEvent(cross);
+}
+
+// Compile-only: C++ PWM wrapper uses the same C PEI device.
+bool PeiHalPwmCppApplication(Pwm &pwm, Pei &pei,
+	PeiEvent_t button)
+{
+	PeiEvent_t started = 0U;
+
+	if (!pwm.EnablePeiEvent(pei, started,
+		PWM_PEI_EVENT_SEQSTARTED0))
+	{
+		return false;
+	}
+	if (!pwm.ConnectTask(pei, button, PWM_PEI_TASK_STOP))
+	{
+		return false;
+	}
+	if (!pwm.DisconnectTask(pei, button, PWM_PEI_TASK_STOP))
+	{
+		return false;
+	}
+	if (!pwm.DisablePeiEvent(pei, started))
+	{
+		return false;
+	}
+	return pei.ReleaseEvent(started);
 }
