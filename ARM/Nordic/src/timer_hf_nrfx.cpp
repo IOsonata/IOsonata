@@ -260,7 +260,7 @@ static void TimerIRQHandler(int DevNo)
 			{
 				// HF TIMER has no EVTEN gate; disable the logical PPI
 				// event after its first compare, without stopping TIMER.
-				reg->INTENCLR = TIMER_INTENCLR_COMPARE0_Msk << i;
+				reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << i;
 				if (PeiDisableEvent != nullptr)
 				{
 					PeiDisableEvent(
@@ -695,9 +695,6 @@ static bool nRFxTimerExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 	return true;
 }
 
-// Hardware-only compare event. CONTINUOUS uses COMPARE->CLEAR and SINGLE
-// uses COMPARE->STOP. Both affect the entire counter and require exclusive
-// compare ownership. This path does not enable a timer compare interrupt.
 // Bind one free CC to PEI. The free-running counter is never cleared,
 // stopped or routed to counter-control tasks by a compare trigger.
 // Continuous CC rescheduling follows the original Timer ISR model.
@@ -753,7 +750,6 @@ static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 	count = reg->CC[TrigNo];
 	reg->EVENTS_COMPARE[TrigNo] = 0U;
 	reg->CC[TrigNo] = count + (uint32_t)ticks;
-	reg->INTENSET = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
 	pData->pTrigger[TrigNo].Type = Type == TIMER_TRIG_TYPE_CONTINUOUS ?
 		TIMER_TRIG_PEI_CONTINUOUS : TIMER_TRIG_PEI_SINGLE;
 	pData->pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, ticks);
@@ -761,6 +757,7 @@ static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 	pData->pTrigger[TrigNo].pContext = pPei;
 	pData->pCC[TrigNo] = evt;
 	*pEvent = evt;
+	reg->INTENSET = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
 	return true;
 }
 
@@ -857,7 +854,7 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 		PeiEndpoint_t endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
 
 		// Disarm only this CC; leave the shared counter and other CCs alone.
-		reg->INTENCLR = TIMER_INTENCLR_COMPARE0_Msk << TrigNo;
+		reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
 		if (PeiUnbindEvent == nullptr ||
 			!PeiUnbindEvent(pei, evt, endpoint))
 		{

@@ -198,7 +198,7 @@ static void RtcIRQHandler(int DevNo)
 			else if (s_pnRfxRtcData[DevNo].pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE)
 			{
 				reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << i;
-				reg->EVTENCLR = RTC_EVTENCLR_COMPARE0_Msk << i;
+				reg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << i;
 			}
 			else
 			{
@@ -530,6 +530,27 @@ static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	}
 	pData = &s_nRfxRtcData[devno];
 	reg = pData->pReg;
+	// Internal read-only check: reinitialization must not abandon live
+	// TICK/OVRFLW routes or PEI-owned compare slots.
+	if (pPei == nullptr && Event == 0U)
+	{
+		for (i = 0; i < 2; i++)
+		{
+			if (s_nRfxRtcRaw[devno][i].pPei != nullptr)
+			{
+				return true;
+			}
+		}
+		for (i = 0; i < pData->MaxNbTrigEvt; i++)
+		{
+			if (pData->pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+				pData->pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 	if (pPei == nullptr || Event == 0U || PeiUnbindEvent == nullptr)
 	{
 		return false;
@@ -575,7 +596,7 @@ static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 		}
 		endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[i];
 		reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << i;
-		reg->EVTENCLR = RTC_EVTENCLR_COMPARE0_Msk << i;
+		reg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << i;
 		if (!PeiUnbindEvent(pPei, Event, endpoint))
 		{
 			return false;
@@ -652,8 +673,6 @@ static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 	count = reg->COUNTER;
 	reg->EVENTS_COMPARE[TrigNo] = 0U;
 	reg->CC[TrigNo] = (count + (uint32_t)ticks) & 0xFFFFFFU;
-	reg->EVTENSET = bit;
-	reg->INTENSET = RTC_INTENSET_COMPARE0_Msk << TrigNo;
 	pData->pCC[TrigNo] = evt;
 	pData->pTrigger[TrigNo].Type = Type == TIMER_TRIG_TYPE_CONTINUOUS ?
 		TIMER_TRIG_PEI_CONTINUOUS : TIMER_TRIG_PEI_SINGLE;
@@ -661,6 +680,8 @@ static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 	pData->pTrigger[TrigNo].Handler = nullptr;
 	pData->pTrigger[TrigNo].pContext = pPei;
 	*pEvent = evt;
+	reg->EVTENSET = bit;
+	reg->INTENSET = RTC_INTENSET_COMPARE0_Msk << TrigNo;
 	return true;
 }
 
