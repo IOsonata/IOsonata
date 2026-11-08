@@ -227,6 +227,37 @@ adds check_i2c_pei_contract.py, C/C++ compile checks, and
 non-PEI linker-map cases. MCU compilation, real slave
 communication and cross-variant validation remain outstanding.
 
+## nRF52 UART/UARTE PEI hardware TX chain
+
+The existing UART C/C++ HAL now exposes mode-specific hardware
+UART/UARTE event endpoints. Legacy UART offers CTS/NCTS,
+RXDRDY, TXDRDY, ERROR and RXTO; UARTE adds ENDRX, ENDTX,
+RXSTARTED, TXSTARTED and TXSTOPPED. CTS/NCTS require hardware
+flow control to be configured on the UART instance. The UARTE
+receiver is still started by the normal UARTInit and maintains
+its own EasyDMA RX FIFO and IRQ/polling service.
+
+For hardware TX, initialize UART in DMA mode, bIntMode=false,
+flow control disabled, with no pending TX FIFO contents.
+Call UARTPreparePeiTx() with a short block. It copies bytes
+into the driver's original TX EasyDMA buffer and programs
+TXD.PTR/MAXCNT without starting the transmitter. STARTTX
+and STOPTX may be connected as hardware task destinations
+only while that buffer is prepared. The caller must disable
+and disconnect all task routes before UARTReleasePeiTx(),
+which waits for TXSTOPPED before making the buffer reusable.
+UART RX STARTRX/STOPRX/FLUSHRX remain driver-owned.
+
+Hardware-free demo:
+ARM/Nordic/nRF52/nRF52832/exemples/PeiUartDemo/ioc
+
+On BLYST-NANO-DK, BUT1 starts eight-byte UARTE0 TX from
+TX P0.07 at 1 Mbaud. ENDTX toggles discrete LED1 and triggers
+STOPTX; TXSTOPPED toggles RGB blue. The source-level tests,
+C/C++ compile-only clients and no-PEI link checks are added
+to tests/pei/run.py. An on-board result and a target MCU
+build are still pending.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or

@@ -451,6 +451,34 @@ STOP and LED1, and STOPPED triggers RGB blue. SDA/SCL need
 reliable pull-up resistors. MCU build and hardware validation
 are pending.
 
+### nRF52 UART/UARTE hardware events and prepared transmit tasks
+
+UART0 legacy bytewise mode exposes CTS, NCTS, RXDRDY, TXDRDY,
+ERROR and RXTO as PEI source events. UARTE EasyDMA adds ENDRX,
+ENDTX, RXSTARTED, TXSTARTED and TXSTOPPED sources. These are
+peripheral event addresses, not CPU callbacks or invented IRQ
+routing. The active UART configuration and hardware owner
+select the register map. CTS/NCTS require enabled hardware
+flow control before binding.
+
+For a UARTE task destination, UARTPreparePeiTx() stages
+one short TX block in the original private driver TxDmaMem
+at the currently configured baud rate. The normal TX FIFO
+must be empty, and bIntMode=false; hardware flow control is
+disabled for this initial TX mode. The application then
+connects a source event to STARTTX and may fan out ENDTX
+to STOPTX and an independent GPIO task. UARTReleasePeiTx()
+waits for a started transfer to stop and only then clears
+TXD.PTR/MAXCNT for reuse. The normal RX DMA continues to
+belong to the driver: STARTRX, STOPRX and FLUSHRX are not
+external PEI tasks in this initial integration.
+
+PeiUartDemo on nRF52832 BLYST-NANO-DK exercises BUT1 ->
+UARTE0 STARTTX, UARTE0 ENDTX -> STOPTX + discrete LED1,
+and TXSTOPPED -> RGB blue at 1 Mbaud, without semihosting,
+a receiving UART device or event-forwarding ISR. Hardware
+and MCU build acceptance remain pending.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI

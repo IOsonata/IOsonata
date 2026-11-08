@@ -50,7 +50,7 @@ Status keys:
 | I2S / `i2s_nrfx.cpp` | RXPTRUPD (RX configured), TXPTRUPD (TX configured), STOPPED implemented on nRF52 | START, STOP with initialized and armed driver-owned DMA | **Initial PEI integration:** C/C++ APIs; I2SPreparePeiStart re-arms existing RX/TX buffers without START after I2SDisable; IRQ pointer service required. Source/API regressions added. No device hardware test. |
 | SPI / SPIM / SPIS / `spi_nrfx.cpp` | SPI READY; SPIM STARTED/ENDRX/ENDTX/END/STOPPED; SPIS ENDRX/END/ACQUIRED | SPIM START/STOP/SUSPEND/RESUME only after driver-prepared EasyDMA; legacy SPI no tasks; SPIS ACQUIRE/RELEASE still IRQ-owned | **Initial endpoint added**: mode-specific C/C++ PEI APIs, single-block SPIM DMA preparation and release, PeiSpiDemo and static tests; MCU/hardware validation pending |
 | TWI / TWIM / TWIS / `i2c_nrfx.cpp` | TWI STOPPED/ERROR/SUSPENDED/RXDREADY/TXDSENT/BB; TWIM STOPPED/ERROR/SUSPENDED/RXSTARTED/TXSTARTED/LASTRX/LASTTX; TWIS STOPPED/ERROR/RXSTARTED/TXSTARTED/WRITE/READ | TWIM STARTRX/STARTTX/STOP/SUSPEND/RESUME with driver-owned prepared single-block EasyDMA. Legacy TWI/TWIS tasks remain ISR-owned | **Initial endpoint added:** C/C++ PEI API, generic I2C busy-lock ownership, no-PEI link regressions and PeiTwiDemo (NACK->ERROR->STOP); MCU compilation and hardware validation pending |
-| UART / UARTE / `uart_nrfx.cpp` | RX/TX ready, transfer end, stopped, error and mode-specific events | STARTRX, STOPRX, STARTTX, STOPTX, FLUSHRX where available | **Pending**; do not trigger unprepared EasyDMA |
+| UART / UARTE / `uart_nrfx.cpp` | Legacy UART CTS/NCTS/RXDRDY/TXDRDY/ERROR/RXTO; UARTE also ENDRX/ENDTX/RXSTARTED/TXSTARTED/TXSTOPPED | UARTE STARTTX/STOPTX after driver-prepared TX EasyDMA; legacy UART and UARTE RX task routing restricted | **Initial PEI integration:** C/C++ APIs, driver-owned TxDmaMem preparation, normal RX retained, no-PEI link regression and PeiUartDemo (BUT1->STARTTX, ENDTX->STOPTX, TXSTOPPED). MCU/hardware validation pending. |
 | EGU / `pei_nrf52.cpp` (owned by PEI, no standalone driver) | TRIGGERED[n] as a software event source (`PeiBindSwEvent`, `PeiTriggerSwEvent`) | TRIGGER[n] (`PeiGetSwEventTask`) | **Initial endpoint added**: host-model tests for all build profiles; PeiSwEvent example on nRF52832 not yet run on hardware. No EGU interrupt or callback |
 | QDEC (new nRF52 peripheral driver) | SAMPLERDY, REPORTRDY, ACCOF and device events | START, STOP, READCLR and device-supported tasks | **Pending**; no existing QDEC HAL driver |
 | RNG / `rng_nrfx.cpp` | VALRDY | START, STOP | **Pending**; respect random-driver ownership and SoftDevice RNG service |
@@ -377,6 +377,54 @@ may be insufficient at 100 kHz. Neither the LEDs nor the
 setup status demonstrate successful I2C data transfer. Source
 and API regression checks are registered with tests/pei/run.py.
 No target MCU build or board result has yet been confirmed.
+
+## UART/UARTE PEI source and task integration (initial nRF52 subset)
+
+The Nordic UART HAL now binds the active mode's real event registers.
+Both legacy UART and UARTE expose CTS, NCTS, RXDRDY, TXDRDY, ERROR
+and RXTO. UARTE EasyDMA additionally exposes ENDRX, ENDTX,
+RXSTARTED, TXSTARTED and TXSTOPPED. CTS/NCTS event binding requires
+the existing hardware-flow-control configuration. UART and UARTE
+share UART0 on many nRF52 parts; the selected UARTInit DMA mode and
+actual driver owner determine which endpoint is valid.
+
+The driver already configures and starts UARTE reception inside
+UARTInit and owns RxDmaMem, Rx FIFO, IRQ/polling transfers and
+receiver restart logic. Therefore START_RX, STOP_RX and FLUSHRX
+hardware task connections are **not** exposed to PEI in this
+initial implementation: arbitrary PPI tasks could overwrite or
+invalidate the active RX EasyDMA state. Legacy UART transmission
+also remains under its bytewise driver.
+
+A UARTE TX PPI route must first call UARTPreparePeiTx() on an
+enabled, DMA-configured UART with bIntMode=false, flow control
+disabled and an otherwise idle TX FIFO. It copies up to the size
+of the existing private driver TxDmaMem into that buffer,
+sets TXD.PTR/MAXCNT, clears stale TXSTARTED/ENDTX/TXSTOPPED,
+and does not execute STARTTX. The driver reserves this buffer
+until UARTReleasePeiTx(). The normal UART transmitter, baud-rate
+changes and reinitialization are refused while PEI owns TX.
+UARTReleasePeiTx waits for TXSTOPPED if the hardware transfer
+was started, then releases the DMA registers. Disconnect all
+PPI task destinations and unbind sources before calling it.
+The normal UART receive channel is not reassigned to PEI.
+
+PeiUartDemo is an Eclipse managed BLYST-NANO-DK project on
+nRF52832. BUT1 triggers UART0 UARTE STARTTX through GPIOTE/PPI
+and sends eight bytes at 1 Mbaud on P0.07. ENDTX triggers
+STOPTX and toggles the physically separate LED1 (P0.30).
+TXSTOPPED toggles RGB blue (P0.27). This requires no external
+UART receiver for the hardware event chain; a logic analyzer
+or bridge is needed to verify bytes actually sent. The
+g_PeiUartStatus=1 debugger value reports successful route
+installation, not on-board hardware acceptance.
+
+The C/C++ compile-only clients, source-invariant checker and
+non-PEI link-map regression are registered in tests/pei/run.py.
+No nRF52 target MCU compilation or hardware test has been
+reported for the new UART/UARTE feature; other nRF52 variants,
+RX task ownership/refill, repeated TX rearm and flow control
+remain pending.
 
 ## Completion criteria before nRF53
 
