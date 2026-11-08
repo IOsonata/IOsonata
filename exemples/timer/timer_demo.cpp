@@ -181,7 +181,6 @@ int main(void)
 
 	IOPinCfg(s_Leds, s_NbLeds);
 
-#ifdef TIMER_DEMO_UART
 	if (!s_Uart.Init(s_UartCfg))
 	{
 		while (1)
