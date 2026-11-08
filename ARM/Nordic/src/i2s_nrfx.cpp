@@ -45,6 +45,16 @@ SOFTWARE.
 #include "idelay.h"
 #include "coredev/i2s.h"
 
+// No PEI routing code or PPI matrix should be pulled by normal I2S
+// streaming firmware. Only the optional endpoint APIs refer to these.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 // nRF54LM20 replaces the I2S peripheral with TDM. Keep the generic I2S
 // interface and map only the hardware backend for these parts.
 #if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
@@ -315,7 +325,7 @@ static void nRFxI2SDisable(DevIntrf_t * const pDev)
 #endif
 }
 
-static void nRFxI2SEnable(DevIntrf_t * const pDev)
+static bool nRFxI2SArm(DevIntrf_t * const pDev, bool StartNow)
 {
 #if IOSONATA_NRF_TDM_AUDIO
 	bool rxEnabled;
@@ -326,7 +336,7 @@ static void nRFxI2SEnable(DevIntrf_t * const pDev)
 	if (!nRF53AudioClockStart())
 	{
 		s_Running = false;
-		return;
+		return false;
 	}
 #endif
 	if (s_pI2SDev->hRxFifo != NULL)
@@ -355,7 +365,7 @@ static void nRFxI2SEnable(DevIntrf_t * const pDev)
 	else
 	{
 		s_Running = false;
-		return;
+		return false;
 	}
 	nrf_tdm_mck_set(NRF_AUDIO, NRF_AUDIO->PSEL.MCK != UINT32_MAX);
 	nrf_tdm_rx_buffer_set(NRF_AUDIO, s_I2S_RxBuffer[0]);
@@ -391,7 +401,18 @@ static void nRFxI2SEnable(DevIntrf_t * const pDev)
 		NVIC_EnableIRQ(AUDIO_IRQn);
 	}
 	s_Running = true;
-	NRF_AUDIO->TASKS_START = 1;
+	if (StartNow)
+	{
+		NRF_AUDIO->TASKS_START = 1U;
+	}
+	return true;
+}
+
+// Normal I2S clients retain their original immediate-start behavior.
+// PEI preparation calls nRFxI2SArm(..., false) directly.
+static void nRFxI2SEnable(DevIntrf_t * const pDev)
+{
+	(void)nRFxI2SArm(pDev, true);
 }
 
 static void nRFxI2SPowerOff(DevIntrf_t * const pDev)
@@ -980,4 +1001,201 @@ extern "C" void I2S_IRQHandler()
 #endif
 {
 	nRFxI2SService();
+}
+
+
+// nRF52 PPI endpoints are only exposed from the configured running
+// I2S driver. Pointer-update IRQ service remains enabled so the
+// double-buffered RX/TX streaming DMA pointers are replenished.
+static PeiEndpoint_t I2SPeiEventEndpoint(I2S_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES)
+	switch (Event)
+	{
+		case I2S_PEI_EVENT_RXPTRUPD:
+			return (PeiEndpoint_t)&NRF_AUDIO->EVENTS_RXPTRUPD;
+		case I2S_PEI_EVENT_TXPTRUPD:
+			return (PeiEndpoint_t)&NRF_AUDIO->EVENTS_TXPTRUPD;
+		case I2S_PEI_EVENT_STOPPED:
+			return (PeiEndpoint_t)&NRF_AUDIO->EVENTS_STOPPED;
+		default:
+			return 0U;
+	}
+#else
+	(void)Event;
+	return 0U;
+#endif
+}
+
+static PeiEndpoint_t I2SPeiTaskEndpoint(I2S_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES)
+	switch (Task)
+	{
+		case I2S_PEI_TASK_START:
+			return (PeiEndpoint_t)&NRF_AUDIO->TASKS_START;
+		case I2S_PEI_TASK_STOP:
+			return (PeiEndpoint_t)&NRF_AUDIO->TASKS_STOP;
+		default:
+			return 0U;
+	}
+#else
+	(void)Task;
+	return 0U;
+#endif
+}
+
+static bool I2SPeiReady(I2SDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	uint32_t rx;
+	uint32_t tx;
+
+	if (pDev == nullptr || pDev != s_pI2SDev ||
+		pDev->DevIntrf.pDevData != pDev ||
+		pDev->DevIntrf.Enable != nRFxI2SEnable ||
+		!s_Running || !s_IntEnabled ||
+		s_BlockWords == 0U || s_BlockWords > I2S_BUFF_MAX ||
+		NRF_AUDIO->ENABLE == 0U ||
+		NRF_AUDIO->RXTXD.MAXCNT != s_BlockWords ||
+		(NRF_AUDIO->CONFIG.RXEN == 0U &&
+		 NRF_AUDIO->CONFIG.TXEN == 0U))
+	{
+		return false;
+	}
+	rx = NRF_AUDIO->RXD.PTR;
+	tx = NRF_AUDIO->TXD.PTR;
+	if ((NRF_AUDIO->CONFIG.RXEN != 0U &&
+		 rx != (uint32_t)(uintptr_t)s_I2S_RxBuffer[0] &&
+		 rx != (uint32_t)(uintptr_t)s_I2S_RxBuffer[1]) ||
+		(NRF_AUDIO->CONFIG.TXEN != 0U &&
+		 tx != (uint32_t)(uintptr_t)s_I2S_TxBuffer[0] &&
+		 tx != (uint32_t)(uintptr_t)s_I2S_TxBuffer[1]))
+	{
+		return false;
+	}
+	return true;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool I2SPreparePeiStart(I2SDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	if (pDev == nullptr || pDev != s_pI2SDev ||
+		pDev->DevIntrf.pDevData != pDev ||
+		pDev->DevIntrf.Enable != nRFxI2SEnable ||
+		pDev->DevIntrf.Disable != nRFxI2SDisable ||
+		s_Running || !s_IntEnabled ||
+		atomic_load(&pDev->DevIntrf.EnCnt) != 0)
+	{
+		return false;
+	}
+	if (!nRFxI2SArm(&pDev->DevIntrf, false))
+	{
+		return false;
+	}
+	if (!I2SPeiReady(pDev))
+	{
+		nRFxI2SDisable(&pDev->DevIntrf);
+		return false;
+	}
+	// Restore the standard DeviceIntrf reference count so I2SDisable()
+	// stops and releases an armed or running PEI-controlled transfer.
+	atomic_store(&pDev->DevIntrf.EnCnt, 1);
+	return true;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool I2SEnablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, I2S_PEI_EVENT Event)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == nullptr || pEvt == nullptr || PeiBindEvent == nullptr ||
+		!I2SPeiReady(pDev))
+	{
+		return false;
+	}
+#if defined(NRF52_SERIES)
+	if ((Event == I2S_PEI_EVENT_RXPTRUPD &&
+		 NRF_AUDIO->CONFIG.RXEN == 0U) ||
+		(Event == I2S_PEI_EVENT_TXPTRUPD &&
+		 NRF_AUDIO->CONFIG.TXEN == 0U))
+	{
+		return false;
+	}
+#endif
+	endpoint = I2SPeiEventEndpoint(Event);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt, endpoint);
+}
+
+extern "C" bool I2SDisablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+	PeiEndpoint_t endpoint;
+	int event;
+
+	if (pDev == nullptr || pDev != s_pI2SDev ||
+		pPei == nullptr || PeiGetEventEndpoint == nullptr ||
+		PeiUnbindEvent == nullptr)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	for (event = I2S_PEI_EVENT_RXPTRUPD;
+		event <= I2S_PEI_EVENT_STOPPED; event++)
+	{
+		if (endpoint != 0U &&
+			endpoint == I2SPeiEventEndpoint((I2S_PEI_EVENT)event))
+		{
+			return PeiUnbindEvent(pPei, Evt, endpoint);
+		}
+	}
+	return false;
+}
+
+extern "C" bool I2SConnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, I2S_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == nullptr || PeiConnectTask == nullptr ||
+		!I2SPeiReady(pDev))
+	{
+		return false;
+	}
+	endpoint = I2SPeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+extern "C" bool I2SDisconnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, I2S_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pDev == nullptr || pDev != s_pI2SDev ||
+		pPei == nullptr || PeiDisconnectTask == nullptr)
+	{
+		return false;
+	}
+	endpoint = I2SPeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
 }

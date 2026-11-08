@@ -45,6 +45,20 @@ SOFTWARE.
 #include "cfifo.h"
 #include "device_intrf.h"
 #include "coredev/iopincfg.h"
+#include "coredev/pei.h"
+
+// nRF52 hardware I2S source/destination endpoints. The I2S driver
+// keeps ownership of both streaming DMA buffers and IRQ pointer refill.
+typedef enum {
+	I2S_PEI_EVENT_RXPTRUPD,
+	I2S_PEI_EVENT_TXPTRUPD,
+	I2S_PEI_EVENT_STOPPED
+} I2S_PEI_EVENT;
+
+typedef enum {
+	I2S_PEI_TASK_START,
+	I2S_PEI_TASK_STOP
+} I2S_PEI_TASK;
 
 #define I2S_MAX_NB_IOPIN 5
 
@@ -142,6 +156,20 @@ extern "C" {
  */
 bool I2SInit(I2SDev_t *const pDev, const I2SCfg_t *const pCfg);
 
+// I2SInit starts the interface normally. To start it from PPI, disable
+// the initialized interface first, then arm the driver-owned DMA
+// pointers and interrupt service without triggering TASKS_START.
+// Requires I2SCfg_t.bIntEn = true for ongoing pointer replenishment.
+bool I2SPreparePeiStart(I2SDev_t *pDev);
+bool I2SEnablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, I2S_PEI_EVENT Event);
+bool I2SDisablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+bool I2SConnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, I2S_PEI_TASK Task);
+bool I2SDisconnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, I2S_PEI_TASK Task);
+
 static inline void I2SEnable(I2SDev_t *const pDev)
 {
 	DeviceIntrfEnable(&pDev->DevIntrf);
@@ -195,6 +223,34 @@ public:
 	void Disable(void)
 	{
 		DeviceIntrfDisable(&vDevData.DevIntrf);
+	}
+
+	bool PreparePeiStart()
+	{
+		return I2SPreparePeiStart(&vDevData);
+	}
+
+	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
+		I2S_PEI_EVENT Event)
+	{
+		return I2SEnablePeiEvent(&vDevData, PeiDev, &Evt, Event);
+	}
+
+	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return I2SDisablePeiEvent(&vDevData, PeiDev, Evt);
+	}
+
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt,
+		I2S_PEI_TASK Task)
+	{
+		return I2SConnectPeiTask(&vDevData, PeiDev, Evt, Task);
+	}
+
+	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt,
+		I2S_PEI_TASK Task)
+	{
+		return I2SDisconnectPeiTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 protected:
