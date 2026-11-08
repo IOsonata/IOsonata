@@ -1150,6 +1150,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+#if defined(UART_PRESENT) && defined(UARTE_PRESENT)
+	// Only the first UART_COUNT instances have the legacy UART. The others
+	// are UARTE only (UARTE1 on nRF52833/840) and cannot run without dma.
+	if (pCfg->bDMAMode == false && pCfg->DevNo >= UART_COUNT)
+	{
+		return false;
+	}
+#endif
+
 	int devno = pCfg->DevNo;
 #ifdef UART_PRESENT
 	NRF_UART_Type *reg = s_nRFxUARTDev[devno].pReg;
