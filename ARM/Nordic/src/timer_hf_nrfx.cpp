@@ -998,37 +998,22 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 
 		NRF_CLOCK->EVENTS_XOSTARTED = 0;
 	}
-#else
-	if (!(NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk))
-	{
-		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
-
-		// Clock source not available.  Only 64MHz XTAL
-//		s_nRfxHFClockSem++;
-		NRF_CLOCK->TASKS_HFCLKSTART = 1;
-
-		// Check if HFCLK is running or not
-		int timout = 1000000;
-		do
-		{
-			if ((NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk)
-					&& NRF_CLOCK->EVENTS_HFCLKSTARTED)
-				break;
-
-		} while (timout-- > 0);
-
-		if (timout <= 0)
-			return false;
-
-		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-	}
-#endif
 	else
 	{
 		// Clock source already enabled externally.
 		// This is to ensure we don't disable it when all timers are disabled
 		s_nRfxHFClockSem++;
 	}
+#else
+	// Init leaves the timer running, so it goes through Enable. Enable
+	// starts HFCLK if it is not running, owns it only in that case and
+	// counts the timer once, so that Disable after Init stops the timer and
+	// releases HFCLK, and a later Enable does not count it again.
+	if (nRFxTimerEnable(pTimer) == false)
+	{
+		return false;
+	}
+#endif
 
 	// Init interrupt for TIMERs
 	switch (devno)
