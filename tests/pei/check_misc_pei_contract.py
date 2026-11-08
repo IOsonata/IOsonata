@@ -60,6 +60,11 @@ def main():
     assert "NRF_TEMP->TASKS_STOP = 1;" in TEMP
     assert "WdtStart(" in WDT and "WdtReload(" in WDT
     assert "RngPeriphRxData(" in RNG and "reg->VALUE" in RNG
+    # The ordinary RNG provider must remain excluded on CRACEN/CC3XX targets.
+    assert "#endif // !RNG_USE_CRACEN && !RNG_USE_CC3XX" in RNG
+    assert sum(line.lstrip().startswith(("#if ", "#ifdef ", "#ifndef "))
+               for line in RNG.splitlines()) == sum(
+        line.lstrip().startswith("#endif") for line in RNG.splitlines())
 
     print("nRF52 QDEC and one-shot PEI exclusion contracts: PASS")
 

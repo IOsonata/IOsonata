@@ -274,6 +274,7 @@ RngPeriphIntrf *RngPeriphIntrfInstance(void)
 	return initialized ? &instance : nullptr;
 }
 
+#endif // !RNG_USE_CRACEN && !RNG_USE_CC3XX
 
 bool CryptoRngNrf::Init(DeviceIntrf * const pIntrf)
 {
