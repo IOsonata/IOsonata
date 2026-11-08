@@ -11,6 +11,9 @@ a target MCU. tests/pei/run.py compiles this as C11 with -Werror.
 #include "coredev/pwm.h"
 #include "coredev/spi.h"
 #include "coredev/uart.h"
+#include "coredev/qdec.h"
+#include "temp_nrf_pei.h"
+#include "rng_nrf_pei.h"
 #include "coredev/i2c.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
@@ -429,4 +432,95 @@ bool PeiUartCApplication(UARTDev_t *pUart, PeiDev_t *pPei,
 		return false;
 	}
 	return UARTReleasePeiTx(pUart);
+}
+
+
+// Compile-only C clients of the QDEC/TEMP/RNG PEI matrix.
+bool PeiQdecCApplication(QdecDev_t *pQdec, PeiDev_t *pPei,
+	PeiEvent_t start)
+{
+	PeiEvent_t stopped = 0U;
+
+	if (!QdecPreparePeiStart(pQdec))
+	{
+		return false;
+	}
+	if (!QdecEnablePeiEvent(pQdec, pPei, &stopped,
+		QDEC_PEI_EVENT_STOPPED))
+	{
+		return false;
+	}
+	if (!QdecConnectPeiTask(pQdec, pPei, start, QDEC_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!QdecDisconnectPeiTask(pQdec, pPei, start,
+		QDEC_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!QdecDisablePeiEvent(pQdec, pPei, stopped))
+	{
+		return false;
+	}
+	return PeiReleaseEvent(pPei, &stopped);
+}
+
+bool PeiTempCApplication(PeiDev_t *pPei, PeiEvent_t start)
+{
+	PeiEvent_t ready = 0U;
+
+	if (!TempNrfPeiEnableEvent(pPei, &ready,
+		TEMP_NRF_PEI_EVENT_DATARDY))
+	{
+		return false;
+	}
+	if (!TempNrfPeiConnectTask(pPei, start,
+		TEMP_NRF_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!TempNrfPeiDisconnectTask(pPei, start,
+		TEMP_NRF_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!TempNrfPeiDisableEvent(pPei, ready))
+	{
+		return false;
+	}
+	return PeiReleaseEvent(pPei, &ready);
+}
+
+bool PeiRngCApplication(PeiDev_t *pPei, PeiEvent_t start)
+{
+	PeiEvent_t ready = 0U;
+
+	if (!RngNrfPeiPrepare())
+	{
+		return false;
+	}
+	if (!RngNrfPeiEnableEvent(pPei, &ready,
+		RNG_NRF_PEI_EVENT_VALRDY))
+	{
+		return false;
+	}
+	if (!RngNrfPeiConnectTask(pPei, start, RNG_NRF_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!RngNrfPeiDisconnectTask(pPei, start,
+		RNG_NRF_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!RngNrfPeiDisableEvent(pPei, ready))
+	{
+		return false;
+	}
+	if (!PeiReleaseEvent(pPei, &ready))
+	{
+		return false;
+	}
+	return RngNrfPeiRelease();
 }

@@ -8,6 +8,9 @@
 #include "coredev/pwm.h"
 #include "coredev/spi.h"
 #include "coredev/uart.h"
+#include "coredev/qdec.h"
+#include "temp_nrf5x.h"
+#include "rng_nrf_pei.h"
 #include "coredev/i2c.h"
 #include "coredev/pdm.h"
 #include "coredev/i2s.h"
@@ -359,4 +362,87 @@ bool PeiUartCppApplication(UART &uart, Pei &pei, PeiEvent_t button)
 		return false;
 	}
 	return uart.ReleasePeiTx();
+}
+
+
+// Compile-only QDEC and TEMP C++ wrappers use the same Pei matrix.
+bool PeiQdecCppApplication(Qdec &qdec, Pei &pei, PeiEvent_t start)
+{
+	PeiEvent_t sample = 0U;
+
+	if (!qdec.PreparePeiStart())
+	{
+		return false;
+	}
+	if (!qdec.EnablePeiEvent(pei, sample, QDEC_PEI_EVENT_SAMPLERDY))
+	{
+		return false;
+	}
+	if (!qdec.ConnectTask(pei, start, QDEC_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!qdec.DisconnectTask(pei, start, QDEC_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!qdec.DisablePeiEvent(pei, sample))
+	{
+		return false;
+	}
+	return pei.ReleaseEvent(sample);
+}
+
+bool PeiTempCppApplication(TempnRF5x &temp, Pei &pei, PeiEvent_t start)
+{
+	PeiEvent_t ready = 0U;
+
+	if (!temp.EnablePeiEvent(pei, ready, TEMP_NRF_PEI_EVENT_DATARDY))
+	{
+		return false;
+	}
+	if (!temp.ConnectTask(pei, start, TEMP_NRF_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!temp.DisconnectTask(pei, start, TEMP_NRF_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!temp.DisablePeiEvent(pei, ready))
+	{
+		return false;
+	}
+	return pei.ReleaseEvent(ready);
+}
+
+bool PeiRngCppApplication(Pei &pei, PeiEvent_t start)
+{
+	PeiEvent_t ready = 0U;
+
+	if (!RngNrfPeiPrepare())
+	{
+		return false;
+	}
+	if (!RngNrfPeiEnableEvent(pei, &ready, RNG_NRF_PEI_EVENT_VALRDY))
+	{
+		return false;
+	}
+	if (!RngNrfPeiConnectTask(pei, start, RNG_NRF_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!RngNrfPeiDisconnectTask(pei, start, RNG_NRF_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!RngNrfPeiDisableEvent(pei, ready))
+	{
+		return false;
+	}
+	if (!pei.ReleaseEvent(ready))
+	{
+		return false;
+	}
+	return RngNrfPeiRelease();
 }
