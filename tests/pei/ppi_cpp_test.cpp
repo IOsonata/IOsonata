@@ -109,6 +109,25 @@ int main()
 		assert(pei.BindSwEvent(sw));
 		assert(pei.EventEndpoint(sw) == TEST_EGU_BASE + 0x100U);
 	}
+
+	// The C++ Pei wrapper manages the same C group object and matrix.
+	{
+		Pei pei;
+		PeiGroup_t group = {};
+		PeiEvent_t evt = 0U;
+
+		assert(pei.BindEvent(evt, event1));
+		assert(pei.Connect(evt, task1));
+		assert(pei.Connect(evt, task2));
+		assert(pei.GroupInit(group));
+		assert(pei.GroupAddEvent(group, evt));
+		assert(pei.GroupEnableTask(group) != 0U);
+		assert(pei.GroupDisableTask(group) != 0U);
+		assert(pei.GroupRemoveEvent(group, evt));
+		assert(pei.GroupDeinit(group));
+		assert(pei.ReleaseEvent(evt));
+	}
+
 	assert(g_critical_depth == 0);
 	return 0;
 }

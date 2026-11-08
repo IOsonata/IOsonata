@@ -17,6 +17,7 @@ int g_critical_depth;
 static int g_assign_calls;
 static int g_enable_calls;
 static int g_disable_calls;
+static int g_group_assign_calls;
 static int g_fail_assign;
 static int g_fail_enable;
 static int g_fail_disable;
@@ -63,6 +64,15 @@ uint32_t sd_ppi_channel_enable_set(uint32_t mask)
 	return 0;
 }
 
+uint32_t sd_ppi_group_assign(uint8_t group, uint32_t mask)
+{
+	assert(g_critical_depth == 0);
+	assert(group < 6);
+	g_group_assign_calls++;
+	g_TestPpi.CHG[group] = mask;
+	return 0U;
+}
+
 uint32_t sd_ppi_channel_enable_clr(uint32_t mask)
 {
 	assert(g_critical_depth == 0);
@@ -95,6 +105,7 @@ static void ResetMock(void)
 	g_assign_calls = 0;
 	g_enable_calls = 0;
 	g_disable_calls = 0;
+	g_group_assign_calls = 0;
 	g_fail_assign = 0;
 	g_fail_enable = 0;
 	g_fail_disable = 0;
@@ -556,6 +567,127 @@ static void TestSwEvent(void)
 	assert(g_critical_depth == 0);
 }
 
+
+// Group operations refer to live matrix routes, never arbitrary channel
+// numbers. A disconnected route must be removed from its group before
+// its PPI channel can be reused.
+static uint32_t TestGroupEventMask(PeiDev_t *pPei, PeiEvent_t Evt)
+{
+	uint32_t mask = 0U;
+	int i;
+
+	for (i = 0; i < PEI_MAX_CONNECTIONS; i++)
+	{
+		if (pPei->Routes[i].Token == Evt &&
+			pPei->Routes[i].Conn.Handle != 0U)
+		{
+			int chan = Channel(&pPei->Routes[i].Conn);
+
+			assert(chan >= 0 && chan < TEST_PPI_CHANNEL_COUNT);
+			mask |= 1UL << chan;
+		}
+	}
+	return mask;
+}
+
+static void TestGroups(void)
+{
+	PeiDev_t pei;
+	PeiGroup_t group[6] = {{0}};
+	PeiGroup_t copied;
+	PeiEvent_t evt = 0U;
+	const PeiEndpoint_t source = 0x40008100U;
+	const PeiEndpoint_t task1 = 0x40006000U;
+	const PeiEndpoint_t task2 = 0x40007000U;
+	uint32_t mask;
+	uint32_t token;
+	int available;
+	int i;
+
+	ResetMock();
+	assert(PeiInit(&pei, 0));
+	assert(!PeiGroupInit(NULL, 0));
+	assert(!PeiGroupInit(&group[0], 1));
+	assert(PeiGroupInit(&group[0], 0));
+	assert(!PeiGroupInit(&group[0], 0));
+	token = group[0].Handle;
+	copied = group[0];
+	assert(PeiGroupEnableTask(&copied) == 0U);
+	assert(!PeiGroupDeinit(&copied));
+	assert(PeiGroupEnableTask(&group[0]) ==
+		(PeiEndpoint_t)&NRF_PPI->TASKS_CHG[0].EN);
+	assert(PeiGroupDisableTask(&group[0]) ==
+		(PeiEndpoint_t)&NRF_PPI->TASKS_CHG[0].DIS);
+	assert(!PeiGroupAddEvent(&group[0], &pei, evt));
+	assert(PeiBindEvent(&pei, &evt, source));
+	assert(PeiConnectTask(&pei, evt, task1));
+	assert(PeiConnectTask(&pei, evt, task2));
+	mask = TestGroupEventMask(&pei, evt);
+	assert(mask != 0U && (mask & (mask - 1U)) != 0U);
+	assert(PeiGroupAddEvent(&group[0], &pei, evt));
+	assert(NRF_PPI->CHG[0] == mask);
+	assert(PeiGroupAddEvent(&group[0], &pei, evt));
+	assert(!PeiGroupInit(&copied, 0));
+	assert(PeiGroupInit(&group[1], 0));
+	assert(!PeiGroupAddEvent(&group[1], &pei, evt));
+	assert(PeiEnableEvent(&pei, evt));
+
+	// Host register model does not emulate direct CHENSET side effects,
+	// unlike the SoftDevice SVC stub. Set CHEN to model live hardware.
+	NRF_PPI->CHEN |= mask;
+	assert(!PeiGroupRemoveEvent(&group[0], &pei, evt));
+	assert(!PeiGroupDeinit(&group[0]));
+	NRF_PPI->CHEN &= ~mask;
+	assert(PeiDisableEvent(&pei, evt));
+	assert(PeiGroupRemoveEvent(&group[0], &pei, evt));
+	assert(NRF_PPI->CHG[0] == 0U);
+	assert(PeiGroupAddEvent(&group[0], &pei, evt));
+
+	// The matrix's PEI connection lifecycle removes stale group bits.
+	assert(PeiReleaseEvent(&pei, &evt));
+	assert(NRF_PPI->CHG[0] == 0U);
+	assert(!PeiGroupRemoveEvent(&group[0], &pei, evt));
+
+	// External PPI routes targeting a group must be removed before
+	// freeing it, or a recycled group could be modified unexpectedly.
+	NRF_PPI->CH[0].TEP = (uint32_t)PeiGroupEnableTask(&group[0]);
+	assert(!PeiGroupDeinit(&group[0]));
+	NRF_PPI->CH[0].TEP = 0U;
+	assert(PeiGroupDeinit(&group[0]));
+	assert(group[0].Handle == 0U);
+	assert(!PeiGroupDeinit(&copied));
+	assert(PeiGroupEnableTask(&copied) == 0U);
+	assert(PeiGroupDeinit(&group[1]));
+	assert(PeiGroupInit(&group[0], 0));
+	assert(group[0].Handle != token);
+
+	// Exhaust the available application group IDs. The SoftDevice and
+	// SDC profiles conservatively reserve groups 4/5.
+	available = 0;
+	for (i = 2; i < 6; i++)
+	{
+		if (PeiGroupInit(&group[i], 0))
+		{
+			available++;
+		}
+	}
+#if defined(SOFTDEVICE_PRESENT) || defined(NRFXLIB_SDC)
+	assert(available == 2);
+#else
+	assert(available == 4);
+#endif
+	assert(!PeiGroupInit(&copied, 0));
+	for (i = 0; i < 6; i++)
+	{
+		if (group[i].Handle != 0U)
+		{
+			assert(PeiGroupDeinit(&group[i]));
+		}
+	}
+	assert(PeiDeinit(&pei));
+	assert(g_critical_depth == 0);
+}
+
 int main(void)
 {
 	ResetMock();
@@ -568,6 +700,7 @@ int main(void)
 	TestNoSoftDevice();
 	TestCMatrix();
 	TestRtcMatrixRearm();
+	TestGroups();
 	TestSwEvent();
 	printf("PEI nRF52 %d channels, %d EGU: PASS\n", TEST_PPI_CHANNEL_COUNT, TEST_EGU_COUNT);
 	return 0;

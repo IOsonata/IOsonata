@@ -7,6 +7,8 @@
 #define TEST_PPI_CHANNEL_COUNT 20
 #endif
 typedef struct {
+	// Nordic PPI group hardware tasks, six groups on the host model.
+	struct { volatile uint32_t EN; volatile uint32_t DIS; } TASKS_CHG[6];
 	volatile uint32_t CHEN;
 	volatile uint32_t CHENSET;
 	volatile uint32_t CHENCLR;
