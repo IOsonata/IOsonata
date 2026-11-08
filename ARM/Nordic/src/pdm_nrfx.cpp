@@ -37,6 +37,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 #include "coredev/pdm.h"
 
+// Optional interconnect functions must not extract PEI from a PDM-only
+// application, even though the PDM driver itself is compiled from C++.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 // The MDK indexes the PDM instance on nRF53 but not on nRF91, so the secure
 // alias and the interrupt number are spelled differently on the two families.
 #if defined(NRF53_SERIES)
@@ -186,6 +196,12 @@ bool PdmInit(PdmDev_t * const pDev, const PdmCfg_t * const pCfg)
 	s_pnRFPdmDev = pDev;
 
 	pDev->hFifo = CFifoInit(pCfg->pFifoMem, pCfg->FifoMemSize, pCfg->FifoBlkSize, false);
+	if (pDev->hFifo == nullptr || pCfg->FifoBlkSize < 2U ||
+		(pCfg->FifoBlkSize & 1U) != 0U)
+	{
+		s_pnRFPdmDev = nullptr;
+		return false;
+	}
 
 	IOPinCfg(pCfg->pPins, pCfg->NbPins);
 	NRF_PDM->PSEL.CLK = (pCfg->pPins[PDM_CLKPIN_IDX].PortNo << 5) | pCfg->pPins[PDM_CLKPIN_IDX].PinNo;
@@ -222,6 +238,11 @@ bool PdmInit(PdmDev_t * const pDev, const PdmCfg_t * const pCfg)
 	NRF_PDM->EVENTS_STARTED = 0;
 	NRF_PDM->EVENTS_END = 0;
 	NRF_PDM->EVENTS_STOPPED = 0;
+	NRF_PDM->SAMPLE.PTR = 0U;
+	NRF_PDM->SAMPLE.MAXCNT = 0U;
+	NRF_PDM->INTENCLR = 0xFFFFFFFFU;
+	NVIC_DisableIRQ(PDM_IRQn);
+	NVIC_ClearPendingIRQ(PDM_IRQn);
 
 	if (pCfg->bIntEn)
 	{
@@ -281,3 +302,169 @@ extern "C" void PDM_IRQHandler()
 	NVIC_ClearPendingIRQ(PDM_IRQn);
 }
 
+
+// Hardware PEI routing on nRF52. The normal driver owns the FIFO and
+// refreshes the double-buffered SAMPLE.PTR in the STARTED interrupt.
+// No PEI callback ever forwards events to tasks.
+static PeiEndpoint_t PdmPeiEventEndpoint(PDM_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES)
+	switch (Event)
+	{
+		case PDM_PEI_EVENT_STARTED:
+			return (PeiEndpoint_t)&NRF_PDM->EVENTS_STARTED;
+		case PDM_PEI_EVENT_END:
+			return (PeiEndpoint_t)&NRF_PDM->EVENTS_END;
+		case PDM_PEI_EVENT_STOPPED:
+			return (PeiEndpoint_t)&NRF_PDM->EVENTS_STOPPED;
+		default:
+			return 0U;
+	}
+#else
+	(void)Event;
+	return 0U;
+#endif
+}
+
+static PeiEndpoint_t PdmPeiTaskEndpoint(PDM_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES)
+	switch (Task)
+	{
+		case PDM_PEI_TASK_START:
+			return (PeiEndpoint_t)&NRF_PDM->TASKS_START;
+		case PDM_PEI_TASK_STOP:
+			return (PeiEndpoint_t)&NRF_PDM->TASKS_STOP;
+		default:
+			return 0U;
+	}
+#else
+	(void)Task;
+	return 0U;
+#endif
+}
+
+static bool PdmPeiReady(PdmDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	if (pDev == nullptr || pDev != s_pnRFPdmDev ||
+		pDev->hFifo == nullptr || !pDev->CfgData.bIntEn ||
+		pDev->NbSamples <= 0 || NRF_PDM->ENABLE == 0U ||
+		NRF_PDM->SAMPLE.PTR == 0U ||
+		NRF_PDM->SAMPLE.MAXCNT != (uint32_t)pDev->NbSamples)
+	{
+		return false;
+	}
+	return true;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool PdmPreparePeiStart(PdmDev_t *pDev)
+{
+#if defined(NRF52_SERIES)
+	uint8_t *p;
+
+	if (pDev == nullptr || pDev != s_pnRFPdmDev ||
+		pDev->hFifo == nullptr || !pDev->CfgData.bIntEn ||
+		pDev->NbSamples <= 0 || NRF_PDM->ENABLE == 0U ||
+		NRF_PDM->SAMPLE.PTR != 0U)
+	{
+		return false;
+	}
+	p = CFifoPut(pDev->hFifo);
+	if (p == nullptr)
+	{
+		return false;
+	}
+	NRF_PDM->SAMPLE.PTR = (uint32_t)(uintptr_t)p;
+	NRF_PDM->SAMPLE.MAXCNT = (uint32_t)pDev->NbSamples;
+	NRF_PDM->EVENTS_STARTED = 0U;
+	NRF_PDM->EVENTS_END = 0U;
+	NRF_PDM->EVENTS_STOPPED = 0U;
+	return true;
+#else
+	(void)pDev;
+	return false;
+#endif
+}
+
+extern "C" bool PdmEnablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, PDM_PEI_EVENT Event)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == nullptr || pEvt == nullptr || PeiBindEvent == nullptr ||
+		!PdmPeiReady(pDev))
+	{
+		return false;
+	}
+	endpoint = PdmPeiEventEndpoint(Event);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt, endpoint);
+}
+
+extern "C" bool PdmDisablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+	PeiEndpoint_t endpoint;
+	int i;
+
+	if (pPei == nullptr || pDev == nullptr ||
+		pDev != s_pnRFPdmDev ||
+		PeiGetEventEndpoint == nullptr || PeiUnbindEvent == nullptr)
+	{
+		return false;
+	}
+	endpoint = PeiGetEventEndpoint(pPei, Evt);
+	for (i = PDM_PEI_EVENT_STARTED; i <= PDM_PEI_EVENT_STOPPED; i++)
+	{
+		if (endpoint != 0U &&
+			endpoint == PdmPeiEventEndpoint((PDM_PEI_EVENT)i))
+		{
+			return PeiUnbindEvent(pPei, Evt, endpoint);
+		}
+	}
+	return false;
+}
+
+extern "C" bool PdmConnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, PDM_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == nullptr || PeiConnectTask == nullptr ||
+		!PdmPeiReady(pDev))
+	{
+		return false;
+	}
+	endpoint = PdmPeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+}
+
+extern "C" bool PdmDisconnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, PDM_PEI_TASK Task)
+{
+	PeiEndpoint_t endpoint;
+
+	if (pPei == nullptr || PeiDisconnectTask == nullptr ||
+		pDev == nullptr || pDev != s_pnRFPdmDev)
+	{
+		return false;
+	}
+	endpoint = PdmPeiTaskEndpoint(Task);
+	if (endpoint == 0U)
+	{
+		return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
+}
