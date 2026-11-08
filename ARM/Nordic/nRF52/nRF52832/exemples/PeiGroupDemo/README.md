@@ -2,28 +2,31 @@
 
 Import `ioc` as an Eclipse Embedded CDT managed project.
 
-TIMER3 generates a compare event every 500 ms using its normal driver
-route for periodic clearing. The example binds the *same hardware
-compare register* as a second logical PEI event and connects that
-event to the standalone LED1 (P0.30). Only this LED connection
-belongs to a PPI channel group.
+The example demonstrates **PPI channel-group one-shot behavior** using
+only BUT1, BUT2 and the physically separate LED1 (P0.30). There is no
+timer, no encoder and no external wiring.
 
-The group is initially disabled: TIMER3 runs, but LED1 does not
-toggle. Press **BUT1** to trigger the group's hardware EN task.
-LED1 begins toggling approximately every 500 ms. Press **BUT2**
-to trigger the group's hardware DIS task; blinking stops even though
-TIMER3 continues running. Press BUT1 again to re-enable.
+1. After boot, `g_PeiGroupStatus=1` means PPI setup succeeded.
+2. Press **BUT2** first: LED1 should remain unchanged, because
+   the group is initially disabled.
+3. Press **BUT1**: GPIOTE/PPI triggers the group's **EN** task.
+4. Press **BUT2**: two group-owned PPI routes execute together:
+   the LED1 TOGGLE task and the group's **DIS** task.
+5. Press BUT2 again: nothing happens. Press BUT1 to rearm the group,
+   then BUT2 to toggle LED1 exactly once more.
 
-`g_PeiGroupStatus=1` means the connections and PPI group were armed.
-A negative value locates setup failure; neither is a hardware PASS.
+No CPU ISR forwards events or toggles an LED. The PPI group owns two
+routes from the same BUT2 hardware event; the BUT1->group.EN route
+remains outside the group.
 
-No CPU interrupt forwards any events or toggles the LED. On teardown,
-disconnect the two button->group task links before GroupDeinit;
-disable any grouped route before changing group membership. The
-PEI route destructor removes a channel's group bit before freeing
-its hardware channel, so a recycled channel cannot be accidentally
-activated by an old group.
+The application never enables the BUT2 event's routes through the
+ordinary `pei.Enable(fireEvt)` call: doing so would bypass the initial
+hardware group-disable state. Group EN/DIS is the only controller for
+those two routes.
 
-The test uses only the onboard buttons and LED. MCU compilation,
-board behavior, S132/S140, SDC and other nRF52 variant tests
-are pending.
+To clean up, disable and disconnect the BUT1->group.EN link first,
+then release BUT2 and its grouped destinations, and finally call
+`PeiGroupDeinit()` (or `pei.GroupDeinit(group)`). Releasing a PEI route
+also removes its membership before that PPI channel becomes reusable.
+
+MCU compilation and physical button/LED validation remain pending.
