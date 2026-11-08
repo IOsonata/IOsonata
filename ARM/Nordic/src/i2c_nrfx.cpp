@@ -63,6 +63,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
+// Optional PEI routing must not extract the matrix into non-PEI I2C builds.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 #ifdef NRF54L_SERIES
 #define NRFX_TWI_RX(reg) ((reg)->DMA.RX)
 #define NRFX_TWI_STARTRX(reg) ((reg)->TASKS_DMA.RX.START)
@@ -145,6 +154,7 @@ typedef struct {
 	volatile bool bAsyncErr;// The transfer met a bus error
 	volatile bool bStopped;	// The interrupt handler has already stopped the bus
 	bool bTxRejected;		// Refused command, do not start its receive phase
+	bool bPeiPrepared;		// TWIM DMA and bBusy reserved for hardware PEI
 	alignas(4) uint8_t TxBuf[NRFX_I2C_TXBUF_SIZE];	// Copy of an interrupt driven transmit
 } nRFTwiDev_t;
 
@@ -487,7 +497,7 @@ bool nRFxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
-	if (dev->bTxRejected)
+	if (dev->bTxRejected || dev->bPeiPrepared)
 	{
 		return false;
 	}
@@ -718,6 +728,10 @@ bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
+	if (dev->bPeiPrepared)
+	{
+		return false;
+	}
 	dev->bTxRejected = false;
 
 #ifdef TWI_PRESENT
@@ -1313,6 +1327,10 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	{
 		return false;
 	}
+	if (s_nRFxI2CDev[pCfgData->DevNo].bPeiPrepared)
+	{
+		return false;
+	}
 
 #ifdef NRF54L_SERIES
 	if (pCfgData->DevNo == 4 || pCfgData->pIOPinMap == NULL ||
@@ -1368,6 +1386,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	s_nRFxI2CDev[pCfgData->DevNo].bAsyncErr = false;
 	s_nRFxI2CDev[pCfgData->DevNo].bStopped = false;
 	s_nRFxI2CDev[pCfgData->DevNo].bTxRejected = false;
+	s_nRFxI2CDev[pCfgData->DevNo].bPeiPrepared = false;
 	//s_nRFxI2CDev[pCfgData->DevNo].bTxReady = true;
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;

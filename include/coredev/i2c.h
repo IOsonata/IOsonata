@@ -54,6 +54,7 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "iopincfg.h"
+#include "coredev/pei.h"
 
 /** @addtogroup device_intrf	Device Interface
   * @{
@@ -131,6 +132,31 @@ typedef enum __I2C_Mode {
 	I2CMODE_SLAVE
 } I2CMODE;
 
+// Hardware event identity depends on the initialized Nordic TWI mode.
+// These are event registers, never software-forwared IRQ callbacks.
+typedef enum {
+	I2C_PEI_EVENT_STOPPED,
+	I2C_PEI_EVENT_ERROR,
+	I2C_PEI_EVENT_SUSPENDED,
+	I2C_PEI_EVENT_RXDREADY,
+	I2C_PEI_EVENT_TXDSENT,
+	I2C_PEI_EVENT_BB,
+	I2C_PEI_EVENT_RXSTARTED,
+	I2C_PEI_EVENT_TXSTARTED,
+	I2C_PEI_EVENT_LASTRX,
+	I2C_PEI_EVENT_LASTTX,
+	I2C_PEI_EVENT_WRITE,
+	I2C_PEI_EVENT_READ
+} I2C_PEI_EVENT;
+
+typedef enum {
+	I2C_PEI_TASK_STARTRX,
+	I2C_PEI_TASK_STARTTX,
+	I2C_PEI_TASK_STOP,
+	I2C_PEI_TASK_SUSPEND,
+	I2C_PEI_TASK_RESUME
+} I2C_PEI_TASK;
+
 typedef enum __I2C_Address_Type {
 	I2CADDR_TYPE_NORMAL,			//!< normal 7 bits
 	I2CADDR_TYPE_EXT				//!< extended 10 bits address length
@@ -201,6 +227,26 @@ extern "C" {
  * 			- false	: Failed
  */
 bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData);
+
+// Prepare a single seven-bit TWIM master TX or RX EasyDMA block without
+// triggering START. TX uses the driver's private static 64-byte buffer;
+// RX remains caller-owned SRAM until STOPPED and successful release.
+// The normal I2C busy flag protects ownership while prepared.
+bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
+	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen);
+bool I2CReleasePeiTransfer(I2CDev_t *pDev);
+
+// Bind TWI/TWIM/TWIS events and connect only mode-supported tasks.
+// Master STARTTX/STARTRX requires a prepared EasyDMA transaction.
+// Slave PREPARERX/PREPARETX stay owned by the TWIS request ISR.
+bool I2CEnablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, I2C_PEI_EVENT Event);
+bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt);
+bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, I2C_PEI_TASK Task);
+bool I2CDisconnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+	PeiEvent_t Evt, I2C_PEI_TASK Task);
 void I2CBusReset(I2CDev_t * const pDev);
 static inline int I2CGetRate(I2CDev_t * const pDev) { return pDev->DevIntrf.GetRate(&pDev->DevIntrf); }
 static inline int I2CSetRate(I2CDev_t * const pDev, int Rate) {
@@ -295,6 +341,38 @@ public:
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
 	void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
 
+	bool PreparePeiTransfer(uint8_t DevAddr, const uint8_t *pTx,
+		uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
+	{
+		return I2CPreparePeiTransfer(&vDevData, DevAddr, pTx,
+			TxLen, pRx, RxLen);
+	}
+
+	bool ReleasePeiTransfer()
+	{
+		return I2CReleasePeiTransfer(&vDevData);
+	}
+
+	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
+		I2C_PEI_EVENT Event)
+	{
+		return I2CEnablePeiEvent(&vDevData, PeiDev, &Evt, Event);
+	}
+
+	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return I2CDisablePeiEvent(&vDevData, PeiDev, Evt);
+	}
+
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, I2C_PEI_TASK Task)
+	{
+		return I2CConnectPeiTask(&vDevData, PeiDev, Evt, Task);
+	}
+
+	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, I2C_PEI_TASK Task)
+	{
+		return I2CDisconnectPeiTask(&vDevData, PeiDev, Evt, Task);
+	}
 
 	/**
 	 * @brief	Set I2C slave data for read command.
