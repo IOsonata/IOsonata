@@ -1443,6 +1443,12 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	nRFUsbdQue_t *pQue = (nRFUsbdQue_t *)CFifoPut(s_Usbd.hQue);
+	if (pQue == nullptr)
+	{
+		// Transfer queue full, nothing accepted. Same as UsbCtrlrEpReceive.
+		EnableInterrupt(state);
+		return false;
+	}
 	pQue->EpNum = EpNum;
 	pQue->Dir = NRFX_USBD_QUE_IN_BUFFER;
 	pQue->pBuffer = pBuffer;
