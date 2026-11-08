@@ -51,7 +51,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 }
 
 // Connect a 3.3 V UART adapter: RX to PC27, TX to PC26, and common ground.
-#define TIMER_DEMO_UART
 #define UART_DEVNO 1
 #define UART_RX_PORT IOPORTC
 #define UART_RX_PIN 26

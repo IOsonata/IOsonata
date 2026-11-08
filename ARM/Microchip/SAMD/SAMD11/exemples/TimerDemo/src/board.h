@@ -42,7 +42,15 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
-#define TIMER_DEMO_NO_UART
+// Release output on the EDBG virtual COM port, SERCOM2 function D: RX PA11
+// pad 3, TX PA10 pad 2, as UartPrbsTxTest. Debug prints with semihosting.
+#define UART_DEVNO			2
+#define UART_RX_PORT		IOPORTA
+#define UART_RX_PIN			11
+#define UART_RX_PINOP		IOPINOP_PERIPHD
+#define UART_TX_PORT		IOPORTA
+#define UART_TX_PIN			10
+#define UART_TX_PINOP		IOPINOP_PERIPHD
 
 // LED0 on PA16, active low
 #define LED_PINS_MAP		{ \

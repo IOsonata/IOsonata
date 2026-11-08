@@ -120,8 +120,8 @@ remain zero; their reload event also produces the overflow indication.
 Devices 2-9 expose six triggers; the demo uses the first four.
 The shared demo also accepts the existing `TIMER_DEMO_DEVNO` / `TIMER_DEMO_FREQ`
 settings used by other targets; when supplied they take precedence over
-`TIMER_DEVNO` / `TIMER_FREQ`. The optional `TIMER_DEMO_UART` console remains
-available and requires explicit application UART pin configuration.
+`TIMER_DEVNO` / `TIMER_FREQ`. Release builds print on the UART pins of
+`board.h`, Debug builds print with semihosting.
 
 The demo requests 100 ms, 1000 ms, 250 ms, and 500 ms, up to the selected
 device's trigger capacity. Trigger 1 stays slower than trigger 0 for timers

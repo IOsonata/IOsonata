@@ -388,9 +388,11 @@ examples that format text with `printf` on the UART do not fit its 16 KB
 flash: in Release, I2CScan is over by 3968 bytes, SPILoopback by 3472 and
 UartRetargetDemo by 2936; I2CMasterSlave and SPIMasterSlave are about 20 to
 22 KB. UartSlipPrbsRxTest links, but its 2432 byte receive FIFO leaves 332
-bytes of the 4 KB RAM for the stack, and is not included. The SAM D11
-TimerDemo defines `TIMER_DEMO_NO_UART` in its `board.h`: without the UART
-and `printf` it takes 13550 bytes of flash in Release and 15510 in Debug.
+bytes of the 4 KB RAM for the stack, and is not included. TimerDemo prints
+with `printf`, on the UART in Release and with semihosting in Debug, and does
+not fit the SAM D11 flash either: Release is over by 10004 bytes, Debug by
+1644. Without the UART and `printf` it took 13550 bytes in Release and 15510
+in Debug.
 The SAM D11 library has the USB device port, but the USB stack with one
 class does not fit the flash: UsbCdcLoopback Release is over by 3468 bytes.
 AdcDemo Release is over by 7892 bytes (`printf`), DacDemo, with the ADC, by
