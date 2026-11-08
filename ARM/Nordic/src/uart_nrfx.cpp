@@ -71,6 +71,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
+// The optional PEI matrix must not be extracted by a normal UART-only
+// static HAL application.
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 // Defining common bitfields for both DMA & non DMA registers
 #define NRFX_UART_ERRORSRC_BREAK_Pos (3UL) /*!< Position of BREAK field. */
 #define NRFX_UART_ERRORSRC_BREAK_Msk (0x1UL << NRFX_UART_ERRORSRC_BREAK_Pos) /*!< Bit mask of BREAK field. */
@@ -170,6 +180,7 @@ typedef struct __nRF_UART_Dev {
 	uint8_t TxFifoMem[NRFX_UART_CFIFO_SIZE];
 	uint8_t RxDmaMem[NRFX_UART_RXDMA_SIZE];
 	uint8_t TxDmaMem[NRFX_UART_TXDMA_SIZE];
+	bool bPeiTxPrepared;		// TX EasyDMA reserved for hardware PEI
 } nRFUartDev_t;
 #pragma pack(pop)
 
@@ -735,6 +746,11 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 
+	if (dev->bPeiTxPrepared)
+	{
+		return (uint32_t)dev->pUartDev->Rate;
+	}
+
 	int rate = 0;
 
 	// NOTE: Thanks to hmolesworth for the Baudrate calculation posted on devzone.
@@ -868,12 +884,19 @@ static void nRFUARTStopRx(DevIntrf_t * const pDev)
 
 static bool nRFUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	return true;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+
+	return !dev->bPeiTxPrepared;
 }
 
 static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+
+	if (dev->bPeiTxPrepared)
+	{
+		return 0;
+	}
     int cnt = 0;
     int rtry = pDev->MaxRetry;
 
@@ -1149,6 +1172,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		return false;
 	}
+	if (s_nRFxUARTDev[pCfg->DevNo].bPeiTxPrepared)
+	{
+		return false;
+	}
 
 #if defined(UART_PRESENT) && defined(UARTE_PRESENT)
 	// Only the first UART_COUNT instances have the legacy UART. The others
@@ -1199,6 +1226,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	pDev->DevIntrf.pDevData = &s_nRFxUARTDev[devno];
 	s_nRFxUARTDev[devno].pUartDev = pDev;
+	s_nRFxUARTDev[devno].bPeiTxPrepared = false;
 
 #ifndef UARTE_PRESENT
 	pDev->DevIntrf.bDma = false;	// DMA not avail on nRF51
