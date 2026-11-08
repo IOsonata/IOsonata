@@ -8,6 +8,8 @@
 #include "coredev/pwm.h"
 #include "coredev/spi.h"
 #include "coredev/uart.h"
+#include "coredev/wdt.h"
+#include "pei_nrf52_power_clock.h"
 #include "coredev/qdec.h"
 #include "temp_nrf5x.h"
 #include "rng_nrf_pei.h"
@@ -445,4 +447,63 @@ bool PeiRngCppApplication(Pei &pei, PeiEvent_t start)
 		return false;
 	}
 	return RngNrfPeiRelease();
+}
+
+
+// Compile-only: nRF52 watchdog, passive POWER/CLOCK events and
+// PPI groups use the existing Pei implicit conversion.
+bool PeiSystemCppApplication(Wdt &wdt, Pei &pei,
+	PeiEvent_t grouped, PeiEvent_t arm)
+{
+	PeiGroup_t group = {};
+	PeiEvent_t timeout = 0U;
+	PeiEvent_t power = 0U;
+	PeiEvent_t clock = 0U;
+
+	if (!wdt.EnablePeiEvent(pei, timeout, WDT_PEI_EVENT_TIMEOUT))
+	{
+		return false;
+	}
+	if (!PeiNrf52BindPowerEvent(pei, &power,
+		PEI_NRF52_POWER_EVENT_POFWARN))
+	{
+		return false;
+	}
+	if (!PeiNrf52BindClockEvent(pei, &clock,
+		PEI_NRF52_CLOCK_EVENT_LFCLKSTARTED))
+	{
+		return false;
+	}
+	if (!pei.GroupInit(group))
+	{
+		return false;
+	}
+	if (!pei.GroupAddEvent(group, grouped))
+	{
+		return false;
+	}
+	if (!pei.Connect(arm, pei.GroupEnableTask(group)))
+	{
+		return false;
+	}
+	if (!pei.Disconnect(arm, pei.GroupEnableTask(group)))
+	{
+		return false;
+	}
+	if (!pei.GroupRemoveEvent(group, grouped) ||
+		!pei.GroupDeinit(group))
+	{
+		return false;
+	}
+	if (!PeiNrf52UnbindClockEvent(pei, clock) ||
+		!PeiNrf52UnbindPowerEvent(pei, power) ||
+		!wdt.DisablePeiEvent(pei, timeout))
+	{
+		return false;
+	}
+	if (!pei.ReleaseEvent(timeout) || !pei.ReleaseEvent(power))
+	{
+		return false;
+	}
+	return pei.ReleaseEvent(clock);
 }

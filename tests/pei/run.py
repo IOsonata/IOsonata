@@ -38,6 +38,8 @@ subprocess.run([sys.executable, str(TEST / "check_uart_pei_contract.py")],
                check=True)
 subprocess.run([sys.executable, str(TEST / "check_misc_pei_contract.py")],
                check=True)
+subprocess.run([sys.executable, str(TEST / "check_system_pei_contract.py")],
+               check=True)
 
 with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     temp = pathlib.Path(temp)
