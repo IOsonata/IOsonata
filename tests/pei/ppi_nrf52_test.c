@@ -1,10 +1,16 @@
+#define _DEFAULT_SOURCE
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include "nrf.h"
 #include "coredev/pei.h"
+
+// MCU hooks of the software events, called directly to check exhaustion
+bool PeiSwEventAllocMcu(int DevNo, PeiEndpoint_t *pEvent);
+void PeiSwEventFreeMcu(PeiEndpoint_t Event);
 
 NRF_PPI_Type g_TestPpi;
 int g_critical_depth;
@@ -307,6 +313,190 @@ static void TestRtcMatrixRearm(void)
 	assert(g_critical_depth == 0);
 }
 
+// Map the EGU registers at their nRF52 addresses in host memory
+static void TestEguMap(void)
+{
+	void *p = mmap((void *)TEST_EGU_BASE, 6 * 0x1000, PROT_READ | PROT_WRITE,
+				   MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+
+	assert(p == (void *)TEST_EGU_BASE);
+	memset(p, 0, 6 * 0x1000);
+}
+
+static int CountPpiRoutes(PeiEndpoint_t Event)
+{
+	int i;
+	int count = 0;
+
+	for (i = 0; i < TEST_PPI_CHANNEL_COUNT; i++)
+	{
+		if (g_TestPpi.CH[i].EEP == (uint32_t)Event && Event != 0U)
+		{
+			count++;
+		}
+	}
+	return count;
+}
+
+// EGU instances PEI may use for the build profile, as in pei_nrf52.cpp
+static int EguUsable(int Inst)
+{
+	if (Inst >= TEST_EGU_COUNT)
+	{
+		return 0;
+	}
+#if defined(SOFTDEVICE_PRESENT)
+	return Inst == 0 || Inst == 3;
+#elif defined(NRFXLIB_SDC)
+	return Inst != 5;
+#else
+	return 1;
+#endif
+}
+
+static PeiEndpoint_t EguEvent(int Inst, int Chan)
+{
+	return TEST_EGU_BASE + 0x1000U * (uint32_t)Inst + 0x100U + 4U * (uint32_t)Chan;
+}
+
+static void TestSwEvent(void)
+{
+	PeiDev_t pei;
+	PeiEvent_t sw1 = 0U;
+	PeiEvent_t sw2 = 0U;
+	PeiEvent_t sw3 = 0U;
+	PeiEvent_t hw = 0U;
+	PeiEvent_t old;
+	PeiEndpoint_t ep;
+	PeiEndpoint_t first;
+	const PeiEndpoint_t source = 0x40008100U;
+	const PeiEndpoint_t taskA = 0x40006000U;
+	const PeiEndpoint_t taskB = 0x40007000U;
+	int expected;
+	int count;
+	int i;
+
+	ResetMock();
+	TestEguMap();
+	assert(PeiInit(&pei, 0));
+
+	// First software event takes channel 0 of the first usable instance
+	assert(PeiBindSwEvent(&pei, &sw1));
+	assert(sw1 != 0U);
+	first = PeiGetEventEndpoint(&pei, sw1);
+	assert(first == EguEvent(0, 0));
+	assert(PeiGetSwEventTask(&pei, sw1) == first - 0x100U);
+	assert(PeiConnectTask(&pei, sw1, taskA));
+	assert(PeiConnectTask(&pei, sw1, taskB));
+	assert(CountPpiRoutes(first) == 2);
+	assert(PeiEnableEvent(&pei, sw1));
+
+	// Firing writes TASKS_TRIGGER of the channel, never INTEN
+	NRF_EGU0->EVENTS_TRIGGERED[0] = 1U;
+	assert(PeiTriggerSwEvent(&pei, sw1));
+	assert(NRF_EGU0->TASKS_TRIGGER[0] == 1U);
+	assert(NRF_EGU0->EVENTS_TRIGGERED[0] == 0U);
+	assert(NRF_EGU0->INTEN == 0U);
+
+	// Already a software event: no new channel
+	old = sw1;
+	assert(PeiBindSwEvent(&pei, &sw1));
+	assert(sw1 == old && PeiGetEventEndpoint(&pei, sw1) == first);
+
+	// A hardware source is not a software event
+	assert(PeiBindEvent(&pei, &hw, source));
+	assert(!PeiTriggerSwEvent(&pei, hw));
+	assert(PeiGetSwEventTask(&pei, hw) == 0U);
+	assert(!PeiBindSwEvent(&pei, &hw));
+	assert(!PeiTriggerSwEvent(&pei, 0U));
+	assert(!PeiBindSwEvent(&pei, NULL));
+	assert(!PeiBindSwEvent(NULL, &sw2));
+
+	// Next channel; a channel with INTEN set by another user is skipped
+	assert(PeiBindSwEvent(&pei, &sw2));
+	assert(PeiGetEventEndpoint(&pei, sw2) == EguEvent(0, 1));
+	NRF_EGU0->INTEN = 1U << 2;
+	assert(PeiBindSwEvent(&pei, &sw3));
+	assert(PeiGetEventEndpoint(&pei, sw3) == EguEvent(0, 3));
+	NRF_EGU0->INTEN = 0U;
+
+	// Unbind frees the channel and keeps the routes, a new bind reconnects them
+	assert(PeiUnbindEvent(&pei, sw1, first));
+	assert(CountPpiRoutes(first) == 0);
+	assert(!PeiTriggerSwEvent(&pei, sw1));
+	assert(PeiSwEventAllocMcu(0, &ep));
+	assert(ep == first);
+	PeiSwEventFreeMcu(ep);
+	assert(PeiBindSwEvent(&pei, &sw1));
+	assert(PeiGetEventEndpoint(&pei, sw1) == first);
+	assert(CountPpiRoutes(first) == 2);
+	assert(PeiTriggerSwEvent(&pei, sw1));
+
+	// A failed bind gives the channel back: no PPI channel for the routes
+	assert(PeiUnbindEvent(&pei, sw1, first));
+	g_TestPpi.CHEN = 0xFFFFFFFFU;
+	assert(!PeiBindSwEvent(&pei, &sw1));
+	g_TestPpi.CHEN = 0U;
+	assert(PeiSwEventAllocMcu(0, &ep));
+	assert(ep == first);
+	PeiSwEventFreeMcu(ep);
+	// Freeing a channel PEI does not own does nothing
+	PeiSwEventFreeMcu(source);
+	PeiSwEventFreeMcu(EguEvent(0, 9));
+
+	// Release frees the channel
+	old = sw2;
+	assert(PeiReleaseEvent(&pei, &sw2));
+	assert(sw2 == 0U);
+	assert(!PeiTriggerSwEvent(&pei, old));
+	assert(PeiSwEventAllocMcu(0, &ep));
+	assert(ep == first);
+	assert(PeiSwEventAllocMcu(0, &ep));
+	assert(ep == EguEvent(0, 1));
+	PeiSwEventFreeMcu(ep);
+	PeiSwEventFreeMcu(first);
+
+	// Exhaustion: every channel of the usable instances except sw3. sw1 has
+	// its identity but no channel since the failed bind.
+	expected = 0;
+	for (i = 0; i < 6; i++)
+	{
+		expected += EguUsable(i) ? 16 : 0;
+	}
+	expected -= 1;
+	count = 0;
+	while (PeiSwEventAllocMcu(0, &ep))
+	{
+		int inst = (int)((ep - TEST_EGU_BASE) / 0x1000U);
+
+		assert(EguUsable(inst));
+		count++;
+	}
+	assert(count == expected);
+	assert(!PeiBindSwEvent(&pei, &sw1));
+	for (i = 0; i < 6; i++)
+	{
+		int ch;
+
+		for (ch = 0; ch < 16; ch++)
+		{
+			if (EguEvent(i, ch) != PeiGetEventEndpoint(&pei, sw3))
+			{
+				PeiSwEventFreeMcu(EguEvent(i, ch));
+			}
+		}
+	}
+	assert(!PeiSwEventAllocMcu(1, &ep));
+	assert(!PeiSwEventAllocMcu(0, NULL));
+
+	// Deinit frees everything
+	assert(PeiDeinit(&pei));
+	assert(PeiSwEventAllocMcu(0, &ep));
+	assert(ep == first);
+	PeiSwEventFreeMcu(ep);
+	assert(g_critical_depth == 0);
+}
+
 int main(void)
 {
 	ResetMock();
@@ -318,6 +508,7 @@ int main(void)
 	TestSVCFailures();
 	TestCMatrix();
 	TestRtcMatrixRearm();
-	printf("PEI nRF52 %d channels: PASS\n", TEST_PPI_CHANNEL_COUNT);
+	TestSwEvent();
+	printf("PEI nRF52 %d channels, %d EGU: PASS\n", TEST_PPI_CHANNEL_COUNT, TEST_EGU_COUNT);
 	return 0;
 }

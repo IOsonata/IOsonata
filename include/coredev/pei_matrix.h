@@ -71,6 +71,21 @@ public:
 		return PeiGetEventEndpoint(&vPei, Evt);
 	}
 
+	bool BindSwEvent(PeiEvent_t &Evt)
+	{
+		return PeiBindSwEvent(&vPei, &Evt);
+	}
+
+	bool Trigger(PeiEvent_t Evt)
+	{
+		return PeiTriggerSwEvent(&vPei, Evt);
+	}
+
+	PeiEndpoint_t SwEventTask(PeiEvent_t Evt) const
+	{
+		return PeiGetSwEventTask(&vPei, Evt);
+	}
+
 private:
 	PeiDev_t vPei;
 };

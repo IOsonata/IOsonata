@@ -23,6 +23,13 @@ The C++ tests exercise the same matrix through the `Pei` wrapper.
 `tests/pei/pei_hal_c_api.c` also syntax-checks the public Timer and
 GPIO PEI entry points from C, without requiring an MCU build.
 
+Software events (EGU) are tested with the EGU registers mapped at their
+nRF52 addresses in host memory: allocation order, channels with INTEN set
+by another user, the reserved instances of each build profile (two EGU on
+the nRF52805 profile), firing, the task endpoint, unbind/rebind keeping the
+task connections, a failed bind giving the channel back, release, deinit
+and exhaustion.
+
 Checks cover invalid event/task addresses, resource exhaustion, repeated
 lifecycle calls, owned-channel checks, pre-existing channel and group use,
 1-to-many and many-to-one connections, SoftDevice service errors, and

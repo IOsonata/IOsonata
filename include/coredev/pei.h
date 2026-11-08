@@ -80,6 +80,7 @@ typedef struct {
 	PeiEvent_t Token;
 	PeiEndpoint_t Endpoint;
 	bool Enabled;
+	bool bSwEvent;			//!< Endpoint allocated by PeiBindSwEvent, freed on unbind
 } PeiEventState_t;
 
 typedef struct {
@@ -133,6 +134,48 @@ bool PeiEnableEvent(PeiDev_t *pPei, PeiEvent_t Evt);
 bool PeiDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt);
 bool PeiReleaseEvent(PeiDev_t *pPei, PeiEvent_t *pEvt);
 PeiEndpoint_t PeiGetEventEndpoint(const PeiDev_t *pPei, PeiEvent_t Evt);
+
+/**
+ * @brief	Bind a software event
+ *
+ * The MCU port allocates a hardware event that the CPU fires with
+ * PeiTriggerSwEvent (an EGU channel on nRF52). Its task connections run
+ * in hardware, all from the same event. The event is otherwise like any
+ * bound event: connect tasks, enable, disable. PeiUnbindEvent and
+ * PeiReleaseEvent free the hardware event.
+ *
+ * With *pEvt == 0 a new event identity is allocated. An unbound identity
+ * gets a new software event and keeps its task connections.
+ *
+ * @param	pPei : PEI matrix
+ * @param	pEvt : Event identity, 0 for a new one
+ * @return	true on success, false when the MCU port has no software event
+ *			hardware or none is free
+ */
+bool PeiBindSwEvent(PeiDev_t *pPei, PeiEvent_t *pEvt);
+
+/**
+ * @brief	Fire a software event
+ *
+ * The connected tasks run only while the event is enabled.
+ *
+ * @param	pPei : PEI matrix
+ * @param	Evt  : Event bound with PeiBindSwEvent
+ * @return	true when the event was fired
+ */
+bool PeiTriggerSwEvent(PeiDev_t *pPei, PeiEvent_t Evt);
+
+/**
+ * @brief	Hardware task that fires a software event
+ *
+ * Connecting another event to this task fires the software event, and its
+ * task connections, from hardware as well.
+ *
+ * @param	pPei : PEI matrix
+ * @param	Evt  : Event bound with PeiBindSwEvent
+ * @return	Task endpoint, 0 when Evt is not a software event
+ */
+PeiEndpoint_t PeiGetSwEventTask(const PeiDev_t *pPei, PeiEvent_t Evt);
 
 #ifdef __cplusplus
 }

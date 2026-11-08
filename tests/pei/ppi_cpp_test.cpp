@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstring>
+#include <sys/mman.h>
 
 #include "nrf.h"
 #include "coredev/pei.h"
@@ -78,6 +79,36 @@ int main()
 		// Destructor releases the remaining event.
 	}
 	assert(CountRoutes() == 0);
+
+	// Software event through the C++ wrapper, on EGU registers mapped at
+	// their nRF52 addresses
+	void *egu = mmap((void *)TEST_EGU_BASE, 0x1000, PROT_READ | PROT_WRITE,
+					 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+	assert(egu == (void *)TEST_EGU_BASE);
+	{
+		Pei pei;
+		PeiEvent_t sw = 0U;
+
+		assert(pei.BindSwEvent(sw));
+		assert(pei.EventEndpoint(sw) == TEST_EGU_BASE + 0x100U);
+		assert(pei.SwEventTask(sw) == TEST_EGU_BASE);
+		assert(pei.Connect(sw, task1));
+		assert(pei.Connect(sw, task2));
+		assert(pei.Enable(sw));
+		assert(CountRoutes() == 2);
+		assert(pei.Trigger(sw));
+		assert(NRF_EGU0->TASKS_TRIGGER[0] == 1U);
+		assert(!pei.Trigger(evt2));
+		// Destructor releases the event and its EGU channel.
+	}
+	assert(CountRoutes() == 0);
+	{
+		Pei pei;
+		PeiEvent_t sw = 0U;
+
+		assert(pei.BindSwEvent(sw));
+		assert(pei.EventEndpoint(sw) == TEST_EGU_BASE + 0x100U);
+	}
 	assert(g_critical_depth == 0);
 	return 0;
 }

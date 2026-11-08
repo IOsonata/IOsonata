@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
         ("sdc", ["-DNRFXLIB_SDC"]),
         ("s132", ["-DSOFTDEVICE_PRESENT"]),
         ("s140", ["-DSOFTDEVICE_PRESENT", "-DS140", "-DNRF52840_XXAA"]),
-        ("nrf52805", ["-DTEST_PPI_CHANNEL_COUNT=10"]),
+        ("nrf52805", ["-DTEST_PPI_CHANNEL_COUNT=10", "-DTEST_EGU_COUNT=2"]),
     ]:
         output = temp / name
         driver_obj = temp / (name + "_pei.o")

@@ -88,3 +88,32 @@ bool PeiHalPortCApplication(PeiDev_t *pPei)
 	IOPinSetSense(0, 2, IOPINSENSE_DISABLE);
 	return PeiReleaseEvent(pPei, &evt);
 }
+
+// Compile-only check of a software event starting a Timer and a GPIO task,
+// fired from code and from a GPIO event.
+bool PeiHalSwEventCApplication(TimerDev_t *pTimer, PeiDev_t *pPei)
+{
+	PeiEvent_t sw;
+	PeiEvent_t button;
+
+	sw = 0U;
+	button = 0U;
+	if (!PeiBindSwEvent(pPei, &sw))
+	{
+		return false;
+	}
+	if (!TimerConnectTask(pTimer, pPei, sw, TIMER_TASK_START) ||
+		!IOPinEnableTask(pPei, sw, 0, 30, IOPIN_TASK_SET))
+	{
+		PeiReleaseEvent(pPei, &sw);
+		return false;
+	}
+	if (IOPinEnableEvent(pPei, &button, 0, 2, IOPINSENSE_LOW_TRANSITION))
+	{
+		PeiConnectTask(pPei, button, PeiGetSwEventTask(pPei, sw));
+		PeiEnableEvent(pPei, button);
+	}
+	PeiEnableEvent(pPei, sw);
+	PeiTriggerSwEvent(pPei, sw);
+	return PeiReleaseEvent(pPei, &sw);
+}

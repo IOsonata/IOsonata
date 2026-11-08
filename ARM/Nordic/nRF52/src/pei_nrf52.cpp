@@ -317,3 +317,196 @@ void PeiDisconnect(PeiConn_t * const pConn)
 	pConn->Handle = 0U;
 	EnableInterrupt(state);
 }
+
+// Software events on EGU channels. PEI owns the channels it allocates here:
+// it never sets INTEN, so the SWIn_EGUn interrupt is not raised, and it
+// skips a channel whose INTEN bit another user has set. TASKS_TRIGGER[n]
+// fires EVENTS_TRIGGERED[n], which the PPI routes of the event carry to
+// their tasks.
+static NRF_EGU_Type * const s_PeiNrf52Egu[] = {
+	NRF_EGU0,
+#ifdef NRF_EGU1
+	NRF_EGU1,
+#endif
+#ifdef NRF_EGU2
+	NRF_EGU2,
+#endif
+#ifdef NRF_EGU3
+	NRF_EGU3,
+#endif
+#ifdef NRF_EGU4
+	NRF_EGU4,
+#endif
+#ifdef NRF_EGU5
+	NRF_EGU5,
+#endif
+};
+
+enum {
+	PEI_NRF52_EGU_COUNT = sizeof(s_PeiNrf52Egu) / sizeof(s_PeiNrf52Egu[0]),
+	PEI_NRF52_EGU_CH_COUNT = sizeof(NRF_EGU0->TASKS_TRIGGER) / sizeof(NRF_EGU0->TASKS_TRIGGER[0])
+};
+typedef char PeiNrf52EguChannelCountCheck[
+	(PEI_NRF52_EGU_CH_COUNT > 0 && PEI_NRF52_EGU_CH_COUNT <= 32) ? 1 : -1
+];
+
+// Channels allocated as software events, one bit per channel
+static uint32_t s_PeiEguOwned[PEI_NRF52_EGU_COUNT];
+
+// Called by the generic matrix in src/coredev/pei.c through weak references
+extern "C" {
+bool PeiSwEventAllocMcu(int DevNo, PeiEndpoint_t *pEvent);
+void PeiSwEventFreeMcu(PeiEndpoint_t Event);
+bool PeiSwEventTriggerMcu(PeiEndpoint_t Event);
+PeiEndpoint_t PeiSwEventTaskMcu(PeiEndpoint_t Event);
+}
+
+// EGU instances PEI may use, bit n for EGUn. With a SoftDevice, SWI1/EGU1 is
+// the radio notification, SWI2/EGU2 the SoftDevice event interrupt, SWI4/EGU4
+// and SWI5/EGU5 are reserved by the SoftDevice. SDC builds give SWI5/EGU5
+// to MPSL as its low priority interrupt (nrf_mpsl.h). NRF_EGUS_USED reserves
+// more instances at library build time.
+static uint32_t PeiNrf52EguAvailableMask(void)
+{
+	uint32_t mask = (1UL << PEI_NRF52_EGU_COUNT) - 1UL;
+
+#if defined(SOFTDEVICE_PRESENT)
+	mask &= ~((1UL << 1) | (1UL << 2) | (1UL << 4) | (1UL << 5));
+#elif defined(NRFXLIB_SDC)
+	mask &= ~(1UL << 5);
+#endif
+#ifdef NRF_EGUS_USED
+	mask &= ~(uint32_t)NRF_EGUS_USED;
+#endif
+
+	return mask;
+}
+
+// Instance and channel of an owned software event, from its event endpoint
+static bool PeiNrf52EguOwned(PeiEndpoint_t Event, int *pInst, int *pChan)
+{
+	int i;
+
+	for (i = 0; i < PEI_NRF52_EGU_COUNT; i++)
+	{
+		uintptr_t base = (uintptr_t)&s_PeiNrf52Egu[i]->EVENTS_TRIGGERED[0];
+
+		if (Event < base || Event >= base + PEI_NRF52_EGU_CH_COUNT * 4U ||
+			((Event - base) & 3U) != 0U)
+		{
+			continue;
+		}
+
+		int chan = (int)((Event - base) / 4U);
+
+		if ((s_PeiEguOwned[i] & (1UL << chan)) == 0U)
+		{
+			return false;
+		}
+		*pInst = i;
+		*pChan = chan;
+
+		return true;
+	}
+
+	return false;
+}
+
+bool PeiSwEventAllocMcu(int DevNo, PeiEndpoint_t *pEvent)
+{
+	uint32_t allowed;
+	uint32_t state;
+	int inst = -1;
+	int chan = -1;
+	int i;
+	int j;
+
+	if (DevNo != 0 || pEvent == NULL)
+	{
+		return false;
+	}
+
+	allowed = PeiNrf52EguAvailableMask();
+	state = DisableInterrupt();
+
+	for (i = 0; i < PEI_NRF52_EGU_COUNT && inst < 0; i++)
+	{
+		if ((allowed & (1UL << i)) == 0U)
+		{
+			continue;
+		}
+		for (j = 0; j < PEI_NRF52_EGU_CH_COUNT; j++)
+		{
+			uint32_t bit = 1UL << j;
+
+			if ((s_PeiEguOwned[i] & bit) == 0U && (s_PeiNrf52Egu[i]->INTEN & bit) == 0U)
+			{
+				s_PeiEguOwned[i] |= bit;
+				inst = i;
+				chan = j;
+				break;
+			}
+		}
+	}
+
+	EnableInterrupt(state);
+
+	if (inst < 0)
+	{
+		return false;
+	}
+
+	s_PeiNrf52Egu[inst]->EVENTS_TRIGGERED[chan] = 0;
+	*pEvent = (PeiEndpoint_t)&s_PeiNrf52Egu[inst]->EVENTS_TRIGGERED[chan];
+
+	return true;
+}
+
+void PeiSwEventFreeMcu(PeiEndpoint_t Event)
+{
+	uint32_t state;
+	int inst;
+	int chan;
+
+	if (!PeiNrf52EguOwned(Event, &inst, &chan))
+	{
+		return;
+	}
+
+	s_PeiNrf52Egu[inst]->EVENTS_TRIGGERED[chan] = 0;
+
+	state = DisableInterrupt();
+	s_PeiEguOwned[inst] &= ~(1UL << chan);
+	EnableInterrupt(state);
+}
+
+bool PeiSwEventTriggerMcu(PeiEndpoint_t Event)
+{
+	int inst;
+	int chan;
+
+	if (!PeiNrf52EguOwned(Event, &inst, &chan))
+	{
+		return false;
+	}
+
+	// The PPI routes run from the event itself. The register is cleared first
+	// so that it shows this trigger only.
+	s_PeiNrf52Egu[inst]->EVENTS_TRIGGERED[chan] = 0;
+	s_PeiNrf52Egu[inst]->TASKS_TRIGGER[chan] = 1;
+
+	return true;
+}
+
+PeiEndpoint_t PeiSwEventTaskMcu(PeiEndpoint_t Event)
+{
+	int inst;
+	int chan;
+
+	if (!PeiNrf52EguOwned(Event, &inst, &chan))
+	{
+		return 0U;
+	}
+
+	return (PeiEndpoint_t)&s_PeiNrf52Egu[inst]->TASKS_TRIGGER[chan];
+}

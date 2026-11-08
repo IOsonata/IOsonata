@@ -91,6 +91,41 @@ event/destination selector on R9A02. `PeiEvent_t` is **not** a hardware
 channel. An unsupported route returns failure; it is never emulated
 with software interrupt forwarding.
 
+## Software events
+
+A software event is an event source that the CPU fires. The MCU port
+allocates the hardware for it, an EGU channel on nRF52. Its task
+connections then run in hardware, all from the same event: one CPU write
+starts every connected task at the same time.
+
+```c
+PeiEvent_t sw = 0;
+
+PeiBindSwEvent(&pei, &sw);
+PeiConnectTask(&pei, sw, hardwareTaskA);
+PeiConnectTask(&pei, sw, hardwareTaskB);
+PeiEnableEvent(&pei, sw);
+PeiTriggerSwEvent(&pei, sw);
+```
+
+C++: `pei.BindSwEvent(sw)`, `pei.Trigger(sw)`. Apart from its source a
+software event is an ordinary matrix event: enable, disable, connect and
+disconnect work the same way, and the tasks run only while it is enabled.
+`PeiUnbindEvent` and `PeiReleaseEvent` give the hardware back to the port.
+An unbound identity keeps its task connections, a new `PeiBindSwEvent`
+on it allocates new hardware and reconnects them.
+
+`PeiGetSwEventTask` (C++ `SwEventTask`) returns the hardware task that
+fires the software event. Connecting another event to it fires the same
+task set from hardware too, for example a button and the CPU starting the
+same group of tasks.
+
+The CPU writes the trigger itself, it does not forward an event from an
+interrupt. No interrupt is enabled on the software event hardware, so there
+is no callback. A port without software event hardware leaves the MCU
+functions undefined; the weak references in `src/coredev/pei.c` then make
+`PeiBindSwEvent` return false.
+
 ## MCU implementation rules
 
 - Select only hardware-supported event/task combinations. Return failure when
@@ -287,6 +322,26 @@ The latter test does not link firmware or use nrfx HAL drivers. The
 `PeiBlinky` nRF52832 IOcomposer example is intended for
 BLYST-NANO-DK hardware validation. Its hardware results are not recorded yet.
 
+
+### nRF52 software events on EGU
+
+`pei_nrf52.cpp` allocates software events on EGU channels: 16 per
+instance, EGU0-EGU1 on nRF52805/810/811, EGU0-EGU5 on the other parts.
+The event endpoint is `EVENTS_TRIGGERED[n]`, `PeiTriggerSwEvent` writes
+`TASKS_TRIGGER[n]`, which is also the endpoint `PeiGetSwEventTask` returns.
+PEI never sets the EGU `INTEN`, so the shared SWIn_EGUn interrupt is not
+raised; software interrupt users that only pend the SWI in the NVIC are not
+affected. A channel whose `INTEN` bit is already set by another user is
+skipped.
+
+Reserved instances: with a SoftDevice, EGU1 (radio notification), EGU2
+(SoftDevice events), EGU4 and EGU5 (SoftDevice); in SDC builds EGU5, the
+MPSL low priority interrupt (`nrf_mpsl.h`). That leaves EGU0 and EGU3 in
+SoftDevice builds and EGU0 alone on a SoftDevice nRF52805/810.
+`NRF_EGUS_USED` reserves more instances at library build time, bit n for
+EGUn. The interrupt-delivering direction (a hardware event into an EGU
+channel with its interrupt enabled, to call application code) is not
+provided.
 
 ## nRF5340 DPPI driver (0.14)
 

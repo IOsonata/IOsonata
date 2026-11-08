@@ -31,6 +31,21 @@ bool PeiTimerPrepare(TimerDev_t *pTimer)
 	return TimerPeiPrepareMcu(pTimer);
 }
 
+// Software events: the MCU port allocates a hardware event the CPU can fire
+// (an EGU channel on nRF52). A port without one does not define these, the
+// weak references then make PeiBindSwEvent return false.
+#if defined(__GNUC__)
+extern bool PeiSwEventAllocMcu(int DevNo, PeiEndpoint_t *pEvent) __attribute__((weak));
+extern void PeiSwEventFreeMcu(PeiEndpoint_t Event) __attribute__((weak));
+extern bool PeiSwEventTriggerMcu(PeiEndpoint_t Event) __attribute__((weak));
+extern PeiEndpoint_t PeiSwEventTaskMcu(PeiEndpoint_t Event) __attribute__((weak));
+#else
+extern bool PeiSwEventAllocMcu(int DevNo, PeiEndpoint_t *pEvent);
+extern void PeiSwEventFreeMcu(PeiEndpoint_t Event);
+extern bool PeiSwEventTriggerMcu(PeiEndpoint_t Event);
+extern PeiEndpoint_t PeiSwEventTaskMcu(PeiEndpoint_t Event);
+#endif
+
 
 static int PeiFindEvent(const PeiDev_t *pPei, PeiEvent_t Evt)
 {
@@ -237,6 +252,15 @@ bool PeiUnbindEvent(PeiDev_t *pPei, PeiEvent_t Evt, PeiEndpoint_t Endpoint)
 		}
 	}
 	pPei->Events[e].Endpoint = 0U;
+	if (pPei->Events[e].bSwEvent)
+	{
+		// No route uses the software event any more, give it back
+		pPei->Events[e].bSwEvent = false;
+		if (PeiSwEventFreeMcu != NULL)
+		{
+			PeiSwEventFreeMcu(Endpoint);
+		}
+	}
 	return true;
 }
 
@@ -454,4 +478,78 @@ bool PeiReleaseEvent(PeiDev_t *pPei, PeiEvent_t *pEvt)
 	pPei->Events[e].Enabled = false;
 	*pEvt = 0U;
 	return true;
+}
+
+bool PeiBindSwEvent(PeiDev_t *pPei, PeiEvent_t *pEvt)
+{
+	PeiEndpoint_t endpoint;
+	int e;
+
+	if (pPei == NULL || pEvt == NULL || PeiSwEventAllocMcu == NULL ||
+		PeiSwEventFreeMcu == NULL)
+	{
+		return false;
+	}
+	if (*pEvt != 0U)
+	{
+		e = PeiFindEvent(pPei, *pEvt);
+		if (e < 0)
+		{
+			return false;
+		}
+		if (pPei->Events[e].Endpoint != 0U)
+		{
+			// Already a software event: nothing to do. Another source must be
+			// unbound first.
+			return pPei->Events[e].bSwEvent;
+		}
+	}
+	endpoint = 0U;
+	if (!PeiSwEventAllocMcu(pPei->DevNo, &endpoint))
+	{
+		return false;
+	}
+	// bSwEvent is still false, a failed bind does not free it in unbind
+	if (!PeiBindEvent(pPei, pEvt, endpoint))
+	{
+		e = PeiFindEvent(pPei, *pEvt);
+		if (e >= 0 && pPei->Events[e].Endpoint == endpoint)
+		{
+			// The failed bind could not be undone and the matrix still holds
+			// the endpoint: the unbind that removes it frees it.
+			pPei->Events[e].bSwEvent = true;
+		}
+		else
+		{
+			PeiSwEventFreeMcu(endpoint);
+		}
+		return false;
+	}
+	e = PeiFindEvent(pPei, *pEvt);
+	pPei->Events[e].bSwEvent = true;
+	return true;
+}
+
+bool PeiTriggerSwEvent(PeiDev_t *pPei, PeiEvent_t Evt)
+{
+	int e;
+
+	e = PeiFindEvent(pPei, Evt);
+	if (e < 0 || !pPei->Events[e].bSwEvent || PeiSwEventTriggerMcu == NULL)
+	{
+		return false;
+	}
+	return PeiSwEventTriggerMcu(pPei->Events[e].Endpoint);
+}
+
+PeiEndpoint_t PeiGetSwEventTask(const PeiDev_t *pPei, PeiEvent_t Evt)
+{
+	int e;
+
+	e = PeiFindEvent(pPei, Evt);
+	if (e < 0 || !pPei->Events[e].bSwEvent || PeiSwEventTaskMcu == NULL)
+	{
+		return 0U;
+	}
+	return PeiSwEventTaskMcu(pPei->Events[e].Endpoint);
 }

@@ -75,3 +75,23 @@ bool PeiHalPortCppApplication(Pei &pei)
 	}
 	return pei.ReleaseEvent(evt);
 }
+
+// Compile-only check of the software event wrappers.
+bool PeiHalSwEventCppApplication(Timer &timer, Pei &pei)
+{
+	PeiEvent_t sw = 0U;
+
+	if (!pei.BindSwEvent(sw))
+	{
+		return false;
+	}
+	if (!timer.ConnectTask(pei, sw, TIMER_TASK_START) ||
+		pei.SwEventTask(sw) == 0U)
+	{
+		pei.ReleaseEvent(sw);
+		return false;
+	}
+	pei.Enable(sw);
+	pei.Trigger(sw);
+	return pei.ReleaseEvent(sw);
+}
