@@ -9,6 +9,8 @@ a target MCU. tests/pei/run.py compiles this as C11 with -Werror.
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
 #include "coredev/pwm.h"
+#include "coredev/pdm.h"
+#include "coredev/i2s.h"
 #include "adc_nrf52_pei.h"
 #include "converters/analog_comp.h"
 
@@ -215,4 +217,65 @@ bool PeiHalPwmCApplication(PwmDev_t *pPwm, PeiDev_t *pPei,
 		return false;
 	}
 	return PeiReleaseEvent(pPei, &stopped);
+}
+
+
+// Compile-only C use: the driver, not PEI, owns capture DMA buffers.
+bool PeiAudioCApplication(PdmDev_t *pPdm, I2SDev_t *pI2s,
+	PeiDev_t *pPei, PeiEvent_t source)
+{
+	PeiEvent_t pdmEnd;
+	PeiEvent_t i2sRx;
+
+	pdmEnd = 0U;
+	i2sRx = 0U;
+	if (!PdmPreparePeiStart(pPdm))
+	{
+		return false;
+	}
+	if (!PdmEnablePeiEvent(pPdm, pPei, &pdmEnd, PDM_PEI_EVENT_END))
+	{
+		return false;
+	}
+	if (!PdmConnectPeiTask(pPdm, pPei, source, PDM_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!PdmDisconnectPeiTask(pPdm, pPei, source, PDM_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!PdmDisablePeiEvent(pPdm, pPei, pdmEnd))
+	{
+		return false;
+	}
+	if (!PeiReleaseEvent(pPei, &pdmEnd))
+	{
+		return false;
+	}
+
+	// A normal I2SInit starts streaming. Disable before arming PEI START.
+	I2SDisable(pI2s);
+	if (!I2SPreparePeiStart(pI2s))
+	{
+		return false;
+	}
+	if (!I2SEnablePeiEvent(pI2s, pPei, &i2sRx,
+		I2S_PEI_EVENT_RXPTRUPD))
+	{
+		return false;
+	}
+	if (!I2SConnectPeiTask(pI2s, pPei, source, I2S_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!I2SDisconnectPeiTask(pI2s, pPei, source, I2S_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!I2SDisablePeiEvent(pI2s, pPei, i2sRx))
+	{
+		return false;
+	}
+	return PeiReleaseEvent(pPei, &i2sRx);
 }

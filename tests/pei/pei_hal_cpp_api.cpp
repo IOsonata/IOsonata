@@ -6,6 +6,8 @@
 #include "coredev/timer.h"
 #include "coredev/iopincfg.h"
 #include "coredev/pwm.h"
+#include "coredev/pdm.h"
+#include "coredev/i2s.h"
 #include "adc_nrf52_pei.h"
 #include "converters/analog_comp.h"
 
@@ -176,4 +178,63 @@ bool PeiHalPwmCppApplication(Pwm &pwm, Pei &pei,
 		return false;
 	}
 	return pei.ReleaseEvent(started);
+}
+
+
+// Compile-only C++ use of the same PEI C matrix for PDM and I2S.
+bool PeiAudioCppApplication(PdmDev_t *pPdm, I2S &i2s,
+	Pei &pei, PeiEvent_t source)
+{
+	PeiEvent_t pdmStarted = 0U;
+	PeiEvent_t i2sStopped = 0U;
+
+	if (!PdmPreparePeiStart(pPdm))
+	{
+		return false;
+	}
+	if (!PdmEnablePeiEvent(pPdm, pei, &pdmStarted,
+		PDM_PEI_EVENT_STARTED))
+	{
+		return false;
+	}
+	if (!PdmConnectPeiTask(pPdm, pei, source, PDM_PEI_TASK_STOP))
+	{
+		return false;
+	}
+	if (!PdmDisconnectPeiTask(pPdm, pei, source, PDM_PEI_TASK_STOP))
+	{
+		return false;
+	}
+	if (!PdmDisablePeiEvent(pPdm, pei, pdmStarted))
+	{
+		return false;
+	}
+	if (!pei.ReleaseEvent(pdmStarted))
+	{
+		return false;
+	}
+
+	i2s.Disable();
+	if (!i2s.PreparePeiStart())
+	{
+		return false;
+	}
+	if (!i2s.EnablePeiEvent(pei, i2sStopped,
+		I2S_PEI_EVENT_STOPPED))
+	{
+		return false;
+	}
+	if (!i2s.ConnectTask(pei, source, I2S_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!i2s.DisconnectTask(pei, source, I2S_PEI_TASK_START))
+	{
+		return false;
+	}
+	if (!i2s.DisablePeiEvent(pei, i2sStopped))
+	{
+		return false;
+	}
+	return pei.ReleaseEvent(i2sStopped);
 }
