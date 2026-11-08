@@ -192,8 +192,6 @@ int main(void)
 #ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
 #endif
-	setvbuf(stdout, NULL, _IONBF, 0);
-#endif
 
 #ifdef DEMO_C
 	g_TimerInitOk = TimerInit(&g_TimerDev, &s_TimerCfg);
