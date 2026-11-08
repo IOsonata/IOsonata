@@ -57,9 +57,7 @@ typedef struct {
 
 // Status 2 verifies Timer intervals and counter continuity, not the PPI route.
 // LED0 is the independent physical indication of PPI/GPIOTE operation.
-extern "C" {
 volatile PeiCcTestResult_t g_PeiCcTest;
-}
 
 static void PeiCcIrqHandler(TimerDev_t *pTimer, int TrigNo, void *pContext)
 {

@@ -50,9 +50,7 @@ typedef struct {
 	volatile uint32_t IrqCount;
 } GpioteStressResult_t;
 
-extern "C" {
 volatile GpioteStressResult_t g_GpioteStress;
-}
 
 static void StressButtonIrq(int IntNo, void *pCtx)
 {

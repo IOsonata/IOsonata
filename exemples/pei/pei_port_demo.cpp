@@ -22,9 +22,7 @@ static_assert(sizeof(s_Buttons) / sizeof(s_Buttons[0]) >= 2,
 	"PeiPortDemo requires two buttons");
 
 // 1: both sources enabled. Negative values identify failed steps.
-extern "C" {
 volatile int g_PeiPortDemoStatus;
-}
 
 int main(void)
 {
