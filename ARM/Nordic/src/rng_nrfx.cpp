@@ -19,6 +19,14 @@
 #include "crypto/icrypto.h"
 #include "crypto_rng_nrf.h"
 
+#if defined(__GNUC__)
+#pragma weak PeiBindEvent
+#pragma weak PeiGetEventEndpoint
+#pragma weak PeiUnbindEvent
+#pragma weak PeiConnectTask
+#pragma weak PeiDisconnectTask
+#endif
+
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
 // SysLog transport the a configured (UART, USB, RTT, BLE, or any other
@@ -128,6 +136,8 @@ static int RngPeriphSdRandFill(uint8_t *pBuff, int BuffLen)
 }
 
 static bool s_bPeriphSdXfer;
+static bool s_bPeriphPeiPrepared;
+static DevIntrf_t *s_pPeriphIntrf;
 
 static void RngPeriphDisable(DevIntrf_t * const pDevIntrf)
 {
@@ -153,6 +163,10 @@ static bool RngPeriphStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 {
 	(void)pIntrf;
 	(void)DevAddr;
+	if (s_bPeriphPeiPrepared)
+	{
+		return false;
+	}
 	s_bPeriphSdXfer = RngPeriphSdEnabled();
 	return true;
 }
@@ -161,7 +175,7 @@ static int RngPeriphRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff,
 							   int BuffLen)
 {
 	(void)pIntrf;
-	if (pBuff == nullptr || BuffLen <= 0)
+	if (pBuff == nullptr || BuffLen <= 0 || s_bPeriphPeiPrepared)
 	{
 		return 0;
 	}
@@ -216,11 +230,18 @@ static void RngPeriphStopTx(DevIntrf_t * const pDevIntrf)
 static void RngPeriphReset(DevIntrf_t * const pDevIntrf)
 {
 	(void)pDevIntrf;
-	s_bPeriphSdXfer = false;
+	if (!s_bPeriphPeiPrepared)
+	{
+		s_bPeriphSdXfer = false;
+	}
 }
 static void RngPeriphPowerOff(DevIntrf_t * const pDevIntrf)
 {
 	(void)pDevIntrf;
+	if (s_bPeriphPeiPrepared)
+	{
+		return;
+	}
 	NRF_RNG_Type *reg = RngPeriphReg();
 	reg->TASKS_STOP = 1U;
 	reg->CONFIG = RNG_CONFIG_DERCEN_Disabled;
@@ -233,6 +254,10 @@ static void *RngPeriphGetHandle(DevIntrf_t * const pDevIntrf)
 
 bool RngPeriphIntrf::Init(void)
 {
+	if (s_bPeriphPeiPrepared)
+	{
+		return false;
+	}
 	memset(&vDevIntrf, 0, sizeof(vDevIntrf));
 	vDevIntrf.pDevData = this;
 	vDevIntrf.EvtCB = nullptr;
@@ -258,6 +283,7 @@ bool RngPeriphIntrf::Init(void)
 	vDevIntrf.Reset = RngPeriphReset;
 	vDevIntrf.PowerOff = RngPeriphPowerOff;
 	vDevIntrf.GetHandle = RngPeriphGetHandle;
+	s_pPeriphIntrf = &vDevIntrf;
 	return true;
 }
 
@@ -270,6 +296,186 @@ RngPeriphIntrf *RngPeriphIntrfInstance(void)
 		initialized = instance.Init();
 	}
 	return initialized ? &instance : nullptr;
+}
+
+
+// nRF52 RNG is an exclusive peripheral, shared with the CPU crypto
+// entropy interface and potentially the SoftDevice. PEI uses the same
+// DeviceIntrf busy lock; a PPI event never reads or exposes RNG.VALUE.
+static bool RngNrfPeiReady(void)
+{
+#if defined(NRF52_SERIES) && !defined(NRFXLIB_SDC)
+	return s_bPeriphPeiPrepared && s_pPeriphIntrf != NULL &&
+		!RngPeriphSdEnabled();
+#else
+	return false;
+#endif
+}
+
+extern "C" bool RngNrfPeiPrepare(void)
+{
+#if defined(NRF52_SERIES) && !defined(NRFXLIB_SDC)
+	RngPeriphIntrf *pRng;
+	DevIntrf_t *pDev;
+	NRF_RNG_Type *reg;
+
+	if (s_bPeriphPeiPrepared || RngPeriphSdEnabled())
+	{
+		return false;
+	}
+	pRng = RngPeriphIntrfInstance();
+	if (pRng == NULL)
+	{
+		return false;
+	}
+	pDev = *pRng;
+	if (pDev == NULL || pDev != s_pPeriphIntrf)
+	{
+		return false;
+	}
+	if (atomic_flag_test_and_set(&pDev->bBusy))
+	{
+		return false;
+	}
+	if (s_bPeriphPeiPrepared || RngPeriphSdEnabled())
+	{
+		atomic_flag_clear(&pDev->bBusy);
+		return false;
+	}
+	reg = RngPeriphReg();
+	reg->TASKS_STOP = 1U;
+	reg->CONFIG = RNG_CONFIG_DERCEN_Enabled;
+	reg->EVENTS_VALRDY = 0U;
+	s_bPeriphPeiPrepared = true;
+	return true;
+#else
+	return false;
+#endif
+}
+
+extern "C" bool RngNrfPeiRelease(void)
+{
+#if defined(NRF52_SERIES) && !defined(NRFXLIB_SDC)
+	NRF_RNG_Type *reg;
+
+	if (!s_bPeriphPeiPrepared || s_pPeriphIntrf == NULL ||
+		RngPeriphSdEnabled())
+	{
+		return false;
+	}
+	// The application has already disabled and removed all PEI routes.
+	reg = RngPeriphReg();
+	reg->TASKS_STOP = 1U;
+	reg->CONFIG = RNG_CONFIG_DERCEN_Disabled;
+	reg->EVENTS_VALRDY = 0U;
+	s_bPeriphPeiPrepared = false;
+	atomic_flag_clear(&s_pPeriphIntrf->bBusy);
+	return true;
+#else
+	return false;
+#endif
+}
+
+extern "C" bool RngNrfPeiEnableEvent(PeiDev_t *pPei,
+	PeiEvent_t *pEvt, RNG_NRF_PEI_EVENT Event)
+{
+#if defined(NRF52_SERIES) && !defined(NRFXLIB_SDC)
+	if (!RngNrfPeiReady() || pPei == NULL || pEvt == NULL ||
+		PeiBindEvent == NULL || Event != RNG_NRF_PEI_EVENT_VALRDY)
+	{
+		return false;
+	}
+	return PeiBindEvent(pPei, pEvt,
+		(PeiEndpoint_t)&RngPeriphReg()->EVENTS_VALRDY);
+#else
+	(void)pPei;
+	(void)pEvt;
+	(void)Event;
+	return false;
+#endif
+}
+
+extern "C" bool RngNrfPeiDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt)
+{
+#if defined(NRF52_SERIES) && !defined(NRFXLIB_SDC)
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiGetEventEndpoint == NULL ||
+		PeiUnbindEvent == NULL)
+	{
+		return false;
+	}
+	endpoint = (PeiEndpoint_t)&RngPeriphReg()->EVENTS_VALRDY;
+	if (PeiGetEventEndpoint(pPei, Evt) != endpoint)
+	{
+		return false;
+	}
+	return PeiUnbindEvent(pPei, Evt, endpoint);
+#else
+	(void)pPei;
+	(void)Evt;
+	return false;
+#endif
+}
+
+extern "C" bool RngNrfPeiConnectTask(PeiDev_t *pPei,
+	PeiEvent_t Evt, RNG_NRF_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES) && !defined(NRFXLIB_SDC)
+	PeiEndpoint_t endpoint;
+
+	if (!RngNrfPeiReady() || pPei == NULL || PeiConnectTask == NULL)
+	{
+		return false;
+	}
+	switch (Task)
+	{
+		case RNG_NRF_PEI_TASK_START:
+			endpoint = (PeiEndpoint_t)&RngPeriphReg()->TASKS_START;
+			break;
+		case RNG_NRF_PEI_TASK_STOP:
+			endpoint = (PeiEndpoint_t)&RngPeriphReg()->TASKS_STOP;
+			break;
+		default:
+			return false;
+	}
+	return PeiConnectTask(pPei, Evt, endpoint);
+#else
+	(void)pPei;
+	(void)Evt;
+	(void)Task;
+	return false;
+#endif
+}
+
+extern "C" bool RngNrfPeiDisconnectTask(PeiDev_t *pPei,
+	PeiEvent_t Evt, RNG_NRF_PEI_TASK Task)
+{
+#if defined(NRF52_SERIES) && !defined(NRFXLIB_SDC)
+	PeiEndpoint_t endpoint;
+
+	if (pPei == NULL || PeiDisconnectTask == NULL)
+	{
+		return false;
+	}
+	switch (Task)
+	{
+		case RNG_NRF_PEI_TASK_START:
+			endpoint = (PeiEndpoint_t)&RngPeriphReg()->TASKS_START;
+			break;
+		case RNG_NRF_PEI_TASK_STOP:
+			endpoint = (PeiEndpoint_t)&RngPeriphReg()->TASKS_STOP;
+			break;
+		default:
+			return false;
+	}
+	return PeiDisconnectTask(pPei, Evt, endpoint);
+#else
+	(void)pPei;
+	(void)Evt;
+	(void)Task;
+	return false;
+#endif
 }
 
 #endif
