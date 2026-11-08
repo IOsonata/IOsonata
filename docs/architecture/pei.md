@@ -204,10 +204,10 @@ RTC compare mode requires exclusive RTC counter ownership and rejects
 conflicting trigger or raw-event users. Single-shot stops the counter;
 continuous mode periodically clears it without an ISR. These additions
 have **not** yet been MCU compiled or tested on hardware. The
-BLYST-NANO-DK PeiBlinky board configuration now selects `DevNo = 1`
-(RTC1 at 32768 Hz) in standalone bare-metal mode. RTC1 is reserved
-by S132 when the SoftDevice is active; use application-owned RTC2
-(`DevNo = 2`) for a Bluetooth coexistence test.
+BLYST-NANO-DK PeiBlinky now selects `DevNo = 6` (TIMER3 at 16 MHz,
+with `Freq = 0`) for the standalone PEI test. The RTC backend remains
+unvalidated. The TIMER3 selection also requires a fresh MCU build and
+hardware test; Bluetooth coexistence needs separate resource checks.
 
 ## nRF52 PPI driver (0.14)
 
@@ -309,10 +309,10 @@ The BLYST-NANO-DK `PeiBlinky` example also exercises peripheral-to-
 peripheral control in both directions. The GPIO driver prepares falling-
 edge GPIOTE events on BUT1 (P0.02) and BUT2 (P0.13) using the C
 `IOPinEnableEvent` API. The Timer driver
-exposes its START/STOP hardware tasks. With `DevNo = 1`, PEI routes
-BUT1 to RTC1.START and BUT2 to RTC1.STOP. RTC1.COMPARE fans out
+exposes its START/STOP hardware tasks. With `DevNo = 6`, PEI routes
+BUT1 to TIMER3.START and BUT2 to TIMER3.STOP. TIMER3.COMPARE fans out
 through PEI to two GPIOTE toggle tasks with opposite initial LED states.
-The new RTC1 configuration requires a fresh hardware validation.
+The TIMER3 configuration requires a fresh hardware validation.
 
 The CPU configures these relationships once, executes the timer STOP
 task for initial state, and then waits. Subsequent button events operate

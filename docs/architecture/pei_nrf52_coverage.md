@@ -124,13 +124,13 @@ interrupt periodic hardware rearming. Driver teardown must unbind
 the public source and release the private connection before making
 its compare slot available again.
 
-Hardware test: the nRF52832 `PeiBlinky` board now selects `DevNo = 1`
-(RTC1, 32768 Hz) by default. Build and flash the standalone bare-metal
-example with the same two LEDs and BUT1/BUT2. Confirm both start/stop
-and 500 ms alternating LEDs, then test release/reuse and inspect ISR
-entry counts. **RTC1 is owned by S132 when SoftDevice is active**;
-do not reuse this bare-metal configuration for Bluetooth coexistence.
-Use RTC2 (`DevNo = 2`) for an application-owned RTC with S132.
+Hardware test: the nRF52832 `PeiBlinky` board now selects `DevNo = 6`
+(TIMER3 at 16 MHz with `Freq = 0`) by default. Build and flash the
+standalone bare-metal example with the same two LEDs and BUT1/BUT2.
+Confirm start/stop and 500 ms alternating LEDs, then test release/reuse
+and inspect ISR entries. This tests the HF TIMER backend, **not RTC**;
+a separate RTC2 (`DevNo = 2`) configuration is required to validate the
+low-frequency RTC PEI path.
 
 ## Completion criteria before nRF53
 

@@ -3,9 +3,8 @@
 
 #include "blystnano_boards.h"
 
-// nRF52832 Timer DevNo 1 is RTC1 (32768 Hz). Bare-metal only:
-// S132/SoftDevice owns RTC1 when the Bluetooth stack is active.
-#define PEI_BLINKY_TIMER_DEVNO	1
+// nRF52832 DevNo 6 is high-frequency TIMER3. Freq = 0 selects 16 MHz.
+#define PEI_BLINKY_TIMER_DEVNO	6
 #define PEI_BLINKY_TIMER_FREQ	0
 
 #define LED_PINS_MAP	BLYST_NANO_DK_LED_PINS_CFG

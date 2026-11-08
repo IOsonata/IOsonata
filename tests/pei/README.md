@@ -108,16 +108,15 @@ other active compare triggers or bound RTC TICK/OVRFLW sources.
 `TimerDisableTrigger` unbinds the public event and releases the
 private PPI channel. Supported PPI channel reservations still apply.
 
-**RTC1 compilation and hardware validation remain pending.** The
-`PeiBlinky/src/board.h` configuration selects `TimerCfg_t.DevNo = 1`,
-which is **RTC1** on nRF52832, at 32768 Hz (`Freq = 0`). Clean-rebuild
-and flash BLYST-NANO-DK. Check 500 ms LED alternation, BUT1 start,
-BUT2 stop, BUT1 resume, teardown/reuse and RTC/GPIOTE ISR entries.
-This RTC1 example is for **standalone bare-metal firmware only**:
-S132/SoftDevice reserves RTC1 while active. For an application-owned
-RTC with S132 running, use RTC2 (`DevNo = 2`); physical high-frequency
-TIMER1 and TIMER2 are `DevNo = 4` and `DevNo = 5` respectively.
-The old `PEI_BLINKY_USE_RTC` build-symbol switch is not used.
+**TIMER3 configuration needs a clean MCU build and hardware validation.**
+`PeiBlinky/src/board.h` selects `TimerCfg_t.DevNo = 6`, which is
+**TIMER3** on nRF52832. With `Freq = 0`, IOsonata selects the 16 MHz
+high-frequency timer clock. Clean-rebuild and flash BLYST-NANO-DK.
+Check 500 ms LED alternation, BUT1 start, BUT2 stop, BUT1 resume,
+teardown/reuse and TIMER3/GPIOTE ISR entries. Device numbering on
+nRF52832: RTC0-2 are `DevNo = 0..2`, and TIMER0-4 are `DevNo = 3..7`.
+This change does not validate S132/SDC coexistence; use only resources
+available to the application when a Bluetooth stack is running.
 
 ## BLYST-NANO-DK hardware test
 
@@ -150,16 +149,16 @@ specific to the standalone test, not to Bluetooth applications.
 
 ## Two-button hardware handoff
 
-With `DevNo = 1`, `PeiBlinky` wires four hardware event-to-task
+With `DevNo = 6`, `PeiBlinky` wires four hardware event-to-task
 connections through PEI:
 
-- RTC1.COMPARE -> GPIOTE toggle task for LED 1 and LED 2
-- BUT1 (P0.02, falling edge) -> RTC1.START
-- BUT2 (P0.13, falling edge) -> RTC1.STOP
+- TIMER3.COMPARE -> GPIOTE toggle task for LED 1 and LED 2
+- BUT1 (P0.02, falling edge) -> TIMER3.START
+- BUT2 (P0.13, falling edge) -> TIMER3.STOP
 
-This new RTC1 selection has not yet received a hardware PASS. The
+This TIMER3 selection has not yet received a hardware PASS. The
 previously reported BLYST-NANO-DK behavior predates this configuration
-change and must not be counted as an RTC1 validation.
+change and must not be counted as a TIMER3 validation.
 
 On reset, LED 1 starts off and LED 2 on (both are active-low).
 The counter starts stopped while the low-frequency clock remains
@@ -186,7 +185,7 @@ BLYST-NANO-DK (nRF52832): BUT1 starts alternating the LEDs, BUT2
 stops/freezes them, and BUT1 resumes the timer. This is a **functional
 hardware PASS** for three event sources and four event-to-task links,
 including compare fan-out to both LEDs. That earlier hardware observation
-does not validate the new RTC1 selection. The 500 ms event period is
+does not validate the new TIMER3 selection. The 500 ms event period is
 the configured value, not a separately measured timing result. A debugger
 trace confirming the absence of Timer/GPIOTE ISR entries is still pending.
 
