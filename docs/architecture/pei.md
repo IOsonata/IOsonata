@@ -326,6 +326,29 @@ The standalone nRF52832 PeiSaadcDemo Eclipse project validates this
 chain on BLYST-NANO-DK with a 500 ms TIMER3 compare indicator and a
 separate SAADC END indicator. Hardware testing remains pending.
 
+### Analog comparator events and tasks on nRF52
+
+The generic AnalogComp C/C++ HAL declares PEI binding of comparator
+READY, UP, DOWN and CROSS hardware events, and connections to START,
+STOP and SAMPLE tasks. Nordic's analog_comp_nrf5x.cpp implements those
+endpoints for nRF52 using the COMP/LPCOMP register map. The driver
+continues to own analog input selection, threshold/reference configuration
+and ENABLE state, with no PEI-only allocation or event-forwarding ISR.
+
+An initialized, enabled comparator is required for new routes. In
+CONTINUOUS mode READY_SAMPLE already triggers SAMPLE, so a second
+PPI SAMPLE destination is rejected. SINGLE mode may connect SAMPLE
+after an explicit comparator START and READY. An application that uses
+a pure PEI path leaves the conventional comparator EvtHandler null;
+that avoids enabling the comparator interrupt.
+
+The nRF52832 PeiCompDemo example on BLYST-NANO-DK uses a GPIO event
+on BUT2 to start LPCOMP in hardware, and BLYST BUT1 (AIN0) to cross
+an approximate VDD/2 reference. READY/CROSS/UP/DOWN feed four GPIO
+toggle tasks via PPI. It does not claim ADC-like sample buffering or
+software event forwarding. Hardware testing is pending. Disconnect
+all routes before powering off or reinitializing a comparator.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI

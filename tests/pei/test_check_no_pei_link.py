@@ -66,6 +66,14 @@ class NoPeiLinkTests(unittest.TestCase):
         self.assertEqual(self.check_map(
             discarded=" .text.AdcNrf52PeiBindEvent 0x00000000 0x20"), 0)
 
+    def test_linked_comparator_pei_code_is_rejected(self):
+        self.assertEqual(self.check_map(
+            linked=" .text.AnalogCompPeiConnectTask 0x00002000 0x30"), 1)
+
+    def test_discarded_comparator_pei_code_is_allowed(self):
+        self.assertEqual(self.check_map(
+            discarded=" .text.AnalogCompPeiBindEvent 0x00000000 0x20"), 0)
+
     def test_linked_rtc_pei_state_is_rejected(self):
         self.assertEqual(self.check_map(
             linked=" .bss.s_nRfxRtcRaw 0x20000000 0x50"), 1)

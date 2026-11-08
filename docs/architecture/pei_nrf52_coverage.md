@@ -43,7 +43,7 @@ Status keys:
 | RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Mixed-CC RTC0 hardware working** in both CC orders; **RTC2 working** with ISR-first order (user report, Nov 8); other sources and lifecycle pending |
 | GPIOTE / `iopincfg_nrfx.c` | IN[n] edge; shared PORT SENSE/DETECT source implemented on nRF52 | OUT[n] SET/CLEAR/TOGGLE through configured channels | **PeiPortDemo functional hardware PASS**; **PeiGpioteStress automatic hardware PASS** (Nov 8 screenshot: Status 2, Error 0, 64 exhaustion/reuse, 128 PPI-route, 128 IRQ rounds, IrqCount 13); BUT2 physical route confirmation and cross-variant tests pending |
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED implemented; CALIBRATEDONE and limit events pending (limits reach the application through the driver callback) | START, SAMPLE, STOP implemented; CALIBRATEOFFSET pending | **Initial endpoint added**: single-conversion/no-IRQ driver-owned EasyDMA preparation, nRF52832 erratum 150 guard, C/C++ PEI routing; continuous mode with double-buffered blocks accepts SAMPLE only; PeiSaadcDemo TIMER->SAMPLE / END->START and PeiAdcDemo TIMER->SAMPLE hardware checks pending |
-| COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, UP, DOWN, CROSS and supported variants | START, STOP, SAMPLE where provided | **Pending**; only expose events/tasks from the configured comparator |
+| COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, DOWN, UP, CROSS implemented for nRF52 | START, STOP, SAMPLE (single mode only) implemented | **Initial endpoint added:** common C/C++ HAL, owner/enable checks and no-IRQ PEI routing; PeiCompDemo hardware validation pending |
 | PWM / `pwm_nrfx.cpp` | SEQSTARTED[n], SEQEND[n], LOOPSDONE, PWMPERIODEND, STOPPED | SEQSTART[n], STOP and NEXTSTEP if implemented | **Pending**; requires valid sequence buffers and owner-safe start/stop |
 | PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED | START, STOP | **Pending**; must not bypass sample-buffer configuration |
 | I2S / `i2s_nrfx.cpp` | RXPTRUPD, TXPTRUPD, STOPPED | START, STOP | **Pending**; respect DMA pointer and double-buffer ownership |
@@ -170,6 +170,31 @@ StopConversion(), CloseChannel(), Disable(), or PowerOff().
 The PeiSaadcDemo Eclipse project is added, but no MCU build or
 hardware result has been confirmed. Do not mark SAADC as fully
 covered based on static source tests.
+
+## Comparator COMP/LPCOMP task and event integration
+
+The generic AnalogComp C/C++ HAL now exposes READY, DOWN, UP and CROSS
+hardware event endpoints and START, STOP and SAMPLE task destinations.
+Its Nordic driver selects COMP or LPCOMP from the MCU register map; the
+nRF52 implementation checks the initialized comparator owner and the
+hardware ENABLE state before binding or connecting routes. PEI only
+routes the already-configured comparator: the driver retains threshold,
+reference, input pin and power management.
+
+In CONTINUOUS mode, the comparator driver uses READY->SAMPLE, and rejects
+external PEI SAMPLE destinations to avoid conflicting triggers. In
+SINGLE mode the SAMPLE task is available after the comparator has been
+started. When no conventional callback is configured, the comparator
+IRQ is not enabled; hardware PEI routing does not need an ISR.
+Applications must disconnect comparator task destinations and unbind
+its event sources before disabling/reconfiguring the comparator.
+
+PeiCompDemo on nRF52832 BLYST-NANO-DK demonstrates a hardware GPIOTE
+input event driving LPCOMP START and four independent comparator
+event sources routed to LEDs. BUT1 is AIN0/P0.02 and crosses the VDD/2
+reference when pressed and released. Initial hardware validation,
+SINGLE-mode SAMPLE, teardown/reuse and other nRF52 variants remain
+pending. No hardware pass is inferred from static checks.
 
 ## Completion criteria before nRF53
 

@@ -105,6 +105,26 @@ not a hardware conversion PASS. On the board, LED1 toggles
 only after SAADC END, while LED2 toggles directly from TIMER
 compare. A running status alone does not prove conversion.
 
+## nRF52 COMP/LPCOMP hardware PEI chain
+
+The generic converters/analog_comp.h now defines a common C-compatible
+comparator event/task PEI API with C++ methods on AnalogComp.
+Supported nRF52 events: READY, DOWN, UP, CROSS; tasks: START, STOP,
+and SAMPLE (SINGLE mode only). Comparator input/threshold/reference
+configuration remains inside AnalogCompInit, not in PEI.
+No comparator IRQ is enabled for an application with no callback.
+
+The PeiCompDemo Eclipse project lives at
+ARM/Nordic/nRF52/nRF52832/exemples/PeiCompDemo/ioc. On BLYST-NANO-DK
+BUT2 (P0.13) starts LPCOMP using a GPIOTE event/PPI route.
+BUT1 (P0.02, analog AIN0) crosses the VDD/2 reference: LED0
+indicates READY, LED1 CROSS, LED2 UP and LED3 DOWN.
+
+The PEI host runner includes check_comp_pei_contract.py and C/C++
+header compilation. The link-isolation checker also rejects comparator
+PEI code in non-PEI firmware. Hardware behavior and MCU build remain
+pending.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or
