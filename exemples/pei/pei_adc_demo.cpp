@@ -1,20 +1,20 @@
 /**-------------------------------------------------------------------------
-@example	adc_pei_demo.cpp
+@example	pei_adc_demo.cpp
 
 @brief	SAADC rounds started by a timer through PEI, with limits
 
 The compare event of a Timer starts each SAADC round through PEI (PPI on the
 nRF52), the CPU takes no part in the sampling. Two channels:
-	- channel 0, the analog input ADC_PEI_DEMO_AIN of board.h with the SAADC
+	- channel 0, the analog input PEI_ADC_DEMO_AIN of board.h with the SAADC
 	  pull-up: open it reads the supply, pulled to ground (a button to ground)
 	  it reads 0 V
 	- channel 1, the supply VDD
 
-The results come in blocks of ADC_PEI_DEMO_BLOCK rounds, double buffered. At
+The results come in blocks of PEI_ADC_DEMO_BLOCK rounds, double buffered. At
 each block the demo logs the average, minimum and maximum of each channel in
 millivolts with SysLog on the console UART.
 
-Channel 0 has limits, ADC_PEI_DEMO_LOW_MV and ADC_PEI_DEMO_HIGH_MV. Each result
+Channel 0 has limits, PEI_ADC_DEMO_LOW_MV and PEI_ADC_DEMO_HIGH_MV. Each result
 at or below the low one or at or above the high one is a limit event; the
 counts are logged with each block.
 
@@ -66,25 +66,25 @@ SOFTWARE.
 #endif
 
 // Round period in msec, from the Timer compare
-#ifndef ADC_PEI_DEMO_PERIOD_MS
-#define ADC_PEI_DEMO_PERIOD_MS		10
+#ifndef PEI_ADC_DEMO_PERIOD_MS
+#define PEI_ADC_DEMO_PERIOD_MS		10
 #endif
 
 // Rounds per block, one log line per block
-#ifndef ADC_PEI_DEMO_BLOCK
-#define ADC_PEI_DEMO_BLOCK			50
+#ifndef PEI_ADC_DEMO_BLOCK
+#define PEI_ADC_DEMO_BLOCK			50
 #endif
 
 // Limits of channel 0 in mV
-#ifndef ADC_PEI_DEMO_LOW_MV
-#define ADC_PEI_DEMO_LOW_MV			1000
+#ifndef PEI_ADC_DEMO_LOW_MV
+#define PEI_ADC_DEMO_LOW_MV			1000
 #endif
-#ifndef ADC_PEI_DEMO_HIGH_MV
-#define ADC_PEI_DEMO_HIGH_MV		2000
+#ifndef PEI_ADC_DEMO_HIGH_MV
+#define PEI_ADC_DEMO_HIGH_MV		2000
 #endif
 
-#define ADC_PEI_DEMO_NBCHAN			2
-#define ADC_PEI_DEMO_VDD			8		// PinNo of VDD, PSELP 9
+#define PEI_ADC_DEMO_NBCHAN			2
+#define PEI_ADC_DEMO_VDD			8		// PinNo of VDD, PSELP 9
 
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
@@ -126,8 +126,8 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.bBlocking = true,
 };
 
-static void AdcPeiDemoEvt(Device * const pDev, DEV_EVT Evt);
-static void AdcPeiDemoLimit(AdcnRF52 * const pAdc, int Chan, bool bHigh);
+static void PeiAdcDemoEvt(Device * const pDev, DEV_EVT Evt);
+static void PeiAdcDemoLimit(AdcnRF52 * const pAdc, int Chan, bool bHigh);
 
 // Internal 0.6 V reference, gain 1/6 below: 3.6 V full scale
 static const AdcRefVolt_t s_RefVolt[] = {
@@ -144,18 +144,18 @@ static const AdcCfg_t s_AdcCfg = {
 	.OvrSample = 0,
 	.bInterrupt = true,
 	.IntPrio = 6,
-	.EvtHandler = AdcPeiDemoEvt,
+	.EvtHandler = PeiAdcDemoEvt,
 };
 
 // Each channel FIFO holds two blocks
-#define ADC_PEI_DEMO_FIFO_SIZE		CFIFO_TOTAL_MEMSIZE(2 * ADC_PEI_DEMO_BLOCK, sizeof(AdcData_t))
+#define PEI_ADC_DEMO_FIFO_SIZE		CFIFO_TOTAL_MEMSIZE(2 * PEI_ADC_DEMO_BLOCK, sizeof(AdcData_t))
 
-alignas(4) static uint8_t s_AdcFifo[ADC_PEI_DEMO_NBCHAN][ADC_PEI_DEMO_FIFO_SIZE];
+alignas(4) static uint8_t s_AdcFifo[PEI_ADC_DEMO_NBCHAN][PEI_ADC_DEMO_FIFO_SIZE];
 
 // DMA memory of the two blocks
-alignas(4) static int16_t s_AdcBlk[2 * ADC_PEI_DEMO_BLOCK * ADC_PEI_DEMO_NBCHAN];
+alignas(4) static int16_t s_AdcBlk[2 * PEI_ADC_DEMO_BLOCK * PEI_ADC_DEMO_NBCHAN];
 
-static const AdcChanCfg_t s_AdcChan[ADC_PEI_DEMO_NBCHAN] = {
+static const AdcChanCfg_t s_AdcChan[PEI_ADC_DEMO_NBCHAN] = {
 	{
 		.Chan = 0,
 		.RefVoltIdx = 0,
@@ -163,9 +163,9 @@ static const AdcChanCfg_t s_AdcChan[ADC_PEI_DEMO_NBCHAN] = {
 		.Gain = 6,
 		.AcqTime = 10,
 		.BurstMode = false,
-		.PinP = { .PinNo = ADC_PEI_DEMO_AIN, .Conn = ADC_PIN_CONN_PULLUP },
+		.PinP = { .PinNo = PEI_ADC_DEMO_AIN, .Conn = ADC_PIN_CONN_PULLUP },
 		.PinN = { .PinNo = 0, .Conn = ADC_PIN_CONN_NONE },
-		.FifoMemSize = ADC_PEI_DEMO_FIFO_SIZE,
+		.FifoMemSize = PEI_ADC_DEMO_FIFO_SIZE,
 		.pFifoMem = s_AdcFifo[0],
 	},
 	{
@@ -175,9 +175,9 @@ static const AdcChanCfg_t s_AdcChan[ADC_PEI_DEMO_NBCHAN] = {
 		.Gain = 6,
 		.AcqTime = 10,
 		.BurstMode = false,
-		.PinP = { .PinNo = ADC_PEI_DEMO_VDD, .Conn = ADC_PIN_CONN_NONE },
+		.PinP = { .PinNo = PEI_ADC_DEMO_VDD, .Conn = ADC_PIN_CONN_NONE },
 		.PinN = { .PinNo = 0, .Conn = ADC_PIN_CONN_NONE },
-		.FifoMemSize = ADC_PEI_DEMO_FIFO_SIZE,
+		.FifoMemSize = PEI_ADC_DEMO_FIFO_SIZE,
 		.pFifoMem = s_AdcFifo[1],
 	},
 };
@@ -187,21 +187,21 @@ static Timer s_Timer;
 static Pei s_Pei;
 
 // Interrupt context: flag and counts only, main logs
-static volatile bool s_bAdcPeiDemoBlock = false;
+static volatile bool s_bPeiAdcDemoBlock = false;
 static volatile uint32_t s_LimitLow = 0;
 static volatile uint32_t s_LimitHigh = 0;
 
-static void AdcPeiDemoEvt(Device * const pDev, DEV_EVT Evt)
+static void PeiAdcDemoEvt(Device * const pDev, DEV_EVT Evt)
 {
 	(void)pDev;
 
 	if (Evt == DEV_EVT_DATA_RDY)
 	{
-		s_bAdcPeiDemoBlock = true;
+		s_bPeiAdcDemoBlock = true;
 	}
 }
 
-static void AdcPeiDemoLimit(AdcnRF52 * const pAdc, int Chan, bool bHigh)
+static void PeiAdcDemoLimit(AdcnRF52 * const pAdc, int Chan, bool bHigh)
 {
 	(void)pAdc;
 	(void)Chan;
@@ -216,7 +216,7 @@ static void AdcPeiDemoLimit(AdcnRF52 * const pAdc, int Chan, bool bHigh)
 	}
 }
 
-static void AdcPeiDemoFail(const char *pMsg)
+static void PeiAdcDemoFail(const char *pMsg)
 {
 	SysLogPrintf(SysLogGet(), "%s failed\r\n", pMsg);
 
@@ -234,68 +234,68 @@ int main()
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 
-	SysLogPrintf(SysLogGet(), "AdcPeiDemo\r\n");
+	SysLogPrintf(SysLogGet(), "PeiAdcDemo\r\n");
 
 	if (s_Adc.Init(s_AdcCfg) == false)
 	{
-		AdcPeiDemoFail("ADC init");
+		PeiAdcDemoFail("ADC init");
 	}
-	if (s_Adc.OpenChannel(s_AdcChan, ADC_PEI_DEMO_NBCHAN) == false)
+	if (s_Adc.OpenChannel(s_AdcChan, PEI_ADC_DEMO_NBCHAN) == false)
 	{
-		AdcPeiDemoFail("ADC channels");
+		PeiAdcDemoFail("ADC channels");
 	}
 	s_Adc.Calibrate();
-	s_Adc.BlockRounds(ADC_PEI_DEMO_BLOCK, s_AdcBlk, sizeof(s_AdcBlk));
-	s_Adc.LimitHandler(AdcPeiDemoLimit);
-	if (s_Adc.Limit(0, ADC_PEI_DEMO_LOW_MV / 1000.0f, ADC_PEI_DEMO_HIGH_MV / 1000.0f) == false)
+	s_Adc.BlockRounds(PEI_ADC_DEMO_BLOCK, s_AdcBlk, sizeof(s_AdcBlk));
+	s_Adc.LimitHandler(PeiAdcDemoLimit);
+	if (s_Adc.Limit(0, PEI_ADC_DEMO_LOW_MV / 1000.0f, PEI_ADC_DEMO_HIGH_MV / 1000.0f) == false)
 	{
-		AdcPeiDemoFail("ADC limits");
+		PeiAdcDemoFail("ADC limits");
 	}
 
 	// The SAMPLE task can be connected once the conversion is started
 	if (s_Adc.StartConversion() == false)
 	{
-		AdcPeiDemoFail("ADC start");
+		PeiAdcDemoFail("ADC start");
 	}
 
-	timerCfg.DevNo = ADC_PEI_DEMO_TIMER_DEVNO;
+	timerCfg.DevNo = PEI_ADC_DEMO_TIMER_DEVNO;
 	timerCfg.Freq = 0;
 	timerCfg.IntPrio = IRQ_PRIO_NORMAL;
 	if (s_Timer.Init(timerCfg) == false || s_Timer.Enable() == false)
 	{
-		AdcPeiDemoFail("Timer init");
+		PeiAdcDemoFail("Timer init");
 	}
 
-	if (s_Timer.EnableTimerTrigger(s_Pei, evt, ADC_PEI_DEMO_PERIOD_MS, TIMER_TRIG_TYPE_CONTINUOUS) < 0)
+	if (s_Timer.EnableTimerTrigger(s_Pei, evt, PEI_ADC_DEMO_PERIOD_MS, TIMER_TRIG_TYPE_CONTINUOUS) < 0)
 	{
-		AdcPeiDemoFail("Timer trigger");
+		PeiAdcDemoFail("Timer trigger");
 	}
 	if (s_Adc.ConnectTask(s_Pei, evt, ADC_NRF52_PEI_TASK_SAMPLE) == false)
 	{
-		AdcPeiDemoFail("PEI route");
+		PeiAdcDemoFail("PEI route");
 	}
 	s_Pei.Enable(evt);
 
 	SysLogPrintf(SysLogGet(), "Round every %u ms, %d rounds per block, limits %d to %d mV\r\n",
-				 (unsigned)ADC_PEI_DEMO_PERIOD_MS, s_Adc.BlockRounds(),
-				 ADC_PEI_DEMO_LOW_MV, ADC_PEI_DEMO_HIGH_MV);
+				 (unsigned)PEI_ADC_DEMO_PERIOD_MS, s_Adc.BlockRounds(),
+				 PEI_ADC_DEMO_LOW_MV, PEI_ADC_DEMO_HIGH_MV);
 
 	while (1)
 	{
 		__WFE();
 
-		if (s_bAdcPeiDemoBlock == false)
+		if (s_bPeiAdcDemoBlock == false)
 		{
 			continue;
 		}
-		s_bAdcPeiDemoBlock = false;
+		s_bPeiAdcDemoBlock = false;
 
-		int32_t avg[ADC_PEI_DEMO_NBCHAN];
-		int32_t min[ADC_PEI_DEMO_NBCHAN];
-		int32_t max[ADC_PEI_DEMO_NBCHAN];
+		int32_t avg[PEI_ADC_DEMO_NBCHAN];
+		int32_t min[PEI_ADC_DEMO_NBCHAN];
+		int32_t max[PEI_ADC_DEMO_NBCHAN];
 		uint32_t ts = 0;
 
-		for (int c = 0; c < ADC_PEI_DEMO_NBCHAN; c++)
+		for (int c = 0; c < PEI_ADC_DEMO_NBCHAN; c++)
 		{
 			AdcData_t d;
 			int32_t sum = 0;

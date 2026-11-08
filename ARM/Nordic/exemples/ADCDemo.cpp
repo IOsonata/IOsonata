@@ -148,7 +148,7 @@ static uint8_t s_AdcFifoMem[ADC_CFIFO_SIZE];
 
 // Define ADC device. One round of the four channels per StartConversion. In
 // continuous mode the rounds of several channels are started by PEI, see
-// AdcPeiDemo.
+// PeiAdcDemo.
 static const AdcCfg_t s_AdcCfg = {
 	.Mode = ADC_CONV_MODE_SINGLE,
 	.pRefVolt = s_RefVolt,

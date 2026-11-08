@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	board.h
 
-@brief	Board specific definitions, AdcPeiDemo on the BLYST-NANO-DK
+@brief	Board specific definitions, PeiAdcDemo on the BLYST-NANO-DK
 
 The console is UART0 on the BLYST-NANO-DK UART pins, the SysLog output. The
 analog input is AIN0, P0.02, which is BUT1: released it reads the supply with
@@ -51,9 +51,9 @@ SOFTWARE.
 #define UART_TX_PINOP		BLYST_NANO_DK_UART_TX_PINOP
 
 // Analog input number, AIN0 is P0.02, BUT1
-#define ADC_PEI_DEMO_AIN			0
+#define PEI_ADC_DEMO_AIN			0
 
 // Timer of the rounds, TIMER3
-#define ADC_PEI_DEMO_TIMER_DEVNO	6
+#define PEI_ADC_DEMO_TIMER_DEVNO	6
 
 #endif // __BOARD_H__

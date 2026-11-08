@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	board.h
 
-@brief	Board specific definitions, AdcPeiDemo on the nRF52840 DK
+@brief	Board specific definitions, PeiAdcDemo on the nRF52840 DK
 
 The console is UART0 on the interface MCU VCOM0 port of the nRF52840 DK, the
 SysLog output. The analog input is AIN0, P0.02 on the P1 header: open it reads
@@ -51,9 +51,9 @@ SOFTWARE.
 #define UART_TX_PINOP		1
 
 // Analog input number, AIN0 is P0.02
-#define ADC_PEI_DEMO_AIN			0
+#define PEI_ADC_DEMO_AIN			0
 
 // Timer of the rounds, TIMER3
-#define ADC_PEI_DEMO_TIMER_DEVNO	6
+#define PEI_ADC_DEMO_TIMER_DEVNO	6
 
 #endif // __BOARD_H__
