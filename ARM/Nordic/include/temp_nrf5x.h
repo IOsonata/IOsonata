@@ -38,6 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/iopincfg.h"
 #include "sensors/temp_sensor.h"
+#include "temp_nrf_pei.h"
 
 class TempnRF5x : public TempSensor {
 public:
@@ -91,6 +92,30 @@ public:
 	bool UpdateData();
 
 	void IntHandler();
+
+	// Only C/C++ PEI matrix connections; no additional TEMP driver.
+	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
+		TEMP_NRF_PEI_EVENT Event)
+	{
+		return TempNrfPeiEnableEvent(PeiDev, &Evt, Event);
+	}
+
+	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
+	{
+		return TempNrfPeiDisableEvent(PeiDev, Evt);
+	}
+
+	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt,
+		TEMP_NRF_PEI_TASK Task)
+	{
+		return TempNrfPeiConnectTask(PeiDev, Evt, Task);
+	}
+
+	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt,
+		TEMP_NRF_PEI_TASK Task)
+	{
+		return TempNrfPeiDisconnectTask(PeiDev, Evt, Task);
+	}
 
 private:
 };
