@@ -214,8 +214,9 @@ DfuWire recovery (direct mode):
 Power loss during an install leaves slot 1 pending, so the next boot copies
 again; a Done word cut part way counts as done, as ECC flash cannot take a
 second write. Every unit is erased before it is programmed, even when it
-reads as ones, which on RRAM means ones written before the data. Power loss during a recovery upload leaves no record, so the boot
-stays in recovery. Slot 0 with no record is started only when stage 0 is
+reads as ones, which on RRAM means ones written before the data. Power loss during a recovery upload leaves no record once the image
+header is in, so the boot stays in recovery; before that nothing was
+written and slot 0 still starts. Slot 0 with no record is started only when stage 0 is
 built with `DFU_BOOT_ALLOW_UNSIGNED`, for debugger development.
 
 `exemples/dfu/dfu_boot_main.cpp` is the boot every target builds. Its
@@ -253,6 +254,14 @@ only mode has no revert. The application checks the uploaded image hash and
 entry before it accepts them; the signature is checked by stage 0, so the
 key lives in one place. In recovery the signature is checked at the end of
 the upload, before the record is written.
+
+In recovery the header goes to RAM first, and the record is erased only once
+the whole header is in, just before the first payload byte is written. An
+image refused from its header (magic, sizes, or, with downgrade disabled, a
+version older than slot 0) leaves slot 0 startable, however the host splits
+the header over its first requests; nrfutil sends 23 bytes first. A version
+refusal answers image group result 27 in a version 2 response, rc 3 in
+version 1.
 
 With downgrade disabled, the manager checks the staged version before marking
 it pending, including after reconnect. Stage 0 checks it again against the

@@ -237,7 +237,9 @@ int DfuMgr::BeginImage(uint32_t Len)
 		return DFU_MGR_ERR_STATE;
 	}
 
-	int res = vWr.Begin(Len);
+	// In direct mode the writer checks the version from the header before
+	// it erases the record, so an older image leaves slot 0 startable.
+	int res = vWr.Begin(Len, vCfg.bAllowDowngrade ? nullptr : &vCurVer);
 	if (res != DFU_IMG_OK)
 	{
 		return res;

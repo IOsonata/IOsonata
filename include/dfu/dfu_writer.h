@@ -134,18 +134,25 @@ public:
 	 * @brief	Start an image of Len bytes, dropping any other.
 	 *
 	 * In slot 1 mode the trailer is erased: nothing is pending from here on.
-	 * In direct mode the record is erased: slot 0 is not startable until
-	 * Commit.
+	 * In direct mode the header goes to RAM first and nothing reaches the
+	 * memory before it is all in. The record is erased then, by Write,
+	 * once the header is checked: slot 0 is not startable from there until
+	 * Commit. An image refused from its header leaves slot 0 as it was.
+	 *
+	 * @param	Len     : Image length, header to last TLV.
+	 * @param	pMinVer : Direct mode: oldest version taken, checked from the
+	 * 					header before the record is erased. Null for any.
 	 *
 	 * @return	DFU_IMG_OK, or DFU_IMG_ERR_SIZE, DFU_IMG_ERR_READ.
 	 */
-	int Begin(uint32_t Len);
+	int Begin(uint32_t Len, const DfuImgVer_t *pMinVer = nullptr);
 
 	/**
 	 * @brief	The next bytes of the image.
 	 *
 	 * @return	DFU_IMG_OK, DFU_IMG_ERR_SIZE past the announced length or
 	 * 			with a header that does not fit, DFU_IMG_ERR_HDR,
+	 * 			DFU_IMG_ERR_VERSION older than Begin's pMinVer,
 	 * 			DFU_IMG_ERR_READ when the memory failed.
 	 */
 	int Write(const uint8_t *pData, uint32_t Len);
@@ -214,6 +221,9 @@ private:
 
 	// Direct mode: where the three parts are, known once 16 bytes are in.
 	uint32_t vHdrSize;			//!< 0 until known
+	bool vbRecClear;			//!< The record is still to be erased
+	bool vbMinVer;				//!< vMinVer applies
+	DfuImgVer_t vMinVer;		//!< Oldest version taken
 	uint32_t vImgSize;
 	uint32_t vTlvLen;			//!< TLV areas, once Finish parsed them
 

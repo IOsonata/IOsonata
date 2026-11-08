@@ -194,6 +194,33 @@ static bool Upload(DfuSmp &Mgr, const std::vector<uint8_t> &File,
 	return true;
 }
 
+// Upload with a first request of First bytes, the rest in pieces of 400,
+// until an answer is not an offset. Returns that answer's version 2 group
+// result, 0 when the whole image went in.
+static int64_t UploadFirst(DfuSmp &Mgr, const std::vector<uint8_t> &File,
+						   uint32_t First)
+{
+	uint32_t off = 0;
+	uint32_t n = First;
+
+	while (off < File.size())
+	{
+		if (n > File.size() - off)
+		{
+			n = (uint32_t)(File.size() - off);
+		}
+		Rsp r = Chunk(Mgr, File, off, n, true);
+		if (GrpRc(r) != 0 || Rc(r) != 0)
+		{
+			return GrpRc(r);
+		}
+		off += n;
+		n = 400;
+	}
+
+	return 0;
+}
+
 struct ImgEntry {
 	bool bFound;
 	uint64_t Slot;
@@ -535,6 +562,8 @@ static void TestImg(HostMem Kind, bool bTgt)
 	CHECK(dm.Init(dcfg));
 	CHECK(mgr.Init(cfg));
 	r = SetState(mgr, &h1, false);
+	CHECK(GrpRc(r) == DFUSMP_IMG_ERR_CUR_VER_NEWER);
+	r = SetState(mgr, &h1, false, 0);
 	CHECK(Rc(r) == DFUSMP_ERR_EINVAL);
 	CHECK(dm.Commit() == false);
 	CHECK(Reboot());
@@ -767,16 +796,24 @@ static void TestDirect(HostMem Kind)
 	CHECK(GrpRc(r) == DFUSMP_IMG_ERR_TOO_LARGE);
 	CHECK(Reboot());
 
-	// A header claiming a payload larger than slot 0.
+	// A header claiming a payload larger than slot 0: refused from the
+	// header, before the record is erased, so slot 0 still starts.
 	std::vector<uint8_t> big(v1);
 	uint32_t isz = HOST_SLOT0_SIZE + 4;
 	memcpy(big.data() + 12, &isz, 4);
 	r = Chunk(mgr, big, 0, 64, false);
 	CHECK(GrpRc(r) == DFUSMP_IMG_ERR_TOO_LARGE);
-	CHECK(Reboot() == false);
+	CHECK(Reboot());
+
+	// An upload left before its header is all in: nothing was written, slot
+	// 0 still starts.
+	CHECK(Upload(mgr, v1, rng, 400, &match) && match);
+	r = Chunk(mgr, v2, 0, 16, false);
+	CHECK(UploadOff(r) == 16);
+	mgr.UploadAbort();
+	CHECK(Reboot());
 
 	// An upload left half way: nothing startable. Then a whole one.
-	CHECK(Upload(mgr, v1, rng, 400, &match) && match);
 	r = Chunk(mgr, v2, 0, 1500, false);
 	CHECK(UploadOff(r) == 1500);
 	mgr.UploadAbort();
@@ -821,6 +858,35 @@ static void TestDirect(HostMem Kind)
 	CHECK(Reboot());
 	l = List(mgr);
 	CHECK(l.size() == 1 && l[0].Hash == h2);
+
+	// Downgrades refused, as the stage 0 boot builds by default. An older
+	// image is refused once its header is in, before the record is
+	// erased, however the first requests split the header: slot 0 still
+	// starts. nrfutil sends 23 bytes first.
+	dcfg.bAllowDowngrade = false;
+	CHECK(dm.Init(dcfg));
+	CHECK(mgr.Init(cfg));
+	const uint32_t firsts[] = { 400, 32, 23, 16, 1 };
+	for (uint32_t f : firsts)
+	{
+		CHECK(UploadFirst(mgr, v1, f) == DFUSMP_IMG_ERR_CUR_VER_NEWER);
+		CHECK(mgr.Uploading() == false);
+		CHECK(Reboot());
+		l = List(mgr);
+		CHECK(l.size() == 1 && l[0].Hash == h2);
+	}
+	r = Chunk(mgr, v1, 0, 400, true, 0);
+	CHECK(Rc(r) == DFUSMP_ERR_EINVAL);
+	CHECK(Reboot());
+
+	// The same version is taken.
+	CHECK(Upload(mgr, v2, rng, 400, &match) && match);
+	CHECK(Reboot());
+	l = List(mgr);
+	CHECK(l.size() == 1 && l[0].Hash == h2);
+	dcfg.bAllowDowngrade = true;
+	CHECK(dm.Init(dcfg));
+	CHECK(mgr.Init(cfg));
 
 	CHECK(g_HostNorViolations == 0);
 	printf("  %s direct: %d power cut points\n", HostMemName(Kind), cuts);

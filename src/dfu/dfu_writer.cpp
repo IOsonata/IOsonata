@@ -126,6 +126,9 @@ DfuWriter::DfuWriter()
 	vOff = 0;
 	vErasedEnd = 0;
 	vHdrSize = 0;
+	vbRecClear = false;
+	vbMinVer = false;
+	memset(&vMinVer, 0, sizeof(vMinVer));
 	vImgSize = 0;
 	vTlvLen = 0;
 	vStage = vStageBuf;
@@ -344,7 +347,7 @@ bool DfuWriter::ClearTrailer(void)
 	return true;
 }
 
-int DfuWriter::Begin(uint32_t Len)
+int DfuWriter::Begin(uint32_t Len, const DfuImgVer_t *pMinVer)
 {
 	vLen = 0;
 	vStageLen = 0;
@@ -364,9 +367,17 @@ int DfuWriter::Begin(uint32_t Len)
 	vHdrSize = 0;
 	vImgSize = 0;
 	vTlvLen = 0;
+	vbMinVer = pMinVer != nullptr;
+	if (vbMinVer)
+	{
+		vMinVer = *pMinVer;
+	}
 
 	// Before any byte lands: nothing half written may be taken for an image.
-	if ((vbDirect ? DfuRecClear(vLay) : ClearTrailer()) == false)
+	// Direct mode puts nothing in the memory until the whole header is in
+	// RAM, so Write erases the record then, once the header is checked.
+	vbRecClear = vbDirect;
+	if (vbDirect == false && ClearTrailer() == false)
 	{
 		return DFU_IMG_ERR_READ;
 	}
@@ -437,6 +448,28 @@ int DfuWriter::Write(const uint8_t *pData, uint32_t Len)
 				}
 				vHdrSize = h.HdrSize;
 				vImgSize = h.ImgSize;
+			}
+
+			// The whole header is in and the payload is next: the last point
+			// where slot 0 is still the image its record describes. An older
+			// image is refused here, leaving it so; otherwise the record goes
+			// before the first payload byte is written.
+			if (vbRecClear && vHdrSize != 0 && vOff + n == vHdrSize)
+			{
+				DfuImgHdr_t h;
+
+				memcpy(&h, body, sizeof(h));
+				if (vbMinVer && DfuImgVerCmp(h.Ver, vMinVer) < 0)
+				{
+					vLen = 0;
+					return DFU_IMG_ERR_VERSION;
+				}
+				if (DfuRecClear(vLay) == false)
+				{
+					vLen = 0;
+					return DFU_IMG_ERR_READ;
+				}
+				vbRecClear = false;
 			}
 		}
 		else if (vOff < vHdrSize + vImgSize)

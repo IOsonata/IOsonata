@@ -135,6 +135,7 @@ static int DfuSmpImgErr(int Res)
 		case DFU_IMG_ERR_NOHASH:	return DFUSMP_IMG_ERR_NO_TLVS;
 		case DFU_IMG_ERR_HASH:		return DFUSMP_IMG_ERR_INVALID_HASH;
 		case DFU_IMG_ERR_VECTOR:	return DFUSMP_IMG_ERR_VECTOR_TABLE;
+		case DFU_IMG_ERR_VERSION:	return DFUSMP_IMG_ERR_CUR_VER_NEWER;
 		case DFU_IMG_ERR_KEY:
 		case DFU_IMG_ERR_SIG:		return DFUSMP_IMG_ERR_INVALID_TLV;
 		default:					return DFUSMP_IMG_ERR_UNKNOWN;
@@ -375,6 +376,7 @@ int DfuSmp::ImgState(const uint8_t *p, uint32_t Len, CborWr_t &Wr, int &GrpRc)
 	res = vCfg.pMgr->MarkPending();
 	if (res == DFU_MGR_ERR_VERSION)
 	{
+		GrpRc = DFUSMP_IMG_ERR_CUR_VER_NEWER;
 		return DFUSMP_ERR_EINVAL;
 	}
 	if (res != DFU_IMG_OK)

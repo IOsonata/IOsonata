@@ -138,6 +138,10 @@ public:
 	/**
 	 * @brief	Start an upload of a whole image sent in order.
 	 *
+	 * In direct mode the record is erased only once the whole header is in:
+	 * Write refuses an image older than slot 0 there (DFU_MGR_ERR_VERSION,
+	 * unless downgrade is allowed) and slot 0 stays startable.
+	 *
 	 * @param	Len : Image length, header to last TLV.
 	 *
 	 * @return	DFU_IMG_OK, DFU_IMG_ERR_SIZE, DFU_MGR_ERR_STATE when the
