@@ -108,14 +108,16 @@ other active compare triggers or bound RTC TICK/OVRFLW sources.
 `TimerDisableTrigger` unbinds the public event and releases the
 private PPI channel. Supported PPI channel reservations still apply.
 
-**RTC compilation and hardware validation remain pending.** To test
-the same two-button, two-LED example using RTC2 instead of TIMER2,
-add `PEI_BLINKY_USE_RTC` in PeiBlinky's Eclipse C++ compiler
-defined symbols, clean-rebuild, and flash BLYST-NANO-DK. The board
-configuration selects RTC2 and 32768 Hz; no application source
-changes are needed. Check 500 ms LED alternation, BUT1 start,
-BUT2 stop, BUT1 resume, and RTC/GPIOTE ISR trace. Remove this
-symbol to return to the previously tested TIMER2 configuration.
+**RTC1 compilation and hardware validation remain pending.** The
+`PeiBlinky/src/board.h` configuration selects `TimerCfg_t.DevNo = 1`,
+which is **RTC1** on nRF52832, at 32768 Hz (`Freq = 0`). Clean-rebuild
+and flash BLYST-NANO-DK. Check 500 ms LED alternation, BUT1 start,
+BUT2 stop, BUT1 resume, teardown/reuse and RTC/GPIOTE ISR entries.
+This RTC1 example is for **standalone bare-metal firmware only**:
+S132/SoftDevice reserves RTC1 while active. For an application-owned
+RTC with S132 running, use RTC2 (`DevNo = 2`); physical high-frequency
+TIMER1 and TIMER2 are `DevNo = 4` and `DevNo = 5` respectively.
+The old `PEI_BLINKY_USE_RTC` build-symbol switch is not used.
 
 ## BLYST-NANO-DK hardware test
 
@@ -125,8 +127,8 @@ it binds the event and task endpoints into one `Pei` matrix and enables
 hardware routing, without CPU event forwarding.
 
 The example now uses `Timer::EnableTimerTrigger(pei, evt, ...)` to
-prepare TIMER2's hardware-only compare and bind its event to PEI.
-`IOPinConnectTask(pei, evt, ...)` asks the GPIO driver to prepare a
+prepare the configured Timer/RTC hardware-only compare and bind its event
+to PEI. `IOPinEnableTask(pei, evt, ...)` asks the GPIO driver to prepare a
 GPIOTE task and connect its endpoint. Peripheral setup stays in the
 Timer and GPIO HAL drivers; PEI only programs PPI. The former
 `pei_blinky_port_nrf52.c` adapter and `pei_blinky_port.h` are removed.
@@ -146,16 +148,21 @@ their PEI implementation calls SoftDevice SVC functions. Without a
 running SoftDevice, that path faults. This direct-source workaround is
 specific to the standalone test, not to Bluetooth applications.
 
-## Two-button hardware handoff (functional hardware PASS)
+## Two-button hardware handoff
 
-`PeiBlinky` now wires four hardware event-to-task connections through PEI:
+With `DevNo = 1`, `PeiBlinky` wires four hardware event-to-task
+connections through PEI:
 
-- TIMER2.COMPARE -> GPIOTE toggle task for LED 1 and LED 2
-- BUT1 (P0.02, falling edge) -> TIMER2.START
-- BUT2 (P0.13, falling edge) -> TIMER2.STOP
+- RTC1.COMPARE -> GPIOTE toggle task for LED 1 and LED 2
+- BUT1 (P0.02, falling edge) -> RTC1.START
+- BUT2 (P0.13, falling edge) -> RTC1.STOP
+
+This new RTC1 selection has not yet received a hardware PASS. The
+previously reported BLYST-NANO-DK behavior predates this configuration
+change and must not be counted as an RTC1 validation.
 
 On reset, LED 1 starts off and LED 2 on (both are active-low).
-The timer counter starts stopped while its high-frequency clock remains
+The counter starts stopped while the low-frequency clock remains
 enabled. Press BUT1 to begin alternating the LEDs at 500 ms per toggle;
 press BUT2 to freeze both LEDs in their current states; press BUT1 again
 to resume the counter. STOP does not reset the timer phase. Button
@@ -178,7 +185,8 @@ that the updated two-button, two-LED `PeiBlinky` works on the
 BLYST-NANO-DK (nRF52832): BUT1 starts alternating the LEDs, BUT2
 stops/freezes them, and BUT1 resumes the timer. This is a **functional
 hardware PASS** for three event sources and four event-to-task links,
-including TIMER2 compare fan-out to both LEDs. The 500 ms event period is
+including compare fan-out to both LEDs. That earlier hardware observation
+does not validate the new RTC1 selection. The 500 ms event period is
 the configured value, not a separately measured timing result. A debugger
 trace confirming the absence of Timer/GPIOTE ISR entries is still pending.
 

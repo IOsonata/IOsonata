@@ -143,7 +143,7 @@ Host-model tests exercise lifecycle and routing for both backends.
 On November 7, 2026, the nRF52832 HAL and the refactored
 `PeiBlinky` C++ example were reported compiled successfully on
 BLYST-NANO-DK. The LED was observed flashing at approximately 1 Hz,
-consistent with the intended 500 ms TIMER2 compare -> PPI -> GPIOTE
+consistent with a 500 ms Timer compare -> PPI -> GPIOTE
 task path. This is a **functional hardware PASS** for the HAL-integrated
 example, not a measured frequency or debugger proof of zero ISR entries.
 The nRF52832 compile is not a complete cross-target build validation.
@@ -203,9 +203,11 @@ the Timer driver owns the RTC compare and the lifetime of its route.
 RTC compare mode requires exclusive RTC counter ownership and rejects
 conflicting trigger or raw-event users. Single-shot stops the counter;
 continuous mode periodically clears it without an ISR. These additions
-have **not** yet been MCU compiled or tested on hardware. Define
-`PEI_BLINKY_USE_RTC` in the BLYST-NANO-DK PeiBlinky Eclipse project
-to select RTC2 at 32768 Hz rather than TIMER2 at 1 MHz.
+have **not** yet been MCU compiled or tested on hardware. The
+BLYST-NANO-DK PeiBlinky board configuration now selects `DevNo = 1`
+(RTC1 at 32768 Hz) in standalone bare-metal mode. RTC1 is reserved
+by S132 when the SoftDevice is active; use application-owned RTC2
+(`DevNo = 2`) for a Bluetooth coexistence test.
 
 ## nRF52 PPI driver (0.14)
 
@@ -307,9 +309,10 @@ The BLYST-NANO-DK `PeiBlinky` example also exercises peripheral-to-
 peripheral control in both directions. The GPIO driver prepares falling-
 edge GPIOTE events on BUT1 (P0.02) and BUT2 (P0.13) using the C
 `IOPinEnableEvent` API. The Timer driver
-exposes its START/STOP hardware tasks. PEI routes BUT1 to TIMER2.START and
-BUT2 to TIMER2.STOP. Independently, TIMER2.COMPARE fans out through PEI to
-two GPIOTE toggle tasks with opposite initial LED states.
+exposes its START/STOP hardware tasks. With `DevNo = 1`, PEI routes
+BUT1 to RTC1.START and BUT2 to RTC1.STOP. RTC1.COMPARE fans out
+through PEI to two GPIOTE toggle tasks with opposite initial LED states.
+The new RTC1 configuration requires a fresh hardware validation.
 
 The CPU configures these relationships once, executes the timer STOP
 task for initial state, and then waits. Subsequent button events operate
@@ -337,7 +340,7 @@ The shared `exemples/pei/pei_blinky.cpp` contains no MCU register
 access or platform adapter. It uses the existing Timer object and the
 new `Timer::EnableTimerTrigger(Pei&, PeiEvent_t&, ...)` overload to
 configure a hardware-only compare source and bind it in PEI. The GPIO
-`IOPinConnectTask` wrapper configures a task using its GPIO backend
+`IOPinEnableTask` wrapper configures a task using its GPIO backend
 and registers the endpoint relationship in PEI.
 
 On nRF52, the Timer driver uses hardware COMPARE->CLEAR for continuous
