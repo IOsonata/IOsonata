@@ -57,17 +57,10 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "coredev/pei.h"
 
 /** @addtogroup Coredev
   * @{
   */
-
-// Only TIMEOUT is exposed. WDT START cannot be undone until a reset,
-// and RR[n] reload registers are not peripheral task endpoints.
-typedef enum {
-	WDT_PEI_EVENT_TIMEOUT
-} WDT_PEI_EVENT;
 
 typedef struct __Wdt_Device WdtDev_t;
 
@@ -129,14 +122,6 @@ bool WdtInit(WdtDev_t * const pDev, const WdtCfg_t * const pCfg);
  */
 bool WdtStart(WdtDev_t * const pDev);
 
-// Hardware event source only; does not start or reload the watchdog.
-// TIMEOUT occurs just before reset and must not be used as a safety
-// recovery mechanism. Both C and C++ use the same PeiDev_t matrix.
-bool WdtEnablePeiEvent(WdtDev_t *pDev, PeiDev_t *pPei,
-	PeiEvent_t *pEvt, WDT_PEI_EVENT Event);
-bool WdtDisablePeiEvent(WdtDev_t *pDev, PeiDev_t *pPei,
-	PeiEvent_t Evt);
-
 /**
  * @brief	Reload one channel
  *
@@ -191,17 +176,6 @@ public:
 	 * @return	true - the watchdog runs
 	 */
 	virtual bool Running() { return WdtRunning(&vDev); }
-
-	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
-		WDT_PEI_EVENT Event)
-	{
-		return WdtEnablePeiEvent(&vDev, PeiDev, &Evt, Event);
-	}
-
-	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
-	{
-		return WdtDisablePeiEvent(&vDev, PeiDev, Evt);
-	}
 
 	/**
 	 * @brief	Timeout in effect

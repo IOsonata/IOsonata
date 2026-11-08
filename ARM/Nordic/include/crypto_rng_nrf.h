@@ -53,7 +53,6 @@ SOFTWARE.
 #include "nrf.h"
 #include "device_intrf.h"
 #include "crypto/icrypto.h"
-#include "rng_nrf_pei.h"
 
 /** @addtogroup Crypto
   * @{
@@ -82,34 +81,6 @@ public:
 		return DeviceIntrfTxData(&vDevIntrf, pData, DataLen);
 	}
 	void StopTx(void) override { DeviceIntrfStopTx(&vDevIntrf); }
-
-	// Hardware-only RNG routes, kept separate from CryptoRngNrf's
-	// secure random byte API. Both use the same peripheral owner.
-	bool PreparePei() { return RngNrfPeiPrepare(); }
-	bool ReleasePei() { return RngNrfPeiRelease(); }
-
-	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
-		RNG_NRF_PEI_EVENT Event)
-	{
-		return RngNrfPeiEnableEvent(PeiDev, &Evt, Event);
-	}
-
-	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
-	{
-		return RngNrfPeiDisableEvent(PeiDev, Evt);
-	}
-
-	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt,
-		RNG_NRF_PEI_TASK Task)
-	{
-		return RngNrfPeiConnectTask(PeiDev, Evt, Task);
-	}
-
-	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt,
-		RNG_NRF_PEI_TASK Task)
-	{
-		return RngNrfPeiDisconnectTask(PeiDev, Evt, Task);
-	}
 
 private:
 	DevIntrf_t vDevIntrf;

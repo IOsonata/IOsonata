@@ -44,17 +44,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "temp_nrf5x.h"
 
 static TempnRF5x *s_pTempnRF5x = NULL;
-static bool s_bTempPeiReady = false;
-
-// The TEMP handler is the only consumer of the measured data.
-// Ordinary temperature firmware must not extract PEI/PPI symbols.
-#if defined(__GNUC__)
-#pragma weak PeiBindEvent
-#pragma weak PeiGetEventEndpoint
-#pragma weak PeiUnbindEvent
-#pragma weak PeiConnectTask
-#pragma weak PeiDisconnectTask
-#endif
 
 void TempnRF5x::IntHandler()
 {
@@ -74,7 +63,6 @@ bool TempnRF5x::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf,
 	vDataRdyHandler = CfgData.DataRdyCB;
 
 	s_pTempnRF5x = this;
-	s_bTempPeiReady = false;
 	NRF_TEMP->INTENCLR = 1U;
 	NRF_TEMP->EVENTS_DATARDY = 0U;
 
@@ -93,7 +81,6 @@ bool TempnRF5x::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf,
 bool TempnRF5x::Enable()
 {
     NRF_TEMP->INTENSET = 1U;
-	s_bTempPeiReady = true;
 
 	NVIC_ClearPendingIRQ(TEMP_IRQn);
 	NVIC_EnableIRQ(TEMP_IRQn);
@@ -107,7 +94,6 @@ bool TempnRF5x::Enable()
 void TempnRF5x::Disable()
 {
     NRF_TEMP->INTENCLR = 1U;
-	s_bTempPeiReady = false;
 	NVIC_DisableIRQ(TEMP_IRQn);
 }
 
@@ -158,111 +144,4 @@ extern "C" void TEMP_IRQHandler(void)
 		s_pTempnRF5x->IntHandler();
 	}
     NVIC_ClearPendingIRQ(TEMP_IRQn);
-}
-
-
-// TEMP uses a single one-shot conversion engine. Init/Enable and the
-// DATARDY interrupt handler continue to own sensor data and STOP.
-// PEI merely connects the hardware event and task registers.
-static bool TempNrfPeiReady(void)
-{
-#if defined(NRF52_SERIES)
-	return s_pTempnRF5x != NULL && s_bTempPeiReady;
-#else
-	return false;
-#endif
-}
-
-static PeiEndpoint_t TempNrfPeiTaskEndpoint(TEMP_NRF_PEI_TASK Task)
-{
-#if defined(NRF52_SERIES)
-	switch (Task)
-	{
-		case TEMP_NRF_PEI_TASK_START:
-			return (PeiEndpoint_t)&NRF_TEMP->TASKS_START;
-		case TEMP_NRF_PEI_TASK_STOP:
-			return (PeiEndpoint_t)&NRF_TEMP->TASKS_STOP;
-		default:
-			return 0U;
-	}
-#else
-	(void)Task;
-	return 0U;
-#endif
-}
-
-extern "C" bool TempNrfPeiEnableEvent(PeiDev_t *pPei,
-	PeiEvent_t *pEvt, TEMP_NRF_PEI_EVENT Event)
-{
-#if defined(NRF52_SERIES)
-	if (!TempNrfPeiReady() || pPei == NULL || pEvt == NULL ||
-		PeiBindEvent == NULL || Event != TEMP_NRF_PEI_EVENT_DATARDY)
-	{
-		return false;
-	}
-	return PeiBindEvent(pPei, pEvt,
-		(PeiEndpoint_t)&NRF_TEMP->EVENTS_DATARDY);
-#else
-	(void)pPei;
-	(void)pEvt;
-	(void)Event;
-	return false;
-#endif
-}
-
-extern "C" bool TempNrfPeiDisableEvent(PeiDev_t *pPei, PeiEvent_t Evt)
-{
-#if defined(NRF52_SERIES)
-	PeiEndpoint_t endpoint;
-
-	if (pPei == NULL || PeiGetEventEndpoint == NULL ||
-		PeiUnbindEvent == NULL)
-	{
-		return false;
-	}
-	endpoint = (PeiEndpoint_t)&NRF_TEMP->EVENTS_DATARDY;
-	if (PeiGetEventEndpoint(pPei, Evt) != endpoint)
-	{
-		return false;
-	}
-	return PeiUnbindEvent(pPei, Evt, endpoint);
-#else
-	(void)pPei;
-	(void)Evt;
-	return false;
-#endif
-}
-
-extern "C" bool TempNrfPeiConnectTask(PeiDev_t *pPei,
-	PeiEvent_t Evt, TEMP_NRF_PEI_TASK Task)
-{
-	PeiEndpoint_t endpoint;
-
-	if (!TempNrfPeiReady() || pPei == NULL || PeiConnectTask == NULL)
-	{
-		return false;
-	}
-	endpoint = TempNrfPeiTaskEndpoint(Task);
-	if (endpoint == 0U)
-	{
-		return false;
-	}
-	return PeiConnectTask(pPei, Evt, endpoint);
-}
-
-extern "C" bool TempNrfPeiDisconnectTask(PeiDev_t *pPei,
-	PeiEvent_t Evt, TEMP_NRF_PEI_TASK Task)
-{
-	PeiEndpoint_t endpoint;
-
-	if (pPei == NULL || PeiDisconnectTask == NULL)
-	{
-		return false;
-	}
-	endpoint = TempNrfPeiTaskEndpoint(Task);
-	if (endpoint == 0U)
-	{
-		return false;
-	}
-	return PeiDisconnectTask(pPei, Evt, endpoint);
 }
