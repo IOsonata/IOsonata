@@ -166,6 +166,7 @@ static void RtcIRQHandler(int DevNo)
 
 	NRF_RTC_Type *reg = s_pnRfxRtcData[DevNo].pReg;
     uint32_t evt = 0;
+	uint32_t ticks;
     uint32_t count = reg->COUNTER;
 
     if (reg->EVENTS_TICK)
@@ -191,7 +192,7 @@ static void RtcIRQHandler(int DevNo)
 			if (s_pnRfxRtcData[DevNo].pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
 			{
 				// Only this CC is rescheduled; PEI routes the event in hardware.
-				uint32_t ticks = (uint32_t)TimerNanosecondToTick(timer,
+				ticks = (uint32_t)TimerNanosecondToTick(timer,
 					s_pnRfxRtcData[DevNo].pTrigger[i].nsPeriod);
 				reg->CC[i] = (count + ticks) & 0xFFFFFFU;
 			}
@@ -610,7 +611,7 @@ static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 		pData->pTrigger[i].pContext = nullptr;
 		return true;
 	}
-		return false;
+	return false;
 }
 
 // Bind a free CC to PEI; the RTC counter and all other CCs keep running.
@@ -712,7 +713,6 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
                               	  	 TimerTrigEvtHandler_t Handler, void *pContext)
 {
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
-	int i;
 
 	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
 	{

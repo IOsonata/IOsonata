@@ -225,6 +225,7 @@ static void TimerIRQHandler(int DevNo)
 	}
 
     uint32_t evt = 0;
+	uint32_t ticks;
 	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
 
 	// Read counter value
@@ -252,7 +253,7 @@ static void TimerIRQHandler(int DevNo)
 			{
 				// PEI handles event-to-task routing in hardware. The
 				// ISR only advances this CC, preserving elapsed time.
-				uint32_t ticks = (uint32_t)TimerNanosecondToTick(
+				ticks = (uint32_t)TimerNanosecondToTick(
 					timer, tdata.pTrigger[i].nsPeriod);
 				reg->CC[i] = count + ticks;
 			}
