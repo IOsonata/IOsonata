@@ -273,6 +273,25 @@ The application remains responsible for the GPIO detect lifecycle.
 The new standalone nRF52832 `PeiPortDemo` tests PORT routing alongside
 an independent GPIOTE IN[n] source; hardware validation is pending.
 
+### GPIOTE channel ownership and coexistence
+
+The nRF52 legacy GPIOTE driver tracks task and event channel
+ownership separately from conventional GPIO interrupt callbacks.
+`IOPinEnableInterrupt()` now checks the actual channel CONFIG
+and rejects a second assignment of the same pin across channels
+while holding the local interrupt lock. Automatic IRQ channel
+allocation skips any nonzero CONFIG entry, including those owned
+externally. It clears an old EVENTS_IN flag on reuse. The GPIOTE
+IRQ handler acknowledges only events owned by conventional IRQ
+users, not PEI-owned IN[n] or PORT sources.
+
+The PeiGpioteStress hardware example verifies exhaustion/recovery
+and repeated lifecycle calls through the public GPIO and PEI
+APIs, then a live ordinary IRQ alongside a PPI/GPIOTE task. Its
+nRF52832 board result has not yet been reported. This does not
+authorize stealing stack-owned GPIOTE channels or imply that
+every nRF52 MCU exposes eight channels.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI

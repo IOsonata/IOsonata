@@ -54,6 +54,33 @@ non-invasive-source checks. Run the
 managed project on BLYST-NANO-DK to test the PORT and dedicated IN[n]
 event paths concurrently. There is no hardware PASS yet.
 
+## GPIOTE resource exhaustion and conventional IRQ coexistence
+
+The nRF52832 PeiGpioteStress Eclipse managed project is at
+ARM/Nordic/nRF52/nRF52832/exemples/PeiGpioteStress/ioc.
+Run it on BLYST-NANO-DK, without the UART/semihosting/debugger
+breakpoints. The application uses the GPIO API and PEI only, not
+GPIOTE/PPI register writes.
+
+On startup, the test tries 64 rounds of 8/8 GPIOTE IN channels,
+verifies that channel 9 fails, releases a middle channel and
+verifies reuse while excluding duplicate pin ownership. It then
+exercises 128 enable/disable/disconnect/release cycles of GPIOTE
+PEI event/task/PPI routing, interleaved with 128 ordinary GPIO IRQ
+allocation/release cycles.
+
+Inspect g_GpioteStress in the debugger after uninterrupted startup:
+Status=2, Error=0, ExhaustionRounds=64, ReusedChannels=64,
+RouteRounds=128, IrqRounds=128. The final live test maps BUT1
+to an ordinary IRQ (incrementing IrqCount and toggling LED2)
+and BUT2 to a PPI-driven LED1 toggle task. Check both buttons
+independently and repeatedly; only a physical LED observation
+validates the PEI route.
+
+The new check_gpio_lifecycle_contract.py in tests/pei/run.py is a
+source-level ownership regression. It does not replace MCU compilation
+or the board test. Results remain pending.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or

@@ -41,7 +41,7 @@ Status keys:
 | --- | --- | --- | --- |
 | TIMER / `timer_hf_nrfx.cpp` | COMPARE[n] single-shot/continuous; other events pending | START, STOP, CLEAR; COUNT and CAPTURE[n] pending | **Mixed-CC TIMER3 hardware working** in both CC orders (user report, Nov 8); COUNT/CAPTURE endpoints pending |
 | RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Mixed-CC RTC0 hardware working** in both CC orders; **RTC2 working** with ISR-first order (user report, Nov 8); other sources and lifecycle pending |
-| GPIOTE / `iopincfg_nrfx.c` | IN[n] edge; shared PORT SENSE/DETECT source implemented on nRF52 | OUT[n] SET/CLEAR/TOGGLE through configured channels | **PeiPortDemo functional hardware PASS** on nRF52832 (user-confirmed Nov 8): PORT and dedicated IN[n] coexist, startup source/task rebind and reuse completed; repeated lifecycle stress and cross-variant testing pending |
+| GPIOTE / `iopincfg_nrfx.c` | IN[n] edge; shared PORT SENSE/DETECT source implemented on nRF52 | OUT[n] SET/CLEAR/TOGGLE through configured channels | **PeiPortDemo functional hardware PASS** (Nov 8); conventional IRQ channel/pin ownership safeguards added; **PeiGpioteStress** (64 exhaustion rounds, 128 route/IRQ cycles) awaits hardware validation |
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED, CALIBRATEDONE and available limits | START, SAMPLE, STOP, CALIBRATEOFFSET | **Pending**; cannot expose SAMPLE until conversion channels and EasyDMA buffers are configured and reserved |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, UP, DOWN, CROSS and supported variants | START, STOP, SAMPLE where provided | **Pending**; only expose events/tasks from the configured comparator |
 | PWM / `pwm_nrfx.cpp` | SEQSTARTED[n], SEQEND[n], LOOPSDONE, PWMPERIODEND, STOPPED | SEQSTART[n], STOP and NEXTSTEP if implemented | **Pending**; requires valid sequence buffers and owner-safe start/stop |
@@ -166,6 +166,10 @@ require dedicated validation. The user also confirmed PeiPortDemo
 working on nRF52832 (November 8, 2026). This exercises the shared
 GPIOTE PORT event and independent IN[n] PPI paths after the demo's
 setup-time unbind/rebind and task/event resource reuse sequence.
-Extended lifecycle stress, coexistence with an interrupt consumer,
-and other nRF52 variants remain unvalidated. Other peripheral rows
+An additional PeiGpioteStress managed project now exercises the
+8-channel exhaustion boundary, duplicate channel/pin rejection,
+64 allocation/reuse rounds and 128 PPI-route plus conventional IRQ
+lifecycle rounds, then arms the two buttons for hardware coexistence.
+Its hardware result remains pending; cross-variant and SoftDevice/SDC
+GPIOTE ownership tests remain unvalidated. Other peripheral rows
 remain pending unless independently marked above.
