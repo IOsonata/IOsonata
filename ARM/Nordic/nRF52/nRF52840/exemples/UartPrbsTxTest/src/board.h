@@ -46,6 +46,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define UART_DEVNO			1
 
+// UARTE1 has no legacy UART, it runs only with dma
+#if UART_DEVNO == 1
+#define UART_DMA_MODE		true
+#endif
+
 #ifdef NORDIC_DK
 
 #if UART_DEVNO == 0
