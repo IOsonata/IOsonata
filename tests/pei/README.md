@@ -179,6 +179,24 @@ without a microphone or codec. No nRF52 audio board test was run;
 future tests must validate sample continuity, pointer rollover and
 routing teardown on a real attached microphone/I2S device.
 
+## nRF52 SPI/SPIM/SPIS PEI
+
+The C and C++ SPI HAL support READY on legacy SPI, STARTED/ENDRX/
+ENDTX/END/STOPPED on SPIM, and ENDRX/END/ACQUIRED on SPIS.
+Only SPIM START/STOP/SUSPEND/RESUME tasks are supported after
+SPIPreparePeiTransfer() configures one block. Its transmit bytes
+are copied to the existing driver-owned TX buffer and any RX buffer
+must remain valid until STOPPED and release. Use manual chip select,
+8-bit master EasyDMA and bIntEn=false. Anomaly-58 one-byte RX
+cases are rejected. SPIS ACQUIRE/RELEASE are still ISR-owned.
+
+Run python3 tests/pei/run.py to include check_spi_pei_contract.py,
+C/C++ header clients, and no-PEI GNU ld map cases. Hardware-free
+PeiSpiDemo at ARM/Nordic/nRF52/nRF52832/exemples/PeiSpiDemo/ioc
+uses BUT1 -> SPIM2 START -> END/STOP -> LED1/RGB blue over PPI,
+with no external SPI slave. MCU build and board validation remain
+pending.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or

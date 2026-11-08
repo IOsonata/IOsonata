@@ -406,6 +406,23 @@ I2S external device is currently available for this project's hardware
 validation, so the implementation is not marked as device-tested.
 The nRF53 and nRF54 DPPI/TDM ports are not implied by nRF52 support.
 
+### nRF52 SPI/SPIM/SPIS hardware PEI endpoints
+
+The existing SPI HAL exposes mode-specific event registers: SPI
+READY; SPIM STARTED, ENDRX, ENDTX, END, STOPPED; SPIS ENDRX,
+END, ACQUIRED. Only SPIM START, STOP, SUSPEND and RESUME tasks
+are connected after SPIPreparePeiTransfer() validates and stages a
+driver-owned DMA transaction. SPIS ACQUIRE/RELEASE remain with the
+slave interrupt handler, which owns its semaphore and buffers.
+
+SPIM preparation requires an 8-bit master with manual CS,
+noninterrupt EasyDMA, a stable caller-owned RX buffer if used,
+and a single TX block copied into the existing private TX buffer.
+Disconnect PPI routes before SPIReleasePeiTransfer(). The nRF52832
+PeiSpiDemo exercises BUT1 -> SPIM2 START, END -> STOP and LED1,
+STOPPED -> RGB blue, without any slave peripheral. Target compilation
+and hardware validation remain pending.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI

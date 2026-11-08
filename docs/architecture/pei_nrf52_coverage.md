@@ -48,7 +48,7 @@ Status keys:
 | PWM / `pwm_nrfx.cpp` | SEQSTARTED[0/1], SEQEND[0/1], LOOPSDONE, PWMPERIODEND, STOPPED implemented | SEQSTART[0/1], STOP implemented; NEXTSTEP conditional on decoder mode | **PeiPwmDemo functional hardware PASS on nRF52832** (maintainer report, Nov 8, 2026): BUT1/BUT2 PWM start/stop and event indication; driver-owned static EasyDMA sequences, channel/ENABLE checks and C/C++ APIs. Additional PWM events, NEXTSTEP and lifecycle stress pending |
 | PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED implemented on nRF52 | START, STOP after FIFO/DMA preparation | **Initial PEI integration:** C/C++ APIs; PdmPreparePeiStart reserves the first driver-owned FIFO block and configures SAMPLE.PTR/MAXCNT; mandatory STARTED IRQ buffer refill; source/API regressions added. No device hardware test. |
 | I2S / `i2s_nrfx.cpp` | RXPTRUPD (RX configured), TXPTRUPD (TX configured), STOPPED implemented on nRF52 | START, STOP with initialized and armed driver-owned DMA | **Initial PEI integration:** C/C++ APIs; I2SPreparePeiStart re-arms existing RX/TX buffers without START after I2SDisable; IRQ pointer service required. Source/API regressions added. No device hardware test. |
-| SPI / SPIM / SPIS / `spi_nrfx.cpp` | Ready, started, ended, stopped, error/transfer events actually present in each mode | START, STOP, SUSPEND, RESUME and mode-specific tasks | **Pending**; legacy SPI and EasyDMA modes share instances and are not interchangeable |
+| SPI / SPIM / SPIS / `spi_nrfx.cpp` | SPI READY; SPIM STARTED/ENDRX/ENDTX/END/STOPPED; SPIS ENDRX/END/ACQUIRED | SPIM START/STOP/SUSPEND/RESUME only after driver-prepared EasyDMA; legacy SPI no tasks; SPIS ACQUIRE/RELEASE still IRQ-owned | **Initial endpoint added**: mode-specific C/C++ PEI APIs, single-block SPIM DMA preparation and release, PeiSpiDemo and static tests; MCU/hardware validation pending |
 | TWI / TWIM / TWIS / `i2c_nrfx.cpp` | Transfer ready, stopped, error and other supported events per mode | STARTRX, STARTTX, STOP, SUSPEND, RESUME and mode-specific tasks | **Pending**; bus state and DMA buffer ownership stay with I2C driver |
 | UART / UARTE / `uart_nrfx.cpp` | RX/TX ready, transfer end, stopped, error and mode-specific events | STARTRX, STOPRX, STARTTX, STOPTX, FLUSHRX where available | **Pending**; do not trigger unprepared EasyDMA |
 | EGU / `pei_nrf52.cpp` (owned by PEI, no standalone driver) | TRIGGERED[n] as a software event source (`PeiBindSwEvent`, `PeiTriggerSwEvent`) | TRIGGER[n] (`PeiGetSwEventTask`) | **Initial endpoint added**: host-model tests for all build profiles; PeiSwEvent example on nRF52832 not yet run on hardware. No EGU interrupt or callback |
@@ -302,6 +302,33 @@ but hardware-unvalidated**. Future device tests should exercise PDM
 FIFO rollover and STOPPED/restart sequencing, I2S RX-only, TX-only
 and duplex streaming, pointer-update event delivery, STOPPED, and
 repeated source/task release.
+
+## SPI/SPIM/SPIS PEI integration (initial nRF52 subset)
+
+Only event sources belonging to the currently configured SPI mode
+are exposed. Legacy SPI provides READY; SPIM provides STARTED,
+ENDRX, ENDTX, END and STOPPED; SPIS provides ENDRX, END and
+ACQUIRED. The shared register base does not make these interchangeable.
+SPIS ACQUIRE/RELEASE tasks are not connected through PEI: the
+existing slave ISR owns the semaphore and DMA pointer updates.
+
+SPIM START, STOP, SUSPEND and RESUME may be connected after
+SPIPreparePeiTransfer() arms one block with the existing private TX
+buffer (max 256 bytes) and optionally caller-owned RX RAM. The
+configured SPI must be MASTER, 8-bit, noninterrupt EasyDMA and
+manual-CS; the caller owns chip select, RX lifetime and PPI teardown.
+nRF52832 one-byte RX anomaly 58 is rejected where the driver's CPU
+fallback would normally be needed. Ordinary SPI transfers and SPIInit
+are blocked while PEI has reserved the SPIM transfer. Disconnect task
+routes, then call SPIReleasePeiTransfer() to stop and free DMA pointers.
+No PEI ISR event forwarding or separate DMA buffer is introduced.
+
+PeiSpiDemo on nRF52832 BLYST-NANO-DK needs no external SPI slave:
+BUT1 starts an eight-byte SPIM2 transmission; END routes to STOP
+and LED1, and STOPPED toggles RGB blue, all via PPI. Host API/source
+checks were added but target MCU compilation, hardware behavior,
+SPIS semaphore handoff, shared SPI/TWI lifecycle and all variants
+remain unvalidated.
 
 ## Completion criteria before nRF53
 
