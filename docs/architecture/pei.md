@@ -349,6 +349,33 @@ toggle tasks via PPI. It does not claim ADC-like sample buffering or
 software event forwarding. Hardware testing is pending. Disconnect
 all routes before powering off or reinitializing a comparator.
 
+### nRF52 PWM sequence event/task endpoints
+
+The standard PwmDev_t / Pwm HAL is extended for C and C++ PEI
+routing. PWM0..PWMn events SEQSTARTED[0/1], SEQEND[0/1],
+LOOPSDONE, PWMPERIODEND and STOPPED may serve as event sources;
+prepared PWM output tasks SEQSTART[0/1] and STOP may be PEI
+destinations. NEXTSTEP is refused in the current RefreshCount
+decoder mode and is only valid if the driver owner enables NextStep
+mode.
+
+PWMInit owns the two static RAM sequences. A configured, enabled
+PWM device with at least one output channel is required before a new
+PEI connection; both sequence pointers and counts are validated.
+No extra PEI-specific buffer or IRQ is introduced. The default
+PWM sequence with LOOP.CNT=0 is played once, then the last duty is
+maintained until STOP. The driver does not automatically add a
+LOOPSDONE replay shortcut. Disconnect all PEI relationships before
+stopping, closing channels or reinitializing a PWM instance.
+
+PeiPwmDemo on the nRF52832 BLYST-NANO-DK uses BUT1 and BUT2
+to drive PWM0 SEQSTART0 and STOP over PPI without the CPU.
+RGB red provides a PWM output (1 kHz, 30% duty);
+SEQSTARTED0 toggles the separate LED1, and STOPPED toggles RGB blue.
+It uses the ordinary PWM class and driver-owned sequence buffers.
+The hardware result is pending; no semihosting or debugger
+variable C-linkage wrappers are added.
+
 ## nRF52 PPI driver (0.14)
 
 `ARM/Nordic/nRF52/src/pei_nrf52.cpp` implements the initial generic PEI

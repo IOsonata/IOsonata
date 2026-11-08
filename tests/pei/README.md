@@ -125,6 +125,30 @@ header compilation. The link-isolation checker also rejects comparator
 PEI code in non-PEI firmware. Hardware behavior and MCU build remain
 pending.
 
+## nRF52 PWM hardware PEI sequence and task routing
+
+PWMInit(), PWMOpenChannel() and PWMSetDutyCycle() prepare the
+PWM driver-owned static RAM sequences and output pins. The C
+PWMEnablePeiEvent()/PWMConnectPeiTask() methods and C++ Pwm
+wrappers expose the actual register endpoints; they do not
+configure peripheral channels or DMA buffers.
+
+PeiPwmDemo is at
+ARM/Nordic/nRF52/nRF52832/exemples/PeiPwmDemo/ioc.
+On BLYST-NANO-DK, BUT1 starts PWM0 sequence 0 through PPI,
+and BUT2 sends PWM0 STOP through PPI. RGB red is the waveform
+output; SEQSTARTED0 toggles the *separate* LED1, and STOPPED
+toggles RGB blue. The example runs without semihosting or
+interrupt event-forwarding. g_PeiPwmStatus=1 indicates routes
+are armed but is not a hardware pass.
+
+The existing host runner includes check_pwm_pei_contract.py,
+C/C++ API compilation and link-isolation cases. NEXTSTEP
+is exposed only for a PWM decoder configured in NextStep mode;
+the existing RefreshCount decoder never enables it. Disconnect
+routes before closing PWM channels or disabling/reinitializing.
+MCU compile and board validation are pending.
+
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or

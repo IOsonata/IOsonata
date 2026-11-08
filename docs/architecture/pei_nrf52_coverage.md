@@ -44,7 +44,7 @@ Status keys:
 | GPIOTE / `iopincfg_nrfx.c` | IN[n] edge; shared PORT SENSE/DETECT source implemented on nRF52 | OUT[n] SET/CLEAR/TOGGLE through configured channels | **PeiPortDemo functional hardware PASS**; **PeiGpioteStress automatic hardware PASS** (Nov 8 screenshot: Status 2, Error 0, 64 exhaustion/reuse, 128 PPI-route, 128 IRQ rounds, IrqCount 13); BUT2 physical route confirmation and cross-variant tests pending |
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED implemented; CALIBRATEDONE and limit events pending (limits reach the application through the driver callback) | START, SAMPLE, STOP implemented; CALIBRATEOFFSET pending | **Initial endpoint added**: single-conversion/no-IRQ driver-owned EasyDMA preparation, nRF52832 erratum 150 guard, C/C++ PEI routing; continuous mode with double-buffered blocks accepts SAMPLE only; PeiSaadcDemo TIMER->SAMPLE / END->START and PeiAdcDemo TIMER->SAMPLE hardware checks pending |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, DOWN, UP, CROSS implemented for nRF52 | START, STOP, SAMPLE (single mode only) implemented | **Initial endpoint added:** common C/C++ HAL, owner/enable checks and no-IRQ PEI routing; PeiCompDemo hardware validation pending |
-| PWM / `pwm_nrfx.cpp` | SEQSTARTED[n], SEQEND[n], LOOPSDONE, PWMPERIODEND, STOPPED | SEQSTART[n], STOP and NEXTSTEP if implemented | **Pending**; requires valid sequence buffers and owner-safe start/stop |
+| PWM / `pwm_nrfx.cpp` | SEQSTARTED[0/1], SEQEND[0/1], LOOPSDONE, PWMPERIODEND, STOPPED implemented | SEQSTART[0/1], STOP implemented; NEXTSTEP conditional on decoder mode | **Initial endpoint added:** driver-owned static EasyDMA sequences, channel/ENABLE checks, C/C++ APIs, weak PEI references; PeiPwmDemo hardware check pending |
 | PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED | START, STOP | **Pending**; must not bypass sample-buffer configuration |
 | I2S / `i2s_nrfx.cpp` | RXPTRUPD, TXPTRUPD, STOPPED | START, STOP | **Pending**; respect DMA pointer and double-buffer ownership |
 | SPI / SPIM / SPIS / `spi_nrfx.cpp` | Ready, started, ended, stopped, error/transfer events actually present in each mode | START, STOP, SUSPEND, RESUME and mode-specific tasks | **Pending**; legacy SPI and EasyDMA modes share instances and are not interchangeable |
@@ -195,6 +195,39 @@ event sources routed to LEDs. BUT1 is AIN0/P0.02 and crosses the VDD/2
 reference when pressed and released. Initial hardware validation,
 SINGLE-mode SAMPLE, teardown/reuse and other nRF52 variants remain
 pending. No hardware pass is inferred from static checks.
+
+## PWM event/task integration (initial nRF52 subset)
+
+The existing PWM driver owns all configuration and both internal
+static four-channel EasyDMA sequences. No PEI-specific PWM buffers or
+heap state are allocated. PWMInit(), PWMOpenChannel(), DutyCycle() and
+PWMEnable() prepare a valid PWM output before the PWM-specific PEI
+C/C++ APIs bind events or connect tasks. The driver verifies the
+owning PwmDev_t, channel mask, enabled register, frequency, counter
+top and both sequence DMA pointers/counts.
+
+The initial event sources are SEQSTARTED[0/1], SEQEND[0/1],
+LOOPSDONE, PWMPERIODEND and STOPPED. Hardware task destinations are
+SEQSTART[0/1] and STOP. NEXTSTEP is only connectable when the
+driver-owned DECODER mode is NextStep. The existing HAL configures
+RefreshCount, so NEXTSTEP is not exercised by the default PWM class.
+Disconnecting a task is allowed even if its decoder mode subsequently
+changes, to avoid retaining a stale hardware PPI connection.
+
+PWMInit() now resets any previous LOOP/SHORTS/INTEN state and rejects
+a zero configuration frequency. The PWM driver remains the only owner
+of output pins and DMA buffers; PEI does not invoke a CPU ISR to
+forward or acknowledge PWM events. The new wrapper functions are
+optional weak PEI references and should not extract the PEI matrix
+when a normal PWM-only firmware is linked.
+
+The standalone nRF52832 PeiPwmDemo maps BUT1 to PWM0.SEQSTART0 and
+BUT2 to PWM0.STOP, both through hardware PPI. PWM channel 0 drives
+RGB red, while PWM SEQSTARTED0 and STOPPED toggle the physically
+separate LED1 and RGB blue, respectively. C/C++ compile checks and
+source contract tests are added; MCU build and live hardware results
+are still pending. Further lifecycle stress, second-sequence tests,
+NEXTSTEP decoder support and cross-variant testing remain outstanding.
 
 ## Completion criteria before nRF53
 

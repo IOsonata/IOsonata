@@ -30,7 +30,10 @@ def main():
         assert "pReg->EVENTS_" + event in events
     for task in ("SEQSTART[0]", "SEQSTART[1]", "STOP", "NEXTSTEP"):
         assert "pReg->TASKS_" + task in tasks
-    assert "PWM_DECODER_MODE_NextStep" in tasks
+    connect = section('extern "C" bool PWMConnectPeiTask(',
+                      'extern "C" bool PWMDisconnectPeiTask(')
+    assert "PWM_DECODER_MODE_NextStep" in connect
+    assert "Task == PWM_PEI_TASK_NEXTSTEP" in connect
     assert "dev->OpenMask == 0U" in ready
     assert "dev->TopCount == 0U" in ready
     assert "dev->pReg->ENABLE != PWM_ENABLE_ENABLE_Enabled" in ready
