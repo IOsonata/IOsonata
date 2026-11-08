@@ -806,6 +806,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/mcu_power.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/mcu_power.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
@@ -1789,6 +1794,11 @@
 			<name>src/coredev/iopincfg_nrfx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/mcu_power_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/mcu_power_nrf52.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/pdm_nrfx.cpp</name>
