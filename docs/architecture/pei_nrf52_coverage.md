@@ -39,8 +39,8 @@ Status keys:
 
 | Peripheral / driver | Hardware event source coverage | Hardware task destination coverage | Current status |
 | --- | --- | --- | --- |
-| TIMER / `timer_hf_nrfx.cpp` | COMPARE[n] single-shot/continuous; other events pending | START, STOP, CLEAR; COUNT and CAPTURE[n] pending | **PeiBlinky functional after free-running correction**; mixed-CC TIMER3/RTC2 validation project added, four board runs pending |
-| RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Implemented, unvalidated on MCU**: per-CC compare rescheduling, hardware PEI routing independent of ISR forwarding, no implicit STOP/CLEAR |
+| TIMER / `timer_hf_nrfx.cpp` | COMPARE[n] single-shot/continuous; other events pending | START, STOP, CLEAR; COUNT and CAPTURE[n] pending | **Mixed-CC TIMER3 hardware working** in both CC orders (user report, Nov 8); COUNT/CAPTURE endpoints pending |
+| RTC / `timer_lf_nrfx.cpp` | TICK, OVRFLW; COMPARE[n] single-shot/continuous | START, STOP, CLEAR, TRIGOVRFLW | **Mixed-CC RTC0 hardware working** in both CC orders; **RTC2 working** with ISR-first order (user report, Nov 8); other sources and lifecycle pending |
 | GPIOTE / `iopincfg_nrfx.c` | IN[n] edge, PORT event where supported | OUT[n] SET/CLEAR/TOGGLE through configured channels | IN[n] + output toggle **working hardware before C PEI refactor**; PORT and lifecycle stress pending |
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED, CALIBRATEDONE and available limits | START, SAMPLE, STOP, CALIBRATEOFFSET | **Pending**; cannot expose SAMPLE until conversion channels and EasyDMA buffers are configured and reserved |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, UP, DOWN, CROSS and supported variants | START, STOP, SAMPLE where provided | **Pending**; only expose events/tasks from the configured comparator |
@@ -150,11 +150,16 @@ low-frequency RTC PEI path.
 
 The BLYST-NANO-DK Timer + two LEDs + two buttons demonstrated working
 PPI hardware prior to the conversion of `Pei` to the C `PeiDev_t`
-matrix implementation. The subsequent free-running counter correction
-also requires new hardware validation. RTC TICK/OVRFLW routing,
-single/continuous PEI compare sources and task endpoints are implemented
-but **have not yet been MCU-compiled or hardware-tested**. Compare
-interrupts advance only their own CC in continuous mode; the actual
-event-to-task connection remains hardware PPI. No CC compare stops or
-clears the counter. Other peripheral rows remain pending unless
-independently marked above.
+matrix implementation. After the free-running counter correction,
+the user confirmed PeiTimerCcTest working on RTC0 and HF TIMER3 with
+both CC allocation orders, and on RTC2 with the ISR-first allocation
+(November 8, 2026). An RTC0 debugger capture showed Status = 2,
+Errors = 0, TimerFrequency = 32768, and PeiTrigger = 0.
+Exact numeric diagnostics for TIMER3/RTC2 were not supplied.
+The RTC2 PEI-first order has not yet been separately confirmed.
+Compare interrupts advance only their own CC in continuous mode;
+PEI event-to-task delivery remains hardware PPI. No compare stops
+or clears the elapsed counter. Single-shot behavior, RTC raw TICK/
+OVRFLW sources, teardown/reuse, and remaining endpoints still
+require dedicated validation. Other peripheral rows remain pending
+unless independently marked above.

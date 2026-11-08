@@ -18,8 +18,8 @@ Set macros in src/board.h, build, flash, and observe both LEDs.
 
 | Timer | PEI first | ISR first |
 | --- | --- | --- |
-| TIMER3 (DevNo 6, default) | Pending | Pending |
-| RTC2 (DevNo 2) | Pending | Pending |
+| TIMER3 (DevNo 6, default) | Working - user report | Working - user report |
+| RTC2 (DevNo 2) | Pending separate check | Working - user report |
 
 With PEI_CC_TEST_ISR_FIRST=0, PEI claims CC0 and ISR claims CC1.
 With PEI_CC_TEST_ISR_FIRST=1, ISR claims CC0 and PEI claims CC1.
@@ -41,6 +41,14 @@ The diagnostic interval tolerance is 20%; it is not a precision timing
 benchmark. Do not halt the CPU, set breakpoints or use semihosting while
 collecting timing samples: continuous CC scheduling depends on Timer IRQs.
 
-After observing both LEDs and Status 2/Errors 0, record hardware PASS for
-the corresponding matrix configuration. No hardware PASS is claimed
-by creating this test project alone.
+Reported hardware checks (November 8, 2026):
+- RTC0 (DevNo 0), both CC allocation orders: working. The PEI-first
+  debugger capture showed Status 2 and Errors 0 at 32768 Hz.
+- TIMER3 (DevNo 6), both allocation orders: working per user.
+- RTC2 (DevNo 2), ISR-first allocation after setting
+  PEI_CC_TEST_ISR_FIRST to 1: working per user.
+
+Exact TIMER3/RTC2 diagnostic field values were not supplied. The
+RTC2 PEI-first configuration remains to be checked separately.
+Single-shot, teardown/reuse, and other event/task sources are outside
+this particular test.
