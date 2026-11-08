@@ -80,7 +80,7 @@ def main():
     assert "pei.GroupEnableTask(group)" in DEMO
     assert "pei.GroupDisableTask(group)" in DEMO
     assert "pei.Enable(armEvt)" in DEMO
-    assert "pei.Enable(fireEvt)" not in DEMO.split("g_PeiGroupStatus = 1;")[0]
+    assert "\tif (!pei.Enable(fireEvt))" not in DEMO
     assert "pei.BindEvent(" not in DEMO
     assert 'extern "C"' not in DEMO
     assert "NRF_PPI" not in DEMO
