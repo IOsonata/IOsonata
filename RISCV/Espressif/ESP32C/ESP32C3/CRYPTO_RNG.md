@@ -1,59 +1,53 @@
-# ESP32-C3 hardware RNG and cryptographic entropy
+# ESP32-C3 hardware RNG experiment — disabled in normal firmware
 
-IOsonata uses the ESP32-C3 RNG_DATA register at SYSCON + 0xB0 only when the
-internal SAR ADC is providing physical entropy. Reading this register with
-neither RF nor SAR ADC running is **not** a secure RNG.
+The new SAR-ADC-backed hardware RNG path has **not** been validated on
+ESP32-C3 hardware. The first integrated version invoked
+`Esp32C3RngProbe()` from `Crypto::Init()`. Because
+`exemples/crypto/crypto_engine_test.cpp` calls `Crypto::Init()`
+**before printing its test banner**, the device could stop immediately after
+the ESP-ROM boot message, before any application output.
 
-The standalone backend is `RISCV/Espressif/src/crypto_rng_esp32c3.cpp`.
-It uses only the MCU register map, with the ESP32-C3 ROM analog-I2C functions
-needed to enable the SAR ADC's internal reference. No ESP-IDF HAL, RTOS,
-heap, or driver is linked.
+To restore the known-working startup and crypto behavior:
 
-## Lifecycle
+- `RISCV/Espressif/src/crypto_esp32.cpp` is restored to its pre-RNG
+  implementation. `Crypto::Init()` no longer touches the SAR ADC or ROM
+  analog-I2C interface.
+- The experimental `crypto_rng_esp32c3.cpp` is **not linked** by the
+  ESP32-C3 IOsonata library project. No application can accidentally
+  activate it through `Crypto::Random()`.
+- The default `Crypto::Random()` remains the existing software PRNG,
+  and `Crypto::IsSecure()` remains false. ECDH key generation/signing
+  still correctly refuse non-secure entropy.
+- The experimental source and standalone model test are retained for
+  controlled debugging; they are not production-ready.
 
-- `Crypto::Init()` attempts an RNG probe, but AES and SHA remain available
-  if entropy initialization fails.
-- On a successful probe, `Crypto::IsSecure()` is true while the SAR ADC can
-  be acquired. Key generation and signing still check that value.
-- `Crypto::Random()` temporarily configures the SAR ADC internal reference
-  as a noise source, reads the RNG at a bounded rate, and restores the
-  peripheral registers and analog reference on success or failure.
-- A conflicting ADC use returns failure without reconfiguration. A source
-  activation/health failure clears the entire output and disables further
-  secure RNG operations until reboot.
-- The test-only deterministic software random source is never selected by
-  the production ESP32-C3 `Crypto::Random()` path.
+## Root-cause isolation
 
-## Resource ownership limitations
+The ROM boot text alone does not identify whether the early RNG call
+trapped, timed out, or hung. The early invocation was an unsafe change
+to a working initialization path regardless of the precise fault.
 
-The current ESP32-C3 port does not yet contain an integrated ADC or RF
-ownership manager. **Do not call the RNG simultaneously with ADC sampling,
-Wi-Fi/Bluetooth activity, or another user of the internal analog I2C bus.**
-The backend checks the SARADC timer, clock, DMA and forced power state to
-reject an already-configured peripheral, but that alone cannot prevent an
-independent RF/ADC driver from taking ownership after the check.
+Only after the standard CryptoTest is seen working again should the
+experimental RNG be exercised by a **separate, explicitly initiated**
+hardware test with debugger stops before the internal analog ROM calls,
+SAR clock/power configuration, and cycle-counter wait loops.
 
-Any future ESP32-C3 ADC, Wi-Fi or BLE port must coordinate this shared
-resource explicitly before using the secure RNG concurrently. Disable the
-SAR entropy source (already done on return) before initializing those
-peripherals.
+On-chip entropy requires careful ADC/RF ownership. A host register model
+cannot establish that the physical noise source is safe and reliable.
 
-## Validation
+## Validation commands
 
-The register model test exercises production code with fake MMIO, not fake
-entropy. From the repository root:
+After updating and rebuilding the ESP32-C3 library and application:
 
 ```sh
-python3 tests/crypto/run_esp32c3_rng.py
 python3 tests/crypto/run_esp_models.py
+python3 tests/crypto/run_esp32c3_rng.py
 ```
 
-Then rebuild the **IOsonata_ESP32C3** library and its CryptoTest application
-in IOcomposer. Run CryptoTest on actual ESP32-C3 silicon and collect the
-final pass/fail/skip counts. In particular, check that the default secure
-random source is reported and that key generation, ECDH, and signing pass.
+The second command is only a mock-register test of the *unlinked*
+experimental source. It must not be interpreted as hardware validation.
 
-The 4 KiB distribution test is only a gross diagnostic, **not** a
-cryptographic entropy certification. A host MMIO model cannot prove the
-physical noise source works on the actual chip. Do not mark this hardware
-backend validated until that result is supplied.
+Expected on-board baseline: normal CryptoTest output, including the
+`software PRNG, not for security use` line and skipped secure-RNG tests.
+The previous maintainer result was 59 PASS, 0 FAIL, 1 SKIP. A fresh
+post-revert hardware run is still needed to confirm recovery.

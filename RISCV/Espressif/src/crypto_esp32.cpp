@@ -30,17 +30,9 @@ SOFTWARE.
 #include "crypto/crypto.h"
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_softsha256.h"
-#include "crypto/crypto_softrng.h"
 
 #if !defined(ESP32C3) && !defined(ESP32C6)
 #error "Crypto register mapping is verified only for ESP32-C3/C6"
-#endif
-
-#if defined(ESP32C3) && !defined(ESP32_RNG_MODEL_DISABLED)
-// The C3 RNG source is a separate object to keep C6 builds independent.
-CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len);
-bool Esp32C3RngSecureAvailable(void);
-bool Esp32C3RngProbe(void);
 #endif
 
 #ifndef ESP32_CRYPTO_REG
@@ -304,11 +296,6 @@ bool Crypto::Init()
 		return false;
 	}
 	vbValid = true;
-#if defined(ESP32C3) && !defined(ESP32_RNG_MODEL_DISABLED)
-	// A failed entropy probe does not disable hardware AES or SHA. Secure
-	// key operations remain unavailable until a hardware probe succeeds.
-	(void)Esp32C3RngProbe();
-#endif
 	return true;
 }
 
@@ -655,36 +642,3 @@ CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
 	return s_Hardware.HashFinal(pHashCtx, pDigest);
 }
 
-
-
-#if defined(ESP32C3)
-// Override the generic software PRNG only on C3. The separate low-level
-// driver owns the SAR ADC entropy source for each hardware request.
-CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
-{
-	if (!vbValid)
-	{
-		if (pOut != nullptr)
-		{
-			CryptoSecureWipe(pOut, Len);
-		}
-		return CRYPTO_STATUS_FAIL;
-	}
-#if defined(ESP32_RNG_MODEL_DISABLED)
-	// Existing AES/SHA host models have no analog entropy model. Keep their
-	// deterministic non-security reference generator; IsSecure stays false.
-	return CryptoSoftRngGenerate(vSoftState[0], vSoftState[1], pOut, Len);
-#else
-	return Esp32C3RngFill(pOut, Len);
-#endif
-}
-
-bool Crypto::IsSecure() const
-{
-#if defined(ESP32_RNG_MODEL_DISABLED)
-	return false;
-#else
-	return vbValid && Esp32C3RngSecureAvailable();
-#endif
-}
-#endif

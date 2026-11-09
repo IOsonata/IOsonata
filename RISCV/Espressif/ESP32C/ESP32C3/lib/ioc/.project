@@ -1941,11 +1941,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_esp32.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_rng_esp32c3.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_rng_esp32c3.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/crypto/crypto.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
