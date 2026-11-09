@@ -72,7 +72,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-#include <atomic>
 
 #include "nrf.h"
 
@@ -83,6 +82,7 @@ SOFTWARE.
 #endif
 
 #include "coredev/system_core_clock.h"
+#include "coredev/interrupt.h"
 #include "nrf_mpsl.h"
 
 // CLOCK instance, as in timer_hf_nrfx.cpp
@@ -147,8 +147,18 @@ SOFTWARE.
 #endif
 #endif
 
-static std::atomic<int> s_nRFxHfxoReqCnt(0);
-static volatile bool s_bnRFxHfxoOwned = false;
+// Only the first user starts HFXO. A short interrupt-safe transition flag
+// prevents concurrent start/stop operations without waiting in an ISR.
+typedef enum {
+	NRFX_HFXO_OWNER_NONE,
+	NRFX_HFXO_OWNER_DIRECT,
+	NRFX_HFXO_OWNER_SOFTDEVICE,
+	NRFX_HFXO_OWNER_MPSL
+} nRFxHfxoOwner_t;
+
+static uint32_t s_nRFxHfxoReqCnt = 0U;
+static bool s_bNRFxHfxoTransition = false;
+static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
 
 // Weak: the SoftDevice Controller is not in the build. nrf_mpsl.cpp has the
 // version that goes through MPSL once it is initialized.
@@ -199,136 +209,181 @@ static bool nRFxHfxoRunning(void)
 #endif
 }
 
-// Starts the crystal if needed and waits until it runs
-static bool nRFxHfxoStart(void)
+// Acquire the oscillator through its current owner. The caller holds the
+// transition flag, but interrupts remain enabled during the start wait.
+static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 {
-	int res = nRFxMpslHfxo(true);
+	int res;
 
+	res = nRFxMpslHfxo(true);
 	if (res >= 0)
 	{
-		return res == 0;
+		if (res == 0)
+		{
+			*pOwner = NRFX_HFXO_OWNER_MPSL;
+			return true;
+		}
+		return false;
 	}
 
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 	if (nRFxClockSdEnabled())
 	{
-		uint32_t running = 0;
+		uint32_t running;
+		int i;
 
+		running = 0U;
 		if (sd_clock_hfclk_request() != NRF_SUCCESS)
 		{
 			return false;
 		}
-
-		for (int i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
+		for (i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
 		{
 			if (sd_clock_hfclk_is_running(&running) != NRF_SUCCESS)
 			{
+				(void)sd_clock_hfclk_release();
 				return false;
 			}
-			if (running != 0)
+			if (running != 0U)
 			{
+				*pOwner = NRFX_HFXO_OWNER_SOFTDEVICE;
 				return true;
 			}
 		}
-
+		(void)sd_clock_hfclk_release();
 		return false;
 	}
 #endif
 
 	if (nRFxHfxoRunning())
 	{
+		// Another component started HFXO. Do not stop its oscillator.
+		*pOwner = NRFX_HFXO_OWNER_NONE;
 		return true;
 	}
 
 #ifdef CLOCK_HFCLKSRC_SRC_Msk
 	NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFXO << CLOCK_HFCLKSRC_SRC_Pos;
 #endif
-	NRF_CLOCK->NRFX_HFXO_STARTED = 0;
-	NRF_CLOCK->NRFX_HFXO_START = 1;
-	s_bnRFxHfxoOwned = true;
+	NRF_CLOCK->NRFX_HFXO_STARTED = 0U;
+	NRF_CLOCK->NRFX_HFXO_START = 1U;
 
 	for (int i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
 	{
 		if (nRFxHfxoRunning())
 		{
-			NRF_CLOCK->NRFX_HFXO_STARTED = 0;
-
+			NRF_CLOCK->NRFX_HFXO_STARTED = 0U;
+			*pOwner = NRFX_HFXO_OWNER_DIRECT;
 			return true;
 		}
 	}
 
+	NRF_CLOCK->NRFX_HFXO_STOP = 1U;
+#ifdef CLOCK_HFCLKSRC_SRC_Msk
+	NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
+#endif
 	return false;
 }
 
-// Stops the crystal, only if it was started here
-static void nRFxHfxoStop(void)
+// Release only through the backend that accepted the first request.
+static void nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 {
-	if (nRFxMpslHfxo(false) >= 0)
+	switch (Owner)
 	{
-		return;
-	}
-
+		case NRFX_HFXO_OWNER_MPSL:
+			(void)nRFxMpslHfxo(false);
+			break;
+		case NRFX_HFXO_OWNER_SOFTDEVICE:
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
-	if (nRFxClockSdEnabled())
-	{
-		(void)sd_clock_hfclk_release();
-
-		return;
-	}
+			if (nRFxClockSdEnabled())
+			{
+				(void)sd_clock_hfclk_release();
+			}
 #endif
-
-	if (s_bnRFxHfxoOwned)
-	{
-		s_bnRFxHfxoOwned = false;
-		NRF_CLOCK->NRFX_HFXO_STOP = 1;
+			break;
+		case NRFX_HFXO_OWNER_DIRECT:
+			// Once a BLE stack owns CLOCK, direct register writes are unsafe.
+			if (!nRFxMpslActive() && !nRFxClockSdEnabled())
+			{
+				NRF_CLOCK->NRFX_HFXO_STOP = 1U;
 #ifdef CLOCK_HFCLKSRC_SRC_Msk
-		NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
+				NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
 #endif
-	}
-}
-
-// Releases one request, stops the crystal on the last one
-static void nRFxHfxoRelease(void)
-{
-	int cnt = s_nRFxHfxoReqCnt.load();
-
-	while (cnt > 0 && !s_nRFxHfxoReqCnt.compare_exchange_weak(cnt, cnt - 1));
-
-	if (cnt == 1)
-	{
-		nRFxHfxoStop();
-
-		// A request made from an interrupt while it was stopping
-		if (s_nRFxHfxoReqCnt.load() > 0)
-		{
-			(void)nRFxHfxoStart();
-		}
+			}
+			break;
+		default:
+			break;
 	}
 }
 
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-	// The crystal is 32 MHz on these parts, the frequency changes nothing
+	nRFxHfxoOwner_t owner;
+	uint32_t state;
+	bool success;
+
 	(void)OscFreq;
+	if (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL &&
+		ClkSrc != OSC_TYPE_TCXO)
+	{
+		return false;
+	}
+
+	state = DisableInterrupt();
+	if (s_bNRFxHfxoTransition)
+	{
+		EnableInterrupt(state);
+		// Do not wait for a preempted clock transition in an ISR.
+		return false;
+	}
+	if (ClkSrc != OSC_TYPE_RC && s_nRFxHfxoReqCnt != 0U)
+	{
+		s_nRFxHfxoReqCnt++;
+		EnableInterrupt(state);
+		return true;
+	}
+	if (ClkSrc == OSC_TYPE_RC && s_nRFxHfxoReqCnt == 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if (ClkSrc == OSC_TYPE_RC && s_nRFxHfxoReqCnt > 1U)
+	{
+		s_nRFxHfxoReqCnt--;
+		EnableInterrupt(state);
+		return true;
+	}
+
+	s_bNRFxHfxoTransition = true;
+	owner = s_nRFxHfxoOwner;
+	EnableInterrupt(state);
 
 	if (ClkSrc == OSC_TYPE_RC)
 	{
-		nRFxHfxoRelease();
-
-		return true;
+		nRFxHfxoStop(owner);
+		success = true;
 	}
-
-	s_nRFxHfxoReqCnt++;
-
-	if (nRFxHfxoStart())
+	else
 	{
-		return true;
+		owner = NRFX_HFXO_OWNER_NONE;
+		success = nRFxHfxoStart(&owner);
 	}
 
-	// Not started, the request is dropped
-	nRFxHfxoRelease();
+	state = DisableInterrupt();
+	if (ClkSrc == OSC_TYPE_RC)
+	{
+		s_nRFxHfxoReqCnt = 0U;
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+	}
+	else if (success)
+	{
+		s_nRFxHfxoReqCnt = 1U;
+		s_nRFxHfxoOwner = owner;
+	}
+	s_bNRFxHfxoTransition = false;
+	EnableInterrupt(state);
 
-	return false;
+	return success;
 }
 
 // Starts LFCLK from Src and waits until it runs. Stopped again if it does
