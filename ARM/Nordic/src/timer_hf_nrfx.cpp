@@ -873,8 +873,7 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 		evt = tdata.pCC[TrigNo];
 		endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
 
-		// Unbind before altering the compare source. Failed unbinding
-		// must leave the interrupt and PEI ownership intact.
+		// Keep COMPARE enabled if PEI unbinding fails.
 		if (PeiUnbindEvent == nullptr ||
 			!PeiUnbindEvent(pei, evt, endpoint))
 		{
