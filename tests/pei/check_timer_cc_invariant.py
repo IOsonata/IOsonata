@@ -44,9 +44,9 @@ def check(path, function, ending):
 
 def main():
     check("ARM/Nordic/src/timer_hf_nrfx.cpp", "nRFxTimerEnablePeiTrigger",
-          "bool nRFxTimerInstallPei(")
+          "static uint64_t nRFxTimerEnableTrigger(")
     check("ARM/Nordic/src/timer_lf_nrfx.cpp", "nRFxRtcEnablePeiTrigger",
-          "bool nRFxRtcInstallPei(")
+          "static uint64_t nRFxRtcEnableTrigger(")
     hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
     hf_release = section(hf, "static void nRFxTimerDisableTrigger(",
                          "static int nRFxTimerFindAvailTrigger(")
@@ -69,13 +69,18 @@ def main():
     matrix = (ROOT / "src/coredev/pei.c").read_text(encoding="utf-8")
     timer_api = (ROOT / "include/coredev/timer.h").read_text(
         encoding="utf-8")
-    assert "bool PeiTimerPrepare(TimerDev_t *pTimer)" in timer_driver
-    assert "nRFxTimerInstallPei(pTimer)" in timer_driver
-    assert "nRFxRtcInstallPei(pTimer)" in timer_driver
-    assert "bool PeiTimerPrepare(TimerDev_t *pTimer);" in timer_api
+    assert "PeiTimerPrepare" not in timer_driver
+    assert "PeiTimerPrepare" not in timer_api
+    assert "PeiTimerPrepare" not in matrix
     assert "TimerPeiPrepareMcu" not in timer_driver
     assert "TimerPeiPrepareMcu" not in matrix
-    assert "PeiTimerPrepare" not in matrix
+    assert "nRFxTimerInstallPei" not in hf
+    assert "nRFxRtcInstallPei" not in rtc
+    assert "pTimer->EnablePeiTrigger = nRFxTimerEnablePeiTrigger;" in hf
+    assert "pTimer->EnablePeiTrigger = nRFxRtcEnablePeiTrigger;" in rtc
+    assert "pTimer->EnablePeiEvent = nRFxRtcEnablePeiEvent;" in rtc
+    assert "pTimer->DisablePeiEvent = nRFxRtcDisablePeiEvent;" in rtc
+    assert "!PeiTimerPrepare(" not in timer_api
 
     print("TIMER/RTC free-running PEI compare source checks: PASS")
 
