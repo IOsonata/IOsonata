@@ -1881,7 +1881,7 @@ static bool I2CPeiReady(I2CDev_t *pDev)
 // complete single-block transaction has been prepared. The existing
 // driver's private TxBuf owns TX DMA RAM, and the application owns RX
 // DMA RAM until the PEI transfer has stopped and been released.
-extern "C" bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
+bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
 {
 #if defined(NRF52_SERIES) && defined(TWIM_PRESENT)
@@ -1955,7 +1955,7 @@ extern "C" bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 // The application must disable/disconnect all PPI destinations before
 // releasing the DMA registers. An unstarted block can be released
 // without a STOP task. A started block must reach STOPPED first.
-extern "C" bool I2CReleasePeiTransfer(I2CDev_t *pDev)
+bool I2CReleasePeiTransfer(I2CDev_t *pDev)
 {
 #if defined(NRF52_SERIES) && defined(TWIM_PRESENT)
 	nRFTwiDev_t *dev;
@@ -2002,7 +2002,7 @@ extern "C" bool I2CReleasePeiTransfer(I2CDev_t *pDev)
 #endif
 }
 
-extern "C" bool I2CEnablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CEnablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, I2C_PEI_EVENT Event)
 {
 	nRFTwiDev_t *dev;
@@ -2022,7 +2022,7 @@ extern "C" bool I2CEnablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt)
 {
 	nRFTwiDev_t *dev;
@@ -2047,7 +2047,7 @@ extern "C" bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-extern "C" bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2C_PEI_TASK Task)
 {
 	nRFTwiDev_t *dev;
@@ -2080,7 +2080,7 @@ extern "C" bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool I2CDisconnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CDisconnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2C_PEI_TASK Task)
 {
 	nRFTwiDev_t *dev;
