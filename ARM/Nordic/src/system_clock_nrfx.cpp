@@ -26,6 +26,9 @@ RC again after HFCLKSTOP.
 
 g_McuOsc stays the description of the board, it is not changed.
 
+The peripheral clock is the fixed 16 MHz PCLK16M, peripheral clock 0.
+SystemPeriphClockSet returns it, the only frequency there is.
+
 @author	Hoang Nguyen Hoan
 @date	Nov. 8, 2026
 
@@ -81,6 +84,9 @@ SOFTWARE.
 
 // About 50 ms at 64 MHz, the crystal starts in a few ms
 #define NRFX_HFXO_WAIT_LOOPS		1000000
+
+// Peripherals run from the fixed 16 MHz PCLK16M
+#define NRFX_PCLK_FREQ				16000000UL
 
 #ifdef CLOCK_HFCLKSTAT_SRC_Xtal
 #define NRFX_HFXO_STAT_SRC			(CLOCK_HFCLKSTAT_SRC_Xtal << CLOCK_HFCLKSTAT_SRC_Pos)
@@ -260,4 +266,17 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	nRFxHfxoRelease();
 
 	return false;
+}
+
+uint32_t SystemPeriphClockGet(int Idx)
+{
+	return Idx == 0 ? NRFX_PCLK_FREQ : 0;
+}
+
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+{
+	// Fixed, the closest frequency is the one there is
+	(void)Freq;
+
+	return SystemPeriphClockGet(Idx);
 }
