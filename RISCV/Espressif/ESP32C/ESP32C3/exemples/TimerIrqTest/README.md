@@ -26,8 +26,29 @@ and 12 on TG1. Output includes individual `[PASS]` or `[FAIL]` checks
 and a final `PASS: 0 failed` summary. `g_TimerIrqCount` and
 `g_TimerUnexpectedEvents` remain ordinary C++ debugger-visible globals.
 
-**Status:** The example project is prepared for target validation. No
-TG0/TG1 interrupt or single-shot hardware acceptance result is claimed
-until the maintainer supplies the UART output. CryptoTest's existing
-1 MHz benchmark timer was an initialization and measurement check, not
-an interrupt-delivery check.
+**Status:** **Hardware PASS, November 8, 2026 (ESP32-C3-DevKitM-1).**
+The maintainer's UART log reported all checks passing with **0 failures**.
+Both Timer Group counters ran concurrently at a 1 MHz tick clock.
+The callbacks matched the programmed 100 ms and 250 ms intervals over
+three successive one-second observation points:
+
+| Elapsed | TG0/T0 (100 ms) | TG1/T0 (250 ms) |
+| ---: | ---: | ---: |
+| 1000 ms | 10 | 4 |
+| 2000 ms | 20 | 8 |
+| 3000 ms | 30 | 12 |
+
+The hardware log further confirms:
+
+- Both timer instances initialize correctly; each exposes one alarm.
+- The C++ TG0/T0 and C TG1/T0 callbacks deliver periodic events independently.
+- No unexpected timer events were recorded.
+- Both timers stop generating interrupts after disable.
+- TG1's 120 ms single-shot fires exactly once and does not rearm.
+
+**Validation scope:** This establishes functional interrupt delivery and timer
+lifecycle behavior in the tested configuration; it does not measure
+microsecond-scale interrupt jitter, other timer frequencies, sleep/wakeup,
+or frequency reconfiguration. Preserve those as separate validation targets.
+
+**Maintainer's result:** `PASS: 0 failed`.
