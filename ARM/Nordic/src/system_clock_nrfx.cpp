@@ -302,14 +302,16 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 #endif
 			return false;
 		case NRFX_HFXO_OWNER_DIRECT:
-			// Once a BLE stack owns CLOCK, direct register writes are unsafe.
-			if (!nRFxMpslActive() && !nRFxClockSdEnabled())
+			// A BLE stack may take CLOCK ownership after the acquisition.
+			// Retain the request rather than report a release that did not occur.
+			if (nRFxMpslActive() || nRFxClockSdEnabled())
 			{
-				NRF_CLOCK->NRFX_HFXO_STOP = 1U;
-#ifdef CLOCK_HFCLKSRC_SRC_Msk
-				NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
-#endif
+				return false;
 			}
+			NRF_CLOCK->NRFX_HFXO_STOP = 1U;
+#ifdef CLOCK_HFCLKSRC_SRC_Msk
+			NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
+#endif
 			return true;
 		default:
 			return true;
