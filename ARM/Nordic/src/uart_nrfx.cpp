@@ -1805,7 +1805,7 @@ static PeiEndpoint_t UARTPeiTaskEndpoint(nRFUartDev_t *dev,
 #endif
 }
 
-extern "C" bool UARTPreparePeiTx(UARTDev_t *pDev, const uint8_t *pTx,
+bool UARTPreparePeiTx(UARTDev_t *pDev, const uint8_t *pTx,
 	uint32_t TxLen)
 {
 #if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
@@ -1856,7 +1856,7 @@ extern "C" bool UARTPreparePeiTx(UARTDev_t *pDev, const uint8_t *pTx,
 // The caller must disconnect all PPI TX task routes before release.
 // A transfer that has been started must have stopped before its DMA
 // buffer can be reused. A fresh, unstarted TX can simply be released.
-extern "C" bool UARTReleasePeiTx(UARTDev_t *pDev)
+bool UARTReleasePeiTx(UARTDev_t *pDev)
 {
 #if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
 	nRFUartDev_t *dev;
@@ -1894,7 +1894,7 @@ extern "C" bool UARTReleasePeiTx(UARTDev_t *pDev)
 #endif
 }
 
-extern "C" bool UARTEnablePeiEvent(UARTDev_t *pDev,
+bool UARTEnablePeiEvent(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t *pEvt, UART_PEI_EVENT Event)
 {
 	nRFUartDev_t *dev;
@@ -1920,7 +1920,7 @@ extern "C" bool UARTEnablePeiEvent(UARTDev_t *pDev,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool UARTDisablePeiEvent(UARTDev_t *pDev,
+bool UARTDisablePeiEvent(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt)
 {
 	nRFUartDev_t *dev;
@@ -1945,7 +1945,7 @@ extern "C" bool UARTDisablePeiEvent(UARTDev_t *pDev,
 	return false;
 }
 
-extern "C" bool UARTConnectPeiTask(UARTDev_t *pDev,
+bool UARTConnectPeiTask(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, UART_PEI_TASK Task)
 {
 	nRFUartDev_t *dev;
@@ -1968,7 +1968,7 @@ extern "C" bool UARTConnectPeiTask(UARTDev_t *pDev,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool UARTDisconnectPeiTask(UARTDev_t *pDev,
+bool UARTDisconnectPeiTask(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, UART_PEI_TASK Task)
 {
 	nRFUartDev_t *dev;
