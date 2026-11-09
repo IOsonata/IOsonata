@@ -24,13 +24,13 @@ def main():
     tasks = section("static PeiEndpoint_t I2CPeiTaskEndpoint(",
                     "static bool I2CPeiReady(")
     ready = section("static bool I2CPeiReady(",
-                    'extern "C" bool I2CPreparePeiTransfer(')
-    prep = section('extern "C" bool I2CPreparePeiTransfer(',
-                   'extern "C" bool I2CReleasePeiTransfer(')
-    release = section('extern "C" bool I2CReleasePeiTransfer(',
-                      'extern "C" bool I2CEnablePeiEvent(')
-    connect = section('extern "C" bool I2CConnectPeiTask(',
-                      'extern "C" bool I2CDisconnectPeiTask(')
+                    'bool I2CPreparePeiTransfer(')
+    prep = section('bool I2CPreparePeiTransfer(',
+                   'bool I2CReleasePeiTransfer(')
+    release = section('bool I2CReleasePeiTransfer(',
+                      'bool I2CEnablePeiEvent(')
+    connect = section('bool I2CConnectPeiTask(',
+                      'bool I2CDisconnectPeiTask(')
 
     for event in ("STOPPED", "ERROR", "SUSPENDED", "RXDREADY",
                   "TXDSENT", "BB"):
