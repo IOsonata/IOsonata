@@ -219,16 +219,8 @@ static_assert(RTC_SCR_CALRAF == RTC_SR_ALRAF && RTC_SCR_CALRBF == RTC_SR_ALRBF &
 #define ST_RTC_ONE_IRQ
 #endif
 
-// Backup registers
-#if defined(TAMP_BKP31R) || defined(RTC_BKP31R)
-#define ST_RTC_NB_BKP			32
-#elif defined(RTC_BKP19R)
-#define ST_RTC_NB_BKP			20
-#elif defined(RTC_BKP4R)
-#define ST_RTC_NB_BKP			5
-#else
-#define ST_RTC_NB_BKP			0
-#endif
+// Backup registers, also the retention registers of system_core_clock.h
+#define ST_RTC_NB_BKP			IOSONATA_STM32_NB_BKP
 
 #define ST_RTC_POLL_US			100U
 #define ST_RTC_TIMEOUT_US		1000000U	// Init mode, write flags
