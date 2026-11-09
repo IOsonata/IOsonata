@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Source contracts for nRF52 PDM and I2S hardware PEI endpoints.
+"""Check nRF52 PDM and I2S PEI register and DMA setup.
 
-Validates the intended driver-owned DMA/IRQ preparation path without
-pretending to simulate PDM microphone or I2S transceiver hardware.
+Source checks only; peripheral signals and DMA transfers are not tested.
 """
 from pathlib import Path
 
