@@ -596,12 +596,12 @@ static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 			continue;
 		}
 		endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[i];
-		reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << i;
-		reg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << i;
 		if (!PeiUnbindEvent(pPei, Event, endpoint))
 		{
 			return false;
 		}
+		reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << i;
+		reg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << i;
 		reg->CC[i] = 0U;
 		reg->EVENTS_COMPARE[i] = 0U;
 		pData->pCC[i] = 0U;
