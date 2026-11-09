@@ -201,8 +201,8 @@ Ordinary GPIO calls cannot extract the PEI matrix from a static HAL
 archive.
 
 `TimerInit` does not install PEI trigger callbacks. The first explicit
-PEI Timer call invokes `PeiTimerPrepare`, which installs the applicable
-MCU callback through `TimerPeiPrepareMcu`. Non-PEI Timer applications
+PEI Timer call invokes `PeiTimerPrepare` in the MCU TIMER driver.
+Non-PEI Timer applications
 do not reference this optional path. HF Timer and RTC use their existing
 `TimerTrig_t` and per-CC bookkeeping to own compare sources. No
 COMPARE-to-STOP/CLEAR shortcuts or automatic PPI routes are installed.
