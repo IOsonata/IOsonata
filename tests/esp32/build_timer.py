@@ -15,7 +15,9 @@ args = parser.parse_args()
 tool = args.tool_prefix
 for chip in ('ESP32C2', 'ESP32C3', 'ESP32C5', 'ESP32C6', 'ESP32C61'):
     names = {'ResetEntry.c', 'iatomic.c', 'timer.cpp', 'timer_esp32.cpp',
-             'esp32xx_irq.c', 'CppRuntimeOverload.cpp'}
+             'esp32xx_irq.c', 'CppRuntimeOverload.cpp', 'uart.cpp',
+             'uart_esp32.cpp', 'system_esp32_uart_clock.c', 'iopincfg_esp32.c',
+             'device.cpp', 'device_intrf.cpp', 'cfifo.c', 'uart_retarget.c', 'stddev.c'}
     if chip in ('ESP32C3', 'ESP32C6'):
         names.update({'system_' + chip.lower() + '.c',
                       'Vectors_' + chip.lower() + '.c'})
@@ -66,3 +68,25 @@ for chip in ('ESP32C2', 'ESP32C3', 'ESP32C5', 'ESP32C6', 'ESP32C61'):
             assert 'Esp32EnableSourceIrq' in symbols
             assert 'Pei' not in symbols
             print(chip, config, api, 'timer link PASS', flush=True)
+
+        app = BASE / chip / 'exemples/TimerIrqTest'
+        links = ET.parse(app / 'ioc/.project').findall('.//linkedResources/link')
+        app_sources = [x.findtext('locationURI') for x in links
+                       if x.findtext('name').endswith('.cpp')]
+        assert app_sources == ['PARENT-7-PROJECT_LOC/exemples/timer/timer_dual_irq_test.cpp']
+        obj = directory / 'TimerIrqTest.o'
+        elf = obj.with_suffix('.elf')
+        run(tool + 'g++', *flags, '-std=gnu++20', '-fno-rtti', '-fno-exceptions',
+            '-I' + str(app / 'src'), '-c', ROOT / 'exemples/timer/timer_dual_irq_test.cpp',
+            '-o', obj)
+        run(tool + 'g++', *flags, obj, library, '-L' + str(ROOT / 'RISCV/ldscript'),
+            '-Wl,--undefined=ResetEntry', '-Wl,--gc-sections',
+            '--specs=nano.specs', '--specs=nosys.specs',
+            '-T', BASE / 'ldscript' / ('gcc_' + chip.lower() + '.ld'), '-o', elf)
+        symbols = subprocess.check_output([tool + 'nm', str(elf)], text=True)
+        for name in ('TimerInit', 'UARTRetargetEnable', 'UARTStdDevWrite', '_write'):
+            assert re.search(r' T ' + name + r'$', symbols, re.MULTILINE), name
+        assert 'Pei' not in symbols
+        run(tool + 'objcopy', '-O', 'binary', elf, elf.with_suffix('.bin'))
+        assert elf.with_suffix('.bin').read_bytes()[:8] == bytes.fromhex('1d04dbae1d04dbae')
+        print(chip, config, 'TimerIrqTest PASS', flush=True)

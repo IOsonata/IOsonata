@@ -1,9 +1,10 @@
 /**-------------------------------------------------------------------------
 @example	timer_dual_irq_test.cpp
 
-@brief	ESP32-C3 TG0/T0 and TG1/T0 interrupt and alarm validation.
+@brief	Generic one/two high-frequency timer interrupt and alarm validation.
 
-DevNo 0 uses the C++ Timer API; DevNo 1 uses the C TimerDev_t API.
+The first timer uses C++ initialization; an optional second uses the C API.
+Single-shot checks use the C API on both, including single-timer targets.
 
 @author	IOsonata contributors
 @date	Nov. 8, 2026
@@ -84,33 +85,18 @@ static void OnTimerEvent(TimerDev_t * const pTimer, uint32_t Evt)
 
 	if (pTimer == nullptr)
 	{
-		g_TimerUnexpectedEvents++;
+		g_TimerUnexpectedEvents = g_TimerUnexpectedEvents + 1;
 		return;
 	}
-	devNo = pTimer->DevNo;
+	devNo = pTimer == (TimerDev_t *)s_Timer0 ? 0 :
+		(pTimer == &s_Timer1 ? 1 : -1);
 	if ((Evt & TIMER_EVT_TRIGGER(0)) == 0U || devNo < 0 || devNo > 1)
 	{
-		g_TimerUnexpectedEvents++;
+		g_TimerUnexpectedEvents = g_TimerUnexpectedEvents + 1;
 		return;
 	}
-	g_TimerIrqCount[devNo]++;
+	g_TimerIrqCount[devNo] = g_TimerIrqCount[devNo] + 1;
 }
-
-static const TimerCfg_t s_Cfg0 = {
-	.DevNo = 0,
-	.ClkSrc = TIMER_CLKSRC_DEFAULT,
-	.Freq = 1000000U,
-	.IntPrio = 2,
-	.EvtHandler = OnTimerEvent,
-};
-
-static const TimerCfg_t s_Cfg1 = {
-	.DevNo = 1,
-	.ClkSrc = TIMER_CLKSRC_DEFAULT,
-	.Freq = 1000000U,
-	.IntPrio = 2,
-	.EvtHandler = OnTimerEvent,
-};
 
 static void Snapshot(uint32_t *pCount0, uint32_t *pCount1)
 {
@@ -134,18 +120,17 @@ static void Check(const char *pName, bool Success, int *pFailures)
 int main(void)
 {
 	static char stdoutBuffer[256];
-	uint32_t count0;
-	uint32_t count1;
-	uint32_t stopped0;
-	uint32_t stopped1;
-	uint32_t singleStart;
-	uint32_t singleEnd;
-	uint32_t period0;
-	uint64_t period1;
+	TimerCfg_t config = {};
+	TimerDev_t *timers[2];
+	uint32_t counts[2];
+	uint32_t stopped[2];
+	uint32_t singleStart[2];
+	uint32_t singleEnd[2];
+	uint64_t period;
 	int failures;
+	int count;
 	int i;
-	bool firstInit;
-	bool secondInit;
+	bool initialized;
 
 	if (!s_Uart.Init(s_UartCfg))
 	{
@@ -153,102 +138,110 @@ int main(void)
 	}
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
 	setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
-
-	printf("\r\nESP32-C3 dual Timer Group IRQ test\r\n");
-	printf("TG0/T0: C++ Timer, TG1/T0: C TimerDev_t\r\n");
+	printf("\r\nGeneric timer IRQ test\r\n");
 	failures = 0;
-
-	Check("two HF timer instances",
-		TimerGetHighFreqDevCount() == 2 &&
-		TimerGetHighFreqDevNo() == 0, &failures);
-
-	firstInit = s_Timer0.Init(s_Cfg0);
-	secondInit = TimerInit(&s_Timer1, &s_Cfg1);
-	Check("TG0/T0 initialization at 1 MHz",
-		firstInit && s_Timer0.Frequency() == 1000000U, &failures);
-	Check("TG1/T0 initialization at 1 MHz",
-		secondInit && TimerGetFrequency(&s_Timer1) == 1000000U, &failures);
-
-	if (!firstInit || !secondInit)
+	count = TimerGetHighFreqDevCount();
+	Check("at least one HF timer", count > 0, &failures);
+	if (count <= 0)
 	{
 		msDelay(200U);
 		return 1;
 	}
-	Check("one alarm per Timer Group",
-		s_Timer0.MaxTimerTrigger() == 1 &&
-		TimerGetMaxTrigger(&s_Timer1) == 1, &failures);
-
-	period0 = s_Timer0.EnableTimerTrigger(0, (uint32_t)100U,
-		TIMER_TRIG_TYPE_CONTINUOUS);
-	period1 = msTimerEnableTrigger(&s_Timer1, 0, 250U,
-		TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
-	Check("TG0 periodic alarm programmed to 100 ms",
-		period0 == 100U, &failures);
-	Check("TG1 periodic alarm programmed to 250 ms",
-		period1 == 250U, &failures);
-
-	if (period0 == 0U || period1 == 0U)
+	if (count > 2)
+	{
+		count = 2;
+	}
+	printf("Testing %d timer(s), first DevNo %d\r\n",
+		count, TimerGetHighFreqDevNo());
+	timers[0] = s_Timer0;
+	timers[1] = &s_Timer1;
+	config.DevNo = TimerGetHighFreqDevNo();
+	config.ClkSrc = TIMER_CLKSRC_DEFAULT;
+	config.Freq = 1000000U;
+	config.IntPrio = 2;
+	config.EvtHandler = OnTimerEvent;
+	initialized = s_Timer0.Init(config);
+	Check("first timer initialized through C++", initialized, &failures);
+	if (!initialized)
+	{
+		msDelay(200U);
+		return 1;
+	}
+	if (count == 2)
+	{
+		config.DevNo++;
+		initialized = TimerInit(&s_Timer1, &config);
+		Check("second timer initialized through C", initialized, &failures);
+	}
+	if (!initialized)
 	{
 		s_Timer0.Disable();
-		TimerDisable(&s_Timer1);
 		msDelay(200U);
 		return 1;
 	}
-
-	for (i = 0; i < 30; i++)
+	for (i = 0; i < count; i++)
 	{
-		msDelay(100U);
-		if ((i + 1) % 10 == 0)
-		{
-			Snapshot(&count0, &count1);
-			printf("  elapsed %d00 ms: TG0=%lu TG1=%lu\r\n",
-				i + 1, (unsigned long)count0, (unsigned long)count1);
-		}
+		Check("timer frequency is 1 MHz",
+			TimerGetFrequency(timers[i]) == 1000000U, &failures);
+		Check("timer has an alarm", TimerGetMaxTrigger(timers[i]) > 0, &failures);
 	}
-
-	Snapshot(&count0, &count1);
-	Check("TG0 periodic interrupt callbacks, 100 ms",
-		count0 >= 24U && count0 <= 36U, &failures);
-	Check("TG1 periodic interrupt callbacks, 250 ms",
-		count1 >= 9U && count1 <= 15U, &failures);
-	Check("no unexpected timer events",
-		g_TimerUnexpectedEvents == 0U, &failures);
-
-	s_Timer0.DisableTimerTrigger(0);
-	TimerDisableTrigger(&s_Timer1, 0);
-	s_Timer0.Disable();
-	TimerDisable(&s_Timer1);
-
-	Snapshot(&stopped0, &stopped1);
+	period = s_Timer0.EnableTimerTrigger(0, (uint32_t)100U,
+		TIMER_TRIG_TYPE_CONTINUOUS);
+	Check("first periodic alarm: 100 ms", period == 100U, &failures);
+	if (count == 2)
+	{
+		period = msTimerEnableTrigger(&s_Timer1, 0, 250U,
+			TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
+		Check("second periodic alarm: 250 ms", period == 250U, &failures);
+	}
+	for (i = 0; i < 3; i++)
+	{
+		msDelay(1000U);
+		Snapshot(&counts[0], &counts[1]);
+		printf("  elapsed %d s: first=%lu second=%lu\r\n", i + 1,
+			(unsigned long)counts[0], (unsigned long)counts[1]);
+	}
+	Check("first periodic callbacks: about 30",
+		counts[0] >= 24U && counts[0] <= 36U, &failures);
+	if (count == 2)
+	{
+		Check("second periodic callbacks: about 12",
+			counts[1] >= 9U && counts[1] <= 15U, &failures);
+	}
+	for (i = 0; i < count; i++)
+	{
+		TimerDisableTrigger(timers[i], 0);
+		TimerDisable(timers[i]);
+	}
+	Snapshot(&stopped[0], &stopped[1]);
 	msDelay(300U);
-	Snapshot(&count0, &count1);
-	Check("both timers stop generating interrupts",
-		count0 == stopped0 && count1 == stopped1, &failures);
-
-	if (!TimerEnable(&s_Timer1))
+	Snapshot(&counts[0], &counts[1]);
+	Check("disabled timers stop callbacks",
+		counts[0] == stopped[0] && counts[1] == stopped[1], &failures);
+	Snapshot(&singleStart[0], &singleStart[1]);
+	for (i = 0; i < count; i++)
 	{
-		Check("TG1 timer restart", false, &failures);
-	}
-	else
-	{
-		period1 = msTimerEnableTrigger(&s_Timer1, 0, 120U,
+		Check("restart through C API", TimerEnable(timers[i]), &failures);
+		period = msTimerEnableTrigger(timers[i], 0, 120U,
 			TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr);
-		Check("TG1 single-shot alarm programmed",
-			period1 == 120U, &failures);
-
-		Snapshot(&count0, &singleStart);
-		msDelay(350U);
-		Snapshot(&count0, &singleEnd);
-		Check("TG1 single-shot fires exactly once",
-			singleEnd == singleStart + 1U, &failures);
-		msDelay(250U);
-		Snapshot(&count0, &count1);
-		Check("TG1 single-shot does not rearm",
-			count1 == singleEnd, &failures);
-		TimerDisable(&s_Timer1);
+		Check("single-shot alarm: 120 ms", period == 120U, &failures);
 	}
-	printf("%s: %d failed\r\n",
-		failures == 0 ? "PASS" : "FAIL", failures);
+	msDelay(350U);
+	Snapshot(&singleEnd[0], &singleEnd[1]);
+	for (i = 0; i < count; i++)
+	{
+		Check("single-shot fires exactly once",
+			singleEnd[i] == singleStart[i] + 1U, &failures);
+	}
+	msDelay(250U);
+	Snapshot(&counts[0], &counts[1]);
+	for (i = 0; i < count; i++)
+	{
+		Check("single-shot does not rearm", counts[i] == singleEnd[i], &failures);
+		TimerDisable(timers[i]);
+	}
+	Check("no unexpected timer events", g_TimerUnexpectedEvents == 0U, &failures);
+	printf("%s: %d failed\r\n", failures == 0 ? "PASS" : "FAIL", failures);
 	msDelay(200U);
 	return failures == 0 ? 0 : 1;
 }

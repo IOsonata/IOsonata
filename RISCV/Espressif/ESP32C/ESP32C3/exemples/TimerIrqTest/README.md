@@ -1,54 +1,27 @@
-# ESP32-C3 Timer Group IRQ hardware acceptance
+# ESP32C3 TimerIrqTest
 
-Open the Eclipse Embedded CDT / IOcomposer managed project at
-`RISCV/Espressif/ESP32C/ESP32C3/exemples/TimerIrqTest/ioc/`.
-Use the ESP32-C3-DevKitM-1 with its CP2102N UART0 bridge on
-GPIO21 (TX) and GPIO20 (RX); serial output runs at **1,000,000 baud**.
+Import this `ioc` project and `ESP32C3/lib/ioc` into IOcomposer. Build both
+with matching Debug or Release configurations, then flash `TimerIrqTest.bin`
+using Direct Boot at offset zero. Open the UART console at 1,000,000 baud,
+8N1, no flow control, and reset the board to see the complete report.
 
-Use an ESP32-C3 IOsonata library built from the same branch, then
-clean-build the TimerIrqTest target and flash the resulting application.
+UART0 TX is GPIO21, RX is GPIO20. Connect adapter RX to TX, adapter TX to RX,
+and common ground. Use a 3.3 V adapter. Board wiring is in `src/board.h`.
 
-The test exercises both Timer Group counters simultaneously without the
-board's WS2812 LED:
+The project links `exemples/timer/timer_dual_irq_test.cpp` unchanged.
+It discovers the available high-frequency timers through the generic API:
 
-- **TG0/T0 (DevNo 0)**: C++ `Timer`, continuous 100 ms callback.
-- **TG1/T0 (DevNo 1)**: C `TimerDev_t`, continuous 250 ms callback.
-- Both have a 1 MHz tick clock and one available alarm.
-- The main loop samples callback counters for 3 seconds without printing
-  or allocating memory inside interrupts; both counts are checked with
-  a conservative timing window.
-- It disables the two alarms and verifies that callbacks stop.
-- It restarts TG1 with a 120 ms single-shot alarm and verifies exactly one
-  callback and no unexpected rearming.
+- The first timer uses C++ initialization and a 100 ms periodic alarm.
+- If a second timer exists, it uses C initialization and a 250 ms alarm.
+- After three seconds, counts should be about 30 and 12 respectively.
+- Disabling the timers must stop callbacks.
+- Each timer is restarted through the C API for a 120 ms single-shot alarm.
+  Each must fire exactly once and remain quiet afterward.
 
-Expected periodic counts after 3 seconds are approximately 30 on TG0
-and 12 on TG1. Output includes individual `[PASS]` or `[FAIL]` checks
-and a final `PASS: 0 failed` summary. `g_TimerIrqCount` and
-`g_TimerUnexpectedEvents` remain ordinary C++ debugger-visible globals.
+C2 runs the single-timer path; C3/C5/C6/C61 run both timers. The single-timer
+path also exercises the C API through the existing Timer object's conversion
+to `TimerDev_t *`. No second initializer or extra hardware timer is needed.
 
-**Status:** **Hardware PASS, November 8, 2026 (ESP32-C3-DevKitM-1).**
-The maintainer's UART log reported all checks passing with **0 failures**.
-Both Timer Group counters ran concurrently at a 1 MHz tick clock.
-The callbacks matched the programmed 100 ms and 250 ms intervals over
-three successive one-second observation points:
-
-| Elapsed | TG0/T0 (100 ms) | TG1/T0 (250 ms) |
-| ---: | ---: | ---: |
-| 1000 ms | 10 | 4 |
-| 2000 ms | 20 | 8 |
-| 3000 ms | 30 | 12 |
-
-The hardware log further confirms:
-
-- Both timer instances initialize correctly; each exposes one alarm.
-- The C++ TG0/T0 and C TG1/T0 callbacks deliver periodic events independently.
-- No unexpected timer events were recorded.
-- Both timers stop generating interrupts after disable.
-- TG1's 120 ms single-shot fires exactly once and does not rearm.
-
-**Validation scope:** This establishes functional interrupt delivery and timer
-lifecycle behavior in the tested configuration; it does not measure
-microsecond-scale interrupt jitter, other timer frequencies, sleep/wakeup,
-or frequency reconfiguration. Preserve those as separate validation targets.
-
-**Maintainer's result:** `PASS: 0 failed`.
+Expected final output: `PASS: 0 failed`. The test takes about four seconds.
+Debug and Release both report through UART; no LED or semihosting is used.
+Cross-build and host checks do not establish hardware validation.
