@@ -76,7 +76,8 @@ def main():
                  "EnablePeiEvent", "DisablePeiEvent",
                  "ConnectPeiTask", "DisconnectPeiTask"):
         assert "bool I2C" + name + "(" in HEADER
-        assert 'extern "C" bool I2C' + name + "(" in DRIVER
+        assert "bool I2C" + name + "(" in DRIVER
+        assert 'extern "C" bool I2C' + name + "(" not in DRIVER
     for name in ("PeiBindEvent", "PeiGetEventEndpoint",
                  "PeiUnbindEvent", "PeiConnectTask",
                  "PeiDisconnectTask"):
