@@ -73,7 +73,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SYSTEM_RESET_WAKE_COMP		(1UL << 9)	//!< Wake up from power off by the analog comparator
 #define SYSTEM_RESET_WAKE_NFC		(1UL << 10)	//!< Wake up from power off by an NFC field
 #define SYSTEM_RESET_WAKE_USB		(1UL << 11)	//!< Wake up from power off by USB power
-#define SYSTEM_RESET_WAKE_MSK		(0xFUL << 8)	//!< All wake up from power off reasons
+#define SYSTEM_RESET_WAKE_TIMER		(1UL << 12)	//!< Wake up from power off by a timer or the RTC
+#define SYSTEM_RESET_WAKE_MSK		(0x1FUL << 8)	//!< All wake up from power off reasons
 
 /// DC/DC regulator stages, ORed in McuOsc_t DcDc
 #define SYSTEM_DCDC_MAIN			(1U << 0)	//!< Stage supplying the core

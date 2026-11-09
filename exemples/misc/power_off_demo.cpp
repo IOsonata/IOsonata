@@ -118,6 +118,7 @@ static const struct {
 	{ SYSTEM_RESET_WAKE_COMP, "wake up by the comparator" },
 	{ SYSTEM_RESET_WAKE_NFC, "wake up by NFC" },
 	{ SYSTEM_RESET_WAKE_USB, "wake up by USB" },
+	{ SYSTEM_RESET_WAKE_TIMER, "wake up by a timer" },
 };
 
 int main()
