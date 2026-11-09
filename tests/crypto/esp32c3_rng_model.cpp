@@ -23,6 +23,10 @@ static unsigned s_AnalogWrites;
 static uint8_t s_Analog = 0xA3U;
 static bool s_AnalogWriteIgnored;
 static bool s_Stuck;
+static bool s_CycleStalled;
+
+extern volatile uint32_t g_Esp32C3RngStage;
+extern volatile uint32_t g_Esp32C3RngError;
 
 static uint32_t &ModelWord(uintptr_t Addr)
 {
@@ -97,7 +101,10 @@ void EspRngTestAnalogWrite(uint8_t Msb, uint8_t Lsb, uint8_t Value)
 
 uint32_t EspRngTestCycleCount(void)
 {
-	s_Cycles += 80U;
+	if (!s_CycleStalled)
+	{
+		s_Cycles += 80U;
+	}
 	return s_Cycles;
 }
 
@@ -118,13 +125,17 @@ static void CheckClean(void)
 	assert(s_Analog == 0xA3U);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
 	uint8_t a[34];
 	uint8_t b[32];
 	unsigned reads;
 	unsigned analog;
-	assert(!Esp32C3RngSecureAvailable());
+	bool useCycle = argc > 1 && strcmp(argv[1], "cycle") == 0;
+	bool useStuck = argc > 1 && strcmp(argv[1], "stuck") == 0;
+	bool useAnalog = argc > 1 && strcmp(argv[1], "analog") == 0;
+
+	assert(Esp32C3RngSecureAvailable());
 	assert(Esp32C3RngProbe());
 	assert(Esp32C3RngSecureAvailable());
 	assert(s_ReadCount >= 6);
@@ -152,17 +163,35 @@ int main(void)
 	assert(Esp32C3RngSecureAvailable());
 	CheckClean();
 
-	// A source-start readback failure must restore ALL ADC/RTC state.
-	s_AnalogWriteIgnored = true;
-	memset(b, 0xCC, sizeof(b));
-	assert(Esp32C3RngFill(b, sizeof(b)) == CRYPTO_STATUS_FAIL);
-	for (unsigned i = 0; i < sizeof(b); i++)
+	if (useCycle)
 	{
-		assert(b[i] == 0U);
+		s_CycleStalled = true;
 	}
-	s_AnalogWriteIgnored = false;
-	CheckClean();
-	assert(!Esp32C3RngSecureAvailable());
-	assert(Esp32C3RngFill(b, sizeof(b)) == CRYPTO_STATUS_FAIL);
-	puts("ESP32-C3 RNG MMIO model: PASS (entropy setup, restore, conflict, fault, bounds)");
+	if (useStuck)
+	{
+		s_Stuck = true;
+	}
+	if (useAnalog)
+	{
+		s_AnalogWriteIgnored = true;
+	}
+	if (useCycle || useStuck || useAnalog)
+	{
+		memset(b, 0xCC, sizeof(b));
+		assert(Esp32C3RngFill(b, sizeof(b)) == CRYPTO_STATUS_FAIL);
+		for (unsigned i = 0; i < sizeof(b); i++)
+		{
+			assert(b[i] == 0U);
+		}
+		assert(g_Esp32C3RngError == (useAnalog ? 3U : useCycle ? 4U : 5U));
+		assert(g_Esp32C3RngStage == (useAnalog ? 5U : useCycle ? 7U : 8U));
+		s_AnalogWriteIgnored = false;
+		s_CycleStalled = false;
+		s_Stuck = false;
+		CheckClean();
+		assert(!Esp32C3RngSecureAvailable());
+		assert(Esp32C3RngFill(b, sizeof(b)) == CRYPTO_STATUS_FAIL);
+	}
+
+	puts("ESP32-C3 RNG MMIO model: PASS");
 }

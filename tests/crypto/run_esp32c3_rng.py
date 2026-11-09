@@ -16,6 +16,7 @@ with tempfile.TemporaryDirectory(prefix="esp32c3-rng-") as name:
             "-fno-rtti", "-fno-exceptions",
             "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
             "-DESP32C3", "-DESP32_RNG_TEST",
+            "-DESP32_RNG_WAIT_MAX_POLLS=1024",
             "-I", str(ROOT / "include"),
             "-I", str(ROOT / "RISCV/Espressif/include"),
             "-I", str(TEST),
@@ -23,5 +24,6 @@ with tempfile.TemporaryDirectory(prefix="esp32c3-rng-") as name:
             str(SOURCE), str(TEST / "esp32c3_rng_model.cpp"),
             "-o", str(exe)
         ], check=True)
-        subprocess.run([str(exe)], check=True)
+        for scenario in ("good", "analog", "cycle", "stuck"):
+            subprocess.run([str(exe), scenario], check=True)
 print("ESP32-C3 secure RNG register model: PASS")

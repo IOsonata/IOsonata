@@ -112,7 +112,18 @@ typedef struct {
 
 static bool s_EspRngBusy;
 static bool s_EspRngFault;
-static bool s_EspRngValidated;
+
+// Debugger-visible checkpoints, with normal C++ linkage. No ISR is used.
+// Stages: 1 request, 2 snapshot, 3 analog ROM calls, 4 analog ready,
+// 5 ADC configured, 6 source active, 7 settling, 8 reading,
+// 9 restoring, 10 completed. Error 1 = busy, 2 = ADC in use,
+// 3 = setup failed, 4 = stalled cycle counter, 5 = repeated RNG words.
+volatile uint32_t g_Esp32C3RngStage;
+volatile uint32_t g_Esp32C3RngError;
+
+#ifndef ESP32_RNG_WAIT_MAX_POLLS
+#define ESP32_RNG_WAIT_MAX_POLLS 100000UL
+#endif
 
 static inline void EspRngModify(uintptr_t Addr, uint32_t Mask, uint32_t Value)
 {
@@ -130,6 +141,7 @@ static bool EspRngAdcIdle(void)
 	{
 		return false;
 	}
+	g_Esp32C3RngStage = 6U;
 	return true;
 }
 
@@ -141,6 +153,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 	{
 		return false;
 	}
+	g_Esp32C3RngStage = 2U;
 	pSaved->Sensor = ESP32_RNG_REG(RNG_RTC_SENSOR_CTRL);
 	pSaved->Ana = ESP32_RNG_REG(RNG_RTC_ANA_CONF);
 	pSaved->ClockEn = ESP32_RNG_REG(RNG_SYSTEM_CLK_EN);
@@ -156,6 +169,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 	EspRngModify(RNG_RTC_SENSOR_CTRL, RNG_RTC_SAR_POWER_MASK,
 		RNG_RTC_SAR_POWER_MASK);
 	EspRngModify(RNG_RTC_ANA_CONF, RNG_RTC_ANA_POWER, RNG_RTC_ANA_POWER);
+	g_Esp32C3RngStage = 3U;
 	pSaved->AnalogRef = EspRngAnalogRead(6U, 6U);
 	pSaved->AnalogDtest = EspRngAnalogRead(1U, 0U);
 	pSaved->AnalogRtc = EspRngAnalogRead(3U, 3U);
@@ -164,6 +178,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 	EspRngAnalogWrite(1U, 0U, 0U);
 	EspRngAnalogWrite(3U, 3U, 0U);
 	EspRngAnalogWrite(2U, 2U, 0U);
+	g_Esp32C3RngStage = 4U;
 
 	ESP32_RNG_REG(RNG_SYSTEM_CLK_EN) |= RNG_ADC_CLK_MASK;
 	ESP32_RNG_REG(RNG_SYSTEM_RST_EN) &= ~RNG_ADC_CLK_MASK;
@@ -183,6 +198,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 		RNG_ADC_MEAS_LIMIT, (100UL << 12));
 	ESP32_RNG_REG(RNG_ADC_DMA_CONF) |= RNG_ADC_TRANSFER;
 	ESP32_RNG_REG(RNG_ADC_CTRL2) |= RNG_ADC_TIMER_EN;
+	g_Esp32C3RngStage = 5U;
 
 	if ((ESP32_RNG_REG(RNG_ADC_CTRL2) & RNG_ADC_TIMER_EN) == 0U ||
 		(ESP32_RNG_REG(RNG_ADC_CLK_CONF) & RNG_ADC_CLK_EN) == 0U ||
@@ -216,19 +232,31 @@ static void EspRngStop(const EspRngSnapshot_t *pSaved)
 	EspRngModify(RNG_RTC_ANA_CONF, RNG_RTC_ANA_POWER, pSaved->Ana);
 }
 
-static void EspRngWaitCycles(uint32_t Count)
+// Always exit even if the cycle CSR is disabled or stops advancing.
+// The normal count is only a few hundred iterations; a large upper bound
+// allows optimized and Debug builds without letting the firmware spin forever.
+static bool EspRngWaitCycles(uint32_t Count)
 {
-	uint32_t start = EspRngCycleCount();
-	while ((uint32_t)(EspRngCycleCount() - start) < Count)
+	uint32_t start;
+	uint32_t polls;
+
+	start = EspRngCycleCount();
+	for (polls = 0U; polls < ESP32_RNG_WAIT_MAX_POLLS; polls++)
 	{
-		// The SAR ADC is continually adding fresh physical entropy.
+		if ((uint32_t)(EspRngCycleCount() - start) >= Count)
+		{
+			return true;
+		}
 	}
+	return false;
 }
 
 bool Esp32C3RngSecureAvailable(void)
 {
-	return s_EspRngValidated && !s_EspRngFault && !s_EspRngBusy &&
-		EspRngAdcIdle();
+	// IsSecure describes the hardware entropy capability, not a completed
+	// draw. Every Random() request must still enable and check SAR entropy.
+	// Do not probe from Crypto::Init() or from IsSecure().
+	return !s_EspRngFault && !s_EspRngBusy && EspRngAdcIdle();
 }
 
 CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
@@ -255,37 +283,61 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	state = DisableInterrupt();
 	if (s_EspRngBusy)
 	{
+		g_Esp32C3RngError = 1U;
 		EnableInterrupt(state);
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_BUSY;
 	}
 	if (s_EspRngFault || !EspRngAdcIdle())
 	{
+		g_Esp32C3RngError = 2U;
 		EnableInterrupt(state);
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
 	s_EspRngBusy = true;
+	g_Esp32C3RngError = 0U;
+	g_Esp32C3RngStage = 1U;
 	EnableInterrupt(state);
 
 	started = EspRngStart(&saved);
 	ok = started;
+	if (!started)
+	{
+		g_Esp32C3RngError = 3U;
+	}
 	cyclesPerUs = SystemCoreClockGet() / 1000000UL;
-	if (cyclesPerUs == 0U)
+	if (cyclesPerUs == 0U || cyclesPerUs > 1000U)
 	{
 		ok = false;
+		g_Esp32C3RngError = 4U;
 	}
-	if (started && cyclesPerUs > 0U)
+	if (ok)
 	{
-		// Give the analog reference and SAR sampling path time to settle.
-		EspRngWaitCycles(cyclesPerUs * 100U);
+		// Stabilize the analog noise source before the first sample.
+		g_Esp32C3RngStage = 7U;
+		if (!EspRngWaitCycles(cyclesPerUs * 100U))
+		{
+			ok = false;
+			g_Esp32C3RngError = 4U;
+		}
+	}
+	if (ok)
+	{
 		(void)ESP32_RNG_REG(RNG_DATA);
 		(void)ESP32_RNG_REG(RNG_DATA);
+		g_Esp32C3RngStage = 8U;
 	}
 	for (i = 0U; i < Len && ok; i += n)
 	{
-		// Below Espressif's maximum SAR-based RNG register read rate.
-		EspRngWaitCycles(cyclesPerUs * 20U);
+		// SAR entropy must replenish between reads. This also implements
+		// Espressif's conservative bootloader pacing (>= 64 us/word).
+		if (!EspRngWaitCycles(cyclesPerUs * 80U))
+		{
+			ok = false;
+			g_Esp32C3RngError = 4U;
+			break;
+		}
 		value = ESP32_RNG_REG(RNG_DATA);
 		if (i != 0U && value == last)
 		{
@@ -293,6 +345,7 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 			if (repeats >= 2U)
 			{
 				ok = false;
+				g_Esp32C3RngError = 5U;
 				break;
 			}
 		}
@@ -306,17 +359,20 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	}
 	if (started)
 	{
+		if (ok)
+		{
+			g_Esp32C3RngStage = 9U;
+		}
 		EspRngStop(&saved);
 	}
 	state = DisableInterrupt();
-	if (!ok)
+	if (!ok && g_Esp32C3RngError != 2U)
 	{
 		s_EspRngFault = true;
-		s_EspRngValidated = false;
 	}
-	else
+	if (ok)
 	{
-		s_EspRngValidated = true;
+		g_Esp32C3RngStage = 10U;
 	}
 	s_EspRngBusy = false;
 	EnableInterrupt(state);

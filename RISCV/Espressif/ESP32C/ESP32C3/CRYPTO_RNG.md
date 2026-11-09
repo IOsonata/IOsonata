@@ -1,53 +1,81 @@
-# ESP32-C3 hardware RNG experiment — disabled in normal firmware
+# ESP32-C3 hardware RNG
 
-The new SAR-ADC-backed hardware RNG path has **not** been validated on
-ESP32-C3 hardware. The first integrated version invoked
-`Esp32C3RngProbe()` from `Crypto::Init()`. Because
-`exemples/crypto/crypto_engine_test.cpp` calls `Crypto::Init()`
-**before printing its test banner**, the device could stop immediately after
-the ESP-ROM boot message, before any application output.
+ESP32-C3 supplies a hardware RNG, but physical entropy is guaranteed only
+when an RF subsystem or the internal SAR ADC entropy source is active.
+IOsonata's native ESP32-C3 implementation uses the internal SAR ADC during
+random draws. It uses direct MCU registers and two ROM analog-I2C entry points
+(0x40001958/0x40001960). It does **not** link ESP-IDF's HAL.
 
-To restore the known-working startup and crypto behavior:
+## Startup and operation
 
-- `RISCV/Espressif/src/crypto_esp32.cpp` is restored to its pre-RNG
-  implementation. `Crypto::Init()` no longer touches the SAR ADC or ROM
-  analog-I2C interface.
-- The experimental `crypto_rng_esp32c3.cpp` is **not linked** by the
-  ESP32-C3 IOsonata library project. No application can accidentally
-  activate it through `Crypto::Random()`.
-- The default `Crypto::Random()` remains the existing software PRNG,
-  and `Crypto::IsSecure()` remains false. ECDH key generation/signing
-  still correctly refuse non-secure entropy.
-- The experimental source and standalone model test are retained for
-  controlled debugging; they are not production-ready.
+The earlier experimental implementation called the RNG probe from
+`Crypto::Init()`. The maintainer reported that CryptoTest then stopped
+before printing its banner. The exact trap/hang location was not captured.
 
-## Root-cause isolation
+The corrected implementation preserves the known-working `Crypto::Init()`:
+it initializes AES/SHA but performs **no ADC or RNG operations**. The
+ESP32-C3 library once again includes `crypto_rng_esp32c3.cpp`.
 
-The ROM boot text alone does not identify whether the early RNG call
-trapped, timed out, or hung. The early invocation was an unsafe change
-to a working initialization path regardless of the precise fault.
+`Crypto::Random()` activates the SAR ADC noise source for each request,
+samples the hardware RNG at a conservative 80 microseconds per word,
+and restores the previous state before returning. It never silently
+uses `CryptoSoftRng` on the production ESP32-C3 build.
 
-Only after the standard CryptoTest is seen working again should the
-experimental RNG be exercised by a **separate, explicitly initiated**
-hardware test with debugger stops before the internal analog ROM calls,
-SAR clock/power configuration, and cycle-counter wait loops.
+`Crypto::IsSecure()` reports whether the ESP32-C3 hardware entropy path
+is eligible for a new request: the ADC must be idle and no permanent
+health/setup failure may have been detected. Each `Random()` call still
+checks source activation and the stream; it clears its output and fails
+on error. A failed source activation, stalled cycle counter, or repeated
+word failure permanently disables the RNG until reboot. Unavailable ADC
+resources produce a transient failed request without taking them over.
 
-On-chip entropy requires careful ADC/RF ownership. A host register model
-cannot establish that the physical noise source is safe and reliable.
+**This is not a certified entropy source.** The host model proves register
+sequencing only; electrical entropy behavior and production suitability
+require on-device validation.
 
-## Validation commands
+## Debugger checkpoints
 
-After updating and rebuilding the ESP32-C3 library and application:
+Two globals have ordinary C++ linkage and are visible in the debugger:
+
+- `g_Esp32C3RngStage` is 1 on entry, 2 when reading the snapshot,
+  3 entering ROM analog calls, 4 after analog setup, 5 after ADC
+  configuration, 6 once the source is active, 7 during the initial
+  bounded wait, 8 during RNG reads, 9 during restoration, and
+  10 on success. A failure retains its active stage.
+- `g_Esp32C3RngError` is 0 on request entry; 1 means busy,
+  2 ADC unavailable/already faulted, 3 setup failed, 4 the cycle
+  counter stopped or a clock precondition failed, and 5 repeated RNG
+  words.
+
+The cycle-counter waits have a finite iteration limit to avoid a
+firmware-wide stall if the counter stops advancing. A ROM routine that
+never returns cannot be bounded from the caller; stage 3 distinguishes
+that situation from a timer wait.
+
+## Resource isolation
+
+This backend must not run while another ADC, Wi-Fi/Bluetooth controller
+or internal analog-I2C client uses the SAR ADC. It refuses an ADC that is
+already configured, but a cooperative ADC/RF ownership mechanism is still
+required before permitting concurrent users.
+
+## Validation
+
+Run both host suites from the IOsonata directory:
 
 ```sh
-python3 tests/crypto/run_esp_models.py
 python3 tests/crypto/run_esp32c3_rng.py
+python3 tests/crypto/run_esp_models.py
 ```
 
-The second command is only a mock-register test of the *unlinked*
-experimental source. It must not be interpreted as hardware validation.
+The RNG model tests successful draws, odd-buffer length, register cleanup,
+ADC contention, failed analog configuration, repeated RNG words, and a
+stopped cycle counter at both -O0 and -O2. It is **not** a physical entropy
+measurement. The existing AES/SHA model is compiled without analog
+entropy, using an explicitly test-only PRNG configuration.
 
-Expected on-board baseline: normal CryptoTest output, including the
-`software PRNG, not for security use` line and skipped secure-RNG tests.
-The previous maintainer result was 59 PASS, 0 FAIL, 1 SKIP. A fresh
-post-revert hardware run is still needed to confirm recovery.
+Clean-build `IOsonata_ESP32C3` and the `CryptoTest` example, flash,
+and compare its output against the previously working 59 PASS, 0 FAIL,
+1 SKIP. The new hardware RNG is expected to eliminate the skipped
+ECDH/signing test **only after the board proves it**. If the board
+stops at a stage, capture that stage/error and the exception PC.
