@@ -1853,9 +1853,8 @@ bool UARTPreparePeiTx(UARTDev_t *pDev, const uint8_t *pTx,
 #endif
 }
 
-// The caller must disconnect all PPI TX task routes before release.
-// A transfer that has been started must have stopped before its DMA
-// buffer can be reused. A fresh, unstarted TX can simply be released.
+// Disconnect PPI TX routes before releasing the DMA buffer.
+// Wait for TXSTOPPED only if transmission started.
 bool UARTReleasePeiTx(UARTDev_t *pDev)
 {
 #if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
