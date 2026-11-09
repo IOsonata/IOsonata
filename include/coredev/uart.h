@@ -273,9 +273,6 @@ void UARTRetargetDisable(UARTDev_t * const pDev, int FileNo);
 /// UART base class
 class UART: public DeviceIntrf {
 public:
-	using DeviceIntrf::Rx;
-	using DeviceIntrf::Tx;
-
 	UART() {
 		memset((void*)&vDevData, 0, sizeof(vDevData));
 		vDevData.pObj = this;
