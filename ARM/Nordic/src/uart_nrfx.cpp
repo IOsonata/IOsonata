@@ -745,18 +745,18 @@ static uint32_t nRFUARTGetRate(DevIntrf_t * const pDev)
 static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+	uint32_t regval;
+	int rate;
 
 	if (dev->bPeiTxPrepared)
 	{
 		return (uint32_t)dev->pUartDev->Rate;
 	}
 
-	int rate = 0;
-
 	// NOTE: Thanks to hmolesworth for the Baudrate calculation posted on devzone.
 	// https://devzone.nordicsemi.com/f/nordic-q-a/43280/technical-question-regarding-uart-baud-rate-generator-baudrate-register-offset-0x524/458422
 
-	uint32_t regval = (uint32_t)(((((uint64_t)Rate << 32ULL) + 8000000ULL) / 16000000ULL) + 0x800ULL) & 0xFFFFF000;
+	regval = (uint32_t)(((((uint64_t)Rate << 32ULL) + 8000000ULL) / 16000000ULL) + 0x800ULL) & 0xFFFFF000;
 	rate = (uint32_t)(((uint64_t)regval * 16000000ULL) >> 32ULL);
 
 #if defined(NRF54L_SERIES)
@@ -892,13 +892,13 @@ static bool nRFUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+	int cnt = 0;
+	int rtry = pDev->MaxRetry;
 
 	if (dev->bPeiTxPrepared)
 	{
 		return 0;
 	}
-    int cnt = 0;
-    int rtry = pDev->MaxRetry;
 
     while (Datalen > 0 && rtry-- > 0)
     {
