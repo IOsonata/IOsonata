@@ -17,10 +17,10 @@ the first request, started by other code, is left running.
 
 When a BLE stack is enabled it owns CLOCK. The requests then go to the
 SoftDevice (sd_clock_hfclk_request and sd_clock_hfclk_release) or to MPSL for
-the SoftDevice Controller (nRFxMpslHfxo in nrf_mpsl.cpp). Neither counts the
-callers of the application, the count stays here. Every request is passed to
-the stack, so a request made before the stack was enabled is passed again on
-the next one.
+the SoftDevice Controller (nRFxMpslHfxo in nrf_mpsl.cpp). The application request count stays here; the first acquisition
+is passed to the active clock owner and the last release returns it to that
+same owner. Clock handover during BLE stack initialization requires explicit
+coordination by the stack initializer.
 
 On the nRF53, HFCLKSRC selects the crystal before HFCLKSTART and selects the
 RC again after HFCLKSTOP. On the nRF54L the crystal is started and stopped
@@ -213,7 +213,9 @@ static bool nRFxHfxoRunning(void)
 // transition flag, but interrupts remain enabled during the start wait.
 static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 {
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 	uint32_t running;
+#endif
 	int res;
 	int i;
 
