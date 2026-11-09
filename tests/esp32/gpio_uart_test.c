@@ -8,6 +8,8 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include <stdint.h>
 #include <sys/mman.h>
 #define __INTERRUPT_H__
+static uintptr_t DisableInterrupt(void) { return 0; }
+static void EnableInterrupt(uintptr_t State) { (void)State; }
 #include "RISCV/Espressif/src/iopincfg_esp32.c"
 #include "esp32xx_uart.h"
 
