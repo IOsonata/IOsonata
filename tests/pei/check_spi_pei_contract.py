@@ -25,11 +25,11 @@ def main():
     tasks = section("static PeiEndpoint_t SPIPeiTaskEndpoint(",
                     "static bool SPIPeiReady(")
     ready = section("static bool SPIPeiReady(",
-                    'extern "C" bool SPIPreparePeiTransfer(')
-    prep = section('extern "C" bool SPIPreparePeiTransfer(',
-                   'extern "C" bool SPIReleasePeiTransfer(')
-    connect = section('extern "C" bool SPIConnectPeiTask(',
-                      'extern "C" bool SPIDisconnectPeiTask(')
+                    'bool SPIPreparePeiTransfer(')
+    prep = section('bool SPIPreparePeiTransfer(',
+                   'bool SPIReleasePeiTransfer(')
+    connect = section('bool SPIConnectPeiTask(',
+                      'bool SPIDisconnectPeiTask(')
 
     assert "&dev->pReg->EVENTS_READY" in evts
     for event in ("STARTED", "ENDRX", "ENDTX", "END", "STOPPED"):
@@ -76,7 +76,8 @@ def main():
                  "EnablePeiEvent", "DisablePeiEvent",
                  "ConnectPeiTask", "DisconnectPeiTask"):
         assert "bool SPI" + name + "(" in HEADER
-        assert 'extern "C" bool SPI' + name + "(" in DRIVER
+        assert 'bool SPI' + name + "(" in DRIVER
+        assert 'extern "C" bool SPI' + name + "(" not in DRIVER
     assert 'extern "C"' not in APP
     assert "NRF_SPIM" not in APP
     assert "NRF_SPIS" not in APP
