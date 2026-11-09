@@ -80,12 +80,18 @@ def main():
     assert "bool nRFxRtcEnablePeiTrigger(" in rtc
     assert "bool nRFxRtcEnablePeiEvent(" in rtc
     assert "bool nRFxRtcDisablePeiEvent(" in rtc
+    assert "#pragma weak g_PeiNrf52RtcRaw" in rtc
+    assert "nRFxRtcDisablePeiEvent(pOldTimer" not in rtc
+    assert "nRFxRtcDisablePeiEvent(pTimer," not in rtc
     for name in ("EnablePeiTrigger", "EnablePeiEvent", "DisablePeiEvent"):
         assert "(*" + name + ")" not in timer_api
     for name in ("EnablePeiTrigger", "EnablePeiEvent", "DisablePeiEvent"):
         assert "pTimer->" + name + " =" not in hf
         assert "pTimer->" + name + " =" not in rtc
     assert "int TimerEnablePeiTrigger(" in timer_driver
+    pei_backend = (ROOT / "ARM/Nordic/nRF52/src/pei_nrf52.cpp").read_text(
+        encoding="utf-8")
+    assert "g_PeiNrf52RtcRaw[3][2]" in pei_backend
     assert "bool TimerEnablePeiEvent(" in timer_driver
     assert "bool TimerDisablePeiEvent(" in timer_driver
     assert "!PeiTimerPrepare(" not in timer_api
