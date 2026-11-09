@@ -200,16 +200,17 @@ for the optional matrix functions before reserving hardware channels.
 Ordinary GPIO calls cannot extract the PEI matrix from a static HAL
 archive.
 
-The nRF52 TIMER and RTC drivers assign PEI callbacks during
-`TimerInit`. They use the existing compare registers and `TimerTrig_t`
-state. Continuous compares are rescheduled by the TIMER/RTC ISR;
-PPI routes each compare event directly to its task. No compare
-connection stops or clears the counter. `DisableTimerTrigger`
-unbinds only the selected compare event.
+The nRF52 TIMER and RTC drivers implement `TimerEnablePeiTrigger`,
+`TimerEnablePeiEvent`, and `TimerDisablePeiEvent` directly through the
+Nordic TIMER target. No PEI initialization function or additional
+`TimerDev_t` function pointers are required. The existing compare
+registers and `TimerTrig_t` state remain in use. Continuous compares
+are rescheduled by the TIMER/RTC ISR; PPI routes each compare event to
+its task. No compare connection stops or clears the counter.
 
-Callback pointers may retain PEI-specific TIMER code in applications
-that do not use PEI. Check the final linked sections and sizes before
-accepting this initialization change.
+RTC initialization still examines PEI event state to reject
+reinitialization of a timer with active PEI routes. Verify that this
+does not retain PEI-only code or state in a non-PEI TimerDemo link.
 
 This depends on GCC weak references and link garbage collection, as
 used in the Eclipse managed projects. The source changes are not a
