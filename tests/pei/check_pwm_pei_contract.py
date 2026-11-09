@@ -30,8 +30,8 @@ def main():
         assert "pReg->EVENTS_" + event in events
     for task in ("SEQSTART[0]", "SEQSTART[1]", "STOP", "NEXTSTEP"):
         assert "pReg->TASKS_" + task in tasks
-    connect = section('bool PWMConnectPeiTask(',
-                      'bool PWMDisconnectPeiTask(')
+    connect = section('bool PWMConnectTask(',
+                      'bool PWMDisconnectTask(')
     assert "PWM_DECODER_MODE_NextStep" in connect
     assert "Task == PWM_PEI_TASK_NEXTSTEP" in connect
     assert "dev->OpenMask == 0U" in ready
@@ -42,8 +42,8 @@ def main():
     for name in ("PeiBindEvent", "PeiGetEventEndpoint", "PeiUnbindEvent",
                  "PeiConnectTask", "PeiDisconnectTask"):
         assert "#pragma weak " + name in SOURCE
-    for name in ("EnablePeiEvent", "DisablePeiEvent", "ConnectPeiTask",
-                 "DisconnectPeiTask"):
+    for name in ("EnablePeiEvent", "DisablePeiEvent", "ConnectTask",
+                 "DisconnectTask"):
         assert "bool PWM" + name + "(" in HEADER
         assert 'bool PWM' + name + "(" in SOURCE
     assert "PWM_PEI_TASK_SEQSTART0" in DEMO

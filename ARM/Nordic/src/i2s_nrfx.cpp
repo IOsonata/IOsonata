@@ -1164,7 +1164,7 @@ bool I2SDisablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-bool I2SConnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+bool I2SConnectTask(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2S_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;
@@ -1182,7 +1182,7 @@ bool I2SConnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-bool I2SDisconnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+bool I2SDisconnectTask(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2S_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;

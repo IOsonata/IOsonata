@@ -43,7 +43,7 @@ def main():
     assert "PdmIrqHandler" in PDM
     assert "NRF_PDM->SAMPLE.PTR = (uint32_t)p;" in PDM
     for name in ("PreparePeiStart", "EnablePeiEvent", "DisablePeiEvent",
-                 "ConnectPeiTask", "DisconnectPeiTask"):
+                 "ConnectTask", "DisconnectTask"):
         assert "bool Pdm" + name + "(" in PDM_API
         assert 'bool Pdm' + name + "(" in PDM
 
@@ -78,7 +78,7 @@ def main():
     assert "NRF_AUDIO->CONFIG.TXEN == 0U" in I2S
     assert "nRFxI2SService(void)" in I2S
     for name in ("PreparePeiStart", "EnablePeiEvent", "DisablePeiEvent",
-                 "ConnectPeiTask", "DisconnectPeiTask"):
+                 "ConnectTask", "DisconnectTask"):
         assert "bool I2S" + name + "(" in I2S_API
         assert 'bool I2S' + name + "(" in I2S
 

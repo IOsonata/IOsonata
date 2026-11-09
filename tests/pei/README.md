@@ -129,7 +129,7 @@ pending.
 
 PWMInit(), PWMOpenChannel() and PWMSetDutyCycle() prepare the
 PWM driver-owned static RAM sequences and output pins. The C
-PWMEnablePeiEvent()/PWMConnectPeiTask() methods and C++ Pwm
+PWMEnablePeiEvent()/PWMConnectTask() methods and C++ Pwm
 wrappers expose the actual register endpoints; they do not
 configure peripheral channels or DMA buffers.
 

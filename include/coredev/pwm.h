@@ -135,9 +135,9 @@ bool PWMEnablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, PWM_PEI_EVENT Event);
 bool PWMDisablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt);
-bool PWMConnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+bool PWMConnectTask(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PWM_PEI_TASK Task);
-bool PWMDisconnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+bool PWMDisconnectTask(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PWM_PEI_TASK Task);
 
 #ifdef __cplusplus
@@ -232,12 +232,12 @@ public:
 
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, PWM_PEI_TASK Task)
 	{
-		return PWMConnectPeiTask(&vDev, PeiDev, Evt, Task);
+		return PWMConnectTask(&vDev, PeiDev, Evt, Task);
 	}
 
 	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, PWM_PEI_TASK Task)
 	{
-		return PWMDisconnectPeiTask(&vDev, PeiDev, Evt, Task);
+		return PWMDisconnectTask(&vDev, PeiDev, Evt, Task);
 	}
 
 private:

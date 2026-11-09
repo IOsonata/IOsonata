@@ -29,8 +29,8 @@ def main():
                    'bool UARTReleasePeiTx(')
     release = section('bool UARTReleasePeiTx(',
                       'bool UARTEnablePeiEvent(')
-    connect = section('bool UARTConnectPeiTask(',
-                      'bool UARTDisconnectPeiTask(')
+    connect = section('bool UARTConnectTask(',
+                      'bool UARTDisconnectTask(')
 
     for event in ("CTS", "NCTS", "RXDRDY", "TXDRDY", "ERROR", "RXTO"):
         assert "&dev->pReg->EVENTS_" + event in events
@@ -65,7 +65,7 @@ def main():
     assert "dev->bPeiTxPrepared" in connect
 
     for name in ("PreparePeiTx", "ReleasePeiTx", "EnablePeiEvent",
-                 "DisablePeiEvent", "ConnectPeiTask", "DisconnectPeiTask"):
+                 "DisablePeiEvent", "ConnectTask", "DisconnectTask"):
         assert "bool UART" + name + "(" in HEADER
         assert 'bool UART' + name + "(" in DRIVER
         assert 'extern "C" bool UART' + name + "(" not in DRIVER

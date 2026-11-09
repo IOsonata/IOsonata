@@ -2072,7 +2072,7 @@ bool SPIDisablePeiEvent(SPIDev_t *pDev,
 	return false;
 }
 
-bool SPIConnectPeiTask(SPIDev_t *pDev,
+bool SPIConnectTask(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, SPI_PEI_TASK Task)
 {
 	nRFSpiDev_t *dev;
@@ -2096,7 +2096,7 @@ bool SPIConnectPeiTask(SPIDev_t *pDev,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-bool SPIDisconnectPeiTask(SPIDev_t *pDev,
+bool SPIDisconnectTask(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, SPI_PEI_TASK Task)
 {
 	nRFSpiDev_t *dev;

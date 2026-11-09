@@ -243,9 +243,9 @@ bool I2CEnablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, I2C_PEI_EVENT Event);
 bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt);
-bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CConnectTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2C_PEI_TASK Task);
-bool I2CDisconnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CDisconnectTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2C_PEI_TASK Task);
 void I2CBusReset(I2CDev_t * const pDev);
 static inline int I2CGetRate(I2CDev_t * const pDev) { return pDev->DevIntrf.GetRate(&pDev->DevIntrf); }
@@ -366,12 +366,12 @@ public:
 
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, I2C_PEI_TASK Task)
 	{
-		return I2CConnectPeiTask(&vDevData, PeiDev, Evt, Task);
+		return I2CConnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, I2C_PEI_TASK Task)
 	{
-		return I2CDisconnectPeiTask(&vDevData, PeiDev, Evt, Task);
+		return I2CDisconnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 	/**

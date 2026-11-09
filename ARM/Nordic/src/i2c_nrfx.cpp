@@ -2049,7 +2049,7 @@ bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CConnectTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2C_PEI_TASK Task)
 {
 	nRFTwiDev_t *dev;
@@ -2082,7 +2082,7 @@ bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-bool I2CDisconnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CDisconnectTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2C_PEI_TASK Task)
 {
 	nRFTwiDev_t *dev;

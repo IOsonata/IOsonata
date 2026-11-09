@@ -1944,7 +1944,7 @@ bool UARTDisablePeiEvent(UARTDev_t *pDev,
 	return false;
 }
 
-bool UARTConnectPeiTask(UARTDev_t *pDev,
+bool UARTConnectTask(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, UART_PEI_TASK Task)
 {
 	nRFUartDev_t *dev;
@@ -1967,7 +1967,7 @@ bool UARTConnectPeiTask(UARTDev_t *pDev,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-bool UARTDisconnectPeiTask(UARTDev_t *pDev,
+bool UARTDisconnectTask(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, UART_PEI_TASK Task)
 {
 	nRFUartDev_t *dev;

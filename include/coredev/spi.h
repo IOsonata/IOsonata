@@ -247,9 +247,9 @@ bool SPIEnablePeiEvent(SPIDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, SPI_PEI_EVENT Event);
 bool SPIDisablePeiEvent(SPIDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt);
-bool SPIConnectPeiTask(SPIDev_t *pDev, PeiDev_t *pPei,
+bool SPIConnectTask(SPIDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, SPI_PEI_TASK Task);
-bool SPIDisconnectPeiTask(SPIDev_t *pDev, PeiDev_t *pPei,
+bool SPIDisconnectTask(SPIDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, SPI_PEI_TASK Task);
 
 static inline int SPIGetRate(SPIDev_t * const pDev) { return pDev->DevIntrf.GetRate(&pDev->DevIntrf); }
@@ -459,12 +459,12 @@ public:
 
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, SPI_PEI_TASK Task)
 	{
-		return SPIConnectPeiTask(&vDevData, PeiDev, Evt, Task);
+		return SPIConnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, SPI_PEI_TASK Task)
 	{
-		return SPIDisconnectPeiTask(&vDevData, PeiDev, Evt, Task);
+		return SPIDisconnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 	virtual SPIPHY Phy() { return vDevData.Cfg.Phy; }

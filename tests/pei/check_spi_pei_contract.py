@@ -28,8 +28,8 @@ def main():
                     'bool SPIPreparePeiTransfer(')
     prep = section('bool SPIPreparePeiTransfer(',
                    'bool SPIReleasePeiTransfer(')
-    connect = section('bool SPIConnectPeiTask(',
-                      'bool SPIDisconnectPeiTask(')
+    connect = section('bool SPIConnectTask(',
+                      'bool SPIDisconnectTask(')
 
     assert "&dev->pReg->EVENTS_READY" in evts
     for event in ("STARTED", "ENDRX", "ENDTX", "END", "STOPPED"):
@@ -90,7 +90,7 @@ def main():
         assert "#pragma weak " + api in DRIVER
     for name in ("PreparePeiTransfer", "ReleasePeiTransfer",
                  "EnablePeiEvent", "DisablePeiEvent",
-                 "ConnectPeiTask", "DisconnectPeiTask"):
+                 "ConnectTask", "DisconnectTask"):
         assert "bool SPI" + name + "(" in HEADER
         assert 'bool SPI' + name + "(" in DRIVER
         assert 'extern "C" bool SPI' + name + "(" not in DRIVER

@@ -479,7 +479,7 @@ bool QdecDisablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-bool QdecConnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+bool QdecConnectTask(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, QDEC_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;
@@ -503,7 +503,7 @@ bool QdecConnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-bool QdecDisconnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+bool QdecDisconnectTask(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, QDEC_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;

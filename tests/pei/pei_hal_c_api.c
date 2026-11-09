@@ -172,22 +172,22 @@ bool PeiComparatorCApplication(AnalogCompDev_t *pComp, PeiDev_t *pPei,
 	PeiEvent_t evt;
 
 	evt = 0U;
-	if (!AnalogCompPeiBindEvent(pComp, pPei, &evt,
+	if (!AnalogCompEnablePeiEvent(pComp, pPei, &evt,
 		ANALOG_COMP_PEI_EVENT_CROSS))
 	{
 		return false;
 	}
-	if (!AnalogCompPeiConnectTask(pComp, pPei, startEvent,
+	if (!AnalogCompConnectTask(pComp, pPei, startEvent,
 		ANALOG_COMP_PEI_TASK_START))
 	{
 		return false;
 	}
-	if (!AnalogCompPeiDisconnectTask(pComp, pPei, startEvent,
+	if (!AnalogCompDisconnectTask(pComp, pPei, startEvent,
 		ANALOG_COMP_PEI_TASK_START))
 	{
 		return false;
 	}
-	if (!AnalogCompPeiUnbindEvent(pComp, pPei, evt))
+	if (!AnalogCompDisablePeiEvent(pComp, pPei, evt))
 	{
 		return false;
 	}
@@ -206,12 +206,12 @@ bool PeiHalPwmCApplication(PwmDev_t *pPwm, PeiDev_t *pPei,
 	{
 		return false;
 	}
-	if (!PWMConnectPeiTask(pPwm, pPei, startEvent,
+	if (!PWMConnectTask(pPwm, pPei, startEvent,
 		PWM_PEI_TASK_SEQSTART0))
 	{
 		return false;
 	}
-	if (!PWMDisconnectPeiTask(pPwm, pPei, startEvent,
+	if (!PWMDisconnectTask(pPwm, pPei, startEvent,
 		PWM_PEI_TASK_SEQSTART0))
 	{
 		return false;
@@ -241,11 +241,11 @@ bool PeiAudioCApplication(PdmDev_t *pPdm, I2SDev_t *pI2s,
 	{
 		return false;
 	}
-	if (!PdmConnectPeiTask(pPdm, pPei, source, PDM_PEI_TASK_START))
+	if (!PdmConnectTask(pPdm, pPei, source, PDM_PEI_TASK_START))
 	{
 		return false;
 	}
-	if (!PdmDisconnectPeiTask(pPdm, pPei, source, PDM_PEI_TASK_START))
+	if (!PdmDisconnectTask(pPdm, pPei, source, PDM_PEI_TASK_START))
 	{
 		return false;
 	}
@@ -269,11 +269,11 @@ bool PeiAudioCApplication(PdmDev_t *pPdm, I2SDev_t *pI2s,
 	{
 		return false;
 	}
-	if (!I2SConnectPeiTask(pI2s, pPei, source, I2S_PEI_TASK_START))
+	if (!I2SConnectTask(pI2s, pPei, source, I2S_PEI_TASK_START))
 	{
 		return false;
 	}
-	if (!I2SDisconnectPeiTask(pI2s, pPei, source, I2S_PEI_TASK_START))
+	if (!I2SDisconnectTask(pI2s, pPei, source, I2S_PEI_TASK_START))
 	{
 		return false;
 	}
@@ -301,11 +301,11 @@ bool PeiSpiCApplication(SPIDev_t *pSpi, PeiDev_t *pPei,
 	{
 		return false;
 	}
-	if (!SPIConnectPeiTask(pSpi, pPei, source, SPI_PEI_TASK_START))
+	if (!SPIConnectTask(pSpi, pPei, source, SPI_PEI_TASK_START))
 	{
 		return false;
 	}
-	if (!SPIDisconnectPeiTask(pSpi, pPei, source, SPI_PEI_TASK_START))
+	if (!SPIDisconnectTask(pSpi, pPei, source, SPI_PEI_TASK_START))
 	{
 		return false;
 	}
@@ -344,20 +344,20 @@ bool PeiTwiCApplication(I2CDev_t *pI2c, PeiDev_t *pPei,
 	{
 		return false;
 	}
-	if (!I2CConnectPeiTask(pI2c, pPei, button, I2C_PEI_TASK_STARTTX))
+	if (!I2CConnectTask(pI2c, pPei, button, I2C_PEI_TASK_STARTTX))
 	{
 		return false;
 	}
-	if (!I2CConnectPeiTask(pI2c, pPei, error, I2C_PEI_TASK_STOP))
+	if (!I2CConnectTask(pI2c, pPei, error, I2C_PEI_TASK_STOP))
 	{
 		return false;
 	}
-	if (!I2CDisconnectPeiTask(pI2c, pPei, button,
+	if (!I2CDisconnectTask(pI2c, pPei, button,
 		I2C_PEI_TASK_STARTTX))
 	{
 		return false;
 	}
-	if (!I2CDisconnectPeiTask(pI2c, pPei, error, I2C_PEI_TASK_STOP))
+	if (!I2CDisconnectTask(pI2c, pPei, error, I2C_PEI_TASK_STOP))
 	{
 		return false;
 	}
@@ -399,22 +399,22 @@ bool PeiUartCApplication(UARTDev_t *pUart, PeiDev_t *pPei,
 	{
 		return false;
 	}
-	if (!UARTConnectPeiTask(pUart, pPei, button,
+	if (!UARTConnectTask(pUart, pPei, button,
 		UART_PEI_TASK_STARTTX))
 	{
 		return false;
 	}
-	if (!UARTConnectPeiTask(pUart, pPei, end,
+	if (!UARTConnectTask(pUart, pPei, end,
 		UART_PEI_TASK_STOPTX))
 	{
 		return false;
 	}
-	if (!UARTDisconnectPeiTask(pUart, pPei, button,
+	if (!UARTDisconnectTask(pUart, pPei, button,
 		UART_PEI_TASK_STARTTX))
 	{
 		return false;
 	}
-	if (!UARTDisconnectPeiTask(pUart, pPei, end,
+	if (!UARTDisconnectTask(pUart, pPei, end,
 		UART_PEI_TASK_STOPTX))
 	{
 		return false;
@@ -448,11 +448,11 @@ bool PeiQdecCApplication(QdecDev_t *pQdec, PeiDev_t *pPei,
 	{
 		return false;
 	}
-	if (!QdecConnectPeiTask(pQdec, pPei, start, QDEC_PEI_TASK_START))
+	if (!QdecConnectTask(pQdec, pPei, start, QDEC_PEI_TASK_START))
 	{
 		return false;
 	}
-	if (!QdecDisconnectPeiTask(pQdec, pPei, start,
+	if (!QdecDisconnectTask(pQdec, pPei, start,
 		QDEC_PEI_TASK_START))
 	{
 		return false;

@@ -26,7 +26,7 @@ def main():
     assert "NRF_QDEC->TASKS_READCLRACC = 1;" in QDEC
     assert "QdecPreparePeiStart(" in QDEC_H
     for name in ("PreparePeiStart", "EnablePeiEvent", "DisablePeiEvent",
-                 "ConnectPeiTask", "DisconnectPeiTask"):
+                 "ConnectTask", "DisconnectTask"):
         assert "bool Qdec" + name + "(" in QDEC_H
         assert 'bool Qdec' + name + "(" in QDEC
     for symbol in ("PeiBindEvent", "PeiGetEventEndpoint", "PeiUnbindEvent",

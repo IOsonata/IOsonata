@@ -201,11 +201,11 @@ bool PeiAudioCppApplication(PdmDev_t *pPdm, I2S &i2s,
 	{
 		return false;
 	}
-	if (!PdmConnectPeiTask(pPdm, pei, source, PDM_PEI_TASK_STOP))
+	if (!PdmConnectTask(pPdm, pei, source, PDM_PEI_TASK_STOP))
 	{
 		return false;
 	}
-	if (!PdmDisconnectPeiTask(pPdm, pei, source, PDM_PEI_TASK_STOP))
+	if (!PdmDisconnectTask(pPdm, pei, source, PDM_PEI_TASK_STOP))
 	{
 		return false;
 	}

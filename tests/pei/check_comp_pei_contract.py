@@ -23,8 +23,8 @@ def main():
                      "static PeiEndpoint_t AnalogCompPeiTaskEndpoint(")
     tasks = section("static PeiEndpoint_t AnalogCompPeiTaskEndpoint(",
                     "static bool AnalogCompPeiReady(")
-    connect = section('bool AnalogCompPeiConnectTask(',
-                      'bool AnalogCompPeiDisconnectTask(')
+    connect = section('bool AnalogCompConnectTask(',
+                      'bool AnalogCompDisconnectTask(')
     for event in ("READY", "DOWN", "UP", "CROSS"):
         assert "&NRF_ACOMP->EVENTS_" + event in events
     for task in ("START", "STOP", "SAMPLE"):
@@ -32,10 +32,10 @@ def main():
     for api in ("PeiBindEvent", "PeiGetEventEndpoint", "PeiUnbindEvent",
                 "PeiConnectTask", "PeiDisconnectTask"):
         assert "#pragma weak " + api in SOURCE
-    for api in ("BindEvent", "UnbindEvent", "ConnectTask",
+    for api in ("EnablePeiEvent", "DisablePeiEvent", "ConnectTask",
                 "DisconnectTask"):
-        assert "bool AnalogCompPei" + api in HEADER
-        assert 'bool AnalogCompPei' + api in SOURCE
+        assert "bool AnalogComp" + api in HEADER
+        assert 'bool AnalogComp' + api in SOURCE
     assert "ANALOG_COMP_PEI_TASK_SAMPLE" in connect
     assert "ANALOG_COMP_MODE_CONTINUOUS" in connect
     assert "if (pCfg->EvtHandler != NULL)" in SOURCE

@@ -153,9 +153,9 @@ bool QdecEnablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, QDEC_PEI_EVENT Event);
 bool QdecDisablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt);
-bool QdecConnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+bool QdecConnectTask(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, QDEC_PEI_TASK Task);
-bool QdecDisconnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+bool QdecDisconnectTask(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, QDEC_PEI_TASK Task);
 
 /**
@@ -268,12 +268,12 @@ public:
 
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, QDEC_PEI_TASK Task)
 	{
-		return QdecConnectPeiTask(&vDev, PeiDev, Evt, Task);
+		return QdecConnectTask(&vDev, PeiDev, Evt, Task);
 	}
 
 	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, QDEC_PEI_TASK Task)
 	{
-		return QdecDisconnectPeiTask(&vDev, PeiDev, Evt, Task);
+		return QdecDisconnectTask(&vDev, PeiDev, Evt, Task);
 	}
 
 	operator QdecDev_t * () { return &vDev; }

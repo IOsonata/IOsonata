@@ -29,8 +29,8 @@ def main():
                    'bool I2CReleasePeiTransfer(')
     release = section('bool I2CReleasePeiTransfer(',
                       'bool I2CEnablePeiEvent(')
-    connect = section('bool I2CConnectPeiTask(',
-                      'bool I2CDisconnectPeiTask(')
+    connect = section('bool I2CConnectTask(',
+                      'bool I2CDisconnectTask(')
 
     for event in ("STOPPED", "ERROR", "SUSPENDED", "RXDREADY",
                   "TXDSENT", "BB"):
@@ -79,7 +79,7 @@ def main():
 
     for name in ("PreparePeiTransfer", "ReleasePeiTransfer",
                  "EnablePeiEvent", "DisablePeiEvent",
-                 "ConnectPeiTask", "DisconnectPeiTask"):
+                 "ConnectTask", "DisconnectTask"):
         assert "bool I2C" + name + "(" in HEADER
         assert "bool I2C" + name + "(" in DRIVER
         assert 'extern "C" bool I2C' + name + "(" not in DRIVER
