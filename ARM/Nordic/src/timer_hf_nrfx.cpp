@@ -716,7 +716,7 @@ static bool nRFxTimerExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 // Bind one free CC to PEI. The free-running counter is never cleared,
 // stopped or routed to counter-control tasks by a compare trigger.
 // Continuous CC rescheduling follows the original Timer ISR model.
-static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
+bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei,
 	PeiEvent_t *pEvent)
 {
@@ -951,16 +951,6 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	pTimer->FindAvailTrigger = nRFxTimerFindAvailTrigger;
 	pTimer->DisableTrigger = nRFxTimerDisableTrigger;
 	pTimer->EnableTrigger = nRFxTimerEnableTrigger;
-#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
-	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
-	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
-	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
-	pTimer->EnablePeiTrigger = nRFxTimerEnablePeiTrigger;
-#else
-	pTimer->EnablePeiTrigger = nullptr;
-#endif
-	pTimer->EnablePeiEvent = nullptr;
-	pTimer->DisablePeiEvent = nullptr;
 	pTimer->GetTaskEndpoint = nRFxTimerTaskEndpoint;
 	pTimer->ExecuteTask = nRFxTimerExecuteTask;
 	pTimer->DisableExtTrigger = nRFxTimerDisableExtTrigger;
