@@ -10,6 +10,29 @@ LINKER = FAMILY / "ldscript" / "gcc_esp32c6.ld"
 
 
 class Esp32C6ProjectTests(unittest.TestCase):
+    def test_complete_isa_and_abi_in_every_configuration(self):
+        prefix = "ilg.gnumcueclipse.managedbuild.cross.riscv.option."
+        expected = {
+            "target.isa.base": prefix + "target.arch.rv32i",
+            "target.isa.multiply": "true",
+            "target.isa.compressed": "true",
+            "target.isa.atomic": "false",
+            "target.isa.extensions": "zicsr",
+            "target.abi.integer": prefix + "abi.integer.ilp32",
+        }
+        for name in ("lib", "exemples/Blinky", "exemples/CryptoTest"):
+            project = FAMILY / "ESP32C6" / name / "ioc" / ".cproject"
+            configs = ET.parse(project).findall(".//cconfiguration")
+            self.assertEqual(len(configs), 2)
+            for config in configs:
+                with self.subTest(project=str(project), config=config.get("id")):
+                    toolchain = config.find(".//toolChain")
+                    options = toolchain.findall("option")
+                    for suffix, value in expected.items():
+                        found = [o.get("value") for o in options
+                                 if o.get("superClass") == prefix + suffix]
+                        self.assertEqual(found, [value], suffix)
+
     def test_blinky_and_crypto_target_settings(self):
         self.assertTrue(LINKER.is_file())
         for name in ("Blinky", "CryptoTest"):
