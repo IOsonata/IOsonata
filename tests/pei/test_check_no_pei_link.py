@@ -6,6 +6,7 @@ import io
 import pathlib
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 from check_no_pei_link import check
 
@@ -23,6 +24,28 @@ class NoPeiLinkTests(unittest.TestCase):
             path.write_text(data, encoding="utf-8")
             with contextlib.redirect_stdout(io.StringIO()):
                 return check(path)
+
+    def test_timer_demo_library_configuration(self):
+        project = pathlib.Path(__file__).resolve().parents[2] / (
+            "ARM/Nordic/nRF52/nRF52832/exemples/TimerDemo/ioc/.cproject")
+        root = ET.parse(project).getroot()
+        configurations = {}
+        for settings in root.findall(".//cconfiguration"):
+            build = settings.find("./storageModule[@moduleId='cdtBuildSystem']/configuration")
+            if build is None:
+                continue
+            paths = []
+            for option in build.findall(".//option"):
+                if "linker.paths" in option.get("superClass", ""):
+                    paths.extend(item.get("value", "") for item in
+                                 option.findall("listOptionValue"))
+            configurations[build.get("name")] = paths
+        for config in ("Debug", "Release"):
+            paths = configurations[config]
+            self.assertEqual(len(paths), 2)
+            self.assertTrue(all("/" + config in path for path in paths))
+            self.assertTrue(all(("/Debug" not in path) if config == "Release"
+                                else ("/Release" not in path) for path in paths))
 
     def test_clean_timer_map(self):
         self.assertEqual(self.check_map(
