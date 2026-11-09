@@ -213,7 +213,9 @@ static bool nRFxHfxoRunning(void)
 // transition flag, but interrupts remain enabled during the start wait.
 static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 {
+	uint32_t running;
 	int res;
+	int i;
 
 	res = nRFxMpslHfxo(true);
 	if (res >= 0)
@@ -229,9 +231,6 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 	if (nRFxClockSdEnabled())
 	{
-		uint32_t running;
-		int i;
-
 		running = 0U;
 		if (sd_clock_hfclk_request() != NRF_SUCCESS)
 		{
@@ -268,7 +267,7 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 	NRF_CLOCK->NRFX_HFXO_STARTED = 0U;
 	NRF_CLOCK->NRFX_HFXO_START = 1U;
 
-	for (int i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
+	for (i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
 	{
 		if (nRFxHfxoRunning())
 		{
@@ -286,21 +285,20 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 }
 
 // Release only through the backend that accepted the first request.
-static void nRFxHfxoStop(nRFxHfxoOwner_t Owner)
+static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 {
 	switch (Owner)
 	{
 		case NRFX_HFXO_OWNER_MPSL:
-			(void)nRFxMpslHfxo(false);
-			break;
+			return nRFxMpslHfxo(false) == 0;
 		case NRFX_HFXO_OWNER_SOFTDEVICE:
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 			if (nRFxClockSdEnabled())
 			{
-				(void)sd_clock_hfclk_release();
+				return sd_clock_hfclk_release() == NRF_SUCCESS;
 			}
 #endif
-			break;
+			return false;
 		case NRFX_HFXO_OWNER_DIRECT:
 			// Once a BLE stack owns CLOCK, direct register writes are unsafe.
 			if (!nRFxMpslActive() && !nRFxClockSdEnabled())
@@ -310,9 +308,9 @@ static void nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 				NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
 #endif
 			}
-			break;
+			return true;
 		default:
-			break;
+			return true;
 	}
 }
 
@@ -360,8 +358,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 
 	if (ClkSrc == OSC_TYPE_RC)
 	{
-		nRFxHfxoStop(owner);
-		success = true;
+		success = nRFxHfxoStop(owner);
 	}
 	else
 	{
@@ -370,7 +367,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	}
 
 	state = DisableInterrupt();
-	if (ClkSrc == OSC_TYPE_RC)
+	if (ClkSrc == OSC_TYPE_RC && success)
 	{
 		s_nRFxHfxoReqCnt = 0U;
 		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
