@@ -8,6 +8,20 @@ ROOT = Path(__file__).resolve().parents[2]
 TEST = Path(__file__).resolve().parent
 SOURCE = ROOT / "RISCV/Espressif/src/crypto_rng_esp32c3.cpp"
 
+# Static compatibility check: ESP32-C3 lacks CSR cycle/mcycle.
+# The production RNG must use the existing CPU counter selector, not
+# a standalone rdcycle instruction that traps at the first wait.
+driver_src = SOURCE.read_text()
+delay_src = (ROOT / "RISCV/include/idelay.h").read_text()
+system_src = (ROOT / "RISCV/Espressif/src/system_esp32_system.c").read_text()
+assert '#include "idelay.h"' in driver_src
+assert "return IOsonataRiscvCycle32();" in driver_src
+assert not any(unsupported in driver_src for unsupported in
+               ('csrr %0, 0xC00', 'csrr %0, 0xB00', 'rdcycle'))
+assert "IOSONATA_RISCV_CYCLE_CSR        0x7E2U" in delay_src
+assert 'csrw 0x7E2' in system_src and 'csrw 0x7E1' in system_src
+
+
 with tempfile.TemporaryDirectory(prefix="esp32c3-rng-") as name:
     for optimization in ("-O0", "-O2"):
         exe = Path(name) / ("test_" + optimization[1:])

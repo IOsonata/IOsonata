@@ -23,6 +23,10 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include "coredev/system_core_clock.h"
 #include "crypto/icrypto.h"
 
+#ifndef ESP32_RNG_TEST
+#include "idelay.h"
+#endif
+
 #if !defined(ESP32C3)
 #error ESP32-C3 RNG implementation requires ESP32C3
 #endif
@@ -105,9 +109,10 @@ static void EspRngAnalogWrite(uint8_t Msb, uint8_t Lsb, uint8_t Value)
 }
 static inline uint32_t EspRngCycleCount(void)
 {
-	uint32_t count;
-	__asm volatile ("csrr %0, 0xC00" : "=r"(count));
-	return count;
+	// ESP32-C3 has no standard cycle CSR (0xC00). That instruction
+	// traps. Use the mpccr counter (0x7E2) already initialized by
+	// Esp32EnablePerfCounter() and selected by the common idelay.h.
+	return IOsonataRiscvCycle32();
 }
 #else
 extern uint8_t EspRngTestAnalogRead(uint8_t Msb, uint8_t Lsb);

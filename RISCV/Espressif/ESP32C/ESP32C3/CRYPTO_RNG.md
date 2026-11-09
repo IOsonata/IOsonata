@@ -130,3 +130,24 @@ python3 tests/crypto/run_esp_models.py
 
 Then clean-rebuild `IOsonata_ESP32C3` and `CryptoTest` in IOcomposer.
 These tests have not yet established on-device RNG success.
+
+
+## ESP32-C3 cycle CSR correction
+
+The on-target `CryptoTest` trace reached `RNG 7` (first analog settle wait)
+and stopped. The initial RNG code read standard RISC-V CSR `0xC00`
+(`cycle`), which is **not implemented on ESP32-C3**. An attempt to execute
+this instruction raises an illegal-instruction exception, so bounded loops
+cannot prevent the failure.
+
+The RNG now uses `IOsonataRiscvCycle32()` from `RISCV/include/idelay.h`,
+which selects Espressif's machine performance-counter CSR `0x7E2`
+(`mpccr`). IOsonata's `Esp32SystemInit()` already configures `mpcer`
+and enables `mpcmr` to make that counter advance. This is the same counter
+used by IOsonata's other RISC-V timing utilities; no extra driver or clock
+setup is required.
+
+The host test script checks the counter selection to prevent reintroducing
+`rdcycle` into the ESP32-C3 RNG code. The counter change still requires
+on-target validation; the next output should pass `RNG 7` and reach
+`RNG 8`. The complete CryptoTest result remains pending.
