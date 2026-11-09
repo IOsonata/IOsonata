@@ -82,7 +82,8 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     subprocess.run(["g++", "-std=c++11", *COMMON,
                     "-c", str(driver), "-o", str(obj)], check=True)
     cpp = temp / "cpp"
-    subprocess.run(["g++", "-std=c++11", *COMMON,
+    cpp_flags = ["-DTEST_SKIP_EGU_MMIO"] if skip_egu_mmio else []
+    subprocess.run(["g++", "-std=c++11", *COMMON, *cpp_flags,
                     str(TEST / "ppi_cpp_test.cpp"), str(obj), str(matrix_obj),
                     "-o", str(cpp)], check=True)
     subprocess.run([str(cpp)], check=True)
