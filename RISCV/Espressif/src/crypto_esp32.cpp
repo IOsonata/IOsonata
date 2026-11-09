@@ -2,6 +2,11 @@
 @file	crypto_esp32.cpp
 @brief	ESP32-C3/C6 AES overrides of the generic crypto implementation.
 
+@author	IOsonata contributors
+@date	Nov. 8, 2026
+
+@license
+
 MIT License
 
 Copyright (c) 2026, I-SYST, all rights reserved

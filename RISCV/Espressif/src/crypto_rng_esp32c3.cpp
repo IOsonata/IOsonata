@@ -1,18 +1,37 @@
 /**-------------------------------------------------------------------------
 @file	crypto_rng_esp32c3.cpp
 
-@brief	ESP32-C3 secure RNG via the on-chip SAR ADC entropy source
+@brief	ESP32-C3 SAR ADC hardware entropy source for Crypto::Random().
 
-No ESP-IDF HAL or driver. The register sequence matches Espressif's
-bootloader_random_esp32c3.c. The two analog-register operations use the
-chip's ROM routines at their documented ESP32-C3 addresses.
+The SAR ADC is enabled only during RNG draws and is restored afterward.
 
-The SAR ADC is exclusively owned during each operation and fully restored
-afterwards. Until a shared ADC/RF ownership manager exists, callers must
-not concurrently use the SAR ADC, Wi-Fi, or Bluetooth with this backend.
+@author	IOsonata contributors
+@date	Nov. 8, 2026
+
+@license
 
 MIT License
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 #include <stddef.h>
 #include <stdint.h>
