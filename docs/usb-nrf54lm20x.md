@@ -115,12 +115,19 @@ interoperability.
 
 ### USB CDC to BLE peripheral bridge
 
-`exemples/UsbBleDemo/ioc` links the shared
-[usb_ble.cpp](../exemples/bluetooth/usb_ble.cpp). Use this example for a simple
-USB CDC/BLE peripheral bridge. Match the library's Debug/Release or SDC
-configuration and program the required S145 image for non-SDC builds, as
-outlined below. See the [Bluetooth guide](bluetooth-user-guide.md) for security
-and event processing.
+`ARM/Nordic/nRF54/nRF54LM20x/exemples/UsbBleDemo/ioc` links the shared
+[usb_ble.cpp](../exemples/bluetooth/usb_ble.cpp). It combines IOsonata's
+bare-metal USB CDC device implementation with Nordic's Bluetooth stack in the
+same application. The nRF54LM20 project provides Debug, Release, Debug_SDC and
+Release_SDC configurations. The S145 variants use the SoftDevice supplied by
+`sdk-nrf-bm`; the SDC variants use the controller supplied by `sdk-nrfxlib`.
+Use the matching IOsonata library configuration. For S145, program
+`s145_nrf54lm20_10.0.1_softdevice.hex` before the application.
+
+USB CDC runs through IOsonata's USB device API, not a USB stack provided by
+`sdk-nrf-bm`. The application uses `UsbInit`, `UsbdCdc::Init`, `BtAppInit`
+and `UsbEnable` without Zephyr or an RTOS. See the
+[Bluetooth guide](bluetooth-user-guide.md) for security and event processing.
 
 ### USB CDC to BLE central bridge
 
@@ -140,9 +147,16 @@ All four use `gcc_nrf54lm20a_xxaa_s145.ld`; with the SoftDevice Controller its
 SoftDevice partition stays unused. The TaktOS project also links `TaktOS_M33`.
 `src/board.h` maps the four DK LEDs; LED4 shows the Bluetooth link.
 
-These projects compile and link in Debug and Debug_SDC; they have not been run
-on hardware. The USB port starts HFCLK24M directly through CLOCK and runs USB at
-interrupt priority 6; check enumeration with the radio stack enabled first.
+The USB/BLE project configurations are integrated with IOsonata's existing
+nRF54LM20 USBHS device port and Nordic's bare-metal Bluetooth components.
+The nRF54LM20 USBHS port has separately recorded 2,000-second bare-metal and
+TaktOS composite hardware runs, as described under
+[Recorded hardware validation](#recorded-hardware-validation). Those USB-only
+runs do not, by themselves, establish the results of a simultaneous USB/BLE
+bridge test. This document does not include a current per-configuration
+USB/BLE bench log; consult the project's latest validation record before
+stating measured bridge results. The USB port starts HFCLK24M directly through
+CLOCK and uses interrupt priority 6.
 
 ## Enumeration trace
 
