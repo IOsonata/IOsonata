@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compile and exercise the real nRF52 PEI source against mock PPI registers."""
 import pathlib
+import platform
 import subprocess
 import sys
 import tempfile
@@ -53,6 +54,9 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     subprocess.run(["g++", "-std=c++11", *COMMON,
                     "-Wno-overloaded-virtual", "-fsyntax-only",
                     str(TEST / "pei_hal_cpp_api.cpp")], check=True)
+    # Native macOS ARM64 cannot map the nRF52 EGU MMIO range below 4 GiB.
+    skip_egu_mmio = (platform.system() == "Darwin" and
+                     platform.machine() == "arm64")
     for name, flags in [
         ("bare", []),
         ("sdc", ["-DNRFXLIB_SDC"]),
@@ -60,6 +64,8 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
         ("s140", ["-DSOFTDEVICE_PRESENT", "-DS140", "-DNRF52840_XXAA"]),
         ("nrf52805", ["-DTEST_PPI_CHANNEL_COUNT=10", "-DTEST_EGU_COUNT=2"]),
     ]:
+        if skip_egu_mmio:
+            flags = [*flags, "-DTEST_SKIP_EGU_MMIO"]
         output = temp / name
         driver_obj = temp / (name + "_pei.o")
         test_obj = temp / (name + "_test.o")
