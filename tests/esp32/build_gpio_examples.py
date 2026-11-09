@@ -69,8 +69,9 @@ for chip in ('ESP32C3', 'ESP32C6'):
             symbols = subprocess.check_output([tool + 'nm', '-C', str(elf)], text=True)
             assert ('LedWs2812::' if cpp else 'PulseTrain') in symbols
             assert ('SPIInit' in symbols) == cpp
-            for unwanted in ('Pwm', 'PWM', 'LedPwm', 'UARTInit'):
+            for unwanted in ('Pwm', 'PWM', 'LedPwm'):
                 assert unwanted not in symbols, unwanted
+            assert ('UARTInit' in symbols) == cpp
             run(tool + 'objcopy', '-O', 'binary', elf, elf.with_suffix('.bin'))
             assert elf.with_suffix('.bin').read_bytes()[:8] == bytes.fromhex('1d04dbae1d04dbae')
             print(chip, config, name, 'PASS', flush=True)

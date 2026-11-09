@@ -50,6 +50,38 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/spi.h"
 #include "miscdev/led_ws2812.h"
 
+#if defined(LED_DEMO_TRACE) && LED_DEMO_TRACE
+#include <stdio.h>
+#include "coredev/uart.h"
+#include "stddev.h"
+
+static const IOPinCfg_t s_UartPins[] = UART_PINS;
+static uint8_t s_UartTx[CFIFO_MEMSIZE(256)];
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = UART_BAUDRATE,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 6,
+	.EvtCallback = NULL,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,
+	.pRxMem = NULL,
+	.TxMemSize = sizeof(s_UartTx),
+	.pTxMem = s_UartTx,
+	.bDMAMode = false
+};
+static UART s_Uart;
+#define LED_TRACE(Message) printf("LedDemo: " Message "\r\n")
+#else
+#define LED_TRACE(Message) ((void)0)
+#endif
+
 static const IOPinCfg_t s_SpiPins[] = LED_SPI_PINS;
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = LED_SPI_DEVNO,
@@ -82,20 +114,49 @@ LedWs2812 g_Led;
 
 int main()
 {
-	if (!g_Spi.Init(s_SpiCfg) || !g_Led.Init(s_LedCfg, g_Spi))
+#if defined(LED_DEMO_TRACE) && LED_DEMO_TRACE
+	if (!s_Uart.Init(s_UartCfg))
 	{
 		return 1;
 	}
+	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+#endif
+	LED_TRACE("start");
+	if (!g_Spi.Init(s_SpiCfg))
+	{
+		LED_TRACE("SPI init failed");
+		while (1)
+		{
+		}
+	}
+	LED_TRACE("SPI initialized");
+	if (!g_Led.Init(s_LedCfg, g_Spi))
+	{
+		LED_TRACE("LED init failed");
+		while (1)
+		{
+		}
+	}
+	LED_TRACE("initial off");
 	g_Led.Off();
+	LED_TRACE("initial off returned");
 	while (1)
 	{
+		LED_TRACE("red");
 		g_Led.Level(WS2812_RED);
+		LED_TRACE("transfer returned");
 		msDelay(500);
+		LED_TRACE("green");
 		g_Led.Level(WS2812_GREEN);
+		LED_TRACE("transfer returned");
 		msDelay(500);
+		LED_TRACE("blue");
 		g_Led.Level(WS2812_BLUE);
+		LED_TRACE("transfer returned");
 		msDelay(500);
+		LED_TRACE("off");
 		g_Led.Off();
+		LED_TRACE("transfer returned");
 		msDelay(500);
 	}
 }

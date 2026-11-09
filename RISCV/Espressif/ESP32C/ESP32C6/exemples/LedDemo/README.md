@@ -18,3 +18,9 @@ binary at offset 0. No UART console or semihosting is required.
 The generic demo selects SPI with `LED_DEMO_SPI_ENABLE`. Other boards
 retain their GPIO/PWM demonstration unless this option is enabled.
 Hardware validation is pending.
+
+UART progress output is enabled at 1,000,000 baud, 8N1, without flow control.
+Open the board UART console before resetting. It prints initialization and each
+color transition. `transfer returned` means the call returned; it does not prove
+that the LED accepted the waveform. Set `LED_DEMO_TRACE` to 0 in `board.h` to
+disable progress output after testing.
