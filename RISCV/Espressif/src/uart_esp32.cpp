@@ -45,7 +45,7 @@ Interrupt routing: matrix source IDs come from esp32xx_uart.h
 (ESP32_UART_INTR_SOURCE_UART0/1).  Esp32EnableSourceIrq() routes each
 peripheral source to a CPU INT line (C3/C6 INTC) or a CLIC slot (C5).
 This driver uses CPU INT 2 for UART0 and CPU INT 3 for UART1, avoiding
-the ESP32-C3 reserved CPU INT 1 and the permanently disabled CPU INT 6.
+the ESP32-C3 reserved CPU INT 1 and Timer Group inputs 5 and 6.
 
 @author	Hoang Nguyen Hoan
 @date	Mar. 2026
@@ -132,7 +132,6 @@ static ESP32_UARTDEV s_Esp32UartDev[] = {
 };
 static const int s_NbUartDev = sizeof(s_Esp32UartDev) / sizeof(s_Esp32UartDev[0]);
 
-extern "C" {
 volatile uint32_t g_Esp32C3UartDbgUart0Map;
 volatile uint32_t g_Esp32C3UartDbgUart1Map;
 volatile uint32_t g_Esp32C3UartDbgCpuEnable;
@@ -150,27 +149,26 @@ volatile uint32_t g_Esp32C3UartDbgUart1Raw;
 volatile uint32_t g_Esp32C3UartDbgUart1Ena;
 volatile uint32_t g_Esp32C3UartDbgUart1St;
 
-void Esp32UartDebugSnapshot(void)
+static void Esp32UartDebugSnapshot(void)
 {
 #if defined(ESP32C3) || defined(ESP32C6)
-    g_Esp32C3UartDbgUart0Map   = ESP32_INTMTX_SOURCE_MAP_REG(ESP32_UART_INTR_SOURCE_UART0);
-    g_Esp32C3UartDbgUart1Map   = ESP32_INTMTX_SOURCE_MAP_REG(ESP32_UART_INTR_SOURCE_UART1);
-    g_Esp32C3UartDbgCpuEnable  = ESP32_CPU_INT_ENABLE_REG;
-    g_Esp32C3UartDbgCpuType    = ESP32_CPU_INT_TYPE_REG;
-    g_Esp32C3UartDbgCpuEip     = ESP32_CPU_INT_EIP_STATUS_REG;
-    g_Esp32C3UartDbgCpuPri2    = ESP32_CPU_INT_PRI_REG(UART0_CPU_INT_LEVEL);
-    g_Esp32C3UartDbgCpuPri3    = ESP32_CPU_INT_PRI_REG(UART1_CPU_INT_LEVEL);
-    g_Esp32C3UartDbgCpuThresh  = ESP32_CPU_INT_THRESH_REG;
-    g_Esp32C3UartDbgSrcStatus0 = ESP32_INTMTX_INTR_STATUS_0_REG;
-    g_Esp32C3UartDbgSrcStatus1 = ESP32_INTMTX_INTR_STATUS_1_REG;
-    g_Esp32C3UartDbgUart0Raw   = ESP32_UART_INT_RAW_REG(ESP32_UART0_BASE);
-    g_Esp32C3UartDbgUart0Ena   = ESP32_UART_INT_ENA_REG(ESP32_UART0_BASE);
-    g_Esp32C3UartDbgUart0St    = ESP32_UART_INT_ST_REG(ESP32_UART0_BASE);
-    g_Esp32C3UartDbgUart1Raw   = ESP32_UART_INT_RAW_REG(ESP32_UART1_BASE);
-    g_Esp32C3UartDbgUart1Ena   = ESP32_UART_INT_ENA_REG(ESP32_UART1_BASE);
-    g_Esp32C3UartDbgUart1St    = ESP32_UART_INT_ST_REG(ESP32_UART1_BASE);
+	g_Esp32C3UartDbgUart0Map   = ESP32_INTMTX_SOURCE_MAP_REG(ESP32_UART_INTR_SOURCE_UART0);
+	g_Esp32C3UartDbgUart1Map   = ESP32_INTMTX_SOURCE_MAP_REG(ESP32_UART_INTR_SOURCE_UART1);
+	g_Esp32C3UartDbgCpuEnable  = ESP32_CPU_INT_ENABLE_REG;
+	g_Esp32C3UartDbgCpuType    = ESP32_CPU_INT_TYPE_REG;
+	g_Esp32C3UartDbgCpuEip     = ESP32_CPU_INT_EIP_STATUS_REG;
+	g_Esp32C3UartDbgCpuPri2    = ESP32_CPU_INT_PRI_REG(UART0_CPU_INT_LEVEL);
+	g_Esp32C3UartDbgCpuPri3    = ESP32_CPU_INT_PRI_REG(UART1_CPU_INT_LEVEL);
+	g_Esp32C3UartDbgCpuThresh  = ESP32_CPU_INT_THRESH_REG;
+	g_Esp32C3UartDbgSrcStatus0 = ESP32_INTMTX_INTR_STATUS_0_REG;
+	g_Esp32C3UartDbgSrcStatus1 = ESP32_INTMTX_INTR_STATUS_1_REG;
+	g_Esp32C3UartDbgUart0Raw   = ESP32_UART_INT_RAW_REG(ESP32_UART0_BASE);
+	g_Esp32C3UartDbgUart0Ena   = ESP32_UART_INT_ENA_REG(ESP32_UART0_BASE);
+	g_Esp32C3UartDbgUart0St    = ESP32_UART_INT_ST_REG(ESP32_UART0_BASE);
+	g_Esp32C3UartDbgUart1Raw   = ESP32_UART_INT_RAW_REG(ESP32_UART1_BASE);
+	g_Esp32C3UartDbgUart1Ena   = ESP32_UART_INT_ENA_REG(ESP32_UART1_BASE);
+	g_Esp32C3UartDbgUart1St    = ESP32_UART_INT_ST_REG(ESP32_UART1_BASE);
 #endif
-}
 }
 
 UARTDev_t const *UARTGetInstance(int DevNo)
@@ -251,59 +249,96 @@ static void Esp32UartIntMtxEnable(uint32_t source, uint32_t cpu_int_id, Esp32Irq
 /*---------------------------------------------------------------------------
  * IRQ handler - invoked from the ESP32-C3 CPU interrupt input
  *---------------------------------------------------------------------------*/
+// Transfer queued bytes into free hardware TX FIFO slots.
+// Called from the ISR or with interrupts disabled.
+static void Esp32UartTxFill(ESP32_UARTDEV *pDev)
+{
+	int space;
+	int data;
+
+	space = (int)Esp32UartTxFree(pDev->Base);
+	while (space > 0)
+	{
+		data = CFifoGetByte(pDev->pUartDev->hTxFifo);
+		if (data < 0)
+		{
+			break;
+		}
+		ESP32_UART_FIFO_REG(pDev->Base) = (uint32_t)(uint8_t)data;
+		space--;
+	}
+}
+
 static void Esp32UartIRQHandler(ESP32_UARTDEV *pDev)
 {
-    uint32_t base = pDev->Base;
-    UARTDev_t *udev = pDev->pUartDev;
-    uint32_t st = ESP32_UART_INT_ST_REG(base);
+	UARTDev_t *udev;
+	uint32_t base;
+	uint32_t st;
+	int available;
+	int data;
 
-    // Clear handled flags.  RXFIFO_FULL / RXFIFO_TOUT auto-clear by reading
-    // the FIFO; the rest are edge-style and need an explicit ICR write.
-    if (st & (ESP32_UART_INT_FRM_ERR | ESP32_UART_INT_PARITY_ERR | ESP32_UART_INT_RXFIFO_OVF | ESP32_UART_INT_GLITCH_DET))
-    {
-        ESP32_UART_INT_CLR_REG(base) = ESP32_UART_INT_FRM_ERR | ESP32_UART_INT_PARITY_ERR
-                           | ESP32_UART_INT_RXFIFO_OVF | ESP32_UART_INT_GLITCH_DET;
-    }
+	base = pDev->Base;
+	udev = pDev->pUartDev;
+	st = ESP32_UART_INT_ST_REG(base);
 
-    if (st & (ESP32_UART_INT_RXFIFO_FULL | ESP32_UART_INT_RXFIFO_TOUT))
-    {
-        while (Esp32UartRxAvail(base) > 0U)
-        {
-            uint8_t c = (uint8_t)ESP32_UART_FIFO_REG(base);
-            uint8_t *p = CFifoPut(udev->hRxFifo);
-            if (p != nullptr) *p = c;
-            else udev->RxDropCnt++;
-        }
-        ESP32_UART_INT_CLR_REG(base) = ESP32_UART_INT_RXFIFO_FULL | ESP32_UART_INT_RXFIFO_TOUT;
-        udev->bRxReady = true;
+	if (st & ESP32_UART_INT_RXFIFO_OVF)
+	{
+		udev->RxOvrErrCnt++;
+	}
+	if (st & ESP32_UART_INT_FRM_ERR)
+	{
+		udev->FramErrCnt++;
+	}
+	if (st & ESP32_UART_INT_PARITY_ERR)
+	{
+		udev->ParErrCnt++;
+	}
+	if (st & (ESP32_UART_INT_FRM_ERR | ESP32_UART_INT_PARITY_ERR |
+		ESP32_UART_INT_RXFIFO_OVF | ESP32_UART_INT_GLITCH_DET))
+	{
+		ESP32_UART_INT_CLR_REG(base) = ESP32_UART_INT_FRM_ERR |
+			ESP32_UART_INT_PARITY_ERR | ESP32_UART_INT_RXFIFO_OVF |
+			ESP32_UART_INT_GLITCH_DET;
+	}
 
-        if (udev->EvtCallback)
-        {
-            udev->EvtCallback(udev, UART_EVT_RXDATA, nullptr, CFifoUsed(udev->hRxFifo));
-        }
-    }
+	if (st & (ESP32_UART_INT_RXFIFO_FULL | ESP32_UART_INT_RXFIFO_TOUT))
+	{
+		// Consume one bounded hardware FIFO batch. CFifoPutByte
+		// writes the byte before publishing the FIFO put index.
+		available = (int)Esp32UartRxAvail(base);
+		while (available > 0)
+		{
+			data = (uint8_t)ESP32_UART_FIFO_REG(base);
+			if (!CFifoPutByte(udev->hRxFifo, (uint8_t)data))
+			{
+				udev->RxDropCnt++;
+			}
+			available--;
+		}
+		ESP32_UART_INT_CLR_REG(base) = ESP32_UART_INT_RXFIFO_FULL |
+			ESP32_UART_INT_RXFIFO_TOUT;
+		udev->bRxReady = CFifoUsed(udev->hRxFifo) > 0;
+		if (udev->EvtCallback != nullptr)
+		{
+			udev->EvtCallback(udev, UART_EVT_RXDATA, nullptr,
+				CFifoUsed(udev->hRxFifo));
+		}
+	}
 
-    if (st & ESP32_UART_INT_TXFIFO_EMPTY)
-    {
-        // Drain SW FIFO into HW FIFO until either runs out.
-        while (Esp32UartTxFree(base) > 0U)
-        {
-            uint8_t *p = CFifoGet(udev->hTxFifo);
-            if (p == nullptr) break;
-            ESP32_UART_FIFO_REG(base) = *p;
-        }
-        if (CFifoUsed(udev->hTxFifo) == 0)
-        {
-            // No more bytes queued: mask TXFIFO_EMPTY so we don't storm.
-            ESP32_UART_INT_ENA_REG(base) &= ~ESP32_UART_INT_TXFIFO_EMPTY;
-            udev->bTxReady = true;
-            if (udev->EvtCallback)
-            {
-                udev->EvtCallback(udev, UART_EVT_TXREADY, nullptr, 0);
-            }
-        }
-        ESP32_UART_INT_CLR_REG(base) = ESP32_UART_INT_TXFIFO_EMPTY;
-    }
+	if (st & ESP32_UART_INT_TXFIFO_EMPTY)
+	{
+		Esp32UartTxFill(pDev);
+		if (CFifoUsed(udev->hTxFifo) == 0)
+		{
+			ESP32_UART_INT_ENA_REG(base) &= ~ESP32_UART_INT_TXFIFO_EMPTY;
+			udev->bTxReady = true;
+			if (udev->EvtCallback != nullptr)
+			{
+				udev->EvtCallback(udev, UART_EVT_TXREADY, nullptr, 0);
+			}
+		}
+		ESP32_UART_INT_CLR_REG(base) = ESP32_UART_INT_TXFIFO_EMPTY;
+	}
 }
 
 /*---------------------------------------------------------------------------
@@ -321,15 +356,15 @@ static void Esp32UartIRQHandler(ESP32_UARTDEV *pDev)
 extern "C" __attribute__((used))
 void UART0_IRQHandler(void)
 {
-    g_Esp32C3Uart0IrqCount++;
-    Esp32UartIRQHandler(&s_Esp32UartDev[0]);
+	g_Esp32C3Uart0IrqCount++;
+	Esp32UartIRQHandler(&s_Esp32UartDev[0]);
 }
 
 extern "C" __attribute__((used))
 void UART1_IRQHandler(void)
 {
-    g_Esp32C3Uart1IrqCount++;
-    Esp32UartIRQHandler(&s_Esp32UartDev[1]);
+	g_Esp32C3Uart1IrqCount++;
+	Esp32UartIRQHandler(&s_Esp32UartDev[1]);
 }
 
 /*---------------------------------------------------------------------------
@@ -361,104 +396,166 @@ static void Esp32UartStopTx(DevIntrf_t * const pDev) { (void)pDev; }
 
 static int Esp32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-    ESP32_UARTDEV *dev = (ESP32_UARTDEV *)pDev->pDevData;
-    UARTDev_t *udev = dev->pUartDev;
-    int cnt = 0;
+	ESP32_UARTDEV *dev;
+	UARTDev_t *udev;
+	hCFifo_t fifo;
+	uint8_t *p;
+	uintptr_t state;
+	int cnt;
+	int len;
 
-    if (pDev->bIntEn)
-    {
-        // Drain SW CFifo (filled from HW FIFO by ISR)
-        uintptr_t state = DisableInterrupt();
-        while (BuffLen > 0)
-        {
-            int l = BuffLen;
-            uint8_t *p = CFifoGetMultiple(udev->hRxFifo, &l);
-            if (p == nullptr) break;
-            memcpy(pBuff, p, l);
-            pBuff += l;
-            BuffLen -= l;
-            cnt += l;
-        }
-        EnableInterrupt(state);
-    }
-    else
-    {
-        // Polled: drain HW FIFO directly
-        while (BuffLen > 0 && Esp32UartRxAvail(dev->Base) > 0U)
-        {
-            *pBuff++ = (uint8_t)ESP32_UART_FIFO_REG(dev->Base);
-            BuffLen--;
-            cnt++;
-        }
-    }
+	if (pBuff == nullptr || BuffLen <= 0)
+	{
+		return 0;
+	}
 
-    return cnt;
+	dev = (ESP32_UARTDEV *)pDev->pDevData;
+	udev = dev->pUartDev;
+	fifo = udev->hRxFifo;
+	cnt = 0;
+
+	if (pDev->bIntEn)
+	{
+		if (CFifoIsBlocking(fifo))
+		{
+			// The ISR cannot overwrite an unread blocking FIFO block.
+			// Keep RX interrupts enabled during the buffer copy.
+			while (cnt < BuffLen)
+			{
+				len = BuffLen - cnt;
+				p = CFifoPeekMultiple(fifo, &len);
+				if (p == nullptr)
+				{
+					break;
+				}
+				memcpy(pBuff + cnt, p, len);
+				CFifoRelease(fifo, len);
+				cnt += len;
+			}
+		}
+		else
+		{
+			// A non-blocking producer can discard unread blocks.
+			// Protect the copy until the blocks have been consumed.
+			state = DisableInterrupt();
+			while (cnt < BuffLen)
+			{
+				len = BuffLen - cnt;
+				p = CFifoGetMultiple(fifo, &len);
+				if (p == nullptr)
+				{
+					break;
+				}
+				memcpy(pBuff + cnt, p, len);
+				cnt += len;
+			}
+			EnableInterrupt(state);
+		}
+		udev->bRxReady = CFifoUsed(fifo) > 0;
+	}
+	else
+	{
+		while (cnt < BuffLen && Esp32UartRxAvail(dev->Base) > 0U)
+		{
+			pBuff[cnt] = (uint8_t)ESP32_UART_FIFO_REG(dev->Base);
+			cnt++;
+		}
+	}
+	return cnt;
 }
 
 static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
 {
-    ESP32_UARTDEV *dev = (ESP32_UARTDEV *)pDev->pDevData;
-    UARTDev_t *udev = dev->pUartDev;
-    int cnt = 0;
+	ESP32_UARTDEV *dev;
+	UARTDev_t *udev;
+	hCFifo_t fifo;
+	uintptr_t state;
+	uint8_t *p;
+	int cnt;
+	int len;
+	int space;
+	bool pending;
 
-    if (pDev->bIntEn)
-    {
-        int rtry = pDev->MaxRetry;
-        while (DataLen > 0 && rtry-- > 0)
-        {
-            uintptr_t state = DisableInterrupt();
+	if (pData == nullptr || DataLen <= 0)
+	{
+		return 0;
+	}
 
-            while (DataLen > 0)
-            {
-                int l = DataLen;
-                uint8_t *p = CFifoPutMultiple(udev->hTxFifo, &l);
-                if (p == nullptr) break;
-                memcpy(p, pData, l);
-                pData += l;
-                DataLen -= l;
-                cnt += l;
-            }
+	dev = (ESP32_UARTDEV *)pDev->pDevData;
+	udev = dev->pUartDev;
+	cnt = 0;
 
-            // Kick the ISR pump if idle.  We arm TXFIFO_EMPTY and let the
-            // ISR drain SW -> HW.  We seed at least one byte directly so
-            // TXFIFO_EMPTY edge fires reliably even if all we queued fits
-            // in the HW FIFO right now.
-            if (udev->bTxReady && CFifoUsed(udev->hTxFifo) > 0)
-            {
-                udev->bTxReady = false;
-                while (Esp32UartTxFree(dev->Base) > 0U)
-                {
-                    uint8_t *p = CFifoGet(udev->hTxFifo);
-                    if (p == nullptr) break;
-                    ESP32_UART_FIFO_REG(dev->Base) = *p;
-                }
-                ESP32_UART_INT_CLR_REG(dev->Base) = ESP32_UART_INT_TXFIFO_EMPTY;
-                ESP32_UART_INT_ENA_REG(dev->Base) |= ESP32_UART_INT_TXFIFO_EMPTY;
-            }
+	if (!pDev->bIntEn)
+	{
+		while (DataLen > 0)
+		{
+			space = (int)Esp32UartTxFree(dev->Base);
+			while (DataLen > 0 && space > 0)
+			{
+				ESP32_UART_FIFO_REG(dev->Base) = *pData;
+				pData++;
+				DataLen--;
+				space--;
+				cnt++;
+			}
+		}
+		return cnt;
+	}
 
-            EnableInterrupt(state);
+	fifo = udev->hTxFifo;
+	state = DisableInterrupt();
 
-            // If SW FIFO is full there's nothing useful to retry on; bail.
-            if (DataLen > 0 && CFifoAvail(udev->hTxFifo) == 0)
-            {
-                udev->TxDropCnt += DataLen;
-                break;
-            }
-        }
-    }
-    else
-    {
-        // Polled: spin on HW TX FIFO free space.  Safe but blocking.
-        while (DataLen > 0)
-        {
-            while (Esp32UartTxFree(dev->Base) == 0U) {}
-            ESP32_UART_FIFO_REG(dev->Base) = *pData++;
-            DataLen--;
-            cnt++;
-        }
-    }
+	// With no software backlog, use the free hardware FIFO space first.
+	// Small loopback responses need no software enqueue or TX interrupt.
+	if (udev->bTxReady && CFifoUsed(fifo) == 0)
+	{
+		space = (int)Esp32UartTxFree(dev->Base);
+		while (DataLen > 0 && space > 0)
+		{
+			ESP32_UART_FIFO_REG(dev->Base) = *pData;
+			pData++;
+			DataLen--;
+			space--;
+			cnt++;
+		}
+	}
 
-    return cnt;
+	// Any remaining bytes go into the software FIFO, preserving order.
+	while (DataLen > 0)
+	{
+		len = DataLen;
+		p = CFifoPutMultiple(fifo, &len);
+		if (p == nullptr)
+		{
+			break;
+		}
+		memcpy(p, pData, len);
+		pData += len;
+		DataLen -= len;
+		cnt += len;
+	}
+
+	pending = CFifoUsed(fifo) > 0;
+	if (pending)
+	{
+		Esp32UartTxFill(dev);
+		pending = CFifoUsed(fifo) > 0;
+	}
+	if (pending || (udev->EvtCallback != nullptr &&
+		(cnt > 0 || !udev->bTxReady)))
+	{
+		// Arm TX only for remaining bytes or a requested completion event.
+		udev->bTxReady = false;
+		ESP32_UART_INT_CLR_REG(dev->Base) = ESP32_UART_INT_TXFIFO_EMPTY;
+		ESP32_UART_INT_ENA_REG(dev->Base) |= ESP32_UART_INT_TXFIFO_EMPTY;
+	}
+	else if (cnt > 0 || !udev->bTxReady)
+	{
+		ESP32_UART_INT_ENA_REG(dev->Base) &= ~ESP32_UART_INT_TXFIFO_EMPTY;
+		udev->bTxReady = true;
+	}
+	EnableInterrupt(state);
+	return cnt;
 }
 
 

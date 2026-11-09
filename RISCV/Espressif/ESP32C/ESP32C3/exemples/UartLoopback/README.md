@@ -75,3 +75,34 @@ UART0 RX or echo throughput is claimed from that measurement.
 RX/loopback throughput still awaiting the standard
 `Python/uartprbs_lb.py` result. The application and UART driver
 have not been modified to interpret the earlier rate as a driver bug.
+
+## Baseline with the shared benchmark
+
+The maintainer ran the unmodified `Python/uartprbs_lb.py` on November 8,
+2026, with `--baud 1000000` and the shared defaults
+(`--block-size 16 --window 128`). Sixteen consecutive reports showed
+**zero errors**. RX throughput averaged **66,549 B/s**, ranging from
+63,724 to 67,645 B/s; pending bytes were mostly 127. This is the actual
+streaming-loopback baseline for the ESP32-C3 port.
+
+The subsequent UART driver revision on `esp32_port` changes the target
+implementation, not the shared Python test or generic example:
+
+- `Esp32UartTxData` writes a short frame directly into available
+  hardware TX FIFO space, before using the software FIFO;
+- the TX-empty interrupt is armed only when queued bytes remain or an
+  application registered a completion callback;
+- the UART interrupt uses `CFifoPutByte` and `CFifoGetByte`, and
+  records framing, parity, and overflow conditions;
+- the blocking RX FIFO is peeked, copied, then released without masking
+  UART interrupts during the copy, following the existing Renesas UART
+  pattern. A non-blocking FIFO retains the protected copy path.
+
+**Hardware validation pending for this revision.** Run the same shared
+benchmark with the same settings. Compare steady-state RX B/s and error,
+loss, corruption, repeat, and pending reports. If there is any data loss
+or regression, the new UART change has not passed acceptance.
+
+The source checks for these MCU-specific paths are in
+`tests/uart/esp32_uart_flow_source_test.py`. They do not replace
+hardware testing.
