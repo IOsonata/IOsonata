@@ -20,10 +20,10 @@ def body(source, beginning, ending):
 
 
 def main():
-    prepare = body(PDM, 'extern "C" bool PdmPreparePeiStart(',
-                   'extern "C" bool PdmEnablePeiEvent(')
+    prepare = body(PDM, 'bool PdmPreparePeiStart(',
+                   'bool PdmEnablePeiEvent(')
     ready = body(PDM, "static bool PdmPeiReady(",
-                 'extern "C" bool PdmPreparePeiStart(')
+                 'bool PdmPreparePeiStart(')
     pdm_events = body(PDM, "static PeiEndpoint_t PdmPeiEventEndpoint(",
                       "static PeiEndpoint_t PdmPeiTaskEndpoint(")
     pdm_tasks = body(PDM, "static PeiEndpoint_t PdmPeiTaskEndpoint(",
@@ -46,14 +46,14 @@ def main():
     for name in ("PreparePeiStart", "EnablePeiEvent", "DisablePeiEvent",
                  "ConnectPeiTask", "DisconnectPeiTask"):
         assert "bool Pdm" + name + "(" in PDM_API
-        assert 'extern "C" bool Pdm' + name + "(" in PDM
+        assert 'bool Pdm' + name + "(" in PDM
 
     arm = body(I2S, "static bool nRFxI2SArm(",
                "static void nRFxI2SEnable(")
-    prepare_i2s = body(I2S, 'extern "C" bool I2SPreparePeiStart(',
-                       'extern "C" bool I2SEnablePeiEvent(')
+    prepare_i2s = body(I2S, 'bool I2SPreparePeiStart(',
+                       'bool I2SEnablePeiEvent(')
     i2s_ready = body(I2S, "static bool I2SPeiReady(",
-                     'extern "C" bool I2SPreparePeiStart(')
+                     'bool I2SPreparePeiStart(')
     i2s_events = body(I2S, "static PeiEndpoint_t I2SPeiEventEndpoint(",
                       "static PeiEndpoint_t I2SPeiTaskEndpoint(")
     i2s_tasks = body(I2S, "static PeiEndpoint_t I2SPeiTaskEndpoint(",
@@ -81,7 +81,7 @@ def main():
     for name in ("PreparePeiStart", "EnablePeiEvent", "DisablePeiEvent",
                  "ConnectPeiTask", "DisconnectPeiTask"):
         assert "bool I2S" + name + "(" in I2S_API
-        assert 'extern "C" bool I2S' + name + "(" in I2S
+        assert 'bool I2S' + name + "(" in I2S
 
     for source in (PDM, I2S):
         for name in ("PeiBindEvent", "PeiGetEventEndpoint",
