@@ -3,35 +3,14 @@
 
 @brief	Shared system initialisation for Espressif RISC-V chips with PCR
 
-Covers all Espressif RISC-V targets that use the PCR (Peripheral Clock /
-Reset) controller:
+C6 and C5/C61 use different PCR CPU clock fields. C5/C61 retain the ROM
+clock setup and decode the selected root and divider. Their SYSTIMER and
+watchdog registers follow ESP-IDF v5.5.1 per-chip register definitions.
+The older H2/H4 branches have not been validated by this bring-up.
 
-    ESP32-C5, ESP32-C6, ESP32-H2, ESP32-H4
-
-Provides:
-  - Register definitions for PCR, SYSTIMER, TIMG WDTs, and LP_WDT
-  - IOsonata global clock state (SystemCoreClock, g_McuOsc)
-  - Internal helpers for watchdog disable and SYSTIMER enable
-  - Esp32PcrSystemInit() — shared boot sequence called by chip-specific
-    SystemInit() before installing the vector table in mtvec
-  - SystemCoreClockUpdate() and all system_core_clock.h stubs
-
-NOT included:
-  - SystemInit() itself — chip-specific because mtvec installation
-    requires a chip-specific vector table symbol
-  - CPU frequency divider values — differ per chip (C6: max 160 MHz
-    from 480 MHz SPLL; H2: max 96 MHz from 96 MHz PLL on 32 MHz XTAL)
-
-Chip-specific system_espXXXX.c files define SystemInit() like this:
-
-    #define ESP32_PLL_FREQ  480000000UL   // chip-specific
-    void SystemInit(void)
-    {
-        Esp32PcrSystemInit(160000000UL);  // desired CPU Hz, or 0 to skip
-        extern void (* const g_EspXXXXVectors[])(void);
-        uintptr_t vt = (uintptr_t)g_EspXXXXVectors;
-        __asm volatile("csrw mtvec, %0" : : "r"(vt | 0x3U) : "memory");
-    }
+Chip startup calls Esp32PcrSystemInit() for watchdog and SYSTIMER setup,
+then installs the target trap entry. Generic ResetEntry calls
+SystemCoreClockUpdate() before entering the application.
 
 @author	Hoang Nguyen Hoan
 @date	Mar. 5, 2026
@@ -71,7 +50,21 @@ SOFTWARE.
  * Base address identical across C5, C6, H2, H4.
  *---------------------------------------------------------------------------*/
 #define PCR_BASE                    0x60096000UL
-#if defined(ESP32C6)
+#if defined(ESP32C5) || defined(ESP32C61)
+#if defined(ESP32C5)
+#define PCR_SYSCLK_OFFSET           0x110U
+#define PCR_SYSTIMER_OFFSET         0x06CU
+#else
+#define PCR_SYSCLK_OFFSET           0x0E8U
+#define PCR_SYSTIMER_OFFSET         0x058U
+#endif
+#define PCR_SYSCLK_CONF_REG         (*(volatile uint32_t *)(PCR_BASE + PCR_SYSCLK_OFFSET))
+#define PCR_CPU_FREQ_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + PCR_SYSCLK_OFFSET + 8U))
+#define PCR_AHB_FREQ_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + PCR_SYSCLK_OFFSET + 12U))
+#define PCR_APB_FREQ_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + PCR_SYSCLK_OFFSET + 16U))
+#define PCR_SYSTIMER_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + PCR_SYSTIMER_OFFSET))
+#define PCR_SOC_CLK_SEL_Pos         16U
+#elif defined(ESP32C6)
 #define PCR_SYSCLK_CONF_REG         (*(volatile uint32_t *)(PCR_BASE + 0x110U))
 #define PCR_CPU_FREQ_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x118U))
 #define PCR_SYSTIMER_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x054U))
@@ -92,7 +85,7 @@ SOFTWARE.
 #define PCR_CPU_HS_DIV_NUM_Pos      (8U)
 #define PCR_CPU_HS_DIV_NUM_Msk      (0xFFUL << PCR_CPU_HS_DIV_NUM_Pos)
 
-#if defined(ESP32C6)
+#if defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
 #define PCR_SYSTIMER_CLK_EN         (1UL << 0)
 #define PCR_SYSTIMER_RST_EN         (1UL << 1)
 #else
@@ -103,7 +96,11 @@ SOFTWARE.
 /*---------------------------------------------------------------------------
  * SYSTIMER — fixed 16 MHz, same base on C5/C6/H2/H4
  *---------------------------------------------------------------------------*/
+#if defined(ESP32C5) || defined(ESP32C61)
+#define SYSTIMER_BASE               0x6000A000UL
+#else
 #define SYSTIMER_BASE               0x60005000UL
+#endif
 #define SYSTIMER_CONF_REG           (*(volatile uint32_t *)(SYSTIMER_BASE + 0x000U))
 #define SYSTIMER_TIMER_UNIT0_WORK_EN  (1UL << 30)
 #define SYSTIMER_CLK_EN               (1UL << 31)
@@ -123,14 +120,18 @@ SOFTWARE.
 
 #define TIMG_WDT_WPROTECT_MAGIC     0x50D83AA1UL
 #define TIMG_WDT_EN                 (1UL << 31)
+#if defined(ESP32C5) || defined(ESP32C61)
+#define TIMG_WDT_FLASHBOOT_MOD_EN   (1UL << 14)
+#else
 #define TIMG_WDT_FLASHBOOT_MOD_EN   (1UL << 10)
+#endif
 
 /*---------------------------------------------------------------------------
  * LP Watchdog — RTC WDT and Super WDT
  *---------------------------------------------------------------------------*/
 #define LP_WDT_BASE                 0x600B1C00UL
 #define LP_WDT_RWDT_CONFIG0_REG     (*(volatile uint32_t *)(LP_WDT_BASE + 0x0000U))
-#if defined(ESP32C6)
+#if defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
 #define LP_WDT_RWDT_WPROTECT_REG    (*(volatile uint32_t *)(LP_WDT_BASE + 0x0018U))
 #define LP_WDT_SWD_CONFIG_REG       (*(volatile uint32_t *)(LP_WDT_BASE + 0x001CU))
 #define LP_WDT_SWD_WPROTECT_REG     (*(volatile uint32_t *)(LP_WDT_BASE + 0x0020U))
@@ -155,7 +156,7 @@ SOFTWARE.
 
 uint32_t SystemCoreClock __attribute__((used)) = 80000000UL;
 uint64_t SystemCoreClockPeriodus __attribute__((used)) = 80ULL;
-#if defined(ESP32C6)
+#if defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
 uint64_t SystemCoreClockPeriodns __attribute__((used)) = 13ULL;
 #endif
 
@@ -240,7 +241,7 @@ void Esp32PcrSystemInit(uint32_t CpuHz)
     DisableLpRtcWdt();
     DisableSuperWdt();
 
-#if defined(ESP32_PLL_FREQ)
+#if defined(ESP32_PLL_FREQ) && !defined(ESP32C5) && !defined(ESP32C61)
     if (CpuHz != 0U)
     {
         uint32_t divisor = ESP32_PLL_FREQ / CpuHz;
@@ -263,9 +264,38 @@ void Esp32PcrSystemInit(uint32_t CpuHz)
 /*---------------------------------------------------------------------------
  * SystemCoreClockUpdate — reads PCR to determine actual running frequency.
  *---------------------------------------------------------------------------*/
+#if defined(ESP32C5) || defined(ESP32C61)
+static uint32_t Esp32PcrRootClock(void)
+{
+	uint32_t source;
+
+	source = (PCR_SYSCLK_CONF_REG >> 16) & 3U;
+	switch (source)
+	{
+		case 0:
+			return g_McuOsc.CoreOsc.Freq;
+		case 1:
+			return 17500000UL;
+		case 2:
+			return 160000000UL;
+#if defined(ESP32C5)
+		case 3:
+			return 240000000UL;
+#endif
+		default:
+			return 0;
+	}
+}
+#endif
+
 void SystemCoreClockUpdate(void)
 {
-#if defined(ESP32C6)
+#if defined(ESP32C5) || defined(ESP32C61)
+	SystemCoreClock = Esp32PcrRootClock() / ((PCR_CPU_FREQ_CONF_REG & 0xFFU) + 1U);
+	SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
+	SystemCoreClockPeriodns = SystemCoreClock != 0U ?
+		(1000000000ULL + SystemCoreClock / 2U) / SystemCoreClock : 0U;
+#elif defined(ESP32C6)
 	uint32_t root = PCR_SYSCLK_CONF_REG;
 	uint32_t cpu = PCR_CPU_FREQ_CONF_REG;
 	uint32_t sel = (root & PCR_SOC_CLK_SEL_Msk) >> PCR_SOC_CLK_SEL_Pos;
@@ -333,8 +363,17 @@ uint32_t SystemCoreClockGet(void)
 
 uint32_t SystemPeriphClockGet(int Idx)
 {
+#if defined(ESP32C5) || defined(ESP32C61)
+	if (Idx != 0)
+	{
+		return 0;
+	}
+	return Esp32PcrRootClock() / ((PCR_AHB_FREQ_CONF_REG & 0xFFU) + 1U) /
+		(((PCR_APB_FREQ_CONF_REG >> 8) & 0xFFU) + 1U);
+#else
     (void)Idx;
     return SystemCoreClock;
+#endif
 }
 
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)

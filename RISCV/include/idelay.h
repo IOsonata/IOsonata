@@ -87,7 +87,7 @@ extern uint64_t SystemCoreClockPeriodus;	// Microsecond period
  * an illegal-instruction trap.  They provide a custom Machine Performance
  * Counter Counter at CSR 0x7E2 instead, which must be enabled at boot via
  * mpcer/mpcmr (see system_esp32_system.c: Esp32EnablePerfCounter). */
-#if defined(ESP32C3) || defined(ESP32C6) || defined(ESP32H2)
+#if defined(ESP32C2) || defined(ESP32C3) || defined(ESP32C6) || defined(ESP32H2)
 #define IOSONATA_RISCV_CYCLE_CSR        0x7E2U      /* mpccr */
 #elif defined(R9A02G021)
 // The R9A02G021 core implements mcycle only, no cycle (manual table 2.13)

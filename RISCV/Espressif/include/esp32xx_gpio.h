@@ -3,7 +3,7 @@
 
 @brief	ESP32 GPIO/IO_MUX definitions for the IOsonata RISC-V family.
 
-Covers C3/C5/C6.  Provides three things:
+Covers C2/C3/C5/C6/C61. C61 uses the C5 GPIO matrix layout.  Provides three things:
   1. Raw register macros (ESP32_GPIO_*_REG32, ESP32_IOMUX_PAD_REG) that
      work uniformly across all supported chips.  Use these in driver
      code that must compile for any chip.
@@ -141,7 +141,7 @@ SOFTWARE.
  * Values verified against ESP-IDF v5.3 components/soc/<chip>/include
  * (gpio_pins.h for C3/C6, gpio_struct.h FUNC_IN_SEL field doc for C5).
  *---------------------------------------------------------------------------*/
-#if defined(ESP32C5)
+#if defined(ESP32C5) || defined(ESP32C61)
 #  define ESP32_GPIO_FUNC_OUT_SEL_GPIO      256U
 #  define ESP32_GPIO_FUNC_IN_CONST_HIGH     0x40U
 #  define ESP32_GPIO_FUNC_IN_CONST_LOW      0x60U
@@ -196,7 +196,7 @@ SOFTWARE.
  *
  * Single chip-conditional block; no #undef dance.
  *---------------------------------------------------------------------------*/
-#if defined(ESP32C5)
+#if defined(ESP32C5) || defined(ESP32C61)
 #  define ESP32_GPIO_FUNC_IN_SEL_Pos        0U
 #  define ESP32_GPIO_FUNC_IN_SEL_Msk        (0x7FUL << ESP32_GPIO_FUNC_IN_SEL_Pos)
 #  define ESP32_GPIO_FUNC_IN_INV_SEL_Pos    7U
@@ -275,7 +275,7 @@ SOFTWARE.
  * FUNC_IN/OUT bitfield widths, which is one more reason this overlay
  * is gated to !ESP32C5.
  *===========================================================================*/
-#if !defined(ESP32C5)
+#if !defined(ESP32C5) && !defined(ESP32C61)
 
 typedef struct __ESP32_GPIO_BT_SELECT_Bits {
     uint32_t BT_SEL              : 32;   //!< Bit-select register (chip-specific use).
@@ -497,7 +497,7 @@ ESP32_STATIC_ASSERT(offsetof(ESP32_IOMUX_Type, PIN_CTRL)      == 0x0000U, iomux_
 ESP32_STATIC_ASSERT(offsetof(ESP32_IOMUX_Type, GPIO)          == 0x0004U, iomux_gpio_offset);
 ESP32_STATIC_ASSERT(offsetof(ESP32_IOMUX_Type, DATE)          == 0x00FCU, iomux_date_offset);
 
-#endif // !defined(ESP32C5)
+#endif // !defined(ESP32C5) && !defined(ESP32C61)
 
 /*===========================================================================
  * Raw register-address macros (cross-chip).
@@ -514,7 +514,7 @@ ESP32_STATIC_ASSERT(offsetof(ESP32_IOMUX_Type, DATE)          == 0x00FCU, iomux_
 #define ESP32_GPIO_OUT_W1TS_OFFSET          0x008U
 #define ESP32_GPIO_OUT_W1TC_OFFSET          0x00CU
 
-#if defined(ESP32C5)
+#if defined(ESP32C5) || defined(ESP32C61)
 #  define ESP32_GPIO_ENABLE_REG_OFFSET      0x034U
 #  define ESP32_GPIO_ENABLE_W1TS_OFFSET     0x038U
 #  define ESP32_GPIO_ENABLE_W1TC_OFFSET     0x03CU
