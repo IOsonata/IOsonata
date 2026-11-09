@@ -211,6 +211,15 @@ static inline const OscDesc_t *GetHighFreqOscDesc(void) { return &g_McuOsc.CoreO
 /**
  * @brief	Select core clock oscillator type
  *
+ * On an MCU whose core always runs from its internal clock and uses the
+ * crystal only for accuracy, starting it on demand for the radio, USB or a
+ * timer, a call with OSC_TYPE_XTAL or OSC_TYPE_TCXO is one request for the
+ * crystal and a call with OSC_TYPE_RC releases one. The requests of the
+ * drivers and of the application are counted: the crystal starts on the
+ * first request and stops when the last one is released. Each request is
+ * matched by one release. A request returns once the crystal runs, false if
+ * it did not start.
+ *
  * @param	ClkSrc : Clock source selection
  *						OSC_TYPE_RC - Internal RC
  *						OSC_TYPE_XTAL - External crystal
