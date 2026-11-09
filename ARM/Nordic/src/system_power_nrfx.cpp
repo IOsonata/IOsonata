@@ -11,12 +11,13 @@ reset. On the nRF5340 network core, MFORCEOFF, the core held off by the
 application core and released, is reported as a power on. SECTAMPER of the
 nRF54L has no SYSTEM_RESET_xxx reason and is not reported.
 
-Power off is System OFF through REGULATORS. The nRF5340 network core has no
-REGULATORS, power off is done by the application core, SystemPowerOff
-returns there. On the nRF91 the modem must be shut down before. On the nRF54L
-RESETREAS is cleared before System OFF, a reason left in it can wake the part
-up at once, and the VPR retention bit (MEMCONF POWER[1].RET MEM0) is cleared
-so the VPR stays in reset on wake up.
+Power off is System OFF through REGULATORS. SystemWakePin sets the SENSE
+level of a pin, GPIO DETECT wakes the MCU on that level. The nRF5340 network
+core has no REGULATORS, power off is done by the application core,
+SystemPowerOff returns there. On the nRF91 the modem must be shut down
+before. On the nRF54L RESETREAS is cleared before System OFF, a reason left
+in it can wake the part up at once, and the VPR retention bit (MEMCONF
+POWER[1].RET MEM0) is cleared so the VPR stays in reset on wake up.
 
 The retention registers are GPREGRET[0] and GPREGRET[1] of POWER, 8 bits
 each.
@@ -69,6 +70,7 @@ SOFTWARE.
 #include "nrf.h"
 
 #include "coredev/system_core_clock.h"
+#include "iopinctrl.h"
 
 #if defined(NRF5340_XXAA_APPLICATION)
 #define SYS_PWR_RESET				NRF_RESET_S
@@ -257,6 +259,24 @@ void SystemPowerOff(void)
 		__WFE();
 	}
 #endif
+}
+
+bool SystemWakePin(int PortNo, int PinNo, int Sense)
+{
+	if (PinNo < 0 || PinNo >= 32 || nRFGpioGetReg(PortNo) == NULL)
+	{
+		return false;
+	}
+	if (Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_LOW_TRANSITION &&
+		Sense != IOPINSENSE_HIGH_TRANSITION)
+	{
+		return false;
+	}
+
+	// SENSE of the pin, its DETECT signal wakes the MCU from System OFF
+	IOPinSetSense(PortNo, PinNo, (IOPINSENSE)Sense);
+
+	return true;
 }
 
 int SystemRetRegCount(void)
