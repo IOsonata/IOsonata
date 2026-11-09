@@ -135,5 +135,15 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/spi_esp32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_esp32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

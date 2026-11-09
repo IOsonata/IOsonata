@@ -113,6 +113,10 @@ SOFTWARE.
 #define ESP32_SPI_MOSI_SIGNAL               66U
 #endif
 
+#define ESP32_PINOP_SPI2_SCK                 (IOPINOP_FUNC0 + ESP32_SPI_SCK_SIGNAL)
+#define ESP32_PINOP_SPI2_MISO                (IOPINOP_FUNC0 + ESP32_SPI_MISO_SIGNAL)
+#define ESP32_PINOP_SPI2_MOSI                (IOPINOP_FUNC0 + ESP32_SPI_MOSI_SIGNAL)
+
 /*---------------------------------------------------------------------------
  * PCR offsets for GP-SPI2 bus clock/reset and functional clock selection.
  * C2/C3 use SYSTEM clock/reset registers instead.
