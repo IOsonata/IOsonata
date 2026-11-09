@@ -105,5 +105,15 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/system_esp32_system.c</locationURI>
 		</link>
+		<link>
+			<name>src/timer_esp32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_esp32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/timer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

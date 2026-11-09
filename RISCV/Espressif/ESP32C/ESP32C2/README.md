@@ -19,9 +19,10 @@ Startup keeps the ROM clock configuration, disables boot watchdogs, enables
 the delay counter, and installs the interrupt matrix/vector handler before
 applications run. The core frequency is decoded from hardware.
 
-This library contains startup, GPIO, UART, and their generic dependencies.
-Timer and other peripheral integration is still pending. Build and host MMIO
-tests do not establish hardware validation; TX must be checked before RX.
+This library contains startup, GPIO, UART, Timer Group, and their generic
+dependencies. Timer Group provides one hardware counter through the generic
+C and C++ timer interfaces. Low-frequency timers and PEI are not implemented.
+Build and host MMIO tests do not establish hardware validation; TX must be checked before RX.
 
 The default crystal descriptor is 40 MHz. For a board with a different
 crystal, supply `MCUOSC` in `board.h` using the existing `McuOsc_t` fields;
@@ -42,3 +43,13 @@ The script builds every source linked by the new library projects, then both
 UART applications with C++ and C API selection. It checks the raw boot header,
 entry, vector alignment, IRAM copy address, and stack boundary. It does not
 run IOcomposer or emulate CPU/ROM execution. Host MMIO checks require Linux.
+
+Run `python3 tests/esp32/run_timer.py` for Timer Group and interrupt-routing
+host checks on C2/C3/C5/C6/C61. These checks model register behavior; timer
+clock frequency and interrupts still require validation on each board.
+
+Cross-link the timer C and C++ APIs in Debug and Release configurations:
+
+```sh
+python3 tests/esp32/build_timer.py --output /tmp/esp32-timer-build
+```

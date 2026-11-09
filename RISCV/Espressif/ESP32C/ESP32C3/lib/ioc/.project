@@ -1166,9 +1166,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/timer_esp32c3.cpp</name>
+			<name>src/coredev/timer_esp32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_esp32c3.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_esp32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/uart.cpp</name>
