@@ -543,27 +543,6 @@ bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	}
 	pData = &s_nRfxRtcData[devno];
 	reg = pData->pReg;
-	// Internal read-only check: reinitialization must not abandon live
-	// TICK/OVRFLW routes or PEI-owned compare slots.
-	if (pPei == nullptr && Event == 0U)
-	{
-		for (i = 0; i < 2; i++)
-		{
-			if (s_nRfxRtcRaw[devno][i].pPei != nullptr)
-			{
-				return true;
-			}
-		}
-		for (i = 0; i < pData->MaxNbTrigEvt; i++)
-		{
-			if (pData->pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
-				pData->pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
 	if (pPei == nullptr || Event == 0U || PeiUnbindEvent == nullptr)
 	{
 		return false;
