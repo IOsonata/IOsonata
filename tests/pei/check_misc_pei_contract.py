@@ -17,7 +17,7 @@ def main():
     events = QDEC.split("static PeiEndpoint_t QdecPeiEventEndpoint(", 1)[1]
     events = events.split("static PeiEndpoint_t QdecPeiTaskEndpoint(", 1)[0]
     tasks = QDEC.split("static PeiEndpoint_t QdecPeiTaskEndpoint(", 1)[1]
-    tasks = tasks.split('extern "C" bool QdecPreparePeiStart(', 1)[0]
+    tasks = tasks.split('bool QdecPreparePeiStart(', 1)[0]
     for event in ("SAMPLERDY", "REPORTRDY", "ACCOF", "DBLRDY", "STOPPED"):
         assert "&NRF_QDEC->EVENTS_" + event in events
     for task in ("START", "STOP"):
@@ -28,7 +28,7 @@ def main():
     for name in ("PreparePeiStart", "EnablePeiEvent", "DisablePeiEvent",
                  "ConnectPeiTask", "DisconnectPeiTask"):
         assert "bool Qdec" + name + "(" in QDEC_H
-        assert 'extern "C" bool Qdec' + name + "(" in QDEC
+        assert 'bool Qdec' + name + "(" in QDEC
     for symbol in ("PeiBindEvent", "PeiGetEventEndpoint", "PeiUnbindEvent",
                    "PeiConnectTask", "PeiDisconnectTask"):
         assert "#pragma weak " + symbol in QDEC
