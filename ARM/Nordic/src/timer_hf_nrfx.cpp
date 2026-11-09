@@ -857,6 +857,9 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = tdata.pReg;
+	PeiDev_t *pei;
+	PeiEvent_t evt;
+	PeiEndpoint_t endpoint;
 
 	if (TrigNo < 0 || TrigNo >= tdata.MaxNbTrigEvt)
 	{
@@ -866,10 +869,9 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	if (tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
 		tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
 	{
-		PeiDev_t *pei = static_cast<PeiDev_t *>(
-			tdata.pTrigger[TrigNo].pContext);
-		PeiEvent_t evt = tdata.pCC[TrigNo];
-		PeiEndpoint_t endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
+		pei = static_cast<PeiDev_t *>(tdata.pTrigger[TrigNo].pContext);
+		evt = tdata.pCC[TrigNo];
+		endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
 
 		// Disarm only this CC; leave the shared counter and other CCs alone.
 		reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
