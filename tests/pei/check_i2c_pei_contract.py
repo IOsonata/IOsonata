@@ -88,6 +88,12 @@ def main():
                  "PeiDisconnectTask"):
         assert "#pragma weak " + name in DRIVER
 
+    rate = section("uint32_t nRFxI2CSetRate(", "bool nRFxI2CStartRx(")
+    declarations = rate.split("if (dev->bPeiPrepared)", 1)[0]
+    assert "uint32_t best = 0;" in declarations
+    assert "uint32_t error = UINT32_MAX;" in declarations
+    assert "uint32_t regval = 0;" in declarations
+
     assert "dev->bPeiPrepared" in DRIVER
     assert "if (dev->bPeiPrepared)" in DRIVER
     assert "if (owner->bPeiPrepared)" in DRIVER
