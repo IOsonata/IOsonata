@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory(prefix="esp32c3-rng-") as name:
             "g++", "-std=gnu++23", optimization, "-Wall", "-Wextra", "-Werror",
             "-fno-rtti", "-fno-exceptions",
             "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
-            "-DESP32C3", "-DESP32_RNG_TEST",
+            "-DESP32C3", "-DESP32_RNG_TEST", "-DESP32_RNG_TRACE=0",
             "-DESP32_RNG_WAIT_MAX_POLLS=1024",
             "-I", str(ROOT / "include"),
             "-I", str(ROOT / "RISCV/Espressif/include"),

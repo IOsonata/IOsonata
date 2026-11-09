@@ -79,3 +79,38 @@ and compare its output against the previously working 59 PASS, 0 FAIL,
 1 SKIP. The new hardware RNG is expected to eliminate the skipped
 ECDH/signing test **only after the board proves it**. If the board
 stops at a stage, capture that stage/error and the exception PC.
+
+
+## Temporary UART trace (ESP32-C3)
+
+The next board build includes detailed RNG tracing in both Debug and
+Release; `ESP32_RNG_TRACE` defaults to 1 in
+`RISCV/Espressif/src/crypto_rng_esp32c3.cpp`. It does not touch
+`Crypto::Init()` and leaves the entire RNG implementation linked.
+
+The trace starts immediately after the existing `Random source` banner.
+Only the first four random requests print each milestone, but any detected
+failure prints a summary. The important checkpoints are:
+
+- `RNG: entered hardware backend`: `Crypto::Random` reached the MCU backend.
+- `RNG: request #...`: the driver acquired its internal operation lock.
+- `RNG: ADC idle, begin register snapshot`: the peripheral register scan
+  completed.
+- `RNG: enter analog ROM setup`, followed by individual `before/after
+  ROM read/write` messages: locate a possible ROM analog-I2C hang or trap.
+- `RNG: ADC configured, check source`: SAR configuration completed.
+- `RNG: CPU clock` and `waiting for SAR entropy`: settle timer.
+- `RNG: discarding two initial hardware samples` and
+  `RNG: first output sample follows`: RNG register reads.
+- `RNG: begin ADC/ROM restoration`: restore path.
+- `RNG: completed request` or `RNG: FAIL stage=...`: final outcome.
+
+`g_Esp32C3RngStage`, `g_Esp32C3RngError`, and the new
+`g_Esp32C3RngCallCount` remain readable in the debugger. The
+read-only `IsSecure()` availability check no longer overwrites
+the current diagnostic stage.
+
+After the actual hardware failure is identified and corrected, turn off the
+temporary UART instrumentation by defining `ESP32_RNG_TRACE=0` and
+rerun the Release performance tests. Host register-model tests always build
+with this define disabled to keep their results free of UART logging effects.

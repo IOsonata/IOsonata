@@ -27,6 +27,27 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #error ESP32-C3 RNG implementation requires ESP32C3
 #endif
 
+// Temporary diagnostics enabled in Debug and Release for this branch.
+// Remove after the ESP32-C3 board has passed its hardware RNG tests.
+#ifndef ESP32_RNG_TRACE
+#define ESP32_RNG_TRACE 1
+#endif
+#if ESP32_RNG_TRACE
+#include <stdio.h>
+#endif
+
+volatile uint32_t g_Esp32C3RngStage;
+volatile uint32_t g_Esp32C3RngError;
+volatile uint32_t g_Esp32C3RngCallCount;
+
+#if ESP32_RNG_TRACE
+#define RNG_TRACE(...) do { if (g_Esp32C3RngCallCount <= 4U) printf(__VA_ARGS__); } while (0)
+#define RNG_TRACE_ERROR(...) printf(__VA_ARGS__)
+#else
+#define RNG_TRACE(...) ((void)0)
+#define RNG_TRACE_ERROR(...) ((void)0)
+#endif
+
 #ifndef ESP32_RNG_REG
 #define ESP32_RNG_REG(Addr) (*(volatile uint32_t *)(uintptr_t)(Addr))
 #endif
@@ -70,12 +91,24 @@ typedef void (*EspRngRomWriteMask_t)(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t
 static uint8_t EspRngAnalogRead(uint8_t Msb, uint8_t Lsb)
 {
 	EspRngRomReadMask_t read = (EspRngRomReadMask_t)(uintptr_t)0x40001958UL;
-	return read(0x69U, 0U, 7U, Msb, Lsb);
+	uint8_t value;
+
+	RNG_TRACE("RNG ROM: before read field %u:%u\r\n",
+		(unsigned)Msb, (unsigned)Lsb);
+	value = read(0x69U, 0U, 7U, Msb, Lsb);
+	RNG_TRACE("RNG ROM: after read field %u:%u = %u\r\n",
+		(unsigned)Msb, (unsigned)Lsb, (unsigned)value);
+	return value;
 }
 static void EspRngAnalogWrite(uint8_t Msb, uint8_t Lsb, uint8_t Value)
 {
 	EspRngRomWriteMask_t write = (EspRngRomWriteMask_t)(uintptr_t)0x40001960UL;
+
+	RNG_TRACE("RNG ROM: before write field %u:%u = %u\r\n",
+		(unsigned)Msb, (unsigned)Lsb, (unsigned)Value);
 	write(0x69U, 0U, 7U, Msb, Lsb, Value);
+	RNG_TRACE("RNG ROM: after write field %u:%u\r\n",
+		(unsigned)Msb, (unsigned)Lsb);
 }
 static inline uint32_t EspRngCycleCount(void)
 {
@@ -118,9 +151,6 @@ static bool s_EspRngFault;
 // 5 ADC configured, 6 source active, 7 settling, 8 reading,
 // 9 restoring, 10 completed. Error 1 = busy, 2 = ADC in use,
 // 3 = setup failed, 4 = stalled cycle counter, 5 = repeated RNG words.
-volatile uint32_t g_Esp32C3RngStage;
-volatile uint32_t g_Esp32C3RngError;
-
 #ifndef ESP32_RNG_WAIT_MAX_POLLS
 #define ESP32_RNG_WAIT_MAX_POLLS 100000UL
 #endif
@@ -141,7 +171,6 @@ static bool EspRngAdcIdle(void)
 	{
 		return false;
 	}
-	g_Esp32C3RngStage = 6U;
 	return true;
 }
 
@@ -154,6 +183,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 		return false;
 	}
 	g_Esp32C3RngStage = 2U;
+	RNG_TRACE("RNG: ADC idle, begin register snapshot\r\n");
 	pSaved->Sensor = ESP32_RNG_REG(RNG_RTC_SENSOR_CTRL);
 	pSaved->Ana = ESP32_RNG_REG(RNG_RTC_ANA_CONF);
 	pSaved->ClockEn = ESP32_RNG_REG(RNG_SYSTEM_CLK_EN);
@@ -170,6 +200,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 		RNG_RTC_SAR_POWER_MASK);
 	EspRngModify(RNG_RTC_ANA_CONF, RNG_RTC_ANA_POWER, RNG_RTC_ANA_POWER);
 	g_Esp32C3RngStage = 3U;
+	RNG_TRACE("RNG: enter analog ROM setup\r\n");
 	pSaved->AnalogRef = EspRngAnalogRead(6U, 6U);
 	pSaved->AnalogDtest = EspRngAnalogRead(1U, 0U);
 	pSaved->AnalogRtc = EspRngAnalogRead(3U, 3U);
@@ -179,6 +210,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 	EspRngAnalogWrite(3U, 3U, 0U);
 	EspRngAnalogWrite(2U, 2U, 0U);
 	g_Esp32C3RngStage = 4U;
+	RNG_TRACE("RNG: analog setup complete, configure ADC\r\n");
 
 	ESP32_RNG_REG(RNG_SYSTEM_CLK_EN) |= RNG_ADC_CLK_MASK;
 	ESP32_RNG_REG(RNG_SYSTEM_RST_EN) &= ~RNG_ADC_CLK_MASK;
@@ -199,6 +231,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 	ESP32_RNG_REG(RNG_ADC_DMA_CONF) |= RNG_ADC_TRANSFER;
 	ESP32_RNG_REG(RNG_ADC_CTRL2) |= RNG_ADC_TIMER_EN;
 	g_Esp32C3RngStage = 5U;
+	RNG_TRACE("RNG: ADC configured, check source\r\n");
 
 	if ((ESP32_RNG_REG(RNG_ADC_CTRL2) & RNG_ADC_TIMER_EN) == 0U ||
 		(ESP32_RNG_REG(RNG_ADC_CLK_CONF) & RNG_ADC_CLK_EN) == 0U ||
@@ -208,11 +241,14 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 		EspRngStop(pSaved);
 		return false;
 	}
+	g_Esp32C3RngStage = 6U;
+	RNG_TRACE("RNG: entropy source active\r\n");
 	return true;
 }
 
 static void EspRngStop(const EspRngSnapshot_t *pSaved)
 {
+	RNG_TRACE("RNG: begin ADC/ROM restoration\r\n");
 	ESP32_RNG_REG(RNG_ADC_CTRL2) &= ~RNG_ADC_TIMER_EN;
 	EspRngAnalogWrite(6U, 6U, pSaved->AnalogRef);
 	EspRngAnalogWrite(1U, 0U, pSaved->AnalogDtest);
@@ -248,6 +284,8 @@ static bool EspRngWaitCycles(uint32_t Count)
 			return true;
 		}
 	}
+	RNG_TRACE_ERROR("RNG: cycle counter stalled in stage %lu (wait=%lu cycles)\r\n",
+		(unsigned long)g_Esp32C3RngStage, (unsigned long)Count);
 	return false;
 }
 
@@ -280,11 +318,13 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
+	RNG_TRACE("RNG: entered hardware backend for %lu bytes\r\n", (unsigned long)Len);
 	state = DisableInterrupt();
 	if (s_EspRngBusy)
 	{
 		g_Esp32C3RngError = 1U;
 		EnableInterrupt(state);
+		RNG_TRACE_ERROR("RNG: busy, request rejected\r\n");
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_BUSY;
 	}
@@ -292,21 +332,27 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	{
 		g_Esp32C3RngError = 2U;
 		EnableInterrupt(state);
+		RNG_TRACE_ERROR("RNG: ADC unavailable or previous entropy fault\r\n");
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
 	s_EspRngBusy = true;
+	g_Esp32C3RngCallCount++;
 	g_Esp32C3RngError = 0U;
 	g_Esp32C3RngStage = 1U;
 	EnableInterrupt(state);
 
+	RNG_TRACE("RNG: request #%lu, %lu bytes; begin SAR setup\r\n",
+		(unsigned long)g_Esp32C3RngCallCount, (unsigned long)Len);
 	started = EspRngStart(&saved);
 	ok = started;
 	if (!started)
 	{
 		g_Esp32C3RngError = 3U;
 	}
+	RNG_TRACE("RNG: reading CPU clock\r\n");
 	cyclesPerUs = SystemCoreClockGet() / 1000000UL;
+	RNG_TRACE("RNG: CPU clock %lu MHz\r\n", (unsigned long)cyclesPerUs);
 	if (cyclesPerUs == 0U || cyclesPerUs > 1000U)
 	{
 		ok = false;
@@ -316,6 +362,7 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	{
 		// Stabilize the analog noise source before the first sample.
 		g_Esp32C3RngStage = 7U;
+		RNG_TRACE("RNG: waiting for SAR entropy to settle\r\n");
 		if (!EspRngWaitCycles(cyclesPerUs * 100U))
 		{
 			ok = false;
@@ -324,9 +371,11 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	}
 	if (ok)
 	{
+		RNG_TRACE("RNG: discarding two initial hardware samples\r\n");
 		(void)ESP32_RNG_REG(RNG_DATA);
 		(void)ESP32_RNG_REG(RNG_DATA);
 		g_Esp32C3RngStage = 8U;
+		RNG_TRACE("RNG: first output sample follows\r\n");
 	}
 	for (i = 0U; i < Len && ok; i += n)
 	{
@@ -339,6 +388,11 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 			break;
 		}
 		value = ESP32_RNG_REG(RNG_DATA);
+		if (i < 32U || (i != 0U && (i % 256U) == 0U))
+		{
+			RNG_TRACE("RNG: received sample at offset %lu\r\n",
+				(unsigned long)i);
+		}
 		if (i != 0U && value == last)
 		{
 			repeats++;
@@ -378,9 +432,15 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	EnableInterrupt(state);
 	if (!ok)
 	{
+		RNG_TRACE_ERROR("RNG: FAIL stage=%lu error=%lu request=%lu\r\n",
+			(unsigned long)g_Esp32C3RngStage,
+			(unsigned long)g_Esp32C3RngError,
+			(unsigned long)g_Esp32C3RngCallCount);
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
+	RNG_TRACE("RNG: completed request #%lu\r\n",
+		(unsigned long)g_Esp32C3RngCallCount);
 	return CRYPTO_STATUS_OK;
 }
 
