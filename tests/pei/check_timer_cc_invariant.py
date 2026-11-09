@@ -64,6 +64,19 @@ def main():
     assert compare.index("PeiUnbindEvent(pPei, Event, endpoint)") < compare.index(
         "reg->EVTENCLR ="), "RTC unbind must precede disabling compare event"
 
+    timer_driver = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
+        encoding="utf-8")
+    matrix = (ROOT / "src/coredev/pei.c").read_text(encoding="utf-8")
+    timer_api = (ROOT / "include/coredev/timer.h").read_text(
+        encoding="utf-8")
+    assert "bool PeiTimerPrepare(TimerDev_t *pTimer)" in timer_driver
+    assert "nRFxTimerInstallPei(pTimer)" in timer_driver
+    assert "nRFxRtcInstallPei(pTimer)" in timer_driver
+    assert "bool PeiTimerPrepare(TimerDev_t *pTimer);" in timer_api
+    assert "TimerPeiPrepareMcu" not in timer_driver
+    assert "TimerPeiPrepareMcu" not in matrix
+    assert "PeiTimerPrepare" not in matrix
+
     print("TIMER/RTC free-running PEI compare source checks: PASS")
 
 
