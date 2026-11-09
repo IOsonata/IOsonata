@@ -16,7 +16,7 @@
  * TimerDev_t.  By default uses GRTC device 0 (CC channels 0-1, 2 timers max)
  * or device 2 (CC 4-6, 3 timers max).
  *
- * IOsonata nRF54 GRTC runs at 16 MHz.  Tick conversion macros use this base.
+ * IOsonata nRF54 GRTC runs at 1 MHz.  Tick conversion macros use this base.
  * Device 3 (CC 7-11) is reserved for MPSL/SoftDevice.
  */
 
@@ -54,7 +54,7 @@ extern "C" {
 /*--- Tick conversion macros ---*/
 
 /**
- * @brief IOsonata GRTC base frequency on nRF54L (16 MHz).
+ * @brief IOsonata GRTC base frequency on nRF54L (1 MHz).
  */
 #define BM_TIMER_TICK_FREQ  TIMER_NRFX_RTC_BASE_FREQ
 
@@ -156,7 +156,7 @@ int bm_timer_init(struct bm_timer *timer, enum bm_timer_mode mode,
  * @brief Start a timer.
  *
  * Claims an IOsonata trigger and arms it.  The timeout is specified in
- * GRTC ticks (16 MHz).  Use BM_TIMER_MS_TO_TICKS / BM_TIMER_US_TO_TICKS
+ * GRTC ticks (1 MHz).  Use BM_TIMER_MS_TO_TICKS / BM_TIMER_US_TO_TICKS
  * for convenience.
  *
  * @param timer         Pointer to timer instance.

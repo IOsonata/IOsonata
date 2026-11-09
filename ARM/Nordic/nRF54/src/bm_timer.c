@@ -40,7 +40,17 @@ static void bm_timer_trig_handler(TimerDev_t * const pTimer, int TrigNo, void * 
 {
 	struct bm_timer *t = (struct bm_timer *)pContext;
 
-	if (t && t->handler) {
+	if (t == NULL) {
+		return;
+	}
+
+	/* A single shot trigger is free once it fired, another timer can take
+	 * it: this timer no longer owns it. */
+	if (t->mode != BM_TIMER_MODE_REPEATED) {
+		t->trigno = -1;
+	}
+
+	if (t->handler) {
 		t->handler(t->context);
 	}
 }
@@ -58,7 +68,7 @@ int bm_timer_sys_init(void)
 	const TimerCfg_t cfg = {
 		.DevNo    = BM_TIMER_IOSONATA_DEVNO,
 		.ClkSrc   = TIMER_CLKSRC_DEFAULT,
-		.Freq     = 0,       /* 0 = auto select max (16 MHz for GRTC) */
+		.Freq     = 0,       /* GRTC runs at 1 MHz whatever the value */
 		.IntPrio  = CONFIG_BM_TIMER_IRQ_PRIO,
 		.EvtHandler = NULL,
 		.bTickInt = false,
@@ -125,7 +135,7 @@ int bm_timer_start(struct bm_timer *timer, uint32_t timeout_ticks, void *context
 
 	/* Convert ticks to nanoseconds for IOsonata.
 	 * IOsonata GRTC nsPeriod = 1000000000 / Freq.
-	 * nsPeriod for 16 MHz = 62 ns per tick.
+	 * nsPeriod for 1 MHz = 1000 ns per tick.
 	 * ns = ticks * nsPeriod
 	 */
 	uint64_t nsPeriod = (uint64_t)timeout_ticks * s_TimerDev.nsPeriod;
