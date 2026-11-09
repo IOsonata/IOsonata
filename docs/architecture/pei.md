@@ -200,10 +200,9 @@ for the optional matrix functions before reserving hardware channels.
 Ordinary GPIO calls cannot extract the PEI matrix from a static HAL
 archive.
 
-`TimerInit` does not install PEI trigger callbacks. The first explicit
-PEI Timer call invokes `PeiTimerPrepare` in the MCU TIMER driver.
-Non-PEI Timer applications
-do not reference this optional path. HF Timer and RTC use their existing
+The nRF52 TIMER and RTC initialization functions assign PEI callbacks
+in `TimerDev_t`. The callbacks use the existing TIMER compare and RTC
+registers. PEI connects the configured hardware events to tasks. HF Timer and RTC use their existing
 `TimerTrig_t` and per-CC bookkeeping to own compare sources. No
 COMPARE-to-STOP/CLEAR shortcuts or automatic PPI routes are installed.
 Continuous compare events are rescheduled by the Timer ISR; PPI delivers
