@@ -55,6 +55,106 @@ SOFTWARE.
 
 #include "timer_nrfx.h"
 
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
+	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei,
+	PeiEvent_t *pEvent);
+bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
+	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei,
+	PeiEvent_t *pEvent);
+bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t *pEvent, uint32_t Event);
+bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t Event);
+#endif
+
+int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, uint32_t msPeriod, TIMER_TRIG_TYPE Type)
+{
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+	int trig;
+	bool success;
+
+	if (pTimer == NULL || pPei == NULL || pEvt == NULL || msPeriod == 0U ||
+		pTimer->FindAvailTrigger == NULL)
+	{
+		return -1;
+	}
+	trig = pTimer->FindAvailTrigger(pTimer);
+	if (trig < 0)
+	{
+		return -1;
+	}
+	if (pTimer->DevNo < TIMER_NRFX_RTC_MAX)
+	{
+		success = nRFxRtcEnablePeiTrigger(pTimer, trig,
+			(uint64_t)msPeriod * 1000000ULL, Type, pPei, pEvt);
+	}
+	else
+	{
+		success = nRFxTimerEnablePeiTrigger(pTimer, trig,
+			(uint64_t)msPeriod * 1000000ULL, Type, pPei, pEvt);
+	}
+	return success ? trig : -1;
+#else
+	(void)pTimer;
+	(void)pPei;
+	(void)pEvt;
+	(void)msPeriod;
+	(void)Type;
+	return -1;
+#endif
+}
+
+bool TimerEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, uint32_t Event)
+{
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+	if (pTimer == NULL || pPei == NULL || pEvt == NULL ||
+		pTimer->DevNo < 0 || pTimer->DevNo >= TIMER_NRFX_RTC_MAX)
+	{
+		return false;
+	}
+	return nRFxRtcEnablePeiEvent(pTimer, pPei, pEvt, Event);
+#else
+	(void)pTimer;
+	(void)pPei;
+	(void)pEvt;
+	(void)Event;
+	return false;
+#endif
+}
+
+bool TimerDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t Evt)
+{
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+	if (pTimer == NULL || pPei == NULL ||
+		pTimer->DevNo < 0 || pTimer->DevNo >= TIMER_NRFX_RTC_MAX)
+	{
+		return false;
+	}
+	return nRFxRtcDisablePeiEvent(pTimer, pPei, Evt);
+#else
+	(void)pTimer;
+	(void)pPei;
+	(void)Evt;
+	return false;
+#endif
+}
+
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer == NULL || pCfg == NULL)
