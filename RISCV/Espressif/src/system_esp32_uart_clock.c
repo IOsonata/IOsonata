@@ -3,24 +3,10 @@
 
 @brief	Per-chip UART peripheral clock-gating helpers.
 
-Encapsulates the bus clock enable + system-bus reset bracket that was
-previously inlined in UARTInit.  Same function names on all chips so
-the UART driver can call them without #ifdef awareness.  The actual
-implementations diverge:
-
-  ESP32-C3        SYSTEM controller (PERIP_CLK_EN0 / PERIP_RST_EN0)
-  ESP32-C5/C6     PCR controller    (UARTn CONF_REG : CLK_EN, RST_EN)
-
-UART0 is the ROM console on all three chips; resetting it post-boot
-combined with a GPIO-matrix transition wedges the TX FSM (verified
-against ESP-IDF behaviour in v5.3 hal/esp32c3/uart_ll.h).  The reset
-helper therefore short-circuits to a no-op on devno == 0.
-
-This file follows the IOsonata pattern of one TU per "chip generation":
-both the C3 and C5/C6 implementations live here, gated by `#if defined`.
-The user may either link this file directly or merge its body into the
-matching `system_esp32_system.c` / `system_esp32_pcr.c` per their
-preferred layout.
+C2/C3 use SYSTEM for the peripheral gate and UART CLK_CONF for the
+serial clock. C5/C6/C61 use PCR for both; UART CLK_CONF only enables TX/RX.
+The XTAL selector differs between C6 and C5/C61. Preserve UART0's ROM
+console state and reset the other instances before initialization.
 
 @author	Nguyen Hoan Hoang
 @date	May 9, 2026
@@ -57,90 +43,87 @@ SOFTWARE.
 #include "esp32xx_uart.h"
 
 
-// ===========================================================================
-// ESP32-C3: SYSTEM controller
-// ===========================================================================
-#if defined(ESP32C3)
-
-// SYSTEM block register fragments (matched against esp-idf
-// soc/esp32c3/include/soc/system_reg.h).  Defined locally to avoid
-// pulling in the rest of the SYSTEM block for what's a tiny use case.
-#ifndef SYSTEM_PERIP_CLK_EN0_REG
-#define SYSTEM_PERIP_CLK_EN0_REG    (*(volatile uint32_t *)0x600C0010UL)
-#define SYSTEM_PERIP_RST_EN0_REG    (*(volatile uint32_t *)0x600C0018UL)
-#define SYSTEM_UART_CLK_EN          (1UL << 2)
-#define SYSTEM_UART1_CLK_EN         (1UL << 5)
-#define SYSTEM_UART_RST             (1UL << 2)
-#define SYSTEM_UART1_RST            (1UL << 5)
-#endif
+// C2/C3 use SYSTEM; C5/C6/C61 use PCR. Preserve the ROM console.
+#if defined(ESP32C2) || defined(ESP32C3)
+#define SYSTEM_PERIP_CLK_EN0_REG ESP32_REG32(ESP32_SYSTEM_BASE + 0x10U)
+#define SYSTEM_PERIP_RST_EN0_REG ESP32_REG32(ESP32_SYSTEM_BASE + 0x18U)
 
 void Esp32UartClockEnable(int devno)
 {
-    if (devno == 0)
-    {
-        SYSTEM_PERIP_CLK_EN0_REG |= SYSTEM_UART_CLK_EN;
-    }
-    else if (devno == 1)
-    {
-        SYSTEM_PERIP_CLK_EN0_REG |= SYSTEM_UART1_CLK_EN;
-    }
+	if (devno >= 0 && devno < 2)
+	{
+		SYSTEM_PERIP_CLK_EN0_REG |= 1UL << (devno == 0 ? 2U : 5U);
+	}
 }
 
-// Pulse the full system-bus + UART-core reset bracket.
-//
-// UART0 is the ROM console.  IDF deliberately skips the module reset
-// for the console UART (esp_driver_uart/src/uart.c:218) since pulsing
-// it post-boot wedges the TX FSM when combined with the GPIO-matrix
-// pin transition that follows.  We do the same: no-op for devno == 0.
 void Esp32UartReset(int devno)
 {
-    if (devno != 1)
-    {
-        return;
-    }
-
-    uint32_t base = (uint32_t)ESP32_UART1_BASE;
-
-    ESP32_UART_CLK_CONF_REG(base) |= ESP32_UART_CLK_CONF_RST_CORE_Msk;
-    SYSTEM_PERIP_RST_EN0_REG     |=  SYSTEM_UART1_RST;
-    SYSTEM_PERIP_RST_EN0_REG     &= ~SYSTEM_UART1_RST;
-    ESP32_UART_CLK_CONF_REG(base) &= ~ESP32_UART_CLK_CONF_RST_CORE_Msk;
+	if (devno != 1)
+	{
+		return;
+	}
+#if defined(ESP32C3)
+	ESP32_UART_CLK_CONF_REG(ESP32_UART1_BASE) |= ESP32_UART_CLK_CONF_RST_CORE_Msk;
+#endif
+	SYSTEM_PERIP_RST_EN0_REG |= 1UL << 5;
+	SYSTEM_PERIP_RST_EN0_REG &= ~(1UL << 5);
+#if defined(ESP32C3)
+	ESP32_UART_CLK_CONF_REG(ESP32_UART1_BASE) &= ~ESP32_UART_CLK_CONF_RST_CORE_Msk;
+#endif
 }
 
-#endif // ESP32C3
+void Esp32UartClockConfig(int devno, uint32_t Divider)
+{
+	uint32_t base;
+	uint32_t clock;
 
-
-// ===========================================================================
-// ESP32-C5 / ESP32-C6: PCR controller
-// ===========================================================================
-#if defined(ESP32C5) || defined(ESP32C6)
-
+	base = devno == 0 ? ESP32_UART0_BASE : ESP32_UART1_BASE;
+	clock = ESP32_UART_CLK_CONF_REG(base);
+	clock &= ~(ESP32_UART_CLK_CONF_SCLK_SEL_Msk | ESP32_UART_CLK_CONF_SCLK_DIV_NUM_Msk |
+		ESP32_UART_CLK_CONF_SCLK_DIV_A_Msk | ESP32_UART_CLK_CONF_SCLK_DIV_B_Msk);
+	clock |= ESP32_UART_CLK_CONF_SCLK_SEL_XTAL | ESP32_UART_CLK_CONF_SCLK_EN_Msk |
+		ESP32_UART_CLK_CONF_TX_SCLK_EN_Msk | ESP32_UART_CLK_CONF_RX_SCLK_EN_Msk;
+	clock |= (Divider - 1U) << ESP32_UART_CLK_CONF_SCLK_DIV_NUM_Pos;
+	ESP32_UART_CLK_CONF_REG(base) = clock;
+}
+#else
 #include "esp32xx_pcr.h"
 
 void Esp32UartClockEnable(int devno)
 {
-    if (devno < 0 || devno > 1)
-    {
-        return;
-    }
-    ESP32_PCR_UART_CONF_REG(devno) |= ESP32_PCR_UART_CONF_CLK_EN_Msk;
+	if (devno >= 0 && devno < ESP32_HP_UART_COUNT)
+	{
+		ESP32_PCR_UART_CONF_REG(devno) |= ESP32_PCR_UART_CONF_CLK_EN_Msk;
+	}
 }
 
 void Esp32UartReset(int devno)
 {
-    if (devno != 1)
-    {
-        return;
-    }
+	uint32_t conf;
 
-    uint32_t base = (uint32_t)ESP32_UART1_BASE;
-    uint32_t conf = ESP32_PCR_UART_CONF_REG(1);
-    conf |= ESP32_PCR_UART_CONF_CLK_EN_Msk;
-
-    ESP32_UART_CLK_CONF_REG(base) |= ESP32_UART_CLK_CONF_RST_CORE_Msk;
-    ESP32_PCR_UART_CONF_REG(1)     = conf | ESP32_PCR_UART_CONF_RST_EN_Msk;
-    ESP32_PCR_UART_CONF_REG(1)     = conf;
-    ESP32_UART_CLK_CONF_REG(base) &= ~ESP32_UART_CLK_CONF_RST_CORE_Msk;
+	if (devno <= 0 || devno >= ESP32_HP_UART_COUNT)
+	{
+		return;
+	}
+	conf = ESP32_PCR_UART_CONF_REG(devno) | ESP32_PCR_UART_CONF_CLK_EN_Msk;
+	ESP32_PCR_UART_CONF_REG(devno) = conf | ESP32_PCR_UART_CONF_RST_EN_Msk;
+	ESP32_PCR_UART_CONF_REG(devno) = conf;
 }
 
-#endif // ESP32C5 || ESP32C6
+void Esp32UartClockConfig(int devno, uint32_t Divider)
+{
+	uint32_t base;
+
+	base = devno == 0 ? ESP32_UART0_BASE : ESP32_UART1_BASE;
+#if defined(ESP32C61)
+	if (devno == 2)
+	{
+		base = ESP32_UART2_BASE;
+	}
+#endif
+	ESP32_PCR_UART_SCLK_CONF_REG(devno) = ESP32_PCR_UART_SCLK_SEL_XTAL |
+		ESP32_PCR_UART_SCLK_EN_Msk | ((Divider - 1U) << ESP32_PCR_UART_SCLK_DIV_NUM_Pos);
+	ESP32_UART_CLK_CONF_REG(base) |= ESP32_UART_CLK_CONF_TX_SCLK_EN_Msk |
+		ESP32_UART_CLK_CONF_RX_SCLK_EN_Msk;
+}
+#endif

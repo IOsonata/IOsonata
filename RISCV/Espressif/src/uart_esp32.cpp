@@ -3,49 +3,17 @@
 
 @brief	IOsonata UART driver for ESP32 RISC-V (UART0, UART1)
 
-Cross-chip driver supporting ESP32-C3, ESP32-C5, and ESP32-C6 in a
-single source file.  Driver scope: UART peripheral registers only --
-FIFO, INT_*, CONF, CLKDIV, CLK_CONF.  Everything else is delegated:
+Shared HP UART FIFO transfers for ESP32-C2/C3/C5/C6/C61. Register layout
+and peripheral clock selection follow ESP-IDF v5.5.1 per-chip UART headers.
+C2/C5/C61 polling setup is available; interrupt initialization fails
+explicitly until their CPU vector/interrupt ports are integrated. C3 has hardware validation; C6 has build and host MMIO checks.
 
-  Pin and matrix routing : IOPinCfg() in iopincfg_esp32.c.  The
-                           application's pin map carries the matrix
-                           signal index in IOPinCfg_t.PinOp; this
-                           driver does not touch IOMUX or matrix
-                           registers.  See ESP32_PINOP_U0TXD / U0RXD
-                           etc. in esp32xx_uart.h.
-
-  Peripheral clock gate  : Esp32UartClockEnable() and Esp32UartReset()
-                           in system_esp32_uart_clock.c.
-
-  Interrupt install      : Esp32EnableSourceIrq() in esp32xx_irq.{h,c}.
-
-Per-chip differences inside the UART register space itself
-(REG_UPDATE mechanism on C3 vs C5/C6, interrupt-controller debug
-snapshot path) are isolated to small `#if defined(...)` blocks.  The
-data plane (interrupt handler, FIFO drain, polled and interrupt-driven
-Rx/Tx paths) is identical on all three.
-
-C3 register layout reference: ESP32-C3 TRM Rev 0.4, section 17.
-C5/C6 register layout reference: ESP-IDF master / v5.3 register
-headers (uart_reg.h, pcr_reg.h, gpio_sig_map.h, uart_pins.h).
-
-UART instance bases:
-  C3:    UART0 0x60000000, UART1 0x60010000  (64 KB stride)
-  C5/C6: UART0 0x60000000, UART1 0x60001000  (4 KB stride)
-
-Clock source: SCLK_SEL = 3 (XTAL, 40 MHz) keeps baud independent of any
-later CPU/PLL change.  With SCLK_DIV_NUM = 0 the UART core runs at
-XTAL = 40 MHz directly (formula: SCLK = source / (SCLK_DIV_NUM + 1)).
-
-Baud divider: baud = 40 MHz / (CLKDIV + CLKDIV_FRAG / 16)
-  e.g. 115200 baud -> CLKDIV = 347, CLKDIV_FRAG = 4 -> 115273 baud
-  (+0.06 %).
-
-Interrupt routing: matrix source IDs come from esp32xx_uart.h
-(ESP32_UART_INTR_SOURCE_UART0/1).  Esp32EnableSourceIrq() routes each
-peripheral source to a CPU INT line (C3/C6 INTC) or a CLIC slot (C5).
-This driver uses CPU INT 2 for UART0 and CPU INT 3 for UART1, avoiding
-the ESP32-C3 reserved CPU INT 1 and Timer Group inputs 5 and 6.
+Pin routing uses the application's IOPinCfg_t map. Peripheral clock/reset
+operations live in system_esp32_uart_clock.c. CPU interrupt routing lives
+in esp32xx_irq.c. The UART core uses g_McuOsc.CoreOsc.Freq as its XTAL rate,
+with a source pre-divider and a 12-bit plus 4-bit fractional baud divider.
+SetRate returns the selected baud rate. Automatic baud detection, DMA,
+IrDA, software flow control and synchronous/half-duplex modes are unsupported.
 
 @author	Hoang Nguyen Hoan
 @date	Mar. 2026
@@ -82,6 +50,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 
 #include "esp32xx.h"
@@ -94,8 +63,10 @@ SOFTWARE.
 // External IRQ-count counters (provided elsewhere -- Vectors file or test
 // harness -- for cross-module inspection).
 // ===========================================================================
+#if defined(ESP32C3) || defined(ESP32C6)
 extern "C" volatile uint32_t g_Esp32C3Uart0IrqCount;
 extern "C" volatile uint32_t g_Esp32C3Uart1IrqCount;
+#endif
 
 // ===========================================================================
 // Local CPU-INT level assignment.  CPU INT 1 is reserved by IDF for Wi-Fi
@@ -129,6 +100,9 @@ typedef struct {
 static ESP32_UARTDEV s_Esp32UartDev[] = {
 	{ .DevNo = 0, .Base = ESP32_UART0_BASE, .pUartDev = nullptr },
 	{ .DevNo = 1, .Base = ESP32_UART1_BASE, .pUartDev = nullptr },
+#if defined(ESP32C61)
+	{ .DevNo = 2, .Base = ESP32_UART2_BASE, .pUartDev = nullptr },
+#endif
 };
 static const int s_NbUartDev = sizeof(s_Esp32UartDev) / sizeof(s_Esp32UartDev[0]);
 
@@ -196,56 +170,104 @@ static inline uint32_t Esp32UartRxAvail(uint32_t base)
 
 static inline void Esp32UartRegUpdate(uint32_t base)
 {
-#if defined(ESP32C3)
-	// C3: ID[31] is the REG_UPDATE / commit bit.  Hardware self-clears
-	// once the new config has been synchronised into the UART core clock
-	// domain.  Spin briefly.  Note that on C3 ID[30] (HIGH_SPEED) defaults
-	// to 1, which makes most CONF0/CLKDIV writes auto-sync without this
-	// round trip; we still invoke it for correctness.
-	ESP32_UART_ID_REG(base) |= ESP32_UART_ID_REG_UPDATE_Msk;
-	while (ESP32_UART_ID_REG(base) & ESP32_UART_ID_REG_UPDATE_Msk)
-	{
-	}
-#elif defined(ESP32C5) || defined(ESP32C6)
-	// C5/C6: separate REG_UPDATE register at offset 0x98.  Bit 0 is the
-	// commit bit; hardware self-clears.
+#if defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
 	ESP32_UART_REG_UPDATE_REG(base) = 1U;
 	while (ESP32_UART_REG_UPDATE_REG(base) & 1U)
 	{
 	}
+#else
+	// C2/C3 configuration registers synchronize automatically.
+	(void)base;
 #endif
 }
 
-static void Esp32UartSetBaud(uint32_t base, uint32_t baud)
+static uint32_t Esp32UartSetBaud(ESP32_UARTDEV *dev, uint32_t baud)
 {
-	uint32_t srcHz;
+	uint64_t source;
+	uint64_t divisor;
 	uint32_t scaled;
-	uint32_t integer;
-	uint32_t fraction;
+	uint32_t candidate;
+	uint32_t step;
+	uint32_t pre;
+	uint32_t rate;
+	uint32_t error;
+	uint32_t bestError;
+	uint32_t bestRate;
+	uint32_t bestPre;
+	uint32_t bestScaled;
 
-	srcHz = ESP32_UART_XTAL_HZ;
-	scaled = (uint32_t)(((uint64_t)srcHz * 16ULL + baud / 2U) / baud);
-	integer = scaled >> 4;
-	fraction = scaled & 0xFU;
-
-	if (integer < 1U)
+	if (baud == 0)
 	{
-		integer = 1U;
+		// Automatic baud detection is not implemented.
+		return 0;
 	}
-	if (integer > ESP32_UART_CLKDIV_INT_Msk)
+	source = (uint64_t)GetHighFreqOscFreq() * 16U;
+	if (source == 0)
 	{
-		integer = ESP32_UART_CLKDIV_INT_Msk;
+		return 0;
 	}
-
-	ESP32_UART_CLKDIV_REG(base) = (integer & ESP32_UART_CLKDIV_INT_Msk) |
-		((fraction << ESP32_UART_CLKDIV_FRAG_Pos) & ESP32_UART_CLKDIV_FRAG_Msk);
+	bestError = UINT32_MAX;
+	bestRate = 0;
+	bestPre = 1;
+	bestScaled = 16;
+	for (pre = 1; pre <= 256; pre++)
+	{
+		divisor = (uint64_t)baud * pre;
+		scaled = (uint32_t)(source / divisor);
+		if (scaled < 16U)
+		{
+			scaled = 16U;
+		}
+		if (scaled > 65535U)
+		{
+			scaled = 65535U;
+		}
+		// Compare both adjacent divisors in baud space.
+		for (step = 0; step < 2; step++)
+		{
+			candidate = scaled + step;
+			if (candidate > 65535U)
+			{
+				break;
+			}
+			divisor = (uint64_t)pre * candidate;
+			rate = (uint32_t)((source + divisor / 2U) / divisor);
+			error = rate > baud ? rate - baud : baud - rate;
+			if (error < bestError)
+			{
+				bestError = error;
+				bestRate = rate;
+				bestPre = pre;
+				bestScaled = candidate;
+			}
+		}
+		if (bestError == 0)
+		{
+			break;
+		}
+	}
+	Esp32UartClockConfig(dev->DevNo, bestPre);
+	ESP32_UART_CLKDIV_REG(dev->Base) = (bestScaled >> 4) |
+		((bestScaled & 15U) << ESP32_UART_CLKDIV_FRAG_Pos);
+	return bestRate;
 }
 
-static void Esp32UartIntMtxEnable(uint32_t source, uint32_t cpu_int_id, Esp32IrqHandler handler)
+static bool Esp32UartIntMtxEnable(uint32_t source, uint32_t cpu_int_id, Esp32IrqHandler handler)
 {
-	Esp32EnableSourceIrq(source, cpu_int_id, UART_CPU_INT_PRIO, handler);
+#if defined(ESP32C2) || defined(ESP32C5) || defined(ESP32C61)
+	(void)source;
+	(void)cpu_int_id;
+	(void)handler;
+	return false;
+#else
+	if (!Esp32EnableSourceIrq(source, cpu_int_id, UART_CPU_INT_PRIO, handler))
+	{
+		return false;
+	}
 #if defined(ESP32C3) || defined(ESP32C6)
 	Esp32UartDebugSnapshot();
+#endif
+	return true;
 #endif
 }
 
@@ -381,16 +403,27 @@ static void Esp32UartIRQHandler(ESP32_UARTDEV *pDev)
 extern "C" __attribute__((used))
 void UART0_IRQHandler(void)
 {
+#if defined(ESP32C3) || defined(ESP32C6)
 	g_Esp32C3Uart0IrqCount++;
+#endif
 	Esp32UartIRQHandler(&s_Esp32UartDev[0]);
 }
 
 extern "C" __attribute__((used))
 void UART1_IRQHandler(void)
 {
+#if defined(ESP32C3) || defined(ESP32C6)
 	g_Esp32C3Uart1IrqCount++;
+#endif
 	Esp32UartIRQHandler(&s_Esp32UartDev[1]);
 }
+
+#if defined(ESP32C61)
+extern "C" void UART2_IRQHandler(void)
+{
+	Esp32UartIRQHandler(&s_Esp32UartDev[2]);
+}
+#endif
 
 /*---------------------------------------------------------------------------
  * DevIntrf operations
@@ -408,7 +441,11 @@ static uint32_t Esp32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	ESP32_UARTDEV *dev;
 
 	dev = (ESP32_UARTDEV *)pDev->pDevData;
-	Esp32UartSetBaud(dev->Base, Rate);
+	Rate = Esp32UartSetBaud(dev, Rate);
+	if (Rate == 0)
+	{
+		return 0;
+	}
 	Esp32UartRegUpdate(dev->Base);
 	dev->pUartDev->Rate = Rate;
 	return Rate;
@@ -673,9 +710,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	ESP32_UARTDEV *dev;
 	uint32_t base;
 	uint32_t cc;
+	uint32_t rate;
 	uint32_t conf0;
 	int devno;
 	int bn;
+	bool irqOk;
 
 	if (pDev == nullptr || pCfg == nullptr)
 	{
@@ -690,6 +729,23 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+	if (pCfg->Rate <= 0 || pCfg->bDMAMode || pCfg->bIrDAMode ||
+		pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL ||
+		pCfg->FlowControl == UART_FLWCTRL_XONXOFF ||
+		(pCfg->FlowControl == UART_FLWCTRL_HW && pCfg->NbIOPins < 4) ||
+		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN &&
+		pCfg->Parity != UART_PARITY_ODD))
+	{
+		return false;
+	}
+
+#if defined(ESP32C2) || defined(ESP32C5) || defined(ESP32C61)
+	// These targets still need their CPU vector/interrupt port.
+	if (pCfg->bIntMode)
+	{
+		return false;
+	}
+#endif
 	devno = pCfg->DevNo;
 	dev = &s_Esp32UartDev[devno];
 	base = dev->Base;
@@ -697,86 +753,18 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
 
-	// 1. Enable APB clock to the UART, and reset the peripheral.
-
-	// UART0 IS THE ROM CONSOLE.  ESP-IDF deliberately SKIPS the module
-	// reset on whichever UART is the console (esp_driver_uart/src/uart.c:218):
-
-	//     if (uart_num != CONFIG_ESP_CONSOLE_UART_NUM) {
-	//         uart_ll_reset_register(uart_num);
-	//     }
-
-	// ROM hands UART0 off in a working state - its CLKDIV, CONF0, FIFO,
-	// and TX state machine are all sane.  Pulsing SYSTEM_UART_RST against
-	// a running core (even with the C3 RST_CORE bracket) interacts badly
-	// with the GPIO-matrix pin transition that follows in step 11: the
-	// core comes out of reset, briefly accepts FIFO writes, but its TX
-	// shifter never re-engages.  Symptom: Tx() pushes bytes into the
-	// HW FIFO indefinitely without anything appearing on the wire.
-
-	// Just enable the bus clock (already on for UART0 from ROM, but the
-	// write is idempotent) and proceed.  CONF0/CONF1/CLKDIV/CLK_CONF
-	// are then explicitly programmed below to known values, so we don't
-	// rely on whatever ROM left in those registers - only on the fact
-	// that the UART core is alive and clocked.
-
-	// For UART1 the full C3 RST_CORE bracket is still required, since
-	// ROM never enabled UART1: without it the core latches garbage out
-	// of reset (per IDF v5.3 hal/esp32c3/uart_ll.h:107).
+	// Preserve UART0's running ROM console; reset other instances.
 	Esp32UartClockEnable(devno);
-	Esp32UartReset(devno);   // no-op for devno == 0 (ROM console)
-
-	// 2. Mask all UART interrupts while we configure (safe regardless of
-	//    whether UART is running - these are interrupt-enable bits, not
-	//    state machine bits).
+	Esp32UartReset(devno);
 	ESP32_UART_INT_ENA_REG(base) = 0U;
 	ESP32_UART_INT_CLR_REG(base) = 0xFFFFFFFFUL;
-
-	// 3. Clock source selection.
-
-	// UART0: surgical update.  ROM left CLK_CONF with all the right
-	// enables (SCLK_EN, TX_SCLK_EN, RX_SCLK_EN are all 1 by default and
-	// ROM keeps them so).  We only want to (a) point the source at XTAL
-	// so baud is independent of any later CPU/APB clock change, and
-	// (b) zero the integer pre-divider so SCLK = XTAL = 40 MHz exactly.
-	// Read-modify-write only those two fields (sclk_sel, sclk_div_num);
-	// leaving sclk_div_a, sclk_div_b at 0, and the enable bits and
-	// rst_core untouched at whatever they were (always 1, 1, 1, 0 in
-	// practice, but we don't disturb them).
-
-	// UART1: full overwrite is fine - the RST_CORE bracket above already
-	// reset CLK_CONF to defaults, so this just sets up our chosen state.
-
-	// Why this matters: the previous code did an UNCONDITIONAL full
-	// overwrite of CLK_CONF on UART0.  When UART0 came into Init()
-	// already running (post-Stage-A or after ROM banner remnants), the
-	// full overwrite SWITCHED THE SCLK SOURCE underneath an in-flight
-	// TX byte.  The TX shifter wedged at variable points - symptom was
-	// a non-deterministic truncated AA stream (sometimes 2 bytes,
-	// sometimes 10).  Surgical update doesn't disturb the shifter.
-	if (devno == 0)
+	rate = Esp32UartSetBaud(dev, (uint32_t)pCfg->Rate);
+	if (rate == 0)
 	{
-		cc = ESP32_UART_CLK_CONF_REG(base);
-		cc &= ~(ESP32_UART_CLK_CONF_SCLK_SEL_Msk | ESP32_UART_CLK_CONF_SCLK_DIV_NUM_Msk
-			  | ESP32_UART_CLK_CONF_SCLK_DIV_A_Msk | ESP32_UART_CLK_CONF_SCLK_DIV_B_Msk);
-		cc |= ESP32_UART_CLK_CONF_SCLK_SEL_XTAL;   // sclk_div_num stays 0 -> /1
-		ESP32_UART_CLK_CONF_REG(base) = cc;
-	}
-	else
-	{
-		ESP32_UART_CLK_CONF_REG(base) = ESP32_UART_CLK_CONF_SCLK_SEL_XTAL
-							| ESP32_UART_CLK_CONF_SCLK_EN_Msk
-							| ESP32_UART_CLK_CONF_TX_SCLK_EN_Msk
-							| ESP32_UART_CLK_CONF_RX_SCLK_EN_Msk;
+		return false;
 	}
 
-	// 4. Baud - write CLKDIV.  Atomic register write, doesn't disturb the
-	//    TX state machine (the divider just changes how fast the next
-	//    bit transitions; if a byte is in mid-transmit the worst case
-	//    is one mis-timed bit, not a wedged shifter).
-	Esp32UartSetBaud(base, (uint32_t)pCfg->Rate);
-
-	// 5. Frame format: data bits, parity, stop.  Read-modify-write
+	// Frame format: data bits, parity, stop.  Read-modify-write
 	//    preserves CONF0.mem_clk_en and any other bits ROM/Init set.
 	conf0 = ESP32_UART_CONF0_REG(base) & ~(ESP32_UART_CONF0_BIT_NUM_Msk | ESP32_UART_CONF0_STOP_BIT_Msk
 										 | ESP32_UART_CONF0_PARITY_Msk | ESP32_UART_CONF0_PARITY_EN_Msk
@@ -822,35 +810,32 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	// Keep TX-empty at 16 bytes.
 	ESP32_UART_CONF1_REG(base) =
 		(3U << ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos) |
-		(16U << ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Pos) |
-		ESP32_UART_CONF1_RX_TOUT_EN_Msk;          // RX_TOUT_EN
+		(16U << ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Pos);
 
-	// 6a. IDLE_CONF: clear tx_idle_num so there's no inter-byte gap.
+	cc = ESP32_UART_RX_TOUT_REG(base) & ~ESP32_UART_RX_TOUT_THRHD_Msk;
+	ESP32_UART_RX_TOUT_REG(base) = cc | (10U << ESP32_UART_RX_TOUT_THRHD_Pos);
+	ESP32_UART_RX_TOUT_EN_REG(base) |= ESP32_UART_RX_TOUT_EN_Msk;
+	cc = ESP32_UART_RX_FLOW_REG(base) & ~ESP32_UART_RX_FLOW_THRHD_Msk;
+	ESP32_UART_RX_FLOW_REG(base) = cc | (96U << ESP32_UART_RX_FLOW_THRHD_Pos);
+	ESP32_UART_RX_FLOW_EN_REG(base) &= ~ESP32_UART_RX_FLOW_EN_Msk;
+	if (pCfg->FlowControl == UART_FLWCTRL_HW)
+	{
+		ESP32_UART_RX_FLOW_EN_REG(base) |= ESP32_UART_RX_FLOW_EN_Msk;
+	}
+
+	// IDLE_CONF: clear tx_idle_num so there's no inter-byte gap.
 	//     C3 default is 0x100 (256 baud cycles ~ 2.22 ms at 115200),
 	//     dropping observed line rate from ~11500 B/s to ~430 B/s.
 	//     IDF's uart_hal_init clears this to 0; we do the same.
 	ESP32_UART_IDLE_CONF_REG(base) = 0U;
 
-	// 7. UART0: skip REG_UPDATE and FIFO reset.
+	// C5/C6/C61 require an explicit commit of synchronized registers.
+	Esp32UartRegUpdate(base);
 
-	// On the C3, ID[30] (HIGH_SPEED) is 1 by default - register writes
-	// auto-sync to the core clock domain, so REG_UPDATE is unnecessary
-	// (IDF's C3 uart_ll.h does not have a uart_ll_update function at
-	// all, unlike C5/C6/H2/P4 where it's required).
-
-	// Also: do NOT pulse RXFIFO_RST/TXFIFO_RST on a running UART0.  The
-	// old code's FIFO-reset bracket would clear the FIFO mid-transmit
-	// if any of Stage A's bytes were still in flight, contributing to
-	// the truncated-AA-stream symptom.  UART0 entered Init() with a
-	// running TX shifter; we leave it that way.
-
-	// For UART1 we did the full module reset above, which already
-	// initialised the FIFOs - no separate reset needed here either.
-
-	// 8. Pin/matrix routing
+	// Pin/matrix routing
 	IOPinCfg((IOPinCfg_t *)pCfg->pIOPinMap, pCfg->NbIOPins);
 
-	// 10. Software FIFOs
+	// Software FIFOs
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
 	{
 		pDev->hRxFifo = CFifoInit(pCfg->pRxMem, pCfg->RxMemSize, 1, pCfg->bFifoBlocking);
@@ -869,7 +854,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		pDev->hTxFifo = CFifoInit(dev->TxFifoMem, ESP32_UART_CFIFO_SIZE, 1, pCfg->bFifoBlocking);
 	}
 
-	pDev->Rate         = pCfg->Rate;
+	pDev->Rate         = rate;
 	pDev->DataBits     = pCfg->DataBits;
 	pDev->Parity       = pCfg->Parity;
 	pDev->StopBits     = pCfg->StopBits;
@@ -903,7 +888,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.StopTx   = Esp32UartStopTx;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	// 11. Optional interrupt routing
+	// Optional interrupt routing
 	if (pCfg->bIntMode)
 	{
 		ESP32_UART_INT_CLR_REG(base) = 0xFFFFFFFFUL;
@@ -914,11 +899,23 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 		if (devno == 0)
 		{
-			Esp32UartIntMtxEnable(ESP32_UART_INTR_SOURCE_UART0, UART0_CPU_INT_LEVEL, UART0_IRQHandler);
+			irqOk = Esp32UartIntMtxEnable(ESP32_UART_INTR_SOURCE_UART0, UART0_CPU_INT_LEVEL, UART0_IRQHandler);
 		}
+		else if (devno == 1)
+		{
+			irqOk = Esp32UartIntMtxEnable(ESP32_UART_INTR_SOURCE_UART1, UART1_CPU_INT_LEVEL, UART1_IRQHandler);
+		}
+#if defined(ESP32C61)
 		else
 		{
-			Esp32UartIntMtxEnable(ESP32_UART_INTR_SOURCE_UART1, UART1_CPU_INT_LEVEL, UART1_IRQHandler);
+			irqOk = Esp32UartIntMtxEnable(ESP32_UART_INTR_SOURCE_UART2, 8U, UART2_IRQHandler);
+		}
+#endif
+		if (!irqOk)
+		{
+			ESP32_UART_INT_ENA_REG(base) = 0;
+			dev->pUartDev = nullptr;
+			return false;
 		}
 	}
 

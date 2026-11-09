@@ -3,7 +3,7 @@
 
 @brief	ESP32 UART register definitions for the IOsonata RISC-V family.
 
-Covers C3 / C5 / C6.  Two layouts share this header:
+Covers C2 / C3 / C5 / C6 / C61 HP UARTs.  Two layouts share this header:
 
   * C3:    classic UART layout.  CONF0 at 0x20 is direct R/W; CLK_CONF
            at 0x78; ID register at 0x80; no REG_UPDATE register
@@ -17,7 +17,7 @@ The same logical fields (CONF0, CONF1, INT_*, STATUS) exist on both
 layouts but at different offsets.  This header exposes them through
 chip-aware register access macros that hide the offset differences.
 
-Bitfield positions and masks have been verified against ESP-IDF v5.3
+Bitfield positions and masks have been verified against ESP-IDF v5.5.1
 components/soc/<chip>/include/soc/uart_reg.h.
 
 UART instance numbering:
@@ -64,52 +64,24 @@ SOFTWARE.
 #define ESP32_REG32(addr)                   (*(volatile uint32_t *)((uintptr_t)(addr)))
 #endif
 
-/*---------------------------------------------------------------------------
- * Per-instance UART base addresses.
- *
- * Each chip header already defines its own ESP32CN_UARTn_BASE; this
- * block provides the no-prefix common aliases that drivers use.
- *---------------------------------------------------------------------------*/
-#ifndef ESP32_UART0_BASE
-#  if   defined(ESP32C3)
-#    define ESP32_UART0_BASE                ESP32C3_UART0_BASE
-#  elif defined(ESP32C5)
-#    define ESP32_UART0_BASE                ESP32C5_UART0_BASE
-#  elif defined(ESP32C6)
-#    define ESP32_UART0_BASE                ESP32C6_UART0_BASE
-#  endif
-#endif
-
-#ifndef ESP32_UART1_BASE
-#  if   defined(ESP32C3)
-#    define ESP32_UART1_BASE                ESP32C3_UART1_BASE
-#  elif defined(ESP32C5)
-#    define ESP32_UART1_BASE                ESP32C5_UART1_BASE
-#  elif defined(ESP32C6)
-#    define ESP32_UART1_BASE                ESP32C6_UART1_BASE
-#  endif
-#endif
-
-#if defined(ESP32C5) || defined(ESP32C6)
-#  ifndef ESP32_LP_UART_BASE
-#    if defined(ESP32C5)
-#      define ESP32_LP_UART_BASE            ESP32C5_LP_UART_BASE
-#    else
-#      define ESP32_LP_UART_BASE            ESP32C6_LP_UART_BASE
-#    endif
-#  endif
-#endif
+// Base addresses are supplied by the chip header through esp32xx.h.
 
 /*---------------------------------------------------------------------------
  * UART hardware constants.
  *---------------------------------------------------------------------------*/
 #define ESP32_UART_HW_FIFO_LEN              128U        //!< TX/RX hardware FIFO depth (entries).
-#define ESP32_UART_XTAL_HZ                  40000000UL  //!< XTAL clock used as UART source on C3/C5/C6.
 
 /*---------------------------------------------------------------------------
  * Per-source-id values.  Verified against IDF interrupts.h.
  *---------------------------------------------------------------------------*/
-#if defined(ESP32C3)
+#if defined(ESP32C2)
+#  define ESP32_UART_INTR_SOURCE_UART0      17U
+#  define ESP32_UART_INTR_SOURCE_UART1      18U
+#elif defined(ESP32C61)
+#  define ESP32_UART_INTR_SOURCE_UART0      40U
+#  define ESP32_UART_INTR_SOURCE_UART1      41U
+#  define ESP32_UART_INTR_SOURCE_UART2      42U
+#elif defined(ESP32C3)
 #  define ESP32_UART_INTR_SOURCE_UART0      21U
 #  define ESP32_UART_INTR_SOURCE_UART1      22U
 #elif defined(ESP32C6)
@@ -138,7 +110,7 @@ SOFTWARE.
 /*===========================================================================
  * Layout-divergent offsets.
  *===========================================================================*/
-#if defined(ESP32C3)
+#if (defined(ESP32C2) || defined(ESP32C3))
 // C3 classic layout (no _SYNC suffix; CONF0 directly R/W).
 #  define ESP32_UART_CLKDIV_OFFSET          0x14U
 #  define ESP32_UART_CONF0_OFFSET           0x20U
@@ -159,7 +131,7 @@ SOFTWARE.
 #  define ESP32_UART_ID_OFFSET              0x80U
 // REG_UPDATE does not exist on C3; UART_ID.HIGH_SPEED bit 30 defaults
 // to 1 so writes auto-sync to the core domain without explicit update.
-#elif defined(ESP32C5) || defined(ESP32C6)
+#elif defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
 // C5/C6 _SYNC layout: CONF0_SYNC requires a REG_UPDATE write to commit.
 #  define ESP32_UART_CLKDIV_OFFSET          0x14U   //!< CLKDIV_SYNC_REG.
 #  define ESP32_UART_CONF0_OFFSET           0x20U   //!< CONF0_SYNC_REG.
@@ -223,7 +195,7 @@ SOFTWARE.
 #define ESP32_UART_DATE_REG(base)           ESP32_REG32((base) + ESP32_UART_DATE_OFFSET)
 #define ESP32_UART_ID_REG(base)             ESP32_REG32((base) + ESP32_UART_ID_OFFSET)
 
-#if defined(ESP32C5) || defined(ESP32C6)
+#if defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
 #  define ESP32_UART_HWFC_CONF_REG(base)    ESP32_REG32((base) + ESP32_UART_HWFC_CONF_OFFSET)
 #  define ESP32_UART_SWFC_CONF0_REG(base)   ESP32_REG32((base) + ESP32_UART_SWFC_CONF0_OFFSET)
 #  define ESP32_UART_SWFC_CONF1_REG(base)   ESP32_REG32((base) + ESP32_UART_SWFC_CONF1_OFFSET)
@@ -271,36 +243,59 @@ SOFTWARE.
 #define ESP32_UART_CONF0_BIT_NUM_Msk        (3UL << ESP32_UART_CONF0_BIT_NUM_Pos)
 #define ESP32_UART_CONF0_STOP_BIT_Pos       4U           //!< 1 / 1.5 / 2 stop bits = 1/2/3.
 #define ESP32_UART_CONF0_STOP_BIT_Msk       (3UL << ESP32_UART_CONF0_STOP_BIT_Pos)
+#if defined(ESP32C2) || defined(ESP32C3)
 #define ESP32_UART_CONF0_TX_FLOW_EN_Pos     15U
-#define ESP32_UART_CONF0_TX_FLOW_EN_Msk     (1UL << ESP32_UART_CONF0_TX_FLOW_EN_Pos)
 #define ESP32_UART_CONF0_RXFIFO_RST_Pos     17U
-#define ESP32_UART_CONF0_RXFIFO_RST_Msk     (1UL << ESP32_UART_CONF0_RXFIFO_RST_Pos)
 #define ESP32_UART_CONF0_TXFIFO_RST_Pos     18U
-#define ESP32_UART_CONF0_TXFIFO_RST_Msk     (1UL << ESP32_UART_CONF0_TXFIFO_RST_Pos)
 #define ESP32_UART_CONF0_RXD_INV_Pos        19U
-#define ESP32_UART_CONF0_RXD_INV_Msk        (1UL << ESP32_UART_CONF0_RXD_INV_Pos)
 #define ESP32_UART_CONF0_TXD_INV_Pos        22U
+#define ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Pos 9U
+#define ESP32_UART_FIFO_THRHD_Msk           0x1FFUL
+#define ESP32_UART_FIFO_CNT_Msk             0x3FFUL
+#define ESP32_UART_RX_TOUT_REG(base)        ESP32_UART_MEM_CONF_REG(base)
+#define ESP32_UART_RX_TOUT_THRHD_Pos        16U
+#define ESP32_UART_RX_TOUT_EN_REG(base)     ESP32_UART_CONF1_REG(base)
+#define ESP32_UART_RX_TOUT_EN_Msk           (1UL << 21)
+#define ESP32_UART_RX_FLOW_REG(base)        ESP32_UART_MEM_CONF_REG(base)
+#define ESP32_UART_RX_FLOW_THRHD_Pos        7U
+#define ESP32_UART_RX_FLOW_EN_REG(base)     ESP32_UART_CONF1_REG(base)
+#define ESP32_UART_RX_FLOW_EN_Msk           (1UL << 20)
+#else
+#define ESP32_UART_CONF0_TX_FLOW_EN_Pos     13U
+#define ESP32_UART_CONF0_RXFIFO_RST_Pos     22U
+#define ESP32_UART_CONF0_TXFIFO_RST_Pos     23U
+#define ESP32_UART_CONF0_RXD_INV_Pos        15U
+#define ESP32_UART_CONF0_TXD_INV_Pos        16U
+#define ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Pos 8U
+#define ESP32_UART_FIFO_THRHD_Msk           0xFFUL
+#define ESP32_UART_FIFO_CNT_Msk             0xFFUL
+#define ESP32_UART_RX_TOUT_REG(base)        ESP32_UART_TOUT_CONF_REG(base)
+#define ESP32_UART_RX_TOUT_THRHD_Pos        2U
+#define ESP32_UART_RX_TOUT_EN_REG(base)     ESP32_UART_TOUT_CONF_REG(base)
+#define ESP32_UART_RX_TOUT_EN_Msk           (1UL << 0)
+#define ESP32_UART_RX_FLOW_REG(base)        ESP32_UART_HWFC_CONF_REG(base)
+#define ESP32_UART_RX_FLOW_THRHD_Pos        0U
+#define ESP32_UART_RX_FLOW_EN_REG(base)     ESP32_UART_HWFC_CONF_REG(base)
+#define ESP32_UART_RX_FLOW_EN_Msk           (1UL << 8)
+#endif
+#define ESP32_UART_CONF0_TX_FLOW_EN_Msk     (1UL << ESP32_UART_CONF0_TX_FLOW_EN_Pos)
+#define ESP32_UART_CONF0_RXFIFO_RST_Msk     (1UL << ESP32_UART_CONF0_RXFIFO_RST_Pos)
+#define ESP32_UART_CONF0_TXFIFO_RST_Msk     (1UL << ESP32_UART_CONF0_TXFIFO_RST_Pos)
+#define ESP32_UART_CONF0_RXD_INV_Msk        (1UL << ESP32_UART_CONF0_RXD_INV_Pos)
 #define ESP32_UART_CONF0_TXD_INV_Msk        (1UL << ESP32_UART_CONF0_TXD_INV_Pos)
-
-/*===========================================================================
- * UART_CONF1 bit positions (RX/TX threshold and timeout enable).
- *===========================================================================*/
-#define ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos   0U
-#define ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Msk   (0x1FFUL << ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos)
-#define ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Pos  9U
-#define ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Msk  (0x1FFUL << ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Pos)
-#define ESP32_UART_CONF1_RX_TOUT_THRHD_Pos       16U
-#define ESP32_UART_CONF1_RX_TOUT_THRHD_Msk       (0x3FFUL << ESP32_UART_CONF1_RX_TOUT_THRHD_Pos)
-#define ESP32_UART_CONF1_RX_TOUT_EN_Pos          21U
-#define ESP32_UART_CONF1_RX_TOUT_EN_Msk          (1UL << ESP32_UART_CONF1_RX_TOUT_EN_Pos)
+#define ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos 0U
+#define ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Msk ESP32_UART_FIFO_THRHD_Msk
+#define ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Msk (ESP32_UART_FIFO_THRHD_Msk << ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Pos)
+#define ESP32_UART_RX_TOUT_THRHD_Msk        (0x3FFUL << ESP32_UART_RX_TOUT_THRHD_Pos)
+#define ESP32_UART_RX_FLOW_THRHD_Msk        (ESP32_UART_FIFO_THRHD_Msk << ESP32_UART_RX_FLOW_THRHD_Pos)
 
 /*===========================================================================
  * UART_STATUS bit positions.
  *===========================================================================*/
 #define ESP32_UART_STATUS_RXFIFO_CNT_Pos    0U           //!< Bytes currently in RX FIFO.
-#define ESP32_UART_STATUS_RXFIFO_CNT_Msk    (0x3FFUL << ESP32_UART_STATUS_RXFIFO_CNT_Pos)
+#define ESP32_UART_STATUS_RXFIFO_CNT_Msk    (ESP32_UART_FIFO_CNT_Msk << ESP32_UART_STATUS_RXFIFO_CNT_Pos)
 #define ESP32_UART_STATUS_TXFIFO_CNT_Pos    16U          //!< Bytes currently in TX FIFO.
-#define ESP32_UART_STATUS_TXFIFO_CNT_Msk    (0x3FFUL << ESP32_UART_STATUS_TXFIFO_CNT_Pos)
+#define ESP32_UART_STATUS_TXFIFO_CNT_Msk    (ESP32_UART_FIFO_CNT_Msk << ESP32_UART_STATUS_TXFIFO_CNT_Pos)
 
 /*===========================================================================
  * UART_CLKDIV bit positions (integer + fractional baud divider).
@@ -313,8 +308,8 @@ SOFTWARE.
 /*===========================================================================
  * UART_CLK_CONF bit positions (clock source selection and enable).
  *
- * Same bit positions on C3 and C5/C6 even though the register lives
- * at different offsets between the two layouts.
+ * Source selection and core reset fields apply to C2/C3 only.
+ * C5/C6/C61 use PCR; only TX_SCLK_EN and RX_SCLK_EN remain here.
  *===========================================================================*/
 #define ESP32_UART_CLK_CONF_SCLK_DIV_B_Pos   0U
 #define ESP32_UART_CLK_CONF_SCLK_DIV_B_Msk   (0x3FUL << ESP32_UART_CLK_CONF_SCLK_DIV_B_Pos)
@@ -349,7 +344,7 @@ SOFTWARE.
  *===========================================================================*/
 #define ESP32_UART_ID_REG_UPDATE_Pos        31U
 #define ESP32_UART_ID_REG_UPDATE_Msk        (1UL << ESP32_UART_ID_REG_UPDATE_Pos)
-#if defined(ESP32C3)
+#if (defined(ESP32C2) || defined(ESP32C3))
 #  define ESP32_UART_ID_HIGH_SPEED_Pos      30U
 #  define ESP32_UART_ID_HIGH_SPEED_Msk      (1UL << ESP32_UART_ID_HIGH_SPEED_Pos)
 #endif
@@ -362,7 +357,7 @@ SOFTWARE.
  * the GPIO matrix.  Identical on C5 and C6.  Values verified against
  * IDF gpio_sig_map.h.
  *---------------------------------------------------------------------------*/
-#if defined(ESP32C3)
+#if (defined(ESP32C2) || defined(ESP32C3))
 #define ESP32_U0RXD_IN_IDX                  6U
 #define ESP32_U0TXD_OUT_IDX                 6U
 #define ESP32_U0CTS_IN_IDX                  7U
@@ -371,7 +366,7 @@ SOFTWARE.
 #define ESP32_U1TXD_OUT_IDX                 9U
 #define ESP32_U1CTS_IN_IDX                  10U
 #define ESP32_U1RTS_OUT_IDX                 10U
-#elif defined(ESP32C5) || defined(ESP32C6)
+#elif defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
 #define ESP32_U0RXD_IN_IDX                  6U
 #define ESP32_U0TXD_OUT_IDX                 6U
 #define ESP32_U0CTS_IN_IDX                  7U
@@ -410,19 +405,21 @@ SOFTWARE.
 #define ESP32_PINOP_U1CTS                   (IOPINOP_FUNC0 + ESP32_U1CTS_IN_IDX)
 #define ESP32_PINOP_U1RTS                   (IOPINOP_FUNC0 + ESP32_U1RTS_OUT_IDX)
 
-/*---------------------------------------------------------------------------
- * Per-chip UART peripheral clock-gating helpers.
- *
- * Defined in system_esp32_uart_clock.c (or, equivalently, in the matching
- * system_esp32_system.c / system_esp32_pcr.c if the user prefers to
- * merge the helper bodies into their existing system files).
- *---------------------------------------------------------------------------*/
+#if defined(ESP32C61)
+#define ESP32_PINOP_U2RXD (IOPINOP_FUNC0 + 72U)
+#define ESP32_PINOP_U2TXD (IOPINOP_FUNC0 + 72U)
+#define ESP32_PINOP_U2CTS (IOPINOP_FUNC0 + 73U)
+#define ESP32_PINOP_U2RTS (IOPINOP_FUNC0 + 73U)
+#endif
+
+// Target clock and reset helpers, implemented in system_esp32_uart_clock.c.
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 void Esp32UartClockEnable(int devno);
 void Esp32UartReset(int devno);
+void Esp32UartClockConfig(int devno, uint32_t Divider);
 
 #ifdef __cplusplus
 }
