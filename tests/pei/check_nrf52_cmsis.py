@@ -71,7 +71,7 @@ def main():
             if not (softdevice / "nrf_soc.h").is_file():
                 parser.error("Missing SoftDevice headers: " + str(softdevice))
             cmd += [
-                "-DSOFTDEVICE_PRESENT", "-DSVC_INTERFACE_CALL_AS_NORMAL_FUNCTION",
+                "-DSOFTDEVICE_PRESENT",
                 "-I", str(softdevice), "-I", str(softdevice / "nrf52"),
                 "-I", str(sdk / "components/softdevice/common")
             ]
