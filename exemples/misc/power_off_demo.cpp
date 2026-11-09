@@ -13,7 +13,10 @@ released. With a debugger attached, power off can be emulated by the MCU and
 the demo then stays stopped instead of waking up.
 
 The board.h of the project gives the console UART pins and the wake up
-button.
+button, a button to ground by default. WAKE_BUT_SENSE
+IOPINSENSE_HIGH_TRANSITION selects a button to the supply, for MCU that wake
+up only on a rising level. When SystemWakePin refuses the pin, the demo says
+so and only the reset pin or a power cycle starts the MCU again.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 7, 2026
@@ -63,6 +66,15 @@ SOFTWARE.
 #ifndef POWER_DEMO_DELAY
 #define POWER_DEMO_DELAY		3000
 #endif
+
+// Level of the wake up button that wakes the MCU, a button to ground by default
+#ifndef WAKE_BUT_SENSE
+#define WAKE_BUT_SENSE			IOPINSENSE_LOW_TRANSITION
+#endif
+
+// Pull resistor and level of the released button
+static const IOPINRES s_WakeButRes = WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? IOPINRES_PULLDOWN : IOPINRES_PULLUP;
+static const int s_WakeButIdle = WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 0 : 1;
 
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
@@ -150,19 +162,25 @@ int main()
 	SystemRetRegWrite(0, cnt);
 	SysLogPrintf(SysLogGet(), "Start count %u, %d retention registers\r\n", (unsigned)cnt, SystemRetRegCount());
 
-	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP, IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
 
 	msDelay(POWER_DEMO_DELAY);
 
-	// The button wakes the MCU on low level, it must be up before power off
-	while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) == 0);
+	// The button wakes the MCU when pressed, it must be released before power off
+	while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle);
 
-	SysLogPrintf(SysLogGet(), "Power off, press the button to wake up\r\n");
+	if (SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
+	{
+		SysLogPrintf(SysLogGet(), "Power off, press the button to wake up\r\n");
+	}
+	else
+	{
+		SysLogPrintf(SysLogGet(), "Power off, the button cannot wake this MCU, use the reset pin\r\n");
+	}
 
 	// Time for the UART to send the last record
 	msDelay(100);
 
-	IOPinSetSense(WAKE_BUT_PORT, WAKE_BUT_PIN, IOPINSENSE_LOW_TRANSITION);
 	SystemPowerOff();
 
 	return 0;
