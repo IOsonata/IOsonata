@@ -50,7 +50,8 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
                     str(matrix), "-o", str(matrix_obj)], check=True)
     subprocess.run(["gcc", "-std=c11", *COMMON, "-fsyntax-only",
                     str(TEST / "pei_hal_c_api.c")], check=True)
-    subprocess.run(["g++", "-std=c++11", *COMMON, "-fsyntax-only",
+    subprocess.run(["g++", "-std=c++11", *COMMON,
+                    "-Wno-error=overloaded-virtual", "-fsyntax-only",
                     str(TEST / "pei_hal_cpp_api.cpp")], check=True)
     for name, flags in [
         ("bare", []),
