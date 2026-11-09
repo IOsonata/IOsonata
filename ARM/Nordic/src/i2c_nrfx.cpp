@@ -1911,7 +1911,7 @@ bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 	{
 		return false;
 	}
-	// Recheck the owner's state while holding the generic bus lock.
+	// Check transfer state after acquiring the bus lock.
 	if (dev->bPeiPrepared || dev->bTxRejected ||
 		dev->Async != NRFX_I2C_ASYNC_IDLE)
 	{
@@ -1985,7 +1985,7 @@ bool I2CReleasePeiTransfer(I2CDev_t *pDev)
 		}
 		if (dev->pDmaReg->EVENTS_STOPPED == 0U)
 		{
-			// Keep the caller's RX buffer locked on timeout.
+			// Retain DMA buffer ownership if STOP times out.
 			return false;
 		}
 	}
