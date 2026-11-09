@@ -389,11 +389,13 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 // not start.
 static bool nRFxLfclkStart(uint32_t Src)
 {
+	int i;
+
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
 	NRF_CLOCK->TASKS_LFCLKSTART = 1;
 
-	for (int i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
+	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
 	{
 		if (NRF_CLOCK->EVENTS_LFCLKSTARTED)
 		{
@@ -410,9 +412,11 @@ static bool nRFxLfclkStart(uint32_t Src)
 
 static void nRFxLfclkStop(void)
 {
+	int i;
+
 	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
 
-	for (int i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
+	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
 	{
 		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0)
 		{
@@ -423,10 +427,12 @@ static void nRFxLfclkStop(void)
 
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
+	uint32_t src;
+	uint32_t prev;
+	bool running;
+
 	// The 32 kHz oscillators of these parts are 32768 Hz
 	(void)OscFreq;
-
-	uint32_t src;
 
 	switch (ClkSrc)
 	{
@@ -453,8 +459,8 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return false;
 	}
 
-	bool running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0;
-	uint32_t prev = NRF_CLOCK->NRFX_LFCLKSRC;
+	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0;
+	prev = NRF_CLOCK->NRFX_LFCLKSRC;
 
 	if (running == false || prev != src ||
 		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) != (src & NRFX_LFCLK_SRC_Msk))
