@@ -383,6 +383,7 @@ static void TestRtcMatrixRearm(void)
 	assert(g_critical_depth == 0);
 }
 
+#if !defined(TEST_SKIP_EGU_MMIO)
 // Map the EGU registers at their nRF52 addresses in host memory
 static void TestEguMap(void)
 {
@@ -568,6 +569,8 @@ static void TestSwEvent(void)
 }
 
 
+#endif
+
 // Group operations refer to live matrix routes, never arbitrary channel
 // numbers. A disconnected route must be removed from its group before
 // its PPI channel can be reused.
@@ -720,7 +723,12 @@ int main(void)
 	TestCMatrix();
 	TestRtcMatrixRearm();
 	TestGroups();
+#if defined(TEST_SKIP_EGU_MMIO)
+	printf("PEI EGU fixed-address MMIO: SKIPPED (host address unavailable)\n");
+#else
 	TestSwEvent();
-	printf("PEI nRF52 %d channels, %d EGU: PASS\n", TEST_PPI_CHANNEL_COUNT, TEST_EGU_COUNT);
+	printf("PEI EGU %d instances: PASS\n", TEST_EGU_COUNT);
+#endif
+	printf("PEI nRF52 %d PPI channels: PASS\n", TEST_PPI_CHANNEL_COUNT);
 	return 0;
 }
