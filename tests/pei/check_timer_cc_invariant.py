@@ -44,9 +44,9 @@ def check(path, function, ending):
 
 def main():
     check("ARM/Nordic/src/timer_hf_nrfx.cpp", "nRFxTimerEnablePeiTrigger",
-          "// Only installed by TimerPeiPrepareMcu")
+          "bool nRFxTimerInstallPei(")
     check("ARM/Nordic/src/timer_lf_nrfx.cpp", "nRFxRtcEnablePeiTrigger",
-          "// Called only when an application explicitly uses PEI with this RTC.")
+          "bool nRFxRtcInstallPei(")
     hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
     hf_release = section(hf, "static void nRFxTimerDisableTrigger(",
                          "static int nRFxTimerFindAvailTrigger(")
@@ -56,7 +56,7 @@ def main():
 
     rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
     release = section(rtc, "static bool nRFxRtcDisablePeiEvent(",
-                      "// Bind a free CC to PEI;")
+                      "static bool nRFxRtcEnablePeiTrigger(")
     compare = section(release, "endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[i];",
                       "reg->CC[i] = 0U;")
     assert compare.index("PeiUnbindEvent(pPei, Event, endpoint)") < compare.index(
