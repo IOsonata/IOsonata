@@ -55,18 +55,20 @@ SOFTWARE.
 
 #include "timer_nrfx.h"
 
-// Optional PEI registration. This entry point is referenced weakly by
-// the generic PEI matrix and is never called by ordinary Timer users.
-// Each driver keeps its own hardware endpoint configuration.
 #if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
 	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
 	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
 	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
 bool nRFxTimerInstallPei(TimerDev_t *pTimer);
 bool nRFxRtcInstallPei(TimerDev_t *pTimer);
+#endif
 
-extern "C" bool TimerPeiPrepareMcu(TimerDev_t *pTimer)
+bool PeiTimerPrepare(TimerDev_t *pTimer)
 {
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
 	if (pTimer == nullptr)
 	{
 		return false;
@@ -76,8 +78,11 @@ extern "C" bool TimerPeiPrepareMcu(TimerDev_t *pTimer)
 		return nRFxRtcInstallPei(pTimer);
 	}
 	return nRFxTimerInstallPei(pTimer);
-}
+#else
+	(void)pTimer;
+	return false;
 #endif
+}
 
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
