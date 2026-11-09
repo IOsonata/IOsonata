@@ -1986,7 +1986,8 @@ bool SPIReleasePeiTransfer(SPIDev_t *pDev)
 	{
 		return false;
 	}
-	if (dev->pDmaReg->EVENTS_STOPPED == 0U)
+	if (dev->pDmaReg->EVENTS_STARTED != 0U &&
+		dev->pDmaReg->EVENTS_STOPPED == 0U)
 	{
 		dev->pDmaReg->TASKS_STOP = 1U;
 		timeout = NRFSPI_TIMEOUT;
