@@ -159,22 +159,16 @@ samples fluctuate below the initial 93-94 KB/s plateau. These reports do
 not distinguish firmware latency from USB bridge or host scheduling delays.
 At 1 Mbaud with 8N1 framing, the wire limit is 100,000 data bytes/s.
 
-### C3 interrupt optimization (hardware test pending)
+### C3 interrupt optimization: reverted after hardware regression
 
-`Vectors_esp32c3.c` forced both `RISCV_TrapHandler` and
-`Esp32C3IntMtxDispatch` to `-O0`, including in Release. Both now use the
-project-selected optimization level. The file also uses tabs and declares
-locals at function entry. Routing, IRQ counters, exception diagnostics,
-IRAM placement, and the compiler's machine-interrupt attribute are preserved.
+Commit `fc3dde2b` removed the forced `-O0` attributes from the C3 trap
+handler and matrix dispatcher. Although cross-compilation passed and the
+Release functions were smaller, the maintainer's next board run reported
+15 samples averaging **84,565 B/s**, ranging from **71,041 to 90,681 B/s**,
+with **0 errors**. This was worse than the preceding run.
 
-xPack RISC-V GCC 15.2.0-1 compiled the C3 vector source with
-`-march=rv32imc_zicsr -mabi=ilp32 -Wall -Wextra -Werror` at `-O0` and `-Os`.
-In the unlinked `-Os` object, the trap handler shrank from 318 to 214 bytes
-and the matrix dispatcher from 392 to 250 bytes. Debug function sizes were
-unchanged. Disassembly retains register saves/restores, `mret`, the
-128-byte vector table, and no undefined helper calls. The UART and CFIFO
-sources also cross-compiled at both optimization levels. These are source
-compilation checks, not complete Eclipse firmware builds or hardware results.
-
-Clean-build the C3 library and UartLoopback in Release and repeat the same
-PRBS command to measure this change. No throughput gain is claimed yet.
+The complete C3 vector source is restored byte-for-byte from `6ed776f5`.
+The UART FIFO and critical-section improvements from that commit remain.
+Smaller compiled functions did not establish a throughput improvement;
+the cause of the measured slowdown has not been isolated. A repeat board
+run is needed to confirm throughput after the restoration.
