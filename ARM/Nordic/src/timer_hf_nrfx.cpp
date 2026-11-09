@@ -387,20 +387,13 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 		{
 			NRF_CLOCK->TASKS_PLLSTART = 1;
 		}
-
-		if (!(NRF_CLOCK->XO.STAT & CLOCK_XO_STAT_STATE_Msk))
-		{
-			NRF_CLOCK->TASKS_XOSTART = 1;
-		}
-
-#else
+#endif
 		// One request for the 32 MHz crystal while timers run, released by
 		// the last Disable
 		if (SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000) == false)
 		{
 			return false;
 		}
-#endif
 	}
 
 	s_bTimerEnabled[devno] = true;
@@ -489,11 +482,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 
 	if (s_nRfxHFClockSem == 0)
 	{
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
-		NRF_CLOCK->TASKS_XOSTOP = 1;
-#else
 		(void)SystemCoreClockSelect(OSC_TYPE_RC, 0);
-#endif
 	}
 
     switch (devno)
@@ -937,30 +926,6 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	reg->MODE = TIMER_MODE_MODE_Timer;
 	reg->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
 
-	// Init clock source for TIMERs
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
-	if (!(NRF_CLOCK->XO.STAT & CLOCK_XO_STAT_STATE_Msk))
-	{
-		// Clock source not available.  Only 32MHz XTAL
-//		s_nRfxHFClockSem++;
-		NRF_CLOCK->TASKS_XOSTART = 1;
-
-		// Check if HFCLK is running or not
-		int timout = 1000000;
-		while (timout-- > 0 && NRF_CLOCK->EVENTS_XOSTARTED == 0);
-
-		if (timout <= 0)
-			return false;
-
-		NRF_CLOCK->EVENTS_XOSTARTED = 0;
-	}
-	else
-	{
-		// Clock source already enabled externally.
-		// This is to ensure we don't disable it when all timers are disabled
-		s_nRfxHFClockSem++;
-	}
-#else
 	// Init leaves the timer running, so it goes through Enable. Enable
 	// requests the crystal for the first timer and counts the timer once, so
 	// that Disable after Init stops the timer and releases the crystal, and a
@@ -969,7 +934,6 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	{
 		return false;
 	}
-#endif
 
 	// Init interrupt for TIMERs
 	switch (devno)

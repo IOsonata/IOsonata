@@ -1,7 +1,8 @@
 /**-------------------------------------------------------------------------
 @file	system_clock_nrfx.cpp
 
-@brief	Clock functions of system_core_clock.h on the nRF52, nRF53 and nRF91
+@brief	Clock functions of system_core_clock.h on the nRF52, nRF53, nRF54L and
+		nRF91
 
 The CPU always runs from HFCLK, sourced by the internal RC oscillator (HFINT)
 or by the 32 MHz crystal (HFXO). The crystal only improves accuracy. The
@@ -22,7 +23,9 @@ the stack, so a request made before the stack was enabled is passed again on
 the next one.
 
 On the nRF53, HFCLKSRC selects the crystal before HFCLKSTART and selects the
-RC again after HFCLKSTOP.
+RC again after HFCLKSTOP. On the nRF54L the crystal is started and stopped
+with XOSTART and XOSTOP, its state is in XO.STAT. The PLL is not touched, the
+CPU clock started by SystemInit keeps running from it.
 
 SystemCoreClockSelect does not change g_McuOsc, it stays the description of
 the board.
@@ -31,6 +34,8 @@ SystemLowFreqClockSelect selects the source of LFCLK, the 32 kHz clock of
 the RTCs, and starts it, restarting it when it ran from another source. It
 records the source in g_McuOsc.LowPwrOsc. The RC, the crystal, and on the
 nRF52 a rail to rail external clock on XL1 (OSC_TYPE_TCXO) are supported.
+On the nRF54L the LFCLK registers are LFCLK.SRC, LFCLK.STAT and
+LFCLK.SRCCOPY.
 When a BLE stack is enabled it owns LFCLK, whose source it set when it was
 enabled, and the function returns false. If the crystal does not start,
 LFCLK runs again from its previous source.
@@ -100,6 +105,23 @@ SOFTWARE.
 // Well over the start time of the 32 kHz crystal, about 0.25 s
 #define NRFX_LFCLK_WAIT_LOOPS		10000000
 
+// LFCLK registers and source values
+#if defined(CLOCK_LFCLK_SRC_SRC_Msk)
+#define NRFX_LFCLKSRC				LFCLK.SRC
+#define NRFX_LFCLKSTAT				LFCLK.STAT
+#define NRFX_LFCLKSRCCOPY			LFCLK.SRCCOPY
+#define NRFX_LFCLK_SRC_Pos			CLOCK_LFCLK_SRC_SRC_Pos
+#define NRFX_LFCLK_SRC_Msk			CLOCK_LFCLK_SRC_SRC_Msk
+#define NRFX_LFCLK_STATE_Msk		CLOCK_LFCLK_STAT_STATE_Msk
+#define NRFX_LFCLK_SRC_RC			CLOCK_LFCLK_SRC_SRC_LFRC
+#define NRFX_LFCLK_SRC_XTAL			CLOCK_LFCLK_SRC_SRC_LFXO
+#else
+#define NRFX_LFCLKSRC				LFCLKSRC
+#define NRFX_LFCLKSTAT				LFCLKSTAT
+#define NRFX_LFCLKSRCCOPY			LFCLKSRCCOPY
+#define NRFX_LFCLK_SRC_Pos			CLOCK_LFCLKSRC_SRC_Pos
+#define NRFX_LFCLK_SRC_Msk			CLOCK_LFCLKSRC_SRC_Msk
+#define NRFX_LFCLK_STATE_Msk		CLOCK_LFCLKSTAT_STATE_Msk
 #ifdef CLOCK_LFCLKSRC_SRC_Xtal
 #define NRFX_LFCLK_SRC_RC			CLOCK_LFCLKSRC_SRC_RC
 #define NRFX_LFCLK_SRC_XTAL			CLOCK_LFCLKSRC_SRC_Xtal
@@ -107,11 +129,22 @@ SOFTWARE.
 #define NRFX_LFCLK_SRC_RC			CLOCK_LFCLKSRC_SRC_LFRC
 #define NRFX_LFCLK_SRC_XTAL			CLOCK_LFCLKSRC_SRC_LFXO
 #endif
+#endif
 
+// Crystal start and stop tasks and started event
+#if defined(CLOCK_XO_STAT_STATE_Msk)
+#define NRFX_HFXO_START				TASKS_XOSTART
+#define NRFX_HFXO_STOP				TASKS_XOSTOP
+#define NRFX_HFXO_STARTED			EVENTS_XOSTARTED
+#else
+#define NRFX_HFXO_START				TASKS_HFCLKSTART
+#define NRFX_HFXO_STOP				TASKS_HFCLKSTOP
+#define NRFX_HFXO_STARTED			EVENTS_HFCLKSTARTED
 #ifdef CLOCK_HFCLKSTAT_SRC_Xtal
 #define NRFX_HFXO_STAT_SRC			(CLOCK_HFCLKSTAT_SRC_Xtal << CLOCK_HFCLKSTAT_SRC_Pos)
 #else
 #define NRFX_HFXO_STAT_SRC			(CLOCK_HFCLKSTAT_SRC_HFXO << CLOCK_HFCLKSTAT_SRC_Pos)
+#endif
 #endif
 
 static std::atomic<int> s_nRFxHfxoReqCnt(0);
@@ -158,8 +191,12 @@ static bool nRFxClockSdEnabled(void)
 
 static bool nRFxHfxoRunning(void)
 {
+#if defined(CLOCK_XO_STAT_STATE_Msk)
+	return (NRF_CLOCK->XO.STAT & CLOCK_XO_STAT_STATE_Msk) != 0;
+#else
 	return (NRF_CLOCK->HFCLKSTAT & (CLOCK_HFCLKSTAT_STATE_Msk | CLOCK_HFCLKSTAT_SRC_Msk)) ==
 		   (CLOCK_HFCLKSTAT_STATE_Msk | NRFX_HFXO_STAT_SRC);
+#endif
 }
 
 // Starts the crystal if needed and waits until it runs
@@ -206,15 +243,15 @@ static bool nRFxHfxoStart(void)
 #ifdef CLOCK_HFCLKSRC_SRC_Msk
 	NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFXO << CLOCK_HFCLKSRC_SRC_Pos;
 #endif
-	NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-	NRF_CLOCK->TASKS_HFCLKSTART = 1;
+	NRF_CLOCK->NRFX_HFXO_STARTED = 0;
+	NRF_CLOCK->NRFX_HFXO_START = 1;
 	s_bnRFxHfxoOwned = true;
 
 	for (int i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
 	{
 		if (nRFxHfxoRunning())
 		{
-			NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+			NRF_CLOCK->NRFX_HFXO_STARTED = 0;
 
 			return true;
 		}
@@ -243,7 +280,7 @@ static void nRFxHfxoStop(void)
 	if (s_bnRFxHfxoOwned)
 	{
 		s_bnRFxHfxoOwned = false;
-		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
+		NRF_CLOCK->NRFX_HFXO_STOP = 1;
 #ifdef CLOCK_HFCLKSRC_SRC_Msk
 		NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
 #endif
@@ -298,7 +335,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 // not start.
 static bool nRFxLfclkStart(uint32_t Src)
 {
-	NRF_CLOCK->LFCLKSRC = Src;
+	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
 	NRF_CLOCK->TASKS_LFCLKSTART = 1;
 
@@ -323,7 +360,7 @@ static void nRFxLfclkStop(void)
 
 	for (int i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
 	{
-		if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) == 0)
+		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0)
 		{
 			break;
 		}
@@ -340,15 +377,15 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	switch (ClkSrc)
 	{
 		case OSC_TYPE_RC:
-			src = NRFX_LFCLK_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos;
+			src = NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos;
 			break;
 		case OSC_TYPE_XTAL:
-			src = NRFX_LFCLK_SRC_XTAL << CLOCK_LFCLKSRC_SRC_Pos;
+			src = NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos;
 			break;
 #if defined(CLOCK_LFCLKSRC_BYPASS_Msk) && defined(CLOCK_LFCLKSRC_EXTERNAL_Msk)
 		case OSC_TYPE_TCXO:
 			// Rail to rail clock on XL1
-			src = (NRFX_LFCLK_SRC_XTAL << CLOCK_LFCLKSRC_SRC_Pos) |
+			src = (NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos) |
 				  CLOCK_LFCLKSRC_BYPASS_Msk | CLOCK_LFCLKSRC_EXTERNAL_Msk;
 			break;
 #endif
@@ -362,11 +399,11 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return false;
 	}
 
-	bool running = (NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) != 0;
-	uint32_t prev = NRF_CLOCK->LFCLKSRC;
+	bool running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0;
+	uint32_t prev = NRF_CLOCK->NRFX_LFCLKSRC;
 
 	if (running == false || prev != src ||
-		(NRF_CLOCK->LFCLKSRCCOPY & CLOCK_LFCLKSRCCOPY_SRC_Msk) != (src & CLOCK_LFCLKSRC_SRC_Msk))
+		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) != (src & NRFX_LFCLK_SRC_Msk))
 	{
 		if (running)
 		{
