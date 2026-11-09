@@ -78,6 +78,22 @@ int MpslNvmArbiterStart(void);
  */
 void MpslNvmArbiterStop(void);
 
+/**
+ * @brief	Request or release the 32 MHz crystal through MPSL
+ *
+ * SystemCoreClockSelect calls it for each request of the crystal and for the
+ * last release. Once MPSL is initialized it owns CLOCK and the crystal is
+ * requested from MPSL. The weak default in system_clock_nrfx.cpp is used when
+ * the SoftDevice Controller is not in the build.
+ *
+ * @param	bOn : true - request and wait until it runs, false - release
+ *
+ * @return	-1 - MPSL is not initialized, the caller drives CLOCK
+ * 			0 - done
+ * 			1 - the crystal did not start
+ */
+int nRFxMpslHfxo(bool bOn);
+
 #ifdef __cplusplus
 }
 #endif
