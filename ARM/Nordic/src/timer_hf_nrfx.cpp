@@ -38,6 +38,7 @@ SOFTWARE.
 #endif
 
 #include "nrf.h"
+#include "coredev/system_core_clock.h"
 
 #include "timer_nrfx.h"
 #include "coredev/pei.h"
@@ -54,18 +55,10 @@ SOFTWARE.
 #define NRF_TIMER0			NRF_TIMER0_S
 #define NRF_TIMER1			NRF_TIMER1_S
 #define NRF_TIMER2			NRF_TIMER2_S
-#if defined(NRF91_SERIES)
-// Non secure on nRF91, as POWER, which the Modem library uses there
-// (nrfx_config_nrf91.h)
-#define NRF_CLOCK			NRF_CLOCK_NS
-#else
-#define NRF_CLOCK			NRF_CLOCK_S
-#endif
 #elif defined(NRF5340_XXAA_NETWORK)
 #define NRF_TIMER0			NRF_TIMER0_NS
 #define NRF_TIMER1			NRF_TIMER1_NS
 #define NRF_TIMER2			NRF_TIMER2_NS
-#define NRF_CLOCK			NRF_CLOCK_NS
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #define NRF_TIMER0			NRF_TIMER00_S
 #define NRF_TIMER1			NRF_TIMER10_S
@@ -202,7 +195,6 @@ alignas(4) const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 
 static std::atomic<int> s_nRfxHFClockSem(0);
 static bool s_bTimerEnabled[TIMER_NRFX_HF_MAX];
-static bool s_bHFClockOwned = false;
 
 // Set by nRFxTimerInit. The interrupt handlers below are kept by the linker as soon as
 // this file is part of a build, used or not. They reach the timer data
@@ -402,29 +394,11 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 		}
 
 #else
-		if (!(NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk))
+		// One request for the 32 MHz crystal while timers run, released by
+		// the last Disable
+		if (SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000) == false)
 		{
-			NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-			NRF_CLOCK->TASKS_HFCLKSTART = 1;
-
-			bool started = false;
-			for (int timeout = 1000000; timeout > 0; timeout--)
-			{
-				if (NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk)
-				{
-					started = true;
-					break;
-				}
-			}
-
-			if (!started)
-			{
-				NRF_CLOCK->TASKS_HFCLKSTOP = 1;
-				return false;
-			}
-
-			NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-			s_bHFClockOwned = true;
+			return false;
 		}
 #endif
 	}
@@ -518,11 +492,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		NRF_CLOCK->TASKS_XOSTOP = 1;
 #else
-		if (s_bHFClockOwned)
-		{
-			NRF_CLOCK->TASKS_HFCLKSTOP = 1;
-			s_bHFClockOwned = false;
-		}
+		(void)SystemCoreClockSelect(OSC_TYPE_RC, 0);
 #endif
 	}
 
@@ -992,9 +962,9 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	}
 #else
 	// Init leaves the timer running, so it goes through Enable. Enable
-	// starts HFCLK if it is not running, owns it only in that case and
-	// counts the timer once, so that Disable after Init stops the timer and
-	// releases HFCLK, and a later Enable does not count it again.
+	// requests the crystal for the first timer and counts the timer once, so
+	// that Disable after Init stops the timer and releases the crystal, and a
+	// later Enable does not count it again.
 	if (nRFxTimerEnable(pTimer) == false)
 	{
 		return false;
