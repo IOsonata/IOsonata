@@ -75,13 +75,25 @@ static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_SINGLE =
 static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_CONTINUOUS =
 	static_cast<TIMER_TRIG_TYPE>(3);
 
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+#include "../nRF52/include/pei_rtc_state.h"
+#if defined(__GNUC__)
+#pragma weak g_PeiNrf52RtcRaw
+#endif
+typedef PeiNrf52RtcRawState_t nRFRtcRawPei_t;
+#define s_nRfxRtcRaw g_PeiNrf52RtcRaw
+#define RTC_OPTIONAL_PEI_STATE 1
+#else
 typedef struct {
 	PeiDev_t *pPei;
 	PeiEvent_t Event;
 	bool EventWasEnabled;
 } nRFRtcRawPei_t;
-
 static nRFRtcRawPei_t s_nRfxRtcRaw[TIMER_NRFX_RTC_MAX][2];
+#endif
 
 #pragma pack(push, 4)
 typedef struct {
@@ -736,12 +748,14 @@ static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	if (rtc.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
 		rtc.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
 	{
-		// Release only this CC's PEI event source. Keep ownership
-		// until the matrix successfully unbinds it.
-		nRFxRtcDisablePeiEvent(pTimer,
-			static_cast<PeiDev_t *>(rtc.pTrigger[TrigNo].pContext),
-			rtc.pCC[TrigNo]);
-		return;
+		PeiDev_t *pPei = static_cast<PeiDev_t *>(rtc.pTrigger[TrigNo].pContext);
+		PeiEndpoint_t endpoint = (PeiEndpoint_t)&rtc.pReg->EVENTS_COMPARE[TrigNo];
+
+		if (PeiUnbindEvent == nullptr ||
+			!PeiUnbindEvent(pPei, rtc.pCC[TrigNo], endpoint))
+		{
+			return;
+		}
 	}
 
 	rtc.pCC[TrigNo] = 0U;
@@ -810,11 +824,20 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pOldTimer = s_pnRfxRtcDev[pCfg->DevNo];
 
 	// Do not replace a Timer object with live PEI bindings.
-	// The optional RTC event callback tracks TICK/OVRFLW owners.
-	if (pOldTimer != nullptr &&
-		nRFxRtcDisablePeiEvent(pOldTimer, nullptr, 0U))
+	if (pOldTimer != nullptr)
 	{
-		return false;
+#if defined(RTC_OPTIONAL_PEI_STATE)
+		if (s_nRfxRtcRaw != nullptr)
+#endif
+		{
+			for (i = 0; i < 2; i++)
+			{
+				if (s_nRfxRtcRaw[pCfg->DevNo][i].pPei != nullptr)
+				{
+					return false;
+				}
+			}
+		}
 	}
 	for (i = 0; i < pRtc->MaxNbTrigEvt; i++)
 	{
