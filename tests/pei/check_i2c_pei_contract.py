@@ -71,6 +71,11 @@ def main():
     assert "I2C_PEI_TASK_STARTRX" in connect
     assert "I2C_PEI_TASK_STARTTX" in connect
     assert "dev->bPeiPrepared" in connect
+    assert "#if defined(NRF52_SERIES) && defined(TWIM_PRESENT)" in connect
+    assert "NRFX_TWI_TX(dev->pDmaReg).MAXCNT" in connect
+    assert "NRFX_TWI_RX(dev->pDmaReg).MAXCNT" in connect
+    assert "dev->pDmaReg->TXD.MAXCNT" not in connect
+    assert "dev->pDmaReg->RXD.MAXCNT" not in connect
 
     for name in ("PreparePeiTransfer", "ReleasePeiTransfer",
                  "EnablePeiEvent", "DisablePeiEvent",
