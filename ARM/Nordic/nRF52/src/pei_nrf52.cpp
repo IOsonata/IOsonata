@@ -31,6 +31,7 @@ SOFTWARE.
 #include "nrf.h"
 #include "coredev/interrupt.h"
 #include "coredev/pei.h"
+#include "../include/pei_rtc_state.h"
 
 #if defined(SOFTDEVICE_PRESENT)
 #include "nrf_soc.h"
@@ -39,6 +40,8 @@ SOFTWARE.
 #elif defined(NRFXLIB_SDC)
 #include "sdc_soc.h"
 #endif
+
+PeiNrf52RtcRawState_t g_PeiNrf52RtcRaw[3][2];
 
 // The Nordic MDK exposes the configurable PPI channels and groups as arrays.
 // Their lengths are compile-time constants and differ across nRF52 devices.
