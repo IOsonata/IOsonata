@@ -4,23 +4,13 @@
 @brief	ESP32 General-Purpose SPI (GP-SPI2) register definitions for the
         IOsonata RISC-V family.
 
-Covers the GP-SPI2 controller on C3 / C5 / C6.  The SPI memory
-controllers (SPI0, SPI1 / SPIMEM0, SPIMEM1) are NOT covered here -- those
-are reserved for the flash/PSRAM access path and have a different
-register layout.
+Covers GP-SPI2 on C2, C3, C5, C6 and C61. SPI0/SPI1 memory controllers
+are reserved for flash/PSRAM and have a different register layout.
 
-Register offsets are identical across C3, C5, and C6 for the GP-SPI
-controller.  Only the per-instance base address differs:
-
-  * C3:    SPI2 at 0x60024000
-  * C5/C6: GP_SPI2 at 0x60081000
-
-ESP32-C3/C5/C6 expose only one general-purpose SPI controller (SPI2).
-Earlier ESP32 (Xtensa) variants had SPI3 as well; the C-series does
-not.
-
-Bitfield positions and masks have been verified against ESP-IDF v5.3
-components/soc/<chip>/include/soc/spi_reg.h.
+GP-SPI2 is at 0x60024000 on C2/C3 and 0x60081000 on C5/C6/C61.
+The register offsets are shared; interrupt sources, GPIO matrix signals and
+peripheral clock registers differ. Definitions are checked against ESP-IDF
+v5.5.1 by tests/esp32/check_spi_registers.py.
 
 @author	Nguyen Hoan Hoang
 @date	May 9, 2026
@@ -68,12 +58,16 @@ SOFTWARE.
  * provide the no-prefix common alias.
  *---------------------------------------------------------------------------*/
 #ifndef ESP32_SPI2_BASE
-#  if   defined(ESP32C3)
+#  if   defined(ESP32C2)
+#    define ESP32_SPI2_BASE                 ESP32C2_SPI2_BASE
+#  elif defined(ESP32C3)
 #    define ESP32_SPI2_BASE                 ESP32C3_SPI2_BASE
 #  elif defined(ESP32C5)
 #    define ESP32_SPI2_BASE                 ESP32C5_GP_SPI2_BASE
 #  elif defined(ESP32C6)
 #    define ESP32_SPI2_BASE                 ESP32C6_GP_SPI2_BASE
+#  elif defined(ESP32C61)
+#    define ESP32_SPI2_BASE                 ESP32C61_SPI2_BASE
 #  endif
 #endif
 
@@ -89,16 +83,64 @@ SOFTWARE.
  * On C5/C6 the source is named ETS_GPSPI2_INTR_SOURCE / ETS_GSPI2_INTR_SOURCE
  * but routes the same GP-SPI2 controller.
  *---------------------------------------------------------------------------*/
-#if defined(ESP32C3)
+#if defined(ESP32C2)
+#  define ESP32_SPI_INTR_SOURCE_SPI2        16U
+#elif defined(ESP32C3)
 #  define ESP32_SPI_INTR_SOURCE_SPI2        19U
 #elif defined(ESP32C6)
-#  define ESP32_SPI_INTR_SOURCE_SPI2        76U
+#  define ESP32_SPI_INTR_SOURCE_SPI2        72U
 #elif defined(ESP32C5)
-#  define ESP32_SPI_INTR_SOURCE_SPI2        78U
+#  define ESP32_SPI_INTR_SOURCE_SPI2        77U
+#elif defined(ESP32C61)
+#  define ESP32_SPI_INTR_SOURCE_SPI2        62U
+#endif
+
+/*---------------------------------------------------------------------------
+ * GPIO matrix signal indices for four-wire master operation.
+ * Board pin maps select these signals through IOPinCfg().
+ *---------------------------------------------------------------------------*/
+#if defined(ESP32C2) || defined(ESP32C3) || defined(ESP32C6)
+#define ESP32_SPI_SCK_SIGNAL                63U
+#define ESP32_SPI_MISO_SIGNAL               64U
+#define ESP32_SPI_MOSI_SIGNAL               65U
+#elif defined(ESP32C5)
+#define ESP32_SPI_SCK_SIGNAL                56U
+#define ESP32_SPI_MISO_SIGNAL               57U
+#define ESP32_SPI_MOSI_SIGNAL               58U
+#elif defined(ESP32C61)
+#define ESP32_SPI_SCK_SIGNAL                64U
+#define ESP32_SPI_MISO_SIGNAL               65U
+#define ESP32_SPI_MOSI_SIGNAL               66U
+#endif
+
+/*---------------------------------------------------------------------------
+ * PCR offsets for GP-SPI2 bus clock/reset and functional clock selection.
+ * C2/C3 use SYSTEM clock/reset registers instead.
+ *---------------------------------------------------------------------------*/
+#if defined(ESP32C5)
+#define ESP32_SPI_PCR_CONF_OFFSET           0x0C4U
+#define ESP32_SPI_PCR_CLKM_CONF_OFFSET       0x0C8U
+#elif defined(ESP32C6)
+#define ESP32_SPI_PCR_CONF_OFFSET           0x0C0U
+#define ESP32_SPI_PCR_CLKM_CONF_OFFSET       0x0C4U
+#elif defined(ESP32C61)
+#define ESP32_SPI_PCR_CONF_OFFSET           0x094U
+#define ESP32_SPI_PCR_CLKM_CONF_OFFSET       0x098U
+#endif
+
+#if defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
+#define ESP32_SPI_PCR_CLK_EN_Pos            0U
+#define ESP32_SPI_PCR_CLK_EN_Msk            (1UL << ESP32_SPI_PCR_CLK_EN_Pos)
+#define ESP32_SPI_PCR_RST_EN_Pos            1U
+#define ESP32_SPI_PCR_RST_EN_Msk            (1UL << ESP32_SPI_PCR_RST_EN_Pos)
+#define ESP32_SPI_PCR_CLKM_SEL_Pos          20U
+#define ESP32_SPI_PCR_CLKM_SEL_Msk          (3UL << ESP32_SPI_PCR_CLKM_SEL_Pos)
+#define ESP32_SPI_PCR_CLKM_EN_Pos           22U
+#define ESP32_SPI_PCR_CLKM_EN_Msk           (1UL << ESP32_SPI_PCR_CLKM_EN_Pos)
 #endif
 
 /*===========================================================================
- * GP-SPI register offsets (identical across C3 / C5 / C6).
+ * GP-SPI register offsets (shared across C2 / C3 / C5 / C6 / C61).
  *===========================================================================*/
 #define ESP32_SPI_CMD_OFFSET                0x000U
 #define ESP32_SPI_ADDR_OFFSET               0x004U
@@ -117,8 +159,8 @@ SOFTWARE.
 #define ESP32_SPI_DMA_INT_CLR_OFFSET        0x038U
 #define ESP32_SPI_DMA_INT_RAW_OFFSET        0x03CU
 #define ESP32_SPI_DMA_INT_ST_OFFSET         0x040U
-#if defined(ESP32C5) || defined(ESP32C6)
-#  define ESP32_SPI_DMA_INT_SET_OFFSET      0x044U      //!< Software-trigger DMA interrupts.
+#if defined(ESP32C2) || defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
+#define ESP32_SPI_DMA_INT_SET_OFFSET        0x044U      //!< Software-trigger DMA interrupts.
 #endif
 #define ESP32_SPI_W0_OFFSET                 0x098U      //!< First of 16 contiguous data buffer registers.
 #define ESP32_SPI_SLAVE_OFFSET              0x0E0U
@@ -148,8 +190,8 @@ SOFTWARE.
 #define ESP32_SPI_DMA_INT_CLR_REG(base)     ESP32_REG32((base) + ESP32_SPI_DMA_INT_CLR_OFFSET)
 #define ESP32_SPI_DMA_INT_RAW_REG(base)     ESP32_REG32((base) + ESP32_SPI_DMA_INT_RAW_OFFSET)
 #define ESP32_SPI_DMA_INT_ST_REG(base)      ESP32_REG32((base) + ESP32_SPI_DMA_INT_ST_OFFSET)
-#if defined(ESP32C5) || defined(ESP32C6)
-#  define ESP32_SPI_DMA_INT_SET_REG(base)   ESP32_REG32((base) + ESP32_SPI_DMA_INT_SET_OFFSET)
+#if defined(ESP32C2) || defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
+#define ESP32_SPI_DMA_INT_SET_REG(base)      ESP32_REG32((base) + ESP32_SPI_DMA_INT_SET_OFFSET)
 #endif
 #define ESP32_SPI_W_REG(base, n)            ESP32_REG32((base) + ESP32_SPI_W0_OFFSET + ((uint32_t)(n) * 4U))
 #define ESP32_SPI_SLAVE_REG(base)           ESP32_REG32((base) + ESP32_SPI_SLAVE_OFFSET)
@@ -168,6 +210,21 @@ SOFTWARE.
 #define ESP32_SPI_CMD_USR_Msk               (1UL << ESP32_SPI_CMD_USR_Pos)
 
 /*===========================================================================
+ * SPI_CTRL bit order fields: 0 = MSB first, 1 = LSB first in normal SPI mode.
+ *===========================================================================*/
+#if defined(ESP32C3)
+#define ESP32_SPI_CTRL_RD_BIT_ORDER_Pos     25U
+#define ESP32_SPI_CTRL_RD_BIT_ORDER_Msk     (1UL << ESP32_SPI_CTRL_RD_BIT_ORDER_Pos)
+#define ESP32_SPI_CTRL_WR_BIT_ORDER_Pos     26U
+#define ESP32_SPI_CTRL_WR_BIT_ORDER_Msk     (1UL << ESP32_SPI_CTRL_WR_BIT_ORDER_Pos)
+#else
+#define ESP32_SPI_CTRL_RD_BIT_ORDER_Pos     23U
+#define ESP32_SPI_CTRL_RD_BIT_ORDER_Msk     (3UL << ESP32_SPI_CTRL_RD_BIT_ORDER_Pos)
+#define ESP32_SPI_CTRL_WR_BIT_ORDER_Pos     25U
+#define ESP32_SPI_CTRL_WR_BIT_ORDER_Msk     (3UL << ESP32_SPI_CTRL_WR_BIT_ORDER_Pos)
+#endif
+
+/*===========================================================================
  * SPI_USER bit positions (key fields only).
  *===========================================================================*/
 #define ESP32_SPI_USER_DOUTDIN_Pos          0U           //!< Full-duplex master mode.
@@ -182,7 +239,7 @@ SOFTWARE.
 #define ESP32_SPI_USER_CS_SETUP_Msk         (1UL << ESP32_SPI_USER_CS_SETUP_Pos)
 #define ESP32_SPI_USER_RSCK_I_EDGE_Pos      8U
 #define ESP32_SPI_USER_RSCK_I_EDGE_Msk      (1UL << ESP32_SPI_USER_RSCK_I_EDGE_Pos)
-#define ESP32_SPI_USER_CK_OUT_EDGE_Pos      9U           //!< Clock polarity in master mode.
+#define ESP32_SPI_USER_CK_OUT_EDGE_Pos      9U           //!< Master output edge relative to the idle clock level.
 #define ESP32_SPI_USER_CK_OUT_EDGE_Msk      (1UL << ESP32_SPI_USER_CK_OUT_EDGE_Pos)
 #define ESP32_SPI_USER_FWRITE_DUAL_Pos      12U
 #define ESP32_SPI_USER_FWRITE_DUAL_Msk      (1UL << ESP32_SPI_USER_FWRITE_DUAL_Pos)
@@ -234,8 +291,8 @@ SOFTWARE.
 /*===========================================================================
  * SPI_CLOCK bit positions.
  *
- * SCK = ((src_clk / (PRE+1)) / (N+1)) * (H+1)/(L+1) when H/L are used,
- * or simply src_clk / ((PRE+1)*(N+1)) for symmetric clock.
+ * SCK = src_clk / ((PRE+1)*(N+1)). H sets the high time; L must equal N.
+ * CLK_EQU_SYSCLK bypasses the divider.
  *===========================================================================*/
 #define ESP32_SPI_CLOCK_CLKCNT_L_Pos        0U
 #define ESP32_SPI_CLOCK_CLKCNT_L_Msk        (0x3FUL << ESP32_SPI_CLOCK_CLKCNT_L_Pos)
@@ -257,10 +314,16 @@ SOFTWARE.
 #define ESP32_SPI_MISC_CS1_DIS_Msk          (1UL << ESP32_SPI_MISC_CS1_DIS_Pos)
 #define ESP32_SPI_MISC_CS2_DIS_Pos          2U
 #define ESP32_SPI_MISC_CS2_DIS_Msk          (1UL << ESP32_SPI_MISC_CS2_DIS_Pos)
+#define ESP32_SPI_MISC_CS3_DIS_Pos          3U
+#define ESP32_SPI_MISC_CS3_DIS_Msk          (1UL << ESP32_SPI_MISC_CS3_DIS_Pos)
+#define ESP32_SPI_MISC_CS4_DIS_Pos          4U
+#define ESP32_SPI_MISC_CS4_DIS_Msk          (1UL << ESP32_SPI_MISC_CS4_DIS_Pos)
+#define ESP32_SPI_MISC_CS5_DIS_Pos          5U
+#define ESP32_SPI_MISC_CS5_DIS_Msk          (1UL << ESP32_SPI_MISC_CS5_DIS_Pos)
 #define ESP32_SPI_MISC_CK_DIS_Pos           6U
 #define ESP32_SPI_MISC_CK_DIS_Msk           (1UL << ESP32_SPI_MISC_CK_DIS_Pos)
 #define ESP32_SPI_MISC_MASTER_CS_POL_Pos    7U           //!< Bitmask: which CS lines are active-high.
-#define ESP32_SPI_MISC_MASTER_CS_POL_Msk    (7UL << ESP32_SPI_MISC_MASTER_CS_POL_Pos)
+#define ESP32_SPI_MISC_MASTER_CS_POL_Msk    (0x3FUL << ESP32_SPI_MISC_MASTER_CS_POL_Pos)
 #define ESP32_SPI_MISC_CK_IDLE_EDGE_Pos     29U          //!< Clock polarity (CPOL).
 #define ESP32_SPI_MISC_CK_IDLE_EDGE_Msk     (1UL << ESP32_SPI_MISC_CK_IDLE_EDGE_Pos)
 #define ESP32_SPI_MISC_CS_KEEP_ACTIVE_Pos   30U
@@ -269,7 +332,7 @@ SOFTWARE.
 /*===========================================================================
  * SPI_DMA_INT (RAW / ENA / ST / CLR / SET) bit positions.
  *
- * Same bit positions across all four DMA-INT registers.
+ * Same bit positions across RAW, ENA, ST, CLR and SET registers.
  *===========================================================================*/
 #define ESP32_SPI_DMA_INT_INFIFO_FULL_ERR   (1UL << 0)
 #define ESP32_SPI_DMA_INT_OUTFIFO_EMPTY_ERR (1UL << 1)
@@ -300,7 +363,7 @@ SOFTWARE.
 #define ESP32_SPI_CLK_GATE_CLK_EN_Msk       (1UL << ESP32_SPI_CLK_GATE_CLK_EN_Pos)
 #define ESP32_SPI_CLK_GATE_MST_CLK_ACTIVE_Pos  1U
 #define ESP32_SPI_CLK_GATE_MST_CLK_ACTIVE_Msk  (1UL << ESP32_SPI_CLK_GATE_MST_CLK_ACTIVE_Pos)
-#define ESP32_SPI_CLK_GATE_MST_CLK_SEL_Pos     2U        //!< 0 = APB / PLL_F80M, 1 = XTAL.
+#define ESP32_SPI_CLK_GATE_MST_CLK_SEL_Pos     2U        //!< C2/C3: 0 = PLL_F80M, 1 = XTAL; other chips select the source in PCR.
 #define ESP32_SPI_CLK_GATE_MST_CLK_SEL_Msk     (1UL << ESP32_SPI_CLK_GATE_MST_CLK_SEL_Pos)
 
 #endif // __ESP32XX_SPI_H__
