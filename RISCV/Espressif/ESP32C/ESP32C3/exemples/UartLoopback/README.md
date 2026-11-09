@@ -143,3 +143,38 @@ non-blocking overflow, copy interrupt protection, and an interrupt before
 a reserved TX span is filled. These are host tests, not MCU firmware builds
 or throughput measurements. The shared UART interface and PRBS test remain
 unchanged.
+
+## Follow-up transfer cleanup: hardware result
+
+The maintainer's extended run of commit `6ed776f5` reported 99 samples at
+1,000,000 baud with the unchanged 16-byte block and 128-byte window:
+
+- Arithmetic mean of the reported rates: **91,140 B/s**.
+- First 40 reports: **93,388 B/s** average.
+- Minimum / maximum: **73,403 / 94,015 B/s**.
+- **0 errors** throughout the supplied log.
+
+The full-run mean is 34.3% above the earlier 67,872 B/s mean. The later
+samples fluctuate below the initial 93-94 KB/s plateau. These reports do
+not distinguish firmware latency from USB bridge or host scheduling delays.
+At 1 Mbaud with 8N1 framing, the wire limit is 100,000 data bytes/s.
+
+### C3 interrupt optimization (hardware test pending)
+
+`Vectors_esp32c3.c` forced both `RISCV_TrapHandler` and
+`Esp32C3IntMtxDispatch` to `-O0`, including in Release. Both now use the
+project-selected optimization level. The file also uses tabs and declares
+locals at function entry. Routing, IRQ counters, exception diagnostics,
+IRAM placement, and the compiler's machine-interrupt attribute are preserved.
+
+xPack RISC-V GCC 15.2.0-1 compiled the C3 vector source with
+`-march=rv32imc_zicsr -mabi=ilp32 -Wall -Wextra -Werror` at `-O0` and `-Os`.
+In the unlinked `-Os` object, the trap handler shrank from 318 to 214 bytes
+and the matrix dispatcher from 392 to 250 bytes. Debug function sizes were
+unchanged. Disassembly retains register saves/restores, `mret`, the
+128-byte vector table, and no undefined helper calls. The UART and CFIFO
+sources also cross-compiled at both optimization levels. These are source
+compilation checks, not complete Eclipse firmware builds or hardware results.
+
+Clean-build the C3 library and UartLoopback in Release and repeat the same
+PRBS command to measure this change. No throughput gain is claimed yet.
