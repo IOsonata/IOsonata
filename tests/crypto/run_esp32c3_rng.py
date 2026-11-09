@@ -24,6 +24,6 @@ with tempfile.TemporaryDirectory(prefix="esp32c3-rng-") as name:
             str(SOURCE), str(TEST / "esp32c3_rng_model.cpp"),
             "-o", str(exe)
         ], check=True)
-        for scenario in ("good", "analog", "cycle", "stuck"):
+        for scenario in ("good", "analog", "foreign", "cycle", "stuck"):
             subprocess.run([str(exe), scenario], check=True)
 print("ESP32-C3 secure RNG register model: PASS")

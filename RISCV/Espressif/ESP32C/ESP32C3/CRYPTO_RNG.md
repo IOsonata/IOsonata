@@ -81,36 +81,52 @@ ECDH/signing test **only after the board proves it**. If the board
 stops at a stage, capture that stage/error and the exception PC.
 
 
-## Temporary UART trace (ESP32-C3)
+## Short first-request RNG trace
 
-The next board build includes detailed RNG tracing in both Debug and
-Release; `ESP32_RNG_TRACE` defaults to 1 in
-`RISCV/Espressif/src/crypto_rng_esp32c3.cpp`. It does not touch
-`Crypto::Init()` and leaves the entire RNG implementation linked.
+The user board passed all pre-RNG CryptoTest checks, then stopped during a
+verbose analog-I2C trace. The last confirmed ROM operation was write field
+3:3 = 0; the output ended during the next write to 2:2, but the console
+contained dropped/interleaved characters. That is not proof the ROM call
+was responsible.
 
-The trace starts immediately after the existing `Random source` banner.
-Only the first four random requests print each milestone, but any detected
-failure prints a summary. The important checkpoints are:
+The initial analog reads all returned zero for fields 1:0, 3:3 and 2:2.
+Those zero writes are now **omitted**. The backend checks fields 3:0
+once, refuses to alter nonzero foreign analog state, and only writes
+ADC2_ENCAL_REF (bit 6). It restores only that bit.
 
-- `RNG: entered hardware backend`: `Crypto::Random` reached the MCU backend.
-- `RNG: request #...`: the driver acquired its internal operation lock.
-- `RNG: ADC idle, begin register snapshot`: the peripheral register scan
-  completed.
-- `RNG: enter analog ROM setup`, followed by individual `before/after
-  ROM read/write` messages: locate a possible ROM analog-I2C hang or trap.
-- `RNG: ADC configured, check source`: SAR configuration completed.
-- `RNG: CPU clock` and `waiting for SAR entropy`: settle timer.
-- `RNG: discarding two initial hardware samples` and
-  `RNG: first output sample follows`: RNG register reads.
-- `RNG: begin ADC/ROM restoration`: restore path.
-- `RNG: completed request` or `RNG: FAIL stage=...`: final outcome.
+Verbose per-call UART tracing was replaced with compact numeric
+checkpoints for the first RNG request, reducing transmit-buffer pressure.
+The stage and error globals are still available in the debugger.
+The markers are:
 
-`g_Esp32C3RngStage`, `g_Esp32C3RngError`, and the new
-`g_Esp32C3RngCallCount` remain readable in the debugger. The
-read-only `IsSecure()` availability check no longer overwrites
-the current diagnostic stage.
+| Marker | Meaning |
+| --- | --- |
+| RNG 1 | First request acquired the RNG operation |
+| RNG 2 | ADC snapshot |
+| RNG 30 | About to read analog reference bit 6 |
+| RNG 31 | About to check analog fields 3:0 |
+| RNG 32 | About to set internal reference bit 6 |
+| RNG 4 | Analog reference setup complete |
+| RNG 5 | Digital SAR ADC setup complete |
+| RNG 33 | About to verify analog bit 6 |
+| RNG 6 | Entropy source activated |
+| RNG 7 | Settling wait |
+| RNG 8 | Reading RNG data |
+| RNG 9 | Restoring ADC/analog registers |
+| RNG 10 | Successful completion |
 
-After the actual hardware failure is identified and corrected, turn off the
-temporary UART instrumentation by defining `ESP32_RNG_TRACE=0` and
-rerun the Release performance tests. Host register-model tests always build
-with this define disabled to keep their results free of UART logging effects.
+No printf takes place while interrupts are masked. Failed requests still
+report a concise stage/error line.
+
+Debug and Release builds enable tracing in this diagnostic branch.
+After hardware validation, `ESP32_RNG_TRACE=0` can be used to remove it.
+
+Run the ESP32-C3 model and existing AES/SHA regression tests:
+
+```sh
+python3 tests/crypto/run_esp32c3_rng.py
+python3 tests/crypto/run_esp_models.py
+```
+
+Then clean-rebuild `IOsonata_ESP32C3` and `CryptoTest` in IOcomposer.
+These tests have not yet established on-device RNG success.

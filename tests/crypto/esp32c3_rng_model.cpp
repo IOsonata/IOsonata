@@ -20,7 +20,7 @@ static uint32_t s_Cycles;
 static uint32_t s_Data = 0xA5C39D71UL;
 static unsigned s_ReadCount;
 static unsigned s_AnalogWrites;
-static uint8_t s_Analog = 0xA3U;
+static uint8_t s_Analog = 0xA0U;
 static bool s_AnalogWriteIgnored;
 static bool s_Stuck;
 static bool s_CycleStalled;
@@ -122,7 +122,7 @@ static void CheckClean(void)
 	assert(ModelWord(ESP32_SYSTEM_BASE + 0x010U) == 0U);
 	assert(ModelWord(ESP32_SYSTEM_BASE + 0x018U) == 0U);
 	assert(ModelWord(ESP32_ADC_BASE + 0x050U) == 0U);
-	assert(s_Analog == 0xA3U);
+	assert(s_Analog == 0xA0U);
 }
 
 int main(int argc, char **argv)
@@ -134,6 +134,7 @@ int main(int argc, char **argv)
 	bool useCycle = argc > 1 && strcmp(argv[1], "cycle") == 0;
 	bool useStuck = argc > 1 && strcmp(argv[1], "stuck") == 0;
 	bool useAnalog = argc > 1 && strcmp(argv[1], "analog") == 0;
+	bool useForeign = argc > 1 && strcmp(argv[1], "foreign") == 0;
 
 	assert(Esp32C3RngSecureAvailable());
 	assert(Esp32C3RngProbe());
@@ -175,16 +176,27 @@ int main(int argc, char **argv)
 	{
 		s_AnalogWriteIgnored = true;
 	}
-	if (useCycle || useStuck || useAnalog)
+	if (useForeign)
 	{
+		// A foreign analog selector must cause failure without any writes.
+		s_Analog |= 1U;
+	}
+	if (useCycle || useStuck || useAnalog || useForeign)
+	{
+		analog = s_AnalogWrites;
 		memset(b, 0xCC, sizeof(b));
 		assert(Esp32C3RngFill(b, sizeof(b)) == CRYPTO_STATUS_FAIL);
 		for (unsigned i = 0; i < sizeof(b); i++)
 		{
 			assert(b[i] == 0U);
 		}
-		assert(g_Esp32C3RngError == (useAnalog ? 3U : useCycle ? 4U : 5U));
-		assert(g_Esp32C3RngStage == (useAnalog ? 5U : useCycle ? 7U : 8U));
+		assert(g_Esp32C3RngError == (useAnalog || useForeign ? 3U : useCycle ? 4U : 5U));
+		assert(g_Esp32C3RngStage == (useForeign ? 31U : useAnalog ? 33U : useCycle ? 7U : 8U));
+		if (useForeign)
+		{
+			assert(s_AnalogWrites == analog);
+			s_Analog &= (uint8_t)~1U;
+		}
 		s_AnalogWriteIgnored = false;
 		s_CycleStalled = false;
 		s_Stuck = false;
