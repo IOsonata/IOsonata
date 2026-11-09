@@ -42,6 +42,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //#include <time.h>
 #include "istddef.h"
 #include "coredev/uart.h"
+#include "coredev/iopincfg.h"
+#include "stddev.h"
 #include "prbs.h"
 #include "board.h"
 
@@ -104,71 +106,55 @@ UART g_Uart;
 int main()
 {
 	bool res;
-	int a = -1, b = 3;
-	int c = llmin(a, b);
-	int f = llmax(a, b);
-    
-	printf("%d %d\n", c, f);
-    
-    
+	bool haveValue = false;
+	uint8_t expected = 0;
+	uint8_t data[64];
+	uint32_t errors = 0;
+	uint32_t count = 0;
+	uint32_t report = 0;
+	int length;
+	int i;
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &g_UartCfg);
 #else
 	res = g_Uart.Init(g_UartCfg);
 #endif
-
-	if (!res) return 1;
-
-	uint8_t d = 0xff;
-	uint8_t val = 0;
-	uint32_t errcnt = 0;
-	uint32_t cnt = 0;
-    
-
-	bool isOK = false;
-//    do {
+	if (!res)
+	{
+		return 1;
+	}
+#ifdef UART_RETARGET
 #ifdef DEMO_C
-	while (UARTRx(&g_UartDev, &d, 1) <= 0);
+	UARTRetargetEnable(&g_UartDev, STDOUT_FILENO);
 #else
-	while (g_Uart.Rx(&d, 1) <= 0);
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
-		if (val == d)
-			isOK = true;
-		val = Prbs8(d);
-	//   } while (!isOK);
-    
-	while(1)
+#endif
+	while (1)
 	{
 #ifdef DEMO_C
-		while (UARTRx(&g_UartDev, &d, 1) <= 0);
+		length = UARTRx(&g_UartDev, data, sizeof(data));
 #else
-		while (g_Uart.Rx(&d, 1) <= 0);
+		length = g_Uart.Rx(data, sizeof(data));
 #endif
+		for (i = 0; i < length; i++)
 		{
-			cnt++;
-            
-			// If success send next code
+			if (haveValue && expected != data[i])
+			{
+				errors++;
+			}
+			expected = Prbs8(data[i]);
+			haveValue = true;
+			count++;
 #if UART_PRBS_VERBOSE
-			printf("%x\n", d);
+			printf("%02x\r\n", data[i]);
 #endif
-		   // UARTTx(&g_UartDev, &d, 1);
-			if (val != d)
-			{
-				errcnt++;
-			   printf("PRBS %u errors %x %x\n", errcnt, val, d);
-			}
-			else if ((cnt & 0x7fff) == 0)
-			{
-
-			}
-			val = Prbs8(d);
+		}
+		if (count - report >= 32768U)
+		{
+			printf("PRBS bytes %lu errors %lu\r\n", (unsigned long)count, (unsigned long)errors);
+			report = count;
 		}
 	}
-	return 0;
 }
-
-//extern "C" int _gettimeofday( struct timeval *tv, void *tzvp )
-//{
-//	return 0;  // return non-zero for error
-//}

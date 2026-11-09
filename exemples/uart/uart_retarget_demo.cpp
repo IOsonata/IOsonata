@@ -4,7 +4,7 @@
 
 @brief	UART retarget demo
 
-Demo code using EHAL library to show how to remap stdio in/out over UART.
+Demo code using IOsonata library to show how to remap stdio in/out over UART.
 This is to allow using the standard printf/scanf functionality through UART interface.
 
 
@@ -145,20 +145,29 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 int main()
 {
 	bool res;
+	char buff[512];
+#ifdef USE_GETCHAR
+	char c;
+#endif
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &s_UartCfg);
-	if (!res) while (1) __WFE();
+	if (!res)
+	{
+		return 1;
+	}
 	UARTRetargetEnable(&g_UartDev, STDIN_FILENO);
 	UARTRetargetEnable(&g_UartDev, STDOUT_FILENO);
 #else
 	res = g_Uart.Init(s_UartCfg);
-	if (!res) while (1) __WFE();
+	if (!res)
+	{
+		return 1;
+	}
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
 
-	char buff[512];
 	// Retargeted input reads one character at a time; do not use libc buffering.
 	setvbuf(stdin, NULL, _IONBF, 0);
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -168,7 +177,7 @@ int main()
 	{
 #ifdef USE_GETCHAR
 		printf("Please type something\r\n");
-		char c = getchar();
+		c = getchar();
 		printf("You typed : '%c'\r\n", c);
 #else
 		printf("Please type something then press enter\r\n");

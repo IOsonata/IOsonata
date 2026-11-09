@@ -3,7 +3,7 @@
 
 @brief	UART PRBS transmit test over SLIP protocol
 
-This example sends PRBS byte though UART over SLIP protocole. The example
+This example sends PRBS bytes over UART using SLIP framing. The example
 shows UART & SLIP interface use in both C and C++.
 
 To compile in C, rename the file to .c and uncomment the line #define DEMO_C
@@ -42,6 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "prbs.h"
+#include "stddev.h"
 #include "slip_intrf.h"
 
 // This include contain i/o definition the board in use
@@ -53,7 +54,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define DEMO_C
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 // Allocate FIFO memory
 #define SLIPTEST_BUFSIZE		92
@@ -76,7 +76,7 @@ const UARTCfg_t g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 1,
-	.EvtCallback = NULL,//nRFUartEvthandler,
+	.EvtCallback = NULL,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = NULL,
@@ -96,53 +96,43 @@ UART g_Uart;
 Slip g_Slip;
 #endif
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
-{
-	int cnt = 0;
-//	uint8_t buff[SLIPTEST_BUFSIZE];
-
-	switch (EvtId)
-	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
-//			UARTRx(pDev, buff, BufferLen);
-			break;
-		case UART_EVT_TXREADY:
-			break;
-		case UART_EVT_LINESTATE:
-			break;
-	}
-
-	return cnt;
-}
-
 int main()
 {
 	bool res;
-
-#ifndef SLIP_PRBS_NO_PROGRESS
-	printf("UART Slip PRBS Demo\n");
-#endif
-
-#ifdef DEMO_C
-	res = UARTInit(&g_UartDev, &g_UartCfg);
-	if (!res) return 1;
-	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf, true);
-#else
-	res = g_Uart.Init(g_UartCfg);
-	if (!res) return 1;
-	g_Slip.Init(&g_Uart);
-#endif
-
+	int i;
 	uint8_t d = 0xff;
 	uint8_t buff[SLIPTEST_BUFSIZE];
 #ifndef SLIP_PRBS_NO_PROGRESS
 	uint32_t lcnt = 0;
 #endif
-	
-	while(1)
+
+
+#ifndef SLIP_PRBS_NO_PROGRESS
+#ifndef SLIP_PRBS_NO_PROGRESS
+	printf("UART Slip PRBS Demo\n");
+#endif
+#endif
+
+#ifdef DEMO_C
+	res = UARTInit(&g_UartDev, &g_UartCfg);
+	if (!res)
 	{
-		for (int i = 0; i < SLIPTEST_BUFSIZE; i++)
+		return 1;
+	}
+	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf, true);
+#else
+	res = g_Uart.Init(g_UartCfg);
+	if (!res)
+	{
+		return 1;
+	}
+	g_Slip.Init(&g_Uart);
+#endif
+
+
+	while (1)
+	{
+		for (i = 0; i < SLIPTEST_BUFSIZE; i++)
 		{
 			d = Prbs8(d);
 			buff[i] = d;
@@ -153,11 +143,13 @@ int main()
 		g_Slip.Tx(0, buff, SLIPTEST_BUFSIZE);
 #endif
 #ifndef SLIP_PRBS_NO_PROGRESS
+#ifndef SLIP_PRBS_NO_PROGRESS
 		lcnt++;
 		if ((lcnt & 0xff) == 0)
 		{
 			printf("cnt %u\n", lcnt);
 		}
+#endif
 #endif
 	}
 	return 0;

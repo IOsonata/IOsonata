@@ -145,5 +145,10 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
 		</link>
+	<link>
+			<name>src/slip_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/slip_intrf.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

@@ -1,5 +1,5 @@
 """ -------------------------------------------------------------------------
-@file   uartprbs_rx.py
+@file   uartprbs_tx.py
 
 @brief  PRBS transmit test
 
@@ -32,48 +32,67 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------
 """
-import logging
-import serial
+import argparse
+import sys
 import time
 
+
 def prbs8(curval):
-    newbit = (((curval >> 6) ^ (curval >> 5)) & 1)
-    return ((curval << 1) | newbit) & 0x7f
+    return ((curval << 1) | (((curval >> 6) ^ (curval >> 5)) & 1)) & 0x7f
+
+
+def payload(state, size):
+    data = bytearray()
+    for _ in range(size):
+        state = prbs8(state)
+        data.append(state)
+    return state, bytes(data)
+
+
+def slip_encode(data):
+    return b"\xc0" + data.replace(b"\xdb", b"\xdb\xdd").replace(b"\xc0", b"\xdb\xdc") + b"\xc0"
+
 
 def main():
+    import serial
 
-    comm = serial.Serial(port="/dev/cu.usbmodem40303180003282", baudrate=1000000, rtscts=True)
-    comm.flushInput()
+    parser = argparse.ArgumentParser(description="Send IOsonata PRBS bytes and display receiver diagnostics.")
+    parser.add_argument("--port", required=True)
+    parser.add_argument("--baud", type=int, default=1000000)
+    parser.add_argument("--chunk", type=int, default=92)
+    parser.add_argument("--slip", action="store_true", help="Send SLIP frames")
+    parser.add_argument("--duration", type=float, default=0, help="Seconds; zero runs until interrupted")
+    args = parser.parse_args()
+    if args.chunk <= 0 or args.duration < 0 or args.baud <= 0:
+        parser.error("chunk and baud must be positive; duration must be nonnegative")
 
-    curval = 0
-    val = prbs8(0xff)
-    byteCount = 0
-    dropcnt = 0
-    deltatime = 0
-    drop = False
-    while True:
-        try:
-            comm.write(val)
-            startTime = time.time()
-            endTime = time.time()
-            deltatime += endTime - startTime
-            val = prbs8(val)
-            byteCount += 1
+    comm = serial.Serial(port=None, baudrate=args.baud, timeout=0, write_timeout=2,
+                         rtscts=False, dsrdtr=False)
+    comm.dtr = False
+    comm.rts = False
+    comm.port = args.port
+    state = 0xff
+    start = time.monotonic()
+    try:
+        comm.open()
+        while not args.duration or time.monotonic() - start < args.duration:
+            state, data = payload(state, args.chunk)
+            wire = slip_encode(data) if args.slip else data
+            sent = 0
+            while sent < len(wire):
+                count = comm.write(wire[sent:])
+                if not count:
+                    raise RuntimeError("UART write made no progress")
+                sent += count
+            reply = comm.read(comm.in_waiting)
+            if reply:
+                sys.stdout.write(reply.decode("ascii", errors="replace"))
+                sys.stdout.flush()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        comm.close()
 
-            if deltatime > 0:
-                bytesPerSec = byteCount / deltatime #(endTime - startTime)
 
-            #print("Bytes : {0}".format(bytes))
-            #if drop:
-            #    print("Dropped.... Bytes/sec : {0}".format(bytesPerSec))
-            #else:
-            if (byteCount & 0xff) == 0:
-                print("Bytes/sec : %.2f, drop %d " %(bytesPerSec, dropcnt))
-        except KeyboardInterrupt:
-            print("KeyboardInterrupt. Exiting.")
-            break
-
-    comm.close()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
