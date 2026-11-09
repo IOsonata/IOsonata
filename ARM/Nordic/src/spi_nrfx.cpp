@@ -1912,9 +1912,8 @@ static bool SPIPeiReady(SPIDev_t *pDev)
 	return false;
 }
 
-// PPI START has no callback opportunity to set DMA pointers. Stage at
-// most one SPIM transfer using the existing driver's private TX buffer.
-// The RX buffer belongs to the caller until after STOP/END and teardown.
+// Configure SPIM DMA before connecting a PPI START task.
+// TX uses the driver buffer; RX uses the caller buffer until release.
 bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
 {
