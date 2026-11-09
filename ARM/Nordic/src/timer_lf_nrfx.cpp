@@ -444,7 +444,7 @@ static bool nRFxRtcExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 
 // Bind an RTC TICK or OVRFLW producer without changing its interrupt
 // configuration. EVTEN is independent from INTEN on nRF52.
-static bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t *pEvent, uint32_t Event)
 {
 	nRFRtcRawPei_t *pRaw;
@@ -508,7 +508,7 @@ static bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 
 // Unbind only this RTC event source and leave the shared counter running.
 // The PEI matrix owns its event-to-task routes.
-static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t Event)
 {
 	nRFRtcRawPei_t *pRaw;
@@ -616,7 +616,7 @@ static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 
 // Bind a free CC to PEI; the RTC counter and all other CCs keep running.
 // Continuous compare uses the same ISR reschedule rule as ordinary RTC.
-static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
+bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei,
 	PeiEvent_t *pEvent)
 {
@@ -738,11 +738,7 @@ static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	{
 		// Release only this CC's PEI event source. Keep ownership
 		// until the matrix successfully unbinds it.
-		if (pTimer->DisablePeiEvent == nullptr)
-		{
-			return;
-		}
-		pTimer->DisablePeiEvent(pTimer,
+		nRFxRtcDisablePeiEvent(pTimer,
 			static_cast<PeiDev_t *>(rtc.pTrigger[TrigNo].pContext),
 			rtc.pCC[TrigNo]);
 		return;
@@ -816,8 +812,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	// Do not replace a Timer object with live PEI bindings.
 	// The optional RTC event callback tracks TICK/OVRFLW owners.
 	if (pOldTimer != nullptr &&
-		pOldTimer->DisablePeiEvent != nullptr &&
-		pOldTimer->DisablePeiEvent(pOldTimer, nullptr, 0U))
+		nRFxRtcDisablePeiEvent(pOldTimer, nullptr, 0U))
 	{
 		return false;
 	}
@@ -846,18 +841,6 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     pTimer->FindAvailTrigger = nRFxRtcFindAvailTrigger;
     pTimer->DisableTrigger = nRFxRtcDisableTrigger;
     pTimer->EnableTrigger = nRFxRtcEnableTrigger;
-#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
-	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
-	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
-	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
-	pTimer->EnablePeiTrigger = nRFxRtcEnablePeiTrigger;
-	pTimer->EnablePeiEvent = nRFxRtcEnablePeiEvent;
-	pTimer->DisablePeiEvent = nRFxRtcDisablePeiEvent;
-#else
-	pTimer->EnablePeiTrigger = nullptr;
-	pTimer->EnablePeiEvent = nullptr;
-	pTimer->DisablePeiEvent = nullptr;
-#endif
 	pTimer->GetTaskEndpoint = nRFxRtcTaskEndpoint;
 	pTimer->ExecuteTask = nRFxRtcExecuteTask;
     pTimer->DisableExtTrigger = nRFxRtcDisableExtTrigger;
