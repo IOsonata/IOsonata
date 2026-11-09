@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     subprocess.run(["gcc", "-std=c11", *COMMON, "-fsyntax-only",
                     str(TEST / "pei_hal_c_api.c")], check=True)
     subprocess.run(["g++", "-std=c++11", *COMMON,
-                    "-Wno-error=overloaded-virtual", "-fsyntax-only",
+                    "-Wno-overloaded-virtual", "-fsyntax-only",
                     str(TEST / "pei_hal_cpp_api.cpp")], check=True)
     for name, flags in [
         ("bare", []),
