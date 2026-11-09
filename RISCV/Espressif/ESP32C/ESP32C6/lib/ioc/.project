@@ -1965,5 +1965,10 @@
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/iatomic.c</locationURI>
 		</link>
+		<link>
+			<name>src/i2c_esp32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_esp32.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

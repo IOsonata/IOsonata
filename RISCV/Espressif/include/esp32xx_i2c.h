@@ -76,6 +76,10 @@ SOFTWARE.
 #define ESP32_I2C_SDA_SIGNAL		47U
 #endif
 
+/* Board pin maps use the same PinOp convention as the UART port. */
+#define ESP32_PINOP_I2C0_SDA (IOPINOP_FUNC0 + ESP32_I2C_SDA_SIGNAL)
+#define ESP32_PINOP_I2C0_SCL (IOPINOP_FUNC0 + ESP32_I2C_SCL_SIGNAL)
+
 #if defined(ESP32C2)
 #define ESP32_I2C_INTR_SOURCE_I2C0	22U
 #elif defined(ESP32C3)

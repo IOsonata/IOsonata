@@ -125,5 +125,15 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/stddev.c</locationURI>
 		</link>
+		<link>
+			<name>src/i2c_esp32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_esp32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/i2c.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
