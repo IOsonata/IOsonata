@@ -92,6 +92,13 @@ The library builds the shared STM32 RTC driver, `RtcStm32`
 wakeup timer, 32 backup registers, from the LSE or the 37 kHz LSI. See [STM32
 RTC](../RTC.md). No example project; not run on hardware yet.
 
+The library also builds the shared STM32 power functions of
+`system_core_clock.h`, `ARM/ST/src/system_power_stm32.cpp`: reset reason,
+power off in Standby, wake up on WKUP1 PA0, WKUP2 PC13 and WKUP3 PE6 (rising
+level), the 32 backup registers as retention registers, no RAM kept. See
+[STM32 power functions](../POWER.md). No example project; not run on hardware
+yet.
+
 ## Validation and limits
 
 `python3 tests/stm32l1/run.py` builds the library and all four examples in

@@ -84,7 +84,15 @@ instead of Shutdown.
 ## Libraries and tests
 
 The F030x8, F401, L152RE, L432, L476, L496, L4S9, G474 and H753 library
-projects build the functions.
+projects build the functions. Example `exemples/misc/power_off_demo.cpp`:
+`STM32L4xx/STM32L476/exemples/PowerOffDemo` (B-L475E-IOT01A, USART1 virtual
+COM port, user button B1 PC13 to ground), `STM32G4xx/STM32G474/exemples/PowerOffDemo`
+(NUCLEO-G474RE, LPUART1 virtual COM port, B1 PC13 to the supply) and
+`STM32H7xx/STM32H753/exemples/PowerOffDemo` (NUCLEO-H753ZI, USART3 virtual
+COM port, B1 PC13 to the supply). It logs the reset reason and a start count
+kept in retention register 0, then powers off; B1 wakes the MCU. On the L476
+and G474 the demo keeps no RAM, the MCU goes to Shutdown and its wake up is
+reported as a power on.
 
 `tests/stm32/run_power.py` builds them with `power_fw.cpp` for the F030x8,
 F401xC, L152xE, L432, L476, L496, L4S9, G474 and H753 at -O0 and -Os and calls

@@ -383,6 +383,17 @@ the clock in use, a boot count in backup register 0, the date and time every
 second from the wakeup event, an alarm event each minute. Not run on hardware
 yet.
 
+The four L4 libraries build the shared STM32 power functions of
+`system_core_clock.h`, `ARM/ST/src/system_power_stm32.cpp`: reset reason,
+power off in Shutdown, or Standby with SRAM2 kept, wake up on WKUP1 to WKUP5
+(PA0, PC13, PE6, PA2, PC5) on either level with the pin pull resistor kept,
+the 32 backup registers as retention registers. See
+[STM32 power functions](../POWER.md). The STM32L476 example PowerOffDemo
+(`exemples/misc/power_off_demo.cpp`, B-L475E-IOT01A) logs the reset reason
+and a start count in retention register 0 on the ST-LINK virtual COM port
+(USART1, 1000000 baud 8N1), then powers off; the user button B1 (PC13) wakes
+it. Not run on hardware yet.
+
 ## Validation
 
 Run the focused host regressions from the repository root:
