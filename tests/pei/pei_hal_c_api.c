@@ -138,27 +138,27 @@ bool PeiSaadcCApplication(PeiDev_t *pPei, PeiEvent_t trigger)
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiBindEvent(pPei, &endEvent, ADC_NRF52_PEI_EVENT_END))
+	if (!AdcNrf52EnablePeiEvent(pPei, &endEvent, ADC_NRF52_PEI_EVENT_END))
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiConnectTask(pPei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
+	if (!AdcNrf52ConnectTask(pPei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiConnectTask(pPei, endEvent, ADC_NRF52_PEI_TASK_START))
+	if (!AdcNrf52ConnectTask(pPei, endEvent, ADC_NRF52_PEI_TASK_START))
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiDisconnectTask(pPei, endEvent, ADC_NRF52_PEI_TASK_START))
+	if (!AdcNrf52DisconnectTask(pPei, endEvent, ADC_NRF52_PEI_TASK_START))
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiDisconnectTask(pPei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
+	if (!AdcNrf52DisconnectTask(pPei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiUnbindEvent(pPei, endEvent))
+	if (!AdcNrf52DisablePeiEvent(pPei, endEvent))
 	{
 		return false;
 	}

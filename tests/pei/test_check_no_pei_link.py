@@ -89,11 +89,11 @@ class NoPeiLinkTests(unittest.TestCase):
 
     def test_linked_adc_pei_code_is_rejected(self):
         self.assertEqual(self.check_map(
-            linked=" .text.AdcNrf52PeiConnectTask 0x00002000 0x30"), 1)
+            linked=" .text.AdcNrf52ConnectTask 0x00002000 0x30"), 1)
 
     def test_discarded_adc_pei_code_is_allowed(self):
         self.assertEqual(self.check_map(
-            discarded=" .text.AdcNrf52PeiBindEvent 0x00000000 0x20"), 0)
+            discarded=" .text.AdcNrf52EnablePeiEvent 0x00000000 0x20"), 0)
 
     def test_linked_comparator_pei_code_is_rejected(self):
         self.assertEqual(self.check_map(

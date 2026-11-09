@@ -114,19 +114,19 @@ bool PeiSaadcCppApplication(Pei &pei, PeiEvent_t trigger)
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiBindEvent(pei, &evt, ADC_NRF52_PEI_EVENT_END))
+	if (!AdcNrf52EnablePeiEvent(pei, &evt, ADC_NRF52_PEI_EVENT_END))
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiConnectTask(pei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
+	if (!AdcNrf52ConnectTask(pei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiDisconnectTask(pei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
+	if (!AdcNrf52DisconnectTask(pei, trigger, ADC_NRF52_PEI_TASK_SAMPLE))
 	{
 		return false;
 	}
-	if (!AdcNrf52PeiUnbindEvent(pei, evt))
+	if (!AdcNrf52DisablePeiEvent(pei, evt))
 	{
 		return false;
 	}

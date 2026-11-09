@@ -47,8 +47,8 @@ def main():
     assert "PeiUnbindEvent(pPei, Evt, endpoint)" in SOURCE
     assert "PeiDisconnectTask(pPei, Evt, endpoint)" in SOURCE
     assert "bool PreparePeiSampling();" in HEADER
-    assert "AdcNrf52PeiBindEvent" in C_HEADER
-    assert "AdcNrf52PeiConnectTask" in C_HEADER
+    assert "AdcNrf52EnablePeiEvent" in C_HEADER
+    assert "AdcNrf52ConnectTask" in C_HEADER
     assert "adc.ConnectTask(pei, compareEvt, ADC_NRF52_PEI_TASK_SAMPLE)" in EXAMPLE
     assert "adc.ConnectTask(pei, endEvt, ADC_NRF52_PEI_TASK_START)" in EXAMPLE
     assert "adc.EnablePeiEvent(pei, endEvt, ADC_NRF52_PEI_EVENT_END)" in EXAMPLE
