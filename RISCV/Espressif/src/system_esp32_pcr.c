@@ -71,11 +71,18 @@ SOFTWARE.
  * Base address identical across C5, C6, H2, H4.
  *---------------------------------------------------------------------------*/
 #define PCR_BASE                    0x60096000UL
+#if defined(ESP32C6)
+#define PCR_SYSCLK_CONF_REG         (*(volatile uint32_t *)(PCR_BASE + 0x110U))
+#define PCR_CPU_FREQ_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x118U))
+#define PCR_SYSTIMER_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x054U))
+#define PCR_SOC_CLK_SEL_Pos         (16U)
+#else
 #define PCR_SYSCLK_CONF_REG         (*(volatile uint32_t *)(PCR_BASE + 0x000U))
 #define PCR_CPU_FREQ_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x004U))
 #define PCR_SYSTIMER_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x064U))
 
 #define PCR_SOC_CLK_SEL_Pos         (20U)
+#endif
 #define PCR_SOC_CLK_SEL_Msk         (0x3UL << PCR_SOC_CLK_SEL_Pos)
 #define PCR_SOC_CLK_XTAL            (0x0UL << PCR_SOC_CLK_SEL_Pos)
 #define PCR_SOC_CLK_PLL             (0x1UL << PCR_SOC_CLK_SEL_Pos)
@@ -85,8 +92,13 @@ SOFTWARE.
 #define PCR_CPU_HS_DIV_NUM_Pos      (8U)
 #define PCR_CPU_HS_DIV_NUM_Msk      (0xFFUL << PCR_CPU_HS_DIV_NUM_Pos)
 
+#if defined(ESP32C6)
+#define PCR_SYSTIMER_CLK_EN         (1UL << 0)
+#define PCR_SYSTIMER_RST_EN         (1UL << 1)
+#else
 #define PCR_SYSTIMER_CLK_EN         (1UL << 1)
 #define PCR_SYSTIMER_RST_EN         (1UL << 0)
+#endif
 
 /*---------------------------------------------------------------------------
  * SYSTIMER — fixed 16 MHz, same base on C5/C6/H2/H4
@@ -118,14 +130,24 @@ SOFTWARE.
  *---------------------------------------------------------------------------*/
 #define LP_WDT_BASE                 0x600B1C00UL
 #define LP_WDT_RWDT_CONFIG0_REG     (*(volatile uint32_t *)(LP_WDT_BASE + 0x0000U))
+#if defined(ESP32C6)
+#define LP_WDT_RWDT_WPROTECT_REG    (*(volatile uint32_t *)(LP_WDT_BASE + 0x0018U))
+#define LP_WDT_SWD_CONFIG_REG       (*(volatile uint32_t *)(LP_WDT_BASE + 0x001CU))
+#define LP_WDT_SWD_WPROTECT_REG     (*(volatile uint32_t *)(LP_WDT_BASE + 0x0020U))
+#define LP_WDT_SWD_DISABLE          (1UL << 30)
+#define LP_SWD_WPROTECT_MAGIC       0x8F1D312AUL
+#else
 #define LP_WDT_RWDT_WPROTECT_REG    (*(volatile uint32_t *)(LP_WDT_BASE + 0x001CU))
 #define LP_WDT_SWD_CONFIG_REG       (*(volatile uint32_t *)(LP_WDT_BASE + 0x0020U))
 #define LP_WDT_SWD_WPROTECT_REG     (*(volatile uint32_t *)(LP_WDT_BASE + 0x002CU))
 
+#define LP_WDT_SWD_DISABLE          (1UL << 31)
+#define LP_SWD_WPROTECT_MAGIC       0x50D83AA1UL
+#endif
+
 #define LP_WDT_WPROTECT_MAGIC       0x50D83AA1UL
 #define LP_WDT_RWDT_EN              (1UL << 31)
 #define LP_WDT_RWDT_FLASHBOOT_EN    (1UL << 12)
-#define LP_WDT_SWD_DISABLE          (1UL << 31)
 
 /*---------------------------------------------------------------------------
  * IOsonata global clock state
@@ -133,6 +155,9 @@ SOFTWARE.
 
 uint32_t SystemCoreClock __attribute__((used)) = 80000000UL;
 uint64_t SystemCoreClockPeriodus __attribute__((used)) = 80ULL;
+#if defined(ESP32C6)
+uint64_t SystemCoreClockPeriodns __attribute__((used)) = 13ULL;
+#endif
 
 /**
  * Default oscillator descriptor for 40 MHz XTAL targets (C5, C6).
@@ -185,7 +210,7 @@ static void DisableLpRtcWdt(void)
 
 static void DisableSuperWdt(void)
 {
-    LP_WDT_SWD_WPROTECT_REG = LP_WDT_WPROTECT_MAGIC;
+    LP_WDT_SWD_WPROTECT_REG = LP_SWD_WPROTECT_MAGIC;
     LP_WDT_SWD_CONFIG_REG  |= LP_WDT_SWD_DISABLE;
     LP_WDT_SWD_WPROTECT_REG = 0U;
 }
@@ -240,6 +265,29 @@ void Esp32PcrSystemInit(uint32_t CpuHz)
  *---------------------------------------------------------------------------*/
 void SystemCoreClockUpdate(void)
 {
+#if defined(ESP32C6)
+	uint32_t root = PCR_SYSCLK_CONF_REG;
+	uint32_t cpu = PCR_CPU_FREQ_CONF_REG;
+	uint32_t sel = (root & PCR_SOC_CLK_SEL_Msk) >> PCR_SOC_CLK_SEL_Pos;
+	uint32_t divisor;
+
+	if (sel == 1U)
+	{
+		divisor = (((root >> 8) & 0xFFU) + 1U) * (((cpu >> 8) & 0xFFU) + 1U);
+		if ((cpu & PCR_CPU_HS_DIV_NUM_Msk) == 0U && (cpu & (1UL << 16)) != 0U)
+		{
+			divisor = 4U;
+		}
+		SystemCoreClock = 480000000UL / divisor;
+	}
+	else
+	{
+		divisor = ((root & 0xFFU) + 1U) * ((cpu & 0xFFU) + 1U);
+		SystemCoreClock = (sel == 2U ? 17500000UL : g_McuOsc.CoreOsc.Freq) / divisor;
+	}
+	SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
+	SystemCoreClockPeriodns = (1000000000ULL + SystemCoreClock / 2U) / SystemCoreClock;
+#else
     uint32_t sel = (PCR_SYSCLK_CONF_REG & PCR_SOC_CLK_SEL_Msk) >> PCR_SOC_CLK_SEL_Pos;
 
     switch (sel)
@@ -270,6 +318,7 @@ void SystemCoreClockUpdate(void)
     }
 
     SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
+#endif
 }
 
 /*---------------------------------------------------------------------------

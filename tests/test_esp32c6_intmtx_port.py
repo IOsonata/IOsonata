@@ -23,6 +23,8 @@ class Esp32c6StartupTests(unittest.TestCase):
         self.assertIn("vt | 1UL", system)
         self.assertNotIn("vt | 0x3U", system)
         self.assertIn("ESP32_CPU_INT_ENABLE_REG = 0U", system)
+        self.assertIn('INCLUDE "gcc_riscv_flash.ld"', linker)
+        linker = (ROOT / "RISCV" / "ldscript" / "gcc_riscv_flash.ld").read_text()
         self.assertIn("KEEP(*(.iram.text.vectors))", linker)
         self.assertLess(linker.index("KEEP(*(.iram.text.vectors))"),
                         linker.index("KEEP(*(.iram.text))"))
