@@ -24,14 +24,14 @@ def main():
     tasks = section("static PeiEndpoint_t PwmPeiTaskEndpoint(",
                     "static nRFPwmDev_t *PwmPeiOwnedDevice(")
     ready = section("static bool PwmPeiReady(",
-                    'extern "C" bool PWMEnablePeiEvent(')
+                    'bool PWMEnablePeiEvent(')
     for event in ("SEQSTARTED[0]", "SEQSTARTED[1]", "SEQEND[0]",
                   "SEQEND[1]", "LOOPSDONE", "PWMPERIODEND", "STOPPED"):
         assert "pReg->EVENTS_" + event in events
     for task in ("SEQSTART[0]", "SEQSTART[1]", "STOP", "NEXTSTEP"):
         assert "pReg->TASKS_" + task in tasks
-    connect = section('extern "C" bool PWMConnectPeiTask(',
-                      'extern "C" bool PWMDisconnectPeiTask(')
+    connect = section('bool PWMConnectPeiTask(',
+                      'bool PWMDisconnectPeiTask(')
     assert "PWM_DECODER_MODE_NextStep" in connect
     assert "Task == PWM_PEI_TASK_NEXTSTEP" in connect
     assert "dev->OpenMask == 0U" in ready
@@ -45,7 +45,7 @@ def main():
     for name in ("EnablePeiEvent", "DisablePeiEvent", "ConnectPeiTask",
                  "DisconnectPeiTask"):
         assert "bool PWM" + name + "(" in HEADER
-        assert 'extern "C" bool PWM' + name + "(" in SOURCE
+        assert 'bool PWM' + name + "(" in SOURCE
     assert "PWM_PEI_TASK_SEQSTART0" in DEMO
     assert "PWM_PEI_TASK_STOP" in DEMO
     assert "PWM_PEI_EVENT_SEQSTARTED0" in DEMO
