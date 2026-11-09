@@ -94,6 +94,17 @@ void MpslNvmArbiterStop(void);
  */
 int nRFxMpslHfxo(bool bOn);
 
+/**
+ * @brief	Tell whether MPSL owns CLOCK
+ *
+ * SystemLowFreqClockSelect leaves LFCLK alone while MPSL is initialized, its
+ * source was set by MpslInit. The weak default in system_clock_nrfx.cpp
+ * returns false when the SoftDevice Controller is not in the build.
+ *
+ * @return	true - MPSL is initialized
+ */
+bool nRFxMpslActive(void);
+
 #ifdef __cplusplus
 }
 #endif

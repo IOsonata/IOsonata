@@ -485,6 +485,12 @@ static void nRFxMpslHfxoStarted(mpsl_clock_evt_type_t EvtType)
 	(void)EvtType;
 }
 
+// Once MPSL is initialized it owns CLOCK
+bool nRFxMpslActive(void)
+{
+	return mpsl_is_initialized();
+}
+
 // The crystal of SystemCoreClockSelect. Once MPSL is initialized it owns
 // CLOCK, the request and the release then go through it.
 int nRFxMpslHfxo(bool bOn)

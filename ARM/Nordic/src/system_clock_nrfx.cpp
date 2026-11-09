@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	system_clock_nrfx.cpp
 
-@brief	Core clock selection of system_core_clock.h on the nRF52, nRF53 and nRF91
+@brief	Clock functions of system_core_clock.h on the nRF52, nRF53 and nRF91
 
 The CPU always runs from HFCLK, sourced by the internal RC oscillator (HFINT)
 or by the 32 MHz crystal (HFXO). The crystal only improves accuracy. The
@@ -24,7 +24,16 @@ the next one.
 On the nRF53, HFCLKSRC selects the crystal before HFCLKSTART and selects the
 RC again after HFCLKSTOP.
 
-g_McuOsc stays the description of the board, it is not changed.
+SystemCoreClockSelect does not change g_McuOsc, it stays the description of
+the board.
+
+SystemLowFreqClockSelect selects the source of LFCLK, the 32 kHz clock of
+the RTCs, and starts it, restarting it when it ran from another source. It
+records the source in g_McuOsc.LowPwrOsc. The RC, the crystal, and on the
+nRF52 a rail to rail external clock on XL1 (OSC_TYPE_TCXO) are supported.
+When a BLE stack is enabled it owns LFCLK, whose source it set when it was
+enabled, and the function returns false. If the crystal does not start,
+LFCLK runs again from its previous source.
 
 The peripheral clock is the fixed 16 MHz PCLK16M, peripheral clock 0.
 SystemPeriphClockSet returns it, the only frequency there is.
@@ -88,6 +97,17 @@ SOFTWARE.
 // Peripherals run from the fixed 16 MHz PCLK16M
 #define NRFX_PCLK_FREQ				16000000UL
 
+// Well over the start time of the 32 kHz crystal, about 0.25 s
+#define NRFX_LFCLK_WAIT_LOOPS		10000000
+
+#ifdef CLOCK_LFCLKSRC_SRC_Xtal
+#define NRFX_LFCLK_SRC_RC			CLOCK_LFCLKSRC_SRC_RC
+#define NRFX_LFCLK_SRC_XTAL			CLOCK_LFCLKSRC_SRC_Xtal
+#else
+#define NRFX_LFCLK_SRC_RC			CLOCK_LFCLKSRC_SRC_LFRC
+#define NRFX_LFCLK_SRC_XTAL			CLOCK_LFCLKSRC_SRC_LFXO
+#endif
+
 #ifdef CLOCK_HFCLKSTAT_SRC_Xtal
 #define NRFX_HFXO_STAT_SRC			(CLOCK_HFCLKSTAT_SRC_Xtal << CLOCK_HFCLKSTAT_SRC_Pos)
 #else
@@ -104,6 +124,12 @@ __WEAK int nRFxMpslHfxo(bool bOn)
 	(void)bOn;
 
 	return -1;
+}
+
+// Weak: the SoftDevice Controller is not in the build, MPSL never owns CLOCK
+__WEAK bool nRFxMpslActive(void)
+{
+	return false;
 }
 
 // sd_softdevice_is_enabled is an SVC that only a programmed SoftDevice
@@ -266,6 +292,103 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	nRFxHfxoRelease();
 
 	return false;
+}
+
+// Starts LFCLK from Src and waits until it runs. Stopped again if it does
+// not start.
+static bool nRFxLfclkStart(uint32_t Src)
+{
+	NRF_CLOCK->LFCLKSRC = Src;
+	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
+	NRF_CLOCK->TASKS_LFCLKSTART = 1;
+
+	for (int i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
+	{
+		if (NRF_CLOCK->EVENTS_LFCLKSTARTED)
+		{
+			NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
+
+			return true;
+		}
+	}
+
+	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+
+	return false;
+}
+
+static void nRFxLfclkStop(void)
+{
+	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+
+	for (int i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
+	{
+		if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) == 0)
+		{
+			break;
+		}
+	}
+}
+
+bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	// The 32 kHz oscillators of these parts are 32768 Hz
+	(void)OscFreq;
+
+	uint32_t src;
+
+	switch (ClkSrc)
+	{
+		case OSC_TYPE_RC:
+			src = NRFX_LFCLK_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos;
+			break;
+		case OSC_TYPE_XTAL:
+			src = NRFX_LFCLK_SRC_XTAL << CLOCK_LFCLKSRC_SRC_Pos;
+			break;
+#if defined(CLOCK_LFCLKSRC_BYPASS_Msk) && defined(CLOCK_LFCLKSRC_EXTERNAL_Msk)
+		case OSC_TYPE_TCXO:
+			// Rail to rail clock on XL1
+			src = (NRFX_LFCLK_SRC_XTAL << CLOCK_LFCLKSRC_SRC_Pos) |
+				  CLOCK_LFCLKSRC_BYPASS_Msk | CLOCK_LFCLKSRC_EXTERNAL_Msk;
+			break;
+#endif
+		default:
+			return false;
+	}
+
+	// A BLE stack owns LFCLK, it set the source when it was enabled
+	if (nRFxClockSdEnabled() || nRFxMpslActive())
+	{
+		return false;
+	}
+
+	bool running = (NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) != 0;
+	uint32_t prev = NRF_CLOCK->LFCLKSRC;
+
+	if (running == false || prev != src ||
+		(NRF_CLOCK->LFCLKSRCCOPY & CLOCK_LFCLKSRCCOPY_SRC_Msk) != (src & CLOCK_LFCLKSRC_SRC_Msk))
+	{
+		if (running)
+		{
+			nRFxLfclkStop();
+		}
+
+		if (nRFxLfclkStart(src) == false)
+		{
+			// Back to the source that ran before
+			if (running)
+			{
+				(void)nRFxLfclkStart(prev);
+			}
+
+			return false;
+		}
+	}
+
+	g_McuOsc.LowPwrOsc.Type = ClkSrc;
+	g_McuOsc.LowPwrOsc.Freq = 32768;
+
+	return true;
 }
 
 uint32_t SystemPeriphClockGet(int Idx)
