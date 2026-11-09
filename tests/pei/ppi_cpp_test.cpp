@@ -80,6 +80,7 @@ int main()
 	}
 	assert(CountRoutes() == 0);
 
+#if !defined(TEST_SKIP_EGU_MMIO)
 	// Software event through the C++ wrapper, on EGU registers mapped at
 	// their nRF52 addresses
 	void *egu = mmap((void *)TEST_EGU_BASE, 0x1000, PROT_READ | PROT_WRITE,
@@ -109,6 +110,8 @@ int main()
 		assert(pei.BindSwEvent(sw));
 		assert(pei.EventEndpoint(sw) == TEST_EGU_BASE + 0x100U);
 	}
+
+#endif
 
 	// The C++ Pei wrapper manages the same C group object and matrix.
 	{
