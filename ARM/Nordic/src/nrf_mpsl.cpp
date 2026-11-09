@@ -505,9 +505,7 @@ int nRFxMpslHfxo(bool bOn)
 
 	if (bOn == false)
 	{
-		(void)mpsl_clock_hfclk_src_release(MPSL_CLOCK_HF_SRC_XO);
-
-		return 0;
+		return mpsl_clock_hfclk_src_release(MPSL_CLOCK_HF_SRC_XO) == 0 ? 0 : 1;
 	}
 
 	if (mpsl_clock_hfclk_src_request(MPSL_CLOCK_HF_SRC_XO, nRFxMpslHfxoStarted) != 0)
