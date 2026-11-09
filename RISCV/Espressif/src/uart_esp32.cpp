@@ -5,8 +5,7 @@
 
 Shared HP UART FIFO transfers for ESP32-C2/C3/C5/C6/C61. Register layout
 and peripheral clock selection follow ESP-IDF v5.5.1 per-chip UART headers.
-C2/C5/C61 polling setup is available; interrupt initialization fails
-explicitly until their CPU vector/interrupt ports are integrated. C3 has hardware validation; C6 has build and host MMIO checks.
+C2/C5/C61 use the shared Vectors_esp32.c interrupt entry. C3 has hardware validation; C6 has build and host MMIO checks.
 
 Pin routing uses the application's IOPinCfg_t map. Peripheral clock/reset
 operations live in system_esp32_uart_clock.c. CPU interrupt routing lives
@@ -254,12 +253,6 @@ static uint32_t Esp32UartSetBaud(ESP32_UARTDEV *dev, uint32_t baud)
 
 static bool Esp32UartIntMtxEnable(uint32_t source, uint32_t cpu_int_id, Esp32IrqHandler handler)
 {
-#if defined(ESP32C2) || defined(ESP32C5) || defined(ESP32C61)
-	(void)source;
-	(void)cpu_int_id;
-	(void)handler;
-	return false;
-#else
 	if (!Esp32EnableSourceIrq(source, cpu_int_id, UART_CPU_INT_PRIO, handler))
 	{
 		return false;
@@ -268,7 +261,6 @@ static bool Esp32UartIntMtxEnable(uint32_t source, uint32_t cpu_int_id, Esp32Irq
 	Esp32UartDebugSnapshot();
 #endif
 	return true;
-#endif
 }
 
 /*---------------------------------------------------------------------------
@@ -739,13 +731,6 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-#if defined(ESP32C2) || defined(ESP32C5) || defined(ESP32C61)
-	// These targets still need their CPU vector/interrupt port.
-	if (pCfg->bIntMode)
-	{
-		return false;
-	}
-#endif
 	devno = pCfg->DevNo;
 	dev = &s_Esp32UartDev[devno];
 	base = dev->Base;
