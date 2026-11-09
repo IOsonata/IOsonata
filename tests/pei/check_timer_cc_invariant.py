@@ -56,7 +56,7 @@ def main():
 
     rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
     release = section(rtc, "bool nRFxRtcDisablePeiEvent(",
-                      "static bool nRFxRtcEnablePeiTrigger(")
+                      "bool nRFxRtcEnablePeiTrigger(")
     compare = section(release, "endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[i];",
                       "reg->CC[i] = 0U;")
     assert compare.index("PeiUnbindEvent(pPei, Event, endpoint)") < compare.index(
