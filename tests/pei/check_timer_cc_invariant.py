@@ -47,6 +47,13 @@ def main():
           "// Only installed by TimerPeiPrepareMcu")
     check("ARM/Nordic/src/timer_lf_nrfx.cpp", "nRFxRtcEnablePeiTrigger",
           "// Called only when an application explicitly uses PEI with this RTC.")
+    hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
+    hf_release = section(hf, "static void nRFxTimerDisableTrigger(",
+                         "static int nRFxTimerFindAvailTrigger(")
+    hf_unbind = hf_release.index("!PeiUnbindEvent(pei, evt, endpoint)")
+    hf_disable = hf_release.index("reg->INTENCLR =")
+    assert hf_unbind < hf_disable, "HF TIMER must unbind before disabling compare"
+
     rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
     release = section(rtc, "static bool nRFxRtcDisablePeiEvent(",
                       "// Bind a free CC to PEI;")
