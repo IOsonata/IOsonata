@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "nrf.h"
 #include "coredev/system_core_clock.h"
+#include "coredev/interrupt.h"
 
 #include "timer_nrfx.h"
 #include "coredev/pei.h"
@@ -81,6 +82,22 @@ SOFTWARE.
 #define TIMER4_IRQn			TIMER22_IRQn
 #define TIMER5_IRQn			TIMER23_IRQn
 #define TIMER6_IRQn			TIMER24_IRQn
+// Clock before the prescaler: TIMER00 the CPU clock (64 or 128 MHz), TIMER10
+// 32 MHz, TIMER20 to TIMER24 16 MHz
+#define TIMER0_BASE_FREQ	(TIMER00_PCLK_MHZ * 1000000UL)
+#define TIMER1_BASE_FREQ	(TIMER10_PCLK_MHZ * 1000000UL)
+#endif
+
+#ifndef TIMER0_BASE_FREQ
+#define TIMER0_BASE_FREQ	TIMER_NRFX_HF_BASE_FREQ
+#define TIMER1_BASE_FREQ	TIMER_NRFX_HF_BASE_FREQ
+#endif
+
+// Largest PRESCALER value, the clock divided by 2^PRESCALER
+#ifdef TIMER_PRESCALER_PRESCALER_Max
+#define TIMER_NRFX_PRESCALER_MAX	TIMER_PRESCALER_PRESCALER_Max
+#else
+#define TIMER_NRFX_PRESCALER_MAX	9
 #endif
 
 // PEI compare sources reuse the ordinary trigger state without extra RAM.
@@ -119,7 +136,7 @@ TimerDev_t *s_pnRFxTimerDev[TIMER_NRFX_HF_MAX];
 alignas(4) const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX,
-		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
+		.MaxFreq = TIMER0_BASE_FREQ,
 		.pReg = NRF_TIMER0,
 		.IrqNo = TIMER0_IRQn,
 		.MaxNbTrigEvt = TIMER0_CC_NUM - 1, // Reserve last CC for reading counter
@@ -129,7 +146,7 @@ alignas(4) const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 1,
-		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
+		.MaxFreq = TIMER1_BASE_FREQ,
 		.pReg = NRF_TIMER1,
 		.IrqNo = TIMER1_IRQn,
 		.MaxNbTrigEvt = TIMER1_CC_NUM - 1, // Reserve last CC for reading counter
@@ -196,6 +213,9 @@ alignas(4) const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 static std::atomic<int> s_nRfxHFClockSem(0);
 static bool s_bTimerEnabled[TIMER_NRFX_HF_MAX];
 
+// CLEAR task endpoint given out: a hardware event can clear the counter
+static bool s_bnRFxTimerHwClear[TIMER_NRFX_HF_MAX];
+
 // Set by nRFxTimerInit. The interrupt handlers below are kept by the linker as soon as
 // this file is part of a build, used or not. They reach the timer data
 // through this pointer, so that the data is linked only when a timer is
@@ -207,6 +227,51 @@ const nRFTimerData_t *s_pnRFxTimerData = nullptr;
 __WEAK void nRFxCounterIrq(int Idx)
 {
 	(void)Idx;
+}
+
+// Tick count of a timer from its counter, read through the last CC. A counter
+// lower than the last one read is a wrap, or a clear once the CLEAR task can
+// be run by a hardware event: the tick count then restarts from the clear.
+// Interrupts are masked, the interrupt handler reads the counter too. The
+// handler passes its own table reference, see s_pnRFxTimerData.
+static uint64_t nRFxTimerReadCount(const nRFTimerData_t &TData, int Idx, TimerDev_t * const pTimer,
+								   bool *pbWrap)
+{
+	NRF_TIMER_Type *reg = TData.pReg;
+	uint32_t state = DisableInterrupt();
+	uint32_t t = reg->CC[TData.CountCC];	// Preserve comparator
+	uint32_t count;
+	bool wrap = false;
+
+	reg->TASKS_CAPTURE[TData.CountCC] = 1;
+	while ((count = reg->CC[TData.CountCC]) != reg->CC[TData.CountCC]);
+
+	reg->CC[TData.CountCC] = t;	// Restore comparator
+
+	if (count < pTimer->LastCount)
+	{
+		if (s_bnRFxTimerHwClear[Idx])
+		{
+			pTimer->Rollover = 0;
+		}
+		else
+		{
+			pTimer->Rollover += 0x100000000ULL;
+			wrap = true;
+		}
+	}
+	pTimer->LastCount = count;
+
+	uint64_t ticks = pTimer->Rollover + count;
+
+	EnableInterrupt(state);
+
+	if (pbWrap != nullptr)
+	{
+		*pbWrap = wrap;
+	}
+
+	return ticks;
 }
 
 static void TimerIRQHandler(int DevNo)
@@ -233,25 +298,18 @@ static void TimerIRQHandler(int DevNo)
 		return;
 	}
 
-    uint32_t evt = 0;
+	uint32_t evt = 0;
 	uint32_t ticks;
-	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
+	bool wrap;
 
-	// Read counter value
-    uint32_t count;
-	reg->TASKS_CAPTURE[tdata.CountCC] = 1;
-	while ((count = reg->CC[tdata.CountCC]) != reg->CC[tdata.CountCC]);
+	(void)nRFxTimerReadCount(tdata, DevNo, timer, &wrap);
 
-	reg->CC[tdata.CountCC] = t;	// Restore comparator
+	uint32_t count = timer->LastCount;
 
-    if (count < timer->LastCount)
-    {
-        // Counter wrap arround
-        evt |= TIMER_EVT_COUNTER_OVR;
-        timer->Rollover += 0x100000000ULL;
-    }
-
-    timer->LastCount = count;
+	if (wrap)
+	{
+		evt |= TIMER_EVT_COUNTER_OVR;
+	}
 
     for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
     {
@@ -280,15 +338,24 @@ static void TimerIRQHandler(int DevNo)
 			}
 			else
 			{
+				TimerTrig_t trig = tdata.pTrigger[i];
+
 				evt |= TIMER_EVT_TRIGGER(i);
-				if (tdata.pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+				if (trig.Type == TIMER_TRIG_TYPE_CONTINUOUS)
 				{
 					reg->CC[i] = count + tdata.pCC[i];
 				}
-				if (tdata.pTrigger[i].Handler != nullptr)
+				else
 				{
-					tdata.pTrigger[i].Handler(timer, i,
-						tdata.pTrigger[i].pContext);
+					// Single shot done, the trigger is free. Its compare would
+					// match again after a wrap of the counter.
+					reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << i;
+					tdata.pCC[i] = 0;
+					tdata.pTrigger[i] = {};
+				}
+				if (trig.Handler != nullptr)
+				{
+					trig.Handler(timer, i, trig.pContext);
 				}
 			}
 		}
@@ -546,12 +613,43 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
     }
 
-    reg->INTENSET = 0;
+	// The count and the triggers are kept, Enable resumes them
 }
 
+// Clears the counter and the tick count. The armed triggers restart their
+// period from the clear.
 static void nRFxTimerReset(TimerDev_t * const pTimer)
 {
-	s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX].pReg->TASKS_CLEAR = 1;
+	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
+	NRF_TIMER_Type *reg = tdata.pReg;
+	uint32_t state = DisableInterrupt();
+
+	reg->TASKS_CLEAR = 1;
+	pTimer->Rollover = 0;
+	pTimer->LastCount = 0;
+
+	for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
+	{
+		uint32_t bit = TIMER_INTENSET_COMPARE0_Msk << i;
+
+		if (tdata.pTrigger[i].nsPeriod == 0U || (reg->INTENSET & bit) == 0)
+		{
+			continue;
+		}
+		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			reg->CC[i] = (uint32_t)TimerNanosecondToTick(pTimer, tdata.pTrigger[i].nsPeriod);
+		}
+		else
+		{
+			reg->CC[i] = tdata.pCC[i];
+		}
+		reg->EVENTS_COMPARE[i] = 0;
+	}
+
+	EnableInterrupt(state);
 }
 
 static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
@@ -571,31 +669,53 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 		}
 	}
 
+	// Clock before the prescaler. TIMER00 of the nRF54L runs from the CPU
+	// clock.
+	uint32_t base = tdata.MaxFreq;
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	if (devno == 0)
+	{
+		base = SystemCoreClock;
+	}
+#endif
+
+	// Closest frequency base / 2^PRESCALER, the higher one of two as close,
+	// the highest for 0
+	uint32_t prescaler = 0;
+
+	if (Freq > 0)
+	{
+		uint32_t diff = UINT32_MAX;
+
+		for (uint32_t p = 0; p <= TIMER_NRFX_PRESCALER_MAX; p++)
+		{
+			uint32_t f = base >> p;
+			uint32_t d = f > Freq ? f - Freq : Freq - f;
+
+			if (d < diff)
+			{
+				diff = d;
+				prescaler = p;
+			}
+		}
+	}
+
+	// PRESCALER is written with the timer stopped
 	reg->TASKS_STOP = 1;
+	reg->PRESCALER = prescaler;
 
-    uint32_t prescaler = 0;
-
-    if (Freq > 0)
-    {
-        uint32_t divisor = TIMER_NRFX_HF_BASE_FREQ / Freq;
-        prescaler = 31 - __CLZ(divisor);
-
-        if (prescaler > 9)
-        {
-            prescaler = 9;
-        }
-    }
-
-    reg->PRESCALER = prescaler;
-
-    pTimer->Freq = TIMER_NRFX_HF_BASE_FREQ / (1 << prescaler);
+	pTimer->Freq = base >> prescaler;
 
 	// Tick period rounded down to a nanosecond, 62 for the 62.5 ns of 16 MHz.
 	// Not precise enough to convert a count or a trigger period, those are
 	// computed from Freq, see TimerTickToTime.
     pTimer->nsPeriod = 1000000000ULL / pTimer->Freq;
 
-    reg->TASKS_START = 1;
+	// A disabled timer stays stopped
+	if (s_bTimerEnabled[devno])
+	{
+		reg->TASKS_START = 1;
+	}
 
     return pTimer->Freq;
 }
@@ -603,27 +723,8 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
 {
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
-	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 
-	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
-
-	// Read counter value
-	uint32_t count;
-	reg->TASKS_CAPTURE[tdata.CountCC] = 1;
-	while ((count = reg->CC[tdata.CountCC]) != reg->CC[tdata.CountCC]);
-
-	reg->CC[tdata.CountCC] = t;	// Restore comparator
-
-	if (count < pTimer->LastCount)
-	{
-		// Counter wrap arround
-		pTimer->Rollover += 0x100000000ULL;
-	}
-
-	pTimer->LastCount = count;
-
-	return (uint64_t)pTimer->LastCount + pTimer->Rollover;
+	return nRFxTimerReadCount(s_nRFxTimerData[devno], devno, pTimer, nullptr);
 }
 
 // Peripheral hardware task endpoints; PEI owns only the routing.
@@ -650,6 +751,8 @@ static uintptr_t nRFxTimerTaskEndpoint(TimerDev_t * const pTimer, TIMER_TASK Tas
 		case TIMER_TASK_STOP:
 			return (uintptr_t)&reg->TASKS_STOP;
 		case TIMER_TASK_CLEAR:
+			// From now on a lower counter is a clear, not a wrap
+			s_bnRFxTimerHwClear[devno] = true;
 			return (uintptr_t)&reg->TASKS_CLEAR;
 		default:
 			return 0U;
@@ -662,6 +765,17 @@ static uintptr_t nRFxTimerTaskEndpoint(TimerDev_t * const pTimer, TIMER_TASK Tas
 static bool nRFxTimerExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 {
 	uintptr_t endpoint;
+
+	if (Task == TIMER_TASK_CLEAR)
+	{
+		if (nRFxTimerTaskEndpoint(pTimer, TIMER_TASK_START) == 0U)
+		{
+			return false;
+		}
+		// From the CPU, the tick count and the triggers follow the clear
+		nRFxTimerReset(pTimer);
+		return true;
+	}
 
 	endpoint = nRFxTimerTaskEndpoint(pTimer, Task);
 	if (endpoint == 0U)
@@ -766,26 +880,17 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
     }
 
 	tdata.pTrigger[TrigNo].Type = Type;
-	tdata.pCC[TrigNo] = cc;
-    reg->TASKS_CAPTURE[TrigNo] = 1;
-
-    uint32_t count = reg->CC[TrigNo];
-
-	reg->INTENSET = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
-
-    reg->CC[TrigNo] = count + cc;;
-
-    if (count < pTimer->LastCount)
-    {
-        // Counter wrap around
-        pTimer->Rollover += 0x100000000ULL;
-    }
-
-    pTimer->LastCount = count;
-
 	tdata.pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, cc);
 	tdata.pTrigger[TrigNo].Handler = Handler;
 	tdata.pTrigger[TrigNo].pContext = pContext;
+	tdata.pCC[TrigNo] = cc;
+
+	(void)nRFxTimerReadCount(tdata, devno, pTimer, nullptr);
+
+	// A compare left from before is cleared, the interrupt set last
+	reg->CC[TrigNo] = pTimer->LastCount + cc;
+	reg->EVENTS_COMPARE[TrigNo] = 0;
+	reg->INTENSET = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
 
 	return tdata.pTrigger[TrigNo].nsPeriod; // Return real period in nsec
 }
@@ -872,9 +977,9 @@ bool nRFxTimerEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_E
 
 bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 {
+	// Any frequency, SetFrequency takes the closest one
 	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX
-			|| pCfg->DevNo
-					>= (TIMER_NRFX_HF_MAX + TIMER_NRFX_RTC_MAX)|| pCfg->Freq > TIMER_NRFX_HF_BASE_FREQ)
+			|| pCfg->DevNo >= (TIMER_NRFX_HF_MAX + TIMER_NRFX_RTC_MAX))
 	{
 		return false;
 	}
@@ -898,6 +1003,9 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		}
 	}
 	s_pnRFxTimerDev[devno] = pTimer;
+	s_bnRFxTimerHwClear[devno] = false;
+	pTimer->Rollover = 0;
+	pTimer->LastCount = 0;
 
 	memset(tdata.pTrigger, 0, tdata.MaxNbTrigEvt * sizeof(TimerTrig_t));
 
