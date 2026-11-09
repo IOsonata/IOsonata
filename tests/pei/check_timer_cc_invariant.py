@@ -16,7 +16,7 @@ def section(source, begin, end):
 
 def check(path, function, ending):
     src = (ROOT / path).read_text(encoding="utf-8")
-    code = section(src, "static bool " + function + "(", ending)
+    code = section(src, "bool " + function + "(", ending)
     assert "PeiBindEvent(" in code, path
     assert "EVENTS_COMPARE[" in code, path
     assert "INTENSET" in code, path
@@ -55,7 +55,7 @@ def main():
     assert hf_unbind < hf_disable, "HF TIMER must unbind before disabling compare"
 
     rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
-    release = section(rtc, "static bool nRFxRtcDisablePeiEvent(",
+    release = section(rtc, "bool nRFxRtcDisablePeiEvent(",
                       "static bool nRFxRtcEnablePeiTrigger(")
     compare = section(release, "endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[i];",
                       "reg->CC[i] = 0U;")
@@ -76,10 +76,18 @@ def main():
     assert "TimerPeiPrepareMcu" not in matrix
     assert "nRFxTimerInstallPei" not in hf
     assert "nRFxRtcInstallPei" not in rtc
-    assert "pTimer->EnablePeiTrigger = nRFxTimerEnablePeiTrigger;" in hf
-    assert "pTimer->EnablePeiTrigger = nRFxRtcEnablePeiTrigger;" in rtc
-    assert "pTimer->EnablePeiEvent = nRFxRtcEnablePeiEvent;" in rtc
-    assert "pTimer->DisablePeiEvent = nRFxRtcDisablePeiEvent;" in rtc
+    assert "bool nRFxTimerEnablePeiTrigger(" in hf
+    assert "bool nRFxRtcEnablePeiTrigger(" in rtc
+    assert "bool nRFxRtcEnablePeiEvent(" in rtc
+    assert "bool nRFxRtcDisablePeiEvent(" in rtc
+    for name in ("EnablePeiTrigger", "EnablePeiEvent", "DisablePeiEvent"):
+        assert "(*" + name + ")" not in timer_api
+    for name in ("EnablePeiTrigger", "EnablePeiEvent", "DisablePeiEvent"):
+        assert "pTimer->" + name + " =" not in hf
+        assert "pTimer->" + name + " =" not in rtc
+    assert "int TimerEnablePeiTrigger(" in timer_driver
+    assert "bool TimerEnablePeiEvent(" in timer_driver
+    assert "bool TimerDisablePeiEvent(" in timer_driver
     assert "!PeiTimerPrepare(" not in timer_api
 
     print("TIMER/RTC free-running PEI compare source checks: PASS")
