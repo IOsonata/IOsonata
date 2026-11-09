@@ -343,7 +343,7 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense);
  * @brief	Number of retention registers
  *
  * Retention registers keep their value through power off and software
- * resets, not through a power cycle.
+ * resets. A power cycle can clear them.
  *
  * @return	Number of registers, 0 for none
  */
@@ -380,7 +380,8 @@ bool SystemRetRegWrite(int Idx, uint32_t Val);
  * @param	Size	: Size in bytes
  * @param	bRetain	: true - keep the content in power off
  *
- * @return	true - success, false - the range is not RAM
+ * @return	true - success, false - the range is not RAM that can be kept in
+ * 			power off
  */
 bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain);
 
