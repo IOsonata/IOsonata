@@ -1436,11 +1436,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/bm_scheduler.c</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bm_timer.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/bm_timer.c</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_adv.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
@@ -2761,11 +2756,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/sdk-nrf-bm/include/bm/bm_buttons.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bm_buttons.h</locationURI>
-		</link>
-		<link>
 			<name>src/sdk-nrf-bm/include/bm/bm_gpiote.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bm_gpiote.h</locationURI>
@@ -2774,16 +2764,6 @@
 			<name>src/sdk-nrf-bm/include/bm/bm_scheduler.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bm_scheduler.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/bm_timer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bm_timer.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/drivers</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/include/bm/fs</name>
@@ -2954,11 +2934,6 @@
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/drivers/bm_lpuarte.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/drivers/bm_lpuarte.h</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/include/bm/fs/bm_zms.h</name>
