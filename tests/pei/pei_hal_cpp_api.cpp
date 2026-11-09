@@ -15,6 +15,14 @@
 #include "adc_nrf52_pei.h"
 #include "converters/analog_comp.h"
 
+void UartOverloadCompileTest(UART &uart, uint8_t *pBuff, int Len)
+{
+	uart.Rx(0U, pBuff, Len);
+	uart.Tx(0U, pBuff, Len);
+	uart.Rx(pBuff, Len);
+	uart.Tx(pBuff, Len);
+}
+
 bool PeiHalCppApplication(Timer &timer)
 {
 	Pei pei;
