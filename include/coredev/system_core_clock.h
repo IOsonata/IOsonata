@@ -320,6 +320,26 @@ uint32_t SystemResetReason(void);
 void SystemPowerOff(void);
 
 /**
+ * @brief	Wake up pin of power off
+ *
+ * Selects a pin that wakes the MCU from SystemPowerOff. Configure the pin as
+ * an input with IOPinConfig first. Where the MCU wakes up only on dedicated
+ * pins or on one level, other pins and levels are refused. Where the pin
+ * configuration is lost in power off, its pull resistor is kept if the MCU
+ * can.
+ *
+ * @param	PortNo	: Port number
+ * @param	PinNo	: Pin number
+ * @param	Sense	: IOPINSENSE of coredev/iopincfg.h
+ * 					  IOPINSENSE_LOW_TRANSITION - wake up when the pin goes low
+ * 					  IOPINSENSE_HIGH_TRANSITION - wake up when the pin goes high
+ * 					  IOPINSENSE_DISABLE - the pin no longer wakes the MCU
+ *
+ * @return	true - success, false - the pin or the level cannot wake the MCU
+ */
+bool SystemWakePin(int PortNo, int PinNo, int Sense);
+
+/**
  * @brief	Number of retention registers
  *
  * Retention registers keep their value through power off and software
