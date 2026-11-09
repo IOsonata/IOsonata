@@ -495,6 +495,9 @@ bool nRFxMpslActive(void)
 // CLOCK, the request and the release then go through it.
 int nRFxMpslHfxo(bool bOn)
 {
+	int i;
+	uint32_t running;
+
 	if (mpsl_is_initialized() == false)
 	{
 		return -1;
@@ -512,20 +515,21 @@ int nRFxMpslHfxo(bool bOn)
 		return 1;
 	}
 
-	for (int i = 0; i < NRF_MPSL_HFXO_WAIT_LOOPS; i++)
+	for (i = 0; i < NRF_MPSL_HFXO_WAIT_LOOPS; i++)
 	{
-		uint32_t running = 0;
-
+		running = 0U;
 		if (mpsl_clock_hfclk_src_is_running(MPSL_CLOCK_HF_SRC_XO, &running) != 0)
 		{
+			(void)mpsl_clock_hfclk_src_release(MPSL_CLOCK_HF_SRC_XO);
 			return 1;
 		}
-		if (running != 0)
+		if (running != 0U)
 		{
 			return 0;
 		}
 	}
 
+	(void)mpsl_clock_hfclk_src_release(MPSL_CLOCK_HF_SRC_XO);
 	return 1;
 }
 
