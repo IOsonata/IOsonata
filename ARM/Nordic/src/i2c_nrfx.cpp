@@ -2063,13 +2063,15 @@ extern "C" bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	{
 		return false;
 	}
+#if defined(NRF52_SERIES) && defined(TWIM_PRESENT)
 	if ((Task == I2C_PEI_TASK_STARTTX &&
-		 dev->pDmaReg->TXD.MAXCNT == 0U) ||
+		 NRFX_TWI_TX(dev->pDmaReg).MAXCNT == 0U) ||
 		(Task == I2C_PEI_TASK_STARTRX &&
-		 dev->pDmaReg->RXD.MAXCNT == 0U))
+		 NRFX_TWI_RX(dev->pDmaReg).MAXCNT == 0U))
 	{
 		return false;
 	}
+#endif
 	endpoint = I2CPeiTaskEndpoint(dev, Task);
 	if (endpoint == 0U)
 	{
