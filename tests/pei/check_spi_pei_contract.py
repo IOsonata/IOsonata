@@ -68,6 +68,8 @@ def main():
     release = section('bool SPIReleasePeiTransfer(',
                       'bool SPIEnablePeiEvent(')
     assert "atomic_flag_clear(&pDev->DevIntrf.bBusy)" in release
+    assert "dev->pDmaReg->EVENTS_STARTED != 0U" in release
+    assert "dev->pDmaReg->EVENTS_STOPPED == 0U" in release
     assert release.index("dev->bPeiPrepared = false;") < release.index(
         "atomic_flag_clear(&pDev->DevIntrf.bBusy)")
     for api in ("nRFxSPIRxDataDma(", "nRFxSPITxDataDma(",
