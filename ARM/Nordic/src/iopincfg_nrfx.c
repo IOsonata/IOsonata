@@ -890,6 +890,10 @@ static int IOPinOpenTask(int PortNo, int PinNo, IOPINTASK Task,
 	uint32_t polarity;
 	uint32_t outinit;
 	uint32_t mask;
+	uint32_t old;
+	uint32_t oldMode;
+	uint32_t oldPin;
+	uint32_t oldPort;
 	int i;
 	int chan;
 	int channelCount;
@@ -941,13 +945,13 @@ static int IOPinOpenTask(int PortNo, int PinNo, IOPINTASK Task,
 	// occupies another channel or is owned by code outside this driver.
 	for (i = 0; i < channelCount; i++)
 	{
-		uint32_t old = gpiotereg->CONFIG[i];
-		uint32_t oldMode = old & GPIOTE_CONFIG_MODE_Msk;
-		uint32_t oldPin = (old & GPIOTE_CONFIG_PSEL_Msk) >> GPIOTE_CONFIG_PSEL_Pos;
+		old = gpiotereg->CONFIG[i];
+		oldMode = old & GPIOTE_CONFIG_MODE_Msk;
+		oldPin = (old & GPIOTE_CONFIG_PSEL_Msk) >> GPIOTE_CONFIG_PSEL_Pos;
 #ifdef GPIOTE_CONFIG_PORT_Msk
-		uint32_t oldPort = (old & GPIOTE_CONFIG_PORT_Msk) >> GPIOTE_CONFIG_PORT_Pos;
+		oldPort = (old & GPIOTE_CONFIG_PORT_Msk) >> GPIOTE_CONFIG_PORT_Pos;
 #else
-		uint32_t oldPort = 0U;
+		oldPort = 0U;
 #endif
 		if (oldMode != 0U && oldPin == (uint32_t)PinNo &&
 			oldPort == (uint32_t)PortNo)
