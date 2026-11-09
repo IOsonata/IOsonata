@@ -779,8 +779,7 @@ static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 	return true;
 }
 
-// Only installed by TimerPeiPrepareMcu through the explicit PEI API.
-// The normal TimerInit function never retains the PEI compare callback.
+// Installed by PeiTimerPrepare when a TIMER PEI operation is requested.
 bool nRFxTimerInstallPei(TimerDev_t *pTimer)
 {
 	int devno;
