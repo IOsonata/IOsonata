@@ -596,7 +596,7 @@ static uint32_t TestGroupEventMask(PeiDev_t *pPei, PeiEvent_t Evt)
 static void TestGroups(void)
 {
 	PeiDev_t pei;
-	PeiGroup_t group[6] = {{0}};
+	PeiGroup_t group[7] = {{0}};
 	PeiGroup_t copied;
 	PeiEvent_t evt = 0U;
 	const PeiEndpoint_t source = 0x40008100U;
@@ -686,7 +686,7 @@ static void TestGroups(void)
 	// Exhaust the available application group IDs. The SoftDevice and
 	// SDC profiles conservatively reserve groups 4/5.
 	available = 0;
-	for (i = 2; i < 6; i++)
+	for (i = 2; i < 7; i++)
 	{
 		if (PeiGroupInit(&group[i], 0))
 		{
@@ -694,12 +694,12 @@ static void TestGroups(void)
 		}
 	}
 #if defined(SOFTDEVICE_PRESENT) || defined(NRFXLIB_SDC)
-	assert(available == 2);
+	assert(available == 3);
 #else
-	assert(available == 4);
+	assert(available == 5);
 #endif
-	assert(!PeiGroupInit(&copied, 0));
-	for (i = 0; i < 6; i++)
+	assert(!PeiGroupInit(&group[1], 0));
+	for (i = 0; i < 7; i++)
 	{
 		if (group[i].Handle != 0U)
 		{
