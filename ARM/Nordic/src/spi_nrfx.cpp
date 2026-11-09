@@ -1901,7 +1901,7 @@ static bool SPIPeiReady(SPIDev_t *pDev)
 // PPI START has no callback opportunity to set DMA pointers. Stage at
 // most one SPIM transfer using the existing driver's private TX buffer.
 // The RX buffer belongs to the caller until after STOP/END and teardown.
-extern "C" bool SPIPreparePeiTransfer(SPIDev_t *pDev,
+bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
 {
 #if defined(NRF52_SERIES) && defined(SPIM_PRESENT)
@@ -1964,7 +1964,7 @@ extern "C" bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 #endif
 }
 
-extern "C" bool SPIReleasePeiTransfer(SPIDev_t *pDev)
+bool SPIReleasePeiTransfer(SPIDev_t *pDev)
 {
 #if defined(NRF52_SERIES) && defined(SPIM_PRESENT)
 	nRFSpiDev_t *dev;
@@ -2000,7 +2000,7 @@ extern "C" bool SPIReleasePeiTransfer(SPIDev_t *pDev)
 #endif
 }
 
-extern "C" bool SPIEnablePeiEvent(SPIDev_t *pDev,
+bool SPIEnablePeiEvent(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t *pEvt, SPI_PEI_EVENT Event)
 {
 	nRFSpiDev_t *dev;
@@ -2020,7 +2020,7 @@ extern "C" bool SPIEnablePeiEvent(SPIDev_t *pDev,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool SPIDisablePeiEvent(SPIDev_t *pDev,
+bool SPIDisablePeiEvent(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt)
 {
 	nRFSpiDev_t *dev;
@@ -2046,7 +2046,7 @@ extern "C" bool SPIDisablePeiEvent(SPIDev_t *pDev,
 	return false;
 }
 
-extern "C" bool SPIConnectPeiTask(SPIDev_t *pDev,
+bool SPIConnectPeiTask(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, SPI_PEI_TASK Task)
 {
 	nRFSpiDev_t *dev;
@@ -2070,7 +2070,7 @@ extern "C" bool SPIConnectPeiTask(SPIDev_t *pDev,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool SPIDisconnectPeiTask(SPIDev_t *pDev,
+bool SPIDisconnectPeiTask(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, SPI_PEI_TASK Task)
 {
 	nRFSpiDev_t *dev;
