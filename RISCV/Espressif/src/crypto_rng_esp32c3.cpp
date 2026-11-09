@@ -31,10 +31,10 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #error ESP32-C3 RNG implementation requires ESP32C3
 #endif
 
-// Temporary diagnostics enabled in Debug and Release for this branch.
-// Remove after the ESP32-C3 board has passed its hardware RNG tests.
+// Optional hardware diagnostics. Disabled by default after on-target acceptance.
+// Define ESP32_RNG_TRACE=1 when detailed first-request checkpoints are needed.
 #ifndef ESP32_RNG_TRACE
-#define ESP32_RNG_TRACE 1
+#define ESP32_RNG_TRACE 0
 #endif
 #if ESP32_RNG_TRACE
 #include <stdio.h>

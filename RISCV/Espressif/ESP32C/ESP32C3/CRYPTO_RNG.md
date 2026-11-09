@@ -1,153 +1,52 @@
-# ESP32-C3 hardware RNG
+# ESP32-C3 hardware RNG and crypto validation
 
-ESP32-C3 supplies a hardware RNG, but physical entropy is guaranteed only
-when an RF subsystem or the internal SAR ADC entropy source is active.
-IOsonata's native ESP32-C3 implementation uses the internal SAR ADC during
-random draws. It uses direct MCU registers and two ROM analog-I2C entry points
-(0x40001958/0x40001960). It does **not** link ESP-IDF's HAL.
+The ESP32-C3 `CryptoTest` completed on actual hardware on **November 8, 2026**:
 
-## Startup and operation
+- **101 PASS, 0 FAIL, 0 SKIP**
+- Hardware SAR ADC entropy setup and restoration completed successfully (RNG checkpoints 1 through 10).
+- Random draws, consecutive-output differences, odd-length output bounds, and a 4 KiB basic distribution check all passed. The test reported `Source: secure random generator`.
+- Default P-256 key generation, ECDH agreement, and ECDSA signing and verification passed, including invalid-key and invalid-peer rejection.
+- AES-128 and AES-256 ECB/CBC/CTR known-answer tests passed; AES-128 CMAC, CCM, and GCM tests passed; SHA-256 and HMAC-SHA-256 tests passed.
+- The 200-round AES comparison and 8-round P-256 comparison against the software reference passed.
 
-The earlier experimental implementation called the RNG probe from
-`Crypto::Init()`. The maintainer reported that CryptoTest then stopped
-before printing its banner. The exact trap/hang location was not captured.
+This records **functional hardware acceptance** of the tested crypto engine and entropy path. It is *not* a statistical entropy certification or proof of physical entropy quality under every environmental or RF condition.
 
-The corrected implementation preserves the known-working `Crypto::Init()`:
-it initializes AES/SHA but performs **no ADC or RNG operations**. The
-ESP32-C3 library once again includes `crypto_rng_esp32c3.cpp`.
+## Architecture
 
-`Crypto::Random()` activates the SAR ADC noise source for each request,
-samples the hardware RNG at a conservative 80 microseconds per word,
-and restores the previous state before returning. It never silently
-uses `CryptoSoftRng` on the production ESP32-C3 build.
+`RISCV/Espressif/src/crypto_esp32.cpp` uses the ESP32-C3 AES and SHA registers directly. CCM/GCM and related modes use hardware AES as a primitive; P-256 cryptography is software-based. `Crypto::Init()` initializes AES/SHA without probing or modifying the entropy source.
 
-`Crypto::IsSecure()` reports whether the ESP32-C3 hardware entropy path
-is eligible for a new request: the ADC must be idle and no permanent
-health/setup failure may have been detected. Each `Random()` call still
-checks source activation and the stream; it clears its output and fails
-on error. A failed source activation, stalled cycle counter, or repeated
-word failure permanently disables the RNG until reboot. Unavailable ADC
-resources produce a transient failed request without taking them over.
+`RISCV/Espressif/src/crypto_rng_esp32c3.cpp` supplies the default `Crypto::Random()` implementation. Each request temporarily powers and configures the SAR ADC's internal noise source, uses the ESP32-C3 RNG data register, then restores the prior register state. Only the required analog internal-reference bit is written via the MCU ROM analog-I2C interface. When the ADC is already active, a request fails without claiming the peripheral; a failed entropy activation or detected stream fault prevents insecure key generation.
 
-**This is not a certified entropy source.** The host model proves register
-sequencing only; electrical entropy behavior and production suitability
-require on-device validation.
+The driver uses `IOsonataRiscvCycle32()` from `RISCV/include/idelay.h` to pace reads. On ESP32-C3 this is the vendor MPCCR at CSR `0x7E2`, initialized by `Esp32SystemInit()`. The standard RISC-V `cycle` CSR `0xC00` is not implemented on this MCU and caused the earlier test to stop at checkpoint `RNG 7`.
 
-## Debugger checkpoints
+No ESP-IDF HAL, RTOS, heap, or software-RNG fallback is required for the hardware path.
 
-Two globals have ordinary C++ linkage and are visible in the debugger:
+## Measured RNG latency
 
-- `g_Esp32C3RngStage` is 1 on entry, 2 when reading the snapshot,
-  3 entering ROM analog calls, 4 after analog setup, 5 after ADC
-  configuration, 6 once the source is active, 7 during the initial
-  bounded wait, 8 during RNG reads, 9 during restoration, and
-  10 on success. A failure retains its active stage.
-- `g_Esp32C3RngError` is 0 on request entry; 1 means busy,
-  2 ADC unavailable/already faulted, 3 setup failed, 4 the cycle
-  counter stopped or a clock precondition failed, and 5 repeated RNG
-  words.
+The on-board `CryptoTest` included setup and teardown in each timed draw:
 
-The cycle-counter waits have a finite iteration limit to avoid a
-firmware-wide stall if the counter stops advancing. A ROM routine that
-never returns cannot be bounded from the caller; stage 3 distinguishes
-that situation from a timer wait.
+| Requested random bytes | Time (nanoseconds per operation) |
+| ---: | ---: |
+| 1 | 242,375 |
+| 16 | 475,968 |
+| 256 | 5,339,750 |
+| 1024 | 20,903,609 |
 
-## Resource isolation
+This direct entropy mode intentionally favors sustained entropy collection over bulk throughput. If faster long streams become necessary, investigate a *separately validated* cryptographic DRBG seeded and periodically reseeded from hardware entropy. Do not remove the entropy source or reduce timing merely to improve the benchmark.
 
-This backend must not run while another ADC, Wi-Fi/Bluetooth controller
-or internal analog-I2C client uses the SAR ADC. It refuses an ADC that is
-already configured, but a cooperative ADC/RF ownership mechanism is still
-required before permitting concurrent users.
+## Debugging and limits
 
-## Validation
+`ESP32_RNG_TRACE` now defaults to `0` after functional hardware acceptance. Define `ESP32_RNG_TRACE=1` to print first-request numeric checkpoints. The debugger variables `g_Esp32C3RngStage`, `g_Esp32C3RngError`, and `g_Esp32C3RngCallCount` remain available. Checkpoints include `RNG 7` for the settling wait, `RNG 8` for hardware data reads, `RNG 9` for register restoration, and `RNG 10` for successful completion.
 
-Run both host suites from the IOsonata directory:
+The current implementation is **exclusive-use**: do not run it concurrently with ADC conversions, RF controller use, or other users of the internal analog-I2C interface. A shared peripheral ownership manager is still required for concurrent Wi-Fi/Bluetooth/ADC applications.
+
+## Regression tests
+
+From the IOsonata repository root:
 
 ```sh
 python3 tests/crypto/run_esp32c3_rng.py
 python3 tests/crypto/run_esp_models.py
 ```
 
-The RNG model tests successful draws, odd-buffer length, register cleanup,
-ADC contention, failed analog configuration, repeated RNG words, and a
-stopped cycle counter at both -O0 and -O2. It is **not** a physical entropy
-measurement. The existing AES/SHA model is compiled without analog
-entropy, using an explicitly test-only PRNG configuration.
-
-Clean-build `IOsonata_ESP32C3` and the `CryptoTest` example, flash,
-and compare its output against the previously working 59 PASS, 0 FAIL,
-1 SKIP. The new hardware RNG is expected to eliminate the skipped
-ECDH/signing test **only after the board proves it**. If the board
-stops at a stage, capture that stage/error and the exception PC.
-
-
-## Short first-request RNG trace
-
-The user board passed all pre-RNG CryptoTest checks, then stopped during a
-verbose analog-I2C trace. The last confirmed ROM operation was write field
-3:3 = 0; the output ended during the next write to 2:2, but the console
-contained dropped/interleaved characters. That is not proof the ROM call
-was responsible.
-
-The initial analog reads all returned zero for fields 1:0, 3:3 and 2:2.
-Those zero writes are now **omitted**. The backend checks fields 3:0
-once, refuses to alter nonzero foreign analog state, and only writes
-ADC2_ENCAL_REF (bit 6). It restores only that bit.
-
-Verbose per-call UART tracing was replaced with compact numeric
-checkpoints for the first RNG request, reducing transmit-buffer pressure.
-The stage and error globals are still available in the debugger.
-The markers are:
-
-| Marker | Meaning |
-| --- | --- |
-| RNG 1 | First request acquired the RNG operation |
-| RNG 2 | ADC snapshot |
-| RNG 30 | About to read analog reference bit 6 |
-| RNG 31 | About to check analog fields 3:0 |
-| RNG 32 | About to set internal reference bit 6 |
-| RNG 4 | Analog reference setup complete |
-| RNG 5 | Digital SAR ADC setup complete |
-| RNG 33 | About to verify analog bit 6 |
-| RNG 6 | Entropy source activated |
-| RNG 7 | Settling wait |
-| RNG 8 | Reading RNG data |
-| RNG 9 | Restoring ADC/analog registers |
-| RNG 10 | Successful completion |
-
-No printf takes place while interrupts are masked. Failed requests still
-report a concise stage/error line.
-
-Debug and Release builds enable tracing in this diagnostic branch.
-After hardware validation, `ESP32_RNG_TRACE=0` can be used to remove it.
-
-Run the ESP32-C3 model and existing AES/SHA regression tests:
-
-```sh
-python3 tests/crypto/run_esp32c3_rng.py
-python3 tests/crypto/run_esp_models.py
-```
-
-Then clean-rebuild `IOsonata_ESP32C3` and `CryptoTest` in IOcomposer.
-These tests have not yet established on-device RNG success.
-
-
-## ESP32-C3 cycle CSR correction
-
-The on-target `CryptoTest` trace reached `RNG 7` (first analog settle wait)
-and stopped. The initial RNG code read standard RISC-V CSR `0xC00`
-(`cycle`), which is **not implemented on ESP32-C3**. An attempt to execute
-this instruction raises an illegal-instruction exception, so bounded loops
-cannot prevent the failure.
-
-The RNG now uses `IOsonataRiscvCycle32()` from `RISCV/include/idelay.h`,
-which selects Espressif's machine performance-counter CSR `0x7E2`
-(`mpccr`). IOsonata's `Esp32SystemInit()` already configures `mpcer`
-and enables `mpcmr` to make that counter advance. This is the same counter
-used by IOsonata's other RISC-V timing utilities; no extra driver or clock
-setup is required.
-
-The host test script checks the counter selection to prevent reintroducing
-`rdcycle` into the ESP32-C3 RNG code. The counter change still requires
-on-target validation; the next output should pass `RNG 7` and reach
-`RNG 8`. The complete CryptoTest result remains pending.
+These are host-model tests and do not replace the ESP32-C3 board run. Rebuild the `IOsonata_ESP32C3` managed library and `CryptoTest` in IOcomposer to verify any subsequent changes.
