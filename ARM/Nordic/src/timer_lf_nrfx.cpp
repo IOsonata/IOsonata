@@ -686,29 +686,6 @@ static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 	return true;
 }
 
-// Called only when an application explicitly uses PEI with this RTC.
-// Ordinary RTC initialization has no dependency on the PEI matrix.
-bool nRFxRtcInstallPei(TimerDev_t *pTimer)
-{
-	int devno;
-
-	if (pTimer == nullptr || PeiBindEvent == nullptr ||
-		PeiUnbindEvent == nullptr)
-	{
-		return false;
-	}
-	devno = pTimer->DevNo;
-	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX ||
-		s_pnRfxRtcDev[devno] != pTimer)
-	{
-		return false;
-	}
-	pTimer->EnablePeiTrigger = nRFxRtcEnablePeiTrigger;
-	pTimer->EnablePeiEvent = nRFxRtcEnablePeiEvent;
-	pTimer->DisablePeiEvent = nRFxRtcDisablePeiEvent;
-	return true;
-}
-
 static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                               	  	 TimerTrigEvtHandler_t Handler, void *pContext)
 {
@@ -869,9 +846,18 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     pTimer->FindAvailTrigger = nRFxRtcFindAvailTrigger;
     pTimer->DisableTrigger = nRFxRtcDisableTrigger;
     pTimer->EnableTrigger = nRFxRtcEnableTrigger;
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+	pTimer->EnablePeiTrigger = nRFxRtcEnablePeiTrigger;
+	pTimer->EnablePeiEvent = nRFxRtcEnablePeiEvent;
+	pTimer->DisablePeiEvent = nRFxRtcDisablePeiEvent;
+#else
 	pTimer->EnablePeiTrigger = nullptr;
 	pTimer->EnablePeiEvent = nullptr;
 	pTimer->DisablePeiEvent = nullptr;
+#endif
 	pTimer->GetTaskEndpoint = nRFxRtcTaskEndpoint;
 	pTimer->ExecuteTask = nRFxRtcExecuteTask;
     pTimer->DisableExtTrigger = nRFxRtcDisableExtTrigger;
