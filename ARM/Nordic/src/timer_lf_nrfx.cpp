@@ -740,6 +740,8 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
+	PeiDev_t *pPei;
+	PeiEndpoint_t endpoint;
 
 	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
 	{
@@ -748,8 +750,8 @@ static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	if (rtc.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
 		rtc.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
 	{
-		PeiDev_t *pPei = static_cast<PeiDev_t *>(rtc.pTrigger[TrigNo].pContext);
-		PeiEndpoint_t endpoint = (PeiEndpoint_t)&rtc.pReg->EVENTS_COMPARE[TrigNo];
+		pPei = static_cast<PeiDev_t *>(rtc.pTrigger[TrigNo].pContext);
+		endpoint = (PeiEndpoint_t)&rtc.pReg->EVENTS_COMPARE[TrigNo];
 
 		if (PeiUnbindEvent == nullptr ||
 			!PeiUnbindEvent(pPei, rtc.pCC[TrigNo], endpoint))
