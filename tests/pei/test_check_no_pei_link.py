@@ -6,6 +6,7 @@ import io
 import pathlib
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 from check_no_pei_link import check
 
@@ -23,6 +24,34 @@ class NoPeiLinkTests(unittest.TestCase):
             path.write_text(data, encoding="utf-8")
             with contextlib.redirect_stdout(io.StringIO()):
                 return check(path)
+
+    def test_timer_demo_library_configuration(self):
+        rootdir = pathlib.Path(__file__).resolve().parents[2]
+        projects = (
+            "ARM/Nordic/nRF52/nRF52832/exemples/TimerDemo/ioc/.cproject",
+            "ARM/Nordic/nRF54/nRF54L15/exemples/TimerDemo/ioc/.cproject",
+        )
+        for name in projects:
+            with self.subTest(project=name):
+                root = ET.parse(rootdir / name).getroot()
+                configurations = {}
+                for settings in root.findall(".//cconfiguration"):
+                    build = settings.find(
+                        "./storageModule[@moduleId='cdtBuildSystem']/configuration")
+                    if build is None:
+                        continue
+                    paths = []
+                    for option in build.findall(".//option"):
+                        if "linker.paths" in option.get("superClass", ""):
+                            paths.extend(item.get("value", "") for item in
+                                         option.findall("listOptionValue"))
+                    configurations[build.get("name")] = paths
+                for config in ("Debug", "Release"):
+                    paths = configurations[config]
+                    self.assertEqual(len(paths), 2)
+                    self.assertTrue(all("/" + config in path for path in paths))
+                    self.assertTrue(all(("/Debug" not in path) if config == "Release"
+                                        else ("/Release" not in path) for path in paths))
 
     def test_clean_timer_map(self):
         self.assertEqual(self.check_map(
@@ -125,6 +154,26 @@ class NoPeiLinkTests(unittest.TestCase):
     def test_linked_qdec_pei_code_is_rejected(self):
         self.assertEqual(self.check_map(
             linked=" .text.QdecConnectPeiTask 0x00002000 0x30"), 1)
+
+    def test_linked_hf_timer_pei_target_is_rejected(self):
+        self.assertEqual(self.check_map(
+            linked=" .text.nRFxTimerEnablePeiTrigger 0x00002000 0x50"), 1)
+
+    def test_linked_rtc_pei_target_is_rejected(self):
+        self.assertEqual(self.check_map(
+            linked=" .text.nRFxRtcEnablePeiTrigger 0x00002000 0x50"), 1)
+
+    def test_discarded_timer_pei_target_is_allowed(self):
+        self.assertEqual(self.check_map(
+            discarded=" .text.nRFxTimerEnablePeiTrigger 0x00000000 0x50"), 0)
+
+    def test_linked_backend_rtc_pei_state_is_rejected(self):
+        self.assertEqual(self.check_map(
+            linked=" .bss.g_PeiNrf52RtcRaw 0x20000000 0x48"), 1)
+
+    def test_discarded_backend_rtc_pei_state_is_allowed(self):
+        self.assertEqual(self.check_map(
+            discarded=" .bss.g_PeiNrf52RtcRaw 0x00000000 0x48"), 0)
 
     def test_linked_rtc_pei_state_is_rejected(self):
         self.assertEqual(self.check_map(

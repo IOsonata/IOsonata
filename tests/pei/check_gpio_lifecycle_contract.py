@@ -22,6 +22,15 @@ def main():
                      "int IOPinAllocateInterrupt(")
     disable = section("void IOPinDisableInterrupt(",
                       "bool IOPinEnableInterrupt(")
+    task = section("static int IOPinOpenTask(", "static bool IOPinCloseTask(")
+    task_decls = task.split("if (pEndpoint == NULL", 1)[0]
+    task_scan = task.split("for (i = 0; i < channelCount; i++)", 1)[1]
+    assert "uint32_t oldMode;" in task_decls
+    assert "uint32_t oldPin;" in task_decls
+    assert "uint32_t oldPort;" in task_decls
+    assert "uint32_t oldMode =" not in task_scan
+    assert "uint32_t oldPin =" not in task_scan
+    assert "uint32_t oldPort =" not in task_scan
     irq = GPIO.split("#else\nvoid __WEAK GPIOTE_IRQHandler(void)\n{")[-1]
     irq = irq.split("bool IOPinAssignCore(", 1)[0]
 

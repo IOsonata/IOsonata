@@ -716,7 +716,7 @@ static bool nRFxTimerExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 // Bind one free CC to PEI. The free-running counter is never cleared,
 // stopped or routed to counter-control tasks by a compare trigger.
 // Continuous CC rescheduling follows the original Timer ISR model.
-static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
+bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei,
 	PeiEvent_t *pEvent)
 {
@@ -779,27 +779,6 @@ static bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 	return true;
 }
 
-// Only installed by TimerPeiPrepareMcu through the explicit PEI API.
-// The normal TimerInit function never retains the PEI compare callback.
-bool nRFxTimerInstallPei(TimerDev_t *pTimer)
-{
-	int devno;
-
-	if (pTimer == nullptr || PeiBindEvent == nullptr ||
-		PeiUnbindEvent == nullptr)
-	{
-		return false;
-	}
-	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	if (devno < 0 || devno >= TIMER_NRFX_HF_MAX ||
-		s_pnRFxTimerDev[devno] != pTimer)
-	{
-		return false;
-	}
-	pTimer->EnablePeiTrigger = nRFxTimerEnablePeiTrigger;
-	return true;
-}
-
 static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                                        TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
@@ -857,6 +836,9 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = tdata.pReg;
+	PeiDev_t *pei;
+	PeiEvent_t evt;
+	PeiEndpoint_t endpoint;
 
 	if (TrigNo < 0 || TrigNo >= tdata.MaxNbTrigEvt)
 	{
@@ -866,13 +848,11 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	if (tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
 		tdata.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
 	{
-		PeiDev_t *pei = static_cast<PeiDev_t *>(
-			tdata.pTrigger[TrigNo].pContext);
-		PeiEvent_t evt = tdata.pCC[TrigNo];
-		PeiEndpoint_t endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
+		pei = static_cast<PeiDev_t *>(tdata.pTrigger[TrigNo].pContext);
+		evt = tdata.pCC[TrigNo];
+		endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[TrigNo];
 
-		// Disarm only this CC; leave the shared counter and other CCs alone.
-		reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
+		// Keep COMPARE enabled if PEI unbinding fails.
 		if (PeiUnbindEvent == nullptr ||
 			!PeiUnbindEvent(pei, evt, endpoint))
 		{
@@ -971,9 +951,6 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	pTimer->FindAvailTrigger = nRFxTimerFindAvailTrigger;
 	pTimer->DisableTrigger = nRFxTimerDisableTrigger;
 	pTimer->EnableTrigger = nRFxTimerEnableTrigger;
-	pTimer->EnablePeiTrigger = nullptr;
-	pTimer->EnablePeiEvent = nullptr;
-	pTimer->DisablePeiEvent = nullptr;
 	pTimer->GetTaskEndpoint = nRFxTimerTaskEndpoint;
 	pTimer->ExecuteTask = nRFxTimerExecuteTask;
 	pTimer->DisableExtTrigger = nRFxTimerDisableExtTrigger;

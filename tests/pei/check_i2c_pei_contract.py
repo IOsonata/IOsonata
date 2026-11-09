@@ -24,13 +24,13 @@ def main():
     tasks = section("static PeiEndpoint_t I2CPeiTaskEndpoint(",
                     "static bool I2CPeiReady(")
     ready = section("static bool I2CPeiReady(",
-                    'extern "C" bool I2CPreparePeiTransfer(')
-    prep = section('extern "C" bool I2CPreparePeiTransfer(',
-                   'extern "C" bool I2CReleasePeiTransfer(')
-    release = section('extern "C" bool I2CReleasePeiTransfer(',
-                      'extern "C" bool I2CEnablePeiEvent(')
-    connect = section('extern "C" bool I2CConnectPeiTask(',
-                      'extern "C" bool I2CDisconnectPeiTask(')
+                    'bool I2CPreparePeiTransfer(')
+    prep = section('bool I2CPreparePeiTransfer(',
+                   'bool I2CReleasePeiTransfer(')
+    release = section('bool I2CReleasePeiTransfer(',
+                      'bool I2CEnablePeiEvent(')
+    connect = section('bool I2CConnectPeiTask(',
+                      'bool I2CDisconnectPeiTask(')
 
     for event in ("STOPPED", "ERROR", "SUSPENDED", "RXDREADY",
                   "TXDSENT", "BB"):
@@ -71,16 +71,28 @@ def main():
     assert "I2C_PEI_TASK_STARTRX" in connect
     assert "I2C_PEI_TASK_STARTTX" in connect
     assert "dev->bPeiPrepared" in connect
+    assert "#if defined(NRF52_SERIES) && defined(TWIM_PRESENT)" in connect
+    assert "NRFX_TWI_TX(dev->pDmaReg).MAXCNT" in connect
+    assert "NRFX_TWI_RX(dev->pDmaReg).MAXCNT" in connect
+    assert "dev->pDmaReg->TXD.MAXCNT" not in connect
+    assert "dev->pDmaReg->RXD.MAXCNT" not in connect
 
     for name in ("PreparePeiTransfer", "ReleasePeiTransfer",
                  "EnablePeiEvent", "DisablePeiEvent",
                  "ConnectPeiTask", "DisconnectPeiTask"):
         assert "bool I2C" + name + "(" in HEADER
-        assert 'extern "C" bool I2C' + name + "(" in DRIVER
+        assert "bool I2C" + name + "(" in DRIVER
+        assert 'extern "C" bool I2C' + name + "(" not in DRIVER
     for name in ("PeiBindEvent", "PeiGetEventEndpoint",
                  "PeiUnbindEvent", "PeiConnectTask",
                  "PeiDisconnectTask"):
         assert "#pragma weak " + name in DRIVER
+
+    rate = section("uint32_t nRFxI2CSetRate(", "bool nRFxI2CStartRx(")
+    declarations = rate.split("if (dev->bPeiPrepared)", 1)[0]
+    assert "uint32_t best = 0;" in declarations
+    assert "uint32_t error = UINT32_MAX;" in declarations
+    assert "uint32_t regval = 0;" in declarations
 
     assert "dev->bPeiPrepared" in DRIVER
     assert "if (dev->bPeiPrepared)" in DRIVER

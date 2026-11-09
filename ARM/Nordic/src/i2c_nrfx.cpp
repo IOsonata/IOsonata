@@ -453,14 +453,18 @@ uint32_t nRFxI2CGetRate(DevIntrf_t * const pDev)
 uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
+#ifdef NRF54L_SERIES
+	uint32_t best = 0;
+	uint32_t error = UINT32_MAX;
+#else
+	uint32_t regval = 0;
+#endif
 
 	if (dev->bPeiPrepared)
 	{
 		return dev->pI2cDev->Cfg.Rate;
 	}
 #ifdef NRF54L_SERIES
-	uint32_t best = 0;
-	uint32_t error = UINT32_MAX;
 	for (int i = 0; i < s_NbI2CFreq; ++i)
 	{
 		uint32_t freq = s_nRFxI2CFreq[i].Freq;
@@ -476,8 +480,6 @@ uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 	if (dev->pI2cDev->Cfg.Mode == I2CMODE_MASTER)
 		dev->pDmaReg->FREQUENCY = s_nRFxI2CFreq[best].RegVal;
 #else
-	uint32_t regval = 0;
-
 	for (int i = 0; i < s_NbI2CFreq; i++)
 	{
 		if (s_nRFxI2CFreq[i].Freq <= RateHz)
@@ -1881,7 +1883,7 @@ static bool I2CPeiReady(I2CDev_t *pDev)
 // complete single-block transaction has been prepared. The existing
 // driver's private TxBuf owns TX DMA RAM, and the application owns RX
 // DMA RAM until the PEI transfer has stopped and been released.
-extern "C" bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
+bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
 {
 #if defined(NRF52_SERIES) && defined(TWIM_PRESENT)
@@ -1909,7 +1911,7 @@ extern "C" bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 	{
 		return false;
 	}
-	// Recheck the owner's state while holding the generic bus lock.
+	// Check transfer state after acquiring the bus lock.
 	if (dev->bPeiPrepared || dev->bTxRejected ||
 		dev->Async != NRFX_I2C_ASYNC_IDLE)
 	{
@@ -1955,7 +1957,7 @@ extern "C" bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 // The application must disable/disconnect all PPI destinations before
 // releasing the DMA registers. An unstarted block can be released
 // without a STOP task. A started block must reach STOPPED first.
-extern "C" bool I2CReleasePeiTransfer(I2CDev_t *pDev)
+bool I2CReleasePeiTransfer(I2CDev_t *pDev)
 {
 #if defined(NRF52_SERIES) && defined(TWIM_PRESENT)
 	nRFTwiDev_t *dev;
@@ -1983,7 +1985,7 @@ extern "C" bool I2CReleasePeiTransfer(I2CDev_t *pDev)
 		}
 		if (dev->pDmaReg->EVENTS_STOPPED == 0U)
 		{
-			// Keep the caller's RX buffer locked on timeout.
+			// Retain DMA buffer ownership if STOP times out.
 			return false;
 		}
 	}
@@ -2002,7 +2004,7 @@ extern "C" bool I2CReleasePeiTransfer(I2CDev_t *pDev)
 #endif
 }
 
-extern "C" bool I2CEnablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CEnablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, I2C_PEI_EVENT Event)
 {
 	nRFTwiDev_t *dev;
@@ -2022,7 +2024,7 @@ extern "C" bool I2CEnablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt)
 {
 	nRFTwiDev_t *dev;
@@ -2047,7 +2049,7 @@ extern "C" bool I2CDisablePeiEvent(I2CDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-extern "C" bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2C_PEI_TASK Task)
 {
 	nRFTwiDev_t *dev;
@@ -2063,13 +2065,15 @@ extern "C" bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	{
 		return false;
 	}
+#if defined(NRF52_SERIES) && defined(TWIM_PRESENT)
 	if ((Task == I2C_PEI_TASK_STARTTX &&
-		 dev->pDmaReg->TXD.MAXCNT == 0U) ||
+		 NRFX_TWI_TX(dev->pDmaReg).MAXCNT == 0U) ||
 		(Task == I2C_PEI_TASK_STARTRX &&
-		 dev->pDmaReg->RXD.MAXCNT == 0U))
+		 NRFX_TWI_RX(dev->pDmaReg).MAXCNT == 0U))
 	{
 		return false;
 	}
+#endif
 	endpoint = I2CPeiTaskEndpoint(dev, Task);
 	if (endpoint == 0U)
 	{
@@ -2078,7 +2082,7 @@ extern "C" bool I2CConnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool I2CDisconnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
+bool I2CDisconnectPeiTask(I2CDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2C_PEI_TASK Task)
 {
 	nRFTwiDev_t *dev;

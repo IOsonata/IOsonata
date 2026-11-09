@@ -22,15 +22,15 @@ def main():
     events = section("static PeiEndpoint_t UARTPeiEventEndpoint(",
                      "static PeiEndpoint_t UARTPeiTaskEndpoint(")
     tasks = section("static PeiEndpoint_t UARTPeiTaskEndpoint(",
-                    'extern "C" bool UARTPreparePeiTx(')
+                    'bool UARTPreparePeiTx(')
     ready = section("static bool UARTPeiReady(",
                     "static PeiEndpoint_t UARTPeiEventEndpoint(")
-    prep = section('extern "C" bool UARTPreparePeiTx(',
-                   'extern "C" bool UARTReleasePeiTx(')
-    release = section('extern "C" bool UARTReleasePeiTx(',
-                      'extern "C" bool UARTEnablePeiEvent(')
-    connect = section('extern "C" bool UARTConnectPeiTask(',
-                      'extern "C" bool UARTDisconnectPeiTask(')
+    prep = section('bool UARTPreparePeiTx(',
+                   'bool UARTReleasePeiTx(')
+    release = section('bool UARTReleasePeiTx(',
+                      'bool UARTEnablePeiEvent(')
+    connect = section('bool UARTConnectPeiTask(',
+                      'bool UARTDisconnectPeiTask(')
 
     for event in ("CTS", "NCTS", "RXDRDY", "TXDRDY", "ERROR", "RXTO"):
         assert "&dev->pReg->EVENTS_" + event in events
@@ -67,12 +67,24 @@ def main():
     for name in ("PreparePeiTx", "ReleasePeiTx", "EnablePeiEvent",
                  "DisablePeiEvent", "ConnectPeiTask", "DisconnectPeiTask"):
         assert "bool UART" + name + "(" in HEADER
-        assert 'extern "C" bool UART' + name + "(" in DRIVER
+        assert 'bool UART' + name + "(" in DRIVER
+        assert 'extern "C" bool UART' + name + "(" not in DRIVER
     for name in ("PeiBindEvent", "PeiGetEventEndpoint",
                  "PeiUnbindEvent", "PeiConnectTask", "PeiDisconnectTask"):
         assert "#pragma weak " + name in DRIVER
     assert "dev->bPeiTxPrepared" in DRIVER
     assert "return !dev->bPeiTxPrepared;" in DRIVER
+    rate = section("static uint32_t nRFUARTSetRate(",
+                   "static bool nRFUARTStartRx(")
+    tx = section("static int nRFUARTTxData(",
+                 "static void nRFUARTStopTx(")
+    for body, declarations in (
+            (rate, ("uint32_t regval;", "int rate;")),
+            (tx, ("int cnt = 0;", "int rtry = pDev->MaxRetry;"))):
+        entry = body.split("if (dev->bPeiTxPrepared)", 1)[0]
+        for declaration in declarations:
+            assert declaration in entry, declaration
+
 
     assert "UART_PEI_EVENT_ENDTX" in DEMO
     assert "UART_PEI_EVENT_TXSTOPPED" in DEMO

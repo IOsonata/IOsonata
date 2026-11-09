@@ -409,7 +409,7 @@ static bool AnalogCompPeiReady(AnalogCompDev_t *pDev)
 #endif
 }
 
-extern "C" bool AnalogCompPeiBindEvent(AnalogCompDev_t *pDev,
+bool AnalogCompPeiBindEvent(AnalogCompDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t *pEvt, ANALOG_COMP_PEI_EVENT Event)
 {
 	PeiEndpoint_t endpoint;
@@ -427,7 +427,7 @@ extern "C" bool AnalogCompPeiBindEvent(AnalogCompDev_t *pDev,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool AnalogCompPeiUnbindEvent(AnalogCompDev_t *pDev,
+bool AnalogCompPeiUnbindEvent(AnalogCompDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt)
 {
 	PeiEndpoint_t endpoint;
@@ -455,7 +455,7 @@ extern "C" bool AnalogCompPeiUnbindEvent(AnalogCompDev_t *pDev,
 	return false;
 }
 
-extern "C" bool AnalogCompPeiConnectTask(AnalogCompDev_t *pDev,
+bool AnalogCompPeiConnectTask(AnalogCompDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, ANALOG_COMP_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;
@@ -480,7 +480,7 @@ extern "C" bool AnalogCompPeiConnectTask(AnalogCompDev_t *pDev,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool AnalogCompPeiDisconnectTask(AnalogCompDev_t *pDev,
+bool AnalogCompPeiDisconnectTask(AnalogCompDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, ANALOG_COMP_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;

@@ -71,9 +71,9 @@ def main():
             if not (softdevice / "nrf_soc.h").is_file():
                 parser.error("Missing SoftDevice headers: " + str(softdevice))
             cmd += [
-                "-DSOFTDEVICE_PRESENT", "-DSVC_INTERFACE_CALL_AS_NORMAL_FUNCTION",
-                "-I", str(softdevice), "-I", str(softdevice / "nrf52"),
-                "-I", str(sdk / "components/softdevice/common")
+                "-DSOFTDEVICE_PRESENT",
+                "-isystem", str(softdevice), "-isystem", str(softdevice / "nrf52"),
+                "-isystem", str(sdk / "components/softdevice/common")
             ]
         elif stack == "sdc":
             sdc = nrfxlib / "softdevice_controller/include"

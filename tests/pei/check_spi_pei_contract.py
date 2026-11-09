@@ -25,11 +25,11 @@ def main():
     tasks = section("static PeiEndpoint_t SPIPeiTaskEndpoint(",
                     "static bool SPIPeiReady(")
     ready = section("static bool SPIPeiReady(",
-                    'extern "C" bool SPIPreparePeiTransfer(')
-    prep = section('extern "C" bool SPIPreparePeiTransfer(',
-                   'extern "C" bool SPIReleasePeiTransfer(')
-    connect = section('extern "C" bool SPIConnectPeiTask(',
-                      'extern "C" bool SPIDisconnectPeiTask(')
+                    'bool SPIPreparePeiTransfer(')
+    prep = section('bool SPIPreparePeiTransfer(',
+                   'bool SPIReleasePeiTransfer(')
+    connect = section('bool SPIConnectPeiTask(',
+                      'bool SPIDisconnectPeiTask(')
 
     assert "&dev->pReg->EVENTS_READY" in evts
     for event in ("STARTED", "ENDRX", "ENDTX", "END", "STOPPED"):
@@ -43,6 +43,13 @@ def main():
     assert "pDev->Cfg.DevNo < SPIM_COUNT" in ready
     assert "pDev->Cfg.DevNo < SPIS_COUNT" in ready
     assert "pDev->Cfg.DevNo < SPI_COUNT" in ready
+    rate = section("uint32_t nRFxSPISetRate(", "void nRFxSPIDisable(")
+    declarations = rate.split("if (dev->bPeiPrepared)", 1)[0]
+    for name in ("uint32_t clock;", "uint32_t first;", "uint32_t divisor;",
+                 "uint32_t error;", "uint32_t limit;", "uint32_t regval;",
+                 "bool highSpeed;"):
+        assert name in declarations, name
+
     assert "bool bPeiPrepared;" in PRIVATE
     assert "dev->bPeiPrepared" in connect
     assert "SPI_PEI_TASK_START" in APP
@@ -63,6 +70,15 @@ def main():
     assert "dev->pDmaReg->TASKS_START" not in prep
     assert "nrf52_errata_58()" in prep
     assert "dev->bPeiPrepared = true;" in prep
+    assert "atomic_flag_test_and_set(&pDev->DevIntrf.bBusy)" in prep
+    assert "atomic_flag_clear(&pDev->DevIntrf.bBusy)" in prep
+    release = section('bool SPIReleasePeiTransfer(',
+                      'bool SPIEnablePeiEvent(')
+    assert "atomic_flag_clear(&pDev->DevIntrf.bBusy)" in release
+    assert "dev->pDmaReg->EVENTS_STARTED != 0U" in release
+    assert "dev->pDmaReg->EVENTS_STOPPED == 0U" in release
+    assert release.index("dev->bPeiPrepared = false;") < release.index(
+        "atomic_flag_clear(&pDev->DevIntrf.bBusy)")
     for api in ("nRFxSPIRxDataDma(", "nRFxSPITxDataDma(",
                 "nRFxSPISetRate("):
         assert api in DRIVER
@@ -76,7 +92,8 @@ def main():
                  "EnablePeiEvent", "DisablePeiEvent",
                  "ConnectPeiTask", "DisconnectPeiTask"):
         assert "bool SPI" + name + "(" in HEADER
-        assert 'extern "C" bool SPI' + name + "(" in DRIVER
+        assert 'bool SPI' + name + "(" in DRIVER
+        assert 'extern "C" bool SPI' + name + "(" not in DRIVER
     assert 'extern "C"' not in APP
     assert "NRF_SPIM" not in APP
     assert "NRF_SPIS" not in APP

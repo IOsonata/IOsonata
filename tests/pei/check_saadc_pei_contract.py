@@ -26,7 +26,7 @@ def main():
     event = section("static PeiEndpoint_t AdcNrf52PeiEventEndpoint(",
                     "static PeiEndpoint_t AdcNrf52PeiTaskEndpoint(")
     task = section("static PeiEndpoint_t AdcNrf52PeiTaskEndpoint(",
-                   'extern "C" bool AdcNrf52PreparePeiSampling(')
+                   'bool AdcNrf52PreparePeiSampling(')
     assert "s_AdcnRF52DevData.ResData" in prepare
     assert "NRF_SAADC->RESULT.PTR =" in prepare
     assert "NRF_SAADC->RESULT.MAXCNT =" in prepare

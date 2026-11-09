@@ -383,6 +383,7 @@ static void TestRtcMatrixRearm(void)
 	assert(g_critical_depth == 0);
 }
 
+#if !defined(TEST_SKIP_EGU_MMIO)
 // Map the EGU registers at their nRF52 addresses in host memory
 static void TestEguMap(void)
 {
@@ -568,6 +569,8 @@ static void TestSwEvent(void)
 }
 
 
+#endif
+
 // Group operations refer to live matrix routes, never arbitrary channel
 // numbers. A disconnected route must be removed from its group before
 // its PPI channel can be reused.
@@ -593,7 +596,7 @@ static uint32_t TestGroupEventMask(PeiDev_t *pPei, PeiEvent_t Evt)
 static void TestGroups(void)
 {
 	PeiDev_t pei;
-	PeiGroup_t group[6] = {{0}};
+	PeiGroup_t group[7] = {{0}};
 	PeiGroup_t copied;
 	PeiEvent_t evt = 0U;
 	const PeiEndpoint_t source = 0x40008100U;
@@ -683,7 +686,7 @@ static void TestGroups(void)
 	// Exhaust the available application group IDs. The SoftDevice and
 	// SDC profiles conservatively reserve groups 4/5.
 	available = 0;
-	for (i = 2; i < 6; i++)
+	for (i = 2; i < 7; i++)
 	{
 		if (PeiGroupInit(&group[i], 0))
 		{
@@ -691,12 +694,12 @@ static void TestGroups(void)
 		}
 	}
 #if defined(SOFTDEVICE_PRESENT) || defined(NRFXLIB_SDC)
-	assert(available == 2);
+	assert(available == 3);
 #else
-	assert(available == 4);
+	assert(available == 5);
 #endif
-	assert(!PeiGroupInit(&copied, 0));
-	for (i = 0; i < 6; i++)
+	assert(!PeiGroupInit(&group[1], 0));
+	for (i = 0; i < 7; i++)
 	{
 		if (group[i].Handle != 0U)
 		{
@@ -720,7 +723,12 @@ int main(void)
 	TestCMatrix();
 	TestRtcMatrixRearm();
 	TestGroups();
+#if defined(TEST_SKIP_EGU_MMIO)
+	printf("PEI EGU fixed-address MMIO: SKIPPED (host address unavailable)\n");
+#else
 	TestSwEvent();
-	printf("PEI nRF52 %d channels, %d EGU: PASS\n", TEST_PPI_CHANNEL_COUNT, TEST_EGU_COUNT);
+	printf("PEI EGU %d instances: PASS\n", TEST_EGU_COUNT);
+#endif
+	printf("PEI nRF52 %d PPI channels: PASS\n", TEST_PPI_CHANNEL_COUNT);
 	return 0;
 }
