@@ -63,6 +63,13 @@ def main():
     assert "dev->pDmaReg->TASKS_START" not in prep
     assert "nrf52_errata_58()" in prep
     assert "dev->bPeiPrepared = true;" in prep
+    assert "atomic_flag_test_and_set(&pDev->DevIntrf.bBusy)" in prep
+    assert "atomic_flag_clear(&pDev->DevIntrf.bBusy)" in prep
+    release = section('bool SPIReleasePeiTransfer(',
+                      'bool SPIEnablePeiEvent(')
+    assert "atomic_flag_clear(&pDev->DevIntrf.bBusy)" in release
+    assert release.index("dev->bPeiPrepared = false;") < release.index(
+        "atomic_flag_clear(&pDev->DevIntrf.bBusy)")
     for api in ("nRFxSPIRxDataDma(", "nRFxSPITxDataDma(",
                 "nRFxSPISetRate("):
         assert api in DRIVER
