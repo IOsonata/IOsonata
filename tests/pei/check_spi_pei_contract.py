@@ -43,6 +43,13 @@ def main():
     assert "pDev->Cfg.DevNo < SPIM_COUNT" in ready
     assert "pDev->Cfg.DevNo < SPIS_COUNT" in ready
     assert "pDev->Cfg.DevNo < SPI_COUNT" in ready
+    rate = section("uint32_t nRFxSPISetRate(", "void nRFxSPIDisable(")
+    declarations = rate.split("if (dev->bPeiPrepared)", 1)[0]
+    for name in ("uint32_t clock;", "uint32_t first;", "uint32_t divisor;",
+                 "uint32_t error;", "uint32_t limit;", "uint32_t regval;",
+                 "bool highSpeed;"):
+        assert name in declarations, name
+
     assert "bool bPeiPrepared;" in PRIVATE
     assert "dev->bPeiPrepared" in connect
     assert "SPI_PEI_TASK_START" in APP
