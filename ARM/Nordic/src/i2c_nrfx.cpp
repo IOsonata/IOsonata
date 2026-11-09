@@ -453,14 +453,18 @@ uint32_t nRFxI2CGetRate(DevIntrf_t * const pDev)
 uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
+#ifdef NRF54L_SERIES
+	uint32_t best = 0;
+	uint32_t error = UINT32_MAX;
+#else
+	uint32_t regval = 0;
+#endif
 
 	if (dev->bPeiPrepared)
 	{
 		return dev->pI2cDev->Cfg.Rate;
 	}
 #ifdef NRF54L_SERIES
-	uint32_t best = 0;
-	uint32_t error = UINT32_MAX;
 	for (int i = 0; i < s_NbI2CFreq; ++i)
 	{
 		uint32_t freq = s_nRFxI2CFreq[i].Freq;
@@ -476,8 +480,6 @@ uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 	if (dev->pI2cDev->Cfg.Mode == I2CMODE_MASTER)
 		dev->pDmaReg->FREQUENCY = s_nRFxI2CFreq[best].RegVal;
 #else
-	uint32_t regval = 0;
-
 	for (int i = 0; i < s_NbI2CFreq; i++)
 	{
 		if (s_nRFxI2CFreq[i].Freq <= RateHz)
