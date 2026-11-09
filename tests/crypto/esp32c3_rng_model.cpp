@@ -30,7 +30,9 @@ extern volatile uint32_t g_Esp32C3RngError;
 
 static uint32_t &ModelWord(uintptr_t Addr)
 {
-	for (unsigned i = 0; i < s_RegCount; i++)
+	unsigned i;
+
+	for (i = 0; i < s_RegCount; i++)
 	{
 		if (s_Registers[i].Addr == Addr)
 		{
@@ -44,8 +46,10 @@ static uint32_t &ModelWord(uintptr_t Addr)
 
 EspRngModelReg &EspRngModelRegister(uintptr_t Addr)
 {
+	unsigned i;
+
 	(void)ModelWord(Addr);
-	for (unsigned i = 0; i < s_RegCount; i++)
+	for (i = 0; i < s_RegCount; i++)
 	{
 		if (s_Registers[i].Addr == Addr)
 		{
@@ -131,6 +135,7 @@ int main(int argc, char **argv)
 	uint8_t b[32];
 	unsigned reads;
 	unsigned analog;
+	unsigned i;
 	bool useCycle = argc > 1 && strcmp(argv[1], "cycle") == 0;
 	bool useStuck = argc > 1 && strcmp(argv[1], "stuck") == 0;
 	bool useAnalog = argc > 1 && strcmp(argv[1], "analog") == 0;
@@ -155,7 +160,7 @@ int main(int argc, char **argv)
 	assert(!Esp32C3RngSecureAvailable());
 	memset(b, 0xCC, sizeof(b));
 	assert(Esp32C3RngFill(b, sizeof(b)) == CRYPTO_STATUS_FAIL);
-	for (unsigned i = 0; i < sizeof(b); i++)
+	for (i = 0; i < sizeof(b); i++)
 	{
 		assert(b[i] == 0U);
 	}
@@ -186,7 +191,7 @@ int main(int argc, char **argv)
 		analog = s_AnalogWrites;
 		memset(b, 0xCC, sizeof(b));
 		assert(Esp32C3RngFill(b, sizeof(b)) == CRYPTO_STATUS_FAIL);
-		for (unsigned i = 0; i < sizeof(b); i++)
+		for (i = 0; i < sizeof(b); i++)
 		{
 			assert(b[i] == 0U);
 		}

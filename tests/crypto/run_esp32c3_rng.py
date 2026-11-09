@@ -16,6 +16,9 @@ delay_src = (ROOT / "RISCV/include/idelay.h").read_text()
 system_src = (ROOT / "RISCV/Espressif/src/system_esp32_system.c").read_text()
 assert '#include "idelay.h"' in driver_src
 assert "return IOsonataRiscvCycle32();" in driver_src
+assert "printf(" not in driver_src
+assert "#include <stdio.h>" not in driver_src
+assert 'extern "C" {' not in driver_src
 assert not any(unsupported in driver_src for unsupported in
                ('csrr %0, 0xC00', 'csrr %0, 0xB00', 'rdcycle'))
 assert "IOSONATA_RISCV_CYCLE_CSR        0x7E2U" in delay_src
@@ -29,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="esp32c3-rng-") as name:
             "g++", "-std=gnu++23", optimization, "-Wall", "-Wextra", "-Werror",
             "-fno-rtti", "-fno-exceptions",
             "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
-            "-DESP32C3", "-DESP32_RNG_TEST", "-DESP32_RNG_TRACE=0",
+            "-DESP32C3", "-DESP32_RNG_TEST",
             "-DESP32_RNG_WAIT_MAX_POLLS=1024",
             "-I", str(ROOT / "include"),
             "-I", str(ROOT / "RISCV/Espressif/include"),

@@ -36,7 +36,7 @@ This direct entropy mode intentionally favors sustained entropy collection over 
 
 ## Debugging and limits
 
-`ESP32_RNG_TRACE` now defaults to `0` after functional hardware acceptance. Define `ESP32_RNG_TRACE=1` to print first-request numeric checkpoints. The debugger variables `g_Esp32C3RngStage`, `g_Esp32C3RngError`, and `g_Esp32C3RngCallCount` remain available. Checkpoints include `RNG 7` for the settling wait, `RNG 8` for hardware data reads, `RNG 9` for register restoration, and `RNG 10` for successful completion.
+The temporary UART `printf` diagnostics have been removed from the library. The debugger variables `g_Esp32C3RngStage`, `g_Esp32C3RngError`, and `g_Esp32C3RngCallCount` retain their ordinary C++ linkage and remain available for fault diagnosis. Stages 7, 8, 9, and 10 indicate the settling wait, RNG register reads, restoration, and successful completion. The entropy-source implementation and timing are unchanged.
 
 The current implementation is **exclusive-use**: do not run it concurrently with ADC conversions, RF controller use, or other users of the internal analog-I2C interface. A shared peripheral ownership manager is still required for concurrent Wi-Fi/Bluetooth/ADC applications.
 

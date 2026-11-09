@@ -31,31 +31,10 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #error ESP32-C3 RNG implementation requires ESP32C3
 #endif
 
-// Optional hardware diagnostics. Disabled by default after on-target acceptance.
-// Define ESP32_RNG_TRACE=1 when detailed first-request checkpoints are needed.
-#ifndef ESP32_RNG_TRACE
-#define ESP32_RNG_TRACE 0
-#endif
-#if ESP32_RNG_TRACE
-#include <stdio.h>
-#endif
-
+// Debugger checkpoints use ordinary C++ globals.
 volatile uint32_t g_Esp32C3RngStage;
 volatile uint32_t g_Esp32C3RngError;
 volatile uint32_t g_Esp32C3RngCallCount;
-
-#if ESP32_RNG_TRACE
-// One short checkpoint per step avoids overflowing the normal UART TX FIFO.
-// A detailed snapshot stays in g_Esp32C3RngStage / g_Esp32C3RngError.
-#define RNG_TRACE_STEP(stage) do { \
-	g_Esp32C3RngStage = (stage); \
-	if (g_Esp32C3RngCallCount == 1U) { printf("RNG %lu\r\n", (unsigned long)(stage)); } \
-} while (0)
-#define RNG_TRACE_ERROR(...) printf(__VA_ARGS__)
-#else
-#define RNG_TRACE_STEP(stage) (g_Esp32C3RngStage = (stage))
-#define RNG_TRACE_ERROR(...) ((void)0)
-#endif
 
 #ifndef ESP32_RNG_REG
 #define ESP32_RNG_REG(Addr) (*(volatile uint32_t *)(uintptr_t)(Addr))
@@ -177,7 +156,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 	{
 		return false;
 	}
-	RNG_TRACE_STEP(2U);
+	g_Esp32C3RngStage = 2U;
 	pSaved->Sensor = ESP32_RNG_REG(RNG_RTC_SENSOR_CTRL);
 	pSaved->Ana = ESP32_RNG_REG(RNG_RTC_ANA_CONF);
 	pSaved->ClockEn = ESP32_RNG_REG(RNG_SYSTEM_CLK_EN);
@@ -198,18 +177,18 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 	// them: this RNG owns only ADC2_ENCAL_REF (register 7, bit 6).
 	// A pre-existing nonzero analog test/entropy selector indicates another
 	// owner; return without touching that state.
-	RNG_TRACE_STEP(30U);
+	g_Esp32C3RngStage = 30U;
 	pSaved->AnalogRef = EspRngAnalogRead(6U, 6U);
-	RNG_TRACE_STEP(31U);
+	g_Esp32C3RngStage = 31U;
 	if (EspRngAnalogRead(3U, 0U) != 0U)
 	{
 		EspRngModify(RNG_RTC_SENSOR_CTRL, RNG_RTC_SAR_POWER_MASK, pSaved->Sensor);
 		EspRngModify(RNG_RTC_ANA_CONF, RNG_RTC_ANA_POWER, pSaved->Ana);
 		return false;
 	}
-	RNG_TRACE_STEP(32U);
+	g_Esp32C3RngStage = 32U;
 	EspRngAnalogWrite(6U, 6U, 1U);
-	RNG_TRACE_STEP(4U);
+	g_Esp32C3RngStage = 4U;
 
 	ESP32_RNG_REG(RNG_SYSTEM_CLK_EN) |= RNG_ADC_CLK_MASK;
 	ESP32_RNG_REG(RNG_SYSTEM_RST_EN) &= ~RNG_ADC_CLK_MASK;
@@ -229,9 +208,9 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 		RNG_ADC_MEAS_LIMIT, (100UL << 12));
 	ESP32_RNG_REG(RNG_ADC_DMA_CONF) |= RNG_ADC_TRANSFER;
 	ESP32_RNG_REG(RNG_ADC_CTRL2) |= RNG_ADC_TIMER_EN;
-	RNG_TRACE_STEP(5U);
+	g_Esp32C3RngStage = 5U;
 
-	RNG_TRACE_STEP(33U);
+	g_Esp32C3RngStage = 33U;
 	if ((ESP32_RNG_REG(RNG_ADC_CTRL2) & RNG_ADC_TIMER_EN) == 0U ||
 		(ESP32_RNG_REG(RNG_ADC_CLK_CONF) & RNG_ADC_CLK_EN) == 0U ||
 		(EspRngAnalogRead(6U, 6U) & 1U) == 0U)
@@ -240,7 +219,7 @@ static bool EspRngStart(EspRngSnapshot_t *pSaved)
 		EspRngStop(pSaved);
 		return false;
 	}
-	RNG_TRACE_STEP(6U);
+	g_Esp32C3RngStage = 6U;
 	return true;
 }
 
@@ -279,8 +258,6 @@ static bool EspRngWaitCycles(uint32_t Count)
 			return true;
 		}
 	}
-	RNG_TRACE_ERROR("RNG: cycle wait failed at %lu\r\n",
-		(unsigned long)g_Esp32C3RngStage);
 	return false;
 }
 
@@ -313,13 +290,11 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
-	// No verbose trace on entry: the first successful checkpoint is below.
 	state = DisableInterrupt();
 	if (s_EspRngBusy)
 	{
 		g_Esp32C3RngError = 1U;
 		EnableInterrupt(state);
-		RNG_TRACE_ERROR("RNG: busy, request rejected\r\n");
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_BUSY;
 	}
@@ -327,7 +302,6 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	{
 		g_Esp32C3RngError = 2U;
 		EnableInterrupt(state);
-		RNG_TRACE_ERROR("RNG: ADC unavailable or previous entropy fault\r\n");
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
@@ -336,8 +310,6 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	g_Esp32C3RngError = 0U;
 	g_Esp32C3RngStage = 1U;
 	EnableInterrupt(state);
-
-	RNG_TRACE_STEP(1U);
 	started = EspRngStart(&saved);
 	ok = started;
 	if (!started)
@@ -353,7 +325,7 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	if (ok)
 	{
 		// Stabilize the analog noise source before the first sample.
-		RNG_TRACE_STEP(7U);
+		g_Esp32C3RngStage = 7U;
 		if (!EspRngWaitCycles(cyclesPerUs * 100U))
 		{
 			ok = false;
@@ -364,7 +336,7 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	{
 		(void)ESP32_RNG_REG(RNG_DATA);
 		(void)ESP32_RNG_REG(RNG_DATA);
-		RNG_TRACE_STEP(8U);
+		g_Esp32C3RngStage = 8U;
 	}
 	for (i = 0U; i < Len && ok; i += n)
 	{
@@ -400,7 +372,7 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	{
 		if (ok)
 		{
-			RNG_TRACE_STEP(9U);
+			g_Esp32C3RngStage = 9U;
 		}
 		EspRngStop(&saved);
 	}
@@ -415,17 +387,8 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	}
 	s_EspRngBusy = false;
 	EnableInterrupt(state);
-	if (ok)
-	{
-		// Printing with interrupts masked can deadlock FIFO-backed UART.
-		RNG_TRACE_STEP(10U);
-	}
 	if (!ok)
 	{
-		RNG_TRACE_ERROR("RNG: FAIL stage=%lu error=%lu request=%lu\r\n",
-			(unsigned long)g_Esp32C3RngStage,
-			(unsigned long)g_Esp32C3RngError,
-			(unsigned long)g_Esp32C3RngCallCount);
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
 	}
