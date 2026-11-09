@@ -1,4 +1,4 @@
-# ESP32-C3 UART0 loopback — shared IOsonata PRBS test
+# ESP32-C3 UART0 loopback - shared IOsonata PRBS test
 
 ## Hardware and firmware
 
@@ -53,7 +53,7 @@ a bring-up-specific `main.cpp`, so do not mistake it for a standard
 PRBS throughput firmware unless its project is changed to link the
 generic transmitter.
 
-## Recorded ESP32-C3 loopback evidence — November 8, 2026
+## Recorded ESP32-C3 loopback evidence - November 8, 2026
 
 The first hardware test used a **temporary stop-and-wait** host script,
 which sent one 64-byte frame, waited for the entire echoed frame,
@@ -98,11 +98,31 @@ implementation, not the shared Python test or generic example:
   UART interrupts during the copy, following the existing Renesas UART
   pattern. A non-blocking FIFO retains the protected copy path.
 
-**Hardware validation pending for this revision.** Run the same shared
-benchmark with the same settings. Compare steady-state RX B/s and error,
-loss, corruption, repeat, and pending reports. If there is any data loss
-or regression, the new UART change has not passed acceptance.
+**The first driver revision was measured on hardware, with zero errors,**
+but its throughput remained below the other MCU ports. The result and
+next changes are described below.
 
 The source checks for these MCU-specific paths are in
 `tests/uart/esp32_uart_flow_source_test.py`. They do not replace
 hardware testing.
+
+## First UART driver optimization: hardware result
+
+The maintainer reran `Python/uartprbs_lb.py` at 1,000,000 baud, using the
+same 16-byte block and 128-byte window. Twenty reported samples averaged
+**67,872 B/s** (range 64,239-68,980 B/s), with **0 errors**. This is only
+about 2% faster than the 66,549 B/s baseline and is not satisfactory.
+
+## Next UART revision on esp32_port (hardware test pending)
+
+The revised UART source now uses contiguous CFIFO reservations to transfer
+hardware RX and TX FIFO batches instead of performing a FIFO-index operation
+for each byte. The receive-full interrupt threshold is **16 bytes rather
+than 64 bytes**, matching the generic `uart_loopback.cpp` application
+buffer size and reducing the wait before an interrupt on short bursts.
+The driver's entire C++ source has been corrected to tab indentation, ASCII,
+declarations at function entry, and expanded control statements.
+
+This revision has **not** yet been run on ESP32-C3 hardware. Compare it with
+the shared PRBS test at the same baud, block size and window. Do not treat
+source checks as measured throughput or functional hardware acceptance.

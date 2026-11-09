@@ -54,15 +54,44 @@ class Esp32UartFlowTests(unittest.TestCase):
         cls.transfer = section(cls.source, "static int Esp32UartRxData(",
                                "/*---------------------------------------------------------------------------\n * UARTInit")
 
-    def test_interrupt_fifo_byte_helpers(self):
-        self.assertIn("CFifoPutByte(udev->hRxFifo", self.irq)
-        self.assertIn("CFifoGetByte(pDev->pUartDev->hTxFifo)", self.irq)
-        self.assertNotIn("CFifoPut(udev->hRxFifo", self.irq)
-        self.assertNotIn("CFifoGet(udev->hTxFifo", self.irq)
+    def test_interrupt_fifo_batch_reservation(self):
+        self.assertIn("CFifoResvMultiple(udev->hRxFifo, &len)", self.irq)
+        self.assertIn("CFifoPutMultiple(udev->hRxFifo, &len)", self.irq)
+        self.assertIn("CFifoPeekMultiple(fifo, &len)", self.irq)
+        self.assertIn("CFifoRelease(fifo, len)", self.irq)
+        self.assertIn("CFifoGetMultiple(fifo, &len)", self.irq)
+        self.assertNotIn("CFifoPutByte(", self.irq)
+        self.assertNotIn("CFifoGetByte(", self.irq)
         self.assertIn("udev->RxDropCnt++", self.irq)
         self.assertIn("udev->RxOvrErrCnt++", self.irq)
         self.assertIn("udev->FramErrCnt++", self.irq)
         self.assertIn("udev->ParErrCnt++", self.irq)
+
+        rx = section(self.irq, "if (st & (ESP32_UART_INT_RXFIFO_FULL",
+                     "if (st & ESP32_UART_INT_TXFIFO_EMPTY)")
+        self.assertLess(rx.index("CFifoResvMultiple(udev->hRxFifo, &len)"),
+                        rx.index("p[i] = (uint8_t)ESP32_UART_FIFO_REG(base)"))
+        self.assertLess(rx.index("p[i] = (uint8_t)ESP32_UART_FIFO_REG(base)"),
+                        rx.index("CFifoPutMultiple(udev->hRxFifo, &len)"))
+
+        tx = section(self.irq, "static void Esp32UartTxFill(",
+                     "static void Esp32UartIRQHandler(")
+        self.assertLess(tx.index("CFifoPeekMultiple(fifo, &len)"),
+                        tx.index("ESP32_UART_FIFO_REG(pDev->Base) = p[i]"))
+        self.assertLess(tx.index("ESP32_UART_FIFO_REG(pDev->Base) = p[i]"),
+                        tx.index("CFifoRelease(fifo, len)"))
+
+    def test_interrupt_latency_threshold_and_init_style(self):
+        self.assertIn("(16U << ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos)",
+                      self.source)
+        init = section(self.source, "bool UARTInit(", "void UARTSetCtrlLineState(")
+        self.assertIn("ESP32_UARTDEV *dev;", init)
+        self.assertIn("uint32_t cc;", init)
+        self.assertIn("uint32_t conf0;", init)
+        self.assertIn("int bn;", init)
+        self.assertNotIn("uint32_t cc =", init)
+        self.assertNotIn("uint32_t conf0 =", init)
+        self.assertNotIn("int bn =", init)
 
     def test_blocking_rx_copies_before_releasing(self):
         rx = section(self.transfer, "static int Esp32UartRxData(",
@@ -84,16 +113,19 @@ class Esp32UartFlowTests(unittest.TestCase):
         self.assertIn("ESP32_UART_INT_ENA_REG(dev->Base) &=", tx)
         self.assertNotIn("TxDropCnt +=", tx)
 
-    def test_modified_cpp_uses_tabs_ascii_no_library_prints(self):
-        for body in (self.irq, self.transfer):
-            self.assertTrue(body.isascii())
-            self.assertNotIn("printf(", body)
-            self.assertNotIn("goto ", body)
-            self.assertNotIn("for (int ", body)
-            for number, line in enumerate(body.splitlines(), 1):
-                with self.subTest(line=number):
-                    self.assertFalse(line.startswith("    "),
-                                     "indent with tabs, not spaces")
+    def test_entire_cpp_uses_tabs_ascii_no_library_prints(self):
+        body = self.source.split("----------------------------------------------------------------------------*/", 1)[1]
+        self.assertTrue(self.source.isascii())
+        self.assertNotIn("printf(", body)
+        self.assertNotIn("goto ", body)
+        self.assertNotIn("for (int ", body)
+        for number, line in enumerate(body.splitlines(), 1):
+            with self.subTest(line=number):
+                self.assertFalse(line.startswith("    "),
+                                 "indent with tabs, not spaces")
+                if not line.lstrip().startswith("//"):
+                    self.assertNotRegex(line, r"\)\s+(return|break|continue)\b")
+                    self.assertNotRegex(line, r"\b(if|while)\s*\(.*\)\s*\{\s*\}")
 
     def test_debug_globals_do_not_need_c_linkage(self):
         self.assertNotIn('extern "C" {\nvolatile uint32_t g_Esp32C3UartDbg',
