@@ -208,3 +208,28 @@ The threshold correction needs hardware measurement. Rebuild the library
 and UartLoopback in Release and use the original loopback command, with
 its unchanged 16-byte block and 128-byte window. No gain is claimed before
 that measurement.
+
+## Window comparison and four-byte RX batching trial
+
+With the RX-full register at 15, the maintainer reported:
+
+- Window 128: 30 samples, mean **88,573 B/s**, zero errors.
+- Window 256: 52 samples, mean **98,014 B/s**, zero errors.
+- Both runs kept the host write block at 16 bytes and baud at 1 Mbaud.
+
+The larger window substantially reduces the throughput deficit without
+changing the firmware. This supports a round-trip latency limit; it does
+not isolate the MCU's share from USB bridge and host scheduling delays.
+
+The next controlled change sets RX-full to **3**, delivering four-byte
+batches instead of 16. At 1 Mbaud, 8N1, four bytes take 40 us on the wire
+versus 160 us for 16 bytes. These are batch serialization times, not
+measured interrupt latency. Continuous input can now generate roughly
+25,000 RX-full interrupts/s instead of 6,250, so the reduced batching delay
+must be weighed against the extra CPU work on hardware.
+
+TX configuration, interrupt dispatch, RX timeout configuration, generic
+loopback application and Python scripts are unchanged. Keep the benchmark
+at `--block-size 16 --window 128`. Tails shorter than four bytes
+remain handled by the existing RX timeout interrupt. Throughput and CPU cost
+of this change have not yet been measured on the board.
