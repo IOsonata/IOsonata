@@ -773,7 +773,7 @@ static int nRFxRtcFindAvailTrigger(TimerDev_t * const pTimer)
  *
  * @param   TrigNo : Trigger number to disable. Index value starting at 0
  */
-static inline void nRFxRtcDisableExtTrigger(TimerDev_t * const pTimer) {
+static inline void nRFxRtcDisableExtTrigger(TimerDev_t * const) {
 }
 
 /**
@@ -785,7 +785,7 @@ static inline void nRFxRtcDisableExtTrigger(TimerDev_t * const pTimer) {
  *
  * @return  true - Success
  */
-bool nRFxRtcEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense)
+bool nRFxRtcEnableExtTrigger(TimerDev_t * const, int, TIMER_EXTTRIG_SENSE)
 {
 	// No support for external trigger
 	return false;
@@ -863,6 +863,8 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			case TIMER_CLKSRC_LFXTAL:
 				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos;
 				break;
+			case TIMER_CLKSRC_EXT:
+				return false;
 	#if defined(NRF52_SERIES) || (NRF51)
 			case TIMER_CLKSRC_HFRC:
 			case TIMER_CLKSRC_HFXTAL:
