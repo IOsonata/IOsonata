@@ -1934,6 +1934,17 @@ bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 		return false;
 	}
 #endif
+	if (atomic_flag_test_and_set(&pDev->DevIntrf.bBusy))
+	{
+		return false;
+	}
+	if (dev->bPeiPrepared || dev->bTxAbort || dev->bCmdFailed ||
+		dev->pTxWait != NULL || dev->RxBufflen != 0 ||
+		dev->TxDatalen != 0)
+	{
+		atomic_flag_clear(&pDev->DevIntrf.bBusy);
+		return false;
+	}
 	if (TxLen != 0U)
 	{
 		memcpy(dev->TxBuf, pTx, TxLen);
@@ -1993,6 +2004,7 @@ bool SPIReleasePeiTransfer(SPIDev_t *pDev)
 	dev->pDmaReg->RXD.PTR = 0U;
 	dev->pDmaReg->EVENTS_STOPPED = 0U;
 	dev->bPeiPrepared = false;
+	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 	return true;
 #else
 	(void)pDev;
