@@ -83,7 +83,6 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 #include "coredev/interrupt.h"
-#include "idelay.h"
 
 #include "esp32xx.h"
 #include "esp32xx_gpio.h"
@@ -114,7 +113,8 @@ extern "C" volatile uint32_t g_Esp32C3Uart1IrqCount;
 /*---------------------------------------------------------------------------
  * Per-instance driver data
  *---------------------------------------------------------------------------*/
-#define ESP32_UART_CFIFO_SIZE         CFIFO_MEMSIZE(64)
+#define ESP32_UART_CFIFO_SIZE		CFIFO_MEMSIZE(64)
+#define ESP32_UART_COPY_MAX			128
 
 #pragma pack(push, 4)
 typedef struct {
@@ -376,16 +376,7 @@ static void Esp32UartIRQHandler(ESP32_UARTDEV *pDev)
 }
 
 /*---------------------------------------------------------------------------
- * IRQ entry points.  These override the weak `alias("DEF_IRQHandler")`
- * declarations in Vectors_esp32c3.c.
- *
- * `__attribute__((used))` keeps the compiler from discarding the symbol
- * even if it appears statically unreachable in the current TU; combined
- * with the strong definition this guarantees that the linker resolves
- * the [21]/[22] entries in s_Esp32C3PeriphVectors[] to OUR functions
- * rather than the weak DEF_IRQHandler infinite loop, regardless of
- * archive member ordering.
- *
+ * IRQ entry points. Installed by Esp32UartIntMtxEnable().
  *---------------------------------------------------------------------------*/
 extern "C" __attribute__((used))
 void UART0_IRQHandler(void)
@@ -510,21 +501,34 @@ static int Esp32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		{
 			// A non-blocking producer can discard unread blocks.
 			// Protect the copy until the blocks have been consumed.
-			state = DisableInterrupt();
 			while (cnt < BuffLen)
 			{
 				len = BuffLen - cnt;
+				if (len > ESP32_UART_COPY_MAX)
+				{
+					len = ESP32_UART_COPY_MAX;
+				}
+				state = DisableInterrupt();
 				p = CFifoGetMultiple(fifo, &len);
+				if (p != nullptr)
+				{
+					memcpy(pBuff + cnt, p, len);
+				}
+				EnableInterrupt(state);
 				if (p == nullptr)
 				{
 					break;
 				}
-				memcpy(pBuff + cnt, p, len);
 				cnt += len;
 			}
-			EnableInterrupt(state);
 		}
-		udev->bRxReady = CFifoUsed(fifo) > 0;
+		// Clear first so a later RX interrupt cannot be overwritten by
+		// a stale empty result from the foreground reader.
+		udev->bRxReady = false;
+		if (CFifoUsed(fifo) > 0)
+		{
+			udev->bRxReady = true;
+		}
 	}
 	else
 	{
@@ -548,6 +552,7 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	int len;
 	int space;
 	bool pending;
+	bool blocking;
 
 	if (pData == nullptr || DataLen <= 0)
 	{
@@ -576,11 +581,12 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	}
 
 	fifo = udev->hTxFifo;
+	blocking = CFifoIsBlocking(fifo);
 	state = DisableInterrupt();
 
 	// With no software backlog, use the free hardware FIFO space first.
 	// Small loopback responses need no software enqueue or TX interrupt.
-	if (udev->bTxReady && CFifoUsed(fifo) == 0)
+	if (CFifoUsed(fifo) == 0)
 	{
 		space = (int)Esp32UartTxFree(dev->Base);
 		while (DataLen > 0 && space > 0)
@@ -593,21 +599,48 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		}
 	}
 
-	// Any remaining bytes go into the software FIFO, preserving order.
-	while (DataLen > 0)
+	if (DataLen > 0)
 	{
-		len = DataLen;
-		p = CFifoPutMultiple(fifo, &len);
-		if (p == nullptr)
-		{
-			break;
-		}
-		memcpy(p, pData, len);
-		pData += len;
-		DataLen -= len;
-		cnt += len;
-	}
+		EnableInterrupt(state);
 
+		// DeviceIntrf serializes the producer. Reserve a blocking FIFO
+		// span, fill it, then publish it to the interrupt consumer.
+		while (DataLen > 0)
+		{
+			len = DataLen;
+			if (!blocking)
+			{
+				if (len > ESP32_UART_COPY_MAX)
+				{
+					len = ESP32_UART_COPY_MAX;
+				}
+				state = DisableInterrupt();
+			}
+			p = blocking ? CFifoResvMultiple(fifo, &len) :
+				CFifoPutMultiple(fifo, &len);
+			if (p != nullptr)
+			{
+				memcpy(p, pData, len);
+				if (blocking)
+				{
+					CFifoPutMultiple(fifo, &len);
+				}
+			}
+			if (!blocking)
+			{
+				EnableInterrupt(state);
+			}
+			if (p == nullptr)
+			{
+				break;
+			}
+			pData += len;
+			DataLen -= len;
+			cnt += len;
+		}
+
+		state = DisableInterrupt();
+	}
 	pending = CFifoUsed(fifo) > 0;
 	if (pending)
 	{

@@ -107,7 +107,7 @@ class Esp32UartFlowTests(unittest.TestCase):
     def test_tx_writes_hw_fifo_before_software_queue(self):
         tx = self.transfer[self.transfer.index("static int Esp32UartTxData("):]
         self.assertLess(tx.index("ESP32_UART_FIFO_REG(dev->Base) = *pData;"),
-                        tx.index("p = CFifoPutMultiple(fifo, &len);"))
+                        tx.index("CFifoResvMultiple(fifo, &len)"))
         self.assertIn("Esp32UartTxFill(dev);", tx)
         self.assertIn("if (pending || (udev->EvtCallback != nullptr &&", tx)
         self.assertIn("ESP32_UART_INT_ENA_REG(dev->Base) &=", tx)

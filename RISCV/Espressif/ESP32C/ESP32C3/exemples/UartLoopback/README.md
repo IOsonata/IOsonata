@@ -126,3 +126,20 @@ declarations at function entry, and expanded control statements.
 This revision has **not** yet been run on ESP32-C3 hardware. Compare it with
 the shared PRBS test at the same baud, block size and window. Do not treat
 source checks as measured throughput or functional hardware acceptance.
+
+### Follow-up transfer cleanup (hardware test pending)
+
+Blocking TX now reserves FIFO memory, copies with interrupts enabled, and
+publishes only after the copy. Non-blocking RX/TX copies mask interrupts for
+at most 128 bytes per span. Direct TX uses available hardware FIFO space
+whenever the software queue is empty, including while a TX-ready event is
+pending. RX clears its ready flag before checking for remaining data, so
+a newly arriving RX interrupt cannot be overwritten by a stale empty result.
+
+`python3 tests/uart/run_esp32_uart_transfer.py` runs the actual UART transfer
+functions and CFIFO with simulated registers for C3/C5/C6, at `-O0` and
+`-O2` with undefined-behavior checks. It covers wrap, partial acceptance,
+non-blocking overflow, copy interrupt protection, and an interrupt before
+a reserved TX span is filled. These are host tests, not MCU firmware builds
+or throughput measurements. The shared UART interface and PRBS test remain
+unchanged.
