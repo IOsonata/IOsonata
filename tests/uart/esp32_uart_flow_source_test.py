@@ -82,7 +82,7 @@ class Esp32UartFlowTests(unittest.TestCase):
                         tx.index("CFifoRelease(fifo, len)"))
 
     def test_interrupt_latency_threshold_and_init_style(self):
-        self.assertIn("(16U << ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos)",
+        self.assertIn("(15U << ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos)",
                       self.source)
         init = section(self.source, "bool UARTInit(", "void UARTSetCtrlLineState(")
         self.assertIn("ESP32_UARTDEV *dev;", init)

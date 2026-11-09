@@ -816,12 +816,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	ESP32_UART_CONF0_REG(base) = conf0;
 
-	// 6. CONF1: RX FIFO full threshold + RX timeout.
-	//    Affects RX-side interrupts only; safe to write any time.
-	// Promptly notify the 16-byte UART loopback consumer. A 64-byte
-	// threshold delays short frames until the RX timeout interrupt.
+	// RX-full asserts when the FIFO count is greater than the threshold.
+	// A threshold of 15 delivers a 16-byte burst without waiting for
+	// byte 17 or the RX timeout. Keep TX-empty at 16 bytes.
 	ESP32_UART_CONF1_REG(base) =
-		(16U << ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos) |
+		(15U << ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos) |
 		(16U << ESP32_UART_CONF1_TXFIFO_EMPTY_THRHD_Pos) |
 		ESP32_UART_CONF1_RX_TOUT_EN_Msk;          // RX_TOUT_EN
 

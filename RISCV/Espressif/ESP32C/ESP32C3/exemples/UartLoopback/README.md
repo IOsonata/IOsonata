@@ -185,3 +185,26 @@ The UART FIFO and critical-section improvements from that commit remain.
 Smaller compiled functions did not establish a throughput improvement;
 the cause of the measured slowdown has not been isolated. A repeat board
 run is needed to confirm throughput after the restoration.
+
+## Continuous TX result and RX threshold correction
+
+The maintainer ran the generic `UartPrbsTxTest` from `19e423d2` at
+1 Mbaud, 8N1, byte mode, interrupts enabled and DMA disabled. The host
+`uartprbs_rx.py` log ended with a cumulative average of **99,997.11 B/s**
+and no reported error counters. Continuous TX therefore reaches the
+100,000 B/s wire limit in this configuration. This does not measure RX or
+exclude USB/host round-trip latency from the loopback result.
+
+The earlier RX threshold comment was incorrect: RX-full asserts when FIFO
+occupancy is **greater than** the register value. A value of 16 waits for
+17 bytes or timeout. The driver now writes **15** to deliver a 16-byte
+burst at its final byte. TX-empty remains 16; interrupt dispatch, timeout
+configuration, generic examples, and host test scripts are unchanged.
+
+Reference: ESP32-C3 Technical Reference Manual, UART FIFO description:
+https://documentation.espressif.com/esp32-c3_technical_reference_manual_en.pdf
+
+The threshold correction needs hardware measurement. Rebuild the library
+and UartLoopback in Release and use the original loopback command, with
+its unchanged 16-byte block and 128-byte window. No gain is claimed before
+that measurement.
