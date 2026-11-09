@@ -54,9 +54,9 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     subprocess.run(["g++", "-std=c++11", *COMMON,
                     "-Wno-overloaded-virtual", "-fsyntax-only",
                     str(TEST / "pei_hal_cpp_api.cpp")], check=True)
-    # Native macOS ARM64 cannot map the nRF52 EGU MMIO range below 4 GiB.
-    skip_egu_mmio = (platform.system() == "Darwin" and
-                     platform.machine() == "arm64")
+    # macOS does not reliably permit fixed-address nRF52 EGU MMIO maps.
+    # Keep all PPI and RTC tests enabled; skip only the EGU MMIO test.
+    skip_egu_mmio = platform.system() == "Darwin"
     for name, flags in [
         ("bare", []),
         ("sdc", ["-DNRFXLIB_SDC"]),
