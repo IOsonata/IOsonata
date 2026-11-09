@@ -17,8 +17,8 @@ The test checks all four SPI modes at 1 MHz, six dummy-byte values,
 The driver supports polling master, normal four-wire, 8-bit data, MSB/LSB
 order, and GPIO or application-controlled chip select. Manual CS uses a
 three-entry SCK/MISO/MOSI pin map. Automatic CS entries follow those pins;
-the transfer selector is the zero-based CS index. All three signal pins
-are required. Slave, interrupt, DMA and multi-line modes are unsupported.
+the transfer selector is the zero-based CS index. MOSI is required. SCK and MISO may use port/pin -1 for MOSI-only
+devices; receiving requires a connected MISO pin. Slave, interrupt, DMA and multi-line modes are unsupported.
 Rate selects the closest XTAL divider, with zero selecting the minimum.
 Actual usable speed depends on GPIO matrix timing and board wiring.
 

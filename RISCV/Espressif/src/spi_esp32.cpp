@@ -3,10 +3,12 @@
 
 @brief	GP-SPI2 polling master for ESP32-C2/C3/C5/C6/C61, SPI device 0.
 
-Normal four-wire, 8-bit SPI supports all four clock modes and both bit orders.
+Normal 8-bit SPI supports all four clock modes and both bit orders.
 Transfers use the 64-byte hardware buffer. GPIO chip select remains asserted
 across chunks and the generic command/read sequence. Manual chip select is
 owned by the application. Board pin maps select the GPIO matrix signals.
+SCK and MISO may be omitted with port/pin -1 for MOSI-only devices.
+Receive operations require MISO; MOSI is always required.
 Slave, DMA, interrupt, three-wire and multi-line transfers are not implemented.
 The XTAL supplies the clock. Rate selects the closest divider; zero selects
 its minimum rate. GPIO matrix timing and board wiring limit usable speed.
@@ -114,7 +116,11 @@ static void Esp32SpiConfigure(Esp32SpiDev_t *pDev)
 	Esp32SpiClock(true);
 	ESP32_SPI_CLK_GATE_REG(SPI_BASE) = ESP32_SPI_CLK_GATE_CLK_EN_Msk |
 		ESP32_SPI_CLK_GATE_MST_CLK_ACTIVE_Msk | ESP32_SPI_CLK_GATE_MST_CLK_SEL_Msk;
-	user = ESP32_SPI_USER_DOUTDIN_Msk | ESP32_SPI_USER_USR_MOSI_Msk | ESP32_SPI_USER_USR_MISO_Msk;
+	user = ESP32_SPI_USER_USR_MOSI_Msk;
+	if (cfg->pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo >= 0)
+	{
+		user |= ESP32_SPI_USER_DOUTDIN_Msk | ESP32_SPI_USER_USR_MISO_Msk;
+	}
 	misc = 0x3FU;
 	ctrl = 0;
 	if (cfg->ClkPol == SPICLKPOL_LOW)
@@ -309,7 +315,8 @@ static int Esp32SpiTransfer(DevIntrf_t *pIntrf, const uint8_t *pTx, uint8_t *pRx
 	{
 		return 0;
 	}
-	if (Length <= 0 || (pTx == NULL && pRx == NULL))
+	if (Length <= 0 || (pTx == NULL && pRx == NULL) ||
+		(pRx && dev->pOwner->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo < 0))
 	{
 		dev->bError = true;
 		return 0;
@@ -345,7 +352,7 @@ static int Esp32SpiTransfer(DevIntrf_t *pIntrf, const uint8_t *pTx, uint8_t *pRx
 		{
 			break;
 		}
-		if (dev->pOwner->FirstRdData < 0)
+		if (dev->pOwner->FirstRdData < 0 && dev->pOwner->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo >= 0)
 		{
 			dev->pOwner->FirstRdData = ESP32_SPI_W_REG(SPI_BASE, 0) & 255U;
 		}
@@ -423,7 +430,10 @@ static void Esp32SpiDisable(DevIntrf_t *pIntrf)
 	pins = dev->pOwner->Cfg.pIOPinMap;
 	for (i = 0; i < dev->pOwner->Cfg.NbIOPins; i++)
 	{
-		IOPinConfig(pins[i].PortNo, pins[i].PinNo, IOPINOP_GPIO, IOPINDIR_INPUT, pins[i].Res, IOPINTYPE_NORMAL);
+		if (pins[i].PinNo >= 0)
+		{
+			IOPinConfig(pins[i].PortNo, pins[i].PinNo, IOPINOP_GPIO, IOPINDIR_INPUT, pins[i].Res, IOPINTYPE_NORMAL);
+		}
 	}
 	Esp32SpiClock(false);
 	dev->bEnabled = false;
@@ -482,6 +492,10 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 	used = 0;
 	for (i = 0; i < pCfg->NbIOPins; i++)
 	{
+		if (i < SPI_MOSI_IOPIN_IDX && pins[i].PortNo == -1 && pins[i].PinNo == -1)
+		{
+			continue;
+		}
 		op = i < SPI_CS_IOPIN_IDX ? signals[i] : IOPINOP_GPIO;
 		if (pins[i].PortNo != 0 || pins[i].PinNo < 0 || pins[i].PinNo > ESP32_GPIO_PIN_MAX ||
 			pins[i].Type != IOPINTYPE_NORMAL || pins[i].PinOp != op ||

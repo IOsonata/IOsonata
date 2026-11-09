@@ -42,6 +42,69 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
+#ifndef LED_DEMO_SPI_ENABLE
+#define LED_DEMO_SPI_ENABLE 0
+#endif
+
+#if LED_DEMO_SPI_ENABLE
+#include "coredev/spi.h"
+#include "miscdev/led_ws2812.h"
+
+static const IOPinCfg_t s_SpiPins[] = LED_SPI_PINS;
+static const SPICfg_t s_SpiCfg = {
+	.DevNo = LED_SPI_DEVNO,
+	.Phy = SPIPHY_NORMAL,
+	.Mode = SPIMODE_MASTER,
+	.pIOPinMap = s_SpiPins,
+	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
+	.Rate = LED_SPI_RATE,
+	.DataSize = 8,
+	.MaxRetry = 0,
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_FIRST_CLK,
+	.ClkPol = SPICLKPOL_HIGH,
+	.ChipSel = SPICSEL_MAN,
+	.bDmaEn = false,
+	.bIntEn = false,
+	.IntPrio = 6,
+	.DummyByte = 0,
+	.EvtCB = NULL
+};
+static const WS2812_CFG s_LedCfg = {
+	.NbLed = 1,
+	.Order = WS2812_ORDER_GRB,
+	.Brightness = 32,
+	.DevCs = 0
+};
+
+SPI g_Spi;
+LedWs2812 g_Led;
+
+int main()
+{
+	if (!g_Spi.Init(s_SpiCfg) || !g_Led.Init(s_LedCfg, g_Spi))
+	{
+		return 1;
+	}
+	g_Led.Off();
+	while (1)
+	{
+		g_Led.Level(WS2812_RED);
+		msDelay(500);
+		g_Led.Level(WS2812_GREEN);
+		msDelay(500);
+		g_Led.Level(WS2812_BLUE);
+		msDelay(500);
+		g_Led.Off();
+		msDelay(500);
+	}
+}
+#else
+#ifndef LED_DEMO_PWM_ENABLE
+#define LED_DEMO_PWM_ENABLE 1
+#endif
+
+#if LED_DEMO_PWM_ENABLE
 static const PwmCfg_t s_PwmCfg = {
 	.DevNo = 0,
 	.Freq = 100,
@@ -77,6 +140,8 @@ static const PwmChanCfg_t s_PwmChanCfg[] = {
 const int s_NbPwmChan = sizeof(s_PwmChanCfg) / sizeof(PwmChanCfg_t);
 
 Pwm g_Pwm;
+LedPwm g_Led2Pwm;
+#endif
 
 Led g_Led1;
 Led g_Led2;
@@ -84,24 +149,14 @@ Led g_Led3;
 #ifdef LED4_PORT
 Led g_Led4;
 #endif
-LedPwm g_Led2Pwm;
-
-//
-// Print a greeting message on standard output and exit.
-//
-// On embedded platforms this might require semi-hosting or similar.
-//
-// For example, for toolchains derived from GNU Tools for Embedded,
-// to enable semi-hosting, the following was added to the linker:
-//
-// --specs=rdimon.specs -Wl,--start-group -lgcc -lc -lc -lm -lrdimon -Wl,--end-group
-//
-// Adjust it for other toolchains.
-//
 
 int main()
 {
+#if LED_DEMO_PWM_ENABLE
+	uint32_t x = 0;
+
 	g_Pwm.Init(s_PwmCfg);
+#endif
 
 	g_Led1.Init(LED1_PORT, LED1_PIN, LED1_ACTIVE);
 
@@ -111,7 +166,9 @@ int main()
 	g_Led4.Init(LED4_PORT, LED4_PIN, LED4_ACTIVE);
 #endif
 
-	//while (1)
+#if !LED_DEMO_PWM_ENABLE
+	while (1)
+#endif
 	{
 		g_Led1.Toggle();
 		msDelay(1000);
@@ -128,6 +185,7 @@ int main()
 #endif
 	}
 
+#if LED_DEMO_PWM_ENABLE
 	g_Led2Pwm.Init(&g_Pwm, (PwmChanCfg_t*)s_PwmChanCfg, s_NbPwmChan);
 	g_Led1.On();
 	g_Led2Pwm.Level(0xFF);
@@ -135,8 +193,6 @@ int main()
 	g_Led2Pwm.Level(0xFF0000);
 	g_Led2.Toggle();
 	g_Led1.Off();
-
-	uint32_t x = 0;
 
 	while (1)
 	{
@@ -157,4 +213,7 @@ int main()
 		}
 		msDelay(10);
 	}
+#endif
 }
+
+#endif // LED_DEMO_SPI_ENABLE

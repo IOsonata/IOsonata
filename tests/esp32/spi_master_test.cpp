@@ -103,6 +103,13 @@ struct Register {
 #define ESP32_REG32(addr) Register{uintptr_t(addr)}
 #include "../../RISCV/Espressif/src/spi_esp32.cpp"
 #include "../../src/device_intrf.cpp"
+#define __IDELAY_H__
+static unsigned s_Delay;
+static void usDelay(uint32_t Delay)
+{
+	s_Delay += Delay;
+}
+#include "../../src/miscdev/led_ws2812.cpp"
 
 McuOsc_t g_McuOsc = {};
 uint32_t SystemCoreClockGet()
@@ -114,6 +121,10 @@ void IOPinConfig(int Port, int Pin, int Op, IOPINDIR Dir, IOPINRES Res, IOPINTYP
 	(void)Op;
 	(void)Dir;
 	(void)Res;
+	if (Port == -1 && Pin == -1)
+	{
+		return;
+	}
 	assert(Port == 0 && Pin >= 2 && Pin <= 7);
 	assert(Type == IOPINTYPE_NORMAL);
 }
@@ -165,6 +176,12 @@ static void CheckRates(SPIDev_t *pDev)
 }
 int main()
 {
+	SPI bus;
+	LedWs2812 led;
+	WS2812_CFG ledCfg = {1, WS2812_ORDER_GRB, 255, 0};
+	const uint8_t wire[] = {0xab, 0x12, 0xef};
+	uint8_t expected;
+	unsigned pair;
 	SPIDev_t dev = {};
 	SPIDev_t other = {};
 	IOPinCfg_t pins[] = {
@@ -299,6 +316,36 @@ int main()
 	assert(SPIRx(&other, 0, data, 1) == 1);
 	assert(s_Asserts == 0 && s_Releases == 0);
 	SPIPowerOff(&other);
+	pins[0].PortNo = -1;
+	pins[0].PinNo = -1;
+	pins[1].PortNo = -1;
+	pins[1].PinNo = -1;
+	cfg.BitOrder = SPIDATABIT_MSB;
+	cfg.ClkPol = SPICLKPOL_HIGH;
+	cfg.DataPhase = SPIDATAPHASE_FIRST_CLK;
+	cfg.Rate = 3333333;
+	g_McuOsc.CoreOsc.Freq = 40000000;
+	assert(bus.Init(cfg));
+	TraceReset();
+	assert(bus.Rx(0, data, 1) == 0);
+	assert(s_Runs == 0);
+	assert(led.Init(ledCfg, bus));
+	TraceReset();
+	s_Delay = 0;
+	led.Level(0x12abef);
+	assert(s_Chunks == std::vector<unsigned>({12}));
+	assert(s_Asserts == 0 && s_Releases == 0);
+	assert(s_Delay == 600);
+	for (i = 0; i < 12; i++)
+	{
+		pair = (wire[i / 4] >> (6 - 2 * (i % 4))) & 3;
+		expected = 0x88 | (pair & 2 ? 0x60 : 0) | (pair & 1 ? 0x06 : 0);
+		assert(s_Written[i] == expected);
+	}
+	TraceReset();
+	led.Off();
+	assert(s_Written == std::vector<uint8_t>(12, 0x88));
+	bus.PowerOff();
 	assert(!s_Masked);
 	return 0;
 }

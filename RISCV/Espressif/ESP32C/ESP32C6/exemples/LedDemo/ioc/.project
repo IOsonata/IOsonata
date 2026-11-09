@@ -1,21 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>Blinky</name>
-	<comment></comment>
-	<projects>
-	</projects>
+	<name>LedDemo</name>
+	<comment>ESP32C6 generic GPIO test</comment>
+	<projects />
 	<buildSpec>
 		<buildCommand>
 			<name>org.eclipse.cdt.managedbuilder.core.genmakebuilder</name>
 			<triggers>clean,full,incremental,</triggers>
-			<arguments>
-			</arguments>
+			<arguments />
 		</buildCommand>
 		<buildCommand>
 			<name>org.eclipse.cdt.managedbuilder.core.ScannerConfigBuilder</name>
-			<triggers>full,incremental,</triggers>
-			<arguments>
-			</arguments>
+			<triggers>clean,full,incremental,</triggers>
+			<arguments />
 		</buildCommand>
 	</buildSpec>
 	<natures>
@@ -31,29 +28,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/ResetEntry_diag.c</name>
+			<name>src/led_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/ResetEntry_diag.c</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/misc/led_demo.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
-		</link>
-		<link>
-			<name>src/main.c</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/main.c</locationURI>
-		</link>
-		<link>
-			<name>src/main_diag.c</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/main_diag.c</locationURI>
-		</link>
-		<link>
-			<name>src/ws2812_blinky.c</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/ws2812_blinky.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

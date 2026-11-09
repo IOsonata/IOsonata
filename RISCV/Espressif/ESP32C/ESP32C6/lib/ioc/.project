@@ -1975,5 +1975,10 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/spi_esp32.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/miscdev/led_ws2812.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/led_ws2812.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
