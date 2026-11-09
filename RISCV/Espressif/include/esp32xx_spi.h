@@ -367,7 +367,7 @@ SOFTWARE.
 #define ESP32_SPI_CLK_GATE_CLK_EN_Msk       (1UL << ESP32_SPI_CLK_GATE_CLK_EN_Pos)
 #define ESP32_SPI_CLK_GATE_MST_CLK_ACTIVE_Pos  1U
 #define ESP32_SPI_CLK_GATE_MST_CLK_ACTIVE_Msk  (1UL << ESP32_SPI_CLK_GATE_MST_CLK_ACTIVE_Pos)
-#define ESP32_SPI_CLK_GATE_MST_CLK_SEL_Pos     2U        //!< C2/C3: 0 = PLL_F80M, 1 = XTAL; other chips select the source in PCR.
+#define ESP32_SPI_CLK_GATE_MST_CLK_SEL_Pos     2U        //!< C2/C3: 0 = XTAL, 1 = PLL_F80M; other chips select the source in PCR.
 #define ESP32_SPI_CLK_GATE_MST_CLK_SEL_Msk     (1UL << ESP32_SPI_CLK_GATE_MST_CLK_SEL_Pos)
 
 #endif // __ESP32XX_SPI_H__

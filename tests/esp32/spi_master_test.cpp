@@ -172,6 +172,13 @@ static void CheckRates(SPIDev_t *pDev)
 		}
 		actual = pDev->DevIntrf.SetRate(&pDev->DevIntrf, request);
 		assert(actual == uint32_t(best + 0.5));
+#if defined(ESP32C2) || defined(ESP32C3)
+		// ESP-IDF spi_ll_set_clk_source: bit 2 clear selects XTAL.
+		// A set bit selects PLL 80 MHz and invalidates the divider calculation.
+		assert((s_Regs[SPI_BASE + 0xe8] & (1U << 2)) == 0);
+#else
+		assert(((s_Regs[ESP32_PCR_BASE + ESP32_SPI_PCR_CLKM_CONF_OFFSET] >> 20) & 3U) == 0);
+#endif
 	}
 }
 int main()

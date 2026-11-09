@@ -114,8 +114,14 @@ static void Esp32SpiConfigure(Esp32SpiDev_t *pDev)
 
 	cfg = &pDev->pOwner->Cfg;
 	Esp32SpiClock(true);
+#if defined(ESP32C2) || defined(ESP32C3)
+	// MST_CLK_SEL = 0 selects XTAL, matching the divider source.
+	ESP32_SPI_CLK_GATE_REG(SPI_BASE) = ESP32_SPI_CLK_GATE_CLK_EN_Msk |
+		ESP32_SPI_CLK_GATE_MST_CLK_ACTIVE_Msk;
+#else
 	ESP32_SPI_CLK_GATE_REG(SPI_BASE) = ESP32_SPI_CLK_GATE_CLK_EN_Msk |
 		ESP32_SPI_CLK_GATE_MST_CLK_ACTIVE_Msk | ESP32_SPI_CLK_GATE_MST_CLK_SEL_Msk;
+#endif
 	user = ESP32_SPI_USER_USR_MOSI_Msk;
 	if (cfg->pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo >= 0)
 	{
