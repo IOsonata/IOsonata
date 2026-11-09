@@ -47,11 +47,24 @@ tests are in `tests/uart/uartprbs_lb_test.py`.
 
 For **one-way TX throughput**, use the generic
 `exemples/uart/uart_prbs_tx.cpp` and existing
-`Python/uartprbs_rx.py` together, built in Release with specified
-byte or buffer mode. The legacy ESP32-C3 `UartPrbsTxTest` project has
-a bring-up-specific `main.cpp`, so do not mistake it for a standard
-PRBS throughput firmware unless its project is changed to link the
-generic transmitter.
+`Python/uartprbs_rx.py` together. The ESP32-C3 `UartPrbsTxTest` managed
+project now builds the unchanged generic transmitter in both configurations.
+The old bring-up `main.cpp` is excluded. Board configuration selects
+1 Mbaud, 8N1, interrupt mode, and no DMA. The generic transmitter's
+existing byte mode and event callback remain unchanged.
+
+Build the library and `UartPrbsTxTest` in Release, flash, then run:
+
+```sh
+python3 Python/uartprbs_rx.py --port /dev/cu.usbserial-142140 --baud 1000000
+```
+
+This measures continuous TX without the host's echo window or firmware RX
+path. A rate near 100,000 B/s with no continuing errors would show that
+continuous TX can fill the line in this configuration. It would not by
+itself distinguish firmware RX latency from USB/host delays in loopback.
+A lower TX-only rate requires further investigation of TX and the receive
+measurement path before attributing the loopback gap to RX.
 
 ## Recorded ESP32-C3 loopback evidence - November 8, 2026
 
