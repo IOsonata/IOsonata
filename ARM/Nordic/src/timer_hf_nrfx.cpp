@@ -229,28 +229,18 @@ __WEAK void nRFxCounterIrq(int Idx)
 	(void)Idx;
 }
 
-// Tick count of a timer from its counter, read through the last CC. A counter
-// lower than the last one read is a wrap, or a clear once the CLEAR task can
-// be run by a hardware event: the tick count then restarts from the clear.
-// Interrupts are masked, the interrupt handler reads the counter too. The
-// handler passes its own table reference, see s_pnRFxTimerData.
-static uint64_t nRFxTimerReadCount(const nRFTimerData_t &TData, int Idx, TimerDev_t * const pTimer,
-								   bool *pbWrap)
+// A counter value read, with interrupts masked, taken into the tick count. A
+// counter lower than the last one read is a wrap, or a clear once the CLEAR
+// task can be run by a hardware event: the tick count then restarts from the
+// clear (bHwClear). Returns true on a wrap.
+static inline __attribute__((always_inline)) bool nRFxTimerFoldCount(TimerDev_t * const pTimer,
+								   uint32_t Count, bool bHwClear)
 {
-	NRF_TIMER_Type *reg = TData.pReg;
-	uint32_t state = DisableInterrupt();
-	uint32_t t = reg->CC[TData.CountCC];	// Preserve comparator
-	uint32_t count;
 	bool wrap = false;
 
-	reg->TASKS_CAPTURE[TData.CountCC] = 1;
-	while ((count = reg->CC[TData.CountCC]) != reg->CC[TData.CountCC]);
-
-	reg->CC[TData.CountCC] = t;	// Restore comparator
-
-	if (count < pTimer->LastCount)
+	if (Count < pTimer->LastCount)
 	{
-		if (s_bnRFxTimerHwClear[Idx])
+		if (bHwClear)
 		{
 			pTimer->Rollover = 0;
 		}
@@ -260,8 +250,27 @@ static uint64_t nRFxTimerReadCount(const nRFTimerData_t &TData, int Idx, TimerDe
 			wrap = true;
 		}
 	}
-	pTimer->LastCount = count;
+	pTimer->LastCount = Count;
 
+	return wrap;
+}
+
+// Tick count of a timer from its counter, captured in CountCC, the CC kept
+// for counter reads: nothing else uses its value. Interrupts are masked, the
+// interrupt handler reads the counter too. The handler passes its own table
+// reference, see s_pnRFxTimerData. Inlined: the capture is the first access to
+// the timer.
+static inline __attribute__((always_inline)) uint64_t nRFxTimerReadCount(const nRFTimerData_t &TData,
+								   int Idx, TimerDev_t * const pTimer, bool *pbWrap)
+{
+	NRF_TIMER_Type *reg = TData.pReg;
+	uint32_t state = DisableInterrupt();
+	uint32_t count;
+
+	reg->TASKS_CAPTURE[TData.CountCC] = 1;
+	while ((count = reg->CC[TData.CountCC]) != reg->CC[TData.CountCC]);
+
+	bool wrap = nRFxTimerFoldCount(pTimer, count, s_bnRFxTimerHwClear[Idx]);
 	uint64_t ticks = pTimer->Rollover + count;
 
 	EnableInterrupt(state);
@@ -274,27 +283,69 @@ static uint64_t nRFxTimerReadCount(const nRFTimerData_t &TData, int Idx, TimerDe
 	return ticks;
 }
 
-// Next compare of a continuous trigger, one period after the compare that
-// matched (Prev): the period does not depend on the interrupt latency. When
-// the handler runs late, the periods already passed at Count are skipped. Once
-// a hardware event can clear the counter, Prev can be from before a clear: the
-// period is then taken from Count.
-static inline uint32_t nRFxTimerNextCompare(uint32_t Prev, uint32_t Count, uint32_t Period,
-											bool bHwClear)
+// Counter ticks that can pass from a capture to the CC write that follows it,
+// with interrupts masked: a few CPU cycles, the TIMER clock is not above the
+// CPU clock.
+#define TIMER_NRFX_CC_WRITE_TICKS	32U
+
+// Next compare of continuous trigger TrigNo, one period after the compare that
+// matched, the value in its CC: the period does not depend on the interrupt
+// latency. Interrupts masked, the counter is captured in that CC and the next
+// compare written right after. The periods passed are skipped. When the next
+// compare is close to the counter, the counter is read again after the write:
+// if it reached the compare without its event, the compare was written too
+// late and the next period is taken. Once a hardware event can clear the
+// counter, the compare that matched can be from before a clear: the period is
+// then taken from the counter. The counter read is also taken into the tick
+// count, returns true on a wrap.
+static inline __attribute__((always_inline)) bool nRFxTimerNextCompare(const nRFTimerData_t &TData,
+								int Idx, TimerDev_t * const pTimer, int TrigNo, uint32_t Period)
 {
-	if (bHwClear || Period == 0U)
+	NRF_TIMER_Type *reg = TData.pReg;
+	bool hwclear = s_bnRFxTimerHwClear[Idx];
+	uint32_t prev = reg->CC[TrigNo];
+	uint32_t state = DisableInterrupt();
+
+	reg->TASKS_CAPTURE[TrigNo] = 1;
+
+	uint32_t now = reg->CC[TrigNo];
+	uint32_t next;
+
+	if (hwclear)
 	{
-		return Count + Period;
+		next = now + Period;
+	}
+	else
+	{
+		uint32_t late = now - prev;
+
+		next = prev + Period;
+		if (late >= Period)
+		{
+			next += late - late % Period;
+		}
 	}
 
-	uint32_t late = Count - Prev;
+	reg->CC[TrigNo] = next;
 
-	if (late >= Period)
+	while (Period != 0U && next - now < TIMER_NRFX_CC_WRITE_TICKS)
 	{
-		Prev += late - late % Period;
+		reg->TASKS_CAPTURE[TData.CountCC] = 1;
+		now = reg->CC[TData.CountCC];
+		if ((int32_t)(next - now) > 0 || reg->EVENTS_COMPARE[TrigNo])
+		{
+			// Ahead of the counter, or matched
+			break;
+		}
+		next += Period;
+		reg->CC[TrigNo] = next;
 	}
 
-	return Prev + Period;
+	bool wrap = nRFxTimerFoldCount(pTimer, now, hwclear);
+
+	EnableInterrupt(state);
+
+	return wrap;
 }
 
 static void TimerIRQHandler(int DevNo)
@@ -323,35 +374,68 @@ static void TimerIRQHandler(int DevNo)
 
 	uint32_t evt = 0;
 	uint32_t ticks;
-	bool wrap;
+	bool wrap = false;
+	bool counted = false;
 
-	(void)nRFxTimerReadCount(tdata, DevNo, timer, &wrap);
+	// The triggers first. A continuous trigger reads the counter, otherwise it
+	// is read after them for the tick count. Only the compares of the armed
+	// triggers, their interrupt set.
+	uint32_t armed = (reg->INTENSET >> TIMER_INTENSET_COMPARE0_Pos) &
+					 ((1U << tdata.MaxNbTrigEvt) - 1U);
 
-	uint32_t count = timer->LastCount;
-
-	if (wrap)
+	while (armed != 0U)
 	{
-		evt |= TIMER_EVT_COUNTER_OVR;
-	}
+		int i = __builtin_ctz(armed);
 
-	uint32_t inten = reg->INTENSET;
+		armed &= armed - 1U;
 
-    for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
-    {
-		// Only the compare of an armed trigger, its interrupt is set
-		if ((inten & (TIMER_INTENSET_COMPARE0_Msk << i)) && reg->EVENTS_COMPARE[i])
+		if (reg->EVENTS_COMPARE[i])
 		{
 			reg->EVENTS_COMPARE[i] = 0U;
-			if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+
+			TIMER_TRIG_TYPE type = tdata.pTrigger[i].Type;
+
+			if (type == TIMER_TRIG_TYPE_CONTINUOUS || type == TIMER_TRIG_TYPE_SINGLE)
+			{
+				TimerTrigEvtHandler_t handler;
+				void *ctx;
+
+				if (type == TIMER_TRIG_TYPE_CONTINUOUS)
+				{
+					// Next compare first, then the handler
+					wrap |= nRFxTimerNextCompare(tdata, DevNo, timer, i, tdata.pCC[i]);
+					counted = true;
+					handler = tdata.pTrigger[i].Handler;
+					ctx = tdata.pTrigger[i].pContext;
+				}
+				else
+				{
+					// Single shot done, the trigger is free before its handler,
+					// which can set it again: interrupt off, its compare would
+					// match again after a wrap of the counter, and no period,
+					// see nRFxTimerFindAvailTrigger.
+					handler = tdata.pTrigger[i].Handler;
+					ctx = tdata.pTrigger[i].pContext;
+					reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << i;
+					tdata.pTrigger[i].nsPeriod = 0;
+				}
+
+				evt |= TIMER_EVT_TRIGGER(i);
+				if (handler != nullptr)
+				{
+					handler(timer, i, ctx);
+				}
+			}
+			else if (type == TIMER_TRIG_PEI_CONTINUOUS)
 			{
 				// PEI handles event-to-task routing in hardware. The
 				// ISR only advances this CC, preserving elapsed time.
 				ticks = (uint32_t)TimerNanosecondToTick(
 					timer, tdata.pTrigger[i].nsPeriod);
-				reg->CC[i] = nRFxTimerNextCompare(reg->CC[i], count, ticks,
-												  s_bnRFxTimerHwClear[DevNo]);
+				wrap |= nRFxTimerNextCompare(tdata, DevNo, timer, i, ticks);
+				counted = true;
 			}
-			else if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE)
+			else if (type == TIMER_TRIG_PEI_SINGLE)
 			{
 				// HF TIMER has no EVTEN gate; disable the logical PPI
 				// event after its first compare, without stopping TIMER.
@@ -363,32 +447,18 @@ static void TimerIRQHandler(int DevNo)
 						tdata.pCC[i]);
 				}
 			}
-			else
-			{
-				TimerTrig_t trig = tdata.pTrigger[i];
-
-				evt |= TIMER_EVT_TRIGGER(i);
-				if (trig.Type == TIMER_TRIG_TYPE_CONTINUOUS)
-				{
-					reg->CC[i] = nRFxTimerNextCompare(reg->CC[i], count, tdata.pCC[i],
-													  s_bnRFxTimerHwClear[DevNo]);
-				}
-				else
-				{
-					// Single shot done, the trigger is free. Its compare would
-					// match again after a wrap of the counter.
-					reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << i;
-					tdata.pCC[i] = 0;
-					tdata.pTrigger[i] = {};
-				}
-				if (trig.Handler != nullptr)
-				{
-					trig.Handler(timer, i, trig.pContext);
-				}
-			}
 		}
+	}
 
-    }
+	if (!counted)
+	{
+		(void)nRFxTimerReadCount(tdata, DevNo, timer, &wrap);
+	}
+
+	if (wrap)
+	{
+		evt |= TIMER_EVT_COUNTER_OVR;
+	}
 
     if (timer->EvtHandler)
     {
@@ -900,23 +970,29 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 		return 0;
 	}
 
-	uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
+	// Ticks as TimerNanosecondToTick, with one 64 bit division instead of two
+	// up to 100 s (nsPeriod * Freq fits 64 bits up to 128 MHz): the period
+	// starts at the capture below, as soon as the ticks are known.
+	uint32_t cc;
+
+	if (nsPeriod <= 100000000000ULL)
+	{
+		cc = (uint32_t)((nsPeriod * pTimer->Freq + 500000000ULL) / 1000000000ULL);
+	}
+	else
+	{
+		cc = (uint32_t)TimerNanosecondToTick(pTimer, nsPeriod);
+	}
 
     if (cc <= 0)
     {
         return 0;
     }
 
-	tdata.pTrigger[TrigNo].Type = Type;
-	tdata.pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, cc);
-	tdata.pTrigger[TrigNo].Handler = Handler;
-	tdata.pTrigger[TrigNo].pContext = pContext;
-	tdata.pCC[TrigNo] = cc;
-
-	// A compare left from before is cleared first. The counter is captured in
-	// this CC and the period added right after, interrupts masked, for the
-	// shortest time from the capture to the compare. The interrupt is set
-	// last.
+	// The period starts at the capture. A compare left from before is cleared
+	// first. The counter is captured in this CC and the period added right
+	// after, interrupts masked, for the shortest time from the capture to the
+	// compare.
 	reg->EVENTS_COMPARE[TrigNo] = 0;
 
 	uint32_t state = DisableInterrupt();
@@ -926,9 +1002,28 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 
 	EnableInterrupt(state);
 
+	// The trigger is set before its interrupt. Its period in nanoseconds,
+	// rounded to the ticks, is set after: until then nsPeriod holds the
+	// requested one.
+	tdata.pTrigger[TrigNo].Type = Type;
+	tdata.pTrigger[TrigNo].nsPeriod = nsPeriod;
+	tdata.pTrigger[TrigNo].Handler = Handler;
+	tdata.pTrigger[TrigNo].pContext = pContext;
+	tdata.pCC[TrigNo] = cc;
+
 	reg->INTENSET = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
 
-	return tdata.pTrigger[TrigNo].nsPeriod; // Return real period in nsec
+	uint64_t ns = TimerTickToNanosecond(pTimer, cc);
+
+	// Not when a single shot already fired: freed, or set again by its handler
+	state = DisableInterrupt();
+	if (tdata.pTrigger[TrigNo].nsPeriod == nsPeriod)
+	{
+		tdata.pTrigger[TrigNo].nsPeriod = ns;
+	}
+	EnableInterrupt(state);
+
+	return ns; // Return real period in nsec
 }
 
 static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
