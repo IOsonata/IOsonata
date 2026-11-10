@@ -49,7 +49,7 @@ class Esp32UartFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.source = SOURCE.read_text()
-        cls.irq = section(cls.source, "static void Esp32UartTxFill(",
+        cls.irq = section(cls.source, "static bool Esp32UartTxFill(",
                           "/*---------------------------------------------------------------------------\n * IRQ entry points.")
         cls.transfer = section(cls.source, "static int Esp32UartRxData(",
                                "/*---------------------------------------------------------------------------\n * UARTInit")
@@ -57,11 +57,6 @@ class Esp32UartFlowTests(unittest.TestCase):
     def test_interrupt_fifo_batch_reservation(self):
         self.assertIn("CFifoResvMultiple(udev->hRxFifo, &len)", self.irq)
         self.assertIn("CFifoPutMultiple(udev->hRxFifo, &len)", self.irq)
-        self.assertIn("CFifoPeekMultiple(fifo, &len)", self.irq)
-        self.assertIn("CFifoRelease(fifo, len)", self.irq)
-        self.assertIn("CFifoGetMultiple(fifo, &len)", self.irq)
-        self.assertNotIn("CFifoPutByte(", self.irq)
-        self.assertNotIn("CFifoGetByte(", self.irq)
         self.assertIn("udev->RxDropCnt++", self.irq)
         self.assertIn("udev->RxOvrErrCnt++", self.irq)
         self.assertIn("udev->FramErrCnt++", self.irq)
@@ -74,12 +69,21 @@ class Esp32UartFlowTests(unittest.TestCase):
         self.assertLess(rx.index("p[i] = (uint8_t)ESP32_UART_FIFO_REG(base)"),
                         rx.index("CFifoPutMultiple(udev->hRxFifo, &len)"))
 
-        tx = section(self.irq, "static void Esp32UartTxFill(",
+        # TX fill: queued bytes into the free hardware FIFO slots, true when
+        # the CFIFO is empty
+        tx = section(self.irq, "static bool Esp32UartTxFill(",
                      "static void Esp32UartIRQHandler(")
-        self.assertLess(tx.index("CFifoPeekMultiple(fifo, &len)"),
-                        tx.index("ESP32_UART_FIFO_REG(pDev->Base) = p[i]"))
-        self.assertLess(tx.index("ESP32_UART_FIFO_REG(pDev->Base) = p[i]"),
-                        tx.index("CFifoRelease(fifo, len)"))
+        self.assertLess(tx.index("c = CFifoGetByte(fifo);"),
+                        tx.index("ESP32_UART_FIFO_REG(pDev->Base) = (uint8_t)c;"))
+        self.assertIn("return true;", tx)
+        self.assertIn("return CFifoUsed(fifo) == 0;", tx)
+
+        # The interrupt turns TX empty off once the CFIFO is empty
+        isr = section(self.irq, "if (st & ESP32_UART_INT_TXFIFO_EMPTY)",
+                      "ESP32_UART_INT_CLR_REG(base) = ESP32_UART_INT_TXFIFO_EMPTY;")
+        self.assertLess(isr.index("if (Esp32UartTxFill(pDev))"),
+                        isr.index("ESP32_UART_INT_ENA_REG(base) &= ~ESP32_UART_INT_TXFIFO_EMPTY;"))
+        self.assertIn("udev->bTxReady = true;", isr)
 
     def test_interrupt_latency_threshold_and_init_style(self):
         self.assertIn("(3U << ESP32_UART_CONF1_RXFIFO_FULL_THRHD_Pos)",
@@ -93,25 +97,36 @@ class Esp32UartFlowTests(unittest.TestCase):
         self.assertNotIn("uint32_t conf0 =", init)
         self.assertNotIn("int bn =", init)
 
-    def test_blocking_rx_copies_before_releasing(self):
+    def test_rx_copies_with_interrupts_disabled(self):
         rx = section(self.transfer, "static int Esp32UartRxData(",
-                     "static int Esp32UartTxData(")
-        self.assertLess(rx.index("CFifoPeekMultiple(fifo, &len)"),
-                        rx.index("memcpy(pBuff + cnt, p, len)"))
-        self.assertLess(rx.index("memcpy(pBuff + cnt, p, len)"),
-                        rx.index("CFifoRelease(fifo, len)"))
-        self.assertIn("if (CFifoIsBlocking(fifo))", rx)
-        self.assertIn("CFifoGetMultiple(fifo, &len)", rx)
-        self.assertIn("state = DisableInterrupt();", rx)
+                     "static int Esp32UartPollTx(")
+        self.assertLess(rx.index("state = DisableInterrupt();"),
+                        rx.index("p = CFifoGetMultiple(fifo, &len);"))
+        self.assertLess(rx.index("p = CFifoGetMultiple(fifo, &len);"),
+                        rx.index("memcpy(pBuff + cnt, p, len);"))
+        self.assertLess(rx.index("memcpy(pBuff + cnt, p, len);"),
+                        rx.index("EnableInterrupt(state);"))
 
-    def test_tx_writes_hw_fifo_before_software_queue(self):
+    def test_tx_queues_then_starts_arming_only_for_queued_bytes(self):
+        put = section(self.transfer, "static int Esp32UartTxPut(",
+                      "static int Esp32UartTxData(")
+        self.assertLess(put.index("state = DisableInterrupt();"),
+                        put.index("p = CFifoPutMultiple(udev->hTxFifo, &len);"))
+        self.assertLess(put.index("memcpy(p, pData, len);"),
+                        put.index("EnableInterrupt(state);"))
+        self.assertIn("udev->TxDropCnt += udev->hTxFifo->DropCnt - dropped;", put)
+
         tx = self.transfer[self.transfer.index("static int Esp32UartTxData("):]
-        self.assertLess(tx.index("ESP32_UART_FIFO_REG(dev->Base) = *pData;"),
-                        tx.index("CFifoResvMultiple(fifo, &len)"))
-        self.assertIn("Esp32UartTxFill(dev);", tx)
-        self.assertIn("if (pending || (udev->EvtCallback != nullptr &&", tx)
-        self.assertIn("ESP32_UART_INT_ENA_REG(dev->Base) &=", tx)
-        self.assertNotIn("TxDropCnt +=", tx)
+        self.assertIn("return Esp32UartPollTx(dev, pData, DataLen);", tx)
+        self.assertIn("len = Esp32UartTxPut(dev, pData, DataLen);", tx)
+        # CFIFO first, then start; the TX empty interrupt only for bytes the
+        # hardware FIFO could not take
+        self.assertLess(tx.index("CFifoPutByte(udev->hTxFifo, *pData)"),
+                        tx.index("if (udev->bTxReady && !Esp32UartTxFill(dev))"))
+        self.assertLess(tx.index("if (udev->bTxReady && !Esp32UartTxFill(dev))"),
+                        tx.index("udev->bTxReady = false;"))
+        self.assertLess(tx.index("udev->bTxReady = false;"),
+                        tx.index("ESP32_UART_INT_ENA_REG(dev->Base) |= ESP32_UART_INT_TXFIFO_EMPTY;"))
 
     def test_entire_cpp_uses_tabs_ascii_no_library_prints(self):
         body = self.source.split("----------------------------------------------------------------------------*/", 1)[1]

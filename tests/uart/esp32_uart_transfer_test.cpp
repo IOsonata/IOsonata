@@ -261,6 +261,34 @@ int main()
 
 	Reset(true);
 	s_Uart.EvtCallback = TxCallback;
+	// Room in the hardware FIFO: the byte goes out at once, TX stays ready
+	// and the TX empty interrupt stays off, so a writer slower than the line
+	// takes no interrupt per byte.
+	for (i = 0; i < 300; i++)
+	{
+		assert(Esp32UartTxData(&s_Uart.DevIntrf, data + i, 1) == 1);
+		assert(s_Uart.bTxReady);
+		assert((ESP32_UART_INT_ENA_REG(0) & ESP32_UART_INT_TXFIFO_EMPTY) == 0);
+		assert(CFifoUsed(s_Uart.hTxFifo) == 0);
+		s_TxCount = 0;
+	}
+	assert(s_Tx.size() == 300);
+	assert(std::memcmp(s_Tx.data(), data, 300) == 0);
+	// Hardware FIFO full: the byte stays queued and arms the interrupt,
+	// which sends it and leaves TX ready again.
+	s_TxCount = ESP32_UART_HW_FIFO_LEN;
+	assert(Esp32UartTxData(&s_Uart.DevIntrf, data + 300, 1) == 1);
+	assert(!s_Uart.bTxReady);
+	assert((ESP32_UART_INT_ENA_REG(0) & ESP32_UART_INT_TXFIFO_EMPTY) != 0);
+	assert(s_Tx.size() == 300);
+	Drain();
+	assert(s_Uart.bTxReady);
+	assert((ESP32_UART_INT_ENA_REG(0) & ESP32_UART_INT_TXFIFO_EMPTY) == 0);
+	assert(s_Tx.size() == 301);
+	assert(s_Tx.back() == data[300]);
+
+	Reset(true);
+	s_Uart.EvtCallback = TxCallback;
 	// Match PRBS callback and one-byte writes with the interrupt consumer.
 	for (i = 0; i < sizeof(data); i++)
 	{
