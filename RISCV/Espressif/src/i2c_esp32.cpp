@@ -577,7 +577,8 @@ static void Esp32I2cSlaveDrain(Esp32I2cDev_t *pDev)
 }
 
 // Optional capture follows the master failure trace pattern. Phase 0 is
-// before filling, 1 after filling, and 2 before completing a slave read.
+// before filling, 1 after filling, 2 before completing a slave read,
+// and 3 at a byte/NACK interrupt before clearing its pending status.
 __attribute__((weak)) void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase,
 	int Queued, int Count)
 {
@@ -585,6 +586,12 @@ __attribute__((weak)) void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase,
 	(void)Phase;
 	(void)Queued;
 	(void)Count;
+}
+
+// The diagnostic example opts in. Normal applications keep FIFO interrupts.
+__attribute__((weak)) bool Esp32I2cTraceSlaveBytes()
+{
+	return false;
 }
 
 static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
@@ -638,7 +645,8 @@ static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 		// Discard the rest of this response before another read address can
 		// prefetch it. Resetting at READ_RQST is too late for that first byte.
 		// Leave RX intact: a following command may already be arriving.
-		ESP32_I2C_INT_ENA_REG(pDev->Base) &= ~ESP32_I2C_INT_TXFIFO_WM;
+		ESP32_I2C_INT_ENA_REG(pDev->Base) &= ~(ESP32_I2C_INT_TXFIFO_WM |
+			ESP32_I2C_INT_BYTE_TRANS_DONE | ESP32_I2C_INT_NACK);
 	}
 	pDev->bOpen = false;
 	if (i2c->Cfg.EvtCB)
@@ -672,6 +680,10 @@ static void Esp32I2cSlaveIrq(void)
 	i2c = dev->pOwner;
 	status = ESP32_I2C_INT_STATUS_REG(dev->Base);
 	state = ESP32_I2C_SR_REG(dev->Base);
+	if (status & (ESP32_I2C_INT_BYTE_TRANS_DONE | ESP32_I2C_INT_NACK))
+	{
+		Esp32I2cTraceSlaveTx(dev->Base, 3, dev->SlaveQueued, dev->SlaveCount);
+	}
 	ESP32_I2C_INT_CLR_REG(dev->Base) = status;
 	cause = (state >> ESP32_I2C_SR_STRETCH_CAUSE_Pos) & 3U;
 	readRequest = (status & ESP32_I2C_INT_SLAVE_STRETCH) && cause == 0 &&
@@ -729,6 +741,15 @@ static void Esp32I2cSlaveIrq(void)
 			if (!dev->bRx)
 			{
 				Esp32I2cSlaveFill(dev);
+				if (Esp32I2cTraceSlaveBytes())
+				{
+					// Drop old flags before observing this read. Capture any
+					// address-byte event that arrives after stretch release too.
+					ESP32_I2C_INT_CLR_REG(dev->Base) =
+						ESP32_I2C_INT_BYTE_TRANS_DONE | ESP32_I2C_INT_NACK;
+					ESP32_I2C_INT_ENA_REG(dev->Base) |=
+						ESP32_I2C_INT_BYTE_TRANS_DONE | ESP32_I2C_INT_NACK;
+				}
 				ESP32_I2C_INT_ENA_REG(dev->Base) |= ESP32_I2C_INT_TXFIFO_WM;
 			}
 			else

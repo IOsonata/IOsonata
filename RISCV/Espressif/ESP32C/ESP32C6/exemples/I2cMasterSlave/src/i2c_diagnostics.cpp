@@ -100,11 +100,17 @@ typedef struct {
 	uint32_t State;
 	uint32_t Fifo;
 	uint32_t Raw;
+	uint32_t Pending;
 } I2cSlaveTxTrace_t;
 
-static I2cSlaveTxTrace_t s_SlaveTxTrace[64];
+static I2cSlaveTxTrace_t s_SlaveTxTrace[128];
 static unsigned s_SlaveTxTraceCount;
 static bool s_SlaveTxTraceOverflow;
+
+bool Esp32I2cTraceSlaveBytes()
+{
+	return true;
+}
 
 void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase, int Queued, int Count)
 {
@@ -114,7 +120,7 @@ void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase, int Queued, int Count)
 	{
 		return;
 	}
-	if (s_SlaveTxTraceCount >= 64)
+	if (s_SlaveTxTraceCount >= 128)
 	{
 		s_SlaveTxTraceOverflow = true;
 		return;
@@ -126,6 +132,7 @@ void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase, int Queued, int Count)
 	entry->State = ESP32_I2C_SR_REG(Base);
 	entry->Fifo = ESP32_I2C_FIFO_ST_REG(Base);
 	entry->Raw = ESP32_I2C_INT_RAW_REG(Base);
+	entry->Pending = ESP32_I2C_INT_STATUS_REG(Base);
 	s_SlaveTxTraceCount++;
 }
 
@@ -142,12 +149,14 @@ static void I2cMasterSlavePrintTx()
 	{
 		entry = &s_SlaveTxTrace[i];
 		printf("S%u %s queued=%d count=%d SR=%08lx\r\n", i,
-			entry->Phase == 0 ? "BEFORE" : entry->Phase == 1 ? "FILLED" : "DONE",
+			entry->Phase == 0 ? "BEFORE" : entry->Phase == 1 ? "FILLED" :
+			entry->Phase == 2 ? "DONE" : "IRQ",
 			entry->Queued, entry->Count, (unsigned long)entry->State);
 		fflush(stdout);
 		usDelay(I2C_TEST_TRACE_DELAY_US);
-		printf("S%u FIFO_ST=%08lx RAW=%08lx\r\n", i,
-			(unsigned long)entry->Fifo, (unsigned long)entry->Raw);
+		printf("S%u FIFO_ST=%08lx RAW=%08lx INT=%08lx\r\n", i,
+			(unsigned long)entry->Fifo, (unsigned long)entry->Raw,
+			(unsigned long)entry->Pending);
 		fflush(stdout);
 		usDelay(I2C_TEST_TRACE_DELAY_US);
 	}
