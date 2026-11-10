@@ -87,4 +87,6 @@ void SpiMasterSlaveDiagnostics(void)
 	{
 		printf("  %u   %08lx %08lx\r\n", i, (unsigned long)pads[i], (unsigned long)outputs[i]);
 	}
+	printf("C6 SPI snapshot complete\r\n");
+	fflush(stdout);
 }

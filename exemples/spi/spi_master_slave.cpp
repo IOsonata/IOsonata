@@ -424,6 +424,7 @@ static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 
 int main()
 {
+	static char stdoutBuffer[256];
 	SPICfg_t slaveCfg;
 	SPICfg_t masterCfg;
 	int sm;
@@ -438,6 +439,7 @@ int main()
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
+	setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
 	printf("Init SPI Master/Slave demo\r\n");
 	printf("SPI master %s\r\n", SPI_MASTER_SOFTWARE ? "SPISoft" : "hardware");
 #ifdef SPI_LOOPBACK_WIRING
@@ -489,6 +491,7 @@ int main()
 	}
 	printf("\r\nSPI master/slave loopback %s (%d passed, %d failed, %d skipped)\r\n",
 		(nFail == 0 && nPass > 0) ? "PASS" : "FAIL", nPass, nFail, nSkip);
+	fflush(stdout);
 	while (1)
 		__WFE();
 }
