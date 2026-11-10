@@ -114,7 +114,8 @@ bool SpiMasterSlaveCheckPins(void)
 	unsigned int i;
 	bool pass = true;
 
-	printf("C6 diagnostics: polling UART, GPIO jumper check\r\n");
+	printf("C6 diagnostics: %s UART, GPIO jumper check\r\n",
+		SPI_TEST_UART_INT_ENABLE ? "interrupt" : "polling");
 	for (i = 0; i < 4; i++)
 	{
 		IOPinConfig(0, outputs[i], IOPINOP_GPIO, IOPINDIR_INPUT,

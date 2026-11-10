@@ -25,4 +25,15 @@ non-DMA slave buffer holds at most 64 bytes. The master must allow time
 between frames for the completion interrupt to copy data and rearm.
 
 This tests hardware SPI slave operation; use SpiLoopback separately to test
-the hardware master. Hardware validation is pending.
+the hardware master.
+
+C6 hardware validation passed on 2026-11-10 at `f9389531`, with a polling
+UART console: all four SPI modes, 1/16/64-byte frames, repeated transfers
+and short-frame rearming. The final result was 1 passed, 0 failed, 0 skipped.
+
+The console now uses UART interrupts to check concurrent UART and SPI
+interrupt delivery. This console configuration still needs a board run.
+The startup GPIO jumper check and failure register snapshot remain enabled.
+Expect `C6 diagnostics: interrupt UART, GPIO jumper check`, all four GPIO
+checks passing, and the complete final SPI result. Capture a fresh run from
+reset at 1,000,000 baud; the earlier scrambled console prefix is not yet resolved.
