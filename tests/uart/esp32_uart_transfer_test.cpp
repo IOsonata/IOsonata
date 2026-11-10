@@ -36,14 +36,12 @@ SOFTWARE.
 
 #define __INTERRUPT_H__
 static uintptr_t s_Masked;
-static unsigned s_MaskCount;
 static uintptr_t DisableInterrupt()
 {
 	uintptr_t state;
 
 	state = s_Masked;
 	s_Masked = 1;
-	s_MaskCount++;
 	return state;
 }
 static void EnableInterrupt(uintptr_t State)
@@ -117,12 +115,12 @@ static void Reset(bool Blocking)
 	s_Tx.clear();
 	s_TxCount = 0;
 	s_Masked = 0;
-	s_MaskCount = 0;
 	s_Esp32UartDev[0].pUartDev = &s_Uart;
 	s_Uart.hRxFifo = CFifoInit(rx, sizeof(rx), 1, Blocking);
 	s_Uart.hTxFifo = CFifoInit(tx, sizeof(tx), 1, Blocking);
 	s_Uart.DevIntrf.pDevData = &s_Esp32UartDev[0];
 	s_Uart.DevIntrf.bIntEn = true;
+	s_Uart.DevIntrf.MaxRetry = 1;
 	s_Uart.EvtCallback = nullptr;
 	s_Uart.bTxReady = true;
 	s_Uart.TxDropCnt = 0;
@@ -276,7 +274,7 @@ int main()
 	Drain();
 	assert(s_Tx.size() == sizeof(data));
 	assert(std::memcmp(s_Tx.data(), data, sizeof(data)) == 0);
-	assert(s_MaskCount < 32);
+	assert(s_Masked == 0);
 
 	Reset(true);
 	s_Uart.bTxReady = false;
@@ -285,10 +283,19 @@ int main()
 		assert(Esp32UartTxData(&s_Uart.DevIntrf, data + i, 1) == 1);
 	}
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, 1) == 0);
-	assert(s_MaskCount == 0);
+	assert(s_Masked == 0);
 	assert(s_Tx.empty());
 	Drain();
 	assert(s_Tx.size() == 512);
+
+	Reset(true);
+	s_Uart.DevIntrf.MaxRetry = 2;
+	count = Esp32UartTxData(&s_Uart.DevIntrf, data, sizeof(data));
+	assert(count == 640);
+	Drain();
+	assert(s_Tx.size() == (unsigned)count);
+	assert(std::memcmp(s_Tx.data(), data, count) == 0);
+	assert(s_Uart.TxDropCnt == 0);
 
 	Reset(false);
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, sizeof(data)) == 1000);
