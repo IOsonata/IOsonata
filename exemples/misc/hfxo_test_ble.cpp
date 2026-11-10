@@ -46,6 +46,7 @@ SOFTWARE.
 #if defined(NRFXLIB_SDC)
 #include "nrf_mpsl.h"
 #elif defined(SOFTDEVICE_PRESENT)
+#include "sdk_config.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_soc.h"
 #include "sd_dispatch.h"
