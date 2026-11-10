@@ -120,7 +120,7 @@ BUT2 (P0.13) starts LPCOMP using a GPIOTE event/PPI route.
 BUT1 (P0.02, analog AIN0) crosses the VDD/2 reference: LED0
 indicates READY, LED1 CROSS, LED2 UP and LED3 DOWN.
 
-The PEI host runner includes check_comp_pei_source.py and C/C++
+The PEI test runner includes check_comp_pei_source.py and C/C++
 header compilation. The link-isolation checker also rejects comparator
 PEI code in non-PEI firmware. Hardware behavior and MCU build remain
 pending.

@@ -88,7 +88,7 @@ def main():
                      "PeiDisconnectTask"):
             assert "#pragma weak " + name in source
         assert "goto " not in source
-    print("nRF52 PDM/I2S PEI DMA/IRQ ownership source source checks: PASS")
+    print("nRF52 PDM/I2S PEI DMA/IRQ ownership source checks: PASS")
 
 
 if __name__ == "__main__":

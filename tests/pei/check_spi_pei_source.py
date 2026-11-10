@@ -98,7 +98,7 @@ def main():
     assert "NRF_SPIM" not in APP
     assert "NRF_SPIS" not in APP
     assert "printf(" not in APP
-    print("nRF52 SPI/SPIM/SPIS PEI source source checks: PASS")
+    print("nRF52 SPI/SPIM/SPIS PEI source checks: PASS")
 
 
 if __name__ == "__main__":

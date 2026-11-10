@@ -38,7 +38,7 @@ def main():
     assert "NRF_PPI" not in DEMO
     assert "PeiNrf52PowerEndpoint" not in PPI
     assert "PeiNrf52ClockEndpoint" not in PPI
-    print("nRF52 PPI group automation source source checks: PASS")
+    print("nRF52 PPI group automation source checks: PASS")
 
 if __name__ == "__main__":
     main()

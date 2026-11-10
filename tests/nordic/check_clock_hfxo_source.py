@@ -36,7 +36,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("else if (success)", source)
         self.assertNotIn("std::atomic", source)
 
-    def test_release_uses_original_backend(self):
+    def test_release_uses_original_clock_owner(self):
         source = function(self.clock, "static bool nRFxHfxoStop(",
                           "bool SystemCoreClockSelect(")
         self.assertIn("nRFxMpslHfxo(false) == 0", source)
@@ -48,7 +48,7 @@ class HfxoSourceChecks(unittest.TestCase):
                         guarded.index("NRFX_HFXO_STOP = 1U"))
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
-    def test_failed_start_releases_backend(self):
+    def test_failed_start_releases_clock_request(self):
         source = function(self.clock, "static bool nRFxHfxoStart(",
                           "// Release only through the backend")
         self.assertIn("sd_clock_hfclk_request()", source)

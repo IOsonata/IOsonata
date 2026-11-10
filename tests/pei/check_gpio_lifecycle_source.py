@@ -60,7 +60,7 @@ def main():
         "goto " not in DEMO,
     ]
     assert all(checks), [i for i, ok in enumerate(checks) if not ok]
-    print("GPIOTE/PEI resource ownership and stress source source check: PASS")
+    print("GPIOTE/PEI resource ownership and stress source check: PASS")
 
 
 if __name__ == "__main__":

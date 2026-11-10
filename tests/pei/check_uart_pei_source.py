@@ -94,7 +94,7 @@ def main():
     assert 'extern "C"' not in DEMO
     assert "NRF_UARTE" not in DEMO
     assert "printf(" not in DEMO
-    print("nRF52 UART/UARTE PEI source source checks: PASS")
+    print("nRF52 UART/UARTE PEI source checks: PASS")
 
 
 if __name__ == "__main__":
