@@ -153,6 +153,15 @@ int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr,
 	return count;
 }
 
+static int TxCallback(UARTDev_t *pDev, UART_EVT Event, uint8_t *pData, int Len)
+{
+	(void)pDev;
+	(void)Event;
+	(void)pData;
+	(void)Len;
+	return 0;
+}
+
 int main()
 {
 	uint8_t data[1000];
@@ -212,8 +221,6 @@ int main()
 	// An active transmitter still receives data through the software FIFO.
 	s_Uart.bTxReady = false;
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, 16) == 16);
-	assert(s_Tx.empty());
-	Drain();
 	assert(s_Tx.size() == 16);
 
 	Reset(true);
@@ -248,6 +255,19 @@ int main()
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data + 512, 1) == 1);
 	assert(s_Tx.size() == 513);
 	assert(s_Tx.back() == data[512]);
+
+	Reset(true);
+	s_Uart.EvtCallback = TxCallback;
+	// PRBS uses a callback. Foreground refill must still make progress
+	// when the interrupt has not yet serviced the available FIFO space.
+	for (i = 0; i < sizeof(data); i++)
+	{
+		s_TxCount = 0;
+		assert(Esp32UartTxData(&s_Uart.DevIntrf, data + i, 1) == 1);
+		assert(CFifoUsed(s_Uart.hTxFifo) == 0);
+	}
+	assert(s_Tx.size() == sizeof(data));
+	assert(std::memcmp(s_Tx.data(), data, sizeof(data)) == 0);
 
 	Reset(false);
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, sizeof(data)) == 1000);
