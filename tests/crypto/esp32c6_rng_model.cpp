@@ -55,6 +55,7 @@ static bool s_Nested;
 static bool s_RestoreFail;
 static bool s_BadPowerSequence;
 static unsigned s_PowerUps;
+static unsigned s_PmuCode;
 static uint32_t s_Data = 0xA5C39D71U;
 
 EspRngModelReg &EspRngModelRegister(uintptr_t Addr)
@@ -99,6 +100,8 @@ EspRngModelReg::operator uint32_t() const
 EspRngModelReg &EspRngModelReg::operator=(uint32_t Value)
 {
 	uint8_t reg;
+	uint32_t clockMap;
+	bool clocked;
 
 	s_Writes++;
 	if (Addr == RNG_ANALOG_POWER && (s_Values[Addr] & (1U << 27)) == 0U &&
@@ -110,7 +113,17 @@ EspRngModelReg &EspRngModelReg::operator=(uint32_t Value)
 	}
 	if (Addr == RNG_ANALOG_CTRL0 || Addr == RNG_ANALOG_CTRL0 + 4U)
 	{
-		assert((s_Values[RNG_ANALOG_CLOCK] & 4U) != 0U);
+		clockMap = s_Values[RNG_ANALOG_CLOCK_MAP];
+		clocked = (clockMap & (1U << (24U + s_PmuCode))) != 0U &&
+			(clockMap & (1U << (28U + s_PmuCode))) != 0U &&
+			(s_Values[RNG_ANALOG_CLOCK] & 4U) != 0U;
+		if (!clocked)
+		{
+			// The command register can be written with its domain gated,
+			// but no analog transaction updates the read-data byte.
+			s_Values[Addr] = Value & 0xFF00FFFFU;
+			return *this;
+		}
 		assert((s_Values[RNG_ANALOG_POWER] & RNG_ANALOG_POWER_MASK) == RNG_ANALOG_POWER_MASK);
 		assert(s_Values[RNG_ANALOG_READ] == 0xFFFDFFU);
 		assert((Value & 255U) == 0x69U);
@@ -169,6 +182,9 @@ int main(int argc, char **argv)
 	s_Values[RNG_ADC_CLKM] = 0x400004U;
 	s_Values[RNG_ANALOG_POWER] = strcmp(argv[1], "powered") == 0 ? 0x08001234U : 0x04001234U;
 	s_Values[RNG_ANALOG_CLOCK] = 0x81U;
+	s_Values[RNG_ANALOG_CLOCK_MAP] = 0x005A1234U;
+	s_PmuCode = strcmp(argv[1], "pmu1") == 0 ? 1U :
+		(strcmp(argv[1], "pmu2") == 0 ? 2U : (strcmp(argv[1], "pmu3") == 0 ? 3U : 0U));
 	s_Values[RNG_CLOCK] = 0xEE000000U;
 	s_Values[RNG_ANALOG_READ] = 0x2DU;
 	s_Values[RNG_ANALOG_SELECT] = strcmp(argv[1], "master0") == 0 ? 1U << 11 : 0U;

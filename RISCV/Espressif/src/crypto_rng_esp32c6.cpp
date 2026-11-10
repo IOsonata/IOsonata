@@ -66,6 +66,8 @@ SOFTWARE.
 #define RNG_ADC_CLKM		(ESP32_PCR_BASE + 0x84U)
 #define RNG_ANALOG_POWER		(ESP32_PMU_BASE + 0x154U)
 #define RNG_ANALOG_CLOCK		0x600AF018U
+#define RNG_ANALOG_CLOCK_MAP		0x600AF020U
+#define RNG_ANALOG_CLOCK_MAP_MASK	0xFF000000U
 #define RNG_ANALOG_CTRL0		0x600AF800U
 #define RNG_ANALOG_READ		0x600AF81CU
 #define RNG_ANALOG_SELECT		0x600AF820U
@@ -106,6 +108,7 @@ typedef struct {
 	uint32_t Clkm;
 	uint32_t Power;
 	uint32_t AnalogClock;
+	uint32_t AnalogClockMap;
 	uint32_t RngClock;
 	uint8_t Analog[5];
 	unsigned ChangedAnalog;
@@ -192,6 +195,7 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 	pSaved->Clkm = ESP32_RNG_REG(RNG_ADC_CLKM);
 	pSaved->Power = ESP32_RNG_REG(RNG_ANALOG_POWER);
 	pSaved->AnalogClock = ESP32_RNG_REG(RNG_ANALOG_CLOCK);
+	pSaved->AnalogClockMap = ESP32_RNG_REG(RNG_ANALOG_CLOCK_MAP);
 	pSaved->RngClock = ESP32_RNG_REG(RNG_CLOCK);
 
 	EspC6RngModify(RNG_ADC_CLOCK, 0xEU, 4U);
@@ -204,6 +208,11 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 		EspC6RngModify(RNG_ANALOG_POWER, 1U << 27, 1U << 27);
 	}
 	EspC6RngModify(RNG_ANALOG_POWER, 1U << 26, 1U << 26);
+	// ESP-IDF configures these domain maps during rtc_clk_init(). Bare-metal
+	// startup does not. Permit I2C master and LP APB clocks for each PMU code
+	// while drawing, without changing the PMU code or other modem domains.
+	EspC6RngModify(RNG_ANALOG_CLOCK_MAP, RNG_ANALOG_CLOCK_MAP_MASK,
+		RNG_ANALOG_CLOCK_MAP_MASK);
 	EspC6RngModify(RNG_ANALOG_CLOCK, 4U, 4U);
 	EspC6RngModify(RNG_CLOCK, 1U << 24, 1U << 24);
 	for (i = 0U; i < sizeof(s_AnalogRegisters); i++)
@@ -279,6 +288,7 @@ static bool EspC6RngStop(EspC6RngState_t *pSaved)
 	EspC6RngModify(RNG_ADC_CLOCK, 0xEU, pSaved->Clock);
 	EspC6RngModify(RNG_ANALOG_POWER, RNG_ANALOG_POWER_MASK, pSaved->Power);
 	EspC6RngModify(RNG_ANALOG_CLOCK, 4U, pSaved->AnalogClock);
+	EspC6RngModify(RNG_ANALOG_CLOCK_MAP, RNG_ANALOG_CLOCK_MAP_MASK, pSaved->AnalogClockMap);
 	EspC6RngModify(RNG_CLOCK, 1U << 24, pSaved->RngClock);
 	return ok;
 }

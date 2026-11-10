@@ -31,7 +31,12 @@ The first C6 hardware RNG run completed with 55 passed, 8 failed, 1 skipped:
 all random draws failed, while AES, SHA and HMAC continued to pass. The RNG
 startup now holds the SAR analog block in reset before powering it, then
 releases reset, matching Espressif's PMU sequence. The register model covers
-both initially powered and unpowered analog blocks. Board retest is pending.
+both initially powered and unpowered analog blocks. The board retest still
+failed: error 4, detail zero identified analog register 0 reading zero after
+writing 0x66. The driver now also enables the I2C master and LP APB power-state
+clock maps during draws, then restores them. ESP-IDF initializes those maps in
+`rtc_clk_init()`; IOsonata startup does not. The model checks all four PMU codes
+with initially gated domains. Board retest of this change is pending.
 CryptoTest reports failed draws as unavailable, rather than calling them a
 software PRNG. On C6, the first draw failure also prints the retained RNG error
 and detail: 1 ADC in use, 2 analog bus timeout, 3 analog selection in use,
