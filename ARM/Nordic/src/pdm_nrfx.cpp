@@ -433,7 +433,7 @@ bool PdmDisablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-bool PdmConnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+bool PdmConnectTask(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PDM_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;
@@ -451,7 +451,7 @@ bool PdmConnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-bool PdmDisconnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+bool PdmDisconnectTask(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PDM_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;

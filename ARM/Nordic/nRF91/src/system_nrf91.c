@@ -30,6 +30,8 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf91.h"
 #include "nrf91_erratas.h"
 #include "system_nrf91_approtect.h"
+
+#include "coredev/system_core_clock.h"
 /*lint ++flb "Enter library region" */
 
 void SystemStoreFICRNS(void);
@@ -55,6 +57,13 @@ void SystemLockFICRNS(void);
 #elif defined ( __GNUC__ )
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_DEFAULT;
 #endif
+
+// Overload this variable in application firmware to change oscillator
+__WEAK McuOsc_t g_McuOsc = {
+	.CoreOsc = { OSC_TYPE_XTAL, 32000000, 20, 0 },
+	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 0 },
+	.bUSBClk = false
+};
 
 /* Errata are only handled in secure mode since they usually need access to FICR. */
 #if !defined(NRF_TRUSTZONE_NONSECURE)

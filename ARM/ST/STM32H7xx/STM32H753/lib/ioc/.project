@@ -1971,6 +1971,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_stm32.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/system_power_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_power_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/ba414ep.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/ba414ep.cpp</locationURI>

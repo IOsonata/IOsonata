@@ -7,7 +7,7 @@ mere possession of EVENTS/TASKS registers is **not** sufficient
 justification for a PEI integration. A supported route must eliminate
 repetitive MCU intervention after initial configuration; one-shot
 operations without a recurring hardware benefit stay in the normal
-driver. The nRF52 PEI backend owns PPI routing; *peripheral drivers*
+driver. The nRF52 PEI implementation owns PPI routing; *peripheral drivers*
 must own endpoint configuration, lifetime, resource checks and
 task readiness. No ISR may forward a PEI event in software.
 
@@ -55,7 +55,7 @@ Status keys:
 | SAADC / `adc_nrf52_saadc.cpp` | STARTED, END, DONE, RESULTDONE, STOPPED implemented; CALIBRATEDONE and limit events pending (limits reach the application through the driver callback) | START, SAMPLE, STOP implemented; CALIBRATEOFFSET pending | **Initial endpoint added**: single-conversion/no-IRQ driver-owned EasyDMA preparation, nRF52832 erratum 150 guard, C/C++ PEI routing; continuous mode with double-buffered blocks accepts SAMPLE only; PeiSaadcDemo TIMER->SAMPLE / END->START and PeiAdcDemo TIMER->SAMPLE hardware checks pending |
 | COMP / LPCOMP / `analog_comp_nrf5x.cpp` | READY, DOWN, UP, CROSS implemented for nRF52 | START, STOP, SAMPLE (single mode only) implemented | **Initial endpoint added:** common C/C++ HAL, owner/enable checks and no-IRQ PEI routing; PeiCompDemo hardware validation pending |
 | PWM / `pwm_nrfx.cpp` | SEQSTARTED[0/1], SEQEND[0/1], LOOPSDONE, PWMPERIODEND, STOPPED implemented | SEQSTART[0/1], STOP implemented; NEXTSTEP conditional on decoder mode | **PeiPwmDemo functional hardware PASS on nRF52832** (maintainer report, Nov 8, 2026): BUT1/BUT2 PWM start/stop and event indication; driver-owned static EasyDMA sequences, channel/ENABLE checks and C/C++ APIs. Additional PWM events, NEXTSTEP and lifecycle stress pending |
-| PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED implemented on nRF52 | START, STOP after FIFO/DMA preparation | **Initial PEI integration:** C/C++ APIs; PdmPreparePeiStart reserves the first driver-owned FIFO block and configures SAMPLE.PTR/MAXCNT; mandatory STARTED IRQ buffer refill; source/API regressions added. No device hardware test. |
+| PDM / `pdm_nrfx.cpp` | STARTED, END, STOPPED implemented on nRF52 | START, STOP after FIFO/DMA preparation | **Initial PEI integration:** C/C++ APIs; PdmPreparePeiStart reserves the first driver-owned FIFO block and configures SAMPLE.PTR/MAXCNT; mandatory STARTED IRQ buffer refill; source and API checks added. No device hardware test. |
 | I2S / `i2s_nrfx.cpp` | RXPTRUPD (RX configured), TXPTRUPD (TX configured), STOPPED implemented on nRF52 | START, STOP with initialized and armed driver-owned DMA | **Initial PEI integration:** C/C++ APIs; I2SPreparePeiStart re-arms existing RX/TX buffers without START after I2SDisable; IRQ pointer service required. Source/API regressions added. No device hardware test. |
 | SPI / SPIM / SPIS / `spi_nrfx.cpp` | SPI READY; SPIM STARTED/ENDRX/ENDTX/END/STOPPED; SPIS ENDRX/END/ACQUIRED | SPIM START/STOP/SUSPEND/RESUME only after driver-prepared EasyDMA; legacy SPI no tasks; SPIS ACQUIRE/RELEASE still IRQ-owned | **Initial endpoint added**: mode-specific C/C++ PEI APIs, single-block SPIM DMA preparation and release, PeiSpiDemo and static tests; MCU/hardware validation pending |
 | TWI / TWIM / TWIS / `i2c_nrfx.cpp` | TWI STOPPED/ERROR/SUSPENDED/RXDREADY/TXDSENT/BB; TWIM STOPPED/ERROR/SUSPENDED/RXSTARTED/TXSTARTED/LASTRX/LASTTX; TWIS STOPPED/ERROR/RXSTARTED/TXSTARTED/WRITE/READ | TWIM STARTRX/STARTTX/STOP/SUSPEND/RESUME with driver-owned prepared single-block EasyDMA. Legacy TWI/TWIS tasks remain ISR-owned | **Initial endpoint added:** C/C++ PEI API, generic I2C busy-lock ownership, no-PEI link regressions and PeiTwiDemo (NACK->ERROR->STOP); MCU compilation and hardware validation pending |
@@ -134,7 +134,7 @@ Hardware test: the nRF52832 `PeiBlinky` board now selects `DevNo = 6`
 (TIMER3 at 16 MHz with `Freq = 0`) by default. Build and flash the
 standalone bare-metal example with the same two LEDs and BUT1/BUT2.
 Confirm start/stop and 500 ms alternating LEDs, then test release/reuse
-and inspect ISR entries. This tests the HF TIMER backend, **not RTC**;
+and inspect ISR entries. This tests the HF TIMER driver, **not RTC**;
 a separate RTC2 (`DevNo = 2`) configuration is required to validate the
 low-frequency RTC PEI path.
 
@@ -261,7 +261,7 @@ The standalone nRF52832 PeiPwmDemo maps BUT1 to PWM0.SEQSTART0 and
 BUT2 to PWM0.STOP, both through hardware PPI. PWM channel 0 drives
 RGB red, while PWM SEQSTARTED0 and STOPPED toggle the physically
 separate LED1 and RGB blue, respectively. C/C++ compile checks and
-source contract tests are added. The maintainer confirmed that
+source checks are added. The maintainer confirmed that
 PeiPwmDemo works on nRF52832 BLYST-NANO-DK (Nov 8, 2026), validating
 the demonstrated start/stop routing and indication behavior. This does
 not individually verify every supported event or task. Further lifecycle
@@ -299,12 +299,12 @@ register; I2S remains responsible for pointer updates.
 
 Neither driver introduces software interrupt event-forwarding. Routing
 functions use weak references to the optional PEI matrix, so a
-PDM/I2S-only firmware should not retain the PPI backend. Only the
+PDM/I2S-only firmware should not retain the PPI implementation. Only the
 nRF52 legacy PPI endpoints are exposed; nRF53/nRF54 use other
-interconnect backends and are not covered by these APIs yet.
+interconnect implementations and are not covered by these APIs yet.
 
 The hardware-free tests check the C and C++ public declarations,
-register endpoint mapping, essential buffer/IRQ preparation contracts
+register endpoint mapping, essential buffer and IRQ preparation checks
 and non-PEI linker-section isolation. They are not a substitute for
 compiling against all supported installed Nordic CMSIS headers or a
 live microphone/I2S controller. These features remain **implemented

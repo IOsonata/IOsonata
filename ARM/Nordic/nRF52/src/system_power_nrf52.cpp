@@ -3,10 +3,11 @@
 
 @brief	Power functions of system_core_clock.h on the nRF52
 
-Power off is System OFF. RESETREAS keeps adding reasons until it is cleared,
-an empty value is a power on or brown out reset. The retention registers are
-GPREGRET and GPREGRET2, 8 bits each. The DC/DC regulator is set by SystemInit
-from g_McuOsc.
+Power off is System OFF. SystemWakePin sets the SENSE level of a pin, GPIO
+DETECT wakes the MCU on that level. RESETREAS keeps adding reasons until it
+is cleared, an empty value is a power on or brown out reset. The retention
+registers are GPREGRET and GPREGRET2, 8 bits each. The DC/DC regulator is
+set by SystemInit from g_McuOsc.
 
 RAM is in blocks RAM[n] of sections: RAM0 to RAM7 have two 4 KB sections
 each (the first 64 KB), RAM8 of the nRF52833/840 has 32 KB sections. The
@@ -59,6 +60,7 @@ SOFTWARE.
 #endif
 
 #include "coredev/system_core_clock.h"
+#include "iopinctrl.h"
 
 #define SYS_PWR_NRF52_NB_RETREG		2
 #define SYS_PWR_NRF52_RETREG_MSK	0xFFUL
@@ -198,6 +200,24 @@ void SystemPowerOff(void)
 	{
 		__WFE();
 	}
+}
+
+bool SystemWakePin(int PortNo, int PinNo, int Sense)
+{
+	if (PinNo < 0 || PinNo >= 32 || nRFGpioGetReg(PortNo) == NULL)
+	{
+		return false;
+	}
+	if (Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_LOW_TRANSITION &&
+		Sense != IOPINSENSE_HIGH_TRANSITION)
+	{
+		return false;
+	}
+
+	// SENSE of the pin, its DETECT signal wakes the MCU from System OFF
+	IOPinSetSense(PortNo, PinNo, (IOPINSENSE)Sense);
+
+	return true;
 }
 
 int SystemRetRegCount(void)

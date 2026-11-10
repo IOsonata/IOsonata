@@ -82,6 +82,11 @@ typedef enum __Timer_Trigger_Type {
 
 // Hardware timer tasks. Timer owns the task endpoint; PEI connects events
 // to that endpoint without changing timer configuration.
+// TIMER_TASK_CLEAR from the CPU (ExecuteTask) is a Reset: the tick count
+// restarts and the triggers restart their period. Once its endpoint is
+// given out, a hardware event can clear the counter: the tick count then
+// restarts from each clear, a counter lower than the last read being taken
+// as a clear, not as a wrap.
 typedef enum __Timer_Hardware_Task {
 	TIMER_TASK_START,
 	TIMER_TASK_STOP,
@@ -218,7 +223,8 @@ struct __Timer_Device {
 	 *
 	 * @param   TrigNo : Trigger number to enable. Index value starting at 0
 	 * @param   nsPeriod : Trigger period in nsec.
-	 * @param   Type     : Trigger type single shot or continuous
+	 * @param   Type     : Trigger type single shot or continuous. A single
+	 * 					   shot trigger is free again once it fired.
 	 * @param	Handler	 : Optional Timer trigger user callback
 	 * @param   pContext : Optional pointer to user private data to be passed
 	 *                     to the callback. This could be a class or structure pointer.

@@ -112,13 +112,13 @@ struct __Analog_Comp_Dev {
 extern "C" {
 #endif
 
-bool AnalogCompPeiBindEvent(AnalogCompDev_t *pDev, PeiDev_t *pPei,
+bool AnalogCompEnablePeiEvent(AnalogCompDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, ANALOG_COMP_PEI_EVENT Event);
-bool AnalogCompPeiUnbindEvent(AnalogCompDev_t *pDev, PeiDev_t *pPei,
+bool AnalogCompDisablePeiEvent(AnalogCompDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt);
-bool AnalogCompPeiConnectTask(AnalogCompDev_t *pDev, PeiDev_t *pPei,
+bool AnalogCompConnectTask(AnalogCompDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, ANALOG_COMP_PEI_TASK Task);
-bool AnalogCompPeiDisconnectTask(AnalogCompDev_t *pDev, PeiDev_t *pPei,
+bool AnalogCompDisconnectTask(AnalogCompDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, ANALOG_COMP_PEI_TASK Task);
 
 #ifdef __cplusplus
@@ -142,24 +142,24 @@ public:
 	bool EnablePeiEvent(Pei &PeiDev, PeiEvent_t &Evt,
 		ANALOG_COMP_PEI_EVENT Event)
 	{
-		return AnalogCompPeiBindEvent(&vDevData, PeiDev, &Evt, Event);
+		return AnalogCompEnablePeiEvent(&vDevData, PeiDev, &Evt, Event);
 	}
 
 	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
 	{
-		return AnalogCompPeiUnbindEvent(&vDevData, PeiDev, Evt);
+		return AnalogCompDisablePeiEvent(&vDevData, PeiDev, Evt);
 	}
 
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt,
 		ANALOG_COMP_PEI_TASK Task)
 	{
-		return AnalogCompPeiConnectTask(&vDevData, PeiDev, Evt, Task);
+		return AnalogCompConnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt,
 		ANALOG_COMP_PEI_TASK Task)
 	{
-		return AnalogCompPeiDisconnectTask(&vDevData, PeiDev, Evt, Task);
+		return AnalogCompDisconnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 protected:

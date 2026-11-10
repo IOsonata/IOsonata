@@ -33,9 +33,18 @@ def check(path, function, ending):
                   ("TimerIRQHandler" if "timer_hf_" in path else "RtcIRQHandler") +
                   "(", "extern \"C\"")
     assert "TIMER_TRIG_PEI_CONTINUOUS" in irq, path
-    assert "reg->CC[i] = " in irq, path
     assert "TASKS_STOP =" not in irq, path
     assert "TASKS_CLEAR =" not in irq, path
+    if "nRFxTimerNextCompare(" in irq:
+        # The TIMER handler reschedules a continuous compare through
+        # nRFxTimerNextCompare, which writes the CC
+        nxt = section(src, "static inline __attribute__((always_inline)) bool "
+                      "nRFxTimerNextCompare(", "\n}\n")
+        assert "reg->CC[TrigNo] = " in nxt, path
+        assert "TASKS_STOP =" not in nxt, path
+        assert "TASKS_CLEAR =" not in nxt, path
+    else:
+        assert "reg->CC[i] = " in irq, path
 
     if "timer_lf_" in path:
         assert "nRFxRtcIsPeiTrigger" not in src, path

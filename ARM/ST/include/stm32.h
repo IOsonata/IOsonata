@@ -104,6 +104,18 @@ SOFTWARE.
 #define IOSONATA_STM32_HAS_RNG		0
 #endif
 
+// Backup registers of the RTC or TAMP, kept over a system reset, Standby and
+// Shutdown, cleared by a backup domain reset
+#if defined(TAMP_BKP31R) || defined(RTC_BKP31R)
+#define IOSONATA_STM32_NB_BKP		32
+#elif defined(RTC_BKP19R)
+#define IOSONATA_STM32_NB_BKP		20
+#elif defined(RTC_BKP4R)
+#define IOSONATA_STM32_NB_BKP		5
+#else
+#define IOSONATA_STM32_NB_BKP		0
+#endif
+
 #endif // __IOSONATA_STM32_H__
 
 

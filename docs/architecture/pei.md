@@ -22,7 +22,7 @@ software forwarding callback.
 `Pei` is a thin C++ wrapper around the same C device and operations.
 Neither application language has privileged access to PEI functionality.
 One event can activate multiple tasks; fan-in is allowed when the
-hardware backend supports it without introducing unintended connections.
+MCU interconnect supports it without introducing unintended connections.
 
 A C application uses caller-owned device storage:
 
@@ -62,7 +62,7 @@ descriptor, peripheral clock, interrupt handler or peripheral state.
 - `BindEvent(evt, endpoint)` assigns an event source, allocating a
   persistent `PeiEvent_t` identity when `evt == 0`.
 - `Connect(evt, task)` adds one logical relationship. A repeated pair is
-  idempotent; a backend may reject unsupported fan-in or other topology.
+  idempotent; the MCU implementation may reject unsupported fan-in or other topology.
 - `Enable(evt)`/`Disable(evt)` change the event's routing state, not
   the peripheral's event generation or interrupt settings.
 - `Disconnect(evt, task)` removes one relationship without affecting
@@ -82,7 +82,7 @@ to one matrix. Live `PeiDev_t` instances must not be copied or moved.
 `PeiReleaseEvent` are the public C matrix operations. The older
 `PeiConnect`, `PeiEnable`, `PeiDisable` and `PeiDisconnect`
 still operate on one low-level `PeiConn_t` routing resource and are
-used internally by the C matrix and the MCU backend. Physical channel
+used internally by the C matrix and the MCU routing implementation. Physical channel
 numbers are never part of either application interface.
 
 `PeiEndpoint_t` is the MCU-specific hardware endpoint identifier:
@@ -173,8 +173,8 @@ functions undefined; the weak references in `src/coredev/pei.c` then make
 
 ## Status
 
-The matrix-owning C++ interface and nRF52 PPI/nRF5340 DPPI low-level backends are committed.
-Host-model tests exercise lifecycle and routing for both backends.
+The matrix-owning C++ interface and nRF52 PPI and nRF5340 DPPI implementations are committed.
+Host-model tests exercise lifecycle and routing for both implementations.
 On November 7, 2026, the nRF52832 HAL and the refactored
 `PeiBlinky` C++ example were reported compiled successfully on
 BLYST-NANO-DK. The LED was observed flashing at approximately 1 Hz,
@@ -192,7 +192,7 @@ MDK and nRF5340 on-board tests remain pending.
 The standard nRF52 GPIO and Timer HAL must not pull `pei.o` or
 `pei_nrf52.o` into a firmware that does not use PEI. The previous
 TimerDemo map showed `iopincfg_nrfx.o` extracting the PEI matrix via
-`PeiGetEventEndpoint`, then that matrix extracting the PPI backend.
+`PeiGetEventEndpoint`, then that matrix extracting the nRF52 PPI implementation.
 
 GPIO PEI entry points remain implemented directly in
 `iopincfg_nrfx.c`, but their matrix references are weak. They check
@@ -242,7 +242,7 @@ the shared counter or other CC channels. Disable/re-enable of the PEI
 route does not reset the counter or interrupt-driven CC schedule.
 These changes require a fresh MCU build and hardware revalidation. The
 BLYST-NANO-DK PeiBlinky now selects `DevNo = 6` (TIMER3 at 16 MHz,
-with `Freq = 0`) for the standalone PEI test. The RTC backend remains
+with `Freq = 0`) for the standalone PEI test. The RTC PEI implementation remains
 unvalidated. The TIMER3 selection also requires a fresh MCU build and
 hardware test; Bluetooth coexistence needs separate resource checks.
 
@@ -591,7 +591,7 @@ application and network cores. `DevNo` and `Options` must be zero.
 
 On nRF53, a peripheral event's `PUBLISH_*` register and a peripheral task's
 `SUBSCRIBE_*` register are each at offset +0x80 from the event/task
-register. This backend accepts event offsets 0x100..0x17C and task offsets
+register. The DPPI implementation accepts event offsets 0x100..0x17C and task offsets
 0x000..0x07C within the local peripheral address space. The caller must
 supply actual implemented event/task registers; checking the address range
 alone cannot establish whether an endpoint exists.
@@ -599,7 +599,7 @@ alone cannot establish whether an endpoint exists.
 DPPI supports a single publisher to multiple subscribers on one channel.
 Connections sharing one event share the physical channel, while retaining
 independent enable/disable state. Disabling one subscriber does not interrupt
-other subscribers. A task has only one subscription register: this backend
+other subscribers. A task has only one subscription register: the DPPI implementation
 rejects attempting to connect two distinct events to the same task.
 
 Each core has 32 channels; the driver supports up to 32 simultaneous logical
@@ -624,7 +624,7 @@ standard Debug and Release library configurations are built for S132.
 To avoid a SoftDevice SVC fault, its Eclipse managed project compiles the
 production `ARM/Nordic/nRF52/src/pei_nrf52.cpp` as an application source,
 without `SOFTDEVICE_PRESENT`. The linked HAL archive continues to provide
-other drivers. This does not change the SoftDevice-aware PEI backend used
+other drivers. This does not change the SoftDevice-aware nRF52 PPI implementation used
 by Bluetooth applications and is not a general runtime detection solution.
 
 ### Hardware start/stop through button events
@@ -664,7 +664,7 @@ The shared `exemples/pei/pei_blinky.cpp` contains no MCU register
 access or platform adapter. It uses the existing Timer object and the
 new `Timer::EnableTimerTrigger(Pei&, PeiEvent_t&, ...)` overload to
 configure a compare source and bind it in PEI. The GPIO
-`IOPinEnableTask` wrapper configures a task using its GPIO backend
+`IOPinEnableTask` wrapper configures a task using the GPIO driver
 and registers the endpoint relationship in PEI.
 
 On nRF52, every CC compares against the free-running Timer counter.

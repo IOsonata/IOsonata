@@ -743,7 +743,7 @@ bool PWMDisablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-bool PWMConnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+bool PWMConnectTask(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PWM_PEI_TASK Task)
 {
 	nRFPwmDev_t *dev;
@@ -770,7 +770,7 @@ bool PWMConnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-bool PWMDisconnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+bool PWMDisconnectTask(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PWM_PEI_TASK Task)
 {
 	nRFPwmDev_t *dev;
