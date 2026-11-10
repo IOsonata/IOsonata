@@ -241,17 +241,11 @@ int main(int argc, char **argv)
 			assert(out[i] == 0U);
 		}
 		assert(!Esp32C6RngSecureAvailable());
-		assert(g_Esp32C6RngError != 0U);
 		assert(Esp32C6RngFill(out + 1, 64U) == CRYPTO_STATUS_FAIL);
 		if (s_StallBus || s_StallAfterCommand)
 		{
-			assert(g_Esp32C6RngError == 2U);
-			assert(g_Esp32C6RngTransaction[0] == (s_StallBus ? 1U : 2U));
-			assert(g_Esp32C6RngTransaction[1] == RNG_ANALOG_CTRL0 + 4U);
-			assert(g_Esp32C6RngTransaction[2] == 0x69U);
-			assert(g_Esp32C6RngTransaction[3] == 1U);
-			assert((g_Esp32C6RngTrace[2][1] & RNG_ANALOG_BUSY) != 0U);
-			assert(g_Esp32C6RngTrace[2][9] == 0xFF5A1234U);
+			assert(s_CommandIssued == s_StallAfterCommand);
+			assert(s_Reads == 0U);
 			assert(s_Values[RNG_ANALOG_CLOCK_MAP] == saved[RNG_ANALOG_CLOCK_MAP]);
 		}
 	}
@@ -260,7 +254,6 @@ int main(int argc, char **argv)
 		assert(s_Reads == 64U);
 		assert(!s_BadPowerSequence);
 		assert(s_PowerUps == (strcmp(argv[1], "powered") == 0 ? 0U : 1U));
-		assert(g_Esp32C6RngError == 0U);
 		memcpy(previous, out + 1, sizeof(previous));
 		assert(Esp32C6RngFill(out + 1, 17U) == CRYPTO_STATUS_OK);
 		assert(memcmp(previous, out + 1, 17U) != 0);

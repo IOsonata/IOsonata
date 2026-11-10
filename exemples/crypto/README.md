@@ -22,51 +22,30 @@ Debug and Release route stdout to UART at 1,000,000 baud, 8N1. C3 uses
 TX GPIO21/RX GPIO20; C6 uses TX GPIO16/RX GPIO17. Other targets retain
 their existing Debug console selection.
 
-C6 DevKit Release hardware run, 2026-11-10: 59 passed, 0 failed, 1 skipped.
-All 200 randomized AES comparison rounds completed after correcting the
-Super Watchdog unlock key in shared C5/C6/C61 startup. That run used the
-software PRNG and skipped secure-entropy-dependent tests.
+C6 DevKit Release hardware run with commit `35be114b`, 2026-11-10:
+**101 passed, 0 failed, 0 skipped**. Hardware random draws, SHA-256/HMAC,
+AES known answers and 200 randomized AES comparisons passed. Key generation,
+ECDH, ECDSA and eight randomized P-256 comparison rounds also passed. Every
+RNG benchmark completed 64 of 64 draws. P-256 uses the software implementation.
+The temporary RNG register traces have been removed after this validation;
+the cleanup has build and host-model coverage and awaits a board smoke test.
 
-The first C6 hardware RNG run completed with 55 passed, 8 failed, 1 skipped:
-all random draws failed, while AES, SHA and HMAC continued to pass. The RNG
-startup now holds the SAR analog block in reset before powering it, then
-releases reset, matching Espressif's PMU sequence. The register model covers
-both initially powered and unpowered analog blocks. The board retest still
-failed: error 4, detail zero identified analog register 0 reading zero after
-writing 0x66. The driver now also enables the I2C master and LP APB power-state
-clock maps during draws, then restores them. ESP-IDF initializes those maps in
-`rtc_clk_init()`; IOsonata startup does not. The model checks all four PMU codes
-with initially gated domains. The next board run timed out on master 1 (error 2, detail 0x600af804).
-The trace then showed transaction 2 stalled after issuing read command 0x169,
-with CLOCK_SOURCE zero. ESP-IDF v5.5.1 C6 `bootloader_hardware_init()` calls
-`regi2c_ctrl_ll_master_configure_clock()`, which selects the 160 MHz source
-(bit 0 at 0x600af010). The driver now saves, selects and restores that field.
-The model checks selection before commands and restoration with either initial
-selection. Board retest remains pending; the trace stays enabled.
+The C6 RNG enables internal SAR ADC entropy during `Crypto::Random()`, then
+restores its analog, clock and power settings. Reserved ADC2/channel 1 requires
+no GPIO wiring. The port rejects an active ADC, bounds analog-bus and
+cycle-counter waits, clears output on failure, and latches setup, restoration
+or repeated-output faults until restart. CryptoTest labels failed draws as
+unavailable rather than software PRNG output.
 
-On failure, the C6 UART report prints transaction number, phase (before command,
-after command, completed), controller, command, and register snapshots at entry,
-setup completion and first failure before cleanup. The retained snapshot survives
-subsequent failed draws. No debugger is required.
-CryptoTest reports failed draws as unavailable, rather than calling them a
-software PRNG. On C6, the first draw failure also prints the retained RNG error
-and detail: 1 ADC in use, 2 analog bus timeout, 3 analog selection in use,
-4 analog readback mismatch, 5 ADC trigger, 6 cycle counter, 7 repeated output.
-
-The subsequent C6 RNG implementation enables internal SAR ADC entropy during
-`Crypto::Random()`, then restores its analog, clock and power settings. It uses
-reserved ADC2/channel 1, requires no GPIO wiring, rejects an active ADC, and
-has bounded analog-bus and cycle-counter waits. Failed setup, restoration or
-stuck output clears the requested buffer and disables further draws until
-restart. C6 hardware RNG and the newly enabled key-generation/signing tests
-still need board validation. C3 entropy setup is unchanged; its discarded RNG
-reads now use explicit conversions so the host register model observes them.
-
-C6 setup follows Espressif's v5.5.1 `bootloader_random_esp32c6.c`, `adc_ll.h`
-and `esp_rom_hp_regi2c_esp32c6.c`. Sampling uses one low byte every 80 us,
-slower than the C6 byte sampling interval in `hw_random.c`. The register model
-checks setup, pacing, restoration, ownership and failure handling; it cannot
-establish physical entropy quality.
+C6 initialization includes the SAR analog reset/power sequence, I2C master and
+LP APB power-state clock maps, and the analog-I2C 160 MHz clock selection.
+The latter was missing on the ROM-only boot path; selecting it resolved the
+analog-bus timeout in the board run. Initialization follows ESP-IDF v5.5.1
+`bootloader_random_esp32c6.c`, `bootloader_esp32c6.c`, `rtc_clk_init.c`,
+`adc_ll.h`, `regi2c_ctrl_ll.h` and `esp_rom_hp_regi2c_esp32c6.c`.
+Sampling uses one low byte every 80 us. Host models check setup, pacing,
+restoration, ownership, clock selection and failure handling; neither those
+models nor the sample-distribution check establish physical entropy quality.
 
 Host validation:
 

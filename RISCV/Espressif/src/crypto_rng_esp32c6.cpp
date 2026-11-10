@@ -78,54 +78,6 @@ SOFTWARE.
 #define RNG_ANALOG_BUSY		(1U << 25)
 #define RNG_ANALOG_POWER_MASK		(3U << 26)
 
-// First failure is retained for the board test, with ordinary C++ linkage.
-// 1 ADC in use, 2 analog bus timeout, 3 analog selection in use,
-// 4 analog readback, 5 ADC trigger, 6 cycle counter, 7 repeated output.
-volatile uint32_t g_Esp32C6RngError;
-volatile uint32_t g_Esp32C6RngDetail;
-
-// Read-only snapshots: entry, setup complete, first failure before cleanup.
-// Register labels are listed in the C6 CryptoTest board report.
-volatile uint32_t g_Esp32C6RngTrace[3][13];
-volatile uint32_t g_Esp32C6RngTransaction[4];
-static uint32_t s_AnalogPhase;
-static uint32_t s_AnalogAddress;
-static uint32_t s_AnalogCommand;
-static uint32_t s_AnalogCount;
-
-static void EspC6RngCapture(unsigned Slot)
-{
-	static const uintptr_t addresses[] = {
-		RNG_ANALOG_CTRL0, RNG_ANALOG_CTRL0 + 4U,
-		RNG_ANALOG_CTRL0 + 8U, RNG_ANALOG_CTRL0 + 12U,
-		RNG_ANALOG_SELECT, RNG_ANALOG_READ,
-		RNG_ANALOG_CLOCK_SOURCE, RNG_ANALOG_CLOCK, 0x600AF01CU,
-		RNG_ANALOG_CLOCK_MAP, 0x600AF024U,
-		RNG_ANALOG_POWER, RNG_ADC_CLOCK
-	};
-	unsigned i;
-
-	for (i = 0U; i < sizeof(addresses) / sizeof(addresses[0]); i++)
-	{
-		g_Esp32C6RngTrace[Slot][i] = ESP32_RNG_REG(addresses[i]);
-	}
-}
-
-static bool EspC6RngFail(uint32_t Error, uint32_t Detail)
-{
-	if (g_Esp32C6RngError == 0U)
-	{
-		g_Esp32C6RngError = Error;
-		g_Esp32C6RngDetail = Detail;
-		g_Esp32C6RngTransaction[0] = s_AnalogPhase;
-		g_Esp32C6RngTransaction[1] = s_AnalogAddress;
-		g_Esp32C6RngTransaction[2] = s_AnalogCommand;
-		g_Esp32C6RngTransaction[3] = s_AnalogCount;
-		EspC6RngCapture(2U);
-	}
-	return false;
-}
-
 static bool s_RngBusy;
 static bool s_RngFault;
 static uint8_t s_LastByte;
@@ -168,7 +120,7 @@ static bool EspC6RngWaitIdle(uintptr_t Addr)
 			return true;
 		}
 	}
-	return EspC6RngFail(2U, (uint32_t)Addr);
+	return false;
 }
 
 // Internal analog I2C, SAR block 0x69. Select the master assigned by ROM.
@@ -192,24 +144,15 @@ static bool EspC6RngAnalog(uint8_t Reg, uint8_t *pValue, bool Write)
 	{
 		command |= (1U << 24) | ((uint32_t)*pValue << 16);
 	}
-	s_AnalogPhase = 1U;
-	s_AnalogAddress = (uint32_t)ctrl;
-	s_AnalogCommand = command;
-	s_AnalogCount++;
 	ok = EspC6RngWaitIdle(ctrl);
 	if (ok)
 	{
 		ESP32_RNG_REG(ctrl) = command;
-		s_AnalogPhase = 2U;
 		ok = EspC6RngWaitIdle(ctrl);
 		if (ok && !Write)
 		{
 			*pValue = (uint8_t)(ESP32_RNG_REG(ctrl) >> 16);
 		}
-	}
-	if (ok)
-	{
-		s_AnalogPhase = 3U;
 	}
 	ESP32_RNG_REG(RNG_ANALOG_READ) = selection;
 	EnableInterrupt(state);
@@ -262,7 +205,6 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 	// The ROM-only boot path does not supply that bootloader initialization.
 	EspC6RngModify(RNG_ANALOG_CLOCK_SOURCE, 1U, 1U);
 	EspC6RngModify(RNG_CLOCK, 1U << 24, 1U << 24);
-	EspC6RngCapture(1U);
 	for (i = 0U; i < sizeof(s_AnalogRegisters); i++)
 	{
 		if (!EspC6RngAnalog(s_AnalogRegisters[i], &pSaved->Analog[i], false))
@@ -273,7 +215,7 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 	// Do not replace an existing analog test/calibration/entropy selection.
 	if ((pSaved->Analog[4] & 0x5BU) != 0U)
 	{
-		return EspC6RngFail(3U, pSaved->Analog[4]);
+		return false;
 	}
 	for (i = 0U; i < sizeof(s_AnalogRegisters); i++)
 	{
@@ -286,7 +228,7 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 		}
 		if (readback != value)
 		{
-			return EspC6RngFail(4U, ((uint32_t)s_AnalogRegisters[i] << 8) | readback);
+			return false;
 		}
 	}
 	// Reserved ADC2/channel 1, attenuation 1, two identical pattern entries.
@@ -298,8 +240,7 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 	ESP32_RNG_REG(RNG_ADC_CTRL) |= 1U << 23;
 	ESP32_RNG_REG(RNG_ADC_CTRL) &= ~(1U << 23);
 	ESP32_RNG_REG(RNG_ADC_CTRL2) |= RNG_TIMER_EN;
-	return (ESP32_RNG_REG(RNG_ADC_CTRL2) & RNG_TIMER_EN) != 0U ||
-		EspC6RngFail(5U, ESP32_RNG_REG(RNG_ADC_CTRL2));
+	return (ESP32_RNG_REG(RNG_ADC_CTRL2) & RNG_TIMER_EN) != 0U;
 }
 
 static bool EspC6RngStop(EspC6RngState_t *pSaved)
@@ -326,7 +267,7 @@ static bool EspC6RngStop(EspC6RngState_t *pSaved)
 		}
 		else if (readback != value)
 		{
-			ok = EspC6RngFail(4U, ((uint32_t)s_AnalogRegisters[i - 1U] << 8) | readback);
+			ok = false;
 		}
 	}
 	ESP32_RNG_REG(RNG_ADC_PATTERN) = pSaved->Pattern;
@@ -362,7 +303,7 @@ static bool EspC6RngWait(uint32_t Cycles)
 			return true;
 		}
 	}
-	return EspC6RngFail(6U, Cycles);
+	return false;
 }
 
 bool Esp32C6RngSecureAvailable(void)
@@ -394,19 +335,8 @@ CRYPTO_STATUS Esp32C6RngFill(uint8_t *pOut, size_t Len)
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_BUSY;
 	}
-	if (!s_RngFault)
-	{
-		g_Esp32C6RngError = 0U;
-		g_Esp32C6RngDetail = 0U;
-		s_AnalogPhase = 0U;
-		s_AnalogAddress = 0U;
-		s_AnalogCommand = 0U;
-		s_AnalogCount = 0U;
-		EspC6RngCapture(0U);
-	}
 	if (s_RngFault || !EspC6RngIdle())
 	{
-		(void)EspC6RngFail(1U, ESP32_RNG_REG(RNG_ADC_CTRL));
 		EnableInterrupt(state);
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
@@ -417,7 +347,7 @@ CRYPTO_STATUS Esp32C6RngFill(uint8_t *pOut, size_t Len)
 	cycles = SystemCoreClockGet() / 1000000U;
 	if (ok && (cycles == 0U || cycles > 1000U))
 	{
-		ok = EspC6RngFail(6U, cycles);
+		ok = false;
 	}
 	if (ok)
 	{
@@ -437,7 +367,7 @@ CRYPTO_STATUS Esp32C6RngFill(uint8_t *pOut, size_t Len)
 		s_LastByte = value;
 		if (s_RepeatedBytes >= 32U)
 		{
-			ok = EspC6RngFail(7U, value);
+			ok = false;
 			break;
 		}
 		pOut[i] = value;

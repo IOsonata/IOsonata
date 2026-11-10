@@ -63,7 +63,7 @@ SOFTWARE.
 #include "crypto/crypto_softsha256.h"
 #include "crypto/crypto_uecc.h"
 
-// Board data supplies console configuration and optional failure diagnostics.
+// Board data supplies console configuration only.
 #if defined(__has_include)
 #if __has_include("board.h")
 #include "board.h"
@@ -977,12 +977,6 @@ static void RngChecks(RngEngine *pRng)
 	check("4 KB sample: ones within 5 sigma and byte values spread",
 		ones > 16384U - 450U && ones < 16384U + 450U && missing < 8);
 
-#ifdef CRYPTO_TEST_RNG_FAILURE
-	if (!drawsOk)
-	{
-		CRYPTO_TEST_RNG_FAILURE();
-	}
-#endif
 	printf("  Source: %s\r\n", !drawsOk ? "unavailable: random draw failed" :
 		(pRng->IsSecure() ? "secure random generator" : "not for security use"));
 }
