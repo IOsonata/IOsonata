@@ -1,20 +1,20 @@
 # HFXO test with Nordic BLE clock ownership
 
-The existing HfxoTest is the bare-metal test. These are separate IOcomposer
-managed projects for the clock owners used by Bluetooth applications.
+The existing HfxoTest is the bare-metal test. Each MCU has one IOcomposer managed project with four configurations for
+SoftDevice and MPSL clock ownership.
 
 | MCU | Project | Configuration | Clock owner |
 | --- | --- | --- | --- |
-| nRF52832 | HfxoTestSd | Debug / Release | S132 SoftDevice |
-| nRF52840 | HfxoTestSd | Debug / Release | S140 SoftDevice |
-| nRF52832 | HfxoTestSdc | Debug_SDC / Release_SDC | MPSL |
-| nRF52840 | HfxoTestSdc | Debug_SDC / Release_SDC | MPSL |
+| nRF52832 | HfxoTestBle | Debug / Release | S132 SoftDevice |
+| nRF52832 | HfxoTestBle | Debug_SDC / Release_SDC | MPSL |
+| nRF52840 | HfxoTestBle | Debug / Release | S140 SoftDevice |
+| nRF52840 | HfxoTestBle | Debug_SDC / Release_SDC | MPSL |
 
-HfxoTestSd calls `nrf_sdh_enable_request()` before testing
+The Debug/Release configurations call `nrf_sdh_enable_request()` before testing
 `SystemCoreClockSelect()`. Program the matching SoftDevice image before
 starting this application. Use the corresponding IOsonata library build.
 
-HfxoTestSdc calls `MpslInit()`. MPSL handles the clock requests used by
+The Debug_SDC/Release_SDC configurations call `MpslInit()`. MPSL handles the clock requests used by
 SDC, but this example does not initialize the full Bluetooth controller or
 start radio activity. It tests MPSL clock ownership only.
 
