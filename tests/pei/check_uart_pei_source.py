@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """nRF52 UART/UARTE PEI source and ownership regression checks.
 
-These tests are static source/API contracts; the target must still be
+These tests are static source/API source checks; the target must still be
 built with its installed CMSIS header and validated on MCU hardware.
 """
 from pathlib import Path
@@ -94,7 +94,7 @@ def main():
     assert 'extern "C"' not in DEMO
     assert "NRF_UARTE" not in DEMO
     assert "printf(" not in DEMO
-    print("nRF52 UART/UARTE PEI source contracts: PASS")
+    print("nRF52 UART/UARTE PEI source source checks: PASS")
 
 
 if __name__ == "__main__":

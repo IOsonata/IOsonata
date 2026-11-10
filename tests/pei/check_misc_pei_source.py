@@ -66,7 +66,7 @@ def main():
                for line in RNG.splitlines()) == sum(
         line.lstrip().startswith("#endif") for line in RNG.splitlines())
 
-    print("nRF52 QDEC and one-shot PEI exclusion contracts: PASS")
+    print("nRF52 QDEC and one-shot PEI exclusion source checks: PASS")
 
 if __name__ == "__main__":
     main()

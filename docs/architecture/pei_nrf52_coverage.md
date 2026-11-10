@@ -261,7 +261,7 @@ The standalone nRF52832 PeiPwmDemo maps BUT1 to PWM0.SEQSTART0 and
 BUT2 to PWM0.STOP, both through hardware PPI. PWM channel 0 drives
 RGB red, while PWM SEQSTARTED0 and STOPPED toggle the physically
 separate LED1 and RGB blue, respectively. C/C++ compile checks and
-source contract tests are added. The maintainer confirmed that
+source checks are added. The maintainer confirmed that
 PeiPwmDemo works on nRF52832 BLYST-NANO-DK (Nov 8, 2026), validating
 the demonstrated start/stop routing and indication behavior. This does
 not individually verify every supported event or task. Further lifecycle

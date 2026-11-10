@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static contract for COMP/LPCOMP PEI endpoints and bare-metal test.
+"""Check COMP/LPCOMP PEI endpoint definitions and example source.
 
 Hardware is not emulated by this check. Build/flash PeiCompDemo to validate
 actual nRF52832 threshold crossings and event-to-task routing.
@@ -52,7 +52,7 @@ def main():
     assert "NRF_ACOMP->" not in EXAMPLE
     assert "NRF_LPCOMP->" not in EXAMPLE
     assert "printf(" not in EXAMPLE
-    print("nRF52 comparator PEI endpoint and ownership contracts: PASS")
+    print("nRF52 comparator PEI endpoint and ownership source checks: PASS")
 
 
 if __name__ == "__main__":

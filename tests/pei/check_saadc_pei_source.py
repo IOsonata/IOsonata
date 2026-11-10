@@ -56,7 +56,7 @@ def main():
     assert 'extern "C"' not in EXAMPLE
     assert "NRF_SAADC->" not in EXAMPLE
     assert "printf(" not in EXAMPLE
-    print("nRF52 SAADC PEI preparation and endpoint contracts: PASS")
+    print("nRF52 SAADC PEI preparation and endpoint source checks: PASS")
 
 
 if __name__ == "__main__":

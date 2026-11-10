@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Source contracts for Nordic HFXO ownership and request accounting."""
+"""Inspect Nordic HFXO request code; this does not execute the driver."""
 
 from pathlib import Path
 import unittest
@@ -15,7 +15,7 @@ def function(source, name, next_name):
     return source[begin:end]
 
 
-class HfxoOwnershipTests(unittest.TestCase):
+class HfxoSourceChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.clock = CLOCK.read_text(encoding="utf-8")

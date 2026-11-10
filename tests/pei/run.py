@@ -19,27 +19,27 @@ subprocess.run([sys.executable, str(TEST / "test_check_no_pei_link.py")],
                check=True)
 subprocess.run([sys.executable, str(TEST / "check_timer_cc_invariant.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_gpio_port_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_gpio_port_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_gpio_lifecycle_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_gpio_lifecycle_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_saadc_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_saadc_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_comp_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_comp_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_pwm_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_pwm_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_audio_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_audio_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_spi_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_spi_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_i2c_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_i2c_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_uart_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_uart_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_misc_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_misc_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_system_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_system_pei_source.py")],
                check=True)
 
 with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:

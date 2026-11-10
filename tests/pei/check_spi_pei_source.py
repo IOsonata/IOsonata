@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""nRF52 legacy SPI / SPIM / SPIS PEI source contracts.
+"""Check nRF52 legacy SPI, SPIM and SPIS PEI driver source.
 
 This does not replace target builds, real SPI transfer testing or
 external SPIS master communication.
@@ -98,7 +98,7 @@ def main():
     assert "NRF_SPIM" not in APP
     assert "NRF_SPIS" not in APP
     assert "printf(" not in APP
-    print("nRF52 SPI/SPIM/SPIS PEI source contracts: PASS")
+    print("nRF52 SPI/SPIM/SPIS PEI source source checks: PASS")
 
 
 if __name__ == "__main__":

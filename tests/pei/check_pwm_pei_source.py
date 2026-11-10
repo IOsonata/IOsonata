@@ -55,7 +55,7 @@ def main():
     assert "NRF_PWM" not in DEMO
     assert "printf(" not in DEMO
     assert "goto " not in DEMO
-    print("nRF52 PWM PEI register/sequence ownership contract: PASS")
+    print("nRF52 PWM PEI register/sequence ownership source check: PASS")
 
 
 if __name__ == "__main__":
