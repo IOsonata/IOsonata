@@ -605,6 +605,7 @@ static void Esp32I2cSlaveIrq(void)
 	uint32_t status;
 	uint32_t state;
 	uint32_t cause;
+	bool readRequest;
 	int previous;
 
 	dev = &s_I2c[0];
@@ -616,18 +617,39 @@ static void Esp32I2cSlaveIrq(void)
 	status = ESP32_I2C_INT_STATUS_REG(dev->Base);
 	state = ESP32_I2C_SR_REG(dev->Base);
 	ESP32_I2C_INT_CLR_REG(dev->Base) = status;
+	cause = (state >> ESP32_I2C_SR_STRETCH_CAUSE_Pos) & 3U;
+	readRequest = (status & ESP32_I2C_INT_SLAVE_STRETCH) && cause == 0 &&
+		(state & ESP32_I2C_SR_SLAVE_RW_Msk);
+	// Writes may reach the RX watermark or STOP without an address stretch.
+	// Open the receive buffer before draining, including a command pending
+	// when a repeated START addresses the slave for reading. Do not reset
+	// the FIFO here: it already contains the received bytes.
+	if (!dev->bOpen && (state & ESP32_I2C_SR_RXFIFO_CNT_Msk))
+	{
+		dev->bOpen = true;
+		dev->bRx = true;
+		dev->bError = false;
+		dev->SlaveCount = 0;
+		dev->SlaveQueued = 0;
+		if (i2c->Cfg.EvtCB)
+		{
+			i2c->Cfg.EvtCB(&i2c->DevIntrf, DEVINTRF_EVT_WRITE_RQST,
+				i2c->pTRBuff[0], 0);
+		}
+	}
 	if (status & ESP32_I2C_INT_RXFIFO_OVF)
 	{
 		dev->bError = true;
 	}
-	if (status & ESP32_I2C_INT_TRANS_COMPLETE)
+	// A repeated START hands the write count to READ_RQST below. Completing
+	// that write first would discard the command context in the callback.
+	if ((status & ESP32_I2C_INT_TRANS_COMPLETE) && !readRequest)
 	{
 		Esp32I2cSlaveComplete(dev);
 		ESP32_I2C_INT_ENA_REG(dev->Base) &= ~ESP32_I2C_INT_TXFIFO_WM;
 	}
 	if (status & ESP32_I2C_INT_SLAVE_STRETCH)
 	{
-		cause = (state >> ESP32_I2C_SR_STRETCH_CAUSE_Pos) & 3U;
 		if (cause == 0)
 		{
 			previous = 0;

@@ -436,6 +436,23 @@ int main()
 	assert(I2CInit(&dev, &cfg));
 	assert(s_Irq && dev.DevIntrf.bIntEn);
 	assert(!I2CStartTx(&dev, 0x22));
+	// A write need not generate an address-stretch interrupt. Receive it at
+	// STOP, or preserve its command when the next address starts a read.
+	s_Rx = {4, 0xa0, 0xa1};
+	SlaveIrq(1U << 7, 0);
+	assert(s_SlaveCount == 3 && s_SlaveRx[0] == 4 && s_SlaveRx[1] == 0xa0);
+	s_Rx = {4};
+	SlaveIrq((1U << 16) | (1U << 7), 2);
+	assert(s_Previous == 1 && s_SlaveRx[0] == 4);
+	s_Tx.pop_front();
+	SlaveIrq(1U << 7, 2);
+	assert(s_SlaveCount == 1);
+	// A longer write first becomes visible at the RX watermark.
+	s_Rx = {1, 2, 3};
+	SlaveIrq(1U, 0);
+	s_Rx = {4, 5};
+	SlaveIrq(1U << 7, 0);
+	assert(s_SlaveCount == 5 && s_SlaveRx[0] == 1 && s_SlaveRx[4] == 5);
 	SlaveIrq(1U << 16, 0);
 	s_Rx = {2, 0xab, 0xcd};
 	SlaveIrq(1U << 7, 0);
