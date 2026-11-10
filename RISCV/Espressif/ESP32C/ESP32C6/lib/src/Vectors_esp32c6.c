@@ -118,7 +118,7 @@ void Esp32C3ClearSourceIrqHandler(uint32_t source_id)
     }
 }
 
-__attribute__((section(".iram.text"), used, optimize("O0")))
+__attribute__((section(".iram.text"), used))
 void Esp32C3IntMtxDispatch(void)
 {
     uint32_t status0 = ESP32C3_INTMTX_INTR_STATUS_0_REG;
@@ -200,7 +200,7 @@ void Esp32C3IntMtxDispatch(void)
     }
 }
 
-__attribute__((interrupt("machine"), aligned(4), section(".iram.text"), used, optimize("O0")))
+__attribute__((interrupt("machine"), aligned(4), section(".iram.text"), used))
 void RISCV_TrapHandler(void)
 {
     uint32_t mcause;
