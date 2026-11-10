@@ -56,9 +56,6 @@ static uint32_t s_Regs[64];
 static std::deque<uint8_t> s_Rx;
 static std::vector<uint8_t> s_Tx;
 static unsigned s_TxCount;
-static unsigned s_UnmaskedCopies;
-static bool s_Blocking;
-static bool s_InterruptCopy;
 static UARTDev_t s_Uart;
 
 struct FifoRegister {
@@ -99,19 +96,8 @@ volatile uint32_t g_Esp32C3Uart1IrqCount;
 
 static void *Copy(void *pDest, const void *pSrc, size_t Len)
 {
-	if (s_Blocking)
-	{
-		assert(s_Masked == 0);
-		s_UnmaskedCopies++;
-		if (s_InterruptCopy)
-		{
-			// Interrupt before the producer writes its reserved span.
-			// Only previously published bytes may reach the hardware.
-			s_TxCount = 0;
-			Esp32UartTxFill(&s_Esp32UartDev[0]);
-		}
-	}
-	else
+	if ((uintptr_t)pDest >= (uintptr_t)s_Uart.hTxFifo &&
+		(uintptr_t)pDest < (uintptr_t)s_Uart.hTxFifo + CFIFO_MEMSIZE(512))
 	{
 		assert(s_Masked != 0);
 		assert(Len <= ESP32_UART_COPY_MAX);
@@ -128,10 +114,7 @@ static void Reset(bool Blocking)
 	s_Rx.clear();
 	s_Tx.clear();
 	s_TxCount = 0;
-	s_UnmaskedCopies = 0;
-	s_InterruptCopy = false;
 	s_Masked = 0;
-	s_Blocking = Blocking;
 	s_Esp32UartDev[0].pUartDev = &s_Uart;
 	s_Uart.hRxFifo = CFifoInit(rx, sizeof(rx), 1, Blocking);
 	s_Uart.hTxFifo = CFifoInit(tx, sizeof(tx), 1, Blocking);
@@ -139,6 +122,7 @@ static void Reset(bool Blocking)
 	s_Uart.DevIntrf.bIntEn = true;
 	s_Uart.EvtCallback = nullptr;
 	s_Uart.bTxReady = true;
+	s_Uart.TxDropCnt = 0;
 }
 
 static void Drain()
@@ -208,28 +192,25 @@ int main()
 
 	Reset(true);
 	count = Esp32UartTxData(&s_Uart.DevIntrf, data, sizeof(data));
-	assert(count == 128 + 512);
+	assert(count == 512);
 	Drain();
 	assert(s_Tx.size() == (unsigned)count);
 	assert(std::memcmp(s_Tx.data(), data, count) == 0);
-	assert(s_UnmaskedCopies > 0);
 
 	Reset(true);
-	// Pre-existing backlog must precede bytes copied while an IRQ runs.
+	// Pre-existing backlog must precede newly queued bytes.
 	len = 100;
 	p = CFifoPutMultiple(s_Uart.hTxFifo, &len);
 	std::memcpy(p, data, len);
-	s_InterruptCopy = true;
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data + 100, 400) == 400);
 	Drain();
 	assert(s_Tx.size() == 500);
 	assert(std::memcmp(s_Tx.data(), data, 500) == 0);
 
 	Reset(true);
-	// A pending completion callback must not force a software copy.
+	// An active transmitter still receives data through the software FIFO.
 	s_Uart.bTxReady = false;
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, 16) == 16);
-	assert(s_UnmaskedCopies == 0);
 	assert(s_Tx.size() == 16);
 
 	Reset(true);
@@ -240,11 +221,18 @@ int main()
 	assert(std::memcmp(s_Tx.data(), data, sizeof(data)) == 0);
 	assert(s_Masked == 0);
 
+	Reset(true);
+	s_Uart.DevIntrf.bIntEn = false;
+	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, 16) == 16);
+	assert(s_Tx.size() == 16);
+	assert(std::memcmp(s_Tx.data(), data, 16) == 0);
+	assert((ESP32_UART_INT_ENA_REG(0) & ESP32_UART_INT_TXFIFO_EMPTY) == 0);
+
 	Reset(false);
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, sizeof(data)) == 1000);
 	Drain();
-	assert(s_Tx.size() == 640);
-	assert(std::memcmp(s_Tx.data(), data, 128) == 0);
-	assert(std::memcmp(s_Tx.data() + 128, data + 488, 512) == 0);
+	assert(s_Tx.size() == 512);
+	assert(std::memcmp(s_Tx.data(), data + 488, 512) == 0);
+	assert(s_Uart.TxDropCnt == 488);
 	return 0;
 }

@@ -570,18 +570,49 @@ static int Esp32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	return cnt;
 }
 
+// Queue each bounded copy before exposing it to the TX interrupt.
+static int Esp32UartTxPut(ESP32_UARTDEV *pDev, const uint8_t *pData, int DataLen)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+	hCFifo_t fifo = udev->hTxFifo;
+	uintptr_t state;
+	uint32_t dropped;
+	uint8_t *p;
+	int cnt = 0;
+	int len;
+
+	while (DataLen > 0)
+	{
+		len = DataLen < ESP32_UART_COPY_MAX ? DataLen : ESP32_UART_COPY_MAX;
+		state = DisableInterrupt();
+		dropped = fifo->DropCnt;
+		p = CFifoPutMultiple(fifo, &len);
+		if (p != nullptr)
+		{
+			memcpy(p, pData, len);
+		}
+		udev->TxDropCnt += fifo->DropCnt - dropped;
+		EnableInterrupt(state);
+		if (p == nullptr)
+		{
+			break;
+		}
+		pData += len;
+		DataLen -= len;
+		cnt += len;
+	}
+
+	return cnt;
+}
+
 static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
 {
 	ESP32_UARTDEV *dev;
 	UARTDev_t *udev;
-	hCFifo_t fifo;
 	uintptr_t state;
-	uint8_t *p;
 	int cnt;
-	int len;
 	int space;
 	bool pending;
-	bool blocking;
 
 	if (pData == nullptr || DataLen <= 0)
 	{
@@ -590,10 +621,9 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 	dev = (ESP32_UARTDEV *)pDev->pDevData;
 	udev = dev->pUartDev;
-	cnt = 0;
-
 	if (!pDev->bIntEn)
 	{
+		cnt = 0;
 		while (DataLen > 0)
 		{
 			space = (int)Esp32UartTxFree(dev->Base);
@@ -609,85 +639,22 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		return cnt;
 	}
 
-	fifo = udev->hTxFifo;
-	blocking = CFifoIsBlocking(fifo);
+	cnt = Esp32UartTxPut(dev, pData, DataLen);
+
 	state = DisableInterrupt();
-
-	// With no software backlog, use the free hardware FIFO space first.
-	// Small loopback responses need no software enqueue or TX interrupt.
-	if (CFifoUsed(fifo) == 0)
-	{
-		space = (int)Esp32UartTxFree(dev->Base);
-		while (DataLen > 0 && space > 0)
-		{
-			ESP32_UART_FIFO_REG(dev->Base) = *pData;
-			pData++;
-			DataLen--;
-			space--;
-			cnt++;
-		}
-	}
-
-	if (DataLen > 0)
-	{
-		EnableInterrupt(state);
-
-		// DeviceIntrf serializes the producer. Reserve a blocking FIFO
-		// span, fill it, then publish it to the interrupt consumer.
-		while (DataLen > 0)
-		{
-			len = DataLen;
-			if (!blocking)
-			{
-				if (len > ESP32_UART_COPY_MAX)
-				{
-					len = ESP32_UART_COPY_MAX;
-				}
-				state = DisableInterrupt();
-			}
-			p = blocking ? CFifoResvMultiple(fifo, &len) :
-				CFifoPutMultiple(fifo, &len);
-			if (p != nullptr)
-			{
-				memcpy(p, pData, len);
-				if (blocking)
-				{
-					CFifoPutMultiple(fifo, &len);
-				}
-			}
-			if (!blocking)
-			{
-				EnableInterrupt(state);
-			}
-			if (p == nullptr)
-			{
-				break;
-			}
-			pData += len;
-			DataLen -= len;
-			cnt += len;
-		}
-
-		state = DisableInterrupt();
-	}
-	pending = CFifoUsed(fifo) > 0;
-	if (pending)
-	{
-		Esp32UartTxFill(dev);
-		pending = CFifoUsed(fifo) > 0;
-	}
+	Esp32UartTxFill(dev);
+	pending = CFifoUsed(udev->hTxFifo) > 0;
 	if (pending || (udev->EvtCallback != nullptr &&
 		(cnt > 0 || !udev->bTxReady)))
 	{
-		// Arm TX only for remaining bytes or a requested completion event.
 		udev->bTxReady = false;
 		ESP32_UART_INT_CLR_REG(dev->Base) = ESP32_UART_INT_TXFIFO_EMPTY;
 		ESP32_UART_INT_ENA_REG(dev->Base) |= ESP32_UART_INT_TXFIFO_EMPTY;
 	}
-	else if (cnt > 0 || !udev->bTxReady)
+	else
 	{
 		ESP32_UART_INT_ENA_REG(dev->Base) &= ~ESP32_UART_INT_TXFIFO_EMPTY;
-		udev->bTxReady = true;
+		udev->bTxReady = !pending;
 	}
 	EnableInterrupt(state);
 	return cnt;
