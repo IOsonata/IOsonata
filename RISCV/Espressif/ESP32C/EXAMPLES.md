@@ -16,8 +16,8 @@ the same Debug or Release configuration. Use Release for throughput tests.
 | I2cMaster | Write/read verification with the generic I2C slave demo | C2/C3/C5/C6/C61 |
 | SpiLoopback | Verify SPI with MOSI wired to MISO | C2/C3/C5/C6/C61 |
 | I2cMasterSlave | LP hardware master and HP slave on one board | C6 |
-| I2cSlave | Interrupt-driven slave memory at address 0x22 | C3/C6 |
-| SpiMasterSlave | SPISoft master and SPI2 slave with four jumpers | C3/C6 |
+| I2cSlave | Interrupt-driven slave memory at address 0x22 | C3/C5/C6/C61 |
+| SpiMasterSlave | SPISoft master and SPI2 slave with four jumpers | C2/C3/C5/C6/C61 |
 | SpiMaster | Command and data transfers with an external SPI peer | C2/C3/C5/C6/C61 |
 | TimerIrqTest | Periodic and single-shot timer interrupts | C2/C3/C5/C6/C61 |
 | LedDemo | Onboard addressable RGB LED through SPI | C3/C6 |
@@ -41,7 +41,7 @@ actively driven UART outputs to the same input.
 
 I2cMaster needs a second MCU running `exemples/i2c/i2c_slave_demo.cpp` at
 address 0x22. Connect SDA GPIO6, SCL GPIO7, and ground; provide external pull-ups.
-It writes and reads 16 bytes at offset 2 and prints PASS or FAIL. C3/C6
+It writes and reads 16 bytes at offset 2 and prints PASS or FAIL. C3/C5/C6/C61
 I2cSlave projects provide that peer. Hardware I2C slave mode is implemented
 for C3/C5/C6/C61; C2 has a master-only controller. C6 I2cMasterSlave
 uses its LP master and HP slave on one board. Connect GPIO6 to GPIO4 (SDA)
@@ -66,3 +66,7 @@ interrupt-driven, non-DMA slave operation is selected. SPI2 slave support is
 shared across C2/C3/C5/C6/C61, with a 64-byte frame limit and a required gap
 between frames for interrupt handling. Use SpiLoopback for hardware-master
 validation. Build results and modeled register tests are not hardware validation.
+
+The C2/C5/C61 slave-test projects use their devkit USB-to-UART console pins:
+C2 TX20/RX19, C5 TX11/RX12, and C61 TX11/RX10. These differ from the
+GPIO4/5 external-adapter wiring in their earlier bring-up examples.

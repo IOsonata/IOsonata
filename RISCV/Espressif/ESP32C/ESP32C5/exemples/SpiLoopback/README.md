@@ -22,7 +22,7 @@ devices; receiving requires a connected MISO pin.
 
 SPI2 also supports interrupt-driven slave transfers, with a 64-byte limit
 per CS assertion and a required gap between frames for interrupt handling.
-The C3/C6 SpiMasterSlave projects test that path with a software master.
+The SpiMasterSlave project tests that path with a software master.
 DMA, master interrupt transfers, three-wire and multi-line modes are not
 implemented. SpiLoopback selects the polling hardware master.
 Rate selects the closest XTAL divider, with zero selecting the minimum.

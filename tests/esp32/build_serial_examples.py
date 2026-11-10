@@ -14,12 +14,11 @@ parser.add_argument('--output', type=Path, required=True)
 args = parser.parse_args()
 tool = args.tool_prefix
 for chip in ('ESP32C2', 'ESP32C3', 'ESP32C5', 'ESP32C6', 'ESP32C61'):
-    names = {'ResetEntry.c', 'iatomic.c', 'timer.cpp', 'timer_esp32.cpp', 'spi.cpp', 'spi_esp32.cpp', 'i2c.cpp', 'i2c_esp32.cpp', 'prbs.c', 'slip_intrf.cpp',
+    names = {'ResetEntry.c', 'iatomic.c', 'timer.cpp', 'timer_esp32.cpp', 'spi.cpp', 'spi_esp32.cpp', 'i2c.cpp', 'i2c_esp32.cpp', 'prbs.c', 'slip_intrf.cpp', 'spi_soft.cpp',
              'esp32xx_irq.c', 'CppRuntimeOverload.cpp', 'uart.cpp',
              'uart_esp32.cpp', 'system_esp32_uart_clock.c', 'iopincfg_esp32.c',
              'device.cpp', 'device_intrf.cpp', 'cfifo.c', 'uart_retarget.c', 'stddev.c'}
     if chip in ('ESP32C3', 'ESP32C6'):
-        names.add('spi_soft.cpp')
         names.update({'system_' + chip.lower() + '.c',
                       'Vectors_' + chip.lower() + '.c'})
     else:
@@ -54,9 +53,9 @@ for chip in ('ESP32C2', 'ESP32C3', 'ESP32C5', 'ESP32C6', 'ESP32C61'):
         library = directory / 'libspi.a'
         run(tool + 'ar', 'rcs', library, *objects)
         examples = {'UartPrbsRxTest': 'uart/uart_prbs_rx.cpp', 'UartRetarget': 'uart/uart_retarget_demo.cpp', 'UartSlipPrbsTx': 'uart/uart_slip_prbs_tx.cpp', 'UartSlipPrbsRx': 'uart/uart_slip_prbs_rx.cpp', 'I2cMaster': 'i2c/i2c_master_demo.cpp', 'SpiMaster': 'spi/spi_master_demo.cpp'}
-        if chip in ('ESP32C3', 'ESP32C6'):
-            examples.update({'SpiMasterSlave': 'spi/spi_master_slave.cpp',
-                             'I2cSlave': 'i2c/i2c_slave_demo.cpp'})
+        examples['SpiMasterSlave'] = 'spi/spi_master_slave.cpp'
+        if chip != 'ESP32C2':
+            examples['I2cSlave'] = 'i2c/i2c_slave_demo.cpp'
         if chip == 'ESP32C6':
             examples['I2cMasterSlave'] = 'i2c/i2c_master_slave.cpp'
         for name, source in examples.items():
@@ -71,6 +70,7 @@ for chip in ('ESP32C2', 'ESP32C3', 'ESP32C5', 'ESP32C6', 'ESP32C61'):
             symbols = subprocess.check_output([tool + 'nm', str(elf)], text=True)
             assert ' UARTInit' in symbols
             assert 'Pei' not in symbols
+            assert (' T SPISoftInit' in symbols) == (name == 'SpiMasterSlave'), name
             if name != 'UartSlipPrbsTx':
                 assert re.search(r' T _write$', symbols, re.MULTILINE), name
             run(tool + 'objcopy', '-O', 'binary', elf, elf.with_suffix('.bin'))
