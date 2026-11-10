@@ -18,7 +18,13 @@ The driver supports polling master, normal four-wire, 8-bit data, MSB/LSB
 order, and GPIO or application-controlled chip select. Manual CS uses a
 three-entry SCK/MISO/MOSI pin map. Automatic CS entries follow those pins;
 the transfer selector is the zero-based CS index. MOSI is required. SCK and MISO may use port/pin -1 for MOSI-only
-devices; receiving requires a connected MISO pin. Slave, interrupt, DMA and multi-line modes are unsupported.
+devices; receiving requires a connected MISO pin.
+
+SPI2 also supports interrupt-driven slave transfers, with a 64-byte limit
+per CS assertion and a required gap between frames for interrupt handling.
+The C3/C6 SpiMasterSlave projects test that path with a software master.
+DMA, master interrupt transfers, three-wire and multi-line modes are not
+implemented. SpiLoopback selects the polling hardware master.
 Rate selects the closest XTAL divider, with zero selecting the minimum.
 Actual usable speed depends on GPIO matrix timing and board wiring.
 

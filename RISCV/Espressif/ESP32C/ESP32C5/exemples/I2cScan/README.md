@@ -14,4 +14,6 @@ To check a repeated-start register read, define `I2C_SCAN_REG_DEVADDR`
 and `I2C_SCAN_REG` in `board.h` for a known device and register.
 A disconnected bus with pull-ups should report zero devices.
 
-Slave, DMA, interrupt transfers and LP I2C are not implemented.
+HP I2C also supports one 7-bit slave address with interrupts and clock
+stretching. This scanner selects polling master operation. DMA and master
+interrupt transfers are not implemented.
