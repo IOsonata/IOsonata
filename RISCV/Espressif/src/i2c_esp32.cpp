@@ -342,8 +342,7 @@ static bool Esp32I2cRun(Esp32I2cDev_t *pDev, uint32_t Done, uint32_t Bytes)
 
 static void Esp32I2cFinish(Esp32I2cDev_t *pDev)
 {
-	if (!pDev->bSlave && pDev->bOpen && !pDev->bLost &&
-		(ESP32_I2C_SR_REG(pDev->Base) & ESP32_I2C_SR_BUS_BUSY_Msk))
+	if (!pDev->bSlave && pDev->bOpen && !pDev->bLost)
 	{
 		Esp32I2cCommand(pDev, 0, ESP32_I2C_OPCODE_STOP, 0, 0);
 		Esp32I2cRun(pDev, ESP32_I2C_INT_TRANS_COMPLETE, 0);
@@ -575,6 +574,7 @@ static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 {
 	I2CDev_t *i2c;
+	int remaining;
 
 	if (!pDev->bOpen)
 	{
@@ -587,11 +587,18 @@ static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 	}
 	else
 	{
+		remaining = (ESP32_I2C_SR_REG(pDev->Base) & ESP32_I2C_SR_TXFIFO_CNT_Msk) >> ESP32_I2C_SR_TXFIFO_CNT_Pos;
+		pDev->SlaveCount = pDev->SlaveQueued - remaining;
+		// The output register holds one prefetched byte outside the FIFO.
+		// At STOP that byte has not been clocked out by the master.
+		if (pDev->SlaveCount > 0)
+		{
+			pDev->SlaveCount--;
+		}
 		// Discard the rest of this response before another read address can
 		// prefetch it. Resetting at READ_RQST is too late for that first byte.
 		// Leave RX intact: a following command may already be arriving.
-		ESP32_I2C_INT_ENA_REG(pDev->Base) &=
-			~(ESP32_I2C_INT_TXFIFO_WM | ESP32_I2C_INT_BYTE_TRANS_DONE);
+		ESP32_I2C_INT_ENA_REG(pDev->Base) &= ~ESP32_I2C_INT_TXFIFO_WM;
 	}
 	pDev->bOpen = false;
 	if (i2c->Cfg.EvtCB)
@@ -650,13 +657,6 @@ static void Esp32I2cSlaveIrq(void)
 	{
 		dev->bError = true;
 	}
-	// Count completed data bytes, not FIFO reads into the output register.
-	// The address-byte event is cleared before enabling this interrupt.
-	if ((status & ESP32_I2C_INT_BYTE_TRANS_DONE) && dev->bOpen &&
-		!dev->bRx && !readRequest && dev->SlaveCount < INT32_MAX)
-	{
-		dev->SlaveCount++;
-	}
 	// A repeated START hands the write count to READ_RQST below. Completing
 	// that write first would discard the command context in the callback.
 	if ((status & ESP32_I2C_INT_TRANS_COMPLETE) && !readRequest)
@@ -689,9 +689,7 @@ static void Esp32I2cSlaveIrq(void)
 			if (!dev->bRx)
 			{
 				Esp32I2cSlaveFill(dev);
-				ESP32_I2C_INT_CLR_REG(dev->Base) = ESP32_I2C_INT_BYTE_TRANS_DONE;
-				ESP32_I2C_INT_ENA_REG(dev->Base) |=
-					ESP32_I2C_INT_TXFIFO_WM | ESP32_I2C_INT_BYTE_TRANS_DONE;
+				ESP32_I2C_INT_ENA_REG(dev->Base) |= ESP32_I2C_INT_TXFIFO_WM;
 			}
 			else
 			{

@@ -60,9 +60,3 @@ The diagnostic timer measures the NACK write and recovery read separately
 in microseconds. Recovery runs even when an earlier data check fails.
 The C6 hardware run passed the earlier data and NACK tests, but reported
 zero completion bytes for the final one-byte read; this remains unresolved.
-
-Slave TX completion now counts byte-transfer-done interrupts during the read
-phase instead of inferring transmitted bytes from FIFO occupancy. The address
-byte event is cleared before counting begins. Master cleanup skips a STOP
-command when the hardware reports an idle bus. Keep the timing and register
-trace enabled until both changes have been checked on hardware.
