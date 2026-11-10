@@ -12,6 +12,8 @@ SPDX-License-Identifier: MIT
 #include "board.h"
 #include "idelay.h"
 
+#ifdef I2C_TEST_BOARD_TRACE
+
 static uint32_t s_Registers[I2C_TEST_TRACE_SIZE][6];
 
 void I2cMasterSlaveCapture(int Index)
@@ -188,3 +190,5 @@ void I2cMasterSlavePrintFailures()
 		usDelay(I2C_TEST_TRACE_DELAY_US);
 	}
 }
+
+#endif // I2C_TEST_BOARD_TRACE

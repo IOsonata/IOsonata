@@ -27,36 +27,23 @@ register writes, repeated-START reads, reads without a command, writes up to
 The long write crosses both the 16-byte LP FIFO and the 32-byte HP FIFO.
 
 Expected final message: `I2C master/slave loopback PASS`.
-Hardware validation is pending. The C3 has no LP I2C controller; its I2cSlave
-test still requires an external master.
+The C6 hardware run passed all checks with diagnostics enabled, including
+consecutive one-byte reads advancing from offset 16 to 17 and then 18.
+The address-NACK test completes in about 1.6 ms with five retries; recovery
+reads also pass. Slave TX completion counts byte-completion interrupts because
+FIFO occupancy includes prefetched bytes and does not reliably count bytes
+sent on the bus. FIFO filling remains in blocks.
 
-The C6 board enables a bounded slave callback trace (`I2C_TEST_TRACE_SIZE`).
-The example captures the first 24 callbacks and prints them after the test,
-without UART output inside the I2C interrupt. Each entry shows the event,
-reported length, previous write state, offset before and after the callback,
-first nine bytes of the receive buffer, and slave memory at offsets 4 through
-11. Buffer snapshots can contain bytes from earlier writes; the reported
-length determines how many bytes belong to the current event. This trace is
-for investigating the first register-read failure; hardware validation is
-still pending.
+The default build uses interrupt-driven UART and disables register tracing.
+Repeat the same loopback test in this configuration to confirm operation
+without diagnostic capture. The C3 has no LP I2C controller; its I2cSlave test
+requires an external master.
 
-For the TX investigation, each callback also captures HP I2C SR, FIFO_ST,
-CTR, FIFO_CONF, interrupt RAW, and stretch configuration. READ snapshots
-are taken after FIFO reset and before the driver fills TX; DONE snapshots
-are taken before the next transfer. DATA is never read by diagnostics.
-This configuration uses polling UART and line-buffered stdout to keep the
-trace output complete. Restore `I2C_TEST_UART_INT_ENABLE` after diagnosis.
-
-Trace output uses three short lines per event, each labelled with its event
-index (T0, T1, ...). RX shows the first two receive-buffer bytes; M4 shows
-slave memory bytes 4 and 5. Each line is flushed with a 2 ms pause after it.
-These pauses occur only while printing the captured trace after the test,
-never during an I2C transaction or callback.
-
-The continuation test now reads two single bytes after the four-byte read:
-0x10 followed by 0x11. This detects a slave completion count that fails to
-advance the offset. DONE register snapshots precede the TX FIFO clear.
-The diagnostic timer measures the NACK write and recovery read separately
-in microseconds. Recovery runs even when an earlier data check fails.
-The C6 hardware run passed the earlier data and NACK tests, but reported
-zero completion bytes for the final one-byte read; this remains unresolved.
+For diagnostics, define `I2C_TEST_BOARD_TRACE` in the example compiler settings
+and rebuild the example. This enables polling UART, the diagnostic timer,
+24 slave callback snapshots, 128 slave TX snapshots, and 24 master failure
+snapshots. Capture uses fixed storage and prints only after the transfers.
+Each output line is flushed and paced by 2 ms. DATA is never read by the
+capture code, so diagnostics do not consume received bytes. Remove the define
+to restore normal operation; the diagnostic source then compiles without
+capture storage or trace overrides.

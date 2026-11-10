@@ -7,7 +7,7 @@ This file contains all I/O definitions for a specific board for the
 application firmware.  This files should be located in each project and
 modified to suit the need for the application use case.
 
-ESP32C6 I2cScan console: UART0 TX on GPIO16, RX on GPIO17.
+ESP32C6 I2cMasterSlave console: UART0 TX on GPIO16, RX on GPIO17.
 Use a 3.3 V UART adapter with common ground.
 
 PinOp on ESP32 follows the canonical IOsonata convention: a pin's
@@ -93,10 +93,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_DMA_MODE false
 
 #include "esp32xx_i2c.h"
-#define I2C_TEST_BOARD_TRACE
+// Define I2C_TEST_BOARD_TRACE in the example compiler settings to capture
+// register snapshots and use polling UART for diagnostic output.
+#ifdef I2C_TEST_BOARD_TRACE
 #define I2C_TEST_TRACE_SIZE 24
 #define I2C_TEST_TRACE_DELAY_US 2000
 #define I2C_TEST_UART_INT_ENABLE false
+#endif
 #define I2C_SLAVE_DEVNO 0
 #define I2C_SLAVE_DMA_ENABLE false
 #define I2C_SLAVE_SCL_DIR IOPINDIR_BI
