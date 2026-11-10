@@ -74,8 +74,8 @@ volatile uint32_t g_Esp32C3RngCallCount;
 #define RNG_ADC_CLK_CONF		(ESP32_ADC_BASE + 0x054U)
 #define RNG_DATA			(ESP32_SYSCON_BASE + 0x0B0U)
 
-#define RNG_ADC_CLK_MASK		(1UL << 28)
-#define RNG_ADC_TIMER_EN		(1UL << 24)
+#define RNG_ADC_CLK_MASK		(1U << 28)
+#define RNG_ADC_TIMER_EN		(1U << 24)
 #define RNG_ADC_CLK_EN			(1UL << 20)
 #define RNG_ADC_TRANSFER		(1UL << 31)
 #define RNG_RTC_SAR_POWER_MASK		(3UL << 30)
@@ -86,7 +86,7 @@ volatile uint32_t g_Esp32C3RngCallCount;
 #define RNG_ADC_CLOCK_SEL_MASK		(3UL << 21)
 #define RNG_ADC_CLOCK_DIV_MASK		0xFFUL
 #define RNG_ADC_CLOCK_GATED		(1UL << 6)
-#define RNG_ADC_PATTERN_CLEAR		(1UL << 23)
+#define RNG_ADC_PATTERN_CLEAR		(1U << 23)
 #define RNG_ADC_TIMER_TARGET_MASK	(0xFFFUL << 12)
 #define RNG_ADC_MEAS_LIMIT		(1UL << 0)
 
@@ -325,7 +325,7 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 		return CRYPTO_STATUS_FAIL;
 	}
 	s_EspRngBusy = true;
-	g_Esp32C3RngCallCount++;
+	g_Esp32C3RngCallCount = g_Esp32C3RngCallCount + 1U;
 	g_Esp32C3RngError = 0U;
 	g_Esp32C3RngStage = 1U;
 	EnableInterrupt(state);
@@ -353,8 +353,8 @@ CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len)
 	}
 	if (ok)
 	{
-		(void)ESP32_RNG_REG(RNG_DATA);
-		(void)ESP32_RNG_REG(RNG_DATA);
+		(void)(uint32_t)ESP32_RNG_REG(RNG_DATA);
+		(void)(uint32_t)ESP32_RNG_REG(RNG_DATA);
 		g_Esp32C3RngStage = 8U;
 	}
 	for (i = 0U; i < Len && ok; i += n)

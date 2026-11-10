@@ -19,8 +19,6 @@ security grade; tests requiring secure entropy are explicitly skipped.
 Optional:
 
 	CRYPTO_TEST_SOAK_AES		random AES rounds, default 200
-	CRYPTO_TEST_TRACE_AES		print AES soak round and operation before each check
-	CRYPTO_TEST_REPORT_STATE	optional board diagnostic function
 	CRYPTO_TEST_SOAK_PKA		random P-256 rounds, default 8
 	CRYPTO_TEST_NO_MAIN			give CryptoEngineTest() and no main() or UART setup
 	UART_RETARGET				send stdout to the board UART, as i2c_scan.cpp
@@ -65,7 +63,7 @@ SOFTWARE.
 #include "crypto/crypto_softsha256.h"
 #include "crypto/crypto_uecc.h"
 
-// Board data supplies console configuration and optional diagnostics.
+// Board data supplies console configuration only.
 #if defined(__has_include)
 #if __has_include("board.h")
 #include "board.h"
@@ -518,18 +516,6 @@ static void SoftwareAesDecryptChecks(CryptoSoftAes *pAes)
 	}
 }
 
-// Optional console markers for a soak test that stops before reporting a result.
-static void AesSoakTrace(int Round, const char *pOperation)
-{
-#ifdef CRYPTO_TEST_TRACE_AES
-	printf("  AES round %d: %s\r\n", Round + 1, pOperation);
-	fflush(stdout);
-#else
-	(void)Round;
-	(void)pOperation;
-#endif
-}
-
 // Engine against the software one on random keys, data and lengths
 static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 					CipherEngine *pSw, MacEngine *pSwMac, AeadEngine *pSwAead)
@@ -548,7 +534,6 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 		CRYPTO_STATUS ds;
 		CryptoKey k = AesKey(key, CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT | CRYPTO_KEY_USE_SIGN);
 
-		AesSoakTrace(r, "generate input");
 		len = XsNext() % 97U;
 		blk = (len / 16U) * 16U;
 		XsFill(key, 16);
@@ -570,7 +555,6 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 		// CTR, any length
 		memset(a, 0, sizeof(a));
 		memset(b, 0, sizeof(b));
-		AesSoakTrace(r, "CTR encrypt");
 		if (pHw->Cipher(CRYPTO_CIPHER_CTR, 1, k, iv, 16, in, len, a) != CRYPTO_STATUS_OK ||
 			pSw->Cipher(CRYPTO_CIPHER_CTR, 1, k, iv, 16, in, len, b) != CRYPTO_STATUS_OK ||
 			memcmp(a, b, len) != 0)
@@ -584,7 +568,6 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 		{
 			memset(a, 0, sizeof(a));
 			memset(b, 0, sizeof(b));
-			AesSoakTrace(r, "CBC encrypt");
 			if (pHw->Cipher(CRYPTO_CIPHER_CBC, 1, k, iv, 16, in, blk, a) != CRYPTO_STATUS_OK ||
 				pSw->Cipher(CRYPTO_CIPHER_CBC, 1, k, iv, 16, in, blk, b) != CRYPTO_STATUS_OK ||
 				memcmp(a, b, blk) != 0)
@@ -593,7 +576,6 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 				continue;
 			}
 			// Decrypt back on the engine under test, when it offers it
-			AesSoakTrace(r, "CBC decrypt");
 			ds = pHw->Cipher(CRYPTO_CIPHER_CBC, 0, k, iv, 16, a, blk, b);
 			if (ds != CRYPTO_STATUS_UNSUPPORTED &&
 				(ds != CRYPTO_STATUS_OK || memcmp(b, in, blk) != 0))
@@ -601,7 +583,6 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 				bad++;
 				continue;
 			}
-			AesSoakTrace(r, "ECB encrypt");
 			if (pHw->Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, in, blk, a) != CRYPTO_STATUS_OK ||
 				pSw->Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, in, blk, b) != CRYPTO_STATUS_OK ||
 				memcmp(a, b, blk) != 0)
@@ -609,7 +590,6 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 				bad++;
 				continue;
 			}
-			AesSoakTrace(r, "ECB decrypt");
 			ds = pHw->Cipher(CRYPTO_CIPHER_ECB, 0, k, nullptr, 0, a, blk, b);
 			if (ds != CRYPTO_STATUS_UNSUPPORTED &&
 				(ds != CRYPTO_STATUS_OK || memcmp(b, in, blk) != 0))
@@ -622,7 +602,6 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 		// CMAC
 		memset(ta, 0, sizeof(ta));
 		memset(tb, 0, sizeof(tb));
-		AesSoakTrace(r, "CMAC");
 		if (pHwMac->Mac(CRYPTO_MAC_CMAC, k, in, len, ta, 16) != CRYPTO_STATUS_OK ||
 			pSwMac->Mac(CRYPTO_MAC_CMAC, k, in, len, tb, 16) != CRYPTO_STATUS_OK ||
 			memcmp(ta, tb, 16) != 0)
@@ -637,7 +616,6 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 		memset(b, 0, sizeof(b));
 		memset(ta, 0, sizeof(ta));
 		memset(tb, 0, sizeof(tb));
-		AesSoakTrace(r, "CCM seal");
 		if (pHwAead->Seal(CRYPTO_AEAD_AES_CCM, k, nonce, 13, aad, alen, in, len, a, ta, 8) != CRYPTO_STATUS_OK ||
 			pSwAead->Seal(CRYPTO_AEAD_AES_CCM, k, nonce, 13, aad, alen, in, len, b, tb, 8) != CRYPTO_STATUS_OK ||
 			memcmp(a, b, len) != 0 || memcmp(ta, tb, 8) != 0)
@@ -649,14 +627,11 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 		memset(b, 0, sizeof(b));
 		memset(ta, 0, sizeof(ta));
 		memset(tb, 0, sizeof(tb));
-		AesSoakTrace(r, "GCM seal target");
 		ds = pHwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, a, ta, 16);
 		if (ds == CRYPTO_STATUS_OK)
 		{
-			AesSoakTrace(r, "GCM seal reference");
 			ds = pSwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, b, tb, 16);
 		}
-		AesSoakTrace(r, "GCM seal compare");
 		if (ds != CRYPTO_STATUS_OK ||
 			memcmp(a, b, len) != 0 || memcmp(ta, tb, 16) != 0)
 		{
@@ -664,7 +639,6 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 			continue;
 		}
 		// The engine under test must open what the reference sealed
-		AesSoakTrace(r, "GCM open");
 		if (pHwAead->Open(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, b, len, a, tb, 16) != CRYPTO_STATUS_OK ||
 			memcmp(a, in, len) != 0)
 		{
@@ -1318,9 +1292,6 @@ int CryptoEngineTest(void)
 	s_fail = 0;
 	s_skip = 0;
 	printf("\r\nCrypto engine test\r\n");
-#ifdef CRYPTO_TEST_REPORT_STATE
-	CRYPTO_TEST_REPORT_STATE();
-#endif
 	swRng->Reset();
 	references = swRng->Enable() && swAes->Enable();
 	swPka->SetRng(swRng);
@@ -1366,9 +1337,6 @@ int CryptoEngineTest(void)
 	AesVectors(crypto, crypto, crypto);
 	Aes256Vectors(crypto);
 	SoftwareAesDecryptChecks(swAes);
-#ifdef CRYPTO_TEST_REPORT_STATE
-	CRYPTO_TEST_REPORT_STATE();
-#endif
 	AesSoak(crypto, crypto, crypto, swAes, swAes, swAes);
 	if (DefaultPkaChecks(crypto, crypto, crypto, swPka))
 	{

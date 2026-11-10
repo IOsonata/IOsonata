@@ -22,17 +22,31 @@ Debug and Release route stdout to UART at 1,000,000 baud, 8N1. C3 uses
 TX GPIO21/RX GPIO20; C6 uses TX GPIO16/RX GPIO17. Other targets retain
 their existing Debug console selection.
 
-Define `CRYPTO_TEST_TRACE_AES` in `board.h` to print the AES soak round and
-operation before each check at the console baud rate. It is disabled by
-default. Capture the last markers if the test stops or restarts.
-These markers are outside the timed benchmarks. C6 also links a local diagnostic
-source selected by `CRYPTO_TEST_REPORT_STATE`. It reports the reset cause and
-watchdog registers at startup and before the soak, without changing them.
-GCM seal markers distinguish the target call, software reference and comparison.
+C6 DevKit Release hardware run, 2026-11-10: 59 passed, 0 failed, 1 skipped.
+All 200 randomized AES comparison rounds completed after correcting the
+Super Watchdog unlock key in shared C5/C6/C61 startup. That run used the
+software PRNG and skipped secure-entropy-dependent tests.
+
+The subsequent C6 RNG implementation enables internal SAR ADC entropy during
+`Crypto::Random()`, then restores its analog, clock and power settings. It uses
+reserved ADC2/channel 1, requires no GPIO wiring, rejects an active ADC, and
+has bounded analog-bus and cycle-counter waits. Failed setup, restoration or
+stuck output clears the requested buffer and disables further draws until
+restart. C6 hardware RNG and the newly enabled key-generation/signing tests
+still need board validation. C3 entropy setup is unchanged; its discarded RNG
+reads now use explicit conversions so the host register model observes them.
+
+C6 setup follows Espressif's v5.5.1 `bootloader_random_esp32c6.c`, `adc_ll.h`
+and `esp_rom_hp_regi2c_esp32c6.c`. Sampling uses one low byte every 80 us,
+slower than the C6 byte sampling interval in `hw_random.c`. The register model
+checks setup, pacing, restoration, ownership and failure handling; it cannot
+establish physical entropy quality.
 
 Host validation:
 
 ```
+python3 tests/crypto/run_esp32c6_rng.py
+python3 tests/crypto/run_esp_models.py
 python3 tests/crypto/run_objects.py
 python3 tests/crypto/run_aes256.py
 python3 tests/crypto/run_pka_models.py

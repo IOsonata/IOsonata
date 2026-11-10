@@ -57,8 +57,7 @@ with tempfile.TemporaryDirectory(prefix='crypto-esp-') as temp:
             flags = [opt, '-g', '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                 '-fno-pie', '-DuECC_ENABLE_VLI_API=1', '-DCRYPTO_TEST_NO_MAIN']
             flags += ['-D' + target, '-DESP32_CRYPTO_POLL_MAX=32', '-include', str(ROOT/'tests/crypto/esp_model.h')]
-            if target == 'ESP32C3':
-                flags.append('-DESP32_RNG_MODEL_DISABLED')
+            flags.append('-DESP32_RNG_MODEL_DISABLED')
             inc = ['-I' + str(p) for p in (out, ROOT/'include', ROOT/'micro-ecc',
                 ROOT/'RISCV/Espressif/include', ROOT/'tests/crypto')]
             objects = []

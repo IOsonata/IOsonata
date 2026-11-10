@@ -46,6 +46,9 @@ SOFTWARE.
 #if defined(ESP32C3)
 CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len);
 bool Esp32C3RngSecureAvailable(void);
+#else
+CRYPTO_STATUS Esp32C6RngFill(uint8_t *pOut, size_t Len);
+bool Esp32C6RngSecureAvailable(void);
 #endif
 
 #ifndef ESP32_CRYPTO_REG
@@ -657,8 +660,7 @@ CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
 
 
 
-#if defined(ESP32C3)
-// On ESP32-C3, Crypto::Init() initializes AES/SHA ONLY. Hardware entropy
+// On ESP32-C3/C6, Crypto::Init() initializes AES/SHA only. Hardware entropy
 // is enabled temporarily when a random draw is requested, never at startup.
 CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
 {
@@ -674,8 +676,10 @@ CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
 	// The AES/SHA register-only host model has no analog entropy model.
 	// It explicitly keeps the test's deterministic PRNG, not the MCU build.
 	return CryptoSoftRngGenerate(vSoftState[0], vSoftState[1], pOut, Len);
-#else
+#elif defined(ESP32C3)
 	return Esp32C3RngFill(pOut, Len);
+#else
+	return Esp32C6RngFill(pOut, Len);
 #endif
 }
 
@@ -683,8 +687,9 @@ bool Crypto::IsSecure() const
 {
 #if defined(ESP32_RNG_MODEL_DISABLED)
 	return false;
-#else
+#elif defined(ESP32C3)
 	return vbValid && Esp32C3RngSecureAvailable();
+#else
+	return vbValid && Esp32C6RngSecureAvailable();
 #endif
 }
-#endif
