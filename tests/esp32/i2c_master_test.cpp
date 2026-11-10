@@ -37,6 +37,7 @@ static unsigned s_ModelDepth = ESP32_I2C_FIFO_DEPTH;
 static bool s_SlaveShiftActive;
 static bool s_SlaveShiftValid;
 static uint8_t s_SlaveShift;
+static unsigned s_TransmitOnFill;
 
 static void SlavePrefetch()
 {
@@ -174,6 +175,12 @@ struct Register {
 			assert(s_Tx.size() < s_ModelDepth);
 			s_Tx.push_back(Value);
 			SlavePrefetch();
+			if (s_TransmitOnFill > 0)
+			{
+				SlaveReadByte();
+				s_Regs[s_ModelBase + 0x20] |= 1U << 4;
+				s_TransmitOnFill--;
+			}
 		}
 		if (Address == s_ModelBase + 4)
 		{
@@ -544,6 +551,22 @@ int main()
 		assert(s_Tx.empty());
 		assert(!(s_Regs[ESP32_I2C0_BASE + 0x28] & (1U << 4)));
 	}
+	// Byte completion is a pending bit, not an event queue. Two bytes
+	// finishing inside one refill must both reach the completion count.
+	SlaveIrq(1U << 16, 2);
+	for (i = 0; i < 23; i++)
+	{
+		assert(SlaveReadByte() == i + 0x40);
+		SlaveIrq(1U << 4, 2);
+	}
+	assert(s_Tx.size() == 8);
+	s_TransmitOnFill = 2;
+	SlaveIrq(1U << 1, 2);
+	assert(s_TransmitOnFill == 0);
+	assert(!(s_Regs[ESP32_I2C0_BASE + 0x20] & (1U << 4)));
+	SlaveIrq((1U << 10) | (1U << 7), 2);
+	assert(s_SlaveCount == 25);
+	assert(s_Tx.empty());
 	// Watermark refill crosses the hardware FIFO and application buffer ends.
 	SlaveIrq(1U << 16, 2);
 	for (i = 0; i < 80; i++)

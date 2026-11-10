@@ -593,8 +593,10 @@ static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 	I2CDev_t *i2c;
 	uint32_t available;
 	uint8_t value;
+	bool countBytes;
 
 	i2c = pDev->pOwner;
+	countBytes = (ESP32_I2C_INT_ENA_REG(pDev->Base) & ESP32_I2C_INT_BYTE_TRANS_DONE) != 0;
 	Esp32I2cTraceSlaveTx(pDev->Base, 0, pDev->SlaveQueued, pDev->SlaveCount);
 	available = ESP32_I2C_FIFO_DEPTH - ((ESP32_I2C_SR_REG(pDev->Base) &
 		ESP32_I2C_SR_TXFIFO_CNT_Msk) >> ESP32_I2C_SR_TXFIFO_CNT_Pos);
@@ -603,6 +605,17 @@ static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 		value = i2c->pRRData[0] && pDev->SlaveQueued < i2c->RRDataLen[0] ?
 			i2c->pRRData[0][pDev->SlaveQueued] : 0xff;
 		ESP32_I2C_DATA_REG(pDev->Base) = value;
+		// A full refill can span several wire bytes. Service the single
+		// pending flag here so those completions do not merge into one.
+		// Counting is disabled during the initial address-stretched fill.
+		if (countBytes && (ESP32_I2C_INT_RAW_REG(pDev->Base) & ESP32_I2C_INT_BYTE_TRANS_DONE))
+		{
+			ESP32_I2C_INT_CLR_REG(pDev->Base) = ESP32_I2C_INT_BYTE_TRANS_DONE;
+			if (pDev->SlaveCount < INT32_MAX)
+			{
+				pDev->SlaveCount++;
+			}
+		}
 		if (pDev->SlaveQueued < INT32_MAX)
 		{
 			pDev->SlaveQueued++;
