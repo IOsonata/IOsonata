@@ -14,6 +14,11 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #else
 #include "RISCV/Espressif/src/system_esp32_pcr.c"
 #endif
+#if defined(ESP32C5) || defined(ESP32C61)
+// ESP-IDF v5.5.1 per-chip hal/lpwdt_ll.h: LP_WDT_SWD_WKEY_VALUE.
+_Static_assert(LP_SWD_WPROTECT_MAGIC == 0x50D83AA1UL,
+	"PCR super watchdog unlock key must match the hardware");
+#endif
 unsigned long __data_start__;
 #define REG(a) (*(volatile uint32_t *)(uintptr_t)(a))
 

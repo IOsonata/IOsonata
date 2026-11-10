@@ -136,7 +136,8 @@ SOFTWARE.
 #define LP_WDT_SWD_CONFIG_REG       (*(volatile uint32_t *)(LP_WDT_BASE + 0x001CU))
 #define LP_WDT_SWD_WPROTECT_REG     (*(volatile uint32_t *)(LP_WDT_BASE + 0x0020U))
 #define LP_WDT_SWD_DISABLE          (1UL << 30)
-#define LP_SWD_WPROTECT_MAGIC       0x8F1D312AUL
+// LP watchdog key from the per-chip ESP-IDF v5.5.1 hal/lpwdt_ll.h.
+#define LP_SWD_WPROTECT_MAGIC       0x50D83AA1UL
 #else
 #define LP_WDT_RWDT_WPROTECT_REG    (*(volatile uint32_t *)(LP_WDT_BASE + 0x001CU))
 #define LP_WDT_SWD_CONFIG_REG       (*(volatile uint32_t *)(LP_WDT_BASE + 0x0020U))

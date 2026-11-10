@@ -22,10 +22,9 @@ Debug and Release route stdout to UART at 1,000,000 baud, 8N1. C3 uses
 TX GPIO21/RX GPIO20; C6 uses TX GPIO16/RX GPIO17. Other targets retain
 their existing Debug console selection.
 
-C6 currently enables `CRYPTO_TEST_TRACE_AES` to locate a reported restart in
-the AES soak test. It prints the round and operation before each check at the
-same console baud rate. Capture the last markers before the test heading
-repeats. Remove that definition from `board.h` to disable the extra output.
+Define `CRYPTO_TEST_TRACE_AES` in `board.h` to print the AES soak round and
+operation before each check at the console baud rate. It is disabled by
+default. Capture the last markers if the test stops or restarts.
 These markers are outside the timed benchmarks. C6 also links a local diagnostic
 source selected by `CRYPTO_TEST_REPORT_STATE`. It reports the reset cause and
 watchdog registers at startup and before the soak, without changing them.
