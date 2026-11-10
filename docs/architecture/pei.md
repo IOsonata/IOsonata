@@ -242,7 +242,7 @@ the shared counter or other CC channels. Disable/re-enable of the PEI
 route does not reset the counter or interrupt-driven CC schedule.
 These changes require a fresh MCU build and hardware revalidation. The
 BLYST-NANO-DK PeiBlinky now selects `DevNo = 6` (TIMER3 at 16 MHz,
-with `Freq = 0`) for the standalone PEI test. The RTC backend remains
+with `Freq = 0`) for the standalone PEI test. The RTC PEI implementation remains
 unvalidated. The TIMER3 selection also requires a fresh MCU build and
 hardware test; Bluetooth coexistence needs separate resource checks.
 
@@ -599,7 +599,7 @@ alone cannot establish whether an endpoint exists.
 DPPI supports a single publisher to multiple subscribers on one channel.
 Connections sharing one event share the physical channel, while retaining
 independent enable/disable state. Disabling one subscriber does not interrupt
-other subscribers. A task has only one subscription register: this backend
+other subscribers. A task has only one subscription register: the DPPI implementation
 rejects attempting to connect two distinct events to the same task.
 
 Each core has 32 channels; the driver supports up to 32 simultaneous logical
