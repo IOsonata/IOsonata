@@ -43,7 +43,9 @@ FIFO occupancy includes prefetched bytes and does not reliably count bytes
 sent on the bus. FIFO filling remains in blocks.
 
 The default build uses interrupt-driven UART and disables register tracing.
-The expanded boundary reads and 400 kHz run still require hardware validation. The C3 has no LP I2C controller; its I2cSlave test
+The expanded boundary reads passed on C6 at both 100 kHz and 400 kHz.
+Servicing byte-completion flags during FIFO refill corrected the observed
+400 kHz completion-count failure. The C3 has no LP I2C controller; its I2cSlave test
 requires an external master.
 
 For diagnostics, define `I2C_TEST_BOARD_TRACE` in the example compiler settings
@@ -54,3 +56,11 @@ Each output line is flushed and paced by 2 ms. DATA is never read by the
 capture code, so diagnostics do not consume received bytes. Remove the define
 to restore normal operation; the diagnostic source then compiles without
 capture storage or trace overrides.
+
+The C6 configuration also runs 1,000 stress rounds at each rate. Each round
+writes a changing pattern, reads it back, and checks a following command-free
+byte. Lengths cycle through 1, 2, 8, 15, 16, 17, 31, 32, 33, 63, 64 and 65.
+Every hundredth round inserts an address NACK before the read to verify
+recovery. Progress prints every 100 rounds; the first failure stops that rate
+and reports its round and operation. Stress hardware validation is pending.
+Other boards keep stress disabled unless they define `I2C_TEST_STRESS_ROUNDS`.

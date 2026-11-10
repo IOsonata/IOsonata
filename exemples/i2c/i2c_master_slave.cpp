@@ -589,6 +589,81 @@ static bool WriteTest(const I2CCfg_t &Cfg, int Len)
 	return pass;
 }
 
+#ifndef I2C_TEST_STRESS_ROUNDS
+#define I2C_TEST_STRESS_ROUNDS 0
+#endif
+
+#if I2C_TEST_STRESS_ROUNDS > 0
+static bool StressTest(const I2CCfg_t &Cfg)
+{
+	static const int lengths[] = { 1, 2, 8, 15, 16, 17, 31, 32, 33, 63, 64, 65 };
+	uint8_t expected[66];
+	uint8_t received[66];
+	uint8_t offset;
+	uint32_t timeout;
+	unsigned round;
+	int len;
+	int count;
+	int i;
+
+	static_assert(I2C_SLAVE_MAX_XFER >= 67, "Stress test needs a 67-byte slave write buffer");
+	printf("Stress: %u rounds\r\n", (unsigned)I2C_TEST_STRESS_ROUNDS);
+	for (round = 0; round < I2C_TEST_STRESS_ROUNDS; round++)
+	{
+		len = lengths[round % (sizeof(lengths) / sizeof(lengths[0]))];
+		offset = (uint8_t)(round % 32U);
+		for (i = 0; i <= len; i++)
+		{
+			expected[i] = (uint8_t)(round * 37U + i * 13U + (round >> 8));
+		}
+		s_SlaveWriteLen = 0;
+		count = MasterWrite(Cfg, I2C_SLAVE_ADDR, offset, expected, len + 1);
+		timeout = 1000000;
+		while (s_SlaveWriteLen == 0 && --timeout != 0)
+		{
+		}
+		if (count != len + 1 || s_SlaveWriteLen != len + 2)
+		{
+			printf("Stress round %u WRITE FAIL: master=%d slave=%d expected=%d+command\r\n",
+				round + 1, count, (int)s_SlaveWriteLen, len + 1);
+			return false;
+		}
+		// Every hundredth read also checks recovery from an address NACK.
+		if ((round + 1) % 100U == 0)
+		{
+			count = MasterWrite(Cfg, I2C_NACK_ADDR, offset, expected, len + 1);
+			if (count != 0)
+			{
+				printf("Stress round %u NACK FAIL: returned %d\r\n", round + 1, count);
+				return false;
+			}
+		}
+		memset(received, 0, sizeof(received));
+		count = MasterRead(offset, received, len);
+		if (count != len || memcmp(received, expected, len) != 0)
+		{
+			printf("Stress round %u READ FAIL, offset=%u\r\n", round + 1, (unsigned)offset);
+			CheckRx("Stress read", count, len, received, expected);
+			return false;
+		}
+		// The extra byte written above independently checks the completion
+		// length used to advance the slave's offset.
+		count = MasterRx(received, 1);
+		if (count != 1 || received[0] != expected[len])
+		{
+			printf("Stress round %u CONTINUE FAIL after %d bytes\r\n", round + 1, len);
+			CheckRx("Stress continuation", count, 1, received, &expected[len]);
+			return false;
+		}
+		if ((round + 1) % 100U == 0 || round + 1 == I2C_TEST_STRESS_ROUNDS)
+		{
+			printf("Stress %u/%u PASS\r\n", round + 1, (unsigned)I2C_TEST_STRESS_ROUNDS);
+		}
+	}
+	return true;
+}
+#endif
+
 // Run one master and slave combination.
 // Return 1 for pass, 0 for fail, -1 when the combination is not supported.
 static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
@@ -733,6 +808,13 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 			pass = false;
 		}
 	}
+
+#if I2C_TEST_STRESS_ROUNDS > 0
+	if (pass)
+	{
+		pass = StressTest(MasterCfg);
+	}
+#endif
 
 #ifdef I2C_TEST_BOARD_TRACE
 	I2cMasterSlavePrintFailures();
