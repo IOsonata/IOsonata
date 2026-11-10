@@ -65,6 +65,7 @@ SOFTWARE.
 #define RNG_ADC_CLOCK		(ESP32_PCR_BASE + 0x80U)
 #define RNG_ADC_CLKM		(ESP32_PCR_BASE + 0x84U)
 #define RNG_ANALOG_POWER		(ESP32_PMU_BASE + 0x154U)
+#define RNG_ANALOG_CLOCK_SOURCE	0x600AF010U
 #define RNG_ANALOG_CLOCK		0x600AF018U
 #define RNG_ANALOG_CLOCK_MAP		0x600AF020U
 #define RNG_ANALOG_CLOCK_MAP_MASK	0xFF000000U
@@ -98,7 +99,7 @@ static void EspC6RngCapture(unsigned Slot)
 		RNG_ANALOG_CTRL0, RNG_ANALOG_CTRL0 + 4U,
 		RNG_ANALOG_CTRL0 + 8U, RNG_ANALOG_CTRL0 + 12U,
 		RNG_ANALOG_SELECT, RNG_ANALOG_READ,
-		0x600AF010U, RNG_ANALOG_CLOCK, 0x600AF01CU,
+		RNG_ANALOG_CLOCK_SOURCE, RNG_ANALOG_CLOCK, 0x600AF01CU,
 		RNG_ANALOG_CLOCK_MAP, 0x600AF024U,
 		RNG_ANALOG_POWER, RNG_ADC_CLOCK
 	};
@@ -140,6 +141,7 @@ typedef struct {
 	uint32_t Clkm;
 	uint32_t Power;
 	uint32_t AnalogClock;
+	uint32_t AnalogClockSource;
 	uint32_t AnalogClockMap;
 	uint32_t RngClock;
 	uint8_t Analog[5];
@@ -236,6 +238,7 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 	pSaved->Clkm = ESP32_RNG_REG(RNG_ADC_CLKM);
 	pSaved->Power = ESP32_RNG_REG(RNG_ANALOG_POWER);
 	pSaved->AnalogClock = ESP32_RNG_REG(RNG_ANALOG_CLOCK);
+	pSaved->AnalogClockSource = ESP32_RNG_REG(RNG_ANALOG_CLOCK_SOURCE);
 	pSaved->AnalogClockMap = ESP32_RNG_REG(RNG_ANALOG_CLOCK_MAP);
 	pSaved->RngClock = ESP32_RNG_REG(RNG_CLOCK);
 
@@ -255,6 +258,9 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 	EspC6RngModify(RNG_ANALOG_CLOCK_MAP, RNG_ANALOG_CLOCK_MAP_MASK,
 		RNG_ANALOG_CLOCK_MAP_MASK);
 	EspC6RngModify(RNG_ANALOG_CLOCK, 4U, 4U);
+	// C6 bootloader_hardware_init() selects the 160 MHz analog-I2C clock.
+	// The ROM-only boot path does not supply that bootloader initialization.
+	EspC6RngModify(RNG_ANALOG_CLOCK_SOURCE, 1U, 1U);
 	EspC6RngModify(RNG_CLOCK, 1U << 24, 1U << 24);
 	EspC6RngCapture(1U);
 	for (i = 0U; i < sizeof(s_AnalogRegisters); i++)
@@ -329,6 +335,7 @@ static bool EspC6RngStop(EspC6RngState_t *pSaved)
 	EspC6RngModify(RNG_ADC_CLKM, 0x7FFFFFU, pSaved->Clkm);
 	EspC6RngModify(RNG_ADC_CLOCK, 0xEU, pSaved->Clock);
 	EspC6RngModify(RNG_ANALOG_POWER, RNG_ANALOG_POWER_MASK, pSaved->Power);
+	EspC6RngModify(RNG_ANALOG_CLOCK_SOURCE, 1U, pSaved->AnalogClockSource);
 	EspC6RngModify(RNG_ANALOG_CLOCK, 4U, pSaved->AnalogClock);
 	EspC6RngModify(RNG_ANALOG_CLOCK_MAP, RNG_ANALOG_CLOCK_MAP_MASK, pSaved->AnalogClockMap);
 	EspC6RngModify(RNG_CLOCK, 1U << 24, pSaved->RngClock);

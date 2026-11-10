@@ -37,12 +37,17 @@ writing 0x66. The driver now also enables the I2C master and LP APB power-state
 clock maps during draws, then restores them. ESP-IDF initializes those maps in
 `rtc_clk_init()`; IOsonata startup does not. The model checks all four PMU codes
 with initially gated domains. The next board run timed out on master 1 (error 2, detail 0x600af804).
-The current change adds trace only; it does not change clocks, power, controller
-selection or timeouts. On failure, the C6 UART report prints transaction number,
-phase (before command, after command, completed), controller, command, and
-register snapshots at entry, setup completion and first failure before cleanup.
-The retained snapshot survives subsequent failed draws. Send the full RNG
-section from the next Release run; no debugger is required.
+The trace then showed transaction 2 stalled after issuing read command 0x169,
+with CLOCK_SOURCE zero. ESP-IDF v5.5.1 C6 `bootloader_hardware_init()` calls
+`regi2c_ctrl_ll_master_configure_clock()`, which selects the 160 MHz source
+(bit 0 at 0x600af010). The driver now saves, selects and restores that field.
+The model checks selection before commands and restoration with either initial
+selection. Board retest remains pending; the trace stays enabled.
+
+On failure, the C6 UART report prints transaction number, phase (before command,
+after command, completed), controller, command, and register snapshots at entry,
+setup completion and first failure before cleanup. The retained snapshot survives
+subsequent failed draws. No debugger is required.
 CryptoTest reports failed draws as unavailable, rather than calling them a
 software PRNG. On C6, the first draw failure also prints the retained RNG error
 and detail: 1 ADC in use, 2 analog bus timeout, 3 analog selection in use,

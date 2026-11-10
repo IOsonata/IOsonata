@@ -115,6 +115,8 @@ EspRngModelReg &EspRngModelReg::operator=(uint32_t Value)
 	}
 	if (Addr == RNG_ANALOG_CTRL0 || Addr == RNG_ANALOG_CTRL0 + 4U)
 	{
+		// C6 bootloader selects this clock before any analog-I2C command.
+		assert((s_Values[RNG_ANALOG_CLOCK_SOURCE] & 1U) != 0U);
 		clockMap = s_Values[RNG_ANALOG_CLOCK_MAP];
 		clocked = (clockMap & (1U << (24U + s_PmuCode))) != 0U &&
 			(clockMap & (1U << (28U + s_PmuCode))) != 0U &&
@@ -185,6 +187,7 @@ int main(int argc, char **argv)
 	s_Values[RNG_ADC_CLKM] = 0x400004U;
 	s_Values[RNG_ANALOG_POWER] = strcmp(argv[1], "powered") == 0 ? 0x08001234U : 0x04001234U;
 	s_Values[RNG_ANALOG_CLOCK] = 0x81U;
+	s_Values[RNG_ANALOG_CLOCK_SOURCE] = strcmp(argv[1], "source_selected") == 0 ? 0xA5U : 0xA4U;
 	s_Values[RNG_ANALOG_CLOCK_MAP] = 0x005A1234U;
 	s_PmuCode = strcmp(argv[1], "pmu1") == 0 ? 1U :
 		(strcmp(argv[1], "pmu2") == 0 ? 2U : (strcmp(argv[1], "pmu3") == 0 ? 3U : 0U));
