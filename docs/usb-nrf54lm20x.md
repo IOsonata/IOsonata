@@ -143,8 +143,10 @@ Each has four configurations:
   Release_SDC library, and link `mpsl`, `mpsl_fem_common` and
   `softdevice_controller_multirole` from sdk-nrfxlib.
 
-All four use `gcc_nrf54lm20a_xxaa_s145.ld`; with the SoftDevice Controller its
-SoftDevice partition stays unused. The TaktOS project also links `TaktOS_M33`.
+For the central projects, Debug and Release currently select
+`gcc_nrf54lm20a_xxaa_s145.ld`, while Debug_SDC and Release_SDC select
+`gcc_nrf54lm20b_xxaa.ld`. All configurations define `NRF54LM20B_XXAA`.
+The TaktOS project also links `TaktOS_M33`.
 `src/board.h` maps the four DK LEDs; LED4 shows the Bluetooth link.
 
 The USB/BLE project configurations are integrated with IOsonata's existing
