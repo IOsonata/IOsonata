@@ -234,6 +234,26 @@ static uint8_t s_WriteTestData[I2C_LONG_WRITE_LEN];
 static bool s_bWriteRqst = false;
 static int s_Offset = 0;
 
+#ifndef I2C_TEST_TRACE_SIZE
+#define I2C_TEST_TRACE_SIZE 0
+#endif
+
+#if I2C_TEST_TRACE_SIZE > 0
+// Capture in the callback; print only after the master transfer returns.
+typedef struct {
+	DEVINTRF_EVT Event;
+	int Length;
+	int OffsetBefore;
+	int OffsetAfter;
+	bool WriteBefore;
+	uint8_t Received[9];
+	uint8_t Memory[8];
+} I2cTestTrace_t;
+
+static I2cTestTrace_t s_SlaveTrace[I2C_TEST_TRACE_SIZE];
+static std::atomic<int> s_SlaveTraceCount(0);
+#endif
+
 static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
 	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
@@ -257,6 +277,14 @@ static int WaitMasterComplete(int Timeout)
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
 	int n;
+#if I2C_TEST_TRACE_SIZE > 0
+	int index;
+	int offsetBefore;
+	bool writeBefore;
+
+	offsetBefore = s_Offset;
+	writeBefore = s_bWriteRqst;
+#endif
 
 	switch (EvtId)
 	{
@@ -322,6 +350,22 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 			break;
 	}
 
+#if I2C_TEST_TRACE_SIZE > 0
+	index = s_SlaveTraceCount.load(std::memory_order_relaxed);
+	if (index < I2C_TEST_TRACE_SIZE)
+	{
+		s_SlaveTrace[index].Event = EvtId;
+		s_SlaveTrace[index].Length = Len;
+		s_SlaveTrace[index].OffsetBefore = offsetBefore;
+		s_SlaveTrace[index].OffsetAfter = s_Offset;
+		s_SlaveTrace[index].WriteBefore = writeBefore;
+		memset(s_SlaveTrace[index].Received, 0, sizeof(s_SlaveTrace[index].Received));
+		n = sizeof(s_WriteRqstData) < 9 ? sizeof(s_WriteRqstData) : 9;
+		memcpy(s_SlaveTrace[index].Received, s_WriteRqstData, n);
+		memcpy(s_SlaveTrace[index].Memory, &s_ReadRqstData[4], 8);
+		s_SlaveTraceCount.store(index + 1, std::memory_order_release);
+	}
+#endif
 	return I2C_BUFF_SIZE;
 }
 
@@ -407,6 +451,32 @@ static void PrintBytes(const uint8_t *pData, int Len)
 		printf(" ...");
 	printf("\r\n");
 }
+
+#if I2C_TEST_TRACE_SIZE > 0
+static void PrintSlaveTrace()
+{
+	int count;
+	int i;
+	const char *event;
+	const I2cTestTrace_t *entry;
+
+	count = s_SlaveTraceCount.load(std::memory_order_acquire);
+	printf("Slave callback trace: %d entries (capacity %d)\r\n", count, I2C_TEST_TRACE_SIZE);
+	for (i = 0; i < count; i++)
+	{
+		entry = &s_SlaveTrace[i];
+		event = entry->Event == DEVINTRF_EVT_WRITE_RQST ? "WRITE" :
+			entry->Event == DEVINTRF_EVT_READ_RQST ? "READ" :
+			entry->Event == DEVINTRF_EVT_COMPLETED ? "DONE" : "OTHER";
+		printf("  %d %s len=%d write=%d offset=%d->%d\r\n", i, event,
+			entry->Length, entry->WriteBefore, entry->OffsetBefore, entry->OffsetAfter);
+		printf("    RX buffer:");
+		PrintBytes(entry->Received, sizeof(entry->Received));
+		printf("    Memory[4..11]:");
+		PrintBytes(entry->Memory, sizeof(entry->Memory));
+	}
+}
+#endif
 
 // Check Len received bytes against the expected ones
 static bool CheckRx(const char *pLabel, int Count, int Len, const uint8_t *pRx, const uint8_t *pExpected)
@@ -500,6 +570,10 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 	s_Offset = 0;
 	s_bWriteRqst = false;
 
+#if I2C_TEST_TRACE_SIZE > 0
+	s_SlaveTraceCount = 0;
+#endif
+
 	// Register write of 8 bytes at offset 4
 	c = MasterWrite(MasterCfg, I2C_SLAVE_ADDR, offset, wr, sizeof(wr));
 	printf("Write %d/%d bytes at offset %d\r\n", c, (int)sizeof(wr), offset);
@@ -554,6 +628,9 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 		}
 	}
 
+#if I2C_TEST_TRACE_SIZE > 0
+	PrintSlaveTrace();
+#endif
 	return pass ? 1 : 0;
 }
 

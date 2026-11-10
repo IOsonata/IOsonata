@@ -29,3 +29,13 @@ The long write crosses both the 16-byte LP FIFO and the 32-byte HP FIFO.
 Expected final message: `I2C master/slave loopback PASS`.
 Hardware validation is pending. The C3 has no LP I2C controller; its I2cSlave
 test still requires an external master.
+
+The C6 board enables a bounded slave callback trace (`I2C_TEST_TRACE_SIZE`).
+The example captures the first 24 callbacks and prints them after the test,
+without UART output inside the I2C interrupt. Each entry shows the event,
+reported length, previous write state, offset before and after the callback,
+first nine bytes of the receive buffer, and slave memory at offsets 4 through
+11. Buffer snapshots can contain bytes from earlier writes; the reported
+length determines how many bytes belong to the current event. This trace is
+for investigating the first register-read failure; hardware validation is
+still pending.
