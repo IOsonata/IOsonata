@@ -34,6 +34,8 @@ static uint8_t s_NextRx;
 static unsigned s_RawReads;
 static uintptr_t s_ModelBase = ESP32_I2C0_BASE;
 static unsigned s_ModelDepth = ESP32_I2C_FIFO_DEPTH;
+static void SlaveIrq(uint32_t Status, uint32_t State);
+static bool s_SlavePrefetchNext = true;
 static bool s_SlaveShiftActive;
 static bool s_SlaveShiftValid;
 static uint8_t s_SlaveShift;
@@ -48,16 +50,24 @@ static void SlavePrefetch()
 	}
 }
 
+#if !defined(ESP32C2)
 static uint8_t SlaveReadByte()
 {
 	uint8_t value;
 
+	SlavePrefetch();
 	assert(s_SlaveShiftValid);
 	value = s_SlaveShift;
 	s_SlaveShiftValid = false;
-	SlavePrefetch();
+	if (s_SlavePrefetchNext)
+	{
+		SlavePrefetch();
+	}
+	assert(s_Regs[ESP32_I2C0_BASE + 0x28] & (1U << 4));
+	SlaveIrq(1U << 4, 2);
 	return value;
 }
+#endif
 
 static void Execute()
 {
@@ -409,7 +419,7 @@ int main()
 		s_FailRun = i;
 		s_Failure = 1U << 10;
 		assert(DeviceIntrfRead(&dev.DevIntrf, 0x50, &reg, 1, data, 1) == 0);
-		assert(s_Nacks == 0 && s_Stops == 1);
+		assert(s_Nacks == 0 && s_Stops == (i == 1 ? 0U : 1U));
 		TraceReset();
 		assert(DeviceIntrfRx(&dev.DevIntrf, 0x50, data, 1) == 1);
 	}
@@ -423,12 +433,12 @@ int main()
 	s_Failure = 0;
 	assert(!I2CStartTx(&dev, 0x50));
 	assert(s_RawReads > 100 && s_RawReads < 1000);
-	assert(s_Stops == 1);
+	assert(s_Stops == 0);
 	TraceReset();
 	s_FailRun = 1;
 	s_Failure = 1U << 8;
 	assert(!I2CStartTx(&dev, 0x50));
-	assert(s_Stops == 1);
+	assert(s_Stops == 0);
 	TraceReset();
 	s_Regs[ESP32_I2C0_BASE + 8] = 16;
 	assert(!I2CStartTx(&dev, 0x50));
@@ -517,6 +527,7 @@ int main()
 	// A new response must not begin with bytes remaining from the old one.
 	for (runs = 1; runs <= 8; runs *= 2)
 	{
+		s_SlavePrefetchNext = (runs & 2U) != 0;
 		s_Rx = {4};
 		SlaveIrq(1U << 16, 2);
 		for (i = 0; i < runs; i++)
@@ -527,6 +538,14 @@ int main()
 		assert(s_SlaveCount == (int)runs);
 		assert(s_Tx.empty());
 	}
+	// The last data-byte event may arrive together with STOP.
+	SlaveIrq(1U << 16, 2);
+	assert(s_SlaveShiftValid);
+	s_SlaveShiftValid = false;
+	SlaveIrq((1U << 4) | (1U << 7), 2);
+	assert(s_SlaveCount == 1);
+	assert(!(s_Regs[ESP32_I2C0_BASE + 0x28] & (1U << 4)));
+	s_SlavePrefetchNext = true;
 	// Watermark refill crosses the hardware FIFO and application buffer ends.
 	SlaveIrq(1U << 16, 2);
 	for (i = 0; i < 80; i++)
@@ -614,7 +633,8 @@ int main()
 	s_FailRun = 1;
 	s_Failure = 1U << 10;
 	assert(DeviceIntrfRx(&other.DevIntrf, 0x22, data, 1) == 0);
-	assert(s_Stops == 1);
+	assert(s_Stops == 0);
+	assert(s_Runs == 1);
 	TraceReset();
 	assert(DeviceIntrfRx(&other.DevIntrf, 0x22, data, 1) == 1);
 	other.DevIntrf.PowerOff(&other.DevIntrf);
