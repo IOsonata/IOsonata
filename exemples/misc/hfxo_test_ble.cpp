@@ -47,6 +47,8 @@ SOFTWARE.
 #include "nrf_mpsl.h"
 #elif defined(SOFTDEVICE_PRESENT)
 #include "nrf_sdh.h"
+#include "nrf_sdh_soc.h"
+#include "sd_dispatch.h"
 #else
 #error "HfxoTestBle requires SoftDevice or SDC"
 #endif
@@ -107,11 +109,28 @@ static void HfxoConsoleInit(void)
 }
 #endif
 
+#if defined(SOFTDEVICE_PRESENT) && !defined(NRFXLIB_SDC)
+// The SoftDevice sends NRF_EVT_HFCLKSTARTED through SD_EVT_IRQHandler.
+// Keep its interrupt handler and SoC event polling function linked.
+static void HfxoSdDispatch(void)
+{
+	nrf_sdh_evts_poll();
+}
+
+extern "C" void nrf_sdh_soc_evts_poll(void *pContext);
+
+NRF_SDH_STACK_OBSERVER(s_HfxoSocObserver, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {
+	.handler = nrf_sdh_soc_evts_poll,
+	.p_context = NULL,
+};
+#endif
+
 static bool HfxoStackInit(void)
 {
 #if defined(NRFXLIB_SDC)
 	return MpslInit();
 #else
+	SetSoftdeviceDispatch(HfxoSdDispatch);
 	return nrf_sdh_enable_request() == 0U;
 #endif
 }
