@@ -107,11 +107,6 @@ static I2cSlaveTxTrace_t s_SlaveTxTrace[128];
 static unsigned s_SlaveTxTraceCount;
 static bool s_SlaveTxTraceOverflow;
 
-bool Esp32I2cTraceSlaveBytes()
-{
-	return true;
-}
-
 void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase, int Queued, int Count)
 {
 	I2cSlaveTxTrace_t *entry;

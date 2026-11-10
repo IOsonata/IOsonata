@@ -588,12 +588,6 @@ __attribute__((weak)) void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase,
 	(void)Count;
 }
 
-// The diagnostic example opts in. Normal applications keep FIFO interrupts.
-__attribute__((weak)) bool Esp32I2cTraceSlaveBytes()
-{
-	return false;
-}
-
 static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 {
 	I2CDev_t *i2c;
@@ -620,7 +614,6 @@ static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 {
 	I2CDev_t *i2c;
-	int remaining;
 
 	if (!pDev->bOpen)
 	{
@@ -633,14 +626,8 @@ static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 	}
 	else
 	{
-		remaining = (ESP32_I2C_SR_REG(pDev->Base) & ESP32_I2C_SR_TXFIFO_CNT_Msk) >> ESP32_I2C_SR_TXFIFO_CNT_Pos;
-		pDev->SlaveCount = pDev->SlaveQueued - remaining;
-		// The output register holds one prefetched byte outside the FIFO.
-		// At STOP that byte has not been clocked out by the master.
-		if (pDev->SlaveCount > 0)
-		{
-			pDev->SlaveCount--;
-		}
+		// SlaveCount counts completed byte events. FIFO consumption includes
+		// a variable number of prefetched bytes and is not a wire count.
 		Esp32I2cTraceSlaveTx(pDev->Base, 2, pDev->SlaveQueued, pDev->SlaveCount);
 		// Discard the rest of this response before another read address can
 		// prefetch it. Resetting at READ_RQST is too late for that first byte.
@@ -709,6 +696,13 @@ static void Esp32I2cSlaveIrq(void)
 	{
 		dev->bError = true;
 	}
+	// Count the final byte before processing STOP when both events arrive
+	// in one interrupt. NACK is an end indication, not another byte.
+	if ((status & ESP32_I2C_INT_BYTE_TRANS_DONE) && dev->bOpen &&
+		!dev->bRx && !readRequest && dev->SlaveCount < INT32_MAX)
+	{
+		dev->SlaveCount++;
+	}
 	// A repeated START hands the write count to READ_RQST below. Completing
 	// that write first would discard the command context in the callback.
 	if ((status & ESP32_I2C_INT_TRANS_COMPLETE) && !readRequest)
@@ -741,15 +735,12 @@ static void Esp32I2cSlaveIrq(void)
 			if (!dev->bRx)
 			{
 				Esp32I2cSlaveFill(dev);
-				if (Esp32I2cTraceSlaveBytes())
-				{
-					// Drop old flags before observing this read. Capture any
-					// address-byte event that arrives after stretch release too.
-					ESP32_I2C_INT_CLR_REG(dev->Base) =
-						ESP32_I2C_INT_BYTE_TRANS_DONE | ESP32_I2C_INT_NACK;
-					ESP32_I2C_INT_ENA_REG(dev->Base) |=
-						ESP32_I2C_INT_BYTE_TRANS_DONE | ESP32_I2C_INT_NACK;
-				}
+				// The address byte can leave a pending event. Clear it while
+				// SCL is stretched, before observing response data bytes.
+				ESP32_I2C_INT_CLR_REG(dev->Base) =
+					ESP32_I2C_INT_BYTE_TRANS_DONE | ESP32_I2C_INT_NACK;
+				ESP32_I2C_INT_ENA_REG(dev->Base) |=
+					ESP32_I2C_INT_BYTE_TRANS_DONE | ESP32_I2C_INT_NACK;
 				ESP32_I2C_INT_ENA_REG(dev->Base) |= ESP32_I2C_INT_TXFIFO_WM;
 			}
 			else

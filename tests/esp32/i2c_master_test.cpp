@@ -48,14 +48,17 @@ static void SlavePrefetch()
 	}
 }
 
-static uint8_t SlaveReadByte()
+static uint8_t SlaveReadByte(bool Prefetch = true)
 {
 	uint8_t value;
 
 	assert(s_SlaveShiftValid);
 	value = s_SlaveShift;
 	s_SlaveShiftValid = false;
-	SlavePrefetch();
+	if (Prefetch)
+	{
+		SlavePrefetch();
+	}
 	return value;
 }
 
@@ -487,7 +490,7 @@ int main()
 	SlaveIrq((1U << 16) | (1U << 7), 2);
 	assert(s_Previous == 1 && s_SlaveRx[0] == 4);
 	SlaveReadByte();
-	SlaveIrq(1U << 7, 2);
+	SlaveIrq((1U << 4) | (1U << 10) | (1U << 7), 2);
 	assert(s_SlaveCount == 1);
 	// A longer write first becomes visible at the RX watermark.
 	s_Rx = {1, 2, 3};
@@ -510,6 +513,7 @@ int main()
 	for (i = 0; i < 4; i++)
 	{
 		assert(SlaveReadByte() == i + 0x40);
+		SlaveIrq(1U << 4, 2);
 	}
 	SlaveIrq(1U << 7, 2);
 	assert(s_SlaveCount == 4);
@@ -522,16 +526,30 @@ int main()
 		for (i = 0; i < runs; i++)
 		{
 			assert(SlaveReadByte() == i + 0x40);
+			SlaveIrq(1U << 4, 2);
 		}
+		SlaveIrq(1U << 10, 2);
 		SlaveIrq(1U << 7, 2);
 		assert(s_SlaveCount == (int)runs);
 		assert(s_Tx.empty());
+	}
+	// Both final-byte FIFO states occur on C6: the next byte may or may
+	// not have been prefetched. Completion must report one byte either way.
+	for (runs = 0; runs < 2; runs++)
+	{
+		SlaveIrq(1U << 16, 2);
+		assert(SlaveReadByte(runs != 0) == 0x40);
+		SlaveIrq((1U << 4) | (1U << 10) | (1U << 7), 2);
+		assert(s_SlaveCount == 1);
+		assert(s_Tx.empty());
+		assert(!(s_Regs[ESP32_I2C0_BASE + 0x28] & (1U << 4)));
 	}
 	// Watermark refill crosses the hardware FIFO and application buffer ends.
 	SlaveIrq(1U << 16, 2);
 	for (i = 0; i < 80; i++)
 	{
 		assert(SlaveReadByte() == (i < 64 ? i + 0x40 : 0xff));
+		SlaveIrq(1U << 4, 2);
 		if (s_Tx.size() == 8)
 		{
 			SlaveIrq(1U << 1, 2);
