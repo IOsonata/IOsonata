@@ -36,6 +36,7 @@ static unsigned s_Reads;
 static unsigned s_Asserts;
 static unsigned s_Releases;
 static uint32_t s_Cs;
+static uint32_t s_SlavePrefetch[16];
 
 struct Register {
 	uintptr_t Address;
@@ -49,10 +50,22 @@ struct Register {
 	}
 	void operator=(uint32_t Value)
 	{
+		uint32_t previous;
 		unsigned bytes;
 		unsigned i;
 
+		previous = s_Regs[Address];
 		s_Regs[Address] = Value;
+		// The TX FIFO reloads from shared buffer memory when reset is released.
+		// A reset before new TX data is written captures the previous RX data.
+		if (Address == ESP32_SPI2_BASE + 0x30 && (previous & (1U << 30)) &&
+			!(Value & (1U << 30)))
+		{
+			for (i = 0; i < 16; i++)
+			{
+				s_SlavePrefetch[i] = s_Regs[ESP32_SPI2_BASE + 0x98 + i * 4];
+			}
+		}
 		if (Address == ESP32_GPIO_BASE + ESP32_GPIO_OUT_W1TS_OFFSET)
 		{
 			s_Cs &= ~Value;
@@ -428,6 +441,10 @@ int main()
 		{
 			memset(s_SlaveRx, 0xcc, sizeof(s_SlaveRx));
 			assert((s_Regs[SPI_BASE + 0x98] & 255) == s_SlaveTx[0]);
+			for (i = 0; i < 64; i++)
+			{
+				assert(((s_SlavePrefetch[i / 4] >> (8 * (i % 4))) & 255) == s_SlaveTx[i]);
+			}
 			for (i = 0; i < 16; i++)
 			{
 				s_Regs[SPI_BASE + 0x98 + i * 4] = 0x03020100 + i * 0x04040404;
