@@ -7,7 +7,7 @@ mere possession of EVENTS/TASKS registers is **not** sufficient
 justification for a PEI integration. A supported route must eliminate
 repetitive MCU intervention after initial configuration; one-shot
 operations without a recurring hardware benefit stay in the normal
-driver. The nRF52 PEI backend owns PPI routing; *peripheral drivers*
+driver. The nRF52 PEI implementation owns PPI routing; *peripheral drivers*
 must own endpoint configuration, lifetime, resource checks and
 task readiness. No ISR may forward a PEI event in software.
 
@@ -134,7 +134,7 @@ Hardware test: the nRF52832 `PeiBlinky` board now selects `DevNo = 6`
 (TIMER3 at 16 MHz with `Freq = 0`) by default. Build and flash the
 standalone bare-metal example with the same two LEDs and BUT1/BUT2.
 Confirm start/stop and 500 ms alternating LEDs, then test release/reuse
-and inspect ISR entries. This tests the HF TIMER backend, **not RTC**;
+and inspect ISR entries. This tests the HF TIMER driver, **not RTC**;
 a separate RTC2 (`DevNo = 2`) configuration is required to validate the
 low-frequency RTC PEI path.
 
@@ -299,12 +299,12 @@ register; I2S remains responsible for pointer updates.
 
 Neither driver introduces software interrupt event-forwarding. Routing
 functions use weak references to the optional PEI matrix, so a
-PDM/I2S-only firmware should not retain the PPI backend. Only the
+PDM/I2S-only firmware should not retain the PPI implementation. Only the
 nRF52 legacy PPI endpoints are exposed; nRF53/nRF54 use other
-interconnect backends and are not covered by these APIs yet.
+interconnect implementations and are not covered by these APIs yet.
 
 The hardware-free tests check the C and C++ public declarations,
-register endpoint mapping, essential buffer/IRQ preparation contracts
+register endpoint mapping, essential buffer and IRQ preparation checks
 and non-PEI linker-section isolation. They are not a substitute for
 compiling against all supported installed Nordic CMSIS headers or a
 live microphone/I2S controller. These features remain **implemented

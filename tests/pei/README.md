@@ -7,7 +7,7 @@ python3 tests/pei/run.py
 ```
 
 The host tests compile the production `src/coredev/pei.c` C matrix
-and the `ARM/Nordic/nRF52/src/pei_nrf52.cpp` PPI backend against mock
+and the `ARM/Nordic/nRF52/src/pei_nrf52.cpp` PPI implementation against mock
 registers. The matrix is shared by C (`PeiDev_t`) and C++ (`Pei`)
 callers. They test bare-metal nRF52832 (20 configurable
 channels), S132, S140, SDC, and nRF52805 (10 configurable channels). The mock
@@ -267,7 +267,7 @@ READCLRACC with the original QDEC ISR. The BLYST-NANO-DK
 PeiQdecDemo tests hardware START/STOP and sampling events,
 not quadrature motion accuracy.
 
-The generic PPI group backend supports repeated hardware
+The generic PPI group implementation supports repeated hardware
 enable/disable of owned routes with TASKS_CHG[n].EN/DIS.
 PeiGroupDemo exercises hardware arm/fire/disarm. The C/C++
 group APIs and mock register model are exercised by
@@ -293,7 +293,7 @@ sequence and buffer reuse before accepting those APIs.
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or
-nRF52 PPI backend from `libIOsonata_nRF52832.a`. The TimerDemo
+nRF52 PPI implementation from `libIOsonata_nRF52832.a`. The TimerDemo
 linker map previously demonstrated the regression:
 
 ```text
@@ -354,7 +354,7 @@ for the remaining peripheral families, device-specific differences,
 ownership rules and acceptance criteria. Do not move PEI development
 to another MCU family until nRF52 coverage is complete.
 
-The RTC Timer backend implements TICK/OVRFLW event sources through
+The RTC driver implements TICK/OVRFLW event sources through
 `EVTEN` independently from `INTEN`. Each free compare channel may
 bind its `EVENTS_COMPARE[n]` source to PEI without stopping or clearing
 the counter. Continuous compare scheduling uses an RTC ISR to update
@@ -448,7 +448,7 @@ the configured value, not a separately measured timing result. A debugger
 trace confirming expected TIMER3 compare ISR entries and no event-forwarding GPIOTE ISR is still pending.
 
 Hardware observation (November 7, 2026): following the PEI C++
-backend rename, Eclipse project-link corrections and Timer/GPIO HAL
+implementation rename, Eclipse project-link corrections and Timer/GPIO HAL
 integration, the device tester reports that the nRF52832 HAL and
 `PeiBlinky` compiled and the BLYST-NANO-DK LED flashes at approximately
 1 Hz. This is a **functional hardware PASS** for the earlier one-LED
@@ -477,5 +477,5 @@ testing are separate acceptance checks.
 
 The shared example uses no target-specific registers or platform
 adapter. Timer and GPIO have the endpoint preparation APIs on nRF52.
-The nRF53 DPPI backend and other MCU-specific peripheral drivers are
+The nRF53 DPPI implementation and other MCU-specific peripheral drivers are
 separate follow-up integrations.
