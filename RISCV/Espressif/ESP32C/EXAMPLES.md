@@ -15,6 +15,7 @@ the same Debug or Release configuration. Use Release for throughput tests.
 | I2cScan | Discover responding slave addresses | C2/C3/C5/C6/C61 |
 | I2cMaster | Write/read verification with the generic I2C slave demo | C2/C3/C5/C6/C61 |
 | SpiLoopback | Verify SPI with MOSI wired to MISO | C2/C3/C5/C6/C61 |
+| I2cMasterSlave | LP hardware master and HP slave on one board | C6 |
 | I2cSlave | Interrupt-driven slave memory at address 0x22 | C3/C6 |
 | SpiMasterSlave | SPISoft master and SPI2 slave with four jumpers | C3/C6 |
 | SpiMaster | Command and data transfers with an external SPI peer | C2/C3/C5/C6/C61 |
@@ -42,8 +43,10 @@ I2cMaster needs a second MCU running `exemples/i2c/i2c_slave_demo.cpp` at
 address 0x22. Connect SDA GPIO6, SCL GPIO7, and ground; provide external pull-ups.
 It writes and reads 16 bytes at offset 2 and prints PASS or FAIL. C3/C6
 I2cSlave projects provide that peer. Hardware I2C slave mode is implemented
-for C3/C5/C6/C61; C2 has a master-only controller. C6 LP I2C master support
-is not implemented, so this I2C test currently needs two boards.
+for C3/C5/C6/C61; C2 has a master-only controller. C6 I2cMasterSlave
+uses its LP master and HP slave on one board. Connect GPIO6 to GPIO4 (SDA)
+and GPIO7 to GPIO5 (SCL), with pull-ups to 3.3 V. C3 I2cSlave still needs an
+external master.
 
 SpiMaster uses mode 3 at 1 MHz with automatic chip select. Connect an external
 SPI peer to the board header's SCK, MOSI, MISO and CS pins plus ground. It sends

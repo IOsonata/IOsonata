@@ -16,7 +16,7 @@ EXAMPLES = {'UartPrbsRxTest': 'uart/uart_prbs_rx.cpp', 'UartRetarget': 'uart/uar
 
 class SerialExamples(unittest.TestCase):
     def test_managed_projects(self):
-        for chip, app, source in ((c, a, s) for c in CHIPS for a, s in (EXAMPLES | ({'SpiMasterSlave': 'spi/spi_master_slave.cpp', 'I2cSlave': 'i2c/i2c_slave_demo.cpp'} if c in ('ESP32C3', 'ESP32C6') else {})).items()):
+        for chip, app, source in ((c, a, s) for c in CHIPS for a, s in (EXAMPLES | ({'SpiMasterSlave': 'spi/spi_master_slave.cpp', 'I2cSlave': 'i2c/i2c_slave_demo.cpp'} if c in ('ESP32C3', 'ESP32C6') else {}) | ({'I2cMasterSlave': 'i2c/i2c_master_slave.cpp'} if c == 'ESP32C6' else {})).items()):
             with self.subTest(chip=chip, app=app):
                 project = BASE / chip / ('exemples/' + app + '/ioc')
                 paths = []

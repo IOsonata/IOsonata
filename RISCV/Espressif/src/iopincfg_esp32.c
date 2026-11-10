@@ -295,6 +295,53 @@ static void ESP32GPIODisconnectOutput(int PinNo)
 	}
 }
 
+#if defined(ESP32C6)
+static void Esp32LpI2cPinConfig(int PinNo, IOPINRES Resistor)
+{
+	uint32_t mask;
+	uint32_t config;
+	uintptr_t state;
+
+	mask = 1UL << PinNo;
+	config = (1UL << ESP32_LP_IO_MCU_SEL_Pos) | ESP32_LP_IO_FUN_IE_Msk |
+		(2UL << ESP32_LP_IO_FUN_DRV_Pos);
+	if (Resistor == IOPINRES_PULLUP)
+	{
+		config |= ESP32_LP_IO_FUN_WPU_Msk;
+	}
+	state = DisableInterrupt();
+	ESP32_LP_PERI_CLK_EN_REG |= ESP32_LP_IO_CLK_EN_Msk;
+	ESP32_GPIO_ENABLE_W1TC_REG32 = mask;
+	ESP32_LP_IO_ENABLE_W1TC_REG = mask;
+	ESP32_LP_IO_OUT_W1TS_REG = mask;
+	ESP32_LP_IO_PIN_REG(PinNo) |= ESP32_LP_IO_PAD_DRIVER_Msk;
+	ESP32_LP_IO_MUX_REG(PinNo) = config;
+	ESP32_LP_IO_ENABLE_W1TS_REG = mask;
+	ESP32_LP_AON_GPIO_MUX_REG |= mask;
+	EnableInterrupt(state);
+}
+
+static void Esp32LpPinRelease(int PinNo)
+{
+	uint32_t mask;
+	uintptr_t state;
+
+	if (PinNo >= 8)
+	{
+		return;
+	}
+	mask = 1UL << PinNo;
+	state = DisableInterrupt();
+	if (ESP32_LP_AON_GPIO_MUX_REG & mask)
+	{
+		ESP32_LP_IO_ENABLE_W1TC_REG = mask;
+		ESP32_LP_IO_MUX_REG(PinNo) = 0;
+		ESP32_LP_AON_GPIO_MUX_REG &= ~mask;
+	}
+	EnableInterrupt(state);
+}
+#endif
+
 void IOPinConfig(int PortNo, int PinNo, int PinOp,
 				 IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
@@ -311,6 +358,19 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp,
 	{
 		return;
 	}
+
+#if defined(ESP32C6)
+	if (PinOp == ESP32_PINOP_LP_I2C_SDA)
+	{
+		if ((PinNo == 6 || PinNo == 7) && Dir == IOPINDIR_BI &&
+			Type == IOPINTYPE_OPENDRAIN && Resistor != IOPINRES_PULLDOWN)
+		{
+			Esp32LpI2cPinConfig(PinNo, Resistor);
+		}
+		return;
+	}
+	Esp32LpPinRelease(PinNo);
+#endif
 
 	pin = (uint32_t)PinNo;
 	mask = ESP32PinMask(pin);
@@ -421,6 +481,9 @@ void IOPinDisable(int PortNo, int PinNo)
 	{
 		return;
 	}
+#if defined(ESP32C6)
+	Esp32LpPinRelease(PinNo);
+#endif
 	pin = (uint32_t)PinNo;
 	state = DisableInterrupt();
 	ESP32_GPIO_ENABLE_W1TC_REG32 = ESP32PinMask(pin);

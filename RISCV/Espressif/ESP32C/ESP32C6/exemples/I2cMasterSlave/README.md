@@ -1,0 +1,24 @@
+# ESP32C6 I2cMasterSlave
+
+Uses the generic `exemples/i2c/i2c_master_slave.cpp` on one devkit.
+I2C device 1 is the LP hardware master; device 0 is the HP hardware slave.
+Both run on the main CPU, without an LP-core application.
+
+| Signal | LP master GPIO | HP slave GPIO |
+| --- | --- | --- |
+| SDA | 6 | 4 |
+| SCL | 7 | 5 |
+
+Connect each row with a jumper. Add a 4.7 kOhm pull-up from each bus line to
+3.3 V for reliable operation; the example also enables the internal pull-ups.
+Build the matching library and example, then flash at offset 0. Both Debug
+and Release print results over UART at 1,000,000 baud, 8N1.
+
+The generic test uses 100 kHz, polling master and interrupt slave. It checks
+register writes, repeated-START reads, reads without a command, writes up to
+254 data bytes plus the command, address NACK, and recovery after NACK.
+The long write crosses both the 16-byte LP FIFO and the 32-byte HP FIFO.
+
+Expected final message: `I2C master/slave loopback PASS`.
+Hardware validation is pending. The C3 has no LP I2C controller; its I2cSlave
+test still requires an external master.

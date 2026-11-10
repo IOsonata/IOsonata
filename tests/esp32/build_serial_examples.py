@@ -57,6 +57,8 @@ for chip in ('ESP32C2', 'ESP32C3', 'ESP32C5', 'ESP32C6', 'ESP32C61'):
         if chip in ('ESP32C3', 'ESP32C6'):
             examples.update({'SpiMasterSlave': 'spi/spi_master_slave.cpp',
                              'I2cSlave': 'i2c/i2c_slave_demo.cpp'})
+        if chip == 'ESP32C6':
+            examples['I2cMasterSlave'] = 'i2c/i2c_master_slave.cpp'
         for name, source in examples.items():
             app = BASE / chip / 'exemples' / name
             obj = directory / (name + '.o')

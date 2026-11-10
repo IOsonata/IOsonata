@@ -165,4 +165,25 @@ int main()
 	assert(uint32_t(ESP32_GPIO_PIN_REG32(4)) == before);
 	IOPinDisableInterrupt(42);
 	assert(s_Masked == 1 && s_GpioIntEnableMask == 0);
+#if defined(ESP32C6)
+	// LP routing must preserve other LP pins and shared peripheral clocks.
+	ESP32_LP_AON_GPIO_MUX_REG = 1U << 2;
+	ESP32_LP_PERI_CLK_EN_REG = 1U << 26;
+	IOPinConfig(0, 6, ESP32_PINOP_LP_I2C_SDA, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN);
+	assert(uint32_t(ESP32_LP_AON_GPIO_MUX_REG) == ((1U << 2) | (1U << 6)));
+	assert(uint32_t(ESP32_LP_PERI_CLK_EN_REG) == ((1U << 26) | (1U << 27)));
+	assert(uint32_t(ESP32_LP_IO_MUX_REG(6)) == 0x1b00);
+	assert(uint32_t(ESP32_LP_IO_PIN_REG(6)) & 4U);
+	IOPinConfig(0, 7, ESP32_PINOP_LP_I2C_SCL, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN);
+	assert(uint32_t(ESP32_LP_IO_MUX_REG(7)) == 0x1a00);
+	before = uint32_t(ESP32_LP_AON_GPIO_MUX_REG);
+	IOPinConfig(0, 5, ESP32_PINOP_LP_I2C_SDA, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN);
+	assert(uint32_t(ESP32_LP_AON_GPIO_MUX_REG) == before);
+	IOPinDisable(0, 6);
+	assert(uint32_t(ESP32_LP_AON_GPIO_MUX_REG) == ((1U << 2) | (1U << 7)));
+	IOPinConfig(0, 7, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	assert(uint32_t(ESP32_LP_AON_GPIO_MUX_REG) == (1U << 2));
+	assert(s_Masked == 1);
+#endif
+
 }

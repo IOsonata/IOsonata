@@ -11,5 +11,5 @@ Build the matching library and example, then flash at offset 0.
 UART output uses 1,000,000 baud, 8N1, in Debug and Release.
 
 The HP I2C controller cannot be master and slave simultaneously. This
-project requires an external master; the C6 LP I2C master is not implemented
-here. Hardware validation is pending.
+project requires an external master. Use I2cMasterSlave for a one-board
+LP-master/HP-slave test. Hardware validation is pending.

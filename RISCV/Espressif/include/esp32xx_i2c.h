@@ -9,7 +9,8 @@ ESP-IDF v5.5.1 per-chip soc register headers and hal/i2c_ll.h.
 All five controllers have eight command slots. C2 has 16-byte TX/RX
 FIFOs; C3/C5/C6/C61 have 32-byte TX/RX FIFOs.
 C2/C3 use the local CLK_CONF register; C5/C6/C61 use PCR clock control.
-LP I2C clock and pin routing are separate and are not described here.
+C6 LP I2C shares the master transfer offsets, with a 16-byte FIFO. Its
+clock controls are defined below; LP pin routing is in esp32xx_gpio.h.
 
 @author	Nguyen Hoan Hoang
 @date	May 9, 2026
@@ -45,6 +46,7 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "esp32xx.h"
+#include "esp32xx_gpio.h"
 
 #ifndef ESP32_REG32
 #define ESP32_REG32(addr)                   (*(volatile uint32_t *)((uintptr_t)(addr)))
@@ -345,6 +347,14 @@ SOFTWARE.
 #define ESP32_I2C_SLAVE_STRETCH_EN_Msk (1UL << 10)
 #define ESP32_I2C_SLAVE_STRETCH_CLR_Msk (1UL << 11)
 #define ESP32_I2C_CTR_SLV_TX_AUTO_START_Msk (1UL << 12)
+#endif
+
+#if defined(ESP32C6)
+#define ESP32_LP_I2C_FIFO_DEPTH 16U
+#define ESP32_LP_I2C_CLK_EN_Msk (1UL << 28)
+#define ESP32_LP_I2C_RESET_EN_Msk (1UL << 28)
+#define ESP32_LP_CLKRST_PERI_REG ESP32_REG32(ESP32_LP_CLKRST_BASE + 0x28U)
+#define ESP32_LP_I2C_CLK_SEL_Msk (1UL << 30)
 #endif
 
 #endif // __ESP32XX_I2C_H__

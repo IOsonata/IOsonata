@@ -32,6 +32,8 @@ static unsigned s_Nacks;
 static unsigned s_Stops;
 static uint8_t s_NextRx;
 static unsigned s_RawReads;
+static uintptr_t s_ModelBase = ESP32_I2C0_BASE;
+static unsigned s_ModelDepth = ESP32_I2C_FIFO_DEPTH;
 static void Execute()
 {
 	uint32_t command;
@@ -44,18 +46,18 @@ static void Execute()
 	s_Runs++;
 	if (s_FailRun == s_Runs)
 	{
-		s_Regs[ESP32_I2C0_BASE + 0x20] = s_Failure;
+		s_Regs[s_ModelBase + 0x20] = s_Failure;
 		return;
 	}
 	for (slot = 0; slot < 8; slot++)
 	{
-		command = s_Regs[ESP32_I2C0_BASE + 0x58 + 4 * slot];
+		command = s_Regs[s_ModelBase + 0x58 + 4 * slot];
 		opcode = (command >> 11) & 7;
 		bytes = command & 255;
 		s_Operations.push_back(opcode);
 		if (opcode == 6)
 		{
-			s_Regs[ESP32_I2C0_BASE + 8] = 16;
+			s_Regs[s_ModelBase + 8] = 16;
 		}
 		else if (opcode == 1)
 		{
@@ -71,7 +73,7 @@ static void Execute()
 		else if (opcode == 3)
 		{
 			assert(bytes > 0);
-			assert(s_Rx.size() + bytes <= ESP32_I2C_FIFO_DEPTH);
+			assert(s_Rx.size() + bytes <= s_ModelDepth);
 			if (command & 1024)
 			{
 				assert(bytes == 1);
@@ -85,14 +87,14 @@ static void Execute()
 		else if (opcode == 2)
 		{
 			s_Stops++;
-			s_Regs[ESP32_I2C0_BASE + 8] = 0;
-			s_Regs[ESP32_I2C0_BASE + 0x20] = 128;
+			s_Regs[s_ModelBase + 8] = 0;
+			s_Regs[s_ModelBase + 0x20] = 128;
 			return;
 		}
 		else
 		{
 			assert(opcode == 4);
-			s_Regs[ESP32_I2C0_BASE + 0x20] = 8;
+			s_Regs[s_ModelBase + 0x20] = 8;
 			return;
 		}
 	}
@@ -104,18 +106,18 @@ struct Register {
 	{
 		uint8_t value;
 
-		if (Address == ESP32_I2C0_BASE + 0x1c)
+		if (Address == s_ModelBase + 0x1c)
 		{
 			assert(!s_Rx.empty());
 			value = s_Rx.front();
 			s_Rx.pop_front();
 			return value;
 		}
-		if (Address == ESP32_I2C0_BASE + 0x20)
+		if (Address == s_ModelBase + 0x20)
 		{
 			s_RawReads++;
 		}
-		if (Address == ESP32_I2C0_BASE + 8 && !(s_Regs[ESP32_I2C0_BASE + 4] & 16))
+		if (Address == s_ModelBase + 8 && !(s_Regs[s_ModelBase + 4] & 16))
 		{
 			return (s_Regs[Address] & ~((63U << 8) | (63U << 18))) | (s_Rx.size() << 8) | (s_Tx.size() << 18);
 		}
@@ -124,26 +126,26 @@ struct Register {
 	void operator=(uint32_t Value)
 	{
 		s_Regs[Address] = Value;
-		if (Address == ESP32_I2C0_BASE + 0x24)
+		if (Address == s_ModelBase + 0x24)
 		{
-			s_Regs[ESP32_I2C0_BASE + 0x20] &= ~Value;
+			s_Regs[s_ModelBase + 0x20] &= ~Value;
 		}
-		if (Address == ESP32_I2C0_BASE + 0x18 && (Value & (3U << 12)))
+		if (Address == s_ModelBase + 0x18 && (Value & (3U << 12)))
 		{
 			s_Tx.clear();
 			s_Rx.clear();
 		}
-		if (Address == ESP32_I2C0_BASE + 0x1c)
+		if (Address == s_ModelBase + 0x1c)
 		{
-			assert(s_Tx.size() < ESP32_I2C_FIFO_DEPTH);
+			assert(s_Tx.size() < s_ModelDepth);
 			s_Tx.push_back(Value);
 		}
-		if (Address == ESP32_I2C0_BASE + 4)
+		if (Address == s_ModelBase + 4)
 		{
 			s_Regs[Address] &= ~((1U << 5) | (1U << 10) | (1U << 11));
 			if (Value & (1U << 10))
 			{
-				s_Regs[ESP32_I2C0_BASE + 8] = 0;
+				s_Regs[s_ModelBase + 8] = 0;
 			}
 			if (Value & (1U << 5))
 			{
@@ -186,12 +188,21 @@ static unsigned s_PinConfigs;
 void IOPinConfig(int Port, int Pin, int Op, IOPINDIR Dir, IOPINRES Res, IOPINTYPE Type)
 {
 	assert(Port == 0);
-	assert(Pin == 4 || Pin == 5);
+	assert(Pin >= 4 && Pin <= 7);
 	assert(Res == IOPINRES_NONE);
 	if (Dir == IOPINDIR_BI)
 	{
 		assert(Type == IOPINTYPE_OPENDRAIN);
-		assert(Op == IOPINOP_FUNC0 + (Pin == 4 ? ESP32_I2C_SDA_SIGNAL : ESP32_I2C_SCL_SIGNAL));
+		#if defined(ESP32C6)
+		if (Pin >= 6)
+		{
+			assert(Op == ESP32_PINOP_LP_I2C_SDA);
+		}
+		else
+#endif
+		{
+			assert(Op == IOPINOP_FUNC0 + (Pin == 4 ? ESP32_I2C_SDA_SIGNAL : ESP32_I2C_SCL_SIGNAL));
+		}
 	}
 	else
 	{
@@ -486,6 +497,68 @@ int main()
 	assert(!I2CInit(&dev, &cfg));
 	s_IrqFail = false;
 	assert(I2CInit(&dev, &cfg));
+	dev.DevIntrf.PowerOff(&dev.DevIntrf);
+#endif
+#if defined(ESP32C6)
+	// Keep the HP slave active while LP master transactions and recovery run.
+	assert(I2CInit(&dev, &cfg));
+	s_ModelBase = ESP32_LP_I2C_BASE;
+	s_ModelDepth = 16;
+	g_McuOsc.CoreOsc.Freq = 40000000;
+	cfg.DevNo = 1;
+	assert(!I2CInit(&other, &cfg));
+	cfg.Mode = I2CMODE_MASTER;
+	cfg.bIntEn = false;
+	cfg.EvtCB = NULL;
+	assert(!I2CInit(&other, &cfg));
+	pins[0].PinNo = 6;
+	pins[1].PinNo = 7;
+	pins[0].PinOp = ESP32_PINOP_LP_I2C_SDA;
+	pins[1].PinOp = ESP32_PINOP_LP_I2C_SCL;
+	rate = ESP32_I2C_PCR_SCLK_CONF_REG;
+	assert(!I2CInit(&dev, &cfg));
+	assert(I2CInit(&other, &cfg));
+	assert(s_Irq);
+	assert(uint32_t(ESP32_I2C_PCR_SCLK_CONF_REG) == rate);
+	assert(uint32_t(ESP32_LP_CLKRST_PERI_REG) & (1U << 30));
+	assert(uint32_t(ESP32_LP_PERI_CLK_EN_REG) & (1U << 28));
+	assert(!(s_Regs[ESP32_LP_I2C_BASE + 4] & 0x13U));
+	assert(DeviceIntrfSetRate(&other.DevIntrf, 100000) == 100000);
+	assert(s_Regs[ESP32_LP_I2C_BASE] == 99);
+	assert(DeviceIntrfSetRate(&other.DevIntrf, 400000) == 400000);
+	assert(s_Regs[ESP32_LP_I2C_BASE] == 24);
+	assert(uint32_t(ESP32_I2C_PCR_SCLK_CONF_REG) == rate);
+	TraceReset();
+	assert(DeviceIntrfRead(&other.DevIntrf, 0x22, &reg, 1, data, sizeof(data)) == sizeof(data));
+	assert(s_Nacks == 1 && s_Stops == 1);
+	assert(s_Written == std::vector<uint8_t>({0x44, 0x42, 0x45}));
+	for (i = 0; i < sizeof(data); i++)
+	{
+		assert(data[i] == i);
+	}
+	TraceReset();
+	assert(DeviceIntrfTx(&other.DevIntrf, 0x22, data, sizeof(data)) == sizeof(data));
+	assert(s_Written.size() == sizeof(data) + 1);
+	TraceReset();
+	s_FailRun = 1;
+	s_Failure = 1U << 10;
+	assert(DeviceIntrfRx(&other.DevIntrf, 0x22, data, 1) == 0);
+	assert(s_Stops == 1);
+	TraceReset();
+	assert(DeviceIntrfRx(&other.DevIntrf, 0x22, data, 1) == 1);
+	other.DevIntrf.PowerOff(&other.DevIntrf);
+	assert(s_Irq);
+	assert(uint32_t(ESP32_I2C_PCR_SCLK_CONF_REG) == rate);
+	assert(!(uint32_t(ESP32_LP_PERI_CLK_EN_REG) & (1U << 28)));
+	s_ModelBase = ESP32_I2C0_BASE;
+	s_ModelDepth = ESP32_I2C_FIFO_DEPTH;
+	SlaveIrq(1U << 16, 0);
+	s_Rx = {0x77};
+	SlaveIrq(1U << 7, 0);
+	assert(s_SlaveCount == 1 && s_SlaveRx[0] == 0x77);
+	// Restore HP pin descriptors before releasing the HP slave.
+	pins[0].PinNo = 4;
+	pins[1].PinNo = 5;
 	dev.DevIntrf.PowerOff(&dev.DevIntrf);
 #endif
 	return 0;

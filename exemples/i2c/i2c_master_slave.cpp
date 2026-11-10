@@ -103,6 +103,13 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define I2C_SLAVE_INT_PRIO 7
 #endif
 
+#ifndef I2C_MASTER_SCL_DIR
+#define I2C_MASTER_SCL_DIR IOPINDIR_OUTPUT
+#endif
+#ifndef I2C_SLAVE_SCL_DIR
+#define I2C_SLAVE_SCL_DIR IOPINDIR_OUTPUT
+#endif
+
 //int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE		CFIFO_MEMSIZE(512)
@@ -144,7 +151,7 @@ static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
 
 static const IOPinCfg_t s_I2cMasterPins[] = {
 	{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
-	{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
+	{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, I2C_MASTER_SCL_DIR, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
 };
 
 static const I2CCfg_t s_I2cCfgMaster = {
@@ -182,7 +189,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 
 static const IOPinCfg_t s_I2cSlavePins[] = {
 	{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},		// SDA
-	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
+	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, I2C_SLAVE_SCL_DIR, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
 };
 
 static const I2CCfg_t s_I2cCfgSlave = {
@@ -265,6 +272,10 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 				}
 				s_bWriteRqst = false;
 			}
+			if (s_Offset < 0 || s_Offset >= I2C_BUFF_SIZE)
+			{
+				s_Offset = 0;
+			}
 			g_I2CSlave.SetReadRqstData(0, &s_ReadRqstData[s_Offset], I2C_BUFF_SIZE - s_Offset);
 
 			break;
@@ -275,6 +286,14 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 			break;
 
 		case DEVINTRF_EVT_COMPLETED:
+
+			if (Len < 0)
+			{
+				s_SlaveWriteLen = Len;
+				s_Offset = 0;
+				s_bWriteRqst = false;
+				break;
+			}
 
 			if (s_bWriteRqst == false)
 			{
@@ -309,12 +328,15 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 void HardwareInit()
 {
 	g_Uart.Init(s_UartCfg);
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(UART_RETARGET)
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
 
 	printf("Init I2C Master/Slave demo\r\n");
+#ifdef I2C_LOOPBACK_WIRING
+	printf("%s\r\n", I2C_LOOPBACK_WIRING);
+#endif
 }
 
 static const char *ModeName(const I2CCfg_t &Cfg)
