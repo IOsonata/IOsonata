@@ -9,7 +9,11 @@ Both run on the main CPU, without an LP-core application.
 | SDA | 6 | 4 |
 | SCL | 7 | 5 |
 
-Connect each row with a short jumper. The example enables internal pull-ups
+Connect each row with a short jumper. The C6 `SpiMasterSlave` example uses
+the same GPIO4-GPIO6 and GPIO5-GPIO7 jumpers. Its additional GPIO0-GPIO1 and
+GPIO2-GPIO3 jumpers can remain fitted; this I2C example does not use those pins.
+
+The example enables internal pull-ups
 on both the LP master and HP slave pins, so start this bench test without
 external resistors. If the bus rise time is too slow, add a 4.7 kOhm pull-up
 from SDA to 3.3 V and another from SCL to 3.3 V. Internal pull-ups alone do

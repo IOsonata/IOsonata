@@ -7,10 +7,15 @@ SPI2 as interrupt-driven slave. No external device is required.
 | --- | --- | --- |
 | CS | 0 | 1 |
 | SCK | 2 | 3 |
-| MOSI | 4 | 5 |
-| MISO | 6 | 7 |
+| MOSI | 4 | 6 |
+| MISO | 5 | 7 |
 
-Connect each row with a jumper. Build the matching library and example, then
+Connect each row with a jumper. These four jumpers can stay fitted when
+switching to `I2cMasterSlave`: GPIO4-GPIO6 carries SDA and GPIO5-GPIO7 carries
+SCL; GPIO0-GPIO1 and GPIO2-GPIO3 are unused by that example. LP I2C fixes its
+master pins to GPIO6/GPIO7, so SPI uses this arrangement to share the wiring.
+
+Build the matching library and example, then
 flash at offset 0. UART output uses 1,000,000 baud, 8N1. Debug and Release
 configurations both report results over UART.
 
