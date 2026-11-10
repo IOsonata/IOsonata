@@ -150,6 +150,24 @@ static void Drain()
 	}
 }
 
+#include "../../src/uart_retarget.c"
+
+int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr,
+		const uint8_t *pData, int DataLen)
+{
+	int count;
+
+	(void)DevAddr;
+	count = Esp32UartTxData(pDev, pData, DataLen);
+	if (count == 0)
+	{
+		// Model the ISR draining a saturated queue before the next retry.
+		Drain();
+		s_TxCount = 0;
+	}
+	return count;
+}
+
 int main()
 {
 	uint8_t data[1000];
@@ -213,6 +231,14 @@ int main()
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, 16) == 16);
 	assert(s_UnmaskedCopies == 0);
 	assert(s_Tx.size() == 16);
+
+	Reset(true);
+	s_Uart.hStdOut = 1;
+	assert(UARTStdDevWrite(&s_Uart, 1, data, sizeof(data)) == sizeof(data));
+	Drain();
+	assert(s_Tx.size() == sizeof(data));
+	assert(std::memcmp(s_Tx.data(), data, sizeof(data)) == 0);
+	assert(s_Masked == 0);
 
 	Reset(false);
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, sizeof(data)) == 1000);

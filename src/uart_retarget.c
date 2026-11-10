@@ -31,6 +31,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
+#include <limits.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -38,6 +39,9 @@ Modified by          Date              Description
 
 #include "stddev.h"
 #include "coredev/uart.h"
+
+// Consecutive UART attempts without accepting a byte; not a time interval.
+#define UART_STDIO_WAIT_COUNT	1000000U
 
 extern char s_Buffer[];	// defined in sbuffer.c
 extern int s_BufferSize;
@@ -150,12 +154,42 @@ int UARTStdDevRead(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len)
 int UARTStdDevWrite(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len)
 {
 	UARTDev_t *dev = (UARTDev_t *)pDevObj;
+	int count = 0;
+	int cnt;
+	unsigned wait = UART_STDIO_WAIT_COUNT;
 
-	if (Handle == dev->hStdOut)
+	if (Handle != dev->hStdOut || Len == 0)
 	{
-		return UARTTx(dev, pBuff, Len);
+		return 0;
+	}
+	if (pBuff == NULL || Len > INT_MAX)
+	{
+		return -1;
 	}
 
-	return 0;
+	// FIFO-backed UARTs may accept only part of a stdio write. Keep the
+	// unsent suffix until space becomes available. The adapter does not mask interrupts.
+	// Bound consecutive attempts without progress, not elapsed time, so a
+	// stopped UART cannot hold stdout forever. Progress renews the budget.
+	while (count < (int)Len && wait > 0)
+	{
+		cnt = UARTTx(dev, pBuff + count, (int)Len - count);
+		if (cnt < 0)
+		{
+			// Do not retry an asynchronous or failed transfer.
+			return count > 0 ? count : cnt;
+		}
+		if (cnt == 0)
+		{
+			wait--;
+		}
+		else
+		{
+			count += cnt;
+			wait = UART_STDIO_WAIT_COUNT;
+		}
+	}
+
+	return count;
 }
 

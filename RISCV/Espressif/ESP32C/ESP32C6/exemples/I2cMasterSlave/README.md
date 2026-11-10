@@ -62,5 +62,6 @@ writes a changing pattern, reads it back, and checks a following command-free
 byte. Lengths cycle through 1, 2, 8, 15, 16, 17, 31, 32, 33, 63, 64 and 65.
 Every hundredth round inserts an address NACK before the read to verify
 recovery. Progress prints every 100 rounds; the first failure stops that rate
-and reports its round and operation. Stress hardware validation is pending.
+and reports its round and operation. C6 hardware passed all 1,000 rounds at
+100 kHz and all 1,000 rounds at 400 kHz (2 passed, 0 failed, 0 skipped).
 Other boards keep stress disabled unless they define `I2C_TEST_STRESS_ROUNDS`.
