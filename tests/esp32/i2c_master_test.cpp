@@ -610,11 +610,18 @@ int main()
 	TraceReset();
 	assert(DeviceIntrfTx(&other.DevIntrf, 0x22, data, sizeof(data)) == sizeof(data));
 	assert(s_Written.size() == sizeof(data) + 1);
+	// BUS_BUSY may read clear while a successful sequence still needs STOP.
+	TraceReset();
+	assert(I2CStartTx(&other, 0x22));
+	s_Regs[ESP32_LP_I2C_BASE + 8] = 0;
+	I2CStopTx(&other);
+	assert(s_Stops == 1);
 	TraceReset();
 	s_FailRun = 1;
 	s_Failure = 1U << 10;
 	assert(DeviceIntrfRx(&other.DevIntrf, 0x22, data, 1) == 0);
-	assert(s_Stops == 1);
+	assert(s_Stops == 0);
+	assert(s_Runs == 1);
 	TraceReset();
 	assert(DeviceIntrfRx(&other.DevIntrf, 0x22, data, 1) == 1);
 	other.DevIntrf.PowerOff(&other.DevIntrf);

@@ -354,7 +354,21 @@ static bool Esp32I2cRun(Esp32I2cDev_t *pDev, uint32_t Done, uint32_t Bytes)
 
 static void Esp32I2cFinish(Esp32I2cDev_t *pDev)
 {
-	if (!pDev->bSlave && pDev->bOpen && !pDev->bLost)
+	bool sendStop;
+
+	sendStop = !pDev->bSlave && pDev->bOpen && !pDev->bLost;
+#if defined(ESP32C6)
+	// The LP controller aborts its command sequence on NACK. A new STOP
+	// command does not complete in that state; reset the failed sequence.
+	// Successful transfers still require their explicit STOP, regardless
+	// of the instantaneous BUS_BUSY value.
+	if (pDev->Base == ESP32_LP_I2C_BASE && pDev->bError &&
+		(ESP32_I2C_INT_RAW_REG(pDev->Base) & ESP32_I2C_INT_NACK))
+	{
+		sendStop = false;
+	}
+#endif
+	if (sendStop)
 	{
 		Esp32I2cCommand(pDev, 0, ESP32_I2C_OPCODE_STOP, 0, 0);
 		Esp32I2cRun(pDev, ESP32_I2C_INT_TRANS_COMPLETE, 0);
