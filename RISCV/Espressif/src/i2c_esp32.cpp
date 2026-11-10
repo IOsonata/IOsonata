@@ -599,14 +599,18 @@ static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 		// prefetch it. Resetting at READ_RQST is too late for that first byte.
 		// Leave RX intact: a following command may already be arriving.
 		ESP32_I2C_INT_ENA_REG(pDev->Base) &= ~ESP32_I2C_INT_TXFIFO_WM;
-		ESP32_I2C_FIFO_CONF_REG(pDev->Base) |= ESP32_I2C_FIFO_CONF_TX_FIFO_RST_Msk;
-		ESP32_I2C_FIFO_CONF_REG(pDev->Base) &= ~ESP32_I2C_FIFO_CONF_TX_FIFO_RST_Msk;
 	}
 	pDev->bOpen = false;
 	if (i2c->Cfg.EvtCB)
 	{
 		i2c->Cfg.EvtCB(&i2c->DevIntrf, DEVINTRF_EVT_COMPLETED,
 			pDev->bRx ? i2c->pTRBuff[0] : i2c->pRRData[0], pDev->bError ? -1 : pDev->SlaveCount);
+	}
+	if (!pDev->bRx)
+	{
+		// Keep the pre-reset FIFO state visible to callback diagnostics.
+		ESP32_I2C_FIFO_CONF_REG(pDev->Base) |= ESP32_I2C_FIFO_CONF_TX_FIFO_RST_Msk;
+		ESP32_I2C_FIFO_CONF_REG(pDev->Base) &= ~ESP32_I2C_FIFO_CONF_TX_FIFO_RST_Msk;
 	}
 }
 

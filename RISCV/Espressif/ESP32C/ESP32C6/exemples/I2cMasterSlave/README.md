@@ -52,3 +52,11 @@ index (T0, T1, ...). RX shows the first two receive-buffer bytes; M4 shows
 slave memory bytes 4 and 5. Each line is flushed with a 2 ms pause after it.
 These pauses occur only while printing the captured trace after the test,
 never during an I2C transaction or callback.
+
+The continuation test now reads two single bytes after the four-byte read:
+0x10 followed by 0x11. This detects a slave completion count that fails to
+advance the offset. DONE register snapshots precede the TX FIFO clear.
+The diagnostic timer measures the NACK write and recovery read separately
+in microseconds. Recovery runs even when an earlier data check fails.
+The C6 hardware run passed the earlier data and NACK tests, but reported
+zero completion bytes for the final one-byte read; this remains unresolved.

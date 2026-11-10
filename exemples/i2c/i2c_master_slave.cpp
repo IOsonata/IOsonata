@@ -54,6 +54,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "idelay.h"
 #include "board.h"
+#ifdef I2C_TEST_BOARD_TRACE
+#include "coredev/timer.h"
+static Timer s_TestTimer;
+static bool s_TestTimerReady;
+#endif
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
@@ -394,6 +399,9 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 void HardwareInit()
 {
 	static char outputBuffer[256];
+#ifdef I2C_TEST_BOARD_TRACE
+	TimerCfg_t timerCfg = {};
+#endif
 
 	setvbuf(stdout, outputBuffer, _IOLBF, sizeof(outputBuffer));
 	g_Uart.Init(s_UartCfg);
@@ -404,6 +412,11 @@ void HardwareInit()
 
 	printf("Init I2C Master/Slave demo\r\n");
 #ifdef I2C_TEST_BOARD_TRACE
+	timerCfg.DevNo = TimerGetHighFreqDevNo();
+	timerCfg.ClkSrc = TIMER_CLKSRC_DEFAULT;
+	timerCfg.Freq = 1000000U;
+	s_TestTimerReady = s_TestTimer.Init(timerCfg);
+	printf("Diagnostic timer: %s\r\n", s_TestTimerReady ? "ready" : "unavailable");
 	printf("I2C register trace enabled, UART %s\r\n",
 		I2C_TEST_UART_INT_ENABLE ? "interrupt" : "polling");
 #endif
@@ -590,6 +603,10 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 	uint8_t buff[I2C_BUFF_SIZE];
 	uint8_t expected[I2C_BUFF_SIZE];
 	char label[32];
+#ifdef I2C_TEST_BOARD_TRACE
+	uint64_t begin;
+	uint64_t elapsed;
+#endif
 	bool pass = true;
 	int c;
 	int i;
@@ -634,11 +651,11 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 		snprintf(label, sizeof(label), "%s RX", ModeName(MasterCfg));
 		pass = CheckRx(label, c, 4, buff, expected);
 	}
-	if (pass)
+	for (i = 0; pass && i < 2; i++)
 	{
 		memset(buff, 0xFF, sizeof(buff));
 		c = MasterRx(buff, 1);
-		expected[0] = s_ReadRqstData[offset + sizeof(wr) + 4];
+		expected[0] = s_ReadRqstData[offset + sizeof(wr) + 4 + i];
 		pass = CheckRx(label, c, 1, buff, expected);
 	}
 
@@ -648,16 +665,38 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 		pass = WriteTest(MasterCfg, writeLen[i]);
 	}
 
-	if (pass)
+	// Run recovery even if an earlier data check failed.
 	{
 		// Address NACK: no device answers I2C_NACK_ADDR. No data byte may be
 		// reported as written, and a register read must work after the error.
+		printf("Starting NACK test (MaxRetry=%d)\r\n", MasterCfg.MaxRetry);
+		fflush(stdout);
+#ifdef I2C_TEST_BOARD_TRACE
+		begin = s_TestTimerReady ? s_TestTimer.TickCount() : 0;
+#endif
 		c = MasterWrite(MasterCfg, I2C_NACK_ADDR, offset, wr, sizeof(wr));
+#ifdef I2C_TEST_BOARD_TRACE
+		if (s_TestTimerReady)
+		{
+			elapsed = s_TestTimer.TickCount() - begin;
+			printf("NACK test elapsed: %lu us\r\n", (unsigned long)s_TestTimer.uSecond(elapsed));
+		}
+#endif
 		printf("NACK write %d/%d bytes at address 0x%02x\r\n", c, (int)sizeof(wr), I2C_NACK_ADDR);
-		pass = c == 0;
+		pass = pass && c == 0;
 
 		memset(buff, 0xFF, sizeof(buff));
+#ifdef I2C_TEST_BOARD_TRACE
+		begin = s_TestTimerReady ? s_TestTimer.TickCount() : 0;
+#endif
 		c = MasterRead(offset, buff, sizeof(wr));
+#ifdef I2C_TEST_BOARD_TRACE
+		if (s_TestTimerReady)
+		{
+			elapsed = s_TestTimer.TickCount() - begin;
+			printf("Recovery read elapsed: %lu us\r\n", (unsigned long)s_TestTimer.uSecond(elapsed));
+		}
+#endif
 		if (!CheckRx("Read after NACK", c, sizeof(wr), buff, wr))
 		{
 			pass = false;
