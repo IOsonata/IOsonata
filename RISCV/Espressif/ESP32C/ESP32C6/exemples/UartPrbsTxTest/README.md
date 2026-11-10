@@ -18,4 +18,14 @@ Validate TX before running UartLoopback.
 
 Define `DEMO_C` to exercise the shared example's C UART API path.
 The default uses the C++ wrapper over the same driver.
-Hardware validation on C6 remains pending.
+## Hardware result
+
+ESP32-C6-DevKitC-1, UART driver at `ffe3e035`, Release, byte mode, 1 Mbaud,
+interrupts enabled, DMA disabled, CPU on the 40 MHz crystal (direct boot):
+`uartprbs_rx.py` reported 99,983 to 100,017 B/s per second, cumulative
+average 99,996.54 B/s. The drop count stayed at 7 from the first report to
+the end of the run.
+
+Before that commit the TX start armed the TX empty interrupt on every call,
+one interrupt per byte at this CPU clock, and the same test measured below
+50,000 B/s.
