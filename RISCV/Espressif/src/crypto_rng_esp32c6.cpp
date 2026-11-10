@@ -83,12 +83,44 @@ SOFTWARE.
 volatile uint32_t g_Esp32C6RngError;
 volatile uint32_t g_Esp32C6RngDetail;
 
+// Read-only snapshots: entry, setup complete, first failure before cleanup.
+// Register labels are listed in the C6 CryptoTest board report.
+volatile uint32_t g_Esp32C6RngTrace[3][13];
+volatile uint32_t g_Esp32C6RngTransaction[4];
+static uint32_t s_AnalogPhase;
+static uint32_t s_AnalogAddress;
+static uint32_t s_AnalogCommand;
+static uint32_t s_AnalogCount;
+
+static void EspC6RngCapture(unsigned Slot)
+{
+	static const uintptr_t addresses[] = {
+		RNG_ANALOG_CTRL0, RNG_ANALOG_CTRL0 + 4U,
+		RNG_ANALOG_CTRL0 + 8U, RNG_ANALOG_CTRL0 + 12U,
+		RNG_ANALOG_SELECT, RNG_ANALOG_READ,
+		0x600AF010U, RNG_ANALOG_CLOCK, 0x600AF01CU,
+		RNG_ANALOG_CLOCK_MAP, 0x600AF024U,
+		RNG_ANALOG_POWER, RNG_ADC_CLOCK
+	};
+	unsigned i;
+
+	for (i = 0U; i < sizeof(addresses) / sizeof(addresses[0]); i++)
+	{
+		g_Esp32C6RngTrace[Slot][i] = ESP32_RNG_REG(addresses[i]);
+	}
+}
+
 static bool EspC6RngFail(uint32_t Error, uint32_t Detail)
 {
 	if (g_Esp32C6RngError == 0U)
 	{
 		g_Esp32C6RngError = Error;
 		g_Esp32C6RngDetail = Detail;
+		g_Esp32C6RngTransaction[0] = s_AnalogPhase;
+		g_Esp32C6RngTransaction[1] = s_AnalogAddress;
+		g_Esp32C6RngTransaction[2] = s_AnalogCommand;
+		g_Esp32C6RngTransaction[3] = s_AnalogCount;
+		EspC6RngCapture(2U);
 	}
 	return false;
 }
@@ -153,20 +185,29 @@ static bool EspC6RngAnalog(uint8_t Reg, uint8_t *pValue, bool Write)
 		((ESP32_RNG_REG(RNG_ANALOG_SELECT) & (1U << 11)) != 0U ? 0U : 4U);
 	selection = ESP32_RNG_REG(RNG_ANALOG_READ) & 0x00FFFFFFU;
 	ESP32_RNG_REG(RNG_ANALOG_READ) = 0x00FFFDFFU;
+	command = 0x69U | ((uint32_t)Reg << 8);
+	if (Write)
+	{
+		command |= (1U << 24) | ((uint32_t)*pValue << 16);
+	}
+	s_AnalogPhase = 1U;
+	s_AnalogAddress = (uint32_t)ctrl;
+	s_AnalogCommand = command;
+	s_AnalogCount++;
 	ok = EspC6RngWaitIdle(ctrl);
 	if (ok)
 	{
-		command = 0x69U | ((uint32_t)Reg << 8);
-		if (Write)
-		{
-			command |= (1U << 24) | ((uint32_t)*pValue << 16);
-		}
 		ESP32_RNG_REG(ctrl) = command;
+		s_AnalogPhase = 2U;
 		ok = EspC6RngWaitIdle(ctrl);
 		if (ok && !Write)
 		{
 			*pValue = (uint8_t)(ESP32_RNG_REG(ctrl) >> 16);
 		}
+	}
+	if (ok)
+	{
+		s_AnalogPhase = 3U;
 	}
 	ESP32_RNG_REG(RNG_ANALOG_READ) = selection;
 	EnableInterrupt(state);
@@ -215,6 +256,7 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 		RNG_ANALOG_CLOCK_MAP_MASK);
 	EspC6RngModify(RNG_ANALOG_CLOCK, 4U, 4U);
 	EspC6RngModify(RNG_CLOCK, 1U << 24, 1U << 24);
+	EspC6RngCapture(1U);
 	for (i = 0U; i < sizeof(s_AnalogRegisters); i++)
 	{
 		if (!EspC6RngAnalog(s_AnalogRegisters[i], &pSaved->Analog[i], false))
@@ -349,6 +391,11 @@ CRYPTO_STATUS Esp32C6RngFill(uint8_t *pOut, size_t Len)
 	{
 		g_Esp32C6RngError = 0U;
 		g_Esp32C6RngDetail = 0U;
+		s_AnalogPhase = 0U;
+		s_AnalogAddress = 0U;
+		s_AnalogCommand = 0U;
+		s_AnalogCount = 0U;
+		EspC6RngCapture(0U);
 	}
 	if (s_RngFault || !EspC6RngIdle())
 	{

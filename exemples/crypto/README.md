@@ -36,7 +36,13 @@ failed: error 4, detail zero identified analog register 0 reading zero after
 writing 0x66. The driver now also enables the I2C master and LP APB power-state
 clock maps during draws, then restores them. ESP-IDF initializes those maps in
 `rtc_clk_init()`; IOsonata startup does not. The model checks all four PMU codes
-with initially gated domains. Board retest of this change is pending.
+with initially gated domains. The next board run timed out on master 1 (error 2, detail 0x600af804).
+The current change adds trace only; it does not change clocks, power, controller
+selection or timeouts. On failure, the C6 UART report prints transaction number,
+phase (before command, after command, completed), controller, command, and
+register snapshots at entry, setup completion and first failure before cleanup.
+The retained snapshot survives subsequent failed draws. Send the full RNG
+section from the next Release run; no debugger is required.
 CryptoTest reports failed draws as unavailable, rather than calling them a
 software PRNG. On C6, the first draw failure also prints the retained RNG error
 and detail: 1 ADC in use, 2 analog bus timeout, 3 analog selection in use,

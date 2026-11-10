@@ -49,6 +49,8 @@ static unsigned s_Reads;
 static unsigned s_Writes;
 static bool s_StallClock;
 static bool s_StallBus;
+static bool s_StallAfterCommand;
+static bool s_CommandIssued;
 static bool s_IgnoreAnalog;
 static bool s_Stuck;
 static bool s_Nested;
@@ -68,7 +70,7 @@ EspRngModelReg::operator uint32_t() const
 {
 	if (Addr == RNG_ANALOG_CTRL0 || Addr == RNG_ANALOG_CTRL0 + 4U)
 	{
-		if (s_StallBus)
+		if (s_StallBus || (s_StallAfterCommand && s_CommandIssued))
 		{
 			return RNG_ANALOG_BUSY;
 		}
@@ -126,6 +128,7 @@ EspRngModelReg &EspRngModelReg::operator=(uint32_t Value)
 		}
 		assert((s_Values[RNG_ANALOG_POWER] & RNG_ANALOG_POWER_MASK) == RNG_ANALOG_POWER_MASK);
 		assert(s_Values[RNG_ANALOG_READ] == 0xFFFDFFU);
+		s_CommandIssued = true;
 		assert((Value & 255U) == 0x69U);
 		reg = (Value >> 8) & 255U;
 		assert(reg < sizeof(s_Analog));
@@ -207,6 +210,7 @@ int main(int argc, char **argv)
 	}
 	s_StallClock = strcmp(argv[1], "clock") == 0;
 	s_StallBus = strcmp(argv[1], "bus") == 0;
+	s_StallAfterCommand = strcmp(argv[1], "bus_after") == 0;
 	s_IgnoreAnalog = strcmp(argv[1], "analog") == 0;
 	s_Stuck = strcmp(argv[1], "stuck") == 0;
 	s_Nested = strcmp(argv[1], "nested") == 0;
@@ -215,7 +219,7 @@ int main(int argc, char **argv)
 	{
 		s_Analog[7] |= 1U;
 	}
-	failure = s_RestoreFail || s_StallClock || s_StallBus || s_IgnoreAnalog || s_Stuck ||
+	failure = s_RestoreFail || s_StallClock || s_StallBus || s_StallAfterCommand || s_IgnoreAnalog || s_Stuck ||
 		strcmp(argv[1], "foreign") == 0;
 	saved = s_Values;
 	memcpy(analog, s_Analog, sizeof(analog));
@@ -236,6 +240,17 @@ int main(int argc, char **argv)
 		assert(!Esp32C6RngSecureAvailable());
 		assert(g_Esp32C6RngError != 0U);
 		assert(Esp32C6RngFill(out + 1, 64U) == CRYPTO_STATUS_FAIL);
+		if (s_StallBus || s_StallAfterCommand)
+		{
+			assert(g_Esp32C6RngError == 2U);
+			assert(g_Esp32C6RngTransaction[0] == (s_StallBus ? 1U : 2U));
+			assert(g_Esp32C6RngTransaction[1] == RNG_ANALOG_CTRL0 + 4U);
+			assert(g_Esp32C6RngTransaction[2] == 0x69U);
+			assert(g_Esp32C6RngTransaction[3] == 1U);
+			assert((g_Esp32C6RngTrace[2][1] & RNG_ANALOG_BUSY) != 0U);
+			assert(g_Esp32C6RngTrace[2][9] == 0xFF5A1234U);
+			assert(s_Values[RNG_ANALOG_CLOCK_MAP] == saved[RNG_ANALOG_CLOCK_MAP]);
+		}
 	}
 	else
 	{

@@ -68,10 +68,30 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 extern volatile uint32_t g_Esp32C6RngError;
 extern volatile uint32_t g_Esp32C6RngDetail;
+extern volatile uint32_t g_Esp32C6RngTrace[3][13];
+extern volatile uint32_t g_Esp32C6RngTransaction[4];
 static inline void CryptoTestRngFailure(void)
 {
+	static const char * const labels[] = {
+		"CTRL0", "CTRL1", "CONF0", "CONF1", "SELECT", "READ_MASK",
+		"CLOCK_SOURCE", "CLOCK_ENABLE", "CLOCK_FORCE", "CLOCK_MAP",
+		"RESET", "POWER", "ADC_CLOCK"
+	};
+	unsigned i;
+
 	printf("  C6 RNG error %lu, detail 0x%08lx\r\n",
 		(unsigned long)g_Esp32C6RngError, (unsigned long)g_Esp32C6RngDetail);
+	printf("  Analog transaction %lu: phase %lu, controller %08lx, command %08lx\r\n",
+		(unsigned long)g_Esp32C6RngTransaction[3], (unsigned long)g_Esp32C6RngTransaction[0],
+		(unsigned long)g_Esp32C6RngTransaction[1], (unsigned long)g_Esp32C6RngTransaction[2]);
+	printf("  Phase: 0 no transaction, 1 before command, 2 after command, 3 completed\r\n");
+	printf("  Register         entry    ready    failure\r\n");
+	for (i = 0U; i < sizeof(labels) / sizeof(labels[0]); i++)
+	{
+		printf("  %-12s  %08lx %08lx %08lx\r\n", labels[i],
+			(unsigned long)g_Esp32C6RngTrace[0][i], (unsigned long)g_Esp32C6RngTrace[1][i],
+			(unsigned long)g_Esp32C6RngTrace[2][i]);
+	}
 }
 #define CRYPTO_TEST_RNG_FAILURE CryptoTestRngFailure
 #endif
