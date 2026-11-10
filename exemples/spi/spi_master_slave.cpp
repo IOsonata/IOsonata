@@ -111,6 +111,10 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define SPI_SLAVE_INT_PRIO 6
 #endif
 
+#ifndef SPI_TEST_UART_INT_ENABLE
+#define SPI_TEST_UART_INT_ENABLE true
+#endif
+
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
 
 uint8_t g_UarTxBuff[FIFOSIZE];
@@ -133,7 +137,7 @@ static const UARTCfg_t s_UartCfg = {
 	UART_PARITY_NONE,
 	1,					// Stop bit
 	UART_FLWCTRL_NONE,
-	true,
+	SPI_TEST_UART_INT_ENABLE,
 	1, 					// use APP_IRQ_PRIORITY_LOW with Softdevice
 	NULL,//nRFUartEvthandler,
 	true,				// fifo blocking mode
@@ -181,6 +185,7 @@ SPI g_SpiSlave;
 
 // Optional target-test diagnostic implementation, outside board configuration.
 void SpiMasterSlaveDiagnostics(void) __attribute__((weak));
+bool SpiMasterSlaveCheckPins(void) __attribute__((weak));
 
 static int SlaveEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 					 uint8_t *pBuffer, int Length);
@@ -445,6 +450,13 @@ int main()
 #ifdef SPI_LOOPBACK_WIRING
 	printf("%s\r\n", SPI_LOOPBACK_WIRING);
 #endif
+	if (SpiMasterSlaveCheckPins != nullptr && !SpiMasterSlaveCheckPins())
+	{
+		printf("SPI jumper check FAIL; transfer test not started\r\n");
+		fflush(stdout);
+		while (1)
+			__WFE();
+	}
 	for (sm = 0; sm < 2; ++sm)
 	{
 		if ((SPI_TEST_SLAVE_MASK & (1 << sm)) == 0)

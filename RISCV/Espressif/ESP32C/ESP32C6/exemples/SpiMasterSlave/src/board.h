@@ -55,6 +55,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 #define UART_RETARGET
+// Keep diagnostics independent of UART interrupt delivery.
+#define SPI_TEST_UART_INT_ENABLE false
 
 #include "coredev/iopincfg.h"
 #include "esp32xx_uart.h"

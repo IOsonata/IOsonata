@@ -10,6 +10,9 @@ SPDX-License-Identifier: MIT
 #include <stdint.h>
 #include <stdio.h>
 
+#include "board.h"
+#include "iopinctrl.h"
+#include "idelay.h"
 #include "esp32xx_gpio.h"
 #include "esp32xx_spi.h"
 #include "esp32xx_irq.h"
@@ -89,4 +92,51 @@ void SpiMasterSlaveDiagnostics(void)
 	}
 	printf("C6 SPI snapshot complete\r\n");
 	fflush(stdout);
+}
+
+// Run before either SPI interface owns the pins. SPI Init restores its pin map.
+bool SpiMasterSlaveCheckPins(void)
+{
+	const int outputs[] = {SPI_MASTER_CS_PIN, SPI_MASTER_SCK_PIN,
+		SPI_MASTER_MOSI_PIN, SPI_SLAVE_MISO_PIN};
+	const int inputs[] = {SPI_SLAVE_CS_PIN, SPI_SLAVE_SCK_PIN,
+		SPI_SLAVE_MOSI_PIN, SPI_MASTER_MISO_PIN};
+	int low;
+	int high;
+	int lowAgain;
+	unsigned int i;
+	bool pass = true;
+
+	printf("C6 diagnostics: polling UART, GPIO jumper check\r\n");
+	for (i = 0; i < 4; i++)
+	{
+		IOPinConfig(0, outputs[i], IOPINOP_GPIO, IOPINDIR_INPUT,
+			IOPINRES_NONE, IOPINTYPE_NORMAL);
+		IOPinConfig(0, inputs[i], IOPINOP_GPIO, IOPINDIR_INPUT,
+			IOPINRES_NONE, IOPINTYPE_NORMAL);
+	}
+	for (i = 0; i < 4; i++)
+	{
+		IOPinClear(0, outputs[i]);
+		IOPinConfig(0, outputs[i], IOPINOP_GPIO, IOPINDIR_OUTPUT,
+			IOPINRES_NONE, IOPINTYPE_NORMAL);
+		usDelay(10);
+		low = IOPinRead(0, inputs[i]);
+		IOPinSet(0, outputs[i]);
+		usDelay(10);
+		high = IOPinRead(0, inputs[i]);
+		IOPinClear(0, outputs[i]);
+		usDelay(10);
+		lowAgain = IOPinRead(0, inputs[i]);
+		IOPinConfig(0, outputs[i], IOPINOP_GPIO, IOPINDIR_INPUT,
+			IOPINRES_NONE, IOPINTYPE_NORMAL);
+		printf("  GPIO%d -> GPIO%d: low=%d high=%d low=%d %s\r\n",
+			outputs[i], inputs[i], low, high, lowAgain,
+			low == 0 && high != 0 && lowAgain == 0 ? "PASS" : "FAIL");
+		if (low != 0 || high == 0 || lowAgain != 0)
+		{
+			pass = false;
+		}
+	}
+	return pass;
 }
