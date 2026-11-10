@@ -21,13 +21,21 @@ not guarantee I2C timing for longer wires or higher bus capacitance.
 Build the matching library and example, then flash at offset 0. Both Debug
 and Release print results over UART at 1,000,000 baud, 8N1.
 
-The generic test uses 100 kHz, polling master and interrupt slave. It checks
+The C6 configuration runs the generic test at 100 kHz and 400 kHz, with
+polling master and interrupt slave. Requested and configured rates are printed. It checks
 register writes, repeated-START reads, reads without a command, writes up to
 254 data bytes plus the command, address NACK, and recovery after NACK.
 The long write crosses both the 16-byte LP FIFO and the 32-byte HP FIFO.
 
-Expected final message: `I2C master/slave loopback PASS`.
-The C6 hardware run passed all checks with diagnostics enabled, including
+Boundary reads use lengths 15, 16, 17, 31, 32, 33, 63, 64 and 65 bytes.
+Every read checks all bytes, then a command-free one-byte read checks that
+the slave advanced its offset correctly. The test memory has 128 bytes;
+these reads start at offset 32. Each rate reruns the write and NACK checks.
+
+Expected final message:
+`I2C master/slave loopback PASS (2 passed, 0 failed, 0 skipped)`.
+The earlier 100 kHz C6 hardware runs passed with diagnostics enabled and
+disabled, including
 consecutive one-byte reads advancing from offset 16 to 17 and then 18.
 The address-NACK test completes in about 1.6 ms with five retries; recovery
 reads also pass. Slave TX completion counts byte-completion interrupts because
@@ -35,8 +43,7 @@ FIFO occupancy includes prefetched bytes and does not reliably count bytes
 sent on the bus. FIFO filling remains in blocks.
 
 The default build uses interrupt-driven UART and disables register tracing.
-Repeat the same loopback test in this configuration to confirm operation
-without diagnostic capture. The C3 has no LP I2C controller; its I2cSlave test
+The expanded boundary reads and 400 kHz run still require hardware validation. The C3 has no LP I2C controller; its I2cSlave test
 requires an external master.
 
 For diagnostics, define `I2C_TEST_BOARD_TRACE` in the example compiler settings
