@@ -576,6 +576,17 @@ static void Esp32I2cSlaveDrain(Esp32I2cDev_t *pDev)
 	}
 }
 
+// Optional capture follows the master failure trace pattern. Phase 0 is
+// before filling, 1 after filling, and 2 before completing a slave read.
+__attribute__((weak)) void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase,
+	int Queued, int Count)
+{
+	(void)Base;
+	(void)Phase;
+	(void)Queued;
+	(void)Count;
+}
+
 static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 {
 	I2CDev_t *i2c;
@@ -583,6 +594,7 @@ static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 	uint8_t value;
 
 	i2c = pDev->pOwner;
+	Esp32I2cTraceSlaveTx(pDev->Base, 0, pDev->SlaveQueued, pDev->SlaveCount);
 	available = ESP32_I2C_FIFO_DEPTH - ((ESP32_I2C_SR_REG(pDev->Base) &
 		ESP32_I2C_SR_TXFIFO_CNT_Msk) >> ESP32_I2C_SR_TXFIFO_CNT_Pos);
 	while (available--)
@@ -595,6 +607,7 @@ static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 			pDev->SlaveQueued++;
 		}
 	}
+	Esp32I2cTraceSlaveTx(pDev->Base, 1, pDev->SlaveQueued, pDev->SlaveCount);
 }
 
 static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
@@ -621,6 +634,7 @@ static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 		{
 			pDev->SlaveCount--;
 		}
+		Esp32I2cTraceSlaveTx(pDev->Base, 2, pDev->SlaveQueued, pDev->SlaveCount);
 		// Discard the rest of this response before another read address can
 		// prefetch it. Resetting at READ_RQST is too late for that first byte.
 		// Leave RX intact: a following command may already be arriving.

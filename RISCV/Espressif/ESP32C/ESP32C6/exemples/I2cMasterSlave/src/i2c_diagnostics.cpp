@@ -93,11 +93,72 @@ void Esp32I2cTraceFailure(uintptr_t Base, uint32_t Done,
 	s_MasterFailureCount++;
 }
 
+typedef struct {
+	unsigned Phase;
+	int Queued;
+	int Count;
+	uint32_t State;
+	uint32_t Fifo;
+	uint32_t Raw;
+} I2cSlaveTxTrace_t;
+
+static I2cSlaveTxTrace_t s_SlaveTxTrace[64];
+static unsigned s_SlaveTxTraceCount;
+static bool s_SlaveTxTraceOverflow;
+
+void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase, int Queued, int Count)
+{
+	I2cSlaveTxTrace_t *entry;
+
+	if (Base != ESP32_I2C0_BASE)
+	{
+		return;
+	}
+	if (s_SlaveTxTraceCount >= 64)
+	{
+		s_SlaveTxTraceOverflow = true;
+		return;
+	}
+	entry = &s_SlaveTxTrace[s_SlaveTxTraceCount];
+	entry->Phase = Phase;
+	entry->Queued = Queued;
+	entry->Count = Count;
+	entry->State = ESP32_I2C_SR_REG(Base);
+	entry->Fifo = ESP32_I2C_FIFO_ST_REG(Base);
+	entry->Raw = ESP32_I2C_INT_RAW_REG(Base);
+	s_SlaveTxTraceCount++;
+}
+
+static void I2cMasterSlavePrintTx()
+{
+	const I2cSlaveTxTrace_t *entry;
+	unsigned i;
+
+	printf("HP slave TX trace: %u entries%s\r\n", s_SlaveTxTraceCount,
+		s_SlaveTxTraceOverflow ? " (capacity exceeded)" : "");
+	fflush(stdout);
+	usDelay(I2C_TEST_TRACE_DELAY_US);
+	for (i = 0; i < s_SlaveTxTraceCount; i++)
+	{
+		entry = &s_SlaveTxTrace[i];
+		printf("S%u %s queued=%d count=%d SR=%08lx\r\n", i,
+			entry->Phase == 0 ? "BEFORE" : entry->Phase == 1 ? "FILLED" : "DONE",
+			entry->Queued, entry->Count, (unsigned long)entry->State);
+		fflush(stdout);
+		usDelay(I2C_TEST_TRACE_DELAY_US);
+		printf("S%u FIFO_ST=%08lx RAW=%08lx\r\n", i,
+			(unsigned long)entry->Fifo, (unsigned long)entry->Raw);
+		fflush(stdout);
+		usDelay(I2C_TEST_TRACE_DELAY_US);
+	}
+}
+
 void I2cMasterSlavePrintFailures()
 {
 	const I2cMasterFailure_t *entry;
 	unsigned i;
 
+	I2cMasterSlavePrintTx();
 	printf("LP master failure trace: %u entries%s\r\n", s_MasterFailureCount,
 		s_MasterFailureOverflow ? " (capacity exceeded)" : "");
 	fflush(stdout);
