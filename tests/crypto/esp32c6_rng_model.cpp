@@ -53,6 +53,8 @@ static bool s_IgnoreAnalog;
 static bool s_Stuck;
 static bool s_Nested;
 static bool s_RestoreFail;
+static bool s_BadPowerSequence;
+static unsigned s_PowerUps;
 static uint32_t s_Data = 0xA5C39D71U;
 
 EspRngModelReg &EspRngModelRegister(uintptr_t Addr)
@@ -99,6 +101,13 @@ EspRngModelReg &EspRngModelReg::operator=(uint32_t Value)
 	uint8_t reg;
 
 	s_Writes++;
+	if (Addr == RNG_ANALOG_POWER && (s_Values[Addr] & (1U << 27)) == 0U &&
+		(Value & (1U << 27)) != 0U)
+	{
+		s_BadPowerSequence = (s_Values[Addr] & (1U << 26)) != 0U ||
+			(Value & (1U << 26)) != 0U;
+		s_PowerUps++;
+	}
 	if (Addr == RNG_ANALOG_CTRL0 || Addr == RNG_ANALOG_CTRL0 + 4U)
 	{
 		assert((s_Values[RNG_ANALOG_CLOCK] & 4U) != 0U);
@@ -107,7 +116,7 @@ EspRngModelReg &EspRngModelReg::operator=(uint32_t Value)
 		assert((Value & 255U) == 0x69U);
 		reg = (Value >> 8) & 255U;
 		assert(reg < sizeof(s_Analog));
-		if ((Value & (1U << 24)) != 0U && !s_IgnoreAnalog &&
+		if ((Value & (1U << 24)) != 0U && !s_IgnoreAnalog && !s_BadPowerSequence &&
 			!(s_RestoreFail && s_Reads != 0U && reg == 7U))
 		{
 			s_Analog[reg] = (uint8_t)(Value >> 16);
@@ -158,7 +167,7 @@ int main(int argc, char **argv)
 	s_Values[RNG_ADC_PATTERN] = 0xFFFFFFU;
 	s_Values[RNG_ADC_CLOCK] = 0x84U;
 	s_Values[RNG_ADC_CLKM] = 0x400004U;
-	s_Values[RNG_ANALOG_POWER] = 0x08001234U;
+	s_Values[RNG_ANALOG_POWER] = strcmp(argv[1], "powered") == 0 ? 0x08001234U : 0x04001234U;
 	s_Values[RNG_ANALOG_CLOCK] = 0x81U;
 	s_Values[RNG_CLOCK] = 0xEE000000U;
 	s_Values[RNG_ANALOG_READ] = 0x2DU;
@@ -209,11 +218,15 @@ int main(int argc, char **argv)
 			assert(out[i] == 0U);
 		}
 		assert(!Esp32C6RngSecureAvailable());
+		assert(g_Esp32C6RngError != 0U);
 		assert(Esp32C6RngFill(out + 1, 64U) == CRYPTO_STATUS_FAIL);
 	}
 	else
 	{
 		assert(s_Reads == 64U);
+		assert(!s_BadPowerSequence);
+		assert(s_PowerUps == (strcmp(argv[1], "powered") == 0 ? 0U : 1U));
+		assert(g_Esp32C6RngError == 0U);
 		memcpy(previous, out + 1, sizeof(previous));
 		assert(Esp32C6RngFill(out + 1, 17U) == CRYPTO_STATUS_OK);
 		assert(memcmp(previous, out + 1, 17U) != 0);

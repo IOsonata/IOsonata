@@ -64,6 +64,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/iopincfg.h"
 #include "esp32xx_uart.h"
 
+#ifdef __cplusplus
+#include <stdio.h>
+extern volatile uint32_t g_Esp32C6RngError;
+extern volatile uint32_t g_Esp32C6RngDetail;
+static inline void CryptoTestRngFailure(void)
+{
+	printf("  C6 RNG error %lu, detail 0x%08lx\r\n",
+		(unsigned long)g_Esp32C6RngError, (unsigned long)g_Esp32C6RngDetail);
+}
+#define CRYPTO_TEST_RNG_FAILURE CryptoTestRngFailure
+#endif
+
 // ESP32-C6 UART console
 #define UART_DEVNO          0
 

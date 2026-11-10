@@ -63,7 +63,7 @@ SOFTWARE.
 #include "crypto/crypto_softsha256.h"
 #include "crypto/crypto_uecc.h"
 
-// Board data supplies console configuration only.
+// Board data supplies console configuration and optional failure diagnostics.
 #if defined(__has_include)
 #if __has_include("board.h")
 #include "board.h"
@@ -923,50 +923,68 @@ static void RngChecks(RngEngine *pRng)
 {
 	uint8_t a[32], b[32], big[1024];
 	uint32_t seen[256];
+	uint8_t odd[19];
+	uint32_t ones = 0;
 	int missing = 0;
+	int rep;
+	int bit;
+	int v;
+	size_t i;
+	bool drawsOk;
+	bool oddOk;
 
 	printf("Random source\r\n");
 
 	memset(a, 0, sizeof(a));
 	memset(b, 0, sizeof(b));
-	check("draws succeed",
-		pRng->Random(a, 32) == CRYPTO_STATUS_OK && pRng->Random(b, 32) == CRYPTO_STATUS_OK);
-	check("two draws differ", memcmp(a, b, 32) != 0);
-
-	uint8_t odd[19];
+	drawsOk = pRng->Random(a, 32) == CRYPTO_STATUS_OK &&
+		pRng->Random(b, 32) == CRYPTO_STATUS_OK;
+	check("draws succeed", drawsOk);
+	check("two draws differ", drawsOk && memcmp(a, b, 32) != 0);
 
 	memset(odd, 0xCC, sizeof(odd));
+	oddOk = pRng->Random(odd, 17) == CRYPTO_STATUS_OK;
 	check("odd length request stays inside its length",
-		pRng->Random(odd, 17) == CRYPTO_STATUS_OK && odd[17] == 0xCC && odd[18] == 0xCC);
+		oddOk && odd[17] == 0xCC && odd[18] == 0xCC);
+	drawsOk = drawsOk && oddOk;
 
 	memset(seen, 0, sizeof(seen));
-	uint32_t ones = 0;
-	for (int rep = 0; rep < 4; rep++)
+	for (rep = 0; rep < 4; rep++)
 	{
 		if (pRng->Random(big, sizeof(big)) != CRYPTO_STATUS_OK)
 		{
+			drawsOk = false;
 			missing = 256;
 			break;
 		}
-		for (size_t i = 0; i < sizeof(big); i++)
+		for (i = 0; i < sizeof(big); i++)
 		{
 			seen[big[i]]++;
-			for (int bit = 0; bit < 8; bit++)
+			for (bit = 0; bit < 8; bit++)
 			{
 				ones += (big[i] >> bit) & 1U;
 			}
 		}
 	}
-	for (int v = 0; v < 256; v++)
+	for (v = 0; v < 256; v++)
 	{
-		if (seen[v] == 0U) missing++;
+		if (seen[v] == 0U)
+		{
+			missing++;
+		}
 	}
 	// 32768 bits: the ones count is within 5 sigma (about 450) of 16384
 	check("4 KB sample: ones within 5 sigma and byte values spread",
 		ones > 16384U - 450U && ones < 16384U + 450U && missing < 8);
 
-	printf("  Source: %s\r\n", pRng->IsSecure() ?
-		"secure random generator" : "software PRNG, not for security use");
+#ifdef CRYPTO_TEST_RNG_FAILURE
+	if (!drawsOk)
+	{
+		CRYPTO_TEST_RNG_FAILURE();
+	}
+#endif
+	printf("  Source: %s\r\n", !drawsOk ? "unavailable: random draw failed" :
+		(pRng->IsSecure() ? "secure random generator" : "not for security use"));
 }
 
 static void HashChecks(HashEngine *hash, MacEngine *mac)

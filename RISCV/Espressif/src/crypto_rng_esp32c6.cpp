@@ -75,6 +75,22 @@ SOFTWARE.
 #define RNG_ANALOG_BUSY		(1U << 25)
 #define RNG_ANALOG_POWER_MASK		(3U << 26)
 
+// First failure is retained for the board test, with ordinary C++ linkage.
+// 1 ADC in use, 2 analog bus timeout, 3 analog selection in use,
+// 4 analog readback, 5 ADC trigger, 6 cycle counter, 7 repeated output.
+volatile uint32_t g_Esp32C6RngError;
+volatile uint32_t g_Esp32C6RngDetail;
+
+static bool EspC6RngFail(uint32_t Error, uint32_t Detail)
+{
+	if (g_Esp32C6RngError == 0U)
+	{
+		g_Esp32C6RngError = Error;
+		g_Esp32C6RngDetail = Detail;
+	}
+	return false;
+}
+
 static bool s_RngBusy;
 static bool s_RngFault;
 static uint8_t s_LastByte;
@@ -115,7 +131,7 @@ static bool EspC6RngWaitIdle(uintptr_t Addr)
 			return true;
 		}
 	}
-	return false;
+	return EspC6RngFail(2U, (uint32_t)Addr);
 }
 
 // Internal analog I2C, SAR block 0x69. Select the master assigned by ROM.
@@ -180,7 +196,14 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 
 	EspC6RngModify(RNG_ADC_CLOCK, 0xEU, 4U);
 	EspC6RngModify(RNG_ADC_CLKM, 0x7FFFFFU, 1U << 22);
-	EspC6RngModify(RNG_ANALOG_POWER, RNG_ANALOG_POWER_MASK, RNG_ANALOG_POWER_MASK);
+	// Match the PMU sequence: hold reset, power the analog block, release reset.
+	// An already powered block may also contain temperature sensor state.
+	if ((pSaved->Power & (1U << 27)) == 0U)
+	{
+		EspC6RngModify(RNG_ANALOG_POWER, 1U << 26, 0U);
+		EspC6RngModify(RNG_ANALOG_POWER, 1U << 27, 1U << 27);
+	}
+	EspC6RngModify(RNG_ANALOG_POWER, 1U << 26, 1U << 26);
 	EspC6RngModify(RNG_ANALOG_CLOCK, 4U, 4U);
 	EspC6RngModify(RNG_CLOCK, 1U << 24, 1U << 24);
 	for (i = 0U; i < sizeof(s_AnalogRegisters); i++)
@@ -193,17 +216,20 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 	// Do not replace an existing analog test/calibration/entropy selection.
 	if ((pSaved->Analog[4] & 0x5BU) != 0U)
 	{
-		return false;
+		return EspC6RngFail(3U, pSaved->Analog[4]);
 	}
 	for (i = 0U; i < sizeof(s_AnalogRegisters); i++)
 	{
 		pSaved->ChangedAnalog = i + 1U;
 		value = (pSaved->Analog[i] & ~s_AnalogMasks[i]) | s_AnalogValues[i];
 		if (!EspC6RngAnalog(s_AnalogRegisters[i], &value, true) ||
-			!EspC6RngAnalog(s_AnalogRegisters[i], &readback, false) ||
-			readback != value)
+			!EspC6RngAnalog(s_AnalogRegisters[i], &readback, false))
 		{
 			return false;
+		}
+		if (readback != value)
+		{
+			return EspC6RngFail(4U, ((uint32_t)s_AnalogRegisters[i] << 8) | readback);
 		}
 	}
 	// Reserved ADC2/channel 1, attenuation 1, two identical pattern entries.
@@ -215,7 +241,8 @@ static bool EspC6RngStart(EspC6RngState_t *pSaved)
 	ESP32_RNG_REG(RNG_ADC_CTRL) |= 1U << 23;
 	ESP32_RNG_REG(RNG_ADC_CTRL) &= ~(1U << 23);
 	ESP32_RNG_REG(RNG_ADC_CTRL2) |= RNG_TIMER_EN;
-	return (ESP32_RNG_REG(RNG_ADC_CTRL2) & RNG_TIMER_EN) != 0U;
+	return (ESP32_RNG_REG(RNG_ADC_CTRL2) & RNG_TIMER_EN) != 0U ||
+		EspC6RngFail(5U, ESP32_RNG_REG(RNG_ADC_CTRL2));
 }
 
 static bool EspC6RngStop(EspC6RngState_t *pSaved)
@@ -236,10 +263,13 @@ static bool EspC6RngStop(EspC6RngState_t *pSaved)
 		value = (value & ~s_AnalogMasks[i - 1U]) |
 			(pSaved->Analog[i - 1U] & s_AnalogMasks[i - 1U]);
 		if (!EspC6RngAnalog(s_AnalogRegisters[i - 1U], &value, true) ||
-			!EspC6RngAnalog(s_AnalogRegisters[i - 1U], &readback, false) ||
-			readback != value)
+			!EspC6RngAnalog(s_AnalogRegisters[i - 1U], &readback, false))
 		{
 			ok = false;
+		}
+		else if (readback != value)
+		{
+			ok = EspC6RngFail(4U, ((uint32_t)s_AnalogRegisters[i - 1U] << 8) | readback);
 		}
 	}
 	ESP32_RNG_REG(RNG_ADC_PATTERN) = pSaved->Pattern;
@@ -273,7 +303,7 @@ static bool EspC6RngWait(uint32_t Cycles)
 			return true;
 		}
 	}
-	return false;
+	return EspC6RngFail(6U, Cycles);
 }
 
 bool Esp32C6RngSecureAvailable(void)
@@ -305,8 +335,14 @@ CRYPTO_STATUS Esp32C6RngFill(uint8_t *pOut, size_t Len)
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_BUSY;
 	}
+	if (!s_RngFault)
+	{
+		g_Esp32C6RngError = 0U;
+		g_Esp32C6RngDetail = 0U;
+	}
 	if (s_RngFault || !EspC6RngIdle())
 	{
+		(void)EspC6RngFail(1U, ESP32_RNG_REG(RNG_ADC_CTRL));
 		EnableInterrupt(state);
 		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_FAIL;
@@ -315,7 +351,10 @@ CRYPTO_STATUS Esp32C6RngFill(uint8_t *pOut, size_t Len)
 	EnableInterrupt(state);
 	ok = EspC6RngStart(&saved);
 	cycles = SystemCoreClockGet() / 1000000U;
-	ok = ok && cycles != 0U && cycles <= 1000U;
+	if (ok && (cycles == 0U || cycles > 1000U))
+	{
+		ok = EspC6RngFail(6U, cycles);
+	}
 	if (ok)
 	{
 		ok = EspC6RngWait(cycles * 100U);
@@ -334,7 +373,7 @@ CRYPTO_STATUS Esp32C6RngFill(uint8_t *pOut, size_t Len)
 		s_LastByte = value;
 		if (s_RepeatedBytes >= 32U)
 		{
-			ok = false;
+			ok = EspC6RngFail(7U, value);
 			break;
 		}
 		pOut[i] = value;

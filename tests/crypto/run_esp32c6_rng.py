@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix="esp32c6-rng-") as name:
             "-I", str(ROOT / "include"), "-I", str(ROOT / "RISCV/Espressif/include"),
             str(TEST / "esp32c6_rng_model.cpp"), "-o", str(exe)
         ], check=True)
-        for scenario in ("good", "master0", "owner", "foreign", "clock", "bus", "analog", "stuck", "nested", "restore"):
+        for scenario in ("good", "powered", "master0", "owner", "foreign", "clock", "bus", "analog", "stuck", "nested", "restore"):
             subprocess.run([str(exe), scenario], check=True,
                            env={**os.environ, "ASAN_OPTIONS": "detect_leaks=0"})
             print(opt, scenario, "PASS", flush=True)

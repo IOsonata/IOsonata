@@ -27,6 +27,16 @@ All 200 randomized AES comparison rounds completed after correcting the
 Super Watchdog unlock key in shared C5/C6/C61 startup. That run used the
 software PRNG and skipped secure-entropy-dependent tests.
 
+The first C6 hardware RNG run completed with 55 passed, 8 failed, 1 skipped:
+all random draws failed, while AES, SHA and HMAC continued to pass. The RNG
+startup now holds the SAR analog block in reset before powering it, then
+releases reset, matching Espressif's PMU sequence. The register model covers
+both initially powered and unpowered analog blocks. Board retest is pending.
+CryptoTest reports failed draws as unavailable, rather than calling them a
+software PRNG. On C6, the first draw failure also prints the retained RNG error
+and detail: 1 ADC in use, 2 analog bus timeout, 3 analog selection in use,
+4 analog readback mismatch, 5 ADC trigger, 6 cycle counter, 7 repeated output.
+
 The subsequent C6 RNG implementation enables internal SAR ADC entropy during
 `Crypto::Random()`, then restores its analog, clock and power settings. It uses
 reserved ADC2/channel 1, requires no GPIO wiring, rejects an active ADC, and
