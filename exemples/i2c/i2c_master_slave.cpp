@@ -258,6 +258,10 @@ static I2cTestTrace_t s_SlaveTrace[I2C_TEST_TRACE_SIZE];
 static std::atomic<int> s_SlaveTraceCount(0);
 
 // Board diagnostics capture registers without printing in interrupt context.
+#ifdef I2C_TEST_BOARD_TRACE
+void I2cMasterSlaveCapture(int Index);
+void I2cMasterSlavePrint(int Index);
+#else
 __attribute__((weak)) void I2cMasterSlaveCapture(int Index)
 {
 	(void)Index;
@@ -267,6 +271,7 @@ __attribute__((weak)) void I2cMasterSlavePrint(int Index)
 {
 	(void)Index;
 }
+#endif
 #endif
 
 static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
@@ -397,6 +402,10 @@ void HardwareInit()
 #endif
 
 	printf("Init I2C Master/Slave demo\r\n");
+#ifdef I2C_TEST_BOARD_TRACE
+	printf("I2C register trace enabled, UART %s\r\n",
+		I2C_TEST_UART_INT_ENABLE ? "interrupt" : "polling");
+#endif
 #ifdef I2C_LOOPBACK_WIRING
 	printf("%s\r\n", I2C_LOOPBACK_WIRING);
 #endif
