@@ -130,7 +130,8 @@ static void Drain()
 	while (CFifoUsed(s_Uart.hTxFifo) > 0)
 	{
 		s_TxCount = 0;
-		Esp32UartTxFill(&s_Esp32UartDev[0]);
+		ESP32_UART_INT_ST_REG(0) = ESP32_UART_INT_TXFIFO_EMPTY;
+		Esp32UartIRQHandler(&s_Esp32UartDev[0]);
 	}
 }
 
@@ -211,6 +212,8 @@ int main()
 	// An active transmitter still receives data through the software FIFO.
 	s_Uart.bTxReady = false;
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, 16) == 16);
+	assert(s_Tx.empty());
+	Drain();
 	assert(s_Tx.size() == 16);
 
 	Reset(true);
@@ -227,6 +230,24 @@ int main()
 	assert(s_Tx.size() == 16);
 	assert(std::memcmp(s_Tx.data(), data, 16) == 0);
 	assert((ESP32_UART_INT_ENA_REG(0) & ESP32_UART_INT_TXFIFO_EMPTY) == 0);
+
+	Reset(true);
+	// A full hardware FIFO leaves byte writes queued for interrupt refill.
+	s_TxCount = ESP32_UART_HW_FIFO_LEN;
+	for (i = 0; i < 512; i++)
+	{
+		assert(Esp32UartTxData(&s_Uart.DevIntrf, data + i, 1) == 1);
+		assert(s_Tx.empty());
+	}
+	assert(Esp32UartTxData(&s_Uart.DevIntrf, data + 512, 1) == 0);
+	Drain();
+	assert(s_Uart.bTxReady);
+	assert(s_Tx.size() == 512);
+	assert(std::memcmp(s_Tx.data(), data, 512) == 0);
+	s_TxCount = 0;
+	assert(Esp32UartTxData(&s_Uart.DevIntrf, data + 512, 1) == 1);
+	assert(s_Tx.size() == 513);
+	assert(s_Tx.back() == data[512]);
 
 	Reset(false);
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, sizeof(data)) == 1000);

@@ -610,6 +610,7 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	ESP32_UARTDEV *dev;
 	UARTDev_t *udev;
 	uintptr_t state;
+	uint32_t dropped;
 	int cnt;
 	int space;
 	bool pending;
@@ -639,7 +640,24 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		return cnt;
 	}
 
-	cnt = Esp32UartTxPut(dev, pData, DataLen);
+	if (DataLen == 1)
+	{
+		state = DisableInterrupt();
+		dropped = udev->hTxFifo->DropCnt;
+		cnt = CFifoPutByte(udev->hTxFifo, *pData) ? 1 : 0;
+		udev->TxDropCnt += udev->hTxFifo->DropCnt - dropped;
+		EnableInterrupt(state);
+	}
+	else
+	{
+		cnt = Esp32UartTxPut(dev, pData, DataLen);
+	}
+
+	// An active TX interrupt owns refill until the software FIFO is empty.
+	if (!udev->bTxReady)
+	{
+		return cnt;
+	}
 
 	state = DisableInterrupt();
 	Esp32UartTxFill(dev);
