@@ -46,3 +46,9 @@ are taken after FIFO reset and before the driver fills TX; DONE snapshots
 are taken before the next transfer. DATA is never read by diagnostics.
 This configuration uses polling UART and line-buffered stdout to keep the
 trace output complete. Restore `I2C_TEST_UART_INT_ENABLE` after diagnosis.
+
+Trace output uses three short lines per event, each labelled with its event
+index (T0, T1, ...). RX shows the first two receive-buffer bytes; M4 shows
+slave memory bytes 4 and 5. Each line is flushed with a 2 ms pause after it.
+These pauses occur only while printing the captured trace after the test,
+never during an I2C transaction or callback.

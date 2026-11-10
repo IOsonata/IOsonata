@@ -10,6 +10,7 @@ SPDX-License-Identifier: MIT
 #include <stdint.h>
 #include <stdio.h>
 #include "board.h"
+#include "idelay.h"
 
 static uint32_t s_Registers[I2C_TEST_TRACE_SIZE][6];
 
@@ -37,8 +38,12 @@ void I2cMasterSlavePrint(int Index)
 		return;
 	}
 	values = s_Registers[Index];
-	printf("    HP SR=%08lx FIFO_ST=%08lx CTR=%08lx\r\n",
+	printf("T%d HP SR=%08lx FIFO_ST=%08lx CTR=%08lx\r\n", Index,
 		(unsigned long)values[0], (unsigned long)values[1], (unsigned long)values[2]);
-	printf("    HP FIFO_CONF=%08lx RAW=%08lx STRETCH=%08lx\r\n",
+	fflush(stdout);
+	usDelay(I2C_TEST_TRACE_DELAY_US);
+	printf("T%d HP FIFO_CONF=%08lx RAW=%08lx STRETCH=%08lx\r\n", Index,
 		(unsigned long)values[3], (unsigned long)values[4], (unsigned long)values[5]);
+	fflush(stdout);
+	usDelay(I2C_TEST_TRACE_DELAY_US);
 }

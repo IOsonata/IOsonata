@@ -52,6 +52,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/i2c.h"
 #include "coredev/uart.h"
 #include "stddev.h"
+#include "idelay.h"
 #include "board.h"
 
 #ifdef MCUOSC
@@ -490,18 +491,24 @@ static void PrintSlaveTrace()
 
 	count = s_SlaveTraceCount.load(std::memory_order_acquire);
 	printf("Slave callback trace: %d entries (capacity %d)\r\n", count, I2C_TEST_TRACE_SIZE);
+	fflush(stdout);
+#ifdef I2C_TEST_TRACE_DELAY_US
+	usDelay(I2C_TEST_TRACE_DELAY_US);
+#endif
 	for (i = 0; i < count; i++)
 	{
 		entry = &s_SlaveTrace[i];
 		event = entry->Event == DEVINTRF_EVT_WRITE_RQST ? "WRITE" :
 			entry->Event == DEVINTRF_EVT_READ_RQST ? "READ" :
 			entry->Event == DEVINTRF_EVT_COMPLETED ? "DONE" : "OTHER";
-		printf("  %d %s len=%d write=%d offset=%d->%d\r\n", i, event,
-			entry->Length, entry->WriteBefore, entry->OffsetBefore, entry->OffsetAfter);
-		printf("    RX buffer:");
-		PrintBytes(entry->Received, sizeof(entry->Received));
-		printf("    Memory[4..11]:");
-		PrintBytes(entry->Memory, sizeof(entry->Memory));
+		printf("T%d %s len=%d write=%d off=%d->%d RX=%02x,%02x M4=%02x,%02x\r\n",
+			i, event, entry->Length, entry->WriteBefore, entry->OffsetBefore,
+			entry->OffsetAfter, entry->Received[0], entry->Received[1],
+			entry->Memory[0], entry->Memory[1]);
+		fflush(stdout);
+#ifdef I2C_TEST_TRACE_DELAY_US
+		usDelay(I2C_TEST_TRACE_DELAY_US);
+#endif
 		I2cMasterSlavePrint(i);
 	}
 }
