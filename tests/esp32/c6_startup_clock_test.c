@@ -36,12 +36,20 @@ int main(void)
 	assert(SystemCoreClock == 120000000U);
 	assert(SystemCoreClockPeriodus == 120U);
 	assert(SystemCoreClockPeriodns == 8U);
+	// TG0 starts in flash-boot protection; TG1 also has normal WDT enabled.
+	// Keep the reset pulse-length fields unchanged when disabling both.
+	REG(0x60008048) = (1U << 14) | (1U << 15);
+	REG(0x60009048) = (1U << 31) | (1U << 14) | (1U << 18);
 	REG(0x600B1C00) = (1U << 31) | (1U << 12);
 	REG(0x60096054) = 2;
 	REG(0x60096000) = 0x12345678;
 	REG(0x60096004) = 0x87654321;
 	REG(0x60096064) = 0x11223344;
 	Esp32PcrSystemInit(0);
+	assert(REG(0x60008048) == (1U << 15));
+	assert(REG(0x60009048) == (1U << 18));
+	assert(REG(0x60008064) == 0);
+	assert(REG(0x60009064) == 0);
 	assert(REG(0x600B1C00) == 0);
 	assert(REG(0x600B1C1C) == (1U << 30));
 	assert(REG(0x600B1C18) == 0);

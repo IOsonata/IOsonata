@@ -120,7 +120,7 @@ SOFTWARE.
 
 #define TIMG_WDT_WPROTECT_MAGIC     0x50D83AA1UL
 #define TIMG_WDT_EN                 (1UL << 31)
-#if defined(ESP32C5) || defined(ESP32C61)
+#if defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
 #define TIMG_WDT_FLASHBOOT_MOD_EN   (1UL << 14)
 #else
 #define TIMG_WDT_FLASHBOOT_MOD_EN   (1UL << 10)
