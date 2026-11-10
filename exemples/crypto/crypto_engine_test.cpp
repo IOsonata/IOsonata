@@ -20,6 +20,7 @@ Optional:
 
 	CRYPTO_TEST_SOAK_AES		random AES rounds, default 200
 	CRYPTO_TEST_TRACE_AES		print AES soak round and operation before each check
+	CRYPTO_TEST_REPORT_STATE	optional board diagnostic function
 	CRYPTO_TEST_SOAK_PKA		random P-256 rounds, default 8
 	CRYPTO_TEST_NO_MAIN			give CryptoEngineTest() and no main() or UART setup
 	UART_RETARGET				send stdout to the board UART, as i2c_scan.cpp
@@ -64,7 +65,7 @@ SOFTWARE.
 #include "crypto/crypto_softsha256.h"
 #include "crypto/crypto_uecc.h"
 
-// Board data supplies console configuration only.
+// Board data supplies console configuration and optional diagnostics.
 #if defined(__has_include)
 #if __has_include("board.h")
 #include "board.h"
@@ -648,9 +649,15 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 		memset(b, 0, sizeof(b));
 		memset(ta, 0, sizeof(ta));
 		memset(tb, 0, sizeof(tb));
-		AesSoakTrace(r, "GCM seal");
-		if (pHwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, a, ta, 16) != CRYPTO_STATUS_OK ||
-			pSwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, b, tb, 16) != CRYPTO_STATUS_OK ||
+		AesSoakTrace(r, "GCM seal target");
+		ds = pHwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, a, ta, 16);
+		if (ds == CRYPTO_STATUS_OK)
+		{
+			AesSoakTrace(r, "GCM seal reference");
+			ds = pSwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, b, tb, 16);
+		}
+		AesSoakTrace(r, "GCM seal compare");
+		if (ds != CRYPTO_STATUS_OK ||
 			memcmp(a, b, len) != 0 || memcmp(ta, tb, 16) != 0)
 		{
 			bad++;
@@ -1311,6 +1318,9 @@ int CryptoEngineTest(void)
 	s_fail = 0;
 	s_skip = 0;
 	printf("\r\nCrypto engine test\r\n");
+#ifdef CRYPTO_TEST_REPORT_STATE
+	CRYPTO_TEST_REPORT_STATE();
+#endif
 	swRng->Reset();
 	references = swRng->Enable() && swAes->Enable();
 	swPka->SetRng(swRng);
@@ -1356,6 +1366,9 @@ int CryptoEngineTest(void)
 	AesVectors(crypto, crypto, crypto);
 	Aes256Vectors(crypto);
 	SoftwareAesDecryptChecks(swAes);
+#ifdef CRYPTO_TEST_REPORT_STATE
+	CRYPTO_TEST_REPORT_STATE();
+#endif
 	AesSoak(crypto, crypto, crypto, swAes, swAes, swAes);
 	if (DefaultPkaChecks(crypto, crypto, crypto, swPka))
 	{

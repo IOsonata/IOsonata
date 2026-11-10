@@ -26,7 +26,10 @@ C6 currently enables `CRYPTO_TEST_TRACE_AES` to locate a reported restart in
 the AES soak test. It prints the round and operation before each check at the
 same console baud rate. Capture the last markers before the test heading
 repeats. Remove that definition from `board.h` to disable the extra output.
-These markers are outside the timed benchmarks.
+These markers are outside the timed benchmarks. C6 also links a local diagnostic
+source selected by `CRYPTO_TEST_REPORT_STATE`. It reports the reset cause and
+watchdog registers at startup and before the soak, without changing them.
+GCM seal markers distinguish the target call, software reference and comparison.
 
 Host validation:
 

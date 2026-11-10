@@ -61,6 +61,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_RETARGET
 #define CRYPTO_TEST_UART_DEBUG
 #define CRYPTO_TEST_TRACE_AES
+#define CRYPTO_TEST_REPORT_STATE CryptoTestReportState
+
+void CryptoTestReportState(void);
 
 #include "coredev/iopincfg.h"
 #include "esp32xx_uart.h"
