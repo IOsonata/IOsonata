@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "mcu": "R9A02G021",
+  "cpu": "rv32imac_zba_zbb_zbs_zicsr_zifencei",
+  "fpu": false,
+  "defines": [
+    "R9A02G021"
+  ],
+  "includes": [
+    "${iosonata}/RISCV/include",
+    "${iosonata}/RISCV/Renesas/R9A02/include"
+  ],
+  "linker_script": "${iosonata}/RISCV/Renesas/R9A02/ldscript/gcc_r9a02g021.ld",
+  "lib_path": "${iosonata}/RISCV/Renesas/R9A02/R9A02G021/lib/ioc/${config}",
+  "lib": "IOsonata_R9A02G021"
+}
