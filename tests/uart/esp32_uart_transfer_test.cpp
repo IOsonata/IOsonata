@@ -36,12 +36,14 @@ SOFTWARE.
 
 #define __INTERRUPT_H__
 static uintptr_t s_Masked;
+static unsigned s_MaskCount;
 static uintptr_t DisableInterrupt()
 {
 	uintptr_t state;
 
 	state = s_Masked;
 	s_Masked = 1;
+	s_MaskCount++;
 	return state;
 }
 static void EnableInterrupt(uintptr_t State)
@@ -115,6 +117,7 @@ static void Reset(bool Blocking)
 	s_Tx.clear();
 	s_TxCount = 0;
 	s_Masked = 0;
+	s_MaskCount = 0;
 	s_Esp32UartDev[0].pUartDev = &s_Uart;
 	s_Uart.hRxFifo = CFifoInit(rx, sizeof(rx), 1, Blocking);
 	s_Uart.hTxFifo = CFifoInit(tx, sizeof(tx), 1, Blocking);
@@ -221,6 +224,8 @@ int main()
 	// An active transmitter still receives data through the software FIFO.
 	s_Uart.bTxReady = false;
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, 16) == 16);
+	assert(s_Tx.empty());
+	Drain();
 	assert(s_Tx.size() == 16);
 
 	Reset(true);
@@ -258,16 +263,32 @@ int main()
 
 	Reset(true);
 	s_Uart.EvtCallback = TxCallback;
-	// PRBS uses a callback. Foreground refill must still make progress
-	// when the interrupt has not yet serviced the available FIFO space.
+	// Match PRBS callback and one-byte writes with the interrupt consumer.
 	for (i = 0; i < sizeof(data); i++)
 	{
-		s_TxCount = 0;
 		assert(Esp32UartTxData(&s_Uart.DevIntrf, data + i, 1) == 1);
-		assert(CFifoUsed(s_Uart.hTxFifo) == 0);
+		if (i % 64 == 63)
+		{
+			Drain();
+			s_TxCount = 0;
+		}
 	}
+	Drain();
 	assert(s_Tx.size() == sizeof(data));
 	assert(std::memcmp(s_Tx.data(), data, sizeof(data)) == 0);
+	assert(s_MaskCount < 32);
+
+	Reset(true);
+	s_Uart.bTxReady = false;
+	for (i = 0; i < 512; i++)
+	{
+		assert(Esp32UartTxData(&s_Uart.DevIntrf, data + i, 1) == 1);
+	}
+	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, 1) == 0);
+	assert(s_MaskCount == 0);
+	assert(s_Tx.empty());
+	Drain();
+	assert(s_Tx.size() == 512);
 
 	Reset(false);
 	assert(Esp32UartTxData(&s_Uart.DevIntrf, data, sizeof(data)) == 1000);

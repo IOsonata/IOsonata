@@ -613,7 +613,7 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	uint32_t dropped;
 	int cnt;
 	int space;
-	bool pending;
+
 
 	if (pData == nullptr || DataLen <= 0)
 	{
@@ -642,32 +642,39 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 	if (DataLen == 1)
 	{
-		state = DisableInterrupt();
-		dropped = udev->hTxFifo->DropCnt;
-		cnt = CFifoPutByte(udev->hTxFifo, *pData) ? 1 : 0;
-		udev->TxDropCnt += udev->hTxFifo->DropCnt - dropped;
+		if (CFifoIsBlocking(udev->hTxFifo))
+		{
+			// The producer publishes only after writing the byte. A full
+			// FIFO returns zero without masking the interrupt consumer.
+			cnt = CFifoPutByte(udev->hTxFifo, *pData) ? 1 : 0;
+		}
+		else
+		{
+			state = DisableInterrupt();
+			dropped = udev->hTxFifo->DropCnt;
+			cnt = CFifoPutByte(udev->hTxFifo, *pData) ? 1 : 0;
+			udev->TxDropCnt += udev->hTxFifo->DropCnt - dropped;
+			EnableInterrupt(state);
+		}
 	}
 	else
 	{
 		cnt = Esp32UartTxPut(dev, pData, DataLen);
-		state = DisableInterrupt();
 	}
 
-	Esp32UartTxFill(dev);
-	pending = CFifoUsed(udev->hTxFifo) > 0;
-	if (pending || (udev->EvtCallback != nullptr &&
-		(cnt > 0 || !udev->bTxReady)))
+	// Start only when idle. The interrupt owns subsequent FIFO refill.
+	if (udev->bTxReady)
 	{
-		udev->bTxReady = false;
-		ESP32_UART_INT_CLR_REG(dev->Base) = ESP32_UART_INT_TXFIFO_EMPTY;
-		ESP32_UART_INT_ENA_REG(dev->Base) |= ESP32_UART_INT_TXFIFO_EMPTY;
+		state = DisableInterrupt();
+		if (udev->bTxReady && CFifoUsed(udev->hTxFifo) > 0)
+		{
+			udev->bTxReady = false;
+			ESP32_UART_INT_CLR_REG(dev->Base) = ESP32_UART_INT_TXFIFO_EMPTY;
+			Esp32UartTxFill(dev);
+			ESP32_UART_INT_ENA_REG(dev->Base) |= ESP32_UART_INT_TXFIFO_EMPTY;
+		}
+		EnableInterrupt(state);
 	}
-	else
-	{
-		ESP32_UART_INT_ENA_REG(dev->Base) &= ~ESP32_UART_INT_TXFIFO_EMPTY;
-		udev->bTxReady = !pending;
-	}
-	EnableInterrupt(state);
 	return cnt;
 }
 
