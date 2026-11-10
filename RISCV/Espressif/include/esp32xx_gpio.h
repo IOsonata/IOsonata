@@ -138,17 +138,27 @@ SOFTWARE.
  * - CONST_HIGH / CONST_LOW are FUNC_IN_SEL values that feed a constant
  *   logic level into a peripheral input instead of a pad.
  *
- * Values verified against ESP-IDF v5.3 components/soc/<chip>/include
- * (gpio_pins.h for C3/C6, gpio_struct.h FUNC_IN_SEL field doc for C5).
+ * Values verified against ESP-IDF v5.4.2 components/soc/<chip>/include
+ * (gpio_pins.h for C3/C6/C61, gpio_struct.h FUNC_IN_SEL field doc for C5).
  *---------------------------------------------------------------------------*/
 #if defined(ESP32C5) || defined(ESP32C61)
 #  define ESP32_GPIO_FUNC_OUT_SEL_GPIO      256U
-#  define ESP32_GPIO_FUNC_IN_CONST_HIGH     0x40U
-#  define ESP32_GPIO_FUNC_IN_CONST_LOW      0x60U
+#  if defined(ESP32C61)
+#    define ESP32_GPIO_FUNC_IN_CONST_HIGH   0x20U
+#    define ESP32_GPIO_FUNC_IN_CONST_LOW    0x30U
+#  else
+#    define ESP32_GPIO_FUNC_IN_CONST_HIGH   0x40U
+#    define ESP32_GPIO_FUNC_IN_CONST_LOW    0x60U
+#  endif
 #else
 #  define ESP32_GPIO_FUNC_OUT_SEL_GPIO      128U
-#  define ESP32_GPIO_FUNC_IN_CONST_HIGH     0x1EU
-#  define ESP32_GPIO_FUNC_IN_CONST_LOW      0x1FU
+#  if defined(ESP32C6)
+#    define ESP32_GPIO_FUNC_IN_CONST_HIGH   0x38U
+#    define ESP32_GPIO_FUNC_IN_CONST_LOW    0x3CU
+#  else
+#    define ESP32_GPIO_FUNC_IN_CONST_HIGH   0x1EU
+#    define ESP32_GPIO_FUNC_IN_CONST_LOW    0x1FU
+#  endif
 #endif
 
 /*---------------------------------------------------------------------------
@@ -190,20 +200,28 @@ SOFTWARE.
 /*---------------------------------------------------------------------------
  * GPIO_FUNCn_IN_SEL_CFG and GPIO_FUNCn_OUT_SEL_CFG bit positions and masks.
  *
- * C5 widened both selector fields:
- *   IN_SEL  : 5 bits on C3/C6, 7 bits on C5  (29..127 GPIO matrix sources)
- *   OUT_SEL : 8 bits on C3/C6, 9 bits on C5  (256..511 peripheral signals)
- *
- * Single chip-conditional block; no #undef dance.
+ * Input selectors: C2/C3 use 5 bits, C6/C61 use 6 bits, C5 uses 7 bits.
+ * Output selectors: C2/C3/C6 use 8 bits, C5/C61 use 9 bits.
+ * Verified against ESP-IDF v5.4.2 soc/<chip>/register/soc/gpio_reg.h.
  *---------------------------------------------------------------------------*/
-#if defined(ESP32C5) || defined(ESP32C61)
-#  define ESP32_GPIO_FUNC_IN_SEL_Pos        0U
-#  define ESP32_GPIO_FUNC_IN_SEL_Msk        (0x7FUL << ESP32_GPIO_FUNC_IN_SEL_Pos)
-#  define ESP32_GPIO_FUNC_IN_INV_SEL_Pos    7U
-#  define ESP32_GPIO_FUNC_IN_INV_SEL_Msk    (1UL << ESP32_GPIO_FUNC_IN_INV_SEL_Pos)
-#  define ESP32_GPIO_SIG_IN_SEL_Pos         8U
-#  define ESP32_GPIO_SIG_IN_SEL_Msk         (1UL << ESP32_GPIO_SIG_IN_SEL_Pos)
+#define ESP32_GPIO_FUNC_IN_SEL_Pos         0U
+#if defined(ESP32C5)
+#define ESP32_GPIO_FUNC_IN_SEL_Msk         0x7FUL
+#define ESP32_GPIO_FUNC_IN_INV_SEL_Pos     7U
+#define ESP32_GPIO_SIG_IN_SEL_Pos          8U
+#elif defined(ESP32C6) || defined(ESP32C61)
+#define ESP32_GPIO_FUNC_IN_SEL_Msk         0x3FUL
+#define ESP32_GPIO_FUNC_IN_INV_SEL_Pos     6U
+#define ESP32_GPIO_SIG_IN_SEL_Pos          7U
+#else
+#define ESP32_GPIO_FUNC_IN_SEL_Msk         0x1FUL
+#define ESP32_GPIO_FUNC_IN_INV_SEL_Pos     5U
+#define ESP32_GPIO_SIG_IN_SEL_Pos          6U
+#endif
+#define ESP32_GPIO_FUNC_IN_INV_SEL_Msk     (1UL << ESP32_GPIO_FUNC_IN_INV_SEL_Pos)
+#define ESP32_GPIO_SIG_IN_SEL_Msk          (1UL << ESP32_GPIO_SIG_IN_SEL_Pos)
 
+#if defined(ESP32C5) || defined(ESP32C61)
 #  define ESP32_GPIO_FUNC_OUT_SEL_Pos       0U
 #  define ESP32_GPIO_FUNC_OUT_SEL_Msk       (0x1FFUL << ESP32_GPIO_FUNC_OUT_SEL_Pos)
 #  define ESP32_GPIO_FUNC_OUT_INV_SEL_Pos   9U
@@ -213,13 +231,6 @@ SOFTWARE.
 #  define ESP32_GPIO_FUNC_OEN_INV_SEL_Pos   11U
 #  define ESP32_GPIO_FUNC_OEN_INV_SEL_Msk   (1UL << ESP32_GPIO_FUNC_OEN_INV_SEL_Pos)
 #else
-#  define ESP32_GPIO_FUNC_IN_SEL_Pos        0U
-#  define ESP32_GPIO_FUNC_IN_SEL_Msk        (0x1FUL << ESP32_GPIO_FUNC_IN_SEL_Pos)
-#  define ESP32_GPIO_FUNC_IN_INV_SEL_Pos    5U
-#  define ESP32_GPIO_FUNC_IN_INV_SEL_Msk    (1UL << ESP32_GPIO_FUNC_IN_INV_SEL_Pos)
-#  define ESP32_GPIO_SIG_IN_SEL_Pos         6U
-#  define ESP32_GPIO_SIG_IN_SEL_Msk         (1UL << ESP32_GPIO_SIG_IN_SEL_Pos)
-
 #  define ESP32_GPIO_FUNC_OUT_SEL_Pos       0U
 #  define ESP32_GPIO_FUNC_OUT_SEL_Msk       (0xFFUL << ESP32_GPIO_FUNC_OUT_SEL_Pos)
 #  define ESP32_GPIO_FUNC_OUT_INV_SEL_Pos   8U
@@ -304,10 +315,18 @@ typedef struct __ESP32_GPIO_PIN_Bits {
 } ESP32_GPIO_PIN_Bits;
 
 typedef struct __ESP32_GPIO_FUNC_IN_Bits {
+#if defined(ESP32C6)
+    uint32_t IN_SEL              : 6;    //!< Pad index, or CONST_HIGH/CONST_LOW.
+#else
     uint32_t IN_SEL              : 5;    //!< Pad index, or CONST_HIGH/CONST_LOW.
+#endif
     uint32_t IN_INV_SEL          : 1;    //!< 1: invert input.
     uint32_t SIG_IN_SEL          : 1;    //!< 1: route via matrix; 0: direct from IO_MUX.
+#if defined(ESP32C6)
+    uint32_t RESERVED            : 24;
+#else
     uint32_t RESERVED            : 25;
+#endif
 } ESP32_GPIO_FUNC_IN_Bits;
 
 typedef struct __ESP32_GPIO_FUNC_OUT_Bits {

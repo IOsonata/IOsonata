@@ -16,3 +16,13 @@ with tempfile.TemporaryDirectory(prefix='esp32-gpio-') as directory:
                 str(ROOT / 'tests/esp32/gpio_irq_test.cpp'), '-o', str(binary)], check=True)
             subprocess.run([str(binary)], check=True)
             print(chip, optimization, 'GPIO IRQ PASS', flush=True)
+
+            route = Path(directory) / (chip + optimization + '-route')
+            subprocess.run(['gcc', '-std=gnu11', optimization,
+                '-fsanitize=undefined', '-fno-sanitize-recover=all', '-D' + chip,
+                '-ffunction-sections', '-Wl,--gc-sections', '-I' + str(ROOT),
+                '-I' + str(ROOT / 'include'), '-I' + str(ROOT / 'RISCV/include'),
+                '-I' + str(ROOT / 'RISCV/Espressif/include'),
+                str(ROOT / 'tests/esp32/gpio_uart_test.c'), '-o', str(route)], check=True)
+            subprocess.run([str(route)], check=True)
+            print(chip, optimization, 'GPIO input routing PASS', flush=True)
