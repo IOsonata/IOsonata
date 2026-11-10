@@ -24,6 +24,8 @@ void SpiMasterSlaveDiagnostics(void)
 	uint32_t outputs[8];
 	uint32_t status;
 	uint32_t enable;
+	uint32_t pending;
+	uint32_t vector;
 	unsigned int i;
 
 	// Capture before UART output. These reads do not change the armed slave.
@@ -54,6 +56,8 @@ void SpiMasterSlaveDiagnostics(void)
 	values[24] = ESP32_CPU_INT_EIP_STATUS_REG;
 	__asm volatile("csrr %0, mstatus" : "=r"(status));
 	__asm volatile("csrr %0, mie" : "=r"(enable));
+	__asm volatile("csrr %0, mip" : "=r"(pending));
+	__asm volatile("csrr %0, mtvec" : "=r"(vector));
 	for (i = 0; i < 8; i++)
 	{
 		pads[i] = ESP32_IOMUX_PAD_REG(i);
@@ -87,6 +91,7 @@ void SpiMasterSlaveDiagnostics(void)
 	printf("  IRQ_THRESHOLD  %08lx\r\n", (unsigned long)values[23]);
 	printf("  PLIC_PENDING   %08lx\r\n", (unsigned long)values[24]);
 	printf("  MSTATUS %08lx MIE %08lx\r\n", (unsigned long)status, (unsigned long)enable);
+	printf("  MIP %08lx MTVEC %08lx\r\n", (unsigned long)pending, (unsigned long)vector);
 	printf("  Pin IO_MUX   OUT_MATRIX\r\n");
 	for (i = 0; i < 8; i++)
 	{

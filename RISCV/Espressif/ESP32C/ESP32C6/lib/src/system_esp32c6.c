@@ -104,4 +104,9 @@ void SystemInit(void)
     g_Esp32C6MtvecWritten = vector;
     __asm volatile("csrw mtvec, %0" : : "r"(vector) : "memory");
     __asm volatile("csrr %0, mtvec" : "=r"(g_Esp32C6MtvecReadback));
+
+	// PLIC input enables do not replace the CPU mie mask. ROM direct boot
+	// can leave mie clear. Unmask after mtvec is installed, with every PLIC
+	// input still disabled and mstatus.MIE clear. Drivers enable their inputs.
+	__asm volatile("csrw mie, %0" : : "r"(UINT32_MAX) : "memory");
 }
