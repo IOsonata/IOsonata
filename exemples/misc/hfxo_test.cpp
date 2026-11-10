@@ -112,11 +112,11 @@ static bool HfxoRunning(void)
 		 (CLOCK_HFCLKSTAT_SRC_Xtal << CLOCK_HFCLKSTAT_SRC_Pos));
 }
 
-static void HfxoResult(const char *pName, bool Result, bool Expected)
+static void HfxoResult(const char *pName, bool Result, bool Running)
 {
 	HFXO_PRINT("%s: %s, HFXO %s\r\n", pName,
-		Result == Expected ? "PASS" : "FAIL",
-		HfxoRunning() ? "running" : "stopped");
+		Result ? "PASS" : "FAIL",
+		Running ? "running" : "stopped");
 }
 
 int main(void)
@@ -154,27 +154,27 @@ int main(void)
 	{
 		pass++;
 	}
-	HfxoResult("First request", first && running1, true);
+	HfxoResult("First request", first && running1, running1);
 	if (second && running2)
 	{
 		pass++;
 	}
-	HfxoResult("Second request", second && running2, true);
+	HfxoResult("Second request", second && running2, running2);
 	if (release1 && running3)
 	{
 		pass++;
 	}
-	HfxoResult("First release", release1 && running3, true);
+	HfxoResult("First release", release1 && running3, running3);
 	if (release2 && final == initial)
 	{
 		pass++;
 	}
-	HfxoResult("Last release", release2 && final == initial, true);
+	HfxoResult("Last release", release2 && final == initial, final);
 	if (failed)
 	{
 		pass++;
 	}
-	HfxoResult("Unmatched release", failed, true);
+	HfxoResult("Unmatched release", failed, final);
 	HFXO_PRINT("HfxoTest: %d/5 checks PASS\r\n", pass);
 
 	while (1)
