@@ -19,7 +19,7 @@ SPDX-License-Identifier: MIT
 
 void SpiMasterSlaveDiagnostics(void)
 {
-	uint32_t values[24];
+	uint32_t values[25];
 	uint32_t pads[8];
 	uint32_t outputs[8];
 	uint32_t status;
@@ -51,6 +51,7 @@ void SpiMasterSlaveDiagnostics(void)
 	values[21] = ESP32_CPU_INT_TYPE_REG;
 	values[22] = ESP32_CPU_INT_PRI_REG(12);
 	values[23] = ESP32_CPU_INT_THRESH_REG;
+	values[24] = ESP32_CPU_INT_EIP_STATUS_REG;
 	__asm volatile("csrr %0, mstatus" : "=r"(status));
 	__asm volatile("csrr %0, mie" : "=r"(enable));
 	for (i = 0; i < 8; i++)
@@ -84,6 +85,7 @@ void SpiMasterSlaveDiagnostics(void)
 	printf("  IRQ_TYPE       %08lx\r\n", (unsigned long)values[21]);
 	printf("  IRQ_PRIORITY   %08lx\r\n", (unsigned long)values[22]);
 	printf("  IRQ_THRESHOLD  %08lx\r\n", (unsigned long)values[23]);
+	printf("  PLIC_PENDING   %08lx\r\n", (unsigned long)values[24]);
 	printf("  MSTATUS %08lx MIE %08lx\r\n", (unsigned long)status, (unsigned long)enable);
 	printf("  Pin IO_MUX   OUT_MATRIX\r\n");
 	for (i = 0; i < 8; i++)

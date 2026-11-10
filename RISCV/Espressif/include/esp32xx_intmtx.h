@@ -146,7 +146,7 @@ SOFTWARE.
 
 
 /*---------------------------------------------------------------------------
- * C6: routing+status at INTMTX_BASE, CPU-INT control at INTPRI_BASE.
+ * C6: routing/status at INTMTX_BASE, CPU interrupt control at PLIC_MX_BASE.
  *---------------------------------------------------------------------------*/
 #if defined(ESP32C6)
 
@@ -156,13 +156,14 @@ SOFTWARE.
 #define ESP32_INTMTX_INTR_STATUS_2_REG      ESP32_REG32(ESP32_INTMTX_BASE + 0x13CU)
 #define ESP32_INTMTX_CLOCK_GATE_REG         ESP32_REG32(ESP32_INTMTX_BASE + 0x140U)
 
-// CPU-INT control: separate INTPRI block on C6.
-#define ESP32_CPU_INT_ENABLE_REG            ESP32_REG32(ESP32_INTPRI_BASE + 0x000U)
-#define ESP32_CPU_INT_TYPE_REG              ESP32_REG32(ESP32_INTPRI_BASE + 0x004U)
-#define ESP32_CPU_INT_EIP_STATUS_REG        ESP32_REG32(ESP32_INTPRI_BASE + 0x008U)
-#define ESP32_CPU_INT_PRI_REG(n)            ESP32_REG32(ESP32_INTPRI_BASE + 0x00CU + ((uint32_t)(n) * 4U))
-#define ESP32_CPU_INT_THRESH_REG            ESP32_REG32(ESP32_INTPRI_BASE + 0x08CU)
-#define ESP32_CPU_INT_CLEAR_REG             ESP32_REG32(ESP32_INTPRI_BASE + 0x0A8U)
+// C6 uses the machine-mode PLIC, not the peripheral INTPRI block.
+// ESP-IDF v5.4.2: soc/esp32c6/include/soc/interrupt_reg.h and plic_reg.h.
+#define ESP32_CPU_INT_ENABLE_REG            ESP32_REG32(ESP32_PLIC_MX_BASE + 0x000U)
+#define ESP32_CPU_INT_TYPE_REG              ESP32_REG32(ESP32_PLIC_MX_BASE + 0x004U)
+#define ESP32_CPU_INT_CLEAR_REG             ESP32_REG32(ESP32_PLIC_MX_BASE + 0x008U)
+#define ESP32_CPU_INT_EIP_STATUS_REG        ESP32_REG32(ESP32_PLIC_MX_BASE + 0x00CU)
+#define ESP32_CPU_INT_PRI_REG(n)            ESP32_REG32(ESP32_PLIC_MX_BASE + 0x010U + ((uint32_t)(n) * 4U))
+#define ESP32_CPU_INT_THRESH_REG            ESP32_REG32(ESP32_PLIC_MX_BASE + 0x090U)
 
 #endif // ESP32C6
 

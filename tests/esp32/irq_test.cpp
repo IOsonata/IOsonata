@@ -75,7 +75,14 @@ int main()
 
 	Map(ESP32_INTMTX_BASE, 4096);
 #if defined(ESP32C6)
-	Map(ESP32_INTPRI_BASE, 4096);
+	Map(0x20001000, 4096);
+	// Independent C6 PLIC addresses: do not validate a macro against itself.
+	assert((uintptr_t)&ESP32_CPU_INT_ENABLE_REG == 0x20001000);
+	assert((uintptr_t)&ESP32_CPU_INT_TYPE_REG == 0x20001004);
+	assert((uintptr_t)&ESP32_CPU_INT_CLEAR_REG == 0x20001008);
+	assert((uintptr_t)&ESP32_CPU_INT_EIP_STATUS_REG == 0x2000100C);
+	assert((uintptr_t)&ESP32_CPU_INT_PRI_REG(12) == 0x20001040);
+	assert((uintptr_t)&ESP32_CPU_INT_THRESH_REG == 0x20001090);
 #endif
 #if defined(ESP32C5) || defined(ESP32C61)
 	Map(ESP32_CLIC_BASE, 8192);

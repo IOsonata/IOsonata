@@ -4,7 +4,7 @@
 @brief	ESP32-C6 CPU interrupt matrix vector and exception dispatch.
 
 The C6 has 32 CPU interrupt inputs, with external interrupt routing via
-INTMTX and priorities via INTPRI. It is NOT a 96-slot CLIC controller.
+INTMTX and priorities via the machine-mode PLIC. It is NOT a 96-slot CLIC controller.
 CPU-local lines 0, 3, 4, and 7 are reserved. Peripheral source IDs
 0..79 are monitored through three INTMTX status registers.
 
