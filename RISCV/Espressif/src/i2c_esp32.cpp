@@ -589,6 +589,18 @@ static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 	{
 		remaining = (ESP32_I2C_SR_REG(pDev->Base) & ESP32_I2C_SR_TXFIFO_CNT_Msk) >> ESP32_I2C_SR_TXFIFO_CNT_Pos;
 		pDev->SlaveCount = pDev->SlaveQueued - remaining;
+		// The output register holds one prefetched byte outside the FIFO.
+		// At STOP that byte has not been clocked out by the master.
+		if (pDev->SlaveCount > 0)
+		{
+			pDev->SlaveCount--;
+		}
+		// Discard the rest of this response before another read address can
+		// prefetch it. Resetting at READ_RQST is too late for that first byte.
+		// Leave RX intact: a following command may already be arriving.
+		ESP32_I2C_INT_ENA_REG(pDev->Base) &= ~ESP32_I2C_INT_TXFIFO_WM;
+		ESP32_I2C_FIFO_CONF_REG(pDev->Base) |= ESP32_I2C_FIFO_CONF_TX_FIFO_RST_Msk;
+		ESP32_I2C_FIFO_CONF_REG(pDev->Base) &= ~ESP32_I2C_FIFO_CONF_TX_FIFO_RST_Msk;
 	}
 	pDev->bOpen = false;
 	if (i2c->Cfg.EvtCB)

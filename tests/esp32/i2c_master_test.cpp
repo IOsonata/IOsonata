@@ -34,6 +34,31 @@ static uint8_t s_NextRx;
 static unsigned s_RawReads;
 static uintptr_t s_ModelBase = ESP32_I2C0_BASE;
 static unsigned s_ModelDepth = ESP32_I2C_FIFO_DEPTH;
+static bool s_SlaveShiftActive;
+static bool s_SlaveShiftValid;
+static uint8_t s_SlaveShift;
+
+static void SlavePrefetch()
+{
+	if (s_SlaveShiftActive && !s_SlaveShiftValid && !s_Tx.empty())
+	{
+		s_SlaveShift = s_Tx.front();
+		s_Tx.pop_front();
+		s_SlaveShiftValid = true;
+	}
+}
+
+static uint8_t SlaveReadByte()
+{
+	uint8_t value;
+
+	assert(s_SlaveShiftValid);
+	value = s_SlaveShift;
+	s_SlaveShiftValid = false;
+	SlavePrefetch();
+	return value;
+}
+
 static void Execute()
 {
 	uint32_t command;
@@ -130,15 +155,22 @@ struct Register {
 		{
 			s_Regs[s_ModelBase + 0x20] &= ~Value;
 		}
-		if (Address == s_ModelBase + 0x18 && (Value & (3U << 12)))
+		if (Address == s_ModelBase + 0x18)
 		{
-			s_Tx.clear();
-			s_Rx.clear();
+			if (Value & (1U << 12))
+			{
+				s_Rx.clear();
+			}
+			if (Value & (1U << 13))
+			{
+				s_Tx.clear();
+			}
 		}
 		if (Address == s_ModelBase + 0x1c)
 		{
 			assert(s_Tx.size() < s_ModelDepth);
 			s_Tx.push_back(Value);
+			SlavePrefetch();
 		}
 		if (Address == s_ModelBase + 4)
 		{
@@ -294,7 +326,17 @@ static void SlaveIrq(uint32_t Status, uint32_t State)
 	s_Regs[ESP32_I2C0_BASE + 0x2c] = Status;
 	s_Regs[ESP32_I2C0_BASE + 8] = State;
 	assert(s_Irq);
+	if ((Status & (1U << 16)) && (State & 2U))
+	{
+		s_SlaveShiftActive = true;
+		SlavePrefetch();
+	}
 	s_Irq();
+	if ((Status & (1U << 7)) && !(Status & (1U << 16)))
+	{
+		s_SlaveShiftActive = false;
+		s_SlaveShiftValid = false;
+	}
 }
 #endif
 
@@ -444,7 +486,7 @@ int main()
 	s_Rx = {4};
 	SlaveIrq((1U << 16) | (1U << 7), 2);
 	assert(s_Previous == 1 && s_SlaveRx[0] == 4);
-	s_Tx.pop_front();
+	SlaveReadByte();
 	SlaveIrq(1U << 7, 2);
 	assert(s_SlaveCount == 1);
 	// A longer write first becomes visible at the RX watermark.
@@ -467,17 +509,29 @@ int main()
 	assert(s_Previous == 1 && s_SlaveRx[0] == 7);
 	for (i = 0; i < 4; i++)
 	{
-		assert(s_Tx.front() == i + 0x40);
-		s_Tx.pop_front();
+		assert(SlaveReadByte() == i + 0x40);
 	}
 	SlaveIrq(1U << 7, 2);
 	assert(s_SlaveCount == 4);
+	assert(s_Tx.empty());
+	// A new response must not begin with bytes remaining from the old one.
+	for (runs = 1; runs <= 8; runs *= 2)
+	{
+		s_Rx = {4};
+		SlaveIrq(1U << 16, 2);
+		for (i = 0; i < runs; i++)
+		{
+			assert(SlaveReadByte() == i + 0x40);
+		}
+		SlaveIrq(1U << 7, 2);
+		assert(s_SlaveCount == (int)runs);
+		assert(s_Tx.empty());
+	}
 	// Watermark refill crosses the hardware FIFO and application buffer ends.
 	SlaveIrq(1U << 16, 2);
 	for (i = 0; i < 80; i++)
 	{
-		assert(s_Tx.front() == (i < 64 ? i + 0x40 : 0xff));
-		s_Tx.pop_front();
+		assert(SlaveReadByte() == (i < 64 ? i + 0x40 : 0xff));
 		if (s_Tx.size() == 8)
 		{
 			SlaveIrq(1U << 1, 2);
