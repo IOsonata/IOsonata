@@ -39,3 +39,10 @@ first nine bytes of the receive buffer, and slave memory at offsets 4 through
 length determines how many bytes belong to the current event. This trace is
 for investigating the first register-read failure; hardware validation is
 still pending.
+
+For the TX investigation, each callback also captures HP I2C SR, FIFO_ST,
+CTR, FIFO_CONF, interrupt RAW, and stretch configuration. READ snapshots
+are taken after FIFO reset and before the driver fills TX; DONE snapshots
+are taken before the next transfer. DATA is never read by diagnostics.
+This configuration uses polling UART and line-buffered stdout to keep the
+trace output complete. Restore `I2C_TEST_UART_INT_ENABLE` after diagnosis.

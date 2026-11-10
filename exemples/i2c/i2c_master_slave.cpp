@@ -112,6 +112,10 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 //int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
+#ifndef I2C_TEST_UART_INT_ENABLE
+#define I2C_TEST_UART_INT_ENABLE true
+#endif
+
 #define FIFOSIZE		CFIFO_MEMSIZE(512)
 
 uint8_t g_TxBuff[FIFOSIZE];
@@ -131,7 +135,7 @@ static const UARTCfg_t s_UartCfg = {
 	UART_PARITY_NONE,
 	1,					// Stop bit
 	UART_FLWCTRL_NONE,
-	true,
+	I2C_TEST_UART_INT_ENABLE,
 	1, 					// use APP_IRQ_PRIORITY_LOW with Softdevice
 	NULL,//nRFUartEvthandler,
 	true,				// fifo blocking mode
@@ -252,6 +256,17 @@ typedef struct {
 
 static I2cTestTrace_t s_SlaveTrace[I2C_TEST_TRACE_SIZE];
 static std::atomic<int> s_SlaveTraceCount(0);
+
+// Board diagnostics capture registers without printing in interrupt context.
+__attribute__((weak)) void I2cMasterSlaveCapture(int Index)
+{
+	(void)Index;
+}
+
+__attribute__((weak)) void I2cMasterSlavePrint(int Index)
+{
+	(void)Index;
+}
 #endif
 
 static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
@@ -354,6 +369,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 	index = s_SlaveTraceCount.load(std::memory_order_relaxed);
 	if (index < I2C_TEST_TRACE_SIZE)
 	{
+		I2cMasterSlaveCapture(index);
 		s_SlaveTrace[index].Event = EvtId;
 		s_SlaveTrace[index].Length = Len;
 		s_SlaveTrace[index].OffsetBefore = offsetBefore;
@@ -371,6 +387,9 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 
 void HardwareInit()
 {
+	static char outputBuffer[256];
+
+	setvbuf(stdout, outputBuffer, _IOLBF, sizeof(outputBuffer));
 	g_Uart.Init(s_UartCfg);
 #if defined(NDEBUG) || defined(UART_RETARGET)
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
@@ -474,6 +493,7 @@ static void PrintSlaveTrace()
 		PrintBytes(entry->Received, sizeof(entry->Received));
 		printf("    Memory[4..11]:");
 		PrintBytes(entry->Memory, sizeof(entry->Memory));
+		I2cMasterSlavePrint(i);
 	}
 }
 #endif
@@ -688,6 +708,7 @@ int main()
 	printf("\r\nI2C master/slave loopback %s (%d passed, %d failed, %d skipped)\r\n",
 		(nFail == 0 && nPass > 0) ? "PASS" : "FAIL", nPass, nFail, nSkip);
 
+	fflush(stdout);
 	while (1)
 		__WFE();
 
