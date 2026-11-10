@@ -22,6 +22,12 @@ Debug and Release route stdout to UART at 1,000,000 baud, 8N1. C3 uses
 TX GPIO21/RX GPIO20; C6 uses TX GPIO16/RX GPIO17. Other targets retain
 their existing Debug console selection.
 
+C6 currently enables `CRYPTO_TEST_TRACE_AES` to locate a reported restart in
+the AES soak test. It prints the round and operation before each check at the
+same console baud rate. Capture the last markers before the test heading
+repeats. Remove that definition from `board.h` to disable the extra output.
+These markers are outside the timed benchmarks.
+
 Host validation:
 
 ```

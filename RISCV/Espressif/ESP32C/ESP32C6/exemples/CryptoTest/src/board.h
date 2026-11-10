@@ -60,6 +60,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __BOARD_H__
 #define UART_RETARGET
 #define CRYPTO_TEST_UART_DEBUG
+#define CRYPTO_TEST_TRACE_AES
 
 #include "coredev/iopincfg.h"
 #include "esp32xx_uart.h"
