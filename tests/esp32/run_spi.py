@@ -16,4 +16,4 @@ with tempfile.TemporaryDirectory(prefix='esp32-spi-') as directory:
                 str(ROOT / 'tests/esp32/spi_master_test.cpp'),
                 str(ROOT / 'src/coredev/spi.cpp'), '-o', str(binary)], check=True)
             subprocess.run([str(binary)], check=True)
-            print(chip, optimization, 'SPI master PASS', flush=True)
+            print(chip, optimization, 'SPI master/slave PASS', flush=True)

@@ -115,6 +115,10 @@ struct Register {
 		{
 			s_RawReads++;
 		}
+		if (Address == ESP32_I2C0_BASE + 8 && !(s_Regs[ESP32_I2C0_BASE + 4] & 16))
+		{
+			return (s_Regs[Address] & ~((63U << 8) | (63U << 18))) | (s_Rx.size() << 8) | (s_Tx.size() << 18);
+		}
 		return s_Regs[Address];
 	}
 	void operator=(uint32_t Value)
@@ -152,6 +156,27 @@ struct Register {
 };
 #undef ESP32_REG32
 #define ESP32_REG32(addr) Register{uintptr_t(addr)}
+#include "esp32xx_irq.h"
+static Esp32IrqHandler s_Irq;
+static bool s_IrqFail;
+bool Esp32EnableSourceIrq(uint32_t Source, uint32_t Cpu, uint32_t Priority, Esp32IrqHandler Handler)
+{
+	(void)Source;
+	(void)Cpu;
+	assert(Priority > 0 && Priority <= 7);
+	if (s_IrqFail)
+	{
+		return false;
+	}
+	s_Irq = Handler;
+	return true;
+}
+void Esp32DisableSourceIrq(uint32_t Source, uint32_t Cpu)
+{
+	(void)Source;
+	(void)Cpu;
+	s_Irq = NULL;
+}
 #include "../../RISCV/Espressif/src/i2c_esp32.cpp"
 #include "../../src/device_intrf.cpp"
 
@@ -226,6 +251,42 @@ static void CheckRates(DevIntrf_t *pIntrf)
 		assert((rate > wanted ? rate - wanted : wanted - rate) == best);
 	}
 }
+#if !defined(ESP32C2)
+static uint8_t s_SlaveRx[64];
+static uint8_t s_SlaveTx[64];
+static int s_SlaveCount;
+static int s_Previous;
+static int SlaveEvent(DevIntrf_t *pIntrf, DEVINTRF_EVT Event, uint8_t *pBuffer, int Length)
+{
+	I2CDev_t *dev = (I2CDev_t *)pIntrf->GetHandle(pIntrf);
+
+	(void)pBuffer;
+	if (Event == DEVINTRF_EVT_WRITE_RQST)
+	{
+		dev->pTRBuff[0] = s_SlaveRx;
+		dev->TRBuffLen[0] = sizeof(s_SlaveRx);
+	}
+	if (Event == DEVINTRF_EVT_READ_RQST)
+	{
+		s_Previous = Length;
+		dev->pRRData[0] = s_SlaveTx;
+		dev->RRDataLen[0] = sizeof(s_SlaveTx);
+	}
+	if (Event == DEVINTRF_EVT_COMPLETED)
+	{
+		s_SlaveCount = Length;
+	}
+	return 0;
+}
+static void SlaveIrq(uint32_t Status, uint32_t State)
+{
+	s_Regs[ESP32_I2C0_BASE + 0x2c] = Status;
+	s_Regs[ESP32_I2C0_BASE + 8] = State;
+	assert(s_Irq);
+	s_Irq();
+}
+#endif
+
 int main()
 {
 	I2CDev_t dev = {};
@@ -352,5 +413,80 @@ int main()
 	assert(I2CInit(&other, &cfg));
 	assert(DeviceIntrfGetRate(&other.DevIntrf) == 100000);
 	other.DevIntrf.PowerOff(&other.DevIntrf);
+	cfg.Mode = I2CMODE_SLAVE;
+	cfg.bIntEn = true;
+	cfg.IntPrio = 4;
+	cfg.NbSlaveAddr = 1;
+	cfg.SlaveAddr[0] = 0x22;
+#if defined(ESP32C2)
+	assert(!I2CInit(&dev, &cfg));
+#else
+	cfg.EvtCB = SlaveEvent;
+	assert(I2CInit(&dev, &cfg));
+	assert(s_Irq && dev.DevIntrf.bIntEn);
+	assert(!I2CStartTx(&dev, 0x22));
+	SlaveIrq(1U << 16, 0);
+	s_Rx = {2, 0xab, 0xcd};
+	SlaveIrq(1U << 7, 0);
+	assert(s_SlaveCount == 3 && s_SlaveRx[0] == 2 && s_SlaveRx[2] == 0xcd);
+	SlaveIrq(1U << 16, 0);
+	s_Rx = {7};
+	for (i = 0; i < 64; i++)
+	{
+		s_SlaveTx[i] = i + 0x40;
+	}
+	SlaveIrq(1U << 16, 2);
+	assert(s_Previous == 1 && s_SlaveRx[0] == 7);
+	for (i = 0; i < 4; i++)
+	{
+		assert(s_Tx.front() == i + 0x40);
+		s_Tx.pop_front();
+	}
+	SlaveIrq(1U << 7, 2);
+	assert(s_SlaveCount == 4);
+	// Watermark refill crosses the hardware FIFO and application buffer ends.
+	SlaveIrq(1U << 16, 2);
+	for (i = 0; i < 80; i++)
+	{
+		assert(s_Tx.front() == (i < 64 ? i + 0x40 : 0xff));
+		s_Tx.pop_front();
+		if (s_Tx.size() == 8)
+		{
+			SlaveIrq(1U << 1, 2);
+		}
+	}
+	SlaveIrq(1U << 7, 2);
+	assert(s_SlaveCount == 80);
+	SlaveIrq(1U << 16, 0);
+	for (i = 0; i < 65; i++)
+	{
+		s_Rx.push_back(i);
+		if (s_Rx.size() == 16)
+		{
+			SlaveIrq(1U, 0);
+		}
+	}
+	SlaveIrq(1U << 7, 0);
+	assert(s_SlaveCount == -1);
+	for (i = 0; i < 64; i++)
+	{
+		assert(s_SlaveRx[i] == i);
+	}
+	dev.DevIntrf.Reset(&dev.DevIntrf);
+	assert(s_Irq && (s_Regs[ESP32_I2C0_BASE + 0x28] & (1U << 16)));
+	assert(DeviceIntrfSetRate(&dev.DevIntrf, 400000) > 0);
+	assert(s_Regs[ESP32_I2C0_BASE + 0xc] == 0);
+	SlaveIrq(1U << 16, 0);
+	s_Rx = {0x55};
+	SlaveIrq(1U << 7, 0);
+	assert(s_SlaveCount == 1 && s_SlaveRx[0] == 0x55);
+	dev.DevIntrf.PowerOff(&dev.DevIntrf);
+	assert(!s_Irq);
+	s_IrqFail = true;
+	assert(!I2CInit(&dev, &cfg));
+	s_IrqFail = false;
+	assert(I2CInit(&dev, &cfg));
+	dev.DevIntrf.PowerOff(&dev.DevIntrf);
+#endif
 	return 0;
 }

@@ -71,7 +71,8 @@ struct Register {
 				s_Regs[Address] &= ~(1U << 23);
 			}
 		}
-		if (Address == ESP32_SPI2_BASE && (Value & (1U << 24)))
+		if (Address == ESP32_SPI2_BASE && (Value & (1U << 24)) &&
+			!(s_Regs[ESP32_SPI2_BASE + 0xe0] & (1U << 26)))
 		{
 			assert(!s_Masked);
 			s_Runs++;
@@ -101,6 +102,27 @@ struct Register {
 };
 #undef ESP32_REG32
 #define ESP32_REG32(addr) Register{uintptr_t(addr)}
+#include "esp32xx_irq.h"
+static Esp32IrqHandler s_Irq;
+static bool s_IrqFail;
+bool Esp32EnableSourceIrq(uint32_t Source, uint32_t Cpu, uint32_t Priority, Esp32IrqHandler Handler)
+{
+	(void)Source;
+	(void)Cpu;
+	assert(Priority > 0 && Priority <= 7);
+	if (s_IrqFail)
+	{
+		return false;
+	}
+	s_Irq = Handler;
+	return true;
+}
+void Esp32DisableSourceIrq(uint32_t Source, uint32_t Cpu)
+{
+	(void)Source;
+	(void)Cpu;
+	s_Irq = NULL;
+}
 #include "../../RISCV/Espressif/src/spi_esp32.cpp"
 #include "../../src/device_intrf.cpp"
 #define __IDELAY_H__
@@ -181,6 +203,28 @@ static void CheckRates(SPIDev_t *pDev)
 #endif
 	}
 }
+static uint8_t s_SlaveRx[68];
+static uint8_t s_SlaveTx[64];
+static int s_SlaveCount;
+static unsigned s_Armed;
+static int SlaveEvent(DevIntrf_t *pIntrf, DEVINTRF_EVT Event, uint8_t *pBuffer, int Length)
+{
+	SPIDev_t *spi = (SPIDev_t *)pIntrf->GetHandle(pIntrf);
+
+	(void)pBuffer;
+	if (Event == DEVINTRF_EVT_STATECHG)
+	{
+		s_Armed++;
+		SPISetSlaveRxBuffer(spi, 0, s_SlaveRx + 2, 64);
+		SPISetSlaveTxData(spi, 0, s_SlaveTx, 64);
+	}
+	if (Event == DEVINTRF_EVT_COMPLETED)
+	{
+		s_SlaveCount = Length;
+	}
+	return 0;
+}
+
 int main()
 {
 	SPI bus;
@@ -354,5 +398,65 @@ int main()
 	assert(s_Written == std::vector<uint8_t>(12, 0x88));
 	bus.PowerOff();
 	assert(!s_Masked);
+	cfg.Mode = SPIMODE_SLAVE;
+	cfg.bIntEn = true;
+	cfg.IntPrio = 4;
+	cfg.NbIOPins = 4;
+	cfg.ChipSel = SPICSEL_AUTO;
+	cfg.EvtCB = SlaveEvent;
+	pins[0] = {0, 6, ESP32_PINOP_SPI2_SCK, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
+	pins[1] = {0, 7, ESP32_PINOP_SPI2_MISO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
+	pins[2].PinDir = IOPINDIR_INPUT;
+	pins[3].PinDir = IOPINDIR_INPUT;
+	pins[3].PinOp = ESP32_PINOP_SPI2_CS;
+	for (i = 0; i < 64; i++)
+	{
+		s_SlaveTx[i] = i ^ 0x5a;
+	}
+	for (mode = 0; mode < 4; mode++)
+	{
+		cfg.ClkPol = mode & 2 ? SPICLKPOL_LOW : SPICLKPOL_HIGH;
+		cfg.DataPhase = mode & 1 ? SPIDATAPHASE_SECOND_CLK : SPIDATAPHASE_FIRST_CLK;
+		assert(SPIInit(&dev, &cfg));
+		assert(s_Irq && dev.DevIntrf.bIntEn);
+		assert(!SPIStartTx(&dev, 0));
+		assert(DeviceIntrfSetRate(&dev.DevIntrf, 10000) == 10000);
+		assert(s_Regs[SPI_BASE + 0xc] == 0);
+		assert(((s_Regs[SPI_BASE + 0x10] >> 8) & 1) == unsigned((mode >> 1) ^ (mode & 1)));
+		assert(((s_Regs[SPI_BASE + 0xe0] >> 2) & 1) == unsigned(mode & 1));
+		for (unsigned length : {1U, 16U, 64U, 1U})
+		{
+			memset(s_SlaveRx, 0xcc, sizeof(s_SlaveRx));
+			assert((s_Regs[SPI_BASE + 0x98] & 255) == s_SlaveTx[0]);
+			for (i = 0; i < 16; i++)
+			{
+				s_Regs[SPI_BASE + 0x98 + i * 4] = 0x03020100 + i * 0x04040404;
+			}
+			s_Regs[SPI_BASE + 0xe4] = length * 8;
+			s_Regs[SPI_BASE + 0x3c] = 1U << 12;
+			s_SlaveCount = -1;
+			s_Irq();
+			assert(s_SlaveCount == int(length));
+			for (i = 0; i < length; i++)
+			{
+				assert(s_SlaveRx[i + 2] == i);
+			}
+			assert(s_SlaveRx[0] == 0xcc && s_SlaveRx[1] == 0xcc && s_SlaveRx[length + 2] == 0xcc);
+		}
+		for (unsigned bits : {7U, 520U})
+		{
+			s_Regs[SPI_BASE + 0xe4] = bits;
+			s_Regs[SPI_BASE + 0x3c] = 1U << 12;
+			s_Irq();
+			assert(s_SlaveCount == -1);
+		}
+		SPIPowerOff(&dev);
+		assert(!s_Irq);
+	}
+	s_IrqFail = true;
+	assert(!SPIInit(&dev, &cfg));
+	s_IrqFail = false;
+	assert(SPIInit(&dev, &cfg));
+	SPIPowerOff(&dev);
 	return 0;
 }

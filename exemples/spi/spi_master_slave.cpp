@@ -48,6 +48,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #if SPI_MASTER_SOFTWARE
 #include "coredev/spi_soft.h"
 #endif
+#ifndef SPI_TEST_FRAME_SIZE
+#define SPI_TEST_FRAME_SIZE 129
+#endif
+
 #ifndef SPI_MASTER_RATE
 #define SPI_MASTER_RATE 1000000
 #endif
@@ -166,8 +170,8 @@ static const IOPinCfg_t s_SlavePins[] = {
 	{SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN, SPI_SLAVE_CS_PINOP,
 	 IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 };
-static uint8_t s_SlaveTx[129];
-static uint8_t s_SlaveRx[129];
+static uint8_t s_SlaveTx[SPI_TEST_FRAME_SIZE];
+static uint8_t s_SlaveRx[SPI_TEST_FRAME_SIZE];
 static int s_FrameLength;
 static volatile bool s_Done;
 static volatile int s_Count;
@@ -242,7 +246,7 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 {
 	unsigned before;
 	unsigned armsBefore;
-	uint8_t masterTx[129];
+	uint8_t masterTx[SPI_TEST_FRAME_SIZE];
 	int count;
 	bool checkRx;
 	uint8_t slaveSeed;
@@ -252,7 +256,7 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 	int mismatch;
 	int i;
 	int dumpLength;
-	uint8_t masterRx[129] = {};
+	uint8_t masterRx[SPI_TEST_FRAME_SIZE] = {};
 
 	s_Done = false;
 	before = s_Completions;
@@ -340,14 +344,7 @@ static const char *ModeName(bool bDma, bool bInt)
 // Return 1 for pass, 0 for fail, -1 when the combination is not supported.
 static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 {
-	if ((MasterBase.bDmaEn && !SPI_MASTER_HAS_DMA) ||
-		(SlaveBase.bDmaEn && !SPI_SLAVE_HAS_DMA))
-	{
-		printf("Selected instance has no DMA hardware\r\n");
-		return -1;
-	}
-
-	const int lengths[] = {1, 16, 129};
+	const int lengths[] = {1, 16, SPI_TEST_FRAME_SIZE};
 	SPICfg_t cfg;
 	SPICfg_t masterCfg;
 	const DevIntrf_t *intrf;
@@ -355,6 +352,13 @@ static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 	unsigned i;
 	unsigned n;
 	bool shown = false;
+
+	if ((MasterBase.bDmaEn && !SPI_MASTER_HAS_DMA) ||
+		(SlaveBase.bDmaEn && !SPI_SLAVE_HAS_DMA))
+	{
+		printf("Selected instance has no DMA hardware\r\n");
+		return -1;
+	}
 
 	for (mode = 0; mode < 4; ++mode)
 	{
@@ -430,7 +434,7 @@ int main()
 	int nSkip = 0;
 
 	g_Uart.Init(s_UartCfg);
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(UART_RETARGET)
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif

@@ -60,6 +60,9 @@ def check(chip, idf, temporary, prefix):
                 expected[name] = offset(registers, 'I2C_' + reg)
         elif short.endswith(('_Pos', '_Msk')):
             field = re.sub(r'^(CTR|SR|FIFO_CONF|CLK_CONF)_', '', short[:-4])
+            field = {'SLV_TX_AUTO_START': 'SLV_TX_AUTO_START_EN',
+                     'SLAVE_STRETCH_EN': 'SLAVE_SCL_STRETCH_EN',
+                     'SLAVE_STRETCH_CLR': 'SLAVE_SCL_STRETCH_CLR'}.get(field, field)
             if field.startswith('COMD_'):
                 continue
             reference = pcr if field.startswith('PCR_') else registers

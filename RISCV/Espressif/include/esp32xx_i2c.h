@@ -339,4 +339,12 @@ SOFTWARE.
 #define ESP32_I2C_OPCODE_STOP               2U
 #define ESP32_I2C_OPCODE_END                4U
 
+#if !defined(ESP32C2)
+#define ESP32_I2C_INT_SLAVE_STRETCH (1UL << 16)
+#define ESP32_I2C_SR_STRETCH_CAUSE_Pos 14U
+#define ESP32_I2C_SLAVE_STRETCH_EN_Msk (1UL << 10)
+#define ESP32_I2C_SLAVE_STRETCH_CLR_Msk (1UL << 11)
+#define ESP32_I2C_CTR_SLV_TX_AUTO_START_Msk (1UL << 12)
+#endif
+
 #endif // __ESP32XX_I2C_H__

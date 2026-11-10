@@ -19,6 +19,7 @@ for chip in ('ESP32C2', 'ESP32C3', 'ESP32C5', 'ESP32C6', 'ESP32C61'):
              'uart_esp32.cpp', 'system_esp32_uart_clock.c', 'iopincfg_esp32.c',
              'device.cpp', 'device_intrf.cpp', 'cfifo.c', 'uart_retarget.c', 'stddev.c'}
     if chip in ('ESP32C3', 'ESP32C6'):
+        names.add('spi_soft.cpp')
         names.update({'system_' + chip.lower() + '.c',
                       'Vectors_' + chip.lower() + '.c'})
     else:
@@ -53,6 +54,9 @@ for chip in ('ESP32C2', 'ESP32C3', 'ESP32C5', 'ESP32C6', 'ESP32C61'):
         library = directory / 'libspi.a'
         run(tool + 'ar', 'rcs', library, *objects)
         examples = {'UartPrbsRxTest': 'uart/uart_prbs_rx.cpp', 'UartRetarget': 'uart/uart_retarget_demo.cpp', 'UartSlipPrbsTx': 'uart/uart_slip_prbs_tx.cpp', 'UartSlipPrbsRx': 'uart/uart_slip_prbs_rx.cpp', 'I2cMaster': 'i2c/i2c_master_demo.cpp', 'SpiMaster': 'spi/spi_master_demo.cpp'}
+        if chip in ('ESP32C3', 'ESP32C6'):
+            examples.update({'SpiMasterSlave': 'spi/spi_master_slave.cpp',
+                             'I2cSlave': 'i2c/i2c_slave_demo.cpp'})
         for name, source in examples.items():
             app = BASE / chip / 'exemples' / name
             obj = directory / (name + '.o')

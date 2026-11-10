@@ -1980,5 +1980,10 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/spi_esp32.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/coredev/spi_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi_soft.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

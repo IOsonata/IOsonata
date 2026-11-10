@@ -37,6 +37,11 @@ def check(chip, idf, temporary, prefix):
         'DMA_SEG_TRANS': 'DMA_SEG_TRANS_DONE',
         'BUF_ADDR_ERR': 'SLV_BUF_ADDR_ERR',
         'CMD_ERR': 'SLV_CMD_ERR',
+        'SLAVE_SOFT_RESET': 'SOFT_RESET',
+        'SLAVE_CLK_MODE_13': 'CLK_MODE_13',
+        'SLAVE_DATA_BITLEN': 'SLV_DATA_BITLEN',
+        'DMA_BUF_AFIFO_RST': 'BUF_AFIFO_RST',
+        'DMA_RX_AFIFO_RST': 'RX_AFIFO_RST',
     }
     for name in names:
         short = name.removeprefix('ESP32_SPI_')
@@ -62,7 +67,7 @@ def check(chip, idf, temporary, prefix):
         'ESP32_SPI_W_FIFO_BYTES': number(caps, 'SOC_SPI_MAXIMUM_BUFFER_SIZE'),
         'ESP32_SPI_W_REG_COUNT': (offset(registers, 'SPI_W15_REG') - offset(registers, 'SPI_W0_REG')) // 4 + 1,
     })
-    for line, field in (('SCK', 'FSPICLK'), ('MISO', 'FSPIQ'), ('MOSI', 'FSPID')):
+    for line, field in (('SCK', 'FSPICLK'), ('MISO', 'FSPIQ'), ('MOSI', 'FSPID'), ('CS', 'FSPICS0')):
         expected['ESP32_SPI_' + line + '_SIGNAL'] = number(signals, field + '_IN_IDX')
         assert number(signals, field + '_IN_IDX') == number(signals, field + '_OUT_IDX')
     unchecked = set(names) - expected.keys()

@@ -15,4 +15,4 @@ with tempfile.TemporaryDirectory(prefix='esp32-i2c-') as directory:
                 '-I' + str(ROOT / 'RISCV/Espressif/include'),
                 str(ROOT / 'tests/esp32/i2c_master_test.cpp'), '-o', str(binary)], check=True)
             subprocess.run([str(binary)], check=True)
-            print(chip, optimization, 'I2C master PASS', flush=True)
+            print(chip, optimization, 'I2C master/slave PASS', flush=True)
