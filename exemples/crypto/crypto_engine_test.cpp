@@ -1356,7 +1356,7 @@ int main(void)
 		while (1);
 	}
 
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(CRYPTO_TEST_UART_DEBUG)
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
 #endif
 	setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));

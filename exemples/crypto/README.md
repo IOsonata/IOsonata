@@ -17,6 +17,11 @@ secure entropy. Busy or initialization
 failures are failures, not capability skips. RNG sample tests do not certify
 entropy quality.
 
+C3/C6 CryptoTest defines `CRYPTO_TEST_UART_DEBUG` in `board.h` so both
+Debug and Release route stdout to UART at 1,000,000 baud, 8N1. C3 uses
+TX GPIO21/RX GPIO20; C6 uses TX GPIO16/RX GPIO17. Other targets retain
+their existing Debug console selection.
+
 Host validation:
 
 ```

@@ -10,8 +10,8 @@ modified to suit the need for the application use case.
 ESP32-C6 UART0 (RX GPIO17, TX GPIO16) hardware:
   - On-board WS2812B RGB LED on GPIO 8
   - USB <-> UART bridge (CP2102N) wired to UART0:
-      TXD0 = GPIO 21 (C3 -> host)
-      RXD0 = GPIO 20 (host -> C3)
+      TXD0 = GPIO 16 (C6 -> host)
+      RXD0 = GPIO 17 (host -> C6)
     The same UART0 path the ROM bootloader uses for the boot banner.
 
 PinOp on ESP32 follows the canonical IOsonata convention: a pin's
@@ -59,11 +59,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 #define UART_RETARGET
+#define CRYPTO_TEST_UART_DEBUG
 
 #include "coredev/iopincfg.h"
 #include "esp32xx_uart.h"
 
-// *** ESP32-C3-DevKitM-1
+// ESP32-C6 UART console
 #define UART_DEVNO          0
 
 #define UART_RX_PORT        0
