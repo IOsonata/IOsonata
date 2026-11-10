@@ -9,8 +9,11 @@ Both run on the main CPU, without an LP-core application.
 | SDA | 6 | 4 |
 | SCL | 7 | 5 |
 
-Connect each row with a jumper. Add a 4.7 kOhm pull-up from each bus line to
-3.3 V for reliable operation; the example also enables the internal pull-ups.
+Connect each row with a short jumper. The example enables internal pull-ups
+on both the LP master and HP slave pins, so start this bench test without
+external resistors. If the bus rise time is too slow, add a 4.7 kOhm pull-up
+from SDA to 3.3 V and another from SCL to 3.3 V. Internal pull-ups alone do
+not guarantee I2C timing for longer wires or higher bus capacitance.
 Build the matching library and example, then flash at offset 0. Both Debug
 and Release print results over UART at 1,000,000 baud, 8N1.
 

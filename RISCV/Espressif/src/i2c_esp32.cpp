@@ -13,7 +13,9 @@ i2c_ll.h (XTAL clock, no fractional divider).
 
 SDA then SCL in the pin map, PortNo 0. Board maps select the I2C PinOp
 aliases, bidirectional direction and open-drain type; IOPinCfg applies them.
-External pull-ups are required. C6 device 1 is the LP master, fixed to GPIO6/7,
+The bus needs pull-ups; pin maps may enable internal ones with IOPINRES_PULLUP.
+Use external pull-ups where needed to meet bus rise-time requirements.
+C6 device 1 is the LP master, fixed to GPIO6/7,
 with 16-byte FIFOs and XTAL/2 timing. Its minimum rate is about 19.6 kHz
 with a 40 MHz crystal; Rate returns the closest supported rate up to 400 kHz.
 Device 0 remains HP I2C. LP clock changes do not change the HP divider.

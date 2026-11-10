@@ -45,8 +45,9 @@ It writes and reads 16 bytes at offset 2 and prints PASS or FAIL. C3/C6
 I2cSlave projects provide that peer. Hardware I2C slave mode is implemented
 for C3/C5/C6/C61; C2 has a master-only controller. C6 I2cMasterSlave
 uses its LP master and HP slave on one board. Connect GPIO6 to GPIO4 (SDA)
-and GPIO7 to GPIO5 (SCL), with pull-ups to 3.3 V. C3 I2cSlave still needs an
-external master.
+and GPIO7 to GPIO5 (SCL). That example enables internal pull-ups on both
+controllers; start with short jumpers and add external pull-ups if needed
+for bus rise time. C3 I2cSlave still needs an external master.
 
 SpiMaster uses mode 3 at 1 MHz with automatic chip select. Connect an external
 SPI peer to the board header's SCK, MOSI, MISO and CS pins plus ground. It sends
