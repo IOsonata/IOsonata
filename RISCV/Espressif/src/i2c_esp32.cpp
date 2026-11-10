@@ -308,6 +308,16 @@ static void Esp32I2cCommand(Esp32I2cDev_t *pDev, uint32_t Slot, uint32_t Opcode,
 	ESP32_I2C_COMD_REG(pDev->Base, Slot) = (Opcode << ESP32_I2C_COMD_OPCODE_Pos) | Count | Ack;
 }
 
+// Optional example diagnostics. Capture only; never print from this path.
+__attribute__((weak)) void Esp32I2cTraceFailure(uintptr_t Base, uint32_t Done,
+	uint32_t Status, bool Timeout)
+{
+	(void)Base;
+	(void)Done;
+	(void)Status;
+	(void)Timeout;
+}
+
 static bool Esp32I2cRun(Esp32I2cDev_t *pDev, uint32_t Done, uint32_t Bytes)
 {
 	uint32_t status;
@@ -329,6 +339,7 @@ static bool Esp32I2cRun(Esp32I2cDev_t *pDev, uint32_t Done, uint32_t Bytes)
 		{
 			pDev->bError = true;
 			pDev->bLost = (status & ESP32_I2C_INT_ARBITRATION_LOST) != 0;
+			Esp32I2cTraceFailure(pDev->Base, Done, status, false);
 			return false;
 		}
 		if (status & Done)
@@ -337,6 +348,7 @@ static bool Esp32I2cRun(Esp32I2cDev_t *pDev, uint32_t Done, uint32_t Bytes)
 		}
 	}
 	pDev->bError = true;
+	Esp32I2cTraceFailure(pDev->Base, Done, status, true);
 	return false;
 }
 

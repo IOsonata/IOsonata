@@ -47,3 +47,79 @@ void I2cMasterSlavePrint(int Index)
 	fflush(stdout);
 	usDelay(I2C_TEST_TRACE_DELAY_US);
 }
+
+typedef struct {
+	uint32_t Expected;
+	uint32_t Raw;
+	uint32_t State;
+	uint32_t Control;
+	uint32_t Fifo;
+	uint32_t TimeoutReg;
+	uint32_t Command[4];
+	bool TimedOut;
+} I2cMasterFailure_t;
+
+static I2cMasterFailure_t s_MasterFailures[24];
+static unsigned s_MasterFailureCount;
+static bool s_MasterFailureOverflow;
+
+void Esp32I2cTraceFailure(uintptr_t Base, uint32_t Done,
+	uint32_t Status, bool Timeout)
+{
+	I2cMasterFailure_t *entry;
+	unsigned i;
+
+	if (Base != ESP32_LP_I2C_BASE)
+	{
+		return;
+	}
+	if (s_MasterFailureCount >= 24)
+	{
+		s_MasterFailureOverflow = true;
+		return;
+	}
+	entry = &s_MasterFailures[s_MasterFailureCount];
+	entry->Expected = Done;
+	entry->Raw = Status;
+	entry->State = ESP32_I2C_SR_REG(Base);
+	entry->Control = ESP32_I2C_CTR_REG(Base);
+	entry->Fifo = ESP32_I2C_FIFO_ST_REG(Base);
+	entry->TimeoutReg = ESP32_I2C_TO_REG(Base);
+	entry->TimedOut = Timeout;
+	for (i = 0; i < 4; i++)
+	{
+		entry->Command[i] = ESP32_I2C_COMD_REG(Base, i);
+	}
+	s_MasterFailureCount++;
+}
+
+void I2cMasterSlavePrintFailures()
+{
+	const I2cMasterFailure_t *entry;
+	unsigned i;
+
+	printf("LP master failure trace: %u entries%s\r\n", s_MasterFailureCount,
+		s_MasterFailureOverflow ? " (capacity exceeded)" : "");
+	fflush(stdout);
+	usDelay(I2C_TEST_TRACE_DELAY_US);
+	for (i = 0; i < s_MasterFailureCount; i++)
+	{
+		entry = &s_MasterFailures[i];
+		printf("L%u %s expected=%08lx RAW=%08lx SR=%08lx\r\n", i,
+			entry->TimedOut ? "TIMEOUT" : "ERROR",
+			(unsigned long)entry->Expected, (unsigned long)entry->Raw,
+			(unsigned long)entry->State);
+		fflush(stdout);
+		usDelay(I2C_TEST_TRACE_DELAY_US);
+		printf("L%u CTR=%08lx FIFO_ST=%08lx TO=%08lx\r\n", i,
+			(unsigned long)entry->Control, (unsigned long)entry->Fifo,
+			(unsigned long)entry->TimeoutReg);
+		fflush(stdout);
+		usDelay(I2C_TEST_TRACE_DELAY_US);
+		printf("L%u CMD0=%08lx CMD1=%08lx CMD2=%08lx CMD3=%08lx\r\n", i,
+			(unsigned long)entry->Command[0], (unsigned long)entry->Command[1],
+			(unsigned long)entry->Command[2], (unsigned long)entry->Command[3]);
+		fflush(stdout);
+		usDelay(I2C_TEST_TRACE_DELAY_US);
+	}
+}

@@ -267,6 +267,7 @@ static std::atomic<int> s_SlaveTraceCount(0);
 #ifdef I2C_TEST_BOARD_TRACE
 void I2cMasterSlaveCapture(int Index);
 void I2cMasterSlavePrint(int Index);
+void I2cMasterSlavePrintFailures();
 #else
 __attribute__((weak)) void I2cMasterSlaveCapture(int Index)
 {
@@ -703,6 +704,9 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 		}
 	}
 
+#ifdef I2C_TEST_BOARD_TRACE
+	I2cMasterSlavePrintFailures();
+#endif
 #if I2C_TEST_TRACE_SIZE > 0
 	PrintSlaveTrace();
 #endif
