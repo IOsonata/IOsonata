@@ -87,7 +87,7 @@ FAMILIES = [
 # STM32 libraries: part, family directory and vector file
 LIBRARIES = [
     ('STM32F030x8', 'STM32F0xx', 'ARM/ST/STM32F0xx/STM32F030x8/lib/src/Vectors_STM32F030x8.c'),
-    ('STM32F401xC', 'STM32F4xx', 'ARM/ST/STM32F4xx/STM32F401/STM32F401xc/lib/src/Vectors_STM32F401xC.c'),
+    ('STM32F401xC', 'STM32F4xx', 'ARM/ST/STM32F4xx/STM32F401/lib/src/Vectors_STM32F401.c'),
     ('STM32L432xx', 'STM32L4xx', 'ARM/ST/STM32L4xx/STM32L432/lib/src/Vector_STM32L432xx.c'),
     ('STM32L476xx', 'STM32L4xx', 'ARM/ST/STM32L4xx/STM32L476/lib/src/Vector_STM32L476xx.c'),
     ('STM32L496xx', 'STM32L4xx', 'ARM/ST/STM32L4xx/STM32L496/lib/src/Vector_STM32L496xx.c'),

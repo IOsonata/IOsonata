@@ -422,7 +422,9 @@ uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		}
 	}
 #else
-	regval = 0;
+	// The highest rate at or below the request, the lowest below all of them
+	regval = s_nRFxSPIFreq[0].RegVal;
+	dev->pSpiDev->Cfg.Rate = s_nRFxSPIFreq[0].Freq;
 
 	for (int i = 0; i < s_NbnRFxSPIFreq; i++)
 	{
@@ -1459,7 +1461,7 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 			g_nRFxSPIDev[pDev->Cfg.DevNo].pReg->EVENTS_READY = 0;
 	        if (pDev->DevIntrf.bIntEn == true)
 	        {
-	        	inten = reg->INTENSET = SPI_INTENSET_READY_Msk;
+				inten = SPI_INTENSET_READY_Msk;
 	        }
 #endif
 		}
@@ -1472,7 +1474,7 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
         reg->EVENTS_READY = 0;
         if (pDev->DevIntrf.bIntEn == true)
         {
-        	inten = reg->INTENSET = SPI_INTENSET_READY_Msk;
+			inten = SPI_INTENSET_READY_Msk;
         }
 #endif
 

@@ -63,6 +63,13 @@ int main() {
   assert(Stm32OspiSetRate(&spi.DevIntrf,30000000)==30000000); assert(entry.pReg->DCR2==3);
   assert(Stm32OspiSetRate(&spi.DevIntrf,1)==120000000/256); assert(entry.pReg->DCR2==255);
   assert(Stm32OspiSetRate(&spi.DevIntrf,0)==0); assert(entry.pReg->DCR2==255);
+  // HCLK = SYSCLK / 2, / 16, / 64 and / 512 from HPRE 8, 11, 12 and 15
+  rcc.CFGR=8u<<4; assert(Stm32OspiSetRate(&spi.DevIntrf,UINT32_MAX)==60000000);
+  rcc.CFGR=11u<<4; assert(Stm32OspiSetRate(&spi.DevIntrf,UINT32_MAX)==7500000);
+  rcc.CFGR=12u<<4; assert(Stm32OspiSetRate(&spi.DevIntrf,UINT32_MAX)==1875000);
+  rcc.CFGR=15u<<4; assert(Stm32OspiSetRate(&spi.DevIntrf,UINT32_MAX)==234375);
+  rcc.CFGR=7u<<4; assert(Stm32OspiSetRate(&spi.DevIntrf,UINT32_MAX)==120000000);
+  rcc.CFGR=0;
   assert(QuadSPISendCmd(&spi,0,0,0,0,0)); assert(commandDevice==i);
  }
  SPIDev_t other{}; other.Cfg.DevNo=2; assert(!QuadSPISendCmd(&other,0,0,0,0,0));
@@ -95,6 +102,12 @@ int main() {
  assert(Stm32QspiSetRate(&spi.DevIntrf,20000000)==20000000); assert(reg.CR==(3u<<24));
  assert(Stm32QspiSetRate(&spi.DevIntrf,1)==80000000/256); assert(reg.CR==(255u<<24));
  assert(Stm32QspiSetRate(&spi.DevIntrf,0)==0); assert(reg.CR==(255u<<24));
+ // HCLK = SYSCLK / 2, / 16, / 64 and / 512 from HPRE 8, 11, 12 and 15
+ rcc.CFGR=8u<<4; assert(Stm32QspiSetRate(&spi.DevIntrf,UINT32_MAX)==40000000);
+ rcc.CFGR=11u<<4; assert(Stm32QspiSetRate(&spi.DevIntrf,UINT32_MAX)==5000000);
+ rcc.CFGR=12u<<4; assert(Stm32QspiSetRate(&spi.DevIntrf,UINT32_MAX)==1250000);
+ rcc.CFGR=15u<<4; assert(Stm32QspiSetRate(&spi.DevIntrf,UINT32_MAX)==156250);
+ rcc.CFGR=0;
  assert(QuadSPISendCmd(&spi,0,0,0,0,0)); assert(commands==1);
  SPIDev_t other{}; other.Cfg.DevNo=2; assert(!QuadSPISendCmd(&other,0,0,0,0,0)); assert(commands==1);
  puts("PASS QSPI: prescaler limits and command routing");

@@ -84,55 +84,130 @@ static void Re01AgtUnfIRQHandler(int IntNo, void *pCtx)
 
 void Re01AgtDisableTrigger(TimerDev_t * const pTimer, int TrigNo);
 
-// Service both flags together, retaining the existing AGT stop/update sequence.
+// Counts the counter misses in a stop and a start, at timer frequency Freq
+static uint32_t Re01AgtLost(uint32_t Freq)
+{
+	uint32_t core = SystemCoreClock;
+	uint32_t cpu = 0;
+
+	if (core)
+	{
+		cpu = (uint32_t)(((uint64_t)RE01_TIMER_AGT_STOP_CYCLES * Freq + core / 2) / core);
+	}
+
+	return RE01_TIMER_AGT_RESTART + cpu;
+}
+
+// Counter stopped at Count (up counts), tick count Off + Count once it runs
+// again: writes the compare of trigger TrigNo for its deadline, the next count
+// if the deadline is reached.
+static void Re01AgtArm(RE01_TimerData_t *dev, int TrigNo, uint16_t Count, uint16_t Off)
+{
+	volatile uint16_t *cmp = TrigNo ? &dev->pAgtReg->AGTCMB : &dev->pAgtReg->AGTCMA;
+	uint16_t up = (uint16_t)(dev->Deadline[TrigNo] - Off);
+
+	if (Re01TimerReached((uint16_t)(Off + Count), dev->Deadline[TrigNo], dev->CC[TrigNo], 0xFFFFUL))
+	{
+		up = Count + 1;
+	}
+	*cmp = 0xFFFFU - up;
+}
+
+// Service both flags together. The compare values are written with the
+// counter stopped. The counts it misses are added back to the tick count, the
+// compare values written for the deadlines in that count.
 static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
 {
 	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
-	uint8_t cr = dev->pAgtReg->AGTCR & (AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk);
-	if (cr == 0) return;
-	bool running = (dev->pAgtReg->AGTCR & AGT0_AGTCR_TSTART_Msk) != 0;
-	if (!Re01AgtStop(dev))
+
+	// Flag cleared first: a match while the handler runs calls it again
+	Re01AcknowledgeInt((IRQn_Type)IntNo);
+
+	if ((dev->pAgtReg->AGTCR & (AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk)) == 0)
 	{
-		Re01AgtDisableTrigger(dev->pTimer, 0);
-		if (dev->DevNo == 0) Re01AgtDisableTrigger(dev->pTimer, 1);
 		return;
 	}
-	dev->pAgtReg->AGTCR &= ~cr;
+
 	TimerDev_t *timer = dev->pTimer;
 	TimerEvtHandler_t evtHandler = timer->EvtHandler;
 	TimerTrig_t trig[RE01_TIMER_AGT_TRIG_MAXCNT] = {};
 	uint8_t fired = 0;
-	uint16_t count = 0xFFFFU - dev->pAgtReg->AGT;
 	int maxtrig = dev->DevNo == 0 ? RE01_TIMER_AGT_TRIG_MAXCNT : 1;
+	bool running = (dev->pAgtReg->AGTCR & AGT0_AGTCR_TSTART_Msk) != 0;
+
+	if (!Re01AgtStop(dev))
+	{
+		Re01AgtDisableTrigger(timer, 0);
+		if (dev->DevNo == 0) Re01AgtDisableTrigger(timer, 1);
+		return;
+	}
+
+	uint32_t state = DisableInterrupt();
+
+	// Counter stopped, no match until it runs: the flags have all of them.
+	// Short, the counts missed depend on it. Tick count once the counter runs
+	// again: off + count.
+	uint8_t cr = dev->pAgtReg->AGTCR & (AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk);
+	uint16_t count = 0xFFFFU - dev->pAgtReg->AGT;
+	uint8_t cmsr = dev->pAgtReg->AGTCMSR;
+	uint16_t off = (uint16_t)timer->Rollover;
+	uint16_t lost = running ? (uint16_t)dev->Lost : 0;
+
+	dev->pAgtReg->AGTCR &= ~cr;
 	for (int i = 0; i < maxtrig; i++)
 	{
-		if ((cr & (AGT0_AGTCR_TCMAF_Msk << i)) == 0 ||
-			dev->IrqMatch[i] == (IRQn_Type)-1) continue;
-		trig[i] = dev->Trigger[i];
-		fired |= 1U << i;
-		Re01TimerClearPending(dev->IrqMatch[i]);
-		volatile uint16_t *cmp = i ? &dev->pAgtReg->AGTCMB : &dev->pAgtReg->AGTCMA;
-		if (trig[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+		if ((cmsr & (1U << (i << 2))) == 0)
 		{
-			*cmp = 0xFFFFU - Re01TimerNextCompare(0xFFFFU - *cmp,
-				count, dev->CC[i], 0xFFFFUL);
+			continue;
 		}
-		else
+		if ((cr & (AGT0_AGTCR_TCMAF_Msk << i)) && dev->IrqMatch[i] != (IRQn_Type)-1)
 		{
-			Re01AgtDisableTrigger(dev->pTimer, i);
-			*cmp = 0xFFFF;
+			fired |= 1U << i;
+			if (dev->Trigger[i].Type != TIMER_TRIG_TYPE_CONTINUOUS)
+			{
+				// Released once the counter runs
+				*(i ? &dev->pAgtReg->AGTCMB : &dev->pAgtReg->AGTCMA) = 0xFFFF;
+				continue;
+			}
+			dev->Deadline[i] = Re01TimerNextCompare(dev->Deadline[i], (uint16_t)(off + count),
+				dev->CC[i], 0xFFFFUL);
+		}
+		Re01AgtArm(dev, i, count, off + lost);
+	}
+	if (running)
+	{
+		dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
+	}
+
+	// Counts missed while stopped
+	timer->Rollover += lost;
+	for (int i = 0; i < maxtrig; i++)
+	{
+		if (fired & (1U << i))
+		{
+			trig[i] = dev->Trigger[i];
 		}
 	}
-	if (running) dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
+	EnableInterrupt(state);
+
+	for (int i = 0; i < maxtrig; i++)
+	{
+		if ((fired & (1U << i)) && trig[i].Type != TIMER_TRIG_TYPE_CONTINUOUS)
+		{
+			// Released before invoking the callback, which may rearm this trigger
+			Re01AgtDisableTrigger(timer, i);
+		}
+	}
 	// Snapshot both callbacks before either can reconfigure the timer.
 	for (int i = 0; i < maxtrig; i++)
 	{
 		if ((fired & (1U << i)) == 0) continue;
+		// Trigger handler first, then the event handler, as the other timer ports
 		if (trig[i].Handler)
 		{
 			trig[i].Handler(timer, i, trig[i].pContext);
 		}
-		else if (evtHandler)
+		if (evtHandler)
 		{
 			evtHandler(timer, TIMER_EVT_TRIGGER(i));
 		}
@@ -190,6 +265,8 @@ static void Re01AgtReset(TimerDev_t * const pTimer)
 	dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TUNDF_Msk | AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk);
 	pTimer->LastCount = 0;
 	pTimer->Rollover = 0;
+	dev->Deadline[0] = dev->CC[0];
+	dev->Deadline[1] = dev->CC[1];
 	if (dev->pAgtReg->AGTCMSR & AGT0_AGTCMSR_TCMEA_Msk)
 	{
 		dev->pAgtReg->AGTCMA = 0xFFFF - dev->CC[0];
@@ -227,7 +304,7 @@ static void Re01AgtReset(TimerDev_t * const pTimer)
 static uint32_t Re01AgtSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
-	if (dev == NULL || dev->BaseFreq == 0 || Freq > 64000000UL) return 0;
+	if (dev == NULL || dev->BaseFreq == 0) return 0;
 	uint32_t cks = 0;
 	uint32_t freq = dev->BaseFreq;
 	uint32_t error = Freq > freq ? Freq - freq : freq - Freq;
@@ -256,6 +333,7 @@ static uint32_t Re01AgtSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	dev->pAgtReg->AGTMR2 = (dev->pAgtReg->AGTMR2 & ~AGT0_AGTMR2_CKS_Msk) | cks;
 	pTimer->Freq = freq;
 	pTimer->nsPeriod = (1000000000ULL + (freq >> 1)) / freq;
+	dev->Lost = Re01AgtLost(freq);
 	Re01TimerSetPeriods(dev, cc);
 	Re01AgtReset(pTimer);
 	Re01AgtEnable(pTimer);
@@ -320,14 +398,12 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
 
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
 	if (dev == NULL || (Type != TIMER_TRIG_TYPE_SINGLE && Type != TIMER_TRIG_TYPE_CONTINUOUS)) return 0;
-	uint64_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
-
-	if (cc <= 2ULL || cc >= 0x10000ULL)
+	if (nsPeriod == 0)
 	{
 		return 0;
 	}
+	uint64_t cc = Re01TimerClosestTicks(TimerNanosecondToTick(pTimer, nsPeriod), 0xFFFFUL);
 
-	volatile uint16_t *cntreg = 0;
 	uint8_t evtid = 0;
 	Re01IRQHandler_t hndlr = 0;
 
@@ -336,13 +412,11 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
 	{
 		evtid = RE01_EVTID_AGT0_AGTCMBI;
 		hndlr = Re01AgtTcmBIRQHandler;
-		cntreg = &dev->pAgtReg->AGTCMB;
 	}
 	else
 	{
 		evtid = pTimer->DevNo > 0? RE01_EVTID_AGT1_AGTCMAI : RE01_EVTID_AGT0_AGTCMAI;
 		hndlr = Re01AgtTcmAIRQHandler;
-		cntreg = &dev->pAgtReg->AGTCMA;
 	}
 
 	uint32_t state = DisableInterrupt();
@@ -353,35 +427,61 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
 		return 0;
 	}
 	bool running = (dev->pAgtReg->AGTCR & AGT0_AGTCR_TSTART_Msk) != 0;
+
+	// Compare disabled while it is set up, with the counter running
+	uint8_t cmsr = dev->pAgtReg->AGTCMSR;
+
+	dev->pAgtReg->AGTCMSR = cmsr & ~(1U << (TrigNo << 2));
+	dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TCMAF_Msk << TrigNo);
+	(&ICU->IELSR0)[irq - IEL0_IRQn] &= ~ICU_IELSR0_IR_Msk;
+	NVIC_ClearPendingIRQ(irq);
+
+	// The period starts now, the counter running
+	uint16_t start = (uint16_t)pTimer->Rollover + (uint16_t)(0xFFFFU - dev->pAgtReg->AGT);
+
 	if (!Re01AgtStop(dev))
 	{
 		if (dev->IrqMatch[TrigNo] == (IRQn_Type)-1)
 		{
 			Re01UnregisterIntHandler(irq);
 		}
+		dev->pAgtReg->AGTCMSR = cmsr;
 		EnableInterrupt(state);
 		return 0;
 	}
+
 	dev->IrqMatch[TrigNo] = irq;
-	dev->pAgtReg->AGTCMSR &= ~(1U << (TrigNo << 2));
-	dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TCMAF_Msk << TrigNo);
-	(&ICU->IELSR0)[irq - IEL0_IRQn] &= ~ICU_IELSR0_IR_Msk;
-	NVIC_ClearPendingIRQ(irq);
 	dev->Trigger[TrigNo].Type = Type;
 	dev->CC[TrigNo] = cc;
-	dev->Trigger[TrigNo].nsPeriod = TimerTickToTime(pTimer, cc, 1000000000UL);
+	dev->Deadline[TrigNo] = (uint16_t)(start + cc);
 	dev->Trigger[TrigNo].Handler = Handler;
 	dev->Trigger[TrigNo].pContext = pContext;
 
-	*cntreg = dev->pAgtReg->AGT - cc;
+	// Counter stopped. Short, the counts missed depend on it: those are added
+	// back to the tick count, the compare values written for it. Tick count
+	// once the counter runs again: off + count.
+	uint16_t count = 0xFFFFU - dev->pAgtReg->AGT;
+	uint16_t lost = running ? (uint16_t)dev->Lost : 0;
+	uint16_t off = (uint16_t)pTimer->Rollover + lost;
+	int other = TrigNo ^ 1;
 
+	Re01AgtArm(dev, TrigNo, count, off);
+	if (dev->DevNo == 0 && (dev->pAgtReg->AGTCMSR & (1U << (other << 2))))
+	{
+		Re01AgtArm(dev, other, count, off);
+	}
 	dev->pAgtReg->AGTCMSR |= (1 << (TrigNo << 2));
 
 	if (running)
 	{
 		dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
 	}
-	uint64_t period = dev->Trigger[TrigNo].nsPeriod;
+	pTimer->Rollover += lost;
+
+	// Period of the counts, computed once the period has started
+	uint64_t period = TimerTickToTime(pTimer, cc, 1000000000UL);
+
+	dev->Trigger[TrigNo].nsPeriod = period;
 	EnableInterrupt(state);
 	return period;
 }
@@ -469,11 +569,6 @@ static int Re01AgtFindAvailTrigger(TimerDev_t * const pTimer)
  */
 bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const pCfg)
 {
-	if (pCfg->Freq > 64000000)
-	{
-		return false;
-	}
-
 	pTimerData->IntPrio = pCfg->IntPrio;
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
 	pTimerData->pTimer->EvtHandler = pCfg->EvtHandler;

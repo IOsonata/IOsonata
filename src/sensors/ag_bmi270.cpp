@@ -617,7 +617,7 @@ bool AccelBmi270::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 	return AccelBmi270::Enable();
 }
 
-uint8_t AccelBmi270::Scale(uint8_t Value)
+uint16_t AccelBmi270::Scale(uint16_t Value)
 {
 	uint8_t regaddr;
 	uint8_t d;
@@ -1008,7 +1008,7 @@ uint32_t GyroBmi270::SamplingFrequency(uint32_t Freq)
 	return GyroSensor::SamplingFrequency(actual);
 }
 
-uint32_t GyroBmi270::Sensitivity(uint32_t Value)
+uint16_t GyroBmi270::Sensitivity(uint16_t Value)
 {
 	uint32_t actual;
 	uint8_t regaddr;

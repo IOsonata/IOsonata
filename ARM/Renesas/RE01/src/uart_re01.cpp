@@ -162,6 +162,11 @@ static int Re01UartFillTx(Re01UartDev_t *dev)
 static void Re01UartIRQHandler(int IntNo, void *pCtx)
 {
 	Re01UartDev_t *dev = (Re01UartDev_t*)pCtx;
+
+	// Flag cleared before the status is read: an event while the handler
+	// runs calls it again
+	Re01AcknowledgeInt((IRQn_Type)IntNo);
+
 	uint8_t status = dev->pUartReg2->SSR;
 	int received = 0;
 	int sent = 0;
@@ -230,8 +235,7 @@ static uint32_t Re01UARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	Re01UartDev_t *dev = (Re01UartDev_t*)pDev->pDevData;
 	uint32_t pclk = SystemPeriphClockGet(dev->DevNo < 2 ? 0 : 1);
-	if (Rate == 0 || pclk == 0 || Rate > pclk / 6 ||
-		(uint64_t)Rate * 32 * 64 * 256 * 256 < (uint64_t)pclk * 128)
+	if (Rate == 0 || pclk == 0)
 		return 0;
 	uint32_t diff = UINT32_MAX;
 	uint32_t baud = 0;
@@ -245,12 +249,15 @@ static uint32_t Re01UARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 			{
 				uint64_t numerator = (uint64_t)pclk * m;
 				uint32_t count = numerator / (factor * Rate);
-				// Both neighbours of the ideal BRR+1; include BRR=255.
+				// Both neighbours of the ideal BRR+1; include BRR=255. Out of
+				// the BRR range, the closest end of it.
 				for (unsigned j = 0; j < 2; j++)
 				{
 					uint32_t divisor = count + j;
-					if (divisor < 1 || divisor > 256)
-						continue;
+					if (divisor < 1)
+						divisor = 1;
+					if (divisor > 256)
+						divisor = 256;
 					uint64_t denominator = factor * divisor;
 					uint32_t actual = (numerator + denominator / 2) / denominator;
 					uint32_t error = actual > Rate ? actual - Rate : Rate - actual;

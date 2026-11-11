@@ -85,6 +85,8 @@ typedef struct __PressureSensor_Config {
 /// Pressure sensor base class.  Sensor implementation must derive form this class
 class PressSensor : public Sensor {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	PressSensor() { Type(SENSOR_TYPE_PRESSURE); }
 

@@ -178,7 +178,7 @@ int main() {
 	assert(t.EnableTrigger(&t,1,1000000000,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr));
 	assert(t.EnableTrigger(&t,2,1000000000,TIMER_TRIG_TYPE_SINGLE,Callback,&callbacks));
 	unsigned old=events[1][0];cancelNext=true;
-	Advance(1,375000); assert(events[1][0]==old+1&&events[1][1]==0&&callbacks==1);
+	Advance(1,375000); assert(events[1][0]==old+1&&events[1][1]==0&&callbacks==1&&events[1][2]==1);
 	cancelNext=false;
 	assert(t.GetTickCount(&t)==375000); // trigger spanning five hardware wraps
 	// Several missed periods, but service each wrap for the 16-bit extension.

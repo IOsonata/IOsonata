@@ -37,7 +37,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "display/display_ssd1351.h"
 
-bool LcdSSD1351::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
+bool LcdSSD1351::Init(const DisplayCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	LCDMatrix::vpLineBuff = vLineBuff;
 	SetDevRes(SSD1351_WIDTH_MAX, SSD1351_HEIGHT_MAX);

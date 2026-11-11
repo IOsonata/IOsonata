@@ -51,6 +51,21 @@ SOFTWARE.
 #define RE01_TIMER_CC_MAXCNT				4
 #define RE01_TIMER_TRIG_MAXCNT			4
 
+// CPU cycles from the last counter read of a compare interrupt handler to the
+// clear of its interrupt flag, after the handler returns
+#define RE01_TIMER_ISR_TAIL				256
+
+// Trigger calls in one compare interrupt at most
+#define RE01_TIMER_ISR_CALLS				4
+
+// AGT compare values are written with the counter stopped. The counts the
+// counter misses are added back: RE01_TIMER_AGT_RESTART count source cycles for
+// a start to take effect (3 AGTCLK in the Renesas FSP AGT notes), and the CPU
+// cycles from the stop to the start, RE01_TIMER_AGT_STOP_CYCLES (175 to 272 on
+// a Cortex-M0+ model of a Release build). To be checked on hardware.
+#define RE01_TIMER_AGT_RESTART			3
+#define RE01_TIMER_AGT_STOP_CYCLES		224
+
 #pragma pack(push, 4)
 
 typedef struct {
@@ -64,6 +79,9 @@ typedef struct {
 	uint32_t BaseFreq;
 	uint8_t TmrClock;		//!< TMR1 source/divider retained across Disable/Enable
 	uint32_t CC[RE01_TIMER_CC_MAXCNT];
+	uint32_t Deadline[RE01_TIMER_TRIG_MAXCNT];	//!< Count of the next trigger call (TMR, GPT), tick count (AGT, low 16 bits)
+	uint32_t Margin;		//!< Counts a compare must be ahead when a compare interrupt returns
+	uint32_t Lost;			//!< AGT: counts the counter misses in a stop and a start
 	TimerTrig_t Trigger[RE01_TIMER_TRIG_MAXCNT];
 	TimerDev_t *pTimer;
 	int IntPrio;
@@ -109,7 +127,13 @@ static inline uint64_t Re01TimerPeriodTicks(uint32_t Freq, uint64_t nsPeriod)
 		((nsPeriod % 1000000000ULL) * Freq + 500000000ULL) / 1000000000ULL;
 }
 
-// Validate every active period before changing the frequency or hardware.
+// Closest period the compare takes, from 3 ticks to Mask
+static inline uint32_t Re01TimerClosestTicks(uint64_t Ticks, uint32_t Mask)
+{
+	return Ticks < 3 ? 3 : (Ticks > Mask ? Mask : (uint32_t)Ticks);
+}
+
+// Closest period of every active trigger at the new frequency
 static inline bool Re01TimerNewPeriods(RE01_TimerData_t *dev, uint32_t Freq,
 		uint32_t Mask, uint32_t *CC)
 {
@@ -118,12 +142,7 @@ static inline bool Re01TimerNewPeriods(RE01_TimerData_t *dev, uint32_t Freq,
 		CC[i] = 0;
 		if (dev->IrqMatch[i] != (IRQn_Type)-1)
 		{
-			uint64_t ticks = Re01TimerPeriodTicks(Freq, dev->Trigger[i].nsPeriod);
-			if (ticks <= 2 || ticks > Mask)
-			{
-				return false;
-			}
-			CC[i] = (uint32_t)ticks;
+			CC[i] = Re01TimerClosestTicks(Re01TimerPeriodTicks(Freq, dev->Trigger[i].nsPeriod), Mask);
 		}
 	}
 	return true;
@@ -141,12 +160,43 @@ static inline void Re01TimerSetPeriods(RE01_TimerData_t *dev, const uint32_t *CC
 	}
 }
 
+// True if Count has reached Deadline, which is Period after a previous
+// deadline or after the count it was set from
+static inline bool Re01TimerReached(uint32_t Count, uint32_t Deadline,
+		uint32_t Period, uint32_t Mask)
+{
+	return ((Count - (Deadline - Period)) & Mask) >= Period;
+}
+
+// The interrupt dispatcher clears the interrupt flag after the handler
+// returns: a compare match before that is lost and waits a counter wrap. A
+// compare interrupt handler returns with its compare value this many counts
+// ahead of the counter at least.
+static inline uint32_t Re01TimerMargin(uint32_t Freq)
+{
+	uint32_t core = SystemCoreClock;
+
+	if (core == 0)
+	{
+		return Freq;
+	}
+
+	return (uint32_t)(((uint64_t)RE01_TIMER_ISR_TAIL * Freq + core - 1) / core) + 1;
+}
+
 // Preserve the previous compare phase and skip elapsed periods in bounded work.
 // At most one counter wrap may elapse before the interrupt is serviced.
 static inline uint32_t Re01TimerNextCompare(uint32_t Deadline, uint32_t Count,
 		uint32_t Period, uint32_t Mask)
 {
 	uint32_t elapsed = (Count - Deadline) & Mask;
+
+	// The division only when a period or more was missed
+	if (elapsed < Period)
+	{
+		return (Deadline + Period) & Mask;
+	}
+
 	uint64_t steps = (uint64_t)elapsed / Period + 1;
 	return (uint32_t)(Deadline + steps * Period) & Mask;
 }

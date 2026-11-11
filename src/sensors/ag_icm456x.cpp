@@ -139,7 +139,7 @@ uint32_t AccelIcm456x::SamplingFrequency(uint32_t Freq)
 	return AccelSensor::SamplingFrequency(Freq);
 }
 
-uint8_t AccelIcm456x::Scale(uint8_t Value)
+uint16_t AccelIcm456x::Scale(uint16_t Value)
 {
 	uint8_t regaddr = ICM456X_ACCEL_CONFIG0_REG;
 	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_ACCEL_CONFIG0_UI_FS_SEL_MASK;
@@ -421,7 +421,7 @@ uint32_t GyroIcm456x::SamplingFrequency(uint32_t Freq)
 	return GyroSensor::SamplingFrequency(Freq);
 }
 
-uint32_t GyroIcm456x::Sensitivity(uint32_t Value)
+uint16_t GyroIcm456x::Sensitivity(uint16_t Value)
 {
 	uint8_t regaddr = ICM456X_GYRO_CONFIG0_REG;
 	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_GYRO_CONFIG0_UI_FS_SEL_MASK;

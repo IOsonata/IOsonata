@@ -5,12 +5,15 @@
 
 SysTick is the 24-bit system timer present on all ARM Cortex-M devices
 (M0/M0+/M3/M4/M7/M23/M33/M55). This MCU port wraps it in the IOsonata
-TimerDev_t interface so any kernel or driver that accepts a TimerDev_t*
-works identically regardless of the underlying tick source.
+TimerDev_t interface.
 
-When SysTick is not the preferred tick source (e.g. nRF52 uses RTC1 for
-lower power, RE01 uses AGT), include the appropriate MCU port instead.
-This port and those are mutually exclusive per project.
+The counter runs on the processor clock: the timer frequency is the core
+clock (SystemCoreClockGet) and the tick count is in core clock cycles. It has
+one trigger, the reload interrupt, with a period from 2 to 2^24 cycles.
+
+This port defines TimerInit and SysTick_Handler. It cannot be linked with an
+MCU timer port or with code that has its own SysTick_Handler, such as an RTOS
+tick.
 
 @author	Hoang Nguyen Hoan
 @date	Mar. 2026
@@ -53,8 +56,13 @@ SOFTWARE.
 #pragma pack(push, 4)
 
 typedef struct {
-	int			DevNo;			//!< Must be 0 — only one SysTick per core
-	uint32_t	CoreClkHz;		//!< Core clock in Hz at Init() time
+	uint32_t	CurPeriod;		//!< Cycles of the period in progress
+	uint32_t	NextPeriod;		//!< Cycles of the next periods, LOAD + 1
+	uint32_t	Wraps;			//!< Wraps counted, not seen by the interrupt handler yet
+	uint64_t	nsMax;			//!< Shortest nsec period taken as 2^24 cycles
+	uint64_t	CycQ32;			//!< Cycles per nsec in 1/2^32, rounded down
+	uint32_t	NsHi;			//!< nsec per cycle, integer part
+	uint32_t	NsLo;			//!< nsec per cycle, fraction in 1/2^32
 	TimerTrig_t	Trigger[SYSTICK_TRIG_MAXCNT];
 	TimerDev_t	*pTimer;		//!< Back-pointer to the TimerDev_t
 } SysTick_TimerData_t;
@@ -68,27 +76,32 @@ extern "C" {
 /**
  * @brief	Cortex-M SysTick timer initialisation.
  *
- * Wires all TimerDev_t function pointers and configures SysTick to fire
- * at pCfg->Freq Hz. The core clock frequency must be passed in via
- * pCfg->DevNo which is repurposed as CoreClkHz (DevNo is always 0 for
- * SysTick — there is only one per core).
+ * Wires all TimerDev_t function pointers and starts SysTick on the processor
+ * clock with the longest reload, 2^24 cycles, and its interrupt on. The
+ * interrupt extends the tick count to 64 bits.
  *
- * Recommended usage:
- *   static SysTick_TimerData_t s_SysTickData;
- *   static TimerDev_t          g_SysTickDev;
- *   static const TimerCfg_t s_Cfg = {
- *       .DevNo      = (int)SystemCoreClock,   // pass core clock here
+ * pCfg->DevNo, ClkSrc and Freq are not used: the timer frequency is always
+ * the core clock, the closest value SysTick has to any requested one.
+ * pCfg->IntPrio is the interrupt priority level, 0 the highest, as for the
+ * NVIC interrupts. A level past the lowest one gives the lowest one.
+ * bTickInt is refused, the count changes every cycle.
+ *
+ * A 1 kHz tick:
+ *   TimerCfg_t cfg = {
+ *       .DevNo      = 0,
  *       .ClkSrc     = TIMER_CLKSRC_DEFAULT,
- *       .Freq       = 1000,                   // 1 kHz tick
- *       .IntPrio    = 0xFF,                   // lowest priority
- *       .EvtHandler = NULL,                   // filled by TaktOS
+ *       .Freq       = 0,
+ *       .IntPrio    = 7,
+ *       .EvtHandler = NULL,
  *   };
- *   TimerInit(&g_SysTickDev, &s_Cfg);
+ *   TimerInit(&g_SysTickDev, &cfg);
+ *   msTimerEnableTrigger(&g_SysTickDev, 0, 1, TIMER_TRIG_TYPE_CONTINUOUS, TickHandler, NULL);
  *
  * @param	pTimer	: Pointer to TimerDev_t (caller provides storage)
  * @param	pCfg	: Timer configuration.
  *
- * @return	true on success
+ * @return	true on success, false if the core clock is unknown (0) or
+ * 			bTickInt is set
  */
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 

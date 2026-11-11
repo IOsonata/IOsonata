@@ -39,7 +39,7 @@ for i, source in enumerate(sources):
     objects.append(obj)
 elf = out / 'spi_slave.elf'
 exports = ['EmuInit', 'EmuInit20', 'EmuSnooze', 'EmuOtherSnooze', 'EmuStandby', 'EmuReset', 'EmuDisable',
-           'EmuEnable', 'EmuPowerOff', 'EmuRate', 'EmuMasterTx', 'R9a02IrqDispatch',
+           'EmuEnable', 'EmuPowerOff', 'EmuRate', 'EmuGetRate', 'EmuMasterTx', 'R9a02IrqDispatch',
            'SystemPeriphClockGet']
 linker = 'clang++' if args.llvm else 'g++'
 specs = [] if args.llvm else ['--specs=nano.specs', '--specs=nosys.specs']

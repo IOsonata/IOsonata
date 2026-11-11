@@ -111,6 +111,9 @@ int EInkIntrfWrite(EInkIntrfDev_t * const pDev, uint8_t *pCmd, int CmdLen, const
 /// E-Ink interface class
 class EInkIntrf : public DeviceIntrf {
 public:
+	// Transfer with a device address, not hidden by the Write below
+	using DeviceIntrf::Write;
+
 	EInkIntrf() { memset((void*)&vDevData, 0, (int)sizeof(vDevData));}
 	EInkIntrf(EInkIntrf&);	// copy ctor not allowed
 

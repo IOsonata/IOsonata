@@ -1557,7 +1557,13 @@ static void TestInit(void)
 	c = good; c.Rate = 0;
 	Check(!I2CInit(&dev, &c), "rate 0 accepted");
 	c = good; c.Rate = 1000000;
-	Check(!I2CInit(&dev, &c), "1 MHz accepted");
+	{
+		// Above the range: the closest rate, 400 kHz at most
+		I2CDev_t fast = {};
+		Check(I2CInit(&fast, &c) && I2CGetRate(&fast) > 100000 && I2CGetRate(&fast) <= 400000,
+			"1 MHz not the closest rate");
+		I2CPowerOff(&fast);
+	}
 	c = good; c.NbIOPins = 1;
 	Check(!I2CInit(&dev, &c), "one pin accepted");
 	c = good; c.pIOPinMap = NULL;
@@ -1676,8 +1682,11 @@ static void TestRate(void)
 
 	Check(r > 100000 && r <= 400000, "SetRate 400k gave %d", r);
 	Check(I2CGetRate(&dev) == r, "GetRate differs after SetRate");
-	Check(I2CSetRate(&dev, 2000000) == 0, "SetRate above 400k accepted");
-	Check(I2CGetRate(&dev) == r, "failed SetRate changed the rate");
+	Check(I2CSetRate(&dev, 2000000) == r, "SetRate above 400k not the 400k rate");
+	Check(I2CGetRate(&dev) == r, "GetRate differs after SetRate above 400k");
+	const int slow = I2CSetRate(&dev, 1);
+	Check(slow > 0 && slow < 10000, "SetRate below the range gave %d", slow);
+	Check(I2CSetRate(&dev, 400000) == r, "SetRate 400k again");
 
 	Check(I2CStartTx(&dev, 0x50), "StartTx");
 	Check(I2CSetRate(&dev, 100000) == 0, "SetRate accepted inside a transfer");

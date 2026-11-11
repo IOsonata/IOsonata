@@ -236,7 +236,7 @@ int main()
 		t.EnableTrigger(&t, 0, 100000, TIMER_TRIG_TYPE_SINGLE, ResetHandler, nullptr);
 		t.EnableTrigger(&t, 1, 100000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr);
 		Advance(d, 4800);
-		assert(s_Cb == 1 && s_Evt[1] == 0 && t.GetTickCount(&t) == 0);
+		assert(s_Cb == 1 && s_Evt[0] == 1 && s_Evt[1] == 0 && t.GetTickCount(&t) == 0);
 		Advance(d, 4800);
 		assert(s_Evt[1] == 1);
 		// Frequency selection must minimize Hz error, not divisor error.

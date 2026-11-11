@@ -103,6 +103,8 @@ typedef struct __AccelSensor_Config {
 /// Accel. sensor base class
 class AccelSensor : public Sensor {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	/**
 	 * @brief	Sensor initialization

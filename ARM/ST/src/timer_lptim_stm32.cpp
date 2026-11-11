@@ -14,7 +14,11 @@
 		each period. Compare triggers: one on L4 and G4 (CMP), two on WBA
 		(CCR1, CCR2). A continuous trigger is scheduled one period after its
 		previous compare value, it does not drift with the interrupt
-		latency.
+		latency. The interrupt calls the trigger handlers while its new
+		compare value is being taken, then waits for it. A compare value the
+		counter reaches before it is taken is serviced by the interrupt
+		right away, not a counter period later. A trigger period is the
+		closest of 3 to 65535 counts.
 
 		Two kinds of LPTIM, told apart by the device header:
 		- L4 and G4, LPTIM_IER: CFGR and IER written with the timer
@@ -160,6 +164,8 @@ typedef struct {
 	uint32_t Next[ST_LPTIM_TRIG_MAXCNT];	//!< Compare values written
 	volatile bool bTrigEn[ST_LPTIM_TRIG_MAXCNT];	//!< Trigger callback enabled
 	volatile bool bTrigWrite;			//!< Compare programming in progress
+	volatile bool bDue[ST_LPTIM_TRIG_MAXCNT];	//!< Compare passed before it was taken
+	volatile uint8_t WaitMask;			//!< Compare writes of the interrupt not yet taken
 	TimerTrig_t Trigger[ST_LPTIM_TRIG_MAXCNT];
 } StLptDev_t;
 
@@ -255,6 +261,47 @@ static uint32_t StLptCount(LPTIM_TypeDef *pReg)
 	return cnt;
 }
 
+// True if the counter has reached the compare value Next of trigger TrigNo.
+// It was written at most one period CC before it, and taken some counter
+// clock cycles after the write: a match before that is lost.
+static bool StLptPassed(LPTIM_TypeDef *pReg, const StLptDev_t *pDev, int TrigNo)
+{
+	uint32_t from = pDev->Next[TrigNo] - pDev->CC[TrigNo];
+
+	return ((StLptCount(pReg) - from) & 0xFFFF) >= pDev->CC[TrigNo];
+}
+
+// Completes the compare writes the interrupt handler left: waits for their OK
+// flag, then a compare the counter passed before it was taken is serviced by
+// the interrupt. Called before another write to the timer.
+static void StLptFinish(int DevNo)
+{
+	StLptDev_t *dev = &s_StLptDev[DevNo];
+	LPTIM_TypeDef *reg = s_StLptInfo[DevNo].pReg;
+
+	for (int i = 0; dev->WaitMask != 0 && i < ST_LPTIM_TRIG_MAXCNT; i++)
+	{
+		if (dev->WaitMask & (1U << i))
+		{
+			StLptWaitFlag(&reg->ISR, s_StLptCmpOk[i], ST_LPTIM_READY_POLLS);
+
+			uint32_t state = DisableInterrupt();
+
+			// Not completed by an interrupt meanwhile
+			if (dev->WaitMask & (1U << i))
+			{
+				dev->WaitMask &= ~(1U << i);
+				if (dev->bTrigEn[i] && StLptPassed(reg, dev, i))
+				{
+					dev->bDue[i] = true;
+					NVIC_SetPendingIRQ(s_StLptInfo[DevNo].IrqNo);
+				}
+			}
+			EnableInterrupt(state);
+		}
+	}
+}
+
 // Extended count of a counter read. Interrupts disabled.
 static uint64_t StLptTick(TimerDev_t * const pTimer, uint32_t Cnt)
 {
@@ -277,6 +324,7 @@ static bool StLptRestart(int DevNo)
 	LPTIM_TypeDef *reg = info->pReg;
 	bool res;
 
+	StLptFinish(DevNo);
 	reg->CR = 0;
 	reg->CFGR = dev->Cfgr;
 	dev->pTimer->Rollover = 0;
@@ -302,6 +350,7 @@ static bool StLptRestart(int DevNo)
 	{
 		// The counter starts from 0
 		dev->Next[i] = dev->bTrigEn[i] ? dev->CC[i] : 0;
+		dev->bDue[i] = false;
 		res = StLptWrite(reg, StLptCmpReg(reg, i), dev->Next[i], s_StLptCmpOk[i]);
 	}
 	if (res == false)
@@ -347,6 +396,7 @@ static void StLptStop(int DevNo)
 {
 	const StLptInfo_t *info = &s_StLptInfo[DevNo];
 
+	StLptFinish(DevNo);
 	NVIC_DisableIRQ(info->IrqNo);
 	info->pReg->CR = 0;
 	*info->pEnReg &= ~info->Mask;
@@ -483,11 +533,40 @@ static int StLptFindAvailTrigger(TimerDev_t * const pTimer)
 	return -1;
 }
 
+// Closest trigger period in counts, 3 to 65535
+static uint32_t StLptTicks(uint32_t Freq, uint64_t nsPeriod)
+{
+	uint64_t cc = 0xFFFF;
+
+	if (nsPeriod <= UINT32_MAX)
+	{
+		cc = (nsPeriod * Freq + 500000000ULL) / 1000000000ULL;
+	}
+	else
+	{
+		// Whole seconds and the rest apart, the product would overflow
+		// otherwise
+		uint64_t sec = nsPeriod / 1000000000ULL;
+
+		if (sec < 0x10000ULL)
+		{
+			cc = sec * Freq + ((nsPeriod - sec * 1000000000ULL) * Freq + 500000000ULL) / 1000000000ULL;
+		}
+	}
+	if (cc < 3)
+	{
+		cc = 3;
+	}
+
+	return cc > 0xFFFF ? 0xFFFF : (uint32_t)cc;
+}
+
 /**
  * @brief	Enable a compare trigger.
  *
  * @param   TrigNo : 0 (CMP or CCR1) or, on WBA, 1 (CCR2)
- * @param   nsPeriod : Trigger period in nsec, 3 to 65535 counts
+ * @param   nsPeriod : Trigger period in nsec. The closest period of 3 to
+ * 					   65535 counts is used.
  * @param   Type     : Trigger type single shot or continuous
  * @param	Handler	 : Optional trigger callback
  * @param   pContext : Optional pointer passed to the callback
@@ -501,26 +580,27 @@ static uint64_t StLptEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64
 	int devno = StLptDevNo(pTimer);
 	StLptDev_t *dev;
 	LPTIM_TypeDef *reg;
-	uint64_t cc;
+	uint32_t cc;
 	uint64_t period;
 	uint32_t state;
 	bool irqEnabled;
 	bool res;
 
-	if (devno < 0 || TrigNo < 0 || TrigNo >= ST_LPTIM_TRIG_MAXCNT)
+	if (devno < 0 || TrigNo < 0 || TrigNo >= ST_LPTIM_TRIG_MAXCNT || nsPeriod == 0)
 	{
 		return 0;
 	}
 
 	dev = &s_StLptDev[devno];
 	reg = s_StLptInfo[devno].pReg;
-	cc = (nsPeriod + (pTimer->nsPeriod >> 1ULL)) / pTimer->nsPeriod;
 
 	// The compare register is written with the timer enabled
-	if (cc <= 2ULL || cc >= 0x10000ULL || (reg->CR & LPTIM_CR_ENABLE) == 0)
+	if ((reg->CR & LPTIM_CR_ENABLE) == 0)
 	{
 		return 0;
 	}
+
+	cc = StLptTicks(pTimer->Freq, nsPeriod);
 
 	state = DisableInterrupt();
 	if (dev->bTrigWrite)
@@ -535,20 +615,27 @@ static uint64_t StLptEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64
 	// The timer vector cannot observe these fields until the write finishes.
 	// A higher-priority interrupt may cancel by clearing bTrigEn while we wait.
 	dev->bTrigEn[TrigNo] = true;
-	dev->CC[TrigNo] = (uint32_t)cc;
+	dev->CC[TrigNo] = cc;
 	dev->Trigger[TrigNo].Type = Type;
-	dev->Trigger[TrigNo].nsPeriod = pTimer->nsPeriod * cc;
 	dev->Trigger[TrigNo].Handler = Handler;
 	dev->Trigger[TrigNo].pContext = pContext;
-	period = dev->Trigger[TrigNo].nsPeriod;
 
-	dev->Next[TrigNo] = (StLptCount(reg) + dev->CC[TrigNo]) & 0xFFFF;
+	dev->Next[TrigNo] = (StLptCount(reg) + cc) & 0xFFFF;
 
 	EnableInterrupt(state);
 
+	// Called from a trigger handler: the compare write of the interrupt
+	// handler is completed first
+	StLptFinish(devno);
+
 	// Synchronization takes several LPTIM clock cycles. Leave other vectors,
 	// including the priority-zero radio interrupt, in their caller's state.
-	res = StLptWrite(reg, StLptCmpReg(reg, TrigNo), dev->Next[TrigNo], s_StLptCmpOk[TrigNo]);
+	reg->ICR = s_StLptCmpOk[TrigNo];
+	*StLptCmpReg(reg, TrigNo) = dev->Next[TrigNo];
+
+	// Period of the counts, computed while the compare value is taken
+	period = ((uint64_t)cc * 1000000000ULL + (pTimer->Freq >> 1)) / pTimer->Freq;
+	res = StLptWaitFlag(&reg->ISR, s_StLptCmpOk[TrigNo], ST_LPTIM_READY_POLLS);
 
 	state = DisableInterrupt();
 
@@ -556,6 +643,15 @@ static uint64_t StLptEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64
 	reg->ICR = s_StLptCmpIf[TrigNo];
 	res = res && dev->bTrigEn[TrigNo];
 	dev->bTrigEn[TrigNo] = res;
+
+	// A short period may pass before the compare value is taken. It is
+	// serviced by the interrupt now, not a counter period later.
+	dev->bDue[TrigNo] = res && StLptPassed(reg, dev, TrigNo);
+	if (dev->bDue[TrigNo])
+	{
+		NVIC_SetPendingIRQ(s_StLptInfo[devno].IrqNo);
+	}
+	dev->Trigger[TrigNo].nsPeriod = period;
 	dev->bTrigWrite = false;
 	if (irqEnabled)
 	{
@@ -614,8 +710,9 @@ static void StLptIRQHandler(int DevNo)
 
 	for (int i = 0; i < ST_LPTIM_TRIG_MAXCNT; i++)
 	{
-		if ((flag & s_StLptCmpIf[i]) && dev->bTrigEn[i])
+		if (((flag & s_StLptCmpIf[i]) || dev->bDue[i]) && dev->bTrigEn[i])
 		{
+			dev->bDue[i] = false;
 			if (dev->Trigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 			{
 				// One period after the last compare value. If the interrupt
@@ -627,8 +724,14 @@ static void StLptIRQHandler(int DevNo)
 				{
 					next = (count + dev->CC[i]) & 0xFFFF;
 				}
+				// Written now, taken some counter clock cycles later: the
+				// handlers are called meanwhile, StLptFinish waits for it
+				state = DisableInterrupt();
 				dev->Next[i] = next;
-				StLptWrite(reg, StLptCmpReg(reg, i), next, s_StLptCmpOk[i]);
+				dev->WaitMask |= 1U << i;
+				reg->ICR = s_StLptCmpOk[i];
+				*StLptCmpReg(reg, i) = next;
+				EnableInterrupt(state);
 			}
 			else
 			{
@@ -647,6 +750,8 @@ static void StLptIRQHandler(int DevNo)
 	{
 		timer->EvtHandler(timer, evt);
 	}
+
+	StLptFinish(DevNo);
 }
 
 // LPTIM vector, from Stm32TimerIRQHandler

@@ -233,13 +233,16 @@ void Sam4lTimerIRQ(int devno)
 		TimerTrig_t info = tr.Info;
 		if (info.Type == TIMER_TRIG_TYPE_SINGLE) { tr.Active = false; Arm(d, n, false); }
 		else {
-			// Preserve phase; coalesce late periods into one callback.
-			tr.Deadline += ((now - tr.Deadline) / tr.Ticks + 1) * tr.Ticks;
+			// Preserve phase; coalesce late periods into one callback. The
+			// division only when a period or more was missed.
+			uint64_t late = now - tr.Deadline;
+			tr.Deadline += late < tr.Ticks ? tr.Ticks : (late / tr.Ticks + 1) * tr.Ticks;
 			Arm(d, n, true);
 		}
 		EnableInterrupt(state);
+		// Trigger handler first, then the event handler, as the other timer ports
 		if (info.Handler) info.Handler(d.Timer, n, info.pContext);
-		else if (d.Timer->EvtHandler) d.Timer->EvtHandler(d.Timer, TIMER_EVT_TRIGGER(n));
+		if (d.Timer->EvtHandler) d.Timer->EvtHandler(d.Timer, TIMER_EVT_TRIGGER(n));
 	}
 }
 bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)

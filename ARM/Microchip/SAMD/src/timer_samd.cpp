@@ -1036,14 +1036,15 @@ void SamdTimerIrq(int DevNo)
 		}
 		else
 		{
-			// Keeps the phase, missed periods are one event
-			if (now >= trig->Deadline)
+			// Keeps the phase, missed periods are one event. No division
+			// when on time.
+			if (now < trig->Deadline + trig->Ticks)
 			{
-				trig->Deadline += ((now - trig->Deadline) / trig->Ticks + 1) * trig->Ticks;
+				trig->Deadline += trig->Ticks;
 			}
 			else
 			{
-				trig->Deadline += trig->Ticks;
+				trig->Deadline += ((now - trig->Deadline) / trig->Ticks + 1) * trig->Ticks;
 			}
 			(void)SamdTimerArm(d, i, true, count, &check[i]);
 			seq[i] = trig->Seq;

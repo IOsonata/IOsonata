@@ -169,6 +169,10 @@ static void RE01IOPinIRQHandler(int IntNo, void *pCtx)
 {
 	IOPINSENS_EVTHOOK *evthook = (IOPINSENS_EVTHOOK*)pCtx;
 
+	// Edge sense only: the flag is cleared first, an edge while the callback
+	// runs calls it again
+	Re01AcknowledgeInt((IRQn_Type)IntNo);
+
 	if (evthook->SensEvtCB)
 	{
 		evthook->SensEvtCB(evthook->Idx, evthook->pCtx);

@@ -82,6 +82,9 @@ typedef enum __Adp5360BatteryState
 class PmAdp5360 : public PowerMgnt
 {
 public:
+	// Battery state of PowerMgnt, not hidden by the BatteryState below
+	using PowerMgnt::BatteryState;
+
 	PmAdp5360();
 
 	/** Enable/disable charging; other rails retain their state. */

@@ -34,7 +34,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "display/display_einkmtrx.h"
 
-bool EInkMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
+bool EInkMatrix::Init(const DisplayCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	if (pIntrf == nullptr)
 	{

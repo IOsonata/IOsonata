@@ -93,11 +93,12 @@ static void R9a02TimerEvent(R9a02TimerDev_t * const pDev, uint32_t Evt, TimerTri
 {
 	TimerDev_t *timer = pDev->pTimer;
 
+	// Trigger handler first, then the event handler, as the other timer ports
 	if ((Evt & TIMER_EVT_TRIGGER(0)) && Handler != NULL)
 	{
 		Handler(timer, 0, pCtx);
 	}
-	else if (timer->EvtHandler)
+	if (timer->EvtHandler)
 	{
 		timer->EvtHandler(timer, Evt);
 	}
@@ -141,8 +142,11 @@ static void R9a02MtimerIRQHandler(int IntNo, void *pCtx)
 		ctx = dev->pTrigCtx;
 		if (dev->TrigType == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
-			// From the previous deadline, missed periods merged
-			dev->Deadline += ((now - dev->Deadline) / dev->TrigTicks + 1U) * dev->TrigTicks;
+			// From the previous deadline, missed periods merged. The division
+			// only when a period or more was missed.
+			uint64_t late = now - dev->Deadline;
+
+			dev->Deadline += late < dev->TrigTicks ? dev->TrigTicks : (late / dev->TrigTicks + 1U) * dev->TrigTicks;
 			R9a02MtimecmpWrite(dev->Deadline);
 		}
 		else
@@ -250,11 +254,21 @@ static uint64_t R9a02MtimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, 
 		return 0;
 	}
 
-	uint64_t ticks = TimerNanosecondToTick(pTimer, nsPeriod);
-
-	if (ticks < R9A02_TIMER_TICKS_MIN || ticks > R9A02_MTIMER_TICKS_MAX)
+	if (nsPeriod == 0)
 	{
 		return 0;
+	}
+
+	// Closest period the timer takes
+	uint64_t ticks = TimerNanosecondToTick(pTimer, nsPeriod);
+
+	if (ticks < R9A02_TIMER_TICKS_MIN)
+	{
+		ticks = R9A02_TIMER_TICKS_MIN;
+	}
+	else if (ticks > R9A02_MTIMER_TICKS_MAX)
+	{
+		ticks = R9A02_MTIMER_TICKS_MAX;
 	}
 
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
@@ -595,11 +609,21 @@ static uint64_t R9a02TauEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uin
 		return 0;
 	}
 
-	uint64_t ticks = TimerNanosecondToTick(pTimer, nsPeriod);
-
-	if (ticks < R9A02_TIMER_TICKS_MIN || ticks > R9A02_TAU_PERIOD_MAX)
+	if (nsPeriod == 0)
 	{
 		return 0;
+	}
+
+	// Closest period the timer takes
+	uint64_t ticks = TimerNanosecondToTick(pTimer, nsPeriod);
+
+	if (ticks < R9A02_TIMER_TICKS_MIN)
+	{
+		ticks = R9A02_TIMER_TICKS_MIN;
+	}
+	else if (ticks > R9A02_TAU_PERIOD_MAX)
+	{
+		ticks = R9A02_TAU_PERIOD_MAX;
 	}
 
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];

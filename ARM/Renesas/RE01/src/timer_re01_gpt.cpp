@@ -82,37 +82,109 @@ static void Re01GptDisableTrigger(TimerDev_t *pTimer, int TrigNo)
 	EnableInterrupt(state);
 }
 
+// Writes the compare value of the trigger deadline. A value the counter
+// reaches before it is written matches only after a counter wrap: it is then
+// written again ahead of the counter, the interrupt checks the deadline.
+// Interrupts disabled.
+__attribute__((noinline)) static void Re01GptArm(RE01_TimerData_t *dev, int TrigNo)
+{
+	volatile uint32_t *cmp = Re01GptCompare(dev, TrigNo);
+	uint32_t mask = Re01GptMask(dev);
+	uint32_t from = dev->Deadline[TrigNo] - dev->CC[TrigNo];
+	uint32_t val = dev->Deadline[TrigNo];
+
+	*cmp = val;
+	for (uint32_t ahead = 2; ahead < 0x1000; ahead <<= 1)
+	{
+		uint32_t count = dev->pGptReg->GTCNT & mask;
+
+		// Ahead of the counter, or reached with a match
+		if (((count - from) & mask) < ((val - from) & mask) ||
+			(dev->pGptReg->GTST & (1UL << TrigNo)))
+		{
+			return;
+		}
+		from = count;
+		val = (count + ahead) & mask;
+		*cmp = val;
+	}
+}
+
 static void Re01GptCompareIRQHandler(int IntNo, void *pCtx)
 {
 	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
-	for (int i = 0; i < RE01_TIMER_TRIG_MAXCNT; i++)
+	int i = 0;
+
+	while (i < RE01_TIMER_TRIG_MAXCNT && dev->IrqMatch[i] != (IRQn_Type)IntNo)
 	{
-		if (dev->IrqMatch[i] != (IRQn_Type)IntNo)
+		i++;
+	}
+	if (i >= RE01_TIMER_TRIG_MAXCNT)
+	{
+		return;
+	}
+
+	uint32_t mask = Re01GptMask(dev);
+	int calls = 0;
+
+	// The trigger is called when the counter reaches its deadline. The
+	// handler returns with the compare value of the next deadline far enough
+	// ahead of the counter to match after the interrupt flag is cleared.
+	while (dev->IrqMatch[i] == (IRQn_Type)IntNo)
+	{
+		uint32_t count = dev->pGptReg->GTCNT & mask;
+
+		if (!Re01TimerReached(count, dev->Deadline[i], dev->CC[i], mask))
 		{
-			continue;
+			if (((dev->Deadline[i] - count) & mask) > dev->Margin ||
+				(dev->pGptReg->GTCR & GPT320_GTCR_CST_Msk) == 0)
+			{
+				*Re01GptCompare(dev, i) = dev->Deadline[i];
+				return;
+			}
+			// Too close to return before it: wait for it, shorter than
+			// RE01_TIMER_ISR_TAIL counter reads. After a few calls, called
+			// late by the next interrupt.
+			int n = RE01_TIMER_ISR_TAIL;
+
+			while (calls < RE01_TIMER_ISR_CALLS && n-- > 0 &&
+				!Re01TimerReached(count, dev->Deadline[i], dev->CC[i], mask))
+			{
+				count = dev->pGptReg->GTCNT & mask;
+			}
+			if (n < 0 || calls >= RE01_TIMER_ISR_CALLS)
+			{
+				*Re01GptCompare(dev, i) = (count + dev->Margin + 1) & mask;
+				return;
+			}
 		}
+		if (calls++ >= RE01_TIMER_ISR_CALLS)
+		{
+			// Bounded work: called by the next interrupt
+			*Re01GptCompare(dev, i) = (count + dev->Margin + 1) & mask;
+			return;
+		}
+
 		TimerTrig_t trig = dev->Trigger[i];
+
 		dev->pGptReg->GTST &= ~(1UL << i);
-		Re01TimerClearPending(dev->IrqMatch[i]);
 		if (trig.Type == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
-			volatile uint32_t *cmp = Re01GptCompare(dev, i);
-			*cmp = Re01TimerNextCompare(*cmp, dev->pGptReg->GTCNT,
-				dev->CC[i], Re01GptMask(dev));
+			dev->Deadline[i] = Re01TimerNextCompare(dev->Deadline[i], count, dev->CC[i], mask);
 		}
 		else
 		{
 			Re01GptDisableTrigger(dev->pTimer, i);
 		}
+		// Trigger handler first, then the event handler, as the other timer ports
 		if (trig.Handler)
 		{
 			trig.Handler(dev->pTimer, i, trig.pContext);
 		}
-		else if (dev->pTimer->EvtHandler)
+		if (dev->pTimer->EvtHandler)
 		{
 			dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(i));
 		}
-		return;
 	}
 }
 
@@ -167,6 +239,7 @@ static void Re01GptReset(TimerDev_t *pTimer)
 	Re01TimerClearPending(dev->IrqOvr);
 	for (int i = 0; i < RE01_TIMER_TRIG_MAXCNT; i++)
 	{
+		dev->Deadline[i] = dev->CC[i];
 		*Re01GptCompare(dev, i) = dev->CC[i];
 		Re01TimerClearPending(dev->IrqMatch[i]);
 	}
@@ -177,7 +250,7 @@ static void Re01GptReset(TimerDev_t *pTimer)
 static uint32_t Re01GptSetFrequency(TimerDev_t *pTimer, uint32_t Freq)
 {
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
-	if (dev == NULL || dev->BaseFreq == 0 || Freq > 64000000UL)
+	if (dev == NULL || dev->BaseFreq == 0)
 	{
 		return 0;
 	}
@@ -210,6 +283,7 @@ static uint32_t Re01GptSetFrequency(TimerDev_t *pTimer, uint32_t Freq)
 	dev->pGptReg->GTCR = code << GPT320_GTCR_TPCS_Pos;
 	pTimer->Freq = freq;
 	pTimer->nsPeriod = (1000000000ULL + (freq >> 1)) / freq;
+	dev->Margin = Re01TimerMargin(freq);
 	Re01TimerSetPeriods(dev, cc);
 	Re01GptReset(pTimer);
 	Re01GptEnable(pTimer);
@@ -265,14 +339,13 @@ static uint64_t Re01GptEnableTrigger(TimerDev_t *pTimer, int TrigNo, uint64_t ns
 	{
 		return 0;
 	}
-	uint32_t state = DisableInterrupt();
-	uint64_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
-	uint32_t mask = Re01GptMask(dev);
-	if (cc <= 2 || cc > mask)
+	if (nsPeriod == 0)
 	{
-		EnableInterrupt(state);
 		return 0;
 	}
+	uint32_t state = DisableInterrupt();
+	uint32_t mask = Re01GptMask(dev);
+	uint64_t cc = Re01TimerClosestTicks(TimerNanosecondToTick(pTimer, nsPeriod), mask);
 	IRQn_Type irq = Re01RegisterIntHandler(Re01GptEvent(dev, TrigNo), dev->IntPrio,
 		Re01GptCompareIRQHandler, dev);
 	if (irq == (IRQn_Type)-1)
@@ -282,11 +355,16 @@ static uint64_t Re01GptEnableTrigger(TimerDev_t *pTimer, int TrigNo, uint64_t ns
 	}
 	dev->IrqMatch[TrigNo] = irq;
 	dev->CC[TrigNo] = (uint32_t)cc;
-	dev->Trigger[TrigNo] = {Type, TimerTickToTime(pTimer, cc, 1000000000UL), Handler, pContext};
+	dev->Trigger[TrigNo] = {Type, 0, Handler, pContext};
 	dev->pGptReg->GTST &= ~(1UL << TrigNo);
 	Re01TimerClearPending(irq);
-	*Re01GptCompare(dev, TrigNo) = (dev->pGptReg->GTCNT + (uint32_t)cc) & mask;
-	uint64_t period = dev->Trigger[TrigNo].nsPeriod;
+	dev->Deadline[TrigNo] = (dev->pGptReg->GTCNT + (uint32_t)cc) & mask;
+	Re01GptArm(dev, TrigNo);
+
+	// Period of the counts, computed once the period has started
+	uint64_t period = TimerTickToTime(pTimer, cc, 1000000000UL);
+
+	dev->Trigger[TrigNo].nsPeriod = period;
 	EnableInterrupt(state);
 	return period;
 }

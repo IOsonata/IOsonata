@@ -728,17 +728,25 @@ static void TestEach(void)
 		}
 		CHECK(d.FindAvailTrigger(&d) == 0);
 
-		// Refused periods and trigger numbers
+		// Refused trigger numbers, type and period 0
 		d.Reset(&d);
 		CHECK(d.EnableTrigger(&d, trig, 1000000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
 		CHECK(d.EnableTrigger(&d, -1, 1000000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
-		CHECK(d.EnableTrigger(&d, 0, UINT64_MAX, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
-		CHECK(d.EnableTrigger(&d, 0, 3000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
+		CHECK(d.EnableTrigger(&d, 0, 0, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
 		CHECK(d.EnableTrigger(&d, 0, 1000000, (TIMER_TRIG_TYPE)7, nullptr, nullptr) == 0);
+
+		// Closest periods: 4 counts at least, 2^32 - 1 counts at most, one
+		// counter period on the basic timers
+		uint64_t longest = info.NbChan == 0 ? 65536000ULL : 4294967295000ULL;
+
+		CHECK(d.EnableTrigger(&d, 0, UINT64_MAX, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == longest);
+		d.DisableTrigger(&d, 0);
+		CHECK(d.EnableTrigger(&d, 0, 3000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 4000);
+		d.DisableTrigger(&d, 0);
 		if (info.NbChan == 0)
 		{
-			// One counter period at most
-			CHECK(d.EnableTrigger(&d, 0, 65537000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
+			CHECK(d.EnableTrigger(&d, 0, 65537000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 65536000);
+			d.DisableTrigger(&d, 0);
 			CHECK(d.EnableTrigger(&d, 0, 65536000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 65536000);
 			d.DisableTrigger(&d, 0);
 		}
@@ -794,10 +802,14 @@ static void TestEach(void)
 		CHECK(d.nsPeriod == 500);
 		if (info.NbChan == 0)
 		{
-			// A trigger the new frequency can not make refuses it
-			CHECK(d.EnableTrigger(&d, 0, 30000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
-			CHECK(d.SetFrequency(&d, 4000000) == 0 && d.Freq == 2000000 && r.PSC == 23);
+			// A trigger the new frequency can not make takes the closest
+			// period, one counter period
+			CHECK(d.EnableTrigger(&d, 0, 30000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr) == 30000000);
+			CHECK(d.SetFrequency(&d, 4000000) == 4000000 && d.Freq == 4000000 && r.PSC == 11);
+			CHECK(info.pTrig[0].Ticks == 65536 && r.ARR == 65535);
+			CHECK(info.pTrig[0].Info.nsPeriod == 16384000);
 			d.DisableTrigger(&d, 0);
+			CHECK(d.SetFrequency(&d, 2000000) == 2000000 && r.PSC == 23);
 		}
 
 		// Pause with a pending update: Enable keeps it

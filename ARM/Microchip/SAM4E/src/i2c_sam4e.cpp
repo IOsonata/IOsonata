@@ -166,38 +166,109 @@ uint32_t Sam4eI2CGetRate(DevIntrf_t * const pDev)
 	return dev->pI2cDev->Cfg.Rate;
 }
 
+// TWI clock (TWI_CWGR): low period (CLDIV * 2^CKDIV + 4) MCK cycles, high
+// period (CHDIV * 2^CKDIV + 4) MCK cycles, SCL = MCK / (((CLDIV + CHDIV) <<
+// CKDIV) + 8). The rate closest to the request, at most 100 kHz up to a
+// 100 kHz request, at most 400 kHz above, each period at least the I2C
+// minimum of the mode. Out of the range of the dividers, the closest end.
 uint32_t Sam4eI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
-	uint32_t cldiv;
-	uint32_t ckdiv = -1;
 	uint32_t mck = SystemPeriphClockGet(0);
-	uint32_t diff = RateHz;
 
-	for (int i = 0; i < 8; i++)
+	if (RateHz == 0 || mck == 0)
 	{
-		uint32_t div = ((mck << 1) / RateHz - 4) / (1<<i);
-		if (div < 256)
+		return 0;
+	}
+	if (RateHz > I2C_SCL_FAST_MODE_MAX_SPEED * 1000U)
+	{
+		RateHz = I2C_SCL_FAST_MODE_MAX_SPEED * 1000U;
+	}
+
+	bool fast = RateHz > I2C_SCL_STD_MODE_MAX_SPEED * 1000U;
+	uint32_t top = (fast ? I2C_SCL_FAST_MODE_MAX_SPEED : I2C_SCL_STD_MODE_MAX_SPEED) * 1000U;
+
+	// Minimum low, high and SCL periods in MCK cycles
+	uint32_t lowmin = (uint32_t)(((uint64_t)mck * (fast ? I2C_SCL_TLOW_FAST_MODE_MIN :
+						I2C_SCL_TLOW_STD_MODE_MIN) + 999999999ULL) / 1000000000ULL);
+	uint32_t highmin = (uint32_t)(((uint64_t)mck * (fast ? I2C_SCL_THIGH_FAST_MODE_MIN :
+						I2C_SCL_THIGH_STD_MODE_MIN) + 999999999ULL) / 1000000000ULL);
+	uint32_t permin = (mck + top - 1) / top;
+	uint32_t req = mck / RateHz;
+	uint32_t bestper = 0;
+	uint64_t besterr = 0;
+	uint32_t bestsum = 510;
+	uint32_t bestck = 7;
+	uint32_t clmin = 0;
+	uint32_t chmin = 0;
+
+	for (uint32_t ck = 0; ck < 8; ck++)
+	{
+		uint32_t up = (1U << ck) - 1;
+		uint32_t cl = lowmin > 4 ? (lowmin - 4 + up) >> ck : 0;
+		uint32_t ch = highmin > 4 ? (highmin - 4 + up) >> ck : 0;
+
+		// Range of CLDIV + CHDIV
+		uint32_t summin = permin > 8 ? (permin - 8 + up) >> ck : 0;
+
+		if (summin < cl + ch)
 		{
-			uint32_t l = labs(RateHz - (2 * mck / (div * (1<<i) + 4)));
-			if (l < diff)
+			summin = cl + ch;
+		}
+		if (cl > 255 || ch > 255 || summin > 510)
+		{
+			continue;
+		}
+
+		// The sums around the request: the first at or above it, the next
+		// below it
+		uint32_t sum = req > 8 ? (req - 8) >> ck : 0;
+
+		for (uint32_t i = 0; i < 2; i++, sum++)
+		{
+			uint32_t s = sum < summin ? summin : (sum > 510 ? 510 : sum);
+			uint32_t per = (s << ck) + 8;
+			uint64_t rp = (uint64_t)RateHz * per;
+
+			// Error of MCK / per to RateHz, scaled by per
+			uint64_t err = rp > mck ? rp - mck : mck - rp;
+
+			if (bestper == 0 || err * bestper < besterr * per)
 			{
-				cldiv = div;
-				ckdiv = i;
-				diff = l;
+				bestper = per;
+				besterr = err;
+				bestsum = s;
+				bestck = ck;
+				clmin = cl;
+				chmin = ch;
 			}
 		}
 	}
 
-	if (ckdiv != -1)
+	if (bestper == 0)
 	{
-		dev->pI2cDev->Cfg.Rate = (2 * mck / (cldiv * (1<<ckdiv) + 4));
-		dev->pReg->TWI_CWGR = TWI_CWGR_CLDIV(cldiv) | TWI_CWGR_CHDIV(cldiv) |
-							  TWI_CWGR_CKDIV(ckdiv);
-		return dev->pI2cDev->Cfg.Rate;
+		// Slowest
+		bestper = (510U << 7) + 8;
+		clmin = 0;
+		chmin = 0;
 	}
 
-	return 0;
+	// The low period takes the larger half
+	uint32_t chdiv = bestsum / 2;
+
+	if (chdiv < chmin)
+	{
+		chdiv = chmin;
+	}
+	if (bestsum - chdiv < clmin)
+	{
+		chdiv = bestsum - clmin;
+	}
+
+	dev->pReg->TWI_CWGR = TWI_CWGR_CLDIV(bestsum - chdiv) | TWI_CWGR_CHDIV(chdiv) | TWI_CWGR_CKDIV(bestck);
+	dev->pI2cDev->Cfg.Rate = mck / bestper;
+
+	return dev->pI2cDev->Cfg.Rate;
 }
 
 bool Sam4eI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)

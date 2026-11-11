@@ -29,9 +29,10 @@ class Sam4eTimerPortTests(unittest.TestCase):
         self.assertIn("Sam4eSampleCount(", source)
         self.assertIn("TC_IER_COVFS", source)
         self.assertIn("TC_SR_COVFS", source)
-        self.assertIn("TC_SR_CPAS", source)
-        self.assertIn("TC_SR_CPBS", source)
-        self.assertIn("TC_SR_CPCS", source)
+        self.assertIn("TC_IER_CPAS", source)
+        self.assertIn("TC_IER_CPBS", source)
+        self.assertIn("TC_IER_CPCS", source)
+        self.assertIn("Sam4eCheckPassed(", source)
         self.assertIn("TC_CMR_WAVSEL_UP", source)
         self.assertIn("return false;", source)
         for i in range(9):

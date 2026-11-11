@@ -699,7 +699,7 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
-	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
+	virtual uint16_t Sensitivity(uint16_t Value);	// Gyro
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t FilterFreq(uint32_t Freq);
 	virtual bool Enable();

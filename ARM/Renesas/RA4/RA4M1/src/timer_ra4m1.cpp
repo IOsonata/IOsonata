@@ -240,13 +240,18 @@ static bool Plan(bool Agt, TIMER_CLKSRC Source, uint32_t Request, TimerPlan &p)
 	p.Base=base; p.Source=Source; p.SyncCycles=2U*((cpu+bus-1U)/bus)+2U;
 	return best!=UINT32_MAX;
 }
-// Split seconds before multiplying. Reject huge requests before overflow.
+// Closest number of ticks, from 4 to Max (at most UINT32_MAX). Seconds split
+// before multiplying, a period above Max takes Max without the product.
 static bool Period(uint32_t Freq, uint64_t Ns, uint64_t Max, uint32_t &CountOut, uint64_t &Actual)
 {
-	if (!Freq || !Ns || Ns/1000000000ULL > Max/Freq) return false;
-	uint64_t count=(Ns/1000000000ULL)*Freq +
-		((Ns%1000000000ULL)*Freq+500000000ULL)/1000000000ULL;
-	if (count<4U || count>Max || count>UINT32_MAX) return false;
+	if (!Freq || !Ns) return false;
+	uint64_t count=Max;
+	if (Ns/1000000000ULL <= Max/Freq) {
+		count=(Ns/1000000000ULL)*Freq +
+			((Ns%1000000000ULL)*Freq+500000000ULL)/1000000000ULL;
+		if (count<4U) count=4U;
+		if (count>Max) count=Max;
+	}
 	CountOut=(uint32_t)count;
 	Actual=(count*1000000000ULL+Freq/2U)/Freq;
 	return true;
@@ -284,10 +289,11 @@ static bool ArmCompare(Ra4m1TimerData &d, Ra4m1TimerTrigger &tr, bool Periodic)
 	g_Ra4m1TimerError[d.No]=RA4M1_TIMER_COMPARE_ERROR;
 	return false;
 }
-static void TriggerCall(Ra4m1TimerData &d, const TimerTrig_t &info, unsigned No)
+// Trigger handler first, then the event handler, as the other timer ports
+static void TriggerCall(TimerDev_t *Timer, const TimerTrig_t &info, unsigned No)
 {
-	if (info.Handler) info.Handler(d.Timer,(int)No,info.pContext);
-	else if (d.Timer->EvtHandler) d.Timer->EvtHandler(d.Timer,TIMER_EVT_TRIGGER(No));
+	if (info.Handler) info.Handler(Timer,(int)No,info.pContext);
+	if (Timer->EvtHandler) Timer->EvtHandler(Timer,TIMER_EVT_TRIGGER(No));
 }
 static void OverflowIrq(int IrqNo, void *Ctx)
 {
@@ -313,7 +319,7 @@ static void OverflowIrq(int IrqNo, void *Ctx)
 		uint32_t state=DisableInterrupt();
 		call=d.Epoch==epoch && d.Running && d.Trigger[0].Generation==generation;
 		EnableInterrupt(state);
-		if (call) TriggerCall(d,info,0);
+		if (call) TriggerCall(d.Timer,info,0);
 	}
 }
 static void CompareIrq(int IrqNo, void *Ctx)
@@ -339,7 +345,7 @@ static void CompareIrq(int IrqNo, void *Ctx)
 			}
 		}
 	}
-	if (call) TriggerCall(d,info,tr.No);
+	if (call) TriggerCall(d.Timer,info,tr.No);
 }
 static uint64_t GetCount(TimerDev_t *t)
 {
@@ -438,6 +444,11 @@ static int FindTrigger(TimerDev_t *t)
 	for (unsigned i=0; i<d->MaxTrigger; ++i) if (!d->Trigger[i].Active) {result=(int)i;break;}
 	EnableInterrupt(state); return result;
 }
+// AGT: count source cycles a start of the counter takes to take effect (3
+// AGTCLK in the Renesas FSP AGT notes). The counter misses them when a trigger
+// change stops and starts it again: added back to the tick count. To be checked
+// on hardware.
+#define RA4M1_TIMER_AGT_RESTART 3U
 static uint64_t TriggerEnable(TimerDev_t *t, int No, uint64_t Ns, TIMER_TRIG_TYPE Type,
 	TimerTrigEvtHandler_t Handler, void *Ctx)
 {
@@ -463,6 +474,7 @@ static uint64_t TriggerEnable(TimerDev_t *t, int No, uint64_t Ns, TIMER_TRIG_TYP
 	tr.Ticks=count; tr.Active=true; ++tr.Generation;
 	if (d->Agt) {
 		if (running && !Start(*d)) {tr.Active=false;return 0;}
+		if (running) t->Rollover+=RA4M1_TIMER_AGT_RESTART;
 	} else {
 		uint64_t now=Ticks(*d);
 		if (now>UINT64_MAX-count) {tr.Active=false;return 0;}
@@ -479,7 +491,7 @@ static void TriggerDisable(TimerDev_t *t, int No)
 	Ra4m1TimerTrigger &tr=d->Trigger[No]; tr.Active=false; ++tr.Generation;
 	if (d->Agt) {
 		bool running=d->Running;
-		if (Rebase(*d,65536U,false) && running) Start(*d);
+		if (Rebase(*d,65536U,false) && running && Start(*d)) t->Rollover+=RA4M1_TIMER_AGT_RESTART;
 	} else if (tr.Irq>=0) {
 		NVIC_DisableIRQ(tr.Irq); Ra4m1UnregisterIntHandler(tr.Irq); tr.Irq=(IRQn_Type)-1;
 	}

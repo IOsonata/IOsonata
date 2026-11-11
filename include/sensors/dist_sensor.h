@@ -94,6 +94,9 @@ typedef struct __DistSensor_Config {
 /// Distance sensor base class.  Sensor implementation must derive form this class
 class DistSensor : public Sensor {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
+
 	DistSensor() { Type(SENSOR_TYPE_DISTANCE); }
 
 	/**

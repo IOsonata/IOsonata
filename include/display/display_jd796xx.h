@@ -71,7 +71,7 @@ SOFTWARE.
 
 class EInkJD796xx : public EInkMatrix {
 public:
-	bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf);
+	bool Init(const DisplayCfg_t &, DeviceIntrf * const pIntrf);
 
 	/**
 	 * @brief	Power on or wake up device

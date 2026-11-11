@@ -163,6 +163,9 @@ protected:
  */
 class RFTag : virtual public Device {
 public:
+	// Device event handler, not hidden by the EvtHandler below
+	using Device::EvtHandler;
+
 	RFTag() : vpProto(nullptr) {
 		memset(&vCfg, 0, sizeof(vCfg));
 	}

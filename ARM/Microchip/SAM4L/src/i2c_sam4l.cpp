@@ -347,8 +347,11 @@ static uint32_t Sam4lI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	I2CDev_t *i2c = dev->pI2cDev;
 	const uint32_t pba = SystemPeriphClockGet(0);
 
-	if (Rate == 0U || pba == 0U || Rate > I2C_SCL_FAST_MODE_PLUS_MAX_SPEED * 1000U)
+	if (Rate == 0U || pba == 0U)
 		return 0U;
+	// Above fast mode plus: the closest, its maximum
+	if (Rate > I2C_SCL_FAST_MODE_PLUS_MAX_SPEED * 1000U)
+		Rate = I2C_SCL_FAST_MODE_PLUS_MAX_SPEED * 1000U;
 
 	uint32_t setupNs;
 	uint32_t lowNs;
@@ -431,8 +434,13 @@ static uint32_t Sam4lI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 			high += extra >> 1U;
 		}
 
-		if (low > 255U || high > 255U)
+		// Below the slowest rate: the closest, the slowest
+		if ((low > 255U || high > 255U) && exp < 7U)
 			continue;
+		if (low > 255U)
+			low = 255U;
+		if (high > 255U)
+			high = 255U;
 
 		dev->pMReg->TWIM_CWGR =
 			TWIM_CWGR_LOW(low) |

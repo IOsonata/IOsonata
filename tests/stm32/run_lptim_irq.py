@@ -11,7 +11,7 @@ source = (ROOT / 'ARM/ST/src/timer_lptim_stm32.cpp').read_text()
 
 
 def function(name):
-    match = re.search(r'^static (?:uint64_t|void) ' + name + r'\([^;]*?\)\s*\{', source, re.M)
+    match = re.search(r'^static (?:uint64_t|uint32_t|bool|void) ' + name + r'\([^;]*?\)\s*\{', source, re.M)
     assert match, name
     end, depth = match.end(), 1
     while depth:
@@ -27,7 +27,8 @@ code = r'''
 #define ST_LPTIM_TRIG_MAXCNT 2
 #define ST_LPTIM_CNT 1
 #define LPTIM_CR_ENABLE 1
-struct LPTIM_TypeDef { uint32_t CR, CNT, ICR, CMP[2]; };
+#define ST_LPTIM_READY_POLLS 1
+struct LPTIM_TypeDef { uint32_t CR, CNT, ICR, ISR, CMP[2]; };
 '''
 start = source.index('typedef struct {\n\tTimerDev_t *pTimer;')
 code += source[start:source.index('} StLptDev_t;', start) + len('} StLptDev_t;')]
@@ -37,8 +38,8 @@ static LPTIM_TypeDef regs;
 static struct { LPTIM_TypeDef *pReg; int IrqNo; } s_StLptInfo[1] = {{&regs, 0}};
 static uint32_t s_StLptCmpOk[2] = {1, 2}, s_StLptCmpIf[2] = {4, 8};
 static uint32_t primask, expectedMask;
-static bool timerIrq = true, radioIrq = true, writeOk = true, cancel, reenter;
-static unsigned writes, preemptions;
+static bool timerIrq = true, radioIrq = true, writeOk = true, cancel, reenter, pass;
+static unsigned writes, preemptions, pends;
 static TimerDev_t timer;
 static int StLptDevNo(TimerDev_t *p) { return p == &timer ? 0 : -1; }
 static uint32_t DisableInterrupt()
@@ -51,14 +52,19 @@ static void EnableInterrupt(uint32_t old) { primask = old; }
 static uint32_t NVIC_GetEnableIRQ(int) { return timerIrq; }
 static void NVIC_DisableIRQ(int) { timerIrq = false; }
 static void NVIC_EnableIRQ(int) { timerIrq = true; }
+static void NVIC_SetPendingIRQ(int) { pends++; }
 static uint32_t StLptCount(LPTIM_TypeDef *reg) { return reg->CNT; }
 static volatile uint32_t *StLptCmpReg(LPTIM_TypeDef *reg, int n) { return &reg->CMP[n]; }
-static bool StLptWrite(LPTIM_TypeDef *, volatile uint32_t *, uint32_t, uint32_t);
+static bool StLptWaitFlag(volatile uint32_t *, uint32_t, int);
 '''
+code += function('StLptPassed')
+code += function('StLptFinish')
+code += function('StLptTicks')
 code += function('StLptEnableTrigger')
 code += function('StLptDisableTrigger')
 code += r'''
-static bool StLptWrite(LPTIM_TypeDef *, volatile uint32_t *dst, uint32_t val, uint32_t)
+// Compare synchronization wait, the compare value written
+static bool StLptWaitFlag(volatile uint32_t *, uint32_t, int)
 {
 	writes++;
 	assert(primask == expectedMask && !timerIrq && radioIrq);
@@ -77,8 +83,12 @@ static bool StLptWrite(LPTIM_TypeDef *, volatile uint32_t *dst, uint32_t val, ui
 		{
 			StLptDisableTrigger(&timer, 0);
 		}
+		if (pass)
+		{
+			// The counter reaches the compare value before it is taken
+			regs.CNT = 420;
+		}
 	}
-	*dst = val;
 	return writeOk;
 }
 static uint64_t Arm()
@@ -89,6 +99,7 @@ static uint64_t Arm()
 int main()
 {
 	timer.nsPeriod = 31250;
+	timer.Freq = 32000;
 	regs.CR = LPTIM_CR_ENABLE;
 	regs.CNT = 100;
 	assert(Arm() == 10000000);
@@ -117,6 +128,16 @@ int main()
 	timerIrq = true;
 	assert(Arm() == 10000000 && primask == 1 && timerIrq);
 	assert(writes == 7 && preemptions == 6);
+	assert(pends == 0 && !s_StLptDev[0].bDue[0]);
+
+	// A compare passed before it is taken is serviced by the interrupt
+	primask = expectedMask = 0;
+	pass = true;
+	assert(Arm() == 10000000 && regs.CMP[0] == 420);
+	assert(s_StLptDev[0].bDue[0] && pends == 1);
+	pass = false;
+	regs.CNT = 100;
+	assert(Arm() == 10000000 && !s_StLptDev[0].bDue[0] && pends == 1);
 }
 '''
 with tempfile.TemporaryDirectory(prefix='lptim-irq-') as temp:
@@ -128,4 +149,4 @@ with tempfile.TemporaryDirectory(prefix='lptim-irq-') as temp:
                         '-fsanitize=undefined', '-fno-sanitize-recover=all',
                         '-I' + str(ROOT / 'include'), str(cpp), '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True, timeout=10)
-        print('PASS LPTIM IRQ:', opt, 'preemption, reentry, cancellation, write failure, saved masks')
+        print('PASS LPTIM IRQ:', opt, 'preemption, reentry, cancellation, write failure, saved masks, passed compare')

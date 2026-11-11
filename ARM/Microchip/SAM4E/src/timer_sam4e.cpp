@@ -38,6 +38,7 @@ typedef struct {
 	uint8_t ClockSelect;
 	bool Running;
 	uint32_t LastHwCount;
+	uint32_t Epoch;
 	uint64_t Elapsed;
 	Sam4eTimerTrigger_t Trigger[SAM4E_TIMER_TRIGGERS];
 } Sam4eTimerData_t;
@@ -172,6 +173,23 @@ static void Sam4eWriteCompare(Sam4eTimerData_t *pData, int TrigNo, uint32_t Tick
 	}
 }
 
+// A compare written after the counter passed it matches only after the 32 bit
+// counter wraps. Interrupts disabled: a deadline already reached pends the
+// interrupt, which services the triggers from their deadline.
+static void Sam4eCheckPassed(Sam4eTimerData_t *pData)
+{
+	uint64_t count = Sam4eSampleCount(pData);
+
+	for (int i = 0; i < SAM4E_TIMER_TRIGGERS; i++)
+	{
+		if (pData->Trigger[i].Active && count >= pData->Trigger[i].Deadline)
+		{
+			NVIC_SetPendingIRQ(pData->Irq);
+			return;
+		}
+	}
+}
+
 static void Sam4eRun(Sam4eTimerData_t *pData, bool Enable)
 {
 	if (Enable)
@@ -239,6 +257,7 @@ static void Sam4eReset(TimerDev_t *pTimer)
 	pData->pReg->TC_CCR = TC_CCR_SWTRG;
 	pData->LastHwCount = 0;
 	pData->Elapsed = 0;
+	pData->Epoch++;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	(void)pData->pReg->TC_SR;
@@ -395,6 +414,11 @@ static uint64_t Sam4eEnableTrigger(TimerDev_t *pTimer, int TrigNo, uint64_t nsPe
 	pData->Trigger[TrigNo].Active = true;
 	Sam4eWriteCompare(pData, TrigNo, (uint32_t)pData->Trigger[TrigNo].Deadline);
 	pData->pReg->TC_IER = Sam4eTriggerMask(TrigNo);
+	if (pData->Running && Sam4eSampleCount(pData) >= pData->Trigger[TrigNo].Deadline)
+	{
+		// Passed before the compare was written
+		NVIC_SetPendingIRQ(pData->Irq);
+	}
 	EnableInterrupt(state);
 	return actual;
 }
@@ -412,12 +436,15 @@ static bool Sam4eEnableExtTrigger(TimerDev_t *pTimer, int DevNo, TIMER_EXTTRIG_S
 	return false;
 }
 
+// Triggers serviced from their deadline. A handler calling Reset ends the
+// loop, the triggers left are checked against the new count.
 static void Sam4eTimerIRQ(int DevNo)
 {
-	static const uint32_t s_Flags[] = { TC_SR_CPAS, TC_SR_CPBS, TC_SR_CPCS };
 	Sam4eTimerData_t *pData;
 	TimerTrig_t info;
 	uint32_t status;
+	uint32_t state;
+	uint32_t epoch;
 	uint64_t count;
 	int i;
 
@@ -426,16 +453,24 @@ static void Sam4eTimerIRQ(int DevNo)
 	{
 		return;
 	}
+	state = DisableInterrupt();
 	status = pData->pReg->TC_SR;
 	count = Sam4eSampleCount(pData);
+	epoch = pData->Epoch;
 	if ((status & TC_SR_COVFS) && pData->pTimer->EvtHandler != NULL)
 	{
+		EnableInterrupt(state);
 		pData->pTimer->EvtHandler(pData->pTimer, TIMER_EVT_COUNTER_OVR);
+		state = DisableInterrupt();
 	}
 	for (i = 0; i < SAM4E_TIMER_TRIGGERS; i++)
 	{
-		if ((status & s_Flags[i]) == 0 || !pData->Trigger[i].Active ||
-			count < pData->Trigger[i].Deadline)
+		// Interrupts disabled here
+		if (epoch != pData->Epoch || !pData->Running)
+		{
+			break;
+		}
+		if (!pData->Trigger[i].Active || count < pData->Trigger[i].Deadline)
 		{
 			continue;
 		}
@@ -447,20 +482,30 @@ static void Sam4eTimerIRQ(int DevNo)
 		}
 		else
 		{
-			pData->Trigger[i].Deadline +=
-				((count - pData->Trigger[i].Deadline) / pData->Trigger[i].Ticks + 1)
-				* pData->Trigger[i].Ticks;
+			// Next period. Periods missed are skipped, the division only then.
+			uint64_t late = count - pData->Trigger[i].Deadline;
+
+			pData->Trigger[i].Deadline += late < pData->Trigger[i].Ticks ? pData->Trigger[i].Ticks :
+				(late / pData->Trigger[i].Ticks + 1) * pData->Trigger[i].Ticks;
 			Sam4eWriteCompare(pData, i, (uint32_t)pData->Trigger[i].Deadline);
 		}
+		EnableInterrupt(state);
+		// Trigger handler first, then the event handler, as the other timer ports
 		if (info.Handler != NULL)
 		{
 			info.Handler(pData->pTimer, i, info.pContext);
 		}
-		else if (pData->pTimer->EvtHandler != NULL)
+		if (pData->pTimer->EvtHandler != NULL)
 		{
 			pData->pTimer->EvtHandler(pData->pTimer, TIMER_EVT_TRIGGER(i));
 		}
+		state = DisableInterrupt();
 	}
+	if (pData->Running)
+	{
+		Sam4eCheckPassed(pData);
+	}
+	EnableInterrupt(state);
 }
 
 extern "C" void TC0_Handler(void) { Sam4eTimerIRQ(0); }

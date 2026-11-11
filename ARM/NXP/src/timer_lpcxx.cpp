@@ -228,18 +228,22 @@ void LpcTimerIrqHandler(LpcTimer_t * const pDev)
 		}
 		else
 		{
-			// Same phase, periods missed are reported once.
-			tr->Deadline += ((now - tr->Deadline) / tr->Ticks + 1U) * tr->Ticks;
+			// Same phase, periods missed are reported once. The division only
+			// when a period or more was missed.
+			uint64_t late = now - tr->Deadline;
+
+			tr->Deadline += late < tr->Ticks ? tr->Ticks : (late / tr->Ticks + 1U) * tr->Ticks;
 			LpcTimerArm(pDev, i);
 		}
 
 		EnableInterrupt(state);
 
+		// Trigger handler first, then the event handler, as the other timer ports
 		if (info.Handler)
 		{
 			info.Handler(t, i, info.pContext);
 		}
-		else if (t->EvtHandler)
+		if (t->EvtHandler)
 		{
 			t->EvtHandler(t, TIMER_EVT_TRIGGER(i));
 		}

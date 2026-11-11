@@ -295,7 +295,7 @@ uint32_t AccelLsm303agr::SamplingFrequency(uint32_t Freq)
 	return AccelSensor::SamplingFrequency(f);
 }
 
-uint8_t AccelLsm303agr::Scale(uint8_t Value)
+uint16_t AccelLsm303agr::Scale(uint16_t Value)
 {
 	uint8_t regaddr;
 	uint8_t d;

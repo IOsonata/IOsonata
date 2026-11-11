@@ -132,6 +132,8 @@ typedef struct __Att_Config {
 
 class Att : virtual public Device {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	virtual bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool UpdateData() = 0;

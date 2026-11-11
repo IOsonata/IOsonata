@@ -75,7 +75,8 @@ objects = [compile_source(p, p.stem) for p in sorted(port.iterdir())
 common = ['ARM/src/ResetEntry.c', 'ARM/src/iatomic.c', 'src/cfifo.c',
           'src/coredev/uart.cpp', 'src/coredev/timer.cpp', 'src/coredev/spi.cpp',
           'src/coredev/i2c.cpp', 'src/device_intrf.cpp',
-          'src/prbs.c', 'src/pulse_train.c', 'src/uart_retarget.c', 'src/stddev.c']
+          'src/prbs.c', 'src/pulse_train.c', 'src/uart_retarget.c', 'src/stddev.c',
+          'src/syslog.cpp', 'src/semihost_intrf.cpp', 'ARM/src/semihost_arm.c']
 objects += [compile_source(root / p, Path(p).stem + '_generic') for p in common]
 examples = ['Blinky', 'TimerDemo', 'UartPrbsTxTest', 'PulseTrain',
             'UartRetargetDemo', 'I2CMasterDemo', 'SPIMasterDemo']

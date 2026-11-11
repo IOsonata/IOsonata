@@ -446,6 +446,8 @@ the transmit data.
 - Rate is the highest SCK of the master: at most fMCK / 8 with fMCK above
   16 MHz, fMCK / 6 below (table 37.34, VCC 2.7 V or more). fMCK is the
   highest operation clock of the unit, 24 MHz from PCLKB 48 MHz, so 3 MHz.
+  SPIInit and SetRate take a higher request as that limit, and 500 kHz while
+  Snooze is enabled.
 - The SAU and chip select interrupts run at `IntPrio`; an interrupt at the
   same or a higher level that lasts a byte time makes the slave late.
 

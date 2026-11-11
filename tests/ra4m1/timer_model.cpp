@@ -55,7 +55,7 @@ static uintptr_t fail_address;
 static bool fail_once,start_fail,stop_fail;
 static int step_on_count,step_on_flags;
 static uint64_t injected_ticks, step_on_compare_write;
-static unsigned writes,checks,overflow_calls,trigger_calls[6],last_event;
+static unsigned writes,checks,overflow_calls,trigger_calls[6],event_calls[6],last_event;
 static void *last_context;
 static void step(unsigned,uint64_t);
 #define CHECK(x) do{assert(x);++checks;}while(0)
@@ -160,7 +160,7 @@ static void reset_model()
 	memset(s_Timer,0,sizeof(s_Timer));memset(s_IntHook,0,sizeof(s_IntHook));memset(s_AgtTrigger,0,sizeof(s_AgtTrigger));memset(s_GptTrigger,0,sizeof(s_GptTrigger));
 	for(auto &g:gp)g[0]=1;
 	for(auto &g:ag)g.counter=g.reload=65535;
-	memset(test_priority,0,sizeof(test_priority));memset(trigger_calls,0,sizeof(trigger_calls));
+	memset(test_priority,0,sizeof(test_priority));memset(trigger_calls,0,sizeof(trigger_calls));memset(event_calls,0,sizeof(event_calls));
 	test_primask=test_disabled=test_cleared=test_enabled=test_active=test_pending=0;
 	mstp=0xFFFFFFFF;prcr=8;src=0;loco=0;sosc=1;fail_address=0;fail_once=start_fail=stop_fail=false;
 	step_on_count=step_on_flags=-1;injected_ticks=step_on_compare_write=0;writes=overflow_calls=last_event=0;last_context=nullptr;
@@ -168,7 +168,7 @@ static void reset_model()
 	g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false};
 	for(unsigned i=0;i<10;++i)g_Ra4m1TimerError[i]=0;
 }
-static void evt(TimerDev_t *,uint32_t e){assert(!test_primask);last_event=e;if(e==TIMER_EVT_COUNTER_OVR)++overflow_calls;else for(unsigned i=0;i<6;++i)if(e==TIMER_EVT_TRIGGER(i))++trigger_calls[i];}
+static void evt(TimerDev_t *,uint32_t e){assert(!test_primask);last_event=e;if(e==TIMER_EVT_COUNTER_OVR)++overflow_calls;else for(unsigned i=0;i<6;++i)if(e==TIMER_EVT_TRIGGER(i))++event_calls[i];}
 static void cb(TimerDev_t *,int n,void *ctx){assert(!test_primask);++trigger_calls[n];last_context=ctx;}
 static bool init(TimerDev_t &t,int n,uint32_t f=0,TIMER_CLKSRC clk=TIMER_CLKSRC_DEFAULT){TimerCfg_t c={n,clk,f,3,evt,false};return TimerInit(&t,&c);}
 static uint64_t ns(unsigned ticks,uint32_t f){return (1000000000ULL*ticks+f/2U)/f;}
@@ -217,22 +217,25 @@ int main()
 	reset_model();CHECK(init(t,4,1000000)&&t.Freq==750000);CHECK(t.SetFrequency(&t,0)==48000000);
 	CHECK(t.SetFrequency(&t,1)==46875);step(4,55);CHECK(t.SetFrequency(&t,12000000)==12000000&&t.GetTickCount(&t)==0);
 	fail_address=RA4M1_GPT_BASE(2)+RA4M1_GTCR;fail_once=false;CHECK(t.SetFrequency(&t,750000)==0);
-	// AGT uses stable hardware reload, not ISR-driven stop/restart compare.
+	// AGT uses stable hardware reload, not ISR-driven stop/restart compare. A
+	// trigger change stops and starts the counter: the counts it misses
+	// (RA4M1_TIMER_AGT_RESTART) are added to the tick count.
 	for(unsigned dev=0;dev<2;++dev){reset_model();CHECK(init(t,dev));step(dev,23);CHECK(t.EnableTrigger(&t,0,ns(101,t.Freq),TIMER_TRIG_TYPE_CONTINUOUS,cb,&checks)>0);
-		CHECK(t.GetTickCount(&t)==23&&ag[dev].reload==100);unsigned before=writes;step(dev,101);serve(dev);
-		CHECK(trigger_calls[0]==1&&last_context==&checks&&t.GetTickCount(&t)==124);CHECK(ag[dev].reload==100);CHECK(writes>before);
-		step(dev,101);serve(dev);CHECK(trigger_calls[0]==2&&t.GetTickCount(&t)==225);CHECK(t.FindAvailTrigger(&t)==-1);
-		t.DisableTrigger(&t,0);CHECK(t.FindAvailTrigger(&t)==0&&ag[dev].reload==65535&&t.GetTickCount(&t)==225);
+		CHECK(t.GetTickCount(&t)==23+RA4M1_TIMER_AGT_RESTART&&ag[dev].reload==100);unsigned before=writes;step(dev,101);serve(dev);
+		CHECK(trigger_calls[0]==1&&event_calls[0]==1&&last_context==&checks&&t.GetTickCount(&t)==124+RA4M1_TIMER_AGT_RESTART);CHECK(ag[dev].reload==100);CHECK(writes>before);
+		step(dev,101);serve(dev);CHECK(trigger_calls[0]==2&&t.GetTickCount(&t)==225+RA4M1_TIMER_AGT_RESTART);CHECK(t.FindAvailTrigger(&t)==-1);
+		t.DisableTrigger(&t,0);CHECK(t.FindAvailTrigger(&t)==0&&ag[dev].reload==65535&&t.GetTickCount(&t)==225+2*RA4M1_TIMER_AGT_RESTART);
 		CHECK(t.EnableTrigger(&t,0,ns(99,t.Freq),TIMER_TRIG_TYPE_SINGLE,cb,nullptr)>0);step(dev,99);serve(dev);step(dev,99);serve(dev);CHECK(trigger_calls[0]==3);
-		CHECK(!t.EnableTrigger(&t,1,1000000000,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));CHECK(!t.EnableTrigger(&t,0,UINT64_MAX,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));
+		CHECK(!t.EnableTrigger(&t,1,1000000000,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));CHECK(!t.EnableTrigger(&t,0,0,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));
+		CHECK(t.EnableTrigger(&t,0,UINT64_MAX,TIMER_TRIG_TYPE_SINGLE,cb,nullptr)==ns(65536,t.Freq)&&ag[dev].reload==65535);
 	}
-	reset_model();CHECK(init(t,0));t.EvtHandler=cancel_evt;CHECK(t.EnableTrigger(&t,0,ns(71,t.Freq),TIMER_TRIG_TYPE_SINGLE,cb,nullptr)>0);step(0,71);serve(0);CHECK(trigger_calls[0]==0);
+	reset_model();CHECK(init(t,0));t.EvtHandler=cancel_evt;CHECK(t.EnableTrigger(&t,0,ns(71,t.Freq),TIMER_TRIG_TYPE_SINGLE,cb,nullptr)>0);step(0,71);serve(0);CHECK(trigger_calls[0]==0&&event_calls[0]==0);
 	// Six independent GPT compares, D/E physical register ordering, rearm phase.
 	for(unsigned dev:{2U,4U}){reset_model();CHECK(init(t,dev));for(unsigned k=0;k<6;++k){
 		CHECK(t.EnableTrigger(&t,k,ns(101+k,t.Freq),TIMER_TRIG_TYPE_CONTINUOUS,cb,&checks)>0);
 		CHECK(gp[dev-2][s_Gtccr[k]/4]==101+k);
 	}CHECK(t.FindAvailTrigger(&t)==-1);step(dev,113);serve(dev);
-		for(unsigned k=0;k<6;++k){CHECK(trigger_calls[k]==1);CHECK(s_Timer[dev].Trigger[k].Deadline==2*(101+k));}
+		for(unsigned k=0;k<6;++k){CHECK(trigger_calls[k]==1&&event_calls[k]==1);CHECK(s_Timer[dev].Trigger[k].Deadline==2*(101+k));}
 		step(dev,400);serve(dev);for(unsigned k=0;k<6;++k){CHECK(trigger_calls[k]==2);CHECK(s_Timer[dev].Trigger[k].Deadline>513);CHECK(s_Timer[dev].Trigger[k].Deadline%(101+k)==0);}
 		t.DisableTrigger(&t,3);CHECK(t.FindAvailTrigger(&t)==3&&s_Timer[dev].Trigger[3].Irq<0);
 	}
@@ -251,15 +254,17 @@ int main()
 	reset_model();CHECK(init(t,2));CHECK(t.EnableTrigger(&t,0,ns(101,t.Freq),TIMER_TRIG_TYPE_CONTINUOUS,disable_cb,nullptr)>0);step(2,101);serve(2);CHECK(!s_Timer[2].Running);
 	// Invalid requests and allocation/write failures do not invent triggers.
 	reset_model();CHECK(init(t,4));CHECK(!t.EnableTrigger(&t,-1,1000,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));CHECK(!t.EnableTrigger(&t,6,1000,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));
-	CHECK(!t.EnableTrigger(&t,0,1,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));CHECK(!t.EnableTrigger(&t,0,UINT64_MAX,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));
+	CHECK(!t.EnableTrigger(&t,0,0,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));
+	CHECK(t.EnableTrigger(&t,0,1,TIMER_TRIG_TYPE_SINGLE,cb,nullptr)==ns(4,t.Freq)&&s_Timer[4].Trigger[0].Ticks==4);t.DisableTrigger(&t,0);
+	CHECK(t.EnableTrigger(&t,0,UINT64_MAX,TIMER_TRIG_TYPE_SINGLE,cb,nullptr)==ns(65535,t.Freq)&&s_Timer[4].Trigger[0].Ticks==65535);t.DisableTrigger(&t,0);
 	for(unsigned i=1;i<32;++i)iel[i]=1;CHECK(!t.EnableTrigger(&t,0,10000,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));CHECK(t.FindAvailTrigger(&t)==0);
 	reset_model();CHECK(init(t,4));fail_address=RA4M1_GPT_BASE(2)+0x4C;CHECK(!t.EnableTrigger(&t,0,10000,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));CHECK(t.FindAvailTrigger(&t)==0);
 	// Reset and changing frequency retain active trigger durations, reset phase.
 	reset_model();CHECK(init(t,2,12000000));CHECK(t.EnableTrigger(&t,0,1000000,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr)==1000000);
-	step(2,12000);serve(2);CHECK(trigger_calls[0]==1);t.Reset(&t);CHECK(t.GetTickCount(&t)==0&&gp[0][0x4C/4]==12000);
-	CHECK(t.SetFrequency(&t,3000000)==3000000&&gp[0][0x4C/4]==3000);step(2,3000);serve(2);CHECK(trigger_calls[0]==2);
+	step(2,12000);serve(2);CHECK(event_calls[0]==1);t.Reset(&t);CHECK(t.GetTickCount(&t)==0&&gp[0][0x4C/4]==12000);
+	CHECK(t.SetFrequency(&t,3000000)==3000000&&gp[0][0x4C/4]==3000);step(2,3000);serve(2);CHECK(event_calls[0]==2);
 	reset_model();CHECK(init(t,0));CHECK(t.EnableTrigger(&t,0,1000000000,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr)==1000000000);
-	CHECK(t.SetFrequency(&t,1024)==1024&&ag[0].reload==1023);step(0,1024);serve(0);CHECK(trigger_calls[0]==1);
+	CHECK(t.SetFrequency(&t,1024)==1024&&ag[0].reload==1023);step(0,1024);serve(0);CHECK(event_calls[0]==1);
 	// Programming latency: report a missed single shot, skip a missed periodic
 	// phase without waiting for the counter to wrap.
 	reset_model();CHECK(init(t,2));step_on_compare_write=150;
@@ -270,7 +275,7 @@ int main()
 	step(2,52);serve(2);CHECK(trigger_calls[0]==2);
 	// The AGT interrupt must not erase another underflow produced in its callback.
 	reset_model();CHECK(init(t,0));CHECK(t.EnableTrigger(&t,0,ns(101,t.Freq),TIMER_TRIG_TYPE_CONTINUOUS,fresh_cb,nullptr)>0);
-	step(0,101);serve(0);CHECK((iel[s_Timer[0].Irq]&RA4M1_IELS_IR)!=0);CHECK(t.GetTickCount(&t)==202);
+	step(0,101);serve(0);CHECK((iel[s_Timer[0].Irq]&RA4M1_IELS_IR)!=0);CHECK(t.GetTickCount(&t)==202+RA4M1_TIMER_AGT_RESTART);
 	// All devices can coexist; their shared GPT gates remain intact.
 	reset_model();TimerDev_t all[10]={};for(unsigned n=0;n<10;++n)CHECK(init(all[n],n));
 	for(unsigned n=0;n<10;++n){step(n,100+n);CHECK(all[n].GetTickCount(&all[n])==100+n);}

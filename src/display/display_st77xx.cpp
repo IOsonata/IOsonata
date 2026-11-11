@@ -37,7 +37,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "display/display_st77xx.h"
 
-bool LcdST77xx::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
+bool LcdST77xx::Init(const DisplayCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	LCDMatrix::vpLineBuff = vLineBuff;
 	SetDevRes(ST7789_WIDTH_MAX, ST7789_HEIGHT_MAX);

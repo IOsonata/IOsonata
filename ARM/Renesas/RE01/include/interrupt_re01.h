@@ -41,6 +41,8 @@ SOFTWARE.
 #ifndef __INTERRUPT_RE01_H__
 #define __INTERRUPT_RE01_H__
 
+#include <stdbool.h>
+
 #include "re01xxx.h"
 
 // Event number definitions (see table 16.6 of the datasheet)
@@ -266,6 +268,19 @@ IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHand
  *
  */
 void Re01UnregisterIntHandler(IRQn_Type IrqNo);
+
+/**
+ * @brief	Clear the interrupt flag of an interrupt from its handler
+ *
+ * The interrupt flag is cleared after the handler returns. A handler that
+ * calls this before it handles the event keeps the flag of an event that
+ * happens while it runs: the handler is called again for it.
+ *
+ * @param 	IrqNo : IRQn number returned by Re01RegisterIntHandler
+ *
+ * @return	true - Success
+ */
+bool Re01AcknowledgeInt(IRQn_Type IrqNo);
 
 #ifdef __cplusplus
 }

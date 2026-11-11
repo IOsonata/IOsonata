@@ -85,6 +85,8 @@ typedef struct __HumiditySensor_Config {
 /// Humidity sensor base class.  Sensor implementation must derive form this class
 class HumiSensor : public Sensor {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	HumiSensor() { Type(SENSOR_TYPE_HUMI); }
 

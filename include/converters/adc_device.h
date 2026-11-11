@@ -153,6 +153,8 @@ typedef AdcData_t	ADC_DATA;
 /// ADC generic base class. implementation must derive from this class.
 class AdcDevice : public Device {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	/**
 	 * @brief	ADC device initialization

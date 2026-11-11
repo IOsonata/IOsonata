@@ -89,7 +89,7 @@ public:
 	 * 					Bits 16-23	: LED 2 (Blue)
 	 *
 	 */
-	virtual void Level(uint32_t Val) { Level(&Val, 1); }
+	virtual void Level(uint32_t Val) { Level(&Val, 1, 0); }
 
 	/**
 	 * @brief	Set LED level for strip LED.
@@ -101,7 +101,15 @@ public:
 	 * @param 	NbLeds : Number of LED to set.
 	 * @param	Repeat : Repeat count.
 	 */
-	virtual void Level(uint32_t * const pVal, int NbLeds, int Repeat = 0);
+	virtual void Level(uint32_t * const pVal, int NbLeds, int Repeat);
+
+	/**
+	 * @brief	Set LED level for strip LED, no repeat.
+	 *
+	 * @param	pLevel : pointer to array of RGB LED to set
+	 * @param 	NbLeds : Number of LED to set.
+	 */
+	virtual void Level(uint32_t *pLevel, int NbLeds) { Level(pLevel, NbLeds, 0); }
 
 private:
 	int vNbLed;			//!< Total number of Led in strip

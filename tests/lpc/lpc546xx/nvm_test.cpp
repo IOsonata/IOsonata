@@ -20,8 +20,6 @@
 uint32_t g_IrqMasked = 0;
 uint32_t SystemCoreClock = 220000000;
 
-alignas(8) static uint8_t s_GpioMem[sizeof(GPIO_Type)];
-
 #define FLASH_SIZE		FSL_FEATURE_SYSCON_FLASH_SIZE_BYTES
 #define SECT_SIZE		FSL_FEATURE_SYSCON_FLASH_SECTOR_SIZE_BYTES
 #define PAGE_SIZE		FSL_FEATURE_SYSCON_FLASH_PAGE_SIZE_BYTES
@@ -106,8 +104,6 @@ extern "C" IAPSTATUS IAPCopyRamToFlash(uint8_t *pDst, uint8_t *pSrc, int Size)
 	return IAPSTATUS_SUCCESS;
 }
 
-#undef GPIO
-#define GPIO ((GPIO_Type *)s_GpioMem)
 #define LPC546XX_NVM_MEM(Addr)		(&s_Flash[(uintptr_t)(Addr)])
 
 // The generic Nvm (src/storage/nvm.cpp), device.cpp and device_intrf.cpp are
@@ -317,9 +313,12 @@ int main()
 	assert(mem.Write(0, data, 4) == 4);
 
 	// The whole flash as one Nvm: the last page
+	NvmCfg_t allCfg = {};
 	Nvm all;
 
-	assert(all.Init(cfg, &intrf));
+	assert(NvmMcuCfgInit(allCfg, 0, FLASH_SIZE));
+	assert(allCfg.BaseAddr == 0 && allCfg.TotalSize == FLASH_SIZE);
+	assert(all.Init(allCfg, &intrf));
 	assert(all.Write(FLASH_SIZE - 3, data, 3) == 3 && memcmp(&s_Flash[FLASH_SIZE - 3], data, 3) == 0);
 	assert(all.Read(FLASH_SIZE - 3, back, 3) == 3 && memcmp(back, data, 3) == 0);
 	assert(all.Write(FLASH_SIZE - 2, data, 3) < 0);

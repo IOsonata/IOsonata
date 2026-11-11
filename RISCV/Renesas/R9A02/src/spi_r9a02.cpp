@@ -336,16 +336,19 @@ static uint32_t R9a02SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 		return 0;
 	}
 
-	// Slave: the highest SCK of the master, checked against fMCK
+	// Slave: the highest SCK of the master, at most the one the slave takes
+	// from fMCK, and at most 0.5 Mbps with Snooze enabled
 	if (dev->bSlave)
 	{
-		if (Rate > R9a02SpiSlaveMaxRate(dev->FmckHz) || (dev->pSnz != NULL && Rate > R9A02_SPI_SNZ_RATE_MAX))
-		{
-			return 0;
-		}
-		dev->pSpiDev->Cfg.Rate = Rate;
+		uint32_t max = R9a02SpiSlaveMaxRate(dev->FmckHz);
 
-		return Rate;
+		if (dev->pSnz != NULL && max > R9A02_SPI_SNZ_RATE_MAX)
+		{
+			max = R9A02_SPI_SNZ_RATE_MAX;
+		}
+		dev->pSpiDev->Cfg.Rate = Rate < max ? Rate : max;
+
+		return dev->pSpiDev->Cfg.Rate;
 	}
 
 	R9A02_SAU_Type *reg = R9a02SauReg(dev->Unit);
@@ -1806,9 +1809,10 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 
 	intrf->pDevData = dev;
 
-	// Slave: Rate is the highest SCK of the master. Its DTC records stay in
-	// place, they are filled for each frame.
-	bool ok = slave ? R9a02SpiSlaveClock(dev) && pCfg->Rate <= R9a02SpiSlaveMaxRate(dev->FmckHz) &&
+	// Slave: Rate is the highest SCK of the master, at most the one the
+	// slave takes from fMCK. Its DTC records stay in place, they are filled
+	// for each frame.
+	bool ok = slave ? R9a02SpiSlaveClock(dev) && R9a02SpiSetRate(intrf, pCfg->Rate) != 0U &&
 					  (!pCfg->bDmaEn || R9a02DtcSet(dev->IntNo, dev->Dtc))
 					: R9a02SpiSetRate(intrf, pCfg->Rate) != 0U;
 

@@ -92,13 +92,16 @@ static bool Re01SpiRate(uint32_t Rate, uint8_t *pSpbr, uint16_t *pBrdv,
 	uint32_t clk = SystemPeriphClockGet(0); // ICLK/PCLKA, not PCLKB.
 	if (Rate == 0 || clk == 0)
 		return false;
-	// fRSPCK = PCLKA / (2 * (SPBR + 1) * 2^BRDV).
+	// fRSPCK = PCLKA / (2 * (SPBR + 1) * 2^BRDV). Below the slowest rate,
+	// BRDV = 3 and SPBR = 255: the closest.
 	for (unsigned div = 0; div < 4; div++)
 	{
 		uint64_t denom = (uint64_t)Rate * (2U << div);
 		uint32_t count = (uint32_t)(((uint64_t)clk + denom - 1) / denom);
 		if (count == 0)
 			count = 1;
+		if (count > 256 && div == 3)
+			count = 256;
 		if (count <= 256)
 		{
 			*pSpbr = (uint8_t)(count - 1);

@@ -1066,7 +1066,7 @@ class AccelLsm6dsv : public AccelSensor {
 public:
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
-	virtual uint8_t Scale(uint8_t Value);
+	virtual uint16_t Scale(uint16_t Value);
 
 	/**
 	 * @brief	Set and enable filter cutoff frequency
@@ -1092,7 +1092,7 @@ class GyroLsm6dsv : public GyroSensor {
 public:
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
-	virtual uint32_t Sensitivity(uint32_t Value);
+	virtual uint16_t Sensitivity(uint16_t Value);
 
 	/**
 	 * @brief	Set and enable filter cutoff frequency

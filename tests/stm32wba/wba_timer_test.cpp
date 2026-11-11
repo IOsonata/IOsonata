@@ -77,6 +77,7 @@ static int s_Checks;
 #define CHECK(c)	do { s_Checks++; if (!(c)) { s_Fail++; printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #c); } } while (0)
 
 static bool s_NvicEn[128];
+static bool s_NvicPend[128];
 static uint32_t s_NvicPrio[128];
 
 extern "C" uint32_t TestNvicGetEnable(int IrqNo)
@@ -94,7 +95,9 @@ extern "C" void TestNvic(int Op, int IrqNo, uint32_t Prio)
 	{
 		case 0: s_NvicEn[IrqNo] = true; break;
 		case 1: s_NvicEn[IrqNo] = false; break;
+		case 2: s_NvicPend[IrqNo] = false; break;
 		case 3: s_NvicPrio[IrqNo] = Prio; break;
+		case 4: s_NvicPend[IrqNo] = true; break;
 		default: break;
 	}
 }
@@ -124,6 +127,17 @@ static void TrigHandler(TimerDev_t * const pTimer, int TrigNo, void * const pCon
 	}
 	s_LastTrig = TrigNo;
 	s_LastCtx = pContext;
+}
+
+// LPTIM1 counter moved by s_RunCount in the handler, as if the handler ran
+// that long
+static uint32_t s_RunCount;
+
+static void RunHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext)
+{
+	TrigHandler(pTimer, TrigNo, pContext);
+	LPTIM1->CNT = (LPTIM1->CNT + s_RunCount) & 0xFFFF;
+	s_RunCount = 0;
 }
 
 static void LptReset(void)
@@ -388,6 +402,22 @@ static void TestTrigger(void)
 	LptIrq(LPTIM1, LPTIM_ISR_CC1IF, 0x40 + 320);
 	CHECK(s_TrigCnt[0] == n0 && (s_Evt & TIMER_EVT_TRIGGER(0)) == 0);
 
+	// The handler runs past the next CCR2 value before it is taken: the
+	// interrupt is pending again and services trigger 1 without a match
+	s_RunCount = 900;
+	LPTIM1->CNT = 4000;
+	CHECK(t.EnableTrigger(&t, 1, 25000000ULL, TIMER_TRIG_TYPE_CONTINUOUS, RunHandler, nullptr) == 25000000ULL);
+	CHECK(LPTIM1->CCR2 == 4800);
+	s_NvicPend[LPTIM1_IRQn] = false;
+	int r1 = s_TrigCnt[1];
+	LptIrq(LPTIM1, LPTIM_ISR_CC2IF, 4800);
+	CHECK(s_TrigCnt[1] == r1 + 1 && LPTIM1->CCR2 == 5600 && s_NvicPend[LPTIM1_IRQn]);
+	s_NvicPend[LPTIM1_IRQn] = false;
+	LptIrq(LPTIM1, 0, LPTIM1->CNT);
+	CHECK(s_TrigCnt[1] == r1 + 2 && s_Evt == TIMER_EVT_TRIGGER(1) && !s_NvicPend[LPTIM1_IRQn]);
+	CHECK(LPTIM1->CCR2 == 6400 && s_TrigCnt[0] == n0);
+	t.DisableTrigger(&t, 1);
+
 	// Single shot
 	CHECK(t.EnableTrigger(&t, 1, 10000000ULL, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) != 0);
 	int n1 = s_TrigCnt[1];
@@ -398,9 +428,14 @@ static void TestTrigger(void)
 	CHECK(s_TrigCnt[1] == n1 + 1);
 	CHECK(t.FindAvailTrigger(&t) == 0);
 
-	// Out of the 16 bits compare range, wrong trigger number
-	CHECK(t.EnableTrigger(&t, 0, 31250ULL * 2, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 0);
-	CHECK(t.EnableTrigger(&t, 0, 31250ULL * 0x10000, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 0);
+	// Closest period in the 16 bits compare range: 3 to 65535 counts
+	CHECK(t.EnableTrigger(&t, 0, 31250ULL * 2, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 31250ULL * 3);
+	t.DisableTrigger(&t, 0);
+	CHECK(t.EnableTrigger(&t, 0, 31250ULL * 0x10000, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 31250ULL * 0xFFFF);
+	t.DisableTrigger(&t, 0);
+	CHECK(t.EnableTrigger(&t, 0, 0, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 0);
+
+	// Wrong trigger number
 	CHECK(t.EnableTrigger(&t, 2, 10000000ULL, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 0);
 	CHECK(t.EnableTrigger(&t, -1, 10000000ULL, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 0);
 	CHECK(t.EnableExtTrigger(&t, 0, TIMER_EXTTRIG_SENSE_HIGH_TRANSITION) == false);

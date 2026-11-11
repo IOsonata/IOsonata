@@ -324,6 +324,9 @@ public:
 	}
 
 	virtual void SetCtrlLineState(int LineState) { UARTSetCtrlLineState(&vDevData, LineState); }
+	// Transfers with a device address, not hidden by the Rx and Tx below
+	using DeviceIntrf::Rx;
+	using DeviceIntrf::Tx;
 	virtual int Rx(uint8_t *pBuff, int Len) { return DeviceIntrfRx(&vDevData.DevIntrf, 0, pBuff, Len); }
 	// Initiate receive
 	virtual int Tx(uint8_t *pData, uint32_t Len) { return DeviceIntrfTx(&vDevData.DevIntrf, 0, pData, Len); }

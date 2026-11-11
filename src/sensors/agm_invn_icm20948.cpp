@@ -405,7 +405,7 @@ bool GyroInvnIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Tim
 	return true;
 }
 
-uint32_t GyroInvnIcm20948::Sensitivity(uint32_t Value)
+uint16_t GyroInvnIcm20948::Sensitivity(uint16_t Value)
 {
 	enum mpu_gyro_fs gfsr;
 

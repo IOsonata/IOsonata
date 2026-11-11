@@ -106,10 +106,15 @@ void Esp32C3IntMtxDispatch(void) {}
 
 static unsigned s_Events;
 static unsigned s_Triggers;
+static bool s_ExpectTrigger;
 static void Event(TimerDev_t *pDev, uint32_t Events)
 {
 	assert(pDev != nullptr);
 	assert(Events == TIMER_EVT_TRIGGER(0));
+	if (s_ExpectTrigger)
+	{
+		assert(s_Triggers == s_Events);
+	}
 	s_Events++;
 }
 static void Trigger(TimerDev_t *pDev, int TriggerNo, void *pContext)
@@ -204,11 +209,15 @@ int main()
 		TimerDisableTrigger(&timers[dev], 0);
 		assert(nsTimerEnableTrigger(&timers[dev], 0, 120000000,
 			TIMER_TRIG_TYPE_SINGLE, Trigger, &s_Triggers) == 120000000);
+		s_ExpectTrigger = true;
 		SetCount(dev, 240000);
 		s_TimerHandlers[dev]();
 		s_TimerHandlers[dev]();
 		assert(s_Triggers == unsigned(dev + 1));
 		assert(!s_Timer[dev].TriggerActive);
+		assert(s_Events == unsigned(dev + 2));
+		s_Events--;
+		s_ExpectTrigger = false;
 		SetCount(dev, (1ULL << 32) + 42);
 		assert(TimerGetTickCount(&timers[dev]) == (1ULL << 32) + 42);
 	}

@@ -141,14 +141,14 @@ static uint32_t Stm32QspiSetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 	}
 
 	Stm32QspiDev_t *dev = (Stm32QspiDev_t *)pDev->pDevData;
-#ifdef STM32H753xx
+	// HPRE: 0xxx /1, then /2, /4, /8, /16, /64, /128, /256, /512 (no /32)
 	static const uint8_t hpreShift[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
+#ifdef STM32H753xx
 	uint32_t tmp = (RCC->D1CFGR & RCC_D1CFGR_HPRE) >> RCC_D1CFGR_HPRE_Pos;
-	uint32_t hclk = SystemCoreClock >> hpreShift[tmp];
 #else
 	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
-	uint32_t hclk = tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
 #endif
+	uint32_t hclk = SystemCoreClock >> hpreShift[tmp & 0xF];
 
 	// SCK = HCLK / (PRESCALER + 1)
 	int32_t div = (hclk + (DataRate >> 1)) / DataRate - 1;

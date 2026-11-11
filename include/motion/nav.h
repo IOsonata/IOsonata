@@ -128,6 +128,8 @@ typedef struct __Nav_Config {
 
 class Nav : virtual public Device {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	/**
 	 * @brief	Bind the inertial sensors that drive the strapdown.

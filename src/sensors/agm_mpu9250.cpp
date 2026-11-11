@@ -814,7 +814,7 @@ uint16_t AccelMpu9250::Scale(uint16_t Value)
 }
 
 // Gyro scale
-uint32_t GyroMpu9250::Sensitivity(uint32_t Value)
+uint16_t GyroMpu9250::Sensitivity(uint16_t Value)
 {
 	uint8_t regaddr = MPU9250_AG_GYRO_CONFIG;
 	uint8_t d = Read8(&regaddr, 1) & MPU9250_AG_GYRO_CONFIG_FCHOICE_MASK;

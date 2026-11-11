@@ -364,7 +364,7 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	return true;
 }
 
-uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
+uint16_t GyroIcm20948::Sensitivity(uint16_t Value)
 {
 	uint16_t regaddr = ICM20948_GYRO_CONFIG_1_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_MASK;

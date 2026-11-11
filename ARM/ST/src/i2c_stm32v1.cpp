@@ -74,16 +74,40 @@ static void Stm32V1Stop(Stm32I2cv1_t *d)
 	d->pReg->CR1 |= I2C_CR1_ACK;
 }
 
+// CCR for SCL = Clk / (Mul * CCR) closest to Rate, Min to 0xFFF
+static uint32_t Stm32V1Ccr(uint32_t Clk, uint32_t Rate, uint32_t Mul, uint32_t Min)
+{
+	uint32_t ccr = Clk / (Rate * Mul);
+	if (ccr < Min)
+	{
+		return Min;
+	}
+	if (ccr >= 0xFFFU)
+	{
+		return 0xFFFU;
+	}
+	// Clk / (Mul * ccr) >= Rate > Clk / (Mul * (ccr + 1)). The higher rate is
+	// the closest when the sum of both rates is at most 2 * Rate.
+	uint64_t sum = (uint64_t)Clk * (2U * ccr + 1U);
+	uint64_t lim = 2ULL * Rate * Mul * ccr * (ccr + 1U);
+	return sum <= lim ? ccr : ccr + 1U;
+}
+
 static uint32_t Stm32V1Rate(DevIntrf_t *p, uint32_t rate)
 {
 	Stm32I2cv1_t *d = Stm32V1Handle(p);
-	if (!d || rate > 400000U)
+	if (!d)
 	{
 		return 0;
 	}
 	if (!rate)
 	{
 		rate = 100000U;
+	}
+	// Above fast mode: the closest, 400 kHz
+	if (rate > 400000U)
+	{
+		rate = 400000U;
 	}
 	uint32_t clk = SystemPeriphClockGet(0);
 	uint32_t mhz = clk / 1000000U;
@@ -97,16 +121,17 @@ static uint32_t Stm32V1Rate(DevIntrf_t *p, uint32_t rate)
 	uint32_t ccr;
 	if (rate <= 100000U)
 	{
-		ccr = clk / (rate * 2U);
-		if (ccr < 4U) ccr = 4U;
+		// Standard mode: SCL = PCLK1 / (2 * CCR), at most 100 kHz
+		uint32_t min = (clk + 199999U) / 200000U;
+		ccr = Stm32V1Ccr(clk, rate, 2U, min > 4U ? min : 4U);
 		r->CCR = ccr;
 		r->TRISE = mhz + 1U;
 		d->Rate = clk / (ccr * 2U);
 	}
 	else
 	{
-		ccr = clk / (rate * 3U);
-		if (ccr < 1U) ccr = 1U;
+		// Fast mode, duty 2:1: SCL = PCLK1 / (3 * CCR), at most 400 kHz
+		ccr = Stm32V1Ccr(clk, rate, 3U, (clk + 1199999U) / 1200000U);
 		r->CCR = I2C_CCR_FS | ccr;
 		r->TRISE = (mhz * 300U) / 1000U + 1U;
 		d->Rate = clk / (ccr * 3U);

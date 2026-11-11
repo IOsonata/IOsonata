@@ -480,6 +480,9 @@ uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 	if (dev->pI2cDev->Cfg.Mode == I2CMODE_MASTER)
 		dev->pDmaReg->FREQUENCY = s_nRFxI2CFreq[best].RegVal;
 #else
+	// The highest rate at or below the request, the lowest below all of them
+	regval = s_nRFxI2CFreq[0].RegVal;
+	dev->pI2cDev->Cfg.Rate = s_nRFxI2CFreq[0].Freq;
 	for (int i = 0; i < s_NbI2CFreq; i++)
 	{
 		if (s_nRFxI2CFreq[i].Freq <= RateHz)

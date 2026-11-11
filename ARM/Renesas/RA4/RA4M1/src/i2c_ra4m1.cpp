@@ -396,9 +396,20 @@ static bool Ra4m1I2cRate(uint32_t Rate, uint8_t *pCks, uint8_t *pBrl,
 
 	uint32_t clk = SystemPeriphClockGet(1);
 
-	if (Rate == 0U || Rate > RA4M1_I2C_MAX_RATE || clk == 0U)
+	if (Rate == 0U || clk == 0U)
 	{
 		return false;
+	}
+
+	// Out of the range, the closest end of it. The slowest is CKS = 7 with
+	// BRL = BRH = 31: 2 * (31 + 4) * 128 IIC-phi clocks.
+	if (Rate > RA4M1_I2C_MAX_RATE)
+	{
+		Rate = RA4M1_I2C_MAX_RATE;
+	}
+	if ((uint64_t)Rate * 2U * (31U + 4U) * 128U < clk)
+	{
+		Rate = (clk + 2U * (31U + 4U) * 128U - 1U) / (2U * (31U + 4U) * 128U);
 	}
 
 	uint32_t lowNs = Rate <= I2C_SCL_STD_MODE_MAX_SPEED * 1000U ?

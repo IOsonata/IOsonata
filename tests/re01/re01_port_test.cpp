@@ -10,6 +10,8 @@
 #include "timer_re01.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "coredev/i2c.h"
+#include "coredev/spi.h"
 
 extern "C" void IEL0_IRQHandler();
 extern "C" void IEL1_IRQHandler();
@@ -122,6 +124,39 @@ static int countRoutes()
 }
 static void hook(int, void *Ctx) { (*(int*)Ctx)++; }
 
+// An event while the handler runs, at its first call. Ack: the handler clears
+// the flag first.
+struct RaiseCtx { int Count; bool Ack; };
+static void raiseHook(int IntNo, void *Ctx)
+{
+	RaiseCtx *c = (RaiseCtx*)Ctx;
+
+	if (c->Ack)
+	{
+		Re01AcknowledgeInt((IRQn_Type)IntNo);
+	}
+	if (c->Count++ == 0)
+	{
+		routes[IntNo] |= ICU_IELSR0_IR_Msk;
+	}
+}
+
+// Edge on interrupt pin IRQ8 while the callback runs, at its first call
+static int s_PinEdge;
+static void pinEdgeHook(int, void *)
+{
+	if (s_PinEdge++ == 0)
+	{
+		for (int i = 0; i < 32; i += 8)
+		{
+			if ((routes[i] & ICU_IELSR0_IELS_Msk) == 0x1E)
+			{
+				routes[i] |= ICU_IELSR0_IR_Msk;
+			}
+		}
+	}
+}
+
 static void clocks()
 {
 	SYSTEM->SCKSCR = 0;
@@ -171,6 +206,23 @@ static void icuAndGpio()
 	assert((n & 7) == 2 && (routes[n] & ICU_IELSR0_IELS_Msk) == 0x1F);
 	Re01UnregisterIntHandler(n);
 
+	// The flag is cleared after the handler returns, an event while it runs
+	// with it. A handler that clears it first keeps that event: called again.
+	RaiseCtx lost = {0, false}, kept = {0, true};
+	n = Re01RegisterIntHandler(RE01_EVTID_DMAC0_INT, 1, raiseHook, &lost);
+	assert(n >= 0);
+	routes[n] |= ICU_IELSR0_IR_Msk;
+	handlers[n](); assert(lost.Count == 1 && (routes[n] & ICU_IELSR0_IR_Msk) == 0);
+	Re01UnregisterIntHandler(n);
+	n = Re01RegisterIntHandler(RE01_EVTID_DMAC0_INT, 1, raiseHook, &kept);
+	assert(n >= 0);
+	routes[n] |= ICU_IELSR0_IR_Msk;
+	handlers[n](); assert(kept.Count == 1 && (routes[n] & ICU_IELSR0_IR_Msk));
+	handlers[n](); assert(kept.Count == 2 && (routes[n] & ICU_IELSR0_IR_Msk) == 0);
+	handlers[n](); assert(kept.Count == 2); // no flag, no call
+	assert(!Re01AcknowledgeInt((IRQn_Type)32) && !Re01AcknowledgeInt((IRQn_Type)-1));
+	Re01UnregisterIntHandler(n);
+
 	uint32_t p0 = *(volatile uint32_t*)PFS_BASE;
 	IOPinDisableInterrupt(0); // never allocated: must not touch P0.0 or IEL0
 	assert(*(volatile uint32_t*)PFS_BASE == p0);
@@ -206,6 +258,19 @@ static void icuAndGpio()
 	irq(2, 0x1F); assert(a == 3);
 	IOPinDisableInterrupt(9);
 	assert((ICU->WUPEN & (1UL << 9)) == 0);
+	// An edge while the callback runs calls it again
+	assert(IOPinEnableInterrupt(8, 1, 1, 5, IOPINSENSE_TOGGLE, pinEdgeHook, nullptr));
+	for (int i = 0; i < 32; i += 8)
+	{
+		if ((routes[i] & ICU_IELSR0_IELS_Msk) == 0x1E)
+		{
+			routes[i] |= ICU_IELSR0_IR_Msk;
+			handlers[i](); assert(s_PinEdge == 1 && (routes[i] & ICU_IELSR0_IR_Msk));
+			handlers[i](); assert(s_PinEdge == 2 && (routes[i] & ICU_IELSR0_IR_Msk) == 0);
+		}
+	}
+	assert(s_PinEdge == 2);
+	IOPinDisableInterrupt(8);
 	exhaust();
 	uint32_t pfs = *(volatile uint32_t*)(PFS_BASE + ((1 * 16 + 6) * 4));
 	uint32_t wake = ICU->WUPEN;
@@ -264,6 +329,7 @@ static void timers()
 	restore();
 	assert(TimerInit(&t, &cfg));
 	assert(t.Freq == 24000000);
+	assert(t.SetFrequency(&t, 100000000) == 24000000 && t.Freq == 24000000);
 	assert(t.GetMaxTrigger(&t) == 2);
 	TimerDev_t other = {};
 	assert(!TimerInit(&other, &cfg));
@@ -279,6 +345,8 @@ static void timers()
 	assert(t.FindAvailTrigger(&t) == 1);
 	assert(t.EnableTrigger(&t, 1, 20000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr) == 20000);
 	assert(t.FindAvailTrigger(&t) == -1);
+	// The counter at the deadline of single A: called and released
+	TMR01->TCNT = g_Re01TimerData[2].Deadline[0];
 	irq(2, 0x14);
 	assert(t.FindAvailTrigger(&t) == 0);
 	assert(countRoutes() == 2); // overflow and continuous B; single A was released
@@ -301,14 +369,25 @@ static void timers()
 	t.Disable(&t); t.Reset(&t);
 	assert(TMR1->TCCR == 0 && t.GetTickCount(&t) == 0);
 	assert(t.Enable(&t));
-	assert(t.SetFrequency(&t, 1) == 0 && t.Freq == 12000000); // active period too short
-	assert(t.SetFrequency(&t, 65000000) == 0 && t.Freq == 12000000);
-	assert(t.EnableTrigger(&t, 0, UINT64_MAX, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
+	// Active periods take the closest one at the lowest rate
+	uint32_t low = t.SetFrequency(&t, 1);
+	assert(low != 0 && low < 12000000 && t.Freq == low);
+	assert(t.SetFrequency(&t, 12000000) == 12000000);
+	assert(t.SetFrequency(&t, 65000000) == 24000000 && t.Freq == 24000000);
+	assert(t.SetFrequency(&t, 12000000) == 12000000);
+	assert(t.EnableTrigger(&t, 0, UINT64_MAX, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) ==
+		TimerTickToTime(&t, 0xFFFF, 1000000000UL) && g_Re01TimerData[2].CC[0] == 0xFFFF);
+	assert(t.EnableTrigger(&t, 0, 0, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
 	assert(t.EnableTrigger(&t, 0, 10000, (TIMER_TRIG_TYPE)2, nullptr, nullptr) == 0);
 	t.DisableTrigger(&t, 0); t.DisableTrigger(&t, 1);
 	unsigned rearmed = 0;
 	assert(t.EnableTrigger(&t, 0, 10000, TIMER_TRIG_TYPE_SINGLE, triggerRearm, &rearmed));
+	// A compare interrupt before the deadline is not a call
+	timerIrq(g_Re01TimerData[2].IrqMatch[0]); assert(rearmed == 0);
+	TMR01->TCNT = g_Re01TimerData[2].Deadline[0];
 	timerIrq(g_Re01TimerData[2].IrqMatch[0]); assert(rearmed == 1);
+	assert(TMR01->TCORA == ((TMR01->TCNT + 120) & 0xFFFF));
+	TMR01->TCNT = g_Re01TimerData[2].Deadline[0];
 	timerIrq(g_Re01TimerData[2].IrqMatch[0]); assert(rearmed == 2 && countRoutes() == 1);
 	assert(!t.EnableExtTrigger(&t, 0, TIMER_EXTTRIG_SENSE_TOGGLE));
 	exhaust();
@@ -321,14 +400,17 @@ static void timers()
 	t.Disable(&t);
 
 	static TimerDev_t a = {};
-	cfg.DevNo = 0; cfg.ClkSrc = TIMER_CLKSRC_LFRC; cfg.Freq = 100000000;
-	assert(!TimerInit(&a, &cfg));
-	cfg.Freq = 1000000;
+	cfg.DevNo = 0; cfg.ClkSrc = TIMER_CLKSRC_LFRC; cfg.Freq = 1000000;
 	exhaust();
 	assert(!TimerInit(&a, &cfg) && (AGT0->AGTCR & AGT0_AGTCR_TSTART_Msk) == 0);
 	restore();
 	assert(TimerInit(&a, &cfg) && a.Freq == 32768);
 	assert(AGT0->AGTMR2_b.CKS == 0);
+	// Above the range: the closest, the highest
+	assert(a.SetFrequency(&a, UINT32_MAX) == 32768 && AGT0->AGTMR2_b.CKS == 0);
+	cfg.Freq = 100000000;
+	assert(TimerInit(&a, &cfg) && a.Freq == 32768);
+	cfg.Freq = 1000000;
 	assert(a.SetFrequency(&a, 1) == 256 && AGT0->AGTMR2_b.CKS == 7);
 	AGT0->AGT = 123; a.Rollover = 0x10000;
 	a.Reset(&a);
@@ -345,13 +427,27 @@ static void timers()
 	assert(countRoutes() == 3); // TMR overflow, AGT overflow and continuous B
 	assert(a.SetFrequency(&a, 12000000) == 12000000);
 	assert(AGT0->AGTCMB == 0xFFFF - 240);
+	// The counts the counter misses while stopped for the compare write: added
+	// to the tick count, the compare moved earlier by as many
+	uint32_t lost = g_Re01TimerData[0].Lost;
+	assert(lost == RE01_TIMER_AGT_RESTART +
+		(RE01_TIMER_AGT_STOP_CYCLES * 12000000ULL + SystemCoreClock / 2) / SystemCoreClock);
 	AGT0->AGT = 0xFFFF - 257; AGT0->AGTCR |= AGT0_AGTCR_TCMBF_Msk;
-	timerIrq(g_Re01TimerData[0].IrqMatch[1]); assert(AGT0->AGTCMB == 0xFFFF - 480);
-	AGT0->AGT = 3; assert(a.GetTickCount(&a) == 0xFFFC);
+	timerIrq(g_Re01TimerData[0].IrqMatch[1]); assert(AGT0->AGTCMB == 0xFFFF - 480 + lost);
+	assert((AGT0->AGTCR & AGT0_AGTCR_TSTART_Msk) && a.Rollover == lost);
+	AGT0->AGT = 3; assert(a.GetTickCount(&a) == 0xFFFC + lost);
 	AGT0->AGT = 0xFFFF - 4; AGT0->AGTCR |= AGT0_AGTCR_TUNDF_Msk;
-	assert(a.GetTickCount(&a) == 0x10004 && a.Rollover == 0);
+	assert(a.GetTickCount(&a) == 0x10004 + lost && a.Rollover == lost);
 	timerIrq(g_Re01TimerData[0].IrqOvr);
-	assert(overflowReads[0] == 0x10004 && a.GetTickCount(&a) == 0x10004);
+	assert(overflowReads[0] == 0x10004 + lost && a.GetTickCount(&a) == 0x10004 + lost);
+	// Next deadline 720 (480 + 240), reached once the counts missed are added:
+	// the next count, the deadline kept
+	uint16_t at = 720 - 2 * lost + 1;
+	assert(lost < 120);
+	AGT0->AGT = 0xFFFF - at; AGT0->AGTCR |= AGT0_AGTCR_TCMBF_Msk;
+	timerIrq(g_Re01TimerData[0].IrqMatch[1]);
+	assert(AGT0->AGTCMB == 0xFFFF - (at + 1) && a.Rollover == 0x10000 + 2 * lost);
+	assert(g_Re01TimerData[0].Deadline[1] == 720);
 	a.Disable(&a); a.Reset(&a);
 	assert((AGT0->AGTCR & AGT0_AGTCR_TSTART_Msk) == 0 && a.GetTickCount(&a) == 0);
 	assert(a.Enable(&a));
@@ -374,7 +470,9 @@ static void timers()
 	assert(rearmed == 3 && a.FindAvailTrigger(&a) == 1);
 	AGT0->AGTCR |= AGT0_AGTCR_TCMAF_Msk; timerIrq(g_Re01TimerData[0].IrqMatch[0]);
 	assert(rearmed == 4 && a.FindAvailTrigger(&a) == 0);
-	assert(a.EnableTrigger(&a, 0, UINT64_MAX, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
+	assert(a.EnableTrigger(&a, 0, UINT64_MAX, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) ==
+		TimerTickToTime(&a, 0xFFFF, 1000000000UL) && g_Re01TimerData[0].CC[0] == 0xFFFF);
+	assert(a.EnableTrigger(&a, 0, 0, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
 	assert(a.EnableTrigger(&a, 0, 10000, (TIMER_TRIG_TYPE)2, nullptr, nullptr) == 0);
 	assert(a.EnableTrigger(&a, 0, 10000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
 	AGT0->AGTCR |= AGT0_AGTCR_TCSTF_Msk | AGT0_AGTCR_TCMAF_Msk;
@@ -435,6 +533,7 @@ static void gptTimers()
 		}
 		assert(TimerInit(&timer, &cfg));
 		assert(timer.Freq == 48000000 && timer.Freq == SystemPeriphClockGet(0));
+		assert(timer.SetFrequency(&timer, UINT32_MAX) == 48000000 && timer.Freq == 48000000);
 		assert(timer.Freq != SystemPeriphClockGet(1));
 		assert(timer.GetMaxTrigger(&timer) == 4 && timer.FindAvailTrigger(&timer) == 0);
 		uint32_t mask = channel < 2 ? UINT32_MAX : 0xFFFFUL;
@@ -451,7 +550,7 @@ static void gptTimers()
 			assert(timer.SetFrequency(&timer, rate) == rate && reg->GTCR_b.TPCS == code);
 		}
 		assert(timer.SetFrequency(&timer, 0) == 48000000);
-		assert(timer.SetFrequency(&timer, 65000000) == 0 && timer.Freq == 48000000);
+		assert(timer.SetFrequency(&timer, 65000000) == 48000000 && timer.Freq == 48000000);
 		assert(timer.SetFrequency(&timer, 3000000) == 3000000);
 		unsigned hits[4] = {};
 		reg->GTCCRE = 0xA5A5; reg->GTCCRF = 0x5A5A;
@@ -470,22 +569,33 @@ static void gptTimers()
 		{
 			int before = countRoutes();
 			reg->GTCNT = *cmp[i]; reg->GTST |= 1UL << i;
+			timerEvents[no] &= ~TIMER_EVT_TRIGGER(i);
 			timerIrq(dev.IrqMatch[i]);
 			assert(countRoutes() == before - 1 && dev.IrqMatch[i] == (IRQn_Type)-1);
-			assert(i == 2 ? (timerEvents[no] & TIMER_EVT_TRIGGER(2)) != 0 : hits[i] == 1);
+			// Event handler after the trigger handler too
+			assert((timerEvents[no] & TIMER_EVT_TRIGGER(i)) != 0 && (i == 2 || hits[i] == 1));
 		}
 		assert(timer.FindAvailTrigger(&timer) == 0);
 		unsigned rearmed = 0;
 		assert(timer.EnableTrigger(&timer, 0, 10000, TIMER_TRIG_TYPE_SINGLE, triggerRearm, &rearmed));
+		// A compare interrupt before the deadline is not a call
+		reg->GTST |= 1; timerIrq(dev.IrqMatch[0]); assert(rearmed == 0);
+		reg->GTCNT = dev.Deadline[0];
 		reg->GTST |= 1; timerIrq(dev.IrqMatch[0]); assert(rearmed == 1);
+		reg->GTCNT = dev.Deadline[0];
 		reg->GTST |= 1; timerIrq(dev.IrqMatch[0]); assert(rearmed == 2 && timer.FindAvailTrigger(&timer) == 0);
 		reg->GTCNT = mask - 10;
 		assert(timer.EnableTrigger(&timer, 0, 10000, TIMER_TRIG_TYPE_CONTINUOUS, triggerCount, &hits[0]));
 		assert(reg->GTCCRA == 19);
 		reg->GTCNT = 24; reg->GTST |= 1; timerIrq(dev.IrqMatch[0]);
 		assert(reg->GTCCRA == 49); // phase preserved through counter wrap
-		reg->GTCNT = 123; reg->GTST |= 1; timerIrq(dev.IrqMatch[0]);
-		assert(reg->GTCCRA == 139); // skip two missed periods
+		reg->GTCNT = 109; reg->GTST |= 1; timerIrq(dev.IrqMatch[0]);
+		assert(reg->GTCCRA == 139 && dev.Deadline[0] == 139); // skip missed periods
+		// A deadline closer than the margin when the interrupt returns: the
+		// counter does not run here, the wait ends and the compare is after
+		// the deadline, the deadline kept
+		reg->GTCNT = 130; reg->GTST |= 1; timerIrq(dev.IrqMatch[0]);
+		assert(dev.Margin > 9 && reg->GTCCRA == 130 + dev.Margin + 1 && dev.Deadline[0] == 139);
 		reg->GTCNT = mask - 1; assert(timer.GetTickCount(&timer) == mask - 1);
 		reg->GTCNT = 5; reg->GTST |= GPT320_GTST_TCFPO_Msk;
 		uint64_t wrapped = (uint64_t)mask + 6;
@@ -501,21 +611,29 @@ static void gptTimers()
 		assert(reg->GTCCRA == 30 && timer.Enable(&timer));
 		assert(timer.SetFrequency(&timer, 750000) == 750000 && reg->GTCCRA == 8);
 		uint32_t cr = reg->GTCR;
-		assert(timer.SetFrequency(&timer, 1) == 0 && reg->GTCR == cr && reg->GTCCRA == 8);
+		// The active period takes the closest one, 3 ticks, at the lowest rate
+		assert(timer.SetFrequency(&timer, 1) == 46875 && reg->GTCR != cr && reg->GTCCRA == 3);
 		timer.DisableTrigger(&timer, 0);
 		assert(timer.SetFrequency(&timer, 3000000) == 3000000);
 		assert(timer.EnableTrigger(&timer, -1, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
 		assert(timer.EnableTrigger(&timer, 4, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
-		assert(timer.EnableTrigger(&timer, 0, 1, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
-		assert(timer.EnableTrigger(&timer, 0, UINT64_MAX, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
+		assert(timer.EnableTrigger(&timer, 0, 0, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
+		assert(timer.EnableTrigger(&timer, 0, 1, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 1000 && dev.CC[0] == 3);
+		assert(timer.EnableTrigger(&timer, 0, UINT64_MAX, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) ==
+			TimerTickToTime(&timer, mask, 1000000000UL) && dev.CC[0] == mask);
+		timer.DisableTrigger(&timer, 0);
 		assert(timer.EnableTrigger(&timer, 0, 10000, (TIMER_TRIG_TYPE)2, nullptr, nullptr) == 0);
 		uint64_t tooLong = ((uint64_t)mask + 1) * 1000000000ULL / timer.Freq;
-		assert(timer.EnableTrigger(&timer, 0, tooLong, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
+		assert(timer.EnableTrigger(&timer, 0, tooLong, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) &&
+			dev.CC[0] == mask);
+		timer.DisableTrigger(&timer, 0);
 		uint64_t longest = (uint64_t)mask * 1000000000ULL / timer.Freq;
 		assert(timer.EnableTrigger(&timer, 0, longest, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
 		assert(dev.CC[0] == mask);
 		cr = reg->GTCR;
-		assert(timer.SetFrequency(&timer, 48000000) == 0 && reg->GTCR == cr && timer.Freq == 3000000);
+		// The active period takes the longest one at the higher rate
+		assert(timer.SetFrequency(&timer, 48000000) == 48000000 && reg->GTCR != cr && dev.CC[0] == mask);
+		assert(timer.SetFrequency(&timer, 3000000) == 3000000);
 		timer.DisableTrigger(&timer, 0);
 		assert(!timer.EnableExtTrigger(&timer, 0, TIMER_EXTTRIG_SENSE_TOGGLE));
 		exhaust();
@@ -556,7 +674,8 @@ static uint32_t bestError(uint32_t Clock, uint32_t Rate)
 			{
 				double base = (double)Clock / (div * (1UL << (cks * 2)) * (brr + 1));
 				int ideal = (int)std::floor(Rate / base * 256);
-				for (int m : {256, ideal, ideal + 1})
+				// 128 is the closest M below the range
+				for (int m : {256, ideal, ideal + 1, 128})
 				{
 					if (m < 128 || m > 256) continue;
 					uint32_t actual = (uint32_t)std::floor(base * m / 256 + 0.5);
@@ -565,6 +684,17 @@ static uint32_t bestError(uint32_t Clock, uint32_t Rate)
 				}
 			}
 	return best;
+}
+
+// A byte received while the UART handler runs, at the first call
+static int s_UartRxIrq = -1, s_UartRxCalls;
+static int uartRaise(UARTDev_t * const, UART_EVT Evt, uint8_t *, int)
+{
+	if (Evt == UART_EVT_RXDATA && s_UartRxCalls++ == 0)
+	{
+		routes[s_UartRxIrq] |= ICU_IELSR0_IR_Msk;
+	}
+	return 0;
 }
 
 static void uarts()
@@ -584,9 +714,10 @@ static void uarts()
 		SYSTEM->HOCOMCR = clock == 24000000 ? 2 : 3;
 		SYSTEM->SCKDIVCR = (clock == 16000000 ? 2UL : 1UL) << SYSTEM_SCKDIVCR_PCKB_Pos;
 		SystemCoreClockUpdate();
-		for (uint32_t rate : {31U, 50U, 300U, 9600U, 115200U, 250000U, 1000000U, 2000000U, 4000000U})
+		// Rates out of the range take the closest one
+		for (uint32_t rate : {1U, 31U, 50U, 300U, 9600U, 115200U, 250000U, 1000000U, 2000000U,
+			4000000U, 100000000U})
 		{
-			if ((uint64_t)rate * 1048576 < clock || rate > clock / 6) continue;
 			uint32_t actual = UARTSetRate(&u, rate);
 			assert(actual == actualBaud(SCI9, clock));
 			uint32_t err = actual > rate ? actual - rate : rate - actual;
@@ -594,8 +725,10 @@ static void uarts()
 			assert(UARTGetRate(&u) == (int)actual);
 		}
 	}
+	// Lowest: PCLK * 128 / (32 * 64 * 256 * 256), highest: PCLK / 6
+	assert(UARTSetRate(&u, 1) == 31 && UARTSetRate(&u, 100000000) == 5333333);
 	uint8_t smr = SCI9->SMR, semr = SCI9->SEMR, brr = SCI9->BRR;
-	assert(UARTSetRate(&u, 0) == 0 && UARTSetRate(&u, 1) == 0 && UARTSetRate(&u, 100000000) == 0);
+	assert(UARTSetRate(&u, 0) == 0);
 	assert(SCI9->SMR == smr && SCI9->SEMR == semr && SCI9->BRR == brr);
 	uint8_t data[] = {0x12, 0x34};
 	SCI9->SSR = SCI2_SSR_TDRE_Msk;
@@ -635,6 +768,29 @@ static void uarts()
 	assert(u.RxDropCnt == 1 && (SCI9->SSR & SCI2_SSR_RDRF_Msk) == 0);
 	assert(u.DevIntrf.RxData(&u.DevIntrf, received, sizeof(received)) == 16);
 	for (unsigned i = 0; i < 16; i++) assert(received[i] == i);
+	// The handler clears the flag first: a byte received while it runs calls
+	// it again
+	for (int i = 4; i < 32; i += 8)
+	{
+		if ((routes[i] & ICU_IELSR0_IELS_Msk) == 0x1C)
+		{
+			s_UartRxIrq = i;
+		}
+	}
+	assert(s_UartRxIrq >= 0);
+	u.EvtCallback = uartRaise;
+	*(volatile uint8_t*)&SCI9->RDR = 0x77;
+	SCI9->SSR = SCI2_SSR_RDRF_Msk;
+	routes[s_UartRxIrq] |= ICU_IELSR0_IR_Msk;
+	handlers[s_UartRxIrq]();
+	assert(s_UartRxCalls == 1 && (routes[s_UartRxIrq] & ICU_IELSR0_IR_Msk));
+	*(volatile uint8_t*)&SCI9->RDR = 0x78;
+	SCI9->SSR = SCI2_SSR_RDRF_Msk;
+	handlers[s_UartRxIrq]();
+	assert(s_UartRxCalls == 2 && (routes[s_UartRxIrq] & ICU_IELSR0_IR_Msk) == 0);
+	u.EvtCallback = nullptr;
+	assert(u.DevIntrf.RxData(&u.DevIntrf, received, sizeof(received)) == 2);
+	assert(received[0] == 0x77 && received[1] == 0x78);
 	cfg.bIntMode = false;
 	assert(UARTInit(&u, &cfg) && countRoutes() == 0);
 	cfg.bDMAMode = true;
@@ -662,10 +818,46 @@ static void uarts()
 	assert(UARTInit(&fifo, &cfg) && countRoutes() == 0);
 }
 
+// Rate requests out of the range take the closest end of it
+static void busRates()
+{
+	const IOPinCfg_t i2cPins[] = {{1, 2, IOPINOP_FUNC7, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN},
+		{1, 3, IOPINOP_FUNC7, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN}};
+	I2CCfg_t icfg = {};
+	I2CDev_t i2c = {};
+	icfg.DevNo = 0; icfg.Type = I2CTYPE_STANDARD; icfg.Mode = I2CMODE_MASTER;
+	icfg.pIOPinMap = i2cPins; icfg.NbIOPins = 2; icfg.Rate = 1000000;
+	assert(I2CInit(&i2c, &icfg));
+	uint32_t pclkb = SystemPeriphClockGet(1);
+	uint32_t fast = i2c.DevIntrf.SetRate(&i2c.DevIntrf, 400000);
+	assert(fast > 100000 && fast <= 400000 && i2c.Cfg.Rate == fast);
+	assert(i2c.DevIntrf.SetRate(&i2c.DevIntrf, 1000000) == fast);
+	// Slowest: CKS 7, BRL = BRH = 31, 2 * (31 + 4) * 128 PCLKB clocks
+	assert(i2c.DevIntrf.SetRate(&i2c.DevIntrf, 1) == pclkb / 8960);
+	assert(i2c.DevIntrf.SetRate(&i2c.DevIntrf, 0) == 0 && i2c.Cfg.Rate == pclkb / 8960);
+
+	const IOPinCfg_t spiPins[] = {{2, 0, IOPINOP_FUNC6, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+		{2, 1, IOPINOP_FUNC6, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+		{2, 2, IOPINOP_FUNC6, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+		{2, 3, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}};
+	SPICfg_t scfg = {};
+	SPIDev_t spi = {};
+	scfg.DevNo = 0; scfg.Mode = SPIMODE_MASTER; scfg.Phy = SPIPHY_NORMAL;
+	scfg.pIOPinMap = spiPins; scfg.NbIOPins = 4; scfg.Rate = 1;
+	scfg.DataSize = 8; scfg.ChipSel = SPICSEL_MAN; scfg.BitOrder = SPIDATABIT_MSB;
+	scfg.ClkPol = SPICLKPOL_HIGH; scfg.DataPhase = SPIDATAPHASE_FIRST_CLK;
+	assert(SPIInit(&spi, &scfg));
+	uint32_t pclka = SystemPeriphClockGet(0);
+	// Slowest: BRDV 3, SPBR 255, highest: PCLKA / 2
+	assert(spi.Cfg.Rate == pclka / 4096);
+	assert(spi.DevIntrf.SetRate(&spi.DevIntrf, UINT32_MAX) == pclka / 2);
+	assert(spi.DevIntrf.SetRate(&spi.DevIntrf, 1) == pclka / 4096);
+}
+
 int main()
 {
 	assert(mmap((void*)0x40000000, 0xA0000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
 	assert(mmap((void*)FLASH_BASE, 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
-	clocks(); icuAndGpio(); timers(); gptTimers(); uarts();
-	puts("RE01 clock, ICU, GPIO, timer and UART regression checks passed");
+	clocks(); icuAndGpio(); timers(); gptTimers(); uarts(); busRates();
+	puts("RE01 clock, ICU, GPIO, timer, UART, I2C and SPI rate regression checks passed");
 }

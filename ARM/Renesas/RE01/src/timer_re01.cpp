@@ -80,7 +80,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	if (pCfg->DevNo < 0 || pCfg->DevNo >= RE01_TIMER_MAXCNT ||
 		pCfg->ClkSrc < TIMER_CLKSRC_DEFAULT || pCfg->ClkSrc >= TIMER_CLKSRC_EXT ||
-		pCfg->Freq > 64000000UL || pCfg->bTickInt)
+		pCfg->bTickInt)
 	{
 		return false;
 	}

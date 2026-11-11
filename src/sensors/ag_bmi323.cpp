@@ -109,7 +109,7 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 	return true;
 }
 
-uint8_t AccelBmi323::Scale(uint8_t Value)
+uint16_t AccelBmi323::Scale(uint16_t Value)
 {
 	uint8_t regaddr = BMI323_ACC_CONFIG_REG;
 	uint16_t d = Read16(&regaddr, 1) & ~BMI323_ACC_CONFIG_RANGE_MASK;
@@ -409,7 +409,7 @@ uint32_t GyroBmi323::SamplingFrequency(uint32_t Freq)
 	return Sensor::SamplingFrequency(f);
 }
 
-uint32_t GyroBmi323::Sensitivity(uint32_t Value)
+uint16_t GyroBmi323::Sensitivity(uint16_t Value)
 {
 	uint8_t regaddr = BMI323_GYR_CONFIG_REG;
 	uint32_t d = Read16(&regaddr, 1) & ~BMI323_GYR_CONFIG_RANGE_MASK;

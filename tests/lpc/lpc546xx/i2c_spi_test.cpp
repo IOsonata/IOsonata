@@ -408,6 +408,9 @@ static void I2cTest(void)
 		   s_I2cRegs[2].MSTTIME == ((9U - 2U) | ((6U - 2U) << 4)));
 	assert(I2CSetRate(&i2c, 1000000) == 1000000 && s_I2cRegs[2].CLKDIV == 0U &&
 		   s_I2cRegs[2].MSTTIME == ((8U - 2U) | ((4U - 2U) << 4)));
+	// Below the slowest rate: the slowest, divider 65536 and 9 + 9 clocks
+	assert(I2CSetRate(&i2c, 1) == 12000000U / (65536U * 18U) && s_I2cRegs[2].CLKDIV == 0xFFFFU &&
+		   s_I2cRegs[2].MSTTIME == ((9U - 2U) | ((9U - 2U) << 4)));
 	assert(I2CSetRate(&i2c, 100000) == 100000);
 
 	// Register write and read back

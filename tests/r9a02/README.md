@@ -98,8 +98,9 @@ DTC, ICU and pin sources, then runs `spi_slave_emu.py`, which is the
 external SPI master of SPI21 and of SPI20. It checks:
 
 - SPIInit refusals: 7-bit frames with the DTC, no interrupt, five pins, a
-  chip select without IRQ line, `SPICSEL_MAN`, a rate above fMCK / 8; the
-  SMR, SDR and SPS values; SetRate; a master transfer refused.
+  chip select without IRQ line, `SPICSEL_MAN`; a rate above fMCK / 8 taken
+  as fMCK / 8 by SPIInit and SetRate; the SMR, SDR and SPS values; SetRate;
+  a master transfer refused.
 - With and without the DTC, in the four clock modes: frames of 1 to 128
   bytes against 64-byte buffers, receive and transmit buffers of other
   sizes and none, both orders of the SAU and chip select interrupts at the
@@ -111,7 +112,8 @@ external SPI master of SPI21 and of SPI20. It checks:
   PowerOff.
 - Reception in Snooze on SPI20, with and without the DTC in all four clock
   modes: SELSR0 and SNZCR,
-  a rate above 0.5 Mbps refused at the enabling and by SetRate;
+  a rate above 0.5 Mbps refused at the enabling, taken as 0.5 Mbps by
+  SetRate;
   ICU_SNZCANCEL on only from the standby entry to the wake-up; frames of 1,
   2, 16 and 64 bytes started in Software Standby: byte 0 received in
   Snooze, the next ones in normal operation, MISO idle in byte 0 then the

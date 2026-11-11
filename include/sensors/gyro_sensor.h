@@ -98,6 +98,8 @@ typedef struct __GyroSensor_Config {
 
 class GyroSensor : public Sensor {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	/**
 	 * @brief	Sensor initialization

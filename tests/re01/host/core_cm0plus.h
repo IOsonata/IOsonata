@@ -12,6 +12,10 @@
 #define __NOP() ((void)0)
 #define __WFE() ((void)0)
 #define __CLZ(n) ((n) ? __builtin_clz((uint32_t)(n)) : 32U)
+#define __DSB() ((void)0)
+static inline uint32_t __get_PRIMASK(void) { return 0; }
+static inline void __set_PRIMASK(uint32_t Mask) { (void)Mask; }
+static inline void __disable_irq(void) {}
 static inline void NVIC_EnableIRQ(IRQn_Type Irq) { (void)Irq; }
 static inline void NVIC_DisableIRQ(IRQn_Type Irq) { (void)Irq; }
 static inline void NVIC_ClearPendingIRQ(IRQn_Type Irq) { (void)Irq; }

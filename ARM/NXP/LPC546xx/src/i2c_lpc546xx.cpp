@@ -888,6 +888,11 @@ static uint32_t Lpc546xxI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	{
 		divmax = LPC546XX_I2C_DIV_MAX;
 	}
+	if (divmin > divmax)
+	{
+		// Below the slowest rate: the closest, the slowest divider
+		divmin = divmax;
+	}
 
 	for (uint32_t div = (uint32_t)divmin; div <= (uint32_t)divmax; div++)
 	{

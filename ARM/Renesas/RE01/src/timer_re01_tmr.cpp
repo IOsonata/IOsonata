@@ -57,28 +57,112 @@ static void Re01TmrOvrIRQHandler(int IntNo, void *pCtx)
 	}
 }
 
-static void Re01TmrCompareIRQHandler(RE01_TimerData_t *dev, int TrigNo)
+static void Re01TmrCompare(int TrigNo, uint32_t Val)
 {
-	if (dev->IrqMatch[TrigNo] == (IRQn_Type)-1) return;
-	TimerTrig_t trig = dev->Trigger[TrigNo];
-	Re01TimerClearPending(dev->IrqMatch[TrigNo]);
-	if (trig.Type == TIMER_TRIG_TYPE_CONTINUOUS)
+	if (TrigNo)
 	{
-		volatile uint16_t *cmp = TrigNo ? &TMR01->TCORB : &TMR01->TCORA;
-		*cmp = Re01TimerNextCompare(*cmp, TMR01->TCNT, dev->CC[TrigNo], 0xFFFFUL);
+		TMR01->TCORB = (uint16_t)Val;
 	}
 	else
 	{
-		// Release before invoking the callback, which may rearm this trigger.
-		Re01TmrDisableTrigger(dev->pTimer, TrigNo);
+		TMR01->TCORA = (uint16_t)Val;
 	}
-	if (trig.Handler)
+}
+
+// Writes the compare value of the trigger deadline. A value the counter
+// reaches before it is written matches only after a counter wrap: it is then
+// written again ahead of the counter, the interrupt checks the deadline.
+// Compare interrupt enabled, interrupts disabled.
+__attribute__((noinline)) static void Re01TmrArm(RE01_TimerData_t *dev, int TrigNo)
+{
+	volatile uint16_t *cmp = TrigNo ? &TMR01->TCORB : &TMR01->TCORA;
+	__IOM uint32_t *ielsr = &(&ICU->IELSR0)[dev->IrqMatch[TrigNo] - IEL0_IRQn];
+	uint32_t from = dev->Deadline[TrigNo] - dev->CC[TrigNo];
+	uint32_t val = dev->Deadline[TrigNo];
+
+	*cmp = (uint16_t)val;
+	for (uint32_t ahead = 2; ahead < 0x1000; ahead <<= 1)
 	{
-		trig.Handler(dev->pTimer, TrigNo, trig.pContext);
+		uint32_t count = TMR01->TCNT;
+
+		// Ahead of the counter, or reached with a match
+		if (((count - from) & 0xFFFFUL) < ((val - from) & 0xFFFFUL) ||
+			(*ielsr & ICU_IELSR0_IR_Msk))
+		{
+			return;
+		}
+		from = count;
+		val = (count + ahead) & 0xFFFFUL;
+		*cmp = (uint16_t)val;
 	}
-	else if (dev->pTimer->EvtHandler)
+}
+
+static void Re01TmrCompareIRQHandler(RE01_TimerData_t *dev, int TrigNo)
+{
+	IRQn_Type irq = dev->IrqMatch[TrigNo];
+
+	if (irq == (IRQn_Type)-1) return;
+
+	int calls = 0;
+
+	// The trigger is called when the counter reaches its deadline. The
+	// handler returns with the compare value of the next deadline far enough
+	// ahead of the counter to match after the interrupt flag is cleared.
+	while (dev->IrqMatch[TrigNo] == irq)
 	{
-		dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(TrigNo));
+		uint32_t count = TMR01->TCNT;
+
+		if (!Re01TimerReached(count, dev->Deadline[TrigNo], dev->CC[TrigNo], 0xFFFFUL))
+		{
+			if (((dev->Deadline[TrigNo] - count) & 0xFFFFUL) > dev->Margin || TMR1->TCCR == 0)
+			{
+				Re01TmrCompare(TrigNo, dev->Deadline[TrigNo]);
+				return;
+			}
+			// Too close to return before it: wait for it, shorter than
+			// RE01_TIMER_ISR_TAIL counter reads. After a few calls, called
+			// late by the next interrupt.
+			int n = RE01_TIMER_ISR_TAIL;
+
+			while (calls < RE01_TIMER_ISR_CALLS && n-- > 0 &&
+				!Re01TimerReached(count, dev->Deadline[TrigNo], dev->CC[TrigNo], 0xFFFFUL))
+			{
+				count = TMR01->TCNT;
+			}
+			if (n < 0 || calls >= RE01_TIMER_ISR_CALLS)
+			{
+				Re01TmrCompare(TrigNo, count + dev->Margin + 1);
+				return;
+			}
+		}
+		if (calls++ >= RE01_TIMER_ISR_CALLS)
+		{
+			// Bounded work: called by the next interrupt
+			Re01TmrCompare(TrigNo, count + dev->Margin + 1);
+			return;
+		}
+
+		TimerTrig_t trig = dev->Trigger[TrigNo];
+
+		if (trig.Type == TIMER_TRIG_TYPE_CONTINUOUS)
+		{
+			dev->Deadline[TrigNo] = Re01TimerNextCompare(dev->Deadline[TrigNo], count,
+				dev->CC[TrigNo], 0xFFFFUL);
+		}
+		else
+		{
+			// Release before invoking the callback, which may rearm this trigger.
+			Re01TmrDisableTrigger(dev->pTimer, TrigNo);
+		}
+		// Trigger handler first, then the event handler, as the other timer ports
+		if (trig.Handler)
+		{
+			trig.Handler(dev->pTimer, TrigNo, trig.pContext);
+		}
+		if (dev->pTimer->EvtHandler)
+		{
+			dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(TrigNo));
+		}
 	}
 }
 
@@ -139,10 +223,12 @@ static void Re01TmrReset(TimerDev_t * const pTimer)
 	pTimer->Rollover = 0;
 	if (TMR0->TCR_b.CMIEA)
 	{
+		dev->Deadline[0] = dev->CC[0];
 		TMR01->TCORA = dev->CC[0];
 	}
 	if (TMR0->TCR_b.CMIEB)
 	{
+		dev->Deadline[1] = dev->CC[1];
 		TMR01->TCORB = dev->CC[1];
 	}
 	__IOM uint32_t *ielsr = &ICU->IELSR0;
@@ -172,7 +258,7 @@ static void Re01TmrReset(TimerDev_t * const pTimer)
 static uint32_t Re01TmrSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
-	if (dev == NULL || dev->BaseFreq == 0 || Freq > 64000000UL)
+	if (dev == NULL || dev->BaseFreq == 0)
 	{
 		return 0;
 	}
@@ -208,6 +294,7 @@ static uint32_t Re01TmrSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	dev->TmrClock = (1U << TMR1_TCCR_CSS_Pos) | (code << TMR1_TCCR_CKS_Pos);
 	pTimer->Freq = freq;
 	pTimer->nsPeriod = (1000000000ULL + (freq >> 1)) / freq;
+	dev->Margin = Re01TimerMargin(freq);
 	Re01TimerSetPeriods(dev, cc);
 	Re01TmrReset(pTimer);
 	Re01TmrEnable(pTimer);
@@ -263,12 +350,11 @@ static uint64_t Re01TmrEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
 	if (dev == NULL || (Type != TIMER_TRIG_TYPE_SINGLE && Type != TIMER_TRIG_TYPE_CONTINUOUS)) return 0;
-	uint64_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
-
-	if (cc <= 2ULL || cc >= 0x10000ULL)
+	if (nsPeriod == 0)
 	{
 		return 0;
 	}
+	uint64_t cc = Re01TimerClosestTicks(TimerNanosecondToTick(pTimer, nsPeriod), 0xFFFFUL);
 
 	uint32_t state = DisableInterrupt();
 	uint8_t evtid = TrigNo ? RE01_EVTID_TMR_CMIB0 : RE01_EVTID_TMR_CMIA0;
@@ -287,24 +373,28 @@ static uint64_t Re01TmrEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 	dev->Trigger[TrigNo].Type = Type;
 	dev->CC[TrigNo] = cc & 0xFFFF;
 
-	dev->Trigger[TrigNo].nsPeriod = TimerTickToTime(pTimer, cc, 1000000000UL);
 	dev->Trigger[TrigNo].Handler = Handler;
 	dev->Trigger[TrigNo].pContext = pContext;
 
 	// TMR does not support periodic trigger.
 	// Do it manually within interrupt handler
+	dev->Deadline[TrigNo] = (TMR01->TCNT + cc) & 0xFFFFUL;
 	if (TrigNo > 0)
 	{
-		TMR01->TCORB = (cc + TMR01->TCNT);
+		TMR01->TCORB = (uint16_t)dev->Deadline[TrigNo];
 	}
 	else
 	{
-		TMR01->TCORA = (cc + TMR01->TCNT);
+		TMR01->TCORA = (uint16_t)dev->Deadline[TrigNo];
 	}
 
 	TMR0->TCR |= (TrigNo + 1) << TMR0_TCR_CMIEA_Pos;
+	Re01TmrArm(dev, TrigNo);
 
-	uint64_t period = dev->Trigger[TrigNo].nsPeriod;
+	// Period of the counts, computed once the period has started
+	uint64_t period = TimerTickToTime(pTimer, cc, 1000000000UL);
+
+	dev->Trigger[TrigNo].nsPeriod = period;
 	EnableInterrupt(state);
 	return period;
 }
@@ -413,11 +503,6 @@ static int Re01TmrFindAvailTrigger(TimerDev_t * const pTimer)
  */
 bool Re01TmrInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const pCfg)
 {
-	if (pCfg->Freq > 64000000)
-	{
-		return false;
-	}
-
 	pTimerData->IntPrio = pCfg->IntPrio;
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
 	pTimerData->pTimer->EvtHandler = pCfg->EvtHandler;

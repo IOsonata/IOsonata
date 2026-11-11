@@ -490,6 +490,7 @@ static void Esp32IRQ(int DevNo)
 	Esp32TimerData_t *pData;
 	TimerTrig_t info;
 	uint64_t now;
+	uint64_t late;
 
 	pData = &s_Timer[DevNo];
 	Esp32Reg(pData->Base, ESP32_T0_INT_CLR) = ESP32_T0_INT_BIT;
@@ -510,16 +511,16 @@ static void Esp32IRQ(int DevNo)
 	}
 	else
 	{
-		pData->Deadline +=
-			((now - pData->Deadline) / pData->TriggerTicks + 1) *
-			pData->TriggerTicks;
+		late = now - pData->Deadline;
+		pData->Deadline += late < pData->TriggerTicks ? pData->TriggerTicks :
+			(late / pData->TriggerTicks + 1) * pData->TriggerTicks;
 		Esp32ArmAlarm(pData);
 	}
 	if (info.Handler != NULL)
 	{
 		info.Handler(pData->pTimer, 0, info.pContext);
 	}
-	else if (pData->pTimer->EvtHandler != NULL)
+	if (pData->pTimer->EvtHandler != NULL)
 	{
 		pData->pTimer->EvtHandler(pData->pTimer, TIMER_EVT_TRIGGER(0));
 	}

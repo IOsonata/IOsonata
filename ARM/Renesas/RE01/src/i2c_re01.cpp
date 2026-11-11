@@ -93,8 +93,14 @@ static bool Re01I2cRate(uint32_t Rate, uint8_t *pCks, uint8_t *pBrl,
 					   uint8_t *pBrh, uint32_t *pActual)
 {
 	uint32_t clk = SystemPeriphClockGet(1); // PCLKB, independent of ICLK/PCLKA.
-	if (Rate == 0 || Rate > 400000 || clk == 0 || clk > 32000000)
+	if (Rate == 0 || clk == 0 || clk > 32000000)
 		return false;
+	// Out of the range, the closest end of it. The slowest is CKS = 7 with
+	// BRL = BRH = 31: 2 * (31 + 4) * 128 PCLKB clocks.
+	if (Rate > 400000)
+		Rate = 400000;
+	if ((uint64_t)Rate * 2 * (31 + 4) * 128 < clk)
+		Rate = (clk + 2 * (31 + 4) * 128 - 1) / (2 * (31 + 4) * 128);
 	uint32_t lowNs = Rate <= 100000 ? I2C_SCL_TLOW_STD_MODE_MIN : I2C_SCL_TLOW_FAST_MODE_MIN;
 	uint32_t highNs = Rate <= 100000 ? I2C_SCL_THIGH_STD_MODE_MIN : I2C_SCL_THIGH_FAST_MODE_MIN;
 	uint32_t best = UINT32_MAX;

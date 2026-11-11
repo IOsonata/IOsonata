@@ -88,7 +88,7 @@ SOFTWARE.
 
 class LcdST77xx : public LCDMatrix {
 public:
-	bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf);
+	bool Init(const DisplayCfg_t &, DeviceIntrf * const pIntrf);
 
 
 private:

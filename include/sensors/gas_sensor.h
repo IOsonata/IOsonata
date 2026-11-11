@@ -86,6 +86,8 @@ typedef struct __GasSensor_Config {
 /// Gas sensor base class, implementation must derive this class
 class GasSensor : public Sensor {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	/**
 	 * @brief	Initialize sensor (require implementation).

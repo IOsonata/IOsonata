@@ -148,6 +148,11 @@ extern "C" int EmuRate(int Rate)
 	return (int)g_Slave.Rate((uint32_t)Rate);
 }
 
+extern "C" int EmuGetRate(void)
+{
+	return (int)g_Slave.Rate();
+}
+
 // SPI20 slave, DevNo 4. Flags bit 0: DMA. Returns 1 when SPIInit succeeds.
 extern "C" int EmuInit20(int Flags, int Rate, int Mode)
 {

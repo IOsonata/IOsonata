@@ -17,7 +17,8 @@
 		so a period can be longer than the counter. A continuous trigger
 		keeps its phase, periods missed by a late interrupt are counted as
 		one. The basic timers TIM6 and TIM7 have no compare channel: their
-		one trigger sets the counter period.
+		one trigger sets the counter period. A trigger period is the
+		closest of 4 to 2^32 - 1 counts, 4 to 65536 on the basic timers.
 
 		The timer clock is the APB timer clock: PCLK, twice PCLK when the
 		APB prescaler is not 1. The frequency is the closest of that clock
@@ -643,20 +644,36 @@ static bool StTimPlan(int PclkIdx, uint32_t Freq, uint32_t *pDiv, uint32_t *pFre
 	return *pFreq != 0;
 }
 
-// Period in counts, 4 to UINT32_MAX, and the period it makes in nsec
-static bool StTimPeriod(uint32_t Freq, uint64_t nsPeriod, uint32_t *pTicks, uint64_t *pActual)
+// Longest trigger period in counts: one counter period on the basic timers,
+// the deadline is 64 bits on the others
+static uint32_t StTimMaxTicks(const StTimInfo_t *pInfo)
 {
-	if (Freq == 0 || nsPeriod == 0 || nsPeriod / 1000000000ULL > UINT32_MAX / Freq)
+	return pInfo->NbChan == 0 ? 65536U : UINT32_MAX;
+}
+
+// Closest period in counts, 4 to Max, and the period it makes in nsec
+static bool StTimPeriod(uint32_t Freq, uint64_t nsPeriod, uint32_t Max, uint32_t *pTicks, uint64_t *pActual)
+{
+	if (Freq == 0 || nsPeriod == 0)
 	{
 		return false;
 	}
 
-	uint64_t val = (nsPeriod / 1000000000ULL) * Freq +
-				   ((nsPeriod % 1000000000ULL) * Freq + 500000000ULL) / 1000000000ULL;
+	uint64_t sec = nsPeriod / 1000000000ULL;
+	uint64_t val = Max;
 
-	if (val < 4 || val > UINT32_MAX)
+	// Whole seconds and the rest apart, the product would overflow otherwise
+	if (sec <= UINT32_MAX / Freq)
 	{
-		return false;
+		val = sec * Freq + ((nsPeriod - sec * 1000000000ULL) * Freq + 500000000ULL) / 1000000000ULL;
+	}
+	if (val > Max)
+	{
+		val = Max;
+	}
+	if (val < 4)
+	{
+		val = 4;
 	}
 	*pTicks = (uint32_t)val;
 	*pActual = (val * 1000000000ULL + (Freq >> 1)) / Freq;
@@ -820,8 +837,8 @@ static void StTimReset(TimerDev_t * const pTimer)
 /**
  * @brief	Set timer main frequency.
  *
- * The counter restarts from 0 and runs. Enabled triggers keep their period,
- * the frequency is refused if one can not.
+ * The counter restarts from 0 and runs. Enabled triggers take the period
+ * closest to theirs at the new frequency.
  *
  * @param 	Freq : Frequency in Hz, 0 for the highest
  *
@@ -850,13 +867,9 @@ static uint32_t StTimSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
 	for (int i = 0; i < StTimTrigCnt(info); i++)
 	{
-		if (info->pTrig[i].bActive &&
-			(StTimPeriod(freq, info->pTrig[i].Info.nsPeriod, &ticks[i], &actual[i]) == false ||
-			 (info->NbChan == 0 && ticks[i] > 65536)))
+		if (info->pTrig[i].bActive)
 		{
-			EnableInterrupt(state);
-
-			return 0;
+			(void)StTimPeriod(freq, info->pTrig[i].Info.nsPeriod, StTimMaxTicks(info), &ticks[i], &actual[i]);
 		}
 	}
 
@@ -968,8 +981,9 @@ static void StTimTriggerDisable(TimerDev_t * const pTimer, int TrigNo)
  * @brief	Enable a compare trigger.
  *
  * @param   TrigNo : 0 to GetMaxTrigger - 1
- * @param   nsPeriod : Trigger period in nsec, 4 counts or more, 65536 at
- * 					   most on the basic timers
+ * @param   nsPeriod : Trigger period in nsec. The closest period of 4 to
+ * 					   2^32 - 1 counts is used, 4 to 65536 on the basic
+ * 					   timers.
  * @param   Type     : Trigger type single shot or continuous
  * @param	Handler	 : Optional trigger callback
  * @param   pContext : Optional pointer passed to the callback
@@ -992,8 +1006,7 @@ static uint64_t StTimTriggerEnable(TimerDev_t * const pTimer, int TrigNo, uint64
 	uint32_t ticks;
 	uint64_t actual;
 
-	if (StTimPeriod(pTimer->Freq, nsPeriod, &ticks, &actual) == false ||
-		(info->NbChan == 0 && ticks > 65536))
+	if (StTimPeriod(pTimer->Freq, nsPeriod, StTimMaxTicks(info), &ticks, &actual) == false)
 	{
 		return 0;
 	}
@@ -1074,9 +1087,17 @@ static void StTimService(int Idx)
 		}
 
 		StTimTrig_t *trig = &info->pTrig[i];
+
+		// No counter read for a trigger not enabled
+		if (trig->bActive == false)
+		{
+			EnableInterrupt(state);
+			continue;
+		}
+
 		uint64_t now = StTimCount(Idx);
 
-		if (trig->bActive == false || now < trig->Deadline)
+		if (now < trig->Deadline)
 		{
 			EnableInterrupt(state);
 			continue;
@@ -1090,8 +1111,11 @@ static void StTimService(int Idx)
 		}
 		else
 		{
-			// Keeps the phase, missed periods are one event
-			trig->Deadline += ((now - trig->Deadline) / trig->Ticks + 1) * trig->Ticks;
+			// Keeps the phase, missed periods are one event. No division
+			// when on time.
+			uint64_t late = now - trig->Deadline;
+
+			trig->Deadline += late < trig->Ticks ? trig->Ticks : (late / trig->Ticks + 1) * trig->Ticks;
 			StTimArm(Idx, i);
 		}
 		EnableInterrupt(state);

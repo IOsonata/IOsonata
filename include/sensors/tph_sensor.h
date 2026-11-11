@@ -89,6 +89,8 @@ typedef struct __TPHSensor_Config {
 /// TPH sensor base class.  Sensor implementation must derive form this class
 class TphSensor : public Sensor {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	/**
 	 * @brief	Initialize sensor (require implementation).

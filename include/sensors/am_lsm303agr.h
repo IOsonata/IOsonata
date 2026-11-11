@@ -357,7 +357,7 @@ public:
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
-	virtual uint8_t Scale(uint8_t Value);
+	virtual uint16_t Scale(uint16_t Value);
 
 	/**
 	 * @brief	Set and enable filter cutoff frequency

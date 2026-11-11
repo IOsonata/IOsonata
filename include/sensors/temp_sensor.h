@@ -89,6 +89,8 @@ typedef struct __TempSensor_Config {
 /// Temperature sensor base class.  Sensor implementation must derive form this class
 class TempSensor : public Sensor {
 public:
+	// Device register access, not hidden by the Read below
+	using Device::Read;
 
 	TempSensor() { Type(SENSOR_TYPE_TEMP); }
 
