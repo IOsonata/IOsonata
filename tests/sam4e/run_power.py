@@ -28,6 +28,14 @@ with tempfile.TemporaryDirectory(prefix='sam4e-power-') as directory:
                         *INCLUDES, str(ROOT / 'tests/sam4e/power_test.cpp'),
                         '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
+with tempfile.TemporaryDirectory(prefix='sam4e-clock-') as directory:
+    for opt in ('-O0', '-O2'):
+        binary = Path(directory) / ('clock' + opt)
+        subprocess.run(['g++', '-std=c++17', opt, '-Wall', '-Wextra', '-Werror',
+                        '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                        *INCLUDES, str(ROOT / 'tests/sam4e/clock_test.cpp'),
+                        '-o', str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
 project = ROOT / 'ARM/Microchip/SAM4E/SAM4E16E/lib/ioc/.project'
 links = ET.parse(project).findall('.//link')
 for source in SOURCES:
