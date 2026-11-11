@@ -23,7 +23,8 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | Missing from shared power implementation | Preserve radio clock ownership |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L, SAMD | Missing | Audit existing selectors and low-power clocks |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Review runtime selection and oscillator initialization |
+| SAMD | Missing | Audit existing selectors and low-power clocks |
 | LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
@@ -84,3 +85,41 @@ Peripheral clock index 0 is MCK; other indices return 0.
 The main-clock register model checks repeated selections, transition ordering,
 PLL limits, bypass, RC rounding, USB division and ready timeouts at O0 and O2.
 See datasheet sections 28, 29 and 46 for the clock tree and electrical limits.
+
+## SAM4L
+
+`system_power_sam4l.cpp` implements reset reasons, Backup entry, EIC wake pins
+and four 32-bit backup registers. Backup powers down both SRAM banks, so
+`SystemRamRetain` returns false. Ordinary Retention sleep is not used for
+`SystemPowerOff`, since it resumes execution instead of resetting the core.
+Stop DMA and peripheral transfers before calling power off. Existing AST and
+other backup wake enables are preserved; their drivers own their configuration.
+
+Wake pins use asynchronous high/low level detection through the backup mux.
+Configure the selected pin as a GPIO input first. Toggle detection is not
+supported. An EIC line already enabled by another driver is refused. Wake
+configuration does not install an ISR or enable NVIC delivery.
+
+| Package | Backup wake pins |
+| --- | --- |
+| A | PA04, PA05, PA06, PA07 |
+| B | A pins plus PB01 |
+| C | B pins plus PC03, PC04, PC05, PC06 |
+
+Both SAM4LC and SAM4LS use these mappings. Alternative EIC pin routes cannot
+wake from Backup. Disabling a pin removes its backup mux and EIC enable while
+preserving the shared EIC wake enable for other users.
+
+The cause registers remain readable until the next reset/wakeup. SYSRESETREQ
+is reported by hardware as OCDRST and maps to `SYSTEM_RESET_SOFT`; software
+cannot distinguish a debugger-issued SYSRESETREQ. Backup EIC and AST wakeups
+map to the generic pin and timer reasons. PICOUART wakeup has no generic reason
+bit and is not misreported as USB or GPIO.
+
+Run `python3 tests/sam4l/run_power.py`. It checks production headers for all
+18 C/S, density and package combinations, runs host register tests for all six
+package/family combinations at O0 and O2, and checks both Eclipse library links.
+These are not Arm firmware builds or hardware power/wakeup validation.
+
+Reference: [Microchip SAM4L datasheet 42023H](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/DataSheets/Atmel-42023-ARM-Microcontroller-ATSAM4L-Low-Power-LCD_Datasheet.pdf),
+sections 6.1.3, 10.7.15, 11.5, 11.6.9..11, 12.7.18 and 21.6.

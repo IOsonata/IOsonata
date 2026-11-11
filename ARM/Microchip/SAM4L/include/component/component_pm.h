@@ -416,13 +416,15 @@
 #define PM_RCAUSE_EXT               (0x1u << PM_RCAUSE_EXT_Pos)
 #define PM_RCAUSE_WDT_Pos           3            /**< \brief (PM_RCAUSE) Watchdog Reset */
 #define PM_RCAUSE_WDT               (0x1u << PM_RCAUSE_WDT_Pos)
+#define PM_RCAUSE_BKUP_Pos          6            /**< Backup wake reset (datasheet 42023H, section 10.7.15) */
+#define PM_RCAUSE_BKUP              (0x1u << PM_RCAUSE_BKUP_Pos)
 #define PM_RCAUSE_OCDRST_Pos        8            /**< \brief (PM_RCAUSE) OCD Reset */
 #define PM_RCAUSE_OCDRST            (0x1u << PM_RCAUSE_OCDRST_Pos)
 #define PM_RCAUSE_POR33_Pos         10           /**< \brief (PM_RCAUSE) Power-on Reset */
 #define PM_RCAUSE_POR33             (0x1u << PM_RCAUSE_POR33_Pos)
 #define PM_RCAUSE_BOD33_Pos         13           /**< \brief (PM_RCAUSE) Brown-out 3.3V Reset */
 #define PM_RCAUSE_BOD33             (0x1u << PM_RCAUSE_BOD33_Pos)
-#define PM_RCAUSE_MASK              0x0000250Fu  /**< \brief (PM_RCAUSE) MASK Register */
+#define PM_RCAUSE_MASK              0x0000254Fu  /**< \brief (PM_RCAUSE) MASK Register */
 
 /* -------- PM_WCAUSE : (PM Offset: 0x184) (R/  32) Wake Cause Register -------- */
 #define PM_WCAUSE_OFFSET            0x184        /**< \brief (PM_WCAUSE offset) Wake Cause Register */
