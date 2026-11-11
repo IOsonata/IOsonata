@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?fileVersion 4.0.0?>
+<cproject storage_type_id="org.eclipse.cdt.core.XmlProjectDescriptionStorage">
+	<storageModule moduleId="org.eclipse.cdt.core.settings">
+		<cconfiguration id="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.debug.esp32c5.timerirqtest.1">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.debug.esp32c5.timerirqtest.1" moduleId="org.eclipse.cdt.core.settings" name="Debug">
+				<externalSettings />
+				<extensions>
+					<extension id="org.eclipse.cdt.core.GNU_ELF" point="org.eclipse.cdt.core.BinaryParser" />
+					<extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser" />
+					<extension id="org.eclipse.cdt.core.GmakeErrorParser" point="org.eclipse.cdt.core.ErrorParser" />
+					<extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser" />
+					<extension id="org.eclipse.cdt.core.CWDLocator" point="org.eclipse.cdt.core.ErrorParser" />
+					<extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser" />
+				</extensions>
+			</storageModule>
+			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+				<configuration id="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.debug.esp32c5.timerirqtest.1" name="Debug" parent="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.debug" artifactName="${ProjName}" artifactExtension="elf" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" postbuildStep="riscv-none-elf-objcopy -O binary &quot;${ProjName}.elf&quot; &quot;${ProjName}.bin&quot;">
+					<folderInfo id="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.debug.esp32c5.timerirqtest.1." name="/" resourcePath="">
+						<toolChain id="ilg.gnumcueclipse.managedbuild.cross.riscv.toolchain.elf.debug.esp32c5.timerirqtest.2" name="RISC-V Cross GCC" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.toolchain.elf.debug">
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.base.esp32c5.timerirqtest.3" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.base" valueType="enumerated" name="Architecture" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.arch.rv32i" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.multiply.esp32c5.timerirqtest.4" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.multiply" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.atomic.esp32c5.timerirqtest.5" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.atomic" valueType="boolean" value="false" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.compressed.esp32c5.timerirqtest.6" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.compressed" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.extensions.esp32c5.timerirqtest.7" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.extensions" valueType="string" name="Other extensions" value="zicsr" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.abi.integer.esp32c5.timerirqtest.8" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.abi.integer" valueType="enumerated" name="Integer ABI" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.abi.integer.ilp32" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.toolchain.id.esp32c5.timerirqtest.9" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.toolchain.id" valueType="string" value="2273142913" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.toolchain.name.esp32c5.timerirqtest.10" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.toolchain.name" valueType="string" value="xPack GNU RISC-V Embedded GCC" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.prefix.esp32c5.timerirqtest.11" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.prefix" valueType="string" value="riscv-none-elf-" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.c.esp32c5.timerirqtest.12" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.c" valueType="string" value="gcc" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.cpp.esp32c5.timerirqtest.13" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.cpp" valueType="string" value="g++" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.ar.esp32c5.timerirqtest.14" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.ar" valueType="string" value="ar" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.objcopy.esp32c5.timerirqtest.15" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.objcopy" valueType="string" value="objcopy" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.objdump.esp32c5.timerirqtest.16" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.objdump" valueType="string" value="objdump" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.size.esp32c5.timerirqtest.17" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.size" valueType="string" value="size" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.make.esp32c5.timerirqtest.18" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.make" valueType="string" value="make" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.rm.esp32c5.timerirqtest.19" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.rm" valueType="string" value="rm" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.level.esp32c5.timerirqtest.20" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.level" valueType="enumerated" name="Optimization Level" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.level.none" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.messagelength.esp32c5.timerirqtest.21" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.messagelength" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.signedchar.esp32c5.timerirqtest.22" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.signedchar" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.functionsections.esp32c5.timerirqtest.23" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.functionsections" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.datasections.esp32c5.timerirqtest.24" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.datasections" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.debugging.level.esp32c5.timerirqtest.25" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.debugging.level" valueType="enumerated" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.debugging.level.max" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.addtools.createflash.esp32c5.timerirqtest.26" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.addtools.createflash" valueType="boolean" value="false" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.addtools.printsize.esp32c5.timerirqtest.27" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.addtools.printsize" valueType="boolean" value="true" />
+							<targetPlatform id="ilg.gnumcueclipse.managedbuild.cross.riscv.targetPlatform.esp32c5.timerirqtest.28" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.targetPlatform" archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" isAbstract="false" osList="all" />
+							<builder id="ilg.gnumcueclipse.managedbuild.cross.riscv.builder.esp32c5.timerirqtest.29" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.builder" name="Gnu Make Builder" buildPath="${workspace_loc:/SpiLoopback}/Debug" keepEnvironmentInBuildfile="false" managedBuildOn="true" />
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.assembler.esp32c5.timerirqtest.30" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.assembler" name="GNU RISC-V Cross Assembler">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.assembler.usepreprocessor.esp32c5.timerirqtest.31" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.assembler.usepreprocessor" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.assembler.defs.esp32c5.timerirqtest.32" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.assembler.defs" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="ESP32C5" />
+								</option>
+								<inputType id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.assembler.input.esp32c5.timerirqtest.33" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.assembler.input" />
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.compiler.esp32c5.timerirqtest.34" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.compiler" name="GNU RISC-V Cross C Compiler">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.defs.esp32c5.timerirqtest.35" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.defs" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="ESP32C5" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.include.paths.esp32c5.timerirqtest.36" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.include.paths" valueType="includePath" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../src&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.std.esp32c5.timerirqtest.37" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.std" valueType="enumerated" name="Language standard" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.std.gnu11" />
+								<inputType id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.compiler.input.esp32c5.timerirqtest.38" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.compiler.input" />
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.compiler.esp32c5.timerirqtest.39" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.compiler" name="GNU RISC-V Cross C++ Compiler">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.defs.esp32c5.timerirqtest.40" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.defs" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="ESP32C5" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.include.paths.esp32c5.timerirqtest.41" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.include.paths" valueType="includePath" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../src&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.noexceptions.esp32c5.timerirqtest.42" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.noexceptions" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.nortti.esp32c5.timerirqtest.43" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.nortti" valueType="boolean" value="true" />
+								<inputType id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.compiler.input.esp32c5.timerirqtest.44" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.compiler.input" />
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.linker.esp32c5.timerirqtest.45" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.linker" name="GNU RISC-V Cross C Linker">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.gcsections.esp32c5.timerirqtest.46" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.gcsections" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.other.esp32c5.timerirqtest.47" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.other" valueType="string" name="Other linker flags" value="-Wl,--undefined=ResetEntry" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.scriptfile.esp32c5.timerirqtest.48" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.scriptfile" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../../../../ldscript/gcc_esp32c5.ld&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.paths.esp32c5.timerirqtest.49" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.paths" valueType="libPaths" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.libs.esp32c5.timerirqtest.50" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.libs" valueType="libs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="IOsonata_ESP32C5" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.usenewlibnano.esp32c5.timerirqtest.51" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.usenewlibnano" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.usenewlibnosys.esp32c5.timerirqtest.52" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.usenewlibnosys" valueType="boolean" value="true" />
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.linker.esp32c5.timerirqtest.53" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.linker" name="GNU RISC-V Cross C++ Linker">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.gcsections.esp32c5.timerirqtest.54" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.gcsections" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.other.esp32c5.timerirqtest.55" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.other" valueType="string" name="Other linker flags" value="-Wl,--undefined=ResetEntry" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.scriptfile.esp32c5.timerirqtest.56" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.scriptfile" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../../../../ldscript/gcc_esp32c5.ld&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.paths.esp32c5.timerirqtest.57" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.paths" valueType="libPaths" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.libs.esp32c5.timerirqtest.58" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.libs" valueType="libs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="IOsonata_ESP32C5" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.usenewlibnano.esp32c5.timerirqtest.59" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.usenewlibnano" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.usenewlibnosys.esp32c5.timerirqtest.60" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.usenewlibnosys" valueType="boolean" value="true" />
+								<inputType id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.linker.input.esp32c5.timerirqtest.61" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)" />
+									<additionalInput kind="additionalinput" paths="$(LIBS)" />
+								</inputType>
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.archiver.esp32c5.timerirqtest.62" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.archiver" name="GNU RISC-V Cross Archiver" />
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.createflash.esp32c5.timerirqtest.63" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.createflash" name="GNU RISC-V Cross Create Flash Image" />
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.createlisting.esp32c5.timerirqtest.64" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.createlisting" name="GNU RISC-V Cross Create Listing" />
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.printsize.esp32c5.timerirqtest.65" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.printsize" name="GNU RISC-V Cross Print Size" />
+						</toolChain>
+					</folderInfo>
+					<sourceEntries>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src" />
+					</sourceEntries>
+				</configuration>
+			</storageModule>
+			<storageModule moduleId="org.eclipse.cdt.core.externalSettings" />
+		</cconfiguration>
+		<cconfiguration id="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.release.esp32c5.timerirqtest.66">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.release.esp32c5.timerirqtest.66" moduleId="org.eclipse.cdt.core.settings" name="Release">
+				<externalSettings />
+				<extensions>
+					<extension id="org.eclipse.cdt.core.GNU_ELF" point="org.eclipse.cdt.core.BinaryParser" />
+					<extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser" />
+					<extension id="org.eclipse.cdt.core.GmakeErrorParser" point="org.eclipse.cdt.core.ErrorParser" />
+					<extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser" />
+					<extension id="org.eclipse.cdt.core.CWDLocator" point="org.eclipse.cdt.core.ErrorParser" />
+					<extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser" />
+				</extensions>
+			</storageModule>
+			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+				<configuration id="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.release.esp32c5.timerirqtest.66" name="Release" parent="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.release" artifactName="${ProjName}" artifactExtension="elf" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" postbuildStep="riscv-none-elf-objcopy -O binary &quot;${ProjName}.elf&quot; &quot;${ProjName}.bin&quot;">
+					<folderInfo id="ilg.gnumcueclipse.managedbuild.cross.riscv.config.elf.release.esp32c5.timerirqtest.66." name="/" resourcePath="">
+						<toolChain id="ilg.gnumcueclipse.managedbuild.cross.riscv.toolchain.elf.release.esp32c5.timerirqtest.67" name="RISC-V Cross GCC" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.toolchain.elf.release">
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.base.esp32c5.timerirqtest.68" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.base" valueType="enumerated" name="Architecture" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.arch.rv32i" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.multiply.esp32c5.timerirqtest.69" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.multiply" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.atomic.esp32c5.timerirqtest.70" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.atomic" valueType="boolean" value="false" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.compressed.esp32c5.timerirqtest.71" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.compressed" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.extensions.esp32c5.timerirqtest.72" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.isa.extensions" valueType="string" name="Other extensions" value="zicsr" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.abi.integer.esp32c5.timerirqtest.73" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.target.abi.integer" valueType="enumerated" name="Integer ABI" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.abi.integer.ilp32" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.toolchain.id.esp32c5.timerirqtest.74" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.toolchain.id" valueType="string" value="2273142913" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.toolchain.name.esp32c5.timerirqtest.75" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.toolchain.name" valueType="string" value="xPack GNU RISC-V Embedded GCC" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.prefix.esp32c5.timerirqtest.76" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.prefix" valueType="string" value="riscv-none-elf-" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.c.esp32c5.timerirqtest.77" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.c" valueType="string" value="gcc" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.cpp.esp32c5.timerirqtest.78" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.cpp" valueType="string" value="g++" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.ar.esp32c5.timerirqtest.79" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.ar" valueType="string" value="ar" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.objcopy.esp32c5.timerirqtest.80" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.objcopy" valueType="string" value="objcopy" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.objdump.esp32c5.timerirqtest.81" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.objdump" valueType="string" value="objdump" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.size.esp32c5.timerirqtest.82" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.size" valueType="string" value="size" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.make.esp32c5.timerirqtest.83" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.make" valueType="string" value="make" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.rm.esp32c5.timerirqtest.84" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.command.rm" valueType="string" value="rm" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.level.esp32c5.timerirqtest.85" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.level" valueType="enumerated" name="Optimization Level" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.level.size" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.messagelength.esp32c5.timerirqtest.86" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.messagelength" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.signedchar.esp32c5.timerirqtest.87" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.signedchar" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.functionsections.esp32c5.timerirqtest.88" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.functionsections" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.datasections.esp32c5.timerirqtest.89" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.optimization.datasections" valueType="boolean" value="true" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.debugging.level.esp32c5.timerirqtest.90" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.debugging.level" valueType="enumerated" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.debugging.level.none" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.addtools.createflash.esp32c5.timerirqtest.91" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.addtools.createflash" valueType="boolean" value="false" />
+							<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.addtools.printsize.esp32c5.timerirqtest.92" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.addtools.printsize" valueType="boolean" value="true" />
+							<targetPlatform id="ilg.gnumcueclipse.managedbuild.cross.riscv.targetPlatform.esp32c5.timerirqtest.93" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.targetPlatform" archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" isAbstract="false" osList="all" />
+							<builder id="ilg.gnumcueclipse.managedbuild.cross.riscv.builder.esp32c5.timerirqtest.94" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.builder" name="Gnu Make Builder" buildPath="${workspace_loc:/SpiLoopback}/Release" keepEnvironmentInBuildfile="false" managedBuildOn="true" />
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.assembler.esp32c5.timerirqtest.95" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.assembler" name="GNU RISC-V Cross Assembler">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.assembler.usepreprocessor.esp32c5.timerirqtest.96" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.assembler.usepreprocessor" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.assembler.defs.esp32c5.timerirqtest.97" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.assembler.defs" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="ESP32C5" />
+								</option>
+								<inputType id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.assembler.input.esp32c5.timerirqtest.98" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.assembler.input" />
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.compiler.esp32c5.timerirqtest.99" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.compiler" name="GNU RISC-V Cross C Compiler">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.defs.esp32c5.timerirqtest.100" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.defs" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="ESP32C5" />
+									<listOptionValue builtIn="false" value="NDEBUG" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.include.paths.esp32c5.timerirqtest.101" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.include.paths" valueType="includePath" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../src&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.std.esp32c5.timerirqtest.102" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.std" valueType="enumerated" name="Language standard" value="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.compiler.std.gnu11" />
+								<inputType id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.compiler.input.esp32c5.timerirqtest.103" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.compiler.input" />
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.compiler.esp32c5.timerirqtest.104" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.compiler" name="GNU RISC-V Cross C++ Compiler">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.defs.esp32c5.timerirqtest.105" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.defs" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="ESP32C5" />
+									<listOptionValue builtIn="false" value="NDEBUG" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.include.paths.esp32c5.timerirqtest.106" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.include.paths" valueType="includePath" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../src&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.noexceptions.esp32c5.timerirqtest.107" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.noexceptions" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.nortti.esp32c5.timerirqtest.108" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.compiler.nortti" valueType="boolean" value="true" />
+								<inputType id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.compiler.input.esp32c5.timerirqtest.109" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.compiler.input" />
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.linker.esp32c5.timerirqtest.110" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.c.linker" name="GNU RISC-V Cross C Linker">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.gcsections.esp32c5.timerirqtest.111" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.gcsections" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.other.esp32c5.timerirqtest.112" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.other" valueType="string" name="Other linker flags" value="-Wl,--undefined=ResetEntry" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.scriptfile.esp32c5.timerirqtest.113" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.scriptfile" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../../../../ldscript/gcc_esp32c5.ld&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.paths.esp32c5.timerirqtest.114" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.paths" valueType="libPaths" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.libs.esp32c5.timerirqtest.115" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.libs" valueType="libs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="IOsonata_ESP32C5" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.usenewlibnano.esp32c5.timerirqtest.116" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.usenewlibnano" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.usenewlibnosys.esp32c5.timerirqtest.117" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.c.linker.usenewlibnosys" valueType="boolean" value="true" />
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.linker.esp32c5.timerirqtest.118" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.linker" name="GNU RISC-V Cross C++ Linker">
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.gcsections.esp32c5.timerirqtest.119" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.gcsections" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.other.esp32c5.timerirqtest.120" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.other" valueType="string" name="Other linker flags" value="-Wl,--undefined=ResetEntry" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.scriptfile.esp32c5.timerirqtest.121" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.scriptfile" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../../../../ldscript/gcc_esp32c5.ld&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.paths.esp32c5.timerirqtest.122" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.paths" valueType="libPaths" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release&quot;" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.libs.esp32c5.timerirqtest.123" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.libs" valueType="libs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
+									<listOptionValue builtIn="false" value="IOsonata_ESP32C5" />
+								</option>
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.usenewlibnano.esp32c5.timerirqtest.124" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.usenewlibnano" valueType="boolean" value="true" />
+								<option id="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.usenewlibnosys.esp32c5.timerirqtest.125" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.option.cpp.linker.usenewlibnosys" valueType="boolean" value="true" />
+								<inputType id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.linker.input.esp32c5.timerirqtest.126" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.cpp.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)" />
+									<additionalInput kind="additionalinput" paths="$(LIBS)" />
+								</inputType>
+							</tool>
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.archiver.esp32c5.timerirqtest.127" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.archiver" name="GNU RISC-V Cross Archiver" />
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.createflash.esp32c5.timerirqtest.128" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.createflash" name="GNU RISC-V Cross Create Flash Image" />
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.createlisting.esp32c5.timerirqtest.129" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.createlisting" name="GNU RISC-V Cross Create Listing" />
+							<tool id="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.printsize.esp32c5.timerirqtest.130" superClass="ilg.gnumcueclipse.managedbuild.cross.riscv.tool.printsize" name="GNU RISC-V Cross Print Size" />
+						</toolChain>
+					</folderInfo>
+					<sourceEntries>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src" />
+					</sourceEntries>
+				</configuration>
+			</storageModule>
+			<storageModule moduleId="org.eclipse.cdt.core.externalSettings" />
+		</cconfiguration>
+	</storageModule>
+	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+		<project id="SpiLoopback.ilg.gnumcueclipse.managedbuild.cross.riscv.target.elf.esp32c5.timerirqtest.131" name="Executable" projectType="ilg.gnumcueclipse.managedbuild.cross.riscv.target.elf" />
+	</storageModule>
+	<storageModule moduleId="scannerConfiguration">
+		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="" />
+	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders" />
+	<storageModule moduleId="refreshScope" />
+	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets" />
+</cproject>

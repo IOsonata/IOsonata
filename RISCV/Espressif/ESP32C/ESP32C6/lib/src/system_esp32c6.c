@@ -67,10 +67,15 @@ void SystemInit(void)
     Esp32PcrSystemInit(0U);
 #endif
 
+	// Enable the cycle event used by idelay.h (Espressif PCER/PCMR/PCCR).
+	__asm volatile("csrw 0x7E0, %0" : : "r"(1U));
+	__asm volatile("csrw 0x7E2, zero");
+	__asm volatile("csrw 0x7E1, %0" : : "r"(1U));
+
     vt = (uintptr_t)RISCV_VectorTable;
     g_Esp32C6VectorBase = vt;
-    // The 32-entry CPU trap table must reside in the 64 KiB IRAM region.
-    if ((vt & 0xFFUL) != 0U || vt < 0x40800000UL || vt >= 0x40810000UL)
+    // Keep the CPU trap table in executable SRAM above the cache reservation.
+    if ((vt & 0xFFUL) != 0U || vt < 0x40808000UL || vt >= 0x40810000UL)
     {
         g_Esp32C6VectorRangeError = 1U;
         for (;;)
@@ -99,4 +104,9 @@ void SystemInit(void)
     g_Esp32C6MtvecWritten = vector;
     __asm volatile("csrw mtvec, %0" : : "r"(vector) : "memory");
     __asm volatile("csrr %0, mtvec" : "=r"(g_Esp32C6MtvecReadback));
+
+	// PLIC input enables do not replace the CPU mie mask. ROM direct boot
+	// can leave mie clear. Unmask after mtvec is installed, with every PLIC
+	// input still disabled and mstatus.MIE clear. Drivers enable their inputs.
+	__asm volatile("csrw mie, %0" : : "r"(UINT32_MAX) : "memory");
 }

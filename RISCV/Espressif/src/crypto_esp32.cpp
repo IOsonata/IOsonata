@@ -2,6 +2,11 @@
 @file	crypto_esp32.cpp
 @brief	ESP32-C3/C6 AES overrides of the generic crypto implementation.
 
+@author	IOsonata contributors
+@date	Nov. 8, 2026
+
+@license
+
 MIT License
 
 Copyright (c) 2026, I-SYST, all rights reserved
@@ -30,9 +35,20 @@ SOFTWARE.
 #include "crypto/crypto.h"
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_softsha256.h"
+#if defined(ESP32_RNG_MODEL_DISABLED)
+#include "crypto/crypto_softrng.h"
+#endif
 
 #if !defined(ESP32C3) && !defined(ESP32C6)
 #error "Crypto register mapping is verified only for ESP32-C3/C6"
+#endif
+
+#if defined(ESP32C3)
+CRYPTO_STATUS Esp32C3RngFill(uint8_t *pOut, size_t Len);
+bool Esp32C3RngSecureAvailable(void);
+#else
+CRYPTO_STATUS Esp32C6RngFill(uint8_t *pOut, size_t Len);
+bool Esp32C6RngSecureAvailable(void);
 #endif
 
 #ifndef ESP32_CRYPTO_REG
@@ -642,3 +658,38 @@ CRYPTO_STATUS Crypto::HashFinal(void *pHashCtx, uint8_t *pDigest)
 	return s_Hardware.HashFinal(pHashCtx, pDigest);
 }
 
+
+
+// On ESP32-C3/C6, Crypto::Init() initializes AES/SHA only. Hardware entropy
+// is enabled temporarily when a random draw is requested, never at startup.
+CRYPTO_STATUS Crypto::Random(uint8_t *pOut, size_t Len)
+{
+	if (!vbValid)
+	{
+		if (pOut != nullptr)
+		{
+			CryptoSecureWipe(pOut, Len);
+		}
+		return CRYPTO_STATUS_FAIL;
+	}
+#if defined(ESP32_RNG_MODEL_DISABLED)
+	// The AES/SHA register-only host model has no analog entropy model.
+	// It explicitly keeps the test's deterministic PRNG, not the MCU build.
+	return CryptoSoftRngGenerate(vSoftState[0], vSoftState[1], pOut, Len);
+#elif defined(ESP32C3)
+	return Esp32C3RngFill(pOut, Len);
+#else
+	return Esp32C6RngFill(pOut, Len);
+#endif
+}
+
+bool Crypto::IsSecure() const
+{
+#if defined(ESP32_RNG_MODEL_DISABLED)
+	return false;
+#elif defined(ESP32C3)
+	return vbValid && Esp32C3RngSecureAvailable();
+#else
+	return vbValid && Esp32C6RngSecureAvailable();
+#endif
+}

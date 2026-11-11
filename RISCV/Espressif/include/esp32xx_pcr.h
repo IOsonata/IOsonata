@@ -2,24 +2,11 @@
 @file	esp32xx_pcr.h
 
 @brief	ESP32 PCR (Peripheral Clock and Reset) controller register
-        definitions for ESP32-C5 and ESP32-C6.
+        definitions for ESP32-C5, ESP32-C6 and ESP32-C61.
 
-ESP32-C3 uses the older SYSTEM controller for peripheral clock-gating;
-its register definitions are NOT in this header.  C5 and C6 share the
-same PCR layout (verified against ESP-IDF: components/soc/esp32c5/
-register/soc/pcr_reg.h and components/soc/esp32c6/include/soc/
-pcr_reg.h, identical UART block).
-
-Per peripheral the PCR exposes three registers:
-  CONF_REG     bit 0 = CLK_EN, bit 1 = RST_EN
-  SCLK_CONF    SCLK source select and divider for the peripheral core clock
-  PD_CTRL      power-down / memory-retention controls (rarely needed)
-
-The standard "enable peripheral" sequence is:
-  1. CONF_REG  CLK_EN = 1
-  2. CONF_REG  RST_EN = 1
-  3. CONF_REG  RST_EN = 0
-  4. SCLK_CONF source select + divider (peripheral-specific)
+C2/C3 use SYSTEM instead. The C5/C6/C61 HP UART PCR blocks have a
+12-byte stride: bus clock/reset, serial clock, and memory power control.
+C61 adds UART2. XTAL source selectors differ between C6 and C5/C61.
 
 @author	Nguyen Hoan Hoang
 @date	May 9, 2026
@@ -56,7 +43,7 @@ SOFTWARE.
 
 #include "esp32xx.h"
 
-#if defined(ESP32C5) || defined(ESP32C6)
+#if defined(ESP32C5) || defined(ESP32C6) || defined(ESP32C61)
 
 #ifndef ESP32_REG32
 #define ESP32_REG32(addr)                   (*(volatile uint32_t *)((uintptr_t)(addr)))
@@ -79,7 +66,7 @@ SOFTWARE.
 #define ESP32_PCR_UART1_SCLK_CONF_REG       ESP32_REG32(ESP32_PCR_BASE + 0x010U)
 #define ESP32_PCR_UART1_PD_CTRL_REG         ESP32_REG32(ESP32_PCR_BASE + 0x014U)
 
-// Per-UART register accessors keyed by device number (0 or 1).
+// Per-UART register accessors keyed by HP UART device number.
 #define ESP32_PCR_UART_CONF_REG(devno)      ESP32_REG32(ESP32_PCR_BASE + (uint32_t)(devno) * 0x0CU + 0x000U)
 #define ESP32_PCR_UART_SCLK_CONF_REG(devno) ESP32_REG32(ESP32_PCR_BASE + (uint32_t)(devno) * 0x0CU + 0x004U)
 #define ESP32_PCR_UART_PD_CTRL_REG(devno)   ESP32_REG32(ESP32_PCR_BASE + (uint32_t)(devno) * 0x0CU + 0x008U)
@@ -99,16 +86,20 @@ SOFTWARE.
  * SCLK_CONF_REG bit positions.
  *
  * SCLK source select for the UART core clock (separate from APB clock to
- * the registers).  Same encoding as the on-UART CLK_CONF.SCLK_SEL field:
- *   1 = XTAL (40 MHz on C5/C6)
- *   2 = RC_FAST  (~17.5 MHz)
- *   3 = PLL_F80M (80 MHz on C6 / C5)
+ * the registers). C6 selects XTAL/RC_FAST/PLL with 3/2/1.
+ * C5 and C61 select XTAL/RC_FAST/PLL with 0/1/2.
  *---------------------------------------------------------------------------*/
 #define ESP32_PCR_UART_SCLK_SEL_Pos         20U
 #define ESP32_PCR_UART_SCLK_SEL_Msk         (3UL << ESP32_PCR_UART_SCLK_SEL_Pos)
-#define ESP32_PCR_UART_SCLK_SEL_XTAL        (1UL << ESP32_PCR_UART_SCLK_SEL_Pos)
+#if defined(ESP32C6)
+#define ESP32_PCR_UART_SCLK_SEL_XTAL        (3UL << ESP32_PCR_UART_SCLK_SEL_Pos)
 #define ESP32_PCR_UART_SCLK_SEL_RC_FAST     (2UL << ESP32_PCR_UART_SCLK_SEL_Pos)
-#define ESP32_PCR_UART_SCLK_SEL_PLL_F80M    (3UL << ESP32_PCR_UART_SCLK_SEL_Pos)
+#define ESP32_PCR_UART_SCLK_SEL_PLL_F80M    (1UL << ESP32_PCR_UART_SCLK_SEL_Pos)
+#else
+#define ESP32_PCR_UART_SCLK_SEL_XTAL        (0UL << ESP32_PCR_UART_SCLK_SEL_Pos)
+#define ESP32_PCR_UART_SCLK_SEL_RC_FAST     (1UL << ESP32_PCR_UART_SCLK_SEL_Pos)
+#define ESP32_PCR_UART_SCLK_SEL_PLL_F80M    (2UL << ESP32_PCR_UART_SCLK_SEL_Pos)
+#endif
 #define ESP32_PCR_UART_SCLK_DIV_NUM_Pos     12U
 #define ESP32_PCR_UART_SCLK_DIV_NUM_Msk     (0xFFUL << ESP32_PCR_UART_SCLK_DIV_NUM_Pos)
 #define ESP32_PCR_UART_SCLK_DIV_A_Pos       6U

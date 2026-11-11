@@ -528,10 +528,14 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 	for (int r = 0; r < n; r++)
 	{
 		uint8_t key[16], iv[16], in[96], a[96], b[96], ta[16], tb[16], nonce[13], aad[24];
-		size_t len = XsNext() % 97U;
-		size_t blk = (len / 16U) * 16U;
+		size_t len;
+		size_t blk;
+		size_t alen;
+		CRYPTO_STATUS ds;
 		CryptoKey k = AesKey(key, CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT | CRYPTO_KEY_USE_SIGN);
 
+		len = XsNext() % 97U;
+		blk = (len / 16U) * 16U;
 		XsFill(key, 16);
 		XsFill(iv, 16);
 		XsFill(in, sizeof(in));
@@ -572,7 +576,7 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 				continue;
 			}
 			// Decrypt back on the engine under test, when it offers it
-			CRYPTO_STATUS ds = pHw->Cipher(CRYPTO_CIPHER_CBC, 0, k, iv, 16, a, blk, b);
+			ds = pHw->Cipher(CRYPTO_CIPHER_CBC, 0, k, iv, 16, a, blk, b);
 			if (ds != CRYPTO_STATUS_UNSUPPORTED &&
 				(ds != CRYPTO_STATUS_OK || memcmp(b, in, blk) != 0))
 			{
@@ -607,7 +611,7 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 		}
 
 		// CCM and GCM
-		size_t alen = XsNext() % 25U;
+		alen = XsNext() % 25U;
 		memset(a, 0, sizeof(a));
 		memset(b, 0, sizeof(b));
 		memset(ta, 0, sizeof(ta));
@@ -623,8 +627,12 @@ static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 		memset(b, 0, sizeof(b));
 		memset(ta, 0, sizeof(ta));
 		memset(tb, 0, sizeof(tb));
-		if (pHwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, a, ta, 16) != CRYPTO_STATUS_OK ||
-			pSwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, b, tb, 16) != CRYPTO_STATUS_OK ||
+		ds = pHwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, a, ta, 16);
+		if (ds == CRYPTO_STATUS_OK)
+		{
+			ds = pSwAead->Seal(CRYPTO_AEAD_AES_GCM, k, nonce, 12, aad, alen, in, len, b, tb, 16);
+		}
+		if (ds != CRYPTO_STATUS_OK ||
 			memcmp(a, b, len) != 0 || memcmp(ta, tb, 16) != 0)
 		{
 			bad++;
@@ -915,50 +923,62 @@ static void RngChecks(RngEngine *pRng)
 {
 	uint8_t a[32], b[32], big[1024];
 	uint32_t seen[256];
+	uint8_t odd[19];
+	uint32_t ones = 0;
 	int missing = 0;
+	int rep;
+	int bit;
+	int v;
+	size_t i;
+	bool drawsOk;
+	bool oddOk;
 
 	printf("Random source\r\n");
 
 	memset(a, 0, sizeof(a));
 	memset(b, 0, sizeof(b));
-	check("draws succeed",
-		pRng->Random(a, 32) == CRYPTO_STATUS_OK && pRng->Random(b, 32) == CRYPTO_STATUS_OK);
-	check("two draws differ", memcmp(a, b, 32) != 0);
-
-	uint8_t odd[19];
+	drawsOk = pRng->Random(a, 32) == CRYPTO_STATUS_OK &&
+		pRng->Random(b, 32) == CRYPTO_STATUS_OK;
+	check("draws succeed", drawsOk);
+	check("two draws differ", drawsOk && memcmp(a, b, 32) != 0);
 
 	memset(odd, 0xCC, sizeof(odd));
+	oddOk = pRng->Random(odd, 17) == CRYPTO_STATUS_OK;
 	check("odd length request stays inside its length",
-		pRng->Random(odd, 17) == CRYPTO_STATUS_OK && odd[17] == 0xCC && odd[18] == 0xCC);
+		oddOk && odd[17] == 0xCC && odd[18] == 0xCC);
+	drawsOk = drawsOk && oddOk;
 
 	memset(seen, 0, sizeof(seen));
-	uint32_t ones = 0;
-	for (int rep = 0; rep < 4; rep++)
+	for (rep = 0; rep < 4; rep++)
 	{
 		if (pRng->Random(big, sizeof(big)) != CRYPTO_STATUS_OK)
 		{
+			drawsOk = false;
 			missing = 256;
 			break;
 		}
-		for (size_t i = 0; i < sizeof(big); i++)
+		for (i = 0; i < sizeof(big); i++)
 		{
 			seen[big[i]]++;
-			for (int bit = 0; bit < 8; bit++)
+			for (bit = 0; bit < 8; bit++)
 			{
 				ones += (big[i] >> bit) & 1U;
 			}
 		}
 	}
-	for (int v = 0; v < 256; v++)
+	for (v = 0; v < 256; v++)
 	{
-		if (seen[v] == 0U) missing++;
+		if (seen[v] == 0U)
+		{
+			missing++;
+		}
 	}
 	// 32768 bits: the ones count is within 5 sigma (about 450) of 16384
 	check("4 KB sample: ones within 5 sigma and byte values spread",
 		ones > 16384U - 450U && ones < 16384U + 450U && missing < 8);
 
-	printf("  Source: %s\r\n", pRng->IsSecure() ?
-		"secure random generator" : "software PRNG, not for security use");
+	printf("  Source: %s\r\n", !drawsOk ? "unavailable: random draw failed" :
+		(pRng->IsSecure() ? "secure random generator" : "not for security use"));
 }
 
 static void HashChecks(HashEngine *hash, MacEngine *mac)
@@ -1356,7 +1376,7 @@ int main(void)
 		while (1);
 	}
 
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(CRYPTO_TEST_UART_DEBUG)
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
 #endif
 	setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));

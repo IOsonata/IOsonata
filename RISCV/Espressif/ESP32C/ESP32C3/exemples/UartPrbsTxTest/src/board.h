@@ -64,6 +64,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // *** ESP32-C3-DevKitM-1
 #define UART_DEVNO          0
+#define UART_BAUDRATE       1000000
+#define UART_INT_MODE       true
+#define UART_DMA_MODE       false
+#define UART_STOPBITS       1
 
 #define UART_RX_PORT        0
 #define UART_RX_PIN         20

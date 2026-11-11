@@ -17,9 +17,41 @@ secure entropy. Busy or initialization
 failures are failures, not capability skips. RNG sample tests do not certify
 entropy quality.
 
+C3/C6 CryptoTest defines `CRYPTO_TEST_UART_DEBUG` in `board.h` so both
+Debug and Release route stdout to UART at 1,000,000 baud, 8N1. C3 uses
+TX GPIO21/RX GPIO20; C6 uses TX GPIO16/RX GPIO17. Other targets retain
+their existing Debug console selection.
+
+C6 DevKit Release hardware run with commit `35be114b`, 2026-11-10:
+**101 passed, 0 failed, 0 skipped**. Hardware random draws, SHA-256/HMAC,
+AES known answers and 200 randomized AES comparisons passed. Key generation,
+ECDH, ECDSA and eight randomized P-256 comparison rounds also passed. Every
+RNG benchmark completed 64 of 64 draws. P-256 uses the software implementation.
+The temporary RNG register traces have been removed after this validation;
+the cleanup has build and host-model coverage and awaits a board smoke test.
+
+The C6 RNG enables internal SAR ADC entropy during `Crypto::Random()`, then
+restores its analog, clock and power settings. Reserved ADC2/channel 1 requires
+no GPIO wiring. The port rejects an active ADC, bounds analog-bus and
+cycle-counter waits, clears output on failure, and latches setup, restoration
+or repeated-output faults until restart. CryptoTest labels failed draws as
+unavailable rather than software PRNG output.
+
+C6 initialization includes the SAR analog reset/power sequence, I2C master and
+LP APB power-state clock maps, and the analog-I2C 160 MHz clock selection.
+The latter was missing on the ROM-only boot path; selecting it resolved the
+analog-bus timeout in the board run. Initialization follows ESP-IDF v5.5.1
+`bootloader_random_esp32c6.c`, `bootloader_esp32c6.c`, `rtc_clk_init.c`,
+`adc_ll.h`, `regi2c_ctrl_ll.h` and `esp_rom_hp_regi2c_esp32c6.c`.
+Sampling uses one low byte every 80 us. Host models check setup, pacing,
+restoration, ownership, clock selection and failure handling; neither those
+models nor the sample-distribution check establish physical entropy quality.
+
 Host validation:
 
 ```
+python3 tests/crypto/run_esp32c6_rng.py
+python3 tests/crypto/run_esp_models.py
 python3 tests/crypto/run_objects.py
 python3 tests/crypto/run_aes256.py
 python3 tests/crypto/run_pka_models.py

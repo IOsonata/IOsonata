@@ -1,23 +1,11 @@
 /**-------------------------------------------------------------------------
 @example	i2c_master_demo.cpp
 
-@brief	This example demonstrate the use of I2C in both master and slave mode
+@brief	I2C master write/read verification with the generic I2C slave demo.
 
-Two I2C devices are created, one in master mode and the other in slave mode.
-User is required to connect the wire to the appropriate pins.
-
-This example demonstrate the read/write to the slave device memory. The
-read/write command starts with a 1 byte offset location of the device memory.
-
-For example :
-
-- Reading 10 bytes at offset 3 is done by issuing a write of 1 byte value 3 then
-  follow by a read of 10 byte.
-
-    uint8_t offset = 3;
-    uint8_t buff[10];
-    g_I2C.Read(SLAVE_I2C_DEV_ADDR, &offset, 1, buff, 10);
-
+Connect SDA, SCL and ground to a second MCU running i2c_slave_demo.cpp.
+Use external pull-ups on SDA and SCL. The slave uses address 0x22 and a
+one-byte memory offset. This example writes and reads 16 bytes at offset 2.
 
 @author	Hoang Nguyen Hoan
 @date	July 21, 2018
@@ -48,6 +36,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include <atomic>
+#include <stdio.h>
+#include <string.h>
 
 #include "coredev/i2c.h"
 #include "coredev/uart.h"
@@ -71,7 +61,9 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define I2C_MASTER_INT_ENABLE true
 #endif
 
-//int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+#ifndef I2C_MASTER_SCL_DIR
+#define I2C_MASTER_SCL_DIR IOPINDIR_OUTPUT
+#endif
 
 #define FIFOSIZE		CFIFO_MEMSIZE(512)
 
@@ -111,7 +103,7 @@ int I2CMasterIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *
 
 static const IOPinCfg_t s_I2cMasterPins[] = {
 	{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
-	{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
+	{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, I2C_MASTER_SCL_DIR, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
 };
 
 static const I2CCfg_t s_I2cCfgMaster = {
@@ -133,202 +125,78 @@ static const I2CCfg_t s_I2cCfgMaster = {
 
 I2C g_I2CMaster;
 
-//********** I2C Slave **********
+#define I2C_SLAVE_ADDR 0x22
 
-#define I2C_SLAVE_ADDR			0x22
-
-#define I2C_BUFF_SIZE	20
-#define I2C_BUFF_SIZE	20
-static uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
-static uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
-static bool s_bWriteRqst = false;
-static int s_Offset = 0;
-std::atomic<bool> g_bCompleted(false);
-std::atomic<int> g_RxCnt(0);
+static std::atomic<bool> s_Completed(false);
+static std::atomic<int> s_Count(0);
 
 int I2CMasterIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
-	switch (EvtId)
+	(void)pDev;
+	(void)pBuffer;
+	if (EvtId == DEVINTRF_EVT_COMPLETED)
 	{
-		case DEVINTRF_EVT_TX_READY:
-			//g_bCompleted = true;
-			break;
-		case DEVINTRF_EVT_COMPLETED:
-			g_RxCnt = Len;
-			printf("DEVINTRF_EVT_COMPLETED %d\r\n", (int)g_RxCnt);
-			g_bCompleted = true;
-			break;
+		s_Count = Len;
+		s_Completed = true;
 	}
-
 	return 0;
 }
 
-void HardwareInit()
+static int WaitTransfer(int Count)
 {
-	g_Uart.Init(s_UartCfg);
-#ifdef NDEBUG
-	UARTRetargetEnable(g_Uart, STDIN_FILENO);
-	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
-#endif
+	uint32_t timeout = 10000000U;
 
-	g_Uart.printf("Init I2C Master demo\r\n");
+	if (Count >= 0)
+	{
+		return Count;
+	}
+	while (!s_Completed && --timeout > 0)
+	{
+		__NOP();
+	}
+	if (!s_Completed)
+	{
+		g_I2CMaster.Reset();
+		return 0;
+	}
+	return s_Count;
 }
-
-//
-// Print a greeting message on standard output and exit.
-//
-// On embedded platforms this might require semi-hosting or similar.
-//
-// For example, for toolchains derived from GNU Tools for Embedded,
-// to enable semi-hosting, the following was added to the linker:
-//
-// --specs=rdimon.specs -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group
-//
-// Adjust it for other toolchains.
-//
 
 int main()
 {
-	uint8_t offset;
-	uint8_t buff[I2C_BUFF_SIZE];
+	uint8_t offset = 2;
+	uint8_t tx[16];
+	uint8_t rx[16];
+	int written;
+	int received;
+	int i;
+	bool pass;
 
-	HardwareInit();
-
-	g_I2CMaster.Init(s_I2cCfgMaster);
-
-
-	// Fill dummy data for debugging and validation
-	for (int i = 0; i < I2C_BUFF_SIZE; i++)
+	if (!g_Uart.Init(s_UartCfg))
 	{
-		s_ReadRqstData[i] = i;
+		return 1;
 	}
-
-	memset(s_WriteRqstData, 0, I2C_BUFF_SIZE);
-	memset(buff, 0xFF, I2C_BUFF_SIZE);
-
-	// Fill buff with data
-	buff[0] = 0xa0;
-	buff[1] = 0xa1;
-	buff[2] = 0xa2;
-	buff[3] = 0xa3;
-	buff[4] = 0xa4;
-	buff[5] = 0xa5;
-	buff[6] = 0xa6;
-	buff[7] = 0xa7;
-
-	buff[8] = 0xb0;
-	buff[9] = 0xb1;
-	buff[10] = 0xb2;
-	buff[11] = 0xb3;
-	buff[12] = 0xb4;
-	buff[13] = 0xb5;
-	buff[14] = 0xb6;
-	buff[15] = 0xb7;
-
-
-	uint16_t i2cDevAddr = (buff[1] << 8) | buff[0];
-	uint8_t x = i2cDevAddr;
-
-	offset = 0; // want to read/write from offset position
-	uint8_t nBytes = 11;
-	int c = 0;
-
-#if 1
-//	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
-	//printf("Write %d bytes at offset %d\r\n", c, offset);
-	c = g_I2CMaster.Tx(I2C_SLAVE_ADDR, buff, nBytes);
-
-	while (s_I2cCfgMaster.bIntEn)
-	{
-		if (g_bCompleted == true)
-			break;
-	}
-
-	printf("Write %d bytes\r\n", c);
-	printf("s_WriteRqstData: ");
-	for (int i = offset; i < offset + nBytes; i++)
-	{
-		printf("%x ", s_WriteRqstData[i]);
-	}
-	printf("\r\n");
+#if defined(NDEBUG) || defined(UART_RETARGET)
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
-
-	g_bCompleted = false;
-
-	// Master send read command to read 10 bytes from offset defined in data[0]
-	//offset = 3;
-	nBytes = 9;
-	memset(buff, 0xFF, I2C_BUFF_SIZE);
-#if 1
-//	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
-	//printf("Read %d bytes from offset %d: ", c, offset);
-	printf("Rx %d bytes\r\n", nBytes);
-	c = g_I2CMaster.Rx(I2C_SLAVE_ADDR, buff, nBytes);
-	while (s_I2cCfgMaster.bIntEn)
+	if (!g_I2CMaster.Init(s_I2cCfgMaster))
+	{
+		printf("I2C master init FAIL\r\n");
+		return 1;
+	}
+	for (i = 0; i < (int)sizeof(tx); i++)
+	{
+		tx[i] = 0xa0 + i;
+	}
+	memset(rx, 0, sizeof(rx));
+	s_Completed = false;
+	written = WaitTransfer(g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, tx, sizeof(tx)));
+	s_Completed = false;
+	received = WaitTransfer(g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, rx, sizeof(rx)));
+	pass = written == (int)sizeof(tx) && received == (int)sizeof(rx) && memcmp(tx, rx, sizeof(tx)) == 0;
+	printf("I2C master write %d read %d: %s\r\n", written, received, pass ? "PASS" : "FAIL");
+	while (1)
 	{
 		__WFE();
-		if (g_bCompleted == true)
-		{
-			c = g_RxCnt;
-			break;
-		}
 	}
-	printf("Read %d bytes: ", c);
-	for (int i = 0; i < c; i++)
-	{
-		printf("%x ", buff[i]);
-	}
-	printf("\r\n");
-	g_bCompleted = false;
-#endif
-
-#if 1
-	// Master send read command without setting anything
-	nBytes = 5;
-	uint8_t ad[2] = {3, 13};
-	//c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &ad, 1, 0, 0);
-#if 1
-	g_Uart.printf("Read 1, %d\r\n", nBytes);
-	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, ad, 1, buff, nBytes);
-	while (s_I2cCfgMaster.bIntEn)
-	{
-		__WFE();
-		if (g_bCompleted == true)
-		{
-			c = g_RxCnt;
-			break;
-		}
-	}
-	printf("Master send read command without setting anything %d bytes: \r\n", c);
-	for (int i = 0; i < c; i++)
-	{
-		printf("%x ", buff[i]);
-	}
-	printf("\r\n");
-//#else
-	g_bCompleted = false;
-
-	g_Uart.printf("Read %d\r\n", nBytes);
-	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, NULL, 0, buff, nBytes);
-	while (s_I2cCfgMaster.bIntEn)
-	{
-		__WFE();
-		if (g_bCompleted == true)
-		{
-			c = g_RxCnt;
-			break;
-		}
-	}
-	printf("Master send read command without setting anything %d bytes: \r\n", c);
-	for (int i = 0; i < c; i++)
-	{
-		printf("%x ", buff[i]);
-	}
-	printf("\r\n");
-#endif
-#endif
-
-	while(1) __WFE();
-
-	return 0;
 }

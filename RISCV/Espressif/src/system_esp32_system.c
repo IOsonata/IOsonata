@@ -7,7 +7,7 @@
 Covers Espressif RISC-V targets that use the legacy SYSTEM (not PCR)
 peripheral for clock and reset control:
 
-    ESP32-C3
+    ESP32-C2 and ESP32-C3
 
 Clock architecture (ESP32-C3 TRM Rev 0.4 §7, verified against ESP-IDF
 v5.3 hal/esp32c3 clk_tree_ll.h):
@@ -30,7 +30,7 @@ either 0 or 1 (depending on flash-speed / boot path), this code MUST
 program both fields.
 
 Define ESP32C3_CPU_160MHZ to run at 160 MHz.
-Default (no define): 80 MHz from PLL.
+C3 default (no define): 80 MHz from PLL. C2 preserves the ROM clock setup.
 
 Chip-specific system_espXXXX.c files call Esp32SystemInit() then install
 the trap handler into mtvec.
@@ -144,11 +144,20 @@ SOFTWARE.
  * dim flicker rather than a 9-second reset cycle.
  *---------------------------------------------------------------------*/
 #define RTC_CNTL_BASE               0x60008000UL
+#if defined(ESP32C2)
+#define RTC_CNTL_WDTCONFIG0_REG    (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x0084U))
+#define RTC_CNTL_WDTFEED_REG       (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x0098U))
+#define RTC_CNTL_WDTWPROTECT_REG   (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x009CU))
+#define RTC_CNTL_SWD_CONF_REG      (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00A0U))
+#define RTC_CNTL_SWD_WPROTECT_REG  (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00A4U))
+#else
 #define RTC_CNTL_WDTCONFIG0_REG    (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x0090U))
 #define RTC_CNTL_WDTFEED_REG       (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00A4U))
 #define RTC_CNTL_WDTWPROTECT_REG   (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00A8U))
 #define RTC_CNTL_SWD_CONF_REG      (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00ACU))
 #define RTC_CNTL_SWD_WPROTECT_REG  (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00B0U))
+
+#endif
 
 #define RTC_WDT_WPROTECT_MAGIC      0x50D83AA1UL    /* RTC_CNTL_WDT_WKEY */
 #define RTC_SWD_WPROTECT_MAGIC      0x8F1D312AUL    /* RTC_CNTL_SWD_WKEY — different! */
@@ -193,6 +202,7 @@ static void DisableTimg0Wdt(void)
 	TIMG0_WDTWPROTECT_REG = 0U;
 }
 
+#if !defined(ESP32C2)
 static void DisableTimg1Wdt(void)
 {
 	TIMG1_WDTWPROTECT_REG = TIMG_WDT_WPROTECT_MAGIC;
@@ -200,6 +210,8 @@ static void DisableTimg1Wdt(void)
 	TIMG1_WDTCONFIG0_REG &= ~(TIMG_WDT_EN | TIMG_WDT_FLASHBOOT_MOD_EN);
 	TIMG1_WDTWPROTECT_REG = 0U;
 }
+
+#endif
 
 static void DisableRtcWdt(void)
 {
@@ -218,6 +230,10 @@ static void DisableSuperWdt(void)
 
 static void EnableSysTimer(void)
 {
+#if defined(ESP32C2)
+	*(volatile uint32_t *)(SYSTEM_BASE + 0x10U) |= 1UL << 29;
+	*(volatile uint32_t *)(SYSTEM_BASE + 0x18U) &= ~(1UL << 29);
+#endif
 	SYSTIMER_CONF_REG |= (SYSTIMER_CLK_EN | SYSTIMER_TIMER_UNIT0_WORK_EN);
 }
 
@@ -238,9 +254,11 @@ static void EnableSysTimer(void)
  *---------------------------------------------------------------------------*/
 static void Esp32EnablePerfCounter(void)
 {
+#if defined(__riscv)
 	__asm volatile ("csrw 0x7E0, %0" :: "r"(1U));   /* mpcer = CYCLE event   */
 	__asm volatile ("csrw 0x7E2, %0" :: "r"(0U));   /* mpccr = 0 (clear)     */
 	__asm volatile ("csrw 0x7E1, %0" :: "r"(1U));   /* mpcmr = COUNT_EN      */
+#endif
 }
 
 /*---------------------------------------------------------------------------
@@ -256,11 +274,15 @@ static void Esp32EnablePerfCounter(void)
 void Esp32SystemInit(void)
 {
 	DisableTimg0Wdt();
+#if !defined(ESP32C2)
 	DisableTimg1Wdt();
+#endif
 	DisableRtcWdt();
 	DisableSuperWdt();
 
-#if defined(ESP32C3_CPU_160MHZ)
+#if defined(ESP32C2)
+	// Keep the ROM clock setup. C2's second PLL tap is 120 MHz, not 160.
+#elif defined(ESP32C3_CPU_160MHZ)
 	/* 160 MHz from PLL: program CPUPERIOD_SEL = 1 (160) BEFORE switching
 	 * SOC_CLK_SEL to PLL, so we never briefly see an unsupported tap. */
 	uint32_t pc = SYSTEM_CPU_PER_CONF_REG & ~SYSTEM_CPUPERIOD_SEL_Msk;
@@ -305,7 +327,11 @@ void SystemCoreClockUpdate(void)
 		{
 			uint32_t per = (SYSTEM_CPU_PER_CONF_REG & SYSTEM_CPUPERIOD_SEL_Msk)
 			               >> SYSTEM_CPUPERIOD_SEL_Pos;
+#if defined(ESP32C2)
+			SystemCoreClock = per < 2U ? (per == 1U ? 120000000UL : 80000000UL) : 0U;
+#else
 			SystemCoreClock = (per == 1U) ? 160000000UL : 80000000UL;
+#endif
 			break;
 		}
 		case 2U: /* RC_FAST ~17.5 MHz */
@@ -316,10 +342,16 @@ void SystemCoreClockUpdate(void)
 			break;
 	}
 
+#if defined(ESP32C2)
+	if (sel == 0U || sel == 2U)
+	{
+		SystemCoreClock /= (SYSTEM_SYSCLK_CONF_REG & 0x3FFU) + 1U;
+	}
+#endif
 	/* Update idelay period variables for the rdcycle path. */
 	SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
-	SystemCoreClockPeriodns = (1000000000ULL + (uint64_t)(SystemCoreClock / 2))
-	                          / SystemCoreClock;
+	SystemCoreClockPeriodns = SystemCoreClock != 0U ?
+		(1000000000ULL + SystemCoreClock / 2U) / SystemCoreClock : 0U;
 }
 
 /*---------------------------------------------------------------------------
@@ -333,8 +365,17 @@ uint32_t SystemCoreClockGet(void)
 
 uint32_t SystemPeriphClockGet(int Idx)
 {
+#if defined(ESP32C2)
+	if (Idx != 0)
+	{
+		return 0;
+	}
+	SystemCoreClockUpdate();
+	return SystemCoreClock > 40000000U ? 40000000U : SystemCoreClock;
+#else
 	(void)Idx;
 	return SystemCoreClock;
+#endif
 }
 
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)

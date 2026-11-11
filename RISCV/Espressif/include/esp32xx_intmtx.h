@@ -9,32 +9,13 @@ peripheral interrupt sources to a CPU interrupt level and configuring
 that CPU interrupt's enable, type, priority and threshold.  It also
 defines the per-chip GPIO interrupt source IDs used by iopincfg_esp32.c.
 
-Architecture note:
+C2/C3 combine interrupt matrix and INTC registers in one block. C6
+separates matrix routing from INTPRI CPU control. C5/C61 also use the
+matrix, with each destination selecting a CLIC slot at CPU input + 16.
+Their CLIC control registers are defined in esp32xx_clic.h.
 
-  ESP32-C3 and ESP32-C6 use Espressif's "INTC" interrupt controller:
-      - Per-source MAP register routes one of 62..64 sources to one of
-        32 CPU interrupt levels.
-      - Global per-CPU-INT registers (ENABLE / TYPE / PRI / THRESH)
-        control level, edge sensitivity, priority (1..15), and the
-        global priority threshold.
-      - C3 has both the routing block AND the CPU-INT control block at
-        a single INTMTX_BASE.  C6 split them: routing+status remain at
-        INTMTX_BASE, CPU-INT control moved to INTPRI_BASE.
-
-  ESP32-C5 uses RISC-V CLIC (Core Local Interrupt Controller):
-      - Per-interrupt CLIC_INT_n_IE / IP / CTL registers at
-        0x20801000.  No global ENABLE/TYPE/PRI/THRESH.
-      - Different programming model entirely; the C3/C6 macros below
-        are intentionally NOT defined on C5.  CLIC support belongs in
-        a separate esp32xx_clic.h.
-
-Driver code that wants to compile across C3/C5/C6 should guard its
-INTC setup on the existence of ESP32_CPU_INT_ENABLE_REG (for example)
-and provide a CLIC alternative when that macro is undefined.
-
-Register offsets verified against ESP-IDF v5.3
-components/soc/esp32c3/include/soc/interrupt_core0_reg.h and
-components/soc/esp32c6/include/soc/{interrupt_matrix_reg.h, intpri_reg.h}.
+Register offsets follow Espressif ESP-IDF v5.5.1 per-chip interrupt_core0,
+interrupt_matrix, intpri and clic register headers.
 
 @author	Nguyen Hoan Hoang
 @date	May 9, 2026
@@ -72,37 +53,6 @@ SOFTWARE.
 #include "esp32xx.h"
 
 /*---------------------------------------------------------------------------
- * Cross-chip base-address fallbacks.
- *
- * Each chip header defines its own ESP32CN_INTMTX_BASE; here we provide
- * the no-prefix common alias if the chip header has not already done it.
- *---------------------------------------------------------------------------*/
-#ifndef ESP32_INTMTX_BASE
-#  if   defined(ESP32C3)
-#    define ESP32_INTMTX_BASE               ESP32C3_INTMTX_BASE
-#  elif defined(ESP32C5)
-#    define ESP32_INTMTX_BASE               ESP32C5_INTMTX_BASE
-#  elif defined(ESP32C6)
-#    define ESP32_INTMTX_BASE               ESP32C6_INTMTX_BASE
-#  endif
-#endif
-
-#ifndef ESP32_INTPRI_BASE
-#  if   defined(ESP32C5)
-#    define ESP32_INTPRI_BASE               ESP32C5_INTPRI_BASE
-#  elif defined(ESP32C6)
-#    define ESP32_INTPRI_BASE               ESP32C6_INTPRI_BASE
-#  endif
-#endif
-
-/* On C3 the CPU-INT control registers share the INTMTX block.  Provide
- * an alias so the same ESP32_CPU_INT_*_REG macros can use a single base
- * variable name. */
-#if defined(ESP32C3) && !defined(ESP32_INTPRI_BASE)
-#  define ESP32_INTPRI_BASE                 ESP32_INTMTX_BASE
-#endif
-
-/*---------------------------------------------------------------------------
  * Memory-mapped 32-bit register helper.  Defined here too so this header
  * is usable independently of esp32xx_gpio.h.
  *---------------------------------------------------------------------------*/
@@ -121,15 +71,15 @@ SOFTWARE.
  * Per-chip GPIO interrupt source ID.
  *
  * Verified against IDF interrupts.h periph_interrupt_t enum:
- *   C3:  ETS_GPIO_INTR_SOURCE = 16
- *   C6:  ETS_GPIO_INTR_SOURCE = 30
- *   C5:  ETS_GPIO_INTR_SOURCE = 31  (used by the CLIC install path
- *                                    in esp32xx_irq.c, which adds the
- *                                    CLIC_EXT_INTR_NUM_OFFSET to obtain
- *                                    the actual CLIC slot).
+ * C2: 13, C3: 16, C5: 31, C6: 30, C61: 27.
+ * The matrix destination CPU input determines the CLIC slot on C5/C61.
  *---------------------------------------------------------------------------*/
 #ifndef ESP32_GPIO_INTR_SOURCE_ID
-#  if   defined(ESP32C3)
+#  if defined(ESP32C2)
+#    define ESP32_GPIO_INTR_SOURCE_ID       13U
+#  elif defined(ESP32C61)
+#    define ESP32_GPIO_INTR_SOURCE_ID       27U
+#  elif defined(ESP32C3)
 #    define ESP32_GPIO_INTR_SOURCE_ID       16U
 #  elif defined(ESP32C5)
 #    define ESP32_GPIO_INTR_SOURCE_ID       31U
@@ -164,7 +114,7 @@ SOFTWARE.
  * alternative path.
  *===========================================================================*/
 
-#if defined(ESP32C3) || defined(ESP32C6)
+#if defined(ESP32C2) || defined(ESP32C3) || defined(ESP32C6) || defined(ESP32C61)
 
 /* Source-map register: route source N to one of the 32 CPU INT lines.
  * Common to C3 and C6: stored at ESP32_INTMTX_BASE + N*4. */
@@ -196,7 +146,7 @@ SOFTWARE.
 
 
 /*---------------------------------------------------------------------------
- * C6: routing+status at INTMTX_BASE, CPU-INT control at INTPRI_BASE.
+ * C6: routing/status at INTMTX_BASE, CPU interrupt control at PLIC_MX_BASE.
  *---------------------------------------------------------------------------*/
 #if defined(ESP32C6)
 
@@ -206,13 +156,14 @@ SOFTWARE.
 #define ESP32_INTMTX_INTR_STATUS_2_REG      ESP32_REG32(ESP32_INTMTX_BASE + 0x13CU)
 #define ESP32_INTMTX_CLOCK_GATE_REG         ESP32_REG32(ESP32_INTMTX_BASE + 0x140U)
 
-// CPU-INT control: separate INTPRI block on C6.
-#define ESP32_CPU_INT_ENABLE_REG            ESP32_REG32(ESP32_INTPRI_BASE + 0x000U)
-#define ESP32_CPU_INT_TYPE_REG              ESP32_REG32(ESP32_INTPRI_BASE + 0x004U)
-#define ESP32_CPU_INT_EIP_STATUS_REG        ESP32_REG32(ESP32_INTPRI_BASE + 0x008U)
-#define ESP32_CPU_INT_PRI_REG(n)            ESP32_REG32(ESP32_INTPRI_BASE + 0x00CU + ((uint32_t)(n) * 4U))
-#define ESP32_CPU_INT_THRESH_REG            ESP32_REG32(ESP32_INTPRI_BASE + 0x08CU)
-#define ESP32_CPU_INT_CLEAR_REG             ESP32_REG32(ESP32_INTPRI_BASE + 0x0A8U)
+// C6 uses the machine-mode PLIC, not the peripheral INTPRI block.
+// ESP-IDF v5.4.2: soc/esp32c6/include/soc/interrupt_reg.h and plic_reg.h.
+#define ESP32_CPU_INT_ENABLE_REG            ESP32_REG32(ESP32_PLIC_MX_BASE + 0x000U)
+#define ESP32_CPU_INT_TYPE_REG              ESP32_REG32(ESP32_PLIC_MX_BASE + 0x004U)
+#define ESP32_CPU_INT_CLEAR_REG             ESP32_REG32(ESP32_PLIC_MX_BASE + 0x008U)
+#define ESP32_CPU_INT_EIP_STATUS_REG        ESP32_REG32(ESP32_PLIC_MX_BASE + 0x00CU)
+#define ESP32_CPU_INT_PRI_REG(n)            ESP32_REG32(ESP32_PLIC_MX_BASE + 0x010U + ((uint32_t)(n) * 4U))
+#define ESP32_CPU_INT_THRESH_REG            ESP32_REG32(ESP32_PLIC_MX_BASE + 0x090U)
 
 #endif // ESP32C6
 
@@ -236,5 +187,44 @@ SOFTWARE.
  * Use CLIC (esp32xx_clic.h) for per-interrupt enable/priority/level. */
 
 #endif // ESP32C5
+
+// Source counts stop before the status/control registers in the matrix.
+#if defined(ESP32C2)
+#define ESP32_INTMTX_NUM_SOURCES 43U
+#define ESP32_INTMTX_INTR_STATUS_0_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x0ACU)
+#define ESP32_INTMTX_INTR_STATUS_1_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x0B0U)
+#define ESP32_INTMTX_CLOCK_GATE_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x0B4U)
+#define ESP32_CPU_INT_ENABLE_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x0B8U)
+#define ESP32_CPU_INT_TYPE_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x0BCU)
+#define ESP32_CPU_INT_CLEAR_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x0C0U)
+#define ESP32_CPU_INT_EIP_STATUS_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x0C4U)
+#define ESP32_CPU_INT_PRI_REG(n) ESP32_REG32(ESP32_INTMTX_BASE + 0x0C8U + (uint32_t)(n) * 4U)
+#define ESP32_CPU_INT_THRESH_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x148U)
+#elif defined(ESP32C3)
+#define ESP32_INTMTX_NUM_SOURCES 62U
+#elif defined(ESP32C5)
+#define ESP32_INTMTX_NUM_SOURCES 84U
+#elif defined(ESP32C6)
+#define ESP32_INTMTX_NUM_SOURCES 77U
+#elif defined(ESP32C61)
+#define ESP32_INTMTX_NUM_SOURCES 66U
+#define ESP32_INTMTX_INTR_STATUS_0_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x108U)
+#define ESP32_INTMTX_INTR_STATUS_1_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x10CU)
+#define ESP32_INTMTX_INTR_STATUS_2_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x110U)
+#define ESP32_INTMTX_CLOCK_GATE_REG ESP32_REG32(ESP32_INTMTX_BASE + 0x128U)
+#endif
+
+// CLIC matrix values include the 16 CPU-local interrupt slots.
+#if defined(ESP32C5) || defined(ESP32C61)
+#define ESP32_INTMTX_CPU_OFFSET 16U
+#define ESP32_INTMTX_DISABLED_CPU 6U
+#elif defined(ESP32C6)
+#define ESP32_INTMTX_CPU_OFFSET 0U
+#define ESP32_INTMTX_DISABLED_CPU 0U
+#else
+#define ESP32_INTMTX_CPU_OFFSET 0U
+#define ESP32_INTMTX_DISABLED_CPU 6U
+#endif
+#define ESP32_INTMTX_DISABLED_MAP (ESP32_INTMTX_DISABLED_CPU + ESP32_INTMTX_CPU_OFFSET)
 
 #endif // __ESP32XX_INTMTX_H__

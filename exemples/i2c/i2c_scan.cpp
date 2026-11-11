@@ -182,9 +182,7 @@ int main()
 		while (1);
 	}
 
-#ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
-#endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 #endif
 

@@ -3,7 +3,7 @@
 
 @brief	ESP32 GPIO/IO_MUX definitions for the IOsonata RISC-V family.
 
-Covers C3/C5/C6.  Provides three things:
+Covers C2/C3/C5/C6/C61. C61 uses the C5 GPIO matrix layout.  Provides three things:
   1. Raw register macros (ESP32_GPIO_*_REG32, ESP32_IOMUX_PAD_REG) that
      work uniformly across all supported chips.  Use these in driver
      code that must compile for any chip.
@@ -138,17 +138,27 @@ SOFTWARE.
  * - CONST_HIGH / CONST_LOW are FUNC_IN_SEL values that feed a constant
  *   logic level into a peripheral input instead of a pad.
  *
- * Values verified against ESP-IDF v5.3 components/soc/<chip>/include
- * (gpio_pins.h for C3/C6, gpio_struct.h FUNC_IN_SEL field doc for C5).
+ * Values verified against ESP-IDF v5.4.2 components/soc/<chip>/include
+ * (gpio_pins.h for C3/C6/C61, gpio_struct.h FUNC_IN_SEL field doc for C5).
  *---------------------------------------------------------------------------*/
-#if defined(ESP32C5)
+#if defined(ESP32C5) || defined(ESP32C61)
 #  define ESP32_GPIO_FUNC_OUT_SEL_GPIO      256U
-#  define ESP32_GPIO_FUNC_IN_CONST_HIGH     0x40U
-#  define ESP32_GPIO_FUNC_IN_CONST_LOW      0x60U
+#  if defined(ESP32C61)
+#    define ESP32_GPIO_FUNC_IN_CONST_HIGH   0x20U
+#    define ESP32_GPIO_FUNC_IN_CONST_LOW    0x30U
+#  else
+#    define ESP32_GPIO_FUNC_IN_CONST_HIGH   0x40U
+#    define ESP32_GPIO_FUNC_IN_CONST_LOW    0x60U
+#  endif
 #else
 #  define ESP32_GPIO_FUNC_OUT_SEL_GPIO      128U
-#  define ESP32_GPIO_FUNC_IN_CONST_HIGH     0x1EU
-#  define ESP32_GPIO_FUNC_IN_CONST_LOW      0x1FU
+#  if defined(ESP32C6)
+#    define ESP32_GPIO_FUNC_IN_CONST_HIGH   0x38U
+#    define ESP32_GPIO_FUNC_IN_CONST_LOW    0x3CU
+#  else
+#    define ESP32_GPIO_FUNC_IN_CONST_HIGH   0x1EU
+#    define ESP32_GPIO_FUNC_IN_CONST_LOW    0x1FU
+#  endif
 #endif
 
 /*---------------------------------------------------------------------------
@@ -190,20 +200,28 @@ SOFTWARE.
 /*---------------------------------------------------------------------------
  * GPIO_FUNCn_IN_SEL_CFG and GPIO_FUNCn_OUT_SEL_CFG bit positions and masks.
  *
- * C5 widened both selector fields:
- *   IN_SEL  : 5 bits on C3/C6, 7 bits on C5  (29..127 GPIO matrix sources)
- *   OUT_SEL : 8 bits on C3/C6, 9 bits on C5  (256..511 peripheral signals)
- *
- * Single chip-conditional block; no #undef dance.
+ * Input selectors: C2/C3 use 5 bits, C6/C61 use 6 bits, C5 uses 7 bits.
+ * Output selectors: C2/C3/C6 use 8 bits, C5/C61 use 9 bits.
+ * Verified against ESP-IDF v5.4.2 soc/<chip>/register/soc/gpio_reg.h.
  *---------------------------------------------------------------------------*/
+#define ESP32_GPIO_FUNC_IN_SEL_Pos         0U
 #if defined(ESP32C5)
-#  define ESP32_GPIO_FUNC_IN_SEL_Pos        0U
-#  define ESP32_GPIO_FUNC_IN_SEL_Msk        (0x7FUL << ESP32_GPIO_FUNC_IN_SEL_Pos)
-#  define ESP32_GPIO_FUNC_IN_INV_SEL_Pos    7U
-#  define ESP32_GPIO_FUNC_IN_INV_SEL_Msk    (1UL << ESP32_GPIO_FUNC_IN_INV_SEL_Pos)
-#  define ESP32_GPIO_SIG_IN_SEL_Pos         8U
-#  define ESP32_GPIO_SIG_IN_SEL_Msk         (1UL << ESP32_GPIO_SIG_IN_SEL_Pos)
+#define ESP32_GPIO_FUNC_IN_SEL_Msk         0x7FUL
+#define ESP32_GPIO_FUNC_IN_INV_SEL_Pos     7U
+#define ESP32_GPIO_SIG_IN_SEL_Pos          8U
+#elif defined(ESP32C6) || defined(ESP32C61)
+#define ESP32_GPIO_FUNC_IN_SEL_Msk         0x3FUL
+#define ESP32_GPIO_FUNC_IN_INV_SEL_Pos     6U
+#define ESP32_GPIO_SIG_IN_SEL_Pos          7U
+#else
+#define ESP32_GPIO_FUNC_IN_SEL_Msk         0x1FUL
+#define ESP32_GPIO_FUNC_IN_INV_SEL_Pos     5U
+#define ESP32_GPIO_SIG_IN_SEL_Pos          6U
+#endif
+#define ESP32_GPIO_FUNC_IN_INV_SEL_Msk     (1UL << ESP32_GPIO_FUNC_IN_INV_SEL_Pos)
+#define ESP32_GPIO_SIG_IN_SEL_Msk          (1UL << ESP32_GPIO_SIG_IN_SEL_Pos)
 
+#if defined(ESP32C5) || defined(ESP32C61)
 #  define ESP32_GPIO_FUNC_OUT_SEL_Pos       0U
 #  define ESP32_GPIO_FUNC_OUT_SEL_Msk       (0x1FFUL << ESP32_GPIO_FUNC_OUT_SEL_Pos)
 #  define ESP32_GPIO_FUNC_OUT_INV_SEL_Pos   9U
@@ -213,13 +231,6 @@ SOFTWARE.
 #  define ESP32_GPIO_FUNC_OEN_INV_SEL_Pos   11U
 #  define ESP32_GPIO_FUNC_OEN_INV_SEL_Msk   (1UL << ESP32_GPIO_FUNC_OEN_INV_SEL_Pos)
 #else
-#  define ESP32_GPIO_FUNC_IN_SEL_Pos        0U
-#  define ESP32_GPIO_FUNC_IN_SEL_Msk        (0x1FUL << ESP32_GPIO_FUNC_IN_SEL_Pos)
-#  define ESP32_GPIO_FUNC_IN_INV_SEL_Pos    5U
-#  define ESP32_GPIO_FUNC_IN_INV_SEL_Msk    (1UL << ESP32_GPIO_FUNC_IN_INV_SEL_Pos)
-#  define ESP32_GPIO_SIG_IN_SEL_Pos         6U
-#  define ESP32_GPIO_SIG_IN_SEL_Msk         (1UL << ESP32_GPIO_SIG_IN_SEL_Pos)
-
 #  define ESP32_GPIO_FUNC_OUT_SEL_Pos       0U
 #  define ESP32_GPIO_FUNC_OUT_SEL_Msk       (0xFFUL << ESP32_GPIO_FUNC_OUT_SEL_Pos)
 #  define ESP32_GPIO_FUNC_OUT_INV_SEL_Pos   8U
@@ -275,7 +286,7 @@ SOFTWARE.
  * FUNC_IN/OUT bitfield widths, which is one more reason this overlay
  * is gated to !ESP32C5.
  *===========================================================================*/
-#if !defined(ESP32C5)
+#if !defined(ESP32C5) && !defined(ESP32C61)
 
 typedef struct __ESP32_GPIO_BT_SELECT_Bits {
     uint32_t BT_SEL              : 32;   //!< Bit-select register (chip-specific use).
@@ -304,10 +315,18 @@ typedef struct __ESP32_GPIO_PIN_Bits {
 } ESP32_GPIO_PIN_Bits;
 
 typedef struct __ESP32_GPIO_FUNC_IN_Bits {
+#if defined(ESP32C6)
+    uint32_t IN_SEL              : 6;    //!< Pad index, or CONST_HIGH/CONST_LOW.
+#else
     uint32_t IN_SEL              : 5;    //!< Pad index, or CONST_HIGH/CONST_LOW.
+#endif
     uint32_t IN_INV_SEL          : 1;    //!< 1: invert input.
     uint32_t SIG_IN_SEL          : 1;    //!< 1: route via matrix; 0: direct from IO_MUX.
+#if defined(ESP32C6)
+    uint32_t RESERVED            : 24;
+#else
     uint32_t RESERVED            : 25;
+#endif
 } ESP32_GPIO_FUNC_IN_Bits;
 
 typedef struct __ESP32_GPIO_FUNC_OUT_Bits {
@@ -497,7 +516,7 @@ ESP32_STATIC_ASSERT(offsetof(ESP32_IOMUX_Type, PIN_CTRL)      == 0x0000U, iomux_
 ESP32_STATIC_ASSERT(offsetof(ESP32_IOMUX_Type, GPIO)          == 0x0004U, iomux_gpio_offset);
 ESP32_STATIC_ASSERT(offsetof(ESP32_IOMUX_Type, DATE)          == 0x00FCU, iomux_date_offset);
 
-#endif // !defined(ESP32C5)
+#endif // !defined(ESP32C5) && !defined(ESP32C61)
 
 /*===========================================================================
  * Raw register-address macros (cross-chip).
@@ -514,7 +533,7 @@ ESP32_STATIC_ASSERT(offsetof(ESP32_IOMUX_Type, DATE)          == 0x00FCU, iomux_
 #define ESP32_GPIO_OUT_W1TS_OFFSET          0x008U
 #define ESP32_GPIO_OUT_W1TC_OFFSET          0x00CU
 
-#if defined(ESP32C5)
+#if defined(ESP32C5) || defined(ESP32C61)
 #  define ESP32_GPIO_ENABLE_REG_OFFSET      0x034U
 #  define ESP32_GPIO_ENABLE_W1TS_OFFSET     0x038U
 #  define ESP32_GPIO_ENABLE_W1TC_OFFSET     0x03CU
@@ -575,5 +594,28 @@ ESP32_STATIC_ASSERT(offsetof(ESP32_IOMUX_Type, DATE)          == 0x00FCU, iomux_
 #define ESP32_GPIO_FUNC_OUT_GPIO_VALUE                                              \
     (((uint32_t)ESP32_GPIO_FUNC_OUT_SEL_GPIO << ESP32_GPIO_FUNC_OUT_SEL_Pos)        \
      | ESP32_GPIO_FUNC_OEN_SEL_Msk)
+
+#if defined(ESP32C6)
+// C6 LP I2C uses LP IO_MUX function 1 on GPIO6 (SDA) and GPIO7 (SCL).
+// The high bit range distinguishes LP IO_MUX from HP GPIO matrix indices.
+#define ESP32_PINOP_LP_I2C_SDA (0x1000 + IOPINOP_FUNC1)
+#define ESP32_PINOP_LP_I2C_SCL (0x1000 + IOPINOP_FUNC1)
+#define ESP32_LP_PERI_CLK_EN_REG ESP32_REG32(ESP32_LPPERI_BASE + 0x00U)
+#define ESP32_LP_PERI_RESET_EN_REG ESP32_REG32(ESP32_LPPERI_BASE + 0x04U)
+#define ESP32_LP_IO_CLK_EN_Msk (1UL << 27)
+#define ESP32_LP_AON_GPIO_MUX_REG ESP32_REG32(ESP32_LP_AON_BASE + 0x28U)
+#define ESP32_LP_IO_OUT_W1TS_REG ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x04U)
+#define ESP32_LP_IO_ENABLE_W1TS_REG ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x10U)
+#define ESP32_LP_IO_ENABLE_W1TC_REG ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x14U)
+#define ESP32_LP_IO_PIN_REG(pin) ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x28U + (pin) * 4U)
+#define ESP32_LP_IO_MUX_REG(pin) ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x48U + (pin) * 4U)
+#define ESP32_LP_IO_PAD_DRIVER_Msk (1UL << 2)
+#define ESP32_LP_IO_FUN_WPD_Msk (1UL << 7)
+#define ESP32_LP_IO_FUN_WPU_Msk (1UL << 8)
+#define ESP32_LP_IO_FUN_IE_Msk (1UL << 9)
+#define ESP32_LP_IO_FUN_DRV_Pos 10U
+#define ESP32_LP_IO_FUN_DRV_Msk (3UL << 10)
+#define ESP32_LP_IO_MCU_SEL_Pos 12U
+#endif
 
 #endif // __ESP32XX_GPIO_H__

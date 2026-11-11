@@ -23,6 +23,8 @@ class Esp32c6StartupTests(unittest.TestCase):
         self.assertIn("vt | 1UL", system)
         self.assertNotIn("vt | 0x3U", system)
         self.assertIn("ESP32_CPU_INT_ENABLE_REG = 0U", system)
+        self.assertIn('INCLUDE "gcc_riscv_flash.ld"', linker)
+        linker = (ROOT / "RISCV" / "ldscript" / "gcc_riscv_flash.ld").read_text()
         self.assertIn("KEEP(*(.iram.text.vectors))", linker)
         self.assertLess(linker.index("KEEP(*(.iram.text.vectors))"),
                         linker.index("KEEP(*(.iram.text))"))
@@ -49,7 +51,7 @@ class Esp32c6StartupTests(unittest.TestCase):
     def test_c6_applications_pull_reset_entry_from_archive(self):
         shared = (ROOT / "RISCV" / "ldscript" / "gcc_riscv_flash.ld").read_text()
         self.assertIn("ENTRY(ResetEntry)", shared)
-        for name in ("Blinky", "CryptoTest"):
+        for name in ("LedDemo", "PulseTrain", "CryptoTest"):
             project = (C6 / "exemples" / name / "ioc" / ".cproject")
             tree = ET.parse(project)
             for cfg in tree.findall(".//cconfiguration"):

@@ -9,20 +9,11 @@ live in the generic <clic.h> at the RISCV/ layer.  This header only
 adds the values that vary per chip: control block addresses, total
 slot count, NLBITS, and the offset where peripheral interrupts start.
 
-Targets covered by this file:
-    ESP32-C5    NLBITS = 3, INT_COUNT = 64, ext-int offset = 16
-
-Future Espressif CLIC chips (ESP32-H2, ESP32-H4, ESP32-P4) plug in
-the same way: a new #if block here defining their addresses and
-limits.  The CLIC enable/disable code in esp32xx_irq.c does not
-change per chip — it just calls ClicEnableSlot() with whichever
-ESP32_CLIC_* macros this header exposes.
-
-C3 and C6 use the older INTMTX + global CPU-INT controller;
-those definitions are in esp32xx_intmtx.h, not here.
-
-Register addresses verified against ESP-IDF master,
-components/soc/esp32c5/include/soc/clic_reg.h.
+C5 and C61 use 16 CPU-local plus 32 external CLIC slots. The interrupt
+matrix routes each peripheral source to an external CPU input; the CLIC
+slot is that input plus 16, not the peripheral source number plus 16.
+Register definitions follow ESP-IDF v5.5.1 for production C5 and C61.
+C2/C3/C6 use INTC, defined in esp32xx_intmtx.h.
 
 @author	Nguyen Hoan Hoang
 @date	May 9, 2026
@@ -64,10 +55,10 @@ IN THE SOFTWARE.
 #define ESP32_REG32(addr)                       (*(volatile uint32_t *)((uintptr_t)(addr)))
 #endif
 
-#if defined(ESP32C5)
+#if defined(ESP32C5) || defined(ESP32C61)
 
 /*---------------------------------------------------------------------------
- * ESP32-C5 CLIC base addresses.
+ * ESP32-C5/C61 CLIC base addresses.
  *
  * The CLIC has two register windows: a small global config block at
  * CLIC_BASE (used at boot to set NLBITS and during exception entry to
@@ -81,7 +72,7 @@ IN THE SOFTWARE.
 /*---------------------------------------------------------------------------
  * Chip-specific CLIC limits and configuration.
  *---------------------------------------------------------------------------*/
-#define ESP32_CLIC_INT_COUNT                    64U             //!< Total CLIC slots (0..63).
+#define ESP32_CLIC_INT_COUNT                    48U             //!< 16 local plus 32 matrix-routed CPU inputs.
 #define ESP32_CLIC_NLBITS                       3U              //!< Level bits in CTL byte (3 level + 5 sub-prio, IDF default).
 #define ESP32_CLIC_EXT_INTR_NUM_OFFSET          16U             //!< First peripheral slot (slots 0..15 reserved for standard RISC-V ints).
 
@@ -98,6 +89,6 @@ IN THE SOFTWARE.
 #define ESP32_CLIC_INT_CONFIG_MNLBITS_Pos       0U
 #define ESP32_CLIC_INT_CONFIG_MNLBITS_Msk       (0xFUL << ESP32_CLIC_INT_CONFIG_MNLBITS_Pos)
 
-#endif // ESP32C5
+#endif // ESP32C5 || ESP32C61
 
 #endif // __ESP32XX_CLIC_H__

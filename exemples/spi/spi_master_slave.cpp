@@ -48,6 +48,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #if SPI_MASTER_SOFTWARE
 #include "coredev/spi_soft.h"
 #endif
+#ifndef SPI_TEST_FRAME_SIZE
+#define SPI_TEST_FRAME_SIZE 129
+#endif
+
 #ifndef SPI_MASTER_RATE
 #define SPI_MASTER_RATE 1000000
 #endif
@@ -107,6 +111,10 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define SPI_SLAVE_INT_PRIO 6
 #endif
 
+#ifndef SPI_TEST_UART_INT_ENABLE
+#define SPI_TEST_UART_INT_ENABLE true
+#endif
+
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
 
 uint8_t g_UarTxBuff[FIFOSIZE];
@@ -129,7 +137,7 @@ static const UARTCfg_t s_UartCfg = {
 	UART_PARITY_NONE,
 	1,					// Stop bit
 	UART_FLWCTRL_NONE,
-	true,
+	SPI_TEST_UART_INT_ENABLE,
 	1, 					// use APP_IRQ_PRIORITY_LOW with Softdevice
 	NULL,//nRFUartEvthandler,
 	true,				// fifo blocking mode
@@ -166,8 +174,8 @@ static const IOPinCfg_t s_SlavePins[] = {
 	{SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN, SPI_SLAVE_CS_PINOP,
 	 IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 };
-static uint8_t s_SlaveTx[129];
-static uint8_t s_SlaveRx[129];
+static uint8_t s_SlaveTx[SPI_TEST_FRAME_SIZE];
+static uint8_t s_SlaveRx[SPI_TEST_FRAME_SIZE];
 static int s_FrameLength;
 static volatile bool s_Done;
 static volatile int s_Count;
@@ -175,8 +183,6 @@ static volatile unsigned s_Completions;
 static volatile unsigned s_Arms;
 SPI g_SpiSlave;
 
-// Optional target-test diagnostic implementation, outside board configuration.
-void SpiMasterSlaveDiagnostics(void) __attribute__((weak));
 
 static int SlaveEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 					 uint8_t *pBuffer, int Length);
@@ -242,7 +248,7 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 {
 	unsigned before;
 	unsigned armsBefore;
-	uint8_t masterTx[129];
+	uint8_t masterTx[SPI_TEST_FRAME_SIZE];
 	int count;
 	bool checkRx;
 	uint8_t slaveSeed;
@@ -252,7 +258,7 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 	int mismatch;
 	int i;
 	int dumpLength;
-	uint8_t masterRx[129] = {};
+	uint8_t masterRx[SPI_TEST_FRAME_SIZE] = {};
 
 	s_Done = false;
 	before = s_Completions;
@@ -303,12 +309,6 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 			IOPinRead(SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN),
 			before, s_Completions, armsBefore, s_Arms, s_Count);
 	}
-	if (!pass && SpiMasterSlaveDiagnostics != nullptr)
-	{
-		printf("Master completed count=%d expected=%d async callback=%d\r\n",
-			count, Length, s_MasterDone);
-		SpiMasterSlaveDiagnostics();
-	}
 	if (mismatch >= 0)
 		printf("Mismatch at %d: master RX=%02x expected=%02x slave RX=%02x expected=%02x\r\n",
 			mismatch, masterRx[mismatch], s_SlaveTx[mismatch],
@@ -340,14 +340,7 @@ static const char *ModeName(bool bDma, bool bInt)
 // Return 1 for pass, 0 for fail, -1 when the combination is not supported.
 static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 {
-	if ((MasterBase.bDmaEn && !SPI_MASTER_HAS_DMA) ||
-		(SlaveBase.bDmaEn && !SPI_SLAVE_HAS_DMA))
-	{
-		printf("Selected instance has no DMA hardware\r\n");
-		return -1;
-	}
-
-	const int lengths[] = {1, 16, 129};
+	const int lengths[] = {1, 16, SPI_TEST_FRAME_SIZE};
 	SPICfg_t cfg;
 	SPICfg_t masterCfg;
 	const DevIntrf_t *intrf;
@@ -355,6 +348,13 @@ static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 	unsigned i;
 	unsigned n;
 	bool shown = false;
+
+	if ((MasterBase.bDmaEn && !SPI_MASTER_HAS_DMA) ||
+		(SlaveBase.bDmaEn && !SPI_SLAVE_HAS_DMA))
+	{
+		printf("Selected instance has no DMA hardware\r\n");
+		return -1;
+	}
 
 	for (mode = 0; mode < 4; ++mode)
 	{
@@ -420,6 +420,7 @@ static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 
 int main()
 {
+	static char stdoutBuffer[256];
 	SPICfg_t slaveCfg;
 	SPICfg_t masterCfg;
 	int sm;
@@ -430,10 +431,11 @@ int main()
 	int nSkip = 0;
 
 	g_Uart.Init(s_UartCfg);
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(UART_RETARGET)
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
+	setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
 	printf("Init SPI Master/Slave demo\r\n");
 	printf("SPI master %s\r\n", SPI_MASTER_SOFTWARE ? "SPISoft" : "hardware");
 #ifdef SPI_LOOPBACK_WIRING
@@ -485,6 +487,7 @@ int main()
 	}
 	printf("\r\nSPI master/slave loopback %s (%d passed, %d failed, %d skipped)\r\n",
 		(nFail == 0 && nPass > 0) ? "PASS" : "FAIL", nPass, nFail, nSkip);
+	fflush(stdout);
 	while (1)
 		__WFE();
 }

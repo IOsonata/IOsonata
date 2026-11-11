@@ -17,88 +17,29 @@ GROUP( -lstdc++ -lgcc -lc)
 
 MEMORY
 {
-  /* IRAM: time-critical code (interrupt vectors, cache-miss-safe handlers) */
-  IRAM (RWX) : ORIGIN = 0x40800000, LENGTH = 0x10000
+  /* Reserve 0x40800000..0x40807FFF for cache before executable SRAM. */
+  IRAM (RWX) : ORIGIN = 0x40808000, LENGTH = 0x8000
 
   /* Main SRAM (data, stack, heap) */
   RAM  (RW)  : ORIGIN = 0x40810000, LENGTH = 0x70000
 
   /* External Flash -- XIP-mapped via cache */
   FLASH (RX) : ORIGIN = 0x42000000, LENGTH = 0x400000
-
-  /* Flash data (read-only data mapped via cache at DROM window) */
-  FLASH_DROM (R) : ORIGIN = 0x3C000000, LENGTH = 0x400000
 }
 
-/*
- * RESET_VECTOR: entry point in Flash XIP space.
- * The ROM bootloader jumps here after loading the secondary bootloader
- * (or directly to the app if no bootloader is used with JTAG loading).
- * Must match the address set in esptool / OpenOCD flash map.
- */
-RESET_VECTOR = 0x42000020;
-
-/*
- * __global_pointer$: the ABI small-data anchor for RISC-V GP-relative
- * addressing.  ResetEntry.c loads this into the gp register before
- * calling SystemInit().  Placed 0x800 bytes into RAM so that the +/-2KB
- * GP-relative window covers the most-used data section.
- */
+/* Direct Boot: flash offset 0 contains the ROM magic; entry follows it. */
+RESET_VECTOR = 0x42000008;
 __global_pointer$ = ORIGIN(RAM) + 0x800;
 
-/*
- * Section Definitions
- * Map program sections to the defined memory regions.
- */
 SECTIONS
 {
-  /*
-   * IRAM: CPU interrupt vector table followed by cache-miss-safe handlers.
-   * Keep the 32-entry 4-byte jump table first with 256-byte alignment,
-   * as required by the RISC-V mtvec base address.
-   */
-  .iram.text :
-  {
-    . = ALIGN(256);
-    __iram_start__ = .;
-    _iram_text_start = ABSOLUTE(.);
-    KEEP(*(.iram.text.vectors))
-    KEEP(*(.iram.text))
-    *(.iram.text.*)
-    . = ALIGN(4);
-    _iram_text_end = ABSOLUTE(.);
-    __iram_end__ = .;
-  } > IRAM AT > FLASH
-
-  __iram_loc__ = LOADADDR(.iram.text);
-  __iram_size__ = __iram_end__ - __iram_start__;
-
-  /* The .dram.data section contains initialized data variables. */
-  .dram.data :
-  {
-    . = ALIGN(4);
-    _dram_data_start = ABSOLUTE(.);
-    *(.dram.data)
-    *(.dram.data.*)
-    . = ALIGN(4);
-    _dram_data_end = ABSOLUTE(.);
-  } > RAM AT > FLASH_DROM
-
-  /* The .irom.text section contains the main program code executed from Flash. */
-  .irom.text :
-  {
-    . = ALIGN(4);
-    _irom_text_start = ABSOLUTE(.);
-    KEEP(*(.reset))
-    *(.irom.text)
-    *(.irom.text.*)
-    . = ALIGN(4);
-    _irom_text_end = ABSOLUTE(.);
-  } > FLASH
-
+	.dboot_hdr ORIGIN(FLASH) :
+	{
+		LONG(0xaedb041d);
+		LONG(0xaedb041d);
+	} > FLASH
 }
 
-/* Stack top: referenced by ResetEntry.c */
-__StackTop = ORIGIN(RAM) + LENGTH(RAM);
-
+/* Common sections keep .iram.text.vectors first and aligned to 256 bytes,
+ * copy initialized RAM from the unified C6 flash mapping, and place .reset. */
 INCLUDE "gcc_riscv_flash.ld"

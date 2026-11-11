@@ -52,6 +52,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/i2c.h"
 #include "coredev/uart.h"
 #include "stddev.h"
+#include "idelay.h"
 #include "board.h"
 
 #ifdef MCUOSC
@@ -103,7 +104,18 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define I2C_SLAVE_INT_PRIO 7
 #endif
 
+#ifndef I2C_MASTER_SCL_DIR
+#define I2C_MASTER_SCL_DIR IOPINDIR_OUTPUT
+#endif
+#ifndef I2C_SLAVE_SCL_DIR
+#define I2C_SLAVE_SCL_DIR IOPINDIR_OUTPUT
+#endif
+
 //int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+
+#ifndef I2C_TEST_UART_INT_ENABLE
+#define I2C_TEST_UART_INT_ENABLE true
+#endif
 
 #define FIFOSIZE		CFIFO_MEMSIZE(512)
 
@@ -124,7 +136,7 @@ static const UARTCfg_t s_UartCfg = {
 	UART_PARITY_NONE,
 	1,					// Stop bit
 	UART_FLWCTRL_NONE,
-	true,
+	I2C_TEST_UART_INT_ENABLE,
 	1, 					// use APP_IRQ_PRIORITY_LOW with Softdevice
 	NULL,//nRFUartEvthandler,
 	true,				// fifo blocking mode
@@ -137,14 +149,17 @@ static const UARTCfg_t s_UartCfg = {
 UART g_Uart;
 
 //********** I2C Master **********
-#define I2C_SCL_RATE	100000 // Rate in Hz, supported 100k, 250k, and 400k
+#define I2C_SCL_RATE	100000
+#ifndef I2C_TEST_RATES
+#define I2C_TEST_RATES { I2C_SCL_RATE }
+#endif
 
 static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
 	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
 
 static const IOPinCfg_t s_I2cMasterPins[] = {
 	{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
-	{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
+	{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, I2C_MASTER_SCL_DIR, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
 };
 
 static const I2CCfg_t s_I2cCfgMaster = {
@@ -182,7 +197,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 
 static const IOPinCfg_t s_I2cSlavePins[] = {
 	{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},		// SDA
-	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
+	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, I2C_SLAVE_SCL_DIR, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
 };
 
 static const I2CCfg_t s_I2cCfgSlave = {
@@ -204,7 +219,7 @@ static const I2CCfg_t s_I2cCfgSlave = {
 
 I2C g_I2CSlave;
 
-#define I2C_BUFF_SIZE	20
+#define I2C_BUFF_SIZE	128
 
 // Most bytes the slave takes in one transfer, the command byte included.
 // The longest write test sends this many bytes. A board.h overrides it with
@@ -226,6 +241,8 @@ static std::atomic<int> s_SlaveWriteLen(0);	// Bytes of the last completed write
 static uint8_t s_WriteTestData[I2C_LONG_WRITE_LEN];
 static bool s_bWriteRqst = false;
 static int s_Offset = 0;
+
+
 
 static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
 	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
@@ -265,6 +282,10 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 				}
 				s_bWriteRqst = false;
 			}
+			if (s_Offset < 0 || s_Offset >= I2C_BUFF_SIZE)
+			{
+				s_Offset = 0;
+			}
 			g_I2CSlave.SetReadRqstData(0, &s_ReadRqstData[s_Offset], I2C_BUFF_SIZE - s_Offset);
 
 			break;
@@ -275,6 +296,14 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 			break;
 
 		case DEVINTRF_EVT_COMPLETED:
+
+			if (Len < 0)
+			{
+				s_SlaveWriteLen = Len;
+				s_Offset = 0;
+				s_bWriteRqst = false;
+				break;
+			}
 
 			if (s_bWriteRqst == false)
 			{
@@ -308,13 +337,19 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 
 void HardwareInit()
 {
+	static char outputBuffer[256];
+
+	setvbuf(stdout, outputBuffer, _IOLBF, sizeof(outputBuffer));
 	g_Uart.Init(s_UartCfg);
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(UART_RETARGET)
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
 
 	printf("Init I2C Master/Slave demo\r\n");
+#ifdef I2C_LOOPBACK_WIRING
+	printf("%s\r\n", I2C_LOOPBACK_WIRING);
+#endif
 }
 
 static const char *ModeName(const I2CCfg_t &Cfg)
@@ -386,6 +421,7 @@ static void PrintBytes(const uint8_t *pData, int Len)
 	printf("\r\n");
 }
 
+
 // Check Len received bytes against the expected ones
 static bool CheckRx(const char *pLabel, int Count, int Len, const uint8_t *pRx, const uint8_t *pExpected)
 {
@@ -444,19 +480,88 @@ static bool WriteTest(const I2CCfg_t &Cfg, int Len)
 	return pass;
 }
 
+#ifndef I2C_TEST_STRESS_ROUNDS
+#define I2C_TEST_STRESS_ROUNDS 0
+#endif
+
+#if I2C_TEST_STRESS_ROUNDS > 0
+static bool StressTest(const I2CCfg_t &Cfg)
+{
+	static const int lengths[] = { 1, 2, 8, 15, 16, 17, 31, 32, 33, 63, 64, 65 };
+	uint8_t expected[66];
+	uint8_t received[66];
+	uint8_t offset;
+	uint32_t timeout;
+	unsigned round;
+	int len;
+	int count;
+	int i;
+
+	static_assert(I2C_SLAVE_MAX_XFER >= 67, "Stress test needs a 67-byte slave write buffer");
+	printf("Stress: %u rounds\r\n", (unsigned)I2C_TEST_STRESS_ROUNDS);
+	for (round = 0; round < I2C_TEST_STRESS_ROUNDS; round++)
+	{
+		len = lengths[round % (sizeof(lengths) / sizeof(lengths[0]))];
+		offset = (uint8_t)(round % 32U);
+		for (i = 0; i <= len; i++)
+		{
+			expected[i] = (uint8_t)(round * 37U + i * 13U + (round >> 8));
+		}
+		s_SlaveWriteLen = 0;
+		count = MasterWrite(Cfg, I2C_SLAVE_ADDR, offset, expected, len + 1);
+		timeout = 1000000;
+		while (s_SlaveWriteLen == 0 && --timeout != 0)
+		{
+		}
+		if (count != len + 1 || s_SlaveWriteLen != len + 2)
+		{
+			printf("Stress round %u WRITE FAIL: master=%d slave=%d expected=%d+command\r\n",
+				round + 1, count, (int)s_SlaveWriteLen, len + 1);
+			return false;
+		}
+		// Every hundredth read also checks recovery from an address NACK.
+		if ((round + 1) % 100U == 0)
+		{
+			count = MasterWrite(Cfg, I2C_NACK_ADDR, offset, expected, len + 1);
+			if (count != 0)
+			{
+				printf("Stress round %u NACK FAIL: returned %d\r\n", round + 1, count);
+				return false;
+			}
+		}
+		memset(received, 0, sizeof(received));
+		count = MasterRead(offset, received, len);
+		if (count != len || memcmp(received, expected, len) != 0)
+		{
+			printf("Stress round %u READ FAIL, offset=%u\r\n", round + 1, (unsigned)offset);
+			CheckRx("Stress read", count, len, received, expected);
+			return false;
+		}
+		// The extra byte written above independently checks the completion
+		// length used to advance the slave's offset.
+		count = MasterRx(received, 1);
+		if (count != 1 || received[0] != expected[len])
+		{
+			printf("Stress round %u CONTINUE FAIL after %d bytes\r\n", round + 1, len);
+			CheckRx("Stress continuation", count, 1, received, &expected[len]);
+			return false;
+		}
+		if ((round + 1) % 100U == 0 || round + 1 == I2C_TEST_STRESS_ROUNDS)
+		{
+			printf("Stress %u/%u PASS\r\n", round + 1, (unsigned)I2C_TEST_STRESS_ROUNDS);
+		}
+	}
+	return true;
+}
+#endif
+
 // Run one master and slave combination.
 // Return 1 for pass, 0 for fail, -1 when the combination is not supported.
 static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 {
-	if ((MasterCfg.bDmaEn && !I2C_MASTER_HAS_DMA) ||
-		(SlaveCfg.bDmaEn && !I2C_SLAVE_HAS_DMA))
-	{
-		printf("Selected instance has no DMA hardware\r\n");
-		return -1;
-	}
-
 	static const int writeLen[] = { 0, 1, 2, 8, I2C_LONG_WRITE_LEN };
 	static const int readLen[] = { 1, 2, 8 };
+	static const int boundaryLen[] = { 15, 16, 17, 31, 32, 33, 63, 64, 65 };
 	const uint8_t wr[8] = { 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7 };
 	const uint8_t offset = 4;
 	uint8_t buff[I2C_BUFF_SIZE];
@@ -466,17 +571,34 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 	int c;
 	int i;
 
-	if (!g_I2CMaster.Init(MasterCfg) || !g_I2CSlave.Init(SlaveCfg))
+	if ((MasterCfg.bDmaEn && !I2C_MASTER_HAS_DMA) ||
+		(SlaveCfg.bDmaEn && !I2C_SLAVE_HAS_DMA))
 	{
-		printf("I2C initialization failed\r\n");
+		printf("Selected instance has no DMA hardware\r\n");
+		return -1;
+	}
+
+	if (!g_I2CMaster.Init(MasterCfg))
+	{
+		printf("I2C master initialization failed\r\n");
 		return 0;
 	}
+	if (!g_I2CSlave.Init(SlaveCfg))
+	{
+		printf("I2C slave initialization failed\r\n");
+		g_I2CMaster.PowerOff();
+		return 0;
+	}
+
+	printf("I2C configured rate: master %lu Hz, slave %lu Hz\r\n",
+		(unsigned long)g_I2CMaster.Rate(), (unsigned long)g_I2CSlave.Rate());
 
 	for (i = 0; i < I2C_BUFF_SIZE; ++i)
 		s_ReadRqstData[i] = (uint8_t)i;
 	memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
 	s_Offset = 0;
 	s_bWriteRqst = false;
+
 
 	// Register write of 8 bytes at offset 4
 	c = MasterWrite(MasterCfg, I2C_SLAVE_ADDR, offset, wr, sizeof(wr));
@@ -502,12 +624,29 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 		snprintf(label, sizeof(label), "%s RX", ModeName(MasterCfg));
 		pass = CheckRx(label, c, 4, buff, expected);
 	}
-	if (pass)
+	for (i = 0; pass && i < 2; i++)
 	{
 		memset(buff, 0xFF, sizeof(buff));
 		c = MasterRx(buff, 1);
-		expected[0] = s_ReadRqstData[offset + sizeof(wr) + 4];
+		expected[0] = s_ReadRqstData[offset + sizeof(wr) + 4 + i];
 		pass = CheckRx(label, c, 1, buff, expected);
+	}
+
+	// Reads around common 16- and 32-byte FIFO boundaries. Check a following
+	// command-free read too: correct data alone does not prove the slave
+	// reported the correct completion length.
+	for (i = 0; pass && i < (int)(sizeof(boundaryLen) / sizeof(boundaryLen[0])); i++)
+	{
+		memset(buff, 0xff, sizeof(buff));
+		c = MasterRead(32, buff, boundaryLen[i]);
+		pass = CheckRx("Boundary read at offset 32", c, boundaryLen[i],
+			buff, &s_ReadRqstData[32]);
+		if (pass)
+		{
+			c = MasterRx(buff, 1);
+			expected[0] = s_ReadRqstData[32 + boundaryLen[i]];
+			pass = CheckRx("Read after boundary", c, 1, buff, expected);
+		}
 	}
 
 	// Writes of 0 (command only), 1, 2, 8 and I2C_LONG_WRITE_LEN data bytes
@@ -516,13 +655,15 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 		pass = WriteTest(MasterCfg, writeLen[i]);
 	}
 
-	if (pass)
+	// Run recovery even if an earlier data check failed.
 	{
 		// Address NACK: no device answers I2C_NACK_ADDR. No data byte may be
 		// reported as written, and a register read must work after the error.
+		printf("Starting NACK test (MaxRetry=%d)\r\n", MasterCfg.MaxRetry);
+		fflush(stdout);
 		c = MasterWrite(MasterCfg, I2C_NACK_ADDR, offset, wr, sizeof(wr));
 		printf("NACK write %d/%d bytes at address 0x%02x\r\n", c, (int)sizeof(wr), I2C_NACK_ADDR);
-		pass = c == 0;
+		pass = pass && c == 0;
 
 		memset(buff, 0xFF, sizeof(buff));
 		c = MasterRead(offset, buff, sizeof(wr));
@@ -532,11 +673,22 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 		}
 	}
 
+#if I2C_TEST_STRESS_ROUNDS > 0
+	if (pass)
+	{
+		pass = StressTest(MasterCfg);
+	}
+#endif
+
+	g_I2CMaster.PowerOff();
+	g_I2CSlave.PowerOff();
 	return pass ? 1 : 0;
 }
 
 int main()
 {
+	static const uint32_t rates[] = I2C_TEST_RATES;
+	unsigned rateIndex;
 	I2CCfg_t masterCfg;
 	I2CCfg_t slaveCfg;
 	int mm;
@@ -548,40 +700,46 @@ int main()
 
 	HardwareInit();
 
-	for (sm = 0; sm < 2; ++sm)
+	for (rateIndex = 0; rateIndex < sizeof(rates) / sizeof(rates[0]); rateIndex++)
 	{
-		if ((I2C_TEST_SLAVE_MASK & (1 << sm)) == 0)
-			continue;
-
-		for (mm = 0; mm < 4; ++mm)
+		printf("\r\nI2C requested rate: %lu Hz\r\n", (unsigned long)rates[rateIndex]);
+		for (sm = 0; sm < 2; ++sm)
 		{
-			if ((I2C_TEST_MASTER_MASK & (1 << mm)) == 0)
+			if ((I2C_TEST_SLAVE_MASK & (1 << sm)) == 0)
 				continue;
 
-			masterCfg = s_I2cCfgMaster;
-			masterCfg.bDmaEn = mm >= 2;
-			masterCfg.bIntEn = mm == 1 || mm == 3;
-			slaveCfg = s_I2cCfgSlave;
-			slaveCfg.bDmaEn = sm == 1;
-			slaveCfg.bIntEn = true;
+			for (mm = 0; mm < 4; ++mm)
+			{
+				if ((I2C_TEST_MASTER_MASK & (1 << mm)) == 0)
+					continue;
 
-			printf("\r\n== I2C master %s, slave %s ==\r\n",
-				ModeName(masterCfg), sm == 1 ? "DMA" : "interrupt");
-			rc = RunCombo(masterCfg, slaveCfg);
-			if (rc > 0)
-			{
-				++nPass;
-				printf("-> PASS\r\n");
-			}
-			else if (rc == 0)
-			{
-				++nFail;
-				printf("-> FAIL\r\n");
-			}
-			else
-			{
-				++nSkip;
-				printf("-> SKIPPED\r\n");
+				masterCfg = s_I2cCfgMaster;
+				masterCfg.Rate = rates[rateIndex];
+				masterCfg.bDmaEn = mm >= 2;
+				masterCfg.bIntEn = mm == 1 || mm == 3;
+				slaveCfg = s_I2cCfgSlave;
+				slaveCfg.Rate = rates[rateIndex];
+				slaveCfg.bDmaEn = sm == 1;
+				slaveCfg.bIntEn = true;
+
+				printf("\r\n== I2C master %s, slave %s ==\r\n",
+					ModeName(masterCfg), sm == 1 ? "DMA" : "interrupt");
+				rc = RunCombo(masterCfg, slaveCfg);
+				if (rc > 0)
+				{
+					++nPass;
+					printf("-> PASS\r\n");
+				}
+				else if (rc == 0)
+				{
+					++nFail;
+					printf("-> FAIL\r\n");
+				}
+				else
+				{
+					++nSkip;
+					printf("-> SKIPPED\r\n");
+				}
 			}
 		}
 	}
@@ -589,6 +747,7 @@ int main()
 	printf("\r\nI2C master/slave loopback %s (%d passed, %d failed, %d skipped)\r\n",
 		(nFail == 0 && nPass > 0) ? "PASS" : "FAIL", nPass, nFail, nSkip);
 
+	fflush(stdout);
 	while (1)
 		__WFE();
 

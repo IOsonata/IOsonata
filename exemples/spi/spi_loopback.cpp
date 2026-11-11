@@ -179,7 +179,7 @@ static int SpiWait(int Count)
 void HardwareInit()
 {
 	g_Uart.Init(s_UartCfg);
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(UART_RETARGET)
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif

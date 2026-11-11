@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
 @example	i2c_slave_demo.cpp
 
-@brief	This example demonstrate the use of I2C in both master and slave mode
+@brief	I2C slave memory with a one-byte address offset.
 
-Two I2C devices are created, one in master mode and the other in slave mode.
-User is required to connect the wire to the appropriate pins.
+Connect an external master to the SDA, SCL and ground pins.
+Provide pull-ups to the I/O supply on SDA and SCL.
 
 This example demonstrate the read/write to the slave device memory. The
 read/write command starts with a 1 byte offset location of the device memory.
@@ -67,7 +67,9 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define I2C_SLAVE_DMA_ENABLE true
 #endif
 
-//int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+#ifndef I2C_SLAVE_SCL_DIR
+#define I2C_SLAVE_SCL_DIR IOPINDIR_OUTPUT
+#endif
 
 #define FIFOSIZE		CFIFO_MEMSIZE(512)
 
@@ -112,7 +114,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 
 static const IOPinCfg_t s_I2cSlavePins[] = {
 	{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN},		// SDA
-	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_OPENDRAIN},	// SCL
+	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, I2C_SLAVE_SCL_DIR, IOPINRES_NONE, IOPINTYPE_OPENDRAIN},	// SCL
 };
 
 static const I2CCfg_t s_I2cCfgSlave = {
@@ -134,142 +136,96 @@ static const I2CCfg_t s_I2cCfgSlave = {
 
 I2C g_I2CSlave;
 
-#define I2C_BUFF_SIZE	20
-#define I2C_BUFF_SIZE	20
+#define I2C_BUFF_SIZE 20
 static uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
-static uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
-static volatile bool s_bWriteRqst = false;
-std::atomic<bool> s_bReadRqst(false);
-static int s_Offset = 0;
+static uint8_t s_WriteRqstData[I2C_BUFF_SIZE + 1];
+static bool s_bWriteRqst;
+static unsigned s_Offset;
+static volatile unsigned s_Completions;
+static volatile unsigned s_Errors;
 
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
-	printf("EvId : %x\r\n", EvtId);
+	int count;
 
+	(void)pDev;
+	(void)pBuffer;
 	switch (EvtId)
 	{
 		case DEVINTRF_EVT_READ_RQST:
-			if (s_bWriteRqst)
+			if (s_bWriteRqst && Len > 0)
 			{
-				// There was a write command previously
-				// get the offset.  parameter Len should indicates number of byte
-				// was written prior to change state to read request
-				if (Len > 0)
-				{
-					s_Offset = s_WriteRqstData[0];
-				}
-				s_bWriteRqst = false;
+				s_Offset = s_WriteRqstData[0] % I2C_BUFF_SIZE;
 			}
-#if 1
-			s_bReadRqst = true;
-#else
-			g_I2CSlave.SetReadRqstData(0, &s_ReadRqstData[s_Offset], I2C_BUFF_SIZE);
-#endif
+			s_bWriteRqst = false;
+			g_I2CSlave.SetReadRqstData(0, &s_ReadRqstData[s_Offset], I2C_BUFF_SIZE - s_Offset);
 			break;
 
 		case DEVINTRF_EVT_WRITE_RQST:
 			s_bWriteRqst = true;
-			g_I2CSlave.SetWriteRqstBuffer(0, s_WriteRqstData, I2C_BUFF_SIZE);
+			g_I2CSlave.SetWriteRqstBuffer(0, s_WriteRqstData, sizeof(s_WriteRqstData));
 			break;
 
 		case DEVINTRF_EVT_COMPLETED:
-
-			if (s_bWriteRqst == false)
+			if (Len < 0 || (s_bWriteRqst && Len > (int)sizeof(s_WriteRqstData)))
 			{
-				// No previous write command. This means a continuous read
-				// move to last read
-				s_Offset += Len;
-				if (s_Offset >= I2C_BUFF_SIZE)
-				{
-					// Reset offset if we moved beyond max buffer
-					s_Offset = 0;
-				}
+				++s_Errors;
 			}
-			else
+			else if (s_bWriteRqst && Len > 0)
 			{
-				// Write data completed
-				// TODO : Validate data before copying.
-				memcpy(&s_ReadRqstData[s_WriteRqstData[0]], &s_WriteRqstData[1], Len - 1);
+				s_Offset = s_WriteRqstData[0] % I2C_BUFF_SIZE;
+				count = Len - 1;
+				if (count > (int)(I2C_BUFF_SIZE - s_Offset))
+				{
+					count = I2C_BUFF_SIZE - s_Offset;
+				}
+				memcpy(&s_ReadRqstData[s_Offset], &s_WriteRqstData[1], count);
+			}
+			else if (!s_bWriteRqst)
+			{
+				s_Offset = (s_Offset + Len) % I2C_BUFF_SIZE;
 			}
 			s_bWriteRqst = false;
+			++s_Completions;
+			break;
+
+		default:
 			break;
 	}
-
 	return 0;
 }
-
-void HardwareInit()
-{
-	g_Uart.Init(s_UartCfg);
-#ifdef NDEBUG
-//	UARTRetargetEnable(g_Uart, STDIN_FILENO);
-	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
-#endif
-
-	printf("Init I2C Master/Slave demo\r\n");
-}
-
-//
-// Print a greeting message on standard output and exit.
-//
-// On embedded platforms this might require semi-hosting or similar.
-//
-// For example, for toolchains derived from GNU Tools for Embedded,
-// to enable semi-hosting, the following was added to the linker:
-//
-// --specs=rdimon.specs -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group
-//
-// Adjust it for other toolchains.
-//
 
 int main()
 {
-	uint8_t offset;
-	uint8_t buff[I2C_BUFF_SIZE];
+	unsigned previous;
+	int i;
 
-	HardwareInit();
-
-	g_I2CSlave.Init(s_I2cCfgSlave);
-
-	// Fill dummy data for debugging and validation
-	for (int i = 0; i < I2C_BUFF_SIZE; i++)
+	g_Uart.Init(s_UartCfg);
+#if defined(NDEBUG) || defined(UART_RETARGET)
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
+#endif
+	for (i = 0; i < I2C_BUFF_SIZE; i++)
 	{
 		s_ReadRqstData[i] = i;
 	}
-
-	memset(s_WriteRqstData, 0, I2C_BUFF_SIZE);
-	memset(buff, 0xFF, I2C_BUFF_SIZE);
-
-	// Fill buff with data
-	buff[0] = 0xa0;
-	buff[1] = 0xa1;
-	buff[2] = 0xa2;
-	buff[3] = 0xa3;
-	buff[4] = 0xa4;
-	buff[5] = 0xa5;
-	buff[6] = 0xa6;
-	buff[7] = 0xa7;
-
-	buff[8] = 0xb0;
-	buff[9] = 0xb1;
-	buff[10] = 0xb2;
-	buff[11] = 0xb3;
-	buff[12] = 0xb4;
-	buff[13] = 0xb5;
-	buff[14] = 0xb6;
-	buff[15] = 0xb7;
-
-	while (1)
+	if (!g_I2CSlave.Init(s_I2cCfgSlave))
 	{
-		__WFE();
-		if (s_bReadRqst == true)
+		printf("I2C slave init failed\r\n");
+		while (1)
 		{
-			printf("SetReadRqstData %d\r\n", s_Offset);
-			//msDelay(1);
-			g_I2CSlave.SetReadRqstData(0, &s_ReadRqstData[s_Offset], I2C_BUFF_SIZE);
-			s_bReadRqst = false;
+			__WFE();
 		}
 	}
-
-	return 0;
+	printf("I2C slave ready: address 0x22, SDA GPIO%d, SCL GPIO%d\r\n",
+		I2C_SLAVE_SDA_PIN, I2C_SLAVE_SCL_PIN);
+	previous = 0;
+	while (1)
+	{
+		if (previous != s_Completions)
+		{
+			previous = s_Completions;
+			printf("I2C slave: completed %u, errors %u\r\n", previous, s_Errors);
+		}
+		__WFE();
+	}
 }

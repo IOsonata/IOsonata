@@ -3,7 +3,7 @@
 
 @brief	UART PRBS receive test over SLIP protocol
 
-This example sends PRBS byte though UART over SLIP protocole. The example
+This example checks PRBS bytes over UART using SLIP framing. The example
 shows UART & SLIP interface use in both C and C++.
 
 To compile in C, rename the file to .c and uncomment the line #define DEMO_C
@@ -42,6 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "prbs.h"
+#include "stddev.h"
 #include "slip_intrf.h"
 
 // This include contain i/o definition the board in use
@@ -53,11 +54,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define DEMO_C
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define SLIPTEST_BUFSIZE		600
 #define FIFOSIZE				CFIFO_MEMSIZE(SLIPTEST_BUFSIZE * 4)
 uint8_t g_RxBuff[FIFOSIZE];
+uint8_t g_TxBuff[CFIFO_MEMSIZE(256)];
 
 // This defines the s_UartPortPins map and pin count.
 // See board.h for target device specific definitions
@@ -75,12 +76,12 @@ const UARTCfg_t g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 1,
-	.EvtCallback = NULL,//nRFUartEvthandler,
+	.EvtCallback = NULL,
 	.bFifoBlocking = true,
 	.RxMemSize = FIFOSIZE,
 	.pRxMem = g_RxBuff,
-	.TxMemSize = 0,//FIFOSIZE,
-	.pTxMem = NULL,//g_TxBuff,
+	.TxMemSize = sizeof(g_TxBuff),
+	.pTxMem = g_TxBuff,
 	.bDMAMode = false,
 };
 
@@ -95,61 +96,61 @@ UART g_Uart;
 Slip g_Slip;
 #endif
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
-{
-	int cnt = 0;
-	//uint8_t buff[SLIPTEST_BUFSIZE];
-
-	switch (EvtId)
-	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
-			//UARTRx(pDev, buff, BufferLen);
-			break;
-		case UART_EVT_TXREADY:
-			break;
-		case UART_EVT_LINESTATE:
-			break;
-	}
-
-	return cnt;
-}
-
 int main()
 {
 	bool res;
-
-#ifdef DEMO_C
-	res = UARTInit(&g_UartDev, &g_UartCfg);
-	if (!res) return 1;
-	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf, false);
-#else
-	res = g_Uart.Init(g_UartCfg);
-	if (!res) return 1;
-	g_Slip.Init(&g_Uart, false);
-#endif
-
-	printf("UART PRBS Test\n\r");
-
+	bool complete;
+	int len;
+	int i;
 	uint8_t val = 0;
 	bool haveValue = false;
 	uint32_t errcnt = 0;
 	uint32_t pkcnt = 0;
 	uint8_t buf[SLIPTEST_BUFSIZE] = {};
 
+
+#ifdef DEMO_C
+	res = UARTInit(&g_UartDev, &g_UartCfg);
+	if (!res)
+	{
+		return 1;
+	}
+	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf, false);
+#else
+	res = g_Uart.Init(g_UartCfg);
+	if (!res)
+	{
+		return 1;
+	}
+	g_Slip.Init(&g_Uart, false);
+#endif
+
+#ifdef UART_RETARGET
+#ifdef DEMO_C
+	UARTRetargetEnable(&g_UartDev, STDOUT_FILENO);
+#else
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
+#endif
+#endif
+	printf("UART SLIP PRBS receive test\r\n");
+
+
 	while (1)
 	{
 #ifdef DEMO_C
-		int len = SlipRx(&g_SlipDev, buf, sizeof(buf));
-		bool complete = SlipRxCompleted(&g_SlipDev);
+		len = SlipRx(&g_SlipDev, buf, sizeof(buf));
+		complete = SlipRxCompleted(&g_SlipDev);
 #else
-		int len = g_Slip.Rx(0, buf, sizeof(buf));
-		bool complete = g_Slip.RxCompleted();
+		len = g_Slip.Rx(0, buf, sizeof(buf));
+		complete = g_Slip.RxCompleted();
 #endif
-		if (len < 0) continue;
+		if (len < 0)
+		{
+			continue;
+		}
 		// Validate payload chunks as they arrive, including frames larger than buf.
 		// Rx excludes END; completion can also accompany a zero-byte read.
-		for (int i = 0; i < len; i++)
+		for (i = 0; i < len; i++)
 		{
 			if (haveValue && val != buf[i])
 			{
@@ -165,7 +166,10 @@ int main()
 		if (complete)
 		{
 			pkcnt++;
-			if ((pkcnt & 0xff) == 0) printf("frames %u errors %u\n", pkcnt, errcnt);
+			if ((pkcnt & 0xff) == 0)
+			{
+				printf("frames %u errors %u\n", pkcnt, errcnt);
+			}
 		}
 	}
 	return 0;

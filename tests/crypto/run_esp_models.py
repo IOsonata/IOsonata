@@ -1,5 +1,37 @@
 #!/usr/bin/env python3
-"""Exercise production ESP32 register drivers with OpenSSL register models."""
+"""-------------------------------------------------------------------------
+@file   run_esp_models.py
+
+@brief  Build and execute ESP32-C3/C6 register models.
+
+@author IOsonata contributors
+@date   Nov. 8, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------"""
 from pathlib import Path
 import os
 import subprocess
@@ -25,6 +57,7 @@ with tempfile.TemporaryDirectory(prefix='crypto-esp-') as temp:
             flags = [opt, '-g', '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                 '-fno-pie', '-DuECC_ENABLE_VLI_API=1', '-DCRYPTO_TEST_NO_MAIN']
             flags += ['-D' + target, '-DESP32_CRYPTO_POLL_MAX=32', '-include', str(ROOT/'tests/crypto/esp_model.h')]
+            flags.append('-DESP32_RNG_MODEL_DISABLED')
             inc = ['-I' + str(p) for p in (out, ROOT/'include', ROOT/'micro-ecc',
                 ROOT/'RISCV/Espressif/include', ROOT/'tests/crypto')]
             objects = []

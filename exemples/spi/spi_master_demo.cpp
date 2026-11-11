@@ -136,45 +136,38 @@ SPI g_SpiMaster;
 void HardwareInit()
 {
 	g_Uart.Init(s_UartCfg);
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(UART_RETARGET)
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
 	printf("Init SPI Master demo\r\n");
 }
 
-//
-// Print a greeting message on standard output and exit.
-//
-// On embedded platforms this might require semi-hosting or similar.
-//
-// For example, for toolchains derived from GNU Tools for Embedded,
-// to enable semi-hosting, the following was added to the linker:
-//
-// --specs=rdimon.specs -Wl,--start-group -lgcc -lc -lc -lm -lrdimon -Wl,--end-group
-//
-// Adjust it for other toolchains.
-//
-
 int main()
 {
+	uint8_t data[100];
+	uint8_t buff[100];
+	int cnt;
+	int i;
 	HardwareInit();
 
 	if (!g_SpiMaster.Init(s_SpiMasterCfg))
 	{
 		printf("SPI master init FAIL\r\n");
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
 	printf("SPI master %s DMA=0 INT=0 rate=%lu Hz%s\r\n",
 		SPI_MASTER_SOFTWARE ? "SPISoft" : "hardware",
 		(unsigned long)g_SpiMaster.Rate(),
 		SPI_MASTER_SOFTWARE ? " (nominal software rate)" : "");
 
-	uint8_t data[100];
-	uint8_t buff[100];
+
 
 	// Fill dummy data
-	for (int i = 0; i < 100; i++)
+	for (i = 0; i < 100; i++)
 	{
 		data[i] = i;
 		//g_SpiSlaveTxBuff[i] = 255-i;
@@ -189,10 +182,10 @@ int main()
 
 	usDelay(10); // Slave requires a small delays between access
 
-	int cnt = g_SpiMaster.Read(0, data, 1, buff, 20);
+	cnt = g_SpiMaster.Read(0, data, 1, buff, 20);
 
 	printf("Received : %d\r\n", cnt);
-	for (int i = 0; i < cnt; i++)
+	for (i = 0; i < cnt; i++)
 	{
 		printf("%x ", buff[i]);
 	}
