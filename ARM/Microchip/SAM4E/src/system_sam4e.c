@@ -100,22 +100,6 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 	return true;
 }
 
-bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	if (ClkSrc == OSC_TYPE_RC)
-	{
-		g_McuOsc.LowPwrOsc.Type = OSC_TYPE_RC;
-		g_McuOsc.LowPwrOsc.Freq = 32000;
-	}
-	else
-	{
-		g_McuOsc.LowPwrOsc.Type = OSC_TYPE_XTAL;
-		g_McuOsc.LowPwrOsc.Freq = 32768;
-	}
-
-	return true;
-}
-
 void SystemSetPLLA()
 {
 	uint32_t div = 0;
@@ -142,6 +126,10 @@ void SystemSetPLLA()
 void SystemInit()
 {
 	uint32_t mor = 0;
+
+	// Preserve read-to-clear wake flags before clock initialization.
+	(void)SystemResetReason();
+	SystemOscInit();
 
 	// WDT is on by default.  Disable it.
 	SAM4E_WDT->WDT_MR = WDT_MR_WDDIS;

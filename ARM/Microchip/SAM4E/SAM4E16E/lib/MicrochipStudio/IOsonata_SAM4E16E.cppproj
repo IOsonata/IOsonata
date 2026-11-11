@@ -238,6 +238,14 @@
       <SubType>compile</SubType>
       <Link>src\system_sam4e.c</Link>
     </Compile>
+    <Compile Include="..\..\..\src\system_power_sam4e.cpp">
+      <SubType>compile</SubType>
+      <Link>src\system_power_sam4e.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\src\system_clock_sam4e.cpp">
+      <SubType>compile</SubType>
+      <Link>src\system_clock_sam4e.cpp</Link>
+    </Compile>
     <Compile Include="..\..\..\src\Vectors_SAM4E.c">
       <SubType>compile</SubType>
       <Link>src\Vectors_SAM4E.c</Link>
