@@ -618,31 +618,27 @@ EOF
 echo
 echo ">>> udev rules file created at: $UDEV_SRC"
 
-# Download IDAPnRFProg if not present
-IDAP_PROG="$TOOLS_DIR/IDAPnRFProg"
-if [[ ! -x "$IDAP_PROG" || "$MODE" == "force" ]]; then
-  echo
-  echo ">>> Downloading IDAPnRFProg tool..."
-  IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/Linux/IDAPnRFProg_Linux_2_1_240807.zip/download"
-  IDAP_STAGE=$(mktemp -d)
-  if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
-    echo "Warning: IDAP download failed; existing executables preserved." >&2
-  elif ! unzip -o -j "$IDAP_STAGE/archive.zip" -d "$IDAP_STAGE/unpacked" \
-    || [[ ! -s "$IDAP_STAGE/unpacked/IDAPnRFProg" ]]; then
-    echo "Warning: Invalid IDAP archive; installation continues." >&2
-  else
-    for tool in IDAPnRFProg IDAPSetTarget; do
-      if [[ -s "$IDAP_STAGE/unpacked/$tool" ]]; then
-        if ! chmod +x "$IDAP_STAGE/unpacked/$tool" || ! cp "$IDAP_STAGE/unpacked/$tool" "$TOOLS_DIR/$tool"; then
-          echo "Warning: Could not install $tool; installation continues." >&2
-        fi
-      fi
-    done
-    echo "IDAP tools download processed in $TOOLS_DIR"
-  fi
-  rm -rf "$IDAP_STAGE"
-else
-  echo "✅ IDAPnRFProg already installed (skipping)"
+# Install IDAP tools and download firmware for each supported probe revision.
+install_idap_tools() (
+	local helper=""
+	if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+		helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install_idap.py"
+	fi
+	local stage=""
+	local args=(--root "$ROOT" --platform linux)
+	if [[ "$MODE" == "force" ]]; then
+		args+=(--force)
+	fi
+	if [[ ! -f "$helper" ]]; then
+		stage=$(mktemp -d) || exit 1
+		trap 'rm -rf "$stage"' EXIT
+		helper="$stage/install_idap.py"
+		curl -fL "https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/install_idap.py" -o "$helper" || exit 1
+	fi
+	"$PYTHON3" "$helper" "${args[@]}" || exit 1
+)
+if ! install_idap_tools; then
+	echo "Warning: IDAP installation failed; rerun the installer to retry." >&2
 fi
 
 # Check if udev rules already installed in system

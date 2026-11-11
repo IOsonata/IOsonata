@@ -27,6 +27,35 @@ IOsonata is a cross-platform C++ framework for embedded MCU development. These s
 - **Dependencies** - External libraries (Nordic SDKs, TinyUSB, LVGL, etc.)
 - **Library builds** - Pre-compiled IOsonata libraries for your target MCU
 
+## IDAP tools and probe firmware
+
+The installers install IDAPnRFProg and IDAPSetTarget release `2_4_260521` in
+`<SDK home>/Tools/bin`. Normal runs upgrade old installations, repair missing or
+changed files, and skip files already installed by this installer at that release.
+`--force-update` (Windows: `-ForceUpdate`) downloads them again. The installer
+records the package version and installed executable hashes in
+`Tools/IDAP/installed.json`; it does not run the programmer to detect its version.
+
+Firmware is downloaded to these separate directories:
+
+- `Tools/IDAP/Firmware/IDAP-Link_R2/build_2_4_260521/firmware.bin`
+- `Tools/IDAP/Firmware/IDAP-Link_R3/build_2_4_260521/firmware.bin`
+- `Tools/IDAP/Firmware/IDAP-M/build_2_4_260521/firmware.bin`
+
+Use the file matching the probe hardware revision. The installer downloads
+firmware only; it does not flash an attached probe. All tool archives and firmware
+must pass SHA-256 checks before any installed file is replaced.
+
+To update only IDAP tools and download firmware from a current checkout:
+
+```bash
+python3 Installer/install_idap.py --root "$HOME/IOcomposer" --platform macos
+```
+
+Use `linux` or `windows` for those platforms and supply the corresponding SDK
+home. Add `--force` to download again. Published filenames and hashes are kept
+in `Installer/install_idap.py` and must be updated when a new release is adopted.
+
 ## Available Scripts
 
 #
