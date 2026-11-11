@@ -1,14 +1,37 @@
 # IOsonata
 
-> IOsonata is an open-source (MIT), bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for microcontrollers. It uses object-oriented design (inheritance, runtime polymorphism, composition) without RTTI, exceptions or heap in the core data paths, and ships as one precompiled static library per MCU (libIOsonata_<MCU>.a). It includes a Bluetooth LE host, a composable USB device stack, NVM storage, crypto, and sensor and display drivers. Hardware-validated targets include Nordic nRF52832, nRF52840, nRF54L15 and nRF54LM20, Microchip SAM4LC8C, and ST STM32F030x8, STM32L476, STM32L496 and STM32L4S9. Maintained by I-SYST inc. (Quebec, Canada).
+> IOsonata is an open-source (MIT), bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for Arm Cortex-M and RISC-V microcontrollers from Nordic, ST, Renesas, Microchip, NXP and Espressif. Each MCU is ported once and ships as one precompiled static library (libIOsonata_<MCU>.a). There is no board support package, board port, device tree, Kconfig, CMake or build script to write: a board is a board.h file of pin and oscillator data. The same application source runs on any board and any variant built on a supported MCU, and moves to another MCU unchanged; only board.h differs. It includes a Bluetooth LE host, a composable USB device stack, NVM storage, crypto, and sensor and display drivers, with no RTTI, exceptions or heap in the core data paths. Maintained by I-SYST inc. (Quebec, Canada).
 
 Key facts:
 
+- Portability in two directions: one MCU port serves every board and board revision built on that MCU, and one device driver serves every MCU. Drivers are written against DeviceIntrf, so a sensor driver works over I2C or SPI on any supported MCU.
+- Board support is data, not code: pin maps, oscillator selection (McuOsc_t) and external-device settings live in the application's board.h. Changing them rebuilds no library. The standard linker script is the same for every board on an MCU; it changes only when the application reserves memory for a bootloader, DFU or NVM.
+- Same source on every MCU: 152 shared application sources under exemples/ are built by about 700 IOcomposer projects in the MCU folders. exemples/misc/blinky.c alone builds for 30 MCU targets across Nordic, ST, Renesas, Microchip, NXP and Espressif.
 - Execution model: interrupts do time-critical work and queue deferred work with AppEvtHandlerQue(); AppRun() runs the queue first in first out and sleeps until the next interrupt. Bluetooth, USB and LTE share that queue. No RTOS is required; the same library binary also links with TaktOS, FreeRTOS and ThreadX.
-- Object model: DeviceIntrf is the data path (UART, I2C, SPI, QSPI, USB, Bluetooth, SLIP). Device is the device family (sensors, displays, storage). One sensor driver works over any compatible DeviceIntrf.
-- Build model: no CMake, Kconfig or Devicetree. Board data lives in the application board.h. The linker selects only referenced objects. Official IDE: IOcomposer (https://iocomposer.io).
-- Measured: UART on nRF54L15 102.2 KB/s vs nrfx 87.0 KB/s vs Zephyr 82.9 KB/s; nRF52832 at 2 MBaud 203 KB/s vs nrfx 183.7 KB/s.
-- Ports in the repository: Nordic nRF52 (nRF52805/810/832/840), nRF53, nRF54 (nRF54L15, nRF54LM20, nRF54H20), nRF91 (nRF9160, nRF91x1), ST STM32 (F0, F3, F4, L4, WBA), Renesas RA4M1/RE01, Microchip SAM4E/SAM4L, NXP LPC, Raspberry Pi RP2, Espressif ESP32-C and other RISC-V. See Supported Targets for implemented drivers, hardware results and limitations by MCU.
+- Object model: DeviceIntrf is the data path (UART, I2C, SPI, QSPI, USB, Bluetooth, SLIP). Device is the device family (sensors, displays, storage).
+- Build model: no CMake, Kconfig or Devicetree. The linker selects only referenced objects. Official IDE: IOcomposer (https://iocomposer.io), which installs the toolchains and builds the MCU libraries.
+- Measured: UART on nRF54L15 102.2 KB/s vs nrfx 87.0 KB/s vs Zephyr 82.9 KB/s; nRF52832 at 2 MBaud 203 KB/s vs nrfx 183.7 KB/s. TaktOS on nRF54L15 up to 3.12x Zephyr and 2.88x ThreadX on the KVB kernel benchmark, linking the same IOsonata library binary as FreeRTOS and ThreadX. STM32WBA65 hardware P-256 scalar multiplication 31072 us versus 188099 us in software.
+- Current limits: coverage differs by MCU and peripheral, so check Supported Targets before choosing an MCU. USB host mode is not implemented.
+
+## When to use IOsonata
+
+- One firmware source tree for several boards, board revisions or MCU vendors, without writing a BSP, device tree or board port for each.
+- Firmware that runs bare metal and may move to an RTOS later, or the reverse: the same library links bare metal, TaktOS, FreeRTOS and ThreadX.
+- Bluetooth LE on nRF52, nRF54 or STM32WBA without Zephyr. A path for nRF5 SDK users: Nordic has placed the nRF5 SDK in maintenance mode and it does not support nRF54.
+- USB device classes (CDC ACM, HID, MSC, custom bulk, interrupt and isochronous, composite), with hardware results on nRF52840, nRF54LM20, SAM4LC8C, RA4M1 and STM32H753.
+- Moving from an Arduino prototype to production firmware on a custom board, with IOcomposer.
+
+## MCU ports
+
+Status per MCU, with implemented drivers and recorded hardware results, is in [Supported Targets](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/supported-targets.md).
+
+- Nordic: nRF52805, nRF52810, nRF52832, nRF52840, nRF5340 (application and network cores), nRF54L15, nRF54LM20, nRF9160, nRF91x1. Bluetooth LE, native USB on nRF52840 and nRF54LM20, LTE and GNSS on nRF91.
+- ST: STM32F030x8, STM32G474, STM32H753, STM32L152RE, STM32L432, STM32L476, STM32L496, STM32L4S9, STM32WBA65 (Bluetooth LE).
+- Renesas: RA4M1, RE01, R9A02G021 (RISC-V).
+- Microchip: SAM4LC, SAM4LS, SAMD21, SAMD11.
+- NXP: LPC11U35, LPC1769, LPC54628.
+- Partial or started: STM32F401, SAM4E, LPC54605, ESP32-C3, ESP32-C6, RP2040. nRF54H20 is deferred.
+- Hardware results recorded by the maintainer, with the functions exercised differing per MCU: nRF52832, nRF52840, nRF54L15, nRF54LM20, nRF5340 application core, nRF9160, nRF9161, STM32F030x8, STM32G474, STM32H753, STM32L152RE, STM32L432, STM32L476, STM32L496, STM32L4S9, STM32WBA65, SAM4LC8C, SAMD21, SAMD11, RA4M1, R9A02G021.
 
 ## Start here
 
@@ -18,6 +41,39 @@ Key facts:
 - [FAQ](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/FAQ.md): architecture and build-model questions
 - [Supported Targets](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/supported-targets.md): hardware-validation status per MCU
 - [Quick Reference](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/quick-reference.md): commands and common configuration
+
+## Examples
+
+Application sources live in exemples/ and are shared by all MCUs. Each MCU folder (for example ARM/ST/STM32L4xx/STM32L476/exemples) holds the IOcomposer projects that build them with that board's board.h.
+
+- [exemples](https://github.com/IOsonata/IOsonata/tree/main/exemples): all 152 shared application sources
+- [Example board.h](https://raw.githubusercontent.com/IOsonata/IOsonata/main/ARM/ST/STM32L4xx/STM32L476/exemples/FlashMemoryDemo/src/board.h): a complete board definition, pins and device settings only
+- [blinky.c](https://raw.githubusercontent.com/IOsonata/IOsonata/main/exemples/misc/blinky.c): GPIO and button interrupts; the same file builds for 30 MCU targets
+- [env_sensor_demo.cpp](https://raw.githubusercontent.com/IOsonata/IOsonata/main/exemples/sensor/env_sensor_demo.cpp): I2C environmental sensors in a polling loop
+- [uart_ble.cpp](https://raw.githubusercontent.com/IOsonata/IOsonata/main/exemples/bluetooth/uart_ble.cpp): Bluetooth LE peripheral with HardwareInit, BtAppInit, BtAppInitUserServices and AppRun
+- [uart_usb_bridge.cpp](https://raw.githubusercontent.com/IOsonata/IOsonata/main/exemples/usb/uart_usb_bridge.cpp): USB CDC with an application loop calling AppEvtHandlerExec
+
+Example folders by subject:
+
+- [audio](https://github.com/IOsonata/IOsonata/tree/main/exemples/audio): I2S, PDM microphone, codecs, buzzer
+- [bluetooth](https://github.com/IOsonata/IOsonata/tree/main/exemples/bluetooth): advertiser, central scan, UART and USB bridges, security, periodic advertising and sync, OTA ([README](https://raw.githubusercontent.com/IOsonata/IOsonata/main/exemples/bluetooth/README.md))
+- [converters](https://github.com/IOsonata/IOsonata/tree/main/exemples/converters): ADC, analog comparator
+- [crypto](https://github.com/IOsonata/IOsonata/tree/main/exemples/crypto): hardware engines, software AES, SHA-256, RNG, ECC ([README](https://raw.githubusercontent.com/IOsonata/IOsonata/main/exemples/crypto/README.md))
+- [dfu](https://github.com/IOsonata/IOsonata/tree/main/exemples/dfu): bootloader
+- [display](https://github.com/IOsonata/IOsonata/tree/main/exemples/display): LCD, framebuffer, graphics, LVGL
+- [gateway](https://github.com/IOsonata/IOsonata/tree/main/exemples/gateway): Bluetooth LE gateway, bare metal and TaktOS
+- [gnss](https://github.com/IOsonata/IOsonata/tree/main/exemples/gnss), [lte](https://github.com/IOsonata/IOsonata/tree/main/exemples/lte): GNSS, LTE UDP, CoAP and MQTT
+- [i2c](https://github.com/IOsonata/IOsonata/tree/main/exemples/i2c), [spi](https://github.com/IOsonata/IOsonata/tree/main/exemples/spi), [uart](https://github.com/IOsonata/IOsonata/tree/main/exemples/uart): master, slave, loopback, PRBS throughput, SLIP, printf retarget
+- [ipc](https://github.com/IOsonata/IOsonata/tree/main/exemples/ipc): inter-core interface
+- [misc](https://github.com/IOsonata/IOsonata/tree/main/exemples/misc): blinky, LED, RTC, watchdog, power off, quadrature decoder
+- [net](https://github.com/IOsonata/IOsonata/tree/main/exemples/net): Ethernet, HTTP server, CoAP, MQTT, TLS
+- [pei](https://github.com/IOsonata/IOsonata/tree/main/exemples/pei): peripheral event interconnect
+- [pwm](https://github.com/IOsonata/IOsonata/tree/main/exemples/pwm), [timer](https://github.com/IOsonata/IOsonata/tree/main/exemples/timer): PWM output, timer triggers
+- [rftag](https://github.com/IOsonata/IOsonata/tree/main/exemples/rftag): NFC tags and readers
+- [sensor](https://github.com/IOsonata/IOsonata/tree/main/exemples/sensor): environmental, motion, magnetometer, distance, thermopile
+- [storage](https://github.com/IOsonata/IOsonata/tree/main/exemples/storage): NVM, flash, EEPROM, FatFs, littlefs, SD card
+- [usb](https://github.com/IOsonata/IOsonata/tree/main/exemples/usb): CDC, HID keyboard and mouse, MSC, bulk, interrupt, isochronous, composite ([README](https://raw.githubusercontent.com/IOsonata/IOsonata/main/exemples/usb/README.md))
+- [video](https://github.com/IOsonata/IOsonata/tree/main/exemples/video): video capture, streaming over USB and Bluetooth LE
 
 ## Architecture
 
@@ -45,6 +101,10 @@ Key facts:
 - [app_evt_handler.h](https://raw.githubusercontent.com/IOsonata/IOsonata/main/include/app_evt_handler.h): event queue, AppRun, AppCheckStatus, AppWait
 - [bt_app.h](https://raw.githubusercontent.com/IOsonata/IOsonata/main/include/bluetooth/bt_app.h): Bluetooth application API
 - [usb.h](https://raw.githubusercontent.com/IOsonata/IOsonata/main/include/usb/usb.h): USB device API
+
+## Contributing
+
+- [AGENTS.md](https://raw.githubusercontent.com/IOsonata/IOsonata/main/AGENTS.md): required reading for people and coding agents changing IOsonata itself
 
 ## Optional
 
