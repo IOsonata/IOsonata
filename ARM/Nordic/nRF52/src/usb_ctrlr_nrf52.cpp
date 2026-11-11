@@ -52,24 +52,10 @@ SOFTWARE.
 #include "istddef.h"
 #include "cfifo.h"
 #include "coredev/interrupt.h"
+#include "coredev/system_core_clock.h"
 
 #include "usb/usb.h"
 
-// A legacy nRF52 SoftDevice owns HFCLK while it is enabled. Only clock
-// request/release needs the SoftDevice API; USB controller operation does not.
-#if defined(NRF52_SERIES) && \
-	(defined(SOFTDEVICE_PRESENT) || defined(S140))
-#define SOFTDEVICE_PRESENT			1
-#endif
-
-#ifdef SOFTDEVICE_PRESENT
-#include "nrf_soc.h"
-#include "nrf_error.h"
-#endif
-
-#ifndef NRFX_USBD_XTAL_WAIT_LOOPS
-#define NRFX_USBD_XTAL_WAIT_LOOPS			2000000UL
-#endif
 
 #ifndef NRFX_USBD_READY_WAIT_LOOPS
 #define NRFX_USBD_READY_WAIT_LOOPS			2000000UL
@@ -164,6 +150,10 @@ alignas(4) static uint8_t s_Ep0QueMem[
 
 nRFUsbdState_t s_Usbd;
 
+// The crystal request of the controller, held from a successful start to
+// the stop. Outside s_Usbd, which UsbCtrlrInit clears.
+static bool s_bUsbdXtalHeld = false;
+
 extern bool nRFUsbdIsoStart(void) __attribute__((weak));
 
 // usb_ctrlr_nrf52_vbus.cpp: cable attach and removal interrupt
@@ -208,12 +198,8 @@ void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 	pReg->Handler(Event, Length, pReg->pContext);
 }
 
-#ifdef SOFTDEVICE_PRESENT
-bool UsbdSdRunning(void);
-#endif
-
-// Bounded spin for a status bit shared by the clock, controller and
-// regulator ready waits.
+// Bounded spin for a status bit shared by the controller and regulator ready
+// waits.
 static bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 						  uint32_t Loops)
 {
@@ -229,70 +215,26 @@ static bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 	return false;
 }
 
+// One request for the 32 MHz crystal through SystemCoreClockSelect, which counts the
+// requests of every driver and goes through the SoftDevice or MPSL when one
+// owns CLOCK. The controller holds at most one.
 static bool UsbdXtalRequest(void)
 {
-#ifdef SOFTDEVICE_PRESENT
-	if (UsbdSdRunning())
+	if (s_bUsbdXtalHeld == false)
 	{
-		uint32_t running = 0;
-
-		if (sd_clock_hfclk_request() != NRF_SUCCESS)
-		{
-			return false;
-		}
-
-		for (uint32_t i = 0; i < NRFX_USBD_XTAL_WAIT_LOOPS; i++)
-		{
-			if (sd_clock_hfclk_is_running(&running) != NRF_SUCCESS)
-			{
-				break;
-			}
-
-			if (running != 0)
-			{
-				return true;
-			}
-		}
-
-		(void)sd_clock_hfclk_release();
-
-		return false;
-	}
-#endif
-
-	if ((NRF_CLOCK->HFCLKSTAT &
-		 (CLOCK_HFCLKSTAT_STATE_Msk | CLOCK_HFCLKSTAT_SRC_Msk)) ==
-		(CLOCK_HFCLKSTAT_STATE_Msk |
-		 (CLOCK_HFCLKSTAT_SRC_Xtal << CLOCK_HFCLKSTAT_SRC_Pos)))
-	{
-		return true;
+		s_bUsbdXtalHeld = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000);
 	}
 
-	NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-	NRF_CLOCK->TASKS_HFCLKSTART = 1;
-
-	if (UsbdWaitReady(&NRF_CLOCK->EVENTS_HFCLKSTARTED, 0xFFFFFFFFUL,
-					  NRFX_USBD_XTAL_WAIT_LOOPS))
-	{
-		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-		return true;
-	}
-
-	return false;
+	return s_bUsbdXtalHeld;
 }
 
 static inline void UsbdXtalRelease(void)
 {
-#ifdef SOFTDEVICE_PRESENT
-	if (UsbdSdRunning())
+	if (s_bUsbdXtalHeld)
 	{
-		(void)sd_clock_hfclk_release();
-		return;
+		s_bUsbdXtalHeld = false;
+		(void)SystemCoreClockSelect(OSC_TYPE_RC, 0);
 	}
-#endif
-
-	// Left running on both parts. Other peripherals take these clocks without
-	// counting, so stopping one here would stop it under them.
 }
 
 

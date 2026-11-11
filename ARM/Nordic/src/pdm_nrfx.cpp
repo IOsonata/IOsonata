@@ -362,7 +362,7 @@ static bool PdmPeiReady(PdmDev_t *pDev)
 #endif
 }
 
-extern "C" bool PdmPreparePeiStart(PdmDev_t *pDev)
+bool PdmPreparePeiStart(PdmDev_t *pDev)
 {
 #if defined(NRF52_SERIES)
 	uint8_t *p;
@@ -391,7 +391,7 @@ extern "C" bool PdmPreparePeiStart(PdmDev_t *pDev)
 #endif
 }
 
-extern "C" bool PdmEnablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
+bool PdmEnablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, PDM_PEI_EVENT Event)
 {
 	PeiEndpoint_t endpoint;
@@ -409,7 +409,7 @@ extern "C" bool PdmEnablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool PdmDisablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
+bool PdmDisablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt)
 {
 	PeiEndpoint_t endpoint;
@@ -433,7 +433,7 @@ extern "C" bool PdmDisablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-extern "C" bool PdmConnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+bool PdmConnectTask(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PDM_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;
@@ -451,7 +451,7 @@ extern "C" bool PdmConnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool PdmDisconnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+bool PdmDisconnectTask(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PDM_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;

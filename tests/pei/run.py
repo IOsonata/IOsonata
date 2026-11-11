@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compile and exercise the real nRF52 PEI source against mock PPI registers."""
 import pathlib
+import platform
 import subprocess
 import sys
 import tempfile
@@ -18,27 +19,27 @@ subprocess.run([sys.executable, str(TEST / "test_check_no_pei_link.py")],
                check=True)
 subprocess.run([sys.executable, str(TEST / "check_timer_cc_invariant.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_gpio_port_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_gpio_port_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_gpio_lifecycle_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_gpio_lifecycle_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_saadc_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_saadc_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_comp_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_comp_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_pwm_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_pwm_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_audio_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_audio_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_spi_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_spi_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_i2c_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_i2c_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_uart_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_uart_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_misc_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_misc_pei_source.py")],
                check=True)
-subprocess.run([sys.executable, str(TEST / "check_system_pei_contract.py")],
+subprocess.run([sys.executable, str(TEST / "check_system_pei_source.py")],
                check=True)
 
 with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
@@ -50,8 +51,12 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
                     str(matrix), "-o", str(matrix_obj)], check=True)
     subprocess.run(["gcc", "-std=c11", *COMMON, "-fsyntax-only",
                     str(TEST / "pei_hal_c_api.c")], check=True)
-    subprocess.run(["g++", "-std=c++11", *COMMON, "-fsyntax-only",
+    subprocess.run(["g++", "-std=c++11", *COMMON,
+                    "-Wno-overloaded-virtual", "-fsyntax-only",
                     str(TEST / "pei_hal_cpp_api.cpp")], check=True)
+    # macOS does not reliably permit fixed-address nRF52 EGU MMIO maps.
+    # Keep all PPI and RTC tests enabled; skip only the EGU MMIO test.
+    skip_egu_mmio = platform.system() == "Darwin"
     for name, flags in [
         ("bare", []),
         ("sdc", ["-DNRFXLIB_SDC"]),
@@ -59,6 +64,8 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
         ("s140", ["-DSOFTDEVICE_PRESENT", "-DS140", "-DNRF52840_XXAA"]),
         ("nrf52805", ["-DTEST_PPI_CHANNEL_COUNT=10", "-DTEST_EGU_COUNT=2"]),
     ]:
+        if skip_egu_mmio:
+            flags = [*flags, "-DTEST_SKIP_EGU_MMIO"]
         output = temp / name
         driver_obj = temp / (name + "_pei.o")
         test_obj = temp / (name + "_test.o")
@@ -75,7 +82,8 @@ with tempfile.TemporaryDirectory(prefix="pei-nrf52-") as temp:
     subprocess.run(["g++", "-std=c++11", *COMMON,
                     "-c", str(driver), "-o", str(obj)], check=True)
     cpp = temp / "cpp"
-    subprocess.run(["g++", "-std=c++11", *COMMON,
+    cpp_flags = ["-DTEST_SKIP_EGU_MMIO"] if skip_egu_mmio else []
+    subprocess.run(["g++", "-std=c++11", *COMMON, *cpp_flags,
                     str(TEST / "ppi_cpp_test.cpp"), str(obj), str(matrix_obj),
                     "-o", str(cpp)], check=True)
     subprocess.run([str(cpp)], check=True)

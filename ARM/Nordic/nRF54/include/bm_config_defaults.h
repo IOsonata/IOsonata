@@ -482,10 +482,6 @@ in your project's build configuration.
 
 /* === Drivers / Platform === */
 
-#ifndef CONFIG_BM_TIMER_IRQ_PRIO
-#define CONFIG_BM_TIMER_IRQ_PRIO                  5
-#endif
-
 /* Zero-latency IRQs not used on bare metal — disables the
  * IF_ENABLED(CONFIG_ZERO_LATENCY_IRQS, ...) path in bm_irq.h
  * so BUILD_ASSERT is never expanded inside parentheses. */

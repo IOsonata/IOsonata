@@ -265,23 +265,23 @@ public:
 		ADC_NRF52_PEI_EVENT Event)
 	{
 		return PeiSamplingReady() &&
-			AdcNrf52PeiBindEvent(PeiDev, &Evt, Event);
+			AdcNrf52EnablePeiEvent(PeiDev, &Evt, Event);
 	}
 
 	bool DisablePeiEvent(Pei &PeiDev, PeiEvent_t Evt)
 	{
-		return AdcNrf52PeiUnbindEvent(PeiDev, Evt);
+		return AdcNrf52DisablePeiEvent(PeiDev, Evt);
 	}
 
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, ADC_NRF52_PEI_TASK Task)
 	{
 		return PeiSamplingReady() &&
-			AdcNrf52PeiConnectTask(PeiDev, Evt, Task);
+			AdcNrf52ConnectTask(PeiDev, Evt, Task);
 	}
 
 	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, ADC_NRF52_PEI_TASK Task)
 	{
-		return AdcNrf52PeiDisconnectTask(PeiDev, Evt, Task);
+		return AdcNrf52DisconnectTask(PeiDev, Evt, Task);
 	}
 
 private:

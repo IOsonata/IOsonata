@@ -121,9 +121,9 @@ bool PdmEnablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, PDM_PEI_EVENT Event);
 bool PdmDisablePeiEvent(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt);
-bool PdmConnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+bool PdmConnectTask(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PDM_PEI_TASK Task);
-bool PdmDisconnectPeiTask(PdmDev_t *pDev, PeiDev_t *pPei,
+bool PdmDisconnectTask(PdmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PDM_PEI_TASK Task);
 
 #ifdef __cplusplus

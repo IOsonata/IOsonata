@@ -419,7 +419,7 @@ static PeiEndpoint_t QdecPeiTaskEndpoint(QDEC_PEI_TASK Task)
 #endif
 }
 
-extern "C" bool QdecPreparePeiStart(QdecDev_t *pDev)
+bool QdecPreparePeiStart(QdecDev_t *pDev)
 {
 #if defined(NRF52_SERIES)
 	if (!QdecPeiOwner(pDev))
@@ -437,7 +437,7 @@ extern "C" bool QdecPreparePeiStart(QdecDev_t *pDev)
 #endif
 }
 
-extern "C" bool QdecEnablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
+bool QdecEnablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, QDEC_PEI_EVENT Event)
 {
 	PeiEndpoint_t endpoint;
@@ -455,7 +455,7 @@ extern "C" bool QdecEnablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool QdecDisablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
+bool QdecDisablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt)
 {
 	PeiEndpoint_t endpoint;
@@ -479,7 +479,7 @@ extern "C" bool QdecDisablePeiEvent(QdecDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-extern "C" bool QdecConnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+bool QdecConnectTask(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, QDEC_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;
@@ -503,7 +503,7 @@ extern "C" bool QdecConnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool QdecDisconnectPeiTask(QdecDev_t *pDev, PeiDev_t *pPei,
+bool QdecDisconnectTask(QdecDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, QDEC_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;

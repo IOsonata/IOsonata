@@ -745,18 +745,18 @@ static uint32_t nRFUARTGetRate(DevIntrf_t * const pDev)
 static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+	uint32_t regval;
+	int rate;
 
 	if (dev->bPeiTxPrepared)
 	{
 		return (uint32_t)dev->pUartDev->Rate;
 	}
 
-	int rate = 0;
-
 	// NOTE: Thanks to hmolesworth for the Baudrate calculation posted on devzone.
 	// https://devzone.nordicsemi.com/f/nordic-q-a/43280/technical-question-regarding-uart-baud-rate-generator-baudrate-register-offset-0x524/458422
 
-	uint32_t regval = (uint32_t)(((((uint64_t)Rate << 32ULL) + 8000000ULL) / 16000000ULL) + 0x800ULL) & 0xFFFFF000;
+	regval = (uint32_t)(((((uint64_t)Rate << 32ULL) + 8000000ULL) / 16000000ULL) + 0x800ULL) & 0xFFFFF000;
 	rate = (uint32_t)(((uint64_t)regval * 16000000ULL) >> 32ULL);
 
 #if defined(NRF54L_SERIES)
@@ -892,13 +892,13 @@ static bool nRFUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+	int cnt = 0;
+	int rtry = pDev->MaxRetry;
 
 	if (dev->bPeiTxPrepared)
 	{
 		return 0;
 	}
-    int cnt = 0;
-    int rtry = pDev->MaxRetry;
 
     while (Datalen > 0 && rtry-- > 0)
     {
@@ -1805,7 +1805,7 @@ static PeiEndpoint_t UARTPeiTaskEndpoint(nRFUartDev_t *dev,
 #endif
 }
 
-extern "C" bool UARTPreparePeiTx(UARTDev_t *pDev, const uint8_t *pTx,
+bool UARTPreparePeiTx(UARTDev_t *pDev, const uint8_t *pTx,
 	uint32_t TxLen)
 {
 #if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
@@ -1853,10 +1853,9 @@ extern "C" bool UARTPreparePeiTx(UARTDev_t *pDev, const uint8_t *pTx,
 #endif
 }
 
-// The caller must disconnect all PPI TX task routes before release.
-// A transfer that has been started must have stopped before its DMA
-// buffer can be reused. A fresh, unstarted TX can simply be released.
-extern "C" bool UARTReleasePeiTx(UARTDev_t *pDev)
+// Disconnect PPI TX routes before releasing the DMA buffer.
+// Wait for TXSTOPPED only if transmission started.
+bool UARTReleasePeiTx(UARTDev_t *pDev)
 {
 #if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
 	nRFUartDev_t *dev;
@@ -1894,7 +1893,7 @@ extern "C" bool UARTReleasePeiTx(UARTDev_t *pDev)
 #endif
 }
 
-extern "C" bool UARTEnablePeiEvent(UARTDev_t *pDev,
+bool UARTEnablePeiEvent(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t *pEvt, UART_PEI_EVENT Event)
 {
 	nRFUartDev_t *dev;
@@ -1920,7 +1919,7 @@ extern "C" bool UARTEnablePeiEvent(UARTDev_t *pDev,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool UARTDisablePeiEvent(UARTDev_t *pDev,
+bool UARTDisablePeiEvent(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt)
 {
 	nRFUartDev_t *dev;
@@ -1945,7 +1944,7 @@ extern "C" bool UARTDisablePeiEvent(UARTDev_t *pDev,
 	return false;
 }
 
-extern "C" bool UARTConnectPeiTask(UARTDev_t *pDev,
+bool UARTConnectTask(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, UART_PEI_TASK Task)
 {
 	nRFUartDev_t *dev;
@@ -1968,7 +1967,7 @@ extern "C" bool UARTConnectPeiTask(UARTDev_t *pDev,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool UARTDisconnectPeiTask(UARTDev_t *pDev,
+bool UARTDisconnectTask(UARTDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, UART_PEI_TASK Task)
 {
 	nRFUartDev_t *dev;

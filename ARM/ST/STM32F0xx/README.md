@@ -96,6 +96,13 @@ A, from the LSE or the 40 kHz LSI; the F030x8 has no wakeup timer and no backup
 registers. See [STM32 RTC](../RTC.md). No example project; not run on hardware
 yet.
 
+The library also builds the shared STM32 power functions of
+`system_core_clock.h`, `ARM/ST/src/system_power_stm32.cpp`: reset reason,
+power off in Standby, wake up on WKUP1 PA0 and WKUP2 PC13 (rising level), no
+retention register (no backup register on the F030x8), no RAM kept. See
+[STM32 power functions](../POWER.md). No example project; not run on hardware
+yet.
+
 Trigger periods are rounded to ticks and must be at least four ticks. Compare
 timers support periods up to UINT32_MAX ticks across hardware wraps. TIM6's
 single trigger uses ARR and supports up to 65536 ticks; reduce its frequency

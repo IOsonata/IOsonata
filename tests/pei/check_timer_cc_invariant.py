@@ -16,7 +16,7 @@ def section(source, begin, end):
 
 def check(path, function, ending):
     src = (ROOT / path).read_text(encoding="utf-8")
-    code = section(src, "static bool " + function + "(", ending)
+    code = section(src, "bool " + function + "(", ending)
     assert "PeiBindEvent(" in code, path
     assert "EVENTS_COMPARE[" in code, path
     assert "INTENSET" in code, path
@@ -33,9 +33,18 @@ def check(path, function, ending):
                   ("TimerIRQHandler" if "timer_hf_" in path else "RtcIRQHandler") +
                   "(", "extern \"C\"")
     assert "TIMER_TRIG_PEI_CONTINUOUS" in irq, path
-    assert "reg->CC[i] = " in irq, path
     assert "TASKS_STOP =" not in irq, path
     assert "TASKS_CLEAR =" not in irq, path
+    if "nRFxTimerNextCompare(" in irq:
+        # The TIMER handler reschedules a continuous compare through
+        # nRFxTimerNextCompare, which writes the CC
+        nxt = section(src, "static inline __attribute__((always_inline)) bool "
+                      "nRFxTimerNextCompare(", "\n}\n")
+        assert "reg->CC[TrigNo] = " in nxt, path
+        assert "TASKS_STOP =" not in nxt, path
+        assert "TASKS_CLEAR =" not in nxt, path
+    else:
+        assert "reg->CC[i] = " in irq, path
 
     if "timer_lf_" in path:
         assert "nRFxRtcIsPeiTrigger" not in src, path
@@ -44,9 +53,58 @@ def check(path, function, ending):
 
 def main():
     check("ARM/Nordic/src/timer_hf_nrfx.cpp", "nRFxTimerEnablePeiTrigger",
-          "// Only installed by TimerPeiPrepareMcu")
+          "static uint64_t nRFxTimerEnableTrigger(")
     check("ARM/Nordic/src/timer_lf_nrfx.cpp", "nRFxRtcEnablePeiTrigger",
-          "// Called only when an application explicitly uses PEI with this RTC.")
+          "static uint64_t nRFxRtcEnableTrigger(")
+    hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
+    hf_release = section(hf, "static void nRFxTimerDisableTrigger(",
+                         "static int nRFxTimerFindAvailTrigger(")
+    hf_unbind = hf_release.index("!PeiUnbindEvent(pei, evt, endpoint)")
+    hf_disable = hf_release.index("reg->INTENCLR =")
+    assert hf_unbind < hf_disable, "HF TIMER must unbind before disabling compare"
+
+    rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
+    release = section(rtc, "bool nRFxRtcDisablePeiEvent(",
+                      "bool nRFxRtcEnablePeiTrigger(")
+    compare = section(release, "endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[i];",
+                      "reg->CC[i] = 0U;")
+    assert compare.index("PeiUnbindEvent(pPei, Event, endpoint)") < compare.index(
+        "reg->INTENCLR ="), "RTC unbind must precede disabling compare interrupt"
+    assert compare.index("PeiUnbindEvent(pPei, Event, endpoint)") < compare.index(
+        "reg->EVTENCLR ="), "RTC unbind must precede disabling compare event"
+
+    timer_driver = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
+        encoding="utf-8")
+    matrix = (ROOT / "src/coredev/pei.c").read_text(encoding="utf-8")
+    timer_api = (ROOT / "include/coredev/timer.h").read_text(
+        encoding="utf-8")
+    assert "PeiTimerPrepare" not in timer_driver
+    assert "PeiTimerPrepare" not in timer_api
+    assert "PeiTimerPrepare" not in matrix
+    assert "TimerPeiPrepareMcu" not in timer_driver
+    assert "TimerPeiPrepareMcu" not in matrix
+    assert "nRFxTimerInstallPei" not in hf
+    assert "nRFxRtcInstallPei" not in rtc
+    assert "bool nRFxTimerEnablePeiTrigger(" in hf
+    assert "bool nRFxRtcEnablePeiTrigger(" in rtc
+    assert "bool nRFxRtcEnablePeiEvent(" in rtc
+    assert "bool nRFxRtcDisablePeiEvent(" in rtc
+    assert "#pragma weak g_PeiNrf52RtcRaw" in rtc
+    assert "nRFxRtcDisablePeiEvent(pOldTimer" not in rtc
+    assert "nRFxRtcDisablePeiEvent(pTimer," not in rtc
+    for name in ("EnablePeiTrigger", "EnablePeiEvent", "DisablePeiEvent"):
+        assert "(*" + name + ")" not in timer_api
+    for name in ("EnablePeiTrigger", "EnablePeiEvent", "DisablePeiEvent"):
+        assert "pTimer->" + name + " =" not in hf
+        assert "pTimer->" + name + " =" not in rtc
+    assert "int TimerEnablePeiTrigger(" in timer_driver
+    pei_backend = (ROOT / "ARM/Nordic/nRF52/src/pei_nrf52.cpp").read_text(
+        encoding="utf-8")
+    assert "g_PeiNrf52RtcRaw[3][2]" in pei_backend
+    assert "bool TimerEnablePeiEvent(" in timer_driver
+    assert "bool TimerDisablePeiEvent(" in timer_driver
+    assert "!PeiTimerPrepare(" not in timer_api
+
     print("TIMER/RTC free-running PEI compare source checks: PASS")
 
 

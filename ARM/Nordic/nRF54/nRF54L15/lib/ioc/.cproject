@@ -364,7 +364,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/drivers/src/nrfx_power.c|src/sdk-nrf-bm|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/bluetooth/bt_adv_bm.cpp|src/bluetooth/bt_app_bm.cpp|src/bluetooth/bt_gap_bm.cpp|src/bluetooth/bt_gatt_bm.cpp|src/bluetooth/bt_scan_bm.cpp|src/bluetooth/bt_sec_bm.cpp|src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bm_scheduler.c|src/bluetooth/bm_timer.c|src/bluetooth/nrf_sdh.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrfx/drivers/src/nrfx_power.c|src/sdk-nrf-bm|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/bluetooth/bt_adv_bm.cpp|src/bluetooth/bt_app_bm.cpp|src/bluetooth/bt_gap_bm.cpp|src/bluetooth/bt_gatt_bm.cpp|src/bluetooth/bt_scan_bm.cpp|src/bluetooth/bt_sec_bm.cpp|src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bm_scheduler.c|src/bluetooth/nrf_sdh.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -735,7 +735,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/drivers/src/nrfx_power.c|src/sdk-nrf-bm|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/bluetooth/bt_adv_bm.cpp|src/bluetooth/bt_app_bm.cpp|src/bluetooth/bt_gap_bm.cpp|src/bluetooth/bt_gatt_bm.cpp|src/bluetooth/bt_scan_bm.cpp|src/bluetooth/bt_sec_bm.cpp|src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bm_scheduler.c|src/bluetooth/bm_timer.c|src/bluetooth/nrf_sdh.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrfx/drivers/src/nrfx_power.c|src/sdk-nrf-bm|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/bluetooth/bt_adv_bm.cpp|src/bluetooth/bt_app_bm.cpp|src/bluetooth/bt_gap_bm.cpp|src/bluetooth/bt_gatt_bm.cpp|src/bluetooth/bt_scan_bm.cpp|src/bluetooth/bt_sec_bm.cpp|src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bm_scheduler.c|src/bluetooth/nrf_sdh.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

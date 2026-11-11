@@ -338,18 +338,32 @@ static uint32_t nRFxSPIGetRate(DevIntrf_t * const pDev)
 uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
+#ifdef NRF54L_SERIES
+	uint32_t clock;
+	uint32_t first;
+	uint32_t divisor;
+	uint32_t error;
+#elif defined(NRF5340_XXAA_APPLICATION)
+	const IOPinCfg_t *pins;
+	uint32_t limit;
+	uint32_t error;
+	uint32_t regval;
+	bool highSpeed;
+#else
+	uint32_t regval;
+#endif
 
 	if (dev->bPeiPrepared)
 	{
 		return dev->pSpiDev->Cfg.Rate;
 	}
 #ifdef NRF54L_SERIES
-	const uint32_t clock = (dev->DevNo == 4 ? SPIM00_CORE_FREQUENCY :
+	clock = (dev->DevNo == 4 ? SPIM00_CORE_FREQUENCY :
 		SPIM20_CORE_FREQUENCY) * 1000000U;
-	const uint32_t first = dev->DevNo == 4 ? SPIM00_PRESCALER_DIVISOR_RANGE_MIN :
+	first = dev->DevNo == 4 ? SPIM00_PRESCALER_DIVISOR_RANGE_MIN :
 		SPIM20_PRESCALER_DIVISOR_RANGE_MIN;
-	uint32_t divisor = first;
-	uint32_t error = UINT32_MAX;
+	divisor = first;
+	error = UINT32_MAX;
 	for (uint32_t d = first; d <= SPIM20_PRESCALER_DIVISOR_RANGE_MAX; d += 2)
 	{
 		uint32_t freq = clock / d;
@@ -365,17 +379,17 @@ uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		dev->pDmaReg->PRESCALER = divisor;
 #else
 #ifdef NRF5340_XXAA_APPLICATION
-	const IOPinCfg_t *pins = dev->pSpiDev->Cfg.pIOPinMap;
-	uint32_t limit = dev->DevNo == 4 ? 16000000U : 8000000U;
-	bool highSpeed = dev->DevNo == 4 && SystemCoreClock == 128000000U &&
+	pins = dev->pSpiDev->Cfg.pIOPinMap;
+	limit = dev->DevNo == 4 ? 16000000U : 8000000U;
+	highSpeed = dev->DevNo == 4 && SystemCoreClock == 128000000U &&
 		dev->pSpiDev->Cfg.Phy == SPIPHY_NORMAL &&
 		pins[SPI_SCK_IOPIN_IDX].PortNo == 0 && pins[SPI_SCK_IOPIN_IDX].PinNo == 8 &&
 		pins[SPI_MOSI_IOPIN_IDX].PortNo == 0 && pins[SPI_MOSI_IOPIN_IDX].PinNo == 9 &&
 		pins[SPI_MISO_IOPIN_IDX].PinNo == -1;
 	if (highSpeed)
 		limit = 32000000U;
-	uint32_t error = UINT32_MAX;
-	uint32_t regval = s_nRFxSPIFreq[0].RegVal;
+	error = UINT32_MAX;
+	regval = s_nRFxSPIFreq[0].RegVal;
 	for (int i = 0; i < s_NbnRFxSPIFreq && s_nRFxSPIFreq[i].Freq <= limit; ++i)
 	{
 		uint32_t freq = s_nRFxSPIFreq[i].Freq;
@@ -408,7 +422,7 @@ uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		}
 	}
 #else
-	uint32_t regval = 0;
+	regval = 0;
 
 	for (int i = 0; i < s_NbnRFxSPIFreq; i++)
 	{
@@ -1898,10 +1912,9 @@ static bool SPIPeiReady(SPIDev_t *pDev)
 	return false;
 }
 
-// PPI START has no callback opportunity to set DMA pointers. Stage at
-// most one SPIM transfer using the existing driver's private TX buffer.
-// The RX buffer belongs to the caller until after STOP/END and teardown.
-extern "C" bool SPIPreparePeiTransfer(SPIDev_t *pDev,
+// Configure SPIM DMA before connecting a PPI START task.
+// TX uses the driver buffer; RX uses the caller buffer until release.
+bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
 {
 #if defined(NRF52_SERIES) && defined(SPIM_PRESENT)
@@ -1934,6 +1947,17 @@ extern "C" bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 		return false;
 	}
 #endif
+	if (atomic_flag_test_and_set(&pDev->DevIntrf.bBusy))
+	{
+		return false;
+	}
+	if (dev->bPeiPrepared || dev->bTxAbort || dev->bCmdFailed ||
+		dev->pTxWait != NULL || dev->RxBufflen != 0 ||
+		dev->TxDatalen != 0)
+	{
+		atomic_flag_clear(&pDev->DevIntrf.bBusy);
+		return false;
+	}
 	if (TxLen != 0U)
 	{
 		memcpy(dev->TxBuf, pTx, TxLen);
@@ -1964,7 +1988,7 @@ extern "C" bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 #endif
 }
 
-extern "C" bool SPIReleasePeiTransfer(SPIDev_t *pDev)
+bool SPIReleasePeiTransfer(SPIDev_t *pDev)
 {
 #if defined(NRF52_SERIES) && defined(SPIM_PRESENT)
 	nRFSpiDev_t *dev;
@@ -1975,7 +1999,8 @@ extern "C" bool SPIReleasePeiTransfer(SPIDev_t *pDev)
 	{
 		return false;
 	}
-	if (dev->pDmaReg->EVENTS_STOPPED == 0U)
+	if (dev->pDmaReg->EVENTS_STARTED != 0U &&
+		dev->pDmaReg->EVENTS_STOPPED == 0U)
 	{
 		dev->pDmaReg->TASKS_STOP = 1U;
 		timeout = NRFSPI_TIMEOUT;
@@ -1993,6 +2018,7 @@ extern "C" bool SPIReleasePeiTransfer(SPIDev_t *pDev)
 	dev->pDmaReg->RXD.PTR = 0U;
 	dev->pDmaReg->EVENTS_STOPPED = 0U;
 	dev->bPeiPrepared = false;
+	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 	return true;
 #else
 	(void)pDev;
@@ -2000,7 +2026,7 @@ extern "C" bool SPIReleasePeiTransfer(SPIDev_t *pDev)
 #endif
 }
 
-extern "C" bool SPIEnablePeiEvent(SPIDev_t *pDev,
+bool SPIEnablePeiEvent(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t *pEvt, SPI_PEI_EVENT Event)
 {
 	nRFSpiDev_t *dev;
@@ -2020,7 +2046,7 @@ extern "C" bool SPIEnablePeiEvent(SPIDev_t *pDev,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool SPIDisablePeiEvent(SPIDev_t *pDev,
+bool SPIDisablePeiEvent(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt)
 {
 	nRFSpiDev_t *dev;
@@ -2046,7 +2072,7 @@ extern "C" bool SPIDisablePeiEvent(SPIDev_t *pDev,
 	return false;
 }
 
-extern "C" bool SPIConnectPeiTask(SPIDev_t *pDev,
+bool SPIConnectTask(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, SPI_PEI_TASK Task)
 {
 	nRFSpiDev_t *dev;
@@ -2070,7 +2096,7 @@ extern "C" bool SPIConnectPeiTask(SPIDev_t *pDev,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool SPIDisconnectPeiTask(SPIDev_t *pDev,
+bool SPIDisconnectTask(SPIDev_t *pDev,
 	PeiDev_t *pPei, PeiEvent_t Evt, SPI_PEI_TASK Task)
 {
 	nRFSpiDev_t *dev;

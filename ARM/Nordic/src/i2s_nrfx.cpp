@@ -1081,7 +1081,7 @@ static bool I2SPeiReady(I2SDev_t *pDev)
 #endif
 }
 
-extern "C" bool I2SPreparePeiStart(I2SDev_t *pDev)
+bool I2SPreparePeiStart(I2SDev_t *pDev)
 {
 #if defined(NRF52_SERIES)
 	if (pDev == nullptr || pDev != s_pI2SDev ||
@@ -1112,7 +1112,7 @@ extern "C" bool I2SPreparePeiStart(I2SDev_t *pDev)
 #endif
 }
 
-extern "C" bool I2SEnablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
+bool I2SEnablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, I2S_PEI_EVENT Event)
 {
 	PeiEndpoint_t endpoint;
@@ -1139,7 +1139,7 @@ extern "C" bool I2SEnablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool I2SDisablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
+bool I2SDisablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt)
 {
 	PeiEndpoint_t endpoint;
@@ -1164,7 +1164,7 @@ extern "C" bool I2SDisablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-extern "C" bool I2SConnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+bool I2SConnectTask(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2S_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;
@@ -1182,7 +1182,7 @@ extern "C" bool I2SConnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool I2SDisconnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+bool I2SDisconnectTask(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2S_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;

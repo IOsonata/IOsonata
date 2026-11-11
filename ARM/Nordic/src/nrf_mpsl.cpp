@@ -76,6 +76,10 @@ SOFTWARE.
 #endif
 /*******************************/
 
+// Wait for the crystal requested by SystemCoreClockSelect, about 50 ms at
+// 64 MHz. It starts in a few ms.
+#define NRF_MPSL_HFXO_WAIT_LOOPS	1000000
+
 //---------------------------------------------------------------------------
 // Memory arbiter. The memory controller is shared with the radio, so a write
 // or an erase has to run inside a window MPSL says is free. The memory
@@ -472,6 +476,59 @@ bool MpslInit(void)
 
 
 	return true;
+}
+
+// Started callback of the crystal request, the request waits on
+// mpsl_clock_hfclk_src_is_running instead
+static void nRFxMpslHfxoStarted(mpsl_clock_evt_type_t EvtType)
+{
+	(void)EvtType;
+}
+
+// Once MPSL is initialized it owns CLOCK
+bool nRFxMpslActive(void)
+{
+	return mpsl_is_initialized();
+}
+
+// The crystal of SystemCoreClockSelect. Once MPSL is initialized it owns
+// CLOCK, the request and the release then go through it.
+int nRFxMpslHfxo(bool bOn)
+{
+	int i;
+	uint32_t running;
+
+	if (mpsl_is_initialized() == false)
+	{
+		return -1;
+	}
+
+	if (bOn == false)
+	{
+		return mpsl_clock_hfclk_src_release(MPSL_CLOCK_HF_SRC_XO) == 0 ? 0 : 1;
+	}
+
+	if (mpsl_clock_hfclk_src_request(MPSL_CLOCK_HF_SRC_XO, nRFxMpslHfxoStarted) != 0)
+	{
+		return 1;
+	}
+
+	for (i = 0; i < NRF_MPSL_HFXO_WAIT_LOOPS; i++)
+	{
+		running = 0U;
+		if (mpsl_clock_hfclk_src_is_running(MPSL_CLOCK_HF_SRC_XO, &running) != 0)
+		{
+			(void)mpsl_clock_hfclk_src_release(MPSL_CLOCK_HF_SRC_XO);
+			return 1;
+		}
+		if (running != 0U)
+		{
+			return 0;
+		}
+	}
+
+	(void)mpsl_clock_hfclk_src_release(MPSL_CLOCK_HF_SRC_XO);
+	return 1;
 }
 
 extern "C" {

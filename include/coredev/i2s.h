@@ -165,9 +165,9 @@ bool I2SEnablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, I2S_PEI_EVENT Event);
 bool I2SDisablePeiEvent(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt);
-bool I2SConnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+bool I2SConnectTask(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2S_PEI_TASK Task);
-bool I2SDisconnectPeiTask(I2SDev_t *pDev, PeiDev_t *pPei,
+bool I2SDisconnectTask(I2SDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, I2S_PEI_TASK Task);
 
 static inline void I2SEnable(I2SDev_t *const pDev)
@@ -244,13 +244,13 @@ public:
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt,
 		I2S_PEI_TASK Task)
 	{
-		return I2SConnectPeiTask(&vDevData, PeiDev, Evt, Task);
+		return I2SConnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt,
 		I2S_PEI_TASK Task)
 	{
-		return I2SDisconnectPeiTask(&vDevData, PeiDev, Evt, Task);
+		return I2SDisconnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 protected:

@@ -82,6 +82,11 @@ typedef enum __Timer_Trigger_Type {
 
 // Hardware timer tasks. Timer owns the task endpoint; PEI connects events
 // to that endpoint without changing timer configuration.
+// TIMER_TASK_CLEAR from the CPU (ExecuteTask) is a Reset: the tick count
+// restarts and the triggers restart their period. Once its endpoint is
+// given out, a hardware event can clear the counter: the tick count then
+// restarts from each clear, a counter lower than the last read being taken
+// as a clear, not as a wrap.
 typedef enum __Timer_Hardware_Task {
 	TIMER_TASK_START,
 	TIMER_TASK_STOP,
@@ -218,7 +223,8 @@ struct __Timer_Device {
 	 *
 	 * @param   TrigNo : Trigger number to enable. Index value starting at 0
 	 * @param   nsPeriod : Trigger period in nsec.
-	 * @param   Type     : Trigger type single shot or continuous
+	 * @param   Type     : Trigger type single shot or continuous. A single
+	 * 					   shot trigger is free again once it fired.
 	 * @param	Handler	 : Optional Timer trigger user callback
 	 * @param   pContext : Optional pointer to user private data to be passed
 	 *                     to the callback. This could be a class or structure pointer.
@@ -228,19 +234,6 @@ struct __Timer_Device {
 	uint64_t (*EnableTrigger)(TimerDev_t * const pTimerDev, int TrigNo, uint64_t nsPeriod,
 							  TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 							  void * const pContext);
-
-	// Optional PEI compare event source. Timer owns CC programming and
-	// continuous ISR rescheduling; PEI hardware routes the event to tasks.
-	// A compare never implicitly stops or clears the elapsed counter.
-	bool (*EnablePeiTrigger)(TimerDev_t * const pTimerDev, int TrigNo,
-						 uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
-						 PeiDev_t *pPei, PeiEvent_t *pEvent);
-
-	// Optional hardware-only event source support, separate from ISR events.
-	bool (*EnablePeiEvent)(TimerDev_t *pTimerDev, PeiDev_t *pPei,
-		PeiEvent_t *pEvent, uint32_t Event);
-	bool (*DisablePeiEvent)(TimerDev_t *pTimerDev, PeiDev_t *pPei,
-		PeiEvent_t Event);
 
 	// Optional hardware task support. Resolving an endpoint does not
 	// execute the task. ExecuteTask runs the same action from the CPU.
@@ -284,10 +277,6 @@ extern "C" {
  * 			- false : Otherwise
  */
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
-
-// Internal opt-in: install the MCU's PEI callbacks only when a PEI
-// Timer API is used. Normal Timer initialization never loads PEI.
-bool PeiTimerPrepare(TimerDev_t *pTimer);
 
 int TimerGetLowFreqDevCount(void);
 int TimerGetHighFreqDevCount(void);
@@ -335,76 +324,13 @@ static inline uint32_t TimerSetFrequency(TimerDev_t * const pTimer, uint32_t Fre
  */
 static inline void TimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo) { pTimer->DisableTrigger(pTimer, TrigNo); }
 
-/**
- * @brief Configure a Timer CC event source and bind it to PEI.
- * Returns the allocated trigger index, or -1 on failure. The C++
- * Timer::EnableTimerTrigger overload uses this same C function.
- * On nRF52, the Timer ISR reschedules continuous CC compares but never
- * forwards an event to PEI; no compare stops or clears the counter.
- */
-static inline int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
-	PeiEvent_t *pEvt, uint32_t msPeriod, TIMER_TRIG_TYPE Type)
-{
-	int trig;
-
-	if (pTimer == NULL || pPei == NULL || pEvt == NULL || msPeriod == 0U ||
-		pTimer->FindAvailTrigger == NULL)
-	{
-		return -1;
-	}
-	if (pTimer->EnablePeiTrigger == NULL && !PeiTimerPrepare(pTimer))
-	{
-		return -1;
-	}
-	if (pTimer->EnablePeiTrigger == NULL)
-	{
-		return -1;
-	}
-	trig = pTimer->FindAvailTrigger(pTimer);
-	if (trig < 0)
-	{
-		return -1;
-	}
-	if (!pTimer->EnablePeiTrigger(pTimer, trig,
-		(uint64_t)msPeriod * 1000000ULL, Type, pPei, pEvt))
-	{
-		return -1;
-	}
-	return trig;
-}
-
-/**
- * @brief Bind an RTC TICK or COUNTER_OVR hardware event to PEI.
- * This does not enable a Timer interrupt or install an ISR callback.
- */
-static inline bool TimerEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
-	PeiEvent_t *pEvt, uint32_t Event)
-{
-	if (pTimer == NULL || pPei == NULL || pEvt == NULL)
-	{
-		return false;
-	}
-	if (pTimer->EnablePeiEvent == NULL && !PeiTimerPrepare(pTimer))
-	{
-		return false;
-	}
-	if (pTimer->EnablePeiEvent == NULL)
-	{
-		return false;
-	}
-	return pTimer->EnablePeiEvent(pTimer, pPei, pEvt, Event);
-}
-
-/** @brief Unbind and release an RTC PEI event producer. */
-static inline bool TimerDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
-	PeiEvent_t Evt)
-{
-	if (pTimer == NULL || pPei == NULL || pTimer->DisablePeiEvent == NULL)
-	{
-		return false;
-	}
-	return pTimer->DisablePeiEvent(pTimer, pPei, Evt);
-}
+// TIMER and RTC PEI operations are implemented by the MCU driver.
+int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, uint32_t msPeriod, TIMER_TRIG_TYPE Type);
+bool TimerEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t *pEvt, uint32_t Event);
+bool TimerDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+	PeiEvent_t Evt);
 
 /** @brief Route an event to a Timer hardware START or STOP task. */
 static inline bool TimerConnectTask(TimerDev_t *pTimer, PeiDev_t *pPei,
@@ -594,9 +520,6 @@ public:
 	Timer()
 	{
 		vTimer.pObj = this;
-		vTimer.EnablePeiTrigger = NULL;
-		vTimer.EnablePeiEvent = NULL;
-		vTimer.DisablePeiEvent = NULL;
 		vTimer.GetTaskEndpoint = NULL;
 		vTimer.ExecuteTask = NULL;
 	}
@@ -617,9 +540,6 @@ public:
      */
     virtual bool Init(const TimerCfg_t &Cfg)
 	{
-		vTimer.EnablePeiTrigger = NULL;
-		vTimer.EnablePeiEvent = NULL;
-		vTimer.DisablePeiEvent = NULL;
 		vTimer.GetTaskEndpoint = NULL;
 		vTimer.ExecuteTask = NULL;
 		return TimerInit(&vTimer, &Cfg);

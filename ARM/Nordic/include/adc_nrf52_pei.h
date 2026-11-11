@@ -37,15 +37,15 @@ extern "C" {
 bool AdcNrf52PreparePeiSampling(void);
 
 // Bind/unbind supported SAADC hardware event registers. No IRQ forwarding.
-bool AdcNrf52PeiBindEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
+bool AdcNrf52EnablePeiEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
 	ADC_NRF52_PEI_EVENT Event);
-bool AdcNrf52PeiUnbindEvent(PeiDev_t *pPei, PeiEvent_t Evt);
+bool AdcNrf52DisablePeiEvent(PeiDev_t *pPei, PeiEvent_t Evt);
 
 // Connect/disconnect a prepared SAADC hardware task from a PEI event.
 // Disconnect every task before reconfiguring, stopping or disabling SAADC.
-bool AdcNrf52PeiConnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
+bool AdcNrf52ConnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
 	ADC_NRF52_PEI_TASK Task);
-bool AdcNrf52PeiDisconnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
+bool AdcNrf52DisconnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
 	ADC_NRF52_PEI_TASK Task);
 
 #ifdef __cplusplus

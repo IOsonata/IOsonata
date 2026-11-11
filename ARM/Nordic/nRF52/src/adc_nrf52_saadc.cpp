@@ -1393,13 +1393,13 @@ static PeiEndpoint_t AdcNrf52PeiTaskEndpoint(ADC_NRF52_PEI_TASK Task)
 	}
 }
 
-extern "C" bool AdcNrf52PreparePeiSampling(void)
+bool AdcNrf52PreparePeiSampling(void)
 {
 	return s_AdcnRF52DevData.pDevObj != NULL &&
 		s_AdcnRF52DevData.pDevObj->PreparePeiSampling();
 }
 
-extern "C" bool AdcNrf52PeiBindEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
+bool AdcNrf52EnablePeiEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
 	ADC_NRF52_PEI_EVENT Event)
 {
 	PeiEndpoint_t endpoint;
@@ -1418,7 +1418,7 @@ extern "C" bool AdcNrf52PeiBindEvent(PeiDev_t *pPei, PeiEvent_t *pEvt,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool AdcNrf52PeiUnbindEvent(PeiDev_t *pPei, PeiEvent_t Evt)
+bool AdcNrf52DisablePeiEvent(PeiDev_t *pPei, PeiEvent_t Evt)
 {
 	PeiEndpoint_t endpoint;
 	int i;
@@ -1441,7 +1441,7 @@ extern "C" bool AdcNrf52PeiUnbindEvent(PeiDev_t *pPei, PeiEvent_t Evt)
 	return false;
 }
 
-extern "C" bool AdcNrf52PeiConnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
+bool AdcNrf52ConnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
 	ADC_NRF52_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;
@@ -1467,7 +1467,7 @@ extern "C" bool AdcNrf52PeiConnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool AdcNrf52PeiDisconnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
+bool AdcNrf52DisconnectTask(PeiDev_t *pPei, PeiEvent_t Evt,
 	ADC_NRF52_PEI_TASK Task)
 {
 	PeiEndpoint_t endpoint;

@@ -73,7 +73,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SYSTEM_RESET_WAKE_COMP		(1UL << 9)	//!< Wake up from power off by the analog comparator
 #define SYSTEM_RESET_WAKE_NFC		(1UL << 10)	//!< Wake up from power off by an NFC field
 #define SYSTEM_RESET_WAKE_USB		(1UL << 11)	//!< Wake up from power off by USB power
-#define SYSTEM_RESET_WAKE_MSK		(0xFUL << 8)	//!< All wake up from power off reasons
+#define SYSTEM_RESET_WAKE_TIMER		(1UL << 12)	//!< Wake up from power off by a timer or the RTC
+#define SYSTEM_RESET_WAKE_MSK		(0x1FUL << 8)	//!< All wake up from power off reasons
 
 /// DC/DC regulator stages, ORed in McuOsc_t DcDc
 #define SYSTEM_DCDC_MAIN			(1U << 0)	//!< Stage supplying the core
@@ -211,6 +212,15 @@ static inline const OscDesc_t *GetHighFreqOscDesc(void) { return &g_McuOsc.CoreO
 /**
  * @brief	Select core clock oscillator type
  *
+ * On an MCU whose core always runs from its internal clock and uses the
+ * crystal only for accuracy, starting it on demand for the radio, USB or a
+ * timer, a call with OSC_TYPE_XTAL or OSC_TYPE_TCXO is one request for the
+ * crystal and a call with OSC_TYPE_RC releases one. The requests of the
+ * drivers and of the application are counted: the crystal starts on the
+ * first request and stops when the last one is released. Each request is
+ * matched by one release. A request returns once the crystal runs, false if
+ * it did not start.
+ *
  * @param	ClkSrc : Clock source selection
  *						OSC_TYPE_RC - Internal RC
  *						OSC_TYPE_XTAL - External crystal
@@ -310,10 +320,30 @@ uint32_t SystemResetReason(void);
 void SystemPowerOff(void);
 
 /**
+ * @brief	Wake up pin of power off
+ *
+ * Selects a pin that wakes the MCU from SystemPowerOff. Configure the pin as
+ * an input with IOPinConfig first. Where the MCU wakes up only on dedicated
+ * pins or on one level, other pins and levels are refused. Where the pin
+ * configuration is lost in power off, its pull resistor is kept if the MCU
+ * can.
+ *
+ * @param	PortNo	: Port number
+ * @param	PinNo	: Pin number
+ * @param	Sense	: IOPINSENSE of coredev/iopincfg.h
+ * 					  IOPINSENSE_LOW_TRANSITION - wake up when the pin goes low
+ * 					  IOPINSENSE_HIGH_TRANSITION - wake up when the pin goes high
+ * 					  IOPINSENSE_DISABLE - the pin no longer wakes the MCU
+ *
+ * @return	true - success, false - the pin or the level cannot wake the MCU
+ */
+bool SystemWakePin(int PortNo, int PinNo, int Sense);
+
+/**
  * @brief	Number of retention registers
  *
  * Retention registers keep their value through power off and software
- * resets, not through a power cycle.
+ * resets. A power cycle can clear them.
  *
  * @return	Number of registers, 0 for none
  */
@@ -350,7 +380,8 @@ bool SystemRetRegWrite(int Idx, uint32_t Val);
  * @param	Size	: Size in bytes
  * @param	bRetain	: true - keep the content in power off
  *
- * @return	true - success, false - the range is not RAM
+ * @return	true - success, false - the range is not RAM that can be kept in
+ * 			power off
  */
 bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain);
 

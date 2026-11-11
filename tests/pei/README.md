@@ -7,7 +7,7 @@ python3 tests/pei/run.py
 ```
 
 The host tests compile the production `src/coredev/pei.c` C matrix
-and the `ARM/Nordic/nRF52/src/pei_nrf52.cpp` PPI backend against mock
+and the `ARM/Nordic/nRF52/src/pei_nrf52.cpp` PPI implementation against mock
 registers. The matrix is shared by C (`PeiDev_t`) and C++ (`Pei`)
 callers. They test bare-metal nRF52832 (20 configurable
 channels), S132, S140, SDC, and nRF52805 (10 configurable channels). The mock
@@ -77,8 +77,8 @@ and BUT2 to a PPI-driven LED1 toggle task. Check both buttons
 independently and repeatedly; only a physical LED observation
 validates the PEI route.
 
-The new check_gpio_lifecycle_contract.py in tests/pei/run.py is a
-source-level ownership regression. It does not replace MCU compilation
+The new check_gpio_lifecycle_source.py in tests/pei/run.py is a
+source-code check. It does not replace MCU compilation
 or the board test. Results remain pending.
 
 ## SAADC PEI event and task chain
@@ -99,7 +99,7 @@ by AdcnRF52 C++ wrappers, but does not turn the C++-only
 ADC configuration driver into a C API.
 
 The host suite includes C/C++ API compile-only checks and
-check_saadc_pei_contract.py for DMA readiness, task/event
+check_saadc_pei_source.py for DMA readiness, task/event
 mapping, and no ISR event forwarding. These are source checks,
 not a hardware conversion PASS. On the board, LED1 toggles
 only after SAADC END, while LED2 toggles directly from TIMER
@@ -120,7 +120,7 @@ BUT2 (P0.13) starts LPCOMP using a GPIOTE event/PPI route.
 BUT1 (P0.02, analog AIN0) crosses the VDD/2 reference: LED0
 indicates READY, LED1 CROSS, LED2 UP and LED3 DOWN.
 
-The PEI host runner includes check_comp_pei_contract.py and C/C++
+The PEI test runner includes check_comp_pei_source.py and C/C++
 header compilation. The link-isolation checker also rejects comparator
 PEI code in non-PEI firmware. Hardware behavior and MCU build remain
 pending.
@@ -129,7 +129,7 @@ pending.
 
 PWMInit(), PWMOpenChannel() and PWMSetDutyCycle() prepare the
 PWM driver-owned static RAM sequences and output pins. The C
-PWMEnablePeiEvent()/PWMConnectPeiTask() methods and C++ Pwm
+PWMEnablePeiEvent()/PWMConnectTask() methods and C++ Pwm
 wrappers expose the actual register endpoints; they do not
 configure peripheral channels or DMA buffers.
 
@@ -142,7 +142,7 @@ toggles RGB blue. The example runs without semihosting or
 interrupt event-forwarding. g_PeiPwmStatus=1 indicates routes
 are armed but is not a hardware pass.
 
-The existing host runner includes check_pwm_pei_contract.py,
+The existing host runner includes check_pwm_pei_source.py,
 C/C++ API compilation and link-isolation cases. NEXTSTEP
 is exposed only for a PWM decoder configured in NextStep mode;
 the existing RefreshCount decoder never enables it. Disconnect
@@ -173,7 +173,7 @@ configurations may bind only their corresponding RXPTRUPD or
 TXPTRUPD events. STOPPED remains available for both.
 
 Run python3 tests/pei/run.py from the repository root. It includes
-check_audio_pei_contract.py, compile-only C/C++ API clients and
+check_audio_pei_source.py, compile-only C/C++ API clients and
 linker-map isolation tests. Static source validation is available
 without a microphone or codec. No nRF52 audio board test was run;
 future tests must validate sample continuity, pointer rollover and
@@ -190,7 +190,7 @@ must remain valid until STOPPED and release. Use manual chip select,
 8-bit master EasyDMA and bIntEn=false. Anomaly-58 one-byte RX
 cases are rejected. SPIS ACQUIRE/RELEASE are still ISR-owned.
 
-Run python3 tests/pei/run.py to include check_spi_pei_contract.py,
+Run python3 tests/pei/run.py to include check_spi_pei_source.py,
 C/C++ header clients, and no-PEI GNU ld map cases. Hardware-free
 PeiSpiDemo at ARM/Nordic/nRF52/nRF52832/exemples/PeiSpiDemo/ioc
 uses BUT1 -> SPIM2 START -> END/STOP -> LED1/RGB blue over PPI,
@@ -223,7 +223,7 @@ is not a hardware PASS or proof of correct I2C data.
 Legacy TWI's bytewise data and TWIS PREPARERX/PREPARETX
 state machine remain with their existing interrupt handlers;
 only their event sources are enabled for PEI. The host runner
-adds check_i2c_pei_contract.py, C/C++ compile checks, and
+adds check_i2c_pei_source.py, C/C++ compile checks, and
 non-PEI linker-map cases. MCU compilation, real slave
 communication and cross-variant validation remain outstanding.
 
@@ -267,11 +267,11 @@ READCLRACC with the original QDEC ISR. The BLYST-NANO-DK
 PeiQdecDemo tests hardware START/STOP and sampling events,
 not quadrature motion accuracy.
 
-The generic PPI group backend supports repeated hardware
+The generic PPI group implementation supports repeated hardware
 enable/disable of owned routes with TASKS_CHG[n].EN/DIS.
 PeiGroupDemo exercises hardware arm/fire/disarm. The C/C++
 group APIs and mock register model are exercised by
-tests/pei/run.py and check_system_pei_contract.py.
+tests/pei/run.py and check_system_pei_source.py.
 
 WDT, one-shot TEMP, RNG and passive POWER/CLOCK PEI interfaces
 have been **removed**. Their prior APIs did not offer meaningful
@@ -279,7 +279,7 @@ repetitive MCU-free operation. Ordinary Wdt, TempnRF5x,
 CryptoRngNrf and platform power/clock drivers remain intact,
 including the independent TEMP interrupt fix.
 
-check_misc_pei_contract.py now verifies both QDEC sampling
+check_misc_pei_source.py now verifies both QDEC sampling
 integration and exclusion of one-shot wrappers. C/C++ API
 smoke tests and non-PEI linker map regressions no longer
 reference the removed interfaces. PeiTempDemo and
@@ -293,7 +293,7 @@ sequence and buffer reuse before accepting those APIs.
 ## Non-PEI firmware link isolation
 
 A standard Timer or GPIO application must not pull the PEI matrix or
-nRF52 PPI backend from `libIOsonata_nRF52832.a`. The TimerDemo
+nRF52 PPI implementation from `libIOsonata_nRF52832.a`. The TimerDemo
 linker map previously demonstrated the regression:
 
 ```text
@@ -354,7 +354,7 @@ for the remaining peripheral families, device-specific differences,
 ownership rules and acceptance criteria. Do not move PEI development
 to another MCU family until nRF52 coverage is complete.
 
-The RTC Timer backend implements TICK/OVRFLW event sources through
+The RTC driver implements TICK/OVRFLW event sources through
 `EVTEN` independently from `INTEN`. Each free compare channel may
 bind its `EVENTS_COMPARE[n]` source to PEI without stopping or clearing
 the counter. Continuous compare scheduling uses an RTC ISR to update
@@ -448,7 +448,7 @@ the configured value, not a separately measured timing result. A debugger
 trace confirming expected TIMER3 compare ISR entries and no event-forwarding GPIOTE ISR is still pending.
 
 Hardware observation (November 7, 2026): following the PEI C++
-backend rename, Eclipse project-link corrections and Timer/GPIO HAL
+implementation rename, Eclipse project-link corrections and Timer/GPIO HAL
 integration, the device tester reports that the nRF52832 HAL and
 `PeiBlinky` compiled and the BLYST-NANO-DK LED flashes at approximately
 1 Hz. This is a **functional hardware PASS** for the earlier one-LED
@@ -477,5 +477,5 @@ testing are separate acceptance checks.
 
 The shared example uses no target-specific registers or platform
 adapter. Timer and GPIO have the endpoint preparation APIs on nRF52.
-The nRF53 DPPI backend and other MCU-specific peripheral drivers are
+The nRF53 DPPI implementation and other MCU-specific peripheral drivers are
 separate follow-up integrations.

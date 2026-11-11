@@ -693,7 +693,7 @@ static bool PwmPeiReady(PwmDev_t *pDev)
 #endif
 }
 
-extern "C" bool PWMEnablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
+bool PWMEnablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, PWM_PEI_EVENT Event)
 {
 	nRFPwmDev_t *dev;
@@ -713,7 +713,7 @@ extern "C" bool PWMEnablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
 	return PeiBindEvent(pPei, pEvt, endpoint);
 }
 
-extern "C" bool PWMDisablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
+bool PWMDisablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt)
 {
 	nRFPwmDev_t *dev;
@@ -743,7 +743,7 @@ extern "C" bool PWMDisablePeiEvent(PwmDev_t *pDev, PeiDev_t *pPei,
 	return false;
 }
 
-extern "C" bool PWMConnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+bool PWMConnectTask(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PWM_PEI_TASK Task)
 {
 	nRFPwmDev_t *dev;
@@ -770,7 +770,7 @@ extern "C" bool PWMConnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
 	return PeiConnectTask(pPei, Evt, endpoint);
 }
 
-extern "C" bool PWMDisconnectPeiTask(PwmDev_t *pDev, PeiDev_t *pPei,
+bool PWMDisconnectTask(PwmDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, PWM_PEI_TASK Task)
 {
 	nRFPwmDev_t *dev;

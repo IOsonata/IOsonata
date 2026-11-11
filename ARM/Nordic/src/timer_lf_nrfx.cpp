@@ -35,6 +35,7 @@ SOFTWARE.
 
 #include "timer_nrfx.h"
 #include "coredev/pei.h"
+#include "coredev/interrupt.h"
 
 // PEI is an optional Timer feature. Weak references let ordinary RTC
 // applications link without the PEI matrix or nRF52 PPI backend.
@@ -75,13 +76,25 @@ static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_SINGLE =
 static constexpr TIMER_TRIG_TYPE TIMER_TRIG_PEI_CONTINUOUS =
 	static_cast<TIMER_TRIG_TYPE>(3);
 
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
+#include "../nRF52/include/pei_rtc_state.h"
+#if defined(__GNUC__)
+#pragma weak g_PeiNrf52RtcRaw
+#endif
+typedef PeiNrf52RtcRawState_t nRFRtcRawPei_t;
+#define s_nRfxRtcRaw g_PeiNrf52RtcRaw
+#define RTC_OPTIONAL_PEI_STATE 1
+#else
 typedef struct {
 	PeiDev_t *pPei;
 	PeiEvent_t Event;
 	bool EventWasEnabled;
 } nRFRtcRawPei_t;
-
 static nRFRtcRawPei_t s_nRfxRtcRaw[TIMER_NRFX_RTC_MAX][2];
+#endif
 
 #pragma pack(push, 4)
 typedef struct {
@@ -143,12 +156,166 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 static std::atomic<int> s_nRfxLFClockSem(0);
 static bool s_bRtcEnabled[TIMER_NRFX_RTC_MAX];
 static bool s_bLFClockOwned = false;
+// CLEAR task endpoint given out: a hardware event can clear the counter
+static bool s_bRtcHwClear[TIMER_NRFX_RTC_MAX];
+
+// RTC section of the product specifications:
+// - STOP and CLEAR take effect 15 to 46 us after the task, up to about 250 us
+//   when the LFCLK is not running. Bound of the waits for them, in register
+//   reads.
+// - A compare written with N + 2 while COUNTER is N matches; with N or N + 1
+//   it may not.
+#define RTC_TASK_WAIT_MAX		10000
+#define RTC_CC_AHEAD_MIN		2U
+#define RTC_COUNTER_MASK		0xFFFFFFU
+
+// Ticks around a wrap, 2 s at 32768 Hz: the interrupt handler counts a wrap on
+// OVRFLW well within this time.
+#define RTC_NEAR_WRAP			0x10000U
 
 // Set by nRFxRtcInit. The interrupt handlers below are kept by the linker as soon as
 // this file is part of a build, used or not. They reach the timer data
 // through this pointer, so that the data is linked only when a timer is
 // initialized.
 static const nRFRtcData_t *s_pnRfxRtcData = nullptr;
+
+// Tick count: COUNTER plus the wraps counted by the interrupt handler on
+// OVRFLW. Here for a COUNTER value read near a wrap, see nRFxRtcGetTickCount,
+// or once the CLEAR endpoint is given out, interrupts masked:
+// - before a wrap, COUNTER is read again: a wrap since the first read is taken
+//   as after a wrap;
+// - after a wrap the handler did not count yet, OVRFLW set, the wrap is added;
+// - once the CLEAR endpoint is given out, a COUNTER lower than the last one
+//   read is read again: lower again, it is a hardware clear, the tick count
+//   restarts from it; not lower, there was a read from a higher priority in
+//   between.
+static __attribute__((noinline)) uint64_t nRFxRtcReadCountMasked(TimerDev_t * const pTimer,
+																 NRF_RTC_Type *pReg, uint32_t Count)
+{
+	uint32_t state = DisableInterrupt();
+	uint64_t rollover = pTimer->Rollover;
+
+	if (Count > RTC_COUNTER_MASK - RTC_NEAR_WRAP)
+	{
+		uint32_t count = pReg->COUNTER;
+
+		if (count < Count)
+		{
+			Count = count;
+		}
+	}
+
+	if (Count < RTC_NEAR_WRAP && pReg->EVENTS_OVRFLW)
+	{
+		rollover += 0x1000000ULL;
+	}
+	else if (Count < pTimer->LastCount && s_bRtcHwClear[pTimer->DevNo])
+	{
+		Count = pReg->COUNTER;
+		if (Count < pTimer->LastCount)
+		{
+			pTimer->Rollover = 0;
+			rollover = 0;
+		}
+	}
+	pTimer->LastCount = Count;
+
+	EnableInterrupt(state);
+
+	return rollover + Count;
+}
+
+// Compare CC[Idx] = COUNTER + Ticks, Ticks 2 or more, written right after the
+// COUNTER read, interrupts masked by the caller. COUNTER can increment once in
+// between: with 3 ticks or more the compare is still 2 ticks ahead of it.
+// With 2 ticks COUNTER is read again: if it moved, the compare is moved one
+// tick later. The first value can still match. CC takes the 24 low bits.
+static inline __attribute__((always_inline)) void nRFxRtcSetCompare(NRF_RTC_Type *pReg, int Idx,
+								uint32_t Ticks)
+{
+	volatile uint32_t *cc = &pReg->CC[Idx];
+
+	if (Ticks > RTC_CC_AHEAD_MIN)
+	{
+		*cc = pReg->COUNTER + Ticks;
+	}
+	else
+	{
+		uint32_t count = pReg->COUNTER;
+
+		*cc = count + Ticks;
+		if (pReg->COUNTER != count)
+		{
+			*cc = count + Ticks + 1U;
+		}
+	}
+}
+
+// Period in ticks of a continuous trigger
+static inline uint32_t nRFxRtcPeriod(TimerDev_t * const pTimer, const nRFRtcData_t &Rtc, int TrigNo)
+{
+	if (Rtc.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
+	{
+		return (uint32_t)TimerNanosecondToTick(pTimer, Rtc.pTrigger[TrigNo].nsPeriod);
+	}
+
+	return Rtc.pCC[TrigNo];
+}
+
+// Next compares of the continuous triggers in Mask, already set one period
+// after the compare that matched by the interrupt handler, before COUNTER is
+// read. A compare at least 2 ticks ahead of COUNTER matches. Closer, it may
+// match or not: decided once COUNTER passed it, within 2 ticks, the wait
+// bounded. A compare behind COUNTER that did not match, the handler being
+// late, is set to the next period at least 3 ticks ahead, the periods passed
+// skipped. Once a hardware event can clear the counter, the next compare is
+// one period from COUNTER.
+static void nRFxRtcCheckCompares(TimerDev_t * const pTimer, const nRFRtcData_t &Rtc, uint32_t Mask)
+{
+	NRF_RTC_Type *reg = Rtc.pReg;
+	bool hwclear = s_bRtcHwClear[pTimer->DevNo];
+	uint32_t now = reg->COUNTER;
+
+	while (Mask != 0U)
+	{
+		int i = __builtin_ctz(Mask);
+
+		Mask &= Mask - 1U;
+
+		uint32_t cc = reg->CC[i];
+		uint32_t ahead = (cc - now) & RTC_COUNTER_MASK;
+
+		if (hwclear == false)
+		{
+			if (ahead >= RTC_CC_AHEAD_MIN && ahead < (RTC_COUNTER_MASK >> 1))
+			{
+				continue;
+			}
+			for (int timeout = RTC_TASK_WAIT_MAX; ahead < RTC_CC_AHEAD_MIN && timeout > 0; timeout--)
+			{
+				now = reg->COUNTER;
+				ahead = (cc - now) & RTC_COUNTER_MASK;
+			}
+			if (ahead < RTC_CC_AHEAD_MIN || reg->EVENTS_COMPARE[i])
+			{
+				continue;
+			}
+		}
+
+		uint32_t period = nRFxRtcPeriod(pTimer, Rtc, i);
+		uint32_t state = DisableInterrupt();
+
+		now = reg->COUNTER;
+		ahead = hwclear ? period : period - ((now - cc) & RTC_COUNTER_MASK) % period;
+		if (ahead <= RTC_CC_AHEAD_MIN)
+		{
+			ahead += period;
+		}
+		reg->CC[i] = now + ahead;
+
+		EnableInterrupt(state);
+	}
+}
 
 static void RtcIRQHandler(int DevNo)
 {
@@ -164,12 +331,13 @@ static void RtcIRQHandler(int DevNo)
 		return;
 	}
 
-	NRF_RTC_Type *reg = s_pnRfxRtcData[DevNo].pReg;
+	const nRFRtcData_t &rtc = s_pnRfxRtcData[DevNo];
+	NRF_RTC_Type *reg = rtc.pReg;
     uint32_t evt = 0;
 	uint32_t ticks;
-    uint32_t count = reg->COUNTER;
+	uint32_t inten = reg->INTENSET;
 
-    if (reg->EVENTS_TICK)
+    if ((inten & RTC_INTENSET_TICK_Msk) && reg->EVENTS_TICK)
 	{
         evt |= TIMER_EVT_TICK;
         reg->EVENTS_TICK = 0;
@@ -177,44 +345,85 @@ static void RtcIRQHandler(int DevNo)
 
     if (reg->EVENTS_OVRFLW)
 	{
-    	timer->Rollover += 0x1000000ULL;
-        evt |= TIMER_EVT_COUNTER_OVR;
+		uint32_t state = DisableInterrupt();
+
         reg->EVENTS_OVRFLW = 0;
+		timer->Rollover += 0x1000000ULL;
+		timer->LastCount = 0;
+
+		EnableInterrupt(state);
+
+        evt |= TIMER_EVT_COUNTER_OVR;
 	}
 
-    timer->LastCount = count;
+	// Only the compares of the armed triggers, their interrupt set
+	uint32_t armed = (inten >> RTC_INTENSET_COMPARE0_Pos) & ((1U << rtc.MaxNbTrigEvt) - 1U);
 
-	for (int i = 0; i < s_pnRfxRtcData[DevNo].MaxNbTrigEvt; i++)
+	// Continuous triggers whose next compare is set, checked against COUNTER
+	// after the handlers
+	uint32_t next = 0;
+
+	while (armed != 0U)
 	{
-		if (reg->EVENTS_COMPARE[i])
+		int i = __builtin_ctz(armed);
+
+		armed &= armed - 1U;
+
+		if (reg->EVENTS_COMPARE[i] == 0U)
 		{
-			reg->EVENTS_COMPARE[i] = 0U;
-			if (s_pnRfxRtcData[DevNo].pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+			continue;
+		}
+
+		reg->EVENTS_COMPARE[i] = 0U;
+
+		TIMER_TRIG_TYPE type = rtc.pTrigger[i].Type;
+
+		if (type == TIMER_TRIG_TYPE_CONTINUOUS || type == TIMER_TRIG_TYPE_SINGLE)
+		{
+			TimerTrigEvtHandler_t handler = rtc.pTrigger[i].Handler;
+			void *ctx = rtc.pTrigger[i].pContext;
+
+			if (type == TIMER_TRIG_TYPE_CONTINUOUS)
 			{
-				// Only this CC is rescheduled; PEI routes the event in hardware.
-				ticks = (uint32_t)TimerNanosecondToTick(timer,
-					s_pnRfxRtcData[DevNo].pTrigger[i].nsPeriod);
-				reg->CC[i] = (count + ticks) & 0xFFFFFFU;
-			}
-			else if (s_pnRfxRtcData[DevNo].pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE)
-			{
-				reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << i;
-				reg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << i;
+				// Next compare one period after the one that matched, first.
+				// CC takes the 24 low bits.
+				reg->CC[i] = reg->CC[i] + rtc.pCC[i];
+				next |= 1U << i;
 			}
 			else
 			{
-				evt |= TIMER_EVT_TRIGGER(i);
-				if (s_pnRfxRtcData[DevNo].pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
-				{
-					reg->CC[i] = (count + s_pnRfxRtcData[DevNo].pCC[i]) & 0xFFFFFFU;
-				}
-				if (s_pnRfxRtcData[DevNo].pTrigger[i].Handler != nullptr)
-				{
-					s_pnRfxRtcData[DevNo].pTrigger[i].Handler(timer, i,
-						s_pnRfxRtcData[DevNo].pTrigger[i].pContext);
-				}
+				// Single shot done, the trigger is free before its handler,
+				// which can set it again: interrupt and event off, its
+				// compare would match again after a wrap of the counter, and
+				// no period, see nRFxRtcFindAvailTrigger.
+				reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << i;
+				reg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << i;
+				rtc.pTrigger[i].nsPeriod = 0;
+			}
+
+			evt |= TIMER_EVT_TRIGGER(i);
+			if (handler != nullptr)
+			{
+				handler(timer, i, ctx);
 			}
 		}
+		else if (type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			// Only this CC is rescheduled; PEI routes the event in hardware.
+			ticks = (uint32_t)TimerNanosecondToTick(timer, rtc.pTrigger[i].nsPeriod);
+			reg->CC[i] = reg->CC[i] + ticks;
+			next |= 1U << i;
+		}
+		else if (type == TIMER_TRIG_PEI_SINGLE)
+		{
+			reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << i;
+			reg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << i;
+		}
+	}
+
+	if (next != 0U)
+	{
+		nRFxRtcCheckCompares(timer, rtc, next);
 	}
 
     if (timer->EvtHandler)
@@ -341,14 +550,75 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 	}
 }
 
-static void nRFxRtcReset(TimerDev_t * const pTimer)
+// CLEAR task, returns once COUNTER reads lower than before it, bounded:
+// the task takes effect some LFCLK edges later.
+static void nRFxRtcClear(NRF_RTC_Type *pReg)
 {
-	s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_CLEAR = 1;
+	uint32_t count = pReg->COUNTER;
+
+	pReg->TASKS_CLEAR = 1;
+	for (int timeout = RTC_TASK_WAIT_MAX; count > 0U && timeout > 0; timeout--)
+	{
+		if (pReg->COUNTER < count)
+		{
+			break;
+		}
+	}
 }
 
+// The counter is cleared, the tick count restarts and the armed triggers
+// restart their period from the clear.
+static void nRFxRtcReset(TimerDev_t * const pTimer)
+{
+	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
+	NRF_RTC_Type *reg = rtc.pReg;
+
+	nRFxRtcClear(reg);
+
+	uint32_t state = DisableInterrupt();
+	uint32_t count = reg->COUNTER;
+
+	// An overflow from before the clear is not counted
+	reg->EVENTS_OVRFLW = 0;
+	pTimer->Rollover = 0;
+	pTimer->LastCount = 0;
+
+	for (int i = 0; i < rtc.MaxNbTrigEvt; i++)
+	{
+		uint32_t cc;
+
+		if (rtc.pTrigger[i].nsPeriod == 0U ||
+			(reg->INTENSET & (RTC_INTENSET_COMPARE0_Msk << i)) == 0U)
+		{
+			continue;
+		}
+		if (rtc.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			rtc.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			cc = (uint32_t)TimerNanosecondToTick(pTimer, rtc.pTrigger[i].nsPeriod);
+		}
+		else
+		{
+			cc = rtc.pCC[i];
+		}
+		reg->EVENTS_COMPARE[i] = 0;
+
+		// At least 3 ticks ahead of COUNTER, see nRFxRtcSetCompare
+		reg->CC[i] = cc < count + RTC_CC_AHEAD_MIN + 1U ? count + RTC_CC_AHEAD_MIN + 1U : cc;
+	}
+
+	EnableInterrupt(state);
+}
+
+// Closest of 32768 / (PRESCALER + 1), PRESCALER 0 to 4095, the higher of two
+// as close, 32768 Hz for 0. PRESCALER is written only while the RTC is
+// stopped, which is 15 to 46 us after the STOP task: written until it reads
+// back, bounded. A disabled RTC stays stopped.
 static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
+	NRF_RTC_Type *reg = rtc.pReg;
+
 	for (int i = 0; i < rtc.MaxNbTrigEvt; i++)
 	{
 		if (rtc.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
@@ -357,37 +627,74 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 			return pTimer->Freq;
 		}
 	}
-	s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_STOP = 1;
 
-    uint32_t prescaler = 1;
+	uint32_t div = 1;
 
-    if (Freq > 0)
+	if (Freq > 0U && Freq < TIMER_NRFX_RTC_BASE_FREQ)
 	{
-    	prescaler = TIMER_NRFX_RTC_BASE_FREQ / Freq;
-    	if (prescaler > 0x1000)
-    	{
-    		// Cap at 12 bits
-    		prescaler = 0x1000;
-    	}
+		div = TIMER_NRFX_RTC_BASE_FREQ / Freq;
+		if (div > RTC_PRESCALER_PRESCALER_Msk)
+		{
+			div = RTC_PRESCALER_PRESCALER_Msk + 1U;
+		}
+		else if ((uint64_t)TIMER_NRFX_RTC_BASE_FREQ * (2U * div + 1U) >
+				 2ULL * Freq * div * (div + 1U))
+		{
+			// base / div - Freq > Freq - base / (div + 1)
+			div++;
+		}
 	}
 
-    s_nRfxRtcData[pTimer->DevNo].pReg->PRESCALER = prescaler - 1;
+	reg->TASKS_STOP = 1;
+	for (int timeout = RTC_TASK_WAIT_MAX; timeout > 0; timeout--)
+	{
+		reg->PRESCALER = div - 1U;
+		if (reg->PRESCALER == div - 1U)
+		{
+			break;
+		}
+	}
 
-    pTimer->Freq = TIMER_NRFX_RTC_BASE_FREQ / prescaler;
+	// From what PRESCALER holds
+	div = (reg->PRESCALER & RTC_PRESCALER_PRESCALER_Msk) + 1U;
+	pTimer->Freq = (TIMER_NRFX_RTC_BASE_FREQ + div / 2U) / div;
 
 	// Tick period rounded down to a nanosecond, 30517 for the 30517.58 ns of
 	// 32768 Hz. Not precise enough to convert a count or a trigger period,
 	// those are computed from Freq, see TimerTickToTime.
     pTimer->nsPeriod = 1000000000ULL / (uint64_t)pTimer->Freq;     // Period in nsec
 
-    s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_START = 1;
+	if (s_bRtcEnabled[pTimer->DevNo])
+	{
+		reg->TASKS_START = 1;
+	}
 
     return pTimer->Freq;
 }
 
+// Tick count, see nRFxRtcReadCountMasked. A COUNTER away from a wrap is used
+// as read: the interrupt handler does not change the wraps counted until the
+// next wrap.
 static uint64_t nRFxRtcGetTickCount(TimerDev_t * const pTimer)
 {
-	return (uint64_t)s_nRfxRtcData[pTimer->DevNo].pReg->COUNTER + pTimer->Rollover;
+	NRF_RTC_Type *reg = s_nRfxRtcData[pTimer->DevNo].pReg;
+	uint32_t count = reg->COUNTER;
+
+	if (count - RTC_NEAR_WRAP < RTC_COUNTER_MASK + 1U - 2U * RTC_NEAR_WRAP)
+	{
+		return pTimer->Rollover + count;
+	}
+
+	return nRFxRtcReadCountMasked(pTimer, reg, count);
+}
+
+// Tick count once the CLEAR endpoint is given out: each read is kept to find
+// a hardware clear, see nRFxRtcReadCountMasked
+static uint64_t nRFxRtcGetTickCountHwClear(TimerDev_t * const pTimer)
+{
+	NRF_RTC_Type *reg = s_nRfxRtcData[pTimer->DevNo].pReg;
+
+	return nRFxRtcReadCountMasked(pTimer, reg, reg->COUNTER);
 }
 
 static int nRFxRtcGetMaxTrigger(TimerDev_t * const pTimer)
@@ -421,6 +728,17 @@ static uintptr_t nRFxRtcTaskEndpoint(TimerDev_t * const pTimer, TIMER_TASK Task)
 		case TIMER_TASK_STOP:
 			return (uintptr_t)&reg->TASKS_STOP;
 		case TIMER_TASK_CLEAR:
+			// From now on a lower COUNTER without wrap is a clear
+			if (s_bRtcHwClear[devno] == false)
+			{
+				uint32_t state = DisableInterrupt();
+
+				pTimer->LastCount = reg->COUNTER;
+				s_bRtcHwClear[devno] = true;
+				pTimer->GetTickCount = nRFxRtcGetTickCountHwClear;
+
+				EnableInterrupt(state);
+			}
 			return (uintptr_t)&reg->TASKS_CLEAR;
 		case TIMER_TASK_TRIGOVRFLW:
 			return (uintptr_t)&reg->TASKS_TRIGOVRFLW;
@@ -433,6 +751,17 @@ static bool nRFxRtcExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 {
 	uintptr_t endpoint;
 
+	if (Task == TIMER_TASK_CLEAR)
+	{
+		if (nRFxRtcTaskEndpoint(pTimer, TIMER_TASK_START) == 0U)
+		{
+			return false;
+		}
+		// From the CPU, the tick count and the triggers follow the clear
+		nRFxRtcReset(pTimer);
+		return true;
+	}
+
 	endpoint = nRFxRtcTaskEndpoint(pTimer, Task);
 	if (endpoint == 0U)
 	{
@@ -444,7 +773,7 @@ static bool nRFxRtcExecuteTask(TimerDev_t * const pTimer, TIMER_TASK Task)
 
 // Bind an RTC TICK or OVRFLW producer without changing its interrupt
 // configuration. EVTEN is independent from INTEN on nRF52.
-static bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t *pEvent, uint32_t Event)
 {
 	nRFRtcRawPei_t *pRaw;
@@ -508,7 +837,7 @@ static bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 
 // Unbind only this RTC event source and leave the shared counter running.
 // The PEI matrix owns its event-to-task routes.
-static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
+bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t Event)
 {
 	nRFRtcRawPei_t *pRaw;
@@ -531,27 +860,6 @@ static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	}
 	pData = &s_nRfxRtcData[devno];
 	reg = pData->pReg;
-	// Internal read-only check: reinitialization must not abandon live
-	// TICK/OVRFLW routes or PEI-owned compare slots.
-	if (pPei == nullptr && Event == 0U)
-	{
-		for (i = 0; i < 2; i++)
-		{
-			if (s_nRfxRtcRaw[devno][i].pPei != nullptr)
-			{
-				return true;
-			}
-		}
-		for (i = 0; i < pData->MaxNbTrigEvt; i++)
-		{
-			if (pData->pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
-				pData->pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
 	if (pPei == nullptr || Event == 0U || PeiUnbindEvent == nullptr)
 	{
 		return false;
@@ -596,12 +904,12 @@ static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 			continue;
 		}
 		endpoint = (PeiEndpoint_t)&reg->EVENTS_COMPARE[i];
-		reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << i;
-		reg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << i;
 		if (!PeiUnbindEvent(pPei, Event, endpoint))
 		{
 			return false;
 		}
+		reg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << i;
+		reg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << i;
 		reg->CC[i] = 0U;
 		reg->EVENTS_COMPARE[i] = 0U;
 		pData->pCC[i] = 0U;
@@ -616,7 +924,7 @@ static bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 
 // Bind a free CC to PEI; the RTC counter and all other CCs keep running.
 // Continuous compare uses the same ISR reschedule rule as ordinary RTC.
-static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
+bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, PeiDev_t *pPei,
 	PeiEvent_t *pEvent)
 {
@@ -671,9 +979,16 @@ static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 		return false;
 	}
 
-	count = reg->COUNTER;
 	reg->EVENTS_COMPARE[TrigNo] = 0U;
-	reg->CC[TrigNo] = (count + (uint32_t)ticks) & 0xFFFFFFU;
+
+	// COUNTER read and compare written with interrupts masked
+	uint32_t state = DisableInterrupt();
+
+	count = reg->COUNTER;
+	reg->CC[TrigNo] = (count + (uint32_t)ticks) & RTC_COUNTER_MASK;
+
+	EnableInterrupt(state);
+
 	pData->pCC[TrigNo] = evt;
 	pData->pTrigger[TrigNo].Type = Type == TIMER_TRIG_TYPE_CONTINUOUS ?
 		TIMER_TRIG_PEI_CONTINUOUS : TIMER_TRIG_PEI_SINGLE;
@@ -686,35 +1001,12 @@ static bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 	return true;
 }
 
-// Called only when an application explicitly uses PEI with this RTC.
-// Ordinary RTC initialization has no dependency on the PEI matrix.
-bool nRFxRtcInstallPei(TimerDev_t *pTimer)
-{
-	int devno;
-
-	if (pTimer == nullptr || PeiBindEvent == nullptr ||
-		PeiUnbindEvent == nullptr)
-	{
-		return false;
-	}
-	devno = pTimer->DevNo;
-	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX ||
-		s_pnRfxRtcDev[devno] != pTimer)
-	{
-		return false;
-	}
-	pTimer->EnablePeiTrigger = nRFxRtcEnablePeiTrigger;
-	pTimer->EnablePeiEvent = nRFxRtcEnablePeiEvent;
-	pTimer->DisablePeiEvent = nRFxRtcDisablePeiEvent;
-	return true;
-}
-
 static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                               	  	 TimerTrigEvtHandler_t Handler, void *pContext)
 {
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 
-	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
+	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt || nsPeriod == 0U)
 	{
 		return 0;
 	}
@@ -726,31 +1018,63 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 		return 0;
 	}
 
-	uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
+	// Ticks as TimerNanosecondToTick, one 64 bit division up to 10^14 ns
+	// (nsPeriod * Freq fits 64 bits up to 32768 Hz). Closest supported: 2 ticks
+	// at least, 0xFFFFFF at most (24 bit compare).
+	uint64_t ticks;
 
-    if (cc <= 0)
+	if (nsPeriod <= 100000000000000ULL)
 	{
-        return 0;
+		ticks = (nsPeriod * pTimer->Freq + 500000000ULL) / 1000000000ULL;
+	}
+	else
+	{
+		ticks = TimerNanosecondToTick(pTimer, nsPeriod);
 	}
 
+	uint32_t cc = ticks < RTC_CC_AHEAD_MIN ? RTC_CC_AHEAD_MIN :
+				  ticks > RTC_COUNTER_MASK ? RTC_COUNTER_MASK : (uint32_t)ticks;
+
+	// The period starts at the COUNTER read. A compare left from before is
+	// cleared first. COUNTER read and compare written with interrupts masked.
+	rtc.pReg->EVENTS_COMPARE[TrigNo] = 0;
+
+	uint32_t state = DisableInterrupt();
+
+	nRFxRtcSetCompare(rtc.pReg, TrigNo, cc);
+
+	EnableInterrupt(state);
+
+	// The trigger is set before its interrupt. Its period in nanoseconds,
+	// rounded to the ticks, is set after: until then nsPeriod holds the
+	// requested one.
 	rtc.pTrigger[TrigNo].Type = Type;
-	rtc.pCC[TrigNo] = cc;
-    rtc.pReg->EVTENSET = RTC_EVTEN_COMPARE0_Msk << TrigNo;
-
-    rtc.pReg->INTENSET = RTC_INTENSET_COMPARE0_Msk << TrigNo;
-
-	rtc.pReg->CC[TrigNo] =rtc.pCC[TrigNo] + rtc.pReg->COUNTER;
-
-	rtc.pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, cc);
+	rtc.pTrigger[TrigNo].nsPeriod = nsPeriod;
 	rtc.pTrigger[TrigNo].Handler = Handler;
 	rtc.pTrigger[TrigNo].pContext = pContext;
+	rtc.pCC[TrigNo] = cc;
 
-	return rtc.pTrigger[TrigNo].nsPeriod; // Return real period in nsec
+    rtc.pReg->EVTENSET = RTC_EVTEN_COMPARE0_Msk << TrigNo;
+    rtc.pReg->INTENSET = RTC_INTENSET_COMPARE0_Msk << TrigNo;
+
+	uint64_t ns = TimerTickToNanosecond(pTimer, cc);
+
+	// Not when a single shot already fired: freed, or set again by its handler
+	state = DisableInterrupt();
+	if (rtc.pTrigger[TrigNo].nsPeriod == nsPeriod)
+	{
+		rtc.pTrigger[TrigNo].nsPeriod = ns;
+	}
+	EnableInterrupt(state);
+
+	return ns; // Return real period in nsec
 }
 
 static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
+	PeiDev_t *pPei;
+	PeiEndpoint_t endpoint;
 
 	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
 	{
@@ -759,16 +1083,14 @@ static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	if (rtc.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_SINGLE ||
 		rtc.pTrigger[TrigNo].Type == TIMER_TRIG_PEI_CONTINUOUS)
 	{
-		// Release only this CC's PEI event source. Keep ownership
-		// until the matrix successfully unbinds it.
-		if (pTimer->DisablePeiEvent == nullptr)
+		pPei = static_cast<PeiDev_t *>(rtc.pTrigger[TrigNo].pContext);
+		endpoint = (PeiEndpoint_t)&rtc.pReg->EVENTS_COMPARE[TrigNo];
+
+		if (PeiUnbindEvent == nullptr ||
+			!PeiUnbindEvent(pPei, rtc.pCC[TrigNo], endpoint))
 		{
 			return;
 		}
-		pTimer->DisablePeiEvent(pTimer,
-			static_cast<PeiDev_t *>(rtc.pTrigger[TrigNo].pContext),
-			rtc.pCC[TrigNo]);
-		return;
 	}
 
 	rtc.pCC[TrigNo] = 0U;
@@ -800,7 +1122,7 @@ static int nRFxRtcFindAvailTrigger(TimerDev_t * const pTimer)
  *
  * @param   TrigNo : Trigger number to disable. Index value starting at 0
  */
-static inline void nRFxRtcDisableExtTrigger(TimerDev_t * const pTimer) {
+static inline void nRFxRtcDisableExtTrigger(TimerDev_t * const) {
 }
 
 /**
@@ -812,7 +1134,7 @@ static inline void nRFxRtcDisableExtTrigger(TimerDev_t * const pTimer) {
  *
  * @return  true - Success
  */
-bool nRFxRtcEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense)
+bool nRFxRtcEnableExtTrigger(TimerDev_t * const, int, TIMER_EXTTRIG_SENSE)
 {
 	// No support for external trigger
 	return false;
@@ -825,9 +1147,9 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	TimerDev_t *pOldTimer;
 	int i;
 
+	// Any frequency, SetFrequency takes the closest one
 	if (pTimer == nullptr || pCfg == nullptr || pCfg->DevNo < 0 ||
-		pCfg->DevNo >= TIMER_NRFX_RTC_MAX ||
-		pCfg->Freq > TIMER_NRFX_RTC_BASE_FREQ)
+		pCfg->DevNo >= TIMER_NRFX_RTC_MAX)
 	{
 		return false;
 	}
@@ -837,12 +1159,20 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pOldTimer = s_pnRfxRtcDev[pCfg->DevNo];
 
 	// Do not replace a Timer object with live PEI bindings.
-	// The optional RTC event callback tracks TICK/OVRFLW owners.
-	if (pOldTimer != nullptr &&
-		pOldTimer->DisablePeiEvent != nullptr &&
-		pOldTimer->DisablePeiEvent(pOldTimer, nullptr, 0U))
+	if (pOldTimer != nullptr)
 	{
-		return false;
+#if defined(RTC_OPTIONAL_PEI_STATE)
+		if (s_nRfxRtcRaw != nullptr)
+#endif
+		{
+			for (i = 0; i < 2; i++)
+			{
+				if (s_nRfxRtcRaw[pCfg->DevNo][i].pPei != nullptr)
+				{
+					return false;
+				}
+			}
+		}
 	}
 	for (i = 0; i < pRtc->MaxNbTrigEvt; i++)
 	{
@@ -857,6 +1187,9 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	s_pnRfxRtcData = s_nRfxRtcData;
 	s_pnRfxRtcDev[pCfg->DevNo] = pTimer;
+	s_bRtcHwClear[pCfg->DevNo] = false;
+	pTimer->Rollover = 0;
+	pTimer->LastCount = 0;
 	memset(pRtc->pTrigger, 0, pRtc->MaxNbTrigEvt * sizeof(TimerTrig_t));
 
 
@@ -869,16 +1202,19 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     pTimer->FindAvailTrigger = nRFxRtcFindAvailTrigger;
     pTimer->DisableTrigger = nRFxRtcDisableTrigger;
     pTimer->EnableTrigger = nRFxRtcEnableTrigger;
-	pTimer->EnablePeiTrigger = nullptr;
-	pTimer->EnablePeiEvent = nullptr;
-	pTimer->DisablePeiEvent = nullptr;
 	pTimer->GetTaskEndpoint = nRFxRtcTaskEndpoint;
 	pTimer->ExecuteTask = nRFxRtcExecuteTask;
     pTimer->DisableExtTrigger = nRFxRtcDisableExtTrigger;
     pTimer->EnableExtTrigger = nRFxRtcEnableExtTrigger;
 
     reg->TASKS_STOP = 1;
-    reg->TASKS_CLEAR = 1;
+    reg->EVENTS_OVRFLW = 0;
+
+	// No compare of an earlier use, the triggers are cleared above
+	uint32_t ccmask = ((1U << pRtc->MaxNbTrigEvt) - 1U);
+
+	reg->INTENCLR = ccmask << RTC_INTENSET_COMPARE0_Pos;
+	reg->EVTENCLR = ccmask << RTC_EVTEN_COMPARE0_Pos;
 
 	if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
 	{
@@ -894,6 +1230,8 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			case TIMER_CLKSRC_LFXTAL:
 				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos;
 				break;
+			case TIMER_CLKSRC_EXT:
+				return false;
 	#if defined(NRF52_SERIES) || (NRF51)
 			case TIMER_CLKSRC_HFRC:
 			case TIMER_CLKSRC_HFXTAL:
@@ -960,6 +1298,9 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
     nRFxRtcSetFrequency(pTimer, pCfg->Freq);
 
-    return true;
+	// Tick count from 0, then started with the LFCLK request of Enable
+	nRFxRtcClear(reg);
+
+    return nRFxRtcEnable(pTimer);
 }
 

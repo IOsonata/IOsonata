@@ -13,9 +13,9 @@ import re
 import sys
 
 MEMBER = re.compile(r"\.a\((?:[^()\n]*/)?pei(?:_[a-zA-Z0-9]+)?(?:\.(?:c|cpp))?\.o\)")
-CODE = re.compile(r"^\s*\.text\.(?:Pei[A-Za-z0-9_]*|[^\s]*Pei(?:Trigger|Event|Install)[^\s]*|IOPin(?:Enable|Disable)PortEvent|AdcNrf52(?:PreparePeiSampling|Pei[A-Za-z0-9_]*)|AnalogCompPei[A-Za-z0-9_]*|PWM(?:EnablePeiEvent|DisablePeiEvent|ConnectPeiTask|DisconnectPeiTask)|Pdm(?:PreparePeiStart|EnablePeiEvent|DisablePeiEvent|ConnectPeiTask|DisconnectPeiTask)|I2S(?:PreparePeiStart|EnablePeiEvent|DisablePeiEvent|ConnectPeiTask|DisconnectPeiTask)|SPI(?:PreparePeiTransfer|ReleasePeiTransfer|EnablePeiEvent|DisablePeiEvent|ConnectPeiTask|DisconnectPeiTask)|I2C(?:PreparePeiTransfer|ReleasePeiTransfer|EnablePeiEvent|DisablePeiEvent|ConnectPeiTask|DisconnectPeiTask)|UART(?:PreparePeiTx|ReleasePeiTx|EnablePeiEvent|DisablePeiEvent|ConnectPeiTask|DisconnectPeiTask)|Qdec(?:PreparePeiStart|EnablePeiEvent|DisablePeiEvent|ConnectPeiTask|DisconnectPeiTask))(?=\s|$)", re.M)
+CODE = re.compile(r"^\s*\.text\.(?:Pei[A-Za-z0-9_]*|[^\s]*Pei(?:Trigger|Event|Install)[^\s]*|IOPin(?:Enable|Disable)PortEvent|AdcNrf52(?:PreparePeiSampling|EnablePeiEvent|DisablePeiEvent|ConnectTask|DisconnectTask|Pei[A-Za-z0-9_]*)|AnalogComp(?:EnablePeiEvent|DisablePeiEvent|ConnectTask|DisconnectTask|Pei[A-Za-z0-9_]*)|PWM(?:EnablePeiEvent|DisablePeiEvent|ConnectTask|DisconnectTask)|Pdm(?:PreparePeiStart|EnablePeiEvent|DisablePeiEvent|ConnectTask|DisconnectTask)|I2S(?:PreparePeiStart|EnablePeiEvent|DisablePeiEvent|ConnectTask|DisconnectTask)|SPI(?:PreparePeiTransfer|ReleasePeiTransfer|EnablePeiEvent|DisablePeiEvent|ConnectTask|DisconnectTask)|I2C(?:PreparePeiTransfer|ReleasePeiTransfer|EnablePeiEvent|DisablePeiEvent|ConnectTask|DisconnectTask)|UART(?:PreparePeiTx|ReleasePeiTx|EnablePeiEvent|DisablePeiEvent|ConnectTask|DisconnectTask)|Qdec(?:PreparePeiStart|EnablePeiEvent|DisablePeiEvent|ConnectTask|DisconnectTask))(?=\s|$)", re.M)
 HF_STATE = re.compile(r"^\s*\.bss\.[^\s]*s_nRFxTimer[0-9]+Pei\b", re.M)
-RTC_STATE = re.compile(r"^\s*\.bss\.[^\s]*s_nRfxRtc(?:[0-9]+Pei|Raw)\b", re.M)
+RTC_STATE = re.compile(r"^\s*\.bss\.[^\s]*(?:s_nRfxRtc(?:[0-9]+Pei|Raw)|g_PeiNrf52RtcRaw)\b", re.M)
 
 
 def check(path):

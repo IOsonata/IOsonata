@@ -45,6 +45,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "nrf.h"
+#include "coredev/system_core_clock.h"
 #include "nrf_timer.h"
 #include "nrf_radio.h"
 
@@ -738,14 +739,10 @@ static void dtm_test_done(void)
  */
 static uint32_t timer_init(void)
 {
-    // Use 16MHz from external crystal
-    // This could be customized for RC/Xtal, or even to use a 32 kHz crystal
-    NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-    NRF_CLOCK->TASKS_HFCLKSTART    = 1;
-
-    while (NRF_CLOCK->EVENTS_HFCLKSTARTED == 0)
+    // Use 16MHz from external crystal, requested for as long as DTM runs
+    if (SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000) == false)
     {
-        // Do nothing while waiting for the clock to start
+        return DTM_ERROR_ILLEGAL_CONFIGURATION;
     }
 
     nrf_timer_task_trigger(mp_timer, NRF_TIMER_TASK_STOP);            // Stop timer, if it was running

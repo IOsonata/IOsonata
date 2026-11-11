@@ -896,6 +896,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/system_clock_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_clock_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/system_power_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_power_nrfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/timer_hf_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/timer_hf_nrfx.cpp</locationURI>

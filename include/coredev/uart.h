@@ -240,9 +240,9 @@ bool UARTEnablePeiEvent(UARTDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, UART_PEI_EVENT Event);
 bool UARTDisablePeiEvent(UARTDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt);
-bool UARTConnectPeiTask(UARTDev_t *pDev, PeiDev_t *pPei,
+bool UARTConnectTask(UARTDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, UART_PEI_TASK Task);
-bool UARTDisconnectPeiTask(UARTDev_t *pDev, PeiDev_t *pPei,
+bool UARTDisconnectTask(UARTDev_t *pDev, PeiDev_t *pPei,
 	PeiEvent_t Evt, UART_PEI_TASK Task);
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState);
 UARTDev_t const *UARTGetInstance(int DevNo);
@@ -315,12 +315,12 @@ public:
 
 	bool ConnectTask(Pei &PeiDev, PeiEvent_t Evt, UART_PEI_TASK Task)
 	{
-		return UARTConnectPeiTask(&vDevData, PeiDev, Evt, Task);
+		return UARTConnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 	bool DisconnectTask(Pei &PeiDev, PeiEvent_t Evt, UART_PEI_TASK Task)
 	{
-		return UARTDisconnectPeiTask(&vDevData, PeiDev, Evt, Task);
+		return UARTDisconnectTask(&vDevData, PeiDev, Evt, Task);
 	}
 
 	virtual void SetCtrlLineState(int LineState) { UARTSetCtrlLineState(&vDevData, LineState); }
