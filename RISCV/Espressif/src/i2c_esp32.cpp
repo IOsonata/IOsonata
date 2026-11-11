@@ -308,16 +308,6 @@ static void Esp32I2cCommand(Esp32I2cDev_t *pDev, uint32_t Slot, uint32_t Opcode,
 	ESP32_I2C_COMD_REG(pDev->Base, Slot) = (Opcode << ESP32_I2C_COMD_OPCODE_Pos) | Count | Ack;
 }
 
-// Optional example diagnostics. Capture only; never print from this path.
-__attribute__((weak)) void Esp32I2cTraceFailure(uintptr_t Base, uint32_t Done,
-	uint32_t Status, bool Timeout)
-{
-	(void)Base;
-	(void)Done;
-	(void)Status;
-	(void)Timeout;
-}
-
 static bool Esp32I2cRun(Esp32I2cDev_t *pDev, uint32_t Done, uint32_t Bytes)
 {
 	uint32_t status;
@@ -339,7 +329,6 @@ static bool Esp32I2cRun(Esp32I2cDev_t *pDev, uint32_t Done, uint32_t Bytes)
 		{
 			pDev->bError = true;
 			pDev->bLost = (status & ESP32_I2C_INT_ARBITRATION_LOST) != 0;
-			Esp32I2cTraceFailure(pDev->Base, Done, status, false);
 			return false;
 		}
 		if (status & Done)
@@ -348,7 +337,6 @@ static bool Esp32I2cRun(Esp32I2cDev_t *pDev, uint32_t Done, uint32_t Bytes)
 		}
 	}
 	pDev->bError = true;
-	Esp32I2cTraceFailure(pDev->Base, Done, status, true);
 	return false;
 }
 
@@ -576,18 +564,6 @@ static void Esp32I2cSlaveDrain(Esp32I2cDev_t *pDev)
 	}
 }
 
-// Optional capture follows the master failure trace pattern. Phase 0 is
-// before filling, 1 after filling, 2 before completing a slave read,
-// and 3 at a byte/NACK interrupt before clearing its pending status.
-__attribute__((weak)) void Esp32I2cTraceSlaveTx(uintptr_t Base, unsigned Phase,
-	int Queued, int Count)
-{
-	(void)Base;
-	(void)Phase;
-	(void)Queued;
-	(void)Count;
-}
-
 static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 {
 	I2CDev_t *i2c;
@@ -597,7 +573,6 @@ static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 
 	i2c = pDev->pOwner;
 	countBytes = (ESP32_I2C_INT_ENA_REG(pDev->Base) & ESP32_I2C_INT_BYTE_TRANS_DONE) != 0;
-	Esp32I2cTraceSlaveTx(pDev->Base, 0, pDev->SlaveQueued, pDev->SlaveCount);
 	available = ESP32_I2C_FIFO_DEPTH - ((ESP32_I2C_SR_REG(pDev->Base) &
 		ESP32_I2C_SR_TXFIFO_CNT_Msk) >> ESP32_I2C_SR_TXFIFO_CNT_Pos);
 	while (available--)
@@ -621,7 +596,6 @@ static void Esp32I2cSlaveFill(Esp32I2cDev_t *pDev)
 			pDev->SlaveQueued++;
 		}
 	}
-	Esp32I2cTraceSlaveTx(pDev->Base, 1, pDev->SlaveQueued, pDev->SlaveCount);
 }
 
 static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
@@ -641,7 +615,6 @@ static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 	{
 		// SlaveCount counts completed byte events. FIFO consumption includes
 		// a variable number of prefetched bytes and is not a wire count.
-		Esp32I2cTraceSlaveTx(pDev->Base, 2, pDev->SlaveQueued, pDev->SlaveCount);
 		// Discard the rest of this response before another read address can
 		// prefetch it. Resetting at READ_RQST is too late for that first byte.
 		// Leave RX intact: a following command may already be arriving.
@@ -656,7 +629,6 @@ static void Esp32I2cSlaveComplete(Esp32I2cDev_t *pDev)
 	}
 	if (!pDev->bRx)
 	{
-		// Keep the pre-reset FIFO state visible to callback diagnostics.
 		ESP32_I2C_FIFO_CONF_REG(pDev->Base) |= ESP32_I2C_FIFO_CONF_TX_FIFO_RST_Msk;
 		ESP32_I2C_FIFO_CONF_REG(pDev->Base) &= ~ESP32_I2C_FIFO_CONF_TX_FIFO_RST_Msk;
 	}
@@ -680,10 +652,6 @@ static void Esp32I2cSlaveIrq(void)
 	i2c = dev->pOwner;
 	status = ESP32_I2C_INT_STATUS_REG(dev->Base);
 	state = ESP32_I2C_SR_REG(dev->Base);
-	if (status & (ESP32_I2C_INT_BYTE_TRANS_DONE | ESP32_I2C_INT_NACK))
-	{
-		Esp32I2cTraceSlaveTx(dev->Base, 3, dev->SlaveQueued, dev->SlaveCount);
-	}
 	ESP32_I2C_INT_CLR_REG(dev->Base) = status;
 	cause = (state >> ESP32_I2C_SR_STRETCH_CAUSE_Pos) & 3U;
 	readRequest = (status & ESP32_I2C_INT_SLAVE_STRETCH) && cause == 0 &&

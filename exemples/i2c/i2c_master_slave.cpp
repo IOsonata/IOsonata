@@ -54,11 +54,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "idelay.h"
 #include "board.h"
-#ifdef I2C_TEST_BOARD_TRACE
-#include "coredev/timer.h"
-static Timer s_TestTimer;
-static bool s_TestTimerReady;
-#endif
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
@@ -247,42 +242,7 @@ static uint8_t s_WriteTestData[I2C_LONG_WRITE_LEN];
 static bool s_bWriteRqst = false;
 static int s_Offset = 0;
 
-#ifndef I2C_TEST_TRACE_SIZE
-#define I2C_TEST_TRACE_SIZE 0
-#endif
 
-#if I2C_TEST_TRACE_SIZE > 0
-// Capture in the callback; print only after the master transfer returns.
-typedef struct {
-	DEVINTRF_EVT Event;
-	int Length;
-	int OffsetBefore;
-	int OffsetAfter;
-	bool WriteBefore;
-	uint8_t Received[9];
-	uint8_t Memory[8];
-} I2cTestTrace_t;
-
-static I2cTestTrace_t s_SlaveTrace[I2C_TEST_TRACE_SIZE];
-static std::atomic<int> s_SlaveTraceCount(0);
-
-// Board diagnostics capture registers without printing in interrupt context.
-#ifdef I2C_TEST_BOARD_TRACE
-void I2cMasterSlaveCapture(int Index);
-void I2cMasterSlavePrint(int Index);
-void I2cMasterSlavePrintFailures();
-#else
-__attribute__((weak)) void I2cMasterSlaveCapture(int Index)
-{
-	(void)Index;
-}
-
-__attribute__((weak)) void I2cMasterSlavePrint(int Index)
-{
-	(void)Index;
-}
-#endif
-#endif
 
 static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
 	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
@@ -307,14 +267,6 @@ static int WaitMasterComplete(int Timeout)
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
 	int n;
-#if I2C_TEST_TRACE_SIZE > 0
-	int index;
-	int offsetBefore;
-	bool writeBefore;
-
-	offsetBefore = s_Offset;
-	writeBefore = s_bWriteRqst;
-#endif
 
 	switch (EvtId)
 	{
@@ -380,32 +332,12 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 			break;
 	}
 
-#if I2C_TEST_TRACE_SIZE > 0
-	index = s_SlaveTraceCount.load(std::memory_order_relaxed);
-	if (index < I2C_TEST_TRACE_SIZE)
-	{
-		I2cMasterSlaveCapture(index);
-		s_SlaveTrace[index].Event = EvtId;
-		s_SlaveTrace[index].Length = Len;
-		s_SlaveTrace[index].OffsetBefore = offsetBefore;
-		s_SlaveTrace[index].OffsetAfter = s_Offset;
-		s_SlaveTrace[index].WriteBefore = writeBefore;
-		memset(s_SlaveTrace[index].Received, 0, sizeof(s_SlaveTrace[index].Received));
-		n = sizeof(s_WriteRqstData) < 9 ? sizeof(s_WriteRqstData) : 9;
-		memcpy(s_SlaveTrace[index].Received, s_WriteRqstData, n);
-		memcpy(s_SlaveTrace[index].Memory, &s_ReadRqstData[4], 8);
-		s_SlaveTraceCount.store(index + 1, std::memory_order_release);
-	}
-#endif
 	return I2C_BUFF_SIZE;
 }
 
 void HardwareInit()
 {
 	static char outputBuffer[256];
-#ifdef I2C_TEST_BOARD_TRACE
-	TimerCfg_t timerCfg = {};
-#endif
 
 	setvbuf(stdout, outputBuffer, _IOLBF, sizeof(outputBuffer));
 	g_Uart.Init(s_UartCfg);
@@ -415,15 +347,6 @@ void HardwareInit()
 #endif
 
 	printf("Init I2C Master/Slave demo\r\n");
-#ifdef I2C_TEST_BOARD_TRACE
-	timerCfg.DevNo = TimerGetHighFreqDevNo();
-	timerCfg.ClkSrc = TIMER_CLKSRC_DEFAULT;
-	timerCfg.Freq = 1000000U;
-	s_TestTimerReady = s_TestTimer.Init(timerCfg);
-	printf("Diagnostic timer: %s\r\n", s_TestTimerReady ? "ready" : "unavailable");
-	printf("I2C register trace enabled, UART %s\r\n",
-		I2C_TEST_UART_INT_ENABLE ? "interrupt" : "polling");
-#endif
 #ifdef I2C_LOOPBACK_WIRING
 	printf("%s\r\n", I2C_LOOPBACK_WIRING);
 #endif
@@ -498,38 +421,6 @@ static void PrintBytes(const uint8_t *pData, int Len)
 	printf("\r\n");
 }
 
-#if I2C_TEST_TRACE_SIZE > 0
-static void PrintSlaveTrace()
-{
-	int count;
-	int i;
-	const char *event;
-	const I2cTestTrace_t *entry;
-
-	count = s_SlaveTraceCount.load(std::memory_order_acquire);
-	printf("Slave callback trace: %d entries (capacity %d)\r\n", count, I2C_TEST_TRACE_SIZE);
-	fflush(stdout);
-#ifdef I2C_TEST_TRACE_DELAY_US
-	usDelay(I2C_TEST_TRACE_DELAY_US);
-#endif
-	for (i = 0; i < count; i++)
-	{
-		entry = &s_SlaveTrace[i];
-		event = entry->Event == DEVINTRF_EVT_WRITE_RQST ? "WRITE" :
-			entry->Event == DEVINTRF_EVT_READ_RQST ? "READ" :
-			entry->Event == DEVINTRF_EVT_COMPLETED ? "DONE" : "OTHER";
-		printf("T%d %s len=%d write=%d off=%d->%d RX=%02x,%02x M4=%02x,%02x\r\n",
-			i, event, entry->Length, entry->WriteBefore, entry->OffsetBefore,
-			entry->OffsetAfter, entry->Received[0], entry->Received[1],
-			entry->Memory[0], entry->Memory[1]);
-		fflush(stdout);
-#ifdef I2C_TEST_TRACE_DELAY_US
-		usDelay(I2C_TEST_TRACE_DELAY_US);
-#endif
-		I2cMasterSlavePrint(i);
-	}
-}
-#endif
 
 // Check Len received bytes against the expected ones
 static bool CheckRx(const char *pLabel, int Count, int Len, const uint8_t *pRx, const uint8_t *pExpected)
@@ -676,10 +567,6 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 	uint8_t buff[I2C_BUFF_SIZE];
 	uint8_t expected[I2C_BUFF_SIZE];
 	char label[32];
-#ifdef I2C_TEST_BOARD_TRACE
-	uint64_t begin;
-	uint64_t elapsed;
-#endif
 	bool pass = true;
 	int c;
 	int i;
@@ -712,9 +599,6 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 	s_Offset = 0;
 	s_bWriteRqst = false;
 
-#if I2C_TEST_TRACE_SIZE > 0
-	s_SlaveTraceCount = 0;
-#endif
 
 	// Register write of 8 bytes at offset 4
 	c = MasterWrite(MasterCfg, I2C_SLAVE_ADDR, offset, wr, sizeof(wr));
@@ -777,32 +661,12 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 		// reported as written, and a register read must work after the error.
 		printf("Starting NACK test (MaxRetry=%d)\r\n", MasterCfg.MaxRetry);
 		fflush(stdout);
-#ifdef I2C_TEST_BOARD_TRACE
-		begin = s_TestTimerReady ? s_TestTimer.TickCount() : 0;
-#endif
 		c = MasterWrite(MasterCfg, I2C_NACK_ADDR, offset, wr, sizeof(wr));
-#ifdef I2C_TEST_BOARD_TRACE
-		if (s_TestTimerReady)
-		{
-			elapsed = s_TestTimer.TickCount() - begin;
-			printf("NACK test elapsed: %lu us\r\n", (unsigned long)s_TestTimer.uSecond(elapsed));
-		}
-#endif
 		printf("NACK write %d/%d bytes at address 0x%02x\r\n", c, (int)sizeof(wr), I2C_NACK_ADDR);
 		pass = pass && c == 0;
 
 		memset(buff, 0xFF, sizeof(buff));
-#ifdef I2C_TEST_BOARD_TRACE
-		begin = s_TestTimerReady ? s_TestTimer.TickCount() : 0;
-#endif
 		c = MasterRead(offset, buff, sizeof(wr));
-#ifdef I2C_TEST_BOARD_TRACE
-		if (s_TestTimerReady)
-		{
-			elapsed = s_TestTimer.TickCount() - begin;
-			printf("Recovery read elapsed: %lu us\r\n", (unsigned long)s_TestTimer.uSecond(elapsed));
-		}
-#endif
 		if (!CheckRx("Read after NACK", c, sizeof(wr), buff, wr))
 		{
 			pass = false;
@@ -816,12 +680,6 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 	}
 #endif
 
-#ifdef I2C_TEST_BOARD_TRACE
-	I2cMasterSlavePrintFailures();
-#endif
-#if I2C_TEST_TRACE_SIZE > 0
-	PrintSlaveTrace();
-#endif
 	g_I2CMaster.PowerOff();
 	g_I2CSlave.PowerOff();
 	return pass ? 1 : 0;

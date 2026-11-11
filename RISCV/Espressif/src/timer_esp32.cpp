@@ -610,9 +610,6 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pTimer->EnableTrigger = Esp32EnableTrigger;
 	pTimer->DisableExtTrigger = Esp32DisableExtTrigger;
 	pTimer->EnableExtTrigger = Esp32EnableExtTrigger;
-	pTimer->EnablePeiTrigger = NULL;
-	pTimer->EnablePeiEvent = NULL;
-	pTimer->DisablePeiEvent = NULL;
 	pTimer->GetTaskEndpoint = NULL;
 	pTimer->ExecuteTask = NULL;
 

@@ -33,7 +33,3 @@ and short-frame rearming. The final result was 1 passed, 0 failed, 0 skipped.
 
 The console now uses UART interrupts to check concurrent UART and SPI
 interrupt delivery. This console configuration still needs a board run.
-The startup GPIO jumper check and failure register snapshot remain enabled.
-Expect `C6 diagnostics: interrupt UART, GPIO jumper check`, all four GPIO
-checks passing, and the complete final SPI result. Capture a fresh run from
-reset at 1,000,000 baud; the earlier scrambled console prefix is not yet resolved.

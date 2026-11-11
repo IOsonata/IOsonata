@@ -42,20 +42,11 @@ reads also pass. Slave TX completion counts byte-completion interrupts because
 FIFO occupancy includes prefetched bytes and does not reliably count bytes
 sent on the bus. FIFO filling remains in blocks.
 
-The default build uses interrupt-driven UART and disables register tracing.
+The default build uses interrupt-driven UART.
 The expanded boundary reads passed on C6 at both 100 kHz and 400 kHz.
 Servicing byte-completion flags during FIFO refill corrected the observed
 400 kHz completion-count failure. The C3 has no LP I2C controller; its I2cSlave test
 requires an external master.
-
-For diagnostics, define `I2C_TEST_BOARD_TRACE` in the example compiler settings
-and rebuild the example. This enables polling UART, the diagnostic timer,
-24 slave callback snapshots, 128 slave TX snapshots, and 24 master failure
-snapshots. Capture uses fixed storage and prints only after the transfers.
-Each output line is flushed and paced by 2 ms. DATA is never read by the
-capture code, so diagnostics do not consume received bytes. Remove the define
-to restore normal operation; the diagnostic source then compiles without
-capture storage or trace overrides.
 
 The C6 configuration also runs 1,000 stress rounds at each rate. Each round
 writes a changing pattern, reads it back, and checks a following command-free

@@ -93,13 +93,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_DMA_MODE false
 
 #include "esp32xx_i2c.h"
-// Define I2C_TEST_BOARD_TRACE in the example compiler settings to capture
-// register snapshots and use polling UART for diagnostic output.
-#ifdef I2C_TEST_BOARD_TRACE
-#define I2C_TEST_TRACE_SIZE 24
-#define I2C_TEST_TRACE_DELAY_US 2000
-#define I2C_TEST_UART_INT_ENABLE false
-#endif
 #define I2C_SLAVE_DEVNO 0
 #define I2C_SLAVE_DMA_ENABLE false
 #define I2C_SLAVE_SCL_DIR IOPINDIR_BI

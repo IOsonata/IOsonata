@@ -183,9 +183,6 @@ static volatile unsigned s_Completions;
 static volatile unsigned s_Arms;
 SPI g_SpiSlave;
 
-// Optional target-test diagnostic implementation, outside board configuration.
-void SpiMasterSlaveDiagnostics(void) __attribute__((weak));
-bool SpiMasterSlaveCheckPins(void) __attribute__((weak));
 
 static int SlaveEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 					 uint8_t *pBuffer, int Length);
@@ -311,12 +308,6 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 			IOPinRead(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN),
 			IOPinRead(SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN),
 			before, s_Completions, armsBefore, s_Arms, s_Count);
-	}
-	if (!pass && SpiMasterSlaveDiagnostics != nullptr)
-	{
-		printf("Master completed count=%d expected=%d async callback=%d\r\n",
-			count, Length, s_MasterDone);
-		SpiMasterSlaveDiagnostics();
 	}
 	if (mismatch >= 0)
 		printf("Mismatch at %d: master RX=%02x expected=%02x slave RX=%02x expected=%02x\r\n",
@@ -450,13 +441,6 @@ int main()
 #ifdef SPI_LOOPBACK_WIRING
 	printf("%s\r\n", SPI_LOOPBACK_WIRING);
 #endif
-	if (SpiMasterSlaveCheckPins != nullptr && !SpiMasterSlaveCheckPins())
-	{
-		printf("SPI jumper check FAIL; transfer test not started\r\n");
-		fflush(stdout);
-		while (1)
-			__WFE();
-	}
 	for (sm = 0; sm < 2; ++sm)
 	{
 		if ((SPI_TEST_SLAVE_MASK & (1 << sm)) == 0)
