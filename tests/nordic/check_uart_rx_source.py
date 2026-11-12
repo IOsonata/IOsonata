@@ -27,16 +27,24 @@ class UartRxSourceChecks(unittest.TestCase):
         self.assertIn("NRFX_UARTE_TASKS_STARTRX", complete)
 
     def test_interrupt_dma_read_does_not_stop_partial_rx(self):
-        rx = self.source.split("static int nRFUARTRxData(", 1)[1]
+        rx = self.source.split("static int nRFUARTRxDataDma(", 1)[1]
         rx = rx.split("static void nRFUARTStopRx(", 1)[0]
-        self.assertIn("pDev->bDma == true && pDev->bIntEn == false", rx)
+        self.assertIn("if (pDev->bIntEn == false)", rx)
         self.assertIn("NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;", rx)
+        self.assertNotIn("pDev->bDma == false", rx)
 
     def test_polling_rx_still_reads_hardware(self):
         rx = self.source.split("static int nRFUARTRxData(", 1)[1]
-        rx = rx.split("static void nRFUARTStopRx(", 1)[0]
-        self.assertIn("pDev->bIntEn == false && pDev->bDma == false", rx)
+        rx = rx.split("static int nRFUARTRxDataDma(", 1)[0]
+        self.assertIn("if (pDev->bIntEn == false)", rx)
         self.assertIn("pBuff[cnt] = (uint8_t)dev->pReg->RXD;", rx)
+        self.assertNotIn("NRFX_UARTE_TASKS_STOPRX", rx)
+
+    def test_rx_callback_selected_by_dma_mode(self):
+        init = self.source.split("bool UARTInit(", 1)[1]
+        self.assertIn("if (pDev->DevIntrf.bDma)", init)
+        self.assertIn("pDev->DevIntrf.RxData = nRFUARTRxDataDma;", init)
+        self.assertIn("pDev->DevIntrf.RxData = nRFUARTRxData;", init)
 
 
 if __name__ == "__main__":
