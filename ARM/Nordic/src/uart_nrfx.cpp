@@ -810,23 +810,16 @@ static void nRFUARTPollLegacyTx(nRFUartDev_t * const dev)
 }
 #endif
 
+#ifdef UART_PRESENT
+// Legacy UART RX. No EasyDMA state or tasks are accessed from this path.
 static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 	int cnt = 0;
+	uint32_t state;
 
-#ifdef UARTE_PRESENT
-	if (pDev->bIntEn == false && pDev->bDma == true)
+	if (pDev->bIntEn == false)
 	{
-		nRFUARTPollRx(dev);
-	}
-#endif
-#ifdef UART_PRESENT
-	if (pDev->bIntEn == false && pDev->bDma == false)
-	{
-		// No RX interrupt owns the UART in polling mode. Read the hardware
-		// register directly rather than staging bytes through the ISR FIFO.
-		// Clear RXDRDY before reading RXD so a new byte can raise a new event.
 		while (cnt < Bufflen && dev->pReg->EVENTS_RXDRDY)
 		{
 			dev->pReg->EVENTS_RXDRDY = 0;
@@ -836,32 +829,14 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		nRFUARTPollLegacyTx(dev);
 		return cnt;
 	}
-#endif
 
-	uint32_t state = DisableInterrupt();
-	while (Bufflen)
+	state = DisableInterrupt();
+	while (Bufflen > 0)
 	{
-		int l  = Bufflen;
+		int l = Bufflen;
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &l);
 		if (p == NULL)
 		{
-#if defined(UARTE_PRESENT) && !defined(UARTE_CONFIG_FRAMETIMEOUT_Msk)
-			// Force the partial DMA buffer out into the fifo. On chips with
-			// the hardware frame timeout this is done by the FRAMETIMEOUT
-			// event instead.
-			// Interrupt-driven EasyDMA must complete its active RX buffer.
-			// Repeated STOPRX from the foreground reader interrupts incoming
-			// frames and can produce framing errors. Only polling mode needs
-			// an explicit flush to make a partial DMA buffer readable.
-			if (pDev->bDma == true && pDev->bIntEn == false &&
-				CFifoUsed(dev->pUartDev->hRxFifo) <= 0)
-			{
-				if (dev->RxDmaCnt > 0)
-				{
-					NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;
-				}
-			}
-#endif
 			break;
 		}
 		memcpy(pBuff, p, l);
@@ -873,36 +848,67 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 
 	if (dev->pUartDev->bRxReady)
 	{
-#ifdef UARTE_PRESENT
-		if (pDev->bDma == true)
+		uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
+		if (p != NULL)
 		{
-			// Restart the transfer nRFUARTRxDmaEnd held back once the fifo
-			// can take a whole one
-			if (CFifoAvail(dev->pUartDev->hRxFifo) >= NRFX_UART_RXDMA_SIZE)
-			{
-				dev->pUartDev->bRxReady = false;
-				NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = NRFX_UART_RXDMA_SIZE;
-				NRFX_UARTE_RXD_PTR(dev->pDmaReg) = (uint32_t)dev->RxDmaMem;
-				NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
-			}
-		}
-		else
-#endif
-		{
-#ifdef UART_PRESENT
-			uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
-			if (p)
-			{
-				dev->pReg->EVENTS_RXDRDY = 0;
-				dev->pUartDev->bRxReady = false;
-				*p = dev->pReg->RXD;
-			}
-#endif
+			dev->pReg->EVENTS_RXDRDY = 0;
+			dev->pUartDev->bRxReady = false;
+			*p = dev->pReg->RXD;
 		}
 	}
 
 	return cnt;
 }
+#endif
+
+#ifdef UARTE_PRESENT
+// EasyDMA RX. Completion IRQ owns transfer retirement and rearming.
+// The foreground reader never stops an active interrupt-driven RX.
+static int nRFUARTRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
+{
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+	int cnt = 0;
+	uint32_t state;
+
+	if (pDev->bIntEn == false)
+	{
+		nRFUARTPollRx(dev);
+	}
+
+	state = DisableInterrupt();
+	while (Bufflen > 0)
+	{
+		int l = Bufflen;
+		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &l);
+		if (p == NULL)
+		{
+#if !defined(UARTE_CONFIG_FRAMETIMEOUT_Msk)
+			if (pDev->bIntEn == false && dev->RxDmaCnt > 0)
+			{
+				NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;
+			}
+#endif
+			break;
+		}
+		memcpy(pBuff, p, l);
+		cnt += l;
+		pBuff += l;
+		Bufflen -= l;
+	}
+	EnableInterrupt(state);
+
+	if (dev->pUartDev->bRxReady &&
+		CFifoAvail(dev->pUartDev->hRxFifo) >= NRFX_UART_RXDMA_SIZE)
+	{
+		dev->pUartDev->bRxReady = false;
+		NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = NRFX_UART_RXDMA_SIZE;
+		NRFX_UARTE_RXD_PTR(dev->pDmaReg) = (uint32_t)dev->RxDmaMem;
+		NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+	}
+
+	return cnt;
+}
+#endif
 
 static void nRFUARTStopRx(DevIntrf_t * const pDev)
 {
@@ -1451,7 +1457,20 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.GetRate = nRFUARTGetRate;
 	pDev->DevIntrf.SetRate = nRFUARTSetRate;
 	pDev->DevIntrf.StartRx = nRFUARTStartRx;
-	pDev->DevIntrf.RxData = nRFUARTRxData;
+#ifdef UARTE_PRESENT
+	if (pDev->DevIntrf.bDma)
+	{
+		pDev->DevIntrf.RxData = nRFUARTRxDataDma;
+	}
+	else
+#endif
+	{
+#ifdef UART_PRESENT
+		pDev->DevIntrf.RxData = nRFUARTRxData;
+#else
+		return false;
+#endif
+	}
 	pDev->DevIntrf.StopRx = nRFUARTStopRx;
 	pDev->DevIntrf.StartTx = nRFUARTStartTx;
 	pDev->DevIntrf.TxData = nRFUARTTxData;
