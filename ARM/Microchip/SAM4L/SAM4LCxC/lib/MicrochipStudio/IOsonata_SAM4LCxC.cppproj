@@ -191,6 +191,10 @@
     <Folder Include="src\sensors" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\..\..\src\system_power_sam4l.cpp">
+      <SubType>compile</SubType>
+      <Link>src\system_power_sam4l.cpp</Link>
+    </Compile>
     <Compile Include="..\..\..\..\..\..\src\base64.c">
       <SubType>compile</SubType>
       <Link>src\base64.c</Link>
