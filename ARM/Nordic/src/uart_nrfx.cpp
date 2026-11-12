@@ -787,6 +787,31 @@ static bool nRFUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
 	return true;
 }
 
+#ifdef UART_PRESENT
+// Legacy UART polling has no TX interrupt. Advance one queued byte whenever
+// RX or TX is polled so full-duplex receive never waits for a byte to finish.
+static void nRFUARTPollLegacyTx(nRFUartDev_t * const dev)
+{
+	uint8_t *p;
+
+	if (dev->pUartDev->bTxReady == false && dev->pReg->EVENTS_TXDRDY == 0)
+	{
+		return;
+	}
+
+	p = CFifoGet(dev->pUartDev->hTxFifo);
+	if (p == NULL)
+	{
+		dev->pUartDev->bTxReady = true;
+		return;
+	}
+
+	dev->pReg->EVENTS_TXDRDY = 0;
+	dev->pUartDev->bTxReady = false;
+	dev->pReg->TXD = *p;
+}
+#endif
+
 static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
@@ -810,6 +835,7 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 			pBuff[cnt] = (uint8_t)dev->pReg->RXD;
 			cnt++;
 		}
+		nRFUARTPollLegacyTx(dev);
 		return cnt;
 	}
 #endif
@@ -897,35 +923,6 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 		return 0;
 	}
 
-#ifdef UART_PRESENT
-	if (pDev->bIntEn == false && pDev->bDma == false)
-	{
-		// Without an interrupt there is no handler to drain the TX FIFO.
-		// Complete each byte here before accepting the next one.
-		while (cnt < Datalen)
-		{
-			int timeout = 1000;
-
-			dev->pReg->EVENTS_TXDRDY = 0;
-			dev->pReg->TXD = pData[cnt];
-
-			while (dev->pReg->EVENTS_TXDRDY == 0 && timeout-- > 0)
-			{
-				usDelay(1);
-			}
-			if (dev->pReg->EVENTS_TXDRDY == 0)
-			{
-				// This byte was submitted to hardware, but completion
-				// was not observed. Do not report it as transmitted.
-				break;
-			}
-			cnt++;
-		}
-		dev->pUartDev->bTxReady = true;
-		return cnt;
-	}
-#endif
-
     while (Datalen > 0 && rtry-- > 0)
     {
         uint32_t state = DisableInterrupt();
@@ -952,16 +949,13 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
         }
 #endif
 #ifdef UART_PRESENT
-		// Polling without dma. No handler sets bTxReady back once TXD is
-		// sent, so check the TXDRDY event here. Without this only the first
-		// byte goes out.
-		if (pDev->bIntEn == false && pDev->bDma == false && dev->pReg->EVENTS_TXDRDY)
+		if (pDev->bIntEn == false && pDev->bDma == false)
 		{
-			dev->pUartDev->bTxReady = true;
+			nRFUARTPollLegacyTx(dev);
 		}
 #endif
 
-        if (dev->pUartDev->bTxReady)
+        if ((pDev->bIntEn || pDev->bDma) && dev->pUartDev->bTxReady)
         {
 #ifdef UARTE_PRESENT
         	if (pDev->bDma == true)
