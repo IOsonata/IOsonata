@@ -464,9 +464,8 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 	int len = 0;
 	int cnt = 0;
+
 #ifdef UART_PRESENT
-	uint8_t *d;
-	uint8_t value;
 	NRF_UART_Type *reg = dev->pReg;
 #else
 	NRF_UARTE_Type *reg = dev->pDmaReg;
@@ -507,26 +506,26 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	if (reg->EVENTS_RXDRDY)
 	{
 #ifdef UART_PRESENT
+		uint8_t *d;
+
 		if (pDev->bDma == false)
 		{
 			cnt = 0;
+			dev->pUartDev->bRxReady = false;
 
 			do {
-				// Consume RXD exactly once, even when the software FIFO is full.
-				// Leaving a byte in RXD and rereading it later can repeat data.
 				reg->EVENTS_RXDRDY = 0;
-				value = (uint8_t)reg->RXD;
+
 				d = CFifoPut(dev->pUartDev->hRxFifo);
 				if (d == NULL)
 				{
+					dev->pUartDev->bRxReady = true;
 					dev->pUartDev->RxDropCnt++;
+					break;
 				}
-				else
-				{
-					*d = value;
-				}
+				*d = reg->RXD;
 				cnt++;
-			} while (reg->EVENTS_RXDRDY && cnt < NRFX_UART_HWFIFO_SIZE);
+			} while (reg->EVENTS_RXDRDY && cnt < NRFX_UART_HWFIFO_SIZE) ;
 		}
 		else
 #endif
@@ -653,10 +652,26 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 #endif
 			{
 #ifdef UART_PRESENT
-				// RXDRDY was already serviced above. Do not drain RXD
-				// again here: the old loop incremented and decremented the
-				// same counter, making its iteration limit ineffective.
-				// A pending RXDRDY will be handled by the next interrupt.
+				// Only drain bytes signaled by RXDRDY, with a bounded
+				// iteration count. Do not reread RXD without a fresh event.
+				cnt = NRFX_UART_HWFIFO_SIZE;
+				while (dev->pReg->EVENTS_RXDRDY && cnt-- > 0)
+				{
+					dev->pReg->EVENTS_RXDRDY = 0;
+					uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
+					if (p == NULL)
+					{
+						dev->pUartDev->bRxReady = true;
+						break;
+					}
+					dev->pUartDev->bRxReady = false;
+					*p = dev->pReg->RXD;
+				}
+				if (dev->pUartDev->EvtCallback)
+				{
+					len = CFifoUsed(dev->pUartDev->hRxFifo);
+					dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
+				}
 #endif
 			}
 		}
@@ -851,17 +866,12 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 #endif
 		{
 #ifdef UART_PRESENT
-			// Only polling-mode UART can defer a hardware byte when the FIFO
-			// is full. Interrupt mode consumes RXD immediately in the ISR.
-			if (pDev->bIntEn == false && dev->pReg->EVENTS_RXDRDY)
+			uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
+			if (p)
 			{
-				uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
-				if (p)
-				{
-					dev->pReg->EVENTS_RXDRDY = 0;
-					dev->pUartDev->bRxReady = false;
-					*p = dev->pReg->RXD;
-				}
+				dev->pReg->EVENTS_RXDRDY = 0;
+				dev->pUartDev->bRxReady = false;
+				*p = dev->pReg->RXD;
 			}
 #endif
 		}
