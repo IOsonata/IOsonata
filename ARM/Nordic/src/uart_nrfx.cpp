@@ -464,8 +464,9 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 	int len = 0;
 	int cnt = 0;
-
 #ifdef UART_PRESENT
+	uint8_t *d;
+	uint8_t value;
 	NRF_UART_Type *reg = dev->pReg;
 #else
 	NRF_UARTE_Type *reg = dev->pDmaReg;
@@ -506,9 +507,6 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	if (reg->EVENTS_RXDRDY)
 	{
 #ifdef UART_PRESENT
-		uint8_t *d;
-		uint8_t value;
-
 		if (pDev->bDma == false)
 		{
 			cnt = 0;
