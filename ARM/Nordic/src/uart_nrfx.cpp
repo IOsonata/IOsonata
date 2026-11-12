@@ -849,7 +849,12 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 			// Force the partial DMA buffer out into the fifo. On chips with
 			// the hardware frame timeout this is done by the FRAMETIMEOUT
 			// event instead.
-			if (pDev->bDma == true && CFifoUsed(dev->pUartDev->hRxFifo) <= 0)
+			// Interrupt-driven EasyDMA must complete its active RX buffer.
+			// Repeated STOPRX from the foreground reader interrupts incoming
+			// frames and can produce framing errors. Only polling mode needs
+			// an explicit flush to make a partial DMA buffer readable.
+			if (pDev->bDma == true && pDev->bIntEn == false &&
+				CFifoUsed(dev->pUartDev->hRxFifo) <= 0)
 			{
 				if (dev->RxDmaCnt > 0)
 				{
