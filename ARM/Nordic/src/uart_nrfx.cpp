@@ -921,102 +921,133 @@ static bool nRFUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return !dev->bPeiTxPrepared;
 }
 
+#ifdef UART_PRESENT
+// Byte-oriented UART transmission. The ISR services the TX FIFO in
+// interrupt mode; polling mode pumps it on each RX/TX API call.
 static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 	int cnt = 0;
 	int rtry = pDev->MaxRetry;
+	int l;
+	uint8_t *p;
+	uint32_t state;
 
 	if (dev->bPeiTxPrepared)
 	{
 		return 0;
 	}
 
-    while (Datalen > 0 && rtry-- > 0)
-    {
-        uint32_t state = DisableInterrupt();
+	while (Datalen > 0 && rtry-- > 0)
+	{
+		state = DisableInterrupt();
+		while (Datalen > 0)
+		{
+			l = Datalen;
+			p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
+			if (p == NULL)
+			{
+				break;
+			}
+			memcpy(p, pData, l);
+			Datalen -= l;
+			pData += l;
+			cnt += l;
+		}
+		EnableInterrupt(state);
 
-        while (Datalen > 0)
-        {
-            int l = Datalen;
-            uint8_t *p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
-            if (p == NULL)
-            {
-            	break;
-            }
-            memcpy(p, pData, l);
-            Datalen -= l;
-            pData += l;
-            cnt += l;
-        }
-        EnableInterrupt(state);
-
-#ifdef UARTE_PRESENT
-        if (pDev->bIntEn == false && pDev->bDma == true)
-        {
-        	nRFUARTPollTx(dev);
-        }
-#endif
-#ifdef UART_PRESENT
-		if (pDev->bIntEn == false && pDev->bDma == false)
+		if (pDev->bIntEn == false)
 		{
 			nRFUARTPollLegacyTx(dev);
 		}
-#endif
+		else if (dev->pUartDev->bTxReady)
+		{
+			p = CFifoGet(dev->pUartDev->hTxFifo);
+			if (p != NULL)
+			{
+				dev->pReg->EVENTS_TXDRDY = 0;
+				dev->pUartDev->bTxReady = false;
+				dev->pReg->TXD = *p;
+			}
+		}
+	}
 
-        if ((pDev->bIntEn || pDev->bDma) && dev->pUartDev->bTxReady)
-        {
-#ifdef UARTE_PRESENT
-        	if (pDev->bDma == true)
-        	{
-        		int l = NRFX_UART_TXDMA_SIZE;
-        		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
-        		if (p)
-        		{
-        			dev->pUartDev->bTxReady = false;
+	if (Datalen > 0)
+	{
+		dev->pUartDev->TxDropCnt += (uint32_t)Datalen;
+	}
 
-        			// Transfer to tx cache before sending as CFifo will immediately make the memory
-        			// block available for reuse in the Put request. This could cause an overwrite
-        			// if uart tx has not completed in time.
-        			memcpy(dev->TxDmaMem, p, l);
-
-					#if defined(NRF54L_SERIES)
-			dev->TxDmaLen = (uint32_t)l;
-#endif
-			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
-					NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
-					NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
-        		}
-        	}
-        	else
-#endif
-            {
-#ifdef UART_PRESENT
-                dev->pReg->EVENTS_TXDRDY = 0;
-                dev->pUartDev->bTxReady = true;
-                uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
-                if (p)
-                {
-                    dev->pUartDev->bTxReady = false;
-                    dev->pReg->TXD = *p;
-                }
-#endif
-            }
-        }
-    }
-
-    // Datalen is what is left and cnt is what was accepted, both moved by the
-    // same loop above, so the drop is Datalen. Taking cnt off it underflowed
-    // the unsigned counter whenever more was accepted than remained, and the
-    // old rtry test only ran when the FIFO refused, so with a large FIFO this
-    // reported 0 no matter what was lost.
-    if (Datalen > 0)
-    {
-    	dev->pUartDev->TxDropCnt += (uint32_t)Datalen;
-    }
-
-    return cnt;
+	return cnt;
 }
+#endif
+
+#ifdef UARTE_PRESENT
+// EasyDMA transmission. The active DMA buffer must be kept stable until
+// ENDTX. IRQ mode advances queued blocks in UartIrqHandler.
+static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
+{
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+	int cnt = 0;
+	int rtry = pDev->MaxRetry;
+	int l;
+	uint8_t *p;
+	uint32_t state;
+
+	if (dev->bPeiTxPrepared)
+	{
+		return 0;
+	}
+
+	while (Datalen > 0 && rtry-- > 0)
+	{
+		state = DisableInterrupt();
+		while (Datalen > 0)
+		{
+			l = Datalen;
+			p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
+			if (p == NULL)
+			{
+				break;
+			}
+			memcpy(p, pData, l);
+			Datalen -= l;
+			pData += l;
+			cnt += l;
+		}
+		EnableInterrupt(state);
+
+		if (pDev->bIntEn == false)
+		{
+			nRFUARTPollTx(dev);
+		}
+
+		if (dev->pUartDev->bTxReady)
+		{
+			l = NRFX_UART_TXDMA_SIZE;
+			p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
+			if (p != NULL)
+			{
+				dev->pUartDev->bTxReady = false;
+				// The FIFO slot is reusable immediately; cache DMA data.
+				memcpy(dev->TxDmaMem, p, l);
+#if defined(NRF54L_SERIES)
+				dev->TxDmaLen = (uint32_t)l;
+#endif
+				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
+				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
+			}
+		}
+	}
+
+	if (Datalen > 0)
+	{
+		dev->pUartDev->TxDropCnt += (uint32_t)Datalen;
+	}
+
+	return cnt;
+}
+#endif
 
 static void nRFUARTStopTx(DevIntrf_t * const pDev)
 {
@@ -1473,7 +1504,20 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	}
 	pDev->DevIntrf.StopRx = nRFUARTStopRx;
 	pDev->DevIntrf.StartTx = nRFUARTStartTx;
-	pDev->DevIntrf.TxData = nRFUARTTxData;
+#ifdef UARTE_PRESENT
+	if (pDev->DevIntrf.bDma)
+	{
+		pDev->DevIntrf.TxData = nRFUARTTxDataDma;
+	}
+	else
+#endif
+	{
+#ifdef UART_PRESENT
+		pDev->DevIntrf.TxData = nRFUARTTxData;
+#else
+		return false;
+#endif
+	}
 	pDev->DevIntrf.StopTx = nRFUARTStopTx;
 	pDev->DevIntrf.MaxRetry = UART_RETRY_MAX;
 	pDev->DevIntrf.PowerOff = nRFUARTPowerOff;
