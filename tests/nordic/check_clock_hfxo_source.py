@@ -36,6 +36,15 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("else if (success)", source)
         self.assertNotIn("std::atomic", source)
 
+    def test_softdevice_probe_requires_sdk_runtime_state(self):
+        source = function(self.clock, "static bool nRFxClockSdEnabled(",
+                          "static bool nRFxHfxoRunning(")
+        self.assertIn("nrf_sdh_is_enabled != nullptr", source)
+        self.assertIn("nrf_sdh_is_enabled()", source)
+        self.assertNotIn("sd_softdevice_is_enabled(", self.clock)
+        self.assertNotIn("SOFTDEVICE_INFO_STRUCT_OFFSET", self.clock)
+        self.assertIn("#pragma weak nrf_sdh_is_enabled", self.clock)
+
     def test_release_uses_original_clock_owner(self):
         source = function(self.clock, "static bool nRFxHfxoStop(",
                           "bool SystemCoreClockSelect(")

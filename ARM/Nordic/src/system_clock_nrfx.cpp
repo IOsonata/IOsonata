@@ -76,8 +76,7 @@ SOFTWARE.
 #include "nrf.h"
 
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
-#include "nrf_mbr.h"
-#include "nrf_sdm.h"
+#include "nrf_sdh.h"
 #include "nrf_soc.h"
 #endif
 
@@ -175,25 +174,17 @@ __WEAK bool nRFxMpslActive(void)
 	return false;
 }
 
-// sd_softdevice_is_enabled is an SVC that only a programmed SoftDevice
-// implements, so the image is looked for first: its magic number follows the
-// MBR.
+// A compiled SoftDevice header or a signature in flash does not mean the
+// SoftDevice is running. The SDK maintains this state in RAM. The weak
+// reference allows bare-metal applications to link the same HAL archive
+// without pulling in the SoftDevice handler or executing an SVC.
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+#pragma weak nrf_sdh_is_enabled
+#endif
 static bool nRFxClockSdEnabled(void)
 {
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
-	const volatile uint32_t *pMagic = (const volatile uint32_t *)(
-		MBR_SIZE + SOFTDEVICE_INFO_STRUCT_OFFSET + 4U);
-
-	if (*pMagic != 0x51B1E5DBUL)
-	{
-		return false;
-	}
-
-	uint8_t enabled = 0U;
-
-	(void)sd_softdevice_is_enabled(&enabled);
-
-	return enabled != 0U;
+	return nrf_sdh_is_enabled != nullptr && nrf_sdh_is_enabled();
 #else
 	return false;
 #endif
