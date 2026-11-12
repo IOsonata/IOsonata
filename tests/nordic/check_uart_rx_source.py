@@ -26,6 +26,12 @@ class UartRxSourceChecks(unittest.TestCase):
         self.assertIn("NRFX_UARTE_EVENTS_ENDRX", complete)
         self.assertIn("NRFX_UARTE_TASKS_STARTRX", complete)
 
+    def test_interrupt_dma_read_does_not_stop_partial_rx(self):
+        rx = self.source.split("static int nRFUARTRxData(", 1)[1]
+        rx = rx.split("static void nRFUARTStopRx(", 1)[0]
+        self.assertIn("pDev->bDma == true && pDev->bIntEn == false", rx)
+        self.assertIn("NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;", rx)
+
     def test_polling_rx_still_reads_hardware(self):
         rx = self.source.split("static int nRFUARTRxData(", 1)[1]
         rx = rx.split("static void nRFUARTStopRx(", 1)[0]
