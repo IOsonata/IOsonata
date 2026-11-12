@@ -698,12 +698,10 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 #ifdef UARTE_PRESENT
 		if (pDev->bDma == true)
 		{
-			// Not while a transfer is held back for lack of fifo room,
-			// nRFUARTRxData restarts it
-			if (dev->pUartDev->bRxReady == false)
-			{
-				NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
-			}
+			// Do not restart an active EasyDMA RX transfer on a framing
+			// or parity error. After an overrun STOPRX, ENDRX retires the
+			// stopped transfer and nRFUARTRxDmaEnd rearms RX once its
+			// buffer has been consumed. RXTO flush handling is above.
 		}
 		else
 #endif
