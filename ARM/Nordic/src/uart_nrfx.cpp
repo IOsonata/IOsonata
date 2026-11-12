@@ -801,21 +801,16 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 #ifdef UART_PRESENT
 	if (pDev->bIntEn == false && pDev->bDma == false)
 	{
-		// Polling without dma. No handler moves the received bytes into the
-		// fifo, do it here as the handler does. A byte the fifo has no room
-		// for stays in RXD with bRxReady set, the same as in interrupt mode.
-		int n = NRFX_UART_HWFIFO_SIZE;
-		while (dev->pReg->EVENTS_RXDRDY && n-- > 0)
+		// No RX interrupt owns the UART in polling mode. Read the hardware
+		// register directly rather than staging bytes through the ISR FIFO.
+		// Clear RXDRDY before reading RXD so a new byte can raise a new event.
+		while (cnt < Bufflen && dev->pReg->EVENTS_RXDRDY)
 		{
-			uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
-			if (p == NULL)
-			{
-				dev->pUartDev->bRxReady = true;
-				break;
-			}
 			dev->pReg->EVENTS_RXDRDY = 0;
-			*p = dev->pReg->RXD;
+			pBuff[cnt] = (uint8_t)dev->pReg->RXD;
+			cnt++;
 		}
+		return cnt;
 	}
 #endif
 
