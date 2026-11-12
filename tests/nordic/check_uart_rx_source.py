@@ -40,6 +40,19 @@ class UartRxSourceChecks(unittest.TestCase):
         self.assertIn("pBuff[cnt] = (uint8_t)dev->pReg->RXD;", rx)
         self.assertNotIn("NRFX_UARTE_TASKS_STOPRX", rx)
 
+    def test_tx_callback_selected_by_dma_mode(self):
+        init = self.source.split("bool UARTInit(", 1)[1]
+        self.assertIn("pDev->DevIntrf.TxData = nRFUARTTxDataDma;", init)
+        self.assertIn("pDev->DevIntrf.TxData = nRFUARTTxData;", init)
+        legacy = self.source.split("static int nRFUARTTxData(", 1)[1]
+        legacy = legacy.split("static int nRFUARTTxDataDma(", 1)[0]
+        dma = self.source.split("static int nRFUARTTxDataDma(", 1)[1]
+        dma = dma.split("static void nRFUARTStopTx(", 1)[0]
+        self.assertNotIn("NRFX_UARTE_TASKS_STARTTX", legacy)
+        self.assertNotIn("dev->pReg->TXD", dma)
+        self.assertIn("nRFUARTPollLegacyTx(dev);", legacy)
+        self.assertIn("nRFUARTPollTx(dev);", dma)
+
     def test_rx_callback_selected_by_dma_mode(self):
         init = self.source.split("bool UARTInit(", 1)[1]
         self.assertIn("if (pDev->DevIntrf.bDma)", init)
