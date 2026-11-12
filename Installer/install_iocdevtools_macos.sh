@@ -536,41 +536,27 @@ if [[ -n "$RISCV_DIR" && ! -f "$RISCV_DIR/bin/riscv-none-elf-gcc" && -f "$RISCV_
 fi
 
 # ---------------------------------------------------------
-# Install IDAP tools
-# ---------------------------------------------------------
-IDAP_DIR="$TOOL_BIN"
-mkdir -p "$IDAP_DIR"
-
-IDAP_PROG="$IDAP_DIR/IDAPnRFProg"
-if [[ ! -x "$IDAP_PROG" || "$MODE" == "force" ]]; then
-  echo
-  echo ">>> Downloading IDAPnRFProg tool..."
-  IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/OSX/IDAPnRFProg_OSX_2_1_240807.zip/download"
-	IDAP_STAGE=$(mktemp -d)
-	if ! curl -fL "$IDAP_URL" -o "$IDAP_STAGE/archive.zip"; then
-		rm -rf "$IDAP_STAGE"
-		echo "IDAP download failed; existing executables preserved." >&2
-		exit 1
+# Install IDAP tools and download firmware for each supported probe revision.
+install_idap_tools() (
+	local helper=""
+	if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+		helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install_idap.py"
 	fi
-	if ! unzip -o -j "$IDAP_STAGE/archive.zip" -d "$IDAP_STAGE/unpacked" \
-		|| [[ ! -s "$IDAP_STAGE/unpacked/IDAPnRFProg" ]]; then
-		rm -rf "$IDAP_STAGE"
-		echo "Invalid IDAP archive." >&2
-		exit 1
+	local stage=""
+	local args=(--root "$ROOT" --platform macos)
+	if [[ "$MODE" == "force" ]]; then
+		args+=(--force)
 	fi
-	for tool in IDAPnRFProg IDAPSetTarget; do
-		if [[ -s "$IDAP_STAGE/unpacked/$tool" ]]; then
-			chmod +x "$IDAP_STAGE/unpacked/$tool" || exit 1
-			cp "$IDAP_STAGE/unpacked/$tool" "$IDAP_DIR/$tool" || exit 1
-		fi
-	done
-	rm -rf "$IDAP_STAGE"
-	echo "IDAP executables installed in $IDAP_DIR"
-else
-  echo "✅ IDAPnRFProg already installed (skipping)"
-fi
+	if [[ ! -f "$helper" ]]; then
+		stage=$(mktemp -d) || exit 1
+		trap 'rm -rf "$stage"' EXIT
+		helper="$stage/install_idap.py"
+		curl -fL "https://raw.githubusercontent.com/IOsonata/IOsonata/${IOSONATA_INSTALLER_REF:-main}/Installer/install_idap.py" -o "$helper" || exit 1
+	fi
+	"$PYTHON3" "$helper" "${args[@]}" || exit 1
+)
+install_idap_tools
 
-# ---------------------------------------------------------
 # Install Eclipse Embedded CDT
 # ---------------------------------------------------------
 echo

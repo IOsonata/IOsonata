@@ -962,43 +962,24 @@ if (Test-Path $CLONE_LOG) {
     Remove-Item $CLONE_LOG -Force -ErrorAction SilentlyContinue
 }
 
-# --- Install IDAP Tools ---
-$IDAP_DIR = "$TOOL_BIN"
-$IDAP_PROG = "$IDAP_DIR\IDAPnRFProg.exe"
-$IDAP_PARENT = Split-Path $IDAP_DIR -Parent
-New-Item -Path $IDAP_PARENT -ItemType Directory -Force | Out-Null
-
-if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
-	Write-Host
-	Write-Host ">>> Downloading IDAPnRFProg tool..."
-	$IDAP_URL = "https://sourceforge.net/projects/idaplinkfirmware/files/Windows/IDAPnRFProg_Win_2_1_240807.zip/download"
-	$IDAP_STAGE = Join-Path $IDAP_PARENT (".idap-stage-" + [guid]::NewGuid().ToString('N'))
-	$IDAP_BACKUP = Join-Path $IDAP_PARENT (".idap-backup-" + [guid]::NewGuid().ToString('N'))
-	New-Item $IDAP_STAGE -ItemType Directory | Out-Null
-
-	try {
-		$archive = Join-Path $IDAP_STAGE "archive.zip"
-		curl.exe -fL $IDAP_URL -o $archive --silent --show-error
-		if ($LASTEXITCODE -ne 0) { throw "IDAPnRFProg download failed." }
-
-		$candidate = Join-Path $IDAP_STAGE "candidate"
-		New-Item $candidate -ItemType Directory | Out-Null
-		& $SEVENZIP_EXE e $archive -o"$candidate" -y | Out-Null
-		if ($LASTEXITCODE -ne 0) { throw "IDAPnRFProg extraction failed." }
-		$stagedProgram = Join-Path $candidate "IDAPnRFProg.exe"
-		if (-not (Test-Path $stagedProgram) -or (Get-Item $stagedProgram).Length -le 0) {
-			throw "Invalid IDAPnRFProg archive: missing or empty IDAPnRFProg.exe."
-		}
-		foreach ($tool in @('IDAPnRFProg.exe', 'IDAPSetTarget.exe')) {
-			$stagedTool = Join-Path $candidate $tool
-			if (Test-Path $stagedTool) { Copy-Item $stagedTool $IDAP_DIR -Force }
-		}
-		Write-Host "   [OK] IDAPnRFProg installed at: $IDAP_PROG" -ForegroundColor Green
-	} finally {
-		Remove-Item $IDAP_STAGE -Recurse -Force -ErrorAction SilentlyContinue
+# --- Install IDAP tools and download probe firmware ---
+$idapHelper = $null
+if ($PSScriptRoot) { $idapHelper = Join-Path $PSScriptRoot 'install_idap.py' }
+$idapStage = $null
+try {
+	if (-not $idapHelper -or -not (Test-Path $idapHelper)) {
+		$idapStage = Join-Path $env:TEMP ("idap-" + [guid]::NewGuid().ToString('N'))
+		New-Item $idapStage -ItemType Directory | Out-Null
+		$idapHelper = Join-Path $idapStage 'install_idap.py'
+		curl.exe -fL "https://raw.githubusercontent.com/IOsonata/IOsonata/$installerRef/Installer/install_idap.py" -o $idapHelper
+		if ($LASTEXITCODE -ne 0) { throw "IDAP installer download failed." }
 	}
-} else {
-	Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
+	$idapArgs = @('--root', $ROOT, '--platform', 'windows')
+	if ($MODE -eq 'force') { $idapArgs += '--force' }
+	& $PythonExecutablePath $idapHelper @idapArgs
+	if ($LASTEXITCODE -ne 0) { throw "IDAP installation failed. Rerun the installer to retry." }
+} finally {
+	if ($idapStage) { Remove-Item $idapStage -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 # Wizard is installed together with the AI and UI plugins.
