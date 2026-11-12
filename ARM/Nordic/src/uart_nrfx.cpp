@@ -897,6 +897,35 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 		return 0;
 	}
 
+#ifdef UART_PRESENT
+	if (pDev->bIntEn == false && pDev->bDma == false)
+	{
+		// Without an interrupt there is no handler to drain the TX FIFO.
+		// Complete each byte here before accepting the next one.
+		while (cnt < Datalen)
+		{
+			int timeout = 1000;
+
+			dev->pReg->EVENTS_TXDRDY = 0;
+			dev->pReg->TXD = pData[cnt];
+
+			while (dev->pReg->EVENTS_TXDRDY == 0 && timeout-- > 0)
+			{
+				usDelay(1);
+			}
+			if (dev->pReg->EVENTS_TXDRDY == 0)
+			{
+				// This byte was submitted to hardware, but completion
+				// was not observed. Do not report it as transmitted.
+				break;
+			}
+			cnt++;
+		}
+		dev->pUartDev->bTxReady = true;
+		return cnt;
+	}
+#endif
+
     while (Datalen > 0 && rtry-- > 0)
     {
         uint32_t state = DisableInterrupt();
