@@ -41,9 +41,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blueio_board.h"
 
-#define NORDIC_DK
+//#define NORDIC_DK
 #ifdef NORDIC_DK
-// nRF52832 DK (PCA10040)
+// PCA10056
 #define UART_RX_PORT		0
 #define UART_RX_PIN			8
 #define UART_RX_PINOP		1
