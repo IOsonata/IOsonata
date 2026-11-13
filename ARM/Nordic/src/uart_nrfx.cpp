@@ -151,9 +151,22 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Default fifo size if one is not provided in the config.
 #define NRFX_UART_RXDMA_SIZE		(NRFX_UART_HWFIFO_SIZE)
-#define NRFX_UART_TXDMA_SIZE		(4 * NRFX_UART_HWFIFO_SIZE)
 
+// The nRF52 TX DMA buffer size is an experiment parameter. Its default
+// remains 16 bytes unless overridden when compiling the HAL library.
+// A larger DMA buffer only helps when enough bytes are queued in the FIFO.
+#ifndef NRFX_UART_TXDMA_SIZE
+#define NRFX_UART_TXDMA_SIZE		(4 * NRFX_UART_HWFIFO_SIZE)
+#endif
+
+// Keep enough internal TX FIFO capacity for a full DMA block and for a
+// second block to accumulate while the current transfer runs. No change to
+// the default FIFO size unless the caller increases TXDMA_SIZE.
+#if NRFX_UART_TXDMA_SIZE > (4 * NRFX_UART_HWFIFO_SIZE)
+#define NRFX_UART_CFIFO_SIZE		CFIFO_MEMSIZE(2 * NRFX_UART_TXDMA_SIZE)
+#else
 #define NRFX_UART_CFIFO_SIZE		CFIFO_MEMSIZE(4 * NRFX_UART_HWFIFO_SIZE)
+#endif
 
 #pragma pack(push, 4)
 // Device driver data require by low level functions
