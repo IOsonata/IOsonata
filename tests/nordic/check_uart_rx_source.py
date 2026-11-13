@@ -61,6 +61,12 @@ class UartRxSourceChecks(unittest.TestCase):
         self.assertIn("UARTE_INTENSET_DMATXEND_Set", dma)
         self.assertIn("UART_INTENSET_TXDRDY_Set", irq)
 
+    def test_tx_dma_block_override_has_matching_fifo_capacity(self):
+        self.assertIn("#ifndef NRFX_UART_TXDMA_SIZE", self.source)
+        self.assertIn("CFIFO_MEMSIZE(2 * NRFX_UART_TXDMA_SIZE)", self.source)
+        self.assertIn("CFIFO_MEMSIZE(4 * NRFX_UART_HWFIFO_SIZE)", self.source)
+        self.assertIn("uint8_t TxDmaMem[NRFX_UART_TXDMA_SIZE];", self.source)
+
     def test_tx_callback_selected_by_dma_mode(self):
         init = self.source.split("bool UARTInit(", 1)[1]
         self.assertIn("pDev->DevIntrf.TxData = nRFUARTTxDataDma;", init)
