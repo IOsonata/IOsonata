@@ -628,12 +628,6 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			len = CFifoAvail(dev->pUartDev->hTxFifo);
 			len = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, len);
 		}
-#if defined(NRF52_SERIES)
-		else if (CFifoUsed(dev->pUartDev->hTxFifo) == 0)
-		{
-			dev->pDmaReg->INTENCLR = UARTE_INTENSET_ENDTX_Msk;
-		}
-#endif
 	}
 #endif
 
@@ -1017,35 +1011,6 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 		return 0;
 	}
 
-#if defined(NRF52_SERIES)
-	// Avoid FIFO enqueue/dequeue for an idle single-byte DMA transfer.
-	// Only the foreground-only path may retire ENDTX without a callback.
-	if (Datalen == 1 && pDev->bIntEn && dev->pUartDev->EvtCallback == NULL)
-	{
-		state = DisableInterrupt();
-		if (CFifoUsed(dev->pUartDev->hTxFifo) == 0)
-		{
-			if (NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) ||
-				dev->pDmaReg->EVENTS_TXSTOPPED)
-			{
-				nRFUARTPollTx(dev);
-			}
-			if (dev->pUartDev->bTxReady)
-			{
-				dev->pUartDev->bTxReady = false;
-				dev->TxDmaMem[0] = *pData;
-				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = 1;
-				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
-				dev->pDmaReg->INTENCLR = UARTE_INTENSET_ENDTX_Msk;
-				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
-				EnableInterrupt(state);
-				return 1;
-			}
-		}
-		EnableInterrupt(state);
-	}
-#endif
-
 	while (Datalen > 0 && rtry-- > 0)
 	{
 		state = DisableInterrupt();
@@ -1062,15 +1027,8 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 			pData += l;
 			cnt += l;
 		}
-#if defined(NRF52_SERIES)
-		// With no TX callback, poll completed foreground transfers.
-		// ENDTX IRQ is needed only while the FIFO contains queued data.
-		if (pDev->bIntEn && dev->pUartDev->EvtCallback == NULL &&
-			(dev->pDmaReg->INTENSET & UARTE_INTENSET_ENDTX_Msk) == 0U)
-		{
-			nRFUARTPollTx(dev);
-		}
-#endif
+		EnableInterrupt(state);
+
 		if (pDev->bIntEn == false)
 		{
 			nRFUARTPollTx(dev);
@@ -1093,20 +1051,6 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 			}
 		}
-#if defined(NRF52_SERIES)
-		if (pDev->bIntEn && dev->pUartDev->EvtCallback == NULL)
-		{
-			if (CFifoUsed(dev->pUartDev->hTxFifo) != 0)
-			{
-				dev->pDmaReg->INTENSET = UARTE_INTENSET_ENDTX_Msk;
-			}
-			else
-			{
-				dev->pDmaReg->INTENCLR = UARTE_INTENSET_ENDTX_Msk;
-			}
-		}
-#endif
-		EnableInterrupt(state);
 	}
 
 	if (Datalen > 0)
