@@ -158,16 +158,20 @@ int main()
 			d = Prbs8(d);
 		}
 #else
+		uint8_t next = d;
 		for (int i = 0; i < TEST_BUFSIZE; i++)
 		{
-			d = Prbs8(d);
-			buff[i] = d;
+			next = Prbs8(next);
+			buff[i] = next;
 		}
 
 		s_bTxDone = false;
 		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, 0) == NRFX_SUCCESS)
 		{
-			while (s_bTxDone == false);
+			d = next;
+			while (s_bTxDone == false)
+			{
+			}
 		}
 #endif
 	}
