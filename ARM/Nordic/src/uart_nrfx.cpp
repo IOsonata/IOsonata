@@ -933,24 +933,6 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 		return 0;
 	}
 
-	// When polling a legacy UART with an empty software queue, write the
-	// byte directly if TXD is ready. Keep the FIFO path for queued traffic.
-	// This avoids a FIFO put/get and two interrupt-mask operations per byte.
-	if (!pDev->bIntEn && Datalen == 1)
-	{
-		state = DisableInterrupt();
-		if (CFifoUsed(dev->pUartDev->hTxFifo) == 0 &&
-			(dev->pUartDev->bTxReady || dev->pReg->EVENTS_TXDRDY))
-		{
-			dev->pReg->EVENTS_TXDRDY = 0;
-			dev->pUartDev->bTxReady = false;
-			dev->pReg->TXD = *pData;
-			EnableInterrupt(state);
-			return 1;
-		}
-		EnableInterrupt(state);
-	}
-
 	while (Datalen > 0 && rtry-- > 0)
 	{
 		state = DisableInterrupt();
