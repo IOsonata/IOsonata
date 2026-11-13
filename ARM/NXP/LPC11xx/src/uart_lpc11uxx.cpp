@@ -218,7 +218,7 @@ void LpcUARTModemSet(int DevNo, uint32_t LineState)
 	LPC_USART->MCR = mcr;
 }
 
-void UART_IRQHandler(void)
+extern "C" void UART_IRQHandler(void)
 {
 	LpcUARTIrqHandler(0);
 }
