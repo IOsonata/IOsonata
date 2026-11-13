@@ -65,7 +65,7 @@ const app_uart_comm_params_t comm_params = {
 		UART_TX_PIN,
 		UART_RTS_PIN,
 		UART_CTS_PIN,
-		APP_UART_FLOW_CONTROL_ENABLED,//APP_UART_FLOW_CONTROL_DISABLED,
+		APP_UART_FLOW_CONTROL_DISABLED,
       false,
 	  NRF_UARTE_BAUDRATE_1000000
 };
@@ -132,7 +132,7 @@ int main()
 	{
 		// NOTE : NRFX_UARTE_TX_BLOCKING is extremely slow
 #ifdef BYTE_MODE
-		if (nrfx_uarte_tx(&g_Uarte, &d, 1, NRFX_UARTE_TX_LINK/*NRFX_UARTE_TX_BLOCKING*/) == NRF_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, &d, 1) == NRF_SUCCESS)
 		{
 			//while (s_bTxDone == false);
 			// If success send next code
@@ -146,7 +146,7 @@ int main()
 		}
 
 		s_bTxDone = false;
-		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, NRFX_UARTE_TX_LINK) == NRFX_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) == NRFX_SUCCESS)
 		{
 			while (s_bTxDone == false);
 		}
@@ -165,7 +165,7 @@ int main()
 
     while (1)
     {
-    	if (app_uart_put(d) == NRF_SUCCESS);
+    	if (app_uart_put(d) == NRF_SUCCESS)
     	{
 			// If success send next code
 			d = Prbs8(d);
