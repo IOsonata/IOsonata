@@ -588,7 +588,7 @@ static void Lpc11UsbBusReset(uint32_t Status, bool Detached)
 	UsbDevProcessEvent(0, &event);
 }
 
-void USB_IRQHandler(void)
+extern "C" void USB_IRQHandler(void)
 {
 	const uint32_t state = DisableInterrupt();
 	if (!s_Prepared || !s_Ep0.Enabled)
