@@ -83,17 +83,10 @@ static bool Lpc11UsbControlReady(void);
 static void Lpc11UsbEp0Fault(void);
 static void Lpc11UsbControlEvent(const UsbCtrlrEvt_t *pEvent);
 
-static LpcUsbFsEp0_t s_Ep0 = {
-	.pReg = LPC_USB,
-	.pList = s_Memory.Command,
-	.pSetup = s_Memory.Setup,
-	.pBuf = s_Memory.Packet[0],
-	.BufSize = sizeof(s_Memory.Packet[0]),
-	.NbEp = 5,
-	.bHsList = false,
-	.Ready = Lpc11UsbControlReady,
-	.Fault = Lpc11UsbEp0Fault,
-};
+// Initialize these at runtime. Hardware register pointer casts in C++
+// may require dynamic initialization, which the bare-metal startup does not
+// guarantee before USB is configured.
+static LpcUsbFsEp0_t s_Ep0;
 static bool s_Prepared;
 static uint32_t s_AddedClocks;
 static bool s_Initialized;
@@ -106,12 +99,7 @@ static bool s_WakeAddedClock;
 // 0 idle, 1..3 waiting for the minimum bus-idle time, 4 signalling resume.
 static uint8_t s_WakeFrames;
 
-static LpcUsbFsData_t s_Data = {
-	.pEp0 = &s_Ep0,
-	.pPrepared = &s_Prepared,
-	.pClosing = &s_Closing,
-	.Irq = USB_IRQn,
-};
+static LpcUsbFsData_t s_Data;
 
 static bool Lpc11UsbRetire(uint32_t Mask);
 static void Lpc11UsbWakeCancel(void);
@@ -286,6 +274,19 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 		return false;
 	}
 	s_Initialized = false;
+	s_Ep0.pReg = LPC_USB;
+	s_Ep0.pList = s_Memory.Command;
+	s_Ep0.pSetup = s_Memory.Setup;
+	s_Ep0.pBuf = s_Memory.Packet[0];
+	s_Ep0.BufSize = sizeof(s_Memory.Packet[0]);
+	s_Ep0.NbEp = 5;
+	s_Ep0.bHsList = false;
+	s_Ep0.Ready = Lpc11UsbControlReady;
+	s_Ep0.Fault = Lpc11UsbEp0Fault;
+	s_Data.pEp0 = &s_Ep0;
+	s_Data.pPrepared = &s_Prepared;
+	s_Data.pClosing = &s_Closing;
+	s_Data.Irq = USB_IRQn;
 	LpcUsbFsDataInit(&s_Data);
 	if (s_VbusInt >= 0)
 		IOPinDisableInterrupt(s_VbusInt);
