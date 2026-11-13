@@ -33,13 +33,16 @@ class UartRxSourceChecks(unittest.TestCase):
         self.assertNotIn("NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;", rx)
         self.assertIn("dev->RxDmaSize", rx)
 
-    def test_polling_dma_uses_single_byte_completion(self):
+    def test_polling_dma_waits_for_full_buffer_completion(self):
         init = self.source.split("bool UARTInit(", 1)[1]
-        self.assertIn("pCfg->bIntMode ? NRFX_UART_RXDMA_SIZE : 1U", init)
-        self.assertIn("RxDmaSize", self.source)
-        end = self.source.split("static void nRFUARTRxDmaEnd(", 1)[1]
-        end = end.split("static void nRFUARTPollRx(", 1)[0]
-        self.assertIn("dev->RxDmaSize", end)
+        self.assertNotIn("RxDmaSize", self.source)
+        self.assertIn("NRFX_UART_RXDMA_SIZE", init)
+        rx = self.source.split("static int nRFUARTRxDataDma(", 1)[1]
+        rx = rx.split("static void nRFUARTStopRx(", 1)[0]
+        self.assertNotIn("NRFX_UARTE_TASKS_STOPRX", rx)
+        poll = self.source.split("static void nRFUARTPollRx(", 1)[1]
+        poll = poll.split("static void UartIrqHandler(", 1)[0]
+        self.assertIn("NRFX_UARTE_EVENTS_ENDRX", poll)
 
     def test_polling_rx_still_reads_hardware(self):
         rx = self.source.split("static int nRFUARTRxData(", 1)[1]
