@@ -61,6 +61,21 @@ class UartRxSourceChecks(unittest.TestCase):
         self.assertIn("UARTE_INTENSET_DMATXEND_Set", dma)
         self.assertIn("UART_INTENSET_TXDRDY_Set", irq)
 
+    def test_dma_byte_fast_path_keeps_queue_order_and_isr_lock(self):
+        dma = self.source.split("static int nRFUARTTxDataDma(", 1)[1]
+        dma = dma.split("static void nRFUARTStopTx(", 1)[0]
+        fast = dma.split("if (Datalen == 1)", 1)[1]
+        fast = fast.split("while (Datalen > 0 && rtry-- > 0)", 1)[0]
+        self.assertIn("state = DisableInterrupt();", fast)
+        self.assertIn("dev->pUartDev->bTxReady &&", fast)
+        self.assertIn("CFifoUsed(dev->pUartDev->hTxFifo) == 0", fast)
+        self.assertIn("dev->TxDmaMem[0] = *pData;", fast)
+        self.assertIn("NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;", fast)
+        self.assertIn("EnableInterrupt(state);", fast)
+        self.assertLess(fast.index("dev->TxDmaMem[0] = *pData;"),
+                        fast.index("NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;"))
+        self.assertIn("CFifoPutMultiple", dma)
+
     def test_tx_callback_selected_by_dma_mode(self):
         init = self.source.split("bool UARTInit(", 1)[1]
         self.assertIn("pDev->DevIntrf.TxData = nRFUARTTxDataDma;", init)
