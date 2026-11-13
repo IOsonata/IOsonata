@@ -224,8 +224,6 @@ def parse_args() -> argparse.Namespace:
                    help="Baud rate (default: 1000000)")
     p.add_argument("--read-size", type=int, default=4096,
                    help="Bytes per serial read (default: 4096)")
-    p.add_argument("--capture-seconds", type=float, default=0.0,
-                   help="Capture without PRBS checking, then validate afterward (e.g., 30)")
     p.add_argument("--report-interval", type=float, default=1.0,
                    help="Status report interval in seconds (default: 1.0)")
     p.add_argument("--dtr", choices=("on", "off"), default="on",
@@ -293,61 +291,11 @@ def report(chk, rate, average, oof_interval, count_interval):
         print("  receiver out of frame: UART decoding may be misaligned; reset the board if this persists")
 
 
-def capture_benchmark(comm, args):
-    """Measure received bytes in real elapsed time; validate only afterward.
-
-    A bounded memory capture avoids per-byte PRBS work in the timed loop.
-    The first block establishes synchronization and is excluded from the rate.
-    """
-    blocks = []
-    total = 0
-    start_time = None
-    start_count = 0
-    end_time = None
-
-    print("Capturing for %.1f seconds without PRBS processing..." % args.capture_seconds)
-    try:
-        while True:
-            data = comm.read(args.read_size)
-            now = time.perf_counter()
-            if data:
-                blocks.append(data)
-                total += len(data)
-                if start_time is None:
-                    start_time = now
-                    start_count = total
-                end_time = now
-            if start_time is not None and now - start_time >= args.capture_seconds:
-                break
-    except KeyboardInterrupt:
-        print("Capture interrupted; validating collected bytes.")
-
-    if start_time is None or end_time is None or end_time <= start_time:
-        print("No measurable UART data captured.")
-        return 1
-
-    elapsed = end_time - start_time
-    received = total - start_count
-    print("Captured %d bytes; measured %d bytes in %.3f s: %.2f B/s" %
-          (total, received, elapsed, received / elapsed))
-    print("Validating PRBS outside the acquisition interval...")
-    chk = PrbsCheck()
-    for block in blocks:
-        chk.feed(block)
-    chk.finish()
-    report(chk, received / elapsed, received / elapsed, 0, None)
-    return 0
-
-
 def main():
     args = parse_args()
 
     if args.read_size <= 0:
         print("ERROR: --read-size must be greater than zero", file=sys.stderr)
-        return 2
-
-    if args.capture_seconds < 0 or args.capture_seconds > 120:
-        print("ERROR: --capture-seconds must be between 0 and 120", file=sys.stderr)
         return 2
 
     if args.report_interval <= 0:
@@ -369,12 +317,6 @@ def main():
         return 2
 
     comm.reset_input_buffer()
-    if args.capture_seconds:
-        try:
-            return capture_benchmark(comm, args)
-        finally:
-            comm.close()
-
     chk = PrbsCheck()
 
     try:
