@@ -1017,6 +1017,35 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 		return 0;
 	}
 
+#if defined(NRF52_SERIES)
+	// Avoid FIFO enqueue/dequeue for an idle single-byte DMA transfer.
+	// Only the foreground-only path may retire ENDTX without a callback.
+	if (Datalen == 1 && pDev->bIntEn && dev->pUartDev->EvtCallback == NULL)
+	{
+		state = DisableInterrupt();
+		if (CFifoUsed(dev->pUartDev->hTxFifo) == 0)
+		{
+			if (NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) ||
+				dev->pDmaReg->EVENTS_TXSTOPPED)
+			{
+				nRFUARTPollTx(dev);
+			}
+			if (dev->pUartDev->bTxReady)
+			{
+				dev->pUartDev->bTxReady = false;
+				dev->TxDmaMem[0] = *pData;
+				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = 1;
+				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+				dev->pDmaReg->INTENCLR = UARTE_INTENSET_ENDTX_Msk;
+				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
+				EnableInterrupt(state);
+				return 1;
+			}
+		}
+		EnableInterrupt(state);
+	}
+#endif
+
 	while (Datalen > 0 && rtry-- > 0)
 	{
 		state = DisableInterrupt();
