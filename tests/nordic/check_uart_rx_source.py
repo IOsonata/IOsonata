@@ -51,6 +51,16 @@ class UartRxSourceChecks(unittest.TestCase):
         self.assertIn("pBuff[cnt] = (uint8_t)dev->pReg->RXD;", rx)
         self.assertNotIn("NRFX_UARTE_TASKS_STOPRX", rx)
 
+    def test_uarte_dma_does_not_enable_txdrdy_interrupt(self):
+        init = self.source.split("if (pCfg->bIntMode)", 1)[1]
+        irq = init.split("switch (devno)", 1)[0]
+        dma = irq.split("if (pDev->DevIntrf.bDma == true)", 1)[1]
+        dma = dma.split("else\\n#endif", 1)[0]
+        self.assertNotIn("UARTE_INTENSET_TXDRDY_Set", dma)
+        self.assertIn("UARTE_INTENSET_ENDTX_Set", dma)
+        self.assertIn("UARTE_INTENSET_DMATXEND_Set", dma)
+        self.assertIn("UART_INTENSET_TXDRDY_Set", irq)
+
     def test_tx_callback_selected_by_dma_mode(self):
         init = self.source.split("bool UARTInit(", 1)[1]
         self.assertIn("pDev->DevIntrf.TxData = nRFUARTTxDataDma;", init)
