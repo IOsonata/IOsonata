@@ -51,6 +51,18 @@ class UartRxSourceChecks(unittest.TestCase):
         self.assertIn("pBuff[cnt] = (uint8_t)dev->pReg->RXD;", rx)
         self.assertNotIn("NRFX_UARTE_TASKS_STOPRX", rx)
 
+    def test_polling_tx_direct_fast_path_preserves_fifo_order(self):
+        tx = self.source.split("static int nRFUARTTxData(", 1)[1]
+        tx = tx.split("static int nRFUARTTxDataDma(", 1)[0]
+        self.assertIn("nRFUARTPollLegacyTx(dev);", tx)
+        self.assertIn("CFifoUsed(dev->pUartDev->hTxFifo) == 0", tx)
+        self.assertIn("dev->pReg->TXD = *pData;", tx)
+        self.assertIn("dev->pUartDev->bTxReady = false;", tx)
+        self.assertLess(tx.index("CFifoUsed(dev->pUartDev->hTxFifo) == 0"),
+                        tx.index("dev->pReg->TXD = *pData;"))
+        self.assertLess(tx.index("dev->pReg->TXD = *pData;"),
+                        tx.index("while (Datalen > 0 && rtry-- > 0)"))
+
     def test_tx_callback_selected_by_dma_mode(self):
         init = self.source.split("bool UARTInit(", 1)[1]
         self.assertIn("pDev->DevIntrf.TxData = nRFUARTTxDataDma;", init)
