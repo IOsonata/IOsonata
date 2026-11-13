@@ -132,7 +132,7 @@ int main()
 	{
 		// NOTE : NRFX_UARTE_TX_BLOCKING is extremely slow
 #ifdef BYTE_MODE
-		if (nrfx_uarte_tx(&g_Uarte, &d, 1) == NRF_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, &d, 1, NRFX_UARTE_TX_LINK) == NRF_SUCCESS)
 		{
 			//while (s_bTxDone == false);
 			// If success send next code
@@ -146,7 +146,7 @@ int main()
 		}
 
 		s_bTxDone = false;
-		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) == NRFX_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, NRFX_UARTE_TX_LINK) == NRFX_SUCCESS)
 		{
 			while (s_bTxDone == false);
 		}
