@@ -232,7 +232,7 @@ void LpcUsbFsEp0SetAddress(LpcUsbFsEp0_t *pEp0, uint8_t Address)
 
 static void LpcUsbFsEp0Complete(LpcUsbFsEp0_t *pEp0, bool In, uint16_t Length, bool Cancelled)
 {
-	UsbCtrlrEvt_t event = {0};
+	UsbCtrlrEvt_t event = {};
 	event.Type = USB_CTRLR_EVT_XFER_CMPL;
 	event.Xfer.EpAddr = In ? 0x80U : 0U;
 	event.Xfer.Length = Length;
@@ -271,7 +271,7 @@ static void LpcUsbFsEp0Setup(LpcUsbFsEp0_t *pEp0, uint32_t Pending)
 		if (!pEp0->Ready() || !pEp0->Enabled || pEp0->Generation != generation)
 			return;
 	}
-	UsbCtrlrEvt_t event = {0};
+	UsbCtrlrEvt_t event = {};
 	event.Type = USB_CTRLR_EVT_SETUP;
 	__DMB();
 	memcpy(&event.Setup, pEp0->pSetup, sizeof(event.Setup));

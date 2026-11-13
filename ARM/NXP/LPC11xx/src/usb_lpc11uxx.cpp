@@ -582,7 +582,7 @@ static void Lpc11UsbBusReset(uint32_t Status, bool Detached)
 		(clearSetup ? LPC11_USB_SETUP : 0U));
 	if (!clearSetup && (LPC_USB->DEVCMDSTAT & LPC11_USB_SETUP) != 0U)
 		LPC_USB->INTSETSTAT = 1U;
-	UsbCtrlrEvt_t event = {0};
+	UsbCtrlrEvt_t event = {};
 	event.Type = USB_CTRLR_EVT_RESET;
 	UsbDevProcessEvent(0, &event);
 }
@@ -627,7 +627,7 @@ void USB_IRQHandler(void)
 			UsbProcessQue(0);
 		if (!s_Detached && (status & LPC11_USB_SUSPEND_CHANGE) != 0U)
 		{
-			UsbCtrlrEvt_t event = {0};
+			UsbCtrlrEvt_t event = {};
 			event.Type = (status & (1U << 17)) != 0U ?
 				USB_CTRLR_EVT_SUSPEND : USB_CTRLR_EVT_RESUME;
 			UsbDevProcessEvent(0, &event);
@@ -646,7 +646,7 @@ void USB_IRQHandler(void)
 		Lpc11UsbWakeFrame();
 		if (s_SofEnabled)
 		{
-			UsbCtrlrEvt_t event = {0};
+			UsbCtrlrEvt_t event = {};
 			event.Type = USB_CTRLR_EVT_SOF;
 			event.FrameNo = LPC_USB->INFO & 0x7FFU;
 			UsbDevProcessEvent(0, &event);
