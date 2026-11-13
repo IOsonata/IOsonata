@@ -993,6 +993,29 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 		return 0;
 	}
 
+	// A byte-oriented producer can start an idle DMA directly. Avoid a
+	// FIFO reserve, copy, release and readback for this common case.
+	// Keep the readiness check and STARTTX atomic with the ENDTX ISR.
+	if (Datalen == 1)
+	{
+		state = DisableInterrupt();
+		if (dev->pUartDev->bTxReady &&
+			CFifoUsed(dev->pUartDev->hTxFifo) == 0)
+		{
+			dev->pUartDev->bTxReady = false;
+			dev->TxDmaMem[0] = *pData;
+#if defined(NRF54L_SERIES)
+			dev->TxDmaLen = 1U;
+#endif
+			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = 1;
+			NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+			NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
+			EnableInterrupt(state);
+			return 1;
+		}
+		EnableInterrupt(state);
+	}
+
 	while (Datalen > 0 && rtry-- > 0)
 	{
 		state = DisableInterrupt();
