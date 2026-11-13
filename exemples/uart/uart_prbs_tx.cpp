@@ -48,9 +48,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 //#define DEMO_C	// Select demo C code
+// Default is the historical byte-at-a-time TX benchmark.
+// Set UART_PRBS_BLOCK_MODE=1 to benchmark queued DMA blocks instead.
+#if !defined(UART_PRBS_BLOCK_MODE) || !UART_PRBS_BLOCK_MODE
 #define BYTE_MODE
+#endif
 
-#define TEST_BUFSIZE		16
+#ifndef UART_PRBS_TX_BUFSIZE
+#define UART_PRBS_TX_BUFSIZE	16
+#endif
+#define TEST_BUFSIZE		UART_PRBS_TX_BUFSIZE
 
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE 		1000000
