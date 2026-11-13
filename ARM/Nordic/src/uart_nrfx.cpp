@@ -173,6 +173,7 @@ typedef struct __nRF_UART_Dev {
 	uint32_t CtsPin;
 	uint32_t RtsPin;
 	uint32_t RxDmaCnt;
+	uint32_t RxDmaSize;
 #if defined(NRF54L_SERIES)
 	uint32_t TxDmaLen;
 #endif
@@ -416,7 +417,7 @@ static void nRFUARTRxDmaEnd(nRFUartDev_t * const dev)
 		l -= n;
 	}
 
-	if (CFifoAvail(dev->pUartDev->hRxFifo) < NRFX_UART_RXDMA_SIZE)
+	if (CFifoAvail(dev->pUartDev->hRxFifo) < (int)dev->RxDmaSize)
 	{
 		dev->pUartDev->bRxReady = true;
 	}
@@ -882,12 +883,8 @@ static int nRFUARTRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &l);
 		if (p == NULL)
 		{
-#if !defined(UARTE_CONFIG_FRAMETIMEOUT_Msk)
-			if (pDev->bIntEn == false && dev->RxDmaCnt > 0)
-			{
-				NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;
-			}
-#endif
+			// Polling mode completes one-byte DMA blocks instead of
+			// stopping the receiver in the middle of an incoming frame.
 			break;
 		}
 		memcpy(pBuff, p, l);
@@ -898,10 +895,10 @@ static int nRFUARTRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen
 	EnableInterrupt(state);
 
 	if (dev->pUartDev->bRxReady &&
-		CFifoAvail(dev->pUartDev->hRxFifo) >= NRFX_UART_RXDMA_SIZE)
+		CFifoAvail(dev->pUartDev->hRxFifo) >= (int)dev->RxDmaSize)
 	{
 		dev->pUartDev->bRxReady = false;
-		NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = NRFX_UART_RXDMA_SIZE;
+		NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = dev->RxDmaSize;
 		NRFX_UARTE_RXD_PTR(dev->pDmaReg) = (uint32_t)dev->RxDmaMem;
 		NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
 	}
@@ -1105,7 +1102,7 @@ static void nRFUARTEnable(DevIntrf_t * const pDev)
 		dev->pDmaReg->PSEL.RTS = dev->RtsPin;
 
 		dev->pDmaReg->ENABLE |= (UARTE_ENABLE_ENABLE_Enabled << UARTE_ENABLE_ENABLE_Pos);
-		NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = NRFX_UART_RXDMA_SIZE;
+		NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = dev->RxDmaSize;
 		NRFX_UARTE_RXD_PTR(dev->pDmaReg) = (uint32_t)dev->RxDmaMem;
 		NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg) = 0;
 		NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
@@ -1465,6 +1462,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	s_nRFxUARTDev[devno].pUartDev->RxDropCnt = 0;
 	s_nRFxUARTDev[devno].pUartDev->TxDropCnt = 0;
 	s_nRFxUARTDev[devno].RxDmaCnt = 0;
+	// Single-byte DMA in polling mode needs no STOPRX partial flush.
+	// IRQ mode retains the normal multi-byte DMA buffer.
+	s_nRFxUARTDev[devno].RxDmaSize = pCfg->bIntMode ? NRFX_UART_RXDMA_SIZE : 1U;
 #if defined(NRF54L_SERIES)
 	s_nRFxUARTDev[devno].TxDmaLen = 0U;
 #endif
@@ -1535,7 +1535,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		// We need to transfer only 1 byte at a time for Rx. Otherwise, it will not interrupt
 		// until buffer is filled. It will be blocked.
 		// The RX timeout logic of the nRF series is implemented wrong. We cannot use it.
-		NRFX_UARTE_RXD_MAXCNT(s_nRFxUARTDev[devno].pDmaReg) = NRFX_UART_RXDMA_SIZE;
+		NRFX_UARTE_RXD_MAXCNT(s_nRFxUARTDev[devno].pDmaReg) = s_nRFxUARTDev[devno].RxDmaSize;
 		NRFX_UARTE_RXD_PTR(s_nRFxUARTDev[devno].pDmaReg) = (uint32_t)s_nRFxUARTDev[devno].RxDmaMem;
 		NRFX_UARTE_EVENTS_ENDRX(s_nRFxUARTDev[devno].pDmaReg) = 0;
 		NRFX_UARTE_TASKS_STARTRX(s_nRFxUARTDev[devno].pDmaReg) = 1;
