@@ -173,6 +173,11 @@ typedef struct __nRF_UART_Dev {
 	uint32_t CtsPin;
 	uint32_t RtsPin;
 	uint32_t RxDmaCnt;
+#if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
+	volatile uint32_t TxDmaTransfers;
+	volatile uint32_t TxDmaBytes;
+	volatile uint32_t TxDmaSingles;
+#endif
 #if defined(NRF54L_SERIES)
 	uint32_t TxDmaLen;
 #endif
@@ -617,6 +622,14 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 #endif
 			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
 			NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+#if defined(NRF52_SERIES)
+			dev->TxDmaTransfers++;
+			dev->TxDmaBytes += (uint32_t)l;
+			if (l == 1)
+			{
+				dev->TxDmaSingles++;
+			}
+#endif
 			NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 		}
 		else
@@ -1048,6 +1061,14 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 #endif
 				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
 				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+#if defined(NRF52_SERIES)
+				dev->TxDmaTransfers++;
+				dev->TxDmaBytes += (uint32_t)l;
+				if (l == 1)
+				{
+					dev->TxDmaSingles++;
+				}
+#endif
 				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 			}
 		}
@@ -1106,6 +1127,11 @@ static void nRFUARTEnable(DevIntrf_t * const pDev)
 	dev->pUartDev->RxDropCnt = 0;
 	dev->pUartDev->TxDropCnt = 0;
 	dev->RxDmaCnt = 0;
+#if defined(NRF52_SERIES) && defined(UARTE_PRESENT)
+	dev->TxDmaTransfers = 0;
+	dev->TxDmaBytes = 0;
+	dev->TxDmaSingles = 0;
+#endif
 
 	CFifoFlush(dev->pUartDev->hTxFifo);
 
