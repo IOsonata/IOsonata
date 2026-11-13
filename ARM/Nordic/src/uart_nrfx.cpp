@@ -933,28 +933,20 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 		return 0;
 	}
 
-	if (pDev->bIntEn == false)
+	if (pDev->bIntEn == false && CFifoUsed(dev->pUartDev->hTxFifo) == 0)
 	{
-		// Poll a completed byte before accepting more data.
-		nRFUARTPollLegacyTx(dev);
-
-		// Fast path for byte-wise producers such as uart_prbs_tx: when
-		// no bytes are queued and TXD can accept a byte, skip both FIFO
-		// operations and the interrupt-masking section.
-		if (Datalen > 0 && CFifoUsed(dev->pUartDev->hTxFifo) == 0 &&
-			(dev->pUartDev->bTxReady || dev->pReg->EVENTS_TXDRDY))
+		// Polling does not need a software TX queue when no previous
+		// bytes are pending. Write one byte directly when TXD is ready.
+		// A busy transmitter accepts nothing; the caller retries.
+		if (Datalen > 0 && (dev->pUartDev->bTxReady ||
+			dev->pReg->EVENTS_TXDRDY))
 		{
 			dev->pReg->EVENTS_TXDRDY = 0;
 			dev->pUartDev->bTxReady = false;
 			dev->pReg->TXD = *pData;
-			pData++;
-			Datalen--;
-			cnt++;
-			if (Datalen == 0)
-			{
-				return cnt;
-			}
+			return 1;
 		}
+		return 0;
 	}
 
 	while (Datalen > 0 && rtry-- > 0)
