@@ -45,7 +45,7 @@ SOFTWARE.
 #define IBK_NRF54L15		2
 
 #ifndef BOARD
-#define BOARD			NORDIC_NRF54L15_DK
+#define BOARD			IBK_NRF54L15
 #endif
 
 // The console is UARTE30 on both boards.
