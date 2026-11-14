@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------
-File   : uart_lpcxx.c
+File   : uart_lpcxx.cpp
 
 Author : Hoang Nguyen Hoan          Jan. 16, 2012
 
@@ -42,6 +42,11 @@ Modified by          Date              Description
 #define LPCUART_CFIFO_SIZE		CFIFO_MEMSIZE(16)
 #define LPCUART_WAIT_COUNT		100000U
 #define LPCUART_DIV_MAX			65535U
+// Passes of the interrupt handler over the interrupt sources before it
+// returns, when new ones come up while it runs
+#define LPCUART_IRQ_PASSES		4
+
+#define LPCUART_LSR_ERR			(LPCUART_LSR_OE | LPCUART_LSR_PE | LPCUART_LSR_FE | LPCUART_LSR_BI)
 
 // One state and pair of default buffers per physical UART.
 typedef struct {
@@ -72,15 +77,46 @@ static void LpcUARTEnable(DevIntrf_t *pDev);
 static void LpcUARTDisable(DevIntrf_t *pDev);
 static void LpcUARTReset(DevIntrf_t *pDev);
 static void *LpcUARTGetHandle(DevIntrf_t *pDev);
-static void LpcUARTTxFill(LpcUartDev_t *pDev);
+static uint32_t LpcUARTTxFill(LpcUartDev_t *pDev);
 static uint32_t LpcUARTRxFill(LpcUartDev_t *pDev);
+
+// Count the receive errors of one line status value and return them as line
+// state flags. Reading LSR clears the error flags, so every read of LSR goes
+// through here : a read on the transmit side would otherwise drop an overrun
+// before the receive side sees it. Called only when an error flag is set.
+static uint32_t __attribute__((noinline)) LpcUARTLineErr(UARTDev_t *pUart, uint32_t Lsr)
+{
+	uint32_t errors = 0;
+
+	if (Lsr & LPCUART_LSR_OE)
+	{
+		pUart->RxOvrErrCnt++;
+		errors |= UART_LINESTATE_OVR;
+	}
+	if (Lsr & LPCUART_LSR_PE)
+	{
+		pUart->ParErrCnt++;
+		errors |= UART_LINESTATE_PARERR;
+	}
+	if (Lsr & LPCUART_LSR_FE)
+	{
+		pUart->FramErrCnt++;
+		errors |= UART_LINESTATE_FRMERR;
+	}
+	if (Lsr & LPCUART_LSR_BI)
+	{
+		errors |= UART_LINESTATE_BRK;
+	}
+
+	return errors;
+}
 
 // Fixed 16x sampling. Compare both neighbouring divisors for every legal
 // fraction. DLL must be at least 3 when DLM is zero and DIVADDVAL is nonzero.
 // Compare rational errors without rounding rates or overflowing a product.
 static LpcUartRate_t LpcUARTRateFind(uint32_t Clock, uint32_t Rate)
 {
-	LpcUartRate_t result = {0};
+	LpcUartRate_t result = {0, 0, 0};
 	uint64_t bestWhole = UINT64_MAX;
 	uint64_t bestRem = 0;
 	uint32_t bestDen = 1;
@@ -211,12 +247,24 @@ static uint32_t LpcUARTSetRate(DevIntrf_t *pDev, uint32_t Rate)
 
 // Called with interrupts masked, and only writes when the hardware FIFO
 // is empty. THRE then guarantees room for a complete 16-byte burst.
-static void LpcUARTTxFill(LpcUartDev_t *pDev)
+// Returns the receive errors found in the line status it had to read.
+static uint32_t LpcUARTTxFill(LpcUartDev_t *pDev)
 {
 	int no = pDev->Cfg.DevNo;
 	UARTDev_t *uart = pDev->pUartDev;
+	uint32_t lsr = LPCUART_READ(no, LSR);
+	uint32_t errors = 0;
 
-	if (LPCUART_READ(no, LSR) & LPCUART_LSR_THRE)
+	if (lsr & LPCUART_LSR_ERR)
+	{
+		errors = LpcUARTLineErr(uart, lsr);
+	}
+	// The FIFO is known to be empty only when a get comes back empty. Until
+	// then there may be more to send : the transmit interrupt stays on and
+	// the next one finds out. No call to count the FIFO is needed.
+	bool more = true;
+
+	if (lsr & LPCUART_LSR_THRE)
 	{
 		for (int i = 0; i < LPCUART_FIFO_DEPTH; i++)
 		{
@@ -224,17 +272,21 @@ static void LpcUARTTxFill(LpcUartDev_t *pDev)
 
 			if (data < 0)
 			{
+				more = false;
 				break;
 			}
 			LPCUART_WRITE(no, THR, (uint8_t)data);
+			// Something is in the transmitter now
+			lsr &= ~LPCUART_LSR_THRE;
 		}
 	}
 	uint32_t ier = LPCUART_READ(no, IER);
-	bool pending = CFifoUsed(uart->hTxFifo) != 0 ||
-		(LPCUART_READ(no, LSR) & LPCUART_LSR_THRE) == 0;
+	bool pending = more || (lsr & LPCUART_LSR_THRE) == 0;
 
 	uart->bTxReady = !pending;
 	LPCUART_WRITE(no, IER, pending ? ier | LPCUART_IER_THRE : ier & ~LPCUART_IER_THRE);
+
+	return errors;
 }
 
 // Bound the work even if new bytes arrive continuously. Read RBR even when
@@ -242,47 +294,39 @@ static void LpcUARTTxFill(LpcUartDev_t *pDev)
 static uint32_t LpcUARTRxFill(LpcUartDev_t *pDev)
 {
 	UARTDev_t *uart = pDev->pUartDev;
+	hCFifo_t fifo = uart->hRxFifo;
 	int no = pDev->Cfg.DevNo;
 	uint32_t errors = 0;
+	// Per call, not per byte
+	uint32_t mask = (1U << uart->DataBits) - 1U;
+	uint32_t dropped = fifo->DropCnt;
 
 	for (int i = 0; i < LPCUART_FIFO_DEPTH; i++)
 	{
 		uint32_t lsr = LPCUART_READ(no, LSR);
 
-		if (lsr & LPCUART_LSR_OE)
+		if (lsr & LPCUART_LSR_ERR)
 		{
-			uart->RxOvrErrCnt++;
-			errors |= UART_LINESTATE_OVR;
-		}
-		if (lsr & LPCUART_LSR_PE)
-		{
-			uart->ParErrCnt++;
-			errors |= UART_LINESTATE_PARERR;
-		}
-		if (lsr & LPCUART_LSR_FE)
-		{
-			uart->FramErrCnt++;
-			errors |= UART_LINESTATE_FRMERR;
-		}
-		if (lsr & LPCUART_LSR_BI)
-		{
-			errors |= UART_LINESTATE_BRK;
+			errors |= LpcUARTLineErr(uart, lsr);
 		}
 		if ((lsr & LPCUART_LSR_RDR) == 0)
 		{
 			break;
 		}
 
-		uint8_t data = LPCUART_READ(no, RBR) & ((1U << uart->DataBits) - 1U);
-		uint32_t dropped = uart->hRxFifo->DropCnt;
-
-		if (!CFifoPutByte(uart->hRxFifo, data))
+		if (CFifoPutByte(fifo, LPCUART_READ(no, RBR) & mask))
 		{
+			// The reader clears it when it finds the FIFO empty
+			uart->bRxReady = true;
+		}
+		else
+		{
+			// Blocking FIFO full
 			uart->RxDropCnt++;
 		}
-		uart->RxDropCnt += uart->hRxFifo->DropCnt - dropped;
 	}
-	uart->bRxReady = CFifoUsed(uart->hRxFifo) != 0;
+	// Non blocking FIFO : blocks pushed out to make room
+	uart->RxDropCnt += fifo->DropCnt - dropped;
 
 	return errors;
 }
@@ -301,31 +345,48 @@ void LpcUARTIrqHandler(int DevNo)
 		return;
 	}
 	uint32_t state = DisableInterrupt();
-	uint32_t iir = LPCUART_READ(DevNo, IIR);
-	uint32_t id = iir & LPCUART_IIR_ID_MASK;
 	uint32_t errors = 0;
 	bool rx = false;
+	bool rxtimeout = false;
 	bool tx = false;
 	bool modem = false;
 
-	if ((iir & LPCUART_IIR_STATUS) == 0)
+	// Serve the sources that are pending now and those that come up while
+	// this runs, instead of one source per interrupt entry. At high baud
+	// rates receive and transmit are often pending together.
+	for (int pass = 0; pass < LPCUART_IRQ_PASSES; pass++)
 	{
-		switch (id)
+		uint32_t iir = LPCUART_READ(DevNo, IIR);
+
+		if (iir & LPCUART_IIR_STATUS)
 		{
-			case LPCUART_IIR_ID_RLS:
-			case LPCUART_IIR_ID_RDA:
-			case LPCUART_IIR_ID_CTIMOUT:
-				errors = LpcUARTRxFill(dev);
-				rx = true;
-				break;
-			case LPCUART_IIR_ID_THRE:
-				LpcUARTTxFill(dev);
-				tx = true;
-				break;
-			case LPCUART_IIR_ID_MS:
-				uart->LineState = LpcUARTModemGet(DevNo);
-				modem = true;
-				break;
+			// Nothing pending
+			break;
+		}
+
+		// if / else, not a switch : the compiler may turn a switch into a
+		// call to a helper that stays in flash
+		uint32_t id = iir & LPCUART_IIR_ID_MASK;
+
+		if (id == LPCUART_IIR_ID_THRE)
+		{
+			errors |= LpcUARTTxFill(dev);
+			tx = true;
+		}
+		else if (id == LPCUART_IIR_ID_MS)
+		{
+			uart->LineState = LpcUARTModemGet(DevNo);
+			modem = true;
+		}
+		else if (id == LPCUART_IIR_ID_RLS || id == LPCUART_IIR_ID_RDA ||
+				 id == LPCUART_IIR_ID_CTIMOUT)
+		{
+			if (id == LPCUART_IIR_ID_CTIMOUT)
+			{
+				rxtimeout = true;
+			}
+			errors |= LpcUARTRxFill(dev);
+			rx = true;
 		}
 	}
 	EnableInterrupt(state);
@@ -340,7 +401,7 @@ void LpcUARTIrqHandler(int DevNo)
 		}
 		if (rx)
 		{
-			UART_EVT evt = id == LPCUART_IIR_ID_CTIMOUT ? UART_EVT_RXTIMEOUT : UART_EVT_RXDATA;
+			UART_EVT evt = rxtimeout ? UART_EVT_RXTIMEOUT : UART_EVT_RXDATA;
 
 			uart->EvtCallback(uart, evt, NULL, CFifoUsed(uart->hRxFifo));
 		}
@@ -360,24 +421,63 @@ static int LpcUARTRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
 	{
 		return 0;
 	}
-	while (count < BuffLen)
-	{
-		uint32_t state = DisableInterrupt();
-		int data = CFifoGetByte(dev->pUartDev->hRxFifo);
+	UARTDev_t *uart = dev->pUartDev;
+	hCFifo_t fifo = uart->hRxFifo;
 
-		if (data < 0)
+	if (fifo->bBlocking)
+	{
+		// Copy in blocks, without masking interrupts for each byte. The
+		// blocks are released after the copy : released before, a full FIFO
+		// would let the interrupt write over them while they are copied.
+		while (count < BuffLen)
 		{
-			LpcUARTRxFill(dev);
-			data = CFifoGetByte(dev->pUartDev->hRxFifo);
+			int len = BuffLen - count;
+			uint8_t *p = CFifoPeekMultiple(fifo, &len);
+
+			if (p == NULL)
+			{
+				// Software FIFO empty, take what the hardware holds below
+				// its interrupt level
+				uint32_t state = DisableInterrupt();
+
+				LpcUARTRxFill(dev);
+				EnableInterrupt(state);
+
+				len = BuffLen - count;
+				p = CFifoPeekMultiple(fifo, &len);
+				if (p == NULL)
+				{
+					break;
+				}
+			}
+			memcpy(&pBuff[count], p, len);
+			CFifoRelease(fifo, len);
+			count += len;
 		}
-		dev->pUartDev->bRxReady = CFifoUsed(dev->pUartDev->hRxFifo) != 0;
-		EnableInterrupt(state);
-		if (data < 0)
-		{
-			break;
-		}
-		pBuff[count++] = (uint8_t)data;
 	}
+	else
+	{
+		// The interrupt may push the oldest bytes out of a non blocking
+		// FIFO at any time, each byte is taken with interrupts masked
+		while (count < BuffLen)
+		{
+			uint32_t state = DisableInterrupt();
+			int data = CFifoGetByte(fifo);
+
+			if (data < 0)
+			{
+				LpcUARTRxFill(dev);
+				data = CFifoGetByte(fifo);
+			}
+			EnableInterrupt(state);
+			if (data < 0)
+			{
+				break;
+			}
+			pBuff[count++] = (uint8_t)data;
+		}
+	}
+	uart->bRxReady = CFifoUsed(fifo) != 0;
 
 	return count;
 }
@@ -416,34 +516,56 @@ static int LpcUARTTxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 		return count;
 	}
 
+	// Queue with interrupts enabled : the space is reserved, filled, and only
+	// then published, so the interrupt never reads a byte that is not there
+	// yet. Interrupts were masked here for every 16 bytes together with the
+	// load of the hardware FIFO, which at a high baud rate is long enough to
+	// overrun the receiver. Two passes at most, the free space can wrap.
+	uint32_t dropped = uart->hTxFifo->DropCnt;
+
 	while (count < DataLen)
 	{
-		uint32_t state = DisableInterrupt();
-		uint32_t dropped = uart->hTxFifo->DropCnt;
 		int len = DataLen - count;
+		uint8_t *p = CFifoResvMultiple(uart->hTxFifo, &len);
 
-		if (len > LPCUART_FIFO_DEPTH)
-		{
-			len = LPCUART_FIFO_DEPTH;
-		}
-		uint8_t *buff = CFifoPutMultiple(uart->hTxFifo, &len);
-
-		if (buff != NULL)
-		{
-			memcpy(buff, pData + count, len);
-			count += len;
-		}
-
-		uart->TxDropCnt += uart->hTxFifo->DropCnt - dropped;
-		LpcUARTTxFill(dev);
-		EnableInterrupt(state);
-		if (buff == NULL)
+		if (p == NULL || len <= 0)
 		{
 			break;
 		}
+		memcpy(p, &pData[count], len);
+		CFifoPutMultiple(uart->hTxFifo, &len);
+		count += len;
 	}
 
+	// One short masked section to start the transmitter, the interrupt
+	// sends the rest
+	uint32_t state = DisableInterrupt();
+
+	uart->TxDropCnt += uart->hTxFifo->DropCnt - dropped;
+	LpcUARTTxFill(dev);
+	EnableInterrupt(state);
+
 	return count;
+}
+
+// Start sending data the caller put in the transmit FIFO itself, with
+// CFifoResvMultiple and CFifoPutMultiple on hTxFifo, for example a USB packet
+// read straight into the FIFO memory. Same as the end of the Tx call.
+void LpcUARTTxStart(UARTDev_t *pDev)
+{
+	if (pDev == NULL || pDev->DevIntrf.pDevData == NULL)
+	{
+		return;
+	}
+	LpcUartDev_t *dev = (LpcUartDev_t *)pDev->DevIntrf.pDevData;
+
+	if (dev->bEnabled && pDev->DevIntrf.bIntEn)
+	{
+		uint32_t state = DisableInterrupt();
+
+		LpcUARTTxFill(dev);
+		EnableInterrupt(state);
+	}
 }
 
 static bool LpcUARTStart(DevIntrf_t *pDev, uint32_t DevAddr)

@@ -85,9 +85,15 @@ static void uart_event_handler(nrfx_uarte_event_t const *p_event, void *ctx)
 }
 
 /*
- * Do not define UARTE0_UART0_IRQHandler() here when nrfx_prs.c is linked.
- * nrfx_prs owns the shared IRQ handler and dispatches it to nrfx_uarte.
+ * nrfx 4.x requires an explicit IRQ handler when PRS is disabled.
+ * When PRS is enabled, nrfx_prs owns the shared peripheral interrupt.
  */
+#if !NRFX_CHECK(NRFX_PRS_ENABLED)
+void UARTE0_UART0_IRQHandler(void)
+{
+	nrfx_uarte_irq_handler(&g_Uarte);
+}
+#endif
 
 static int UartInit(void)
 {

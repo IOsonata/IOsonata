@@ -82,6 +82,7 @@ def prbs8(curval):
 # Successor of every byte value, and the position of each PRBS value in the
 # sequence
 NEXT = [prbs8(v) for v in range(256)]
+NEXT_TABLE = bytes(NEXT)
 INDEX = {}
 _v = NEXT[PRBS_START]
 for _i in range(PRBS_PERIOD):
@@ -185,6 +186,17 @@ class PrbsCheck:
         self.anchor = None
 
     def feed(self, data):
+        # Fast path: validate a contiguous PRBS block in C, including the
+        # first byte against the previous block. Fall back to the existing
+        # recovery logic only when a discontinuity occurs.
+        if (data and self.synced and self.last is not None and
+                data[0] == NEXT[self.last] and
+                data[1:] == data[:-1].translate(NEXT_TABLE)):
+            self.last = data[-1]
+            self.prev = self.last
+            self.count += len(data)
+            return
+
         for c in data:
             if c > 0x7F and c != PRBS_START:
                 self.out_of_frame += 1

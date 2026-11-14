@@ -65,7 +65,7 @@ const app_uart_comm_params_t comm_params = {
 		UART_TX_PIN,
 		UART_RTS_PIN,
 		UART_CTS_PIN,
-		APP_UART_FLOW_CONTROL_ENABLED,//APP_UART_FLOW_CONTROL_DISABLED,
+		APP_UART_FLOW_CONTROL_DISABLED,
       false,
 	  NRF_UARTE_BAUDRATE_1000000
 };
@@ -84,30 +84,50 @@ void uart_error_handle(app_uart_evt_t * p_event)
 
 #else
 
-const nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(0);
-const nrfx_uarte_config_t g_UarteCfg = {
-	.rxd_pin = UART_RX_PIN,
-	.txd_pin = UART_TX_PIN,
-	.baudrate = NRF_UARTE_BAUDRATE_1000000,
-	.config = {
-		.hwfc = NRF_UARTE_HWFC_DISABLED,
-	},
-	.interrupt_priority = 1
-};
+static uint8_t s_CacheBuff[TEST_BUFSIZE];
+static nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(NRF_UARTE0);
 
-void uart_error_handle(nrfx_uarte_event_t const * p_event, void *ctx)
+static void uart_error_handle(nrfx_uarte_event_t const *p_event, void *ctx)
 {
-//	printf("Uarte Handler\r\n");
-	switch(p_event->type)
+	(void)ctx;
+
+	switch (p_event->type)
 	{
-		case NRFX_UARTE_EVT_TX_DONE: ///< Requested TX transfer completed.
+		case NRFX_UARTE_EVT_TX_DONE:
 			s_bTxDone = true;
 			break;
-		case NRFX_UARTE_EVT_RX_DONE: ///< Requested RX transfer completed.
-		 	 break;
-		case NRFX_UARTE_EVT_ERROR:   ///< Error reported by UART peripheral.
+		case NRFX_UARTE_EVT_RX_DONE:
+			break;
+		case NRFX_UARTE_EVT_ERROR:
+			break;
+		default:
 			break;
 	}
+}
+
+#if !NRFX_CHECK(NRFX_PRS_ENABLED)
+void UARTE0_UART0_IRQHandler(void)
+{
+	nrfx_uarte_irq_handler(&g_Uarte);
+}
+#endif
+
+static int UartInit(void)
+{
+	nrfx_uarte_config_t cfg =
+		NRFX_UARTE_DEFAULT_CONFIG(
+			(UART_TX_PORT << 5) | UART_TX_PIN,
+			(UART_RX_PORT << 5) | UART_RX_PIN
+		);
+
+	cfg.tx_cache.p_buffer = s_CacheBuff;
+	cfg.tx_cache.length = sizeof(s_CacheBuff);
+	cfg.baudrate = NRF_UARTE_BAUDRATE_1000000;
+	cfg.interrupt_priority = 1;
+	cfg.config.hwfc = NRF_UARTE_HWFC_DISABLED;
+	cfg.config.parity = NRF_UARTE_PARITY_EXCLUDED;
+
+	return nrfx_uarte_init(&g_Uarte, &cfg, uart_error_handle);
 }
 #endif
 
@@ -119,36 +139,39 @@ int main()
 
 #ifdef SDK_NRFX
 
-    err_code = nrfx_uarte_init(&g_Uarte, &g_UarteCfg, uart_error_handle);
-    if (err_code != NRF_SUCCESS)
-    {
-    	//printf("Error %x\n\r", err_code);
-    }
-
-    //sprintf(buff, "UART PRBS Test\n\r");
-    //while (nrfx_uarte_tx(&g_Uarte, buff, strlen(buff)) != NRFX_SUCCESS);
+	err_code = UartInit();
+	if (err_code != NRF_SUCCESS)
+	{
+		while (1)
+		{
+		}
+	}
 
 	while(1)
 	{
 		// NOTE : NRFX_UARTE_TX_BLOCKING is extremely slow
 #ifdef BYTE_MODE
-		if (nrfx_uarte_tx(&g_Uarte, &d, 1, NRFX_UARTE_TX_LINK/*NRFX_UARTE_TX_BLOCKING*/) == NRF_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, &d, 1, NRFX_UARTE_TX_BLOCKING) == NRF_SUCCESS)
 		{
 			//while (s_bTxDone == false);
 			// If success send next code
 			d = Prbs8(d);
 		}
 #else
+		uint8_t next = d;
 		for (int i = 0; i < TEST_BUFSIZE; i++)
 		{
-			d = Prbs8(d);
-			buff[i] = d;
+			next = Prbs8(next);
+			buff[i] = next;
 		}
 
 		s_bTxDone = false;
-		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, NRFX_UARTE_TX_LINK) == NRFX_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, 0) == NRFX_SUCCESS)
 		{
-			while (s_bTxDone == false);
+			d = next;
+			while (s_bTxDone == false)
+			{
+			}
 		}
 #endif
 	}
@@ -165,7 +188,7 @@ int main()
 
     while (1)
     {
-    	if (app_uart_put(d) == NRF_SUCCESS);
+    	if (app_uart_put(d) == NRF_SUCCESS)
     	{
 			// If success send next code
 			d = Prbs8(d);
