@@ -280,19 +280,7 @@ int main()
 	SystemRetRegWrite(0, cnt);
 	SysLogPrintf(SysLogGet(), "Start count %u, %d retention registers\r\n", (unsigned)cnt, SystemRetRegCount());
 
-#if defined(POWER_DEMO_STOP_ON_DEBUG_RESET) && POWER_DEMO_STOP_ON_DEBUG_RESET
-	if ((reason & SYSTEM_RESET_DEBUG) && !(reason & SYSTEM_RESET_WAKE_MSK))
-	{
-		SysLogPrintf(SysLogGet(),
-			"Debug reset 0x%08x: System OFF skipped to avoid reset loop\r\n",
-			(unsigned)reason);
-		(void)PowerDemoConsoleDrain();
-		while (1)
-		{
-			__WFE();
-		}
-	}
-#endif
+
 
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
 	// Check before writing the next pattern. Startup must leave RAM1 untouched.
