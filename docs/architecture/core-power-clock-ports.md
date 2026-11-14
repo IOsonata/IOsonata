@@ -21,7 +21,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | nRF52 | Existing dedicated implementation | Preserve SoftDevice/MPSL ownership and tested HFXO requests |
 | nRF53, nRF54L, nRF91 | Existing shared implementation, with per-core restrictions | Verify per-core and SDK configurations |
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
-| STM32 WBA | Missing from shared power implementation | Preserve radio clock ownership |
+| STM32 WBA | WBA65 standalone Standby, GPIO wake, reset reason and backup registers added on working branch; SRAM retention unsupported | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
 | SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Review runtime selection and oscillator initialization |
 | SAMD | Missing | Audit existing selectors and low-power clocks |
@@ -39,12 +39,20 @@ SRAM1/SRAM2 Standby retention. The standby mode is entered with PWR CR1
 LPMS and exits through reset. Radio Link Layer users must stop or enter the
 required deep-sleep mode before Standby.
 
-Port status: WBA2 MCU selection is recognized by stm32.h, but the generic
-power functions have not yet been implemented or linked into the WBA65
-Eclipse MCU library. Do not claim SystemPowerOff or RAM retention support
-until the CMSIS register definitions, wakeup mux and protection/security
-configuration have been matched to the WBA65 reference manual, and the
-source has passed target builds and hardware tests.
+Port status: WBA2 MCU selection is recognized by stm32.h. The WBA65
+working branch now has a separate system_power_stm32wba.cpp linked to the
+managed MCU library. It implements Standby entry through WFI, GPIO wakeup
+line routing/polarity on WUCR1/2/3, reset/wakeup reason, and 16 TAMP
+backup registers with write readback. It leaves SRAM retention unsupported
+rather than claim that an arbitrary RAM range is retained. No changes were
+made to the existing radio or clock drivers.
+
+The new WBA65 implementation is not yet compiled or exercised on hardware.
+In applications using Bluetooth, the radio stack must release its own power
+and timing resources before entering Standby. WBA2/WBA5 were not ported by
+this WBA65-specific source. Follow-up tests should cover reset causes,
+standby wake, both wakeup polarities, backup registers, and interactions
+with active radio/USB before merging.
 
 Reference: ST RM0515 (STM32WBA6), chapter 11 Power control.
 The earlier STM32WBA5 uses RM0493; its register and wakeup routing
