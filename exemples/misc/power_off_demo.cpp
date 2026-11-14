@@ -301,10 +301,40 @@ int main()
 
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP, IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
 
+#if defined(POWER_DEMO_PIN_DIAG) && POWER_DEMO_PIN_DIAG
+	SysLogPrintf(SysLogGet(), "Before delay: pin P%d.%02d = %d, idle = %d\r\n",
+		WAKE_BUT_PORT, WAKE_BUT_PIN,
+		IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN), s_WakeButIdle);
+#endif
 	msDelay(POWER_DEMO_DELAY);
 
-	// The button wakes the MCU when pressed, it must be released before power off
+#if defined(POWER_DEMO_PIN_DIAG) && POWER_DEMO_PIN_DIAG
+	SysLogPrintf(SysLogGet(), "After delay: pin P%d.%02d = %d\r\n",
+		WAKE_BUT_PORT, WAKE_BUT_PIN,
+		IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN));
+
+	// Avoid an infinite wait when the board's button input stays active.
+	int attempts = 200;
+	while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle &&
+		attempts-- > 0)
+	{
+		msDelay(10);
+	}
+	if (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle)
+	{
+		SysLogPrintf(SysLogGet(),
+			"Wake button not idle: P%d.%02d = %d, expected %d\r\n",
+			WAKE_BUT_PORT, WAKE_BUT_PIN,
+			IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN), s_WakeButIdle);
+		while (1)
+		{
+			__WFE();
+		}
+	}
+#else
+	// The button wakes the MCU when pressed, it must be released before power off.
 	while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle);
+#endif
 
 	if (SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
 	{
