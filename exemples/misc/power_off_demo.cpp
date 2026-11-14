@@ -78,6 +78,52 @@ SOFTWARE.
 static volatile uint32_t * const s_pRamRet =
 	(volatile uint32_t *)POWER_DEMO_RAM_RET_ADDR;
 
+static volatile uint32_t * const s_pRamDrop =
+	(volatile uint32_t *)POWER_DEMO_RAM_DROP_ADDR;
+
+#define RAM_TEST_PREPARED 0xA7U
+
+static uint32_t RamDropPattern(uint32_t Idx)
+{
+	return 0x6C39E2B5UL ^ (Idx * 0x85EBCA6BUL);
+}
+
+static bool RamDropCheck(void)
+{
+	uint32_t i;
+	uint32_t unchanged;
+	uint32_t count;
+
+	count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
+	unchanged = 0U;
+	for (i = 0; i < count; i++)
+	{
+		if (s_pRamDrop[i] == RamDropPattern(i))
+		{
+			unchanged++;
+		}
+	}
+
+	SysLogPrintf(SysLogGet(),
+		"RAM non-retention %s, %u/%u words unchanged\r\n",
+		unchanged == count ? "FAIL" : "PASS",
+		(unsigned)unchanged, (unsigned)count);
+
+	return unchanged != count;
+}
+
+static void RamDropWrite(void)
+{
+	uint32_t i;
+	uint32_t count;
+
+	count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
+	for (i = 0; i < count; i++)
+	{
+		s_pRamDrop[i] = RamDropPattern(i);
+	}
+}
+
 static uint32_t RamRetPattern(uint32_t Idx)
 {
 	return 0xA55A1234UL ^ (Idx * 0x9E3779B9UL);
@@ -209,9 +255,15 @@ int main()
 
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
 	// Check before writing the next pattern. Startup must leave RAM1 untouched.
-	if (reason & SYSTEM_RESET_WAKE_PIN)
+	if ((reason & SYSTEM_RESET_WAKE_PIN) &&
+		SystemRetRegRead(1) == RAM_TEST_PREPARED)
 	{
 		(void)RamRetCheck();
+		(void)RamDropCheck();
+	}
+	else
+	{
+		SysLogPrintf(SysLogGet(), "RAM test: preparing first cycle\r\n");
 	}
 
 	if (!SystemRamRetain(POWER_DEMO_RAM_RET_ADDR, POWER_DEMO_RAM_RET_SIZE, true))
@@ -222,9 +274,29 @@ int main()
 			__WFE();
 		}
 	}
+	if (!SystemRamRetain(POWER_DEMO_RAM_DROP_ADDR, POWER_DEMO_RAM_DROP_SIZE, false))
+	{
+		SysLogPrintf(SysLogGet(), "RAM non-retention configuration FAIL\r\n");
+		while (1)
+		{
+			__WFE();
+		}
+	}
+
 	RamRetWrite();
+	RamDropWrite();
+	if (!SystemRetRegWrite(1, RAM_TEST_PREPARED))
+	{
+		SysLogPrintf(SysLogGet(), "RAM test marker FAIL\r\n");
+		while (1)
+		{
+			__WFE();
+		}
+	}
 	SysLogPrintf(SysLogGet(), "RAM retention enabled, %u bytes\r\n",
 		(unsigned)POWER_DEMO_RAM_RET_SIZE);
+	SysLogPrintf(SysLogGet(), "RAM non-retention disabled, %u bytes\r\n",
+		(unsigned)POWER_DEMO_RAM_DROP_SIZE);
 #endif
 
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP, IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
