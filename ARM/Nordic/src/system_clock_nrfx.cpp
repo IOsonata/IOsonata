@@ -331,6 +331,11 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	}
 	if (ClkSrc != OSC_TYPE_RC && s_nRFxHfxoReqCnt != 0U)
 	{
+		if (s_nRFxHfxoReqCnt == UINT32_MAX)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
 		s_nRFxHfxoReqCnt++;
 		EnableInterrupt(state);
 		return true;
@@ -403,7 +408,7 @@ static bool nRFxLfclkStart(uint32_t Src)
 	return false;
 }
 
-static void nRFxLfclkStop(void)
+static bool nRFxLfclkStop(void)
 {
 	int i;
 
@@ -413,9 +418,11 @@ static void nRFxLfclkStop(void)
 	{
 		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0)
 		{
-			break;
+			return true;
 		}
 	}
+
+	return false;
 }
 
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
@@ -460,7 +467,10 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	{
 		if (running)
 		{
-			nRFxLfclkStop();
+			if (nRFxLfclkStop() == false)
+			{
+				return false;
+			}
 		}
 
 		if (nRFxLfclkStart(src) == false)
