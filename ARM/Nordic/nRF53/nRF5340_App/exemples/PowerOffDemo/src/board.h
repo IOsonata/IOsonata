@@ -4,7 +4,7 @@
 @brief	Board definitions for nRF5340 Audio DK and standard DK PowerOffDemo
 
 The Audio DK (PCA10121) uses UARTE0, P1.04 RX, P1.05 TX and
-Button 1 (volume down) P0.02. The standard DK (PCA10095) uses
+PLAY/PAUSE button P0.04. The standard DK (PCA10095) uses
 P0.22 RX, P0.20 TX and Button 1 P0.23.
 
 @author	Hoang Nguyen Hoan
@@ -56,7 +56,7 @@ SOFTWARE.
 #define WAKE_BUT_PIN		23
 #define WAKE_BUT_PINOP		0
 #else
-// nRF5340 Audio DK (PCA10121), VCOM and Button 1 (volume down).
+// nRF5340 Audio DK (PCA10121), VCOM and PLAY/PAUSE button.
 #define UART_RX_PORT		1
 #define UART_RX_PIN			4
 #define UART_RX_PINOP		0
@@ -64,7 +64,7 @@ SOFTWARE.
 #define UART_TX_PIN			5
 #define UART_TX_PINOP		0
 #define WAKE_BUT_PORT		0
-#define WAKE_BUT_PIN		2
+#define WAKE_BUT_PIN		4
 #define WAKE_BUT_PINOP		0
 #define POWER_DEMO_PIN_DIAG	1
 #endif
