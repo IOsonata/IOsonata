@@ -111,6 +111,8 @@ SOFTWARE.
 #define IOSONATA_STM32_NB_BKP		32
 #elif defined(RTC_BKP19R)
 #define IOSONATA_STM32_NB_BKP		20
+#elif defined(TAMP_BKP15R)
+#define IOSONATA_STM32_NB_BKP		16
 #elif defined(RTC_BKP4R)
 #define IOSONATA_STM32_NB_BKP		5
 #else
