@@ -30,6 +30,71 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
+## Nordic validation (0.14)
+
+The Nordic HFXO reference-count and ownership regression was verified on
+nRF52832 hardware: bare-metal HfxoTest 5/5, S132 SoftDevice HfxoTestBle 5/5,
+and SDC/MPSL HfxoTestBle 5/5. The source-level clock test
+`python3 tests/nordic/check_clock_hfxo_source.py` passed 5 tests. These
+results do not cover BLE clock handover during stack initialization.
+
+On the I-SYST IBK-NRF54L15, the Release PowerOffDemo was tested with
+standalone System OFF / S1 GPIO wakeup (P1.08). RESETREAS mapped to
+SYSTEM_RESET_WAKE_PIN (0x100), and GPREGRET boot counts increased across
+successive wakeups. SRAM retention was verified in RAM1 for four successive
+wakeups with 8192/8192 words preserved in the selected 32 KB section.
+The subsequent non-retention comparison passed for three consecutive wakeups,
+with 0/8192 words matching the original pattern in the other 32 KB section.
+The two ranges start at 0x20020000 and 0x20028000.
+
+System OFF validation must be done without an active debugger connection.
+Repeated RESETREAS debug-interface (0x20) restarts were observed in a debug
+setup; they are not counted as System OFF GPIO-wakeup validation, and their
+precise trigger was not established. Run the Release firmware standalone and
+monitor through UART. Do not add debug-reset suppression to the generic demo.
+
+On the nRF54LM20 DK, Release PowerOffDemo completed three consecutive
+System OFF / button wakeup cycles. Reset reason was
+SYSTEM_RESET_WAKE_PIN (0x100), with GPREGRET counter increasing from 3 to 6.
+The 32 KB retained RAM1 section at 0x20040000 preserved 8192/8192 words
+each cycle. The separate non-retained RAM1 section at 0x20048000 had
+0/8192 original words remaining each cycle. These results validate the
+specified sections only, not all RAM retention modes.
+
+On the nRF5340 Audio DK (PCA10121), the application-core Release PowerOffDemo
+used UART RX P1.04, TX P1.05 and PLAY/PAUSE P0.04 for wakeup. Two
+consecutive System OFF/wakeup cycles reported SYSTEM_RESET_WAKE_PIN (0x100).
+The GPREGRET startup count advanced from 8 to 10. The 32 KB RAM1 region at
+0x20040000 retained all 8192/8192 test words, and the separate 32 KB region
+at 0x20048000 retained 0/8192 original words, after each wakeup. The example
+uses P0.04 because the earlier P0.02 VOL- configuration read as asserted
+when the button was not pressed. Temporary pin diagnostics were removed
+after validation. The nRF5340 network-core power path was not exercised.
+
+For nRF9151/nRF9161 the current PowerOffDemo is a bare-metal GPIO/UART
+application: it does not initialize the Nordic modem library, and its Eclipse
+project does not link a modem library. Consequently no modem shutdown call
+is needed for this example. Other applications which initialize the modem
+must first stop cellular operation and shut down the modem through their
+own modem interface before SystemPowerOff. The nRF91x1 DK demo uses UART0
+RX P0.26 / TX P0.27 and wake button P0.08. It should be tested standalone
+in Release without an active debug session.
+
+The nRF91 RAM linker region is shared with application data, stack and
+optional modem shared-memory sections; unlike the tested nRF54 targets
+it does not reserve a separate free RAM1 region. Do not reuse the nRF54
+fixed RAM test addresses on nRF91 without a dedicated linker reservation.
+
+The nRF91x1 PowerOffDemo was hardware validated on the reported DK setup:
+three successive GPIO wakeups from System OFF, with reset reason
+SYSTEM_RESET_WAKE_PIN (0x100) and GPREGRET start counter increasing from
+3 to 6. This validates bare-metal System OFF, button wakeup and retention
+registers for the tested configuration. It does not validate SRAM retention,
+modem-active shutdown, or the independent nRF9160 variant.
+
+Outstanding family-specific build checks and the nRF5340 network-core
+power limitations still require review.
+
 ## SAM4E
 
 `system_power_sam4e.cpp` implements the power functions. `SystemInit` captures

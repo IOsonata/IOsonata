@@ -331,6 +331,11 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	}
 	if (ClkSrc != OSC_TYPE_RC && s_nRFxHfxoReqCnt != 0U)
 	{
+		if (s_nRFxHfxoReqCnt == UINT32_MAX)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
 		s_nRFxHfxoReqCnt++;
 		EnableInterrupt(state);
 		return true;
@@ -378,6 +383,38 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return success;
 }
 
+// System OFF requires HFXO stopped on nRF54L. The application must first
+// close radio users and release every outstanding clock request.
+#if defined(NRF54L_SERIES)
+bool nRFxClockPrepareSystemOff(void)
+{
+	uint32_t state;
+	int i;
+
+	state = DisableInterrupt();
+	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt != 0U ||
+		nRFxMpslActive() || nRFxClockSdEnabled())
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	EnableInterrupt(state);
+
+	// A running oscillator with no IOsonata request belongs to another
+	// component. Never stop it here. Wait only for a pending stop to settle.
+	for (i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
+	{
+		if (nRFxHfxoRunning() == false)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+#endif
+
 // Starts LFCLK from Src and waits until it runs. Stopped again if it does
 // not start.
 static bool nRFxLfclkStart(uint32_t Src)
@@ -403,7 +440,7 @@ static bool nRFxLfclkStart(uint32_t Src)
 	return false;
 }
 
-static void nRFxLfclkStop(void)
+static bool nRFxLfclkStop(void)
 {
 	int i;
 
@@ -413,9 +450,11 @@ static void nRFxLfclkStop(void)
 	{
 		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0)
 		{
-			break;
+			return true;
 		}
 	}
+
+	return false;
 }
 
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
@@ -460,7 +499,10 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	{
 		if (running)
 		{
-			nRFxLfclkStop();
+			if (nRFxLfclkStop() == false)
+			{
+				return false;
+			}
 		}
 
 		if (nRFxLfclkStart(src) == false)

@@ -1,10 +1,11 @@
 /**-------------------------------------------------------------------------
 @example	board.h
 
-@brief	Board specific definitions, power off demo on the nRF54L15 DK
+@brief	Board definitions for nRF54L15 DK and IBK-NRF54L15 PowerOffDemo
 
-The console is UARTE30 (UART_DEVNO 0) on the VCOM1 pins of the DK, P0.01 RX
-and P0.00 TX, the SysLog output. The wake up button is Button 1, P1.09.
+The DK uses UARTE30 on VCOM1, P0.01 RX and P0.00 TX, with Button 1
+on P1.09. The IBK-NRF54L15 (schematic 03-231201-01 revision 0) has
+P0.00 RXD, P0.01 TXD, S1 on P1.08 and S2 on P0.03.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 8, 2026
@@ -39,8 +40,42 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
-// Console, the SysLog output
+// Select BOARD using the project preprocessor definitions when required.
+#define NORDIC_NRF54L15_DK	1
+#define IBK_NRF54L15		2
+
+#ifndef BOARD
+#define BOARD			IBK_NRF54L15
+#endif
+
+// The console is UARTE30 on both boards.
 #define UART_DEVNO			0
+
+#if BOARD == IBK_NRF54L15
+
+// IBK-NRF54L15: P0.00 RXD, P0.01 TXD (IDAP-Link header).
+#define UART_RX_PORT		0
+#define UART_RX_PIN			0
+#define UART_RX_PINOP		1
+#define UART_TX_PORT		0
+#define UART_TX_PIN			1
+#define UART_TX_PINOP		1
+
+// S1 is active low on P1.08. S2 is active low on P0.03.
+#define WAKE_BUT_PORT		1
+#define WAKE_BUT_PIN		8
+#define WAKE_BUT_PINOP		0
+
+// RAM1 is unused by this example's linker script (normal data/stack use RAM).
+#define POWER_DEMO_RAM_RET_TEST	1
+#define POWER_DEMO_RAM_RET_ADDR	0x20020000UL
+#define POWER_DEMO_RAM_RET_SIZE	32768UL
+#define POWER_DEMO_RAM_DROP_ADDR	0x20028000UL
+#define POWER_DEMO_RAM_DROP_SIZE	32768UL
+
+#elif BOARD == NORDIC_NRF54L15_DK
+
+// Nordic DK console (VCOM1).
 #define UART_RX_PORT		0
 #define UART_RX_PIN			1
 #define UART_RX_PINOP		1
@@ -48,9 +83,13 @@ SOFTWARE.
 #define UART_TX_PIN			0
 #define UART_TX_PINOP		1
 
-// Wake up button, to ground
+// Button 1, active low.
 #define WAKE_BUT_PORT		1
 #define WAKE_BUT_PIN		9
 #define WAKE_BUT_PINOP		0
+
+#else
+#error "Unsupported nRF54L15 PowerOffDemo board"
+#endif
 
 #endif
