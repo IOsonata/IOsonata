@@ -53,4 +53,12 @@ SOFTWARE.
 #define WAKE_BUT_PIN		23
 #define WAKE_BUT_PINOP		0
 
+// Test two sections in RAM1. Normal data and stack are in RAM;
+// IPC0 starts at 0x20070000 and must not be modified.
+#define POWER_DEMO_RAM_RET_TEST	1
+#define POWER_DEMO_RAM_RET_ADDR	0x20040000UL
+#define POWER_DEMO_RAM_RET_SIZE	32768UL
+#define POWER_DEMO_RAM_DROP_ADDR	0x20048000UL
+#define POWER_DEMO_RAM_DROP_SIZE	32768UL
+
 #endif
