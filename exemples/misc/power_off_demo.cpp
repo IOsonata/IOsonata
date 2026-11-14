@@ -224,6 +224,41 @@ static const struct {
 	{ SYSTEM_RESET_WAKE_TIMER, "wake up by a timer" },
 };
 
+#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG
+// Confirm the external wake input changes state before entering Standby.
+static bool WakeButtonCheck(void)
+{
+	bool bActive;
+	int level;
+	int i;
+
+	bActive = false;
+	level = IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN);
+	SysLogPrintf(SysLogGet(), "Wake GPIO P%d.%02d idle=%d observed=%d\r\n",
+		WAKE_BUT_PORT, WAKE_BUT_PIN, s_WakeButIdle, level);
+	SysLogPrintf(SysLogGet(), "Press and release wake input within 10 s\r\n");
+
+	for (i = 0; i < 1000; i++)
+	{
+		level = IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN);
+		if (level != s_WakeButIdle && bActive == false)
+		{
+			bActive = true;
+			SysLogPrintf(SysLogGet(), "Wake GPIO active level=%d\r\n", level);
+		}
+		if (level == s_WakeButIdle && bActive)
+		{
+			SysLogPrintf(SysLogGet(), "Wake GPIO released level=%d\r\n", level);
+			return true;
+		}
+		msDelay(10);
+	}
+
+	SysLogPrintf(SysLogGet(), "Wake GPIO check FAIL, active seen=%d\r\n", bActive);
+	return false;
+}
+#endif
+
 int main()
 {
 	s_Uart.Init(s_UartCfg);
@@ -300,6 +335,18 @@ int main()
 #endif
 
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP, IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
+
+#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG
+	if (WakeButtonCheck() == false)
+	{
+		SysLogPrintf(SysLogGet(), "Standby skipped: wake input not verified\r\n");
+		while (1)
+		{
+			__WFE();
+		}
+	}
+	SysLogPrintf(SysLogGet(), "Wake GPIO check PASS\r\n");
+#endif
 
 	msDelay(POWER_DEMO_DELAY);
 
