@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/semihost_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/semihost_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -226,11 +231,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/semihost_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/semihost_intrf.h</locationURI>
-		</link>
-		<link>
 			<name>include/sensors</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -289,11 +289,6 @@
 			<name>include/utf8cvt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/utf8cvt.h</locationURI>
-		</link>
-		<link>
-			<name>include/video</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/CppRuntimeOverload.cpp</name>
@@ -554,11 +549,6 @@
 			<name>src/vector_nrf54l15.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/vector_nrf54l15.c</locationURI>
-		</link>
-		<link>
-			<name>src/video</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/audio/audiodev.h</name>
@@ -841,11 +831,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/cracen_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/crypto/crypto.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
-		</link>
-		<link>
 			<name>include/crypto/crypto_softaes.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
@@ -1071,14 +1056,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
 		</link>
 		<link>
-			<name>include/rftag/m24sr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/m24sr.h</locationURI>
-		</link>
-		<link>
 			<name>include/rftag/nfct_nrfx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/nfct_nrfx.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/m24sr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/m24sr.h</locationURI>
 		</link>
 		<link>
 			<name>include/rftag/rfreader_pn532.h</name>
@@ -1356,16 +1341,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
 		</link>
 		<link>
-			<name>include/video/cam_arducam_mega.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
-		</link>
-		<link>
-			<name>include/video/videodev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
-		</link>
-		<link>
 			<name>src/audio/buzzer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/audio/buzzer.cpp</locationURI>
@@ -1406,11 +1381,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_app_hci.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_hci.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_att.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
@@ -1424,11 +1394,6 @@
 			<name>src/bluetooth/bt_attrsp.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_crypto_ctlr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_crypto_ctlr.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_dfu_smp.cpp</name>
@@ -1556,11 +1521,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_sec_bm.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_sec_hci.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sec_hci.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_smp.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
@@ -1646,6 +1606,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/timer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/system_clock_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/system_clock_nrfx.cpp</locationURI>
@@ -1654,11 +1619,6 @@
 			<name>src/coredev/system_power_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/system_power_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/timer.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer_hf_nrfx.cpp</name>
@@ -1696,9 +1656,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/cracen_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto.cpp</name>
+			<name>src/crypto/crypto_p256.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_aes_modes.cpp</name>
@@ -1709,16 +1669,6 @@
 			<name>src/crypto/crypto_aes_soft.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_default_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_p256.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
@@ -1946,14 +1896,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_mp2696a.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/rftag/m24sr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/m24sr.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/rftag/nfct_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/nfct_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/m24sr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/m24sr.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/rftag/rfreader_pn532.cpp</name>
@@ -2204,11 +2154,6 @@
 			<name>src/storage/stdfs_littlefs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/video/cam_arducam_mega.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/services/bt_bas.h</name>
@@ -2756,11 +2701,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/ble_conn_state.h</locationURI>
 		</link>
 		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/ble_date_time.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/ble_date_time.h</locationURI>
-		</link>
-		<link>
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/ble_db_discovery.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/ble_db_discovery.h</locationURI>
@@ -2906,6 +2846,11 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_cgms.h</locationURI>
 		</link>
 		<link>
+			<name>src/sdk-nrf-bm/include/bm/bluetooth/ble_date_time.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/ble_date_time.h</locationURI>
+		</link>
+		<link>
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_hids.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_hids.h</locationURI>
@@ -2999,6 +2944,51 @@
 			<name>src/sdk-nrf-bm/include/bm/nfc/t4t/ndef_file.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/nfc/t4t/ndef_file.h</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_sec_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sec_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_crypto_ctlr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_crypto_ctlr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+			<link>
+			<name>include/video/videodev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
+		</link>
+		<link>
+			<name>include/video/cam_arducam_mega.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
+		</link>
+		<link>
+			<name>src/video/cam_arducam_mega.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
