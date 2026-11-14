@@ -64,7 +64,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("s_bNRFxHfxoTransition", source)
         self.assertIn("nRFxMpslActive()", source)
         self.assertIn("nRFxClockSdEnabled()", source)
-        self.assertIn("NRF_CLOCK->TASKS_XOSTOP = 1U", source)
+        self.assertNotIn("NRF_CLOCK->TASKS_XOSTOP = 1U", source)
         self.assertIn("nRFxHfxoRunning() == false", source)
         self.assertIn("DisableInterrupt()", source)
         self.assertIn("EnableInterrupt(state)", source)
