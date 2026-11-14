@@ -116,6 +116,11 @@ SOFTWARE.
 #error "system_power_nrfx.cpp is for the nRF53, nRF54L and nRF91"
 #endif
 
+#ifdef SYS_PWR_MEMCONF
+// Implemented in system_clock_nrfx.cpp; do not bypass radio clock ownership.
+bool nRFxClockPrepareSystemOff(void);
+#endif
+
 #define SYS_PWR_NB_RETREG			2
 #define SYS_PWR_RETREG_MSK			0xFFUL
 
@@ -238,6 +243,13 @@ uint32_t SystemResetReason(void)
 void SystemPowerOff(void)
 {
 #ifdef SYS_PWR_MEMCONF
+	// Nordic requires HFXO stopped before System OFF. Refuse shutdown
+	// while an application clock request or the radio still owns it.
+	if (nRFxClockPrepareSystemOff() == false)
+	{
+		return;
+	}
+
 	uint32_t nbsect = SYS_PWR_FICR->INFO.RAM * 1024UL / SYS_PWR_RAM_SECT;
 	uint32_t msk = nbsect < 32 ? (1UL << nbsect) - 1 : 0xFFFFFFFFUL;
 
