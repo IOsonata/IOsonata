@@ -232,13 +232,15 @@ static bool WakeButtonCheck(void)
 	int level;
 	int i;
 
+	// Let GPIO input/pull configuration settle before the first sample.
+	msDelay(50);
 	bActive = false;
 	level = IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN);
-	SysLogPrintf(SysLogGet(), "Wake GPIO P%d.%02d idle=%d observed=%d\r\n",
+	SysLogPrintf(SysLogGet(), "Wake GPIO P%d.%02d idle=%d initial=%d\r\n",
 		WAKE_BUT_PORT, WAKE_BUT_PIN, s_WakeButIdle, level);
-	SysLogPrintf(SysLogGet(), "Press and release wake input within 10 s\r\n");
+	SysLogPrintf(SysLogGet(), "Connect wake input to GND, then release within 30 s\r\n");
 
-	for (i = 0; i < 1000; i++)
+	for (i = 0; i < 3000; i++)
 	{
 		level = IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN);
 		if (level != s_WakeButIdle && bActive == false)
@@ -251,10 +253,16 @@ static bool WakeButtonCheck(void)
 			SysLogPrintf(SysLogGet(), "Wake GPIO released level=%d\r\n", level);
 			return true;
 		}
+		if (i % 100 == 0)
+		{
+			SysLogPrintf(SysLogGet(), "Wake GPIO sample %d s, level=%d\r\n",
+				i / 100, level);
+		}
 		msDelay(10);
 	}
 
-	SysLogPrintf(SysLogGet(), "Wake GPIO check FAIL, active seen=%d\r\n", bActive);
+	SysLogPrintf(SysLogGet(), "Wake GPIO check FAIL, active seen=%d, last=%d\r\n",
+		bActive, level);
 	return false;
 }
 #endif
