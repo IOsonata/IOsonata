@@ -32,9 +32,14 @@ and RAM2 retention is enabled before Standby. Test memory must never overlap
 1. Build `IOsonata_STM32WBA65` and this example with matching Release
    configurations.
 2. Program the DK1, disconnect active debugging, and monitor the VCOM.
-3. Confirm the first startup reports both RAM retention settings and
-   `Power off, press the button to wake up`.
-4. After Standby, momentarily close the switch PC13 to GND, then release it.
+3. In this diagnostic build, the firmware first prints `Wake GPIO P2.13`
+   (the port index for GPIOC is 2). While the ten-second input check runs,
+   momentarily connect PC13/D4 to GND and release it. Confirm the log
+   contains `Wake GPIO active level=0`, `Wake GPIO released level=1`,
+   and `Wake GPIO check PASS`. If it prints FAIL, Standby is skipped:
+   verify wiring and PC13 GPIO operation before debugging power registers.
+4. After the check passes and the MCU enters Standby, briefly connect
+   PC13 to GND again and release it.
 5. Confirm wake reason 0x100, increasing backup-register count, all 8192
    retained words matching and no prior-pattern words remaining in the
    nonretained region. Repeat multiple times.
