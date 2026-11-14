@@ -53,6 +53,28 @@ static uint32_t s_WakeConfigured;
 static uint32_t s_WakeEnable;
 static uint32_t s_WakeLow;
 static uint32_t s_WakeSelect;
+// STM32WBA65 I variant: SRAM1 448 KB, SRAM2 64 KB.
+// Each bank's Standby retention is selected as a whole by this generic API.
+// Applications must reserve test ranges in the linker script.
+#define ST_WBA_SRAM1_BASE	0x20000000UL
+#define ST_WBA_SRAM1_SIZE	0x70000UL
+#define ST_WBA_SRAM2_BASE	0x20070000UL
+#define ST_WBA_SRAM2_SIZE	0x10000UL
+
+#if !defined(PWR_CR1_R1RSB1) || !defined(PWR_CR1_R1RSB2) || \
+	!defined(PWR_CR1_R1RSB3) || !defined(PWR_CR1_R1RSB4) || \
+	!defined(PWR_CR1_R1RSB567) || !defined(PWR_CR1_R2RSB1) || \
+	!defined(PWR_CR1_R2RSB2)
+#error "STM32WBA65 Standby SRAM retention definitions missing"
+#endif
+
+#define ST_WBA_SRAM1_RET	(PWR_CR1_R1RSB1 | PWR_CR1_R1RSB2 | \
+	PWR_CR1_R1RSB3 | PWR_CR1_R1RSB4 | PWR_CR1_R1RSB567)
+#define ST_WBA_SRAM2_RET	(PWR_CR1_R2RSB1 | PWR_CR1_R2RSB2)
+
+static bool s_bRam1Retain;
+static bool s_bRam2Retain;
+
 static bool s_bReasonRead;
 static uint32_t s_ResetReason;
 
@@ -206,7 +228,11 @@ void SystemPowerOff(void)
 	PWR->WUSCR = s_WakeConfigured;
 	PWR->WUCR1 |= en;
 
-	PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_2;
+	uint32_t ram = (s_bRam1Retain ? ST_WBA_SRAM1_RET : 0U) |
+		(s_bRam2Retain ? ST_WBA_SRAM2_RET : 0U);
+	PWR->CR1 = (PWR->CR1 & ~(PWR_CR1_LPMS |
+		ST_WBA_SRAM1_RET | ST_WBA_SRAM2_RET)) |
+		PWR_CR1_LPMS_2 | ram;
 	SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
 	__DSB();
 	while (1)
@@ -268,8 +294,34 @@ bool SystemRetRegWrite(int Idx, uint32_t Val)
 
 bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 {
-	(void)Addr;
-	(void)Size;
-	(void)bRetain;
+	uintptr_t off;
+
+	if (Size == 0U)
+	{
+		return false;
+	}
+
+	if (Addr >= ST_WBA_SRAM1_BASE)
+	{
+		off = Addr - ST_WBA_SRAM1_BASE;
+		if (off < ST_WBA_SRAM1_SIZE &&
+			Size <= ST_WBA_SRAM1_SIZE - off)
+		{
+			s_bRam1Retain = bRetain;
+			return true;
+		}
+	}
+
+	if (Addr >= ST_WBA_SRAM2_BASE)
+	{
+		off = Addr - ST_WBA_SRAM2_BASE;
+		if (off < ST_WBA_SRAM2_SIZE &&
+			Size <= ST_WBA_SRAM2_SIZE - off)
+		{
+			s_bRam2Retain = bRetain;
+			return true;
+		}
+	}
+
 	return false;
 }
