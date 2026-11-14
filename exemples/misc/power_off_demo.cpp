@@ -93,14 +93,14 @@ static bool RamRetCheck(void)
 		if (s_pRamRet[i] != RamRetPattern(i))
 		{
 			SysLogPrintf(SysLogGet(),
-				"RAM retention FAIL at word %u: 0x%08x, expected 0x%08x\\r\\n",
+				"RAM retention FAIL at word %u: 0x%08x, expected 0x%08x\r\n",
 				(unsigned)i, (unsigned)s_pRamRet[i],
 				(unsigned)RamRetPattern(i));
 			return false;
 		}
 	}
 
-	SysLogPrintf(SysLogGet(), "RAM retention PASS, %u words\\r\\n",
+	SysLogPrintf(SysLogGet(), "RAM retention PASS, %u words\r\n",
 		(unsigned)count);
 	return true;
 }
@@ -216,14 +216,14 @@ int main()
 
 	if (!SystemRamRetain(POWER_DEMO_RAM_RET_ADDR, POWER_DEMO_RAM_RET_SIZE, true))
 	{
-		SysLogPrintf(SysLogGet(), "RAM retention configuration FAIL\\r\\n");
+		SysLogPrintf(SysLogGet(), "RAM retention configuration FAIL\r\n");
 		while (1)
 		{
 			__WFE();
 		}
 	}
 	RamRetWrite();
-	SysLogPrintf(SysLogGet(), "RAM retention enabled, %u bytes\\r\\n",
+	SysLogPrintf(SysLogGet(), "RAM retention enabled, %u bytes\r\n",
 		(unsigned)POWER_DEMO_RAM_RET_SIZE);
 #endif
 
