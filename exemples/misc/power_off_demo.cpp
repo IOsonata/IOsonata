@@ -374,11 +374,13 @@ int main()
 
 	SystemPowerOff();
 
-	// SystemPowerOff may return if entry is refused (for example HFXO busy).
-#if !defined(POWER_DEMO_UART_SHUTDOWN) || !POWER_DEMO_UART_SHUTDOWN
-	SysLogPrintf(SysLogGet(), "SystemPowerOff returned without entering System OFF\r\n");
-	(void)PowerDemoConsoleDrain();
+	// SystemPowerOff may return when entry is refused (for example HFXO busy).
+#if defined(POWER_DEMO_UART_SHUTDOWN) && POWER_DEMO_UART_SHUTDOWN
+	s_Uart.Enable();
 #endif
+	SysLogPrintf(SysLogGet(),
+		"SystemPowerOff returned: System OFF was not entered\r\n");
+	(void)PowerDemoConsoleDrain();
 	while (1)
 	{
 		__WFE();
