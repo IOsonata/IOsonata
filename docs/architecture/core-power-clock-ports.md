@@ -71,7 +71,21 @@ uses P0.04 because the earlier P0.02 VOL- configuration read as asserted
 when the button was not pressed. Temporary pin diagnostics were removed
 after validation. The nRF5340 network-core power path was not exercised.
 
-nRF91 hardware power/clock validation and any outstanding family-specific
+For nRF9151/nRF9161 the current PowerOffDemo is a bare-metal GPIO/UART
+application: it does not initialize the Nordic modem library, and its Eclipse
+project does not link a modem library. Consequently no modem shutdown call
+is needed for this example. Other applications which initialize the modem
+must first stop cellular operation and shut down the modem through their
+own modem interface before SystemPowerOff. The nRF91x1 DK demo uses UART0
+RX P0.26 / TX P0.27 and wake button P0.08. It should be tested standalone
+in Release without an active debug session.
+
+The nRF91 RAM linker region is shared with application data, stack and
+optional modem shared-memory sections; unlike the tested nRF54 targets
+it does not reserve a separate free RAM1 region. Do not reuse the nRF54
+fixed RAM test addresses on nRF91 without a dedicated linker reservation.
+
+nRF91 hardware power/clock validation and outstanding family-specific
 build checks remain pending.
 
 ## SAM4E
