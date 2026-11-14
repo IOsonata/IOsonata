@@ -83,6 +83,7 @@ uint32_t SystemResetReason(void)
 	uint32_t rst;
 	uint32_t reason;
 	uint32_t wake;
+	uint32_t rtcWake;
 	bool standby;
 
 	if (s_bReasonRead)
@@ -131,7 +132,7 @@ uint32_t SystemResetReason(void)
 		// Standby resets core logic; its power-on flags are not the cause.
 		reason &= ~SYSTEM_RESET_POWERON;
 		// RTC/TAMP can be routed through WKUP6/7/8. They are not GPIO.
-		uint32_t rtcWake = 0U;
+		rtcWake = 0U;
 		if ((wake & (1UL << 5)) &&
 			((PWR->WUCR3 >> 10U) & 3U) == 3U)
 		{
@@ -229,6 +230,7 @@ void SystemPowerOff(void)
 	uint32_t en;
 	uint32_t selectMask;
 	uint32_t i;
+	uint32_t ram;
 
 	en = s_WakeEnable & s_WakeConfigured;
 	selectMask = 0;
@@ -248,7 +250,7 @@ void SystemPowerOff(void)
 	PWR->WUSCR = s_WakeConfigured;
 	PWR->WUCR1 |= en;
 
-	uint32_t ram = (s_bRam1Retain ? ST_WBA_SRAM1_RET : 0U) |
+	ram = (s_bRam1Retain ? ST_WBA_SRAM1_RET : 0U) |
 		(s_bRam2Retain ? ST_WBA_SRAM2_RET : 0U);
 	PWR->CR1 = (PWR->CR1 & ~(PWR_CR1_LPMS |
 		ST_WBA_SRAM1_RET | ST_WBA_SRAM2_RET)) |
