@@ -53,4 +53,12 @@ SOFTWARE.
 #define WAKE_BUT_PIN		26
 #define WAKE_BUT_PINOP		0
 
+// RAM1 is outside the default .data/.bss/stack allocation.
+// Two independent 32 KB sections exercise retention on and off.
+#define POWER_DEMO_RAM_RET_TEST	1
+#define POWER_DEMO_RAM_RET_ADDR	0x20040000UL
+#define POWER_DEMO_RAM_RET_SIZE	32768UL
+#define POWER_DEMO_RAM_DROP_ADDR	0x20048000UL
+#define POWER_DEMO_RAM_DROP_SIZE	32768UL
+
 #endif

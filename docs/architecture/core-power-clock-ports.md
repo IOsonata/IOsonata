@@ -30,6 +30,33 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
+## Nordic validation (0.14)
+
+The Nordic HFXO reference-count and ownership regression was verified on
+nRF52832 hardware: bare-metal HfxoTest 5/5, S132 SoftDevice HfxoTestBle 5/5,
+and SDC/MPSL HfxoTestBle 5/5. The source-level clock test
+`python3 tests/nordic/check_clock_hfxo_source.py` passed 5 tests. These
+results do not cover BLE clock handover during stack initialization.
+
+On the I-SYST IBK-NRF54L15, the Release PowerOffDemo was tested with
+standalone System OFF / S1 GPIO wakeup (P1.08). RESETREAS mapped to
+SYSTEM_RESET_WAKE_PIN (0x100), and GPREGRET boot counts increased across
+successive wakeups. SRAM retention was verified in RAM1 for four successive
+wakeups with 8192/8192 words preserved in the selected 32 KB section.
+The subsequent non-retention comparison passed for three consecutive wakeups,
+with 0/8192 words matching the original pattern in the other 32 KB section.
+The two ranges start at 0x20020000 and 0x20028000.
+
+System OFF validation must be done without an active debugger connection.
+Repeated RESETREAS debug-interface (0x20) restarts were observed in a debug
+setup; they are not counted as System OFF GPIO-wakeup validation, and their
+precise trigger was not established. Run the Release firmware standalone and
+monitor through UART. Do not add debug-reset suppression to the generic demo.
+
+The nRF5340, nRF54LM20 and nRF91 power/clock paths still require their
+own target-specific build and hardware regression results. SRAM retention
+testing above verifies the specified nRF54L15 sections, not every RAM section.
+
 ## SAM4E
 
 `system_power_sam4e.cpp` implements the power functions. `SystemInit` captures
