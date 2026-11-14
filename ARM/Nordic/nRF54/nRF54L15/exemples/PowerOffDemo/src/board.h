@@ -66,6 +66,11 @@ SOFTWARE.
 #define WAKE_BUT_PIN		8
 #define WAKE_BUT_PINOP		0
 
+// RAM1 is unused by this example's linker script (normal data/stack use RAM).
+#define POWER_DEMO_RAM_RET_TEST	1
+#define POWER_DEMO_RAM_RET_ADDR	0x20020000UL
+#define POWER_DEMO_RAM_RET_SIZE	32768UL
+
 #elif BOARD == NORDIC_NRF54L15_DK
 
 // Nordic DK console (VCOM1).
