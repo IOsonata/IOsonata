@@ -383,6 +383,40 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return success;
 }
 
+// System OFF requires HFXO stopped on nRF54L. The application must first
+// close radio users and release every outstanding clock request.
+#if defined(NRF54L_SERIES)
+bool nRFxClockPrepareSystemOff(void)
+{
+	uint32_t state;
+	int i;
+
+	state = DisableInterrupt();
+	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt != 0U ||
+		nRFxMpslActive() || nRFxClockSdEnabled())
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	if (nRFxHfxoRunning())
+	{
+		NRF_CLOCK->TASKS_XOSTOP = 1U;
+	}
+	EnableInterrupt(state);
+
+	for (i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
+	{
+		if (nRFxHfxoRunning() == false)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+#endif
+
 // Starts LFCLK from Src and waits until it runs. Stopped again if it does
 // not start.
 static bool nRFxLfclkStart(uint32_t Src)
