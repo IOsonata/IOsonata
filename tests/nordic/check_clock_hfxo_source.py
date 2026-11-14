@@ -57,6 +57,25 @@ class HfxoSourceChecks(unittest.TestCase):
                         guarded.index("NRFX_HFXO_STOP = 1U"))
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
+    def test_nrf54l_system_off_checks_hfxo(self):
+        source = function(self.clock, "bool nRFxClockPrepareSystemOff(",
+                          "// Starts LFCLK from Src")
+        self.assertIn("s_nRFxHfxoReqCnt != 0U", source)
+        self.assertIn("s_bNRFxHfxoTransition", source)
+        self.assertIn("nRFxMpslActive()", source)
+        self.assertIn("nRFxClockSdEnabled()", source)
+        self.assertIn("NRF_CLOCK->TASKS_XOSTOP = 1U", source)
+        self.assertIn("nRFxHfxoRunning() == false", source)
+        self.assertIn("DisableInterrupt()", source)
+        self.assertIn("EnableInterrupt(state)", source)
+
+        power = (ROOT / "ARM/Nordic/src/system_power_nrfx.cpp").read_text(
+            encoding="utf-8")
+        entry = function(power, "void SystemPowerOff(",
+                         "bool SystemWakePin(")
+        self.assertLess(entry.index("nRFxClockPrepareSystemOff()"),
+                        entry.index("SYS_PWR_REGULATORS->SYSTEMOFF"))
+
     def test_failed_start_releases_clock_request(self):
         source = function(self.clock, "static bool nRFxHfxoStart(",
                           "// Release only through the backend")
