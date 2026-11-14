@@ -215,22 +215,55 @@ void SystemPowerOff(void)
 	}
 }
 
+static void StWbaBackupAccess(void)
+{
+	RCC->AHB4ENR |= RCC_AHB4ENR_PWREN;
+	(void)RCC->AHB4ENR;
+#ifdef RCC_APB7ENR_RTCAPBEN
+	RCC->APB7ENR |= RCC_APB7ENR_RTCAPBEN;
+	(void)RCC->APB7ENR;
+#endif
+	PWR->DBPR |= PWR_DBPR_DBP;
+	(void)PWR->DBPR;
+}
+
 int SystemRetRegCount(void)
 {
-	return 0;
+	return IOSONATA_STM32_NB_BKP;
 }
 
 uint32_t SystemRetRegRead(int Idx)
 {
-	(void)Idx;
+	if (Idx < 0 || Idx >= IOSONATA_STM32_NB_BKP)
+	{
+		return 0;
+	}
+
+	StWbaBackupAccess();
+
+#if defined(TAMP_BKP0R)
+	return (&TAMP->BKP0R)[Idx];
+#else
 	return 0;
+#endif
 }
 
 bool SystemRetRegWrite(int Idx, uint32_t Val)
 {
-	(void)Idx;
+	if (Idx < 0 || Idx >= IOSONATA_STM32_NB_BKP)
+	{
+		return false;
+	}
+
+	StWbaBackupAccess();
+
+#if defined(TAMP_BKP0R)
+	(&TAMP->BKP0R)[Idx] = Val;
+	return (&TAMP->BKP0R)[Idx] == Val;
+#else
 	(void)Val;
 	return false;
+#endif
 }
 
 bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
