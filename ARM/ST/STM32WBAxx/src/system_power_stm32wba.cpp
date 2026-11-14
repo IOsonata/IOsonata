@@ -61,16 +61,14 @@ static uint32_t s_WakeSelect;
 #define ST_WBA_SRAM2_BASE	0x20070000UL
 #define ST_WBA_SRAM2_SIZE	0x10000UL
 
-#if !defined(PWR_CR1_R1RSB1) || !defined(PWR_CR1_R1RSB2) || \
-	!defined(PWR_CR1_R1RSB3) || !defined(PWR_CR1_R1RSB4) || \
-	!defined(PWR_CR1_R1RSB567) || !defined(PWR_CR1_R2RSB1) || \
-	!defined(PWR_CR1_R2RSB2)
-#error "STM32WBA65 Standby SRAM retention definitions missing"
+// On STM32WBA65 (WBA6), Standby retention uses one enable bit per SRAM
+// bank. The page-granular R1RSB2..R1RSB567/R2RSB2 fields are not present.
+#if !defined(PWR_CR1_R1RSB1) || !defined(PWR_CR1_R2RSB1)
+#error "STM32WBA65 SRAM1/SRAM2 Standby retention bits missing"
 #endif
 
-#define ST_WBA_SRAM1_RET	(PWR_CR1_R1RSB1 | PWR_CR1_R1RSB2 | \
-	PWR_CR1_R1RSB3 | PWR_CR1_R1RSB4 | PWR_CR1_R1RSB567)
-#define ST_WBA_SRAM2_RET	(PWR_CR1_R2RSB1 | PWR_CR1_R2RSB2)
+#define ST_WBA_SRAM1_RET	PWR_CR1_R1RSB1
+#define ST_WBA_SRAM2_RET	PWR_CR1_R2RSB1
 
 static bool s_bRam1Configured;
 static bool s_bRam2Configured;
