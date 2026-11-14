@@ -33,10 +33,10 @@ and RAM2 retention is enabled before Standby. Test memory must never overlap
    configurations.
 2. Program the DK1, disconnect active debugging, and monitor the VCOM.
 3. In this diagnostic build, the firmware first prints `Wake GPIO P2.13`
-   (the port index for GPIOC is 2). While the ten-second input check runs,
+   (the port index for GPIOC is 2). While the 30-second input check runs,
    momentarily connect PC13/D4 to GND and release it. Confirm the log
    contains `Wake GPIO active level=0`, `Wake GPIO released level=1`,
-   and `Wake GPIO check PASS`. If it prints FAIL, Standby is skipped:
+   and `Wake GPIO check PASS`. A live input level is also printed every second. If it prints FAIL, Standby is skipped:
    verify wiring and PC13 GPIO operation before debugging power registers.
 4. After the check passes and the MCU enters Standby, briefly connect
    PC13 to GND again and release it.
