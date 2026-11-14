@@ -71,15 +71,15 @@
 		406FC7DD233A00C400106BCA /* base64.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC746233A00C400106BCA /* base64.c */; };
 		406FC7DF233A00C400106BCA /* timer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC749233A00C400106BCA /* timer.cpp */; };
 		406FC7E0233A00C400106BCA /* spi.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC74A233A00C400106BCA /* spi.cpp */; };
-		406FC7E1233A00C400106BCA /* uart.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC74B233A00C400106BCA /* uart.c */; };
+		406FC7E1233A00C400106BCA /* uart.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC74B233A00C400106BCA /* uart.cpp */; };
 		406FC7EC233A00C400106BCA /* slip_intrf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC757233A00C400106BCA /* slip_intrf.cpp */; };
 		406FC7ED233A00C400106BCA /* crc.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC758233A00C400106BCA /* crc.c */; };
 		406FC7F0233A00C400106BCA /* utf8cvt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC75C233A00C400106BCA /* utf8cvt.cpp */; };
 		406FC801233A016300106BCA /* usb_hidhost_impl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC7FF233A016300106BCA /* usb_hidhost_impl.cpp */; };
 		406FC802233A016300106BCA /* uart_osx.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC800233A016300106BCA /* uart_osx.cpp */; };
-		A01300000000000000000011 /* videodev.h in Headers */ = {isa = PBXBuildFile; fileRef = A01300000000000000000001 /* videodev.h */; };
-		A01300000000000000000012 /* cam_arducam_mega.h in Headers */ = {isa = PBXBuildFile; fileRef = A01300000000000000000002 /* cam_arducam_mega.h */; };
-		A01300000000000000000013 /* cam_arducam_mega.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A01300000000000000000003 /* cam_arducam_mega.cpp */; };
+		A01300000000000000000011 /* ../../include/video/videodev.h in Headers */ = {isa = PBXBuildFile; fileRef = A01300000000000000000001 /* ../../include/video/videodev.h */; };
+		A01300000000000000000012 /* ../../include/video/cam_arducam_mega.h in Headers */ = {isa = PBXBuildFile; fileRef = A01300000000000000000002 /* ../../include/video/cam_arducam_mega.h */; };
+		A01300000000000000000013 /* ../../src/video/cam_arducam_mega.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A01300000000000000000003 /* ../../src/video/cam_arducam_mega.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -143,20 +143,20 @@
 		406FC73A233A00C400106BCA /* utf8.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = utf8.c; sourceTree = "<group>"; };
 		406FC73B233A00C400106BCA /* stddev.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stddev.c; sourceTree = "<group>"; };
 		406FC73D233A00C400106BCA /* intelhex.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = intelhex.c; sourceTree = "<group>"; };
-		406FC744233A00C400106BCA /* usb_hidhost.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = usb_hidhost.cpp; sourceTree = "<group>"; };
+		406FC744233A00C400106BCA /* usb_hidhost.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = usb_hidhost.cpp; path = usb/usb_hidhost.cpp; sourceTree = "<group>"; };
 		406FC745233A00C400106BCA /* prbs.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prbs.c; sourceTree = "<group>"; };
 		406FC746233A00C400106BCA /* base64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = base64.c; sourceTree = "<group>"; };
 		406FC749233A00C400106BCA /* timer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = timer.cpp; sourceTree = "<group>"; };
 		406FC74A233A00C400106BCA /* spi.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = spi.cpp; sourceTree = "<group>"; };
-		406FC74B233A00C400106BCA /* uart.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = uart.c; sourceTree = "<group>"; };
+		406FC74B233A00C400106BCA /* uart.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uart.cpp; sourceTree = "<group>"; };
 		406FC757233A00C400106BCA /* slip_intrf.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = slip_intrf.cpp; sourceTree = "<group>"; };
 		406FC758233A00C400106BCA /* crc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = crc.c; sourceTree = "<group>"; };
 		406FC75C233A00C400106BCA /* utf8cvt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = utf8cvt.cpp; sourceTree = "<group>"; };
 		406FC7FF233A016300106BCA /* usb_hidhost_impl.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = usb_hidhost_impl.cpp; path = src/usb_hidhost_impl.cpp; sourceTree = SOURCE_ROOT; };
 		406FC800233A016300106BCA /* uart_osx.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = uart_osx.cpp; path = src/uart_osx.cpp; sourceTree = SOURCE_ROOT; };
-		A01300000000000000000001 /* videodev.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ../../include/video/videodev.h; sourceTree = "<group>"; };
-		A01300000000000000000002 /* cam_arducam_mega.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ../../include/video/cam_arducam_mega.h; sourceTree = "<group>"; };
-		A01300000000000000000003 /* cam_arducam_mega.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ../../src/video/cam_arducam_mega.cpp; sourceTree = "<group>"; };
+		A01300000000000000000001 /* ../../include/video/videodev.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ../../include/video/videodev.h; sourceTree = "<group>"; };
+		A01300000000000000000002 /* ../../include/video/cam_arducam_mega.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ../../include/video/cam_arducam_mega.h; sourceTree = "<group>"; };
+		A01300000000000000000003 /* ../../src/video/cam_arducam_mega.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ../../src/video/cam_arducam_mega.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -170,16 +170,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A01300000000000000000021 /* video */ = {
-			isa = PBXGroup;
-			children = (
-				A01300000000000000000001 /* videodev.h */,
-				A01300000000000000000002 /* cam_arducam_mega.h */,
-				A01300000000000000000003 /* cam_arducam_mega.cpp */,
-			);
-			name = video;
-			sourceTree = "<group>";
-		};
 		406FC6642339FDA800106BCA = {
 			isa = PBXGroup;
 			children = (
@@ -265,14 +255,6 @@
 			path = coredev;
 			sourceTree = "<group>";
 		};
-		CF611F3A0000000000000001 /* audio */ = {
-			isa = PBXGroup;
-			children = (
-				406FC70F233A00C400106BCA /* buzzer.h */,
-			);
-			path = audio;
-			sourceTree = "<group>";
-		};
 		406FC708233A00C400106BCA /* miscdev */ = {
 			isa = PBXGroup;
 			children = (
@@ -327,9 +309,27 @@
 			children = (
 				406FC749233A00C400106BCA /* timer.cpp */,
 				406FC74A233A00C400106BCA /* spi.cpp */,
-				406FC74B233A00C400106BCA /* uart.c */,
+				406FC74B233A00C400106BCA /* uart.cpp */,
 			);
 			path = coredev;
+			sourceTree = "<group>";
+		};
+		A01300000000000000000021 /* video */ = {
+			isa = PBXGroup;
+			children = (
+				A01300000000000000000001 /* ../../include/video/videodev.h */,
+				A01300000000000000000002 /* ../../include/video/cam_arducam_mega.h */,
+				A01300000000000000000003 /* ../../src/video/cam_arducam_mega.cpp */,
+			);
+			name = video;
+			sourceTree = "<group>";
+		};
+		CF611F3A0000000000000001 /* audio */ = {
+			isa = PBXGroup;
+			children = (
+				406FC70F233A00C400106BCA /* buzzer.h */,
+			);
+			path = audio;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -339,8 +339,8 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A01300000000000000000011 /* videodev.h in Headers */,
-				A01300000000000000000012 /* cam_arducam_mega.h in Headers */,
+				A01300000000000000000011 /* ../../include/video/videodev.h in Headers */,
+				A01300000000000000000012 /* ../../include/video/cam_arducam_mega.h in Headers */,
 				4028DD0A2FBE7C2500450A9D /* idelay.h in Headers */,
 				406FC7AB233A00C400106BCA /* buzzer.h in Headers */,
 				406FC7B0233A00C400106BCA /* intelhex.h in Headers */,
@@ -450,12 +450,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A01300000000000000000013 /* cam_arducam_mega.cpp in Sources */,
+				A01300000000000000000013 /* ../../src/video/cam_arducam_mega.cpp in Sources */,
 				406FC7DC233A00C400106BCA /* prbs.c in Sources */,
 				406FC7ED233A00C400106BCA /* crc.c in Sources */,
 				406FC7CF233A00C400106BCA /* device.cpp in Sources */,
 				406FC7C7233A00C400106BCA /* isha1.c in Sources */,
-				406FC7E1233A00C400106BCA /* uart.c in Sources */,
+				406FC7E1233A00C400106BCA /* uart.cpp in Sources */,
 				406FC7E0233A00C400106BCA /* spi.cpp in Sources */,
 				406FC7B3233A00C400106BCA /* isha256.c in Sources */,
 				406FC7CE233A00C400106BCA /* adc_ltc2495.cpp in Sources */,
