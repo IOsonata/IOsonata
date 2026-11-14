@@ -207,6 +207,33 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.bBlocking = true,
 };
 
+// Drain both the logger and the UART DMA before removing the UART clock.
+// SysLogFlush reports bytes accepted by the UART, not bytes on the wire.
+static bool PowerDemoConsoleDrain(void)
+{
+	UARTDev_t *pUart;
+	SysLog_t *pLog;
+	int i;
+
+	pUart = (UARTDev_t *)s_Uart;
+	pLog = SysLogGet();
+
+	for (i = 0; i < 500; i++)
+	{
+		(void)SysLogFlush(pLog);
+		if (CFifoUsed(pLog->hFifo) == 0 &&
+			CFifoUsed(pUart->hTxFifo) == 0 &&
+			pUart->bTxReady)
+		{
+			// Give the physical TX line time to return to idle.
+			msDelay(2);
+			return true;
+		}
+		msDelay(1);
+	}
+	return false;
+}
+
 static const struct {
 	uint32_t Reason;
 	const char *pName;
@@ -252,6 +279,20 @@ int main()
 	cnt++;
 	SystemRetRegWrite(0, cnt);
 	SysLogPrintf(SysLogGet(), "Start count %u, %d retention registers\r\n", (unsigned)cnt, SystemRetRegCount());
+
+#if defined(POWER_DEMO_STOP_ON_DEBUG_RESET) && POWER_DEMO_STOP_ON_DEBUG_RESET
+	if ((reason & SYSTEM_RESET_DEBUG) && !(reason & SYSTEM_RESET_WAKE_MSK))
+	{
+		SysLogPrintf(SysLogGet(),
+			"Debug reset 0x%08x: System OFF skipped to avoid reset loop\r\n",
+			(unsigned)reason);
+		(void)PowerDemoConsoleDrain();
+		while (1)
+		{
+			__WFE();
+		}
+	}
+#endif
 
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
 	// Check before writing the next pattern. Startup must leave RAM1 untouched.
@@ -315,10 +356,33 @@ int main()
 		SysLogPrintf(SysLogGet(), "Power off, the button cannot wake this MCU, use the reset pin\r\n");
 	}
 
-	// Time for the UART to send the last record
-	msDelay(100);
+	// The UART may still own EasyDMA even after SysLog has accepted a record.
+	if (!PowerDemoConsoleDrain())
+	{
+		SysLogPrintf(SysLogGet(), "Console TX timeout: System OFF cancelled\r\n");
+		(void)PowerDemoConsoleDrain();
+		while (1)
+		{
+			__WFE();
+		}
+	}
+
+#if defined(POWER_DEMO_UART_SHUTDOWN) && POWER_DEMO_UART_SHUTDOWN
+	// Disable the UART only after the last TX has completed.
+	s_Uart.Disable();
+#endif
 
 	SystemPowerOff();
+
+	// SystemPowerOff may return if entry is refused (for example HFXO busy).
+#if !defined(POWER_DEMO_UART_SHUTDOWN) || !POWER_DEMO_UART_SHUTDOWN
+	SysLogPrintf(SysLogGet(), "SystemPowerOff returned without entering System OFF\r\n");
+	(void)PowerDemoConsoleDrain();
+#endif
+	while (1)
+	{
+		__WFE();
+	}
 
 	return 0;
 }
