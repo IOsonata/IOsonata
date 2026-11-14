@@ -85,8 +85,15 @@ optional modem shared-memory sections; unlike the tested nRF54 targets
 it does not reserve a separate free RAM1 region. Do not reuse the nRF54
 fixed RAM test addresses on nRF91 without a dedicated linker reservation.
 
-nRF91 hardware power/clock validation and outstanding family-specific
-build checks remain pending.
+The nRF91x1 PowerOffDemo was hardware validated on the reported DK setup:
+three successive GPIO wakeups from System OFF, with reset reason
+SYSTEM_RESET_WAKE_PIN (0x100) and GPREGRET start counter increasing from
+3 to 6. This validates bare-metal System OFF, button wakeup and retention
+registers for the tested configuration. It does not validate SRAM retention,
+modem-active shutdown, or the independent nRF9160 variant.
+
+Outstanding family-specific build checks and the nRF5340 network-core
+power limitations still require review.
 
 ## SAM4E
 
