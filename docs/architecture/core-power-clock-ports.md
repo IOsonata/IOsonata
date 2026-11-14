@@ -30,6 +30,26 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
+## STM32WBA power port (0.14 work in progress)
+
+STM32WBA requires a family-specific power implementation rather than using
+the existing F0/F4/L1/L4/G4/H7 power register layout. WBA6 uses separate
+PWR wakeup control registers (WUCR1, WUCR2, WUCR3), and supports optional
+SRAM1/SRAM2 Standby retention. The standby mode is entered with PWR CR1
+LPMS and exits through reset. Radio Link Layer users must stop or enter the
+required deep-sleep mode before Standby.
+
+Port status: WBA2 MCU selection is recognized by stm32.h, but the generic
+power functions have not yet been implemented or linked into the WBA65
+Eclipse MCU library. Do not claim SystemPowerOff or RAM retention support
+until the CMSIS register definitions, wakeup mux and protection/security
+configuration have been matched to the WBA65 reference manual, and the
+source has passed target builds and hardware tests.
+
+Reference: ST RM0515 (STM32WBA6), chapter 11 Power control.
+The earlier STM32WBA5 uses RM0493; its register and wakeup routing
+differences require separate review.
+
 ## Nordic validation (0.14)
 
 The Nordic HFXO reference-count and ownership regression was verified on
