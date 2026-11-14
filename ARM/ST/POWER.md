@@ -115,7 +115,13 @@ and autonomous peripheral resources before entering Standby.
 The STM32WBA65I-DK1 has an analog joystick, not a GPIO button. Hardware
 wakeup validation therefore needs an external input wired to a supported
 wakeup pin and a suitable pull resistor. The on-board VCOM uses USART1,
-RX PA8 and TX PB12. SRAM Standby retention is not implemented yet;
-SystemRamRetain returns false. Standby, backup registers and wakeup routing
+RX PA8 and TX PB12. SRAM Standby retention is implemented for the STM32WBA65 I memory
+variant. SystemRamRetain selects whole-bank retention for SRAM1
+(0x20000000, 448 KB) or SRAM2 (0x20070000, 64 KB). A range inside a
+bank selects retention of the entire bank, not merely those bytes. The
+standard linker script allocates all 512 KB as contiguous RAM and does not
+reserve a test range. Use a dedicated linker reservation when testing
+persistence after wake reset. The WBA65 G variant has less SRAM1; the
+current retention bounds apply to the I variant only. Standby, backup registers and wakeup routing
 remain unvalidated on target hardware. The earlier WBA2/WBA5 series are
 not covered by this source yet.
