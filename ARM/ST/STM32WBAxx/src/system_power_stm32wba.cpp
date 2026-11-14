@@ -130,7 +130,27 @@ uint32_t SystemResetReason(void)
 	{
 		// Standby resets core logic; its power-on flags are not the cause.
 		reason &= ~SYSTEM_RESET_POWERON;
-		if (wake != 0U)
+		// RTC/TAMP can be routed through WKUP6/7/8. They are not GPIO.
+		uint32_t rtcWake = 0U;
+		if ((wake & (1UL << 5)) &&
+			((PWR->WUCR3 >> 10U) & 3U) == 3U)
+		{
+			rtcWake |= 1UL << 5;
+		}
+		if ((wake & (1UL << 6)) &&
+			((PWR->WUCR3 >> 12U) & 3U) == 3U)
+		{
+			rtcWake |= 1UL << 6;
+		}
+		if (rtcWake)
+		{
+			reason |= SYSTEM_RESET_WAKE_TIMER;
+		}
+		if (wake & ~((1UL << 5) | (1UL << 6) | (1UL << 7)))
+		{
+			reason |= SYSTEM_RESET_WAKE_PIN;
+		}
+		if ((wake & ((1UL << 5) | (1UL << 6))) != rtcWake)
 		{
 			reason |= SYSTEM_RESET_WAKE_PIN;
 		}
