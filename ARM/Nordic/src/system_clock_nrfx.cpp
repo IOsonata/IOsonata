@@ -399,12 +399,10 @@ bool nRFxClockPrepareSystemOff(void)
 		return false;
 	}
 
-	if (nRFxHfxoRunning())
-	{
-		NRF_CLOCK->TASKS_XOSTOP = 1U;
-	}
 	EnableInterrupt(state);
 
+	// A running oscillator with no IOsonata request belongs to another
+	// component. Never stop it here. Wait only for a pending stop to settle.
 	for (i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
 	{
 		if (nRFxHfxoRunning() == false)
