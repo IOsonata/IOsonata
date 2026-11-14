@@ -5,7 +5,8 @@
 families: `SystemResetReason`, `SystemPowerOff`, `SystemWakePin`,
 `SystemRetRegCount`, `SystemRetRegRead`, `SystemRetRegWrite` and
 `SystemRamRetain`. One source serves them all; the differences are keyed on
-the CMSIS device header. The WBA is not done yet.
+the CMSIS device header. STM32WBA65 uses its own implementation in
+`ARM/ST/STM32WBAxx/src/system_power_stm32wba.cpp` on the 0.14 working branch.
 
 ## Power off
 
@@ -100,3 +101,21 @@ each function in Unicorn against a model of the RCC reset flags, PWR, the RTC
 backup registers and alarm flag, the GPIO pull resistors and SCB SCR. The wake
 up pins and the RAM kept come from the reference manuals and datasheets in the
 script. Not run on hardware yet.
+
+## STM32WBA65 (0.14 branch)
+
+The standalone WBA65 power source is linked to the managed STM32WBA65 MCU
+library. It implements reset reason, Standby through the PWR CR1 LPMS field,
+wake GPIO input selection/polarity on WUCR1/2/3 and TAMP backup registers.
+Wakeup lines 1–8 have selectable input pins, not the fixed STM32L4 mapping.
+The code only updates wakeup lines configured by SystemWakePin, preserving
+other drivers' wake settings. The application must release Bluetooth/radio
+and autonomous peripheral resources before entering Standby.
+
+The STM32WBA65I-DK1 has an analog joystick, not a GPIO button. Hardware
+wakeup validation therefore needs an external input wired to a supported
+wakeup pin and a suitable pull resistor. The on-board VCOM uses USART1,
+RX PA8 and TX PB12. SRAM Standby retention is not implemented yet;
+SystemRamRetain returns false. Standby, backup registers and wakeup routing
+remain unvalidated on target hardware. The earlier WBA2/WBA5 series are
+not covered by this source yet.
