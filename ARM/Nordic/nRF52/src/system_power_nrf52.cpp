@@ -303,7 +303,7 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 
 	uint32_t off = (uint32_t)(Addr - base);
 
-	if (Size > ramsize - off)
+	if (Size == 0 || Size > ramsize - off)
 	{
 		return false;
 	}
