@@ -317,12 +317,19 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 
 	uint32_t off = (uint32_t)(Addr - SYS_PWR_RAM_BASE);
 
-	if (Size > ramsize - off)
+	if (Size == 0 || Size > ramsize - off)
 	{
 		return false;
 	}
 
+	// Check the whole range before changing any retention registers.
 	uint32_t end = off + Size;
+	uint32_t lastunit = (end - 1U) / SYS_PWR_RAM_SECT;
+
+	if (lastunit / SYS_PWR_RAM_PERBLK >= SYS_PWR_NB_RAMBLK)
+	{
+		return false;
+	}
 
 	while (off < end)
 	{
