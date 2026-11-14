@@ -49,6 +49,7 @@ static const StWbaWakePin_t s_WakePins[] = {
 	{ IOPORTB, 9, 7, 2 }
 };
 
+static uint32_t s_WakeConfigured;
 static uint32_t s_WakeEnable;
 static uint32_t s_WakeLow;
 static uint32_t s_WakeSelect;
@@ -177,19 +178,32 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 			return false;
 	}
 
+	s_WakeConfigured |= bit;
 	return true;
 }
 
 void SystemPowerOff(void)
 {
 	uint32_t en;
+	uint32_t selectMask;
+	uint32_t i;
 
-	en = s_WakeEnable;
-	// Configure polarity and input mux before enabling wakeup lines.
-	PWR->WUCR1 &= ~0xFFUL;
-	PWR->WUCR2 = (PWR->WUCR2 & ~0xFFUL) | s_WakeLow;
-	PWR->WUCR3 = s_WakeSelect;
-	PWR->WUSCR = 0xFFUL;
+	en = s_WakeEnable & s_WakeConfigured;
+	selectMask = 0;
+	for (i = 0; i < 8U; i++)
+	{
+		if (s_WakeConfigured & (1UL << i))
+		{
+			selectMask |= 3UL << (2U * i);
+		}
+	}
+
+	// Do not overwrite RTC, radio or other wake sources owned by drivers.
+	PWR->WUCR1 &= ~s_WakeConfigured;
+	PWR->WUCR2 = (PWR->WUCR2 & ~s_WakeConfigured) |
+		(s_WakeLow & s_WakeConfigured);
+	PWR->WUCR3 = (PWR->WUCR3 & ~selectMask) | (s_WakeSelect & selectMask);
+	PWR->WUSCR = s_WakeConfigured;
 	PWR->WUCR1 |= en;
 
 	PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_2;
