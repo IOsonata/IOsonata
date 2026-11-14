@@ -53,9 +53,16 @@ setup; they are not counted as System OFF GPIO-wakeup validation, and their
 precise trigger was not established. Run the Release firmware standalone and
 monitor through UART. Do not add debug-reset suppression to the generic demo.
 
-The nRF5340, nRF54LM20 and nRF91 power/clock paths still require their
-own target-specific build and hardware regression results. SRAM retention
-testing above verifies the specified nRF54L15 sections, not every RAM section.
+On the nRF54LM20 DK, Release PowerOffDemo completed three consecutive
+System OFF / button wakeup cycles. Reset reason was
+SYSTEM_RESET_WAKE_PIN (0x100), with GPREGRET counter increasing from 3 to 6.
+The 32 KB retained RAM1 section at 0x20040000 preserved 8192/8192 words
+each cycle. The separate non-retained RAM1 section at 0x20048000 had
+0/8192 original words remaining each cycle. These results validate the
+specified sections only, not all RAM retention modes.
+
+The nRF5340 and nRF91 power/clock paths still require target-specific build
+and hardware regression results.
 
 ## SAM4E
 
