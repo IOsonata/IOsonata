@@ -61,8 +61,18 @@ each cycle. The separate non-retained RAM1 section at 0x20048000 had
 0/8192 original words remaining each cycle. These results validate the
 specified sections only, not all RAM retention modes.
 
-The nRF5340 and nRF91 power/clock paths still require target-specific build
-and hardware regression results.
+On the nRF5340 Audio DK (PCA10121), the application-core Release PowerOffDemo
+used UART RX P1.04, TX P1.05 and PLAY/PAUSE P0.04 for wakeup. Two
+consecutive System OFF/wakeup cycles reported SYSTEM_RESET_WAKE_PIN (0x100).
+The GPREGRET startup count advanced from 8 to 10. The 32 KB RAM1 region at
+0x20040000 retained all 8192/8192 test words, and the separate 32 KB region
+at 0x20048000 retained 0/8192 original words, after each wakeup. The example
+uses P0.04 because the earlier P0.02 VOL- configuration read as asserted
+when the button was not pressed. Temporary pin diagnostics were removed
+after validation. The nRF5340 network-core power path was not exercised.
+
+nRF91 hardware power/clock validation and any outstanding family-specific
+build checks remain pending.
 
 ## SAM4E
 
