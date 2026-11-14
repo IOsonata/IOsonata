@@ -72,6 +72,8 @@ static uint32_t s_WakeSelect;
 	PWR_CR1_R1RSB3 | PWR_CR1_R1RSB4 | PWR_CR1_R1RSB567)
 #define ST_WBA_SRAM2_RET	(PWR_CR1_R2RSB1 | PWR_CR1_R2RSB2)
 
+static bool s_bRam1Configured;
+static bool s_bRam2Configured;
 static bool s_bRam1Retain;
 static bool s_bRam2Retain;
 
@@ -231,6 +233,7 @@ void SystemPowerOff(void)
 	uint32_t selectMask;
 	uint32_t i;
 	uint32_t ram;
+	uint32_t ramMask;
 
 	en = s_WakeEnable & s_WakeConfigured;
 	selectMask = 0;
@@ -252,9 +255,10 @@ void SystemPowerOff(void)
 
 	ram = (s_bRam1Retain ? ST_WBA_SRAM1_RET : 0U) |
 		(s_bRam2Retain ? ST_WBA_SRAM2_RET : 0U);
-	PWR->CR1 = (PWR->CR1 & ~(PWR_CR1_LPMS |
-		ST_WBA_SRAM1_RET | ST_WBA_SRAM2_RET)) |
-		PWR_CR1_LPMS_2 | ram;
+	ramMask = (s_bRam1Configured ? ST_WBA_SRAM1_RET : 0U) |
+		(s_bRam2Configured ? ST_WBA_SRAM2_RET : 0U);
+	PWR->CR1 = (PWR->CR1 & ~(PWR_CR1_LPMS | ramMask)) |
+		PWR_CR1_LPMS_2 | (ram & ramMask);
 	SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
 	__DSB();
 	while (1)
@@ -329,6 +333,7 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 		if (off < ST_WBA_SRAM1_SIZE &&
 			Size <= ST_WBA_SRAM1_SIZE - off)
 		{
+			s_bRam1Configured = true;
 			s_bRam1Retain = bRetain;
 			return true;
 		}
@@ -340,6 +345,7 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 		if (off < ST_WBA_SRAM2_SIZE &&
 			Size <= ST_WBA_SRAM2_SIZE - off)
 		{
+			s_bRam2Configured = true;
 			s_bRam2Retain = bRetain;
 			return true;
 		}
