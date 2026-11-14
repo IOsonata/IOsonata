@@ -66,6 +66,7 @@ SOFTWARE.
 #define WAKE_BUT_PORT		0
 #define WAKE_BUT_PIN		2
 #define WAKE_BUT_PINOP		0
+#define POWER_DEMO_PIN_DIAG	1
 #endif
 
 // Test two sections in RAM1. Normal data and stack are in RAM;
