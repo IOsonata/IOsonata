@@ -12,6 +12,7 @@ Copyright (c) 2026 I-SYST inc.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 
+#include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 #include "coredev/system_core_clock.h"
 #include "board.h"
