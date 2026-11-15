@@ -126,7 +126,8 @@ enum {
 __attribute__((weak)) McuOsc_t g_McuOsc = {
 	{ OSC_TYPE_RC, SAMD_OSC8M_FREQ, 0UL, 0UL },
 	{ OSC_TYPE_RC, SAMD_OSC32K_FREQ, 0UL, 0UL },
-	false
+	false,
+	0U	// No DC/DC regulator stage on SAM D11/D21
 };
 
 // CPU clock after reset is OSC8M divided by 8
