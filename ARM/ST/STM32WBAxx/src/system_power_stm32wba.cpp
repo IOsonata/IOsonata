@@ -272,12 +272,7 @@ static void StWbaWakePullRetain(void)
 	}
 }
 
-// Diagnostic entry point: prepare the same Standby state without executing WFI.
-// PowerOffDemo reads the resulting registers, then calls SystemPowerOff.
-// A completed preparation is consumed once by SystemPowerOff.
-static bool s_bStandbyPrepared;
-
-bool StWbaPowerPrepareStandby(void)
+void SystemPowerOff(void)
 {
 	uint32_t en;
 	uint32_t selectMask;
@@ -285,7 +280,6 @@ bool StWbaPowerPrepareStandby(void)
 	uint32_t ram;
 	uint32_t ramMask;
 
-	s_bStandbyPrepared = false;
 	en = s_WakeEnable & s_WakeConfigured;
 	selectMask = 0;
 	for (i = 0; i < 8U; i++)
@@ -313,7 +307,7 @@ bool StWbaPowerPrepareStandby(void)
 		(s_WakeLow & s_WakeConfigured) ||
 		(PWR->WUCR3 & selectMask) != (s_WakeSelect & selectMask))
 	{
-		return false;
+		return;
 	}
 
 	ram = (s_bRam1Retain ? ST_WBA_SRAM1_RET : 0U) |
@@ -327,27 +321,14 @@ bool StWbaPowerPrepareStandby(void)
 	if ((PWR->CR1 & PWR_CR1_LPMS) != PWR_CR1_LPMS_2 ||
 		(SCB->SCR & SCB_SCR_SLEEPDEEP_Msk) == 0U)
 	{
-		return false;
-	}
-
-	s_bStandbyPrepared = true;
-	return true;
-}
-
-void SystemPowerOff(void)
-{
-	if (!s_bStandbyPrepared && !StWbaPowerPrepareStandby())
-	{
 		return;
 	}
 
-	s_bStandbyPrepared = false;
 	__DSB();
-	__WFI();
-
-	// If WFI returns without reset, Standby was not entered. Report this to
-	// the application instead of silently looping on an interrupt source.
-	SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
+	while (1)
+	{
+		__WFI();
+	}
 }
 
 static void StWbaBackupAccess(void)
