@@ -137,6 +137,12 @@ static void Sam4lStartupFailed(uint32_t Error)
 	}
 }
 
+static bool Sam4lClockFailed(uint32_t Error)
+{
+	s_StartupError = Error;
+	return false;
+}
+
 static bool Sam4lWaitBits(volatile const uint32_t *pReg,
 						 uint32_t Mask, uint32_t Value)
 {
@@ -195,57 +201,62 @@ static uint32_t Sam4lDivider(uint32_t Freq, uint32_t Limit)
 {
 	uint32_t shift = 0;
 	if (Freq == 0U || Limit == 0U) {
-		Sam4lStartupFailed(SAM4L_STARTUP_CLOCK_SWITCH);
+		return UINT32_MAX;
 	}
 	while (Freq > Limit && shift < 8U) {
 		Freq = (Freq >> 1U) + (Freq & 1U); // Rounded up, without overflow.
 		++shift;
 	}
 	if (Freq > Limit) {
-		Sam4lStartupFailed(SAM4L_STARTUP_CLOCK_SWITCH);
+		return UINT32_MAX;
 	}
 	return shift == 0U ? 0U : PM_CPUSEL_CPUDIV | PM_CPUSEL_CPUSEL(shift - 1U);
 }
 
-static void Sam4lWriteDivider(volatile uint32_t *pReg, uint32_t Sel)
+static bool Sam4lWriteDivider(volatile uint32_t *pReg, uint32_t Sel)
 {
 	if (!Sam4lWaitBits(&SAM4L_PM->PM_SR, PM_SR_CKRDY, PM_SR_CKRDY)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_CLOCK_SWITCH);
+		return Sam4lClockFailed(SAM4L_STARTUP_CLOCK_SWITCH);
 	}
 	Sam4lWritePm(pReg, Sel);
 	if (!Sam4lWaitBits(&SAM4L_PM->PM_SR, PM_SR_CKRDY, PM_SR_CKRDY) ||
 		*pReg != Sel) {
-		Sam4lStartupFailed(SAM4L_STARTUP_CLOCK_SWITCH);
+		return Sam4lClockFailed(SAM4L_STARTUP_CLOCK_SWITCH);
 	}
+	return true;
 }
 
-// Startup only: no peripheral/AHB transfers may be active. When slowing the
+// No peripheral/AHB transfers may be active. When slowing the
 // CPU, slow the PB clocks first; when speeding it up, change CPUSEL first.
 // The final PBB and CPU/HSB frequencies are equal, as required by AHB modules.
-static void Sam4lSetSyncClkDividers(uint32_t Sel)
+static bool Sam4lSetSyncClkDividers(uint32_t Sel)
 {
 	bool slowing = Sam4lApplyClkDiv(256U, Sel) <
 		Sam4lApplyClkDiv(256U, SAM4L_PM->PM_CPUSEL);
-	if (!slowing) {
-		Sam4lWriteDivider(&SAM4L_PM->PM_CPUSEL, Sel);
+
+	if (!slowing && !Sam4lWriteDivider(&SAM4L_PM->PM_CPUSEL, Sel))
+	{
+		return false;
 	}
-	Sam4lWriteDivider(&SAM4L_PM->PM_PBASEL, Sel);
-	Sam4lWriteDivider(&SAM4L_PM->PM_PBCSEL, Sel);
-	Sam4lWriteDivider(&SAM4L_PM->PM_PBDSEL, Sel);
-	Sam4lWriteDivider(&SAM4L_PM->PM_PBBSEL, Sel);
-	if (slowing) {
-		Sam4lWriteDivider(&SAM4L_PM->PM_CPUSEL, Sel);
+	if (!Sam4lWriteDivider(&SAM4L_PM->PM_PBASEL, Sel) ||
+		!Sam4lWriteDivider(&SAM4L_PM->PM_PBCSEL, Sel) ||
+		!Sam4lWriteDivider(&SAM4L_PM->PM_PBDSEL, Sel) ||
+		!Sam4lWriteDivider(&SAM4L_PM->PM_PBBSEL, Sel))
+	{
+		return false;
 	}
+	return !slowing || Sam4lWriteDivider(&SAM4L_PM->PM_CPUSEL, Sel);
 }
 
-static void Sam4lSelectMain(uint32_t Source)
+static bool Sam4lSelectMain(uint32_t Source)
 {
 	Sam4lWritePm(&SAM4L_PM->PM_MCCTRL, Source);
 	__DSB();
 	__ISB();
 	if (SAM4L_PM->PM_MCCTRL != Source) {
-		Sam4lStartupFailed(SAM4L_STARTUP_CLOCK_SWITCH);
+		return Sam4lClockFailed(SAM4L_STARTUP_CLOCK_SWITCH);
 	}
+	return true;
 }
 
 // FRDY/HSMODE reflect the latest sample. Command error bits are accumulated
@@ -303,14 +314,15 @@ void FlashSendCommand(uint32_t Cmd, int PgNo)
 	(void)Sam4lFlashCommand(Cmd, PgNo);
 }
 
-static void Sam4lFlashReadMode(uint32_t Cmd)
+static bool Sam4lFlashReadMode(uint32_t Cmd)
 {
 	uint32_t status = Sam4lFlashWait(STARTUP_POLL_LIMIT);
 	uint32_t mode = Cmd == FLASHCALW_FCMD_CMD_HSEN ? FLASHCALW_FSR_HSMODE : 0U;
 	if ((status & FLASHCALW_FSR_FRDY) == 0U ||
 		((status & FLASHCALW_FSR_HSMODE) != mode && !Sam4lFlashCommand(Cmd, -1))) {
-		Sam4lStartupFailed(SAM4L_STARTUP_FLASH);
+		return Sam4lClockFailed(SAM4L_STARTUP_FLASH);
 	}
+	return true;
 }
 
 static bool Sam4lFlashSettings(uint32_t Freq, uint32_t Pmcon,
@@ -347,7 +359,7 @@ static bool Sam4lFlashSettings(uint32_t Freq, uint32_t Pmcon,
 
 // Freq is an HSB frequency bound, not an oscillator frequency. Set timing
 // BEFORE increasing the clock. SystemCoreClockUpdate is deliberately read-only.
-void SetFlashWaitState(uint32_t Freq)
+static bool Sam4lFlashWaitState(uint32_t Freq)
 {
 	uint32_t cmd;
 	uint32_t fws;
@@ -355,19 +367,31 @@ void SetFlashWaitState(uint32_t Freq)
 	if ((pmcon & BPM_PMCON_PSCREQ) != 0U ||
 		(SAM4L_BPM->BPM_SR & BPM_SR_PSOK) == 0U ||
 		!Sam4lFlashSettings(Freq, pmcon, &cmd, &fws)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_FLASH);
+		return Sam4lClockFailed(SAM4L_STARTUP_FLASH);
 	}
 	uint32_t fcr = SAM4L_HFLASHC->FLASHCALW_FCR &
 		~(FLASHCALW_FCR_FWS | FLASHCALW_FCR_WS1OPT);
 	SAM4L_HFLASHC->FLASHCALW_FCR = fcr | FLASHCALW_FCR_FWS_1 | FLASHCALW_FCR_WS1OPT;
-	Sam4lFlashReadMode(cmd);
+	if (!Sam4lFlashReadMode(cmd))
+	{
+		return false;
+	}
 	SAM4L_HFLASHC->FLASHCALW_FCR = fcr | fws;
 	if ((SAM4L_HFLASHC->FLASHCALW_FCR &
 		 (FLASHCALW_FCR_FWS | FLASHCALW_FCR_WS1OPT)) != fws) {
-		Sam4lStartupFailed(SAM4L_STARTUP_FLASH);
+		return Sam4lClockFailed(SAM4L_STARTUP_FLASH);
 	}
 	__DSB();
 	__ISB();
+	return true;
+}
+
+void SetFlashWaitState(uint32_t Freq)
+{
+	if (!Sam4lFlashWaitState(Freq))
+	{
+		Sam4lStartupFailed(s_StartupError);
+	}
 }
 
 // gcc_arm_flash.ld places .fastrun in initialized SRAM. ResetEntry copies
@@ -428,7 +452,10 @@ static uint32_t Sam4lPreparePower(void)
 	uint32_t limit = ps2 ? SYSTEM_CORE_CLOCK : 36000000UL;
 	uint32_t pmcon = SAM4L_BPM->BPM_PMCON;
 	SAM4L_HFLASHC->FLASHCALW_FCR |= FLASHCALW_FCR_FWS_1 | FLASHCALW_FCR_WS1OPT;
-	Sam4lFlashReadMode(ps2 ? FLASHCALW_FCMD_CMD_HSEN : FLASHCALW_FCMD_CMD_HSDIS);
+	if (!Sam4lFlashReadMode(ps2 ? FLASHCALW_FCMD_CMD_HSEN : FLASHCALW_FCMD_CMD_HSDIS))
+	{
+		Sam4lStartupFailed(SAM4L_STARTUP_FLASH);
+	}
 	if ((pmcon & BPM_PMCON_PS_Msk) != target) {
 		// Both SAM4L SRAM sizes use the 0x20000000 region. Catch an absent
 		// .fastrun placement before requesting a transition. Final ELF
@@ -498,26 +525,27 @@ static bool Sam4lOsc0Gain(uint32_t Freq, uint32_t *pGain)
 	return true;
 }
 
-static void Sam4lEnableOsc0(void)
+static bool Sam4lEnableOsc0(void)
 {
 	uint32_t gain = 0;
 	uint32_t config = 0;
 	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL) {
 		if (!Sam4lOsc0Gain(g_McuOsc.CoreOsc.Freq, &gain)) {
-			Sam4lStartupFailed(SAM4L_STARTUP_CONFIG);
+			return Sam4lClockFailed(SAM4L_STARTUP_CONFIG);
 		}
 		config = SCIF_OSCCTRL0_MODE | SCIF_OSCCTRL0_GAIN(gain) |
 			SCIF_OSCCTRL0_STARTUP(SAM4L_OSC0_STARTUP);
 	} else if (g_McuOsc.CoreOsc.Type != OSC_TYPE_TCXO ||
 			   g_McuOsc.CoreOsc.Freq == 0U ||
 			   g_McuOsc.CoreOsc.Freq > 50000000UL) {
-		Sam4lStartupFailed(SAM4L_STARTUP_CONFIG);
+		return Sam4lClockFailed(SAM4L_STARTUP_CONFIG);
 	}
 	Sam4lWriteScif(&SAM4L_SCIF->SCIF_OSCCTRL0, config | SCIF_OSCCTRL0_OSCEN);
 	if (!Sam4lWaitBits(&SAM4L_SCIF->SCIF_PCLKSR,
 					  SCIF_PCLKSR_OSC0RDY, SCIF_PCLKSR_OSC0RDY)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_OSC0);
+		return Sam4lClockFailed(SAM4L_STARTUP_OSC0);
 	}
+	return true;
 }
 
 // Keep the existing preferred 192/96 MHz plan. Both are legal VCO rates.
@@ -560,19 +588,19 @@ static bool Sam4lPllConfig(uint32_t Freq, uint32_t *pConfig, uint32_t *pRate)
 	return false;
 }
 
-void SystemSetPLL(void)
+static bool Sam4lSetPll(void)
 {
 	uint32_t config;
 	uint32_t rate;
 	s_PllFreq = 0;
 	if (!Sam4lPllConfig(g_McuOsc.CoreOsc.Freq, &config, &rate)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_PLL);
+		return Sam4lClockFailed(SAM4L_STARTUP_PLL);
 	}
 	volatile uint32_t *reg = &SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL;
-	// Called only during startup on RCSYS, before GCLK7 is enabled.
+	// Called on RCSYS with GCLK7 stopped.
 	Sam4lWriteScif(reg, *reg & ~SCIF_PLL_PLLEN);
 	if (!Sam4lWaitBits(reg, SCIF_PLL_PLLEN, 0U)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_PLL);
+		return Sam4lClockFailed(SAM4L_STARTUP_PLL);
 	}
 	Sam4lWriteScif(reg, config);
 	// Erratum 45.1.2: PLLCOUNT must remain zero, including on wake-up.
@@ -580,57 +608,98 @@ void SystemSetPLL(void)
 	if (!Sam4lWaitBits(&SAM4L_SCIF->SCIF_PCLKSR,
 					  SCIF_PCLKSR_PLL0LOCK, SCIF_PCLKSR_PLL0LOCK) ||
 		*reg != (config | SCIF_PLL_PLLEN)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_PLL);
+		return Sam4lClockFailed(SAM4L_STARTUP_PLL);
 	}
 	s_PllFreq = rate;
+	return true;
 }
 
-static void Sam4lDfllWrite(volatile uint32_t *pReg, uint32_t Value)
+void SystemSetPLL(void)
+{
+	if (!Sam4lSetPll())
+	{
+		Sam4lStartupFailed(s_StartupError);
+	}
+}
+
+static bool Sam4lDfllWrite(volatile uint32_t *pReg, uint32_t Value)
 {
 	if (!Sam4lWaitBits(&SAM4L_SCIF->SCIF_PCLKSR,
 					  SCIF_PCLKSR_DFLL0RDY, SCIF_PCLKSR_DFLL0RDY)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_DFLL);
+		return Sam4lClockFailed(SAM4L_STARTUP_DFLL);
 	}
 	Sam4lWriteScif(pReg, Value);
+	return true;
 }
 
 // Output in nominal MHz, using GCLK0 at nominal 62.5 kHz. The old 1 MHz
 // reference was outside table 42-27's 8..150 kHz operating range.
-void ConfigDFLL0Freq(uint16_t MHz)
+static bool Sam4lConfigDfll(uint16_t MHz)
 {
 	if (MHz < 20U || MHz > 150U) {
-		Sam4lStartupFailed(SAM4L_STARTUP_DFLL);
+		return Sam4lClockFailed(SAM4L_STARTUP_DFLL);
 	}
 	SAM4L_SCIF->SCIF_DFLL0SYNC = SCIF_DFLL0SYNC_SYNC;
 	if (!Sam4lWaitBits(&SAM4L_SCIF->SCIF_PCLKSR,
 					  SCIF_PCLKSR_DFLL0RDY, SCIF_PCLKSR_DFLL0RDY)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_DFLL);
+		return Sam4lClockFailed(SAM4L_STARTUP_DFLL);
 	}
 	uint32_t conf = SAM4L_SCIF->SCIF_DFLL0CONF;
 	if ((conf & SCIF_DFLL0CONF_EN) == 0U) {
+		// Enable alone before configuring the closed loop.
 		conf |= SCIF_DFLL0CONF_EN;
-		Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0CONF, conf); // EN alone
+		if (!Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0CONF, conf))
+		{
+			return false;
+		}
 	}
 	uint32_t range = MHz < 30U ? 3U : MHz < 55U ? 2U : MHz < 110U ? 1U : 0U;
 	conf &= ~(SCIF_DFLL0CONF_MODE | SCIF_DFLL0CONF_RANGE_Msk |
 			  SCIF_DFLL0CONF_STABLE | SCIF_DFLL0CONF_LLAW |
 			  SCIF_DFLL0CONF_CCDIS | SCIF_DFLL0CONF_QLDIS);
 	conf |= SCIF_DFLL0CONF_RANGE(range);
-	Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0CONF, conf);
-	Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0MUL,
-				  SCIF_DFLL0MUL_MUL((uint32_t)MHz * (1000000UL / DFLL_REF_FREQ)));
-	Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0STEP,
-				  SCIF_DFLL0STEP_CSTEP(4U) | SCIF_DFLL0STEP_FSTEP(4U));
-	Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0VAL,
-				  SCIF_DFLL0VAL_COARSE(16U) | SCIF_DFLL0VAL_FINE(128U));
-	Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0SSG, 0U);
-	Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0CONF, conf | SCIF_DFLL0CONF_MODE);
+	if (!Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0CONF, conf))
+	{
+		return false;
+	}
+	if (!Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0MUL,
+				  SCIF_DFLL0MUL_MUL((uint32_t)MHz * (1000000UL / DFLL_REF_FREQ))))
+	{
+		return false;
+	}
+	if (!Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0STEP,
+				  SCIF_DFLL0STEP_CSTEP(4U) | SCIF_DFLL0STEP_FSTEP(4U)))
+	{
+		return false;
+	}
+	if (!Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0VAL,
+				  SCIF_DFLL0VAL_COARSE(16U) | SCIF_DFLL0VAL_FINE(128U)))
+	{
+		return false;
+	}
+	if (!Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0SSG, 0U))
+	{
+		return false;
+	}
+	if (!Sam4lDfllWrite(&SAM4L_SCIF->SCIF_DFLL0CONF, conf | SCIF_DFLL0CONF_MODE))
+	{
+		return false;
+	}
 	uint32_t ready = SCIF_PCLKSR_DFLL0RDY | SCIF_PCLKSR_DFLL0LOCKC |
 		SCIF_PCLKSR_DFLL0LOCKF;
 	if (!Sam4lWaitBits(&SAM4L_SCIF->SCIF_PCLKSR, ready, ready)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_DFLL);
+		return Sam4lClockFailed(SAM4L_STARTUP_DFLL);
 	}
 	s_DfllFreq = (uint32_t)MHz * 1000000UL;
+	return true;
+}
+
+void ConfigDFLL0Freq(uint16_t MHz)
+{
+	if (!Sam4lConfigDfll(MHz))
+	{
+		Sam4lStartupFailed(s_StartupError);
+	}
 }
 
 static uint32_t Sam4lRcFastFreq(void)
@@ -640,13 +709,13 @@ static uint32_t Sam4lRcFastFreq(void)
 	return range <= 2U ? (range + 1U) * 4000000UL : 0U;
 }
 
-static void Sam4lEnableRcFast(uint32_t Freq)
+static bool Sam4lEnableRcFast(uint32_t Freq)
 {
 	uint32_t config = SAM4L_SCIF->SCIF_RCFASTCFG;
 	if ((config & SCIF_RCFASTCFG_EN) != 0U) {
 		Sam4lWriteScif(&SAM4L_SCIF->SCIF_RCFASTCFG, config & ~SCIF_RCFASTCFG_EN);
 		if (!Sam4lWaitBits(&SAM4L_SCIF->SCIF_RCFASTCFG, SCIF_RCFASTCFG_EN, 0U)) {
-			Sam4lStartupFailed(SAM4L_STARTUP_RCFAST);
+			return Sam4lClockFailed(SAM4L_STARTUP_RCFAST);
 		}
 	}
 	// Preserve factory CALIB/FCD. FRANGE and CALIB may change only while
@@ -657,8 +726,9 @@ static void Sam4lEnableRcFast(uint32_t Freq)
 	Sam4lWriteScif(&SAM4L_SCIF->SCIF_RCFASTCFG, config | SCIF_RCFASTCFG_EN);
 	if (!Sam4lWaitBits(&SAM4L_SCIF->SCIF_RCFASTCFG, SCIF_RCFASTCFG_EN,
 					  SCIF_RCFASTCFG_EN)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_RCFAST);
+		return Sam4lClockFailed(SAM4L_STARTUP_RCFAST);
 	}
+	return true;
 }
 
 static bool Sam4lLowClockInit(const OscDesc_t *pOsc)
@@ -756,47 +826,72 @@ static bool Sam4lConfigurationValid(const McuOsc_t *pOsc)
 	return Sam4lLowClockValid(low, lf);
 }
 
-static void Sam4lClockInit(void)
+static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 {
-	uint32_t primask = __get_PRIMASK();
-	__disable_irq();
 	s_StartupError = SAM4L_STARTUP_OK;
 	s_StartupReg = 0U;
 	s_StartupValue = 0U;
 	s_PowerControl = 0U;
 	s_PowerStatus = 0U;
-	if (!Sam4lConfigurationValid(&g_McuOsc)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_CONFIG);
+	if (!Sam4lConfigurationValid(pOsc)) {
+		return Sam4lClockFailed(SAM4L_STARTUP_CONFIG);
 	}
 	// SystemInit is entered after reset, before peripheral initialization.
 	// Return to the always-available clock before touching clock sources.
-	Sam4lSelectMain(PM_MCCTRL_MCSEL(0U));
+	if (!Sam4lSelectMain(PM_MCCTRL_MCSEL(0U)))
+	{
+		return false;
+	}
+	g_McuOsc.CoreOsc = pOsc->CoreOsc;
 	s_MainClock = RCSYS_FREQ;
-	Sam4lSetSyncClkDividers(0U);
+	if (!Sam4lSetSyncClkDividers(0U))
+	{
+		return false;
+	}
 	SystemCoreClock = RCSYS_FREQ;
 
-	uint32_t mask = SAM4L_PM->PM_PBBMASK | PM_PBBMASK_HCACHE;
-	Sam4lWritePm(&SAM4L_PM->PM_PBBMASK, mask);
-	if ((SAM4L_PM->PM_PBBMASK & PM_PBBMASK_HCACHE) == 0U) {
-		Sam4lStartupFailed(SAM4L_STARTUP_CACHE);
-	}
-	if ((SAM4L_HCACHE->HCACHE_SR & HCACHE_SR_CSTS_EN) == 0U) {
-		SAM4L_HCACHE->HCACHE_CTRL = HCACHE_CTRL_CEN_YES;
-		if (!Sam4lWaitBits(&SAM4L_HCACHE->HCACHE_SR,
-						  HCACHE_SR_CSTS_EN, HCACHE_SR_CSTS_EN)) {
-			Sam4lStartupFailed(SAM4L_STARTUP_CACHE);
+	if (Startup)
+	{
+		uint32_t mask = SAM4L_PM->PM_PBBMASK | PM_PBBMASK_HCACHE;
+		Sam4lWritePm(&SAM4L_PM->PM_PBBMASK, mask);
+		if ((SAM4L_PM->PM_PBBMASK & PM_PBBMASK_HCACHE) == 0U) {
+			return Sam4lClockFailed(SAM4L_STARTUP_CACHE);
+		}
+		if ((SAM4L_HCACHE->HCACHE_SR & HCACHE_SR_CSTS_EN) == 0U) {
+			SAM4L_HCACHE->HCACHE_CTRL = HCACHE_CTRL_CEN_YES;
+			if (!Sam4lWaitBits(&SAM4L_HCACHE->HCACHE_SR,
+							  HCACHE_SR_CSTS_EN, HCACHE_SR_CSTS_EN)) {
+				return Sam4lClockFailed(SAM4L_STARTUP_CACHE);
+			}
 		}
 	}
 	// Stop owned generated clocks before changing a PLL/reference. All
 	// clients must be stopped on explicit re-entry, just as on reset.
 	if (!Sam4lGenericClock(7U, 0U) || !Sam4lGenericClock(0U, 0U)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_GCLK);
+		return Sam4lClockFailed(SAM4L_STARTUP_GCLK);
 	}
-	uint32_t coreLimit = Sam4lPreparePower();
-	// A long crystal start is still timed on RCSYS.
-	if (!Sam4lLowClockInit(&g_McuOsc.LowPwrOsc))
+	uint32_t coreLimit;
+	if (Startup)
 	{
-		Sam4lStartupFailed(SAM4L_STARTUP_LFCLK);
+		coreLimit = Sam4lPreparePower();
+		if (!Sam4lLowClockInit(&g_McuOsc.LowPwrOsc))
+		{
+			return Sam4lClockFailed(SAM4L_STARTUP_LFCLK);
+		}
+	}
+	else
+	{
+		// Runtime keeps the established voltage scale and low-frequency clock.
+		uint32_t pmcon = SAM4L_BPM->BPM_PMCON;
+		uint32_t ps = pmcon & BPM_PMCON_PS_Msk;
+		if ((pmcon & BPM_PMCON_PSCREQ) != 0U ||
+			(SAM4L_BPM->BPM_SR & BPM_SR_PSOK) == 0U || ps == BPM_PMCON_PS(3))
+		{
+			return Sam4lClockFailed(SAM4L_STARTUP_POWER);
+		}
+		coreLimit = ps == BPM_PMCON_PS(2) ? 48000000UL :
+			ps == BPM_PMCON_PS(0) && !(pmcon & BPM_PMCON_FASTWKUP) ?
+			36000000UL : 12000000UL;
 	}
 	s_PllFreq = 0U;
 
@@ -804,18 +899,24 @@ static void Sam4lClockInit(void)
 	uint32_t mainRate;
 	uint32_t mainMax;
 	if (g_McuOsc.CoreOsc.Type != OSC_TYPE_RC) {
-		Sam4lEnableOsc0();
+		if (!Sam4lEnableOsc0())
+		{
+			return false;
+		}
 		uint32_t config;
 		uint32_t rate;
 		if (Sam4lPllConfig(g_McuOsc.CoreOsc.Freq, &config, &rate)) {
-			SystemSetPLL();
+			if (!Sam4lSetPll())
+			{
+				return false;
+			}
 			mainRate = s_PllFreq;
 			source = PM_MCCTRL_MCSEL_PLL0;
 		} else {
 			// A valid external oscillator need not have an exact PLL ratio.
 			// It can supply the CPU directly, but not this PLL-based USB plan.
 			if (g_McuOsc.bUSBClk) {
-				Sam4lStartupFailed(SAM4L_STARTUP_PLL);
+				return Sam4lClockFailed(SAM4L_STARTUP_PLL);
 			}
 			mainRate = g_McuOsc.CoreOsc.Freq;
 			source = PM_MCCTRL_MCSEL(1U);
@@ -827,7 +928,7 @@ static void Sam4lClockInit(void)
 					  SAM4L_SCIF->SCIF_RC80MCR | SCIF_RC80MCR_EN);
 		if (!Sam4lWaitBits(&SAM4L_SCIF->SCIF_RC80MCR,
 						  SCIF_RC80MCR_EN, SCIF_RC80MCR_EN)) {
-			Sam4lStartupFailed(SAM4L_STARTUP_RC80M);
+			return Sam4lClockFailed(SAM4L_STARTUP_RC80M);
 		}
 		mainRate = 80000000UL;
 		mainMax = 100000000UL; // Table 42-32: /2 could reach 50 MHz.
@@ -841,12 +942,15 @@ static void Sam4lClockInit(void)
 						   SAM4L_BSCIF->BSCIF_RC1MCR | BSCIF_RC1MCR_CLKOE);
 			if (!Sam4lWaitBits(&SAM4L_BSCIF->BSCIF_RC1MCR,
 							  BSCIF_RC1MCR_CLKOE, BSCIF_RC1MCR_CLKOE)) {
-				Sam4lStartupFailed(SAM4L_STARTUP_DFLL);
+				return Sam4lClockFailed(SAM4L_STARTUP_DFLL);
 			}
 			refSource = RC1M_GEN_CLK_SRC;
 			refMax = 1120000UL;
 		} else {
-			Sam4lEnableRcFast(freq);
+			if (!Sam4lEnableRcFast(freq))
+			{
+				return false;
+			}
 			refSource = RCFAST_GEN_CLK_SRC;
 			refMax = freq == 4000000UL ? 4600000UL :
 				freq == 8000000UL ? 8500000UL : 12300000UL;
@@ -854,12 +958,15 @@ static void Sam4lClockInit(void)
 		uint32_t refDiv = freq / DFLL_REF_FREQ;
 		if (!Sam4lGenericClock(0U, SCIF_GCCTRL_OSCSEL(refSource) |
 							  SCIF_GCCTRL_DIVEN | SCIF_GCCTRL_DIV(refDiv / 2U - 1U) | SCIF_GCCTRL_CEN)) {
-			Sam4lStartupFailed(SAM4L_STARTUP_GCLK);
+			return Sam4lClockFailed(SAM4L_STARTUP_GCLK);
 		}
 		// 80 MHz nominal allows the RC reference tolerance and up to 1%
 		// DFLL tracking error without taking CPU/HSB over 48 MHz at /2.
 		// These RC bounds are characterized values, not precision clocks.
-		ConfigDFLL0Freq(DFLL_CORE_MHZ);
+		if (!Sam4lConfigDfll(DFLL_CORE_MHZ))
+		{
+			return false;
+		}
 		mainRate = s_DfllFreq;
 		// Accepted RC nominal rates are integral MHz. These products fit
 		// uint32_t; round upwards before adding the 1% tracking allowance.
@@ -870,9 +977,15 @@ static void Sam4lClockInit(void)
 	}
 
 	uint32_t sel = Sam4lDivider(mainMax, coreLimit);
-	SetFlashWaitState(Sam4lApplyClkDiv(mainMax - 1U, sel) + 1U);
-	Sam4lSetSyncClkDividers(sel);
-	Sam4lSelectMain(source);
+	if (sel == UINT32_MAX)
+	{
+		return Sam4lClockFailed(SAM4L_STARTUP_CLOCK_SWITCH);
+	}
+	if (!Sam4lFlashWaitState(Sam4lApplyClkDiv(mainMax - 1U, sel) + 1U) ||
+		!Sam4lSetSyncClkDividers(sel) || !Sam4lSelectMain(source))
+	{
+		return false;
+	}
 	s_MainClock = mainRate;
 	SystemCoreClock = Sam4lApplyClkDiv(mainRate, sel);
 
@@ -882,14 +995,14 @@ static void Sam4lClockInit(void)
 		uint32_t div = s_PllFreq / USB_FREQ;
 		if (s_PllFreq == 0U || s_PllFreq % USB_FREQ != 0U ||
 			(div != 1U && ((div & 1U) != 0U || div > 512U))) {
-			Sam4lStartupFailed(SAM4L_STARTUP_GCLK);
+			return Sam4lClockFailed(SAM4L_STARTUP_GCLK);
 		}
 		uint32_t config = SCIF_GCCTRL_OSCSEL(PLL0_GEN_CLK_SRC);
 		if (div != 1U) {
 			config |= SCIF_GCCTRL_DIVEN | SCIF_GCCTRL_DIV(div / 2U - 1U);
 		}
 		if (!Sam4lGenericClock(7U, config | SCIF_GCCTRL_CEN)) {
-			Sam4lStartupFailed(SAM4L_STARTUP_GCLK);
+			return Sam4lClockFailed(SAM4L_STARTUP_GCLK);
 		}
 		Sam4lWritePm(&SAM4L_PM->PM_HSBMASK,
 					 SAM4L_PM->PM_HSBMASK | PM_HSBMASK_USBC);
@@ -897,10 +1010,10 @@ static void Sam4lClockInit(void)
 					 SAM4L_PM->PM_PBBMASK | PM_PBBMASK_USBC);
 		if ((SAM4L_PM->PM_HSBMASK & PM_HSBMASK_USBC) == 0U ||
 			(SAM4L_PM->PM_PBBMASK & PM_PBBMASK_USBC) == 0U) {
-			Sam4lStartupFailed(SAM4L_STARTUP_GCLK);
+			return Sam4lClockFailed(SAM4L_STARTUP_GCLK);
 		}
 	}
-	__set_PRIMASK(primask);
+	return true;
 }
 
 // The watchdog stays disabled at startup. Applications enable it explicitly.
@@ -910,7 +1023,10 @@ void SystemInit(void)
 
 	__disable_irq();
 	Sam4lDisableWatchdog();
-	Sam4lClockInit();
+	if (!Sam4lClockInit(&g_McuOsc, true))
+	{
+		Sam4lStartupFailed(s_StartupError);
+	}
 	__set_PRIMASK(primask);
 }
 
@@ -985,21 +1101,28 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 // does not quiesce those engines. Do not call from an interrupt handler.
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 {
-	McuOsc_t requested = g_McuOsc;
+	McuOsc_t previous = g_McuOsc;
+	McuOsc_t requested = previous;
 	requested.CoreOsc.Type = ClkSrc;
 	requested.CoreOsc.Freq = Freq;
 	if (__get_IPSR() != 0U || !Sam4lConfigurationValid(&requested)) {
 		return false;
 	}
-	if (ClkSrc == g_McuOsc.CoreOsc.Type && Freq == g_McuOsc.CoreOsc.Freq) {
-		return true;
-	}
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
-	g_McuOsc.CoreOsc = requested.CoreOsc;
-	Sam4lClockInit();
+	bool result = Sam4lClockInit(&requested, false);
+	if (!result)
+	{
+		// Keep the previous descriptor unless the requested source was selected.
+		// RCSYS needs neither oscillator descriptor nor PLL lock to run.
+		if (Sam4lSelectMain(PM_MCCTRL_MCSEL(0U)))
+		{
+			g_McuOsc.CoreOsc = previous.CoreOsc;
+		}
+	}
+	SystemCoreClockUpdate();
 	__set_PRIMASK(primask);
-	return true;
+	return result;
 }
 
 // LF consumers (including AST and a WDT using this source) must be stopped.

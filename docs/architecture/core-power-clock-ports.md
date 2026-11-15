@@ -23,7 +23,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Review runtime selection and oscillator initialization |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime clock failure recovery implemented; active clock-user audit and hardware validation pending |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; SAMD11 SW0/PA14 repeated resume passed | Validate SAMD21 wake, full SRAM continuity, sleep current and peripheral clock ownership |
 | LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
@@ -43,7 +43,9 @@ Maintainer-reported reset-cause tests passed 128/128 combinations for
 each MCU, and Arm GNU source compilation passed for D11/D21 including
 the Standby source. On November 15, 2026, the maintainer reported five
 consecutive SAMD11 SW0/PA14 Standby resumes, with counts 0x00000001 through
-0x00000005 and another Standby entry. SAMD21 hardware wake, full SRAM
+0x00000005 and another Standby entry. Subsequent D11 runs also passed the
+128-byte static and 128-byte stack SRAM samples across five wakeups. This
+is a sample of live RAM continuity, not a full SRAM test. SAMD21 hardware wake, full SRAM
 testing and sleep-current measurements remain pending.
 
 ## STM32WBA power port (0.14)
@@ -222,8 +224,19 @@ only after success. Repeating the same request checks readiness again.
 The descriptor records the last successful selection, not a measurement of
 clock health. A failed external-mode change may leave that oscillator stopped.
 Startup still halts when its required clock cannot be established. Runtime
-main-clock changes still use startup clock-tree helpers with fatal failure
-paths; recovery from those failures remains to be implemented and tested.
+main-clock selection now returns false on oscillator, PLL, DFLL, divider or
+flash setup failure and attempts to leave the CPU on RCSYS. The clock getter
+reports the register-selected source and divider after the attempt. A failed
+hardware switch cannot be treated as a confirmed stable clock.
+
+Runtime selection preserves the watchdog, low-frequency clock, cache settings
+and voltage scale. It chooses dividers within the existing voltage scale
+instead of requesting a new power transition. Startup retains its checked
+power transition in SRAM and stops if its required clock setup fails.
+The caller must still stop clock consumers before changing the main clock
+and reconfigure their rates afterward. Active peripheral clock-user checks
+remain to be completed. Repeating a request rechecks the hardware setup; a
+matching descriptor alone does not report success.
 Run `python3 tests/sam4l/run_clock.py` for the Linux register-model checks.
 
 Wake pins use asynchronous high/low level detection through the backup mux.
@@ -260,6 +273,10 @@ UsbCdcLoopbackTaktOS, using TaktOS commit
 [IOsonata/TaktOS](https://github.com/IOsonata/TaktOS). Run it with
 `python3 tests/sam4l/peripheral_build_test.py --taktos ../TaktOS`.
 These 40 builds use selected library sources; hardware execution is unverified.
+The 18-variant compilation and all 40 example links passed again after the
+runtime failure-handling change. The existing clock register checks also passed
+for SAM4LC8C and SAM4LS8C at O0 and O2, including failed oscillator/PLL/DFLL
+startup, retry, flash readiness, interrupt-mask restoration and WDT preservation.
 
 Reference: [Microchip SAM4L datasheet 42023H](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/DataSheets/Atmel-42023-ARM-Microcontroller-ATSAM4L-Low-Power-LCD_Datasheet.pdf),
 sections 6.1.3, 10.7.15, 11.5, 11.6.9..11, 12.7.18 and 21.6.

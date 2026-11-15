@@ -57,28 +57,89 @@ int main(void)
 	g_TestIpsr = 0;
 	assert(!SystemLowFreqClockSelect(OSC_TYPE_XTAL, 12345));
 
-	// Force a later clock-ready failure to inspect WDT handling before it.
-	for (volatile unsigned enabled = 0; enabled < 2; enabled++)
+	// Runtime failures return with the original interrupt mask and WDT state.
+	for (uint32_t mask = 0; mask < 2; mask++)
 	{
-		SAM4L_WDT->WDT_CTRL = enabled ? WDT_CTRL_EN : 0;
-		*(volatile uint32_t *)&SAM4L_PM->PM_SR = 0;
-		g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
-		g_McuOsc.CoreOsc.Freq = 12000000;
-		if (setjmp(s_Halt) == 0)
+		for (unsigned enabled = 0; enabled < 2; enabled++)
 		{
-			(void)SystemCoreClockSelect(OSC_TYPE_RC, 8000000);
-			assert(0);
+			g_TestMask = mask;
+			SAM4L_WDT->WDT_CTRL = enabled ? WDT_CTRL_EN : 0;
+			*(volatile uint32_t *)&SAM4L_PM->PM_SR = 0;
+			g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
+			g_McuOsc.CoreOsc.Freq = 12000000;
+			assert(!SystemCoreClockSelect(OSC_TYPE_RC, 8000000));
+			assert(g_TestMask == mask);
+			assert(SAM4L_WDT->WDT_CTRL == (enabled ? WDT_CTRL_EN : 0));
+			assert(s_StartupError == SAM4L_STARTUP_CLOCK_SWITCH);
+			assert(g_McuOsc.CoreOsc.Freq == 12000000);
+			assert(SystemCoreClockGet() == RCSYS_FREQ);
 		}
-		assert(SAM4L_WDT->WDT_CTRL == (enabled ? WDT_CTRL_EN : 0));
-		assert(s_StartupError == SAM4L_STARTUP_CLOCK_SWITCH);
-		if (setjmp(s_Halt) == 0)
-		{
-			SystemInit();
-			assert(0);
-		}
-		assert((SAM4L_WDT->WDT_CTRL & WDT_CTRL_EN) == 0);
 	}
+
+	*(volatile uint32_t *)&SAM4L_PM->PM_SR = PM_SR_CKRDY;
+	SAM4L_BPM->BPM_PMCON = BPM_PMCON_PS(2) | BPM_PMCON_CK32S;
+	*(volatile uint32_t *)&SAM4L_BPM->BPM_SR = BPM_SR_PSOK;
+	*(volatile uint32_t *)&SAM4L_HFLASHC->FLASHCALW_FSR =
+		FLASHCALW_FSR_FRDY | FLASHCALW_FSR_HSMODE;
+	for (uint32_t mask = 0; mask < 2; mask++)
+	{
+		g_TestMask = mask;
+		// Missing external oscillator, then missing PLL lock.
+		*(volatile uint32_t *)&SAM4L_SCIF->SCIF_PCLKSR = 0;
+		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000));
+		assert(s_StartupError == SAM4L_STARTUP_OSC0);
+		assert(g_TestMask == mask);
+		assert(SystemCoreClockGet() == RCSYS_FREQ);
+		*(volatile uint32_t *)&SAM4L_SCIF->SCIF_PCLKSR = SCIF_PCLKSR_OSC0RDY;
+		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000));
+		assert(s_StartupError == SAM4L_STARTUP_PLL);
+		assert(g_TestMask == mask);
+		assert(SystemCoreClockGet() == RCSYS_FREQ);
+		// Retry succeeds; a repeated request must not hide a later lock failure.
+		*(volatile uint32_t *)&SAM4L_SCIF->SCIF_PCLKSR =
+			SCIF_PCLKSR_OSC0RDY | SCIF_PCLKSR_PLL0LOCK;
+		assert(SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000));
+		assert(SystemCoreClockGet() == 48000000);
+		assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL);
+		*(volatile uint32_t *)&SAM4L_SCIF->SCIF_PCLKSR = SCIF_PCLKSR_OSC0RDY;
+		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000));
+		assert(SystemCoreClockGet() == RCSYS_FREQ);
+		// Missing DFLL synchronization and lock must also return.
+		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 8000000));
+		assert(s_StartupError == SAM4L_STARTUP_DFLL);
+		*(volatile uint32_t *)&SAM4L_SCIF->SCIF_PCLKSR = SCIF_PCLKSR_DFLL0RDY;
+		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 8000000));
+		assert(s_StartupError == SAM4L_STARTUP_DFLL);
+		*(volatile uint32_t *)&SAM4L_SCIF->SCIF_PCLKSR = SCIF_PCLKSR_DFLL0RDY |
+			SCIF_PCLKSR_DFLL0LOCKC | SCIF_PCLKSR_DFLL0LOCKF;
+		assert(SystemCoreClockSelect(OSC_TYPE_RC, 8000000));
+		assert(SystemCoreClockGet() == 40000000);
+		assert(g_TestMask == mask);
+		assert(SAM4L_WDT->WDT_CTRL == WDT_CTRL_EN);
+		assert(SAM4L_BPM->BPM_PMCON == (BPM_PMCON_PS(2) | BPM_PMCON_CK32S));
+		// Runtime does not initialize the low clock or cache.
+		assert(SAM4L_HCACHE->HCACHE_CTRL == 0);
+		assert(SAM4L_BSCIF->BSCIF_PCLKSR == BSCIF_PCLKSR_RC32KRDY);
+		*(volatile uint32_t *)&SAM4L_HFLASHC->FLASHCALW_FSR = 0;
+		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 80000000));
+		assert(s_StartupError == SAM4L_STARTUP_FLASH);
+		assert(SystemCoreClockGet() == RCSYS_FREQ);
+		assert(g_TestMask == mask);
+		*(volatile uint32_t *)&SAM4L_HFLASHC->FLASHCALW_FSR =
+			FLASHCALW_FSR_FRDY | FLASHCALW_FSR_HSMODE;
+		assert(SystemCoreClockSelect(OSC_TYPE_RC, 80000000));
+		assert(SystemCoreClockGet() == 20000000);
+	}
+
+	// Startup still halts on clock failure and disables the default watchdog.
+	*(volatile uint32_t *)&SAM4L_PM->PM_SR = 0;
+	if (setjmp(s_Halt) == 0)
+	{
+		SystemInit();
+		assert(0);
+	}
+	assert((SAM4L_WDT->WDT_CTRL & WDT_CTRL_EN) == 0);
 	assert(munmap(regs, 0x100000) == 0);
-	puts("SAM4L LF success/timeouts, PRIMASK and runtime watchdog preservation PASS");
+	puts("SAM4L runtime clock success, failure recovery, PRIMASK and watchdog preservation PASS");
 	return 0;
 }
