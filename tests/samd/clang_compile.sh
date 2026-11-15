@@ -55,6 +55,10 @@ do
 		-c "$VECTORS" -o "$OUT/$DEVICE-vectors.o"
 	"$CLANG" $COMMON -std=c11 -D"$PART" $CMSIS $GENERIC $FAMILY -I"$PART_INC" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/system_samd.c" -o "$OUT/$DEVICE-system.o"
+	"$CLANGXX" $COMMON -std=gnu++17 -fno-exceptions -fno-rtti -D"$PART" \
+		$CMSIS $GENERIC $FAMILY -I"$PART_INC" \
+		-c "$ROOT/ARM/Microchip/SAMD/src/system_power_samd.cpp" \
+		-o "$OUT/$DEVICE-power.o"
 	"$CLANG" $COMMON -std=c11 -D"$PART" $CMSIS $GENERIC $FAMILY -I"$PART_INC" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/iopincfg_samd.c" -o "$OUT/$DEVICE-gpio.o"
 
