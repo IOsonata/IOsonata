@@ -1,17 +1,34 @@
 # SAM D11 OLED1 display console
 
-Work in progress: the current image exceeds the SAMD11D14AM's 16 KB flash.
-Do not flash an ELF produced with linker overflow checks bypassed. Hardware
-validation is pending. This project is only for SAM D11 Xplained Pro with
+Work in progress: the display selection exceeds the SAMD11D14AM's 16 KB flash.
+The UART selection fits; hardware validation is pending for both selections.
+Do not flash an ELF produced with linker overflow checks bypassed. This project is only for SAM D11 Xplained Pro with
 OLED1 Xplained Pro connected to EXT1.
 
 The existing `exemples/display/console_display_demo.cpp` selects the system
 5x7 font, shows its character sample, then sends a counter every two seconds
-through `SysLog` and `DisplayIntrf`. The display scrolls the text. UART and
-semihosting are not used for this output. Watchdog startup policy is unchanged.
+through `SysLog` and `DisplayIntrf` when display output is selected. The display
+scrolls the text. UART output skips the display initialization and font sample
+and sends the same counter to the EDBG virtual COM port at 1,000,000 baud, 8N1. Watchdog startup policy is unchanged.
 
 `DISPLAY_SYSLOG_ENABLE` selects this small-font log demonstration in `board.h`.
 Other console projects retain their existing font demonstration.
+
+Select exactly one output in `src/board.h` or with a compiler definition:
+
+- `CONSOLE_LOG_OUTPUT=CONSOLE_LOG_UART` (1): UART only.
+- `CONSOLE_LOG_OUTPUT=CONSOLE_LOG_DISPLAY` (2): display only, the default.
+
+The D11 board rejects 0, 3 (both), and other values. The unselected output's
+objects are not compiled into the application. Link checks verify that its
+drivers are absent from a successful image. This is a D11 application choice;
+it is not a generic SysLog restriction. Larger MCUs can initialize separate
+SysLog instances with their own record storage, one for UART and one for the
+display, and write to both. The global logger itself still selects one sink.
+
+UART uses interrupt-driven transmission without DMA. The foreground retries
+queued records every 10 ms so a partial write to the small TX FIFO finishes
+even when no new record follows.
 
 | OLED1 signal | EXT1 pin | SAMD11 pin |
 | --- | --- | --- |
@@ -58,7 +75,7 @@ byte count means text was passed to that API, not verified on the panel.
   Environments running under ptrace need `ASAN_OPTIONS=detect_leaks=0`.
 - `python3 tests/display/build_samd11_console.py`: Arm GCC source build using
   the target's real linker script. GCC 15.2.1, `-Os`, currently fails the flash
-  limit by 2628 bytes in both Debug and Release after the syslog changes.
+  limit in display mode; the current overflow is recorded below.
 - No SAMD11 OLED hardware result yet. Flash size must be resolved first.
 
 Hardware references:
@@ -93,3 +110,16 @@ policy and partial-write behavior are preserved. Rebuild the library and
 application together: the internal `SysLog_t` layout has gained a function
 pointer. Host tests cover full 64-bit status timestamps and truncation at every
 record length from 2 through 64 bytes.
+
+## Output-selection builds
+
+Run `python3 tests/display/build_samd11_console.py --output uart` or
+`--output display`. Both use the same Eclipse-managed project and board file.
+The script checks the application object for unselected output references and
+checks the final ELF when linking succeeds.
+
+UART Debug and Release: text 15160, data 716, BSS 632 bytes. Flash is 15876
+bytes; static RAM is 1348 bytes, excluding stack. No display/SPI driver links.
+The default display selection remains 2628 bytes over flash in both builds
+and needs flash reduction before hardware use.
+No other MCU board was built or tested for this change.

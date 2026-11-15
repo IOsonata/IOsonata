@@ -50,10 +50,15 @@ SOFTWARE.
 #include "board.h"
 
 #ifdef DISPLAY_SYSLOG_ENABLE
-#include "display/display_intrf.h"
 #include "syslog.h"
+#ifdef CONSOLE_SYSLOG_UART
+#include "coredev/uart.h"
+#else
+#include "display/display_intrf.h"
+#endif
 #endif
 
+#ifndef CONSOLE_SYSLOG_UART
 // Existing HX8357 boards keep their original settings. Other panels select
 // their driver, native geometry and SPI settings beside the pin map.
 #ifndef DISPLAY_DRIVER
@@ -121,8 +126,34 @@ uint8_t g_LineBuff[480 * 4];
 
 static const char s_FontText[] = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\r\n";
 
+#endif // CONSOLE_SYSLOG_UART
+
 #ifdef DISPLAY_SYSLOG_ENABLE
+#ifdef CONSOLE_SYSLOG_UART
+static const IOPinCfg_t s_UartPins[] = UART_PINS;
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = UART_BAUDRATE,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 6,
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,
+	.pRxMem = nullptr,
+	.TxMemSize = 0,
+	.pTxMem = nullptr,
+	.bDMAMode = false,
+};
+static UART s_Uart;
+#else
 static DisplayIntrf s_DisplayIntrf;
+#endif
 alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(2, 32)];
 static const SysLogCfg_t s_LogCfg = {
 	.pMem = s_LogMem,
@@ -132,6 +163,7 @@ static const SysLogCfg_t s_LogCfg = {
 };
 #endif
 
+#ifndef CONSOLE_SYSLOG_UART
 // Keep the font demo usable on small panels. The generic formatted-print
 // buffer is 80 bytes, so send the character sample in smaller chunks. "%s"
 // formatting also keeps the sample's percent sign literal.
@@ -160,6 +192,13 @@ bool HardwareInit()
 	return true;
 }
 
+#else
+bool HardwareInit()
+{
+	return s_Uart.Init(s_UartCfg);
+}
+#endif
+
 //
 // Print a greeting message on standard output and exit.
 //
@@ -179,7 +218,18 @@ bool HardwareInit()
 int main()
 {
 #ifdef DISPLAY_SYSLOG_ENABLE
-	if (!HardwareInit() || !s_DisplayIntrf.Init(&g_Lcd) ||
+	if (!HardwareInit())
+	{
+		return 1;
+	}
+#ifdef CONSOLE_SYSLOG_UART
+	if (!SysLogGetInstance()->Init(s_LogCfg, &s_Uart))
+	{
+		return 1;
+	}
+	SysLogGetInstance()->Printf("IOsonata UART log\r\n");
+#else
+	if (!s_DisplayIntrf.Init(&g_Lcd) ||
 		!SysLogGetInstance()->Init(s_LogCfg, &s_DisplayIntrf))
 	{
 		return 1;
@@ -188,10 +238,19 @@ int main()
 	msDelay(2000);
 	g_Lcd.Clear();
 	SysLogGetInstance()->Printf("IOsonata display log\r\n");
+#endif
 	uint32_t count = 0;
 	while (1)
 	{
+#ifdef CONSOLE_SYSLOG_UART
+		for (int i = 0; i < 200; i++)
+		{
+			SysLogGetInstance()->Flush();
+			msDelay(10);
+		}
+#else
 		msDelay(2000);
+#endif
 		SysLogGetInstance()->Printf("Count %lu\r\n", (unsigned long)++count);
 	}
 #else
