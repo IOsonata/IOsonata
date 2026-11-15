@@ -25,7 +25,8 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
 | SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime recovery and main/low-frequency peripheral checks implemented; hardware validation pending |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; SAMD11 SW0/PA14 repeated resume passed | Validate SAMD21 wake, full SRAM continuity, sleep current and peripheral clock ownership |
-| LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
+| LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
+| LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
@@ -411,3 +412,48 @@ All seven TimerDemo selections also compile and link in Debug and Release.
 
 Reference: [Microchip SAM4L datasheet 42023H](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/DataSheets/Atmel-42023-ARM-Microcontroller-ATSAM4L-Low-Power-LCD_Datasheet.pdf),
 sections 6.1.3, 10.7.15, 11.5, 11.6.9..11, 12.7.18 and 21.6.
+
+## LPC11Uxx power and clock port
+
+The LPC11U35 library implements the existing generic power functions using
+UM10462 chapters 3 and 4. `SystemPowerOff` enters Deep power-down and discards
+pending CPU interrupts. PIO0_16 wakes the chip on a falling edge and starts a
+reset. The pin needs an external pull-up; the RESET pin is inactive in this
+mode. `SystemWakePin` accepts only that pin and polarity. It returns false for
+disable because the hardware wake input cannot be disabled. Applications must
+not set the write-once PCON NODPD bit if they intend to use Deep power-down.
+
+`SystemResetReason` caches the first read and clears the recorded flags.
+DPDFLAG identifies wakeup rather than a cold power-on, even though wakeup
+internally generates POR. Four full-width GPREG words survive Deep power-down
+and software reset. GPREG4 is left to the application because it also contains
+wake-pin hysteresis control. SRAM retention in Deep power-down is unsupported.
+`SystemSleep` currently uses ordinary Sleep, preserves RAM and peripheral
+clocks, and wakes from an enabled NVIC interrupt. Deep-sleep and Power-down
+with clock restoration are not implemented. `SystemWakePin` selects the
+Deep power-down input only; ordinary Sleep uses the normal interrupt drivers.
+
+Runtime core-clock requests refuse enabled timer, SSP, UART, ADC, USB and WWDT
+clock gates, an enabled I2C controller, or CLKOUT. Stopped timers whose gates
+remain enabled are conservatively refused. These checks apply to the legacy
+setters as well as `SystemCoreClockSelect`; startup configures the clocks before
+drivers take ownership. Applications must stop and reconfigure SysTick and
+scheduler timing around an accepted runtime change. Clock decoding reports
+zero for powered-down sources or an unlocked PLL. The existing fixed 48 MHz
+CPU target and bounded PLL recovery to 12 MHz IRC remain unchanged.
+
+`SystemLowFreqClockSelect` selects the closest nominal watchdog-oscillator
+rate for an RC request. Actual nominal frequency and 40-percent oscillator
+accuracy are recorded in `g_McuOsc.LowPwrOsc`. A running WWDT, its enabled bus
+clock, a main-clock WDO selection, or a WDO CLKOUT selection prevents changing
+it. This does not enable or feed the watchdog. The default LF descriptor has
+frequency zero, so startup leaves WDO unconfigured; an application-supplied
+nonzero LF descriptor is applied during startup.
+
+The managed `PowerOffDemo` project links the existing generic demo, with UART
+DMA disabled for LPC11U35. Validation includes all 115 enabled library source
+files in Debug and Release, TimerDemo, UART PRBS TX and loopback, SPI loopback,
+I2CScan and PowerOffDemo links in both configurations, existing clock tests in
+C and C++, and temporary power-register checks at O0/O2. These are compilation
+and register-model results; sleep entry, wake reset, retention and current draw
+still need hardware validation. D11 remains the current hardware test target.

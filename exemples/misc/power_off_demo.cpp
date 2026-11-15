@@ -63,6 +63,11 @@ SOFTWARE.
 #define UART_BAUDRATE			1000000
 #endif
 
+// UART DMA can be disabled on targets without a DMA transport.
+#ifndef POWER_DEMO_UART_DMA
+#define POWER_DEMO_UART_DMA true
+#endif
+
 // Time before power off, in msec
 #ifndef POWER_DEMO_DELAY
 #define POWER_DEMO_DELAY		3000
@@ -119,7 +124,7 @@ static const UARTCfg_t s_UartCfg = {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	.bDMAMode = false,
 #else
-	.bDMAMode = true,
+	.bDMAMode = POWER_DEMO_UART_DMA,
 #endif
 };
 

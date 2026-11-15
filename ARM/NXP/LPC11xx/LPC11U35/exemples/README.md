@@ -7,6 +7,7 @@ directory; host commands run from the repository root.
 
 ## Contents
 
+- [PowerOffDemo](#poweroffdemo)
 - [I2CScan](#i2cscan)
 - [SpiLoopback](#spiloopback)
 - [TimerDemo](#timerdemo)
@@ -430,3 +431,17 @@ Measured with Arm GNU GCC 13.2.1 and binutils 2.42:
 The stack allowance is not a measured runtime high-water mark. Host-model
 CDC/HID tests cover descriptor routing, reports and reconnect; hardware
 report traffic and throughput remain untested.
+
+## PowerOffDemo
+
+Links `exemples/misc/power_off_demo.cpp`. Both configurations use UART0 TX
+PIO0_19, RX PIO0_18 at 1000000 baud. Connect an external button from PIO0_16
+to ground and an external pull-up from PIO0_16 to VDD. The internal pull-up
+and RESET pin cannot wake the part from Deep power-down.
+
+The demo reports reset reasons and a counter stored in GPREG0, waits three
+seconds, stops the UART and enters Deep power-down. Pressing the button
+restarts the MCU; the next report should identify pin wakeup and an incremented
+counter. Removing power clears retention. UART DMA is disabled because this
+part has no UART DMA implementation. This project has been linked in Debug
+and Release; board validation is pending.

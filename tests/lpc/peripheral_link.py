@@ -30,6 +30,8 @@ APPLICATIONS = {
 }
 # Examples of one target only
 TARGET_APPLICATIONS = {
+    '11': {'PowerOffDemo': 'exemples/misc/power_off_demo.cpp',
+           'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp'},
     '546': {'I2CMasterSlave': 'exemples/i2c/i2c_master_slave.cpp',
             'SPIMasterSlave': 'exemples/spi/spi_master_slave.cpp',
             'WdtDemo': 'exemples/misc/wdt_demo.cpp',
@@ -47,6 +49,8 @@ TARGET_APPLICATIONS = {
 # Symbols the image must define
 SYMBOLS = {
     'UartLoopback': ['UARTInit'],
+    'UartPrbsTxTest': ['UARTInit'],
+    'PowerOffDemo': ['SystemPowerOff', 'SystemResetReason', 'SystemRetRegWrite'],
     'SpiLoopback': ['SPIInit'],
     'I2CScan': ['I2CInit'],
     'I2CMasterSlave': ['I2CInit', 'DMA0_IRQHandler', 'FLEXCOMM2_IRQHandler', 'FLEXCOMM8_IRQHandler'],
@@ -75,7 +79,7 @@ SYMBOLS = {
 def build(target, prefix, directory):
     family, mcu, script, cpu, define, linker = TARGETS[target]
     timer = runpy.run_path(str(ROOT / 'tests/lpc/timer' / script))
-    sources = timer['SOURCES'] + ['src/coredev/i2c.cpp', 'src/coredev/spi.cpp']
+    sources = timer['SOURCES'] + ['src/prbs.c'] + ['src/coredev/i2c.cpp', 'src/coredev/spi.cpp']
     if target == '546':
         sources += ['ARM/NXP/LPC546xx/src/i2c_lpc546xx.cpp',
                     'ARM/NXP/LPC546xx/src/spi_lpc546xx.cpp',
@@ -105,8 +109,8 @@ def build(target, prefix, directory):
                     'src/device.cpp',
                     'src/syslog.cpp']
     else:
-        sources += ['ARM/NXP/src/i2c_lpc_master.cpp', 'ARM/NXP/src/spi_lpcxx.c']
-        sources += (['ARM/NXP/LPC11xx/src/i2c_lpc11uxx.cpp', 'ARM/NXP/LPC11xx/src/spi_lpc11uxx.c']
+        sources += ['ARM/NXP/src/i2c_lpc_master.cpp', 'ARM/NXP/src/spi_lpcxx.cpp']
+        sources += (['ARM/NXP/LPC11xx/src/i2c_lpc11uxx.cpp', 'ARM/NXP/LPC11xx/src/spi_lpc11uxx.cpp']
                     if target == '11' else
                     ['ARM/NXP/LPC17xx/src/i2c_lpc17xx.c', 'ARM/NXP/LPC17xx/src/spi_lpc17xx.c'])
     project = ROOT / 'ARM/NXP' / family / mcu

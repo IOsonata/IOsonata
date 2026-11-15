@@ -54,7 +54,7 @@ Modified by          Date              Description
 
 __WEAK McuOsc_t g_McuOsc = {
 	{OSC_TYPE_XTAL, 12000000, 20},
-	{OSC_TYPE_RC, 4000000, 20},
+	{OSC_TYPE_RC, 0, 0},
 	true
 };
 
@@ -77,9 +77,9 @@ static inline uint32_t GetSysPllClk(void)
 	switch (LPC_SYSCON->SYSPLLCLKSEL & SYSPLLCLKSEL_MASK)
 	{
 	case SYSPLLCLKSEL_SYSOSC:
-		return s_SysOscFreq;
+		return (LPC_SYSCON->PDRUNCFG & PDRUNCFG_SYSOSC_PD) == 0 ? s_SysOscFreq : 0;
 	case SYSPLLCLKSEL_IRC:
-		return IRC_FREQ;
+		return (LPC_SYSCON->PDRUNCFG & (PDRUNCFG_IRC_PD | PDRUNCFG_IRCOUT_PD)) == 0 ? IRC_FREQ : 0;
 	default:
 		return 0;
 	}
@@ -99,18 +99,28 @@ void SystemCoreClockUpdate(void)
 		break;
 	case MAINCLKSEL_PLLOUT:
 		// PLL output is FIN * M; P selects the internal CCO frequency.
-		sysclk = GetSysPllClk() * ((LPC_SYSCON->SYSPLLCTRL & 0x1fU) + 1U);
+		if ((LPC_SYSCON->PDRUNCFG & PDRUNCFG_SYSPLL_PD) == 0 &&
+			(LPC_SYSCON->SYSPLLSTAT & 1U) != 0)
+		{
+			sysclk = GetSysPllClk() * ((LPC_SYSCON->SYSPLLCTRL & 0x1fU) + 1U);
+		}
 		break;
 	case MAINCLKSEL_WDT:
 	{
 		uint32_t ctrl = LPC_SYSCON->WDTOSCCTRL;
 		uint32_t wdtdiv = 2U * ((ctrl & 0x1fU) + 1U);
 
-		sysclk = s_WdtOscFreq[(ctrl >> 5) & 0xfU] / wdtdiv;
+		if ((LPC_SYSCON->PDRUNCFG & PDRUNCFG_WDTOSC_PD) == 0)
+		{
+			sysclk = s_WdtOscFreq[(ctrl >> 5) & 0xfU] / wdtdiv;
+		}
 		break;
 	}
 	case MAINCLKSEL_IRC:
-		sysclk = IRC_FREQ;
+		if ((LPC_SYSCON->PDRUNCFG & (PDRUNCFG_IRC_PD | PDRUNCFG_IRCOUT_PD)) == 0)
+		{
+			sysclk = IRC_FREQ;
+		}
 		break;
 	}
 
@@ -162,6 +172,74 @@ static bool Lpc11MainClockIRC(void)
 	SystemMainClkFreq = IRC_FREQ;
 	SystemCoreClock = IRC_FREQ;
 
+	return true;
+}
+
+// The caller has selected IRC and holds the interrupt lock.
+static bool Lpc11ConnectPll(OSC_TYPE Type, uint32_t sysclk, uint32_t pll,
+		uint32_t div, bool UsbClock)
+{
+	bool external = Type != OSC_TYPE_RC;
+
+	// Callers must stop USB and other clock-dependent peripherals first.
+	LPC_SYSCON->USBCLKDIV = 0;
+	LPC_SYSCON->PDRUNCFG |= PDRUNCFG_USBPAD_PD | PDRUNCFG_SYSPLL_PD | PDRUNCFG_USBPLL_PD;
+	if (external)
+	{
+		LPC_SYSCON->PDRUNCFG |= PDRUNCFG_SYSOSC_PD;
+		LPC_SYSCON->SYSOSCCTRL = (LPC_SYSCON->SYSOSCCTRL & ~3U) |
+			(sysclk > 20000000U ? SYSOSCCTRL_FREQRANGE15 : SYSOSCCTRL_FREQRANGE0) |
+			(Type == OSC_TYPE_TCXO ? SYSOSCCTRL_BYPASS : 0U);
+		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSOSC_PD;
+		// At least 1 ms at the 12 MHz IRC; PLL lock is checked separately.
+		Lpc11ClockDelay(12000U);
+		s_SysOscFreq = sysclk;
+	}
+	LPC_SYSCON->SYSPLLCLKSEL = external ? SYSPLLCLKSEL_SYSOSC : SYSPLLCLKSEL_IRC;
+	if (!Lpc11ClockLatch(&LPC_SYSCON->SYSPLLCLKUEN))
+	{
+		return false;
+	}
+	LPC_SYSCON->SYSPLLCTRL = pll;
+	LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSPLL_PD;
+	if (!Lpc11ClockReady(&LPC_SYSCON->SYSPLLSTAT))
+	{
+		return false;
+	}
+
+	if (external && UsbClock)
+	{
+		LPC_SYSCON->USBPLLCLKSEL = USBPLLCLKSEL_SYSOSC;
+		if (!Lpc11ClockLatch(&LPC_SYSCON->USBPLLCLKUEN))
+		{
+			return false;
+		}
+		LPC_SYSCON->USBPLLCTRL = pll;
+		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_USBPLL_PD;
+		if (!Lpc11ClockReady(&LPC_SYSCON->USBPLLSTAT))
+		{
+			return false;
+		}
+	}
+
+	// Install the divider before connecting the faster PLL output.
+	LPC_SYSCON->SYSAHBCLKDIV = div;
+	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLOUT;
+	if (!Lpc11ClockLatch(&LPC_SYSCON->MAINCLKUEN))
+	{
+		return false;
+	}
+	if (external && UsbClock)
+	{
+		LPC_SYSCON->USBCLKSEL = USBCLKSEL_PLLOUT;
+		if (!Lpc11ClockLatch(&LPC_SYSCON->USBCLKUEN))
+		{
+			return false;
+		}
+		LPC_SYSCON->USBCLKDIV = div;
+		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_USBPAD_PD;
+	}
+	LPC_SYSCON->SYSAHBCLKCTRL |= 1U << 16;
 	return true;
 }
 
@@ -225,72 +303,14 @@ static uint32_t Lpc11SetCoreClock(OSC_TYPE Type, uint32_t ClkFreq, bool UsbClock
 		return 0;
 	}
 
-	// Callers must stop USB and other clock-dependent peripherals first.
-	LPC_SYSCON->USBCLKDIV = 0;
-	LPC_SYSCON->PDRUNCFG |= PDRUNCFG_USBPAD_PD | PDRUNCFG_SYSPLL_PD | PDRUNCFG_USBPLL_PD;
-	if (external)
+	if (Lpc11ConnectPll(Type, sysclk, pll, div, UsbClock))
 	{
-		LPC_SYSCON->PDRUNCFG |= PDRUNCFG_SYSOSC_PD;
-		LPC_SYSCON->SYSOSCCTRL = (LPC_SYSCON->SYSOSCCTRL & ~3U) |
-			(sysclk > 20000000U ? SYSOSCCTRL_FREQRANGE15 : SYSOSCCTRL_FREQRANGE0) |
-			(Type == OSC_TYPE_TCXO ? SYSOSCCTRL_BYPASS : 0U);
-		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSOSC_PD;
-		// At least 1 ms at the 12 MHz IRC; PLL lock is checked separately.
-		Lpc11ClockDelay(12000U);
-		s_SysOscFreq = sysclk;
-	}
-	LPC_SYSCON->SYSPLLCLKSEL = external ? SYSPLLCLKSEL_SYSOSC : SYSPLLCLKSEL_IRC;
-	if (!Lpc11ClockLatch(&LPC_SYSCON->SYSPLLCLKUEN))
-	{
-		goto clock_failed;
-	}
-	LPC_SYSCON->SYSPLLCTRL = pll;
-	LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSPLL_PD;
-	if (!Lpc11ClockReady(&LPC_SYSCON->SYSPLLSTAT))
-	{
-		goto clock_failed;
+		SystemMainClkFreq = fclko;
+		SystemCoreClock = fclko / div;
+		EnableInterrupt(state);
+		return SystemCoreClock;
 	}
 
-	if (external && UsbClock)
-	{
-		LPC_SYSCON->USBPLLCLKSEL = USBPLLCLKSEL_SYSOSC;
-		if (!Lpc11ClockLatch(&LPC_SYSCON->USBPLLCLKUEN))
-		{
-			goto clock_failed;
-		}
-		LPC_SYSCON->USBPLLCTRL = pll;
-		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_USBPLL_PD;
-		if (!Lpc11ClockReady(&LPC_SYSCON->USBPLLSTAT))
-		{
-			goto clock_failed;
-		}
-	}
-
-	// Install the divider before connecting the faster PLL output.
-	LPC_SYSCON->SYSAHBCLKDIV = div;
-	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLOUT;
-	if (!Lpc11ClockLatch(&LPC_SYSCON->MAINCLKUEN))
-	{
-		goto clock_failed;
-	}
-	if (external && UsbClock)
-	{
-		LPC_SYSCON->USBCLKSEL = USBCLKSEL_PLLOUT;
-		if (!Lpc11ClockLatch(&LPC_SYSCON->USBCLKUEN))
-		{
-			goto clock_failed;
-		}
-		LPC_SYSCON->USBCLKDIV = div;
-		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_USBPAD_PD;
-	}
-	LPC_SYSCON->SYSAHBCLKCTRL |= 1U << 16;
-	SystemMainClkFreq = fclko;
-	SystemCoreClock = fclko / div;
-	EnableInterrupt(state);
-
-	return SystemCoreClock;
-
-clock_failed:
 	LPC_SYSCON->USBCLKDIV = 0;
 	LPC_SYSCON->PDRUNCFG |= PDRUNCFG_USBPAD_PD;
 	if (Lpc11MainClockIRC())
@@ -308,6 +328,24 @@ clock_failed:
 	return 0;
 }
 
+// Enabled peripheral gates must be released before a runtime clock change.
+// The I2C gate is enabled at reset, so inspect its controller enable bit.
+static uint32_t Lpc11SelectCoreClock(OSC_TYPE Type, uint32_t Freq, bool UsbClock)
+{
+	uint32_t state = DisableInterrupt();
+	uint32_t clocks = LPC_SYSCON->SYSAHBCLKCTRL;
+	uint32_t freq = 0;
+	uint32_t busy = (0x1ffU << 7) | (1U << 18);
+
+	if ((clocks & busy) == 0 && LPC_SYSCON->CLKOUTDIV == 0 &&
+		((clocks & (1U << 5)) == 0 || (LPC_I2C->CONSET & (1U << 6)) == 0))
+	{
+		freq = Lpc11SetCoreClock(Type, Freq, UsbClock);
+	}
+	EnableInterrupt(state);
+	return freq;
+}
+
 /**
  * Select the physical PLL input for the fixed 48 MHz CPU target.
  * USB follows g_McuOsc.bUSBClk and is disabled for IRC input.
@@ -321,7 +359,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	{
 		return false;
 	}
-	if (Lpc11SetCoreClock(ClkSrc, OscFreq, g_McuOsc.bUSBClk) == 0)
+	if (Lpc11SelectCoreClock(ClkSrc, OscFreq, g_McuOsc.bUSBClk) == 0)
 	{
 		return false;
 	}
@@ -333,7 +371,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 
 uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
 {
-	return Lpc11SetCoreClock(Crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC,
+	return Lpc11SelectCoreClock(Crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC,
 		(uint32_t)ClkFreq, Crystal);
 }
 
@@ -344,8 +382,12 @@ uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq)
 
 void SystemInit (void)
 {
-	SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq);
+	Lpc11SetCoreClock(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, g_McuOsc.bUSBClk);
 	SystemCoreClockUpdate();
+	if (g_McuOsc.LowPwrOsc.Freq != 0)
+	{
+		SystemLowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq);
+	}
 }
 
 /**
@@ -384,3 +426,58 @@ uint32_t SystemCoreClockGet()
 }
 
 
+// Select the closest nominal watchdog oscillator output without enabling WWDT.
+bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	if (ClkSrc != OSC_TYPE_RC || OscFreq == 0)
+	{
+		return false;
+	}
+	uint32_t best = 0;
+	uint32_t value = 0;
+	uint32_t error = UINT32_MAX;
+
+	for (uint32_t sel = 1; sel < 16; sel++)
+	{
+		for (uint32_t div = 0; div < 32; div++)
+		{
+			uint32_t rate = s_WdtOscFreq[sel] / (2U * (div + 1U));
+			uint32_t diff = rate > OscFreq ? rate - OscFreq : OscFreq - rate;
+
+			if (diff < error)
+			{
+				error = diff;
+				best = rate;
+				value = (sel << 5) | div;
+			}
+		}
+	}
+	uint32_t state = DisableInterrupt();
+
+	if ((LPC_SYSCON->SYSAHBCLKCTRL & (1U << 15)) != 0 ||
+		(LPC_SYSCON->MAINCLKSEL & 3U) == MAINCLKSEL_WDT ||
+		(LPC_SYSCON->CLKOUTDIV != 0 && (LPC_SYSCON->CLKOUTSEL & 3U) == 2U))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	uint32_t clocks = LPC_SYSCON->SYSAHBCLKCTRL;
+
+	LPC_SYSCON->SYSAHBCLKCTRL = clocks | (1U << 15);
+	(void)LPC_SYSCON->SYSAHBCLKCTRL;
+	bool running = (LPC_WWDT->MOD & 1U) != 0;
+
+	LPC_SYSCON->SYSAHBCLKCTRL = clocks;
+	if (running)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	LPC_SYSCON->WDTOSCCTRL = value;
+	LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_WDTOSC_PD;
+	g_McuOsc.LowPwrOsc.Type = OSC_TYPE_RC;
+	g_McuOsc.LowPwrOsc.Freq = best;
+	g_McuOsc.LowPwrOsc.Accuracy = 400000;
+	EnableInterrupt(state);
+	return true;
+}

@@ -229,5 +229,44 @@ int main(void)
 	assert(GetHighFreqOscType() == OSC_TYPE_XTAL);
 	assert(GetHighFreqOscFreq() == 16000000);
 	assert(SystemCoreClock == 48000000 && LPC_SYSCON->USBCLKDIV != 0);
+	// Runtime requests must leave enabled peripheral users untouched.
+	for (unsigned bit = 7; bit <= 18; bit++)
+	{
+		if (bit == 16 || bit == 17)
+		{
+			continue;
+		}
+		LPC_SYSCON->SYSAHBCLKCTRL = 1U << bit;
+		memcpy(before, regs, sizeof(before));
+		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 12000000));
+		assert(SystemSetCoreClock(false, 12000000) == 0);
+		assert(memcmp(before, regs, sizeof(before)) == 0);
+	}
+	LPC_SYSCON->SYSAHBCLKCTRL = 0;
+	assert(mmap((void *)0x40004000, 0x1000, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)0x40004000);
+	assert(SystemLowFreqClockSelect(OSC_TYPE_RC, 1));
+	assert(GetLowFreqOscFreq() == 9375);
+	assert(SystemLowFreqClockSelect(OSC_TYPE_RC, UINT32_MAX));
+	assert(GetLowFreqOscFreq() == 2300000);
+	assert(LPC_WWDT->MOD == 0);
+	assert(LPC_SYSCON->SYSAHBCLKCTRL == 0);
+	LPC_WWDT->MOD = 1;
+	memcpy(before, regs, sizeof(before));
+	assert(!SystemLowFreqClockSelect(OSC_TYPE_RC, 32768));
+	assert(memcmp(before, regs, sizeof(before)) == 0);
+	LPC_WWDT->MOD = 0;
+	assert(!SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768));
+	assert(!SystemLowFreqClockSelect(OSC_TYPE_RC, 0));
+	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_WDT;
+	assert(!SystemLowFreqClockSelect(OSC_TYPE_RC, 32768));
+	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_IRC;
+	LPC_SYSCON->CLKOUTSEL = 2;
+	LPC_SYSCON->CLKOUTDIV = 1;
+	assert(!SystemLowFreqClockSelect(OSC_TYPE_RC, 32768));
+	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 12000000));
+	LPC_SYSCON->CLKOUTDIV = 0;
+	assert(SystemLowFreqClockSelect(OSC_TYPE_RC, 32768));
+	assert(GetLowFreqOscFreq() == 32812);
 	puts("LPC11Uxx clock setters, PLL selection and lock recovery: PASS");
 }
