@@ -31,9 +31,39 @@ Microchip device CMSIS headers; no vendor driver library is linked.
 | DAC | `dac_samd.cpp`, `include/dac_samd.h` | One 10-bit channel written by software: output buffer to the VOUT pin PA02 and the ADC, internal output to the comparators; INT1V, VDDANA and VREFA references |
 | ADC | `adc_samd.cpp`, `include/adc_samd.h` | Single conversions by polling: AIN pins, temperature sensor, bandgap, scaled supplies, DAC output; single ended or differential; gain 1/2 to 16; INT1V, supply and external references; averaging |
 
+## Generic power and reset diagnostics (0.14 draft)
+
+The D11 and D21 libraries now link `src/system_power_samd.cpp` for
+`SystemResetReason()` and `src/system_sleep_samd.cpp` for
+interrupt-resumable `SystemSleep()`. Reset causes come from the read-only
+PM RCAUSE register (power-on/brownout, external reset, watchdog, software
+reset). Reset reasons are optional diagnostics, **not** a substitute for
+power management.
+
+The sleep implementation enters Standby through SLEEPDEEP/WFI and resumes
+after an interrupt. `SystemWakePin()` configures a selected asynchronous
+EIC level wake source; EIC line ownership and the ordinary GPIO interrupt
+configuration must be preserved. The existing generic
+`exemples/misc/power_off_demo.cpp` has a board-selected resumable mode,
+with Eclipse managed PowerOffDemo projects for D11 and D21. No separate
+reset-only application is required.
+
+The SAMD11 Xplained Pro onboard PA14 button is NMI-only: connect an
+external switch from PA15 (EXTINT1) to GND. SAMD21 Xplained Pro uses its
+onboard PA15 button (EXTINT15). Monitor the EDBG VCOM at 115200 baud.
+
+Validated on the contributing reset-reason branch: `python3
+tests/samd/run_power.py` (128/128 combinations per MCU) and
+`sh tests/samd/clang_compile.sh` (both targets' source compilation).
+`sh tests/samd/standby_compile.sh` also passed on both targets.
+A prior SAMD11 PowerOffDemo Release link exceeded the 16 KB flash;
+its later compact UART-output changes still require full link verification
+and hardware validation of repeated wake and SRAM continuity.
+Do not consider the Standby port hardware-validated yet.
+
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
 configuration asking for it fails init), USB host mode, PWM (the TCC are
-timers only), watchdog, sleep modes and the NVM controller. The ADC has no interrupt, event or continuous mode, the DAC no
+timers only), watchdog and the NVM controller. The ADC has no interrupt, event or continuous mode, the DAC no
 event start (DATABUF).
 Crypto is not supported: the devices have no crypto hardware and their
 flash and RAM are too small for the software engines, so the libraries do
