@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "ARM/Microchip/SAMD/SAMD11/exemples"
-PROJECTS = ("UartPrbsRxTest", "UartPrbsTxTestTaktOS", "UartSlipPrbsTxTest")
+PROJECTS = ("UartPrbsRxTest", "UartPrbsTxTestTaktOS", "UartSlipPrbsTxTest", "LCDConsoleDisplayDemo")
 
 
 class Samd11PrbsLtoTest(unittest.TestCase):
@@ -50,6 +50,20 @@ class Samd11PrbsLtoTest(unittest.TestCase):
                 self.assertEqual(levels, [
                     "ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.size"
                 ])
+
+    def test_library_lto_and_native_atomic_helpers(self):
+        project = ROOT / "ARM/Microchip/SAMD/SAMD11/lib/ioc/.cproject"
+        for cfg in ET.parse(project).getroot().findall(".//configuration"):
+            for tool in cfg.findall("./folderInfo/toolChain/tool"):
+                if tool.get("name", "").endswith(("C Compiler", "C++ Compiler")):
+                    flags = next(option.get("value", "").split()
+                                 for option in tool.findall("option")
+                                 if option.get("name") == "Other compiler flags")
+                    self.assertIn("-flto", flags)
+                    self.assertIn("-ffat-lto-objects", flags)
+            atomic = cfg.find("./fileInfo[@resourcePath='src/iatomic.c']")
+            self.assertIsNotNone(atomic)
+            self.assertEqual(atomic.find("./tool/option").get("value"), "-fno-lto")
 
     def test_prbs_examples_compile_and_link_with_lto(self):
         for project in PROJECTS:

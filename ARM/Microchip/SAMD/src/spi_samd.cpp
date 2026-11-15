@@ -112,7 +112,20 @@ typedef enum {
 
 #pragma pack(push, 4)
 
+typedef struct SamdSpiDev SamdSpiDev_t;
+
 typedef struct {
+	int (*Sync)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
+	int (*Async)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
+	void (*DmaStart)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int, bool);
+	int (*DmaEnd)(SamdSpiDev_t *);
+	void (*DmaRelease)(SamdSpiDev_t *);
+	void (*SlaveArm)(SamdSpiDev_t *);
+	IrqHandler_t Irq;
+} SamdSpiOps_t;
+
+struct SamdSpiDev {
+	const SamdSpiOps_t *pOps;
 	int DevNo;						//!< SERCOM number
 	sercom_spim_registers_t *pReg;
 	SPIDev_t *pSpiDev;				//!< Generic SPI device data
@@ -136,7 +149,7 @@ typedef struct {
 	uint8_t Sink;					//!< Received bytes nobody wants
 	int8_t DmaRx;					//!< DMAC channels of the master
 	int8_t DmaTx;
-} SamdSpiDev_t;
+};
 
 #pragma pack(pop)
 
@@ -144,6 +157,34 @@ static SamdSpiDev_t s_SamdSpiDev[SAMD_SERCOM_CNT];
 
 static uint8_t s_SamdSpiTxBuf[SAMD_SPI_TXBUF_SIZE];
 static SamdSpiDev_t *s_pSamdSpiTxOwner;
+
+// Only the selected mode supplies optional operations. Common lifecycle
+// functions do not link DMA or slave handling on their own.
+static int SamdSpimPolling(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
+static int SamdSpimDmaWait(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
+static int SamdSpimInt(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
+static void SamdSpimDmaStart(SamdSpiDev_t *, const uint8_t *, uint8_t *, int, bool);
+static int SamdSpimDmaEnd(SamdSpiDev_t *);
+static void SamdSpiDmaGive(SamdSpiDev_t *);
+static void SamdSpisArm(SamdSpiDev_t *);
+static void SamdSpimIrq(int, DevIntrf_t * const);
+static void SamdSpisIrq(int, DevIntrf_t * const);
+
+static const SamdSpiOps_t s_SamdSpiPolling = {
+	SamdSpimPolling, NULL, NULL, NULL, NULL, NULL, NULL
+};
+static const SamdSpiOps_t s_SamdSpiInterrupt = {
+	SamdSpimPolling, SamdSpimInt, NULL, NULL, NULL, NULL, SamdSpimIrq
+};
+static const SamdSpiOps_t s_SamdSpiDmaPolling = {
+	SamdSpimDmaWait, NULL, NULL, SamdSpimDmaEnd, SamdSpiDmaGive, NULL, NULL
+};
+static const SamdSpiOps_t s_SamdSpiDmaInterrupt = {
+	SamdSpimDmaWait, SamdSpimInt, SamdSpimDmaStart, SamdSpimDmaEnd, SamdSpiDmaGive, NULL, SamdSpimIrq
+};
+static const SamdSpiOps_t s_SamdSpiSlave = {
+	NULL, NULL, NULL, NULL, NULL, SamdSpisArm, SamdSpisIrq
+};
 
 static bool SamdSpiSync(sercom_spim_registers_t *pReg, uint32_t Mask)
 {
@@ -389,10 +430,13 @@ static void SamdSpisEnd(SamdSpiDev_t *pDev)
 	}
 }
 
-static void SamdSpisIrq(SamdSpiDev_t *pDev)
+static void SamdSpisIrq(int DevNo, DevIntrf_t * const pIntrf)
 {
+	SamdSpiDev_t *pDev = (SamdSpiDev_t *)pIntrf->pDevData;
 	sercom_spim_registers_t *reg = pDev->pReg;
 	SPIDev_t *spi = pDev->pSpiDev;
+
+	(void)DevNo;
 
 	SamdSpisDrain(pDev);
 
@@ -542,17 +586,6 @@ static int SamdSpimDmaWait(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx,
 	return count;
 }
 
-// Transfer with the CPU waiting: DMA with bDmaEn, polling otherwise
-static int SamdSpimSync(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int Length)
-{
-	if (pDev->bDma)
-	{
-		return SamdSpimDmaWait(pDev, pTx, pRx, Length);
-	}
-
-	return SamdSpimPolling(pDev, pTx, pRx, Length);
-}
-
 // End of the master transfer taken by the first of the DMAC interrupt, the
 // SERCOM interrupt and the caller, interrupts disabled: SERCOM interrupts
 // off, a DMA transfer stopped with the count of bytes its receive channel
@@ -567,7 +600,7 @@ static SAMD_SPI_OP SamdSpimTake(SamdSpiDev_t *pDev)
 		if (pDev->bDmaRun)
 		{
 			pDev->bDmaRun = false;
-			pDev->Count = pDev->Length - SamdSpimDmaEnd(pDev);
+			pDev->Count = pDev->Length - pDev->pOps->DmaEnd(pDev);
 		}
 		pDev->Op = SAMD_SPI_OP_NONE;
 		if (s_pSamdSpiTxOwner == pDev)
@@ -634,7 +667,7 @@ static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int
 
 		if (!buff)
 		{
-			pDev->Count = SamdSpimSync(pDev, pTx, NULL, Length);
+			pDev->Count = pDev->pOps->Sync(pDev, pTx, NULL, Length);
 			pDev->Op = SAMD_SPI_OP_TX;
 			SamdSpimComplete(pDev);
 
@@ -648,7 +681,7 @@ static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int
 	else if (pDev->bDma && Length > SAMD_DMAC_COUNT_MAX)
 	{
 		// Longer than a block
-		pDev->Count = SamdSpimSync(pDev, NULL, pRx, Length);
+		pDev->Count = pDev->pOps->Sync(pDev, NULL, pRx, Length);
 		pDev->Op = SAMD_SPI_OP_RX;
 		SamdSpimComplete(pDev);
 
@@ -665,7 +698,7 @@ static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int
 	{
 		// The DMAC interrupt of the receive channel ends it
 		pDev->bDmaRun = true;
-		SamdSpimDmaStart(pDev, pTx, pRx, Length, true);
+		pDev->pOps->DmaStart(pDev, pTx, pRx, Length, true);
 
 		return -1;
 	}
@@ -682,9 +715,12 @@ static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int
 	return -1;
 }
 
-static void SamdSpimIrq(SamdSpiDev_t *pDev)
+static void SamdSpimIrq(int DevNo, DevIntrf_t * const pIntrf)
 {
+	SamdSpiDev_t *pDev = (SamdSpiDev_t *)pIntrf->pDevData;
 	sercom_spim_registers_t *reg = pDev->pReg;
+
+	(void)DevNo;
 
 	if (pDev->Op == SAMD_SPI_OP_NONE)
 	{
@@ -797,22 +833,6 @@ static void SamdSpiDmaGive(SamdSpiDev_t *pDev)
 	}
 }
 
-static void SamdSpiIrqHandler(int DevNo, DevIntrf_t * const pDev)
-{
-	SamdSpiDev_t *dev = (SamdSpiDev_t *)pDev->pDevData;
-
-	(void)DevNo;
-
-	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
-	{
-		SamdSpisIrq(dev);
-	}
-	else
-	{
-		SamdSpimIrq(dev);
-	}
-}
-
 static uint32_t SamdSpiGetRate(DevIntrf_t * const pDev)
 {
 	return ((SamdSpiDev_t *)pDev->pDevData)->pSpiDev->Cfg.Rate;
@@ -895,10 +915,10 @@ static int SamdSpiTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 
 	if (pDev->bIntEn && !pDev->bNoStop)
 	{
-		return SamdSpimInt(dev, pData, NULL, DataLen);
+		return dev->pOps->Async(dev, pData, NULL, DataLen);
 	}
 
-	return SamdSpimSync(dev, pData, NULL, DataLen);
+	return dev->pOps->Sync(dev, pData, NULL, DataLen);
 }
 
 static int SamdSpiRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
@@ -913,10 +933,10 @@ static int SamdSpiRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 
 	if (pDev->bIntEn)
 	{
-		return SamdSpimInt(dev, NULL, pBuff, BuffLen);
+		return dev->pOps->Async(dev, NULL, pBuff, BuffLen);
 	}
 
-	return SamdSpimSync(dev, NULL, pBuff, BuffLen);
+	return dev->pOps->Sync(dev, NULL, pBuff, BuffLen);
 }
 
 static void SamdSpiStopTx(DevIntrf_t * const pDev)
@@ -947,7 +967,7 @@ static void SamdSpiDisable(DevIntrf_t * const pDev)
 		// Channels stopped, a transfer started with the interrupt is not
 		// reported: Reset ends it
 		dev->bDmaRun = false;
-		(void)SamdSpimDmaEnd(dev);
+		(void)dev->pOps->DmaEnd(dev);
 	}
 	EnableInterrupt(state);
 
@@ -969,9 +989,9 @@ static void SamdSpiEnable(DevIntrf_t * const pDev)
 
 	uint32_t state = DisableInterrupt();
 
-	if (SamdSpiHwInit(dev) && spi->Cfg.Mode == SPIMODE_SLAVE)
+	if (SamdSpiHwInit(dev) && dev->pOps->SlaveArm != NULL)
 	{
-		SamdSpisArm(dev);
+		dev->pOps->SlaveArm(dev);
 	}
 
 	EnableInterrupt(state);
@@ -988,7 +1008,7 @@ static void SamdSpiReset(DevIntrf_t * const pDev)
 	if (dev->bDma)
 	{
 		dev->bDmaRun = false;
-		(void)SamdSpimDmaEnd(dev);
+		(void)dev->pOps->DmaEnd(dev);
 	}
 	dev->Op = SAMD_SPI_OP_NONE;
 	if (s_pSamdSpiTxOwner == dev)
@@ -996,9 +1016,9 @@ static void SamdSpiReset(DevIntrf_t * const pDev)
 		s_pSamdSpiTxOwner = NULL;
 	}
 
-	if (SamdSpiHwInit(dev) && dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	if (SamdSpiHwInit(dev) && dev->pOps->SlaveArm != NULL)
 	{
-		SamdSpisArm(dev);
+		dev->pOps->SlaveArm(dev);
 	}
 
 	EnableInterrupt(state);
@@ -1012,7 +1032,10 @@ static void SamdSpiPowerOff(DevIntrf_t * const pDev)
 
 	uint32_t state = DisableInterrupt();
 
-	SamdSpiDmaGive(dev);
+	if (dev->pOps != NULL && dev->pOps->DmaRelease != NULL)
+	{
+		dev->pOps->DmaRelease(dev);
+	}
 	EnableInterrupt(state);
 
 	IOPinDis(dev->pSpiDev->Cfg.pIOPinMap, dev->pSpiDev->Cfg.NbIOPins);
@@ -1076,8 +1099,14 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	NVIC_DisableIRQ(irq);
 
 	// Channels of an earlier SPIInit given back
-	SamdSpiDmaGive(dev);
+	if (dev->pOps != NULL && dev->pOps->DmaRelease != NULL)
+	{
+		dev->pOps->DmaRelease(dev);
+	}
 	memset(dev, 0, sizeof(SamdSpiDev_t));
+	dev->pOps = slave ? &s_SamdSpiSlave :
+				(pCfgData->bDmaEn ? (intEn ? &s_SamdSpiDmaInterrupt : &s_SamdSpiDmaPolling) :
+				(intEn ? &s_SamdSpiInterrupt : &s_SamdSpiPolling));
 	dev->DevNo = pCfgData->DevNo;
 	dev->pReg = &SamdSercomGetReg(pCfgData->DevNo)->SPIM;
 	dev->pSpiDev = pDev;
@@ -1140,7 +1169,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, SamdSpiIrqHandler);
+	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, dev->pOps->Irq);
 
 	// Chip selects inactive before they drive
 	for (int i = 0; i < dev->NbCs; i++)
@@ -1157,7 +1186,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	{
 		if (slave)
 		{
-			SamdSpisArm(dev);
+			dev->pOps->SlaveArm(dev);
 		}
 
 		if (intEn)
@@ -1169,7 +1198,10 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	}
 	else
 	{
-		SamdSpiDmaGive(dev);
+		if (dev->pOps->DmaRelease != NULL)
+		{
+			dev->pOps->DmaRelease(dev);
+		}
 		SharedIntrfSetIrqHandler(pCfgData->DevNo, NULL, NULL);
 		IOPinDis(pCfgData->pIOPinMap, pCfgData->NbIOPins);
 		SamdSercomClockDisable(pCfgData->DevNo);

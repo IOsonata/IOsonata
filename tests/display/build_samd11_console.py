@@ -34,6 +34,7 @@ def main():
                         help="build status logging without a display or printf")
     parser.add_argument("--output", choices=("uart", "display"), default="display",
                         help="select the D11 console log output")
+    parser.add_argument("--no-lto", action="store_true", help="compare a normal object build")
     args = parser.parse_args()
     app = ("tests/display/syslog_resource_probe.cpp" if args.syslog_only else
            "exemples/display/console_display_demo.cpp")
@@ -41,32 +42,44 @@ def main():
     failures = 0
     for mode in ("Debug", "Release"):
         out = Path(tempfile.gettempdir()) / "iosonata-oled1-build" / name / args.output / mode
+        if args.no_lto:
+            out = out / "no-lto"
         out.mkdir(parents=True, exist_ok=True)
         flags = ["-mcpu=cortex-m0plus", "-mthumb", "-Os", "-fsigned-char",
                  "-ffunction-sections", "-fdata-sections", "-fstack-usage",
                  "-D__SAMD11D14AM__", "-D__PROGRAM_START"]
         flags += ["-DCONSOLE_LOG_OUTPUT=" + ("1" if args.output == "uart" else "2")]
         flags += ["-I" + str(path) for path in INCLUDES]
-        flags += ["-DNDEBUG"] if mode == "Release" else ["-g3"]
+        flags += ["-g3"] if mode == "Debug" else []
         objects = []
         for index, source in enumerate(SOURCES + [app]):
             obj = out / (str(index) + ".o")
             cpp = source.endswith(".cpp")
             language = (["-std=gnu++23", "-fno-exceptions", "-fno-rtti"] if cpp
                         else ["-std=gnu17"])
-            subprocess.run([PREFIX + ("g++" if cpp else "gcc"), *flags, *language,
+            # GCC emits M0+ atomic helper references after LTO. Keep their
+            # archive member native so the linker can resolve them then.
+            lto = ([] if args.no_lto or source == "ARM/src/iatomic.c" else
+                   ["-flto", "-ffat-lto-objects"])
+            app_flags = ["-DNDEBUG"] if source == app and mode == "Release" else []
+            subprocess.run([PREFIX + ("g++" if cpp else "gcc"), *flags, *language, *lto, *app_flags,
                             "-c", str(ROOT / source), "-o", str(obj)], check=True)
             objects.append(str(obj))
         if not args.syslog_only:
             app_symbols = subprocess.check_output([PREFIX + "nm", objects[-1]], text=True)
             absent = ("g_Lcd", "g_Spi", "DisplayIntrf") if args.output == "uart" else ("s_Uart", "UARTInit")
             assert all(symbol not in app_symbols for symbol in absent), "Unselected output compiled"
+        archive = out / "libIOsonata_SAMD11D14AM.a"
+        archive.unlink(missing_ok=True)
+        subprocess.run([PREFIX + "ar", "rcs", str(archive), *objects[:-1]], check=True)
         elf = out / (name + ".elf")
+        link_lto = [] if args.no_lto else ["-flto"]
         result = subprocess.run([
-            PREFIX + "g++", "-mcpu=cortex-m0plus", "-mthumb", "--specs=nano.specs",
+            PREFIX + "g++", "-mcpu=cortex-m0plus", "-mthumb", "-Os", *link_lto,
+            "-ffunction-sections", "-fdata-sections", "--specs=nano.specs",
             "-T", str(TARGET / "ldscript/gcc_samd11d14a.ld"),
             "-L" + str(ROOT / "ARM/ldscript"), "-Wl,--gc-sections",
-            "-Wl,-Map," + str(out / (name + ".map")), *objects,
+            "-Wl,-Map," + str(out / (name + ".map")), objects[-1], str(archive),
             "-Wl,--start-group", "-lgcc", "-lc", "-lm", "-Wl,--end-group",
             "-o", str(elf),
         ])
@@ -80,6 +93,11 @@ def main():
         if not args.syslog_only:
             absent = ("LcdSSD", "SPIInit", "DisplayIntrf") if args.output == "uart" else ("UARTInit", "SamdUart")
             assert all(symbol not in symbols for symbol in absent), "Unselected output linked"
+        assert "__Vectors" in symbols and "ResetEntry" in symbols, "Startup missing"
+        if not args.no_lto and not args.syslog_only and args.output == "display":
+            absent = ("SamdSpimInt", "SamdSpis", "SamdSpimDma", "SamdDmacOpen",
+                      "SamdDmacStart", "s_SamdSpiTxBuf")
+            assert all(symbol not in symbols for symbol in absent), "Unused SPI mode linked"
         if args.syslog_only:
             symbols = subprocess.check_output([PREFIX + "nm", str(elf)], text=True)
             assert "vsnprintf" not in symbols, "Status-only log linked printf"

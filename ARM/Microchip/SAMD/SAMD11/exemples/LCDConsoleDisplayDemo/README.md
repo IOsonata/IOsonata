@@ -1,9 +1,8 @@
 # SAM D11 OLED1 display console
 
-Work in progress: the display selection exceeds the SAMD11D14AM's 16 KB flash.
-The UART selection fits; hardware validation is pending for both selections.
-Do not flash an ELF produced with linker overflow checks bypassed. This project is only for SAM D11 Xplained Pro with
-OLED1 Xplained Pro connected to EXT1.
+Both selections fit the SAMD11D14AM's 16 KB flash with the LTO settings below.
+Hardware validation is pending for both selections. This project is for
+SAM D11 Xplained Pro with OLED1 Xplained Pro connected to EXT1.
 
 The existing `exemples/display/console_display_demo.cpp` selects the system
 5x7 font, shows its character sample, then sends a counter every two seconds
@@ -74,9 +73,16 @@ byte count means text was passed to that API, not verified on the panel.
   this board's console initialization, with address/undefined-behavior checks.
   Environments running under ptrace need `ASAN_OPTIONS=detect_leaks=0`.
 - `python3 tests/display/build_samd11_console.py`: Arm GCC source build using
-  the target's real linker script. GCC 15.2.1, `-Os`, currently fails the flash
-  limit in display mode; the current overflow is recorded below.
-- No SAMD11 OLED hardware result yet. Flash size must be resolved first.
+  the target's real linker script, a separate library archive, GCC 15.2.1,
+  `-Os` and LTO. Checks that unused SPI transfer modes are absent.
+- `python3 tests/samd/run_spi.py`: host tests of all SPI master modes,
+  completion, read-command synchronization, reinitialization, failed channel
+  acquisition, reset timeout, power-off cleanup and slave arming.
+- `python3 tests/samd/build_spi.py`: after the display build, links a C program
+  with runtime mode selection against the archive, with and without LTO.
+- Full managed D11 library: all 238 sources compile in Debug and Release;
+  both console selections link against each complete archive at the sizes below.
+- No SAMD11 OLED hardware result yet.
 
 Hardware references:
 - [OLED1 extension header](https://onlinedocs.microchip.com/oxy/GUID-26DC66D4-2EF7-4C54-8D2D-2A29BED57CAB-en-US-2/GUID-4AEF0FF0-9E97-4FCB-8565-668D17B30006.html)
@@ -85,7 +91,8 @@ Hardware references:
 
 ## Syslog resource changes
 
-GCC 15.2.1, Cortex-M0+, `-Os`, real SAMD11 linker script, no LTO:
+Earlier direct-object measurements, GCC 15.2.1, Cortex-M0+, `-Os`,
+real SAMD11 linker script, no LTO:
 
 | Build | Before flash | After flash | Before static RAM | After static RAM |
 | --- | ---: | ---: | ---: | ---: |
@@ -93,12 +100,13 @@ GCC 15.2.1, Cortex-M0+, `-Os`, real SAMD11 linker script, no LTO:
 
 Flash counts text plus initialized data. Static RAM counts data plus BSS;
 it does not include the stack. These are probe image sizes, not logger-only
-sizes. Run `python3 tests/display/build_samd11_console.py --syslog-only`.
-The script also checks that the probe does not link printf or timestamp code.
+sizes. The current script uses an archive instead of linking every object
+directly. With `--syslog-only --no-lto`, the current probe uses 5062 bytes
+flash and 296 bytes static RAM. The script also checks that the probe does not link printf or timestamp code.
 
 The OLED console saves 764 flash bytes. Its queue changes from four 64-byte
 records to two 32-byte records; together with four extra bytes for timestamp
-selection, this saves 188 bytes of static RAM. It still exceeds flash.
+selection, this saves 188 bytes of static RAM. The later SPI/LTO change below makes it fit flash.
 
 The compiler-reported local stack frame of `SysLogVPrintf` falls from 48 to
 32 bytes. This is not a measurement of the complete call chain's stack use.
@@ -118,8 +126,44 @@ Run `python3 tests/display/build_samd11_console.py --output uart` or
 The script checks the application object for unselected output references and
 checks the final ELF when linking succeeds.
 
-UART Debug and Release: text 15160, data 716, BSS 632 bytes. Flash is 15876
-bytes; static RAM is 1348 bytes, excluding stack. No display/SPI driver links.
-The default display selection remains 2628 bytes over flash in both builds
-and needs flash reduction before hardware use.
-No other MCU board was built or tested for this change.
+GCC 15.2.1, `-Os`, library and application rebuilt together. Debug and Release
+have the same sizes:
+
+| Output | Text | Data | BSS | Flash (text + data) | Static RAM (data + BSS) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Display | 14720 | 204 | 1956 | 14924 | 2160 |
+| UART | 14068 | 576 | 628 | 14644 | 1204 |
+
+Display has 1460 bytes flash free and 1936 bytes RAM beyond static storage.
+The remaining RAM must cover the stack; this is not a measured stack margin.
+
+## SPI and LTO
+
+The SAMD SPI driver selects a private constant operation table at initialization.
+Common transfer and lifecycle functions call the selected operations, so a
+constant polling configuration does not retain interrupt transfers, slave
+handling or DMA transfers. Runtime configurations still support every mode;
+no feature-disable macro or public API change is needed. The table pointer
+adds four bytes per SERCOM instance. Removing unused DMA/interrupt storage
+more than offsets that in the polling console.
+
+Using the same archive build and LTO settings, the previous SPI driver required
+16476 bytes flash (92 bytes too large); the updated driver requires 14924,
+saving 1552 bytes. Earlier direct-object link measurements are not identical
+to these archive builds.
+
+The D11 library compiles with `-flto -ffat-lto-objects`; the console compiles
+and links with `-flto`. The final link also passes `-ffunction-sections` and
+`-fdata-sections`, alongside the existing `--gc-sections`, so code generated
+by LTO can be discarded individually. Fat objects retain normal machine code
+for applications explicitly linking with `-fno-lto`.
+
+`src/iatomic.c` has a file-specific `-fno-lto` setting in the library project.
+Cortex-M0+ atomic helper references appear during code generation after LTO;
+keeping that archive member native lets the linker resolve those calls.
+Clean and rebuild both the D11 library and the application after updating.
+
+The archive still contributes the DMAC vector handler; the display ELF omits
+DMA channel allocation and transfer functions, slave handling and the shared
+SPI interrupt transmit buffer. No other board was built or hardware-tested
+for this change.
