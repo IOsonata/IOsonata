@@ -260,6 +260,22 @@ static void PowerDemoPut(const char *pText)
 	}
 }
 
+// In SAMD polling mode, Tx() may leave the last bytes in its FIFO.
+// Rx() services both FIFOs, so drain TX before shutting down SERCOM.
+static void PowerDemoDrain(void)
+{
+	UARTDev_t *pUart;
+	uint8_t dummy;
+
+	pUart = (UARTDev_t *)s_Uart;
+	while (CFifoUsed(pUart->hTxFifo) != 0)
+	{
+		(void)s_Uart.Rx(&dummy, 1);
+	}
+	// FIFO empty means the last byte reached DATA, not that TX is complete.
+	msDelay(2);
+}
+
 static void PowerDemoPutCount(uint32_t Value)
 {
 	uint8_t digit;
@@ -304,7 +320,7 @@ int main()
 			msDelay(10);
 		}
 		PowerDemoPut("Entering Standby\r\n");
-		msDelay(250);
+		PowerDemoDrain();
 		s_Uart.Disable();
 		SystemSleep();
 		s_Uart.Enable();
