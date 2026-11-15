@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "mcu": "NRF54LM20A_XXAA",
+  "mcu": "NRF54LM20B_XXAA",
   "cpu": "cortex-m33",
   "fpu": true,
   "fpu_unit": "fpv5spd16",
@@ -20,12 +20,12 @@
     "${external}/nrfx/hal",
     "${external}/nrfx/bsp/stable/soc"
   ],
-  "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54lm20a_xxaa.ld",
+  "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54lm20b_xxaa.ld",
   "lib_path": "${iosonata}/ARM/Nordic/nRF54/nRF54LM20x/lib/ioc/${config}",
   "lib": "IOsonata_nRF54LM20x",
   "features": {
     "ble": {
-      "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54lm20a_xxaa_s145.ld",
+      "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54lm20b_xxaa_s145.ld",
       "defines": [
         "S145"
       ],

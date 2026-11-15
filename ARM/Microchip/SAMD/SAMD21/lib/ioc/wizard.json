@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "mcu": "SAMD21J18A",
+  "cpu": "cortex-m0plus",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [
+    "__SAMD21J18A__",
+    "__PROGRAM_START"
+  ],
+  "includes": [
+    "${iosonata}/ARM/Microchip/include",
+    "${iosonata}/ARM/Microchip/SAMD/include"
+  ],
+  "linker_script": "${iosonata}/ARM/Microchip/SAMD/SAMD21/ldscript/gcc_samd21j18a.ld",
+  "lib_path": "${iosonata}/ARM/Microchip/SAMD/SAMD21/lib/ioc/${config}",
+  "lib": "IOsonata_SAMD21J18A"
+}

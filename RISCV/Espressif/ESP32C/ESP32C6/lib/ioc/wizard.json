@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "mcu": "ESP32C6",
+  "cpu": "rv32imc_zicsr",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [],
+  "includes": [
+    "${iosonata}/RISCV/include",
+    "${iosonata}/RISCV/Espressif/include"
+  ],
+  "linker_script": "${iosonata}/RISCV/Espressif/ESP32C/ldscript/gcc_esp32c6.ld",
+  "lib_path": "${iosonata}/RISCV/Espressif/ESP32C/ESP32C6/lib/ioc/${config}",
+  "lib": "IOsonata_ESP32C6"
+}

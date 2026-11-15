@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "mcu": "SAMD11D14AM",
+  "cpu": "cortex-m0plus",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [
+    "__SAMD11D14AM__",
+    "__PROGRAM_START"
+  ],
+  "includes": [
+    "${iosonata}/ARM/Microchip/include",
+    "${iosonata}/ARM/Microchip/SAMD/include"
+  ],
+  "linker_script": "${iosonata}/ARM/Microchip/SAMD/SAMD11/ldscript/gcc_samd11d14a.ld",
+  "lib_path": "${iosonata}/ARM/Microchip/SAMD/SAMD11/lib/ioc/${config}",
+  "lib": "IOsonata_SAMD11D14AM"
+}
