@@ -51,6 +51,8 @@ class StandbySourceTest(unittest.TestCase):
 		s = body(EIC, "static bool SamdStandbyNmiConfig(")
 		self.assertIn("PinNo != 14", s)
 		self.assertIn("SAMD_GCLK_LF", s)
+		self.assertIn("SYSCTRL_OSC32K_RUNSTDBY_Msk", s)
+		self.assertIn("SYSCTRL_XOSC32K_RUNSTDBY_Msk", s)
 		self.assertIn("EIC_NMICTRL_NMISENSE_FALL", s)
 		self.assertIn("EIC_NMIFLAG_NMI_Msk", s)
 		self.assertIn("PORT_PINCFG_PMUXEN_Msk", s)
