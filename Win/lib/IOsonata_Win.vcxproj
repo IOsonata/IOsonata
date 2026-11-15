@@ -81,7 +81,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WINAPI_PARTITION_DESKTOP;_ALLOW_KEYWORD_MACROS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>include;../../include;../../../include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;../include;../../include;../../../include;../../../../include</AdditionalIncludeDirectories>
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <SDLCheck>false</SDLCheck>
@@ -93,7 +93,7 @@
       <MSCompatibility>true</MSCompatibility>
       <MSExtensions>true</MSExtensions>
       <UseShortEnums>true</UseShortEnums>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
@@ -112,7 +112,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\src\base64.c" />
     <ClCompile Include="..\..\src\cfifo.c" />
-    <ClCompile Include="..\..\src\coredev\uart.c" />
+    <ClCompile Include="..\..\src\coredev\uart.cpp" />
     <ClCompile Include="..\..\src\crc.c" />
     <ClCompile Include="..\..\src\device_intrf.cpp" />
     <ClCompile Include="..\..\src\intelhex.c" />
@@ -123,7 +123,6 @@
     <ClCompile Include="..\..\src\utf8.c" />
     <ClCompile Include="..\..\src\utf8cvt.cpp" />
     <ClCompile Include="src\usb_hidhost_impl.cpp" />
-    <ClCompile Include="..\..\src\video\cam_arducam_mega.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\video\videodev.h" />
@@ -135,9 +134,7 @@
     <ClInclude Include="..\..\include\intelhex.h" />
     <ClInclude Include="..\..\include\istddef.h" />
     <ClInclude Include="..\..\include\prbs.h" />
-    <ClInclude Include="..\..\include\serialintrf.h" />
     <ClInclude Include="..\..\include\sysstatus.h" />
-    <ClInclude Include="..\..\include\uart.h" />
     <ClInclude Include="..\..\include\usb_hidhost.h" />
     <ClInclude Include="..\..\include\utf8.h" />
     <ClInclude Include="..\..\include\utf8cvt.h" />
