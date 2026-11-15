@@ -365,11 +365,17 @@ void IOPinDisableInterrupt(int IntNo)
 	EIC_REGS->EIC_INTENCLR = 1UL << IntNo;
 	EIC_REGS->EIC_INTFLAG = 1UL << IntNo;
 
-	// A disabled interrupt must not remain an armed Standby wake source.
+	// EIC wake configuration is changed with the controller disabled.
 	if ((s_SamdStandbyWakeLines & (1UL << IntNo)) != 0U)
 	{
-		EIC_REGS->EIC_WAKEUP &= ~(1UL << IntNo);
-		s_SamdStandbyWakeLines &= ~(1UL << IntNo);
+		EIC_REGS->EIC_CTRL = 0U;
+		if (SamdEicSync())
+		{
+			EIC_REGS->EIC_WAKEUP &= ~(1UL << IntNo);
+			s_SamdStandbyWakeLines &= ~(1UL << IntNo);
+		}
+		EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
+		(void)SamdEicSync();
 	}
 
 	if (s_SamdPinInt[IntNo].PortNo >= 0)
