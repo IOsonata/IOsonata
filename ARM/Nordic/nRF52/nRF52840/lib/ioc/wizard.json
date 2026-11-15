@@ -1,12 +1,10 @@
 {
   "schema_version": 1,
-  "mcu": "NRF52840",
+  "mcu": "NRF52840_XXAA",
   "cpu": "cortex-m4",
   "fpu": true,
   "fpu_unit": "fpv4spd16",
-  "defines": [
-    "FDS_BACKEND=NRF_FSTORAGE_NVMC"
-  ],
+  "defines": [],
   "includes": [
     "${iosonata}/ARM/Nordic/include",
     "${iosonata}/ARM/Nordic/nRF52/include",
@@ -28,7 +26,6 @@
     "ble": {
       "linker_script": "${iosonata}/ARM/Nordic/nRF52/ldscript/gcc_nrf52840_xxaa_s140.ld",
       "defines": [
-        "FDS_BACKEND=NRF_FSTORAGE_SD",
         "NRF_SD_BLE_API_VERSION=7",
         "SOFTDEVICE_PRESENT",
         "BLE_STACK_SUPPORT_REQD",
@@ -42,7 +39,6 @@
         "${external}/nRF5_SDK/components/libraries/cli",
         "${external}/nRF5_SDK/components/libraries/delay",
         "${external}/nRF5_SDK/components/libraries/experimental_section_vars",
-        "${external}/nRF5_SDK/components/libraries/fds",
         "${external}/nRF5_SDK/components/libraries/fstorage",
         "${external}/nRF5_SDK/components/libraries/log",
         "${external}/nRF5_SDK/components/libraries/log/src",

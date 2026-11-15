@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "mcu": "NRF9160_XXAA",
+  "cpu": "cortex-m33",
+  "fpu": true,
+  "fpu_unit": "fpv5spd16",
+  "defines": [
+    "__PROGRAM_START"
+  ],
+  "includes": [
+    "${iosonata}/ARM/Nordic/include",
+    "${iosonata}/ARM/Nordic/nRF91/include",
+    "${iosonata}/ARM/Nordic/nRF91/nRF9160/lib/include",
+    "${external}/nrfx",
+    "${external}/nrfx/drivers/include",
+    "${external}/nrfx/bsp/stable",
+    "${external}/nrfx/bsp/stable/mdk",
+    "${external}/nrfx/bsp/stable/mdk/common",
+    "${external}/nrfx/bsp/stable/mdk/nrf91",
+    "${external}/nrfx/hal"
+  ],
+  "linker_script": "${iosonata}/ARM/Nordic/nRF91/ldscript/gcc_nrf9160_xxaa.ld",
+  "lib_path": "${iosonata}/ARM/Nordic/nRF91/nRF9160/lib/ioc/${config}",
+  "lib": "IOsonata_nRF9160"
+}
