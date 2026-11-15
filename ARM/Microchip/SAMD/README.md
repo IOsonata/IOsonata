@@ -48,8 +48,8 @@ configuration must be preserved. The existing generic
 with Eclipse managed PowerOffDemo projects for D11 and D21. No separate
 reset-only application is required.
 
-The SAMD11 Xplained Pro onboard PA14 button is NMI-only: connect an
-external switch from PA15 (EXTINT1) to GND. SAMD21 Xplained Pro uses its
+SAMD11 Xplained Pro uses its onboard SW0/PA14, the dedicated EIC NMI input.
+No external wiring is needed. SAMD21 Xplained Pro uses its
 onboard PA15 button (EXTINT15). Monitor the EDBG VCOM at 115200 baud.
 
 Validated on the contributing reset-reason branch: `python3
