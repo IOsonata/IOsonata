@@ -262,20 +262,14 @@ static void PowerDemoPut(const char *pText)
 
 static void PowerDemoPutCount(uint32_t Value)
 {
-	char digits[10];
-	uint32_t count;
+	uint8_t digit;
 	uint8_t c;
+	int shift;
 
-	count = 0U;
-	do
+	for (shift = 28; shift >= 0; shift -= 4)
 	{
-		digits[count++] = (char)('0' + Value % 10U);
-		Value /= 10U;
-	} while (Value != 0U);
-
-	while (count != 0U)
-	{
-		c = (uint8_t)digits[--count];
+		digit = (uint8_t)((Value >> shift) & 0xFU);
+		c = (uint8_t)(digit < 10U ? '0' + digit : 'A' + digit - 10U);
 		while (s_Uart.Tx(&c, 1) != 1)
 		{
 		}
@@ -315,7 +309,7 @@ int main()
 		SystemSleep();
 		s_Uart.Enable();
 		wakeCount++;
-		PowerDemoPut("Resumed from Standby, count ");
+		PowerDemoPut("Resumed from Standby, count 0x");
 		PowerDemoPutCount(wakeCount);
 		PowerDemoPut("\r\n");
 	}
