@@ -131,6 +131,23 @@ The separate `ResetReasonDemo` projects and
 The single shared `PowerOffDemo` serves as the low-power validation
 application. This branch has not been hardware-validated or merged.
 
+## Pre-hardware review after consolidation
+
+Three source-level issues were addressed on the review branch:
+
+1. `IOPinEnableInterrupt()` and `IOPinSetSense()` now refuse to take or
+   silently reconfigure an EIC line owned by Standby wake. Disabling that
+   GPIO interrupt releases its `EIC_WAKEUP` setting.
+2. Clearing the Standby wake bit is performed while the EIC is disabled
+   and synchronized, rather than writing the configuration while enabled.
+3. `SystemSleep()` masks interrupts while rearming the wake source and
+   executing WFI, restoring the previous PRIMASK afterward. This keeps
+   an early wake interrupt from being handled before WFI and lost.
+
+Source checks are available in `python3 tests/samd/run_standby_source.py`.
+These checks and the new code have **not** yet been run on either target
+after the changes; physical wake and measured sleep current remain pending.
+
 ## Suggested correction order
 
 1. Define and approve the generic API's sleep/deep-sleep/off semantics and
