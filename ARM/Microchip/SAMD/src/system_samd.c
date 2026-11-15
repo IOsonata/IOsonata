@@ -1094,6 +1094,114 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	return current != 0U && current == Freq ? current : 0U;
 }
 
+// Runtime changes require released peripheral clocks. Bus masks alone do not
+// show activity: several masks are enabled at reset. Interrupts are disabled.
+static bool SamdClockBusy(bool LowFreq)
+{
+	uint32_t apba = PM_APBAMASK_SYSCTRL_Msk | PM_APBAMASK_GCLK_Msk |
+					PM_APBAMASK_WDT_Msk | PM_APBAMASK_RTC_Msk | PM_APBAMASK_EIC_Msk;
+	uint32_t apbb = PM_APBBMASK_DMAC_Msk | PM_APBBMASK_USB_Msk;
+
+	// A gated register interface cannot prove that its peripheral is stopped.
+	if ((PM_REGS->PM_APBAMASK & apba) != apba || (PM_REGS->PM_APBBMASK & apbb) != apbb)
+	{
+		return true;
+	}
+
+	if ((WDT_REGS->WDT_CTRL & (WDT_CTRL_ENABLE_Msk | WDT_CTRL_ALWAYSON_Msk)) != 0U ||
+		(RTC_REGS->MODE0.RTC_CTRL & RTC_MODE0_CTRL_ENABLE_Msk) != 0U ||
+		(EIC_REGS->EIC_CTRL & EIC_CTRL_ENABLE_Msk) != 0U ||
+		(DMAC_REGS->DMAC_CTRL & (DMAC_CTRL_DMAENABLE_Msk | DMAC_CTRL_CRCENABLE_Msk)) != 0U)
+	{
+		return true;
+	}
+
+#if defined(__SAMD11D14AM__)
+	uint8_t usb = USB_REGS->USB_CTRLA;
+#else
+	uint8_t usb = USB_REGS->DEVICE.USB_CTRLA;
+#endif
+	if ((usb & USB_CTRLA_ENABLE_Msk) != 0U || !SamdGclkSync())
+	{
+		return true;
+	}
+
+	// A running DFLL may depend on either low-frequency source. Do not stop
+	// its reference while the CPU or another generator uses its output.
+	if (LowFreq && (SYSCTRL_REGS->SYSCTRL_DFLLCTRL & SYSCTRL_DFLLCTRL_ENABLE_Msk) != 0U)
+	{
+		return true;
+	}
+	if (LowFreq && (SYSCTRL_REGS->SYSCTRL_DPLLCTRLA & SYSCTRL_DPLLCTRLA_ENABLE_Msk) != 0U)
+	{
+		uint32_t ref = SYSCTRL_REGS->SYSCTRL_DPLLCTRLB & SYSCTRL_DPLLCTRLB_REFCLK_Msk;
+		*(volatile uint8_t *)&GCLK_REGS->GCLK_CLKCTRL = GCLK_CLKCTRL_ID_FDPLL_Val;
+		if (!SamdGclkSync())
+		{
+			return true;
+		}
+
+		uint16_t channel = GCLK_REGS->GCLK_CLKCTRL;
+
+		if ((ref != SYSCTRL_DPLLCTRLB_REFCLK_REF1 && ref != SYSCTRL_DPLLCTRLB_REFCLK_GCLK) ||
+			(ref == SYSCTRL_DPLLCTRLB_REFCLK_GCLK &&
+			 (channel & GCLK_CLKCTRL_GEN_Msk) == GCLK_CLKCTRL_GEN(SAMD_GCLK_LF)))
+		{
+			return true;
+		}
+	}
+
+	for (uint32_t i = 0; i < GCLK_NUM; i++)
+	{
+		*(volatile uint8_t *)&GCLK_REGS->GCLK_CLKCTRL = (uint8_t)i;
+		if (!SamdGclkSync())
+		{
+			return true;
+		}
+
+		uint16_t channel = GCLK_REGS->GCLK_CLKCTRL;
+
+		if (i == GCLK_CLKCTRL_ID_DFLL48_Val || i == GCLK_CLKCTRL_ID_FDPLL_Val ||
+			i == GCLK_CLKCTRL_ID_FDPLL32K_Val)
+		{
+			if (!LowFreq || (channel & GCLK_CLKCTRL_GEN_Msk) != GCLK_CLKCTRL_GEN(SAMD_GCLK_LF))
+			{
+				continue;
+			}
+		}
+		if ((channel & GCLK_CLKCTRL_CLKEN_Msk) != 0U)
+		{
+			return true;
+		}
+	}
+
+	for (uint32_t i = 0; i < GCLK_GEN_NUM; i++)
+	{
+		*(volatile uint8_t *)&GCLK_REGS->GCLK_GENCTRL = (uint8_t)i;
+		if (!SamdGclkSync())
+		{
+			return true;
+		}
+
+		uint32_t gen = GCLK_REGS->GCLK_GENCTRL;
+		uint32_t src = gen & GCLK_GENCTRL_SRC_Msk;
+		if ((gen & GCLK_GENCTRL_GENEN_Msk) == 0U)
+		{
+			continue;
+		}
+		if ((gen & GCLK_GENCTRL_OE_Msk) != 0U ||
+			(!LowFreq && i > SAMD_GCLK_DPLLREF) ||
+			(LowFreq && i != SAMD_GCLK_LF &&
+			 (src == GCLK_GENCTRL_SRC_OSC32K || src == GCLK_GENCTRL_SRC_XOSC32K ||
+			  src == GCLK_GENCTRL_SRC_GCLKGEN1)))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 // Full clock tree setup again. The caller stops the clock consumers first
 // (USB, DMA, timers, serial interfaces) and sets them up again after.
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
@@ -1112,6 +1220,13 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 
 	primask = __get_PRIMASK();
 	__disable_irq();
+	if (SamdClockBusy(false))
+	{
+		__set_PRIMASK(primask);
+
+		return false;
+	}
+
 	g_McuOsc.CoreOsc = requested.CoreOsc;
 	result = SamdSystemClockInit();
 	__set_PRIMASK(primask);
@@ -1133,6 +1248,13 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 
 	primask = __get_PRIMASK();
 	__disable_irq();
+	if (SamdClockBusy(true))
+	{
+		__set_PRIMASK(primask);
+
+		return false;
+	}
+
 	g_McuOsc.LowPwrOsc.Type = ClkSrc;
 	g_McuOsc.LowPwrOsc.Freq = OscFreq;
 	result = SamdLowFreqInit();

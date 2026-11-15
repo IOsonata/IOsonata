@@ -57,11 +57,27 @@ descriptor cannot hide a previous failure. The descriptors retain the requested
 configuration; a failed operation does not promise to restore the previous
 clock tree.
 
-The caller must still stop all affected clock consumers before either selector,
-including a repeated request. Core selection rebuilds the clock tree, including
-the low-frequency generator. Low-frequency selection must not run while the
-CPU depends on that source through the DFLL or DPLL. Automatic refusal for
-active consumers remains pending.
+The caller must stop and release affected clock consumers before either
+selector, including a repeated request. Under the interrupt mask, both selectors
+now refuse enabled watchdog, RTC, EIC, USB, DMA or CRC operation, allocated
+peripheral generic-clock channels, and enabled clock outputs. A gated register
+interface or a generic-clock synchronization timeout also causes refusal.
+Watchdog state is only read; clock selection never enables or disables it.
+
+Core selection rebuilds the clock tree, including the low-frequency generator,
+and refuses enabled application generators beyond the three system generators.
+Low-frequency selection refuses a running DFLL, a DPLL using XOSC32K or
+generator 1, and other generators using OSC32K, XOSC32K or generator 1. A DPLL
+using XOSC or generator 2 on OSC8M can continue. These checks are conservative:
+USB-recovery DFLL operation and peripheral channels on unrelated sources also
+block low-frequency changes. The GCLK inspection writes only register selector
+IDs, without changing channel or generator configuration.
+
+Timer Disable stops counting but retains its clock connection; this still
+blocks selection. DMA initialization likewise leaves the controller enabled.
+These resources must be released before selecting clocks. SysTick and scheduler
+retiming remain the application's responsibility; reading SysTick CTRL here
+would clear COUNTFLAG. The refusal checks do not retime peripheral drivers.
 
 Arm GNU D11/D21 compilation passed. Both complete managed D11 library
 configurations compiled 239 sources, and ClockDisplayDemo linked at 16,208
@@ -70,6 +86,14 @@ Temporary host checks of the selector control flow passed with setup failures,
 repeated requests, fallback attempts, invalid/interrupt-context calls and both
 initial interrupt-mask states. These checks substitute the hardware helpers;
 runtime oscillator failure and recovery still require board validation.
+Temporary D11/D21 register checks at O0 and O2 also passed every peripheral
+channel, clock-output generator, low-frequency generator dependency, watchdog,
+RTC, EIC, USB, DMA/CRC, inaccessible register interface and synchronization
+refusal case. Refused calls retained the oscillator descriptors and interrupt
+mask, without entering clock setup; releasing the simulated resources allowed
+setup again. These checks model indirect GCLK register selection and substitute
+clock setup; hardware switching and refusal validation remain pending.
+
 
 ## STM32WBA power port (0.14)
 
