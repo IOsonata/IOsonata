@@ -8,7 +8,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EIC = (ROOT / "ARM/Microchip/SAMD/src/iopincfg_samd.c").read_text(encoding="utf-8")
-SLEEP = (ROOT / "ARM/Microchip/SAMD/src/system_sleep_samd.cpp").read_text(encoding="utf-8")
+SLEEP = (ROOT / "ARM/Microchip/SAMD/src/system_sleep_samd.c").read_text(encoding="utf-8")
 
 
 def body(source, signature):
