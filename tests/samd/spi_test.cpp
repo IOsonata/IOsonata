@@ -204,6 +204,29 @@ static int Event(DevIntrf_t * const pIntrf, DEVINTRF_EVT EventId, uint8_t *, int
 	return 0;
 }
 
+static void CheckBaud(uint32_t Rate)
+{
+	uint8_t baud = 0;
+	uint32_t actual = SamdSpiBaud(Rate, &baud);
+	uint32_t requested = Rate == 0 ? SAMD_SPI_RATE_DEFAULT : Rate;
+	uint32_t best = 0;
+	uint32_t bestdiff = UINT32_MAX;
+
+	for (unsigned i = 0; i < 256; i++)
+	{
+		uint32_t rate = 48000000U / (2U * (i + 1U));
+		uint32_t diff = rate > requested ? rate - requested : requested - rate;
+
+		if (diff < bestdiff || (diff == bestdiff && rate < best))
+		{
+			best = rate;
+			bestdiff = diff;
+		}
+	}
+	assert(actual == best);
+	assert(actual == 48000000U / (2U * (baud + 1U)));
+}
+
 int main()
 {
 	SPIDev_t spi = {};
@@ -215,6 +238,22 @@ int main()
 	};
 	uint8_t data[] = {1, 2, 3};
 	auto &reg = s_Regs[0].SPIM;
+
+	CheckBaud(0);
+	CheckBaud(1);
+	CheckBaud(UINT32_MAX);
+	for (unsigned i = 1; i < 256; i++)
+	{
+		uint32_t rate = 24000000U / i;
+		uint32_t midpoint = (rate + 24000000U / (i + 1U)) / 2U;
+
+		CheckBaud(rate);
+		CheckBaud(rate - 1U);
+		CheckBaud(rate + 1U);
+		CheckBaud(midpoint);
+		CheckBaud(midpoint - 1U);
+		CheckBaud(midpoint + 1U);
+	}
 
 	// Every master mode, including reinitialization from DMA to non-DMA.
 	for (int mode : {3, 0, 2, 1})

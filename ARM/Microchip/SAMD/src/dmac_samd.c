@@ -52,8 +52,12 @@ SOFTWARE.
 static dmac_descriptor_registers_t s_SamdDmacDesc[DMAC_CH_NUM] __attribute__((aligned(16)));
 static dmac_descriptor_registers_t s_SamdDmacWrb[DMAC_CH_NUM] __attribute__((aligned(16)));
 
-static SamdDmacHandler_t s_SamdDmacHandler[DMAC_CH_NUM];
-static void *s_pSamdDmacCtx[DMAC_CH_NUM];
+typedef struct {
+	SamdDmacHandler_t Handler;
+	void *pCtx;
+} SamdDmacChan_t;
+
+static SamdDmacChan_t s_SamdDmacChan[DMAC_CH_NUM];
 static int s_SamdDmacIrqLvl = -1;		// Priority of the DMAC interrupt, -1 before the first handler
 static uint16_t s_SamdDmacUsed;
 
@@ -131,8 +135,8 @@ int SamdDmacOpen(int Trig, SamdDmacHandler_t Handler, void *pCtx, int IntPrio)
 	{
 		SamdDmacOn();
 
-		s_SamdDmacHandler[chan] = Handler;
-		s_pSamdDmacCtx[chan] = pCtx;
+		s_SamdDmacChan[chan].Handler = Handler;
+		s_SamdDmacChan[chan].pCtx = pCtx;
 		s_SamdDmacWrb[chan].DMAC_BTCNT = 0;
 
 		// Channel disabled, CHCTRLB, the flags and their interrupt set in
@@ -162,14 +166,13 @@ void SamdDmacClose(int Chan)
 		return;
 	}
 
-	(void)SamdDmacStop(Chan);
-
 	uint32_t state = DisableInterrupt();
 
-	DMAC_REGS->DMAC_CHID = (uint8_t)Chan;
+	// Stop leaves CHID selected and flags cleared. Keep that selection
+	// protected until its interrupts and ownership are released.
+	(void)SamdDmacStop(Chan);
 	DMAC_REGS->DMAC_CHINTENCLR = SAMD_DMAC_CH_INTS;
-	DMAC_REGS->DMAC_CHINTFLAG = SAMD_DMAC_CH_INTS;
-	s_SamdDmacHandler[Chan] = NULL;
+	s_SamdDmacChan[Chan].Handler = NULL;
 	s_SamdDmacUsed &= (uint16_t)~(1U << Chan);
 
 	EnableInterrupt(state);
@@ -285,10 +288,10 @@ void DMAC_Handler(void)
 
 		DMAC_REGS->DMAC_INTPEND = (uint16_t)((pend & DMAC_INTPEND_ID_Msk) | flags);
 
-		if (chan < DMAC_CH_NUM && s_SamdDmacHandler[chan] != NULL)
+		if (chan < DMAC_CH_NUM && s_SamdDmacChan[chan].Handler != NULL)
 		{
 			// INTPEND flags are the CHINTFLAG bits shifted by 8
-			s_SamdDmacHandler[chan](chan, flags >> DMAC_INTPEND_TERR_Pos, s_pSamdDmacCtx[chan]);
+			s_SamdDmacChan[chan].Handler(chan, flags >> DMAC_INTPEND_TERR_Pos, s_SamdDmacChan[chan].pCtx);
 		}
 	}
 }

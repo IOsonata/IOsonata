@@ -84,7 +84,7 @@ byte count means text was passed to that API, not verified on the panel.
 - Full managed D11 library: all 238 sources compile in Debug and Release;
   both console selections link against each complete archive at the sizes below.
 - Maintainer reports polling, interrupt-only and DMA-only OLED output works
-  on D11 + OLED1. Combined DMA/interrupt output has not fit flash yet.
+  on D11 + OLED1. Combined DMA/interrupt now links but still needs hardware validation.
 
 Hardware references:
 - [OLED1 extension header](https://onlinedocs.microchip.com/oxy/GUID-26DC66D4-2EF7-4C54-8D2D-2A29BED57CAB-en-US-2/GUID-4AEF0FF0-9E97-4FCB-8565-668D17B30006.html)
@@ -192,15 +192,18 @@ then clean and rebuild the library and application:
 
 | Mode | DISPLAY_SPI_DMA_ENABLE | DISPLAY_SPI_INT_ENABLE | Flash bytes |
 | --- | --- | --- | ---: |
-| Polling (default) | false | false | 14992 |
-| Interrupt only | false | true | 15600 |
-| DMA, CPU waits | true | false | 16024 |
-| DMA with interrupts | true | true | 16532 (148 over D11 flash) |
+| Polling (default) | false | false | 14956 |
+| Interrupt only | false | true | 15508 |
+| DMA, CPU waits | true | false | 15912 |
+| DMA with interrupts | true | true | 16360 (24 free) |
 
 These are GCC 15.2.1, `-Os` + LTO results, identical in Debug and Release,
 using `tests/display/build_samd11_console.py`. Pass `--interrupt`, `--dma`,
-or both to reproduce a selection. The combined setting currently exceeds
-D11 flash; do not bypass the linker limit.
+or both to reproduce a selection. The combined setting leaves only 24 bytes of flash in this build. The
+maintainer's previous managed build was eight bytes larger, so local size output
+remains the final check. The full 238-source managed library compiles in Debug
+and Release; linking the combined demo against it uses 16364 flash bytes,
+leaving 20 bytes. Clean and rebuild the library as well as the application.
 
 `tests/display/run_ssd1315.py` now covers all four interface flag combinations,
 delayed and immediate completion, CS/D/C ordering, timeout abort and recovery,
@@ -211,7 +214,7 @@ The DMA operation table selects a separate SERCOM error handler and DMA start
 function. With a constant DMA selection and LTO, the CPU polling transfer loop,
 byte interrupt starter, byte interrupt handler and slave transfer code are omitted.
 GPIO control of CS, D/C and reset remains required. Runtime mode selection still
-retains the selectable implementations. The combined build saves 168 flash bytes
+retains the selectable implementations. The combined build saves 340 flash bytes
 from the previous 16700-byte result. Host SPI tests cover ignored RXC in DMA mode,
 partial error completion and suppression of duplicate late completion.
 
@@ -222,3 +225,13 @@ transfers. Their asynchronous operation table contains only DMA transfer functio
 The build check also verifies that the register TxData/RxData symbols are absent
 from a constant-DMA LTO ELF. Host tests exercise transmit and receive in all four
 DMA/interrupt combinations and verify entry-point reselection on initialization.
+
+The latest optimization packs the byte-sized private SPI state together, keeps
+register-transfer buffer pointers out of DMA startup, and shares normal/error
+completion. DMAC channel handler/context storage is grouped, and channel close
+keeps selection protected through interrupt disable and release. Baud selection
+compares its two candidates directly and avoids overflowing twice the requested
+rate. Host checks compare selection against all 256 divisors around every divider
+boundary and midpoint. Private SPI state uses 24 fewer RAM bytes across D11's
+three SERCOM instances. All four modes still require hardware retesting after
+these changes; combined DMA/interrupt has not yet been validated on the board.
