@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
 @file	board.h
 
-@brief	SAM D21 Xplained Pro UART stdio retarget demo
+@brief	SAM D21 Xplained Pro Standby wake demo
 
-printf and the standard input go to the EDBG COM port at 115200 baud.
+Standby wake and SRAM sample results go to EDBG COM at 115200 baud.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 29, 2026
@@ -61,9 +61,9 @@ SOFTWARE.
 #define UART_INT_PRIO		2
 
 // Asynchronous level-detection wake from SAM D Standby.
-// SAMD11 SW0 is on PA14 (NMI), so connect an external switch between
-// PA15 (EXTINT1) and GND. On SAMD21 SW0 is already PA15 (EXTINT15).
+// SW0 is PA15 (EXTINT15), active low. No external switch is required.
 #define POWER_DEMO_RESUME_WAKE 1
+#define POWER_DEMO_STANDBY_RAM_TEST 1
 #define WAKE_BUT_PORT IOPORTA
 #define WAKE_BUT_PIN 15
 #define WAKE_BUT_PINOP IOPINOP_GPIO

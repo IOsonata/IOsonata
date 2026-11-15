@@ -125,6 +125,13 @@ static const UARTCfg_t s_UartCfg = {
 
 static UART s_Uart;
 
+#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
+// Sample static and stack storage without overwriting live application RAM.
+#define STANDBY_RAM_WORDS 32U
+static volatile uint32_t s_StandbyRam[STANDBY_RAM_WORDS];
+#endif
+
+
 #if !defined(POWER_DEMO_RESUME_WAKE) || !POWER_DEMO_RESUME_WAKE
 // SysLog on the console UART, a record goes out as soon as it is logged.
 // 16 records of 128 bytes. A record the UART does not take in full stays in
@@ -296,10 +303,20 @@ static void PowerDemoPutCount(uint32_t Value)
 }
 #endif
 
+#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
+static uint32_t StandbyRamPattern(uint32_t Cycle, uint32_t Idx)
+{
+	return 0xA55A1234UL ^ (Cycle * 0x85EBCA6BUL) ^ (Idx * 0x9E3779B9UL);
+}
+#endif
+
 int main()
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	uint32_t wakeCount;
+#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
+	volatile uint32_t stackRam[STANDBY_RAM_WORDS];
+#endif
 
 	if (!s_Uart.Init(s_UartCfg))
 	{
@@ -325,12 +342,44 @@ int main()
 		PowerDemoPut("Entering Standby\r\n");
 		PowerDemoDrain();
 		s_Uart.Disable();
+#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
+		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
+		{
+			uint32_t pattern = StandbyRamPattern(wakeCount, i);
+
+			s_StandbyRam[i] = pattern;
+			stackRam[i] = ~pattern;
+		}
+#endif
 		SystemSleep();
+#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
+		bool ramOk = true;
+		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
+		{
+			uint32_t pattern = StandbyRamPattern(wakeCount, i);
+
+			if (s_StandbyRam[i] != pattern || stackRam[i] != ~pattern)
+			{
+				ramOk = false;
+			}
+		}
+#endif
 		s_Uart.Enable();
 		wakeCount++;
 		PowerDemoPut("Resumed from Standby, count 0x");
 		PowerDemoPutCount(wakeCount);
 		PowerDemoPut("\r\n");
+#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
+		PowerDemoPut(ramOk ? "SRAM sample PASS: 128 static + 128 stack bytes\r\n" :
+			"SRAM sample FAIL\r\n");
+		if (!ramOk)
+		{
+			PowerDemoDrain();
+			while (1)
+			{
+			}
+		}
+#endif
 	}
 #else
 	s_Uart.Init(s_UartCfg);

@@ -52,6 +52,21 @@ SAMD11 Xplained Pro uses its onboard SW0/PA14, the dedicated EIC NMI input.
 No external wiring is needed. SAMD21 Xplained Pro uses its
 onboard PA15 button (EXTINT15). Monitor the EDBG VCOM at 115200 baud.
 
+Both PowerOffDemo boards enable `POWER_DEMO_STANDBY_RAM_TEST`. Before each
+Standby entry, the demo fills 128 bytes of static storage and 128 bytes on
+the stack with complementary patterns that change each cycle. It checks
+them immediately after `SystemSleep()` returns, before enabling the UART.
+Each wake prints `SRAM sample PASS: 128 static + 128 stack bytes` or
+`SRAM sample FAIL`. A failure stops the demo after draining the UART.
+This checks only those 256 bytes; it is not a full-SRAM test. The sample
+has compiled and linked for D11 and D21 but has not yet run on hardware.
+
+With Arm GCC 15.2.1 at the projects' size optimization, the D11 linked
+image uses 14,814 bytes for text plus initialized data, with 1,288 bytes
+of data plus BSS. The 128-byte stack sample is additional runtime stack
+usage. It fits the 16 KB flash and 4 KB SRAM target. These standalone
+link checks use selected library sources, not an IOcomposer build.
+
 Validated on the contributing reset-reason branch: `python3
 tests/samd/run_power.py` (128/128 combinations per MCU) and
 `sh tests/samd/clang_compile.sh` (both targets' source compilation).
