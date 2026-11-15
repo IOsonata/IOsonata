@@ -320,6 +320,23 @@ uint32_t SystemResetReason(void);
 void SystemPowerOff(void);
 
 /**
+ * @brief Enter a low-power state that resumes execution on wakeup.
+ *
+ * MCU-specific implementation uses the deepest interrupt-resumable sleep
+ * mode supported by the port. Wake sources must be configured and enabled
+ * before this call. When a wake event is serviced, execution resumes after
+ * this function. RAM and stack remain valid.
+ *
+ * Drivers and the application own stopping active peripherals that cannot
+ * operate or retain their clocks in the selected sleep state. The function
+ * does not alter reset reasons or configure a wake source.
+ *
+ * Unlike SystemPowerOff, this operation never requests a reset-on-wake
+ * state. It is optional on MCUs without a supported resumable sleep mode.
+ */
+void SystemSleep(void);
+
+/**
  * @brief	Wake up pin of power off
  *
  * Selects a pin that wakes the MCU from SystemPowerOff. Configure the pin as
