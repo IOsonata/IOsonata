@@ -57,6 +57,11 @@ SOFTWARE.
 
 #include "board.h"
 
+#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG && defined(STM32WBA65xx)
+#include "stm32.h"
+bool StWbaPowerPrepareStandby(void);
+#endif
+
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE			1000000
@@ -370,7 +375,30 @@ int main()
 		SysLogPrintf(SysLogGet(), "Power off, the button cannot wake this MCU, use the reset pin\r\n");
 	}
 
-	// Time for the UART to send the last record
+#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG && defined(STM32WBA65xx)
+	// Program the power registers, but do not execute WFI until the
+	// hardware settings have been reported over UART.
+	if (!StWbaPowerPrepareStandby())
+	{
+		SysLogPrintf(SysLogGet(), "Standby preparation FAIL\r\n");
+		while (1)
+		{
+			__WFE();
+		}
+	}
+
+	SysLogPrintf(SysLogGet(), "WKUP WUCR1=%08x WUCR2=%08x WUCR3=%08x WUSR=%08x\r\n",
+		(unsigned)PWR->WUCR1, (unsigned)PWR->WUCR2,
+		(unsigned)PWR->WUCR3, (unsigned)PWR->WUSR);
+	SysLogPrintf(SysLogGet(), "PWR IORETENRC=%08x CR1=%08x SR=%08x\r\n",
+		(unsigned)PWR->IORETENRC, (unsigned)PWR->CR1,
+		(unsigned)PWR->SR);
+	SysLogPrintf(SysLogGet(), "PC13 MODER=%08x PUPDR=%08x IDR=%08x SCR=%08x\r\n",
+		(unsigned)GPIOC->MODER, (unsigned)GPIOC->PUPDR,
+		(unsigned)GPIOC->IDR, (unsigned)SCB->SCR);
+#endif
+
+	// Time for the UART to send the last records
 	msDelay(100);
 
 	SystemPowerOff();
