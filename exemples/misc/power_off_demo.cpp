@@ -396,6 +396,14 @@ int main()
 	SysLogPrintf(SysLogGet(), "PC13 MODER=%08x PUPDR=%08x IDR=%08x SCR=%08x\r\n",
 		(unsigned)GPIOC->MODER, (unsigned)GPIOC->PUPDR,
 		(unsigned)GPIOC->IDR, (unsigned)SCB->SCR);
+	SysLogPrintf(SysLogGet(),
+		"Pending EXTI RPR1=%08x FPR1=%08x ICSR=%08x SYSTICK=%08x\r\n",
+		(unsigned)EXTI->RPR1, (unsigned)EXTI->FPR1,
+		(unsigned)SCB->ICSR, (unsigned)SysTick->CTRL);
+	SysLogPrintf(SysLogGet(),
+		"NVIC ISPR0=%08x ISPR1=%08x ISPR2=%08x\r\n",
+		(unsigned)NVIC->ISPR[0], (unsigned)NVIC->ISPR[1],
+		(unsigned)NVIC->ISPR[2]);
 #endif
 
 	// Time for the UART to send the last records
@@ -405,7 +413,7 @@ int main()
 
 #if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG
 	SysLogPrintf(SysLogGet(),
-		"SystemPowerOff returned: Standby was not entered\r\n");
+		"WFI returned without Standby reset\r\n");
 	while (1)
 	{
 		__WFE();
