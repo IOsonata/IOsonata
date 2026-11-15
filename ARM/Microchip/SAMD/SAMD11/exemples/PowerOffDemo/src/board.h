@@ -55,12 +55,11 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// Asynchronous level-detection wake from SAM D Standby.
-// SAMD11 SW0 is on PA14 (NMI), so connect an external switch between
-// PA15 (EXTINT1) and GND. On SAMD21 SW0 is already PA15 (EXTINT15).
+// SW0 is PA14, the SAMD11 EIC dedicated NMI input (active low).
+// No external switch or wire is required for Standby wake.
 #define POWER_DEMO_RESUME_WAKE 1
 #define WAKE_BUT_PORT IOPORTA
-#define WAKE_BUT_PIN 15
+#define WAKE_BUT_PIN 14
 #define WAKE_BUT_PINOP IOPINOP_GPIO
 #define UART_BAUDRATE 115200
 
