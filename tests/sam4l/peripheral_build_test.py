@@ -26,6 +26,7 @@ common = [
     'src/cfifo.c', 'src/device_intrf.cpp', 'src/device.cpp',
     'src/coredev/uart.cpp', 'ARM/Microchip/SAM4L/src/uart_sam4l.cpp',
     'src/uart_retarget.c', 'src/stddev.c', 'src/prbs.c', 'src/syslog.cpp',
+    'src/semihost_intrf.cpp', 'ARM/src/semihost_arm.c',
     'src/coredev/i2c.cpp', 'ARM/Microchip/SAM4L/src/i2c_sam4l.cpp',
     'src/coredev/spi.cpp', 'src/coredev/spi_soft.cpp',
     'ARM/Microchip/SAM4L/src/spi_sam4l.cpp',
@@ -38,10 +39,12 @@ common = [
     'src/usb/usb.cpp', 'src/usb/usb_intrf.cpp', 'src/usb/usbd_epalloc.cpp',
     'src/usb/usbd_cdc.cpp', 'src/usb/usbd_cdc_desc.cpp', 'src/usb/usbd_hid.cpp',
     'src/usb/usb_int.cpp', 'src/usb/usb_iso.cpp',
+    'src/usb/usbd_int.cpp', 'src/usb/usbd_iso.cpp', 'src/usb/usbd_periodic.cpp',
     'src/usb/usbd_bulk.cpp', 'src/usb/usbd_msc.cpp', 'src/storage/diskio_impl.cpp',
 ]
 inc = ['-I' + str(root / f) for f in [
-    'include', 'ARM/include', 'ARM/Microchip/SAM4L/include', 'ARM/CMSIS/Core/Include']]
+    'include', 'ARM/include', 'ARM/Microchip/SAM4L/include', 'ARM/CMSIS/Core/Include',
+    'micro-ecc']]
 
 def run(cmd):
     subprocess.run(cmd, check=True)
@@ -62,6 +65,22 @@ def source_links(project):
             result.append(path)
     return result
 
+# Use the crypto implementations selected by the managed library project.
+libproject = root / 'ARM/Microchip/SAM4L/SAM4LSxC/lib/ioc'
+for link in ET.parse(libproject / '.project').findall('.//link'):
+    name = link.findtext('name')
+    if not name.startswith(('src/crypto/', 'src/micro-ecc/')):
+        continue
+    uri = link.findtext('locationURI')
+    prefix, relative = uri.split('-PROJECT_LOC/', 1)
+    parent = libproject
+    for _ in range(int(prefix.split('-')[1])):
+        parent = parent.parent
+    source = (parent / relative).resolve()
+    if source.suffix in ('.c', '.cpp'):
+        assert source.is_file(), source
+        common.append(str(source.relative_to(root)))
+
 for mode, opt in [('Debug', '-O0'), ('Release', '-Os')]:
     out = a.build_dir.resolve() / mode
     out.mkdir(parents=True, exist_ok=True)
@@ -75,7 +94,13 @@ for mode, opt in [('Debug', '-O0'), ('Release', '-Os')]:
              *flags, *lang, *inc, *extra, '-c', str(path), '-o', str(obj)])
         return str(obj)
     lib = out / 'libIOsonata_SAM4LSxC.a'
-    objects = [compile(root / f, out) for f in common]
+    libcfg = next(c for c in ET.parse(libproject / '.cproject').findall('.//cconfiguration')
+                  if c.find('.//configuration').get('name') == mode)
+    libdefs = set()
+    for option in libcfg.findall('.//option'):
+        if option.get('superClass', '').endswith(('.c.compiler.defs', '.cpp.compiler.defs')):
+            libdefs.update('-D' + v.get('value') for v in option)
+    objects = [compile(root / f, out, sorted(libdefs)) for f in common]
     run([cc + 'ar', 'rcs', str(lib), *objects])
     taktlib = None
     if takt:
