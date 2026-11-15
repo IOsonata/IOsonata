@@ -214,10 +214,14 @@ static uint32_t s_SysPwrRamRet = 0;		// Sections kept in System OFF, one bit eac
 
 uint32_t SystemResetReason(void)
 {
+	uint32_t reas;
+	uint32_t r;
+	size_t i;
+
 	if (s_bSysPwrResetRead == false)
 	{
-		uint32_t reas = SYS_PWR_RESET->RESETREAS;
-		uint32_t r = 0;
+		reas = SYS_PWR_RESET->RESETREAS;
+		r = 0;
 
 		SYS_PWR_RESET->RESETREAS = reas;
 
@@ -225,7 +229,7 @@ uint32_t SystemResetReason(void)
 		{
 			r = SYSTEM_RESET_POWERON;
 		}
-		for (size_t i = 0; i < sizeof(s_SysPwrResetMap) / sizeof(s_SysPwrResetMap[0]); i++)
+		for (i = 0; i < sizeof(s_SysPwrResetMap) / sizeof(s_SysPwrResetMap[0]); i++)
 		{
 			if (reas & s_SysPwrResetMap[i].Msk)
 			{
@@ -243,6 +247,9 @@ uint32_t SystemResetReason(void)
 void SystemPowerOff(void)
 {
 #ifdef SYS_PWR_MEMCONF
+	uint32_t nbsect;
+	uint32_t msk;
+
 	// Nordic requires HFXO stopped before System OFF. Refuse shutdown
 	// while an application clock request or the radio still owns it.
 	if (nRFxClockPrepareSystemOff() == false)
@@ -250,8 +257,8 @@ void SystemPowerOff(void)
 		return;
 	}
 
-	uint32_t nbsect = SYS_PWR_FICR->INFO.RAM * 1024UL / SYS_PWR_RAM_SECT;
-	uint32_t msk = nbsect < 32 ? (1UL << nbsect) - 1 : 0xFFFFFFFFUL;
+	nbsect = SYS_PWR_FICR->INFO.RAM * 1024UL / SYS_PWR_RAM_SECT;
+	msk = nbsect < 32 ? (1UL << nbsect) - 1 : 0xFFFFFFFFUL;
 
 	SYS_PWR_MEMCONF->POWER[0].RET = (SYS_PWR_MEMCONF->POWER[0].RET & ~msk) | s_SysPwrRamRet;
 #ifdef MEMCONF_POWER_RET2_MEM0_Msk
@@ -320,14 +327,25 @@ bool SystemRetRegWrite(int Idx, uint32_t Val)
 
 bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 {
-	uint32_t ramsize = SYS_PWR_FICR->INFO.RAM * 1024UL;
+	uint32_t ramsize;
+	uint32_t off;
+	uint32_t end;
+	uint32_t lastunit;
+	uint32_t unit;
+	uint32_t blk;
+	uint32_t sect;
+#ifdef SYS_PWR_VMC
+	uint32_t msk;
+#endif
+
+	ramsize = SYS_PWR_FICR->INFO.RAM * 1024UL;
 
 	if (Addr < SYS_PWR_RAM_BASE || Addr - SYS_PWR_RAM_BASE >= ramsize)
 	{
 		return false;
 	}
 
-	uint32_t off = (uint32_t)(Addr - SYS_PWR_RAM_BASE);
+	off = (uint32_t)(Addr - SYS_PWR_RAM_BASE);
 
 	if (Size == 0 || Size > ramsize - off)
 	{
@@ -335,8 +353,8 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 	}
 
 	// Check the whole range before changing any retention registers.
-	uint32_t end = off + Size;
-	uint32_t lastunit = (end - 1U) / SYS_PWR_RAM_SECT;
+	end = off + Size;
+	lastunit = (end - 1U) / SYS_PWR_RAM_SECT;
 
 	if (lastunit / SYS_PWR_RAM_PERBLK >= SYS_PWR_NB_RAMBLK)
 	{
@@ -345,9 +363,9 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 
 	while (off < end)
 	{
-		uint32_t unit = off / SYS_PWR_RAM_SECT;
-		uint32_t blk = unit / SYS_PWR_RAM_PERBLK;
-		uint32_t sect = unit % SYS_PWR_RAM_PERBLK;
+		unit = off / SYS_PWR_RAM_SECT;
+		blk = unit / SYS_PWR_RAM_PERBLK;
+		sect = unit % SYS_PWR_RAM_PERBLK;
 
 		if (blk >= SYS_PWR_NB_RAMBLK)
 		{
@@ -355,7 +373,7 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 		}
 
 #ifdef SYS_PWR_VMC
-		uint32_t msk = VMC_RAM_POWERSET_S0RETENTION_Msk << sect;
+		msk = VMC_RAM_POWERSET_S0RETENTION_Msk << sect;
 
 		if (bRetain)
 		{
