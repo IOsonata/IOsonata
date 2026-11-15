@@ -210,23 +210,27 @@ static bool SamdPclkWait(uint32_t Mask, uint32_t Limit)
 	return true;
 }
 
-// GENCTRL and GENDIV are read for the generator whose ID was written in their
-// first byte. Interrupts disabled by the caller.
-static uint32_t SamdGclkGenRead(volatile uint32_t *pReg, uint32_t Gen)
+// Select an indirect GCLK register before reading its 16- or 32-bit value.
+// Keep one synchronization sequence for generator and channel queries.
+static uint32_t SamdGclkRead(volatile void *pReg, uint32_t Id, bool HalfWord)
 {
 	if (!SamdGclkSync())
 	{
-		return 0U;
+		return UINT32_MAX;
 	}
 
-	*(volatile uint8_t *)pReg = (uint8_t)Gen;
-
+	*(volatile uint8_t *)pReg = (uint8_t)Id;
 	if (!SamdGclkSync())
 	{
-		return 0U;
+		return UINT32_MAX;
 	}
 
-	return *pReg;
+	return HalfWord ? *(volatile uint16_t *)pReg : *(volatile uint32_t *)pReg;
+}
+
+static uint32_t SamdGclkGenRead(volatile uint32_t *pReg, uint32_t Gen)
+{
+	return SamdGclkRead(pReg, Gen, false);
 }
 
 // Generator Gen from source Src divided by Div, 0 and 1 undivided. GENDIV is
@@ -256,11 +260,7 @@ static bool SamdGclkGenSet(uint32_t Gen, uint32_t Src, uint32_t Div)
 // branch does.
 static uint16_t SamdGclkChannelRead(uint8_t Channel)
 {
-	(void)SamdGclkSync();
-	*(volatile uint8_t *)&GCLK_REGS->GCLK_CLKCTRL = Channel;
-	(void)SamdGclkSync();
-
-	return GCLK_REGS->GCLK_CLKCTRL;
+	return (uint16_t)SamdGclkRead(&GCLK_REGS->GCLK_CLKCTRL, Channel, true);
 }
 
 // Channel stop as ASF system_gclk_chan_disable does: the channel is moved to
@@ -365,7 +365,7 @@ bool SamdGclkChannelDisable(uint8_t Channel)
 	return res;
 }
 
-// Generator of a GCLK channel
+// Generator of a GCLK channel, with the register selection protected.
 static uint32_t SamdGclkChannelGen(uint8_t Channel)
 {
 	uint32_t state = DisableInterrupt();
@@ -382,7 +382,8 @@ static uint32_t SamdDfllFreq(void)
 	uint32_t ctrl = SYSCTRL_REGS->SYSCTRL_DFLLCTRL;
 	uint32_t mul = (SYSCTRL_REGS->SYSCTRL_DFLLMUL & SYSCTRL_DFLLMUL_MUL_Msk) >> SYSCTRL_DFLLMUL_MUL_Pos;
 
-	if ((ctrl & SYSCTRL_DFLLCTRL_ENABLE_Msk) == 0U)
+	if ((ctrl & SYSCTRL_DFLLCTRL_ENABLE_Msk) == 0U ||
+		(SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_DFLLRDY_Msk) == 0U)
 	{
 		return 0U;
 	}
@@ -393,6 +394,13 @@ static uint32_t SamdDfllFreq(void)
 	if ((ctrl & SYSCTRL_DFLLCTRL_USBCRM_Msk) != 0U)
 	{
 		return mul * (SAMD_DFLL_USB_FREQ / SAMD_DFLL_USB_MUL);
+	}
+
+	uint32_t locked = SYSCTRL_PCLKSR_DFLLLCKC_Msk | SYSCTRL_PCLKSR_DFLLLCKF_Msk;
+
+	if ((SYSCTRL_REGS->SYSCTRL_PCLKSR & locked) != locked)
+	{
+		return 0U;
 	}
 
 	return mul * SamdGclkGenFreq(SamdGclkChannelGen(GCLK_CLKCTRL_ID_DFLL48_Val));
@@ -406,7 +414,8 @@ static uint32_t SamdDpllFreq(void)
 	uint32_t ratio = SYSCTRL_REGS->SYSCTRL_DPLLRATIO;
 	uint32_t ref;
 
-	if ((SYSCTRL_REGS->SYSCTRL_DPLLSTATUS & ready) != ready)
+	if ((SYSCTRL_REGS->SYSCTRL_DPLLCTRLA & SYSCTRL_DPLLCTRLA_ENABLE_Msk) == 0U ||
+		(SYSCTRL_REGS->SYSCTRL_DPLLSTATUS & ready) != ready)
 	{
 		return 0U;
 	}
@@ -439,16 +448,23 @@ static uint32_t SamdSourceFreq(uint32_t Src)
 	switch (Src)
 	{
 		case GCLK_GENCTRL_SRC_XOSC_Val:
-			return (SYSCTRL_REGS->SYSCTRL_XOSC & SYSCTRL_XOSC_ENABLE_Msk) != 0U ? g_McuOsc.CoreOsc.Freq : 0U;
+			return (SYSCTRL_REGS->SYSCTRL_XOSC & SYSCTRL_XOSC_ENABLE_Msk) != 0U &&
+				   (SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_XOSCRDY_Msk) != 0U ? g_McuOsc.CoreOsc.Freq : 0U;
 		case GCLK_GENCTRL_SRC_GCLKGEN1_Val:
 			return SamdGclkGenFreq(1U);
 		case GCLK_GENCTRL_SRC_OSCULP32K_Val:
 			return SAMD_OSC32K_FREQ;
 		case GCLK_GENCTRL_SRC_OSC32K_Val:
-			return (SYSCTRL_REGS->SYSCTRL_OSC32K & SYSCTRL_OSC32K_ENABLE_Msk) != 0U ? SAMD_OSC32K_FREQ : 0U;
+			return (SYSCTRL_REGS->SYSCTRL_OSC32K & SYSCTRL_OSC32K_ENABLE_Msk) != 0U &&
+				   (SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_OSC32KRDY_Msk) != 0U ? SAMD_OSC32K_FREQ : 0U;
 		case GCLK_GENCTRL_SRC_XOSC32K_Val:
-			return (SYSCTRL_REGS->SYSCTRL_XOSC32K & SYSCTRL_XOSC32K_ENABLE_Msk) != 0U ? g_McuOsc.LowPwrOsc.Freq : 0U;
+			return (SYSCTRL_REGS->SYSCTRL_XOSC32K & SYSCTRL_XOSC32K_ENABLE_Msk) != 0U &&
+				   (SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_XOSC32KRDY_Msk) != 0U ? g_McuOsc.LowPwrOsc.Freq : 0U;
 		case GCLK_GENCTRL_SRC_OSC8M_Val:
+			if ((SYSCTRL_REGS->SYSCTRL_OSC8M & SYSCTRL_OSC8M_ENABLE_Msk) == 0U)
+			{
+				return 0U;
+			}
 			return SAMD_OSC8M_FREQ >> ((SYSCTRL_REGS->SYSCTRL_OSC8M & SYSCTRL_OSC8M_PRESC_Msk) >> SYSCTRL_OSC8M_PRESC_Pos);
 		case GCLK_GENCTRL_SRC_DFLL48M_Val:
 			return SamdDfllFreq();
@@ -475,8 +491,14 @@ static uint32_t SamdGclkGenFreq(uint32_t Gen)
 
 	state = DisableInterrupt();
 	ctrl = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, Gen);
-	div = (SamdGclkGenRead(&GCLK_REGS->GCLK_GENDIV, Gen) & GCLK_GENDIV_DIV_Msk) >> GCLK_GENDIV_DIV_Pos;
+	div = SamdGclkGenRead(&GCLK_REGS->GCLK_GENDIV, Gen);
 	EnableInterrupt(state);
+
+	if (ctrl == UINT32_MAX || div == UINT32_MAX)
+	{
+		return 0U;
+	}
+	div = (div & GCLK_GENDIV_DIV_Msk) >> GCLK_GENDIV_DIV_Pos;
 
 	src = (ctrl & GCLK_GENCTRL_SRC_Msk) >> GCLK_GENCTRL_SRC_Pos;
 
@@ -1185,8 +1207,9 @@ static bool SamdTimerClockBusy(uint32_t Channel)
 	}
 }
 
-// Runtime changes require stopped timers and released peripheral clocks. Bus masks alone do not
-// show activity: several masks are enabled at reset. Interrupts are disabled.
+// Runtime changes require stopped timers and released peripheral clocks.
+// Bus masks alone do not show activity: several are enabled at reset.
+// Interrupts are disabled.
 static bool SamdClockBusy(bool LowFreq)
 {
 	uint32_t apba = PM_APBAMASK_SYSCTRL_Msk | PM_APBAMASK_GCLK_Msk |

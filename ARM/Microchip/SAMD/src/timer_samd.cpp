@@ -352,9 +352,12 @@ static bool SamdTimerRun(SamdTimerData_t *pData, bool bRun)
 
 	// SYNCRDY is not set at the end of an enable synchronization: the
 	// continuous read is started here
-	if (SamdTimerIsRtc(pData))
+	if (SamdTimerIsRtc(pData) && !pData->pOps->pRtc->Wait(pData, false))
 	{
-		(void)pData->pOps->pRtc->Wait(pData, false);
+		pData->bRunning = false;
+		pData->BaseFreq = 0;
+		SamdTimerNvic(pData, false);
+		res = false;
 	}
 
 	return res;

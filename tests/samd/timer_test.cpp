@@ -52,6 +52,8 @@ static bool s_SetupFail;
 static bool s_StopFail;
 static bool s_StartFail;
 static bool s_ResetFail;
+static bool s_RtcWaitFail;
+static int s_RtcRunSyncFail = -1;
 bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg);
 static uint32_t SystemPeriphClockGet(int);
 static unsigned GetLowFreqOscType();
@@ -89,7 +91,15 @@ static void NVIC_SetPendingIRQ(int Irq) { s_Pending |= 1U << Irq; }
 static void NVIC_ClearPendingIRQ(int Irq) { s_Pending &= ~(1U << Irq); }
 
 static bool ModelSetup(SamdTimerData_t *) { return !s_SetupFail; }
-static bool ModelRun(SamdTimerData_t *, bool Run) { return Run ? !s_StartFail : !s_StopFail; }
+static bool ModelRun(SamdTimerData_t *d, bool Run)
+{
+	if (d->pTimer->DevNo == 0 && (int)Run == s_RtcRunSyncFail)
+	{
+		s_RtcWaitFail = true;
+	}
+
+	return Run ? !s_StartFail : !s_StopFail;
+}
 static bool ModelReset(SamdTimerData_t *d)
 {
 	if (s_ResetFail)
@@ -133,7 +143,7 @@ static bool ModelMatched(SamdTimerData_t *d, int n)
 COUNTER_OPS(SamdRtc)
 COUNTER_OPS(SamdTc)
 COUNTER_OPS(SamdTcc)
-bool SamdRtcWait(SamdTimerData_t *, bool) { return true; }
+bool SamdRtcWait(SamdTimerData_t *, bool) { return !s_RtcWaitFail; }
 void SamdRtcResume(SamdTimerData_t *) {}
 bool SamdRtcEvent(SamdTimerData_t *d)
 {
@@ -260,6 +270,28 @@ int main()
 			assert(timer.SetFrequency(&timer, requested) != 0);
 			assert(g_SamdTimerData[dev].BaseFreq == source);
 			assert(g_SamdTimerData[dev].bRunning);
+		}
+		if (dev == 0)
+		{
+			for (int run = 0; run < 2; run++)
+			{
+				TimerDisable(&timer);
+				s_RtcRunSyncFail = run;
+				if (run)
+				{
+					assert(!TimerEnable(&timer));
+				}
+				else
+				{
+					TimerDisable(&timer);
+				}
+				assert(!g_SamdTimerData[dev].bRunning);
+				assert(g_SamdTimerData[dev].BaseFreq == 0);
+				s_RtcRunSyncFail = -1;
+				s_RtcWaitFail = false;
+				assert(!TimerEnable(&timer));
+				assert(timer.SetFrequency(&timer, requested) != 0);
+			}
 		}
 	}
 	assert(s_OverflowEvents == 4);

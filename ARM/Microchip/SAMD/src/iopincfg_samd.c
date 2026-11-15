@@ -358,6 +358,34 @@ static bool SamdEicSense(int ExtInt, IOPINSENSE Sense, bool bEvent)
 	return SamdEicSync();
 }
 
+// Release the shared clock only after every pin, wake and event user is gone.
+// Interrupts disabled by the caller. Keep the register interface accessible.
+static bool SamdEicStopIdle(void)
+{
+	if (EIC_REGS->EIC_INTENSET != 0U || EIC_REGS->EIC_EVCTRL != 0U ||
+		EIC_REGS->EIC_WAKEUP != 0U || s_SamdEicEvent != 0U ||
+		s_SamdStandbyWakeLines != 0U ||
+		(EIC_REGS->EIC_NMICTRL & EIC_NMICTRL_NMISENSE_Msk) != EIC_NMICTRL_NMISENSE_NONE)
+	{
+		return true;
+	}
+	for (uint32_t i = 0; i < (EIC_EXTINT_NUM + 7U) / 8U; i++)
+	{
+		if (EIC_REGS->EIC_CONFIG[i] != 0U)
+		{
+			return true;
+		}
+	}
+
+	EIC_REGS->EIC_CTRL = 0U;
+	if (!SamdEicSync())
+	{
+		return false;
+	}
+
+	return SamdGclkChannelDisable(GCLK_CLKCTRL_ID_EIC_Val);
+}
+
 void IOPinDisableInterrupt(int IntNo)
 {
 	uint32_t state;
@@ -376,11 +404,13 @@ void IOPinDisableInterrupt(int IntNo)
 	if ((s_SamdStandbyWakeLines & (1UL << IntNo)) != 0U)
 	{
 		EIC_REGS->EIC_CTRL = 0U;
-		if (SamdEicSync())
+		if (!SamdEicSync())
 		{
-			EIC_REGS->EIC_WAKEUP &= ~(1UL << IntNo);
-			s_SamdStandbyWakeLines &= ~(1UL << IntNo);
+			EnableInterrupt(state);
+			return;
 		}
+		EIC_REGS->EIC_WAKEUP &= ~(1UL << IntNo);
+		s_SamdStandbyWakeLines &= ~(1UL << IntNo);
 		EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
 		(void)SamdEicSync();
 	}
@@ -390,7 +420,11 @@ void IOPinDisableInterrupt(int IntNo)
 		// Pin back to GPIO
 		PORT_REGS->GROUP[s_SamdPinInt[IntNo].PortNo].PORT_PINCFG[s_SamdPinInt[IntNo].PinNo] &=
 			(uint8_t)~PORT_PINCFG_PMUXEN_Msk;
-		(void)SamdEicSense(IntNo, IOPINSENSE_DISABLE, false);
+		if (!SamdEicSense(IntNo, IOPINSENSE_DISABLE, false))
+		{
+			EnableInterrupt(state);
+			return;
+		}
 	}
 
 	s_SamdPinInt[IntNo].Handler = NULL;
@@ -402,6 +436,8 @@ void IOPinDisableInterrupt(int IntNo)
 	{
 		NVIC_DisableIRQ(EIC_IRQn);
 	}
+
+	(void)SamdEicStopIdle();
 
 	EnableInterrupt(state);
 }
@@ -572,9 +608,9 @@ static bool SamdStandbyNmiConfig(int PortNo, int PinNo, int Sense)
 	{
 		return false;
 	}
-	if (Sense != IOPINSENSE_DISABLE && s_bSamdStandbyNmi)
+	if (Sense == IOPINSENSE_DISABLE && !s_bSamdStandbyNmi)
 	{
-		return true;
+		return false;
 	}
 
 	state = DisableInterrupt();
@@ -641,6 +677,7 @@ static bool SamdStandbyNmiConfig(int PortNo, int PinNo, int Sense)
 		{
 			pPort->PORT_PINCFG[PinNo] &= (uint8_t)~PORT_PINCFG_PMUXEN_Msk;
 			s_bSamdStandbyNmi = false;
+			result = SamdEicStopIdle();
 		}
 	}
 	EnableInterrupt(state);
@@ -698,7 +735,7 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 			return false;
 		}
 		IOPinDisableInterrupt(line);
-		return true;
+		return (s_SamdStandbyWakeLines & bit) == 0U && s_SamdPinInt[line].PortNo < 0;
 	}
 
 	if ((s_SamdEicEvent & bit) != 0U ||
@@ -763,7 +800,10 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 	if ((s_SamdEicEvent & (1UL << intno)) == 0U &&
 		(s_SamdStandbyWakeLines & (1UL << intno)) == 0U && SamdEicStart())
 	{
-		(void)SamdEicSense(intno, Sense, false);
+		if (SamdEicSense(intno, Sense, false) && Sense == IOPINSENSE_DISABLE)
+		{
+			(void)SamdEicStopIdle();
+		}
 	}
 	EnableInterrupt(state);
 }
@@ -787,9 +827,10 @@ bool SamdEicEvent(int ExtInt, IOPINSENSE Sense)
 	{
 		s_SamdEicEvent |= 1UL << ExtInt;
 	}
-	else
+	else if (res)
 	{
 		s_SamdEicEvent &= ~(1UL << ExtInt);
+		res = SamdEicStopIdle();
 	}
 
 	EnableInterrupt(state);

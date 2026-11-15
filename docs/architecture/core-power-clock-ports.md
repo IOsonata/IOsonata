@@ -48,14 +48,26 @@ consecutive SAMD11 SW0/PA14 Standby resumes, with counts 0x00000001 through
 is a sample of live RAM continuity, not a full SRAM test. SAMD21 hardware wake, full SRAM
 testing and sleep-current measurements remain pending.
 
-SAMD runtime clock selection now returns the clock setup result. A failed
+SAMD runtime clock selection returns the clock setup result. A failed
 core-clock change attempts the same OSC8M fallback used at startup, updates
 `SystemCoreClock` from the registers and returns false. Low-frequency
 selection returns false when oscillator startup or generator synchronization
 fails. Repeating the same request executes setup again, so a saved oscillator
 descriptor cannot hide a previous failure. The descriptors retain the requested
 configuration; a failed operation does not promise to restore the previous
-clock tree.
+clock tree. Frequency queries return zero for an oscillator that is not ready,
+a disabled or unlocked DPLL, an unlocked closed-loop DFLL, or a failed GCLK
+register read. USB recovery retains its nominal frequency before USB lock.
+OSC8M does not require OSC8MRDY when already enabled, preserving the D11
+startup behavior observed on hardware. Channel and generator reads share the
+same bounded synchronization sequence.
+
+Disabling the last EIC user releases its generic-clock channel after successful
+synchronization. Interrupt, event, wake, NMI and sense users are checked before
+stopping the shared controller. SW0 NMI wake polarity can be changed after
+initial configuration. Failed wake/event reconfiguration retains ownership
+until the line configuration succeeds, allowing a retry. Standby entry
+continues to preserve the existing NMI/IRQ pending-state handling.
 
 The caller must stop and release affected clock consumers before either
 selector, including a repeated request. Under the interrupt mask, both selectors
@@ -89,7 +101,9 @@ A stop, setup, reset or start failure invalidates the cached source frequency,
 so Enable refuses partial configuration even when the source is unchanged.
 A successful Frequency retry restores the cached value. This does not claim
 that hardware stopped when a stop synchronization failed; clock selection still
-checks the counter registers before allowing a change.
+checks the counter registers before allowing a change. The final RTC read
+synchronization after start or stop is also checked: failure suppresses timer
+interrupt dispatch, invalidates the saved frequency and requires reconfiguration.
 The period calculation uses an aligned local value before assigning the packed
 64-bit trigger field. An unchanged source allows normal Disable/Enable resume.
 
@@ -102,36 +116,29 @@ peripheral is reconfigured. SysTick and scheduler
 retiming remain the application's responsibility; reading SysTick CTRL here
 would clear COUNTFLAG. The refusal checks do not retime peripheral drivers.
 
-Arm GNU D11/D21 compilation passed. Both complete managed D11 library
-configurations compiled 239 sources, and ClockDisplayDemo linked at 16,208
-bytes of flash and 2,892 bytes of static RAM, unchanged from before this fix.
-Temporary host checks of the selector control flow passed with setup failures,
-repeated requests, fallback attempts, invalid/interrupt-context calls and both
-initial interrupt-mask states. These checks substitute the hardware helpers;
-runtime oscillator failure and recovery still require board validation.
-Temporary D11/D21 register checks at O0 and O2 also passed every peripheral
-channel, clock-output generator, low-frequency generator dependency, watchdog,
-RTC, EIC, USB, DMA/CRC, inaccessible register interface and synchronization
-refusal case. Refused calls retained the oscillator descriptors and interrupt
-mask, without entering clock setup; releasing the simulated resources allowed
-setup again. DMA checks cover all six D11 and twelve D21 channels, controller
-and channel resets, busy/pending channels, pending interrupt status and each
-active arbitration level. An enabled controller with all channels idle is
-accepted, and CHID is preserved on both acceptance and refusal. These checks
-model indirect GCLK/DMAC selection and substitute clock setup; hardware
-switching and refusal validation remain pending.
+Validation with Arm GNU 15.2.1:
 
-The timer core checks pass at O0 and Os with changed and missing source
-frequencies on RTC, both D11 TC devices and TCC, including active trigger
-recalculation and restart refusal. Stop, setup, reset and start failures with
-an unchanged source also refuse Enable and recover through Frequency retries.
-D11/D21 register checks cover each shared
-TC/TCC peer, enabled/reset/synchronizing states and restoration of the APBC
-mask. D11 managed libraries and all TimerDemo link configurations pass; the
-D21 timer source compiles with Arm GNU. ClockDisplayDemo remains at 16,208
-bytes of flash and 2,892 bytes of static RAM. Hardware clock switching remains
-pending.
+- Complete managed library source sets compile in Debug and Release:
+  239/239 sources for D11 and 317/317 for D21.
+- PowerOffDemo, UartPrbsTxTest and UartLoopback link for both targets and
+  configurations. D21 TimerDemo and every D11 timer-family/runtime selection
+  link, including the native and LTO checks.
+- D11 LCDConsoleDisplayDemo links in all four interrupt/DMA combinations.
+  With both enabled it uses 16,380 bytes of flash, leaving 4 bytes free.
+- ClockDisplayDemo uses 16,244 bytes of flash and 2,892 bytes of static RAM,
+  leaving 140 bytes of flash free. Its unused timer and transport checks pass.
+- Core and low-frequency selector calls link against both target libraries.
+- Existing UART, SPI, reset-reason, timer and Standby checks pass. The timer
+  model includes failed final RTC synchronization after both start and stop.
+- Temporary D11/D21 register checks at O0 and O2 cover clock readiness,
+  failed GCLK reads, shared timer peers, all DMA channels, EIC last-user
+  release, failed release/retry and SW0 polarity changes. Peripheral registers
+  and synchronization are modeled; these are not hardware measurements.
 
+Hardware clock switching, oscillator failure recovery, the latest wake-release
+changes, D21 wake, full SRAM continuity and sleep-current measurements remain
+pending. The prior D11 resume and SRAM-sample results above are retained as
+separate hardware evidence.
 
 ## STM32WBA power port (0.14)
 
