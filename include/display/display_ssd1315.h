@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	display_ssd1315.h
 
-@brief	SSD1315 monochrome OLED over a synchronous four-wire SPI interface.
+@brief	SSD1315 monochrome OLED over a four-wire SPI interface.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 18, 2026
@@ -45,7 +45,11 @@ SOFTWARE.
 // pages; Stride = (Width + 7) / 8. Width and Height describe the native panel.
 // pPins uses DISPL_CTRL_* indices. D/C is required; reset is optional. Set
 // unused backlight/reset entries to PortNo = PinNo = -1. No backlight is used.
-// The supplied SPI must be initialized, 8-bit, MSB first, mode 0, polling.
+// The supplied SPI must be initialized, 8-bit, MSB first, mode 0. Polling,
+// synchronous DMA and interrupt transfers are supported. Async SPI must use
+// DeviceIntrfTxComplete and provide Reset to abort a timed-out transfer.
+// Drawing waits for completion (up to 1,000,000 polling iterations per send);
+// call from foreground/task context with the SPI completion interrupt enabled.
 // All drawing methods update the display immediately. Colors: zero = black,
 // nonzero = white. SetCursor uses the top-left pixel of the next character.
 // Text sends only changed page spans. Refresh explicitly resends the frame.

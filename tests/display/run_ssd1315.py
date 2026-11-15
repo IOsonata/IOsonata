@@ -24,7 +24,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                             '-c', str(ROOT / 'src/display/fonts' / name), '-o', str(font)], check=True)
             fonts.append(str(font))
         subprocess.run(cmd + [str(ROOT / p) for p in sources] +
-                       fonts + ['-o', str(exe)], check=True)
+                       fonts + ['-Wl,--wrap=DeviceIntrfWaitTxComplete', '-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
         print(opt + ': SSD1315 checks passed', flush=True)
         # Exercise the configuration supplied to SPIInit by the real console

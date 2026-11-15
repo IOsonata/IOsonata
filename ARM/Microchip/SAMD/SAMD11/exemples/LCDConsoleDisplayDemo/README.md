@@ -1,7 +1,8 @@
 # SAM D11 OLED1 display console
 
 Both selections fit the SAMD11D14AM's 16 KB flash with the LTO settings below.
-Hardware validation is pending for both selections. This project is for
+The maintainer has validated polling display output on D11 + OLED1.
+Interrupt and DMA display output need retesting after the fix below. This project is for
 SAM D11 Xplained Pro with OLED1 Xplained Pro connected to EXT1.
 
 The existing `exemples/display/console_display_demo.cpp` selects the system
@@ -82,7 +83,8 @@ byte count means text was passed to that API, not verified on the panel.
   with runtime mode selection against the archive, with and without LTO.
 - Full managed D11 library: all 238 sources compile in Debug and Release;
   both console selections link against each complete archive at the sizes below.
-- No SAMD11 OLED hardware result yet.
+- Maintainer reports the polling OLED console works on D11 + OLED1.
+  Interrupt and DMA were rejected at display initialization before the fix below.
 
 Hardware references:
 - [OLED1 extension header](https://onlinedocs.microchip.com/oxy/GUID-26DC66D4-2EF7-4C54-8D2D-2A29BED57CAB-en-US-2/GUID-4AEF0FF0-9E97-4FCB-8565-668D17B30006.html)
@@ -126,8 +128,8 @@ Run `python3 tests/display/build_samd11_console.py --output uart` or
 The script checks the application object for unselected output references and
 checks the final ELF when linking succeeds.
 
-GCC 15.2.1, `-Os`, library and application rebuilt together. Debug and Release
-have the same sizes:
+SPI/LTO baseline before interrupt-display support, GCC 15.2.1, `-Os`.
+Debug and Release have the same sizes:
 
 | Output | Text | Data | BSS | Flash (text + data) | Static RAM (data + BSS) |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -167,3 +169,40 @@ The archive still contributes the DMAC vector handler; the display ELF omits
 DMA channel allocation and transfer functions, slave handling and the shared
 SPI interrupt transmit buffer. No other board was built or hardware-tested
 for this change.
+
+## Interrupt and DMA display transfers
+
+The previous SSD1315/SSD1306 initialization rejected either `bIntEn` or
+`bDma`, so enabling either caused this demo to exit before sending commands.
+The display now accepts synchronous DMA and waits for interrupt transfers
+through `DeviceIntrfWaitTxComplete`. D/C and the source data stay unchanged
+until completion. The SPI driver releases CS; the display does not stop an
+asynchronous transfer a second time. On timeout it resets SPI to abort the
+pending transfer, releases CS if necessary and reports failure.
+
+Interrupt operation requires a SPI implementation that signals
+`DeviceIntrfTxComplete` and provides Reset to abort transfers. Use foreground
+or task context with completion interrupts enabled. The wait limit is
+1,000,000 polling iterations per transfer. Completion means the SPI transfer
+ended; this helper does not expose the asynchronous byte count or confirm
+that the panel received the bytes.
+
+Select these definitions in `src/board.h` or the application compiler settings;
+then clean and rebuild the library and application:
+
+| Mode | DISPLAY_SPI_DMA_ENABLE | DISPLAY_SPI_INT_ENABLE | Flash bytes |
+| --- | --- | --- | ---: |
+| Polling (default) | false | false | 15000 |
+| Interrupt only | false | true | 15640 |
+| DMA, CPU waits | true | false | 16020 |
+| DMA with interrupts | true | true | 16700 (316 over D11 flash) |
+
+These are GCC 15.2.1, `-Os` + LTO results, identical in Debug and Release,
+using `tests/display/build_samd11_console.py`. Pass `--interrupt`, `--dma`,
+or both to reproduce a selection. The combined setting currently exceeds
+D11 flash; do not bypass the linker limit.
+
+`tests/display/run_ssd1315.py` now covers all four interface flag combinations,
+delayed and immediate completion, CS/D/C ordering, timeout abort and recovery,
+as well as the existing rendering checks. Host checks pass; hardware results
+for the two individual enabled modes are still pending.

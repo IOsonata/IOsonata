@@ -35,6 +35,8 @@ def main():
     parser.add_argument("--output", choices=("uart", "display"), default="display",
                         help="select the D11 console log output")
     parser.add_argument("--no-lto", action="store_true", help="compare a normal object build")
+    parser.add_argument("--dma", action="store_true")
+    parser.add_argument("--interrupt", action="store_true")
     args = parser.parse_args()
     app = ("tests/display/syslog_resource_probe.cpp" if args.syslog_only else
            "exemples/display/console_display_demo.cpp")
@@ -42,12 +44,16 @@ def main():
     failures = 0
     for mode in ("Debug", "Release"):
         out = Path(tempfile.gettempdir()) / "iosonata-oled1-build" / name / args.output / mode
+        if args.dma or args.interrupt:
+            out = out / ("dma%d-int%d" % (args.dma, args.interrupt))
         if args.no_lto:
             out = out / "no-lto"
         out.mkdir(parents=True, exist_ok=True)
         flags = ["-mcpu=cortex-m0plus", "-mthumb", "-Os", "-fsigned-char",
                  "-ffunction-sections", "-fdata-sections", "-fstack-usage",
                  "-D__SAMD11D14AM__", "-D__PROGRAM_START"]
+        flags += ["-DDISPLAY_SPI_DMA_ENABLE=" + str(int(args.dma)),
+                  "-DDISPLAY_SPI_INT_ENABLE=" + str(int(args.interrupt))]
         flags += ["-DCONSOLE_LOG_OUTPUT=" + ("1" if args.output == "uart" else "2")]
         flags += ["-I" + str(path) for path in INCLUDES]
         flags += ["-g3"] if mode == "Debug" else []
@@ -94,7 +100,7 @@ def main():
             absent = ("LcdSSD", "SPIInit", "DisplayIntrf") if args.output == "uart" else ("UARTInit", "SamdUart")
             assert all(symbol not in symbols for symbol in absent), "Unselected output linked"
         assert "__Vectors" in symbols and "ResetEntry" in symbols, "Startup missing"
-        if not args.no_lto and not args.syslog_only and args.output == "display":
+        if not (args.no_lto or args.syslog_only or args.dma or args.interrupt) and args.output == "display":
             absent = ("SamdSpimInt", "SamdSpis", "SamdSpimDma", "SamdDmacOpen",
                       "SamdDmacStart", "s_SamdSpiTxBuf")
             assert all(symbol not in symbols for symbol in absent), "Unused SPI mode linked"

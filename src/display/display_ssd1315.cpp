@@ -67,7 +67,7 @@ bool LcdSSD1315::Init(const DisplayCfg_t &Cfg, DeviceIntrf * const pIntrf)
 		return false;
 	}
 	DevIntrf_t *intrf = *pIntrf;
-	if (intrf == nullptr || intrf->bIntEn || intrf->bDma)
+	if (intrf == nullptr || (intrf->bIntEn && intrf->Reset == nullptr))
 	{
 		return false;
 	}
@@ -98,9 +98,38 @@ bool LcdSSD1315::Send(bool bData, const uint8_t *pData, int Len)
 		return false;
 	}
 	const IOPinCfg_t &pin = vCfg.pPins[DISPL_CTRL_DCX_PINIDX];
-	if (bData) { IOPinSet(pin.PortNo, pin.PinNo); }
-	else { IOPinClear(pin.PortNo, pin.PinNo); }
+	if (bData)
+	{
+		IOPinSet(pin.PortNo, pin.PinNo);
+	}
+	else
+	{
+		IOPinClear(pin.PortNo, pin.PinNo);
+	}
+	DevIntrf_t *intrf = *vpIntrf;
+
+	intrf->bNoStop = false;
 	int count = vpIntrf->TxData(pData, Len);
+
+	if (count < 0)
+	{
+		// Keep D/C and the source bytes unchanged until the SPI implementation
+		// completes the transfer and releases CS through DeviceIntrfTxComplete.
+		if (DeviceIntrfWaitTxComplete(intrf, 1000000))
+		{
+			return true;
+		}
+		// Reset must abort the pending transfer before local command bytes
+		// leave scope. A late completion may already have released CS.
+		vpIntrf->Reset();
+		if (!atomic_load(&intrf->bTxReady))
+		{
+			vpIntrf->StopTx();
+		}
+		Valid(false);
+
+		return false;
+	}
 	vpIntrf->StopTx();
 	return count == Len;
 }

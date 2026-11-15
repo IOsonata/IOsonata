@@ -41,6 +41,11 @@ SOFTWARE.
 #include "display/display_ssd1315.h"
 
 static bool dataMode, selected, refuse, failData;
+static bool immediate, timeout;
+static const uint8_t *pendingData;
+static int pendingLen;
+static bool pendingMode;
+static unsigned aborts;
 static unsigned starts, stops, sends, dcWrites, resetWrites;
 static unsigned dataBytes;
 static uint8_t ram[8][128];
@@ -99,7 +104,7 @@ static void Stop(DevIntrf_t *)
 	stops++;
 }
 
-static int Tx(DevIntrf_t *, const uint8_t *p, int n)
+static int Transfer(DevIntrf_t *, const uint8_t *p, int n)
 {
 	assert(selected && n > 0);
 	sends++;
@@ -165,6 +170,58 @@ static int Tx(DevIntrf_t *, const uint8_t *p, int n)
 	return n;
 }
 
+
+static void Abort(DevIntrf_t *)
+{
+	pendingData = nullptr;
+	pendingLen = 0;
+	aborts++;
+}
+
+static int Tx(DevIntrf_t *pDev, const uint8_t *pData, int Len)
+{
+	assert(pendingData == nullptr);
+	if (!pDev->bIntEn)
+	{
+		return Transfer(pDev, pData, Len);
+	}
+	atomic_store(&pDev->bTxReady, false);
+	if (immediate)
+	{
+		assert(Transfer(pDev, pData, Len) == Len);
+		DeviceIntrfTxComplete(pDev);
+	}
+	else
+	{
+		pendingData = pData;
+		pendingLen = Len;
+		pendingMode = dataMode;
+	}
+	return -1;
+}
+
+// Finish the modeled IRQ only when the display waits. This catches early
+// StopTx, D/C changes and double completion, without host thread timing.
+extern "C" bool __wrap_DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Limit)
+{
+	assert(Limit > 0);
+	if (timeout)
+	{
+		assert(selected && pendingData != nullptr);
+		return false;
+	}
+	if (pendingData != nullptr)
+	{
+		assert(selected && dataMode == pendingMode);
+		assert(Transfer(pDev, pendingData, pendingLen) == pendingLen);
+		pendingData = nullptr;
+		pendingLen = 0;
+		DeviceIntrfTxComplete(pDev);
+	}
+	assert(atomic_load(&pDev->bTxReady));
+	return true;
+}
+
 class Bus : public DeviceIntrf {
 public:
 	DevIntrf_t dev{};
@@ -175,6 +232,7 @@ public:
 		dev.StartTx = Start;
 		dev.StopTx = Stop;
 		dev.TxData = ::Tx;
+		dev.Reset = Abort;
 		atomic_flag_clear(&dev.bBusy);
 	}
 
@@ -210,11 +268,27 @@ int main()
 	Bus bus;
 	LcdSSD1315 oled;
 	assert(!oled.Init(cfg, nullptr));
+	for (unsigned mode = 0; mode < 4; mode++)
+	{
+		bus.dev.bIntEn = (mode & 1) != 0;
+		bus.dev.bDma = (mode & 2) != 0;
+		for (unsigned early = 0; early < 2; early++)
+		{
+			immediate = early != 0;
+			assert(oled.Init(cfg, &bus));
+			oled.SetPixel(5, 7, 1);
+			assert(On(5, 7) && oled.Refresh());
+			assert(starts == stops && !selected && pendingData == nullptr);
+		}
+	}
 	bus.dev.bIntEn = true;
+	immediate = false;
+	timeout = true;
 	assert(!oled.Init(cfg, &bus));
+	assert(aborts == 1 && !selected && pendingData == nullptr);
+	timeout = false;
+	assert(oled.Init(cfg, &bus));
 	bus.dev.bIntEn = false;
-	bus.dev.bDma = true;
-	assert(!oled.Init(cfg, &bus));
 	bus.dev.bDma = false;
 	refuse = true;
 	assert(!oled.Init(cfg, &bus));

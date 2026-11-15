@@ -79,6 +79,9 @@ SOFTWARE.
 #ifndef DISPLAY_SPI_CLKPOL
 #define DISPLAY_SPI_CLKPOL SPICLKPOL_HIGH
 #endif
+#ifndef DISPLAY_SPI_INT_ENABLE
+#define DISPLAY_SPI_INT_ENABLE false
+#endif
 #ifndef DISPLAY_SPI_DMA_ENABLE
 #define DISPLAY_SPI_DMA_ENABLE true
 #endif
@@ -102,7 +105,7 @@ static const SPICfg_t s_SpiCfg = {
 	.ClkPol = DISPLAY_SPI_CLKPOL,		 // clock polarity
 	.ChipSel = SPICSEL_AUTO,
 	.bDmaEn = DISPLAY_SPI_DMA_ENABLE, // DMA
-	.bIntEn = false,
+	.bIntEn = DISPLAY_SPI_INT_ENABLE,
 	.IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
 	.EvtCB = NULL
 };
