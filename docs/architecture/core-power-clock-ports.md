@@ -59,7 +59,8 @@ clock tree.
 
 The caller must stop and release affected clock consumers before either
 selector, including a repeated request. Under the interrupt mask, both selectors
-now refuse enabled watchdog, RTC, EIC, USB, DMA or CRC operation, allocated
+now refuse enabled watchdog, RTC, EIC, USB or CRC operation, armed or active
+DMA channels, pending DMA completions, allocated
 peripheral generic-clock channels, and enabled clock outputs. A gated register
 interface or a generic-clock synchronization timeout also causes refusal.
 Watchdog state is only read; clock selection never enables or disables it.
@@ -74,8 +75,13 @@ block low-frequency changes. The GCLK inspection writes only register selector
 IDs, without changing channel or generator configuration.
 
 Timer Disable stops counting but retains its clock connection; this still
-blocks selection. DMA initialization likewise leaves the controller enabled.
-These resources must be released before selecting clocks. SysTick and scheduler
+blocks selection. DMA initialization leaves the controller enabled, but that
+alone no longer blocks selection: every channel must be disabled, with no busy
+or pending transfer, active arbitration level, completion awaiting its ISR, or
+reset in progress. The inspection preserves CHID, descriptors and interrupt
+flags. An idle DMA allocation can be reused after clock selection once its
+peripheral is reconfigured. Timer connections still require release or a future
+restart path that handles changed source frequencies. SysTick and scheduler
 retiming remain the application's responsibility; reading SysTick CTRL here
 would clear COUNTFLAG. The refusal checks do not retime peripheral drivers.
 
@@ -91,8 +97,12 @@ channel, clock-output generator, low-frequency generator dependency, watchdog,
 RTC, EIC, USB, DMA/CRC, inaccessible register interface and synchronization
 refusal case. Refused calls retained the oscillator descriptors and interrupt
 mask, without entering clock setup; releasing the simulated resources allowed
-setup again. These checks model indirect GCLK register selection and substitute
-clock setup; hardware switching and refusal validation remain pending.
+setup again. DMA checks cover all six D11 and twelve D21 channels, controller
+and channel resets, busy/pending channels, pending interrupt status and each
+active arbitration level. An enabled controller with all channels idle is
+accepted, and CHID is preserved on both acceptance and refusal. These checks
+model indirect GCLK/DMAC selection and substitute clock setup; hardware
+switching and refusal validation remain pending.
 
 
 ## STM32WBA power port (0.14)

@@ -1094,6 +1094,35 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	return current != 0U && current == Freq ? current : 0U;
 }
 
+// DMAC register clock accessible, interrupts disabled. An initialized but
+// idle controller does not own a clock rate. Preserve the channel selector.
+static bool SamdDmaClockBusy(void)
+{
+	uint8_t selected = DMAC_REGS->DMAC_CHID;
+	bool busy = false;
+
+	if ((DMAC_REGS->DMAC_CTRL & (DMAC_CTRL_CRCENABLE_Msk | DMAC_CTRL_SWRST_Msk)) != 0U)
+	{
+		return true;
+	}
+
+	for (uint32_t i = 0; i < DMAC_CH_NUM; i++)
+	{
+		DMAC_REGS->DMAC_CHID = (uint8_t)i;
+		if ((DMAC_REGS->DMAC_CHCTRLA & (DMAC_CHCTRLA_ENABLE_Msk | DMAC_CHCTRLA_SWRST_Msk)) != 0U)
+		{
+			busy = true;
+			break;
+		}
+	}
+	DMAC_REGS->DMAC_CHID = selected;
+
+	// Include a final beat, queued request and a completion awaiting its ISR.
+	return busy || DMAC_REGS->DMAC_BUSYCH != 0U || DMAC_REGS->DMAC_PENDCH != 0U ||
+		   DMAC_REGS->DMAC_INTSTATUS != 0U ||
+		   (DMAC_REGS->DMAC_ACTIVE & (DMAC_ACTIVE_ABUSY_Msk | DMAC_ACTIVE_LVLEX_Msk)) != 0U;
+}
+
 // Runtime changes require released peripheral clocks. Bus masks alone do not
 // show activity: several masks are enabled at reset. Interrupts are disabled.
 static bool SamdClockBusy(bool LowFreq)
@@ -1111,7 +1140,7 @@ static bool SamdClockBusy(bool LowFreq)
 	if ((WDT_REGS->WDT_CTRL & (WDT_CTRL_ENABLE_Msk | WDT_CTRL_ALWAYSON_Msk)) != 0U ||
 		(RTC_REGS->MODE0.RTC_CTRL & RTC_MODE0_CTRL_ENABLE_Msk) != 0U ||
 		(EIC_REGS->EIC_CTRL & EIC_CTRL_ENABLE_Msk) != 0U ||
-		(DMAC_REGS->DMAC_CTRL & (DMAC_CTRL_DMAENABLE_Msk | DMAC_CTRL_CRCENABLE_Msk)) != 0U)
+		SamdDmaClockBusy())
 	{
 		return true;
 	}
