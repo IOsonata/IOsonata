@@ -27,6 +27,23 @@ RAMRET. Retention configuration is whole-bank; RAM1 retention is disabled
 and RAM2 retention is enabled before Standby. Test memory must never overlap
 `.data`, `.bss` or stack.
 
+## Live power-register snapshot
+
+The test builds with `POWER_DEMO_WAKE_DIAG=1`. After the first PC13
+press/release, the example prepares the actual Standby register state without
+yet issuing WFI, then prints:
+
+- `WUCR1`, `WUCR2`, `WUCR3`, `WUSR` for WKUP2 enable, polarity, selection,
+  and any pending wake flags
+- `IORETENRC` for PC13 pull retention, `CR1` and `SR` for power mode/status
+- GPIOC `MODER`, `PUPDR`, `IDR`, and SCB `SCR` for pin state and SLEEPDEEP
+
+The second call, `SystemPowerOff()`, consumes this prepared state and
+executes WFI without clearing or reprogramming the wake flags a second time.
+This preparation entry point is temporary diagnostic support, not a generic
+power API addition. Record these register values even if the second PC13 press
+does not wake the board.
+
 ## Standby entry diagnostics
 
 The WBA65 power implementation now clears stale WKUP status before enabling
