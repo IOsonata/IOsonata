@@ -32,6 +32,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "timer_sam4l.h"
+#include "system_sam4l.h"
 
 volatile uint32_t g_Sam4lTimerInitStage;
 
@@ -44,6 +45,25 @@ Sam4l_TimerData_t g_Sam4lTimerData[SAM4L_TIMER_MAXCNT] = {
 	{nullptr, &SAM4L_TC1->TC_CHANNEL[1], TC11_IRQn, PM_PBAMASK_TC1},
 	{nullptr, &SAM4L_TC1->TC_CHANNEL[2], TC12_IRQn, PM_PBAMASK_TC1},
 };
+bool Sam4lTimerClockBusy(uint32_t ClockMask)
+{
+	uint32_t owned = 0;
+
+	for (const auto &d : g_Sam4lTimerData)
+	{
+		if (d.TcReg && d.Timer && (ClockMask & d.ClockMask))
+		{
+			if (d.Running || !d.Healthy)
+			{
+				return true;
+			}
+			owned |= d.ClockMask;
+		}
+	}
+	// A TC block enabled outside the timer port must be stopped by its owner.
+	return (ClockMask & ~owned) != 0;
+}
+
 void Sam4lTimerPmWrite(volatile uint32_t *reg, uint32_t value)
 {
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAA) | PM_UNLOCK_ADDR((uintptr_t)reg - (uintptr_t)SAM4L_PM);
@@ -167,6 +187,10 @@ static uint32_t Frequency(TimerDev_t *t, uint32_t request)
 	uint32_t state = DisableInterrupt();
 	uint32_t select, freq, ticks[3] = {};
 	uint64_t actual[3] = {};
+	if (d->TcReg)
+	{
+		d->BaseFreq = SystemPeriphClockGet(0);
+	}
 	if (!Plan(*d, request, select, freq)) { EnableInterrupt(state); return 0; }
 	for (int n = 0; n < MaxTrigger(t); ++n) if (d->Trigger[n].Active &&
 		!Period(freq, d->Trigger[n].Info.nsPeriod, ticks[n], actual[n])) {

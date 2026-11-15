@@ -55,6 +55,9 @@ void SystemInit(void);
  */
 void SystemCoreClockUpdate(void);
 
+// Private timer-port query. Does not read clear-on-read TC status registers.
+bool Sam4lTimerClockBusy(uint32_t ClockMask);
+
 
 #ifdef __cplusplus
 }

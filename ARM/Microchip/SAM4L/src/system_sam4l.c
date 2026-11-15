@@ -127,6 +127,9 @@ static volatile uint32_t s_PowerControl;
 static volatile uint32_t s_PowerStatus;
 static volatile uint32_t s_FlashStatus;
 
+// A clock-only application must not pull the timer implementation into its link.
+extern bool Sam4lTimerClockBusy(uint32_t ClockMask) __attribute__((weak));
+
 __attribute__((noreturn, noinline))
 static void Sam4lStartupFailed(uint32_t Error)
 {
@@ -1099,12 +1102,24 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 // A disabled transport releases its PBA clock through its driver.
 static bool Sam4lCoreClockBusy(void)
 {
-	uint32_t transports = PM_PBAMASK_SPI | PM_PBAMASK_TWIM0 | PM_PBAMASK_TWIM1 |
-		PM_PBAMASK_TWIM2 | PM_PBAMASK_TWIM3 | PM_PBAMASK_TWIS0 | PM_PBAMASK_TWIS1 |
-		PM_PBAMASK_USART0 | PM_PBAMASK_USART1 | PM_PBAMASK_USART2 | PM_PBAMASK_USART3;
+	uint32_t pba = SAM4L_PM->PM_PBAMASK;
+	uint32_t tc = pba & (PM_PBAMASK_TC0 | PM_PBAMASK_TC1);
 
-	if (SAM4L_PM->PM_PBAMASK & transports)
+	// The remaining PBA users include transports, analog, audio and LCD.
+	// Refuse their enabled clock gates; do not consume peripheral status.
+	if (pba & (PM_PBAMASK_MASK & ~(PM_PBAMASK_TC0 | PM_PBAMASK_TC1)))
 	{
+		return true;
+	}
+	if (tc && (!Sam4lTimerClockBusy || Sam4lTimerClockBusy(tc)))
+	{
+		return true;
+	}
+	if ((SAM4L_PM->PM_PBDMASK & PM_PBDMASK_AST) &&
+		((SAM4L_AST->AST_SR & (AST_SR_BUSY | AST_SR_CLKBUSY)) ||
+		(SAM4L_AST->AST_CR & AST_CR_EN)))
+	{
+		// Keep AST synchronization timing unchanged while it is running.
 		return true;
 	}
 	if ((SAM4L_PM->PM_PBBMASK & PM_PBBMASK_USBC) &&

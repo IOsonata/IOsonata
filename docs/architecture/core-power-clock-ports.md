@@ -23,7 +23,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime recovery and transport/DMA clock checks implemented; timer/other clock users and hardware validation pending |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime recovery and main-clock peripheral checks implemented; low-frequency ownership and hardware validation pending |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; SAMD11 SW0/PA14 repeated resume passed | Validate SAMD21 wake, full SRAM continuity, sleep current and peripheral clock ownership |
 | LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
@@ -242,11 +242,22 @@ system DFLL reference, and GCLK7 is treated as system-owned only when
 `bUSBClk` is set and USB is disabled. Refusal leaves hardware registers and
 oscillator descriptors untouched and restores the incoming interrupt mask.
 
-These checks cover transports, DMA and generic clocks. Timer, analog and
-other peripheral users still need a separate review. In particular, TC status
-registers must not be read merely to check activity because the read clears
-pending events. Repeating a request rechecks the hardware setup; a
-matching descriptor alone does not report success.
+Enabled analog, audio, LCD and other PBA peripheral clock gates also refuse
+main-clock changes. The AST must be stopped with no synchronization pending.
+For TC timers managed by IOsonata, the timer port reports running/unhealthy
+state without reading TC status, so rollover and compare flags are preserved.
+A TC block with no IOsonata timer owner is refused while its PBA clock is on.
+Applications using TC registers directly must stop and gate that block before
+changing the clock; mixing direct channel control with Timer objects in the
+same block is not covered by the ownership query.
+
+Disable every active timer before changing the clock. After a successful
+change, TC `SetFrequency` reads the current PBA frequency and recalculates its
+divider and trigger periods. It resets and starts the counter as before. The
+optional timer query does not pull timer drivers into a clock-only image.
+Core SysTick/scheduler timing remains the application's responsibility.
+Low-frequency clock-user checks are still pending. Repeating a request
+rechecks the hardware setup; a matching descriptor alone does not report success.
 Run `python3 tests/sam4l/run_clock.py` for the Linux register-model checks.
 
 Wake pins use asynchronous high/low level detection through the backup mux.

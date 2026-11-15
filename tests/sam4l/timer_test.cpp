@@ -16,6 +16,7 @@ enum {AST_ALARM_IRQn=39,AST_OVF_IRQn=41,TC00_IRQn=55,TC01_IRQn,TC02_IRQn,TC10_IR
 struct { uint32_t ISER[2]={}; } nvic;
 #define NVIC (&nvic)
 uint64_t pending;
+static uint32_t s_TestPeripheralClock = 48000000;
 void NVIC_EnableIRQ(int n) { nvic.ISER[n/32] |= 1u<<(n%32); }
 void NVIC_DisableIRQ(int n) { nvic.ISER[n/32] &= ~(1u<<(n%32)); }
 void NVIC_ClearPendingIRQ(int n) { pending &= ~(1ULL<<n); }
@@ -76,7 +77,7 @@ AstStatus::operator uint32_t() {
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp"
 McuOsc_t g_McuOsc = {};
-extern "C" uint32_t SystemPeriphClockGet(int) { return 48000000; }
+extern "C" uint32_t SystemPeriphClockGet(int) { return s_TestPeripheralClock; }
 unsigned events[7][3]={},overflows[7]={},callbacks=0;
 bool cancelNext=false,resetInCallback=false;
 void Event(TimerDev_t *t,uint32_t e) {
@@ -115,6 +116,7 @@ void Advance(int dev,uint32_t ticks,bool service=true) {
 	}
 }
 int main() {
+	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0));
 	g_McuOsc.LowPwrOsc.Freq=32768;
 	// AST is only reset by POR (42023H table 10-12), not by debugger reset.
 	// Model a previous firmware's running timer with no live software owner.
@@ -153,6 +155,18 @@ int main() {
 		assert(!timers[dev].EnableExtTrigger(&timers[dev],0,TIMER_EXTTRIG_SENSE_TOGGLE));
 	}
 	assert(pm.PM_PBADIVMASK==64 && (pm.PM_PBAMASK & (PM_PBAMASK_TC0|PM_PBAMASK_TC1)));
+	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0 | PM_PBAMASK_TC1));
+	for (int dev = 1; dev < 7; dev++) timers[dev].Disable(&timers[dev]);
+	assert(!Sam4lTimerClockBusy(PM_PBAMASK_TC0 | PM_PBAMASK_TC1));
+	// The ownership query must not clear pending rollover/compare flags.
+	tc[0].TC_CHANNEL[0].TC_SR.value = TC_SR_COVFS | TC_SR_CPAS;
+	assert(!Sam4lTimerClockBusy(PM_PBAMASK_TC0));
+	assert(tc[0].TC_CHANNEL[0].TC_SR.value == (TC_SR_COVFS | TC_SR_CPAS));
+	tc[0].TC_CHANNEL[0].TC_SR.value = 0;
+	g_Sam4lTimerData[1].Healthy = false;
+	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0));
+	g_Sam4lTimerData[1].Healthy = true;
+	for (int dev = 1; dev < 7; dev++) assert(timers[dev].Enable(&timers[dev]));
 	for(int dev=0;dev<7;++dev) {
 		auto &t=timers[dev];
 		assert(t.EnableTrigger(&t,0,100000000,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr));
@@ -235,5 +249,9 @@ int main() {
 	}
 	// A stuck synchronization flag must time out and make Enable return false.
 	ast.AST_SR.value|=AST_SR_BUSY;a.Reset(&a);assert(!a.Enable(&a));
+	timers[1].Disable(&timers[1]);
+	s_TestPeripheralClock = 24000000;
+	assert(timers[1].SetFrequency(&timers[1], 0) == 187500);
+	assert(g_Sam4lTimerData[1].BaseFreq == s_TestPeripheralClock);
 	puts("SAM4L timer register-model tests passed");
 }
