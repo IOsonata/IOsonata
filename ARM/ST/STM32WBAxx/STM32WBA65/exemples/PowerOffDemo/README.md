@@ -75,3 +75,7 @@ A source review or a successful build does not establish SRAM retention or
 wakeup behavior. These must be confirmed on hardware. The radio/USB shutdown
 sequence is outside this bare-metal example. Do not use this test while BLE
 or USB is active.
+
+## Latest Standby experiment
+
+The demo disables USART1 and its DMA before WFI, after allowing the UART message to finish. If WFI returns, it enables USART1 again to log the failure. Hardware outcome pending.
