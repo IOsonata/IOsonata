@@ -40,6 +40,11 @@ yet issuing WFI, then prints:
 
 The second call, `SystemPowerOff()`, consumes this prepared state and
 executes WFI without clearing or reprogramming the wake flags a second time.
+If WFI returns without a reset, the diagnostic reports
+`WFI returned without Standby reset` and stops. Before WFI the log also
+reports EXTI rising/falling pending flags, SCB ICSR, SysTick CTRL and
+NVIC pending registers ISPR0–2. Pending interrupts or peripheral flags
+may prevent Standby mode entry, even when WUCR1/2/3 are correct.
 This preparation entry point is temporary diagnostic support, not a generic
 power API addition. Record these register values even if the second PC13 press
 does not wake the board.
