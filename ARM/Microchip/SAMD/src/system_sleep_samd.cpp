@@ -16,10 +16,14 @@ Copyright (c) 2026 I-SYST inc.
 #include "samdxxx.h"
 #include "coredev/system_core_clock.h"
 
+// EIC wake line ownership is managed in iopincfg_samd.c.
+extern "C" void SamdStandbyWakeArm(void);
+
 void SystemSleep(void)
 {
 	uint32_t previous;
 
+	SamdStandbyWakeArm();
 	previous = SCB->SCR;
 	SCB->SCR = previous | SCB_SCR_SLEEPDEEP_Msk;
 	__DSB();
