@@ -31,6 +31,19 @@ Microchip device CMSIS headers; no vendor driver library is linked.
 | DAC | `dac_samd.cpp`, `include/dac_samd.h` | One 10-bit channel written by software: output buffer to the VOUT pin PA02 and the ADC, internal output to the comparators; INT1V, VDDANA and VREFA references |
 | ADC | `adc_samd.cpp`, `include/adc_samd.h` | Single conversions by polling: AIN pins, temperature sensor, bandgap, scaled supplies, DAC output; single ended or differential; gain 1/2 to 16; INT1V, supply and external references; averaging |
 
+## Generic power API (0.14, in progress)
+
+`src/system_power_samd.cpp` reads the PM RCAUSE register and maps
+power-on/brown-out, external reset, watchdog and software reset into
+`SystemResetReason()`. Both D11 and D21 managed MCU libraries link this
+shared source. PM RCAUSE is read-only; it is not cleared in software.
+
+The remaining power functions are not implemented yet. In particular,
+SAMD Standby resumes execution on an interrupt and cannot be substituted
+for the IOsonata `SystemPowerOff()` operation, which requires a reset on
+wake. Do not add a dummy implementation or claim Standby is a power-off.
+Target compilation and reset-cause hardware validation are pending.
+
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
 configuration asking for it fails init), USB host mode, PWM (the TCC are
 timers only), watchdog, sleep modes and the NVM controller. The ADC has no interrupt, event or continuous mode, the DAC no
