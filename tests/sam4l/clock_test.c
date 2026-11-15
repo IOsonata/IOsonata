@@ -18,7 +18,7 @@ void ClockTestHalt(void)
 
 #include "../../ARM/Microchip/SAM4L/src/system_sam4l.c"
 
-static void CheckClockBusy(void)
+static void CheckClockBusy(bool Low)
 {
 	McuOsc_t previous = g_McuOsc;
 	uint32_t frequency = SystemCoreClock;
@@ -27,7 +27,8 @@ static void CheckClockBusy(void)
 	for (unsigned mask = 0; mask < 2; mask++)
 	{
 		g_TestMask = mask;
-		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000));
+		assert(!(Low ? SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768) :
+			SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000)));
 		assert(g_TestMask == mask);
 		assert(memcmp(s_ClockRegisters, (void *)0x40000000, sizeof(s_ClockRegisters)) == 0);
 		assert(memcmp(&previous, &g_McuOsc, sizeof(previous)) == 0);
@@ -40,6 +41,8 @@ int main(void)
 	void *regs = mmap((void *)0x40000000, 0x100000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
 	assert(regs == (void *)0x40000000);
+	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE;
+	SAM4L_PM->PM_PBCMASK = PM_PBCMASK_RESETVALUE;
 	assert(setjmp(s_Halt) == 0); // Runtime LF failures must return, not halt.
 
 	for (uint32_t mask = 0; mask < 2; mask++)
@@ -75,6 +78,75 @@ int main(void)
 	g_TestIpsr = 0;
 	assert(!SystemLowFreqClockSelect(OSC_TYPE_XTAL, 12345));
 
+	// Low-clock refusal must preserve all registers, flags and descriptors.
+	SAM4L_AST->AST_CR = AST_CR_EN;
+	CheckClockBusy(true);
+	SAM4L_AST->AST_CR = 0;
+	*(volatile uint32_t *)&SAM4L_AST->AST_SR = AST_SR_BUSY;
+	CheckClockBusy(true);
+	*(volatile uint32_t *)&SAM4L_AST->AST_SR = AST_SR_CLKBUSY;
+	CheckClockBusy(true);
+	*(volatile uint32_t *)&SAM4L_AST->AST_SR = AST_SR_ALARM0;
+	assert(!Sam4lLowClockBusy());
+	*(volatile uint32_t *)&SAM4L_PICOUART->PICOUART_SR = PICOUART_SR_EN;
+	CheckClockBusy(true);
+	*(volatile uint32_t *)&SAM4L_PICOUART->PICOUART_SR = 0;
+	*(volatile uint32_t *)&SAM4L_FREQM->FREQM_STATUS = FREQM_STATUS_BUSY;
+	CheckClockBusy(true);
+	*(volatile uint32_t *)&SAM4L_FREQM->FREQM_STATUS = FREQM_STATUS_RCLKBUSY;
+	CheckClockBusy(true);
+	*(volatile uint32_t *)&SAM4L_FREQM->FREQM_STATUS = 0;
+	SAM4L_PM->PM_PBAMASK = PM_PBAMASK_LCDCA;
+	CheckClockBusy(true);
+	SAM4L_PM->PM_PBAMASK = PM_PBAMASK_CATB;
+	CheckClockBusy(true);
+	SAM4L_PM->PM_PBAMASK = 0;
+	SAM4L_WDT->WDT_CTRL = WDT_CTRL_EN | WDT_CTRL_CSSEL;
+	CheckClockBusy(true);
+	SAM4L_WDT->WDT_CTRL = WDT_CTRL_CEN | WDT_CTRL_CSSEL1;
+	CheckClockBusy(true);
+	SAM4L_WDT->WDT_CTRL = WDT_CTRL_EN | WDT_CTRL_CEN;
+	assert(!Sam4lLowClockBusy()); // RCSYS watchdog is unaffected.
+	SAM4L_BSCIF->BSCIF_BOD33CTRL = BSCIF_BOD33CTRL_EN | BSCIF_BOD33CTRL_MODE;
+	CheckClockBusy(true);
+	SAM4L_BSCIF->BSCIF_BOD33CTRL = BSCIF_BOD33CTRL_EN;
+	SAM4L_BSCIF->BSCIF_BOD18CTRL = BSCIF_BOD18CTRL_EN | BSCIF_BOD18CTRL_MODE;
+	CheckClockBusy(true);
+	SAM4L_BSCIF->BSCIF_BOD18CTRL = BSCIF_BOD18CTRL_EN;
+	assert(!Sam4lLowClockBusy()); // Continuous brownout detection is unaffected.
+	for (unsigned i = 0; i < 12; i++)
+	{
+		uint32_t sources[] = {OSC32K_GEN_CLK_SRC, RC32K_GEN_CLK_SRC, OSC1K_GEN_CLK_SRC};
+		for (unsigned n = 0; n < 3; n++)
+		{
+			SAM4L_SCIF->SCIF_GCCTRL[i].SCIF_GCCTRL = SCIF_GCCTRL_CEN | SCIF_GCCTRL_OSCSEL(sources[n]);
+			CheckClockBusy(true);
+		}
+		SAM4L_SCIF->SCIF_GCCTRL[i].SCIF_GCCTRL = SCIF_GCCTRL_CEN | SCIF_GCCTRL_OSCSEL(OSC0_GEN_CLK_SRC);
+		assert(!Sam4lLowClockBusy());
+		SAM4L_SCIF->SCIF_GCCTRL[i].SCIF_GCCTRL = 0;
+	}
+	for (unsigned i = 0; i < 6; i++)
+	{
+		if (i == 4) continue; // EIC is not needed for these reads.
+		SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE & ~(1U << i);
+		CheckClockBusy(true);
+	}
+	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE;
+	SAM4L_PM->PM_PBCMASK &= ~PM_PBCMASK_FREQM;
+	CheckClockBusy(true);
+	SAM4L_PM->PM_PBCMASK = PM_PBCMASK_RESETVALUE & ~PM_PBCMASK_SCIF;
+	CheckClockBusy(true);
+	SAM4L_PM->PM_PBCMASK = PM_PBCMASK_RESETVALUE;
+	*(volatile uint32_t *)&SAM4L_BSCIF->BSCIF_PCLKSR = BSCIF_PCLKSR_OSC32RDY | BSCIF_PCLKSR_RC32KRDY;
+	assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768));
+	assert(SAM4L_WDT->WDT_CTRL == (WDT_CTRL_EN | WDT_CTRL_CEN));
+	assert(SAM4L_BSCIF->BSCIF_BOD33CTRL == BSCIF_BOD33CTRL_EN);
+	assert(SAM4L_BSCIF->BSCIF_BOD18CTRL == BSCIF_BOD18CTRL_EN);
+	assert(SAM4L_AST->AST_SR == AST_SR_ALARM0);
+	assert(SystemLowFreqClockSelect(OSC_TYPE_RC, 32768));
+	*(volatile uint32_t *)&SAM4L_BSCIF->BSCIF_PCLKSR = BSCIF_PCLKSR_RC32KRDY;
+	*(volatile uint32_t *)&SAM4L_AST->AST_SR = 0;
 	// Runtime failures return with the original interrupt mask and WDT state.
 	for (uint32_t mask = 0; mask < 2; mask++)
 	{
@@ -163,24 +235,24 @@ int main(void)
 	for (unsigned i = 0; i < sizeof(transports) / sizeof(transports[0]); i++)
 	{
 		SAM4L_PM->PM_PBAMASK = transports[i];
-		CheckClockBusy();
+		CheckClockBusy(false);
 	}
 	SAM4L_PM->PM_PBAMASK = 0;
 	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_AST;
 	SAM4L_AST->AST_CR = AST_CR_EN;
-	CheckClockBusy();
+	CheckClockBusy(false);
 	SAM4L_AST->AST_CR = 0;
 	*(volatile uint32_t *)&SAM4L_AST->AST_SR = AST_SR_BUSY;
-	CheckClockBusy();
+	CheckClockBusy(false);
 	*(volatile uint32_t *)&SAM4L_AST->AST_SR = AST_SR_CLKBUSY;
-	CheckClockBusy();
+	CheckClockBusy(false);
 	*(volatile uint32_t *)&SAM4L_AST->AST_SR = 0;
 	assert(!Sam4lCoreClockBusy());
 	SAM4L_PM->PM_PBBMASK = PM_PBBMASK_USBC;
 	SAM4L_USBC->USBC_USBCON = USBC_USBCON_USBE;
-	CheckClockBusy();
+	CheckClockBusy(false);
 	SAM4L_USBC->USBC_USBCON |= USBC_USBCON_FRZCLK;
-	CheckClockBusy();
+	CheckClockBusy(false);
 	SAM4L_USBC->USBC_USBCON = USBC_USBCON_FRZCLK;
 	assert(!Sam4lCoreClockBusy());
 	SAM4L_PM->PM_PBBMASK = PM_PBBMASK_PDCA;
@@ -188,20 +260,20 @@ int main(void)
 	{
 		// An enabled channel may be waiting for a request with zero count.
 		*(volatile uint32_t *)&SAM4L_PDCA->PDCA_CHANNEL[i].PDCA_SR = PDCA_SR_TEN;
-		CheckClockBusy();
+		CheckClockBusy(false);
 		*(volatile uint32_t *)&SAM4L_PDCA->PDCA_CHANNEL[i].PDCA_SR = 0;
 	}
 	assert(!Sam4lCoreClockBusy());
 	SAM4L_PM->PM_PBBMASK = 0;
 	SAM4L_PM->PM_HSBMASK = PM_HSBMASK_PDCA;
-	CheckClockBusy();
+	CheckClockBusy(false);
 	SAM4L_PM->PM_HSBMASK = PM_HSBMASK_USBC;
-	CheckClockBusy();
+	CheckClockBusy(false);
 	SAM4L_PM->PM_HSBMASK = 0;
 	for (unsigned i = 1; i < 12U; i++)
 	{
 		SAM4L_SCIF->SCIF_GCCTRL[i].SCIF_GCCTRL = SCIF_GCCTRL_CEN;
-		CheckClockBusy();
+		CheckClockBusy(false);
 		SAM4L_SCIF->SCIF_GCCTRL[i].SCIF_GCCTRL = 0;
 	}
 	g_McuOsc.bUSBClk = true;
@@ -209,7 +281,7 @@ int main(void)
 	assert(!Sam4lCoreClockBusy());
 	SAM4L_PM->PM_PBBMASK = PM_PBBMASK_USBC;
 	SAM4L_USBC->USBC_USBCON = USBC_USBCON_USBE;
-	CheckClockBusy();
+	CheckClockBusy(false);
 	SAM4L_USBC->USBC_USBCON = 0;
 	SAM4L_PM->PM_PBBMASK = 0;
 	SAM4L_SCIF->SCIF_GCCTRL[7].SCIF_GCCTRL = 0;

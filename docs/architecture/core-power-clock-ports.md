@@ -23,7 +23,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime recovery and main-clock peripheral checks implemented; low-frequency ownership and hardware validation pending |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime recovery and main/low-frequency peripheral checks implemented; hardware validation pending |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; SAMD11 SW0/PA14 repeated resume passed | Validate SAMD21 wake, full SRAM continuity, sleep current and peripheral clock ownership |
 | LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
@@ -256,8 +256,23 @@ change, TC `SetFrequency` reads the current PBA frequency and recalculates its
 divider and trigger periods. It resets and starts the counter as before. The
 optional timer query does not pull timer drivers into a clock-only image.
 Core SysTick/scheduler timing remains the application's responsibility.
-Low-frequency clock-user checks are still pending. Repeating a request
-rechecks the hardware setup; a matching descriptor alone does not report success.
+Low-frequency selection refuses a running or synchronizing AST, enabled
+PICOUART, an LF-selected watchdog, enabled LCD/CATB clock gates, an active
+frequency measurement, or any generic clock using OSC32K, RC32K or the 1 kHz
+output. Both sampled brownout monitors are conservatively treated as busy;
+continuous brownout detection and a watchdog using RCSYS may remain enabled.
+The selector does not disable or reconfigure these users.
+
+The BPM/BSCIF, AST, WDT, PICOUART, SCIF and FREQM register clocks must be
+accessible for these checks. If one is gated, the request is refused rather
+than temporarily enabling clocks or assuming its peripheral is stopped.
+These gates are enabled by the reset configuration. Refused calls preserve
+all registers, pending flags, oscillator descriptors and the interrupt mask.
+After a permitted source change, AST SetFrequency refreshes its source rate
+before recalculating its prescaler and periods.
+
+Repeating a request rechecks the hardware setup; a matching descriptor alone
+does not report success.
 Run `python3 tests/sam4l/run_clock.py` for the Linux register-model checks.
 
 Wake pins use asynchronous high/low level detection through the backup mux.
@@ -298,6 +313,9 @@ The 18-variant compilation and all 40 example links passed again after the
 runtime failure-handling change. The existing clock register checks also passed
 for SAM4LC8C and SAM4LS8C at O0 and O2, including failed oscillator/PLL/DFLL
 startup, retry, flash readiness, interrupt-mask restoration and WDT preservation.
+The low-frequency ownership checks cover every generic-clock index and verify
+register preservation on refusal. The timer model checks AST and TC retiming.
+All seven TimerDemo selections also compile and link in Debug and Release.
 
 Reference: [Microchip SAM4L datasheet 42023H](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/DataSheets/Atmel-42023-ARM-Microcontroller-ATSAM4L-Low-Power-LCD_Datasheet.pdf),
 sections 6.1.3, 10.7.15, 11.5, 11.6.9..11, 12.7.18 and 21.6.

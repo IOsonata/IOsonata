@@ -247,6 +247,11 @@ int main() {
 		assert(g_Sam4lTimerData[dev].Trigger[0].Info.nsPeriod==
 			(UINT32_MAX*1000000000ULL+timer.Freq/2)/timer.Freq);
 	}
+	a.Disable(&a);
+	g_McuOsc.LowPwrOsc.Freq = 32000;
+	assert(a.SetFrequency(&a, 1000) == 1000);
+	assert(g_Sam4lTimerData[0].BaseFreq == 32000);
+	g_McuOsc.LowPwrOsc.Freq = 32768;
 	// A stuck synchronization flag must time out and make Enable return false.
 	ast.AST_SR.value|=AST_SR_BUSY;a.Reset(&a);assert(!a.Enable(&a));
 	timers[1].Disable(&timers[1]);

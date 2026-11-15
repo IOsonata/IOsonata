@@ -82,6 +82,7 @@
 #define RCFAST_GEN_CLK_SRC              5U
 #define RC1M_GEN_CLK_SRC                6U
 #define RC32K_GEN_CLK_SRC               13U
+#define OSC1K_GEN_CLK_SRC               15U
 #define PLL0_GEN_CLK_SRC                16U
 
 // OscDesc_t: { type, frequency Hz, accuracy ppm, load capacitance x10 pF }.
@@ -1194,6 +1195,55 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 	return result;
 }
 
+static bool Sam4lLowClockBusy(void)
+{
+	uint32_t required = PM_PBDMASK_BPM | PM_PBDMASK_BSCIF | PM_PBDMASK_AST |
+		PM_PBDMASK_WDT | PM_PBDMASK_PICOUART;
+
+	// Gating register access does not stop a backup-domain clock user.
+	// Refuse when its state cannot be inspected without changing clock gates.
+	if ((SAM4L_PM->PM_PBDMASK & required) != required ||
+		(SAM4L_PM->PM_PBCMASK & (PM_PBCMASK_FREQM | PM_PBCMASK_SCIF)) !=
+		(PM_PBCMASK_FREQM | PM_PBCMASK_SCIF))
+	{
+		return true;
+	}
+	if ((SAM4L_AST->AST_SR & (AST_SR_BUSY | AST_SR_CLKBUSY)) ||
+		(SAM4L_AST->AST_CR & AST_CR_EN) ||
+		(SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_EN) ||
+		(SAM4L_FREQM->FREQM_STATUS & (FREQM_STATUS_BUSY | FREQM_STATUS_RCLKBUSY)) ||
+		(SAM4L_PM->PM_PBAMASK & (PM_PBAMASK_LCDCA | PM_PBAMASK_CATB)))
+	{
+		return true;
+	}
+	uint32_t wdt = SAM4L_WDT->WDT_CTRL;
+	if ((wdt & (WDT_CTRL_EN | WDT_CTRL_CEN)) &&
+		(wdt & (WDT_CTRL_CSSEL | WDT_CTRL_CSSEL1)))
+	{
+		return true;
+	}
+	// Leave both brownout monitors untouched. The vendor headers do not
+	// expose BOD18SAMPLING, so conservatively refuse either sampled monitor.
+	uint32_t bod33 = BSCIF_BOD33CTRL_EN | BSCIF_BOD33CTRL_MODE;
+	uint32_t bod18 = BSCIF_BOD18CTRL_EN | BSCIF_BOD18CTRL_MODE;
+	if ((SAM4L_BSCIF->BSCIF_BOD33CTRL & bod33) == bod33 ||
+		(SAM4L_BSCIF->BSCIF_BOD18CTRL & bod18) == bod18)
+	{
+		return true;
+	}
+	for (unsigned i = 0; i < 12U; i++)
+	{
+		uint32_t clock = SAM4L_SCIF->SCIF_GCCTRL[i].SCIF_GCCTRL;
+		uint32_t source = (clock & SCIF_GCCTRL_OSCSEL_Msk) >> SCIF_GCCTRL_OSCSEL_Pos;
+		if ((clock & SCIF_GCCTRL_CEN) &&
+			(source == OSC32K_GEN_CLK_SRC || source == RC32K_GEN_CLK_SRC || source == OSC1K_GEN_CLK_SRC))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 // LF consumers (including AST and a WDT using this source) must be stopped.
 // Unlike the old descriptor-only setter, this configures the oscillator and
 // CK32S before reporting success. It does not reset the core/PLL/USB clocks.
@@ -1207,6 +1257,11 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	}
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
+	if (Sam4lLowClockBusy())
+	{
+		__set_PRIMASK(primask);
+		return false;
+	}
 	bool result = Sam4lLowClockInit(&requested.LowPwrOsc);
 	if (result)
 	{

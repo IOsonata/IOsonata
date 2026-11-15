@@ -191,6 +191,11 @@ static uint32_t Frequency(TimerDev_t *t, uint32_t request)
 	{
 		d->BaseFreq = SystemPeriphClockGet(0);
 	}
+	else
+	{
+		d->BaseFreq = (SAM4L_BPM->BPM_PMCON & BPM_PMCON_CK32S) ?
+			32768U : GetLowFreqOscFreq();
+	}
 	if (!Plan(*d, request, select, freq)) { EnableInterrupt(state); return 0; }
 	for (int n = 0; n < MaxTrigger(t); ++n) if (d->Trigger[n].Active &&
 		!Period(freq, d->Trigger[n].Info.nsPeriod, ticks[n], actual[n])) {
