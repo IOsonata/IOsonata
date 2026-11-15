@@ -57,10 +57,6 @@ SOFTWARE.
 
 #include "board.h"
 
-#if defined(POWER_DEMO_STANDBY_DIAG) && POWER_DEMO_STANDBY_DIAG && defined(STM32WBA65xx)
-#include "stm32.h"
-bool StWbaPowerPrepareStandby(void);
-#endif
 
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
@@ -320,43 +316,9 @@ int main()
 		SysLogPrintf(SysLogGet(), "Power off, the button cannot wake this MCU, use the reset pin\r\n");
 	}
 
-#if defined(POWER_DEMO_STANDBY_DIAG) && POWER_DEMO_STANDBY_DIAG && defined(STM32WBA65xx)
-	// Program the power registers, but do not execute WFI until the
-	// hardware settings have been reported over UART.
-	if (!StWbaPowerPrepareStandby())
-	{
-		SysLogPrintf(SysLogGet(), "Standby preparation FAIL\r\n");
-		while (1)
-		{
-			__WFE();
-		}
-	}
-
-	SysLogPrintf(SysLogGet(), "WKUP WUCR1=%08x WUCR2=%08x WUCR3=%08x WUSR=%08x\r\n",
-		(unsigned)PWR->WUCR1, (unsigned)PWR->WUCR2,
-		(unsigned)PWR->WUCR3, (unsigned)PWR->WUSR);
-	SysLogPrintf(SysLogGet(), "PWR IORETENRC=%08x CR1=%08x SR=%08x\r\n",
-		(unsigned)PWR->IORETENRC, (unsigned)PWR->CR1,
-		(unsigned)PWR->SR);
-	SysLogPrintf(SysLogGet(), "PC13 MODER=%08x PUPDR=%08x IDR=%08x SCR=%08x\r\n",
-		(unsigned)GPIOC->MODER, (unsigned)GPIOC->PUPDR,
-		(unsigned)GPIOC->IDR, (unsigned)SCB->SCR);
-	SysLogPrintf(SysLogGet(),
-		"Pending EXTI RPR1=%08x FPR1=%08x ICSR=%08x SYSTICK=%08x\r\n",
-		(unsigned)EXTI->RPR1, (unsigned)EXTI->FPR1,
-		(unsigned)SCB->ICSR, (unsigned)SysTick->CTRL);
-	// No direct NVIC ISPR reads here: identify the last executing step.
-	SysLogPrintf(SysLogGet(), "Wake register snapshot complete\r\n");
-#endif
-
-	// Let the UART finish queued output before Standby cuts its clock.
-#if defined(POWER_DEMO_STANDBY_DIAG) && POWER_DEMO_STANDBY_DIAG && defined(STM32WBA65xx)
-	msDelay(2000);
-	SysLogPrintf(SysLogGet(), "Calling SystemPowerOff in 1 second\r\n");
+	// Allow the final UART record to finish before stopping the transport.
+#if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
 	msDelay(1000);
-
-	// USART1 is only the diagnostic transport. Stop its DMA and clock
-	// requests before WBA Standby; they must not hold the power domain on.
 	s_Uart.Disable();
 #else
 	msDelay(100);
@@ -364,14 +326,11 @@ int main()
 
 	SystemPowerOff();
 
-#if defined(POWER_DEMO_STANDBY_DIAG) && POWER_DEMO_STANDBY_DIAG
-#if defined(STM32WBA65xx)
-	// Restore the UART only if WFI returned rather than resetting the MCU.
+#if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
+	// If the power function returns, the system did not enter Standby.
 	s_Uart.Enable();
 	msDelay(50);
-#endif
-	SysLogPrintf(SysLogGet(),
-		"WFI returned without Standby reset\r\n");
+	SysLogPrintf(SysLogGet(), "SystemPowerOff returned\r\n");
 	while (1)
 	{
 		__WFE();
