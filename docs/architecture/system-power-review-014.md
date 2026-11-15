@@ -35,7 +35,7 @@ Reset reason is an optional diagnostic, not the objective of saving power.
 | STM32WBA65I | Standby with optional full-bank SRAM retention | PC13 WKUP2, SRAM2 retention and SRAM1 non-retention passed; disabling USART1/DMA before entry was necessary | Final cleaned-up firmware: two successive hardware wake cycles PASS |
 | SAM4E | Backup (supply off to SRAM) | Correct reset-exit mode; RTC/RTT wake paths and application peripheral shutdown still need hardware evidence | Host tests, hardware not confirmed |
 | SAM4L | Backup (SRAM off) | Correct reset-exit mode; alternate Retention sleep is not yet exposed by generic API | Host tests, hardware coverage incomplete |
-| SAM D11/D21 (PR #140) | **Not implemented**; only reset-cause getter added | Missing actual power-saving feature. PM RCAUSE mapping is valid but is not power management; duplicate ResetReasonDemo should not be the primary example | Reset-model 128/128 for each part, Cortex-M0+ source compilation PASS; power wake not tested |
+| SAM D11/D21 (PR #141 draft) | SystemSleep entry/resume, asynchronous EIC wake and PM RCAUSE reset diagnostics implemented on review branch | Standby source compiled on both targets; full link and wake validation pending; reset-only demo intentionally omitted | Reset-model 128/128 each, Arm source compilation PASS; power wake not tested |
 | LPC/RA/RE/ESP32 families | No generic port in main for most targets | Not reviewed as implemented generic power backends; should be scoped to available hardware | Pending |
 
 ## Specific implementation and test risks
@@ -117,6 +117,19 @@ Validate clock availability, interrupt delivery, actual Standby entry,
 wake latency, RAM continuity and repeated cycles before claiming PASS.
 Microchip SAM D21 datasheet DS40001882G §21.6.3 specifies asynchronous
 detection for unfiltered level sensing without `GCLK_EIC`.
+
+## Branch consolidation
+
+The useful work from `port_samd_power_014` (former PR #140) has been
+incorporated into this review branch: production `SystemResetReason()`,
+the default `McuOsc_t.DcDc` initializer fix, reset model test runner,
+the Arm GNU compile harness and the Eclipse source links for D11/D21.
+Both libraries retain the Standby source and the reset-reason source.
+
+The separate `ResetReasonDemo` projects and
+`exemples/misc/reset_reason_demo.cpp` were deliberately not copied.
+The single shared `PowerOffDemo` serves as the low-power validation
+application. This branch has not been hardware-validated or merged.
 
 ## Suggested correction order
 
