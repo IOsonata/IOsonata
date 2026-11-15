@@ -400,16 +400,15 @@ int main()
 		"Pending EXTI RPR1=%08x FPR1=%08x ICSR=%08x SYSTICK=%08x\r\n",
 		(unsigned)EXTI->RPR1, (unsigned)EXTI->FPR1,
 		(unsigned)SCB->ICSR, (unsigned)SysTick->CTRL);
-	// Compact snapshot avoids a final multi-record log while UART is busy.
-	SysLogPrintf(SysLogGet(), "NVIC pending: %08x %08x %08x\r\n",
-		(unsigned)NVIC->ISPR[0], (unsigned)NVIC->ISPR[1],
-		(unsigned)NVIC->ISPR[2]);
-	SysLogPrintf(SysLogGet(), "Entering WFI in 2 seconds\r\n");
+	// No direct NVIC ISPR reads here: identify the last executing step.
+	SysLogPrintf(SysLogGet(), "Wake register snapshot complete\r\n");
 #endif
 
 	// Let the UART finish queued output before Standby cuts its clock.
 #if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG && defined(STM32WBA65xx)
 	msDelay(2000);
+	SysLogPrintf(SysLogGet(), "Calling SystemPowerOff in 1 second\r\n");
+	msDelay(1000);
 #else
 	msDelay(100);
 #endif
