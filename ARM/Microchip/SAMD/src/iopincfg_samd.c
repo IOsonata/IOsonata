@@ -126,6 +126,10 @@ static uint32_t s_SamdEicEvent;
 
 // EIC lines owned by Standby wakeup. Ordinary pin IRQ/event lines are separate.
 static uint32_t s_SamdStandbyWakeLines;
+#if defined(__SAMD11D14AM__)
+// The SAMD11 Xplained Pro SW0 is PA14, the dedicated NMI input.
+static bool s_bSamdStandbyNmi;
+#endif
 
 static bool SamdPinValid(int PortNo, int PinNo)
 {
@@ -497,6 +501,13 @@ void SamdStandbyWakeArm(void)
 {
 	uint32_t mask;
 
+#if defined(__SAMD11D14AM__)
+	if (s_bSamdStandbyNmi)
+	{
+		// Clear the previous SW0 edge before another Standby cycle.
+		EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk;
+	}
+#endif
 	mask = s_SamdStandbyWakeLines;
 	if (mask != 0U)
 	{
@@ -504,6 +515,96 @@ void SamdStandbyWakeArm(void)
 		EIC_REGS->EIC_INTENSET = mask;
 	}
 }
+
+#if defined(__SAMD11D14AM__)
+// Dedicated NMI wake for the Xplained Pro SW0, PA14 (active low).
+// Unlike the level-triggered EXTINT wake, NMI uses falling-edge detection,
+// so holding the button does not continuously retrigger the NMI handler.
+static bool SamdStandbyNmiConfig(int PortNo, int PinNo, int Sense)
+{
+	uint32_t state;
+	uint8_t ctrl;
+	bool result;
+	port_group_registers_t *pPort;
+
+	if (PortNo != IOPORTA || PinNo != 14)
+	{
+		return false;
+	}
+	if (Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_LOW_TRANSITION &&
+		Sense != IOPINSENSE_HIGH_TRANSITION)
+	{
+		return false;
+	}
+	if (Sense != IOPINSENSE_DISABLE && s_bSamdStandbyNmi)
+	{
+		return true;
+	}
+
+	state = DisableInterrupt();
+	// Standby uses a slow EIC clock for edge sampling. Do not reassign a
+	// shared EIC clock if other pin interrupts or events own it.
+	if (Sense != IOPINSENSE_DISABLE &&
+		(EIC_REGS->EIC_INTENSET != 0U || s_SamdEicEvent != 0U ||
+		s_SamdStandbyWakeLines != 0U))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	PM_REGS->PM_APBAMASK |= PM_APBAMASK_EIC_Msk;
+	if (Sense != IOPINSENSE_DISABLE &&
+		!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_EIC_Val, SAMD_GCLK_LF))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	EIC_REGS->EIC_CTRL = 0U;
+	result = SamdEicSync();
+	if (result)
+	{
+		ctrl = EIC_NMICTRL_NMISENSE_NONE;
+		if (Sense == IOPINSENSE_LOW_TRANSITION)
+		{
+			ctrl = EIC_NMICTRL_NMISENSE_FALL;
+		}
+		else if (Sense == IOPINSENSE_HIGH_TRANSITION)
+		{
+			ctrl = EIC_NMICTRL_NMISENSE_RISE;
+		}
+		EIC_REGS->EIC_NMICTRL = ctrl;
+		EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk;
+		EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
+		result = SamdEicSync();
+	}
+
+	if (result)
+	{
+		pPort = &PORT_REGS->GROUP[IOPORTA];
+		if (Sense != IOPINSENSE_DISABLE)
+		{
+			SamdPinMux(pPort, PinNo, SAMD_PMUX_EIC);
+			pPort->PORT_PINCFG[PinNo] |= PORT_PINCFG_PMUXEN_Msk |
+				PORT_PINCFG_INEN_Msk;
+			s_bSamdStandbyNmi = true;
+		}
+		else
+		{
+			pPort->PORT_PINCFG[PinNo] &= (uint8_t)~PORT_PINCFG_PMUXEN_Msk;
+			s_bSamdStandbyNmi = false;
+		}
+	}
+	EnableInterrupt(state);
+	return result;
+}
+
+// NMI is an ARM core exception, not an EIC NVIC interrupt.
+void NMI_Handler(void)
+{
+	EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk;
+}
+#endif
 
 // The EIC owns both the pin function and its wakeup bits. Level detection
 // without filtering is asynchronous on SAM D11/D21; it does not depend on
@@ -519,6 +620,12 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	bool enabled;
 	bool result;
 
+#if defined(__SAMD11D14AM__)
+	if (PortNo == IOPORTA && PinNo == 14)
+	{
+		return SamdStandbyNmiConfig(PortNo, PinNo, Sense);
+	}
+#endif
 	line = SamdExtIntFind(PortNo, PinNo);
 	if (line < 0 || line >= EIC_EXTINT_NUM)
 	{
