@@ -23,7 +23,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime clock failure recovery implemented; active clock-user audit and hardware validation pending |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime recovery and transport/DMA clock checks implemented; timer/other clock users and hardware validation pending |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; SAMD11 SW0/PA14 repeated resume passed | Validate SAMD21 wake, full SRAM continuity, sleep current and peripheral clock ownership |
 | LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
@@ -234,8 +234,18 @@ and voltage scale. It chooses dividers within the existing voltage scale
 instead of requesting a new power transition. Startup retains its checked
 power transition in SRAM and stops if its required clock setup fails.
 The caller must still stop clock consumers before changing the main clock
-and reconfigure their rates afterward. Active peripheral clock-user checks
-remain to be completed. Repeating a request rechecks the hardware setup; a
+and reconfigure their rates afterward. Runtime changes are refused while a
+UART, SPI or I2C peripheral clock is enabled, USB is enabled (including suspended USB), or any PDCA channel is
+enabled. USB or PDCA with its HSB clock enabled but register clock gated is
+also refused. Application generic clocks must be disabled; GCLK0 remains the
+system DFLL reference, and GCLK7 is treated as system-owned only when
+`bUSBClk` is set and USB is disabled. Refusal leaves hardware registers and
+oscillator descriptors untouched and restores the incoming interrupt mask.
+
+These checks cover transports, DMA and generic clocks. Timer, analog and
+other peripheral users still need a separate review. In particular, TC status
+registers must not be read merely to check activity because the read clears
+pending events. Repeating a request rechecks the hardware setup; a
 matching descriptor alone does not report success.
 Run `python3 tests/sam4l/run_clock.py` for the Linux register-model checks.
 

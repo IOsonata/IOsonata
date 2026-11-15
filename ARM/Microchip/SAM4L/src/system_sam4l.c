@@ -1095,6 +1095,55 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	return current != 0U && current == Freq ? current : 0U;
 }
 
+// Check the existing transport clock gates without reading interrupt status.
+// A disabled transport releases its PBA clock through its driver.
+static bool Sam4lCoreClockBusy(void)
+{
+	uint32_t transports = PM_PBAMASK_SPI | PM_PBAMASK_TWIM0 | PM_PBAMASK_TWIM1 |
+		PM_PBAMASK_TWIM2 | PM_PBAMASK_TWIM3 | PM_PBAMASK_TWIS0 | PM_PBAMASK_TWIS1 |
+		PM_PBAMASK_USART0 | PM_PBAMASK_USART1 | PM_PBAMASK_USART2 | PM_PBAMASK_USART3;
+
+	if (SAM4L_PM->PM_PBAMASK & transports)
+	{
+		return true;
+	}
+	if ((SAM4L_PM->PM_PBBMASK & PM_PBBMASK_USBC) &&
+		(SAM4L_USBC->USBC_USBCON & USBC_USBCON_USBE))
+	{
+		// Suspended/frozen USB still owns its clock and resume state.
+		return true;
+	}
+	if (((SAM4L_PM->PM_HSBMASK & PM_HSBMASK_PDCA) &&
+		!(SAM4L_PM->PM_PBBMASK & PM_PBBMASK_PDCA)) ||
+		((SAM4L_PM->PM_HSBMASK & PM_HSBMASK_USBC) &&
+		!(SAM4L_PM->PM_PBBMASK & PM_PBBMASK_USBC)))
+	{
+		// Cannot inspect an active bus master with its register clock gated.
+		return true;
+	}
+	if (SAM4L_PM->PM_PBBMASK & PM_PBBMASK_PDCA)
+	{
+		for (unsigned i = 0; i < 16U; i++)
+		{
+			if (SAM4L_PDCA->PDCA_CHANNEL[i].PDCA_SR & PDCA_SR_TEN)
+			{
+				return true;
+			}
+		}
+	}
+	for (unsigned i = 1; i < 12U; i++)
+	{
+		uint32_t clock = SAM4L_SCIF->SCIF_GCCTRL[i].SCIF_GCCTRL;
+		// GCLK0 is the system DFLL reference. GCLK7 is owned here only
+		// when the application requested the system USB clock setup.
+		if ((clock & SCIF_GCCTRL_CEN) && !(i == 7U && g_McuOsc.bUSBClk))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 // Explicit full clock-tree reinitialization, preserving the existing API.
 // The caller MUST stop all clock consumers first (USB, DMA, timers and other
 // peripherals) and retime/reinitialize them afterwards. IRQ masking alone
@@ -1110,6 +1159,11 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 	}
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
+	if (Sam4lCoreClockBusy())
+	{
+		__set_PRIMASK(primask);
+		return false;
+	}
 	bool result = Sam4lClockInit(&requested, false);
 	if (!result)
 	{
