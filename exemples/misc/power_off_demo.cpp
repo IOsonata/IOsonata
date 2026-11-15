@@ -244,13 +244,13 @@ int main()
 		return 1;
 	}
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
-	SysLogPrintf(SysLogGet(), "PowerOffDemo: interrupt-resumable Standby\\r\\n");
+	SysLogPrintf(SysLogGet(), "PowerOffDemo: interrupt-resumable Standby\r\n");
 
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
 		IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
 	if (!SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
 	{
-		SysLogPrintf(SysLogGet(), "Standby wake pin not available\\r\\n");
+		SysLogPrintf(SysLogGet(), "Standby wake pin not available\r\n");
 		return 1;
 	}
 
@@ -261,13 +261,13 @@ int main()
 		{
 			msDelay(10);
 		}
-		SysLogPrintf(SysLogGet(), "Entering Standby\\r\\n");
+		SysLogPrintf(SysLogGet(), "Entering Standby\r\n");
 		msDelay(250);
 		s_Uart.Disable();
 		SystemSleep();
 		s_Uart.Enable();
 		wakeCount++;
-		SysLogPrintf(SysLogGet(), "Resumed from Standby, count %u\\r\\n",
+		SysLogPrintf(SysLogGet(), "Resumed from Standby, count %u\r\n",
 			(unsigned)wakeCount);
 	}
 #else
