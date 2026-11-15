@@ -24,11 +24,25 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
 | SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Review runtime selection and oscillator initialization |
-| SAMD | Missing | Audit existing selectors and low-power clocks |
+| SAM D11/D21 | PM reset reasons and interrupt-resumable Standby with asynchronous EIC wake on review branch; hardware wake not validated | Validate Standby, repeated wake, SRAM continuity and peripheral clock ownership |
 | LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
+
+## SAM D11/D21 low-power work (0.14, unmerged)
+
+The consolidated `review_system_power_014` branch contains
+`SystemSleep()` (resume execution after Standby), EIC asynchronous wake
+configuration, and the PM RCAUSE-based `SystemResetReason()` convenience
+function. The shared `PowerOffDemo` selects the resumable path for SAMD
+without changing existing reset-on-wake power-off behavior on other MCUs.
+No separate `ResetReasonDemo` is retained in the consolidated branch.
+
+Maintainer-reported reset-cause tests passed 128/128 combinations for
+each MCU, and Arm GNU source compilation passed for D11/D21 including
+the Standby source. Full SAMD11 Release linking after recent size changes
+and hardware wake/current measurements remain pending.
 
 ## STM32WBA power port (0.14)
 
