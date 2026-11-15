@@ -42,7 +42,10 @@ The remaining power functions are not implemented yet. In particular,
 SAMD Standby resumes execution on an interrupt and cannot be substituted
 for the IOsonata `SystemPowerOff()` operation, which requires a reset on
 wake. Do not add a dummy implementation or claim Standby is a power-off.
-Target compilation and reset-cause hardware validation are pending.
+Run `python3 tests/samd/run_power.py` to compile the production reset-reason
+source against target-derived PM RCAUSE bit positions for D11 and D21 and
+exercise all 128 combinations (including unused bits). This is a host
+register test, not an Arm build or hardware validation. Both remain pending.
 
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
 configuration asking for it fails init), USB host mode, PWM (the TCC are
