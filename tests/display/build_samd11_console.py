@@ -104,6 +104,9 @@ def main():
             absent = ("SamdSpimInt", "SamdSpis", "SamdSpimDma", "SamdDmacOpen",
                       "SamdDmacStart", "s_SamdSpiTxBuf")
             assert all(symbol not in symbols for symbol in absent), "Unused SPI mode linked"
+        if args.dma and not args.no_lto and args.output == "display":
+            absent = ("SamdSpimPolling", "SamdSpimStart", "SamdSpimIrq", "SamdSpis")
+            assert all(symbol not in symbols for symbol in absent), "CPU SPI mode linked with DMA"
         if args.syslog_only:
             symbols = subprocess.check_output([PREFIX + "nm", str(elf)], text=True)
             assert "vsnprintf" not in symbols, "Status-only log linked printf"

@@ -1,8 +1,8 @@
 # SAM D11 OLED1 display console
 
 Both selections fit the SAMD11D14AM's 16 KB flash with the LTO settings below.
-The maintainer has validated polling display output on D11 + OLED1.
-Interrupt and DMA display output need retesting after the fix below. This project is for
+The maintainer has validated polling, interrupt-only and DMA-only display output
+on D11 + OLED1. The handler optimization below still needs hardware retesting. This project is for
 SAM D11 Xplained Pro with OLED1 Xplained Pro connected to EXT1.
 
 The existing `exemples/display/console_display_demo.cpp` selects the system
@@ -83,8 +83,8 @@ byte count means text was passed to that API, not verified on the panel.
   with runtime mode selection against the archive, with and without LTO.
 - Full managed D11 library: all 238 sources compile in Debug and Release;
   both console selections link against each complete archive at the sizes below.
-- Maintainer reports the polling OLED console works on D11 + OLED1.
-  Interrupt and DMA were rejected at display initialization before the fix below.
+- Maintainer reports polling, interrupt-only and DMA-only OLED output works
+  on D11 + OLED1. Combined DMA/interrupt output has not fit flash yet.
 
 Hardware references:
 - [OLED1 extension header](https://onlinedocs.microchip.com/oxy/GUID-26DC66D4-2EF7-4C54-8D2D-2A29BED57CAB-en-US-2/GUID-4AEF0FF0-9E97-4FCB-8565-668D17B30006.html)
@@ -193,9 +193,9 @@ then clean and rebuild the library and application:
 | Mode | DISPLAY_SPI_DMA_ENABLE | DISPLAY_SPI_INT_ENABLE | Flash bytes |
 | --- | --- | --- | ---: |
 | Polling (default) | false | false | 15000 |
-| Interrupt only | false | true | 15640 |
-| DMA, CPU waits | true | false | 16020 |
-| DMA with interrupts | true | true | 16700 (316 over D11 flash) |
+| Interrupt only | false | true | 15620 |
+| DMA, CPU waits | true | false | 16028 |
+| DMA with interrupts | true | true | 16544 (160 over D11 flash) |
 
 These are GCC 15.2.1, `-Os` + LTO results, identical in Debug and Release,
 using `tests/display/build_samd11_console.py`. Pass `--interrupt`, `--dma`,
@@ -204,5 +204,13 @@ D11 flash; do not bypass the linker limit.
 
 `tests/display/run_ssd1315.py` now covers all four interface flag combinations,
 delayed and immediate completion, CS/D/C ordering, timeout abort and recovery,
-as well as the existing rendering checks. Host checks pass; hardware results
-for the two individual enabled modes are still pending.
+as well as the existing rendering checks. The maintainer confirmed both individual
+enabled modes before the handler optimization.
+
+The DMA operation table selects a separate SERCOM error handler and DMA start
+function. With a constant DMA selection and LTO, the CPU polling transfer loop,
+byte interrupt starter, byte interrupt handler and slave transfer code are omitted.
+GPIO control of CS, D/C and reset remains required. Runtime mode selection still
+retains the selectable implementations. The combined build saves 156 flash bytes
+from the previous 16700-byte result. Host SPI tests cover ignored RXC in DMA mode,
+partial error completion and suppression of duplicate late completion.

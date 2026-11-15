@@ -32,6 +32,7 @@ static void *s_DmaCtx[2];
 static unsigned s_Opens, s_Closes, s_Stops, s_Starts, s_Events, s_Arms;
 static bool s_IrqEnabled, s_Clock, s_FailTx;
 static int s_EventLen;
+static uint32_t s_DmaLeft[2];
 static uint8_t s_SlaveTx[] = {0x31, 0x32};
 static uint8_t s_SlaveRx[2];
 static const IOPinCfg_t s_MasterPins[] = {
@@ -170,7 +171,7 @@ static uint32_t SamdDmacStop(int Chan)
 {
 	assert(Chan >= 0 && s_Channels[Chan]);
 	s_Stops++;
-	return 0;
+	return s_DmaLeft[Chan];
 }
 static bool SamdDmacBusy(int)
 {
@@ -252,6 +253,29 @@ int main()
 			assert(s_Events == events);
 			spi.DevIntrf.StopTx(&spi.DevIntrf);
 		}
+		if (cfg.bIntEn && cfg.bDmaEn)
+		{
+			// DMA must ignore RXC; SERCOM handles only transfer errors.
+			reg.SERCOM_INTFLAG = 0;
+			assert(spi.DevIntrf.StartTx(&spi.DevIntrf, 0));
+			assert(spi.DevIntrf.TxData(&spi.DevIntrf, data, sizeof(data)) == -1);
+			events = s_Events;
+			reg.SERCOM_DATA = 0xa5;
+			reg.SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_RXC_Msk;
+			s_Handler(0, &spi.DevIntrf);
+			assert(s_Events == events && reg.SERCOM_DATA == 0xa5);
+			s_DmaLeft[0] = 1;
+			reg.SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_ERROR_Msk;
+			s_Handler(0, &spi.DevIntrf);
+			assert(s_Events == events + 1 && s_EventLen == 2);
+			assert(spi.DevIntrf.bTxReady);
+			// A late channel completion cannot report the same transfer twice.
+			s_DmaHandler[0](0, DMAC_CHINTFLAG_TCMPL_Msk, s_DmaCtx[0]);
+			s_Handler(0, &spi.DevIntrf);
+			assert(s_Events == events + 1);
+			s_DmaLeft[0] = 0;
+		}
+
 		// A read's command phase remains synchronous even with interrupts.
 		spi.DevIntrf.bNoStop = true;
 		reg.SERCOM_INTFLAG = cfg.bDmaEn ? 0 :
@@ -306,6 +330,6 @@ int main()
 	assert(s_Arms == 3);
 	spi.DevIntrf.PowerOff(&spi.DevIntrf);
 	assert(s_Opens == s_Closes);
-	assert(s_Starts == 8);
+	assert(s_Starts == 10);
 	puts("SAMD SPI master modes, completion, lifecycle and slave arming: PASS");
 }

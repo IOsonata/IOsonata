@@ -117,7 +117,7 @@ typedef struct SamdSpiDev SamdSpiDev_t;
 typedef struct {
 	int (*Sync)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
 	int (*Async)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
-	void (*DmaStart)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int, bool);
+	void (*Start)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int, bool);
 	int (*DmaEnd)(SamdSpiDev_t *);
 	void (*DmaRelease)(SamdSpiDev_t *);
 	void (*SlaveArm)(SamdSpiDev_t *);
@@ -168,19 +168,21 @@ static int SamdSpimDmaEnd(SamdSpiDev_t *);
 static void SamdSpiDmaGive(SamdSpiDev_t *);
 static void SamdSpisArm(SamdSpiDev_t *);
 static void SamdSpimIrq(int, DevIntrf_t * const);
+static void SamdSpimDmaIrq(int, DevIntrf_t * const);
+static void SamdSpimStart(SamdSpiDev_t *, const uint8_t *, uint8_t *, int, bool);
 static void SamdSpisIrq(int, DevIntrf_t * const);
 
 static const SamdSpiOps_t s_SamdSpiPolling = {
 	SamdSpimPolling, NULL, NULL, NULL, NULL, NULL, NULL
 };
 static const SamdSpiOps_t s_SamdSpiInterrupt = {
-	SamdSpimPolling, SamdSpimInt, NULL, NULL, NULL, NULL, SamdSpimIrq
+	SamdSpimPolling, SamdSpimInt, SamdSpimStart, NULL, NULL, NULL, SamdSpimIrq
 };
 static const SamdSpiOps_t s_SamdSpiDmaPolling = {
 	SamdSpimDmaWait, NULL, NULL, SamdSpimDmaEnd, SamdSpiDmaGive, NULL, NULL
 };
 static const SamdSpiOps_t s_SamdSpiDmaInterrupt = {
-	SamdSpimDmaWait, SamdSpimInt, SamdSpimDmaStart, SamdSpimDmaEnd, SamdSpiDmaGive, NULL, SamdSpimIrq
+	SamdSpimDmaWait, SamdSpimInt, SamdSpimDmaStart, SamdSpimDmaEnd, SamdSpiDmaGive, NULL, SamdSpimDmaIrq
 };
 static const SamdSpiOps_t s_SamdSpiSlave = {
 	NULL, NULL, NULL, NULL, NULL, SamdSpisArm, SamdSpisIrq
@@ -542,6 +544,7 @@ static void SamdSpimDmaStart(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pR
 	reg->SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_ERROR_Msk;
 	if (bErrInt)
 	{
+		pDev->bDmaRun = true;
 		reg->SERCOM_INTENSET = SERCOM_SPIM_INTENSET_ERROR_Msk;
 	}
 
@@ -646,11 +649,11 @@ static void SamdSpimComplete(SamdSpiDev_t *pDev)
 	}
 }
 
-// Byte by byte on the receive interrupt
+// Start an asynchronous transfer, or complete synchronously if buffering is unavailable.
 static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int Length)
 {
-	sercom_spim_registers_t *reg = pDev->pReg;
 	DevIntrf_t *intrf = &pDev->pSpiDev->DevIntrf;
+	bool sync = pDev->bDma && Length > SAMD_DMAC_COUNT_MAX;
 
 	if (pTx != NULL)
 	{
@@ -665,24 +668,18 @@ static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int
 
 		intrf->bTxReady = false;
 
-		if (!buff)
+		sync = !buff;
+		if (buff)
 		{
-			pDev->Count = pDev->pOps->Sync(pDev, pTx, NULL, Length);
-			pDev->Op = SAMD_SPI_OP_TX;
-			SamdSpimComplete(pDev);
-
-			return -1;
+			// The caller data does not outlive the call
+			memcpy(s_SamdSpiTxBuf, pTx, (size_t)Length);
+			pTx = s_SamdSpiTxBuf;
 		}
-
-		// The caller data does not outlive the call
-		memcpy(s_SamdSpiTxBuf, pTx, (size_t)Length);
-		pTx = s_SamdSpiTxBuf;
 	}
-	else if (pDev->bDma && Length > SAMD_DMAC_COUNT_MAX)
+	if (sync)
 	{
-		// Longer than a block
-		pDev->Count = pDev->pOps->Sync(pDev, NULL, pRx, Length);
-		pDev->Op = SAMD_SPI_OP_RX;
+		pDev->Count = pDev->pOps->Sync(pDev, pTx, pRx, Length);
+		pDev->Op = pTx != NULL ? SAMD_SPI_OP_TX : SAMD_SPI_OP_RX;
 		SamdSpimComplete(pDev);
 
 		return -1;
@@ -694,25 +691,51 @@ static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int
 	pDev->Count = 0;
 	pDev->Op = pTx != NULL ? SAMD_SPI_OP_TX : SAMD_SPI_OP_RX;
 
-	if (pDev->bDma)
-	{
-		// The DMAC interrupt of the receive channel ends it
-		pDev->bDmaRun = true;
-		pDev->pOps->DmaStart(pDev, pTx, pRx, Length, true);
+	pDev->pOps->Start(pDev, pTx, pRx, Length, true);
 
-		return -1;
-	}
+	return -1;
+}
 
-	// Stale received bytes
+// Byte interrupts only: DMA arms channels instead of feeding DATA here.
+static void SamdSpimStart(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int Length, bool bErrInt)
+{
+	sercom_spim_registers_t *reg = pDev->pReg;
+
+	(void)pRx;
+	(void)Length;
+	(void)bErrInt;
 	while ((reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_RXC_Msk) != 0U)
 	{
 		(void)reg->SERCOM_DATA;
 	}
-
 	reg->SERCOM_DATA = pTx != NULL ? pTx[0] : pDev->pSpiDev->Cfg.DummyByte;
 	reg->SERCOM_INTENSET = SAMD_SPIM_INTS;
+}
 
-	return -1;
+// DMA uses the SERCOM interrupt only for overflow, never for RX bytes.
+static void SamdSpimDmaIrq(int DevNo, DevIntrf_t * const pIntrf)
+{
+	SamdSpiDev_t *dev = (SamdSpiDev_t *)pIntrf->pDevData;
+	sercom_spim_registers_t *reg = dev->pReg;
+	uint32_t state = DisableInterrupt();
+	SAMD_SPI_OP op = SAMD_SPI_OP_NONE;
+	int count = 0;
+
+	(void)DevNo;
+	// Read and take the error with interrupts masked: DMA completion may
+	// otherwise finish this transfer and start another between them.
+	if ((reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_ERROR_Msk) != 0U)
+	{
+		reg->SERCOM_STATUS = SERCOM_SPIM_STATUS_BUFOVF_Msk;
+		reg->SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_ERROR_Msk;
+		op = SamdSpimTake(dev);
+		count = dev->Count;
+	}
+	EnableInterrupt(state);
+	if (op != SAMD_SPI_OP_NONE)
+	{
+		SamdSpimFinish(dev, op, count);
+	}
 }
 
 static void SamdSpimIrq(int DevNo, DevIntrf_t * const pIntrf)
@@ -731,31 +754,11 @@ static void SamdSpimIrq(int DevNo, DevIntrf_t * const pIntrf)
 
 	if ((reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_ERROR_Msk) != 0U)
 	{
-		// The flag read again and the transfer taken with interrupts
-		// disabled: a DMAC interrupt in between could end this transfer and
-		// start the next one
-		uint32_t state = DisableInterrupt();
-		SAMD_SPI_OP op = SAMD_SPI_OP_NONE;
-		int count = 0;
-
-		if ((reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_ERROR_Msk) != 0U)
-		{
-			reg->SERCOM_STATUS = SERCOM_SPIM_STATUS_BUFOVF_Msk;
-			reg->SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_ERROR_Msk;
-			op = SamdSpimTake(pDev);
-			count = pDev->Count;
-		}
-		EnableInterrupt(state);
-
-		if (op != SAMD_SPI_OP_NONE)
-		{
-			SamdSpimFinish(pDev, op, count);
-		}
+		SamdSpimDmaIrq(DevNo, pIntrf);
 
 		return;
 	}
-
-	if (pDev->bDmaRun || (reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_RXC_Msk) == 0U)
+	if ((reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_RXC_Msk) == 0U)
 	{
 		return;
 	}
