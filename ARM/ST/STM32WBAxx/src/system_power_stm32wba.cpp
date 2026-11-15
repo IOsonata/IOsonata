@@ -343,10 +343,11 @@ void SystemPowerOff(void)
 
 	s_bStandbyPrepared = false;
 	__DSB();
-	while (1)
-	{
-		__WFI();
-	}
+	__WFI();
+
+	// If WFI returns without reset, Standby was not entered. Report this to
+	// the application instead of silently looping on an interrupt source.
+	SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
 }
 
 static void StWbaBackupAccess(void)
