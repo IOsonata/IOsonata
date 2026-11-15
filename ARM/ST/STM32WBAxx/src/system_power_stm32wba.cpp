@@ -301,7 +301,14 @@ void SystemPowerOff(void)
 	// clearing it afterward would discard that event.
 	PWR->WUSCR = s_WakeConfigured;
 	PWR->WUCR1 |= en;
-	(void)PWR->WUCR1;
+	// Do not enter Standby if the wakeup selection was not programmed.
+	if ((PWR->WUCR1 & s_WakeConfigured) != en ||
+		(PWR->WUCR2 & s_WakeConfigured) !=
+		(s_WakeLow & s_WakeConfigured) ||
+		(PWR->WUCR3 & selectMask) != (s_WakeSelect & selectMask))
+	{
+		return;
+	}
 
 	ram = (s_bRam1Retain ? ST_WBA_SRAM1_RET : 0U) |
 		(s_bRam2Retain ? ST_WBA_SRAM2_RET : 0U);
