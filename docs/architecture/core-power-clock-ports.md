@@ -30,46 +30,33 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
-## STM32WBA power port (0.14 work in progress)
+## STM32WBA power port (0.14)
 
-STM32WBA requires a family-specific power implementation rather than using
-the existing F0/F4/L1/L4/G4/H7 power register layout. WBA6 uses separate
-PWR wakeup control registers (WUCR1, WUCR2, WUCR3), and supports optional
-SRAM1/SRAM2 Standby retention. The standby mode is entered with PWR CR1
-LPMS and exits through reset. Radio Link Layer users must stop or enter the
-required deep-sleep mode before Standby.
+STM32WBA requires a family-specific power implementation. The WBA65 I
+variant uses the `system_power_stm32wba.cpp` source linked into its Eclipse
+managed MCU library. It implements reset and Standby wake reasons, GPIO
+wakeup routing and polarity through PWR WUCR1/2/3, the TAMP backup registers,
+and whole-bank SRAM1/SRAM2 Standby retention via PWR CR1 R1RSB1/R2RSB1.
+The DK1 hardware reported 32 backup registers; a requested SRAM subrange
+selects retention for its entire bank.
 
-Port status: WBA2 MCU selection is recognized by stm32.h. The WBA65
-working branch now has a separate system_power_stm32wba.cpp linked to the
-managed MCU library. It implements Standby entry through WFI, GPIO wakeup
-line routing/polarity on WUCR1/2/3, reset/wakeup reason, and 16 TAMP
-backup registers with write readback. It supports whole-bank SRAM1/SRAM2 Standby retention for the WBA65 I
-variant (SRAM1 0x20000000–0x2006FFFF, SRAM2 0x20070000–0x2007FFFF),
-using PWR CR1 R1RSB/R2RSB. A range within a bank retains the entire bank.
-The G variant has less SRAM1 and needs separate range validation. Existing
-linker scripts allocate RAM contiguously, with no reserved SRAM test area. No changes were
-made to the existing radio or clock drivers.
+The dedicated PowerOffDemo reserves the SRAM test regions in its linker
+script. Hardware validation on STM32WBA65I-DK1 (MB2143),
+November 14, 2026: two consecutive PC13/WKUP2 Standby wake resets
+(`SYSTEM_RESET_WAKE_PIN`, 0x100) passed. Backup-register startup counts
+advanced from 1 through 3. Each wake preserved all 8192/8192 words in
+the retained 32 KB SRAM2 test region and yielded 0/8192 unchanged words
+in the deliberately non-retained SRAM1 test region.
 
-The new WBA65 implementation is not yet compiled or exercised on hardware.
-In applications using Bluetooth, the radio stack must release its own power
-and timing resources before entering Standby. WBA2/WBA5 were not ported by
-this WBA65-specific source. Follow-up tests should cover reset causes, standby wake, both wakeup
-polarities, retained and dropped SRAM bank contents, backup registers,
-and interactions with active radio/USB before merging.
+The example disables USART1 and its DMA before Standby. Earlier tests
+with an active UART did not wake; the exact peripheral/DMA/clock contribution
+was not isolated. The simplified post-cleanup build still requires a
+regression run. Bluetooth/radio and USB activity must be stopped by their
+owners; active-stack power transitions are not validated. WBA G memory
+variants and WBA2/WBA5 need separate port review.
 
-Reference: ST RM0515 (STM32WBA6), chapter 11 Power control.
-The earlier STM32WBA5 uses RM0493; its register and wakeup routing
-differences require separate review.
-
-Hardware validation on STM32WBA65I-DK1 (MB2143), November 14, 2026:
-two consecutive PC13 WKUP2 Standby wake resets (0x100) passed, with the
-backup-register count advancing to 2 and 3. Each wake preserved all
-8192/8192 words in the selected 32 KB SRAM2 test region and yielded
-0/8192 unchanged words in the non-retained SRAM1 test region.
-The working example must stop USART1 and DMA before entering Standby;
-earlier tests with the UART active did not wake. The exact individual
-peripheral/clock cause was not isolated. This result does not cover
-active Bluetooth or USB power transitions.
+Reference: ST RM0515 (STM32WBA6), chapter 11 Power control. STM32WBA5
+uses RM0493 and has different wakeup and memory layouts.
 
 ## Nordic validation (0.14)
 
