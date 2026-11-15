@@ -47,6 +47,23 @@ class StandbySourceTest(unittest.TestCase):
 		self.assertIn("cfg & ~(0xFUL << shift)", s)
 		self.assertIn("EIC_REGS->EIC_WAKEUP |= bit", s)
 
+	def test_samd11_nmi_wake(self):
+		s = body(EIC, "static bool SamdStandbyNmiConfig(")
+		self.assertIn("PinNo != 14", s)
+		self.assertIn("SAMD_GCLK_LF", s)
+		self.assertIn("EIC_NMICTRL_NMISENSE_FALL", s)
+		self.assertIn("EIC_NMIFLAG_NMI_Msk", s)
+		self.assertIn("PORT_PINCFG_PMUXEN_Msk", s)
+
+	def test_nmi_handler_clears_flag(self):
+		s = body(EIC, "void NMI_Handler(")
+		self.assertIn("EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk", s)
+
+	def test_samd11_board_selects_sw0(self):
+		board = (ROOT / "ARM/Microchip/SAMD/SAMD11/exemples/PowerOffDemo/src/board.h").read_text(encoding="utf-8")
+		self.assertIn("#define WAKE_BUT_PIN 14", board)
+		self.assertIn("#define POWER_DEMO_RESUME_WAKE 1", board)
+
 	def test_sleep_rearm_wfi_is_atomic(self):
 		s = body(SLEEP, "void SystemSleep(")
 		self.assertLess(s.index("DisableInterrupt()"), s.index("SamdStandbyWakeArm()"))
