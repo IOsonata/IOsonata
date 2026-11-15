@@ -45,7 +45,10 @@ wake. Do not add a dummy implementation or claim Standby is a power-off.
 Run `python3 tests/samd/run_power.py` to compile the production reset-reason
 source against target-derived PM RCAUSE bit positions for D11 and D21 and
 exercise all 128 combinations (including unused bits). This is a host
-register test, not an Arm build or hardware validation. Both remain pending.
+register test, not an Arm build or hardware validation. The existing
+`tests/samd/clang_compile.sh` now also compiles `system_power_samd.cpp`
+against each production Cortex-M0+ CMSIS device header. These checks have
+not yet been run for this branch, and board validation remains pending.
 
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
 configuration asking for it fails init), USB host mode, PWM (the TCC are
