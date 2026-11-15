@@ -375,5 +375,14 @@ int main()
 
 	SystemPowerOff();
 
+#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG
+	SysLogPrintf(SysLogGet(),
+		"SystemPowerOff returned: Standby was not entered\r\n");
+	while (1)
+	{
+		__WFE();
+	}
+#endif
+
 	return 0;
 }
