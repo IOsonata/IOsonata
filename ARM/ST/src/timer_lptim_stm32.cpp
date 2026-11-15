@@ -110,10 +110,6 @@ SOFTWARE.
 static const uint32_t s_StLptCmpOk[ST_LPTIM_TRIG_MAXCNT] = { LPTIM_ISR_CMP1OK, LPTIM_ISR_CMP2OK };
 static const uint32_t s_StLptCmpIf[ST_LPTIM_TRIG_MAXCNT] = { LPTIM_ISR_CC1IF, LPTIM_ISR_CC2IF };
 
-static inline volatile uint32_t *StLptCmpReg(LPTIM_TypeDef *pReg, int TrigNo)
-{
-	return TrigNo == 0 ? &pReg->CCR1 : &pReg->CCR2;
-}
 #else
 // L4, G4: interrupt enables in IER, one compare
 #define ST_LPTIM_TRIG_MAXCNT		1
@@ -123,12 +119,6 @@ static inline volatile uint32_t *StLptCmpReg(LPTIM_TypeDef *pReg, int TrigNo)
 static const uint32_t s_StLptCmpOk[ST_LPTIM_TRIG_MAXCNT] = { LPTIM_ISR_CMPOK };
 static const uint32_t s_StLptCmpIf[ST_LPTIM_TRIG_MAXCNT] = { LPTIM_ISR_CMPM };
 
-static inline volatile uint32_t *StLptCmpReg(LPTIM_TypeDef *pReg, int TrigNo)
-{
-	(void)TrigNo;
-
-	return &pReg->CMP;
-}
 #endif
 
 // Backup domain control register holding the LSE bits, BDCR1 on WBA
@@ -211,6 +201,20 @@ static const StLptInfo_t s_StLptInfo[ST_LPTIM_CNT] = {
 };
 
 static StLptDev_t s_StLptDev[ST_LPTIM_CNT];
+
+#ifdef LPTIM_DIER_ARRMIE
+static inline volatile uint32_t *StLptCmpReg(LPTIM_TypeDef *pReg, int TrigNo)
+{
+	return TrigNo == 0 ? &pReg->CCR1 : &pReg->CCR2;
+}
+#else
+static inline volatile uint32_t *StLptCmpReg(LPTIM_TypeDef *pReg, int TrigNo)
+{
+	(void)TrigNo;
+
+	return &pReg->CMP;
+}
+#endif
 
 // DevNo of a TimerDev_t bound to this driver, -1 if it is not
 static int StLptDevNo(TimerDev_t * const pTimer)

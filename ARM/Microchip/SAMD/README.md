@@ -56,10 +56,12 @@ Validated on the contributing reset-reason branch: `python3
 tests/samd/run_power.py` (128/128 combinations per MCU) and
 `sh tests/samd/clang_compile.sh` (both targets' source compilation).
 `sh tests/samd/standby_compile.sh` also passed on both targets.
-A prior SAMD11 PowerOffDemo Release link exceeded the 16 KB flash;
-its later compact UART-output changes still require full link verification
-and hardware validation of repeated wake and SRAM continuity.
-Do not consider the Standby port hardware-validated yet.
+Hardware result reported November 15, 2026: SAMD11 Xplained Pro SW0/PA14
+woke PowerOffDemo from Standby five consecutive times. The resume counter
+advanced from 0x00000001 through 0x00000005, followed by another Standby
+entry. This validates repeated resume and counter continuity for that
+firmware. SAMD21 hardware wake, full SRAM testing and sleep-current
+measurements remain pending.
 
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
 configuration asking for it fails init), USB host mode, PWM (the TCC are

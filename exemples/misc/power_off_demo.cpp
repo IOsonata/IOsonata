@@ -84,84 +84,6 @@ static volatile uint32_t * const s_pRamDrop =
 
 #define RAM_TEST_PREPARED 0xA7U
 
-static uint32_t RamDropPattern(uint32_t Idx)
-{
-	return 0x6C39E2B5UL ^ (Idx * 0x85EBCA6BUL);
-}
-
-static bool RamDropCheck(void)
-{
-	uint32_t i;
-	uint32_t unchanged;
-	uint32_t count;
-
-	count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
-	unchanged = 0U;
-	for (i = 0; i < count; i++)
-	{
-		if (s_pRamDrop[i] == RamDropPattern(i))
-		{
-			unchanged++;
-		}
-	}
-
-	SysLogPrintf(SysLogGet(),
-		"RAM non-retention %s, %u/%u words unchanged\r\n",
-		unchanged == count ? "FAIL" : "PASS",
-		(unsigned)unchanged, (unsigned)count);
-
-	return unchanged != count;
-}
-
-static void RamDropWrite(void)
-{
-	uint32_t i;
-	uint32_t count;
-
-	count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
-	for (i = 0; i < count; i++)
-	{
-		s_pRamDrop[i] = RamDropPattern(i);
-	}
-}
-
-static uint32_t RamRetPattern(uint32_t Idx)
-{
-	return 0xA55A1234UL ^ (Idx * 0x9E3779B9UL);
-}
-
-static bool RamRetCheck(void)
-{
-	uint32_t i;
-	uint32_t count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
-
-	for (i = 0; i < count; i++)
-	{
-		if (s_pRamRet[i] != RamRetPattern(i))
-		{
-			SysLogPrintf(SysLogGet(),
-				"RAM retention FAIL at word %u: 0x%08x, expected 0x%08x\r\n",
-				(unsigned)i, (unsigned)s_pRamRet[i],
-				(unsigned)RamRetPattern(i));
-			return false;
-		}
-	}
-
-	SysLogPrintf(SysLogGet(), "RAM retention PASS, %u words\r\n",
-		(unsigned)count);
-	return true;
-}
-
-static void RamRetWrite(void)
-{
-	uint32_t i;
-	uint32_t count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
-
-	for (i = 0; i < count; i++)
-	{
-		s_pRamRet[i] = RamRetPattern(i);
-	}
-}
 #endif
 
 // Pull resistor and level of the released button
@@ -243,6 +165,87 @@ static const struct {
 	{ SYSTEM_RESET_WAKE_TIMER, "wake up by a timer" },
 };
 
+#endif
+
+#if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
+static uint32_t RamDropPattern(uint32_t Idx)
+{
+	return 0x6C39E2B5UL ^ (Idx * 0x85EBCA6BUL);
+}
+
+static bool RamDropCheck(void)
+{
+	uint32_t i;
+	uint32_t unchanged;
+	uint32_t count;
+
+	count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
+	unchanged = 0U;
+	for (i = 0; i < count; i++)
+	{
+		if (s_pRamDrop[i] == RamDropPattern(i))
+		{
+			unchanged++;
+		}
+	}
+
+	SysLogPrintf(SysLogGet(),
+		"RAM non-retention %s, %u/%u words unchanged\r\n",
+		unchanged == count ? "FAIL" : "PASS",
+		(unsigned)unchanged, (unsigned)count);
+
+	return unchanged != count;
+}
+
+static void RamDropWrite(void)
+{
+	uint32_t i;
+	uint32_t count;
+
+	count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
+	for (i = 0; i < count; i++)
+	{
+		s_pRamDrop[i] = RamDropPattern(i);
+	}
+}
+
+static uint32_t RamRetPattern(uint32_t Idx)
+{
+	return 0xA55A1234UL ^ (Idx * 0x9E3779B9UL);
+}
+
+static bool RamRetCheck(void)
+{
+	uint32_t i;
+	uint32_t count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
+
+	for (i = 0; i < count; i++)
+	{
+		if (s_pRamRet[i] != RamRetPattern(i))
+		{
+			SysLogPrintf(SysLogGet(),
+				"RAM retention FAIL at word %u: 0x%08x, expected 0x%08x\r\n",
+				(unsigned)i, (unsigned)s_pRamRet[i],
+				(unsigned)RamRetPattern(i));
+			return false;
+		}
+	}
+
+	SysLogPrintf(SysLogGet(), "RAM retention PASS, %u words\r\n",
+		(unsigned)count);
+	return true;
+}
+
+static void RamRetWrite(void)
+{
+	uint32_t i;
+	uint32_t count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
+
+	for (i = 0; i < count; i++)
+	{
+		s_pRamRet[i] = RamRetPattern(i);
+	}
+}
 #endif
 
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE

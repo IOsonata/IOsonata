@@ -157,6 +157,9 @@ __attribute__((section(".data"))) static volatile uint32_t s_SamdStartupLog[SAMD
 #define SAMD_STARTUP_REG_LEN	12U
 __attribute__((section(".data"))) static volatile uint32_t s_SamdStartupReg[SAMD_STARTUP_REG_LEN];
 
+static uint32_t SamdGclkGenFreq(uint32_t Gen);
+static uint32_t SamdSourceFreq(uint32_t Src);
+
 // Failure of a startup step, the caller returns false
 static bool SamdStartupFailed(uint32_t Error, uint32_t Line)
 {
@@ -361,9 +364,6 @@ bool SamdGclkChannelDisable(uint8_t Channel)
 
 	return res;
 }
-
-static uint32_t SamdGclkGenFreq(uint32_t Gen);
-static uint32_t SamdSourceFreq(uint32_t Src);
 
 // Generator of a GCLK channel
 static uint32_t SamdGclkChannelGen(uint8_t Channel)

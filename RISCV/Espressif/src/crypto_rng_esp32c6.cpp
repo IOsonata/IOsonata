@@ -104,6 +104,13 @@ static const uint8_t s_AnalogRegisters[] = { 0U, 1U, 3U, 4U, 7U };
 static const uint8_t s_AnalogMasks[] = { 0xFFU, 0x0FU, 0xFFU, 0x0FU, 0x5BU };
 static const uint8_t s_AnalogValues[] = { 0x66U, 0x08U, 0x66U, 0x08U, 0x5AU };
 
+#ifdef ESP32_RNG_TEST
+extern uint32_t EspC6RngTestCycles(void);
+#define EspC6RngCycles EspC6RngTestCycles
+#else
+#define EspC6RngCycles IOsonataRiscvCycle32
+#endif
+
 static void EspC6RngModify(uintptr_t Addr, uint32_t Mask, uint32_t Value)
 {
 	ESP32_RNG_REG(Addr) = (ESP32_RNG_REG(Addr) & ~Mask) | (Value & Mask);
@@ -282,13 +289,6 @@ static bool EspC6RngStop(EspC6RngState_t *pSaved)
 	EspC6RngModify(RNG_CLOCK, 1U << 24, pSaved->RngClock);
 	return ok;
 }
-
-#ifdef ESP32_RNG_TEST
-extern uint32_t EspC6RngTestCycles(void);
-#define EspC6RngCycles EspC6RngTestCycles
-#else
-#define EspC6RngCycles IOsonataRiscvCycle32
-#endif
 
 static bool EspC6RngWait(uint32_t Cycles)
 {

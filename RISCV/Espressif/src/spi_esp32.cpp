@@ -65,6 +65,10 @@ typedef struct {
 
 static Esp32SpiDev_t s_Spi;
 
+static void Esp32SpiSlaveArm(Esp32SpiDev_t *pDev);
+static void Esp32SpiDisable(DevIntrf_t *pIntrf);
+static void Esp32SpiSlaveIrq(void);
+
 static Esp32SpiDev_t *Esp32SpiHandle(DevIntrf_t *pIntrf)
 {
 	if (pIntrf == NULL || s_Spi.pOwner == NULL ||
@@ -110,10 +114,6 @@ static void Esp32SpiClock(bool Enable)
 #endif
 	EnableInterrupt(state);
 }
-
-static void Esp32SpiSlaveArm(Esp32SpiDev_t *pDev);
-static void Esp32SpiDisable(DevIntrf_t *pIntrf);
-static void Esp32SpiSlaveIrq(void);
 
 static void Esp32SpiConfigure(Esp32SpiDev_t *pDev)
 {

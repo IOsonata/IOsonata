@@ -115,6 +115,18 @@ static Esp32TimerData_t s_Timer[ESP32_TIMG_COUNT];
 
 #define Esp32Reg(Base, Offset) ESP32_REG32((Base) + (Offset))
 
+static void Esp32Tg0Handler(void);
+#if ESP32_TIMG_COUNT > 1
+static void Esp32Tg1Handler(void);
+#endif
+
+static const Esp32IrqHandler s_TimerHandlers[] = {
+	Esp32Tg0Handler,
+#if ESP32_TIMG_COUNT > 1
+	Esp32Tg1Handler,
+#endif
+};
+
 static void Esp32EnableTimerClock(int DevNo)
 {
 #if defined(ESP32C2) || defined(ESP32C3)
@@ -537,13 +549,6 @@ static void Esp32Tg1Handler(void)
 	Esp32IRQ(1);
 }
 #endif
-
-static const Esp32IrqHandler s_TimerHandlers[] = {
-	Esp32Tg0Handler,
-#if ESP32_TIMG_COUNT > 1
-	Esp32Tg1Handler,
-#endif
-};
 
 bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 {

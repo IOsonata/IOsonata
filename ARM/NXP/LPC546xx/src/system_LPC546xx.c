@@ -122,6 +122,8 @@ uint32_t SystemCoreClock = DEFAULT_SYSTEM_CLOCK;
 uint32_t SystemnsDelayFactor = LPC546XX_NSDELAY_LOOP_CLK * 1000000000UL / DEFAULT_SYSTEM_CLOCK;
 
 
+static uint32_t s_Lpc546xxAudioPllFreq = 0;
+
 /* Get WATCH DOG Clk */
 static uint32_t getWdtOscFreq(void)
 {
@@ -782,8 +784,6 @@ __attribute__ ((weak)) void SystemInitHook (void) {
 }
 
 // ---- Audio PLL ----
-
-static uint32_t s_Lpc546xxAudioPllFreq = 0;
 
 // The audio PLL setting with the output closest to Fout: P from 1, N from 1,
 // M rounded and kept in the CCO range. The first exact one is taken. A Fout

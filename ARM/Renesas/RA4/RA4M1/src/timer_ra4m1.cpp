@@ -59,6 +59,8 @@ struct Ra4m1TimerData {
 	uint8_t No, ClockBits, MaxTrigger, Priority;
 	bool Agt, Running, Fault;
 };
+struct TimerPlan { uint32_t Base, Divider, Frequency, SyncCycles; uint8_t Bits; TIMER_CLKSRC Source; };
+
 static R_AGTX0_Type * const s_AgtRegs[2] = {R_AGT0, R_AGT1};
 static R_GPT0_Type * const s_GptRegs[8] = {
 	R_GPT0, R_GPT1, R_GPT2, R_GPT3,
@@ -69,6 +71,8 @@ static Ra4m1TimerData s_Timer[RA4M1_TIMER_COUNT];
 static Ra4m1TimerTrigger s_AgtTrigger[2];
 static Ra4m1TimerTrigger s_GptTrigger[8][6];
 volatile uint32_t g_Ra4m1TimerError[RA4M1_TIMER_COUNT];
+
+static void CompareIrq(int IrqNo, void *Ctx);
 
 static uint32_t ModuleBit(const Ra4m1TimerData &d)
 {
@@ -211,7 +215,6 @@ static bool Start(Ra4m1TimerData &d)
 	g_Ra4m1TimerError[d.No]=RA4M1_TIMER_START_TIMEOUT;
 	return false;
 }
-struct TimerPlan { uint32_t Base, Divider, Frequency, SyncCycles; uint8_t Bits; TIMER_CLKSRC Source; };
 static bool Plan(bool Agt, TIMER_CLKSRC Source, uint32_t Request, TimerPlan &p)
 {
 	if (Agt && Source == TIMER_CLKSRC_DEFAULT)
@@ -264,7 +267,6 @@ static bool CompareWrite(Ra4m1TimerData &d, unsigned No, uint64_t Deadline)
 	d.GptReg->GTCCR[s_GptCompareIndex[No]] = value;
 	return d.GptReg->GTCCR[s_GptCompareIndex[No]] == value;
 }
-static void CompareIrq(int IrqNo, void *Ctx);
 static bool ArmCompare(Ra4m1TimerData &d, Ra4m1TimerTrigger &tr, bool Periodic)
 {
 	for (unsigned attempt=0; attempt<4; ++attempt) {

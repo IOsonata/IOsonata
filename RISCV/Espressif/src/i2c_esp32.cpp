@@ -91,6 +91,9 @@ static Esp32I2cDev_t s_I2c[] = {
 #endif
 };
 
+static void Esp32I2cEnable(DevIntrf_t *pIntrf);
+static void Esp32I2cDisable(DevIntrf_t *pIntrf);
+
 static Esp32I2cDev_t *Esp32I2cHandle(DevIntrf_t *pIntrf)
 {
 	unsigned i;
@@ -369,9 +372,6 @@ static void Esp32I2cFinish(Esp32I2cDev_t *pDev)
 	pDev->bReadEnded = false;
 	pDev->bLost = false;
 }
-
-static void Esp32I2cEnable(DevIntrf_t *pIntrf);
-static void Esp32I2cDisable(DevIntrf_t *pIntrf);
 
 static void Esp32I2cStop(DevIntrf_t *pIntrf)
 {

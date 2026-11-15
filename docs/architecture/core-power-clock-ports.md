@@ -24,7 +24,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
 | SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Review runtime selection and oscillator initialization |
-| SAM D11/D21 | PM reset reasons and interrupt-resumable Standby with asynchronous EIC wake on review branch; hardware wake not validated | Validate Standby, repeated wake, SRAM continuity and peripheral clock ownership |
+| SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; SAMD11 SW0/PA14 repeated resume passed | Validate SAMD21 wake, full SRAM continuity, sleep current and peripheral clock ownership |
 | LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
@@ -41,8 +41,10 @@ No separate `ResetReasonDemo` is retained in the consolidated branch.
 
 Maintainer-reported reset-cause tests passed 128/128 combinations for
 each MCU, and Arm GNU source compilation passed for D11/D21 including
-the Standby source. Full SAMD11 Release linking after recent size changes
-and hardware wake/current measurements remain pending.
+the Standby source. On November 15, 2026, the maintainer reported five
+consecutive SAMD11 SW0/PA14 Standby resumes, with counts 0x00000001 through
+0x00000005 and another Standby entry. SAMD21 hardware wake, full SRAM
+testing and sleep-current measurements remain pending.
 
 ## STM32WBA power port (0.14)
 

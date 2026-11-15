@@ -1,5 +1,12 @@
 # System power review (0.14)
 
+Current hardware result, November 15, 2026: SAMD11 Xplained Pro SW0/PA14
+woke PowerOffDemo five consecutive times, counts 0x00000001 through
+0x00000005, followed by another Standby entry. Repeated resume and counter
+continuity passed. SAMD21 wake, full SRAM testing and sleep-current
+measurements remain pending. The sections below retain the earlier review
+sequence; their pending SAMD11 wake statements are superseded by this result.
+
 Review basis: `main` immediately after STM32WBA65 PR #139 squash merge,
 plus unmerged SAM D11/D21 PR #140. This document is an implementation
 audit, **not** a new power API design or an assertion that untested code works.
@@ -58,10 +65,9 @@ Reset reason is an optional diagnostic, not the objective of saving power.
 5. **Claimed support**: A compiled power source does not imply that every
    MCU of that series or its radio/USB configurations were hardware tested.
    Keep validation tied to exact targets and modes.
-6. **Source style**: Several existing drivers declare variables midway
-   through functions or inside loops, against the project convention that
-   declarations are placed at function entry. Clean these incrementally,
-   without mixing cosmetic changes into functional power-mode commits.
+6. **Source style**: File-scope types, globals, constants and prototypes
+   belong before function implementations. Local variables may remain in
+   their relevant context. Apply the file-scope rule to earlier work too.
 
 ## Compatibility-preserving API direction
 

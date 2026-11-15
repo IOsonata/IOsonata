@@ -50,16 +50,6 @@ extern void RISCV_VectorTableEnd(void);
 
 volatile uint32_t g_Esp32C3DefIrqCount;
 
-__attribute__((weak, section(".iram.text"), used))
-void DEF_IRQHandler(void)
-{
-    g_Esp32C3DefIrqCount++;
-    while (1)
-    {
-        __asm volatile("nop");
-    }
-}
-
 typedef void (*Esp32C3IrqHandler)(void);
 
 static volatile Esp32C3IrqHandler s_Esp32C3CpuIrqHandlers[32];
@@ -81,6 +71,16 @@ volatile uint32_t g_Esp32C3UnhandledSourceStatus2;
 volatile uint32_t g_Esp32C3CpuDispatchCount[32];
 volatile uint32_t g_Esp32C3Uart0IrqCount;
 volatile uint32_t g_Esp32C3Uart1IrqCount;
+
+__attribute__((weak, section(".iram.text"), used))
+void DEF_IRQHandler(void)
+{
+    g_Esp32C3DefIrqCount++;
+    while (1)
+    {
+        __asm volatile("nop");
+    }
+}
 
 void Esp32C3SetCpuIrqHandler(uint32_t cpu_int_id, Esp32C3IrqHandler handler)
 {

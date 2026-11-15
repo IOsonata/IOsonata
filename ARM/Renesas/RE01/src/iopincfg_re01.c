@@ -80,12 +80,6 @@ SOFTWARE.
 #define RE01_1500KB_PIN_MAX_INT		(10)
 #define RE01_1500KB_MAX_PORT		(9)
 
-// Package pin counts are not pin-number limits: some ports have gaps.
-// Board pin maps select the pins bonded out on the particular package.
-static bool IsValidIOPin(int PortNo, int PinNo)
-{
-	return PortNo >= 0 && PortNo < RE01_1500KB_MAX_PORT && PinNo >= 0 && PinNo < 16;
-}
 
 #pragma pack(push, 4)
 typedef struct {
@@ -127,6 +121,12 @@ static const uint32_t s_Re01IntPins[] = {
 	0x914, 0x924,			// IRQ9
 };
 
+// Package pin counts are not pin-number limits: some ports have gaps.
+// Board pin maps select the pins bonded out on the particular package.
+static bool IsValidIOPin(int PortNo, int PinNo)
+{
+	return PortNo >= 0 && PortNo < RE01_1500KB_MAX_PORT && PinNo >= 0 && PinNo < 16;
+}
 static bool IsValidIOInterrupt(int IntNo, int PortNo, int PinNo)
 {
 	bool retval = false;

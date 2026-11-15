@@ -80,6 +80,13 @@ static PeiNrf53Channel_t s_Channels[PEI_NRF53_CHANNEL_COUNT];
 static PeiNrf53Route_t s_Routes[PEI_NRF53_ROUTE_COUNT];
 static uint32_t s_Generation;
 
+#ifdef PEI_NRF53_TEST
+extern volatile uint32_t *PeiNrf53TestRegister(PeiEndpoint_t Addr);
+#define PEI_NRF53_REG(addr)	PeiNrf53TestRegister(addr)
+#else
+#define PEI_NRF53_REG(addr)	((volatile uint32_t *)(uintptr_t)(addr))
+#endif
+
 // Publish and subscribe registers are at +0x80 from event/task registers.
 // A valid offset does not prove the endpoint register is implemented.
 static bool PeiNrf53EndpointValid(PeiEndpoint_t Addr, bool IsEvent)
@@ -97,13 +104,6 @@ static bool PeiNrf53EndpointValid(PeiEndpoint_t Addr, bool IsEvent)
 	}
 	return offset < 0x80U;
 }
-
-#ifdef PEI_NRF53_TEST
-extern volatile uint32_t *PeiNrf53TestRegister(PeiEndpoint_t Addr);
-#define PEI_NRF53_REG(addr)	PeiNrf53TestRegister(addr)
-#else
-#define PEI_NRF53_REG(addr)	((volatile uint32_t *)(uintptr_t)(addr))
-#endif
 
 static volatile uint32_t *PeiNrf53Publish(PeiEndpoint_t Event)
 {

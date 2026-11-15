@@ -79,6 +79,49 @@ typedef struct {
 static PeiNrf52GroupSlot_t s_PeiGroupSlot[PEI_NRF52_GROUP_COUNT];
 static uint32_t s_PeiGroupGeneration;
 
+// Software events on EGU channels. PEI owns the channels it allocates here:
+// it never sets INTEN, so the SWIn_EGUn interrupt is not raised, and it
+// skips a channel whose INTEN bit another user has set. TASKS_TRIGGER[n]
+// fires EVENTS_TRIGGERED[n], which the PPI routes of the event carry to
+// their tasks.
+static NRF_EGU_Type * const s_PeiNrf52Egu[] = {
+	NRF_EGU0,
+#ifdef NRF_EGU1
+	NRF_EGU1,
+#endif
+#ifdef NRF_EGU2
+	NRF_EGU2,
+#endif
+#ifdef NRF_EGU3
+	NRF_EGU3,
+#endif
+#ifdef NRF_EGU4
+	NRF_EGU4,
+#endif
+#ifdef NRF_EGU5
+	NRF_EGU5,
+#endif
+};
+
+enum {
+	PEI_NRF52_EGU_COUNT = sizeof(s_PeiNrf52Egu) / sizeof(s_PeiNrf52Egu[0]),
+	PEI_NRF52_EGU_CH_COUNT = sizeof(NRF_EGU0->TASKS_TRIGGER) / sizeof(NRF_EGU0->TASKS_TRIGGER[0])
+};
+typedef char PeiNrf52EguChannelCountCheck[
+	(PEI_NRF52_EGU_CH_COUNT > 0 && PEI_NRF52_EGU_CH_COUNT <= 32) ? 1 : -1
+];
+
+// Channels allocated as software events, one bit per channel
+static uint32_t s_PeiEguOwned[PEI_NRF52_EGU_COUNT];
+
+// Called by the generic matrix in src/coredev/pei.c through weak references
+extern "C" {
+bool PeiSwEventAllocMcu(int DevNo, PeiEndpoint_t *pEvent);
+void PeiSwEventFreeMcu(PeiEndpoint_t Event);
+bool PeiSwEventTriggerMcu(PeiEndpoint_t Event);
+PeiEndpoint_t PeiSwEventTaskMcu(PeiEndpoint_t Event);
+}
+
 // Event registers occupy 0x100-0x1FC, task registers 0x000-0x0FC.
 // PPI endpoints must address real nRF52 peripheral registers, not RAM.
 static bool PeiNrf52EndpointValid(PeiEndpoint_t Addr, bool IsEvent)
@@ -455,49 +498,6 @@ void PeiDisconnect(PeiConn_t * const pConn)
 	s_PeiSlot[chan].pOwner = NULL;
 	pConn->Handle = 0U;
 	EnableInterrupt(state);
-}
-
-// Software events on EGU channels. PEI owns the channels it allocates here:
-// it never sets INTEN, so the SWIn_EGUn interrupt is not raised, and it
-// skips a channel whose INTEN bit another user has set. TASKS_TRIGGER[n]
-// fires EVENTS_TRIGGERED[n], which the PPI routes of the event carry to
-// their tasks.
-static NRF_EGU_Type * const s_PeiNrf52Egu[] = {
-	NRF_EGU0,
-#ifdef NRF_EGU1
-	NRF_EGU1,
-#endif
-#ifdef NRF_EGU2
-	NRF_EGU2,
-#endif
-#ifdef NRF_EGU3
-	NRF_EGU3,
-#endif
-#ifdef NRF_EGU4
-	NRF_EGU4,
-#endif
-#ifdef NRF_EGU5
-	NRF_EGU5,
-#endif
-};
-
-enum {
-	PEI_NRF52_EGU_COUNT = sizeof(s_PeiNrf52Egu) / sizeof(s_PeiNrf52Egu[0]),
-	PEI_NRF52_EGU_CH_COUNT = sizeof(NRF_EGU0->TASKS_TRIGGER) / sizeof(NRF_EGU0->TASKS_TRIGGER[0])
-};
-typedef char PeiNrf52EguChannelCountCheck[
-	(PEI_NRF52_EGU_CH_COUNT > 0 && PEI_NRF52_EGU_CH_COUNT <= 32) ? 1 : -1
-];
-
-// Channels allocated as software events, one bit per channel
-static uint32_t s_PeiEguOwned[PEI_NRF52_EGU_COUNT];
-
-// Called by the generic matrix in src/coredev/pei.c through weak references
-extern "C" {
-bool PeiSwEventAllocMcu(int DevNo, PeiEndpoint_t *pEvent);
-void PeiSwEventFreeMcu(PeiEndpoint_t Event);
-bool PeiSwEventTriggerMcu(PeiEndpoint_t Event);
-PeiEndpoint_t PeiSwEventTaskMcu(PeiEndpoint_t Event);
 }
 
 // EGU instances PEI may use, bit n for EGUn. With a SoftDevice, SWI1/EGU1 is

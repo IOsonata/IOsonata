@@ -90,6 +90,35 @@ volatile uint32_t g_Esp32C3RngCallCount;
 #define RNG_ADC_TIMER_TARGET_MASK	(0xFFFUL << 12)
 #define RNG_ADC_MEAS_LIMIT		(1UL << 0)
 
+typedef struct {
+	uint32_t Sensor;
+	uint32_t Ana;
+	uint32_t ClockEn;
+	uint32_t ResetEn;
+	uint32_t Ctrl;
+	uint32_t Ctrl2;
+	uint32_t Wait;
+	uint32_t Pattern1;
+	uint32_t Pattern2;
+	uint32_t Dma;
+	uint32_t ClockConf;
+	uint8_t AnalogRef;
+} EspRngSnapshot_t;
+
+static bool s_EspRngBusy;
+static bool s_EspRngFault;
+
+static void EspRngStop(const EspRngSnapshot_t *pSaved);
+
+// Debugger-visible checkpoints, with normal C++ linkage. No ISR is used.
+// Stages: 1 request, 2 snapshot, 3 analog ROM calls, 4 analog ready,
+// 5 ADC configured, 6 source active, 7 settling, 8 reading,
+// 9 restoring, 10 completed. Error 1 = busy, 2 = ADC in use,
+// 3 = setup failed, 4 = stalled cycle counter, 5 = repeated RNG words.
+#ifndef ESP32_RNG_WAIT_MAX_POLLS
+#define ESP32_RNG_WAIT_MAX_POLLS 100000UL
+#endif
+
 // ROM internal analog I2C: I2C_SAR_ADC block 0x69, host 0,
 // ADC_SARADC2_ENCAL_REF_ADDR at address 7 bit 6.
 #ifndef ESP32_RNG_TEST
@@ -121,33 +150,6 @@ extern uint32_t EspRngTestCycleCount(void);
 #define EspRngCycleCount EspRngTestCycleCount
 #endif
 
-typedef struct {
-	uint32_t Sensor;
-	uint32_t Ana;
-	uint32_t ClockEn;
-	uint32_t ResetEn;
-	uint32_t Ctrl;
-	uint32_t Ctrl2;
-	uint32_t Wait;
-	uint32_t Pattern1;
-	uint32_t Pattern2;
-	uint32_t Dma;
-	uint32_t ClockConf;
-	uint8_t AnalogRef;
-} EspRngSnapshot_t;
-
-static bool s_EspRngBusy;
-static bool s_EspRngFault;
-
-// Debugger-visible checkpoints, with normal C++ linkage. No ISR is used.
-// Stages: 1 request, 2 snapshot, 3 analog ROM calls, 4 analog ready,
-// 5 ADC configured, 6 source active, 7 settling, 8 reading,
-// 9 restoring, 10 completed. Error 1 = busy, 2 = ADC in use,
-// 3 = setup failed, 4 = stalled cycle counter, 5 = repeated RNG words.
-#ifndef ESP32_RNG_WAIT_MAX_POLLS
-#define ESP32_RNG_WAIT_MAX_POLLS 100000UL
-#endif
-
 static inline void EspRngModify(uintptr_t Addr, uint32_t Mask, uint32_t Value)
 {
 	ESP32_RNG_REG(Addr) = (ESP32_RNG_REG(Addr) & ~Mask) | (Value & Mask);
@@ -166,8 +168,6 @@ static bool EspRngAdcIdle(void)
 	}
 	return true;
 }
-
-static void EspRngStop(const EspRngSnapshot_t *pSaved);
 
 static bool EspRngStart(EspRngSnapshot_t *pSaved)
 {
