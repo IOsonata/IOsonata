@@ -157,9 +157,11 @@ static uint32_t SysPwrResetMap(uint32_t ResetReas)
 
 uint32_t SystemResetReason(void)
 {
+	uint32_t reas;
+
 	if (s_bSysPwrResetRead == false)
 	{
-		uint32_t reas = 0;
+		reas = 0;
 
 		if (SysPwrSdEnabled())
 		{
@@ -285,8 +287,20 @@ bool SystemRetRegWrite(int Idx, uint32_t Val)
 
 bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 {
-	uint32_t ramsize = NRF_FICR->INFO.RAM * 1024UL;
+	uint32_t ramsize;
 	uintptr_t base;
+	uint32_t off;
+	uint32_t end;
+	bool sd;
+	uint32_t blk;
+	uint32_t sect;
+	uint32_t next;
+	uint32_t msk;
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	uint32_t rc;
+#endif
+
+	ramsize = NRF_FICR->INFO.RAM * 1024UL;
 
 	if (Addr >= SYS_PWR_NRF52_RAM_DATA && Addr - SYS_PWR_NRF52_RAM_DATA < ramsize)
 	{
@@ -301,22 +315,18 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 		return false;
 	}
 
-	uint32_t off = (uint32_t)(Addr - base);
+	off = (uint32_t)(Addr - base);
 
 	if (Size == 0 || Size > ramsize - off)
 	{
 		return false;
 	}
 
-	uint32_t end = off + Size;
-	bool sd = SysPwrSdEnabled();
+	end = off + Size;
+	sd = SysPwrSdEnabled();
 
 	while (off < end)
 	{
-		uint32_t blk;
-		uint32_t sect;
-		uint32_t next;
-
 		if (off < SYS_PWR_NRF52_SMALL_END)
 		{
 			blk = off / (SYS_PWR_NRF52_SMALL_SECT * SYS_PWR_NRF52_SMALL_PERBLK);
@@ -335,12 +345,12 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 			return false;
 		}
 
-		uint32_t msk = POWER_RAM_POWERSET_S0RETENTION_Msk << sect;
+		msk = POWER_RAM_POWERSET_S0RETENTION_Msk << sect;
 
 		if (sd)
 		{
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
-			uint32_t rc = bRetain ? sd_power_ram_power_set((uint8_t)blk, msk) :
+			rc = bRetain ? sd_power_ram_power_set((uint8_t)blk, msk) :
 									sd_power_ram_power_clr((uint8_t)blk, msk);
 
 			if (rc != NRF_SUCCESS)
