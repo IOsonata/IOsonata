@@ -15,6 +15,7 @@ Copyright (c) 2026 I-SYST inc.
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 #include "board.h"
 
 #ifndef UART_BAUDRATE
@@ -73,10 +74,7 @@ int main(void)
 		if (s_Uart.Rx(&command, 1) == 1 && command == 'r')
 		{
 			s_Uart.printf("Software reset\r\n");
-			for (volatile uint32_t i = 0U; i < 1000000U; i++)
-			{
-				__NOP();
-			}
+			msDelay(250);
 			NVIC_SystemReset();
 		}
 	}
