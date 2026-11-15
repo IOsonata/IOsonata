@@ -66,12 +66,14 @@ class StandbySourceTest(unittest.TestCase):
 		self.assertIn("#define WAKE_BUT_PIN 14", board)
 		self.assertIn("#define POWER_DEMO_RESUME_WAKE 1", board)
 
-	def test_sleep_rearm_wfi_is_atomic(self):
+	def test_maskable_wake_is_pending_through_wfi(self):
 		s = body(SLEEP, "void SystemSleep(")
 		self.assertLess(s.index("DisableInterrupt()"), s.index("SamdStandbyWakeArm()"))
 		self.assertLess(s.index("SamdStandbyWakeArm()"), s.index("__WFI()"))
 		self.assertLess(s.index("__WFI()"), s.index("EnableInterrupt(state)"))
 		self.assertIn("SCB->SCR = previous", s)
+		self.assertLess(s.index("__WFI()"), s.index("SamdStandbyWakeDone()"))
+		self.assertLess(s.index("SamdStandbyWakeDone()"), s.index("EnableInterrupt(state)"))
 
 	def test_rearm_does_not_change_gpio_ownership(self):
 		s = body(EIC, "void SamdStandbyWakeArm(")

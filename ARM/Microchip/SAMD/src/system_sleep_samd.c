@@ -19,15 +19,17 @@ Copyright (c) 2026 I-SYST inc.
 
 // EIC wake line ownership is managed in iopincfg_samd.c.
 void SamdStandbyWakeArm(void);
+void SamdStandbyWakeDone(void);
 
 void SystemSleep(void)
 {
 	uint32_t previous;
 	uint32_t state;
 
-	// Keep the wake interrupt pending until WFI has completed. An
+	// Keep maskable wake interrupts pending until WFI has completed. An
 	// interrupt between rearming EIC and WFI could otherwise be consumed
-	// before sleeping, leaving no interrupt to wake the CPU.
+	// before sleeping, leaving no interrupt to wake the CPU. The SAMD11
+	// NMI handler leaves EIC_IRQn pending during this window.
 	state = DisableInterrupt();
 	SamdStandbyWakeArm();
 	previous = SCB->SCR;
@@ -36,5 +38,6 @@ void SystemSleep(void)
 	__WFI();
 	__ISB();
 	SCB->SCR = previous;
+	SamdStandbyWakeDone();
 	EnableInterrupt(state);
 }

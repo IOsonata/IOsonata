@@ -52,6 +52,21 @@ SAMD11 Xplained Pro uses its onboard SW0/PA14, the dedicated EIC NMI input.
 No external wiring is needed. SAMD21 Xplained Pro uses its
 onboard PA15 button (EXTINT15). Monitor the EDBG VCOM at 115200 baud.
 
+PRIMASK cannot mask SW0's NMI on D11. During Standby entry the NMI handler
+therefore leaves EIC_IRQn pending so an edge handled just before WFI cannot
+be consumed before the CPU sleeps. Entry also checks the current button
+level. After WFI, the previous EIC NVIC enable state is restored; a prior
+pending IRQ or a real EIC pin interrupt is preserved. The NMI itself is
+acknowledged normally. D21 continues to use its ordinary masked EIC IRQ.
+
+`python3 tests/samd/run_standby_entry.py` checks the extracted production
+entry functions with a host register model: 128 cases at O0 and O2. This
+models event timing and saved interrupt state, not Arm instruction execution
+or electrical timing. The entry change still needs a hardware rerun.
+The sleep instruction remains WFI as specified in the
+[SAMD11 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-42363-SAM-D11_Datasheet.pdf),
+section 15.6.2.8.2.
+
 Both PowerOffDemo boards enable `POWER_DEMO_STANDBY_RAM_TEST`. Before each
 Standby entry, the demo fills 128 bytes of static storage and 128 bytes on
 the stack with complementary patterns that change each cycle. It checks
@@ -62,7 +77,7 @@ This checks only those 256 bytes; it is not a full-SRAM test. The sample
 has compiled and linked for D11 and D21 but has not yet run on hardware.
 
 With Arm GCC 15.2.1 at the projects' size optimization, the D11 linked
-image uses 14,814 bytes for text plus initialized data, with 1,288 bytes
+image uses 15,022 bytes for text plus initialized data, with 1,296 bytes
 of data plus BSS. The 128-byte stack sample is additional runtime stack
 usage. It fits the 16 KB flash and 4 KB SRAM target. These standalone
 link checks use selected library sources, not an IOcomposer build.

@@ -129,6 +129,9 @@ static uint32_t s_SamdStandbyWakeLines;
 #if defined(__SAMD11D14AM__)
 // The SAMD11 Xplained Pro SW0 is PA14, the dedicated NMI input.
 static bool s_bSamdStandbyNmi;
+static volatile bool s_bSamdStandbyNmiArmed;
+static uint32_t s_SamdStandbyEicEnabled;
+static uint32_t s_SamdStandbyEicPending;
 #endif
 
 static bool SamdPinValid(int PortNo, int PinNo)
@@ -504,8 +507,20 @@ void SamdStandbyWakeArm(void)
 #if defined(__SAMD11D14AM__)
 	if (s_bSamdStandbyNmi)
 	{
-		// Clear the previous SW0 edge before another Standby cycle.
-		EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk;
+		// PRIMASK cannot hold an NMI pending. Keep its wake indication in
+		// EIC_IRQn until WFI has completed, without changing EIC pin enables.
+		s_SamdStandbyEicEnabled = NVIC_GetEnableIRQ(EIC_IRQn);
+		s_SamdStandbyEicPending = NVIC_GetPendingIRQ(EIC_IRQn);
+		s_bSamdStandbyNmiArmed = true;
+		NVIC_EnableIRQ(EIC_IRQn);
+		// Also cover a press already held when entry begins.
+		uint32_t level = PORT_REGS->GROUP[IOPORTA].PORT_IN & (1UL << 14);
+		uint8_t sense = EIC_REGS->EIC_NMICTRL & EIC_NMICTRL_NMISENSE_Msk;
+		if ((sense == EIC_NMICTRL_NMISENSE_FALL && level == 0U) ||
+			(sense == EIC_NMICTRL_NMISENSE_RISE && level != 0U))
+		{
+			NVIC_SetPendingIRQ(EIC_IRQn);
+		}
 	}
 #endif
 	mask = s_SamdStandbyWakeLines;
@@ -514,6 +529,27 @@ void SamdStandbyWakeArm(void)
 		EIC_REGS->EIC_INTFLAG = mask;
 		EIC_REGS->EIC_INTENSET = mask;
 	}
+}
+
+// Called before restoring PRIMASK after WFI.
+void SamdStandbyWakeDone(void)
+{
+#if defined(__SAMD11D14AM__)
+	if (s_bSamdStandbyNmiArmed)
+	{
+		s_bSamdStandbyNmiArmed = false;
+		if (s_SamdStandbyEicEnabled == 0U)
+		{
+			NVIC_DisableIRQ(EIC_IRQn);
+		}
+		// Preserve a pre-existing pending IRQ and real pin interrupts.
+		if (s_SamdStandbyEicPending == 0U &&
+			(EIC_REGS->EIC_INTFLAG & EIC_REGS->EIC_INTENSET) == 0U)
+		{
+			NVIC_ClearPendingIRQ(EIC_IRQn);
+		}
+	}
+#endif
 }
 
 #if defined(__SAMD11D14AM__)
@@ -614,6 +650,10 @@ static bool SamdStandbyNmiConfig(int PortNo, int PinNo, int Sense)
 // NMI is an ARM core exception, not an EIC NVIC interrupt.
 void NMI_Handler(void)
 {
+	if (s_bSamdStandbyNmiArmed)
+	{
+		NVIC_SetPendingIRQ(EIC_IRQn);
+	}
 	EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk;
 }
 #endif
