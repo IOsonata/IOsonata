@@ -45,6 +45,7 @@ files = ['src/CppRuntimeOverload.cpp', 'ARM/src/ResetEntry.c',
          'src/coredev/timer.cpp', 'src/coredev/uart.cpp',
          'ARM/Microchip/SAM4L/src/uart_sam4l.cpp', 'src/uart_retarget.c',
          'src/stddev.c', 'src/cfifo.c', 'src/device_intrf.cpp',
+         'src/syslog.cpp', 'src/semihost_intrf.cpp', 'ARM/src/semihost_arm.c',
          'src/video/cam_arducam_mega.cpp']
 includes = ['-I' + str(root / s) for s in ['include', 'ARM/include',
             'ARM/Microchip/SAM4L/include', 'ARM/CMSIS/Core/Include']]
