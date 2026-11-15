@@ -24,7 +24,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
 | SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Review runtime selection and oscillator initialization |
-| SAMD | Missing | Audit existing selectors and low-power clocks |
+| SAMD D11/D21 | Reset-reason mapping added on `port_samd_power_014`; other generic power functions pending | Review Standby semantics and low-power clocks; target build pending |
 | LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
