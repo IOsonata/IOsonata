@@ -50,6 +50,25 @@ register test, not an Arm build or hardware validation. The existing
 against each production Cortex-M0+ CMSIS device header. These checks have
 not yet been run for this branch, and board validation remains pending.
 
+### Reset-reason board test
+
+`ResetReasonDemo` is a dedicated managed Eclipse project for both
+`SAMD11/exemples/ResetReasonDemo/ioc` and
+`SAMD21/exemples/ResetReasonDemo/ioc`. It uses the known EDBG UART pin
+mapping of each board rather than modifying the UART demonstrations.
+
+Build the corresponding MCU library and `ResetReasonDemo` in Release,
+program the board, and open the EDBG virtual COM port at 115200 baud.
+The demo prints `Reset reason 0x...` with decoded power-on, pin,
+watchdog and software reset flags. Press the board RESET button to
+exercise external reset; send the single character `r` through the
+serial port to call `NVIC_SystemReset()` and check software reset.
+The output may have more than one flag; RCAUSE is read-only and is not
+cleared by the demo.
+
+The dedicated projects and test source have not yet been compiled or
+run on hardware. These are reset-cause tests, not Standby wakeup tests.
+
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
 configuration asking for it fails init), USB host mode, PWM (the TCC are
 timers only), watchdog, sleep modes and the NVM controller. The ADC has no interrupt, event or continuous mode, the DAC no
