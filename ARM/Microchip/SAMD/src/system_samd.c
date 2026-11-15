@@ -1027,9 +1027,10 @@ static bool SamdClockInit(void)
 // does: s_SamdStartupError and s_SamdStartupLine tell the first step that
 // failed, also when the DFLL48M took over from the FDPLL96M, s_SamdStartupLog
 // all the failed steps and s_SamdStartupReg the clock registers after them.
-void SystemInit(void)
+static bool SamdSystemClockInit(void)
 {
 	uint32_t primask = __get_PRIMASK();
+	bool result;
 
 	__disable_irq();
 
@@ -1040,7 +1041,8 @@ void SystemInit(void)
 		s_SamdStartupLog[i] = 0U;
 	}
 
-	if (!SamdClockInit())
+	result = SamdClockInit();
+	if (!result)
 	{
 		(void)SamdMainOsc8m();
 	}
@@ -1050,6 +1052,13 @@ void SystemInit(void)
 	SystemCoreClockUpdate();
 
 	__set_PRIMASK(primask);
+
+	return result;
+}
+
+void SystemInit(void)
+{
+	(void)SamdSystemClockInit();
 }
 
 uint32_t SystemCoreClockGet(void)
@@ -1091,6 +1100,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	McuOsc_t requested = g_McuOsc;
 	uint32_t primask;
+	bool result;
 
 	requested.CoreOsc.Type = ClkSrc;
 	requested.CoreOsc.Freq = OscFreq;
@@ -1100,18 +1110,13 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return false;
 	}
 
-	if (ClkSrc == g_McuOsc.CoreOsc.Type && OscFreq == g_McuOsc.CoreOsc.Freq)
-	{
-		return true;
-	}
-
 	primask = __get_PRIMASK();
 	__disable_irq();
 	g_McuOsc.CoreOsc = requested.CoreOsc;
-	SystemInit();
+	result = SamdSystemClockInit();
 	__set_PRIMASK(primask);
 
-	return true;
+	return result;
 }
 
 // The low frequency oscillator and generator 1 only. The consumers of
@@ -1119,25 +1124,21 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t primask;
+	bool result;
 
 	if (__get_IPSR() != 0U || !SamdLowFreqValid(ClkSrc, OscFreq))
 	{
 		return false;
 	}
 
-	if (ClkSrc == g_McuOsc.LowPwrOsc.Type && OscFreq == g_McuOsc.LowPwrOsc.Freq)
-	{
-		return true;
-	}
-
 	primask = __get_PRIMASK();
 	__disable_irq();
 	g_McuOsc.LowPwrOsc.Type = ClkSrc;
 	g_McuOsc.LowPwrOsc.Freq = OscFreq;
-	SamdLowFreqInit();
+	result = SamdLowFreqInit();
 	__set_PRIMASK(primask);
 
-	return true;
+	return result;
 }
 
 void SystemOscInit(void)

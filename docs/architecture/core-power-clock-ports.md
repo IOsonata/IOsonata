@@ -48,6 +48,29 @@ consecutive SAMD11 SW0/PA14 Standby resumes, with counts 0x00000001 through
 is a sample of live RAM continuity, not a full SRAM test. SAMD21 hardware wake, full SRAM
 testing and sleep-current measurements remain pending.
 
+SAMD runtime clock selection now returns the clock setup result. A failed
+core-clock change attempts the same OSC8M fallback used at startup, updates
+`SystemCoreClock` from the registers and returns false. Low-frequency
+selection returns false when oscillator startup or generator synchronization
+fails. Repeating the same request executes setup again, so a saved oscillator
+descriptor cannot hide a previous failure. The descriptors retain the requested
+configuration; a failed operation does not promise to restore the previous
+clock tree.
+
+The caller must still stop all affected clock consumers before either selector,
+including a repeated request. Core selection rebuilds the clock tree, including
+the low-frequency generator. Low-frequency selection must not run while the
+CPU depends on that source through the DFLL or DPLL. Automatic refusal for
+active consumers remains pending.
+
+Arm GNU D11/D21 compilation passed. Both complete managed D11 library
+configurations compiled 239 sources, and ClockDisplayDemo linked at 16,208
+bytes of flash and 2,892 bytes of static RAM, unchanged from before this fix.
+Temporary host checks of the selector control flow passed with setup failures,
+repeated requests, fallback attempts, invalid/interrupt-context calls and both
+initial interrupt-mask states. These checks substitute the hardware helpers;
+runtime oscillator failure and recovery still require board validation.
+
 ## STM32WBA power port (0.14)
 
 STM32WBA requires a family-specific power implementation. The WBA65 I
