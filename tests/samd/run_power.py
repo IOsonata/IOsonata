@@ -25,7 +25,7 @@ def masks_from_header(target):
 	s = path.read_text(encoding="utf-8")
 	masks = {}
 	for field in FIELDS:
-		pat = r"#define\\s+PM_RCAUSE_" + field + r"_Pos\\s+_UINT8_\\((\\d+)\\)"
+		pat = r"#define\s+PM_RCAUSE_" + field + r"_Pos\s+_UINT8_\((\d+)\)"
 		match = re.search(pat, s)
 		if match is None:
 			raise RuntimeError(f"{target}: no RCAUSE bit for {field}")
