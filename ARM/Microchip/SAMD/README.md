@@ -50,7 +50,8 @@ reset-only application is required.
 
 SAMD11 Xplained Pro uses its onboard SW0/PA14, the dedicated EIC NMI input.
 No external wiring is needed. SAMD21 Xplained Pro uses its
-onboard PA15 button (EXTINT15). Monitor the EDBG VCOM at 115200 baud.
+onboard PA15 button (EXTINT15). Monitor SAMD11 EDBG VCOM at the default
+1,000,000 baud; SAMD21 currently selects 115200 baud in its board.h.
 
 PRIMASK cannot mask SW0's NMI on D11. During Standby entry the NMI handler
 therefore leaves EIC_IRQn pending so an edge handled just before WFI cannot
