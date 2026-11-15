@@ -12,21 +12,33 @@ unchanged; its runtime initializer can retain all timer families. Runtime
 device selection also retains all supported choices. Per-device static state
 is still allocated for the supported timers.
 
-The project retains the existing `_sbrk` startup hook explicitly because
-newlib can introduce its reference after LTO.
+The demo builds fixed decimal fields and sends them with `SysLogStatus`,
+without linking the general printf formatter. Timing lines have the standard
+runtime status prefix, for example:
+
+```text
+R:000:0003 Count = 100 ms, T0 = 100000 us
+```
 
 ## Validation
 
-With Arm GCC 15.2.1, `-Os`, LTO, and the default RTC configuration:
+With Arm GCC 15.2.1, `-Os`, and LTO, all four selections fit with the full demo:
 
-| Configuration | text | data | bss | Flash (text + data) |
-| --- | ---: | ---: | ---: | ---: |
-| Debug | 13664 | 172 | 2184 | 13836 |
-| Release | 16124 | 172 | 3040 | 16296 |
+| Timer | Debug flash | Release flash | Release flash free |
+| --- | ---: | ---: | ---: |
+| 0 (RTC) | 11612 | 14084 | 2300 |
+| 1 (TC1) | 12564 | 15032 | 1352 |
+| 2 (TC2) | 12608 | 15072 | 1312 |
+| 3 (TCC0) | 12868 | 15340 | 1044 |
 
-Release leaves 88 bytes of flash and 884 bytes of RAM beyond static data.
-These are build results, not measured stack usage or board validation.
-Other timer selections with the full logging demo have not been size-qualified.
+Flash includes text and initialized data. Release static RAM is 3112 bytes
+for RTC and 3120 bytes for TC/TCC; stack usage has not been measured.
+
+Before the fixed-field logging change, the maintainer validated RTC trigger 0
+at 100 ms with Debug semihosting and Release UART, and all four TCC0 triggers
+with Debug semihosting. TC1/TC2 hardware tests and the revised logging output
+remain to be validated. Timer and UART driver code is unchanged by this
+logging change.
 
 From the repository root:
 

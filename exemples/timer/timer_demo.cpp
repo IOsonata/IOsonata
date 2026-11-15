@@ -6,6 +6,7 @@
 
 This example demonstrate how to use the generic timer
 
+The fixed decimal fields use SysLog status records, avoiding printf formatting.
 The results are logged with SysLog: to the UART of board.h in a Release
 build (NDEBUG), to the debugger console through semihosting in a Debug build.
 The Debug build needs no UART, it works on boards that only have a debug
@@ -44,7 +45,6 @@ SOFTWARE.
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 
 #include "idelay.h"
 #include "coredev/timer.h"
@@ -187,6 +187,33 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 	g_TickCount = c;
 }
 
+// Append the fixed demo fields without linking the printf format parser.
+static int TimerDemoText(char *pLine, int Pos, const char *pText)
+{
+	while (*pText != 0 && Pos < TIMER_DEMO_LINE_LEN - 1)
+	{
+		pLine[Pos++] = *pText++;
+	}
+	pLine[Pos] = 0;
+
+	return Pos;
+}
+
+static int TimerDemoNumber(char *pLine, int Pos, uint32_t Value)
+{
+	char digits[11];
+	int pos = sizeof(digits) - 1;
+
+	digits[pos] = 0;
+	do
+	{
+		digits[--pos] = '0' + Value % 10U;
+		Value /= 10U;
+	} while (Value != 0U);
+
+	return TimerDemoText(pLine, Pos, digits + pos);
+}
+
 // Main application entry
 int main(void)
 {
@@ -253,14 +280,21 @@ int main(void)
 #endif
 	if (!g_TimerInitOk)
 	{
-		SysLogGetInstance()->Printf("Timer %d initialization failed\r\n", s_TimerCfg.DevNo);
+		n = TimerDemoText(line, 0, "Timer ");
+		if (s_TimerCfg.DevNo < 0)
+		{
+			n = TimerDemoText(line, n, "-");
+		}
+		n = TimerDemoNumber(line, n, s_TimerCfg.DevNo < 0 ? 0U - (uint32_t)s_TimerCfg.DevNo : (uint32_t)s_TimerCfg.DevNo);
+		TimerDemoText(line, n, " initialization failed");
+		SysLogStatus(SysLogGet(), SYSSTATUS_FAILED, line);
 		return 1;
 	}
 
 	triggers = TimerGetMaxTrigger(dev);
 	if (triggers < 1)
 	{
-		SysLogGetInstance()->Printf("No timer triggers available\r\n");
+		SysLogStatus(SysLogGet(), SYSSTATUS_NOTSUPPORTED, "No timer triggers available");
 		TimerDisable(dev);
 		return 1;
 	}
@@ -279,8 +313,14 @@ int main(void)
 			ns, TIMER_TRIG_TYPE_CONTINUOUS);
 #endif
 		g_TriggerPeriod[i] = period;
-		SysLogGetInstance()->Printf("Timer %d trigger %d: %lu ms\r\n", s_TimerCfg.DevNo, i,
-									(unsigned long)(period / 1000000ULL));
+		n = TimerDemoText(line, 0, "Timer ");
+		n = TimerDemoNumber(line, n, s_TimerCfg.DevNo);
+		n = TimerDemoText(line, n, " trigger ");
+		n = TimerDemoNumber(line, n, i);
+		n = TimerDemoText(line, n, ": ");
+		n = TimerDemoNumber(line, n, (uint32_t)(period / 1000000ULL));
+		TimerDemoText(line, n, " ms");
+		SysLogStatus(SysLogGet(), SYSSTATUS_RUNNING, line);
 		if (period == 0)
 		{
 			for (n = 0; n < i; n++)
@@ -312,12 +352,17 @@ int main(void)
 			continue;
 		}
 		// Build the whole line, then log it as one record
-		n = snprintf(line, sizeof(line), "Count = %lu ms", (unsigned long)TimerGetMilisecond(dev));
-		for (i = 0; i < triggers && n > 0 && n < (int)sizeof(line); i++)
+		n = TimerDemoText(line, 0, "Count = ");
+		n = TimerDemoNumber(line, n, (uint32_t)TimerGetMilisecond(dev));
+		n = TimerDemoText(line, n, " ms");
+		for (i = 0; i < triggers; i++)
 		{
-			n += snprintf(&line[n], sizeof(line) - n, ", T%d = %lu us", i,
-						  (unsigned long)(periods[i] / 1000));
+			n = TimerDemoText(line, n, ", T");
+			n = TimerDemoNumber(line, n, i);
+			n = TimerDemoText(line, n, " = ");
+			n = TimerDemoNumber(line, n, (uint32_t)(periods[i] / 1000));
+			n = TimerDemoText(line, n, " us");
 		}
-		SysLogGetInstance()->Printf("%s\r\n", line);
+		SysLogStatus(SysLogGet(), SYSSTATUS_RUNNING, line);
 	}
 }
