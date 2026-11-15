@@ -75,7 +75,7 @@ reset-exit semantics for all current validated backends. No existing
 backend will be modified simply to satisfy the new declaration.
 
 The `SystemSleep()` entry has now been implemented for SAM D11/D21 in
-`ARM/Microchip/SAMD/src/system_sleep_samd.cpp` and linked into both
+`ARM/Microchip/SAMD/src/system_sleep_samd.c` and linked into both
 Eclipse-managed MCU libraries. It sets SLEEPDEEP, executes WFI and restores
 the original SCR after wake. **This is entry/resume logic only**: a working
 asynchronous wake source, peripheral shutdown and target compilation/hardware
