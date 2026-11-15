@@ -85,6 +85,11 @@ Timer Enable refuses a source frequency different from its cached BaseFreq.
 After a successful clock change, call Frequency to select a rate using the new
 source. This existing operation resets the counter, recalculates active trigger
 periods and starts it. A missing source or failed reconfiguration returns zero.
+A stop, setup, reset or start failure invalidates the cached source frequency,
+so Enable refuses partial configuration even when the source is unchanged.
+A successful Frequency retry restores the cached value. This does not claim
+that hardware stopped when a stop synchronization failed; clock selection still
+checks the counter registers before allowing a change.
 The period calculation uses an aligned local value before assigning the packed
 64-bit trigger field. An unchanged source allows normal Disable/Enable resume.
 
@@ -118,7 +123,9 @@ switching and refusal validation remain pending.
 
 The timer core checks pass at O0 and Os with changed and missing source
 frequencies on RTC, both D11 TC devices and TCC, including active trigger
-recalculation and restart refusal. D11/D21 register checks cover each shared
+recalculation and restart refusal. Stop, setup, reset and start failures with
+an unchanged source also refuse Enable and recover through Frequency retries.
+D11/D21 register checks cover each shared
 TC/TCC peer, enabled/reset/synchronizing states and restoration of the APBC
 mask. D11 managed libraries and all TimerDemo link configurations pass; the
 D21 timer source compiles with Arm GNU. ClockDisplayDemo remains at 16,208

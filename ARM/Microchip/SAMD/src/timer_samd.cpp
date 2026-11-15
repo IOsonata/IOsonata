@@ -680,7 +680,7 @@ static uint32_t SamdTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	// The prescaler is written with the counter stopped
 	if (!SamdTimerRun(d, false))
 	{
-		d->BaseFreq = previous;
+		d->BaseFreq = 0;
 
 		return 0;
 	}
@@ -711,7 +711,9 @@ static uint32_t SamdTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
 	if (!res)
 	{
-		d->BaseFreq = previous;
+		// Partial setup cannot be resumed, even if the source is unchanged.
+		// A successful frequency selection is required before Enable.
+		d->BaseFreq = 0;
 	}
 
 	return res ? freq : 0;

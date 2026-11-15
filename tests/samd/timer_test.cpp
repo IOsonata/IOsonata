@@ -49,6 +49,9 @@ static unsigned s_SysTickStops;
 static uint32_t s_MainFreq = 48000000;
 static uint32_t s_LfFreq = 32768;
 static bool s_SetupFail;
+static bool s_StopFail;
+static bool s_StartFail;
+static bool s_ResetFail;
 bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg);
 static uint32_t SystemPeriphClockGet(int);
 static unsigned GetLowFreqOscType();
@@ -86,9 +89,14 @@ static void NVIC_SetPendingIRQ(int Irq) { s_Pending |= 1U << Irq; }
 static void NVIC_ClearPendingIRQ(int Irq) { s_Pending &= ~(1U << Irq); }
 
 static bool ModelSetup(SamdTimerData_t *) { return !s_SetupFail; }
-static bool ModelRun(SamdTimerData_t *, bool) { return true; }
+static bool ModelRun(SamdTimerData_t *, bool Run) { return Run ? !s_StartFail : !s_StopFail; }
 static bool ModelReset(SamdTimerData_t *d)
 {
+	if (s_ResetFail)
+	{
+		return false;
+	}
+
 	s_Count[d->pTimer->DevNo] = {};
 	return true;
 }
@@ -235,10 +243,24 @@ int main()
 		source = original;
 		s_SetupFail = true;
 		assert(timer.SetFrequency(&timer, requested) == 0);
-		assert(g_SamdTimerData[dev].BaseFreq == original / 2);
+		assert(g_SamdTimerData[dev].BaseFreq == 0);
 		assert(!TimerEnable(&timer) && !g_SamdTimerData[dev].bRunning);
 		s_SetupFail = false;
 		assert(timer.SetFrequency(&timer, requested) != 0);
+		// Each hardware failure must prevent Enable on an unchanged source.
+		bool *failures[] = { &s_StopFail, &s_SetupFail, &s_ResetFail, &s_StartFail };
+
+		for (bool *failure : failures)
+		{
+			*failure = true;
+			assert(timer.SetFrequency(&timer, requested) == 0);
+			assert(g_SamdTimerData[dev].BaseFreq == 0);
+			*failure = false;
+			assert(!TimerEnable(&timer));
+			assert(timer.SetFrequency(&timer, requested) != 0);
+			assert(g_SamdTimerData[dev].BaseFreq == source);
+			assert(g_SamdTimerData[dev].bRunning);
+		}
 	}
 	assert(s_OverflowEvents == 4);
 	// Capture routing is released before moving the same handle to RTC.
