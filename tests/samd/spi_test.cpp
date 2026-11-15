@@ -223,6 +223,8 @@ int main()
 		cfg.bIntEn = (mode & 1) != 0;
 		assert(SPIInit(&spi, &cfg));
 		assert(s_Intrf == &spi.DevIntrf);
+		assert(spi.DevIntrf.TxData == (cfg.bDmaEn ? SamdSpiTxDataDma : SamdSpiTxData));
+		assert(spi.DevIntrf.RxData == (cfg.bDmaEn ? SamdSpiRxDataDma : SamdSpiRxData));
 		assert((s_Handler != nullptr) == cfg.bIntEn);
 		assert(s_IrqEnabled == cfg.bIntEn);
 		assert(s_Channels[0] == cfg.bDmaEn && s_Channels[1] == cfg.bDmaEn);
@@ -284,6 +286,35 @@ int main()
 		assert(spi.DevIntrf.TxData(&spi.DevIntrf, data, sizeof(data)) == 3);
 		assert(s_Events == events);
 		spi.DevIntrf.bNoStop = false;
+		uint8_t received[3] = {};
+		reg.SERCOM_INTFLAG = cfg.bIntEn || cfg.bDmaEn ? 0 :
+			SERCOM_SPIM_INTFLAG_DRE_Msk | SERCOM_SPIM_INTFLAG_RXC_Msk;
+		events = s_Events;
+		assert(spi.DevIntrf.RxData(&spi.DevIntrf, received, sizeof(received)) ==
+			(cfg.bIntEn ? -1 : 3));
+		if (cfg.bIntEn)
+		{
+			if (cfg.bDmaEn)
+			{
+				s_DmaHandler[0](0, DMAC_CHINTFLAG_TCMPL_Msk, s_DmaCtx[0]);
+			}
+			else
+			{
+				for (int i = 0; i < 3; i++)
+				{
+					reg.SERCOM_DATA = data[i];
+					reg.SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_RXC_Msk;
+					s_Handler(0, &spi.DevIntrf);
+				}
+				assert(memcmp(received, data, sizeof(data)) == 0);
+			}
+			assert(s_Events == events + 1 && s_EventLen == 3);
+		}
+		else
+		{
+			assert(s_Events == events);
+		}
+
 		unsigned stops = s_Stops;
 		spi.DevIntrf.Disable(&spi.DevIntrf);
 		assert(!s_Clock);
@@ -299,6 +330,7 @@ int main()
 	spi.DevIntrf.PowerOff(&spi.DevIntrf);
 	assert(!s_Clock && !s_Channels[0] && !s_Channels[1]);
 	assert(spi.DevIntrf.TxData(&spi.DevIntrf, data, sizeof(data)) == 0);
+	assert(spi.DevIntrf.RxData(&spi.DevIntrf, data, sizeof(data)) == 0);
 	assert(SPIInit(&spi, &cfg));
 	spi.DevIntrf.PowerOff(&spi.DevIntrf);
 
@@ -330,6 +362,6 @@ int main()
 	assert(s_Arms == 3);
 	spi.DevIntrf.PowerOff(&spi.DevIntrf);
 	assert(s_Opens == s_Closes);
-	assert(s_Starts == 10);
+	assert(s_Starts == 14);
 	puts("SAMD SPI master modes, completion, lifecycle and slave arming: PASS");
 }

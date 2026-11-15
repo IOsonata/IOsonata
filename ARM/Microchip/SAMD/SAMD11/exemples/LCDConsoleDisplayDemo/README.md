@@ -192,10 +192,10 @@ then clean and rebuild the library and application:
 
 | Mode | DISPLAY_SPI_DMA_ENABLE | DISPLAY_SPI_INT_ENABLE | Flash bytes |
 | --- | --- | --- | ---: |
-| Polling (default) | false | false | 15000 |
-| Interrupt only | false | true | 15620 |
-| DMA, CPU waits | true | false | 16028 |
-| DMA with interrupts | true | true | 16544 (160 over D11 flash) |
+| Polling (default) | false | false | 14992 |
+| Interrupt only | false | true | 15600 |
+| DMA, CPU waits | true | false | 16024 |
+| DMA with interrupts | true | true | 16532 (148 over D11 flash) |
 
 These are GCC 15.2.1, `-Os` + LTO results, identical in Debug and Release,
 using `tests/display/build_samd11_console.py`. Pass `--interrupt`, `--dma`,
@@ -211,6 +211,14 @@ The DMA operation table selects a separate SERCOM error handler and DMA start
 function. With a constant DMA selection and LTO, the CPU polling transfer loop,
 byte interrupt starter, byte interrupt handler and slave transfer code are omitted.
 GPIO control of CS, D/C and reset remains required. Runtime mode selection still
-retains the selectable implementations. The combined build saves 156 flash bytes
+retains the selectable implementations. The combined build saves 168 flash bytes
 from the previous 16700-byte result. Host SPI tests cover ignored RXC in DMA mode,
 partial error completion and suppression of duplicate late completion.
+
+`SPIInit` selects separate `SamdSpiTxDataDma` / `SamdSpiRxDataDma` entry points
+when DMA is enabled, and `SamdSpiTxData` / `SamdSpiRxData` for register transfers.
+The DMA entry points call the DMA wait implementation directly for synchronous
+transfers. Their asynchronous operation table contains only DMA transfer functions.
+The build check also verifies that the register TxData/RxData symbols are absent
+from a constant-DMA LTO ELF. Host tests exercise transmit and receive in all four
+DMA/interrupt combinations and verify entry-point reselection on initialization.

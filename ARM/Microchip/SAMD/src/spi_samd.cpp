@@ -909,9 +909,7 @@ static int SamdSpiTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 {
 	SamdSpiDev_t *dev = (SamdSpiDev_t *)pDev->pDevData;
 
-	// bDmaEn without the channels: given back by PowerOff
-	if (pData == NULL || DataLen <= 0 || dev->pSpiDev->Cfg.Mode != SPIMODE_MASTER ||
-		dev->pSpiDev->Cfg.bDmaEn != dev->bDma)
+	if (pData == NULL || DataLen <= 0 || dev->pSpiDev->Cfg.Mode != SPIMODE_MASTER)
 	{
 		return 0;
 	}
@@ -921,15 +919,14 @@ static int SamdSpiTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 		return dev->pOps->Async(dev, pData, NULL, DataLen);
 	}
 
-	return dev->pOps->Sync(dev, pData, NULL, DataLen);
+	return SamdSpimPolling(dev, pData, NULL, DataLen);
 }
 
 static int SamdSpiRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	SamdSpiDev_t *dev = (SamdSpiDev_t *)pDev->pDevData;
 
-	if (pBuff == NULL || BuffLen <= 0 || dev->pSpiDev->Cfg.Mode != SPIMODE_MASTER ||
-		dev->pSpiDev->Cfg.bDmaEn != dev->bDma)
+	if (pBuff == NULL || BuffLen <= 0 || dev->pSpiDev->Cfg.Mode != SPIMODE_MASTER)
 	{
 		return 0;
 	}
@@ -939,7 +936,42 @@ static int SamdSpiRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		return dev->pOps->Async(dev, NULL, pBuff, BuffLen);
 	}
 
-	return dev->pOps->Sync(dev, NULL, pBuff, BuffLen);
+	return SamdSpimPolling(dev, NULL, pBuff, BuffLen);
+}
+
+static int SamdSpiTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
+{
+	SamdSpiDev_t *dev = (SamdSpiDev_t *)pDev->pDevData;
+
+	// bDmaEn without the channels: given back by PowerOff
+	if (pData == NULL || DataLen <= 0 || !dev->bDma)
+	{
+		return 0;
+	}
+
+	if (pDev->bIntEn && !pDev->bNoStop)
+	{
+		return dev->pOps->Async(dev, pData, NULL, DataLen);
+	}
+
+	return SamdSpimDmaWait(dev, pData, NULL, DataLen);
+}
+
+static int SamdSpiRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
+{
+	SamdSpiDev_t *dev = (SamdSpiDev_t *)pDev->pDevData;
+
+	if (pBuff == NULL || BuffLen <= 0 || !dev->bDma)
+	{
+		return 0;
+	}
+
+	if (pDev->bIntEn)
+	{
+		return dev->pOps->Async(dev, NULL, pBuff, BuffLen);
+	}
+
+	return SamdSpimDmaWait(dev, NULL, pBuff, BuffLen);
 }
 
 static void SamdSpiStopTx(DevIntrf_t * const pDev)
@@ -1157,10 +1189,10 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	pDev->DevIntrf.GetRate = SamdSpiGetRate;
 	pDev->DevIntrf.SetRate = SamdSpiSetRate;
 	pDev->DevIntrf.StartRx = SamdSpiStartRx;
-	pDev->DevIntrf.RxData = SamdSpiRxData;
+	pDev->DevIntrf.RxData = pCfgData->bDmaEn ? SamdSpiRxDataDma : SamdSpiRxData;
 	pDev->DevIntrf.StopRx = SamdSpiStopRx;
 	pDev->DevIntrf.StartTx = SamdSpiStartTx;
-	pDev->DevIntrf.TxData = SamdSpiTxData;
+	pDev->DevIntrf.TxData = pCfgData->bDmaEn ? SamdSpiTxDataDma : SamdSpiTxData;
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.StopTx = SamdSpiStopTx;
 	pDev->DevIntrf.Reset = SamdSpiReset;

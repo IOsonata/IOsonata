@@ -96,6 +96,7 @@ def main():
         print(mode + ": link passed", flush=True)
         subprocess.run([PREFIX + "size", str(elf)], check=True)
         symbols = subprocess.check_output([PREFIX + "nm", str(elf)], text=True)
+        demangled = subprocess.check_output([PREFIX + "nm", "-C", str(elf)], text=True)
         if not args.syslog_only:
             absent = ("LcdSSD", "SPIInit", "DisplayIntrf") if args.output == "uart" else ("UARTInit", "SamdUart")
             assert all(symbol not in symbols for symbol in absent), "Unselected output linked"
@@ -107,6 +108,7 @@ def main():
         if args.dma and not args.no_lto and args.output == "display":
             absent = ("SamdSpimPolling", "SamdSpimStart", "SamdSpimIrq", "SamdSpis")
             assert all(symbol not in symbols for symbol in absent), "CPU SPI mode linked with DMA"
+            assert "SamdSpiTxData(" not in demangled and "SamdSpiRxData(" not in demangled, "Register entry points linked with DMA"
         if args.syslog_only:
             symbols = subprocess.check_output([PREFIX + "nm", str(elf)], text=True)
             assert "vsnprintf" not in symbols, "Status-only log linked printf"
