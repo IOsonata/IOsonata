@@ -354,6 +354,10 @@ int main()
 	msDelay(2000);
 	SysLogPrintf(SysLogGet(), "Calling SystemPowerOff in 1 second\r\n");
 	msDelay(1000);
+
+	// USART1 is only the diagnostic transport. Stop its DMA and clock
+	// requests before WBA Standby; they must not hold the power domain on.
+	s_Uart.Disable();
 #else
 	msDelay(100);
 #endif
@@ -361,6 +365,11 @@ int main()
 	SystemPowerOff();
 
 #if defined(POWER_DEMO_STANDBY_DIAG) && POWER_DEMO_STANDBY_DIAG
+#if defined(STM32WBA65xx)
+	// Restore the UART only if WFI returned rather than resetting the MCU.
+	s_Uart.Enable();
+	msDelay(50);
+#endif
 	SysLogPrintf(SysLogGet(),
 		"WFI returned without Standby reset\r\n");
 	while (1)
