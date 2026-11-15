@@ -599,7 +599,13 @@ static bool SamdTimerEnable(TimerDev_t * const pTimer)
 {
 	SamdTimerData_t *d = SamdTimerGet(pTimer);
 
-	return d != NULL && SamdTimerRun(d, true);
+	if (d == NULL || d->BaseFreq == 0U ||
+		d->BaseFreq != SystemPeriphClockGet(SamdTimerIsRtc(d) ? SAMD_GCLK_LF : SAMD_GCLK_MAIN))
+	{
+		return false;
+	}
+
+	return SamdTimerRun(d, true);
 }
 
 static void SamdTimerReset(TimerDev_t * const pTimer)
@@ -655,14 +661,27 @@ static uint32_t SamdTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	uint32_t presc;
 	uint32_t freq;
 
-	if (d == NULL || !SamdTimerPlan(d, Freq, &presc, &freq))
+	if (d == NULL)
 	{
+		return 0;
+	}
+
+	uint32_t base = SystemPeriphClockGet(SamdTimerIsRtc(d) ? SAMD_GCLK_LF : SAMD_GCLK_MAIN);
+	uint32_t previous = d->BaseFreq;
+
+	d->BaseFreq = base;
+	if (!SamdTimerPlan(d, Freq, &presc, &freq))
+	{
+		d->BaseFreq = previous;
+
 		return 0;
 	}
 
 	// The prescaler is written with the counter stopped
 	if (!SamdTimerRun(d, false))
 	{
+		d->BaseFreq = previous;
+
 		return 0;
 	}
 
@@ -679,13 +698,21 @@ static uint32_t SamdTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
 		if (trig->bActive)
 		{
-			(void)SamdTimerPeriod(freq, trig->Info.nsPeriod, &trig->Ticks, &trig->Info.nsPeriod);
+			uint64_t period = trig->Info.nsPeriod;
+
+			(void)SamdTimerPeriod(freq, period, &trig->Ticks, &period);
+			trig->Info.nsPeriod = period;
 		}
 	}
 	EnableInterrupt(state);
 
 	bool res = d->pOps->Setup(d) && (d->pTickOps == NULL || d->pTickOps->Open(d, (int)NVIC_GetPriority(d->IrqNo))) &&
 			   SamdTimerResetCounter(d) && SamdTimerRun(d, true);
+
+	if (!res)
+	{
+		d->BaseFreq = previous;
+	}
 
 	return res ? freq : 0;
 }

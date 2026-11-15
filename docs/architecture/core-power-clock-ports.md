@@ -74,14 +74,26 @@ USB-recovery DFLL operation and peripheral channels on unrelated sources also
 block low-frequency changes. The GCLK inspection writes only register selector
 IDs, without changing channel or generator configuration.
 
-Timer Disable stops counting but retains its clock connection; this still
-blocks selection. DMA initialization leaves the controller enabled, but that
+Stopped RTC, TC and TCC timers may retain their generic-clock connections
+across selection. Every counter sharing the channel must have ENABLE and
+SWRST clear and no synchronization pending. TC/TCC register bus gates are
+opened temporarily for inspection and restored before returning; counter
+configuration, pending flags and generic-clock connections are preserved.
+A running shared-clock peer blocks selection even if its register bus was gated.
+
+Timer Enable refuses a source frequency different from its cached BaseFreq.
+After a successful clock change, call Frequency to select a rate using the new
+source. This existing operation resets the counter, recalculates active trigger
+periods and starts it. A missing source or failed reconfiguration returns zero.
+The period calculation uses an aligned local value before assigning the packed
+64-bit trigger field. An unchanged source allows normal Disable/Enable resume.
+
+DMA initialization leaves the controller enabled, but that
 alone no longer blocks selection: every channel must be disabled, with no busy
 or pending transfer, active arbitration level, completion awaiting its ISR, or
 reset in progress. The inspection preserves CHID, descriptors and interrupt
 flags. An idle DMA allocation can be reused after clock selection once its
-peripheral is reconfigured. Timer connections still require release or a future
-restart path that handles changed source frequencies. SysTick and scheduler
+peripheral is reconfigured. SysTick and scheduler
 retiming remain the application's responsibility; reading SysTick CTRL here
 would clear COUNTFLAG. The refusal checks do not retime peripheral drivers.
 
@@ -103,6 +115,15 @@ active arbitration level. An enabled controller with all channels idle is
 accepted, and CHID is preserved on both acceptance and refusal. These checks
 model indirect GCLK/DMAC selection and substitute clock setup; hardware
 switching and refusal validation remain pending.
+
+The timer core checks pass at O0 and Os with changed and missing source
+frequencies on RTC, both D11 TC devices and TCC, including active trigger
+recalculation and restart refusal. D11/D21 register checks cover each shared
+TC/TCC peer, enabled/reset/synchronizing states and restoration of the APBC
+mask. D11 managed libraries and all TimerDemo link configurations pass; the
+D21 timer source compiles with Arm GNU. ClockDisplayDemo remains at 16,208
+bytes of flash and 2,892 bytes of static RAM. Hardware clock switching remains
+pending.
 
 
 ## STM32WBA power port (0.14)

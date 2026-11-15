@@ -46,6 +46,9 @@ static bool s_CancelNext;
 static bool s_ResetInHandler;
 static uint32_t s_Pending;
 static unsigned s_SysTickStops;
+static uint32_t s_MainFreq = 48000000;
+static uint32_t s_LfFreq = 32768;
+static bool s_SetupFail;
 bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg);
 static uint32_t SystemPeriphClockGet(int);
 static unsigned GetLowFreqOscType();
@@ -72,7 +75,7 @@ bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *)
 	return true;
 }
 
-static uint32_t SystemPeriphClockGet(int Id) { return Id == SAMD_GCLK_LF ? 32768 : 48000000; }
+static uint32_t SystemPeriphClockGet(int Id) { return Id == SAMD_GCLK_LF ? s_LfFreq : s_MainFreq; }
 static unsigned GetLowFreqOscType() { return 0; }
 static unsigned SamdIrqPrio(int Prio) { return (unsigned)Prio; }
 static void NVIC_EnableIRQ(int) {}
@@ -82,7 +85,7 @@ static unsigned NVIC_GetPriority(int) { return 1; }
 static void NVIC_SetPendingIRQ(int Irq) { s_Pending |= 1U << Irq; }
 static void NVIC_ClearPendingIRQ(int Irq) { s_Pending &= ~(1U << Irq); }
 
-static bool ModelSetup(SamdTimerData_t *) { return true; }
+static bool ModelSetup(SamdTimerData_t *) { return !s_SetupFail; }
 static bool ModelRun(SamdTimerData_t *, bool) { return true; }
 static bool ModelReset(SamdTimerData_t *d)
 {
@@ -207,6 +210,35 @@ int main()
 		TimerDisable(&timer);
 		assert(!g_SamdTimerData[dev].bRunning);
 		assert(TimerEnable(&timer));
+		// A changed source needs a new frequency selection before restart.
+		assert(nsTimerEnableTrigger(&timer, 0, 1000000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
+		TimerDisable(&timer);
+		uint32_t &source = dev == 0 ? s_LfFreq : s_MainFreq;
+		uint32_t original = source;
+		uint32_t requested = timer.Freq;
+
+		source /= 2;
+		assert(!TimerEnable(&timer));
+		assert(!g_SamdTimerData[dev].bRunning);
+		uint32_t actual = timer.SetFrequency(&timer, requested);
+
+		assert(actual != 0 && g_SamdTimerData[dev].BaseFreq == source);
+		assert(g_SamdTimerData[dev].bRunning && TimerGetTickCount(&timer) == 0);
+		assert(g_SamdTimerData[dev].pTrig[0].Ticks == actual);
+		assert(g_SamdTimerData[dev].pTrig[0].Info.nsPeriod == 1000000000);
+		TimerDisable(&timer);
+		source = 0;
+		assert(!TimerEnable(&timer));
+		assert(timer.SetFrequency(&timer, requested) == 0);
+		assert(!g_SamdTimerData[dev].bRunning);
+		assert(g_SamdTimerData[dev].BaseFreq == original / 2);
+		source = original;
+		s_SetupFail = true;
+		assert(timer.SetFrequency(&timer, requested) == 0);
+		assert(g_SamdTimerData[dev].BaseFreq == original / 2);
+		assert(!TimerEnable(&timer) && !g_SamdTimerData[dev].bRunning);
+		s_SetupFail = false;
+		assert(timer.SetFrequency(&timer, requested) != 0);
 	}
 	assert(s_OverflowEvents == 4);
 	// Capture routing is released before moving the same handle to RTC.

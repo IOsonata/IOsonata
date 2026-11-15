@@ -1123,7 +1123,69 @@ static bool SamdDmaClockBusy(void)
 		   (DMAC_REGS->DMAC_ACTIVE & (DMAC_ACTIVE_ABUSY_Msk | DMAC_ACTIVE_LVLEX_Msk)) != 0U;
 }
 
-// Runtime changes require released peripheral clocks. Bus masks alone do not
+// Temporarily open the register interface to inspect a shared-clock peer.
+// This does not enable its counter or change its generic clock connection.
+static bool SamdTcClockBusy(tc_registers_t *pReg, uint32_t Mask)
+{
+	uint32_t saved = PM_REGS->PM_APBCMASK;
+	bool busy;
+
+	PM_REGS->PM_APBCMASK = saved | Mask;
+	busy = (pReg->COUNT16.TC_CTRLA & (TC_CTRLA_ENABLE_Msk | TC_CTRLA_SWRST_Msk)) != 0U ||
+		   (pReg->COUNT16.TC_STATUS & TC_STATUS_SYNCBUSY_Msk) != 0U;
+	PM_REGS->PM_APBCMASK = saved;
+
+	return busy;
+}
+
+static bool SamdTccClockBusy(tcc_registers_t *pReg, uint32_t Mask)
+{
+	uint32_t saved = PM_REGS->PM_APBCMASK;
+	bool busy;
+
+	PM_REGS->PM_APBCMASK = saved | Mask;
+	busy = (pReg->TCC_CTRLA & (TCC_CTRLA_ENABLE_Msk | TCC_CTRLA_SWRST_Msk)) != 0U ||
+		   pReg->TCC_SYNCBUSY != 0U;
+	PM_REGS->PM_APBCMASK = saved;
+
+	return busy;
+}
+
+// Every counter sharing the channel must be stopped and synchronized.
+// Other peripheral channels retain the conservative allocated-clock check.
+static bool SamdTimerClockBusy(uint32_t Channel)
+{
+	switch (Channel)
+	{
+		case GCLK_CLKCTRL_ID_RTC_Val:
+			return (RTC_REGS->MODE0.RTC_CTRL & (RTC_MODE0_CTRL_ENABLE_Msk | RTC_MODE0_CTRL_SWRST_Msk)) != 0U ||
+				   (RTC_REGS->MODE0.RTC_STATUS & RTC_STATUS_SYNCBUSY_Msk) != 0U;
+#if defined(__SAMD11D14AM__)
+		case GCLK_CLKCTRL_ID_TC1_TC2_Val:
+			return SamdTcClockBusy(TC1_REGS, PM_APBCMASK_TC1_Msk) ||
+				   SamdTcClockBusy(TC2_REGS, PM_APBCMASK_TC2_Msk);
+		case GCLK_CLKCTRL_ID_TCC0_Val:
+			return SamdTccClockBusy(TCC0_REGS, PM_APBCMASK_TCC0_Msk);
+#else
+		case GCLK_CLKCTRL_ID_TCC0_TCC1_Val:
+			return SamdTccClockBusy(TCC0_REGS, PM_APBCMASK_TCC0_Msk) ||
+				   SamdTccClockBusy(TCC1_REGS, PM_APBCMASK_TCC1_Msk);
+		case GCLK_CLKCTRL_ID_TCC2_TC3_Val:
+			return SamdTccClockBusy(TCC2_REGS, PM_APBCMASK_TCC2_Msk) ||
+				   SamdTcClockBusy(TC3_REGS, PM_APBCMASK_TC3_Msk);
+		case GCLK_CLKCTRL_ID_TC4_TC5_Val:
+			return SamdTcClockBusy(TC4_REGS, PM_APBCMASK_TC4_Msk) ||
+				   SamdTcClockBusy(TC5_REGS, PM_APBCMASK_TC5_Msk);
+		case GCLK_CLKCTRL_ID_TC6_TC7_Val:
+			return SamdTcClockBusy(TC6_REGS, PM_APBCMASK_TC6_Msk) ||
+				   SamdTcClockBusy(TC7_REGS, PM_APBCMASK_TC7_Msk);
+#endif
+		default:
+			return true;
+	}
+}
+
+// Runtime changes require stopped timers and released peripheral clocks. Bus masks alone do not
 // show activity: several masks are enabled at reset. Interrupts are disabled.
 static bool SamdClockBusy(bool LowFreq)
 {
@@ -1198,7 +1260,7 @@ static bool SamdClockBusy(bool LowFreq)
 				continue;
 			}
 		}
-		if ((channel & GCLK_CLKCTRL_CLKEN_Msk) != 0U)
+		if ((channel & GCLK_CLKCTRL_CLKEN_Msk) != 0U && SamdTimerClockBusy(i))
 		{
 			return true;
 		}
