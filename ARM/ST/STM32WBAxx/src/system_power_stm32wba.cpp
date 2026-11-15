@@ -272,7 +272,12 @@ static void StWbaWakePullRetain(void)
 	}
 }
 
-void SystemPowerOff(void)
+// Diagnostic entry point: prepare the same Standby state without executing WFI.
+// PowerOffDemo reads the resulting registers, then calls SystemPowerOff.
+// A completed preparation is consumed once by SystemPowerOff.
+static bool s_bStandbyPrepared;
+
+bool StWbaPowerPrepareStandby(void)
 {
 	uint32_t en;
 	uint32_t selectMask;
@@ -280,6 +285,7 @@ void SystemPowerOff(void)
 	uint32_t ram;
 	uint32_t ramMask;
 
+	s_bStandbyPrepared = false;
 	en = s_WakeEnable & s_WakeConfigured;
 	selectMask = 0;
 	for (i = 0; i < 8U; i++)
@@ -290,24 +296,24 @@ void SystemPowerOff(void)
 		}
 	}
 
-	// Do not overwrite RTC, radio or other wake sources owned by drivers.
+	// Preserve wake lines owned by other drivers.
 	PWR->WUCR1 &= ~s_WakeConfigured;
 	PWR->WUCR2 = (PWR->WUCR2 & ~s_WakeConfigured) |
 		(s_WakeLow & s_WakeConfigured);
-	PWR->WUCR3 = (PWR->WUCR3 & ~selectMask) | (s_WakeSelect & selectMask);
+	PWR->WUCR3 = (PWR->WUCR3 & ~selectMask) |
+		(s_WakeSelect & selectMask);
 	StWbaWakePullRetain();
-	// Clear stale WKUP flags while the affected lines are disabled.
-	// Enabling an active wake source can immediately set its wake flag;
-	// clearing it afterward would discard that event.
+
+	// Clear old wake flags while the corresponding lines are disabled.
 	PWR->WUSCR = s_WakeConfigured;
 	PWR->WUCR1 |= en;
-	// Do not enter Standby if the wakeup selection was not programmed.
+
 	if ((PWR->WUCR1 & s_WakeConfigured) != en ||
 		(PWR->WUCR2 & s_WakeConfigured) !=
 		(s_WakeLow & s_WakeConfigured) ||
 		(PWR->WUCR3 & selectMask) != (s_WakeSelect & selectMask))
 	{
-		return;
+		return false;
 	}
 
 	ram = (s_bRam1Retain ? ST_WBA_SRAM1_RET : 0U) |
@@ -317,6 +323,25 @@ void SystemPowerOff(void)
 	PWR->CR1 = (PWR->CR1 & ~(PWR_CR1_LPMS | ramMask)) |
 		PWR_CR1_LPMS_2 | (ram & ramMask);
 	SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+
+	if ((PWR->CR1 & PWR_CR1_LPMS) != PWR_CR1_LPMS_2 ||
+		(SCB->SCR & SCB_SCR_SLEEPDEEP_Msk) == 0U)
+	{
+		return false;
+	}
+
+	s_bStandbyPrepared = true;
+	return true;
+}
+
+void SystemPowerOff(void)
+{
+	if (!s_bStandbyPrepared && !StWbaPowerPrepareStandby())
+	{
+		return;
+	}
+
+	s_bStandbyPrepared = false;
 	__DSB();
 	while (1)
 	{
