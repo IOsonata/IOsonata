@@ -661,21 +661,21 @@ static void Sam4lEnableRcFast(uint32_t Freq)
 	}
 }
 
-static void Sam4lLowClockInit(void)
+static bool Sam4lLowClockInit(const OscDesc_t *pOsc)
 {
 	uint32_t pmcon = SAM4L_BPM->BPM_PMCON;
-	if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC) {
+	if (pOsc->Type == OSC_TYPE_RC) {
 		uint32_t control = SAM4L_BSCIF->BSCIF_RC32KCR;
 		control &= ~(BSCIF_RC32KCR_MODE | BSCIF_RC32KCR_REF);
 		control |= BSCIF_RC32KCR_TCEN | BSCIF_RC32KCR_EN32K | BSCIF_RC32KCR_EN;
 		Sam4lWriteBscif(&SAM4L_BSCIF->BSCIF_RC32KCR, control);
 		if (!Sam4lWaitBits(&SAM4L_BSCIF->BSCIF_PCLKSR,
 						  BSCIF_PCLKSR_RC32KRDY, BSCIF_PCLKSR_RC32KRDY)) {
-			Sam4lStartupFailed(SAM4L_STARTUP_LFCLK);
+			return false;
 		}
 		pmcon |= BPM_PMCON_CK32S;
 	} else {
-		uint32_t mode = g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL ?
+		uint32_t mode = pOsc->Type == OSC_TYPE_XTAL ?
 			BSCIF_OSCCTRL32_MODE(1U) : 0U;
 		uint32_t control = SAM4L_BSCIF->BSCIF_OSCCTRL32;
 		// OSC32 survives non-POR resets. Reuse a running matching mode.
@@ -690,13 +690,13 @@ static void Sam4lLowClockInit(void)
 				Sam4lWriteBscif(&SAM4L_BSCIF->BSCIF_OSCCTRL32, control);
 				if (!Sam4lWaitBits(&SAM4L_BSCIF->BSCIF_OSCCTRL32,
 								  BSCIF_OSCCTRL32_OSC32EN, 0U)) {
-					Sam4lStartupFailed(SAM4L_STARTUP_LFCLK);
+					return false;
 				}
 			}
 			control &= ~(BSCIF_OSCCTRL32_MODE_Msk | BSCIF_OSCCTRL32_STARTUP_Msk |
 						 BSCIF_OSCCTRL32_SELCURR_Msk | BSCIF_OSCCTRL32_OSC32EN);
 			control |= mode | BSCIF_OSCCTRL32_EN32K |
-				(g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL ?
+				(pOsc->Type == OSC_TYPE_XTAL ?
 				 BSCIF_OSCCTRL32_STARTUP(SAM4L_OSC32_STARTUP) |
 				 BSCIF_OSCCTRL32_SELCURR(SAM4L_OSC32_SELCURR) : 0U);
 			Sam4lWriteBscif(&SAM4L_BSCIF->BSCIF_OSCCTRL32, control);
@@ -706,14 +706,15 @@ static void Sam4lLowClockInit(void)
 		}
 		if (!Sam4lWaitBits(&SAM4L_BSCIF->BSCIF_PCLKSR,
 						  BSCIF_PCLKSR_OSC32RDY, BSCIF_PCLKSR_OSC32RDY)) {
-			Sam4lStartupFailed(SAM4L_STARTUP_LFCLK);
+			return false;
 		}
 		pmcon &= ~BPM_PMCON_CK32S;
 	}
 	Sam4lWriteBpm(pmcon);
 	if ((SAM4L_BPM->BPM_PMCON & BPM_PMCON_CK32S) != (pmcon & BPM_PMCON_CK32S)) {
-		Sam4lStartupFailed(SAM4L_STARTUP_LFCLK);
+		return false;
 	}
+	return true;
 }
 
 static bool Sam4lLowClockValid(OSC_TYPE Type, uint32_t Freq)
@@ -755,7 +756,7 @@ static bool Sam4lConfigurationValid(const McuOsc_t *pOsc)
 	return Sam4lLowClockValid(low, lf);
 }
 
-void SystemInit(void)
+static void Sam4lClockInit(void)
 {
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
@@ -764,7 +765,6 @@ void SystemInit(void)
 	s_StartupValue = 0U;
 	s_PowerControl = 0U;
 	s_PowerStatus = 0U;
-	Sam4lDisableWatchdog();
 	if (!Sam4lConfigurationValid(&g_McuOsc)) {
 		Sam4lStartupFailed(SAM4L_STARTUP_CONFIG);
 	}
@@ -793,7 +793,11 @@ void SystemInit(void)
 		Sam4lStartupFailed(SAM4L_STARTUP_GCLK);
 	}
 	uint32_t coreLimit = Sam4lPreparePower();
-	Sam4lLowClockInit(); // A long crystal start is still timed on RCSYS.
+	// A long crystal start is still timed on RCSYS.
+	if (!Sam4lLowClockInit(&g_McuOsc.LowPwrOsc))
+	{
+		Sam4lStartupFailed(SAM4L_STARTUP_LFCLK);
+	}
 	s_PllFreq = 0U;
 
 	uint32_t source;
@@ -899,6 +903,17 @@ void SystemInit(void)
 	__set_PRIMASK(primask);
 }
 
+// The watchdog stays disabled at startup. Applications enable it explicitly.
+void SystemInit(void)
+{
+	uint32_t primask = __get_PRIMASK();
+
+	__disable_irq();
+	Sam4lDisableWatchdog();
+	Sam4lClockInit();
+	__set_PRIMASK(primask);
+}
+
 static uint32_t Sam4lMainClockGet(void)
 {
 	switch (SAM4L_PM->PM_MCCTRL & PM_MCCTRL_MCSEL_Msk) {
@@ -982,7 +997,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
 	g_McuOsc.CoreOsc = requested.CoreOsc;
-	SystemInit();
+	Sam4lClockInit();
 	__set_PRIMASK(primask);
 	return true;
 }
@@ -998,13 +1013,13 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	if (__get_IPSR() != 0U || !Sam4lLowClockValid(ClkSrc, OscFreq)) {
 		return false;
 	}
-	if (ClkSrc == g_McuOsc.LowPwrOsc.Type && OscFreq == g_McuOsc.LowPwrOsc.Freq) {
-		return true;
-	}
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
-	g_McuOsc.LowPwrOsc = requested.LowPwrOsc;
-	Sam4lLowClockInit();
+	bool result = Sam4lLowClockInit(&requested.LowPwrOsc);
+	if (result)
+	{
+		g_McuOsc.LowPwrOsc = requested.LowPwrOsc;
+	}
 	__set_PRIMASK(primask);
-	return true;
+	return result;
 }

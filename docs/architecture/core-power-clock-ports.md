@@ -214,6 +214,18 @@ and four 32-bit backup registers. Backup powers down both SRAM banks, so
 Stop DMA and peripheral transfers before calling power off. Existing AST and
 other backup wake enables are preserved; their drivers own their configuration.
 
+SAM4L startup leaves the watchdog disabled; applications enable it for their
+own use case. Runtime core-clock selection preserves that application choice.
+Low-frequency clock selection returns false on an oscillator-ready timeout,
+restores the incoming interrupt mask, and updates the oscillator descriptor
+only after success. Repeating the same request checks readiness again.
+The descriptor records the last successful selection, not a measurement of
+clock health. A failed external-mode change may leave that oscillator stopped.
+Startup still halts when its required clock cannot be established. Runtime
+main-clock changes still use startup clock-tree helpers with fatal failure
+paths; recovery from those failures remains to be implemented and tested.
+Run `python3 tests/sam4l/run_clock.py` for the Linux register-model checks.
+
 Wake pins use asynchronous high/low level detection through the backup mux.
 Configure the selected pin as a GPIO input first. Toggle detection is not
 supported. An EIC line already enabled by another driver is refused. Wake
