@@ -34,9 +34,9 @@ def main():
         target = out / mode
         target.mkdir(parents=True, exist_ok=True)
         # The real demo retains its logs: semihosting in Debug, UART in Release.
-        cases = [('demo' + str(dev), dev, True) for dev in (0, 1, 2, 3)]
+        cases = [('demo' + str(dev), dev, True) for dev in (0, 1, 2, 3, 4)]
         if mode == 'Release':
-            cases += [('dev' + str(dev), dev, True) for dev in (0, 1, 2, 3)]
+            cases += [('dev' + str(dev), dev, True) for dev in (0, 1, 2, 3, 4)]
             cases += [('runtime-lto', -1, True), ('runtime-native', -1, False)]
         for name, dev, lto in cases:
             demo = name.startswith('demo')
@@ -60,7 +60,10 @@ def main():
                             '-o', str(elf)], check=True)
             symbols = subprocess.check_output([PREFIX + 'nm', '-C', str(elf)], text=True)
             selected = dev
-            if selected >= 0:
+            if selected == 4:
+                assert all(n not in symbols for n in ('SamdRtcSetup', 'SamdTcSetup', 'SamdTccSetup'))
+                assert 's_SysTickData' in symbols and 'SystickEnableTrigger' in symbols
+            elif selected >= 0:
                 absent = ('SamdTcSetup', 'SamdTccSetup', 'SamdCounterTimerIrq') if selected == 0 else (
                     ('SamdRtcSetup', 'SamdRtcWait', 'SamdRtcTimerIrq', 'SamdTccSetup') if selected < 3
                     else ('SamdRtcSetup', 'SamdRtcWait', 'SamdRtcTimerIrq', 'SamdTcSetup'))

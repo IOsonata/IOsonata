@@ -2405,5 +2405,10 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_intrf.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/coredev/timer_systick.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/timer_systick.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

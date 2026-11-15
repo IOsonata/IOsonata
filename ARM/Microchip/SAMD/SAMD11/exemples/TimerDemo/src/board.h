@@ -60,7 +60,7 @@ SOFTWARE.
 
 // DevNo 0 is the RTC on the 32.768 kHz clock, 1 trigger. DevNo 1 and 2 are
 // TC1 and TC2 on the main clock, 2 triggers each, DevNo 3 is TCC0 on the
-// main clock, 4 triggers.
+// main clock, 4 triggers. DevNo 4 is SysTick on the core clock, 1 trigger.
 #ifndef TIMER_DEMO_DEVNO
 #define TIMER_DEMO_DEVNO	0
 #endif

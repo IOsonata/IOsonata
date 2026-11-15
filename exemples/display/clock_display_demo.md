@@ -34,11 +34,11 @@ Connect OLED1 to EXT1. The SPI and control pins match LCDConsoleDisplayDemo.
 SW0 on PA14 adjusts the time. SPI uses polling at 1 MHz.
 The output is the display in both configurations; no UART or logger is used.
 
-This project's linked sources include `ARM/src/timer_systick.cpp`. It supplies
-`TimerInit` and `SysTick_Handler`, so the SAMD RTC/TC/TCC timer implementation
-is not extracted from the library. The application itself still calls the
-generic Timer API. Do not add an RTOS tick or another timer port to this
-project: they would define the same symbols.
+The library contains the SAMD timer port and `ARM/src/timer_systick.cpp`.
+`CLOCK_TIMER_DEVNO=4` selects SysTick through the normal `TimerInit` API.
+The demo project contains only application sources. Devices 0 through 3 keep
+their existing RTC, TC1, TC2 and TCC0 numbering. SysTick has one trigger and
+cannot share its interrupt with an RTOS tick or another SysTick handler.
 
 **The D11 build uses the core-clock SysTick, not the low-frequency RTC.** It
 runs at the configured core clock, which must remain unchanged. It uses idle
@@ -46,18 +46,18 @@ waits between updates, not Standby. Clock accuracy follows the core oscillator;
 this is not a battery-backed calendar clock.
 
 A first build using the SAMD RTC timer needed 19,120 flash bytes, exceeding
-16 KB by 2,736 bytes. The SysTick version fits without modifying library APIs
-or removing display virtual methods. The display still retains its ordinary
+16 KB by 2,736 bytes. The SysTick version fits with the existing
+display virtual methods. The display still retains its ordinary
 text formatter and system font through its virtual table.
 
 Arm GCC 15.2.1, full D11 library archive:
 
 | Configuration | text | data | bss | Flash | Static RAM |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Debug | 15772 | 176 | 2356 | 15948 | 2532 |
-| Release | 15772 | 176 | 2356 | 15948 | 2532 |
+| Debug | 16032 | 176 | 2716 | 16208 | 2892 |
+| Release | 16032 | 176 | 2716 | 16208 | 2892 |
 
-Flash margin is 436 bytes. RAM beyond static storage is 1564 bytes; complete
+Flash margin is 176 bytes. RAM beyond static storage is 1204 bytes; complete
 stack usage has not been measured. Board operation is not yet validated.
 
 ## Checks
@@ -80,5 +80,5 @@ validate oscillator accuracy, physical button wiring or SPI transfers.
 
 For another board, provide its pin map, monochrome display class and timer
 selection in `board.h`, and link the appropriate IOsonata library. The clock
-face requires at least 128x32 pixels and is centered on larger panels. If that
-board uses its MCU timer port, omit the linked SysTick source.
+face requires at least 128x32 pixels and is centered on larger panels. Select a timer device supported by that board's library; do not link a timer
+implementation into the application project.

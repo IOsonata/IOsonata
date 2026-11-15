@@ -4,8 +4,9 @@ Build the IOsonata_SAMD11D14AM library and TimerDemo with the same Debug or
 Release configuration. Clean both projects after changing the library.
 Debug logs through semihosting; Release logs through UART at 1 Mbaud.
 
-`TIMER_DEMO_DEVNO` in `src/board.h` selects RTC (0), TC1 (1), TC2 (2), or
-TCC0 (3). The default is RTC. The D11 board selects the example's C API path
+`TIMER_DEMO_DEVNO` in `src/board.h` selects RTC (0), TC1 (1), TC2 (2),
+TCC0 (3), or SysTick (4). The default is RTC. The D11 board selects the
+example's C API path
 with `TIMER_DEMO_USE_C_API=1`. Compile and link LTO expose the constant device
 selection so unused timer families can be discarded. The C++ virtual API is
 unchanged; its runtime initializer can retain all timer families. Runtime
@@ -22,23 +23,24 @@ R:000:0003 Count = 100 ms, T0 = 100000 us
 
 ## Validation
 
-With Arm GCC 15.2.1, `-Os`, and LTO, all four selections fit with the full demo:
+With Arm GCC 15.2.1, `-Os`, and LTO, all five selections fit with the full demo:
 
 | Timer | Debug flash | Release flash | Release flash free |
 | --- | ---: | ---: | ---: |
-| 0 (RTC) | 11612 | 14084 | 2300 |
-| 1 (TC1) | 12564 | 15032 | 1352 |
-| 2 (TC2) | 12608 | 15072 | 1312 |
-| 3 (TCC0) | 12868 | 15340 | 1044 |
+| 0 (RTC) | 11800 | 14276 | 2108 |
+| 1 (TC1) | 12752 | 15224 | 1160 |
+| 2 (TC2) | 12792 | 15264 | 1120 |
+| 3 (TCC0) | 13056 | 15528 | 856 |
+| 4 (SysTick) | 8696 | 11300 | 5084 |
 
-Flash includes text and initialized data. Release static RAM is 3112 bytes
-for RTC and 3120 bytes for TC/TCC; stack usage has not been measured.
+Flash includes text and initialized data. Release static RAM is 3176 bytes
+for RTC, 3184 bytes for TC/TCC, and 2816 bytes for SysTick; stack usage has not been measured.
 
 Before the fixed-field logging change, the maintainer validated RTC trigger 0
 at 100 ms with Debug semihosting and Release UART, and all four TCC0 triggers
-with Debug semihosting. TC1/TC2 hardware tests and the revised logging output
-remain to be validated. Timer and UART driver code is unchanged by this
-logging change.
+with Debug semihosting. The maintainer subsequently validated TC1, TC2 and TCC0 with revised Release
+UART logging. SysTick device 4 and the new library dispatch remain to be
+validated on hardware.
 
 From the repository root:
 
@@ -50,7 +52,7 @@ python3 tests/samd/build_timer.py
 
 The link check uses the managed library archives in `lib/ioc/Debug` and
 `lib/ioc/Release`; `--library-dir` accepts another directory containing those
-two configurations. It links the real demo and small C programs for all four
+two configurations. It links the real demo and small C programs for all five
 timer devices, checks that unused timer families are absent, and checks that
 runtime selection remains available with and without LTO. All links use the
 normal 16 KB flash region.

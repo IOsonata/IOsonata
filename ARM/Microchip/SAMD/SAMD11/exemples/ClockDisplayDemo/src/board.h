@@ -49,9 +49,9 @@ SOFTWARE.
 #ifndef DISPLAY_SPI_INT_ENABLE
 #define DISPLAY_SPI_INT_ENABLE false
 #endif
-// This project links the Cortex-M SysTick Timer implementation.
+// Select the Cortex-M SysTick implementation from the IOsonata library.
 // Initial wall time is restored after reset.
-#define CLOCK_TIMER_DEVNO 0
+#define CLOCK_TIMER_DEVNO 4
 #define CLOCK_TIMER_PRIORITY 1
 #define CLOCK_START_HOUR 12
 #define CLOCK_START_MINUTE 0

@@ -21,6 +21,8 @@ def main():
     parser.add_argument('--library-dir', type=Path, default=TARGET / 'lib/ioc')
     args = parser.parse_args()
     project = TARGET / 'exemples/ClockDisplayDemo/ioc'
+    linked = ET.parse(project / '.project')
+    assert not any('timer_systick.cpp' in (item.text or '') for item in linked.iter('locationURI'))
     xml = ET.parse(project / '.cproject')
     opt = xml.find(".//option[@name='Include paths (-I)']")
     includes = ['-I' + str((project / 'Release' / v.get('value').strip('"')).resolve()) for v in opt]
@@ -37,14 +39,12 @@ def main():
         subprocess.run([PREFIX + 'g++', *flags, '-flto', '-std=gnu++23', '-fno-rtti',
                         '-fno-exceptions', *defines, '-c', str(ROOT / 'exemples/display/clock_display_demo.cpp'),
                         '-o', str(obj)], check=True)
-        tick = target / 'timer_systick.o'
-        subprocess.run([PREFIX + 'g++', *flags, '-flto', '-std=gnu++23', '-fno-rtti',
-                        '-fno-exceptions', *defines, '-c', str(ROOT / 'ARM/src/timer_systick.cpp'),
-                        '-o', str(tick)], check=True)
+        app_symbols = subprocess.check_output([PREFIX + 'nm', str(obj)], text=True)
+        assert ' U TimerInit' in app_symbols and 'SysTickTimerInit' not in app_symbols
         subprocess.run([PREFIX + 'g++', *flags, '-flto', '--specs=nano.specs',
                         '-T', str(TARGET / 'ldscript/gcc_samd11d14a.ld'),
                         '-L' + str(ROOT / 'ARM/ldscript'), '-Wl,--gc-sections',
-                        '-Wl,-Map,' + str(elf.with_suffix('.map')), str(obj), str(tick), str(archive),
+                        '-Wl,-Map,' + str(elf.with_suffix('.map')), str(obj), str(archive),
                         '-Wl,--start-group', '-lgcc', '-lc', '-lm', '-Wl,--end-group',
                         '-o', str(elf)], check=True)
         symbols = subprocess.check_output([PREFIX + 'nm', '-C', str(elf)], text=True)

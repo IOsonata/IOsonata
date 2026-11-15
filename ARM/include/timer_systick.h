@@ -11,9 +11,11 @@ The counter runs on the processor clock: the timer frequency is the core
 clock (SystemCoreClockGet) and the tick count is in core clock cycles. It has
 one trigger, the reload interrupt, with a period from 2 to 2^24 cycles.
 
-This port defines TimerInit and SysTick_Handler. It cannot be linked with an
-MCU timer port or with code that has its own SysTick_Handler, such as an RTOS
-tick.
+SysTickTimerInit is the entry point used by MCU timer dispatchers. A library
+containing an MCU timer port builds this source with SYSTICK_TIMER_NO_DEFAULT_INIT so
+TimerInit remains owned by that port. Otherwise TimerInit calls SysTickTimerInit.
+SysTick_Handler is owned by this implementation; do not combine it with an RTOS
+tick or another SysTick interrupt handler.
 
 @author	Hoang Nguyen Hoan
 @date	Mar. 2026
@@ -103,7 +105,7 @@ extern "C" {
  * @return	true on success, false if the core clock is unknown (0) or
  * 			bTickInt is set
  */
-bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
+bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 
 #ifdef __cplusplus
 }

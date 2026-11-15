@@ -172,6 +172,7 @@ static void SystickDisable(TimerDev_t * const pTimer)
 	(void)pTimer;
 
 	SYSTICK_REG->CTRL = SYSTICK_CTRL_STOPPED;
+	SYSTICK_ICSR = SCB_ICSR_PENDSTCLR;
 }
 
 // The tick count restarts from 0 and the trigger restarts its period
@@ -333,7 +334,7 @@ static bool SystickEnableExtTrig(TimerDev_t * const pTimer, int TrigDevNo, TIMER
 	return false;
 }
 
-bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer == nullptr || pCfg == nullptr || pCfg->bTickInt)
 	{
@@ -389,6 +390,14 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	return SystickEnable(pTimer);
 }
 
+// Ports using SysTick as their only timer retain the generic initializer.
+#ifndef SYSTICK_TIMER_NO_DEFAULT_INIT
+bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+{
+	return SysTickTimerInit(pTimer, pCfg);
+}
+#endif
+
 // Each wrap extends the tick count, unless GetTickCount did it already. The
 // trigger is called once per interrupt with a wrap counted since the last one:
 // a restart in between, from an interrupt of higher priority, drops it.
@@ -397,6 +406,11 @@ extern "C" void SysTick_Handler(void)
 	SysTick_TimerData_t &d = s_SysTickData;
 	TimerDev_t * const pTimer = d.pTimer;
 	TimerTrig_t &trig = d.Trigger[0];
+
+	if (pTimer == nullptr)
+	{
+		return;
+	}
 
 	__disable_irq();
 

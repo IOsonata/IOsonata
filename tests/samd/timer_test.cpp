@@ -45,6 +45,8 @@ static unsigned s_Closes;
 static bool s_CancelNext;
 static bool s_ResetInHandler;
 static uint32_t s_Pending;
+static unsigned s_SysTickStops;
+bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg);
 static uint32_t SystemPeriphClockGet(int);
 static unsigned GetLowFreqOscType();
 static unsigned SamdIrqPrio(int);
@@ -55,6 +57,20 @@ static unsigned NVIC_GetPriority(int);
 static void NVIC_SetPendingIRQ(int);
 static void NVIC_ClearPendingIRQ(int);
 #include "timer_driver.h"
+
+static void StopSysTick(TimerDev_t *)
+{
+	s_SysTickStops++;
+}
+
+bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *)
+{
+	pTimer->DevNo = 0;
+	pTimer->Disable = StopSysTick;
+	pTimer->Freq = 48000000;
+
+	return true;
+}
 
 static uint32_t SystemPeriphClockGet(int Id) { return Id == SAMD_GCLK_LF ? 32768 : 48000000; }
 static unsigned GetLowFreqOscType() { return 0; }
@@ -219,5 +235,28 @@ int main()
 	s_ResetInHandler = true;
 	Advance(1, g_SamdTimerData[1].pTrig[0].Ticks);
 	assert(TimerGetTickCount(&timer) == 0);
+	// SysTick follows the existing hardware device numbers.
+	assert(TimerGetLowFreqDevCount() == 1);
+	assert(TimerGetHighFreqDevCount() == 4);
+	cfg.DevNo = SAMD_SYSTICK_TIMER_DEVNO;
+	assert(cfg.DevNo == 4 && TimerInit(&timer, &cfg));
+	assert(timer.DevNo == 4 && timer.Freq == 48000000);
+	assert(g_SamdTimerData[1].pTimer == nullptr);
+	assert(!g_SamdTimerData[1].bRunning);
+	TimerDev_t other = {};
+	assert(!TimerInit(&other, &cfg));
+	assert(TimerInit(&timer, &cfg));
+	assert(s_SysTickStops == 1);
+	cfg.bTickInt = true;
+	assert(!TimerInit(&timer, &cfg));
+	assert(s_SysTickStops == 1);
+	cfg.bTickInt = false;
+	cfg.DevNo = 2;
+	assert(TimerInit(&timer, &cfg));
+	assert(s_SysTickStops == 2 && s_SamdSysTickOwner == nullptr);
+	cfg.DevNo = 4;
+	assert(TimerInit(&other, &cfg));
+	cfg.DevNo = 5;
+	assert(!TimerInit(&timer, &cfg));
 	puts("SAMD timer family selection, rollover, triggers, routing and reinitialization: PASS");
 }

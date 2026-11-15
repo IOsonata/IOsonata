@@ -8,7 +8,7 @@
 		triggers each: TC1, TC2 on SAM D11, TC3 to TC7 on SAM D21. Then the
 		TCC on the main clock, a trigger per compare channel: TCC0 (24-bit,
 		4) on SAM D11; TCC0 (24-bit, 4), TCC1 (24-bit, 2) and TCC2 (16-bit,
-		2) on SAM D21.
+		2) on SAM D21. SysTick is last, on the core clock, 1 trigger.
 
 		Frequencies: RTC 32768 Hz divided by 1 to 1024 in powers of 2,
 		default 32768 Hz. TC and TCC main clock divided by 1, 2, 4, 8, 16,
@@ -88,6 +88,7 @@ SOFTWARE.
 #include "clock_samd.h"
 #include "evsys_samd.h"
 #include "timer_samd.h"
+#include "timer_systick.h"
 
 #define SAMD_TIMER_MIN_TICKS		4U
 #define SAMD_TIMER_LOCK_TRIES		16U
@@ -162,6 +163,8 @@ static const SamdTimerHw_t s_SamdTimerHw[SAMD_TIMER_MAXCNT] = {
 };
 
 SamdTimerData_t g_SamdTimerData[SAMD_TIMER_MAXCNT];
+static TimerDev_t *s_SamdSysTickOwner;
+static void (*s_SamdReleaseHardware)(TimerDev_t *pTimer, int DevNo);
 
 static bool SamdTimerTickOpen(SamdTimerData_t *pData, int IntPrio);
 static void SamdTimerTickClose(SamdTimerData_t *pData);
@@ -1139,7 +1142,7 @@ static void SamdTimerRelease(SamdTimerData_t *pData)
 		pData->pTickOps->Close(pData);
 	}
 
-	(void)SamdTimerRun(pData, false);
+	pData->pTimer->Disable(pData->pTimer);
 
 	uint32_t state = DisableInterrupt();
 
@@ -1166,8 +1169,46 @@ static bool SamdTimerNoExtEnable(TimerDev_t * const pTimer, int TrigDevNo, TIMER
 	return Sense == TIMER_EXTTRIG_SENSE_DISABLE;
 }
 
+// Release this handle's previous timer, or the selected hardware timer.
+static void SamdTimerReleaseBinding(TimerDev_t *pTimer, int DevNo)
+{
+	for (int i = 0; i < SAMD_TIMER_MAXCNT; i++)
+	{
+		if (g_SamdTimerData[i].pTimer == pTimer || (i == DevNo && g_SamdTimerData[i].pTimer != NULL))
+		{
+			SamdTimerRelease(&g_SamdTimerData[i]);
+		}
+	}
+}
+
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
+	if (pTimer != NULL && pCfg != NULL && pCfg->DevNo == SAMD_SYSTICK_TIMER_DEVNO)
+	{
+		if (pCfg->bTickInt || pCfg->IntPrio < 0 ||
+			(s_SamdSysTickOwner != NULL && s_SamdSysTickOwner != pTimer))
+		{
+			return false;
+		}
+		if (s_SamdSysTickOwner == pTimer)
+		{
+			pTimer->Disable(pTimer);
+			s_SamdSysTickOwner = NULL;
+		}
+		if (s_SamdReleaseHardware != NULL)
+		{
+			s_SamdReleaseHardware(pTimer, -1);
+		}
+		if (!SysTickTimerInit(pTimer, pCfg))
+		{
+			return false;
+		}
+		pTimer->DevNo = pCfg->DevNo;
+		s_SamdSysTickOwner = pTimer;
+
+		return true;
+	}
+
 	// Tick interrupt on the RTC only
 	if (pTimer == NULL || pCfg == NULL || pCfg->DevNo < 0 || pCfg->DevNo >= SAMD_TIMER_MAXCNT ||
 		(pCfg->bTickInt && pCfg->DevNo >= SAMD_RTC_TIMER_MAXCNT) || pCfg->IntPrio < 0)
@@ -1216,15 +1257,13 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	uint32_t presc;
 	uint32_t freq;
 
-	// The interrupts of a device bound to another DevNo would update this
-	// timer, it is released. A device bound to another timer is taken.
-	for (int i = 0; i < SAMD_TIMER_MAXCNT; i++)
+	if (s_SamdSysTickOwner == pTimer)
 	{
-		if (g_SamdTimerData[i].pTimer == pTimer || (i == pCfg->DevNo && g_SamdTimerData[i].pTimer != NULL))
-		{
-			SamdTimerRelease(&g_SamdTimerData[i]);
-		}
+		pTimer->Disable(pTimer);
+		s_SamdSysTickOwner = NULL;
 	}
+	s_SamdReleaseHardware = SamdTimerReleaseBinding;
+	SamdTimerReleaseBinding(pTimer, pCfg->DevNo);
 
 	d->bCapture = false;
 	d->bTick = pCfg->bTickInt;
@@ -1284,7 +1323,7 @@ int TimerGetLowFreqDevCount(void)
 
 int TimerGetHighFreqDevCount(void)
 {
-	return SAMD_TC_TIMER_MAXCNT + SAMD_TCC_TIMER_MAXCNT;
+	return SAMD_TC_TIMER_MAXCNT + SAMD_TCC_TIMER_MAXCNT + 1;
 }
 
 int TimerGetHighFreqDevNo(void)

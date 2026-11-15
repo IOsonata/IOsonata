@@ -108,9 +108,9 @@ generic network and motion sources: lwip and Fusion are cloned next to
 IOsonata by the installer (`external/lwip`, `external/Fusion`). Both
 libraries define `__PROGRAM_START`, as the other ports: the CMSIS 6 startup
 function of `cmsis_gcc_m.h` does not compile in C++ without the device
-header first. The libraries do not link the generic
-`ARM/src/timer_systick.cpp`: its `TimerInit` would be a second definer next
-to `timer_samd.cpp`, which serves every timer device of the port. The SAM
+header first. Both libraries include `ARM/src/timer_systick.cpp` with
+`SYSTICK_TIMER_NO_DEFAULT_INIT`: `timer_samd.cpp` owns `TimerInit` and selects
+SysTick through `SysTickTimerInit` for the last device number. The SAM
 D21 library links the UART transport of the HCI host,
 `bt_hci_ctlr_uart.cpp`, not the IPC one of a dual core part, which defines
 `BtHciCtlrH4Open` too. The examples were run on a peripheral model
@@ -249,6 +249,13 @@ Timers, virtual DevNo from low to high frequency:
 | TCC0 | 3 | 6 | 24-bit | same | 4 |
 | TCC1 | | 7 | 24-bit | same | 2 |
 | TCC2 | | 8 | 16-bit | same | 2 |
+| SysTick | 4 | 9 | 24-bit down-counter | core clock | 1 |
+
+SysTick is last so existing device numbers do not change. Its reload ranges
+from 2 to 2^24 core cycles; a longer trigger request is clamped to that range.
+It does not provide external capture or `bTickInt`. It cannot share SysTick
+with an RTOS. A second timer handle cannot take SysTick while it is owned;
+reinitializing the current handle on another timer releases it.
 
 The counts are extended to 64 bits by the overflow interrupt, which must be
 served within half a counter period (10.9 ms for a 16-bit counter at 3 MHz,

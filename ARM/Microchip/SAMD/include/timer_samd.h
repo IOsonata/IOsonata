@@ -80,6 +80,8 @@ SOFTWARE.
 #endif
 
 #define SAMD_TIMER_MAXCNT			(SAMD_RTC_TIMER_MAXCNT + SAMD_TC_TIMER_MAXCNT + SAMD_TCC_TIMER_MAXCNT)
+// SysTick is the last device; it keeps its state in the Cortex-M timer port.
+#define SAMD_SYSTICK_TIMER_DEVNO		SAMD_TIMER_MAXCNT
 #define SAMD_TIMER_TRIG_MAXCNT		4		// The most of one device, TCC0
 #define SAMD_TIMER_TRIG_CNT			(SAMD_RTC_TIMER_TRIG_MAXCNT + SAMD_TC_TIMER_MAXCNT * SAMD_TC_TIMER_TRIG_MAXCNT + \
 									 SAMD_TCC_TIMER_TRIG_CNT)
