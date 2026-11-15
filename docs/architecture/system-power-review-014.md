@@ -107,8 +107,8 @@ The review branch now has a concrete interrupt-resumable implementation:
   after an EIC wake, restart UART and log a wake counter. Existing
   reset-on-wake demo logic is unchanged.
 - Eclipse-managed PowerOffDemo projects are provided for SAM D11 and D21.
-  SAMD21 uses SW0/PA15 (EXTINT15). SAMD11's SW0/PA14 is an NMI input,
-  so use an **external switch from PA15 (EXTINT1) to GND**.
+  SAMD21 uses SW0/PA15 (EXTINT15). SAMD11 SW0/PA14 is routed to the dedicated NMI wake path, so no
+  external switch is needed.
 - Build checks are in `tests/samd/standby_compile.sh` (invoke using `sh`
   if the script is not executable in the checkout).
 
@@ -175,3 +175,16 @@ and unmerged `ARM/Microchip/SAMD/src/system_power_samd.cpp`.
 Microchip SAM D21/DA1 datasheet DS40001882G §16.6.2.8.2 identifies
 Standby entry through SLEEPDEEP+WFI, SRAM preservation and asynchronous
 interrupt wake. SAM D11 datasheet 42363 describes equivalent wake behavior.
+
+## SAMD11 onboard SW0 wake (pending hardware validation)
+
+SAMD11's onboard SW0 is PA14, the dedicated EIC NMI input. The Standby
+wake port now handles this pin separately from EXTINT; it configures the
+NMICTRL falling-edge detector, clears NMIFLAG in the NMI handler, and
+selects the low-frequency EIC generic clock. The generic PowerOffDemo
+uses PA14 without external jumpers. SAMD21 retains PA15/EXTINT15 wake.
+
+The NMI vector is shared with other application-level critical NMI uses;
+using this pin as a wake source reserves that handler while the power
+wake feature is enabled. The new NMI path is not hardware-validated yet.
+
