@@ -88,7 +88,8 @@ SOFTWARE.
 #define IOSONATA_STM32_WB		1
 #include "stm32wbxx.h"
 
-#elif defined(STM32WBA) || defined(STM32WBA50xx) || defined(STM32WBA52xx) || defined(STM32WBA54xx) || \
+#elif defined(STM32WBA) || defined(STM32WBA20xx) || defined(STM32WBA23xx) || defined(STM32WBA25xx) || \
+	defined(STM32WBA50xx) || defined(STM32WBA52xx) || defined(STM32WBA54xx) || \
 	defined(STM32WBA55xx) || defined(STM32WBA5Mxx) || defined(STM32WBA6xx) || \
 	defined(STM32WBA62xx) || defined(STM32WBA63xx) || defined(STM32WBA64xx) || defined(STM32WBA65xx) || defined(STM32WBA6Mxx)
 #define IOSONATA_STM32_WBA		1
@@ -110,6 +111,8 @@ SOFTWARE.
 #define IOSONATA_STM32_NB_BKP		32
 #elif defined(RTC_BKP19R)
 #define IOSONATA_STM32_NB_BKP		20
+#elif defined(TAMP_BKP15R)
+#define IOSONATA_STM32_NB_BKP		16
 #elif defined(RTC_BKP4R)
 #define IOSONATA_STM32_NB_BKP		5
 #else

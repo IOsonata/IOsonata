@@ -21,7 +21,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | nRF52 | Existing dedicated implementation | Preserve SoftDevice/MPSL ownership and tested HFXO requests |
 | nRF53, nRF54L, nRF91 | Existing shared implementation, with per-core restrictions | Verify per-core and SDK configurations |
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
-| STM32 WBA | Missing from shared power implementation | Preserve radio clock ownership |
+| STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
 | SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Review runtime selection and oscillator initialization |
 | SAMD | Missing | Audit existing selectors and low-power clocks |
@@ -29,6 +29,34 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
+
+## STM32WBA power port (0.14)
+
+STM32WBA requires a family-specific power implementation. The WBA65 I
+variant uses the `system_power_stm32wba.cpp` source linked into its Eclipse
+managed MCU library. It implements reset and Standby wake reasons, GPIO
+wakeup routing and polarity through PWR WUCR1/2/3, the TAMP backup registers,
+and whole-bank SRAM1/SRAM2 Standby retention via PWR CR1 R1RSB1/R2RSB1.
+The DK1 hardware reported 32 backup registers; a requested SRAM subrange
+selects retention for its entire bank.
+
+The dedicated PowerOffDemo reserves the SRAM test regions in its linker
+script. Hardware validation on STM32WBA65I-DK1 (MB2143),
+November 14, 2026: two consecutive PC13/WKUP2 Standby wake resets
+(`SYSTEM_RESET_WAKE_PIN`, 0x100) passed. Backup-register startup counts
+advanced from 1 through 3. Each wake preserved all 8192/8192 words in
+the retained 32 KB SRAM2 test region and yielded 0/8192 unchanged words
+in the deliberately non-retained SRAM1 test region.
+
+The example disables USART1 and its DMA before Standby. Earlier tests
+with an active UART did not wake; the exact peripheral/DMA/clock contribution
+was not isolated. The simplified post-cleanup build still requires a
+regression run. Bluetooth/radio and USB activity must be stopped by their
+owners; active-stack power transitions are not validated. WBA G memory
+variants and WBA2/WBA5 need separate port review.
+
+Reference: ST RM0515 (STM32WBA6), chapter 11 Power control. STM32WBA5
+uses RM0493 and has different wakeup and memory layouts.
 
 ## Nordic validation (0.14)
 

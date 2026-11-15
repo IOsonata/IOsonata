@@ -5,7 +5,8 @@
 families: `SystemResetReason`, `SystemPowerOff`, `SystemWakePin`,
 `SystemRetRegCount`, `SystemRetRegRead`, `SystemRetRegWrite` and
 `SystemRamRetain`. One source serves them all; the differences are keyed on
-the CMSIS device header. The WBA is not done yet.
+the CMSIS device header. STM32WBA65 uses its own implementation in
+`ARM/ST/STM32WBAxx/src/system_power_stm32wba.cpp` on the 0.14 working branch.
 
 ## Power off
 
@@ -100,3 +101,37 @@ each function in Unicorn against a model of the RCC reset flags, PWR, the RTC
 backup registers and alarm flag, the GPIO pull resistors and SCB SCR. The wake
 up pins and the RAM kept come from the reference manuals and datasheets in the
 script. Not run on hardware yet.
+
+## STM32WBA65 (0.14 branch)
+
+The standalone WBA65 power source is linked to the managed STM32WBA65 MCU
+library. It implements reset reason, Standby through the PWR CR1 LPMS field,
+wake GPIO input selection/polarity on WUCR1/2/3 and TAMP backup registers.
+Wakeup lines 1–8 have selectable input pins, not the fixed STM32L4 mapping.
+The code only updates wakeup lines configured by SystemWakePin, preserving
+other drivers' wake settings. The application must release Bluetooth/radio
+and autonomous peripheral resources before entering Standby.
+
+The STM32WBA65I-DK1 has an analog joystick, not a GPIO button. Hardware
+wakeup validation therefore needs an external input wired to a supported
+wakeup pin and a suitable pull resistor. The on-board VCOM uses USART1,
+RX PA8 and TX PB12. SRAM Standby retention is implemented for the STM32WBA65 I memory
+variant. SystemRamRetain selects whole-bank retention for SRAM1
+(0x20000000, 448 KB) or SRAM2 (0x20070000, 64 KB). A range inside a
+bank selects retention of the entire bank, not merely those bytes. The
+standard linker script allocates all 512 KB as contiguous RAM and does not
+reserve a test range. Use a dedicated linker reservation when testing
+persistence after wake reset. The WBA65 G variant has less SRAM1; the
+current retention bounds apply to the I variant only. Standby, backup registers and SRAM retention have now been validated on STM32WBA65I-DK1. The earlier WBA2/WBA5 series are
+not covered by this source yet.
+
+Hardware validation on STM32WBA65I-DK1 (MB2143), November 14, 2026:
+two consecutive PC13 WKUP2 Standby wake resets (0x100) passed, with the
+backup-register count advancing to 2 and 3. Each wake preserved all
+8192/8192 words in the selected 32 KB SRAM2 test region and yielded
+0/8192 unchanged words in the non-retained SRAM1 test region.
+The working example must stop USART1 and DMA before entering Standby;
+earlier tests with the UART active did not wake. The exact individual
+peripheral/clock cause was not isolated. This result does not cover
+active Bluetooth or USB power transitions.
+

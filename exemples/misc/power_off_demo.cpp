@@ -57,6 +57,7 @@ SOFTWARE.
 
 #include "board.h"
 
+
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE			1000000
@@ -73,8 +74,8 @@ SOFTWARE.
 #endif
 
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
-// RAM1 is not allocated to .data, .bss or the stack by the nRF54L15 linker.
-// Use volatile accesses; startup must not overwrite this section before check.
+// The board-specific linker script must reserve both test regions outside
+// .data, .bss and the stack. Startup must not overwrite them before check.
 static volatile uint32_t * const s_pRamRet =
 	(volatile uint32_t *)POWER_DEMO_RAM_RET_ADDR;
 
@@ -315,10 +316,26 @@ int main()
 		SysLogPrintf(SysLogGet(), "Power off, the button cannot wake this MCU, use the reset pin\r\n");
 	}
 
-	// Time for the UART to send the last record
+	// Allow the final UART record to finish before stopping the transport.
+#if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
+	msDelay(1000);
+	s_Uart.Disable();
+#else
 	msDelay(100);
+#endif
 
 	SystemPowerOff();
+
+#if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
+	// If the power function returns, the system did not enter Standby.
+	s_Uart.Enable();
+	msDelay(50);
+	SysLogPrintf(SysLogGet(), "SystemPowerOff returned\r\n");
+	while (1)
+	{
+		__WFE();
+	}
+#endif
 
 	return 0;
 }
