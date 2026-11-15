@@ -182,7 +182,11 @@ static const UARTCfg_t s_UartCfg = {
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
+#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
+	.bIntMode = false,
+#else
 	.bIntMode = true,
+#endif
 	.IntPrio = 6,
 	.EvtCallback = nullptr,
 	.bFifoBlocking = true,
@@ -190,11 +194,16 @@ static const UARTCfg_t s_UartCfg = {
 	.pRxMem = nullptr,
 	.TxMemSize = 0,
 	.pTxMem = nullptr,
+#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
+	.bDMAMode = false,
+#else
 	.bDMAMode = true,
+#endif
 };
 
 static UART s_Uart;
 
+#if !defined(POWER_DEMO_RESUME_WAKE) || !POWER_DEMO_RESUME_WAKE
 // SysLog on the console UART, a record goes out as soon as it is logged.
 // 16 records of 128 bytes. A record the UART does not take in full stays in
 // the store and the rest goes out at the next log call. bBlocking keeps the
@@ -234,6 +243,46 @@ static const struct {
 	{ SYSTEM_RESET_WAKE_TIMER, "wake up by a timer" },
 };
 
+#endif
+
+#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
+// Minimal polling output avoids formatted logging on the 16 KB SAM D11.
+static void PowerDemoPut(const char *pText)
+{
+	uint8_t c;
+
+	while (*pText != 0)
+	{
+		c = (uint8_t)*pText++;
+		while (s_Uart.Tx(&c, 1) != 1)
+		{
+		}
+	}
+}
+
+static void PowerDemoPutCount(uint32_t Value)
+{
+	char digits[10];
+	uint32_t count;
+	uint8_t c;
+
+	count = 0U;
+	do
+	{
+		digits[count++] = (char)('0' + Value % 10U);
+		Value /= 10U;
+	} while (Value != 0U);
+
+	while (count != 0U)
+	{
+		c = (uint8_t)digits[--count];
+		while (s_Uart.Tx(&c, 1) != 1)
+		{
+		}
+	}
+}
+#endif
+
 int main()
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
@@ -243,14 +292,13 @@ int main()
 	{
 		return 1;
 	}
-	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
-	SysLogPrintf(SysLogGet(), "PowerOffDemo: interrupt-resumable Standby\r\n");
+	PowerDemoPut("PowerOffDemo: Standby\r\n");
 
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
 		IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
 	if (!SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
 	{
-		SysLogPrintf(SysLogGet(), "Standby wake pin not available\r\n");
+		PowerDemoPut("Standby wake pin not available\r\n");
 		return 1;
 	}
 
@@ -261,14 +309,15 @@ int main()
 		{
 			msDelay(10);
 		}
-		SysLogPrintf(SysLogGet(), "Entering Standby\r\n");
+		PowerDemoPut("Entering Standby\r\n");
 		msDelay(250);
 		s_Uart.Disable();
 		SystemSleep();
 		s_Uart.Enable();
 		wakeCount++;
-		SysLogPrintf(SysLogGet(), "Resumed from Standby, count %u\r\n",
-			(unsigned)wakeCount);
+		PowerDemoPut("Resumed from Standby, count ");
+		PowerDemoPutCount(wakeCount);
+		PowerDemoPut("\r\n");
 	}
 #else
 	s_Uart.Init(s_UartCfg);
