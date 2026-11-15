@@ -296,9 +296,12 @@ void SystemPowerOff(void)
 		(s_WakeLow & s_WakeConfigured);
 	PWR->WUCR3 = (PWR->WUCR3 & ~selectMask) | (s_WakeSelect & selectMask);
 	StWbaWakePullRetain();
-	PWR->WUCR1 |= en;
-	// Clear stale wake status only after the wake lines are configured.
+	// Clear stale WKUP flags while the affected lines are disabled.
+	// Enabling an active wake source can immediately set its wake flag;
+	// clearing it afterward would discard that event.
 	PWR->WUSCR = s_WakeConfigured;
+	PWR->WUCR1 |= en;
+	(void)PWR->WUCR1;
 
 	ram = (s_bRam1Retain ? ST_WBA_SRAM1_RET : 0U) |
 		(s_bRam2Retain ? ST_WBA_SRAM2_RET : 0U);
