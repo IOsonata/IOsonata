@@ -39,6 +39,8 @@ SOFTWARE.
 #include "flash17_shim.h"
 #include "coredev/system_core_clock.h"
 
+LPC_WDT_TypeDef g_TestWdt;
+LPC_DAC_TypeDef g_TestDac;
 uint32_t SystemMicroSecLoopCnt;
 TestScb_t g_TestScb;
 void (* const __Vectors[])(void) = {0};
@@ -57,7 +59,7 @@ static int s_StuckDisconnect;
 static unsigned s_ConnectSeen;
 static unsigned s_ConnectWait;
 static uint32_t s_Primask;
-static unsigned s_FeedGuards;
+static unsigned s_InterruptRestores;
 static int s_UsbModel = 1;
 static int s_CheckUsbStop;
 static int s_BlockUsbStop;
@@ -138,8 +140,8 @@ void TestDisableIRQ(void)
 void TestSetPrimask(uint32_t Mask)
 {
 	assert(s_Primask == 1);
-	assert(s_Regs.PLL0FEED == 0x55 || s_Regs.PLL1FEED == 0x55);
-	s_FeedGuards++;
+
+	s_InterruptRestores++;
 	s_Primask = Mask;
 }
 
@@ -252,6 +254,10 @@ LPC_SC_TypeDef *TestSystemRegs(void)
 		status |= 1U << 26;
 	}
 
+	if ((s_Regs.SCS & 0x20U) == 0)
+	{
+		s_Regs.SCS &= ~0x40U;
+	}
 	if ((s_Regs.SCS & 0x60U) == 0x20U)
 	{
 		if (s_Regs.CCLKCFG != 0 || s_Regs.CLKSRCSEL != 0 || s_Regs.PLL0CON != 0)
@@ -786,20 +792,20 @@ int main(void)
 
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_Primask = mask;
-		s_FeedGuards = 0;
+		s_InterruptRestores = 0;
 		assert(SystemCoreClockSet(120000000, 4000000) == 120000000);
 		assert(s_Primask == mask);
-		assert(s_FeedGuards == 4);
+		assert(s_InterruptRestores == 5);
 
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
 		s_Regs.SCS = 0x60;
 		SystemClkFreq = 12000000;
 		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &status, sizeof(status));
-		s_FeedGuards = 0;
+		s_InterruptRestores = 0;
 		SystemConnectPLL1();
 		assert(s_Primask == mask);
-		assert(s_FeedGuards == 4);
+		assert(s_InterruptRestores == 5);
 	}
 	// PLL1 needs exactly 48 MHz output and P=2 for its 192 MHz CCO.
 	for (unsigned i = 0; i < sizeof(s_UsbInputs) / sizeof(s_UsbInputs[0]); i++)
@@ -976,6 +982,56 @@ int main(void)
 		assert(SystemCoreClock == core);
 		assert(SystemClkFreq == source);
 	}
+	memset(&s_Regs, 0, sizeof(s_Regs));
+	s_Regs.SCS = 0x60;
+	s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
+	assert(SystemCoreClockSet(24000000, 24000000) == 0);
+	assert(s_Regs.SCS == 0x60 && s_Regs.FLASHCFG == 0);
+	s_Regs.CLKSRCSEL = CLKSRCSEL_IRC;
+	s_OscWait = 0;
+	s_OscReadyAfter = 4;
+	assert(SystemCoreClockSet(24000000, 24000000) == 24000000);
+	assert((s_Regs.SCS & 0x70U) == 0x70U);
+
+	// Enabled peripheral users must be refused without clock register writes.
+	for (unsigned bit = 0; bit < 32; bit++)
+	{
+		if (bit == 0 || bit == 5 || bit == 9 || bit == 11 || bit == 15 ||
+			bit == 20 || bit == 28)
+		{
+			continue;
+		}
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.PCONP = 1U << bit;
+		(void)TestSystemRegs();
+		LPC_SC_TypeDef before = s_Regs;
+
+		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+		assert(SystemCoreClockSet(4000000, 4000000) == 0);
+		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
+	}
+	memset(&s_Regs, 0, sizeof(s_Regs));
+	g_TestWdt.WDMOD = 1;
+	g_TestWdt.WDCLKSEL = 1;
+	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+	g_TestWdt.WDMOD = 0;
+	g_TestDac.DACCTRL = 4;
+	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+	g_TestDac.DACCTRL = 0;
+	s_Regs.CLKOUTCFG = 1U << 8;
+	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+	s_Regs.CLKOUTCFG = 0;
+	s_Regs.PLL1CON = 1;
+	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+	memset(&s_Regs, 0, sizeof(s_Regs));
+	s_Regs.PCONP = 1U << 31;
+	SystemConnectPLL1();
+	assert(s_Regs.PLL1CON == 0 && s_Regs.PLL1FEED == 0);
+	memset(&s_Regs, 0, sizeof(s_Regs));
+	s_Regs.PCONP = (1U << 9) | (1U << 15);
+	assert(SystemCoreClockSet(4000000, 4000000) == 4000000);
+	assert(!SystemLowFreqClockSelect(OSC_TYPE_RC, 32768));
+	assert(!SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768));
 	printf("LPC17xx flash timing and oscillator wait: %u errors\n", errors);
 	return errors != 0;
 }

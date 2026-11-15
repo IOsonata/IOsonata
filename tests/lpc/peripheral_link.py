@@ -32,6 +32,8 @@ APPLICATIONS = {
 TARGET_APPLICATIONS = {
     '11': {'PowerOffDemo': 'exemples/misc/power_off_demo.cpp',
            'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp'},
+    '17': {'PowerOffDemo': 'exemples/misc/power_off_demo.cpp',
+           'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp'},
     '546': {'I2CMasterSlave': 'exemples/i2c/i2c_master_slave.cpp',
             'SPIMasterSlave': 'exemples/spi/spi_master_slave.cpp',
             'WdtDemo': 'exemples/misc/wdt_demo.cpp',
@@ -112,7 +114,7 @@ def build(target, prefix, directory):
         sources += ['ARM/NXP/src/i2c_lpc_master.cpp', 'ARM/NXP/src/spi_lpcxx.cpp']
         sources += (['ARM/NXP/LPC11xx/src/i2c_lpc11uxx.cpp', 'ARM/NXP/LPC11xx/src/spi_lpc11uxx.cpp']
                     if target == '11' else
-                    ['ARM/NXP/LPC17xx/src/i2c_lpc17xx.c', 'ARM/NXP/LPC17xx/src/spi_lpc17xx.c'])
+                    ['ARM/NXP/LPC17xx/src/i2c_lpc17xx.cpp', 'ARM/NXP/LPC17xx/src/spi_lpc17xx.cpp'])
     project = ROOT / 'ARM/NXP' / family / mcu
     linked = timer['project_sources'](project / 'lib/ioc/.project')
     applications = {**APPLICATIONS, **TARGET_APPLICATIONS.get(target, {})}

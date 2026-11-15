@@ -71,7 +71,8 @@ static const uint16_t s_Lpc17RtcMultipliers[] = {
 __WEAK McuOsc_t g_McuOsc = {
 	{OSC_TYPE_RC, IRC_FREQ, 10000, 0},
 	{OSC_TYPE_XTAL, RTC_FREQ, 0, 0},
-	false
+	false,
+	0
 };
 
 /*
@@ -196,8 +197,11 @@ uint32_t GetSysClk(void)
 		case CLKSRCSEL_RTC:
 			sysclk = RTC_FREQ;
 			break;
-		default:
+		case CLKSRCSEL_IRC:
 			sysclk = IRC_FREQ;
+			break;
+		default:
+			sysclk = 0;
 			break;
 	}
 
@@ -308,27 +312,10 @@ static Lpc17ClockConfig_t Lpc17ClockSelect(uint32_t Request, uint32_t Input)
 	return best;
 }
 
-static uint32_t Lpc17CoreClockSet(uint32_t CoreFreq, int ClkFreq, uint32_t clksrcsel, bool UsePll)
+static uint32_t Lpc17SetCoreClock(int ClkFreq, uint32_t clksrcsel, const Lpc17ClockConfig_t *pClock)
 {
 	uint32_t temp = 0;
-	Lpc17ClockConfig_t clock;
-
-	// ClkFreq describes a physical input, not the requested CPU rate.
-	if (ClkFreq != (int)RTC_FREQ && (ClkFreq < 1000000 || ClkFreq > 25000000))
-	{
-		return 0;
-	}
-
-	if (UsePll)
-	{
-		clock = Lpc17ClockSelect(CoreFreq, (uint32_t)ClkFreq);
-	}
-	else
-	{
-		// Startup recovery must not depend on a working PLL.
-		memset(&clock, 0, sizeof(clock));
-		clock.CpuDiv = 1;
-	}
+	Lpc17ClockConfig_t clock = *pClock;
 
 	// Six flash clocks are safe throughout clock-source and divider changes.
 	LPC_SC->FLASHCFG = (LPC_SC->FLASHCFG & ~0xF000U) | 0x5000U;
@@ -346,7 +333,20 @@ static uint32_t Lpc17CoreClockSet(uint32_t CoreFreq, int ClkFreq, uint32_t clksr
 		if (ClkFreq > 15000000)
 			temp |= 0x10;	/* Oscillator range 15MHz-25MHz */
 
-		LPC_SC->SCS = temp;
+		if ((LPC_SC->SCS & 0x20U) != 0 && (LPC_SC->SCS & 0x10U) != (temp & 0x10U))
+		{
+			// The caller already refused a range change on the active source.
+			LPC_SC->SCS &= ~0x20U;
+			while ((LPC_SC->SCS & 0x40U) != 0)
+			{
+				if (--wait == 0)
+				{
+					return 0;
+				}
+			}
+			wait = LPC17_OSC_WAIT_MAX;
+		}
+		LPC_SC->SCS = (LPC_SC->SCS & ~0x30U) | temp;
 		// OSCSTAT (bit 6) must be set before selecting the main oscillator.
 		while ((LPC_SC->SCS & (1U << 6)) == 0U)
 		{
@@ -396,92 +396,88 @@ static uint32_t Lpc17CoreClockSet(uint32_t CoreFreq, int ClkFreq, uint32_t clksr
 
 	LPC_SC->CCLKCFG = clock.CpuDiv - 1U;
 	LPC_SC->CLKSRCSEL = clksrcsel;
-	if (clock.PllFreq == 0)
+	if (clock.PllFreq != 0)
 	{
-		// The divided input is closer; leave PLL0 stopped and report bypass.
-		goto clock_ready;
-	}
+		LPC_SC->PLL0CFG = clock.PllCfg;
+		Lpc17PllFeed(&LPC_SC->PLL0FEED);
 
-	LPC_SC->PLL0CFG = clock.PllCfg;
-	Lpc17PllFeed(&LPC_SC->PLL0FEED);
-
-	LPC_SC->PLL0CON   = 0x01;
-	Lpc17PllFeed(&LPC_SC->PLL0FEED);
-	// PLOCK0 is unreliable outside 100 kHz..20 MHz reference frequency.
-	temp = ((clock.PllCfg >> 16) & 0xFFU) + 1U;
-	if ((uint32_t)ClkFreq < 100000U * temp ||
-		(uint32_t)ClkFreq > 20000000U * temp)
-	{
-		volatile uint32_t wait;
-
-		// CPU still runs at FIN / CpuDiv. UM10360 4.5.6 requires
-		// 200 / FREF seconds below 100 kHz, or 500 us above 20 MHz.
-		if ((uint32_t)ClkFreq < 100000U * temp)
+		LPC_SC->PLL0CON   = 0x01;
+		Lpc17PllFeed(&LPC_SC->PLL0FEED);
+		// PLOCK0 is unreliable outside 100 kHz..20 MHz reference frequency.
+		temp = ((clock.PllCfg >> 16) & 0xFFU) + 1U;
+		if ((uint32_t)ClkFreq < 100000U * temp ||
+			(uint32_t)ClkFreq > 20000000U * temp)
 		{
-			wait = (200U * temp + clock.CpuDiv - 1U) / clock.CpuDiv;
+			volatile uint32_t wait;
+
+			// CPU still runs at FIN / CpuDiv. UM10360 4.5.6 requires
+			// 200 / FREF seconds below 100 kHz, or 500 us above 20 MHz.
+			if ((uint32_t)ClkFreq < 100000U * temp)
+			{
+				wait = (200U * temp + clock.CpuDiv - 1U) / clock.CpuDiv;
+			}
+			else
+			{
+				wait = ((uint32_t)ClkFreq + 2000U * clock.CpuDiv - 1U) /
+					(2000U * clock.CpuDiv);
+			}
+			// A volatile decrement consumes at least one CPU cycle per count.
+			// Loop overhead and interrupts only extend this minimum delay.
+			while (wait != 0)
+			{
+				__NOP();
+				wait--;
+			}
 		}
 		else
 		{
-			wait = ((uint32_t)ClkFreq + 2000U * clock.CpuDiv - 1U) /
-				(2000U * clock.CpuDiv);
+			// Within the reliable range, do not connect without reported lock.
+			temp = LPC17_PLL_WAIT_MAX;
+			while ((LPC_SC->PLL0STAT & (1U << 26)) == 0U)
+			{
+				if (--temp == 0U)
+				{
+					SystemCoreClockUpdate();
+
+					return 0;
+				}
+			}
 		}
-		// A volatile decrement consumes at least one CPU cycle per count.
-		// Loop overhead and interrupts only extend this minimum delay.
-		while (wait != 0)
-		{
-			__NOP();
-			wait--;
-		}
-	}
-	else
-	{
-		// Within the reliable range, do not connect without reported lock.
+
+		LPC_SC->PLL0CON   = 0x03;
+		Lpc17PllFeed(&LPC_SC->PLL0FEED);
 		temp = LPC17_PLL_WAIT_MAX;
-		while ((LPC_SC->PLL0STAT & (1U << 26)) == 0U)
+		while ((LPC_SC->PLL0STAT & (1U << 25)) == 0U)
 		{
 			if (--temp == 0U)
 			{
+				// Cancel a pending connection, but keep PLL0 enabled in case
+				// the hardware connects late or cannot acknowledge disconnect.
+				LPC_SC->PLL0CON = 0x01;
+				Lpc17PllFeed(&LPC_SC->PLL0FEED);
+
+				temp = LPC17_PLL_WAIT_MAX;
+				while ((LPC_SC->PLL0STAT & (1U << 25)) != 0U)
+				{
+					if (--temp == 0U)
+					{
+						break;
+					}
+				}
 				SystemCoreClockUpdate();
 
 				return 0;
 			}
 		}
-	}
 
-	LPC_SC->PLL0CON   = 0x03;
-	Lpc17PllFeed(&LPC_SC->PLL0FEED);
-	temp = LPC17_PLL_WAIT_MAX;
-	while ((LPC_SC->PLL0STAT & (1U << 25)) == 0U)
-	{
-		if (--temp == 0U)
+		// USB needs MAIN input and an even division to exactly 48 MHz.
+		// A rounded CPU rate alone does not establish a usable USB clock.
+		if (clksrcsel == CLKSRCSEL_MAIN && clock.UsbExact)
 		{
-			// Cancel a pending connection, but keep PLL0 enabled in case
-			// the hardware connects late or cannot acknowledge disconnect.
-			LPC_SC->PLL0CON = 0x01;
-			Lpc17PllFeed(&LPC_SC->PLL0FEED);
-
-			temp = LPC17_PLL_WAIT_MAX;
-			while ((LPC_SC->PLL0STAT & (1U << 25)) != 0U)
-			{
-				if (--temp == 0U)
-				{
-					break;
-				}
-			}
-			SystemCoreClockUpdate();
-
-			return 0;
+			LPC_SC->USBCLKCFG = clock.PllFreq / 48000000U - 1U;
 		}
 	}
 
-	// USB needs MAIN input and an even division to exactly 48 MHz.
-	// A rounded CPU rate alone does not establish a usable USB clock.
-	if (clksrcsel == CLKSRCSEL_MAIN && clock.UsbExact)
-	{
-		LPC_SC->USBCLKCFG = clock.PllFreq / 48000000U - 1U;
-	}
-
-clock_ready:
 	SystemCoreClockUpdate();
 
 	// Reduce access time only after the resulting CPU clock is known.
@@ -500,16 +496,67 @@ clock_ready:
 	return SystemCoreClock;
 }
 
+// Stop peripheral gates before runtime changes; RTC and GPIO are independent.
+static uint32_t Lpc17CoreClockSet(uint32_t CoreFreq, int ClkFreq, uint32_t Source,
+		bool UsePll, bool CheckUsers)
+{
+	Lpc17ClockConfig_t clock;
+
+	// ClkFreq describes a physical input, not the requested CPU rate.
+	if (ClkFreq != (int)RTC_FREQ && (ClkFreq < 1000000 || ClkFreq > 25000000))
+	{
+		return 0;
+	}
+
+	if (UsePll)
+	{
+		clock = Lpc17ClockSelect(CoreFreq, (uint32_t)ClkFreq);
+	}
+	else
+	{
+		// Startup recovery must not depend on a working PLL.
+		memset(&clock, 0, sizeof(clock));
+		clock.CpuDiv = 1;
+	}
+
+	uint32_t state = __get_PRIMASK();
+	uint32_t result = 0;
+
+	__disable_irq();
+	// PCONP reserved bits 0, 5, 11, 20 and 28 are not peripheral owners.
+	uint32_t users = LPC_SC->PCONP & ~((1U << 0) | (1U << 5) | (1U << 9) |
+		(1U << 11) | (1U << 15) | (1U << 20) | (1U << 28));
+	bool busy = users != 0 || (LPC_SC->CLKOUTCFG & (1U << 8)) != 0 ||
+		(LPC_SC->PLL1CON & 3U) != 0 || (LPC_SC->PLL1STAT & (3U << 8)) != 0;
+
+	if (CheckUsers && !busy)
+	{
+		busy = ((LPC_WDT->WDMOD & 1U) != 0 && (LPC_WDT->WDCLKSEL & 3U) == 1U) ||
+			(LPC_DAC->DACCTRL & (1U << 2)) != 0;
+	}
+	// Never change the range of an oscillator currently feeding the CPU.
+	bool rangeChange = Source == CLKSRCSEL_MAIN &&
+		(LPC_SC->CLKSRCSEL & 3U) == CLKSRCSEL_MAIN &&
+		((LPC_SC->SCS & 0x10U) != (ClkFreq > 15000000 ? 0x10U : 0U));
+
+	if ((!CheckUsers || !busy) && !rangeChange)
+	{
+		result = Lpc17SetCoreClock(ClkFreq, Source, &clock);
+	}
+	__set_PRIMASK(state);
+	return result;
+}
+
 uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 {
 	// Preserve the frequency-based legacy source selection.
 	uint32_t source = ClkFreq == (int)IRC_FREQ ? CLKSRCSEL_IRC :
 		(ClkFreq == (int)RTC_FREQ ? CLKSRCSEL_RTC : CLKSRCSEL_MAIN);
 
-	return Lpc17CoreClockSet(CoreFreq, ClkFreq, source, true);
+	return Lpc17CoreClockSet(CoreFreq, ClkFreq, source, true, true);
 }
 
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+static bool Lpc17CoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq, bool CheckUsers)
 {
 	uint32_t source;
 
@@ -529,7 +576,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return false;
 	}
 
-	if (Lpc17CoreClockSet(CORE_FREQ, (int)OscFreq, source, true) == 0)
+	if (Lpc17CoreClockSet(CORE_FREQ, (int)OscFreq, source, true, CheckUsers) == 0)
 	{
 		return false;
 	}
@@ -544,6 +591,19 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	g_McuOsc.CoreOsc.Freq = OscFreq;
 
 	return true;
+}
+
+bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	return Lpc17CoreClockSelect(ClkSrc, OscFreq, true);
+}
+
+bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	// The RTC has a fixed external 32768 Hz source and no software source mux.
+	(void)ClkSrc;
+	(void)OscFreq;
+	return false;
 }
 
 uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel)
@@ -568,7 +628,7 @@ uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel)
 	return SystemCoreClockSet(CoreFreq, clkfreq);
 }
 
-void SystemConnectPLL1(void)
+static void Lpc17ConnectPLL1(void)
 {
 	uint32_t sysclk = SystemClkFreq;
 	uint32_t val;
@@ -634,6 +694,18 @@ void SystemConnectPLL1(void)
 	}
 }
 
+void SystemConnectPLL1(void)
+{
+	uint32_t state = __get_PRIMASK();
+
+	__disable_irq();
+	if ((LPC_SC->PCONP & (1U << 31)) == 0)
+	{
+		Lpc17ConnectPLL1();
+	}
+	__set_PRIMASK(state);
+}
+
 /**
  * Initialize the system
  *
@@ -659,11 +731,11 @@ void SystemInit (void)
 		memcpy(__data_ahb_start__, __data_ahb_loc__, ahbsize);
 	}
 
-	if (SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq) == false)
+	if (Lpc17CoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, false) == false)
 	{
 		// Recover from a missing external source or PLL failure on bare IRC.
 		// The shared transition still requires PLL disconnect/stop acknowledgement.
-		if (Lpc17CoreClockSet(IRC_FREQ, IRC_FREQ, CLKSRCSEL_IRC, false) != 0)
+		if (Lpc17CoreClockSet(IRC_FREQ, IRC_FREQ, CLKSRCSEL_IRC, false, false) != 0)
 		{
 			g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
 			g_McuOsc.CoreOsc.Freq = IRC_FREQ;

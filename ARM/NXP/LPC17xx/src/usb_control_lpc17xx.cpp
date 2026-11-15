@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	usb_control_lpc17xx.c
+@file	usb_control_lpc17xx.cpp
 
 @brief	Private LPC17xx control endpoint event handling.
 
@@ -75,7 +75,7 @@ void Lpc17UsbControlBusReset(Lpc17UsbControl_t *pControl)
 		if (Lpc17UsbBusReset())
 		{
 			Lpc17UsbControlReset(pControl, true);
-			UsbCtrlrEvt_t event = {0};
+			UsbCtrlrEvt_t event = {};
 			event.Type = USB_CTRLR_EVT_RESET;
 			pControl->Event(&event);
 		}
@@ -210,7 +210,7 @@ void Lpc17UsbControlStall(Lpc17UsbControl_t *pControl)
 static void Lpc17UsbControlComplete(Lpc17UsbControl_t *pControl, bool In,
 		uint16_t Length, const uint8_t *pData, bool Invalid)
 {
-	UsbCtrlrEvt_t event = {0};
+	UsbCtrlrEvt_t event = {};
 	event.Type = USB_CTRLR_EVT_XFER_CMPL;
 	event.Xfer.EpAddr = In ? 0x80 : 0;
 	event.Xfer.Length = Length;
@@ -276,7 +276,7 @@ static void Lpc17UsbControlDispatch(Lpc17UsbControl_t *pControl)
 			Lpc17UsbControlStall(pControl);
 			return;
 		}
-		UsbCtrlrEvt_t event = {0};
+		UsbCtrlrEvt_t event = {};
 		event.Type = USB_CTRLR_EVT_SETUP;
 		memcpy(&event.Setup, packet, sizeof(event.Setup));
 		if (!Lpc17UsbControlCancelAddress(pControl))

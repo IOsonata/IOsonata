@@ -26,7 +26,8 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime recovery and main/low-frequency peripheral checks implemented; hardware validation pending |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; SAMD11 SW0/PA14 repeated resume passed | Validate SAMD21 wake, full SRAM continuity, sleep current and peripheral clock ownership |
 | LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
-| LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
+| LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |
+| LPC546xx | Missing | Audit existing selectors and peripheral clocks |
 | RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
@@ -457,3 +458,58 @@ I2CScan and PowerOffDemo links in both configurations, existing clock tests in
 C and C++, and temporary power-register checks at O0/O2. These are compilation
 and register-model results; sleep entry, wake reset, retention and current draw
 still need hardware validation. D11 remains the current hardware test target.
+
+## LPC17xx power and clock port
+
+The LPC1769 managed library includes reset reporting, Deep Power-down,
+ordinary interrupt-resumable Sleep and five full-width RTC backup registers.
+RTC register access temporarily enables PCONP.PCRTC and restores the previous
+gate state. Backup contents survive software reset and Deep Power-down while
+the VBAT domain remains supplied. SRAM cannot be retained in Deep Power-down.
+The watchdog is neither enabled nor fed by these functions.
+
+Deep Power-down wakes through the RESET pin or an application-configured RTC
+interrupt. `SystemPowerOff` preserves the RTC interrupt enable and pending
+state, stops SysTick, and disables other CPU interrupts before entry. The
+application must arm a future RTC event and handle any already-pending event
+before entering. `SystemWakePin` returns false because there is no selectable
+GPIO wake input for this mode. `SystemSleep` uses ordinary Sleep and enabled
+NVIC interrupts; Deep Sleep and Power-down with PLL restoration are not yet
+implemented.
+
+`SystemResetReason` caches and clears RSID and DPDFLAG on the first call.
+It reports power-on/brownout, external reset and watchdog reset. After Deep
+Power-down it reports reset-pin wake when EXTR is set, otherwise RTC wake when
+an RTC interrupt flag is present. It leaves RTC interrupt flags untouched.
+RSID has no dedicated software-reset or lockup flag, so these are not inferred.
+Read the reset reason before application RTC initialization clears wake flags.
+With a separately supplied VBAT domain, retention and DPDFLAG can outlive a
+loss of core supply; the registers do not identify every such power sequence.
+
+Runtime core-clock changes refuse enabled peripheral gates except RTC and
+GPIO, active PLL1, CLKOUT, a PCLK-clocked running watchdog, and the DAC counter.
+The gate check is conservative: powered but idle peripherals must also be
+released. Startup configures clocks before application drivers own them.
+The divider/PLL search remains outside the interrupt lock; register changes
+and ownership checks run under the lock. The closest-frequency calculation,
+100/120 MHz device limits and bounded PLL failure handling remain in place.
+Applications must stop and reconfigure SysTick and scheduler timing around a
+runtime change. Peripheral-clock setters remain caller-controlled because
+drivers use them while configuring their own peripherals.
+
+The port refuses an oscillator-range change while MAIN feeds the CPU. Switch
+to IRC first; changing the range of an unused oscillator stops and restarts it
+with bounded ready checks. Other SCS fields are preserved. PLL1 configuration
+refuses an enabled USB peripheral. The RTC has a fixed 32768 Hz external clock;
+`SystemLowFreqClockSelect` returns false because there is no programmable LF
+source selector. This does not stop or reset the RTC.
+
+Validation covers all 124 enabled library sources in Debug and Release,
+TimerDemo, PowerOffDemo, UART PRBS TX/loopback, SPI loopback, I2CScan and the six
+USB demos in both configurations. Clock register tests cover C/C++ callers,
+LPC1758/1759/1768/1769 limits, oscillator/PLL failures and busy-user rejection.
+Temporary power-register checks cover reset caching, backup access, interrupt
+selection and sleep register restoration at O0/O2. USB project source links
+and four C++ event initializers were corrected; USB_IRQHandler now has the C
+linkage required by the vector table. Hardware sleep/wake, retention and current
+measurements remain pending. D11 remains the current hardware test board.

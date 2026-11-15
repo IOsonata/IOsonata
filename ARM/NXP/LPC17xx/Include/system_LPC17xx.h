@@ -142,7 +142,8 @@ void SystemCoreClockUpdate (void);
  * 		Return actual frequency in Hz, or zero on failure.
  *
  * @brief	Setup core clock (cclk) & update SystemCoreClock variable
- * Stop clock-dependent peripherals before changing the CPU clock.
+ * Release clock-dependent peripheral gates before changing the CPU clock.
+ * Enabled users, PLL1 and CLKOUT prevent runtime changes.
  * For a different main oscillator frequency, use SystemCoreClockSet.
  */
 uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel);
@@ -158,7 +159,8 @@ uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel);
  * USBCLKCFG is updated only for MAIN-driven PLL0 at 288/384/480 MHz;
  * otherwise it is unchanged. CPU-clock success does not imply USB readiness.
  * USB also requires an accurate input and at least 18 MHz CPU clock.
- * Stop clock-dependent peripherals before changing the CPU clock.
+ * Release clock-dependent peripheral gates before changing the CPU clock.
+ * Enabled users, PLL1 and CLKOUT prevent runtime changes.
  * Returns the actual CPU frequency, or zero on failure.
  */
 uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
@@ -167,7 +169,7 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
  * Configure PLL1 for the fixed 48 MHz USB clock.
  * Requires MAIN selected and ready, with its 12, 16 or 24 MHz frequency
  * recorded by the clock setup. Other inputs leave PLL1 unchanged.
- * The caller must stop USB before configuring its clock.
+ * The caller must release the USB peripheral clock gate before configuring PLL1.
  * Stops PLL1 before changing its configuration. Stop/lock/connect waits
  * are bounded; stop timeout preserves the configuration and disable request.
  * Lock/connect timeout requests PLL1 disable and returns.
