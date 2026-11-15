@@ -116,7 +116,17 @@ SOFTWARE.
 
 #pragma pack(push, 4)
 
+typedef struct SamdUartDev SamdUartDev_t;
+
 typedef struct {
+	bool (*Service)(SamdUartDev_t *, bool);
+	void (*Stop)(SamdUartDev_t *);
+	void (*Close)(SamdUartDev_t *);
+} SamdUartDmaOps_t;
+
+struct SamdUartDev {
+	const SamdUartDmaOps_t *pDmaOps;
+	void (*Poll)(SamdUartDev_t *);
 	int DevNo;							//!< SERCOM number
 	sercom_usart_int_registers_t *pReg;
 	UARTDev_t *pUartDev;				//!< Generic UART device data
@@ -130,19 +140,18 @@ typedef struct {
 	alignas(4) uint8_t RxFifoMem[SAMD_UART_CFIFO_MEMSIZE];
 	alignas(4) uint8_t TxFifoMem[SAMD_UART_CFIFO_MEMSIZE];
 	uint8_t TxDmaCopy[SAMD_UART_DMA_COPY];	//!< Block of a non-blocking TX CFIFO
-} SamdUartDev_t;
+};
 
 #pragma pack(pop)
 
-static SamdUartDev_t s_SamdUartDev[SAMD_SERCOM_CNT] = {
-	{ .DevNo = 0, .pReg = &SERCOM0_REGS->USART_INT, .DmaChan = -1, },
-	{ .DevNo = 1, .pReg = &SERCOM1_REGS->USART_INT, .DmaChan = -1, },
-	{ .DevNo = 2, .pReg = &SERCOM2_REGS->USART_INT, .DmaChan = -1, },
-#if SAMD_SERCOM_CNT > 3
-	{ .DevNo = 3, .pReg = &SERCOM3_REGS->USART_INT, .DmaChan = -1, },
-	{ .DevNo = 4, .pReg = &SERCOM4_REGS->USART_INT, .DmaChan = -1, },
-	{ .DevNo = 5, .pReg = &SERCOM5_REGS->USART_INT, .DmaChan = -1, },
-#endif
+static SamdUartDev_t s_SamdUartDev[SAMD_SERCOM_CNT];
+
+static bool SamdUartDmaService(SamdUartDev_t * const pDev, bool bError);
+static void SamdUartDmaStop(SamdUartDev_t * const pDev);
+static void SamdUartDmaClose(SamdUartDev_t * const pDev);
+
+static const SamdUartDmaOps_t s_SamdUartDmaOps = {
+	SamdUartDmaService, SamdUartDmaStop, SamdUartDmaClose
 };
 
 static bool SamdUartSync(SamdUartDev_t * const pDev, uint32_t Mask)
@@ -570,7 +579,7 @@ static inline __attribute__((always_inline)) void SamdUartPollInline(SamdUartDev
 	}
 	else
 	{
-		(void)SamdUartDmaService(pDev, false);
+		(void)pDev->pDmaOps->Service(pDev, false);
 	}
 	SamdUartPollRx(pDev);
 }
@@ -596,7 +605,7 @@ static int SamdUartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	if (poll)
 	{
 		uint32_t state = DisableInterrupt();
-		SamdUartPoll(dev);
+		dev->Poll(dev);
 		EnableInterrupt(state);
 	}
 
@@ -610,7 +619,7 @@ static int SamdUartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 
 		if (poll)
 		{
-			SamdUartPoll(dev);
+			dev->Poll(dev);
 		}
 
 		uint8_t *p = CFifoGetMultiple(fifo, &l);
@@ -639,7 +648,7 @@ static int SamdUartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	if (poll)
 	{
 		uint32_t state = DisableInterrupt();
-		SamdUartPoll(dev);
+		dev->Poll(dev);
 		EnableInterrupt(state);
 	}
 
@@ -675,7 +684,7 @@ __attribute__((noinline)) static int SamdUartTxPut(SamdUartDev_t * const pDev, u
 
 		if (poll)
 		{
-			SamdUartPoll(pDev);
+			pDev->Poll(pDev);
 		}
 
 		uint8_t *p = CFifoPutMultiple(fifo, &l);
@@ -727,7 +736,7 @@ static int SamdUartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Dat
 		// the next TxData or RxData call sends the rest
 		uint32_t state = DisableInterrupt();
 
-		SamdUartPollInline(dev);
+		dev->Poll(dev);
 
 		EnableInterrupt(state);
 	}
@@ -742,7 +751,7 @@ static int SamdUartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Dat
 		{
 			// DMA: the CPU fills DATA, a block for the rest, ended by the
 			// DMAC interrupt
-			if (SamdUartDmaService(dev, false))
+			if (dev->pDmaOps->Service(dev, false))
 			{
 				udev->bTxReady = false;
 			}
@@ -779,7 +788,10 @@ static void SamdUartDisable(DevIntrf_t * const pDev)
 	uint32_t state = DisableInterrupt();
 
 	dev->pReg->SERCOM_INTENCLR = SERCOM_USART_INT_INTENCLR_Msk;
-	SamdUartDmaStop(dev);
+	if (dev->pDmaOps != NULL)
+	{
+		dev->pDmaOps->Stop(dev);
+	}
 	(void)SamdUartRun(dev, false);
 	SamdSercomClockDisable(dev->DevNo);
 
@@ -797,7 +809,10 @@ static void SamdUartPowerOff(DevIntrf_t * const pDev)
 
 	uint32_t state = DisableInterrupt();
 
-	SamdUartDmaClose(dev);
+	if (dev->pDmaOps != NULL)
+	{
+		dev->pDmaOps->Close(dev);
+	}
 	EnableInterrupt(state);
 }
 
@@ -813,7 +828,10 @@ static void SamdUartEnable(DevIntrf_t * const pDev)
 	udev->RxDropCnt = 0;
 	udev->TxDropCnt = 0;
 
-	SamdUartDmaStop(dev);
+	if (dev->pDmaOps != NULL)
+	{
+		dev->pDmaOps->Stop(dev);
+	}
 	CFifoFlush(udev->hTxFifo);
 	udev->bTxReady = true;
 
@@ -837,7 +855,10 @@ static void SamdUartReset(DevIntrf_t * const pDev)
 	SamdUartDev_t *dev = (SamdUartDev_t *)pDev->pDevData;
 	uint32_t state = DisableInterrupt();
 
-	SamdUartDmaStop(dev);
+	if (dev->pDmaOps != NULL)
+	{
+		dev->pDmaOps->Stop(dev);
+	}
 	dev->pReg->SERCOM_CTRLA = SERCOM_USART_INT_CTRLA_SWRST_Msk;
 	(void)SamdUartSync(dev, SERCOM_USART_INT_SYNCBUSY_SWRST_Msk);
 
@@ -949,7 +970,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	}
 
 	SamdUartDev_t *dev = &s_SamdUartDev[pCfg->DevNo];
-	sercom_usart_int_registers_t *reg = dev->pReg;
+	sercom_usart_int_registers_t *reg = &SamdSercomGetReg(pCfg->DevNo)->USART_INT;
 	uint32_t state = DisableInterrupt();
 
 	// Reject another running owner of the SERCOM: UART, I2C or SPI
@@ -968,7 +989,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	}
 
 	// A channel of an earlier UARTInit given back, a new one taken
-	SamdUartDmaClose(dev);
+	if (dev->pDmaOps != NULL)
+	{
+		dev->pDmaOps->Close(dev);
+	}
+	dev->DevNo = pCfg->DevNo;
+	dev->pReg = reg;
+	dev->DmaChan = -1;
+	dev->pDmaOps = pCfg->bDMAMode ? &s_SamdUartDmaOps : NULL;
+	dev->Poll = pCfg->bIntMode ? NULL : SamdUartPoll;
 	dev->bDmaActive = false;
 	dev->DmaLen = 0;
 	if (pCfg->bDMAMode)
@@ -989,7 +1018,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	reg->SERCOM_CTRLA = SERCOM_USART_INT_CTRLA_SWRST_Msk;
 	if (!SamdUartSync(dev, SERCOM_USART_INT_SYNCBUSY_SWRST_Msk))
 	{
-		SamdUartDmaClose(dev);
+		if (dev->pDmaOps != NULL)
+		{
+			dev->pDmaOps->Close(dev);
+		}
 		SamdSercomClockDisable(pCfg->DevNo);
 		EnableInterrupt(state);
 
@@ -1017,7 +1049,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	// CFifoInit returns NULL when the supplied memory is too small
 	if (pDev->hRxFifo == NULL || pDev->hTxFifo == NULL)
 	{
-		SamdUartDmaClose(dev);
+		if (dev->pDmaOps != NULL)
+		{
+			dev->pDmaOps->Close(dev);
+		}
 		SamdSercomClockDisable(pCfg->DevNo);
 		EnableInterrupt(state);
 
@@ -1066,7 +1101,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	if (pDev->Rate == 0 || !SamdUartSync(dev, SERCOM_USART_INT_SYNCBUSY_CTRLB_Msk))
 	{
-		SamdUartDmaClose(dev);
+		if (dev->pDmaOps != NULL)
+		{
+			dev->pDmaOps->Close(dev);
+		}
 		dev->pUartDev = NULL;
 		IOPinDis(dev->pIOPinMap, dev->NbIOPins);
 		SamdSercomClockDisable(pCfg->DevNo);

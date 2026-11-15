@@ -60,7 +60,9 @@ SOFTWARE.
 #endif
 
 //#define DEMO_C
-#define DEMO_C_OBJ
+#if defined(TIMER_DEMO_USE_C_API) && TIMER_DEMO_USE_C_API
+#define DEMO_C
+#endif
 
 #ifndef TIMER_DEMO_DEVNO
 #ifdef TIMER_DEVNO
@@ -151,7 +153,11 @@ static const UARTCfg_t s_UartCfg = {
 	.pTxMem = s_UartTxMem,
 	.bDMAMode = false,
 };
+#ifdef DEMO_C
+static UARTDev_t s_Uart;
+#else
 static UART s_Uart;
+#endif
 #else
 // Debug output
 static Semihost s_Semihost;
@@ -195,7 +201,11 @@ int main(void)
 	bool changed;
 	uint32_t state;
 	char line[TIMER_DEMO_LINE_LEN];
+#ifdef DEMO_C
+	DevIntrf_t *logOut;
+#else
 	DeviceIntrf *logOut;
+#endif
 	int i;
 	int n;
 
@@ -203,20 +213,36 @@ int main(void)
 
 #ifdef NDEBUG
 	// Release logs to the UART
+#ifdef DEMO_C
+	if (!UARTInit(&s_Uart, &s_UartCfg))
+#else
 	if (!s_Uart.Init(s_UartCfg))
+#endif
 	{
 		while (1)
 		{
 			__WFE();
 		}
 	}
+#ifdef DEMO_C
+	logOut = &s_Uart.DevIntrf;
+#else
 	logOut = &s_Uart;
+#endif
 #else
 	// Debug logs to the debugger console
 	s_Semihost.Init();
+#ifdef DEMO_C
+	logOut = s_Semihost;
+#else
 	logOut = &s_Semihost;
 #endif
+#endif
+#ifdef DEMO_C
+	SysLogInitNoTimer(SysLogGet(), &s_LogCfg, logOut, 0, 0);
+#else
 	SysLogGetInstance()->Init(s_LogCfg, logOut);
+#endif
 
 #ifdef DEMO_C
 	g_TimerInitOk = TimerInit(&g_TimerDev, &s_TimerCfg);

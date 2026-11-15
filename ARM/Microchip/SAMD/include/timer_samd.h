@@ -97,6 +97,21 @@ typedef struct {
 
 typedef struct __Samd_Timer_Data	SamdTimerData_t;
 
+// RTC synchronization operations. Other counter families do not reference them.
+typedef struct {
+	bool (*Wait)(SamdTimerData_t *pData, bool bFresh);
+	void (*Resume)(SamdTimerData_t *pData);
+	bool (*Event)(SamdTimerData_t *pData);
+	uint32_t (*TickGen)(SamdTimerData_t *pData);
+	uint32_t (*Lag)(SamdTimerData_t *pData);
+} SamdTimerRtcOps_t;
+
+// Optional tick routing, selected only for a configuration using tick events.
+typedef struct {
+	bool (*Open)(SamdTimerData_t *pData, int IntPrio);
+	void (*Close)(SamdTimerData_t *pData);
+} SamdTimerTickOps_t;
+
 // Register operations of a kind of counter:
 //	Setup	: clock, reset, mode and Prescaler, counter stopped
 //	Run		: counter started or stopped, overflow interrupt
@@ -123,25 +138,20 @@ typedef struct {
 	bool (*Matched)(SamdTimerData_t *pData, int TrigNo);
 	bool (*Capture)(SamdTimerData_t *pData, bool bEnable);
 	bool (*Captured)(SamdTimerData_t *pData, uint32_t *pCount);
+	const SamdTimerRtcOps_t *pRtc;
+	void (*Irq)(SamdTimerData_t *pData);
 } SamdTimerOps_t;
 
 struct __Samd_Timer_Data {
 	TimerDev_t *pTimer;			//!< Timer bound to the device, NULL if free
 	const SamdTimerOps_t *pOps;	//!< Register operations
+	const SamdTimerTickOps_t *pTickOps;
 	void *pReg;					//!< tc_count16_registers_t or tcc_registers_t, NULL for the RTC
 	SamdTimerTrig_t *pTrig;		//!< Triggers of the device
-	IRQn_Type IrqNo;
-	uint32_t ApbMask;			//!< PM APBC bit of the TC or TCC
 	uint8_t GclkId;				//!< Generic clock channel
 	uint8_t NbTrig;				//!< Number of triggers
 	uint8_t CntBits;			//!< Counter size in bits
 	int8_t EvUser;				//!< Event user of the capture channel, -1 none
-	uint32_t BaseFreq;			//!< Counter clock before the prescaler
-	uint32_t Prescaler;			//!< PRESCALER field value
-	uint32_t Epoch;				//!< Changed by a counter reset
-	uint64_t Floor;				//!< Last count returned, counts never go back
-	uint32_t Compare;			//!< RTC compare value written last
-	uint32_t StopCount;			//!< TCC count when the counter stopped
 	bool bRunning;
 	bool bOverflow;				//!< Overflow event to report
 	bool bResetOvf;				//!< RTC overflow flag from before a reset to drop
@@ -152,6 +162,14 @@ struct __Samd_Timer_Data {
 	int8_t ExtChan;				//!< Event channel of the external trigger
 	int8_t ExtLine;				//!< EIC line of the external trigger
 	int8_t TickChan;			//!< Event channel of the tick interrupt
+	IRQn_Type IrqNo;
+	uint32_t ApbMask;			//!< PM APBC bit of the TC or TCC
+	uint32_t BaseFreq;			//!< Counter clock before the prescaler
+	uint32_t Prescaler;			//!< PRESCALER field value
+	uint32_t Epoch;				//!< Changed by a counter reset
+	uint64_t Floor;				//!< Last count returned, counts never go back
+	uint32_t Compare;			//!< RTC compare value written last
+	uint32_t StopCount;			//!< TCC count when the counter stopped
 	uint64_t ExtCount;			//!< Count captured at the last external trigger
 };
 

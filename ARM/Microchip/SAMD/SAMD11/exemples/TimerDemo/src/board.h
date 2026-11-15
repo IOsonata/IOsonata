@@ -6,8 +6,9 @@
 This file contains the I/O definitions for this application firmware.
 Keep it in the application project and modify it for the hardware in use.
 The pins are those of the SAM D11 Xplained Pro. Trigger 0 toggles LED0. The
-UART and printf do not fit the 16 KB flash with the timer: no console, the
-counts and periods are in g_TriggerCount and g_Period for the debugger.
+C API selection and LTO let unused timer implementations be discarded.
+Debug uses semihosting, Release UART. Counts and periods are also in
+g_TriggerCount and g_Period for the debugger.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 30, 2026
@@ -60,7 +61,12 @@ SOFTWARE.
 // DevNo 0 is the RTC on the 32.768 kHz clock, 1 trigger. DevNo 1 and 2 are
 // TC1 and TC2 on the main clock, 2 triggers each, DevNo 3 is TCC0 on the
 // main clock, 4 triggers.
+#ifndef TIMER_DEMO_DEVNO
 #define TIMER_DEMO_DEVNO	0
+#endif
+#ifndef TIMER_DEMO_USE_C_API
+#define TIMER_DEMO_USE_C_API	1
+#endif
 #define TIMER_DEMO_FREQ		0
 
 // Cortex-M0+ priorities 0 to 3
