@@ -27,27 +27,19 @@ RAMRET. Retention configuration is whole-bank; RAM1 retention is disabled
 and RAM2 retention is enabled before Standby. Test memory must never overlap
 `.data`, `.bss` or stack.
 
-## Live power-register snapshot
+## Standby register snapshot
 
-The test builds with `POWER_DEMO_WAKE_DIAG=1`. After the first PC13
-press/release, the example prepares the actual Standby register state without
-yet issuing WFI, then prints:
+`POWER_DEMO_STANDBY_DIAG=1` enables a short register readback immediately
+before WFI. PC13 input switching was already validated on hardware, so
+there is **no preliminary GPIO polling or press/release test**.
 
-- `WUCR1`, `WUCR2`, `WUCR3`, `WUSR` for WKUP2 enable, polarity, selection,
-  and any pending wake flags
-- `IORETENRC` for PC13 pull retention, `CR1` and `SR` for power mode/status
-- GPIOC `MODER`, `PUPDR`, `IDR`, and SCB `SCR` for pin state and SLEEPDEEP
-
-The second call, `SystemPowerOff()`, consumes this prepared state and
-executes WFI without clearing or reprogramming the wake flags a second time.
-If WFI returns without a reset, the diagnostic reports
-`WFI returned without Standby reset` and stops. Before WFI the log also
-reports EXTI rising/falling pending flags, SCB ICSR, SysTick CTRL and
-NVIC pending registers ISPR0–2. Pending interrupts or peripheral flags
-may prevent Standby mode entry, even when WUCR1/2/3 are correct.
-This preparation entry point is temporary diagnostic support, not a generic
-power API addition. Record these register values even if the second PC13 press
-does not wake the board.
+The example prints WUCR1/2/3, WUSR, IORETENRC, CR1, SR,
+GPIOC MODER/PUPDR/IDR, SCB SCR, EXTI and SysTick state. It then prints
+`Calling SystemPowerOff in 1 second` and enters Standby.
+The temporary `StWbaPowerPrepareStandby()` routine prepares registers
+once, so SystemPowerOff does not clear wake flags twice.
+If the WFI instruction returns without reset, the diagnostic prints
+`WFI returned without Standby reset`.
 
 ## Standby entry diagnostics
 
@@ -66,26 +58,18 @@ not sufficient by itself: GPIO configuration is lost when the core domain
 powers down. The power driver now enables the matching bit in
 `PWR_IORETENRC` for an explicitly enabled wake pin that has a pull
 configured, preserving that input pull while in Standby. It preserves other
-pins' retention settings. The first press/release still checks PC13 in Run;
-after the `Power off` message, a second press/release tests the WKUP2
-Standby path. Record the resulting reset reason and SRAM comparisons.
+pins' retention settings. PC13 input transitions have been confirmed in Run mode. After the
+`Power off` message, a single press/release tests WKUP2 Standby wake. Record the resulting reset reason and SRAM comparisons.
 
 ## Procedure
 
-1. Build `IOsonata_STM32WBA65` and this example with matching Release
-   configurations.
-2. Program the DK1, disconnect active debugging, and monitor the VCOM.
-3. In this diagnostic build, the firmware first prints `Wake GPIO P2.13`
-   (the port index for GPIOC is 2). While the 30-second input check runs,
-   momentarily connect PC13/D4 to GND and release it. Confirm the log
-   contains `Wake GPIO active level=0`, `Wake GPIO released level=1`,
-   and `Wake GPIO check PASS`. A live input level is also printed every second. If it prints FAIL, Standby is skipped:
-   verify wiring and PC13 GPIO operation before debugging power registers.
-4. After the check passes and the MCU enters Standby, briefly connect
-   PC13 to GND again and release it.
-5. Confirm wake reason 0x100, increasing backup-register count, all 8192
-   retained words matching and no prior-pattern words remaining in the
-   nonretained region. Repeat multiple times.
+1. Build `IOsonata_STM32WBA65` and `PowerOffDemo` in Release.
+2. Program and run standalone, monitoring USART1 VCOM.
+3. Check the wake register snapshot and `Calling SystemPowerOff in 1 second`.
+4. After that message and the one-second delay, momentarily connect
+   PC13/D4 to GND and release it.
+5. Look for wake reason 0x100, incremented backup count, 8192/8192 retained
+   words, and the nonretained memory result. Repeat to validate.
 
 A source review or a successful build does not establish SRAM retention or
 wakeup behavior. These must be confirmed on hardware. The radio/USB shutdown
