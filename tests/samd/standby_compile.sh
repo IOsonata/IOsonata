@@ -49,9 +49,9 @@ do
 	"$GCC" $COMMON -std=c11 -D"$PART" $CMSIS $INC -I"$PARTDIR/include" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/iopincfg_samd.c" \
 		-o "$OUT/$DEVICE-gpio.o"
-	"$GXX" $COMMON -std=gnu++23 -fno-exceptions -fno-rtti -D"$PART" \
+	"$GCC" $COMMON -std=c11 -D"$PART" \
 		$CMSIS $INC -I"$PARTDIR/include" -I"$BOARD" \
-		-c "$ROOT/ARM/Microchip/SAMD/src/system_sleep_samd.cpp" \
+		-c "$ROOT/ARM/Microchip/SAMD/src/system_sleep_samd.c" \
 		-o "$OUT/$DEVICE-sleep.o"
 	"$GXX" $COMMON -std=gnu++23 -Wno-missing-field-initializers \
 		-fno-exceptions -fno-rtti -D"$PART" \
