@@ -46,7 +46,13 @@ SOFTWARE.
 #include "display/display_ssd1315.h"
 #include "iopinctrl.h"
 
+#include "display/display_ssd1306.h"
 #include "board.h"
+
+#ifdef DISPLAY_SYSLOG_ENABLE
+#include "display/display_intrf.h"
+#include "syslog.h"
+#endif
 
 // Existing HX8357 boards keep their original settings. Other panels select
 // their driver, native geometry and SPI settings beside the pin map.
@@ -115,6 +121,17 @@ uint8_t g_LineBuff[480 * 4];
 
 static const char s_FontText[] = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\r\n";
 
+#ifdef DISPLAY_SYSLOG_ENABLE
+static DisplayIntrf s_DisplayIntrf;
+alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(2, 32)];
+static const SysLogCfg_t s_LogCfg = {
+	.pMem = s_LogMem,
+	.MemSize = sizeof(s_LogMem),
+	.RecordLen = 32,
+	.bBlocking = false
+};
+#endif
+
 // Keep the font demo usable on small panels. The generic formatted-print
 // buffer is 80 bytes, so send the character sample in smaller chunks. "%s"
 // formatting also keeps the sample's percent sign literal.
@@ -161,6 +178,23 @@ bool HardwareInit()
 
 int main()
 {
+#ifdef DISPLAY_SYSLOG_ENABLE
+	if (!HardwareInit() || !s_DisplayIntrf.Init(&g_Lcd) ||
+		!SysLogGetInstance()->Init(s_LogCfg, &s_DisplayIntrf))
+	{
+		return 1;
+	}
+	ShowFont(&iFontSystem5x7, "System 5x7");
+	msDelay(2000);
+	g_Lcd.Clear();
+	SysLogGetInstance()->Printf("IOsonata display log\r\n");
+	uint32_t count = 0;
+	while (1)
+	{
+		msDelay(2000);
+		SysLogGetInstance()->Printf("Count %lu\r\n", (unsigned long)++count);
+	}
+#else
 	uint32_t colorr = 0;
 	uint32_t colorg = 0;
 	uint32_t colorb = 0;
@@ -310,4 +344,5 @@ int main()
 	}
 
 	return 0;
+#endif
 }

@@ -2390,5 +2390,20 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
 		</link>
+		<link>
+			<name>include/display/display_ssd1306.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_ssd1306.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_intrf.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

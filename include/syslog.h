@@ -19,6 +19,12 @@
  record and no further record follows to send it, and for sending what
  accumulated while no transport was attached.
 
+ On small targets without timestamps, use SysLogInitNoTimer. The C++ Init
+ wrapper selects it when no timer is supplied. This keeps timer conversion
+ and timestamp formatting out of an optimized image. SysLogStatus writes its
+ fixed fields directly, so a status-only application does not need printf.
+ SysLogPrintf keeps standard printf formatting and links it only when used.
+
  The status word supplies the type, module id and code fields. The optional
  detail string supplies additional runtime values and is formatted by the
  caller.
@@ -172,6 +178,7 @@ typedef struct __Sys_Log {
 	DevIntrf_t	*pSink;		//!< Output interface. NULL disables direct output.
 	uint32_t	SinkAddr;	//!< Device select id passed to DeviceIntrfTx, 0 for UART
 	TimerDev_t	*pTimer;	//!< Timestamp tick source. NULL disables timestamp.
+	int (*FormatTime)(TimerDev_t *, char *, int, bool); //!< Optional timestamp writer, set by Init.
 	uint32_t	MinType;	//!< Minimum type field emitted, e.g. SYSSTATUS_TYPE_WRN. 0 emits all.
 	hCFifo_t	hFifo;		//!< Record store, one complete record per block.
 	uint32_t	HeadIdx;	//!< Store index of the record HeadSent belongs to
@@ -206,6 +213,14 @@ typedef struct __Sys_Log {
 bool SysLogInit(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 				DevIntrf_t * const pSink, uint32_t SinkAddr,
 				TimerDev_t * const pTimer, uint32_t MinType);
+
+/**
+ * Initialize without timestamps. Same storage and output behavior as
+ * SysLogInit with pTimer = NULL, but does not link timer conversion or
+ * timestamp formatting. Use this form for small targets without timestamps.
+ */
+bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
+				DevIntrf_t * const pSink, uint32_t SinkAddr, uint32_t MinType);
 
 /**
  * Select the DeviceIntrf used for output.
@@ -436,11 +451,13 @@ public:
 	bool Init(const SysLogCfg_t &Cfg,
 			  DeviceIntrf *pSink = (DeviceIntrf *)0, uint32_t SinkAddr = 0,
 			  Timer *pTimer = (Timer *)0, uint32_t MinType = 0) {
-		return SysLogInit(&vLog, &Cfg,
-						  pSink ? (DevIntrf_t *)*pSink : (DevIntrf_t *)0,
-						  SinkAddr,
-						  pTimer ? (TimerDev_t *)*pTimer : (TimerDev_t *)0,
-						  MinType);
+		DevIntrf_t *sink = pSink ? (DevIntrf_t *)*pSink : nullptr;
+		if (pTimer == nullptr)
+		{
+			return SysLogInitNoTimer(&vLog, &Cfg, sink, SinkAddr, MinType);
+		}
+		return SysLogInit(&vLog, &Cfg, sink, SinkAddr,
+			(TimerDev_t *)*pTimer, MinType);
 	}
 
 	void SetSink(DeviceIntrf *pSink, uint32_t SinkAddr = 0) {

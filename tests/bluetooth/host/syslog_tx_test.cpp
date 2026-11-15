@@ -29,6 +29,9 @@ int s_CapturedLen = 0;
 int s_ChunkLimit = 512;
 int s_TxCalls = 0;
 
+// Line length used by the tests that do not care about it.
+constexpr uint32_t kLineLen = 128U;
+
 bool MockStartTx(DevIntrf_t * const, uint32_t)
 {
 	return true;
@@ -69,9 +72,6 @@ void ResetCapture(int ChunkLimit = 512)
 	s_ChunkLimit = ChunkLimit;
 	s_TxCalls = 0;
 }
-
-// Line length used by the tests that do not care about it.
-constexpr uint32_t kLineLen = 128U;
 
 SysLogCfg_t MakeCfg(uint8_t *pMem, uint32_t MemSize, uint32_t RecordLen,
 					bool bBlocking)
@@ -608,10 +608,85 @@ void TestStoredRecordsGoOutOnSinkAttach()
 	CHECK(std::memcmp(s_Captured, "one\ntwo\n", 8) == 0);
 }
 
+uint64_t MaxTick(TimerDev_t *)
+{
+	return UINT64_MAX;
+}
+
+uint64_t MillisecondTick(TimerDev_t *)
+{
+	return 12345;
+}
+
+// Compare every truncation boundary against the existing output format,
+// including all 20 decimal digits of a uint64_t status timestamp.
+void TestTimestampTruncation()
+{
+	alignas(4) uint8_t memory[SYSLOG_MEMSIZE(2, 96)];
+	DevIntrf_t intrf{};
+	MakeIntrf(&intrf);
+	TimerDev_t timer{};
+	timer.GetTickCount = MaxTick;
+	timer.Freq = 1000;
+	const char *want = "[18446744073709551615] E:FFF:FFFF 100%\r\n";
+	for (uint32_t size = 2; size <= 64; size++)
+	{
+		SysLog_t log{};
+		SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), size, true);
+		CHECK(SysLogInit(&log, &cfg, &intrf, 0, &timer, 0));
+		ResetCapture();
+		int count = SysLogStatus(&log, SYSSTATUS_TYPE_ERR | 0x0FFFFFFFu, "100%");
+		int expected = (int)std::strlen(want);
+		if (expected >= (int)size)
+		{
+			expected = size - 1;
+		}
+		CHECK(count == expected);
+		CHECK(s_CapturedLen == expected);
+		CHECK(std::memcmp(s_Captured, want, expected) == 0);
+	}
+	timer.GetTickCount = MillisecondTick;
+	for (uint32_t size = 2; size <= 32; size++)
+	{
+		SysLog_t log{};
+		SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), size, true);
+		CHECK(SysLogInit(&log, &cfg, &intrf, 0, &timer, 0));
+		ResetCapture();
+		const char *text = "[12345] 100%";
+		int count = SysLogPrintf(&log, "%u%%", 100U);
+		int expected = (int)std::strlen(text);
+		if (expected >= (int)size)
+		{
+			expected = size - 1;
+		}
+		CHECK(count == expected);
+		CHECK(s_CapturedLen == expected);
+		CHECK(std::memcmp(s_Captured, text, expected) == 0);
+	}
+}
+
+void TestNoTimerInitialization()
+{
+	alignas(4) uint8_t memory[SYSLOG_MEMSIZE(2, 32)];
+	SysLog_t log{};
+	SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), 32, true);
+	DevIntrf_t intrf{};
+	MakeIntrf(&intrf);
+	CHECK(SysLogInitNoTimer(&log, &cfg, &intrf, 0, 0));
+	CHECK(log.pTimer == nullptr && log.FormatTime == nullptr);
+	ResetCapture();
+	CHECK(SysLogStatus(&log, SYSSTATUS_TYPE_ERR | 1, "error") == 18);
+	CHECK(std::memcmp(s_Captured, "E:000:0001 error\r\n", 18) == 0);
+	CHECK(SysLogInitNoTimer(&log, nullptr, &intrf, 0, 0) == false);
+	CHECK(SysLogPrintf(&log, "dropped") == 0);
+}
+
 } // namespace
 
 int main()
 {
+	TestTimestampTruncation();
+	TestNoTimerInitialization();
 	TestBufferedBeforeSink();
 	TestRecordTruncatedToLineMax();
 	TestBufferedFlushRetriesNotReadyRecord();
