@@ -27,6 +27,17 @@ RAMRET. Retention configuration is whole-bank; RAM1 retention is disabled
 and RAM2 retention is enabled before Standby. Test memory must never overlap
 `.data`, `.bss` or stack.
 
+## Standby wake input pull retention
+
+On STM32WBA6, configuring PC13 as GPIO input/pull-up before Standby is
+not sufficient by itself: GPIO configuration is lost when the core domain
+powers down. The power driver now enables the matching bit in
+`PWR_IORETENRC` for an explicitly enabled wake pin that has a pull
+configured, preserving that input pull while in Standby. It preserves other
+pins' retention settings. The first press/release still checks PC13 in Run;
+after the `Power off` message, a second press/release tests the WKUP2
+Standby path. Record the resulting reset reason and SRAM comparisons.
+
 ## Procedure
 
 1. Build `IOsonata_STM32WBA65` and this example with matching Release
