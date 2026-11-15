@@ -365,6 +365,13 @@ void IOPinDisableInterrupt(int IntNo)
 	EIC_REGS->EIC_INTENCLR = 1UL << IntNo;
 	EIC_REGS->EIC_INTFLAG = 1UL << IntNo;
 
+	// A disabled interrupt must not remain an armed Standby wake source.
+	if ((s_SamdStandbyWakeLines & (1UL << IntNo)) != 0U)
+	{
+		EIC_REGS->EIC_WAKEUP &= ~(1UL << IntNo);
+		s_SamdStandbyWakeLines &= ~(1UL << IntNo);
+	}
+
 	if (s_SamdPinInt[IntNo].PortNo >= 0)
 	{
 		// Pin back to GPIO
@@ -404,7 +411,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	// The line may be in use by another pin or by the event system
 	if ((s_SamdPinInt[IntNo].PortNo >= 0 &&
 		 (s_SamdPinInt[IntNo].PortNo != (int)PortNo || s_SamdPinInt[IntNo].PinNo != (int)PinNo)) ||
-		(s_SamdEicEvent & (1UL << IntNo)) != 0U)
+		(s_SamdEicEvent & (1UL << IntNo)) != 0U ||
+		(s_SamdStandbyWakeLines & (1UL << IntNo)) != 0U)
 	{
 		EnableInterrupt(state);
 
@@ -525,18 +533,7 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 			return false;
 		}
 		IOPinDisableInterrupt(line);
-		state = DisableInterrupt();
-		EIC_REGS->EIC_CTRL = 0U;
-		result = SamdEicSync();
-		if (result)
-		{
-			EIC_REGS->EIC_WAKEUP &= ~bit;
-			EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
-			result = SamdEicSync();
-		}
-		s_SamdStandbyWakeLines &= ~bit;
-		EnableInterrupt(state);
-		return result;
+		return true;
 	}
 
 	if ((s_SamdEicEvent & bit) != 0U ||
@@ -598,7 +595,8 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 	}
 
 	state = DisableInterrupt();
-	if ((s_SamdEicEvent & (1UL << intno)) == 0U && SamdEicStart())
+	if ((s_SamdEicEvent & (1UL << intno)) == 0U &&
+		(s_SamdStandbyWakeLines & (1UL << intno)) == 0U && SamdEicStart())
 	{
 		(void)SamdEicSense(intno, Sense, false);
 	}
