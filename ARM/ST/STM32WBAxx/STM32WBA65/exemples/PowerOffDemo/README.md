@@ -27,6 +27,16 @@ RAMRET. Retention configuration is whole-bank; RAM1 retention is disabled
 and RAM2 retention is enabled before Standby. Test memory must never overlap
 `.data`, `.bss` or stack.
 
+## Standby entry diagnostics
+
+The WBA65 power implementation now clears stale WKUP status before enabling
+the configured wake line, as recommended by the STM32WBA HAL sequence.
+It verifies the WUCR1/2/3 readback before entering Standby. If readback
+fails, SystemPowerOff returns, and the diagnostic build prints
+`SystemPowerOff returned: Standby was not entered`. Absence of this
+message is not by itself proof that Standby was reached; the next
+confirmation is a GPIO wake reset with the expected retained data.
+
 ## Standby wake input pull retention
 
 On STM32WBA6, configuring PC13 as GPIO input/pull-up before Standby is
