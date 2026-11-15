@@ -34,7 +34,7 @@ Microchip device CMSIS headers; no vendor driver library is linked.
 ## Generic power and reset diagnostics (0.14 draft)
 
 The D11 and D21 libraries now link `src/system_power_samd.cpp` for
-`SystemResetReason()` and `src/system_sleep_samd.cpp` for
+`SystemResetReason()` and `src/system_sleep_samd.c` for
 interrupt-resumable `SystemSleep()`. Reset causes come from the read-only
 PM RCAUSE register (power-on/brownout, external reset, watchdog, software
 reset). Reset reasons are optional diagnostics, **not** a substitute for
