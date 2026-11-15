@@ -337,10 +337,11 @@ void SystemPowerOff(void);
 void SystemSleep(void);
 
 /**
- * @brief	Wake up pin of power off
+ * @brief	Low-power wakeup pin
  *
- * Selects a pin that wakes the MCU from SystemPowerOff. Configure the pin as
- * an input with IOPinConfig first. Where the MCU wakes up only on dedicated
+ * Selects a pin that wakes the MCU from its implemented low-power state
+ * (SystemPowerOff or SystemSleep). Configure the pin as an input with
+ * IOPinConfig first. Where the MCU wakes up only on dedicated
  * pins or on one level, other pins and levels are refused. Where the pin
  * configuration is lost in power off, its pull resistor is kept if the MCU
  * can.
