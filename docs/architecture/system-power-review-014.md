@@ -63,6 +63,28 @@ Reset reason is an optional diagnostic, not the objective of saving power.
    declarations are placed at function entry. Clean these incrementally,
    without mixing cosmetic changes into functional power-mode commits.
 
+## Compatibility-preserving API direction
+
+Introduce `SystemSleep(void)` as an optional **interrupt-resumable**
+low-power operation. The MCU implementation should enter its deepest
+supported sleep mode that resumes execution, after callers have configured
+the wake sources and stopped incompatible peripherals. It returns normally
+after wake and preserves the stack and SRAM. The state does **not** imply
+a reset or a new startup. `SystemPowerOff(void)` retains its existing
+reset-exit semantics for all current validated backends. No existing
+backend will be modified simply to satisfy the new declaration.
+
+This is only an interface change so far. A target must not advertise
+`SystemSleep` until its actual wake path and peripheral-clock requirements
+are implemented and tested. SAMD11/D21 are the first proposed targets.
+
+The SAMD EIC code currently configures edge detection with a filter and
+uses generic clock generator 0 (main), while Standby wake requires a
+suitable asynchronous EIC wake source and `EIC_WAKEUP` enable. Before
+using `SystemSleep` in the shared demo, review EIC ownership, wake bits,
+filter availability and low-frequency generator selection. Changing every
+EIC interrupt to a standby configuration would be a regression risk.
+
 ## Suggested correction order
 
 1. Define and approve the generic API's sleep/deep-sleep/off semantics and
