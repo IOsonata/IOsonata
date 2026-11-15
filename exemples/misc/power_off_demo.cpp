@@ -57,7 +57,7 @@ SOFTWARE.
 
 #include "board.h"
 
-#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG && defined(STM32WBA65xx)
+#if defined(POWER_DEMO_STANDBY_DIAG) && POWER_DEMO_STANDBY_DIAG && defined(STM32WBA65xx)
 #include "stm32.h"
 bool StWbaPowerPrepareStandby(void);
 #endif
@@ -229,49 +229,6 @@ static const struct {
 	{ SYSTEM_RESET_WAKE_TIMER, "wake up by a timer" },
 };
 
-#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG
-// Confirm the external wake input changes state before entering Standby.
-static bool WakeButtonCheck(void)
-{
-	bool bActive;
-	int level;
-	int i;
-
-	// Let GPIO input/pull configuration settle before the first sample.
-	msDelay(50);
-	bActive = false;
-	level = IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN);
-	SysLogPrintf(SysLogGet(), "Wake GPIO P%d.%02d idle=%d initial=%d\r\n",
-		WAKE_BUT_PORT, WAKE_BUT_PIN, s_WakeButIdle, level);
-	SysLogPrintf(SysLogGet(), "Connect wake input to GND, then release within 30 s\r\n");
-
-	for (i = 0; i < 3000; i++)
-	{
-		level = IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN);
-		if (level != s_WakeButIdle && bActive == false)
-		{
-			bActive = true;
-			SysLogPrintf(SysLogGet(), "Wake GPIO active level=%d\r\n", level);
-		}
-		if (level == s_WakeButIdle && bActive)
-		{
-			SysLogPrintf(SysLogGet(), "Wake GPIO released level=%d\r\n", level);
-			return true;
-		}
-		if (i % 100 == 0)
-		{
-			SysLogPrintf(SysLogGet(), "Wake GPIO sample %d s, level=%d\r\n",
-				i / 100, level);
-		}
-		msDelay(10);
-	}
-
-	SysLogPrintf(SysLogGet(), "Wake GPIO check FAIL, active seen=%d, last=%d\r\n",
-		bActive, level);
-	return false;
-}
-#endif
-
 int main()
 {
 	s_Uart.Init(s_UartCfg);
@@ -349,18 +306,6 @@ int main()
 
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP, IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
 
-#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG
-	if (WakeButtonCheck() == false)
-	{
-		SysLogPrintf(SysLogGet(), "Standby skipped: wake input not verified\r\n");
-		while (1)
-		{
-			__WFE();
-		}
-	}
-	SysLogPrintf(SysLogGet(), "Wake GPIO check PASS\r\n");
-#endif
-
 	msDelay(POWER_DEMO_DELAY);
 
 	// The button must be released before configuring System OFF wakeup.
@@ -375,7 +320,7 @@ int main()
 		SysLogPrintf(SysLogGet(), "Power off, the button cannot wake this MCU, use the reset pin\r\n");
 	}
 
-#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG && defined(STM32WBA65xx)
+#if defined(POWER_DEMO_STANDBY_DIAG) && POWER_DEMO_STANDBY_DIAG && defined(STM32WBA65xx)
 	// Program the power registers, but do not execute WFI until the
 	// hardware settings have been reported over UART.
 	if (!StWbaPowerPrepareStandby())
@@ -405,7 +350,7 @@ int main()
 #endif
 
 	// Let the UART finish queued output before Standby cuts its clock.
-#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG && defined(STM32WBA65xx)
+#if defined(POWER_DEMO_STANDBY_DIAG) && POWER_DEMO_STANDBY_DIAG && defined(STM32WBA65xx)
 	msDelay(2000);
 	SysLogPrintf(SysLogGet(), "Calling SystemPowerOff in 1 second\r\n");
 	msDelay(1000);
@@ -415,7 +360,7 @@ int main()
 
 	SystemPowerOff();
 
-#if defined(POWER_DEMO_WAKE_DIAG) && POWER_DEMO_WAKE_DIAG
+#if defined(POWER_DEMO_STANDBY_DIAG) && POWER_DEMO_STANDBY_DIAG
 	SysLogPrintf(SysLogGet(),
 		"WFI returned without Standby reset\r\n");
 	while (1)
