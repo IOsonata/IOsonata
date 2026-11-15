@@ -60,10 +60,9 @@ Arm GCC 15.2.1, full D11 library archive:
 Flash margin is 176 bytes. RAM beyond static storage is 1204 bytes; complete
 stack usage has not been measured. Board operation is not yet validated.
 
-## Checks
+## Build verification
 
 ```sh
-ASAN_OPTIONS=detect_leaks=0 python3 tests/display/run_clock.py
 python3 tests/display/build_samd11_clock.py
 ```
 
@@ -74,9 +73,8 @@ and writes ELF, map and HEX files under the temporary `samd-clock-validation`
 directory. It checks that UART, SysLog, hardware RTC/TC/TCC and unused SPI modes
 are absent.
 
-Host tests cover midnight rollover, delayed updates, button bounce, short and
-long presses, and the bitmap bounds for every second in a day. They do not
-validate oscillator accuracy, physical button wiring or SPI transfers.
+Run the demo on the board to check the display, time progression, midnight
+rollover, and short and long button presses.
 
 For another board, provide its pin map, monochrome display class and timer
 selection in `board.h`, and link the appropriate IOsonata library. The clock

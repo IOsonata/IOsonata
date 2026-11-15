@@ -36,13 +36,35 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include <stdint.h>
+#include <string.h>
 #include "coredev/spi.h"
 #include "coredev/timer.h"
 #include "coredev/interrupt.h"
 #include "iopinctrl.h"
 #include "board.h"
-#include "clock_display_digits.h"
-#include "clock_display_time.h"
+
+#define CLOCK_FACE_WIDTH 128
+#define CLOCK_FACE_HEIGHT 32
+#define CLOCK_FACE_BYTES (CLOCK_FACE_WIDTH * CLOCK_FACE_HEIGHT / 8)
+
+// Segments: top, upper right, lower right, bottom, lower left, upper left, middle.
+static const uint8_t s_ClockSegments[10] = {
+	0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f
+};
+static const uint8_t s_ClockDigitX[6] = {2, 20, 45, 63, 88, 106};
+static const uint8_t s_ClockBars[7][4] = {
+	{3, 0, 10, 3}, {13, 3, 3, 11}, {13, 17, 3, 11},
+	{3, 28, 10, 3}, {0, 17, 3, 11}, {0, 3, 3, 11}, {3, 14, 10, 3}
+};
+
+typedef struct {
+	uint32_t Offset;
+	uint32_t LastSample;
+	uint32_t PressedAt;
+	unsigned Debounce;
+	bool Pressed;
+	bool Held;
+} ClockTime_t;
 
 static_assert(DISPLAY_PIXEL_SIZE == 1, "Clock face requires a monochrome display");
 static_assert(DISPLAY_WIDTH >= CLOCK_FACE_WIDTH && DISPLAY_HEIGHT >= CLOCK_FACE_HEIGHT,
@@ -94,6 +116,87 @@ static SPI s_Spi;
 static DISPLAY_DRIVER s_Display;
 static TimerDev_t s_Timer;
 static uint8_t s_Frame[CLOCK_FACE_BYTES];
+
+static void ClockRect(uint8_t *pFrame, unsigned X, unsigned Y, unsigned Width, unsigned Height)
+{
+	for (unsigned y = Y; y < Y + Height; y++)
+	{
+		for (unsigned x = X; x < X + Width; x++)
+		{
+			pFrame[y * (CLOCK_FACE_WIDTH / 8) + x / 8] |= 0x80U >> (x & 7);
+		}
+	}
+}
+
+static void ClockRender(uint8_t *pFrame, uint32_t Seconds)
+{
+	uint32_t time = Seconds % 86400U;
+	uint8_t digits[6];
+
+	digits[0] = time / 36000U;
+	digits[1] = (time / 3600U) % 10U;
+	digits[2] = (time / 600U) % 6U;
+	digits[3] = (time / 60U) % 10U;
+	digits[4] = (time / 10U) % 6U;
+	digits[5] = time % 10U;
+	memset(pFrame, 0, CLOCK_FACE_BYTES);
+	for (unsigned i = 0; i < 6; i++)
+	{
+		uint8_t segments = s_ClockSegments[digits[i]];
+		for (unsigned b = 0; b < 7; b++)
+		{
+			if (segments & (1U << b))
+			{
+				ClockRect(pFrame, s_ClockDigitX[i] + s_ClockBars[b][0], s_ClockBars[b][1],
+						  s_ClockBars[b][2], s_ClockBars[b][3]);
+			}
+		}
+	}
+	ClockRect(pFrame, 39, 9, 3, 3);
+	ClockRect(pFrame, 39, 21, 3, 3);
+	ClockRect(pFrame, 82, 9, 3, 3);
+	ClockRect(pFrame, 82, 21, 3, 3);
+}
+
+static uint32_t ClockTimeUpdate(ClockTime_t *pTime, uint64_t Ticks, uint32_t Frequency, bool Down)
+{
+	uint32_t elapsed = (uint32_t)((Ticks / Frequency) % 86400U);
+	uint32_t sample = (uint32_t)(Ticks * 20U / Frequency);
+
+	if (sample != pTime->LastSample)
+	{
+		pTime->LastSample = sample;
+		if (Down != pTime->Pressed)
+		{
+			if (++pTime->Debounce == 2)
+			{
+				pTime->Pressed = Down;
+				pTime->Debounce = 0;
+				if (pTime->Pressed)
+				{
+					pTime->PressedAt = sample;
+					pTime->Held = false;
+				}
+				else if (!pTime->Held)
+				{
+					pTime->Offset = (pTime->Offset + 60U) % 86400U;
+				}
+			}
+		}
+		else
+		{
+			pTime->Debounce = 0;
+		}
+		if (pTime->Pressed && sample - pTime->PressedAt >= 20U)
+		{
+			pTime->Offset = (pTime->Offset + 3600U) % 86400U;
+			pTime->PressedAt = sample;
+			pTime->Held = true;
+		}
+	}
+
+	return (elapsed + pTime->Offset) % 86400U;
+}
 
 int main(void)
 {

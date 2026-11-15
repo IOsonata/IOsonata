@@ -41,15 +41,5 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/display/clock_display_demo.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/clock_display_digits.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/display/clock_display_digits.h</locationURI>
-		</link>
-		<link>
-			<name>src/clock_display_time.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/display/clock_display_time.h</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>
