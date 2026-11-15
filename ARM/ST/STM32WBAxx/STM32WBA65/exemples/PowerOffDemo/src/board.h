@@ -25,8 +25,8 @@ Copyright (c) 2026 I-SYST inc.
 #define WAKE_BUT_PIN		13
 #define WAKE_BUT_PINOP		IOPINOP_GPIO
 
-// Keep the Standby register snapshot without the completed GPIO input test.
-#define POWER_DEMO_STANDBY_DIAG	1
+// WBA65 Standby requires stopping the diagnostic UART and its DMA.
+#define POWER_DEMO_UART_OFF	1
 
 // RAMRET is SRAM2. RAMDROP is the end of SRAM1, not .data/.bss/stack.
 #define POWER_DEMO_RAM_RET_TEST	1
