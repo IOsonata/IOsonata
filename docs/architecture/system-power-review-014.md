@@ -74,9 +74,12 @@ a reset or a new startup. `SystemPowerOff(void)` retains its existing
 reset-exit semantics for all current validated backends. No existing
 backend will be modified simply to satisfy the new declaration.
 
-This is only an interface change so far. A target must not advertise
-`SystemSleep` until its actual wake path and peripheral-clock requirements
-are implemented and tested. SAMD11/D21 are the first proposed targets.
+The `SystemSleep()` entry has now been implemented for SAM D11/D21 in
+`ARM/Microchip/SAMD/src/system_sleep_samd.cpp` and linked into both
+Eclipse-managed MCU libraries. It sets SLEEPDEEP, executes WFI and restores
+the original SCR after wake. **This is entry/resume logic only**: a working
+asynchronous wake source, peripheral shutdown and target compilation/hardware
+validation still need to be demonstrated. Do not call the port complete yet.
 
 The SAMD EIC code currently configures edge detection with a filter and
 uses generic clock generator 0 (main), while Standby wake requires a
