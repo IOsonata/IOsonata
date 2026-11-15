@@ -225,6 +225,53 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	return true;
 }
 
+// Preserve the GPIO pull setting of wakeup inputs through Standby.
+// The GPIO PUPDR register itself is lost when the core supply is removed.
+// WBA6 uses per-pin PWR IORETENR registers, not STM32L4 PUCR/PDCR.
+static void StWbaWakePullRetain(void)
+{
+	uint32_t i;
+	uint32_t bit;
+	GPIO_TypeDef *gpio;
+	volatile uint32_t *pRet;
+
+	for (i = 0; i < sizeof(s_WakePins) / sizeof(s_WakePins[0]); i++)
+	{
+		bit = 1UL << s_WakePins[i].Line;
+		if ((s_WakeEnable & bit) == 0U ||
+			(s_WakeSelect & (3UL << (s_WakePins[i].Line * 2U))) !=
+			((uint32_t)s_WakePins[i].Select << (s_WakePins[i].Line * 2U)))
+		{
+			continue;
+		}
+
+		switch (s_WakePins[i].Port)
+		{
+			case IOPORTA:
+				gpio = GPIOA;
+				pRet = &PWR->IORETENRA;
+				break;
+			case IOPORTB:
+				gpio = GPIOB;
+				pRet = &PWR->IORETENRB;
+				break;
+			case IOPORTC:
+				gpio = GPIOC;
+				pRet = &PWR->IORETENRC;
+				break;
+			default:
+				continue;
+		}
+
+		// Retain only pull-up/down pins. Never modify other pin retention.
+		if (((gpio->PUPDR >> (s_WakePins[i].Pin * 2U)) & 3U) != 0U)
+		{
+			*pRet |= 1UL << s_WakePins[i].Pin;
+			(void)*pRet;
+		}
+	}
+}
+
 void SystemPowerOff(void)
 {
 	uint32_t en;
@@ -248,8 +295,10 @@ void SystemPowerOff(void)
 	PWR->WUCR2 = (PWR->WUCR2 & ~s_WakeConfigured) |
 		(s_WakeLow & s_WakeConfigured);
 	PWR->WUCR3 = (PWR->WUCR3 & ~selectMask) | (s_WakeSelect & selectMask);
-	PWR->WUSCR = s_WakeConfigured;
+	StWbaWakePullRetain();
 	PWR->WUCR1 |= en;
+	// Clear stale wake status only after the wake lines are configured.
+	PWR->WUSCR = s_WakeConfigured;
 
 	ram = (s_bRam1Retain ? ST_WBA_SRAM1_RET : 0U) |
 		(s_bRam2Retain ? ST_WBA_SRAM2_RET : 0U);
