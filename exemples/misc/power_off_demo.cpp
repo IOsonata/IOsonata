@@ -199,12 +199,21 @@ static UART s_Uart;
 // 16 records of 128 bytes. A record the UART does not take in full stays in
 // the store and the rest goes out at the next log call. bBlocking keeps the
 // oldest records when the store is full.
+#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(4, 96)];
+#else
 alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+#endif
 
 static const SysLogCfg_t s_SysLogCfg = {
 	.pMem = s_SysLogMem,
 	.MemSize = sizeof(s_SysLogMem),
-	.RecordLen = 128,
+	.RecordLen =
+#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
+		96,
+#else
+		128,
+#endif
 	.bBlocking = true,
 };
 
@@ -227,6 +236,41 @@ static const struct {
 
 int main()
 {
+#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
+	uint32_t wakeCount;
+
+	if (!s_Uart.Init(s_UartCfg))
+	{
+		return 1;
+	}
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
+	SysLogPrintf(SysLogGet(), "PowerOffDemo: interrupt-resumable Standby\\r\\n");
+
+	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
+		IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
+	if (!SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
+	{
+		SysLogPrintf(SysLogGet(), "Standby wake pin not available\\r\\n");
+		return 1;
+	}
+
+	wakeCount = 0U;
+	while (1)
+	{
+		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle)
+		{
+			msDelay(10);
+		}
+		SysLogPrintf(SysLogGet(), "Entering Standby\\r\\n");
+		msDelay(250);
+		s_Uart.Disable();
+		SystemSleep();
+		s_Uart.Enable();
+		wakeCount++;
+		SysLogPrintf(SysLogGet(), "Resumed from Standby, count %u\\r\\n",
+			(unsigned)wakeCount);
+	}
+#else
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 
@@ -337,5 +381,6 @@ int main()
 	}
 #endif
 
+#endif
 	return 0;
 }
