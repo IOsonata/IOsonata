@@ -280,6 +280,13 @@ static bool StPwrRtcWake(void)
 
 uint32_t SystemResetReason(void)
 {
+	uint32_t rst;
+	uint32_t r;
+	bool sb;
+	bool pin;
+	bool tmr;
+	size_t i;
+
 	if (s_bStPwrResetRead)
 	{
 		return s_StPwrResetReason;
@@ -287,11 +294,11 @@ uint32_t SystemResetReason(void)
 
 	StPwrClock();
 
-	uint32_t rst = ST_PWR_RSTREG;
-	uint32_t r = 0;
-	bool sb = false;		// Standby exit
-	bool pin = false;		// Wake up pin flag
-	bool tmr = false;		// Wake up timer, internal source
+	rst = ST_PWR_RSTREG;
+	r = 0;
+	sb = false;		// Standby exit
+	pin = false;		// Wake up pin flag
+	tmr = false;		// Wake up timer, internal source
 
 #if defined(ST_PWR_V1)
 	sb = (PWR->CSR & PWR_CSR_SBF) != 0;
@@ -319,7 +326,7 @@ uint32_t SystemResetReason(void)
 	ST_PWR_RSTREG |= ST_PWR_RMVF;
 	ST_PWR_RSTREG &= ~ST_PWR_RMVF;
 
-	for (size_t i = 0; i < sizeof(s_StPwrResetMap) / sizeof(s_StPwrResetMap[0]); i++)
+	for (i = 0; i < sizeof(s_StPwrResetMap) / sizeof(s_StPwrResetMap[0]); i++)
 	{
 		// A Standby exit is a power reset, its flags are not the reason
 		if ((rst & s_StPwrResetMap[i].Msk) && !(sb && (s_StPwrResetMap[i].Msk & ST_PWR_POWERRSTF)))
@@ -353,7 +360,10 @@ uint32_t SystemResetReason(void)
 
 bool SystemWakePin(int PortNo, int PinNo, int Sense)
 {
-	uint32_t idx = 0;
+	uint32_t idx;
+	uint32_t bit;
+
+	idx = 0;
 
 	while (idx < ST_PWR_NB_WAKEPIN &&
 		   (s_StPwrWakePins[idx].PortNo != PortNo || s_StPwrWakePins[idx].PinNo != PinNo))
@@ -365,7 +375,7 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 		return false;
 	}
 
-	uint32_t bit = 1UL << idx;
+	bit = 1UL << idx;
 
 	switch (Sense)
 	{
@@ -412,8 +422,21 @@ static uint32_t StPwrWakePull(uint32_t Idx)
 
 void SystemPowerOff(void)
 {
-	uint32_t en = s_StPwrWakeEn & ST_PWR_WAKEPIN_MSK;
+	uint32_t en;
+#if defined(ST_PWR_V2)
+	uint32_t low;
+	bool apc;
+	uint32_t i;
+	volatile uint32_t *pucr;
+	volatile uint32_t *pdcr;
+	uint32_t pin;
+	uint32_t pull;
+#elif defined(ST_PWR_H7)
+	uint32_t epr;
+	uint32_t i;
+#endif
 
+	en = s_StPwrWakeEn & ST_PWR_WAKEPIN_MSK;
 	StPwrClock();
 
 #if defined(ST_PWR_V1)
@@ -422,8 +445,8 @@ void SystemPowerOff(void)
 	PWR->CR |= PWR_CR_CWUF | PWR_CR_CSBF;
 	PWR->CR |= PWR_CR_PDDS;
 #elif defined(ST_PWR_V2)
-	uint32_t low = s_StPwrWakeLow & en;
-	bool apc = false;
+	low = s_StPwrWakeLow & en;
+	apc = false;
 
 	PWR->CR3 &= ~PWR_CR3_EWUP;
 	PWR->CR4 = (PWR->CR4 & ~ST_PWR_WAKEPIN_MSK) | low;
@@ -431,17 +454,17 @@ void SystemPowerOff(void)
 	(void)PWR->CR4;
 
 	// Pull resistors of the wake up pins kept in power off
-	for (uint32_t i = 0; i < ST_PWR_NB_WAKEPIN; i++)
+	for (i = 0; i < ST_PWR_NB_WAKEPIN; i++)
 	{
 		if ((en & (1UL << i)) == 0)
 		{
 			continue;
 		}
 
-		volatile uint32_t *pucr = &PWR->PUCRA + 2U * s_StPwrWakePins[i].PortNo;
-		volatile uint32_t *pdcr = pucr + 1;
-		uint32_t pin = 1UL << s_StPwrWakePins[i].PinNo;
-		uint32_t pull = StPwrWakePull(i);
+		pucr = &PWR->PUCRA + 2U * s_StPwrWakePins[i].PortNo;
+		pdcr = pucr + 1;
+		pin = 1UL << s_StPwrWakePins[i].PinNo;
+		pull = StPwrWakePull(i);
 
 		*pucr = pull == 1U ? *pucr | pin : *pucr & ~pin;
 		*pdcr = pull == 2U ? *pdcr | pin : *pdcr & ~pin;
@@ -467,9 +490,9 @@ void SystemPowerOff(void)
 		PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | PWR_CR1_LPMS_SHUTDOWN;
 	}
 #elif defined(ST_PWR_H7)
-	uint32_t epr = en | ((s_StPwrWakeLow & en) << PWR_WKUPEPR_WKUPP1_Pos);
+	epr = en | ((s_StPwrWakeLow & en) << PWR_WKUPEPR_WKUPP1_Pos);
 
-	for (uint32_t i = 0; i < ST_PWR_NB_WAKEPIN; i++)
+	for (i = 0; i < ST_PWR_NB_WAKEPIN; i++)
 	{
 		if (en & (1UL << i))
 		{
@@ -484,7 +507,7 @@ void SystemPowerOff(void)
 	if (s_bStPwrRamRet)
 	{
 		PWR->CR2 |= PWR_CR2_BREN;
-		for (uint32_t i = 0; i < ST_PWR_BRRDY_POLLS && (PWR->CR2 & PWR_CR2_BRRDY) == 0; i++);
+		for (i = 0; i < ST_PWR_BRRDY_POLLS && (PWR->CR2 & PWR_CR2_BRRDY) == 0; i++);
 	}
 	else
 	{
@@ -559,7 +582,9 @@ static bool StPwrInRange(uintptr_t Addr, uint32_t Size, uintptr_t Base, uint32_t
 bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 {
 #if defined(ST_PWR_RETRAM_BASE)
-	bool ok = StPwrInRange(Addr, Size, ST_PWR_RETRAM_BASE, ST_PWR_RETRAM_SIZE);
+	bool ok;
+
+	ok = StPwrInRange(Addr, Size, ST_PWR_RETRAM_BASE, ST_PWR_RETRAM_SIZE);
 
 #ifdef ST_PWR_RETRAM_ALIAS
 	ok = ok || StPwrInRange(Addr, Size, ST_PWR_RETRAM_ALIAS, ST_PWR_RETRAM_SIZE);
