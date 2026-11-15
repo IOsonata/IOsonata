@@ -122,6 +122,16 @@ bank selects retention of the entire bank, not merely those bytes. The
 standard linker script allocates all 512 KB as contiguous RAM and does not
 reserve a test range. Use a dedicated linker reservation when testing
 persistence after wake reset. The WBA65 G variant has less SRAM1; the
-current retention bounds apply to the I variant only. Standby, backup registers and wakeup routing
-remain unvalidated on target hardware. The earlier WBA2/WBA5 series are
+current retention bounds apply to the I variant only. Standby, backup registers and SRAM retention have now been validated on STM32WBA65I-DK1. The earlier WBA2/WBA5 series are
 not covered by this source yet.
+
+Hardware validation on STM32WBA65I-DK1 (MB2143), November 14, 2026:
+two consecutive PC13 WKUP2 Standby wake resets (0x100) passed, with the
+backup-register count advancing to 2 and 3. Each wake preserved all
+8192/8192 words in the selected 32 KB SRAM2 test region and yielded
+0/8192 unchanged words in the non-retained SRAM1 test region.
+The working example must stop USART1 and DMA before entering Standby;
+earlier tests with the UART active did not wake. The exact individual
+peripheral/clock cause was not isolated. This result does not cover
+active Bluetooth or USB power transitions.
+
