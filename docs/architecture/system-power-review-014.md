@@ -88,6 +88,36 @@ using `SystemSleep` in the shared demo, review EIC ownership, wake bits,
 filter availability and low-frequency generator selection. Changing every
 EIC interrupt to a standby configuration would be a regression risk.
 
+## SAM D11/D21 first Standby integration (unvalidated)
+
+The review branch now has a concrete interrupt-resumable implementation:
+
+- `SystemSleep()` enters Standby with SLEEPDEEP/WFI, restores the SCR state
+  on return, and rearms explicitly configured EIC wake interrupt lines.
+- SAMD-specific `SystemWakePin()` uses an EIC EXTINT line owned by the
+  power wake path. It selects asynchronous **low/high level detection with
+  filter disabled**, sets `EIC_WAKEUP`, and arms the interrupt. The wake
+  callback disables further level-triggered IRQ delivery until rearmed on
+  another sleep cycle.
+- Existing GPIO interrupts using edge detection/filter/GCLK0 are unchanged
+  and cannot be silently taken over by a Standby wake pin. An EIC event
+  source already owned by another driver is refused.
+- The shared `exemples/misc/power_off_demo.cpp` now has a
+  `POWER_DEMO_RESUME_WAKE=1` path: stop the UART before Standby, return
+  after an EIC wake, restart UART and log a wake counter. Existing
+  reset-on-wake demo logic is unchanged.
+- Eclipse-managed PowerOffDemo projects are provided for SAM D11 and D21.
+  SAMD21 uses SW0/PA15 (EXTINT15). SAMD11's SW0/PA14 is an NMI input,
+  so use an **external switch from PA15 (EXTINT1) to GND**.
+- Build checks are in `tests/samd/standby_compile.sh` (invoke using `sh`
+  if the script is not executable in the checkout).
+
+This code has **not been compiled or exercised on target hardware**.
+Validate clock availability, interrupt delivery, actual Standby entry,
+wake latency, RAM continuity and repeated cycles before claiming PASS.
+Microchip SAM D21 datasheet DS40001882G §21.6.3 specifies asynchronous
+detection for unfiltered level sensing without `GCLK_EIC`.
+
 ## Suggested correction order
 
 1. Define and approve the generic API's sleep/deep-sleep/off semantics and
