@@ -61,6 +61,16 @@ Reference: ST RM0515 (STM32WBA6), chapter 11 Power control.
 The earlier STM32WBA5 uses RM0493; its register and wakeup routing
 differences require separate review.
 
+Hardware validation on STM32WBA65I-DK1 (MB2143), November 14, 2026:
+two consecutive PC13 WKUP2 Standby wake resets (0x100) passed, with the
+backup-register count advancing to 2 and 3. Each wake preserved all
+8192/8192 words in the selected 32 KB SRAM2 test region and yielded
+0/8192 unchanged words in the non-retained SRAM1 test region.
+The working example must stop USART1 and DMA before entering Standby;
+earlier tests with the UART active did not wake. The exact individual
+peripheral/clock cause was not isolated. This result does not cover
+active Bluetooth or USB power transitions.
+
 ## Nordic validation (0.14)
 
 The Nordic HFXO reference-count and ownership regression was verified on
