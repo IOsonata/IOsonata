@@ -27,49 +27,35 @@ RAMRET. Retention configuration is whole-bank; RAM1 retention is disabled
 and RAM2 retention is enabled before Standby. Test memory must never overlap
 `.data`, `.bss` or stack.
 
-## Standby register snapshot
+## Hardware validation (November 14, 2026)
 
-`POWER_DEMO_STANDBY_DIAG=1` enables a short register readback immediately
-before WFI. PC13 input switching was already validated on hardware, so
-there is **no preliminary GPIO polling or press/release test**.
+STM32WBA65I-DK1 (MB2143), bare-metal Release PowerOffDemo, without
+active debugging: **two consecutive Standby and PC13/WKUP2 wakeup cycles
+passed**. GPIO wake reason was 0x100 on both boots. The backup-register
+startup counter advanced to 2 and then 3. After each wake, SRAM2 retained
+8192/8192 words and the SRAM1 non-retained region had 0/8192 unchanged
+words.
 
-The example prints WUCR1/2/3, WUSR, IORETENRC, CR1, SR,
-GPIOC MODER/PUPDR/IDR, SCB SCR, EXTI and SysTick state. It then prints
-`Calling SystemPowerOff in 1 second` and enters Standby.
-The temporary `StWbaPowerPrepareStandby()` routine prepares registers
-once, so SystemPowerOff does not clear wake flags twice.
-If the WFI instruction returns without reset, the diagnostic prints
-`WFI returned without Standby reset`.
+The successful test required disabling USART1 and its DMA before
+`SystemPowerOff()`. Earlier tests with USART1 running did not wake.
+Those results demonstrate the shutdown path works with the UART stopped,
+but do not distinguish whether the active UART peripheral, its DMA or
+a related clock/request prevented Standby.
 
-## Standby entry diagnostics
-
-The WBA65 power implementation now clears stale WKUP status before enabling
-the configured wake line, as recommended by the STM32WBA HAL sequence.
-It verifies the WUCR1/2/3 readback before entering Standby. If readback
-fails, SystemPowerOff returns, and the diagnostic build prints
-`SystemPowerOff returned: Standby was not entered`. Absence of this
-message is not by itself proof that Standby was reached; the next
-confirmation is a GPIO wake reset with the expected retained data.
-
-## Standby wake input pull retention
-
-On STM32WBA6, configuring PC13 as GPIO input/pull-up before Standby is
-not sufficient by itself: GPIO configuration is lost when the core domain
-powers down. The power driver now enables the matching bit in
-`PWR_IORETENRC` for an explicitly enabled wake pin that has a pull
-configured, preserving that input pull while in Standby. It preserves other
-pins' retention settings. PC13 input transitions have been confirmed in Run mode. After the
-`Power off` message, a single press/release tests WKUP2 Standby wake. Record the resulting reset reason and SRAM comparisons.
+The final example sets `POWER_DEMO_UART_OFF=1`, waits for the last
+UART record, then calls `s_Uart.Disable()` before power-off. The
+30-second GPIO continuity test, power-register snapshot and temporary
+Standby preparation function were removed following validation.
 
 ## Procedure
 
 1. Build `IOsonata_STM32WBA65` and `PowerOffDemo` in Release.
-2. Program and run standalone, monitoring USART1 VCOM.
-3. Check the wake register snapshot and `Calling SystemPowerOff in 1 second`.
-4. After that message and the one-second delay, momentarily connect
-   PC13/D4 to GND and release it.
-5. Look for wake reason 0x100, incremented backup count, 8192/8192 retained
-   words, and the nonretained memory result. Repeat to validate.
+2. Program and run standalone, monitoring USART1 VCOM at 1 Mbaud.
+3. Wait for `Power off, press the button to wake up` and for UART
+   shutdown.
+4. Momentarily connect PC13 (Arduino D4) to GND and release it.
+5. Confirm reset reason 0x100, incremented startup counter, SRAM2
+   retention PASS and SRAM1 non-retention PASS. Repeat.
 
 A source review or a successful build does not establish SRAM retention or
 wakeup behavior. These must be confirmed on hardware. The radio/USB shutdown
