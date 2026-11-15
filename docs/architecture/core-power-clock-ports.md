@@ -171,6 +171,16 @@ syntax checks and Eclipse source-link checks. These do not measure power, execut
 a target firmware image, or validate physical wakeup. Those checks remain to be
 performed on hardware.
 
+Arm GCC 15.2.1 target checks passed on November 15, 2026:
+
+- `python3 tests/microchip/compile_power.py`: all six SAM4E variants compile
+  with the production CMSIS headers; every typed peripheral address is checked.
+- `python3 tests/sam4e/build_examples.py`: SAM4E16E Blinky, UartRetargetDemo
+  and UartPrbsTxTest compile and link in Debug and Release (six builds).
+  The check uses selected library sources and the managed projects' source
+  links, defines and linker scripts. It verifies that each image includes the
+  SAM4E clock and reset implementations. It does not run IOcomposer or hardware.
+
 Main-clock selection in `system_sam4e.c` switches MCK to SLCK before changing
 MAINCK or PLLA. Prescaler and source writes are separate and each waits for
 MCKRDY. All ready waits are bounded. A failed oscillator or PLL start leaves
@@ -229,6 +239,15 @@ Run `python3 tests/sam4l/run_power.py`. It checks production headers for all
 18 C/S, density and package combinations, runs host register tests for all six
 package/family combinations at O0 and O2, and checks both Eclipse library links.
 These are not Arm firmware builds or hardware power/wakeup validation.
+
+Arm GCC 15.2.1 also compiled the power and clock sources for all 18 SAM4L
+variants with `python3 tests/microchip/compile_power.py`. The SAM4LS8C
+peripheral check linked 20 examples in each of Debug and Release, including
+UsbCdcLoopbackTaktOS, using TaktOS commit
+`86002a6c3fee280ac0e978283919630f99e3b53d` from
+[IOsonata/TaktOS](https://github.com/IOsonata/TaktOS). Run it with
+`python3 tests/sam4l/peripheral_build_test.py --taktos ../TaktOS`.
+These 40 builds use selected library sources; hardware execution is unverified.
 
 Reference: [Microchip SAM4L datasheet 42023H](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/DataSheets/Atmel-42023-ARM-Microcontroller-ATSAM4L-Low-Power-LCD_Datasheet.pdf),
 sections 6.1.3, 10.7.15, 11.5, 11.6.9..11, 12.7.18 and 21.6.
