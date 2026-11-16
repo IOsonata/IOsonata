@@ -786,6 +786,10 @@ Boost transitions and sleep current.
 
 ## ESP32-C3/C6 CPU sleep and clock readout
 
+This section records the earlier CPU-WFI-only batch, before the RTC/PMU
+implementation. The current code and its unverified status are described
+in "ESP32-C3/C6 RTC and PMU sleep implementation" below.
+
 The C3 and C6 libraries now provide SystemSleep using CPU WFI. It keeps the
 peripheral clocks, SRAM and stack intact. Interrupt delivery is masked around
 WFI and restored to its previous state after wake. The GPIO driver implements
@@ -1030,3 +1034,70 @@ Validation:
 
 References: Espressif ESP-IDF v5.5.1 per-chip rtc_clk.c, clk_tree_ll.h,
 system_reg.h, pcr_reg.h, rtc_cntl_reg.h, pmu_reg.h and UART register definitions.
+
+
+## ESP32-C3/C6 RTC and PMU sleep implementation (unverified)
+
+Current source on branch `review_system_power_014` has the target-specific
+`system_sleep_esp32c3.c` and `system_sleep_esp32c6.c` implementations, linked
+in the corresponding Eclipse-managed libraries. This replaces the previous
+CPU-WFI-only behavior documented above. The generic API is unchanged.
+
+`SystemSleep()` first attempts a resumable hardware Light-sleep using the
+wake pins configured by `SystemWakePin()`. If the required pin state or
+controller preparation cannot be established, it falls back to CPU WFI.
+The GPIO driver temporarily changes wake-owned GPIO edge interrupts to
+level-triggered sleep wake inputs, and restores their original configuration
+on return. A pin already active at the requested level prevents the hardware
+sleep attempt. All SRAM and the stack are intended to remain powered in
+Light-sleep. The current implementation retains the crystal and PLL rather
+than requesting their power down or reduced analog voltage.
+
+`SystemPowerOff()` requests reset-on-wake Deep-sleep using the RTC on C3 and
+the PMU/LP IO on C6. Its only configured wake source is a dedicated GPIO pin.
+C3 accepts GPIO0-5; C6 accepts GPIO0-7. GPIO0/1 are refused when the 32 kHz
+crystal uses them, and pins assigned to another interrupt/peripheral or C6
+LP IO owner are not taken over. C3 uses RTC GPIO wake configuration; C6 uses
+LP IO wake routing. Both GPIO paths save and restore changed register state
+if controller preparation fails. On a rejected Deep-sleep request the CPU
+remains in an IRAM wait loop until external reset rather than attempting to
+continue application execution after potentially removing PLL/flash power.
+
+C3 sleep entry saves the RTC settings and uses ROM analog-I2C functions to
+configure its sleep regulator. C6 programs the HP/LP PMU sleep states and
+derives its regulator bias from chip eFuse values when present. Root-clock
+selection is performed by an IRAM function, and the ROM CPU delay frequency
+is updated on the temporary XTAL switch and after Light-sleep resume.
+The controller must not return to flash while its cache or SPI flash supply
+is unavailable. The new source has not been shown to recover reliably on
+a previously PLL-sourced core. ROM flash-cache operation, clock stability,
+and regulator timing still require target verification. C3 wake-stub/RTC fast
+memory CRC handling and C6 PMU initialization ownership also need verification
+before these implementations are suitable for production use.
+
+The current `PowerOffDemo` projects use GPIO9 BOOT and
+`POWER_DEMO_RESUME_WAKE=1`; they are for Light-sleep and the SRAM resume
+check. GPIO9 is not a valid Deep-sleep pin on either target. To exercise
+Deep-sleep, use a board-available GPIO in the supported low-power pin
+range with an external wake switch and select the reset-on-wake demo
+configuration. Existing reset/wake decoding identifies GPIO and timer causes,
+but the new port does not configure an RTC timer wake source.
+
+Callers must drain and disable UART/DMA and stop affected peripheral, modem,
+and flash transactions before changing the power state. The power functions
+do not enable a watchdog. RTC scratch registers are reserved for ROM and
+clock control: retention register count remains zero, and
+`SystemRamRetain()` still returns false. No optional retained-RAM section
+or startup exemption has been introduced.
+
+Verification is separate from implementation:
+
+- Source and register definitions have been reviewed against the official
+  ESP-IDF v5.5.1 C3 RTC sleep and C6 PMU sleep implementations.
+- The previous managed-project builds and host register-model checks apply
+  only to the earlier WFI, oscillator, and reset-decoding sources. They are
+  not verification of the new RTC/PMU sleep code.
+- New C3/C6 Debug/Release library builds, PowerOffDemo links, and
+  register-model checks have not been run in this session. No ESP32 board
+  or current measurements were performed. Hardware testing remains
+  on SAMD11 until the maintainer selects another board.
