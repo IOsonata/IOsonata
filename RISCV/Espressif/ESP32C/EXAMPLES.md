@@ -23,6 +23,7 @@ the same Debug or Release configuration. Use Release for throughput tests.
 | LedDemo | Onboard addressable RGB LED through SPI | C3/C6 |
 | PulseTrain | GPIO output timing on GPIO4/5/6/7 | C3/C6 |
 | CryptoTest | Implemented cryptographic operations | C3/C6 |
+| PowerOffDemo | RTC/PMU sleep and wake, static/stack SRAM continuity | C3/C6 |
 
 UART tests use 1,000,000 baud, 8N1, no flow control. The new I2C/SPI master
 examples use polling without DMA. Hardware validation is pending for the new
@@ -70,3 +71,27 @@ validation. Build results and modeled register tests are not hardware validation
 The C2/C5/C61 slave-test projects use their devkit USB-to-UART console pins:
 C2 TX20/RX19, C5 TX11/RX12, and C61 TX11/RX10. These differ from the
 GPIO4/5 external-adapter wiring in their earlier bring-up examples.
+
+## PowerOffDemo (ESP32-C3/C6)
+
+The shared `exemples/misc/power_off_demo.cpp` provides both wake-resume and
+reset-on-wake demonstration paths. The default C3/C6 board configurations
+use UART0 at 1 Mbaud, GPIO9 BOOT and `POWER_DEMO_RESUME_WAKE=1`.
+They drain/disable the UART before `SystemSleep()` and check 128 bytes
+each of static and stack storage after wake. RTC/PMU Light-sleep is
+requested when GPIO9 is configured and idle; CPU WFI is a fallback if
+the controller rejects sleep or its preparation fails.
+
+For Deep-sleep, select a GPIO available on the board in the dedicated
+wake range (C3 GPIO0-5; C6 GPIO0-7), provide an external momentary
+switch to ground, change `WAKE_BUT_PIN` accordingly and set
+`POWER_DEMO_RESUME_WAKE=0` in that board's `src/board.h`.
+The demo then calls `SystemPowerOff()`; only a reset exits it.
+GPIO9 is not a valid Deep-sleep wake input. GPIO0/1 must not be
+used when the 32.768 kHz crystal is selected.
+
+No ESP32-C3/C6 board execution or sleep-current measurement has been
+performed for the new RTC/PMU controller code. The new source also
+requires Debug/Release library builds and link checks. Existing older
+WFI demo build results do not validate this revision. Keep hardware
+validation on SAMD11 until the maintainer selects another board.
