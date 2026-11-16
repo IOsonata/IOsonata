@@ -55,6 +55,7 @@ SOFTWARE.
 #include "r9a02g021.h"
 #include "system_r9a02.h"
 #include "interrupt_r9a02.h"
+#include "clic.h"
 
 #define R9A02_EXTAL_FREQ_MIN		1000000UL	//!< Datasheet 2.3.3
 #define R9A02_LOCO_START_US			100U		//!< tLOCO, manual 37.3
@@ -81,7 +82,8 @@ volatile uint32_t g_R9a02StartupError;
 __attribute__((weak)) McuOsc_t g_McuOsc = {
 	{ OSC_TYPE_RC, R9A02_HOCO_48MHZ, 0U, 0U },
 	{ OSC_TYPE_RC, R9A02_LOCO_FREQ, 0U, 0U },
-	false
+	false,
+	0
 };
 
 // Nominal EXTAL frequency, the registers do not give it
@@ -100,6 +102,10 @@ static void *s_R9a02SbyHookCtx[R9A02_STANDBY_HOOK_CNT];
 
 // PCLKB divider relative to ICLK, as a power of 2, from SystemPeriphClockSet
 static uint8_t s_PclkbShift;
+static uint32_t s_ResetReason;
+static bool s_ResetRead;
+
+static bool R9a02ClockUsers(void);
 
 static inline uint32_t R9a02Mcycle(void)
 {
@@ -170,15 +176,15 @@ static uint32_t R9a02SourceHz(void)
 	switch (R9A02_SYSC_SCKSCR & R9A02_SCKSCR_CKSEL_Msk)
 	{
 		case R9A02_SCKSCR_HOCO:
-			return R9a02HocoHz();
+			return R9a02HocoClockGet();
 		case R9A02_SCKSCR_MOCO:
-			return R9A02_MOCO_FREQ;
+			return (R9A02_SYSC_MOCOCR & R9A02_MOCOCR_MCSTP) ? 0U : R9A02_MOCO_FREQ;
 		case R9A02_SCKSCR_LOCO:
-			return R9A02_LOCO_FREQ;
+			return (R9A02_SYSC_LOCOCR & R9A02_LOCOCR_LCSTP) ? 0U : R9A02_LOCO_FREQ;
 		case R9A02_SCKSCR_EXTAL:
-			return s_ExtalFreq;
+			return R9a02ExtalClockGet();
 		case R9A02_SCKSCR_SOSC:
-			return R9A02_SOSC_FREQ;
+			return (R9A02_SYSC_SOSCCR & R9A02_SOSCCR_SOSTP) ? 0U : R9A02_SOSC_FREQ;
 		default:
 			return 0U;
 	}
@@ -188,7 +194,7 @@ static uint32_t R9a02IclkHz(void)
 {
 	uint32_t ick = (R9A02_SYSC_SCKDIVCR & R9A02_SCKDIVCR_ICK_Msk) >> R9A02_SCKDIVCR_ICK_Pos;
 
-	return R9a02SourceHz() >> ick;
+	return ick <= R9A02_SCKDIVCR_DIV_MAX ? R9a02SourceHz() >> ick : 0U;
 }
 
 uint32_t R9a02HocoClockGet(void)
@@ -595,6 +601,9 @@ void SystemCoreClockUpdate(void)
 
 	if (hz == 0U)
 	{
+		SystemCoreClock = 0U;
+		SystemCoreClockPeriodus = 0U;
+		SystemCoreClockPeriodns = 0U;
 		return;
 	}
 
@@ -615,12 +624,14 @@ uint32_t SystemPeriphClockGet(int Idx)
 		return 0U;
 	}
 
-	return R9a02SourceHz() >> ((R9A02_SYSC_SCKDIVCR & R9A02_SCKDIVCR_PCKB_Msk) >> R9A02_SCKDIVCR_PCKB_Pos);
+	uint32_t div = (R9A02_SYSC_SCKDIVCR & R9A02_SCKDIVCR_PCKB_Msk) >> R9A02_SCKDIVCR_PCKB_Pos;
+
+	return div <= R9A02_SCKDIVCR_DIV_MAX ? R9a02SourceHz() >> div : 0U;
 }
 
 // Idx 0 is PCLKB, the only peripheral clock. Sets the closest PCLKB at or
-// below ICLK with ICLK : PCLKB = 2^n : 1 (8.2.1) and returns it. Peripherals
-// already running keep their divider settings, set PCLKB before their Init.
+// below ICLK with ICLK : PCLKB = 2^n : 1 (8.2.1) and returns it. Enabled
+// peripheral modules refuse a change; select PCLKB before their Init.
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
 	if (Idx != 0 || Freq == 0U)
@@ -629,6 +640,11 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	}
 
 	uintptr_t state = DisableInterrupt();
+	if (R9a02ClockUsers() || R9A02_FLCN_FENTRYR != 0U)
+	{
+		EnableInterrupt(state);
+		return 0U;
+	}
 	uint32_t src = R9a02SourceHz();
 	uint32_t ick = (R9A02_SYSC_SCKDIVCR & R9A02_SCKDIVCR_ICK_Msk) >> R9A02_SCKDIVCR_ICK_Pos;
 
@@ -650,11 +666,21 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 		}
 
 		uint16_t prev = R9a02Unprotect(R9A02_PRCR_PRC0);
+		uint32_t divcr = (ick << R9A02_SCKDIVCR_ICK_Pos) |
+			(best << R9A02_SCKDIVCR_PCKB_Pos) | R9A02_SCKDIVCR_FIXED;
+		bool ok = (R9A02_SYSC_PRCR & R9A02_PRCR_PRC0) != 0U;
 
-		R9A02_SYSC_SCKDIVCR = (ick << R9A02_SCKDIVCR_ICK_Pos) | (best << R9A02_SCKDIVCR_PCKB_Pos) |
-							  R9A02_SCKDIVCR_FIXED;
+		if (ok)
+		{
+			R9A02_SYSC_SCKDIVCR = divcr;
+			ok = R9A02_SYSC_SCKDIVCR == divcr;
+		}
 		R9a02Protect(prev);
-
+		if (!ok)
+		{
+			EnableInterrupt(state);
+			return 0U;
+		}
 		s_PclkbShift = (uint8_t)(best - ick);
 	}
 
@@ -665,7 +691,16 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	return actual;
 }
 
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+static bool R9a02ClockUsers(void)
+{
+	return (R9A02_SYSC_MSTPCRA & R9A02_MSTPCRA_DTC) == 0U ||
+		R9A02_MSTP_MSTPCRB != UINT32_MAX ||
+		R9A02_MSTP_MSTPCRC != UINT32_MAX ||
+		R9A02_MSTP_MSTPCRD != UINT32_MAX ||
+		(R9A02_SYSC_CKOCR & 0x80U) != 0U || s_bR9a02Snooze;
+}
+
+static bool R9a02CoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq, bool CheckUsers)
 {
 	R9a02ClockPlan_t plan;
 
@@ -677,6 +712,12 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	}
 
 	uintptr_t state = DisableInterrupt();
+	if (CheckUsers && (R9a02ClockUsers() || R9A02_FLCN_FENTRYR != 0U))
+	{
+		g_R9a02StartupError = R9A02_STARTUP_CLOCK;
+		EnableInterrupt(state);
+		return false;
+	}
 	uint16_t prev = R9a02Unprotect(R9A02_PRCR_PRC0 | R9A02_PRCR_PRC1);
 	R9a02StartupError_t err = R9A02_STARTUP_PROTECT;
 
@@ -699,20 +740,12 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return err == R9A02_STARTUP_OK;
 }
 
-// Clock of RTC, TML32, UARTA and REMC (OSMCR.WUTMMCK0, 8.2.18). Change it
-// only while those are stopped, a running RTC is stopped first and
-// R9a02RtcInit starts it again. An RTC counting on the SOSC keeps it: the RTC
-// is not reset by a reset other than the power-on reset (table 20.2), the
-// LOCO request of a warm start would stop the calendar. Table 5.3 lists RTCC0
-// as reset by every reset, RTCE then reads 0 and the RTC starts again.
-static void R9a02LfClockRtcStop(void)
+bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-	if (R9A02_RTC->RTCC0 & R9A02_RTCC0_RTCE)
-	{
-		R9A02_RTC->RTCC0 = (uint8_t)(R9A02_RTC->RTCC0 & ~R9A02_RTCC0_RTCE);
-	}
+	return R9a02CoreClockSelect(ClkSrc, OscFreq, true);
 }
 
+// The shared subsystem clock may change only with its users stopped.
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	if (OscFreq != R9A02_LOCO_FREQ || (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL))
@@ -722,13 +755,21 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return false;
 	}
 
-	if (ClkSrc == OSC_TYPE_RC && (R9A02_RTC->RTCC0 & R9A02_RTCC0_RTCE) &&
-		(R9A02_SYSC_OSMCR & R9A02_OSMCR_WUTMMCK0) == 0U && (R9A02_SYSC_SOSCCR & R9A02_SOSCCR_SOSTP) == 0U)
-	{
-		ClkSrc = OSC_TYPE_XTAL;
-	}
-
 	uintptr_t state = DisableInterrupt();
+	bool change = ((R9A02_SYSC_OSMCR & R9A02_OSMCR_WUTMMCK0) != 0U) != (ClkSrc == OSC_TYPE_RC);
+	bool users = (R9A02_RTC->RTCC0 & R9A02_RTCC0_RTCE) != 0U ||
+		(R9A02_MSTP_MSTPCRB & R9A02_MSTPCRB_UARTA) == 0U ||
+		(R9A02_MSTP_MSTPCRC & R9A02_MSTPCRC_REMC) == 0U ||
+		(R9A02_MSTP_MSTPCRD & R9A02_MSTPCRD_TML32) == 0U || s_bR9a02Snooze ||
+		(R9A02_SYSC_CKOCR & 0x80U) != 0U ||
+		(R9A02_SYSC_SCKSCR & R9A02_SCKSCR_CKSEL_Msk) == R9A02_SCKSCR_SOSC;
+
+	if ((change && users) || R9A02_FLCN_FENTRYR != 0U)
+	{
+		g_R9a02StartupError = R9A02_STARTUP_LF_CLOCK;
+		EnableInterrupt(state);
+		return false;
+	}
 	uint16_t prev = R9a02Unprotect(R9A02_PRCR_PRC0);
 	bool ok = (R9A02_SYSC_PRCR & R9A02_PRCR_PRC0) != 0U;
 
@@ -758,7 +799,6 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 			}
 			if (ok)
 			{
-				R9a02LfClockRtcStop();
 				R9A02_SYSC_OSMCR = R9A02_OSMCR_WUTMMCK0;
 				ok = R9A02_SYSC_OSMCR == R9A02_OSMCR_WUTMMCK0;
 			}
@@ -779,7 +819,6 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		}
 		if (ok && (R9A02_SYSC_OSMCR & R9A02_OSMCR_WUTMMCK0))
 		{
-			R9a02LfClockRtcStop();
 			R9A02_SYSC_OSMCR = 0U;
 			ok = R9A02_SYSC_OSMCR == 0U;
 		}
@@ -801,9 +840,15 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 // Applies g_McuOsc: core clock, then subsystem clock
 void SystemOscInit(void)
 {
-	if (SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq))
+	if (R9a02CoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, false))
 	{
-		SystemLowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq);
+		OSC_TYPE lf = g_McuOsc.LowPwrOsc.Type;
+
+		if (R9A02_RTC->RTCC0 & R9A02_RTCC0_RTCE)
+		{
+			lf = (R9A02_SYSC_OSMCR & R9A02_OSMCR_WUTMMCK0) ? OSC_TYPE_RC : OSC_TYPE_XTAL;
+		}
+		SystemLowFreqClockSelect(lf, g_McuOsc.LowPwrOsc.Freq);
 	}
 }
 
@@ -983,10 +1028,11 @@ bool R9a02WakeupSet(uint8_t EvtId, bool bEnable)
 	uintptr_t state = DisableInterrupt();
 
 	*reg = bEnable ? (*reg | bit) : (*reg & ~bit);
+	bool ok = ((*reg & bit) != 0U) == bEnable;
 
 	EnableInterrupt(state);
 
-	return true;
+	return ok;
 }
 
 // ICU_SNZCANCEL: Snooze ended in Normal mode by the SELSR0 event
@@ -1263,13 +1309,18 @@ bool R9a02LowPowerEnter(bool bStandby)
 		R9A02_SYSC_SNZCR = (uint8_t)(s_R9a02SnzCr | R9A02_SNZCR_SNZE);
 		(void)R9A02_SYSC_SNZCR;
 	}
+	bool entered = R9A02_SYSC_SBYCR == sbycr &&
+		(!snooze || (R9A02_SYSC_SNZCR & R9A02_SNZCR_SNZE) != 0U);
 	R9a02Protect(prev);
 
 	// The last register write is done before WFI (10.9.5)
 	(void)R9A02_SYSC_SBYCR;
 	(void)R9A02_SYSC_PRCR;
 
-	__asm volatile ("wfi" ::: "memory");
+	if (entered)
+	{
+		__asm volatile ("wfi" ::: "memory");
+	}
 
 	if (bStandby)
 	{
@@ -1298,5 +1349,138 @@ bool R9a02LowPowerEnter(bool bStandby)
 		R9a02StandbyHooks(false);
 	}
 
-	return true;
+	return entered;
+}
+
+uint32_t SystemResetReason(void)
+{
+	uintptr_t state = DisableInterrupt();
+
+	if (!s_ResetRead)
+	{
+		uint8_t reset0 = R9A02_SYSC_RSTSR0 & 0x0fU;
+		uint16_t reset1 = R9A02_SYSC_RSTSR1 & 0x1307U;
+
+		if (reset0)
+		{
+			s_ResetReason |= SYSTEM_RESET_POWERON;
+		}
+		if (reset1 & 3U)
+		{
+			s_ResetReason |= SYSTEM_RESET_WDT;
+		}
+		if (reset1 & 4U)
+		{
+			s_ResetReason |= SYSTEM_RESET_SOFT;
+		}
+		if (reset0 == 0U && reset1 == 0U)
+		{
+			s_ResetReason = SYSTEM_RESET_PIN;
+		}
+		R9A02_SYSC_RSTSR0 = 0U;
+		R9A02_SYSC_RSTSR1 = 0U;
+		s_ResetRead = true;
+	}
+	EnableInterrupt(state);
+	return s_ResetReason;
+}
+
+void SystemSleep(void)
+{
+	uintptr_t state = DisableInterrupt();
+	uint8_t enables[R9A02_CLIC_INT_COUNT];
+	bool standby = !s_bR9a02Snooze && R9A02_SYSC_SNZCR == 0U &&
+		(R9A02_DTC->DTCST & R9A02_DTCST_DTCST) == 0U;
+	bool wake = false;
+	bool pending = false;
+
+	if (R9A02_FLCN_FENTRYR != 0U)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	for (unsigned id = 0; id < R9A02_CLIC_INT_COUNT; id++)
+	{
+		enables[id] = CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, id);
+		if (enables[id] && CLIC_INT_IP_REG(R9A02_CLIC_CTRL_BASE, id))
+		{
+			pending = true;
+		}
+		if (id >= R9A02_CLIC_ID_IELSR0 && enables[id])
+		{
+			pending |= (R9A02_ICU->IELSR[id - R9A02_CLIC_ID_IELSR0] & R9A02_IELSR_IR) != 0U;
+			volatile uint32_t *reg;
+			uint32_t bit;
+
+			if (R9a02WakeupBit(R9a02IntEvent(id - R9A02_CLIC_ID_IELSR0), &reg, &bit) && (*reg & bit))
+			{
+				wake = true;
+			}
+		}
+	}
+	if (pending)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	standby = standby && wake;
+	if (!standby)
+	{
+		R9a02LowPowerEnter(false);
+		EnableInterrupt(state);
+		return;
+	}
+
+	// TN-RIS-A0001B/E procedure B. Leave IELSR and pending flags intact.
+	// DTC is already stopped; this path does not enter Snooze.
+	for (unsigned id = 0; id < R9A02_CLIC_INT_COUNT; id++)
+	{
+		bool keep = false;
+
+		if (id >= R9A02_CLIC_ID_IELSR0)
+		{
+			volatile uint32_t *reg;
+			uint32_t bit;
+
+			keep = R9a02WakeupBit(R9a02IntEvent(id - R9A02_CLIC_ID_IELSR0), &reg, &bit) && (*reg & bit);
+		}
+		if (!keep && enables[id])
+		{
+			CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, id) = 0U;
+			(void)CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, id);
+		}
+	}
+	__asm volatile ("fence iorw, iorw" ::: "memory");
+	R9a02LowPowerEnter(true);
+	for (unsigned id = 0; id < R9A02_CLIC_INT_COUNT; id++)
+	{
+		CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, id) = enables[id];
+	}
+	EnableInterrupt(state);
+}
+
+int SystemRetRegCount(void)
+{
+	return 0;
+}
+
+uint32_t SystemRetRegRead(int Idx)
+{
+	(void)Idx;
+	return 0;
+}
+
+bool SystemRetRegWrite(int Idx, uint32_t Val)
+{
+	(void)Idx;
+	(void)Val;
+	return false;
+}
+
+bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
+{
+	(void)Addr;
+	(void)Size;
+	(void)bRetain;
+	return false;
 }

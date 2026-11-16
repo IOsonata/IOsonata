@@ -13,8 +13,10 @@ ABI, GNU C17/C++23 and newlib-nano.
 Debug enables semihosting and leaves `NDEBUG` undefined. The RISC-V toolchain
 uses `--specs=semihost.specs` and links `libsemihost` with `--whole-archive` /
 `--no-whole-archive` so its syscalls replace the weak startup stubs. Run Debug
-with debugger semihosting enabled; the examples enable UART console
-retargeting only in Release.
+with debugger semihosting enabled; most examples enable UART console
+retargeting only in Release. I2CScan links semihosting without forcing its
+syscalls because it also uses IOsonata stddev. PowerOffDemo explicitly selects
+the UART console in both configurations.
 
 Release uses nosys without semihosting and defines `NDEBUG` in the C and
 C++ compiler settings of both the examples and the matching library.
@@ -26,6 +28,7 @@ and example. Executable names are `<example>.elf`.
 | Directory | Shared application source | Linker script | Setting |
 | --- | --- | --- | --- |
 | `Blinky` | `exemples/misc/blinky.c` | `gcc_r9a02g021.ld` | LED1, LED2, switch S1 on IRQ4 |
+| `PowerOffDemo` | `exemples/misc/power_off_demo.cpp` | `gcc_r9a02g021.ld` | Resume through SystemSleep, S1/P108 wake, UART0 at 1000000 baud, SRAM sample check |
 | `TimerDemo` | `exemples/timer/timer_demo.cpp` | `gcc_r9a02g021.ld` | Timer DevNo 0, default frequency |
 | `UartLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_r9a02g021.ld` | UART0, 1000000 baud 8N1, interrupt mode |
 | `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | `gcc_r9a02g021.ld` | UART0, 1000000 baud 8N1, interrupt mode |

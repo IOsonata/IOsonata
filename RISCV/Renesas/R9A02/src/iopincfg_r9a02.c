@@ -56,6 +56,7 @@ SOFTWARE.
 
 #include "iopinctrl.h"
 #include "interrupt_r9a02.h"
+#include "system_r9a02.h"
 
 #define R9A02_IRQ_LINE_CNT		8
 #define R9A02_ANALOG_PIN_CNT	8			// Analog pins are pins 0 to 7 of their port
@@ -92,6 +93,9 @@ static const uint16_t s_R9a02PinIrqMap[] = {
 };
 
 static R9a02PinHook_t s_R9a02PinHook[R9A02_IRQ_LINE_CNT];
+static uint8_t s_WakePins;
+
+static void R9a02WakeEvent(int IntNo, void *pCtx);
 
 // Users of the analog function of each pin, R9a02AnalogPinUse
 static uint8_t s_R9a02AnalogUse[R9A02_PORT_COUNT][R9A02_ANALOG_PIN_CNT];
@@ -332,7 +336,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	uintptr_t state = DisableInterrupt();
 	uint32_t old = R9A02_PFS(PortNo, PinNo);
 
-	if (s_R9a02PinHook[IntNo].Handler != NULL ||
+	if ((R9A02_ICU->WUPEN0 & R9A02_WUPEN0_IRQ(IntNo)) ||
+		s_R9a02PinHook[IntNo].Handler != NULL ||
 		(old & (R9A02_PFS_ASEL | R9A02_PFS_PDR | R9A02_PFS_PMR | R9A02_PFS_ISEL)))
 	{
 		EnableInterrupt(state);
@@ -416,6 +421,11 @@ void IOPinDisableInterrupt(int IntNo)
 		int port = hook->Pin >> 4;
 		int pin = hook->Pin & 15;
 
+		if (s_WakePins & (1U << IntNo))
+		{
+			R9a02WakeupSet((uint8_t)(R9A02_EVT_PORT_IRQ0 + IntNo), false);
+			s_WakePins &= ~(1U << IntNo);
+		}
 		R9a02UnregisterIntHandler(hook->IntNo);
 		R9a02PfsWrite(port, pin, R9A02_PFS(port, pin) & ~R9A02_PFS_ISEL);
 		hook->Handler = NULL;
@@ -481,4 +491,60 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
 {
 	return CoreNo == 0 && R9a02PinValid(PortNo, PinNo);
+}
+
+static void R9a02WakeEvent(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+}
+
+bool SystemWakePin(int PortNo, int PinNo, int Sense)
+{
+	int line = R9a02PinIrq(PortNo, PinNo);
+
+	if (line < 0 || (Sense != IOPINSENSE_DISABLE &&
+		Sense != IOPINSENSE_LOW_TRANSITION && Sense != IOPINSENSE_HIGH_TRANSITION))
+	{
+		return false;
+	}
+	uintptr_t state = DisableInterrupt();
+	bool owned = (s_WakePins & (1U << line)) &&
+		s_R9a02PinHook[line].Pin == (PortNo * 16 + PinNo);
+
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		if (owned)
+		{
+			IOPinDisableInterrupt(line);
+		}
+		EnableInterrupt(state);
+		return owned;
+	}
+	if (owned)
+	{
+		uint8_t mode = Sense == IOPINSENSE_LOW_TRANSITION ? R9A02_IRQCR_IRQMD_FALLING : R9A02_IRQCR_IRQMD_RISING;
+		bool same = R9A02_ICU->IRQCR[line] == mode;
+
+		EnableInterrupt(state);
+		return same;
+	}
+	if (R9A02_SYSC_SNZREQCR0 & R9A02_SNZREQ_IRQ(line))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	bool ok = IOPinEnableInterrupt(line, 1, PortNo, PinNo, (IOPINSENSE)Sense, R9a02WakeEvent, NULL);
+
+	if (ok)
+	{
+		s_WakePins |= 1U << line;
+		ok = R9a02WakeupSet((uint8_t)(R9A02_EVT_PORT_IRQ0 + line), true);
+		if (!ok)
+		{
+			IOPinDisableInterrupt(line);
+		}
+	}
+	EnableInterrupt(state);
+	return ok;
 }
