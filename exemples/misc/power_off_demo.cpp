@@ -451,6 +451,10 @@ int main()
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 
 	SysLogPrintf(SysLogGet(), "PowerOffDemo\r\n");
+#if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
+	g_Esp32C6SleepTrace = PowerDemoSleepTrace;
+	SysLogPrintf(SysLogGet(), "Deep-sleep serial trace enabled: S=xx\r\n");
+#endif
 
 	uint32_t reason = SystemResetReason();
 

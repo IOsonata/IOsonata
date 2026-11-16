@@ -27,9 +27,9 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define POWER_DEMO_RESUME_WAKE 0
 #define POWER_DEMO_STANDBY_RAM_TEST 1
 #define POWER_DEMO_UART_DMA false
-#define POWER_DEMO_UART_OFF 1
+#define POWER_DEMO_UART_OFF 0
 // Set to 1 to keep UART0 enabled and print sleep stages from RAM.
-#define POWER_DEMO_SLEEP_TRACE 0
+#define POWER_DEMO_SLEEP_TRACE 1
 
 // To restore the validated BOOT-button Light-sleep configuration, set
 // WAKE_BUT_PIN to 9 and POWER_DEMO_RESUME_WAKE to 1.

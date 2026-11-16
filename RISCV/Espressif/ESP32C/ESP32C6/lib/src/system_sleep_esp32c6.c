@@ -428,8 +428,13 @@ void Esp32PowerDeepSleep(void)
 			g_Esp32C6SleepWakeEnable = C6_PMU(0x128U);
 			(void)Esp32C6Request(&state, true);
 		}
+		Esp32C6SetSleepStage(0x3DU);
 		Esp32C6Restore(&state);
 		Esp32DeepWakeRestore();
+	}
+	else
+	{
+		Esp32C6SetSleepStage(0x3EU);
 	}
 	(void)mask;
 	for (;;)
