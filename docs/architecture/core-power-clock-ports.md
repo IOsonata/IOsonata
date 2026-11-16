@@ -798,7 +798,11 @@ SystemResetReason reads the last hardware reset cause without clearing it.
 Power/brownout, software, watchdog and JTAG causes map to generic flags. C3's
 power-on code also covers chip-level brownout and super-watchdog events; the
 hardware code does not distinguish them. Unmapped reset causes return zero.
-Deep-sleep wake causes are not decoded in this batch.
+For a deep-sleep reset (0x05), pin and timer wake causes map to the generic
+wake flags. C3 uses RTC wake status with timer bit 3; C6 uses PMU wake status
+with timer bit 4. Multiple recognized causes are combined. Wake status is not
+cleared, and a different reset reason does not report stale wake flags. This
+decoding does not enable PMU sleep entry.
 
 C3 clock decoding now applies PRE_DIV_CNT to XTAL and RC_FAST and returns zero
 for reserved clock selections. Its peripheral clock 0 is the APB clock, limited

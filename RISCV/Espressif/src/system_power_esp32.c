@@ -19,9 +19,15 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 #if defined(ESP32C3)
 #define ESP32_RESET_CAUSE_REG (*(volatile uint32_t *)0x60008038UL)
 #define ESP32_RESET_CAUSE_MASK 0x3FU
+#define ESP32_WAKE_CAUSE_REG (*(volatile uint32_t *)0x600080F8UL)
+#define ESP32_WAKE_PIN_MASK (1UL << 2)
+#define ESP32_WAKE_TIMER_MASK (1UL << 3)
 #elif defined(ESP32C6)
 #define ESP32_RESET_CAUSE_REG (*(volatile uint32_t *)(ESP32_LP_CLKRST_BASE + 0x10U))
 #define ESP32_RESET_CAUSE_MASK 0x1FU
+#define ESP32_WAKE_CAUSE_REG (*(volatile uint32_t *)0x600B0140UL)
+#define ESP32_WAKE_PIN_MASK ((1UL << 0) | (1UL << 1) | (1UL << 2))
+#define ESP32_WAKE_TIMER_MASK (1UL << 4)
 #else
 #error "System power is implemented for ESP32-C3 and ESP32-C6"
 #endif
@@ -40,6 +46,21 @@ uint32_t SystemResetReason(void)
 		case 0x03U:
 		case 0x0CU:
 			return SYSTEM_RESET_SOFT;
+		case 0x05U:
+		{
+			uint32_t wake = ESP32_WAKE_CAUSE_REG;
+			uint32_t reason = 0;
+
+			if (wake & ESP32_WAKE_PIN_MASK)
+			{
+				reason |= SYSTEM_RESET_WAKE_PIN;
+			}
+			if (wake & ESP32_WAKE_TIMER_MASK)
+			{
+				reason |= SYSTEM_RESET_WAKE_TIMER;
+			}
+			return reason;
+		}
 		case 0x07U:
 		case 0x08U:
 		case 0x09U:
