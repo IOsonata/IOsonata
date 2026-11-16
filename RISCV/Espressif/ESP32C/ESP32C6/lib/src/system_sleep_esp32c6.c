@@ -219,9 +219,10 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 		~((0xFFUL << 24) | 0xFFFFFUL)) |
 		((Esp32C6SlowCycles(bDeep ? 500U : 154U) & 0xFFU) << 24) |
 		20700U;
-	// The PMU default PLL wait is two fast-clock cycles.
+	// ESP-IDF v5.5.1 uses a 50 us PLL settle interval.
+	// Use 20 MHz nominal RC_FAST for a conservative 1000-cycle wait.
 	C6_PMU(0x11CU) = (Esp32C6SlowCycles(250U) & 0xFFFFU) |
-		(2UL << 16);
+		(1000UL << 16);
 	C6_PMU(0x78U) |= 1UL << 27;
 	C6_PMU(0x6CU) = 0U;
 	C6_PMU(0x8CU) &= ~((1UL << 27) | (3UL << 30));
