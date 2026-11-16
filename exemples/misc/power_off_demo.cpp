@@ -550,7 +550,7 @@ int main()
 		}
 		else
 		{
-			PowerDemoPut("PMU wake returned to application\r\n");
+			PowerDemoPut("PMU sleep request returned to application\r\n");
 			PowerDemoPut("PMU stage 0x");
 			PowerDemoPutCount(g_Esp32C6SleepStage);
 			PowerDemoPut(", flags 0x");

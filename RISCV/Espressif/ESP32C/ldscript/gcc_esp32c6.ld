@@ -46,3 +46,6 @@ INCLUDE "gcc_riscv_flash.ld"
 
 /* ESP-IDF v5.5.1 ROM ets_update_cpu_frequency, argument in MHz. */
 PROVIDE(Esp32RomClockUpdate = 0x40000048);
+/* Cache_Suspend_ICache and Cache_Resume_ICache, ESP-IDF v5.5.1 ROM table. */
+PROVIDE(Esp32RomCacheSuspend = 0x40000698);
+PROVIDE(Esp32RomCacheResume = 0x4000069c);
