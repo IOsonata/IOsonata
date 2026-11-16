@@ -44,7 +44,10 @@ typedef struct {
 	uint32_t Clock;
 	uint32_t Sdio;
 	uint32_t Timer1;
+	uint32_t Timer3;
+	uint32_t Timer4;
 	uint32_t Timer5;
+	uint32_t Timer6;
 	uint32_t Wake;
 	uint32_t Reject;
 	uint8_t RtcBias;
@@ -73,7 +76,10 @@ static void Esp32C3Read(Esp32C3SleepState_t *pState)
 	pState->Clock = C3_REG(0x70U);
 	pState->Sdio = C3_REG(0x78U);
 	pState->Timer1 = C3_REG(0x1CU);
+	pState->Timer3 = C3_REG(0x24U);
+	pState->Timer4 = C3_REG(0x28U);
 	pState->Timer5 = C3_REG(0x2CU);
+	pState->Timer6 = C3_REG(0x30U);
 	pState->Wake = C3_REG(0x3CU);
 	pState->Reject = C3_REG(0x68U);
 	pState->RtcBias = Esp32RomRegi2cReadMask(0x6DU, 0U, 5U, 4U, 0U);
@@ -95,7 +101,12 @@ static bool Esp32C3Configure(bool bDeep)
 
 	C3_REG(0x1CU) = (C3_REG(0x1CU) & ~C3_RTC_TIMER1_MASK) |
 		C3_RTC_TIMER1_DEFAULT;
+	// RTC sleep has its own power-up and settle timers. The RTC ROM
+	// path may not have initialized them for a direct-boot image.
+	C3_REG(0x24U) = (1UL << 25) | (1UL << 16) | (1UL << 9) | 1UL;
+	C3_REG(0x28U) = (1UL << 25) | (1UL << 16) | (1UL << 9) | 1UL;
 	C3_REG(0x2CU) = (C3_REG(0x2CU) & ~(0xFFUL << 8)) | (2UL << 8);
+	C3_REG(0x30U) = (1UL << 25) | (1UL << 16);
 	// Keep the RTC regulator and RC_FAST available for GPIO sensing.
 	C3_REG(0x80U) = (C3_REG(0x80U) | (1UL << 31)) & ~(1UL << 30);
 	C3_REG(0x70U) |= (1UL << 26) | (1UL << 16);
@@ -154,7 +165,10 @@ static void Esp32C3Restore(const Esp32C3SleepState_t *pState)
 	C3_REG(0x70U) = pState->Clock;
 	C3_REG(0x78U) = pState->Sdio;
 	C3_REG(0x1CU) = pState->Timer1;
+	C3_REG(0x24U) = pState->Timer3;
+	C3_REG(0x28U) = pState->Timer4;
 	C3_REG(0x2CU) = pState->Timer5;
+	C3_REG(0x30U) = pState->Timer6;
 	C3_REG(0x3CU) = pState->Wake;
 	C3_REG(0x68U) = pState->Reject;
 	Esp32RomRegi2cWriteMask(0x6DU, 0U, 5U, 4U, 0U, pState->RtcBias);
