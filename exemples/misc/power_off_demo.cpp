@@ -57,6 +57,9 @@ SOFTWARE.
 
 #include "board.h"
 
+#if defined(ESP32C6) && defined(POWER_DEMO_DEEP_RESET_CHECK) && POWER_DEMO_DEEP_RESET_CHECK
+extern "C" void Esp32C6CheckDeepReset(void);
+#endif
 
 #if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
 extern void (*g_Esp32C6SleepTrace)(uint32_t Stage);
@@ -621,7 +624,14 @@ int main()
 	msDelay(100);
 #endif
 
+#if defined(ESP32C6) && defined(POWER_DEMO_DEEP_RESET_CHECK) && POWER_DEMO_DEEP_RESET_CHECK
+	SysLogPrintf(SysLogGet(), "HP reset test: supplies and oscillators stay on\r\n");
+	SysLogPrintf(SysLogGet(), "Connect GPIO3 to GND after S=36; expect PowerOffDemo to restart\r\n");
+	msDelay(100);
+	Esp32C6CheckDeepReset();
+#else
 	SystemPowerOff();
+#endif
 
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
 	// If the power function returns, the system did not enter Standby.

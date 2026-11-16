@@ -592,7 +592,7 @@ uint32_t Esp32C6CheckDeepWake(void)
 	return result;
 }
 
-void Esp32PowerDeepSleep(void)
+static void Esp32C6DeepSleep(bool KeepSupply)
 {
 	Esp32C6SleepState_t state;
 	uintptr_t mask;
@@ -609,6 +609,25 @@ void Esp32PowerDeepSleep(void)
 		ready = state.CpuMHz != 0U &&
 			((state.Root >> 16) & 3U) != 3U &&
 			Esp32C6Configure(true, false);
+		if (ready && KeepSupply)
+		{
+			// Isolate HP digital reset-on-wake from regulator and oscillator
+			// shutdown. This board diagnostic does not measure Deep-sleep power.
+			C6_PMU(0x68U) &= ~(1UL << 21);
+			C6_PMU(0x7CU) = (C6_PMU(0x7CU) & ~(31UL << 26)) |
+				(C6_PMU(0x14U) & (31UL << 26));
+			C6_PMU(0x80U) = (C6_PMU(0x80U) & ~(127UL << 25)) |
+				(C6_PMU(0x18U) & (127UL << 25));
+			C6_PMU(0x90U) = (C6_PMU(0x90U) & ~C6_DBIAS_MASK) |
+				(C6_PMU(0x28U) & C6_DBIAS_MASK) | (1UL << 18);
+			C6_PMU(0x98U) |= 1UL << 31;
+			C6_PMU(0xBCU) |= 1UL << 31;
+			C6_PMU(0xC4U) |= 1UL << 30;
+			C6_PMU(0xC8U) &= ~(127UL << 25);
+			C6_PMU(0xB4U) = (C6_PMU(0xB4U) & ~C6_DBIAS_MASK) |
+				(C6_PMU(0x9CU) & C6_DBIAS_MASK);
+			Esp32C6SetSleepStage(0x50U);
+		}
 		if (ready)
 		{
 			Esp32C6SetSleepStage(0x3BU);
@@ -634,4 +653,15 @@ void Esp32PowerDeepSleep(void)
 	{
 		__WFI();
 	}
+}
+
+// Temporary board diagnostic: HP digital domains power down, supplies stay on.
+void Esp32C6CheckDeepReset(void)
+{
+	Esp32C6DeepSleep(true);
+}
+
+void Esp32PowerDeepSleep(void)
+{
+	Esp32C6DeepSleep(false);
 }
