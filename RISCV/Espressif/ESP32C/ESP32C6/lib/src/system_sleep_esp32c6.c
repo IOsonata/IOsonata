@@ -27,6 +27,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 #define C6_EFUSE_BIAS ESP32_REG32(0x600B084CUL)
 #define C6_EFUSE_VERSION ESP32_REG32(0x600B0850UL)
 #define C6_SLEEP_WAKE (1UL << 2)
+#define C6_DEEP_WAKE (1UL << 1)
 #define C6_SLEEP_RESULT ((1UL << 30) | (1UL << 31))
 #define C6_PLL_KEEP ((1UL << 28) | (1UL << 29) | (1UL << 30))
 #define C6_DEEP_HP_PD ((1UL << 21) | (1UL << 27) | (1UL << 29) | (1UL << 30) | (1UL << 31))
@@ -150,7 +151,9 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	uint32_t lpBias;
 	uint32_t lpDebug;
 	uint32_t efuse;
+	uint32_t wake;
 
+	wake = bDeep ? C6_DEEP_WAKE : C6_SLEEP_WAKE;
 	// Read the current clock state, not a write-trigger command register.
 	if ((C6_PMU(0x194U) & (1UL << 15)) != 0U)
 	{
@@ -266,10 +269,10 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	C6_PMU(0x6CU) = 0U;
 	C6_PMU(0x70U) = 0U;
 	C6_PMU(0x8CU) = (C6_PMU(0x8CU) & ~C6_SYSCLK_MASK) | C6_SYSCLK_SLEEP;
-	C6_PMU(0x124U) = (1UL << 31) | C6_SLEEP_WAKE;
-	C6_PMU(0x128U) = C6_SLEEP_WAKE;
+	C6_PMU(0x124U) = (1UL << 31) | wake;
+	C6_PMU(0x128U) = wake;
 	C6_LP_STORE9 = (C6_LP_STORE9 & ~1U) | (bDeep ? 1U : 0U);
-	if (C6_PMU(0x128U) != C6_SLEEP_WAKE ||
+	if (C6_PMU(0x128U) != wake ||
 		(C6_PMU(0x24U) & C6_SYSCLK_MASK) != C6_SYSCLK_ACTIVE ||
 		(C6_PMU(0x8CU) & C6_SYSCLK_MASK) != C6_SYSCLK_SLEEP ||
 		(C6_PMU(0x12CU) & C6_SLEEP_PROTECT_MASK) != C6_SLEEP_PROTECT_MODE ||
