@@ -117,7 +117,6 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	uint32_t lowfreq;
 	uint32_t hpBias;
 	uint32_t lpBias;
-	uint32_t hpDebug;
 	uint32_t lpDebug;
 	uint32_t efuse;
 
@@ -130,7 +129,6 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	lowfreq = Esp32C6SlowCycles(450U);
 	hpBias = Esp32C6Dbias(0U, 25U);
 	lpBias = Esp32C6Dbias(5U, 26U);
-	hpDebug = 0U;
 	lpDebug = 0U;
 	efuse = C6_EFUSE_BIAS;
 
@@ -182,7 +180,7 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 			~C6_PLL_KEEP) | (3UL << 26);
 		C6_PMU(0x80U) = (C6_PMU(0x80U) &
 			~((15UL << 26) | (3UL << 30))) | (3UL << 30);
-		C6_PMU(0x90U) &= ~(1UL << 18);
+		C6_PMU(0x90U) &= ~((1UL << 16) | (1UL << 17) | (1UL << 18));
 		C6_PMU(0xC8U) = (C6_PMU(0xC8U) &
 			~((15UL << 26) | (3UL << 30))) |
 			(lpDebug << 26) | (3UL << 30);
@@ -217,8 +215,7 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 		~((0xFFUL << 24) | 0xFFFFFUL)) |
 		((Esp32C6SlowCycles(bDeep ? 500U : 154U) & 0xFFU) << 24) |
 		20700U;
-	C6_PMU(0x11CU) = (C6_PMU(0x11CU) & 0U) |
-		(Esp32C6SlowCycles(250U) & 0xFFFFU) |
+	C6_PMU(0x11CU) = (Esp32C6SlowCycles(250U) & 0xFFFFU) |
 		(16UL << 16);
 	C6_PMU(0x78U) |= 1UL << 27;
 	C6_PMU(0x6CU) = 0U;
@@ -256,16 +253,23 @@ static uint32_t Esp32C6Request(const Esp32C6SleepState_t *pState, bool bDeep)
 			break;
 		}
 	}
-	if (!bDeep)
+	if (bDeep)
 	{
-		C6_PMU(0x168U) = C6_SLEEP_RESULT;
-		C6_CPU = pState->Cpu;
-		C6_AHB = pState->Ahb;
-		C6_ROOT = root;
-		(void)C6_ROOT;
-		Esp32RomClockUpdate(pState->CpuMHz);
-		__asm volatile("fence iorw, iorw" : : : "memory");
+		// Deep-sleep resets the MCU. A rejected entry cannot assume
+		// the pre-sleep PLL or flash supply is still available.
+		for (;;)
+		{
+			__WFI();
+		}
 	}
+	C6_PMU(0x168U) = C6_SLEEP_RESULT;
+	C6_CPU = pState->Cpu;
+	C6_AHB = pState->Ahb;
+	C6_ROOT = root;
+	(void)C6_ROOT;
+	C6_PMU(0xD0U) |= 1UL << 31;
+	Esp32RomClockUpdate(pState->CpuMHz);
+	__asm volatile("fence iorw, iorw" : : : "memory");
 	return status;
 }
 
