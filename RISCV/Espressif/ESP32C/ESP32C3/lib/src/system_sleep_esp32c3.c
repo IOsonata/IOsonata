@@ -203,6 +203,7 @@ bool Esp32PowerSleep(void)
 	Esp32C3SleepState_t state;
 	uintptr_t mask;
 	bool attempted;
+	bool slept;
 
 	mask = DisableInterrupt();
 	if (!Esp32LightWakePrepare())
@@ -212,14 +213,15 @@ bool Esp32PowerSleep(void)
 	}
 	Esp32C3Read(&state);
 	attempted = state.CpuMHz != 0U && Esp32C3Configure(false);
+	slept = false;
 	if (attempted)
 	{
-		(void)Esp32C3Request(state.Root, state.CpuMHz, false);
+		slept = (Esp32C3Request(state.Root, state.CpuMHz, false) & 1U) != 0U;
 	}
 	Esp32C3Restore(&state);
 	Esp32LightWakeRestore();
 	EnableInterrupt(mask);
-	return attempted;
+	return slept;
 }
 
 void Esp32PowerDeepSleep(void)
