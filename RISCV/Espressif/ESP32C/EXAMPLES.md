@@ -74,6 +74,40 @@ GPIO4/5 external-adapter wiring in their earlier bring-up examples.
 
 ## PowerOffDemo (ESP32-C3/C6)
 
+### C6 BOOT input trace
+
+The C6 board enables `POWER_DEMO_BUTTON_TRACE`. Before disabling UART
+or entering sleep, it reports GPIO9's idle level, waits for a stable
+BOOT press and release, and prints the observed input levels, GPIO IRQ
+count and last pending mask. The press should read 0, the release 1.
+The last pending mask should include GPIO9 (0x00000200) and the IRQ
+count must increase. If the input or interrupt check fails, the demo
+reports the failure and does not enter sleep. While waiting for BOOT,
+it repeats the live GPIO level approximately once a second.
+
+A successful button test is followed by "Entering Standby".
+Press BOOT a second time to test the actual PMU wake path. If no
+response appears, attach the Eclipse debugger and inspect
+`g_PowerDemoWakeStage`, `g_Esp32C6SleepStage`,
+`g_Esp32C6SleepPmuRaw`, `g_Esp32C6SleepWakeCause`,
+`g_Esp32C6SleepRejectCause`, `g_Esp32C6SleepWakeEnable`
+and `g_Esp32C6SleepGpio`. The last two are snapshots taken
+before requesting PMU sleep.
+
+The demo stage is 0x01 before GPIO sampling, 0x02 on a debounced
+press, 0x03 on release, 0x04 after the GPIO interrupt check,
+0x05 before UART disable, 0x06 after UART disable,
+0x07 before `SystemSleep`, 0x08 after `SystemSleep` returns,
+and 0x09 after UART re-enable. The C6 driver stage is 0x10
+at entry, 0x11 after wake-pin preparation, 0x12 after register
+save, 0x13 after PMU configuration, 0x14/0x15 during
+CPU clock switching, 0x16 at sleep request, 0x17 after
+PMU wake/reject/timeout, 0x18 after clock restoration and
+0x19 after register and wake-pin restoration. Stages 0x1D
+and 0x1E indicate PMU configuration or wake-pin preparation
+failure. The raw PMU status distinguishes wake (bit 31)
+from rejection (bit 30).
+
 The shared `exemples/misc/power_off_demo.cpp` provides both wake-resume and
 reset-on-wake demonstration paths. The default C3/C6 board configurations
 use UART0 at 1 Mbaud, GPIO9 BOOT and `POWER_DEMO_RESUME_WAKE=1`.
