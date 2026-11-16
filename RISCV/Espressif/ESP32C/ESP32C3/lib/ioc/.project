@@ -431,6 +431,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/system_esp32c3.c</locationURI>
 		</link>
 		<link>
+			<name>src/system_sleep_esp32c3.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/system_sleep_esp32c3.c</locationURI>
+		</link>
+		<link>
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
