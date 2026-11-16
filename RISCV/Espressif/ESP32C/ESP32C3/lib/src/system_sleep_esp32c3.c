@@ -137,7 +137,11 @@ static bool Esp32C3Configure(bool bDeep)
 	C3_REG(0x68U) = (C3_REG(0x68U) & ~C3_REJECT_FIELD) |
 		(3UL << 30) | (C3_GPIO_WAKE << 12);
 	return (C3_REG(0x3CU) & C3_WAKE_FIELD) == (C3_GPIO_WAKE << 15) &&
-		(C3_REG(0x00U) & (1UL << 13)) == (bDeep ? 0U : (1UL << 13));
+		(C3_REG(0x00U) & (1UL << 13)) == (bDeep ? 0U : (1UL << 13)) &&
+		Esp32RomRegi2cReadMask(0x6DU, 0U, 5U, 4U, 0U) ==
+			(bDeep ? 0U : C3_DBIAS_DEFAULT) &&
+		Esp32RomRegi2cReadMask(0x6DU, 0U, 7U, 4U, 0U) ==
+			(bDeep ? 0U : C3_DBIAS_DEFAULT);
 }
 
 static void Esp32C3Restore(const Esp32C3SleepState_t *pState)
@@ -158,7 +162,7 @@ static void Esp32C3Restore(const Esp32C3SleepState_t *pState)
 }
 
 __attribute__((noinline, section(".iram.text.esp32_c3_sleep")))
-static uint32_t Esp32C3Request(uint32_t Root, uint32_t CpuMHz)
+static uint32_t Esp32C3Request(uint32_t Root, uint32_t CpuMHz, bool bDeep)
 {
 	uint32_t observed;
 
@@ -175,6 +179,15 @@ static uint32_t Esp32C3Request(uint32_t Root, uint32_t CpuMHz)
 		if (observed != 0U)
 		{
 			break;
+		}
+	}
+	if (bDeep)
+	{
+		// Never reselect the pre-sleep PLL after a rejected deep sleep.
+		// Wait in instruction RAM for a manual reset.
+		for (;;)
+		{
+			__WFI();
 		}
 	}
 	C3_REG(0x4CU) = C3_RESULT_MASK;
@@ -201,7 +214,7 @@ bool Esp32PowerSleep(void)
 	attempted = state.CpuMHz != 0U && Esp32C3Configure(false);
 	if (attempted)
 	{
-		(void)Esp32C3Request(state.Root, state.CpuMHz);
+		(void)Esp32C3Request(state.Root, state.CpuMHz, false);
 	}
 	Esp32C3Restore(&state);
 	Esp32LightWakeRestore();
@@ -223,7 +236,7 @@ void Esp32PowerDeepSleep(void)
 		ready = state.CpuMHz != 0U && Esp32C3Configure(true);
 		if (ready)
 		{
-			(void)Esp32C3Request(state.Root, state.CpuMHz);
+			(void)Esp32C3Request(state.Root, state.CpuMHz, true);
 		}
 		Esp32C3Restore(&state);
 		Esp32DeepWakeRestore();
