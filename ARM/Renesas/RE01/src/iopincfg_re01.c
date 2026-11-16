@@ -41,6 +41,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
 #include "interrupt_re01.h"
+#include "coredev/system_core_clock.h"
 
 #define PFS_PSEL_Pos              (24UL)                    /*!< PSEL (Bit 24)                                         */
 #define PFS_PSEL_Msk              (0x1f000000UL)            /*!< PSEL (Bitfield-Mask: 0x1f)                            */
@@ -120,6 +121,8 @@ static const uint32_t s_Re01IntPins[] = {
 	0x815, 0x825,			// IRQ8
 	0x914, 0x924,			// IRQ9
 };
+
+static void Re01WakePinHandler(int IntNo, void *pCtx);
 
 // Package pin counts are not pin-number limits: some ports have gaps.
 // Board pin maps select the pins bonded out on the particular package.
@@ -275,6 +278,12 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	if (!IsValidIOPin(PortNo, PinNo) || PinOp < IOPINOP_GPIO || PinOp > IOPINOP_FUNC31)
 		return;
 
+	int wake = IOPinFindAvailInterrupt(PortNo, PinNo);
+	if (wake >= 0 && s_GpIOSenseEvt[wake].PortPinNo == ((PortNo << 8) | PinNo) &&
+		s_GpIOSenseEvt[wake].SensEvtCB == Re01WakePinHandler)
+	{
+		return;
+	}
 	RE01IOPinSupplyEnable(PortNo, PinNo);
 
 	PORT0_Type *port = (PORT0_Type*)(PORT0_BASE + PortNo * 0x20);
@@ -453,7 +462,9 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	}
 	uint32_t state = DisableInterrupt();
 	IOPINSENS_EVTHOOK *hook = &s_GpIOSenseEvt[IntNo];
-	if (hook->IrqNo != (IRQn_Type)-1 && hook->PortPinNo != ((PortNo << 8) | PinNo))
+	if (hook->IrqNo != (IRQn_Type)-1 &&
+		(hook->PortPinNo != ((PortNo << 8) | PinNo) ||
+		(hook->SensEvtCB == Re01WakePinHandler && pEvtCB != Re01WakePinHandler)))
 	{
 		EnableInterrupt(state);
 		return false;
@@ -564,6 +575,12 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 	{
 		return;
 	}
+	int wake = IOPinFindAvailInterrupt(PortNo, PinNo);
+	if (wake >= 0 && s_GpIOSenseEvt[wake].PortPinNo == ((PortNo << 8) | PinNo) &&
+		s_GpIOSenseEvt[wake].SensEvtCB == Re01WakePinHandler)
+	{
+		return;
+	}
 	int offset = (PinNo + (PortNo << 4)) << 2;
 	__IOM uint32_t *psf = (__IOM uint32_t*)(PFS_BASE + offset);
 	uint32_t psfval = *psf & ~PFS_EOFR_Msk;
@@ -641,4 +658,54 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
 {
 	return CoreNo == 0 && IsValidIOPin(PortNo, PinNo);
+}
+
+static void Re01WakePinHandler(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+}
+
+bool SystemWakePin(int PortNo, int PinNo, int Sense)
+{
+	int intno = IOPinFindAvailInterrupt(PortNo, PinNo);
+	if (intno < 0 || (Sense != IOPINSENSE_DISABLE &&
+		Sense != IOPINSENSE_LOW_TRANSITION && Sense != IOPINSENSE_HIGH_TRANSITION))
+	{
+		return false;
+	}
+	uint32_t state = DisableInterrupt();
+	IOPINSENS_EVTHOOK *hook = &s_GpIOSenseEvt[intno];
+	bool owned = hook->IrqNo != (IRQn_Type)-1 &&
+		hook->PortPinNo == ((PortNo << 8) | PinNo) && hook->SensEvtCB == Re01WakePinHandler;
+	if (!owned && (hook->IrqNo != (IRQn_Type)-1 || (ICU->WUPEN & (1UL << intno))))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	uint8_t protection = PMISC->PWPR;
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		if (owned)
+		{
+			IOPinDisableInterrupt(intno);
+			PMISC->PWPR = 0;
+			PMISC->PWPR = protection;
+		}
+		EnableInterrupt(state);
+		return true;
+	}
+	volatile uint32_t *pfs = (volatile uint32_t *)(PFS_BASE + ((PortNo * 16 + PinNo) * 4));
+	if ((*pfs & (PFS_PDR_Msk | PFS_PMR_Msk | PFS_ASEL_Msk)) != 0 ||
+		(!owned && ((*pfs & PFS_ISEL_Msk) || (ICU->WUPEN & (1UL << intno)))))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	bool result = IOPinEnableInterrupt(intno, 3, PortNo, PinNo, (IOPINSENSE)Sense,
+		Re01WakePinHandler, NULL);
+	PMISC->PWPR = 0;
+	PMISC->PWPR = protection;
+	EnableInterrupt(state);
+	return result;
 }

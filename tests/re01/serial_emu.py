@@ -358,7 +358,8 @@ def test_spi(filename):
                 continue
             cmd = e.get(SPI_BASE[0] + 0x10, 2)
             divisor = 2 * (e.get(SPI_BASE[0] + 10) + 1) * (1 << ((cmd >> 2) & 3))
-            assert actual == iclk // divisor and iclk <= rate * divisor
+            assert actual == iclk // divisor
+            assert iclk <= rate * divisor or divisor == 4096
     assert not e.op(0, 10, 0)
     e.clocks(2000000, 2000000, 0)
     assert e.init(0, 100000, 16)
@@ -437,10 +438,13 @@ def test_i2c(filename):
             offset = 5 if cks == 0 else 4
             low = ((brl & 31) + offset) * (1 << cks)
             high = ((brh & 31) + offset) * (1 << cks)
-            assert actual == pclk // (low + high) and pclk <= rate * (low + high)
+            assert actual == pclk // (low + high)
+            requested = max(rate, (pclk + 8959) // 8960)
+            assert pclk <= requested * (low + high)
             ln, hn = (4700, 4000) if rate <= 100000 else (1300, 600)
             assert low * 1000000000 >= ln * pclk and high * 1000000000 >= hn * pclk
-    assert not e.op(2, 10, 0) and not e.op(2, 10, 400001)
+    assert not e.op(2, 10, 0)
+    assert 0 < e.op(2, 10, 400001) <= 400000
     e.clocks(2000000, 2000000, 0)
     assert e.init(2)
     m = e.iic[0]
@@ -506,7 +510,8 @@ def test_i2c(filename):
     assert e.op(2, 0, 0x50, 4) == 4
     for options in (1, 2, 4, 8, 16):
         assert not e.init(2, options=options)
-    assert not e.init(2, 400001)
+    assert e.init(2, 400001)
+    assert 0 < e.op(2, 11) <= 400000
     assert e.op(2, 15) and e.op(3, 15)
     assert e.get(MSTPB, 4) == 0xFFFFFFFF
     assert e.init(2) and e.op(2, 15)

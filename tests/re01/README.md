@@ -28,7 +28,7 @@ initialization, RX drops, error clearing, and partial IRQ allocation cleanup.
 The baud-rate check uses an independent exhaustive BRR/MDDR calculation.
 
 Build and link Blinky, TimerDemo, UartPrbsTxTest, PulseTrain, UartRetargetDemo,
-I2CMasterDemo and SPIMasterDemo for Cortex-M0+ with both normal linker scripts,
+I2CMasterDemo, SPIMasterDemo and PowerOffDemo for Cortex-M0+ with the normal linker script,
 then inspect the resulting ELF sections and option bytes:
 
 ```sh
@@ -288,3 +288,25 @@ The record magic now occupies 256 bytes (`__dfu_state_unit = 256`). Records
 made with the previous 128-byte assumption are refused. After installing the
 updated boot, reupload the application or regenerate its factory record with
 the new state unit. Keep the recovery path available during this migration.
+
+## Power and clock update (2026-11-16)
+
+The host checks now include active-module refusal for clock changes, MOCO
+selection, LF oscillator lifetime, and wake-pin ownership/reconfiguration.
+The serial model expectations now match the existing SPI/I2C drivers' rate
+clamping at the supported limits; zero still means an invalid request.
+
+Arm GNU 15.2.1 compiled all 113 library translation units for each of the six
+DBN/CFB/CFP Debug/Release configurations. Direct compiler/linker checks using
+the managed project source links and options cover 44 example configurations,
+excluding the separate TaktOS project. All 22 Release configurations and 21
+Debug configurations link. DfuBoot Debug exceeds its reserved flash area;
+the previous revision also overflows with the same toolchain and settings.
+Missing target/common linker-script search paths in Blinky, DfuBoot,
+UartPrbsTxTest and UartSlipPrbsRxTest were corrected.
+
+The example image checker also covers all nine timer selections and the new
+PowerOffDemo for each package. Register-model checks cover Sleep/Standby
+selection, all ten external IRQ wake mappings, reset reason caching, SRAM-bank
+settings, and interrupt/protection restoration. These are compiler and model
+checks, not Eclipse IDE execution or hardware results.

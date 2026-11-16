@@ -42,13 +42,13 @@ SOFTWARE.
 
 #include <stdbool.h>
 #include <stdlib.h>
-#include <assert.h>
+#include "coredev/interrupt.h"
 
 #include "re01xxx.h"
 #include "coredev/system_core_clock.h"
 
-#define SYSTEM_CORE_CLOCK_MAX			64000000UL	// TODO: Adjust value for CPU with fixed core frequency
-#define SYSTEM_NSDELAY_CORE_FACTOR		(34UL)		// TODO: Adjustment value for nanosec delay
+#define SYSTEM_CORE_CLOCK_MAX			64000000UL
+#define SYSTEM_NSDELAY_CORE_FACTOR		(34UL)
 #define RE01_OSC_WAIT_COUNT				1000000UL
 
 #define SYSTEM_SCKSCR_CKSEL_HOCO	(0)		// High speed RC
@@ -66,40 +66,30 @@ __WEAK McuOsc_t g_McuOsc = {
 	{
 		OSC_TYPE_RC,
 		48000000,		// Default to 48MHz because at 64MHz many UART baudrate could not be matched
-		20
+		20, 0
 	},
 	{
 		OSC_TYPE_RC,
-		32768, 20
+		32768, 20, 0
 	},
-	true
+	true,
+	0
 };
 
 static uint32_t s_PeriphSrcFreq = 0;
 
-#if 0
-/**
- * @brief	Get system low frequency oscillator type
- *
- * @return	Return oscillator type either internal RC or external crystal/osc
- */
-OSC_TYPE GetLowFreqOscType()
+static bool Re01ClockIdle(void)
 {
-	return g_McuOsc.LFType;
+	// Running modules keep the source and dividers used by their drivers.
+	return (SYSTEM->MSTPCRA & SYSTEM_MSTPCRA_MSTPA22_Msk) != 0 &&
+		(MSTP->MSTPCRB & 0xfc4c0b60UL) == 0xfc4c0b60UL &&
+		(MSTP->MSTPCRC & 0x8640e403UL) == 0x8640e403UL &&
+		(MSTP->MSTPCRD & 0x105341ffUL) == 0x105341ffUL &&
+		(SYSTEM->CKOCR & SYSTEM_CKOCR_CKOEN_Msk) == 0 &&
+		FLASH->FENTRYR == 0;
 }
 
-/**
- * @brief	Get system high frequency oscillator type
- *
- * @return	Return oscillator type either internal RC or external crystal/osc
- */
-OSC_TYPE GetHighFreqOscType()
-{
-	return g_McuOsc.HFType;
-}
-#endif
-
-void SetFlashWaitState(uint32_t CoreFreq)
+static void SetFlashWaitState(uint32_t CoreFreq)
 {
 	if (CoreFreq > 32000000U)
 	{
@@ -123,43 +113,36 @@ static bool Re01WaitOsc(uint8_t Mask, bool bStable)
 	return false;
 }
 
-bool EnterBoostMode()
+static bool EnterBoostMode(void)
 {
 	if (SYSTEM->PWSTF_b.BOOSTM)
 	{
 		return true;
 	}
+	if (SYSTEM->PWSTF != SYSTEM_PWSTF_ALLPWONM_Msk)
+	{
+		return false;
+	}
 	uint16_t sbycr = SYSTEM->SBYCR;
 	uint8_t dpsbycr = SYSTEM->DPSBYCR;
 	uint8_t snzcr = SYSTEM->SNZCR;
-    /* Set the software standby mode. (step1) */
-    SYSTEM->SBYCR_b.SSBYMP  = 0U;
-
-    /* Set the software standby mode. (step2) */
-    SYSTEM->SBYCR_b.SSBY    = 1U;
-
-    /* Set the software standby mode. (step3) */
-    SYSTEM->DPSBYCR_b.DPSBY = 0U;
-
-    /* Disable the snooze mode. */
-    SYSTEM->SNZCR_b.SNZE    = 0U;
-
-    /* Transition from normal mode to Boost mode. */
-    SYSTEM->PWSTCR = 0x05U;
-
-    /* Returns an error because the PWSTCR.PWST[2:0] bits could not be modified. */
-    if(0x05U != SYSTEM->PWSTCR)
-    {
+	uint8_t power = SYSTEM->PWSTCR;
+	// Boost entry uses Software Standby as a power-mode transition.
+	SYSTEM->SBYCR = SYSTEM_SBYCR_SSBY_Msk;
+	SYSTEM->DPSBYCR_b.DPSBY = 0;
+	SYSTEM->SNZCR_b.SNZE = 0;
+	SYSTEM->PWSTCR = 5;
+	if (SYSTEM->PWSTCR != 5)
+	{
 		SYSTEM->SBYCR = sbycr;
 		SYSTEM->DPSBYCR = dpsbycr;
 		SYSTEM->SNZCR = snzcr;
-        return false;
-    }
+		SYSTEM->PWSTCR = power;
+		return false;
+	}
+	__DSB();
+	__WFE();
 
-    /* Execute WFE instruction */
-    __WFE();
-
-    /* Wait the transition from normal mode to Boost mode. */
 	uint32_t retry = RE01_OSC_WAIT_COUNT;
 	while (!SYSTEM->PWSTF_b.BOOSTM && retry > 0)
 	{
@@ -169,13 +152,14 @@ bool EnterBoostMode()
 	SYSTEM->SBYCR = sbycr;
 	SYSTEM->DPSBYCR = dpsbycr;
 	SYSTEM->SNZCR = snzcr;
+	SYSTEM->PWSTCR = power;
 	return ready;
 }
 
 // USB operation requires PLL clock source
 // Target PLL for 48MHz operating for compatibility with USB
 // PLL operation can only work in Boost mode
-uint32_t ConfigPLL(uint32_t SrcFreq)
+static uint32_t ConfigPLL(uint32_t SrcFreq)
 {
 	uint32_t tf = 64000000;
 
@@ -225,11 +209,16 @@ uint32_t ConfigPLL(uint32_t SrcFreq)
 void SystemCoreClockUpdate(void)
 {
 	uint8_t clksrc = SYSTEM->SCKSCR_b.CKSEL;
-	uint32_t div = 1 << ((SYSTEM->SCKDIVCR & SYSTEM_SCKDIVCR_ICK_Msk) >> SYSTEM_SCKDIVCR_ICK_Pos);
+	uint32_t divider = (SYSTEM->SCKDIVCR & SYSTEM_SCKDIVCR_ICK_Msk) >> SYSTEM_SCKDIVCR_ICK_Pos;
 
 	switch (clksrc)
 	{
 		case SYSTEM_SCKSCR_CKSEL_HOCO:
+			if (SYSTEM->HOCOCR || !(SYSTEM->OSCSF & SYSTEM_OSCSF_HOCOSF_Msk))
+			{
+				SystemCoreClock = 0;
+				break;
+			}
 			switch (SYSTEM->HOCOMCR & SYSTEM_HOCOMCR_HCFRQ_Msk)
 			{
 				case 0:
@@ -247,155 +236,204 @@ void SystemCoreClockUpdate(void)
 			}
 			break;
 		case SYSTEM_SCKSCR_CKSEL_MOCO:
-			SystemCoreClock = 2000000UL;
+			SystemCoreClock = SYSTEM->MOCOCR ? 0 : 2000000UL;
 			break;
 		case SYSTEM_SCKSCR_CKSEL_LOCO:
+			SystemCoreClock = SYSTEM->LOCOCR ? 0 : 32768UL;
+			break;
 		case SYSTEM_SCKSCR_CKSEL_SCO:
-			SystemCoreClock = 32768UL;
+			SystemCoreClock = SYSTEM->SOSCCR ? 0 : 32768UL;
 			break;
 		case SYSTEM_SCKSCR_CKSEL_MCO:
-			SystemCoreClock = g_McuOsc.CoreOsc.Freq;
+			SystemCoreClock = SYSTEM->MOSCCR || !(SYSTEM->OSCSF & SYSTEM_OSCSF_MOSCSF_Msk) ?
+				0 : g_McuOsc.CoreOsc.Freq;
 			break;
 		case SYSTEM_SCKSCR_CKSEL_PLL:
+			if (SYSTEM->MOSCCR || SYSTEM->PLLCR ||
+				(SYSTEM->OSCSF & (SYSTEM_OSCSF_MOSCSF_Msk | SYSTEM_OSCSF_PLLSF_Msk)) !=
+				(SYSTEM_OSCSF_MOSCSF_Msk | SYSTEM_OSCSF_PLLSF_Msk))
+			{
+				SystemCoreClock = 0;
+				break;
+			}
 			SystemCoreClock = (uint64_t)g_McuOsc.CoreOsc.Freq * (SYSTEM->PLLCCR_b.PLLMUL + 1) /
 							  (SYSTEM->PLLCCR_b.PLIDIV + 1);
 			break;
 		default:
-			assert(0);
+			SystemCoreClock = 0;
+			break;
 	}
 
 	s_PeriphSrcFreq = SystemCoreClock;
 
-	SystemCoreClock /= div;
+	SystemCoreClock = divider <= 6 ? SystemCoreClock >> divider : 0;
 
 	// Reporting clocks must not change divider or flash settings.
 }
 
 
-void SystemInit(void)
+static bool Re01SetCoreClock(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-    SYSTEM->PRCR = 0xA503U;
-
 	FLASH->FLWT = 1;
-	// Move off HOCO/PLL before stopping or reprogramming either oscillator.
 	SYSTEM->MOCOCR = 0;
 	SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MOCO;
-	(void)SYSTEM->SCKSCR;
-	// PCLKA follows ICLK. PCLKB is limited to 32 MHz, even in boost mode.
-	SYSTEM->SCKDIVCR = (SYSTEM->SCKDIVCR & ~(SYSTEM_SCKDIVCR_ICK_Msk | SYSTEM_SCKDIVCR_PCKB_Msk)) |
-						  (1UL << SYSTEM_SCKDIVCR_PCKB_Pos);
-
-    if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+	if (SYSTEM->MOCOCR || SYSTEM->SCKSCR_b.CKSEL != SYSTEM_SCKSCR_CKSEL_MOCO)
 	{
-    	if (g_McuOsc.bUSBClk)
-    	{
-    		// USB requires external crystal.
-    		// Disable USB support when using RC
-    		g_McuOsc.bUSBClk = false;
-    	}
+		return false;
+	}
+	g_McuOsc.CoreOsc.Type = ClkSrc;
+	g_McuOsc.CoreOsc.Freq = OscFreq;
+	SYSTEM->SCKDIVCR = (SYSTEM->SCKDIVCR & ~(SYSTEM_SCKDIVCR_ICK_Msk | SYSTEM_SCKDIVCR_PCKB_Msk)) |
+		(1UL << SYSTEM_SCKDIVCR_PCKB_Pos);
 
-    	if (g_McuOsc.CoreOsc.Freq <= 2000000UL)
-    	{
-			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MOCO;
-    	}
-    	else
-    	{
-    		uint8_t hcfrq = 0;
-    		if (g_McuOsc.CoreOsc.Freq <= 24000000UL)
-    		{
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+	{
+		g_McuOsc.bUSBClk = false;
+		if (g_McuOsc.CoreOsc.Freq <= 2000000UL)
+		{
+			return true;
+		}
+		uint8_t hcfrq = g_McuOsc.CoreOsc.Freq <= 24000000UL ? 0 :
+			(g_McuOsc.CoreOsc.Freq <= 32000000UL ? 1 :
+			(g_McuOsc.CoreOsc.Freq <= 48000000UL ? 2 : 3));
+		if (hcfrq >= 2 && !EnterBoostMode())
+		{
+			return false;
+		}
+		SYSTEM->HOCOCR = 1;
+		if (!Re01WaitOsc(SYSTEM_OSCSF_HOCOSF_Msk, false))
+		{
+			return false;
+		}
+		SYSTEM->HOCOMCR = hcfrq;
+		SYSTEM->HOCOCR = 0;
+		if (!Re01WaitOsc(SYSTEM_OSCSF_HOCOSF_Msk, true))
+		{
+			return false;
+		}
+		SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_HOCO;
+		return SYSTEM->SCKSCR_b.CKSEL == SYSTEM_SCKSCR_CKSEL_HOCO;
+	}
+	if ((g_McuOsc.CoreOsc.Type != OSC_TYPE_XTAL && g_McuOsc.CoreOsc.Type != OSC_TYPE_TCXO) ||
+		g_McuOsc.CoreOsc.Freq < 8000000UL || g_McuOsc.CoreOsc.Freq > 32000000UL)
+	{
+		g_McuOsc.bUSBClk = false;
+		return false;
+	}
+	SYSTEM->PLLCR = SYSTEM_PLLCR_PLLSTP_Msk;
+	if (!Re01WaitOsc(SYSTEM_OSCSF_PLLSF_Msk, false))
+	{
+		g_McuOsc.bUSBClk = false;
+		return false;
+	}
+	SYSTEM->MOSCCR = 1;
+	if (!Re01WaitOsc(SYSTEM_OSCSF_MOSCSF_Msk, false))
+	{
+		g_McuOsc.bUSBClk = false;
+		return false;
+	}
+	SYSTEM->MOMCR = SYSTEM_MOMCR_OSCLPEN_Msk | (4 << SYSTEM_MOMCR_MODRV_Pos) |
+		(g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO ? SYSTEM_MOMCR_MOSEL_Msk : 0);
+	SYSTEM->MOSCCR = 0;
+	if (!Re01WaitOsc(SYSTEM_OSCSF_MOSCSF_Msk, true))
+	{
+		g_McuOsc.bUSBClk = false;
+		return false;
+	}
+	if (ConfigPLL(g_McuOsc.CoreOsc.Freq) != 0)
+	{
+		SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_PLL;
+		return SYSTEM->SCKSCR_b.CKSEL == SYSTEM_SCKSCR_CKSEL_PLL;
+	}
+	// A failed PLL leaves a live main clock selected.
+	SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MCO;
+	g_McuOsc.bUSBClk = false;
+	return false;
+}
 
-    		}
-    		else if (g_McuOsc.CoreOsc.Freq <= 32000000UL)
-    		{
-    			hcfrq = 1;
-    		}
-    		else if (g_McuOsc.CoreOsc.Freq <= 48000000UL)
-    		{
-    			hcfrq = 2;
-    		}
-    		else
-    		{
-    			hcfrq = 3;
-    		}
+bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	if ((ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL && ClkSrc != OSC_TYPE_TCXO) ||
+		(ClkSrc != OSC_TYPE_RC && (OscFreq < 8000000UL || OscFreq > 32000000UL)))
+	{
+		return false;
+	}
+	if (ClkSrc == OSC_TYPE_RC)
+	{
+		OscFreq = OscFreq <= 13000000UL ? 2000000UL :
+			(OscFreq <= 28000000UL ? 24000000UL :
+			(OscFreq <= 40000000UL ? 32000000UL :
+			(OscFreq <= 56000000UL ? 48000000UL : 64000000UL)));
+	}
+	uint32_t state = DisableInterrupt();
+	if (!Re01ClockIdle() || (SYSTEM->PWSTF &
+		(SYSTEM_PWSTF_ALLPWONM_Msk | SYSTEM_PWSTF_VBBM_Msk)) != SYSTEM_PWSTF_ALLPWONM_Msk)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	uint16_t protection = SYSTEM->PRCR & 0xfU;
+	SYSTEM->PRCR = 0xa503U | protection;
+	bool ready = Re01SetCoreClock(ClkSrc, OscFreq);
+	SYSTEM->PRCR = 0xa500U | protection;
+	SystemCoreClockUpdate();
+	SetFlashWaitState(SystemCoreClock);
+	if (SYSTEM->SCKSCR_b.CKSEL == SYSTEM_SCKSCR_CKSEL_HOCO ||
+		SYSTEM->SCKSCR_b.CKSEL == SYSTEM_SCKSCR_CKSEL_MOCO)
+	{
+		g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
+		g_McuOsc.CoreOsc.Freq = s_PeriphSrcFreq;
+	}
+	EnableInterrupt(state);
+	return ready;
+}
 
-    		// Freq higher than 32MHz requires boost mode
-			if (g_McuOsc.CoreOsc.Freq > 32000000)
-			{
-				if (!EnterBoostMode())
-				{
-					goto init_done;
-				}
-			}
-
-    		SYSTEM->HOCOCR = 1;	// Stop HOCO
-			if (!Re01WaitOsc(SYSTEM_OSCSF_HOCOSF_Msk, false))
-			{
-				goto init_done;
-			}
-			SYSTEM->HOCOMCR = hcfrq;
-    		SYSTEM->HOCOCR = 0;	// Start HOCO
-			if (!Re01WaitOsc(SYSTEM_OSCSF_HOCOSF_Msk, true))
-			{
-				goto init_done;
-			}
-
-			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_HOCO;
-    	}
+bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	if (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL)
+	{
+		return false;
+	}
+	(void)OscFreq;
+	uint32_t state = DisableInterrupt();
+	uint16_t protection = SYSTEM->PRCR & 0xfU;
+	SYSTEM->PRCR = 0xa501U | protection;
+	if (ClkSrc == OSC_TYPE_RC)
+	{
+		SYSTEM->LOCOCR = 0;
 	}
 	else
 	{
-		// Main clock range 8-32MHz
-		if (g_McuOsc.CoreOsc.Freq < 8000000UL || g_McuOsc.CoreOsc.Freq > 32000000UL)
+		SYSTEM->SOSCCR = 0;
+	}
+	bool ready = false;
+	for (uint32_t retry = RE01_OSC_WAIT_COUNT; retry > 0; retry--)
+	{
+		if ((ClkSrc == OSC_TYPE_RC ? SYSTEM->LOCOCR : SYSTEM->SOSCCR) == 0)
 		{
-			g_McuOsc.bUSBClk = false;
-			goto init_done;
-		}
-
-		if (g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO)
-		{
-			// External input clock
-		    SYSTEM->MOMCR = SYSTEM_MOMCR_OSCLPEN_Msk | (4 << SYSTEM_MOMCR_MODRV_Pos) | SYSTEM_MOMCR_MOSEL_Msk;
-		}
-		else
-		{
-			// Crystal
-		    SYSTEM->MOMCR = SYSTEM_MOMCR_OSCLPEN_Msk | (4 << SYSTEM_MOMCR_MODRV_Pos);
-		}
-
-		SYSTEM->MOSCCR = 0;	// Start main clock oscillator
-
-		if (!Re01WaitOsc(SYSTEM_OSCSF_MOSCSF_Msk, true))
-		{
-			g_McuOsc.bUSBClk = false;
-			goto init_done;
-		}
-
-		uint32_t pllfreq = ConfigPLL(g_McuOsc.CoreOsc.Freq);
-		if (pllfreq != 0)
-		{
-			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_PLL;
-		}
-		else
-		{
-			// Keep a live main clock when PLL/boost setup fails.
-			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MCO;
-			g_McuOsc.bUSBClk = false;
+			ready = true;
+			break;
 		}
 	}
+	SYSTEM->PRCR = 0xa500U | protection;
+	if (ready)
+	{
+		// Starting a source does not stop the oscillator used by RTC or AGT.
+		g_McuOsc.LowPwrOsc.Type = ClkSrc;
+		g_McuOsc.LowPwrOsc.Freq = 32768;
+	}
+	EnableInterrupt(state);
+	return ready;
+}
 
-init_done:
-    if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC)
-    {
-    	SYSTEM->LOCOCR = 0;
-    }
-    else
-    {
-    	SYSTEM->SOSCCR = 0;	// Enable 32KHz crystal
-    }
-
-    SYSTEM->PRCR = 0xA500U;
-
-    SystemCoreClockUpdate();
+void SystemInit(void)
+{
+	uint16_t protection = SYSTEM->PRCR & 0xfU;
+	SYSTEM->PRCR = 0xa503U | protection;
+	(void)Re01SetCoreClock(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq);
+	SYSTEM->PRCR = 0xa500U | protection;
+	(void)SystemLowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq);
+	SystemCoreClockUpdate();
 	SetFlashWaitState(SystemCoreClock);
 }
 
@@ -431,8 +469,8 @@ uint32_t SystemPeriphClockGet(int Idx)
 	}
 	else if (Idx == 1)
 	{
-		uint32_t div = 1 << ((SYSTEM->SCKDIVCR & SYSTEM_SCKDIVCR_PCKB_Msk) >> SYSTEM_SCKDIVCR_PCKB_Pos);
-		clk = s_PeriphSrcFreq / div;
+		uint32_t div = (SYSTEM->SCKDIVCR & SYSTEM_SCKDIVCR_PCKB_Msk) >> SYSTEM_SCKDIVCR_PCKB_Pos;
+		clk = div <= 6 ? s_PeriphSrcFreq >> div : 0;
 	}
 
 	return clk;
@@ -461,29 +499,37 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	{
 		Freq = 32000000UL;
 	}
-	uint32_t div = 0;
-	while (div < 6 && (s_PeriphSrcFreq >> div) > Freq)
-	{
-		div++;
-	}
-	if ((s_PeriphSrcFreq >> div) > Freq)
-	{
-		return 0;
-	}
+	uint32_t state = DisableInterrupt();
 	uint32_t reg = SYSTEM->SCKDIVCR;
 	uint32_t ick = (reg & SYSTEM_SCKDIVCR_ICK_Msk) >> SYSTEM_SCKDIVCR_ICK_Pos;
 	uint32_t pckb = (reg & SYSTEM_SCKDIVCR_PCKB_Msk) >> SYSTEM_SCKDIVCR_PCKB_Pos;
+	if (ick > 6 || pckb > 6)
+	{
+		EnableInterrupt(state);
+		return 0;
+	}
+	uint32_t div = 6;
+	uint32_t error = UINT32_MAX;
+	for (uint32_t candidate = Idx == 1 ? ick : 0; candidate <= 6; candidate++)
+	{
+		uint32_t rate = s_PeriphSrcFreq >> candidate;
+		if (Idx == 1 && rate > 32000000UL)
+		{
+			continue;
+		}
+		uint32_t difference = rate > Freq ? rate - Freq : Freq - rate;
+		if (difference < error)
+		{
+			error = difference;
+			div = candidate;
+		}
+	}
 	if (Idx == 0)
 	{
 		ick = div;
 		if (pckb < ick)
 		{
 			pckb = ick;
-		}
-		// Set wait states before increasing the CPU clock.
-		if ((s_PeriphSrcFreq >> ick) > SystemCoreClock)
-		{
-			SetFlashWaitState(s_PeriphSrcFreq >> ick);
 		}
 	}
 	else
@@ -494,14 +540,27 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	{
 		pckb++;
 	}
+	uint32_t next = (reg & ~(SYSTEM_SCKDIVCR_ICK_Msk | SYSTEM_SCKDIVCR_PCKB_Msk)) |
+		(ick << SYSTEM_SCKDIVCR_ICK_Pos) | (pckb << SYSTEM_SCKDIVCR_PCKB_Pos);
+	if (next != reg && !Re01ClockIdle())
+	{
+		EnableInterrupt(state);
+		return 0;
+	}
+	if ((s_PeriphSrcFreq >> ick) > SystemCoreClock)
+	{
+		SetFlashWaitState(s_PeriphSrcFreq >> ick);
+	}
 	uint16_t protection = SYSTEM->PRCR & 0xFU;
 	SYSTEM->PRCR = 0xA501U | protection;
-	SYSTEM->SCKDIVCR = (reg & ~(SYSTEM_SCKDIVCR_ICK_Msk | SYSTEM_SCKDIVCR_PCKB_Msk)) |
-						  (ick << SYSTEM_SCKDIVCR_ICK_Pos) | (pckb << SYSTEM_SCKDIVCR_PCKB_Pos);
+	SYSTEM->SCKDIVCR = next;
+	bool ready = SYSTEM->SCKDIVCR == next;
 	SYSTEM->PRCR = 0xA500U | protection;
 	SystemCoreClockUpdate();
 	SetFlashWaitState(SystemCoreClock);
-	return SystemPeriphClockGet(Idx);
+	uint32_t actual = SystemPeriphClockGet(Idx);
+	EnableInterrupt(state);
+	return ready ? actual : 0;
 }
 
 uint32_t SystemCoreClockGet()

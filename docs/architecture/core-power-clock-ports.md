@@ -30,7 +30,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Runtime peripheral/PLL ownership and clock decoding checked; hardware pending |
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
-| RE01 | Missing | Audit existing selectors and protected register writes |
+| RE01 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; Deep Software Standby not implemented | Runtime module checks and core/LF selectors added; Boost uses ordinary Sleep; hardware pending |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
@@ -699,3 +699,52 @@ pending work and Sleep fallback. Existing UART/Snooze, I2C and SPI slave
 emulators pass at O0 and Os. These are compiler/linker and register checks,
 not an Eclipse headless build or hardware power validation. D11 remains the
 current hardware target.
+
+## RE01
+
+The RE01_1500KB library now includes `system_power_re01.c` in all six
+DBN/CFB/CFP Debug/Release configurations. Reset reporting caches and clears
+RSTSR0/RSTSR1 on the first call. Deep Software Standby wake flags are reported
+when present, although this port does not yet implement entry into that mode.
+No retention registers or reset-on-wake RAM retention are exposed.
+
+`SystemSleep()` uses Software Standby only in normal ALLPWON mode, with Snooze
+disabled, the DMAC/DTC module stopped, and an enabled external IRQ wake route.
+It selects ALLPWON -> EXFPWON -> ALLPWON and retains all eight SRAM banks.
+Boost, other power-domain modes, Snooze, enabled DMAC/DTC, or other wake policies
+use ordinary Sleep. Both paths preserve the caller's interrupt mask, register
+protection, sleep settings and pending interrupts. Drivers still own stopping
+peripherals before Standby. The port does not enable a watchdog.
+
+`SystemWakePin()` uses the existing GPIO interrupt allocator for IRQ0 through
+IRQ9. It accepts rising or falling edges on the fixed interrupt pin mappings.
+An application GPIO handler or a pin already used for another function is not
+replaced. Reconfiguring the same wake pin changes its edge; disabling it
+releases only its own route. Disable wake before changing that pin's function.
+
+Startup no longer uses `goto`. Core-clock changes share the startup sequence
+and preserve a live MOCO fallback when oscillator setup fails. Frequency
+reporting returns zero for stopped or unready sources and reserved dividers.
+Runtime core/divider changes refuse enabled peripheral modules, CLKOUT and
+flash programming. Startup does not apply that runtime module check. Core RC
+and divider requests select the nearest supported frequency; PCLKB remains at
+or below ICLK and 32 MHz. External oscillator descriptors must describe a real
+8-32 MHz input. Applications own retiming SysTick and software delays after a
+runtime clock change. Lowering the frequency does not automatically exit Boost.
+The LF selector starts LOCO or SOSC without stopping a source used by RTC/AGT;
+TCXO selection is unsupported.
+
+The new `PowerOffDemo` has six package/configuration targets and uses the
+shared resume-on-interrupt demo, including static and stack RAM samples.
+Its application clock configuration selects the internal 32 MHz oscillator
+at startup, avoiding Boost. The UART uses the existing P2.2/P2.3 SCI4 mapping
+at 1 Mbaud. Connect an external normally-open button from P1.5 (IRQ8) to ground;
+check that these pins are available on the selected board/package before use.
+This is a resumable Standby demo, not reset-on-wake power off.
+
+The transition sequence follows Renesas' RE01 driver package:
+[`r_lpm_api.c`](https://github.com/renesas/re-driver-package/blob/master/SDK_RE01_1500KB/RE01_1500KB_DFP/Device/Driver/Src/r_lpm/r_lpm_api.c)
+and
+[`r_system_api.c`](https://github.com/renesas/re-driver-package/blob/master/SDK_RE01_1500KB/RE01_1500KB_DFP/Device/Driver/Src/r_system/r_system_api.c).
+Deep Software Standby entry, its dedicated wake pins, WS1 restrictions and
+Boost-exit handling remain separate work. No RE01 hardware validation is claimed.

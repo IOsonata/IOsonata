@@ -26,6 +26,11 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>src/system_power_re01.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/system_power_re01.c</locationURI>
+		</link>
+		<link>
 			<name>include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
