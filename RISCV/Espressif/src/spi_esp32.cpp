@@ -217,7 +217,7 @@ static uint32_t Esp32SpiSetRate(DevIntrf_t *pIntrf, uint32_t Rate)
 		dev->pOwner->Cfg.Rate = Rate;
 		return Rate;
 	}
-	source = GetHighFreqOscFreq();
+	source = Esp32XtalClockGet();
 	if (source == 0)
 	{
 		return 0;
@@ -630,7 +630,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 		(pCfg->Mode != SPIMODE_MASTER && pCfg->Mode != SPIMODE_SLAVE) ||
 		pCfg->DataSize != 8 || pCfg->bDmaEn ||
 		pCfg->MaxRetry < 0 || pCfg->pIOPinMap == NULL || pCfg->NbIOPins < 3 ||
-		pCfg->NbIOPins > (int)ESP32_GPIO_PIN_COUNT || GetHighFreqOscFreq() == 0 ||
+		pCfg->NbIOPins > (int)ESP32_GPIO_PIN_COUNT || Esp32XtalClockGet() == 0 ||
 		(pCfg->ChipSel != SPICSEL_AUTO && pCfg->ChipSel != SPICSEL_MAN) ||
 		(pCfg->ChipSel == SPICSEL_AUTO && pCfg->NbIOPins < 4) ||
 		(pCfg->ChipSel == SPICSEL_MAN && pCfg->NbIOPins != 3) ||

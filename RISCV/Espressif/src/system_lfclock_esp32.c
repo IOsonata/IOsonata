@@ -206,8 +206,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return false;
 	}
 	// These targets use a 40 MHz crystal as the calibration reference.
-	if (g_McuOsc.CoreOsc.Type != OSC_TYPE_XTAL || g_McuOsc.CoreOsc.Freq != 40000000U ||
-		SystemCoreClockGet() == 0U)
+	if (SystemCoreClockGet() < 1000000U)
 	{
 		return false;
 	}

@@ -31,7 +31,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
-| ESP32 C-series | C3/C6 CPU sleep, GPIO wake and reset reason implemented; clock readout corrected | C3/C6 LF selection and calibration implemented; runtime core/peripheral roots, PMU Light-sleep/Deep-sleep and retention pending; hardware pending |
+| ESP32 C-series | C3/C6 CPU sleep, GPIO wake and reset reason implemented; clock readout corrected | C3/C6 LF calibration, direct XTAL/RC CPU selection and APB rates implemented; PLL power sequencing, PMU sleep and retention pending; hardware pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
 ## SAM D11/D21 low-power work (0.14, unmerged)
@@ -953,3 +953,67 @@ Validation:
 Register references: Espressif ESP-IDF v5.5.1 per-chip clk_tree_ll.h,
 rtc_clk.c, rtc_time.c, timer_group_reg.h, rtc_cntl_reg.h, lp_clkrst_reg.h,
 lp_aon_reg.h, pmu_reg.h, pcr_reg.h and the C6 modem_lpcon_reg.h/reg_base.h.
+
+## ESP32-C3/C6 direct CPU source and APB selection
+
+`SystemCoreClockSelect()` now selects the 40 MHz crystal directly or RC_FAST
+(nominal 17.5 MHz on C3, 20 MHz on C6). XTAL accepts 40000000 or zero; RC
+requests use the one available oscillator rate. External clock input is not
+implemented. This follows the existing target-level source selector and
+active-consumer checks, without changing the generic API.
+
+The operation keeps existing PLL and flash clock settings. It does not start,
+recalibrate or select PLL. A return to the PLL-based startup CPU rate is not
+provided by this selector. C3/C6 crystal-based peripherals continue to use the
+physical 40 MHz crystal even when the CPU descriptor reports RC_FAST. UART,
+SPI, I2C, clock readout and LF calibration now account for that distinction.
+The descriptor and getters report nominal RC rates, not a measured RC_FAST
+frequency or accuracy guarantee.
+
+`SystemPeriphClockSet(0, rate)` selects the nearest supported APB rate:
+
+- C3 uses the shared CPU/APB divider on XTAL or RC_FAST, with a minimum CPU
+  rate of 1 MHz for the existing delay/ROM timing implementation. While PLL
+  feeds the CPU, APB remains fixed at 80 MHz and the call returns that rate.
+- C6 selects AHB divided by 1, 2 or 4, preserving CPU and AHB dividers. Invalid
+  root/divider configurations are rejected. Other indices and zero return 0.
+
+A change updates IOsonata cycle delays and ROM CPU timing before restoring the
+caller's interrupt mask. C3 also updates the ROM APB frequency storage word.
+The root mux write/readback runs from instruction RAM. Failed power-enable,
+mux or divider writes leave the prior configuration and descriptor in place.
+The crystal must already be running; the function does not restart an external
+oscillator that another owner has shut down. RC_FAST startup waits 100 us to
+cover the vendor's 50 us minimum despite integer-MHz delay rounding. Calls
+require the current CPU rate to be at least 1 MHz.
+
+Call before starting modem or LP-core firmware. Enabled peripheral gates are
+checked conservatively; SPI/I2C and other affected peripherals must be released.
+TIMG counters and watchdogs must be stopped. UARTs using XTAL may remain on;
+other UART sources block a change. No watchdog is enabled or fed by these APIs.
+An unchanged APB request does not require stopping its users.
+
+C3 Timer Group setup now calculates its divider from the actual APB rate.
+Reinitialize an existing stopped C3 timer after changing APB, before restarting
+it. C6 Timer Groups retain their independent 80 MHz PLL source. These calls do
+not change their counters, alarms or watchdog configuration.
+
+Validation:
+
+- All 202 C3 and 204 C6 managed-library translation units compile in Debug
+  and Release, including a full rebuild after the shared header change.
+- Default PowerOffDemo images and images retaining all three clock APIs link
+  for both chips and configurations. The root mux helper is in instruction RAM;
+  retaining it does not pull in the timer driver.
+- Temporary production-source register models pass at O0 and Os for source
+  changes, nearest rates, unsupported inputs, active consumers, UART crystal
+  operation, invalid dividers, failed writes, rollback and interrupt state.
+  LF calibration checks also pass with the CPU descriptor set to RC_FAST.
+- Existing checks pass: 24 ESP32 Python checks; 10 timer, 10 SPI and 10 I2C
+  model configurations; 30 C/C++ timer/demo links; 80 serial-example links.
+  Existing timer/SPI checks were extended for changed CPU/APB rates.
+- No board execution was performed. PMU Light-sleep/Deep-sleep, PLL power
+  sequencing and retention remain pending. Hardware testing remains on SAMD11.
+
+References: Espressif ESP-IDF v5.5.1 per-chip rtc_clk.c, clk_tree_ll.h,
+system_reg.h, pcr_reg.h, rtc_cntl_reg.h, pmu_reg.h and UART register definitions.

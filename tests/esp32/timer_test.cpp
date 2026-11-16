@@ -12,6 +12,14 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 
 #define __INTERRUPT_H__
 static uintptr_t s_Masked;
+#if defined(ESP32C3)
+static uint32_t s_ApbClock = 80000000UL;
+
+uint32_t SystemPeriphClockGet(int Idx)
+{
+	return Idx == 0 ? s_ApbClock : 0U;
+}
+#endif
 static uintptr_t DisableInterrupt()
 {
 	uintptr_t previous;
@@ -130,6 +138,17 @@ static void SetCount(unsigned DevNo, uint64_t Count)
 
 int main()
 {
+#if defined(ESP32C3)
+	uint32_t apbDivider = 0;
+
+	s_ApbClock = 40000000UL;
+	assert(Esp32ClockSelect(1000000, &apbDivider) == 1000000 && apbDivider == 40);
+	s_ApbClock = 17500000UL;
+	assert(Esp32ClockSelect(1000000, &apbDivider) == 972222 && apbDivider == 18);
+	s_ApbClock = 0;
+	assert(Esp32ClockSelect(1000000, &apbDivider) == 0);
+	s_ApbClock = 80000000UL;
+#endif
 	TimerDev_t timers[ESP32_TIMG_COUNT] = {};
 	TimerDev_t duplicate = {};
 	TimerCfg_t cfg = {};

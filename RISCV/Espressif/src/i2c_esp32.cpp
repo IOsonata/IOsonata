@@ -227,7 +227,7 @@ static uint32_t Esp32I2cSetRate(DevIntrf_t *pIntrf, uint32_t Rate)
 	{
 		return 0;
 	}
-	source = GetHighFreqOscFreq();
+	source = Esp32XtalClockGet();
 	maxPre = 256U;
 	minHalf = 32U;
 #if defined(ESP32C6)
@@ -901,7 +901,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		(pCfg->Mode == I2CMODE_SLAVE && (!pCfg->bIntEn || pCfg->NbSlaveAddr != 1 ||
 		 pCfg->SlaveAddr[0] == 0 || pCfg->SlaveAddr[0] > 127 || pCfg->IntPrio < 1 || pCfg->IntPrio > 7)) ||
 		pCfg->pIOPinMap == NULL || pCfg->NbIOPins != 2 || pCfg->MaxRetry < 0 ||
-		GetHighFreqOscFreq() == 0)
+		Esp32XtalClockGet() == 0)
 	{
 		return false;
 	}

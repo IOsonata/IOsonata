@@ -363,7 +363,7 @@ void SystemCoreClockUpdate(void)
 	{
 		divisor = ((root & 0xFFU) + 1U) * ((cpu & 0xFFU) + 1U);
 		SystemCoreClock = sel == 3U ? 0U :
-			(sel == 2U ? 20000000UL : g_McuOsc.CoreOsc.Freq) / divisor;
+			(sel == 2U ? 20000000UL : 40000000UL) / divisor;
 	}
 	SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
 	SystemCoreClockPeriodns = SystemCoreClock != 0U ?
@@ -442,7 +442,7 @@ uint32_t SystemPeriphClockGet(int Idx)
 	else if (source == 0U || source == 2U)
 	{
 		divisor = ((root & 0xFFU) + 1U) * ((ahb & 0xFFU) + 1U);
-		root = source == 0U ? g_McuOsc.CoreOsc.Freq : 20000000UL;
+		root = source == 0U ? 40000000UL : 20000000UL;
 	}
 	else
 	{
@@ -455,6 +455,7 @@ uint32_t SystemPeriphClockGet(int Idx)
 #endif
 }
 
+#if !defined(ESP32C6)
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
 	(void)Idx;
@@ -469,7 +470,6 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return false;
 }
 
-#if !defined(ESP32C6)
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	(void)ClkSrc;

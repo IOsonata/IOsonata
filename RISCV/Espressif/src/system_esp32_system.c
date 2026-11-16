@@ -327,7 +327,11 @@ void SystemCoreClockUpdate(void)
 	switch (sel)
 	{
 		case 0U: /* XTAL */
+#if defined(ESP32C3)
+			SystemCoreClock = 40000000UL;
+#else
 			SystemCoreClock = g_McuOsc.CoreOsc.Freq;
+#endif
 			break;
 		case 1U: /* PLL - actual freq depends on CPUPERIOD_SEL */
 		{
@@ -383,6 +387,7 @@ uint32_t SystemPeriphClockGet(int Idx)
 #endif
 }
 
+#if !defined(ESP32C3)
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
 	(void)Idx;
@@ -397,7 +402,6 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return false;
 }
 
-#if !defined(ESP32C3)
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	(void)ClkSrc;

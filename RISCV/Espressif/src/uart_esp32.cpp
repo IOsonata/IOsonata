@@ -9,7 +9,7 @@ C2/C5/C61 use the shared Vectors_esp32.c interrupt entry. C3 has hardware valida
 
 Pin routing uses the application's IOPinCfg_t map. Peripheral clock/reset
 operations live in system_esp32_uart_clock.c. CPU interrupt routing lives
-in esp32xx_irq.c. The UART core uses g_McuOsc.CoreOsc.Freq as its XTAL rate,
+in esp32xx_irq.c. The UART core uses Esp32XtalClockGet() as its XTAL rate,
 with a source pre-divider and a 12-bit plus 4-bit fractional baud divider.
 SetRate returns the selected baud rate. Automatic baud detection, DMA,
 IrDA, software flow control and synchronous/half-duplex modes are unsupported.
@@ -194,7 +194,7 @@ static uint32_t Esp32UartSetBaud(ESP32_UARTDEV *dev, uint32_t baud)
 		// Automatic baud detection is not implemented.
 		return 0;
 	}
-	source = (uint64_t)GetHighFreqOscFreq() * 16U;
+	source = (uint64_t)Esp32XtalClockGet() * 16U;
 	if (source == 0)
 	{
 		return 0;

@@ -95,4 +95,18 @@ SOFTWARE.
 #define ESP32_PIN_MAX                       ESP32_GPIO_PIN_COUNT
 #define ESP32_MAX_PIN                       ESP32_GPIO_PIN_MAX
 
+#ifndef __ASSEMBLER__
+#include "coredev/system_core_clock.h"
+
+// C3/C6 serial peripherals use the board crystal independently of CPU source.
+static inline uint32_t Esp32XtalClockGet(void)
+{
+#if defined(ESP32C3) || defined(ESP32C6)
+	return 40000000UL;
+#else
+	return GetHighFreqOscFreq();
+#endif
+}
+#endif
+
 #endif // __ESP32XX_H__
