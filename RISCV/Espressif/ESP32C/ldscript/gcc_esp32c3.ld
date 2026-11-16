@@ -97,3 +97,7 @@ INCLUDE "gcc_riscv_flash.ld"
 
 /* ESP-IDF v5.5.1 ROM ets_update_cpu_frequency, argument in MHz. */
 PROVIDE(Esp32RomClockUpdate = 0x40000588);
+
+/* ESP-IDF v5.5.1 C3 ROM analog I2C register access. */
+PROVIDE(Esp32RomRegi2cReadMask = 0x40001958);
+PROVIDE(Esp32RomRegi2cWriteMask = 0x40001960);
