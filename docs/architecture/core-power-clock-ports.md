@@ -1050,12 +1050,20 @@ protection mode HP_LP_SLEEP (value 2) in PMU_SLP_WAKEUP_CNTL3.
 The previous code left that field at the boot state, although ESP-IDF
 v5.5.1 initializes it explicitly. The PMU readback checks this field.
 
-These two corrections need another C6 hardware test. Build both the
-C6 managed MCU library and PowerOffDemo from the updated branch, flash
-the same build configuration, press/release BOOT after "Entering Standby",
-and verify the next "Resumed from Standby" and SRAM sample output.
-A RESET merely restarts the application and is not a successful wake.
-Do not claim that either correction is proven until the board resumes.
+The November 16 retest confirmed GPIO9 and the GPIO interrupt are working
+while awake: the level was 1 when released and 0 when pressed, ISR count
+increased, and the pending mask was 0x00000200 (GPIO9). The board
+nevertheless remained at "Entering Standby" when BOOT was pressed after
+the RTC/PMU request. These two corrections are not validated as a
+successful PMU wake.
+
+The C6 trace configuration now uses the first Standby cycle as a CPU WFI
+baseline with UART disabled, and the second as the RTC/PMU sleep test.
+A successful CPU wake prints its PASS record and static/stack SRAM
+results. If the next PMU cycle remains unresponsive, the recorded
+g_Esp32C6SleepStage and PMU wake/reject status can be read through
+the Eclipse debugger without resetting. A RESET merely restarts the
+application and is not a successful sleep wake.
 
 ## ESP32-C3/C6 RTC and PMU sleep implementation (unverified)
 
