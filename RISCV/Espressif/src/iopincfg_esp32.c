@@ -884,11 +884,12 @@ bool Esp32DeepWakePrepare(void)
 
 			s_DeepWakePin[pin] = ESP32_LP_IO_PIN_REG(pin);
 			s_DeepWakeMux[pin] = ESP32_LP_IO_MUX_REG(pin);
+			// RTC GPIO uses LP function 0. Clear SLP_SEL so the active
+			// input and pull settings remain selected during sleep.
 			uint32_t lp = (s_DeepWakeMux[pin] &
-				~((7UL << ESP32_LP_IO_MCU_SEL_Pos) |
+				~((7UL << ESP32_LP_IO_MCU_SEL_Pos) | (1UL << 1) |
 				ESP32_LP_IO_FUN_WPU_Msk | ESP32_LP_IO_FUN_WPD_Msk |
 				ESP32_LP_IO_FUN_IE_Msk | ESP32_LP_IO_FUN_DRV_Msk)) |
-				(1UL << ESP32_LP_IO_MCU_SEL_Pos) |
 				ESP32_LP_IO_FUN_IE_Msk | (2UL << ESP32_LP_IO_FUN_DRV_Pos);
 
 			if (pad & (1UL << ESP32_IOMUX_FUN_WPU_Pos))
