@@ -229,7 +229,23 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	C6_PMU(0x124U) = (1UL << 31) | C6_SLEEP_WAKE;
 	C6_PMU(0x128U) = C6_SLEEP_WAKE;
 	C6_LP_STORE9 = (C6_LP_STORE9 & ~1U) | (bDeep ? 1U : 0U);
-	return C6_PMU(0x128U) == C6_SLEEP_WAKE;
+	if (C6_PMU(0x128U) != C6_SLEEP_WAKE ||
+		(C6_PMU(0xA8U) & (1UL << 31)) != 0U ||
+		(C6_PMU(0xC0U) & (1UL << 31)) != 0U ||
+		(C6_PMU(0xB4U) & (1UL << 22)) == 0U ||
+		((C6_PMU(0xB4U) >> 27) & 31U) != lpBias ||
+		((C6_PMU(0x90U) >> 27) & 31U) != hpBias)
+	{
+		return false;
+	}
+	if (bDeep)
+	{
+		return (C6_PMU(0x90U) & (1UL << 18)) == 0U;
+	}
+	return (C6_PMU(0x90U) & (1UL << 18)) != 0U &&
+		(C6_PMU(0x98U) & (1UL << 31)) != 0U &&
+		(C6_PMU(0xBCU) & (1UL << 31)) != 0U &&
+		(!bPll || (C6_PMU(0x7CU) & C6_PLL_KEEP) == C6_PLL_KEEP);
 }
 
 // No flash-resident instruction is executed between selecting XTAL and
