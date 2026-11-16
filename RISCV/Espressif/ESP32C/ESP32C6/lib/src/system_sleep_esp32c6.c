@@ -408,6 +408,38 @@ bool Esp32PowerSleep(void)
 	return true;
 }
 
+// Exercise the Deep-sleep pin route with the HP domain retained.
+// Used by the board demo to separate wake detection from reset-on-wake.
+uint32_t Esp32C6CheckDeepWake(void)
+{
+	Esp32C6SleepState_t state;
+	uintptr_t mask;
+	uint32_t result;
+
+	result = 0U;
+	mask = DisableInterrupt();
+	Esp32C6SetSleepStage(0x40U);
+	if (Esp32DeepWakePrepare())
+	{
+		Esp32C6Save(&state);
+		Esp32C6SetSleepStage(0x41U);
+		if (state.CpuMHz != 0U && (state.Root & 0xFFU) == 0U &&
+			((state.Root >> 16) & 3U) != 3U &&
+			Esp32C6Configure(false, ((state.Root >> 16) & 3U) == 1U))
+		{
+			C6_PMU(0x124U) = (1UL << 31) | C6_DEEP_WAKE;
+			C6_PMU(0x128U) = C6_DEEP_WAKE;
+			g_Esp32C6SleepWakeEnable = C6_DEEP_WAKE;
+			result = Esp32C6Request(&state, false);
+		}
+		Esp32C6Restore(&state);
+		Esp32DeepWakeRestore();
+	}
+	Esp32C6SetSleepStage(0x42U);
+	EnableInterrupt(mask);
+	return result;
+}
+
 void Esp32PowerDeepSleep(void)
 {
 	Esp32C6SleepState_t state;

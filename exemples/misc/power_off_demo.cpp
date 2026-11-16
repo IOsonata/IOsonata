@@ -63,6 +63,12 @@ extern void (*g_Esp32C6SleepTrace)(uint32_t Stage);
 #endif
 
 
+#if defined(ESP32C6) && defined(POWER_DEMO_EXT1_CHECK) && POWER_DEMO_EXT1_CHECK
+extern "C" uint32_t Esp32C6CheckDeepWake(void);
+extern volatile uint32_t g_Esp32C6SleepWakeCause;
+extern volatile uint32_t g_Esp32C6SleepRejectCause;
+#endif
+
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE			1000000
@@ -533,6 +539,28 @@ int main()
 
 	if (SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
 	{
+#if defined(ESP32C6) && defined(POWER_DEMO_EXT1_CHECK) && POWER_DEMO_EXT1_CHECK
+		SysLogPrintf(SysLogGet(), "EXT1 wake check: connect GPIO3 to GND after S=16\r\n");
+		msDelay(100);
+		uint32_t result = Esp32C6CheckDeepWake();
+		SysLogPrintf(SysLogGet(), "EXT1 result 0x%x, wake 0x%x, reject 0x%x\r\n",
+			(unsigned)result, (unsigned)g_Esp32C6SleepWakeCause,
+			(unsigned)g_Esp32C6SleepRejectCause);
+		if (result != (1UL << 31) || g_Esp32C6SleepWakeCause != (1UL << 1))
+		{
+			SysLogPrintf(SysLogGet(), "EXT1 check failed; Deep-sleep skipped\r\n");
+			for (;;)
+			{
+				msDelay(1000);
+			}
+		}
+		SysLogPrintf(SysLogGet(), "EXT1 wake PASS. Disconnect GPIO3 from GND\r\n");
+		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle)
+		{
+			msDelay(10);
+		}
+		msDelay(20);
+#endif
 		SysLogPrintf(SysLogGet(), "Power off, press the button to wake up\r\n");
 	}
 	else
