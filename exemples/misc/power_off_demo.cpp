@@ -503,8 +503,6 @@ int main()
 #endif
 #if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
 		g_PowerDemoWakeStage = 0x07U;
-#endif
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
 		cpuWake = false;
 		if (wakeCount == 0U)
 		{
@@ -553,21 +551,21 @@ int main()
 		else
 		{
 			PowerDemoPut("PMU wake returned to application\r\n");
+			PowerDemoPut("PMU stage 0x");
+			PowerDemoPutCount(g_Esp32C6SleepStage);
+			PowerDemoPut(", flags 0x");
+			PowerDemoPutCount(g_Esp32C6SleepPmuRaw);
+			PowerDemoPut(", wake 0x");
+			PowerDemoPutCount(g_Esp32C6SleepWakeCause);
+			PowerDemoPut(", reject 0x");
+			PowerDemoPutCount(g_Esp32C6SleepRejectCause);
+			PowerDemoPut("\r\n");
+			PowerDemoPut("PMU wake enable 0x");
+			PowerDemoPutCount(g_Esp32C6SleepWakeEnable);
+			PowerDemoPut(", input 0x");
+			PowerDemoPutCount(g_Esp32C6SleepGpio);
+			PowerDemoPut("\r\n");
 		}
-		PowerDemoPut("PMU stage 0x");
-		PowerDemoPutCount(g_Esp32C6SleepStage);
-		PowerDemoPut(", flags 0x");
-		PowerDemoPutCount(g_Esp32C6SleepPmuRaw);
-		PowerDemoPut(", wake 0x");
-		PowerDemoPutCount(g_Esp32C6SleepWakeCause);
-		PowerDemoPut(", reject 0x");
-		PowerDemoPutCount(g_Esp32C6SleepRejectCause);
-		PowerDemoPut("\r\n");
-		PowerDemoPut("PMU wake enable 0x");
-		PowerDemoPutCount(g_Esp32C6SleepWakeEnable);
-		PowerDemoPut(", input 0x");
-		PowerDemoPutCount(g_Esp32C6SleepGpio);
-		PowerDemoPut("\r\n");
 #endif
 		wakeCount++;
 		PowerDemoPut("Resumed from Standby, count 0x");
