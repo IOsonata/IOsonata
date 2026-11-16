@@ -27,7 +27,6 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define POWER_DEMO_STANDBY_RAM_TEST 1
 #define POWER_DEMO_UART_DMA false
 #define POWER_DEMO_UART_OFF 1
-#define POWER_DEMO_BUTTON_TRACE 1
 // Set to 1 to keep UART0 enabled and print sleep stages from RAM.
 #define POWER_DEMO_SLEEP_TRACE 0
 
@@ -35,7 +34,7 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 // For reset-on-wake Deep-sleep, change WAKE_BUT_PIN to a board-available
 // GPIO0-5 (C3) or GPIO0-7 (C6), connect a switch to ground, and set
 // POWER_DEMO_RESUME_WAKE to 0. GPIO9 cannot wake Deep-sleep.
-// C6 GPIO9 Light-sleep: repeated wake and SRAM samples passed with trace.
-// UART-off Light-sleep and reset-on-wake Deep-sleep still need board validation.
+// C6 GPIO9 Light-sleep: repeated wake and SRAM samples passed with UART off.
+// Reset-on-wake Deep-sleep still needs board validation.
 
 #endif // __BOARD_H__

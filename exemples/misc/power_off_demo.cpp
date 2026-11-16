@@ -57,18 +57,6 @@ SOFTWARE.
 
 #include "board.h"
 
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
-extern volatile uint32_t g_Esp32GpioIrqCount;
-extern volatile uint32_t g_Esp32GpioLastPending;
-extern volatile uint32_t g_Esp32C6SleepStage;
-extern volatile uint32_t g_Esp32C6SleepGpio;
-extern volatile uint32_t g_Esp32C6SleepWakeEnable;
-extern volatile uint32_t g_Esp32C6SleepPmuRaw;
-extern volatile uint32_t g_Esp32C6SleepWakeCause;
-extern volatile uint32_t g_Esp32C6SleepRejectCause;
-
-volatile uint32_t g_PowerDemoWakeStage;
-#endif
 
 #if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
 extern void (*g_Esp32C6SleepTrace)(uint32_t Stage);
@@ -324,105 +312,6 @@ static void PowerDemoPutCount(uint32_t Value)
 	}
 }
 
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
-// Verify the input and its interrupt before the UART is turned off.
-static bool PowerDemoTraceButton(void)
-{
-	uint32_t level;
-	uint32_t pressed;
-	uint32_t released;
-	uint32_t irqBefore;
-	uint32_t irqAfter;
-	uint32_t pending;
-	uint32_t polls;
-
-	g_PowerDemoWakeStage = 0x01U;
-	level = (uint32_t)IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN);
-	PowerDemoPut("BOOT test: GPIO level 0x");
-	PowerDemoPutCount(level);
-	PowerDemoPut("\r\n");
-	if (level != (uint32_t)s_WakeButIdle)
-	{
-		PowerDemoPut("BOOT test: release the button first\r\n");
-		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle)
-		{
-			msDelay(10);
-		}
-		msDelay(20);
-	}
-
-	irqBefore = g_Esp32GpioIrqCount;
-	PowerDemoPut("BOOT test: press and release BOOT\r\n");
-	polls = 0U;
-	for (;;)
-	{
-		pressed = (uint32_t)IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN);
-		if (pressed != (uint32_t)s_WakeButIdle)
-		{
-			msDelay(20);
-			if (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle)
-			{
-				break;
-			}
-		}
-		msDelay(10);
-		polls++;
-		if (polls >= 100U)
-		{
-			polls = 0U;
-			PowerDemoPut("BOOT wait: GPIO level 0x");
-			PowerDemoPutCount((uint32_t)IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN));
-			PowerDemoPut("\r\n");
-		}
-	}
-	g_PowerDemoWakeStage = 0x02U;
-	PowerDemoPut("BOOT pressed: GPIO level 0x");
-	PowerDemoPutCount(pressed);
-	PowerDemoPut(", IRQ count 0x");
-	PowerDemoPutCount(g_Esp32GpioIrqCount);
-	PowerDemoPut("\r\n");
-
-	for (;;)
-	{
-		released = (uint32_t)IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN);
-		if (released == (uint32_t)s_WakeButIdle)
-		{
-			msDelay(20);
-			if (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) == s_WakeButIdle)
-			{
-				break;
-			}
-		}
-		msDelay(10);
-	}
-	g_PowerDemoWakeStage = 0x03U;
-	irqAfter = g_Esp32GpioIrqCount;
-	pending = g_Esp32GpioLastPending;
-	PowerDemoPut("BOOT released: GPIO level 0x");
-	PowerDemoPutCount(released);
-	PowerDemoPut(", IRQ count 0x");
-	PowerDemoPutCount(irqAfter);
-	PowerDemoPut(", last pending 0x");
-	PowerDemoPutCount(pending);
-	PowerDemoPut("\r\n");
-	if (pressed == (uint32_t)s_WakeButIdle ||
-		released != (uint32_t)s_WakeButIdle)
-	{
-		PowerDemoPut("BOOT input FAIL\r\n");
-		return false;
-	}
-	PowerDemoPut("BOOT input PASS\r\n");
-	if (irqAfter == irqBefore || (pending & (1UL << WAKE_BUT_PIN)) == 0U)
-	{
-		PowerDemoPut("BOOT GPIO interrupt NOT OBSERVED\r\n");
-		return false;
-	}
-	PowerDemoPut("BOOT GPIO interrupt PASS\r\n");
-	g_PowerDemoWakeStage = 0x04U;
-	PowerDemoPut("Press BOOT again after Entering Standby to test wake\r\n");
-	return true;
-}
-#endif
 #endif
 
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
@@ -481,11 +370,6 @@ int main()
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	uint32_t wakeCount;
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
-	uint32_t irqBefore;
-	uint32_t irqAfter;
-	bool cpuWake;
-#endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 	volatile uint32_t stackRam[STANDBY_RAM_WORDS];
 #endif
@@ -508,16 +392,6 @@ int main()
 		return 1;
 	}
 
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
-	if (!PowerDemoTraceButton())
-	{
-		PowerDemoPut("Standby skipped: BOOT test failed\r\n");
-		for (;;)
-		{
-			msDelay(1000);
-		}
-	}
-#endif
 
 	wakeCount = 0U;
 	while (1)
@@ -526,26 +400,10 @@ int main()
 		{
 			msDelay(10);
 		}
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
-		if (wakeCount == 0U)
-		{
-			PowerDemoPut("CPU WFI baseline: press BOOT after Entering Standby\r\n");
-		}
-		else
-		{
-			PowerDemoPut("PMU Light-sleep: press BOOT after Entering Standby\r\n");
-		}
-#endif
 		PowerDemoPut("Entering Standby\r\n");
 		PowerDemoDrain();
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
-		g_PowerDemoWakeStage = 0x05U;
-#endif
 #if !defined(ESP32C6) || !defined(POWER_DEMO_SLEEP_TRACE) || !POWER_DEMO_SLEEP_TRACE
 		s_Uart.Disable();
-#endif
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
-		g_PowerDemoWakeStage = 0x06U;
 #endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
@@ -556,32 +414,7 @@ int main()
 			stackRam[i] = ~pattern;
 		}
 #endif
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
-		g_PowerDemoWakeStage = 0x07U;
-		cpuWake = false;
-		if (wakeCount == 0U)
-		{
-			// First prove that GPIO9 resumes a CPU WFI.
-			// Do not modify the RTC/PMU state in this diagnostic cycle.
-			irqBefore = g_Esp32GpioIrqCount;
-			g_PowerDemoWakeStage = 0xA0U;
-			while (g_Esp32GpioIrqCount == irqBefore)
-			{
-				__WFI();
-			}
-			irqAfter = g_Esp32GpioIrqCount;
-			cpuWake = irqAfter != irqBefore &&
-				(g_Esp32GpioLastPending & (1UL << WAKE_BUT_PIN)) != 0U;
-			g_PowerDemoWakeStage = 0xA1U;
-		}
-		else
-		{
-			SystemSleep();
-		}
-		g_PowerDemoWakeStage = 0x08U;
-#else
 		SystemSleep();
-#endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 		bool ramOk = true;
 		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
@@ -596,33 +429,6 @@ int main()
 #endif
 #if !defined(ESP32C6) || !defined(POWER_DEMO_SLEEP_TRACE) || !POWER_DEMO_SLEEP_TRACE
 		s_Uart.Enable();
-#endif
-#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
-		g_PowerDemoWakeStage = 0x09U;
-		if (wakeCount == 0U)
-		{
-			PowerDemoPut(cpuWake ?
-				"CPU WFI baseline PASS: BOOT GPIO interrupt woke CPU\r\n" :
-				"CPU WFI baseline FAIL: wake was not GPIO9\r\n");
-		}
-		else
-		{
-			PowerDemoPut("PMU sleep request returned to application\r\n");
-			PowerDemoPut("PMU stage 0x");
-			PowerDemoPutCount(g_Esp32C6SleepStage);
-			PowerDemoPut(", flags 0x");
-			PowerDemoPutCount(g_Esp32C6SleepPmuRaw);
-			PowerDemoPut(", wake 0x");
-			PowerDemoPutCount(g_Esp32C6SleepWakeCause);
-			PowerDemoPut(", reject 0x");
-			PowerDemoPutCount(g_Esp32C6SleepRejectCause);
-			PowerDemoPut("\r\n");
-			PowerDemoPut("PMU wake enable 0x");
-			PowerDemoPutCount(g_Esp32C6SleepWakeEnable);
-			PowerDemoPut(", input 0x");
-			PowerDemoPutCount(g_Esp32C6SleepGpio);
-			PowerDemoPut("\r\n");
-		}
 #endif
 		wakeCount++;
 		PowerDemoPut("Resumed from Standby, count 0x");
