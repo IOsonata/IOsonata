@@ -186,4 +186,31 @@ int main()
 	assert(s_Masked == 1);
 #endif
 
+#if defined(ESP32C3) || defined(ESP32C6)
+	assert(!SystemWakePin(1, 6, IOPINSENSE_LOW_TRANSITION));
+	assert(!SystemWakePin(0, -1, IOPINSENSE_LOW_TRANSITION));
+	assert(!SystemWakePin(0, 6, IOPINSENSE_TOGGLE));
+	assert(SystemWakePin(0, 6, IOPINSENSE_LOW_TRANSITION));
+	assert(s_GpioIsr[6].Handler == Esp32WakePinInterrupt);
+	Edge(6);
+	assert((uint32_t(ESP32_GPIO_STATUS_REG32) & (1U << 6)) == 0);
+	assert(SystemWakePin(0, 6, IOPINSENSE_HIGH_TRANSITION));
+#if defined(ESP32C6)
+	ESP32_LP_AON_GPIO_MUX_REG |= 1U << 6;
+	assert(!SystemWakePin(0, 6, IOPINSENSE_LOW_TRANSITION));
+#endif
+	assert(SystemWakePin(0, 6, IOPINSENSE_DISABLE));
+	assert(s_GpioIsr[6].Handler == nullptr);
+#if defined(ESP32C6)
+	ESP32_LP_AON_GPIO_MUX_REG &= ~(1U << 6);
+#endif
+	assert(IOPinEnableInterrupt(7, 2, 0, 6, IOPINSENSE_TOGGLE, Other, &s_Other));
+	before = ESP32_GPIO_PIN_REG32(6);
+	assert(!SystemWakePin(0, 6, IOPINSENSE_LOW_TRANSITION));
+	assert(!SystemWakePin(0, 6, IOPINSENSE_DISABLE));
+	assert(uint32_t(ESP32_GPIO_PIN_REG32(6)) == before);
+	assert(s_GpioIsr[6].Handler == Other);
+	IOPinDisableInterrupt(7);
+#endif
+
 }

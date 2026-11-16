@@ -46,7 +46,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 
 /*---------------------------------------------------------------------------
- * PCR — Peripheral Clock / Reset controller
+ * PCR - Peripheral Clock / Reset controller
  * Base address identical across C5, C6, H2, H4.
  *---------------------------------------------------------------------------*/
 #define PCR_BASE                    0x60096000UL
@@ -67,6 +67,8 @@ SOFTWARE.
 #elif defined(ESP32C6)
 #define PCR_SYSCLK_CONF_REG         (*(volatile uint32_t *)(PCR_BASE + 0x110U))
 #define PCR_CPU_FREQ_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x118U))
+#define PCR_AHB_FREQ_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x11CU))
+#define PCR_APB_FREQ_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x120U))
 #define PCR_SYSTIMER_CONF_REG       (*(volatile uint32_t *)(PCR_BASE + 0x054U))
 #define PCR_SOC_CLK_SEL_Pos         (16U)
 #else
@@ -94,7 +96,7 @@ SOFTWARE.
 #endif
 
 /*---------------------------------------------------------------------------
- * SYSTIMER — fixed 16 MHz, same base on C5/C6/H2/H4
+ * SYSTIMER - fixed 16 MHz, same base on C5/C6/H2/H4
  *---------------------------------------------------------------------------*/
 #if defined(ESP32C5) || defined(ESP32C61)
 #define SYSTIMER_BASE               0x6000A000UL
@@ -106,7 +108,7 @@ SOFTWARE.
 #define SYSTIMER_CLK_EN               (1UL << 31)
 
 /*---------------------------------------------------------------------------
- * Timer Group WDTs — same base addresses on C5/C6/H2/H4
+ * Timer Group WDTs - same base addresses on C5/C6/H2/H4
  *---------------------------------------------------------------------------*/
 #define TIMG0_BASE                  0x60008000UL
 #define TIMG0_WDTCONFIG0_REG        (*(volatile uint32_t *)(TIMG0_BASE + 0x0048U))
@@ -127,7 +129,7 @@ SOFTWARE.
 #endif
 
 /*---------------------------------------------------------------------------
- * LP Watchdog — RTC WDT and Super WDT
+ * LP Watchdog - RTC WDT and Super WDT
  *---------------------------------------------------------------------------*/
 #define LP_WDT_BASE                 0x600B1C00UL
 #define LP_WDT_RWDT_CONFIG0_REG     (*(volatile uint32_t *)(LP_WDT_BASE + 0x0000U))
@@ -168,20 +170,22 @@ uint64_t SystemCoreClockPeriodns __attribute__((used)) = 13ULL;
  */
 __attribute__((weak))
 McuOsc_t g_McuOsc = {
-    .CoreOsc = {
-        .Type     = OSC_TYPE_XTAL,
-        .Freq     = 40000000UL,
-        .Accuracy = 30,
-        .LoadCap  = 0,
-    },
-    .LowPwrOsc = {
-        .Type     = OSC_TYPE_RC,
-        .Freq     = 32000UL,
-        .Accuracy = 5000,
-        .LoadCap  = 0,
-    },
-    .bUSBClk = false,
+	.CoreOsc = {
+		.Type     = OSC_TYPE_XTAL,
+		.Freq     = 40000000UL,
+		.Accuracy = 30,
+		.LoadCap  = 0,
+	},
+	.LowPwrOsc = {
+		.Type     = OSC_TYPE_RC,
+		.Freq     = 32000UL,
+		.Accuracy = 5000,
+		.LoadCap  = 0,
+	},
+	.bUSBClk = false,
 };
+
+extern unsigned long __data_start__;
 
 /*---------------------------------------------------------------------------
  * Internal helpers
@@ -189,39 +193,39 @@ McuOsc_t g_McuOsc = {
 
 static void DisableTimg0Wdt(void)
 {
-    TIMG0_WDTWPROTECT_REG = TIMG_WDT_WPROTECT_MAGIC;
-    TIMG0_WDTFEED_REG     = 1U;
-    TIMG0_WDTCONFIG0_REG &= ~(TIMG_WDT_EN | TIMG_WDT_FLASHBOOT_MOD_EN);
-    TIMG0_WDTWPROTECT_REG = 0U;
+	TIMG0_WDTWPROTECT_REG = TIMG_WDT_WPROTECT_MAGIC;
+	TIMG0_WDTFEED_REG     = 1U;
+	TIMG0_WDTCONFIG0_REG &= ~(TIMG_WDT_EN | TIMG_WDT_FLASHBOOT_MOD_EN);
+	TIMG0_WDTWPROTECT_REG = 0U;
 }
 
 static void DisableTimg1Wdt(void)
 {
-    TIMG1_WDTWPROTECT_REG = TIMG_WDT_WPROTECT_MAGIC;
-    TIMG1_WDTFEED_REG     = 1U;
-    TIMG1_WDTCONFIG0_REG &= ~(TIMG_WDT_EN | TIMG_WDT_FLASHBOOT_MOD_EN);
-    TIMG1_WDTWPROTECT_REG = 0U;
+	TIMG1_WDTWPROTECT_REG = TIMG_WDT_WPROTECT_MAGIC;
+	TIMG1_WDTFEED_REG     = 1U;
+	TIMG1_WDTCONFIG0_REG &= ~(TIMG_WDT_EN | TIMG_WDT_FLASHBOOT_MOD_EN);
+	TIMG1_WDTWPROTECT_REG = 0U;
 }
 
 static void DisableLpRtcWdt(void)
 {
-    LP_WDT_RWDT_WPROTECT_REG = LP_WDT_WPROTECT_MAGIC;
-    LP_WDT_RWDT_CONFIG0_REG &= ~(LP_WDT_RWDT_EN | LP_WDT_RWDT_FLASHBOOT_EN);
-    LP_WDT_RWDT_WPROTECT_REG = 0U;
+	LP_WDT_RWDT_WPROTECT_REG = LP_WDT_WPROTECT_MAGIC;
+	LP_WDT_RWDT_CONFIG0_REG &= ~(LP_WDT_RWDT_EN | LP_WDT_RWDT_FLASHBOOT_EN);
+	LP_WDT_RWDT_WPROTECT_REG = 0U;
 }
 
 static void DisableSuperWdt(void)
 {
-    LP_WDT_SWD_WPROTECT_REG = LP_SWD_WPROTECT_MAGIC;
-    LP_WDT_SWD_CONFIG_REG  |= LP_WDT_SWD_DISABLE;
-    LP_WDT_SWD_WPROTECT_REG = 0U;
+	LP_WDT_SWD_WPROTECT_REG = LP_SWD_WPROTECT_MAGIC;
+	LP_WDT_SWD_CONFIG_REG  |= LP_WDT_SWD_DISABLE;
+	LP_WDT_SWD_WPROTECT_REG = 0U;
 }
 
 static void EnableSysTimer(void)
 {
-    PCR_SYSTIMER_CONF_REG |=  PCR_SYSTIMER_CLK_EN;
-    PCR_SYSTIMER_CONF_REG &= ~PCR_SYSTIMER_RST_EN;
-    SYSTIMER_CONF_REG     |= (SYSTIMER_CLK_EN | SYSTIMER_TIMER_UNIT0_WORK_EN);
+	PCR_SYSTIMER_CONF_REG |=  PCR_SYSTIMER_CLK_EN;
+	PCR_SYSTIMER_CONF_REG &= ~PCR_SYSTIMER_RST_EN;
+	SYSTIMER_CONF_REG     |= (SYSTIMER_CLK_EN | SYSTIMER_TIMER_UNIT0_WORK_EN);
 }
 
 /*---------------------------------------------------------------------------
@@ -230,40 +234,68 @@ static void EnableSysTimer(void)
  * Shared boot sequence: disable WDTs, optionally switch CPU frequency,
  * enable SYSTIMER.  Does NOT touch mtvec.
  *
- * @param CpuHz  Target CPU frequency in Hz.  The caller must also define
- *               ESP32_PLL_FREQ (the chip's PLL output in Hz) before
- *               including this TU, or the frequency switch is skipped.
- *               Pass 0 to leave the clock at the ROM bootloader default.
+ * @param CpuHz  Target CPU frequency in Hz. C6 changes the CPU divider only
+ *               when ROM left PLL selected. Other legacy PCR targets require
+ *               ESP32_PLL_FREQ. Pass 0 to preserve the ROM clock setup.
  *---------------------------------------------------------------------------*/
 void Esp32PcrSystemInit(uint32_t CpuHz)
 {
-    DisableTimg0Wdt();
-    DisableTimg1Wdt();
-    DisableLpRtcWdt();
-    DisableSuperWdt();
+	DisableTimg0Wdt();
+	DisableTimg1Wdt();
+	DisableLpRtcWdt();
+	DisableSuperWdt();
 
-#if defined(ESP32_PLL_FREQ) && !defined(ESP32C5) && !defined(ESP32C61)
-    if (CpuHz != 0U)
-    {
-        uint32_t divisor = ESP32_PLL_FREQ / CpuHz;
-        if (divisor < 1U) { divisor = 1U; }
+#if defined(ESP32C6)
+	// Change only the CPU divider of an already running PLL. The ROM owns
+	// PLL initialization; preserve the AHB, APB and flash clock settings.
+	if (CpuHz != 0U && (PCR_SYSCLK_CONF_REG & PCR_SOC_CLK_SEL_Msk) == PCR_SOC_CLK_PLL)
+	{
+		uint32_t divider;
+		uint32_t force;
 
-        uint32_t r = PCR_CPU_FREQ_CONF_REG & ~PCR_CPU_HS_DIV_NUM_Msk;
-        PCR_CPU_FREQ_CONF_REG = r | (((divisor - 1U) << PCR_CPU_HS_DIV_NUM_Pos)
-                                     & PCR_CPU_HS_DIV_NUM_Msk);
+		if (CpuHz <= 60000000U)
+		{
+			divider = 3U;
+			force = 0U;
+		}
+		else if (CpuHz <= 100000000U)
+		{
+			divider = 1U;
+			force = 0U;
+		}
+		else
+		{
+			divider = 0U;
+			force = CpuHz <= 140000000U ? 1UL << 16 : 0U;
+		}
+		PCR_CPU_FREQ_CONF_REG = (PCR_CPU_FREQ_CONF_REG &
+			~(PCR_CPU_HS_DIV_NUM_Msk | (1UL << 16))) | (divider << 8) | force;
+	}
+#elif defined(ESP32_PLL_FREQ) && !defined(ESP32C5) && !defined(ESP32C61)
+	if (CpuHz != 0U)
+	{
+		uint32_t divisor = ESP32_PLL_FREQ / CpuHz;
+		if (divisor < 1U)
+		{
+			divisor = 1U;
+		}
 
-        r = PCR_SYSCLK_CONF_REG & ~PCR_SOC_CLK_SEL_Msk;
-        PCR_SYSCLK_CONF_REG = r | PCR_SOC_CLK_PLL;
-    }
+		uint32_t r = PCR_CPU_FREQ_CONF_REG & ~PCR_CPU_HS_DIV_NUM_Msk;
+		PCR_CPU_FREQ_CONF_REG = r | (((divisor - 1U) << PCR_CPU_HS_DIV_NUM_Pos)
+									 & PCR_CPU_HS_DIV_NUM_Msk);
+
+		r = PCR_SYSCLK_CONF_REG & ~PCR_SOC_CLK_SEL_Msk;
+		PCR_SYSCLK_CONF_REG = r | PCR_SOC_CLK_PLL;
+	}
 #else
-    (void)CpuHz;
+	(void)CpuHz;
 #endif
 
-    EnableSysTimer();
+	EnableSysTimer();
 }
 
 /*---------------------------------------------------------------------------
- * SystemCoreClockUpdate — reads PCR to determine actual running frequency.
+ * SystemCoreClockUpdate - reads PCR to determine actual running frequency.
  *---------------------------------------------------------------------------*/
 #if defined(ESP32C5) || defined(ESP32C61)
 static uint32_t Esp32PcrRootClock(void)
@@ -314,41 +346,43 @@ void SystemCoreClockUpdate(void)
 	else
 	{
 		divisor = ((root & 0xFFU) + 1U) * ((cpu & 0xFFU) + 1U);
-		SystemCoreClock = (sel == 2U ? 17500000UL : g_McuOsc.CoreOsc.Freq) / divisor;
+		SystemCoreClock = sel == 3U ? 0U :
+			(sel == 2U ? 20000000UL : g_McuOsc.CoreOsc.Freq) / divisor;
 	}
 	SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
-	SystemCoreClockPeriodns = (1000000000ULL + SystemCoreClock / 2U) / SystemCoreClock;
+	SystemCoreClockPeriodns = SystemCoreClock != 0U ?
+		(1000000000ULL + SystemCoreClock / 2U) / SystemCoreClock : 0U;
 #else
-    uint32_t sel = (PCR_SYSCLK_CONF_REG & PCR_SOC_CLK_SEL_Msk) >> PCR_SOC_CLK_SEL_Pos;
+	uint32_t sel = (PCR_SYSCLK_CONF_REG & PCR_SOC_CLK_SEL_Msk) >> PCR_SOC_CLK_SEL_Pos;
 
-    switch (sel)
-    {
-        case 0U: /* XTAL */
-            SystemCoreClock = g_McuOsc.CoreOsc.Freq;
-            break;
+	switch (sel)
+	{
+		case 0U: /* XTAL */
+			SystemCoreClock = g_McuOsc.CoreOsc.Freq;
+			break;
 
-        case 1U: /* PLL */
-        {
-            uint32_t div_n = (PCR_CPU_FREQ_CONF_REG & PCR_CPU_HS_DIV_NUM_Msk)
-                              >> PCR_CPU_HS_DIV_NUM_Pos;
+		case 1U: /* PLL */
+		{
+			uint32_t div_n = (PCR_CPU_FREQ_CONF_REG & PCR_CPU_HS_DIV_NUM_Msk)
+							  >> PCR_CPU_HS_DIV_NUM_Pos;
 #if defined(ESP32_PLL_FREQ)
-            SystemCoreClock = (uint32_t)(ESP32_PLL_FREQ / (div_n + 1U));
+			SystemCoreClock = (uint32_t)(ESP32_PLL_FREQ / (div_n + 1U));
 #else
-            SystemCoreClock = 480000000UL / (div_n + 1U);   /* C5/C6 safe default */
+			SystemCoreClock = 480000000UL / (div_n + 1U);   /* C5/C6 safe default */
 #endif
-            break;
-        }
+			break;
+		}
 
-        case 2U: /* FOSC internal RC ~17.5 MHz */
-            SystemCoreClock = 17500000UL;
-            break;
+		case 2U: /* FOSC internal RC ~17.5 MHz */
+			SystemCoreClock = 17500000UL;
+			break;
 
-        default:
-            SystemCoreClock = 80000000UL;
-            break;
-    }
+		default:
+			SystemCoreClock = 80000000UL;
+			break;
+	}
 
-    SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
+	SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
 #endif
 }
 
@@ -358,8 +392,8 @@ void SystemCoreClockUpdate(void)
 
 uint32_t SystemCoreClockGet(void)
 {
-    SystemCoreClockUpdate();
-    return SystemCoreClock;
+	SystemCoreClockUpdate();
+	return SystemCoreClock;
 }
 
 uint32_t SystemPeriphClockGet(int Idx)
@@ -371,31 +405,59 @@ uint32_t SystemPeriphClockGet(int Idx)
 	}
 	return Esp32PcrRootClock() / ((PCR_AHB_FREQ_CONF_REG & 0xFFU) + 1U) /
 		(((PCR_APB_FREQ_CONF_REG >> 8) & 0xFFU) + 1U);
+#elif defined(ESP32C6)
+	uint32_t root;
+	uint32_t source;
+	uint32_t divisor;
+	uint32_t ahb;
+
+	if (Idx != 0)
+	{
+		return 0;
+	}
+	root = PCR_SYSCLK_CONF_REG;
+	source = (root & PCR_SOC_CLK_SEL_Msk) >> PCR_SOC_CLK_SEL_Pos;
+	ahb = PCR_AHB_FREQ_CONF_REG;
+	if (source == 1U)
+	{
+		divisor = (((root >> 8) & 0xFFU) + 1U) * (((ahb >> 8) & 0xFFU) + 1U);
+		root = 480000000UL;
+	}
+	else if (source == 0U || source == 2U)
+	{
+		divisor = ((root & 0xFFU) + 1U) * ((ahb & 0xFFU) + 1U);
+		root = source == 0U ? g_McuOsc.CoreOsc.Freq : 20000000UL;
+	}
+	else
+	{
+		return 0;
+	}
+	return root / divisor / (((PCR_APB_FREQ_CONF_REG >> 8) & 0xFFU) + 1U);
 #else
-    (void)Idx;
-    return SystemCoreClock;
+	(void)Idx;
+	return SystemCoreClock;
 #endif
 }
 
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-    (void)Idx;
-    (void)Freq;
-    return 0U;
+	(void)Idx;
+	(void)Freq;
+	return 0U;
 }
 
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-    (void)ClkSrc;
-    (void)OscFreq;
-    return false;
+	(void)ClkSrc;
+	(void)OscFreq;
+	return false;
 }
 
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-    (void)ClkSrc;
-    (void)OscFreq;
-    return false;
+	(void)ClkSrc;
+	(void)OscFreq;
+	return false;
 }
 
 void SystemOscInit(void)
@@ -404,6 +466,5 @@ void SystemOscInit(void)
 
 void *SystemRamStart(void)
 {
-    extern unsigned long __data_start__;
-    return (void *)&__data_start__;
+	return (void *)&__data_start__;
 }

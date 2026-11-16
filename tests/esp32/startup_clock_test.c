@@ -9,7 +9,7 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include <sys/mman.h>
 #include <stdio.h>
 
-#if defined(ESP32C2)
+#if defined(ESP32C2) || defined(ESP32C3)
 #include "RISCV/Espressif/src/system_esp32_system.c"
 #else
 #include "RISCV/Espressif/src/system_esp32_pcr.c"
@@ -32,7 +32,38 @@ int main(void)
 	mem = mmap((void *)0x60000000, 0xD0000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
 	assert(mem != MAP_FAILED);
-#if defined(ESP32C2)
+#if defined(ESP32C3)
+	REG(0x600C0058) = 1U << 10;
+	REG(0x600C0008) = 1;
+	assert(SystemCoreClockGet() == 160000000U);
+	assert(SystemPeriphClockGet(0) == 80000000U);
+	assert(SystemPeriphClockGet(-1) == 0);
+	assert(SystemPeriphClockGet(1) == 0);
+	REG(0x600C0058) = 3;
+	assert(SystemCoreClockGet() == 10000000U);
+	assert(SystemPeriphClockGet(0) == 10000000U);
+	REG(0x600C0058) = (2U << 10) | 1U;
+	assert(SystemCoreClockGet() == 8750000U);
+	REG(0x600C0058) = 3U << 10;
+	assert(SystemCoreClockGet() == 0);
+	assert(SystemCoreClockPeriodns == 0);
+	REG(0x600C0058) = 1U << 10;
+	REG(0x600C0008) = 2;
+	assert(SystemCoreClockGet() == 0);
+	REG(0x60008090) = (1U << 31) | (1U << 12);
+	REG(0x6001F048) = (1U << 31) | (1U << 14);
+	REG(0x60020048) = (1U << 31) | (1U << 14);
+	Esp32SystemInit();
+	assert(SystemCoreClockGet() == 80000000U);
+	assert(REG(0x60008090) == 0);
+	assert(REG(0x600080A8) == 0);
+	assert(REG(0x600080AC) == (1U << 30));
+	assert(REG(0x600080B0) == 0);
+	assert(REG(0x6001F048) == 0);
+	assert(REG(0x60020048) == 0);
+	puts("C3 clock and startup MMIO PASS");
+	return 0;
+#elif defined(ESP32C2)
 	root = 0x600C0058;
 	cpu = 0x600C0008;
 	timer = 0x6001F000;

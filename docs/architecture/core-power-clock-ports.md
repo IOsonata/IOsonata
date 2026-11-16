@@ -31,7 +31,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
-| ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
+| ESP32 C-series | C3/C6 CPU sleep, GPIO wake and reset reason implemented; clock readout corrected | Runtime oscillator changes, PMU Light-sleep/Deep-sleep and retention remain pending; hardware validation pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
 ## SAM D11/D21 low-power work (0.14, unmerged)
@@ -783,3 +783,66 @@ and
 Pin assignments follow Renesas datasheet R01DS0363EJ0110, tables 1.5-1.7.
 Hardware validation remains pending for wake/reset behavior, I/O retention,
 Boost transitions and sleep current.
+
+## ESP32-C3/C6 CPU sleep and clock readout
+
+The C3 and C6 libraries now provide SystemSleep using CPU WFI. It keeps the
+peripheral clocks, SRAM and stack intact. Interrupt delivery is masked around
+WFI and restored to its previous state after wake. The GPIO driver implements
+SystemWakePin with the existing interrupt registration and dispatch functions.
+It accepts rising or falling transitions, refuses pins already owned by another
+callback, and releases only its own callback. C6 pads assigned to LP IO are
+refused. This mode does not configure the RTC or PMU sleep state machine.
+
+SystemResetReason reads the last hardware reset cause without clearing it.
+Power/brownout, software, watchdog and JTAG causes map to generic flags. C3's
+power-on code also covers chip-level brownout and super-watchdog events; the
+hardware code does not distinguish them. Unmapped reset causes return zero.
+Deep-sleep wake causes are not decoded in this batch.
+
+C3 clock decoding now applies PRE_DIV_CNT to XTAL and RC_FAST and returns zero
+for reserved clock selections. Its peripheral clock 0 is the APB clock, limited
+to 80 MHz. C6 peripheral clock 0 follows the root, AHB and APB dividers instead
+of returning CPU frequency. C6 RC_FAST uses the nominal 20 MHz rate; a reserved
+root returns zero without dividing by zero in the delay-period calculation.
+Both ports reject invalid peripheral clock indices.
+
+The C6 startup CPU-frequency option no longer requires ESP32_PLL_FREQ. When
+ROM left PLL selected, it changes only the CPU divider, accounting for the
+fixed root divide-by-three and the separate 120 MHz selection. AHB, APB, flash
+and peripheral clock selections remain unchanged. A non-PLL boot configuration
+is preserved. Default startup still preserves ROM clock selection. Watchdogs
+remain disabled during startup and are not changed by SystemSleep.
+
+PowerOffDemo managed projects are provided for C3 and C6, using UART0 at 1 Mbaud
+and the GPIO9 BOOT button. They use the generic resume path and static/stack SRAM
+sample check. Release BOOT before resetting the board. The generic demo prints
+"Standby"; on these targets the implemented mode is CPU WFI only.
+
+Runtime core/low-frequency oscillator selection and peripheral-clock setters
+still return failure. SystemPowerOff is not implemented. No retention registers
+are exposed because RTC scratch registers are used by ROM and clock setup;
+SystemRamRetain returns false. PMU Light-sleep, Deep-sleep, RTC/LP wake sources,
+retention and runtime oscillator ownership remain work to complete before
+calling the ESP32 power and clock port complete.
+
+Validation for this batch:
+
+- All 200 C3 and 202 C6 managed-library translation units compile in both Debug
+  and Release with RISC-V GCC 15.2.0.
+- Both new PowerOffDemo projects link in Debug and Release using their managed
+  source and linker settings. Release text/data/bss: C3 11137/480/1420 bytes;
+  C6 11395/480/1600 bytes.
+- 24 existing ESP32 Python checks pass, including extended C3/C6 clock MMIO
+  checks at O0 and Os.
+- GPIO interrupt/wake ownership and input-routing checks pass for all five
+  C-series variants at O0 and O2. C2/C5/C61 startup clock checks also pass.
+- The existing serial-example build script links 80 Debug/Release example
+  configurations across C2/C3/C5/C6/C61.
+- Temporary C3/C6 MMIO checks verify reset mapping, repeated reads, unsupported
+  retention results and preservation of the interrupt mask around CPU sleep.
+- No board execution or sleep-current measurement was performed. Hardware
+  testing remains on SAMD11 until the maintainer selects another board.
+
+Register references are Espressif ESP-IDF v5.5.1 per-chip clk_tree_ll.h,
+reset_reasons.h, system_reg.h, pcr_reg.h, rtc_cntl_reg.h and lp_clkrst_reg.h.

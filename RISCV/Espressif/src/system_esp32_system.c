@@ -9,7 +9,7 @@ peripheral for clock and reset control:
 
     ESP32-C2 and ESP32-C3
 
-Clock architecture (ESP32-C3 TRM Rev 0.4 §7, verified against ESP-IDF
+Clock architecture (ESP32-C3 TRM Rev 0.4 section 7, verified against ESP-IDF
 v5.3 hal/esp32c3 clk_tree_ll.h):
   XTAL  :  40 MHz
   PLL   : 480 MHz raw, divided to 80 MHz or 160 MHz at the CPU mux
@@ -17,13 +17,13 @@ v5.3 hal/esp32c3 clk_tree_ll.h):
 
 CPU clock is selected by TWO independent register fields:
 
-  SYSCLK_CONF.SOC_CLK_SEL    (offset 0x058, bits [11:10]) — source family
+  SYSCLK_CONF.SOC_CLK_SEL    (offset 0x058, bits [11:10]) - source family
        0 = XTAL       1 = PLL       2 = RC_FAST       3 = (invalid)
 
-  CPU_PER_CONF.CPUPERIOD_SEL (offset 0x008, bits  [1:0])  — PLL tap
+  CPU_PER_CONF.CPUPERIOD_SEL (offset 0x008, bits  [1:0])  - PLL tap
        0 = 80 MHz     1 = 160 MHz   (only meaningful when SOC_CLK_SEL = 1)
 
-Writing SOC_CLK_SEL = 1 alone does NOT pin the CPU to a specific MHz —
+Writing SOC_CLK_SEL = 1 alone does NOT pin the CPU to a specific MHz -
 it leaves the divider at whatever value the previous owner of the field
 left.  Since the C3 ROM bootloader can hand off with CPUPERIOD_SEL at
 either 0 or 1 (depending on flash-speed / boot path), this code MUST
@@ -35,7 +35,7 @@ C3 default (no define): 80 MHz from PLL. C2 preserves the ROM clock setup.
 Chip-specific system_espXXXX.c files call Esp32SystemInit() then install
 the trap handler into mtvec.
 
-NOT used by ESP32-C5, ESP32-C6, ESP32-H2, ESP32-H4 — those use PCR and
+NOT used by ESP32-C5, ESP32-C6, ESP32-H2, ESP32-H4 - those use PCR and
 call Esp32PcrSystemInit() from system_esp32_pcr.c.
 
 @author	Hoang Nguyen Hoan
@@ -72,15 +72,15 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 
 /*---------------------------------------------------------------------------
- * SYSTEM — Clock and reset controller for CLINT-based ESP32 targets
- * ESP32-C3 TRM Rev 0.4, §7 (System Configuration)
+ * SYSTEM - Clock and reset controller for CLINT-based ESP32 targets
+ * ESP32-C3 TRM Rev 0.4, section 7 (System Configuration)
  * Base address: 0x600C0000
  *---------------------------------------------------------------------------*/
 #define SYSTEM_BASE                 0x600C0000UL
 #define SYSTEM_CPU_PER_CONF_REG     (*(volatile uint32_t *)(SYSTEM_BASE + 0x008U))
 #define SYSTEM_SYSCLK_CONF_REG      (*(volatile uint32_t *)(SYSTEM_BASE + 0x058U))
 
-/* SYSCLK_CONF.SOC_CLK_SEL [11:10] — clock SOURCE FAMILY only (verified
+/* SYSCLK_CONF.SOC_CLK_SEL [11:10] - clock SOURCE FAMILY only (verified
  * against ESP-IDF v5.3 components/hal/esp32c3/include/hal/clk_tree_ll.h
  * clk_ll_cpu_set_src).  Value 2 is RC_FAST (~17.5 MHz), NOT 160 MHz PLL.
  * Value 3 is reserved/invalid. */
@@ -90,8 +90,8 @@ SOFTWARE.
 #define SYSTEM_SOC_CLK_SEL_PLL      (0x1UL << SYSTEM_SOC_CLK_SEL_Pos)  /* PLL (80 or 160) */
 #define SYSTEM_SOC_CLK_SEL_RC_FAST  (0x2UL << SYSTEM_SOC_CLK_SEL_Pos)  /* ~17.5 MHz RC     */
 
-/* CPU_PER_CONF.CPUPERIOD_SEL [1:0] — selects the PLL tap when source is PLL.
- * 0 → 80 MHz, 1 → 160 MHz.  Independent of SOC_CLK_SEL.  Per IDF
+/* CPU_PER_CONF.CPUPERIOD_SEL [1:0] - selects the PLL tap when source is PLL.
+ * 0 -> 80 MHz, 1 -> 160 MHz.  Independent of SOC_CLK_SEL.  Per IDF
  * clk_ll_cpu_set_freq_mhz_from_pll. */
 #define SYSTEM_CPUPERIOD_SEL_Pos    (0U)
 #define SYSTEM_CPUPERIOD_SEL_Msk    (0x3UL << SYSTEM_CPUPERIOD_SEL_Pos)
@@ -99,8 +99,8 @@ SOFTWARE.
 #define SYSTEM_CPUPERIOD_SEL_160M   (0x1UL << SYSTEM_CPUPERIOD_SEL_Pos)
 
 /*---------------------------------------------------------------------------
- * SYSTIMER — 16 MHz free-running counter
- * ESP32-C3 TRM, §22  Base: 0x60023000
+ * SYSTIMER - 16 MHz free-running counter
+ * ESP32-C3 TRM, section 22  Base: 0x60023000
  *---------------------------------------------------------------------------*/
 #define SYSTIMER_BASE               0x60023000UL
 #define SYSTIMER_CONF_REG           (*(volatile uint32_t *)(SYSTIMER_BASE + 0x000U))
@@ -109,7 +109,7 @@ SOFTWARE.
 
 /*---------------------------------------------------------------------------
  * Timer Group WDTs
- * ESP32-C3 TRM, §24
+ * ESP32-C3 TRM, section 24
  * TIMG0: 0x6001F000   TIMG1: 0x60020000
  *---------------------------------------------------------------------------*/
 #define TIMG0_BASE                  0x6001F000UL
@@ -127,8 +127,8 @@ SOFTWARE.
 #define TIMG_WDT_FLASHBOOT_MOD_EN   (1UL << 14)   /* C3 TRM: bitpos [14], default 1 at reset */
 
 /*---------------------------------------------------------------------------
- * RTC_CNTL — RTC watchdog and super watchdog
- * ESP32-C3 TRM, §8  Base: 0x60008000
+ * RTC_CNTL - RTC watchdog and super watchdog
+ * ESP32-C3 TRM, section 8  Base: 0x60008000
  * NOTE: C3 uses RTC_CNTL instead of the LP_WDT found on PCR-based chips.
  *
  * Register offsets verified against ESP-IDF C3 register file
@@ -136,7 +136,7 @@ SOFTWARE.
  * revision of this file had all five RTC CNTL offsets shifted, the
  * SWD using the wrong write-protect key, and SWD_DISABLE on the wrong
  * bit (31 vs 30).  Net effect was that the RTC WDT and the Super WDT
- * were never actually disabled — both fired at their default timeouts
+ * were never actually disabled - both fired at their default timeouts
  * (~9 s and ~3 s respectively) and reset the chip in a loop.  Symptom
  * was masked when a) the chip didn't reach user code anyway because of
  * an upstream IOcomposer wrap bug, or b) the WS2812 LED happened to
@@ -160,10 +160,10 @@ SOFTWARE.
 #endif
 
 #define RTC_WDT_WPROTECT_MAGIC      0x50D83AA1UL    /* RTC_CNTL_WDT_WKEY */
-#define RTC_SWD_WPROTECT_MAGIC      0x8F1D312AUL    /* RTC_CNTL_SWD_WKEY — different! */
+#define RTC_SWD_WPROTECT_MAGIC      0x8F1D312AUL    /* RTC_CNTL_SWD_WKEY - different! */
 #define RTC_WDT_EN                  (1UL << 31)
 #define RTC_WDT_FLASHBOOT_EN        (1UL << 12)
-#define RTC_SWD_DISABLE             (1UL << 30)     /* bit 30 — bit 31 is SWD_AUTO_FEED_EN */
+#define RTC_SWD_DISABLE             (1UL << 30)     /* bit 30 - bit 31 is SWD_AUTO_FEED_EN */
 
 /*---------------------------------------------------------------------------
  * IOsonata global clock state
@@ -190,6 +190,8 @@ McuOsc_t g_McuOsc = {
 	},
 	.bUSBClk = false,
 };
+
+extern unsigned long __data_start__;
 
 /*---------------------------------------------------------------------------
  * Internal helpers
@@ -240,7 +242,7 @@ static void EnableSysTimer(void)
 /*---------------------------------------------------------------------------
  * Enable the Espressif RISC-V Machine Performance Counter so that the
  * MPCCR (CSR 0x7E2) increments once per CPU cycle.  IOsonataRiscvCycle32()
- * in idelay.h reads this CSR — without this setup, MPCCR stays at 0 and
+ * in idelay.h reads this CSR - without this setup, MPCCR stays at 0 and
  * usDelay/nsDelay's rdcycle path spins forever.
  *
  * The C3/C6/H2 do NOT implement the standard `cycle` / `mcycle` CSRs
@@ -248,7 +250,7 @@ static void EnableSysTimer(void)
  * Espressif provides this custom mpcer/mpcmr/mpccr trio at 0x7E0..0x7E2
  * in the user-reserved CSR range instead.
  *
- *   mpcer (0x7E0): event selector — bit 0 (CYCLE) selects per-cycle increment
+ *   mpcer (0x7E0): event selector - bit 0 (CYCLE) selects per-cycle increment
  *   mpcmr (0x7E1): bit 0 (COUNT_EN) starts the counter
  *   mpccr (0x7E2): the running 32-bit count (R/W)
  *---------------------------------------------------------------------------*/
@@ -269,7 +271,7 @@ static void Esp32EnablePerfCounter(void)
  *   2. Optionally switch CPU to 160 MHz (define ESP32C3_CPU_160MHZ).
  *   3. Enable SYSTIMER.
  *
- * Does NOT touch mtvec — that is done in the chip-specific SystemInit().
+ * Does NOT touch mtvec - that is done in the chip-specific SystemInit().
  *---------------------------------------------------------------------------*/
 void Esp32SystemInit(void)
 {
@@ -292,7 +294,7 @@ void Esp32SystemInit(void)
 	SystemCoreClock = 160000000UL;
 #else
 	/* 80 MHz from PLL.  The C3 ROM bootloader does NOT pin CPUPERIOD_SEL
-	 * to any specific value — depending on flash speed config and ROM
+	 * to any specific value - depending on flash speed config and ROM
 	 * path it can land at 0 (80) or 1 (160).  Writing SOC_CLK_SEL=PLL
 	 * alone (as the previous version of this file did) leaves the PLL
 	 * tap at whatever ROM left it, so the CPU may end up at 160 MHz
@@ -311,7 +313,7 @@ void Esp32SystemInit(void)
 }
 
 /*---------------------------------------------------------------------------
- * SystemCoreClockUpdate — reads SYSTEM peripheral for actual running freq.
+ * SystemCoreClockUpdate - reads SYSTEM peripheral for actual running freq.
  *---------------------------------------------------------------------------*/
 void SystemCoreClockUpdate(void)
 {
@@ -323,26 +325,26 @@ void SystemCoreClockUpdate(void)
 		case 0U: /* XTAL */
 			SystemCoreClock = g_McuOsc.CoreOsc.Freq;
 			break;
-		case 1U: /* PLL — actual freq depends on CPUPERIOD_SEL */
+		case 1U: /* PLL - actual freq depends on CPUPERIOD_SEL */
 		{
 			uint32_t per = (SYSTEM_CPU_PER_CONF_REG & SYSTEM_CPUPERIOD_SEL_Msk)
 			               >> SYSTEM_CPUPERIOD_SEL_Pos;
 #if defined(ESP32C2)
 			SystemCoreClock = per < 2U ? (per == 1U ? 120000000UL : 80000000UL) : 0U;
 #else
-			SystemCoreClock = (per == 1U) ? 160000000UL : 80000000UL;
+			SystemCoreClock = per < 2U ? (per == 1U ? 160000000UL : 80000000UL) : 0U;
 #endif
 			break;
 		}
 		case 2U: /* RC_FAST ~17.5 MHz */
 			SystemCoreClock = 17500000UL;
 			break;
-		default: /* 3 = invalid on C3, treat as PLL_F80M default */
-			SystemCoreClock = 80000000UL;
+		default: /* Reserved source */
+			SystemCoreClock = 0U;
 			break;
 	}
 
-#if defined(ESP32C2)
+#if defined(ESP32C2) || defined(ESP32C3)
 	if (sel == 0U || sel == 2U)
 	{
 		SystemCoreClock /= (SYSTEM_SYSCLK_CONF_REG & 0x3FFU) + 1U;
@@ -365,16 +367,15 @@ uint32_t SystemCoreClockGet(void)
 
 uint32_t SystemPeriphClockGet(int Idx)
 {
-#if defined(ESP32C2)
 	if (Idx != 0)
 	{
 		return 0;
 	}
 	SystemCoreClockUpdate();
+#if defined(ESP32C2)
 	return SystemCoreClock > 40000000U ? 40000000U : SystemCoreClock;
 #else
-	(void)Idx;
-	return SystemCoreClock;
+	return SystemCoreClock > 80000000U ? 80000000U : SystemCoreClock;
 #endif
 }
 
@@ -405,6 +406,5 @@ void SystemOscInit(void)
 
 void *SystemRamStart(void)
 {
-	extern unsigned long __data_start__;
 	return (void *)&__data_start__;
 }

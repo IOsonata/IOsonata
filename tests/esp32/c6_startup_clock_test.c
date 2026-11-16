@@ -39,6 +39,36 @@ int main(void)
 	assert(SystemCoreClock == 120000000U);
 	assert(SystemCoreClockPeriodus == 120U);
 	assert(SystemCoreClockPeriodns == 8U);
+	REG(0x6009611C) = 3U << 8;
+	REG(0x60096120) = 0;
+	assert(SystemPeriphClockGet(0) == 40000000U);
+	REG(0x60096120) = 1U << 8;
+	assert(SystemPeriphClockGet(0) == 20000000U);
+	assert(SystemPeriphClockGet(-1) == 0);
+	assert(SystemPeriphClockGet(1) == 0);
+	Esp32PcrSystemInit(160000000U);
+	assert(REG(0x60096118) == 0);
+	assert(REG(0x6009611C) == (3U << 8));
+	assert(REG(0x60096120) == (1U << 8));
+	assert(SystemCoreClockGet() == 160000000U);
+	Esp32PcrSystemInit(80000000U);
+	assert(SystemCoreClockGet() == 80000000U);
+	Esp32PcrSystemInit(120000000U);
+	assert(SystemCoreClockGet() == 120000000U);
+	Esp32PcrSystemInit(1U);
+	assert(SystemCoreClockGet() == 40000000U);
+	REG(0x60096110) = 2U << 16;
+	REG(0x60096118) = 1;
+	REG(0x6009611C) = 3;
+	assert(SystemCoreClockGet() == 10000000U);
+	assert(SystemPeriphClockGet(0) == 2500000U);
+	Esp32PcrSystemInit(160000000U);
+	assert(REG(0x60096110) == (2U << 16));
+	assert(REG(0x60096118) == 1);
+	REG(0x60096110) = 3U << 16;
+	assert(SystemCoreClockGet() == 0);
+	assert(SystemCoreClockPeriodns == 0);
+	assert(SystemPeriphClockGet(0) == 0);
 	// TG0 starts in flash-boot protection; TG1 also has normal WDT enabled.
 	// Keep the reset pulse-length fields unchanged when disabling both.
 	REG(0x60008048) = (1U << 14) | (1U << 15);

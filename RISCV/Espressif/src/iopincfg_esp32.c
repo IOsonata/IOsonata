@@ -50,6 +50,7 @@ SOFTWARE.
 #include <stdbool.h>
 
 #include "coredev/iopincfg.h"
+#include "coredev/system_core_clock.h"
 
 #include "esp32xx_gpio.h"
 #include "esp32xx_irq.h"
@@ -581,6 +582,63 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo,
 	}
 	return PinNo;
 }
+
+#if defined(ESP32C3) || defined(ESP32C6)
+static void Esp32WakePinInterrupt(int IntNo, void *pContext)
+{
+	(void)IntNo;
+	(void)pContext;
+}
+
+bool SystemWakePin(int PortNo, int PinNo, int Sense)
+{
+	uintptr_t state;
+	bool result;
+
+	if (PortNo != 0 || !ESP32IsValidGpioPin(PinNo) ||
+		(Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_LOW_TRANSITION &&
+		Sense != IOPINSENSE_HIGH_TRANSITION))
+	{
+		return false;
+	}
+#if defined(ESP32C6)
+	if (Sense != IOPINSENSE_DISABLE && PinNo < 8 &&
+		(ESP32_LP_AON_GPIO_MUX_REG & (1UL << PinNo)))
+	{
+		return false;
+	}
+#endif
+	if (Sense != IOPINSENSE_DISABLE && !s_GpioIntInstalled &&
+		!ESP32InstallGpioInterrupt(ESP32_GPIO_INTR_CPU_INT_PRIO))
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	// Ordinary GPIO interrupts wake CPU sleep. Do not replace a driver's
+	// callback or release an interrupt that was reassigned after this call.
+	if (s_GpioIsr[PinNo].Handler != 0 &&
+		s_GpioIsr[PinNo].Handler != Esp32WakePinInterrupt)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		if (s_GpioIsr[PinNo].Handler == Esp32WakePinInterrupt)
+		{
+			ESP32ReleasePinInterrupt((uint32_t)PinNo);
+		}
+		result = true;
+	}
+	else
+	{
+		result = IOPinEnableInterrupt(PinNo, ESP32_GPIO_INTR_CPU_INT_PRIO,
+			0, (uint32_t)PinNo, (IOPINSENSE)Sense, Esp32WakePinInterrupt, 0);
+	}
+	EnableInterrupt(state);
+	return result;
+}
+#endif
 
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
