@@ -765,25 +765,32 @@ bool Esp32DeepWakePrepare(void)
 	ESP32_REG32(0x60008064UL) = s_DeepWakeExt | (1UL << 31);
 	ESP32_REG32(0x60008110UL) = rtc;
 #else
-	s_DeepWakeClock = ESP32_LP_PERI_CLK_EN_REG;
-	s_DeepWakeDate = ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x3FCU);
 	s_DeepWakeAon = ESP32_LP_AON_GPIO_MUX_REG;
-	s_DeepWakeOutput = ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x0CU);
 	if ((s_DeepWakeAon & mask) != 0U)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
+	s_DeepWakeClock = ESP32_LP_PERI_CLK_EN_REG;
 	ESP32_LP_PERI_CLK_EN_REG = s_DeepWakeClock | ESP32_LP_IO_CLK_EN_Msk;
+	s_DeepWakeDate = ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x3FCU);
+	s_DeepWakeOutput = ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x0CU);
 	ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x3FCU) = s_DeepWakeDate | (1UL << 31);
 	for (uint32_t pin = 0U; pin < ESP32_DEEP_WAKE_PINS; pin++)
 	{
 		if ((mask & ESP32PinMask(pin)) != 0U)
 		{
 			uint32_t pad = ESP32_IOMUX_PAD_REG(pin);
-			uint32_t lp = (1UL << ESP32_LP_IO_MCU_SEL_Pos) |
-				ESP32_LP_IO_FUN_IE_Msk | (2UL << ESP32_LP_IO_FUN_DRV_Pos);
 			uint32_t type = s_DeepWakeSense[pin] == IOPINSENSE_LOW_TRANSITION ? 4U : 5U;
+
+			s_DeepWakePin[pin] = ESP32_LP_IO_PIN_REG(pin);
+			s_DeepWakeMux[pin] = ESP32_LP_IO_MUX_REG(pin);
+			uint32_t lp = (s_DeepWakeMux[pin] &
+				~((7UL << ESP32_LP_IO_MCU_SEL_Pos) |
+				ESP32_LP_IO_FUN_WPU_Msk | ESP32_LP_IO_FUN_WPD_Msk |
+				ESP32_LP_IO_FUN_IE_Msk | ESP32_LP_IO_FUN_DRV_Msk)) |
+				(1UL << ESP32_LP_IO_MCU_SEL_Pos) |
+				ESP32_LP_IO_FUN_IE_Msk | (2UL << ESP32_LP_IO_FUN_DRV_Pos);
 
 			if (pad & (1UL << ESP32_IOMUX_FUN_WPU_Pos))
 			{
@@ -793,8 +800,6 @@ bool Esp32DeepWakePrepare(void)
 			{
 				lp |= ESP32_LP_IO_FUN_WPD_Msk;
 			}
-			s_DeepWakePin[pin] = ESP32_LP_IO_PIN_REG(pin);
-			s_DeepWakeMux[pin] = ESP32_LP_IO_MUX_REG(pin);
 			ESP32_LP_IO_ENABLE_W1TC_REG = ESP32PinMask(pin);
 			ESP32_LP_IO_MUX_REG(pin) = lp;
 			ESP32_LP_IO_PIN_REG(pin) = (s_DeepWakePin[pin] &
