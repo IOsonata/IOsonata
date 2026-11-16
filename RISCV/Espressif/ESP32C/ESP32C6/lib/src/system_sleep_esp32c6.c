@@ -39,6 +39,15 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 #define C6_SYSCLK_MASK (0x3FUL << 26)
 #define C6_SYSCLK_ACTIVE (1UL << 27)
 #define C6_SYSCLK_SLEEP ((1UL << 28) | (1UL << 29))
+#define C6_ANALOG_CLOCK ESP32_REG32(0x600AF018UL)
+#define C6_ANALOG_FORCE ESP32_REG32(0x600AF01CUL)
+#define C6_ANALOG_SOURCE ESP32_REG32(0x600AF010UL)
+#define C6_ANALOG_READ ESP32_REG32(0x600AF81CUL)
+#define C6_ANALOG_SELECT ESP32_REG32(0x600AF820UL)
+
+static const uint8_t s_C6RegulatorAddr[] = { 5U, 7U, 13U };
+static const uint8_t s_C6RegulatorMask[] = { 0x80U, 0x80U, 0x0CU };
+static const uint8_t s_C6RegulatorValue[] = { 0x80U, 0x80U, 0U };
 
 // Only R/W PMU registers are saved. Status and W1C registers are excluded.
 static const uint16_t s_C6SavedOffsets[] = {
@@ -89,6 +98,107 @@ static inline __attribute__((always_inline)) void Esp32C6SetSleepStage(uint32_t 
 	{
 		g_Esp32C6SleepTrace(Stage);
 	}
+}
+
+static bool Esp32C6AnalogWait(uintptr_t Ctrl)
+{
+	for (unsigned count = 0U; count < 100000U; count++)
+	{
+		if ((ESP32_REG32(Ctrl) & (1UL << 25)) == 0U)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// DIG_REG block access follows the C6 analog-I2C ROM workaround.
+// The caller holds interrupts masked and enables the master clock.
+static bool Esp32C6AnalogTransfer(uint8_t Addr, uint8_t *pValue, bool Write)
+{
+	uintptr_t ctrl;
+	uint32_t selection;
+	uint32_t command;
+	bool ready;
+
+	ctrl = 0x600AF800UL + ((C6_ANALOG_SELECT & (1UL << 12)) != 0U ? 0U : 4U);
+	selection = C6_ANALOG_READ & 0x00FFFFFFU;
+	C6_ANALOG_READ = 0x00FFFBFFU;
+	command = 0x6DU | ((uint32_t)Addr << 8);
+	if (Write)
+	{
+		command |= (1UL << 24) | ((uint32_t)*pValue << 16);
+	}
+	ready = Esp32C6AnalogWait(ctrl);
+	if (ready)
+	{
+		ESP32_REG32(ctrl) = command;
+		ready = Esp32C6AnalogWait(ctrl);
+		if (ready && !Write)
+		{
+			*pValue = (uint8_t)(ESP32_REG32(ctrl) >> 16);
+		}
+	}
+	C6_ANALOG_READ = selection;
+	return ready;
+}
+
+static bool Esp32C6RegulatorPrepare(void)
+{
+	uint32_t clock;
+	uint32_t force;
+	uint32_t source;
+	uint8_t saved[3];
+	uint8_t value;
+	uint8_t readback;
+	unsigned changed;
+	bool ready;
+
+	clock = C6_ANALOG_CLOCK;
+	force = C6_ANALOG_FORCE;
+	source = C6_ANALOG_SOURCE;
+	C6_ANALOG_CLOCK = clock | (1UL << 2);
+	C6_ANALOG_FORCE = force | (1UL << 2);
+	C6_ANALOG_SOURCE = source | 1U;
+	ready = true;
+	changed = 0U;
+	for (unsigned i = 0U; i < 3U; i++)
+	{
+		if (!Esp32C6AnalogTransfer(s_C6RegulatorAddr[i], &saved[i], false))
+		{
+			ready = false;
+			break;
+		}
+	}
+	if (ready)
+	{
+		// Enable the PMU voltage interface before releasing the analog
+		// force-on bits. Active and sleep regulator settings are ready.
+		for (unsigned i = 0U; i < 3U; i++)
+		{
+			value = (saved[i] & ~s_C6RegulatorMask[i]) | s_C6RegulatorValue[i];
+			changed = i + 1U;
+			if (!Esp32C6AnalogTransfer(s_C6RegulatorAddr[i], &value, true) ||
+				!Esp32C6AnalogTransfer(s_C6RegulatorAddr[i], &readback, false) ||
+				readback != value)
+			{
+				ready = false;
+				break;
+			}
+		}
+	}
+	if (!ready)
+	{
+		while (changed > 0U)
+		{
+			changed--;
+			(void)Esp32C6AnalogTransfer(s_C6RegulatorAddr[changed], &saved[changed], true);
+		}
+	}
+	C6_ANALOG_SOURCE = source;
+	C6_ANALOG_FORCE = force;
+	C6_ANALOG_CLOCK = clock;
+	return ready;
 }
 
 static uint32_t Esp32C6Dbias(uint32_t Shift, uint32_t Default)
@@ -499,6 +609,12 @@ void Esp32PowerDeepSleep(void)
 		ready = state.CpuMHz != 0U &&
 			((state.Root >> 16) & 3U) != 3U &&
 			Esp32C6Configure(true, false);
+		if (ready)
+		{
+			Esp32C6SetSleepStage(0x3BU);
+			ready = Esp32C6RegulatorPrepare();
+			Esp32C6SetSleepStage(ready ? 0x3CU : 0x3FU);
+		}
 		if (ready)
 		{
 			Esp32C6SetSleepStage(0x33U);
