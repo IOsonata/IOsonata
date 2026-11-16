@@ -19,22 +19,21 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define UART_RX_PINOP ESP32_PINOP_U0RXD
 #define UART_TX_PINOP ESP32_PINOP_U0TXD
 
-// BOOT button. Release it before resetting the board.
+// External momentary switch between GPIO3 (header label 3) and GND.
+// Release the switch before sleep; press it to restart from Deep-sleep.
 #define WAKE_BUT_PORT 0
-#define WAKE_BUT_PIN 9
+#define WAKE_BUT_PIN 3
 #define WAKE_BUT_PINOP IOPINOP_GPIO
-#define POWER_DEMO_RESUME_WAKE 1
+#define POWER_DEMO_RESUME_WAKE 0
 #define POWER_DEMO_STANDBY_RAM_TEST 1
 #define POWER_DEMO_UART_DMA false
 #define POWER_DEMO_UART_OFF 1
 // Set to 1 to keep UART0 enabled and print sleep stages from RAM.
 #define POWER_DEMO_SLEEP_TRACE 0
 
-// The BOOT button on GPIO9 exercises resumable RTC/PMU Light-sleep.
-// For reset-on-wake Deep-sleep, change WAKE_BUT_PIN to a board-available
-// GPIO0-5 (C3) or GPIO0-7 (C6), connect a switch to ground, and set
-// POWER_DEMO_RESUME_WAKE to 0. GPIO9 cannot wake Deep-sleep.
+// To restore the validated BOOT-button Light-sleep configuration, set
+// WAKE_BUT_PIN to 9 and POWER_DEMO_RESUME_WAKE to 1.
 // C6 GPIO9 Light-sleep: repeated wake and SRAM samples passed with UART off.
-// Reset-on-wake Deep-sleep still needs board validation.
+// GPIO3 reset-on-wake Deep-sleep still needs board validation.
 
 #endif // __BOARD_H__
