@@ -824,7 +824,16 @@ sample check. Release BOOT before resetting the board. The generic demo prints
 "Standby"; on these targets the implemented mode is CPU WFI only.
 
 Runtime core/low-frequency oscillator selection and peripheral-clock setters
-still return failure. SystemPowerOff is not implemented. No retention registers
+still return failure. The GPIO driver also prepares separate RTC/LP deep-wake routing for
+registered wake pins, with rollback after a rejected sleep. C3 supports
+GPIO0-5; C6 supports GPIO0-7. Preparation checks GPIO direction, the
+input-matrix consumers, GPIO0/1 when used by the 32 kHz crystal, and
+C6 pins already assigned to LP IO. A driver cannot silently replace
+a wake-owned interrupt callback. The preparation is not yet called by
+a PMU sleep transition, so this routing is not a functional Deep-sleep
+mode and must not be used as evidence that Deep-sleep is implemented.
+
+SystemPowerOff is not implemented. No retention registers
 are exposed because RTC scratch registers are used by ROM and clock setup;
 SystemRamRetain returns false. PMU Light-sleep, Deep-sleep, RTC/LP wake sources,
 retention and runtime oscillator ownership remain work to complete before
