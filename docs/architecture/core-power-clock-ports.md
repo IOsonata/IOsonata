@@ -513,3 +513,54 @@ selection and sleep register restoration at O0/O2. USB project source links
 and four C++ event initializers were corrected; USB_IRQHandler now has the C
 linkage required by the vector table. Hardware sleep/wake, retention and current
 measurements remain pending. D11 remains the current hardware test board.
+
+## LPC546xx power and clock port
+
+Both LPC54605 and LPC54628 managed libraries include the target power unit.
+It caches and clears SYSRSTSTAT on the first reset-reason query, implements
+ordinary interrupt-resumable Sleep, and enters reset-on-wake Deep power-down.
+The latter follows NXP libpower's POWER_EnterDeepPowerDown sequence: SCR deep
+sleep, PDRUNCFG1 = 0x300002AF, PDRUNCFG0 = 0xFEFFFFF7, then WFI. These full
+register values include reserved bits required by the vendor sequence. No
+vendor binary is linked. Reference: UM10912 power management and power API
+chapters, and [NXP MCUXpresso LPC54628 libpower_hardabi.a](https://github.com/nxp-mcuxpresso/legacy-mcux-sdk/blob/main/devices/LPC54628/gcc/libpower_hardabi.a),
+Git blob d58823378ee47b14321d21e662696dd6a7bc578a.
+
+Deep power-down leaves only the RTC domain and RESET wake input. RTC CTRL
+alarm/countdown wake configuration is preserved. Applications must arm a
+future RTC event and handle existing flags before entry. CPU interrupts and
+SysTick are stopped; ordinary Sleep preserves their configuration and restores
+the incoming SCR and interrupt mask. Deep-sleep clock and voltage restoration
+is not implemented. No watchdog is enabled or fed by these functions.
+
+There is no selectable GPIO wake input for Deep power-down, so SystemWakePin
+returns false. SRAM retention is unsupported. Seven full-width backup words
+alias the RTC driver's GPREG0..6; applications must coordinate their use.
+GPREG7 remains the RTC time-valid marker. Backup access temporarily enables the
+RTC bus clock and restores its prior state without resetting the RTC.
+Reset reporting uses only the hardware POR, BOD, EXTRST, WDT and SYSRST flags.
+It does not infer a Deep power-down wake cause from a possibly stale RTC flag.
+
+Runtime core selection refuses peripheral clock gates other than memory,
+GPIO/pin routing and RTC, active audio/USB PLLs, or CLKOUT. This is conservative:
+a stopped peripheral with its gate enabled must still release it. The PLL
+search precedes the interrupt lock; the ownership check and transition are
+atomic against interrupts. Startup uses the same setup without application
+ownership checks. Applications must stop and reconfigure SysTick and scheduler
+rates around a runtime change. An external oscillator is stopped before its
+mode/range is changed. Failed PLL setup leaves the core on the 12 MHz FRO.
+
+Clock decoding rejects powered-down FRO, system oscillator and PLL sources,
+unlocked PLLs, disabled FRO high-frequency output, and invalid PLL divisors.
+The RTC's system-clock output must be enabled to be decoded. This is register
+state, not an oscillator-health measurement. The LF descriptor now describes
+the fixed 32768 Hz crystal; SystemLowFreqClockSelect returns false, and the RTC
+driver retains ownership of oscillator startup and verification.
+
+The new LPC54628 PowerOffDemo uses the existing generic example and VCOM UART.
+It wakes through hardware RESET; P0.4 cannot wake Deep power-down. All 179 LPC54628 and 32 LPC54605 managed library sources compile in Debug
+and Release. The LPC54628 timer, peripheral and USB checks pass 60 firmware
+links across those configurations. Existing register tests cover clock ownership, failed PLL setup,
+RTC, timers, transfers, storage, audio and other peripherals. Temporary power
+register checks ran at O0/O2. These do not establish hardware wake behavior,
+backup retention or current draw. D11 remains the current hardware test board.

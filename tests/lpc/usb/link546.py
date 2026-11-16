@@ -19,14 +19,14 @@ timer = runpy.run_path(str(ROOT / 'tests/lpc/timer/link546.py'))
 SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC546xx/src/usb_hw_lpc546xx.c',
     'ARM/NXP/LPC546xx/src/usb_lpc546xx.c',
-    'ARM/NXP/src/usb_ep0_lpc_fs.c',
-    'ARM/NXP/src/usb_data_lpc_fs.c',
+    'ARM/NXP/src/usb_ep0_lpc_fs.cpp',
+    'ARM/NXP/src/usb_data_lpc_fs.cpp',
     'ARM/NXP/src/lpc_iap.c',
     'src/prbs.c',
     'src/app_evt_handler.cpp', 'src/app_run.cpp', 'src/app_wait.cpp',
     'src/usb/usb.cpp', 'src/usb/usb_intrf.cpp', 'src/usb/usbd_cdc.cpp',
     'src/usb/usbd_cdc_desc.cpp', 'src/usb/usbd_epalloc.cpp',
-    'src/usb/usbd_hid.cpp', 'src/usb/usbd_bulk.cpp', 'src/usb/usb_int.cpp',
+    'src/usb/usbd_hid.cpp', 'src/usb/usbd_bulk.cpp', 'src/usb/usb_int.cpp', 'src/usb/usbd_int.cpp',
 ]
 
 APPLICATIONS = {

@@ -52,6 +52,7 @@ SOFTWARE.
 static struct { uint32_t CPACR, VTOR; } s_Scb;
 #define SCB (&s_Scb)
 void *__Vectors;
+uint32_t g_IrqMasked;
 
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
 #include "../../../ARM/NXP/LPC546xx/src/system_LPC546xx.c"
@@ -66,13 +67,19 @@ void *__Vectors;
 #define VD3_RDY		(1UL << 5)
 #define AUD_PD		SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK
 
-static volatile uint32_t *VdStatus(void) { return (volatile uint32_t *)0x40020054UL; }
-
 // The PLL setting in the registers
 typedef struct {
 	uint32_t N, M, P;
 	uint64_t Num, Den;		// Output = Num / Den
 } Setting_t;
+
+static uint8_t s_Before[MAP_SIZE];
+static volatile bool s_Watched;
+
+static volatile uint32_t *VdStatus(void)
+{
+	return (volatile uint32_t *)0x40020054UL;
+}
 
 static Setting_t Decode(void)
 {
@@ -143,7 +150,6 @@ static void CheckSetting(uint32_t Fin, uint32_t ClkSel, uint32_t Out)
 	assert(Lpc546xxAudioPllFreq() == Out);
 }
 
-static uint8_t s_Before[MAP_SIZE];
 
 // Every SYSCON word but the audio PLL ones and the power controls unchanged
 static void Snapshot(void)
@@ -266,7 +272,6 @@ static void TestClosest(void)
 	printf("closest: PASS\n");
 }
 
-static volatile bool s_Watched;
 
 static void *Watcher(void *pArg)
 {
@@ -347,11 +352,85 @@ static void TestFailures(void)
 	printf("failures: PASS\n");
 }
 
+// Runtime core selection must leave every register unchanged when busy.
+static void TestCoreClockUsers(void)
+{
+	for (unsigned bank = 0; bank < 3; bank++)
+	{
+		for (unsigned bit = 0; bit < 32; bit++)
+		{
+			Fresh();
+			SYSCON->PDRUNCFG[1] = SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK |
+				SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK;
+			SYSCON->CLKOUTDIV = SYSCON_CLKOUTDIV_HALT_MASK;
+			SYSCON->AHBCLKCTRL[bank] = 1U << bit;
+			if (!Lpc546xxClockUsers())
+			{
+				continue;
+			}
+			Snapshot();
+			g_IrqMasked = bit & 1U;
+			assert(!SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
+			assert(g_IrqMasked == (bit & 1U));
+			assert(memcmp(s_Before, (const void *)MAP_BASE, MAP_SIZE) == 0);
+		}
+	}
+	for (unsigned busy = 0; busy < 3; busy++)
+	{
+		Fresh();
+		SYSCON->PDRUNCFG[1] = SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK |
+			SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK;
+		SYSCON->CLKOUTDIV = SYSCON_CLKOUTDIV_HALT_MASK;
+		if (busy == 0)
+		{
+			SYSCON->PDRUNCFG[1] &= ~SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK;
+		}
+		else if (busy == 1)
+		{
+			SYSCON->PDRUNCFG[1] &= ~SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK;
+		}
+		else
+		{
+			SYSCON->CLKOUTDIV = 0;
+		}
+		Snapshot();
+		assert(!SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
+		assert(memcmp(s_Before, (const void *)MAP_BASE, MAP_SIZE) == 0);
+	}
+	Fresh();
+	SYSCON->PDRUNCFG[1] = SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK |
+		SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK;
+	SYSCON->CLKOUTDIV = SYSCON_CLKOUTDIV_HALT_MASK;
+	SYSCON->AHBCLKCTRL[0] = SYSCON_AHBCLKCTRL_RTC_MASK | SYSCON_AHBCLKCTRL_GPIO0_MASK;
+	SYSCON->SYSPLLSTAT = SYSCON_SYSPLLSTAT_LOCK_MASK;
+	assert(SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
+	assert(SystemCoreClock > 210000000U && SystemCoreClock <= SYSTEM_CORE_CLOCK_MAX);
+	assert(SYSCON->AHBCLKCTRL[0] == (SYSCON_AHBCLKCTRL_RTC_MASK | SYSCON_AHBCLKCTRL_GPIO0_MASK));
+	SYSCON->SYSPLLSTAT = 0;
+	SystemCoreClockUpdate();
+	assert(SystemCoreClock == 0);
+	SYSCON->SYSPLLSTAT = SYSCON_SYSPLLSTAT_LOCK_MASK;
+	SYSCON->SYSPLLNDEC = 0x3ff;
+	SystemCoreClockUpdate();
+	assert(SystemCoreClock == 0);
+	SYSCON->SYSPLLSTAT = 0;
+	assert(!SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
+	assert(SystemCoreClock == CLK_FRO_12MHZ);
+	SYSCON->PDRUNCFG[0] = SYSCON_PDRUNCFG_PDEN_FRO_MASK;
+	SystemCoreClockUpdate();
+	assert(SystemCoreClock == 0);
+	Snapshot();
+	assert(!SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768));
+	assert(memcmp(s_Before, (const void *)MAP_BASE, MAP_SIZE) == 0);
+	printf("core clock ownership and failure: PASS\n");
+}
+
 int main(void)
 {
 	setvbuf(stdout, NULL, _IONBF, 0);
 	assert(mmap((void *)MAP_BASE, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) ==
 		   (void *)MAP_BASE);
+	TestCoreClockUsers();
 	TestAudioRates();
 	TestClosest();
 	TestFailures();
