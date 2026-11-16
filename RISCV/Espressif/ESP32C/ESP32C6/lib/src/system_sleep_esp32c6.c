@@ -41,9 +41,11 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 
 // Only R/W PMU registers are saved. Status and W1C registers are excluded.
 static const uint16_t s_C6SavedOffsets[] = {
-	0x10U, 0x24U, 0x68U, 0x6CU, 0x70U, 0x78U, 0x7CU, 0x80U, 0x8CU, 0x90U, 0x94U,
-	0x98U, 0xA8U, 0xACU, 0xB4U, 0xB8U, 0xBCU, 0xC0U, 0xC4U,
-	0xC8U, 0xECU, 0xF0U, 0x11CU, 0x124U, 0x128U, 0x12CU,
+	0x00U, 0x04U, 0x08U, 0x10U, 0x14U, 0x18U, 0x24U, 0x28U, 0x30U,
+	0x68U, 0x6CU, 0x70U, 0x78U, 0x7CU, 0x80U, 0x8CU, 0x90U, 0x94U,
+	0x98U, 0x9CU, 0xA8U, 0xACU, 0xB4U, 0xB8U, 0xBCU, 0xC0U, 0xC4U,
+	0xC8U, 0xECU, 0xF0U, 0xF4U, 0xF8U, 0xFCU, 0x104U, 0x108U, 0x10CU,
+	0x11CU, 0x124U, 0x128U, 0x12CU,
 	0x134U, 0x13CU,
 };
 
@@ -169,6 +171,28 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 
 	if (bDeep)
 	{
+		// Direct boot leaves power-up, no-reset and no-isolation overrides
+		// asserted. Initialize the wake state before giving the PMU control.
+		C6_PMU(0x00U) &= ~(C6_DEEP_HP_PD | (1UL << 22) | (15UL << 23));
+		C6_PMU(0x04U) = 0xFFFFFFFFU;
+		C6_PMU(0x08U) = 0xFFFFFFFFU;
+		C6_PMU(0x14U) = (C6_PMU(0x14U) & ~(3UL << 26)) | C6_PLL_KEEP;
+		C6_PMU(0x18U) = (C6_PMU(0x18U) & ~(0x3FUL << 26)) | (1UL << 25);
+		C6_PMU(0x28U) = (C6_PMU(0x28U) &
+			~(C6_DBIAS_MASK | (1UL << 15) | (3UL << 16))) |
+			(1UL << 18) | (hpBias << 27);
+		C6_PMU(0x30U) |= 1UL << 31;
+		C6_PMU(0x9CU) = (C6_PMU(0x9CU) &
+			~(C6_DBIAS_MASK | (1UL << 21))) | (1UL << 22) | (lpBias << 27);
+
+		// ESP-IDF pmu_power_domain_force_default(): release each domain's
+		// force controls, leaving its timing and power-down masks intact.
+		C6_PMU(0xF4U) &= ~0x3FUL;
+		C6_PMU(0xF8U) &= ~0x3FUL;
+		C6_PMU(0xFCU) &= ~0x3FUL;
+		C6_PMU(0x104U) &= ~0x3FUL;
+		C6_PMU(0x108U) &= ~0x3FUL;
+		C6_PMU(0x10CU) &= ~(15UL << 24);
 		hp |= C6_DEEP_HP_PD;
 		// LP GPIO is the sole configured Deep-sleep wake source.
 		// The LP peripheral power domain must remain available.
