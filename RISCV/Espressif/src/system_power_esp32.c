@@ -34,6 +34,9 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 #error "System power is implemented for ESP32-C3 and ESP32-C6"
 #endif
 
+bool Esp32PowerSleep(void);
+void Esp32PowerDeepSleep(void);
+
 uint32_t SystemResetReason(void)
 {
 	// The status records the last reset. Reading it does not clear it.
@@ -81,9 +84,6 @@ uint32_t SystemResetReason(void)
 			return 0;
 	}
 }
-
-bool Esp32PowerSleep(void);
-void Esp32PowerDeepSleep(void);
 
 void SystemSleep(void)
 {
