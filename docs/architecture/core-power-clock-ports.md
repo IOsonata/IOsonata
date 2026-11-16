@@ -1036,6 +1036,27 @@ References: Espressif ESP-IDF v5.5.1 per-chip rtc_clk.c, clk_tree_ll.h,
 system_reg.h, pcr_reg.h, rtc_cntl_reg.h, pmu_reg.h and UART register definitions.
 
 
+## ESP32-C6 GPIO9 Light-sleep hardware retest (November 16, 2026)
+
+On the C6 DevKitC-1, the first RTC/PMU version printed
+"PowerOffDemo: Standby" and "Entering Standby", then did not resume when
+BOOT/GPIO9 was pressed. Pressing RESET restarted the demo and reproduced
+the same output. This is a failed hardware wake test, not a PASS.
+
+The C3/C6 GPIO driver now saves the IO_MUX pad setting and clears SLP_SEL
+while using a wake pin in Light-sleep. It restores the exact original
+IO_MUX setting on return. The C6 PMU now explicitly selects sleep
+protection mode HP_LP_SLEEP (value 2) in PMU_SLP_WAKEUP_CNTL3.
+The previous code left that field at the boot state, although ESP-IDF
+v5.5.1 initializes it explicitly. The PMU readback checks this field.
+
+These two corrections need another C6 hardware test. Build both the
+C6 managed MCU library and PowerOffDemo from the updated branch, flash
+the same build configuration, press/release BOOT after "Entering Standby",
+and verify the next "Resumed from Standby" and SRAM sample output.
+A RESET merely restarts the application and is not a successful wake.
+Do not claim that either correction is proven until the board resumes.
+
 ## ESP32-C3/C6 RTC and PMU sleep implementation (unverified)
 
 Current source on branch `review_system_power_014` has the target-specific
