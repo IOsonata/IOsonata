@@ -1,11 +1,13 @@
 /**-------------------------------------------------------------------------
 @file	system_power_esp32.c
 
-@brief	ESP32-C3/C6 reset reason and interrupt-resumable CPU sleep.
+@brief	ESP32-C3/C6 reset reporting and sleep entry.
 
-CPU sleep keeps the peripheral clocks, RAM and stack running. PMU Light-sleep
-and reset-on-wake Deep-sleep are not implemented here. Reset causes follow
-Espressif ESP-IDF v5.5.1 per-chip reset_reasons.h and register definitions.
+SystemSleep requests a resumable RTC/PMU sleep with an armed GPIO wake
+source. Unsupported configurations use interrupt-resumable CPU WFI.
+SystemPowerOff enters reset-on-wake sleep with a dedicated RTC/LP GPIO
+wake source. The application stops active peripherals before entry.
+Reset codes follow Espressif ESP-IDF v5.5.1.
 
 @license MIT
 Copyright (c) 2026, I-SYST inc., all rights reserved.
@@ -80,14 +82,33 @@ uint32_t SystemResetReason(void)
 	}
 }
 
+bool Esp32PowerSleep(void);
+void Esp32PowerDeepSleep(void);
+
 void SystemSleep(void)
 {
-	uintptr_t state = DisableInterrupt();
+	uintptr_t state;
 
-	// Keep an enabled interrupt pending until WFI completes. Restore the
-	// caller's interrupt mask before its handler runs; do not alter mie.
-	__WFI();
+	// The controller restores wake routing and its CPU clock before
+	// returning. If no RTC/PMU wake was configured, ordinary WFI is used.
+	state = DisableInterrupt();
+	if (!Esp32PowerSleep())
+	{
+		__WFI();
+	}
 	EnableInterrupt(state);
+}
+
+void SystemPowerOff(void)
+{
+	// The RTC/PMU may reject entry if no usable low-power GPIO is armed.
+	// Either way the application must restart after this call.
+	(void)DisableInterrupt();
+	Esp32PowerDeepSleep();
+	for (;;)
+	{
+		__WFI();
+	}
 }
 
 int SystemRetRegCount(void)
