@@ -32,6 +32,8 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 #define C6_DEEP_HP_PD ((1UL << 21) | (1UL << 27) | (1UL << 29) | (1UL << 30) | (1UL << 31))
 #define C6_DBIAS_MASK (31UL << 27)
 #define C6_SLEEP_MODE_MASK (3UL << 16)
+#define C6_SLEEP_PROTECT_MODE (2UL << 16)
+#define C6_SLEEP_PROTECT_MASK (3UL << 16)
 
 // Only R/W PMU registers are saved. Status and W1C registers are excluded.
 static const uint16_t s_C6SavedOffsets[] = {
@@ -211,8 +213,11 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	C6_PMU(0xF0U) = (C6_PMU(0xF0U) &
 		~((0x7FUL << 16) | (0x1FFUL << 23))) |
 		(32UL << 16) | (32UL << 23);
-	C6_PMU(0x12CU) = (C6_PMU(0x12CU) & ~0xFFFFU) |
-		(lowfreq << 8) | lowfreq;
+	// PMU_SLEEP_PROTECT_HP_LP_SLEEP is value 2 in the vendor PMU
+	// initialization. Bare-metal startup must set it explicitly.
+	C6_PMU(0x12CU) = (C6_PMU(0x12CU) &
+		~(0xFFFFUL | C6_SLEEP_PROTECT_MASK)) |
+		C6_SLEEP_PROTECT_MODE | (lowfreq << 8) | lowfreq;
 	C6_PMU(0x13CU) = (C6_PMU(0x13CU) & ~(0xFFFFUL << 16)) |
 		(2419UL << 16);
 	C6_PMU(0x134U) = (C6_PMU(0x134U) &
@@ -230,6 +235,7 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	C6_PMU(0x128U) = C6_SLEEP_WAKE;
 	C6_LP_STORE9 = (C6_LP_STORE9 & ~1U) | (bDeep ? 1U : 0U);
 	if (C6_PMU(0x128U) != C6_SLEEP_WAKE ||
+		(C6_PMU(0x12CU) & C6_SLEEP_PROTECT_MASK) != C6_SLEEP_PROTECT_MODE ||
 		(C6_PMU(0xA8U) & (1UL << 31)) != 0U ||
 		(C6_PMU(0xC0U) & (1UL << 31)) != 0U ||
 		(C6_PMU(0xB4U) & (1UL << 22)) == 0U ||
