@@ -135,7 +135,9 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	if (bDeep)
 	{
 		hp |= C6_DEEP_HP_PD;
-		lp |= (1UL << 30) | (1UL << 31);
+		// LP GPIO is the sole configured Deep-sleep wake source.
+		// The LP peripheral power domain must remain available.
+		lp = (lp | (1UL << 30)) & ~(1UL << 31);
 		hpBias = 0U;
 		lpBias = 23U;
 		lpDebug = 12U;
@@ -158,6 +160,8 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	}
 	C6_PMU(0x68U) = hp;
 	C6_PMU(0xC0U) = lp;
+	// HP sleep must not power off the LP GPIO peripheral either.
+	C6_PMU(0xA8U) &= ~(1UL << 31);
 	// The active LP slow clock remains powered for wake detection.
 	C6_PMU(0xACU) |= (1UL << 30);
 	if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL)
