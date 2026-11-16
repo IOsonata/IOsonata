@@ -28,6 +28,8 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define POWER_DEMO_UART_DMA false
 #define POWER_DEMO_UART_OFF 1
 #define POWER_DEMO_BUTTON_TRACE 1
+// Keep UART0 enabled and print sleep stages from RAM for board diagnosis.
+#define POWER_DEMO_SLEEP_TRACE 1
 
 // The BOOT button on GPIO9 exercises resumable RTC/PMU Light-sleep.
 // For reset-on-wake Deep-sleep, change WAKE_BUT_PIN to a board-available

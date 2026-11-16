@@ -70,6 +70,10 @@ extern volatile uint32_t g_Esp32C6SleepRejectCause;
 volatile uint32_t g_PowerDemoWakeStage;
 #endif
 
+#if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
+extern void (*g_Esp32C6SleepTrace)(uint32_t Stage);
+#endif
+
 
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
@@ -428,6 +432,51 @@ static uint32_t StandbyRamPattern(uint32_t Cycle, uint32_t Idx)
 }
 #endif
 
+#if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
+// Emit S=xx from RAM without a UART driver call or flash-resident strings.
+// UART0 uses XTAL, independent of the CPU clock selected during sleep entry.
+__attribute__((noinline, section(".iram.text.power_sleep_trace")))
+static void PowerDemoSleepTrace(uint32_t Stage)
+{
+	uint32_t digit;
+	uint32_t value;
+	uint32_t count;
+
+	for (unsigned i = 0U; i < 6U; i++)
+	{
+		if (i == 0U)
+		{
+			value = 'S';
+		}
+		else if (i == 1U)
+		{
+			value = '=';
+		}
+		else if (i < 4U)
+		{
+			digit = (Stage >> (i == 2U ? 4U : 0U)) & 15U;
+			value = digit < 10U ? '0' + digit : 'A' + digit - 10U;
+		}
+		else
+		{
+			value = i == 4U ? '\r' : '\n';
+		}
+		ESP32_UART_FIFO_REG(ESP32_UART0_BASE) = value;
+	}
+	// Drain the FIFO and shift register before the PMU gates the clock.
+	// Bound the wait so diagnostics cannot trap the sleep path.
+	for (count = 0U; count < 100000U; count++)
+	{
+		if ((ESP32_UART_STATUS_REG(ESP32_UART0_BASE) &
+			ESP32_UART_STATUS_TXFIFO_CNT_Msk) == 0U &&
+			(ESP32_UART_FSM_STATUS_REG(ESP32_UART0_BASE) & (15U << 4)) == 0U)
+		{
+			break;
+		}
+	}
+}
+#endif
+
 int main()
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
@@ -446,6 +495,10 @@ int main()
 		return 1;
 	}
 	PowerDemoPut("PowerOffDemo: Standby\r\n");
+#if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
+	g_Esp32C6SleepTrace = PowerDemoSleepTrace;
+	PowerDemoPut("PMU serial trace enabled: S=xx is the last sleep stage\r\n");
+#endif
 
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
 		IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
@@ -488,7 +541,9 @@ int main()
 #if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
 		g_PowerDemoWakeStage = 0x05U;
 #endif
+#if !defined(ESP32C6) || !defined(POWER_DEMO_SLEEP_TRACE) || !POWER_DEMO_SLEEP_TRACE
 		s_Uart.Disable();
+#endif
 #if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
 		g_PowerDemoWakeStage = 0x06U;
 #endif
@@ -506,7 +561,7 @@ int main()
 		cpuWake = false;
 		if (wakeCount == 0U)
 		{
-			// First prove that GPIO9 resumes a CPU WFI while UART is off.
+			// First prove that GPIO9 resumes a CPU WFI.
 			// Do not modify the RTC/PMU state in this diagnostic cycle.
 			irqBefore = g_Esp32GpioIrqCount;
 			g_PowerDemoWakeStage = 0xA0U;
@@ -539,7 +594,9 @@ int main()
 			}
 		}
 #endif
+#if !defined(ESP32C6) || !defined(POWER_DEMO_SLEEP_TRACE) || !POWER_DEMO_SLEEP_TRACE
 		s_Uart.Enable();
+#endif
 #if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
 		g_PowerDemoWakeStage = 0x09U;
 		if (wakeCount == 0U)
