@@ -31,7 +31,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
-| ESP32 C-series | C3/C6 CPU sleep, GPIO wake and reset reason implemented; clock readout corrected | Runtime oscillator changes, PMU Light-sleep/Deep-sleep and retention remain pending; hardware validation pending |
+| ESP32 C-series | C3/C6 CPU sleep, GPIO wake and reset reason implemented; clock readout corrected | C3/C6 LF selection and calibration implemented; runtime core/peripheral roots, PMU Light-sleep/Deep-sleep and retention pending; hardware pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
 ## SAM D11/D21 low-power work (0.14, unmerged)
@@ -888,3 +888,68 @@ Light-sleep or Deep-sleep.
 References: Espressif ESP-IDF v5.5.1 components/esp_rom/esp32c3/ld/esp32c3.rom.ld,
 components/esp_rom/esp32c6/ld/esp32c6.rom.ld, the per-chip rtc_clk.c and C3
 rtc_sleep.c in components/esp_hw_support/port.
+
+## ESP32-C3/C6 low-frequency clock selection
+
+`SystemLowFreqClockSelect()` now uses the TIMG0 calibration unit to measure
+low-frequency sources against the 40 MHz crystal before switching the RTC mux.
+It follows the existing target-level oscillator selector and descriptor pattern;
+the generic API is unchanged. `SystemOscInit()` applies the application oscillator
+descriptor. Startup does not call it automatically. Call the boolean selector
+when the application needs to handle a missing crystal or failed calibration.
+
+Supported sources:
+
+| Target | Internal RC | External crystal |
+| --- | --- | --- |
+| C3 | Nominal 136 kHz RC_SLOW | 32.768 kHz XTAL32K |
+| C6 | Nominal 136 kHz RC_SLOW or 32.768 kHz RC32K | 32.768 kHz XTAL32K |
+
+An RC request selects the nearest available nominal frequency; zero selects
+RC_SLOW. The default C3/C6 descriptors now specify 136 kHz. A crystal request
+must specify 32768 Hz or zero. TCXO input and C3 RC_FAST/256 are not implemented.
+The RC descriptor reports the measured frequency. The crystal descriptor keeps
+its nominal frequency, while the measured period is stored in the hardware's
+Q13.19 calibration word for subsequent RTC timing.
+
+This is an initialization operation: call before RTC timekeeping, LP-core
+firmware, modem timing or low-power wake scheduling. GPIO0/1 must be reserved
+for the crystal. Output, interrupt, GPIO input-matrix and C6 LP-pin assignments
+are checked, but these checks do not constitute tracking of every possible
+analog or direct-pin consumer. Active RTC/LP watchdogs, configured wake sources,
+timer alarm interrupts and C6 modem clock use cause the call to fail. Existing
+TIMG timer counters and watchdog configuration are not changed or reset.
+
+One-shot calibration and application-configured continuous calibration are not
+interrupted. The hardware-reset continuous configuration can be paused with a
+bounded timeout and is restored afterward. Temporary bus gating, digital clock
+routing and the C6 shared 32 kHz calibration selection are restored. A missing
+or out-of-range oscillator leaves the previous RTC mux, calibration period and
+oscillator descriptor unchanged, and restores oscillator configuration/power.
+A successful selection leaves previously running oscillators enabled.
+
+The call masks interrupts throughout. Its delay/polling budgets total less than
+121 ms, including a 100 ms startup wait for a newly enabled crystal. It should
+not be called from an interrupt or during latency-sensitive operation. It does
+not enable a watchdog. PMU Light-sleep and Deep-sleep remain unimplemented.
+
+Validation:
+
+- All 201 C3 and 203 C6 library translation units compile in Debug and Release
+  with RISC-V GCC 15.2.0, using the managed project source lists and settings.
+- PowerOffDemo links for both targets in Debug and Release, both normally and
+  with SystemOscInit explicitly retained so the new code is checked by the
+  linker. Release flash text increases by 976 bytes on C3 and 1204 bytes on C6
+  in the latter case. Unused LF code is discarded.
+- Temporary production-source MMIO checks pass at O0 and Os for both chips:
+  RC/crystal selection, repeat selection, reset calibration pause, busy
+  calibration rejection, hardware timeout, stuck polling, invalid readings,
+  rollback, register preservation, clock/pin ownership and interrupt state.
+- The existing 24 ESP32 Python checks, 20 GPIO checks and all 80 serial-example
+  links pass. No new demo or test framework was added.
+- No board execution was performed. Hardware testing remains on SAMD11 until
+  the maintainer selects another board.
+
+Register references: Espressif ESP-IDF v5.5.1 per-chip clk_tree_ll.h,
+rtc_clk.c, rtc_time.c, timer_group_reg.h, rtc_cntl_reg.h, lp_clkrst_reg.h,
+lp_aon_reg.h, pmu_reg.h, pcr_reg.h and the C6 modem_lpcon_reg.h/reg_base.h.

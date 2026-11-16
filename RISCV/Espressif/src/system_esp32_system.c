@@ -183,7 +183,11 @@ McuOsc_t g_McuOsc = {
 	},
 	.LowPwrOsc = {
 		.Type     = OSC_TYPE_RC,
+#if defined(ESP32C3)
+		.Freq     = 136000UL,
+#else
 		.Freq     = 32000UL,
+#endif
 		.Accuracy = 5000,
 		.LoadCap  = 0,
 	},
@@ -393,6 +397,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return false;
 }
 
+#if !defined(ESP32C3)
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	(void)ClkSrc;
@@ -403,6 +408,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 void SystemOscInit(void)
 {
 }
+#endif
 
 void *SystemRamStart(void)
 {
