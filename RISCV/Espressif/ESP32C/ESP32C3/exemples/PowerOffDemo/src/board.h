@@ -78,8 +78,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define POWER_DEMO_RESUME_WAKE 1
 #define POWER_DEMO_STANDBY_RAM_TEST 1
 #define POWER_DEMO_UART_DMA false
+#define POWER_DEMO_UART_OFF 1
 
-// SystemSleep uses CPU WFI with peripheral clocks and SRAM retained.
-// This project does not enter PMU Light-sleep or Deep-sleep.
+// The BOOT button on GPIO9 exercises resumable RTC/PMU Light-sleep.
+// For reset-on-wake Deep-sleep, change WAKE_BUT_PIN to a board-available
+// GPIO0-5 (C3) or GPIO0-7 (C6), connect a switch to ground, and set
+// POWER_DEMO_RESUME_WAKE to 0. GPIO9 cannot wake Deep-sleep.
+// These sleep modes have not been verified on ESP32 hardware.
 
 #endif // __BOARD_H__
