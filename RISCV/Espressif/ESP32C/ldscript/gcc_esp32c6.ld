@@ -43,3 +43,6 @@ SECTIONS
 /* Common sections keep .iram.text.vectors first and aligned to 256 bytes,
  * copy initialized RAM from the unified C6 flash mapping, and place .reset. */
 INCLUDE "gcc_riscv_flash.ld"
+
+/* ESP-IDF v5.5.1 ROM ets_update_cpu_frequency, argument in MHz. */
+PROVIDE(Esp32RomClockUpdate = 0x40000048);

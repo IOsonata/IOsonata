@@ -14,7 +14,15 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 _Static_assert(LP_SWD_WPROTECT_MAGIC == 0x50D83AA1UL,
 	"C6 super watchdog unlock key must match the hardware");
 unsigned long __data_start__;
+static uint32_t s_RomMHz;
+static unsigned s_RomUpdates;
 #define REG(a) (*(volatile uint32_t *)(uintptr_t)(a))
+void Esp32RomClockUpdate(uint32_t CpuMHz)
+{
+	s_RomMHz = CpuMHz;
+	s_RomUpdates++;
+}
+
 int main(void)
 {
 	void *mem = mmap((void *)0x60000000, 0xC0000, PROT_READ | PROT_WRITE,
@@ -47,13 +55,16 @@ int main(void)
 	assert(SystemPeriphClockGet(-1) == 0);
 	assert(SystemPeriphClockGet(1) == 0);
 	Esp32PcrSystemInit(160000000U);
+	assert(SystemCoreClock == 160000000U && s_RomMHz == 160U);
 	assert(REG(0x60096118) == 0);
 	assert(REG(0x6009611C) == (3U << 8));
 	assert(REG(0x60096120) == (1U << 8));
 	assert(SystemCoreClockGet() == 160000000U);
 	Esp32PcrSystemInit(80000000U);
+	assert(SystemCoreClock == 80000000U && s_RomMHz == 80U);
 	assert(SystemCoreClockGet() == 80000000U);
 	Esp32PcrSystemInit(120000000U);
+	assert(SystemCoreClock == 120000000U && s_RomMHz == 120U);
 	assert(SystemCoreClockGet() == 120000000U);
 	Esp32PcrSystemInit(1U);
 	assert(SystemCoreClockGet() == 40000000U);
@@ -65,10 +76,13 @@ int main(void)
 	Esp32PcrSystemInit(160000000U);
 	assert(REG(0x60096110) == (2U << 16));
 	assert(REG(0x60096118) == 1);
+	assert(SystemCoreClock == 10000000U && s_RomMHz == 10U);
 	REG(0x60096110) = 3U << 16;
 	assert(SystemCoreClockGet() == 0);
 	assert(SystemCoreClockPeriodns == 0);
 	assert(SystemPeriphClockGet(0) == 0);
+	Esp32PcrSystemInit(160000000U);
+	assert(SystemCoreClock == 0 && s_RomUpdates == 5U);
 	// TG0 starts in flash-boot protection; TG1 also has normal WDT enabled.
 	// Keep the reset pulse-length fields unchanged when disabling both.
 	REG(0x60008048) = (1U << 14) | (1U << 15);

@@ -94,3 +94,6 @@ SECTIONS
 }
 
 INCLUDE "gcc_riscv_flash.ld"
+
+/* ESP-IDF v5.5.1 ROM ets_update_cpu_frequency, argument in MHz. */
+PROVIDE(Esp32RomClockUpdate = 0x40000588);

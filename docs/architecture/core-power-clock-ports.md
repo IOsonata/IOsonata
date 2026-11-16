@@ -846,3 +846,45 @@ Validation for this batch:
 
 Register references are Espressif ESP-IDF v5.5.1 per-chip clk_tree_ll.h,
 reset_reasons.h, system_reg.h, pcr_reg.h, rtc_cntl_reg.h and lp_clkrst_reg.h.
+
+## ESP32-C3/C6 startup clock preservation and ROM timing
+
+C3 startup previously selected PLL regardless of the root left by ROM. It now
+changes only the CPU tap when PLL is already selected. XTAL, RC_FAST and their
+dividers are preserved. The default PLL tap remains 80 MHz, with
+ESP32C3_CPU_160MHZ selecting 160 MHz. Startup does not power up, calibrate or
+stop a PLL.
+
+Both C3 and C6 startup now read back the resulting CPU frequency and update
+IOsonata's cycle-delay values immediately. They also call the target ROM
+ets_update_cpu_frequency entry so later ROM delays use the same CPU MHz. The
+C3/C6 linker scripts supply the respective ROM addresses as Esp32RomClockUpdate.
+Invalid clock selections do not overwrite the ROM timing value. Clock getters
+remain read-only with respect to ROM timing state. Fractional MHz values use
+the nearest integer supported by the ROM interface.
+
+This follows the existing startup ownership rule: ROM initializes the crystal,
+PLL and flash interface; IOsonata changes the supported CPU tap without
+reconfiguring the bus or peripheral roots. Watchdogs remain disabled by startup.
+
+Validation:
+
+- All 200 C3 and 202 C6 library sources compile in Debug and Release.
+- The default and 160 MHz PowerOffDemo variants link in both configurations
+  for both chips, eight images total. Their ROM symbols resolve to 0x40000588
+  on C3 and 0x40000048 on C6, matching the Espressif v5.5.1 ROM linker files.
+- 24 ESP32 Python checks pass. The clock model covers C3 default/160 MHz
+  startup, C6 CPU-divider choices, non-PLL entry, invalid source handling and
+  the MHz value passed to the ROM function.
+- C2/C5/C61 clock checks pass at O0 and Os. All 80 serial-example builds pass.
+- These are compiler/linker and host-register checks, not board execution.
+
+Runtime root-clock switching, low-frequency oscillator startup/calibration and
+PMU sleep remain pending. The vendor review confirms that C3 Deep-sleep also
+needs revision-dependent regulator settings and RTC-memory wake-stub handling;
+C6 uses a different PMU sequence. CPU WFI must not be presented as either
+Light-sleep or Deep-sleep.
+
+References: Espressif ESP-IDF v5.5.1 components/esp_rom/esp32c3/ld/esp32c3.rom.ld,
+components/esp_rom/esp32c6/ld/esp32c6.rom.ld, the per-chip rtc_clk.c and C3
+rtc_sleep.c in components/esp_hw_support/port.

@@ -20,7 +20,19 @@ _Static_assert(LP_SWD_WPROTECT_MAGIC == 0x50D83AA1UL,
 	"PCR super watchdog unlock key must match the hardware");
 #endif
 unsigned long __data_start__;
+#if defined(ESP32C3)
+static uint32_t s_RomMHz;
+static unsigned s_RomUpdates;
+#endif
 #define REG(a) (*(volatile uint32_t *)(uintptr_t)(a))
+
+#if defined(ESP32C3)
+void Esp32RomClockUpdate(uint32_t CpuMHz)
+{
+	s_RomMHz = CpuMHz;
+	s_RomUpdates++;
+}
+#endif
 
 int main(void)
 {
@@ -54,13 +66,36 @@ int main(void)
 	REG(0x6001F048) = (1U << 31) | (1U << 14);
 	REG(0x60020048) = (1U << 31) | (1U << 14);
 	Esp32SystemInit();
-	assert(SystemCoreClockGet() == 80000000U);
+#if defined(ESP32C3_CPU_160MHZ)
+	assert(SystemCoreClock == 160000000U);
+	assert(s_RomMHz == 160U);
+#else
+	assert(SystemCoreClock == 80000000U);
+	assert(s_RomMHz == 80U);
+#endif
+	assert(s_RomUpdates == 1U);
 	assert(REG(0x60008090) == 0);
 	assert(REG(0x600080A8) == 0);
 	assert(REG(0x600080AC) == (1U << 30));
 	assert(REG(0x600080B0) == 0);
 	assert(REG(0x6001F048) == 0);
 	assert(REG(0x60020048) == 0);
+	// Non-PLL entry must not select an uninitialized PLL or alter dividers.
+	REG(0x600C0058) = 3U;
+	REG(0x600C0008) = 0xA5A5A5A5U;
+	Esp32SystemInit();
+	assert(REG(0x600C0058) == 3U);
+	assert(REG(0x600C0008) == 0xA5A5A5A5U);
+	assert(SystemCoreClock == 10000000U && s_RomMHz == 10U);
+	assert(SystemCoreClockPeriodus == 10U && SystemCoreClockPeriodns == 100U);
+	REG(0x600C0058) = (2U << 10) | 1U;
+	Esp32SystemInit();
+	assert(REG(0x600C0058) == ((2U << 10) | 1U));
+	assert(SystemCoreClock == 8750000U && s_RomMHz == 9U);
+	REG(0x600C0058) = 3U << 10;
+	Esp32SystemInit();
+	assert(REG(0x600C0058) == (3U << 10));
+	assert(SystemCoreClock == 0 && s_RomUpdates == 3U);
 	puts("C3 clock and startup MMIO PASS");
 	return 0;
 #elif defined(ESP32C2)

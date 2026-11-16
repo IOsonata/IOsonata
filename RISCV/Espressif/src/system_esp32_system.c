@@ -23,14 +23,13 @@ CPU clock is selected by TWO independent register fields:
   CPU_PER_CONF.CPUPERIOD_SEL (offset 0x008, bits  [1:0])  - PLL tap
        0 = 80 MHz     1 = 160 MHz   (only meaningful when SOC_CLK_SEL = 1)
 
-Writing SOC_CLK_SEL = 1 alone does NOT pin the CPU to a specific MHz -
-it leaves the divider at whatever value the previous owner of the field
-left.  Since the C3 ROM bootloader can hand off with CPUPERIOD_SEL at
-either 0 or 1 (depending on flash-speed / boot path), this code MUST
-program both fields.
+Startup sets the CPU tap only when SOC_CLK_SEL already selects PLL. It leaves
+the source, XTAL/RC divider and peripheral clocks unchanged.
 
 Define ESP32C3_CPU_160MHZ to run at 160 MHz.
-C3 default (no define): 80 MHz from PLL. C2 preserves the ROM clock setup.
+C3 selects the 80 MHz CPU tap by default or 160 MHz when requested, provided
+ROM left the PLL selected. Other root-clock selections and their dividers are
+preserved. C2 preserves the ROM clock setup.
 
 Chip-specific system_espXXXX.c files call Esp32SystemInit() then install
 the trap handler into mtvec.
@@ -192,6 +191,11 @@ McuOsc_t g_McuOsc = {
 };
 
 extern unsigned long __data_start__;
+void SystemCoreClockUpdate(void);
+#if defined(ESP32C3)
+// ROM entry is supplied by gcc_esp32c3.ld.
+void Esp32RomClockUpdate(uint32_t CpuMHz);
+#endif
 
 /*---------------------------------------------------------------------------
  * Internal helpers
@@ -282,34 +286,30 @@ void Esp32SystemInit(void)
 	DisableRtcWdt();
 	DisableSuperWdt();
 
-#if defined(ESP32C2)
-	// Keep the ROM clock setup. C2's second PLL tap is 120 MHz, not 160.
-#elif defined(ESP32C3_CPU_160MHZ)
-	/* 160 MHz from PLL: program CPUPERIOD_SEL = 1 (160) BEFORE switching
-	 * SOC_CLK_SEL to PLL, so we never briefly see an unsupported tap. */
-	uint32_t pc = SYSTEM_CPU_PER_CONF_REG & ~SYSTEM_CPUPERIOD_SEL_Msk;
-	SYSTEM_CPU_PER_CONF_REG = pc | SYSTEM_CPUPERIOD_SEL_160M;
-	uint32_t r = SYSTEM_SYSCLK_CONF_REG & ~SYSTEM_SOC_CLK_SEL_Msk;
-	SYSTEM_SYSCLK_CONF_REG = r | SYSTEM_SOC_CLK_SEL_PLL;
-	SystemCoreClock = 160000000UL;
+#if defined(ESP32C3)
+	// ROM initializes the PLL and flash clocks. Adjust its running CPU tap
+	// only; selecting PLL here would also require power-up and calibration.
+	if ((SYSTEM_SYSCLK_CONF_REG & SYSTEM_SOC_CLK_SEL_Msk) == SYSTEM_SOC_CLK_SEL_PLL)
+	{
+		uint32_t pc = SYSTEM_CPU_PER_CONF_REG & ~SYSTEM_CPUPERIOD_SEL_Msk;
+
+#if defined(ESP32C3_CPU_160MHZ)
+		SYSTEM_CPU_PER_CONF_REG = pc | SYSTEM_CPUPERIOD_SEL_160M;
 #else
-	/* 80 MHz from PLL.  The C3 ROM bootloader does NOT pin CPUPERIOD_SEL
-	 * to any specific value - depending on flash speed config and ROM
-	 * path it can land at 0 (80) or 1 (160).  Writing SOC_CLK_SEL=PLL
-	 * alone (as the previous version of this file did) leaves the PLL
-	 * tap at whatever ROM left it, so the CPU may end up at 160 MHz
-	 * even though SystemCoreClock says 80 MHz.  WS2812 NOP timing,
-	 * msDelay() via mpccr, and any other cycle-calibrated code then
-	 * runs at 2x.  Force CPUPERIOD_SEL=0 here to actually pin 80 MHz. */
-	uint32_t pc = SYSTEM_CPU_PER_CONF_REG & ~SYSTEM_CPUPERIOD_SEL_Msk;
-	SYSTEM_CPU_PER_CONF_REG = pc | SYSTEM_CPUPERIOD_SEL_80M;
-	uint32_t r = SYSTEM_SYSCLK_CONF_REG & ~SYSTEM_SOC_CLK_SEL_Msk;
-	SYSTEM_SYSCLK_CONF_REG = r | SYSTEM_SOC_CLK_SEL_PLL;
-	SystemCoreClock = 80000000UL;
+		SYSTEM_CPU_PER_CONF_REG = pc | SYSTEM_CPUPERIOD_SEL_80M;
+#endif
+	}
 #endif
 
 	EnableSysTimer();
 	Esp32EnablePerfCounter();
+	SystemCoreClockUpdate();
+#if defined(ESP32C3)
+	if (SystemCoreClockPeriodus != 0U)
+	{
+		Esp32RomClockUpdate((uint32_t)SystemCoreClockPeriodus);
+	}
+#endif
 }
 
 /*---------------------------------------------------------------------------

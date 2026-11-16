@@ -186,6 +186,11 @@ McuOsc_t g_McuOsc = {
 };
 
 extern unsigned long __data_start__;
+void SystemCoreClockUpdate(void);
+#if defined(ESP32C6)
+// ROM entry is supplied by gcc_esp32c6.ld.
+void Esp32RomClockUpdate(uint32_t CpuMHz);
+#endif
 
 /*---------------------------------------------------------------------------
  * Internal helpers
@@ -292,6 +297,13 @@ void Esp32PcrSystemInit(uint32_t CpuHz)
 #endif
 
 	EnableSysTimer();
+#if defined(ESP32C6)
+	SystemCoreClockUpdate();
+	if (SystemCoreClockPeriodus != 0U)
+	{
+		Esp32RomClockUpdate((uint32_t)SystemCoreClockPeriodus);
+	}
+#endif
 }
 
 /*---------------------------------------------------------------------------
