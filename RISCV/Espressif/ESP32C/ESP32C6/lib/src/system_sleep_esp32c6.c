@@ -17,6 +17,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 #include "esp32xx.h"
+#include "esp32xx_gpio.h"
 
 #define C6_PMU(Off) ESP32_REG32(0x600B0000UL + (Off))
 #define C6_ROOT ESP32_REG32(0x60096110UL)
