@@ -60,6 +60,9 @@ SOFTWARE.
 
 #if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
 extern void (*g_Esp32C6SleepTrace)(uint32_t Stage);
+extern volatile uint32_t g_Esp32C6SleepPmuRaw;
+extern volatile uint32_t g_Esp32C6SleepWakeCause;
+extern volatile uint32_t g_Esp32C6SleepRejectCause;
 #endif
 
 
@@ -336,6 +339,8 @@ static void PowerDemoSleepTrace(uint32_t Stage)
 	uint32_t digit;
 	uint32_t value;
 	uint32_t count;
+	uint32_t regs[6];
+	uint32_t label;
 
 	for (unsigned i = 0U; i < 6U; i++)
 	{
@@ -357,6 +362,46 @@ static void PowerDemoSleepTrace(uint32_t Stage)
 			value = i == 4U ? '\r' : '\n';
 		}
 		ESP32_UART_FIFO_REG(ESP32_UART0_BASE) = value;
+	}
+	if (Stage == 0x37U)
+	{
+		// The request loop also exits on timeout. Report its saved result
+		// before the library halts, while flash access is still suspended.
+		// R: interrupt raw, W: wake cause, J: reject cause,
+		// M: main state, P: power state, C: clock state 0.
+		regs[0] = g_Esp32C6SleepPmuRaw;
+		regs[1] = g_Esp32C6SleepWakeCause;
+		regs[2] = g_Esp32C6SleepRejectCause;
+		regs[3] = ESP32_REG32(0x600B018CUL);
+		regs[4] = ESP32_REG32(0x600B0190UL);
+		regs[5] = ESP32_REG32(0x600B0194UL);
+		for (unsigned reg = 0U; reg < 6U; reg++)
+		{
+			// Pack labels into immediates so GCC cannot emit a flash table.
+			label = reg < 4U ? (0x4D4A5752UL >> (reg * 8U)) & 255U :
+				(0x4350UL >> ((reg - 4U) * 8U)) & 255U;
+			for (unsigned i = 0U; i < 12U; i++)
+			{
+				if (i == 0U)
+				{
+					value = label;
+				}
+				else if (i == 1U)
+				{
+					value = '=';
+				}
+				else if (i < 10U)
+				{
+					digit = (regs[reg] >> ((9U - i) * 4U)) & 15U;
+					value = digit < 10U ? '0' + digit : 'A' + digit - 10U;
+				}
+				else
+				{
+					value = i == 10U ? '\r' : '\n';
+				}
+				ESP32_UART_FIFO_REG(ESP32_UART0_BASE) = value;
+			}
+		}
 	}
 	// Drain the FIFO and shift register before the PMU gates the clock.
 	// Bound the wait so diagnostics cannot trap the sleep path.
