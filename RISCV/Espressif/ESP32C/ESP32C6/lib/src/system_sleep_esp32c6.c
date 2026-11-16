@@ -23,6 +23,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 #define C6_ROOT ESP32_REG32(0x60096110UL)
 #define C6_CPU ESP32_REG32(0x60096118UL)
 #define C6_AHB ESP32_REG32(0x6009611CUL)
+#define C6_LP_CLOCK ESP32_REG32(0x600B0400UL)
 #define C6_LP_STORE9 ESP32_REG32(0x600B1024UL)
 #define C6_EFUSE_BIAS ESP32_REG32(0x600B084CUL)
 #define C6_EFUSE_VERSION ESP32_REG32(0x600B0850UL)
@@ -154,8 +155,10 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	uint32_t lpDebug;
 	uint32_t efuse;
 	uint32_t wake;
+	bool rtcXtal;
 
 	wake = bDeep ? C6_DEEP_WAKE : C6_SLEEP_WAKE;
+	rtcXtal = (C6_LP_CLOCK & (1UL << 2)) != 0U;
 	// Read the current clock state, not a write-trigger command register.
 	if ((C6_PMU(0x194U) & (1UL << 15)) != 0U)
 	{
@@ -197,7 +200,10 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 		// LP GPIO is the sole configured Deep-sleep wake source.
 		// The LP peripheral power domain must remain available.
 		lp = (lp | (1UL << 30)) & ~(1UL << 31);
-		hpBias = 0U;
+		if (!rtcXtal)
+		{
+			hpBias = 0U;
+		}
 		lpBias = 23U;
 		lpDebug = 12U;
 		if (((C6_EFUSE_VERSION >> 30) & 3U) >= 3U)
@@ -237,12 +243,24 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	if (bDeep)
 	{
 		C6_PMU(0xC4U) &= ~(1UL << 30);
-		C6_PMU(0x98U) &= ~(1UL << 31);
+		// RTC_FAST defaults to XTAL/2 on C6. In that configuration the
+		// crystal must restart at LP_SLEEP -> LP_ACTIVE, before the HP
+		// wake sequence uses RTC_FAST. Keep its HP_SLEEP request asserted;
+		// LP_SLEEP may still power it down while the chip is asleep.
+		if (rtcXtal)
+		{
+			C6_PMU(0x98U) |= 1UL << 31;
+			C6_PMU(0x80U) &= ~((15UL << 26) | (3UL << 30));
+		}
+		else
+		{
+			C6_PMU(0x98U) &= ~(1UL << 31);
+			C6_PMU(0x80U) = (C6_PMU(0x80U) &
+				~((15UL << 26) | (3UL << 30))) | (3UL << 30);
+		}
 		C6_PMU(0xBCU) &= ~(1UL << 31);
 		C6_PMU(0x7CU) = (C6_PMU(0x7CU) &
 			~C6_PLL_KEEP) | (3UL << 26);
-		C6_PMU(0x80U) = (C6_PMU(0x80U) &
-			~((15UL << 26) | (3UL << 30))) | (3UL << 30);
 		C6_PMU(0x90U) &= ~((1UL << 16) | (1UL << 17) | (1UL << 18));
 		C6_PMU(0xC8U) = (C6_PMU(0xC8U) &
 			~((15UL << 26) | (3UL << 30))) |
