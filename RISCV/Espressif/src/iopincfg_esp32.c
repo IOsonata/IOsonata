@@ -82,6 +82,7 @@ void Esp32LightWakeRestore(void);
 static uint8_t s_WakeSense[ESP32_GPIO_PIN_COUNT];
 static uint32_t s_LightWakeMask;
 static uint32_t s_LightWakePin[ESP32_GPIO_PIN_COUNT];
+static uint32_t s_LightWakePad[ESP32_GPIO_PIN_COUNT];
 static uint32_t s_DeepWakeMask;
 #if defined(ESP32C3)
 static uint32_t s_DeepWakeRtc;
@@ -733,6 +734,7 @@ bool Esp32LightWakePrepare(void)
 		}
 		config = ESP32_GPIO_PIN_REG32(pin);
 		s_LightWakePin[pin] = config;
+		s_LightWakePad[pin] = pad;
 		mask |= ESP32PinMask(pin);
 	}
 	if (mask == 0U)
@@ -751,6 +753,10 @@ bool Esp32LightWakePrepare(void)
 			config |= type << ESP32_GPIO_PIN_INT_TYPE_Pos;
 			config |= ESP32_GPIO_PIN_WAKEUP_ENABLE_Msk;
 			ESP32_GPIO_PIN_REG32(pin) = config;
+			// Use the active GPIO input configuration during sleep.
+			// Restore the caller's pad configuration after wake.
+			ESP32_IOMUX_PAD_REG(pin) =
+				s_LightWakePad[pin] & ~ESP32_IOMUX_SLP_SEL_Msk;
 		}
 	}
 	s_LightWakeMask = mask;
@@ -770,6 +776,7 @@ void Esp32LightWakeRestore(void)
 		if ((mask & ESP32PinMask(pin)) != 0U)
 		{
 			ESP32_GPIO_PIN_REG32(pin) = s_LightWakePin[pin];
+			ESP32_IOMUX_PAD_REG(pin) = s_LightWakePad[pin];
 		}
 	}
 	s_LightWakeMask = 0U;
