@@ -36,6 +36,8 @@ static uint8_t stuck_ready;
 static bool fail_invalidate;
 static unsigned hocowtcr_writes;
 static unsigned checks;
+static uint32_t mstp[4];
+
 static uint32_t nominal(void)
 {
 	unsigned sel=sys[0x26]&7;
@@ -66,7 +68,7 @@ static uint16_t rd16(uintptr_t a)
 	assert(false && "startup must not read the stopped USB controller");
 	return 0;
 }
-static uint32_t rd32(uintptr_t a){if(a==RA4M1_SCKDIVCR)return dividers;assert(a>=RA4M1_IELSR(0)&&a<=RA4M1_IELSR(31));return links[(a-RA4M1_IELSR(0))/4];}
+static uint32_t rd32(uintptr_t a){if(a==0x4001E01C)return mstp[0];if(a>=0x40047000&&a<=0x40047008)return mstp[1+(a-0x40047000)/4];if(a==RA4M1_SCKDIVCR)return dividers;assert(a>=RA4M1_IELSR(0)&&a<=RA4M1_IELSR(31));return links[(a-RA4M1_IELSR(0))/4];}
 static void wr8(uintptr_t a,uint8_t v)
 {
 	++writes;assert(test_primask==1);assert(a>=0x4001E000UL&&a<0x4001E500UL);
@@ -110,6 +112,7 @@ volatile uint16_t *HostRegPtr(uintptr_t a,uint16_t *){if(a==RA4M1_FCACHEE)return
 
 static void reset_model(void)
 {
+	for(unsigned i=0;i<4;i++)mstp[i]=UINT32_MAX;
 	memset(sys,0,sizeof(sys));memset(&test_scb,0,sizeof(test_scb));
 	sys[0x26]=1;sys[0x2A]=sys[0x32]=sys[0x480]=sys[0x490]=1;sys[0x3C]=1;sys[0xA0]=2;sys[0xA5]=5;
 	dividers=RA4M1_RESET_DIV;input_hz=12000000;protect=cache=invalid=usb_cfg=0;
@@ -122,6 +125,19 @@ static void reset_model(void)
 static void pass(const char *name){++checks;printf("PASS %u: %s\n",checks,name);}
 int main(void)
 {
+	for (unsigned bank = 0; bank < 4; bank++)
+	{
+		reset_model();
+		mstp[bank] &= ~(1U << (bank == 0 ? 22 : 8));
+		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 48000000));
+		assert(writes == 0 && test_primask == 0);
+	}
+	reset_model();
+	sys[0x3e] = 0x80;
+	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 48000000));
+	assert(writes == 0 && test_primask == 0);
+	pass("busy modules and CLKOUT refuse runtime clock changes");
+
 	reset_model();SystemInit();assert(SystemCoreClock==48000000);assert(dividers==0x10010100);assert(sys[0x31]==1&&cache==1&&protect==0);assert(sys[0xA5]==5&&hocowtcr_writes==0);
 	assert(test_disabled==0xFFFFFFFFU && test_cleared==0xFFFFFFFFU && test_primask==0);
 	assert(test_scb.CPACR==0xF00000 && test_scb.VTOR==(uint32_t)(uintptr_t)__Vectors);

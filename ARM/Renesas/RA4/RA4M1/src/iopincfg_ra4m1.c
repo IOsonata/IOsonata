@@ -34,6 +34,7 @@ SOFTWARE.
 #include <stddef.h>
 #include "iopinctrl.h"
 #include "interrupt_ra4m1.h"
+#include "coredev/system_core_clock.h"
 
 #ifndef RA4M1_IO_READY_POLLS
 #define RA4M1_IO_READY_POLLS 1000000UL
@@ -63,6 +64,9 @@ typedef struct {
 	uint8_t Pin; // port * 16 + pin; Handler is the ownership sentinel
 } Ra4m1PinHook;
 static Ra4m1PinHook s_PinHook[16];
+static uint16_t s_WakePins;
+
+static void Ra4m1WakeEvent(int IntNo, void *pCtx);
 
 static int Ra4m1PinIrq(int PortNo, int PinNo)
 {
@@ -306,8 +310,13 @@ void IOPinDisableInterrupt(int IntNo)
 	uint32_t state = DisableInterrupt();
 	Ra4m1PinHook *hook = &s_PinHook[IntNo];
 	if (hook->Handler) {
-		// This API owns ISEL but not the port's EOF/EOR event sense or the
-		// system's low-power WUPEN policy. Neither is modified here.
+		if (s_WakePins & (1U << IntNo))
+		{
+			R_ICU->WUPEN &= ~(1UL << IntNo);
+			s_WakePins &= ~(1U << IntNo);
+		}
+		// Release ISEL and an owned wake bit only. Preserve port events
+		// and wake bits configured outside SystemWakePin.
 		unsigned port = hook->Pin >> 4, pin = hook->Pin & 15U;
 		Ra4m1PfsWrite(port, pin, R_PFS->PORT[port].PIN[pin].PmnPFS & ~RA4M1_PFS_ISEL);
 		__DSB();
@@ -367,4 +376,57 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
 {
 	return CoreNo == 0 && Ra4m1PinValid(PortNo, PinNo);
+}
+
+static void Ra4m1WakeEvent(int IntNo, void *pCtx)
+{
+	// Edge flags are acknowledged by the shared interrupt dispatcher.
+	(void)IntNo;
+	(void)pCtx;
+}
+
+bool SystemWakePin(int PortNo, int PinNo, int Sense)
+{
+	int line = Ra4m1PinIrq(PortNo, PinNo);
+
+	if (line < 0 || (Sense != IOPINSENSE_DISABLE &&
+		Sense != IOPINSENSE_LOW_TRANSITION && Sense != IOPINSENSE_HIGH_TRANSITION))
+	{
+		return false;
+	}
+	uint32_t state = DisableInterrupt();
+	bool owned = (s_WakePins & (1U << line)) != 0 &&
+		s_PinHook[line].Pin == PortNo * 16 + PinNo;
+
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		if (owned)
+		{
+			IOPinDisableInterrupt(line);
+		}
+		EnableInterrupt(state);
+		return owned;
+	}
+	if (owned)
+	{
+		bool same = R_ICU->IRQCR[line] == (Sense - IOPINSENSE_LOW_TRANSITION);
+
+		EnableInterrupt(state);
+		return same;
+	}
+	bool ok = IOPinEnableInterrupt(line, (1U << __NVIC_PRIO_BITS) - 1U,
+		PortNo, PinNo, (IOPINSENSE)Sense, Ra4m1WakeEvent, NULL);
+
+	if (ok)
+	{
+		s_WakePins |= 1U << line;
+		R_ICU->WUPEN |= 1UL << line;
+		ok = (R_ICU->WUPEN & (1UL << line)) != 0;
+		if (!ok)
+		{
+			IOPinDisableInterrupt(line);
+		}
+	}
+	EnableInterrupt(state);
+	return ok;
 }

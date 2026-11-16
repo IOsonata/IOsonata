@@ -27,8 +27,9 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; SAMD11 SW0/PA14 repeated resume passed | Validate SAMD21 wake, full SRAM continuity, sleep current and peripheral clock ownership |
 | LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
 | LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |
-| LPC546xx | Missing | Audit existing selectors and peripheral clocks |
-| RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
+| LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Runtime peripheral/PLL ownership and clock decoding checked; hardware pending |
+| RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
+| RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
@@ -564,3 +565,73 @@ links across those configurations. Existing register tests cover clock ownership
 RTC, timers, transfers, storage, audio and other peripherals. Temporary power
 register checks ran at O0/O2. These do not establish hardware wake behavior,
 backup retention or current draw. D11 remains the current hardware test board.
+
+
+## RA4M1 power and clock port
+
+RA4M1 has Sleep, Software Standby and Snooze, but no Deep Software Standby.
+The shared vendor header includes registers belonging to other RA variants;
+the port does not use those as evidence of RA4M1 capabilities. There is no
+SystemPowerOff implementation. The existing generic PowerOffDemo uses its
+resume path through SystemSleep, with P000/IRQ6 and SCI0 P100/P101.
+
+SystemWakePin uses the existing GPIO interrupt allocator. Falling and rising
+edges are supported, with the IRQ filter disabled. A pin, IRQ line or event
+route already owned by GPIO, DMA/DTC or another wake source is refused.
+Disabling the owned pin releases its WUPEN bit and interrupt route. Ordinary
+GPIO interrupt release also removes a wake bit owned by this port. Unrelated
+WUPEN bits and pin routes are preserved.
+
+SystemSleep uses Software Standby when external IRQ wake is configured and
+an associated NVIC interrupt is enabled, DMA/DTC are stopped, Snooze is off,
+and oscillator-stop detection is disabled. Otherwise it uses ordinary Sleep.
+Other Software Standby wake sources are not yet handled by this implementation.
+Active SysTick/PendSV pending work returns without sleep so it can be serviced.
+Applications must stop incompatible peripheral transfers before entry.
+
+The Standby entry follows procedure B of Renesas technical update
+[TN-RA*-A0146A/E](https://www.renesas.com/en/document/tcu/note-about-interruption-during-transition-low-power-modes-0):
+disable SysTick interrupt generation and non-wake NVIC delivery, then DSB/WFI.
+Event routes and pending IRQ flags are preserved. After resume, restore SBYCR,
+PRCR, SCR, NVIC enables and SysTick control before restoring PRIMASK. SBYCR
+bit 14 is always written as one. The port does not touch unsupported DPSBYCR.
+Software Standby retains SRAM and resumes execution; it does not generate a
+reset reason. Reset-on-wake RAM retention and generic retention words report
+unsupported. Battery backup memory integration remains outside this port.
+
+Reset reporting caches the first read of RSTSR0/1, then clears their recorded
+flags. POR and voltage-monitor resets map to POWERON, WDT/IWDT to WDT, and
+SWRF to SOFT. RES clears all reset flags, so an all-zero first read maps to PIN.
+Read this API before other code clears reset flags. Memory/MPU/stack errors
+have no exact generic reason bit and are not mislabeled as CPU lockup. RSTSR2
+cold/warm history is left untouched. Startup option words keep WDT and IWDT
+auto-start disabled; sleep and clock selection do not feed or start them.
+
+Runtime core-clock changes now refuse enabled peripheral module gates,
+DMAC/DTC's enabled module gate, and CLKOUT before unlocking protected registers.
+The SRAM gates and MSTPC0 clock-domain policy are excluded from that test.
+This is conservative: a stopped but ungated peripheral still prevents a change.
+Startup bypasses the application-ownership check. The existing oscillator
+plans, bounded ready waits and protection/interrupt restoration are retained.
+LF selection starts LOCO or SOSC without stopping the other oscillator or
+resetting the RTC; the peripheral chooses its own LF source. Callers still
+own SysTick/scheduler retiming after a successful core-clock change. Module-gate
+checks do not track a watchdog started directly through registers; applications
+must not change its PCLK timing while it is running.
+
+All 305 enabled library sources compile in Debug and Release. All 19 managed
+demo projects link in both configurations, including PowerOffDemo. GCC host
+checks run the existing clock and GPIO models at O0/O2 with undefined-behavior
+checks, including wake ownership and runtime busy refusal. The existing timer
+model also passes at O0/O2. UART passes at O0/Os/O2 and with address/undefined-
+behavior checks (1,167,463 interrupts per run). I2C and SPI models pass their optimization and
+address/undefined-behavior checks, with leak detection disabled because the
+workspace runs under ptrace. Temporary power
+register checks cover reset caching, mode selection, pending work, interrupt
+masking and register restoration at O0/O2. The original all-in-one validation
+runner additionally requires Clang/LLD, which are not installed in this workspace;
+its separate Clang ELF probes were not run. Hardware wake, current draw and
+oscillator restoration remain pending; D11 is still the hardware test target.
+
+Reference: RA4M1 hardware manual R01UH0887EJ0110, chapters 5, 8, 10 and 13,
+and the RA4M1 feature definitions in Renesas FSP.

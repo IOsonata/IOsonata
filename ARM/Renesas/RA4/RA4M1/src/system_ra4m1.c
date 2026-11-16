@@ -78,7 +78,8 @@ extern void (* const __Vectors[])(void);
 __WEAK McuOsc_t g_McuOsc = {
 	{ OSC_TYPE_RC, 48000000UL, 0U, 0U },
 	{ OSC_TYPE_RC, 32768UL, 0U, 0U },
-	false
+	false,
+	0
 };
 
 // Only an external oscillator's frequency is not recoverable from registers.
@@ -483,7 +484,17 @@ uint32_t SystemUsbClockGet(void)
 	return hz == 48000000UL ? hz : 0U;
 }
 
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
+static bool Ra4m1ClockUsers(void)
+{
+	// Module-stop bits read as one for stopped modules and reserved fields.
+	// SRAM remains enabled. DMAC/DTC must be stopped before retiming ICLK.
+	return (R_SYSTEM->MSTPCRA & (1UL << 22)) == 0 ||
+		R_MSTP->MSTPCRB != UINT32_MAX ||
+		(R_MSTP->MSTPCRC & ~1UL) != (UINT32_MAX & ~1UL) ||
+		R_MSTP->MSTPCRD != UINT32_MAX || (R_SYSTEM->CKOCR & 0x80U) != 0;
+}
+
+static bool Ra4m1CoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq, bool CheckUsers)
 {
 	Ra4m1ClockPlan_t plan;
 	if (!Ra4m1MakePlan(ClkSrc, Freq, g_McuOsc.bUSBClk, &plan))
@@ -492,6 +503,12 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 		return false;
 	}
 	const uint32_t state = DisableInterrupt();
+	if (CheckUsers && Ra4m1ClockUsers())
+	{
+		g_Ra4m1StartupError = RA4M1_STARTUP_BAD_ENTRY;
+		EnableInterrupt(state);
+		return false;
+	}
 	const uint16_t protect = R_SYSTEM->PRCR & 0x0BU;
 	R_SYSTEM->PRCR =  RA4M1_PRCR_KEY | protect | 3U;
 	Ra4m1StartupError_t result = RA4M1_STARTUP_PROTECT;
@@ -510,6 +527,11 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 	g_Ra4m1StartupError = result;
 	EnableInterrupt(state);
 	return result == RA4M1_STARTUP_OK;
+}
+
+bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
+{
+	return Ra4m1CoreClockSelect(ClkSrc, Freq, true);
 }
 
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
@@ -606,7 +628,7 @@ void SystemInit(void)
 	if (!Ra4m1MakePlan(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq,
 					  g_McuOsc.bUSBClk, &plan))
 		Ra4m1StartupStop(RA4M1_STARTUP_BAD_OSC);
-	if (!SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq))
+	if (!Ra4m1CoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, false))
 		Ra4m1StartupStop((Ra4m1StartupError_t)g_Ra4m1StartupError);
 	if (!SystemLowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq))
 		Ra4m1StartupStop((Ra4m1StartupError_t)g_Ra4m1StartupError);
