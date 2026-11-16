@@ -432,6 +432,11 @@ int main()
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	uint32_t wakeCount;
+#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
+	uint32_t irqBefore;
+	uint32_t irqAfter;
+	bool cpuWake;
+#endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 	volatile uint32_t stackRam[STANDBY_RAM_WORDS];
 #endif
@@ -468,6 +473,16 @@ int main()
 		{
 			msDelay(10);
 		}
+#if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
+		if (wakeCount == 0U)
+		{
+			PowerDemoPut("CPU WFI baseline: press BOOT after Entering Standby\r\n");
+		}
+		else
+		{
+			PowerDemoPut("PMU Light-sleep: press BOOT after Entering Standby\r\n");
+		}
+#endif
 		PowerDemoPut("Entering Standby\r\n");
 		PowerDemoDrain();
 #if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
@@ -489,9 +504,30 @@ int main()
 #if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
 		g_PowerDemoWakeStage = 0x07U;
 #endif
-		SystemSleep();
 #if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
+		cpuWake = false;
+		if (wakeCount == 0U)
+		{
+			// First prove that GPIO9 resumes a CPU WFI while UART is off.
+			// Do not modify the RTC/PMU state in this diagnostic cycle.
+			irqBefore = g_Esp32GpioIrqCount;
+			g_PowerDemoWakeStage = 0xA0U;
+			while (g_Esp32GpioIrqCount == irqBefore)
+			{
+				__WFI();
+			}
+			irqAfter = g_Esp32GpioIrqCount;
+			cpuWake = irqAfter != irqBefore &&
+				(g_Esp32GpioLastPending & (1UL << WAKE_BUT_PIN)) != 0U;
+			g_PowerDemoWakeStage = 0xA1U;
+		}
+		else
+		{
+			SystemSleep();
+		}
 		g_PowerDemoWakeStage = 0x08U;
+#else
+		SystemSleep();
 #endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 		bool ramOk = true;
@@ -508,6 +544,16 @@ int main()
 		s_Uart.Enable();
 #if defined(ESP32C6) && defined(POWER_DEMO_BUTTON_TRACE) && POWER_DEMO_BUTTON_TRACE
 		g_PowerDemoWakeStage = 0x09U;
+		if (wakeCount == 0U)
+		{
+			PowerDemoPut(cpuWake ?
+				"CPU WFI baseline PASS: BOOT GPIO interrupt woke CPU\r\n" :
+				"CPU WFI baseline FAIL: wake was not GPIO9\r\n");
+		}
+		else
+		{
+			PowerDemoPut("PMU wake returned to application\r\n");
+		}
 		PowerDemoPut("PMU stage 0x");
 		PowerDemoPutCount(g_Esp32C6SleepStage);
 		PowerDemoPut(", flags 0x");
