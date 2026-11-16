@@ -85,9 +85,17 @@ count must increase. If the input or interrupt check fails, the demo
 reports the failure and does not enter sleep. While waiting for BOOT,
 it repeats the live GPIO level approximately once a second.
 
-A successful button test is followed by "Entering Standby".
-Press BOOT a second time to test the actual PMU wake path. If no
-response appears, attach the Eclipse debugger and inspect
+A successful button test is followed by two different wake cycles.
+The first `Entering Standby` uses CPU WFI only, with UART disabled and
+the SRAM sample prepared. Press BOOT again. A successful baseline prints
+"CPU WFI baseline PASS" and the normal resume/SRAM results. The next
+`Entering Standby` requests PMU Light-sleep. Press BOOT a third time
+to test PMU wake, independently of the CPU WFI baseline.
+
+If the CPU WFI baseline fails, the problem is not specific to PMU sleep;
+check the GPIO interrupt source and UART disable/enable sequence.
+If CPU WFI passes but PMU does not return, attach the Eclipse debugger
+without resetting the chip and inspect
 `g_PowerDemoWakeStage`, `g_Esp32C6SleepStage`,
 `g_Esp32C6SleepPmuRaw`, `g_Esp32C6SleepWakeCause`,
 `g_Esp32C6SleepRejectCause`, `g_Esp32C6SleepWakeEnable`
@@ -97,8 +105,10 @@ before requesting PMU sleep.
 The demo stage is 0x01 before GPIO sampling, 0x02 on a debounced
 press, 0x03 on release, 0x04 after the GPIO interrupt check,
 0x05 before UART disable, 0x06 after UART disable,
-0x07 before `SystemSleep`, 0x08 after `SystemSleep` returns,
-and 0x09 after UART re-enable. The C6 driver stage is 0x10
+0x07 before the wake operation, 0xA0 waiting in CPU WFI
+(first cycle), 0xA1 after the GPIO9 WFI event, 0x08 after the wake
+operation returns, and 0x09 after UART re-enable. The C6 driver stage
+is 0x10
 at entry, 0x11 after wake-pin preparation, 0x12 after register
 save, 0x13 after PMU configuration, 0x14/0x15 during
 CPU clock switching, 0x16 at sleep request, 0x17 after
@@ -124,8 +134,12 @@ The demo then calls `SystemPowerOff()`; only a reset exits it.
 GPIO9 is not a valid Deep-sleep wake input. GPIO0/1 must not be
 used when the 32.768 kHz crystal is selected.
 
-No ESP32-C3/C6 board execution or sleep-current measurement has been
-performed for the new RTC/PMU controller code. The new source also
-requires Debug/Release library builds and link checks. Existing older
-WFI demo build results do not validate this revision. Keep hardware
-validation on SAMD11 until the maintainer selects another board.
+On November 16, 2026, the C6 BOOT input trace passed: GPIO9 read
+high when released and low when pressed; the GPIO ISR count increased
+and the pending mask contained 0x00000200. PMU wake has not succeeded:
+the board displayed "Entering Standby" without a subsequent resume
+message, and RESET restarted the demo. This failure is the reason for
+the staged CPU WFI/PMU trace. The C3 controller and C6 power/current
+measurements remain untested. The new RTC/PMU source still requires
+Debug/Release managed-library builds and demo link checks in a target
+toolchain.
