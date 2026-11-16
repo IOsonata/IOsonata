@@ -73,14 +73,19 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
 
-// External normally-open button between P1.5 (IRQ8) and ground.
-#define WAKE_BUT_PORT 1
-#define WAKE_BUT_PIN 5
+// P4.10 supports IRQ2 in Standby and IRQ2-DS in Deep Standby.
+// Connect a normally-open button to ground; EK-RE01 uses this pin for SW3.
+#define WAKE_BUT_PORT 4
+#define WAKE_BUT_PIN 10
 #define WAKE_BUT_PINOP IOPINOP_GPIO
 #define WAKE_BUT_SENSE IOPINSENSE_LOW_TRANSITION
 #define UART_BAUDRATE 1000000
+#ifndef POWER_DEMO_RESUME_WAKE
 #define POWER_DEMO_RESUME_WAKE 1
+#endif
+#if POWER_DEMO_RESUME_WAKE
 #define POWER_DEMO_STANDBY_RAM_TEST 1
+#endif
 #define POWER_DEMO_UART_DMA false
 
 #endif // __BOARD_H__

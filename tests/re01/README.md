@@ -310,3 +310,20 @@ PowerOffDemo for each package. Register-model checks cover Sleep/Standby
 selection, all ten external IRQ wake mappings, reset reason caching, SRAM-bank
 settings, and interrupt/protection restoration. These are compiler and model
 checks, not Eclipse IDE execution or hardware results.
+
+## Deep Standby follow-up
+
+The existing host checks cover all four dedicated Deep Standby pins, edge
+changes, ownership refusal, release through both GPIO and system APIs, and
+startup cleanup after a Deep Standby reset without losing its wake reason.
+The power register model was also run at `-O0` and `-Os`, both with and without
+`CHIP_VERSION_WS1`, covering Boost exit, debug refusal, transition failure and
+the WS1 CCC requirement. This verifies register sequences, not physical wake.
+
+PowerOffDemo uses P4.10 (IRQ2/IRQ2-DS, SW3 on EK-RE01). The six managed
+application configurations compile/link in their default resumable mode and
+with `POWER_DEMO_RESUME_WAKE=0` for reset-on-wake Deep Standby. Define that
+option in the application compiler settings; the board header supplies the
+default only when no option is given. Early WS1 hardware additionally needs
+`CHIP_VERSION_WS1` in the library settings and an application-configured CCC
+wake source. Debug attachment prevents Deep Standby entry.

@@ -30,7 +30,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Runtime peripheral/PLL ownership and clock decoding checked; hardware pending |
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
-| RE01 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; Deep Software Standby not implemented | Runtime module checks and core/LF selectors added; Boost uses ordinary Sleep; hardware pending |
+| RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
 | ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
@@ -704,8 +704,9 @@ current hardware target.
 
 The RE01_1500KB library now includes `system_power_re01.c` in all six
 DBN/CFB/CFP Debug/Release configurations. Reset reporting caches and clears
-RSTSR0/RSTSR1 on the first call. Deep Software Standby wake flags are reported
-when present, although this port does not yet implement entry into that mode.
+RSTSR0/RSTSR1 on the first call. Deep Software Standby wake flags identify
+pin and CCC wake. Startup disables the previous boot's wake configuration
+and clears the Deep Standby mode selection without clearing those wake flags.
 No retention registers or reset-on-wake RAM retention are exposed.
 
 `SystemSleep()` uses Software Standby only in normal ALLPWON mode, with Snooze
@@ -721,6 +722,18 @@ IRQ9. It accepts rising or falling edges on the fixed interrupt pin mappings.
 An application GPIO handler or a pin already used for another function is not
 replaced. Reconfiguring the same wake pin changes its edge; disabling it
 releases only its own route. Disable wake before changing that pin's function.
+On the four dedicated Deep Standby pins, it also reserves the corresponding
+DPSIER0/DPSIEGR0 setting, preserving unrelated wake sources. Other IRQ pins
+remain usable for `SystemSleep()` only.
+
+| Deep Standby source | Pin |
+| --- | --- |
+| IRQ0-DS | P4.11 |
+| IRQ1-DS | P2.7 |
+| IRQ2-DS | P4.10 |
+| IRQ3-DS | P4.9 |
+
+P4.11 and P2.7 share debug functions and are refused while debug is enabled.
 
 Startup no longer uses `goto`. Core-clock changes share the startup sequence
 and preserve a live MOCO fallback when oscillator setup fails. Frequency
@@ -730,7 +743,9 @@ flash programming. Startup does not apply that runtime module check. Core RC
 and divider requests select the nearest supported frequency; PCLKB remains at
 or below ICLK and 32 MHz. External oscillator descriptors must describe a real
 8-32 MHz input. Applications own retiming SysTick and software delays after a
-runtime clock change. Lowering the frequency does not automatically exit Boost.
+runtime clock change. Selecting an internal core clock at 32 MHz or below
+now exits Boost through MOCO, with PLL and HOCO stopped before the transition.
+Changing only a divider does not exit Boost.
 The LF selector starts LOCO or SOSC without stopping a source used by RTC/AGT;
 TCXO selection is unsupported.
 
@@ -738,13 +753,33 @@ The new `PowerOffDemo` has six package/configuration targets and uses the
 shared resume-on-interrupt demo, including static and stack RAM samples.
 Its application clock configuration selects the internal 32 MHz oscillator
 at startup, avoiding Boost. The UART uses the existing P2.2/P2.3 SCI4 mapping
-at 1 Mbaud. Connect an external normally-open button from P1.5 (IRQ8) to ground;
-check that these pins are available on the selected board/package before use.
-This is a resumable Standby demo, not reset-on-wake power off.
+at 1 Mbaud. The wake pin is P4.10 (IRQ2/IRQ2-DS), connected to SW3 on the
+EK-RE01 1500KB. Other boards can use a normally-open button from P4.10 to
+ground. Check the board/package pin availability before use.
+
+The demo defaults to resumable Standby with static and stack RAM samples.
+Set `POWER_DEMO_RESUME_WAKE=0` in the application compiler definitions to
+exercise reset-on-wake Deep Standby instead. Both forms use the same project
+and shared demo source. Since this part has no exposed retention registers,
+the reset-on-wake demo's start count is not retained.
+
+`SystemPowerOff()` disables SysTick/NVIC delivery, exits Boost if needed, and
+enters Deep Software Standby with I/O state retained. Dedicated wake sources
+reset the MCU; the function never resumes the application. If debug is enabled
+or a required transition fails, it stays stopped until reset; Deep Standby
+is not entered. Debug-mode Boost transitions are also refused
+by the clock helpers. The application owns quiescing its devices before power
+off, as shown by the demo's UART drain and disable.
+
+For early WS1 silicon, compile the RE01 library with `CHIP_VERSION_WS1`.
+The vendor restrictions require an application-configured CCC wake source for
+Deep Standby; without it, `SystemPowerOff()` stays stopped until reset. The
+port does not enable CCC or a watchdog on behalf of the application.
 
 The transition sequence follows Renesas' RE01 driver package:
 [`r_lpm_api.c`](https://github.com/renesas/re-driver-package/blob/master/SDK_RE01_1500KB/RE01_1500KB_DFP/Device/Driver/Src/r_lpm/r_lpm_api.c)
 and
 [`r_system_api.c`](https://github.com/renesas/re-driver-package/blob/master/SDK_RE01_1500KB/RE01_1500KB_DFP/Device/Driver/Src/r_system/r_system_api.c).
-Deep Software Standby entry, its dedicated wake pins, WS1 restrictions and
-Boost-exit handling remain separate work. No RE01 hardware validation is claimed.
+Pin assignments follow Renesas datasheet R01DS0363EJ0110, tables 1.5-1.7.
+Hardware validation remains pending for wake/reset behavior, I/O retention,
+Boost transitions and sleep current.

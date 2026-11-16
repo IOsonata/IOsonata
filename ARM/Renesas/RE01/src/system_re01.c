@@ -119,7 +119,8 @@ static bool EnterBoostMode(void)
 	{
 		return true;
 	}
-	if (SYSTEM->PWSTF != SYSTEM_PWSTF_ALLPWONM_Msk)
+	if (SYSTEM->PWSTF != SYSTEM_PWSTF_ALLPWONM_Msk ||
+		(SYSTEM->SYOCDCR & (SYSTEM_SYOCDCR_DOCDF_Msk | SYSTEM_SYOCDCR_DBGEN_Msk)))
 	{
 		return false;
 	}
@@ -127,6 +128,9 @@ static bool EnterBoostMode(void)
 	uint8_t dpsbycr = SYSTEM->DPSBYCR;
 	uint8_t snzcr = SYSTEM->SNZCR;
 	uint8_t power = SYSTEM->PWSTCR;
+	// Consume a stale event before the WFE power transition.
+	__SEV();
+	__WFE();
 	// Boost entry uses Software Standby as a power-mode transition.
 	SYSTEM->SBYCR = SYSTEM_SBYCR_SSBY_Msk;
 	SYSTEM->DPSBYCR_b.DPSBY = 0;
@@ -153,6 +157,83 @@ static bool EnterBoostMode(void)
 	SYSTEM->DPSBYCR = dpsbycr;
 	SYSTEM->SNZCR = snzcr;
 	SYSTEM->PWSTCR = power;
+	return ready;
+}
+
+bool Re01LeaveBoostMode(void)
+{
+	uint32_t state = DisableInterrupt();
+	if ((SYSTEM->PWSTF & SYSTEM_PWSTF_BOOSTM_Msk) == 0)
+	{
+		EnableInterrupt(state);
+		return true;
+	}
+	if (SYSTEM->PWSTF != (SYSTEM_PWSTF_ALLPWONM_Msk | SYSTEM_PWSTF_BOOSTM_Msk) ||
+		(SYSTEM->SYOCDCR & (SYSTEM_SYOCDCR_DOCDF_Msk | SYSTEM_SYOCDCR_DBGEN_Msk)))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	uint16_t protection = SYSTEM->PRCR & 0xfU;
+	uint16_t standby = SYSTEM->SBYCR;
+	uint8_t deepstandby = SYSTEM->DPSBYCR;
+	uint8_t snooze = SYSTEM->SNZCR;
+	uint8_t power = SYSTEM->PWSTCR;
+	uint8_t operating = SYSTEM->OPCCR;
+	uint8_t suboperating = SYSTEM->SOPCCR;
+	SYSTEM->PRCR = 0xa503U | protection;
+
+	// PLL and clocks above 32 MHz require Boost. Move to MOCO first.
+	SYSTEM->MOCOCR = 0;
+	SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MOCO;
+	bool ready = SYSTEM->MOCOCR == 0 && SYSTEM->SCKSCR_b.CKSEL == SYSTEM_SCKSCR_CKSEL_MOCO;
+	if (ready)
+	{
+		SYSTEM->PLLCR = SYSTEM_PLLCR_PLLSTP_Msk;
+		SYSTEM->HOCOCR = 1;
+		ready = SYSTEM->PLLCR == SYSTEM_PLLCR_PLLSTP_Msk && SYSTEM->HOCOCR == 1 &&
+			Re01WaitOsc(SYSTEM_OSCSF_PLLSF_Msk | SYSTEM_OSCSF_HOCOSF_Msk, false);
+		g_McuOsc.bUSBClk = false;
+	}
+	if (ready)
+	{
+		// Consume a stale event before selecting the transition request.
+		__SEV();
+		__WFE();
+		SYSTEM->SOPCCR_b.SOPCM = 0;
+		SYSTEM->OPCCR_b.OPCM = 0;
+		SYSTEM->SBYCR = SYSTEM_SBYCR_SSBY_Msk;
+		SYSTEM->DPSBYCR_b.DPSBY = 0;
+		SYSTEM->SNZCR_b.SNZE = 0;
+		SYSTEM->PWSTCR = 4;
+		ready = SYSTEM->PWSTCR == 4;
+		SYSTEM->PRCR = 0xa500U | protection;
+		if (ready)
+		{
+			__DSB();
+			__WFE();
+			uint32_t retry = RE01_OSC_WAIT_COUNT;
+			while ((SYSTEM->PWSTF & (SYSTEM_PWSTF_BOOSTM_Msk | SYSTEM_PWSTF_VBBM_Msk)) && retry > 0)
+			{
+				retry--;
+			}
+			ready = SYSTEM->PWSTF == SYSTEM_PWSTF_ALLPWONM_Msk;
+		}
+	}
+	SYSTEM->PRCR = 0xa503U | protection;
+	SYSTEM->SBYCR = standby;
+	SYSTEM->DPSBYCR = deepstandby;
+	SYSTEM->SNZCR = snooze;
+	SYSTEM->PWSTCR = power;
+	if (!ready)
+	{
+		SYSTEM->OPCCR = operating;
+		SYSTEM->SOPCCR = suboperating;
+	}
+	SYSTEM->PRCR = 0xa500U | protection;
+	SystemCoreClockUpdate();
+	SetFlashWaitState(SystemCoreClock);
+	EnableInterrupt(state);
 	return ready;
 }
 
@@ -285,6 +366,11 @@ static bool Re01SetCoreClock(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	g_McuOsc.CoreOsc.Freq = OscFreq;
 	SYSTEM->SCKDIVCR = (SYSTEM->SCKDIVCR & ~(SYSTEM_SCKDIVCR_ICK_Msk | SYSTEM_SCKDIVCR_PCKB_Msk)) |
 		(1UL << SYSTEM_SCKDIVCR_PCKB_Pos);
+
+	if (ClkSrc == OSC_TYPE_RC && OscFreq <= 32000000UL && !Re01LeaveBoostMode())
+	{
+		return false;
+	}
 
 	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
 	{
@@ -430,6 +516,17 @@ void SystemInit(void)
 {
 	uint16_t protection = SYSTEM->PRCR & 0xfU;
 	SYSTEM->PRCR = 0xa503U | protection;
+	if (SYSTEM->RSTSR0 & SYSTEM_RSTSR0_DPSRSTF_Msk)
+	{
+		// Wake configuration belongs to the previous boot. Keep the wake flags
+		// for SystemResetReason and the retained pin levels until reconfigured.
+		SYSTEM->SBYCR = 0;
+		SYSTEM->DPSBYCR_b.DPSBY = 0;
+		SYSTEM->PWSTCR = 0;
+		SYSTEM->SNZCR_b.SNZE = 0;
+		SYSTEM->DPSIER0 = 0;
+		SYSTEM->DPSIER1 = 0;
+	}
 	(void)Re01SetCoreClock(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq);
 	SYSTEM->PRCR = 0xa500U | protection;
 	(void)SystemLowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq);

@@ -201,6 +201,20 @@ static void clocks()
 	assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768));
 	assert(SYSTEM->LOCOCR == 0 && SYSTEM->SOSCCR == 0);
 	assert(!SystemLowFreqClockSelect(OSC_TYPE_TCXO, 32768));
+	SYSTEM->RSTSR0 = SYSTEM_RSTSR0_DPSRSTF_Msk;
+	SYSTEM->DPSIER0 = 15;
+	SYSTEM->DPSIER1 = 0x33;
+	SYSTEM->DPSIFR0 = 4;
+	SYSTEM->DPSIFR1 = 0x20;
+	SYSTEM->SBYCR = 0x8000;
+	SYSTEM->DPSBYCR = 0xc0;
+	SYSTEM->SNZCR = 0x80;
+	SystemInit();
+	assert(SYSTEM->DPSIER0 == 0 && SYSTEM->DPSIER1 == 0);
+	assert(SYSTEM->DPSIFR0 == 4 && SYSTEM->DPSIFR1 == 0x20);
+	assert(SYSTEM->RSTSR0 == SYSTEM_RSTSR0_DPSRSTF_Msk);
+	assert(SYSTEM->SBYCR == 0 && SYSTEM->DPSBYCR == 0x40 && SYSTEM->SNZCR == 0);
+	SYSTEM->RSTSR0 = 0;
 	SYSTEM->SCKSCR = 0;
 	SYSTEM->HOCOMCR = 2;
 	SYSTEM->SCKDIVCR = 1UL << SYSTEM_SCKDIVCR_PCKB_Pos;
@@ -318,6 +332,41 @@ static void icuAndGpio()
 	IOPinDisableInterrupt(8);
 	assert(!SystemWakePin(-1, 0, IOPINSENSE_LOW_TRANSITION));
 	assert(!SystemWakePin(1, 5, IOPINSENSE_TOGGLE));
+
+	const int deepPins[4][2] = {{4, 11}, {2, 7}, {4, 10}, {4, 9}};
+	for (unsigned i = 0; i < 4; i++)
+	{
+		int port = deepPins[i][0];
+		int pin = deepPins[i][1];
+		uint8_t other = 1U << ((i + 1) & 3);
+		SYSTEM->PRCR = 0xa509;
+		SYSTEM->DPSIER0 = other;
+		SYSTEM->DPSIEGR0 = other;
+		IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+		assert(SystemWakePin(port, pin, IOPINSENSE_LOW_TRANSITION));
+		assert(SYSTEM->DPSIER0 == (other | (1U << i)) && SYSTEM->DPSIEGR0 == other);
+		assert(SystemWakePin(port, pin, IOPINSENSE_HIGH_TRANSITION));
+		assert(SYSTEM->DPSIEGR0 == (other | (1U << i)) && SYSTEM->PRCR == 0xa509);
+		assert(SystemWakePin(port, pin, IOPINSENSE_DISABLE));
+		assert(SYSTEM->DPSIER0 == other && SYSTEM->DPSIEGR0 == other);
+		SYSTEM->DPSIER0 = 1U << i;
+		assert(!SystemWakePin(port, pin, IOPINSENSE_LOW_TRANSITION));
+		assert(!SystemWakePin(port, pin, IOPINSENSE_DISABLE));
+		assert(SYSTEM->DPSIER0 == (1U << i) && countRoutes() == 0);
+		SYSTEM->DPSIER0 = 0;
+		assert(SystemWakePin(port, pin, IOPINSENSE_LOW_TRANSITION));
+		IOPinDisable(port, pin);
+		assert(SYSTEM->DPSIER0 == 0 && countRoutes() == 0);
+	}
+	SYSTEM->DPSIEGR0 = 0;
+	SYSTEM->SYOCDCR = SYSTEM_SYOCDCR_DBGEN_Msk;
+	assert(!SystemWakePin(4, 11, IOPINSENSE_LOW_TRANSITION));
+	assert(!SystemWakePin(2, 7, IOPINSENSE_LOW_TRANSITION));
+	SYSTEM->SYOCDCR = 0;
+	IOPinConfig(1, 6, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	assert(SystemWakePin(1, 6, IOPINSENSE_LOW_TRANSITION));
+	assert(SYSTEM->DPSIER0 == 0);
+	assert(SystemWakePin(1, 6, IOPINSENSE_DISABLE));
 
 }
 

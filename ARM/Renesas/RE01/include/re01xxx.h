@@ -49,8 +49,18 @@ SOFTWARE.
 #include "RE01_256KB.h"
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#else
+#include <stdbool.h>
+#endif
+
+// Internal clock/power helper. Leaves a live MOCO clock on transition failure.
+// Call only when peripheral clocks may be stopped or retimed.
+bool Re01LeaveBoostMode(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif // __RE01XXX_H__
-
-
-
-

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	system_power_re01.c
 
-@brief	RE01 reset reporting and interrupt-resumable sleep.
+@brief	RE01 reset reporting, sleep and Deep Software Standby.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 16, 2026
@@ -168,6 +168,62 @@ void SystemSleep(void)
 	EnableInterrupt(state);
 }
 
+void SystemPowerOff(void)
+{
+	(void)DisableInterrupt();
+	SysTick->CTRL = 0;
+	SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk | SCB_ICSR_PENDSVCLR_Msk;
+	NVIC->ICER[0] = UINT32_MAX;
+	NVIC->ICPR[0] = UINT32_MAX;
+	SCB->SCR &= ~(SCB_SCR_SLEEPONEXIT_Msk | SCB_SCR_SLEEPDEEP_Msk);
+
+	// Debug prevents Boost transitions and can prevent Deep Standby entry.
+	bool ready = (SYSTEM->SYOCDCR & (SYSTEM_SYOCDCR_DOCDF_Msk | SYSTEM_SYOCDCR_DBGEN_Msk)) == 0;
+#if defined(CHIP_VERSION_WS1)
+	// WS1 restrictions 51/52 require an application-configured CCC wake.
+	ready = ready && (SYSTEM->DPSIER1 & SYSTEM_DPSIER1_DCCCIE_Msk) != 0;
+#endif
+	if (ready)
+	{
+		ready = Re01LeaveBoostMode();
+	}
+	uint16_t protection = SYSTEM->PRCR & 0xfU;
+	SYSTEM->PRCR = 0xa502U | protection;
+	if (ready)
+	{
+		SYSTEM->SNZCR_b.SNZE = 0;
+		SYSTEM->SBYCR = SYSTEM_SBYCR_SSBY_Msk;
+		SYSTEM->DPSBYCR = SYSTEM_DPSBYCR_DPSBY_Msk | SYSTEM_DPSBYCR_IOKEEP_Msk;
+		SYSTEM->PWSTCR = 0;
+		// Clear old wake flags once. A new edge after this point stays pending.
+		SYSTEM->DPSIFR0 = 0;
+		SYSTEM->DPSIFR1 = 0;
+		ready = SYSTEM->SBYCR == SYSTEM_SBYCR_SSBY_Msk &&
+			SYSTEM->DPSBYCR == (SYSTEM_DPSBYCR_DPSBY_Msk | SYSTEM_DPSBYCR_IOKEEP_Msk) &&
+			SYSTEM->PWSTCR == 0;
+	}
+	if (!ready)
+	{
+		// A refused transition stays stopped until reset; it must not return
+		// to an application that has already shut its devices down.
+		SYSTEM->SBYCR = 0;
+	}
+	bool sleep = ready || SYSTEM->SBYCR == 0;
+	SYSTEM->PRCR = 0xa500U | protection;
+	__DSB();
+	while (1)
+	{
+		if (sleep)
+		{
+			__WFI();
+		}
+		else
+		{
+			__NOP();
+		}
+	}
+}
+
 int SystemRetRegCount(void)
 {
 	return 0;
@@ -188,7 +244,7 @@ bool SystemRetRegWrite(int Idx, uint32_t Val)
 
 bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 {
-	// Reset-on-wake Deep Software Standby is not implemented by this port.
+	// RAMSDCR retains banks in Software Standby only, not Deep Standby.
 	(void)Addr;
 	(void)Size;
 	(void)bRetain;
