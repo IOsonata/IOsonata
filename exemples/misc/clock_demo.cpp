@@ -511,7 +511,7 @@ int main(void)
 					(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
 				ClockDemoResult("APB", actual == request &&
 					SystemPeriphClockGet(0) == actual &&
-					SystemCoreClockGet() == (CLOCK_DEMO_APB_SHARED_CORE ? actual : core));
+					SystemCoreClockGet() == (CLOCK_DEMO_APB_SHARED_CORE && core == bus ? actual : core));
 
 #if !CLOCK_DEMO_DEFER_TIMER
 				ClockDemoTimer();

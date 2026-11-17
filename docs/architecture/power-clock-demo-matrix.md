@@ -25,6 +25,13 @@ messages. Its LCDConsoleDisplayDemo continues to exercise syslog. New clock,
 sleep and retained-memory paths require hardware runs; see the outstanding
 items at the top of [core power and clock ports](core-power-clock-ports.md).
 
+The C3/C6 ClockDemo also supports the existing 160 MHz library build option.
+Define ESP32C3_CPU_160MHZ or ESP32C6_CPU_160MHZ in both library and application
+settings and clean rebuild. The XTAL entries then expect a 160 MHz PLL CPU;
+RC_FAST remains measured. C3 APB remains fixed at 80 MHz in that profile.
+Eight additional Debug/Release ClockDemo/PowerOffDemo links pass with the
+160 MHz option. New PLL behavior has not yet been run on a board.
+
 ## Compile and link results
 
 All 114 configurations below linked successfully. These are command-line GNU

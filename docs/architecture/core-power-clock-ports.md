@@ -53,12 +53,26 @@ Hardware validation still required for this revision:
 - C3/C6 retained SRAM across repeated Deep-sleep pin wakes.
 - Sleep-current measurements and external oscillator configurations.
 
-An implementation gap remains in C3/C6: runtime PLL startup/calibration and a
-return to a PLL CPU rate after selecting RC_FAST are not provided. The existing
-160 MHz startup option only adjusts an already selected PLL. Do not describe
-these targets as fully implemented until that work and its validation are done.
-The shared clock API takes oscillator type/frequency, not a requested CPU rate;
-any extension of that API must be explicit.
+The subsequent C3/C6 PLL implementation extends the existing 160 MHz build
+option. Define ESP32C3_CPU_160MHZ or ESP32C6_CPU_160MHZ in both the library and
+ClockDemo compiler settings, then clean rebuild both. Startup initializes PLL
+when required, and SystemCoreClockSelect(OSC_TYPE_XTAL, 40000000) returns to its
+160 MHz CPU output after RC_FAST. Without the option, XTAL still selects 40 MHz.
+The generic oscillator API is unchanged; it is not an arbitrary CPU-rate setter.
+
+PLL configuration and settling execute from instruction RAM. C3 uses its ROM
+analog-I2C routines and checks PLL lock; C6 uses the vendor analog-I2C workaround
+and checks calibration completion. Failed setup keeps the previous CPU source.
+An already running PLL is reused. C6 limits the MSPI PLL input to 80 MHz and
+keeps AHB at 40 MHz when switching from a direct source. Application peripherals
+must be stopped before runtime source changes, as in the direct-clock profile.
+C3 APB is fixed at 80 MHz under PLL, so that profile does not request fractional
+APB rates; the direct profile exercises the shared CPU/APB divider.
+
+Default and 160 MHz profiles compile and link in Debug and Release. PLL startup,
+RC-to-PLL return and sleep/resume at 160 MHz still require board execution.
+Earlier sections describing PLL startup as unimplemented refer to prior code.
+These additions are not a claim of complete hardware validation.
 
 The maintainer also confirmed SAM4LC LCDConsoleDisplayDemo in all four
 interrupt/DMA combinations and ClockDisplayDemo. Those results apply to the
@@ -96,7 +110,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
-| ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; runtime PLL selection incomplete; RTC/LP SRAM retention implemented, hardware validation pending |
+| ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; optional 160 MHz PLL profile and RTC/LP SRAM retention implemented, hardware validation pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
 ## SAM D11/D21 low-power work (0.14, unmerged)

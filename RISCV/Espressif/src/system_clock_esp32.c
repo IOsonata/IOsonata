@@ -7,8 +7,10 @@ Call with peripherals stopped, before starting modem or LP-core firmware.
 A UART using XTAL may remain enabled. Existing crystal, PLL and flash clock
 settings are preserved. XTAL selects
 40 MHz directly; C6 measures RC_FAST against XTAL before selecting it.
-C3 measures RC_FAST through its divide-by-256 calibration input. PLL startup/calibration
-is owned by boot code and is not performed by these functions.
+C3 measures RC_FAST through its divide-by-256 calibration input. The optional
+ESP32C3_CPU_160MHZ / ESP32C6_CPU_160MHZ profile starts the PLL at boot and
+selects its 160 MHz CPU output for XTAL requests. The default profile selects
+XTAL directly. PLL setup uses the ESP-IDF v5.5.1 per-chip clock sequence.
 
 @license MIT
 Copyright (c) 2026, I-SYST inc., all rights reserved.
@@ -141,6 +143,279 @@ static void Esp32ClockUpdate(void)
 #endif
 }
 
+// Internal PLL setup shared by startup and the configured XTAL CPU profile.
+// The 160 MHz profile uses a 40 MHz crystal; C6 caps its MSPI PLL input at 80 MHz.
+// At least 10 us even at 160 MHz. Keep oscillator settling independent of
+// flash code and of the cycle counter during early startup.
+static __attribute__((section(".iram.text.esp32_pll"), noinline))
+void Esp32PllDelay(void)
+{
+	uint32_t count = 1600U;
+	__asm volatile (
+		"1: nop\n\t"
+		"addi %0, %0, -1\n\t"
+		"bnez %0, 1b"
+		: "+r"(count) : : "memory");
+}
+
+static __attribute__((section(".iram.text.esp32_pll"), noinline))
+bool Esp32PllTransfer(uint8_t Addr, uint8_t *pValue, bool Write)
+{
+#if defined(ESP32C3)
+	if (Write)
+	{
+		((void (*)(uint8_t, uint8_t, uint8_t, uint8_t))0x4000195CUL)(0x66U, 0U, Addr, *pValue);
+	}
+	else
+	{
+		*pValue = ((uint8_t (*)(uint8_t, uint8_t, uint8_t))0x40001954UL)(0x66U, 0U, Addr);
+	}
+	return true;
+#else
+	uintptr_t ctrl = 0x600AF800UL + ((ESP32_REG32(0x600AF820UL) & (1UL << 9)) ? 0U : 4U);
+	uint32_t selection = ESP32_REG32(0x600AF81CUL) & 0x00FFFFFFU;
+	uint32_t command = 0x66U | ((uint32_t)Addr << 8);
+	bool ready = false;
+
+	ESP32_REG32(0x600AF81CUL) = 0x00FFFF7FU;
+	if (Write)
+	{
+		command |= (1UL << 24) | ((uint32_t)*pValue << 16);
+	}
+	for (unsigned phase = 0U; phase < 2U; phase++)
+	{
+		unsigned count = 100000U;
+		while ((ESP32_REG32(ctrl) & (1UL << 25)) != 0U && --count != 0U)
+		{
+		}
+		if (count == 0U)
+		{
+			break;
+		}
+		if (phase == 0U)
+		{
+			ESP32_REG32(ctrl) = command;
+		}
+		else
+		{
+			ready = true;
+			if (!Write)
+			{
+				*pValue = (uint8_t)(ESP32_REG32(ctrl) >> 16);
+			}
+		}
+	}
+	ESP32_REG32(0x600AF81CUL) = selection;
+	return ready;
+#endif
+}
+
+static __attribute__((section(".iram.text.esp32_pll"), noinline))
+bool Esp32PllWrite(uint8_t Addr, uint8_t Mask, uint8_t Value)
+{
+	uint8_t value;
+	if (!Esp32PllTransfer(Addr, &value, false))
+	{
+		return false;
+	}
+	value = (value & ~Mask) | Value;
+	if (!Esp32PllTransfer(Addr, &value, true))
+	{
+		return false;
+	}
+	return Esp32PllTransfer(Addr, &value, false) && (value & Mask) == Value;
+}
+
+__attribute__((section(".iram.text.esp32_pll"), noinline))
+bool Esp32PllClockSelect(void)
+{
+	uintptr_t state = DisableInterrupt();
+	uint32_t root = CLOCK_ROOT_REG;
+	bool ready = false;
+	OscDesc_t previous = g_McuOsc.CoreOsc;
+#if defined(ESP32C3)
+	uint32_t originalCpu = ESP32_REG32(0x600C0008UL);
+#else
+	uint32_t originalCpu = CLOCK_CPU_REG;
+	uint32_t originalAhb = CLOCK_AHB_REG;
+	uint32_t originalFlash = ESP32_REG32(0x6009601CUL);
+#endif
+
+	if (SystemCoreClockGet() < 1000000U ||
+		(root & CLOCK_SOURCE_MASK) == CLOCK_SOURCE_MASK)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if ((root & CLOCK_SOURCE_MASK) == (1UL << CLOCK_SOURCE_SHIFT))
+	{
+#if defined(ESP32C3)
+		ESP32_REG32(0x600C0008UL) = (ESP32_REG32(0x600C0008UL) & ~3U) | 1U;
+#else
+		CLOCK_CPU_REG &= ~((0xFFUL << 8) | (1UL << 16));
+#endif
+		Esp32ClockUpdate();
+		ready = SystemCoreClockGet() == 160000000U;
+		if (!ready)
+		{
+#if defined(ESP32C3)
+			ESP32_REG32(0x600C0008UL) = originalCpu;
+#else
+			CLOCK_CPU_REG = originalCpu;
+#endif
+			Esp32ClockUpdate();
+		}
+		EnableInterrupt(state);
+		return ready;
+	}
+#if defined(ESP32C3)
+	uint32_t options = ESP32_REG32(0x60008000UL);
+	uint32_t analog = ESP32_REG32(0x6000E044UL);
+	uint32_t calibration = ESP32_REG32(0x6000E040UL);
+	uint32_t cpu = ESP32_REG32(0x600C0008UL);
+	uint8_t status = 0U;
+
+	if ((options & (1UL << 12)) != 0U ||
+		((options & (1UL << 13)) == 0U && (root & CLOCK_SOURCE_MASK) != 0U))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	ESP32_REG32(0x6000E044UL) = analog & ~(1UL << 17);
+	if ((options & ((1UL << 10) | (1UL << 8) | (1UL << 6))) == 0U)
+	{
+		ready = Esp32PllTransfer(8U, &status, false) && (status & 0x80U) != 0U;
+	}
+	if (!ready)
+	{
+		ESP32_REG32(0x60008000UL) = options & ~((1UL << 10) | (1UL << 8) | (1UL << 6));
+		ESP32_REG32(0x6000E040UL) = (calibration & ~(1UL << 2)) | (1UL << 3);
+		ready = Esp32PllWrite(4U, 0xFFU, 0x6BU) &&
+			Esp32PllWrite(2U, 0xFFU, 0x50U) && Esp32PllWrite(3U, 0xFFU, 8U) &&
+			Esp32PllWrite(5U, 0x77U, 0U) && Esp32PllWrite(6U, 0xFFU, 0x63U) &&
+			Esp32PllWrite(9U, 3U, 2U);
+		if (ready)
+		{
+			ready = false;
+			for (unsigned count = 0U; count < 1000U; count++)
+			{
+				if (Esp32PllTransfer(8U, &status, false) && (status & 0x80U) != 0U)
+				{
+					ready = true;
+					break;
+				}
+				Esp32PllDelay();
+			}
+		}
+		if (ready)
+		{
+			cpu |= 1UL << 2;
+		}
+	}
+	if (ready)
+	{
+		ESP32_REG32(0x600C0008UL) = (cpu & ~3U) | 1U;
+		Esp32ClockWrite((root & ~(CLOCK_SOURCE_MASK | 0x3FFU)) | (1UL << CLOCK_SOURCE_SHIFT));
+	}
+	else
+	{
+		ESP32_REG32(0x60008000UL) = options;
+		ESP32_REG32(0x6000E040UL) = calibration;
+	}
+	ESP32_REG32(0x6000E044UL) = analog;
+#else
+	uint32_t clock = ESP32_REG32(0x600AF018UL);
+	uint32_t force = ESP32_REG32(0x600AF01CUL);
+	uint32_t source = ESP32_REG32(0x600AF010UL);
+	uint32_t calibration = ESP32_REG32(0x600AF818UL);
+	bool running = (ESP32_REG32(0x600B0194UL) & (1UL << 30)) != 0U;
+
+	if ((ESP32_REG32(0x600B0194UL) & 2U) == 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	ready = running;
+	if (!running)
+	{
+		ESP32_REG32(0x600B00CCUL) = (1UL << 28) | (1UL << 29) | (1UL << 30);
+		ESP32_REG32(0x600B00CCUL) = 1UL << 25;
+		ESP32_REG32(0x600AF018UL) = clock | (1UL << 2);
+		ESP32_REG32(0x600AF01CUL) = force | (1UL << 2);
+		ESP32_REG32(0x600AF010UL) = source | 1U;
+		ESP32_REG32(0x600AF818UL) = (calibration & ~(1UL << 2)) | (1UL << 3);
+		ready = Esp32PllWrite(2U, 0xFFU, 0x50U) && Esp32PllWrite(3U, 0xFFU, 8U) &&
+			Esp32PllWrite(5U, 0x77U, 0U) && Esp32PllWrite(6U, 0xFFU, 0x73U) &&
+			Esp32PllWrite(9U, 3U, 2U);
+		if (ready)
+		{
+			ready = false;
+			for (unsigned count = 0U; count < 1000U; count++)
+			{
+				if (ESP32_REG32(0x600AF818UL) & (1UL << 24))
+				{
+					ready = true;
+					break;
+				}
+				Esp32PllDelay();
+			}
+		}
+		if (ready)
+		{
+			Esp32PllDelay();
+			ESP32_REG32(0x600AF818UL) = (ESP32_REG32(0x600AF818UL) & ~(1UL << 3)) | (1UL << 2);
+		}
+		else
+		{
+			ESP32_REG32(0x600AF818UL) = calibration;
+			ESP32_REG32(0x600B00CCUL) = 1U | (1UL << 4) | (1UL << 5);
+		}
+		ESP32_REG32(0x600AF010UL) = source;
+		ESP32_REG32(0x600AF01CUL) = force;
+		ESP32_REG32(0x600AF018UL) = clock;
+	}
+	if (ready && ((root >> 8) & 0xFFU) == 2U)
+	{
+		uint32_t flash = ESP32_REG32(0x6009601CUL);
+		// MSPI's PLL input must not exceed 80 MHz. Preserve a slower setting.
+		if (((flash >> 8) & 0xFFU) < 5U)
+		{
+			ESP32_REG32(0x6009601CUL) = (flash & ~(0xFFUL << 8)) | (5UL << 8);
+		}
+		CLOCK_CPU_REG &= ~((0xFFUL << 8) | (1UL << 16));
+		// Keep AHB at 40 MHz and APB at or below it while selecting PLL.
+		CLOCK_AHB_REG = (CLOCK_AHB_REG & ~(0xFFUL << 8)) | (3UL << 8);
+		Esp32ClockWrite((root & ~CLOCK_SOURCE_MASK) | (1UL << CLOCK_SOURCE_SHIFT));
+	}
+	else
+	{
+		ready = false;
+	}
+#endif
+	if (ready)
+	{
+		g_McuOsc.CoreOsc.Type = OSC_TYPE_XTAL;
+		g_McuOsc.CoreOsc.Freq = 40000000U;
+		Esp32ClockUpdate();
+		ready = SystemCoreClockGet() == 160000000U;
+	}
+	if (!ready)
+	{
+		Esp32ClockWrite(root);
+#if defined(ESP32C3)
+		ESP32_REG32(0x600C0008UL) = originalCpu;
+#else
+		CLOCK_CPU_REG = originalCpu;
+		CLOCK_AHB_REG = originalAhb;
+		ESP32_REG32(0x6009601CUL) = originalFlash;
+#endif
+		g_McuOsc.CoreOsc = previous;
+		Esp32ClockUpdate();
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	if ((ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL) ||
@@ -179,6 +454,14 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 			return false;
 		}
 	}
+#if defined(ESP32C3_CPU_160MHZ) || defined(ESP32C6_CPU_160MHZ)
+	if (ClkSrc == OSC_TYPE_XTAL)
+	{
+		bool ready = Esp32PllClockSelect();
+		EnableInterrupt(state);
+		return ready;
+	}
+#endif
 	if (ClkSrc == OSC_TYPE_RC)
 	{
 #if defined(ESP32C3)

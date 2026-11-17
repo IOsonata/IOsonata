@@ -13,7 +13,7 @@ Clock parameters (ESP32-C6 TRM Rev 0.6 section 7):
 
 Define ESP32C6_CPU_160MHZ to run at 160 MHz.
 Default (no define): preserve the ROM bootloader clock setup.
-The 160 MHz option changes only the CPU divider when PLL is already selected.
+The 160 MHz option starts and calibrates PLL when it is not already running.
 
 @author	Hoang Nguyen Hoan
 @date	Mar. 5, 2026
@@ -52,6 +52,7 @@ SOFTWARE.
 extern void Esp32PcrSystemInit(uint32_t CpuHz);
 void Esp32C6PeripheralClockInit(void);
 extern void RISCV_VectorTable(void);
+bool Esp32PllClockSelect(void);
 
 volatile uintptr_t g_Esp32C6VectorBase;
 volatile uintptr_t g_Esp32C6MtvecWritten;
@@ -75,6 +76,9 @@ void SystemInit(void)
 	__asm volatile("csrw 0x7E0, %0" : : "r"(1U));
 	__asm volatile("csrw 0x7E2, zero");
 	__asm volatile("csrw 0x7E1, %0" : : "r"(1U));
+#if defined(ESP32C6_CPU_160MHZ)
+	(void)Esp32PllClockSelect();
+#endif
 
 	vt = (uintptr_t)RISCV_VectorTable;
 	g_Esp32C6VectorBase = vt;
