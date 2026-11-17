@@ -927,9 +927,30 @@ static bool SamdDfllFromLf(void)
 // runs on both boards. Interrupts disabled.
 static bool SamdMainOsc8m(void)
 {
-	return SamdOsc8mStart() &&
-		   (SamdGclkGenSet(SAMD_GCLK_MAIN, GCLK_GENCTRL_SRC_OSC8M_Val, 0U) ||
-			SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__));
+	uint32_t ctrl;
+
+	if (!SamdOsc8mStart())
+	{
+		return false;
+	}
+
+	ctrl = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_MAIN);
+	if (ctrl == UINT32_MAX)
+	{
+		return SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
+	}
+
+	// Keep the divider until the main clock has left FDPLL96M. Clearing it
+	// first would clock the CPU at 96 MHz instead of the allowed 48 MHz.
+	GCLK_REGS->GCLK_GENCTRL = (ctrl & ~GCLK_GENCTRL_SRC_Msk) |
+		GCLK_GENCTRL_SRC_OSC8M | GCLK_GENCTRL_GENEN_Msk;
+	if (!SamdGclkSync())
+	{
+		return SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
+	}
+
+	return SamdGclkGenSet(SAMD_GCLK_MAIN, GCLK_GENCTRL_SRC_OSC8M_Val, 0U) ||
+		SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
 }
 
 // 48 MHz main clock from g_McuOsc, the main clock on OSC8M first. Stops at

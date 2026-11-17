@@ -15,7 +15,7 @@ retain timer module ownership after TimerDisable. It then checks SysTick (timer 
 The returned timer rate may differ from 1 MHz. Delay and interrupt checks use
 the actual rate/period. They do not independently measure oscillator accuracy.
 Debug and Release use size optimization and LTO. The linker retains _sbrk
-for newlib formatting after LTO. Flash use is 15,122 bytes (14,910 text plus
+for newlib formatting after LTO. Flash use is 15,190 bytes (14,978 text plus
 212 data); static RAM is 2,148 bytes, before stack use.
 No watchdog is enabled. No sleep is requested by this configuration; use
 PowerOffDemo for target wake validation. Reset restores startup clocks.
@@ -24,3 +24,11 @@ An omitted selector prints SKIP. A configured selector that fails prints FAIL;
 unsupported selections are not silently counted as successful tests. Runtime
 clock ownership, board wiring and hardware operation still require board
 validation. See the cross-target power/clock demo matrix for build results.
+
+The first board run stopped in GCLK synchronization during core selection.
+The main-clock transition now preserves the existing divider while selecting
+OSC8M, synchronizes that source change, and only then clears the divider.
+Previously the divider was cleared while FDPLL96M still supplied 96 MHz,
+exceeding the 48 MHz CPU limit. The revised write sequence passes a register
+model check and both SAMD11/SAMD21 demo build configurations. Board retest is
+pending.
