@@ -5,6 +5,7 @@
 struct PowerTestScb { uint32_t SCR; };
 extern PowerTestScb g_PowerTestScb;
 #define SCB (&g_PowerTestScb)
+#define SCB_SCR_SLEEPONEXIT_Msk (1UL << 1)
 #define SCB_SCR_SLEEPDEEP_Msk (1UL << 2)
 extern uint32_t g_PowerTestMask;
 void PowerTestWfi(void);
@@ -17,3 +18,6 @@ static inline uint32_t DisableInterrupt(void)
 static inline void EnableInterrupt(uint32_t State) { g_PowerTestMask = State; }
 static inline void __DSB(void) {}
 static inline void __WFI(void) { PowerTestWfi(); }
+
+static inline void __ISB(void) {}
+static inline void __NOP(void) {}

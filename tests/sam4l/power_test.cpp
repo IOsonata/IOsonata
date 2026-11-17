@@ -15,7 +15,19 @@ static Eic s_Eic;
 static std::jmp_buf s_Off;
 PowerTestScb g_PowerTestScb;
 uint32_t g_PowerTestMask;
-void PowerTestWfi(void) { std::longjmp(s_Off, 1); }
+static bool s_TestSleep;
+static unsigned s_SleepCount;
+void PowerTestWfi(void)
+{
+	if (!s_TestSleep)
+	{
+		std::longjmp(s_Off, 1);
+	}
+	assert(g_PowerTestMask == 1);
+	assert(!(g_PowerTestScb.SCR & (SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk)));
+	assert(!(s_Bpm.BPM_PMCON & (BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP_Msk)));
+	s_SleepCount++;
+}
 #undef SAM4L_PM
 #undef SAM4L_BPM
 #undef SAM4L_BSCIF
@@ -118,6 +130,28 @@ int main(void)
 #if !defined(SAM4LSXC) && !defined(SAM4LCXC)
 	assert(!SystemWakePin(2, 3, IOPINSENSE_LOW_TRANSITION));
 #endif
+	s_TestSleep = true;
+	s_Pm.PM_PBDMASK = 0;
+	s_Bpm.BPM_PMCON = BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP(3) | BPM_PMCON_CK32S;
+	uint32_t saved = s_Bpm.BPM_PMCON;
+	g_PowerTestScb.SCR = SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk | 0x10;
+	s_Bscif.BSCIF_PCLKSR = BSCIF_PCLKSR_VREGOK;
+	for (unsigned mask = 0; mask < 2; mask++)
+	{
+		g_PowerTestMask = mask;
+		SystemSleep();
+		assert(g_PowerTestMask == mask);
+		assert(s_Pm.PM_PBDMASK == 0);
+		assert(s_Bpm.BPM_PMCON == saved);
+		assert(g_PowerTestScb.SCR == (SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk | 0x10));
+	}
+	assert(s_SleepCount == 2);
+	s_Bscif.BSCIF_PCLKSR = 0;
+	SystemSleep();
+	assert(s_SleepCount == 2);
+	assert(s_Pm.PM_PBDMASK == 0);
+	assert(s_Bpm.BPM_PMCON == saved);
+	s_TestSleep = false;
 	s_Bpm.BPM_PMCON = BPM_PMCON_RET | BPM_PMCON_CK32S | BPM_PMCON_PS(2);
 	if (setjmp(s_Off) == 0)
 	{
@@ -128,5 +162,5 @@ int main(void)
 	assert(s_Bpm.BPM_UNLOCK == (BPM_UNLOCK_KEY(0xaa) | BPM_UNLOCK_ADDR(0x1c)));
 	assert(g_PowerTestScb.SCR & SCB_SCR_SLEEPDEEP_Msk);
 	assert(g_PowerTestMask == 1);
-	std::puts("SAM4L reset, backup registers, wake pins and Backup entry PASS");
+	std::puts("SAM4L reset, backup registers, wake pins, SLEEP0 and Backup entry PASS");
 }

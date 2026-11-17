@@ -23,7 +23,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime recovery and main/low-frequency peripheral checks implemented; hardware validation pending |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0 resume added | SAM4LC clock/delay checks passed; SLEEP0 hardware checks and intermittent Backup wake correction pending; WAIT/RETENTION unsupported |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; D11 SW0 and D21 SW0/OLED1 BUTTON1 repeated resume passed | D21 clocks, delays, timer IRQs, UART RX and SRAM samples passed; full SRAM continuity, LF switching and sleep current remain unverified |
 | LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
 | LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |
@@ -340,6 +340,15 @@ SAM4LC ClockDemo rerun passed all three RC4/RC12 selection cycles with readable
 UART output. CPU/APB measurements were about 44.8 MHz with RC4 and 39.64 MHz
 with RC12. Both 250 ms delays measured about 253420 us with 25 interrupts,
 within the demo's 2 percent tolerance; the final result was zero failures.
+SAM4L now implements SystemSleep using SLEEP0, preserving BPM mode, SCR,
+PBD clock gates and the caller's interrupt mask. Entry clears RET/BKUP and
+SLEEPDEEP/SLEEPONEXIT, and returns without sleeping if VREG is not ready.
+Peripherals retain their running clocks; enabled interrupts wake the CPU.
+This does not implement WAIT or RETENTION. The SAM4LC ClockDemo selects
+OLED1 BUTTON1/PC06 through GPIO interrupt group 8 and checks the wake callback,
+clocks, both delays, timer IRQs and UART RX across three cycles. Hardware
+validation is pending. Backup wake continues to use the separate EIC route.
+
 The SAM4LCxC PowerOffDemo now selects OLED1 BUTTON1 on EXT2 (PC06 / EIC8) for
 Backup wake. Hardware confirmed one BUTTON1 wake and retained start count
 advancing from 1 to 2. The following re-arm exposed a stale ownership check:

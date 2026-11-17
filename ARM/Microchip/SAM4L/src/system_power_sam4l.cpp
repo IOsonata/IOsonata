@@ -185,6 +185,41 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	return true;
 }
 
+void SystemSleep(void)
+{
+	uint32_t state = DisableInterrupt();
+	uint32_t scr = SCB->SCR;
+	uint32_t clocks = SAM4L_PM->PM_PBDMASK;
+
+	Sam4lPowerClockEnable(PM_PBDMASK_BPM | PM_PBDMASK_BSCIF);
+	uint32_t pmcon = SAM4L_BPM->BPM_PMCON;
+	// SLEEP0 stops only the CPU. Drivers retain their clocks and state.
+	// WAIT/RETENTION require separate asynchronous wake and clock handling.
+	if ((SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_VREGOK) != 0U)
+	{
+		SAM4L_BPM->BPM_UNLOCK = BPM_UNLOCK_KEY(0xaa) |
+			BPM_UNLOCK_ADDR(offsetof(Bpm, BPM_PMCON));
+		SAM4L_BPM->BPM_PMCON = pmcon &
+			~(BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP_Msk);
+		(void)SAM4L_BPM->BPM_PMCON;
+		SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+		__DSB();
+		__WFI();
+		__NOP();
+		SAM4L_BPM->BPM_UNLOCK = BPM_UNLOCK_KEY(0xaa) |
+			BPM_UNLOCK_ADDR(offsetof(Bpm, BPM_PMCON));
+		SAM4L_BPM->BPM_PMCON = pmcon;
+		(void)SAM4L_BPM->BPM_PMCON;
+		SCB->SCR = scr;
+	}
+	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
+		PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
+	SAM4L_PM->PM_PBDMASK = clocks;
+	__DSB();
+	__ISB();
+	EnableInterrupt(state);
+}
+
 void SystemPowerOff(void)
 {
 	uint32_t value;

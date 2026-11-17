@@ -121,6 +121,9 @@ static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
 static volatile uint32_t s_InterruptCount;
 static unsigned s_Failures;
+#if defined(CLOCK_DEMO_WAKE_IRQ)
+static volatile bool s_PinWoke;
+#endif
 alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(4, 160)];
 static const SysLogCfg_t s_LogCfg = {
 	.pMem = s_LogMem,
@@ -280,6 +283,15 @@ static void ClockDemoTimer(void)
 	}
 }
 
+#if defined(CLOCK_DEMO_WAKE_IRQ)
+static void ClockDemoWakeHandler(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+	s_PinWoke = true;
+}
+#endif
+
 #if defined(CLOCK_DEMO_WAKE_PIN)
 static void ClockDemoSleep(void)
 {
@@ -306,8 +318,16 @@ static void ClockDemoSleep(void)
 			released + 1U : 0U;
 		msDelay(1);
 	}
-	if (!SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN,
-		IOPINSENSE_LOW_TRANSITION))
+#if defined(CLOCK_DEMO_WAKE_IRQ)
+	s_PinWoke = false;
+	bool armed = IOPinEnableInterrupt(CLOCK_DEMO_WAKE_IRQ, CLOCK_DEMO_IRQ_PRIORITY,
+		CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINSENSE_LOW_TRANSITION,
+		ClockDemoWakeHandler, nullptr);
+#else
+	bool armed = SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN,
+		IOPINSENSE_LOW_TRANSITION);
+#endif
+	if (!armed)
 	{
 		ClockDemoResult("Sleep wake pin", false);
 		(void)SystemPeriphClockSet(0, apb);
@@ -318,9 +338,24 @@ static void ClockDemoSleep(void)
 	SysLogPrintf(SysLogGet(), "Entering sleep; press " CLOCK_DEMO_WAKE_NAME " to resume\r\n");
 	ClockDemoFlush();
 	UARTDisable(&s_Uart);
+#if defined(CLOCK_DEMO_WAKE_IRQ)
+	// Keep a button edge between the prompt and WFI from being lost.
+	uint32_t interruptState = DisableInterrupt();
+	if (!s_PinWoke)
+	{
+		SystemSleep();
+	}
+	EnableInterrupt(interruptState);
+#else
 	SystemSleep();
+#endif
 	UARTEnable(&s_Uart);
+#if defined(CLOCK_DEMO_WAKE_IRQ)
+	IOPinDisableInterrupt(CLOCK_DEMO_WAKE_IRQ);
+	ClockDemoResult("GPIO wake interrupt", s_PinWoke);
+#else
 	(void)SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINSENSE_DISABLE);
+#endif
 	SysLogPrintf(SysLogGet(), "Sleep returned; checking clocks\r\n");
 	ClockDemoResult("CPU clock after resume", SystemCoreClockGet() == core &&
 		GetHighFreqOscType() == high.Type && GetHighFreqOscFreq() == high.Freq);

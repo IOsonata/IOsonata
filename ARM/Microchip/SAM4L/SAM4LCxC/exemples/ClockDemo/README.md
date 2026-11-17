@@ -15,8 +15,16 @@ retain timer module ownership after TimerDisable. It then checks the first
 high-frequency timer at 1 MHz requested rate, with a 10 ms trigger over 250 ms.
 The returned timer rate may differ from 1 MHz. Delay and interrupt checks use
 the actual rate/period. They do not independently measure oscillator accuracy.
-No watchdog is enabled. No sleep is requested by this configuration; use
-PowerOffDemo for target wake validation. Reset restores startup clocks.
+No watchdog is enabled. Connect OLED1 to EXT2. After the initial checks, send
+uppercase U at each UART prompt (1,000,000 baud). Three SLEEP0 cycles follow;
+press and release OLED1 BUTTON1 (PC06) at each sleep prompt. The GPIO interrupt
+must be observed, then clocks, both delays, timer interrupts and UART RX are
+checked again. Expect zero failures. Hardware confirmation is pending.
+
+SLEEP0 stops the CPU while peripheral clocks continue. This checks resumable
+sleep; it does not exercise WAIT, RETENTION or reset-on-wake Backup mode.
+BUTTON1 uses GPIO interrupt group 8 here. PowerOffDemo uses the separate EIC8
+Backup wake route on the same pin. Reset restores startup clocks.
 
 An omitted selector prints SKIP. A configured selector that fails prints FAIL;
 unsupported selections are not silently counted as successful tests. Runtime
