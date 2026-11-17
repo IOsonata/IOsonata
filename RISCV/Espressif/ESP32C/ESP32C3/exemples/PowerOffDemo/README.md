@@ -27,12 +27,10 @@ releases its pins and interrupt route before MCU Deep-sleep; startup initializes
 it again. No watchdog is enabled by the demo.
 
 C3 hardware completed six consecutive Light-sleep wakes with both SRAM samples
-passing. Deep-sleep testing exposed repeated pin-wake resets without a new
-button press; it has not passed. The C3 GPIO implementation now holds the wake
-pad configuration and clears the previous RTC GPIO wake status before entry,
-following ESP-IDF v5.5.1. IOPinConfig releases the retained pad after configuring
-it on restart. This correction still needs a board retest. C6 results do not
-validate the C3 RTC controller, ROM restart, or retention sequence. The SRAM samples apply
+passing. After the wake-pad and status-clearing correction, four consecutive
+Deep-sleep GPIO3 wakes restarted with reset reason 0x100. The board remained
+asleep until GPIO3 was connected to GND. Repeated dots on the UART remain
+unexplained; sleep current has not been measured. The SRAM samples apply
 to Light-sleep only. Returning from SystemSleep can also follow its WFI fallback
 and does not establish sleep current.
 

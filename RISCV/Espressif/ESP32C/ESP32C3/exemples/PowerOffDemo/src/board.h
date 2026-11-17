@@ -85,6 +85,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // GPIO0-5, connect a switch to ground, and set
 // POWER_DEMO_RESUME_WAKE to 0. GPIO9 cannot wake Deep-sleep.
 // Light-sleep passed six consecutive C3 wakes with SRAM samples intact.
-// Deep-sleep wake-pad retention and status clearing still need a board retest.
+// Deep-sleep passed four consecutive GPIO3-triggered restarts.
 
 #endif // __BOARD_H__

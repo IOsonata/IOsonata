@@ -43,6 +43,10 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "board.h"
 
+#ifndef CLOCK_DEMO_APB_SHARED_CORE
+#define CLOCK_DEMO_APB_SHARED_CORE 0
+#endif
+
 struct ClockDemoSource_t {
 	const char *pName;
 	OSC_TYPE Type;
@@ -163,6 +167,7 @@ static void ClockDemoSleep(void)
 		ClockDemoResult("Sleep APB selection", false);
 		return;
 	}
+	core = SystemCoreClockGet();
 	IOPinConfig(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINOP_GPIO,
 		IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 	while (released < 20U)
@@ -238,7 +243,8 @@ int main(void)
 				SysLogPrintf(SysLogGet(), "CPU %u Hz, APB request %u Hz, actual %u Hz\r\n",
 					(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
 				ClockDemoResult("APB", actual == request &&
-					SystemPeriphClockGet(0) == actual && SystemCoreClockGet() == core);
+					SystemPeriphClockGet(0) == actual &&
+					SystemCoreClockGet() == (CLOCK_DEMO_APB_SHARED_CORE ? actual : core));
 				ClockDemoTimer();
 			}
 #if defined(CLOCK_DEMO_WAKE_PIN)
