@@ -31,7 +31,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
-| ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART disabled; C3 sleep hardware pending | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; runtime clock hardware checks and current measurements pending; runtime PLL selection and Deep-sleep RAM retention unsupported |
+| ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 sleep hardware pending | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C6 clock-only hardware checks passed; combined sleep/clock checks and current measurements pending; runtime PLL selection and Deep-sleep RAM retention unsupported |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
 ## SAM D11/D21 low-power work (0.14, unmerged)
@@ -1050,14 +1050,17 @@ API is unchanged.
 
 | Mode | Wake input | Result |
 | --- | --- | --- |
-| Light-sleep, resume execution | BOOT/GPIO9 | Repeated wake passed with UART disabled; 128 static and 128 stack bytes matched after each wake |
-| Deep-sleep, reset on wake | External GPIO3 switch to GND | Seven consecutive wake/restart cycles passed on DevKit N8 with UART disabled and serial diagnostics removed |
+| Light-sleep, resume execution | BOOT/GPIO9 | Repeated wake passed with UART output drained and Disable() called; 128 static and 128 stack bytes matched after each wake |
+| Deep-sleep, reset on wake | External GPIO3 switch to GND | Seven consecutive wake/restart cycles passed on DevKit N8 with UART output drained and Disable() called and serial diagnostics removed |
 
 Every reported Deep-sleep restart identified reset reason `0x100` (pin wake).
 `Start count 1, 0 retention registers` is expected: the port exposes no
 retention registers. The counter is initialized again at startup.
 The SRAM sample result applies to Light-sleep only and is not a full SRAM
-or Deep-sleep retention test. Sleep current has not been measured.
+or Deep-sleep retention test. Sleep current has not been measured. The ESP32 UART Disable/Enable hooks
+are currently empty: the earlier UART-off configuration drained output and
+called Disable(), but did not gate UART hardware clocks. Actual UART shutdown
+remains unimplemented in these hooks.
 
 The cleaned C6 PowerOffDemo defaults to GPIO3 Deep-sleep. To exercise the
 validated Light-sleep path, set `WAKE_BUT_PIN` to 9 and
@@ -1128,7 +1131,9 @@ Remaining work is separate from the completed C6 GPIO wake validation:
 
 - C6 ClockDemo at `e5044c35f` passed three cycles of XTAL/RC_FAST switching,
   APB changes, LF selection, UART TX and timer interrupts with zero failures.
-  The subsequent calibrated RC_FAST timing change still needs its board test.
+  Calibrated RC_FAST timing at `6d3947a30` also passed three cycles with zero
+  failures: RC_FAST 16134719-16136308 Hz, 250 ms delay 249969-250037 us.
+  Combined clock selection and Light-sleep resume checks remain pending.
   UART RX and other peripheral operation after switching remain untested.
 - Measure Light-sleep and Deep-sleep current with board circuitry accounted for.
 - Validate C3 RTC sleep entry and repeated wake on C3 hardware, including ROM

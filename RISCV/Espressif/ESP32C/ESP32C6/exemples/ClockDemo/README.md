@@ -5,7 +5,9 @@ and ClockDemo in the same configuration, then flash ClockDemo.elf using the
 normal IOcomposer flash command. Debug and Release both use UART0 at
 1,000,000 baud, 8N1, without flow control. The DevKit N8 USB-to-UART bridge
 connects TX16 and RX17; the native USB JTAG/serial port is not this UART.
-Open the terminal before pressing RESET. No jumper or button is needed.
+Open the terminal before pressing RESET. No jumper is needed. At each
+`Entering sleep; press BOOT to resume` prompt, press and release BOOT (GPIO9).
+The default run has nine sleep prompts.
 
 The shared source is `exemples/misc/clock_demo.cpp`. Board configuration selects
 three repetitions of the following sequence:
@@ -19,6 +21,24 @@ three repetitions of the following sequence:
    before the next clock change.
 4. At each CPU source, select and calibrate RC_SLOW, RC32K, then RC_SLOW again.
    Print the measured LF frequency. No external 32 kHz crystal is assumed.
+
+Once per CPU-source step, the demo also selects APB divided by four, drains
+UART output, calls Disable(), and enters SystemSleep with BOOT configured for
+wake. After return it checks CPU/APB frequencies and the LF descriptor, calls
+Enable() on UART, and repeats the delay/interrupt checks before restoring APB.
+Cycle 1 sleeps with RC_SLOW, cycle 2 with RC32K and cycle 3 with RC_SLOW again.
+The timer is stopped before entry. CPU and APB checks read hardware; the LF
+check compares the saved descriptor and does not remeasure the LF oscillator.
+
+Comment out `CLOCK_DEMO_WAKE_PIN` in board.h for the automatic clock-only run.
+That configuration does not link the PMU sleep entry.
+
+The ESP32 UART Disable/Enable hooks currently perform no hardware operation.
+These calls quiesce application use but do not establish UART clock gating.
+Sleep-current measurements and actual UART shutdown remain separate work.
+SystemSleep can fall back to CPU WFI; returning with preserved clocks alone
+is not proof of PMU entry or a particular current consumption. Confirm that each
+prompt waits for BOOT before continuing.
 
 Each operation prints its result. The final line should read:
 
@@ -42,12 +62,12 @@ startup configuration. No watchdog or power-off operation is enabled.
 
 Validation: all 206 C6 library sources and this example compiled and linked
 in Debug and Release using RISC-V GNU 15.2.0 and the Eclipse-managed source
-lists/settings. The calibrated timing change awaits hardware validation.
+lists/settings. The combined clock/sleep run awaits hardware validation.
 
 | Build | text | data | bss |
 | --- | ---: | ---: | ---: |
-| Debug | 47400 | 584 | 3008 |
-| Release | 21918 | 564 | 2740 |
+| Debug | 57062 | 584 | 3292 |
+| Release | 27038 | 564 | 3024 |
 
 Hardware results before calibrated CPU timing (`e5044c35f`): all three cycles
 completed with zero failures. Source selection, APB readback, LF calibration,
@@ -72,3 +92,10 @@ Temporary production-source checks passed at O0 and Os for fractional-frequency
 CPU/APB readback, repeated switching, failed calibration rollback, interrupt-mask
 restoration, microsecond/nanosecond delay arithmetic and cycle-counter wrap.
 Existing C3/C6 startup checks and five-chip timer checks also passed.
+
+Calibrated timing at `6d3947a30` passed all three hardware cycles with zero
+failures. RC_FAST measured 16134719-16136308 Hz; its 250 ms delay samples were
+249969-250037 us. The 24/25 interrupt counts matched the sampling boundary.
+XTAL restoration, divided APB settings, LF calibration and UART output passed.
+This validates the clock-only run; sleep after these selections is not yet
+validated. Both sleep-enabled and clock-only Debug/Release configurations build.

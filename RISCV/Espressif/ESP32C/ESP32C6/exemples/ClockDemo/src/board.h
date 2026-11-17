@@ -35,4 +35,9 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define CLOCK_DEMO_TIMER_DEVNO 0
 #define CLOCK_DEMO_CYCLES 3U
 
+// Comment out CLOCK_DEMO_WAKE_PIN for the automatic clock-only run.
+#define CLOCK_DEMO_WAKE_PORT 0
+#define CLOCK_DEMO_WAKE_PIN 9
+#define CLOCK_DEMO_WAKE_NAME "BOOT"
+
 #endif // __BOARD_H__

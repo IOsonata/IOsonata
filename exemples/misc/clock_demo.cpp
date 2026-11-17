@@ -7,7 +7,8 @@ Uses the generic clock, UART and Timer interfaces. The board supplies the
 source sequence and peripheral clock divisors. Each change is made with the
 timer stopped. Both build configurations log to UART without a debugger.
 Timer elapsed time and interrupt counts check operation after each change;
-they do not measure absolute oscillator accuracy.
+they do not measure absolute oscillator accuracy. An optional board wake pin
+adds sleep/resume checks with UART output drained and the timer stopped.
 
 @license
 
@@ -39,6 +40,7 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "syslog.h"
 #include "idelay.h"
+#include "iopinctrl.h"
 #include "board.h"
 
 struct ClockDemoSource_t {
@@ -144,6 +146,58 @@ static void ClockDemoTimer(void)
 	ClockDemoResult("Timer count and IRQ", elapsed > 0U && count > 0U && difference <= 1U);
 }
 
+#if defined(CLOCK_DEMO_WAKE_PIN)
+static void ClockDemoSleep(void)
+{
+	uint32_t core = SystemCoreClockGet();
+	uint32_t apb = SystemPeriphClockGet(0);
+	OscDesc_t high = *GetHighFreqOscDesc();
+	OscDesc_t low = *GetLowFreqOscDesc();
+	unsigned released = 0U;
+
+	// Exercise restoration with APB divided, not just at the CPU rate.
+	msDelay(2);
+	uint32_t sleepApb = SystemPeriphClockSet(0, core / 4U);
+	if (sleepApb == 0U)
+	{
+		ClockDemoResult("Sleep APB selection", false);
+		return;
+	}
+	IOPinConfig(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINOP_GPIO,
+		IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	while (released < 20U)
+	{
+		released = IOPinRead(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN) != 0 ?
+			released + 1U : 0U;
+		msDelay(1);
+	}
+	if (!SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN,
+		IOPINSENSE_LOW_TRANSITION))
+	{
+		ClockDemoResult("Sleep wake pin", false);
+		(void)SystemPeriphClockSet(0, apb);
+		return;
+	}
+	SysLogPrintf(SysLogGet(), "Sleep: CPU %u Hz, APB %u Hz, LF %u Hz\r\n",
+		(unsigned)core, (unsigned)sleepApb, (unsigned)low.Freq);
+	SysLogPrintf(SysLogGet(), "Entering sleep; press " CLOCK_DEMO_WAKE_NAME " to resume\r\n");
+	msDelay(2);
+	s_Uart.Disable();
+	SystemSleep();
+	s_Uart.Enable();
+	(void)SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINSENSE_DISABLE);
+	SysLogPrintf(SysLogGet(), "Sleep returned; checking clocks\r\n");
+	ClockDemoResult("CPU clock after resume", SystemCoreClockGet() == core &&
+		GetHighFreqOscType() == high.Type && GetHighFreqOscFreq() == high.Freq);
+	ClockDemoResult("APB clock after resume", SystemPeriphClockGet(0) == sleepApb);
+	ClockDemoResult("LF descriptor after resume", GetLowFreqOscType() == low.Type &&
+		GetLowFreqOscFreq() == low.Freq);
+	ClockDemoTimer();
+	msDelay(2);
+	ClockDemoResult("APB restore", SystemPeriphClockSet(0, apb) == apb);
+}
+#endif
+
 int main(void)
 {
 	if (!s_Uart.Init(s_UartCfg) ||
@@ -187,6 +241,9 @@ int main(void)
 					SystemPeriphClockGet(0) == actual && SystemCoreClockGet() == core);
 				ClockDemoTimer();
 			}
+#if defined(CLOCK_DEMO_WAKE_PIN)
+			unsigned lfIndex = 0U;
+#endif
 			for (const ClockDemoLowFreq_t &source : s_LowFreqSources)
 			{
 				SysLogPrintf(SysLogGet(), "Selecting LF %s\r\n", source.pName);
@@ -194,6 +251,15 @@ int main(void)
 				bool selected = SystemLowFreqClockSelect(source.Type, source.Frequency);
 				ClockDemoResult(source.pName, selected);
 				SysLogPrintf(SysLogGet(), "LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
+#if defined(CLOCK_DEMO_WAKE_PIN)
+				// Rotate the LF source used for sleep across the three cycles.
+				if (selected && lfIndex == (cycle - 1U) %
+					(sizeof(s_LowFreqSources) / sizeof(s_LowFreqSources[0])))
+				{
+					ClockDemoSleep();
+				}
+				lfIndex++;
+#endif
 			}
 		}
 	}
