@@ -506,7 +506,16 @@ int main()
 
 	// Allow the final UART record to finish before stopping the transport.
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
-	msDelay(1000);
+	UARTDev_t *pUart = (UARTDev_t *)s_Uart;
+	uint8_t unused;
+
+	while (CFifoUsed(SysLogGet()->hFifo) != 0 || CFifoUsed(pUart->hTxFifo) != 0)
+	{
+		(void)SysLogFlush(SysLogGet());
+		(void)s_Uart.Rx(&unused, 1);
+	}
+	// Allow the last UART character to leave the shift register.
+	msDelay(2);
 	s_Uart.PowerOff();
 #else
 	msDelay(100);

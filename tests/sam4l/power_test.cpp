@@ -80,7 +80,9 @@ int main(void)
 		assert(s_Eic.EIC_EN == (1U << 1));
 		assert(s_Bpm.BPM_BKUPPMUX & (1U << 1));
 	}
+	assert(s_Eic.EIC_IER == (1U << 1));
 	assert(SystemWakePin(IOPORTA, 6, IOPINSENSE_DISABLE));
+	assert(s_Eic.EIC_IDR == (1U << 1));
 	assert(!(s_Bpm.BPM_BKUPPMUX & (1U << 1)));
 	s_Eic.EIC_CTRL = 0;
 	s_Bpm.BPM_BKUPWEN = SAM4L_BACKUP_WAKE_AST;
@@ -92,6 +94,7 @@ int main(void)
 		assert(SystemWakePin(s_Sam4lBackupPins[i].Port, s_Sam4lBackupPins[i].Pin,
 				IOPINSENSE_HIGH_TRANSITION));
 		assert(s_Eic.EIC_EN == bit);
+		assert(s_Eic.EIC_IER == bit);
 		assert(s_Eic.EIC_IDR == bit);
 		assert(s_Eic.EIC_MODE & bit);
 		assert(s_Eic.EIC_ASYNC & bit);

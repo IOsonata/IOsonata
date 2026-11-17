@@ -155,6 +155,7 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 		return false;
 	}
 	SAM4L_EIC->EIC_DIS = bit;
+	SAM4L_EIC->EIC_IDR = bit;
 	if (Sense == IOPINSENSE_DISABLE)
 	{
 		SAM4L_BPM->BPM_BKUPPMUX &= ~bit;
@@ -173,11 +174,12 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	{
 		SAM4L_EIC->EIC_LEVEL &= ~bit;
 	}
-	// EIC_WAKE is generated without enabling an NVIC interrupt.
-	SAM4L_EIC->EIC_IDR = bit;
+	// Datasheet 21.6.5 requires IMR for wakeup. The NVIC interrupt is
+	// left disabled: Backup wake resets the core instead of calling an ISR.
 	SAM4L_EIC->EIC_ICR = bit;
 	SAM4L_BPM->BPM_BKUPPMUX |= bit;
 	SAM4L_BPM->BPM_BKUPWEN |= SAM4L_BACKUP_WAKE_EIC;
+	SAM4L_EIC->EIC_IER = bit;
 	SAM4L_EIC->EIC_EN = bit;
 	EnableInterrupt(state);
 	return true;

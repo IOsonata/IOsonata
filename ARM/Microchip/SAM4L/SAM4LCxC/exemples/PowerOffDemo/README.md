@@ -8,8 +8,8 @@ Build the SAM4LCxC library and PowerOffDemo in the same configuration.
 Flash the application and run without an active debugger session. UART output
 uses USART1 at 1000000 baud on the EDBG virtual COM port.
 
-After `Power off, press the button to wake up`, allow one second for the UART
-to shut down, then press and release OLED1 BUTTON1. A successful wake restarts
+After `Power off, press the button to wake up`, press and release OLED1
+BUTTON1. The demo drains UART output before shutting it down. A successful wake restarts
 the application and reports `Reset reason 0x100: wake up by a pin`. Repeat
 several times. The start count should increase if backup register retention
 works; record the output to verify both wake and retention.
@@ -22,3 +22,9 @@ pin routing to recognize that line. Repeated wake validation is pending.
 
 Pin assignments: Microchip SAM4L8 Xplained Pro User Guide, table 4-2, and
 OLED1 Xplained Pro User Guide, extension header table.
+
+Repeated wakes remained intermittent with EIC IMR cleared, including a
+one-second button hold more than two seconds after the prompt. Wake setup now
+enables the peripheral interrupt, as required by datasheet section 21.6.5,
+without enabling its NVIC interrupt. Disabling a wake pin masks the peripheral
+interrupt again. Hardware confirmation of this correction is pending.
