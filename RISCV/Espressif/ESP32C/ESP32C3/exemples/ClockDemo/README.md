@@ -7,7 +7,7 @@ log through UART0 TX21/RX20 at 1,000,000 baud, 8N1. No debugger is required.
 The demo runs three cycles of XTAL 40 MHz, RC_FAST and XTAL restoration.
 Each source exercises dividers 1, 2, 4 and 1. On C3 these divide CPU and APB
 together. A stopped Timer Group counter is restarted after each change to
-check a 250 ms delay and 10 ms periodic interrupts. Delay calculations use
+check msDelay(250), nsDelay(250000000) and 10 ms periodic interrupts. Delay calculations use
 frequency in Hz so fractional MHz from the C3 divider is preserved.
 
 RC_FAST is measured against XTAL through the RTC divide-by-256 calibration
@@ -20,7 +20,7 @@ implementation, and an external 32 kHz crystal is not assumed.
 At each `Entering sleep; press BOOT to resume` prompt, press and release BOOT
 (GPIO9). The demo checks clock descriptors, frequency readback, timer counts
 and interrupts after Light-sleep. There are nine sleep prompts across three
-cycles. Comment out `CLOCK_DEMO_WAKE_PIN` in `src/board.h` for an automatic
+cycles. Comment out `CLOCK_DEMO_WAKE_PIN` in `src/board.h` and set `CLOCK_DEMO_UART_RX_TEST` to 0 for an automatic
 clock-only run. The expected final line is `ClockDemo complete: 0 failures`.
 No watchdog is enabled by the demo.
 
@@ -40,3 +40,23 @@ enables. RC_FAST power and digital output are enabled before calibration.
 A failed calibration leaves the previous CPU source selected.
 UART RX after clock changes and sleep-current measurements remain untested.
 The dots before startup output remain unexplained.
+
+The default run now also checks polling UART receive. At each
+`UART RX: send U within 30 s` prompt, send uppercase `U` (then Enter if the
+terminal buffers a line). There are ten receive prompts: one at startup and
+one after each of nine BOOT wakes. Receive timeout counts as a failure and
+the demo continues. Do not send continuously while UART is disabled for sleep.
+These checks use the existing generic ClockDemo receive function; interrupt
+and DMA receive modes are not enabled.
+
+Rebuild both the library and demo to include the shared RISC-V delay changes.
+The header uses the port's cycle counter and current CPU frequency for both
+delay units. Hardware results above predate this receive-enabled run; the
+combined delay and receive run still needs board validation.
+
+Receive-enabled command-line build sizes:
+
+| Build | text | data | bss |
+| --- | ---: | ---: | ---: |
+| Debug | 51052 | 608 | 2764 |
+| Release | 24788 | 596 | 2760 |

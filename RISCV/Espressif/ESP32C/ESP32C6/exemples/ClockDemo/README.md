@@ -16,8 +16,8 @@ three repetitions of the following sequence:
 2. At each source, select APB divisors 1, 2, 4, then 1. Check the selected
    frequency and readback and confirm the CPU rate remains unchanged.
 3. After every APB request, run Timer 0 at 1 MHz with a 10 ms interrupt period.
-   Report the timer's elapsed time during a 250 ms CPU delay and the number of
-   interrupts. Check the delay is within 2 percent of 250 ms. Stop the timer
+   Report elapsed time and interrupt counts separately for msDelay(250)
+   and nsDelay(250000000). Check the delay is within 2 percent of 250 ms. Stop the timer
    before the next clock change.
 4. At each CPU source, select and calibrate RC_SLOW, RC32K, then RC_SLOW again.
    Print the measured LF frequency. No external 32 kHz crystal is assumed.
@@ -30,7 +30,8 @@ Cycle 1 sleeps with RC_SLOW, cycle 2 with RC32K and cycle 3 with RC_SLOW again.
 The timer is stopped before entry. CPU and APB checks read hardware; the LF
 check compares the saved descriptor and does not remeasure the LF oscillator.
 
-Comment out `CLOCK_DEMO_WAKE_PIN` in board.h for the automatic clock-only run.
+Comment out `CLOCK_DEMO_WAKE_PIN` in board.h and set
+`CLOCK_DEMO_UART_RX_TEST` to 0 for the automatic clock-only run.
 That configuration does not link the PMU sleep entry.
 
 UART Disable now masks UART interrupts and gates the serial and bus clocks.
@@ -56,7 +57,8 @@ is not an independent measurement of the timer's absolute frequency. The
 250 ms delay uses the calibrated CPU frequency, including fractional MHz.
 The timer provides a separate PLL-derived reference on C6. UART text
 remaining readable checks TX operation throughout the source/rate changes;
-this demo does not check UART RX or other peripheral drivers.
+the optional receive prompts check polling RX before sleep and after wake.
+Other peripheral drivers are not exercised.
 
 On normal completion, the selected sources are XTAL for the CPU and RC_SLOW
 for the LF clock, with APB at 40 MHz. The original PLL CPU source is not restored;
@@ -70,8 +72,8 @@ the UART shutdown changes at `17d081bd1` also passed all nine wakes.
 
 | Build | text | data | bss |
 | --- | ---: | ---: | ---: |
-| Debug | 58634 | 616 | 3292 |
-| Release | 27818 | 596 | 3024 |
+| Debug | 56956 | 608 | 3028 |
+| Release | 27772 | 596 | 3024 |
 
 Hardware results before calibrated CPU timing (`e5044c35f`): all three cycles
 completed with zero failures. Source selection, APB readback, LF calibration,
@@ -136,9 +138,22 @@ Hardware run at `17d081bd1`: three cycles, nine BOOT wakes and zero failures
 with UART Disable/Enable gating clocks. Every post-wake timer sample had 25
 interrupts; 250 ms delays measured 250049-250180 us. CPU/APB restoration and
 LF descriptor checks passed. One initial UART line was truncated before the
-first sleep; its cause has not been established by this log. UART RX and current
-consumption are not checked by this demo.
+first sleep; its cause has not been established by this log. That run did not check UART
+RX or current consumption.
 
 PowerOffDemo at the same revision also passed three consecutive GPIO3
 Deep-sleep wake/restart cycles after UART PowerOff. Every restart reported
 pin-wake reason 0x100. Start count 1 is expected with zero retention registers.
+
+The default run now also checks polling UART receive. At each
+`UART RX: send U within 30 s` prompt, send uppercase `U` (then Enter if the
+terminal buffers a line). There are ten receive prompts: one at startup and
+one after each of nine BOOT wakes. Receive timeout counts as a failure and
+the demo continues. Do not send continuously while UART is disabled for sleep.
+These checks use the existing generic ClockDemo receive function; interrupt
+and DMA receive modes are not enabled.
+
+Rebuild both the library and demo to include the shared RISC-V delay changes.
+The header uses the port's cycle counter and current CPU frequency for both
+delay units. Hardware results above predate this receive-enabled run; the
+combined delay and receive run still needs board validation.

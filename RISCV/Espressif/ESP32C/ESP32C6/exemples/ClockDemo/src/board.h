@@ -34,8 +34,11 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 }
 #define CLOCK_DEMO_TIMER_DEVNO 0
 #define CLOCK_DEMO_CYCLES 3U
+#ifndef CLOCK_DEMO_UART_RX_TEST
+#define CLOCK_DEMO_UART_RX_TEST 1
+#endif
 
-// Comment out CLOCK_DEMO_WAKE_PIN for the automatic clock-only run.
+// For an automatic run, omit CLOCK_DEMO_WAKE_PIN and disable the RX check.
 #define CLOCK_DEMO_WAKE_PORT 0
 #define CLOCK_DEMO_WAKE_PIN 9
 #define CLOCK_DEMO_WAKE_NAME "BOOT"

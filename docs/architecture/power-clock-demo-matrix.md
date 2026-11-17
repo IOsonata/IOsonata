@@ -191,3 +191,14 @@ SAMD21 ClockDemo/PowerOffDemo and C3/C6 ClockDemo compatibility links passed.
 The receive helper's response, timeout, unrelated-input, stale-input and timer
 failure paths passed host checks. Polling receive operation passed the board
 run recorded above.
+
+C3 and C6 ClockDemo now enable the same polling UART receive check by default.
+Each run has ten receive prompts (startup and nine Light-sleep wakes), together
+with the existing CPU/APB/LF selection, msDelay and nsDelay measurements. Send
+uppercase U within 30 seconds at each prompt and press BOOT only when asked to
+resume. Both libraries and demos rebuilt from their managed source lists in
+Debug and Release: 204/204 C3 sources and 206/206 C6 sources. Release flash use
+is 25,384 bytes for C3 and 28,368 bytes for C6; static RAM is 3,356 and 3,620
+bytes respectively, excluding stack. This receive-enabled run still needs
+hardware validation. D21 hardware validation is deferred because the board is
+not available.
