@@ -291,6 +291,18 @@ void Esp32SystemInit(void)
 	DisableSuperWdt();
 
 #if defined(ESP32C3)
+	// Reset enables unused peripheral clocks. Drivers enable their own gates.
+	// Preserve flash, UART0, timer infrastructure, eFuse and USB Serial/JTAG.
+	*(volatile uint32_t *)(SYSTEM_BASE + 0x10U) &=
+		~((1UL << 5) | (1UL << 6) | (1UL << 7) | (1UL << 8) |
+		(1UL << 9) | (1UL << 10) | (1UL << 11) | (1UL << 12) |
+		(1UL << 16) | (1UL << 17) | (1UL << 18) | (1UL << 19) |
+		(1UL << 20) | (1UL << 21) | (1UL << 22) | (1UL << 25) |
+		(1UL << 26) | (1UL << 27) | (1UL << 28) | (1UL << 30) |
+		(1UL << 31));
+	// Crypto, DMA and sensor clocks are also acquired by their drivers.
+	*(volatile uint32_t *)(SYSTEM_BASE + 0x14U) &= ~0x5FEUL;
+
 	// ROM initializes the PLL and flash clocks. Adjust its running CPU tap
 	// only; selecting PLL here would also require power-up and calibration.
 	if ((SYSTEM_SYSCLK_CONF_REG & SYSTEM_SOC_CLK_SEL_Msk) == SYSTEM_SOC_CLK_SEL_PLL)

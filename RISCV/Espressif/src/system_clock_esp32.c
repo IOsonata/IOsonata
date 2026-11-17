@@ -69,12 +69,14 @@ void Esp32C6PeripheralClockInit(void)
 static bool Esp32ClockBusy(void)
 {
 #if defined(ESP32C3)
-	// Flash, eFuse, SYSTIMER, UART memory and idle Timer Groups may remain on.
-	uint32_t infrastructure = (1UL << 1) | (1UL << 2) | (1UL << 5) | (1UL << 13) | (1UL << 14) |
-		(1UL << 15) | (1UL << 24) | (1UL << 29);
+	// USB Serial/JTAG keeps its PLL clock independently of CPU/APB selection.
+	// System timers, flash, eFuse and UART memory may also remain clocked.
+	uint32_t infrastructure = (1UL << 0) | (1UL << 1) | (1UL << 2) |
+		(1UL << 3) | (1UL << 5) | (1UL << 13) | (1UL << 14) |
+		(1UL << 15) | (1UL << 23) | (1UL << 24) | (1UL << 29);
 
 	if ((ESP32_REG32(0x600C0010UL) & ~infrastructure) != 0U ||
-		ESP32_REG32(0x600C0014UL) != 0U)
+		(ESP32_REG32(0x600C0014UL) & 0x5FEUL) != 0U)
 	{
 		return true;
 	}

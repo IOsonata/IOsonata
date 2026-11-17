@@ -27,3 +27,11 @@ Build validation uses RISC-V GNU 15.2.0 with the Eclipse managed source lists
 and compiler settings. It is a command-line compile/link check, not an Eclipse
 invocation. Debug and Release compile all 204 C3 library sources and link the
 demo. The generic demo remains shared with ESP32-C6.
+
+The first C3 board run rejected all nine source selections. Startup now gates
+unused peripherals before drivers initialize them. The busy check permits the
+system timer infrastructure and independent USB Serial/JTAG clock, while
+continuing to reject active peripheral users. This follows the startup clock
+gating in ESP-IDF v5.5.1 `components/esp_system/port/soc/esp32c3/clk.c`.
+The correction passes host register checks and Debug/Release builds; the C3
+board retest is pending.

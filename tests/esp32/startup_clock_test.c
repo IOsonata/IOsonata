@@ -1,6 +1,6 @@
 /**-------------------------------------------------------------------------
 @file startup_clock_test.c
-@brief C2/C5/C61 boot watchdog and clock decoding checks with host MMIO.
+@brief C2/C3/C5/C61 boot watchdog and clock decoding checks with host MMIO.
 @license MIT License
 Copyright (c) 2026 I-SYST inc. All rights reserved.
 ----------------------------------------------------------------------------*/
@@ -65,7 +65,15 @@ int main(void)
 	REG(0x60008090) = (1U << 31) | (1U << 12);
 	REG(0x6001F048) = (1U << 31) | (1U << 14);
 	REG(0x60020048) = (1U << 31) | (1U << 14);
+	// Reset-enabled peripherals must not appear owned before driver init.
+	REG(0x600C0010) = 0xFFFFFFEFU;
+	REG(0x600C0014) = 0x5FEU;
 	Esp32SystemInit();
+	assert(REG(0x600C0010) == ((1U << 0) | (1U << 1) | (1U << 2) |
+		(1U << 3) | (1U << 13) | (1U << 14) | (1U << 15) |
+		(1U << 23) | (1U << 24) | (1U << 29)));
+	assert(REG(0x600C0014) == 0);
+
 #if defined(ESP32C3_CPU_160MHZ)
 	assert(SystemCoreClock == 160000000U);
 	assert(s_RomMHz == 160U);
