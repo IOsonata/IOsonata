@@ -15,7 +15,10 @@ several times. The start count should increase if backup register retention
 works; record the output to verify both wake and retention.
 
 This demo does not initialize the OLED display. Its output remains on UART.
-Backup wake through OLED1 still requires hardware validation.
+The first hardware wake reported pin wake and advanced the retained count
+from 1 to 2. Re-arming then failed because the EIC line survived Backup while
+its SRAM ownership flag was cleared. The driver now uses the retained Backup
+pin routing to recognize that line. Repeated wake validation is pending.
 
 Pin assignments: Microchip SAM4L8 Xplained Pro User Guide, table 4-2, and
 OLED1 Xplained Pro User Guide, extension header table.

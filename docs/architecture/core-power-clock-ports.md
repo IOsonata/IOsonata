@@ -331,7 +331,11 @@ UART output. CPU/APB measurements were about 44.8 MHz with RC4 and 39.64 MHz
 with RC12. Both 250 ms delays measured about 253420 us with 25 interrupts,
 within the demo's 2 percent tolerance; the final result was zero failures.
 The SAM4LCxC PowerOffDemo now selects OLED1 BUTTON1 on EXT2 (PC06 / EIC8) for
-Backup wake. Button wake and backup-register retention remain unverified.
+Backup wake. Hardware confirmed one BUTTON1 wake and retained start count
+advancing from 1 to 2. The following re-arm exposed a stale ownership check:
+EIC remained enabled across Backup but its SRAM flag was cleared. Wake-line
+ownership now follows the retained Backup pin routing. Repeated wakes after
+this correction still need hardware confirmation.
 
 SAM4LC ClockDemo hardware results on November 17 exposed UART corruption with
 RCFAST 4 MHz selected and incorrect delay calibration: 250 ms measured as

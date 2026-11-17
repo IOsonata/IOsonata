@@ -42,8 +42,6 @@ SOFTWARE.
 #define SAM4L_BACKUP_WAKE_WDT (1UL << 2)
 #define SAM4L_BACKUP_WAKE_BOD ((1UL << 3) | (1UL << 4))
 
-static uint32_t s_Sam4lWakePins;
-
 static const struct {
 	int Port;
 	int Pin;
@@ -149,8 +147,9 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	}
 	state = DisableInterrupt();
 	Sam4lPowerClockEnable(PM_PBDMASK_BPM | PM_PBDMASK_EIC);
-	// Do not take an EIC line already enabled by another driver.
-	if ((SAM4L_EIC->EIC_CTRL & bit) && !(s_Sam4lWakePins & bit))
+	// Backup pin routing survives a Backup wake; SRAM ownership does not.
+	// Reuse a routed wake line, but leave an ordinary EIC user's line alone.
+	if ((SAM4L_EIC->EIC_CTRL & bit) && !(SAM4L_BPM->BPM_BKUPPMUX & bit))
 	{
 		EnableInterrupt(state);
 		return false;
@@ -159,7 +158,6 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	if (Sense == IOPINSENSE_DISABLE)
 	{
 		SAM4L_BPM->BPM_BKUPPMUX &= ~bit;
-		s_Sam4lWakePins &= ~bit;
 		// Keep the shared EIC wake enable for any other configured line.
 		EnableInterrupt(state);
 		return true;
@@ -181,7 +179,6 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	SAM4L_BPM->BPM_BKUPPMUX |= bit;
 	SAM4L_BPM->BPM_BKUPWEN |= SAM4L_BACKUP_WAKE_EIC;
 	SAM4L_EIC->EIC_EN = bit;
-	s_Sam4lWakePins |= bit;
 	EnableInterrupt(state);
 	return true;
 }

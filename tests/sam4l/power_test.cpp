@@ -68,6 +68,20 @@ int main(void)
 	s_Eic.EIC_CTRL = 1 << 1;
 	assert(!SystemWakePin(0, 6, IOPINSENSE_LOW_TRANSITION));
 	assert(s_Eic.EIC_DIS == 0);
+	// Start with retained hardware and freshly initialized driver RAM, as
+	// after Backup wake. An enabled EIC line alone was refused above.
+	s_Bpm.BPM_BKUPPMUX = 1U << 1;
+	s_Bpm.BPM_BKUPWEN = SAM4L_BACKUP_WAKE_EIC;
+	s_Eic.EIC_MODE = 1U << 1;
+	s_Eic.EIC_ASYNC = 1U << 1;
+	for (i = 0; i < 3U; i++)
+	{
+		assert(SystemWakePin(IOPORTA, 6, IOPINSENSE_LOW_TRANSITION));
+		assert(s_Eic.EIC_EN == (1U << 1));
+		assert(s_Bpm.BPM_BKUPPMUX & (1U << 1));
+	}
+	assert(SystemWakePin(IOPORTA, 6, IOPINSENSE_DISABLE));
+	assert(!(s_Bpm.BPM_BKUPPMUX & (1U << 1)));
 	s_Eic.EIC_CTRL = 0;
 	s_Bpm.BPM_BKUPWEN = SAM4L_BACKUP_WAKE_AST;
 	s_Eic.EIC_MODE = 1UL << 31;
