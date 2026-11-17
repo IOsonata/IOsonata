@@ -31,7 +31,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
-| ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 sleep hardware pending | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C6 clock-only hardware checks passed; combined sleep/clock checks and current measurements pending; runtime PLL selection and Deep-sleep RAM retention unsupported |
+| ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; runtime PLL selection and Deep-sleep RAM retention unsupported |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
 ## SAM D11/D21 low-power work (0.14, unmerged)
@@ -62,8 +62,12 @@ that combined run at `e017243bc` passed all three wakes with zero failures.
 CPU/APB and LF descriptor checks passed. Post-wake msDelay measured
 250097-250103 us and nsDelay 250108-250112 us, with 25 interrupts per sample.
 A separate PowerOffDemo run passed five wakes with both 128-byte SRAM samples.
-ClockDemo now adds a polling UART receive prompt before sleep and after each
-wake; that new receive check awaits hardware validation.
+The run at `d11b58001` also passed all four polling UART receive prompts:
+one before sleep and one after each of three SW0 wakes. Baseline msDelay
+measured 250093 us and nsDelay 250107 us; post-wake measurements were
+250103-250104 us and 250114-250115 us respectively. Every sample had 25
+interrupts. CPU/APB clocks, LF descriptors and APB restoration passed, with
+zero failures. UART interrupt/DMA receive modes were not exercised.
 
 SAMD runtime clock selection returns the clock setup result. A failed
 core-clock change attempts the same OSC8M fallback used at startup, updates
@@ -152,10 +156,11 @@ Validation with Arm GNU 15.2.1:
   release, failed release/retry and SW0 polarity changes. Peripheral registers
   and synchronization are modeled; these are not hardware measurements.
 
-Hardware clock switching, oscillator failure recovery, the latest wake-release
-changes, D21 wake, full SRAM continuity and sleep-current measurements remain
-pending. The prior D11 resume and SRAM-sample results above are retained as
-separate hardware evidence.
+D11 clock re-selection, repeated SW0 wake, delay scaling, timer interrupts
+and polling UART operation passed as recorded above. Oscillator failure
+recovery, D21 wake, full SRAM continuity and sleep-current measurements remain
+pending. The D11 runs do not establish arbitrary CPU/APB rate changes or
+peripheral clock-ownership behavior under concurrent transfers.
 
 ## STM32WBA power port (0.14)
 

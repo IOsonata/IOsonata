@@ -80,10 +80,15 @@ measured 250097-250103 us; nsDelay measured 250108-250112 us, with 25 interrupts
 in every sample and zero failures. PowerOffDemo separately passed five
 consecutive wakes with both 128-byte SRAM samples preserved.
 
-The added polling UART RX check remains to be run on hardware. Missing the
-response deadline increments the failure count; the demo continues. Input
-cleanup is bounded, and unrelated characters do not count as a successful
-response. UART interrupt/DMA receive modes are outside this check.
+The maintainer's run at d11b58001 passed polling UART RX before sleep and
+following each of three SW0 wakes, completing with zero failures. Baseline
+msDelay measured 250093 us and nsDelay 250107 us. Post-wake msDelay measured
+250103-250104 us and nsDelay 250114-250115 us; every sample had 25 interrupts.
+CPU/APB clocks, LF descriptors and APB restoration passed after every wake.
+
+Missing the UART response deadline increments the failure count; the demo
+continues. Input cleanup is bounded, and unrelated characters do not count as
+a successful response. UART interrupt/DMA receive modes are outside this check.
 
 OSC8M identifies the PLL reference selected by SystemCoreClockSelect; the
 clock tree is rebuilt to 48 MHz. It does not request an 8 MHz CPU clock.

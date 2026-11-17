@@ -55,8 +55,7 @@ library sources compile. No new board execution was performed for this batch.
 The shared demo now uses the UART C functions, as it already does for Timer.
 This allows LTO to discard unused C++ UART methods without changing driver APIs.
 SAMD11 selects SysTick as timer 4 and uses size optimization and LTO in both
-configurations: 15,086 text, 208 data, 1,936 bss. Flash use is 15,294 bytes;
-static RAM is 2,144 bytes, with stack space still required.
+configurations. Current sizes for its selectable runs are recorded below.
 
 ## What each configuration exercises
 
@@ -179,10 +178,16 @@ D11 Standby mode now enables CLOCK_DEMO_UART_RX_TEST. Send uppercase U at the
 terminal prompt before the first sleep and after each wake. Each response has
 a 30-second polling budget, and timeout increments the demo failure count.
 This checks polling RX after UART disable/enable across Standby; it does not
-validate interrupt or DMA receive modes. The receive check remains pending.
+validate interrupt or DMA receive modes. The maintainer's run at d11b58001
+passed all four receive prompts and three SW0 wakes with zero failures.
+CPU/APB clocks, LF descriptors and APB restoration passed after each wake.
+Baseline msDelay measured 250093 us and nsDelay 250107 us. Post-wake msDelay
+measured 250103-250104 us and nsDelay 250114-250115 us, with 25 interrupts
+in every sample.
 
 The UART receive version linked in both D11 modes, Debug and Release. Standby
 mode uses 16,120 flash bytes and 2,132 static RAM bytes before the stack.
 SAMD21 ClockDemo/PowerOffDemo and C3/C6 ClockDemo compatibility links passed.
 The receive helper's response, timeout, unrelated-input, stale-input and timer
-failure paths passed host checks; physical receive operation remains pending.
+failure paths passed host checks. Polling receive operation passed the board
+run recorded above.
