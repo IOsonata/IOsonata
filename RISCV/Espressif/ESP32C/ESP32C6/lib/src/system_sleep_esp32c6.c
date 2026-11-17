@@ -73,21 +73,6 @@ typedef struct {
 	uint32_t Registers[sizeof(s_C6SavedOffsets) / sizeof(s_C6SavedOffsets[0])];
 } Esp32C6SleepState_t;
 
-// Sleep progress and hardware status remain in SRAM when the UART is off.
-// Inspect these globals in the debugger if the MCU stops responding.
-volatile uint32_t g_Esp32C6SleepStage;
-volatile uint32_t g_Esp32C6SleepIrq;
-volatile uint32_t g_Esp32C6SleepGpio;
-volatile uint32_t g_Esp32C6SleepWakeEnable;
-volatile uint32_t g_Esp32C6SleepPmuRaw;
-volatile uint32_t g_Esp32C6SleepWakeCause;
-volatile uint32_t g_Esp32C6SleepRejectCause;
-volatile uint32_t g_Esp32C6SleepRoot;
-
-// Optional diagnostic output. The handler and its data must be in RAM.
-// It runs with interrupts masked and may run with the cache suspended.
-void (*g_Esp32C6SleepTrace)(uint32_t Stage);
-
 uint32_t Esp32C6FastClockMeasure(void);
 bool Esp32LightWakePrepare(void);
 void Esp32LightWakeRestore(void);
@@ -96,15 +81,6 @@ void Esp32DeepWakeRestore(void);
 void Esp32RomClockUpdate(uint32_t CpuMHz);
 uint32_t Esp32RomCacheSuspend(void);
 void Esp32RomCacheResume(uint32_t Autoload);
-
-static inline __attribute__((always_inline)) void Esp32C6SetSleepStage(uint32_t Stage)
-{
-	g_Esp32C6SleepStage = Stage;
-	if (g_Esp32C6SleepTrace != 0)
-	{
-		g_Esp32C6SleepTrace(Stage);
-	}
-}
 
 static bool Esp32C6AnalogWait(uintptr_t Ctrl)
 {
@@ -506,17 +482,13 @@ static uint32_t Esp32C6Request(const Esp32C6SleepState_t *pState, bool bDeep)
 	uint32_t autoload;
 
 	root = pState->Root;
-	Esp32C6SetSleepStage(bDeep ? 0x34U : 0x14U);
-	g_Esp32C6SleepRoot = root;
 	// Suspend from IRAM and wait for outstanding flash reads before the
 	// PMU gates clocks. The ROM result preserves the autoload setting.
 	autoload = Esp32RomCacheSuspend();
-	Esp32C6SetSleepStage(bDeep ? 0x3AU : 0x1AU);
 	C6_CPU = pState->Cpu & ~0xFFU;
 	C6_AHB = pState->Ahb & ~0xFFU;
 	C6_ROOT = root & ~C6_SLEEP_MODE_MASK;
 	(void)C6_ROOT;
-	Esp32C6SetSleepStage(bDeep ? 0x35U : 0x15U);
 	Esp32RomClockUpdate(40U);
 	// Allow the PMU's active/sleep ICG selection to control the clocks.
 	if (bDeep)
@@ -526,7 +498,6 @@ static uint32_t Esp32C6Request(const Esp32C6SleepState_t *pState, bool bDeep)
 	C6_PMU(0xD0U) = 1UL << 28;
 	C6_PMU(0x130U) = 1UL << 31;
 	C6_PMU(0x168U) = C6_SLEEP_RESULT | (1UL << 29);
-	Esp32C6SetSleepStage(bDeep ? 0x36U : 0x16U);
 	C6_PMU(0x120U) = 1UL << 31;
 	__asm volatile("fence iorw, iorw" : : : "memory");
 	status = 0U;
@@ -538,10 +509,6 @@ static uint32_t Esp32C6Request(const Esp32C6SleepState_t *pState, bool bDeep)
 			break;
 		}
 	}
-	g_Esp32C6SleepPmuRaw = C6_PMU(0x15CU);
-	g_Esp32C6SleepWakeCause = C6_PMU(0x140U);
-	g_Esp32C6SleepRejectCause = C6_PMU(0x144U);
-	Esp32C6SetSleepStage(bDeep ? 0x37U : 0x17U);
 	if (bDeep)
 	{
 		// Deep-sleep resets the MCU. A rejected entry cannot assume
@@ -559,8 +526,6 @@ static uint32_t Esp32C6Request(const Esp32C6SleepState_t *pState, bool bDeep)
 	C6_PMU(0xD0U) = 1UL << 31;
 	Esp32RomClockUpdate(pState->CpuMHz);
 	Esp32RomCacheResume(autoload);
-	Esp32C6SetSleepStage(0x18U);
-	g_Esp32C6SleepRoot = C6_ROOT;
 	__asm volatile("fence iorw, iorw" : : : "memory");
 	return status;
 }
@@ -572,152 +537,54 @@ bool Esp32PowerSleep(void)
 	bool attempted;
 
 	mask = DisableInterrupt();
-	Esp32C6SetSleepStage(0x10U);
-	g_Esp32C6SleepIrq = mask;
-	g_Esp32C6SleepGpio = ESP32_GPIO_IN_REG32;
-	g_Esp32C6SleepWakeEnable = C6_PMU(0x128U);
-	g_Esp32C6SleepPmuRaw = C6_PMU(0x15CU);
-	g_Esp32C6SleepWakeCause = C6_PMU(0x140U);
-	g_Esp32C6SleepRejectCause = C6_PMU(0x144U);
 	if (!Esp32LightWakePrepare())
 	{
-		Esp32C6SetSleepStage(0x1EU);
 		EnableInterrupt(mask);
 		return false;
 	}
-	Esp32C6SetSleepStage(0x11U);
 	Esp32C6Save(&state);
-	Esp32C6SetSleepStage(0x12U);
 	attempted = state.CpuMHz != 0U &&
 		(state.Root & 0xFFU) == 0U &&
 		((state.Root >> 16) & 3U) != 3U &&
 		Esp32C6Configure(false, ((state.Root >> 16) & 3U) == 1U);
 	if (attempted)
 	{
-		Esp32C6SetSleepStage(0x13U);
-		g_Esp32C6SleepWakeEnable = C6_PMU(0x128U);
 		(void)Esp32C6Request(&state, false);
-	}
-	else
-	{
-		Esp32C6SetSleepStage(0x1DU);
 	}
 	Esp32C6Restore(&state);
 	Esp32LightWakeRestore();
-	if (attempted)
-	{
-		Esp32C6SetSleepStage(0x19U);
-	}
 	EnableInterrupt(mask);
 	// This request was handled even if rejected. Return to the caller
 	// instead of hiding the PMU result behind another CPU WFI.
 	return true;
 }
 
-// Exercise the Deep-sleep pin route with the HP domain retained.
-// Used by the board demo to separate wake detection from reset-on-wake.
-uint32_t Esp32C6CheckDeepWake(void)
+void Esp32PowerDeepSleep(void)
 {
 	Esp32C6SleepState_t state;
-	uintptr_t mask;
-	uint32_t result;
-
-	result = 0U;
-	mask = DisableInterrupt();
-	Esp32C6SetSleepStage(0x40U);
-	if (Esp32DeepWakePrepare())
-	{
-		Esp32C6Save(&state);
-		Esp32C6SetSleepStage(0x41U);
-		if (state.CpuMHz != 0U && (state.Root & 0xFFU) == 0U &&
-			((state.Root >> 16) & 3U) != 3U &&
-			Esp32C6Configure(false, ((state.Root >> 16) & 3U) == 1U))
-		{
-			C6_PMU(0x124U) = (1UL << 31) | C6_DEEP_WAKE;
-			C6_PMU(0x128U) = C6_DEEP_WAKE;
-			g_Esp32C6SleepWakeEnable = C6_DEEP_WAKE;
-			result = Esp32C6Request(&state, false);
-		}
-		Esp32C6Restore(&state);
-		Esp32DeepWakeRestore();
-	}
-	Esp32C6SetSleepStage(0x42U);
-	EnableInterrupt(mask);
-	return result;
-}
-
-static void Esp32C6DeepSleep(bool KeepSupply)
-{
-	Esp32C6SleepState_t state;
-	uintptr_t mask;
 	bool ready;
 
-	mask = DisableInterrupt();
-	Esp32C6SetSleepStage(0x30U);
+	(void)DisableInterrupt();
 	ready = Esp32DeepWakePrepare();
 	if (ready)
 	{
-		Esp32C6SetSleepStage(0x31U);
 		Esp32C6Save(&state);
-		Esp32C6SetSleepStage(0x32U);
 		ready = state.CpuMHz != 0U &&
 			((state.Root >> 16) & 3U) != 3U &&
 			Esp32C6Configure(true, false);
-		if (ready && KeepSupply)
-		{
-			// Isolate HP digital reset-on-wake from regulator and oscillator
-			// shutdown. This board diagnostic does not measure Deep-sleep power.
-			C6_PMU(0x68U) &= ~(1UL << 21);
-			C6_PMU(0x7CU) = (C6_PMU(0x7CU) & ~(31UL << 26)) |
-				(C6_PMU(0x14U) & (31UL << 26));
-			C6_PMU(0x80U) = (C6_PMU(0x80U) & ~(127UL << 25)) |
-				(C6_PMU(0x18U) & (127UL << 25));
-			C6_PMU(0x90U) = (C6_PMU(0x90U) & ~C6_DBIAS_MASK) |
-				(C6_PMU(0x28U) & C6_DBIAS_MASK) | (1UL << 18);
-			C6_PMU(0x11CU) = (C6_PMU(0x11CU) & 0xFFFF0000U) |
-				Esp32C6SlowCycles(250U);
-			C6_PMU(0x98U) |= 1UL << 31;
-			C6_PMU(0xBCU) |= 1UL << 31;
-			C6_PMU(0xC4U) |= 1UL << 30;
-			C6_PMU(0xC8U) &= ~(127UL << 25);
-			C6_PMU(0xB4U) = (C6_PMU(0xB4U) & ~C6_DBIAS_MASK) |
-				(C6_PMU(0x9CU) & C6_DBIAS_MASK);
-			Esp32C6SetSleepStage(0x50U);
-		}
 		if (ready)
 		{
-			Esp32C6SetSleepStage(0x3BU);
 			ready = Esp32C6RegulatorPrepare();
-			Esp32C6SetSleepStage(ready ? 0x3CU : 0x3FU);
 		}
 		if (ready)
 		{
-			Esp32C6SetSleepStage(0x33U);
-			g_Esp32C6SleepWakeEnable = C6_PMU(0x128U);
 			(void)Esp32C6Request(&state, true);
 		}
-		Esp32C6SetSleepStage(0x3DU);
 		Esp32C6Restore(&state);
 		Esp32DeepWakeRestore();
 	}
-	else
-	{
-		Esp32C6SetSleepStage(0x3EU);
-	}
-	(void)mask;
 	for (;;)
 	{
 		__WFI();
 	}
-}
-
-// Temporary board diagnostic: HP digital domains power down, supplies stay on.
-void Esp32C6CheckDeepReset(void)
-{
-	Esp32C6DeepSleep(true);
-}
-
-void Esp32PowerDeepSleep(void)
-{
-	Esp32C6DeepSleep(false);
 }

@@ -57,23 +57,6 @@ SOFTWARE.
 
 #include "board.h"
 
-#if defined(ESP32C6) && defined(POWER_DEMO_DEEP_RESET_CHECK) && POWER_DEMO_DEEP_RESET_CHECK
-extern "C" void Esp32C6CheckDeepReset(void);
-#endif
-
-#if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
-extern void (*g_Esp32C6SleepTrace)(uint32_t Stage);
-extern volatile uint32_t g_Esp32C6SleepPmuRaw;
-extern volatile uint32_t g_Esp32C6SleepWakeCause;
-extern volatile uint32_t g_Esp32C6SleepRejectCause;
-#endif
-
-
-#if defined(ESP32C6) && defined(POWER_DEMO_EXT1_CHECK) && POWER_DEMO_EXT1_CHECK
-extern "C" uint32_t Esp32C6CheckDeepWake(void);
-extern volatile uint32_t g_Esp32C6SleepWakeCause;
-extern volatile uint32_t g_Esp32C6SleepRejectCause;
-#endif
 
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
@@ -333,93 +316,6 @@ static uint32_t StandbyRamPattern(uint32_t Cycle, uint32_t Idx)
 }
 #endif
 
-#if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
-// Emit S=xx from RAM without a UART driver call or flash-resident strings.
-// UART0 uses XTAL, independent of the CPU clock selected during sleep entry.
-__attribute__((noinline, section(".iram.text.power_sleep_trace")))
-static void PowerDemoSleepTrace(uint32_t Stage)
-{
-	uint32_t digit;
-	uint32_t value;
-	uint32_t count;
-	uint32_t regs[6];
-	uint32_t label;
-
-	for (unsigned i = 0U; i < 6U; i++)
-	{
-		if (i == 0U)
-		{
-			value = 'S';
-		}
-		else if (i == 1U)
-		{
-			value = '=';
-		}
-		else if (i < 4U)
-		{
-			digit = (Stage >> (i == 2U ? 4U : 0U)) & 15U;
-			value = digit < 10U ? '0' + digit : 'A' + digit - 10U;
-		}
-		else
-		{
-			value = i == 4U ? '\r' : '\n';
-		}
-		ESP32_UART_FIFO_REG(ESP32_UART0_BASE) = value;
-	}
-	if (Stage == 0x37U)
-	{
-		// The request loop also exits on timeout. Report its saved result
-		// before the library halts, while flash access is still suspended.
-		// R: interrupt raw, W: wake cause, J: reject cause,
-		// M: main state, P: power state, C: clock state 0.
-		regs[0] = g_Esp32C6SleepPmuRaw;
-		regs[1] = g_Esp32C6SleepWakeCause;
-		regs[2] = g_Esp32C6SleepRejectCause;
-		regs[3] = ESP32_REG32(0x600B018CUL);
-		regs[4] = ESP32_REG32(0x600B0190UL);
-		regs[5] = ESP32_REG32(0x600B0194UL);
-		for (unsigned reg = 0U; reg < 6U; reg++)
-		{
-			// Pack labels into immediates so GCC cannot emit a flash table.
-			label = reg < 4U ? (0x4D4A5752UL >> (reg * 8U)) & 255U :
-				(0x4350UL >> ((reg - 4U) * 8U)) & 255U;
-			for (unsigned i = 0U; i < 12U; i++)
-			{
-				if (i == 0U)
-				{
-					value = label;
-				}
-				else if (i == 1U)
-				{
-					value = '=';
-				}
-				else if (i < 10U)
-				{
-					digit = (regs[reg] >> ((9U - i) * 4U)) & 15U;
-					value = digit < 10U ? '0' + digit : 'A' + digit - 10U;
-				}
-				else
-				{
-					value = i == 10U ? '\r' : '\n';
-				}
-				ESP32_UART_FIFO_REG(ESP32_UART0_BASE) = value;
-			}
-		}
-	}
-	// Drain the FIFO and shift register before the PMU gates the clock.
-	// Bound the wait so diagnostics cannot trap the sleep path.
-	for (count = 0U; count < 100000U; count++)
-	{
-		if ((ESP32_UART_STATUS_REG(ESP32_UART0_BASE) &
-			ESP32_UART_STATUS_TXFIFO_CNT_Msk) == 0U &&
-			(ESP32_UART_FSM_STATUS_REG(ESP32_UART0_BASE) & (15U << 4)) == 0U)
-		{
-			break;
-		}
-	}
-}
-#endif
-
 // Require a stable release before arming another sleep cycle.
 static void PowerDemoWaitRelease(void)
 {
@@ -452,10 +348,6 @@ int main()
 		return 1;
 	}
 	PowerDemoPut("PowerOffDemo: Standby\r\n");
-#if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
-	g_Esp32C6SleepTrace = PowerDemoSleepTrace;
-	PowerDemoPut("PMU serial trace enabled: S=xx is the last sleep stage\r\n");
-#endif
 
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
 		IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
@@ -472,9 +364,7 @@ int main()
 		PowerDemoWaitRelease();
 		PowerDemoPut("Entering Standby\r\n");
 		PowerDemoDrain();
-#if !defined(ESP32C6) || !defined(POWER_DEMO_SLEEP_TRACE) || !POWER_DEMO_SLEEP_TRACE
 		s_Uart.Disable();
-#endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
 		{
@@ -497,9 +387,7 @@ int main()
 			}
 		}
 #endif
-#if !defined(ESP32C6) || !defined(POWER_DEMO_SLEEP_TRACE) || !POWER_DEMO_SLEEP_TRACE
 		s_Uart.Enable();
-#endif
 		wakeCount++;
 		PowerDemoPut("Resumed from Standby, count 0x");
 		PowerDemoPutCount(wakeCount);
@@ -521,10 +409,6 @@ int main()
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 
 	SysLogPrintf(SysLogGet(), "PowerOffDemo\r\n");
-#if defined(ESP32C6) && defined(POWER_DEMO_SLEEP_TRACE) && POWER_DEMO_SLEEP_TRACE
-	g_Esp32C6SleepTrace = PowerDemoSleepTrace;
-	SysLogPrintf(SysLogGet(), "Deep-sleep serial trace enabled: S=xx\r\n");
-#endif
 
 	uint32_t reason = SystemResetReason();
 
@@ -603,24 +487,6 @@ int main()
 
 	if (SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
 	{
-#if defined(ESP32C6) && defined(POWER_DEMO_EXT1_CHECK) && POWER_DEMO_EXT1_CHECK
-		SysLogPrintf(SysLogGet(), "EXT1 wake check: connect GPIO3 to GND after S=16\r\n");
-		msDelay(100);
-		uint32_t result = Esp32C6CheckDeepWake();
-		SysLogPrintf(SysLogGet(), "EXT1 result 0x%x, wake 0x%x, reject 0x%x\r\n",
-			(unsigned)result, (unsigned)g_Esp32C6SleepWakeCause,
-			(unsigned)g_Esp32C6SleepRejectCause);
-		if (result != (1UL << 31) || g_Esp32C6SleepWakeCause != (1UL << 1))
-		{
-			SysLogPrintf(SysLogGet(), "EXT1 check failed; Deep-sleep skipped\r\n");
-			for (;;)
-			{
-				msDelay(1000);
-			}
-		}
-		SysLogPrintf(SysLogGet(), "EXT1 wake PASS. Disconnect GPIO3 from GND\r\n");
-		PowerDemoWaitRelease();
-#endif
 		SysLogPrintf(SysLogGet(), "Power off, press the button to wake up\r\n");
 	}
 	else
@@ -636,14 +502,7 @@ int main()
 	msDelay(100);
 #endif
 
-#if defined(ESP32C6) && defined(POWER_DEMO_DEEP_RESET_CHECK) && POWER_DEMO_DEEP_RESET_CHECK
-	SysLogPrintf(SysLogGet(), "HP reset test: supplies and oscillators stay on\r\n");
-	SysLogPrintf(SysLogGet(), "Connect GPIO3 to GND after S=36; expect PowerOffDemo to restart\r\n");
-	msDelay(100);
-	Esp32C6CheckDeepReset();
-#else
 	SystemPowerOff();
-#endif
 
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
 	// If the power function returns, the system did not enter Standby.

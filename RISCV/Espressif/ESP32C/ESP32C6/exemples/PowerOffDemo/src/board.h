@@ -27,18 +27,10 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define POWER_DEMO_RESUME_WAKE 0
 #define POWER_DEMO_STANDBY_RAM_TEST 1
 #define POWER_DEMO_UART_DMA false
-#define POWER_DEMO_UART_OFF 0
-// Set to 1 to keep UART0 enabled and print sleep stages from RAM.
-#define POWER_DEMO_SLEEP_TRACE 1
-// Verify GPIO3/EXT1 wake with HP power retained before testing Deep-sleep.
-#define POWER_DEMO_EXT1_CHECK 0
-// Isolate HP digital reset-on-wake while keeping supplies and oscillators on.
-// Set to 0 to exercise the normal Deep-sleep power-down sequence.
-#define POWER_DEMO_DEEP_RESET_CHECK 0
-
+#define POWER_DEMO_UART_OFF 1
 // To restore the validated BOOT-button Light-sleep configuration, set
 // WAKE_BUT_PIN to 9 and POWER_DEMO_RESUME_WAKE to 1.
 // C6 GPIO9 Light-sleep: repeated wake and SRAM samples passed with UART off.
-// GPIO3 Deep-sleep pin wake and restart passed; repeated cycles under test.
+// GPIO3 Deep-sleep: four consecutive pin wake and restart cycles passed.
 
 #endif // __BOARD_H__
