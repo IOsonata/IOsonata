@@ -92,8 +92,10 @@ static volatile uint32_t * const s_pRamDrop =
 #endif
 
 // Pull resistor and level of the released button
+#if defined(WAKE_BUT_PIN)
 static const IOPINRES s_WakeButRes = WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? IOPINRES_PULLDOWN : IOPINRES_PULLUP;
 static const int s_WakeButIdle = WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 0 : 1;
+#endif
 
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
@@ -319,6 +321,7 @@ static uint32_t StandbyRamPattern(uint32_t Cycle, uint32_t Idx)
 // Require a stable release before arming another sleep cycle.
 static void PowerDemoWaitRelease(void)
 {
+#if defined(WAKE_BUT_PIN)
 	unsigned idle = 0U;
 
 	while (idle < 20U)
@@ -333,6 +336,19 @@ static void PowerDemoWaitRelease(void)
 		}
 		msDelay(1);
 	}
+#endif
+}
+
+static bool PowerDemoWakeConfig(void)
+{
+#if defined(WAKE_BUT_PIN)
+	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
+		IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
+	PowerDemoWaitRelease();
+	return SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
+#else
+	return false;
+#endif
 }
 
 int main()
@@ -349,9 +365,7 @@ int main()
 	}
 	PowerDemoPut("PowerOffDemo: Standby\r\n");
 
-	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
-		IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
-	if (!SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
+	if (!PowerDemoWakeConfig())
 	{
 		PowerDemoPut("Standby wake pin not available\r\n");
 		return 1;
@@ -478,14 +492,10 @@ int main()
 		(unsigned)POWER_DEMO_RAM_DROP_SIZE);
 #endif
 
-	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP, IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
-
 	msDelay(POWER_DEMO_DELAY);
 
-	// The button must be released before configuring System OFF wakeup.
-	PowerDemoWaitRelease();
-
-	if (SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
+	// Configure the pin and wait for release before arming System OFF wakeup.
+	if (PowerDemoWakeConfig())
 	{
 		SysLogPrintf(SysLogGet(), "Power off, press the button to wake up\r\n");
 	}

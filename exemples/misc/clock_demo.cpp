@@ -6,8 +6,9 @@
 Uses the generic clock, UART and Timer interfaces. The board supplies the
 source sequence and peripheral clock divisors. Each change is made with the
 timer stopped. Both build configurations log to UART without a debugger.
-Timer elapsed time and interrupt counts check operation after each change;
-they do not measure absolute oscillator accuracy. An optional board wake pin
+Timer elapsed time and interrupt counts check operation after clock changes.
+Boards that defer timer initialization check it after the selection sequence.
+These checks do not measure absolute oscillator accuracy. An optional board wake pin
 adds sleep/resume checks with UART output drained and the timer stopped.
 
 @license
@@ -47,12 +48,32 @@ SOFTWARE.
 #define CLOCK_DEMO_APB_SHARED_CORE 0
 #endif
 
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE 1000000
+#endif
+#ifndef CLOCK_DEMO_IRQ_PRIORITY
+#define CLOCK_DEMO_IRQ_PRIORITY 6
+#endif
+#ifndef CLOCK_DEMO_CORE_READONLY
+#define CLOCK_DEMO_CORE_READONLY 0
+#endif
+#ifndef CLOCK_DEMO_APB_READONLY
+#define CLOCK_DEMO_APB_READONLY 0
+#endif
+#ifndef CLOCK_DEMO_DEFER_TIMER
+#define CLOCK_DEMO_DEFER_TIMER 0
+#endif
+#ifndef CLOCK_DEMO_STOP_UART
+#define CLOCK_DEMO_STOP_UART 0
+#endif
+
 struct ClockDemoSource_t {
 	const char *pName;
 	OSC_TYPE Type;
 	uint32_t Frequency;
 	uint32_t CoreMin;
 	uint32_t CoreMax;
+	bool Select = true;
 };
 
 struct ClockDemoLowFreq_t {
@@ -62,7 +83,9 @@ struct ClockDemoLowFreq_t {
 };
 
 static const ClockDemoSource_t s_Sources[] = CLOCK_DEMO_SOURCES;
+#if defined(CLOCK_DEMO_LF_SOURCES)
 static const ClockDemoLowFreq_t s_LowFreqSources[] = CLOCK_DEMO_LF_SOURCES;
+#endif
 static const uint32_t s_ApbDividers[] = CLOCK_DEMO_APB_DIVIDERS;
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
@@ -78,11 +101,11 @@ static const UARTCfg_t s_UartCfg = {
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = false,
-	.IntPrio = 6,
+	.IntPrio = CLOCK_DEMO_IRQ_PRIORITY,
 	.bFifoBlocking = true,
 	.bDMAMode = false,
 };
-static UART s_Uart;
+static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
 static volatile uint32_t s_InterruptCount;
 static unsigned s_Failures;
@@ -100,7 +123,7 @@ static const TimerCfg_t s_TimerCfg = {
 	.DevNo = CLOCK_DEMO_TIMER_DEVNO,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 1000000U,
-	.IntPrio = 6,
+	.IntPrio = CLOCK_DEMO_IRQ_PRIORITY,
 	.EvtHandler = ClockDemoTimerHandler,
 };
 
@@ -120,6 +143,41 @@ static void ClockDemoResult(const char *pName, bool Passed)
 	{
 		s_Failures++;
 	}
+}
+
+static bool ClockDemoTimerInit(void)
+{
+	if (!TimerInit(&s_Timer, &s_TimerCfg))
+	{
+		ClockDemoResult("Timer initialization", false);
+		return false;
+	}
+	TimerDisable(&s_Timer);
+	return true;
+}
+
+static void ClockDemoClockBegin(void)
+{
+	msDelay(2);
+#if CLOCK_DEMO_STOP_UART
+	UARTDev_t *uart = &s_Uart;
+	uint8_t unused;
+	while (CFifoUsed(uart->hTxFifo) != 0)
+	{
+		(void)UARTRx(&s_Uart, &unused, 1);
+	}
+	msDelay(2);
+	UARTPowerOff(&s_Uart);
+#endif
+}
+
+static bool ClockDemoClockEnd(void)
+{
+#if CLOCK_DEMO_STOP_UART
+	return UARTInit(&s_Uart, &s_UartCfg);
+#else
+	return true;
+#endif
 }
 
 static void ClockDemoTimer(void)
@@ -187,9 +245,9 @@ static void ClockDemoSleep(void)
 		(unsigned)core, (unsigned)sleepApb, (unsigned)low.Freq);
 	SysLogPrintf(SysLogGet(), "Entering sleep; press " CLOCK_DEMO_WAKE_NAME " to resume\r\n");
 	msDelay(2);
-	s_Uart.Disable();
+	UARTDisable(&s_Uart);
 	SystemSleep();
-	s_Uart.Enable();
+	UARTEnable(&s_Uart);
 	(void)SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINSENSE_DISABLE);
 	SysLogPrintf(SysLogGet(), "Sleep returned; checking clocks\r\n");
 	ClockDemoResult("CPU clock after resume", SystemCoreClockGet() == core &&
@@ -205,20 +263,34 @@ static void ClockDemoSleep(void)
 
 int main(void)
 {
-	if (!s_Uart.Init(s_UartCfg) ||
-		!SysLogInitNoTimer(SysLogGet(), &s_LogCfg, (DevIntrf_t *)s_Uart, 0, 0))
+	if (!UARTInit(&s_Uart, &s_UartCfg) ||
+		!SysLogInitNoTimer(SysLogGet(), &s_LogCfg, &s_Uart.DevIntrf, 0, 0))
 	{
 		return 1;
 	}
 	msDelay(1000);
 	SysLogPrintf(SysLogGet(), "ClockDemo\r\nStartup CPU %u Hz, APB %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
-	if (!TimerInit(&s_Timer, &s_TimerCfg))
+#if !CLOCK_DEMO_DEFER_TIMER
+	if (!ClockDemoTimerInit())
 	{
-		ClockDemoResult("Timer initialization", false);
 		return 1;
 	}
-	TimerDisable(&s_Timer);
+#endif
+	if (sizeof(s_Sources) == 0U)
+	{
+		SysLogPrintf(SysLogGet(), "Core selection: SKIP (not configured)\r\n");
+	}
+	if (sizeof(s_ApbDividers) == 0U)
+	{
+		SysLogPrintf(SysLogGet(), "Peripheral clock setting: SKIP (not configured)\r\n");
+	}
+
+#if !defined(CLOCK_DEMO_LF_SOURCES)
+	{
+		SysLogPrintf(SysLogGet(), "LF selection: SKIP (not configured)\r\n");
+	}
+#endif
 
 	for (unsigned cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
 	{
@@ -227,34 +299,57 @@ int main(void)
 		{
 			SysLogPrintf(SysLogGet(), "Selecting %s\r\n", source.pName);
 			// Polling Tx has queued the last bytes in the hardware FIFO.
-			msDelay(2);
-			bool selected = SystemCoreClockSelect(source.Type, source.Frequency);
+			ClockDemoClockBegin();
+#if CLOCK_DEMO_CORE_READONLY
+			bool selected = !source.Select;
+#else
+			bool selected = !source.Select || SystemCoreClockSelect(source.Type, source.Frequency);
+#endif
+			if (!ClockDemoClockEnd())
+			{
+				return 1;
+			}
 			uint32_t core = SystemCoreClockGet();
 			ClockDemoResult(source.pName, selected && core >= source.CoreMin && core <= source.CoreMax);
 			if (!selected || core < source.CoreMin || core > source.CoreMax)
 			{
 				continue;
 			}
+#if !CLOCK_DEMO_APB_READONLY
+			uint32_t bus = SystemPeriphClockGet(0);
 			for (uint32_t divider : s_ApbDividers)
 			{
-				uint32_t request = core / divider;
-				msDelay(2);
+				uint32_t request = bus / divider;
+				ClockDemoClockBegin();
 				uint32_t actual = SystemPeriphClockSet(0, request);
+				if (!ClockDemoClockEnd())
+				{
+					return 1;
+				}
 				SysLogPrintf(SysLogGet(), "CPU %u Hz, APB request %u Hz, actual %u Hz\r\n",
 					(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
 				ClockDemoResult("APB", actual == request &&
 					SystemPeriphClockGet(0) == actual &&
 					SystemCoreClockGet() == (CLOCK_DEMO_APB_SHARED_CORE ? actual : core));
+
+#if !CLOCK_DEMO_DEFER_TIMER
 				ClockDemoTimer();
+#endif
 			}
+#endif
 #if defined(CLOCK_DEMO_WAKE_PIN)
 			unsigned lfIndex = 0U;
 #endif
+#if defined(CLOCK_DEMO_LF_SOURCES)
 			for (const ClockDemoLowFreq_t &source : s_LowFreqSources)
 			{
 				SysLogPrintf(SysLogGet(), "Selecting LF %s\r\n", source.pName);
-				msDelay(2);
+				ClockDemoClockBegin();
 				bool selected = SystemLowFreqClockSelect(source.Type, source.Frequency);
+				if (!ClockDemoClockEnd())
+				{
+					return 1;
+				}
 				ClockDemoResult(source.pName, selected);
 				SysLogPrintf(SysLogGet(), "LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
 #if defined(CLOCK_DEMO_WAKE_PIN)
@@ -267,8 +362,18 @@ int main(void)
 				lfIndex++;
 #endif
 			}
+#endif
 		}
 	}
+#if CLOCK_DEMO_DEFER_TIMER
+	// Some ports keep a timer's module clock until reset, even after Disable.
+	// Complete clock selection before acquiring that timer.
+	if (!ClockDemoTimerInit())
+	{
+		return 1;
+	}
+	ClockDemoTimer();
+#endif
 	SysLogPrintf(SysLogGet(), "ClockDemo complete: %u failures\r\n", s_Failures);
 	while (1)
 	{

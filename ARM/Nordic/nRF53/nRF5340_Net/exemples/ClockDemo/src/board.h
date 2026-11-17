@@ -1,0 +1,159 @@
+/**-------------------------------------------------------------------------
+@file	board.h
+
+@brief	Board specific definitions
+
+This file contains all I/O definitions for a specific board for the
+application firmware.  This files should be located in each project and
+modified to suit the need for the application use case.
+
+@author	Hoang Nguyen Hoan
+@date	Nov. 16, 2016
+
+@license
+
+Copyright (c) 2016, I-SYST inc., all rights reserved
+
+Permission to use, copy, modify, and distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright
+notice and this permission notice appear in all copies, and none of the
+names : I-SYST or its contributors may be used to endorse or
+promote products derived from this software without specific prior written
+permission.
+
+For info or contributing contact : hnhoan at i-syst dot com
+
+THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+----------------------------------------------------------------------------*/
+
+#ifndef __BOARD_H__
+#define __BOARD_H__
+
+#include "blueio_board.h"
+
+#define NORDIC_DK
+
+// UARTE0 for the timer demo output
+#define UART_DEVNO			0
+
+#ifdef NORDIC_DK
+// Default is the nRF5340 Audio DK, the dev board of the nRF5340 work.
+// Define NRF5340_DK_PCA10095 in the project symbols for the standard
+// nRF5340 DK. Pins from the Zephyr board files of both boards.
+// The application core must hand these pins to the network core (GPIO
+// MCUSEL) before it releases it.
+#if defined(NRF5340_DK_PCA10095)
+// nRF5340 DK: LED1 to LED4 P0.28 to P0.31 active low, buttons 1 and 2
+// P0.23, P0.24; DK network core virtual COM port P1.01 TXD, P1.00 RXD, P1.11 RTS, P1.10 CTS
+#define LED_ACTIVE_LOW	1
+
+#define LED1_PORT		0
+#define LED1_PIN		28
+#define LED1_PINOP		0
+
+#define LED2_PORT		0
+#define LED2_PIN		29
+#define LED2_PINOP		0
+
+#define LED3_PORT		0
+#define LED3_PIN		30
+#define LED3_PINOP		0
+
+#define LED4_PORT		0
+#define LED4_PIN		31
+#define LED4_PINOP		0
+
+#define UART_RX_PORT		1
+#define UART_RX_PIN			0
+#define UART_RX_PINOP		1
+#define UART_TX_PORT		1
+#define UART_TX_PIN			1
+#define UART_TX_PINOP		1
+#define UART_CTS_PORT		1
+#define UART_CTS_PIN		10
+#define UART_CTS_PINOP		1
+#define UART_RTS_PORT		1
+#define UART_RTS_PIN		11
+#define UART_RTS_PINOP		1
+
+#else
+// nRF5340 Audio DK: LED1 (blue) P0.31, LED2 P1.00, LED3 P1.01, RGB2 green
+// P0.29 as LED4, active high; buttons VOL- P0.02, VOL+ P0.03; network core virtual COM port P1.09 TXD, P1.08 RXD, P1.10 RTS, P1.11 CTS (the second port the board enumerates)
+#define LED_ACTIVE_LOW	0
+
+#define LED1_PORT		0
+#define LED1_PIN		31
+#define LED1_PINOP		0
+
+#define LED2_PORT		1
+#define LED2_PIN		0
+#define LED2_PINOP		0
+
+#define LED3_PORT		1
+#define LED3_PIN		1
+#define LED3_PINOP		0
+
+#define LED4_PORT		0
+#define LED4_PIN		29
+#define LED4_PINOP		0
+
+#define UART_RX_PORT		1
+#define UART_RX_PIN			8
+#define UART_RX_PINOP		1
+#define UART_TX_PORT		1
+#define UART_TX_PIN			9
+#define UART_TX_PINOP		1
+#define UART_CTS_PORT		1
+#define UART_CTS_PIN		11
+#define UART_CTS_PINOP		1
+#define UART_RTS_PORT		1
+#define UART_RTS_PIN		10
+#define UART_RTS_PINOP		1
+
+#endif
+#else
+
+
+#define UART_RX_PORT		BLUEIO_UART_RX_PORT
+#define UART_RX_PIN			BLUEIO_UART_RX_PIN
+#define UART_RX_PINOP		BLUEIO_UART_RX_PINOP
+#define UART_TX_PORT		BLUEIO_UART_TX_PORT
+#define UART_TX_PIN			BLUEIO_UART_TX_PIN
+#define UART_TX_PINOP		BLUEIO_UART_TX_PINOP
+#define UART_CTS_PORT		BLUEIO_UART_CTS_PORT
+#define UART_CTS_PIN		BLUEIO_UART_CTS_PIN
+#define UART_CTS_PINOP		BLUEIO_UART_CTS_PINOP
+#define UART_RTS_PORT		BLUEIO_UART_RTS_PORT
+#define UART_RTS_PIN		BLUEIO_UART_RTS_PIN
+#define UART_RTS_PINOP		BLUEIO_UART_RTS_PINOP
+#endif
+
+#define LED_PINS_MAP	{ \
+	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{LED3_PORT, LED3_PIN, LED3_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{LED4_PORT, LED4_PIN, LED4_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+}
+
+
+// Bare-metal HFXO requests/releases are balanced. No BLE stack is started.
+#define CLOCK_DEMO_SOURCES { {"Request HFXO", OSC_TYPE_XTAL, 0U, 1U, UINT32_MAX}, {"Release HFXO", OSC_TYPE_RC, 0U, 1U, UINT32_MAX} }
+#define CLOCK_DEMO_APB_DIVIDERS {1U}
+#define CLOCK_DEMO_LF_SOURCES { {"LF RC", OSC_TYPE_RC, 32768U} }
+#define CLOCK_DEMO_TIMER_DEVNO TimerGetLowFreqDevCount()
+#define CLOCK_DEMO_CYCLES 3U
+#define CLOCK_DEMO_IRQ_PRIORITY 1
+#define CLOCK_DEMO_STOP_UART 1
+#define CLOCK_DEMO_DEFER_TIMER 1
+
+#endif // __BOARD_H__

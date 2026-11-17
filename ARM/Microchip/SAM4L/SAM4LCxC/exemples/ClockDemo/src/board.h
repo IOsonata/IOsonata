@@ -1,0 +1,76 @@
+/**-------------------------------------------------------------------------
+@file	board.h
+
+@brief	Board specific definitions
+
+This file contains all I/O definitions for a specific board for the
+application firmware.  This files should be located in each project and
+modified to suit the need for the application use case.
+
+@author	Hoang Nguyen Hoan
+@date	Nov. 16, 2016
+
+@license
+
+Copyright (c) 2016, I-SYST inc., all rights reserved
+
+Permission to use, copy, modify, and distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright
+notice and this permission notice appear in all copies, and none of the
+names : I-SYST or its contributors may be used to endorse or
+promote products derived from this software without specific prior written
+permission.
+
+For info or contributing contact : hnhoan at i-syst dot com
+
+THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+----------------------------------------------------------------------------*/
+
+#ifndef __BOARD_H__
+#define __BOARD_H__
+
+// SAM4L8 Xplained Pro yellow LED0, active low.
+#define LED1_PORT		IOPORTC
+#define LED1_PIN		7
+#define LED1_PINOP		IOPINOP_GPIO
+
+// USART1 console, matching the SAM4LCxC CDC example.
+#define UART_DEVNO 		1
+#define UART_RX_PORT 	IOPORTC
+#define UART_RX_PIN 	26
+#define UART_RX_PINOP 	IOPINOP_PERIPHA
+#define UART_TX_PORT 	IOPORTC
+#define UART_TX_PIN 	27
+#define UART_TX_PINOP 	IOPINOP_PERIPHA
+
+// Virtual device 0 = AST, 1..3 = TC0 channels 0..2, 4..6 = TC1 channels 0..2.
+// Compiler -DTIMER_DEMO_DEVNO also overrides this selection.
+#define TIMER_DEVNO 	0
+#define TIMER_FREQ 		0
+
+#define LED_PINS_MAP	{ \
+	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+}
+
+
+// Internal sources only; external crystal frequency is not assumed.
+#define CLOCK_DEMO_SOURCES { {"RC 4 MHz", OSC_TYPE_RC, 4000000U, 1U, UINT32_MAX}, {"RC 12 MHz", OSC_TYPE_RC, 12000000U, 1U, UINT32_MAX} }
+#define CLOCK_DEMO_APB_DIVIDERS {1U}
+#define CLOCK_DEMO_LF_SOURCES { {"RC32K", OSC_TYPE_RC, 32768U} }
+#define CLOCK_DEMO_TIMER_DEVNO TimerGetLowFreqDevCount()
+#define CLOCK_DEMO_CYCLES 3U
+#define CLOCK_DEMO_IRQ_PRIORITY 1
+#define CLOCK_DEMO_STOP_UART 1
+#define CLOCK_DEMO_DEFER_TIMER 1
+
+#endif // __BOARD_H__

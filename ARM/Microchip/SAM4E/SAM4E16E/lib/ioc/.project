@@ -1275,5 +1275,10 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_clock_sam4e.cpp</locationURI>
 		</link>
+			<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

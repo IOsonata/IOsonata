@@ -1148,14 +1148,22 @@ Remaining work is separate from the completed C6 GPIO wake validation:
   was truncated before sleep; the cause remains unresolved.
   UART RX and other peripheral operation after switching remain untested.
 - Measure Light-sleep and Deep-sleep current with board circuitry accounted for.
-- Validate C3 RTC sleep entry and repeated wake on C3 hardware, including ROM
-  restart and RTC fast-memory handling. C6 results do not validate C3.
-  All 204 C3 managed-library sources and both PowerOffDemo modes now compile
-  and link in Debug and Release after adding its missing syslog.cpp source.
-  The default remains BOOT/GPIO9 Light-sleep; the example README gives both
-  board procedures. These builds are not hardware validation.
+- C3 PowerOffDemo passed six consecutive GPIO9 Light-sleep wakes with the
+  128-byte static and 128-byte stack SRAM samples preserved. GPIO3 Deep-sleep
+  passed four manual wake/restart cycles with reset reason 0x100; the board
+  stayed asleep between manual wake events. RTC fast-memory retention is not
+  validated or exposed as application retention registers.
+- C3 ClockDemo after `04d1522a8` passed all three cycles and nine Light-sleep
+  wakes with zero failures. XTAL, calibrated RC_FAST, shared CPU/APB division,
+  RC_SLOW, restored clock descriptors and timer IRQs passed. RC_FAST measured
+  20805079-20810365 Hz; 250 ms samples measured 250065-252360 us with 25 IRQs.
+  UART RX after switching and sleep-current measurements remain pending.
+  Dots before startup output remain unexplained.
 - Runtime PLL startup/selection and Deep-sleep RAM retention are unsupported;
   they must not be reported as completed capabilities.
 
 Implementation references: Espressif ESP-IDF v5.5.1 per-chip RTC/PMU sleep,
 PMU initialization, clock calibration and ROM register-I2C implementations.
+
+Cross-target demo projects and build coverage are listed in
+[Power and clock demos](power-clock-demo-matrix.md).
