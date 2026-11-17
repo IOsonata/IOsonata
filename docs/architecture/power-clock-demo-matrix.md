@@ -55,8 +55,8 @@ library sources compile. No new board execution was performed for this batch.
 The shared demo now uses the UART C functions, as it already does for Timer.
 This allows LTO to discard unused C++ UART methods without changing driver APIs.
 SAMD11 selects SysTick as timer 4 and uses size optimization and LTO in both
-configurations: 15,006 text, 212 data, 1,936 bss. Flash use is 15,218 bytes;
-static RAM is 2,148 bytes, with stack space still required.
+configurations: 15,086 text, 208 data, 1,936 bss. Flash use is 15,294 bytes;
+static RAM is 2,144 bytes, with stack space still required.
 
 ## What each configuration exercises
 

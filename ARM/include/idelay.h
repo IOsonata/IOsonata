@@ -45,6 +45,9 @@ extern "C" {
 #endif
 extern uint32_t SystemMicroSecLoopCnt;
 extern uint32_t SystemnsDelayFactor;
+#if defined(__SAMD11D14AM__) || defined(__SAMD21J18A__)
+extern uint32_t SystemCoreClock;
+#endif
 #ifdef __cplusplus
 }
 #endif
@@ -59,11 +62,22 @@ extern uint32_t SystemnsDelayFactor;
  * This function is based on a 16MHz clock. For higher clock
  * rate SystemMicroSecNopCnt needs to be adjusted.  Adjustment of this variable
  * should be done in the CMSIS SystemCoreCLockUpdate function.
+ * SAM D11/D21 calculate iterations from the current SystemCoreClock and
+ * the Cortex-M0+ loop timing. Other targets use SystemMicroSecLoopCnt.
+ * Interrupt service and instruction fetch stalls can extend this delay.
  * This delay is only approximate, it is NOT 100% accurate.
  *
  * @param	cnt : microsecond delay count
  */
 static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
+#if defined(__SAMD11D14AM__) || defined(__SAMD21J18A__)
+	// Cortex-M0+: ten NOPs, SUBS and a taken BGT use 13 cycles.
+	// Scale the full interval before division so fractional loops per
+	// microsecond are preserved, including after a runtime clock change.
+	uint32_t loops = ((uint64_t)cnt * SystemCoreClock + 12999999ULL) / 13000000ULL;
+#else
+	uint32_t loops = cnt * SystemMicroSecLoopCnt;
+#endif
 	__asm__ volatile (
 #ifdef __GNUC__
 		".syntax unified\n"
@@ -90,7 +104,7 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
 		".syntax divided\n"
 #endif
 		:
-		: [ucnt] "l" (cnt * SystemMicroSecLoopCnt)
+		: [ucnt] "l" (loops)
 		:"r0"
 		 );
 }

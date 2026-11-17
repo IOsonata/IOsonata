@@ -15,8 +15,8 @@ retain timer module ownership after TimerDisable. It then checks SysTick (timer 
 The returned timer rate may differ from 1 MHz. Delay and interrupt checks use
 the actual rate/period. They do not independently measure oscillator accuracy.
 Debug and Release use size optimization and LTO. The linker retains _sbrk
-for newlib formatting after LTO. Flash use is 15,218 bytes (15,006 text plus
-212 data); static RAM is 2,148 bytes, before stack use.
+for newlib formatting after LTO. Flash use is 15,294 bytes (15,086 text plus
+208 data); static RAM is 2,144 bytes, before stack use.
 No watchdog is enabled. No sleep is requested by this configuration; use
 PowerOffDemo for target wake validation. Reset restores startup clocks.
 
@@ -37,3 +37,14 @@ ClockDemo drains both the syslog record store and polling UART FIFO after
 startup and result output, before changing clocks, and before its final idle
 loop. A partial UART write leaves the remainder in syslog; draining only the
 UART FIFO can leave the last visible output in the middle of a line.
+
+The following board run completed all three core/APB selections. Its timer
+reported 203202 us and 20 interrupts for a requested 250 ms delay. The old
+usDelay scaling selected three 13-cycle iterations per microsecond at 48 MHz,
+which predicts 203125 us. SAM D11/D21 now calculate the iteration count from
+the full requested interval and current CPU frequency before dividing by
+13 million. ClockDemo and PowerOffDemo rebuild for both targets in Debug and
+Release. The corrected delay still requires a board run.
+
+OSC8M identifies the PLL reference selected by SystemCoreClockSelect; the
+clock tree is rebuilt to 48 MHz. It does not request an 8 MHz CPU clock.
