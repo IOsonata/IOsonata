@@ -18,7 +18,7 @@ This demo does not initialize the OLED display. Its output remains on UART.
 The first hardware wake reported pin wake and advanced the retained count
 from 1 to 2. Re-arming then failed because the EIC line survived Backup while
 its SRAM ownership flag was cleared. The driver now uses the retained Backup
-pin routing to recognize that line. Repeated wake validation is pending.
+pin routing to recognize that line.
 
 Pin assignments: Microchip SAM4L8 Xplained Pro User Guide, table 4-2, and
 OLED1 Xplained Pro User Guide, extension header table.
@@ -27,4 +27,11 @@ Repeated wakes remained intermittent with EIC IMR cleared, including a
 one-second button hold more than two seconds after the prompt. Wake setup now
 enables the peripheral interrupt, as required by datasheet section 21.6.5,
 without enabling its NVIC interrupt. Disabling a wake pin masks the peripheral
-interrupt again. Hardware confirmation of this correction is pending.
+interrupt again.
+
+After a clean rebuild on November 17, 2026, the maintainer reported eight
+consecutive Backup wakes. Every wake reported reset reason 0x100, and the
+retained start count advanced from 1 to 9. No intermittent failure occurred
+in this run. The initial startup reported software reset (0x8). This confirms
+pin wake and retention of the start-count register; it is not a test of every
+backup register or a sleep-current measurement.

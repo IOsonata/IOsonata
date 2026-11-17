@@ -336,4 +336,7 @@ The SAMD21 library (318 source files) and all three demos linked in Debug and
 Release. Both display demos also linked with all four SPI mode combinations;
 ClockDemo linked with OLED1 wake selected. No driver changes were needed for
 the OLED1 project additions. Full SRAM coverage and sleep current remain
-unmeasured. SAM4LC intermittent Backup wake is a separate unresolved result.
+unmeasured. A subsequent clean SAM4LC PowerOffDemo rebuild passed eight
+consecutive Backup wakes: reset reason 0x100 each time, retained start count
+1 through 9. The earlier intermittent failure did not recur in that run.
+SAM4LC SLEEP0 ClockDemo hardware validation remains pending.

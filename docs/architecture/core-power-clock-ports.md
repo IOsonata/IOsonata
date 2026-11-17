@@ -23,7 +23,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0 resume added | SAM4LC clock/delay checks passed; SLEEP0 hardware checks and intermittent Backup wake correction pending; WAIT/RETENTION unsupported |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0 resume added | SAM4LC clock/delay checks and eight consecutive Backup wakes passed; SLEEP0 hardware checks pending; WAIT/RETENTION unsupported |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; D11 SW0 and D21 SW0/OLED1 BUTTON1 repeated resume passed | D21 clocks, delays, timer IRQs, UART RX and SRAM samples passed; full SRAM continuity, LF switching and sleep current remain unverified |
 | LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
 | LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |
@@ -349,12 +349,19 @@ OLED1 BUTTON1/PC06 through GPIO interrupt group 8 and checks the wake callback,
 clocks, both delays, timer IRQs and UART RX across three cycles. Hardware
 validation is pending. Backup wake continues to use the separate EIC route.
 
+SAM4LC PowerOffDemo was clean-rebuilt and retested on November 17: eight
+consecutive pin wakes reported reset reason 0x100, and the retained start
+count advanced from 1 to 9. The intermittent failure did not recur in that
+run. This validates the tested EIC8 wake and start-count retention; it does
+not cover all backup registers or measure Backup current.
+
 The SAM4LCxC PowerOffDemo now selects OLED1 BUTTON1 on EXT2 (PC06 / EIC8) for
 Backup wake. Hardware confirmed one BUTTON1 wake and retained start count
 advancing from 1 to 2. The following re-arm exposed a stale ownership check:
 EIC remained enabled across Backup but its SRAM flag was cleared. Wake-line
-ownership now follows the retained Backup pin routing. Repeated wakes after
-this correction still need hardware confirmation.
+ownership now follows the retained Backup pin routing. Wake setup also enables
+the EIC peripheral interrupt. The clean rebuild results above confirm repeated
+wake with these corrections.
 
 SAM4LC ClockDemo hardware results on November 17 exposed UART corruption with
 RCFAST 4 MHz selected and incorrect delay calibration: 250 ms measured as
