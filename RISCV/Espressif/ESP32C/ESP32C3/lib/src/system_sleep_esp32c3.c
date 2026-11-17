@@ -93,7 +93,7 @@ static bool Esp32C3Configure(bool bDeep)
 	uint32_t dig;
 
 	options = C3_REG(0x00U);
-	dig = C3_REG(0x88U);
+	dig = (C3_REG(0x88U) | (1UL << 16)) & ~(1UL << 15);
 	if (C3_REG(0x80U) & (1UL << 30))
 	{
 		return false;

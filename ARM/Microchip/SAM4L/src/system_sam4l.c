@@ -1180,14 +1180,6 @@ uint32_t SystemPeriphClockGet(int Idx)
 	}
 }
 
-uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
-{
-	// Independent runtime bus retiming is not implemented. A no-op succeeds;
-	// an unsupported request must not be reported as a successful change.
-	uint32_t current = SystemPeriphClockGet(Idx);
-	return current != 0U && current == Freq ? current : 0U;
-}
-
 // Check the existing transport clock gates without reading interrupt status.
 // A disabled transport releases its PBA clock through its driver.
 static bool Sam4lCoreClockBusy(void)
@@ -1254,6 +1246,52 @@ static bool Sam4lCoreClockBusy(void)
 		}
 	}
 	return false;
+}
+
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+{
+	if (Idx < 0 || Idx > 3 || Freq == 0U || __get_IPSR() != 0U)
+	{
+		return 0U;
+	}
+	uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	uint32_t mainClock = Sam4lMainClockGet();
+	uint32_t cpu = Sam4lApplyClkDiv(mainClock, SAM4L_PM->PM_CPUSEL);
+	volatile uint32_t *reg = Idx == 0 ? &SAM4L_PM->PM_PBASEL :
+		Idx == 1 ? &SAM4L_PM->PM_PBBSEL :
+		Idx == 2 ? &SAM4L_PM->PM_PBCSEL : &SAM4L_PM->PM_PBDSEL;
+	uint32_t previous = *reg;
+	uint32_t best = previous;
+	uint32_t actual = 0U;
+	uint32_t error = UINT32_MAX;
+
+	for (uint32_t shift = 0; shift <= 8U; shift++)
+	{
+		uint32_t rate = mainClock >> shift;
+		// PBB serves AHB modules and must track CPU/HSB (42023H 10.6.1.2).
+		if (rate == 0U || rate > cpu || (Idx == 1 && rate != cpu))
+		{
+			continue;
+		}
+		uint32_t difference = rate > Freq ? rate - Freq : Freq - rate;
+		if (difference < error)
+		{
+			error = difference;
+			actual = rate;
+			best = shift == 0U ? 0U : PM_PBASEL_PBDIV | PM_PBASEL_PBSEL(shift - 1U);
+		}
+	}
+	if (actual != 0U && best != previous)
+	{
+		// Clock consumers must be stopped before their bus rate changes.
+		if (Sam4lCoreClockBusy() || !Sam4lWriteDivider(reg, best))
+		{
+			actual = 0U;
+		}
+	}
+	__set_PRIMASK(state);
+	return actual;
 }
 
 // Explicit full clock-tree reinitialization, preserving the existing API.

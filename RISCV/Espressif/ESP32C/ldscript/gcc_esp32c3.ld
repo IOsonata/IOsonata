@@ -51,6 +51,7 @@ GROUP( -lstdc++ -lgcc -lc )
 
 MEMORY
 {
+	RTC (RW) : ORIGIN = 0x50000000, LENGTH = 0x2000
     /* Code XIP region — IROM cache mapped to flash physical 0..0x3FFFFF.
      * objcopy -O binary outputs from the lowest LMA in this region. */
     FLASH  (RX)  : ORIGIN = 0x42000000, LENGTH = 0x400000
@@ -91,6 +92,16 @@ SECTIONS
         LONG(0xaedb041d);
         LONG(0xaedb041d);
     } > FLASH
+}
+
+/* Retained data must not be copied or cleared by normal startup. */
+SECTIONS
+{
+	.rtc.noinit (NOLOAD) : ALIGN(4)
+	{
+		*(.rtc.noinit .rtc.noinit.*)
+		. = ALIGN(4);
+	} > RTC
 }
 
 INCLUDE "gcc_riscv_flash.ld"

@@ -84,8 +84,10 @@ SOFTWARE.
 static volatile uint32_t * const s_pRamRet =
 	(volatile uint32_t *)POWER_DEMO_RAM_RET_ADDR;
 
+#if defined(POWER_DEMO_RAM_DROP_ADDR)
 static volatile uint32_t * const s_pRamDrop =
 	(volatile uint32_t *)POWER_DEMO_RAM_DROP_ADDR;
+#endif
 
 #define RAM_TEST_PREPARED 0xA7U
 
@@ -182,6 +184,7 @@ static const struct {
 #endif
 
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
+#if defined(POWER_DEMO_RAM_DROP_ADDR)
 static uint32_t RamDropPattern(uint32_t Idx)
 {
 	return 0x6C39E2B5UL ^ (Idx * 0x85EBCA6BUL);
@@ -222,6 +225,8 @@ static void RamDropWrite(void)
 		s_pRamDrop[i] = RamDropPattern(i);
 	}
 }
+
+#endif
 
 static uint32_t RamRetPattern(uint32_t Idx)
 {
@@ -447,12 +452,14 @@ int main()
 	SysLogPrintf(SysLogGet(), "Start count %u, %d retention registers\r\n", (unsigned)cnt, SystemRetRegCount());
 
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
-	// Check before writing the next pattern. Startup must leave RAM1 untouched.
+	// Check before writing the next pattern. Startup must leave the test region untouched.
 	if ((reason & SYSTEM_RESET_WAKE_PIN) &&
-		SystemRetRegRead(1) == RAM_TEST_PREPARED)
+		(SystemRetRegCount() < 2 || SystemRetRegRead(1) == RAM_TEST_PREPARED))
 	{
 		(void)RamRetCheck();
+#if defined(POWER_DEMO_RAM_DROP_ADDR)
 		(void)RamDropCheck();
+#endif
 	}
 	else
 	{
@@ -467,6 +474,7 @@ int main()
 			__WFE();
 		}
 	}
+#if defined(POWER_DEMO_RAM_DROP_ADDR)
 	if (!SystemRamRetain(POWER_DEMO_RAM_DROP_ADDR, POWER_DEMO_RAM_DROP_SIZE, false))
 	{
 		SysLogPrintf(SysLogGet(), "RAM non-retention configuration FAIL\r\n");
@@ -476,9 +484,10 @@ int main()
 		}
 	}
 
-	RamRetWrite();
 	RamDropWrite();
-	if (!SystemRetRegWrite(1, RAM_TEST_PREPARED))
+#endif
+	RamRetWrite();
+	if (SystemRetRegCount() >= 2 && !SystemRetRegWrite(1, RAM_TEST_PREPARED))
 	{
 		SysLogPrintf(SysLogGet(), "RAM test marker FAIL\r\n");
 		while (1)
@@ -488,8 +497,10 @@ int main()
 	}
 	SysLogPrintf(SysLogGet(), "RAM retention enabled, %u bytes\r\n",
 		(unsigned)POWER_DEMO_RAM_RET_SIZE);
+#if defined(POWER_DEMO_RAM_DROP_ADDR)
 	SysLogPrintf(SysLogGet(), "RAM non-retention disabled, %u bytes\r\n",
 		(unsigned)POWER_DEMO_RAM_DROP_SIZE);
+#endif
 #endif
 
 	msDelay(POWER_DEMO_DELAY);

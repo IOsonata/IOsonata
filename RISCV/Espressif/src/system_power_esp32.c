@@ -21,12 +21,15 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 #if defined(ESP32C3)
 #define ESP32_RESET_CAUSE_REG (*(volatile uint32_t *)0x60008038UL)
 #define ESP32_RESET_CAUSE_MASK 0x3FU
+#define ESP32_RETAINED_RAM_SIZE 0x2000U
+#define ESP32_RTC_MEMORY_POWER_REG (*(volatile uint32_t *)0x60008088UL)
 #define ESP32_WAKE_CAUSE_REG (*(volatile uint32_t *)0x600080F8UL)
 #define ESP32_WAKE_PIN_MASK (1UL << 2)
 #define ESP32_WAKE_TIMER_MASK (1UL << 3)
 #elif defined(ESP32C6)
 #define ESP32_RESET_CAUSE_REG (*(volatile uint32_t *)(ESP32_LP_CLKRST_BASE + 0x10U))
 #define ESP32_RESET_CAUSE_MASK 0x1FU
+#define ESP32_RETAINED_RAM_SIZE 0x4000U
 #define ESP32_WAKE_CAUSE_REG (*(volatile uint32_t *)0x600B0140UL)
 #define ESP32_WAKE_PIN_MASK ((1UL << 0) | (1UL << 1) | (1UL << 2))
 #define ESP32_WAKE_TIMER_MASK (1UL << 4)
@@ -133,8 +136,26 @@ bool SystemRetRegWrite(int Idx, uint32_t Val)
 
 bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 {
-	(void)Addr;
-	(void)Size;
-	(void)bRetain;
-	return false;
+	// RTC/LP SRAM remains powered in Deep-sleep. HP SRAM cannot be kept.
+	// These targets do not provide independent power-off of RTC/LP SRAM.
+	if (!bRetain || Size == 0U || Addr < 0x50000000UL ||
+		Addr - 0x50000000UL >= ESP32_RETAINED_RAM_SIZE ||
+		Size > ESP32_RETAINED_RAM_SIZE - (Addr - 0x50000000UL))
+	{
+		return false;
+	}
+#if defined(ESP32C3)
+	uintptr_t state = DisableInterrupt();
+	uint32_t value = ESP32_RTC_MEMORY_POWER_REG;
+	// Follow rtc_sleep_init: keep RTC fast memory powered in sleep.
+	value = (value | (1UL << 16)) & ~(1UL << 15);
+	ESP32_RTC_MEMORY_POWER_REG = value;
+	bool ready = (ESP32_RTC_MEMORY_POWER_REG & (3UL << 15)) == (1UL << 16);
+	EnableInterrupt(state);
+	return ready;
+#else
+	// The PMU sleep sequence puts LP SRAM into its content-retaining
+	// deep-sleep state, then restores access on wake. No HP bank is kept.
+	return true;
+#endif
 }

@@ -26,6 +26,11 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define WAKE_BUT_PINOP IOPINOP_GPIO
 #define POWER_DEMO_RESUME_WAKE 0
 #define POWER_DEMO_STANDBY_RAM_TEST 1
+// RTC/LP SRAM is outside normal .data/.bss and survives Deep-sleep.
+// Leave the first 1 KB available for a wake stub.
+#define POWER_DEMO_RAM_RET_TEST 1
+#define POWER_DEMO_RAM_RET_ADDR 0x50000400UL
+#define POWER_DEMO_RAM_RET_SIZE 0x3C00U
 #define POWER_DEMO_UART_DMA false
 #define POWER_DEMO_UART_OFF 1
 // To restore the validated BOOT-button Light-sleep configuration, set

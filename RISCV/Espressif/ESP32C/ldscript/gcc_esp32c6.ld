@@ -17,6 +17,7 @@ GROUP( -lstdc++ -lgcc -lc)
 
 MEMORY
 {
+	RTC (RW) : ORIGIN = 0x50000000, LENGTH = 0x4000
   /* Reserve 0x40800000..0x40807FFF for cache before executable SRAM. */
   IRAM (RWX) : ORIGIN = 0x40808000, LENGTH = 0x8000
 
@@ -44,6 +45,16 @@ SECTIONS
 
 /* Common sections keep .iram.text.vectors first and aligned to 256 bytes,
  * copy initialized RAM from the unified C6 flash mapping, and place .reset. */
+/* Retained data must not be copied or cleared by normal startup. */
+SECTIONS
+{
+	.rtc.noinit (NOLOAD) : ALIGN(4)
+	{
+		*(.rtc.noinit .rtc.noinit.*)
+		. = ALIGN(4);
+	} > RTC
+}
+
 INCLUDE "gcc_riscv_flash.ld"
 
 /* ESP-IDF v5.5.1 ROM ets_update_cpu_frequency, argument in MHz. */

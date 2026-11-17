@@ -6,6 +6,25 @@ build the matching library configuration first. Board pin maps come from the
 existing example named in each README. These additions provide 29 ClockDemo
 projects and 10 missing PowerOffDemo projects outside ESP32.
 
+## Current focused regression
+
+The November 17 completion review rebuilt all library sources for SAMD11 (239),
+SAMD21 (318), SAM4LC (124), SAM4LS (128), ESP32-C3 (204) and ESP32-C6 (206), in
+Debug and Release. ClockDemo and PowerOffDemo linked for all six configurations;
+ClockDisplayDemo and LCDConsoleDisplayDemo also linked for both SAMD targets:
+32 successful links in total. This does not supersede hardware results below.
+
+D11/D21 and SAM4LC ClockDemo now check 1/2/4/1 peripheral-clock divisors, delays
+and timer interrupts at each rate, then three sleep cycles at divisor four.
+SAM4LC uses the EIC route for OLED1 BUTTON1 to enter RETENTION. The previous
+GPIO-only SLEEP0 run remains recorded separately. C3/C6 PowerOffDemo now checks
+RTC/LP SRAM retention after pin wake. Clean rebuild both library and demo.
+
+The expanded D11 ClockDemo fits in 13,364 bytes of flash using direct UART
+messages. Its LCDConsoleDisplayDemo continues to exercise syslog. New clock,
+sleep and retained-memory paths require hardware runs; see the outstanding
+items at the top of [core power and clock ports](core-power-clock-ports.md).
+
 ## Compile and link results
 
 All 114 configurations below linked successfully. These are command-line GNU

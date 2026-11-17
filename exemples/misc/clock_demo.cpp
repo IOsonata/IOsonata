@@ -39,7 +39,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/timer.h"
 #include "coredev/uart.h"
-#include "syslog.h"
+#include <stdarg.h>
 #include "idelay.h"
 #include "iopinctrl.h"
 #include "board.h"
@@ -124,14 +124,6 @@ static unsigned s_Failures;
 #if defined(CLOCK_DEMO_WAKE_IRQ)
 static volatile bool s_PinWoke;
 #endif
-alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(4, 160)];
-static const SysLogCfg_t s_LogCfg = {
-	.pMem = s_LogMem,
-	.MemSize = sizeof(s_LogMem),
-	.RecordLen = 160,
-	.bBlocking = true,
-};
-
 static void ClockDemoTimerHandler(TimerDev_t *pTimer, uint32_t Event);
 static void ClockDemoFlush(void);
 
@@ -152,9 +144,64 @@ static void ClockDemoTimerHandler(TimerDev_t *pTimer, uint32_t Event)
 	}
 }
 
+// This demo prints only strings and unsigned decimal values. Direct polling
+// output keeps the clock checks small enough for the 16 KB targets.
+static void ClockDemoPut(const char *pText)
+{
+	while (*pText != 0)
+	{
+		uint8_t value = (uint8_t)*pText;
+		if (UARTTx(&s_Uart, &value, 1) == 1)
+		{
+			pText++;
+		}
+	}
+}
+
+static void ClockDemoPrint(const char *pFormat, ...)
+{
+	va_list args;
+	va_start(args, pFormat);
+	while (*pFormat != 0)
+	{
+		char text[11];
+		if (*pFormat != '%')
+		{
+			text[0] = *pFormat++;
+			text[1] = 0;
+			ClockDemoPut(text);
+		}
+		else
+		{
+			pFormat++;
+			if (*pFormat == 's')
+			{
+				ClockDemoPut(va_arg(args, const char *));
+			}
+			else if (*pFormat == 'u')
+			{
+				unsigned value = va_arg(args, unsigned);
+				unsigned pos = sizeof(text) - 1U;
+				text[pos] = 0;
+				do
+				{
+					text[--pos] = '0' + value % 10U;
+					value /= 10U;
+				} while (value != 0U);
+				ClockDemoPut(text + pos);
+			}
+			if (*pFormat != 0)
+			{
+				pFormat++;
+			}
+		}
+	}
+	va_end(args);
+}
+
 static void ClockDemoResult(const char *pName, bool Passed)
 {
-	SysLogPrintf(SysLogGet(), "%s: %s\r\n", pName, Passed ? "PASS" : "FAIL");
+	ClockDemoPrint("%s: %s\r\n", pName, Passed ? "PASS" : "FAIL");
 	ClockDemoFlush();
 	if (!Passed)
 	{
@@ -186,11 +233,9 @@ static void ClockDemoUartRx(void)
 		return;
 	}
 	uint32_t start = TimerGetMicrosecond(&s_Timer);
-	SysLogPrintf(SysLogGet(), "UART RX: send U within 30 s\r\n");
+	ClockDemoPrint("UART RX: send U within 30 s\r\n");
 	while ((uint32_t)(TimerGetMicrosecond(&s_Timer) - start) < 30000000U)
 	{
-		// Drain output without discarding a response received during transmission.
-		(void)SysLogFlush(SysLogGet());
 		if (UARTRx(&s_Uart, &value, 1) > 0 && value == 'U')
 		{
 			received = true;
@@ -213,15 +258,13 @@ static bool ClockDemoTimerInit(void)
 	return true;
 }
 
-// Polling UART may accept only part of a syslog record. Drain both queues
-// before stopping its clock, including the final bytes in the shift register.
+// Drain the polling UART before stopping its clock, including the shift register.
 static void ClockDemoFlush(void)
 {
 	uint8_t unused;
 
-	while (CFifoUsed(SysLogGet()->hFifo) != 0 || CFifoUsed(s_Uart.hTxFifo) != 0)
+	while (CFifoUsed(s_Uart.hTxFifo) != 0)
 	{
-		(void)SysLogFlush(SysLogGet());
 		(void)UARTRx(&s_Uart, &unused, 1);
 	}
 	msDelay(2);
@@ -275,7 +318,7 @@ static void ClockDemoTimer(void)
 		TimerDisableTrigger(&s_Timer, 0);
 		uint32_t expected = (uint64_t)elapsed * 1000U / period;
 		uint32_t difference = count > expected ? count - expected : expected - count;
-		SysLogPrintf(SysLogGet(), "Timer: %u Hz, %s 250 ms measured %u us, IRQ %u\r\n",
+		ClockDemoPrint("Timer: %u Hz, %s 250 ms measured %u us, IRQ %u\r\n",
 			(unsigned)frequency, delay == 0U ? "msDelay" : "nsDelay",
 			(unsigned)elapsed, (unsigned)count);
 		ClockDemoResult("Delay within 2 percent", elapsed >= 245000U && elapsed <= 255000U);
@@ -302,9 +345,10 @@ static void ClockDemoSleep(void)
 	unsigned released = 0U;
 
 	// The board selects a supported peripheral-clock divider for sleep.
-	msDelay(2);
+	ClockDemoClockBegin();
 	uint32_t sleepApb = SystemPeriphClockSet(0, core / CLOCK_DEMO_SLEEP_APB_DIVIDER);
-	if (sleepApb == 0U)
+	bool uartReady = ClockDemoClockEnd();
+	if (sleepApb == 0U || !uartReady)
 	{
 		ClockDemoResult("Sleep APB selection", false);
 		return;
@@ -330,12 +374,14 @@ static void ClockDemoSleep(void)
 	if (!armed)
 	{
 		ClockDemoResult("Sleep wake pin", false);
+		ClockDemoClockBegin();
 		(void)SystemPeriphClockSet(0, apb);
+		(void)ClockDemoClockEnd();
 		return;
 	}
-	SysLogPrintf(SysLogGet(), "Sleep: CPU %u Hz, APB %u Hz, LF %u Hz\r\n",
+	ClockDemoPrint("Sleep: CPU %u Hz, APB %u Hz, LF %u Hz\r\n",
 		(unsigned)core, (unsigned)sleepApb, (unsigned)low.Freq);
-	SysLogPrintf(SysLogGet(), "Entering sleep; press " CLOCK_DEMO_WAKE_NAME " to resume\r\n");
+	ClockDemoPrint("Entering sleep; press " CLOCK_DEMO_WAKE_NAME " to resume\r\n");
 	ClockDemoFlush();
 	UARTDisable(&s_Uart);
 #if defined(CLOCK_DEMO_WAKE_IRQ)
@@ -356,7 +402,7 @@ static void ClockDemoSleep(void)
 #else
 	(void)SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINSENSE_DISABLE);
 #endif
-	SysLogPrintf(SysLogGet(), "Sleep returned; checking clocks\r\n");
+	ClockDemoPrint("Sleep returned; checking clocks\r\n");
 	ClockDemoResult("CPU clock after resume", SystemCoreClockGet() == core &&
 		GetHighFreqOscType() == high.Type && GetHighFreqOscFreq() == high.Freq);
 	ClockDemoResult("APB clock after resume", SystemPeriphClockGet(0) == sleepApb);
@@ -366,8 +412,10 @@ static void ClockDemoSleep(void)
 #if CLOCK_DEMO_UART_RX_TEST
 	ClockDemoUartRx();
 #endif
-	msDelay(2);
-	ClockDemoResult("APB restore", SystemPeriphClockSet(0, apb) == apb);
+	ClockDemoClockBegin();
+	bool restored = SystemPeriphClockSet(0, apb) == apb;
+	uartReady = ClockDemoClockEnd();
+	ClockDemoResult("APB restore", restored && uartReady);
 }
 #endif
 
@@ -378,13 +426,12 @@ int main(void)
 	TimerDev_t retainedTimer = {};
 	TimerCfg_t retainedCfg = s_TimerCfg;
 #endif
-	if (!UARTInit(&s_Uart, &s_UartCfg) ||
-		!SysLogInitNoTimer(SysLogGet(), &s_LogCfg, &s_Uart.DevIntrf, 0, 0))
+	if (!UARTInit(&s_Uart, &s_UartCfg))
 	{
 		return 1;
 	}
 	msDelay(1000);
-	SysLogPrintf(SysLogGet(), "ClockDemo\r\nStartup CPU %u Hz, APB %u Hz\r\n",
+	ClockDemoPrint("ClockDemo\r\nStartup CPU %u Hz, APB %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	ClockDemoFlush();
 #if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
@@ -409,28 +456,28 @@ int main(void)
 #endif
 	if (sizeof(s_Sources) == 0U)
 	{
-		SysLogPrintf(SysLogGet(), "Core selection: SKIP (not configured)\r\n");
+		ClockDemoPrint("Core selection: SKIP (not configured)\r\n");
 	}
 	if (sizeof(s_ApbDividers) == 0U)
 	{
-		SysLogPrintf(SysLogGet(), "Peripheral clock setting: SKIP (not configured)\r\n");
+		ClockDemoPrint("Peripheral clock setting: SKIP (not configured)\r\n");
 	}
 
 #if !defined(CLOCK_DEMO_LF_SOURCES)
 	{
-		SysLogPrintf(SysLogGet(), "LF selection: SKIP (not configured)\r\n");
+		ClockDemoPrint("LF selection: SKIP (not configured)\r\n");
 	}
 #endif
 
 	for (unsigned cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
 	{
-		SysLogPrintf(SysLogGet(), "Cycle %u\r\n", cycle);
+		ClockDemoPrint("Cycle %u\r\n", cycle);
 		for (const ClockDemoSource_t &source : s_Sources)
 		{
 #if CLOCK_DEMO_CORE_READONLY
-			SysLogPrintf(SysLogGet(), "Checking %s\r\n", source.pName);
+			ClockDemoPrint("Checking %s\r\n", source.pName);
 #else
-			SysLogPrintf(SysLogGet(), "Selecting %s\r\n", source.pName);
+			ClockDemoPrint("Selecting %s\r\n", source.pName);
 #endif
 			// Polling Tx has queued the last bytes in the hardware FIFO.
 			ClockDemoClockBegin();
@@ -460,7 +507,7 @@ int main(void)
 				{
 					return 1;
 				}
-				SysLogPrintf(SysLogGet(), "CPU %u Hz, APB request %u Hz, actual %u Hz\r\n",
+				ClockDemoPrint("CPU %u Hz, APB request %u Hz, actual %u Hz\r\n",
 					(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
 				ClockDemoResult("APB", actual == request &&
 					SystemPeriphClockGet(0) == actual &&
@@ -477,7 +524,7 @@ int main(void)
 #if defined(CLOCK_DEMO_LF_SOURCES)
 			for (const ClockDemoLowFreq_t &source : s_LowFreqSources)
 			{
-				SysLogPrintf(SysLogGet(), "Selecting LF %s\r\n", source.pName);
+				ClockDemoPrint("Selecting LF %s\r\n", source.pName);
 				ClockDemoClockBegin();
 				bool selected = SystemLowFreqClockSelect(source.Type, source.Frequency);
 				if (!ClockDemoClockEnd())
@@ -485,7 +532,7 @@ int main(void)
 					return 1;
 				}
 				ClockDemoResult(source.pName, selected);
-				SysLogPrintf(SysLogGet(), "LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
+				ClockDemoPrint("LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
 #if defined(CLOCK_DEMO_WAKE_PIN) && !CLOCK_DEMO_DEFER_TIMER
 				// Rotate the LF source used for sleep across the three cycles.
 				if (selected && lfIndex == (cycle - 1U) %
@@ -513,13 +560,13 @@ int main(void)
 #if defined(CLOCK_DEMO_WAKE_PIN)
 	for (unsigned cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
 	{
-		SysLogPrintf(SysLogGet(), "Sleep cycle %u\r\n", cycle);
+		ClockDemoPrint("Sleep cycle %u\r\n", cycle);
 		ClockDemoSleep();
 	}
 #endif
 #endif
 	ClockDemoFlush();
-	SysLogPrintf(SysLogGet(), "ClockDemo complete: %u failures\r\n", s_Failures);
+	ClockDemoPrint("ClockDemo complete: %u failures\r\n", s_Failures);
 	ClockDemoFlush();
 	while (1)
 	{

@@ -1,6 +1,6 @@
 /**-------------------------------------------------------------------------
 @file system_power_sam4l.cpp
-@brief SAM4L Backup mode, reset reasons, wake pins and backup registers.
+@brief SAM4L sleep modes, reset reasons, wake pins and backup registers.
 
 Backup mode loses all SRAM. Wakeup resets the core. EIC wake pins use the
 backup pin assignments, not the alternative GPIO peripheral routes.
@@ -191,21 +191,60 @@ void SystemSleep(void)
 	uint32_t scr = SCB->SCR;
 	uint32_t clocks = SAM4L_PM->PM_PBDMASK;
 
-	Sam4lPowerClockEnable(PM_PBDMASK_BPM | PM_PBDMASK_BSCIF);
+	Sam4lPowerClockEnable(PM_PBDMASK_BPM | PM_PBDMASK_BSCIF | PM_PBDMASK_EIC);
 	uint32_t pmcon = SAM4L_BPM->BPM_PMCON;
-	// SLEEP0 stops only the CPU. Drivers retain their clocks and state.
-	// WAIT/RETENTION require separate asynchronous wake and clock handling.
+	uint32_t eic = SAM4L_EIC->EIC_CTRL & SAM4L_EIC->EIC_IMR & SAM4L_EIC->EIC_ASYNC;
+	bool ast = (clocks & PM_PBDMASK_AST) != 0U &&
+		(SAM4L_AST->AST_CR & AST_CR_EN) != 0U && SAM4L_AST->AST_WER != 0U;
+	bool deep = eic != 0U || ast || SAM4L_PM->PM_AWEN != 0U;
+	uint32_t wakeMask = SAM4L_PM->PM_IMR & PM_IMR_WAKE;
+	uint32_t irqEnabled = NVIC_GetEnableIRQ(PM_IRQn);
+	uint32_t irqPending = NVIC_GetPendingIRQ(PM_IRQn);
+	// EIC and AST wake directly. Other asynchronous users require AWEN.
+	// WAIT permits SleepWalking; RETENTION is used for EIC/AST alone.
 	if ((SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_VREGOK) != 0U)
 	{
+		uint32_t mode = pmcon & ~(BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP_Msk);
+		if (deep && SAM4L_PM->PM_AWEN == 0U)
+		{
+			mode |= BPM_PMCON_RET;
+		}
 		SAM4L_BPM->BPM_UNLOCK = BPM_UNLOCK_KEY(0xaa) |
 			BPM_UNLOCK_ADDR(offsetof(Bpm, BPM_PMCON));
-		SAM4L_BPM->BPM_PMCON = pmcon &
-			~(BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP_Msk);
+		SAM4L_BPM->BPM_PMCON = mode;
 		(void)SAM4L_BPM->BPM_PMCON;
 		SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+		if (deep)
+		{
+			SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+			if (wakeMask == 0U)
+			{
+				SAM4L_PM->PM_ICR = PM_ICR_WAKE;
+			}
+			SAM4L_PM->PM_IER = PM_IER_WAKE;
+			NVIC_EnableIRQ(PM_IRQn);
+		}
 		__DSB();
 		__WFI();
 		__NOP();
+		if (deep)
+		{
+			// Consume only the temporary PM wake interrupt. Peripheral flags
+			// and application-owned PM interrupts remain for their handlers.
+			if (wakeMask == 0U)
+			{
+				SAM4L_PM->PM_IDR = PM_IDR_WAKE;
+				SAM4L_PM->PM_ICR = PM_ICR_WAKE;
+				if (irqPending == 0U && (SAM4L_PM->PM_ISR & SAM4L_PM->PM_IMR & ~PM_IMR_WAKE) == 0U)
+				{
+					NVIC_ClearPendingIRQ(PM_IRQn);
+				}
+			}
+			if (irqEnabled == 0U)
+			{
+				NVIC_DisableIRQ(PM_IRQn);
+			}
+		}
 		SAM4L_BPM->BPM_UNLOCK = BPM_UNLOCK_KEY(0xaa) |
 			BPM_UNLOCK_ADDR(offsetof(Bpm, BPM_PMCON));
 		SAM4L_BPM->BPM_PMCON = pmcon;

@@ -325,6 +325,33 @@ int main(void)
 	// Releasing every checked user permits the next clock change.
 	assert(SystemCoreClockSelect(OSC_TYPE_RC, 80000000));
 
+	// APB dividers choose the nearest rate without changing the CPU.
+	for (unsigned mask = 0; mask < 2; mask++)
+	{
+		g_TestMask = mask;
+		uint32_t cpu = SystemCoreClockGet();
+		for (int bus = 0; bus < 4; bus++)
+		{
+			uint32_t expected = bus == 1 ? cpu : cpu / 2U;
+			assert(SystemPeriphClockSet(bus, cpu / 2U) == expected);
+			assert(SystemPeriphClockGet(bus) == expected);
+			assert(SystemCoreClockGet() == cpu);
+			assert(g_TestMask == mask);
+			assert(SystemPeriphClockSet(bus, UINT32_MAX) == cpu);
+		}
+		SAM4L_PM->PM_PBAMASK = PM_PBAMASK_SPI;
+		assert(SystemPeriphClockSet(0, cpu / 2U) == 0U);
+		assert(SystemPeriphClockGet(0) == cpu);
+		SAM4L_PM->PM_PBAMASK = 0U;
+		assert(SystemPeriphClockSet(-1, cpu) == 0U);
+		assert(SystemPeriphClockSet(4, cpu) == 0U);
+		assert(SystemPeriphClockSet(0, 0) == 0U);
+		g_TestIpsr = 1U;
+		assert(SystemPeriphClockSet(0, cpu / 2U) == 0U);
+		g_TestIpsr = 0U;
+		assert(g_TestMask == mask);
+	}
+
 	// Startup still halts on clock failure and disables the default watchdog.
 	*(volatile uint32_t *)&SAM4L_PM->PM_SR = 0;
 	if (setjmp(s_Halt) == 0)

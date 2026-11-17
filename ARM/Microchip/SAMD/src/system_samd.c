@@ -1132,15 +1132,6 @@ uint32_t SystemPeriphClockGet(int Idx)
 	return SamdGclkGenFreq((uint32_t)Idx);
 }
 
-uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
-{
-	// The generators are set by SystemInit. Their frequency is not changed
-	// at run time, a request for another frequency fails.
-	uint32_t current = SystemPeriphClockGet(Idx);
-
-	return current != 0U && current == Freq ? current : 0U;
-}
-
 // DMAC register clock accessible, interrupts disabled. An initialized but
 // idle controller does not own a clock rate. Preserve the channel selector.
 static bool SamdDmaClockBusy(void)
@@ -1339,6 +1330,138 @@ static bool SamdClockBusy(bool LowFreq)
 	}
 
 	return false;
+}
+
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+{
+	if (Idx < 0 || Idx >= GCLK_GEN_NUM || Freq == 0U || __get_IPSR() != 0U)
+	{
+		return 0U;
+	}
+	uint32_t state = DisableInterrupt();
+	uint32_t ctrl = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, (uint32_t)Idx);
+	uint32_t saved = SamdGclkGenRead(&GCLK_REGS->GCLK_GENDIV, (uint32_t)Idx);
+	uint32_t actual = 0U;
+
+	if (ctrl == UINT32_MAX || saved == UINT32_MAX ||
+		(ctrl & GCLK_GENCTRL_GENEN_Msk) == 0U)
+	{
+		EnableInterrupt(state);
+		return 0U;
+	}
+	uint32_t input = SamdSourceFreq((ctrl & GCLK_GENCTRL_SRC_Msk) >> GCLK_GENCTRL_SRC_Pos);
+	if (input == 0U)
+	{
+		EnableInterrupt(state);
+		return 0U;
+	}
+	uint32_t maximum = Idx == 1 ? 65535U : Idx == 2 ? 31U : 255U;
+	uint32_t best = 1U;
+	uint32_t error = UINT32_MAX;
+	bool binary = false;
+	uint32_t first = input / Freq;
+	uint32_t minimum = Idx == SAMD_GCLK_MAIN ?
+		(input + SAMD_MAIN_FREQ_MAX - 1U) / SAMD_MAIN_FREQ_MAX : 1U;
+	if (first < minimum)
+	{
+		first = minimum;
+	}
+	if (first > maximum)
+	{
+		first = maximum;
+	}
+	uint32_t limit = first < maximum ? first + 1U : first;
+	for (uint32_t div = first; div <= limit; div++)
+	{
+		uint32_t rate = input / div;
+		uint32_t difference = rate > Freq ? rate - Freq : Freq - rate;
+		if (difference < error)
+		{
+			error = difference;
+			best = div;
+			actual = rate;
+		}
+	}
+	for (uint32_t div = 0U; div < 31U; div++)
+	{
+		uint32_t rate = input >> (div + 1U);
+		if (rate == 0U || (Idx == SAMD_GCLK_MAIN && rate > SAMD_MAIN_FREQ_MAX))
+		{
+			continue;
+		}
+		uint32_t difference = rate > Freq ? rate - Freq : Freq - rate;
+		if (difference < error)
+		{
+			error = difference;
+			best = div;
+			actual = rate;
+			binary = true;
+		}
+	}
+	bool modeChange = binary != ((ctrl & GCLK_GENCTRL_DIVSEL_Msk) != 0U);
+	uint32_t previous = (saved & GCLK_GENDIV_DIV_Msk) >> GCLK_GENDIV_DIV_Pos;
+	if (actual != 0U && (modeChange ||
+		(best != previous && !(best == 1U && previous == 0U && !binary))))
+	{
+		bool busy = Idx == SAMD_GCLK_MAIN && SamdClockBusy(false);
+		busy = busy || (ctrl & GCLK_GENCTRL_OE_Msk) != 0U;
+		// Generator 1 can feed another generator directly.
+		for (uint32_t gen = 0; !busy && Idx == SAMD_GCLK_LF && gen < GCLK_GEN_NUM; gen++)
+		{
+			uint32_t value = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, gen);
+			busy = value == UINT32_MAX ||
+				((value & GCLK_GENCTRL_GENEN_Msk) != 0U &&
+				 (value & GCLK_GENCTRL_SRC_Msk) == GCLK_GENCTRL_SRC_GCLKGEN1);
+		}
+		// A reference channel must not be retimed beneath a running PLL.
+		for (uint32_t channel = 0; !busy && channel < GCLK_NUM; channel++)
+		{
+			uint32_t value = SamdGclkRead(&GCLK_REGS->GCLK_CLKCTRL, channel, true);
+			bool reference =
+				(channel == GCLK_CLKCTRL_ID_DFLL48_Val &&
+				 (SYSCTRL_REGS->SYSCTRL_DFLLCTRL & SYSCTRL_DFLLCTRL_ENABLE_Msk) != 0U) ||
+				(channel == GCLK_CLKCTRL_ID_FDPLL_Val &&
+				 (SYSCTRL_REGS->SYSCTRL_DPLLCTRLA & SYSCTRL_DPLLCTRLA_ENABLE_Msk) != 0U &&
+				 (SYSCTRL_REGS->SYSCTRL_DPLLCTRLB & SYSCTRL_DPLLCTRLB_REFCLK_Msk) ==
+				 SYSCTRL_DPLLCTRLB_REFCLK_GCLK);
+			busy = value == UINT32_MAX ||
+				((reference || (value & GCLK_CLKCTRL_CLKEN_Msk) != 0U) &&
+				 (value & GCLK_CLKCTRL_GEN_Msk) == GCLK_CLKCTRL_GEN(Idx) &&
+				 SamdTimerClockBusy(channel));
+		}
+		if (busy)
+		{
+			actual = 0U;
+		}
+		else
+		{
+			bool ready = true;
+			if (modeChange)
+			{
+				// Use a divider safe in either encoding while changing DIVSEL.
+				// The generator remains enabled, including the CPU's generator.
+				GCLK_REGS->GCLK_GENDIV = GCLK_GENDIV_ID(Idx) | GCLK_GENDIV_DIV(minimum);
+				ready = SamdGclkSync();
+				if (ready)
+				{
+					GCLK_REGS->GCLK_GENCTRL = ctrl ^ GCLK_GENCTRL_DIVSEL_Msk;
+					ready = SamdGclkSync();
+				}
+			}
+			if (ready)
+			{
+				GCLK_REGS->GCLK_GENDIV = GCLK_GENDIV_ID(Idx) | GCLK_GENDIV_DIV(best);
+				ready = SamdGclkSync();
+			}
+			if (!ready || SamdGclkGenFreq((uint32_t)Idx) != actual)
+			{
+				actual = 0U;
+			}
+			SystemCoreClockUpdate();
+		}
+	}
+	EnableInterrupt(state);
+	return actual;
 }
 
 // Full clock tree setup again. The caller stops the clock consumers first

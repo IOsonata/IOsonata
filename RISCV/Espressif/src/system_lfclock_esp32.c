@@ -300,13 +300,9 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	}
 	else if (ClkSrc == OSC_TYPE_RC)
 	{
-#if defined(ESP32C6)
-		// Zero requests the reset RC_SLOW source. Other values choose nearest.
-		if (OscFreq != 0U && OscFreq <= (LF_RC_SLOW_FREQ + LF_32K_FREQ) / 2U)
-		{
-			source = 2U;
-		}
-#endif
+		// RC_SLOW is the supported internal LF source. Espressif AR2024-011
+		// withdraws C6 RC32K because it may stop at low temperatures.
+		// As on C3, requests select the available RC source and report its rate.
 	}
 	else
 	{
@@ -379,22 +375,12 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 			usDelay(100000);
 		}
 	}
-	else if (source == 2U)
-	{
-		LF_POWER_REG = power | (1UL << 29);
-		LF_DIGITAL_REG = digital | (1UL << 30);
-		LF_CAL_SOURCE_REG = calibration & ~3U;
-		if (!(power & (1UL << 29)))
-		{
-			usDelay(300);
-		}
-	}
+
 #endif
 	count = Esp32LowFreqMeasure(source);
 	frequency = count != 0U ? (40000000ULL * LF_CAL_CYCLES + count / 2U) / count : 0U;
 	ready = source == 0U ? frequency >= 50000U && frequency <= 300000U :
-		source == 1U ? frequency >= 32735U && frequency <= 32801U :
-		frequency >= 16000U && frequency <= 64000U;
+		frequency >= 32735U && frequency <= 32801U;
 #if defined(ESP32C6)
 	LF_CAL_SOURCE_REG = calibration;
 	LF_DIGITAL_REG = digital;

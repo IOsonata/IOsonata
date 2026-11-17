@@ -1,5 +1,70 @@
 # MCU core power and clock ports
 
+## November 17 implementation review
+
+SAMD11, SAMD21, SAM4L, ESP32-C3 and ESP32-C6 are not marked fully complete.
+Earlier demo passes establish the configurations exercised, not every clock
+source, divider or power mode. The remaining items below must not be hidden by
+a successful build or by reclassifying a missing implementation as unsupported
+hardware.
+
+This revision adds:
+
+- SAMD11/21 generic-clock divider selection, including each generator's divider
+  width, binary division, active-consumer checks and CPU delay-factor updates.
+  ClockDemo now selects OSC8M again on D11 and checks 1/2/4/1 dividers, timer
+  interrupts and both delay functions at each rate on both targets.
+- SAM4L peripheral-clock setters for PBA/PBB/PBC/PBD. Rates cannot exceed the
+  CPU rate; PBB must equal the CPU rate because it also supplies AHB modules.
+  ClockDemo checks the PBA dividers with the UART stopped and reinitialized.
+- SAM4L SystemSleep selects RETENTION for asynchronous EIC/AST wake, WAIT for
+  enabled PM SleepWalking wake sources, and SLEEP0 for ordinary interrupt wake.
+  AST wake detection uses WER, independently of the interrupt mask. The caller
+  still owns configuring and clearing the peripheral wake event. BPM, SCR,
+  clock gates, PM interrupt ownership and the caller's interrupt mask are kept.
+- C3 RTC fast SRAM (8 KB) and C6 LP SRAM (16 KB) retention requests, with a
+  `.rtc.noinit` linker section excluded from normal startup initialization.
+  HP SRAM retention and independently powering off RTC/LP SRAM are not claimed.
+  ROM storage words remain reserved; they are not application retention registers.
+- C3/C6 PowerOffDemo checks retained data after pin wake, using the region above
+  the first 1 KB reserved for wake-stub use. This demo region must not also hold
+  application retained objects or LP firmware.
+- C6 RC32K selection is removed following Espressif advisory AR2024-011. RC
+  selection uses RC_SLOW. Sleep keeps the actual selected LP clock powered,
+  using the hardware mux rather than inferring it from a frequency descriptor.
+
+ClockDemo now prints its small set of integer/string messages directly through
+UART; LCDConsoleDisplayDemo remains the display/syslog demonstration. The
+expanded D11 ClockDemo uses 13,364 bytes of flash and 1,208 bytes of BSS in the
+current size-optimized LTO build. Sleep checks on D11, D21 and SAM4LC now use
+a peripheral-clock divisor of four and restore the original rate afterward.
+
+Debug and Release library-source builds and ClockDemo/PowerOffDemo links passed
+for D11, D21, SAM4LC, SAM4LS, C3 and C6. Both display demos also linked for D11
+and D21. These are GNU command-line builds derived from the managed project
+source lists; no new board execution was performed here.
+
+Hardware validation still required for this revision:
+
+- D11/D21 changed dividers, actual D11 source selection, and sleep at reduced
+  clock rates, including UART receive after resume.
+- SAM4LC changed PBA dividers and RETENTION entry/resume with OLED1 BUTTON1.
+  WAIT/SleepWalking and AST wake need their corresponding configured sources.
+- C3/C6 retained SRAM across repeated Deep-sleep pin wakes.
+- Sleep-current measurements and external oscillator configurations.
+
+An implementation gap remains in C3/C6: runtime PLL startup/calibration and a
+return to a PLL CPU rate after selecting RC_FAST are not provided. The existing
+160 MHz startup option only adjusts an already selected PLL. Do not describe
+these targets as fully implemented until that work and its validation are done.
+The shared clock API takes oscillator type/frequency, not a requested CPU rate;
+any extension of that API must be explicit.
+
+The maintainer also confirmed SAM4LC LCDConsoleDisplayDemo in all four
+interrupt/DMA combinations and ClockDisplayDemo. Those results apply to the
+existing display configuration and do not validate the new sleep modes.
+
+
 The public functions are in `include/coredev/system_core_clock.h`.
 Implementations belong to the MCU library. Applications use the same functions
 and `exemples/misc/power_off_demo.cpp`, with board pins in `board.h`.
@@ -23,7 +88,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0 resume added | SAM4LC clock/delay checks and eight consecutive Backup wakes passed; three Release SLEEP0 cycles passed with clocks, delays, timer IRQs and UART RX; WAIT/RETENTION unsupported |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0/WAIT/RETENTION resume implemented | SAM4LC clock/delay checks and eight consecutive Backup wakes passed; three Release SLEEP0 cycles passed with clocks, delays, timer IRQs and UART RX; WAIT/RETENTION hardware validation pending |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; D11 SW0 and D21 SW0/OLED1 BUTTON1 repeated resume passed | D21 clocks, delays, timer IRQs, UART RX and SRAM samples passed; full SRAM continuity, LF switching and sleep current remain unverified |
 | LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
 | LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |
@@ -31,7 +96,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
-| ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; runtime PLL selection and Deep-sleep RAM retention unsupported |
+| ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; runtime PLL selection incomplete; RTC/LP SRAM retention implemented, hardware validation pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
 ## SAM D11/D21 low-power work (0.14, unmerged)
@@ -340,11 +405,11 @@ SAM4LC ClockDemo rerun passed all three RC4/RC12 selection cycles with readable
 UART output. CPU/APB measurements were about 44.8 MHz with RC4 and 39.64 MHz
 with RC12. Both 250 ms delays measured about 253420 us with 25 interrupts,
 within the demo's 2 percent tolerance; the final result was zero failures.
-SAM4L now implements SystemSleep using SLEEP0, preserving BPM mode, SCR,
+The earlier SystemSleep implementation used SLEEP0, preserving BPM mode, SCR,
 PBD clock gates and the caller's interrupt mask. Entry clears RET/BKUP and
 SLEEPDEEP/SLEEPONEXIT, and returns without sleeping if VREG is not ready.
 Peripherals retain their running clocks; enabled interrupts wake the CPU.
-This does not implement WAIT or RETENTION. The SAM4LC ClockDemo selects
+That tested revision did not implement WAIT or RETENTION. Its SAM4LC ClockDemo selected
 OLED1 BUTTON1/PC06 through GPIO interrupt group 8 and checks the wake callback,
 clocks, both delays, timer IRQs and UART RX across three cycles. The Release
 retest passed all checks with zero failures. Its 1260164 Hz timer measured

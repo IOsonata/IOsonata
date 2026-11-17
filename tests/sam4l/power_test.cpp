@@ -12,9 +12,14 @@ static Pm s_Pm;
 static Bpm s_Bpm;
 static Bscif s_Bscif;
 static Eic s_Eic;
+static Ast s_Ast;
 static std::jmp_buf s_Off;
 PowerTestScb g_PowerTestScb;
 uint32_t g_PowerTestMask;
+uint32_t g_PowerTestIrqEnabled;
+uint32_t g_PowerTestIrqPending;
+static bool s_DeepSleep;
+static bool s_WaitSleep;
 static bool s_TestSleep;
 static unsigned s_SleepCount;
 void PowerTestWfi(void)
@@ -24,13 +29,23 @@ void PowerTestWfi(void)
 		std::longjmp(s_Off, 1);
 	}
 	assert(g_PowerTestMask == 1);
-	assert(!(g_PowerTestScb.SCR & (SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk)));
-	assert(!(s_Bpm.BPM_PMCON & (BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP_Msk)));
+	assert(!(g_PowerTestScb.SCR & SCB_SCR_SLEEPONEXIT_Msk));
+	assert(bool(g_PowerTestScb.SCR & SCB_SCR_SLEEPDEEP_Msk) == s_DeepSleep);
+	assert(!(s_Bpm.BPM_PMCON & (BPM_PMCON_BKUP | BPM_PMCON_SLEEP_Msk)));
+	assert(bool(s_Bpm.BPM_PMCON & BPM_PMCON_RET) == (s_DeepSleep && !s_WaitSleep));
+	if (s_DeepSleep)
+	{
+		assert(g_PowerTestIrqEnabled == 1);
+		assert(s_Pm.PM_IER == PM_IER_WAKE);
+		g_PowerTestIrqPending = 1;
+	}
 	s_SleepCount++;
 }
 #undef SAM4L_PM
 #undef SAM4L_BPM
 #undef SAM4L_BSCIF
+#undef SAM4L_AST
+#define SAM4L_AST (&s_Ast)
 #undef SAM4L_EIC
 #define SAM4L_PM (&s_Pm)
 #define SAM4L_BPM (&s_Bpm)
@@ -146,9 +161,36 @@ int main(void)
 		assert(g_PowerTestScb.SCR == (SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk | 0x10));
 	}
 	assert(s_SleepCount == 2);
+	// Repeat retained sleep with EIC, AST, and an AWEN SleepWalking source.
+	s_DeepSleep = true;
+	for (unsigned source = 0; source < 3; source++)
+	{
+		s_Eic.EIC_CTRL = source == 0 ? 2U : 0U;
+		s_Eic.EIC_IMR = 2U;
+		s_Eic.EIC_ASYNC = 2U;
+		s_Pm.PM_PBDMASK = source == 1 ? PM_PBDMASK_AST : 0U;
+		s_Ast.AST_CR = AST_CR_EN;
+		s_Ast.AST_WER = AST_WER_ALARM0;
+		s_Pm.PM_AWEN = source == 2 ? (1U << PM_AWEN_TWIS0) : 0U;
+		s_WaitSleep = source == 2;
+		for (unsigned cycle = 0; cycle < 3; cycle++)
+		{
+			SystemSleep();
+			assert(g_PowerTestIrqEnabled == 0);
+			assert(g_PowerTestIrqPending == 0);
+			assert(s_Pm.PM_IDR == PM_IDR_WAKE);
+			assert(s_Pm.PM_ICR == PM_ICR_WAKE);
+			assert(s_Bpm.BPM_PMCON == saved);
+		}
+	}
+	s_Pm.PM_PBDMASK = 0;
+	s_Pm.PM_AWEN = 0;
+	s_Eic.EIC_CTRL = 0;
+	s_DeepSleep = false;
+
 	s_Bscif.BSCIF_PCLKSR = 0;
 	SystemSleep();
-	assert(s_SleepCount == 2);
+	assert(s_SleepCount == 11);
 	assert(s_Pm.PM_PBDMASK == 0);
 	assert(s_Bpm.BPM_PMCON == saved);
 	s_TestSleep = false;
@@ -162,5 +204,5 @@ int main(void)
 	assert(s_Bpm.BPM_UNLOCK == (BPM_UNLOCK_KEY(0xaa) | BPM_UNLOCK_ADDR(0x1c)));
 	assert(g_PowerTestScb.SCR & SCB_SCR_SLEEPDEEP_Msk);
 	assert(g_PowerTestMask == 1);
-	std::puts("SAM4L reset, backup registers, wake pins, SLEEP0 and Backup entry PASS");
+	std::puts("SAM4L reset, backup registers, wake pins, SLEEP0, WAIT, RETENTION and Backup entry PASS");
 }

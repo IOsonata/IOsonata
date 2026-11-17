@@ -374,12 +374,12 @@ static bool Esp32C6Configure(bool bDeep)
 	C6_PMU(0xA8U) &= ~(1UL << 31);
 	// The active LP slow clock remains powered for wake detection.
 	C6_PMU(0xACU) |= (1UL << 30);
-	if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL)
+	if ((C6_LP_CLOCK & 3U) == 1U)
 	{
 		C6_PMU(0xACU) |= (1UL << 28);
 		C6_PMU(0xC4U) |= (1UL << 28);
 	}
-	else if (g_McuOsc.LowPwrOsc.Freq <= 64000U)
+	else if ((C6_LP_CLOCK & 3U) == 2U)
 	{
 		C6_PMU(0xACU) |= (1UL << 29);
 		C6_PMU(0xC4U) |= (1UL << 29);

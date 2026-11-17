@@ -21,3 +21,11 @@ static inline void __WFI(void) { PowerTestWfi(); }
 
 static inline void __ISB(void) {}
 static inline void __NOP(void) {}
+
+extern uint32_t g_PowerTestIrqEnabled;
+extern uint32_t g_PowerTestIrqPending;
+static inline uint32_t NVIC_GetEnableIRQ(IRQn_Type) { return g_PowerTestIrqEnabled; }
+static inline uint32_t NVIC_GetPendingIRQ(IRQn_Type) { return g_PowerTestIrqPending; }
+static inline void NVIC_EnableIRQ(IRQn_Type) { g_PowerTestIrqEnabled = 1; }
+static inline void NVIC_DisableIRQ(IRQn_Type) { g_PowerTestIrqEnabled = 0; }
+static inline void NVIC_ClearPendingIRQ(IRQn_Type) { g_PowerTestIrqPending = 0; }
