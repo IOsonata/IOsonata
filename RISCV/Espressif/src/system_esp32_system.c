@@ -303,6 +303,8 @@ void Esp32SystemInit(void)
 	// Crypto, DMA and sensor clocks are also acquired by their drivers.
 	*(volatile uint32_t *)(SYSTEM_BASE + 0x14U) &= ~0x5FEUL;
 
+	// Sleep entry arms wake sources when requested by the application.
+	*(volatile uint32_t *)0x6000803CUL &= ~(0x1FFFFUL << 15);
 	// ROM initializes the PLL and flash clocks. Adjust its running CPU tap
 	// only; selecting PLL here would also require power-up and calibration.
 	if ((SYSTEM_SYSCLK_CONF_REG & SYSTEM_SOC_CLK_SEL_Msk) == SYSTEM_SOC_CLK_SEL_PLL)
@@ -357,7 +359,12 @@ void SystemCoreClockUpdate(void)
 			break;
 		}
 		case 2U: /* RC_FAST ~17.5 MHz */
+			#if defined(ESP32C3)
+			SystemCoreClock = g_McuOsc.CoreOsc.Type == OSC_TYPE_RC ?
+				g_McuOsc.CoreOsc.Freq : 17500000UL;
+#else
 			SystemCoreClock = 17500000UL;
+#endif
 			break;
 		default: /* Reserved source */
 			SystemCoreClock = 0U;

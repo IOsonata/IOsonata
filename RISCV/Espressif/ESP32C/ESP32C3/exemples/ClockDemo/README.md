@@ -10,8 +10,10 @@ together. A stopped Timer Group counter is restarted after each change to
 check a 250 ms delay and 10 ms periodic interrupts. Delay calculations use
 frequency in Hz so fractional MHz from the C3 divider is preserved.
 
-RC_FAST currently uses the port's nominal 17.5 MHz value; it is not calibrated.
-The timer and delay checks do not independently measure oscillator accuracy.
+RC_FAST is measured against XTAL through the RTC divide-by-256 calibration
+input before the CPU source changes. A timeout leaves the CPU on its previous
+source. CPU/APB readback and delays use the measured frequency. The timer and
+delay checks do not independently measure oscillator accuracy.
 The LF step selects and measures RC_SLOW. RC32K is not offered by this C3
 implementation, and an external 32 kHz crystal is not assumed.
 
@@ -35,3 +37,11 @@ continuing to reject active peripheral users. This follows the startup clock
 gating in ESP-IDF v5.5.1 `components/esp_system/port/soc/esp32c3/clk.c`.
 The correction passes host register checks and Debug/Release builds; the C3
 board retest is pending.
+
+The next board run passed XTAL and all four divider/timer checks, rejected
+RC_SLOW, then stopped reporting at RC_FAST selection. C3 startup now clears the
+reset-default RTC wake enables; sleep entry arms them when requested. RC_FAST
+power and digital output are enabled before a bounded calibration checks that
+it is running. These corrections pass host register checks and Debug/Release
+builds of C3 ClockDemo and both PowerOffDemo modes. C6 ClockDemo also rebuilds
+in both configurations. The corrected C3 clock sequence awaits a board retest.

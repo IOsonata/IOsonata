@@ -68,11 +68,13 @@ int main(void)
 	// Reset-enabled peripherals must not appear owned before driver init.
 	REG(0x600C0010) = 0xFFFFFFEFU;
 	REG(0x600C0014) = 0x5FEU;
+	REG(0x6000803C) = 12U << 15;
 	Esp32SystemInit();
 	assert(REG(0x600C0010) == ((1U << 0) | (1U << 1) | (1U << 2) |
 		(1U << 3) | (1U << 13) | (1U << 14) | (1U << 15) |
 		(1U << 23) | (1U << 24) | (1U << 29)));
 	assert(REG(0x600C0014) == 0);
+	assert(REG(0x6000803C) == 0);
 
 #if defined(ESP32C3_CPU_160MHZ)
 	assert(SystemCoreClock == 160000000U);

@@ -19,10 +19,10 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define UART_RX_PINOP ESP32_PINOP_U0RXD
 #define UART_TX_PINOP ESP32_PINOP_U0TXD
 
-// Core source sequence and accepted frequency ranges. C3 currently reports the nominal RC_FAST rate.
+// Core source sequence and accepted frequency ranges. RC_FAST is measured against XTAL.
 #define CLOCK_DEMO_SOURCES { \
 	{"XTAL", OSC_TYPE_XTAL, 40000000U, 40000000U, 40000000U}, \
-	{"RC_FAST", OSC_TYPE_RC, 0U, 17500000U, 17500000U}, \
+	{"RC_FAST", OSC_TYPE_RC, 0U, 10000000U, 30000000U}, \
 	{"XTAL restore", OSC_TYPE_XTAL, 40000000U, 40000000U, 40000000U} \
 }
 // C3 divides CPU and APB together outside PLL mode.

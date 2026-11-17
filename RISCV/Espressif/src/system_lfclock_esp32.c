@@ -165,6 +165,56 @@ static uint32_t Esp32LowFreqMeasure(uint32_t Source)
 	return value;
 }
 
+#if defined(ESP32C3)
+// Check RC_FAST against XTAL before selecting it as the CPU source.
+uint32_t Esp32C3FastClockMeasure(void)
+{
+	uint32_t bus = LF_BUS_REG;
+	uint32_t clock = LF_CLOCK_REG;
+	uint32_t config;
+	uint32_t timeout;
+	uint32_t count = 0U;
+
+	if (ESP32_REG32(0x600C0018UL) & LF_BUS_ENABLE)
+	{
+		return 0U;
+	}
+	LF_BUS_REG = bus | LF_BUS_ENABLE;
+	config = LF_CAL_CONFIG_REG;
+	timeout = LF_CAL_TIMEOUT_REG;
+	if (!Esp32LowFreqCalibrationPause(config, timeout))
+	{
+		LF_BUS_REG = bus;
+		return 0U;
+	}
+	// Select divide-by-256 and enable its digital calibration output.
+	LF_CLOCK_REG = (clock & ~((1UL << 7) | (3UL << 4))) |
+		(1UL << 9) | (1UL << 4);
+	LF_CAL_CONFIG_REG = (config & 0xFFFU) | (1UL << 13) | (64UL << 16);
+	LF_CAL_TIMEOUT_REG = (timeout & 0x7EU) | (0x100000UL << 7);
+	LF_CAL_CONFIG_REG |= LF_CAL_START;
+	for (unsigned retry = 0U; retry < 1000U; retry++)
+	{
+		if (LF_CAL_CONFIG_REG & LF_CAL_READY)
+		{
+			count = LF_CAL_VALUE_REG >> 7;
+			break;
+		}
+		if (LF_CAL_TIMEOUT_REG & 1U)
+		{
+			break;
+		}
+		usDelay(10);
+	}
+	LF_CAL_CONFIG_REG &= ~LF_CAL_START;
+	LF_CAL_TIMEOUT_REG = timeout;
+	LF_CAL_CONFIG_REG = config;
+	LF_CLOCK_REG = clock;
+	LF_BUS_REG = bus;
+	return count != 0U ? (40000000ULL * 64U * 256U + count / 2U) / count : 0U;
+}
+#endif
+
 #if defined(ESP32C6)
 // Measure RC_FAST for PMU transition timing. The caller masks interrupts.
 // Restore TIMG0 and PCR state; timer counters and watchdogs are untouched.
