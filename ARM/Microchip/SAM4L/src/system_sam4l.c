@@ -47,7 +47,8 @@
 #include "coredev/system_core_clock.h"
 
 #define SYSTEM_CORE_CLOCK               48000000UL
-#define SYSTEM_NSDELAY_CORE_FACTOR      27UL
+#define SAM4L_USDELAY_LOOP_CYCLES       13UL
+#define SAM4L_NSDELAY_LOOP_CYCLES       3UL
 #define RCSYS_FREQ                      115000UL
 #define USB_FREQ                        48000000UL
 #define DFLL_REF_FREQ                   62500UL
@@ -120,7 +121,8 @@ enum {
 	SAM4L_STARTUP_RC80M = 11,
 	SAM4L_STARTUP_LFCLK = 12,
 	SAM4L_STARTUP_CLOCK_SWITCH = 13,
-	SAM4L_STARTUP_CACHE = 14
+	SAM4L_STARTUP_CACHE = 14,
+	SAM4L_STARTUP_FREQM = 15
 };
 static volatile uint32_t s_StartupError;
 // Last failed poll, and the power/Flash status samples retained before any
@@ -519,6 +521,74 @@ static bool Sam4lGenericClock(unsigned Idx, uint32_t Config)
 	return Sam4lWaitBits(reg, mask, Config & mask);
 }
 
+// Measure the DFLL against CLK32K before selecting it as the main clock.
+// Open-loop RCFAST tolerance is multiplied by the DFLL; its nominal rate
+// cannot be used to calculate a UART baud divisor. Accuracy follows CLK32K.
+static bool Sam4lMeasureDfll(uint32_t *pRate)
+{
+	uint32_t mask = SAM4L_PM->PM_PBCMASK;
+	uint32_t mode;
+	uint32_t reference = g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC ?
+		32768UL : g_McuOsc.LowPwrOsc.Freq;
+	uint32_t ready = (SAM4L_BPM->BPM_PMCON & BPM_PMCON_CK32S) ?
+		BSCIF_PCLKSR_RC32KRDY : BSCIF_PCLKSR_OSC32RDY;
+	bool result;
+
+	if (reference == 0U || !(SAM4L_BSCIF->BSCIF_PCLKSR & ready))
+	{
+		return Sam4lClockFailed(SAM4L_STARTUP_FREQM);
+	}
+	Sam4lWritePm(&SAM4L_PM->PM_PBCMASK, mask | PM_PBCMASK_FREQM);
+	mode = SAM4L_FREQM->FREQM_MODE;
+	if ((mode & FREQM_MODE_REFCEN) || SAM4L_FREQM->FREQM_STATUS ||
+		SAM4L_FREQM->FREQM_IMR)
+	{
+		Sam4lWritePm(&SAM4L_PM->PM_PBCMASK, mask);
+		return Sam4lClockFailed(SAM4L_STARTUP_FREQM);
+	}
+	SAM4L_FREQM->FREQM_MODE = FREQM_MODE_REFSEL(1U) |
+		FREQM_MODE_CLKSEL(9U) | FREQM_MODE_REFNUM(128U);
+	SAM4L_FREQM->FREQM_MODE |= FREQM_MODE_REFCEN;
+	result = Sam4lWaitBits(&SAM4L_FREQM->FREQM_STATUS, FREQM_STATUS_RCLKBUSY, 0U);
+	if (result)
+	{
+		SAM4L_FREQM->FREQM_ICR = FREQM_ICR_DONE;
+		SAM4L_FREQM->FREQM_CTRL = FREQM_CTRL_START;
+		result = Sam4lWaitBits(&SAM4L_FREQM->FREQM_ISR, FREQM_ISR_DONE, FREQM_ISR_DONE);
+	}
+	if (result)
+	{
+		*pRate = (uint64_t)(SAM4L_FREQM->FREQM_VALUE & FREQM_VALUE_VALUE_Msk) *
+			reference / 128U;
+		result = *pRate != 0U;
+	}
+	// A missing reference cannot be switched while a measurement is busy.
+	// Leave it enabled on timeout so it can finish if the reference recovers.
+	if (SAM4L_FREQM->FREQM_STATUS == 0U)
+	{
+		SAM4L_FREQM->FREQM_MODE &= ~FREQM_MODE_REFCEN;
+		if (Sam4lWaitBits(&SAM4L_FREQM->FREQM_STATUS, FREQM_STATUS_RCLKBUSY, 0U))
+		{
+			SAM4L_FREQM->FREQM_ICR = FREQM_ICR_DONE | FREQM_ICR_RCLKRDY;
+			SAM4L_FREQM->FREQM_MODE = mode;
+			Sam4lWritePm(&SAM4L_PM->PM_PBCMASK, mask);
+		}
+		else
+		{
+			result = false;
+		}
+	}
+	else
+	{
+		result = false;
+	}
+	if (!result)
+	{
+		return Sam4lClockFailed(SAM4L_STARTUP_FREQM);
+	}
+	return true;
+}
+
 static bool Sam4lOsc0Gain(uint32_t Freq, uint32_t *pGain)
 {
 	if (Freq < 600000UL || Freq > 16000000UL) {
@@ -856,8 +926,8 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		return false;
 	}
 	SystemCoreClock = RCSYS_FREQ;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / (SAM4L_USDELAY_LOOP_CYCLES * 1000000UL);
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL);
 
 	if (Startup)
 	{
@@ -976,6 +1046,10 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		{
 			return false;
 		}
+		if (!Sam4lMeasureDfll(&s_DfllFreq))
+		{
+			return false;
+		}
 		mainRate = s_DfllFreq;
 		// Accepted RC nominal rates are integral MHz. These products fit
 		// uint32_t; round upwards before adding the 1% tracking allowance.
@@ -985,6 +1059,11 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		source = PM_MCCTRL_MCSEL_DFLL0;
 	}
 
+	// Keep the characterized bound, and also cover an outlying measurement.
+	if (mainRate > mainMax)
+	{
+		mainMax = mainRate;
+	}
 	uint32_t sel = Sam4lDivider(mainMax, coreLimit);
 	if (sel == UINT32_MAX)
 	{
@@ -997,8 +1076,8 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 	}
 	s_MainClock = mainRate;
 	SystemCoreClock = Sam4lApplyClkDiv(mainRate, sel);
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / (SAM4L_USDELAY_LOOP_CYCLES * 1000000UL);
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL);
 
 	if (g_McuOsc.bUSBClk) {
 		// Only the external OSC0/PLL path reaches here. The application must
@@ -1078,8 +1157,8 @@ void SystemCoreClockUpdate(void)
 	// Reporting a clock must not change Flash timing underneath the CPU.
 	s_MainClock = Sam4lMainClockGet();
 	SystemCoreClock = Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_CPUSEL);
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / (SAM4L_USDELAY_LOOP_CYCLES * 1000000UL);
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL);
 }
 
 uint32_t SystemCoreClockGet(void)
@@ -1114,6 +1193,13 @@ static bool Sam4lCoreClockBusy(void)
 {
 	uint32_t pba = SAM4L_PM->PM_PBAMASK;
 	uint32_t tc = pba & (PM_PBAMASK_TC0 | PM_PBAMASK_TC1);
+
+	if ((SAM4L_PM->PM_PBCMASK & PM_PBCMASK_FREQM) &&
+		(SAM4L_FREQM->FREQM_STATUS || SAM4L_FREQM->FREQM_IMR ||
+		(SAM4L_FREQM->FREQM_MODE & FREQM_MODE_REFCEN)))
+	{
+		return true;
+	}
 
 	// The remaining PBA users include transports, analog, audio and LCD.
 	// Refuse their enabled clock gates; do not consume peripheral status.

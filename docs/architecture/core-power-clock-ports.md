@@ -326,6 +326,26 @@ See datasheet sections 28, 29 and 46 for the clock tree and electrical limits.
 
 ## SAM4L
 
+SAM4LC ClockDemo hardware results on November 17 exposed UART corruption with
+RCFAST 4 MHz selected and incorrect delay calibration: 250 ms measured as
+205823 us through `msDelay` and 586699 us through `nsDelay`. The SAM4L port now
+uses 13-cycle and 3-cycle loop factors, respectively, refreshed from the CPU
+frequency at startup and after clock updates. The generic ARM delay code is
+unchanged.
+
+The DFLL output is measured with FREQM against the configured CLK32K reference
+before selecting it. `SystemCoreClockGet` and `SystemPeriphClockGet` use this
+measured rate with their hardware dividers. UART already calculates its baud
+rate from `SystemPeriphClockGet(0)`; no UART-specific clock correction is used.
+Measurement accuracy depends on the low-frequency reference. An internal
+RC32K reference does not provide crystal accuracy. An active FREQM user blocks
+core-clock changes. A failed measurement reports failure instead of accepting
+the nominal DFLL frequency.
+
+SAM4LC/SAM4LS Debug and Release ClockDemo and PowerOffDemo links pass, as do
+existing SAM4L clock and power host checks. Corrected UART output and delay
+timing still require a new board run.
+
 `system_power_sam4l.cpp` implements reset reasons, Backup entry, EIC wake pins
 and four 32-bit backup registers. Backup powers down both SRAM banks, so
 `SystemRamRetain` returns false. Ordinary Retention sleep is not used for

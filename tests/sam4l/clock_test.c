@@ -48,6 +48,8 @@ int main(void)
 	void *regs = mmap((void *)0x40000000, 0x100000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
 	assert(regs == (void *)0x40000000);
+	*(volatile uint32_t *)&SAM4L_FREQM->FREQM_ISR = FREQM_ISR_DONE;
+	*(volatile uint32_t *)&SAM4L_FREQM->FREQM_VALUE = 312500U;
 	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE;
 	SAM4L_PM->PM_PBCMASK = PM_PBCMASK_RESETVALUE;
 	assert(setjmp(s_Halt) == 0); // Runtime LF failures must return, not halt.
@@ -211,6 +213,8 @@ int main(void)
 			SCIF_PCLKSR_DFLL0LOCKC | SCIF_PCLKSR_DFLL0LOCKF;
 		assert(SystemCoreClockSelect(OSC_TYPE_RC, 8000000));
 		assert(SystemCoreClockGet() == 40000000);
+		assert(SystemMicroSecLoopCnt == ((uint64_t)40000000U << 16) / 13000000U);
+		assert(SystemnsDelayFactor == ((uint64_t)40000000U << 16) / 3000000U);
 		assert(g_TestMask == mask);
 		assert(SAM4L_WDT->WDT_CTRL == WDT_CTRL_EN);
 		assert(SAM4L_BPM->BPM_PMCON == (BPM_PMCON_PS(2) | BPM_PMCON_CK32S));
@@ -227,6 +231,31 @@ int main(void)
 		assert(SystemCoreClockSelect(OSC_TYPE_RC, 80000000));
 		assert(SystemCoreClockGet() == 20000000);
 	}
+
+	// RCFAST tolerance must reach the CPU/APB descriptors, not just the DFLL.
+	uint32_t measured = 0;
+	uint32_t freqmMode = FREQM_MODE_REFNUM(64U) | FREQM_MODE_CLKSEL(2U);
+	uint32_t pbcMask = SAM4L_PM->PM_PBCMASK;
+	SAM4L_FREQM->FREQM_MODE = freqmMode;
+	assert(Sam4lMeasureDfll(&measured));
+	assert(measured == 80000000U);
+	assert(SAM4L_FREQM->FREQM_MODE == freqmMode);
+	assert(SAM4L_PM->PM_PBCMASK == pbcMask);
+	*(volatile uint32_t *)&SAM4L_FREQM->FREQM_ISR = 0;
+	assert(!Sam4lMeasureDfll(&measured));
+	assert(s_StartupError == SAM4L_STARTUP_FREQM);
+	assert(SAM4L_FREQM->FREQM_MODE == freqmMode);
+	assert(SAM4L_PM->PM_PBCMASK == pbcMask);
+	*(volatile uint32_t *)&SAM4L_FREQM->FREQM_ISR = FREQM_ISR_DONE;
+	*(volatile uint32_t *)&SAM4L_FREQM->FREQM_VALUE = 335938U;
+	assert(SystemCoreClockSelect(OSC_TYPE_RC, 4000000U));
+	assert(SystemCoreClockGet() == 43000064U);
+	assert(SystemPeriphClockGet(0) == 43000064U);
+	assert((SAM4L_FREQM->FREQM_MODE & FREQM_MODE_REFCEN) == 0U);
+	*(volatile uint32_t *)&SAM4L_FREQM->FREQM_VALUE = 312500U;
+	SAM4L_FREQM->FREQM_MODE = FREQM_MODE_REFCEN;
+	CheckClockBusy(false);
+	SAM4L_FREQM->FREQM_MODE = 0;
 
 	// Reject enabled transports before any clock or descriptor write.
 	uint32_t transports[] = {
