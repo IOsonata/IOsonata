@@ -93,6 +93,30 @@ bool BtScanStart();
 void BtScanStop();
 void BtScanReport(uint8_t Type, uint8_t NbReport, void *pReport);
 
+/**
+ * @brief	Callback on ADV_NONCONN_IND report
+ *
+ * @param	Rssi		: RSSI in dBm
+ * @param	AdvLen		: Advertising data length in bytes
+ * @param	pAdvData	: Advertising data
+ */
+typedef void (*BtScanMeshReportCb_t)(int8_t Rssi, size_t AdvLen, uint8_t *pAdvData);
+
+/**
+ * @brief	Set the handler for ADV_NONCONN_IND reports
+ *
+ * The handler receives every legacy non connectable, non scannable
+ * advertising report, before the application scan report. Other PDU types
+ * are not passed to it. Used by the Bluetooth Mesh advertising bearer.
+ *
+ * Call after BtAppInit. Implemented by the HCI host only.
+ *
+ * @param	Handler : Report handler, NULL to remove
+ *
+ * @return	true - success
+ */
+bool BtScanMeshReportSet(BtScanMeshReportCb_t Handler);
+
 #ifdef __cplusplus
 }
 #endif

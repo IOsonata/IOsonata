@@ -382,6 +382,41 @@ void BtAdvStart(void);
 void BtAdvStop(void);
 
 /**
+ * @brief	Callback on raw advertising completed
+ *
+ * @param	bSuccess : true - the requested number of advertising events
+ * 					   was sent
+ */
+typedef void (*BtAdvRawSentCb_t)(bool bSuccess);
+
+/**
+ * @brief	Send one AD structure for a fixed number of advertising events
+ *
+ * The data is sent as ADV_NONCONN_IND on the 3 primary channels. The
+ * controller counts the events and stops by itself, SentCB is called when
+ * it reports the end. SentCB runs in the host event context and can call
+ * BtAdvRawSend again.
+ *
+ * Advertising set 0 is used. The parameters and data programmed by
+ * BtAppAdvInit are replaced, BtAdvStart does nothing until BtAppAdvInit is
+ * called again. The call is refused while the set is advertising.
+ * BtAdvStop cancels a send in progress without calling SentCB.
+ *
+ * Implemented by the HCI host only.
+ *
+ * @param	AdType		: GAP data type of the AD structure
+ * @param	pData		: AD structure data
+ * @param	Len			: Data length in bytes, max 29
+ * @param	NbEvt		: Number of advertising events to send, min 1
+ * @param	IntervalMs	: Advertising interval in msec, min 20
+ * @param	SentCB		: Completion callback, NULL if not used
+ *
+ * @return	true - advertising started
+ */
+bool BtAdvRawSend(uint8_t AdType, const uint8_t *pData, uint8_t Len,
+				  uint8_t NbEvt, uint16_t IntervalMs, BtAdvRawSentCb_t SentCB);
+
+/**
  * @brief	Decide whether extended advertising PDUs are required.
  *
  * Legacy advertising PDUs cap both the advertising data and the scan response

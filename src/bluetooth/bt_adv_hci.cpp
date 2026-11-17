@@ -48,6 +48,11 @@ static bool s_bAdvConfigured;
 static bool s_bExtAdv;
 static uint16_t s_AdvVendorId;
 
+// Raw send state, see BtAdvRawSend.
+static bool s_bRawActive;					// Send in progress
+static BtAdvRawSentCb_t s_RawSentCB;		// Completion callback
+static uint32_t s_RawInterval;				// Interval set 0 is programmed with, 0.625 ms units. 0 : not programmed for raw send
+
 // The controller stopped set 0. Called before its connection/timeout callback.
 void BtAdvHciStopped(void)
 {
@@ -467,12 +472,194 @@ void BtAdvStop()
 	}
 
 	s_bAdvertising = false;
+
+	// A host disable does not generate the set terminated event.
+	s_bRawActive = false;
+	s_RawSentCB = nullptr;
+}
+
+// Program set 0 as ADV_NONCONN_IND, legacy PDU, 1M PHY, 3 primary channels.
+// Interval in 0.625 ms units.
+static bool BtAdvRawParamSet(BtHciDevice_t *pDev, uint32_t Interval)
+{
+	BtHciLeExtAdvParams_t p;
+
+	memset(&p, 0, sizeof(p));
+	p.AdvHandle = 0;
+	BtAdvWr16(p.EvtProp, BTADV_EXTADV_EVT_PROP_LEGACY);
+	BtAdvWr24(p.PrimIntervalMin, Interval);
+	BtAdvWr24(p.PrimIntervalMax, Interval);
+	p.PrimChanMap = BTADV_CHAN_37 | BTADV_CHAN_38 | BTADV_CHAN_39;
+
+	uint8_t localType = 0;
+	uint8_t localAddr[6];
+
+	BtSmpLocalAddrGet(&localType, localAddr);
+
+	bool useRandom = (localType == BTADDR_TYPE_RAND ||
+					  localType == BTADDR_TYPE_RANDOM_STATIC);
+
+	if (useRandom && BtAddrIsStaticRandom(localAddr) == false)
+	{
+		return false;
+	}
+
+	p.OwnAddrType = useRandom ? BTADDR_TYPE_RAND : BTADDR_TYPE_PUBLIC;
+	p.PrimPhy = BTADV_EXTADV_PHY_1M;
+	p.SecPhy = BTADV_EXTADV_PHY_1M;
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM, &p, sizeof(p), NULL, 0) != 0)
+	{
+		return false;
+	}
+
+	if (useRandom)
+	{
+		BtHciLeAdvSetRandAddr_t ra;
+
+		ra.AdvHandle = 0;
+		memcpy(ra.RandAddr, localAddr, 6);
+
+		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR, &ra, sizeof(ra), NULL, 0) != 0)
+		{
+			return false;
+		}
+	}
+
+	s_BtAdvOwnAddrType = p.OwnAddrType;
+	memcpy(s_BtAdvOwnAddr, localAddr, 6);
+
+	return true;
+}
+
+bool BtAdvRawSend(uint8_t AdType, const uint8_t *pData, uint8_t Len,
+				  uint8_t NbEvt, uint16_t IntervalMs, BtAdvRawSentCb_t SentCB)
+{
+	if (s_bAdvertising || s_bRawActive || NbEvt == 0 ||
+		Len > BT_ADV_LEGACY_DATA_MAX - 2 || (Len > 0 && pData == nullptr))
+	{
+		return false;
+	}
+
+	BtHciDevice_t *pDev = BtAdvHciDev();
+
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	// Primary_Advertising_Interval_Min is 0x000020 (20 ms), 7.8.53.
+	uint32_t interval = ((uint32_t)IntervalMs * 1000UL) / 625UL;
+
+	if (interval < 0x20)
+	{
+		interval = 0x20;
+	}
+
+	// Disable before every send. The SDC refuses the enable of a set it
+	// reported terminated until the set is disabled, see BtAdvStart. The
+	// parameters can only be changed on a disabled set.
+	int res = BtAppAdvDisable();
+
+	// The parameters stay in the controller between sends. Program them
+	// again only when the interval changes or after BtAppAdvInit.
+	if (interval != s_RawInterval)
+	{
+		// The disable status is not checked here : it fails with Unknown
+		// Advertising Identifier when set 0 was never created. The
+		// parameters command creates the set.
+		s_RawInterval = 0;
+		s_bAdvConfigured = false;
+
+		if (BtAdvRawParamSet(pDev, interval) == false)
+		{
+			return false;
+		}
+
+		s_RawInterval = interval;
+	}
+	else if (res != BT_HCI_SUCCESS)
+	{
+		return false;
+	}
+
+	// LE Set Extended Advertising Data with one AD structure.
+	uint8_t d[BTADV_HCI_DATA_HDR_LEN + BT_ADV_LEGACY_DATA_MAX];
+
+	d[0] = 0;				// Advertising_Handle
+	d[1] = 3;				// Operation : complete data
+	d[2] = 1;				// Fragment_Preference : no fragmentation
+	d[3] = Len + 2;			// Advertising_Data_Length
+	d[4] = Len + 1;			// AD length : type + data
+	d[5] = AdType;
+	if (Len > 0)
+	{
+		memcpy(&d[6], pData, Len);
+	}
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA, d,
+					 BTADV_HCI_DATA_HDR_LEN + Len + 2, NULL, 0) != 0)
+	{
+		return false;
+	}
+
+	BtHciLeExtAdvEnable_t x;
+
+	x.Enable = 1;
+	x.NumSets = 1;
+	x.AdvHandle = 0;
+	BtAdvWr16(x.Duration, 0);
+	x.MaxExtAdvEvts = NbEvt;
+
+	// Set before the command : the terminated event can arrive while the
+	// command is waiting for its response.
+	s_bRawActive = true;
+	s_bAdvertising = true;
+	s_RawSentCB = SentCB;
+
+	if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, &x, sizeof(x), NULL, 0) != 0)
+	{
+		s_bRawActive = false;
+		s_bAdvertising = false;
+		s_RawSentCB = nullptr;
+
+		return false;
+	}
+
+	return true;
+}
+
+// Advertising set 0 terminated. Called by the HCI host before its own
+// handling. Returns false when no raw send is in progress.
+bool BtAdvHciRawDone(uint8_t Status)
+{
+	if (s_bRawActive == false)
+	{
+		return false;
+	}
+
+	BtAdvRawSentCb_t cb = s_RawSentCB;
+
+	s_bRawActive = false;
+	s_bAdvertising = false;
+	s_RawSentCB = nullptr;
+
+	if (cb != nullptr)
+	{
+		// Limit Reached : MaxExtAdvEvts events were sent.
+		cb(Status == BT_HCI_ERR_LIMIT_REACHED);
+	}
+
+	return true;
 }
 
 bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 {
 	s_bAdvConfigured = false;
 	s_bAdvertising = false;
+	s_bRawActive = false;
+	s_RawSentCB = nullptr;
+	s_RawInterval = 0;
 	if (pCfg == nullptr)
 	{
 		return false;

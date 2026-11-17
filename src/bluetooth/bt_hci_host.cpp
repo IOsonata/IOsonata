@@ -56,6 +56,15 @@ SOFTWARE.
 
 // Advertising remains optional in a host used only as a central.
 extern void BtAdvHciStopped(void) __attribute__((weak));
+// Raw send on set 0 ended. Returns true when the event belongs to it.
+extern bool BtAdvHciRawDone(uint8_t Status) __attribute__((weak));
+
+// Advertising report types of ADV_NONCONN_IND.
+// Legacy report Event_Type, Vol 4 Part E 7.7.65.2.
+#define BT_HCI_ADV_REPORT_NONCONN_IND			3
+// Extended report Event_Type bits 0-6 : legacy PDU bit only, 7.7.65.13.
+#define BT_HCI_EXT_ADV_REPORT_TYPE_MASK			0x7F
+#define BT_HCI_EXT_ADV_REPORT_NONCONN_IND		0x10
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
@@ -278,6 +287,10 @@ static void BtHciLeAdvReport(BtHciDevice_t * const pDev,
 			break;
 		}
 		int8_t rssi = (int8_t)r->Data[r->DataLen];
+		if (pDev->MeshReport && r->EvtType == BT_HCI_ADV_REPORT_NONCONN_IND)
+		{
+			pDev->MeshReport(rssi, r->DataLen, r->Data);
+		}
 		if (pDev->ScanReport)
 		{
 			pDev->ScanReport(rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
@@ -316,6 +329,13 @@ static void BtHciLeExtAdvReport(BtHciDevice_t * const pDev,
 		if (cur + 24 + r->DataLen > evtEnd)
 		{
 			break;
+		}
+
+		// A legacy PDU is always a complete report, no reassembly.
+		if (pDev->MeshReport &&
+			(r->Type & BT_HCI_EXT_ADV_REPORT_TYPE_MASK) == BT_HCI_EXT_ADV_REPORT_NONCONN_IND)
+		{
+			pDev->MeshReport(r->Rssi, r->DataLen, r->Data);
 		}
 
 		// Data_Status is bits 5-6 of the Event_Type field: 0 =
@@ -689,6 +709,15 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				ADV_TRACE("ADV terminated: status=0x%02x handle=%u events=%u hook=%u callback=%u\r\n",
 						  (unsigned)p->Status, (unsigned)p->AdvHdl, (unsigned)p->NbCompletedEvt,
 						  (unsigned)(BtAdvHciStopped != nullptr), (unsigned)(pDev->AdvTimeout != nullptr));
+
+				// A raw send in progress on set 0 takes the event. The set
+				// was not started by the application, its timeout handler
+				// is not called.
+				if (p->AdvHdl == 0 && BtAdvHciRawDone != nullptr &&
+					BtAdvHciRawDone(p->Status))
+				{
+					break;
+				}
 
 				// Successful termination follows connection-complete, which already
 				// retired the set before the application could restart it.

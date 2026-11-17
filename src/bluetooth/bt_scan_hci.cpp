@@ -25,6 +25,7 @@ Copyright (c) 2022, I-SYST inc., all rights reserved.
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hci_ctlr.h"
+#include "bluetooth/bt_scan.h"
 
 static bool s_bScanning;
 
@@ -50,6 +51,23 @@ __attribute__((weak)) void BtHciCtlrCentralSupport(void)
 // is what tells the controller port that the central or observer role is in
 // use. Nothing else in the library defines it.
 extern "C" void (* const g_pBtHciCtlrCentralSupport)(void) = BtHciCtlrCentralSupport;
+
+// Internal controller access; not an application API.
+BtHciDevice_t *BtAppHciDevice(void);
+
+bool BtScanMeshReportSet(BtScanMeshReportCb_t Handler)
+{
+	BtHciDevice_t *pDev = BtAppHciDevice();
+
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	pDev->MeshReport = Handler;
+
+	return true;
+}
 
 void BtAppScan()
 {
