@@ -66,8 +66,8 @@ lists/settings. The combined clock/sleep run awaits hardware validation.
 
 | Build | text | data | bss |
 | --- | ---: | ---: | ---: |
-| Debug | 57062 | 584 | 3292 |
-| Release | 27038 | 564 | 3024 |
+| Debug | 57032 | 584 | 3292 |
+| Release | 27018 | 564 | 3024 |
 
 Hardware results before calibrated CPU timing (`e5044c35f`): all three cycles
 completed with zero failures. Source selection, APB readback, LF calibration,
@@ -99,3 +99,14 @@ failures. RC_FAST measured 16134719-16136308 Hz; its 250 ms delay samples were
 XTAL restoration, divided APB settings, LF calibration and UART output passed.
 This validates the clock-only run; sleep after these selections is not yet
 validated. Both sleep-enabled and clock-only Debug/Release configurations build.
+
+The first combined run returned from sleep and passed CPU/APB readback and LF
+descriptor checks, then stopped before the timer result. The C6 sleep code had
+kept the PLL powered only when it supplied the CPU, overlooking the Timer Group
+80 MHz PLL source while CPU ran from XTAL or RC_FAST. Light-sleep now keeps PLL
+and its analog controls powered in both sleep and wake states regardless of the
+CPU source. Deep-sleep still powers the PLL down and restarts through ROM.
+A temporary PMU register model checked the retained settings for XTAL, RC_FAST
+and PLL CPU selections with both internal LF sources, full saved-register
+restoration, and unchanged Deep-sleep wake/reject settings at O0 and Os.
+The post-resume timer result still requires a hardware retest.

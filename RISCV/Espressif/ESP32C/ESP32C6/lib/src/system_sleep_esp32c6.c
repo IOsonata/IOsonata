@@ -239,7 +239,7 @@ static void Esp32C6Restore(const Esp32C6SleepState_t *pState)
 	C6_LP_CLOCK = pState->LpClock;
 }
 
-static bool Esp32C6Configure(bool bDeep, bool bPll)
+static bool Esp32C6Configure(bool bDeep)
 {
 	uint32_t hp;
 	uint32_t lp;
@@ -280,6 +280,10 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	lpDebug = 0U;
 	efuse = C6_EFUSE_BIAS;
 
+	// The wake state must power the PLL even when the CPU uses XTAL or
+	// RC_FAST. Timer Groups and other peripherals can use PLL independently.
+	C6_PMU(0x14U) = (C6_PMU(0x14U) & ~(3UL << 26)) | C6_PLL_KEEP;
+
 	if (bDeep)
 	{
 		// Direct boot leaves power-up, no-reset and no-isolation overrides
@@ -287,7 +291,6 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 		C6_PMU(0x00U) &= ~(C6_DEEP_HP_PD | (1UL << 22) | (15UL << 23));
 		C6_PMU(0x04U) = 0xFFFFFFFFU;
 		C6_PMU(0x08U) = 0xFFFFFFFFU;
-		C6_PMU(0x14U) = (C6_PMU(0x14U) & ~(3UL << 26)) | C6_PLL_KEEP;
 		C6_PMU(0x18U) = (C6_PMU(0x18U) & ~(0x3FUL << 26)) | (1UL << 25);
 		C6_PMU(0x28U) = (C6_PMU(0x28U) &
 			~(C6_DBIAS_MASK | (1UL << 15) | (3UL << 16))) |
@@ -401,8 +404,8 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	{
 		C6_PMU(0x98U) |= (1UL << 31);
 		C6_PMU(0xBCU) |= (1UL << 31);
-		C6_PMU(0x7CU) = (C6_PMU(0x7CU) |
-			(3UL << 26) | (bPll ? C6_PLL_KEEP : 0U));
+		// Retain PLL and its analog control throughout resumable sleep.
+		C6_PMU(0x7CU) = (C6_PMU(0x7CU) & ~(3UL << 26)) | C6_PLL_KEEP;
 		C6_PMU(0x80U) &= ~((15UL << 26) | (3UL << 30));
 		C6_PMU(0x90U) |= (1UL << 18);
 		C6_PMU(0xC8U) &= ~((15UL << 26) | (3UL << 30));
@@ -469,7 +472,8 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	return (C6_PMU(0x90U) & (1UL << 18)) != 0U &&
 		(C6_PMU(0x98U) & (1UL << 31)) != 0U &&
 		(C6_PMU(0xBCU) & (1UL << 31)) != 0U &&
-		(!bPll || (C6_PMU(0x7CU) & C6_PLL_KEEP) == C6_PLL_KEEP);
+		(C6_PMU(0x7CU) & (C6_PLL_KEEP | (3UL << 26))) == C6_PLL_KEEP &&
+		(C6_PMU(0x14U) & (C6_PLL_KEEP | (3UL << 26))) == C6_PLL_KEEP;
 }
 
 // No flash-resident instruction is executed between selecting XTAL and
@@ -546,7 +550,7 @@ bool Esp32PowerSleep(void)
 	attempted = state.CpuMHz != 0U &&
 		(state.Root & 0xFFU) == 0U &&
 		((state.Root >> 16) & 3U) != 3U &&
-		Esp32C6Configure(false, ((state.Root >> 16) & 3U) == 1U);
+		Esp32C6Configure(false);
 	if (attempted)
 	{
 		(void)Esp32C6Request(&state, false);
@@ -571,7 +575,7 @@ void Esp32PowerDeepSleep(void)
 		Esp32C6Save(&state);
 		ready = state.CpuMHz != 0U &&
 			((state.Root >> 16) & 3U) != 3U &&
-			Esp32C6Configure(true, false);
+			Esp32C6Configure(true);
 		if (ready)
 		{
 			ready = Esp32C6RegulatorPrepare();
