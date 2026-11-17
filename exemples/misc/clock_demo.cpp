@@ -45,7 +45,8 @@ struct ClockDemoSource_t {
 	const char *pName;
 	OSC_TYPE Type;
 	uint32_t Frequency;
-	uint32_t CoreFrequency;
+	uint32_t CoreMin;
+	uint32_t CoreMax;
 };
 
 struct ClockDemoLowFreq_t {
@@ -139,6 +140,7 @@ static void ClockDemoTimer(void)
 	uint32_t difference = count > expected ? count - expected : expected - count;
 	SysLogPrintf(SysLogGet(), "Timer: %u Hz, delay 250 ms measured %u us, IRQ %u\r\n",
 		(unsigned)frequency, (unsigned)elapsed, (unsigned)count);
+	ClockDemoResult("Delay within 2 percent", elapsed >= 245000U && elapsed <= 255000U);
 	ClockDemoResult("Timer count and IRQ", elapsed > 0U && count > 0U && difference <= 1U);
 }
 
@@ -169,14 +171,14 @@ int main(void)
 			msDelay(2);
 			bool selected = SystemCoreClockSelect(source.Type, source.Frequency);
 			uint32_t core = SystemCoreClockGet();
-			ClockDemoResult(source.pName, selected && core == source.CoreFrequency);
-			if (!selected || core != source.CoreFrequency)
+			ClockDemoResult(source.pName, selected && core >= source.CoreMin && core <= source.CoreMax);
+			if (!selected || core < source.CoreMin || core > source.CoreMax)
 			{
 				continue;
 			}
 			for (uint32_t divider : s_ApbDividers)
 			{
-				uint32_t request = source.CoreFrequency / divider;
+				uint32_t request = core / divider;
 				msDelay(2);
 				uint32_t actual = SystemPeriphClockSet(0, request);
 				SysLogPrintf(SysLogGet(), "CPU %u Hz, APB request %u Hz, actual %u Hz\r\n",

@@ -984,8 +984,10 @@ recalibrate or select PLL. A return to the PLL-based startup CPU rate is not
 provided by this selector. C3/C6 crystal-based peripherals continue to use the
 physical 40 MHz crystal even when the CPU descriptor reports RC_FAST. UART,
 SPI, I2C, clock readout and LF calibration now account for that distinction.
-The descriptor and getters report nominal RC rates, not a measured RC_FAST
-frequency or accuracy guarantee.
+C3 retains its nominal RC_FAST rate. C6 measures RC_FAST against XTAL on
+each RC selection and uses the result in the descriptor, CPU/APB getters and
+IOsonata cycle delays. Calibration failure leaves the prior selection unchanged.
+There is no background drift tracking; ROM timing retains integer-MHz rounding.
 
 `SystemPeriphClockSet(0, rate)` selects the nearest supported APB rate:
 
@@ -1124,8 +1126,10 @@ RTC timer wake is not configured by these power functions.
 
 Remaining work is separate from the completed C6 GPIO wake validation:
 
-- Validate runtime XTAL/RC_FAST switching, APB rate changes and LF clock
-  selection on C6 hardware, including peripheral operation afterward.
+- C6 ClockDemo at `e5044c35f` passed three cycles of XTAL/RC_FAST switching,
+  APB changes, LF selection, UART TX and timer interrupts with zero failures.
+  The subsequent calibrated RC_FAST timing change still needs its board test.
+  UART RX and other peripheral operation after switching remain untested.
 - Measure Light-sleep and Deep-sleep current with board circuitry accounted for.
 - Validate C3 RTC sleep entry and repeated wake on C3 hardware, including ROM
   restart and RTC fast-memory handling. C6 results do not validate C3.

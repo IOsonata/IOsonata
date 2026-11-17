@@ -349,6 +349,8 @@ void SystemCoreClockUpdate(void)
 	uint32_t cpu = PCR_CPU_FREQ_CONF_REG;
 	uint32_t sel = (root & PCR_SOC_CLK_SEL_Msk) >> PCR_SOC_CLK_SEL_Pos;
 	uint32_t divisor;
+	uint32_t rc = g_McuOsc.CoreOsc.Type == OSC_TYPE_RC ?
+		g_McuOsc.CoreOsc.Freq : 20000000UL;
 
 	if (sel == 1U)
 	{
@@ -363,7 +365,7 @@ void SystemCoreClockUpdate(void)
 	{
 		divisor = ((root & 0xFFU) + 1U) * ((cpu & 0xFFU) + 1U);
 		SystemCoreClock = sel == 3U ? 0U :
-			(sel == 2U ? 20000000UL : 40000000UL) / divisor;
+			(sel == 2U ? rc : 40000000UL) / divisor;
 	}
 	SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
 	SystemCoreClockPeriodns = SystemCoreClock != 0U ?
@@ -442,7 +444,9 @@ uint32_t SystemPeriphClockGet(int Idx)
 	else if (source == 0U || source == 2U)
 	{
 		divisor = ((root & 0xFFU) + 1U) * ((ahb & 0xFFU) + 1U);
-		root = source == 0U ? 40000000UL : 20000000UL;
+		uint32_t rc = g_McuOsc.CoreOsc.Type == OSC_TYPE_RC ?
+			g_McuOsc.CoreOsc.Freq : 20000000UL;
+		root = source == 0U ? 40000000UL : rc;
 	}
 	else
 	{

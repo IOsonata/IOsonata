@@ -6,7 +6,8 @@
 Call with peripherals stopped, before starting modem or LP-core firmware.
 A UART using XTAL may remain enabled. Existing crystal, PLL and flash clock
 settings are preserved. XTAL selects
-40 MHz directly, RC selects the nominal RC_FAST rate. PLL startup/calibration
+40 MHz directly; C6 measures RC_FAST against XTAL before selecting it.
+C3 retains its nominal RC_FAST rate. PLL startup/calibration
 is owned by boot code and is not performed by these functions.
 
 @license MIT
@@ -48,6 +49,9 @@ static const uint8_t s_ClockUsers[] = {
 extern uint64_t SystemCoreClockPeriodus;
 void SystemCoreClockUpdate(void);
 void Esp32RomClockUpdate(uint32_t CpuMHz);
+#if defined(ESP32C6)
+uint32_t Esp32C6FastClockMeasure(void);
+#endif
 
 #if defined(ESP32C6)
 // Run once during SystemInit, before drivers claim peripherals. PCR bus clocks
@@ -144,6 +148,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	uint32_t root = CLOCK_ROOT_REG;
 	uint32_t source = ClkSrc == OSC_TYPE_RC ? 2U : 0U;
 	uint32_t power = CLOCK_POWER_REG;
+	uint32_t frequency = ClkSrc == OSC_TYPE_RC ? CLOCK_RC_FREQ : 40000000UL;
 #if defined(ESP32C3)
 	uint32_t wait = ESP32_REG32(0x6000801CUL);
 #else
@@ -194,6 +199,15 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		}
 		// Allow for the integer-MHz rounding used by cycle delays.
 		usDelay(100);
+#if defined(ESP32C6)
+		frequency = Esp32C6FastClockMeasure();
+		if (frequency < 10000000U || frequency > 30000000U)
+		{
+			CLOCK_POWER_REG = power;
+			EnableInterrupt(state);
+			return false;
+		}
+#endif
 	}
 #if defined(ESP32C3)
 	uint32_t next = (root & ~(CLOCK_SOURCE_MASK | 0x3FFU)) |
@@ -220,7 +234,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	if (ready)
 	{
 		g_McuOsc.CoreOsc.Type = ClkSrc;
-		g_McuOsc.CoreOsc.Freq = ClkSrc == OSC_TYPE_RC ? CLOCK_RC_FREQ : 40000000UL;
+		g_McuOsc.CoreOsc.Freq = frequency;
 	}
 	else
 	{
@@ -282,7 +296,12 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 		EnableInterrupt(state);
 		return 0;
 	}
-	uint32_t input = actual * (apbDivider + 1U);
+	// Derive the input from the source, not a rounded APB readback.
+	uint32_t rc = g_McuOsc.CoreOsc.Type == OSC_TYPE_RC ?
+		g_McuOsc.CoreOsc.Freq : CLOCK_RC_FREQ;
+	uint32_t input = source == 1U ? 480000000UL /
+		((((root >> 8) & 0xFFU) + 1U) * (ahbDivider + 1U)) :
+		(source == 0U ? 40000000UL : rc) / (ahbDivider + 1U);
 	uint32_t maximum = 4;
 #endif
 	if (actual == 0U || source == 3U)

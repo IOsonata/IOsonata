@@ -109,7 +109,12 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 #if defined(__riscv_zicntr) || \
     (defined(__riscv) && !defined(__riscv_32e) && defined(__riscv_zicsr))
 	uint32_t start = IOsonataRiscvCycle32();
+#if defined(ESP32C6)
+	// Preserve fractional MHz from RC_FAST calibration.
+	uint32_t wait = ((uint64_t)cnt * SystemCoreClock + 999999ULL) / 1000000ULL;
+#else
 	uint32_t wait = cnt * (uint32_t)SystemCoreClockPeriodus;
+#endif
 	if (wait == 0U)
 	{
 		wait = 1U;
@@ -149,8 +154,12 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 #if defined(__riscv_zicntr) || \
     (defined(__riscv) && !defined(__riscv_32e) && defined(__riscv_zicsr))
 	/* cycles = ns * Hz / 1e9.  Use MHz to keep this RV32-friendly. */
+#if defined(ESP32C6)
+	uint32_t wait = ((uint64_t)cnt * SystemCoreClock + 999999999ULL) / 1000000000ULL;
+#else
 	uint32_t cycles_per_us = (uint32_t)SystemCoreClockPeriodus;
 	uint32_t wait = (uint32_t)(((uint64_t)cnt * cycles_per_us + 999ULL) / 1000ULL);
+#endif
 	if (wait == 0U)
 	{
 		wait = 1U;
