@@ -1062,8 +1062,11 @@ used empty UART Disable/Enable hooks: they drained output but did not gate UART
 clocks. The new hooks gate serial and bus clocks, preserve configuration and
 restore UART interrupt enables on resume. PowerOff additionally clears FIFOs,
 releases pins and interrupt routing, and requires Init before reuse. The updated
-PowerOffDemo uses UART PowerOff before Deep-sleep. Both shutdown paths await
-hardware retesting; build and host register checks do not measure current.
+PowerOffDemo uses UART PowerOff before Deep-sleep. At `17d081bd1`, ClockDemo
+passed three cycles and nine BOOT wakes with these Disable/Enable hooks, and
+PowerOffDemo passed three consecutive GPIO3 wake/restart cycles after UART
+PowerOff. Every Deep-sleep restart reported pin-wake reason 0x100. These results
+validate both UART shutdown paths on the board; current remains unmeasured.
 
 The cleaned C6 PowerOffDemo defaults to GPIO3 Deep-sleep. To exercise the
 validated Light-sleep path, set `WAKE_BUT_PIN` to 9 and
@@ -1140,11 +1143,17 @@ Remaining work is separate from the completed C6 GPIO wake validation:
   three cycles and nine BOOT wakes with zero failures. CPU/APB restoration,
   LF descriptor preservation and post-wake timers passed for XTAL/RC_FAST and
   RC_SLOW/RC32K. Post-wake 250 ms samples were 250019-250078 us with 25 IRQs.
-  This run preceded UART hardware shutdown; retest with the new UART hooks.
+  The later run at `17d081bd1` passed all nine wakes with UART clock gating:
+  post-wake delays were 250049-250180 us with 25 IRQs. One initial UART line
+  was truncated before sleep; the cause remains unresolved.
   UART RX and other peripheral operation after switching remain untested.
 - Measure Light-sleep and Deep-sleep current with board circuitry accounted for.
 - Validate C3 RTC sleep entry and repeated wake on C3 hardware, including ROM
   restart and RTC fast-memory handling. C6 results do not validate C3.
+  All 204 C3 managed-library sources and both PowerOffDemo modes now compile
+  and link in Debug and Release after adding its missing syslog.cpp source.
+  The default remains BOOT/GPIO9 Light-sleep; the example README gives both
+  board procedures. These builds are not hardware validation.
 - Runtime PLL startup/selection and Deep-sleep RAM retention are unsupported;
   they must not be reported as completed capabilities.
 

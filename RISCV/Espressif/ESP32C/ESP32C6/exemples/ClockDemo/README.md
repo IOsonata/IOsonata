@@ -36,8 +36,8 @@ That configuration does not link the PMU sleep entry.
 UART Disable now masks UART interrupts and gates the serial and bus clocks.
 Enable restores both clocks and the saved interrupt mask without resetting baud
 settings or FIFOs. The application must finish TX and stop incoming traffic
-before Disable. No UART wake source is configured. This change requires a new
-board run; the nine-wake result below used the earlier empty UART hooks.
+before Disable. No UART wake source is configured. The hardware run at
+`17d081bd1` passed all nine wakes with these UART hooks.
 Sleep-current measurements remain separate work.
 SystemSleep can fall back to CPU WFI; returning with preserved clocks alone
 is not proof of PMU entry or a particular current consumption. Confirm that each
@@ -66,7 +66,7 @@ startup configuration. No watchdog or power-off operation is enabled.
 Validation: all 206 C6 library sources and this example compiled and linked
 in Debug and Release using RISC-V GNU 15.2.0 and the Eclipse-managed source
 lists/settings. The combined clock/sleep run at `b79ea4253` passed on hardware;
-the subsequent UART shutdown changes await a board retest.
+the UART shutdown changes at `17d081bd1` also passed all nine wakes.
 
 | Build | text | data | bss |
 | --- | ---: | ---: | ---: |
@@ -131,3 +131,14 @@ reference-counted suspend, repeated resume, queue preservation, PowerOff after
 Disable, rejection of Enable after PowerOff, and successful reinitialization.
 Both UART source files cross-compiled for all five chips at O0/Os. C6 ClockDemo
 and PowerOffDemo rebuilt with all 206 library sources in Debug and Release.
+
+Hardware run at `17d081bd1`: three cycles, nine BOOT wakes and zero failures
+with UART Disable/Enable gating clocks. Every post-wake timer sample had 25
+interrupts; 250 ms delays measured 250049-250180 us. CPU/APB restoration and
+LF descriptor checks passed. One initial UART line was truncated before the
+first sleep; its cause has not been established by this log. UART RX and current
+consumption are not checked by this demo.
+
+PowerOffDemo at the same revision also passed three consecutive GPIO3
+Deep-sleep wake/restart cycles after UART PowerOff. Every restart reported
+pin-wake reason 0x100. Start count 1 is expected with zero retention registers.

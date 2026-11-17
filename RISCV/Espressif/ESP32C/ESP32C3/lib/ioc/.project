@@ -2005,5 +2005,10 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/system_clock_esp32.c</locationURI>
 		</link>
+		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

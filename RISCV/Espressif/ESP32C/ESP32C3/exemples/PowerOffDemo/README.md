@@ -1,0 +1,46 @@
+# ESP32-C3 PowerOffDemo
+
+This project targets ESP32-C3-DevKitM-1. Import `ioc` as an existing Eclipse
+managed project. Build the ESP32C3 library and PowerOffDemo in the same
+configuration. UART0 uses TX21/RX20 at 1,000,000 baud, 8N1, through the board's
+USB-to-UART bridge. Open the terminal before resetting the board.
+
+The default board configuration selects resumable Light-sleep:
+
+- `WAKE_BUT_PIN` is 9, the BOOT button.
+- `POWER_DEMO_RESUME_WAKE` is 1.
+- `POWER_DEMO_STANDBY_RAM_TEST` is 1.
+
+Release BOOT before reset. After each `Entering Standby` line, press and release
+BOOT. The application should resume, increment the wake count and report
+`SRAM sample PASS: 128 static + 128 stack bytes`. Repeat at least five times.
+UART output is drained before Disable; Enable restores the UART after wake.
+
+For reset-on-wake Deep-sleep, change `WAKE_BUT_PIN` to 3 and
+`POWER_DEMO_RESUME_WAKE` to 0. Connect a momentary switch between a board header
+labelled GPIO3 and GND; do not interpret 3 as the header position number.
+Release the switch before reset and between wakes. After `Power off, press the
+button to wake up`, connect GPIO3 to GND briefly. GPIO9 cannot wake Deep-sleep.
+The application should restart and report reset reason 0x100. A start count of
+1 is expected because this port exposes no retention registers. UART PowerOff
+releases its pins and interrupt route before MCU Deep-sleep; startup initializes
+it again. No watchdog is enabled by the demo.
+
+Both modes await C3 hardware validation. C6 wake results do not validate the
+C3 RTC controller, ROM restart, or retention sequence. The SRAM samples apply
+to Light-sleep only. Returning from SystemSleep can also follow its WFI fallback
+and does not establish sleep current.
+
+Build validation used RISC-V GNU 15.2.0 with source lists and settings from the
+Eclipse managed projects, through command-line compiler invocations. All 204
+C3 library sources compiled in Debug and Release. Both demo modes linked after
+adding the missing generic syslog.cpp link to the library project.
+
+| Mode | Build | text | data | bss |
+| --- | --- | ---: | ---: | ---: |
+| Light-sleep | Debug | 34312 | 576 | 2224 |
+| Light-sleep | Release | 13617 | 480 | 1624 |
+| Deep-sleep | Debug | 39894 | 616 | 4048 |
+| Deep-sleep | Release | 19001 | 596 | 3780 |
+
+The committed board configuration remains Light-sleep with BOOT/GPIO9.

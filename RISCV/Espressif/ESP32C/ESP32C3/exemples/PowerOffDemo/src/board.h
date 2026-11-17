@@ -82,8 +82,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // The BOOT button on GPIO9 exercises resumable RTC/PMU Light-sleep.
 // For reset-on-wake Deep-sleep, change WAKE_BUT_PIN to a board-available
-// GPIO0-5 (C3) or GPIO0-7 (C6), connect a switch to ground, and set
+// GPIO0-5, connect a switch to ground, and set
 // POWER_DEMO_RESUME_WAKE to 0. GPIO9 cannot wake Deep-sleep.
-// These sleep modes have not been verified on ESP32 hardware.
+// These sleep modes have not been verified on C3 hardware; C6 results do not apply.
 
 #endif // __BOARD_H__
