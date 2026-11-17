@@ -1,4 +1,9 @@
-// SAM4L runtime clock failure tests using production register definitions.
+/**-------------------------------------------------------------------------
+@file clock_test.c
+@brief SAM4L runtime clock checks using production register definitions.
+@license MIT License
+Copyright (c) 2026 I-SYST inc. All rights reserved.
+----------------------------------------------------------------------------*/
 #include <assert.h>
 #include <setjmp.h>
 #include <stdio.h>
@@ -6,6 +11,8 @@
 #include <sys/mman.h>
 #include "sam4lxxx.h"
 
+// Supplied by ARM startup in firmware builds.
+uint32_t SystemMicroSecLoopCnt = 65536UL;
 uint32_t g_TestMask;
 uint32_t g_TestIpsr;
 static jmp_buf s_Halt;

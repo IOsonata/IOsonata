@@ -201,4 +201,3 @@ uses PA14 without external jumpers. SAMD21 retains PA15/EXTINT15 wake.
 The NMI vector is shared with other application-level critical NMI uses;
 using this pin as a wake source reserves that handler while the power
 wake feature is enabled. The new NMI path is not hardware-validated yet.
-

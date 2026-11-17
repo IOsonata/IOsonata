@@ -303,3 +303,20 @@ C3/C6 complete libraries rebuilt in Debug/Release, and both PowerOffDemo sleep
 modes linked in each configuration (eight links, GNU C++11 demos). Temporary
 reset/wake decoding comparisons at O0/Os passed. The five hardware wakes
 precede the reporting-only change; its USB reset label awaits board validation.
+
+## November 17 software review
+
+Existing host checks passed for C3/C6 startup and clock readback, D11/D21
+reset decoding and Standby source checks, LPC11/LPC17 clocks, SAM4E power
+and clocks, SAM4L power and clocks, and R9A02 delay arithmetic.
+
+The SAM4E and SAM4L clock fixtures initially failed to link because they did
+not supply SystemMicroSecLoopCnt after clock-update code began refreshing
+that variable. The fixtures now provide the same initial value as ARM startup;
+production clock and delay code is unchanged. Both suites then passed their
+existing optimization variants. SAM4L power checks also passed all 18 device
+header configurations. These checks do not replace missing board validation.
+
+Whitespace cleanup in LPC1769 PowerOffDemo leaves the parsed Eclipse project
+unchanged. Existing CRLF source files retain their line endings. No new MCU
+hardware support or power-consumption result is claimed by this review.

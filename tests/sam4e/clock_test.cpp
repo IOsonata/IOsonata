@@ -18,6 +18,9 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include "component/supc.h"
 #include "component/wdt.h"
 
+// Supplied by ARM startup in firmware builds.
+uint32_t SystemMicroSecLoopCnt = 65536UL;
+
 static uint32_t s_Status;
 static uint32_t s_Fail;
 static uint32_t s_Mck;
