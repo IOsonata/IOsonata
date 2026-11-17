@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	board.h
 
-@brief	SAM D21 Xplained Pro Standby wake demo
+@brief	SAM D21 Xplained Pro clock and Standby demo
 
 Standby wake and SRAM sample results go to EDBG COM at 115200 baud.
 
@@ -60,14 +60,21 @@ SOFTWARE.
 #define UART_DMA_MODE		false
 #define UART_INT_PRIO		2
 
-// Asynchronous level-detection wake from SAM D Standby.
-// SW0 is PA15 (EXTINT15), active low. No external switch is required.
-#define POWER_DEMO_RESUME_WAKE 1
-#define POWER_DEMO_STANDBY_RAM_TEST 1
-#define WAKE_BUT_PORT IOPORTA
-#define WAKE_BUT_PIN 15
-#define WAKE_BUT_PINOP IOPINOP_GPIO
-
+// Set to 1 when OLED1 is connected to EXT1; otherwise use onboard SW0.
+#ifndef CLOCK_DEMO_OLED1_WAKE
+#define CLOCK_DEMO_OLED1_WAKE 0
+#endif
+#define CLOCK_DEMO_UART_RX_TEST 1
+#define CLOCK_DEMO_SLEEP_APB_DIVIDER 1U
+#if CLOCK_DEMO_OLED1_WAKE
+#define CLOCK_DEMO_WAKE_PORT IOPORTB
+#define CLOCK_DEMO_WAKE_PIN 4
+#define CLOCK_DEMO_WAKE_NAME "OLED1 BUTTON1"
+#else
+#define CLOCK_DEMO_WAKE_PORT IOPORTA
+#define CLOCK_DEMO_WAKE_PIN 15
+#define CLOCK_DEMO_WAKE_NAME "SW0"
+#endif
 
 // LF selection omitted because a running DFLL/DPLL may own its reference.
 #define CLOCK_DEMO_SOURCES { {"OSC8M", OSC_TYPE_RC, 8000000U, 1U, UINT32_MAX} }
