@@ -66,6 +66,9 @@ SOFTWARE.
 #ifndef CLOCK_DEMO_SLEEP_APB_DIVIDER
 #define CLOCK_DEMO_SLEEP_APB_DIVIDER 4U
 #endif
+#ifndef CLOCK_DEMO_UART_RX_TEST
+#define CLOCK_DEMO_UART_RX_TEST 0
+#endif
 #ifndef CLOCK_DEMO_STOP_UART
 #define CLOCK_DEMO_STOP_UART 0
 #endif
@@ -149,6 +152,46 @@ static void ClockDemoResult(const char *pName, bool Passed)
 		s_Failures++;
 	}
 }
+
+#if CLOCK_DEMO_UART_RX_TEST
+static void ClockDemoUartRx(void)
+{
+	uint8_t value;
+	bool received = false;
+	unsigned remaining = 1024U;
+
+	// Discard bytes from the previous prompt before starting this check.
+	while (remaining != 0U && UARTRx(&s_Uart, &value, 1) > 0)
+	{
+		remaining--;
+	}
+	if (remaining == 0U)
+	{
+		ClockDemoResult("UART RX", false);
+		return;
+	}
+	if (!TimerEnable(&s_Timer))
+	{
+		TimerDisable(&s_Timer);
+		ClockDemoResult("UART RX timer", false);
+		return;
+	}
+	uint32_t start = TimerGetMicrosecond(&s_Timer);
+	SysLogPrintf(SysLogGet(), "UART RX: send U within 30 s\r\n");
+	while ((uint32_t)(TimerGetMicrosecond(&s_Timer) - start) < 30000000U)
+	{
+		// Drain output without discarding a response received during transmission.
+		(void)SysLogFlush(SysLogGet());
+		if (UARTRx(&s_Uart, &value, 1) > 0 && value == 'U')
+		{
+			received = true;
+			break;
+		}
+	}
+	TimerDisable(&s_Timer);
+	ClockDemoResult("UART RX", received);
+}
+#endif
 
 static bool ClockDemoTimerInit(void)
 {
@@ -279,6 +322,9 @@ static void ClockDemoSleep(void)
 	ClockDemoResult("LF descriptor after resume", GetLowFreqOscType() == low.Type &&
 		GetLowFreqOscFreq() == low.Freq);
 	ClockDemoTimer();
+#if CLOCK_DEMO_UART_RX_TEST
+	ClockDemoUartRx();
+#endif
 	msDelay(2);
 	ClockDemoResult("APB restore", SystemPeriphClockSet(0, apb) == apb);
 }
@@ -300,6 +346,9 @@ int main(void)
 	{
 		return 1;
 	}
+#if CLOCK_DEMO_UART_RX_TEST
+	ClockDemoUartRx();
+#endif
 #endif
 	if (sizeof(s_Sources) == 0U)
 	{
@@ -401,6 +450,9 @@ int main(void)
 		return 1;
 	}
 	ClockDemoTimer();
+#if CLOCK_DEMO_UART_RX_TEST
+	ClockDemoUartRx();
+#endif
 #if defined(CLOCK_DEMO_WAKE_PIN)
 	for (unsigned cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
 	{

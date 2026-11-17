@@ -165,10 +165,24 @@ descriptors and both delay/timer checks are repeated after every wake. Set
 CLOCK_DEMO_RESUME_TEST to 0 in board.h to repeat the validated clock-selection
 run. The complete source-selection plus sleep build exceeded D11 flash by
 600 bytes; the two selectable runs fit separately. The Standby mode keeps the
-startup clock and APB rate. Its combined checks await hardware validation.
+startup clock and APB rate. The run at e017243bc passed all three SW0 wakes,
+CPU/APB clocks and LF descriptors, with zero failures. Post-wake msDelay was
+250097-250103 us and nsDelay 250108-250112 us, each with 25 interrupts.
 
-Both SAMD11 modes linked in Debug and Release. The Standby mode uses 15,892
+Both SAMD11 modes linked in Debug and Release. The Standby mode uses 16,120
 flash bytes and 2,132 static RAM bytes, excluding the stack. SAMD21 and
 STM32F401 ClockDemo/PowerOffDemo and C3/C6 ClockDemo also relinked in both
-configurations after the generic demo change. Hardware results remain pending
-for the new D11 Standby mode.
+configurations after the generic demo change. The D11 Standby mode passed
+hardware validation as recorded above.
+
+D11 Standby mode now enables CLOCK_DEMO_UART_RX_TEST. Send uppercase U at the
+terminal prompt before the first sleep and after each wake. Each response has
+a 30-second polling budget, and timeout increments the demo failure count.
+This checks polling RX after UART disable/enable across Standby; it does not
+validate interrupt or DMA receive modes. The receive check remains pending.
+
+The UART receive version linked in both D11 modes, Debug and Release. Standby
+mode uses 16,120 flash bytes and 2,132 static RAM bytes before the stack.
+SAMD21 ClockDemo/PowerOffDemo and C3/C6 ClockDemo compatibility links passed.
+The receive helper's response, timeout, unrelated-input, stale-input and timer
+failure paths passed host checks; physical receive operation remains pending.

@@ -58,7 +58,12 @@ selections at 48 MHz. The shared fixed-point delay implementation measured
 interrupts each and zero failures. Short nanosecond-delay accuracy is not
 established by this long-interval check. ClockDemo now provides a selectable
 SW0 Standby run that repeats clock, delay and timer checks after three wakes;
-that combined run remains pending.
+that combined run at `e017243bc` passed all three wakes with zero failures.
+CPU/APB and LF descriptor checks passed. Post-wake msDelay measured
+250097-250103 us and nsDelay 250108-250112 us, with 25 interrupts per sample.
+A separate PowerOffDemo run passed five wakes with both 128-byte SRAM samples.
+ClockDemo now adds a polling UART receive prompt before sleep and after each
+wake; that new receive check awaits hardware validation.
 
 SAMD runtime clock selection returns the clock setup result. A failed
 core-clock change attempts the same OSC8M fallback used at startup, updates

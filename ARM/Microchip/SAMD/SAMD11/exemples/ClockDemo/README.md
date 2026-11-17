@@ -10,7 +10,10 @@ Select the run in `src/board.h` with `CLOCK_DEMO_RESUME_TEST`:
 
 - `1` (default): check the startup clock, measure both delays, then perform
   three Standby wake cycles. Press and release SW0 after each
-  `Entering sleep; press SW0 to resume` message. Each wake checks CPU/APB
+  `Entering sleep; press SW0 to resume` message. At each UART RX prompt,
+  send uppercase `U` from the terminal within 30 seconds (press Enter if the
+  terminal buffers a line). This runs once before sleep and after every wake.
+  Each wake checks CPU/APB
   clocks, oscillator descriptors, UART output, timer interrupts and both delays.
 - `0`: run the three OSC8M clock-selection cycles, then measure both delays.
   UART is drained and powered off before each change, then initialized again.
@@ -35,7 +38,7 @@ newlib formatting after LTO. Both configurations linked with these sizes:
 | Mode | Flash (text + data) | Static RAM (data + bss) |
 | --- | ---: | ---: |
 | Clock selection | 15,466 bytes | 2,152 bytes |
-| Standby/resume | 15,892 bytes | 2,132 bytes |
+| Standby/resume | 16,120 bytes | 2,132 bytes |
 
 RAM totals exclude stack use. PowerOffDemo remains available for the
 static/stack SRAM continuity check. Reset restores startup clocks.
@@ -71,7 +74,16 @@ cycles per nanosecond-delay loop. idelay.h has no SAMD-specific calculation.
 The maintainer's run of 2de35f281 passed all three clock selections and both
 delay checks: msDelay measured 250094 us, nsDelay measured 250107 us, both
 with 25 interrupts. ClockDemo completed with zero failures at 48 MHz.
-The new combined Standby/clock/delay checks still require a board run.
+The maintainer's Standby run at e017243bc passed all three SW0 wakes, CPU/APB
+clock and LF descriptor checks, and timer interrupts. Post-wake msDelay
+measured 250097-250103 us; nsDelay measured 250108-250112 us, with 25 interrupts
+in every sample and zero failures. PowerOffDemo separately passed five
+consecutive wakes with both 128-byte SRAM samples preserved.
+
+The added polling UART RX check remains to be run on hardware. Missing the
+response deadline increments the failure count; the demo continues. Input
+cleanup is bounded, and unrelated characters do not count as a successful
+response. UART interrupt/DMA receive modes are outside this check.
 
 OSC8M identifies the PLL reference selected by SystemCoreClockSelect; the
 clock tree is rebuilt to 48 MHz. It does not request an 8 MHz CPU clock.

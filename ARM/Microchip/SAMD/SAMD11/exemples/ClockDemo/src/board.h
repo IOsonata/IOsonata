@@ -61,6 +61,7 @@ SOFTWARE.
 #endif
 
 #if CLOCK_DEMO_RESUME_TEST
+#define CLOCK_DEMO_UART_RX_TEST 1
 // SW0 is PA14, the dedicated NMI input (active low).
 #define CLOCK_DEMO_WAKE_PORT IOPORTA
 #define CLOCK_DEMO_WAKE_PIN 14
