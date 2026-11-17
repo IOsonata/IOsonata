@@ -1167,7 +1167,14 @@ Remaining work is separate from the completed C6 GPIO wake validation:
   The later run at `17d081bd1` passed all nine wakes with UART clock gating:
   post-wake delays were 250049-250180 us with 25 IRQs. One initial UART line
   was truncated before sleep; the cause remains unresolved.
-  UART RX and other peripheral operation after switching remain untested.
+  The November 17 receive-enabled run completed with zero failures after
+  power-cycling the board. The submitted excerpt covers the end of cycle 2
+  and all of cycle 3: five BOOT resumes and five polling UART RX checks pass.
+  Both delay units pass, with 250 ms samples at 249979-250050 us and 24/25
+  IRQs. Build configuration was not specified. Other peripheral operation,
+  interrupt/DMA UART RX and short nanosecond delays remain untested.
+  RESET had failed to start ClockDemo, PowerOffDemo and LedDemo after flashing;
+  power-cycling restored execution. The flashing/reset cause is unresolved.
 - Measure Light-sleep and Deep-sleep current with board circuitry accounted for.
 - C3 PowerOffDemo passed six consecutive GPIO9 Light-sleep wakes with the
   128-byte static and 128-byte stack SRAM samples preserved. GPIO3 Deep-sleep

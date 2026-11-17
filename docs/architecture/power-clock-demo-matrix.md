@@ -271,3 +271,19 @@ The source descriptor uses a constexpr constructor so five-field board entries
 retain Select=true and six-field entries can request readback only. All 32
 board source arrays, including both D11 selections, also passed C++11
 compile-time checks of those flags. No project language setting was changed.
+
+## C6 combined delay, receive and sleep hardware result
+
+On November 17, 2026, ClockDemo completed with zero failures after a power
+cycle. The supplied excerpt starts during cycle 2 and contains all of cycle 3.
+It shows five successful sleep/resume operations and five polling UART receive
+checks, with CPU/APB/LF restoration passing. Both msDelay and nsDelay pass
+at 250 ms: 249979-250050 us, with 24 or 25 timer interrupts. XTAL/RC_FAST,
+APB division and both internal LF sources are exercised. The log does not
+identify Debug or Release; the missing beginning is not counted as observed
+individual checks. Short nanosecond timing and sleep current remain unmeasured.
+
+ClockDemo, PowerOffDemo and LedDemo initially failed to run after flashing;
+RESET did not recover them, but power-cycling restored execution. The reset
+issue remains separate from the passing firmware run. No cause or reset-path
+fix has yet been verified.

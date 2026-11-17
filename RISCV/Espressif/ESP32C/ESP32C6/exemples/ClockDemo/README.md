@@ -155,5 +155,21 @@ and DMA receive modes are not enabled.
 
 Rebuild both the library and demo to include the shared RISC-V delay changes.
 The header uses the port's cycle counter and current CPU frequency for both
-delay units. Hardware results above predate this receive-enabled run; the
-combined delay and receive run still needs board validation.
+delay units.
+
+Hardware run on November 17, 2026 completed with zero failures after the
+shared delay and polling receive changes. The supplied excerpt starts during
+cycle 2 and includes all of cycle 3. It shows five successful BOOT wake/resume
+operations and five polling UART RX checks. XTAL/RC_FAST selection, APB
+changes, LF selection, clock restoration and timer interrupts pass. Across
+the excerpt, 250 ms requests measured 249979-250050 us with 24 or 25 IRQs.
+Counts of 24 occur on samples ending just before 250 ms. These measurements
+check delay scaling against the on-chip timer, not absolute time accuracy or
+short nanosecond delays. The build configuration was not identified.
+
+Before this run, ClockDemo and PowerOffDemo produced no UART output and
+LedDemo did not run. RESET did not recover execution; a power cycle did,
+after which LedDemo and ClockDemo ran. The post-flash reset issue remains
+unresolved. The flashing command, reset options and ROM boot log are needed
+to distinguish host reset-line control from a boot-mode or flashing issue.
+No firmware change was made in response to the blank UART report.
