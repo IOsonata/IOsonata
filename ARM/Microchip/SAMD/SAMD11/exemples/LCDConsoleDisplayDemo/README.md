@@ -84,7 +84,8 @@ byte count means text was passed to that API, not verified on the panel.
 - Full managed D11 library: all 238 sources compile in Debug and Release;
   both console selections link against each complete archive at the sizes below.
 - Maintainer reports polling, interrupt-only and DMA-only OLED output works
-  on D11 + OLED1. Combined DMA/interrupt now links but still needs hardware validation.
+  on D11 + OLED1, including combined DMA/interrupt in a later run. Current
+  clock-arithmetic changes have not been rerun on the board.
 
 Hardware references:
 - [OLED1 extension header](https://onlinedocs.microchip.com/oxy/GUID-26DC66D4-2EF7-4C54-8D2D-2A29BED57CAB-en-US-2/GUID-4AEF0FF0-9E97-4FCB-8565-668D17B30006.html)
@@ -190,20 +191,28 @@ that the panel received the bytes.
 Select these definitions in `src/board.h` or the application compiler settings;
 then clean and rebuild the library and application:
 
-| Mode | DISPLAY_SPI_DMA_ENABLE | DISPLAY_SPI_INT_ENABLE | Flash bytes |
-| --- | --- | --- | ---: |
-| Polling (default) | false | false | 14956 |
-| Interrupt only | false | true | 15508 |
-| DMA, CPU waits | true | false | 15912 |
-| DMA with interrupts | true | true | 16360 (24 free) |
+| Mode | DISPLAY_SPI_DMA_ENABLE | DISPLAY_SPI_INT_ENABLE | Flash bytes | Free bytes |
+| --- | --- | --- | ---: | ---: |
+| Polling (default) | false | false | 14968 | 1416 |
+| Interrupt only | false | true | 15520 | 864 |
+| DMA, CPU waits | true | false | 15932 | 452 |
+| DMA with interrupts | true | true | 16380 | 4 |
 
 These are GCC 15.2.1, `-Os` + LTO results, identical in Debug and Release,
-using `tests/display/build_samd11_console.py`. Pass `--interrupt`, `--dma`,
-or both to reproduce a selection. The combined setting leaves only 24 bytes of flash in this build. The
-maintainer's previous managed build was eight bytes larger, so local size output
-remains the final check. The full 238-source managed library compiles in Debug
-and Release; linking the combined demo against it uses 16364 flash bytes,
-leaving 20 bytes. Clean and rebuild the library as well as the application.
+linked against the complete 239-source managed library. Flash includes the
+initialized data image. Clean and rebuild the library and application together.
+The combined setting has only four bytes free; another compiler or build setting
+may exceed the device limit.
+
+The clock implementation now calculates its Q16 delay factors and DPLL values
+with equivalent 32-bit arithmetic. The display console no longer links the
+64-bit division routine, saving 564 flash bytes in each SPI mode. Delay loops,
+SPI transfer selection, fonts and formatted logging are unchanged.
+
+`tests/display/build_samd11_console.py --dma --interrupt` uses a smaller source
+archive and produces 16376 flash bytes, leaving eight bytes. Pass `--interrupt`,
+`--dma`, or neither for the other selections. The managed-library sizes above
+are the reference for the Eclipse projects.
 
 `tests/display/run_ssd1315.py` now covers all four interface flag combinations,
 delayed and immediate completion, CS/D/C ordering, timeout abort and recovery,
@@ -233,5 +242,6 @@ keeps selection protected through interrupt disable and release. Baud selection
 compares its two candidates directly and avoids overflowing twice the requested
 rate. Host checks compare selection against all 256 divisors around every divider
 boundary and midpoint. Private SPI state uses 24 fewer RAM bytes across D11's
-three SERCOM instances. All four modes still require hardware retesting after
-these changes; combined DMA/interrupt has not yet been validated on the board.
+three SERCOM instances. The maintainer previously confirmed all four modes on D11 + OLED1.
+The current clock-arithmetic change has build and arithmetic validation; it has
+not been rerun on hardware.

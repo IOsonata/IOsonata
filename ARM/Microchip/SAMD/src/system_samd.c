@@ -68,7 +68,6 @@ SOFTWARE.
 #define SAMD_DFLL_USB_FREQ		48000000UL
 #define SAMD_DFLL_USB_MUL		48000UL		// 48 MHz from the 1 kHz USB start of frame
 #define SAMD_MAIN_FREQ_MAX		48000000UL
-#define SAMD_DPLL_FREQ_MIN		48000000UL	// FDPLL96M output range
 #define SAMD_DPLL_FREQ_MAX		96000000UL
 #define SAMD_DPLL_REF_MIN		32000UL		// FDPLL96M reference input range
 #define SAMD_DPLL_REF_MAX		2000000UL
@@ -442,7 +441,8 @@ static uint32_t SamdDpllFreq(void)
 	uint32_t mul16 = ((((ratio & SYSCTRL_DPLLRATIO_LDR_Msk) >> SYSCTRL_DPLLRATIO_LDR_Pos) + 1U) << 4) +
 					 ((ratio & SYSCTRL_DPLLRATIO_LDRFRAC_Msk) >> SYSCTRL_DPLLRATIO_LDRFRAC_Pos);
 
-	return (uint32_t)(((uint64_t)ref * mul16) >> 4);
+	// Split before multiplying so the fractional product cannot overflow.
+	return (ref >> 4) * mul16 + ((ref & 15U) * mul16 >> 4);
 }
 
 // Frequency of a GCLK generator source
@@ -707,25 +707,17 @@ static bool SamdDpllStop(void)
 static bool SamdDpllStart(uint32_t RefClk, uint32_t RefFreq, uint32_t Div)
 {
 	uint32_t ratio;
-	uint32_t freq;
 
 	if (RefFreq < SAMD_DPLL_REF_MIN || RefFreq > SAMD_DPLL_REF_MAX)
 	{
 		return SamdStartupFailed(SAMD_STARTUP_DPLL, __LINE__);
 	}
 
-	// (LDR + 1) x 16 + LDRFRAC, rounded down to stay within 96 MHz
-	ratio = (uint32_t)(((uint64_t)SAMD_DPLL_FREQ_MAX * 16U) / RefFreq);
-	if (ratio > 4096U * 16U)
-	{
-		ratio = 4096U * 16U;
-	}
-	freq = (uint32_t)(((uint64_t)RefFreq * ratio) / 16U);
-
-	if (freq < SAMD_DPLL_FREQ_MIN)
-	{
-		return SamdStartupFailed(SAMD_STARTUP_DPLL, __LINE__);
-	}
+	// (LDR + 1) x 16 + LDRFRAC, rounded down to stay within 96 MHz.
+	// The validated reference gives a ratio of at most 48000, below 65536.
+	ratio = (SAMD_DPLL_FREQ_MAX * 16U) / RefFreq;
+	// Rounding loses less than RefFreq / 16, at most 125 kHz. The
+	// output remains above 95.875 MHz, within the 48 to 96 MHz range.
 
 	if (!SamdDpllStop())
 	{
@@ -861,14 +853,25 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 	return true;
 }
 
+// Reduce 65536 / 1000000 to 1024 / 15625 before scaling. Splitting
+// the quotient and remainder keeps both products within 32 bits.
+static uint32_t SamdDelayFactor(uint32_t Freq, uint32_t LoopClocks)
+{
+	uint32_t divisor = LoopClocks * 15625U;
+	uint32_t whole = Freq / divisor;
+	uint32_t remainder = Freq - whole * divisor;
+
+	return (whole << 10) + ((remainder << 10) / divisor);
+}
+
 void SystemCoreClockUpdate(void)
 {
 	uint32_t freq = SamdGclkGenFreq(SAMD_GCLK_MAIN);
 
 	SystemCoreClock = freq >> ((PM_REGS->PM_CPUSEL & PM_CPUSEL_CPUDIV_Msk) >> PM_CPUSEL_CPUDIV_Pos);
 
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 13000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (SAMD_NSDELAY_LOOP_CLK * 1000000UL);
+	SystemMicroSecLoopCnt = SamdDelayFactor(SystemCoreClock, 13U);
+	SystemnsDelayFactor = SamdDelayFactor(SystemCoreClock, SAMD_NSDELAY_LOOP_CLK);
 }
 
 // Clock registers at the end of the startup, see s_SamdStartupReg

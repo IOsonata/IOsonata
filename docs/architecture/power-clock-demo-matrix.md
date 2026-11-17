@@ -232,9 +232,22 @@ library still has unrelated missing SDK sources; its demo links do not establish
 a complete library build. D11 also linked both ClockDemo selections,
 PowerOffDemo, TimerDemo, ClockDisplayDemo and the default LCDConsoleDisplayDemo.
 
-The D11 display console fits with polling SPI (15,532 flash bytes) or interrupt
-SPI without DMA (16,084 bytes). DMA alone exceeds flash by 112 bytes and
-interrupt plus DMA by 560 bytes in both configurations. Rebuilding those modes
-with the unchanged delay header also failed, by 260 and 700 bytes respectively.
-This is an existing size regression, reduced but not resolved by the delay
-change. ClockDisplayDemo uses 16,324 flash bytes and 2,892 static RAM bytes.
+The subsequent SAMD clock-arithmetic optimization resolves that display-console
+size regression. The complete 239-source D11 library links all four modes in
+Debug and Release: polling 14,968 flash bytes; interrupt-only 15,520; DMA-only
+15,932; DMA with interrupts 16,380. The combined setting has four bytes free.
+ClockDisplayDemo uses 16,308 flash bytes and 2,892 static RAM bytes.
+
+The Q16 calculation uses the same clock frequency and produces the same factors
+without 64-bit division. Temporary native checks compared every frequency from
+0 to 48 MHz, every supported DPLL reference Hz, all DPLL ratios at boundary
+references, and one million full-width arithmetic samples. All passed. The
+shared ARM delay header and assembly loops are unchanged by this optimization.
+
+D11 and D21 complete libraries, ClockDemo and PowerOffDemo build in Debug and
+Release. D11 also passes both ClockDemo selections, TimerDemo, ClockDisplayDemo,
+and all eight display-console mode/configuration links. SPI mode exclusion
+checks and the existing SPI and SSD1315 host checks pass. The SSD1315 checks used
+AddressSanitizer and UndefinedBehaviorSanitizer with leak detection disabled
+because LeakSanitizer cannot run under this environment's tracing.
+These are software results; hardware validation of this change remains pending.
