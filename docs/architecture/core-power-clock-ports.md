@@ -52,6 +52,14 @@ consecutive SAMD11 SW0/PA14 Standby resumes, with counts 0x00000001 through
 is a sample of live RAM continuity, not a full SRAM test. SAMD21 hardware wake, full SRAM
 testing and sleep-current measurements remain pending.
 
+On November 17, 2026, ClockDemo at `2de35f281` passed three OSC8M-reference
+selections at 48 MHz. The shared fixed-point delay implementation measured
+250094 us for msDelay(250) and 250107 us for nsDelay(250000000), with 25
+interrupts each and zero failures. Short nanosecond-delay accuracy is not
+established by this long-interval check. ClockDemo now provides a selectable
+SW0 Standby run that repeats clock, delay and timer checks after three wakes;
+that combined run remains pending.
+
 SAMD runtime clock selection returns the clock setup result. A failed
 core-clock change attempts the same OSC8M fallback used at startup, updates
 `SystemCoreClock` from the registers and returns false. Low-frequency

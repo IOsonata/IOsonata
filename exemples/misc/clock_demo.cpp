@@ -63,6 +63,9 @@ SOFTWARE.
 #ifndef CLOCK_DEMO_DEFER_TIMER
 #define CLOCK_DEMO_DEFER_TIMER 0
 #endif
+#ifndef CLOCK_DEMO_SLEEP_APB_DIVIDER
+#define CLOCK_DEMO_SLEEP_APB_DIVIDER 4U
+#endif
 #ifndef CLOCK_DEMO_STOP_UART
 #define CLOCK_DEMO_STOP_UART 0
 #endif
@@ -237,9 +240,9 @@ static void ClockDemoSleep(void)
 	OscDesc_t low = *GetLowFreqOscDesc();
 	unsigned released = 0U;
 
-	// Exercise restoration with APB divided, not just at the CPU rate.
+	// The board selects a supported peripheral-clock divider for sleep.
 	msDelay(2);
-	uint32_t sleepApb = SystemPeriphClockSet(0, core / 4U);
+	uint32_t sleepApb = SystemPeriphClockSet(0, core / CLOCK_DEMO_SLEEP_APB_DIVIDER);
 	if (sleepApb == 0U)
 	{
 		ClockDemoResult("Sleep APB selection", false);
@@ -318,7 +321,11 @@ int main(void)
 		SysLogPrintf(SysLogGet(), "Cycle %u\r\n", cycle);
 		for (const ClockDemoSource_t &source : s_Sources)
 		{
+#if CLOCK_DEMO_CORE_READONLY
+			SysLogPrintf(SysLogGet(), "Checking %s\r\n", source.pName);
+#else
 			SysLogPrintf(SysLogGet(), "Selecting %s\r\n", source.pName);
+#endif
 			// Polling Tx has queued the last bytes in the hardware FIFO.
 			ClockDemoClockBegin();
 #if CLOCK_DEMO_CORE_READONLY
@@ -358,7 +365,7 @@ int main(void)
 #endif
 			}
 #endif
-#if defined(CLOCK_DEMO_WAKE_PIN)
+#if defined(CLOCK_DEMO_WAKE_PIN) && !CLOCK_DEMO_DEFER_TIMER
 			unsigned lfIndex = 0U;
 #endif
 #if defined(CLOCK_DEMO_LF_SOURCES)
@@ -373,7 +380,7 @@ int main(void)
 				}
 				ClockDemoResult(source.pName, selected);
 				SysLogPrintf(SysLogGet(), "LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
-#if defined(CLOCK_DEMO_WAKE_PIN)
+#if defined(CLOCK_DEMO_WAKE_PIN) && !CLOCK_DEMO_DEFER_TIMER
 				// Rotate the LF source used for sleep across the three cycles.
 				if (selected && lfIndex == (cycle - 1U) %
 					(sizeof(s_LowFreqSources) / sizeof(s_LowFreqSources[0])))
@@ -394,6 +401,13 @@ int main(void)
 		return 1;
 	}
 	ClockDemoTimer();
+#if defined(CLOCK_DEMO_WAKE_PIN)
+	for (unsigned cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
+	{
+		SysLogPrintf(SysLogGet(), "Sleep cycle %u\r\n", cycle);
+		ClockDemoSleep();
+	}
+#endif
 #endif
 	ClockDemoFlush();
 	SysLogPrintf(SysLogGet(), "ClockDemo complete: %u failures\r\n", s_Failures);

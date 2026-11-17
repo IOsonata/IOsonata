@@ -55,17 +55,24 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// SW0 is PA14, the SAMD11 EIC dedicated NMI input (active low).
-// No external switch or wire is required for Standby wake.
-#define POWER_DEMO_RESUME_WAKE 1
-#define POWER_DEMO_STANDBY_RAM_TEST 1
-#define WAKE_BUT_PORT IOPORTA
-#define WAKE_BUT_PIN 14
-#define WAKE_BUT_PINOP IOPINOP_GPIO
+// Select Standby/resume checks or the clock-selection checks to fit D11 flash.
+#ifndef CLOCK_DEMO_RESUME_TEST
+#define CLOCK_DEMO_RESUME_TEST 1
+#endif
 
+#if CLOCK_DEMO_RESUME_TEST
+// SW0 is PA14, the dedicated NMI input (active low).
+#define CLOCK_DEMO_WAKE_PORT IOPORTA
+#define CLOCK_DEMO_WAKE_PIN 14
+#define CLOCK_DEMO_WAKE_NAME "SW0"
+#define CLOCK_DEMO_SLEEP_APB_DIVIDER 1U
+#define CLOCK_DEMO_CORE_READONLY 1
+#define CLOCK_DEMO_SOURCES { {"Startup clock", OSC_TYPE_RC, 0U, 48000000U, 48000000U, false} }
+#else
+#define CLOCK_DEMO_SOURCES { {"OSC8M", OSC_TYPE_RC, 8000000U, 1U, UINT32_MAX} }
+#endif
 
 // LF selection omitted because a running DFLL/DPLL may own its reference.
-#define CLOCK_DEMO_SOURCES { {"OSC8M", OSC_TYPE_RC, 8000000U, 1U, UINT32_MAX} }
 #define CLOCK_DEMO_APB_DIVIDERS {1U}
 #define CLOCK_DEMO_TIMER_DEVNO 4
 #define CLOCK_DEMO_CYCLES 3U

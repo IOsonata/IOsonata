@@ -91,7 +91,8 @@ C3 ClockDemo after 04d1522a8 passed three cycles and nine BOOT wakes with zero
 failures. C3 PowerOffDemo passed six Light-sleep SRAM checks and four manual
 GPIO3 Deep-sleep wake/restart cycles. C6 also passed repeated wake and combined
 clock/sleep runs. SAMD11 passed Standby wake and SRAM checks. ClockDemo completed three
-core/APB selections and measured 250106 us with 25 IRQs for a 250 ms delay,
+core/APB selections at 2de35f281 and measured 250094 us for msDelay and
+250107 us for nsDelay, each with 25 IRQs for a 250 ms delay,
 with zero failures. See
 [core power and clock ports](core-power-clock-ports.md) for exact results.
 Other new configurations remain build-only. Sleep current, UART RX after clock
@@ -123,8 +124,8 @@ RISC-V cycle-counter delays preserve fractional MHz for every target, using
 the current SystemCoreClock. Loop overhead, interrupt handling and flash stalls
 can extend delays; these functions do not replace a hardware timer.
 
-The fixed-point ARM implementation requires another hardware run. The SAMD11
-result above validates the preceding frequency-based correction.
+The fixed-point ARM implementation passed the SAMD11 board run above. Other
+MCUs and short nanosecond delays still require timing measurements.
 
 ClockDemo now measures msDelay(250) and nsDelay(250000000) separately against
 the same timer, checking elapsed time within two percent and interrupt counts.
@@ -157,3 +158,17 @@ RV64, with and without CSR use. C3/C6 ClockDemo and R9A02 ClockDemo/PowerOffDemo
 relinked in Debug and Release. C2/C5/C61 startup and GPIO/UART host checks
 passed, along with 24 C/C++ UART demo links. These do not establish hardware
 support or measured timing on those additional chips.
+
+SAMD11 ClockDemo now defaults to three SW0 Standby wake cycles after startup
+clock checks and a baseline delay measurement. CPU/APB clocks, oscillator
+descriptors and both delay/timer checks are repeated after every wake. Set
+CLOCK_DEMO_RESUME_TEST to 0 in board.h to repeat the validated clock-selection
+run. The complete source-selection plus sleep build exceeded D11 flash by
+600 bytes; the two selectable runs fit separately. The Standby mode keeps the
+startup clock and APB rate. Its combined checks await hardware validation.
+
+Both SAMD11 modes linked in Debug and Release. The Standby mode uses 15,892
+flash bytes and 2,132 static RAM bytes, excluding the stack. SAMD21 and
+STM32F401 ClockDemo/PowerOffDemo and C3/C6 ClockDemo also relinked in both
+configurations after the generic demo change. Hardware results remain pending
+for the new D11 Standby mode.

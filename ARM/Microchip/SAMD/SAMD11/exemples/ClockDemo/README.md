@@ -6,19 +6,39 @@ oscillator selections are in `src/board.h`, copied from this target's
 PowerOffDemo project. Default console speed is 1,000,000 baud unless board.h
 specifies another rate. No debugger is required for UART logging.
 
-LF selection omitted because a running DFLL/DPLL may own its reference.
+Select the run in `src/board.h` with `CLOCK_DEMO_RESUME_TEST`:
 
-This project runs three clock-selection cycles. UART is drained and powered
-off before each change, then initialized again to update its baud divider.
-Clock selection completes before the timer is initialized because some ports
-retain timer module ownership after TimerDisable. It then checks SysTick (timer 4) at 1 MHz requested rate, with a 10 ms trigger over 250 ms.
-The returned timer rate may differ from 1 MHz. Delay and interrupt checks use
+- `1` (default): check the startup clock, measure both delays, then perform
+  three Standby wake cycles. Press and release SW0 after each
+  `Entering sleep; press SW0 to resume` message. Each wake checks CPU/APB
+  clocks, oscillator descriptors, UART output, timer interrupts and both delays.
+- `0`: run the three OSC8M clock-selection cycles, then measure both delays.
+  UART is drained and powered off before each change, then initialized again.
+
+The two modes share the generic ClockDemo source. Combining clock selection
+and wake support in one D11 build exceeded flash by 600 bytes, so the board
+selects the required checks at compile time. The Standby run keeps the startup
+clock; it does not perform runtime source selection. The APB clock stays at
+48 MHz because the SAMD setter does not support a different rate.
+
+LF selection is omitted because a running DFLL/DPLL may own its reference.
+Timer initialization is deferred until clock checks complete because some ports
+retain timer module ownership after TimerDisable. SysTick (timer 4) requests
+1 MHz and a 10 ms trigger. Both msDelay(250) and nsDelay(250000000) are measured
+against that timer. The returned timer rate may differ from 1 MHz; checks use
 the actual rate/period. They do not independently measure oscillator accuracy.
-Debug and Release use size optimization and LTO. The linker retains _sbrk
-for newlib formatting after LTO. Flash use is 15,294 bytes (15,086 text plus
-208 data); static RAM is 2,144 bytes, before stack use.
-No watchdog is enabled. No sleep is requested by this configuration; use
-PowerOffDemo for target wake validation. Reset restores startup clocks.
+The timer is disabled and UART drained before each sleep. No watchdog is enabled.
+
+Debug and Release use size optimization and LTO. The linker retains _sbrk for
+newlib formatting after LTO. Both configurations linked with these sizes:
+
+| Mode | Flash (text + data) | Static RAM (data + bss) |
+| --- | ---: | ---: |
+| Clock selection | 15,466 bytes | 2,152 bytes |
+| Standby/resume | 15,892 bytes | 2,132 bytes |
+
+RAM totals exclude stack use. PowerOffDemo remains available for the
+static/stack SRAM continuity check. Reset restores startup clocks.
 
 An omitted selector prints SKIP. A configured selector that fails prints FAIL;
 unsupported selections are not silently counted as successful tests. Runtime
@@ -48,8 +68,10 @@ The shared ARM delay now uses SystemMicroSecLoopCnt with 16 fractional bits.
 SystemCoreClockUpdate refreshes it from the CPU frequency and the port's loop
 calibration. The SAMD port uses 13 cycles per microsecond-delay loop and three
 cycles per nanosecond-delay loop. idelay.h has no SAMD-specific calculation.
-ClockDemo measures both msDelay(250) and nsDelay(250000000). This version
-still needs a board run.
+The maintainer's run of 2de35f281 passed all three clock selections and both
+delay checks: msDelay measured 250094 us, nsDelay measured 250107 us, both
+with 25 interrupts. ClockDemo completed with zero failures at 48 MHz.
+The new combined Standby/clock/delay checks still require a board run.
 
 OSC8M identifies the PLL reference selected by SystemCoreClockSelect; the
 clock tree is rebuilt to 48 MHz. It does not request an 8 MHz CPU clock.
