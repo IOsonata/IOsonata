@@ -1154,6 +1154,25 @@ RTC scratch registers remain reserved for ROM and clock control:
 No Deep-sleep retained-RAM section or startup exemption is implemented.
 RTC timer wake is not configured by these power functions.
 
+The November 17 C6 PowerOffDemo retest recorded five consecutive Deep-sleep
+wake/restart cycles, each reporting SYSTEM_RESET_WAKE_PIN (0x100). Start count
+remained one with zero exposed retention registers, as expected. The initial
+start reported zero; the submitted log did not include the raw reset register.
+
+Review against ESP-IDF v5.5.1 C3/C6 ROM rtc.h found raw reset code 0x15
+(USB_UART_CHIP_RESET) missing from the translation. It now maps to
+SYSTEM_RESET_DEBUG alongside USB-JTAG reset 0x16. This describes a host reset
+through the USB Serial/JTAG interface, not wake from USB power. It may explain
+the initial zero, but that cause is not confirmed without the raw register.
+No sleep entry, wake configuration or flasher reset sequence changed.
+
+Both complete libraries rebuilt (204 C3 and 206 C6 sources per configuration),
+and PowerOffDemo linked in Debug/Release for Light-sleep and Deep-sleep: eight
+links. Demo compilation used GNU C++11. Temporary production-function checks
+at O0/Os compared every low-byte reset value and six-bit wake combination;
+only USB-serial reset translation changed. Pin, timer and combined wake checks
+passed. The new reset label has not yet been checked on hardware.
+
 Remaining work is separate from the completed C6 GPIO wake validation:
 
 - C6 ClockDemo at `e5044c35f` passed three cycles of XTAL/RC_FAST switching,

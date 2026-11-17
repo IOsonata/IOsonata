@@ -289,3 +289,17 @@ worked normally afterward. The flasher reported a Release image written via
 native USB Serial/JTAG. The transient stuck state remains separate from the
 passing firmware run; it is not a recurring power-cycle requirement. No cause
 or reset-path fix has been verified.
+
+## C6 Deep-sleep retest and USB reset reporting
+
+The November 17 PowerOffDemo log records five consecutive pin-wake restarts,
+each with reset reason 0x100, start count one and zero retention registers.
+The initial reset reason was zero. C3/C6 raw USB-serial reset code 0x15 was
+missing from SystemResetReason; it now uses SYSTEM_RESET_DEBUG (0x20), as do
+resets through USB-JTAG. The initial raw hardware code was not captured, so
+this mapping omission is not a confirmed diagnosis of that first message.
+
+C3/C6 complete libraries rebuilt in Debug/Release, and both PowerOffDemo sleep
+modes linked in each configuration (eight links, GNU C++11 demos). Temporary
+reset/wake decoding comparisons at O0/Os passed. The five hardware wakes
+precede the reporting-only change; its USB reset label awaits board validation.

@@ -75,6 +75,7 @@ uint32_t SystemResetReason(void)
 		case 0x11U:
 		case 0x12U:
 			return SYSTEM_RESET_WDT;
+		case 0x15U:	// Host reset through USB Serial/JTAG serial interface.
 		case 0x16U:
 #if defined(ESP32C6)
 		case 0x18U:
