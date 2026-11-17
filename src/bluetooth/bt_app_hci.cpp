@@ -312,6 +312,8 @@ extern "C" void BtSmpCheckStatus(void) __attribute__((weak));
 extern "C" void BtSmpBondNvmCheckStatus(void) __attribute__((weak));
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
 extern void BtHciTxCheckStatus(BtHciDevice_t *pDev) __attribute__((weak));
+// Bluetooth Mesh node, linked when the application calls BtMeshInit.
+extern "C" void BtMeshCheckStatus(void) __attribute__((weak));
 
 // Called from the application status check (AppRun when its queue is empty,
 // the Bluetooth worker of an RTOS before it blocks). Retries the work the
@@ -359,6 +361,10 @@ void BtAppCheckStatus(void)
 	if (BtDfuSmpCheckStatus != nullptr)
 	{
 		BtDfuSmpCheckStatus();
+	}
+	if (BtMeshCheckStatus != nullptr)
+	{
+		BtMeshCheckStatus();
 	}
 }
 

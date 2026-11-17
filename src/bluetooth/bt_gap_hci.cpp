@@ -286,7 +286,10 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 
 	BtHciLeExtScanEnable_t e;
 	e.Enable = 1;
-	e.FilterDup = 1;
+	// The duplicate filter keeps one report per advertiser address. Mesh
+	// packets from one device differ only by their data and would be
+	// dropped, so the filter is off when the mesh report handler is set.
+	e.FilterDup = (pDev->MeshReport != nullptr) ? 0 : 1;
 	BtGapWr16(e.Duration, 0);
 	BtGapWr16(e.Period, 0);
 
