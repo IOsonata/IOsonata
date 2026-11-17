@@ -59,42 +59,50 @@ extern uint32_t SystemnsDelayFactor;
  *
  * SystemCoreClockUpdate refreshes SystemMicroSecLoopCnt after a CPU clock
  * change. Scale the full interval before removing the fractional bits.
+ * Long intervals retain the full calculated loop count.
  * Interrupt service and instruction fetch stalls can extend this delay.
  * This delay is only approximate, it is NOT 100% accurate.
  *
  * @param	cnt : microsecond delay count
  */
-static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
-	uint32_t loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 65535ULL) >> 16;
+static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
+{
+	uint64_t loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 65535ULL) >> 16;
+	uint32_t low = (uint32_t)loops;
+	uint32_t high = (uint32_t)(loops >> 32);
+
+	// Run the low word first. Each remaining high count adds 2^32 iterations.
+	// Subtracting from zero clears carry and ends the outer loop.
 	__asm__ volatile (
 #ifdef __GNUC__
 		".syntax unified\n"
 #endif
-			"ORRS %[ucnt], %[ucnt]\n"
-			"BEQ 2f\n"
-			"MOVS r0, %[ucnt]\n"
+		" CMP %[low], #0\n"
+		" BEQ 2f\n"
 		"1:\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" SUBS r0, #1\n"
-			" BNE 1b\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" SUBS %[low], #1\n"
+		" BNE 1b\n"
 		"2:\n"
+		" SUBS %[high], #1\n"
+		" BCS 1b\n"
 #if defined ( __ARMCC_VERSION )
 #elif defined ( __GNUC__ )
 		".syntax divided\n"
 #endif
+		: [low] "+&l" (low), [high] "+&l" (high)
 		:
-		: [ucnt] "l" (loops)
-		:"r0", "cc"
-		 );
+		: "cc"
+	);
 }
 
 /**
@@ -107,33 +115,49 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
  *
  * @param	cnt : nanosecond count
  */
-static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt) {
-	uint32_t loops = ((uint64_t)cnt * SystemnsDelayFactor + 65535999ULL) / 65536000ULL;
-	if (loops == 0U)
-	{
-		return;
-	}
+static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
+{
+	uint64_t loops = ((uint64_t)cnt * SystemnsDelayFactor + 65535999ULL) / 65536000ULL;
+	uint32_t low = (uint32_t)loops;
+	uint32_t high = (uint32_t)(loops >> 32);
+
+	// Run the low word first. Each remaining high count adds 2^32 iterations.
+	// Subtracting from zero clears carry and ends the outer loop.
 	__asm__ volatile (
 #ifdef __GNUC__
 		".syntax unified\n"
 #endif
-			"MOVS r1, %[ucnt]\n"
+		" CMP %[low], #0\n"
+		" BEQ 2f\n"
 		"1:\n"
-			" SUBS r1, #1\n"
-			" BNE 1b\n"
+		" SUBS %[low], #1\n"
+		" BNE 1b\n"
 		"2:\n"
+		" SUBS %[high], #1\n"
+		" BCS 1b\n"
 #if defined ( __ARMCC_VERSION )
 #elif defined ( __GNUC__ )
 		".syntax divided\n"
 #endif
+		: [low] "+&l" (low), [high] "+&l" (high)
 		:
-		: [ucnt] "l" (loops)
-		:"r1", "cc"
-		 );
+		: "cc"
+	);
 }
 
-static inline __attribute__((always_inline)) void msDelay(uint32_t ms) {
-	usDelay(ms * 1000UL);
+/**
+ * @brief	Millisecond delay.
+ * @param	ms : Milliseconds to wait.
+ */
+static inline void msDelay(uint32_t ms)
+{
+	// Split before converting milliseconds to the 32-bit microsecond count.
+	while (ms > UINT32_MAX / 1000U)
+	{
+		usDelay((UINT32_MAX / 1000U) * 1000U);
+		ms -= UINT32_MAX / 1000U;
+	}
+	usDelay(ms * 1000U);
 }
 
 /** @} End of group Utilities */

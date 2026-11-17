@@ -168,7 +168,7 @@ startup clock and APB rate. The run at e017243bc passed all three SW0 wakes,
 CPU/APB clocks and LF descriptors, with zero failures. Post-wake msDelay was
 250097-250103 us and nsDelay 250108-250112 us, each with 25 interrupts.
 
-Both SAMD11 modes linked in Debug and Release. The Standby mode uses 16,120
+Both SAMD11 modes linked in Debug and Release. The Standby mode uses 15,788
 flash bytes and 2,132 static RAM bytes, excluding the stack. SAMD21 and
 STM32F401 ClockDemo/PowerOffDemo and C3/C6 ClockDemo also relinked in both
 configurations after the generic demo change. The D11 Standby mode passed
@@ -186,7 +186,7 @@ measured 250103-250104 us and nsDelay 250114-250115 us, with 25 interrupts
 in every sample.
 
 The UART receive version linked in both D11 modes, Debug and Release. Standby
-mode uses 16,120 flash bytes and 2,132 static RAM bytes before the stack.
+mode uses 15,788 flash bytes and 2,132 static RAM bytes before the stack.
 SAMD21 ClockDemo/PowerOffDemo and C3/C6 ClockDemo compatibility links passed.
 The receive helper's response, timeout, unrelated-input, stale-input and timer
 failure paths passed host checks. Polling receive operation passed the board
@@ -202,3 +202,39 @@ is 25,384 bytes for C3 and 28,368 bytes for C6; static RAM is 3,356 and 3,620
 bytes respectively, excluding stack. This receive-enabled run still needs
 hardware validation. D21 hardware validation is deferred because the board is
 not available.
+
+## ARM delay range and code size
+
+ARM usDelay and nsDelay retain the complete 64-bit iteration count. The low
+word runs first, then each high-word count runs another 2^32 iterations. The
+instructions inside each timed iteration and the MCU calibration remain the
+same. msDelay splits requests before multiplying by 1000, preserving the full
+uint32_t millisecond range. Previously msDelay(4294968) converted to only
+704 microseconds through 32-bit wraparound. On a port calibrated to four
+iterations per microsecond, usDelay(1073741824) also wrapped to zero iterations.
+
+The compiler may now share msDelay code rather than inlining it at every call.
+No MCU-specific calculation or new clock dependency was added to idelay.h.
+The D11 ClockDemo Standby build uses 15,788 flash bytes (332 fewer) and 2,132
+static RAM bytes. Clock-selection mode uses 15,350 flash and 2,152 static RAM
+bytes. Both exclude stack use and linked in Debug and Release.
+
+Temporary checks exercised 355 delay arithmetic cases at O0 and Os, including
+zero, fractional calibration, UINT32_MAX requests and the 32-bit loop boundary.
+The compiled Cortex-M0+ instructions passed 72 execution cases with loop
+bodies accelerated; this checks counts and termination, not physical timing.
+C and C++ probes compiled for Cortex-M0/M0+/M3/M4/M7/M33 at O0 and Os.
+Hardware timing after this change remains unmeasured.
+
+ClockDemo and PowerOffDemo linked in Debug and Release on SAMD21, SAM4E16E,
+LPC11U35, RA4M1, STM32F401, STM32H753 and nRF52832 (28 links). The nRF52832
+library still has unrelated missing SDK sources; its demo links do not establish
+a complete library build. D11 also linked both ClockDemo selections,
+PowerOffDemo, TimerDemo, ClockDisplayDemo and the default LCDConsoleDisplayDemo.
+
+The D11 display console fits with polling SPI (15,532 flash bytes) or interrupt
+SPI without DMA (16,084 bytes). DMA alone exceeds flash by 112 bytes and
+interrupt plus DMA by 560 bytes in both configurations. Rebuilding those modes
+with the unchanged delay header also failed, by 260 and 700 bytes respectively.
+This is an existing size regression, reduced but not resolved by the delay
+change. ClockDisplayDemo uses 16,324 flash bytes and 2,892 static RAM bytes.

@@ -37,8 +37,8 @@ newlib formatting after LTO. Both configurations linked with these sizes:
 
 | Mode | Flash (text + data) | Static RAM (data + bss) |
 | --- | ---: | ---: |
-| Clock selection | 15,466 bytes | 2,152 bytes |
-| Standby/resume | 16,120 bytes | 2,132 bytes |
+| Clock selection | 15,350 bytes | 2,152 bytes |
+| Standby/resume | 15,788 bytes | 2,132 bytes |
 
 RAM totals exclude stack use. PowerOffDemo remains available for the
 static/stack SRAM continuity check. Reset restores startup clocks.
@@ -92,3 +92,11 @@ a successful response. UART interrupt/DMA receive modes are outside this check.
 
 OSC8M identifies the PLL reference selected by SystemCoreClockSelect; the
 clock tree is rebuilt to 48 MHz. It does not request an 8 MHz CPU clock.
+
+The shared ARM delay loops now preserve calculated counts above 32 bits, and
+msDelay splits long requests before converting to microseconds. Millisecond
+delay code is no longer forced inline at every call site; the compiler can
+share it when optimizing for size. The current Standby build saves 332 flash
+bytes compared with the receive-enabled hardware run above. Both selectable
+runs still fit in Debug and Release. These are build results; the recorded
+board timings predate this loop update.

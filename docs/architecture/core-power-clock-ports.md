@@ -144,10 +144,12 @@ Validation with Arm GNU 15.2.1:
 - PowerOffDemo, UartPrbsTxTest and UartLoopback link for both targets and
   configurations. D21 TimerDemo and every D11 timer-family/runtime selection
   link, including the native and LTO checks.
-- D11 LCDConsoleDisplayDemo links in all four interrupt/DMA combinations.
-  With both enabled it uses 16,380 bytes of flash, leaving 4 bytes free.
-- ClockDisplayDemo uses 16,244 bytes of flash and 2,892 bytes of static RAM,
-  leaving 140 bytes of flash free. Its unused timer and transport checks pass.
+- Current D11 LCDConsoleDisplayDemo builds fit with polling SPI or interrupt
+  SPI without DMA. DMA alone exceeds flash by 112 bytes; interrupt plus DMA
+  exceeds flash by 560 bytes. Both also overflowed before the ARM delay-range
+  fix, by 260 and 700 bytes. The earlier four-mode fit no longer holds.
+- ClockDisplayDemo uses 16,324 bytes of flash and 2,892 bytes of static RAM,
+  leaving 60 bytes of flash free. Its unused timer and transport checks pass.
 - Core and low-frequency selector calls link against both target libraries.
 - Existing UART, SPI, reset-reason, timer and Standby checks pass. The timer
   model includes failed final RTC synchronization after both start and stop.
