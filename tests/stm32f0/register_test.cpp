@@ -7,6 +7,8 @@
 #include "stm32f0xx.h"
 #include "coredev/iopincfg.h"
 #include "coredev/system_core_clock.h"
+uint32_t SystemMicroSecLoopCnt;
+
 static void pin_event(int, void *) {}
 static void map(unsigned long addr, unsigned long len) {
 	assert(mmap((void *)addr, len, PROT_READ | PROT_WRITE,

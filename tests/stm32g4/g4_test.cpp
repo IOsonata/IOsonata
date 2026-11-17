@@ -44,6 +44,8 @@ SOFTWARE.
 #include "stm32g4xx.h"
 #include "coredev/system_core_clock.h"
 
+uint32_t SystemMicroSecLoopCnt;
+
 TestScb_t g_TestScb;
 
 // Const has internal linkage in C++ without extern

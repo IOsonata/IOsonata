@@ -70,7 +70,7 @@ SOFTWARE.
 // Reset is MOCO /16, not HOCO. ResetEntry initializes this storage before
 // calling SystemInit, including an application's strong g_McuOsc override.
 uint32_t SystemCoreClock = 500000UL;
-uint32_t SystemnsDelayFactor = RA4M1_NSDELAY_FACTOR;
+uint32_t SystemnsDelayFactor = 65536UL;
 volatile uint32_t g_Ra4m1StartupError;
 extern uint32_t SystemMicroSecLoopCnt;
 extern void (* const __Vectors[])(void);
@@ -452,6 +452,8 @@ void SystemCoreClockUpdate(void)
 {
 	// Read/report only: never change flash timing in a clock query.
 	SystemCoreClock = Ra4m1DividedClock(24U);
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)RA4M1_NSDELAY_FACTOR * 48000UL);
 }
 
 uint32_t SystemCoreClockGet(void)
@@ -523,7 +525,6 @@ static bool Ra4m1CoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq, bool CheckUsers
 		g_McuOsc.CoreOsc.Freq = Freq;
 	}
 	SystemCoreClockUpdate();
-	SystemMicroSecLoopCnt = (SystemCoreClock + 8000000UL) / 16000000UL;
 	g_Ra4m1StartupError = result;
 	EnableInterrupt(state);
 	return result == RA4M1_STARTUP_OK;

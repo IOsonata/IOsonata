@@ -200,6 +200,20 @@ void Esp32RomClockUpdate(uint32_t CpuMHz);
  * Internal helpers
  *---------------------------------------------------------------------------*/
 
+// The delay implementation uses the counter enabled by this port's startup.
+uint32_t IOsonataRiscvCycle32(void)
+{
+	uint32_t count = 0U;
+#if defined(__riscv)
+#if defined(ESP32C6) || defined(ESP32H2)
+	__asm volatile ("csrr %0, 0x7E2" : "=r"(count));
+#else
+	__asm volatile ("csrr %0, cycle" : "=r"(count));
+#endif
+#endif
+	return count;
+}
+
 static void DisableTimg0Wdt(void)
 {
 	TIMG0_WDTWPROTECT_REG = TIMG_WDT_WPROTECT_MAGIC;

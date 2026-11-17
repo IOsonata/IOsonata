@@ -94,8 +94,11 @@ __WEAK McuOsc_t g_McuOsc = {
 	false
 };
 
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+extern uint32_t SystemMicroSecLoopCnt;
+
 uint32_t SystemCoreClock = RCSYS_FREQ;
-uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
+uint32_t SystemnsDelayFactor = 65536UL;
 static uint32_t s_MainClock = RCSYS_FREQ;
 static uint32_t s_PllFreq;
 static uint32_t s_DfllFreq = DFLL_CORE_MHZ * 1000000UL;
@@ -853,6 +856,8 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		return false;
 	}
 	SystemCoreClock = RCSYS_FREQ;
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
 
 	if (Startup)
 	{
@@ -992,6 +997,8 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 	}
 	s_MainClock = mainRate;
 	SystemCoreClock = Sam4lApplyClkDiv(mainRate, sel);
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
 
 	if (g_McuOsc.bUSBClk) {
 		// Only the external OSC0/PLL path reaches here. The application must
@@ -1071,6 +1078,8 @@ void SystemCoreClockUpdate(void)
 	// Reporting a clock must not change Flash timing underneath the CPU.
 	s_MainClock = Sam4lMainClockGet();
 	SystemCoreClock = Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_CPUSEL);
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
 }
 
 uint32_t SystemCoreClockGet(void)

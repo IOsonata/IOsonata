@@ -107,7 +107,7 @@ static bool s_ResetRead;
 
 static bool R9a02ClockUsers(void);
 
-static inline uint32_t R9a02Mcycle(void)
+uint32_t IOsonataRiscvCycle32(void)
 {
 	uint32_t v;
 
@@ -247,14 +247,14 @@ void R9a02DelayUs(uint32_t Us)
 	frac = (a * d + b * c) * 1000U + b * d;
 	cycles = (uint64_t)Us * mhz + (uint64_t)sec * rhz;
 	cycles += (uint64_t)a * c + (frac + 999999U) / 1000000U;
-	start = R9a02Mcycle();
+	start = IOsonataRiscvCycle32();
 
 	// Wait in parts so the 32-bit counter difference never wraps
 	while (cycles > 0U)
 	{
 		uint32_t part = cycles > 0x40000000ULL ? 0x40000000UL : (uint32_t)cycles;
 
-		while ((uint32_t)(R9a02Mcycle() - start) < part)
+		while ((uint32_t)(IOsonataRiscvCycle32() - start) < part)
 		{
 		}
 		start += part;

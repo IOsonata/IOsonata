@@ -9,7 +9,7 @@ volatile uint32_t DmaTestActive;
 volatile uint32_t DmaSlaveCase;
 volatile uint32_t I2cIrqTestInside;
 uint32_t SystemCoreClock = 400000000;
-uint32_t SystemMicroSecLoopCnt = 1;
+uint32_t SystemMicroSecLoopCnt = 65536UL;
 uint32_t SystemPeriphClockGet(int n) { return n == 3 ? 50000000 : 100000000; }
 void SPI1_IRQHandler(); void SPI2_IRQHandler(); void SPI3_IRQHandler();
 void SPI4_IRQHandler(); void SPI5_IRQHandler(); void SPI6_IRQHandler();

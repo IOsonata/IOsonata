@@ -5,23 +5,15 @@
 
 Implementation on RISC-V.
 
-If the target supports the Zicntr extension (rdcycle available), delays are
-implemented using the CPU cycle counter for accurate, pipeline-independent
-timing.  This is the recommended path for any RISC-V chip that needs
-correct delay semantics - build examples with -march=...zicsr_zicntr to
-enable it (the lib is already built with zicsr).
+CSR-capable builds read the CPU cycle counter through IOsonataRiscvCycle32,
+implemented by the MCU port. The port selects and enables its counter before
+using delays. The shared delay code does not select a CSR address.
 
-If rdcycle is not available, a simple 2-instruction NOP loop is used as a
-fallback.  Its accuracy depends on the core's pipeline behavior - taken-
-branch latency in particular - so it is *not* expected to give accurate
-delays on cores without branch prediction (e.g. ESP32-C3, Nordic VPR).
+Builds without CSR support use a two-instruction loop. Its nominal two-cycle
+calibration is approximate; pipeline and branch timing depend on the core.
 
-Path selection is automatic via __riscv_zicntr / __riscv_zicsr / __riscv_32e
-compiler-defined macros - no manual configuration needed.
-
-Globals (set by SystemCoreClockUpdate, in their natural physical units):
-	SystemCoreClockPeriodus = cycles per us   (= CPU MHz, e.g. 80 @ 80MHz)
-  SystemCoreClockPeriodns = ns per cycle    (e.g. 13 @ 80MHz)
+SystemCoreClockUpdate refreshes SystemCoreClock after CPU clock changes.
+Both delay calculations retain fractional MHz from that frequency.
 
 @author Hoang Nguyen Hoan
 @date	Aug. 16, 2025
@@ -62,10 +54,13 @@ SOFTWARE.
 extern "C" {
 #endif
 
-// These globals are pre-calculated at system startup to reduce overhead
+// Updated by the MCU clock implementation.
 extern uint32_t SystemCoreClock;
 extern uint64_t SystemCoreClockPeriodns;	// Nanosecond period
-extern uint64_t SystemCoreClockPeriodus;	// Microsecond period
+extern uint64_t SystemCoreClockPeriodus;	// Cycles per microsecond
+
+// Low 32 bits of the running CPU cycle counter; wraps modulo 2^32.
+uint32_t IOsonataRiscvCycle32(void);
 
 #ifdef __cplusplus
 }
@@ -75,119 +70,70 @@ extern uint64_t SystemCoreClockPeriodus;	// Microsecond period
   * @{
   */
 
-/**
- * @brief	Microsecond delay.
- *
- *
- * @param	cnt : microsecond delay count
- */
-/* Mark which RISC-V family-specific cycle-counter CSR to read.  The standard
- * RISC-V `cycle` user CSR (0xC00) is implemented by most cores, but Espressif
- * RISC-V parts (ESP32-C3, C6, H2) do NOT implement it - accessing 0xC00 raises
- * an illegal-instruction trap.  They provide a custom Machine Performance
- * Counter Counter at CSR 0x7E2 instead, which must be enabled at boot via
- * mpcer/mpcmr (see system_esp32_system.c: Esp32EnablePerfCounter). */
-#if defined(ESP32C2) || defined(ESP32C3) || defined(ESP32C6) || defined(ESP32H2)
-#define IOSONATA_RISCV_CYCLE_CSR        0x7E2U      /* mpccr */
-#elif defined(R9A02G021)
-// The R9A02G021 core implements mcycle only, no cycle (manual table 2.13)
-#define IOSONATA_RISCV_CYCLE_CSR        0xB00U
-#else
-#define IOSONATA_RISCV_CYCLE_CSR        0xC00U      /* standard cycle */
-#endif
-
-static inline __attribute__((always_inline)) uint32_t IOsonataRiscvCycle32(void)
-{
-	uint32_t v;
-	__asm volatile ("csrr %0, %1"
-	                : "=r"(v) : "i"(IOSONATA_RISCV_CYCLE_CSR));
-	return v;
-}
-
-static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
+// The MCU port supplies the counter for CSR-capable builds. Limit each wait
+// to half the counter range so normal wraparound is handled by subtraction.
+static inline __attribute__((always_inline)) void IOsonataRiscvDelayCycles(uint64_t Cycles)
 {
 #if defined(__riscv_zicntr) || \
     (defined(__riscv) && !defined(__riscv_32e) && defined(__riscv_zicsr))
-	uint32_t start = IOsonataRiscvCycle32();
-#if defined(ESP32C3) || defined(ESP32C6)
-	// Preserve fractional MHz from the source frequency and CPU divider.
-	uint32_t wait = ((uint64_t)cnt * SystemCoreClock + 999999ULL) / 1000000ULL;
-#else
-	uint32_t wait = cnt * (uint32_t)SystemCoreClockPeriodus;
-#endif
-	if (wait == 0U)
+	while (Cycles != 0U)
 	{
-		wait = 1U;
+		uint32_t wait = Cycles > 0x7FFFFFFFULL ? 0x7FFFFFFFU : (uint32_t)Cycles;
+		uint32_t start = IOsonataRiscvCycle32();
+		while ((uint32_t)(IOsonataRiscvCycle32() - start) < wait)
+		{
+			__asm volatile("nop");
+		}
+		Cycles -= wait;
 	}
+#else
+	// Nominal two-cycle loop; branch and instruction-fetch timing vary by core.
+	uint64_t remaining = (Cycles >> 1) + (Cycles & 1U);
+	while (remaining != 0U)
+	{
+		uint32_t loops = remaining > UINT32_MAX ? UINT32_MAX : (uint32_t)remaining;
+		remaining -= loops;
+		__asm volatile (
+			"1: addi %0, %0, -1\n\t"
+			"   bne  %0, zero, 1b"
+			: "+r"(loops) : : "memory"
+		);
+	}
+#endif
+}
 
-	while ((uint32_t)(IOsonataRiscvCycle32() - start) < wait)
-	{
-		__asm volatile("nop");
-	}
-#else
-	// Fallback NOP loop. Inaccurate by design - actual cycles per
-	// iteration depends on whether the core has branch prediction.
-	// On the ESP32-C3 (no prediction, branch-taken = 3 cycles) one
-	// iteration is ~4 cycles, not 2.  Use Zicsr+Zicntr in -march to
-	// get the rdcycle path above for accurate timing.
-	uint32_t n = cnt * (uint32_t)SystemCoreClockPeriodus;
-	if (n == 0U)
-	{
-		n = 1U;
-	}
-	__asm volatile (
-		"1: addi %0, %0, -1\n\t"
-		"   bne  %0, zero, 1b"
-		: "+r"(n) : : "memory"
-	);
-#endif
+/**
+ * @brief	Microsecond delay.
+ * @param	cnt : Microseconds to wait.
+ */
+static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
+{
+	uint64_t cycles = ((uint64_t)cnt * SystemCoreClock + 999999ULL) / 1000000ULL;
+	IOsonataRiscvDelayCycles(cycles);
 }
 
 /**
  * @brief	Nanosecond delay.
  *
+ * Calculation and counter-read overhead extend short delays. Use a hardware
+ * timer when precise timing is required.
  *
- * @param	cnt : nanosecond count
+ * @param	cnt : Nanoseconds to wait.
  */
 static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 {
-#if defined(__riscv_zicntr) || \
-    (defined(__riscv) && !defined(__riscv_32e) && defined(__riscv_zicsr))
-	/* cycles = ns * Hz / 1e9.  Use MHz to keep this RV32-friendly. */
-#if defined(ESP32C3) || defined(ESP32C6)
-	uint32_t wait = ((uint64_t)cnt * SystemCoreClock + 999999999ULL) / 1000000000ULL;
-#else
-	uint32_t cycles_per_us = (uint32_t)SystemCoreClockPeriodus;
-	uint32_t wait = (uint32_t)(((uint64_t)cnt * cycles_per_us + 999ULL) / 1000ULL);
-#endif
-	if (wait == 0U)
-	{
-		wait = 1U;
-	}
-
-	uint32_t start = IOsonataRiscvCycle32();
-	while ((uint32_t)(IOsonataRiscvCycle32() - start) < wait)
-	{
-		__asm volatile("nop");
-	}
-#else
-	// Fallback NOP loop - see usDelay for accuracy notes.  Use rdcycle
-	// (Zicsr+Zicntr in -march) for accurate ns-resolution timing.
-	uint32_t n = cnt * (uint32_t)SystemCoreClockPeriodns;
-	if (n == 0U)
-	{
-		n = 1U;
-	}
-	__asm volatile (
-		"1: addi %0, %0, -1\n\t"
-		"   bne  %0, zero, 1b"
-		: "+r"(n) : : "memory"
-	);
-#endif
+	uint64_t cycles = ((uint64_t)cnt * SystemCoreClock + 999999999ULL) / 1000000000ULL;
+	IOsonataRiscvDelayCycles(cycles);
 }
 
-static inline __attribute__((always_inline)) void msDelay(uint32_t ms) {
-	usDelay(ms * 1000UL);
+/**
+ * @brief	Millisecond delay.
+ * @param	ms : Milliseconds to wait.
+ */
+static inline __attribute__((always_inline)) void msDelay(uint32_t ms)
+{
+	uint64_t cycles = ((uint64_t)ms * SystemCoreClock + 999ULL) / 1000ULL;
+	IOsonataRiscvDelayCycles(cycles);
 }
 
 /** @} End of group Utilities */

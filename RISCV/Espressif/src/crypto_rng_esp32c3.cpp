@@ -138,7 +138,7 @@ static inline uint32_t EspRngCycleCount(void)
 {
 	// ESP32-C3 has no standard cycle CSR (0xC00). That instruction
 	// traps. Use the mpccr counter (0x7E2) already initialized by
-	// Esp32EnablePerfCounter() and selected by the common idelay.h.
+	// Esp32EnablePerfCounter() and read by the system clock implementation.
 	return IOsonataRiscvCycle32();
 }
 #else

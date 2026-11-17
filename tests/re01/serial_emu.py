@@ -241,7 +241,7 @@ class Emulator:
         self.uc.hook_add(UC_HOOK_MEM_WRITE, self.write, begin=0x40000000, end=0x400FFFFF)
         self.clocks(32000000, 32000000, 1)
         self.put(MSTPB, 0xFFFFFFFF, 4)
-        self.put(self.sym['SystemMicroSecLoopCnt'], 1, 4)
+        self.put(self.sym['SystemMicroSecLoopCnt'], 65536, 4)
 
     def get(self, addr, size=1):
         return int.from_bytes(self.uc.mem_read(addr, size), 'little')

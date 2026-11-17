@@ -742,7 +742,7 @@ int main(void)
 		assert(s_Regs.FLASHCFG == 0x503AU);
 		assert(SystemCoreClock == input / 4);
 		assert(SystemClkFreq == input);
-		assert(SystemMicroSecLoopCnt == 0);
+		assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock << 16) / 16000000U);
 		assert(s_Unsafe == 0);
 		s_FailPllLock = 0;
 	}
@@ -764,7 +764,7 @@ int main(void)
 		assert(s_Regs.USBCLKCFG == 9);
 		assert(s_Regs.FLASHCFG == 0x503AU);
 		assert(SystemCoreClock == (stuck ? 120000000U : 1000000U));
-		assert(SystemMicroSecLoopCnt == SystemCoreClock / 16000000U);
+		assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock << 16) / 16000000U);
 		assert(s_Unsafe == 0);
 		s_FailPllConnect = 0;
 	}
@@ -950,7 +950,7 @@ int main(void)
 				assert(s_Regs.USBCLKCFG == 9);
 				assert(SystemClkFreq == 16000000);
 				assert(SystemCoreClock == (mode == 2 ? 80000000U : 2000000U));
-				assert(SystemMicroSecLoopCnt == SystemCoreClock / 16000000U);
+				assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock << 16) / 16000000U);
 				assert(s_Regs.FLASHCFG == 0x503A);
 			}
 			s_CpuStopMode = 0;

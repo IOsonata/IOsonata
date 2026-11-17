@@ -169,7 +169,7 @@ SOFTWARE.
  *---------------------------------------------------------------------------*/
 uint32_t SystemCoreClock __attribute__((used)) = 80000000UL;
 
-/* idelay.h rdcycle path: Periodus = cycles/us, Periodns = ns/cycle */
+/* Clock periods: Periodus = cycles/us, Periodns = ns/cycle. */
 uint64_t SystemCoreClockPeriodus __attribute__((used)) = 80ULL;        /* 80 MHz default */
 uint64_t SystemCoreClockPeriodns __attribute__((used)) = 13ULL;        /* ~12.5 ns @ 80 MHz */
 
@@ -204,6 +204,16 @@ void Esp32RomClockUpdate(uint32_t CpuMHz);
 /*---------------------------------------------------------------------------
  * Internal helpers
  *---------------------------------------------------------------------------*/
+// The delay implementation uses the counter enabled by this port's startup.
+uint32_t IOsonataRiscvCycle32(void)
+{
+	uint32_t count = 0U;
+#if defined(__riscv)
+	__asm volatile ("csrr %0, 0x7E2" : "=r"(count));
+#endif
+	return count;
+}
+
 static void DisableTimg0Wdt(void)
 {
 	TIMG0_WDTWPROTECT_REG = TIMG_WDT_WPROTECT_MAGIC;
@@ -250,7 +260,7 @@ static void EnableSysTimer(void)
 /*---------------------------------------------------------------------------
  * Enable the Espressif RISC-V Machine Performance Counter so that the
  * MPCCR (CSR 0x7E2) increments once per CPU cycle.  IOsonataRiscvCycle32()
- * in idelay.h reads this CSR - without this setup, MPCCR stays at 0 and
+ * reads this CSR - without this setup, MPCCR stays at 0 and
  * usDelay/nsDelay's rdcycle path spins forever.
  *
  * The C3/C6/H2 do NOT implement the standard `cycle` / `mcycle` CSRs
@@ -377,7 +387,7 @@ void SystemCoreClockUpdate(void)
 		SystemCoreClock /= (SYSTEM_SYSCLK_CONF_REG & 0x3FFU) + 1U;
 	}
 #endif
-	/* Update idelay period variables for the rdcycle path. */
+	/* Update the clock periods used by ROM timing and clock queries. */
 	SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
 	SystemCoreClockPeriodns = SystemCoreClock != 0U ?
 		(1000000000ULL + SystemCoreClock / 2U) / SystemCoreClock : 0U;

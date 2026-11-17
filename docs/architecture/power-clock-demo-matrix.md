@@ -90,8 +90,9 @@ configurations keep their wiring and modes. No demo enables a watchdog.
 C3 ClockDemo after 04d1522a8 passed three cycles and nine BOOT wakes with zero
 failures. C3 PowerOffDemo passed six Light-sleep SRAM checks and four manual
 GPIO3 Deep-sleep wake/restart cycles. C6 also passed repeated wake and combined
-clock/sleep runs. SAMD11 previously passed Standby wake and SRAM checks, but
-its new ClockDemo has not run on a board. See
+clock/sleep runs. SAMD11 passed Standby wake and SRAM checks. ClockDemo completed three
+core/APB selections and measured 250106 us with 25 IRQs for a 250 ms delay,
+with zero failures. See
 [core power and clock ports](core-power-clock-ports.md) for exact results.
 Other new configurations remain build-only. Sleep current, UART RX after clock
 changes and external oscillator accuracy have not been measured here.
@@ -101,3 +102,58 @@ nRF52810 lack a suitable UART board configuration; no pin maps were guessed.
 nRF5340 network-core ClockDemo has no companion PowerOffDemo because the
 application core controls system power. RP2040, nRF54H20 and ESP32C2/C5/C61
 remain outside this batch because their relevant ports are incomplete.
+
+## Delay calibration after clock changes
+
+The ARM delay loops use SystemMicroSecLoopCnt and SystemnsDelayFactor as
+iterations per microsecond, with 16 fractional bits.
+Each port refreshes it in SystemCoreClockUpdate. LPC11 and SAM4L also refresh
+it on their direct clock assignments during transitions and fallback. ResetEntry
+no longer overwrites the port calibration after startup. Rebuild the library
+and application together when changing from the former integer count.
+
+The shared idelay.h calculation has no MCU-specific path. SAMD supplies its
+13-cycle calibration from system_samd.c. Other ARM ports retain their existing
+16-cycle calibration; their physical loop timing still needs board measurement.
+Nanosecond delays retain existing port calibration where available; ports
+without a prior calibration use a nominal three-cycle loop. These values
+require hardware timing validation. Both counts update together. Zero delays
+execute no loop, and nanosecond scaling uses 64-bit arithmetic.
+RISC-V cycle-counter delays preserve fractional MHz for every target, using
+the current SystemCoreClock. Loop overhead, interrupt handling and flash stalls
+can extend delays; these functions do not replace a hardware timer.
+
+The fixed-point ARM implementation requires another hardware run. The SAMD11
+result above validates the preceding frequency-based correction.
+
+ClockDemo now measures msDelay(250) and nsDelay(250000000) separately against
+the same timer, checking elapsed time within two percent and interrupt counts.
+This checks scaling over a measurable interval. It does not establish the
+accuracy of an individual delay of a few nanoseconds; setup overhead dominates
+such short calls. Both tests run after resume where ClockDemo supports sleep.
+
+Software validation for the shared delay change: ClockDemo and PowerOffDemo
+linked in 114 configurations across 29 targets; C3/C6 ClockDemo added four
+links, and SAMD11 display-console and timer demos added four. Some Nordic
+libraries still have unrelated missing SDK sources; these counts describe
+successful demo links, not a complete library-source build. Existing LPC,
+STM32F0/F4/G4/L4 and RE01 checks passed. Delay arithmetic passed 244 host
+checks, including zero and UINT32_MAX nanosecond requests. ARM assembly
+compiled for six Cortex-M cores at -O0/-Os; RISC-V counter and fallback
+paths compiled at both optimization levels. None of these checks measures
+physical instruction timing.
+
+The RISC-V delay header contains no MCU checks or CSR addresses.
+IOsonataRiscvCycle32 is supplied by the MCU system implementation: the
+Espressif performance counter or standard cycle counter, and Renesas mcycle.
+The shared code handles fractional frequencies and divides long waits into
+intervals shorter than half the 32-bit counter range. msDelay calculates
+cycles directly instead of overflowing a millisecond-to-microsecond product.
+The non-CSR path remains an approximate two-instruction loop.
+
+The RISC-V counter model passed 108 cases covering zero, fractional MHz,
+counter wrap and long durations. The header compiled for RV32, RV32E and
+RV64, with and without CSR use. C3/C6 ClockDemo and R9A02 ClockDemo/PowerOffDemo
+relinked in Debug and Release. C2/C5/C61 startup and GPIO/UART host checks
+passed, along with 24 C/C++ UART demo links. These do not establish hardware
+support or measured timing on those additional chips.

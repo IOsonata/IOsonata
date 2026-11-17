@@ -4,6 +4,8 @@
 #include "stm32f4xx.h"
 TestSCB test_scb;
 void (* const __Vectors[])(void) = {0};
+uint32_t SystemMicroSecLoopCnt;
+
 int main(void)
 {
 	void *base = (void *)0x40000000UL;

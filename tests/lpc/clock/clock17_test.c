@@ -116,7 +116,7 @@ static void Check(unsigned Source, uint32_t Input, uint32_t Status,
 		}
 		s_Errors++;
 	}
-	assert(SystemMicroSecLoopCnt == SystemCoreClock / 16000000U);
+	assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock << 16) / 16000000U);
 	assert(memcmp(&before, (const void *)LPC_SC, sizeof(before)) == 0);
 }
 

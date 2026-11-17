@@ -124,8 +124,11 @@ static const uint32_t s_FlashTimFreq[] = {
 	12000000UL, 24000000UL, 36000000UL, 60000000UL, 96000000UL,
 	120000000UL, 144000000UL, 168000000UL, 180000000UL
 };
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+extern uint32_t SystemMicroSecLoopCnt;
+
 uint32_t SystemCoreClock = DEFAULT_SYSTEM_CLOCK;
-uint32_t SystemnsDelayFactor = LPC546XX_NSDELAY_LOOP_CLK * 1000000000UL / DEFAULT_SYSTEM_CLOCK;
+uint32_t SystemnsDelayFactor = 65536UL;
 
 
 static uint32_t s_Lpc546xxAudioPllFreq = 0;
@@ -844,10 +847,8 @@ uint32_t clkRate = 0;
             break;
     }
     SystemCoreClock = clkRate / ((SYSCON->AHBCLKDIV & 0xFFUL) + 1UL);
-	if (SystemCoreClock != 0)
-	{
-		SystemnsDelayFactor = LPC546XX_NSDELAY_LOOP_CLK * 1000000000UL / SystemCoreClock;
-	}
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (LPC546XX_NSDELAY_LOOP_CLK * 1000000UL);
 }
 
 /* ----------------------------------------------------------------------------

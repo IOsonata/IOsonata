@@ -13,6 +13,8 @@
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 
+uint32_t SystemMicroSecLoopCnt;
+
 extern "C" void IEL0_IRQHandler();
 extern "C" void IEL1_IRQHandler();
 extern "C" void IEL2_IRQHandler();

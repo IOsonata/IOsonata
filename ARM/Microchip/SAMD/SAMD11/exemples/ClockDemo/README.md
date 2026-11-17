@@ -30,8 +30,8 @@ The main-clock transition now preserves the existing divider while selecting
 OSC8M, synchronizes that source change, and only then clears the divider.
 Previously the divider was cleared while FDPLL96M still supplied 96 MHz,
 exceeding the 48 MHz CPU limit. The revised write sequence passes a register
-model check and both SAMD11/SAMD21 demo build configurations. Board retest is
-pending.
+model check and both SAMD11/SAMD21 demo build configurations. The later
+board run completed all three selections.
 
 ClockDemo drains both the syslog record store and polling UART FIFO after
 startup and result output, before changing clocks, and before its final idle
@@ -41,10 +41,15 @@ UART FIFO can leave the last visible output in the middle of a line.
 The following board run completed all three core/APB selections. Its timer
 reported 203202 us and 20 interrupts for a requested 250 ms delay. The old
 usDelay scaling selected three 13-cycle iterations per microsecond at 48 MHz,
-which predicts 203125 us. SAM D11/D21 now calculate the iteration count from
-the full requested interval and current CPU frequency before dividing by
-13 million. ClockDemo and PowerOffDemo rebuild for both targets in Debug and
-Release. The corrected delay still requires a board run.
+which predicts 203125 us. The corrected board run measured 250106 us and
+25 interrupts, completing with zero failures.
+
+The shared ARM delay now uses SystemMicroSecLoopCnt with 16 fractional bits.
+SystemCoreClockUpdate refreshes it from the CPU frequency and the port's loop
+calibration. The SAMD port uses 13 cycles per microsecond-delay loop and three
+cycles per nanosecond-delay loop. idelay.h has no SAMD-specific calculation.
+ClockDemo measures both msDelay(250) and nsDelay(250000000). This version
+still needs a board run.
 
 OSC8M identifies the PLL reference selected by SystemCoreClockSelect; the
 clock tree is rebuilt to 48 MHz. It does not request an 8 MHz CPU clock.

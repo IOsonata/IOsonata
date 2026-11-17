@@ -64,8 +64,11 @@ SOFTWARE.
 #define CLK_MIN						2660000
 #define CLK_MAX						8000000
 
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+extern uint32_t SystemMicroSecLoopCnt;
+
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
-uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
+uint32_t SystemnsDelayFactor = 65536UL;
 
 // Keep this name for compatibility with STM code
 const uint32_t MSIRangeTable[] = {
@@ -223,6 +226,8 @@ void SystemCoreClockUpdate(void)
 	SetFlashWaitState(SystemCoreClock);
 	SystemPeriphClockSet(0, SystemCoreClock >> 1);
 	SystemPeriphClockSet(1, SystemCoreClock >> 1);
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK_MAX / 1000UL);
 }
 
 /**

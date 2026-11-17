@@ -4,7 +4,7 @@
 #include "iopinctrl.h"
 #include "interrupt_ra4m1.h"
 extern unsigned long __data_loc__, __data_start__, __data_size__, __bss_start__, __bss_size__;
-uint32_t SystemMicroSecLoopCnt = 1;
+uint32_t SystemMicroSecLoopCnt = 65536UL;
 volatile uint32_t probe_data = 0x12345678;
 volatile uint32_t probe_bss;
 __attribute__((section(".fastrun"),noinline)) uint32_t probe_ram(void) {return probe_data;}

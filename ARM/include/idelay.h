@@ -3,8 +3,8 @@
 
 @brief	Delay loop functions.
 
-The delay loop is calculated based on a 16MHz ARM loop is invariant to compiler
-optimization. nsec delay cannot be achieved is at 295ns per loop.
+Delay-loop calibration is maintained by the MCU clock implementation.
+The microsecond loop count uses 16 fractional bits.
 
 @author Hoang Nguyen Hoan
 @date	May 22, 2015
@@ -43,11 +43,9 @@ SOFTWARE.
 #ifdef __cplusplus
 extern "C" {
 #endif
+// Iterations per microsecond for each loop, with 16 fractional bits.
 extern uint32_t SystemMicroSecLoopCnt;
 extern uint32_t SystemnsDelayFactor;
-#if defined(__SAMD11D14AM__) || defined(__SAMD21J18A__)
-extern uint32_t SystemCoreClock;
-#endif
 #ifdef __cplusplus
 }
 #endif
@@ -59,25 +57,15 @@ extern uint32_t SystemCoreClock;
 /**
  * @brief	Microsecond delay.
  *
- * This function is based on a 16MHz clock. For higher clock
- * rate SystemMicroSecNopCnt needs to be adjusted.  Adjustment of this variable
- * should be done in the CMSIS SystemCoreCLockUpdate function.
- * SAM D11/D21 calculate iterations from the current SystemCoreClock and
- * the Cortex-M0+ loop timing. Other targets use SystemMicroSecLoopCnt.
+ * SystemCoreClockUpdate refreshes SystemMicroSecLoopCnt after a CPU clock
+ * change. Scale the full interval before removing the fractional bits.
  * Interrupt service and instruction fetch stalls can extend this delay.
  * This delay is only approximate, it is NOT 100% accurate.
  *
  * @param	cnt : microsecond delay count
  */
 static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
-#if defined(__SAMD11D14AM__) || defined(__SAMD21J18A__)
-	// Cortex-M0+: ten NOPs, SUBS and a taken BGT use 13 cycles.
-	// Scale the full interval before division so fractional loops per
-	// microsecond are preserved, including after a runtime clock change.
-	uint32_t loops = ((uint64_t)cnt * SystemCoreClock + 12999999ULL) / 13000000ULL;
-#else
-	uint32_t loops = cnt * SystemMicroSecLoopCnt;
-#endif
+	uint32_t loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 65535ULL) >> 16;
 	__asm__ volatile (
 #ifdef __GNUC__
 		".syntax unified\n"
@@ -97,7 +85,7 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
 			" NOP\n"
 			" NOP\n"
 			" SUBS r0, #1\n"
-			" BGT 1b\n"
+			" BNE 1b\n"
 		"2:\n"
 #if defined ( __ARMCC_VERSION )
 #elif defined ( __GNUC__ )
@@ -105,21 +93,26 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
 #endif
 		:
 		: [ucnt] "l" (loops)
-		:"r0"
+		:"r0", "cc"
 		 );
 }
 
 /**
  * @brief	Nanosecond delay.
  *
- * This is highly inaccurate use at you own risk
- *
- * nsec delay cannot be achieved for low cpu clock.
- * this loop is 295ns on a 16MHz cpu
+ * SystemnsDelayFactor uses the same fractional format as the microsecond
+ * loop count and is refreshed by the MCU clock implementation.
+ * Calculation overhead, instruction fetch and interrupts extend the delay.
+ * Use a hardware timer when precise timing is required.
  *
  * @param	cnt : nanosecond count
  */
 static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt) {
+	uint32_t loops = ((uint64_t)cnt * SystemnsDelayFactor + 65535999ULL) / 65536000ULL;
+	if (loops == 0U)
+	{
+		return;
+	}
 	__asm__ volatile (
 #ifdef __GNUC__
 		".syntax unified\n"
@@ -127,16 +120,15 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt) {
 			"MOVS r1, %[ucnt]\n"
 		"1:\n"
 			" SUBS r1, #1\n"
-			" BGT 1b\n"
+			" BNE 1b\n"
 		"2:\n"
 #if defined ( __ARMCC_VERSION )
 #elif defined ( __GNUC__ )
 		".syntax divided\n"
 #endif
 		:
-		: [ucnt] "l" ((cnt + (SystemnsDelayFactor >> 1)) / SystemnsDelayFactor)//(SYSTEM_NSDELAY_CORE_FACTOR >> 1)) / SYSTEM_NSDELAY_CORE_FACTOR)
-//		: [ucnt] "l" ((cnt + (SYSTEM_NSDELAY_CORE_FACTOR >> 1)) / SYSTEM_NSDELAY_CORE_FACTOR)
-		:"r1"
+		: [ucnt] "l" (loops)
+		:"r1", "cc"
 		 );
 }
 

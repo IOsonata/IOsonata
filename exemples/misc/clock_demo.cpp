@@ -191,30 +191,41 @@ static bool ClockDemoClockEnd(void)
 
 static void ClockDemoTimer(void)
 {
-	// Refresh the divider after a peripheral-clock change, with timer stopped.
-	uint32_t frequency = TimerSetFrequency(&s_Timer, s_TimerCfg.Freq);
-	s_InterruptCount = 0U;
-	uint64_t period = nsTimerEnableTrigger(&s_Timer, 0, 10000000ULL,
-		TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
-	if (frequency == 0U || period == 0U || !TimerEnable(&s_Timer))
+	for (unsigned delay = 0U; delay < 2U; delay++)
 	{
-		TimerDisableTrigger(&s_Timer, 0);
+		// Refresh the divider after a peripheral-clock change, with timer stopped.
+		uint32_t frequency = TimerSetFrequency(&s_Timer, s_TimerCfg.Freq);
+		s_InterruptCount = 0U;
+		uint64_t period = nsTimerEnableTrigger(&s_Timer, 0, 10000000ULL,
+			TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
+		if (frequency == 0U || period == 0U || !TimerEnable(&s_Timer))
+		{
+			TimerDisableTrigger(&s_Timer, 0);
+			TimerDisable(&s_Timer);
+			ClockDemoResult("Timer start", false);
+			return;
+		}
+		uint32_t start = TimerGetMicrosecond(&s_Timer);
+		if (delay == 0U)
+		{
+			msDelay(250);
+		}
+		else
+		{
+			nsDelay(250000000U);
+		}
 		TimerDisable(&s_Timer);
-		ClockDemoResult("Timer start", false);
-		return;
+		uint32_t elapsed = TimerGetMicrosecond(&s_Timer) - start;
+		uint32_t count = s_InterruptCount;
+		TimerDisableTrigger(&s_Timer, 0);
+		uint32_t expected = (uint64_t)elapsed * 1000U / period;
+		uint32_t difference = count > expected ? count - expected : expected - count;
+		SysLogPrintf(SysLogGet(), "Timer: %u Hz, %s 250 ms measured %u us, IRQ %u\r\n",
+			(unsigned)frequency, delay == 0U ? "msDelay" : "nsDelay",
+			(unsigned)elapsed, (unsigned)count);
+		ClockDemoResult("Delay within 2 percent", elapsed >= 245000U && elapsed <= 255000U);
+		ClockDemoResult("Timer count and IRQ", elapsed > 0U && count > 0U && difference <= 1U);
 	}
-	uint32_t start = TimerGetMicrosecond(&s_Timer);
-	msDelay(250);
-	TimerDisable(&s_Timer);
-	uint32_t elapsed = TimerGetMicrosecond(&s_Timer) - start;
-	uint32_t count = s_InterruptCount;
-	TimerDisableTrigger(&s_Timer, 0);
-	uint32_t expected = (uint64_t)elapsed * 1000U / period;
-	uint32_t difference = count > expected ? count - expected : expected - count;
-	SysLogPrintf(SysLogGet(), "Timer: %u Hz, delay 250 ms measured %u us, IRQ %u\r\n",
-		(unsigned)frequency, (unsigned)elapsed, (unsigned)count);
-	ClockDemoResult("Delay within 2 percent", elapsed >= 245000U && elapsed <= 255000U);
-	ClockDemoResult("Timer count and IRQ", elapsed > 0U && count > 0U && difference <= 1U);
 }
 
 #if defined(CLOCK_DEMO_WAKE_PIN)

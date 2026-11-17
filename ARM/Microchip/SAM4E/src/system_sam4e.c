@@ -56,8 +56,11 @@ __WEAK McuOsc_t g_McuOsc = {
 	0
 };
 
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+extern uint32_t SystemMicroSecLoopCnt;
+
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
-uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
+uint32_t SystemnsDelayFactor = 65536UL;
 static bool Sam4eClockWait(uint32_t Mask, uint32_t Value)
 {
 	uint32_t i;
@@ -316,11 +319,9 @@ void SystemCoreClockUpdate( void )
 	}
 
 	SystemCoreClock = clk;
-	if (clk != 0)
-	{
-		SystemnsDelayFactor = (SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK + clk / 2) / clk;
-	}
 
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
 }
 
 uint32_t SystemCoreClockGet()

@@ -130,9 +130,12 @@ __attribute__((weak)) McuOsc_t g_McuOsc = {
 	0U	// No DC/DC regulator stage on SAM D11/D21
 };
 
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+extern uint32_t SystemMicroSecLoopCnt;
+
 // CPU clock after reset is OSC8M divided by 8
 uint32_t SystemCoreClock = SAMD_OSC8M_FREQ / 8UL;
-uint32_t SystemnsDelayFactor = SAMD_NSDELAY_LOOP_CLK * 1000000000UL / (SAMD_OSC8M_FREQ / 8UL);
+uint32_t SystemnsDelayFactor = 65536UL;
 
 // The frequencies of the DFLL48M and the FDPLL96M come from their registers:
 // the C startup clears .bss after SystemInit, a variable set there is lost.
@@ -864,10 +867,8 @@ void SystemCoreClockUpdate(void)
 
 	SystemCoreClock = freq >> ((PM_REGS->PM_CPUSEL & PM_CPUSEL_CPUDIV_Msk) >> PM_CPUSEL_CPUDIV_Pos);
 
-	if (SystemCoreClock != 0U)
-	{
-		SystemnsDelayFactor = SAMD_NSDELAY_LOOP_CLK * 1000000000UL / SystemCoreClock;
-	}
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 13000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (SAMD_NSDELAY_LOOP_CLK * 1000000UL);
 }
 
 // Clock registers at the end of the startup, see s_SamdStartupReg

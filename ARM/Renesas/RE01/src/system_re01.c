@@ -58,8 +58,11 @@ SOFTWARE.
 #define SYSTEM_SCKSCR_CKSEL_SCO		(4)		// Sub-clock osc
 #define SYSTEM_SCKSCR_CKSEL_PLL		(5)		// PLL
 
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+extern uint32_t SystemMicroSecLoopCnt;
+
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
-uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
+uint32_t SystemnsDelayFactor = 65536UL;
 
 // Overload this variable in application firmware to change oscillator
 __WEAK McuOsc_t g_McuOsc = {
@@ -350,6 +353,8 @@ void SystemCoreClockUpdate(void)
 	SystemCoreClock = divider <= 6 ? SystemCoreClock >> divider : 0;
 
 	// Reporting clocks must not change divider or flash settings.
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK_MAX / 1000UL);
 }
 
 

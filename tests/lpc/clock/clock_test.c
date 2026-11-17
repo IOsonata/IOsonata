@@ -38,6 +38,8 @@ SOFTWARE.
 #include "LPC11Uxx.h"
 #include "coredev/system_core_clock.h"
 
+uint32_t SystemMicroSecLoopCnt;
+
 extern uint32_t SystemMainClkFreq;
 
 static void Check(uint32_t Main, uint32_t Core)
@@ -48,6 +50,7 @@ static void Check(uint32_t Main, uint32_t Core)
 	SystemCoreClockUpdate();
 	assert(SystemMainClkFreq == Main);
 	assert(SystemCoreClockGet() == Core);
+	assert(SystemMicroSecLoopCnt == ((uint64_t)Core << 16) / 16000000U);
 	assert(SystemPeriphClockGet(0) == Core);
 	assert(SystemPeriphClockGet(-1) == 0);
 	assert(SystemPeriphClockGet(1) == 0);

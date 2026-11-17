@@ -77,6 +77,10 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
          (TAMPC_PROTECT_GPIOSWD_CTRL_KEY_KEY << TAMPC_PROTECT_GPIOSWD_CTRL_KEY_Pos))
 #endif
 
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+extern uint32_t SystemMicroSecLoopCnt;
+uint32_t SystemnsDelayFactor = 65536UL;
+
 #if defined ( __CC_ARM ) || defined ( __GNUC__ )
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_DEFAULT;
 #elif defined ( __ICCARM__ )
@@ -106,6 +110,8 @@ void SystemCoreClockUpdate(void)
             break;
     }
 #endif
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
 }
 
 void SystemInit(void)

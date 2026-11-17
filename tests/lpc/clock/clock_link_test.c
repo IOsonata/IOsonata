@@ -41,6 +41,8 @@ SOFTWARE.
 #include "LPC11Uxx.h"
 #include "coredev/system_core_clock.h"
 
+uint32_t SystemMicroSecLoopCnt;
+
 typedef uint32_t (*ClockSetter_t)(bool, int);
 
 // Strong board definition must override the driver's weak default in C and C++.
