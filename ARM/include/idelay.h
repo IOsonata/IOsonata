@@ -79,6 +79,8 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 #endif
 		" CMP %[low], #0\n"
 		" BEQ 2f\n"
+		// Keep loop placement independent of surrounding code and optimization.
+		".balign 8\n"
 		"1:\n"
 		" NOP\n"
 		" NOP\n"
@@ -129,6 +131,8 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 #endif
 		" CMP %[low], #0\n"
 		" BEQ 2f\n"
+		// Keep loop placement independent of surrounding code and optimization.
+		".balign 8\n"
 		"1:\n"
 		" SUBS %[low], #1\n"
 		" BNE 1b\n"
