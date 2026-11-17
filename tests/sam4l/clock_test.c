@@ -213,7 +213,7 @@ int main(void)
 			SCIF_PCLKSR_DFLL0LOCKC | SCIF_PCLKSR_DFLL0LOCKF;
 		assert(SystemCoreClockSelect(OSC_TYPE_RC, 8000000));
 		assert(SystemCoreClockGet() == 40000000);
-		assert(SystemMicroSecLoopCnt == ((uint64_t)40000000U << 16) / 13000000U);
+		assert(SystemMicroSecLoopCnt == ((uint64_t)40000000U << 16) / 14000000U);
 		assert(SystemnsDelayFactor == ((uint64_t)40000000U << 16) / 3000000U);
 		assert(g_TestMask == mask);
 		assert(SAM4L_WDT->WDT_CTRL == WDT_CTRL_EN);

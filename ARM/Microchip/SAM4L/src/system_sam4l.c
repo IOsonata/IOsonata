@@ -47,7 +47,8 @@
 #include "coredev/system_core_clock.h"
 
 #define SYSTEM_CORE_CLOCK               48000000UL
-#define SAM4L_USDELAY_LOOP_CYCLES       13UL
+// Ten NOPs, decrement and taken branch in the aligned ARM microsecond loop.
+#define SAM4L_USDELAY_LOOP_CYCLES       14UL
 #define SAM4L_NSDELAY_LOOP_CYCLES       3UL
 #define RCSYS_FREQ                      115000UL
 #define USB_FREQ                        48000000UL

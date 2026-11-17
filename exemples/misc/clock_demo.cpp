@@ -373,6 +373,11 @@ static void ClockDemoSleep(void)
 
 int main(void)
 {
+#if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
+	// Keep the timer handle alive after acquiring and stopping a retained timer.
+	TimerDev_t retainedTimer = {};
+	TimerCfg_t retainedCfg = s_TimerCfg;
+#endif
 	if (!UARTInit(&s_Uart, &s_UartCfg) ||
 		!SysLogInitNoTimer(SysLogGet(), &s_LogCfg, &s_Uart.DevIntrf, 0, 0))
 	{
@@ -382,6 +387,17 @@ int main(void)
 	SysLogPrintf(SysLogGet(), "ClockDemo\r\nStartup CPU %u Hz, APB %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	ClockDemoFlush();
+#if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
+	retainedCfg.DevNo = CLOCK_DEMO_STOP_TIMER_DEVNO;
+	retainedCfg.Freq = 0;
+	retainedCfg.EvtHandler = nullptr;
+	if (!TimerInit(&retainedTimer, &retainedCfg))
+	{
+		ClockDemoResult("Retained timer initialization", false);
+		return 1;
+	}
+	TimerDisable(&retainedTimer);
+#endif
 #if !CLOCK_DEMO_DEFER_TIMER
 	if (!ClockDemoTimerInit())
 	{

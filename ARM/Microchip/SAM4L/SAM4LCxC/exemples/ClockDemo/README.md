@@ -10,7 +10,9 @@ Internal sources only; external crystal frequency is not assumed.
 
 This project runs three clock-selection cycles. UART is drained and powered
 off before each change, then initialized again to update its baud divider.
-Clock selection completes before the timer is initialized because some ports
+The demo acquires and stops AST (virtual timer 0), which can remain running
+from ClockDisplayDemo across a reset. This deliberately resets its counter.
+Clock selection completes before the measurement timer is initialized because some ports
 retain timer module ownership after TimerDisable. It then checks the first
 high-frequency timer at 1 MHz requested rate, with a 10 ms trigger over 250 ms.
 The returned timer rate may differ from 1 MHz. Delay and interrupt checks use
@@ -19,7 +21,10 @@ No watchdog is enabled. Connect OLED1 to EXT2. After the initial checks, send
 uppercase U at each UART prompt (1,000,000 baud). Three SLEEP0 cycles follow;
 press and release OLED1 BUTTON1 (PC06) at each sleep prompt. The GPIO interrupt
 must be observed, then clocks, both delays, timer interrupts and UART RX are
-checked again. Expect zero failures. Hardware confirmation is pending.
+checked again. The maintainer confirmed three GPIO wake cycles, clock
+descriptors, timer interrupts and UART RX. The microsecond delay calibration
+was corrected after the Release run measured 270.69 ms instead of 250 ms;
+its hardware retest is pending.
 
 SLEEP0 stops the CPU while peripheral clocks continue. This checks resumable
 sleep; it does not exercise WAIT, RETENTION or reset-on-wake Backup mode.
