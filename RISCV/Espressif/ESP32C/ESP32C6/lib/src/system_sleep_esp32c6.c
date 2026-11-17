@@ -469,7 +469,9 @@ static bool Esp32C6Configure(bool bDeep, bool bPll)
 	C6_PMU(0x6CU) = 0U;
 	C6_PMU(0x70U) = 0U;
 	C6_PMU(0x8CU) = (C6_PMU(0x8CU) & ~C6_SYSCLK_MASK) | C6_SYSCLK_SLEEP;
-	C6_PMU(0x124U) = (1UL << 31) | wake;
+	// SystemPowerOff cannot return a rejected request. Match the reference
+	// Deep-sleep entry: an arriving wake source must restart the CPU.
+	C6_PMU(0x124U) = (1UL << 31) | (bDeep ? 0U : wake);
 	C6_PMU(0x128U) = wake;
 	C6_LP_STORE9 = (C6_LP_STORE9 & ~1U) | (bDeep ? 1U : 0U);
 	if (C6_PMU(0x128U) != wake ||

@@ -420,6 +420,25 @@ static void PowerDemoSleepTrace(uint32_t Stage)
 }
 #endif
 
+// Require a stable release before arming another sleep cycle.
+static void PowerDemoWaitRelease(void)
+{
+	unsigned idle = 0U;
+
+	while (idle < 20U)
+	{
+		if (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) == s_WakeButIdle)
+		{
+			idle++;
+		}
+		else
+		{
+			idle = 0U;
+		}
+		msDelay(1);
+	}
+}
+
 int main()
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
@@ -450,10 +469,7 @@ int main()
 	wakeCount = 0U;
 	while (1)
 	{
-		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle)
-		{
-			msDelay(10);
-		}
+		PowerDemoWaitRelease();
 		PowerDemoPut("Entering Standby\r\n");
 		PowerDemoDrain();
 #if !defined(ESP32C6) || !defined(POWER_DEMO_SLEEP_TRACE) || !POWER_DEMO_SLEEP_TRACE
@@ -583,7 +599,7 @@ int main()
 	msDelay(POWER_DEMO_DELAY);
 
 	// The button must be released before configuring System OFF wakeup.
-	while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle);
+	PowerDemoWaitRelease();
 
 	if (SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE))
 	{
@@ -603,11 +619,7 @@ int main()
 			}
 		}
 		SysLogPrintf(SysLogGet(), "EXT1 wake PASS. Disconnect GPIO3 from GND\r\n");
-		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) != s_WakeButIdle)
-		{
-			msDelay(10);
-		}
-		msDelay(20);
+		PowerDemoWaitRelease();
 #endif
 		SysLogPrintf(SysLogGet(), "Power off, press the button to wake up\r\n");
 	}
