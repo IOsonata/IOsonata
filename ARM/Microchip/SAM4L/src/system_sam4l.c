@@ -958,6 +958,10 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		{
 			return Sam4lClockFailed(SAM4L_STARTUP_LFCLK);
 		}
+		if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC)
+		{
+			g_McuOsc.LowPwrOsc.Freq = 32768U;
+		}
 	}
 	else
 	{
@@ -1400,7 +1404,17 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	if (result)
 	{
 		g_McuOsc.LowPwrOsc = requested.LowPwrOsc;
+		if (ClkSrc == OSC_TYPE_RC)
+		{
+			g_McuOsc.LowPwrOsc.Freq = 32768U;
+		}
 	}
 	__set_PRIMASK(primask);
 	return result;
+}
+
+void SystemOscInit(void)
+{
+	// SystemInit and the clock selectors configure the oscillators. SAM4L
+	// has no programmable crystal load capacitance to apply separately.
 }

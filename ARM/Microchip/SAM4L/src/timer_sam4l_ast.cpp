@@ -33,71 +33,145 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "timer_sam4l.h"
 
-// Bounded even if the selected source fails. At 48 MHz this allows several
-// 32 kHz synchronization cycles. No unbounded waits in a callback/ISR.
-bool Sam4lAstWait(uint32_t mask)
+// Bounded even if the selected source fails.
+bool Sam4lAstWait(uint32_t Mask)
 {
-	for (uint32_t i = 0; i < 100000; ++i)
-		if (!(SAM4L_AST->AST_SR & mask)) return true;
+	for (uint32_t i = 0; i < 100000U; i++)
+	{
+		if ((SAM4L_AST->AST_SR & Mask) == 0U)
+		{
+			return true;
+		}
+	}
 	return false;
 }
-static bool Write(volatile uint32_t *reg, uint32_t value)
+
+static bool Write(volatile uint32_t *pReg, uint32_t Value)
 {
-	if (!Sam4lAstWait(AST_SR_BUSY)) return false;
-	*reg = value;
+	if (!Sam4lAstWait(AST_SR_BUSY))
+	{
+		return false;
+	}
+	*pReg = Value;
 	return Sam4lAstWait(AST_SR_BUSY);
 }
+
 bool Sam4lAstSetup(Sam4l_TimerData_t &d)
 {
-	Sam4lTimerPmWrite(&SAM4L_PM->PM_PBDMASK, SAM4L_PM->PM_PBDMASK | PM_PBDMASK_AST);
-	SAM4L_AST->AST_IDR = 0xFFFFFFFF;
-	if (!Sam4lAstWait(AST_SR_BUSY | AST_SR_CLKBUSY)) return false;
+	Sam4lTimerPmWrite(&SAM4L_PM->PM_PBDMASK,
+		SAM4L_PM->PM_PBDMASK | PM_PBDMASK_AST | PM_PBDMASK_BPM);
+	SAM4L_AST->AST_IDR = 0xFFFFFFFFU;
+	if (!Sam4lAstWait(AST_SR_BUSY | AST_SR_CLKBUSY) ||
+		!Write(&SAM4L_AST->AST_WER, 0U))
+	{
+		return false;
+	}
 	// CSSEL and CEN must never change in the same write (19.5.1).
 	SAM4L_AST->AST_CLOCK = SAM4L_AST->AST_CLOCK & ~AST_CLOCK_CEN;
-	if (!Sam4lAstWait(AST_SR_CLKBUSY)) return false;
+	if (!Sam4lAstWait(AST_SR_CLKBUSY))
+	{
+		return false;
+	}
 	SAM4L_AST->AST_CLOCK = AST_CLOCK_CSSEL_32KHZCLK;
-	if (!Sam4lAstWait(AST_SR_CLKBUSY)) return false;
+	if (!Sam4lAstWait(AST_SR_CLKBUSY))
+	{
+		return false;
+	}
 	SAM4L_AST->AST_CLOCK = AST_CLOCK_CSSEL_32KHZCLK | AST_CLOCK_CEN;
-	if (!Sam4lAstWait(AST_SR_CLKBUSY)) return false;
-	if (!Write(&SAM4L_AST->AST_CR, AST_CR_PSEL(d.Select)) ||
-		!Write(&SAM4L_AST->AST_DTR, 0) ||
-		!Write(&SAM4L_AST->AST_SCR, AST_SCR_MASK)) return false;
+	if (!Sam4lAstWait(AST_SR_CLKBUSY) ||
+		!Write(&SAM4L_AST->AST_CR, AST_CR_PSEL(d.Select)) ||
+		!Write(&SAM4L_AST->AST_DTR, 0U) ||
+		!Write(&SAM4L_AST->AST_SCR, AST_SCR_MASK))
+	{
+		return false;
+	}
+	// BPM table 11-3: bit 1 routes an enabled AST wake into Backup wake.
+	// WER is zero while stopped; enabling this route alone cannot wake the CPU.
+	SAM4L_BPM->BPM_BKUPWEN |= 1UL << 1;
 	SAM4L_AST->AST_IER = AST_SR_OVF;
 	return true;
 }
-bool Sam4lAstRun(Sam4l_TimerData_t &d, bool run)
+
+bool Sam4lAstRun(Sam4l_TimerData_t &d, bool Run)
 {
-	return Write(&SAM4L_AST->AST_CR, AST_CR_PSEL(d.Select) | (run ? AST_CR_EN : 0));
+	// WER is independent of IMR and requires the same synchronization as CR.
+	// Disable wake first, then stop. Restore only this driver's enabled events.
+	if (!Write(&SAM4L_AST->AST_WER, 0U) ||
+		!Write(&SAM4L_AST->AST_CR, AST_CR_PSEL(d.Select) | (Run ? AST_CR_EN : 0U)))
+	{
+		return false;
+	}
+	return !Run || Write(&SAM4L_AST->AST_WER,
+		SAM4L_AST->AST_IMR & (AST_WER_OVF | AST_WER_ALARM0));
 }
+
 bool Sam4lAstReset(Sam4l_TimerData_t &d)
 {
 	return Sam4lAstRun(d, false) &&
 		Write(&SAM4L_AST->AST_CR, AST_CR_PSEL(d.Select) | AST_CR_PCLR) &&
-		Write(&SAM4L_AST->AST_CV, 0) && Write(&SAM4L_AST->AST_SCR, AST_SCR_MASK);
+		Write(&SAM4L_AST->AST_CV, 0U) && Write(&SAM4L_AST->AST_SCR, AST_SCR_MASK);
 }
+
 uint64_t Sam4lAstCount(Sam4l_TimerData_t &d)
 {
-	if (!Sam4lAstWait(AST_SR_BUSY)) { d.Healthy = false; return d.Timer->Rollover + d.Timer->LastCount; }
+	if (!Sam4lAstWait(AST_SR_BUSY))
+	{
+		d.Healthy = false;
+		return d.Timer->Rollover + d.Timer->LastCount;
+	}
 	uint32_t before = SAM4L_AST->AST_SR;
 	uint32_t low = SAM4L_AST->AST_CV;
 	uint32_t after = SAM4L_AST->AST_SR;
-	if ((after & AST_SR_OVF) && !(before & AST_SR_OVF)) low = SAM4L_AST->AST_CV;
+	if ((after & AST_SR_OVF) && !(before & AST_SR_OVF))
+	{
+		low = SAM4L_AST->AST_CV;
+	}
 	uint32_t flags = (before | after) & (AST_SR_OVF | AST_SR_ALARM0);
-	if (flags) {
-		if (!Write(&SAM4L_AST->AST_SCR, flags)) d.Healthy = false;
-		if (flags & AST_SR_OVF) { d.Timer->Rollover += 0x100000000ULL; d.Overflow = true; }
+	if (flags != 0U)
+	{
+		// SCR also acknowledges the wake signal, permitting the next sleep.
+		if (!Write(&SAM4L_AST->AST_SCR, flags))
+		{
+			d.Healthy = false;
+		}
+		if (flags & AST_SR_OVF)
+		{
+			d.Timer->Rollover += 0x100000000ULL;
+			d.Overflow = true;
+		}
 		NVIC_SetPendingIRQ(d.Irq);
 	}
 	return d.Timer->Rollover + low;
 }
-bool Sam4lAstArm(Sam4l_TimerData_t &d, bool enable)
+
+bool Sam4lAstArm(Sam4l_TimerData_t &d, bool Enable)
 {
 	SAM4L_AST->AST_IDR = AST_SR_ALARM0;
-	if (!Write(&SAM4L_AST->AST_SCR, AST_SR_ALARM0)) return false;
-	if (!enable) return true;
-	if (!Write(&SAM4L_AST->AST_AR0, (uint32_t)d.Trigger[0].Deadline)) return false;
+	if (!Sam4lAstWait(AST_SR_BUSY) ||
+		!Write(&SAM4L_AST->AST_WER, SAM4L_AST->AST_WER & ~AST_WER_ALARM0) ||
+		!Write(&SAM4L_AST->AST_SCR, AST_SR_ALARM0))
+	{
+		return false;
+	}
+	if (!Enable)
+	{
+		return true;
+	}
+	if (!Write(&SAM4L_AST->AST_AR0, (uint32_t)d.Trigger[0].Deadline))
+	{
+		return false;
+	}
 	SAM4L_AST->AST_IER = AST_SR_ALARM0;
-	return true;
+	return !d.Running || Write(&SAM4L_AST->AST_WER,
+		SAM4L_AST->AST_WER | AST_WER_ALARM0);
 }
-extern "C" void AST_ALARM_Handler(void) { Sam4lTimerIRQ(0); }
-extern "C" void AST_OVF_Handler(void) { Sam4lTimerIRQ(0); }
+
+extern "C" void AST_ALARM_Handler(void)
+{
+	Sam4lTimerIRQ(0);
+}
+
+extern "C" void AST_OVF_Handler(void)
+{
+	Sam4lTimerIRQ(0);
+}

@@ -74,6 +74,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define CLOCK_DEMO_DEFER_TIMER 0
 // AST survives reset and may still be running from a previous application.
 #define CLOCK_DEMO_STOP_TIMER_DEVNO 0
+#define CLOCK_DEMO_SLEEP_TIMER_MS 1000U
 
 // OLED1 BUTTON1 on EXT2, PC06. GPIO interrupt group 8 covers PC00..PC07.
 #define CLOCK_DEMO_WAKE_PORT IOPORTC

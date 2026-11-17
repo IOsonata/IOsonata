@@ -53,13 +53,13 @@ struct Tc { TcChannel TC_CHANNEL[3]; } tc[2];
 #define SAM4L_TC1 (&tc[1])
 struct {uint32_t PM_UNLOCK=0,PM_PBAMASK=0,PM_PBDMASK=0,PM_PBADIVMASK=0;} pm;
 #define SAM4L_PM (&pm)
-struct {uint32_t BPM_PMCON=0;} bpm;
+struct {uint32_t BPM_PMCON=0,BPM_BKUPWEN=0;} bpm;
 #define SAM4L_BPM (&bpm)
 struct {uint32_t BSCIF_PCLKSR=BSCIF_PCLKSR_OSC32RDY,BSCIF_OSCCTRL32=BSCIF_OSCCTRL32_EN32K,BSCIF_RC32KCR=0;} bscif;
 #define SAM4L_BSCIF (&bscif)
 struct AstStatus {uint32_t value=0; operator uint32_t();};
 struct {
-	uint32_t AST_CR=0,AST_CLOCK=0,AST_DTR=0,AST_CV=0,AST_SCR=0,AST_AR0=0,AST_IMR=0;
+	uint32_t AST_CR=0,AST_CLOCK=0,AST_DTR=0,AST_CV=0,AST_SCR=0,AST_AR0=0,AST_IMR=0,AST_WER=0;
 	AstStatus AST_SR;
 	MaskWrite AST_IER{&AST_IMR,true},AST_IDR{&AST_IMR,false};
 } ast;
@@ -128,6 +128,7 @@ int main() {
 	ast.AST_CV=123456;
 	ast.AST_SR.value=AST_SR_OVF | AST_SR_ALARM0;
 	ast.AST_IMR=AST_SR_ALARM0;
+	ast.AST_WER=AST_WER_PER0 | AST_WER_ALARM0;
 	TimerDev_t timers[7]={},other={};
 	TimerCfg_t cfg={0,TIMER_CLKSRC_DEFAULT,0,7,Event,false};
 	assert(TimerGetLowFreqDevCount()==1&&TimerGetHighFreqDevCount()==6&&TimerGetHighFreqDevNo()==1);
@@ -154,6 +155,8 @@ int main() {
 		assert(timers[dev].GetMaxTrigger(&timers[dev])==(dev?3:1));
 		assert(!timers[dev].EnableExtTrigger(&timers[dev],0,TIMER_EXTTRIG_SENSE_TOGGLE));
 	}
+	assert(ast.AST_WER == AST_WER_OVF);
+	assert(bpm.BPM_BKUPWEN & (1U << 1));
 	assert(pm.PM_PBADIVMASK==64 && (pm.PM_PBAMASK & (PM_PBAMASK_TC0|PM_PBAMASK_TC1)));
 	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0 | PM_PBAMASK_TC1));
 	for (int dev = 1; dev < 7; dev++) timers[dev].Disable(&timers[dev]);
@@ -170,17 +173,24 @@ int main() {
 	for(int dev=0;dev<7;++dev) {
 		auto &t=timers[dev];
 		assert(t.EnableTrigger(&t,0,100000000,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr));
+		if (dev == 0) assert(ast.AST_WER == (AST_WER_OVF | AST_WER_ALARM0));
 		uint32_t period=g_Sam4lTimerData[dev].Trigger[0].Ticks;
 		Advance(dev,period*3); assert(events[dev][0]==3);
 		uint64_t count=t.GetTickCount(&t); assert(count==period*3);
-		t.Disable(&t); Advance(dev,period);assert(t.GetTickCount(&t)==count);
-		assert(t.Enable(&t));Advance(dev,period);assert(events[dev][0]==4);
+		t.Disable(&t);
+		if (dev == 0) assert(ast.AST_WER == 0);
+		Advance(dev,period);assert(t.GetTickCount(&t)==count);
+		assert(t.Enable(&t));
+		if (dev == 0) assert(ast.AST_WER == (AST_WER_OVF | AST_WER_ALARM0));
+		Advance(dev,period);assert(events[dev][0]==4);
 		t.Disable(&t);t.Reset(&t);assert(t.GetTickCount(&t)==0);
 		Advance(dev,period);assert(t.GetTickCount(&t)==0);
 		assert(t.Enable(&t));
 		Advance(dev,period,false);assert(t.GetTickCount(&t)==period); // reading status must not lose compare
 		Service(dev);assert(events[dev][0]==5);
-		t.DisableTrigger(&t,0);Advance(dev,period);assert(events[dev][0]==5);
+		t.DisableTrigger(&t,0);
+		if (dev == 0) assert(ast.AST_WER == AST_WER_OVF);
+		Advance(dev,period);assert(events[dev][0]==5);
 		assert(t.FindAvailTrigger(&t)==0);
 		assert(t.EnableTrigger(&t,0,UINT64_MAX,TIMER_TRIG_TYPE_SINGLE,nullptr,nullptr)==
 			(UINT32_MAX*1000000000ULL+t.Freq/2)/t.Freq);
@@ -228,6 +238,20 @@ int main() {
 		Advance(dev,3);assert(events[dev][0]==previous);
 		Advance(dev,5);assert(events[dev][0]==previous+2);
 	}
+	// A one-shot alarm clears its wake request before invoking user code.
+	a.DisableTrigger(&a, 0);
+	assert(a.EnableTrigger(&a, 0, 4000000000ULL, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
+	Advance(0, 4);
+	assert(ast.AST_WER == AST_WER_OVF);
+	assert(!(ast.AST_SR.value & AST_SR_ALARM0));
+	a.Disable(&a);
+	assert(ast.AST_WER == 0U);
+	assert(a.EnableTrigger(&a, 0, 4000000000ULL, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
+	assert(ast.AST_WER == 0U);
+	assert(a.Enable(&a));
+	assert(ast.AST_WER == (AST_WER_OVF | AST_WER_ALARM0));
+	Advance(0, 4);
+	assert(ast.AST_WER == AST_WER_OVF);
 	// The user's AST 1 Hz / 100 ms request returns four seconds.
 	assert(a.EnableTrigger(&a,0,100000000,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr)==4000000000ULL);
 	// Changing frequency also rounds an existing short period to four ticks.

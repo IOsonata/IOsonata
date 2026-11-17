@@ -1,5 +1,52 @@
 # MCU core power and clock ports
 
+## SAM4L implementation and board evidence, November 17
+
+The SAM4L generic power/clock entry points are implemented for SAM4LC and
+SAM4LS. This states source coverage, not validation of every hardware mode.
+
+| Operation | Implementation |
+| --- | --- |
+| Core source | RC1M, RCFAST 4/8/12 MHz through DFLL; RC80M; OSC0 crystal/bypass with PLL where a valid ratio exists |
+| Low-frequency source | RC32K, 32768 Hz crystal, external clock; active consumers prevent unsafe changes |
+| Peripheral clocks | PBA/PBB/PBC/PBD dividers; PBB remains equal to CPU/HSB |
+| Delay factors | Refreshed after core clock changes for both delay loops |
+| SystemOscInit | Linkable no-op, matching SAMD; SystemInit/selectors perform configuration and crystal load capacitance is not programmable |
+| SystemSleep | SLEEP0 for ordinary IRQs, RETENTION for asynchronous EIC/AST, WAIT for configured PM.AWEN peripheral sources |
+| SystemPowerOff | Backup, exited by reset; EIC and AST wake routes supported |
+| Reset/retention | Reset and wake reason decoding; four BSCIF backup registers; SRAM retention in Backup is physically unavailable |
+| Watchdog | Disabled at startup; applications own enabling it |
+
+AST previously enabled IMR without WER. The timer driver now synchronizes WER
+writes, enables overflow/alarm wake while running, removes wake requests when
+stopped, and clears wake flags through SCR. Single-shot completion disables the
+alarm wake before delivering the callback. Setup clears retained wake state
+and enables the BPM AST Backup route while preserving other routes. The
+32000 Hz RC32K request alias now reports its actual nominal 32768 Hz source.
+
+The maintainer's latest SAM4LC ClockDemo run ended with zero failures: RC4/RC12,
+PBA divisors 1/2/4/1, both delay functions, 25 timer interrupts per interval,
+six OLED1 BUTTON1 RETENTION wakes, CPU/APB/LF descriptors, UART RX and APB
+restoration passed. The 250 ms delays were approximately 251194..251600 us.
+Earlier eight consecutive Backup pin wakes advanced the retained count 1..9.
+ClockDisplayDemo and every interrupt/DMA combination of LCDConsoleDisplayDemo
+also passed on this board.
+
+Validation for this update: all 124 SAM4LC and 128 SAM4LS library sources
+compiled in Debug and Release, followed by relinks after the final edits.
+Sixteen SAM4L demo links passed: ClockDemo, button/timer PowerOffDemo on both
+families and both display demos on SAM4LC. The edited C++ sources compile with
+GNU++11. All fifteen public clock/power functions have one definition in each
+archive. Existing timer, clock and power register tests passed. Shared demo
+rebuilds also passed on D11, D21, C3 and C6.
+
+ClockDemo now adds a one-second AST wake after each button wake. PowerOffDemo
+has a selectable three-second AST Backup wake run. These additions need board
+execution. WAIT/SleepWalking needs an application-configured asynchronous
+peripheral source; its register entry/restoration is checked, not its hardware
+operation. External oscillators, SAM4LS hardware and sleep currents remain
+unmeasured. They are not represented as successful hardware tests.
+
 ## November 17 implementation review
 
 SAMD11, SAMD21, SAM4L, ESP32-C3 and ESP32-C6 are not marked fully complete.
@@ -48,8 +95,8 @@ Hardware validation still required for this revision:
 
 - D11/D21 changed dividers, actual D11 source selection, and sleep at reduced
   clock rates, including UART receive after resume.
-- SAM4LC changed PBA dividers and RETENTION entry/resume with OLED1 BUTTON1.
-  WAIT/SleepWalking and AST wake need their corresponding configured sources.
+- SAM4LC AST automatic wake and WAIT/SleepWalking. PBA dividers and OLED1
+  RETENTION wake now have the passing board result recorded above.
 - C3/C6 retained SRAM across repeated Deep-sleep pin wakes.
 - Sleep-current measurements and external oscillator configurations.
 
@@ -102,7 +149,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0/WAIT/RETENTION resume implemented | SAM4LC clock/delay checks and eight consecutive Backup wakes passed; three Release SLEEP0 cycles passed with clocks, delays, timer IRQs and UART RX; WAIT/RETENTION hardware validation pending |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0/WAIT/RETENTION resume implemented | SAM4LC clock/delay checks and eight consecutive Backup wakes passed; three Release SLEEP0 cycles passed with clocks, delays, timer IRQs and UART RX; six EIC RETENTION cycles and PBA dividers passed; AST and WAIT hardware validation pending |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; D11 SW0 and D21 SW0/OLED1 BUTTON1 repeated resume passed | D21 clocks, delays, timer IRQs, UART RX and SRAM samples passed; full SRAM continuity, LF switching and sleep current remain unverified |
 | LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
 | LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |

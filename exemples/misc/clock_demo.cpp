@@ -119,6 +119,12 @@ static const UARTCfg_t s_UartCfg = {
 };
 static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
+#if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
+static TimerDev_t s_RetainedTimer;
+#endif
+#if defined(CLOCK_DEMO_SLEEP_TIMER_MS)
+static volatile bool s_TimerWoke;
+#endif
 static volatile uint32_t s_InterruptCount;
 static unsigned s_Failures;
 #if defined(CLOCK_DEMO_WAKE_IRQ)
@@ -335,6 +341,50 @@ static void ClockDemoWakeHandler(int IntNo, void *pCtx)
 }
 #endif
 
+#if defined(CLOCK_DEMO_SLEEP_TIMER_MS)
+static void ClockDemoSleepTimerHandler(TimerDev_t *pTimer, int Trigger, void *pContext)
+{
+	(void)pTimer;
+	(void)Trigger;
+	(void)pContext;
+	s_TimerWoke = true;
+}
+
+static void ClockDemoTimerSleep(void)
+{
+	ClockDemoPrint("Timer sleep: automatic wake after %u ms\r\n",
+		(unsigned)CLOCK_DEMO_SLEEP_TIMER_MS);
+	ClockDemoFlush();
+	// SetFrequency refreshes the LF rate and restarts the stopped timer.
+	if (TimerSetFrequency(&s_RetainedTimer, 1024U) == 0U)
+	{
+		ClockDemoResult("Sleep timer frequency", false);
+		return;
+	}
+	UARTDisable(&s_Uart);
+	uint32_t state = DisableInterrupt();
+	s_TimerWoke = false;
+	uint32_t start = TimerGetMicrosecond(&s_RetainedTimer);
+	uint64_t period = nsTimerEnableTrigger(&s_RetainedTimer, 0,
+		(uint64_t)CLOCK_DEMO_SLEEP_TIMER_MS * 1000000ULL,
+		TIMER_TRIG_TYPE_SINGLE, ClockDemoSleepTimerHandler, nullptr);
+	if (period != 0U && !s_TimerWoke)
+	{
+		// Masking through WFI prevents losing an alarm between arming and sleep.
+		SystemSleep();
+	}
+	EnableInterrupt(state);
+	uint32_t elapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+	TimerDisableTrigger(&s_RetainedTimer, 0);
+	TimerDisable(&s_RetainedTimer);
+	UARTEnable(&s_Uart);
+	ClockDemoPrint("Timer wake: %u us\r\n", (unsigned)elapsed);
+	uint64_t expected = period / 1000U;
+	ClockDemoResult("Timer wake interrupt", period != 0U && s_TimerWoke &&
+		elapsed >= expected * 98U / 100U && elapsed <= expected * 102U / 100U);
+}
+#endif
+
 #if defined(CLOCK_DEMO_WAKE_PIN)
 static void ClockDemoSleep(void)
 {
@@ -402,6 +452,9 @@ static void ClockDemoSleep(void)
 #else
 	(void)SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINSENSE_DISABLE);
 #endif
+#if defined(CLOCK_DEMO_SLEEP_TIMER_MS)
+	ClockDemoTimerSleep();
+#endif
 	ClockDemoPrint("Sleep returned; checking clocks\r\n");
 	ClockDemoResult("CPU clock after resume", SystemCoreClockGet() == core &&
 		GetHighFreqOscType() == high.Type && GetHighFreqOscFreq() == high.Freq);
@@ -423,7 +476,6 @@ int main(void)
 {
 #if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
 	// Keep the timer handle alive after acquiring and stopping a retained timer.
-	TimerDev_t retainedTimer = {};
 	TimerCfg_t retainedCfg = s_TimerCfg;
 #endif
 	if (!UARTInit(&s_Uart, &s_UartCfg))
@@ -438,12 +490,12 @@ int main(void)
 	retainedCfg.DevNo = CLOCK_DEMO_STOP_TIMER_DEVNO;
 	retainedCfg.Freq = 0;
 	retainedCfg.EvtHandler = nullptr;
-	if (!TimerInit(&retainedTimer, &retainedCfg))
+	if (!TimerInit(&s_RetainedTimer, &retainedCfg))
 	{
 		ClockDemoResult("Retained timer initialization", false);
 		return 1;
 	}
-	TimerDisable(&retainedTimer);
+	TimerDisable(&s_RetainedTimer);
 #endif
 #if !CLOCK_DEMO_DEFER_TIMER
 	if (!ClockDemoTimerInit())

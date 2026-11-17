@@ -6,6 +6,18 @@ build the matching library configuration first. Board pin maps come from the
 existing example named in each README. These additions provide 29 ClockDemo
 projects and 10 missing PowerOffDemo projects outside ESP32.
 
+## SAM4LC latest hardware result
+
+The maintainer reported zero failures with RC4/RC12 and PBA divisors 1/2/4/1,
+both delays and timer IRQs at every rate, six OLED1 BUTTON1 RETENTION wakes,
+clock restoration and UART RX. ClockDemo now also checks a one-second automatic
+AST wake after each button wake; that addition has not yet run on the board.
+
+PowerOffDemo retains button wake by default. Set POWER_DEMO_TIMER_WAKE_MS=3000
+in its board.h or application compiler settings for automatic AST Backup wake.
+Expect reset reason 0x1000 and a rising retained start count. Both profiles
+build for SAM4LC and SAM4LS in Debug and Release.
+
 ## Current focused regression
 
 The November 17 completion review rebuilt all library sources for SAMD11 (239),

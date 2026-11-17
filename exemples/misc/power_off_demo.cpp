@@ -51,6 +51,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "coredev/uart.h"
+#include "coredev/timer.h"
 #include "coredev/system_core_clock.h"
 #include "syslog.h"
 #include "idelay.h"
@@ -133,6 +134,15 @@ static const UARTCfg_t s_UartCfg = {
 };
 
 static UART s_Uart;
+#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
+static TimerDev_t s_WakeTimer;
+static const TimerCfg_t s_WakeTimerCfg = {
+	.DevNo = POWER_DEMO_TIMER_WAKE_DEVNO,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 1024U,
+	.IntPrio = 6,
+};
+#endif
 
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 // Sample static and stack storage without overwriting live application RAM.
@@ -505,6 +515,20 @@ int main()
 
 	msDelay(POWER_DEMO_DELAY);
 
+#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
+#if defined(WAKE_BUT_PIN)
+	(void)SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, IOPINSENSE_DISABLE);
+#endif
+	if (!TimerInit(&s_WakeTimer, &s_WakeTimerCfg))
+	{
+		SysLogPrintf(SysLogGet(), "Wake timer initialization FAIL\r\n");
+		(void)SysLogFlush(SysLogGet());
+		return 1;
+	}
+	TimerDisable(&s_WakeTimer);
+	SysLogPrintf(SysLogGet(), "Power off, automatic timer wake in %u ms\r\n",
+		(unsigned)POWER_DEMO_TIMER_WAKE_MS);
+#else
 	// Configure the pin and wait for release before arming System OFF wakeup.
 	if (PowerDemoWakeConfig())
 	{
@@ -515,6 +539,7 @@ int main()
 		SysLogPrintf(SysLogGet(), "Power off, the button cannot wake this MCU, use the reset pin\r\n");
 	}
 
+#endif
 	// Allow the final UART record to finish before stopping the transport.
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
 	UARTDev_t *pUart = (UARTDev_t *)s_Uart;
@@ -532,6 +557,23 @@ int main()
 	msDelay(100);
 #endif
 
+#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
+	// Keep the alarm pending until Backup entry; the reset starts a new timer.
+	uint32_t state = DisableInterrupt();
+	if (nsTimerEnableTrigger(&s_WakeTimer, 0,
+		(uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000000ULL,
+		TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0U || !TimerEnable(&s_WakeTimer))
+	{
+		EnableInterrupt(state);
+		if (s_Uart.Init(s_UartCfg))
+		{
+			SysLogPrintf(SysLogGet(), "Wake timer start FAIL\r\n");
+			(void)SysLogFlush(SysLogGet());
+			msDelay(100);
+		}
+		return 1;
+	}
+#endif
 	SystemPowerOff();
 
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF

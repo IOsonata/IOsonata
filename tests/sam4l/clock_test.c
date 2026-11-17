@@ -352,6 +352,17 @@ int main(void)
 		assert(g_TestMask == mask);
 	}
 
+	*(volatile uint32_t *)&SAM4L_BSCIF->BSCIF_PCLKSR = BSCIF_PCLKSR_RC32KRDY;
+	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE;
+	SAM4L_PM->PM_PBCMASK = PM_PBCMASK_RESETVALUE;
+	assert(SystemLowFreqClockSelect(OSC_TYPE_RC, 32000U));
+	assert(GetLowFreqOscFreq() == 32768U);
+
+	// The optional oscillator hook must be linkable and leave live clocks alone.
+	memcpy(s_ClockRegisters, (void *)0x40000000, sizeof(s_ClockRegisters));
+	SystemOscInit();
+	assert(memcmp(s_ClockRegisters, (void *)0x40000000, sizeof(s_ClockRegisters)) == 0);
+
 	// Startup still halts on clock failure and disables the default watchdog.
 	*(volatile uint32_t *)&SAM4L_PM->PM_SR = 0;
 	if (setjmp(s_Halt) == 0)

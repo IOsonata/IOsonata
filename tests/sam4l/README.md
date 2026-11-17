@@ -107,7 +107,11 @@ The register model checks both clock enable and start before advancing a TC.
   48 MHz PBA / 128), AST every `2^32 / actual_frequency` seconds. Multiple wraps
   while interrupts are masked cannot be recovered from a single status flag.
 - TC requires the PBA clock while running.
-  AST backup-domain wake and restart behavior is not implemented here.
+  AST enables asynchronous overflow/alarm wake while running and clears WER
+  when stopped. Disabling a trigger removes its alarm wake. SCR acknowledgement
+  clears both interrupt and wake requests. The BPM AST Backup route is enabled
+  without changing other wake sources. After Backup reset, TimerInit starts a
+  new counter and software handle; it does not reconstruct elapsed uptime.
 - External capture and per-tick interrupts are unsupported and rejected.
   Reinitializing a live handle, moving it to another timer, or taking another
   handle's channel is rejected. Keep the Timer object alive while in use.

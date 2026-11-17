@@ -72,4 +72,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define POWER_DEMO_UART_DMA false
 #define POWER_DEMO_UART_OFF 1
 
+// Set to 3000 to exercise AST reset-on-wake instead of button wake.
+#ifndef POWER_DEMO_TIMER_WAKE_MS
+#define POWER_DEMO_TIMER_WAKE_MS 0
+#endif
+#define POWER_DEMO_TIMER_WAKE_DEVNO 0
+
 #endif // __BOARD_H__

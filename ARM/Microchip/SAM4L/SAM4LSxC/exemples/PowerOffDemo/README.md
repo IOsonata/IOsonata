@@ -12,3 +12,17 @@ Verify that the target SystemWakePin supports that pin and power mode.
 PowerOffDemo on a target with existing verified wiring is the reference for
 that board. No watchdog is enabled. Build and hardware status are separate;
 see the cross-target demo matrix.
+
+## Automatic AST Backup wake
+
+Set `POWER_DEMO_TIMER_WAKE_MS` to `3000` in `src/board.h`, or define it in the
+application compiler settings. Leave it at zero for the existing button run.
+Rebuild the library and demo. The timer run disables the configured button wake,
+sets a single AST alarm, drains the UART, then enters Backup. After three
+seconds the application should restart with reset reason `0x1000` (timer wake)
+and an incremented retained start count. Repeat several cycles. AST registers
+survive Backup; TimerInit clears the previous alarm and wake state before
+arming the next one. SRAM is lost, so timer handles are initialized again.
+
+This configuration compiles in Debug and Release. AST Backup wake hardware
+validation is pending; the earlier pin-wake results remain separate.
