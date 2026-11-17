@@ -79,7 +79,13 @@ struct ClockDemoSource_t {
 	uint32_t Frequency;
 	uint32_t CoreMin;
 	uint32_t CoreMax;
-	bool Select = true;
+	bool Select;
+
+	constexpr ClockDemoSource_t(const char *pLabel, OSC_TYPE Osc, uint32_t Freq,
+		uint32_t Min, uint32_t Max, bool bSelect = true) :
+		pName(pLabel), Type(Osc), Frequency(Freq), CoreMin(Min), CoreMax(Max), Select(bSelect)
+	{
+	}
 };
 
 struct ClockDemoLowFreq_t {
