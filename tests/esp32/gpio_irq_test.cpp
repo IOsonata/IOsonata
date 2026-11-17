@@ -9,6 +9,9 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include <map>
 #include <sys/mman.h>
 #include "esp32xx_gpio.h"
+#include "coredev/system_core_clock.h"
+
+McuOsc_t g_McuOsc = {};
 
 #define __INTERRUPT_H__
 static uintptr_t s_Masked;
@@ -211,6 +214,30 @@ int main()
 	assert(uint32_t(ESP32_GPIO_PIN_REG32(6)) == before);
 	assert(s_GpioIsr[6].Handler == Other);
 	IOPinDisableInterrupt(7);
+#endif
+
+#if defined(ESP32C3)
+	// Retain the wake input, clear a previous wake, and restore a rejected entry.
+	ESP32_REG32(0x600080D0UL) = 1U << 1;
+	ESP32_REG32(0x60008110UL) = (1U << 31) | (1U << 3);
+	IOPinConfig(0, 3, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	assert(SystemWakePin(0, 3, IOPINSENSE_LOW_TRANSITION));
+	before = ESP32_IOMUX_PAD_REG(3);
+	for (unsigned cycle = 0; cycle < 3; cycle++)
+	{
+		assert(Esp32DeepWakePrepare());
+		assert(uint32_t(ESP32_REG32(0x600080D0UL)) == ((1U << 1) | (1U << 3)));
+		assert((uint32_t(ESP32_REG32(0x60008110UL)) >> 26) == (1U << 2));
+		assert((uint32_t(ESP32_REG32(0x60008110UL)) & (1U << 6)) == 0);
+		assert((uint32_t(ESP32_REG32(0x60008110UL)) & (7U << 14)) == (4U << 14));
+		assert(!Esp32DeepWakePrepare());
+		Esp32DeepWakeRestore();
+		assert(uint32_t(ESP32_IOMUX_PAD_REG(3)) == before);
+		assert(uint32_t(ESP32_REG32(0x600080D0UL)) == (1U << 1));
+	}
+	ESP32_REG32(0x600080D0UL) |= 1U << 3;
+	IOPinConfig(0, 3, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
+	assert(uint32_t(ESP32_REG32(0x600080D0UL)) == (1U << 1));
 #endif
 
 }

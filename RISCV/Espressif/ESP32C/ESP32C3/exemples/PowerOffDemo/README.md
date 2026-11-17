@@ -26,21 +26,33 @@ The application should restart and report reset reason 0x100. A start count of
 releases its pins and interrupt route before MCU Deep-sleep; startup initializes
 it again. No watchdog is enabled by the demo.
 
-Both modes await C3 hardware validation. C6 wake results do not validate the
-C3 RTC controller, ROM restart, or retention sequence. The SRAM samples apply
+C3 hardware completed six consecutive Light-sleep wakes with both SRAM samples
+passing. Deep-sleep testing exposed repeated pin-wake resets without a new
+button press; it has not passed. The C3 GPIO implementation now holds the wake
+pad configuration and clears the previous RTC GPIO wake status before entry,
+following ESP-IDF v5.5.1. IOPinConfig releases the retained pad after configuring
+it on restart. This correction still needs a board retest. C6 results do not
+validate the C3 RTC controller, ROM restart, or retention sequence. The SRAM samples apply
 to Light-sleep only. Returning from SystemSleep can also follow its WFI fallback
 and does not establish sleep current.
 
 Build validation used RISC-V GNU 15.2.0 with source lists and settings from the
 Eclipse managed projects, through command-line compiler invocations. All 204
 C3 library sources compiled in Debug and Release. Both demo modes linked after
-adding the missing generic syslog.cpp link to the library project.
+the wake-pad correction. The existing GPIO host checks passed for C2, C3, C5,
+C6 and C61 at O0 and O2 with undefined-behavior sanitization. These checks do
+not simulate pad power loss or replace the board retest.
 
 | Mode | Build | text | data | bss |
 | --- | --- | ---: | ---: | ---: |
-| Light-sleep | Debug | 34312 | 576 | 2224 |
-| Light-sleep | Release | 13617 | 480 | 1624 |
-| Deep-sleep | Debug | 39894 | 616 | 4048 |
-| Deep-sleep | Release | 19001 | 596 | 3780 |
+| Light-sleep | Debug | 34352 | 576 | 2224 |
+| Light-sleep | Release | 13641 | 480 | 1624 |
+| Deep-sleep | Debug | 40168 | 616 | 4076 |
+| Deep-sleep | Release | 19171 | 596 | 3808 |
+
+For the Deep-sleep retest, leave GPIO3 disconnected from GND after reset. The
+board should stay asleep until GPIO3 is connected to GND briefly, then restart
+once with reset reason 0x100. Release GPIO3 before the next sleep. Repeat at
+least five times. A continuous reset loop is a failure.
 
 The committed board configuration remains Light-sleep with BOOT/GPIO9.

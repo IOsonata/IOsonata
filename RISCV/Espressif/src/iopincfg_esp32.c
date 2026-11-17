@@ -87,6 +87,8 @@ static uint32_t s_DeepWakeMask;
 #if defined(ESP32C3)
 static uint32_t s_DeepWakeRtc;
 static uint32_t s_DeepWakeExt;
+static uint32_t s_DeepWakeHold;
+static uint32_t s_DeepWakePad[ESP32_DEEP_WAKE_PINS];
 #else
 static uint32_t s_DeepWakeExt;
 static uint32_t s_DeepWakeClock;
@@ -492,6 +494,13 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp,
 	{
 		ESP32_GPIO_ENABLE_W1TS_REG32 = mask;
 	}
+#if defined(ESP32C3)
+	// Release the retained pad only after its new configuration is ready.
+	if (pin < ESP32_DEEP_WAKE_PINS)
+	{
+		ESP32_REG32(0x600080D0UL) &= ~mask;
+	}
+#endif
 }
 
 // Call with CPU interrupts masked. Hardware remains pin-indexed; the public
@@ -852,7 +861,9 @@ bool Esp32DeepWakePrepare(void)
 #if defined(ESP32C3)
 	s_DeepWakeRtc = ESP32_REG32(0x60008110UL);
 	s_DeepWakeExt = ESP32_REG32(0x60008064UL);
-	uint32_t rtc = s_DeepWakeRtc | (1UL << 7);
+	s_DeepWakeHold = ESP32_REG32(0x600080D0UL);
+	uint32_t rtc = (s_DeepWakeRtc & ~((0x3FUL << 26) | (1UL << 6))) |
+		(1UL << 7);
 
 	for (uint32_t pin = 0U; pin < ESP32_DEEP_WAKE_PINS; pin++)
 	{
@@ -863,9 +874,16 @@ bool Esp32DeepWakePrepare(void)
 
 			rtc = (rtc & ~(7UL << shift)) | (type << shift) |
 				(1UL << (31U - pin));
+			s_DeepWakePad[pin] = ESP32_IOMUX_PAD_REG(pin);
+			ESP32_IOMUX_PAD_REG(pin) =
+				s_DeepWakePad[pin] & ~ESP32_IOMUX_SLP_SEL_Msk;
 		}
 	}
+	// Keep the input and its pull resistor when the digital domain powers off.
+	ESP32_REG32(0x600080D0UL) = s_DeepWakeHold | mask;
 	ESP32_REG32(0x60008064UL) = s_DeepWakeExt | (1UL << 31);
+	// The GPIO wake latch survives a deep-sleep reset. Clear it before rearming.
+	ESP32_REG32(0x60008110UL) = rtc | (1UL << 6);
 	ESP32_REG32(0x60008110UL) = rtc;
 #else
 	s_DeepWakeExt = ESP32_LP_EXT_WAKE_REG;
@@ -939,6 +957,14 @@ void Esp32DeepWakeRestore(void)
 #if defined(ESP32C3)
 		ESP32_REG32(0x60008110UL) = s_DeepWakeRtc;
 		ESP32_REG32(0x60008064UL) = s_DeepWakeExt;
+		for (uint32_t pin = 0U; pin < ESP32_DEEP_WAKE_PINS; pin++)
+		{
+			if ((mask & ESP32PinMask(pin)) != 0U)
+			{
+				ESP32_IOMUX_PAD_REG(pin) = s_DeepWakePad[pin];
+			}
+		}
+		ESP32_REG32(0x600080D0UL) = s_DeepWakeHold;
 #else
 		ESP32_LP_EXT_WAKE_REG = s_DeepWakeExt & ~ESP32_LP_EXT_WAKE_CLEAR_Msk;
 		ESP32_LP_AON_GPIO_MUX_REG = s_DeepWakeAon;
