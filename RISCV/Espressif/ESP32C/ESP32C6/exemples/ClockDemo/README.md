@@ -169,7 +169,10 @@ short nanosecond delays. The build configuration was not identified.
 
 Before this run, ClockDemo and PowerOffDemo produced no UART output and
 LedDemo did not run. RESET did not recover execution; a power cycle did,
-after which LedDemo and ClockDemo ran. The post-flash reset issue remains
-unresolved. The flashing command, reset options and ROM boot log are needed
-to distinguish host reset-line control from a boot-mode or flashing issue.
-No firmware change was made in response to the blank UART report.
+after which LedDemo and ClockDemo ran. The maintainer clarified that only one
+power cycle was needed; RESET worked normally afterward. The flashing log
+identifies native USB Serial/JTAG, a 28364-byte Release image at offset zero,
+and successful completion through the reset-request stage. It does not show
+which reset sequence was used or confirm application startup. This was a
+transient stuck state, not a demonstrated failure after every flash. Its cause
+remains unconfirmed; no firmware or flasher change was made for this report.

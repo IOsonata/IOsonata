@@ -284,6 +284,8 @@ identify Debug or Release; the missing beginning is not counted as observed
 individual checks. Short nanosecond timing and sleep current remain unmeasured.
 
 ClockDemo, PowerOffDemo and LedDemo initially failed to run after flashing;
-RESET did not recover them, but power-cycling restored execution. The reset
-issue remains separate from the passing firmware run. No cause or reset-path
-fix has yet been verified.
+RESET did not recover them, but one power cycle restored execution and RESET
+worked normally afterward. The flasher reported a Release image written via
+native USB Serial/JTAG. The transient stuck state remains separate from the
+passing firmware run; it is not a recurring power-cycle requirement. No cause
+or reset-path fix has been verified.

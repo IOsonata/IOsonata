@@ -1174,7 +1174,9 @@ Remaining work is separate from the completed C6 GPIO wake validation:
   IRQs. Build configuration was not specified. Other peripheral operation,
   interrupt/DMA UART RX and short nanosecond delays remain untested.
   RESET had failed to start ClockDemo, PowerOffDemo and LedDemo after flashing;
-  power-cycling restored execution. The flashing/reset cause is unresolved.
+  one power cycle restored execution and RESET then worked normally. The
+  transient native-USB flashing/reset cause is unconfirmed; no recurring
+  post-flash failure or flasher fix has been established.
 - Measure Light-sleep and Deep-sleep current with board circuitry accounted for.
 - C3 PowerOffDemo passed six consecutive GPIO9 Light-sleep wakes with the
   128-byte static and 128-byte stack SRAM samples preserved. GPIO3 Deep-sleep
