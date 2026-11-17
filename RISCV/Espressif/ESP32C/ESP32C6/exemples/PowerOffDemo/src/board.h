@@ -31,6 +31,6 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 // To restore the validated BOOT-button Light-sleep configuration, set
 // WAKE_BUT_PIN to 9 and POWER_DEMO_RESUME_WAKE to 1.
 // C6 GPIO9 Light-sleep: repeated wake and SRAM samples passed with UART off.
-// GPIO3 Deep-sleep: four consecutive pin wake and restart cycles passed.
+// GPIO3 Deep-sleep: seven consecutive wake/restart cycles passed with UART off.
 
 #endif // __BOARD_H__

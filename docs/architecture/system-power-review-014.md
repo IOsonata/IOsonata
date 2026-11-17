@@ -1,5 +1,11 @@
 # System power review (0.14)
 
+This document preserves the initial review sequence. For current per-target
+implementation and hardware results, see [MCU core power and clock ports](core-power-clock-ports.md).
+C6 repeated GPIO9 Light-sleep resume and seven GPIO3 Deep-sleep wake/restart
+cycles have now passed with UART disabled. Earlier ESP32 pending statements
+below describe the initial review, not the current C6 wake status.
+
 Current hardware result, November 15, 2026: SAMD11 Xplained Pro SW0/PA14
 woke PowerOffDemo five consecutive times, counts 0x00000001 through
 0x00000005, followed by another Standby entry. Repeated resume and counter
