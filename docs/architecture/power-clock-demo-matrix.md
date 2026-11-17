@@ -205,8 +205,7 @@ run passed all ten UART prompts and nine BOOT wakes with zero failures. Its
 45 msDelay samples measured 250018-250478 us, and 45 nsDelay samples measured
 250018-250137 us; every sample reported 25 interrupts. All CPU/APB/LF and
 post-wake restoration checks passed. C6 receive-enabled hardware validation
-remains pending. D21 hardware validation is deferred because the board is
-not available.
+remains pending. D21 was not available for that run; subsequent results are recorded below.
 
 ## ARM delay range and code size
 
@@ -320,3 +319,21 @@ header configurations. These checks do not replace missing board validation.
 Whitespace cleanup in LPC1769 PowerOffDemo leaves the parsed Eclipse project
 unchanged. Existing CRLF source files retain their line endings. No new MCU
 hardware support or power-consumption result is claimed by this review.
+
+## SAMD21 OLED1 and Standby hardware results (November 17)
+
+The maintainer confirmed five PowerOffDemo Standby wakes with 128-byte static
+and 128-byte stack samples preserved. ClockDemo passed three combined sleep
+cycles with SW0/PA15 and three with OLED1 BUTTON1/PB04 on EXT1. CPU/APB and LF
+descriptor checks, msDelay, nsDelay, timer IRQs and UART RX all passed. The
+actual timer rate was 750 kHz; 250 ms requests measured about 251 ms with 25
+interrupts. LF source switching was not configured.
+
+ClockDisplayDemo output worked. LCDConsoleDisplayDemo display syslog worked
+with polling, interrupt only, DMA only, and interrupt plus DMA. The build
+configuration used for these hardware reports was not specified.
+The SAMD21 library (318 source files) and all three demos linked in Debug and
+Release. Both display demos also linked with all four SPI mode combinations;
+ClockDemo linked with OLED1 wake selected. No driver changes were needed for
+the OLED1 project additions. Full SRAM coverage and sleep current remain
+unmeasured. SAM4LC intermittent Backup wake is a separate unresolved result.

@@ -13,4 +13,5 @@ SPI uses SERCOM0: SCK PA07, MOSI PA06, CS PA05. Display D/C is PB06
 and reset is PB05. BUTTON1 is PB04 with an internal pull-up.
 SPI defaults to polling; `DISPLAY_SPI_INT_ENABLE` and
 `DISPLAY_SPI_DMA_ENABLE` select the other transfer modes.
-Hardware display validation is pending.
+The maintainer confirmed clock display operation on hardware. The separate
+LCDConsoleDisplayDemo passed all four SPI interrupt/DMA combinations.

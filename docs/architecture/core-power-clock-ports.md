@@ -24,7 +24,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
 | SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Runtime recovery and main/low-frequency peripheral checks implemented; hardware validation pending |
-| SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; SAMD11 SW0/PA14 repeated resume passed | Validate SAMD21 wake, full SRAM continuity, sleep current and peripheral clock ownership |
+| SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; D11 SW0 and D21 SW0/OLED1 BUTTON1 repeated resume passed | D21 clocks, delays, timer IRQs, UART RX and SRAM samples passed; full SRAM continuity, LF switching and sleep current remain unverified |
 | LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
 | LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |
 | LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Runtime peripheral/PLL ownership and clock decoding checked; hardware pending |
@@ -49,8 +49,18 @@ the Standby source. On November 15, 2026, the maintainer reported five
 consecutive SAMD11 SW0/PA14 Standby resumes, with counts 0x00000001 through
 0x00000005 and another Standby entry. Subsequent D11 runs also passed the
 128-byte static and 128-byte stack SRAM samples across five wakeups. This
-is a sample of live RAM continuity, not a full SRAM test. SAMD21 hardware wake, full SRAM
+is a sample of live RAM continuity, not a full SRAM test. SAMD21 subsequently
+passed five Standby wakes with the same static and stack samples. Full SRAM
 testing and sleep-current measurements remain pending.
+
+On November 17, SAMD21 ClockDemo passed three Standby cycles with SW0/PA15
+and another three with OLED1 BUTTON1/PB04 on EXT1. CPU/APB reporting remained
+48 MHz; the LF descriptor remained 32768 Hz. Both 250 ms delay checks measured
+about 251 ms at the actual 750 kHz timer rate, with 25 interrupts. UART RX
+passed before sleep and after every wake. LF switching was skipped.
+ClockDisplayDemo output worked, and LCDConsoleDisplayDemo display syslog
+passed all four combinations of SPI interrupt and DMA settings. These results
+do not establish other CPU/APB rates or physical oscillator accuracy.
 
 On November 17, 2026, ClockDemo at `2de35f281` passed three OSC8M-reference
 selections at 48 MHz. The shared fixed-point delay implementation measured

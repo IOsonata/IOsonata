@@ -27,7 +27,9 @@ ClockDemo still prints to UART and does not initialize the display.
 SAMD21 hardware validation: three Standby cycles with SW0 passed, including
 CPU/APB and LF descriptor checks, both delays, timer IRQs and UART RX.
 The 250 ms delays measured approximately 250.99 ms at a 750 kHz timer rate.
-OLED1 BUTTON1 wake remains to be checked on hardware.
+OLED1 BUTTON1 (PB04) also passed three Standby cycles with zero failures.
+Both delays measured approximately 251.01 ms, with 25 interrupts per sample;
+UART RX and the CPU/APB/LF descriptor checks passed after every wake.
 
 An omitted selector prints SKIP. A configured selector that fails prints FAIL;
 unsupported selections are not silently counted as successful tests. Runtime
