@@ -1415,5 +1415,50 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_power_sam4l.cpp</locationURI>
 		</link>
+		<link>
+			<name>include/display/display.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_ssd1306.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_ssd1306.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_ssd1315.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_ssd1315.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/ifont.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/ifont.h</locationURI>
+		</link>
+		<link>
+			<name>src/display/display.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_ssd1315.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_ssd1315.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/syst5x7.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/syst5x7.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
