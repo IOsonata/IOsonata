@@ -118,6 +118,7 @@ static const SysLogCfg_t s_LogCfg = {
 };
 
 static void ClockDemoTimerHandler(TimerDev_t *pTimer, uint32_t Event);
+static void ClockDemoFlush(void);
 
 static const TimerCfg_t s_TimerCfg = {
 	.DevNo = CLOCK_DEMO_TIMER_DEVNO,
@@ -139,6 +140,7 @@ static void ClockDemoTimerHandler(TimerDev_t *pTimer, uint32_t Event)
 static void ClockDemoResult(const char *pName, bool Passed)
 {
 	SysLogPrintf(SysLogGet(), "%s: %s\r\n", pName, Passed ? "PASS" : "FAIL");
+	ClockDemoFlush();
 	if (!Passed)
 	{
 		s_Failures++;
@@ -156,17 +158,24 @@ static bool ClockDemoTimerInit(void)
 	return true;
 }
 
-static void ClockDemoClockBegin(void)
+// Polling UART may accept only part of a syslog record. Drain both queues
+// before stopping its clock, including the final bytes in the shift register.
+static void ClockDemoFlush(void)
 {
-	msDelay(2);
-#if CLOCK_DEMO_STOP_UART
-	UARTDev_t *uart = &s_Uart;
 	uint8_t unused;
-	while (CFifoUsed(uart->hTxFifo) != 0)
+
+	while (CFifoUsed(SysLogGet()->hFifo) != 0 || CFifoUsed(s_Uart.hTxFifo) != 0)
 	{
+		(void)SysLogFlush(SysLogGet());
 		(void)UARTRx(&s_Uart, &unused, 1);
 	}
 	msDelay(2);
+}
+
+static void ClockDemoClockBegin(void)
+{
+	ClockDemoFlush();
+#if CLOCK_DEMO_STOP_UART
 	UARTPowerOff(&s_Uart);
 #endif
 }
@@ -244,7 +253,7 @@ static void ClockDemoSleep(void)
 	SysLogPrintf(SysLogGet(), "Sleep: CPU %u Hz, APB %u Hz, LF %u Hz\r\n",
 		(unsigned)core, (unsigned)sleepApb, (unsigned)low.Freq);
 	SysLogPrintf(SysLogGet(), "Entering sleep; press " CLOCK_DEMO_WAKE_NAME " to resume\r\n");
-	msDelay(2);
+	ClockDemoFlush();
 	UARTDisable(&s_Uart);
 	SystemSleep();
 	UARTEnable(&s_Uart);
@@ -271,6 +280,7 @@ int main(void)
 	msDelay(1000);
 	SysLogPrintf(SysLogGet(), "ClockDemo\r\nStartup CPU %u Hz, APB %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
+	ClockDemoFlush();
 #if !CLOCK_DEMO_DEFER_TIMER
 	if (!ClockDemoTimerInit())
 	{
@@ -374,7 +384,9 @@ int main(void)
 	}
 	ClockDemoTimer();
 #endif
+	ClockDemoFlush();
 	SysLogPrintf(SysLogGet(), "ClockDemo complete: %u failures\r\n", s_Failures);
+	ClockDemoFlush();
 	while (1)
 	{
 		msDelay(1000);

@@ -15,7 +15,7 @@ retain timer module ownership after TimerDisable. It then checks SysTick (timer 
 The returned timer rate may differ from 1 MHz. Delay and interrupt checks use
 the actual rate/period. They do not independently measure oscillator accuracy.
 Debug and Release use size optimization and LTO. The linker retains _sbrk
-for newlib formatting after LTO. Flash use is 15,190 bytes (14,978 text plus
+for newlib formatting after LTO. Flash use is 15,218 bytes (15,006 text plus
 212 data); static RAM is 2,148 bytes, before stack use.
 No watchdog is enabled. No sleep is requested by this configuration; use
 PowerOffDemo for target wake validation. Reset restores startup clocks.
@@ -32,3 +32,8 @@ Previously the divider was cleared while FDPLL96M still supplied 96 MHz,
 exceeding the 48 MHz CPU limit. The revised write sequence passes a register
 model check and both SAMD11/SAMD21 demo build configurations. Board retest is
 pending.
+
+ClockDemo drains both the syslog record store and polling UART FIFO after
+startup and result output, before changing clocks, and before its final idle
+loop. A partial UART write leaves the remainder in syslog; draining only the
+UART FIFO can leave the last visible output in the middle of a line.
