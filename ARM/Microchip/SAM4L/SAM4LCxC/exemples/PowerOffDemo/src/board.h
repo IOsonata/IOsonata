@@ -63,7 +63,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 }
 
 
-// No wake pin is assumed. Reset or power-cycle to leave power off.
+// OLED1 Xplained Pro on SAM4L8 Xplained Pro EXT2.
+// BUTTON1 is active low on header pin 9, PC06 / EIC8 Backup wake input.
+#define WAKE_BUT_PORT		IOPORTC
+#define WAKE_BUT_PIN		6
+#define WAKE_BUT_PINOP		IOPINOP_GPIO
+#define WAKE_BUT_SENSE		IOPINSENSE_LOW_TRANSITION
 #define POWER_DEMO_UART_DMA false
 #define POWER_DEMO_UART_OFF 1
 

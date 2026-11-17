@@ -326,6 +326,13 @@ See datasheet sections 28, 29 and 46 for the clock tree and electrical limits.
 
 ## SAM4L
 
+SAM4LC ClockDemo rerun passed all three RC4/RC12 selection cycles with readable
+UART output. CPU/APB measurements were about 44.8 MHz with RC4 and 39.64 MHz
+with RC12. Both 250 ms delays measured about 253420 us with 25 interrupts,
+within the demo's 2 percent tolerance; the final result was zero failures.
+The SAM4LCxC PowerOffDemo now selects OLED1 BUTTON1 on EXT2 (PC06 / EIC8) for
+Backup wake. Button wake and backup-register retention remain unverified.
+
 SAM4LC ClockDemo hardware results on November 17 exposed UART corruption with
 RCFAST 4 MHz selected and incorrect delay calibration: 250 ms measured as
 205823 us through `msDelay` and 586699 us through `nsDelay`. The SAM4L port now
@@ -343,8 +350,8 @@ core-clock changes. A failed measurement reports failure instead of accepting
 the nominal DFLL frequency.
 
 SAM4LC/SAM4LS Debug and Release ClockDemo and PowerOffDemo links pass, as do
-existing SAM4L clock and power host checks. Corrected UART output and delay
-timing still require a new board run.
+existing SAM4L clock and power host checks. The SAM4LC hardware rerun above confirms UART output and delay timing.
+SAM4LS hardware validation remains pending.
 
 `system_power_sam4l.cpp` implements reset reasons, Backup entry, EIC wake pins
 and four 32-bit backup registers. Backup powers down both SRAM banks, so

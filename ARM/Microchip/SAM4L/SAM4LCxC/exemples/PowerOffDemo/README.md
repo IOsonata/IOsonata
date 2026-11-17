@@ -1,14 +1,21 @@
-# SAM4LCxC PowerOffDemo
+# SAM4L8 Xplained Pro PowerOffDemo
 
-Build the matching library and this Eclipse managed project in the same
-configuration. UART pins come from TimerDemo; default baud is 1,000,000.
-This configuration does not assume a board wake pin. After reset-reason and
-retention-register output, it powers off the UART and requests MCU power off.
-Use RESET or a power cycle to start again. It is not a GPIO wake test.
+Connect OLED1 Xplained Pro to **EXT2**. The demo uses OLED1 **BUTTON1**,
+connected through EXT2 pin 9 to **PC06 / EIC8**, as an active-low Backup wake
+input. The on-board SW0 is not the wake button for this configuration.
 
-For a supported wake input, define WAKE_BUT_PORT, WAKE_BUT_PIN and
-WAKE_BUT_PINOP in board.h, with WAKE_BUT_SENSE for its active transition.
-Verify that the target SystemWakePin supports that pin and power mode.
-PowerOffDemo on a target with existing verified wiring is the reference for
-that board. No watchdog is enabled. Build and hardware status are separate;
-see the cross-target demo matrix.
+Build the SAM4LCxC library and PowerOffDemo in the same configuration.
+Flash the application and run without an active debugger session. UART output
+uses USART1 at 1000000 baud on the EDBG virtual COM port.
+
+After `Power off, press the button to wake up`, allow one second for the UART
+to shut down, then press and release OLED1 BUTTON1. A successful wake restarts
+the application and reports `Reset reason 0x100: wake up by a pin`. Repeat
+several times. The start count should increase if backup register retention
+works; record the output to verify both wake and retention.
+
+This demo does not initialize the OLED display. Its output remains on UART.
+Backup wake through OLED1 still requires hardware validation.
+
+Pin assignments: Microchip SAM4L8 Xplained Pro User Guide, table 4-2, and
+OLED1 Xplained Pro User Guide, extension header table.
