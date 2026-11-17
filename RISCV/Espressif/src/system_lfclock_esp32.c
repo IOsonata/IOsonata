@@ -165,6 +165,63 @@ static uint32_t Esp32LowFreqMeasure(uint32_t Source)
 	return value;
 }
 
+#if defined(ESP32C6)
+// Measure RC_FAST for PMU transition timing. The caller masks interrupts.
+// Restore TIMG0 and PCR state; timer counters and watchdogs are untouched.
+uint32_t Esp32C6FastClockMeasure(void)
+{
+	uint32_t bus = LF_BUS_REG;
+	uint32_t config;
+	uint32_t timeout;
+	uint32_t digital;
+	uint32_t tick;
+	uint32_t count = 0U;
+	uint32_t divider;
+
+	if ((bus & 2U) != 0U)
+	{
+		return 0U;
+	}
+	LF_BUS_REG = bus | LF_BUS_ENABLE;
+	config = LF_CAL_CONFIG_REG;
+	timeout = LF_CAL_TIMEOUT_REG;
+	if (!Esp32LowFreqCalibrationPause(config, timeout))
+	{
+		LF_BUS_REG = bus;
+		return 0U;
+	}
+	digital = LF_DIGITAL_REG;
+	tick = ESP32_REG32(0x60096130UL);
+	LF_DIGITAL_REG = digital | (1UL << 31);
+	ESP32_REG32(0x60096130UL) = tick | (255UL << 8) | (1UL << 16);
+	// ECO1 and later divide the calibration input by 32.
+	divider = (ESP32_REG32(0x600B0850UL) & (63UL << 18)) != 0U ? 32U : 1U;
+	LF_CAL_CONFIG_REG = (config & 0xFFFU) | (1UL << 13) | (256UL << 16);
+	LF_CAL_TIMEOUT_REG = (timeout & 0x7EU) | (0x100000UL << 7);
+	LF_CAL_CONFIG_REG |= LF_CAL_START;
+	for (unsigned retry = 0U; retry < 1000U; retry++)
+	{
+		if ((LF_CAL_CONFIG_REG & LF_CAL_READY) != 0U)
+		{
+			count = LF_CAL_VALUE_REG >> 7;
+			break;
+		}
+		if ((LF_CAL_TIMEOUT_REG & 1U) != 0U)
+		{
+			break;
+		}
+		usDelay(10);
+	}
+	LF_CAL_CONFIG_REG &= ~LF_CAL_START;
+	LF_CAL_TIMEOUT_REG = timeout;
+	LF_CAL_CONFIG_REG = config;
+	ESP32_REG32(0x60096130UL) = tick;
+	LF_DIGITAL_REG = digital;
+	LF_BUS_REG = bus;
+	return count != 0U ? (40000000ULL * 256U * divider + count / 2U) / count : 0U;
+}
+#endif
+
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t source = 0;
