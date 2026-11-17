@@ -418,6 +418,7 @@ extern "C" {
 #endif
 
 void Esp32UartClockEnable(int devno);
+void Esp32UartClockDisable(int devno);
 void Esp32UartReset(int devno);
 void Esp32UartClockConfig(int devno, uint32_t Divider);
 

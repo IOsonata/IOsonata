@@ -497,7 +497,7 @@ int main()
 	// Allow the final UART record to finish before stopping the transport.
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
 	msDelay(1000);
-	s_Uart.Disable();
+	s_Uart.PowerOff();
 #else
 	msDelay(100);
 #endif
@@ -505,8 +505,11 @@ int main()
 	SystemPowerOff();
 
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
-	// If the power function returns, the system did not enter Standby.
-	s_Uart.Enable();
+	// If power off returns, rebuild the console to report the failure.
+	if (!s_Uart.Init(s_UartCfg))
+	{
+		return 1;
+	}
 	msDelay(50);
 	SysLogPrintf(SysLogGet(), "SystemPowerOff returned\r\n");
 	while (1)

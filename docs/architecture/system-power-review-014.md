@@ -3,8 +3,9 @@
 This document preserves the initial review sequence. For current per-target
 implementation and hardware results, see [MCU core power and clock ports](core-power-clock-ports.md).
 C6 repeated GPIO9 Light-sleep resume and seven GPIO3 Deep-sleep wake/restart
-cycles have now passed with UART output drained. The UART Disable hook does
-not currently gate hardware clocks. Earlier ESP32 pending statements
+cycles have now passed with UART output drained. Combined clock/sleep checks
+also passed all nine wakes. UART clock gating and PowerOff were added afterward
+and await hardware retesting. Earlier ESP32 pending statements
 below describe the initial review, not the current C6 wake status.
 
 Current hardware result, November 15, 2026: SAMD11 Xplained Pro SW0/PA14

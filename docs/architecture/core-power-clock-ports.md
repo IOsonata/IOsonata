@@ -1057,10 +1057,13 @@ Every reported Deep-sleep restart identified reset reason `0x100` (pin wake).
 `Start count 1, 0 retention registers` is expected: the port exposes no
 retention registers. The counter is initialized again at startup.
 The SRAM sample result applies to Light-sleep only and is not a full SRAM
-or Deep-sleep retention test. Sleep current has not been measured. The ESP32 UART Disable/Enable hooks
-are currently empty: the earlier UART-off configuration drained output and
-called Disable(), but did not gate UART hardware clocks. Actual UART shutdown
-remains unimplemented in these hooks.
+or Deep-sleep retention test. Sleep current has not been measured. These runs
+used empty UART Disable/Enable hooks: they drained output but did not gate UART
+clocks. The new hooks gate serial and bus clocks, preserve configuration and
+restore UART interrupt enables on resume. PowerOff additionally clears FIFOs,
+releases pins and interrupt routing, and requires Init before reuse. The updated
+PowerOffDemo uses UART PowerOff before Deep-sleep. Both shutdown paths await
+hardware retesting; build and host register checks do not measure current.
 
 The cleaned C6 PowerOffDemo defaults to GPIO3 Deep-sleep. To exercise the
 validated Light-sleep path, set `WAKE_BUT_PIN` to 9 and
@@ -1133,7 +1136,11 @@ Remaining work is separate from the completed C6 GPIO wake validation:
   APB changes, LF selection, UART TX and timer interrupts with zero failures.
   Calibrated RC_FAST timing at `6d3947a30` also passed three cycles with zero
   failures: RC_FAST 16134719-16136308 Hz, 250 ms delay 249969-250037 us.
-  Combined clock selection and Light-sleep resume checks remain pending.
+  Combined clock selection and Light-sleep resume at `b79ea4253` passed all
+  three cycles and nine BOOT wakes with zero failures. CPU/APB restoration,
+  LF descriptor preservation and post-wake timers passed for XTAL/RC_FAST and
+  RC_SLOW/RC32K. Post-wake 250 ms samples were 250019-250078 us with 25 IRQs.
+  This run preceded UART hardware shutdown; retest with the new UART hooks.
   UART RX and other peripheral operation after switching remain untested.
 - Measure Light-sleep and Deep-sleep current with board circuitry accounted for.
 - Validate C3 RTC sleep entry and repeated wake on C3 hardware, including ROM

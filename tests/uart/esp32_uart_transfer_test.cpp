@@ -116,6 +116,7 @@ static void Reset(bool Blocking)
 	s_TxCount = 0;
 	s_Masked = 0;
 	s_Esp32UartDev[0].pUartDev = &s_Uart;
+	s_Esp32UartDev[0].bEnabled = true;
 	s_Uart.hRxFifo = CFifoInit(rx, sizeof(rx), 1, Blocking);
 	s_Uart.hTxFifo = CFifoInit(tx, sizeof(tx), 1, Blocking);
 	s_Uart.DevIntrf.pDevData = &s_Esp32UartDev[0];

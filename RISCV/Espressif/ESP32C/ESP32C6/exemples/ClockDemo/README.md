@@ -33,9 +33,12 @@ check compares the saved descriptor and does not remeasure the LF oscillator.
 Comment out `CLOCK_DEMO_WAKE_PIN` in board.h for the automatic clock-only run.
 That configuration does not link the PMU sleep entry.
 
-The ESP32 UART Disable/Enable hooks currently perform no hardware operation.
-These calls quiesce application use but do not establish UART clock gating.
-Sleep-current measurements and actual UART shutdown remain separate work.
+UART Disable now masks UART interrupts and gates the serial and bus clocks.
+Enable restores both clocks and the saved interrupt mask without resetting baud
+settings or FIFOs. The application must finish TX and stop incoming traffic
+before Disable. No UART wake source is configured. This change requires a new
+board run; the nine-wake result below used the earlier empty UART hooks.
+Sleep-current measurements remain separate work.
 SystemSleep can fall back to CPU WFI; returning with preserved clocks alone
 is not proof of PMU entry or a particular current consumption. Confirm that each
 prompt waits for BOOT before continuing.
@@ -62,12 +65,13 @@ startup configuration. No watchdog or power-off operation is enabled.
 
 Validation: all 206 C6 library sources and this example compiled and linked
 in Debug and Release using RISC-V GNU 15.2.0 and the Eclipse-managed source
-lists/settings. The combined clock/sleep run awaits hardware validation.
+lists/settings. The combined clock/sleep run at `b79ea4253` passed on hardware;
+the subsequent UART shutdown changes await a board retest.
 
 | Build | text | data | bss |
 | --- | ---: | ---: | ---: |
-| Debug | 57032 | 584 | 3292 |
-| Release | 27018 | 564 | 3024 |
+| Debug | 58634 | 616 | 3292 |
+| Release | 27818 | 596 | 3024 |
 
 Hardware results before calibrated CPU timing (`e5044c35f`): all three cycles
 completed with zero failures. Source selection, APB readback, LF calibration,
@@ -97,8 +101,8 @@ Calibrated timing at `6d3947a30` passed all three hardware cycles with zero
 failures. RC_FAST measured 16134719-16136308 Hz; its 250 ms delay samples were
 249969-250037 us. The 24/25 interrupt counts matched the sampling boundary.
 XTAL restoration, divided APB settings, LF calibration and UART output passed.
-This validates the clock-only run; sleep after these selections is not yet
-validated. Both sleep-enabled and clock-only Debug/Release configurations build.
+This result covers the clock-only run. The combined run is recorded below.
+Both sleep-enabled and clock-only Debug/Release configurations build.
 
 The first combined run returned from sleep and passed CPU/APB readback and LF
 descriptor checks, then stopped before the timer result. The C6 sleep code had
@@ -109,4 +113,21 @@ CPU source. Deep-sleep still powers the PLL down and restarts through ROM.
 A temporary PMU register model checked the retained settings for XTAL, RC_FAST
 and PLL CPU selections with both internal LF sources, full saved-register
 restoration, and unchanged Deep-sleep wake/reject settings at O0 and Os.
-The post-resume timer result still requires a hardware retest.
+Hardware retest at `b79ea4253` completed three cycles and all nine BOOT wake
+operations with `ClockDemo complete: 0 failures`. CPU and APB restoration,
+LF descriptor preservation, timer interrupts and delay checks passed after
+every wake. RC_FAST measured 16128365-16132336 Hz. The post-resume 250 ms
+samples were 250019-250078 us, all with 25 interrupts. The timer stall is
+resolved in this run. No sleep-current measurement was made.
+
+The UART now also implements PowerOff: it clears hardware/software FIFOs,
+releases interrupt routing and pins, and prevents Enable from restarting the
+instance. Init is required to use it again. The Deep-sleep path in PowerOffDemo
+uses that operation; ClockDemo uses resumable Disable/Enable.
+
+UART validation after these changes: production-driver host checks passed for
+C2/C3/C5/C6/C61 at O0/O2, including polling and interrupt configurations,
+reference-counted suspend, repeated resume, queue preservation, PowerOff after
+Disable, rejection of Enable after PowerOff, and successful reinitialization.
+Both UART source files cross-compiled for all five chips at O0/Os. C6 ClockDemo
+and PowerOffDemo rebuilt with all 206 library sources in Debug and Release.
