@@ -94,8 +94,9 @@ core/APB selections at 2de35f281 and measured 250094 us for msDelay and
 250107 us for nsDelay, each with 25 IRQs for a 250 ms delay,
 with zero failures. See
 [core power and clock ports](core-power-clock-ports.md) for exact results.
-Other new configurations remain build-only. Sleep current, UART RX after clock
-changes and external oscillator accuracy have not been measured here.
+Other new configurations remain build-only. C3 and D11 polling UART receive
+after wake has passed in the later runs recorded below. Sleep current and
+external oscillator accuracy have not been measured here.
 
 LPC54605 has no existing board example to supply console wiring. nRF52805 and
 nRF52810 lack a suitable UART board configuration; no pin maps were guessed.
@@ -199,8 +200,12 @@ uppercase U within 30 seconds at each prompt and press BOOT only when asked to
 resume. Both libraries and demos rebuilt from their managed source lists in
 Debug and Release: 204/204 C3 sources and 206/206 C6 sources. Release flash use
 is 25,384 bytes for C3 and 28,368 bytes for C6; static RAM is 3,356 and 3,620
-bytes respectively, excluding stack. This receive-enabled run still needs
-hardware validation. D21 hardware validation is deferred because the board is
+bytes respectively, excluding stack. The later C3 receive-enabled hardware
+run passed all ten UART prompts and nine BOOT wakes with zero failures. Its
+45 msDelay samples measured 250018-250478 us, and 45 nsDelay samples measured
+250018-250137 us; every sample reported 25 interrupts. All CPU/APB/LF and
+post-wake restoration checks passed. C6 receive-enabled hardware validation
+remains pending. D21 hardware validation is deferred because the board is
 not available.
 
 ## ARM delay range and code size
@@ -251,3 +256,18 @@ checks and the existing SPI and SSD1315 host checks pass. The SSD1315 checks use
 AddressSanitizer and UndefinedBehaviorSanitizer with leak detection disabled
 because LeakSanitizer cannot run under this environment's tracing.
 These are software results; hardware validation of this change remains pending.
+
+## ClockDemo language-setting verification
+
+After the C++11 initialization fix at ca3dd5f52, all 31 ClockDemo applications
+were recompiled and linked in their two project configurations (62 links).
+The compilation used each project's declared C++ standard, with GNU C++11
+for C3/C6 where Eclipse supplies that default: four C++11, ten C++20 and
+48 C++23 configurations. RE01 uses DebugCFB/ReleaseCFB. These links reused
+the previously built target libraries; they are not a new full-library rebuild.
+The partial SDK library counts in the table above still apply.
+
+The source descriptor uses a constexpr constructor so five-field board entries
+retain Select=true and six-field entries can request readback only. All 32
+board source arrays, including both D11 selections, also passed C++11
+compile-time checks of those flags. No project language setting was changed.

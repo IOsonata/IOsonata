@@ -1178,8 +1178,14 @@ Remaining work is separate from the completed C6 GPIO wake validation:
   wakes with zero failures. XTAL, calibrated RC_FAST, shared CPU/APB division,
   RC_SLOW, restored clock descriptors and timer IRQs passed. RC_FAST measured
   20805079-20810365 Hz; 250 ms samples measured 250065-252360 us with 25 IRQs.
-  UART RX after switching and sleep-current measurements remain pending.
-  Dots before startup output remain unexplained.
+  A later receive-enabled run on November 17, following the C++11 demo fix,
+  passed three cycles, nine BOOT wakes and all ten polling UART RX prompts
+  with zero failures. All 90 delay samples reported 25 interrupts: msDelay
+  250018-250478 us and nsDelay 250018-250137 us. RC_FAST measured
+  20811686-20815652 Hz; RC_SLOW measured 135730-136293 Hz. The build
+  configuration was not identified in the submitted log. Sleep-current and
+  interrupt/DMA UART RX measurements remain pending. Dots before startup
+  output remain unexplained.
 - Runtime PLL startup/selection and Deep-sleep RAM retention are unsupported;
   they must not be reported as completed capabilities.
 

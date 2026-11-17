@@ -51,12 +51,31 @@ and DMA receive modes are not enabled.
 
 Rebuild both the library and demo to include the shared RISC-V delay changes.
 The header uses the port's cycle counter and current CPU frequency for both
-delay units. Hardware results above predate this receive-enabled run; the
-combined delay and receive run still needs board validation.
+delay units. The receive-enabled hardware run is recorded below.
 
 Receive-enabled command-line build sizes:
 
 | Build | text | data | bss |
 | --- | ---: | ---: | ---: |
-| Debug | 51052 | 608 | 2764 |
-| Release | 24788 | 596 | 2760 |
+| Debug | 50720 | 608 | 2764 |
+| Release | 24768 | 596 | 2760 |
+
+## Receive-enabled hardware run, November 17, 2026
+
+The maintainer completed three XTAL / RC_FAST / XTAL-restore cycles with
+`ClockDemo complete: 0 failures`, following the C++11 initialization fix.
+The submitted log does not identify Debug or Release.
+
+- All nine BOOT Light-sleep wakes restored CPU/APB clocks and LF descriptors.
+- All ten polling UART receive prompts passed: startup and after every wake.
+- All 36 APB requests and nine post-wake APB restorations passed.
+- msDelay: 45 samples, 250018-250478 us for a 250 ms request.
+- nsDelay: 45 samples, 250018-250137 us for a 250 ms request.
+- Every delay sample reported 25 timer interrupts.
+- RC_FAST measured 20811686-20815652 Hz; RC_SLOW measured 135730-136293 Hz.
+
+The largest observed delay error was 0.1912 percent. These checks validate
+clock changes, timer operation and polling UART receive across repeated sleep;
+they do not measure sleep current, absolute oscillator accuracy, interrupt/DMA
+UART receive, or short nanosecond pulses. Dots preceding startup remain
+unexplained; the three-cycle run itself completed without a reported failure.
