@@ -339,4 +339,15 @@ the OLED1 project additions. Full SRAM coverage and sleep current remain
 unmeasured. A subsequent clean SAM4LC PowerOffDemo rebuild passed eight
 consecutive Backup wakes: reset reason 0x100 each time, retained start count
 1 through 9. The earlier intermittent failure did not recur in that run.
-SAM4LC SLEEP0 ClockDemo hardware validation remains pending.
+
+## SAM4LC Release ClockDemo hardware results (November 17)
+
+The retest after commit 4d2aa276f completed with zero failures. Three RC4/RC12
+selection cycles and LF RC32K selection passed. Three OLED1 BUTTON1 SLEEP0
+wakes passed with CPU/APB/LF descriptors, both delays, timer interrupts and
+UART RX preserved. All four UART RX prompts passed. The timer rate was
+1260164 Hz; 250 ms delays measured 251320 to 251351 us with 25 interrupts.
+The run confirms the 14-cycle microsecond calibration and ClockDemo's
+retained-AST preparation. These checks do not independently measure the LF
+oscillator frequency or sleep current. WAIT and RETENTION remain unsupported.
+SAM4LC OLED display output and SPI mode hardware checks remain pending.

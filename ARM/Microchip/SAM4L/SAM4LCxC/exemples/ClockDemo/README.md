@@ -21,10 +21,12 @@ No watchdog is enabled. Connect OLED1 to EXT2. After the initial checks, send
 uppercase U at each UART prompt (1,000,000 baud). Three SLEEP0 cycles follow;
 press and release OLED1 BUTTON1 (PC06) at each sleep prompt. The GPIO interrupt
 must be observed, then clocks, both delays, timer interrupts and UART RX are
-checked again. The maintainer confirmed three GPIO wake cycles, clock
-descriptors, timer interrupts and UART RX. The microsecond delay calibration
-was corrected after the Release run measured 270.69 ms instead of 250 ms;
-its hardware retest is pending.
+checked again. The maintainer's Release retest completed with zero failures:
+three RC4/RC12 selection cycles, three BUTTON1 SLEEP0 wakes, CPU/APB/LF
+descriptors, both delays, timer interrupts and all four UART RX prompts passed.
+The timer ran at 1260164 Hz. The 250 ms delays measured 251320 to 251351 us
+with 25 interrupts, before and after sleep. This confirms the 14-cycle
+microsecond-loop calibration and retained-AST preparation on this board.
 
 SLEEP0 stops the CPU while peripheral clocks continue. This checks resumable
 sleep; it does not exercise WAIT, RETENTION or reset-on-wake Backup mode.
