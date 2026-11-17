@@ -50,6 +50,7 @@ SOFTWARE.
 #include "esp32xx_uart.h"
 
 extern void Esp32PcrSystemInit(uint32_t CpuHz);
+void Esp32C6PeripheralClockInit(void);
 extern void RISCV_VectorTable(void);
 
 volatile uintptr_t g_Esp32C6VectorBase;
@@ -67,6 +68,8 @@ void SystemInit(void)
 #else
 	Esp32PcrSystemInit(0U);
 #endif
+
+	Esp32C6PeripheralClockInit();
 
 	// Enable the cycle event used by idelay.h (Espressif PCER/PCMR/PCCR).
 	__asm volatile("csrw 0x7E0, %0" : : "r"(1U));

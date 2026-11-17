@@ -34,9 +34,10 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 #define CLOCK_APB_REG ESP32_REG32(0x60096120UL)
 #define CLOCK_TIMG0 0x60008000UL
 #define CLOCK_TIMG1 0x60009000UL
+// USB Serial/JTAG uses the unchanged PLL clock, not the CPU/APB source.
 static const uint8_t s_ClockUsers[] = {
 	0x20, 0x28, 0x2C, 0x34, 0x5C, 0x64, 0x6C, 0x80,
-	0x8C, 0x94, 0x98, 0x9C, 0xA4, 0xB0, 0xBC, 0xC0, 0xC8, 0xCC,
+	0x94, 0x98, 0x9C, 0xA4, 0xB0, 0xBC, 0xC0, 0xC8, 0xCC,
 	0xD0, 0xD8, 0xE0, 0xE4,
 };
 #else
@@ -47,6 +48,19 @@ static const uint8_t s_ClockUsers[] = {
 extern uint64_t SystemCoreClockPeriodus;
 void SystemCoreClockUpdate(void);
 void Esp32RomClockUpdate(uint32_t CpuMHz);
+
+#if defined(ESP32C6)
+// Run once during SystemInit, before drivers claim peripherals. PCR bus clocks
+// reset enabled; drivers enable their own gates when initialized. Preserve ROM
+// flash, UART, interrupt routing, timers and USB Serial/JTAG clocks.
+void Esp32C6PeripheralClockInit(void)
+{
+	for (unsigned i = 0; i < sizeof(s_ClockUsers); i++)
+	{
+		ESP32_REG32(0x60096000UL + s_ClockUsers[i]) &= ~1UL;
+	}
+}
+#endif
 
 static bool Esp32ClockBusy(void)
 {

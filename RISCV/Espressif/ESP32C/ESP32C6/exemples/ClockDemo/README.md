@@ -45,5 +45,20 @@ lists/settings. Hardware execution is pending.
 
 | Build | text | data | bss |
 | --- | ---: | ---: | ---: |
-| Debug | 44256 | 584 | 3008 |
-| Release | 20660 | 564 | 2740 |
+| Debug | 44364 | 584 | 3008 |
+| Release | 20706 | 564 | 2740 |
+
+The first hardware run reported nine core-source failures and skipped every
+APB/LF check. C6 PCR bus gates reset enabled, and startup had left those gates
+on. The runtime clock checks consequently treated unused peripherals as active
+users. Startup now clears the unused bus gates before driver initialization;
+drivers enable their own gates. Flash, UART, interrupt routing, Timer Groups,
+SYSTIMER and USB Serial/JTAG are preserved. USB Serial/JTAG is excluded from
+the CPU/APB user list because its PLL clock is unchanged by these calls.
+Rebuild the C6 library as well as ClockDemo for this correction.
+
+A temporary register model reproduced the refusal with reset-enabled gates,
+then passed repeated source/APB changes after startup initialization at O0 and
+Os. It also checked preserved boot clocks and refusal with active peripheral,
+timer and non-XTAL UART clocks. The existing C3/C6 startup checks passed.
+The corrected firmware still requires the board retest.
