@@ -165,6 +165,8 @@ int main(void)
 		for (const ClockDemoSource_t &source : s_Sources)
 		{
 			SysLogPrintf(SysLogGet(), "Selecting %s\r\n", source.pName);
+			// Polling Tx has queued the last bytes in the hardware FIFO.
+			msDelay(2);
 			bool selected = SystemCoreClockSelect(source.Type, source.Frequency);
 			uint32_t core = SystemCoreClockGet();
 			ClockDemoResult(source.pName, selected && core == source.CoreFrequency);
@@ -175,6 +177,7 @@ int main(void)
 			for (uint32_t divider : s_ApbDividers)
 			{
 				uint32_t request = source.CoreFrequency / divider;
+				msDelay(2);
 				uint32_t actual = SystemPeriphClockSet(0, request);
 				SysLogPrintf(SysLogGet(), "CPU %u Hz, APB request %u Hz, actual %u Hz\r\n",
 					(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
@@ -185,6 +188,7 @@ int main(void)
 			for (const ClockDemoLowFreq_t &source : s_LowFreqSources)
 			{
 				SysLogPrintf(SysLogGet(), "Selecting LF %s\r\n", source.pName);
+				msDelay(2);
 				bool selected = SystemLowFreqClockSelect(source.Type, source.Frequency);
 				ClockDemoResult(source.pName, selected);
 				SysLogPrintf(SysLogGet(), "LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());

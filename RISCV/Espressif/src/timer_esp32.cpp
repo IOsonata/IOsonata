@@ -659,6 +659,9 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	}
 	Esp32Run(pData, true);
 	EnableInterrupt(state);
+	// The saved startup mask can have MIE clear. Enable delivery after the
+	// complete timer configuration, as required by Esp32EnableSourceIrq.
+	Esp32GlobalIrqEnable();
 	return true;
 }
 

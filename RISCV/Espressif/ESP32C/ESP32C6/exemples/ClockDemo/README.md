@@ -45,8 +45,8 @@ lists/settings. Hardware execution is pending.
 
 | Build | text | data | bss |
 | --- | ---: | ---: | ---: |
-| Debug | 44364 | 584 | 3008 |
-| Release | 20706 | 564 | 2740 |
+| Debug | 44704 | 584 | 3008 |
+| Release | 20810 | 564 | 2740 |
 
 The first hardware run reported nine core-source failures and skipped every
 APB/LF check. C6 PCR bus gates reset enabled, and startup had left those gates
@@ -62,3 +62,20 @@ then passed repeated source/APB changes after startup initialization at O0 and
 Os. It also checked preserved boot clocks and refusal with active peripheral,
 timer and non-XTAL UART clocks. The existing C3/C6 startup checks passed.
 The corrected firmware still requires the board retest.
+
+The next hardware run passed all core-source selections, APB requests/readback
+and LF selections over three cycles. Timer counters advanced, but every sample
+reported zero interrupts (36 failures). TimerInit restored the initially masked
+CPU state after the interrupt routing helper had enabled delivery. The timer
+now enables global delivery after restoring its outer setup mask, following
+the existing Espressif interrupt installation behavior. The demo also allows
+2 ms for polling UART output to leave the hardware FIFO before clock changes.
+
+The board reported about 250018 us for the XTAL delay and 309900 us for RC_FAST,
+consistent with an RC_FAST rate of roughly 16.1 MHz against its nominal 20 MHz
+value. LF calibration reported about 147.8 kHz for RC_SLOW and 18.0 kHz for
+RC32K. These are observations from this board, not accuracy specifications.
+The timer fix passed the existing five-chip Timer Group checks and a temporary
+model starting with global interrupts masked, each at O0 and O2. C6 Debug and
+Release library/demo builds passed; corrected interrupt delivery and complete
+UART output still need the board retest.
