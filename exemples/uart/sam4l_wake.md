@@ -51,6 +51,10 @@ python3 Python/sam4l_uart_wake.py --port /dev/cu.usbserial-ADAPTER --baud 100000
 ```
 
 The helper also answers the ordinary UART RX prompts at the normal baud rate.
+It reports each transmitted byte and exits with the last stage after 30 seconds
+without a complete output line, or after 300 seconds overall. These limits
+can be changed with `--timeout` and `--total-timeout`. Start the helper before
+resetting the board so it sees and answers every prompt.
 
 The LC profile repeats UART wake after each selected CPU source and LF
 selection, six times in total. The LS profile runs three wake cycles after

@@ -36,14 +36,48 @@ import time
 import serial
 
 
+def send_byte(port, timeout):
+    if port.write(b"U") != 1:
+        raise serial.SerialTimeoutException("Wake/test byte was not queued")
+    deadline = time.monotonic() + timeout
+    while port.out_waiting:
+        if time.monotonic() >= deadline:
+            raise serial.SerialTimeoutException("Adapter TX did not drain")
+        time.sleep(0.001)
+    # USB adapters may report an empty queue before the stop bit leaves TX.
+    time.sleep(0.003)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", required=True)
     parser.add_argument("--baud", type=int, default=1000000)
+    parser.add_argument("--timeout", type=float, default=30,
+                        help="Seconds without a complete console line")
+    parser.add_argument("--total-timeout", type=float, default=300,
+                        help="Maximum duration of the complete test in seconds")
     args = parser.parse_args()
-    with serial.Serial(args.port, args.baud, timeout=1, write_timeout=2) as port:
+    if args.timeout <= 0 or args.total_timeout <= 0:
+        parser.error("timeouts must be greater than zero")
+    with serial.Serial(args.port, args.baud, timeout=0.2, write_timeout=2) as port:
         pending = bytearray()
+        started = time.monotonic()
+        progress = started
+        stage = "waiting for ClockDemo output"
+        last_line = "(none)"
+        print("[host] Opened %s at %d baud. Reset the board now." %
+              (args.port, args.baud), flush=True)
+        print("[host] Use the adapter wired to PB00/PB01, not EDBG. "
+              "ClockDemo needs CLOCK_DEMO_UART_WAKE=1.", flush=True)
         while True:
+            now = time.monotonic()
+            if now - progress >= args.timeout or now - started >= args.total_timeout:
+                print("\n[host] Timeout: %s. Last line: %s" %
+                      (stage, last_line), file=sys.stderr)
+                if pending:
+                    print("[host] Partial input: %r" % bytes(pending[-160:]),
+                          file=sys.stderr)
+                return 2
             data = port.read_until(b"\n")
             if not data:
                 continue
@@ -52,26 +86,38 @@ def main():
             pending.extend(data)
             if not pending.endswith(b"\n"):
                 if len(pending) > 4096:
-                    pending.clear()
+                    print("\n[host] No line ending in 4096 bytes; check baud rate.",
+                          file=sys.stderr)
+                    return 2
                 continue
             line = bytes(pending)
             pending.clear()
+            progress = time.monotonic()
+            last_line = line.decode("ascii", errors="replace").strip()
             if b"Entering UART sleep;" in line:
+                stage = "waiting for UART wake result"
                 # Let the MCU arm PICOUART after draining its prompt.
                 time.sleep(0.1)
                 try:
                     port.baudrate = 9600
-                    port.write(b"U")
-                    port.flush()
-                    # Allow the 8-N-1 frame to leave the adapter shift register.
-                    time.sleep(0.003)
+                    send_byte(port, 2)
                 finally:
                     port.baudrate = args.baud
+                print("[host] Sent U at 9600; adapter restored to %d baud." %
+                      args.baud, flush=True)
             elif b"UART RX: send U" in line:
-                port.write(b"U")
-                port.flush()
+                stage = "waiting for normal UART RX result"
+                send_byte(port, 2)
+                print("[host] Sent U at %d baud." % args.baud, flush=True)
+            elif b"Entering sleep; press" in line:
+                print("[host] GPIO-wake profile detected. Set CLOCK_DEMO_UART_WAKE=1 "
+                      "and rebuild ClockDemo.", file=sys.stderr)
+                return 2
             elif b"ClockDemo complete:" in line:
                 return 0 if b"complete: 0 failures" in line else 1
+            elif b"UART wake byte:" in line or b"UART RX:" in line:
+                stage = "waiting for the next ClockDemo stage"
+
 
 
 if __name__ == "__main__":
