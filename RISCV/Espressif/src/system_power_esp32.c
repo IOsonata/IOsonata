@@ -49,6 +49,7 @@ bool Esp32I2cPrepareSleep(void) __attribute__((weak));
 void Esp32I2cResumeSleep(void) __attribute__((weak));
 bool Esp32SpiPrepareSleep(void) __attribute__((weak));
 void Esp32SpiResumeSleep(void) __attribute__((weak));
+bool Esp32TimerAllowLightSleep(void) __attribute__((weak));
 
 uint32_t SystemResetReason(void)
 {
@@ -114,7 +115,8 @@ void SystemSleep(void)
 	}
 	// Suspend idle transport drivers only for RTC/PMU sleep. Their
 	// interrupt state is unchanged for a plain WFI without RTC wake.
-	bool ready = (Esp32I2cPrepareSleep == NULL || Esp32I2cPrepareSleep()) &&
+	bool ready = (Esp32TimerAllowLightSleep == NULL || Esp32TimerAllowLightSleep()) &&
+		(Esp32I2cPrepareSleep == NULL || Esp32I2cPrepareSleep()) &&
 		(Esp32SpiPrepareSleep == NULL || Esp32SpiPrepareSleep()) &&
 		(Esp32UartPrepareSleep == NULL || Esp32UartPrepareSleep());
 	if (!ready)

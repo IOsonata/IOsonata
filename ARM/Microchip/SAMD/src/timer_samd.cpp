@@ -175,6 +175,25 @@ static const SamdTimerTickOps_t s_SamdTickOps = {
 
 static SamdTimerTrig_t s_SamdTimerTrig[SAMD_TIMER_TRIG_CNT];
 
+// RTC uses the low-frequency clock and remains available as a wake timer.
+// The TC/TCC and SysTick counters cannot retain their running clock in
+// Standby, so report them before the system suspends other peripherals.
+extern "C" bool SamdTimerAllowStandby(void)
+{
+	if (s_SamdSysTickOwner != NULL)
+	{
+		return false;
+	}
+	for (int i = SAMD_RTC_TIMER_MAXCNT; i < SAMD_TIMER_MAXCNT; i++)
+	{
+		if (g_SamdTimerData[i].pTimer != NULL && g_SamdTimerData[i].bRunning)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 static inline bool SamdTimerIsRtc(const SamdTimerData_t *pData)
 {
 	return pData->pOps->pRtc != NULL;

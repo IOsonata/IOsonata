@@ -207,6 +207,7 @@ int main()
 		assert(TimerInit(&timer, &cfg));
 		assert(g_SamdTimerData[dev].pOps == (dev == 0 ? &s_SamdRtcOps : dev < 3 ? &s_SamdTcOps : &s_SamdTccOps));
 		assert(g_SamdTimerData[dev].pTickOps == nullptr);
+		assert(SamdTimerAllowStandby() == (dev == 0));
 		assert(TimerGetMaxTrigger(&timer) == (dev == 0 ? 1 : dev < 3 ? 2 : 4));
 		assert(nsTimerEnableTrigger(&timer, 0, 1000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
 		uint32_t ticks = g_SamdTimerData[dev].pTrig[0].Ticks;
@@ -227,6 +228,7 @@ int main()
 		assert(TimerGetTickCount(&timer) == before + 4);
 		TimerDisable(&timer);
 		assert(!g_SamdTimerData[dev].bRunning);
+		assert(SamdTimerAllowStandby());
 		assert(TimerEnable(&timer));
 		// A changed source needs a new frequency selection before restart.
 		assert(nsTimerEnableTrigger(&timer, 0, 1000000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
@@ -326,6 +328,7 @@ int main()
 	assert(TimerGetHighFreqDevCount() == 4);
 	cfg.DevNo = SAMD_SYSTICK_TIMER_DEVNO;
 	assert(cfg.DevNo == 4 && TimerInit(&timer, &cfg));
+	assert(!SamdTimerAllowStandby());
 	assert(timer.DevNo == 4 && timer.Freq == 48000000);
 	assert(g_SamdTimerData[1].pTimer == nullptr);
 	assert(!g_SamdTimerData[1].bRunning);
@@ -340,6 +343,7 @@ int main()
 	cfg.DevNo = 2;
 	assert(TimerInit(&timer, &cfg));
 	assert(s_SysTickStops == 2 && s_SamdSysTickOwner == nullptr);
+	assert(!SamdTimerAllowStandby());
 	cfg.DevNo = 4;
 	assert(TimerInit(&other, &cfg));
 	cfg.DevNo = 5;

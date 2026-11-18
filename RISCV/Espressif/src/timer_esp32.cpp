@@ -113,6 +113,22 @@ typedef struct {
 
 static Esp32TimerData_t s_Timer[ESP32_TIMG_COUNT];
 
+#if defined(ESP32C3) || defined(ESP32C6)
+// The APB timer groups do not run at their configured rate in RTC
+// Light-sleep. Do not silently lose count or scheduled compare events.
+extern "C" bool Esp32TimerAllowLightSleep(void)
+{
+	for (int i = 0; i < ESP32_TIMG_COUNT; i++)
+	{
+		if (s_Timer[i].pTimer != NULL && s_Timer[i].Running)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+#endif
+
 #define Esp32Reg(Base, Offset) ESP32_REG32((Base) + (Offset))
 
 static void Esp32Tg0Handler(void);

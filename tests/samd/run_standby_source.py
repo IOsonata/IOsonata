@@ -11,6 +11,7 @@ EIC = (ROOT / "ARM/Microchip/SAMD/src/iopincfg_samd.c").read_text(encoding="utf-
 SLEEP = (ROOT / "ARM/Microchip/SAMD/src/system_sleep_samd.c").read_text(encoding="utf-8")
 ADC = (ROOT / "ARM/Microchip/SAMD/src/adc_samd.cpp").read_text(encoding="utf-8")
 DMAC = (ROOT / "ARM/Microchip/SAMD/src/dmac_samd.c").read_text(encoding="utf-8")
+TIMER = (ROOT / "ARM/Microchip/SAMD/src/timer_samd.cpp").read_text(encoding="utf-8")
 
 
 def body(source, signature):
@@ -101,6 +102,14 @@ class StandbySourceTest(unittest.TestCase):
 		self.assertIn("DMAC_CHCTRLA_ENABLE_Msk", check)
 		self.assertIn("DMAC_REGS->DMAC_CHID = selected", check)
 		self.assertLess(sleep.index("SamdDmacAllowStandby()"), sleep.index("SamdAdcPrepareSleep()"))
+
+	def test_hf_timer_standby_refusal(self):
+		check = body(TIMER, 'extern "C" bool SamdTimerAllowStandby(')
+		sleep = body(SLEEP, 'void SystemSleep(')
+		self.assertIn('s_SamdSysTickOwner != NULL', check)
+		self.assertIn('SAMD_RTC_TIMER_MAXCNT', check)
+		self.assertIn('g_SamdTimerData[i].bRunning', check)
+		self.assertLess(sleep.index('SamdTimerAllowStandby()'), sleep.index('SamdAdcPrepareSleep()'))
 
 	def test_rearm_does_not_change_gpio_ownership(self):
 		s = body(EIC, "void SamdStandbyWakeArm(")

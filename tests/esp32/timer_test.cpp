@@ -240,6 +240,17 @@ int main()
 		SetCount(dev, (1ULL << 32) + 42);
 		assert(TimerGetTickCount(&timers[dev]) == (1ULL << 32) + 42);
 	}
+#if defined(ESP32C3) || defined(ESP32C6)
+	assert(!Esp32TimerAllowLightSleep());
+	for (int i = 0; i < ESP32_TIMG_COUNT; i++)
+	{
+		TimerDisable(&timers[i]);
+	}
+	assert(Esp32TimerAllowLightSleep());
+	assert(TimerEnable(&timers[0]));
+	assert(!Esp32TimerAllowLightSleep());
+	TimerDisable(&timers[0]);
+#endif
 	assert(Esp32ClockSelect(UINT32_MAX, &divider) == ESP32_TIMER_APB_HZ / 2);
 	assert(divider == 2);
 	assert(Esp32ClockSelect(0, &divider) == ESP32_TIMER_APB_HZ / 2);

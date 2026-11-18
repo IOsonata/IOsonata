@@ -29,6 +29,7 @@ static bool s_RealPin;
 static uint32_t s_Isr;
 static uint32_t s_RejectStage;
 static uint32_t s_DmacCheckCount;
+static uint32_t s_TimerCheckCount;
 static uint32_t s_AdcPrepareCount;
 static uint32_t s_AdcResumeCount;
 static uint32_t s_I2cPrepareCount;
@@ -75,6 +76,11 @@ static bool SamdDmacAllowStandbyMock(void)
 	s_DmacCheckCount++;
 	return s_RejectStage != 7U;
 }
+static bool SamdTimerAllowStandbyMock(void)
+{
+	s_TimerCheckCount++;
+	return s_RejectStage != 8U;
+}
 static bool SamdAdcPrepareSleepMock(void)
 {
 	s_AdcPrepareCount++;
@@ -110,6 +116,7 @@ static void SamdUartResumeSleepMock(void)
 static bool (*SamdUsbAllowStandby)(void) = SamdUsbAllowStandbyMock;
 static bool (*SamdDacAllowStandby)(void) = SamdDacAllowStandbyMock;
 static bool (*SamdDmacAllowStandby)(void) = SamdDmacAllowStandbyMock;
+static bool (*SamdTimerAllowStandby)(void) = SamdTimerAllowStandbyMock;
 static bool (*SamdAdcPrepareSleep)(void) = SamdAdcPrepareSleepMock;
 static void (*SamdAdcResumeSleep)(void) = SamdAdcResumeSleepMock;
 static bool (*SamdI2cPrepareSleep)(void) = SamdI2cPrepareSleepMock;
@@ -164,13 +171,14 @@ int main(void)
 		assert(!s_bSamdStandbyNmiArmed);
 	}
 	// Refused Standby must restore the earlier drivers and not execute WFI.
-	for (unsigned stage = 1U; stage <= 7U; stage++)
+	for (unsigned stage = 1U; stage <= 8U; stage++)
 	{
 		s_RejectStage = stage;
 		s_Mask = 0U;
 		s_Isr = 0U;
 		s_Scb.SCR = 0x10U;
 		s_DmacCheckCount = 0U;
+		s_TimerCheckCount = 0U;
 		s_AdcPrepareCount = 0U;
 		s_AdcResumeCount = 0U;
 		s_I2cPrepareCount = 0U;
@@ -180,6 +188,7 @@ int main(void)
 		assert(s_Scb.SCR == 0x10U);
 		assert(s_WfiCount == 128U);
 		assert(s_DmacCheckCount == (stage >= 3U ? 1U : 0U));
+		assert(s_TimerCheckCount == (stage >= 3U && stage != 7U ? 1U : 0U));
 		assert(s_AdcPrepareCount == (stage >= 3U && stage <= 6U ? 1U : 0U));
 		assert(s_AdcResumeCount == 1U);
 		assert(s_I2cPrepareCount == (stage >= 4U && stage <= 6U ? 1U : 0U));
@@ -190,9 +199,11 @@ int main(void)
 	s_Isr = 1U;
 	s_AdcPrepareCount = 0U;
 	s_DmacCheckCount = 0U;
+	s_TimerCheckCount = 0U;
 	SystemSleep();
 	assert(s_AdcPrepareCount == 0U);
 	assert(s_DmacCheckCount == 0U);
+	assert(s_TimerCheckCount == 0U);
 	assert(s_WfiCount == 128U);
 	s_Isr = 0U;
 	s_Pending = 0;

@@ -308,3 +308,26 @@ gates, an active PDCA channel, and a running TC0 refusal, followed
 by successful sleep when these resources are idle. This is source
 and register-model coverage only. Target compilation, timer
 continuity, DMA behavior and power consumption remain unverified.
+
+## High-frequency timer ownership during low-power sleep
+
+SAM4L checks the timer driver's existing active-clock state for
+TC0/TC1 before deep resumable sleep and preserves AST as a wake
+source. SAMD11/SAMD21 now also refuse Standby when any bound,
+running TC/TCC timer exists. A bound SysTick timer is refused
+conservatively because the system does not preserve its core-clock
+timebase across Standby. A stopped high-frequency timer does not
+prevent sleep, and the existing low-frequency RTC counter remains
+outside this high-frequency check.
+
+ESP32-C3/C6 now check running Timer Group counters before entering
+RTC/PMU Light-sleep. A running counter prevents that transition;
+a stopped one does not. Ordinary CPU WFI without RTC wake remains
+available. Timer Enable/Disable and trigger state are unchanged by
+these checks, so existing timers remain owned by their drivers.
+
+The SAMD and ESP32 timer host tests now exercise these decisions.
+The SAMD Standby entry host fixture covers timer refusal before
+any peripheral is suspended. Existing RTC clock continuity and
+wakeup on SAMD, and power-domain transitions on ESP32, still
+require hardware verification.
