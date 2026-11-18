@@ -336,6 +336,14 @@ void SystemSleep(void)
 	}
 	if (slept && deep)
 	{
+		// A SystemWakePin EIC event stays latched until EIC_ICR is written.
+		// Clear only the enabled asynchronous lines routed by SystemWakePin,
+		// before acknowledging PM WAKE. Other EIC owners retain their flags.
+		uint32_t wakeEic = eic & SAM4L_BPM->BPM_BKUPPMUX;
+		if (wakeEic != 0U)
+		{
+			SAM4L_EIC->EIC_ICR = SAM4L_EIC->EIC_ISR & wakeEic;
+		}
 		if (wakeMask == 0U)
 		{
 			SAM4L_PM->PM_IDR = PM_IDR_WAKE;

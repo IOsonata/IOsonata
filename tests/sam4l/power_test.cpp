@@ -131,6 +131,7 @@ bool Sam4lTimerClockBusy(uint32_t ClockMask)
 int main(void)
 {
 	unsigned i;
+	unsigned before;
 	uint32_t bit;
 	uint32_t cause[] = {PM_RCAUSE_POR, PM_RCAUSE_POR33, PM_RCAUSE_BOD,
 			PM_RCAUSE_BOD33, PM_RCAUSE_EXT, PM_RCAUSE_WDT, PM_RCAUSE_OCDRST};
@@ -280,7 +281,7 @@ int main(void)
 		s_Hooks = {};
 		s_Hooks.RejectStage = stage;
 		g_PowerTestMask = 0U;
-		unsigned before = s_SleepCount;
+		before = s_SleepCount;
 		SystemSleep();
 		assert(s_SleepCount == before);
 		assert(g_PowerTestMask == 0U);
@@ -299,6 +300,27 @@ int main(void)
 	}
 	s_Hooks = {};
 
+	// EIC8 simulates the latched BUTTON1 interrupt after a RETENTION wake.
+	// EIC9 is not owned by SystemWakePin and must not be acknowledged.
+	s_Eic.EIC_CTRL = (1U << 8) | (1U << 9);
+	s_Eic.EIC_IMR = (1U << 8) | (1U << 9);
+	s_Eic.EIC_ASYNC = (1U << 8) | (1U << 9);
+	s_Bpm.BPM_BKUPPMUX = 1U << 8;
+	s_Eic.EIC_ISR = (1U << 8) | (1U << 9);
+	s_Eic.EIC_ICR = 0U;
+	s_WaitSleep = false;
+	before = s_SleepCount;
+	SystemSleep();
+	assert(s_SleepCount == before + 1U);
+	assert(s_Eic.EIC_ICR == (1U << 8));
+	assert(s_Eic.EIC_ISR == ((1U << 8) | (1U << 9)));
+	s_Bpm.BPM_BKUPPMUX = 0U;
+	s_Eic.EIC_ICR = 0U;
+	SystemSleep();
+	assert(s_SleepCount == before + 2U);
+	assert(s_Eic.EIC_ICR == 0U);
+	s_Eic.EIC_ISR = 0U;
+
 	// Shared DMA and running high-frequency timers must prevent RETENTION.
 	// AST is allowed to keep running for the existing wake tests above.
 	s_Pm.PM_AWEN = 0U;
@@ -307,7 +329,7 @@ int main(void)
 	s_WaitSleep = false;
 	s_Pm.PM_HSBMASK = PM_HSBMASK_PDCA;
 	s_Pm.PM_PBBMASK = 0U;
-	unsigned before = s_SleepCount;
+	before = s_SleepCount;
 	SystemSleep();
 	assert(s_SleepCount == before);
 	assert(s_Pm.PM_PBDMASK == 0U);
@@ -344,7 +366,7 @@ int main(void)
 
 	s_Bscif.BSCIF_PCLKSR = 0;
 	SystemSleep();
-	assert(s_SleepCount == 13);
+	assert(s_SleepCount == 15);
 	assert(s_Pm.PM_PBDMASK == 0);
 	assert(s_Bpm.BPM_PMCON == saved);
 	s_TestSleep = false;
@@ -358,5 +380,5 @@ int main(void)
 	assert(s_Bpm.BPM_UNLOCK == (BPM_UNLOCK_KEY(0xaa) | BPM_UNLOCK_ADDR(0x1c)));
 	assert(g_PowerTestScb.SCR & SCB_SCR_SLEEPDEEP_Msk);
 	assert(g_PowerTestMask == 1);
-	std::puts("SAM4L reset, backup registers, wake pins, PDCA/timer sleep refusal, SLEEP0, WAIT, RETENTION and Backup entry PASS");
+	std::puts("SAM4L reset, backup registers, EIC wake acknowledgement, PDCA/timer sleep refusal, SLEEP0, WAIT, RETENTION and Backup entry PASS");
 }

@@ -104,3 +104,19 @@ I2C master and SPI master clock suspension without application-specific
 sleep code. TWIS keeps its enabled address-match SleepWalking request.
 Active masters or unsupported SPI slave sleep prevent entry. The
 new coordination has not been compiled or tested on hardware.
+
+## Repeated RETENTION wake fix
+
+Following the first BUTTON1 wake, the EIC interrupt status can remain
+latched. An uncleared EIC wake event may cause the next WFI to return
+immediately, producing rapid `Resumed from Standby` messages without a
+reset. SystemSleep now acknowledges the selected asynchronous EIC wake
+pins routed through SystemWakePin, before clearing the PM WAKE status.
+Other EIC interrupt lines are not acknowledged by this operation.
+
+Rebuild the library and PowerOffDemo after this change. The hardware
+validation is ten distinct BUTTON1 press/release cycles, with the CPU
+remaining asleep between presses. Repeated log output without a new
+button press is a failure even when UART, CPU/APB clock and SRAM checks
+all report PASS. A host register model checks the EIC acknowledgement;
+physical validation remains outstanding.
