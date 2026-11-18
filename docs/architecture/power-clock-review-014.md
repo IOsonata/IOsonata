@@ -371,3 +371,25 @@ refusal of an unready or unknown source.
 
 This host model does not test the synchronization timing of GCLK
 or the physical RTC wake circuit. Hardware validation remains required.
+
+## SAM4L PICOUART functional hardware validation (November 18, 2026)
+
+The maintainer's SAM4L8 Xplained Pro test established 10/10
+consecutive PICOUART UART wake cycles at 9600 baud with the
+restored 1 Mbaud USART0, CPU/APB clocks, sequential wake counters
+and 128-byte static plus 128-byte stack SRAM samples all PASS.
+The Python host regression suite passed 5/5 tests.
+
+A subsequent `--wake-delay 20 --cycles 1` run also passed
+PICOUART byte reception, UART/clock restoration and sampled SRAM.
+The host waits 20 seconds after changing baud before sending
+the wake byte; the MCU's 750 ms pre-sleep test guard is included
+in that interval.
+
+This validates the functional UART-wake path with both repeated
+and delayed wake requests. Actual low-power current could not be
+measured because no current-measurement equipment was available.
+Mixed-peripheral sleep handling, clean managed-project build coverage,
+and independent low-power mode/current verification remain separate
+validation items. The host's baud switch/handshake are test-only;
+normal applications do not coordinate `SystemSleep()` with a host.

@@ -132,3 +132,16 @@ A successful wake does not itself establish the current or even the
 exact power state reached. Compare the plateau with an active-idle
 baseline, and repeat separately for EIC/AST wake if needed. Do not
 attribute board-wide or debugger current to the target MCU.
+
+## Extended wake validation (November 18, 2026)
+
+The maintainer reported a successful single hardware wake using
+`--wake-delay 20`, with the normal 1 Mbaud RX preflight and the
+9600-baud PICOUART wake followed by UART rate, CPU/APB clock,
+resume-counter and 128-static/128-stack-byte SRAM checks all PASS.
+The earlier ten-cycle default-delay run also passed every check.
+The extended delay is host-controlled test traffic only; PICOUART
+and USART0 transition management remains inside the MCU driver.
+
+No supply-current measurement was possible with the available tools.
+The exact low-power hardware state and consumption remain unverified.

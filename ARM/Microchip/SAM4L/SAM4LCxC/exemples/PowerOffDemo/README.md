@@ -663,3 +663,27 @@ The host still sends `U` and checks UART, clock and sampled SRAM
 restoration. Record the supply voltage, MCU-only sleep current and
 active-idle baseline and confirm no measurement supply brownout.
 No sleep-current value has yet been reported.
+
+## November 18, 2026: 20-second PICOUART wake PASS
+
+With the unchanged firmware from the validated ten-cycle run, the
+maintainer used `--wake-delay 20 --cycles 1 --baud 1000000`.
+The host switched its FTDI adapter to 9600 before PICOUART activation,
+held the wake byte for 20 seconds, then sent `U`. The board reported:
+
+- `UART wake byte: PASS`
+- `UART rate after resume: PASS`
+- `CPU/APB clock after resume: PASS`
+- `Resumed from Standby, count 0x00000001`
+- `SRAM sample PASS: 128 static + 128 stack bytes`
+- `[host] UART wake cycle 1/1 PASS, including SRAM.`
+
+The delay is measured from the host baud switch; the MCU's 750 ms
+test-only preparation interval occurs within it. This validates wake
+functionality following a prolonged quiet interval. Neither actual
+sleep current nor the precise mode/duration of hardware low-power
+entry was independently measured.
+
+No current-measurement equipment was available for this run, so
+power consumption remains unverified, not failed. No driver or
+generic system power source modification is required by this test.
