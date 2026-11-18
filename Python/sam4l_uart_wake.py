@@ -82,6 +82,12 @@ def main():
                 if pending:
                     print("[host] Partial input: %r" % bytes(pending[-160:]),
                           file=sys.stderr)
+                elif cycles == 0 and stage == "waiting for PowerOffDemo output":
+                    print("[host] No USART0 console received. Check EXT1/EXT4 "
+                          "pin 13 = PB00 MCU RX (adapter TX), pin 14 = PB01 "
+                          "MCU TX (adapter RX), pin 19 = GND. EXT2 pin 13/14 "
+                          "is USART1, not USART0. Also check that the UART-wake "
+                          "firmware was flashed.", file=sys.stderr)
                 return 2
             data = port.read_until(b"\n")
             if not data:

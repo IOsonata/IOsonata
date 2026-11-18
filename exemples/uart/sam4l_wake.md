@@ -20,9 +20,12 @@ PICOUART shares USART0 RX on PB00, not the EDBG USART1 console.
 
 | External adapter | SAM4L |
 | --- | --- |
-| 3.3 V TX | PB00 (USART0 RX / PICOUART RX) |
-| 3.3 V RX | PB01 (USART0 TX) |
-| GND | GND |
+| 3.3 V TX | EXT1/EXT4 pin 13, PB00 (USART0 RX / PICOUART RX) |
+| 3.3 V RX | EXT1/EXT4 pin 14, PB01 (USART0 TX) |
+| GND | EXT1/EXT4 pin 19 (or pin 2) |
+
+EXT2 pin 13/14 is PC26/PC27 USART1, not USART0; do not use EXT2
+for this profile. PB00/PB01 are available on both EXT1 and EXT4.
 
 USART0 normal operation retains its configured baud, 1,000,000 by
 default. PICOUART uses 9600 baud, 8-N-1, with a 32768 Hz clock

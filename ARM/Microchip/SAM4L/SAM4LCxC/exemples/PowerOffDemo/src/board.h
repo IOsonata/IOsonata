@@ -56,8 +56,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 // PICOUART receive wake is the next validation profile. It needs a
-// 3.3 V USB-UART adapter on PB00 (adapter TX) and PB01 (adapter RX),
-// plus common ground. Console output moves off the EDBG virtual COM.
+// 3.3 V USB-UART adapter on EXT1 (or EXT4) pin 13 = PB00 (adapter TX),
+// pin 14 = PB01 (adapter RX), and pin 19 = ground.
+// EXT2 pin 13/14 is USART1, not USART0.
+// Console output moves off the EDBG virtual COM.
 // Override UART_WAKE to 0 to restore the verified OLED1 BUTTON1 test.
 #ifndef POWER_DEMO_UART_WAKE
 #define POWER_DEMO_UART_WAKE 1

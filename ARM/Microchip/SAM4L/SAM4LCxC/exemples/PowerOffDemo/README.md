@@ -26,9 +26,13 @@ After `Entering Standby`, press OLED1 BUTTON1. Each wake should print
 
 With the default UART-wake profile in board.h, USART0 RX PB00 is shared
 with PICOUART and USART0 TX is PB01. Connect a 3.3 V USB-UART adapter:
-adapter TX to PB00, adapter RX to PB01, and GND to GND. Do not connect a
-5 V UART signal or power the board from the adapter. This is not the
-EDBG virtual COM port.
+adapter TX to EXT1 (or EXT4) pin 13 / PB00, adapter RX to
+EXT1 (or EXT4) pin 14 / PB01, and adapter GND to pin 19.
+These are the board's USART0 pins (Table 4-1 or 4-4, SAM4L8
+Xplained Pro user guide). EXT2 pin 13/14 instead carries USART1
+PC26/PC27 and will not work for this test.
+Do not connect a 5 V UART signal or power the board from the adapter.
+This is not the EDBG virtual COM port.
 
 Build the SAM4LCxC library and PowerOffDemo in matching Release
 configurations. Flash the application with EDBG and stop the debugger.
@@ -46,6 +50,14 @@ console baud. Each wake must report `UART wake byte: PASS`,
 `UART rate after resume: PASS`, and
 `CPU/APB clock after resume: PASS`. The SRAM sample should also
 pass. This profile has not been validated on physical hardware.
+
+If the host script prints `Timeout: waiting for PowerOffDemo output`:
+check that the adapter is wired to EXT1 or EXT4, not EXT2; verify
+adapter RX is connected to pin 14 (MCU TX), adapter TX to pin 13
+(MCU RX), and both share ground. Ensure the latest UART-wake
+PowerOffDemo is flashed and no other program owns the adapter port.
+Use a scope or logic analyzer on PB01 to distinguish missing UART
+transmission from a host baud/wiring issue before modifying the driver.
 
 ## Previously validated Backup-mode button wake
 
