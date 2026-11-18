@@ -62,6 +62,10 @@ static const struct {
 #endif
 };
 
+// Optional UART preparation does not pull the driver into UART-free applications.
+extern bool Sam4lUartPrepareSleep(void) __attribute__((weak));
+extern void Sam4lUartResumeSleep(void) __attribute__((weak));
+
 static void Sam4lPowerClockEnable(uint32_t Mask)
 {
 	uint32_t value = SAM4L_PM->PM_PBDMASK | Mask;
@@ -188,6 +192,11 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 void SystemSleep(void)
 {
 	uint32_t state = DisableInterrupt();
+	if (Sam4lUartPrepareSleep != NULL && !Sam4lUartPrepareSleep())
+	{
+		EnableInterrupt(state);
+		return;
+	}
 	uint32_t scr = SCB->SCR;
 	uint32_t clocks = SAM4L_PM->PM_PBDMASK;
 
@@ -256,6 +265,10 @@ void SystemSleep(void)
 	SAM4L_PM->PM_PBDMASK = clocks;
 	__DSB();
 	__ISB();
+	if (Sam4lUartResumeSleep != NULL)
+	{
+		Sam4lUartResumeSleep();
+	}
 	EnableInterrupt(state);
 }
 

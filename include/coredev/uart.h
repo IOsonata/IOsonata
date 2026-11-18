@@ -247,6 +247,25 @@ bool UARTDisconnectTask(UARTDev_t *pDev, PeiDev_t *pPei,
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState);
 UARTDev_t const *UARTGetInstance(int DevNo);
 
+/**
+ * @brief Enable or disable UART reception as a system sleep wake source.
+ *
+ * Does not enter sleep or change normal UART operation. Call SystemSleep()
+ * separately. The driver prepares its wake receiver on sleep entry and
+ * restores the normal UART rate before SystemSleep() returns. Wake data is
+ * available through UARTRx(). Wake remains enabled until explicitly disabled
+ * or the UART is disabled, powered off or reinitialized.
+ *
+ * Drain TX and RX and stop other active peripherals before sleeping. A busy
+ * receiver may prevent sleep. Wake pins, baud rate and frame format depend
+ * on the MCU. The sender must wait for acknowledgement before sending payload.
+ * An RX callback may run during resume with interrupts masked; do not block.
+ *
+ * @return true when the request is accepted; false if unsupported or invalid.
+ *         Acceptance does not guarantee that a later sleep attempt succeeds.
+ */
+bool UARTEnableWake(UARTDev_t *pDev, bool bEnable);
+
 static inline int UARTGetRate(UARTDev_t * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
 static inline int UARTSetRate(UARTDev_t * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }
 static inline void UARTEnable(UARTDev_t * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
@@ -293,6 +312,8 @@ public:
 	virtual uint32_t Rate(void) { return UARTGetRate(&vDevData); }
     void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
     void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
+	bool EnableWake(bool bEnable) { return UARTEnableWake(&vDevData, bEnable); }
+
 	bool PreparePeiTx(const uint8_t *pTx, uint32_t TxLen)
 	{
 		return UARTPreparePeiTx(&vDevData, pTx, TxLen);

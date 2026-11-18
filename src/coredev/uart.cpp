@@ -46,6 +46,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //extern char s_Buffer[];	// defined in sbuffer.c
 //extern int s_BufferSize;
 
+// Ports without a receive-wake implementation leave the MCU and UART running.
+__attribute__((weak)) bool UARTEnableWake(UARTDev_t *pDev, bool bEnable)
+{
+	(void)pDev;
+	(void)bEnable;
+	return false;
+}
+
 void UARTprintf(UARTDev_t * const pDev, const char *pFormat, ...)
 {
 	va_list vl;
