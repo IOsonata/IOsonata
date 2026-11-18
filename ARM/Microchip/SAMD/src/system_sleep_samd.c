@@ -81,7 +81,9 @@ void SystemSleep(void)
 	}
 	SamdStandbyWakeArm();
 	previous = SCB->SCR;
-	SCB->SCR = previous | SCB_SCR_SLEEPDEEP_Msk;
+	// Standby returns to this caller; never inherit SLEEPONEXIT.
+	SCB->SCR = (previous | SCB_SCR_SLEEPDEEP_Msk) &
+		~SCB_SCR_SLEEPONEXIT_Msk;
 	__DSB();
 	__WFI();
 	__ISB();
