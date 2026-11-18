@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
 @file	board.h
 
-@brief	SAM D21 Xplained Pro clock and Standby demo
+@brief	SAM D21 Xplained Pro clock demo
 
-Standby wake and SRAM sample results go to EDBG COM at 115200 baud.
+Clock and peripheral tests report over EDBG COM at 115200 baud.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 29, 2026
@@ -60,21 +60,8 @@ SOFTWARE.
 #define UART_DMA_MODE		false
 #define UART_INT_PRIO		2
 
-// Set to 1 when OLED1 is connected to EXT1; otherwise use onboard SW0.
-#ifndef CLOCK_DEMO_OLED1_WAKE
-#define CLOCK_DEMO_OLED1_WAKE 0
-#endif
+// ClockDemo has no wake-pin profile; PowerOffDemo tests SW0/standby.
 #define CLOCK_DEMO_UART_RX_TEST 1
-#define CLOCK_DEMO_SLEEP_APB_DIVIDER 4U
-#if CLOCK_DEMO_OLED1_WAKE
-#define CLOCK_DEMO_WAKE_PORT IOPORTB
-#define CLOCK_DEMO_WAKE_PIN 4
-#define CLOCK_DEMO_WAKE_NAME "OLED1 BUTTON1"
-#else
-#define CLOCK_DEMO_WAKE_PORT IOPORTA
-#define CLOCK_DEMO_WAKE_PIN 15
-#define CLOCK_DEMO_WAKE_NAME "SW0"
-#endif
 
 // LF selection omitted because a running DFLL/DPLL may own its reference.
 #define CLOCK_DEMO_SOURCES { {"OSC8M", OSC_TYPE_RC, 8000000U, 1U, UINT32_MAX} }

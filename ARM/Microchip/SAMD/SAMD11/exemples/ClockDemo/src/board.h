@@ -55,23 +55,10 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// Select Standby/resume checks or the clock-selection checks to fit D11 flash.
-#ifndef CLOCK_DEMO_RESUME_TEST
-#define CLOCK_DEMO_RESUME_TEST 1
-#endif
-
-#if CLOCK_DEMO_RESUME_TEST
-#define CLOCK_DEMO_UART_RX_TEST 1
-// SW0 is PA14, the dedicated NMI input (active low).
-#define CLOCK_DEMO_WAKE_PORT IOPORTA
-#define CLOCK_DEMO_WAKE_PIN 14
-#define CLOCK_DEMO_WAKE_NAME "SW0"
-#define CLOCK_DEMO_SLEEP_APB_DIVIDER 4U
-#define CLOCK_DEMO_CORE_READONLY 0
-#define CLOCK_DEMO_SOURCES { {"OSC8M", OSC_TYPE_RC, 8000000U, 48000000U, 48000000U} }
-#else
+// Clock selection is the only ClockDemo mode. Use PowerOffDemo for SW0 wake.
+// Leave the optional UART RX prompt off until the flash-limited build is checked.
+#define CLOCK_DEMO_UART_RX_TEST 0
 #define CLOCK_DEMO_SOURCES { {"OSC8M", OSC_TYPE_RC, 8000000U, 1U, UINT32_MAX} }
-#endif
 
 // LF selection omitted because a running DFLL/DPLL may own its reference.
 #define CLOCK_DEMO_APB_SHARED_CORE 1

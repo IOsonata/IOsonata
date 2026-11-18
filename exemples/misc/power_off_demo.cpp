@@ -428,10 +428,10 @@ int main()
 	wakeCount = 0U;
 	while (1)
 	{
-#if POWER_DEMO_UART_WAKE
 		uint32_t coreBefore = SystemCoreClockGet();
 		uint32_t apbBefore = SystemPeriphClockGet(0);
 		uint32_t rateBefore = s_Uart.Rate();
+#if POWER_DEMO_UART_WAKE
 		PowerDemoPut("Entering UART sleep; send one U at 9600 baud\r\n");
 #elif defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
 		PowerDemoPut("Entering Standby; automatic timer wake\r\n");
@@ -494,14 +494,16 @@ int main()
 		// Let the host adapter switch back to its normal console baud.
 		msDelay(100);
 		PowerDemoPut(received ? "UART wake byte: PASS\r\n" : "UART wake byte: FAIL\r\n");
+#else
+		s_Uart.Enable();
+#endif
+		// Keep wake verification in PowerOffDemo for every resumable port.
+		// UART output here also exercises TX after resume.
 		PowerDemoPut(s_Uart.Rate() == rateBefore ? "UART rate after resume: PASS\r\n" :
 			"UART rate after resume: FAIL\r\n");
 		PowerDemoPut(SystemCoreClockGet() == coreBefore && SystemPeriphClockGet(0) == apbBefore ?
 			"CPU/APB clock after resume: PASS\r\n" :
 			"CPU/APB clock after resume: FAIL\r\n");
-#else
-		s_Uart.Enable();
-#endif
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
 		uint64_t expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
 		PowerDemoPut(period != 0U && s_StandbyTimerWoke &&
