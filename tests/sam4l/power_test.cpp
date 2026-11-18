@@ -331,9 +331,13 @@ int main(void)
 	s_Eic.EIC_ISR = 0U;
 
 	// Shared DMA and running high-frequency timers must prevent RETENTION.
+	// Restore the EIC interrupt and asynchronous wake masks after the
+	// EIC8/EIC9 test, so the bit 1 EIC line still selects deep sleep.
 	// AST is allowed to keep running for the existing wake tests above.
 	s_Pm.PM_AWEN = 0U;
 	s_Eic.EIC_CTRL = 2U;
+	s_Eic.EIC_IMR = 2U;
+	s_Eic.EIC_ASYNC = 2U;
 	s_Pm.PM_PBDMASK = 0U;
 	s_WaitSleep = false;
 	s_Pm.PM_HSBMASK = PM_HSBMASK_PDCA;
