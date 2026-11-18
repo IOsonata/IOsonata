@@ -52,11 +52,11 @@ python3 Python/sam4l_uart_wake.py --port /dev/cu.usbserial-ADAPTER --baud 100000
 The helper first sends a ready byte `R` at the normal 1 Mbaud console
 rate. After the MCU's setup prompt, the host changes the adapter to
 9600 baud while USART0 is still active. The MCU waits 750 ms before
-arming PICOUART in `SystemSleep()`; the host waits 1.25 s before
-sending `U`, then restores the console baud. It checks the recovered
-UART byte, rate and CPU/APB clock
-after every wake. The script stops after the requested number of
-complete cycles or a configured timeout.
+arming PICOUART in `SystemSleep()`; the host waits 1.25 s by default
+before sending `U`, then restores the console baud. It checks the
+recovered UART byte, rate, CPU/APB clock, sequential resume counter
+and sampled SRAM after every wake. The script stops after the requested
+number of complete cycles or a configured timeout.
 
 ## Driver behavior and limits
 
@@ -88,3 +88,47 @@ resume counting (1 through 10), and 128 static plus 128 stack bytes
 of sampled SRAM retention. The host helper required every check
 before accepting a cycle. Sleep-current measurement, extended wake
 reliability and mixed-peripheral sleep behavior remain pending.
+
+## Measuring PICOUART sleep current
+
+The SAM4L8 Xplained Pro has a dedicated 1x2 MCU-current measurement
+header near the board's upper edge. All MCU supply current passes
+through this header (Atmel-42103B-SAM4L8-Xplained-Pro User Guide,
+section 4.1.3). **Disconnect board power before removing the MCU
+supply jumper or inserting/removing an ammeter.** Removing it while
+powered may back-power the MCU through I/O pins and cause damage.
+
+Connect a low-burden ammeter or power analyzer *in series across the
+jumper header*, then power the board. Use an appropriate starting
+current range to accommodate startup current. Check that the MCU
+still starts and that the analyzer does not cause a supply brownout.
+The external USB-UART adapter must share ground and idle HIGH on PB00.
+Measure MCU supply current, not the total debugger/board current.
+
+The host helper accepts `--wake-delay`, the delay from switching the
+FTDI adapter to 9600 baud until sending the wake byte. The default is
+1.25 seconds, matching the ten-cycle validation. Choose a longer
+interval to observe a stable low-power plateau. The MCU remains in
+its independently selected sleep mode; the host controls only when it
+sends the wake stimulus.
+
+```sh
+python3 Python/sam4l_uart_wake.py \
+    --port /dev/cu.usbserial-A8UKQC7S \
+    --baud 1000000 \
+    --cycles 1 \
+    --wake-delay 20
+```
+
+After the host prints "Adapter switched to 9600 before PICOUART
+activation", wait approximately one second for the firmware's
+750 ms pre-sleep guard to elapse, then measure the steady-state
+current before the host sends `U`. The helper performs the same
+post-wake functional checks. Record the supply voltage, mean current
+and peak/transient current, supply configuration, debugger connection,
+adapter wiring and measurement duration.
+
+A successful wake does not itself establish the current or even the
+exact power state reached. Compare the plateau with an active-idle
+baseline, and repeat separately for EIC/AST wake if needed. Do not
+attribute board-wide or debugger current to the target MCU.

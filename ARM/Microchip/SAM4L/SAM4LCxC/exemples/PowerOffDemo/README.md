@@ -634,3 +634,32 @@ The host handshake coordinates external test traffic only.
 Production `SystemSleep()` remains autonomous: the UART driver
 arms PICOUART and restores USART0 without host participation.
 No UART driver or system power code was changed for this result.
+
+## Measuring actual PICOUART sleep current
+
+The functional 10/10 result did not measure supply current. The
+board's MCU-current measurement header permits a separate MCU-only
+series measurement (Atmel SAM4L8 Xplained Pro User Guide, 4.1.3).
+**Power off before moving the jumper or ammeter** to prevent I/O
+back-powering and damage.
+
+Without modifying `SystemSleep()` or the PICOUART driver, the host
+script can hold the external adapter at 9600 baud with its TX idle
+while the MCU waits in its normal sleep mode:
+
+```sh
+python3 Python/sam4l_uart_wake.py \
+    --port /dev/cu.usbserial-A8UKQC7S \
+    --baud 1000000 \
+    --cycles 1 \
+    --wake-delay 20
+```
+
+The host switches rate first. The MCU's 750 ms guard is unchanged;
+the 20-second interval is measured from the host rate switch, not
+from the precise sleep-entry instant. Take a stable current reading
+after approximately one second and before wake-byte transmission.
+The host still sends `U` and checks UART, clock and sampled SRAM
+restoration. Record the supply voltage, MCU-only sleep current and
+active-idle baseline and confirm no measurement supply brownout.
+No sleep-current value has yet been reported.

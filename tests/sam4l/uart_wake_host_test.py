@@ -24,10 +24,15 @@ with mock.patch.dict(sys.modules, {"serial": serial_stub}):
 class FakeClock:
     def __init__(self):
         self.value = 0.0
+        self.delays = []
 
     def monotonic(self):
         self.value += 0.02
         return self.value
+
+    def sleep(self, seconds):
+        self.delays.append(seconds)
+        self.value += seconds
 
 
 class FakePort:
@@ -87,7 +92,7 @@ class FakePort:
 
 
 class UARTWakeHostTests(unittest.TestCase):
-    def run_scenario(self, scenario, cycles):
+    def run_scenario(self, scenario, cycles, wake_delay=None):
         port = FakePort(scenario)
         clock = FakeClock()
         output = io.BytesIO()
@@ -97,15 +102,18 @@ class UARTWakeHostTests(unittest.TestCase):
             str(script), "--port", "fake", "--baud", "1000000",
             "--cycles", str(cycles), "--timeout", "2", "--total-timeout", "20",
         ]
+        if wake_delay is not None:
+            argv.extend(("--wake-delay", str(wake_delay)))
         with mock.patch.object(wake.serial, "Serial", return_value=port, create=True), \
                 mock.patch.object(wake.time, "monotonic", clock.monotonic), \
-                mock.patch.object(wake.time, "sleep", lambda _seconds: None), \
+                mock.patch.object(wake.time, "sleep", clock.sleep), \
                 mock.patch.object(sys, "argv", argv), \
                 mock.patch.object(sys, "stdout", console), \
                 mock.patch.object(sys, "stderr", errors):
             code = wake.main()
             console.flush()
             result = output.getvalue().decode("utf-8")
+        port.sleep_delays = clock.delays
         return code, result, errors.getvalue(), port
 
     def test_two_complete_cycles(self):
@@ -132,6 +140,13 @@ class UARTWakeHostTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertNotIn("UART wake cycle 1/1 PASS", output)
         self.assertIn("expected 1", errors)
+
+    def test_extended_sleep_current_interval(self):
+        code, output, errors, port = self.run_scenario("success", 1, 10.0)
+        self.assertEqual(code, 0, errors)
+        self.assertIn("Wake deferred 10.00 s", output)
+        self.assertIn(10.0, port.sleep_delays)
+        self.assertEqual(port.wakes, 1)
 
 
 if __name__ == "__main__":

@@ -54,6 +54,9 @@ def main():
     parser.add_argument("--baud", type=int, default=1000000)
     parser.add_argument("--cycles", type=int, default=3,
                         help="Number of complete UART wake cycles to check")
+    parser.add_argument("--wake-delay", type=float, default=1.25,
+                        help="Seconds after FTDI switches to 9600 before wake U "
+                             "(minimum 1.25; increase for MCU sleep-current measurements)")
     parser.add_argument("--timeout", type=float, default=30,
                         help="Seconds without a complete console line")
     parser.add_argument("--total-timeout", type=float, default=300,
@@ -61,6 +64,9 @@ def main():
     args = parser.parse_args()
     if args.timeout <= 0 or args.total_timeout <= 0 or args.cycles <= 0:
         parser.error("timeouts and cycles must be greater than zero")
+    if not 1.25 <= args.wake_delay < args.total_timeout:
+        parser.error("--wake-delay must be at least 1.25 seconds and less "
+                     "than --total-timeout")
     with serial.Serial(args.port, args.baud, timeout=0.2, write_timeout=2) as port:
         pending = bytearray()
         started = time.monotonic()
@@ -142,14 +148,21 @@ def main():
                 rate_ok = False
                 clock_ok = False
                 resumed_ok = False
-                # The MCU waits 750 ms after this prompt before calling
-                # SystemSleep(). Settle the FTDI rate first, then let
-                # PICOUART arm before sending the wake byte.
+                # The MCU waits 750 ms after the prompt before calling
+                # SystemSleep(). Keep FTDI at 9600 for the requested interval
+                # so sleep current can be measured without altering firmware.
                 try:
                     port.baudrate = 9600
                     print("[host] Adapter switched to 9600 before PICOUART "
                           "activation.", flush=True)
-                    time.sleep(1.25)
+                    if args.wake_delay > 1.25:
+                        print("[host] Wake deferred %.2f s for sleep-current "
+                              "measurement." % args.wake_delay, flush=True)
+                    time.sleep(args.wake_delay)
+                    if time.monotonic() - started >= args.total_timeout:
+                        print("[host] Total timeout reached during wake delay.",
+                              file=sys.stderr)
+                        return 2
                     early = port.read(port.in_waiting) if port.in_waiting else b""
                     if early:
                         print("[host] Unexpected data during the 9600-baud "
@@ -160,6 +173,7 @@ def main():
                     send_byte(port, 2)
                 finally:
                     port.baudrate = args.baud
+                progress = time.monotonic()
                 print("[host] Sent U at 9600; adapter restored to %d baud." %
                       args.baud, flush=True)
             elif b"Entering UART sleep;" in line:
