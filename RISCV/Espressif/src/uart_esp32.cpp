@@ -95,10 +95,10 @@ typedef struct {
 	int          NbIOPins;
 	uint32_t     SavedInterrupts;
 	uint32_t     SleepInterrupts;		//!< UART interrupt enable before system sleep
-	bool         bSleepPaused;		//!< SystemSleep temporarily stopped the clocks
 	uint8_t      RxFifoMem[ESP32_UART_CFIFO_SIZE];
 	uint8_t      TxFifoMem[ESP32_UART_CFIFO_SIZE];
 	volatile bool bEnabled;
+	bool         bSleepPaused;		//!< SystemSleep temporarily stopped the clocks
 } ESP32_UARTDEV;
 #pragma pack(pop)
 
