@@ -94,6 +94,8 @@ typedef struct {
 	const IOPinCfg_t *pIOPinMap;
 	int          NbIOPins;
 	uint32_t     SavedInterrupts;
+	uint32_t     SleepInterrupts;		//!< UART interrupt enable before system sleep
+	bool         bSleepPaused;		//!< SystemSleep temporarily stopped the clocks
 	uint8_t      RxFifoMem[ESP32_UART_CFIFO_SIZE];
 	uint8_t      TxFifoMem[ESP32_UART_CFIFO_SIZE];
 	volatile bool bEnabled;
@@ -416,6 +418,66 @@ void UART1_IRQHandler(void)
 extern "C" void UART2_IRQHandler(void)
 {
 	Esp32UartIRQHandler(&s_Esp32UartDev[2]);
+}
+#endif
+
+// Called with CPU interrupts masked by SystemSleep. Only UARTs that are
+// idle can be paused; no FIFO or pin configuration is discarded.
+// The transmitter FSM is idle at zero (UART_FSM_STATUS bits 7:4).
+#if defined(ESP32C3) || defined(ESP32C6)
+extern "C" bool Esp32UartPrepareSleep(void)
+{
+	ESP32_UARTDEV *dev;
+	UARTDev_t *udev;
+
+	for (int i = 0; i < s_NbUartDev; i++)
+	{
+		dev = &s_Esp32UartDev[i];
+		udev = dev->pUartDev;
+		if (udev == nullptr || !dev->bEnabled ||
+			atomic_load(&udev->DevIntrf.EnCnt) == 0)
+		{
+			continue;
+		}
+		if (dev->bSleepPaused || !udev->bTxReady ||
+			CFifoUsed(udev->hTxFifo) != 0 ||
+			(ESP32_UART_STATUS_REG(dev->Base) &
+				(ESP32_UART_STATUS_TXFIFO_CNT_Msk | ESP32_UART_STATUS_RXFIFO_CNT_Msk)) != 0U ||
+			(ESP32_UART_FSM_STATUS_REG(dev->Base) & (0xFU << 4U)) != 0U)
+		{
+			return false;
+		}
+	}
+	for (int i = 0; i < s_NbUartDev; i++)
+	{
+		dev = &s_Esp32UartDev[i];
+		udev = dev->pUartDev;
+		if (udev == nullptr || !dev->bEnabled ||
+			atomic_load(&udev->DevIntrf.EnCnt) == 0)
+		{
+			continue;
+		}
+		dev->SleepInterrupts = ESP32_UART_INT_ENA_REG(dev->Base);
+		ESP32_UART_INT_ENA_REG(dev->Base) = 0U;
+		Esp32UartClockDisable(dev->DevNo);
+		dev->bSleepPaused = true;
+	}
+	return true;
+}
+
+extern "C" void Esp32UartResumeSleep(void)
+{
+	ESP32_UARTDEV *dev;
+	for (int i = 0; i < s_NbUartDev; i++)
+	{
+		dev = &s_Esp32UartDev[i];
+		if (dev->bSleepPaused)
+		{
+			Esp32UartClockEnable(dev->DevNo);
+			ESP32_UART_INT_ENA_REG(dev->Base) = dev->SleepInterrupts;
+			dev->bSleepPaused = false;
+		}
+	}
 }
 #endif
 
@@ -933,6 +995,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	dev->SavedInterrupts = 0U;
+	dev->SleepInterrupts = 0U;
+	dev->bSleepPaused = false;
 	dev->bEnabled = true;
 
 	// Optional interrupt routing

@@ -534,18 +534,13 @@ static uint32_t Esp32C6Request(const Esp32C6SleepState_t *pState, bool bDeep)
 	return status;
 }
 
+// SystemSleep owns wake routing and the UART lifecycle. This function
+// changes only C6 PMU, regulator, CPU and cache state.
 bool Esp32PowerSleep(void)
 {
 	Esp32C6SleepState_t state;
-	uintptr_t mask;
 	bool attempted;
 
-	mask = DisableInterrupt();
-	if (!Esp32LightWakePrepare())
-	{
-		EnableInterrupt(mask);
-		return false;
-	}
 	Esp32C6Save(&state);
 	attempted = state.CpuMHz != 0U &&
 		(state.Root & 0xFFU) == 0U &&
@@ -556,10 +551,7 @@ bool Esp32PowerSleep(void)
 		(void)Esp32C6Request(&state, false);
 	}
 	Esp32C6Restore(&state);
-	Esp32LightWakeRestore();
-	EnableInterrupt(mask);
-	// This request was handled even if rejected. Return to the caller
-	// instead of hiding the PMU result behind another CPU WFI.
+	// A rejected PMU request must not be replaced by a hidden CPU WFI.
 	return true;
 }
 

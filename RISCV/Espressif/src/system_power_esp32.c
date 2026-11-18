@@ -6,7 +6,8 @@
 SystemSleep requests a resumable RTC/PMU sleep with an armed GPIO wake
 source. Unsupported configurations use interrupt-resumable CPU WFI.
 SystemPowerOff enters reset-on-wake sleep with a dedicated RTC/LP GPIO
-wake source. The application stops active peripherals before entry.
+wake source. Idle UART instances are temporarily suspended by SystemSleep; other
+peripherals remain under their driver lifecycle control.
 Reset codes follow Espressif ESP-IDF v5.5.1.
 
 @license MIT
@@ -39,6 +40,10 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 
 bool Esp32PowerSleep(void);
 void Esp32PowerDeepSleep(void);
+bool Esp32LightWakePrepare(void);
+void Esp32LightWakeRestore(void);
+bool Esp32UartPrepareSleep(void) __attribute__((weak));
+void Esp32UartResumeSleep(void) __attribute__((weak));
 
 uint32_t SystemResetReason(void)
 {
@@ -92,11 +97,33 @@ uint32_t SystemResetReason(void)
 void SystemSleep(void)
 {
 	uintptr_t state;
+	bool handled;
 
-	// The controller restores wake routing and its CPU clock before
-	// returning. If no RTC/PMU wake was configured, ordinary WFI is used.
 	state = DisableInterrupt();
-	if (!Esp32PowerSleep())
+	// Wake routing belongs to the system, not to a board-specific sleep
+	// sequence. Keep ordinary WFI available when no RTC wake was selected.
+	if (!Esp32LightWakePrepare())
+	{
+		__WFI();
+		EnableInterrupt(state);
+		return;
+	}
+	// Suspend idle peripherals only for RTC/PMU sleep. UART interrupts
+	// remain enabled for a plain CPU WFI when no RTC wake was selected.
+	if (Esp32UartPrepareSleep != NULL && !Esp32UartPrepareSleep())
+	{
+		Esp32LightWakeRestore();
+		EnableInterrupt(state);
+		return;
+	}
+	handled = Esp32PowerSleep();
+	if (Esp32UartResumeSleep != NULL)
+	{
+		Esp32UartResumeSleep();
+	}
+	Esp32LightWakeRestore();
+	SystemCoreClockUpdate();
+	if (!handled)
 	{
 		__WFI();
 	}
