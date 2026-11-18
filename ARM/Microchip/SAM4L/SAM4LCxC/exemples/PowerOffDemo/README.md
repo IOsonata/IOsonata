@@ -1,12 +1,15 @@
 # SAM4L8 Xplained Pro PowerOffDemo
 
-Connect OLED1 Xplained Pro to **EXT2**. The demo uses OLED1 **BUTTON1**,
-connected through EXT2 pin 9 to **PC06 / EIC8**, as an active-low
-Standby or Backup wake input. The on-board SW0 is not the wake button.
+Build the SAM4LCxC library and PowerOffDemo in matching configurations.
+Flash with EDBG and run without an active debugger session. The current
+review-branch default tests USART0/PICOUART wake using an external USB-UART
+adapter on PB00/PB01 at 1000000 baud during normal operation.
 
-Build the SAM4LCxC library and PowerOffDemo in the same configuration.
-Flash the application and run without an active debugger session. UART output
-uses USART1 at 1000000 baud on the EDBG virtual COM port.
+For the validated EIC wake profile, set `POWER_DEMO_UART_WAKE=0`,
+connect OLED1 Xplained Pro to **EXT2**, and use its **BUTTON1**,
+connected through EXT2 pin 9 to **PC06 / EIC8**. That profile uses
+USART1 at 1000000 baud on EDBG's virtual COM port. The on-board SW0
+is not the wake button.
 
 The default board.h now selects USART0/PICOUART receive wake for the
 next hardware test: `POWER_DEMO_RESUME_WAKE=1`,
@@ -46,8 +49,9 @@ pass. This profile has not been validated on physical hardware.
 
 ## Previously validated Backup-mode button wake
 
-Set `POWER_DEMO_RESUME_WAKE=0` (in board.h or the project compiler
-symbols), then clean rebuild and flash. The historical results below
+Set `POWER_DEMO_RESUME_WAKE=0` and `POWER_DEMO_UART_WAKE=0`
+(in board.h or the project compiler symbols), then clean rebuild
+and flash. The historical results below
 describe this reset-on-wake mode, not the new default Standby mode.
 
 After `Power off, press the button to wake up`, press and release OLED1
@@ -80,8 +84,9 @@ backup register or a sleep-current measurement.
 
 ## Automatic AST Backup wake
 
-Set `POWER_DEMO_RESUME_WAKE=0` and `POWER_DEMO_TIMER_WAKE_MS=3000`
-in `src/board.h` or the application compiler settings. Leave the timer
+Set `POWER_DEMO_RESUME_WAKE=0`, `POWER_DEMO_UART_WAKE=0`, and
+`POWER_DEMO_TIMER_WAKE_MS=3000` in `src/board.h` or the application
+compiler settings. Leave the timer
 wake value at zero for the button test.
 Rebuild the library and demo. The timer run disables the configured button wake,
 sets a single AST alarm, drains the UART, then enters Backup. After three

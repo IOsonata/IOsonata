@@ -45,7 +45,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED1_PINOP		IOPINOP_GPIO
 
 // Resumable sleep profile for the SAM4L power/clock hardware tests.
-// Set RESUME_WAKE to 0 for the previously validated Backup-mode test.
+// Set RESUME_WAKE and UART_WAKE to 0 for the Backup-mode test.
 #ifndef POWER_DEMO_RESUME_WAKE
 #define POWER_DEMO_RESUME_WAKE 1
 #endif
