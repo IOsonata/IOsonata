@@ -124,10 +124,9 @@ void SystemSleep(void)
 	}
 	Esp32LightWakeRestore();
 	(void)SystemCoreClockGet();
-	if (!handled)
-	{
-		__WFI();
-	}
+	// A configured RTC wake request can be rejected by the PMU. Do not
+	// enter another CPU WFI here and conceal that rejection.
+	(void)handled;
 	EnableInterrupt(state);
 }
 
