@@ -577,3 +577,26 @@ If the MCU still wakes with `0xFF` before `U`, the baud-change
 timing has been isolated and the next investigation is the PICOUART
 input and activation behavior. This is a test-sequence correction;
 physical wake validation remains pending.
+
+## November 18: first successful PICOUART hardware wake
+
+The maintainer's first run with host baud changed before PICOUART
+activation produced `UART RX normal: PASS`, followed by a 9600-baud
+`U`, `UART wake byte: PASS`, `UART rate after resume: PASS`, and
+`CPU/APB clock after resume: PASS`. The host reported
+`UART wake cycle 1/1 PASS`: one successful hardware PICOUART
+receive wake with USART0 and the clocks restored.
+
+The prior helper accepted that result before reading the MCU resume
+counter and SRAM-retention message. SRAM retention therefore was
+not independently confirmed by the host in that run.
+
+The host now requires the next MCU resume count and
+`SRAM sample PASS: 128 static + 128 stack bytes` before accepting
+any wake cycle. Simulated serial tests cover two successful cycles,
+RAM failure, absent RAM output, and a wrong resume count.
+
+Next hardware acceptance target: 10 consecutive cycles passing all
+checks, followed by separate sleep-current measurement. The host
+handshake and baud switching belong only to the test harness,
+never the production SystemSleep interface.

@@ -81,6 +81,9 @@ sleep, not Backup-mode UART wake.
 SAM4L register tests passed before this refactor. Earlier LC/LS
 Debug/Release checks compiled and linked using cached library
 archives with updated UART and system objects; these were not
-clean full-library rebuilds. The host helper passed simulated
-serial scenarios only. Hardware UART wake, wake-byte delivery,
-repeated wake and current measurements remain unverified.
+clean full-library rebuilds. On November 18, the maintainer reported
+one physical PICOUART wake with the 9600-baud `U` delivered and
+successful USART0 rate and CPU/APB restoration. The host helper now
+requires a sequential resume counter and SRAM PASS on each cycle.
+Ten consecutive physical wake cycles, SRAM verification under the
+stricter host check, and sleep-current measurement remain pending.

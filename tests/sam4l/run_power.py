@@ -2,6 +2,7 @@
 """Host register tests and device-header syntax checks, not an Arm build."""
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
@@ -75,6 +76,10 @@ host_send = host_source.index('send_byte(port, 2)', host_settle)
 assert host_setup < host_switch < host_settle < host_send
 assert 'Old PowerOffDemo firmware.' in host_source
 print('SAM4L UART host-rate handshake precedes PICOUART activation PASS')
+
+# Exercise host acceptance with a simulated serial port, without hardware.
+subprocess.run([sys.executable,
+                str(root / 'tests/sam4l/uart_wake_host_test.py')], check=True)
 
 for project in (root / 'ARM/Microchip/SAM4L').glob('*/lib/ioc/.project'):
     matches = [link for link in ET.parse(project).findall('.//link')
