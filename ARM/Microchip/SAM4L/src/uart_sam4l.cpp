@@ -706,14 +706,11 @@ bool Sam4lUartPrepareSleep(void)
 	s_Sam4lUartSleep.WakeMask = awen;
 	s_Sam4lUartSleep.Clocks = clocks;
 	s_Sam4lUartSleep.bActive = true;
-	dev->pReg->US_IDR = 0xFFFFFFFFU;
-	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
-	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
-	// PICOUART receives at 9600 baud. Keep the normal USART divider unchanged.
+	// Both receivers share PB00. Start PICOUART while USART0 still owns
+	// its clock and the RX input is stable. The PM wake source must stay
+	// disabled until the receive handover has completed.
+	// PICOUART receives at 9600 baud; USART0 retains its baud divider.
 	SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);
-	// SystemSleep owns the shared PM wake interrupt. The UART owns only
-	// the PICOUART asynchronous wake selection and its receive state.
-	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen | wake);
 	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_EN;
 	__DSB();
 	picoStatus = SAM4L_PICOUART->PICOUART_SR;
@@ -721,6 +718,13 @@ bool Sam4lUartPrepareSleep(void)
 	{
 		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_DATA;
 	}
+	dev->pReg->US_IDR = 0xFFFFFFFFU;
+	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
+	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
+	// The UART owns PICOUART's asynchronous wake selection; SystemSleep
+	// owns the shared PM WAKE interrupt. Arm only after the handover.
+	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen | wake);
+	__DSB();
 	if ((SAM4L_PM->PM_ISR & PM_ISR_WAKE) != 0U)
 	{
 		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_WAKE;

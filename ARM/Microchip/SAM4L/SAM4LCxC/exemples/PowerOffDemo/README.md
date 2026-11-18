@@ -379,3 +379,27 @@ If normal RX passes and the PICOUART diagnostic still reports
 premature DRDY, check PB00 with a scope or logic analyzer across
 USART0 disable and PICOUART enable. The idle state should stay
 high, and no start bit should occur before the host wake byte.
+
+## November 18: PICOUART wake handover sequencing
+
+The normal USART0 RX preflight passed at 1000000 baud with the external
+adapter on PB00/PB01. PICOUART still produced `0xFF0200FD` before the
+host transmitted the 9600-baud wake byte. The diagnostic confirms
+DRDY became set immediately after enabling PICOUART even though
+it was clear before enabling, and the PM subsequently reported a
+PICOUART wake. The received 0xFF was not the host's U (0x55).
+
+The driver previously suspended USART0 and enabled the PM
+asynchronous PICOUART wake before enabling PICOUART itself.
+This can expose the PM to a receiver event during handover.
+It now configures and enables PICOUART while the idle USART0 RX
+input remains connected and its peripheral clock is running,
+then disables the USART and finally enables PM_AWEN.PICOUART.
+The full-frame wake source and generic wake API are unchanged.
+The source ordering is checked by `tests/sam4l/run_power.py`.
+
+This sequencing is a targeted hardware fix candidate; it has not
+yet been proven to suppress the immediate 0xFF on the board.
+If DRDY still asserts as soon as PICOUART is enabled, the next
+diagnostic is the PB00 voltage and waveform during the handover,
+not a change to the application wake token.
