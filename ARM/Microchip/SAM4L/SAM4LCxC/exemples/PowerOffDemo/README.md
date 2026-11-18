@@ -150,8 +150,9 @@ No second startup banner appears in the provided log. This is hardware
 evidence of six resumable wake/resume cycles with intact UART, clocks
 and sampled RAM. The log itself does not time-stamp individual button
 presses or measure sleep current. Ten distinct button presses with a
-quiet interval between them, AST resumable wake and PICOUART receive
-wake remain additional validation goals.
+quiet interval between them and PICOUART receive wake remain
+additional validation goals. The separate AST resumable wake result is
+recorded below.
 
 ## Diagnosing an AST Standby initialization failure
 
@@ -186,4 +187,30 @@ register synchronization may remain busy until that clock runs.
 The code now waits for CLKBUSY while changing AST_CLOCK and waits
 for BUSY only after enabling AST_CLOCK.CEN. A register-model regression
 simulates BUSY set with CEN clear and verifies AST initialization.
-This change has not yet been validated on the physical board.
+The subsequent physical-board run completed 12 automatic AST wakes,
+recorded below.
+
+## November 18, 2026: automatic AST RETENTION wake
+
+After enabling the AST prescaler clock before waiting for AST_SR.BUSY,
+the maintainer reported a repeating PowerOffDemo log with
+`POWER_DEMO_RESUME_WAKE=1` and `POWER_DEMO_TIMER_WAKE_MS=1000`.
+The program intentionally re-arms its one-shot AST alarm and goes back
+to Standby after each wake. Unlike the earlier button-wake regression,
+repeated wakeups are expected in this configuration.
+
+The captured log shows 12 consecutive automatic AST wake/resume cycles
+(counts 0x00000001 through 0x0000000C), all reporting:
+
+- UART rate after resume: PASS
+- CPU/APB clock after resume: PASS
+- Standby timer wake: PASS
+- SRAM sample PASS: 128 static + 128 stack bytes
+
+The timer check includes an accepted period and a wake callback, and
+checks elapsed timer time against a 98-102 percent window of the
+configured 1000 ms. No new startup banner appears, supporting
+resumable RETENTION rather than reset-on-wake. This result verifies the
+AST initialization and automatic alarm wake sequence on the connected
+SAM4LC8C board; power consumption and independent wall-clock timing
+have not been measured. PICOUART wake remains unverified on hardware.
