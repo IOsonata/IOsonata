@@ -802,7 +802,8 @@ extern "C" bool SamdUartPrepareSleep(void)
 		{
 			continue;
 		}
-		if (dev->bSleepPaused || CFifoUsed(udev->hTxFifo) != 0 ||
+		if (atomic_flag_test(&udev->DevIntrf.bBusy) ||
+			dev->bSleepPaused || CFifoUsed(udev->hTxFifo) != 0 ||
 			!udev->bTxReady || dev->bDmaActive ||
 			(dev->pReg->SERCOM_INTFLAG &
 				(SERCOM_USART_INT_INTFLAG_TXC_Msk | SERCOM_USART_INT_INTFLAG_RXC_Msk)) !=
