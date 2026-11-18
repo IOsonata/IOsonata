@@ -565,20 +565,23 @@ void Sam4lUartPowerOff(DevIntrf_t * const pDev)
 bool UARTEnableWake(UARTDev_t *pDev, bool bEnable)
 {
 	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[0];
+	uint32_t state;
 
-	if (pDev == NULL || dev->pUartDev != pDev || s_Sam4lUartSleep.bActive)
+	if (pDev == NULL || dev->pUartDev != pDev)
 	{
 		return false;
 	}
-	if (bEnable && (atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+	state = DisableInterrupt();
+	if (s_Sam4lUartSleep.bActive ||
+		(bEnable && (atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
 		(SAM4L_PM->PM_PBAMASK & dev->PbaMask) == 0U ||
 		!dev->bPicoRx || pDev->Rate == 0U || pDev->DataBits != 8 ||
 		pDev->StopBits != 1 || pDev->Parity != UART_PARITY_NONE ||
-		pDev->FlowControl != UART_FLWCTRL_NONE || pDev->bIrDAMode))
+		pDev->FlowControl != UART_FLWCTRL_NONE || pDev->bIrDAMode)))
 	{
+		EnableInterrupt(state);
 		return false;
 	}
-	uint32_t state = DisableInterrupt();
 	dev->bWake = bEnable;
 	EnableInterrupt(state);
 	return true;
