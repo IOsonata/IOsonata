@@ -34,7 +34,10 @@ static uint32_t s_I2cPrepareCount;
 static uint32_t s_I2cResumeCount;
 void NMI_Handler(void);
 
-static uint32_t __get_IPSR(void) { return s_Isr; }
+static uint32_t __get_IPSR(void)
+{
+	return s_Isr;
+}
 static uint32_t DisableInterrupt(void)
 {
 	uint32_t previous = s_Mask;
@@ -58,24 +61,46 @@ static void __DSB(void)
 	if (s_Inject == 2) NMI_Handler();
 }
 static void __ISB(void) {}
-static bool SamdUsbAllowStandbyMock(void) { return s_RejectStage != 1U; }
-static bool SamdDacAllowStandbyMock(void) { return s_RejectStage != 2U; }
+static bool SamdUsbAllowStandbyMock(void)
+{
+	return s_RejectStage != 1U;
+}
+static bool SamdDacAllowStandbyMock(void)
+{
+	return s_RejectStage != 2U;
+}
 static bool SamdAdcPrepareSleepMock(void)
 {
 	s_AdcPrepareCount++;
 	return s_RejectStage != 3U;
 }
-static void SamdAdcResumeSleepMock(void) { s_AdcResumeCount++; }
+static void SamdAdcResumeSleepMock(void)
+{
+	s_AdcResumeCount++;
+}
 static bool SamdI2cPrepareSleepMock(void)
 {
 	s_I2cPrepareCount++;
 	return s_RejectStage != 4U;
 }
-static void SamdI2cResumeSleepMock(void) { s_I2cResumeCount++; }
-static bool SamdSpiPrepareSleepMock(void) { return s_RejectStage != 5U; }
-static void SamdSpiResumeSleepMock(void) {}
-static bool SamdUartPrepareSleepMock(void) { return s_RejectStage != 6U; }
-static void SamdUartResumeSleepMock(void) {}
+static void SamdI2cResumeSleepMock(void)
+{
+	s_I2cResumeCount++;
+}
+static bool SamdSpiPrepareSleepMock(void)
+{
+	return s_RejectStage != 5U;
+}
+static void SamdSpiResumeSleepMock(void)
+{
+}
+static bool SamdUartPrepareSleepMock(void)
+{
+	return s_RejectStage != 6U;
+}
+static void SamdUartResumeSleepMock(void)
+{
+}
 static bool (*SamdUsbAllowStandby)(void) = SamdUsbAllowStandbyMock;
 static bool (*SamdDacAllowStandby)(void) = SamdDacAllowStandbyMock;
 static bool (*SamdAdcPrepareSleep)(void) = SamdAdcPrepareSleepMock;

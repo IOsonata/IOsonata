@@ -58,6 +58,19 @@ do
 		$CMSIS $INC -I"$PARTDIR/include" -I"$BOARD" \
 		-c "$ROOT/exemples/misc/power_off_demo.cpp" \
 		-o "$OUT/$DEVICE-demo.o"
+	"$GXX" $COMMON -std=gnu++23 -Wno-missing-field-initializers \
+		-fno-exceptions -fno-rtti -D"$PART" \
+		$CMSIS $INC -I"$PARTDIR/include" \
+		-c "$ROOT/ARM/Microchip/SAMD/src/adc_samd.cpp" \
+		-o "$OUT/$DEVICE-adc.o"
+	if [ "$DEVICE" = SAMD21 ]
+	then
+		"$GXX" $COMMON -std=gnu++23 -Wno-missing-field-initializers \
+			-fno-exceptions -fno-rtti -D"$PART" \
+			$CMSIS $INC -I"$PARTDIR/include" \
+			-c "$ROOT/ARM/Microchip/SAMD/src/dac_samd.cpp" \
+			-o "$OUT/$DEVICE-dac.o"
+	fi
 done
 
-echo "SAM D11/D21 Standby source compilation PASS"
+echo "SAM D11/D21 Standby, ADC and DAC source compilation PASS"
