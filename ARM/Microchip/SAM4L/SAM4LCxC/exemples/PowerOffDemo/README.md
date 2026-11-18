@@ -152,3 +152,19 @@ and sampled RAM. The log itself does not time-stamp individual button
 presses or measure sleep current. Ten distinct button presses with a
 quiet interval between them, AST resumable wake and PICOUART receive
 wake remain additional validation goals.
+
+## Diagnosing an AST Standby initialization failure
+
+With `POWER_DEMO_RESUME_WAKE=1` and `POWER_DEMO_TIMER_WAKE_MS=1000`,
+the SAM4L demo prints `SAM4L TimerInit stage 0x...` when the
+initial call to TimerInit returns false. It also reports BPM_PMCON,
+BSCIF_PCLKSR, PM_PBDMASK and NVIC_ISER1. If AST register access has
+been enabled (stage 5 or later), it reports AST_SR and AST_CR.
+The diagnostic only reads hardware registers, does not alter the
+clock or timer driver, and is compiled only for SAM4L timer Standby
+tests. The board.h configuration is not changed by this diagnostic.
+
+Stage values in hex: 1 invalid configuration, 2 previous timer owner,
+3 low-frequency clock source, 4 frequency selection, 5 AST sync,
+6 NVIC ownership conflict, 7 AST setup, 8 counter reset, 9 start.
+Report the complete UART failure output when an AST failure occurs.

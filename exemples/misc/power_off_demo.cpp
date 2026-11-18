@@ -58,6 +58,15 @@ SOFTWARE.
 
 #include "board.h"
 
+// Show the SAM4L AST failure stage on the UART without a debugger.
+// The generic demo remains independent of SAM4L on other MCU ports.
+#if (defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC) || \
+	defined(SAM4LSXA) || defined(SAM4LSXB) || defined(SAM4LSXC)) && \
+	defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE && \
+	defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
+#define POWER_DEMO_SAM4L_AST_DIAG 1
+#include "timer_sam4l.h"
+#endif
 
 // UART wake requires a board profile with a supported sleep receiver.
 #ifndef POWER_DEMO_UART_WAKE
@@ -414,6 +423,32 @@ int main()
 	if (!TimerInit(&s_WakeTimer, &s_WakeTimerCfg))
 	{
 		PowerDemoPut("Standby timer initialization FAIL\r\n");
+#if defined(POWER_DEMO_SAM4L_AST_DIAG)
+		PowerDemoPut("SAM4L TimerInit stage 0x");
+		PowerDemoPutCount(g_Sam4lTimerInitStage);
+		PowerDemoPut("\r\n");
+		PowerDemoPut("BPM_PMCON 0x");
+		PowerDemoPutCount(SAM4L_BPM->BPM_PMCON);
+		PowerDemoPut("\r\n");
+		PowerDemoPut("BSCIF_PCLKSR 0x");
+		PowerDemoPutCount(SAM4L_BSCIF->BSCIF_PCLKSR);
+		PowerDemoPut("\r\n");
+		PowerDemoPut("PM_PBDMASK 0x");
+		PowerDemoPutCount(SAM4L_PM->PM_PBDMASK);
+		PowerDemoPut("\r\n");
+		PowerDemoPut("NVIC_ISER1 0x");
+		PowerDemoPutCount(NVIC->ISER[1]);
+		PowerDemoPut("\r\n");
+		if (g_Sam4lTimerInitStage >= SAM4L_TIMER_INIT_SYNC)
+		{
+			PowerDemoPut("AST_SR 0x");
+			PowerDemoPutCount(SAM4L_AST->AST_SR);
+			PowerDemoPut("\r\n");
+			PowerDemoPut("AST_CR 0x");
+			PowerDemoPutCount(SAM4L_AST->AST_CR);
+			PowerDemoPut("\r\n");
+		}
+#endif
 		return 1;
 	}
 	TimerDisable(&s_WakeTimer);
