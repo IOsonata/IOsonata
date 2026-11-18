@@ -394,6 +394,24 @@ int main(void)
 	*(volatile uint32_t *)&SAM4L_AST->AST_SR = 0U;
 	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE;
 
+	// PICOUART can retain wake selection across a firmware reset.
+	// Reset only its owned selection and retain unrelated PM/BPM wakes.
+	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE & ~PM_PBDMASK_PICOUART;
+	SAM4L_PM->PM_AWEN = (1UL << PM_AWEN_PICOUART) |
+		(1UL << PM_AWEN_TWIS0);
+	SAM4L_BPM->BPM_BKUPWEN = (1UL << 5) | (1UL << 0);
+	SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);
+	Sam4lResetPicoWake();
+	assert(SAM4L_PICOUART->PICOUART_CR == PICOUART_CR_DIS);
+	assert(SAM4L_PICOUART->PICOUART_CFG == 0U);
+	assert(SAM4L_PM->PM_AWEN == (1UL << PM_AWEN_TWIS0));
+	assert(SAM4L_BPM->BPM_BKUPWEN == (1UL << 0));
+	assert(SAM4L_PM->PM_PBDMASK ==
+		(PM_PBDMASK_RESETVALUE & ~PM_PBDMASK_PICOUART));
+	SAM4L_PM->PM_AWEN = 0U;
+	SAM4L_BPM->BPM_BKUPWEN = 0U;
+	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE;
+
 	// The optional oscillator hook must be linkable and leave live clocks alone.
 	memcpy(s_ClockRegisters, (void *)0x40000000, sizeof(s_ClockRegisters));
 	SystemOscInit();

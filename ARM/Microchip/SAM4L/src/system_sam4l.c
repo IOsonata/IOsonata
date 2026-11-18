@@ -938,6 +938,25 @@ static bool Sam4lResetAstWake(void)
 	return true;
 }
 
+// PICOUART also belongs to the backup clock domain. A new firmware
+// image must not inherit its previous wake selection or receiver state.
+// Disarm it at startup, before any UART driver acquires the peripheral.
+static void Sam4lResetPicoWake(void)
+{
+	uint32_t clocks;
+	uint32_t wake;
+
+	clocks = SAM4L_PM->PM_PBDMASK;
+	wake = 1UL << PM_AWEN_PICOUART;
+	Sam4lWritePm(&SAM4L_PM->PM_PBDMASK,
+		clocks | PM_PBDMASK_PICOUART | PM_PBDMASK_BPM);
+	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
+	SAM4L_PICOUART->PICOUART_CFG = 0U;
+	Sam4lWritePm(&SAM4L_PM->PM_AWEN, SAM4L_PM->PM_AWEN & ~wake);
+	SAM4L_BPM->BPM_BKUPWEN &= ~(1UL << 5);
+	Sam4lWritePm(&SAM4L_PM->PM_PBDMASK, clocks);
+}
+
 static bool Sam4lLowClockValid(OSC_TYPE Type, uint32_t Freq)
 {
 	if (Type == OSC_TYPE_RC) {
@@ -1035,6 +1054,7 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		{
 			return Sam4lClockFailed(SAM4L_STARTUP_AST);
 		}
+		Sam4lResetPicoWake();
 		if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC)
 		{
 			g_McuOsc.LowPwrOsc.Freq = 32768U;

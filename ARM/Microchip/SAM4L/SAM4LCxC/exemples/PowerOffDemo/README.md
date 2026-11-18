@@ -403,3 +403,30 @@ yet been proven to suppress the immediate 0xFF on the board.
 If DRDY still asserts as soon as PICOUART is enabled, the next
 diagnostic is the PB00 voltage and waveform during the handover,
 not a change to the application wake token.
+
+## November 18: PICOUART retained wake cleanup at startup
+
+With USART0 normal RX validated, PICOUART still produced a premature
+0xFF frame. The repeated diagnostic was `0xFF0200FD`: its DRDY bit
+was clear before enabling the peripheral but set immediately after.
+Changing the USART0-to-PICOUART handover sequence did not change
+this result.
+
+The Microchip ASF driver confirms SOURCE=2 selects full-frame wake.
+The SAM4L datasheet identifies PICOUART as a low-frequency receiver
+in the backup clock domain. A non-power-on reset can retain peripheral
+configuration while the owning software state is reinitialized.
+SystemInit now disables inherited PICOUART reception and its old
+wake selection after initializing the 32 kHz clock, before any UART
+driver initializes. Only the PICOUART bits in PM_AWEN and
+BPM_BKUPWEN are cleared; other wake selections are preserved.
+The original PBD peripheral clock mask is restored.
+
+The host register test checks the owned wake bits, config, disable
+command and peripheral clock restoration. This startup cleanup is
+not proven to clear a retained DRDY flag, which the datasheet says
+is cleared by detecting a new start bit. It is also not yet known
+whether the premature 0xFF is retained hardware state or a fresh
+false frame. A complete power cycle is an additional distinguishing
+test. Do not classify this as a successful PICOUART wake until the
+external 9600-baud U is received after sleep entry.
