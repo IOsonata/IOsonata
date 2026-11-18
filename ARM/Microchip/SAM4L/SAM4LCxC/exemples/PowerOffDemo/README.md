@@ -329,9 +329,31 @@ Diagnostic bits:
 | 13 | Pending UART TX |
 | 14 | Pending UART RX |
 | 15 | PICOUART RX pin held low |
+| 16 | PICOUART DRDY already set before rearming |
+| 17 | PICOUART DRDY set immediately after enabling |
+| 18 | PM wake status already set immediately after enabling |
+| 19 | PM wake cause previously reported PICOUART |
 | 24..31 | Captured byte, if a resume occurred |
 
 This trace is restricted to the SAM4L UART implementation and its
 existing private sleep state. No generic UART, SystemSleep, EIC or
 AST API was modified. It is intended for removal after hardware
 validation and is not itself evidence of PICOUART wake support.
+
+## November 18: unsolicited PICOUART frame at wake entry
+
+The next trace was `SAM4L UART sleep diagnostic 0xFF0000FD`.
+It shows PICOUART was armed, PM reported a PICOUART wake, the
+peripheral reported a received frame, and the received byte 0xFF was
+delivered into the UART FIFO. The host had not yet transmitted its
+requested 0x55 ('U') byte, so this is an unsolicited receive event.
+The USART0 console and UART and clock restoration were functioning.
+
+The SAM4L datasheet, section 25.6.1, specifies that PICOUART DRDY
+is cleared on detection of a new start bit, not by reading RHR.
+The driver now samples DRDY before and immediately after arming
+PICOUART, plus the prior PM wake cause and PM wake status immediately
+after arming. Bits 16-19 distinguish previously retained receiver
+status from a new frame or wake event arising after handover.
+No valid receive byte is discarded, and the full-frame wake mode
+is unchanged. The source of the unsolicited 0xFF remains unverified.

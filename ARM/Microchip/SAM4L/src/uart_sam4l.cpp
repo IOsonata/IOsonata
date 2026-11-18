@@ -146,6 +146,10 @@ static struct {
 #define SAM4L_PICO_TX_BUSY		(1UL << 13)
 #define SAM4L_PICO_RX_BUSY		(1UL << 14)
 #define SAM4L_PICO_RX_LOW		(1UL << 15)
+#define SAM4L_PICO_STALE_DATA	(1UL << 16)
+#define SAM4L_PICO_ARMED_DATA	(1UL << 17)
+#define SAM4L_PICO_ARMED_WAKE	(1UL << 18)
+#define SAM4L_PICO_STALE_CAUSE	(1UL << 19)
 
 uint32_t Sam4lUartSleepDiagnostic(void)
 {
@@ -624,6 +628,7 @@ bool Sam4lUartPrepareSleep(void)
 	uint32_t clocks;
 	uint32_t rejected;
 	uint32_t awen;
+	uint32_t picoStatus;
 	bool rc;
 	bool clockReady;
 
@@ -678,6 +683,17 @@ bool Sam4lUartPrepareSleep(void)
 	{
 		rejected |= SAM4L_PICO_RX_LOW;
 	}
+	// DRDY is not software-clearable through a status-clear register.
+	// Record retained received data before the next PICOUART enable.
+	picoStatus = SAM4L_PICOUART->PICOUART_SR;
+	if ((picoStatus & PICOUART_SR_DRDY) != 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_STALE_DATA;
+	}
+	if ((SAM4L_PM->PM_WCAUSE & wake) != 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_STALE_CAUSE;
+	}
 	if (rejected != 0U)
 	{
 		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_REJECTED | rejected;
@@ -700,6 +716,15 @@ bool Sam4lUartPrepareSleep(void)
 	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen | wake);
 	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_EN;
 	__DSB();
+	picoStatus = SAM4L_PICOUART->PICOUART_SR;
+	if ((picoStatus & PICOUART_SR_DRDY) != 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_DATA;
+	}
+	if ((SAM4L_PM->PM_ISR & PM_ISR_WAKE) != 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_WAKE;
+	}
 	s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_PREPARED;
 	return true;
 }
