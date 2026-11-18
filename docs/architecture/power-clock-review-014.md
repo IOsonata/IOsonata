@@ -393,3 +393,33 @@ Mixed-peripheral sleep handling, clean managed-project build coverage,
 and independent low-power mode/current verification remain separate
 validation items. The host's baud switch/handshake are test-only;
 normal applications do not coordinate `SystemSleep()` with a host.
+
+## Power/clock release validation after SAM4L PICOUART PASS
+
+The SAM4L UART wake functional tests passed (10 consecutive cycles, a
+20-second delayed wake and five host regression tests). Additional
+mixed-peripheral sleep demonstrations differ substantially between MCU
+families and are not a common release acceptance requirement. Do not
+treat those family-specific exercises as a substitute for verifying
+the shared power/clock APIs and build integration.
+
+The next acceptance step is clean target compilation, using the
+existing IOsonata build configuration and tools:
+
+```sh
+python3 tests/sam4l/run_power.py
+python3 tests/microchip/compile_power.py
+```
+
+The SAM4L power test now validates the configurable host
+`--wake-delay` instead of searching for the obsolete literal
+`time.sleep(1.25)`. The Microchip target compilation matrix now
+also builds `uart_sam4l.cpp` for each SAM4LC/SAM4LS device variant,
+alongside the system power source. This expands the compiler check
+without changing the driver or public API.
+
+A clean Eclipse managed-project build of the SAM4LC and SAM4LS
+libraries and ClockDemo/PowerOffDemo in Debug and Release remains
+necessary before the review branch is ready to merge. These commands
+and project builds have not yet been executed for this validation
+update. External current measurement remains unverified.

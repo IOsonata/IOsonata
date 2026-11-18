@@ -71,9 +71,11 @@ assert setup_prompt < switch_prompt < host_guard < sleep_entry
 assert "if (rxByte != 'R')" in demo_source[setup_prompt:switch_prompt]
 host_setup = host_source.index('if b"UART wake setup: send R" in line:')
 host_switch = host_source.index('port.baudrate = 9600', host_setup)
-host_settle = host_source.index('time.sleep(1.25)', host_switch)
+host_settle = host_source.index('time.sleep(args.wake_delay)', host_switch)
 host_send = host_source.index('send_byte(port, 2)', host_settle)
 assert host_setup < host_switch < host_settle < host_send
+assert 'parser.add_argument("--wake-delay", type=float, default=1.25' in host_source
+assert 'if not 1.25 <= args.wake_delay < args.total_timeout:' in host_source
 assert 'Old PowerOffDemo firmware.' in host_source
 print('SAM4L UART host-rate handshake precedes PICOUART activation PASS')
 
