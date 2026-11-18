@@ -26,21 +26,25 @@ with tempfile.TemporaryDirectory(prefix='sam4l-power-') as tmp:
                                     str(root / 'tests/sam4l/power_test.cpp'),
                                     '-o', str(binary)], check=True)
                     subprocess.run([str(binary)], check=True)
-# PICOUART must be enabled on a stable USART0 RX input before USART0
-# is suspended, with PM asynchronous wake armed only after handover.
+# PICOUART receives PB00 directly; enable GPIO input monitoring
+# before checking the RX level, then restore the USART pin on resume.
 uart_source = (root / 'ARM/Microchip/SAM4L/src/uart_sam4l.cpp').read_text()
 uart_prep = uart_source.split('bool Sam4lUartPrepareSleep(void)', 1)[1].split(
     'bool Sam4lUartSuspendSleep(void)', 1)[0]
 sequence = (
+    'gpio->GPIO_GPERS = 1U;',
+    'if ((gpio->GPIO_PVR & 1U) == 0U)',
+    'dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;',
     'SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);',
     'SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_EN;',
-    'dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;',
     'Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);',
     'Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen | wake);',
 )
 positions = [uart_prep.index(step) for step in sequence]
-assert positions == sorted(positions), 'SAM4L PICOUART sleep handover order'
-print('SAM4L PICOUART wake handover source order PASS')
+assert positions == sorted(positions), 'SAM4L PICOUART GPIO input handover order'
+assert 'if (!s_Sam4lUartSleep.bRxWasGpio)' in uart_source
+assert 'gpio->GPIO_GPERC = 1U;' in uart_source
+print('SAM4L PICOUART GPIO input handover source order PASS')
 
 for project in (root / 'ARM/Microchip/SAM4L').glob('*/lib/ioc/.project'):
     matches = [link for link in ET.parse(project).findall('.//link')

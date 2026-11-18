@@ -124,6 +124,8 @@ static struct {
 	uint32_t Config;
 	uint32_t Interrupts;
 	uint32_t WakeMask;
+	uint32_t GpioClocks;
+	bool bRxWasGpio;
 	uint32_t Diagnostic;
 } s_Sam4lUartSleep;
 
@@ -150,6 +152,8 @@ static struct {
 #define SAM4L_PICO_ARMED_DATA	(1UL << 17)
 #define SAM4L_PICO_ARMED_WAKE	(1UL << 18)
 #define SAM4L_PICO_STALE_CAUSE	(1UL << 19)
+#define SAM4L_PICO_RX_GPIO		(1UL << 20)
+#define SAM4L_PICO_RX_IDLE		(1UL << 21)
 
 uint32_t Sam4lUartSleepDiagnostic(void)
 {
@@ -624,11 +628,14 @@ bool Sam4lUartPrepareSleep(void)
 {
 	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[0];
 	UARTDev_t *pDev = dev->pUartDev;
+	GpioPort *gpio = &SAM4L_GPIO->GPIO_PORT[IOPORTB];
 	uint32_t wake = 1UL << PM_AWEN_PICOUART;
 	uint32_t clocks;
+	uint32_t gpioClocks;
 	uint32_t rejected;
 	uint32_t awen;
 	uint32_t picoStatus;
+	bool rxWasGpio;
 	bool rc;
 	bool clockReady;
 
@@ -679,10 +686,9 @@ bool Sam4lUartPrepareSleep(void)
 	{
 		rejected |= SAM4L_PICO_RX_BUSY;
 	}
-	if (IOPinRead(IOPORTB, 0) == 0)
-	{
-		rejected |= SAM4L_PICO_RX_LOW;
-	}
+	// GPIO_PVR is not a live RX sample while PB00 is assigned to USART0
+	// unless GPIO input monitoring is enabled. Check the physical pin
+	// after switching it to a GPIO input below.
 	// DRDY is not software-clearable through a status-clear register.
 	// Record retained received data before the next PICOUART enable.
 	picoStatus = SAM4L_PICOUART->PICOUART_SR;
@@ -700,16 +706,41 @@ bool Sam4lUartPrepareSleep(void)
 		Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, clocks);
 		return false;
 	}
+	// PICOUART receives PB00 directly. Release the USART peripheral mux
+	// before enabling the low-frequency receiver, and sample the live
+	// GPIO input. Preserve the original GPIO clock gate and pin ownership.
+	gpioClocks = SAM4L_PM->PM_PBCMASK;
+	Sam4lPmWrite(&SAM4L_PM->PM_PBCMASK, gpioClocks | PM_PBCMASK_GPIO);
+	rxWasGpio = (gpio->GPIO_GPER & 1U) != 0U;
+	gpio->GPIO_ODERC = 1U;
+	gpio->GPIO_GPERS = 1U;
+	__DSB();
+	s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_RX_GPIO;
+	if ((gpio->GPIO_PVR & 1U) == 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |=
+			SAM4L_PICO_REJECTED | SAM4L_PICO_RX_LOW;
+		if (!rxWasGpio)
+		{
+			gpio->GPIO_GPERC = 1U;
+		}
+		Sam4lPmWrite(&SAM4L_PM->PM_PBCMASK, gpioClocks);
+		Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, clocks);
+		return false;
+	}
+	s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_RX_IDLE;
 	s_Sam4lUartSleep.Config = SAM4L_PICOUART->PICOUART_CFG;
 	s_Sam4lUartSleep.Interrupts = dev->pReg->US_IMR;
 	awen = SAM4L_PM->PM_AWEN;
 	s_Sam4lUartSleep.WakeMask = awen;
 	s_Sam4lUartSleep.Clocks = clocks;
+	s_Sam4lUartSleep.GpioClocks = gpioClocks;
+	s_Sam4lUartSleep.bRxWasGpio = rxWasGpio;
 	s_Sam4lUartSleep.bActive = true;
-	// Both receivers share PB00. Start PICOUART while USART0 still owns
-	// its clock and the RX input is stable. The PM wake source must stay
-	// disabled until the receive handover has completed.
-	// PICOUART receives at 9600 baud; USART0 retains its baud divider.
+	dev->pReg->US_IDR = 0xFFFFFFFFU;
+	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
+	// USART0 is quiescent and PB00 is a live GPIO input. The UART
+	// configuration and its baud divider are not modified by PICOUART.
 	SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);
 	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_EN;
 	__DSB();
@@ -718,8 +749,6 @@ bool Sam4lUartPrepareSleep(void)
 	{
 		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_DATA;
 	}
-	dev->pReg->US_IDR = 0xFFFFFFFFU;
-	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
 	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
 	// The UART owns PICOUART's asynchronous wake selection; SystemSleep
 	// owns the shared PM WAKE interrupt. Arm only after the handover.
@@ -791,6 +820,7 @@ void Sam4lUartResumeSleep(void)
 {
 	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[0];
 	UARTDev_t *pDev = dev->pUartDev;
+	GpioPort *gpio = &SAM4L_GPIO->GPIO_PORT[IOPORTB];
 	uint32_t wake = 1UL << PM_AWEN_PICOUART;
 	uint32_t pmStatus;
 	uint32_t pmCause;
@@ -824,12 +854,26 @@ void Sam4lUartResumeSleep(void)
 			(SAM4L_PICO_PM_WAKE | SAM4L_PICO_PM_CAUSE | SAM4L_PICO_DATA_READY)) ==
 			(SAM4L_PICO_PM_WAKE | SAM4L_PICO_PM_CAUSE | SAM4L_PICO_DATA_READY);
 		SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
-		SAM4L_PICOUART->PICOUART_CFG = s_Sam4lUartSleep.Config;
+		// Do not change CFG until the backup clock domain reports
+		// that the PICOUART receiver is disabled.
+		for (i = 0; i < 100000 &&
+			(SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_EN) != 0U; i++)
+		{
+		}
+		if ((SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_EN) == 0U)
+		{
+			SAM4L_PICOUART->PICOUART_CFG = s_Sam4lUartSleep.Config;
+		}
 		Sam4lPmWrite(&SAM4L_PM->PM_AWEN, s_Sam4lUartSleep.WakeMask);
+		if (!s_Sam4lUartSleep.bRxWasGpio)
+		{
+			gpio->GPIO_GPERC = 1U;
+		}
 		Sam4lUartClockEnable(dev);
 		dev->pReg->US_CR = US_CR_RSTRX | US_CR_RSTSTA;
 		dev->pReg->US_CR = US_CR_RXEN | US_CR_TXEN;
 		dev->pReg->US_IER = s_Sam4lUartSleep.Interrupts;
+		Sam4lPmWrite(&SAM4L_PM->PM_PBCMASK, s_Sam4lUartSleep.GpioClocks);
 		if (received)
 		{
 			p = CFifoPut(pDev->hRxFifo);

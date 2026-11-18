@@ -433,3 +433,35 @@ whether the premature 0xFF is retained hardware state or a fresh
 false frame. A complete power cycle is an additional distinguishing
 test. Do not classify this as a successful PICOUART wake until the
 external 9600-baud U is received after sleep entry.
+
+## November 18: live PB00 input check for PICOUART
+
+After the PICOUART startup reset, the physical board still received
+an unsolicited 0xFF when PICOUART was enabled, with diagnostic
+`0xFF0200FD`. The normal USART0 RX preflight continued to pass.
+
+The SAM4L datasheet (23.6.1.3) notes GPIO_PVR is not updated for
+a peripheral-owned pin unless GPIO input monitoring is enabled.
+The earlier idle-level check used IOPinRead(PB00) without enabling
+GPIO ownership or an interrupt, so it was not a reliable check of
+the live RX signal. In the revised SAM4L UART sleep path,
+Sam4lUartPrepareSleep temporarily assigns PB00 to GPIO input
+with the existing RX pull-up, checks its physical idle level, and
+then disables USART0 before enabling PICOUART. The original GPIO
+clock gate and peripheral pin selection are restored on wake
+before USART0 RX is enabled again. The normal USART0 baud rate,
+PICOUART 9600-baud full-frame mode and generic UART API do not
+change. On resume the code waits for PICOUART_SR.EN to clear
+before writing PICOUART_CFG.
+
+The temporary diagnostic adds bit 20 when PB00 input monitoring was
+enabled and bit 21 when the live input was high before PICOUART
+enable. If bit 15 is set, the live input was low and the driver
+refused sleep. The expected new successful handover diagnostics
+retain bits 20 and 21; an unsolicited 0xFF with these bits set
+would show the line was high at the handover check, not prove
+that a correct wake byte was received.
+
+The new GPIO handover source-order check was added to
+`tests/sam4l/run_power.py`. This is a hardware test candidate
+and has not been compiled or validated on the SAM4LC8C board.
