@@ -10,6 +10,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 EIC = (ROOT / "ARM/Microchip/SAMD/src/iopincfg_samd.c").read_text(encoding="utf-8")
 SLEEP = (ROOT / "ARM/Microchip/SAMD/src/system_sleep_samd.c").read_text(encoding="utf-8")
 ADC = (ROOT / "ARM/Microchip/SAMD/src/adc_samd.cpp").read_text(encoding="utf-8")
+DMAC = (ROOT / "ARM/Microchip/SAMD/src/dmac_samd.c").read_text(encoding="utf-8")
 
 
 def body(source, signature):
@@ -90,6 +91,16 @@ class StandbySourceTest(unittest.TestCase):
 		self.assertGreater(sleep.rindex('SamdAdcResumeSleep()'), sleep.index('__WFI()'))
 		self.assertIn('SamdUsbAllowStandby()', sleep)
 		self.assertIn('SamdDacAllowStandby()', sleep)
+
+	def test_dma_busy_prevents_standby(self):
+		check = body(DMAC, "bool SamdDmacAllowStandby(")
+		sleep = body(SLEEP, "void SystemSleep(")
+		self.assertIn("DMAC_REGS->DMAC_BUSYCH", check)
+		self.assertIn("DMAC_REGS->DMAC_PENDCH", check)
+		self.assertIn("DMAC_REGS->DMAC_INTSTATUS", check)
+		self.assertIn("DMAC_CHCTRLA_ENABLE_Msk", check)
+		self.assertIn("DMAC_REGS->DMAC_CHID = selected", check)
+		self.assertLess(sleep.index("SamdDmacAllowStandby()"), sleep.index("SamdAdcPrepareSleep()"))
 
 	def test_rearm_does_not_change_gpio_ownership(self):
 		s = body(EIC, "void SamdStandbyWakeArm(")

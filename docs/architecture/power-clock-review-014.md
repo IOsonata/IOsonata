@@ -270,3 +270,20 @@ claim an accepted sleep mode. The SAMD Standby host entry fixture
 includes the USB, DAC, ADC, I2C, SPI and UART checks, a refused-entry
 matrix, rollback and an ISR call. The tests still require execution
 and the full embedded libraries still require clean builds.
+
+## SAMD DMAC active-transfer sleep check
+
+SAMD11 and SAMD21 now ask the existing DMAC driver whether all hardware
+channels and outstanding requests are idle before entering Standby.
+The DMAC driver reads channel ENABLE/SWRST, the hardware busy and pending
+sets, interrupt status, and active-bus flags without stopping a transfer,
+freeing an allocated channel or changing its selected channel register.
+If the DMAC register interface is gated while channels are allocated,
+the sleep attempt is refused rather than guessing whether DMA is idle.
+
+This check happens before ADC and transport suspension. It protects
+transfers owned by drivers outside the UART/I2C/SPI set as well.
+The existing SAMD host Standby fixture now covers a DMAC refusal and
+requires WFI not to execute on refusal; the compile script also
+includes dmac_samd.c. These checks are not target build or hardware
+validation.

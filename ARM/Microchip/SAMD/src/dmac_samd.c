@@ -228,6 +228,45 @@ void SamdDmacStart(int Chan, const volatile void *pSrc, bool bSrcInc, volatile v
 	EnableInterrupt(state);
 }
 
+// A peripheral or memory transfer must finish before the system stops
+// the high-frequency clocks in Standby. Keep the DMAC channel selector,
+// outstanding requests, and the allocation state unchanged.
+bool SamdDmacAllowStandby(void)
+{
+	uint32_t state;
+	uint8_t selected;
+	bool idle;
+
+	state = DisableInterrupt();
+	if ((PM_REGS->PM_AHBMASK & PM_AHBMASK_DMAC_Msk) == 0U ||
+		(PM_REGS->PM_APBBMASK & PM_APBBMASK_DMAC_Msk) == 0U)
+	{
+		idle = s_SamdDmacUsed == 0U;
+		EnableInterrupt(state);
+		return idle;
+	}
+	selected = DMAC_REGS->DMAC_CHID;
+	idle = (DMAC_REGS->DMAC_CTRL &
+		(DMAC_CTRL_CRCENABLE_Msk | DMAC_CTRL_SWRST_Msk)) == 0U &&
+		DMAC_REGS->DMAC_BUSYCH == 0U &&
+		DMAC_REGS->DMAC_PENDCH == 0U &&
+		DMAC_REGS->DMAC_INTSTATUS == 0U &&
+		(DMAC_REGS->DMAC_ACTIVE &
+		(DMAC_ACTIVE_ABUSY_Msk | DMAC_ACTIVE_LVLEX_Msk)) == 0U;
+	for (int i = 0; idle && i < DMAC_CH_NUM; i++)
+	{
+		DMAC_REGS->DMAC_CHID = (uint8_t)i;
+		if ((DMAC_REGS->DMAC_CHCTRLA &
+			(DMAC_CHCTRLA_ENABLE_Msk | DMAC_CHCTRLA_SWRST_Msk)) != 0U)
+		{
+			idle = false;
+		}
+	}
+	DMAC_REGS->DMAC_CHID = selected;
+	EnableInterrupt(state);
+	return idle;
+}
+
 bool SamdDmacBusy(int Chan)
 {
 	if (Chan < 0 || Chan >= DMAC_CH_NUM)

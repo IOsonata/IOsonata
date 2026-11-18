@@ -29,6 +29,7 @@ bool SamdSpiPrepareSleep(void) __attribute__((weak));
 void SamdSpiResumeSleep(void) __attribute__((weak));
 bool SamdUsbAllowStandby(void) __attribute__((weak));
 bool SamdDacAllowStandby(void) __attribute__((weak));
+bool SamdDmacAllowStandby(void) __attribute__((weak));
 bool SamdAdcPrepareSleep(void) __attribute__((weak));
 void SamdAdcResumeSleep(void) __attribute__((weak));
 
@@ -49,6 +50,7 @@ void SystemSleep(void)
 	state = DisableInterrupt();
 	bool ready = (SamdUsbAllowStandby == NULL || SamdUsbAllowStandby()) &&
 		(SamdDacAllowStandby == NULL || SamdDacAllowStandby()) &&
+		(SamdDmacAllowStandby == NULL || SamdDmacAllowStandby()) &&
 		(SamdAdcPrepareSleep == NULL || SamdAdcPrepareSleep()) &&
 		(SamdI2cPrepareSleep == NULL || SamdI2cPrepareSleep()) &&
 		(SamdSpiPrepareSleep == NULL || SamdSpiPrepareSleep()) &&

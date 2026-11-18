@@ -49,6 +49,9 @@ do
 	"$GCC" $COMMON -std=c11 -D"$PART" $CMSIS $INC -I"$PARTDIR/include" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/iopincfg_samd.c" \
 		-o "$OUT/$DEVICE-gpio.o"
+	"$GCC" $COMMON -std=c11 -D"$PART" $CMSIS $INC -I"$PARTDIR/include" \
+		-c "$ROOT/ARM/Microchip/SAMD/src/dmac_samd.c" \
+		-o "$OUT/$DEVICE-dmac.o"
 	"$GCC" $COMMON -std=c11 -D"$PART" \
 		$CMSIS $INC -I"$PARTDIR/include" -I"$BOARD" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/system_sleep_samd.c" \
@@ -73,4 +76,4 @@ do
 	fi
 done
 
-echo "SAM D11/D21 Standby, ADC and DAC source compilation PASS"
+echo "SAM D11/D21 Standby, DMAC, ADC and DAC source compilation PASS"
