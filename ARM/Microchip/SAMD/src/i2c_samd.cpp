@@ -1435,7 +1435,8 @@ extern "C" bool SamdI2cPrepareSleep(void)
 		{
 			continue;
 		}
-		if (pDev->Cfg.Mode != I2CMODE_MASTER || dev->bSleepPaused ||
+		if (pDev->Cfg.Mode != I2CMODE_MASTER ||
+			atomic_flag_test(&pDev->DevIntrf.bBusy) || dev->bSleepPaused ||
 			dev->Op != SAMD_I2C_OP_NONE || dev->bDmaRun || dev->bBusHeld || dev->bSlaveTx || dev->bSlaveRx)
 		{
 			return false;
