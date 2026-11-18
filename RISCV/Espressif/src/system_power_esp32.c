@@ -98,7 +98,6 @@ uint32_t SystemResetReason(void)
 void SystemSleep(void)
 {
 	uintptr_t state;
-	bool handled;
 
 	state = DisableInterrupt();
 	// Wake routing belongs to the system, not to a board-specific sleep
@@ -117,7 +116,7 @@ void SystemSleep(void)
 		EnableInterrupt(state);
 		return;
 	}
-	handled = Esp32PowerSleep();
+	(void)Esp32PowerSleep();
 	if (Esp32UartResumeSleep != NULL)
 	{
 		Esp32UartResumeSleep();
@@ -126,7 +125,6 @@ void SystemSleep(void)
 	(void)SystemCoreClockGet();
 	// A configured RTC wake request can be rejected by the PMU. Do not
 	// enter another CPU WFI here and conceal that rejection.
-	(void)handled;
 	EnableInterrupt(state);
 }
 
