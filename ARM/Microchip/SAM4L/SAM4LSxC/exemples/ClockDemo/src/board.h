@@ -51,6 +51,21 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 }
 
 // Connect a 3.3 V UART adapter: RX to PC27, TX to PC26, and common ground.
+#ifndef CLOCK_DEMO_UART_WAKE
+#define CLOCK_DEMO_UART_WAKE 0
+#endif
+#if CLOCK_DEMO_UART_WAKE
+#include "uart_sam4l.h"
+#define UART_DEVNO 0
+#define UART_RX_PORT IOPORTB
+#define UART_RX_PIN 0
+#define UART_RX_PINOP IOPINOP_PERIPHB
+#define UART_TX_PORT IOPORTB
+#define UART_TX_PIN 1
+#define UART_TX_PINOP IOPINOP_PERIPHB
+#define UART_BAUDRATE 9600
+#define CLOCK_DEMO_UART_SLEEP Sam4lUartSleep
+#else
 #define UART_DEVNO 1
 #define UART_RX_PORT IOPORTC
 #define UART_RX_PIN 26
@@ -58,6 +73,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_TX_PORT IOPORTC
 #define UART_TX_PIN 27
 #define UART_TX_PINOP IOPINOP_PERIPHA
+#endif
 
 // 0 = AST; 1..3 = TC0 channels 0..2; 4..6 = TC1 channels 0..2.
 #define TIMER_DEVNO 0
@@ -73,6 +89,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 #define CLOCK_DEMO_STOP_UART 1
 #define CLOCK_DEMO_DEFER_TIMER 1
+#define CLOCK_DEMO_SLEEP_APB_DIVIDER 1U
 // AST survives reset and may still be running from a previous application.
 #define CLOCK_DEMO_STOP_TIMER_DEVNO 0
 

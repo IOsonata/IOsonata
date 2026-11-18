@@ -57,6 +57,8 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "coredev/system_core_clock.h"
 #include "cfifo.h"
+#include "iopinctrl.h"
+#include "uart_sam4l.h"
 
 #define SAM4L_UART_CFIFO_SIZE		16
 #define SAM4L_UART_CFIFO_MEMSIZE	CFIFO_MEMSIZE(SAM4L_UART_CFIFO_SIZE)
@@ -77,6 +79,7 @@ typedef struct _Sam_Uart_Dev {
 	IRQn_Type IrqNo;		//!< USARTn_IRQn
 	Usart *pReg;			//!< USART register block
 	UARTDev_t *pUartDev;		//!< Generic UART device data
+	bool bPicoRx;			//!< USART0 RX is routed to PB00
 	uint8_t RxFifoMem[SAM4L_UART_CFIFO_MEMSIZE];
 	uint8_t TxFifoMem[SAM4L_UART_CFIFO_MEMSIZE];
 	uint8_t PdcTxBuff[SAM4L_UART_CFIFO_SIZE];
@@ -549,6 +552,97 @@ void Sam4lUartPowerOff(DevIntrf_t * const pDev)
 	Sam4lUartDisable(pDev);
 }
 
+bool Sam4lUartSleep(UARTDev_t *pDev)
+{
+	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[0];
+	uint32_t wake = 1UL << PM_AWEN_PICOUART;
+
+	if (pDev == NULL || dev->pUartDev != pDev || !dev->bPicoRx ||
+		pDev->Rate < 9500U || pDev->Rate > 9700U || pDev->DataBits != 8 ||
+		pDev->StopBits != 1 || pDev->Parity != UART_PARITY_NONE ||
+		pDev->FlowControl != UART_FLWCTRL_NONE || pDev->bIrDAMode || __get_IPSR() != 0U ||
+		__get_PRIMASK() != 0U)
+	{
+		return false;
+	}
+	uint32_t state = DisableInterrupt();
+	uint32_t clocks = SAM4L_PM->PM_PBDMASK;
+	Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, clocks |
+		PM_PBDMASK_PICOUART | PM_PBDMASK_BPM | PM_PBDMASK_BSCIF);
+	bool rc = (SAM4L_BPM->BPM_PMCON & BPM_PMCON_CK32S) != 0U;
+	bool clockReady = rc ?
+		(SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_RC32KRDY) != 0U &&
+		(SAM4L_BSCIF->BSCIF_RC32KCR & BSCIF_RC32KCR_EN32K) != 0U :
+		(SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_OSC32RDY) != 0U &&
+		(SAM4L_BSCIF->BSCIF_OSCCTRL32 & BSCIF_OSCCTRL32_EN32K) != 0U;
+	if (!clockReady || (SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_EN) != 0U ||
+		(SAM4L_PM->PM_PBAMASK & dev->PbaMask) == 0U ||
+		(SAM4L_PM->PM_AWEN & wake) != 0U ||
+		(SAM4L_PM->PM_IMR & PM_IMR_WAKE) != 0U || NVIC_GetPendingIRQ(PM_IRQn) ||
+		!pDev->bTxReady || CFifoUsed(pDev->hTxFifo) != 0 ||
+		CFifoUsed(pDev->hRxFifo) != 0 ||
+		(dev->pReg->US_CSR & (US_CSR_TXEMPTY | US_CSR_RXRDY)) != US_CSR_TXEMPTY ||
+		IOPinRead(IOPORTB, 0) == 0)
+	{
+		Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, clocks);
+		EnableInterrupt(state);
+		return false;
+	}
+	uint32_t cfg = SAM4L_PICOUART->PICOUART_CFG;
+	uint32_t imr = dev->pReg->US_IMR;
+	uint32_t awen = SAM4L_PM->PM_AWEN;
+	dev->pReg->US_IDR = 0xFFFFFFFFU;
+	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
+	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
+	// Full-frame reception at 9600 baud with CLK32 = 32768 Hz.
+	SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);
+	SAM4L_PM->PM_ICR = PM_ICR_WAKE;
+	// Own WAKE until its cause has been sampled. SystemSleep preserves it.
+	SAM4L_PM->PM_IER = PM_IER_WAKE;
+	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen | wake);
+	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_EN;
+	__DSB();
+	SystemSleep();
+	bool received = (SAM4L_PM->PM_ISR & PM_ISR_WAKE) != 0U &&
+		(SAM4L_PM->PM_WCAUSE & wake) != 0U &&
+		(SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_DRDY) != 0U;
+	uint8_t data = SAM4L_PICOUART->PICOUART_RHR;
+	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
+	SAM4L_PICOUART->PICOUART_CFG = cfg;
+	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen);
+	SAM4L_PM->PM_IDR = PM_IDR_WAKE;
+	SAM4L_PM->PM_ICR = PM_ICR_WAKE;
+	if ((SAM4L_PM->PM_ISR & SAM4L_PM->PM_IMR) == 0U)
+	{
+		NVIC_ClearPendingIRQ(PM_IRQn);
+	}
+	Sam4lUartClockEnable(dev);
+	dev->pReg->US_CR = US_CR_RSTRX | US_CR_RSTSTA;
+	dev->pReg->US_CR = US_CR_RXEN | US_CR_TXEN;
+	dev->pReg->US_IER = imr;
+	if (received)
+	{
+		uint8_t *p = CFifoPut(pDev->hRxFifo);
+		if (p != NULL)
+		{
+			*p = data;
+		}
+		else
+		{
+			pDev->RxDropCnt++;
+			received = false;
+		}
+	}
+	Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, clocks);
+	__DSB();
+	EnableInterrupt(state);
+	if (received && pDev->EvtCallback != NULL)
+	{
+		pDev->EvtCallback(pDev, UART_EVT_RXDATA, NULL, 0);
+	}
+	return received;
+}
+
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 {
 	// SAM4L USART has no modem control lines mapped to generic line state.
@@ -609,6 +703,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCFG *pCfg)
 
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
+	dev->bPicoRx = devno == 0 && ((const IOPINCFG *)pCfg->pIOPinMap)[0].PortNo == IOPORTB &&
+		((const IOPINCFG *)pCfg->pIOPinMap)[0].PinNo == 0 &&
+		((const IOPINCFG *)pCfg->pIOPinMap)[0].PinOp == IOPINOP_PERIPHB;
 
 	// Pin muxing.  Caller supplies RX, TX, and optionally RTS/CTS.
 	if (pCfg->NbIOPins > 2 && pCfg->FlowControl == UART_FLWCTRL_HW)

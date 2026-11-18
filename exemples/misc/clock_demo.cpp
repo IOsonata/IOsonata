@@ -385,14 +385,13 @@ static void ClockDemoTimerSleep(void)
 }
 #endif
 
-#if defined(CLOCK_DEMO_WAKE_PIN)
+#if (defined(CLOCK_DEMO_WAKE_PIN) || defined(CLOCK_DEMO_UART_SLEEP))
 static void ClockDemoSleep(void)
 {
 	uint32_t core = SystemCoreClockGet();
 	uint32_t apb = SystemPeriphClockGet(0);
 	OscDesc_t high = *GetHighFreqOscDesc();
 	OscDesc_t low = *GetLowFreqOscDesc();
-	unsigned released = 0U;
 
 	// The board selects a supported peripheral-clock divider for sleep.
 	ClockDemoClockBegin();
@@ -404,6 +403,16 @@ static void ClockDemoSleep(void)
 		return;
 	}
 	core = SystemCoreClockGet();
+#if defined(CLOCK_DEMO_UART_SLEEP)
+	ClockDemoPrint("Entering UART sleep; send one U at %u baud\r\n",
+		(unsigned)UART_BAUDRATE);
+	ClockDemoFlush();
+	bool woke = CLOCK_DEMO_UART_SLEEP(&s_Uart);
+	uint8_t wakeByte = 0;
+	int count = UARTRx(&s_Uart, &wakeByte, 1);
+	ClockDemoResult("UART wake byte", woke && count == 1 && wakeByte == 'U');
+#else
+	unsigned released = 0U;
 	IOPinConfig(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINOP_GPIO,
 		IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 	while (released < 20U)
@@ -454,6 +463,7 @@ static void ClockDemoSleep(void)
 #endif
 #if defined(CLOCK_DEMO_SLEEP_TIMER_MS)
 	ClockDemoTimerSleep();
+#endif
 #endif
 	ClockDemoPrint("Sleep returned; checking clocks\r\n");
 	ClockDemoResult("CPU clock after resume", SystemCoreClockGet() == core &&
@@ -570,7 +580,7 @@ int main(void)
 #endif
 			}
 #endif
-#if defined(CLOCK_DEMO_WAKE_PIN) && !CLOCK_DEMO_DEFER_TIMER
+#if (defined(CLOCK_DEMO_WAKE_PIN) || defined(CLOCK_DEMO_UART_SLEEP)) && !CLOCK_DEMO_DEFER_TIMER
 			unsigned lfIndex = 0U;
 #endif
 #if defined(CLOCK_DEMO_LF_SOURCES)
@@ -585,7 +595,7 @@ int main(void)
 				}
 				ClockDemoResult(source.pName, selected);
 				ClockDemoPrint("LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
-#if defined(CLOCK_DEMO_WAKE_PIN) && !CLOCK_DEMO_DEFER_TIMER
+#if (defined(CLOCK_DEMO_WAKE_PIN) || defined(CLOCK_DEMO_UART_SLEEP)) && !CLOCK_DEMO_DEFER_TIMER
 				// Rotate the LF source used for sleep across the three cycles.
 				if (selected && lfIndex == (cycle - 1U) %
 					(sizeof(s_LowFreqSources) / sizeof(s_LowFreqSources[0])))
@@ -609,7 +619,7 @@ int main(void)
 #if CLOCK_DEMO_UART_RX_TEST
 	ClockDemoUartRx();
 #endif
-#if defined(CLOCK_DEMO_WAKE_PIN)
+#if (defined(CLOCK_DEMO_WAKE_PIN) || defined(CLOCK_DEMO_UART_SLEEP))
 	for (unsigned cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
 	{
 		ClockDemoPrint("Sleep cycle %u\r\n", cycle);
