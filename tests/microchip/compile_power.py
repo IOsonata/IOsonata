@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile SAM4E/SAM4L power and clock sources with real Arm CMSIS headers.
+"""Compile SAM4E/SAM4L power, clock and sleep-aware drivers with Arm headers.
 
 This checks target compilation, not linking or hardware behavior.
 """
@@ -23,7 +23,8 @@ TARGETS = (
      ('system_sam4e.c', 'system_power_sam4e.cpp', 'system_clock_sam4e.cpp')),
     ('SAM4L', tuple('SAM4L' + family + size + package
                    for family in 'CS' for size in '248' for package in 'ABC'),
-     ('system_sam4l.c', 'system_power_sam4l.cpp', 'uart_sam4l.cpp')),
+     ('system_sam4l.c', 'system_power_sam4l.cpp',
+      'uart_sam4l.cpp', 'i2c_sam4l.cpp', 'spi_sam4l.cpp')),
 )
 
 
@@ -112,7 +113,7 @@ def main():
                     subprocess.run([prefix + ('g++' if cpp else 'gcc'),
                                     *flags, *language, '-c', str(source), '-o',
                                     str(out / (part + '-' + source.name + '.o'))], check=True)
-                print(part + ': power/clock target compilation PASS', flush=True)
+                print(part + ': power/clock/peripheral target compilation PASS', flush=True)
 
 
 if __name__ == '__main__':
