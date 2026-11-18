@@ -64,6 +64,7 @@ static const struct {
 
 // Optional UART preparation does not pull the driver into UART-free applications.
 extern bool Sam4lUartPrepareSleep(void) __attribute__((weak));
+extern bool Sam4lUartSuspendSleep(void) __attribute__((weak));
 extern void Sam4lUartResumeSleep(void) __attribute__((weak));
 
 static void Sam4lPowerClockEnable(uint32_t Mask)
@@ -191,6 +192,10 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 
 void SystemSleep(void)
 {
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
 	uint32_t state = DisableInterrupt();
 	if (Sam4lUartPrepareSleep != NULL && !Sam4lUartPrepareSleep())
 	{
@@ -206,6 +211,18 @@ void SystemSleep(void)
 	bool ast = (clocks & PM_PBDMASK_AST) != 0U &&
 		(SAM4L_AST->AST_CR & AST_CR_EN) != 0U && SAM4L_AST->AST_WER != 0U;
 	bool deep = eic != 0U || ast || SAM4L_PM->PM_AWEN != 0U;
+	if (deep && Sam4lUartSuspendSleep != NULL && !Sam4lUartSuspendSleep())
+	{
+		if (Sam4lUartResumeSleep != NULL)
+		{
+			Sam4lUartResumeSleep();
+		}
+		SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
+			PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
+		SAM4L_PM->PM_PBDMASK = clocks;
+		EnableInterrupt(state);
+		return;
+	}
 	uint32_t wakeMask = SAM4L_PM->PM_IMR & PM_IMR_WAKE;
 	uint32_t irqEnabled = NVIC_GetEnableIRQ(PM_IRQn);
 	uint32_t irqPending = NVIC_GetPendingIRQ(PM_IRQn);
@@ -269,6 +286,7 @@ void SystemSleep(void)
 	{
 		Sam4lUartResumeSleep();
 	}
+	SystemCoreClockUpdate();
 	EnableInterrupt(state);
 }
 

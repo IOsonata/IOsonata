@@ -83,6 +83,8 @@ typedef struct _Sam_Uart_Dev {
 	uint8_t PdcTxBuff[SAM4L_UART_CFIFO_SIZE];
 	bool bWake;			//!< Receive wake requested by the application
 	bool bPicoRx;			//!< USART0 RX is routed to PB00
+	bool bSleepPaused;		//!< Temporarily stopped by SystemSleep
+	uint32_t SleepInterrupts;	//!< USART interrupt state across sleep
 } SAM4L_UARTDEV;
 
 #pragma pack(pop)
@@ -643,17 +645,70 @@ bool Sam4lUartPrepareSleep(void)
 	return true;
 }
 
+// Sleep is selected by SystemSleep, not the UART. Suspend only idle
+// non-wake USARTs when the system is entering a deep resumable mode.
+// Keep DeviceIntrf reference counts, FIFOs and baud registers unchanged.
+bool Sam4lUartSuspendSleep(void)
+{
+	SAM4L_UARTDEV *dev;
+	UARTDev_t *pDev;
+	PdcaChannel *chan;
+
+	for (int i = 0; i < s_NbSam4lUartDev; i++)
+	{
+		dev = &s_Sam4lUartDev[i];
+		pDev = dev->pUartDev;
+		if (pDev == NULL || dev->bWake ||
+			atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+			(SAM4L_PM->PM_PBAMASK & dev->PbaMask) == 0U)
+		{
+			continue;
+		}
+		if (dev->bSleepPaused || !pDev->bTxReady ||
+			CFifoUsed(pDev->hTxFifo) != 0 ||
+			(dev->pReg->US_CSR & (US_CSR_TXEMPTY | US_CSR_RXRDY)) != US_CSR_TXEMPTY)
+		{
+			return false;
+		}
+		if (pDev->DevIntrf.bDma)
+		{
+			chan = &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_PDCA_TX_CHAN(i)];
+			if ((chan->PDCA_SR & PDCA_SR_TEN) != 0U || chan->PDCA_TCR != 0U)
+			{
+				return false;
+			}
+		}
+	}
+	for (int i = 0; i < s_NbSam4lUartDev; i++)
+	{
+		dev = &s_Sam4lUartDev[i];
+		pDev = dev->pUartDev;
+		if (pDev == NULL || dev->bWake ||
+			atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+			(SAM4L_PM->PM_PBAMASK & dev->PbaMask) == 0U)
+		{
+			continue;
+		}
+		dev->SleepInterrupts = dev->pReg->US_IMR;
+		dev->pReg->US_IDR = 0xFFFFFFFFU;
+		dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
+		Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK,
+			SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
+		dev->bSleepPaused = true;
+	}
+	return true;
+}
+
 void Sam4lUartResumeSleep(void)
 {
 	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[0];
 	UARTDev_t *pDev = dev->pUartDev;
 	uint32_t wake = 1UL << PM_AWEN_PICOUART;
+	bool received = false;
 
-	if (!s_Sam4lUartSleep.bActive)
+	if (s_Sam4lUartSleep.bActive)
 	{
-		return;
-	}
-	bool received = (SAM4L_PM->PM_ISR & PM_ISR_WAKE) != 0U &&
+		received = (SAM4L_PM->PM_ISR & PM_ISR_WAKE) != 0U &&
 		(SAM4L_PM->PM_WCAUSE & wake) != 0U &&
 		(SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_DRDY) != 0U;
 	uint8_t data = SAM4L_PICOUART->PICOUART_RHR;
@@ -686,7 +741,19 @@ void Sam4lUartResumeSleep(void)
 	Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, s_Sam4lUartSleep.Clocks);
 	__DSB();
 	s_Sam4lUartSleep.bActive = false;
-	if (received && pDev->EvtCallback != NULL)
+	}
+	for (int i = 0; i < s_NbSam4lUartDev; i++)
+	{
+		dev = &s_Sam4lUartDev[i];
+		if (dev->bSleepPaused)
+		{
+			Sam4lUartClockEnable(dev);
+			dev->pReg->US_CR = US_CR_RXEN | US_CR_TXEN;
+			dev->pReg->US_IER = dev->SleepInterrupts;
+			dev->bSleepPaused = false;
+		}
+	}
+	if (received && pDev != NULL && pDev->EvtCallback != NULL)
 	{
 		pDev->EvtCallback(pDev, UART_EVT_RXDATA, NULL, 0);
 	}
@@ -753,6 +820,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCFG *pCfg)
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
 	dev->bWake = false;
+	dev->bSleepPaused = false;
 	dev->bPicoRx = devno == 0 && ((const IOPINCFG *)pCfg->pIOPinMap)[0].PortNo == IOPORTB &&
 		((const IOPINCFG *)pCfg->pIOPinMap)[0].PinNo == 0 &&
 		((const IOPINCFG *)pCfg->pIOPinMap)[0].PinOp == IOPINOP_PERIPHB;
