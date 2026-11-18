@@ -25,6 +25,11 @@ static bool s_TestSleep;
 static unsigned s_SleepCount;
 static uint32_t s_TimerBusyMask;
 static uint32_t s_ExpectedEicWakeClear;
+static uint32_t s_SavedCpuDivider;
+static uint32_t s_SavedPbaDivider;
+static uint32_t s_SavedPbbDivider;
+static uint32_t s_SavedPbcDivider;
+static uint32_t s_SavedPbdDivider;
 
 // Optional driver functions must be provided by the host test. Linking
 // undefined weak C++ references is not portable to macOS clang.
@@ -48,6 +53,11 @@ void PowerTestWfi(void)
 		std::longjmp(s_Off, 1);
 	}
 	assert(g_PowerTestMask == 1);
+	assert(s_Pm.PM_CPUSEL == s_SavedCpuDivider);
+	assert(s_Pm.PM_PBASEL == s_SavedPbaDivider);
+	assert(s_Pm.PM_PBBSEL == s_SavedPbbDivider);
+	assert(s_Pm.PM_PBCSEL == s_SavedPbcDivider);
+	assert(s_Pm.PM_PBDSEL == s_SavedPbdDivider);
 	assert(!(g_PowerTestScb.SCR & SCB_SCR_SLEEPONEXIT_Msk));
 	assert(bool(g_PowerTestScb.SCR & SCB_SCR_SLEEPDEEP_Msk) == s_DeepSleep);
 	assert(!(s_Bpm.BPM_PMCON & (BPM_PMCON_BKUP | BPM_PMCON_SLEEP_Msk)));
@@ -227,6 +237,16 @@ int main(void)
 #if !defined(SAM4LSXC) && !defined(SAM4LCXC)
 	assert(!SystemWakePin(2, 3, IOPINSENSE_LOW_TRANSITION));
 #endif
+	s_SavedCpuDivider = PM_CPUSEL_CPUDIV | PM_CPUSEL_CPUSEL(0);
+	s_SavedPbaDivider = PM_PBASEL_PBDIV | PM_PBASEL_PBSEL(0);
+	s_SavedPbbDivider = 0U;
+	s_SavedPbcDivider = 0U;
+	s_SavedPbdDivider = 0U;
+	s_Pm.PM_CPUSEL = s_SavedCpuDivider;
+	s_Pm.PM_PBASEL = s_SavedPbaDivider;
+	s_Pm.PM_PBBSEL = s_SavedPbbDivider;
+	s_Pm.PM_PBCSEL = s_SavedPbcDivider;
+	s_Pm.PM_PBDSEL = s_SavedPbdDivider;
 	s_TestSleep = true;
 	s_Pm.PM_PBDMASK = 0;
 	s_Bpm.BPM_PMCON = BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP(3) | BPM_PMCON_CK32S;
@@ -239,6 +259,8 @@ int main(void)
 		SystemSleep();
 		assert(g_PowerTestMask == mask);
 		assert(s_Pm.PM_PBDMASK == 0);
+		assert(s_Pm.PM_CPUSEL == s_SavedCpuDivider);
+		assert(s_Pm.PM_PBASEL == s_SavedPbaDivider);
 		assert(s_Bpm.BPM_PMCON == saved);
 		assert(g_PowerTestScb.SCR == (SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk | 0x10));
 	}
