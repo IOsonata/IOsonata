@@ -245,7 +245,7 @@ bool Sam4lSpiSuspendSleep(void)
 		return true;
 	}
 	if (pDev->Cfg.Mode != SPIMODE_MASTER || dev->bSleepPaused ||
-		dev->Active || dev->Async ||
+		dev->Active ||
 		(dev->pReg->SPI_SR & SPI_SR_TXEMPTY) == 0U)
 	{
 		return false;

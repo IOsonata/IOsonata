@@ -141,3 +141,27 @@ were performed on the edited source. Existing SAM4L and SAMD host test
 stubs were updated for internal sleep calls. No actual compiler, library
 rebuild, unit test or hardware run was performed after these edits.
 GitHub reports no commit status checks for the current head.
+
+## SAM4L master transport sleep coordination
+
+The SAM4L system implementation now asks the I2C and SPI drivers to
+prepare for deep resumable sleep alongside the existing UART driver.
+Each enabled idle I2C or SPI master stores its interrupt mask, stops its
+controller and gates its own bus clock without changing DeviceIntrf
+reference counts, clock dividers, pins or transfer settings. The
+system restores those drivers after WFI, or rolls back any already
+suspended driver when another driver refuses entry.
+
+I2C slave address matching retains its PM.AWEN and power-clock request
+for TWIS SleepWalking. An active slave transaction prevents sleep.
+SAM4L SPI has no supported asynchronous slave wake mechanism; an
+enabled SPI slave prevents deep resumable sleep. Active master,
+DMA or incomplete operations also prevent that sleep attempt.
+No application-side clock switching is required for these paths.
+
+This changes untested hardware behavior. No SAM4L SPI or I2C
+post-wake hardware result, clean library rebuild or current
+measurement exists yet. Other peripheral clock consumers (including
+USB and ADC) have not been covered by this driver coordination.
+Do not mark SAM4L power management complete until they are reviewed
+and the corresponding hardware paths are validated.
