@@ -44,28 +44,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED1_PIN		7
 #define LED1_PINOP		IOPINOP_GPIO
 
-// USART1 console, matching the SAM4LCxC CDC example.
-#ifndef CLOCK_DEMO_UART_WAKE
-#define CLOCK_DEMO_UART_WAKE 0
-#endif
-#if CLOCK_DEMO_UART_WAKE
-#define UART_DEVNO 0
-#define UART_RX_PORT IOPORTB
-#define UART_RX_PIN 0
-#define UART_RX_PINOP IOPINOP_PERIPHB
-#define UART_TX_PORT IOPORTB
-#define UART_TX_PIN 1
-#define UART_TX_PINOP IOPINOP_PERIPHB
-#define CLOCK_DEMO_UART_WAKE_BAUDRATE 9600U
-#else
-#define UART_DEVNO 		1
-#define UART_RX_PORT 	IOPORTC
-#define UART_RX_PIN 	26
-#define UART_RX_PINOP 	IOPINOP_PERIPHA
-#define UART_TX_PORT 	IOPORTC
-#define UART_TX_PIN 	27
-#define UART_TX_PINOP 	IOPINOP_PERIPHA
-#endif
+// ClockDemo retains USART1. UART wake belongs to PowerOffDemo.
+#define UART_DEVNO 1
+#define UART_RX_PORT IOPORTC
+#define UART_RX_PIN 26
+#define UART_RX_PINOP IOPINOP_PERIPHA
+#define UART_TX_PORT IOPORTC
+#define UART_TX_PIN 27
+#define UART_TX_PINOP IOPINOP_PERIPHA
 
 // Virtual device 0 = AST, 1..3 = TC0 channels 0..2, 4..6 = TC1 channels 0..2.
 // Compiler -DTIMER_DEMO_DEVNO also overrides this selection.
@@ -88,15 +74,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define CLOCK_DEMO_DEFER_TIMER 0
 // AST survives reset and may still be running from a previous application.
 #define CLOCK_DEMO_STOP_TIMER_DEVNO 0
-#define CLOCK_DEMO_SLEEP_TIMER_MS 1000U
 
-// OLED1 BUTTON1 on EXT2, PC06. GPIO interrupt group 8 covers PC00..PC07.
-#define CLOCK_DEMO_WAKE_PORT IOPORTC
-#define CLOCK_DEMO_WAKE_PIN 6
-#define CLOCK_DEMO_WAKE_NAME "OLED1 BUTTON1"
-// Use asynchronous EIC wake for RETENTION; GPIO-only wake uses SLEEP0.
-// #define CLOCK_DEMO_WAKE_IRQ 8
-#define CLOCK_DEMO_SLEEP_APB_DIVIDER 4U
 #define CLOCK_DEMO_UART_RX_TEST 1
 
 #endif // __BOARD_H__

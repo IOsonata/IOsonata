@@ -570,7 +570,9 @@ bool UARTEnableWake(UARTDev_t *pDev, bool bEnable)
 	{
 		return false;
 	}
-	if (bEnable && (!dev->bPicoRx || pDev->Rate == 0U || pDev->DataBits != 8 ||
+	if (bEnable && (atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+		(SAM4L_PM->PM_PBAMASK & dev->PbaMask) == 0U ||
+		!dev->bPicoRx || pDev->Rate == 0U || pDev->DataBits != 8 ||
 		pDev->StopBits != 1 || pDev->Parity != UART_PARITY_NONE ||
 		pDev->FlowControl != UART_FLWCTRL_NONE || pDev->bIrDAMode))
 	{

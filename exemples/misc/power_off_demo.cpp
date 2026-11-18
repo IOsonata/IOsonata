@@ -59,6 +59,14 @@ SOFTWARE.
 #include "board.h"
 
 
+// UART wake requires a board profile with a supported sleep receiver.
+#ifndef POWER_DEMO_UART_WAKE
+#define POWER_DEMO_UART_WAKE 0
+#endif
+#if POWER_DEMO_UART_WAKE && (!defined(POWER_DEMO_RESUME_WAKE) || !POWER_DEMO_RESUME_WAKE)
+#error "UART wake requires resumable sleep"
+#endif
+
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE			1000000
@@ -142,6 +150,11 @@ static const TimerCfg_t s_WakeTimerCfg = {
 	.Freq = 1024U,
 	.IntPrio = 6,
 };
+#endif
+
+#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE && \
+	defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
+static volatile bool s_StandbyTimerWoke;
 #endif
 
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
@@ -333,6 +346,17 @@ static uint32_t StandbyRamPattern(uint32_t Cycle, uint32_t Idx)
 }
 #endif
 
+#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE && \
+	defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
+static void PowerDemoStandbyTimerWake(TimerDev_t *pTimer, int Trigger, void *pContext)
+{
+	(void)pTimer;
+	(void)Trigger;
+	(void)pContext;
+	s_StandbyTimerWoke = true;
+}
+#endif
+
 // Require a stable release before arming another sleep cycle.
 static void PowerDemoWaitRelease(void)
 {
@@ -380,20 +404,45 @@ int main()
 	}
 	PowerDemoPut("PowerOffDemo: Standby\r\n");
 
+#if POWER_DEMO_UART_WAKE
+	if (!s_Uart.EnableWake(true))
+	{
+		PowerDemoPut("UART wake unavailable for this configuration\r\n");
+		return 1;
+	}
+#elif defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
+	if (!TimerInit(&s_WakeTimer, &s_WakeTimerCfg))
+	{
+		PowerDemoPut("Standby timer initialization FAIL\r\n");
+		return 1;
+	}
+	TimerDisable(&s_WakeTimer);
+#else
 	if (!PowerDemoWakeConfig())
 	{
 		PowerDemoPut("Standby wake pin not available\r\n");
 		return 1;
 	}
-
+#endif
 
 	wakeCount = 0U;
 	while (1)
 	{
+#if POWER_DEMO_UART_WAKE
+		uint32_t coreBefore = SystemCoreClockGet();
+		uint32_t apbBefore = SystemPeriphClockGet(0);
+		uint32_t rateBefore = s_Uart.Rate();
+		PowerDemoPut("Entering UART sleep; send one U at 9600 baud\r\n");
+#elif defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
+		PowerDemoPut("Entering Standby; automatic timer wake\r\n");
+#else
 		PowerDemoWaitRelease();
 		PowerDemoPut("Entering Standby\r\n");
+#endif
 		PowerDemoDrain();
+#if !POWER_DEMO_UART_WAKE
 		s_Uart.Disable();
+#endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
 		{
@@ -403,7 +452,30 @@ int main()
 			stackRam[i] = ~pattern;
 		}
 #endif
+#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
+		if (TimerSetFrequency(&s_WakeTimer, 1024U) == 0U)
+		{
+			s_Uart.Enable();
+			PowerDemoPut("Standby timer frequency FAIL\r\n");
+			return 1;
+		}
+		uint32_t state = DisableInterrupt();
+		s_StandbyTimerWoke = false;
+		uint32_t start = TimerGetMicrosecond(&s_WakeTimer);
+		uint64_t period = nsTimerEnableTrigger(&s_WakeTimer, 0,
+			(uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000000ULL,
+			TIMER_TRIG_TYPE_SINGLE, PowerDemoStandbyTimerWake, nullptr);
+		if (period != 0U && !s_StandbyTimerWoke)
+		{
+			SystemSleep();
+		}
+		EnableInterrupt(state);
+		uint32_t elapsed = TimerGetMicrosecond(&s_WakeTimer) - start;
+		TimerDisableTrigger(&s_WakeTimer, 0);
+		TimerDisable(&s_WakeTimer);
+#else
 		SystemSleep();
+#endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 		bool ramOk = true;
 		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
@@ -416,7 +488,27 @@ int main()
 			}
 		}
 #endif
+#if POWER_DEMO_UART_WAKE
+		uint8_t wakeByte = 0;
+		bool received = s_Uart.Rx(&wakeByte, 1) == 1 && wakeByte == 'U';
+		// Let the host adapter switch back to its normal console baud.
+		msDelay(100);
+		PowerDemoPut(received ? "UART wake byte: PASS\r\n" : "UART wake byte: FAIL\r\n");
+		PowerDemoPut(s_Uart.Rate() == rateBefore ? "UART rate after resume: PASS\r\n" :
+			"UART rate after resume: FAIL\r\n");
+		PowerDemoPut(SystemCoreClockGet() == coreBefore && SystemPeriphClockGet(0) == apbBefore ?
+			"CPU/APB clock after resume: PASS\r\n" :
+			"CPU/APB clock after resume: FAIL\r\n");
+#else
 		s_Uart.Enable();
+#endif
+#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
+		uint64_t expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
+		PowerDemoPut(period != 0U && s_StandbyTimerWoke &&
+			(uint64_t)elapsed >= expected * 98ULL / 100ULL &&
+			(uint64_t)elapsed <= expected * 102ULL / 100ULL ?
+			"Standby timer wake: PASS\r\n" : "Standby timer wake: FAIL\r\n");
+#endif
 		wakeCount++;
 		PowerDemoPut("Resumed from Standby, count 0x");
 		PowerDemoPutCount(wakeCount);

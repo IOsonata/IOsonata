@@ -256,9 +256,10 @@ UARTDev_t const *UARTGetInstance(int DevNo);
  * available through UARTRx(). Wake remains enabled until explicitly disabled
  * or the UART is disabled, powered off or reinitialized.
  *
- * Drain TX and RX and stop other active peripherals before sleeping. A busy
- * receiver may prevent sleep. Wake pins, baud rate and frame format depend
- * on the MCU. The sender must wait for acknowledgement before sending payload.
+ * Finish pending transfers before sleeping. The driver may refuse sleep entry
+ * if it cannot safely pause the UART. The application does not switch UART
+ * clocks, rates or operating modes for wake. Wake pins and sleep receiver
+ * formats depend on the MCU. The sender must wait for acknowledgement before sending payload.
  * An RX callback may run during resume with interrupts masked; do not block.
  *
  * @return true when the request is accepted; false if unsupported or invalid.

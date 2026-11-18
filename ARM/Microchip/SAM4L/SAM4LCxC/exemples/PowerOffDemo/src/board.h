@@ -44,6 +44,20 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED1_PIN		7
 #define LED1_PINOP		IOPINOP_GPIO
 
+// Optional UART wake uses an external 3.3 V adapter on PB00/PB01.
+#ifndef POWER_DEMO_UART_WAKE
+#define POWER_DEMO_UART_WAKE 0
+#endif
+#if POWER_DEMO_UART_WAKE
+#define POWER_DEMO_RESUME_WAKE 1
+#define UART_DEVNO 0
+#define UART_RX_PORT IOPORTB
+#define UART_RX_PIN 0
+#define UART_RX_PINOP IOPINOP_PERIPHB
+#define UART_TX_PORT IOPORTB
+#define UART_TX_PIN 1
+#define UART_TX_PINOP IOPINOP_PERIPHB
+#else
 // USART1 console, matching the SAM4LCxC CDC example.
 #define UART_DEVNO 		1
 #define UART_RX_PORT 	IOPORTC
@@ -52,6 +66,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_TX_PORT 	IOPORTC
 #define UART_TX_PIN 	27
 #define UART_TX_PINOP 	IOPINOP_PERIPHA
+#endif
 
 // Virtual device 0 = AST, 1..3 = TC0 channels 0..2, 4..6 = TC1 channels 0..2.
 // Compiler -DTIMER_DEMO_DEVNO also overrides this selection.

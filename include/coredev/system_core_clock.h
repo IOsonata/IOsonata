@@ -327,9 +327,11 @@ void SystemPowerOff(void);
  * before this call. When a wake event is serviced, execution resumes after
  * this function. RAM and stack remain valid.
  *
- * Drivers and the application own stopping active peripherals that cannot
- * operate or retain their clocks in the selected sleep state. The function
- * does not alter reset reasons or configure a wake source.
+ * Peripheral drivers own their clock and power resources. Supported drivers
+ * prepare and restore sleep-related hardware from the target implementation.
+ * Applications configure wake sources and finish outstanding transfers, not
+ * target-specific clock or peripheral restoration. This function does not
+ * alter reset reasons or select wake sources.
  *
  * Unlike SystemPowerOff, this operation never requests a reset-on-wake
  * state. It is optional on MCUs without a supported resumable sleep mode.

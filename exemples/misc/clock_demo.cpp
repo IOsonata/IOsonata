@@ -8,8 +8,8 @@ source sequence and peripheral clock divisors. Each change is made with the
 timer stopped. Both build configurations log to UART without a debugger.
 Timer elapsed time and interrupt counts check operation after clock changes.
 Boards that defer timer initialization check it after the selection sequence.
-These checks do not measure absolute oscillator accuracy. An optional board wake pin
-adds sleep/resume checks with UART output drained and the timer stopped.
+These checks do not measure absolute oscillator accuracy. PowerOffDemo tests
+low-power modes, wake sources and peripheral operation following resume.
 
 @license
 
@@ -62,9 +62,6 @@ SOFTWARE.
 #endif
 #ifndef CLOCK_DEMO_DEFER_TIMER
 #define CLOCK_DEMO_DEFER_TIMER 0
-#endif
-#ifndef CLOCK_DEMO_SLEEP_APB_DIVIDER
-#define CLOCK_DEMO_SLEEP_APB_DIVIDER 4U
 #endif
 #ifndef CLOCK_DEMO_UART_RX_TEST
 #define CLOCK_DEMO_UART_RX_TEST 0
@@ -122,14 +119,8 @@ static TimerDev_t s_Timer;
 #if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
 static TimerDev_t s_RetainedTimer;
 #endif
-#if defined(CLOCK_DEMO_SLEEP_TIMER_MS)
-static volatile bool s_TimerWoke;
-#endif
 static volatile uint32_t s_InterruptCount;
 static unsigned s_Failures;
-#if defined(CLOCK_DEMO_WAKE_IRQ)
-static volatile bool s_PinWoke;
-#endif
 static void ClockDemoTimerHandler(TimerDev_t *pTimer, uint32_t Event);
 static void ClockDemoFlush(void);
 
@@ -332,164 +323,6 @@ static void ClockDemoTimer(void)
 	}
 }
 
-#if defined(CLOCK_DEMO_WAKE_IRQ)
-static void ClockDemoWakeHandler(int IntNo, void *pCtx)
-{
-	(void)IntNo;
-	(void)pCtx;
-	s_PinWoke = true;
-}
-#endif
-
-#if defined(CLOCK_DEMO_SLEEP_TIMER_MS)
-static void ClockDemoSleepTimerHandler(TimerDev_t *pTimer, int Trigger, void *pContext)
-{
-	(void)pTimer;
-	(void)Trigger;
-	(void)pContext;
-	s_TimerWoke = true;
-}
-
-static void ClockDemoTimerSleep(void)
-{
-	ClockDemoPrint("Timer sleep: automatic wake after %u ms\r\n",
-		(unsigned)CLOCK_DEMO_SLEEP_TIMER_MS);
-	ClockDemoFlush();
-	// SetFrequency refreshes the LF rate and restarts the stopped timer.
-	if (TimerSetFrequency(&s_RetainedTimer, 1024U) == 0U)
-	{
-		ClockDemoResult("Sleep timer frequency", false);
-		return;
-	}
-	UARTDisable(&s_Uart);
-	uint32_t state = DisableInterrupt();
-	s_TimerWoke = false;
-	uint32_t start = TimerGetMicrosecond(&s_RetainedTimer);
-	uint64_t period = nsTimerEnableTrigger(&s_RetainedTimer, 0,
-		(uint64_t)CLOCK_DEMO_SLEEP_TIMER_MS * 1000000ULL,
-		TIMER_TRIG_TYPE_SINGLE, ClockDemoSleepTimerHandler, nullptr);
-	if (period != 0U && !s_TimerWoke)
-	{
-		// Masking through WFI prevents losing an alarm between arming and sleep.
-		SystemSleep();
-	}
-	EnableInterrupt(state);
-	uint32_t elapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
-	TimerDisableTrigger(&s_RetainedTimer, 0);
-	TimerDisable(&s_RetainedTimer);
-	UARTEnable(&s_Uart);
-	ClockDemoPrint("Timer wake: %u us\r\n", (unsigned)elapsed);
-	uint64_t expected = period / 1000U;
-	ClockDemoResult("Timer wake interrupt", period != 0U && s_TimerWoke &&
-		elapsed >= expected * 98U / 100U && elapsed <= expected * 102U / 100U);
-}
-#endif
-
-#if (defined(CLOCK_DEMO_WAKE_PIN) || CLOCK_DEMO_UART_WAKE)
-static void ClockDemoSleep(void)
-{
-	uint32_t core = SystemCoreClockGet();
-	uint32_t apb = SystemPeriphClockGet(0);
-	OscDesc_t high = *GetHighFreqOscDesc();
-	OscDesc_t low = *GetLowFreqOscDesc();
-
-	// The board selects a supported peripheral-clock divider for sleep.
-	ClockDemoClockBegin();
-	uint32_t sleepApb = SystemPeriphClockSet(0, core / CLOCK_DEMO_SLEEP_APB_DIVIDER);
-	bool uartReady = ClockDemoClockEnd();
-	if (sleepApb == 0U || !uartReady)
-	{
-		ClockDemoResult("Sleep APB selection", false);
-		return;
-	}
-	core = SystemCoreClockGet();
-#if CLOCK_DEMO_UART_WAKE
-	uint32_t uartRate = UARTGetRate(&s_Uart);
-	ClockDemoPrint("Entering UART sleep; send one U at %u baud; resume at %u baud\r\n",
-		(unsigned)CLOCK_DEMO_UART_WAKE_BAUDRATE, (unsigned)UART_BAUDRATE);
-	ClockDemoFlush();
-	bool armed = UARTEnableWake(&s_Uart, true);
-	if (armed)
-	{
-		SystemSleep();
-		(void)UARTEnableWake(&s_Uart, false);
-	}
-	uint8_t wakeByte = 0;
-	int count = UARTRx(&s_Uart, &wakeByte, 1);
-	// Allow the host adapter to return from the wake rate to the console rate.
-	msDelay(100);
-	ClockDemoResult("UART wake byte", armed && count == 1 && wakeByte == 'U');
-	ClockDemoResult("UART rate after resume", UARTGetRate(&s_Uart) == uartRate);
-#else
-	unsigned released = 0U;
-	IOPinConfig(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINOP_GPIO,
-		IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
-	while (released < 20U)
-	{
-		released = IOPinRead(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN) != 0 ?
-			released + 1U : 0U;
-		msDelay(1);
-	}
-#if defined(CLOCK_DEMO_WAKE_IRQ)
-	s_PinWoke = false;
-	bool armed = IOPinEnableInterrupt(CLOCK_DEMO_WAKE_IRQ, CLOCK_DEMO_IRQ_PRIORITY,
-		CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINSENSE_LOW_TRANSITION,
-		ClockDemoWakeHandler, nullptr);
-#else
-	bool armed = SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN,
-		IOPINSENSE_LOW_TRANSITION);
-#endif
-	if (!armed)
-	{
-		ClockDemoResult("Sleep wake pin", false);
-		ClockDemoClockBegin();
-		(void)SystemPeriphClockSet(0, apb);
-		(void)ClockDemoClockEnd();
-		return;
-	}
-	ClockDemoPrint("Sleep: CPU %u Hz, APB %u Hz, LF %u Hz\r\n",
-		(unsigned)core, (unsigned)sleepApb, (unsigned)low.Freq);
-	ClockDemoPrint("Entering sleep; press " CLOCK_DEMO_WAKE_NAME " to resume\r\n");
-	ClockDemoFlush();
-	UARTDisable(&s_Uart);
-#if defined(CLOCK_DEMO_WAKE_IRQ)
-	// Keep a button edge between the prompt and WFI from being lost.
-	uint32_t interruptState = DisableInterrupt();
-	if (!s_PinWoke)
-	{
-		SystemSleep();
-	}
-	EnableInterrupt(interruptState);
-#else
-	SystemSleep();
-#endif
-	UARTEnable(&s_Uart);
-#if defined(CLOCK_DEMO_WAKE_IRQ)
-	IOPinDisableInterrupt(CLOCK_DEMO_WAKE_IRQ);
-	ClockDemoResult("GPIO wake interrupt", s_PinWoke);
-#else
-	(void)SystemWakePin(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINSENSE_DISABLE);
-#endif
-#if defined(CLOCK_DEMO_SLEEP_TIMER_MS)
-	ClockDemoTimerSleep();
-#endif
-#endif
-	ClockDemoPrint("Sleep returned; checking clocks\r\n");
-	ClockDemoResult("CPU clock after resume", SystemCoreClockGet() == core &&
-		GetHighFreqOscType() == high.Type && GetHighFreqOscFreq() == high.Freq);
-	ClockDemoResult("APB clock after resume", SystemPeriphClockGet(0) == sleepApb);
-	ClockDemoResult("LF descriptor after resume", GetLowFreqOscType() == low.Type &&
-		GetLowFreqOscFreq() == low.Freq);
-	ClockDemoTimer();
-#if CLOCK_DEMO_UART_RX_TEST
-	ClockDemoUartRx();
-#endif
-	ClockDemoClockBegin();
-	bool restored = SystemPeriphClockSet(0, apb) == apb;
-	uartReady = ClockDemoClockEnd();
-	ClockDemoResult("APB restore", restored && uartReady);
-}
-#endif
 
 int main(void)
 {
@@ -589,9 +422,6 @@ int main(void)
 #endif
 			}
 #endif
-#if (defined(CLOCK_DEMO_WAKE_PIN) || CLOCK_DEMO_UART_WAKE) && !CLOCK_DEMO_DEFER_TIMER
-			unsigned lfIndex = 0U;
-#endif
 #if defined(CLOCK_DEMO_LF_SOURCES)
 			for (const ClockDemoLowFreq_t &source : s_LowFreqSources)
 			{
@@ -604,15 +434,6 @@ int main(void)
 				}
 				ClockDemoResult(source.pName, selected);
 				ClockDemoPrint("LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
-#if (defined(CLOCK_DEMO_WAKE_PIN) || CLOCK_DEMO_UART_WAKE) && !CLOCK_DEMO_DEFER_TIMER
-				// Rotate the LF source used for sleep across the three cycles.
-				if (selected && lfIndex == (cycle - 1U) %
-					(sizeof(s_LowFreqSources) / sizeof(s_LowFreqSources[0])))
-				{
-					ClockDemoSleep();
-				}
-				lfIndex++;
-#endif
 			}
 #endif
 		}
@@ -627,13 +448,6 @@ int main(void)
 	ClockDemoTimer();
 #if CLOCK_DEMO_UART_RX_TEST
 	ClockDemoUartRx();
-#endif
-#if (defined(CLOCK_DEMO_WAKE_PIN) || CLOCK_DEMO_UART_WAKE)
-	for (unsigned cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
-	{
-		ClockDemoPrint("Sleep cycle %u\r\n", cycle);
-		ClockDemoSleep();
-	}
 #endif
 #endif
 	ClockDemoFlush();
