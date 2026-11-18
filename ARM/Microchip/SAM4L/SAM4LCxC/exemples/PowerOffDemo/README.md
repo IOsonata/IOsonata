@@ -292,3 +292,46 @@ with stale AST wake state being cleared at startup; the log does not by
 itself establish the exact underlying register cause.
 
 Independent power measurements and PICOUART receive wake remain pending.
+
+## November 18, 2026: PICOUART first hardware observation
+
+With the 3.3 V adapter correctly connected to USART0, the maintainer
+received the startup banner and `Entering UART sleep`. The host helper
+sent `U` at 9600 baud and subsequently displayed `UART wake byte: FAIL`.
+This does not establish whether SystemSleep entered WAIT or returned
+before the host sent the byte, because both the host and the MCU
+previously waited about 100 ms before proceeding.
+
+The host script now waits 350 ms while checking for an unsolicited
+MCU reply before sending `U`. If an early reply arrives, it reports
+that sleep was refused or another event caused an early wake.
+The SAM4L UART driver also records one internal 32-bit diagnostic
+during wake preparation and restoration. On a failed UART wake,
+PowerOffDemo prints `SAM4L UART sleep diagnostic 0x........`.
+
+Diagnostic bits:
+
+| Bit | Meaning |
+| --- | --- |
+| 0 | Wake requested |
+| 1 | Sleep preparation rejected |
+| 2 | PICOUART preparation completed |
+| 3 | PICOUART restore executed |
+| 4 | PM_ISR.WAKE was set at restore |
+| 5 | PM_WCAUSE reported PICOUART |
+| 6 | PICOUART_SR.DRDY was set |
+| 7 | Captured byte queued in UART RX FIFO |
+| 8 | Invalid or already active wake owner |
+| 9 | Required LF clock not ready |
+| 10 | PICOUART already enabled |
+| 11 | Conflicting PM wake registration or pending PM IRQ |
+| 12 | USART0 clock gate disabled |
+| 13 | Pending UART TX |
+| 14 | Pending UART RX |
+| 15 | PICOUART RX pin held low |
+| 24..31 | Captured byte, if a resume occurred |
+
+This trace is restricted to the SAM4L UART implementation and its
+existing private sleep state. No generic UART, SystemSleep, EIC or
+AST API was modified. It is intended for removal after hardware
+validation and is not itself evidence of PICOUART wake support.

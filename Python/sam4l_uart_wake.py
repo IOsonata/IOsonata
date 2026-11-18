@@ -109,8 +109,19 @@ def main():
                 stage = "waiting for UART wake result"
                 rx_ok = False
                 rate_ok = False
-                # Let the MCU arm PICOUART after draining its prompt.
-                time.sleep(0.1)
+                # The MCU prints a FAIL around 100 ms after an immediate
+                # SystemSleep return. Check for that before sending a byte,
+                # otherwise the result can be mistaken for a failed decode.
+                time.sleep(0.35)
+                early = port.read(port.in_waiting) if port.in_waiting else b""
+                if early:
+                    sys.stdout.buffer.write(early)
+                    sys.stdout.buffer.flush()
+                    print("[host] MCU responded before the 9600-baud wake "
+                          "byte was sent. Sleep was refused or another "
+                          "event woke it. Inspect the SAM4L diagnostic.",
+                          file=sys.stderr)
+                    return 1
                 try:
                     port.baudrate = 9600
                     send_byte(port, 2)
