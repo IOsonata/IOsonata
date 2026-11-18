@@ -70,6 +70,7 @@ extern bool Sam4lI2CSuspendSleep(void) __attribute__((weak));
 extern void Sam4lI2CResumeSleep(void) __attribute__((weak));
 extern bool Sam4lSpiSuspendSleep(void) __attribute__((weak));
 extern void Sam4lSpiResumeSleep(void) __attribute__((weak));
+extern bool Sam4lUsbAllowDeepSleep(void) __attribute__((weak));
 
 static void Sam4lPowerClockEnable(uint32_t Mask)
 {
@@ -218,7 +219,8 @@ void SystemSleep(void)
 	bool deep = eic != 0U || ast || SAM4L_PM->PM_AWEN != 0U;
 	if (deep)
 	{
-		bool ready = (Sam4lI2CSuspendSleep == NULL || Sam4lI2CSuspendSleep()) &&
+		bool ready = (Sam4lUsbAllowDeepSleep == NULL || Sam4lUsbAllowDeepSleep()) &&
+			(Sam4lI2CSuspendSleep == NULL || Sam4lI2CSuspendSleep()) &&
 			(Sam4lSpiSuspendSleep == NULL || Sam4lSpiSuspendSleep()) &&
 			(Sam4lUartSuspendSleep == NULL || Sam4lUartSuspendSleep());
 		if (!ready)

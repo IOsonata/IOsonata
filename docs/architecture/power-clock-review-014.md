@@ -218,3 +218,19 @@ System-wide clock and power ownership for USB, ADC and other optional
 peripherals remains a separate architectural review. Sleep current
 measurements and independent confirmation of actual low-power mode
 entry are still pending. Do not merge this work based on source checks.
+
+## USB clock ownership during resumable sleep
+
+The SAM4L and SAMD USB device controllers retain ownership of their
+USB clock/reference while the host session is started. Their driver
+state now reports that deep resumable sleep is not supported while
+the controller is started (including when the USB bus is suspended).
+SystemSleep checks this before suspending other peripherals. A rejected
+sleep preserves the USB session; it does not detach or change USB clocks.
+
+Stopping the USB controller normally releases this restriction. This
+does not implement USB-powered wake or a USB clock RUNSTDBY configuration.
+Both require separate target-specific work and hardware validation,
+including enumeration, SOF, suspend/resume and endpoint transfers.
+The fallback is intentional rather than inferring that bus suspend makes
+a low-frequency CPU sleep mode safe.
