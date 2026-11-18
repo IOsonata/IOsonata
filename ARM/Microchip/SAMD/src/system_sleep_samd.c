@@ -38,6 +38,7 @@ void SystemSleep(void)
 {
 	uint32_t previous;
 	uint32_t state;
+	bool ready;
 
 	if (__get_IPSR() != 0U)
 	{
@@ -49,7 +50,7 @@ void SystemSleep(void)
 	// before sleeping, leaving no interrupt to wake the CPU. The SAMD11
 	// NMI handler leaves EIC_IRQn pending during this window.
 	state = DisableInterrupt();
-	bool ready = (SamdUsbAllowStandby == NULL || SamdUsbAllowStandby()) &&
+	ready = (SamdUsbAllowStandby == NULL || SamdUsbAllowStandby()) &&
 		(SamdDacAllowStandby == NULL || SamdDacAllowStandby()) &&
 		(SamdDmacAllowStandby == NULL || SamdDmacAllowStandby()) &&
 		(SamdTimerAllowStandby == NULL || SamdTimerAllowStandby()) &&
