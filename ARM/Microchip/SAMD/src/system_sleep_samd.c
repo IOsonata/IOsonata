@@ -29,6 +29,8 @@ bool SamdSpiPrepareSleep(void) __attribute__((weak));
 void SamdSpiResumeSleep(void) __attribute__((weak));
 bool SamdUsbAllowStandby(void) __attribute__((weak));
 bool SamdDacAllowStandby(void) __attribute__((weak));
+bool SamdAdcPrepareSleep(void) __attribute__((weak));
+void SamdAdcResumeSleep(void) __attribute__((weak));
 
 void SystemSleep(void)
 {
@@ -47,6 +49,7 @@ void SystemSleep(void)
 	state = DisableInterrupt();
 	bool ready = (SamdUsbAllowStandby == NULL || SamdUsbAllowStandby()) &&
 		(SamdDacAllowStandby == NULL || SamdDacAllowStandby()) &&
+		(SamdAdcPrepareSleep == NULL || SamdAdcPrepareSleep()) &&
 		(SamdI2cPrepareSleep == NULL || SamdI2cPrepareSleep()) &&
 		(SamdSpiPrepareSleep == NULL || SamdSpiPrepareSleep()) &&
 		(SamdUartPrepareSleep == NULL || SamdUartPrepareSleep());
@@ -63,6 +66,10 @@ void SystemSleep(void)
 		if (SamdI2cResumeSleep != NULL)
 		{
 			SamdI2cResumeSleep();
+		}
+		if (SamdAdcResumeSleep != NULL)
+		{
+			SamdAdcResumeSleep();
 		}
 		EnableInterrupt(state);
 		return;
@@ -86,6 +93,10 @@ void SystemSleep(void)
 	if (SamdI2cResumeSleep != NULL)
 	{
 		SamdI2cResumeSleep();
+	}
+	if (SamdAdcResumeSleep != NULL)
+	{
+		SamdAdcResumeSleep();
 	}
 	(void)SystemCoreClockGet();
 	EnableInterrupt(state);

@@ -26,8 +26,15 @@ static uint32_t s_SamdStandbyEicEnabled;
 static uint32_t s_SamdStandbyEicPending;
 static uint32_t s_Mask, s_Enabled, s_Pending, s_Inject, s_WfiCount;
 static bool s_RealPin;
+static uint32_t s_Isr;
+static uint32_t s_RejectStage;
+static uint32_t s_AdcPrepareCount;
+static uint32_t s_AdcResumeCount;
+static uint32_t s_I2cPrepareCount;
+static uint32_t s_I2cResumeCount;
 void NMI_Handler(void);
 
+static uint32_t __get_IPSR(void) { return s_Isr; }
 static uint32_t DisableInterrupt(void)
 {
 	uint32_t previous = s_Mask;
@@ -51,8 +58,32 @@ static void __DSB(void)
 	if (s_Inject == 2) NMI_Handler();
 }
 static void __ISB(void) {}
-static bool SamdUartPrepareSleepMock(void) { return true; }
+static bool SamdUsbAllowStandbyMock(void) { return s_RejectStage != 1U; }
+static bool SamdDacAllowStandbyMock(void) { return s_RejectStage != 2U; }
+static bool SamdAdcPrepareSleepMock(void)
+{
+	s_AdcPrepareCount++;
+	return s_RejectStage != 3U;
+}
+static void SamdAdcResumeSleepMock(void) { s_AdcResumeCount++; }
+static bool SamdI2cPrepareSleepMock(void)
+{
+	s_I2cPrepareCount++;
+	return s_RejectStage != 4U;
+}
+static void SamdI2cResumeSleepMock(void) { s_I2cResumeCount++; }
+static bool SamdSpiPrepareSleepMock(void) { return s_RejectStage != 5U; }
+static void SamdSpiResumeSleepMock(void) {}
+static bool SamdUartPrepareSleepMock(void) { return s_RejectStage != 6U; }
 static void SamdUartResumeSleepMock(void) {}
+static bool (*SamdUsbAllowStandby)(void) = SamdUsbAllowStandbyMock;
+static bool (*SamdDacAllowStandby)(void) = SamdDacAllowStandbyMock;
+static bool (*SamdAdcPrepareSleep)(void) = SamdAdcPrepareSleepMock;
+static void (*SamdAdcResumeSleep)(void) = SamdAdcResumeSleepMock;
+static bool (*SamdI2cPrepareSleep)(void) = SamdI2cPrepareSleepMock;
+static void (*SamdI2cResumeSleep)(void) = SamdI2cResumeSleepMock;
+static bool (*SamdSpiPrepareSleep)(void) = SamdSpiPrepareSleepMock;
+static void (*SamdSpiResumeSleep)(void) = SamdSpiResumeSleepMock;
 static bool (*SamdUartPrepareSleep)(void) = SamdUartPrepareSleepMock;
 static void (*SamdUartResumeSleep)(void) = SamdUartResumeSleepMock;
 static uint32_t SystemCoreClockGet(void) { return 48000000U; }
@@ -100,10 +131,38 @@ int main(void)
 		assert(s_Scb.SCR == 0x10);
 		assert(!s_bSamdStandbyNmiArmed);
 	}
+	// Refused Standby must restore the earlier drivers and not execute WFI.
+	for (unsigned stage = 1U; stage <= 6U; stage++)
+	{
+		s_RejectStage = stage;
+		s_Mask = 0U;
+		s_Isr = 0U;
+		s_Scb.SCR = 0x10U;
+		s_AdcPrepareCount = 0U;
+		s_AdcResumeCount = 0U;
+		s_I2cPrepareCount = 0U;
+		s_I2cResumeCount = 0U;
+		SystemSleep();
+		assert(s_Mask == 0U);
+		assert(s_Scb.SCR == 0x10U);
+		assert(s_WfiCount == 128U);
+		assert(s_AdcPrepareCount == (stage >= 3U ? 1U : 0U));
+		assert(s_AdcResumeCount == 1U);
+		assert(s_I2cPrepareCount == (stage >= 4U ? 1U : 0U));
+		assert(s_I2cResumeCount == 1U);
+	}
+	// Never enter Standby while running inside a peripheral interrupt.
+	s_RejectStage = 0U;
+	s_Isr = 1U;
+	s_AdcPrepareCount = 0U;
+	SystemSleep();
+	assert(s_AdcPrepareCount == 0U);
+	assert(s_WfiCount == 128U);
+	s_Isr = 0U;
 	s_Pending = 0;
 	NMI_Handler();
 	assert(s_Pending == 0); // No synthetic IRQ outside the entry window.
 	assert(s_WfiCount == 128);
-	puts("SAMD11 NMI entry timing and IRQ state: 128 cases PASS");
+	puts("SAMD11 NMI entry timing, refusal, and IRQ state: 128 wake cases PASS");
 	return 0;
 }

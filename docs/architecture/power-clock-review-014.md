@@ -253,3 +253,20 @@ No ADC sleep-state transition has been added without target
 hardware evidence. Continuous or event-triggered ADC operation
 would require separate preparation and restore support.
 SystemSleep on SAMD also rejects entry from an interrupt handler.
+
+## SAMD ADC standby ownership
+
+The existing SAMD ADC supports only software-triggered blocking reads;
+there is no ADC interrupt, DMA or SleepWalking conversion path.
+The ADC driver now pauses its enabled converter before Standby and
+re-enables it on resume, without losing unread software sample data,
+pin ownership, reference configuration or its generic clock assignment.
+It preserves the previously disabled state and marks the first
+conversion after re-enabling for discard via the existing Enable method.
+
+If ADC synchronization fails during preparation, SystemSleep refuses
+Standby and invokes its normal resume path; the driver does not
+claim an accepted sleep mode. The SAMD Standby host entry fixture
+includes the USB, DAC, ADC, I2C, SPI and UART checks, a refused-entry
+matrix, rollback and an ISR call. The tests still require execution
+and the full embedded libraries still require clean builds.

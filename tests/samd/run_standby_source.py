@@ -9,6 +9,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EIC = (ROOT / "ARM/Microchip/SAMD/src/iopincfg_samd.c").read_text(encoding="utf-8")
 SLEEP = (ROOT / "ARM/Microchip/SAMD/src/system_sleep_samd.c").read_text(encoding="utf-8")
+ADC = (ROOT / "ARM/Microchip/SAMD/src/adc_samd.cpp").read_text(encoding="utf-8")
 
 
 def body(source, signature):
@@ -77,6 +78,18 @@ class StandbySourceTest(unittest.TestCase):
 		self.assertIn("SamdUartPrepareSleep()", s)
 		self.assertLess(s.index("SamdUartPrepareSleep()"), s.index("SamdStandbyWakeArm()"))
 		self.assertLess(s.index("SamdStandbyWakeDone()"), s.index("SamdUartResumeSleep()"))
+
+	def test_adc_preserves_enabled_state_through_standby(self):
+		prepare = body(ADC, 'extern "C" bool SamdAdcPrepareSleep(')
+		resume = body(ADC, 'extern "C" void SamdAdcResumeSleep(')
+		sleep = body(SLEEP, 'void SystemSleep(')
+		self.assertIn('s_bSamdAdcSleepPaused = true', prepare)
+		self.assertIn('ADC_REGS->ADC_CTRLA = ctrl & ~ADC_CTRLA_ENABLE_Msk', prepare)
+		self.assertIn('s_pSamdAdc->Enable()', resume)
+		self.assertLess(sleep.index('SamdAdcPrepareSleep()'), sleep.index('SamdStandbyWakeArm()'))
+		self.assertGreater(sleep.rindex('SamdAdcResumeSleep()'), sleep.index('__WFI()'))
+		self.assertIn('SamdUsbAllowStandby()', sleep)
+		self.assertIn('SamdDacAllowStandby()', sleep)
 
 	def test_rearm_does_not_change_gpio_ownership(self):
 		s = body(EIC, "void SamdStandbyWakeArm(")
