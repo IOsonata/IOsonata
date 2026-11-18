@@ -44,14 +44,27 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED1_PIN		7
 #define LED1_PINOP		IOPINOP_GPIO
 
-// Optional UART wake uses an external 3.3 V adapter on PB00/PB01.
-#ifndef POWER_DEMO_UART_WAKE
-#define POWER_DEMO_UART_WAKE 0
-#endif
-#if POWER_DEMO_UART_WAKE
+// Default validation: resumable EIC Standby wake on OLED1 BUTTON1.
+// Set RESUME_WAKE to 0 for the previously validated Backup-mode test.
 #ifndef POWER_DEMO_RESUME_WAKE
 #define POWER_DEMO_RESUME_WAKE 1
 #endif
+
+// Verify retained static and stack memory after each resumable wake.
+#ifndef POWER_DEMO_STANDBY_RAM_TEST
+#define POWER_DEMO_STANDBY_RAM_TEST 1
+#endif
+
+// Keep AST timer and PICOUART wake disabled for the first button test.
+#ifndef POWER_DEMO_TIMER_WAKE_MS
+#define POWER_DEMO_TIMER_WAKE_MS 0
+#endif
+#ifndef POWER_DEMO_UART_WAKE
+#define POWER_DEMO_UART_WAKE 0
+#endif
+
+// UART wake uses an external 3.3 V adapter on PB00/PB01.
+#if POWER_DEMO_UART_WAKE
 #define UART_DEVNO 0
 #define UART_RX_PORT IOPORTB
 #define UART_RX_PIN 0
@@ -89,10 +102,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define POWER_DEMO_UART_DMA false
 #define POWER_DEMO_UART_OFF 1
 
-// Set to 3000 to exercise AST reset-on-wake instead of button wake.
-#ifndef POWER_DEMO_TIMER_WAKE_MS
-#define POWER_DEMO_TIMER_WAKE_MS 0
-#endif
+// AST is virtual timer 0. Enable TIMER_WAKE_MS to test automatic wake.
 #define POWER_DEMO_TIMER_WAKE_DEVNO 0
 
 #endif // __BOARD_H__

@@ -1,12 +1,26 @@
 # SAM4L8 Xplained Pro PowerOffDemo
 
 Connect OLED1 Xplained Pro to **EXT2**. The demo uses OLED1 **BUTTON1**,
-connected through EXT2 pin 9 to **PC06 / EIC8**, as an active-low Backup wake
-input. The on-board SW0 is not the wake button for this configuration.
+connected through EXT2 pin 9 to **PC06 / EIC8**, as an active-low
+Standby or Backup wake input. The on-board SW0 is not the wake button.
 
 Build the SAM4LCxC library and PowerOffDemo in the same configuration.
 Flash the application and run without an active debugger session. UART output
 uses USART1 at 1000000 baud on the EDBG virtual COM port.
+
+The default board.h now selects resumable Standby:
+`POWER_DEMO_RESUME_WAKE=1`, `POWER_DEMO_STANDBY_RAM_TEST=1`,
+`POWER_DEMO_UART_WAKE=0` and `POWER_DEMO_TIMER_WAKE_MS=0`.
+After `Entering Standby`, press OLED1 BUTTON1. Each wake should print
+`UART rate after resume: PASS`, `CPU/APB clock after resume: PASS`,
+`SRAM sample PASS: 128 static + 128 stack bytes`, and an increasing
+`Resumed from Standby` count. Repeat at least ten times.
+
+## Previously validated Backup-mode button wake
+
+Set `POWER_DEMO_RESUME_WAKE=0` (in board.h or the project compiler
+symbols), then clean rebuild and flash. The historical results below
+describe this reset-on-wake mode, not the new default Standby mode.
 
 After `Power off, press the button to wake up`, press and release OLED1
 BUTTON1. The demo drains UART output before shutting it down. A successful wake restarts
@@ -38,8 +52,9 @@ backup register or a sleep-current measurement.
 
 ## Automatic AST Backup wake
 
-Set `POWER_DEMO_TIMER_WAKE_MS` to `3000` in `src/board.h`, or define it in the
-application compiler settings. Leave it at zero for the existing button run.
+Set `POWER_DEMO_RESUME_WAKE=0` and `POWER_DEMO_TIMER_WAKE_MS=3000`
+in `src/board.h` or the application compiler settings. Leave the timer
+wake value at zero for the button test.
 Rebuild the library and demo. The timer run disables the configured button wake,
 sets a single AST alarm, drains the UART, then enters Backup. After three
 seconds the application should restart with reset reason `0x1000` (timer wake)
@@ -51,19 +66,17 @@ This configuration compiles in Debug and Release. The maintainer confirmed four
 consecutive AST Backup wakes with reset reason 0x1000 and retained start counts
 1 through 5. The earlier pin-wake results remain separate.
 
-## Resumable standby profiles (not hardware revalidated)
+## Resumable Standby profiles (not hardware revalidated)
 
-The default configuration above remains Backup mode using USART1/EDBG.
-For a resumable EIC wake test set `POWER_DEMO_RESUME_WAKE=1` in the project
-compiler symbols and keep `POWER_DEMO_UART_WAKE=0`. OLED1 BUTTON1
-on PC06 remains the wake source. Set
-`POWER_DEMO_STANDBY_RAM_TEST=1` to check retained stack and static bytes.
+The default board.h selects resumable EIC wake with USART1/EDBG and
+retained static/stack RAM checks. OLED1 BUTTON1 on PC06 is the wake
+source. The previous Backup validation does not verify this profile.
 
 For automatic AST wake in resumable sleep, set
 `POWER_DEMO_RESUME_WAKE=1`, `POWER_DEMO_TIMER_WAKE_MS=1000`,
 and `POWER_DEMO_UART_WAKE=0`. The demo configures the timer through
 the normal Timer interface. SystemSleep selects and restores its sleep
-clock configuration. Leave `POWER_DEMO_RESUME_WAKE` undefined for the
+clock configuration. Set `POWER_DEMO_RESUME_WAKE=0` for the
 previously validated reset-on-wake Backup timer test.
 
 For UART wake, set `POWER_DEMO_UART_WAKE=1` in board.h or the project
