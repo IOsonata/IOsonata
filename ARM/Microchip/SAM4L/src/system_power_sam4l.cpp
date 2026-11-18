@@ -197,6 +197,7 @@ void SystemSleep(void)
 		return;
 	}
 	uint32_t state = DisableInterrupt();
+	uint32_t entryClocks = SAM4L_PM->PM_PBDMASK;
 	if (Sam4lUartPrepareSleep != NULL && !Sam4lUartPrepareSleep())
 	{
 		EnableInterrupt(state);
@@ -219,7 +220,9 @@ void SystemSleep(void)
 		}
 		SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
 			PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
-		SAM4L_PM->PM_PBDMASK = clocks;
+		// PICOUART preparation may have enabled PBD clock gates before
+		// the other UART rejected sleep. Restore the original mask.
+		SAM4L_PM->PM_PBDMASK = entryClocks;
 		EnableInterrupt(state);
 		return;
 	}
