@@ -672,7 +672,8 @@ bool Sam4lUartPrepareSleep(void)
 	{
 		rejected |= SAM4L_PICO_PM_BUSY;
 	}
-	if (!pDev->bTxReady || CFifoUsed(pDev->hTxFifo) != 0 ||
+	if (atomic_flag_test(&pDev->DevIntrf.bBusy) ||
+		!pDev->bTxReady || CFifoUsed(pDev->hTxFifo) != 0 ||
 		(dev->pReg->US_CSR & US_CSR_TXEMPTY) == 0U)
 	{
 		rejected |= SAM4L_PICO_TX_BUSY;
