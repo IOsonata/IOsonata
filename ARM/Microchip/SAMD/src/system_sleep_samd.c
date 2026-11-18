@@ -23,6 +23,10 @@ void SamdStandbyWakeArm(void);
 void SamdStandbyWakeDone(void);
 bool SamdUartPrepareSleep(void) __attribute__((weak));
 void SamdUartResumeSleep(void) __attribute__((weak));
+bool SamdI2cPrepareSleep(void) __attribute__((weak));
+void SamdI2cResumeSleep(void) __attribute__((weak));
+bool SamdSpiPrepareSleep(void) __attribute__((weak));
+void SamdSpiResumeSleep(void) __attribute__((weak));
 
 void SystemSleep(void)
 {
@@ -34,8 +38,23 @@ void SystemSleep(void)
 	// before sleeping, leaving no interrupt to wake the CPU. The SAMD11
 	// NMI handler leaves EIC_IRQn pending during this window.
 	state = DisableInterrupt();
-	if (SamdUartPrepareSleep != NULL && !SamdUartPrepareSleep())
+	bool ready = (SamdI2cPrepareSleep == NULL || SamdI2cPrepareSleep()) &&
+		(SamdSpiPrepareSleep == NULL || SamdSpiPrepareSleep()) &&
+		(SamdUartPrepareSleep == NULL || SamdUartPrepareSleep());
+	if (!ready)
 	{
+		if (SamdUartResumeSleep != NULL)
+		{
+			SamdUartResumeSleep();
+		}
+		if (SamdSpiResumeSleep != NULL)
+		{
+			SamdSpiResumeSleep();
+		}
+		if (SamdI2cResumeSleep != NULL)
+		{
+			SamdI2cResumeSleep();
+		}
 		EnableInterrupt(state);
 		return;
 	}
@@ -50,6 +69,14 @@ void SystemSleep(void)
 	if (SamdUartResumeSleep != NULL)
 	{
 		SamdUartResumeSleep();
+	}
+	if (SamdSpiResumeSleep != NULL)
+	{
+		SamdSpiResumeSleep();
+	}
+	if (SamdI2cResumeSleep != NULL)
+	{
+		SamdI2cResumeSleep();
 	}
 	(void)SystemCoreClockGet();
 	EnableInterrupt(state);

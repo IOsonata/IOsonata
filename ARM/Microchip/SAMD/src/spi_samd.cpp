@@ -130,6 +130,7 @@ struct SamdSpiDev {
 	bool bSlaveSel;					//!< Slave SS went low in the frame
 	bool bDma;						//!< DmaRx and DmaTx taken
 	volatile bool bDmaRun;			//!< Master DMA transfer ended by the DMAC interrupt
+	bool bSleepPaused;			//!< Master suspended by SystemSleep
 	uint8_t Sink;					//!< Received bytes nobody wants
 	int8_t DmaRx;					//!< DMAC channels of the master
 	int8_t DmaTx;
@@ -1027,6 +1028,64 @@ static void SamdSpiEnable(DevIntrf_t * const pDev)
 	}
 
 	EnableInterrupt(state);
+}
+
+// Only idle master instances can temporarily release SERCOM clocks.
+// Enabled slave instances lack a supported asynchronous Standby wake route.
+// Preserve the existing DeviceIntrf ownership and enable count.
+extern "C" bool SamdSpiPrepareSleep(void)
+{
+	SamdSpiDev_t *dev;
+	SPIDev_t *pDev;
+
+	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
+	{
+		dev = &s_SamdSpiDev[i];
+		pDev = dev->pSpiDev;
+		if (pDev == NULL || g_SharedIntrf[i].pIntrf != &pDev->DevIntrf ||
+			atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) == 0U)
+		{
+			continue;
+		}
+		if (pDev->Cfg.Mode != SPIMODE_MASTER || dev->bSleepPaused ||
+			dev->Op != SAMD_SPI_OP_NONE || dev->bDmaRun || dev->bSlaveSel)
+		{
+			return false;
+		}
+	}
+	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
+	{
+		dev = &s_SamdSpiDev[i];
+		pDev = dev->pSpiDev;
+		if (pDev != NULL && pDev->Cfg.Mode == SPIMODE_MASTER &&
+			g_SharedIntrf[i].pIntrf == &pDev->DevIntrf &&
+			atomic_load(&pDev->DevIntrf.EnCnt) != 0 &&
+			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) != 0U)
+		{
+			SamdSpiDisable(&pDev->DevIntrf);
+			dev->bSleepPaused = true;
+		}
+	}
+	return true;
+}
+
+extern "C" void SamdSpiResumeSleep(void)
+{
+	SamdSpiDev_t *dev;
+
+	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
+	{
+		dev = &s_SamdSpiDev[i];
+		if (dev->bSleepPaused)
+		{
+			SamdSpiEnable(&dev->pSpiDev->DevIntrf);
+			if ((PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) != 0U)
+			{
+				dev->bSleepPaused = false;
+			}
+		}
+	}
 }
 
 // Configured again, a slave waits for the next frame with its buffers set

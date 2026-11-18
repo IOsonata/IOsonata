@@ -153,6 +153,7 @@ typedef struct {
 	bool bDma;						//!< DmaChan taken
 	int SlaveCount;
 	volatile bool bDmaRun;			//!< Master DMA block ended by the DMAC interrupt
+	bool bSleepPaused;			//!< Master suspended by SystemSleep
 	int8_t DmaChan;					//!< DMAC channel of the master, both directions
 	uint16_t DmaLen;				//!< Bytes of the running block
 } SamdI2cDev_t;
@@ -1413,6 +1414,64 @@ static void SamdI2cEnable(DevIntrf_t * const pDev)
 	else
 	{
 		reg->I2CS.SERCOM_INTENSET = SAMD_I2CS_INTS;
+	}
+}
+
+// Only idle master instances can temporarily release SERCOM clocks.
+// Enabled slave instances lack a supported asynchronous Standby wake route.
+// Preserve the existing DeviceIntrf ownership and enable count.
+extern "C" bool SamdI2cPrepareSleep(void)
+{
+	SamdI2cDev_t *dev;
+	I2CDev_t *pDev;
+
+	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
+	{
+		dev = &s_SamdI2cDev[i];
+		pDev = dev->pI2cDev;
+		if (pDev == NULL || g_SharedIntrf[i].pIntrf != &pDev->DevIntrf ||
+			atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) == 0U)
+		{
+			continue;
+		}
+		if (pDev->Cfg.Mode != I2CMODE_MASTER || dev->bSleepPaused ||
+			dev->Op != SAMD_I2C_OP_NONE || dev->bDmaRun || dev->bBusHeld || dev->bSlaveTx || dev->bSlaveRx)
+		{
+			return false;
+		}
+	}
+	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
+	{
+		dev = &s_SamdI2cDev[i];
+		pDev = dev->pI2cDev;
+		if (pDev != NULL && pDev->Cfg.Mode == I2CMODE_MASTER &&
+			g_SharedIntrf[i].pIntrf == &pDev->DevIntrf &&
+			atomic_load(&pDev->DevIntrf.EnCnt) != 0 &&
+			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) != 0U)
+		{
+			SamdI2cDisable(&pDev->DevIntrf);
+			dev->bSleepPaused = true;
+		}
+	}
+	return true;
+}
+
+extern "C" void SamdI2cResumeSleep(void)
+{
+	SamdI2cDev_t *dev;
+
+	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
+	{
+		dev = &s_SamdI2cDev[i];
+		if (dev->bSleepPaused)
+		{
+			SamdI2cEnable(&dev->pI2cDev->DevIntrf);
+			if ((PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) != 0U)
+			{
+				dev->bSleepPaused = false;
+			}
+		}
 	}
 }
 
