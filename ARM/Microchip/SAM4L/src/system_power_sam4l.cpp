@@ -66,6 +66,10 @@ static const struct {
 extern bool Sam4lUartPrepareSleep(void) __attribute__((weak));
 extern bool Sam4lUartSuspendSleep(void) __attribute__((weak));
 extern void Sam4lUartResumeSleep(void) __attribute__((weak));
+extern bool Sam4lI2CSuspendSleep(void) __attribute__((weak));
+extern void Sam4lI2CResumeSleep(void) __attribute__((weak));
+extern bool Sam4lSpiSuspendSleep(void) __attribute__((weak));
+extern void Sam4lSpiResumeSleep(void) __attribute__((weak));
 
 static void Sam4lPowerClockEnable(uint32_t Mask)
 {
@@ -212,19 +216,31 @@ void SystemSleep(void)
 	bool ast = (clocks & PM_PBDMASK_AST) != 0U &&
 		(SAM4L_AST->AST_CR & AST_CR_EN) != 0U && SAM4L_AST->AST_WER != 0U;
 	bool deep = eic != 0U || ast || SAM4L_PM->PM_AWEN != 0U;
-	if (deep && Sam4lUartSuspendSleep != NULL && !Sam4lUartSuspendSleep())
+	if (deep)
 	{
-		if (Sam4lUartResumeSleep != NULL)
+		bool ready = (Sam4lI2CSuspendSleep == NULL || Sam4lI2CSuspendSleep()) &&
+			(Sam4lSpiSuspendSleep == NULL || Sam4lSpiSuspendSleep()) &&
+			(Sam4lUartSuspendSleep == NULL || Sam4lUartSuspendSleep());
+		if (!ready)
 		{
-			Sam4lUartResumeSleep();
+			if (Sam4lUartResumeSleep != NULL)
+			{
+				Sam4lUartResumeSleep();
+			}
+			if (Sam4lSpiResumeSleep != NULL)
+			{
+				Sam4lSpiResumeSleep();
+			}
+			if (Sam4lI2CResumeSleep != NULL)
+			{
+				Sam4lI2CResumeSleep();
+			}
+			SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
+				PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
+			SAM4L_PM->PM_PBDMASK = entryClocks;
+			EnableInterrupt(state);
+			return;
 		}
-		SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
-			PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
-		// PICOUART preparation may have enabled PBD clock gates before
-		// the other UART rejected sleep. Restore the original mask.
-		SAM4L_PM->PM_PBDMASK = entryClocks;
-		EnableInterrupt(state);
-		return;
 	}
 	uint32_t wakeMask = SAM4L_PM->PM_IMR & PM_IMR_WAKE;
 	uint32_t irqEnabled = NVIC_GetEnableIRQ(PM_IRQn);
@@ -274,6 +290,14 @@ void SystemSleep(void)
 	if (Sam4lUartResumeSleep != NULL)
 	{
 		Sam4lUartResumeSleep();
+	}
+	if (Sam4lSpiResumeSleep != NULL)
+	{
+		Sam4lSpiResumeSleep();
+	}
+	if (Sam4lI2CResumeSleep != NULL)
+	{
+		Sam4lI2CResumeSleep();
 	}
 	if (slept && deep)
 	{

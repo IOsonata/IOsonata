@@ -143,6 +143,8 @@ typedef struct {
 	int SlaveTxLoaded;
 	bool SlaveRxActive;
 	bool SlaveTxActive;
+	bool bSleepPaused;		//!< Master stopped temporarily for SystemSleep
+	uint32_t SleepInterrupts;	//!< Master interrupt mask before sleep
 } SAM4L_I2CDEV;
 
 static SAM4L_I2CDEV s_Sam4lI2CDev[SAM4L_I2C_MASTER_COUNT] = {
@@ -1651,6 +1653,75 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 	}
 }
 
+// The TWIS slave retains its asynchronous wake request. Only idle
+// masters are gated for deep sleep, without changing interface ownership.
+bool Sam4lI2CSuspendSleep(void)
+{
+	SAM4L_I2CDEV *dev;
+	I2CDev_t *pDev;
+	uint32_t mask;
+
+	for (int i = 0; i < SAM4L_I2C_MASTER_COUNT; i++)
+	{
+		dev = &s_Sam4lI2CDev[i];
+		pDev = dev->pI2cDev;
+		if (pDev == nullptr || atomic_load(&pDev->DevIntrf.EnCnt) == 0)
+		{
+			continue;
+		}
+		mask = pDev->Cfg.Mode == I2CMODE_SLAVE ? dev->SlavePbaMask : dev->MasterPbaMask;
+		if ((SAM4L_PM->PM_PBAMASK & mask) == 0U)
+		{
+			continue;
+		}
+		if (dev->bSleepPaused || dev->Op != SAM4L_I2C_OP_NONE ||
+			dev->BusHeld || dev->SlaveRxActive || dev->SlaveTxActive)
+		{
+			return false;
+		}
+		if (pDev->Cfg.Mode == I2CMODE_MASTER && pDev->DevIntrf.bDma &&
+			((Sam4lI2CPdcaRxChannel(dev)->PDCA_SR & PDCA_SR_TEN) != 0U ||
+			 (Sam4lI2CPdcaTxChannel(dev)->PDCA_SR & PDCA_SR_TEN) != 0U))
+		{
+			return false;
+		}
+	}
+	for (int i = 0; i < SAM4L_I2C_MASTER_COUNT; i++)
+	{
+		dev = &s_Sam4lI2CDev[i];
+		pDev = dev->pI2cDev;
+		if (pDev == nullptr || pDev->Cfg.Mode != I2CMODE_MASTER ||
+			atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+			(SAM4L_PM->PM_PBAMASK & dev->MasterPbaMask) == 0U)
+		{
+			continue;
+		}
+		dev->SleepInterrupts = dev->pMReg->TWIM_IMR;
+		dev->pMReg->TWIM_IDR = 0xFFFFFFFFU;
+		dev->pMReg->TWIM_CR = TWIM_CR_MDIS;
+		Sam4lI2CClockDisable(dev);
+		dev->bSleepPaused = true;
+	}
+	return true;
+}
+
+void Sam4lI2CResumeSleep(void)
+{
+	SAM4L_I2CDEV *dev;
+
+	for (int i = 0; i < SAM4L_I2C_MASTER_COUNT; i++)
+	{
+		dev = &s_Sam4lI2CDev[i];
+		if (dev->bSleepPaused)
+		{
+			Sam4lI2CClockEnable(dev);
+			dev->pMReg->TWIM_CR = TWIM_CR_MEN;
+			dev->pMReg->TWIM_IER = dev->SleepInterrupts;
+			dev->bSleepPaused = false;
+		}
+	}
+}
+
 static void Sam4lI2CDisable(DevIntrf_t * const pDev)
 {
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
@@ -1875,6 +1946,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	dev->SlaveTxLoaded = 0;
 	dev->SlaveRxActive = false;
 	dev->SlaveTxActive = false;
+	dev->bSleepPaused = false;
+	dev->SleepInterrupts = 0U;
 
 	pDev->DevIntrf.pDevData = dev;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;
