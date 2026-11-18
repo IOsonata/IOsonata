@@ -768,7 +768,8 @@ bool Sam4lUartSuspendSleep(void)
 		{
 			continue;
 		}
-		if (dev->bSleepPaused || !pDev->bTxReady ||
+		if (atomic_flag_test(&pDev->DevIntrf.bBusy) ||
+			dev->bSleepPaused || !pDev->bTxReady ||
 			CFifoUsed(pDev->hTxFifo) != 0 ||
 			(dev->pReg->US_CSR & (US_CSR_TXEMPTY | US_CSR_RXRDY)) != US_CSR_TXEMPTY)
 		{
