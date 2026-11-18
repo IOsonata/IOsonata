@@ -52,6 +52,16 @@ SOFTWARE.
 
 static DacSamd *s_pSamdDac = nullptr;
 
+// The DAC drives an analog output while enabled. No RUNSTDBY clock or
+// output-retention mode is configured by this driver, so the system
+// cannot assume that the output survives Standby.
+extern "C" bool SamdDacAllowStandby(void)
+{
+	return s_pSamdDac == nullptr ||
+		(PM_REGS->PM_APBCMASK & PM_APBCMASK_DAC_Msk) == 0U ||
+		(DAC_REGS->DAC_CTRLA & DAC_CTRLA_ENABLE_Msk) == 0U;
+}
+
 static bool SamdDacSync(void)
 {
 	for (uint32_t i = 0; i < SAMD_DAC_SYNC_TIMEOUT; i++)

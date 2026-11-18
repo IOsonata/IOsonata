@@ -28,11 +28,17 @@ void SamdI2cResumeSleep(void) __attribute__((weak));
 bool SamdSpiPrepareSleep(void) __attribute__((weak));
 void SamdSpiResumeSleep(void) __attribute__((weak));
 bool SamdUsbAllowStandby(void) __attribute__((weak));
+bool SamdDacAllowStandby(void) __attribute__((weak));
 
 void SystemSleep(void)
 {
 	uint32_t previous;
 	uint32_t state;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
 
 	// Keep maskable wake interrupts pending until WFI has completed. An
 	// interrupt between rearming EIC and WFI could otherwise be consumed
@@ -40,6 +46,7 @@ void SystemSleep(void)
 	// NMI handler leaves EIC_IRQn pending during this window.
 	state = DisableInterrupt();
 	bool ready = (SamdUsbAllowStandby == NULL || SamdUsbAllowStandby()) &&
+		(SamdDacAllowStandby == NULL || SamdDacAllowStandby()) &&
 		(SamdI2cPrepareSleep == NULL || SamdI2cPrepareSleep()) &&
 		(SamdSpiPrepareSleep == NULL || SamdSpiPrepareSleep()) &&
 		(SamdUartPrepareSleep == NULL || SamdUartPrepareSleep());

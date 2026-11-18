@@ -234,3 +234,22 @@ Both require separate target-specific work and hardware validation,
 including enumeration, SOF, suspend/resume and endpoint transfers.
 The fallback is intentional rather than inferring that bus suspend makes
 a low-frequency CPU sleep mode safe.
+
+## Analog peripheral ownership on SAMD11/SAMD21
+
+The SAMD DAC driver now reports whether its output is enabled.
+SystemSleep rejects Standby while the DAC is actively driving an
+output: this driver does not configure RUNSTDBY or an alternate
+output-retention supply, so assuming uninterrupted analog output
+would be incorrect. An initialized but disabled DAC does not
+prevent Standby. Applications do not manage DAC clocks on behalf
+of sleep; the DAC keeps its existing Enable/Disable lifecycle.
+
+The SAMD ADC driver supports only software-triggered, blocking
+single conversions on these ports. It does not currently advertise
+ADC sleep-walking or asynchronous conversion wake. Its clock
+requests are handled by its own Init/PowerOff implementation.
+No ADC sleep-state transition has been added without target
+hardware evidence. Continuous or event-triggered ADC operation
+would require separate preparation and restore support.
+SystemSleep on SAMD also rejects entry from an interrupt handler.
