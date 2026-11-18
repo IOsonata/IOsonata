@@ -1048,7 +1048,8 @@ extern "C" bool SamdSpiPrepareSleep(void)
 		{
 			continue;
 		}
-		if (pDev->Cfg.Mode != SPIMODE_MASTER || dev->bSleepPaused ||
+		if (pDev->Cfg.Mode != SPIMODE_MASTER ||
+			atomic_flag_test(&pDev->DevIntrf.bBusy) || dev->bSleepPaused ||
 			dev->Op != SAMD_SPI_OP_NONE || dev->bDmaRun || dev->bSlaveSel)
 		{
 			return false;
