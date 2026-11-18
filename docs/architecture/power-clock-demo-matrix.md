@@ -1,0 +1,400 @@
+# Power and clock demo projects
+
+The projects use the shared `exemples/misc/clock_demo.cpp` and
+`exemples/misc/power_off_demo.cpp`. Import each `ioc` directory in Eclipse and
+build the matching library configuration first. Board pin maps come from the
+existing example named in each README. These additions provide 29 ClockDemo
+projects and 10 missing PowerOffDemo projects outside ESP32.
+
+## SAM4LC latest hardware result
+
+On November 18, 2026, PowerOffDemo completed **10 consecutive PICOUART
+wake cycles** with the external 3.3 V USB-UART adapter: the 9600-baud
+`U` wake byte, restored 1 Mbaud USART0, restored CPU/APB clocks,
+sequential resume counts 1 through 10 and 128 static + 128 stack bytes
+of sampled SRAM all PASS. The host switched baud before PICOUART
+activation for the test only. Sleep current and long-duration wake
+behavior remain unmeasured.
+
+The maintainer reported zero failures with RC4/RC12 and PBA divisors 1/2/4/1,
+both delays and timer IRQs at every rate, six OLED1 BUTTON1 RETENTION wakes,
+clock restoration and UART RX. ClockDemo now also checks a one-second automatic
+AST wake after each button wake; the subsequent run ended with zero failures.
+
+PowerOffDemo retains button wake by default. Set POWER_DEMO_TIMER_WAKE_MS=3000
+in its board.h or application compiler settings for automatic AST Backup wake.
+The maintainer confirmed four consecutive timer wakes with reset reason 0x1000
+and retained counts 1 through 5. Both profiles
+build for SAM4LC and SAM4LS in Debug and Release.
+
+## Current focused regression
+
+The November 17 completion review rebuilt all library sources for SAMD11 (239),
+SAMD21 (318), SAM4LC (124), SAM4LS (128), ESP32-C3 (204) and ESP32-C6 (206), in
+Debug and Release. ClockDemo and PowerOffDemo linked for all six configurations;
+ClockDisplayDemo and LCDConsoleDisplayDemo also linked for both SAMD targets:
+32 successful links in total. This does not supersede hardware results below.
+
+D11/D21 and SAM4LC ClockDemo now check 1/2/4/1 peripheral-clock divisors, delays
+and timer interrupts at each rate, then three sleep cycles at divisor four.
+SAM4LC uses the EIC route for OLED1 BUTTON1 to enter RETENTION. The previous
+GPIO-only SLEEP0 run remains recorded separately. C3/C6 PowerOffDemo now checks
+RTC/LP SRAM retention after pin wake. Clean rebuild both library and demo.
+
+The expanded D11 ClockDemo fits in 13,364 bytes of flash using direct UART
+messages. Its LCDConsoleDisplayDemo continues to exercise syslog. New clock,
+sleep and retained-memory paths require hardware runs; see the outstanding
+items at the top of [core power and clock ports](core-power-clock-ports.md).
+
+The C3/C6 ClockDemo also supports the existing 160 MHz library build option.
+Define ESP32C3_CPU_160MHZ or ESP32C6_CPU_160MHZ in both library and application
+settings and clean rebuild. The XTAL entries then expect a 160 MHz PLL CPU;
+RC_FAST remains measured. C3 APB remains fixed at 80 MHz in that profile.
+Eight additional Debug/Release ClockDemo/PowerOffDemo links pass with the
+160 MHz option. New PLL behavior has not yet been run on a board.
+
+## Compile and link results
+
+All 114 configurations below linked successfully. These are command-line GNU
+builds using the managed project source lists and settings, not Eclipse builds.
+Arm uses GCC 15.2.1; R9A02 uses RISC-V GCC 15.2.0. The checks compile the available
+library sources, archive successful objects, then compile and link each demo.
+Where the source count is incomplete, unrelated SDK-dependent library sources
+failed or were unavailable. A linked demo does not establish that the complete
+library project builds. Debug/Release results are listed separately where the
+source counts differ. RE01 uses DebugCFB/ReleaseCFB.
+
+| Target | ClockDemo | PowerOffDemo | Compiled library sources (Debug; Release) |
+| --- | --- | --- | --- |
+| SAM4E16E | PASS / PASS | PASS / PASS | 105/105; 105/105 |
+| SAM4LCxC | PASS / PASS | PASS / PASS | 120/120; 120/120 |
+| SAM4LSxC | PASS / PASS | PASS / PASS | 128/128; 128/128 |
+| SAMD11 | PASS / PASS | PASS / PASS | 239/239; 239/239 |
+| SAMD21 | PASS / PASS | PASS / PASS | 317/317; 317/317 |
+| LPC11U35 | PASS / PASS | PASS / PASS | 114/114; 114/114 |
+| LPC1769 | PASS / PASS | PASS / PASS | 124/124; 124/124 |
+| LPC54628 | PASS / PASS | PASS / PASS | 179/179; 179/179 |
+| nRF52832 | PASS / PASS | PASS / PASS | 334/474; 334/474 |
+| nRF52840 | PASS / PASS | PASS / PASS | 344/458; 344/458 |
+| nRF5340_App | PASS / PASS | PASS / PASS | 196/196; 196/196 |
+| nRF5340_Net | PASS / PASS | Not provided | 116/118; 116/118 |
+| nRF54L15 | PASS / PASS | PASS / PASS | 234/255; 234/255 |
+| nRF54LM20x | PASS / PASS | PASS / PASS | 249/270; 249/270 |
+| nRF9160 | PASS / PASS | PASS / PASS | 178/183; 178/183 |
+| nRF91x1 | PASS / PASS | PASS / PASS | 179/184; 179/184 |
+| RA4M1 | PASS / PASS | PASS / PASS | 305/305; 305/305 |
+| RE01_1500KB | PASS / PASS | PASS / PASS | 113/113; 113/113 |
+| STM32F030x8 | PASS / PASS | PASS / PASS | 109/109; 109/109 |
+| STM32F401 | PASS / PASS | PASS / PASS | 68/68; 68/68 |
+| STM32G474 | PASS / PASS | PASS / PASS | 173/173; 173/173 |
+| STM32H753 | PASS / PASS | PASS / PASS | 322/322; 322/322 |
+| STM32L152RE | PASS / PASS | PASS / PASS | 45/45; 45/45 |
+| STM32L432 | PASS / PASS | PASS / PASS | 185/185; 185/185 |
+| STM32L476 | PASS / PASS | PASS / PASS | 294/294; 294/294 |
+| STM32L496 | PASS / PASS | PASS / PASS | 202/202; 202/202 |
+| STM32L4S9 | PASS / PASS | PASS / PASS | 186/186; 186/186 |
+| STM32WBA65 | PASS / PASS | PASS / PASS | 285/297; 285/297 |
+| R9A02G021 | PASS / PASS | PASS / PASS | 196/196; 196/196 |
+
+C3/C6 regression builds also pass: ClockDemo Debug/Release and PowerOffDemo
+Light-sleep/Deep-sleep in both configurations (12 links). All 204 C3 and 206 C6
+library sources compile. No new board execution was performed for this batch.
+The shared demo now uses the UART C functions, as it already does for Timer.
+This allows LTO to discard unused C++ UART methods without changing driver APIs.
+SAMD11 selects SysTick as timer 4 and uses size optimization and LTO in both
+configurations. Current sizes for its selectable runs are recorded below.
+
+## What each configuration exercises
+
+- SAM4E: internal RC at 4/8/12 MHz; SAM4L: internal RC at 4/12 MHz and LF RC.
+  SAMD11/21: OSC8M; LF changes omitted while DFLL/DPLL may own the reference.
+- LPC11/17/54628: internal source selection. LPC11 also selects its watchdog
+  oscillator without enabling the watchdog. APB changes are omitted.
+- Nordic: balanced HFXO request/release and LF RC selection. Clock ownership
+  can refuse a change while another peripheral or radio owns the source.
+- RA4M1, RE01 and R9A02: internal high-speed and low-speed RC selection.
+- STM32F0/G4/L4/WBA: internal source selection; G4/L4/WBA include APB divisors.
+  STM32F4/H7/L1 only read existing core clocks because their generic runtime
+  selectors are incomplete. These are not runtime clock-switch validation.
+
+The new ClockDemo configurations power off and reinitialize UART around clock
+changes. They finish clock selection before acquiring a timer because some
+ports retain timer module ownership after TimerDisable. The final timer check
+requests 1 MHz and a 10 ms interrupt period over a 250 ms delay. It does not
+validate timer operation at every intermediate clock. Unsupported selectors
+print SKIP rather than being counted as a successful switch. Clock readback
+and delay checks do not independently establish oscillator accuracy.
+
+The new PowerOffDemo configurations have no assumed wake pin. They report
+reset/retention information, power off UART and request MCU power off. RESET
+or a power cycle restarts the application. Configure a supported board wake
+pin before using them to test GPIO wake. Existing board-specific PowerOffDemo
+configurations keep their wiring and modes. No demo enables a watchdog.
+
+## Hardware and remaining coverage
+
+C3 ClockDemo after 04d1522a8 passed three cycles and nine BOOT wakes with zero
+failures. C3 PowerOffDemo passed six Light-sleep SRAM checks and four manual
+GPIO3 Deep-sleep wake/restart cycles. C6 also passed repeated wake and combined
+clock/sleep runs. SAMD11 passed Standby wake and SRAM checks. ClockDemo completed three
+core/APB selections at 2de35f281 and measured 250094 us for msDelay and
+250107 us for nsDelay, each with 25 IRQs for a 250 ms delay,
+with zero failures. See
+[core power and clock ports](core-power-clock-ports.md) for exact results.
+Other new configurations remain build-only. C3 and D11 polling UART receive
+after wake has passed in the later runs recorded below. Sleep current and
+external oscillator accuracy have not been measured here.
+
+LPC54605 has no existing board example to supply console wiring. nRF52805 and
+nRF52810 lack a suitable UART board configuration; no pin maps were guessed.
+nRF5340 network-core ClockDemo has no companion PowerOffDemo because the
+application core controls system power. RP2040, nRF54H20 and ESP32C2/C5/C61
+remain outside this batch because their relevant ports are incomplete.
+
+## Delay calibration after clock changes
+
+The ARM delay loops use SystemMicroSecLoopCnt and SystemnsDelayFactor as
+iterations per microsecond, with 16 fractional bits.
+Each port refreshes it in SystemCoreClockUpdate. LPC11 and SAM4L also refresh
+it on their direct clock assignments during transitions and fallback. ResetEntry
+no longer overwrites the port calibration after startup. Rebuild the library
+and application together when changing from the former integer count.
+
+The shared idelay.h calculation has no MCU-specific path. SAMD supplies its
+13-cycle calibration from system_samd.c. Other ARM ports retain their existing
+16-cycle calibration; their physical loop timing still needs board measurement.
+Nanosecond delays retain existing port calibration where available; ports
+without a prior calibration use a nominal three-cycle loop. These values
+require hardware timing validation. Both counts update together. Zero delays
+execute no loop, and nanosecond scaling uses 64-bit arithmetic.
+RISC-V cycle-counter delays preserve fractional MHz for every target, using
+the current SystemCoreClock. Loop overhead, interrupt handling and flash stalls
+can extend delays; these functions do not replace a hardware timer.
+
+The fixed-point ARM implementation passed the SAMD11 board run above. Other
+MCUs and short nanosecond delays still require timing measurements.
+
+ClockDemo now measures msDelay(250) and nsDelay(250000000) separately against
+the same timer, checking elapsed time within two percent and interrupt counts.
+This checks scaling over a measurable interval. It does not establish the
+accuracy of an individual delay of a few nanoseconds; setup overhead dominates
+such short calls. Both tests run after resume where ClockDemo supports sleep.
+
+Software validation for the shared delay change: ClockDemo and PowerOffDemo
+linked in 114 configurations across 29 targets; C3/C6 ClockDemo added four
+links, and SAMD11 display-console and timer demos added four. Some Nordic
+libraries still have unrelated missing SDK sources; these counts describe
+successful demo links, not a complete library-source build. Existing LPC,
+STM32F0/F4/G4/L4 and RE01 checks passed. Delay arithmetic passed 244 host
+checks, including zero and UINT32_MAX nanosecond requests. ARM assembly
+compiled for six Cortex-M cores at -O0/-Os; RISC-V counter and fallback
+paths compiled at both optimization levels. None of these checks measures
+physical instruction timing.
+
+The RISC-V delay header contains no MCU checks or CSR addresses.
+IOsonataRiscvCycle32 is supplied by the MCU system implementation: the
+Espressif performance counter or standard cycle counter, and Renesas mcycle.
+The shared code handles fractional frequencies and divides long waits into
+intervals shorter than half the 32-bit counter range. msDelay calculates
+cycles directly instead of overflowing a millisecond-to-microsecond product.
+The non-CSR path remains an approximate two-instruction loop.
+
+The RISC-V counter model passed 108 cases covering zero, fractional MHz,
+counter wrap and long durations. The header compiled for RV32, RV32E and
+RV64, with and without CSR use. C3/C6 ClockDemo and R9A02 ClockDemo/PowerOffDemo
+relinked in Debug and Release. C2/C5/C61 startup and GPIO/UART host checks
+passed, along with 24 C/C++ UART demo links. These do not establish hardware
+support or measured timing on those additional chips.
+
+SAMD11 ClockDemo now defaults to three SW0 Standby wake cycles after startup
+clock checks and a baseline delay measurement. CPU/APB clocks, oscillator
+descriptors and both delay/timer checks are repeated after every wake. Set
+CLOCK_DEMO_RESUME_TEST to 0 in board.h to repeat the validated clock-selection
+run. The complete source-selection plus sleep build exceeded D11 flash by
+600 bytes; the two selectable runs fit separately. The Standby mode keeps the
+startup clock and APB rate. The run at e017243bc passed all three SW0 wakes,
+CPU/APB clocks and LF descriptors, with zero failures. Post-wake msDelay was
+250097-250103 us and nsDelay 250108-250112 us, each with 25 interrupts.
+
+Both SAMD11 modes linked in Debug and Release. The Standby mode uses 15,788
+flash bytes and 2,132 static RAM bytes, excluding the stack. SAMD21 and
+STM32F401 ClockDemo/PowerOffDemo and C3/C6 ClockDemo also relinked in both
+configurations after the generic demo change. The D11 Standby mode passed
+hardware validation as recorded above.
+
+D11 Standby mode now enables CLOCK_DEMO_UART_RX_TEST. Send uppercase U at the
+terminal prompt before the first sleep and after each wake. Each response has
+a 30-second polling budget, and timeout increments the demo failure count.
+This checks polling RX after UART disable/enable across Standby; it does not
+validate interrupt or DMA receive modes. The maintainer's run at d11b58001
+passed all four receive prompts and three SW0 wakes with zero failures.
+CPU/APB clocks, LF descriptors and APB restoration passed after each wake.
+Baseline msDelay measured 250093 us and nsDelay 250107 us. Post-wake msDelay
+measured 250103-250104 us and nsDelay 250114-250115 us, with 25 interrupts
+in every sample.
+
+The UART receive version linked in both D11 modes, Debug and Release. Standby
+mode uses 15,788 flash bytes and 2,132 static RAM bytes before the stack.
+SAMD21 ClockDemo/PowerOffDemo and C3/C6 ClockDemo compatibility links passed.
+The receive helper's response, timeout, unrelated-input, stale-input and timer
+failure paths passed host checks. Polling receive operation passed the board
+run recorded above.
+
+C3 and C6 ClockDemo now enable the same polling UART receive check by default.
+Each run has ten receive prompts (startup and nine Light-sleep wakes), together
+with the existing CPU/APB/LF selection, msDelay and nsDelay measurements. Send
+uppercase U within 30 seconds at each prompt and press BOOT only when asked to
+resume. Both libraries and demos rebuilt from their managed source lists in
+Debug and Release: 204/204 C3 sources and 206/206 C6 sources. Release flash use
+is 25,384 bytes for C3 and 28,368 bytes for C6; static RAM is 3,356 and 3,620
+bytes respectively, excluding stack. The later C3 receive-enabled hardware
+run passed all ten UART prompts and nine BOOT wakes with zero failures. Its
+45 msDelay samples measured 250018-250478 us, and 45 nsDelay samples measured
+250018-250137 us; every sample reported 25 interrupts. All CPU/APB/LF and
+post-wake restoration checks passed. C6 receive-enabled hardware validation
+remains pending. D21 was not available for that run; subsequent results are recorded below.
+
+## ARM delay range and code size
+
+ARM usDelay and nsDelay retain the complete 64-bit iteration count. The low
+word runs first, then each high-word count runs another 2^32 iterations. The
+instructions inside each timed iteration and the MCU calibration remain the
+same. msDelay splits requests before multiplying by 1000, preserving the full
+uint32_t millisecond range. Previously msDelay(4294968) converted to only
+704 microseconds through 32-bit wraparound. On a port calibrated to four
+iterations per microsecond, usDelay(1073741824) also wrapped to zero iterations.
+
+The compiler may now share msDelay code rather than inlining it at every call.
+No MCU-specific calculation or new clock dependency was added to idelay.h.
+The D11 ClockDemo Standby build uses 15,788 flash bytes (332 fewer) and 2,132
+static RAM bytes. Clock-selection mode uses 15,350 flash and 2,152 static RAM
+bytes. Both exclude stack use and linked in Debug and Release.
+
+Temporary checks exercised 355 delay arithmetic cases at O0 and Os, including
+zero, fractional calibration, UINT32_MAX requests and the 32-bit loop boundary.
+The compiled Cortex-M0+ instructions passed 72 execution cases with loop
+bodies accelerated; this checks counts and termination, not physical timing.
+C and C++ probes compiled for Cortex-M0/M0+/M3/M4/M7/M33 at O0 and Os.
+Hardware timing after this change remains unmeasured.
+
+ClockDemo and PowerOffDemo linked in Debug and Release on SAMD21, SAM4E16E,
+LPC11U35, RA4M1, STM32F401, STM32H753 and nRF52832 (28 links). The nRF52832
+library still has unrelated missing SDK sources; its demo links do not establish
+a complete library build. D11 also linked both ClockDemo selections,
+PowerOffDemo, TimerDemo, ClockDisplayDemo and the default LCDConsoleDisplayDemo.
+
+The subsequent SAMD clock-arithmetic optimization resolves that display-console
+size regression. The complete 239-source D11 library links all four modes in
+Debug and Release: polling 14,968 flash bytes; interrupt-only 15,520; DMA-only
+15,932; DMA with interrupts 16,380. The combined setting has four bytes free.
+ClockDisplayDemo uses 16,308 flash bytes and 2,892 static RAM bytes.
+
+The Q16 calculation uses the same clock frequency and produces the same factors
+without 64-bit division. Temporary native checks compared every frequency from
+0 to 48 MHz, every supported DPLL reference Hz, all DPLL ratios at boundary
+references, and one million full-width arithmetic samples. All passed. The
+shared ARM delay header and assembly loops are unchanged by this optimization.
+
+D11 and D21 complete libraries, ClockDemo and PowerOffDemo build in Debug and
+Release. D11 also passes both ClockDemo selections, TimerDemo, ClockDisplayDemo,
+and all eight display-console mode/configuration links. SPI mode exclusion
+checks and the existing SPI and SSD1315 host checks pass. The SSD1315 checks used
+AddressSanitizer and UndefinedBehaviorSanitizer with leak detection disabled
+because LeakSanitizer cannot run under this environment's tracing.
+These are software results; hardware validation of this change remains pending.
+
+## ClockDemo language-setting verification
+
+After the C++11 initialization fix at ca3dd5f52, all 31 ClockDemo applications
+were recompiled and linked in their two project configurations (62 links).
+The compilation used each project's declared C++ standard, with GNU C++11
+for C3/C6 where Eclipse supplies that default: four C++11, ten C++20 and
+48 C++23 configurations. RE01 uses DebugCFB/ReleaseCFB. These links reused
+the previously built target libraries; they are not a new full-library rebuild.
+The partial SDK library counts in the table above still apply.
+
+The source descriptor uses a constexpr constructor so five-field board entries
+retain Select=true and six-field entries can request readback only. All 32
+board source arrays, including both D11 selections, also passed C++11
+compile-time checks of those flags. No project language setting was changed.
+
+## C6 combined delay, receive and sleep hardware result
+
+On November 17, 2026, ClockDemo completed with zero failures after a power
+cycle. The supplied excerpt starts during cycle 2 and contains all of cycle 3.
+It shows five successful sleep/resume operations and five polling UART receive
+checks, with CPU/APB/LF restoration passing. Both msDelay and nsDelay pass
+at 250 ms: 249979-250050 us, with 24 or 25 timer interrupts. XTAL/RC_FAST,
+APB division and both internal LF sources are exercised. The log does not
+identify Debug or Release; the missing beginning is not counted as observed
+individual checks. Short nanosecond timing and sleep current remain unmeasured.
+
+ClockDemo, PowerOffDemo and LedDemo initially failed to run after flashing;
+RESET did not recover them, but one power cycle restored execution and RESET
+worked normally afterward. The flasher reported a Release image written via
+native USB Serial/JTAG. The transient stuck state remains separate from the
+passing firmware run; it is not a recurring power-cycle requirement. No cause
+or reset-path fix has been verified.
+
+## C6 Deep-sleep retest and USB reset reporting
+
+The November 17 PowerOffDemo log records five consecutive pin-wake restarts,
+each with reset reason 0x100, start count one and zero retention registers.
+The initial reset reason was zero. C3/C6 raw USB-serial reset code 0x15 was
+missing from SystemResetReason; it now uses SYSTEM_RESET_DEBUG (0x20), as do
+resets through USB-JTAG. The initial raw hardware code was not captured, so
+this mapping omission is not a confirmed diagnosis of that first message.
+
+C3/C6 complete libraries rebuilt in Debug/Release, and both PowerOffDemo sleep
+modes linked in each configuration (eight links, GNU C++11 demos). Temporary
+reset/wake decoding comparisons at O0/Os passed. The five hardware wakes
+precede the reporting-only change; its USB reset label awaits board validation.
+
+## November 17 software review
+
+Existing host checks passed for C3/C6 startup and clock readback, D11/D21
+reset decoding and Standby source checks, LPC11/LPC17 clocks, SAM4E power
+and clocks, SAM4L power and clocks, and R9A02 delay arithmetic.
+
+The SAM4E and SAM4L clock fixtures initially failed to link because they did
+not supply SystemMicroSecLoopCnt after clock-update code began refreshing
+that variable. The fixtures now provide the same initial value as ARM startup;
+production clock and delay code is unchanged. Both suites then passed their
+existing optimization variants. SAM4L power checks also passed all 18 device
+header configurations. These checks do not replace missing board validation.
+
+Whitespace cleanup in LPC1769 PowerOffDemo leaves the parsed Eclipse project
+unchanged. Existing CRLF source files retain their line endings. No new MCU
+hardware support or power-consumption result is claimed by this review.
+
+## SAMD21 OLED1 and Standby hardware results (November 17)
+
+The maintainer confirmed five PowerOffDemo Standby wakes with 128-byte static
+and 128-byte stack samples preserved. ClockDemo passed three combined sleep
+cycles with SW0/PA15 and three with OLED1 BUTTON1/PB04 on EXT1. CPU/APB and LF
+descriptor checks, msDelay, nsDelay, timer IRQs and UART RX all passed. The
+actual timer rate was 750 kHz; 250 ms requests measured about 251 ms with 25
+interrupts. LF source switching was not configured.
+
+ClockDisplayDemo output worked. LCDConsoleDisplayDemo display syslog worked
+with polling, interrupt only, DMA only, and interrupt plus DMA. The build
+configuration used for these hardware reports was not specified.
+The SAMD21 library (318 source files) and all three demos linked in Debug and
+Release. Both display demos also linked with all four SPI mode combinations;
+ClockDemo linked with OLED1 wake selected. No driver changes were needed for
+the OLED1 project additions. Full SRAM coverage and sleep current remain
+unmeasured. A subsequent clean SAM4LC PowerOffDemo rebuild passed eight
+consecutive Backup wakes: reset reason 0x100 each time, retained start count
+1 through 9. The earlier intermittent failure did not recur in that run.
+
+## SAM4LC Release ClockDemo hardware results (November 17)
+
+The retest after commit 4d2aa276f completed with zero failures. Three RC4/RC12
+selection cycles and LF RC32K selection passed. Three OLED1 BUTTON1 SLEEP0
+wakes passed with CPU/APB/LF descriptors, both delays, timer interrupts and
+UART RX preserved. All four UART RX prompts passed. The timer rate was
+1260164 Hz; 250 ms delays measured 251320 to 251351 us with 25 interrupts.
+The run confirms the 14-cycle microsecond calibration and ClockDemo's
+retained-AST preparation. These checks do not independently measure the LF
+oscillator frequency or sleep current. WAIT and RETENTION remain unsupported.
+SAM4LC OLED display output and SPI mode hardware checks remain pending.

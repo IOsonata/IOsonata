@@ -39,9 +39,9 @@ SOFTWARE.
 extern "C" uint32_t SystemD2Clock;
 uint32_t SystemD2Clock = 200000000;
 extern "C" uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemMicroSecLoopCnt = 1;
+uint32_t SystemMicroSecLoopCnt = 65536UL;
 extern "C" uint32_t SystemnsDelayFactor;
-uint32_t SystemnsDelayFactor = 1;
+uint32_t SystemnsDelayFactor = 65536UL;
 
 static EthernetDev_t s_Eth;
 static EthernetDev_t s_Other;

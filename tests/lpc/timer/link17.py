@@ -7,6 +7,7 @@ Requires an Arm GNU toolchain with newlib-nano and C++20 support.
 from pathlib import Path
 import argparse
 import re
+from urllib.parse import unquote
 import struct
 import subprocess
 import tempfile
@@ -18,15 +19,19 @@ SOURCES = [
     'ARM/src/iatomic.c',
     'ARM/NXP/LPC17xx/src/Vectors_LPC17xx.c',
     'ARM/NXP/LPC17xx/src/system_LPC17xx.c',
-    'ARM/NXP/LPC17xx/src/iopincfg.c',
+    'ARM/NXP/LPC17xx/src/system_power_lpc17xx.c',
+    'ARM/NXP/LPC17xx/src/iopincfg_lpc17xx.c',
     'src/cfifo.c',
+    'src/syslog.cpp',
+    'src/semihost_intrf.cpp',
+    'ARM/src/semihost_arm.c',
     'src/device_intrf.cpp',
     'src/coredev/timer.cpp',
     'ARM/NXP/src/timer_lpcxx.cpp',
     'ARM/NXP/LPC17xx/src/timer_lpc17xx.cpp',
     'src/coredev/uart.cpp',
-    'ARM/NXP/src/uart_lpcxx.c',
-    'ARM/NXP/LPC17xx/src/uart_lpc17xx.c',
+    'ARM/NXP/src/uart_lpcxx.cpp',
+    'ARM/NXP/LPC17xx/src/uart_lpc17xx.cpp',
     'src/uart_retarget.c',
     'src/stddev.c',
 ]
@@ -45,7 +50,7 @@ def project_sources(project):
         name = link.findtext('name')
         assert name not in names, name
         names.add(name)
-        uri = link.findtext('locationURI')
+        uri = unquote(link.findtext('locationURI')).replace('${', '').replace('}', '')
         match = re.fullmatch(r'PARENT-(\d+)-PROJECT_LOC/(.*)', uri)
         if match:
             linked.add((project.parent.parents[int(match[1]) - 1] / match[2]).resolve())
@@ -132,7 +137,7 @@ def build(prefix, output, mode, kind):
         assert re.search(r'^[0-9a-fA-F]+ T ' + name + '$', symbols, re.M)
         vector = struct.unpack_from('<I', data, (16 + irq) * 4)[0]
         assert vector == addresses[name] | 1
-    assert ('UARTRetargetEnable' in addresses) == (mode == 'Release')
+    assert ('UARTInit' in addresses) == (mode == 'Release')
     sections = subprocess.check_output([prefix + 'readelf', '-SW', str(image)], text=True)
     assert '.usb_ram' not in sections
     ram = addresses['__bss_end__'] - addresses['__data_start__']

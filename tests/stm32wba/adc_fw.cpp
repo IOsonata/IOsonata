@@ -51,7 +51,7 @@ extern "C" uint32_t SystemCoreClockGet()
 }
 
 extern "C" uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemMicroSecLoopCnt = 1;
+uint32_t SystemMicroSecLoopCnt = 65536UL;
 
 extern "C" void IOPinConfig(int port, int pin, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {

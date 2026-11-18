@@ -31,9 +31,72 @@ Microchip device CMSIS headers; no vendor driver library is linked.
 | DAC | `dac_samd.cpp`, `include/dac_samd.h` | One 10-bit channel written by software: output buffer to the VOUT pin PA02 and the ADC, internal output to the comparators; INT1V, VDDANA and VREFA references |
 | ADC | `adc_samd.cpp`, `include/adc_samd.h` | Single conversions by polling: AIN pins, temperature sensor, bandgap, scaled supplies, DAC output; single ended or differential; gain 1/2 to 16; INT1V, supply and external references; averaging |
 
+## Generic power and reset diagnostics (0.14 draft)
+
+The D11 and D21 libraries now link `src/system_power_samd.cpp` for
+`SystemResetReason()` and `src/system_sleep_samd.c` for
+interrupt-resumable `SystemSleep()`. Reset causes come from the read-only
+PM RCAUSE register (power-on/brownout, external reset, watchdog, software
+reset). Reset reasons are optional diagnostics, **not** a substitute for
+power management.
+
+The sleep implementation enters Standby through SLEEPDEEP/WFI and resumes
+after an interrupt. `SystemWakePin()` configures a selected asynchronous
+EIC level wake source; EIC line ownership and the ordinary GPIO interrupt
+configuration must be preserved. The existing generic
+`exemples/misc/power_off_demo.cpp` has a board-selected resumable mode,
+with Eclipse managed PowerOffDemo projects for D11 and D21. No separate
+reset-only application is required.
+
+SAMD11 Xplained Pro uses its onboard SW0/PA14, the dedicated EIC NMI input.
+No external wiring is needed. SAMD21 Xplained Pro uses its
+onboard PA15 button (EXTINT15). Monitor SAMD11 EDBG VCOM at the default
+1,000,000 baud; SAMD21 currently selects 115200 baud in its board.h.
+
+PRIMASK cannot mask SW0's NMI on D11. During Standby entry the NMI handler
+therefore leaves EIC_IRQn pending so an edge handled just before WFI cannot
+be consumed before the CPU sleeps. Entry also checks the current button
+level. After WFI, the previous EIC NVIC enable state is restored; a prior
+pending IRQ or a real EIC pin interrupt is preserved. The NMI itself is
+acknowledged normally. D21 continues to use its ordinary masked EIC IRQ.
+
+`python3 tests/samd/run_standby_entry.py` checks the extracted production
+entry functions with a host register model: 128 cases at O0 and O2. This
+models event timing and saved interrupt state, not Arm instruction execution
+or electrical timing. The entry change still needs a hardware rerun.
+The sleep instruction remains WFI as specified in the
+[SAMD11 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-42363-SAM-D11_Datasheet.pdf),
+section 15.6.2.8.2.
+
+Both PowerOffDemo boards enable `POWER_DEMO_STANDBY_RAM_TEST`. Before each
+Standby entry, the demo fills 128 bytes of static storage and 128 bytes on
+the stack with complementary patterns that change each cycle. It checks
+them immediately after `SystemSleep()` returns, before enabling the UART.
+Each wake prints `SRAM sample PASS: 128 static + 128 stack bytes` or
+`SRAM sample FAIL`. A failure stops the demo after draining the UART.
+This checks only those 256 bytes; it is not a full-SRAM test. The sample
+has compiled and linked for D11 and D21 but has not yet run on hardware.
+
+With Arm GCC 15.2.1 at the projects' size optimization, the D11 linked
+image uses 15,022 bytes for text plus initialized data, with 1,296 bytes
+of data plus BSS. The 128-byte stack sample is additional runtime stack
+usage. It fits the 16 KB flash and 4 KB SRAM target. These standalone
+link checks use selected library sources, not an IOcomposer build.
+
+Validated on the contributing reset-reason branch: `python3
+tests/samd/run_power.py` (128/128 combinations per MCU) and
+`sh tests/samd/clang_compile.sh` (both targets' source compilation).
+`sh tests/samd/standby_compile.sh` also passed on both targets.
+Hardware result reported November 15, 2026: SAMD11 Xplained Pro SW0/PA14
+woke PowerOffDemo from Standby five consecutive times. The resume counter
+advanced from 0x00000001 through 0x00000005, followed by another Standby
+entry. This validates repeated resume and counter continuity for that
+firmware. SAMD21 hardware wake, full SRAM testing and sleep-current
+measurements remain pending.
+
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
 configuration asking for it fails init), USB host mode, PWM (the TCC are
-timers only), watchdog, sleep modes and the NVM controller. The ADC has no interrupt, event or continuous mode, the DAC no
+timers only), watchdog and the NVM controller. The ADC has no interrupt, event or continuous mode, the DAC no
 event start (DATABUF).
 Crypto is not supported: the devices have no crypto hardware and their
 flash and RAM are too small for the software engines, so the libraries do
@@ -45,9 +108,9 @@ generic network and motion sources: lwip and Fusion are cloned next to
 IOsonata by the installer (`external/lwip`, `external/Fusion`). Both
 libraries define `__PROGRAM_START`, as the other ports: the CMSIS 6 startup
 function of `cmsis_gcc_m.h` does not compile in C++ without the device
-header first. The libraries do not link the generic
-`ARM/src/timer_systick.cpp`: its `TimerInit` would be a second definer next
-to `timer_samd.cpp`, which serves every timer device of the port. The SAM
+header first. Both libraries include `ARM/src/timer_systick.cpp` with
+`SYSTICK_TIMER_NO_DEFAULT_INIT`: `timer_samd.cpp` owns `TimerInit` and selects
+SysTick through `SysTickTimerInit` for the last device number. The SAM
 D21 library links the UART transport of the HCI host,
 `bt_hci_ctlr_uart.cpp`, not the IPC one of a dual core part, which defines
 `BtHciCtlrH4Open` too. The examples were run on a peripheral model
@@ -186,6 +249,13 @@ Timers, virtual DevNo from low to high frequency:
 | TCC0 | 3 | 6 | 24-bit | same | 4 |
 | TCC1 | | 7 | 24-bit | same | 2 |
 | TCC2 | | 8 | 16-bit | same | 2 |
+| SysTick | 4 | 9 | 24-bit down-counter | core clock | 1 |
+
+SysTick is last so existing device numbers do not change. Its reload ranges
+from 2 to 2^24 core cycles; a longer trigger request is clamped to that range.
+It does not provide external capture or `bTickInt`. It cannot share SysTick
+with an RTOS. A second timer handle cannot take SysTick while it is owned;
+reinitializing the current handle on another timer releases it.
 
 The counts are extended to 64 bits by the overflow interrupt, which must be
 served within half a counter period (10.9 ms for a 16-bit counter at 3 MHz,

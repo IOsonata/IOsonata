@@ -53,6 +53,18 @@ void Esp32UartClockEnable(int devno)
 	if (devno >= 0 && devno < 2)
 	{
 		SYSTEM_PERIP_CLK_EN0_REG |= 1UL << (devno == 0 ? 2U : 5U);
+		uint32_t base = devno == 0 ? ESP32_UART0_BASE : ESP32_UART1_BASE;
+		ESP32_UART_CLK_CONF_REG(base) |= ESP32_UART_CLK_CONF_SCLK_EN_Msk;
+	}
+}
+
+void Esp32UartClockDisable(int devno)
+{
+	if (devno >= 0 && devno < 2)
+	{
+		uint32_t base = devno == 0 ? ESP32_UART0_BASE : ESP32_UART1_BASE;
+		ESP32_UART_CLK_CONF_REG(base) &= ~ESP32_UART_CLK_CONF_SCLK_EN_Msk;
+		SYSTEM_PERIP_CLK_EN0_REG &= ~(1UL << (devno == 0 ? 2U : 5U));
 	}
 }
 
@@ -94,6 +106,16 @@ void Esp32UartClockEnable(int devno)
 	if (devno >= 0 && devno < ESP32_HP_UART_COUNT)
 	{
 		ESP32_PCR_UART_CONF_REG(devno) |= ESP32_PCR_UART_CONF_CLK_EN_Msk;
+		ESP32_PCR_UART_SCLK_CONF_REG(devno) |= ESP32_PCR_UART_SCLK_EN_Msk;
+	}
+}
+
+void Esp32UartClockDisable(int devno)
+{
+	if (devno >= 0 && devno < ESP32_HP_UART_COUNT)
+	{
+		ESP32_PCR_UART_SCLK_CONF_REG(devno) &= ~ESP32_PCR_UART_SCLK_EN_Msk;
+		ESP32_PCR_UART_CONF_REG(devno) &= ~ESP32_PCR_UART_CONF_CLK_EN_Msk;
 	}
 }
 

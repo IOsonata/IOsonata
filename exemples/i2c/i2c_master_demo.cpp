@@ -6,6 +6,9 @@
 Connect SDA, SCL and ground to a second MCU running i2c_slave_demo.cpp.
 Use external pull-ups on SDA and SCL. The slave uses address 0x22 and a
 one-byte memory offset. This example writes and reads 16 bytes at offset 2.
+With I2C_SLEEP_TEST=1, three rounds first probe the unmatched address 0x23,
+then write and read 0x22 with idle gaps for the slave to enter sleep.
+The sleep profile uses polling transfers and UART output in both builds.
 
 @author	Hoang Nguyen Hoan
 @date	July 21, 2018
@@ -39,10 +42,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <string.h>
 
+#include "idelay.h"
 #include "coredev/i2c.h"
 #include "coredev/uart.h"
 #include "stddev.h"
 #include "board.h"
+
+// Enable the address-rejection and repeated wake checks in board.h.
+#ifndef I2C_SLEEP_TEST
+#define I2C_SLEEP_TEST 0
+#endif
 
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
@@ -113,12 +122,12 @@ static const I2CCfg_t s_I2cCfgMaster = {
 	.pIOPinMap = s_I2cMasterPins,
 	.NbIOPins = sizeof(s_I2cMasterPins) / sizeof(IOPinCfg_t),
 	.Rate = I2C_SCL_RATE,		// Rate in Hz
-	.MaxRetry = 5,			// Retry
+	.MaxRetry = I2C_SLEEP_TEST ? 0 : 5,			// Retry
 	.AddrType = I2CADDR_TYPE_NORMAL,
 	.NbSlaveAddr = 0,			// Number of slave addresses
 	.SlaveAddr = {0,},		// Slave addresses
-	.bDmaEn = I2C_MASTER_DMA_ENABLE,
-	.bIntEn = I2C_MASTER_INT_ENABLE,
+	.bDmaEn = I2C_SLEEP_TEST ? false : I2C_MASTER_DMA_ENABLE,
+	.bIntEn = I2C_SLEEP_TEST ? false : I2C_MASTER_INT_ENABLE,
 	.IntPrio = 7,			// Interrupt prio
 	.EvtCB = I2CMasterIntrfHandler		// Event callback
 };
@@ -176,7 +185,7 @@ int main()
 	{
 		return 1;
 	}
-#if defined(NDEBUG) || defined(UART_RETARGET)
+#if defined(NDEBUG) || defined(UART_RETARGET) || I2C_SLEEP_TEST
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
 	if (!g_I2CMaster.Init(s_I2cCfgMaster))
@@ -188,13 +197,31 @@ int main()
 	{
 		tx[i] = 0xa0 + i;
 	}
-	memset(rx, 0, sizeof(rx));
-	s_Completed = false;
-	written = WaitTransfer(g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, tx, sizeof(tx)));
-	s_Completed = false;
-	received = WaitTransfer(g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, rx, sizeof(rx)));
-	pass = written == (int)sizeof(tx) && received == (int)sizeof(rx) && memcmp(tx, rx, sizeof(tx)) == 0;
-	printf("I2C master write %d read %d: %s\r\n", written, received, pass ? "PASS" : "FAIL");
+	for (unsigned cycle = 0; cycle < (I2C_SLEEP_TEST ? 3U : 1U); cycle++)
+	{
+#if I2C_SLEEP_TEST
+		// Leave time for the slave to drain its console and enter WAIT.
+		// Read one byte: an unmatched address must return no data.
+		for (unsigned probe = 0; probe < 3; probe++)
+		{
+			msDelay(1000);
+			received = g_I2CMaster.Rx(I2C_SLAVE_ADDR + 1, rx, 1);
+			printf("Unmatched address 0x23: %s\r\n", received == 0 ? "PASS" : "FAIL");
+		}
+		msDelay(1000);
+#endif
+		memset(rx, 0, sizeof(rx));
+		s_Completed = false;
+		written = WaitTransfer(g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, tx, sizeof(tx)));
+#if I2C_SLEEP_TEST
+		// Also start a matching read from sleep, not just from RUN.
+		msDelay(1000);
+#endif
+		s_Completed = false;
+		received = WaitTransfer(g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, rx, sizeof(rx)));
+		pass = written == (int)sizeof(tx) && received == (int)sizeof(rx) && memcmp(tx, rx, sizeof(tx)) == 0;
+		printf("I2C master write %d read %d: %s\r\n", written, received, pass ? "PASS" : "FAIL");
+	}
 	while (1)
 	{
 		__WFE();

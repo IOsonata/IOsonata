@@ -431,6 +431,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/system_esp32c3.c</locationURI>
 		</link>
 		<link>
+			<name>src/system_sleep_esp32c3.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/system_sleep_esp32c3.c</locationURI>
+		</link>
+		<link>
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
@@ -1984,6 +1989,26 @@
 			<name>src/coredev/spi_soft.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi_soft.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/system_power_esp32.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_power_esp32.c</locationURI>
+		</link>
+		<link>
+			<name>src/system_lfclock_esp32.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_lfclock_esp32.c</locationURI>
+		</link>
+		<link>
+			<name>src/system_clock_esp32.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_clock_esp32.c</locationURI>
+		</link>
+		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -34,7 +34,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-#include <math.h>
 
 #include "samdxxx.h"
 #include "clock_samd.h"
@@ -51,6 +50,16 @@ SOFTWARE.
 #define SAMD_DAC_VREFA_PIN			PIN_PA03B_DAC_VREFP
 
 static DacSamd *s_pSamdDac = nullptr;
+
+// The DAC drives an analog output while enabled. No RUNSTDBY clock or
+// output-retention mode is configured by this driver, so the system
+// cannot assume that the output survives Standby.
+extern "C" bool SamdDacAllowStandby(void)
+{
+	return s_pSamdDac == nullptr ||
+		(PM_REGS->PM_APBCMASK & PM_APBCMASK_DAC_Msk) == 0U ||
+		(DAC_REGS->DAC_CTRLA & DAC_CTRLA_ENABLE_Msk) == 0U;
+}
 
 static bool SamdDacSync(void)
 {
@@ -195,7 +204,7 @@ bool DacSamd::Reference(const AdcRefVolt_t &Ref)
 {
 	uint8_t sel;
 
-	if (!isfinite(Ref.Voltage) || Ref.Voltage <= 0)
+	if (!__builtin_isfinite(Ref.Voltage) || Ref.Voltage <= 0)
 	{
 		return false;
 	}
@@ -321,7 +330,7 @@ bool DacSamd::WriteCode(int Chan, uint16_t Code)
 
 float DacSamd::WriteVolt(int Chan, float Volt)
 {
-	if (!isfinite(Volt))
+	if (!__builtin_isfinite(Volt))
 	{
 		return -1.0f;
 	}

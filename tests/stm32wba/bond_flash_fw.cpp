@@ -378,7 +378,7 @@ extern "C" void *__dso_handle;
 extern "C" uint32_t SystemMicroSecLoopCnt;
 
 void *__dso_handle = nullptr;
-uint32_t SystemMicroSecLoopCnt = 1;
+uint32_t SystemMicroSecLoopCnt = 65536UL;
 
 // Power cut sweep. Prepare: the old image, and filler records so that the
 // next save runs the PDS garbage collection when asked for.

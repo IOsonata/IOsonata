@@ -50,6 +50,7 @@ SOFTWARE.
 #include <stdbool.h>
 
 #include "coredev/iopincfg.h"
+#include "coredev/system_core_clock.h"
 
 #include "esp32xx_gpio.h"
 #include "esp32xx_irq.h"
@@ -64,6 +65,40 @@ typedef struct __ESP32_GPIO_ISR_SLOT {
 	void *Context;
 	int IntNo;
 } ESP32_GPIO_ISR_SLOT;
+
+#if defined(ESP32C3) || defined(ESP32C6)
+#if defined(ESP32C3)
+#define ESP32_DEEP_WAKE_PINS 6U
+#else
+#define ESP32_DEEP_WAKE_PINS 8U
+#endif
+
+static void Esp32WakePinInterrupt(int IntNo, void *pContext);
+bool Esp32DeepWakePrepare(void);
+void Esp32DeepWakeRestore(void);
+bool Esp32LightWakePrepare(void);
+void Esp32LightWakeRestore(void);
+
+static uint8_t s_WakeSense[ESP32_GPIO_PIN_COUNT];
+static uint32_t s_LightWakeMask;
+static uint32_t s_LightWakePin[ESP32_GPIO_PIN_COUNT];
+static uint32_t s_LightWakePad[ESP32_GPIO_PIN_COUNT];
+static uint32_t s_DeepWakeMask;
+#if defined(ESP32C3)
+static uint32_t s_DeepWakeRtc;
+static uint32_t s_DeepWakeExt;
+static uint32_t s_DeepWakeHold;
+static uint32_t s_DeepWakePad[ESP32_DEEP_WAKE_PINS];
+#else
+static uint32_t s_DeepWakeExt;
+static uint32_t s_DeepWakeClock;
+static uint32_t s_DeepWakeDate;
+static uint32_t s_DeepWakeAon;
+static uint32_t s_DeepWakeOutput;
+static uint32_t s_DeepWakePin[ESP32_DEEP_WAKE_PINS];
+static uint32_t s_DeepWakeMux[ESP32_DEEP_WAKE_PINS];
+#endif
+#endif
 
 static volatile ESP32_GPIO_ISR_SLOT s_GpioIsr[ESP32_GPIO_PIN_COUNT];
 static volatile uint32_t s_GpioIntEnableMask;
@@ -459,12 +494,25 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp,
 	{
 		ESP32_GPIO_ENABLE_W1TS_REG32 = mask;
 	}
+#if defined(ESP32C3)
+	// Release the retained pad only after its new configuration is ready.
+	if (pin < ESP32_DEEP_WAKE_PINS)
+	{
+		ESP32_REG32(0x600080D0UL) &= ~mask;
+	}
+#endif
 }
 
 // Call with CPU interrupts masked. Hardware remains pin-indexed; the public
 // interrupt number stored in the slot may differ from the physical pin.
 static void ESP32ReleasePinInterrupt(uint32_t Pin)
 {
+#if defined(ESP32C3) || defined(ESP32C6)
+	if (s_GpioIsr[Pin].Handler == Esp32WakePinInterrupt)
+	{
+		s_WakeSense[Pin] = IOPINSENSE_DISABLE;
+	}
+#endif
 	ESP32GpioDisablePinInterrupt(Pin);
 	s_GpioIntEnableMask &= ~ESP32PinMask(Pin);
 	s_GpioIsr[Pin].Handler = 0;
@@ -554,6 +602,14 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio,
 			return false;
 		}
 	}
+#if defined(ESP32C3) || defined(ESP32C6)
+	if (s_GpioIsr[PinNo].Handler == Esp32WakePinInterrupt &&
+		pEvtCB != Esp32WakePinInterrupt)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+#endif
 	mask = ESP32PinMask(PinNo);
 	ESP32GpioDisablePinInterrupt(PinNo);
 	s_GpioIsr[PinNo].Handler = pEvtCB;
@@ -581,6 +637,354 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo,
 	}
 	return PinNo;
 }
+
+#if defined(ESP32C3) || defined(ESP32C6)
+static void Esp32WakePinInterrupt(int IntNo, void *pContext)
+{
+	(void)IntNo;
+	(void)pContext;
+}
+
+bool SystemWakePin(int PortNo, int PinNo, int Sense)
+{
+	uintptr_t state;
+	bool result;
+
+	if (PortNo != 0 || !ESP32IsValidGpioPin(PinNo) ||
+		(Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_LOW_TRANSITION &&
+		Sense != IOPINSENSE_HIGH_TRANSITION))
+	{
+		return false;
+	}
+#if defined(ESP32C6)
+	if (Sense != IOPINSENSE_DISABLE && PinNo < 8 &&
+		(ESP32_LP_AON_GPIO_MUX_REG & (1UL << PinNo)))
+	{
+		return false;
+	}
+#endif
+	if (Sense != IOPINSENSE_DISABLE && !s_GpioIntInstalled &&
+		!ESP32InstallGpioInterrupt(ESP32_GPIO_INTR_CPU_INT_PRIO))
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	// Ordinary GPIO interrupts wake CPU sleep. Do not replace a driver's
+	// callback or release an interrupt that was reassigned after this call.
+	if (s_GpioIsr[PinNo].Handler != 0 &&
+		s_GpioIsr[PinNo].Handler != Esp32WakePinInterrupt)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		if (s_GpioIsr[PinNo].Handler == Esp32WakePinInterrupt)
+		{
+			ESP32ReleasePinInterrupt((uint32_t)PinNo);
+		}
+		result = true;
+	}
+	else
+	{
+		result = IOPinEnableInterrupt(PinNo, ESP32_GPIO_INTR_CPU_INT_PRIO,
+			0, (uint32_t)PinNo, (IOPINSENSE)Sense, Esp32WakePinInterrupt, 0);
+	}
+	if (result && Sense != IOPINSENSE_DISABLE)
+	{
+		s_WakeSense[PinNo] = (uint8_t)Sense;
+	}
+	EnableInterrupt(state);
+	return result;
+}
+
+// GPIO wake is a level signal while the RTC/PMU is in light sleep.
+// The ordinary interrupt remains edge triggered outside the sleep request.
+bool Esp32LightWakePrepare(void)
+{
+	uintptr_t state;
+	uint32_t mask;
+
+	state = DisableInterrupt();
+	if (s_LightWakeMask != 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	mask = 0U;
+	for (uint32_t pin = 0U; pin < ESP32_GPIO_PIN_COUNT; pin++)
+	{
+		uint32_t config;
+		uint32_t pad;
+		uint32_t level;
+		uint32_t polarity;
+
+		if (s_GpioIsr[pin].Handler != Esp32WakePinInterrupt ||
+			s_WakeSense[pin] == IOPINSENSE_DISABLE)
+		{
+			continue;
+		}
+		if ((ESP32_GPIO_ENABLE_REG32 & ESP32PinMask(pin)) != 0U)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		pad = ESP32_IOMUX_PAD_REG(pin);
+		if ((pad & (1UL << ESP32_IOMUX_FUN_IE_Pos)) == 0U)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		polarity = s_WakeSense[pin] == IOPINSENSE_LOW_TRANSITION ? 4U : 5U;
+		level = (ESP32_GPIO_IN_REG32 >> pin) & 1U;
+		if (level == (polarity == 5U ? 1U : 0U))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		config = ESP32_GPIO_PIN_REG32(pin);
+		s_LightWakePin[pin] = config;
+		s_LightWakePad[pin] = pad;
+		mask |= ESP32PinMask(pin);
+	}
+	if (mask == 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	for (uint32_t pin = 0U; pin < ESP32_GPIO_PIN_COUNT; pin++)
+	{
+		if ((mask & ESP32PinMask(pin)) != 0U)
+		{
+			uint32_t type = s_WakeSense[pin] == IOPINSENSE_LOW_TRANSITION ? 4U : 5U;
+			uint32_t config = s_LightWakePin[pin];
+
+			config &= ~ESP32_GPIO_PIN_INT_TYPE_Msk;
+			config |= type << ESP32_GPIO_PIN_INT_TYPE_Pos;
+			config |= ESP32_GPIO_PIN_WAKEUP_ENABLE_Msk;
+			ESP32_GPIO_PIN_REG32(pin) = config;
+			// Use the active GPIO input configuration during sleep.
+			// Restore the caller's pad configuration after wake.
+			ESP32_IOMUX_PAD_REG(pin) =
+				s_LightWakePad[pin] & ~ESP32_IOMUX_SLP_SEL_Msk;
+		}
+	}
+	s_LightWakeMask = mask;
+	EnableInterrupt(state);
+	return true;
+}
+
+void Esp32LightWakeRestore(void)
+{
+	uintptr_t state;
+	uint32_t mask;
+
+	state = DisableInterrupt();
+	mask = s_LightWakeMask;
+	for (uint32_t pin = 0U; pin < ESP32_GPIO_PIN_COUNT; pin++)
+	{
+		if ((mask & ESP32PinMask(pin)) != 0U)
+		{
+			ESP32_GPIO_PIN_REG32(pin) = s_LightWakePin[pin];
+			ESP32_IOMUX_PAD_REG(pin) = s_LightWakePad[pin];
+		}
+	}
+	s_LightWakeMask = 0U;
+	EnableInterrupt(state);
+}
+
+static bool Esp32DeepWakePinReady(uint32_t Pin)
+{
+	uint32_t mask = ESP32PinMask(Pin);
+	uint32_t pad;
+
+	if (s_GpioIsr[Pin].Handler != Esp32WakePinInterrupt ||
+		(ESP32_GPIO_ENABLE_REG32 & mask) != 0U)
+	{
+		return false;
+	}
+	pad = ESP32_IOMUX_PAD_REG(Pin);
+	if ((pad & (1UL << ESP32_IOMUX_FUN_IE_Pos)) == 0U ||
+		((pad & ESP32_IOMUX_MCU_SEL_Msk) >> ESP32_IOMUX_MCU_SEL_Pos) != 1U)
+	{
+		return false;
+	}
+	if (Pin < 2U && g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL &&
+		g_McuOsc.LowPwrOsc.Freq == 32768U)
+	{
+		return false;
+	}
+	for (uint32_t sig = 0U; sig < ESP32_GPIO_FUNC_IN_COUNT; sig++)
+	{
+		uint32_t cfg = ESP32_GPIO_FUNC_IN_REG32(sig);
+
+		if ((cfg & ESP32_GPIO_SIG_IN_SEL_Msk) != 0U &&
+			((cfg & ESP32_GPIO_FUNC_IN_SEL_Msk) >> ESP32_GPIO_FUNC_IN_SEL_Pos) == Pin)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+// Called by the sleep controller before a reset-on-wake transition.
+bool Esp32DeepWakePrepare(void)
+{
+#if defined(ESP32C6)
+	uint32_t levels = 0U;
+#endif
+	uint32_t mask = 0U;
+	uintptr_t state = DisableInterrupt();
+
+	if (s_DeepWakeMask != 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	for (uint32_t pin = 0U; pin < ESP32_DEEP_WAKE_PINS; pin++)
+	{
+		if (s_WakeSense[pin] != IOPINSENSE_DISABLE)
+		{
+			if (!Esp32DeepWakePinReady(pin))
+			{
+				EnableInterrupt(state);
+				return false;
+			}
+			mask |= ESP32PinMask(pin);
+		}
+	}
+	if (mask == 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+#if defined(ESP32C3)
+	s_DeepWakeRtc = ESP32_REG32(0x60008110UL);
+	s_DeepWakeExt = ESP32_REG32(0x60008064UL);
+	s_DeepWakeHold = ESP32_REG32(0x600080D0UL);
+	uint32_t rtc = (s_DeepWakeRtc & ~((0x3FUL << 26) | (1UL << 6))) |
+		(1UL << 7);
+
+	for (uint32_t pin = 0U; pin < ESP32_DEEP_WAKE_PINS; pin++)
+	{
+		if ((mask & ESP32PinMask(pin)) != 0U)
+		{
+			uint32_t shift = 23U - pin * 3U;
+			uint32_t type = s_WakeSense[pin] == IOPINSENSE_LOW_TRANSITION ? 4U : 5U;
+
+			rtc = (rtc & ~(7UL << shift)) | (type << shift) |
+				(1UL << (31U - pin));
+			s_DeepWakePad[pin] = ESP32_IOMUX_PAD_REG(pin);
+			ESP32_IOMUX_PAD_REG(pin) =
+				s_DeepWakePad[pin] & ~ESP32_IOMUX_SLP_SEL_Msk;
+		}
+	}
+	// Keep the input and its pull resistor when the digital domain powers off.
+	ESP32_REG32(0x600080D0UL) = s_DeepWakeHold | mask;
+	ESP32_REG32(0x60008064UL) = s_DeepWakeExt | (1UL << 31);
+	// The GPIO wake latch survives a deep-sleep reset. Clear it before rearming.
+	ESP32_REG32(0x60008110UL) = rtc | (1UL << 6);
+	ESP32_REG32(0x60008110UL) = rtc;
+#else
+	s_DeepWakeExt = ESP32_LP_EXT_WAKE_REG;
+	s_DeepWakeAon = ESP32_LP_AON_GPIO_MUX_REG;
+	if ((s_DeepWakeAon & mask) != 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	s_DeepWakeClock = ESP32_LP_PERI_CLK_EN_REG;
+	ESP32_LP_PERI_CLK_EN_REG = s_DeepWakeClock | ESP32_LP_IO_CLK_EN_Msk;
+	s_DeepWakeDate = ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x3FCU);
+	s_DeepWakeOutput = ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x0CU);
+	ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x3FCU) = s_DeepWakeDate | (1UL << 31);
+	for (uint32_t pin = 0U; pin < ESP32_DEEP_WAKE_PINS; pin++)
+	{
+		if ((mask & ESP32PinMask(pin)) != 0U)
+		{
+			uint32_t pad = ESP32_IOMUX_PAD_REG(pin);
+			if (s_WakeSense[pin] == IOPINSENSE_HIGH_TRANSITION)
+			{
+				levels |= ESP32PinMask(pin);
+			}
+
+			s_DeepWakePin[pin] = ESP32_LP_IO_PIN_REG(pin);
+			s_DeepWakeMux[pin] = ESP32_LP_IO_MUX_REG(pin);
+			// RTC GPIO uses LP function 0. Clear SLP_SEL so the active
+			// input and pull settings remain selected during sleep.
+			uint32_t lp = (s_DeepWakeMux[pin] &
+				~((7UL << ESP32_LP_IO_MCU_SEL_Pos) | (1UL << 1) |
+				ESP32_LP_IO_FUN_WPU_Msk | ESP32_LP_IO_FUN_WPD_Msk |
+				ESP32_LP_IO_FUN_IE_Msk | ESP32_LP_IO_FUN_DRV_Msk)) |
+				ESP32_LP_IO_FUN_IE_Msk | (2UL << ESP32_LP_IO_FUN_DRV_Pos);
+
+			if (pad & (1UL << ESP32_IOMUX_FUN_WPU_Pos))
+			{
+				lp |= ESP32_LP_IO_FUN_WPU_Msk;
+			}
+			if (pad & (1UL << ESP32_IOMUX_FUN_WPD_Pos))
+			{
+				lp |= ESP32_LP_IO_FUN_WPD_Msk;
+			}
+			ESP32_LP_IO_ENABLE_W1TC_REG = ESP32PinMask(pin);
+			ESP32_LP_IO_MUX_REG(pin) = lp;
+			// EXT1 samples the LP pad directly, without an LP GPIO interrupt.
+			ESP32_LP_IO_PIN_REG(pin) = s_DeepWakePin[pin] &
+				~((7UL << 7) | (1UL << 10));
+		}
+	}
+	ESP32_LP_AON_GPIO_MUX_REG = s_DeepWakeAon | mask;
+	ESP32_LP_EXT_WAKE_REG = (s_DeepWakeExt &
+		~(ESP32_LP_EXT_WAKE_SEL_Msk | ESP32_LP_EXT_WAKE_LEVEL_Msk |
+		ESP32_LP_EXT_WAKE_CLEAR_Msk)) |
+		(mask << ESP32_LP_EXT_WAKE_SEL_Pos) |
+		(levels << ESP32_LP_EXT_WAKE_LEVEL_Pos);
+	ESP32_LP_EXT_WAKE_REG |= ESP32_LP_EXT_WAKE_CLEAR_Msk;
+#endif
+	s_DeepWakeMask = mask;
+	EnableInterrupt(state);
+	return true;
+}
+
+// Called after a rejected transition. Successful Deep-sleep resets the MCU.
+void Esp32DeepWakeRestore(void)
+{
+	uintptr_t state = DisableInterrupt();
+	uint32_t mask = s_DeepWakeMask;
+
+	if (mask != 0U)
+	{
+#if defined(ESP32C3)
+		ESP32_REG32(0x60008110UL) = s_DeepWakeRtc;
+		ESP32_REG32(0x60008064UL) = s_DeepWakeExt;
+		for (uint32_t pin = 0U; pin < ESP32_DEEP_WAKE_PINS; pin++)
+		{
+			if ((mask & ESP32PinMask(pin)) != 0U)
+			{
+				ESP32_IOMUX_PAD_REG(pin) = s_DeepWakePad[pin];
+			}
+		}
+		ESP32_REG32(0x600080D0UL) = s_DeepWakeHold;
+#else
+		ESP32_LP_EXT_WAKE_REG = s_DeepWakeExt & ~ESP32_LP_EXT_WAKE_CLEAR_Msk;
+		ESP32_LP_AON_GPIO_MUX_REG = s_DeepWakeAon;
+		for (uint32_t pin = 0U; pin < ESP32_DEEP_WAKE_PINS; pin++)
+		{
+			if ((mask & ESP32PinMask(pin)) != 0U)
+			{
+				ESP32_LP_IO_PIN_REG(pin) = s_DeepWakePin[pin];
+				ESP32_LP_IO_MUX_REG(pin) = s_DeepWakeMux[pin];
+			}
+		}
+		ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x0CU) = s_DeepWakeOutput;
+		ESP32_REG32(ESP32_LP_IOMUX_BASE + 0x3FCU) = s_DeepWakeDate;
+		ESP32_LP_PERI_CLK_EN_REG = s_DeepWakeClock;
+#endif
+		s_DeepWakeMask = 0U;
+	}
+	EnableInterrupt(state);
+}
+#endif
 
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {

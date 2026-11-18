@@ -75,8 +75,8 @@ extern	void (* const __Vectors[])(void);
 // Just to make the linker to keep the __Vectors
 __attribute__ ((used)) static uint32_t s_StackPtr = (uint32_t)__Vectors;
 
-// Nop count for usDelay base on ARM NOP instruction timing on 16MHz clock
-uint32_t SystemMicroSecLoopCnt = 1;
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+uint32_t SystemMicroSecLoopCnt = 65536UL;
 
 /**
  * @brief	Get RAM start address
@@ -142,9 +142,6 @@ void ResetEntry (void)
 	 * Update core clock data
 	 */
 	SystemCoreClockUpdate();
-
-	// Update count for usDelay
-	SystemMicroSecLoopCnt = (SystemCoreClock + 8000000) / 16000000;
 
 	/*
 	 * We are ready to enter main application

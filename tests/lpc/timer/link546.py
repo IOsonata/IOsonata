@@ -17,6 +17,10 @@ SOURCES = [
     'ARM/src/ResetEntry.c',
     'ARM/NXP/LPC546xx/src/Vectors_LPC546xx.c',
     'ARM/NXP/LPC546xx/src/system_LPC546xx.c',
+    'ARM/NXP/LPC546xx/src/system_power_lpc546xx.c',
+    'src/syslog.cpp',
+    'src/semihost_intrf.cpp',
+    'ARM/src/semihost_arm.c',
     'ARM/NXP/LPC546xx/src/iopincfg_lpc546xx.cpp',
     'src/cfifo.c',
     'src/device_intrf.cpp',
@@ -141,7 +145,7 @@ def build(prefix, output, mode, kind):
         assert re.search(r'^[0-9a-fA-F]+ T ' + name + '$', symbols, re.M)
         vector = struct.unpack_from('<I', data, (16 + irq) * 4)[0]
         assert vector == addresses[name] | 1
-    assert ('UARTRetargetEnable' in addresses) == (mode == 'Release')
+    assert ('UARTInit' in addresses) == (mode == 'Release')
     attributes = subprocess.check_output([prefix + 'readelf', '-A', str(image)], text=True)
     assert 'Tag_ABI_VFP_args: VFP registers' in attributes
     sections = subprocess.check_output([prefix + 'readelf', '-SW', str(image)], text=True)

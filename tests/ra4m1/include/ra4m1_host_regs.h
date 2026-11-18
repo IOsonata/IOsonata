@@ -312,6 +312,8 @@ template <typename T, uintptr_t Off, uintptr_t Stride> struct HostRegArray {
 	HostRegArray<T, offsetof(Periph, Member), sizeof(((Periph *)0)->Member[0])> Member
 
 union HostSystem {
+	HOST_REG(uint32_t, R_SYSTEM_Type, MSTPCRA);
+	HOST_REG(uint8_t, R_SYSTEM_Type, CKOCR);
 	HOST_REG(uint32_t, R_SYSTEM_Type, SCKDIVCR);
 	HOST_REG(uint8_t, R_SYSTEM_Type, SCKSCR);
 	HOST_REG(uint8_t, R_SYSTEM_Type, PLLCCR2);
@@ -395,6 +397,8 @@ union HostPmisc {
 };
 
 union HostMstp {
+	HOST_REG(uint32_t, R_MSTP_Type, MSTPCRB);
+	HOST_REG(uint32_t, R_MSTP_Type, MSTPCRC);
 	HOST_REG(uint32_t, R_MSTP_Type, MSTPCRD);
 };
 

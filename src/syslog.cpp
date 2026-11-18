@@ -83,42 +83,34 @@ static char SysLogTypeTag(SysStatus_t Status)
 	}
 }
 
-// Append formatted text at Pos without ever advancing beyond the usable buffer.
-// Returns the new length (bytes to transmit, excluding the trailing NUL).
-static int SysLogAppend(char *pLine, int LineSize, int Pos,
-						const char *pFormat, ...)
+// Write fixed status fields directly into the record. Keep the same prefix
+// when truncated, and always leave space for the terminating NUL.
+static int SysLogAppendText(char *pLine, int LineSize, int Pos, const char *pText)
 {
-	if (pLine == 0 || pFormat == 0 || LineSize <= 1)
+	while (*pText != 0 && Pos < LineSize - 1)
 	{
-		return 0;
+		pLine[Pos++] = *pText++;
 	}
+	pLine[Pos] = 0;
+	return Pos;
+}
 
-	if (Pos < 0)
+static int SysLogAppendTick(char *pLine, int LineSize, uint64_t Tick)
+{
+	// A uint64_t needs at most 20 decimal digits. Only timestamped records
+	// use this scratch space; un-timestamped printf records do not.
+	char digits[21];
+	int pos = sizeof(digits) - 1;
+	digits[pos] = 0;
+	do
 	{
-		Pos = 0;
-	}
+		digits[--pos] = '0' + Tick % 10U;
+		Tick /= 10U;
+	} while (Tick != 0U);
 
-	if (Pos >= LineSize)
-	{
-		return LineSize - 1;
-	}
-
-	va_list args;
-	va_start(args, pFormat);
-	int n = vsnprintf(&pLine[Pos], (size_t)(LineSize - Pos), pFormat, args);
-	va_end(args);
-
-	if (n < 0)
-	{
-		return Pos;
-	}
-
-	if (n >= (LineSize - Pos))
-	{
-		return LineSize - 1;
-	}
-
-	return Pos + n;
+	int len = SysLogAppendText(pLine, LineSize, 0, "[");
+	len = SysLogAppendText(pLine, LineSize, len, digits + pos);
+	return SysLogAppendText(pLine, LineSize, len, "] ");
 }
 
 static uintptr_t SysIrqLock(void)
@@ -143,9 +135,8 @@ static void SysIrqUnlock(uintptr_t State)
 #endif
 }
 
-bool SysLogInit(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
-				DevIntrf_t * const pSink, uint32_t SinkAddr,
-				TimerDev_t * const pTimer, uint32_t MinType)
+bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
+				DevIntrf_t * const pSink, uint32_t SinkAddr, uint32_t MinType)
 {
 	if (pLog == 0)
 	{
@@ -179,7 +170,8 @@ bool SysLogInit(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 
 	pLog->pSink = pSink;
 	pLog->SinkAddr = SinkAddr;
-	pLog->pTimer = pTimer;
+	pLog->pTimer = nullptr;
+	pLog->FormatTime = nullptr;
 	pLog->MinType = MinType & SYSSTATUS_TYPE_MASK;
 	pLog->hFifo = hFifo;
 	pLog->HeadIdx = hFifo->GetIdx;
@@ -187,6 +179,27 @@ bool SysLogInit(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 	pLog->bFlushing = false;
 	pLog->Marker = SYSLOG_INIT_MARKER;
 
+	return true;
+}
+
+// Kept out of the ordinary logger path so an untimestamped logger does not
+// pull in timer conversion and 64-bit decimal arithmetic.
+static int SysLogFormatTime(TimerDev_t *pTimer, char *pLine, int Len, bool bTicks)
+{
+	uint64_t time = bTicks ? TimerGetTickCount(pTimer) : TimerGetMilisecond(pTimer);
+	return SysLogAppendTick(pLine, Len, time);
+}
+
+bool SysLogInit(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
+				DevIntrf_t * const pSink, uint32_t SinkAddr,
+				TimerDev_t * const pTimer, uint32_t MinType)
+{
+	if (!SysLogInitNoTimer(pLog, pCfg, pSink, SinkAddr, MinType))
+	{
+		return false;
+	}
+	pLog->pTimer = pTimer;
+	pLog->FormatTime = pTimer != nullptr ? SysLogFormatTime : nullptr;
 	return true;
 }
 
@@ -333,27 +346,39 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 		return 0;
 	}
 
-	// Timestamp prefix when a Timer is configured.
-	if (pLog->pTimer != 0)
+	if (pLog->FormatTime != nullptr)
 	{
-		uint64_t tick = TimerGetTickCount(pLog->pTimer);
-		len = SysLogAppend(pLine, recordLen, len, "[%llu] ",
-						   (unsigned long long)tick);
+		len = pLog->FormatTime(pLog->pTimer, pLine, recordLen, true);
 	}
 
-	// Type tag, module id, code.
-	len = SysLogAppend(pLine, recordLen, len, "%c:%03lX:%04lX",
-					   SysLogTypeTag(Status),
-					   (unsigned long)StatusModId(Status),
-					   (unsigned long)StatusCode(Status));
-
-	// Detail string when supplied.
+	// Type tag, three hex module digits and four hex code digits. The
+	// separators and digits use shifts, without printf's format parser.
+	char prefix[11];
+	prefix[0] = SysLogTypeTag(Status);
+	prefix[1] = ':';
+	prefix[5] = ':';
+	prefix[10] = 0;
+	uint32_t value = StatusModId(Status);
+	for (int i = 4; i >= 2; i--)
+	{
+		unsigned digit = value & 15U;
+		prefix[i] = digit < 10U ? '0' + digit : 'A' + digit - 10U;
+		value >>= 4;
+	}
+	value = StatusCode(Status);
+	for (int i = 9; i >= 6; i--)
+	{
+		unsigned digit = value & 15U;
+		prefix[i] = digit < 10U ? '0' + digit : 'A' + digit - 10U;
+		value >>= 4;
+	}
+	len = SysLogAppendText(pLine, recordLen, len, prefix);
 	if (pDetail != 0)
 	{
-		len = SysLogAppend(pLine, recordLen, len, " %s", pDetail);
+		len = SysLogAppendText(pLine, recordLen, len, " ");
+		len = SysLogAppendText(pLine, recordLen, len, pDetail);
 	}
-
-	len = SysLogAppend(pLine, recordLen, len, "\r\n");
+	len = SysLogAppendText(pLine, recordLen, len, "\r\n");
 
 	pLine[len] = 0;
 
@@ -386,18 +411,9 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 	// Millisecond stamp ahead of the text when a Timer is configured.
 	int pre = 0;
 
-	if (pLog->pTimer != 0)
+	if (pLog->FormatTime != nullptr)
 	{
-		pre = snprintf((char *)pBlock, (size_t)recordLen, "[%lu] ",
-					   (unsigned long)TimerGetMilisecond(pLog->pTimer));
-		if (pre < 0)
-		{
-			pre = 0;
-		}
-		else if ((uint32_t)pre >= recordLen)
-		{
-			pre = (int)recordLen - 1;
-		}
+		pre = pLog->FormatTime(pLog->pTimer, (char *)pBlock, (int)recordLen, false);
 	}
 
 	int len = vsnprintf((char *)pBlock + pre, (size_t)(recordLen - (uint32_t)pre),

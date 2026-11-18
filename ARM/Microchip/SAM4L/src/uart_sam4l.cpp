@@ -57,6 +57,7 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "coredev/system_core_clock.h"
 #include "cfifo.h"
+#include "iopinctrl.h"
 
 #define SAM4L_UART_CFIFO_SIZE		16
 #define SAM4L_UART_CFIFO_MEMSIZE	CFIFO_MEMSIZE(SAM4L_UART_CFIFO_SIZE)
@@ -80,6 +81,10 @@ typedef struct _Sam_Uart_Dev {
 	uint8_t RxFifoMem[SAM4L_UART_CFIFO_MEMSIZE];
 	uint8_t TxFifoMem[SAM4L_UART_CFIFO_MEMSIZE];
 	uint8_t PdcTxBuff[SAM4L_UART_CFIFO_SIZE];
+	bool bWake;			//!< Receive wake requested by the application
+	bool bPicoRx;			//!< USART0 RX is routed to PB00
+	bool bSleepPaused;		//!< Temporarily stopped by SystemSleep
+	uint32_t SleepInterrupts;	//!< USART interrupt state across sleep
 } SAM4L_UARTDEV;
 
 #pragma pack(pop)
@@ -112,6 +117,45 @@ static SAM4L_UARTDEV s_Sam4lUartDev[] = {
 };
 
 static const int s_NbSam4lUartDev = sizeof(s_Sam4lUartDev) / sizeof(SAM4L_UARTDEV);
+
+static struct {
+	bool bActive;
+	uint32_t Clocks;
+	uint32_t Config;
+	uint32_t Interrupts;
+	uint32_t WakeMask;
+	uint32_t Diagnostic;
+} s_Sam4lUartSleep;
+
+// Temporary wake trace used by PowerOffDemo during PICOUART validation.
+// Bits 0..7 describe entry/exit, 8..15 record refusal reasons, 24..31
+// contain the most recent PICOUART received byte.
+#define SAM4L_PICO_REQUESTED	(1UL << 0)
+#define SAM4L_PICO_REJECTED		(1UL << 1)
+#define SAM4L_PICO_PREPARED		(1UL << 2)
+#define SAM4L_PICO_RESUMED		(1UL << 3)
+#define SAM4L_PICO_PM_WAKE		(1UL << 4)
+#define SAM4L_PICO_PM_CAUSE		(1UL << 5)
+#define SAM4L_PICO_DATA_READY	(1UL << 6)
+#define SAM4L_PICO_RX_QUEUED	(1UL << 7)
+#define SAM4L_PICO_NO_OWNER		(1UL << 8)
+#define SAM4L_PICO_NO_CLOCK		(1UL << 9)
+#define SAM4L_PICO_ALREADY_ON	(1UL << 10)
+#define SAM4L_PICO_PM_BUSY		(1UL << 11)
+#define SAM4L_PICO_USART_GATED	(1UL << 12)
+#define SAM4L_PICO_TX_BUSY		(1UL << 13)
+#define SAM4L_PICO_RX_BUSY		(1UL << 14)
+#define SAM4L_PICO_STALE_DATA	(1UL << 16)
+#define SAM4L_PICO_ARMED_DATA	(1UL << 17)
+#define SAM4L_PICO_ARMED_WAKE	(1UL << 18)
+#define SAM4L_PICO_STALE_CAUSE	(1UL << 19)
+#define SAM4L_PICO_ENABLE_TIMEOUT	(1UL << 22)
+
+uint32_t Sam4lUartSleepDiagnostic(void)
+{
+	return s_Sam4lUartSleep.Diagnostic;
+}
+
 
 UARTDev_t const *UARTGetInstance(int DevNo)
 {
@@ -512,6 +556,7 @@ void Sam4lUartStopTx(DevIntrf_t * const pDev)
 void Sam4lUartDisable(DevIntrf_t * const pDev)
 {
 	SAM4L_UARTDEV *dev = (SAM4L_UARTDEV *)pDev->pDevData;
+	dev->bWake = false;
 
 	dev->pReg->US_IDR = 0xFFFFFFFFu;
 	dev->pReg->US_CR  = US_CR_RXDIS | US_CR_TXDIS;
@@ -547,6 +592,309 @@ void Sam4lUartEnable(DevIntrf_t * const pDev)
 void Sam4lUartPowerOff(DevIntrf_t * const pDev)
 {
 	Sam4lUartDisable(pDev);
+}
+
+bool UARTEnableWake(UARTDev_t *pDev, bool bEnable)
+{
+	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[0];
+	uint32_t state;
+
+	if (pDev == NULL || dev->pUartDev != pDev)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	if (s_Sam4lUartSleep.bActive ||
+		(bEnable && (atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+		(SAM4L_PM->PM_PBAMASK & dev->PbaMask) == 0U ||
+		!dev->bPicoRx || pDev->Rate == 0U || pDev->DataBits != 8 ||
+		pDev->StopBits != 1 || pDev->Parity != UART_PARITY_NONE ||
+		pDev->FlowControl != UART_FLWCTRL_NONE || pDev->bIrDAMode)))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	dev->bWake = bEnable;
+	EnableInterrupt(state);
+	return true;
+}
+
+// Called only by the SAM4L power implementation, with interrupts masked.
+void Sam4lUartResumeSleep(void);
+
+bool Sam4lUartPrepareSleep(void)
+{
+	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[0];
+	UARTDev_t *pDev = dev->pUartDev;
+	uint32_t wake = 1UL << PM_AWEN_PICOUART;
+	uint32_t clocks;
+	uint32_t rejected;
+	uint32_t awen;
+	uint32_t picoStatus;
+	bool rc;
+	bool clockReady;
+	int i;
+
+	if (!dev->bWake)
+	{
+		return true;
+	}
+	s_Sam4lUartSleep.Diagnostic = SAM4L_PICO_REQUESTED;
+	if (pDev == NULL || s_Sam4lUartSleep.bActive || __get_IPSR() != 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_REJECTED | SAM4L_PICO_NO_OWNER;
+		return false;
+	}
+	clocks = SAM4L_PM->PM_PBDMASK;
+	Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, clocks |
+		PM_PBDMASK_PICOUART | PM_PBDMASK_BPM | PM_PBDMASK_BSCIF);
+	rc = (SAM4L_BPM->BPM_PMCON & BPM_PMCON_CK32S) != 0U;
+	clockReady = rc ?
+		(SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_RC32KRDY) != 0U &&
+		(SAM4L_BSCIF->BSCIF_RC32KCR & BSCIF_RC32KCR_EN32K) != 0U :
+		(SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_OSC32RDY) != 0U &&
+		(SAM4L_BSCIF->BSCIF_OSCCTRL32 & BSCIF_OSCCTRL32_EN32K) != 0U;
+	rejected = 0U;
+	if (!clockReady)
+	{
+		rejected |= SAM4L_PICO_NO_CLOCK;
+	}
+	if ((SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_EN) != 0U)
+	{
+		rejected |= SAM4L_PICO_ALREADY_ON;
+	}
+	if ((SAM4L_PM->PM_PBAMASK & dev->PbaMask) == 0U)
+	{
+		rejected |= SAM4L_PICO_USART_GATED;
+	}
+	if ((SAM4L_PM->PM_AWEN & wake) != 0U ||
+		(SAM4L_PM->PM_IMR & PM_IMR_WAKE) != 0U || NVIC_GetPendingIRQ(PM_IRQn))
+	{
+		rejected |= SAM4L_PICO_PM_BUSY;
+	}
+	if (atomic_flag_test(&pDev->DevIntrf.bBusy) ||
+		!pDev->bTxReady || CFifoUsed(pDev->hTxFifo) != 0 ||
+		(dev->pReg->US_CSR & US_CSR_TXEMPTY) == 0U)
+	{
+		rejected |= SAM4L_PICO_TX_BUSY;
+	}
+	if (CFifoUsed(pDev->hRxFifo) != 0 ||
+		(dev->pReg->US_CSR & US_CSR_RXRDY) != 0U)
+	{
+		rejected |= SAM4L_PICO_RX_BUSY;
+	}
+	// DRDY is cleared only on a new start bit. A retained byte must
+	// not prevent arming the receiver for the next full frame.
+	picoStatus = SAM4L_PICOUART->PICOUART_SR;
+	if ((picoStatus & PICOUART_SR_DRDY) != 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_STALE_DATA;
+	}
+	if ((SAM4L_PM->PM_WCAUSE & wake) != 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_STALE_CAUSE;
+	}
+	if (rejected != 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_REJECTED | rejected;
+		Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, clocks);
+		return false;
+	}
+	// PICOUART shares PB00 directly with USART0 (SAM4L 25.5.1).
+	// Leave the pin assigned to USART0. No GPIO mux handover is needed.
+	s_Sam4lUartSleep.Config = SAM4L_PICOUART->PICOUART_CFG;
+	s_Sam4lUartSleep.Interrupts = dev->pReg->US_IMR;
+	awen = SAM4L_PM->PM_AWEN;
+	s_Sam4lUartSleep.WakeMask = awen;
+	s_Sam4lUartSleep.Clocks = clocks;
+	s_Sam4lUartSleep.bActive = true;
+	dev->pReg->US_IDR = 0xFFFFFFFFU;
+	// Keep USART0 and the shared PB00 RX input running until PICOUART
+	// has acknowledged EN. Neither pin ownership nor baud is changed.
+	SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);
+	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_EN;
+	__DSB();
+	for (i = 0; i < 100000; i++)
+	{
+		if ((SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_EN) != 0U)
+		{
+			break;
+		}
+	}
+	picoStatus = SAM4L_PICOUART->PICOUART_SR;
+	if ((picoStatus & PICOUART_SR_EN) == 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |=
+			SAM4L_PICO_REJECTED | SAM4L_PICO_ENABLE_TIMEOUT;
+		Sam4lUartResumeSleep();
+		return false;
+	}
+	if ((picoStatus & PICOUART_SR_DRDY) != 0U)
+	{
+		// Record data retained or received during activation. The
+		// PICOUART wake event is generated on a new valid frame, not
+		// by simply reading the already latched DRDY status.
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_DATA;
+	}
+	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
+	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
+	// The UART owns PICOUART's asynchronous wake selection; SystemSleep
+	// owns the shared PM WAKE interrupt. Arm only after the handover.
+	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen | wake);
+	__DSB();
+	if ((SAM4L_PM->PM_ISR & PM_ISR_WAKE) != 0U)
+	{
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_WAKE;
+	}
+	s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_PREPARED;
+	return true;
+}
+
+// Sleep is selected by SystemSleep, not the UART. Suspend only idle
+// non-wake USARTs when the system is entering a deep resumable mode.
+// Keep DeviceIntrf reference counts, FIFOs and baud registers unchanged.
+bool Sam4lUartSuspendSleep(void)
+{
+	SAM4L_UARTDEV *dev;
+	UARTDev_t *pDev;
+	PdcaChannel *chan;
+
+	for (int i = 0; i < s_NbSam4lUartDev; i++)
+	{
+		dev = &s_Sam4lUartDev[i];
+		pDev = dev->pUartDev;
+		if (pDev == NULL || dev->bWake ||
+			atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+			(SAM4L_PM->PM_PBAMASK & dev->PbaMask) == 0U)
+		{
+			continue;
+		}
+		if (atomic_flag_test(&pDev->DevIntrf.bBusy) ||
+			dev->bSleepPaused || !pDev->bTxReady ||
+			CFifoUsed(pDev->hTxFifo) != 0 ||
+			(dev->pReg->US_CSR & (US_CSR_TXEMPTY | US_CSR_RXRDY)) != US_CSR_TXEMPTY)
+		{
+			return false;
+		}
+		if (pDev->DevIntrf.bDma)
+		{
+			chan = &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_PDCA_TX_CHAN(i)];
+			if ((chan->PDCA_SR & PDCA_SR_TEN) != 0U || chan->PDCA_TCR != 0U)
+			{
+				return false;
+			}
+		}
+	}
+	for (int i = 0; i < s_NbSam4lUartDev; i++)
+	{
+		dev = &s_Sam4lUartDev[i];
+		pDev = dev->pUartDev;
+		if (pDev == NULL || dev->bWake ||
+			atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
+			(SAM4L_PM->PM_PBAMASK & dev->PbaMask) == 0U)
+		{
+			continue;
+		}
+		dev->SleepInterrupts = dev->pReg->US_IMR;
+		dev->pReg->US_IDR = 0xFFFFFFFFU;
+		dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
+		Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK,
+			SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
+		dev->bSleepPaused = true;
+	}
+	return true;
+}
+
+void Sam4lUartResumeSleep(void)
+{
+	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[0];
+	UARTDev_t *pDev = dev->pUartDev;
+	uint32_t wake = 1UL << PM_AWEN_PICOUART;
+	uint32_t pmStatus;
+	uint32_t pmCause;
+	uint32_t picoStatus;
+	uint8_t data;
+	uint8_t *p;
+	int i;
+	bool received = false;
+
+	if (s_Sam4lUartSleep.bActive)
+	{
+		pmStatus = SAM4L_PM->PM_ISR;
+		pmCause = SAM4L_PM->PM_WCAUSE;
+		picoStatus = SAM4L_PICOUART->PICOUART_SR;
+		data = (picoStatus & PICOUART_SR_DRDY) != 0U ?
+			(uint8_t)SAM4L_PICOUART->PICOUART_RHR : 0U;
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_RESUMED |
+			((uint32_t)data << 24);
+		if ((pmStatus & PM_ISR_WAKE) != 0U)
+		{
+			s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_PM_WAKE;
+		}
+		if ((pmCause & wake) != 0U)
+		{
+			s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_PM_CAUSE;
+		}
+		if ((picoStatus & PICOUART_SR_DRDY) != 0U)
+		{
+			s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_DATA_READY;
+		}
+		// A latched DRDY byte is not necessarily the current wake frame.
+		// Copy data only when PM reports a PICOUART wake event.
+		received = (s_Sam4lUartSleep.Diagnostic &
+			(SAM4L_PICO_PREPARED | SAM4L_PICO_PM_WAKE |
+			 SAM4L_PICO_PM_CAUSE | SAM4L_PICO_DATA_READY)) ==
+			(SAM4L_PICO_PREPARED | SAM4L_PICO_PM_WAKE |
+			 SAM4L_PICO_PM_CAUSE | SAM4L_PICO_DATA_READY);
+		SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
+		// Do not change CFG until the backup clock domain reports
+		// that the PICOUART receiver is disabled.
+		for (i = 0; i < 100000 &&
+			(SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_EN) != 0U; i++)
+		{
+		}
+		if ((SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_EN) == 0U)
+		{
+			SAM4L_PICOUART->PICOUART_CFG = s_Sam4lUartSleep.Config;
+		}
+		Sam4lPmWrite(&SAM4L_PM->PM_AWEN, s_Sam4lUartSleep.WakeMask);
+		Sam4lUartClockEnable(dev);
+		dev->pReg->US_CR = US_CR_RSTRX | US_CR_RSTSTA;
+		dev->pReg->US_CR = US_CR_RXEN | US_CR_TXEN;
+		dev->pReg->US_IER = s_Sam4lUartSleep.Interrupts;
+		if (received)
+		{
+			p = CFifoPut(pDev->hRxFifo);
+			if (p != NULL)
+			{
+				*p = data;
+				s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_RX_QUEUED;
+			}
+			else
+			{
+				pDev->RxDropCnt++;
+				received = false;
+			}
+		}
+		Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, s_Sam4lUartSleep.Clocks);
+		__DSB();
+		s_Sam4lUartSleep.bActive = false;
+	}
+	for (i = 0; i < s_NbSam4lUartDev; i++)
+	{
+		dev = &s_Sam4lUartDev[i];
+		if (dev->bSleepPaused)
+		{
+			Sam4lUartClockEnable(dev);
+			dev->pReg->US_CR = US_CR_RXEN | US_CR_TXEN;
+			dev->pReg->US_IER = dev->SleepInterrupts;
+			dev->bSleepPaused = false;
+		}
+	}
+	if (received && pDev != NULL && pDev->EvtCallback != NULL)
+	{
+		pDev->EvtCallback(pDev, UART_EVT_RXDATA, NULL, 0);
+	}
 }
 
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
@@ -609,6 +957,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCFG *pCfg)
 
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
+	dev->bWake = false;
+	dev->bSleepPaused = false;
+	dev->bPicoRx = devno == 0 && ((const IOPINCFG *)pCfg->pIOPinMap)[0].PortNo == IOPORTB &&
+		((const IOPINCFG *)pCfg->pIOPinMap)[0].PinNo == 0 &&
+		((const IOPINCFG *)pCfg->pIOPinMap)[0].PinOp == IOPINOP_PERIPHB;
 
 	// Pin muxing.  Caller supplies RX, TX, and optionally RTS/CTS.
 	if (pCfg->NbIOPins > 2 && pCfg->FlowControl == UART_FLWCTRL_HW)

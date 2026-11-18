@@ -16,6 +16,7 @@ matrix register layout) is in the cross-chip files.
 
 extern void Esp32SystemInit(void);
 extern void RISCV_VectorTable(void);
+bool Esp32PllClockSelect(void);
 
 #define ESP32C3_INTMTX_DISABLED_INUM    0U  //!< CPU INT 0 == "disabled" per TRM.
 
@@ -27,6 +28,9 @@ volatile uint32_t  g_Esp32C3VectorRangeError;
 void SystemInit(void)
 {
     Esp32SystemInit();
+#if defined(ESP32C3_CPU_160MHZ)
+	(void)Esp32PllClockSelect();
+#endif
 
     uintptr_t vt = (uintptr_t)RISCV_VectorTable;
     g_Esp32C3VectorBase = vt;

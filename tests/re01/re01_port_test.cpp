@@ -13,6 +13,8 @@
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 
+uint32_t SystemMicroSecLoopCnt;
+
 extern "C" void IEL0_IRQHandler();
 extern "C" void IEL1_IRQHandler();
 extern "C" void IEL2_IRQHandler();
@@ -160,7 +162,12 @@ static void pinEdgeHook(int, void *)
 static void clocks()
 {
 	SYSTEM->SCKSCR = 0;
+	SYSTEM->MSTPCRA = SYSTEM_MSTPCRA_MSTPA22_Msk;
+	MSTP->MSTPCRB = 0xffffffffU;
+	MSTP->MSTPCRC = 0xffffffffU;
+	MSTP->MSTPCRD = 0xffffffffU;
 	SYSTEM->HOCOMCR = 3;
+	*(volatile uint8_t *)&SYSTEM->OSCSF = SYSTEM_OSCSF_HOCOSF_Msk;
 	SYSTEM->SCKDIVCR = (2UL << SYSTEM_SCKDIVCR_ICK_Pos) | (3UL << SYSTEM_SCKDIVCR_PCKB_Pos);
 	FLASH->FLWT = 0x5A;
 	SystemCoreClockUpdate();
@@ -177,8 +184,39 @@ static void clocks()
 	assert(SystemPeriphClockSet(-1, 1000) == 0);
 	assert(SystemPeriphClockSet(2, 1000) == 0);
 	assert(SystemPeriphClockSet(0, 0) == 0);
-	assert(SystemPeriphClockSet(1, 1) == 0);
+	assert(SystemPeriphClockSet(1, 1) == 1000000);
+	div = SYSTEM->SCKDIVCR;
 	assert(SYSTEM->SCKDIVCR == div);
+	MSTP->MSTPCRB &= ~MSTP_MSTPCRB_MSTPB27_Msk;
+	uint32_t wait = FLASH->FLWT;
+	assert(SystemPeriphClockSet(0, 64000000) == 0);
+	assert(SYSTEM->SCKDIVCR == div && FLASH->FLWT == wait);
+	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 2000000));
+	MSTP->MSTPCRB = 0xffffffffU;
+	*(volatile uint8_t *)&SYSTEM->PWSTF = SYSTEM_PWSTF_ALLPWONM_Msk;
+	assert(SystemCoreClockSelect(OSC_TYPE_RC, 2000000));
+	assert(SystemCoreClock == 2000000 && (SYSTEM->PRCR & 0xfU) == 2);
+	SYSTEM->LOCOCR = 1;
+	SYSTEM->SOSCCR = 1;
+	assert(SystemLowFreqClockSelect(OSC_TYPE_RC, 32768));
+	assert(SYSTEM->LOCOCR == 0 && SYSTEM->SOSCCR == 1);
+	assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768));
+	assert(SYSTEM->LOCOCR == 0 && SYSTEM->SOSCCR == 0);
+	assert(!SystemLowFreqClockSelect(OSC_TYPE_TCXO, 32768));
+	SYSTEM->RSTSR0 = SYSTEM_RSTSR0_DPSRSTF_Msk;
+	SYSTEM->DPSIER0 = 15;
+	SYSTEM->DPSIER1 = 0x33;
+	SYSTEM->DPSIFR0 = 4;
+	SYSTEM->DPSIFR1 = 0x20;
+	SYSTEM->SBYCR = 0x8000;
+	SYSTEM->DPSBYCR = 0xc0;
+	SYSTEM->SNZCR = 0x80;
+	SystemInit();
+	assert(SYSTEM->DPSIER0 == 0 && SYSTEM->DPSIER1 == 0);
+	assert(SYSTEM->DPSIFR0 == 4 && SYSTEM->DPSIFR1 == 0x20);
+	assert(SYSTEM->RSTSR0 == SYSTEM_RSTSR0_DPSRSTF_Msk);
+	assert(SYSTEM->SBYCR == 0 && SYSTEM->DPSBYCR == 0x40 && SYSTEM->SNZCR == 0);
+	SYSTEM->RSTSR0 = 0;
 	SYSTEM->SCKSCR = 0;
 	SYSTEM->HOCOMCR = 2;
 	SYSTEM->SCKDIVCR = 1UL << SYSTEM_SCKDIVCR_PCKB_Pos;
@@ -278,6 +316,60 @@ static void icuAndGpio()
 	assert(*(volatile uint32_t*)(PFS_BASE + ((1 * 16 + 6) * 4)) == pfs && ICU->WUPEN == wake);
 	restore();
 	assert(countRoutes() == 0);
+	IOPinConfig(1, 5, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	assert(SystemWakePin(1, 5, IOPINSENSE_LOW_TRANSITION));
+	assert(SystemWakePin(1, 5, IOPINSENSE_HIGH_TRANSITION));
+	assert(!SystemWakePin(2, 5, IOPINSENSE_LOW_TRANSITION));
+	assert(!SystemWakePin(2, 5, IOPINSENSE_DISABLE));
+	assert(!IOPinEnableInterrupt(8, 1, 1, 5, IOPINSENSE_TOGGLE, hook, &a));
+	pfs = *(volatile uint32_t *)(PFS_BASE + (16 + 5) * 4);
+	IOPinConfig(1, 5, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinSetSense(1, 5, IOPINSENSE_TOGGLE);
+	assert(*(volatile uint32_t *)(PFS_BASE + (16 + 5) * 4) == pfs);
+	assert(SystemWakePin(1, 5, IOPINSENSE_DISABLE));
+	assert((ICU->WUPEN & (1U << 8)) == 0 && countRoutes() == 0);
+	assert(IOPinEnableInterrupt(8, 1, 1, 5, IOPINSENSE_TOGGLE, hook, &a));
+	assert(!SystemWakePin(1, 5, IOPINSENSE_LOW_TRANSITION));
+	assert(!SystemWakePin(1, 5, IOPINSENSE_DISABLE));
+	IOPinDisableInterrupt(8);
+	assert(!SystemWakePin(-1, 0, IOPINSENSE_LOW_TRANSITION));
+	assert(!SystemWakePin(1, 5, IOPINSENSE_TOGGLE));
+
+	const int deepPins[4][2] = {{4, 11}, {2, 7}, {4, 10}, {4, 9}};
+	for (unsigned i = 0; i < 4; i++)
+	{
+		int port = deepPins[i][0];
+		int pin = deepPins[i][1];
+		uint8_t other = 1U << ((i + 1) & 3);
+		SYSTEM->PRCR = 0xa509;
+		SYSTEM->DPSIER0 = other;
+		SYSTEM->DPSIEGR0 = other;
+		IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+		assert(SystemWakePin(port, pin, IOPINSENSE_LOW_TRANSITION));
+		assert(SYSTEM->DPSIER0 == (other | (1U << i)) && SYSTEM->DPSIEGR0 == other);
+		assert(SystemWakePin(port, pin, IOPINSENSE_HIGH_TRANSITION));
+		assert(SYSTEM->DPSIEGR0 == (other | (1U << i)) && SYSTEM->PRCR == 0xa509);
+		assert(SystemWakePin(port, pin, IOPINSENSE_DISABLE));
+		assert(SYSTEM->DPSIER0 == other && SYSTEM->DPSIEGR0 == other);
+		SYSTEM->DPSIER0 = 1U << i;
+		assert(!SystemWakePin(port, pin, IOPINSENSE_LOW_TRANSITION));
+		assert(!SystemWakePin(port, pin, IOPINSENSE_DISABLE));
+		assert(SYSTEM->DPSIER0 == (1U << i) && countRoutes() == 0);
+		SYSTEM->DPSIER0 = 0;
+		assert(SystemWakePin(port, pin, IOPINSENSE_LOW_TRANSITION));
+		IOPinDisable(port, pin);
+		assert(SYSTEM->DPSIER0 == 0 && countRoutes() == 0);
+	}
+	SYSTEM->DPSIEGR0 = 0;
+	SYSTEM->SYOCDCR = SYSTEM_SYOCDCR_DBGEN_Msk;
+	assert(!SystemWakePin(4, 11, IOPINSENSE_LOW_TRANSITION));
+	assert(!SystemWakePin(2, 7, IOPINSENSE_LOW_TRANSITION));
+	SYSTEM->SYOCDCR = 0;
+	IOPinConfig(1, 6, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	assert(SystemWakePin(1, 6, IOPINSENSE_LOW_TRANSITION));
+	assert(SYSTEM->DPSIER0 == 0);
+	assert(SystemWakePin(1, 6, IOPINSENSE_DISABLE));
+
 }
 
 static uint32_t timerEvents[RE01_TIMER_MAXCNT];
@@ -857,6 +949,7 @@ static void busRates()
 int main()
 {
 	assert(mmap((void*)0x40000000, 0xA0000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
+	assert(mmap((void*)0x407fe000, 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
 	assert(mmap((void*)FLASH_BASE, 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
 	clocks(); icuAndGpio(); timers(); gptTimers(); uarts(); busRates();
 	puts("RE01 clock, ICU, GPIO, timer, UART, I2C and SPI rate regression checks passed");

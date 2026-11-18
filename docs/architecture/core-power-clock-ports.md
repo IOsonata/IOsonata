@@ -1,5 +1,137 @@
 # MCU core power and clock ports
 
+## SAM4L implementation and board evidence, November 17
+
+The SAM4L generic power/clock entry points are implemented for SAM4LC and
+SAM4LS. This states source coverage, not validation of every hardware mode.
+
+| Operation | Implementation |
+| --- | --- |
+| Core source | RC1M, RCFAST 4/8/12 MHz through DFLL; RC80M; OSC0 crystal/bypass with PLL where a valid ratio exists |
+| Low-frequency source | RC32K, 32768 Hz crystal, external clock; active consumers prevent unsafe changes |
+| Peripheral clocks | PBA/PBB/PBC/PBD dividers; PBB remains equal to CPU/HSB |
+| Delay factors | Refreshed after core clock changes for both delay loops |
+| SystemOscInit | Linkable no-op, matching SAMD; SystemInit/selectors perform configuration and crystal load capacitance is not programmable |
+| SystemSleep | SLEEP0 for ordinary IRQs, RETENTION for asynchronous EIC/AST, WAIT for configured PM.AWEN peripheral sources |
+| SystemPowerOff | Backup, exited by reset; EIC and AST wake routes supported |
+| Reset/retention | Reset and wake reason decoding; four BSCIF backup registers; SRAM retention in Backup is physically unavailable |
+| Watchdog | Disabled at startup; applications own enabling it |
+
+AST previously enabled IMR without WER. The timer driver now synchronizes WER
+writes, enables overflow/alarm wake while running, removes wake requests when
+stopped, and clears wake flags through SCR. Single-shot completion disables the
+alarm wake before delivering the callback. Setup clears retained wake state
+and enables the BPM AST Backup route while preserving other routes. The
+32000 Hz RC32K request alias now reports its actual nominal 32768 Hz source.
+
+The maintainer's latest SAM4LC ClockDemo run ended with zero failures: RC4/RC12,
+PBA divisors 1/2/4/1, both delay functions, 25 timer interrupts per interval,
+six OLED1 BUTTON1 RETENTION wakes, CPU/APB/LF descriptors, UART RX and APB
+restoration passed. The 250 ms delays were approximately 251194..251600 us.
+Earlier eight consecutive Backup pin wakes advanced the retained count 1..9.
+ClockDisplayDemo and every interrupt/DMA combination of LCDConsoleDisplayDemo
+also passed on this board.
+
+Validation for this update: all 124 SAM4LC and 128 SAM4LS library sources
+compiled in Debug and Release, followed by relinks after the final edits.
+Sixteen SAM4L demo links passed: ClockDemo, button/timer PowerOffDemo on both
+families and both display demos on SAM4LC. The edited C++ sources compile with
+GNU++11. All fifteen public clock/power functions have one definition in each
+archive. Existing timer, clock and power register tests passed. Shared demo
+rebuilds also passed on D11, D21, C3 and C6.
+
+The subsequent ClockDemo AST run ended with zero failures. The visible automatic
+wake intervals were 1000000 us, with timer wake interrupts, restored clocks,
+both delay functions and UART RX passing. PowerOffDemo then completed four
+consecutive AST Backup wakes: reset reason 0x1000 and retained counts 1 through 5.
+
+TWIS0/TWIS1 now configure their PM clock and asynchronous wake requests through
+the I2C slave enable/disable lifecycle. The existing I2CSlaveDemo and D21
+I2CMasterDemo have a selectable address-match sleep profile; see
+[the test procedure](../../exemples/i2c/sleepwalking.md). Hardware execution is
+deferred. This implements TWIS SleepWalking, not ADC/PEVC or other autonomous
+peripheral paths. External oscillators, SAM4LS hardware and sleep currents
+remain unmeasured.
+
+## November 17 implementation review
+
+SAMD11, SAMD21, SAM4L, ESP32-C3 and ESP32-C6 are not marked fully complete.
+Earlier demo passes establish the configurations exercised, not every clock
+source, divider or power mode. The remaining items below must not be hidden by
+a successful build or by reclassifying a missing implementation as unsupported
+hardware.
+
+This revision adds:
+
+- SAMD11/21 generic-clock divider selection, including each generator's divider
+  width, binary division, active-consumer checks and CPU delay-factor updates.
+  ClockDemo now selects OSC8M again on D11 and checks 1/2/4/1 dividers, timer
+  interrupts and both delay functions at each rate on both targets.
+- SAM4L peripheral-clock setters for PBA/PBB/PBC/PBD. Rates cannot exceed the
+  CPU rate; PBB must equal the CPU rate because it also supplies AHB modules.
+  ClockDemo checks the PBA dividers with the UART stopped and reinitialized.
+- SAM4L SystemSleep selects RETENTION for asynchronous EIC/AST wake, WAIT for
+  enabled PM SleepWalking wake sources, and SLEEP0 for ordinary interrupt wake.
+  AST wake detection uses WER, independently of the interrupt mask. The caller
+  still owns configuring and clearing the peripheral wake event. BPM, SCR,
+  clock gates, PM interrupt ownership and the caller's interrupt mask are kept.
+- C3 RTC fast SRAM (8 KB) and C6 LP SRAM (16 KB) retention requests, with a
+  `.rtc.noinit` linker section excluded from normal startup initialization.
+  HP SRAM retention and independently powering off RTC/LP SRAM are not claimed.
+  ROM storage words remain reserved; they are not application retention registers.
+- C3/C6 PowerOffDemo checks retained data after pin wake, using the region above
+  the first 1 KB reserved for wake-stub use. This demo region must not also hold
+  application retained objects or LP firmware.
+- C6 RC32K selection is removed following Espressif advisory AR2024-011. RC
+  selection uses RC_SLOW. Sleep keeps the actual selected LP clock powered,
+  using the hardware mux rather than inferring it from a frequency descriptor.
+
+ClockDemo now prints its small set of integer/string messages directly through
+UART; LCDConsoleDisplayDemo remains the display/syslog demonstration. The
+expanded D11 ClockDemo uses 13,364 bytes of flash and 1,208 bytes of BSS in the
+current size-optimized LTO build. Sleep checks on D11, D21 and SAM4LC now use
+a peripheral-clock divisor of four and restore the original rate afterward.
+
+Debug and Release library-source builds and ClockDemo/PowerOffDemo links passed
+for D11, D21, SAM4LC, SAM4LS, C3 and C6. Both display demos also linked for D11
+and D21. These are GNU command-line builds derived from the managed project
+source lists; no new board execution was performed here.
+
+Hardware validation still required for this revision:
+
+- D11/D21 changed dividers, actual D11 source selection, and sleep at reduced
+  clock rates, including UART receive after resume.
+- SAM4LC TWIS WAIT/SleepWalking. AST, PBA dividers and OLED1 RETENTION
+  wake have the passing board results recorded above.
+- C3/C6 retained SRAM across repeated Deep-sleep pin wakes.
+- Sleep-current measurements and external oscillator configurations.
+
+The subsequent C3/C6 PLL implementation extends the existing 160 MHz build
+option. Define ESP32C3_CPU_160MHZ or ESP32C6_CPU_160MHZ in both the library and
+ClockDemo compiler settings, then clean rebuild both. Startup initializes PLL
+when required, and SystemCoreClockSelect(OSC_TYPE_XTAL, 40000000) returns to its
+160 MHz CPU output after RC_FAST. Without the option, XTAL still selects 40 MHz.
+The generic oscillator API is unchanged; it is not an arbitrary CPU-rate setter.
+
+PLL configuration and settling execute from instruction RAM. C3 uses its ROM
+analog-I2C routines and checks PLL lock; C6 uses the vendor analog-I2C workaround
+and checks calibration completion. Failed setup keeps the previous CPU source.
+An already running PLL is reused. C6 limits the MSPI PLL input to 80 MHz and
+keeps AHB at 40 MHz when switching from a direct source. Application peripherals
+must be stopped before runtime source changes, as in the direct-clock profile.
+C3 APB is fixed at 80 MHz under PLL, so that profile does not request fractional
+APB rates; the direct profile exercises the shared CPU/APB divider.
+
+Default and 160 MHz profiles compile and link in Debug and Release. PLL startup,
+RC-to-PLL return and sleep/resume at 160 MHz still require board execution.
+Earlier sections describing PLL startup as unimplemented refer to prior code.
+These additions are not a claim of complete hardware validation.
+
+The maintainer also confirmed SAM4LC LCDConsoleDisplayDemo in all four
+interrupt/DMA combinations and ClockDisplayDemo. Those results apply to the
+existing display configuration and do not validate the new sleep modes.
+
+
 The public functions are in `include/coredev/system_core_clock.h`.
 Implementations belong to the MCU library. Applications use the same functions
 and `exemples/misc/power_off_demo.cpp`, with board pins in `board.h`.
@@ -23,12 +155,157 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; no SRAM retention | Review runtime selection and oscillator initialization |
-| SAMD | Missing | Audit existing selectors and low-power clocks |
-| LPC11xx, LPC17xx, LPC546xx | Missing | Audit existing selectors and peripheral clocks |
-| RA4M1, RE01, R9A02 | Missing | Audit existing selectors and protected register writes |
-| ESP32 C-series | Missing | Audit SYSTEM/PCR variants and LP clock domains |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0/WAIT/RETENTION resume implemented | SAM4LC clock/delay checks and eight consecutive Backup wakes passed; three Release SLEEP0 cycles passed with clocks, delays, timer IRQs and UART RX; six EIC RETENTION cycles and PBA dividers passed; AST RETENTION and four Backup timer wakes passed; TWIS WAIT hardware validation deferred |
+| SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; D11 SW0 and D21 SW0/OLED1 BUTTON1 repeated resume passed | D21 clocks, delays, timer IRQs, UART RX and SRAM samples passed; full SRAM continuity, LF switching and sleep current remain unverified |
+| LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
+| LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |
+| LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Runtime peripheral/PLL ownership and clock decoding checked; hardware pending |
+| RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
+| R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
+| RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
+| ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; optional 160 MHz PLL profile and RTC/LP SRAM retention implemented, hardware validation pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
+
+## SAM D11/D21 low-power work (0.14, unmerged)
+
+The consolidated `review_system_power_014` branch contains
+`SystemSleep()` (resume execution after Standby), EIC asynchronous wake
+configuration, and the PM RCAUSE-based `SystemResetReason()` convenience
+function. The shared `PowerOffDemo` selects the resumable path for SAMD
+without changing existing reset-on-wake power-off behavior on other MCUs.
+No separate `ResetReasonDemo` is retained in the consolidated branch.
+
+Maintainer-reported reset-cause tests passed 128/128 combinations for
+each MCU, and Arm GNU source compilation passed for D11/D21 including
+the Standby source. On November 15, 2026, the maintainer reported five
+consecutive SAMD11 SW0/PA14 Standby resumes, with counts 0x00000001 through
+0x00000005 and another Standby entry. Subsequent D11 runs also passed the
+128-byte static and 128-byte stack SRAM samples across five wakeups. This
+is a sample of live RAM continuity, not a full SRAM test. SAMD21 subsequently
+passed five Standby wakes with the same static and stack samples. Full SRAM
+testing and sleep-current measurements remain pending.
+
+On November 17, SAMD21 ClockDemo passed three Standby cycles with SW0/PA15
+and another three with OLED1 BUTTON1/PB04 on EXT1. CPU/APB reporting remained
+48 MHz; the LF descriptor remained 32768 Hz. Both 250 ms delay checks measured
+about 251 ms at the actual 750 kHz timer rate, with 25 interrupts. UART RX
+passed before sleep and after every wake. LF switching was skipped.
+ClockDisplayDemo output worked, and LCDConsoleDisplayDemo display syslog
+passed all four combinations of SPI interrupt and DMA settings. These results
+do not establish other CPU/APB rates or physical oscillator accuracy.
+
+On November 17, 2026, ClockDemo at `2de35f281` passed three OSC8M-reference
+selections at 48 MHz. The shared fixed-point delay implementation measured
+250094 us for msDelay(250) and 250107 us for nsDelay(250000000), with 25
+interrupts each and zero failures. Short nanosecond-delay accuracy is not
+established by this long-interval check. ClockDemo now provides a selectable
+SW0 Standby run that repeats clock, delay and timer checks after three wakes;
+that combined run at `e017243bc` passed all three wakes with zero failures.
+CPU/APB and LF descriptor checks passed. Post-wake msDelay measured
+250097-250103 us and nsDelay 250108-250112 us, with 25 interrupts per sample.
+A separate PowerOffDemo run passed five wakes with both 128-byte SRAM samples.
+The run at `d11b58001` also passed all four polling UART receive prompts:
+one before sleep and one after each of three SW0 wakes. Baseline msDelay
+measured 250093 us and nsDelay 250107 us; post-wake measurements were
+250103-250104 us and 250114-250115 us respectively. Every sample had 25
+interrupts. CPU/APB clocks, LF descriptors and APB restoration passed, with
+zero failures. UART interrupt/DMA receive modes were not exercised.
+
+SAMD runtime clock selection returns the clock setup result. A failed
+core-clock change attempts the same OSC8M fallback used at startup, updates
+`SystemCoreClock` from the registers and returns false. Low-frequency
+selection returns false when oscillator startup or generator synchronization
+fails. Repeating the same request executes setup again, so a saved oscillator
+descriptor cannot hide a previous failure. The descriptors retain the requested
+configuration; a failed operation does not promise to restore the previous
+clock tree. Frequency queries return zero for an oscillator that is not ready,
+a disabled or unlocked DPLL, an unlocked closed-loop DFLL, or a failed GCLK
+register read. USB recovery retains its nominal frequency before USB lock.
+OSC8M does not require OSC8MRDY when already enabled, preserving the D11
+startup behavior observed on hardware. Channel and generator reads share the
+same bounded synchronization sequence.
+
+Disabling the last EIC user releases its generic-clock channel after successful
+synchronization. Interrupt, event, wake, NMI and sense users are checked before
+stopping the shared controller. SW0 NMI wake polarity can be changed after
+initial configuration. Failed wake/event reconfiguration retains ownership
+until the line configuration succeeds, allowing a retry. Standby entry
+continues to preserve the existing NMI/IRQ pending-state handling.
+
+The caller must stop and release affected clock consumers before either
+selector, including a repeated request. Under the interrupt mask, both selectors
+now refuse enabled watchdog, RTC, EIC, USB or CRC operation, armed or active
+DMA channels, pending DMA completions, allocated
+peripheral generic-clock channels, and enabled clock outputs. A gated register
+interface or a generic-clock synchronization timeout also causes refusal.
+Watchdog state is only read; clock selection never enables or disables it.
+
+Core selection rebuilds the clock tree, including the low-frequency generator,
+and refuses enabled application generators beyond the three system generators.
+Low-frequency selection refuses a running DFLL, a DPLL using XOSC32K or
+generator 1, and other generators using OSC32K, XOSC32K or generator 1. A DPLL
+using XOSC or generator 2 on OSC8M can continue. These checks are conservative:
+USB-recovery DFLL operation and peripheral channels on unrelated sources also
+block low-frequency changes. The GCLK inspection writes only register selector
+IDs, without changing channel or generator configuration.
+
+Stopped RTC, TC and TCC timers may retain their generic-clock connections
+across selection. Every counter sharing the channel must have ENABLE and
+SWRST clear and no synchronization pending. TC/TCC register bus gates are
+opened temporarily for inspection and restored before returning; counter
+configuration, pending flags and generic-clock connections are preserved.
+A running shared-clock peer blocks selection even if its register bus was gated.
+
+Timer Enable refuses a source frequency different from its cached BaseFreq.
+After a successful clock change, call Frequency to select a rate using the new
+source. This existing operation resets the counter, recalculates active trigger
+periods and starts it. A missing source or failed reconfiguration returns zero.
+A stop, setup, reset or start failure invalidates the cached source frequency,
+so Enable refuses partial configuration even when the source is unchanged.
+A successful Frequency retry restores the cached value. This does not claim
+that hardware stopped when a stop synchronization failed; clock selection still
+checks the counter registers before allowing a change. The final RTC read
+synchronization after start or stop is also checked: failure suppresses timer
+interrupt dispatch, invalidates the saved frequency and requires reconfiguration.
+The period calculation uses an aligned local value before assigning the packed
+64-bit trigger field. An unchanged source allows normal Disable/Enable resume.
+
+DMA initialization leaves the controller enabled, but that
+alone no longer blocks selection: every channel must be disabled, with no busy
+or pending transfer, active arbitration level, completion awaiting its ISR, or
+reset in progress. The inspection preserves CHID, descriptors and interrupt
+flags. An idle DMA allocation can be reused after clock selection once its
+peripheral is reconfigured. SysTick and scheduler
+retiming remain the application's responsibility; reading SysTick CTRL here
+would clear COUNTFLAG. The refusal checks do not retime peripheral drivers.
+
+Validation with Arm GNU 15.2.1:
+
+- Complete managed library source sets compile in Debug and Release:
+  239/239 sources for D11 and 317/317 for D21.
+- PowerOffDemo, UartPrbsTxTest and UartLoopback link for both targets and
+  configurations. D21 TimerDemo and every D11 timer-family/runtime selection
+  link, including the native and LTO checks.
+- D11 LCDConsoleDisplayDemo fits all four SPI modes in Debug and Release:
+  polling 14,968 flash bytes, interrupt-only 15,520, DMA-only 15,932, and
+  DMA plus interrupts 16,380 (four bytes free). Equivalent 32-bit clock
+  arithmetic saves 564 bytes and removes the unused 64-bit division routine.
+  The DMA images still omit register-driven SPI transfers and unused UART.
+- ClockDisplayDemo uses 16,308 bytes of flash and 2,892 bytes of static RAM,
+  leaving 76 bytes of flash free. Its unused timer and transport checks pass.
+- Core and low-frequency selector calls link against both target libraries.
+- Existing UART, SPI, reset-reason, timer and Standby checks pass. The timer
+  model includes failed final RTC synchronization after both start and stop.
+- Temporary D11/D21 register checks at O0 and O2 cover clock readiness,
+  failed GCLK reads, shared timer peers, all DMA channels, EIC last-user
+  release, failed release/retry and SW0 polarity changes. Peripheral registers
+  and synchronization are modeled; these are not hardware measurements.
+
+D11 clock re-selection, repeated SW0 wake, delay scaling, timer interrupts
+and polling UART operation passed as recorded above. Oscillator failure
+recovery, D21 wake, full SRAM continuity and sleep-current measurements remain
+pending. The D11 runs do not establish arbitrary CPU/APB rate changes or
+peripheral clock-ownership behavior under concurrent transfers.
 
 ## STM32WBA power port (0.14)
 
@@ -155,6 +432,16 @@ syntax checks and Eclipse source-link checks. These do not measure power, execut
 a target firmware image, or validate physical wakeup. Those checks remain to be
 performed on hardware.
 
+Arm GCC 15.2.1 target checks passed on November 15, 2026:
+
+- `python3 tests/microchip/compile_power.py`: all six SAM4E variants compile
+  with the production CMSIS headers; every typed peripheral address is checked.
+- `python3 tests/sam4e/build_examples.py`: SAM4E16E Blinky, UartRetargetDemo
+  and UartPrbsTxTest compile and link in Debug and Release (six builds).
+  The check uses selected library sources and the managed projects' source
+  links, defines and linker scripts. It verifies that each image includes the
+  SAM4E clock and reset implementations. It does not run IOcomposer or hardware.
+
 Main-clock selection in `system_sam4e.c` switches MCK to SLCK before changing
 MAINCK or PLLA. Prescaler and source writes are separate and each waits for
 MCKRDY. All ready waits are bounded. A failed oscillator or PLL start leaves
@@ -181,12 +468,125 @@ See datasheet sections 28, 29 and 46 for the clock tree and electrical limits.
 
 ## SAM4L
 
+SAM4LC ClockDemo rerun passed all three RC4/RC12 selection cycles with readable
+UART output. CPU/APB measurements were about 44.8 MHz with RC4 and 39.64 MHz
+with RC12. Both 250 ms delays measured about 253420 us with 25 interrupts,
+within the demo's 2 percent tolerance; the final result was zero failures.
+The earlier SystemSleep implementation used SLEEP0, preserving BPM mode, SCR,
+PBD clock gates and the caller's interrupt mask. Entry clears RET/BKUP and
+SLEEPDEEP/SLEEPONEXIT, and returns without sleeping if VREG is not ready.
+Peripherals retain their running clocks; enabled interrupts wake the CPU.
+That tested revision did not implement WAIT or RETENTION. Its SAM4LC ClockDemo selected
+OLED1 BUTTON1/PC06 through GPIO interrupt group 8 and checks the wake callback,
+clocks, both delays, timer IRQs and UART RX across three cycles. The Release
+retest passed all checks with zero failures. Its 1260164 Hz timer measured
+251320 to 251351 us for 250 ms delays, with 25 interrupts before and after
+sleep. All four UART RX prompts passed. Backup wake continues to use the
+separate EIC route.
+
+SAM4LC PowerOffDemo was clean-rebuilt and retested on November 17: eight
+consecutive pin wakes reported reset reason 0x100, and the retained start
+count advanced from 1 to 9. The intermittent failure did not recur in that
+run. This validates the tested EIC8 wake and start-count retention; it does
+not cover all backup registers or measure Backup current.
+
+The SAM4LCxC PowerOffDemo now selects OLED1 BUTTON1 on EXT2 (PC06 / EIC8) for
+Backup wake. Hardware confirmed one BUTTON1 wake and retained start count
+advancing from 1 to 2. The following re-arm exposed a stale ownership check:
+EIC remained enabled across Backup but its SRAM flag was cleared. Wake-line
+ownership now follows the retained Backup pin routing. Wake setup also enables
+the EIC peripheral interrupt. The clean rebuild results above confirm repeated
+wake with these corrections.
+
+SAM4LC ClockDemo hardware results on November 17 exposed UART corruption with
+RCFAST 4 MHz selected and incorrect delay calibration: 250 ms measured as
+205823 us through `msDelay` and 586699 us through `nsDelay`. The SAM4L port now
+uses 14-cycle and 3-cycle loop factors, respectively, refreshed from the CPU
+frequency at startup and after clock updates. The later Release run exposed
+the incorrect 13-cycle microsecond factor; fixed loop alignment alone did
+not correct it. The 14-cycle factor passed the hardware retest above.
+ClockDemo also acquires and stops AST before selecting clocks because AST
+can survive reset after ClockDisplayDemo. The generic ARM delay loops use
+fixed alignment without MCU-specific conditionals.
+
+The DFLL output is measured with FREQM against the configured CLK32K reference
+before selecting it. `SystemCoreClockGet` and `SystemPeriphClockGet` use this
+measured rate with their hardware dividers. UART already calculates its baud
+rate from `SystemPeriphClockGet(0)`; no UART-specific clock correction is used.
+Measurement accuracy depends on the low-frequency reference. An internal
+RC32K reference does not provide crystal accuracy. An active FREQM user blocks
+core-clock changes. A failed measurement reports failure instead of accepting
+the nominal DFLL frequency.
+
+SAM4LC/SAM4LS Debug and Release ClockDemo and PowerOffDemo links pass, as do
+existing SAM4L clock and power host checks. The SAM4LC hardware rerun above confirms UART output and delay timing.
+SAM4LS hardware validation remains pending.
+
 `system_power_sam4l.cpp` implements reset reasons, Backup entry, EIC wake pins
 and four 32-bit backup registers. Backup powers down both SRAM banks, so
 `SystemRamRetain` returns false. Ordinary Retention sleep is not used for
 `SystemPowerOff`, since it resumes execution instead of resetting the core.
 Stop DMA and peripheral transfers before calling power off. Existing AST and
 other backup wake enables are preserved; their drivers own their configuration.
+
+SAM4L startup leaves the watchdog disabled; applications enable it for their
+own use case. Runtime core-clock selection preserves that application choice.
+Low-frequency clock selection returns false on an oscillator-ready timeout,
+restores the incoming interrupt mask, and updates the oscillator descriptor
+only after success. Repeating the same request checks readiness again.
+The descriptor records the last successful selection, not a measurement of
+clock health. A failed external-mode change may leave that oscillator stopped.
+Startup still halts when its required clock cannot be established. Runtime
+main-clock selection now returns false on oscillator, PLL, DFLL, divider or
+flash setup failure and attempts to leave the CPU on RCSYS. The clock getter
+reports the register-selected source and divider after the attempt. A failed
+hardware switch cannot be treated as a confirmed stable clock.
+
+Runtime selection preserves the watchdog, low-frequency clock, cache settings
+and voltage scale. It chooses dividers within the existing voltage scale
+instead of requesting a new power transition. Startup retains its checked
+power transition in SRAM and stops if its required clock setup fails.
+The caller must still stop clock consumers before changing the main clock
+and reconfigure their rates afterward. Runtime changes are refused while a
+UART, SPI or I2C peripheral clock is enabled, USB is enabled (including suspended USB), or any PDCA channel is
+enabled. USB or PDCA with its HSB clock enabled but register clock gated is
+also refused. Application generic clocks must be disabled; GCLK0 remains the
+system DFLL reference, and GCLK7 is treated as system-owned only when
+`bUSBClk` is set and USB is disabled. Refusal leaves hardware registers and
+oscillator descriptors untouched and restores the incoming interrupt mask.
+
+Enabled analog, audio, LCD and other PBA peripheral clock gates also refuse
+main-clock changes. The AST must be stopped with no synchronization pending.
+For TC timers managed by IOsonata, the timer port reports running/unhealthy
+state without reading TC status, so rollover and compare flags are preserved.
+A TC block with no IOsonata timer owner is refused while its PBA clock is on.
+Applications using TC registers directly must stop and gate that block before
+changing the clock; mixing direct channel control with Timer objects in the
+same block is not covered by the ownership query.
+
+Disable every active timer before changing the clock. After a successful
+change, TC `SetFrequency` reads the current PBA frequency and recalculates its
+divider and trigger periods. It resets and starts the counter as before. The
+optional timer query does not pull timer drivers into a clock-only image.
+Core SysTick/scheduler timing remains the application's responsibility.
+Low-frequency selection refuses a running or synchronizing AST, enabled
+PICOUART, an LF-selected watchdog, enabled LCD/CATB clock gates, an active
+frequency measurement, or any generic clock using OSC32K, RC32K or the 1 kHz
+output. Both sampled brownout monitors are conservatively treated as busy;
+continuous brownout detection and a watchdog using RCSYS may remain enabled.
+The selector does not disable or reconfigure these users.
+
+The BPM/BSCIF, AST, WDT, PICOUART, SCIF and FREQM register clocks must be
+accessible for these checks. If one is gated, the request is refused rather
+than temporarily enabling clocks or assuming its peripheral is stopped.
+These gates are enabled by the reset configuration. Refused calls preserve
+all registers, pending flags, oscillator descriptors and the interrupt mask.
+After a permitted source change, AST SetFrequency refreshes its source rate
+before recalculating its prescaler and periods.
+
+Repeating a request rechecks the hardware setup; a matching descriptor alone
+does not report success.
+Run `python3 tests/sam4l/run_clock.py` for the Linux register-model checks.
 
 Wake pins use asynchronous high/low level detection through the backup mux.
 Configure the selected pin as a GPIO input first. Toggle detection is not
@@ -214,5 +614,807 @@ Run `python3 tests/sam4l/run_power.py`. It checks production headers for all
 package/family combinations at O0 and O2, and checks both Eclipse library links.
 These are not Arm firmware builds or hardware power/wakeup validation.
 
+Arm GCC 15.2.1 also compiled the power and clock sources for all 18 SAM4L
+variants with `python3 tests/microchip/compile_power.py`. The SAM4LS8C
+peripheral check linked 20 examples in each of Debug and Release, including
+UsbCdcLoopbackTaktOS, using TaktOS commit
+`86002a6c3fee280ac0e978283919630f99e3b53d` from
+[IOsonata/TaktOS](https://github.com/IOsonata/TaktOS). Run it with
+`python3 tests/sam4l/peripheral_build_test.py --taktos ../TaktOS`.
+These 40 builds use selected library sources; hardware execution is unverified.
+The 18-variant compilation and all 40 example links passed again after the
+runtime failure-handling change. The existing clock register checks also passed
+for SAM4LC8C and SAM4LS8C at O0 and O2, including failed oscillator/PLL/DFLL
+startup, retry, flash readiness, interrupt-mask restoration and WDT preservation.
+The low-frequency ownership checks cover every generic-clock index and verify
+register preservation on refusal. The timer model checks AST and TC retiming.
+All seven TimerDemo selections also compile and link in Debug and Release.
+
 Reference: [Microchip SAM4L datasheet 42023H](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/DataSheets/Atmel-42023-ARM-Microcontroller-ATSAM4L-Low-Power-LCD_Datasheet.pdf),
 sections 6.1.3, 10.7.15, 11.5, 11.6.9..11, 12.7.18 and 21.6.
+
+## LPC11Uxx power and clock port
+
+The LPC11U35 library implements the existing generic power functions using
+UM10462 chapters 3 and 4. `SystemPowerOff` enters Deep power-down and discards
+pending CPU interrupts. PIO0_16 wakes the chip on a falling edge and starts a
+reset. The pin needs an external pull-up; the RESET pin is inactive in this
+mode. `SystemWakePin` accepts only that pin and polarity. It returns false for
+disable because the hardware wake input cannot be disabled. Applications must
+not set the write-once PCON NODPD bit if they intend to use Deep power-down.
+
+`SystemResetReason` caches the first read and clears the recorded flags.
+DPDFLAG identifies wakeup rather than a cold power-on, even though wakeup
+internally generates POR. Four full-width GPREG words survive Deep power-down
+and software reset. GPREG4 is left to the application because it also contains
+wake-pin hysteresis control. SRAM retention in Deep power-down is unsupported.
+`SystemSleep` currently uses ordinary Sleep, preserves RAM and peripheral
+clocks, and wakes from an enabled NVIC interrupt. Deep-sleep and Power-down
+with clock restoration are not implemented. `SystemWakePin` selects the
+Deep power-down input only; ordinary Sleep uses the normal interrupt drivers.
+
+Runtime core-clock requests refuse enabled timer, SSP, UART, ADC, USB and WWDT
+clock gates, an enabled I2C controller, or CLKOUT. Stopped timers whose gates
+remain enabled are conservatively refused. These checks apply to the legacy
+setters as well as `SystemCoreClockSelect`; startup configures the clocks before
+drivers take ownership. Applications must stop and reconfigure SysTick and
+scheduler timing around an accepted runtime change. Clock decoding reports
+zero for powered-down sources or an unlocked PLL. The existing fixed 48 MHz
+CPU target and bounded PLL recovery to 12 MHz IRC remain unchanged.
+
+`SystemLowFreqClockSelect` selects the closest nominal watchdog-oscillator
+rate for an RC request. Actual nominal frequency and 40-percent oscillator
+accuracy are recorded in `g_McuOsc.LowPwrOsc`. A running WWDT, its enabled bus
+clock, a main-clock WDO selection, or a WDO CLKOUT selection prevents changing
+it. This does not enable or feed the watchdog. The default LF descriptor has
+frequency zero, so startup leaves WDO unconfigured; an application-supplied
+nonzero LF descriptor is applied during startup.
+
+The managed `PowerOffDemo` project links the existing generic demo, with UART
+DMA disabled for LPC11U35. Validation includes all 115 enabled library source
+files in Debug and Release, TimerDemo, UART PRBS TX and loopback, SPI loopback,
+I2CScan and PowerOffDemo links in both configurations, existing clock tests in
+C and C++, and temporary power-register checks at O0/O2. These are compilation
+and register-model results; sleep entry, wake reset, retention and current draw
+still need hardware validation. D11 remains the current hardware test target.
+
+## LPC17xx power and clock port
+
+The LPC1769 managed library includes reset reporting, Deep Power-down,
+ordinary interrupt-resumable Sleep and five full-width RTC backup registers.
+RTC register access temporarily enables PCONP.PCRTC and restores the previous
+gate state. Backup contents survive software reset and Deep Power-down while
+the VBAT domain remains supplied. SRAM cannot be retained in Deep Power-down.
+The watchdog is neither enabled nor fed by these functions.
+
+Deep Power-down wakes through the RESET pin or an application-configured RTC
+interrupt. `SystemPowerOff` preserves the RTC interrupt enable and pending
+state, stops SysTick, and disables other CPU interrupts before entry. The
+application must arm a future RTC event and handle any already-pending event
+before entering. `SystemWakePin` returns false because there is no selectable
+GPIO wake input for this mode. `SystemSleep` uses ordinary Sleep and enabled
+NVIC interrupts; Deep Sleep and Power-down with PLL restoration are not yet
+implemented.
+
+`SystemResetReason` caches and clears RSID and DPDFLAG on the first call.
+It reports power-on/brownout, external reset and watchdog reset. After Deep
+Power-down it reports reset-pin wake when EXTR is set, otherwise RTC wake when
+an RTC interrupt flag is present. It leaves RTC interrupt flags untouched.
+RSID has no dedicated software-reset or lockup flag, so these are not inferred.
+Read the reset reason before application RTC initialization clears wake flags.
+With a separately supplied VBAT domain, retention and DPDFLAG can outlive a
+loss of core supply; the registers do not identify every such power sequence.
+
+Runtime core-clock changes refuse enabled peripheral gates except RTC and
+GPIO, active PLL1, CLKOUT, a PCLK-clocked running watchdog, and the DAC counter.
+The gate check is conservative: powered but idle peripherals must also be
+released. Startup configures clocks before application drivers own them.
+The divider/PLL search remains outside the interrupt lock; register changes
+and ownership checks run under the lock. The closest-frequency calculation,
+100/120 MHz device limits and bounded PLL failure handling remain in place.
+Applications must stop and reconfigure SysTick and scheduler timing around a
+runtime change. Peripheral-clock setters remain caller-controlled because
+drivers use them while configuring their own peripherals.
+
+The port refuses an oscillator-range change while MAIN feeds the CPU. Switch
+to IRC first; changing the range of an unused oscillator stops and restarts it
+with bounded ready checks. Other SCS fields are preserved. PLL1 configuration
+refuses an enabled USB peripheral. The RTC has a fixed 32768 Hz external clock;
+`SystemLowFreqClockSelect` returns false because there is no programmable LF
+source selector. This does not stop or reset the RTC.
+
+Validation covers all 124 enabled library sources in Debug and Release,
+TimerDemo, PowerOffDemo, UART PRBS TX/loopback, SPI loopback, I2CScan and the six
+USB demos in both configurations. Clock register tests cover C/C++ callers,
+LPC1758/1759/1768/1769 limits, oscillator/PLL failures and busy-user rejection.
+Temporary power-register checks cover reset caching, backup access, interrupt
+selection and sleep register restoration at O0/O2. USB project source links
+and four C++ event initializers were corrected; USB_IRQHandler now has the C
+linkage required by the vector table. Hardware sleep/wake, retention and current
+measurements remain pending. D11 remains the current hardware test board.
+
+## LPC546xx power and clock port
+
+Both LPC54605 and LPC54628 managed libraries include the target power unit.
+It caches and clears SYSRSTSTAT on the first reset-reason query, implements
+ordinary interrupt-resumable Sleep, and enters reset-on-wake Deep power-down.
+The latter follows NXP libpower's POWER_EnterDeepPowerDown sequence: SCR deep
+sleep, PDRUNCFG1 = 0x300002AF, PDRUNCFG0 = 0xFEFFFFF7, then WFI. These full
+register values include reserved bits required by the vendor sequence. No
+vendor binary is linked. Reference: UM10912 power management and power API
+chapters, and [NXP MCUXpresso LPC54628 libpower_hardabi.a](https://github.com/nxp-mcuxpresso/legacy-mcux-sdk/blob/main/devices/LPC54628/gcc/libpower_hardabi.a),
+Git blob d58823378ee47b14321d21e662696dd6a7bc578a.
+
+Deep power-down leaves only the RTC domain and RESET wake input. RTC CTRL
+alarm/countdown wake configuration is preserved. Applications must arm a
+future RTC event and handle existing flags before entry. CPU interrupts and
+SysTick are stopped; ordinary Sleep preserves their configuration and restores
+the incoming SCR and interrupt mask. Deep-sleep clock and voltage restoration
+is not implemented. No watchdog is enabled or fed by these functions.
+
+There is no selectable GPIO wake input for Deep power-down, so SystemWakePin
+returns false. SRAM retention is unsupported. Seven full-width backup words
+alias the RTC driver's GPREG0..6; applications must coordinate their use.
+GPREG7 remains the RTC time-valid marker. Backup access temporarily enables the
+RTC bus clock and restores its prior state without resetting the RTC.
+Reset reporting uses only the hardware POR, BOD, EXTRST, WDT and SYSRST flags.
+It does not infer a Deep power-down wake cause from a possibly stale RTC flag.
+
+Runtime core selection refuses peripheral clock gates other than memory,
+GPIO/pin routing and RTC, active audio/USB PLLs, or CLKOUT. This is conservative:
+a stopped peripheral with its gate enabled must still release it. The PLL
+search precedes the interrupt lock; the ownership check and transition are
+atomic against interrupts. Startup uses the same setup without application
+ownership checks. Applications must stop and reconfigure SysTick and scheduler
+rates around a runtime change. An external oscillator is stopped before its
+mode/range is changed. Failed PLL setup leaves the core on the 12 MHz FRO.
+
+Clock decoding rejects powered-down FRO, system oscillator and PLL sources,
+unlocked PLLs, disabled FRO high-frequency output, and invalid PLL divisors.
+The RTC's system-clock output must be enabled to be decoded. This is register
+state, not an oscillator-health measurement. The LF descriptor now describes
+the fixed 32768 Hz crystal; SystemLowFreqClockSelect returns false, and the RTC
+driver retains ownership of oscillator startup and verification.
+
+The new LPC54628 PowerOffDemo uses the existing generic example and VCOM UART.
+It wakes through hardware RESET; P0.4 cannot wake Deep power-down. All 179 LPC54628 and 32 LPC54605 managed library sources compile in Debug
+and Release. The LPC54628 timer, peripheral and USB checks pass 60 firmware
+links across those configurations. Existing register tests cover clock ownership, failed PLL setup,
+RTC, timers, transfers, storage, audio and other peripherals. Temporary power
+register checks ran at O0/O2. These do not establish hardware wake behavior,
+backup retention or current draw. D11 remains the current hardware test board.
+
+
+## RA4M1 power and clock port
+
+RA4M1 has Sleep, Software Standby and Snooze, but no Deep Software Standby.
+The shared vendor header includes registers belonging to other RA variants;
+the port does not use those as evidence of RA4M1 capabilities. There is no
+SystemPowerOff implementation. The existing generic PowerOffDemo uses its
+resume path through SystemSleep, with P000/IRQ6 and SCI0 P100/P101.
+
+SystemWakePin uses the existing GPIO interrupt allocator. Falling and rising
+edges are supported, with the IRQ filter disabled. A pin, IRQ line or event
+route already owned by GPIO, DMA/DTC or another wake source is refused.
+Disabling the owned pin releases its WUPEN bit and interrupt route. Ordinary
+GPIO interrupt release also removes a wake bit owned by this port. Unrelated
+WUPEN bits and pin routes are preserved.
+
+SystemSleep uses Software Standby when external IRQ wake is configured and
+an associated NVIC interrupt is enabled, DMA/DTC are stopped, Snooze is off,
+and oscillator-stop detection is disabled. Otherwise it uses ordinary Sleep.
+Other Software Standby wake sources are not yet handled by this implementation.
+Active SysTick/PendSV pending work returns without sleep so it can be serviced.
+Applications must stop incompatible peripheral transfers before entry.
+
+The Standby entry follows procedure B of Renesas technical update
+[TN-RA*-A0146A/E](https://www.renesas.com/en/document/tcu/note-about-interruption-during-transition-low-power-modes-0):
+disable SysTick interrupt generation and non-wake NVIC delivery, then DSB/WFI.
+Event routes and pending IRQ flags are preserved. After resume, restore SBYCR,
+PRCR, SCR, NVIC enables and SysTick control before restoring PRIMASK. SBYCR
+bit 14 is always written as one. The port does not touch unsupported DPSBYCR.
+Software Standby retains SRAM and resumes execution; it does not generate a
+reset reason. Reset-on-wake RAM retention and generic retention words report
+unsupported. Battery backup memory integration remains outside this port.
+
+Reset reporting caches the first read of RSTSR0/1, then clears their recorded
+flags. POR and voltage-monitor resets map to POWERON, WDT/IWDT to WDT, and
+SWRF to SOFT. RES clears all reset flags, so an all-zero first read maps to PIN.
+Read this API before other code clears reset flags. Memory/MPU/stack errors
+have no exact generic reason bit and are not mislabeled as CPU lockup. RSTSR2
+cold/warm history is left untouched. Startup option words keep WDT and IWDT
+auto-start disabled; sleep and clock selection do not feed or start them.
+
+Runtime core-clock changes now refuse enabled peripheral module gates,
+DMAC/DTC's enabled module gate, and CLKOUT before unlocking protected registers.
+The SRAM gates and MSTPC0 clock-domain policy are excluded from that test.
+This is conservative: a stopped but ungated peripheral still prevents a change.
+Startup bypasses the application-ownership check. The existing oscillator
+plans, bounded ready waits and protection/interrupt restoration are retained.
+LF selection starts LOCO or SOSC without stopping the other oscillator or
+resetting the RTC; the peripheral chooses its own LF source. Callers still
+own SysTick/scheduler retiming after a successful core-clock change. Module-gate
+checks do not track a watchdog started directly through registers; applications
+must not change its PCLK timing while it is running.
+
+All 305 enabled library sources compile in Debug and Release. All 19 managed
+demo projects link in both configurations, including PowerOffDemo. GCC host
+checks run the existing clock and GPIO models at O0/O2 with undefined-behavior
+checks, including wake ownership and runtime busy refusal. The existing timer
+model also passes at O0/O2. UART passes at O0/Os/O2 and with address/undefined-
+behavior checks (1,167,463 interrupts per run). I2C and SPI models pass their optimization and
+address/undefined-behavior checks, with leak detection disabled because the
+workspace runs under ptrace. Temporary power
+register checks cover reset caching, mode selection, pending work, interrupt
+masking and register restoration at O0/O2. The original all-in-one validation
+runner additionally requires Clang/LLD, which are not installed in this workspace;
+its separate Clang ELF probes were not run. Hardware wake, current draw and
+oscillator restoration remain pending; D11 is still the hardware test target.
+
+Reference: RA4M1 hardware manual R01UH0887EJ0110, chapters 5, 8, 10 and 13,
+and the RA4M1 feature definitions in Renesas FSP.
+
+
+## R9A02G021 generic power and clock integration
+
+SystemResetReason caches RSTSR0/1 before clearing recorded flags. Power-on and
+voltage-monitor resets map to POWERON, watchdog resets to WDT and software
+reset to SOFT. An all-zero status maps to PIN following the manual's reset
+source flow. SRAM parity/ECC and bus faults have no matching generic reason
+bit and are not reported as CPU lockup. RSTSR2 cold/warm history is preserved.
+
+SystemWakePin uses the existing GPIO/ICU allocator, supports falling and rising
+edges, and refuses owned pins, wake bits and Snooze requests. Releasing the
+owned GPIO interrupt also releases its wake bit. It does not change another
+source's WUPEN bits. Watchdogs remain application-controlled and stopped by
+the default option words.
+
+SystemSleep uses the existing target sleep implementation. Software Standby
+is selected only with DTC stopped, Snooze unconfigured and an enabled wake
+interrupt. Other configurations use Sleep. Enabled pending CLIC/ICU work
+returns immediately. In Standby the generic wrapper masks non-wake CLIC
+interrupts and restores their enables afterward without clearing pending flags
+or routes, following procedure B of
+[TN-RIS-A0001B/E](https://www.renesas.com/en/document/tcu/note-about-interruption-during-transition-low-power-modes-1).
+Call it from normal application context after stopping incompatible transfers.
+There is no reset-on-wake mode or generic retention storage on this part.
+
+The existing explicit R9a02LowPowerEnter Snooze path is retained for the
+UART, SPI and ADC demos. It is not covered by the generic wrapper's interrupt
+masking. Its DTC/Snooze transition still needs a separate erratum review;
+passing the existing emulator does not validate that hardware transition.
+
+Core and peripheral clock changes refuse enabled module gates, CLKOUT,
+Snooze and flash programming before protected writes. Startup bypasses the
+runtime module check. A stopped peripheral with its module gate enabled still
+prevents retiming. Direct-register watchdog use is not represented by module
+gates; callers must not retime a running PCLK watchdog. Machine-timer and
+scheduler handling remain application-owned.
+
+LF selection no longer stops an RTC or silently substitutes the requested
+source. A source change is refused while RTC, UARTA, TML32, REMC, CLKOUT,
+Snooze or a core using SOSC owns the clock. Startup preserves a running RTC's
+current source. Clock getters return zero for stopped sources and reserved
+dividers; HOCO reporting also requires the stable flag. This does not measure
+external clock presence or crystal stability.
+
+PowerOffDemo uses the shared example's resume path on FPB-R9A02G021 with SW1
+and the existing UART pins. RE01 remains a separate task: its startup still
+needs boost/PLL failure-path cleanup and generic power integration.
+
+Validation uses xPack RISC-V GCC 15.2.0. All 196 managed library sources
+compile in both configurations, including Release LTO. Direct builds using
+project source links, defines and linker flags pass 34 of 36 demo configurations.
+All 18 Release configurations pass. CryptoTest Debug and DfuBoot Debug overflow
+flash; both also fail with the previous commit's sources. I2CScan Debug's
+forced semihost syscall archive caused duplicate stddev definitions and is now
+linked without whole-archive.
+
+Temporary checks execute the compiled RISC-V code at O0 and Os for reset
+caching, clock refusal, divider changes, wake ownership/release, CLIC masking,
+pending work and Sleep fallback. Existing UART/Snooze, I2C and SPI slave
+emulators pass at O0 and Os. These are compiler/linker and register checks,
+not an Eclipse headless build or hardware power validation. D11 remains the
+current hardware target.
+
+## RE01
+
+The RE01_1500KB library now includes `system_power_re01.c` in all six
+DBN/CFB/CFP Debug/Release configurations. Reset reporting caches and clears
+RSTSR0/RSTSR1 on the first call. Deep Software Standby wake flags identify
+pin and CCC wake. Startup disables the previous boot's wake configuration
+and clears the Deep Standby mode selection without clearing those wake flags.
+No retention registers or reset-on-wake RAM retention are exposed.
+
+`SystemSleep()` uses Software Standby only in normal ALLPWON mode, with Snooze
+disabled, the DMAC/DTC module stopped, and an enabled external IRQ wake route.
+It selects ALLPWON -> EXFPWON -> ALLPWON and retains all eight SRAM banks.
+Boost, other power-domain modes, Snooze, enabled DMAC/DTC, or other wake policies
+use ordinary Sleep. Both paths preserve the caller's interrupt mask, register
+protection, sleep settings and pending interrupts. Drivers still own stopping
+peripherals before Standby. The port does not enable a watchdog.
+
+`SystemWakePin()` uses the existing GPIO interrupt allocator for IRQ0 through
+IRQ9. It accepts rising or falling edges on the fixed interrupt pin mappings.
+An application GPIO handler or a pin already used for another function is not
+replaced. Reconfiguring the same wake pin changes its edge; disabling it
+releases only its own route. Disable wake before changing that pin's function.
+On the four dedicated Deep Standby pins, it also reserves the corresponding
+DPSIER0/DPSIEGR0 setting, preserving unrelated wake sources. Other IRQ pins
+remain usable for `SystemSleep()` only.
+
+| Deep Standby source | Pin |
+| --- | --- |
+| IRQ0-DS | P4.11 |
+| IRQ1-DS | P2.7 |
+| IRQ2-DS | P4.10 |
+| IRQ3-DS | P4.9 |
+
+P4.11 and P2.7 share debug functions and are refused while debug is enabled.
+
+Startup no longer uses `goto`. Core-clock changes share the startup sequence
+and preserve a live MOCO fallback when oscillator setup fails. Frequency
+reporting returns zero for stopped or unready sources and reserved dividers.
+Runtime core/divider changes refuse enabled peripheral modules, CLKOUT and
+flash programming. Startup does not apply that runtime module check. Core RC
+and divider requests select the nearest supported frequency; PCLKB remains at
+or below ICLK and 32 MHz. External oscillator descriptors must describe a real
+8-32 MHz input. Applications own retiming SysTick and software delays after a
+runtime clock change. Selecting an internal core clock at 32 MHz or below
+now exits Boost through MOCO, with PLL and HOCO stopped before the transition.
+Changing only a divider does not exit Boost.
+The LF selector starts LOCO or SOSC without stopping a source used by RTC/AGT;
+TCXO selection is unsupported.
+
+The new `PowerOffDemo` has six package/configuration targets and uses the
+shared resume-on-interrupt demo, including static and stack RAM samples.
+Its application clock configuration selects the internal 32 MHz oscillator
+at startup, avoiding Boost. The UART uses the existing P2.2/P2.3 SCI4 mapping
+at 1 Mbaud. The wake pin is P4.10 (IRQ2/IRQ2-DS), connected to SW3 on the
+EK-RE01 1500KB. Other boards can use a normally-open button from P4.10 to
+ground. Check the board/package pin availability before use.
+
+The demo defaults to resumable Standby with static and stack RAM samples.
+Set `POWER_DEMO_RESUME_WAKE=0` in the application compiler definitions to
+exercise reset-on-wake Deep Standby instead. Both forms use the same project
+and shared demo source. Since this part has no exposed retention registers,
+the reset-on-wake demo's start count is not retained.
+
+`SystemPowerOff()` disables SysTick/NVIC delivery, exits Boost if needed, and
+enters Deep Software Standby with I/O state retained. Dedicated wake sources
+reset the MCU; the function never resumes the application. If debug is enabled
+or a required transition fails, it stays stopped until reset; Deep Standby
+is not entered. Debug-mode Boost transitions are also refused
+by the clock helpers. The application owns quiescing its devices before power
+off, as shown by the demo's UART drain and disable.
+
+For early WS1 silicon, compile the RE01 library with `CHIP_VERSION_WS1`.
+The vendor restrictions require an application-configured CCC wake source for
+Deep Standby; without it, `SystemPowerOff()` stays stopped until reset. The
+port does not enable CCC or a watchdog on behalf of the application.
+
+The transition sequence follows Renesas' RE01 driver package:
+[`r_lpm_api.c`](https://github.com/renesas/re-driver-package/blob/master/SDK_RE01_1500KB/RE01_1500KB_DFP/Device/Driver/Src/r_lpm/r_lpm_api.c)
+and
+[`r_system_api.c`](https://github.com/renesas/re-driver-package/blob/master/SDK_RE01_1500KB/RE01_1500KB_DFP/Device/Driver/Src/r_system/r_system_api.c).
+Pin assignments follow Renesas datasheet R01DS0363EJ0110, tables 1.5-1.7.
+Hardware validation remains pending for wake/reset behavior, I/O retention,
+Boost transitions and sleep current.
+
+## ESP32-C3/C6 CPU sleep and clock readout
+
+This section records the earlier CPU-WFI-only batch, before the RTC/PMU
+implementation. The current code and its unverified status are described
+in "ESP32-C3/C6 RTC and PMU sleep implementation" below.
+
+The C3 and C6 libraries now provide SystemSleep using CPU WFI. It keeps the
+peripheral clocks, SRAM and stack intact. Interrupt delivery is masked around
+WFI and restored to its previous state after wake. The GPIO driver implements
+SystemWakePin with the existing interrupt registration and dispatch functions.
+It accepts rising or falling transitions, refuses pins already owned by another
+callback, and releases only its own callback. C6 pads assigned to LP IO are
+refused. This mode does not configure the RTC or PMU sleep state machine.
+
+SystemResetReason reads the last hardware reset cause without clearing it.
+Power/brownout, software, watchdog and JTAG causes map to generic flags. C3's
+power-on code also covers chip-level brownout and super-watchdog events; the
+hardware code does not distinguish them. Unmapped reset causes return zero.
+For a deep-sleep reset (0x05), pin and timer wake causes map to the generic
+wake flags. C3 uses RTC wake status with timer bit 3; C6 uses PMU wake status
+with timer bit 4. Multiple recognized causes are combined. Wake status is not
+cleared, and a different reset reason does not report stale wake flags. This
+decoding does not enable PMU sleep entry.
+
+C3 clock decoding now applies PRE_DIV_CNT to XTAL and RC_FAST and returns zero
+for reserved clock selections. Its peripheral clock 0 is the APB clock, limited
+to 80 MHz. C6 peripheral clock 0 follows the root, AHB and APB dividers instead
+of returning CPU frequency. C6 RC_FAST uses the nominal 20 MHz rate; a reserved
+root returns zero without dividing by zero in the delay-period calculation.
+Both ports reject invalid peripheral clock indices.
+
+The C6 startup CPU-frequency option no longer requires ESP32_PLL_FREQ. When
+ROM left PLL selected, it changes only the CPU divider, accounting for the
+fixed root divide-by-three and the separate 120 MHz selection. AHB, APB, flash
+and peripheral clock selections remain unchanged. A non-PLL boot configuration
+is preserved. Default startup still preserves ROM clock selection. Watchdogs
+remain disabled during startup and are not changed by SystemSleep.
+
+PowerOffDemo managed projects are provided for C3 and C6, using UART0 at 1 Mbaud
+and the GPIO9 BOOT button. They use the generic resume path and static/stack SRAM
+sample check. Release BOOT before resetting the board. The generic demo prints
+"Standby"; on these targets the implemented mode is CPU WFI only.
+
+Runtime core/low-frequency oscillator selection and peripheral-clock setters
+still return failure. The GPIO driver also prepares separate RTC/LP deep-wake routing for
+registered wake pins, with rollback after a rejected sleep. C3 supports
+GPIO0-5; C6 supports GPIO0-7. Preparation checks GPIO direction, the
+input-matrix consumers, GPIO0/1 when used by the 32 kHz crystal, and
+C6 pins already assigned to LP IO. A driver cannot silently replace
+a wake-owned interrupt callback. The preparation is not yet called by
+a PMU sleep transition, so this routing is not a functional Deep-sleep
+mode and must not be used as evidence that Deep-sleep is implemented.
+
+SystemPowerOff is not implemented. No retention registers
+are exposed because RTC scratch registers are used by ROM and clock setup;
+SystemRamRetain returns false. PMU Light-sleep, Deep-sleep, RTC/LP wake sources,
+retention and runtime oscillator ownership remain work to complete before
+calling the ESP32 power and clock port complete.
+
+Validation for this batch:
+
+- All 200 C3 and 202 C6 managed-library translation units compile in both Debug
+  and Release with RISC-V GCC 15.2.0.
+- Both new PowerOffDemo projects link in Debug and Release using their managed
+  source and linker settings. Release text/data/bss: C3 11137/480/1420 bytes;
+  C6 11395/480/1600 bytes.
+- 24 existing ESP32 Python checks pass, including extended C3/C6 clock MMIO
+  checks at O0 and Os.
+- GPIO interrupt/wake ownership and input-routing checks pass for all five
+  C-series variants at O0 and O2. C2/C5/C61 startup clock checks also pass.
+- The existing serial-example build script links 80 Debug/Release example
+  configurations across C2/C3/C5/C6/C61.
+- Temporary C3/C6 MMIO checks verify reset mapping, repeated reads, unsupported
+  retention results and preservation of the interrupt mask around CPU sleep.
+- No board execution or sleep-current measurement was performed. Hardware
+  testing remains on SAMD11 until the maintainer selects another board.
+
+Register references are Espressif ESP-IDF v5.5.1 per-chip clk_tree_ll.h,
+reset_reasons.h, system_reg.h, pcr_reg.h, rtc_cntl_reg.h and lp_clkrst_reg.h.
+
+## ESP32-C3/C6 startup clock preservation and ROM timing
+
+C3 startup previously selected PLL regardless of the root left by ROM. It now
+changes only the CPU tap when PLL is already selected. XTAL, RC_FAST and their
+dividers are preserved. The default PLL tap remains 80 MHz, with
+ESP32C3_CPU_160MHZ selecting 160 MHz. Startup does not power up, calibrate or
+stop a PLL.
+
+Both C3 and C6 startup now read back the resulting CPU frequency and update
+IOsonata's cycle-delay values immediately. They also call the target ROM
+ets_update_cpu_frequency entry so later ROM delays use the same CPU MHz. The
+C3/C6 linker scripts supply the respective ROM addresses as Esp32RomClockUpdate.
+Invalid clock selections do not overwrite the ROM timing value. Clock getters
+remain read-only with respect to ROM timing state. Fractional MHz values use
+the nearest integer supported by the ROM interface.
+
+This follows the existing startup ownership rule: ROM initializes the crystal,
+PLL and flash interface; IOsonata changes the supported CPU tap without
+reconfiguring the bus or peripheral roots. Watchdogs remain disabled by startup.
+
+Validation:
+
+- All 200 C3 and 202 C6 library sources compile in Debug and Release.
+- The default and 160 MHz PowerOffDemo variants link in both configurations
+  for both chips, eight images total. Their ROM symbols resolve to 0x40000588
+  on C3 and 0x40000048 on C6, matching the Espressif v5.5.1 ROM linker files.
+- 24 ESP32 Python checks pass. The clock model covers C3 default/160 MHz
+  startup, C6 CPU-divider choices, non-PLL entry, invalid source handling and
+  the MHz value passed to the ROM function.
+- C2/C5/C61 clock checks pass at O0 and Os. All 80 serial-example builds pass.
+- These are compiler/linker and host-register checks, not board execution.
+
+Runtime root-clock switching, low-frequency oscillator startup/calibration and
+PMU sleep remain pending. The vendor review confirms that C3 Deep-sleep also
+needs revision-dependent regulator settings and RTC-memory wake-stub handling;
+C6 uses a different PMU sequence. CPU WFI must not be presented as either
+Light-sleep or Deep-sleep.
+
+References: Espressif ESP-IDF v5.5.1 components/esp_rom/esp32c3/ld/esp32c3.rom.ld,
+components/esp_rom/esp32c6/ld/esp32c6.rom.ld, the per-chip rtc_clk.c and C3
+rtc_sleep.c in components/esp_hw_support/port.
+
+## ESP32-C3/C6 low-frequency clock selection
+
+`SystemLowFreqClockSelect()` now uses the TIMG0 calibration unit to measure
+low-frequency sources against the 40 MHz crystal before switching the RTC mux.
+It follows the existing target-level oscillator selector and descriptor pattern;
+the generic API is unchanged. `SystemOscInit()` applies the application oscillator
+descriptor. Startup does not call it automatically. Call the boolean selector
+when the application needs to handle a missing crystal or failed calibration.
+
+Supported sources:
+
+| Target | Internal RC | External crystal |
+| --- | --- | --- |
+| C3 | Nominal 136 kHz RC_SLOW | 32.768 kHz XTAL32K |
+| C6 | Nominal 136 kHz RC_SLOW or 32.768 kHz RC32K | 32.768 kHz XTAL32K |
+
+An RC request selects the nearest available nominal frequency; zero selects
+RC_SLOW. The default C3/C6 descriptors now specify 136 kHz. A crystal request
+must specify 32768 Hz or zero. TCXO input and C3 RC_FAST/256 are not implemented.
+The RC descriptor reports the measured frequency. The crystal descriptor keeps
+its nominal frequency, while the measured period is stored in the hardware's
+Q13.19 calibration word for subsequent RTC timing.
+
+This is an initialization operation: call before RTC timekeeping, LP-core
+firmware, modem timing or low-power wake scheduling. GPIO0/1 must be reserved
+for the crystal. Output, interrupt, GPIO input-matrix and C6 LP-pin assignments
+are checked, but these checks do not constitute tracking of every possible
+analog or direct-pin consumer. Active RTC/LP watchdogs, configured wake sources,
+timer alarm interrupts and C6 modem clock use cause the call to fail. Existing
+TIMG timer counters and watchdog configuration are not changed or reset.
+
+One-shot calibration and application-configured continuous calibration are not
+interrupted. The hardware-reset continuous configuration can be paused with a
+bounded timeout and is restored afterward. Temporary bus gating, digital clock
+routing and the C6 shared 32 kHz calibration selection are restored. A missing
+or out-of-range oscillator leaves the previous RTC mux, calibration period and
+oscillator descriptor unchanged, and restores oscillator configuration/power.
+A successful selection leaves previously running oscillators enabled.
+
+The call masks interrupts throughout. Its delay/polling budgets total less than
+121 ms, including a 100 ms startup wait for a newly enabled crystal. It should
+not be called from an interrupt or during latency-sensitive operation. It does
+not enable a watchdog. PMU Light-sleep and Deep-sleep remain unimplemented.
+
+Validation:
+
+- All 201 C3 and 203 C6 library translation units compile in Debug and Release
+  with RISC-V GCC 15.2.0, using the managed project source lists and settings.
+- PowerOffDemo links for both targets in Debug and Release, both normally and
+  with SystemOscInit explicitly retained so the new code is checked by the
+  linker. Release flash text increases by 976 bytes on C3 and 1204 bytes on C6
+  in the latter case. Unused LF code is discarded.
+- Temporary production-source MMIO checks pass at O0 and Os for both chips:
+  RC/crystal selection, repeat selection, reset calibration pause, busy
+  calibration rejection, hardware timeout, stuck polling, invalid readings,
+  rollback, register preservation, clock/pin ownership and interrupt state.
+- The existing 24 ESP32 Python checks, 20 GPIO checks and all 80 serial-example
+  links pass. No new demo or test framework was added.
+- No board execution was performed. Hardware testing remains on SAMD11 until
+  the maintainer selects another board.
+
+Register references: Espressif ESP-IDF v5.5.1 per-chip clk_tree_ll.h,
+rtc_clk.c, rtc_time.c, timer_group_reg.h, rtc_cntl_reg.h, lp_clkrst_reg.h,
+lp_aon_reg.h, pmu_reg.h, pcr_reg.h and the C6 modem_lpcon_reg.h/reg_base.h.
+
+## ESP32-C3/C6 direct CPU source and APB selection
+
+`SystemCoreClockSelect()` now selects the 40 MHz crystal directly or RC_FAST
+(nominal 17.5 MHz on C3, 20 MHz on C6). XTAL accepts 40000000 or zero; RC
+requests use the one available oscillator rate. External clock input is not
+implemented. This follows the existing target-level source selector and
+active-consumer checks, without changing the generic API.
+
+The operation keeps existing PLL and flash clock settings. It does not start,
+recalibrate or select PLL. A return to the PLL-based startup CPU rate is not
+provided by this selector. C3/C6 crystal-based peripherals continue to use the
+physical 40 MHz crystal even when the CPU descriptor reports RC_FAST. UART,
+SPI, I2C, clock readout and LF calibration now account for that distinction.
+C3 retains its nominal RC_FAST rate. C6 measures RC_FAST against XTAL on
+each RC selection and uses the result in the descriptor, CPU/APB getters and
+IOsonata cycle delays. Calibration failure leaves the prior selection unchanged.
+There is no background drift tracking; ROM timing retains integer-MHz rounding.
+
+`SystemPeriphClockSet(0, rate)` selects the nearest supported APB rate:
+
+- C3 uses the shared CPU/APB divider on XTAL or RC_FAST, with a minimum CPU
+  rate of 1 MHz for the existing delay/ROM timing implementation. While PLL
+  feeds the CPU, APB remains fixed at 80 MHz and the call returns that rate.
+- C6 selects AHB divided by 1, 2 or 4, preserving CPU and AHB dividers. Invalid
+  root/divider configurations are rejected. Other indices and zero return 0.
+
+A change updates IOsonata cycle delays and ROM CPU timing before restoring the
+caller's interrupt mask. C3 also updates the ROM APB frequency storage word.
+The root mux write/readback runs from instruction RAM. Failed power-enable,
+mux or divider writes leave the prior configuration and descriptor in place.
+The crystal must already be running; the function does not restart an external
+oscillator that another owner has shut down. RC_FAST startup waits 100 us to
+cover the vendor's 50 us minimum despite integer-MHz delay rounding. Calls
+require the current CPU rate to be at least 1 MHz.
+
+Call before starting modem or LP-core firmware. Enabled peripheral gates are
+checked conservatively; SPI/I2C and other affected peripherals must be released.
+TIMG counters and watchdogs must be stopped. UARTs using XTAL may remain on;
+other UART sources block a change. No watchdog is enabled or fed by these APIs.
+An unchanged APB request does not require stopping its users.
+
+C3 Timer Group setup now calculates its divider from the actual APB rate.
+Reinitialize an existing stopped C3 timer after changing APB, before restarting
+it. C6 Timer Groups retain their independent 80 MHz PLL source. These calls do
+not change their counters, alarms or watchdog configuration.
+
+Validation:
+
+- All 202 C3 and 204 C6 managed-library translation units compile in Debug
+  and Release, including a full rebuild after the shared header change.
+- Default PowerOffDemo images and images retaining all three clock APIs link
+  for both chips and configurations. The root mux helper is in instruction RAM;
+  retaining it does not pull in the timer driver.
+- Temporary production-source register models pass at O0 and Os for source
+  changes, nearest rates, unsupported inputs, active consumers, UART crystal
+  operation, invalid dividers, failed writes, rollback and interrupt state.
+  LF calibration checks also pass with the CPU descriptor set to RC_FAST.
+- Existing checks pass: 24 ESP32 Python checks; 10 timer, 10 SPI and 10 I2C
+  model configurations; 30 C/C++ timer/demo links; 80 serial-example links.
+  Existing timer/SPI checks were extended for changed CPU/APB rates.
+- These clock-selection checks did not include board execution. C6 sleep
+  hardware results are recorded below; runtime clock selection still needs
+  hardware validation.
+
+References: Espressif ESP-IDF v5.5.1 per-chip rtc_clk.c, clk_tree_ll.h,
+system_reg.h, pcr_reg.h, rtc_cntl_reg.h, pmu_reg.h and UART register definitions.
+
+
+## ESP32-C3/C6 RTC and PMU sleep status
+
+The target libraries contain `system_sleep_esp32c3.c` and
+`system_sleep_esp32c6.c`. These implement RTC/PMU sleep and supersede the
+CPU-WFI-only implementation described in the earlier sections. The generic
+API is unchanged.
+
+### C6 hardware results (November 16, 2026)
+
+| Mode | Wake input | Result |
+| --- | --- | --- |
+| Light-sleep, resume execution | BOOT/GPIO9 | Repeated wake passed with UART output drained and Disable() called; 128 static and 128 stack bytes matched after each wake |
+| Deep-sleep, reset on wake | External GPIO3 switch to GND | Seven consecutive wake/restart cycles passed on DevKit N8 with UART output drained and Disable() called and serial diagnostics removed |
+
+Every reported Deep-sleep restart identified reset reason `0x100` (pin wake).
+`Start count 1, 0 retention registers` is expected: the port exposes no
+retention registers. The counter is initialized again at startup.
+The SRAM sample result applies to Light-sleep only and is not a full SRAM
+or Deep-sleep retention test. Sleep current has not been measured. These runs
+used empty UART Disable/Enable hooks: they drained output but did not gate UART
+clocks. The new hooks gate serial and bus clocks, preserve configuration and
+restore UART interrupt enables on resume. PowerOff additionally clears FIFOs,
+releases pins and interrupt routing, and requires Init before reuse. The updated
+PowerOffDemo uses UART PowerOff before Deep-sleep. At `17d081bd1`, ClockDemo
+passed three cycles and nine BOOT wakes with these Disable/Enable hooks, and
+PowerOffDemo passed three consecutive GPIO3 wake/restart cycles after UART
+PowerOff. Every Deep-sleep restart reported pin-wake reason 0x100. These results
+validate both UART shutdown paths on the board; current remains unmeasured.
+
+The cleaned C6 PowerOffDemo defaults to GPIO3 Deep-sleep. To exercise the
+validated Light-sleep path, set `WAKE_BUT_PIN` to 9 and
+`POWER_DEMO_RESUME_WAKE` to 1 in its `board.h`. UART0 uses TX16/RX17 at
+1 Mbaud through the board's USB-to-UART bridge. GPIO9 is not a Deep-sleep
+wake pin. The demo waits for the switch to remain released before sleeping.
+
+### C6 implementation
+
+The Light-sleep entry preserves SRAM, the stack, crystal and PLL. It saves
+PMU and clock state, switches to XTAL from instruction RAM with the flash
+cache suspended, and restores clocks and cache before returning. The linker
+keeps the application stack below ROM-reserved SRAM. GPIO wake preparation
+preserves the pad configuration and restores it after resume.
+
+Deep-sleep initializes the active, modem and sleep PMU states, hands regulator
+control to the PMU and requests HP power down. Regulator bias uses chip eFuse
+values where available. RC_FAST is measured before entry; PMU fast-clock waits,
+including crystal startup, use that measured rate. LP IO routes GPIO3 through
+EXT1. EXT1 remains enabled as a wake source without also rejecting the
+non-returning Deep-sleep request. Wake restarts the application through ROM.
+
+The earlier button checks, first-cycle WFI comparison, PMU serial stage output,
+register dumps and HP reset experiments have been removed. Their earlier
+failures are superseded by the repeated hardware results above.
+
+C6 build validation after cleanup:
+
+- All 206 managed-library source files compiled in Debug and Release with
+  RISC-V GNU 15.2.0, using the source lists and settings from the Eclipse
+  managed projects. These were command-line builds, not Eclipse invocations.
+- PowerOffDemo linked in both Deep-sleep and Light-sleep configurations.
+- The instruction-RAM sleep entry was inspected in both builds; its calls
+  during cache suspension resolve to ROM clock/cache functions.
+
+| Configuration | text | data | bss |
+| --- | ---: | ---: | ---: |
+| Deep-sleep Debug | 44586 | 584 | 4312 |
+| Deep-sleep Release | 21463 | 564 | 4044 |
+| Light-sleep Debug | 37678 | 576 | 2484 |
+| Light-sleep Release | 15335 | 480 | 1884 |
+
+These results apply to the cleaned implementation at `f834cf5e0`.
+
+### Supported behavior and remaining work
+
+`SystemSleep()` attempts resumable Light-sleep using pins configured with
+`SystemWakePin()`. If preparation cannot establish the required pin or
+controller state, it falls back to CPU WFI. A wake input already active
+prevents hardware sleep preparation. Wake-owned GPIO interrupt configuration
+is restored on return.
+
+`SystemPowerOff()` requests reset-on-wake Deep-sleep and never returns.
+C3 accepts GPIO0-5 and C6 accepts GPIO0-7. GPIO0/1 are unavailable when used
+by the 32 kHz crystal. Pins owned by another interrupt, peripheral or C6 LP IO
+user are refused. A rejected Deep-sleep request remains in an instruction-RAM
+wait loop; it does not resume flash execution after potentially powering down
+flash or PLL.
+
+Callers must drain and disable UART/DMA and stop incompatible peripheral,
+modem and flash transactions. The power functions do not enable a watchdog.
+RTC scratch registers remain reserved for ROM and clock control:
+`SystemRetRegCount()` returns zero and `SystemRamRetain()` returns false.
+No Deep-sleep retained-RAM section or startup exemption is implemented.
+RTC timer wake is not configured by these power functions.
+
+The November 17 C6 PowerOffDemo retest recorded five consecutive Deep-sleep
+wake/restart cycles, each reporting SYSTEM_RESET_WAKE_PIN (0x100). Start count
+remained one with zero exposed retention registers, as expected. The initial
+start reported zero; the submitted log did not include the raw reset register.
+
+Review against ESP-IDF v5.5.1 C3/C6 ROM rtc.h found raw reset code 0x15
+(USB_UART_CHIP_RESET) missing from the translation. It now maps to
+SYSTEM_RESET_DEBUG alongside USB-JTAG reset 0x16. This describes a host reset
+through the USB Serial/JTAG interface, not wake from USB power. It may explain
+the initial zero, but that cause is not confirmed without the raw register.
+No sleep entry, wake configuration or flasher reset sequence changed.
+
+Both complete libraries rebuilt (204 C3 and 206 C6 sources per configuration),
+and PowerOffDemo linked in Debug/Release for Light-sleep and Deep-sleep: eight
+links. Demo compilation used GNU C++11. Temporary production-function checks
+at O0/Os compared every low-byte reset value and six-bit wake combination;
+only USB-serial reset translation changed. Pin, timer and combined wake checks
+passed. The new reset label has not yet been checked on hardware.
+
+Remaining work is separate from the completed C6 GPIO wake validation:
+
+- C6 ClockDemo at `e5044c35f` passed three cycles of XTAL/RC_FAST switching,
+  APB changes, LF selection, UART TX and timer interrupts with zero failures.
+  Calibrated RC_FAST timing at `6d3947a30` also passed three cycles with zero
+  failures: RC_FAST 16134719-16136308 Hz, 250 ms delay 249969-250037 us.
+  Combined clock selection and Light-sleep resume at `b79ea4253` passed all
+  three cycles and nine BOOT wakes with zero failures. CPU/APB restoration,
+  LF descriptor preservation and post-wake timers passed for XTAL/RC_FAST and
+  RC_SLOW/RC32K. Post-wake 250 ms samples were 250019-250078 us with 25 IRQs.
+  The later run at `17d081bd1` passed all nine wakes with UART clock gating:
+  post-wake delays were 250049-250180 us with 25 IRQs. One initial UART line
+  was truncated before sleep; the cause remains unresolved.
+  The November 17 receive-enabled run completed with zero failures after
+  power-cycling the board. The submitted excerpt covers the end of cycle 2
+  and all of cycle 3: five BOOT resumes and five polling UART RX checks pass.
+  Both delay units pass, with 250 ms samples at 249979-250050 us and 24/25
+  IRQs. Build configuration was not specified. Other peripheral operation,
+  interrupt/DMA UART RX and short nanosecond delays remain untested.
+  RESET had failed to start ClockDemo, PowerOffDemo and LedDemo after flashing;
+  one power cycle restored execution and RESET then worked normally. The
+  transient native-USB flashing/reset cause is unconfirmed; no recurring
+  post-flash failure or flasher fix has been established.
+- Measure Light-sleep and Deep-sleep current with board circuitry accounted for.
+- C3 PowerOffDemo passed six consecutive GPIO9 Light-sleep wakes with the
+  128-byte static and 128-byte stack SRAM samples preserved. GPIO3 Deep-sleep
+  passed four manual wake/restart cycles with reset reason 0x100; the board
+  stayed asleep between manual wake events. RTC fast-memory retention is not
+  validated or exposed as application retention registers.
+- C3 ClockDemo after `04d1522a8` passed all three cycles and nine Light-sleep
+  wakes with zero failures. XTAL, calibrated RC_FAST, shared CPU/APB division,
+  RC_SLOW, restored clock descriptors and timer IRQs passed. RC_FAST measured
+  20805079-20810365 Hz; 250 ms samples measured 250065-252360 us with 25 IRQs.
+  A later receive-enabled run on November 17, following the C++11 demo fix,
+  passed three cycles, nine BOOT wakes and all ten polling UART RX prompts
+  with zero failures. All 90 delay samples reported 25 interrupts: msDelay
+  250018-250478 us and nsDelay 250018-250137 us. RC_FAST measured
+  20811686-20815652 Hz; RC_SLOW measured 135730-136293 Hz. The build
+  configuration was not identified in the submitted log. Sleep-current and
+  interrupt/DMA UART RX measurements remain pending. Dots before startup
+  output remain unexplained.
+- Runtime PLL startup/selection and Deep-sleep RAM retention are unsupported;
+  they must not be reported as completed capabilities.
+
+Implementation references: Espressif ESP-IDF v5.5.1 per-chip RTC/PMU sleep,
+PMU initialization, clock calibration and ROM register-I2C implementations.
+
+Cross-target demo projects and build coverage are listed in
+[Power and clock demos](power-clock-demo-matrix.md).

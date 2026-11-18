@@ -54,7 +54,7 @@ SOFTWARE.
 #define RA4M1_STARTUP_TIMEOUT     1000000UL
 #endif
 
-// Generic nsDelay's empirical divisor. This initial value is not calibrated
+// Reference nanoseconds per loop at 48 MHz. This value is not calibrated
 // on RA4M1; do not use nsDelay for clock-startup or protocol timing here.
 #ifndef RA4M1_NSDELAY_FACTOR
 #define RA4M1_NSDELAY_FACTOR      27UL

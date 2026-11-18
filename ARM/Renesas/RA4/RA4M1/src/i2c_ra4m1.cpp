@@ -55,6 +55,8 @@ SOFTWARE.
 #include "interrupt_ra4m1.h"
 #include "i2c_ra4m1.h"
 
+static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg);
+
 #define RA4M1_I2C_COUNT				2
 #define RA4M1_I2C_MAX_RATE			400000U
 #define RA4M1_I2C_MAX_SLAVE_ADDR	3
@@ -533,7 +535,6 @@ static inline bool Ra4m1I2cBusy(const R_IIC0_Type * const pReg)
 	return (pReg->ICCR2 & RA4M1_I2C_CR2_BBSY) != 0U;
 }
 
-static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg);
 
 static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 {

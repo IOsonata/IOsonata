@@ -5,7 +5,7 @@
 #include <stdint.h>
 typedef enum { OSC_TYPE_RC, OSC_TYPE_XTAL, OSC_TYPE_TCXO } OSC_TYPE;
 typedef struct { OSC_TYPE Type; uint32_t Freq, Accuracy, LoadCap; } OscDesc_t;
-typedef struct { OscDesc_t CoreOsc, LowPwrOsc; bool bUSBClk; } McuOsc_t;
+typedef struct { OscDesc_t CoreOsc, LowPwrOsc; bool bUSBClk; uint8_t DcDc; } McuOsc_t;
 extern McuOsc_t g_McuOsc;
 bool SystemCoreClockSelect(OSC_TYPE, uint32_t);
 bool SystemLowFreqClockSelect(OSC_TYPE, uint32_t);

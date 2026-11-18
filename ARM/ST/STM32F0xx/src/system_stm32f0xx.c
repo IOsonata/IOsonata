@@ -50,6 +50,10 @@ __WEAK McuOsc_t g_McuOsc = {
 	false
 };
 
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+extern uint32_t SystemMicroSecLoopCnt;
+uint32_t SystemnsDelayFactor = 65536UL;
+
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 
 static uint32_t s_XtlFreq = 0;
@@ -96,6 +100,8 @@ void SystemCoreClockUpdate (void)
 	}
 	static const uint8_t ahbshift[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
 	SystemCoreClock >>= ahbshift[(cfgr & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos];
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
 }
 
 //

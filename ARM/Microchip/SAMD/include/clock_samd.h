@@ -84,6 +84,15 @@ bool SamdGclkChannelEnable(uint8_t Channel, uint8_t Generator);
  */
 bool SamdGclkChannelDisable(uint8_t Channel);
 
+/**
+ * @brief Keep the selected 32 kHz clock source running in Standby.
+ *
+ * RTC and EIC request this before enabling a low-frequency wake source.
+ * This does not change the selected oscillator, generator or clock divider.
+ * A source which is not enabled and ready is refused.
+ */
+bool SamdLowFreqClockStandbyEnable(void);
+
 #ifdef __cplusplus
 }
 #endif

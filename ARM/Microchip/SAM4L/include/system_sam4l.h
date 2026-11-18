@@ -32,8 +32,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __SYSTEM_SAM4E_H__
-#define __SYSTEM_SAM4E_H__
+#ifndef __SYSTEM_SAM4L_H__
+#define __SYSTEM_SAM4L_H__
 
 #include <stdint.h>
 
@@ -55,6 +55,9 @@ void SystemInit(void);
  */
 void SystemCoreClockUpdate(void);
 
+// Private timer-port query. Does not read clear-on-read TC status registers.
+bool Sam4lTimerClockBusy(uint32_t ClockMask);
+
 
 #ifdef __cplusplus
 }
@@ -62,4 +65,4 @@ void SystemCoreClockUpdate(void);
 
 extern uint32_t SystemCoreClock; // System Clock Frequency (Core Clock) in Hz
 
-#endif // __SYSTEM_SAM4E_H__
+#endif // __SYSTEM_SAM4L_H__

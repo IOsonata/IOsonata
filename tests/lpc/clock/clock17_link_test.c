@@ -11,7 +11,7 @@ Copyright (c) 2026 I-SYST inc. MIT License.
 
 // Application definition must override the port default in C and C++.
 McuOsc_t g_McuOsc = {{OSC_TYPE_RC, 4000000, 123, 0},
-	{OSC_TYPE_XTAL, 32768, 20, 0}, false};
+	{OSC_TYPE_XTAL, 32768, 20, 0}, false, 0};
 
 #ifdef __cplusplus
 extern "C" {

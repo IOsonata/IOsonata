@@ -66,6 +66,8 @@
 
 #if !defined(RNG_USE_CRACEN) && !defined(RNG_USE_CC3XX)
 
+static bool s_bPeriphSdXfer;
+
 static inline NRF_RNG_Type *RngPeriphReg(void)
 {
 #if defined(NRF53_SERIES)
@@ -128,8 +130,6 @@ static int RngPeriphSdRandFill(uint8_t *pBuff, int BuffLen)
 	return 0;
 #endif
 }
-
-static bool s_bPeriphSdXfer;
 
 static void RngPeriphDisable(DevIntrf_t * const pDevIntrf)
 {

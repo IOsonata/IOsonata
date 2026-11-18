@@ -9,7 +9,7 @@ C2/C5/C61 use the shared Vectors_esp32.c interrupt entry. C3 has hardware valida
 
 Pin routing uses the application's IOPinCfg_t map. Peripheral clock/reset
 operations live in system_esp32_uart_clock.c. CPU interrupt routing lives
-in esp32xx_irq.c. The UART core uses g_McuOsc.CoreOsc.Freq as its XTAL rate,
+in esp32xx_irq.c. The UART core uses Esp32XtalClockGet() as its XTAL rate,
 with a source pre-divider and a 12-bit plus 4-bit fractional baud divider.
 SetRate returns the selected baud rate. Automatic baud detection, DMA,
 IrDA, software flow control and synchronous/half-duplex modes are unsupported.
@@ -91,8 +91,14 @@ typedef struct {
 	int          DevNo;
 	uint32_t     Base;
 	UARTDev_t   *pUartDev;
+	const IOPinCfg_t *pIOPinMap;
+	int          NbIOPins;
+	uint32_t     SavedInterrupts;
+	uint32_t     SleepInterrupts;		//!< UART interrupt enable before system sleep
 	uint8_t      RxFifoMem[ESP32_UART_CFIFO_SIZE];
 	uint8_t      TxFifoMem[ESP32_UART_CFIFO_SIZE];
+	volatile bool bEnabled;
+	bool         bSleepPaused;		//!< SystemSleep temporarily stopped the clocks
 } ESP32_UARTDEV;
 #pragma pack(pop)
 
@@ -194,7 +200,7 @@ static uint32_t Esp32UartSetBaud(ESP32_UARTDEV *dev, uint32_t baud)
 		// Automatic baud detection is not implemented.
 		return 0;
 	}
-	source = (uint64_t)GetHighFreqOscFreq() * 16U;
+	source = (uint64_t)Esp32XtalClockGet() * 16U;
 	if (source == 0)
 	{
 		return 0;
@@ -298,6 +304,10 @@ static void Esp32UartIRQHandler(ESP32_UARTDEV *pDev)
 	int len;
 	int i;
 
+	if (!pDev->bEnabled)
+	{
+		return;
+	}
 	base = pDev->Base;
 	udev = pDev->pUartDev;
 	st = ESP32_UART_INT_ST_REG(base);
@@ -357,6 +367,10 @@ static void Esp32UartIRQHandler(ESP32_UARTDEV *pDev)
 		{
 			udev->EvtCallback(udev, UART_EVT_RXDATA, nullptr,
 				CFifoUsed(udev->hRxFifo));
+			if (!pDev->bEnabled)
+			{
+				return;
+			}
 		}
 	}
 
@@ -369,6 +383,10 @@ static void Esp32UartIRQHandler(ESP32_UARTDEV *pDev)
 			if (udev->EvtCallback != nullptr)
 			{
 				udev->EvtCallback(udev, UART_EVT_TXREADY, nullptr, 0);
+				if (!pDev->bEnabled)
+				{
+					return;
+				}
 			}
 		}
 		ESP32_UART_INT_CLR_REG(base) = ESP32_UART_INT_TXFIFO_EMPTY;
@@ -403,6 +421,66 @@ extern "C" void UART2_IRQHandler(void)
 }
 #endif
 
+// Called with CPU interrupts masked by SystemSleep. Only UARTs that are
+// idle can be paused; no FIFO or pin configuration is discarded.
+// The transmitter FSM is idle at zero (UART_FSM_STATUS bits 7:4).
+#if defined(ESP32C3) || defined(ESP32C6)
+extern "C" bool Esp32UartPrepareSleep(void)
+{
+	ESP32_UARTDEV *dev;
+	UARTDev_t *udev;
+
+	for (int i = 0; i < s_NbUartDev; i++)
+	{
+		dev = &s_Esp32UartDev[i];
+		udev = dev->pUartDev;
+		if (udev == nullptr || !dev->bEnabled ||
+			atomic_load(&udev->DevIntrf.EnCnt) == 0)
+		{
+			continue;
+		}
+		if (dev->bSleepPaused || !udev->bTxReady ||
+			CFifoUsed(udev->hTxFifo) != 0 ||
+			(ESP32_UART_STATUS_REG(dev->Base) &
+				(ESP32_UART_STATUS_TXFIFO_CNT_Msk | ESP32_UART_STATUS_RXFIFO_CNT_Msk)) != 0U ||
+			(ESP32_UART_FSM_STATUS_REG(dev->Base) & (0xFU << 4U)) != 0U)
+		{
+			return false;
+		}
+	}
+	for (int i = 0; i < s_NbUartDev; i++)
+	{
+		dev = &s_Esp32UartDev[i];
+		udev = dev->pUartDev;
+		if (udev == nullptr || !dev->bEnabled ||
+			atomic_load(&udev->DevIntrf.EnCnt) == 0)
+		{
+			continue;
+		}
+		dev->SleepInterrupts = ESP32_UART_INT_ENA_REG(dev->Base);
+		ESP32_UART_INT_ENA_REG(dev->Base) = 0U;
+		Esp32UartClockDisable(dev->DevNo);
+		dev->bSleepPaused = true;
+	}
+	return true;
+}
+
+extern "C" void Esp32UartResumeSleep(void)
+{
+	ESP32_UARTDEV *dev;
+	for (int i = 0; i < s_NbUartDev; i++)
+	{
+		dev = &s_Esp32UartDev[i];
+		if (dev->bSleepPaused)
+		{
+			Esp32UartClockEnable(dev->DevNo);
+			ESP32_UART_INT_ENA_REG(dev->Base) = dev->SleepInterrupts;
+			dev->bSleepPaused = false;
+		}
+	}
+}
+#endif
+
 /*---------------------------------------------------------------------------
  * DevIntrf operations
  *---------------------------------------------------------------------------*/
@@ -411,7 +489,7 @@ static uint32_t Esp32UartGetRate(DevIntrf_t * const pDev)
 	ESP32_UARTDEV *dev;
 
 	dev = (ESP32_UARTDEV *)pDev->pDevData;
-	return dev->pUartDev->Rate;
+	return dev->pUartDev != nullptr ? dev->pUartDev->Rate : 0U;
 }
 
 static uint32_t Esp32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
@@ -419,6 +497,10 @@ static uint32_t Esp32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	ESP32_UARTDEV *dev;
 
 	dev = (ESP32_UARTDEV *)pDev->pDevData;
+	if (!dev->bEnabled)
+	{
+		return 0;
+	}
 	Rate = Esp32UartSetBaud(dev, Rate);
 	if (Rate == 0)
 	{
@@ -431,17 +513,75 @@ static uint32_t Esp32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 static void Esp32UartEnable(DevIntrf_t * const pDev)
 {
-	(void)pDev;
+	ESP32_UARTDEV *dev = (ESP32_UARTDEV *)pDev->pDevData;
+	uintptr_t state = DisableInterrupt();
+
+	if (!dev->bEnabled && dev->pUartDev != nullptr)
+	{
+		Esp32UartClockEnable(dev->DevNo);
+		dev->bEnabled = true;
+		ESP32_UART_INT_ENA_REG(dev->Base) = dev->SavedInterrupts;
+	}
+	EnableInterrupt(state);
 }
 
 static void Esp32UartDisable(DevIntrf_t * const pDev)
 {
-	(void)pDev;
+	ESP32_UARTDEV *dev = (ESP32_UARTDEV *)pDev->pDevData;
+	uintptr_t state = DisableInterrupt();
+
+	// The application must finish TX and stop the peer before suspending.
+	// Keep configuration, pending events and FIFOs for the matching Enable.
+	if (dev->bEnabled)
+	{
+		dev->SavedInterrupts = ESP32_UART_INT_ENA_REG(dev->Base);
+		ESP32_UART_INT_ENA_REG(dev->Base) = 0U;
+		dev->bEnabled = false;
+		Esp32UartClockDisable(dev->DevNo);
+	}
+	EnableInterrupt(state);
 }
 
 static void Esp32UartPowerOff(DevIntrf_t * const pDev)
 {
-	(void)pDev;
+	ESP32_UARTDEV *dev = (ESP32_UARTDEV *)pDev->pDevData;
+	uintptr_t state = DisableInterrupt();
+
+	if (dev->pUartDev != nullptr)
+	{
+		// The bus must run while clearing FIFOs, including after Disable.
+		Esp32UartClockEnable(dev->DevNo);
+		ESP32_UART_INT_ENA_REG(dev->Base) = 0U;
+		dev->bEnabled = false;
+		ESP32_UART_CONF0_REG(dev->Base) |= ESP32_UART_CONF0_RXFIFO_RST_Msk |
+			ESP32_UART_CONF0_TXFIFO_RST_Msk;
+		Esp32UartRegUpdate(dev->Base);
+		ESP32_UART_CONF0_REG(dev->Base) &= ~(ESP32_UART_CONF0_RXFIFO_RST_Msk |
+			ESP32_UART_CONF0_TXFIFO_RST_Msk);
+		Esp32UartRegUpdate(dev->Base);
+		ESP32_UART_INT_CLR_REG(dev->Base) = 0xFFFFFFFFUL;
+		Esp32UartClockDisable(dev->DevNo);
+		if (pDev->bIntEn)
+		{
+			uint32_t source = dev->DevNo == 0 ? ESP32_UART_INTR_SOURCE_UART0 :
+				ESP32_UART_INTR_SOURCE_UART1;
+			uint32_t cpu = dev->DevNo == 0 ? UART0_CPU_INT_LEVEL : UART1_CPU_INT_LEVEL;
+#if defined(ESP32C61)
+			if (dev->DevNo == 2)
+			{
+				source = ESP32_UART_INTR_SOURCE_UART2;
+				cpu = 8U;
+			}
+#endif
+			Esp32DisableSourceIrq(source, cpu);
+		}
+		IOPinDis(dev->pIOPinMap, dev->NbIOPins);
+		CFifoFlush(dev->pUartDev->hRxFifo);
+		CFifoFlush(dev->pUartDev->hTxFifo);
+		dev->pUartDev = nullptr;
+		dev->SavedInterrupts = 0U;
+	}
+	EnableInterrupt(state);
 }
 
 static void Esp32UartReset(DevIntrf_t * const pDev)
@@ -451,9 +591,8 @@ static void Esp32UartReset(DevIntrf_t * const pDev)
 
 static bool Esp32UartStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	(void)pDev;
 	(void)DevAddr;
-	return true;
+	return ((ESP32_UARTDEV *)pDev->pDevData)->bEnabled;
 }
 
 static void Esp32UartStopRx(DevIntrf_t * const pDev)
@@ -463,9 +602,8 @@ static void Esp32UartStopRx(DevIntrf_t * const pDev)
 
 static bool Esp32UartStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	(void)pDev;
 	(void)DevAddr;
-	return true;
+	return ((ESP32_UARTDEV *)pDev->pDevData)->bEnabled;
 }
 
 static void Esp32UartStopTx(DevIntrf_t * const pDev)
@@ -489,6 +627,10 @@ static int Esp32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	}
 
 	dev = (ESP32_UARTDEV *)pDev->pDevData;
+	if (!dev->bEnabled)
+	{
+		return 0;
+	}
 	udev = dev->pUartDev;
 	fifo = udev->hRxFifo;
 	cnt = 0;
@@ -613,6 +755,10 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	}
 
 	dev = (ESP32_UARTDEV *)pDev->pDevData;
+	if (!dev->bEnabled)
+	{
+		return 0;
+	}
 	udev = dev->pUartDev;
 	if (!pDev->bIntEn)
 	{
@@ -710,6 +856,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
+	dev->pIOPinMap = (const IOPinCfg_t *)pCfg->pIOPinMap;
+	dev->NbIOPins = pCfg->NbIOPins;
 
 	// Preserve UART0's running ROM console; reset other instances.
 	Esp32UartClockEnable(devno);
@@ -846,6 +994,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.StopTx   = Esp32UartStopTx;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
+	dev->SavedInterrupts = 0U;
+	dev->SleepInterrupts = 0U;
+	dev->bSleepPaused = false;
+	dev->bEnabled = true;
+
 	// Optional interrupt routing
 	if (pCfg->bIntMode)
 	{
@@ -872,6 +1025,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		if (!irqOk)
 		{
 			ESP32_UART_INT_ENA_REG(base) = 0;
+			dev->bEnabled = false;
 			dev->pUartDev = nullptr;
 			return false;
 		}

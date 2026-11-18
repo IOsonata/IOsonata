@@ -13,6 +13,7 @@ reimporting these projects, without deleting their files from disk.
 
 | Directory | IOC project | Shared application source | Initial configuration |
 | --- | --- | --- | --- |
+| `PowerOffDemo` | `PowerOffDemo` | `exemples/misc/power_off_demo.cpp` | Resume sleep, P000/IRQ6 wake, SCI0 console, static/stack RAM sample |
 | `Blinky` | `Blinky` | `exemples/misc/blinky.c` | Three LED/test outputs, optional falling-edge button |
 | `TimerDemo` | `TimerDemo` | `exemples/timer/timer_demo.cpp` | Timer DevNo 0, default count frequency, triggers according to device capability |
 | `UartLoopback` | `UartLoopback` | `exemples/uart/uart_loopback.cpp` | SCI0, 1000000 baud 8N1, interrupt mode, no DMA |

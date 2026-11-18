@@ -79,7 +79,7 @@ common = ['ARM/src/ResetEntry.c', 'ARM/src/iatomic.c', 'src/cfifo.c',
           'src/syslog.cpp', 'src/semihost_intrf.cpp', 'ARM/src/semihost_arm.c']
 objects += [compile_source(root / p, Path(p).stem + '_generic') for p in common]
 examples = ['Blinky', 'TimerDemo', 'UartPrbsTxTest', 'PulseTrain',
-            'UartRetargetDemo', 'I2CMasterDemo', 'SPIMasterDemo']
+            'UartRetargetDemo', 'I2CMasterDemo', 'SPIMasterDemo', 'PowerOffDemo']
 for name in examples:
     project = root / 'ARM/Renesas/RE01/RE01_1500KB/exemples' / name / 'ioc'
     links = ET.parse(project / '.project').findall('.//linkedResources/link')
@@ -90,7 +90,7 @@ for name in examples:
         if match:
             paths.append(project.parents[int(match[1]) - 1] / match[2])
     board = next(p.parent for p in paths if p.name == 'board.h')
-    source = next(p for p in paths if p.suffix in ('.c', '.cpp'))
+    sources = [p for p in paths if p.suffix in ('.c', '.cpp')]
     assert all(p.is_file() for p in paths), paths
     defines = []
     if name == 'UartRetargetDemo':
@@ -104,11 +104,12 @@ for name in examples:
     for devno in devices:
         label = name if devno is None else name + '_dev' + str(devno)
         options = defines + (['TIMER_DEMO_DEVNO=' + str(devno)] if devno is not None else [])
-        obj = compile_source(source, label, board, options)
+        appobjects = [compile_source(source, label + "_" + source.stem, board, options)
+                      for source in sources]
         for script in ('gcc_re01_1500kb.ld',):
             elf = out / (label + '_' + Path(script).stem + '.elf')
             run([args.tool_prefix + 'g++', '-mcpu=cortex-m0plus', '-mthumb',
                  '--specs=nano.specs', '--specs=nosys.specs', '-Wl,--gc-sections',
                  '-L' + str(root / 'ARM/ldscript'), '-T' + str(lddir / script),
-                 *map(str, objects), str(obj), '-o', str(elf)])
+                 *map(str, objects), *map(str, appobjects), '-o', str(elf)])
             check_image(elf)

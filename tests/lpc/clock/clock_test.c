@@ -38,6 +38,8 @@ SOFTWARE.
 #include "LPC11Uxx.h"
 #include "coredev/system_core_clock.h"
 
+uint32_t SystemMicroSecLoopCnt;
+
 extern uint32_t SystemMainClkFreq;
 
 static void Check(uint32_t Main, uint32_t Core)
@@ -48,6 +50,7 @@ static void Check(uint32_t Main, uint32_t Core)
 	SystemCoreClockUpdate();
 	assert(SystemMainClkFreq == Main);
 	assert(SystemCoreClockGet() == Core);
+	assert(SystemMicroSecLoopCnt == ((uint64_t)Core << 16) / 16000000U);
 	assert(SystemPeriphClockGet(0) == Core);
 	assert(SystemPeriphClockGet(-1) == 0);
 	assert(SystemPeriphClockGet(1) == 0);
@@ -65,6 +68,9 @@ int main(void)
 	assert(GetHighFreqOscFreq() == 12000000);
 	assert(g_McuOsc.bUSBClk);
 
+	uint32_t locked = 1;
+
+	memcpy((void *)&LPC_SYSCON->SYSPLLSTAT, &locked, sizeof(locked));
 	// Reset IRC source must report 12 MHz, not 6 MHz.
 	LPC_SYSCON->SYSAHBCLKDIV = 1;
 	Check(12000000, 12000000);
@@ -128,5 +134,22 @@ int main(void)
 		LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLOUT;
 		Check(0, 0);
 	}
+	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_IRC;
+	LPC_SYSCON->PDRUNCFG = PDRUNCFG_IRCOUT_PD;
+	Check(0, 0);
+	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLOUT;
+	LPC_SYSCON->SYSPLLCLKSEL = SYSPLLCLKSEL_SYSOSC;
+	LPC_SYSCON->PDRUNCFG = PDRUNCFG_SYSPLL_PD;
+	Check(0, 0);
+	LPC_SYSCON->PDRUNCFG = PDRUNCFG_SYSOSC_PD;
+	Check(0, 0);
+	LPC_SYSCON->PDRUNCFG = 0;
+	locked = 0;
+	memcpy((void *)&LPC_SYSCON->SYSPLLSTAT, &locked, sizeof(locked));
+	Check(0, 0);
+	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_WDT;
+	LPC_SYSCON->WDTOSCCTRL = 1U << 5;
+	LPC_SYSCON->PDRUNCFG = PDRUNCFG_WDTOSC_PD;
+	Check(0, 0);
 	puts("LPC11Uxx clock decoding: PASS");
 }

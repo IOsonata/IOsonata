@@ -74,6 +74,7 @@ typedef struct {
 	uint32_t Divider;
 	uint32_t HalfCycle;
 	bool bEnabled;
+	bool bSleepPaused;		//!< Suspended by SystemSleep
 	bool bOpen;
 	bool bRx;
 	bool bReadEnded;
@@ -90,6 +91,9 @@ static Esp32I2cDev_t s_I2c[] = {
 	{ESP32_LP_I2C_BASE, ESP32_LP_I2C_FIFO_DEPTH},
 #endif
 };
+
+static void Esp32I2cEnable(DevIntrf_t *pIntrf);
+static void Esp32I2cDisable(DevIntrf_t *pIntrf);
 
 static Esp32I2cDev_t *Esp32I2cHandle(DevIntrf_t *pIntrf)
 {
@@ -224,7 +228,7 @@ static uint32_t Esp32I2cSetRate(DevIntrf_t *pIntrf, uint32_t Rate)
 	{
 		return 0;
 	}
-	source = GetHighFreqOscFreq();
+	source = Esp32XtalClockGet();
 	maxPre = 256U;
 	minHalf = 32U;
 #if defined(ESP32C6)
@@ -369,9 +373,6 @@ static void Esp32I2cFinish(Esp32I2cDev_t *pDev)
 	pDev->bReadEnded = false;
 	pDev->bLost = false;
 }
-
-static void Esp32I2cEnable(DevIntrf_t *pIntrf);
-static void Esp32I2cDisable(DevIntrf_t *pIntrf);
 
 static void Esp32I2cStop(DevIntrf_t *pIntrf)
 {
@@ -757,6 +758,62 @@ static void Esp32I2cSlaveIrq(void)
 }
 #endif
 
+#if defined(ESP32C3) || defined(ESP32C6)
+// RTC sleep owns master suspension. Enabled slaves cannot be stopped
+// without losing unsolicited bus traffic and have no RTC wake route here.
+extern "C" bool Esp32I2cPrepareSleep(void)
+{
+	Esp32I2cDev_t *dev;
+	I2CDev_t *pDev;
+
+	for (unsigned i = 0; i < sizeof(s_I2c) / sizeof(s_I2c[0]); i++)
+	{
+		dev = &s_I2c[i];
+		pDev = dev->pOwner;
+		if (pDev == NULL || !dev->bEnabled ||
+			atomic_load(&pDev->DevIntrf.EnCnt) == 0)
+		{
+			continue;
+		}
+		if (dev->bSlave || dev->bSleepPaused || dev->bOpen ||
+			!pDev->DevIntrf.bTxReady)
+		{
+			return false;
+		}
+	}
+	for (unsigned i = 0; i < sizeof(s_I2c) / sizeof(s_I2c[0]); i++)
+	{
+		dev = &s_I2c[i];
+		pDev = dev->pOwner;
+		if (pDev != NULL && dev->bEnabled &&
+			atomic_load(&pDev->DevIntrf.EnCnt) != 0)
+		{
+			Esp32I2cDisable(&pDev->DevIntrf);
+			dev->bSleepPaused = true;
+		}
+	}
+	return true;
+}
+
+extern "C" void Esp32I2cResumeSleep(void)
+{
+	Esp32I2cDev_t *dev;
+
+	for (unsigned i = 0; i < sizeof(s_I2c) / sizeof(s_I2c[0]); i++)
+	{
+		dev = &s_I2c[i];
+		if (dev->bSleepPaused)
+		{
+			Esp32I2cEnable(&dev->pOwner->DevIntrf);
+			if (dev->bEnabled)
+			{
+				dev->bSleepPaused = false;
+			}
+		}
+	}
+}
+#endif
+
 static void Esp32I2cEnable(DevIntrf_t *pIntrf)
 {
 	Esp32I2cDev_t *dev;
@@ -901,7 +958,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		(pCfg->Mode == I2CMODE_SLAVE && (!pCfg->bIntEn || pCfg->NbSlaveAddr != 1 ||
 		 pCfg->SlaveAddr[0] == 0 || pCfg->SlaveAddr[0] > 127 || pCfg->IntPrio < 1 || pCfg->IntPrio > 7)) ||
 		pCfg->pIOPinMap == NULL || pCfg->NbIOPins != 2 || pCfg->MaxRetry < 0 ||
-		GetHighFreqOscFreq() == 0)
+		Esp32XtalClockGet() == 0)
 	{
 		return false;
 	}

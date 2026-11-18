@@ -320,10 +320,30 @@ uint32_t SystemResetReason(void);
 void SystemPowerOff(void);
 
 /**
- * @brief	Wake up pin of power off
+ * @brief Enter a low-power state that resumes execution on wakeup.
  *
- * Selects a pin that wakes the MCU from SystemPowerOff. Configure the pin as
- * an input with IOPinConfig first. Where the MCU wakes up only on dedicated
+ * MCU-specific implementation uses the deepest interrupt-resumable sleep
+ * mode supported by the port. Wake sources must be configured and enabled
+ * before this call. When a wake event is serviced, execution resumes after
+ * this function. RAM and stack remain valid.
+ *
+ * Peripheral drivers own their clock and power resources. Supported drivers
+ * prepare and restore sleep-related hardware from the target implementation.
+ * Applications configure wake sources and finish outstanding transfers, not
+ * target-specific clock or peripheral restoration. This function does not
+ * alter reset reasons or select wake sources.
+ *
+ * Unlike SystemPowerOff, this operation never requests a reset-on-wake
+ * state. It is optional on MCUs without a supported resumable sleep mode.
+ */
+void SystemSleep(void);
+
+/**
+ * @brief	Low-power wakeup pin
+ *
+ * Selects a pin that wakes the MCU from its implemented low-power state
+ * (SystemPowerOff or SystemSleep). Configure the pin as an input with
+ * IOPinConfig first. Where the MCU wakes up only on dedicated
  * pins or on one level, other pins and levels are refused. Where the pin
  * configuration is lost in power off, its pull resistor is kept if the MCU
  * can.

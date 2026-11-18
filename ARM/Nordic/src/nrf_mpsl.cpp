@@ -116,6 +116,16 @@ static volatile uint32_t s_NvmSigBlocked = 0;
 static volatile uint32_t s_NvmSigOther = 0;
 static volatile uint32_t s_NvmSigAbnormal = 0;
 
+// Weak reference to the NVM interface. It is declared here on top of the
+// declaration in nvm_mcu_intrf.h so that this file does not pull the NVM driver
+// into the link: an application that does not use the driver has nothing to
+// arbitrate, and the driver and its data then stay out.
+__attribute__((weak)) void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb);
+
+#if defined(NRF54L_SERIES) && NRF_POWER_HAS_CONST_LATENCY
+static volatile uint8_t s_ConstLatRefs = 0;
+#endif
+
 // An earliest request one step long. Clamped to what MPSL accepts, and high
 // priority so a bond write is not starved by low priority traffic.
 static void NvmBuildReq(mpsl_timeslot_request_t *pReq, uint32_t LengthUs)
@@ -299,12 +309,6 @@ static int NvmArbiterRun(void *pRequest)
 
 	return result;
 }
-
-// Weak reference to the NVM interface. It is declared here on top of the
-// declaration in nvm_mcu_intrf.h so that this file does not pull the NVM driver
-// into the link: an application that does not use the driver has nothing to
-// arbitrate, and the driver and its data then stay out.
-__attribute__((weak)) void NvmMcuIntrfSetArbiter(NvmMcuIntrfArb_t pArb);
 
 int MpslNvmArbiterStart(void)
 {
@@ -598,8 +602,6 @@ void TIMER0_IRQHandler(void)
 // HAL keeps the constant latency behaviour and lets nrfx_power stay out of the
 // SDC library, so MPSL owns the shared interrupt vector.
 #if NRF_POWER_HAS_CONST_LATENCY
-static volatile uint8_t s_ConstLatRefs = 0;
-
 static void ConstLatRequest(void)
 {
 	if (s_ConstLatRefs++ == 0)

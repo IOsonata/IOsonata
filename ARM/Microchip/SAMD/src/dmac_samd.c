@@ -52,8 +52,12 @@ SOFTWARE.
 static dmac_descriptor_registers_t s_SamdDmacDesc[DMAC_CH_NUM] __attribute__((aligned(16)));
 static dmac_descriptor_registers_t s_SamdDmacWrb[DMAC_CH_NUM] __attribute__((aligned(16)));
 
-static SamdDmacHandler_t s_SamdDmacHandler[DMAC_CH_NUM];
-static void *s_pSamdDmacCtx[DMAC_CH_NUM];
+typedef struct {
+	SamdDmacHandler_t Handler;
+	void *pCtx;
+} SamdDmacChan_t;
+
+static SamdDmacChan_t s_SamdDmacChan[DMAC_CH_NUM];
 static int s_SamdDmacIrqLvl = -1;		// Priority of the DMAC interrupt, -1 before the first handler
 static uint16_t s_SamdDmacUsed;
 
@@ -131,8 +135,8 @@ int SamdDmacOpen(int Trig, SamdDmacHandler_t Handler, void *pCtx, int IntPrio)
 	{
 		SamdDmacOn();
 
-		s_SamdDmacHandler[chan] = Handler;
-		s_pSamdDmacCtx[chan] = pCtx;
+		s_SamdDmacChan[chan].Handler = Handler;
+		s_SamdDmacChan[chan].pCtx = pCtx;
 		s_SamdDmacWrb[chan].DMAC_BTCNT = 0;
 
 		// Channel disabled, CHCTRLB, the flags and their interrupt set in
@@ -162,14 +166,13 @@ void SamdDmacClose(int Chan)
 		return;
 	}
 
-	(void)SamdDmacStop(Chan);
-
 	uint32_t state = DisableInterrupt();
 
-	DMAC_REGS->DMAC_CHID = (uint8_t)Chan;
+	// Stop leaves CHID selected and flags cleared. Keep that selection
+	// protected until its interrupts and ownership are released.
+	(void)SamdDmacStop(Chan);
 	DMAC_REGS->DMAC_CHINTENCLR = SAMD_DMAC_CH_INTS;
-	DMAC_REGS->DMAC_CHINTFLAG = SAMD_DMAC_CH_INTS;
-	s_SamdDmacHandler[Chan] = NULL;
+	s_SamdDmacChan[Chan].Handler = NULL;
 	s_SamdDmacUsed &= (uint16_t)~(1U << Chan);
 
 	EnableInterrupt(state);
@@ -223,6 +226,45 @@ void SamdDmacStart(int Chan, const volatile void *pSrc, bool bSrcInc, volatile v
 	DMAC_REGS->DMAC_CHCTRLA = DMAC_CHCTRLA_ENABLE_Msk;
 
 	EnableInterrupt(state);
+}
+
+// A peripheral or memory transfer must finish before the system stops
+// the high-frequency clocks in Standby. Keep the DMAC channel selector,
+// outstanding requests, and the allocation state unchanged.
+bool SamdDmacAllowStandby(void)
+{
+	uint32_t state;
+	uint8_t selected;
+	bool idle;
+
+	state = DisableInterrupt();
+	if ((PM_REGS->PM_AHBMASK & PM_AHBMASK_DMAC_Msk) == 0U ||
+		(PM_REGS->PM_APBBMASK & PM_APBBMASK_DMAC_Msk) == 0U)
+	{
+		idle = s_SamdDmacUsed == 0U;
+		EnableInterrupt(state);
+		return idle;
+	}
+	selected = DMAC_REGS->DMAC_CHID;
+	idle = (DMAC_REGS->DMAC_CTRL &
+		(DMAC_CTRL_CRCENABLE_Msk | DMAC_CTRL_SWRST_Msk)) == 0U &&
+		DMAC_REGS->DMAC_BUSYCH == 0U &&
+		DMAC_REGS->DMAC_PENDCH == 0U &&
+		DMAC_REGS->DMAC_INTSTATUS == 0U &&
+		(DMAC_REGS->DMAC_ACTIVE &
+		(DMAC_ACTIVE_ABUSY_Msk | DMAC_ACTIVE_LVLEX_Msk)) == 0U;
+	for (int i = 0; idle && i < DMAC_CH_NUM; i++)
+	{
+		DMAC_REGS->DMAC_CHID = (uint8_t)i;
+		if ((DMAC_REGS->DMAC_CHCTRLA &
+			(DMAC_CHCTRLA_ENABLE_Msk | DMAC_CHCTRLA_SWRST_Msk)) != 0U)
+		{
+			idle = false;
+		}
+	}
+	DMAC_REGS->DMAC_CHID = selected;
+	EnableInterrupt(state);
+	return idle;
 }
 
 bool SamdDmacBusy(int Chan)
@@ -285,10 +327,10 @@ void DMAC_Handler(void)
 
 		DMAC_REGS->DMAC_INTPEND = (uint16_t)((pend & DMAC_INTPEND_ID_Msk) | flags);
 
-		if (chan < DMAC_CH_NUM && s_SamdDmacHandler[chan] != NULL)
+		if (chan < DMAC_CH_NUM && s_SamdDmacChan[chan].Handler != NULL)
 		{
 			// INTPEND flags are the CHINTFLAG bits shifted by 8
-			s_SamdDmacHandler[chan](chan, flags >> DMAC_INTPEND_TERR_Pos, s_pSamdDmacCtx[chan]);
+			s_SamdDmacChan[chan].Handler(chan, flags >> DMAC_INTPEND_TERR_Pos, s_SamdDmacChan[chan].pCtx);
 		}
 	}
 }

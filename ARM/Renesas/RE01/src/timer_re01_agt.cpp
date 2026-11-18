@@ -49,6 +49,8 @@ SOFTWARE.
 
 extern RE01_TimerData_t g_Re01TimerData[RE01_TIMER_MAXCNT];
 
+void Re01AgtDisableTrigger(TimerDev_t * const pTimer, int TrigNo);
+
 // Stop acknowledgement crosses the selected timer clock domain.
 // Keep the wait bounded, including when called from the compare ISR.
 static bool Re01AgtStop(RE01_TimerData_t *dev)
@@ -81,8 +83,6 @@ static void Re01AgtUnfIRQHandler(int IntNo, void *pCtx)
 		}
 	}
 }
-
-void Re01AgtDisableTrigger(TimerDev_t * const pTimer, int TrigNo);
 
 // Counts the counter misses in a stop and a start, at timer frequency Freq
 static uint32_t Re01AgtLost(uint32_t Freq)

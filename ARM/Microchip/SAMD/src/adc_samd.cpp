@@ -36,7 +36,6 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
-#include <math.h>
 
 #include "samdxxx.h"
 #include "clock_samd.h"
@@ -90,6 +89,7 @@ static const uint8_t s_SamdAdcPin[ADC_EXTCHANNEL_MSB + 1] = {
 static const uint8_t s_SamdAdcRefPin[2] = { PIN_PA03B_DAC_VREFP, PIN_PA04B_ADC_VREFP };
 
 static AdcSamd *s_pSamdAdc = nullptr;
+static bool s_bSamdAdcSleepPaused;
 
 static bool SamdAdcSync(void)
 {
@@ -102,6 +102,46 @@ static bool SamdAdcSync(void)
 	}
 
 	return false;
+}
+
+// SystemSleep pauses an initialized polling ADC without discarding its
+// previously sampled data or changing the owning device's configuration.
+// There is no asynchronous conversion mode on this implementation.
+extern "C" bool SamdAdcPrepareSleep(void)
+{
+	uint8_t ctrl;
+
+	if (s_bSamdAdcSleepPaused)
+	{
+		return false;
+	}
+	if (s_pSamdAdc == nullptr ||
+		(PM_REGS->PM_APBCMASK & PM_APBCMASK_ADC_Msk) == 0U)
+	{
+		return true;
+	}
+	if (!SamdAdcSync())
+	{
+		return false;
+	}
+	ctrl = ADC_REGS->ADC_CTRLA;
+	if ((ctrl & ADC_CTRLA_ENABLE_Msk) == 0U)
+	{
+		return true;
+	}
+	s_bSamdAdcSleepPaused = true;
+	ADC_REGS->ADC_CTRLA = ctrl & ~ADC_CTRLA_ENABLE_Msk;
+	return SamdAdcSync();
+}
+
+extern "C" void SamdAdcResumeSleep(void)
+{
+	if (s_bSamdAdcSleepPaused && s_pSamdAdc != nullptr &&
+		(PM_REGS->PM_APBCMASK & PM_APBCMASK_ADC_Msk) != 0U &&
+		SamdAdcSync() && s_pSamdAdc->Enable())
+	{
+		s_bSamdAdcSleepPaused = false;
+	}
 }
 
 // Pin on its analog function while the ADC uses it, shared with the DAC
@@ -205,7 +245,7 @@ bool AdcSamd::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 	{
 		const AdcRefVolt_t &r = Cfg.pRefVolt[i];
 
-		if (!isfinite(r.Voltage) || r.Voltage <= 0 ||
+		if (!__builtin_isfinite(r.Voltage) || r.Voltage <= 0 ||
 			(r.Type != ADC_REFVOLT_TYPE_INTERNAL && r.Type != ADC_REFVOLT_TYPE_SUPPLY &&
 			 r.Type != ADC_REFVOLT_TYPE_EXTERNAL) ||
 			(r.Type == ADC_REFVOLT_TYPE_EXTERNAL && (r.Pin < 0 || r.Pin > 1)))
@@ -692,6 +732,7 @@ void AdcSamd::PowerOff()
 	Valid(false);
 	memset(vbNew, 0, sizeof(vbNew));
 	s_pSamdAdc = nullptr;
+	s_bSamdAdcSleepPaused = false;
 }
 
 // Conversion of one logical channel. The first conversion after an enable

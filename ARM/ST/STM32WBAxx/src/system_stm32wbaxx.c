@@ -74,6 +74,10 @@ SOFTWARE.
 
 extern void (* const __Vectors[])(void);
 
+// Delay-loop iterations per microsecond, with 16 fractional bits.
+extern uint32_t SystemMicroSecLoopCnt;
+uint32_t SystemnsDelayFactor = 65536UL;
+
 uint32_t SystemCoreClock = HSI16_FREQ;
 
 const uint8_t AHBPrescTable[8] = {0U, 0U, 0U, 0U, 1U, 2U, 3U, 4U};
@@ -243,6 +247,8 @@ void SystemCoreClockUpdate(void)
 	}
 
 	SystemCoreClock = clk >> AHBPrescTable[(RCC->CFGR2 & RCC_CFGR2_HPRE) >> RCC_CFGR2_HPRE_Pos];
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
 }
 
 /* Core clock setup, run by ResetEntry before main.

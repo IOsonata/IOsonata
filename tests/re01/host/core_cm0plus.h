@@ -10,6 +10,7 @@
 #define __IOM volatile
 #define __WEAK __attribute__((weak))
 #define __NOP() ((void)0)
+#define __SEV() ((void)0)
 #define __WFE() ((void)0)
 #define __CLZ(n) ((n) ? __builtin_clz((uint32_t)(n)) : 32U)
 #define __DSB() ((void)0)

@@ -120,6 +120,18 @@ static void Re01UartClearErrors(Re01UartDev_t *dev, uint8_t Status)
 }
 
 // Called with interrupts masked or from the ISR. At most one hardware FIFO.
+// Baud = PCLK * M / (div * 4^CKS * 256 * (BRR + 1)).
+// M = 256 means modulation disabled; otherwise MDDR is 128..255.
+static const struct {
+	uint32_t Div;
+	uint8_t Semr;
+} s_Re01SemrDivTbl[] = {
+	{32, 0},
+	{16, SCI0_SEMR_BGDM_Msk},
+	{8, SCI0_SEMR_BGDM_Msk | SCI0_SEMR_ABCS_Msk},
+	{6, SCI0_SEMR_ABCSE_Msk},
+};
+
 static int Re01UartFillTx(Re01UartDev_t *dev)
 {
 	int sent = 0;
@@ -218,18 +230,6 @@ static uint32_t Re01UARTGetRate(DevIntrf_t * const pDev)
 {
 	return ((Re01UartDev_t*)pDev->pDevData)->pUartDev->Rate;
 }
-
-// Baud = PCLK * M / (div * 4^CKS * 256 * (BRR + 1)).
-// M = 256 means modulation disabled; otherwise MDDR is 128..255.
-static const struct {
-	uint32_t Div;
-	uint8_t Semr;
-} s_Re01SemrDivTbl[] = {
-	{32, 0},
-	{16, SCI0_SEMR_BGDM_Msk},
-	{8, SCI0_SEMR_BGDM_Msk | SCI0_SEMR_ABCS_Msk},
-	{6, SCI0_SEMR_ABCSE_Msk},
-};
 
 static uint32_t Re01UARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {

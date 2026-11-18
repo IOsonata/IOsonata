@@ -3,8 +3,8 @@
 
 @brief	Delay loop functions.
 
-The delay loop is calculated based on a 16MHz ARM loop is invariant to compiler
-optimization. nsec delay cannot be achieved is at 295ns per loop.
+Delay-loop calibration is maintained by the MCU clock implementation.
+The microsecond loop count uses 16 fractional bits.
 
 @author Hoang Nguyen Hoan
 @date	May 22, 2015
@@ -43,6 +43,7 @@ SOFTWARE.
 #ifdef __cplusplus
 extern "C" {
 #endif
+// Iterations per microsecond for each loop, with 16 fractional bits.
 extern uint32_t SystemMicroSecLoopCnt;
 extern uint32_t SystemnsDelayFactor;
 #ifdef __cplusplus
@@ -56,78 +57,111 @@ extern uint32_t SystemnsDelayFactor;
 /**
  * @brief	Microsecond delay.
  *
- * This function is based on a 16MHz clock. For higher clock
- * rate SystemMicroSecNopCnt needs to be adjusted.  Adjustment of this variable
- * should be done in the CMSIS SystemCoreCLockUpdate function.
+ * SystemCoreClockUpdate refreshes SystemMicroSecLoopCnt after a CPU clock
+ * change. Scale the full interval before removing the fractional bits.
+ * Long intervals retain the full calculated loop count.
+ * Interrupt service and instruction fetch stalls can extend this delay.
  * This delay is only approximate, it is NOT 100% accurate.
  *
  * @param	cnt : microsecond delay count
  */
-static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
+static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
+{
+	uint64_t loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 65535ULL) >> 16;
+	uint32_t low = (uint32_t)loops;
+	uint32_t high = (uint32_t)(loops >> 32);
+
+	// Run the low word first. Each remaining high count adds 2^32 iterations.
+	// Subtracting from zero clears carry and ends the outer loop.
 	__asm__ volatile (
 #ifdef __GNUC__
 		".syntax unified\n"
 #endif
-			"ORRS %[ucnt], %[ucnt]\n"
-			"BEQ 2f\n"
-			"MOVS r0, %[ucnt]\n"
+		" CMP %[low], #0\n"
+		" BEQ 2f\n"
+		// Keep loop placement independent of surrounding code and optimization.
+		".balign 8\n"
 		"1:\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" NOP\n"
-			" SUBS r0, #1\n"
-			" BGT 1b\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" NOP\n"
+		" SUBS %[low], #1\n"
+		" BNE 1b\n"
 		"2:\n"
+		" SUBS %[high], #1\n"
+		" BCS 1b\n"
 #if defined ( __ARMCC_VERSION )
 #elif defined ( __GNUC__ )
 		".syntax divided\n"
 #endif
+		: [low] "+&l" (low), [high] "+&l" (high)
 		:
-		: [ucnt] "l" (cnt * SystemMicroSecLoopCnt)
-		:"r0"
-		 );
+		: "cc"
+	);
 }
 
 /**
  * @brief	Nanosecond delay.
  *
- * This is highly inaccurate use at you own risk
- *
- * nsec delay cannot be achieved for low cpu clock.
- * this loop is 295ns on a 16MHz cpu
+ * SystemnsDelayFactor uses the same fractional format as the microsecond
+ * loop count and is refreshed by the MCU clock implementation.
+ * Calculation overhead, instruction fetch and interrupts extend the delay.
+ * Use a hardware timer when precise timing is required.
  *
  * @param	cnt : nanosecond count
  */
-static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt) {
+static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
+{
+	uint64_t loops = ((uint64_t)cnt * SystemnsDelayFactor + 65535999ULL) / 65536000ULL;
+	uint32_t low = (uint32_t)loops;
+	uint32_t high = (uint32_t)(loops >> 32);
+
+	// Run the low word first. Each remaining high count adds 2^32 iterations.
+	// Subtracting from zero clears carry and ends the outer loop.
 	__asm__ volatile (
 #ifdef __GNUC__
 		".syntax unified\n"
 #endif
-			"MOVS r1, %[ucnt]\n"
+		" CMP %[low], #0\n"
+		" BEQ 2f\n"
+		// Keep loop placement independent of surrounding code and optimization.
+		".balign 8\n"
 		"1:\n"
-			" SUBS r1, #1\n"
-			" BGT 1b\n"
+		" SUBS %[low], #1\n"
+		" BNE 1b\n"
 		"2:\n"
+		" SUBS %[high], #1\n"
+		" BCS 1b\n"
 #if defined ( __ARMCC_VERSION )
 #elif defined ( __GNUC__ )
 		".syntax divided\n"
 #endif
+		: [low] "+&l" (low), [high] "+&l" (high)
 		:
-		: [ucnt] "l" ((cnt + (SystemnsDelayFactor >> 1)) / SystemnsDelayFactor)//(SYSTEM_NSDELAY_CORE_FACTOR >> 1)) / SYSTEM_NSDELAY_CORE_FACTOR)
-//		: [ucnt] "l" ((cnt + (SYSTEM_NSDELAY_CORE_FACTOR >> 1)) / SYSTEM_NSDELAY_CORE_FACTOR)
-		:"r1"
-		 );
+		: "cc"
+	);
 }
 
-static inline __attribute__((always_inline)) void msDelay(uint32_t ms) {
-	usDelay(ms * 1000UL);
+/**
+ * @brief	Millisecond delay.
+ * @param	ms : Milliseconds to wait.
+ */
+static inline void msDelay(uint32_t ms)
+{
+	// Split before converting milliseconds to the 32-bit microsecond count.
+	while (ms > UINT32_MAX / 1000U)
+	{
+		usDelay((UINT32_MAX / 1000U) * 1000U);
+		ms -= UINT32_MAX / 1000U;
+	}
+	usDelay(ms * 1000U);
 }
 
 /** @} End of group Utilities */

@@ -16,6 +16,7 @@ enum {AST_ALARM_IRQn=39,AST_OVF_IRQn=41,TC00_IRQn=55,TC01_IRQn,TC02_IRQn,TC10_IR
 struct { uint32_t ISER[2]={}; } nvic;
 #define NVIC (&nvic)
 uint64_t pending;
+static uint32_t s_TestPeripheralClock = 48000000;
 void NVIC_EnableIRQ(int n) { nvic.ISER[n/32] |= 1u<<(n%32); }
 void NVIC_DisableIRQ(int n) { nvic.ISER[n/32] &= ~(1u<<(n%32)); }
 void NVIC_ClearPendingIRQ(int n) { pending &= ~(1ULL<<n); }
@@ -52,13 +53,14 @@ struct Tc { TcChannel TC_CHANNEL[3]; } tc[2];
 #define SAM4L_TC1 (&tc[1])
 struct {uint32_t PM_UNLOCK=0,PM_PBAMASK=0,PM_PBDMASK=0,PM_PBADIVMASK=0;} pm;
 #define SAM4L_PM (&pm)
-struct {uint32_t BPM_PMCON=0;} bpm;
+struct {uint32_t BPM_PMCON=0,BPM_BKUPWEN=0;} bpm;
 #define SAM4L_BPM (&bpm)
 struct {uint32_t BSCIF_PCLKSR=BSCIF_PCLKSR_OSC32RDY,BSCIF_OSCCTRL32=BSCIF_OSCCTRL32_EN32K,BSCIF_RC32KCR=0;} bscif;
 #define SAM4L_BSCIF (&bscif)
 struct AstStatus {uint32_t value=0; operator uint32_t();};
+static bool s_AstBusyUntilClock;
 struct {
-	uint32_t AST_CR=0,AST_CLOCK=0,AST_DTR=0,AST_CV=0,AST_SCR=0,AST_AR0=0,AST_IMR=0;
+	uint32_t AST_CR=0,AST_CLOCK=0,AST_DTR=0,AST_CV=0,AST_SCR=0,AST_AR0=0,AST_IMR=0,AST_WER=0;
 	AstStatus AST_SR;
 	MaskWrite AST_IER{&AST_IMR,true},AST_IDR{&AST_IMR,false};
 } ast;
@@ -66,6 +68,12 @@ struct {
 AstStatus::operator uint32_t() {
 	// Hardware clears flags on a synchronized SCR write.
 	value &= ~ast.AST_SCR; ast.AST_SCR=0;
+	// Model a pending AST write that cannot synchronize with CEN disabled.
+	// It completes once the prescaler clock is enabled.
+	if (s_AstBusyUntilClock && (ast.AST_CLOCK & AST_CLOCK_CEN)) {
+		value &= ~AST_SR_BUSY;
+		s_AstBusyUntilClock = false;
+	}
 	static uint32_t clock=0;
 	uint32_t diff=clock^ast.AST_CLOCK;
 	assert(!((diff&AST_CLOCK_CEN)&&(diff&AST_CLOCK_CSSEL_Msk)));
@@ -76,7 +84,7 @@ AstStatus::operator uint32_t() {
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp"
 McuOsc_t g_McuOsc = {};
-extern "C" uint32_t SystemPeriphClockGet(int) { return 48000000; }
+extern "C" uint32_t SystemPeriphClockGet(int) { return s_TestPeripheralClock; }
 unsigned events[7][3]={},overflows[7]={},callbacks=0;
 bool cancelNext=false,resetInCallback=false;
 void Event(TimerDev_t *t,uint32_t e) {
@@ -115,6 +123,7 @@ void Advance(int dev,uint32_t ticks,bool service=true) {
 	}
 }
 int main() {
+	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0));
 	g_McuOsc.LowPwrOsc.Freq=32768;
 	// AST is only reset by POR (42023H table 10-12), not by debugger reset.
 	// Model a previous firmware's running timer with no live software owner.
@@ -126,6 +135,7 @@ int main() {
 	ast.AST_CV=123456;
 	ast.AST_SR.value=AST_SR_OVF | AST_SR_ALARM0;
 	ast.AST_IMR=AST_SR_ALARM0;
+	ast.AST_WER=AST_WER_PER0 | AST_WER_ALARM0;
 	TimerDev_t timers[7]={},other={};
 	TimerCfg_t cfg={0,TIMER_CLKSRC_DEFAULT,0,7,Event,false};
 	assert(TimerGetLowFreqDevCount()==1&&TimerGetHighFreqDevCount()==6&&TimerGetHighFreqDevNo()==1);
@@ -139,9 +149,20 @@ int main() {
 	assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_IRQ);
 	assert(ast.AST_CR&AST_CR_EN); // Do not take a live interrupt owner.
 	NVIC_DisableIRQ(AST_ALARM_IRQn);
+	// After reset the AST clock may be disabled while a pending write
+	// leaves BUSY set. TimerInit must start the prescaler before waiting
+	// for this synchronization.
+	ast.AST_CLOCK &= ~AST_CLOCK_CEN;
+	ast.AST_SR.value |= AST_SR_BUSY;
+	s_AstBusyUntilClock = true;
 	for(int dev=0;dev<7;++dev) {
 		cfg.DevNo=dev; timers[dev].pObj=&timers[dev];
 		assert(TimerInit(&timers[dev],&cfg));
+		if (dev == 0) {
+			assert(!s_AstBusyUntilClock);
+			assert(!(ast.AST_SR.value & AST_SR_BUSY));
+			assert(ast.AST_CLOCK & AST_CLOCK_CEN);
+		}
 		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OK);
 		assert(timers[dev].GetTickCount(&timers[dev])==0);
 		assert(timers[dev].pObj==&timers[dev]);
@@ -152,21 +173,42 @@ int main() {
 		assert(timers[dev].GetMaxTrigger(&timers[dev])==(dev?3:1));
 		assert(!timers[dev].EnableExtTrigger(&timers[dev],0,TIMER_EXTTRIG_SENSE_TOGGLE));
 	}
+	assert(ast.AST_WER == AST_WER_OVF);
+	assert(bpm.BPM_BKUPWEN & (1U << 1));
 	assert(pm.PM_PBADIVMASK==64 && (pm.PM_PBAMASK & (PM_PBAMASK_TC0|PM_PBAMASK_TC1)));
+	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0 | PM_PBAMASK_TC1));
+	for (int dev = 1; dev < 7; dev++) timers[dev].Disable(&timers[dev]);
+	assert(!Sam4lTimerClockBusy(PM_PBAMASK_TC0 | PM_PBAMASK_TC1));
+	// The ownership query must not clear pending rollover/compare flags.
+	tc[0].TC_CHANNEL[0].TC_SR.value = TC_SR_COVFS | TC_SR_CPAS;
+	assert(!Sam4lTimerClockBusy(PM_PBAMASK_TC0));
+	assert(tc[0].TC_CHANNEL[0].TC_SR.value == (TC_SR_COVFS | TC_SR_CPAS));
+	tc[0].TC_CHANNEL[0].TC_SR.value = 0;
+	g_Sam4lTimerData[1].Healthy = false;
+	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0));
+	g_Sam4lTimerData[1].Healthy = true;
+	for (int dev = 1; dev < 7; dev++) assert(timers[dev].Enable(&timers[dev]));
 	for(int dev=0;dev<7;++dev) {
 		auto &t=timers[dev];
 		assert(t.EnableTrigger(&t,0,100000000,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr));
+		if (dev == 0) assert(ast.AST_WER == (AST_WER_OVF | AST_WER_ALARM0));
 		uint32_t period=g_Sam4lTimerData[dev].Trigger[0].Ticks;
 		Advance(dev,period*3); assert(events[dev][0]==3);
 		uint64_t count=t.GetTickCount(&t); assert(count==period*3);
-		t.Disable(&t); Advance(dev,period);assert(t.GetTickCount(&t)==count);
-		assert(t.Enable(&t));Advance(dev,period);assert(events[dev][0]==4);
+		t.Disable(&t);
+		if (dev == 0) assert(ast.AST_WER == 0);
+		Advance(dev,period);assert(t.GetTickCount(&t)==count);
+		assert(t.Enable(&t));
+		if (dev == 0) assert(ast.AST_WER == (AST_WER_OVF | AST_WER_ALARM0));
+		Advance(dev,period);assert(events[dev][0]==4);
 		t.Disable(&t);t.Reset(&t);assert(t.GetTickCount(&t)==0);
 		Advance(dev,period);assert(t.GetTickCount(&t)==0);
 		assert(t.Enable(&t));
 		Advance(dev,period,false);assert(t.GetTickCount(&t)==period); // reading status must not lose compare
 		Service(dev);assert(events[dev][0]==5);
-		t.DisableTrigger(&t,0);Advance(dev,period);assert(events[dev][0]==5);
+		t.DisableTrigger(&t,0);
+		if (dev == 0) assert(ast.AST_WER == AST_WER_OVF);
+		Advance(dev,period);assert(events[dev][0]==5);
 		assert(t.FindAvailTrigger(&t)==0);
 		assert(t.EnableTrigger(&t,0,UINT64_MAX,TIMER_TRIG_TYPE_SINGLE,nullptr,nullptr)==
 			(UINT32_MAX*1000000000ULL+t.Freq/2)/t.Freq);
@@ -214,6 +256,20 @@ int main() {
 		Advance(dev,3);assert(events[dev][0]==previous);
 		Advance(dev,5);assert(events[dev][0]==previous+2);
 	}
+	// A one-shot alarm clears its wake request before invoking user code.
+	a.DisableTrigger(&a, 0);
+	assert(a.EnableTrigger(&a, 0, 4000000000ULL, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
+	Advance(0, 4);
+	assert(ast.AST_WER == AST_WER_OVF);
+	assert(!(ast.AST_SR.value & AST_SR_ALARM0));
+	a.Disable(&a);
+	assert(ast.AST_WER == 0U);
+	assert(a.EnableTrigger(&a, 0, 4000000000ULL, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
+	assert(ast.AST_WER == 0U);
+	assert(a.Enable(&a));
+	assert(ast.AST_WER == (AST_WER_OVF | AST_WER_ALARM0));
+	Advance(0, 4);
+	assert(ast.AST_WER == AST_WER_OVF);
 	// The user's AST 1 Hz / 100 ms request returns four seconds.
 	assert(a.EnableTrigger(&a,0,100000000,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr)==4000000000ULL);
 	// Changing frequency also rounds an existing short period to four ticks.
@@ -233,7 +289,16 @@ int main() {
 		assert(g_Sam4lTimerData[dev].Trigger[0].Info.nsPeriod==
 			(UINT32_MAX*1000000000ULL+timer.Freq/2)/timer.Freq);
 	}
+	a.Disable(&a);
+	g_McuOsc.LowPwrOsc.Freq = 32000;
+	assert(a.SetFrequency(&a, 1000) == 1000);
+	assert(g_Sam4lTimerData[0].BaseFreq == 32000);
+	g_McuOsc.LowPwrOsc.Freq = 32768;
 	// A stuck synchronization flag must time out and make Enable return false.
 	ast.AST_SR.value|=AST_SR_BUSY;a.Reset(&a);assert(!a.Enable(&a));
+	timers[1].Disable(&timers[1]);
+	s_TestPeripheralClock = 24000000;
+	assert(timers[1].SetFrequency(&timers[1], 0) == 187500);
+	assert(g_Sam4lTimerData[1].BaseFreq == s_TestPeripheralClock);
 	puts("SAM4L timer register-model tests passed");
 }

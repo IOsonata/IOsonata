@@ -56,6 +56,7 @@ typedef struct {
 	SPIDev_t *pOwner;
 	uint32_t Clock;
 	bool bEnabled;
+	bool bSleepPaused;		//!< Suspended by SystemSleep
 	bool bOpen;
 	bool bError;
 	bool bSlave;
@@ -64,6 +65,11 @@ typedef struct {
 } Esp32SpiDev_t;
 
 static Esp32SpiDev_t s_Spi;
+
+static void Esp32SpiSlaveArm(Esp32SpiDev_t *pDev);
+static void Esp32SpiDisable(DevIntrf_t *pIntrf);
+static void Esp32SpiEnable(DevIntrf_t *pIntrf);
+static void Esp32SpiSlaveIrq(void);
 
 static Esp32SpiDev_t *Esp32SpiHandle(DevIntrf_t *pIntrf)
 {
@@ -110,10 +116,6 @@ static void Esp32SpiClock(bool Enable)
 #endif
 	EnableInterrupt(state);
 }
-
-static void Esp32SpiSlaveArm(Esp32SpiDev_t *pDev);
-static void Esp32SpiDisable(DevIntrf_t *pIntrf);
-static void Esp32SpiSlaveIrq(void);
 
 static void Esp32SpiConfigure(Esp32SpiDev_t *pDev)
 {
@@ -217,7 +219,7 @@ static uint32_t Esp32SpiSetRate(DevIntrf_t *pIntrf, uint32_t Rate)
 		dev->pOwner->Cfg.Rate = Rate;
 		return Rate;
 	}
-	source = GetHighFreqOscFreq();
+	source = Esp32XtalClockGet();
 	if (source == 0)
 	{
 		return 0;
@@ -514,6 +516,44 @@ static void Esp32SpiSlaveIrq(void)
 	}
 }
 
+#if defined(ESP32C3) || defined(ESP32C6)
+// This port has no RTC wake route for an enabled SPI slave. Retain
+// master settings through the existing Enable/Disable lifecycle.
+extern "C" bool Esp32SpiPrepareSleep(void)
+{
+	Esp32SpiDev_t *dev = &s_Spi;
+	SPIDev_t *pDev = dev->pOwner;
+
+	if (pDev == NULL || !dev->bEnabled ||
+		atomic_load(&pDev->DevIntrf.EnCnt) == 0)
+	{
+		return true;
+	}
+	if (dev->bSlave || dev->bSleepPaused || dev->bOpen ||
+		!pDev->DevIntrf.bTxReady)
+	{
+		return false;
+	}
+	Esp32SpiDisable(&pDev->DevIntrf);
+	dev->bSleepPaused = true;
+	return true;
+}
+
+extern "C" void Esp32SpiResumeSleep(void)
+{
+	Esp32SpiDev_t *dev = &s_Spi;
+
+	if (dev->bSleepPaused)
+	{
+		Esp32SpiEnable(&dev->pOwner->DevIntrf);
+		if (dev->bEnabled)
+		{
+			dev->bSleepPaused = false;
+		}
+	}
+}
+#endif
+
 static void Esp32SpiEnable(DevIntrf_t *pIntrf)
 {
 	Esp32SpiDev_t *dev;
@@ -630,7 +670,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 		(pCfg->Mode != SPIMODE_MASTER && pCfg->Mode != SPIMODE_SLAVE) ||
 		pCfg->DataSize != 8 || pCfg->bDmaEn ||
 		pCfg->MaxRetry < 0 || pCfg->pIOPinMap == NULL || pCfg->NbIOPins < 3 ||
-		pCfg->NbIOPins > (int)ESP32_GPIO_PIN_COUNT || GetHighFreqOscFreq() == 0 ||
+		pCfg->NbIOPins > (int)ESP32_GPIO_PIN_COUNT || Esp32XtalClockGet() == 0 ||
 		(pCfg->ChipSel != SPICSEL_AUTO && pCfg->ChipSel != SPICSEL_MAN) ||
 		(pCfg->ChipSel == SPICSEL_AUTO && pCfg->NbIOPins < 4) ||
 		(pCfg->ChipSel == SPICSEL_MAN && pCfg->NbIOPins != 3) ||

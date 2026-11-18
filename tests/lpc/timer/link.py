@@ -7,6 +7,7 @@ Requires an Arm GNU toolchain with newlib-nano and C++20 support.
 from pathlib import Path
 import argparse
 import re
+from urllib.parse import unquote
 import struct
 import subprocess
 import tempfile
@@ -19,9 +20,13 @@ SOURCES = [
     'ARM/NXP/src/lpc_iap.c',
     'ARM/NXP/LPC11xx/src/Vectors_LPC11Uxx.c',
     'ARM/NXP/LPC11xx/src/system_LPC11Uxx.c',
+    'ARM/NXP/LPC11xx/src/system_power_lpc11uxx.c',
     'ARM/NXP/LPC11xx/src/iopincfg_lpc11uxx.c',
-    'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c',
+    'ARM/NXP/LPC11xx/src/usb_lpc11uxx.cpp',
     'src/cfifo.c',
+    'src/syslog.cpp',
+    'src/semihost_intrf.cpp',
+    'ARM/src/semihost_arm.c',
     'src/device_intrf.cpp',
     'src/app_evt_handler.cpp',
     'src/app_run.cpp',
@@ -37,11 +42,11 @@ SOURCES = [
     'ARM/NXP/src/timer_lpcxx.cpp',
     'ARM/NXP/LPC11xx/src/timer_lpc11uxx.cpp',
     'src/coredev/uart.cpp',
-    'ARM/NXP/src/uart_lpcxx.c',
-    'ARM/NXP/LPC11xx/src/uart_lpc11uxx.c',
+    'ARM/NXP/src/uart_lpcxx.cpp',
+    'ARM/NXP/LPC11xx/src/uart_lpc11uxx.cpp',
     'src/uart_retarget.c',
     'src/stddev.c',
-    'src/usb/usb_int.cpp',
+    'src/usb/usbd_int.cpp',
 ]
 INCLUDES = [
     'include', 'ARM/include', 'ARM/CMSIS/Core/Include',
@@ -58,7 +63,7 @@ def project_sources(project):
         name = link.findtext('name')
         assert name not in names, name
         names.add(name)
-        uri = link.findtext('locationURI')
+        uri = unquote(link.findtext('locationURI')).replace('${', '').replace('}', '')
         match = re.fullmatch(r'PARENT-(\d+)-PROJECT_LOC/(.*)', uri)
         if match:
             linked.add((project.parent.parents[int(match[1]) - 1] / match[2]).resolve())
@@ -148,7 +153,7 @@ def build(prefix, output, mode, kind):
     # USB objects are present in the archive but a timer application must
     # retain neither the native USB driver nor its dedicated SRAM buffers.
     assert 'Lpc11UsbHwPrepare' not in addresses
-    assert ('UARTRetargetEnable' in addresses) == (mode == 'Release')
+    assert ('UARTInit' in addresses) == (mode == 'Release')
     sections = subprocess.check_output([prefix + 'readelf', '-SW', str(image)], text=True)
     assert '.usb_ram' not in sections
     ram = addresses['__bss_end__'] - addresses['__data_start__']

@@ -167,6 +167,35 @@ static nrf_tdm_config_t s_TdmCfg;
 	NRF_TDM_INT_TXPTRUPD_MASK_MASK | NRF_TDM_INT_STOPPED_MASK_MASK)
 #endif
 
+#if defined(NRF53_SERIES)
+// HFCLKAUDIO synthesizes exact integer-family and 44.1-kHz-family sample
+// clocks. The 32 MHz PCLK dividers do not provide exact 48 kHz.
+typedef struct
+{
+	uint32_t Rate;
+	uint32_t Mclk;
+	uint32_t MckReg;
+	uint32_t RatioReg;
+	uint32_t AudioReg;
+} I2SAudioRate_t;
+
+static const I2SAudioRate_t s_AudioRates[] = {
+	// 48-kHz codec reference: ACLK 12.288 MHz, MCK 6.144 MHz,
+	// MCK/LRCK = 128. The CS47L63 FLL uses MCLK1 with N = 8.
+	// RATIO register indices: 32,48,64,96,128,192,256,384,512.
+	{ 8000,  3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 7, 39846 },
+	{ 12000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 6, 39846 },
+	{ 16000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 5, 39846 },
+	{ 24000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 4, 39846 },
+	{ 32000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 3, 39846 },
+	{ 48000, 6144000, 0x66666000U, 4, 39846 },
+	{ 96000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 0, 39846 },
+};
+
+static bool s_AudioClockStarted;
+static uint32_t s_AudioClockReg;
+#endif
+
 static void nRFxAudioInterruptsDisable(void)
 {
 #if IOSONATA_NRF_TDM_AUDIO
@@ -197,33 +226,6 @@ static bool nRFxAudioRxInterruptEnabled(void)
 }
 
 #if defined(NRF53_SERIES)
-// HFCLKAUDIO synthesizes exact integer-family and 44.1-kHz-family sample
-// clocks. The 32 MHz PCLK dividers do not provide exact 48 kHz.
-typedef struct
-{
-	uint32_t Rate;
-	uint32_t Mclk;
-	uint32_t MckReg;
-	uint32_t RatioReg;
-	uint32_t AudioReg;
-} I2SAudioRate_t;
-
-static const I2SAudioRate_t s_AudioRates[] = {
-	// 48-kHz codec reference: ACLK 12.288 MHz, MCK 6.144 MHz,
-	// MCK/LRCK = 128. The CS47L63 FLL uses MCLK1 with N = 8.
-	// RATIO register indices: 32,48,64,96,128,192,256,384,512.
-	{ 8000,  3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 7, 39846 },
-	{ 12000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 6, 39846 },
-	{ 16000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 5, 39846 },
-	{ 24000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 4, 39846 },
-	{ 32000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 3, 39846 },
-	{ 48000, 6144000, 0x66666000U, 4, 39846 },
-	{ 96000, 3072000, I2S_CONFIG_MCKFREQ_MCKFREQ_32MDIV4, 0, 39846 },
-};
-
-static bool s_AudioClockStarted;
-static uint32_t s_AudioClockReg;
-
 static bool nRF53AudioClockStart(void)
 {
 	uint32_t retry;

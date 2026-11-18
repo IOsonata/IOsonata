@@ -113,7 +113,35 @@ typedef struct {
 
 static Esp32TimerData_t s_Timer[ESP32_TIMG_COUNT];
 
+#if defined(ESP32C3) || defined(ESP32C6)
+// The APB timer groups do not run at their configured rate in RTC
+// Light-sleep. Do not silently lose count or scheduled compare events.
+extern "C" bool Esp32TimerAllowLightSleep(void)
+{
+	for (int i = 0; i < ESP32_TIMG_COUNT; i++)
+	{
+		if (s_Timer[i].pTimer != NULL && s_Timer[i].Running)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+#endif
+
 #define Esp32Reg(Base, Offset) ESP32_REG32((Base) + (Offset))
+
+static void Esp32Tg0Handler(void);
+#if ESP32_TIMG_COUNT > 1
+static void Esp32Tg1Handler(void);
+#endif
+
+static const Esp32IrqHandler s_TimerHandlers[] = {
+	Esp32Tg0Handler,
+#if ESP32_TIMG_COUNT > 1
+	Esp32Tg1Handler,
+#endif
+};
 
 static void Esp32EnableTimerClock(int DevNo)
 {
@@ -173,8 +201,18 @@ static uint32_t Esp32ClockSelect(uint32_t Requested, uint32_t *pDivider)
 	uint32_t upper;
 	uint32_t lower;
 
-	target = Requested == 0 ? ESP32_TIMER_APB_HZ / 2 : Requested;
-	div = ESP32_TIMER_APB_HZ / target;
+	// C3 Timer Group uses APB. PCR targets select the independent 80 MHz PLL.
+#if defined(ESP32C3)
+	uint32_t source = SystemPeriphClockGet(0);
+#else
+	uint32_t source = ESP32_TIMER_APB_HZ;
+#endif
+	if (source < 2U)
+	{
+		return 0;
+	}
+	target = Requested == 0 ? source / 2 : Requested;
+	div = source / target;
 	if (div < ESP32_TIMER_MIN_DIV)
 	{
 		div = ESP32_TIMER_MIN_DIV;
@@ -185,15 +223,15 @@ static uint32_t Esp32ClockSelect(uint32_t Requested, uint32_t *pDivider)
 	}
 	if (div < ESP32_TIMER_MAX_DIV)
 	{
-		upper = ESP32_TIMER_APB_HZ / div;
-		lower = ESP32_TIMER_APB_HZ / (div + 1);
+		upper = source / div;
+		lower = source / (div + 1);
 		if (upper > target && target >= lower && upper - target > target - lower)
 		{
 			div++;
 		}
 	}
 	*pDivider = div;
-	return ESP32_TIMER_APB_HZ / div;
+	return source / div;
 }
 
 static uint64_t Esp32PeriodToTicks(uint32_t Frequency, uint64_t nsPeriod,
@@ -376,6 +414,10 @@ static uint32_t Esp32SetFrequency(TimerDev_t *pTimer, uint32_t Request)
 		return 0;
 	}
 	frequency = Esp32ClockSelect(Request, &divider);
+	if (frequency == 0U)
+	{
+		return 0;
+	}
 	if (pData->TriggerActive)
 	{
 		if (Esp32PeriodToTicks(frequency, pData->TriggerInfo.nsPeriod,
@@ -538,13 +580,6 @@ static void Esp32Tg1Handler(void)
 }
 #endif
 
-static const Esp32IrqHandler s_TimerHandlers[] = {
-	Esp32Tg0Handler,
-#if ESP32_TIMG_COUNT > 1
-	Esp32Tg1Handler,
-#endif
-};
-
 bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 {
 	Esp32TimerData_t *pData;
@@ -564,6 +599,10 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 		return false;
 	}
 	frequency = Esp32ClockSelect(pCfg->Freq, &divider);
+	if (frequency == 0U)
+	{
+		return false;
+	}
 	state = DisableInterrupt();
 	pData = &s_Timer[pCfg->DevNo];
 	for (i = 0; i < ESP32_TIMG_COUNT; i++)
@@ -636,6 +675,9 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	}
 	Esp32Run(pData, true);
 	EnableInterrupt(state);
+	// The saved startup mask can have MIE clear. Enable delivery after the
+	// complete timer configuration, as required by Esp32EnableSourceIrq.
+	Esp32GlobalIrqEnable();
 	return true;
 }
 

@@ -116,7 +116,7 @@ static void Check(unsigned Source, uint32_t Input, uint32_t Status,
 		}
 		s_Errors++;
 	}
-	assert(SystemMicroSecLoopCnt == SystemCoreClock / 16000000U);
+	assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock << 16) / 16000000U);
 	assert(memcmp(&before, (const void *)LPC_SC, sizeof(before)) == 0);
 }
 
@@ -125,6 +125,7 @@ int main(void)
 	assert(mmap((void *)LPC_SC_BASE, 0x1000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)LPC_SC_BASE);
 
+	Check(3, 12000000, 0, 1, 0);
 	// Valid main-oscillator settings: 9.6 GHz intermediate, 400 MHz CCO.
 	Check(CLKSRCSEL_MAIN, 12000000, 0x03000000U | (23U << 16) | 399U, 4, 100000000);
 	// UM10360 table 21 RTC multiplier: M=4272, N=1.

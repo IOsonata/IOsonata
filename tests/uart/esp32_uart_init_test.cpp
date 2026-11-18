@@ -53,6 +53,7 @@ volatile uint32_t g_Esp32C3Uart0IrqCount;
 volatile uint32_t g_Esp32C3Uart1IrqCount;
 static uint32_t s_Source;
 static unsigned s_PinCalls;
+static unsigned s_PinDisableCalls;
 void IOPinConfig(int Port, int Pin, int Op, IOPINDIR Dir, IOPINRES Res, IOPINTYPE Type)
 {
 	(void)Port;
@@ -63,7 +64,18 @@ void IOPinConfig(int Port, int Pin, int Op, IOPINDIR Dir, IOPINRES Res, IOPINTYP
 	(void)Type;
 	s_PinCalls++;
 }
+void IOPinDisable(int Port, int Pin)
+{
+	(void)Port;
+	(void)Pin;
+	s_PinDisableCalls++;
+}
 #ifndef ESP32_UART_REAL_IRQ
+void Esp32DisableSourceIrq(uint32_t Source, uint32_t Cpu)
+{
+	assert(Source == s_Source);
+	assert(Cpu > 0);
+}
 bool Esp32EnableSourceIrq(uint32_t Source, uint32_t Cpu, uint32_t Priority,
 	Esp32IrqHandler Handler)
 {
@@ -121,6 +133,72 @@ static void CheckSource(uint32_t Source, unsigned Instance)
 	(void)Instance;
 	assert(s_Source == Source);
 #endif
+}
+
+#include "../../src/device_intrf.cpp"
+
+static void CheckPower(UARTDev_t *pDev, const UARTCfg_t *pCfg)
+{
+	ESP32_UARTDEV *dev = (ESP32_UARTDEV *)pDev->DevIntrf.pDevData;
+	uint32_t base = dev->Base;
+	uint8_t data = 0x5AU;
+	uint32_t interrupts = ESP32_UART_INT_ENA_REG(base);
+	uint32_t divider = ESP32_UART_CLKDIV_REG(base);
+
+	// Extra owners postpone shutdown until the last release.
+	UARTEnable(pDev);
+	UARTDisable(pDev);
+	assert(dev->bEnabled);
+	assert(CFifoPutByte(pDev->hRxFifo, data));
+	assert(CFifoPutByte(pDev->hTxFifo, data));
+	for (unsigned i = 0; i < 3; i++)
+	{
+		UARTDisable(pDev);
+		assert(!dev->bEnabled);
+		assert(ESP32_UART_INT_ENA_REG(base) == 0U);
+#if defined(ESP32C2) || defined(ESP32C3)
+		assert((SYSTEM_PERIP_CLK_EN0_REG & (1UL << (dev->DevNo == 0 ? 2U : 5U))) == 0U);
+		assert((ESP32_UART_CLK_CONF_REG(base) & ESP32_UART_CLK_CONF_SCLK_EN_Msk) == 0U);
+#else
+		assert((ESP32_PCR_UART_CONF_REG(dev->DevNo) & ESP32_PCR_UART_CONF_CLK_EN_Msk) == 0U);
+		assert((ESP32_PCR_UART_SCLK_CONF_REG(dev->DevNo) & ESP32_PCR_UART_SCLK_EN_Msk) == 0U);
+#endif
+		auto saved = s_Regs;
+		unsigned writes = s_Writes.size();
+		UARTDisable(pDev);
+		assert(Esp32UartTxData(&pDev->DevIntrf, &data, 1) == 0);
+		assert(Esp32UartRxData(&pDev->DevIntrf, &data, 1) == 0);
+		assert(UARTSetRate(pDev, 9600) == 0);
+		Esp32UartIRQHandler(dev);
+		assert(s_Regs == saved && s_Writes.size() == writes);
+		UARTEnable(pDev);
+		assert(dev->bEnabled);
+		assert(ESP32_UART_INT_ENA_REG(base) == interrupts);
+		assert(ESP32_UART_CLKDIV_REG(base) == divider);
+#if defined(ESP32C2) || defined(ESP32C3)
+		assert(SYSTEM_PERIP_CLK_EN0_REG & (1UL << (dev->DevNo == 0 ? 2U : 5U)));
+		assert(ESP32_UART_CLK_CONF_REG(base) & ESP32_UART_CLK_CONF_SCLK_EN_Msk);
+#else
+		assert(ESP32_PCR_UART_CONF_REG(dev->DevNo) & ESP32_PCR_UART_CONF_CLK_EN_Msk);
+		assert(ESP32_PCR_UART_SCLK_CONF_REG(dev->DevNo) & ESP32_PCR_UART_SCLK_EN_Msk);
+#endif
+		assert(CFifoUsed(pDev->hRxFifo) == 1);
+		assert(CFifoUsed(pDev->hTxFifo) == 1);
+	}
+	// PowerOff also works after Disable and cannot be undone by Enable.
+	UARTDisable(pDev);
+	unsigned pins = s_PinDisableCalls;
+	UARTPowerOff(pDev);
+	assert(s_PinDisableCalls == pins + pCfg->NbIOPins);
+	assert(UARTGetInstance(pCfg->DevNo) == nullptr);
+	assert(CFifoUsed(pDev->hRxFifo) == 0 && CFifoUsed(pDev->hTxFifo) == 0);
+	unsigned writes = s_Writes.size();
+	UARTPowerOff(pDev);
+	UARTEnable(pDev);
+	assert(!dev->bEnabled && s_Writes.size() == writes);
+	assert(UARTGetRate(pDev) == 0);
+	assert(UARTInit(pDev, pCfg));
+	assert(dev->bEnabled && UARTGetInstance(pCfg->DevNo) == pDev);
 }
 
 int main()
@@ -210,12 +288,13 @@ int main()
 		assert(Esp32UartSetRate(&dev.DevIntrf, 32800000) == 32000000);
 		assert(Esp32UartSetRate(&dev.DevIntrf, UINT32_MAX) == 40000000);
 		assert(Esp32UartSetRate(&dev.DevIntrf, 1) >= 2);
+		CheckPower(&dev, &cfg);
 	}
 	// C2 boards may use a 26 MHz crystal. Use the configured oscillator.
 	g_McuOsc.CoreOsc.Freq = 26000000;
 	cfg.DevNo = 0;
 	assert(UARTInit(&dev, &cfg));
-	assert(s_Regs[ESP32_UART0_BASE + 0x14] == 26);
+	assert(s_Regs[ESP32_UART0_BASE + 0x14] == Esp32XtalClockGet() / 1000000U);
 	cfg.NbIOPins = 4;
 	cfg.FlowControl = UART_FLWCTRL_HW;
 	assert(UARTInit(&dev, &cfg));
@@ -236,6 +315,12 @@ int main()
 	cfg.bDMAMode = true;
 	assert(!UARTInit(&dev, &cfg));
 	assert(s_Writes.size() == before);
-	assert(s_PinCalls == ESP32_HP_UART_COUNT * 2 + 6);
+	assert(s_PinCalls == ESP32_HP_UART_COUNT * 4 + 6);
+	cfg.bDMAMode = false;
+	cfg.bIntMode = false;
+	assert(UARTInit(&dev, &cfg));
+	CheckPower(&dev, &cfg);
+	UARTPowerOff(&dev);
+	assert(!s_Esp32UartDev[0].bEnabled);
 	return 0;
 }

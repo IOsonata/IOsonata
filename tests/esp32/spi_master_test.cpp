@@ -188,7 +188,11 @@ static void CheckRates(SPIDev_t *pDev)
 	double error;
 	double candidate;
 
+#if defined(ESP32C3) || defined(ESP32C6)
+	source = 40000000;
+#else
 	source = GetHighFreqOscFreq();
+#endif
 	for (index = 0; index < sizeof(requests) / sizeof(requests[0]); index++)
 	{
 		request = requests[index];
@@ -367,7 +371,13 @@ int main()
 	assert(SPIRx(&dev, 0, data, 1) == 1);
 	SPIPowerOff(&dev);
 	assert(!SPIStartTx(&dev, 0));
+#if defined(ESP32C3) || defined(ESP32C6)
+	// The CPU may use RC_FAST while SPI continues to use the 40 MHz crystal.
+	g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
+	g_McuOsc.CoreOsc.Freq = 20000000;
+#else
 	g_McuOsc.CoreOsc.Freq = 26000000;
+#endif
 	cfg.ChipSel = SPICSEL_MAN;
 	cfg.NbIOPins = 3;
 	TraceReset();

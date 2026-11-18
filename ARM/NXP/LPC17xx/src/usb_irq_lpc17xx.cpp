@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	usb_irq_lpc17xx.c
+@file	usb_irq_lpc17xx.cpp
 
 @brief	LPC17xx CPU-mode USB interrupt dispatch.
 
@@ -137,7 +137,7 @@ static void Lpc17UsbIrqData(Lpc17UsbControl_t *pControl)
 	}
 }
 
-void USB_IRQHandler(void)
+extern "C" void USB_IRQHandler(void)
 {
 	const uint32_t state = __get_PRIMASK();
 	__disable_irq();
@@ -205,7 +205,7 @@ void USB_IRQHandler(void)
 		if (result > 0 && (status & 8U) != 0U)
 		{
 			const uint32_t generation = pControl->Generation;
-			UsbCtrlrEvt_t event = {0};
+			UsbCtrlrEvt_t event = {};
 			event.Type = (status & 4U) != 0U ? USB_CTRLR_EVT_SUSPEND : USB_CTRLR_EVT_RESUME;
 			pControl->Event(&event);
 			if (s_pControl != pControl || !pControl->Enabled ||
