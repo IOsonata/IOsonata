@@ -29,8 +29,8 @@ cycles exercise re-arming. No watchdog is enabled. The run should end with
 The maintainer's November 17 result confirmed the six EIC RETENTION wakes,
 RC4/RC12 selection, PBA divisors, timer IRQs, UART RX and clock restoration with
 zero failures. The reported 250 ms delays were approximately 251194..251600 us.
-An earlier run separately confirmed three GPIO-only SLEEP0 wakes. The newly
-added AST automatic wakes still require a board run.
+An earlier run separately confirmed three GPIO-only SLEEP0 wakes. The subsequent AST run ended with zero failures and reported automatic
+wake intervals of 1000000 us.
 
 WAIT is selected by SystemSleep when PM.AWEN contains a configured asynchronous
 peripheral wake source. This permits SleepWalking. This demo does not configure

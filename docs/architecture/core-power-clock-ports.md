@@ -40,12 +40,18 @@ GNU++11. All fifteen public clock/power functions have one definition in each
 archive. Existing timer, clock and power register tests passed. Shared demo
 rebuilds also passed on D11, D21, C3 and C6.
 
-ClockDemo now adds a one-second AST wake after each button wake. PowerOffDemo
-has a selectable three-second AST Backup wake run. These additions need board
-execution. WAIT/SleepWalking needs an application-configured asynchronous
-peripheral source; its register entry/restoration is checked, not its hardware
-operation. External oscillators, SAM4LS hardware and sleep currents remain
-unmeasured. They are not represented as successful hardware tests.
+The subsequent ClockDemo AST run ended with zero failures. The visible automatic
+wake intervals were 1000000 us, with timer wake interrupts, restored clocks,
+both delay functions and UART RX passing. PowerOffDemo then completed four
+consecutive AST Backup wakes: reset reason 0x1000 and retained counts 1 through 5.
+
+TWIS0/TWIS1 now configure their PM clock and asynchronous wake requests through
+the I2C slave enable/disable lifecycle. The existing I2CSlaveDemo and D21
+I2CMasterDemo have a selectable address-match sleep profile; see
+[the test procedure](../../exemples/i2c/sleepwalking.md). Hardware execution is
+deferred. This implements TWIS SleepWalking, not ADC/PEVC or other autonomous
+peripheral paths. External oscillators, SAM4LS hardware and sleep currents
+remain unmeasured.
 
 ## November 17 implementation review
 
@@ -95,8 +101,8 @@ Hardware validation still required for this revision:
 
 - D11/D21 changed dividers, actual D11 source selection, and sleep at reduced
   clock rates, including UART receive after resume.
-- SAM4LC AST automatic wake and WAIT/SleepWalking. PBA dividers and OLED1
-  RETENTION wake now have the passing board result recorded above.
+- SAM4LC TWIS WAIT/SleepWalking. AST, PBA dividers and OLED1 RETENTION
+  wake have the passing board results recorded above.
 - C3/C6 retained SRAM across repeated Deep-sleep pin wakes.
 - Sleep-current measurements and external oscillator configurations.
 
@@ -149,7 +155,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | STM32 F0/F4/L1/L4/G4/H7 | Existing shared implementation | Audit selectors, ready waits and active clock users |
 | STM32 WBA | WBA65I Standby, GPIO wake, reset reason, backup registers and bank-wide SRAM retention on working branch | Validate radio ownership, SRAM bank retention and target build |
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
-| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0/WAIT/RETENTION resume implemented | SAM4LC clock/delay checks and eight consecutive Backup wakes passed; three Release SLEEP0 cycles passed with clocks, delays, timer IRQs and UART RX; six EIC RETENTION cycles and PBA dividers passed; AST and WAIT hardware validation pending |
+| SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0/WAIT/RETENTION resume implemented | SAM4LC clock/delay checks and eight consecutive Backup wakes passed; three Release SLEEP0 cycles passed with clocks, delays, timer IRQs and UART RX; six EIC RETENTION cycles and PBA dividers passed; AST RETENTION and four Backup timer wakes passed; TWIS WAIT hardware validation deferred |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; D11 SW0 and D21 SW0/OLED1 BUTTON1 repeated resume passed | D21 clocks, delays, timer IRQs, UART RX and SRAM samples passed; full SRAM continuity, LF switching and sleep current remain unverified |
 | LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
 | LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |

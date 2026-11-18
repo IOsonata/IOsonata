@@ -5,6 +5,9 @@
 
 Connect an external master to the SDA, SCL and ground pins.
 Provide pull-ups to the I/O supply on SDA and SCL.
+With I2C_SLEEP_TEST=1 on SAM4L, the idle slave enters WAIT and reports CPU
+sleep returns. Unmatched addresses must not wake the CPU. Run the master
+with the same profile, and use UART output without an attached debugger.
 
 This example demonstrate the read/write to the slave device memory. The
 read/write command starts with a 1 byte offset location of the device memory.
@@ -53,6 +56,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/uart.h"
 #include "stddev.h"
 #include "board.h"
+
+// The SAM4L board enables this profile for WAIT address-match wake testing.
+#ifndef I2C_SLEEP_TEST
+#define I2C_SLEEP_TEST 0
+#endif
 
 // Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
@@ -143,6 +151,12 @@ static bool s_bWriteRqst;
 static unsigned s_Offset;
 static volatile unsigned s_Completions;
 static volatile unsigned s_Errors;
+#if I2C_SLEEP_TEST
+static volatile bool s_TransferActive;
+static volatile unsigned s_Requests;
+static unsigned s_SleepReturns;
+static unsigned s_UnexpectedWakes;
+#endif
 
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
@@ -153,6 +167,10 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 	switch (EvtId)
 	{
 		case DEVINTRF_EVT_READ_RQST:
+#if I2C_SLEEP_TEST
+			s_TransferActive = true;
+			++s_Requests;
+#endif
 			if (s_bWriteRqst && Len > 0)
 			{
 				s_Offset = s_WriteRqstData[0] % I2C_BUFF_SIZE;
@@ -162,6 +180,10 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 			break;
 
 		case DEVINTRF_EVT_WRITE_RQST:
+#if I2C_SLEEP_TEST
+			s_TransferActive = true;
+			++s_Requests;
+#endif
 			s_bWriteRqst = true;
 			g_I2CSlave.SetWriteRqstBuffer(0, s_WriteRqstData, sizeof(s_WriteRqstData));
 			break;
@@ -187,6 +209,9 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 			}
 			s_bWriteRqst = false;
 			++s_Completions;
+#if I2C_SLEEP_TEST
+			s_TransferActive = false;
+#endif
 			break;
 
 		default:
@@ -201,7 +226,7 @@ int main()
 	int i;
 
 	g_Uart.Init(s_UartCfg);
-#if defined(NDEBUG) || defined(UART_RETARGET)
+#if defined(NDEBUG) || defined(UART_RETARGET) || I2C_SLEEP_TEST
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
 	for (i = 0; i < I2C_BUFF_SIZE; i++)
@@ -226,6 +251,44 @@ int main()
 			previous = s_Completions;
 			printf("I2C slave: completed %u, errors %u\r\n", previous, s_Errors);
 		}
+#if I2C_SLEEP_TEST
+		// Drain the console before stopping USART. Do not enter WAIT while
+		// TWIS or its optional PDCA channel is transferring data.
+		fflush(stdout);
+		UARTDev_t *uart = g_Uart;
+		while (CFifoUsed(uart->hTxFifo) != 0 || !uart->bTxReady)
+		{
+			__NOP();
+		}
+		usDelay(100);
+		g_Uart.Disable();
+		uint32_t state = DisableInterrupt();
+		unsigned requests = s_Requests;
+		bool slept = !s_TransferActive && previous == s_Completions;
+		if (slept)
+		{
+			SystemSleep();
+			++s_SleepReturns;
+		}
+		EnableInterrupt(state);
+		// Let the address-match ISR and the current transfer finish before
+		// printing or attempting the next deep sleep.
+		while (s_TransferActive)
+		{
+			__NOP();
+		}
+		g_Uart.Enable();
+		if (slept)
+		{
+			if (requests == s_Requests)
+			{
+				++s_UnexpectedWakes;
+			}
+			printf("Sleep returns %u, address requests %u, unexpected wakes %u\r\n",
+				s_SleepReturns, s_Requests, s_UnexpectedWakes);
+		}
+#else
 		__WFE();
+#endif
 	}
 }

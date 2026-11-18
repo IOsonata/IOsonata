@@ -11,11 +11,12 @@ projects and 10 missing PowerOffDemo projects outside ESP32.
 The maintainer reported zero failures with RC4/RC12 and PBA divisors 1/2/4/1,
 both delays and timer IRQs at every rate, six OLED1 BUTTON1 RETENTION wakes,
 clock restoration and UART RX. ClockDemo now also checks a one-second automatic
-AST wake after each button wake; that addition has not yet run on the board.
+AST wake after each button wake; the subsequent run ended with zero failures.
 
 PowerOffDemo retains button wake by default. Set POWER_DEMO_TIMER_WAKE_MS=3000
 in its board.h or application compiler settings for automatic AST Backup wake.
-Expect reset reason 0x1000 and a rising retained start count. Both profiles
+The maintainer confirmed four consecutive timer wakes with reset reason 0x1000
+and retained counts 1 through 5. Both profiles
 build for SAM4LC and SAM4LS in Debug and Release.
 
 ## Current focused regression

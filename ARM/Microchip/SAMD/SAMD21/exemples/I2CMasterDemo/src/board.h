@@ -62,4 +62,10 @@ SOFTWARE.
 #define I2C_MASTER_DMA_ENABLE	false
 #define I2C_MASTER_INT_ENABLE	true
 
+// Set to 1 for the paired SAM4L WAIT address-match wake test.
+// Setup and expected results: exemples/i2c/sleepwalking.md.
+#ifndef I2C_SLEEP_TEST
+#define I2C_SLEEP_TEST 0
+#endif
+
 #endif // __BOARD_H__

@@ -47,5 +47,6 @@ and an incremented retained start count. Repeat several cycles. AST registers
 survive Backup; TimerInit clears the previous alarm and wake state before
 arming the next one. SRAM is lost, so timer handles are initialized again.
 
-This configuration compiles in Debug and Release. AST Backup wake hardware
-validation is pending; the earlier pin-wake results remain separate.
+This configuration compiles in Debug and Release. The maintainer confirmed four
+consecutive AST Backup wakes with reset reason 0x1000 and retained start counts
+1 through 5. The earlier pin-wake results remain separate.
