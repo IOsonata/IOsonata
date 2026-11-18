@@ -355,3 +355,15 @@ check the two wake drivers and both possible oscillators; the target
 source compilation script includes system_samd.c and
 timer_samd_rtc.cpp. No physical current or RTC wake continuity
 measurement has been performed for this change.
+
+## Low-frequency clock register test
+
+Run `python3 tests/samd/run_lfclock_standby.py` to compile the
+production SamdLowFreqClockStandbyEnable function in a host register
+model at -O0 and -O2. The test checks OSC32K and XOSC32K selection,
+readiness and output-enable requirements, unchanged oscillator
+configuration, interrupts restored to their previous state, and
+refusal of an unready or unknown source.
+
+This host model does not test the synchronization timing of GCLK
+or the physical RTC wake circuit. Hardware validation remains required.
