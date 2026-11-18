@@ -53,6 +53,9 @@ void PowerTestWfi(void)
 #define SAM4L_EIC (&s_Eic)
 #include "../../ARM/Microchip/SAM4L/src/system_power_sam4l.cpp"
 
+// The host register model retains the normal CPU rate across sleep.
+uint32_t SystemCoreClockGet(void) { return 12000000U; }
+
 int main(void)
 {
 	unsigned i;

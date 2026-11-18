@@ -70,10 +70,13 @@ class StandbySourceTest(unittest.TestCase):
 		s = body(SLEEP, "void SystemSleep(")
 		self.assertLess(s.index("DisableInterrupt()"), s.index("SamdStandbyWakeArm()"))
 		self.assertLess(s.index("SamdStandbyWakeArm()"), s.index("__WFI()"))
-		self.assertLess(s.index("__WFI()"), s.index("EnableInterrupt(state)"))
+		self.assertLess(s.index("__WFI()"), s.rindex("EnableInterrupt(state)"))
 		self.assertIn("SCB->SCR = previous", s)
 		self.assertLess(s.index("__WFI()"), s.index("SamdStandbyWakeDone()"))
-		self.assertLess(s.index("SamdStandbyWakeDone()"), s.index("EnableInterrupt(state)"))
+		self.assertLess(s.index("SamdStandbyWakeDone()"), s.rindex("EnableInterrupt(state)"))
+		self.assertIn("SamdUartPrepareSleep()", s)
+		self.assertLess(s.index("SamdUartPrepareSleep()"), s.index("SamdStandbyWakeArm()"))
+		self.assertLess(s.index("SamdStandbyWakeDone()"), s.index("SamdUartResumeSleep()"))
 
 	def test_rearm_does_not_change_gpio_ownership(self):
 		s = body(EIC, "void SamdStandbyWakeArm(")

@@ -51,6 +51,9 @@ static void __DSB(void)
 	if (s_Inject == 2) NMI_Handler();
 }
 static void __ISB(void) {}
+static bool SamdUartPrepareSleep(void) { return true; }
+static void SamdUartResumeSleep(void) {}
+static uint32_t SystemCoreClockGet(void) { return 48000000U; }
 static void __WFI(void)
 {
 	assert(s_Mask == 1);

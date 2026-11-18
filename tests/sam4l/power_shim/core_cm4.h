@@ -16,6 +16,7 @@ static inline uint32_t DisableInterrupt(void)
 	return state;
 }
 static inline void EnableInterrupt(uint32_t State) { g_PowerTestMask = State; }
+static inline uint32_t __get_IPSR(void) { return 0U; }
 static inline void __DSB(void) {}
 static inline void __WFI(void) { PowerTestWfi(); }
 
