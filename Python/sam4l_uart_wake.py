@@ -118,6 +118,8 @@ def main():
                           file=sys.stderr)
                     return 1
                 stage = "waiting for 9600 baud switch prompt"
+                # Allow MCU console TX draining to finish before replying.
+                time.sleep(0.05)
                 send_byte(port, 2, b"R")
                 setup_acked = True
                 print("[host] Sent R at %d baud; waiting for MCU setup prompt." %
