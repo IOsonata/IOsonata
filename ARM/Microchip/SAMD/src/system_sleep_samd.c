@@ -51,6 +51,6 @@ void SystemSleep(void)
 	{
 		SamdUartResumeSleep();
 	}
-	SystemCoreClockUpdate();
+	(void)SystemCoreClockGet();
 	EnableInterrupt(state);
 }

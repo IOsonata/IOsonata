@@ -122,7 +122,7 @@ void SystemSleep(void)
 		Esp32UartResumeSleep();
 	}
 	Esp32LightWakeRestore();
-	SystemCoreClockUpdate();
+	(void)SystemCoreClockGet();
 	if (!handled)
 	{
 		__WFI();

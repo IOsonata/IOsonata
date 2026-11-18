@@ -286,7 +286,7 @@ void SystemSleep(void)
 	{
 		Sam4lUartResumeSleep();
 	}
-	SystemCoreClockUpdate();
+	(void)SystemCoreClockGet();
 	EnableInterrupt(state);
 }
 

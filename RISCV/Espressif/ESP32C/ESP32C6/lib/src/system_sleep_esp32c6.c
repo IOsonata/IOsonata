@@ -74,8 +74,6 @@ typedef struct {
 } Esp32C6SleepState_t;
 
 uint32_t Esp32C6FastClockMeasure(void);
-bool Esp32LightWakePrepare(void);
-void Esp32LightWakeRestore(void);
 bool Esp32DeepWakePrepare(void);
 void Esp32DeepWakeRestore(void);
 void Esp32RomClockUpdate(uint32_t CpuMHz);

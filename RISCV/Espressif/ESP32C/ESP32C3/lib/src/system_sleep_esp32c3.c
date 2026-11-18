@@ -55,8 +55,6 @@ typedef struct {
 	uint32_t CpuMHz;
 } Esp32C3SleepState_t;
 
-bool Esp32LightWakePrepare(void);
-void Esp32LightWakeRestore(void);
 bool Esp32DeepWakePrepare(void);
 void Esp32DeepWakeRestore(void);
 uint8_t Esp32RomRegi2cReadMask(uint8_t Block, uint8_t Host, uint8_t Addr,
