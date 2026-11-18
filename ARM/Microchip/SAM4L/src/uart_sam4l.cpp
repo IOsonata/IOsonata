@@ -623,6 +623,7 @@ bool Sam4lUartPrepareSleep(void)
 	uint32_t wake = 1UL << PM_AWEN_PICOUART;
 	uint32_t clocks;
 	uint32_t rejected;
+	uint32_t awen;
 	bool rc;
 	bool clockReady;
 
@@ -685,11 +686,10 @@ bool Sam4lUartPrepareSleep(void)
 	}
 	s_Sam4lUartSleep.Config = SAM4L_PICOUART->PICOUART_CFG;
 	s_Sam4lUartSleep.Interrupts = dev->pReg->US_IMR;
-	uint32_t awen = SAM4L_PM->PM_AWEN;
+	awen = SAM4L_PM->PM_AWEN;
 	s_Sam4lUartSleep.WakeMask = awen;
 	s_Sam4lUartSleep.Clocks = clocks;
 	s_Sam4lUartSleep.bActive = true;
-	s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_PREPARED;
 	dev->pReg->US_IDR = 0xFFFFFFFFU;
 	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
 	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
@@ -700,6 +700,7 @@ bool Sam4lUartPrepareSleep(void)
 	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen | wake);
 	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_EN;
 	__DSB();
+	s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_PREPARED;
 	return true;
 }
 
@@ -766,6 +767,8 @@ void Sam4lUartResumeSleep(void)
 	uint32_t pmCause;
 	uint32_t picoStatus;
 	uint8_t data;
+	uint8_t *p;
+	int i;
 	bool received = false;
 
 	if (s_Sam4lUartSleep.bActive)
@@ -800,7 +803,7 @@ void Sam4lUartResumeSleep(void)
 		dev->pReg->US_IER = s_Sam4lUartSleep.Interrupts;
 		if (received)
 		{
-			uint8_t *p = CFifoPut(pDev->hRxFifo);
+			p = CFifoPut(pDev->hRxFifo);
 			if (p != NULL)
 			{
 				*p = data;
@@ -816,7 +819,7 @@ void Sam4lUartResumeSleep(void)
 		__DSB();
 		s_Sam4lUartSleep.bActive = false;
 	}
-	for (int i = 0; i < s_NbSam4lUartDev; i++)
+	for (i = 0; i < s_NbSam4lUartDev; i++)
 	{
 		dev = &s_Sam4lUartDev[i];
 		if (dev->bSleepPaused)
