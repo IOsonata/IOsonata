@@ -49,9 +49,12 @@ Start the host helper before resetting the board:
 python3 Python/sam4l_uart_wake.py --port /dev/cu.usbserial-ADAPTER --baud 1000000 --cycles 3
 ```
 
-The helper waits for `Entering UART sleep`, changes the adapter to
-9600 baud, sends `U`, waits for its TX to finish, then restores the
-normal baud. It checks the recovered UART byte, rate and CPU/APB clock
+The helper first sends a ready byte `R` at the normal 1 Mbaud console
+rate. After the MCU's setup prompt, the host changes the adapter to
+9600 baud while USART0 is still active. The MCU waits 750 ms before
+arming PICOUART in `SystemSleep()`; the host waits 1.25 s before
+sending `U`, then restores the console baud. It checks the recovered
+UART byte, rate and CPU/APB clock
 after every wake. The script stops after the requested number of
 complete cycles or a configured timeout.
 

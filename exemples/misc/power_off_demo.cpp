@@ -503,7 +503,26 @@ int main()
 		uint32_t apbBefore = SystemPeriphClockGet(0);
 		uint32_t rateBefore = s_Uart.Rate();
 #if POWER_DEMO_UART_WAKE
-		PowerDemoPut("Entering UART sleep; send one U at 9600 baud\r\n");
+		// Establish the last console exchange at normal baud before
+		// the host changes its FTDI divisor. No PICOUART setup yet.
+		PowerDemoPut("UART wake setup: send R at 1000000 baud\r\n");
+		PowerDemoDrain();
+		rxByte = 0U;
+		for (rxWait = 0U; rxWait < 3000U; rxWait++)
+		{
+			if (s_Uart.Rx(&rxByte, 1) == 1)
+			{
+				break;
+			}
+			msDelay(1);
+		}
+		if (rxByte != 'R')
+		{
+			PowerDemoPut("UART wake setup: FAIL\r\n");
+			PowerDemoDrain();
+			return 1;
+		}
+		PowerDemoPut("UART sleep preparation: switch host to 9600 baud\r\n");
 #elif defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
 		PowerDemoPut("Entering Standby; automatic timer wake\r\n");
 #else
@@ -511,6 +530,11 @@ int main()
 		PowerDemoPut("Entering Standby\r\n");
 #endif
 		PowerDemoDrain();
+#if POWER_DEMO_UART_WAKE
+		// Test harness only: keep USART0 running while FTDI changes
+		// rate and its TX line settles. Host waits longer before U.
+		msDelay(750);
+#endif
 		// SystemSleep selects a compatible power state and temporarily
 		// suspends idle peripherals. The application does not stop UART.
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST

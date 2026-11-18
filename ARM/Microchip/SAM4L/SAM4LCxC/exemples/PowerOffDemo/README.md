@@ -43,10 +43,13 @@ ls /dev/cu.usbserial*
 python3 Python/sam4l_uart_wake.py --port /dev/cu.usbserial-ADAPTER --baud 1000000 --cycles 5
 ```
 
-Start the helper before resetting the board. The helper reads the normal
-console at 1000000 baud, sends one U at 9600 baud after each
-`Entering UART sleep` prompt, and switches back to the normal
-console baud. Each wake must report `UART wake byte: PASS`,
+Start the helper before resetting the board. The helper checks normal
+USART0 RX at 1000000 baud, acknowledges each sleep request by sending
+`R` at 1000000 baud, and waits for the MCU's 9600-baud setup prompt.
+It then switches the FTDI adapter to 9600 baud **before** PICOUART is
+activated. The MCU holds its normal USART0 awake for 750 ms to allow
+the adapter to settle, while the host waits 1.25 s before sending `U`
+and switching back to 1000000 baud. Each wake must report `UART wake byte: PASS`,
 `UART rate after resume: PASS`, and
 `CPU/APB clock after resume: PASS`. The SRAM sample should also
 pass. This profile has not been validated on physical hardware.
@@ -553,3 +556,24 @@ be a new frame event, rather than a level continuously asserted by
 latched DRDY. Retest with a single U after a quiet interval to
 distinguish these cases. No successful PICOUART hardware wake has
 yet been demonstrated.
+
+## November 18: correct host baud-switch ordering
+
+The next physical-board run still reported `0xFF0200FD` and an
+unsolicited PICOUART wake *before* the Python helper changed the FTDI
+baud rate. The helper waited 350 ms for an early MCU response while
+USART0 had already been handed over to PICOUART. This was the wrong
+ordering for isolating the host adapter's baud-rate transition.
+
+PowerOffDemo now requests a normal-speed `R` handshake before each
+attempt and emits a final 1 Mbaud setup prompt. It drains UART TX
+and delays 750 ms with USART0 still enabled; only then does it call
+`SystemSleep()` and allow PICOUART activation. The host switches
+to 9600 immediately after the prompt, waits 1.25 s while checking
+for unexpected data, sends one `U`, and returns to the normal
+1 Mbaud console rate. No new generic UART or power API is involved.
+
+If the MCU still wakes with `0xFF` before `U`, the baud-change
+timing has been isolated and the next investigation is the PICOUART
+input and activation behavior. This is a test-sequence correction;
+physical wake validation remains pending.

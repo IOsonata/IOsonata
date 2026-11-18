@@ -36,8 +36,8 @@ import time
 import serial
 
 
-def send_byte(port, timeout):
-    if port.write(b"U") != 1:
+def send_byte(port, timeout, value=b"U"):
+    if port.write(value) != len(value):
         raise serial.SerialTimeoutException("Wake/test byte was not queued")
     deadline = time.monotonic() + timeout
     while port.out_waiting:
@@ -70,6 +70,7 @@ def main():
         rx_ok = False
         rate_ok = False
         normal_rx_ok = False
+        setup_acked = False
         last_line = "(none)"
         print("[host] Opened %s at %d baud. Reset the board now." %
               (args.port, args.baud), flush=True)
@@ -111,41 +112,57 @@ def main():
                 print("[host] UART wake cycle failed; stopping without another attempt.",
                       file=sys.stderr)
                 return 1
-            if b"Entering UART sleep;" in line:
+            if b"UART wake setup: send R" in line:
                 if not normal_rx_ok:
                     print("[host] Normal USART0 RX test was not confirmed.",
                           file=sys.stderr)
                     return 1
+                stage = "waiting for 9600 baud switch prompt"
+                send_byte(port, 2, b"R")
+                setup_acked = True
+                print("[host] Sent R at %d baud; waiting for MCU setup prompt." %
+                      args.baud, flush=True)
+            elif b"UART sleep preparation: switch host to 9600 baud" in line:
+                if not setup_acked:
+                    print("[host] Missing 1 Mbaud wake setup handshake.",
+                          file=sys.stderr)
+                    return 1
+                setup_acked = False
                 stage = "waiting for UART wake result"
                 rx_ok = False
                 rate_ok = False
-                # The MCU prints a FAIL around 100 ms after an immediate
-                # SystemSleep return. Check for that before sending a byte,
-                # otherwise the result can be mistaken for a failed decode.
-                time.sleep(0.35)
-                early = port.read(port.in_waiting) if port.in_waiting else b""
-                if early:
-                    sys.stdout.buffer.write(early)
-                    sys.stdout.buffer.flush()
-                    print("[host] MCU responded before the 9600-baud wake "
-                          "byte was sent. Sleep was refused or another "
-                          "event woke it. Inspect the SAM4L diagnostic.",
-                          file=sys.stderr)
-                    return 1
+                # The MCU waits 750 ms after this prompt before calling
+                # SystemSleep(). Settle the FTDI rate first, then let
+                # PICOUART arm before sending the wake byte.
                 try:
                     port.baudrate = 9600
+                    print("[host] Adapter switched to 9600 before PICOUART "
+                          "activation.", flush=True)
+                    time.sleep(1.25)
+                    early = port.read(port.in_waiting) if port.in_waiting else b""
+                    if early:
+                        print("[host] Unexpected data during the 9600-baud "
+                              "quiet interval before sending U: %r. "
+                              "The MCU may have refused sleep or woken early." %
+                              early[-160:], file=sys.stderr)
+                        return 1
                     send_byte(port, 2)
                 finally:
                     port.baudrate = args.baud
                 print("[host] Sent U at 9600; adapter restored to %d baud." %
                       args.baud, flush=True)
+            elif b"Entering UART sleep;" in line:
+                print("[host] Old PowerOffDemo firmware. Rebuild and flash "
+                      "the version with the 1 Mbaud R handshake and "
+                      "9600-baud setup prompt.", file=sys.stderr)
+                return 2
             elif b"UART RX: send U" in line:
                 stage = "waiting for normal UART RX result"
                 send_byte(port, 2)
                 print("[host] Sent U at %d baud." % args.baud, flush=True)
             elif b"UART RX normal: PASS" in line:
                 normal_rx_ok = True
-                stage = "waiting for PICOUART sleep prompt"
+                stage = "waiting for UART wake setup handshake"
             elif b"UART RX normal: FAIL" in line:
                 print("[host] USART0 RX could not receive U at normal baud. "
                       "Check adapter TX to PB00 and shared ground.",
