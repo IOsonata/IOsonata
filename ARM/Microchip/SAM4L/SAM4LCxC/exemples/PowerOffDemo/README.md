@@ -486,3 +486,36 @@ The original GPIO ownership and clock state remain preserved.
 
 This is a candidate fix for the low GPIO sample; source ordering
 checks were updated. The board has not yet validated this revision.
+
+## November 18: PICOUART direct RX and early-frame refusal
+
+The latest one-cycle hardware run again received 0xFF before the host
+transmitted its 9600-baud U. Diagnostic `0xFF3200FD` records the
+temporary PB00 GPIO input probe as idle/high, followed by immediate
+PICOUART DRDY and an unsolicited received byte 0xFF. This proves the
+normal USART0 RX link and the sampled idle level were working, but
+does not establish the presence or origin of a short transition during
+the handover.
+
+The SAM4L datasheet, section 25.5.1 and table 25-5, specifies that
+PICOUART is connected directly to PB00/USART0 RXD and requires no
+GPIO mux assignment. The driver now leaves PB00 owned by USART0,
+enables PICOUART while USART0 is still active, waits for PICOUART_SR.EN,
+and checks that no frame is already pending before disabling USART0
+and arming PM_AWEN. A stale or early DRDY or an enable timeout refuses
+sleep, rolls back the peripheral configuration, and keeps UART active.
+A frame captured during an aborted handover is delivered to the RX
+FIFO rather than silently discarded. The full-frame wake mode and
+public UART API remain unchanged.
+
+The temporary GPIO probe and its state restoration were removed.
+Diagnostic bit 22 now indicates a PICOUART enable timeout; bits 20
+and 21 are no longer generated. The host helper explicitly exits on
+the first FAIL line, even when the application itself continues
+running. Tests check direct-input source order and rollback cases.
+
+**Hardware validation pending.** This is a targeted handover fix
+candidate, not a verified PICOUART wake result. Retest with the
+external 3.3 V adapter and check for a quiet 350 ms interval followed
+by a 9600-baud U. If early DRDY persists without any GPIO mux
+change, capture the PB00 waveform during activation.

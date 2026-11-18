@@ -106,6 +106,11 @@ def main():
             pending.clear()
             progress = time.monotonic()
             last_line = line.decode("ascii", errors="replace").strip()
+            if b"UART wake byte: FAIL" in line or b"UART rate after resume: FAIL" in line or \
+                    b"CPU/APB clock after resume: FAIL" in line:
+                print("[host] UART wake cycle failed; stopping without another attempt.",
+                      file=sys.stderr)
+                return 1
             if b"Entering UART sleep;" in line:
                 if not normal_rx_ok:
                     print("[host] Normal USART0 RX test was not confirmed.",
@@ -169,9 +174,6 @@ def main():
                 if cycles >= args.cycles:
                     return 0
                 stage = "waiting for the next PowerOffDemo sleep"
-            elif b"UART wake byte: FAIL" in line or b"UART rate after resume: FAIL" in line or \
-                    b"CPU/APB clock after resume: FAIL" in line:
-                return 1
 
 
 

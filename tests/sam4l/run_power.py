@@ -26,31 +26,31 @@ with tempfile.TemporaryDirectory(prefix='sam4l-power-') as tmp:
                                     str(root / 'tests/sam4l/power_test.cpp'),
                                     '-o', str(binary)], check=True)
                     subprocess.run([str(binary)], check=True)
-# PICOUART receives PB00 directly; enable GPIO input monitoring
-# before checking the RX level, then restore the USART pin on resume.
+# PICOUART shares the physical RXD0 pin directly. Do not switch PB00
+# to GPIO or gate USART0 before the low-power receiver is armed.
 uart_source = (root / 'ARM/Microchip/SAM4L/src/uart_sam4l.cpp').read_text()
 uart_prep = uart_source.split('bool Sam4lUartPrepareSleep(void)', 1)[1].split(
     'bool Sam4lUartSuspendSleep(void)', 1)[0]
+uart_arm = uart_prep.split('s_Sam4lUartSleep.bActive = true;', 1)[1]
 sequence = (
-    'gpio->GPIO_ODERC = 1U;',
-    'gpio->GPIO_STERS = 1U;',
-    'gpio->GPIO_GPERS = 1U;',
-    'if ((gpio->GPIO_PVR & 1U) == 0U)',
-    'dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;',
+    'dev->pReg->US_IDR = 0xFFFFFFFFU;',
     'SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);',
     'SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_EN;',
+    'if ((picoStatus & PICOUART_SR_EN) == 0U)',
+    'if ((picoStatus & PICOUART_SR_DRDY) != 0U)',
+    'dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;',
     'Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);',
     'Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen | wake);',
 )
-positions = [uart_prep.index(step) for step in sequence]
-assert positions == sorted(positions), 'SAM4L PICOUART GPIO input handover order'
-assert 'if (!s_Sam4lUartSleep.bRxWasGpio)' in uart_source
-assert 'if (!s_Sam4lUartSleep.bRxHadSchmitt)' in uart_source
-assert 'gpio->GPIO_GPERC = 1U;' in uart_source
-assert 'gpio->GPIO_STERC = 1U;' in uart_source
-assert 'rxHadSchmitt = (gpio->GPIO_STER & 1U) != 0U;' in uart_source
-assert 's_Sam4lUartSleep.bRxHadSchmitt = rxHadSchmitt;' in uart_source
-print('SAM4L PICOUART GPIO input handover source order PASS')
+positions = [uart_arm.index(step) for step in sequence]
+assert positions == sorted(positions), 'SAM4L PICOUART direct RX handover order'
+assert 'gpio->GPIO_GPERS' not in uart_prep
+assert 'gpio->GPIO_PVR' not in uart_prep
+assert 'gpio->GPIO_STERS' not in uart_prep
+assert uart_arm.count('Sam4lUartResumeSleep();') == 2
+assert 'SAM4L_PICO_ENABLE_TIMEOUT' in uart_source
+assert 'rejected |= SAM4L_PICO_STALE_DATA;' in uart_prep
+print('SAM4L PICOUART direct RX handover and early-frame refusal PASS')
 
 for project in (root / 'ARM/Microchip/SAM4L').glob('*/lib/ioc/.project'):
     matches = [link for link in ET.parse(project).findall('.//link')
