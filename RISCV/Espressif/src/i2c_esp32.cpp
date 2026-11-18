@@ -74,6 +74,7 @@ typedef struct {
 	uint32_t Divider;
 	uint32_t HalfCycle;
 	bool bEnabled;
+	bool bSleepPaused;		//!< Suspended by SystemSleep
 	bool bOpen;
 	bool bRx;
 	bool bReadEnded;
@@ -752,6 +753,62 @@ static void Esp32I2cSlaveIrq(void)
 		if (!dev->bRx && (status & ESP32_I2C_INT_TXFIFO_WM))
 		{
 			Esp32I2cSlaveFill(dev);
+		}
+	}
+}
+#endif
+
+#if defined(ESP32C3) || defined(ESP32C6)
+// RTC sleep owns master suspension. Enabled slaves cannot be stopped
+// without losing unsolicited bus traffic and have no RTC wake route here.
+extern "C" bool Esp32I2cPrepareSleep(void)
+{
+	Esp32I2cDev_t *dev;
+	I2CDev_t *pDev;
+
+	for (unsigned i = 0; i < sizeof(s_I2c) / sizeof(s_I2c[0]); i++)
+	{
+		dev = &s_I2c[i];
+		pDev = dev->pOwner;
+		if (pDev == NULL || !dev->bEnabled ||
+			atomic_load(&pDev->DevIntrf.EnCnt) == 0)
+		{
+			continue;
+		}
+		if (dev->bSlave || dev->bSleepPaused || dev->bOpen ||
+			!pDev->DevIntrf.bTxReady)
+		{
+			return false;
+		}
+	}
+	for (unsigned i = 0; i < sizeof(s_I2c) / sizeof(s_I2c[0]); i++)
+	{
+		dev = &s_I2c[i];
+		pDev = dev->pOwner;
+		if (pDev != NULL && dev->bEnabled &&
+			atomic_load(&pDev->DevIntrf.EnCnt) != 0)
+		{
+			Esp32I2cDisable(&pDev->DevIntrf);
+			dev->bSleepPaused = true;
+		}
+	}
+	return true;
+}
+
+extern "C" void Esp32I2cResumeSleep(void)
+{
+	Esp32I2cDev_t *dev;
+
+	for (unsigned i = 0; i < sizeof(s_I2c) / sizeof(s_I2c[0]); i++)
+	{
+		dev = &s_I2c[i];
+		if (dev->bSleepPaused)
+		{
+			Esp32I2cEnable(&dev->pOwner->DevIntrf);
+			if (dev->bEnabled)
+			{
+				dev->bSleepPaused = false;
+			}
 		}
 	}
 }

@@ -56,6 +56,7 @@ typedef struct {
 	SPIDev_t *pOwner;
 	uint32_t Clock;
 	bool bEnabled;
+	bool bSleepPaused;		//!< Suspended by SystemSleep
 	bool bOpen;
 	bool bError;
 	bool bSlave;
@@ -67,6 +68,7 @@ static Esp32SpiDev_t s_Spi;
 
 static void Esp32SpiSlaveArm(Esp32SpiDev_t *pDev);
 static void Esp32SpiDisable(DevIntrf_t *pIntrf);
+static void Esp32SpiEnable(DevIntrf_t *pIntrf);
 static void Esp32SpiSlaveIrq(void);
 
 static Esp32SpiDev_t *Esp32SpiHandle(DevIntrf_t *pIntrf)
@@ -513,6 +515,44 @@ static void Esp32SpiSlaveIrq(void)
 		Esp32SpiSlaveArm(dev);
 	}
 }
+
+#if defined(ESP32C3) || defined(ESP32C6)
+// This port has no RTC wake route for an enabled SPI slave. Retain
+// master settings through the existing Enable/Disable lifecycle.
+extern "C" bool Esp32SpiPrepareSleep(void)
+{
+	Esp32SpiDev_t *dev = &s_Spi;
+	SPIDev_t *pDev = dev->pOwner;
+
+	if (pDev == NULL || !dev->bEnabled ||
+		atomic_load(&pDev->DevIntrf.EnCnt) == 0)
+	{
+		return true;
+	}
+	if (dev->bSlave || dev->bSleepPaused || dev->bOpen ||
+		!pDev->DevIntrf.bTxReady)
+	{
+		return false;
+	}
+	Esp32SpiDisable(&pDev->DevIntrf);
+	dev->bSleepPaused = true;
+	return true;
+}
+
+extern "C" void Esp32SpiResumeSleep(void)
+{
+	Esp32SpiDev_t *dev = &s_Spi;
+
+	if (dev->bSleepPaused)
+	{
+		Esp32SpiEnable(&dev->pOwner->DevIntrf);
+		if (dev->bEnabled)
+		{
+			dev->bSleepPaused = false;
+		}
+	}
+}
+#endif
 
 static void Esp32SpiEnable(DevIntrf_t *pIntrf)
 {

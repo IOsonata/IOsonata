@@ -45,6 +45,10 @@ bool Esp32LightWakePrepare(void);
 void Esp32LightWakeRestore(void);
 bool Esp32UartPrepareSleep(void) __attribute__((weak));
 void Esp32UartResumeSleep(void) __attribute__((weak));
+bool Esp32I2cPrepareSleep(void) __attribute__((weak));
+void Esp32I2cResumeSleep(void) __attribute__((weak));
+bool Esp32SpiPrepareSleep(void) __attribute__((weak));
+void Esp32SpiResumeSleep(void) __attribute__((weak));
 
 uint32_t SystemResetReason(void)
 {
@@ -110,8 +114,23 @@ void SystemSleep(void)
 	}
 	// Suspend idle peripherals only for RTC/PMU sleep. UART interrupts
 	// remain enabled for a plain CPU WFI when no RTC wake was selected.
-	if (Esp32UartPrepareSleep != NULL && !Esp32UartPrepareSleep())
+	bool ready = (Esp32I2cPrepareSleep == NULL || Esp32I2cPrepareSleep()) &&
+		(Esp32SpiPrepareSleep == NULL || Esp32SpiPrepareSleep()) &&
+		(Esp32UartPrepareSleep == NULL || Esp32UartPrepareSleep());
+	if (!ready)
 	{
+		if (Esp32UartResumeSleep != NULL)
+		{
+			Esp32UartResumeSleep();
+		}
+		if (Esp32SpiResumeSleep != NULL)
+		{
+			Esp32SpiResumeSleep();
+		}
+		if (Esp32I2cResumeSleep != NULL)
+		{
+			Esp32I2cResumeSleep();
+		}
 		Esp32LightWakeRestore();
 		EnableInterrupt(state);
 		return;
@@ -120,6 +139,14 @@ void SystemSleep(void)
 	if (Esp32UartResumeSleep != NULL)
 	{
 		Esp32UartResumeSleep();
+	}
+	if (Esp32SpiResumeSleep != NULL)
+	{
+		Esp32SpiResumeSleep();
+	}
+	if (Esp32I2cResumeSleep != NULL)
+	{
+		Esp32I2cResumeSleep();
 	}
 	Esp32LightWakeRestore();
 	(void)SystemCoreClockGet();
