@@ -223,6 +223,8 @@ def main():
                       (cycles, args.cycles), flush=True)
                 if cycles >= args.cycles:
                     return 0
+                clock_ok = False
+                resumed_ok = False
                 stage = "waiting for the next PowerOffDemo sleep"
 
 
