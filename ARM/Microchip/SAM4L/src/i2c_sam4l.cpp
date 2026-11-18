@@ -1674,7 +1674,8 @@ bool Sam4lI2CSuspendSleep(void)
 		{
 			continue;
 		}
-		if (dev->bSleepPaused || dev->Op != SAM4L_I2C_OP_NONE ||
+		if (atomic_flag_test(&pDev->DevIntrf.bBusy) ||
+			dev->bSleepPaused || dev->Op != SAM4L_I2C_OP_NONE ||
 			dev->BusHeld || dev->SlaveRxActive || dev->SlaveTxActive)
 		{
 			return false;
