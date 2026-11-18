@@ -47,10 +47,16 @@ assert positions == sorted(positions), 'SAM4L PICOUART direct RX handover order'
 assert 'gpio->GPIO_GPERS' not in uart_prep
 assert 'gpio->GPIO_PVR' not in uart_prep
 assert 'gpio->GPIO_STERS' not in uart_prep
-assert uart_arm.count('Sam4lUartResumeSleep();') == 2
+assert uart_arm.count('Sam4lUartResumeSleep();') == 1
 assert 'SAM4L_PICO_ENABLE_TIMEOUT' in uart_source
-assert 'rejected |= SAM4L_PICO_STALE_DATA;' in uart_prep
-print('SAM4L PICOUART direct RX handover and early-frame refusal PASS')
+assert 'rejected |= SAM4L_PICO_STALE_DATA;' not in uart_prep
+assert 'SAM4L_PICO_REJECTED | SAM4L_PICO_ARMED_DATA' not in uart_prep
+assert 's_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_DATA;' in uart_prep
+uart_resume = uart_source.split('void Sam4lUartResumeSleep(void)\n{', 1)[1].split(
+    'void UARTSetCtrlLineState(', 1)[0]
+assert 'SAM4L_PICO_PREPARED | SAM4L_PICO_PM_WAKE' in uart_resume
+assert 'SAM4L_PICO_PM_CAUSE | SAM4L_PICO_DATA_READY' in uart_resume
+print('SAM4L PICOUART direct RX handover and retained-status handling PASS')
 
 for project in (root / 'ARM/Microchip/SAM4L').glob('*/lib/ioc/.project'):
     matches = [link for link in ET.parse(project).findall('.//link')

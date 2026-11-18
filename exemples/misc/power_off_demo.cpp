@@ -579,6 +579,16 @@ int main()
 		PowerDemoPut(SystemCoreClockGet() == coreBefore && SystemPeriphClockGet(0) == apbBefore ?
 			"CPU/APB clock after resume: PASS\r\n" :
 			"CPU/APB clock after resume: FAIL\r\n");
+#if POWER_DEMO_UART_WAKE
+		if (!received)
+		{
+			// A refused sleep or an early wake is not a completed cycle.
+			// Stop instead of printing another misleading resume count.
+			PowerDemoPut("UART wake test stopped\r\n");
+			PowerDemoDrain();
+			return 1;
+		}
+#endif
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
 		uint64_t expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
 		PowerDemoPut(period != 0U && s_StandbyTimerWoke &&

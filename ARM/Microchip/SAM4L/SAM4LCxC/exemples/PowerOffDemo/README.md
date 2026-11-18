@@ -519,3 +519,37 @@ candidate, not a verified PICOUART wake result. Retest with the
 external 3.3 V adapter and check for a quiet 350 ms interval followed
 by a 9600-baud U. If early DRDY persists without any GPIO mux
 change, capture the PB00 waveform during activation.
+
+## November 18: PICOUART latched-DRDY handling
+
+The next hardware run on the direct-RXD0 handover branch reported
+`0xFF0200CB` followed by repeated `0x00010003`. The first
+attempt observed DRDY and byte 0xFF during PICOUART activation,
+then rejected sleep before PM wake was armed. The subsequent attempts
+were rejected because DRDY remained set.
+
+Datasheet 42023H, sections 25.6.1 and 25.6.2, states that DRDY is
+latched until a new start bit is detected and that full-frame wake
+occurs when a valid frame is received. A previously latched DRDY
+cannot be cleared by reading RHR or disabling the receiver. The
+driver now records this retained status but does not reject sleep
+solely because DRDY is set, either before or after enabling PICOUART.
+The receiver still requires SR.EN, uses full-frame wake (SOURCE=2),
+and enables PM_AWEN after the handover.
+
+On resume, only a PICOUART wake reported by PM together with DRDY
+permits moving the received byte to the normal UART FIFO.
+Unsolicited 0xFF recorded before arming is not automatically
+delivered to the UART application.
+
+PowerOffDemo now stops its UART-wake profile on the first failed
+reception instead of incrementing the resumed-standby counter and
+continuously retrying. The host helper already terminates on an
+unsolicited early response. This does not change the generic
+SystemSleep/UARTEnableWake interfaces.
+
+This is an unverified hardware hypothesis: the PM wake signal must
+be a new frame event, rather than a level continuously asserted by
+latched DRDY. Retest with a single U after a quiet interval to
+distinguish these cases. No successful PICOUART hardware wake has
+yet been demonstrated.

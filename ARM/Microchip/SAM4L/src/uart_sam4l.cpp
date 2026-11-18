@@ -682,13 +682,12 @@ bool Sam4lUartPrepareSleep(void)
 	{
 		rejected |= SAM4L_PICO_RX_BUSY;
 	}
-	// DRDY is cleared on a new start bit, not by reading RHR.
-	// Reject a retained frame before arming a new wake cycle.
+	// DRDY is cleared only on a new start bit. A retained byte must
+	// not prevent arming the receiver for the next full frame.
 	picoStatus = SAM4L_PICOUART->PICOUART_SR;
 	if ((picoStatus & PICOUART_SR_DRDY) != 0U)
 	{
 		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_STALE_DATA;
-		rejected |= SAM4L_PICO_STALE_DATA;
 	}
 	if ((SAM4L_PM->PM_WCAUSE & wake) != 0U)
 	{
@@ -731,12 +730,10 @@ bool Sam4lUartPrepareSleep(void)
 	}
 	if ((picoStatus & PICOUART_SR_DRDY) != 0U)
 	{
-		// A complete frame appeared before asynchronous wake was armed.
-		// Do not enter WAIT with an already pending receive event.
-		s_Sam4lUartSleep.Diagnostic |=
-			SAM4L_PICO_REJECTED | SAM4L_PICO_ARMED_DATA;
-		Sam4lUartResumeSleep();
-		return false;
+		// Record data retained or received during activation. The
+		// PICOUART wake event is generated on a new valid frame, not
+		// by simply reading the already latched DRDY status.
+		s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_DATA;
 	}
 	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
 	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
@@ -840,13 +837,13 @@ void Sam4lUartResumeSleep(void)
 		{
 			s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_DATA_READY;
 		}
-		// A frame received before PM_AWEN was armed belongs to the
-		// aborted handover; preserve it instead of silently dropping it.
-		received = (picoStatus & PICOUART_SR_DRDY) != 0U &&
-			(((SAM4L_PM->PM_AWEN & wake) == 0U) ||
-			((s_Sam4lUartSleep.Diagnostic &
-			(SAM4L_PICO_PM_WAKE | SAM4L_PICO_PM_CAUSE)) ==
-			(SAM4L_PICO_PM_WAKE | SAM4L_PICO_PM_CAUSE)));
+		// A latched DRDY byte is not necessarily the current wake frame.
+		// Copy data only when PM reports a PICOUART wake event.
+		received = (s_Sam4lUartSleep.Diagnostic &
+			(SAM4L_PICO_PREPARED | SAM4L_PICO_PM_WAKE |
+			 SAM4L_PICO_PM_CAUSE | SAM4L_PICO_DATA_READY)) ==
+			(SAM4L_PICO_PREPARED | SAM4L_PICO_PM_WAKE |
+			 SAM4L_PICO_PM_CAUSE | SAM4L_PICO_DATA_READY);
 		SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
 		// Do not change CFG until the backup clock domain reports
 		// that the PICOUART receiver is disabled.
