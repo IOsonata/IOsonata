@@ -73,3 +73,13 @@ this profile. Connect a 3.3 V USB-UART adapter and common ground. Run
 `python3 Python/sam4l_uart_wake.py --port PORT --baud 1000000`.
 PICOUART sleep entry and USART restoration belong to the SAM4L driver
 and SystemSleep. UART wake has not been hardware tested.
+
+## System-owned sleep coordination (review 0.14)
+
+For resumable sleep, PowerOffDemo now leaves its UART enabled and calls
+`SystemSleep()` directly after draining pending output. The target system
+coordinates temporary UART suspension and restoration with the driver's
+clock and interrupt state, without changing its enable reference count.
+The UART-wake profile retains PICOUART's own receive preparation.
+Previous runs used a different suspend sequence; this refactor requires
+a new clean library/demo build and board test before validation.

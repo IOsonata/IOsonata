@@ -37,3 +37,13 @@ split and additional post-wake reports have **not** been
 compiled or hardware revalidated as part of this review.
 A return from SystemSleep does not by itself establish
 PMU entry, and sleep-current measurements remain pending.
+
+## System-owned sleep coordination (review 0.14)
+
+For resumable sleep, PowerOffDemo now leaves its UART enabled and calls
+`SystemSleep()` directly after draining pending output. The target system
+coordinates temporary UART suspension and restoration with the driver's
+clock and interrupt state, without changing its enable reference count.
+The UART-wake profile retains PICOUART's own receive preparation.
+Previous runs used a different suspend sequence; this refactor requires
+a new clean library/demo build and board test before validation.

@@ -63,7 +63,8 @@ success return value.
 
 Disabling, powering off or reinitializing UART clears wake selection.
 The driver restores PICOUART, USART interrupt settings, clock gates,
-asynchronous wake mask and the captured RX byte. Any receive callback
+the asynchronous PICOUART wake selection and the captured RX byte.
+SystemSleep alone manages the shared PM wake interrupt. Any receive callback
 is called with interrupts masked and must not block. The ordinary
 USART divider is not rewritten for PICOUART. This is resumable WAIT
 sleep, not Backup-mode UART wake.

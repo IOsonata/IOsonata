@@ -68,3 +68,13 @@ Neither check establishes PMU entry or current consumption.
 The code change has not yet been compiled or retested on C3.
 Earlier hardware observations above remain valid for the
 specific configurations exercised at that time.
+
+## System-owned sleep coordination (review 0.14)
+
+For resumable sleep, PowerOffDemo now leaves its UART enabled and calls
+`SystemSleep()` directly after draining pending output. The target system
+coordinates temporary UART suspension and restoration with the driver's
+clock and interrupt state, without changing its enable reference count.
+The UART-wake profile retains PICOUART's own receive preparation.
+Previous runs used a different suspend sequence; this refactor requires
+a new clean library/demo build and board test before validation.

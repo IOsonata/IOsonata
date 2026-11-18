@@ -58,20 +58,39 @@ from current, untested changes.
 
 | Target | Existing reviewed mechanism | Important remaining work |
 | --- | --- | --- |
-| SAM4L | PM/SCIF/BSCIF clock setters, AST/EIC, Backup/RETENTION/WAIT, UART PICOUART hooks and TWIS PM.AWEN | Ordinary USART/peripheral suspend not coordinated automatically; assess shared PM wake ownership and multiple wake sources; hardware UART, TWIS and ADC SleepWalking are unverified |
-| SAMD11 | Shared SAMD GCLK clock setters and delay update, EIC/NMI Standby arm/restore | UART/peripheral suspend still performed by the demo; flash-limited ClockDemo requires a clean link; no full sleep-resource review |
-| SAMD21 | Shared SAMD GCLK and SERCOM ownership, EIC Standby arm/restore | Driver sleep participation beyond EIC is not integrated; validate new PowerOffDemo clock check |
-| ESP32-C3 | SYSTEM clock tree, calibrated RC_FAST, RTC Light/Deep sleep, driver UART clock gates | PowerOffDemo still disables UART in application code; WFI fallback cannot prove PMU entry; investigate previously reported startup dots |
-| ESP32-C6 | PCR clock tree, calibrated RC_FAST and LF, PMU PLL retention, driver UART clocks and RTC wake | PowerOffDemo still disables UART in application code; review PMU request rejection and WFI fallback semantics; verify external sleep current |
+| SAM4L | PM/SCIF/BSCIF clock setters, AST/EIC, Backup/RETENTION/WAIT, driver-owned USART pause/PICOUART and TWIS PM.AWEN | Evaluate other active peripheral clocks and shared asynchronous wake sources; hardware UART, TWIS and ADC SleepWalking unverified |
+| SAMD11 | Shared GCLK and delay update, EIC/NMI Standby, system-owned UART suspend/resume | Flash-limited PowerOffDemo needs clean link and hardware recheck; other peripherals still need review |
+| SAMD21 | Shared GCLK and SERCOM ownership, EIC Standby, system-owned UART suspend/resume | Other peripherals still need sleep review; validate rebuilt PowerOffDemo |
+| ESP32-C3 | SYSTEM clock tree, calibrated RC_FAST, RTC Light/Deep sleep, system-owned UART clock gates | WFI fallback cannot prove PMU entry; other peripheral lifecycles and startup dots remain unverified |
+| ESP32-C6 | PCR clock tree, calibrated RC_FAST/LF, PMU PLL retention, system-owned UART gates and RTC wake | Review PMU rejection and other peripheral lifecycles; measure sleep current |
 
-The same generic PowerOffDemo source still calls Disable/Enable around normal
-resumable sleep when UART wake is not selected. This is an unresolved
-ownership bypass, not an implementation of the desired architecture.
-It was preserved for the previously hardware-tested SAMD and ESP32 paths
-rather than changing their power sequencing without the board/toolchain.
-The next architectural change must move safe peripheral suspend/resume
-to the existing target system and driver implementations; do not
-introduce another public manager merely to avoid using existing code.
+The system and UART implementations now coordinate the known UART sleep
+path, without exposing a new public object or changing DeviceIntrf enable
+references. PowerOffDemo has no explicit UART Disable/Enable in its
+resumable sleep path.
+
+On SAM4L, SystemSleep selects WAIT/RETENTION/SLEEP0 according to active
+wake resources. The UART driver retains the PICOUART wake selection and
+temporarily gates other idle USARTs only for deep resumable sleep. The
+system alone arms, acknowledges and restores the shared PM wake interrupt;
+UART samples the PICOUART wake byte before the system clears its flag.
+
+On SAMD11/SAMD21, SystemSleep calls the UART's private pause/resume
+functions around the existing EIC/NMI Standby sequence. The UART owns
+SERCOM clock gating, pin mux, TX completion and interrupt masks.
+Driver reference counts and FIFOs are preserved.
+
+On ESP32-C3/C6, the shared SystemSleep function owns GPIO RTC wake
+preparation, temporary UART clock gating and restoration. Chip-specific
+Esp32PowerSleep functions control only their RTC/PMU clock, regulator and
+cache transitions. Ordinary CPU WFI does not suspend the UART.
+
+Outstanding peripheral ownership work remains for non-UART active
+transports, DMA and other clock consumers. Current functions reject a
+UART sleep preparation request while a transaction is still active;
+SystemSleep is void, so a rejected request simply returns without entering
+the intended deep mode. Applications are responsible for completing
+transfers, but not for hardware-specific clock or UART restoration.
 
 ## Previous hardware evidence
 
@@ -106,9 +125,9 @@ in this review.
 4. Re-run existing board demonstrations. Verify ordinary UART TX/RX,
    timers, I2C and other enabled peripherals after wake, including
    repeated wake and mixed wake ownership. Do not infer untested modes.
-5. Only then refactor the remaining application-side Disable/Enable
-   sleep preparation into the target system/driver lifecycle. Validate
-   it before removing that behavior from the demos.
+5. Review and implement coordinated sleep for active non-UART transports,
+   DMA and any peripheral requiring a clock through WAIT/Standby, preserving
+   their normal DeviceIntrf and Device lifecycle.
 6. Measure sleep current and distinguish accepted PMU entry from
    a CPU WFI fallback with independent hardware evidence.
 
@@ -118,6 +137,7 @@ The earlier /workspace/scratch working tree is absent. The connected
 GitHub repository provided branch source and writable ref access, but
 the local environment has no checked-out IOsonata tree or ARM/RISC-V
 cross compiler. ASCII, conditional nesting and branch/diff checks
-were performed on the edited source. No actual compiler, library
+were performed on the edited source. Existing SAM4L and SAMD host test
+stubs were updated for internal sleep calls. No actual compiler, library
 rebuild, unit test or hardware run was performed after these edits.
 GitHub reports no commit status checks for the current head.

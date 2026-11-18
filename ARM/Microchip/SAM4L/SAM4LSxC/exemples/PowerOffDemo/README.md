@@ -39,3 +39,13 @@ PICOUART wake instead of USART1. Use a 3.3 V adapter, transmit
 one U at 9600 baud to wake, then return to the normal console baud.
 See `exemples/uart/sam4l_wake.md`. UART wake and these standby modes
 remain without hardware validation on this board.
+
+## System-owned sleep coordination (review 0.14)
+
+For resumable sleep, PowerOffDemo now leaves its UART enabled and calls
+`SystemSleep()` directly after draining pending output. The target system
+coordinates temporary UART suspension and restoration with the driver's
+clock and interrupt state, without changing its enable reference count.
+The UART-wake profile retains PICOUART's own receive preparation.
+Previous runs used a different suspend sequence; this refactor requires
+a new clean library/demo build and board test before validation.
