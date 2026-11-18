@@ -315,6 +315,17 @@ void SystemSleep(void)
 		(void)SAM4L_BPM->BPM_PMCON;
 		SCB->SCR = scr;
 	}
+	if (slept && deep)
+	{
+		// A SystemWakePin event remains latched in EIC_ISR until EIC_ICR
+		// acknowledges it. The BPM and EIC clocks are still enabled here.
+		// Clear only lines routed by SystemWakePin, not other EIC owners.
+		uint32_t wakeEic = eic & SAM4L_BPM->BPM_BKUPPMUX;
+		if (wakeEic != 0U)
+		{
+			SAM4L_EIC->EIC_ICR = SAM4L_EIC->EIC_ISR & wakeEic;
+		}
+	}
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
 		PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
 	SAM4L_PM->PM_PBDMASK = clocks;
@@ -336,14 +347,6 @@ void SystemSleep(void)
 	}
 	if (slept && deep)
 	{
-		// A SystemWakePin EIC event stays latched until EIC_ICR is written.
-		// Clear only the enabled asynchronous lines routed by SystemWakePin,
-		// before acknowledging PM WAKE. Other EIC owners retain their flags.
-		uint32_t wakeEic = eic & SAM4L_BPM->BPM_BKUPPMUX;
-		if (wakeEic != 0U)
-		{
-			SAM4L_EIC->EIC_ICR = SAM4L_EIC->EIC_ISR & wakeEic;
-		}
 		if (wakeMask == 0U)
 		{
 			SAM4L_PM->PM_IDR = PM_IDR_WAKE;
