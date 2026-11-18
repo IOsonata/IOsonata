@@ -17,8 +17,8 @@
 #define SYSCTRL_XOSC32K_XTALEN_Msk (1UL << 2)
 #define SYSCTRL_XOSC32K_EN32K_Msk (1UL << 3)
 #define SYSCTRL_XOSC32K_RUNSTDBY_Msk (1UL << 6)
-#define SYSCTRL_PCLKSR_OSC32KRDY_Msk (1UL << 7)
-#define SYSCTRL_PCLKSR_XOSC32KRDY_Msk (1UL << 6)
+#define SYSCTRL_PCLKSR_OSC32KRDY_Msk (1UL << 2)
+#define SYSCTRL_PCLKSR_XOSC32KRDY_Msk (1UL << 1)
 
 static struct {
 	volatile uint32_t GCLK_GENCTRL;
