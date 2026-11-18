@@ -24,6 +24,22 @@ static bool s_WaitSleep;
 static bool s_TestSleep;
 static unsigned s_SleepCount;
 static uint32_t s_TimerBusyMask;
+
+// Optional driver functions must be provided by the host test. Linking
+// undefined weak C++ references is not portable to macOS clang.
+struct SleepHookTest {
+	unsigned RejectStage;
+	unsigned UartPrepare;
+	unsigned UsbCheck;
+	unsigned I2CPrepare;
+	unsigned SpiPrepare;
+	unsigned UartSuspend;
+	unsigned I2CResume;
+	unsigned SpiResume;
+	unsigned UartResume;
+};
+static SleepHookTest s_Hooks;
+
 void PowerTestWfi(void)
 {
 	if (!s_TestSleep)
@@ -59,6 +75,53 @@ void PowerTestWfi(void)
 
 // The host register model retains the normal CPU rate across sleep.
 uint32_t SystemCoreClockGet(void) { return 12000000U; }
+
+// Host implementations of the optional driver sleep functions. These model
+// successful preparation, refusal and rollback without linking MCU drivers.
+bool Sam4lUartPrepareSleep(void)
+{
+	s_Hooks.UartPrepare++;
+	return s_Hooks.RejectStage != 1U;
+}
+
+bool Sam4lUsbAllowDeepSleep(void)
+{
+	s_Hooks.UsbCheck++;
+	return s_Hooks.RejectStage != 2U;
+}
+
+bool Sam4lI2CSuspendSleep(void)
+{
+	s_Hooks.I2CPrepare++;
+	return s_Hooks.RejectStage != 3U;
+}
+
+bool Sam4lSpiSuspendSleep(void)
+{
+	s_Hooks.SpiPrepare++;
+	return s_Hooks.RejectStage != 4U;
+}
+
+bool Sam4lUartSuspendSleep(void)
+{
+	s_Hooks.UartSuspend++;
+	return s_Hooks.RejectStage != 5U;
+}
+
+void Sam4lUartResumeSleep(void)
+{
+	s_Hooks.UartResume++;
+}
+
+void Sam4lSpiResumeSleep(void)
+{
+	s_Hooks.SpiResume++;
+}
+
+void Sam4lI2CResumeSleep(void)
+{
+	s_Hooks.I2CResume++;
+}
 
 bool Sam4lTimerClockBusy(uint32_t ClockMask)
 {
@@ -195,6 +258,47 @@ int main(void)
 			assert(s_Bpm.BPM_PMCON == saved);
 		}
 	}
+	assert(s_Hooks.UartPrepare == 11U);
+	assert(s_Hooks.UsbCheck == 9U);
+	assert(s_Hooks.I2CPrepare == 9U);
+	assert(s_Hooks.SpiPrepare == 9U);
+	assert(s_Hooks.UartSuspend == 9U);
+	assert(s_Hooks.UartResume == 11U);
+	assert(s_Hooks.SpiResume == 11U);
+	assert(s_Hooks.I2CResume == 11U);
+
+	// Refusal by each driver must prevent WFI and preserve system clocks.
+	// The system rolls back every optional driver on a rejected deep sleep.
+	s_Eic.EIC_CTRL = 2U;
+	s_Eic.EIC_IMR = 2U;
+	s_Eic.EIC_ASYNC = 2U;
+	s_Pm.PM_AWEN = 0U;
+	s_Pm.PM_PBDMASK = 0U;
+	s_WaitSleep = false;
+	for (unsigned stage = 1U; stage <= 5U; stage++)
+	{
+		s_Hooks = {};
+		s_Hooks.RejectStage = stage;
+		g_PowerTestMask = 0U;
+		unsigned before = s_SleepCount;
+		SystemSleep();
+		assert(s_SleepCount == before);
+		assert(g_PowerTestMask == 0U);
+		assert(s_Pm.PM_PBDMASK == 0U);
+		assert(s_Bpm.BPM_PMCON == saved);
+		assert(g_PowerTestScb.SCR ==
+			(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk | 0x10U));
+		assert(s_Hooks.UartPrepare == 1U);
+		assert(s_Hooks.UsbCheck == (stage >= 2U ? 1U : 0U));
+		assert(s_Hooks.I2CPrepare == (stage >= 3U ? 1U : 0U));
+		assert(s_Hooks.SpiPrepare == (stage >= 4U ? 1U : 0U));
+		assert(s_Hooks.UartSuspend == (stage >= 5U ? 1U : 0U));
+		assert(s_Hooks.UartResume == (stage > 1U ? 1U : 0U));
+		assert(s_Hooks.SpiResume == (stage > 1U ? 1U : 0U));
+		assert(s_Hooks.I2CResume == (stage > 1U ? 1U : 0U));
+	}
+	s_Hooks = {};
+
 	// Shared DMA and running high-frequency timers must prevent RETENTION.
 	// AST is allowed to keep running for the existing wake tests above.
 	s_Pm.PM_AWEN = 0U;
