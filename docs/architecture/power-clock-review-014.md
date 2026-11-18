@@ -58,7 +58,7 @@ from current, untested changes.
 
 | Target | Existing reviewed mechanism | Important remaining work |
 | --- | --- | --- |
-| SAM4L | PM/SCIF/BSCIF clock setters, AST/EIC, Backup/RETENTION/WAIT, driver-owned USART pause/PICOUART and TWIS PM.AWEN | Evaluate other active peripheral clocks and shared asynchronous wake sources; hardware UART, TWIS and ADC SleepWalking unverified |
+| SAM4L | PM/SCIF/BSCIF clock setters, AST/EIC, Backup/RETENTION/WAIT, driver-owned USART pause/PICOUART and TWIS PM.AWEN | Evaluate other active peripheral clocks and shared asynchronous wake sources; PICOUART wake 10/10 hardware PASS; TWIS/ADC SleepWalking, mixed peripherals and sleep current unverified |
 | SAMD11 | Shared GCLK and delay update, EIC/NMI Standby, system-owned UART suspend/resume | Flash-limited PowerOffDemo needs clean link and hardware recheck; other peripherals still need review |
 | SAMD21 | Shared GCLK and SERCOM ownership, EIC Standby, system-owned UART suspend/resume | Other peripherals still need sleep review; validate rebuilt PowerOffDemo |
 | ESP32-C3 | SYSTEM clock tree, calibrated RC_FAST, RTC Light/Deep sleep, system-owned UART clock gates | WFI fallback cannot prove PMU entry; other peripheral lifecycles and startup dots remain unverified |
@@ -107,10 +107,12 @@ transfers, but not for hardware-specific clock or UART restoration.
   wakes, clock restoration, timer IRQs and calibrated delays. GPIO3
   Deep-sleep restart tests also passed in reported runs.
 
-These are historical results for prior firmware revisions. They do not
-verify the new demo split. No hardware validation for SAM4L UART wake,
-I2C SleepWalking, ADC SleepWalking, all sleep modes or consumption exists
-in this review.
+These are historical results for prior firmware revisions. The later
+SAM4L PICOUART validation on November 18, 2026 completed 10 consecutive
+hardware wake cycles with received byte, UART baud, CPU/APB clocks,
+sequential wake counters and sampled SRAM all PASS. This validates that
+specific wake path, not I2C/TWIS or ADC SleepWalking, all sleep modes or
+power consumption.
 
 ## Required validation before completion
 
@@ -201,17 +203,19 @@ experiments in ClockDemo remain separate from low-power sleep entry.
 
 ### Validation still required
 
-This review performed source inspection, branch comparison and static
-source checks only. The new SAM4L, SAMD and ESP32 transport sleep
-changes have not been compiled or run on hardware. Do not interpret a
-previous ClockDemo or PowerOffDemo PASS as validation of these changes.
+The additional transport-sleep review performed source inspection,
+branch comparison and static checks, without clean builds or hardware
+runs for all modified transport paths. Separately, the SAM4L PICOUART
+wake path completed ten functional physical-board wake cycles on
+November 18, 2026. Do not extend that result to untested peripherals.
 
 Before treating any target as complete, perform a clean managed-project
 library and application build for Debug and Release, exercise multiple
 simultaneously initialized transports, repeated sleep/resume, a busy-master
-refusal and its rollback, and the existing wake/retention cases. The
-SAM4L TWIS SleepWalking and UART PICOUART wake paths still need
-physical testing. SPI/I2C slave behavior and peripheral wake modes
+refusal and its rollback, and the existing wake/retention cases. SAM4L
+PICOUART wake now has 10/10 physical-board cycles PASS; TWIS
+SleepWalking still needs hardware testing. SPI/I2C slave behavior
+and peripheral wake modes
 outside the implemented set remain unsupported or deferred.
 
 System-wide clock and power ownership for USB, ADC and other optional

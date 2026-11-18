@@ -52,7 +52,8 @@ the adapter to settle, while the host waits 1.25 s before sending `U`
 and switching back to 1000000 baud. Each wake must report `UART wake byte: PASS`,
 `UART rate after resume: PASS`, and
 `CPU/APB clock after resume: PASS`. The SRAM sample should also
-pass. This profile has not been validated on physical hardware.
+pass. This PICOUART profile completed ten consecutive physical-board wake cycles
+on November 18, 2026; see the latest results below. Sleep current is not yet measured.
 
 If the host script prints `Timeout: waiting for PowerOffDemo output`:
 check that the adapter is wired to EXT1 or EXT4, not EXT2; verify
@@ -600,3 +601,36 @@ Next hardware acceptance target: 10 consecutive cycles passing all
 checks, followed by separate sleep-current measurement. The host
 handshake and baud switching belong only to the test harness,
 never the production SystemSleep interface.
+
+## November 18, 2026: ten consecutive PICOUART wakes PASS
+
+The maintainer reran the synchronized USART0/PICOUART wake profile
+using `python3 Python/sam4l_uart_wake.py --baud 1000000 --cycles 10`
+with the external 3.3 V adapter connected to PB00/PB01.
+
+All ten cycles passed the host's complete acceptance criteria:
+
+| Check | Physical-board result |
+| --- | --- |
+| Normal USART0 RX at 1000000 baud | PASS at startup |
+| FTDI switch to 9600 baud before PICOUART activation | Performed each cycle |
+| PICOUART wake byte `U` (0x55) at 9600 baud | 10/10 PASS |
+| USART0 configured baud after resume | 10/10 PASS |
+| CPU/APB clocks after resume | 10/10 PASS |
+| Resume counter | 0x00000001 through 0x0000000A, sequential |
+| SRAM sample: 128 static + 128 stack bytes | 10/10 PASS |
+
+The final host message was
+`[host] UART wake cycle 10/10 PASS, including SRAM.`
+No UART wake, clock-restore or sampled-RAM failure occurred in the log.
+
+This verifies repeated wake-byte delivery and resumption under the
+PowerOffDemo test handshake. It does **not** independently measure
+low-power current or prove all SRAM bytes were retained. Other wake
+sources, simultaneous peripheral activity and long-duration sleep
+reliability remain outside this test.
+
+The host handshake coordinates external test traffic only.
+Production `SystemSleep()` remains autonomous: the UART driver
+arms PICOUART and restores USART0 without host participation.
+No UART driver or system power code was changed for this result.

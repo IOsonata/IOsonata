@@ -82,8 +82,9 @@ SAM4L register tests passed before this refactor. Earlier LC/LS
 Debug/Release checks compiled and linked using cached library
 archives with updated UART and system objects; these were not
 clean full-library rebuilds. On November 18, the maintainer reported
-one physical PICOUART wake with the 9600-baud `U` delivered and
-successful USART0 rate and CPU/APB restoration. The host helper now
-requires a sequential resume counter and SRAM PASS on each cycle.
-Ten consecutive physical wake cycles, SRAM verification under the
-stricter host check, and sleep-current measurement remain pending.
+10 consecutive physical PICOUART wakes using 9600-baud `U`. Every
+cycle passed USART0 baud restoration, CPU/APB restoration, sequential
+resume counting (1 through 10), and 128 static plus 128 stack bytes
+of sampled SRAM retention. The host helper required every check
+before accepting a cycle. Sleep-current measurement, extended wake
+reliability and mixed-peripheral sleep behavior remain pending.

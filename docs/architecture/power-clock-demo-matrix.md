@@ -8,6 +8,14 @@ projects and 10 missing PowerOffDemo projects outside ESP32.
 
 ## SAM4LC latest hardware result
 
+On November 18, 2026, PowerOffDemo completed **10 consecutive PICOUART
+wake cycles** with the external 3.3 V USB-UART adapter: the 9600-baud
+`U` wake byte, restored 1 Mbaud USART0, restored CPU/APB clocks,
+sequential resume counts 1 through 10 and 128 static + 128 stack bytes
+of sampled SRAM all PASS. The host switched baud before PICOUART
+activation for the test only. Sleep current and long-duration wake
+behavior remain unmeasured.
+
 The maintainer reported zero failures with RC4/RC12 and PBA divisors 1/2/4/1,
 both delays and timer IRQs at every rate, six OLED1 BUTTON1 RETENTION wakes,
 clock restoration and UART RX. ClockDemo now also checks a one-second automatic
