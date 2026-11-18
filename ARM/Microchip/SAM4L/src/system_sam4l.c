@@ -1364,31 +1364,43 @@ static bool Sam4lCoreClockBusy(void)
 
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
+	uint32_t state;
+	uint32_t mainClock;
+	uint32_t cpu;
+	volatile uint32_t *reg;
+	uint32_t previous;
+	uint32_t best;
+	uint32_t actual;
+	uint32_t error;
+	uint32_t shift;
+	uint32_t rate;
+	uint32_t difference;
+
 	if (Idx < 0 || Idx > 3 || Freq == 0U || __get_IPSR() != 0U)
 	{
 		return 0U;
 	}
-	uint32_t state = __get_PRIMASK();
+	state = __get_PRIMASK();
 	__disable_irq();
-	uint32_t mainClock = Sam4lMainClockGet();
-	uint32_t cpu = Sam4lApplyClkDiv(mainClock, SAM4L_PM->PM_CPUSEL);
-	volatile uint32_t *reg = Idx == 0 ? &SAM4L_PM->PM_PBASEL :
+	mainClock = Sam4lMainClockGet();
+	cpu = Sam4lApplyClkDiv(mainClock, SAM4L_PM->PM_CPUSEL);
+	reg = Idx == 0 ? &SAM4L_PM->PM_PBASEL :
 		Idx == 1 ? &SAM4L_PM->PM_PBBSEL :
 		Idx == 2 ? &SAM4L_PM->PM_PBCSEL : &SAM4L_PM->PM_PBDSEL;
-	uint32_t previous = *reg;
-	uint32_t best = previous;
-	uint32_t actual = 0U;
-	uint32_t error = UINT32_MAX;
+	previous = *reg;
+	best = previous;
+	actual = 0U;
+	error = UINT32_MAX;
 
-	for (uint32_t shift = 0; shift <= 8U; shift++)
+	for (shift = 0; shift <= 8U; shift++)
 	{
-		uint32_t rate = mainClock >> shift;
+		rate = mainClock >> shift;
 		// PBB serves AHB modules and must track CPU/HSB (42023H 10.6.1.2).
 		if (rate == 0U || rate > cpu || (Idx == 1 && rate != cpu))
 		{
 			continue;
 		}
-		uint32_t difference = rate > Freq ? rate - Freq : Freq - rate;
+		difference = rate > Freq ? rate - Freq : Freq - rate;
 		if (difference < error)
 		{
 			error = difference;
