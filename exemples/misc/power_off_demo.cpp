@@ -433,8 +433,8 @@ int main()
 	}
 	// Validate the physical USART0 RX connection before testing PICOUART.
 	// The host sends one U at the normal 1 Mbps console rate.
+	// Do not drain the RX FIFO while waiting for the test byte.
 	PowerDemoPut("UART RX: send U at 1000000 baud\r\n");
-	PowerDemoDrain();
 	rxByte = 0U;
 	normalRx = false;
 	for (rxWait = 0U; rxWait < 3000U; rxWait++)
