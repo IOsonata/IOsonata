@@ -14,6 +14,7 @@ Reset codes follow Espressif ESP-IDF v5.5.1.
 Copyright (c) 2026, I-SYST inc., all rights reserved.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <stddef.h>
 
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"

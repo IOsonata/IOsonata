@@ -826,6 +826,7 @@ extern "C" bool SamdUartPrepareSleep(void)
 		dev->pReg->SERCOM_INTENCLR = SERCOM_USART_INT_INTENCLR_Msk;
 		if (!SamdUartRun(dev, false))
 		{
+			(void)SamdUartRun(dev, true);
 			dev->pReg->SERCOM_INTENSET = dev->SleepInterrupts;
 			SamdUartResumeSleep();
 			return false;
