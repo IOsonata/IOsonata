@@ -226,6 +226,7 @@ void SystemSleep(void)
 	uint32_t wakeMask = SAM4L_PM->PM_IMR & PM_IMR_WAKE;
 	uint32_t irqEnabled = NVIC_GetEnableIRQ(PM_IRQn);
 	uint32_t irqPending = NVIC_GetPendingIRQ(PM_IRQn);
+	bool slept = false;
 	// EIC and AST wake directly. Other asynchronous users require AWEN.
 	// WAIT permits SleepWalking; RETENTION is used for EIC/AST alone.
 	if ((SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_VREGOK) != 0U)
@@ -253,24 +254,7 @@ void SystemSleep(void)
 		__DSB();
 		__WFI();
 		__NOP();
-		if (deep)
-		{
-			// Consume only the temporary PM wake interrupt. Peripheral flags
-			// and application-owned PM interrupts remain for their handlers.
-			if (wakeMask == 0U)
-			{
-				SAM4L_PM->PM_IDR = PM_IDR_WAKE;
-				SAM4L_PM->PM_ICR = PM_ICR_WAKE;
-				if (irqPending == 0U && (SAM4L_PM->PM_ISR & SAM4L_PM->PM_IMR & ~PM_IMR_WAKE) == 0U)
-				{
-					NVIC_ClearPendingIRQ(PM_IRQn);
-				}
-			}
-			if (irqEnabled == 0U)
-			{
-				NVIC_DisableIRQ(PM_IRQn);
-			}
-		}
+		slept = true;
 		SAM4L_BPM->BPM_UNLOCK = BPM_UNLOCK_KEY(0xaa) |
 			BPM_UNLOCK_ADDR(offsetof(Bpm, BPM_PMCON));
 		SAM4L_BPM->BPM_PMCON = pmcon;
@@ -282,9 +266,28 @@ void SystemSleep(void)
 	SAM4L_PM->PM_PBDMASK = clocks;
 	__DSB();
 	__ISB();
+	// Collect the PICOUART wake byte before acknowledging the shared PM
+	// WAKE status. All private peripheral state is restored first.
 	if (Sam4lUartResumeSleep != NULL)
 	{
 		Sam4lUartResumeSleep();
+	}
+	if (slept && deep)
+	{
+		if (wakeMask == 0U)
+		{
+			SAM4L_PM->PM_IDR = PM_IDR_WAKE;
+			SAM4L_PM->PM_ICR = PM_ICR_WAKE;
+			if (irqPending == 0U &&
+				(SAM4L_PM->PM_ISR & SAM4L_PM->PM_IMR & ~PM_IMR_WAKE) == 0U)
+			{
+				NVIC_ClearPendingIRQ(PM_IRQn);
+			}
+		}
+		if (irqEnabled == 0U)
+		{
+			NVIC_DisableIRQ(PM_IRQn);
+		}
 	}
 	(void)SystemCoreClockGet();
 	EnableInterrupt(state);

@@ -636,9 +636,8 @@ bool Sam4lUartPrepareSleep(void)
 	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
 	// PICOUART receives at 9600 baud. Keep the normal USART divider unchanged.
 	SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);
-	SAM4L_PM->PM_ICR = PM_ICR_WAKE;
-	// Own WAKE until its cause has been sampled. SystemSleep preserves it.
-	SAM4L_PM->PM_IER = PM_IER_WAKE;
+	// SystemSleep owns the shared PM wake interrupt. The UART owns only
+	// the PICOUART asynchronous wake selection and its receive state.
 	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, awen | wake);
 	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_EN;
 	__DSB();
@@ -715,12 +714,6 @@ void Sam4lUartResumeSleep(void)
 	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
 	SAM4L_PICOUART->PICOUART_CFG = s_Sam4lUartSleep.Config;
 	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, s_Sam4lUartSleep.WakeMask);
-	SAM4L_PM->PM_IDR = PM_IDR_WAKE;
-	SAM4L_PM->PM_ICR = PM_ICR_WAKE;
-	if ((SAM4L_PM->PM_ISR & SAM4L_PM->PM_IMR) == 0U)
-	{
-		NVIC_ClearPendingIRQ(PM_IRQn);
-	}
 	Sam4lUartClockEnable(dev);
 	dev->pReg->US_CR = US_CR_RSTRX | US_CR_RSTSTA;
 	dev->pReg->US_CR = US_CR_RXEN | US_CR_TXEN;
