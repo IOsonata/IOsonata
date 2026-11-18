@@ -116,6 +116,10 @@ def main():
                 stage = "waiting for normal UART RX result"
                 send_byte(port, 2)
                 print("[host] Sent U at %d baud." % args.baud, flush=True)
+            elif b"UART wake unavailable for this configuration" in line:
+                print("[host] UARTEnableWake rejected the USART0 profile.",
+                      file=sys.stderr)
+                return 1
             elif b"Entering Standby" in line:
                 print("[host] Another wake profile is selected. Enable "
                       "POWER_DEMO_UART_WAKE and rebuild PowerOffDemo.",

@@ -44,7 +44,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED1_PIN		7
 #define LED1_PINOP		IOPINOP_GPIO
 
-// Default validation: resumable EIC Standby wake on OLED1 BUTTON1.
+// Resumable sleep profile for the SAM4L power/clock hardware tests.
 // Set RESUME_WAKE to 0 for the previously validated Backup-mode test.
 #ifndef POWER_DEMO_RESUME_WAKE
 #define POWER_DEMO_RESUME_WAKE 1
@@ -55,12 +55,17 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define POWER_DEMO_STANDBY_RAM_TEST 1
 #endif
 
-// Keep AST timer and PICOUART wake disabled for the first button test.
+// PICOUART receive wake is the next validation profile. It needs a
+// 3.3 V USB-UART adapter on PB00 (adapter TX) and PB01 (adapter RX),
+// plus common ground. Console output moves off the EDBG virtual COM.
+// Override UART_WAKE to 0 to restore the verified OLED1 BUTTON1 test.
+#ifndef POWER_DEMO_UART_WAKE
+#define POWER_DEMO_UART_WAKE 1
+#endif
+
+// Leave AST automatic wake off while testing PICOUART.
 #ifndef POWER_DEMO_TIMER_WAKE_MS
 #define POWER_DEMO_TIMER_WAKE_MS 0
-#endif
-#ifndef POWER_DEMO_UART_WAKE
-#define POWER_DEMO_UART_WAKE 0
 #endif
 
 // UART wake uses an external 3.3 V adapter on PB00/PB01.

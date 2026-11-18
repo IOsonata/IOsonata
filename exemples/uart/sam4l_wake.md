@@ -33,10 +33,11 @@ received byte during the transition.
 ## PowerOffDemo profile
 
 Set `POWER_DEMO_UART_WAKE=1` in SAM4LCxC or SAM4LSxC PowerOffDemo
-`src/board.h` (or the application project symbols). The default
-remains zero, retaining the normal USART1 console and Backup-mode
-test. Rebuild the matching library and application using the same
-Eclipse managed Debug or Release configuration. The UART-wake
+`src/board.h` (or the application project symbols). The SAM4LCxC board.h selects PICOUART wake by default on the 0.14
+review branch. Override `POWER_DEMO_UART_WAKE=0` to return to its
+previously validated EIC button-wake profile. Rebuild the matching
+library and application using the same Eclipse managed Debug or
+Release configuration. The UART-wake
 profile uses the external adapter for **all console output**, not EDBG.
 
 Start the host helper before resetting the board:

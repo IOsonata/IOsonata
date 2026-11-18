@@ -8,13 +8,41 @@ Build the SAM4LCxC library and PowerOffDemo in the same configuration.
 Flash the application and run without an active debugger session. UART output
 uses USART1 at 1000000 baud on the EDBG virtual COM port.
 
-The default board.h now selects resumable Standby:
-`POWER_DEMO_RESUME_WAKE=1`, `POWER_DEMO_STANDBY_RAM_TEST=1`,
-`POWER_DEMO_UART_WAKE=0` and `POWER_DEMO_TIMER_WAKE_MS=0`.
+The default board.h now selects USART0/PICOUART receive wake for the
+next hardware test: `POWER_DEMO_RESUME_WAKE=1`,
+`POWER_DEMO_STANDBY_RAM_TEST=1`, `POWER_DEMO_UART_WAKE=1`, and
+`POWER_DEMO_TIMER_WAKE_MS=0`. This is resumable WAIT sleep.
+For the previously validated EIC button-wake test, override
+`POWER_DEMO_UART_WAKE=0`, clean-build, and monitor USART1 on EDBG.
 After `Entering Standby`, press OLED1 BUTTON1. Each wake should print
 `UART rate after resume: PASS`, `CPU/APB clock after resume: PASS`,
 `SRAM sample PASS: 128 static + 128 stack bytes`, and an increasing
 `Resumed from Standby` count. Repeat at least ten times.
+
+## Next hardware test: PICOUART receive wake
+
+With the default UART-wake profile in board.h, USART0 RX PB00 is shared
+with PICOUART and USART0 TX is PB01. Connect a 3.3 V USB-UART adapter:
+adapter TX to PB00, adapter RX to PB01, and GND to GND. Do not connect a
+5 V UART signal or power the board from the adapter. This is not the
+EDBG virtual COM port.
+
+Build the SAM4LCxC library and PowerOffDemo in matching Release
+configurations. Flash the application with EDBG and stop the debugger.
+Open the adapter on macOS with:
+
+```sh
+ls /dev/cu.usbserial*
+python3 Python/sam4l_uart_wake.py --port /dev/cu.usbserial-ADAPTER --baud 1000000 --cycles 5
+```
+
+Start the helper before resetting the board. The helper reads the normal
+console at 1000000 baud, sends one U at 9600 baud after each
+`Entering UART sleep` prompt, and switches back to the normal
+console baud. Each wake must report `UART wake byte: PASS`,
+`UART rate after resume: PASS`, and
+`CPU/APB clock after resume: PASS`. The SRAM sample should also
+pass. This profile has not been validated on physical hardware.
 
 ## Previously validated Backup-mode button wake
 
@@ -68,9 +96,10 @@ consecutive AST Backup wakes with reset reason 0x1000 and retained start counts
 
 ## Resumable Standby profiles
 
-The default board.h selects resumable EIC wake with USART1/EDBG and
-retained static/stack RAM checks. OLED1 BUTTON1 on PC06 is the wake
-source. The previous Backup validation does not verify this profile.
+Set `POWER_DEMO_UART_WAKE=0` to select resumable EIC wake with
+USART1/EDBG and retained static/stack RAM checks. OLED1 BUTTON1 on
+PC06 is the wake source. This profile passed hardware validation as
+recorded below. The previous Backup validation remains separate.
 
 For automatic AST wake in resumable sleep, set
 `POWER_DEMO_RESUME_WAKE=1`, `POWER_DEMO_TIMER_WAKE_MS=1000`,
