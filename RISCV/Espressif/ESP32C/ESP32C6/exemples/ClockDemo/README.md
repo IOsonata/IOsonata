@@ -1,5 +1,26 @@
 # ESP32-C6 ClockDemo
 
+## Current clock-only configuration
+
+The current project cycles XTAL, calibrated RC_FAST and XTAL
+restoration; checks APB dividers, low-frequency RC sources,
+timer IRQs, both delays and normal UART RX on TX16/RX17
+at 1 Mbaud. ClockDemo no longer enters Light-sleep. There
+is a single startup UART RX prompt, not ten wake-related
+prompts. PowerOffDemo owns GPIO9 Light-sleep and GPIO3
+reset-on-wake Deep-sleep.
+
+Previous hardware reports include successful repeated
+clock switching, calibrated delays and nine Light-sleep
+wakes, but the newly separated demo has not been
+compiled or hardware revalidated.
+
+## Historical combined clock/sleep configuration and board results
+
+The material below describes earlier combined ClockDemo builds.
+Its BOOT sleep prompts, CLOCK_DEMO_WAKE_PIN option, nine-wake
+run and receive-after-wake instructions are historical.
+
 Import `ioc` as an existing Eclipse managed project. Build the ESP32C6 library
 and ClockDemo in the same configuration, then flash ClockDemo.elf using the
 normal IOcomposer flash command. Debug and Release both use UART0 at

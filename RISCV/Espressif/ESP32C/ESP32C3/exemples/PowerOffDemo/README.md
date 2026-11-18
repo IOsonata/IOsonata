@@ -1,6 +1,6 @@
 # ESP32-C3 PowerOffDemo
 
-This project targets ESP32-C3-DevKitM-1. Import `ioc` as an existing Eclipse
+undefinedThis project targets ESP32-C3-DevKitM-1. Import `ioc` as an existing Eclipse
 managed project. Build the ESP32C3 library and PowerOffDemo in the same
 configuration. UART0 uses TX21/RX20 at 1,000,000 baud, 8N1, through the board's
 USB-to-UART bridge. Open the terminal before resetting the board.
@@ -54,3 +54,17 @@ once with reset reason 0x100. Release GPIO3 before the next sleep. Repeat at
 least five times. A continuous reset loop is a failure.
 
 The committed board configuration remains Light-sleep with BOOT/GPIO9.
+
+## Power/clock review 0.14
+
+PowerOffDemo is the only demo for the configured Light-sleep and
+Deep-sleep paths. In the resumable Light-sleep profile it now prints
+`UART rate after resume: PASS/FAIL` and
+`CPU/APB clock after resume: PASS/FAIL` in addition to the existing
+SRAM and repeated wake checks. The rate check reads the driver
+configuration; the following UART output exercises the TX path.
+Neither check establishes PMU entry or current consumption.
+
+The code change has not yet been compiled or retested on C3.
+Earlier hardware observations above remain valid for the
+specific configurations exercised at that time.

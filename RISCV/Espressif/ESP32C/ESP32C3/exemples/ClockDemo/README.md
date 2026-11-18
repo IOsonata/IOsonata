@@ -1,5 +1,25 @@
 # ESP32-C3 ClockDemo
 
+## Current clock-only configuration
+
+The current project cycles XTAL, calibrated RC_FAST and XTAL
+restoration, changes the supported CPU/APB divider, selects RC_SLOW,
+and checks timer IRQs, both delays and normal UART RX through
+GPIO20/GPIO21 at 1 Mbaud. It does not enter Light-sleep and has
+one startup UART RX prompt, not ten wake-related prompts.
+PowerOffDemo exercises BOOT/GPIO9 Light-sleep and optional
+GPIO3 Deep-sleep; those tests remain separate.
+
+The demo split has not been compiled or retested on this board.
+ClockDemo results from before the split remain historical below.
+
+## Historical combined clock/sleep configuration and board results
+
+The material below describes previous combined ClockDemo builds,
+including historical nine-wake and ten-RX-prompt runs. Their
+instructions for CLOCK_DEMO_WAKE_PIN and post-wake receive no
+longer apply to current ClockDemo.
+
 Import `ioc` as an existing Eclipse managed project. Build the ESP32C3 library
 and ClockDemo in the same Debug or Release configuration. Both configurations
 log through UART0 TX21/RX20 at 1,000,000 baud, 8N1. No debugger is required.

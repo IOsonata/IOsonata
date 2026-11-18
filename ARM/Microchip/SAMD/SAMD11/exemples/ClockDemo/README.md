@@ -1,5 +1,23 @@
 # SAMD11 ClockDemo
 
+## Current clock-only configuration
+
+The ClockDemo board now selects the OSC8M reference and exercises
+the normal clock, divider, timer and delay APIs. It no longer contains
+the Standby/resume profile or calls SystemSleep. UART uses SERCOM2 on
+the EDBG virtual COM port. Polling UART RX is disabled by default on
+this 16 KB flash target until the full library/demo link is verified.
+PowerOffDemo owns SW0/NMI Standby wake and SRAM-retention checks.
+
+The code changes in review 0.14 have not been compiled or retested
+on hardware. The original clock-selection build fitted in 15,350
+bytes of flash before this refactor.
+
+## Historical combined ClockDemo documentation
+
+The following instructions and hardware observations describe the
+earlier combined clock/sleep demo, not the current board configuration.
+
 Import `ioc` as an existing Eclipse managed project and build the matching
 IOsonata library in the same Debug or Release configuration. Console pins and
 oscillator selections are in `src/board.h`, copied from this target's
