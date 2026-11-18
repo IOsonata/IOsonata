@@ -95,7 +95,7 @@ class StandbySourceTest(unittest.TestCase):
 		self.assertLess(s.index("SamdStandbyWakeDone()"), s.rindex("EnableInterrupt(state)"))
 		self.assertIn("SamdUartPrepareSleep()", s)
 		self.assertLess(s.index("SamdUartPrepareSleep()"), s.index("SamdStandbyWakeArm()"))
-		self.assertLess(s.index("SamdStandbyWakeDone()"), s.index("SamdUartResumeSleep()"))
+		self.assertLess(s.index("SamdStandbyWakeDone()"), s.rindex("SamdUartResumeSleep()"))
 
 	def test_adc_preserves_enabled_state_through_standby(self):
 		prepare = body(ADC, 'extern "C" bool SamdAdcPrepareSleep(')

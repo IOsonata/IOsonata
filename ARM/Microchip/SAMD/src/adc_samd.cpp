@@ -36,7 +36,6 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
-#include <math.h>
 
 #include "samdxxx.h"
 #include "clock_samd.h"
@@ -246,7 +245,7 @@ bool AdcSamd::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 	{
 		const AdcRefVolt_t &r = Cfg.pRefVolt[i];
 
-		if (!isfinite(r.Voltage) || r.Voltage <= 0 ||
+		if (!__builtin_isfinite(r.Voltage) || r.Voltage <= 0 ||
 			(r.Type != ADC_REFVOLT_TYPE_INTERNAL && r.Type != ADC_REFVOLT_TYPE_SUPPLY &&
 			 r.Type != ADC_REFVOLT_TYPE_EXTERNAL) ||
 			(r.Type == ADC_REFVOLT_TYPE_EXTERNAL && (r.Pin < 0 || r.Pin > 1)))

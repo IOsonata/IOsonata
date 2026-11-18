@@ -34,7 +34,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-#include <math.h>
 
 #include "samdxxx.h"
 #include "clock_samd.h"
@@ -205,7 +204,7 @@ bool DacSamd::Reference(const AdcRefVolt_t &Ref)
 {
 	uint8_t sel;
 
-	if (!isfinite(Ref.Voltage) || Ref.Voltage <= 0)
+	if (!__builtin_isfinite(Ref.Voltage) || Ref.Voltage <= 0)
 	{
 		return false;
 	}
@@ -331,7 +330,7 @@ bool DacSamd::WriteCode(int Chan, uint16_t Code)
 
 float DacSamd::WriteVolt(int Chan, float Volt)
 {
-	if (!isfinite(Volt))
+	if (!__builtin_isfinite(Volt))
 	{
 		return -1.0f;
 	}
