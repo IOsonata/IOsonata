@@ -418,7 +418,10 @@ in the backup clock domain. A non-power-on reset can retain peripheral
 configuration while the owning software state is reinitialized.
 SystemInit now disables inherited PICOUART reception and its old
 wake selection after initializing the 32 kHz clock, before any UART
-driver initializes. Only the PICOUART bits in PM_AWEN and
+driver initializes. It waits for PICOUART_SR.EN to clear before
+writing PICOUART_CFG, as required by the hardware. An unsuccessful
+disable stops startup with SAM4L_STARTUP_PICOUART instead of modifying
+configuration while the receiver is active. Only the PICOUART bits in PM_AWEN and
 BPM_BKUPWEN are cleared; other wake selections are preserved.
 The original PBD peripheral clock mask is restored.
 

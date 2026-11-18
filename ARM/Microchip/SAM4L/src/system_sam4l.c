@@ -124,7 +124,8 @@ enum {
 	SAM4L_STARTUP_CLOCK_SWITCH = 13,
 	SAM4L_STARTUP_CACHE = 14,
 	SAM4L_STARTUP_FREQM = 15,
-	SAM4L_STARTUP_AST = 16
+	SAM4L_STARTUP_AST = 16,
+	SAM4L_STARTUP_PICOUART = 17
 };
 static volatile uint32_t s_StartupError;
 // Last failed poll, and the power/Flash status samples retained before any
@@ -941,20 +942,29 @@ static bool Sam4lResetAstWake(void)
 // PICOUART also belongs to the backup clock domain. A new firmware
 // image must not inherit its previous wake selection or receiver state.
 // Disarm it at startup, before any UART driver acquires the peripheral.
-static void Sam4lResetPicoWake(void)
+static bool Sam4lResetPicoWake(void)
 {
 	uint32_t clocks;
 	uint32_t wake;
+	bool disabled;
 
 	clocks = SAM4L_PM->PM_PBDMASK;
 	wake = 1UL << PM_AWEN_PICOUART;
 	Sam4lWritePm(&SAM4L_PM->PM_PBDMASK,
 		clocks | PM_PBDMASK_PICOUART | PM_PBDMASK_BPM);
-	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
-	SAM4L_PICOUART->PICOUART_CFG = 0U;
+	// Remove the previous image's wake request before resetting the RX.
 	Sam4lWritePm(&SAM4L_PM->PM_AWEN, SAM4L_PM->PM_AWEN & ~wake);
 	SAM4L_BPM->BPM_BKUPWEN &= ~(1UL << 5);
+	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
+	// CFG changes are only permitted with PICOUART disabled.
+	disabled = Sam4lWaitBits(&SAM4L_PICOUART->PICOUART_SR,
+		PICOUART_SR_EN, 0U);
+	if (disabled)
+	{
+		SAM4L_PICOUART->PICOUART_CFG = 0U;
+	}
 	Sam4lWritePm(&SAM4L_PM->PM_PBDMASK, clocks);
+	return disabled;
 }
 
 static bool Sam4lLowClockValid(OSC_TYPE Type, uint32_t Freq)
@@ -1054,7 +1064,10 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		{
 			return Sam4lClockFailed(SAM4L_STARTUP_AST);
 		}
-		Sam4lResetPicoWake();
+		if (!Sam4lResetPicoWake())
+		{
+			return Sam4lClockFailed(SAM4L_STARTUP_PICOUART);
+		}
 		if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC)
 		{
 			g_McuOsc.LowPwrOsc.Freq = 32768U;
