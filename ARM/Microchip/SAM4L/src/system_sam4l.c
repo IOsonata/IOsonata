@@ -123,7 +123,8 @@ enum {
 	SAM4L_STARTUP_LFCLK = 12,
 	SAM4L_STARTUP_CLOCK_SWITCH = 13,
 	SAM4L_STARTUP_CACHE = 14,
-	SAM4L_STARTUP_FREQM = 15
+	SAM4L_STARTUP_FREQM = 15,
+	SAM4L_STARTUP_AST = 16
 };
 static volatile uint32_t s_StartupError;
 // Last failed poll, and the power/Flash status samples retained before any
@@ -865,6 +866,78 @@ static bool Sam4lLowClockInit(const OscDesc_t *pOsc)
 	return true;
 }
 
+// AST is retained across resets, while its Timer object and NVIC state are
+// not. Disarm an inherited alarm before the new application can sleep.
+// Do this once at startup, before any driver can acquire the peripheral.
+// Leave the low-frequency oscillator running for other consumers.
+static bool Sam4lResetAstWake(void)
+{
+	uint32_t clocks;
+	uint32_t clock;
+
+	clocks = SAM4L_PM->PM_PBDMASK;
+	Sam4lWritePm(&SAM4L_PM->PM_PBDMASK, clocks | PM_PBDMASK_AST);
+	if (SAM4L_AST->AST_WER == 0U &&
+		(SAM4L_AST->AST_CR & AST_CR_EN) == 0U &&
+		SAM4L_AST->AST_IMR == 0U)
+	{
+		Sam4lWritePm(&SAM4L_PM->PM_PBDMASK, clocks);
+		return true;
+	}
+	// CLKBUSY can clear even if AST_SR.BUSY is stuck with CEN off.
+	// Disable CEN before selecting CLK32K, as required by AST 19.5.1.
+	if (!Sam4lWaitBits(&SAM4L_AST->AST_SR, AST_SR_CLKBUSY, 0U))
+	{
+		return false;
+	}
+	clock = SAM4L_AST->AST_CLOCK;
+	if ((clock & AST_CLOCK_CEN) != 0U)
+	{
+		SAM4L_AST->AST_CLOCK = clock & ~AST_CLOCK_CEN;
+		if (!Sam4lWaitBits(&SAM4L_AST->AST_SR, AST_SR_CLKBUSY, 0U))
+		{
+			return false;
+		}
+	}
+	clock = (clock & ~(AST_CLOCK_CEN | AST_CLOCK_CSSEL_Msk)) |
+		AST_CLOCK_CSSEL_32KHZCLK;
+	SAM4L_AST->AST_CLOCK = clock;
+	if (!Sam4lWaitBits(&SAM4L_AST->AST_SR, AST_SR_CLKBUSY, 0U))
+	{
+		return false;
+	}
+	SAM4L_AST->AST_CLOCK = clock | AST_CLOCK_CEN;
+	if (!Sam4lWaitBits(&SAM4L_AST->AST_SR,
+		AST_SR_CLKBUSY | AST_SR_BUSY, 0U))
+	{
+		return false;
+	}
+
+	SAM4L_AST->AST_IDR = AST_IDR_MASK;
+	SAM4L_AST->AST_WER = 0U;
+	if (!Sam4lWaitBits(&SAM4L_AST->AST_SR, AST_SR_BUSY, 0U))
+	{
+		return false;
+	}
+	SAM4L_AST->AST_CR = 0U;
+	if (!Sam4lWaitBits(&SAM4L_AST->AST_SR, AST_SR_BUSY, 0U))
+	{
+		return false;
+	}
+	SAM4L_AST->AST_SCR = AST_SCR_MASK;
+	if (!Sam4lWaitBits(&SAM4L_AST->AST_SR, AST_SR_BUSY, 0U))
+	{
+		return false;
+	}
+	SAM4L_AST->AST_CLOCK = clock;
+	if (!Sam4lWaitBits(&SAM4L_AST->AST_SR, AST_SR_CLKBUSY, 0U))
+	{
+		return false;
+	}
+	Sam4lWritePm(&SAM4L_PM->PM_PBDMASK, clocks);
+	return true;
+}
+
 static bool Sam4lLowClockValid(OSC_TYPE Type, uint32_t Freq)
 {
 	if (Type == OSC_TYPE_RC) {
@@ -957,6 +1030,10 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		if (!Sam4lLowClockInit(&g_McuOsc.LowPwrOsc))
 		{
 			return Sam4lClockFailed(SAM4L_STARTUP_LFCLK);
+		}
+		if (!Sam4lResetAstWake())
+		{
+			return Sam4lClockFailed(SAM4L_STARTUP_AST);
 		}
 		if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC)
 		{

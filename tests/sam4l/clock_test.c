@@ -358,6 +358,42 @@ int main(void)
 	assert(SystemLowFreqClockSelect(OSC_TYPE_RC, 32000U));
 	assert(GetLowFreqOscFreq() == 32768U);
 
+	// Model a firmware reset with a retained, unowned AST alarm.
+	// The core and software Timer ownership have reset but AST WER/CR
+	// and its alarm state still refer to the previous image.
+	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE & ~PM_PBDMASK_AST;
+	SAM4L_AST->AST_CLOCK = AST_CLOCK_CSSEL_32KHZCLK | AST_CLOCK_CEN;
+	SAM4L_AST->AST_CR = AST_CR_EN;
+	SAM4L_AST->AST_WER = AST_WER_ALARM0 | AST_WER_OVF;
+	*(volatile uint32_t *)&SAM4L_AST->AST_IMR = AST_SR_ALARM0;
+	*(volatile uint32_t *)&SAM4L_AST->AST_SR = AST_SR_ALARM0;
+	assert(Sam4lResetAstWake());
+	assert(SAM4L_PM->PM_PBDMASK == (PM_PBDMASK_RESETVALUE & ~PM_PBDMASK_AST));
+	assert(SAM4L_AST->AST_WER == 0U);
+	assert(SAM4L_AST->AST_CR == 0U);
+	assert((SAM4L_AST->AST_CLOCK & AST_CLOCK_CEN) == 0U);
+	assert((SAM4L_AST->AST_CLOCK & AST_CLOCK_CSSEL_Msk) ==
+		AST_CLOCK_CSSEL_32KHZCLK);
+	assert(SAM4L_AST->AST_IDR == AST_IDR_MASK);
+	assert(SAM4L_AST->AST_SCR == AST_SCR_MASK);
+
+	// Without inherited ownership there is no change to AST state.
+	SAM4L_AST->AST_WER = 0U;
+	SAM4L_AST->AST_CR = 0U;
+	*(volatile uint32_t *)&SAM4L_AST->AST_IMR = 0U;
+	SAM4L_AST->AST_CLOCK = AST_CLOCK_CSSEL_32KHZCLK;
+	assert(Sam4lResetAstWake());
+	assert(SAM4L_AST->AST_CLOCK == AST_CLOCK_CSSEL_32KHZCLK);
+
+	// A clock still synchronizing must be reported, not silently reset.
+	SAM4L_AST->AST_WER = AST_WER_ALARM0;
+	*(volatile uint32_t *)&SAM4L_AST->AST_SR = AST_SR_CLKBUSY;
+	assert(!Sam4lResetAstWake());
+	assert(SAM4L_AST->AST_WER == AST_WER_ALARM0);
+	SAM4L_AST->AST_WER = 0U;
+	*(volatile uint32_t *)&SAM4L_AST->AST_SR = 0U;
+	SAM4L_PM->PM_PBDMASK = PM_PBDMASK_RESETVALUE;
+
 	// The optional oscillator hook must be linkable and leave live clocks alone.
 	memcpy(s_ClockRegisters, (void *)0x40000000, sizeof(s_ClockRegisters));
 	SystemOscInit();

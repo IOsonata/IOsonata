@@ -214,3 +214,27 @@ resumable RETENTION rather than reset-on-wake. This result verifies the
 AST initialization and automatic alarm wake sequence on the connected
 SAM4LC8C board; power consumption and independent wall-clock timing
 have not been measured. PICOUART wake remains unverified on hardware.
+
+## November 18, 2026: stale AST wake after switching demos
+
+After 12 successful automatic AST Standby cycles, the maintainer
+rebuilt PowerOffDemo with `POWER_DEMO_TIMER_WAKE_MS=0` for EIC-only
+button wake. It again resumed continuously without new button presses.
+The timer profile is no longer active in the new firmware, but SAM4L
+AST hardware survives non-power-on resets. Its previously configured
+AST_WER/AST_CR wake state can therefore persist when the button-only
+application does not call TimerInit.
+
+SystemInit now disarms inherited AST interrupts, wake enables and
+pending events once during startup, after configuring the selected
+32 kHz oscillator and before drivers initialize. It does not alter
+the low-frequency oscillator or reset AST during a normal SystemSleep
+call. If a clock is disabled while AST BUSY remains set, startup
+enables the AST prescaler clock before waiting for synchronization.
+The system restores the original PBD AST clock gate afterward.
+
+A host register-model test covers inherited AST wake enables after a
+firmware reset, an idle AST, and failure on stuck clock synchronization.
+The EIC-only button wake needs hardware validation again after this
+startup change. A power-on reset should also clear an inherited AST
+configuration and can distinguish stale hardware from an EIC issue.
