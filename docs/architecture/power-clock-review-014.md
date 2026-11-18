@@ -331,3 +331,27 @@ The SAMD Standby entry host fixture covers timer refusal before
 any peripheral is suspended. Existing RTC clock continuity and
 wakeup on SAMD, and power-domain transitions on ESP32, still
 require hardware verification.
+
+## SAMD11/SAMD21 low-frequency RTC and EIC wake clock
+
+The SAMD clock implementation now provides
+SamdLowFreqClockStandbyEnable to keep the *selected* 32.768 kHz
+oscillator running in Standby. It reads GCLK generator 1's source,
+checks the oscillator is enabled and ready, and sets only that
+oscillator's RUNSTDBY bit. A disabled, unready or unrecognized
+source is refused without changing the clock tree.
+
+SamdRtcSetup requests this before enabling the RTC generic clock.
+The SAMD11 NMI EIC wake path now makes the same clock request rather
+than writing OSC32K/XOSC32K directly. Both keep their own channel
+ownership. The generator's RUNSTDBY bit is for driving the optional
+GCLK_IO pin; with GCLK1 output disabled it runs when a peripheral
+requests it (SAM D21 GCLK GENCTRL documentation). The selected
+oscillator's RUNSTDBY bit, not a GCLK output setting, is required
+for RTC/EIC activity in Standby.
+
+No clock change is requested by PowerOffDemo. The source tests now
+check the two wake drivers and both possible oscillators; the target
+source compilation script includes system_samd.c and
+timer_samd_rtc.cpp. No physical current or RTC wake continuity
+measurement has been performed for this change.

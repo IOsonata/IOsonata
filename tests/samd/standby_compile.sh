@@ -47,11 +47,19 @@ do
 	BOARD="$PARTDIR/exemples/PowerOffDemo/src"
 	echo "Checking $DEVICE Standby and PowerOffDemo"
 	"$GCC" $COMMON -std=c11 -D"$PART" $CMSIS $INC -I"$PARTDIR/include" \
+		-c "$ROOT/ARM/Microchip/SAMD/src/system_samd.c" \
+		-o "$OUT/$DEVICE-clock.o"
+	"$GCC" $COMMON -std=c11 -D"$PART" $CMSIS $INC -I"$PARTDIR/include" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/iopincfg_samd.c" \
 		-o "$OUT/$DEVICE-gpio.o"
 	"$GCC" $COMMON -std=c11 -D"$PART" $CMSIS $INC -I"$PARTDIR/include" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/dmac_samd.c" \
 		-o "$OUT/$DEVICE-dmac.o"
+	"$GXX" $COMMON -std=gnu++23 -Wno-missing-field-initializers \
+		-fno-exceptions -fno-rtti -D"$PART" \
+		$CMSIS $INC -I"$PARTDIR/include" \
+		-c "$ROOT/ARM/Microchip/SAMD/src/timer_samd_rtc.cpp" \
+		-o "$OUT/$DEVICE-rtc.o"
 	"$GXX" $COMMON -std=gnu++23 -Wno-missing-field-initializers \
 		-fno-exceptions -fno-rtti -D"$PART" \
 		$CMSIS $INC -I"$PARTDIR/include" \
@@ -81,4 +89,4 @@ do
 	fi
 done
 
-echo "SAM D11/D21 Standby, timers, DMAC, ADC and DAC source compilation PASS"
+echo "SAM D11/D21 Standby, LF clock, RTC, timers, DMAC, ADC and DAC source compilation PASS"

@@ -288,6 +288,57 @@ static bool SamdGclkChannelStop(uint16_t Ctrl)
 	return res;
 }
 
+// The low-frequency clock generator supplies RTC and EIC. A peripheral
+// that needs to work in Standby requests the source oscillator's RUNSTDBY
+// bit here, rather than changing oscillator registers in its own driver.
+// With GCLK1.OE clear, GCLK1 itself runs when the channel requests it.
+bool SamdLowFreqClockStandbyEnable(void)
+{
+	uint32_t state;
+	uint32_t gen;
+	uint32_t value;
+	bool ready = false;
+
+	state = DisableInterrupt();
+	gen = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_LF);
+	if (gen != UINT32_MAX && (gen & GCLK_GENCTRL_GENEN_Msk) != 0U)
+	{
+		switch (gen & GCLK_GENCTRL_SRC_Msk)
+		{
+			case GCLK_GENCTRL_SRC_OSC32K:
+				value = SYSCTRL_REGS->SYSCTRL_OSC32K;
+				if ((value & (SYSCTRL_OSC32K_ENABLE_Msk |
+					SYSCTRL_OSC32K_EN32K_Msk)) ==
+					(SYSCTRL_OSC32K_ENABLE_Msk | SYSCTRL_OSC32K_EN32K_Msk) &&
+					(SYSCTRL_REGS->SYSCTRL_PCLKSR &
+					SYSCTRL_PCLKSR_OSC32KRDY_Msk) != 0U)
+				{
+					SYSCTRL_REGS->SYSCTRL_OSC32K =
+						value | SYSCTRL_OSC32K_RUNSTDBY_Msk;
+					ready = (SYSCTRL_REGS->SYSCTRL_OSC32K &
+						SYSCTRL_OSC32K_RUNSTDBY_Msk) != 0U;
+				}
+				break;
+			case GCLK_GENCTRL_SRC_XOSC32K:
+				value = SYSCTRL_REGS->SYSCTRL_XOSC32K;
+				if ((value & (SYSCTRL_XOSC32K_ENABLE_Msk |
+					SYSCTRL_XOSC32K_EN32K_Msk)) ==
+					(SYSCTRL_XOSC32K_ENABLE_Msk | SYSCTRL_XOSC32K_EN32K_Msk) &&
+					(SYSCTRL_REGS->SYSCTRL_PCLKSR &
+					SYSCTRL_PCLKSR_XOSC32KRDY_Msk) != 0U)
+				{
+					SYSCTRL_REGS->SYSCTRL_XOSC32K =
+						(uint16_t)(value | SYSCTRL_XOSC32K_RUNSTDBY_Msk);
+					ready = (SYSCTRL_REGS->SYSCTRL_XOSC32K &
+						SYSCTRL_XOSC32K_RUNSTDBY_Msk) != 0U;
+				}
+				break;
+		}
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
 bool SamdGclkChannelEnable(uint8_t Channel, uint8_t Generator)
 {
 	uint32_t want = GCLK_CLKCTRL_ID(Channel) | GCLK_CLKCTRL_GEN(Generator) | GCLK_CLKCTRL_CLKEN_Msk;

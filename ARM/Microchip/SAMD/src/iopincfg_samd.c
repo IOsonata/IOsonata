@@ -626,22 +626,11 @@ static bool SamdStandbyNmiConfig(int PortNo, int PinNo, int Sense)
 
 	PM_REGS->PM_APBAMASK |= PM_APBAMASK_EIC_Msk;
 	if (Sense != IOPINSENSE_DISABLE &&
-		!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_EIC_Val, SAMD_GCLK_LF))
+		(!SamdLowFreqClockStandbyEnable() ||
+		 !SamdGclkChannelEnable(GCLK_CLKCTRL_ID_EIC_Val, SAMD_GCLK_LF)))
 	{
 		EnableInterrupt(state);
 		return false;
-	}
-	if (Sense != IOPINSENSE_DISABLE)
-	{
-		// Keep the 32 kHz source available to the EIC during Standby.
-		if (SYSCTRL_REGS->SYSCTRL_XOSC32K & SYSCTRL_XOSC32K_ENABLE_Msk)
-		{
-			SYSCTRL_REGS->SYSCTRL_XOSC32K |= SYSCTRL_XOSC32K_RUNSTDBY_Msk;
-		}
-		else
-		{
-			SYSCTRL_REGS->SYSCTRL_OSC32K |= SYSCTRL_OSC32K_RUNSTDBY_Msk;
-		}
 	}
 
 	EIC_REGS->EIC_CTRL = 0U;

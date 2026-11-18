@@ -9,6 +9,8 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EIC = (ROOT / "ARM/Microchip/SAMD/src/iopincfg_samd.c").read_text(encoding="utf-8")
 SLEEP = (ROOT / "ARM/Microchip/SAMD/src/system_sleep_samd.c").read_text(encoding="utf-8")
+CLOCK = (ROOT / "ARM/Microchip/SAMD/src/system_samd.c").read_text(encoding="utf-8")
+RTC = (ROOT / "ARM/Microchip/SAMD/src/timer_samd_rtc.cpp").read_text(encoding="utf-8")
 ADC = (ROOT / "ARM/Microchip/SAMD/src/adc_samd.cpp").read_text(encoding="utf-8")
 DMAC = (ROOT / "ARM/Microchip/SAMD/src/dmac_samd.c").read_text(encoding="utf-8")
 TIMER = (ROOT / "ARM/Microchip/SAMD/src/timer_samd.cpp").read_text(encoding="utf-8")
@@ -54,11 +56,25 @@ class StandbySourceTest(unittest.TestCase):
 		s = body(EIC, "static bool SamdStandbyNmiConfig(")
 		self.assertIn("PinNo != 14", s)
 		self.assertIn("SAMD_GCLK_LF", s)
-		self.assertIn("SYSCTRL_OSC32K_RUNSTDBY_Msk", s)
-		self.assertIn("SYSCTRL_XOSC32K_RUNSTDBY_Msk", s)
+		self.assertIn("SamdLowFreqClockStandbyEnable()", s)
 		self.assertIn("EIC_NMICTRL_NMISENSE_FALL", s)
 		self.assertIn("EIC_NMIFLAG_NMI_Msk", s)
 		self.assertIn("PORT_PINCFG_PMUXEN_Msk", s)
+
+	def test_rtc_and_nmi_request_standby_oscillator(self):
+		clock = body(CLOCK, "bool SamdLowFreqClockStandbyEnable(")
+		rtc = body(RTC, "bool SamdRtcSetup(")
+		nmi = body(EIC, "static bool SamdStandbyNmiConfig(")
+		self.assertIn("SamdLowFreqClockStandbyEnable()", rtc)
+		self.assertIn("SamdLowFreqClockStandbyEnable()", nmi)
+		self.assertIn("GCLK_GENCTRL_SRC_OSC32K", clock)
+		self.assertIn("GCLK_GENCTRL_SRC_XOSC32K", clock)
+		self.assertIn("SYSCTRL_OSC32K_RUNSTDBY_Msk", clock)
+		self.assertIn("SYSCTRL_XOSC32K_RUNSTDBY_Msk", clock)
+		self.assertIn("SYSCTRL_PCLKSR_OSC32KRDY_Msk", clock)
+		self.assertIn("SYSCTRL_PCLKSR_XOSC32KRDY_Msk", clock)
+		self.assertIn("EnableInterrupt(state)", clock)
+		self.assertNotIn("SYSCTRL_REGS->SYSCTRL_OSC32K |=", nmi)
 
 	def test_nmi_handler_clears_flag(self):
 		s = body(EIC, "void NMI_Handler(")
