@@ -440,9 +440,8 @@ int main()
 		PowerDemoPut("Entering Standby\r\n");
 #endif
 		PowerDemoDrain();
-#if !POWER_DEMO_UART_WAKE
-		s_Uart.Disable();
-#endif
+		// SystemSleep selects a compatible power state and temporarily
+		// suspends idle peripherals. The application does not stop UART.
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
 		{
@@ -455,7 +454,6 @@ int main()
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
 		if (TimerSetFrequency(&s_WakeTimer, 1024U) == 0U)
 		{
-			s_Uart.Enable();
 			PowerDemoPut("Standby timer frequency FAIL\r\n");
 			return 1;
 		}
@@ -494,8 +492,6 @@ int main()
 		// Let the host adapter switch back to its normal console baud.
 		msDelay(100);
 		PowerDemoPut(received ? "UART wake byte: PASS\r\n" : "UART wake byte: FAIL\r\n");
-#else
-		s_Uart.Enable();
 #endif
 		// Keep wake verification in PowerOffDemo for every resumable port.
 		// UART output here also exercises TX after resume.
