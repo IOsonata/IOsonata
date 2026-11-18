@@ -235,6 +235,14 @@ The system restores the original PBD AST clock gate afterward.
 
 A host register-model test covers inherited AST wake enables after a
 firmware reset, an idle AST, and failure on stuck clock synchronization.
-The EIC-only button wake needs hardware validation again after this
-startup change. A power-on reset should also clear an inherited AST
-configuration and can distinguish stale hardware from an EIC issue.
+After the startup cleanup was applied, the maintainer reported that
+BUTTON1 wake worked again with `POWER_DEMO_TIMER_WAKE_MS=0` without the
+continuous loop. The provided serial log shows six consecutive resumable
+wakes (counts 0x00000001 through 0x00000006), with every cycle reporting
+UART rate restoration, CPU/APB clock restoration, and 128-byte static
+plus 128-byte stack SRAM sample PASS. This validates the EIC-only wake
+path after switching away from the AST test. The improvement is consistent
+with stale AST wake state being cleared at startup; the log does not by
+itself establish the exact underlying register cause.
+
+Independent power measurements and PICOUART receive wake remain pending.
