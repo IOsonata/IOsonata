@@ -465,3 +465,24 @@ that a correct wake byte was received.
 The new GPIO handover source-order check was added to
 `tests/sam4l/run_power.py`. This is a hardware test candidate
 and has not been compiled or validated on the SAM4LC8C board.
+
+## November 18: GPIO input Schmitt-trigger initialization
+
+On the first hardware run after the PB00 GPIO handover change, the
+diagnostic was `0x00108003`. It reports GPIO ownership enabled
+(bit 20), RX sampled low (bit 15), and sleep preparation rejected
+(bit 1). PICOUART was never armed. This replaces the previous
+false-frame wake behavior and proves neither PICOUART wake nor a
+physical low level on the adapter line.
+
+The IOsonata SAM4L `IOPinConfig()` implementation sets
+`GPIO_STERS` while configuring a GPIO input, but the temporary
+PB00 input setup in `Sam4lUartPrepareSleep()` omitted that write.
+The driver now sets `GPIO_STERS` before enabling GPIO ownership,
+then samples PB00. It remembers whether the Schmitt trigger had
+previously been enabled and restores that state if the input
+check rejects sleep or when the UART is resumed.
+The original GPIO ownership and clock state remain preserved.
+
+This is a candidate fix for the low GPIO sample; source ordering
+checks were updated. The board has not yet validated this revision.

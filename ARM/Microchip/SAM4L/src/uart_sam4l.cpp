@@ -126,6 +126,7 @@ static struct {
 	uint32_t WakeMask;
 	uint32_t GpioClocks;
 	bool bRxWasGpio;
+	bool bRxHadSchmitt;
 	uint32_t Diagnostic;
 } s_Sam4lUartSleep;
 
@@ -636,6 +637,7 @@ bool Sam4lUartPrepareSleep(void)
 	uint32_t awen;
 	uint32_t picoStatus;
 	bool rxWasGpio;
+	bool rxHadSchmitt;
 	bool rc;
 	bool clockReady;
 
@@ -712,7 +714,10 @@ bool Sam4lUartPrepareSleep(void)
 	gpioClocks = SAM4L_PM->PM_PBCMASK;
 	Sam4lPmWrite(&SAM4L_PM->PM_PBCMASK, gpioClocks | PM_PBCMASK_GPIO);
 	rxWasGpio = (gpio->GPIO_GPER & 1U) != 0U;
+	rxHadSchmitt = (gpio->GPIO_STER & 1U) != 0U;
 	gpio->GPIO_ODERC = 1U;
+	// Match the SAM4L GPIO input setup in IOPinConfig().
+	gpio->GPIO_STERS = 1U;
 	gpio->GPIO_GPERS = 1U;
 	__DSB();
 	s_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_RX_GPIO;
@@ -723,6 +728,10 @@ bool Sam4lUartPrepareSleep(void)
 		if (!rxWasGpio)
 		{
 			gpio->GPIO_GPERC = 1U;
+		}
+		if (!rxHadSchmitt)
+		{
+			gpio->GPIO_STERC = 1U;
 		}
 		Sam4lPmWrite(&SAM4L_PM->PM_PBCMASK, gpioClocks);
 		Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, clocks);
@@ -736,6 +745,7 @@ bool Sam4lUartPrepareSleep(void)
 	s_Sam4lUartSleep.Clocks = clocks;
 	s_Sam4lUartSleep.GpioClocks = gpioClocks;
 	s_Sam4lUartSleep.bRxWasGpio = rxWasGpio;
+	s_Sam4lUartSleep.bRxHadSchmitt = rxHadSchmitt;
 	s_Sam4lUartSleep.bActive = true;
 	dev->pReg->US_IDR = 0xFFFFFFFFU;
 	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
@@ -868,6 +878,10 @@ void Sam4lUartResumeSleep(void)
 		if (!s_Sam4lUartSleep.bRxWasGpio)
 		{
 			gpio->GPIO_GPERC = 1U;
+		}
+		if (!s_Sam4lUartSleep.bRxHadSchmitt)
+		{
+			gpio->GPIO_STERC = 1U;
 		}
 		Sam4lUartClockEnable(dev);
 		dev->pReg->US_CR = US_CR_RSTRX | US_CR_RSTSTA;
