@@ -708,32 +708,32 @@ void Sam4lUartResumeSleep(void)
 	if (s_Sam4lUartSleep.bActive)
 	{
 		received = (SAM4L_PM->PM_ISR & PM_ISR_WAKE) != 0U &&
-		(SAM4L_PM->PM_WCAUSE & wake) != 0U &&
-		(SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_DRDY) != 0U;
-	uint8_t data = SAM4L_PICOUART->PICOUART_RHR;
-	SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
-	SAM4L_PICOUART->PICOUART_CFG = s_Sam4lUartSleep.Config;
-	Sam4lPmWrite(&SAM4L_PM->PM_AWEN, s_Sam4lUartSleep.WakeMask);
-	Sam4lUartClockEnable(dev);
-	dev->pReg->US_CR = US_CR_RSTRX | US_CR_RSTSTA;
-	dev->pReg->US_CR = US_CR_RXEN | US_CR_TXEN;
-	dev->pReg->US_IER = s_Sam4lUartSleep.Interrupts;
-	if (received)
-	{
-		uint8_t *p = CFifoPut(pDev->hRxFifo);
-		if (p != NULL)
+			(SAM4L_PM->PM_WCAUSE & wake) != 0U &&
+			(SAM4L_PICOUART->PICOUART_SR & PICOUART_SR_DRDY) != 0U;
+		uint8_t data = SAM4L_PICOUART->PICOUART_RHR;
+		SAM4L_PICOUART->PICOUART_CR = PICOUART_CR_DIS;
+		SAM4L_PICOUART->PICOUART_CFG = s_Sam4lUartSleep.Config;
+		Sam4lPmWrite(&SAM4L_PM->PM_AWEN, s_Sam4lUartSleep.WakeMask);
+		Sam4lUartClockEnable(dev);
+		dev->pReg->US_CR = US_CR_RSTRX | US_CR_RSTSTA;
+		dev->pReg->US_CR = US_CR_RXEN | US_CR_TXEN;
+		dev->pReg->US_IER = s_Sam4lUartSleep.Interrupts;
+		if (received)
 		{
-			*p = data;
+			uint8_t *p = CFifoPut(pDev->hRxFifo);
+			if (p != NULL)
+			{
+				*p = data;
+			}
+			else
+			{
+				pDev->RxDropCnt++;
+				received = false;
+			}
 		}
-		else
-		{
-			pDev->RxDropCnt++;
-			received = false;
-		}
-	}
-	Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, s_Sam4lUartSleep.Clocks);
-	__DSB();
-	s_Sam4lUartSleep.bActive = false;
+		Sam4lPmWrite(&SAM4L_PM->PM_PBDMASK, s_Sam4lUartSleep.Clocks);
+		__DSB();
+		s_Sam4lUartSleep.bActive = false;
 	}
 	for (int i = 0; i < s_NbSam4lUartDev; i++)
 	{
