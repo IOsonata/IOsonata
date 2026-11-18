@@ -12,6 +12,7 @@ MIT License
 Copyright (c) 2026 I-SYST inc.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <stddef.h>
 
 #include "samdxxx.h"
 #include "coredev/system_core_clock.h"
@@ -20,6 +21,8 @@ Copyright (c) 2026 I-SYST inc.
 // EIC wake line ownership is managed in iopincfg_samd.c.
 void SamdStandbyWakeArm(void);
 void SamdStandbyWakeDone(void);
+bool SamdUartPrepareSleep(void) __attribute__((weak));
+void SamdUartResumeSleep(void) __attribute__((weak));
 
 void SystemSleep(void)
 {
@@ -31,6 +34,11 @@ void SystemSleep(void)
 	// before sleeping, leaving no interrupt to wake the CPU. The SAMD11
 	// NMI handler leaves EIC_IRQn pending during this window.
 	state = DisableInterrupt();
+	if (SamdUartPrepareSleep != NULL && !SamdUartPrepareSleep())
+	{
+		EnableInterrupt(state);
+		return;
+	}
 	SamdStandbyWakeArm();
 	previous = SCB->SCR;
 	SCB->SCR = previous | SCB_SCR_SLEEPDEEP_Msk;
@@ -39,5 +47,10 @@ void SystemSleep(void)
 	__ISB();
 	SCB->SCR = previous;
 	SamdStandbyWakeDone();
+	if (SamdUartResumeSleep != NULL)
+	{
+		SamdUartResumeSleep();
+	}
+	SystemCoreClockUpdate();
 	EnableInterrupt(state);
 }

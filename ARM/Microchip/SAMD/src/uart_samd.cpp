@@ -140,6 +140,8 @@ struct SamdUartDev {
 	alignas(4) uint8_t RxFifoMem[SAMD_UART_CFIFO_MEMSIZE];
 	alignas(4) uint8_t TxFifoMem[SAMD_UART_CFIFO_MEMSIZE];
 	uint8_t TxDmaCopy[SAMD_UART_DMA_COPY];	//!< Block of a non-blocking TX CFIFO
+	bool bSleepPaused;			//!< SystemSleep temporarily gated this USART
+	uint8_t SleepInterrupts;		//!< Active interrupt mask before sleep
 };
 
 #pragma pack(pop)
@@ -149,6 +151,8 @@ static SamdUartDev_t s_SamdUartDev[SAMD_SERCOM_CNT];
 static bool SamdUartDmaService(SamdUartDev_t * const pDev, bool bError);
 static void SamdUartDmaStop(SamdUartDev_t * const pDev);
 static void SamdUartDmaClose(SamdUartDev_t * const pDev);
+
+extern "C" void SamdUartResumeSleep(void);
 
 static const SamdUartDmaOps_t s_SamdUartDmaOps = {
 	SamdUartDmaService, SamdUartDmaStop, SamdUartDmaClose
@@ -780,6 +784,77 @@ static void SamdUartStopTx(DevIntrf_t * const pDev)
 	(void)pDev;
 }
 
+// SystemSleep temporarily suspends an idle UART without changing its
+// DeviceIntrf enable count or discarding buffered data. Shared SERCOM
+// instances owned by I2C/SPI are left to their own drivers.
+extern "C" bool SamdUartPrepareSleep(void)
+{
+	SamdUartDev_t *dev;
+	UARTDev_t *udev;
+	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
+	{
+		dev = &s_SamdUartDev[i];
+		udev = dev->pUartDev;
+		if (udev == NULL ||
+			g_SharedIntrf[i].pIntrf != &udev->DevIntrf ||
+			atomic_load(&udev->DevIntrf.EnCnt) == 0 ||
+			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) == 0U)
+		{
+			continue;
+		}
+		if (dev->bSleepPaused || CFifoUsed(udev->hTxFifo) != 0 ||
+			!udev->bTxReady || dev->bDmaActive ||
+			(dev->pReg->SERCOM_INTFLAG &
+				(SERCOM_USART_INT_INTFLAG_TXC_Msk | SERCOM_USART_INT_INTFLAG_RXC_Msk)) !=
+				SERCOM_USART_INT_INTFLAG_TXC_Msk)
+		{
+			return false;
+		}
+	}
+	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
+	{
+		dev = &s_SamdUartDev[i];
+		udev = dev->pUartDev;
+		if (udev == NULL ||
+			g_SharedIntrf[i].pIntrf != &udev->DevIntrf ||
+			atomic_load(&udev->DevIntrf.EnCnt) == 0 ||
+			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) == 0U)
+		{
+			continue;
+		}
+		dev->SleepInterrupts = dev->pReg->SERCOM_INTENSET;
+		dev->pReg->SERCOM_INTENCLR = SERCOM_USART_INT_INTENCLR_Msk;
+		if (!SamdUartRun(dev, false))
+		{
+			dev->pReg->SERCOM_INTENSET = dev->SleepInterrupts;
+			SamdUartResumeSleep();
+			return false;
+		}
+		SamdSercomClockDisable(i);
+		IOPinDis(dev->pIOPinMap, dev->NbIOPins);
+		dev->bSleepPaused = true;
+	}
+	return true;
+}
+
+extern "C" void SamdUartResumeSleep(void)
+{
+	SamdUartDev_t *dev;
+	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
+	{
+		dev = &s_SamdUartDev[i];
+		if (dev->bSleepPaused && SamdSercomClockEnable(i))
+		{
+			IOPinCfg(dev->pIOPinMap, dev->NbIOPins);
+			if (SamdUartRun(dev, true))
+			{
+				dev->pReg->SERCOM_INTENSET = dev->SleepInterrupts;
+				dev->bSleepPaused = false;
+			}
+		}
+	}
+}
+
 // Registers keep their content while the clock is off, Enable restarts the
 // UART without a new UARTInit.
 static void SamdUartDisable(DevIntrf_t * const pDev)
@@ -1000,6 +1075,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	dev->Poll = pCfg->bIntMode ? NULL : SamdUartPoll;
 	dev->bDmaActive = false;
 	dev->DmaLen = 0;
+	dev->bSleepPaused = false;
 	if (pCfg->bDMAMode)
 	{
 		dev->DmaChan = (int8_t)SamdDmacOpen(SAMD_DMAC_TRIG_SERCOM_TX(pCfg->DevNo),
