@@ -27,6 +27,19 @@ with tempfile.TemporaryDirectory(prefix='sam4l-power-') as tmp:
                                     str(root / 'tests/sam4l/power_test.cpp'),
                                     '-o', str(binary)], check=True)
                     subprocess.run([str(binary)], check=True)
+# A peripheral cannot be suspended while DeviceIntrf owns an open transfer.
+# Hardware idle status alone does not imply that the transaction is closed.
+for peripheral, filename, function in (
+    ('I2C', 'i2c_sam4l.cpp', 'Sam4lI2CSuspendSleep'),
+    ('SPI', 'spi_sam4l.cpp', 'Sam4lSpiSuspendSleep'),
+    ('UART', 'uart_sam4l.cpp', 'Sam4lUartSuspendSleep'),
+):
+    source_text = (root / 'ARM/Microchip/SAM4L/src' / filename).read_text()
+    body = source_text.split('bool ' + function + '(void)\n{', 1)[1].split(
+        '\nvoid ', 1)[0]
+    assert 'atomic_flag_test(&pDev->DevIntrf.bBusy)' in body, peripheral
+print('SAM4L interface transfer ownership sleep checks PASS')
+
 # PICOUART shares the physical RXD0 pin directly. Do not switch PB00
 # to GPIO or gate USART0 before the low-power receiver is armed.
 uart_source = (root / 'ARM/Microchip/SAM4L/src/uart_sam4l.cpp').read_text()
