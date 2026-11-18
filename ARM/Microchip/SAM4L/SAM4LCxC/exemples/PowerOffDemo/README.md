@@ -66,7 +66,7 @@ This configuration compiles in Debug and Release. The maintainer confirmed four
 consecutive AST Backup wakes with reset reason 0x1000 and retained start counts
 1 through 5. The earlier pin-wake results remain separate.
 
-## Resumable Standby profiles (not hardware revalidated)
+## Resumable Standby profiles
 
 The default board.h selects resumable EIC wake with USART1/EDBG and
 retained static/stack RAM checks. OLED1 BUTTON1 on PC06 is the wake
@@ -94,8 +94,9 @@ For resumable sleep, PowerOffDemo now leaves its UART enabled and calls
 coordinates temporary UART suspension and restoration with the driver's
 clock and interrupt state, without changing its enable reference count.
 The UART-wake profile retains PICOUART's own receive preparation.
-Previous runs used a different suspend sequence; this refactor requires
-a new clean library/demo build and board test before validation.
+The USART1 suspend/resume path and EIC wake were exercised in the
+maintainer's November 18 hardware run below. I2C/SPI operation and
+PICOUART receive wake remain separate validation tasks.
 
 ## Driver ownership after the power/clock refactor
 
@@ -103,7 +104,8 @@ During resumable sleep, the SAM4L system now coordinates idle UART,
 I2C master and SPI master clock suspension without application-specific
 sleep code. TWIS keeps its enabled address-match SleepWalking request.
 Active masters or unsupported SPI slave sleep prevent entry. The
-new coordination has not been compiled or tested on hardware.
+November 18 EIC wake run exercised USART1 restoration, not concurrent
+I2C/SPI traffic or PDCA transfer refusal on hardware.
 
 ## Repeated RETENTION wake fix
 
@@ -122,4 +124,31 @@ validation is ten distinct BUTTON1 press/release cycles, with the CPU
 remaining asleep between presses. Repeated log output without a new
 button press is a failure even when UART, CPU/APB clock and SRAM checks
 all report PASS. A host register model checks the EIC acknowledgement;
-physical validation remains outstanding.
+the button-wake hardware test was repeated on November 18 as recorded
+below; other wake sources and current consumption remain unverified.
+
+## November 18, 2026: EIC RETENTION wake retest
+
+With the default resumable Standby profile and OLED1 BUTTON1, the
+maintainer initially observed rapid repeated resume messages after the
+first button press, even after the button was released. The counter
+advanced into the 0x000005xx range without a new startup banner;
+UART rate, CPU/APB clocks and SRAM checks all passed during that loop.
+This was not a reset-on-wake failure.
+
+After changing SystemSleep to acknowledge the EIC wake interrupt
+immediately before the next WFI (while the input may have been
+released), the maintainer reported that the continuous wake loop no
+longer occurred. The serial log shows six consecutive resume counts
+0x00000001 through 0x00000006, each followed by:
+
+- UART rate after resume: PASS
+- CPU/APB clock after resume: PASS
+- SRAM sample PASS: 128 static + 128 stack bytes
+
+No second startup banner appears in the provided log. This is hardware
+evidence of six resumable wake/resume cycles with intact UART, clocks
+and sampled RAM. The log itself does not time-stamp individual button
+presses or measure sleep current. Ten distinct button presses with a
+quiet interval between them, AST resumable wake and PICOUART receive
+wake remain additional validation goals.
