@@ -62,6 +62,7 @@ assert 'gpio->GPIO_GPERS' not in uart_prep
 assert 'gpio->GPIO_PVR' not in uart_prep
 assert 'gpio->GPIO_STERS' not in uart_prep
 assert uart_arm.count('Sam4lUartResumeSleep();') == 1
+assert 'atomic_flag_test(&pDev->DevIntrf.bBusy)' in uart_prep
 assert 'SAM4L_PICO_ENABLE_TIMEOUT' in uart_source
 assert 'rejected |= SAM4L_PICO_STALE_DATA;' not in uart_prep
 assert 'SAM4L_PICO_REJECTED | SAM4L_PICO_ARMED_DATA' not in uart_prep
