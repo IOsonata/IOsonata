@@ -401,7 +401,7 @@ int main(void)
 		(1UL << PM_AWEN_TWIS0);
 	SAM4L_BPM->BPM_BKUPWEN = (1UL << 5) | (1UL << 0);
 	SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);
-	Sam4lResetPicoWake();
+	assert(Sam4lResetPicoWake());
 	assert(SAM4L_PICOUART->PICOUART_CR == PICOUART_CR_DIS);
 	assert(SAM4L_PICOUART->PICOUART_CFG == 0U);
 	assert(SAM4L_PM->PM_AWEN == (1UL << PM_AWEN_TWIS0));
