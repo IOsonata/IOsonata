@@ -69,6 +69,8 @@ def main():
         cycles = 0
         rx_ok = False
         rate_ok = False
+        clock_ok = False
+        resumed_ok = False
         normal_rx_ok = False
         setup_acked = False
         last_line = "(none)"
@@ -108,13 +110,18 @@ def main():
             progress = time.monotonic()
             last_line = line.decode("ascii", errors="replace").strip()
             if b"UART wake byte: FAIL" in line or b"UART rate after resume: FAIL" in line or \
-                    b"CPU/APB clock after resume: FAIL" in line:
+                    b"CPU/APB clock after resume: FAIL" in line or b"SRAM sample FAIL" in line or \
+                    b"UART wake test stopped" in line or b"UART wake setup: FAIL" in line:
                 print("[host] UART wake cycle failed; stopping without another attempt.",
                       file=sys.stderr)
                 return 1
             if b"UART wake setup: send R" in line:
-                if not normal_rx_ok:
+                if not normal_rx_ok or (clock_ok and not resumed_ok):
                     print("[host] Normal USART0 RX test was not confirmed.",
+                          file=sys.stderr)
+                    return 1
+                if clock_ok and resumed_ok:
+                    print("[host] Missing SRAM result for previous cycle.",
                           file=sys.stderr)
                     return 1
                 stage = "waiting for 9600 baud switch prompt"
@@ -133,6 +140,8 @@ def main():
                 stage = "waiting for UART wake result"
                 rx_ok = False
                 rate_ok = False
+                clock_ok = False
+                resumed_ok = False
                 # The MCU waits 750 ms after this prompt before calling
                 # SystemSleep(). Settle the FTDI rate first, then let
                 # PICOUART arm before sending the wake byte.
@@ -187,13 +196,34 @@ def main():
                 if not rx_ok or not rate_ok:
                     print("[host] Incomplete UART wake cycle.", file=sys.stderr)
                     return 1
+                clock_ok = True
+                stage = "waiting for MCU resume counter"
+            elif b"Resumed from Standby, count 0x" in line:
+                if not clock_ok or resumed_ok:
+                    print("[host] Unexpected MCU resume counter.", file=sys.stderr)
+                    return 1
+                try:
+                    count = int(line.rsplit(b"0x", 1)[1], 16)
+                except (IndexError, ValueError):
+                    print("[host] Invalid MCU resume counter.", file=sys.stderr)
+                    return 1
+                if count != cycles + 1:
+                    print("[host] MCU resume count %d, expected %d." %
+                          (count, cycles + 1), file=sys.stderr)
+                    return 1
+                resumed_ok = True
+                stage = "waiting for SRAM retention result"
+            elif b"SRAM sample PASS:" in line:
+                if not (rx_ok and rate_ok and clock_ok and resumed_ok):
+                    print("[host] SRAM result without a complete wake cycle.",
+                          file=sys.stderr)
+                    return 1
                 cycles += 1
-                print("[host] UART wake cycle %d/%d PASS." %
+                print("[host] UART wake cycle %d/%d PASS, including SRAM." %
                       (cycles, args.cycles), flush=True)
                 if cycles >= args.cycles:
                     return 0
                 stage = "waiting for the next PowerOffDemo sleep"
-
 
 
 if __name__ == "__main__":
