@@ -39,6 +39,7 @@ extern "C" {
 
 /**
  * Sleep with USART0 RX on PB00 monitored by PICOUART at 9600 baud, 8-N-1.
+ * The normal USART baud rate is preserved; only the sleep receiver uses 9600.
  * CLK32 must already run at 32768 Hz. Call from thread context with interrupts
  * enabled, TX drained and RX empty. Stop other peripherals before sleeping.
  * The sender sends one byte, then waits for the application acknowledgement.

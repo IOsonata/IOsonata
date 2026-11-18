@@ -558,7 +558,7 @@ bool Sam4lUartSleep(UARTDev_t *pDev)
 	uint32_t wake = 1UL << PM_AWEN_PICOUART;
 
 	if (pDev == NULL || dev->pUartDev != pDev || !dev->bPicoRx ||
-		pDev->Rate < 9500U || pDev->Rate > 9700U || pDev->DataBits != 8 ||
+		pDev->Rate == 0U || pDev->DataBits != 8 ||
 		pDev->StopBits != 1 || pDev->Parity != UART_PARITY_NONE ||
 		pDev->FlowControl != UART_FLWCTRL_NONE || pDev->bIrDAMode || __get_IPSR() != 0U ||
 		__get_PRIMASK() != 0U)
@@ -594,7 +594,7 @@ bool Sam4lUartSleep(UARTDev_t *pDev)
 	dev->pReg->US_IDR = 0xFFFFFFFFU;
 	dev->pReg->US_CR = US_CR_RXDIS | US_CR_TXDIS;
 	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
-	// Full-frame reception at 9600 baud with CLK32 = 32768 Hz.
+	// PICOUART receives at 9600 baud. Keep the normal USART divider unchanged.
 	SAM4L_PICOUART->PICOUART_CFG = PICOUART_CFG_SOURCE(2);
 	SAM4L_PM->PM_ICR = PM_ICR_WAKE;
 	// Own WAKE until its cause has been sampled. SystemSleep preserves it.

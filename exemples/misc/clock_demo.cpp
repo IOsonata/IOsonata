@@ -404,13 +404,17 @@ static void ClockDemoSleep(void)
 	}
 	core = SystemCoreClockGet();
 #if defined(CLOCK_DEMO_UART_SLEEP)
-	ClockDemoPrint("Entering UART sleep; send one U at %u baud\r\n",
-		(unsigned)UART_BAUDRATE);
+	uint32_t uartRate = UARTGetRate(&s_Uart);
+	ClockDemoPrint("Entering UART sleep; send one U at %u baud; resume at %u baud\r\n",
+		(unsigned)CLOCK_DEMO_UART_WAKE_BAUDRATE, (unsigned)UART_BAUDRATE);
 	ClockDemoFlush();
 	bool woke = CLOCK_DEMO_UART_SLEEP(&s_Uart);
 	uint8_t wakeByte = 0;
 	int count = UARTRx(&s_Uart, &wakeByte, 1);
+	// Allow the host adapter to return from the wake rate to the console rate.
+	msDelay(100);
 	ClockDemoResult("UART wake byte", woke && count == 1 && wakeByte == 'U');
+	ClockDemoResult("UART rate after resume", UARTGetRate(&s_Uart) == uartRate);
 #else
 	unsigned released = 0U;
 	IOPinConfig(CLOCK_DEMO_WAKE_PORT, CLOCK_DEMO_WAKE_PIN, IOPINOP_GPIO,
