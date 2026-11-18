@@ -75,7 +75,9 @@ extern bool Sam4lTimerClockBusy(uint32_t ClockMask) __attribute__((weak));
 
 static void Sam4lPowerClockEnable(uint32_t Mask)
 {
-	uint32_t value = SAM4L_PM->PM_PBDMASK | Mask;
+	uint32_t value;
+
+	value = SAM4L_PM->PM_PBDMASK | Mask;
 
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
 			PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
@@ -87,8 +89,12 @@ static void Sam4lPowerClockEnable(uint32_t Mask)
 // channels on behalf of a peripheral.
 static bool Sam4lPdcaAllowDeepSleep(void)
 {
-	bool hsb = (SAM4L_PM->PM_HSBMASK & PM_HSBMASK_PDCA) != 0U;
-	bool pbb = (SAM4L_PM->PM_PBBMASK & PM_PBBMASK_PDCA) != 0U;
+	bool hsb;
+	bool pbb;
+	unsigned i;
+
+	hsb = (SAM4L_PM->PM_HSBMASK & PM_HSBMASK_PDCA) != 0U;
+	pbb = (SAM4L_PM->PM_PBBMASK & PM_PBBMASK_PDCA) != 0U;
 
 	if (hsb != pbb)
 	{
@@ -99,7 +105,7 @@ static bool Sam4lPdcaAllowDeepSleep(void)
 	{
 		return true;
 	}
-	for (unsigned i = 0U; i < 16U; i++)
+	for (i = 0U; i < 16U; i++)
 	{
 		if ((SAM4L_PDCA->PDCA_CHANNEL[i].PDCA_SR & PDCA_SR_TEN) != 0U)
 		{
@@ -111,10 +117,13 @@ static bool Sam4lPdcaAllowDeepSleep(void)
 
 uint32_t SystemResetReason(void)
 {
-	uint32_t reset = SAM4L_PM->PM_RCAUSE;
-	uint32_t reason = 0;
+	uint32_t reset;
+	uint32_t reason;
 	uint32_t wake;
 	uint32_t state;
+
+	reset = SAM4L_PM->PM_RCAUSE;
+	reason = 0;
 
 	if (reset & (PM_RCAUSE_POR | PM_RCAUSE_POR33 | PM_RCAUSE_BOD | PM_RCAUSE_BOD33))
 	{
@@ -225,31 +234,48 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 
 void SystemSleep(void)
 {
+	uint32_t state;
+	uint32_t entryClocks;
+	uint32_t scr;
+	uint32_t clocks;
+	uint32_t pmcon;
+	uint32_t eic;
+	uint32_t tcClocks;
+	uint32_t wakeMask;
+	uint32_t irqEnabled;
+	uint32_t irqPending;
+	uint32_t mode;
+	uint32_t wakeEic;
+	bool ast;
+	bool deep;
+	bool ready;
+	bool slept;
+
 	if (__get_IPSR() != 0U)
 	{
 		return;
 	}
-	uint32_t state = DisableInterrupt();
-	uint32_t entryClocks = SAM4L_PM->PM_PBDMASK;
+	state = DisableInterrupt();
+	entryClocks = SAM4L_PM->PM_PBDMASK;
 	if (Sam4lUartPrepareSleep != NULL && !Sam4lUartPrepareSleep())
 	{
 		EnableInterrupt(state);
 		return;
 	}
-	uint32_t scr = SCB->SCR;
-	uint32_t clocks = SAM4L_PM->PM_PBDMASK;
+	scr = SCB->SCR;
+	clocks = SAM4L_PM->PM_PBDMASK;
 
 	Sam4lPowerClockEnable(PM_PBDMASK_BPM | PM_PBDMASK_BSCIF | PM_PBDMASK_EIC);
-	uint32_t pmcon = SAM4L_BPM->BPM_PMCON;
-	uint32_t eic = SAM4L_EIC->EIC_CTRL & SAM4L_EIC->EIC_IMR & SAM4L_EIC->EIC_ASYNC;
-	bool ast = (clocks & PM_PBDMASK_AST) != 0U &&
+	pmcon = SAM4L_BPM->BPM_PMCON;
+	eic = SAM4L_EIC->EIC_CTRL & SAM4L_EIC->EIC_IMR & SAM4L_EIC->EIC_ASYNC;
+	ast = (clocks & PM_PBDMASK_AST) != 0U &&
 		(SAM4L_AST->AST_CR & AST_CR_EN) != 0U && SAM4L_AST->AST_WER != 0U;
-	bool deep = eic != 0U || ast || SAM4L_PM->PM_AWEN != 0U;
+	deep = eic != 0U || ast || SAM4L_PM->PM_AWEN != 0U;
 	if (deep)
 	{
-		uint32_t tcClocks = SAM4L_PM->PM_PBAMASK &
+		tcClocks = SAM4L_PM->PM_PBAMASK &
 			(PM_PBAMASK_TC0 | PM_PBAMASK_TC1);
-		bool ready = Sam4lPdcaAllowDeepSleep() &&
+		ready = Sam4lPdcaAllowDeepSleep() &&
 			(tcClocks == 0U ||
 			 (Sam4lTimerClockBusy != NULL && !Sam4lTimerClockBusy(tcClocks))) &&
 			(Sam4lUsbAllowDeepSleep == NULL || Sam4lUsbAllowDeepSleep()) &&
@@ -277,15 +303,15 @@ void SystemSleep(void)
 			return;
 		}
 	}
-	uint32_t wakeMask = SAM4L_PM->PM_IMR & PM_IMR_WAKE;
-	uint32_t irqEnabled = NVIC_GetEnableIRQ(PM_IRQn);
-	uint32_t irqPending = NVIC_GetPendingIRQ(PM_IRQn);
-	bool slept = false;
+	wakeMask = SAM4L_PM->PM_IMR & PM_IMR_WAKE;
+	irqEnabled = NVIC_GetEnableIRQ(PM_IRQn);
+	irqPending = NVIC_GetPendingIRQ(PM_IRQn);
+	slept = false;
 	// EIC and AST wake directly. Other asynchronous users require AWEN.
 	// WAIT permits SleepWalking; RETENTION is used for EIC/AST alone.
 	if ((SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_VREGOK) != 0U)
 	{
-		uint32_t mode = pmcon & ~(BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP_Msk);
+		mode = pmcon & ~(BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP_Msk);
 		if (deep && SAM4L_PM->PM_AWEN == 0U)
 		{
 			mode |= BPM_PMCON_RET;
@@ -303,7 +329,7 @@ void SystemSleep(void)
 			// immediately before the next WFI, not while the button is
 			// still held after wake (when the level would set it again).
 			// Do not clear flags owned by other EIC interrupt handlers.
-			uint32_t wakeEic = eic & SAM4L_BPM->BPM_BKUPPMUX;
+			wakeEic = eic & SAM4L_BPM->BPM_BKUPPMUX;
 			if (wakeEic != 0U)
 			{
 				SAM4L_EIC->EIC_ICR = SAM4L_EIC->EIC_ISR & wakeEic;
