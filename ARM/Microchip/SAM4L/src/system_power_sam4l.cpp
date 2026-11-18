@@ -298,6 +298,16 @@ void SystemSleep(void)
 		if (deep)
 		{
 			SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+			// SystemWakePin uses level-triggered EIC wake. An EIC flag
+			// can remain set after the button is released; acknowledge it
+			// immediately before the next WFI, not while the button is
+			// still held after wake (when the level would set it again).
+			// Do not clear flags owned by other EIC interrupt handlers.
+			uint32_t wakeEic = eic & SAM4L_BPM->BPM_BKUPPMUX;
+			if (wakeEic != 0U)
+			{
+				SAM4L_EIC->EIC_ICR = SAM4L_EIC->EIC_ISR & wakeEic;
+			}
 			if (wakeMask == 0U)
 			{
 				SAM4L_PM->PM_ICR = PM_ICR_WAKE;
@@ -314,17 +324,6 @@ void SystemSleep(void)
 		SAM4L_BPM->BPM_PMCON = pmcon;
 		(void)SAM4L_BPM->BPM_PMCON;
 		SCB->SCR = scr;
-	}
-	if (slept && deep)
-	{
-		// A SystemWakePin event remains latched in EIC_ISR until EIC_ICR
-		// acknowledges it. The BPM and EIC clocks are still enabled here.
-		// Clear only lines routed by SystemWakePin, not other EIC owners.
-		uint32_t wakeEic = eic & SAM4L_BPM->BPM_BKUPPMUX;
-		if (wakeEic != 0U)
-		{
-			SAM4L_EIC->EIC_ICR = SAM4L_EIC->EIC_ISR & wakeEic;
-		}
 	}
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
 		PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));

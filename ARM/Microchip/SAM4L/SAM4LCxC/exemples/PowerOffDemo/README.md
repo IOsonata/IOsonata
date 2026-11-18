@@ -110,8 +110,11 @@ new coordination has not been compiled or tested on hardware.
 Following the first BUTTON1 wake, the EIC interrupt status can remain
 latched. An uncleared EIC wake event may cause the next WFI to return
 immediately, producing rapid `Resumed from Standby` messages without a
-reset. SystemSleep now acknowledges the selected asynchronous EIC wake
-pins routed through SystemWakePin, before clearing the PM WAKE status.
+reset. SystemWakePin uses level-triggered EIC detection. Acknowledging
+the flag while BUTTON1 remains pressed does not remove the wake condition,
+because the active level can set it again. SystemSleep now acknowledges
+only its selected EIC wake pins immediately before the next WFI, when
+the wake input can be inactive. PM WAKE is then cleared before entry.
 Other EIC interrupt lines are not acknowledged by this operation.
 
 Rebuild the library and PowerOffDemo after this change. The hardware

@@ -24,6 +24,7 @@ static bool s_WaitSleep;
 static bool s_TestSleep;
 static unsigned s_SleepCount;
 static uint32_t s_TimerBusyMask;
+static uint32_t s_ExpectedEicWakeClear;
 
 // Optional driver functions must be provided by the host test. Linking
 // undefined weak C++ references is not portable to macOS clang.
@@ -51,6 +52,11 @@ void PowerTestWfi(void)
 	assert(bool(g_PowerTestScb.SCR & SCB_SCR_SLEEPDEEP_Msk) == s_DeepSleep);
 	assert(!(s_Bpm.BPM_PMCON & (BPM_PMCON_BKUP | BPM_PMCON_SLEEP_Msk)));
 	assert(bool(s_Bpm.BPM_PMCON & BPM_PMCON_RET) == (s_DeepSleep && !s_WaitSleep));
+	if (s_ExpectedEicWakeClear != 0U)
+	{
+		// A stale level-triggered EIC event is cleared before WFI.
+		assert(s_Eic.EIC_ICR == s_ExpectedEicWakeClear);
+	}
 	if (s_DeepSleep)
 	{
 		assert(g_PowerTestIrqEnabled == 1);
@@ -305,14 +311,17 @@ int main(void)
 	s_Eic.EIC_CTRL = (1U << 8) | (1U << 9);
 	s_Eic.EIC_IMR = (1U << 8) | (1U << 9);
 	s_Eic.EIC_ASYNC = (1U << 8) | (1U << 9);
+	s_Eic.EIC_MODE = 1U << 8;
 	s_Bpm.BPM_BKUPPMUX = 1U << 8;
 	s_Eic.EIC_ISR = (1U << 8) | (1U << 9);
 	s_Eic.EIC_ICR = 0U;
 	s_WaitSleep = false;
+	s_ExpectedEicWakeClear = 1U << 8;
 	before = s_SleepCount;
 	SystemSleep();
 	assert(s_SleepCount == before + 1U);
 	assert(s_Eic.EIC_ICR == (1U << 8));
+	s_ExpectedEicWakeClear = 0U;
 	assert(s_Eic.EIC_ISR == ((1U << 8) | (1U << 9)));
 	s_Bpm.BPM_BKUPPMUX = 0U;
 	s_Eic.EIC_ICR = 0U;
