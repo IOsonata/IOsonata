@@ -159,7 +159,7 @@ With `POWER_DEMO_RESUME_WAKE=1` and `POWER_DEMO_TIMER_WAKE_MS=1000`,
 the SAM4L demo prints `SAM4L TimerInit stage 0x...` when the
 initial call to TimerInit returns false. It also reports BPM_PMCON,
 BSCIF_PCLKSR, PM_PBDMASK and NVIC_ISER1. If AST register access has
-been enabled (stage 5 or later), it reports AST_SR and AST_CR.
+been enabled (stage 5 or later), it reports AST_SR, AST_CLOCK and AST_CR.
 The diagnostic only reads hardware registers, does not alter the
 clock or timer driver, and is compiled only for SAM4L timer Standby
 tests. The board.h configuration is not changed by this diagnostic.
@@ -168,3 +168,22 @@ Stage values in hex: 1 invalid configuration, 2 previous timer owner,
 3 low-frequency clock source, 4 frequency selection, 5 AST sync,
 6 NVIC ownership conflict, 7 AST setup, 8 counter reset, 9 start.
 Report the complete UART failure output when an AST failure occurs.
+
+## November 18: AST initialization synchronization failure
+
+The maintainer's first resumable AST test reported
+`SAM4L TimerInit stage 0x00000005`, `BPM_PMCON 0x00010002`,
+`BSCIF_PCLKSR 0x00001582`, `PM_PBDMASK 0x0000003F`,
+`NVIC_ISER1 0x00000000`, `AST_SR 0x01000000`,
+and `AST_CR 0x00000000`. The selected RC32K clock was reported
+ready; AST_SR.BUSY was set while AST_SR.CLKBUSY was clear.
+The observed values do not reveal AST_CLOCK.CEN, which was not yet
+printed.
+
+Previously, the timer initializer waited for both AST_SR.BUSY and
+AST_SR.CLKBUSY before enabling the AST prescaler clock. A pending
+register synchronization may remain busy until that clock runs.
+The code now waits for CLKBUSY while changing AST_CLOCK and waits
+for BUSY only after enabling AST_CLOCK.CEN. A register-model regression
+simulates BUSY set with CEN clear and verifies AST initialization.
+This change has not yet been validated on the physical board.

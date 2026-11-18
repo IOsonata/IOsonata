@@ -58,6 +58,7 @@ struct {uint32_t BPM_PMCON=0,BPM_BKUPWEN=0;} bpm;
 struct {uint32_t BSCIF_PCLKSR=BSCIF_PCLKSR_OSC32RDY,BSCIF_OSCCTRL32=BSCIF_OSCCTRL32_EN32K,BSCIF_RC32KCR=0;} bscif;
 #define SAM4L_BSCIF (&bscif)
 struct AstStatus {uint32_t value=0; operator uint32_t();};
+static bool s_AstBusyUntilClock;
 struct {
 	uint32_t AST_CR=0,AST_CLOCK=0,AST_DTR=0,AST_CV=0,AST_SCR=0,AST_AR0=0,AST_IMR=0,AST_WER=0;
 	AstStatus AST_SR;
@@ -67,6 +68,12 @@ struct {
 AstStatus::operator uint32_t() {
 	// Hardware clears flags on a synchronized SCR write.
 	value &= ~ast.AST_SCR; ast.AST_SCR=0;
+	// Model a pending AST write that cannot synchronize with CEN disabled.
+	// It completes once the prescaler clock is enabled.
+	if (s_AstBusyUntilClock && (ast.AST_CLOCK & AST_CLOCK_CEN)) {
+		value &= ~AST_SR_BUSY;
+		s_AstBusyUntilClock = false;
+	}
 	static uint32_t clock=0;
 	uint32_t diff=clock^ast.AST_CLOCK;
 	assert(!((diff&AST_CLOCK_CEN)&&(diff&AST_CLOCK_CSSEL_Msk)));
@@ -142,9 +149,20 @@ int main() {
 	assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_IRQ);
 	assert(ast.AST_CR&AST_CR_EN); // Do not take a live interrupt owner.
 	NVIC_DisableIRQ(AST_ALARM_IRQn);
+	// After reset the AST clock may be disabled while a pending write
+	// leaves BUSY set. TimerInit must start the prescaler before waiting
+	// for this synchronization.
+	ast.AST_CLOCK &= ~AST_CLOCK_CEN;
+	ast.AST_SR.value |= AST_SR_BUSY;
+	s_AstBusyUntilClock = true;
 	for(int dev=0;dev<7;++dev) {
 		cfg.DevNo=dev; timers[dev].pObj=&timers[dev];
 		assert(TimerInit(&timers[dev],&cfg));
+		if (dev == 0) {
+			assert(!s_AstBusyUntilClock);
+			assert(!(ast.AST_SR.value & AST_SR_BUSY));
+			assert(ast.AST_CLOCK & AST_CLOCK_CEN);
+		}
 		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OK);
 		assert(timers[dev].GetTickCount(&timers[dev])==0);
 		assert(timers[dev].pObj==&timers[dev]);

@@ -305,7 +305,9 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_SYNC;
 	if (!d.TcReg) {
 		Sam4lTimerPmWrite(&SAM4L_PM->PM_PBDMASK, SAM4L_PM->PM_PBDMASK | PM_PBDMASK_AST);
-		if (!Sam4lAstWait(AST_SR_BUSY | AST_SR_CLKBUSY)) { EnableInterrupt(state); return false; }
+		// BUSY may remain set until the AST prescaler clock is enabled.
+		// Only CLKBUSY must be clear before changing AST_CLOCK.
+		if (!Sam4lAstWait(AST_SR_CLKBUSY)) { EnableInterrupt(state); return false; }
 	}
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_IRQ;
 	// AST survives every reset except POR (42023H table 10-12). CR.EN

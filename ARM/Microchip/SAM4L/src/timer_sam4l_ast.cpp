@@ -61,8 +61,9 @@ bool Sam4lAstSetup(Sam4l_TimerData_t &d)
 	Sam4lTimerPmWrite(&SAM4L_PM->PM_PBDMASK,
 		SAM4L_PM->PM_PBDMASK | PM_PBDMASK_AST | PM_PBDMASK_BPM);
 	SAM4L_AST->AST_IDR = 0xFFFFFFFFU;
-	if (!Sam4lAstWait(AST_SR_BUSY | AST_SR_CLKBUSY) ||
-		!Write(&SAM4L_AST->AST_WER, 0U))
+	// BUSY can remain asserted when AST_CLOCK.CEN is zero. Wait only for
+	// clock synchronization until the selected prescaler clock is running.
+	if (!Sam4lAstWait(AST_SR_CLKBUSY))
 	{
 		return false;
 	}
@@ -78,7 +79,10 @@ bool Sam4lAstSetup(Sam4l_TimerData_t &d)
 		return false;
 	}
 	SAM4L_AST->AST_CLOCK = AST_CLOCK_CSSEL_32KHZCLK | AST_CLOCK_CEN;
-	if (!Sam4lAstWait(AST_SR_CLKBUSY) ||
+	// With the prescaler clock enabled, a pending register synchronization
+	// can complete. Do not write WER or CR until BUSY has cleared.
+	if (!Sam4lAstWait(AST_SR_CLKBUSY | AST_SR_BUSY) ||
+		!Write(&SAM4L_AST->AST_WER, 0U) ||
 		!Write(&SAM4L_AST->AST_CR, AST_CR_PSEL(d.Select)) ||
 		!Write(&SAM4L_AST->AST_DTR, 0U) ||
 		!Write(&SAM4L_AST->AST_SCR, AST_SCR_MASK))

@@ -444,6 +444,9 @@ int main()
 			PowerDemoPut("AST_SR 0x");
 			PowerDemoPutCount(SAM4L_AST->AST_SR);
 			PowerDemoPut("\r\n");
+			PowerDemoPut("AST_CLOCK 0x");
+			PowerDemoPutCount(SAM4L_AST->AST_CLOCK);
+			PowerDemoPut("\r\n");
 			PowerDemoPut("AST_CR 0x");
 			PowerDemoPutCount(SAM4L_AST->AST_CR);
 			PowerDemoPut("\r\n");
