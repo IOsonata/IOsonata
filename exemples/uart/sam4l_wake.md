@@ -1,109 +1,78 @@
-# SAM4L UART wake
+# SAM4L UART receive wake
 
-Enable receive wake with `UARTEnableWake(&uart, true)` or the C++
-`uart.EnableWake(true)` wrapper, then call `SystemSleep()`. Configuration does
-not stop the UART or enter sleep. During sleep entry, the SAM4L driver uses
-PICOUART to receive one wake byte in WAIT. Before `SystemSleep()` returns,
-the driver restores USART0 and places the captured byte in its normal RX FIFO.
-Ports without receive-wake support return false from `UARTEnableWake()`.
+Call `UARTEnableWake(&uart, true)` or `uart.EnableWake(true)` on
+an initialized, enabled USART0 with RX mapped to PB00, then call
+`SystemSleep()`. The application does not switch UART clocks or baud
+rates, disable USART0, configure PICOUART or restore the transport.
+The SAM4L UART driver prepares PICOUART for WAIT sleep and restores
+USART0 before `SystemSleep()` returns. If PICOUART received a byte,
+the driver copies it into the normal UART RX FIFO for `UARTRx()`.
 
-PICOUART is wired to PB00, shared with USART0 RX. It cannot monitor the
-USART1 EDBG console. Its frame format is fixed: 9600 baud, eight data bits,
-no parity, one stop bit, with a 32768 Hz CLK32 source. RC32K or OSC32K must
-already be running. The helper does not change the LF clock selection or
-the normal USART baud-rate divider. USART0 resumes at its configured rate.
+This is a UART wake-source selection, not a UART sleep register or
+an application-defined sleep mode. The UART selects its wake capability
+and the system power implementation selects a compatible power state.
+Other targets without receive wake return false from
+`UARTEnableWake()`.
 
-## ClockDemo profile
+## Hardware connections and rates
 
-In the SAM4LCxC or SAM4LSxC ClockDemo `src/board.h`, set
-`CLOCK_DEMO_UART_WAKE` to `1`, or define it as `1` in the compiler symbols.
-Clean and rebuild the matching IOsonata library and ClockDemo. The default
-profile remains unchanged when this option is zero.
+PICOUART shares USART0 RX on PB00, not the EDBG USART1 console.
 
-Connect a 3.3 V UART adapter:
-
-| Adapter | MCU pin |
+| External adapter | SAM4L |
 | --- | --- |
-| TX | PB00, USART0 RX |
-| RX | PB01, USART0 TX |
+| 3.3 V TX | PB00 (USART0 RX / PICOUART RX) |
+| 3.3 V RX | PB01 (USART0 TX) |
 | GND | GND |
 
-Open the adapter at the normal console rate (1000000 baud by default),
-8-N-1, without flow control. This profile uses
-that adapter for all console output, not the EDBG virtual serial port. Check
-that other connected peripherals do not drive PB00 or PB01.
+USART0 normal operation retains its configured baud, 1,000,000 by
+default. PICOUART uses 9600 baud, 8-N-1, with a 32768 Hz clock
+from RC32K or OSC32K. The sender must wait for application
+acknowledgement before sending more data. PICOUART holds only one
+received byte during the transition.
 
-At each `Entering UART sleep` prompt, change the adapter to 9600 baud, send
-one uppercase `U` without a newline, drain the adapter TX, and immediately
-restore the normal baud rate. The MCU resumes and prints at the normal rate.
-The demo waits 100 ms after return before printing so the host adapter can
-change rate. The driver itself introduces no such delay. A manually operated
-terminal may still miss the first output during this switch.
-`Python/sam4l_uart_wake.py` performs this sequence automatically. Wait for
-`UART wake byte: PASS` before sending payload. The demo checks CPU/APB/LF restoration, timer IRQs,
-msDelay and nsDelay after each wake. When the ordinary `UART RX` prompt
-appears, send another single `U` for that separate receive check.
+## PowerOffDemo profile
 
-With pyserial installed, run the host helper before resetting the board:
+Set `POWER_DEMO_UART_WAKE=1` in SAM4LCxC or SAM4LSxC PowerOffDemo
+`src/board.h` (or the application project symbols). The default
+remains zero, retaining the normal USART1 console and Backup-mode
+test. Rebuild the matching library and application using the same
+Eclipse managed Debug or Release configuration. The UART-wake
+profile uses the external adapter for **all console output**, not EDBG.
+
+Start the host helper before resetting the board:
 
 ```sh
-python3 Python/sam4l_uart_wake.py --port /dev/cu.usbserial-ADAPTER --baud 1000000
+python3 Python/sam4l_uart_wake.py --port /dev/cu.usbserial-ADAPTER --baud 1000000 --cycles 3
 ```
 
-The helper also answers the ordinary UART RX prompts at the normal baud rate.
-It reports each transmitted byte and exits with the last stage after 30 seconds
-without a complete output line, or after 300 seconds overall. These limits
-can be changed with `--timeout` and `--total-timeout`. Start the helper before
-resetting the board so it sees and answers every prompt.
+The helper waits for `Entering UART sleep`, changes the adapter to
+9600 baud, sends `U`, waits for its TX to finish, then restores the
+normal baud. It checks the recovered UART byte, rate and CPU/APB clock
+after every wake. The script stops after the requested number of
+complete cycles or a configured timeout.
 
-The LC profile repeats UART wake after each selected CPU source and LF
-selection, six times in total. The LS profile runs three wake cycles after
-its clock sweep. A successful run ends with `ClockDemo complete: 0 failures`.
+## Driver behavior and limits
 
-## Driver use and limits
+Only an enabled USART0 configured on PB00 for 8-N-1 without flow
+control can request PICOUART wake. The driver checks the RX pin
+route, frame format, clock source, PM wake ownership and pending
+UART traffic. A busy receiver, conflicting wake registration or
+unavailable low-frequency clock may prevent sleep. UART stays
+operational if preparation fails; `SystemSleep()` has no independent
+success return value.
 
-Include `coredev/uart.h` and `coredev/system_core_clock.h`. Initialize USART0
-on PB00 at the application baud rate, 8-N-1, with no flow control. Only the
-sleep receiver uses 9600 baud. Drain TX and RX and stop other active peripherals
-before entering sleep from thread context with interrupts enabled.
+Disabling, powering off or reinitializing UART clears wake selection.
+The driver restores PICOUART, USART interrupt settings, clock gates,
+asynchronous wake mask and the captured RX byte. Any receive callback
+is called with interrupts masked and must not block. The ordinary
+USART divider is not rewritten for PICOUART. This is resumable WAIT
+sleep, not Backup-mode UART wake.
 
-```cpp
-if (UARTEnableWake(&uart, true))
-{
-	SystemSleep();
-	UARTEnableWake(&uart, false);
-}
-```
+## Validation status
 
-Wake remains selected across repeated `SystemSleep()` calls until disabled.
-Disabling, powering off or reinitializing the UART also clears the selection.
-The example disables wake after each sleep check. No target header or target
-function is needed by the application.
-
-At sleep entry, the driver checks CLK32, PICOUART ownership, the PM WAKE
-interrupt and UART activity. If it cannot safely prepare reception, it leaves
-the UART running and `SystemSleep()` returns without sleeping. Other interrupt
-sources can also wake the MCU. Always check received data using `UARTRx()`;
-accepting the wake configuration does not guarantee that a byte was received.
-
-The driver restores the USART interrupt mask, clock gates, PICOUART
-configuration and asynchronous wake mask before returning from sleep. A fresh
-PM wake event and PICOUART data-ready status are both required before copying
-a byte into the RX FIFO. An installed RX callback runs during restoration with
-interrupts masked and must not block.
-
-The sender must wait for an application acknowledgement before sending payload:
-PICOUART has only one receive holding register, and uninterrupted reception
-during clock restoration is not supported. This provides resumable WAIT wake,
-not Backup-mode UART wake.
-
-## Validation
-
-Both profiles compile and link for SAM4LCxC and SAM4LSxC in Debug and Release
-with GNU Arm GCC 15.2.1 and GNU++11. The UART, generic UART and system-power sources were rebuilt into
-the existing library archives for these eight links. Existing SAM4L power
-and clock register tests also pass. UART wake, first-byte recovery and repeat
-wake behavior still require hardware validation.
-
-Reference: Microchip ATSAM4L8/L4/L2 datasheet 42023H, chapter 25 (PICOUART),
-chapter 10 (Power Manager) and the I/O multiplexing tables.
+SAM4L register tests passed before this refactor. Earlier LC/LS
+Debug/Release checks compiled and linked using cached library
+archives with updated UART and system objects; these were not
+clean full-library rebuilds. The host helper passed simulated
+serial scenarios only. Hardware UART wake, wake-byte delivery,
+repeated wake and current measurements remain unverified.

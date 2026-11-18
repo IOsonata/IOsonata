@@ -1,6 +1,6 @@
 """ -------------------------------------------------------------------------
 @file   sam4l_uart_wake.py
-@brief  ClockDemo console with automatic SAM4L wake-baud switching.
+@brief  PowerOffDemo console with automatic SAM4L wake-baud switching.
 
 @license
 
@@ -52,23 +52,28 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", required=True)
     parser.add_argument("--baud", type=int, default=1000000)
+    parser.add_argument("--cycles", type=int, default=3,
+                        help="Number of complete UART wake cycles to check")
     parser.add_argument("--timeout", type=float, default=30,
                         help="Seconds without a complete console line")
     parser.add_argument("--total-timeout", type=float, default=300,
                         help="Maximum duration of the complete test in seconds")
     args = parser.parse_args()
-    if args.timeout <= 0 or args.total_timeout <= 0:
-        parser.error("timeouts must be greater than zero")
+    if args.timeout <= 0 or args.total_timeout <= 0 or args.cycles <= 0:
+        parser.error("timeouts and cycles must be greater than zero")
     with serial.Serial(args.port, args.baud, timeout=0.2, write_timeout=2) as port:
         pending = bytearray()
         started = time.monotonic()
         progress = started
-        stage = "waiting for ClockDemo output"
+        stage = "waiting for PowerOffDemo output"
+        cycles = 0
+        rx_ok = False
+        rate_ok = False
         last_line = "(none)"
         print("[host] Opened %s at %d baud. Reset the board now." %
               (args.port, args.baud), flush=True)
         print("[host] Use the adapter wired to PB00/PB01, not EDBG. "
-              "ClockDemo needs CLOCK_DEMO_UART_WAKE=1.", flush=True)
+              "PowerOffDemo needs POWER_DEMO_UART_WAKE=1.", flush=True)
         while True:
             now = time.monotonic()
             if now - progress >= args.timeout or now - started >= args.total_timeout:
@@ -96,6 +101,8 @@ def main():
             last_line = line.decode("ascii", errors="replace").strip()
             if b"Entering UART sleep;" in line:
                 stage = "waiting for UART wake result"
+                rx_ok = False
+                rate_ok = False
                 # Let the MCU arm PICOUART after draining its prompt.
                 time.sleep(0.1)
                 try:
@@ -109,14 +116,28 @@ def main():
                 stage = "waiting for normal UART RX result"
                 send_byte(port, 2)
                 print("[host] Sent U at %d baud." % args.baud, flush=True)
-            elif b"Entering sleep; press" in line:
-                print("[host] GPIO-wake profile detected. Set CLOCK_DEMO_UART_WAKE=1 "
-                      "and rebuild ClockDemo.", file=sys.stderr)
+            elif b"Entering Standby" in line:
+                print("[host] Another wake profile is selected. Enable "
+                      "POWER_DEMO_UART_WAKE and rebuild PowerOffDemo.",
+                      file=sys.stderr)
                 return 2
-            elif b"ClockDemo complete:" in line:
-                return 0 if b"complete: 0 failures" in line else 1
-            elif b"UART wake byte:" in line or b"UART RX:" in line:
-                stage = "waiting for the next ClockDemo stage"
+            elif b"UART wake byte: PASS" in line:
+                rx_ok = True
+            elif b"UART rate after resume: PASS" in line:
+                rate_ok = True
+            elif b"CPU/APB clock after resume: PASS" in line:
+                if not rx_ok or not rate_ok:
+                    print("[host] Incomplete UART wake cycle.", file=sys.stderr)
+                    return 1
+                cycles += 1
+                print("[host] UART wake cycle %d/%d PASS." %
+                      (cycles, args.cycles), flush=True)
+                if cycles >= args.cycles:
+                    return 0
+                stage = "waiting for the next PowerOffDemo sleep"
+            elif b"UART wake byte: FAIL" in line or b"UART rate after resume: FAIL" in line or \
+                    b"CPU/APB clock after resume: FAIL" in line:
+                return 1
 
 
 

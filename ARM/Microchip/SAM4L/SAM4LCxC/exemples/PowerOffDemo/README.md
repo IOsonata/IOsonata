@@ -50,3 +50,26 @@ arming the next one. SRAM is lost, so timer handles are initialized again.
 This configuration compiles in Debug and Release. The maintainer confirmed four
 consecutive AST Backup wakes with reset reason 0x1000 and retained start counts
 1 through 5. The earlier pin-wake results remain separate.
+
+## Resumable standby profiles (not hardware revalidated)
+
+The default configuration above remains Backup mode using USART1/EDBG.
+For a resumable EIC wake test set `POWER_DEMO_RESUME_WAKE=1` in the project
+compiler symbols and keep `POWER_DEMO_UART_WAKE=0`. OLED1 BUTTON1
+on PC06 remains the wake source. Set
+`POWER_DEMO_STANDBY_RAM_TEST=1` to check retained stack and static bytes.
+
+For automatic AST wake in resumable sleep, set
+`POWER_DEMO_RESUME_WAKE=1`, `POWER_DEMO_TIMER_WAKE_MS=1000`,
+and `POWER_DEMO_UART_WAKE=0`. The demo configures the timer through
+the normal Timer interface. SystemSleep selects and restores its sleep
+clock configuration. Leave `POWER_DEMO_RESUME_WAKE` undefined for the
+previously validated reset-on-wake Backup timer test.
+
+For UART wake, set `POWER_DEMO_UART_WAKE=1` in board.h or the project
+symbols. This selects resumable sleep and USART0 RX PB00 / TX PB01 for
+the whole demo. The EDBG USART1 connection is no longer the console for
+this profile. Connect a 3.3 V USB-UART adapter and common ground. Run
+`python3 Python/sam4l_uart_wake.py --port PORT --baud 1000000`.
+PICOUART sleep entry and USART restoration belong to the SAM4L driver
+and SystemSleep. UART wake has not been hardware tested.

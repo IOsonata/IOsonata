@@ -26,3 +26,16 @@ arming the next one. SRAM is lost, so timer handles are initialized again.
 
 This configuration compiles in Debug and Release. AST Backup wake hardware
 validation is pending; the earlier pin-wake results remain separate.
+
+## Resumable sleep profiles
+
+An application with a supported wired wake input may set
+`POWER_DEMO_RESUME_WAKE=1` for standby. With
+`POWER_DEMO_TIMER_WAKE_MS=1000`, an AST alarm provides automatic
+standby wake. Unlike Backup mode, execution resumes in place.
+
+`POWER_DEMO_UART_WAKE=1` selects USART0 PB00/PB01 and resumable
+PICOUART wake instead of USART1. Use a 3.3 V adapter, transmit
+one U at 9600 baud to wake, then return to the normal console baud.
+See `exemples/uart/sam4l_wake.md`. UART wake and these standby modes
+remain without hardware validation on this board.
