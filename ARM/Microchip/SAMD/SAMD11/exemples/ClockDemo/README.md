@@ -118,3 +118,9 @@ share it when optimizing for size. The current Standby build saves 332 flash
 bytes compared with the receive-enabled hardware run above. Both selectable
 runs still fit in Debug and Release. These are build results; the recorded
 board timings predate this loop update.
+
+The current system Standby implementation also prepares the existing
+UART, I2C and SPI SERCOM drivers, rather than requiring the application
+to stop those clocks. This new driver coordination has not been
+clean-built or hardware-tested on SAMD11. PowerOffDemo remains the
+integration test for resumable wake and SRAM retention.

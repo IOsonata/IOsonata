@@ -83,3 +83,11 @@ clock and interrupt state, without changing its enable reference count.
 The UART-wake profile retains PICOUART's own receive preparation.
 Previous runs used a different suspend sequence; this refactor requires
 a new clean library/demo build and board test before validation.
+
+## Driver ownership after the power/clock refactor
+
+During resumable sleep, the SAM4L system now coordinates idle UART,
+I2C master and SPI master clock suspension without application-specific
+sleep code. TWIS keeps its enabled address-match SleepWalking request.
+Active masters or unsupported SPI slave sleep prevent entry. The
+new coordination has not been compiled or tested on hardware.

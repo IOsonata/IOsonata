@@ -165,3 +165,56 @@ measurement exists yet. Other peripheral clock consumers (including
 USB and ADC) have not been covered by this driver coordination.
 Do not mark SAM4L power management complete until they are reviewed
 and the corresponding hardware paths are validated.
+
+## SystemSleep driver ownership update
+
+The subsequent refactor extends driver-owned sleep coordination on all five
+targets, without modifying DeviceIntrf or introducing a new public interface.
+
+SAM4L:
+- Idle USARTs, I2C masters and SPI masters release their peripheral clocks.
+- DeviceIntrf enable counts and transfer settings remain unchanged.
+- UART PICOUART and TWIS retain their independent asynchronous wake resources.
+- Busy masters and unsupported SPI slave wake prevent deep sleep.
+- SystemSleep restores the suspended drivers in reverse order after wake,
+  or restores them if another driver refuses sleep preparation.
+
+SAMD11/SAMD21:
+- The system coordinates the existing SERCOM UART, I2C and SPI owners.
+- Idle masters use their own Disable/Enable implementation without touching
+  DeviceIntrf reference counts. Active transfers and enabled I2C/SPI slaves
+  prevent Standby because no slave wake behavior is implemented here.
+- EIC/NMI Standby wake resources remain managed in the pin driver.
+
+ESP32-C3/C6:
+- SystemSleep prepares RTC wake routing before requesting the transport
+  drivers to pause. Idle UART, I2C and SPI controllers stop their own clocks.
+- After the RTC sleep attempt, the drivers restore before RTC wake routing
+  is released. Rejected sleep also restores the pre-entry state.
+- Without an RTC wake source, SystemSleep leaves transport configuration
+  unchanged and uses ordinary interrupt-resumable CPU WFI.
+- Other Espressif ports are unchanged by the new I2C/SPI sleep functions.
+
+The demo is not responsible for disabling, reconfiguring or restoring
+these peripherals around SystemSleep. Explicit runtime clock-source
+experiments in ClockDemo remain separate from low-power sleep entry.
+
+### Validation still required
+
+This review performed source inspection, branch comparison and static
+source checks only. The new SAM4L, SAMD and ESP32 transport sleep
+changes have not been compiled or run on hardware. Do not interpret a
+previous ClockDemo or PowerOffDemo PASS as validation of these changes.
+
+Before treating any target as complete, perform a clean managed-project
+library and application build for Debug and Release, exercise multiple
+simultaneously initialized transports, repeated sleep/resume, a busy-master
+refusal and its rollback, and the existing wake/retention cases. The
+SAM4L TWIS SleepWalking and UART PICOUART wake paths still need
+physical testing. SPI/I2C slave behavior and peripheral wake modes
+outside the implemented set remain unsupported or deferred.
+
+System-wide clock and power ownership for USB, ADC and other optional
+peripherals remains a separate architectural review. Sleep current
+measurements and independent confirmation of actual low-power mode
+entry are still pending. Do not merge this work based on source checks.

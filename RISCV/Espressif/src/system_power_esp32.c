@@ -112,8 +112,8 @@ void SystemSleep(void)
 		EnableInterrupt(state);
 		return;
 	}
-	// Suspend idle peripherals only for RTC/PMU sleep. UART interrupts
-	// remain enabled for a plain CPU WFI when no RTC wake was selected.
+	// Suspend idle transport drivers only for RTC/PMU sleep. Their
+	// interrupt state is unchanged for a plain WFI without RTC wake.
 	bool ready = (Esp32I2cPrepareSleep == NULL || Esp32I2cPrepareSleep()) &&
 		(Esp32SpiPrepareSleep == NULL || Esp32SpiPrepareSleep()) &&
 		(Esp32UartPrepareSleep == NULL || Esp32UartPrepareSleep());
