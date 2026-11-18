@@ -357,3 +357,25 @@ after arming. Bits 16-19 distinguish previously retained receiver
 status from a new frame or wake event arising after handover.
 No valid receive byte is discarded, and the full-frame wake mode
 is unchanged. The source of the unsolicited 0xFF remains unverified.
+
+## November 18: verify normal USART0 RX before PICOUART
+
+The next trace was `SAM4L UART sleep diagnostic 0xFF0200FD`, meaning
+the PICOUART DRDY flag became set immediately upon enabling the
+receiver, with received byte 0xFF, before the host transmitted U.
+The startup banner establishes that USART0 TX and the adapter RX
+work, but does not establish the opposite direction (adapter TX
+to PB00). It is not yet possible to attribute the unwanted frame to
+the USART handover rather than an unconnected or unstable RX input.
+
+PowerOffDemo now checks normal USART0 reception before testing
+PICOUART. The host helper responds to `UART RX: send U at 1000000 baud`
+with one U at the normal console rate and verifies the
+`UART RX normal: PASS` result. A failure is reported before
+enabling the wake receiver. This test does not change driver
+clock management or PICOUART wake behavior.
+
+If normal RX passes and the PICOUART diagnostic still reports
+premature DRDY, check PB00 with a scope or logic analyzer across
+USART0 disable and PICOUART enable. The idle state should stay
+high, and no start bit should occur before the host wake byte.

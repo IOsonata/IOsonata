@@ -410,6 +410,11 @@ int main()
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	uint32_t wakeCount;
+#if POWER_DEMO_UART_WAKE
+	uint32_t rxWait;
+	uint8_t rxByte;
+	bool normalRx;
+#endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 	volatile uint32_t stackRam[STANDBY_RAM_WORDS];
 #endif
@@ -424,6 +429,27 @@ int main()
 	if (!s_Uart.EnableWake(true))
 	{
 		PowerDemoPut("UART wake unavailable for this configuration\r\n");
+		return 1;
+	}
+	// Validate the physical USART0 RX connection before testing PICOUART.
+	// The host sends one U at the normal 1 Mbps console rate.
+	PowerDemoPut("UART RX: send U at 1000000 baud\r\n");
+	PowerDemoDrain();
+	rxByte = 0U;
+	normalRx = false;
+	for (rxWait = 0U; rxWait < 3000U; rxWait++)
+	{
+		if (s_Uart.Rx(&rxByte, 1) == 1)
+		{
+			normalRx = rxByte == 'U';
+			break;
+		}
+		msDelay(1);
+	}
+	PowerDemoPut(normalRx ? "UART RX normal: PASS\r\n" :
+		"UART RX normal: FAIL\r\n");
+	if (!normalRx)
+	{
 		return 1;
 	}
 #elif defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0

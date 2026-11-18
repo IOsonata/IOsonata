@@ -69,6 +69,7 @@ def main():
         cycles = 0
         rx_ok = False
         rate_ok = False
+        normal_rx_ok = False
         last_line = "(none)"
         print("[host] Opened %s at %d baud. Reset the board now." %
               (args.port, args.baud), flush=True)
@@ -106,6 +107,10 @@ def main():
             progress = time.monotonic()
             last_line = line.decode("ascii", errors="replace").strip()
             if b"Entering UART sleep;" in line:
+                if not normal_rx_ok:
+                    print("[host] Normal USART0 RX test was not confirmed.",
+                          file=sys.stderr)
+                    return 1
                 stage = "waiting for UART wake result"
                 rx_ok = False
                 rate_ok = False
@@ -133,6 +138,14 @@ def main():
                 stage = "waiting for normal UART RX result"
                 send_byte(port, 2)
                 print("[host] Sent U at %d baud." % args.baud, flush=True)
+            elif b"UART RX normal: PASS" in line:
+                normal_rx_ok = True
+                stage = "waiting for PICOUART sleep prompt"
+            elif b"UART RX normal: FAIL" in line:
+                print("[host] USART0 RX could not receive U at normal baud. "
+                      "Check adapter TX to PB00 and shared ground.",
+                      file=sys.stderr)
+                return 1
             elif b"UART wake unavailable for this configuration" in line:
                 print("[host] UARTEnableWake rejected the USART0 profile.",
                       file=sys.stderr)
