@@ -71,6 +71,7 @@ extern void Sam4lI2CResumeSleep(void) __attribute__((weak));
 extern bool Sam4lSpiSuspendSleep(void) __attribute__((weak));
 extern void Sam4lSpiResumeSleep(void) __attribute__((weak));
 extern bool Sam4lUsbAllowDeepSleep(void) __attribute__((weak));
+extern bool Sam4lTimerClockBusy(uint32_t ClockMask) __attribute__((weak));
 
 static void Sam4lPowerClockEnable(uint32_t Mask)
 {
@@ -79,6 +80,33 @@ static void Sam4lPowerClockEnable(uint32_t Mask)
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
 			PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
 	SAM4L_PM->PM_PBDMASK = value;
+}
+
+// PDCA is shared by several drivers. Inspect all 16 channels before
+// entering a mode that stops the high-speed bus; never stop or clear DMA
+// channels on behalf of a peripheral.
+static bool Sam4lPdcaAllowDeepSleep(void)
+{
+	bool hsb = (SAM4L_PM->PM_HSBMASK & PM_HSBMASK_PDCA) != 0U;
+	bool pbb = (SAM4L_PM->PM_PBBMASK & PM_PBBMASK_PDCA) != 0U;
+
+	if (hsb != pbb)
+	{
+		// The channel registers cannot be read safely with one bus gate off.
+		return false;
+	}
+	if (!hsb)
+	{
+		return true;
+	}
+	for (unsigned i = 0U; i < 16U; i++)
+	{
+		if ((SAM4L_PDCA->PDCA_CHANNEL[i].PDCA_SR & PDCA_SR_TEN) != 0U)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 uint32_t SystemResetReason(void)
@@ -219,7 +247,12 @@ void SystemSleep(void)
 	bool deep = eic != 0U || ast || SAM4L_PM->PM_AWEN != 0U;
 	if (deep)
 	{
-		bool ready = (Sam4lUsbAllowDeepSleep == NULL || Sam4lUsbAllowDeepSleep()) &&
+		uint32_t tcClocks = SAM4L_PM->PM_PBAMASK &
+			(PM_PBAMASK_TC0 | PM_PBAMASK_TC1);
+		bool ready = Sam4lPdcaAllowDeepSleep() &&
+			(tcClocks == 0U ||
+			 (Sam4lTimerClockBusy != NULL && !Sam4lTimerClockBusy(tcClocks))) &&
+			(Sam4lUsbAllowDeepSleep == NULL || Sam4lUsbAllowDeepSleep()) &&
 			(Sam4lI2CSuspendSleep == NULL || Sam4lI2CSuspendSleep()) &&
 			(Sam4lSpiSuspendSleep == NULL || Sam4lSpiSuspendSleep()) &&
 			(Sam4lUartSuspendSleep == NULL || Sam4lUartSuspendSleep());

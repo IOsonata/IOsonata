@@ -13,6 +13,7 @@ static Bpm s_Bpm;
 static Bscif s_Bscif;
 static Eic s_Eic;
 static Ast s_Ast;
+static Pdca s_Pdca;
 static std::jmp_buf s_Off;
 PowerTestScb g_PowerTestScb;
 uint32_t g_PowerTestMask;
@@ -22,6 +23,7 @@ static bool s_DeepSleep;
 static bool s_WaitSleep;
 static bool s_TestSleep;
 static unsigned s_SleepCount;
+static uint32_t s_TimerBusyMask;
 void PowerTestWfi(void)
 {
 	if (!s_TestSleep)
@@ -47,6 +49,8 @@ void PowerTestWfi(void)
 #undef SAM4L_AST
 #define SAM4L_AST (&s_Ast)
 #undef SAM4L_EIC
+#undef SAM4L_PDCA
+#define SAM4L_PDCA (&s_Pdca)
 #define SAM4L_PM (&s_Pm)
 #define SAM4L_BPM (&s_Bpm)
 #define SAM4L_BSCIF (&s_Bscif)
@@ -55,6 +59,11 @@ void PowerTestWfi(void)
 
 // The host register model retains the normal CPU rate across sleep.
 uint32_t SystemCoreClockGet(void) { return 12000000U; }
+
+bool Sam4lTimerClockBusy(uint32_t ClockMask)
+{
+	return (ClockMask & s_TimerBusyMask) != 0U;
+}
 
 int main(void)
 {
@@ -186,6 +195,44 @@ int main(void)
 			assert(s_Bpm.BPM_PMCON == saved);
 		}
 	}
+	// Shared DMA and running high-frequency timers must prevent RETENTION.
+	// AST is allowed to keep running for the existing wake tests above.
+	s_Pm.PM_AWEN = 0U;
+	s_Eic.EIC_CTRL = 2U;
+	s_Pm.PM_PBDMASK = 0U;
+	s_WaitSleep = false;
+	s_Pm.PM_HSBMASK = PM_HSBMASK_PDCA;
+	s_Pm.PM_PBBMASK = 0U;
+	unsigned before = s_SleepCount;
+	SystemSleep();
+	assert(s_SleepCount == before);
+	assert(s_Pm.PM_PBDMASK == 0U);
+
+	s_Pm.PM_HSBMASK = 0U;
+	s_Pm.PM_PBBMASK = PM_PBBMASK_PDCA;
+	SystemSleep();
+	assert(s_SleepCount == before);
+
+	s_Pm.PM_HSBMASK = PM_HSBMASK_PDCA;
+	s_Pdca.PDCA_CHANNEL[5].PDCA_SR = PDCA_SR_TEN;
+	SystemSleep();
+	assert(s_SleepCount == before);
+	assert(s_Pdca.PDCA_CHANNEL[5].PDCA_SR == PDCA_SR_TEN);
+	s_Pdca.PDCA_CHANNEL[5].PDCA_SR = 0U;
+	SystemSleep();
+	assert(s_SleepCount == before + 1U);
+	s_Pm.PM_HSBMASK = 0U;
+	s_Pm.PM_PBBMASK = 0U;
+
+	s_Pm.PM_PBAMASK = PM_PBAMASK_TC0;
+	s_TimerBusyMask = PM_PBAMASK_TC0;
+	before = s_SleepCount;
+	SystemSleep();
+	assert(s_SleepCount == before);
+	s_TimerBusyMask = 0U;
+	SystemSleep();
+	assert(s_SleepCount == before + 1U);
+	s_Pm.PM_PBAMASK = 0U;
 	s_Pm.PM_PBDMASK = 0;
 	s_Pm.PM_AWEN = 0;
 	s_Eic.EIC_CTRL = 0;
@@ -193,7 +240,7 @@ int main(void)
 
 	s_Bscif.BSCIF_PCLKSR = 0;
 	SystemSleep();
-	assert(s_SleepCount == 11);
+	assert(s_SleepCount == 13);
 	assert(s_Pm.PM_PBDMASK == 0);
 	assert(s_Bpm.BPM_PMCON == saved);
 	s_TestSleep = false;
@@ -207,5 +254,5 @@ int main(void)
 	assert(s_Bpm.BPM_UNLOCK == (BPM_UNLOCK_KEY(0xaa) | BPM_UNLOCK_ADDR(0x1c)));
 	assert(g_PowerTestScb.SCR & SCB_SCR_SLEEPDEEP_Msk);
 	assert(g_PowerTestMask == 1);
-	std::puts("SAM4L reset, backup registers, wake pins, SLEEP0, WAIT, RETENTION and Backup entry PASS");
+	std::puts("SAM4L reset, backup registers, wake pins, PDCA/timer sleep refusal, SLEEP0, WAIT, RETENTION and Backup entry PASS");
 }

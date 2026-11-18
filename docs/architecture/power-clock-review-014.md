@@ -287,3 +287,24 @@ The existing SAMD host Standby fixture now covers a DMAC refusal and
 requires WFI not to execute on refusal; the compile script also
 includes dmac_samd.c. These checks are not target build or hardware
 validation.
+
+## SAM4L DMA and high-frequency timer sleep check
+
+The SAM4L system now checks the shared PDCA bus gates and all 16
+PDCA channel transfer-enable bits before entering deep resumable
+sleep. If only one PDCA bus gate is on, it refuses sleep because the
+channel registers cannot be read safely. This does not cancel a DMA
+transfer or change any driver's channel ownership. An enabled bus
+with no transferring channels is permitted.
+
+The existing SAM4L Timer implementation exposes Sam4lTimerClockBusy,
+which SystemSleep now reuses for TC0/TC1 when their module clock gates
+are enabled. A running or unhealthy high-frequency timer prevents
+deep sleep. The 32 kHz AST timer is deliberately excluded because
+it is an intended wake source and its enabled state is preserved.
+
+The SAM4L host register test now includes mismatched PDCA clock
+gates, an active PDCA channel, and a running TC0 refusal, followed
+by successful sleep when these resources are idle. This is source
+and register-model coverage only. Target compilation, timer
+continuity, DMA behavior and power consumption remain unverified.
