@@ -171,10 +171,15 @@ static int Transfer(DevIntrf_t *, const uint8_t *p, int n)
 }
 
 
-static void Abort(DevIntrf_t *)
+static void Abort(DevIntrf_t *pDev)
 {
-	pendingData = nullptr;
-	pendingLen = 0;
+	// Model a reset that has stopped DMA before completing the transfer.
+	if (pendingData != nullptr)
+	{
+		pendingData = nullptr;
+		pendingLen = 0;
+		DeviceIntrfTxComplete(pDev);
+	}
 	aborts++;
 }
 
