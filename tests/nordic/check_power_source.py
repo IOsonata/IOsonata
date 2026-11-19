@@ -77,6 +77,21 @@ class NordicPowerSource(unittest.TestCase):
                      "exemples/PowerOffDemo/src/board.h").read_text()
             self.assertIn("#define POWER_DEMO_UART_OFF\t1", board)
 
+    def test_nrf52_uses_microchip_generic_resume_test(self):
+        source = self.power52
+        sleep = function(source, "void SystemSleep(void)", "void SystemPowerOff(void)")
+        wake = function(source, "bool SystemWakePin(", "int SystemRetRegCount(")
+        self.assertIn("IOPinAllocateInterrupt(2,", sleep)
+        self.assertIn("IOPinDisableInterrupt(wakeIrq)", sleep)
+        self.assertIn("s_SysPwrSleepSense", sleep)
+        self.assertIn("s_SysPwrSleepSense = (IOPINSENSE)Sense;", wake)
+        for mcu in ("nRF52832", "nRF52840"):
+            board = (ROOT / "ARM/Nordic/nRF52" / mcu /
+                     "exemples/PowerOffDemo/src/board.h").read_text()
+            self.assertIn("#define POWER_DEMO_RESUME_WAKE\t1", board)
+            self.assertIn("#define POWER_DEMO_STANDBY_RAM_TEST\t1", board)
+            self.assertNotIn("POWER_DEMO_NRF52_SLEEP_TEST", board)
+
     def test_nrf54l_off_checks_clock_owner(self):
         off = function(self.power, "void SystemPowerOff(void)", "bool SystemWakePin(")
         self.assertLess(off.index("nRFxClockPrepareSystemOff()"),
