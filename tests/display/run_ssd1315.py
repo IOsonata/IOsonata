@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the production SSD1315 driver over a modeled SPI controller."""
 import os
+import platform
 from pathlib import Path
 import subprocess
 import tempfile
@@ -33,6 +34,13 @@ if CLANG:
             break
     if not VLA_FLAGS:
         raise SystemExit('Cannot determine the Clang C++ VLA warning option')
+
+# Older Apple Clang does not recognize every GCC warning spelling.
+# Probe the optional suppression rather than masking unknown-warning errors.
+UNUSED_SET_FLAGS = ['-Wno-unused-but-set-variable'] if supports(
+    [CPP_STD, '-Werror', '-Wno-unused-but-set-variable']) else []
+GC_LINK_FLAGS = ['-Wl,-dead_strip'] if platform.system() == 'Darwin' else [
+    '-Wl,--gc-sections']
 
 with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
     for opt in ('-O0', '-Os'):
@@ -71,11 +79,11 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                            'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
                            'src/device.cpp', 'src/device_intrf.cpp']
         subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
-                             '-Wno-unused-but-set-variable',
+                             *UNUSED_SET_FLAGS,
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/LCDConsoleDisplayDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in console_sources] + fonts +
                        ['-o', str(console)], check=True)
         subprocess.run([str(console)], check=True)
@@ -87,7 +95,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/GfxDisplayDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in gfx_sources] + fonts +
                        ['-o', str(gfx)], check=True)
         subprocess.run([str(gfx)], check=True)
@@ -99,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/JoystickMenuDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in menu_sources] + fonts +
                        ['-o', str(menu)], check=True)
         subprocess.run([str(menu)], check=True)
@@ -116,7 +124,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-unused-parameter', '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/BleScanDisplayDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in scan_sources] + fonts + [str(fifo)] +
                        ['-o', str(scan)], check=True)
         subprocess.run([str(scan)], check=True)
@@ -130,10 +138,10 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-DBLE_SECURITY_EXCHG=(BTAPP_SECEXCHG_DISPLAY|BTAPP_SECEXCHG_YESNO)',
                              '-ffunction-sections', '-fdata-sections',
                              '-Wno-unused-parameter', '-Wno-unused-variable',
-                             '-Wno-unused-but-set-variable', '-Wno-missing-field-initializers',
+                             *UNUSED_SET_FLAGS, '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/BleStatusDisplayDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in status_sources] + fonts + [str(fifo)] +
                        ['-o', str(status)], check=True)
         subprocess.run([str(status)], check=True)
@@ -144,7 +152,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/StopwatchDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in stopwatch_sources] + fonts +
                        ['-o', str(stopwatch)], check=True)
         subprocess.run([str(stopwatch)], check=True)
@@ -157,7 +165,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/CountdownTimerDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in countdown_sources] + fonts +
                        ['-o', str(countdown)], check=True)
         subprocess.run([str(countdown)], check=True)
@@ -170,7 +178,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/PongGame/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in pong_sources] + fonts +
                        ['-o', str(pong)], check=True)
         subprocess.run([str(pong)], check=True)
