@@ -549,22 +549,25 @@ DEVINTRF_INLINE void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
  * @return 	true - Success\n
  * 			false - failed
  */
-DEVINTRF_INLINE bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
+DEVINTRF_INLINE bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
+{
 	bool retval;
 
-    if (atomic_flag_test_and_set(&pDev->bBusy))
-        return false;
+	if (atomic_flag_test_and_set(&pDev->bBusy))
+	{
+		return false;
+	}
 
-	atomic_init(&pDev->TxReadState, 0);
-    retval = pDev->StartTx(pDev, DevAddr);
+	atomic_store(&pDev->TxReadState, 0);
+	retval = pDev->StartTx(pDev, DevAddr);
 
-    // In case of returned false, app would not call Stop to release busy flag
-    // so we need to do that here before returning
-    if (retval == false) {
-    	atomic_flag_clear(&pDev->bBusy);
-    }
+	// StartTx failure does not have a matching StopTx to release bBusy.
+	if (retval == false)
+	{
+		atomic_flag_clear(&pDev->bBusy);
+	}
 
-    return retval;
+	return retval;
 }
 
 /**
