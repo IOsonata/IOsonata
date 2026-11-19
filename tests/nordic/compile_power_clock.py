@@ -50,6 +50,8 @@ def main():
 		help="SoftDevice application sdk_config.h; default uses the SDK5 UART example per chip")
 	parser.add_argument("--target", action="append",
 		help="restrict to a target label (repeatable)")
+	parser.add_argument("--with-i2c", action="store_true",
+		help="also compile the changed Nordic TWI/TWIM/TWIS driver")
 	args = parser.parse_args()
 
 	compiler = shutil.which(args.compiler)
@@ -94,6 +96,9 @@ def main():
 	for label, chip, cpu, family, stack in TARGETS:
 		if args.target and label not in args.target:
 			continue
+		active_sources = sources[family]
+		if args.with_i2c:
+			active_sources += ("ARM/Nordic/src/i2c_nrfx.cpp",)
 		for opt in ("-O0", "-Os"):
 			base = [compiler, "-std=gnu++23", "-fno-exceptions",
 				"-fno-rtti", "-fsyntax-only", "-Wall", "-Wextra",
@@ -141,7 +146,7 @@ def main():
 			if stack == "sdc":
 				base.append("-DNRFXLIB_SDC")
 			base += ["-I" + str(path) for path in includes if path.is_dir()]
-			for source in sources[family]:
+			for source in active_sources:
 				file = ROOT / source
 				flags = list(base)
 				if file.suffix == ".c":
