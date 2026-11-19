@@ -1273,10 +1273,9 @@ static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 		dev->Op = op;
 		if (op == SAM4L_I2C_OP_MASTER_TX && dev->pI2cDev->DevIntrf.bNoStop)
 		{
-			DevIntrf_t *intrf = &dev->pI2cDev->DevIntrf;
 			dev->Op = SAM4L_I2C_OP_NONE;
-			atomic_store(&intrf->bNoStop, false);
-			DeviceIntrfTxComplete(intrf);
+			atomic_store(&dev->pI2cDev->DevIntrf.bNoStop, false);
+			DeviceIntrfTxComplete(&dev->pI2cDev->DevIntrf);
 			return;
 		}
 		Sam4lI2CMasterAsyncComplete(dev);
