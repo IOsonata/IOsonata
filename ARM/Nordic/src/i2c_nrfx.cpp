@@ -417,7 +417,7 @@ void nRFxI2CEnable(DevIntrf_t * const pDev)
     {
 		if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 		{
-			dev->pDmaReg->ENABLE = (TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos);
+			dev->pDmaSReg->ENABLE = (TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos);
 		}
 		else
 		{
