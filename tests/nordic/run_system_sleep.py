@@ -128,7 +128,11 @@ int main(void)
 	g_Scb.SCR = 0x106U;
 	SystemSleep();
 	assert(s_Wfi == 0U && s_SdWait == 1U);
+#ifdef NRF52_SLEEP_MODEL
+	assert(s_Disable == 2U && s_Enable == 2U && s_Mask == 0U);
+#else
 	assert(s_Disable == 0U && s_Enable == 0U && s_Mask == 0U);
+#endif
 	assert(g_Scb.SCR == 0x106U);
 #endif
 #ifdef NRF52_SLEEP_MODEL
@@ -146,6 +150,17 @@ int main(void)
 	assert(s_Wfi == 2U && s_IrqAllocated == 2 && s_IrqReleased == 2);
 	assert(s_Disable == 2U && s_Enable == 2U && s_Mask == 0U);
 	assert(g_Scb.SCR == 0x106U);
+#ifdef SOFTDEVICE_PRESENT
+	s_SdOn = true;
+	s_AllowIrq = true;
+	s_IrqAllocated = s_IrqReleased = 0;
+	s_Disable = s_Enable = s_Wfi = s_SdWait = 0U;
+	SystemSleep();
+	assert(s_SdWait == 1U && s_Wfi == 0U);
+	assert(s_IrqAllocated == 1 && s_IrqReleased == 1);
+	assert(s_Disable == 2U && s_Enable == 2U && s_Mask == 0U);
+	s_SdOn = false;
+#endif
 	s_AllowIrq = false;
 	SystemSleep();
 	assert(s_Wfi == 2U && s_IrqAllocated == 2 && s_IrqReleased == 2);
