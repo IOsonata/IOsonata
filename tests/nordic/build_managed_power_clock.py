@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Clean-build existing Nordic Eclipse CDT libraries and power/clock demos.
+"""Clean-build existing Eclipse CDT libraries and power/clock demos.
 
 Each target receives its own temporary Eclipse workspace because the demo
 projects have identical names across MCU families. The project files and
@@ -25,6 +25,8 @@ TARGETS = {
 	"nrf54lm20": "ARM/Nordic/nRF54/nRF54LM20x",
 	"nrf9160": "ARM/Nordic/nRF91/nRF9160",
 	"nrf91x1": "ARM/Nordic/nRF91/nRF91x1",
+	"sam4lc": "ARM/Microchip/SAM4L/SAM4LCxC",
+	"sam4ls": "ARM/Microchip/SAM4L/SAM4LSxC",
 }
 DEMOS = ("ClockDemo", "PowerOffDemo")
 CONFIGS = ("Debug", "Release")
@@ -209,7 +211,7 @@ def main():
 				print(target, name, config, "PASS" if status == 0 else "FAIL")
 	operation = "project discovery" if args.check_only else (
 		"existing log audit" if args.recheck_logs else "builds")
-	print("Nordic managed CDT", operation + ":", passed, "PASS,",
+	print("IOsonata managed CDT", operation + ":", passed, "PASS,",
 		failures, "FAIL,", skipped, "SKIPPED")
 	if not args.check_only:
 		print("Logs:", logdir)
