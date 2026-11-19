@@ -223,7 +223,7 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 					if (atomic_compare_exchange_strong(&pDev->TxReadState,
 						&expected, DEVINTRF_READ_ABANDONED))
 					{
-						return -1;
+						return 0;
 					}
 				}
 
@@ -237,7 +237,7 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 						atomic_store(&pDev->bNoStop, false);
 						DeviceIntrfStopTx(pDev);
 					}
-					return -1;
+					return 0;
 				}
 			}
 			else if (count == 0 ||
@@ -251,7 +251,7 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 					// Preserve the existing retry policy for zero bytes.
 					continue;
 				}
-				return -1;
+				return 0;
 			}
 
 			atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
@@ -263,7 +263,7 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 		{
 			atomic_store(&pDev->bNoStop, false);
 			DeviceIntrfStopTx(pDev);
-			return -1;
+			return 0;
 		}
 
 		count = pDev->RxData(pDev, pRxBuff, RxLen);
