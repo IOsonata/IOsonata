@@ -505,7 +505,7 @@ int main()
 		spi.DevIntrf.MaxRetry = 0;
 		afterMask = SpiStop;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
-			receive, sizeof(receive)) == -1);
+			receive, sizeof(receive)) == 0);
 		CHECK(timedout == 1 && completed == 0 && !Busy(&spi.DevIntrf));
 		CHECK(spiReg.RxDma.MAXCNT == 0 && !g_nRFxSPIDev[0].bCmdFailed);
 		SpiReceive();
@@ -517,7 +517,7 @@ int main()
 		afterMask = SpiStop;
 		replaceTimeout = true;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
-			receive, sizeof(receive)) == -1);
+			receive, sizeof(receive)) == 0);
 		CHECK(timedout == 1 && replacementResult == 0 && !Busy(&spi.DevIntrf));
 		CHECK(spiReg.RxDma.MAXCNT == 0 && !g_nRFxSPIDev[0].bCmdFailed);
 		SpiReceive();
@@ -528,7 +528,7 @@ int main()
 		spi.DevIntrf.MaxRetry = 0;
 		replaceTimeout = true;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
-			receive, sizeof(receive)) == -1);
+			receive, sizeof(receive)) == 0);
 		CHECK(timedout == 0 && d.bTxAbort && d.bCmdFailed && Busy(&spi.DevIntrf));
 		CHECK(replacementResult == -2 && spiReg.RxDma.MAXCNT == 0);
 		SpiStop();
@@ -541,7 +541,7 @@ int main()
 		Init(dma);
 		spi.DevIntrf.MaxRetry = 0;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
-			receive, sizeof(receive)) == -1);
+			receive, sizeof(receive)) == 0);
 		CHECK(timedout == 0 && d.bTxAbort && d.bCmdFailed && Busy(&spi.DevIntrf));
 		SpiStop();
 		CHECK(timedout == 1 && !Busy(&spi.DevIntrf));
