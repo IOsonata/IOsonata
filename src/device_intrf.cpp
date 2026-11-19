@@ -170,10 +170,13 @@ bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout)
 }
 
 int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
-                 	uint8_t *pRxBuff, int RxLen)
+				 uint8_t *pRxBuff, int RxLen)
 {
 	int count = 0;
 	int nrtry = pDev->MaxRetry;
+	int state;
+	int expected;
+	bool ready;
 
 	if (pRxBuff == NULL || RxLen <= 0)
 	{
@@ -181,60 +184,89 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 	}
 
 	do {
-		if (DeviceIntrfStartTx(pDev, DevAddr))
+		if (!DeviceIntrfStartTx(pDev, DevAddr))
 		{
-			if (pAdCmd)
-            {
-            	pDev->bNoStop = true;
-            	if (pDev->TxSrData)
-            	{
-            		count = pDev->TxSrData(pDev, pAdCmd, AdCmdLen);
-            	}
-            	else
-            	{
-            		count = pDev->TxData(pDev, pAdCmd, AdCmdLen);
-            	}
+			continue;
+		}
 
-				if (count < 0)
+		if (pAdCmd != NULL && AdCmdLen > 0)
+		{
+			atomic_store(&pDev->bNoStop, true);
+			atomic_store(&pDev->TxReadState, DEVINTRF_READ_WAITING);
+
+			if (pDev->TxSrData != NULL)
+			{
+				count = pDev->TxSrData(pDev, pAdCmd, AdCmdLen);
+			}
+			else
+			{
+				count = pDev->TxData(pDev, pAdCmd, AdCmdLen);
+			}
+
+			if (count < 0)
+			{
+				ready = DeviceIntrfWaitTxComplete(pDev, 1000000);
+
+				// Claim the transfer if it has completed. Otherwise mark
+				// it abandoned so the final IRQ releases the bus.
+				for (;;)
 				{
-					if (!DeviceIntrfWaitTxComplete(pDev, 1000000))
+					state = atomic_load(&pDev->TxReadState);
+					if (state != DEVINTRF_READ_WAITING &&
+						state != DEVINTRF_READ_COMPLETING)
 					{
-						// The IRQ/DMA transfer may still own the bus.
-						// Do not start RX or release its busy flag.
-						return -1;
+						break;
 					}
-					if (!atomic_load(&pDev->bNoStop))
+					expected = state;
+					if (atomic_compare_exchange_strong(&pDev->TxReadState,
+						&expected, DEVINTRF_READ_ABANDONED))
 					{
-						// A released bus cannot be used for repeated-start RX.
 						return -1;
 					}
 				}
-				else if (count != AdCmdLen)
+
+				if (state != DEVINTRF_READ_READY || !ready ||
+					!atomic_load(&pDev->bNoStop))
 				{
-					pDev->bNoStop = false;
-					DeviceIntrfStopTx(pDev);
+					if (state == DEVINTRF_READ_READY ||
+						state == DEVINTRF_READ_FAILED)
+					{
+						atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
+						atomic_store(&pDev->bNoStop, false);
+						DeviceIntrfStopTx(pDev);
+					}
 					return -1;
 				}
-				pDev->bNoStop = false;
-            }
-			// This is the repeated-start phase of a command/read transfer.
-			if (!pDev->StartRx(pDev, DevAddr))
+			}
+			else if (count != AdCmdLen)
 			{
-				pDev->bNoStop = false;
+				atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
+				atomic_store(&pDev->bNoStop, false);
 				DeviceIntrfStopTx(pDev);
 				return -1;
 			}
-			count = pDev->RxData(pDev, pRxBuff, RxLen);
 
-        	if (count < 0)
-        	{
-        		break;
-        	}
-			DeviceIntrfStopRx(pDev);
-        }
-    } while (count <= 0 && nrtry-- > 0);
+			atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
+			atomic_store(&pDev->bNoStop, false);
+		}
 
-    return count;
+		// This is the repeated-start phase. The same owner keeps bBusy.
+		if (!pDev->StartRx(pDev, DevAddr))
+		{
+			atomic_store(&pDev->bNoStop, false);
+			DeviceIntrfStopTx(pDev);
+			return -1;
+		}
+
+		count = pDev->RxData(pDev, pRxBuff, RxLen);
+		if (count < 0)
+		{
+			break;
+		}
+		DeviceIntrfStopRx(pDev);
+	} while (count <= 0 && nrtry-- > 0);
+
+	return count;
 }
 
 int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
