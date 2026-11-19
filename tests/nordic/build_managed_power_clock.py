@@ -207,7 +207,9 @@ def main():
 				else:
 					passed += 1
 				print(target, name, config, "PASS" if status == 0 else "FAIL")
-	print("Nordic managed CDT", "project discovery:" if args.check_only else "builds:", passed, "PASS,",
+	operation = "project discovery" if args.check_only else (
+		"existing log audit" if args.recheck_logs else "builds")
+	print("Nordic managed CDT", operation + ":", passed, "PASS,",
 		failures, "FAIL,", skipped, "SKIPPED")
 	if not args.check_only:
 		print("Logs:", logdir)
