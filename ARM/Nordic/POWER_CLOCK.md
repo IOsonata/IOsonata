@@ -16,8 +16,10 @@ enter System OFF or take ownership of running peripherals. Across nRF52,
 nRF53, nRF54L and nRF91, `SystemWakePin()` configures GPIO SENSE for
 System OFF; `SystemSleep()` temporarily arms a GPIOTE interrupt for
 System ON GPIO wake. An enabled nRF52 SoftDevice uses
-`sd_app_evt_wait()`; otherwise the CPU uses WFI. SCR and interrupt-mask
-state are restored. GPIO wake on nRF53/nRF54L/nRF91 still requires a target
+`sd_app_evt_wait()` only when the caller permits normal IRQ delivery;
+if PRIMASK was set by the caller, the SoftDevice path refuses sleep rather
+than enabling interrupts behind the caller. Otherwise the CPU uses WFI.
+SCR and interrupt-mask state are restored. GPIO wake on nRF53/nRF54L/nRF91 still requires a target
 build and hardware test.
 
 System ON sleep differs from Microchip's deeper WAIT/Standby modes:
