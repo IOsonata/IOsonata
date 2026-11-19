@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Run Nordic caller-buffer checks with host register/task models.
 
-Only the function bodies are extracted; their source is not rewritten. The
-model checks IRQ ordering and buffer ownership, not MCU register layout or
+Production functions are extracted for host testing; 32-bit pointer-to-DMA
+casts are adapted to the host pointer width in the temporary test copy.
+The model checks IRQ ordering and buffer ownership, not MCU register layout or
 electrical bus behavior. build.py remains the Arm/MDK integration check.
 """
 from pathlib import Path
@@ -36,7 +37,7 @@ for text, names in [(i2c, [
     'nRFxI2CTxDataDMA', 'nRFxI2CTxData', 'nRFxI2CStopTx', 'nRFxI2CAsyncEnd',
     'nRFxI2CTwimIrq', 'nRFxI2CTwiIrq']), (spi, [
     'nRFxSPIDmaTimeout', 'nRFxSPIAsyncTxBuff', 'nRFxSPIAsyncTxWait',
-    'nRFxSPIStartRx', 'nRFxSPIRxData', 'nRFxSPIDmaNextBlock', 'nRFxSPIDmaEnd',
+    'nRFxSPIStartRx', 'nRFxSPIRxData', 'nRFxSPIRxBlockSize', 'nRFxSPIDmaNextBlock', 'nRFxSPIDmaEnd',
     'nRFxSPIRxDataDma', 'nRFxSPIStopRx', 'nRFxSPIStartTx', 'nRFxSPITxData',
     'nRFxSPITxDataDma', 'nRFxSPIStopTx', 'nRFxSPIAsyncTxAbortEnd', 'SPI_IRQHandler'])]:
     parts += [function(text, name) for name in names]
@@ -44,7 +45,7 @@ for text, names in [(i2c, [
 # Hardware DMA PTR is 32-bit. The host model stores a native pointer so
 # address comparisons work on 64-bit macOS and Linux. Only pointer-to-DMA
 # casts are adjusted in the generated host copy, never in production sources.
-parts = [re.sub(r'\\(uint32_t\\)(?=\\s*(?:&|pData\\b|pBuff\\b|pDev->TxBuf\\b|dev->TxBuf\\b))',
+parts = [re.sub(r'\(uint32_t\)(?=\s*(?:&|pData\b|pBuff\b|pDev->TxBuf\b|dev->TxBuf\b))',
                 '(uintptr_t)', part) for part in parts]
 
 with tempfile.TemporaryDirectory() as directory:
