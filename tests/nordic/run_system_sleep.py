@@ -133,6 +133,16 @@ int main(void)
 #endif
 	assert(g_Scb.SCR == 0x106U);
 #endif
+#if defined(SOFTDEVICE_PRESENT) && defined(NRF_GPIO_SLEEP_MODEL)
+	// A SoftDevice wait may not silently undo caller PRIMASK.
+	s_Ipsr = 0U;
+	s_SdOn = true;
+	s_Mask = 1U;
+	s_Disable = s_Enable = s_Wfi = s_SdWait = 0U;
+	SystemSleep();
+	assert(s_Disable == 1U && s_Enable == 1U);
+	assert(s_Mask == 1U && s_Wfi == 0U && s_SdWait == 0U);
+#endif
 #ifdef NRF_GPIO_SLEEP_MODEL
 	s_Ipsr = 0U;
 	s_SdOn = false;
