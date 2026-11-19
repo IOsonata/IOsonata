@@ -77,6 +77,22 @@ class NordicPowerSource(unittest.TestCase):
                      "exemples/PowerOffDemo/src/board.h").read_text()
             self.assertIn("#define POWER_DEMO_UART_OFF\t1", board)
 
+    def test_nrf52_resumable_timer_profile(self):
+        demo = (ROOT / "exemples/misc/power_off_demo.cpp").read_text()
+        sleep = demo.index("uint64_t period = nsTimerEnableTrigger(&s_WakeTimer")
+        enable = demo.index("started = period != 0U && TimerEnable(&s_WakeTimer)", sleep)
+        entry = demo.index("SystemSleep();", enable)
+        self.assertLess(sleep, enable)
+        self.assertLess(enable, entry)
+        self.assertIn("started && s_StandbyTimerWoke", demo)
+        for target in ("nRF52832", "nRF52840"):
+            board = (ROOT / "ARM/Nordic/nRF52" / target /
+                     "exemples/PowerOffDemo/src/board.h").read_text()
+            self.assertIn("#define POWER_DEMO_NRF52_SLEEP_TEST\t0", board)
+            self.assertIn("#define POWER_DEMO_TIMER_WAKE_MS\t\t1000", board)
+            self.assertIn("#define POWER_DEMO_STANDBY_RAM_TEST\t1", board)
+            self.assertIn("TimerGetLowFreqDevCount()", board)
+
     def test_nrf54l_off_checks_clock_owner(self):
         off = function(self.power, "void SystemPowerOff(void)", "bool SystemWakePin(")
         self.assertLess(off.index("nRFxClockPrepareSystemOff()"),
