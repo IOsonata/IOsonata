@@ -21,16 +21,16 @@ class Nrf52DelayCalibration(unittest.TestCase):
         cls.delay = DELAY.read_text(encoding="utf-8")
 
     def test_microsecond_calibration(self):
-        match = re.search(r"SystemMicroSecLoopCnt\\s*=\\s*"
-                          r"\\(\\(uint64_t\\)SystemCoreClock\\s*<<\\s*16\\)\\s*/\\s*"
-                          r"(\\d+)UL;", self.system)
+        match = re.search(r"SystemMicroSecLoopCnt\s*=\s*"
+                          r"\(\(uint64_t\)SystemCoreClock\s*<<\s*16\)\s*/\s*"
+                          r"(\d+)UL;", self.system)
         self.assertIsNotNone(match)
         self.assertEqual(int(match.group(1)), 13000000)
 
     def test_nanosecond_calibration(self):
-        match = re.search(r"SystemnsDelayFactor\\s*=\\s*"
-                          r"\\(\\(uint64_t\\)SystemCoreClock\\s*<<\\s*16\\)\\s*/\\s*"
-                          r"(\\d+)UL;", self.system)
+        match = re.search(r"SystemnsDelayFactor\s*=\s*"
+                          r"\(\(uint64_t\)SystemCoreClock\s*<<\s*16\)\s*/\s*"
+                          r"(\d+)UL;", self.system)
         self.assertIsNotNone(match)
         self.assertEqual(int(match.group(1)), 6000000)
 
