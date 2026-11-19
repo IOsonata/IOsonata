@@ -73,19 +73,60 @@ int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 	return count;
 }
 
+enum {
+	DEVINTRF_READ_IDLE = 0,
+	DEVINTRF_READ_WAITING,
+	DEVINTRF_READ_COMPLETING,
+	DEVINTRF_READ_READY,
+	DEVINTRF_READ_FAILED,
+	DEVINTRF_READ_ABANDONED
+};
+
 void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
 {
-	if (atomic_load(&pDev->bNoStop) == false)
+	int state = DEVINTRF_READ_WAITING;
+	int next;
+
+	if (atomic_compare_exchange_strong(&pDev->TxReadState, &state,
+		DEVINTRF_READ_COMPLETING))
 	{
-		// Finish driver cleanup before publishing completion, but keep
-		// bBusy held until that publication is visible.
+		// The command has finished, but its reader still owns bBusy.
+		// Publish readiness before giving the reader ownership of RX.
+		next = atomic_load(&pDev->bNoStop) ?
+			DEVINTRF_READ_READY : DEVINTRF_READ_FAILED;
+		atomic_store(&pDev->bTxReady, true);
+		state = DEVINTRF_READ_COMPLETING;
+		if (atomic_compare_exchange_strong(&pDev->TxReadState, &state, next))
+		{
+			return;
+		}
+	}
+
+	if (state == DEVINTRF_READ_ABANDONED)
+	{
+		// The reader timed out. Hardware completion owns final release.
+		atomic_store(&pDev->bNoStop, false);
+		pDev->StopTx(pDev);
+		atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
+		atomic_flag_clear(&pDev->bBusy);
+		return;
+	}
+
+	if (state != DEVINTRF_READ_IDLE)
+	{
+		// A previously reported command cannot be completed twice.
+		return;
+	}
+
+	if (!atomic_load(&pDev->bNoStop))
+	{
+		// Finish driver cleanup while the old owner still holds bBusy.
 		pDev->StopTx(pDev);
 		atomic_store(&pDev->bTxReady, true);
 		atomic_flag_clear(&pDev->bBusy);
 	}
 	else
 	{
-		// A command/read sequence retains the bus for its RX phase.
 		atomic_store(&pDev->bTxReady, true);
 	}
 }
