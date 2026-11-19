@@ -544,7 +544,6 @@ int main()
 		replaceTimeout = true;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
 			receive, sizeof(receive)) == -1);
-		auto &d = g_nRFxSPIDev[0];
 		CHECK(timedout == 0 && d.bTxAbort && d.bCmdFailed && Busy(&spi.DevIntrf));
 		CHECK(replacementResult == -2 && spiReg.RxDma.MAXCNT == 0);
 		SpiStop();
