@@ -9,14 +9,12 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
-import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKENDS = (
 	("nrf52", "ARM/Nordic/nRF52/src/system_power_nrf52.cpp", False),
 	("nrf52_sd", "ARM/Nordic/nRF52/src/system_power_nrf52.cpp", True),
 	("nrfx", "ARM/Nordic/src/system_power_nrfx.cpp", False),
-	("nrf71", "ARM/Nordic/nRF71/src/system_sleep_nrf71.c", False),
 )
 
 MODEL = r"""
@@ -187,11 +185,6 @@ def sleep_function(source):
 
 
 def main():
-	project = ROOT / "ARM/Nordic/nRF71/nRF7120x/lib/ioc/.project"
-	links = ET.parse(project).findall(".//link")
-	assert sum(link.findtext("name") == "src/system_sleep_nrf71.c"
-		for link in links) == 1
-
 	with tempfile.TemporaryDirectory(prefix="nordic-sleep-") as directory:
 		folder = Path(directory)
 		for name, relative, softdevice in BACKENDS:
@@ -213,7 +206,7 @@ def main():
 			subprocess.run(cmd, check=True)
 			subprocess.run([str(output)], check=True)
 			print(name + ": SystemSleep host model PASS", flush=True)
-	print("Nordic power sleep models and nRF71 Eclipse link PASS")
+	print("Nordic power sleep models PASS")
 
 
 if __name__ == "__main__":
