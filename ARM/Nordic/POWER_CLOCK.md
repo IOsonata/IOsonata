@@ -12,11 +12,21 @@ Board headers select the console and wake source; system power/clock code
 and peripheral drivers implement MCU-specific behavior.
 
 `SystemSleep()` provides interrupt-resumable System ON idle. It does not
-enter System OFF or take ownership of running peripherals. On nRF52,
-`SystemWakePin()` configures GPIO SENSE for System OFF; `SystemSleep()`
-temporarily arms a GPIOTE interrupt for System ON GPIO wake. An enabled
-SoftDevice uses `sd_app_evt_wait()`; otherwise the CPU uses WFI. SCR and
-interrupt-mask state are restored.
+enter System OFF or take ownership of running peripherals. Across nRF52,
+nRF53, nRF54L and nRF91, `SystemWakePin()` configures GPIO SENSE for
+System OFF; `SystemSleep()` temporarily arms a GPIOTE interrupt for
+System ON GPIO wake. An enabled nRF52 SoftDevice uses
+`sd_app_evt_wait()`; otherwise the CPU uses WFI. SCR and interrupt-mask
+state are restored. GPIO wake on nRF53/nRF54L/nRF91 still requires a target
+build and hardware test.
+
+System ON sleep differs from Microchip's deeper WAIT/Standby modes:
+Nordic peripherals and radio that remain enabled keep their clocks and
+may continue transfers or raise interrupts. Automatically disabling UART,
+I2C, SPI or USB here would break receive, slave and radio wake semantics;
+their device drivers continue to own their enabled state. The HAL must
+not silently call peripheral Disable/Enable (which may flush FIFOs).
+Deep peripheral suspension is not claimed by this System ON API.
 
 `SystemPowerOff()` enters reset-exit System OFF. The application or
 peripheral owner must finish incompatible UART, DMA, USB, radio and modem
@@ -69,6 +79,31 @@ behavior still requires configuration-specific validation.
 The generic PowerOffDemo timer fix starts its one-shot timer with
 `TimerEnable()` after arming the trigger and before `SystemSleep()`.
 It is common to every MCU and was validated by the nRF52 RTC wake run.
+
+## Peripheral ownership review
+
+- UART/UARTE: the existing `Enable()` path resets counters and flushes the TX
+  FIFO, so using `Disable()/Enable()` as a transparent sleep suspend would
+  lose application state. In System ON, UART remains owned and can continue
+  receiving if an appropriate interrupt is enabled. UART RX as a *new*
+  low-power wake source is not claimed; `UARTEnableWake` must report false
+  where no corresponding wake backend exists.
+- TWI/TWIM/TWIS: `Disable()` now selects the actual configured transport
+  (legacy TWI, TWIM master or TWIS slave), matching `Enable()`. A slave
+  cannot be disabled transparently while expected to detect an address.
+  System ON leaves I2C active; deeper sleep requires a separate driver
+  prepare/resume design and hardware verification.
+- SPI/SPIM/SPIS: an active master or a slave awaiting selection retains
+  driver ownership in System ON. Existing Enable/Disable cannot be used
+  blindly for low-power suspend without transfer-state and PEI checks.
+- USB and radio: active sessions retain their peripheral/clock owners in
+  System ON. A radio stack controls its own timing; the nRF52 SoftDevice
+  uses `sd_app_evt_wait()` for application wake filtering.
+
+This behavior is compatible with the generic application API but is **not**
+equivalent to SAM4L WAIT/RETENTION or SAMD Standby power-state selection.
+Neither low-power current nor seamless suspension of these active Nordic
+transports has been validated. Do not report those modes as completed.
 
 ## Outstanding verification
 
