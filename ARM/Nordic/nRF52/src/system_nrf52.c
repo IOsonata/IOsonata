@@ -152,8 +152,12 @@ uint32_t SystemCoreClockGet(void)
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	// Cortex-M4 with this target's instruction fetch: the long-loop body
+	// takes 13 CPU cycles, the short-loop body takes 6 CPU cycles.
+	// ClockDemo measured 203250 us and 500294 us for 250 ms requests
+	// with the previous 16/3-cycle factors, respectively.
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 13000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 6000000UL;
 }
 
 void SystemInit(void)
