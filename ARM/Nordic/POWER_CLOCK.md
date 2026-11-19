@@ -128,6 +128,15 @@ python3 tests/nordic/build_managed_power_clock.py \
 # --ide /Applications/IOcomposer.app/Contents/MacOS/iocomposerc
 ```
 
+The runner now checks the Eclipse output for compiler/linker, Make and
+headless-build error diagnostics in addition to the process exit status.
+It does not count a successful launcher exit as a successful build if
+the log contains an error. Verify the classifier independently with:
+
+```sh
+python3 tests/nordic/test_build_managed_power_clock.py
+```
+
 The build uses the installed Eclipse CDT managed-build extension and
 the project's existing external toolchain and libraries. Logs are written
 to `tests/nordic/build_logs`. A linked TaktOS archive or SDK not
