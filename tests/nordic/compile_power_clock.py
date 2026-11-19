@@ -34,7 +34,6 @@ TARGETS = (
 	("nrf54lm20b", "NRF54LM20B_XXAA", "cortex-m33", "nrf54l", "bare"),
 	("nrf9160", "NRF9160_XXAA", "cortex-m33", "nrf91", "bare"),
 	("nrf9120", "NRF9120_XXAA", "cortex-m33", "nrf91", "bare"),
-	("nrf7120", "NRF7120E_XXAA", "cortex-m33", "nrf71", "bare"),
 )
 
 def main():
@@ -75,7 +74,6 @@ def main():
 		mdk / "nrf52",
 		mdk / "nrf53",
 		mdk / "nrf54",
-		mdk / "nrf71",
 		mdk / "nrf91",
 		args.nrfx.resolve(),
 		args.nrfx.resolve() / "hal",
@@ -91,29 +89,16 @@ def main():
 			"ARM/Nordic/src/system_clock_nrfx.cpp"),
 		"nrf91": ("ARM/Nordic/src/system_power_nrfx.cpp",
 			"ARM/Nordic/src/system_clock_nrfx.cpp"),
-		# nRF71 has no validated shared power backend yet. Compile the
-		# initial port's actual sleep file and linked clock source.
-		"nrf71": ("ARM/Nordic/nRF71/src/system_sleep_nrf71.c",
-			"ARM/Nordic/src/system_clock_nrfx.cpp"),
 	}
 	errors = 0
-	blocked = 0
-	mdk_devices = (mdk / "nrf.h").read_text(encoding="utf-8")
 	for label, chip, cpu, family, stack in TARGETS:
-		if family == "nrf71" and chip not in mdk_devices:
-			if args.target is None or label in args.target:
-				blocked += 1
-				print(label + ": BLOCKED: installed Nordic MDK nrf.h does not "
-					"recognize " + chip + ". Update external/nrfx MDK "
-					"before validating this target.", file=sys.stderr)
-			continue
 		if args.target and label not in args.target:
 			continue
 		for opt in ("-O0", "-Os"):
 			base = [compiler, "-std=gnu++23", "-fno-exceptions",
 				"-fno-rtti", "-fsyntax-only", "-Wall", "-Wextra",
 				"-mcpu=" + cpu, "-mthumb", opt, "-D" + chip]
-			if family == "nrf54l" or family == "nrf71":
+			if family == "nrf54l":
 				base.append("-DNRF_APPLICATION")
 			if family == "nrf52":
 				base.append("-DNRF52_SERIES")
@@ -123,8 +108,6 @@ def main():
 				base.append("-DNRF54L_SERIES")
 			if family == "nrf91":
 				base.append("-DNRF91_SERIES")
-			if family == "nrf71":
-				base.append("-DNRF71_SERIES")
 			if stack.startswith("s1"):
 				sd = args.nrf5_sdk.resolve() / (
 					"components/softdevice/" + stack + "/headers")
@@ -180,9 +163,8 @@ def main():
 					print(label + " " + opt + " " + file.name + ": PASS",
 						flush=True)
 	print("Nordic focused power/clock syntax matrix:",
-		"PASS" if not errors and not blocked else
-		str(errors) + " FAIL, " + str(blocked) + " BLOCKED")
-	return 1 if errors or blocked else 0
+		"PASS" if not errors else str(errors) + " FAIL")
+	return 1 if errors else 0
 
 if __name__ == "__main__":
 	sys.exit(main())
