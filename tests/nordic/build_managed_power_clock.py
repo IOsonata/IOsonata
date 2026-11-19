@@ -77,9 +77,17 @@ BUILD_ERRORS = re.compile(
 )
 
 
-def log_error(logfile):
+def build_diagnostics(logfile):
+	matches = []
 	with logfile.open(encoding="utf-8", errors="replace") as input:
-		return any(BUILD_ERRORS.search(line) for line in input)
+		for lineno, line in enumerate(input, 1):
+			if BUILD_ERRORS.search(line):
+				matches.append((lineno, line.rstrip()))
+	return matches
+
+
+def log_error(logfile):
+	return len(build_diagnostics(logfile)) != 0
 
 
 def build(ide, workspace, logfile, args):
@@ -114,15 +122,17 @@ def main():
 		help="build managed library only, not ClockDemo or PowerOffDemo")
 	parser.add_argument("--check-only", action="store_true",
 		help="check project and Debug/Release configuration discovery without launching IDE")
+	parser.add_argument("--recheck-logs", action="store_true",
+		help="reclassify existing logs and print matching diagnostics without rebuilding")
 	args = parser.parse_args()
 	ide = None
-	if not args.check_only:
+	if not args.check_only and not args.recheck_logs:
 		try:
 			ide = find_ide(args.ide)
 		except (FileNotFoundError, ValueError) as error:
 			parser.error(str(error))
 	logdir = args.logs.expanduser().resolve()
-	if not args.check_only:
+	if not args.check_only and not args.recheck_logs:
 		logdir.mkdir(parents=True, exist_ok=True)
 	targets = args.target or ("nrf52832", "nrf52840")
 	failures = 0
@@ -151,6 +161,25 @@ def main():
 		if not projects:
 			print("FAIL no managed projects:", target)
 			failures += 1
+			continue
+		if args.recheck_logs:
+			for path, name, config in projects:
+				logfile = logdir / (target + "_" + name + "_" + config + ".log")
+				if not logfile.is_file():
+					print("MISSING LOG:", logfile)
+					failures += 1
+					continue
+				issues = build_diagnostics(logfile)
+				if issues:
+					print("LOG FLAGS:", target, name, config)
+					for lineno, line in issues[:20]:
+						print("  line", lineno, ":", line[:400])
+					if len(issues) > 20:
+						print("  ...", len(issues) - 20, "additional matching lines")
+					failures += 1
+				else:
+					print("LOG NO ERROR MATCH:", target, name, config)
+					passed += 1
 			continue
 		if args.check_only:
 			for path, name, config in projects:
