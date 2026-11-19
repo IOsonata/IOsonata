@@ -52,3 +52,17 @@ there is no UART output, first verify that both core images are flashed and
 that the application-core launcher actually ran. This test validates the
 network core's clock behavior; it does not independently validate application-
 core sleep or network-core system-power transitions.
+
+## PCA10121 runtime delay calibration (November 19, 2026)
+
+Hardware output showed all three clock-selection cycles PASS, with CPU 64 MHz
+and APB 16 MHz. The hardware timer measured `msDelay(250)` at 359899 us
+(FAIL) while `nsDelay(250000000)` measured 250380 us (PASS). The network-core
+microsecond loop calibration was changed from 16 to 23 estimated cycles per
+iteration in `lib/src/system_nrf5340_network.c`, leaving the nanosecond
+calibration unchanged. The change is based on one observed board measurement;
+**the recalibrated firmware has not been re-run on hardware**. Rebuild the
+Network-core IOsonata library and ClockDemo, flash the Network core, then
+repeat the same 250 ms timer test. Use
+`python3 tests/nordic/check_nrf5340_network_delay.py` for the source-level
+calibration check. Do not count the hardware delay test PASS until measured.
