@@ -243,7 +243,7 @@ static bool nRFxSPIWaitRX(nRFSpiDev_t *, uint32_t)
 #include "driver_lifetime.inc"
 
 static int completed, timedout, lastCount, txAttempts, replacementResult;
-static bool replaceTx, replaceTimeout, stopBeforeRx, stopOnRxUnlock;
+static bool replaceTx, replaceTimeout;
 static int Event(DevIntrf_t *p, DEVINTRF_EVT evt, uint8_t *, int count)
 {
 	if (evt == DEVINTRF_EVT_COMPLETED)
@@ -267,25 +267,10 @@ static int Event(DevIntrf_t *p, DEVINTRF_EVT evt, uint8_t *, int count)
 	}
 	return 0;
 }
-static void SpiStop();
 static bool I2cStartTx(DevIntrf_t *p, uint32_t addr)
 {
 	txAttempts++;
 	return nRFxI2CStartTx(p, addr);
-}
-static bool SpiStartRx(DevIntrf_t *p, uint32_t addr)
-{
-	if (stopBeforeRx)
-	{
-		stopBeforeRx = false;
-		SpiStop();
-	}
-	if (stopOnRxUnlock)
-	{
-		stopOnRxUnlock = false;
-		afterMask = SpiStop;
-	}
-	return nRFxSPIStartRx(p, addr);
 }
 static bool Busy(DevIntrf_t *p)
 {
@@ -332,7 +317,7 @@ static void Init(bool dma)
 	i.RxData = dma ? nRFxI2CRxDataDMA : nRFxI2CRxData;
 	s.StartTx = nRFxSPIStartTx;
 	s.StopTx = nRFxSPIStopTx;
-	s.StartRx = SpiStartRx;
+	s.StartRx = nRFxSPIStartRx;
 	s.StopRx = nRFxSPIStopRx;
 	s.TxData = dma ? nRFxSPITxDataDma : nRFxSPITxData;
 	s.RxData = dma ? nRFxSPIRxDataDma : nRFxSPIRxData;
@@ -342,7 +327,7 @@ static void Init(bool dma)
 	replaceTx = false;
 	txAttempts = 0;
 	replacementResult = -2;
-	replaceTimeout = stopBeforeRx = stopOnRxUnlock = false;
+	replaceTimeout = false;
 	for (unsigned n = 0; n < sizeof(source); n++)
 	{
 		source[n] = (uint8_t)n;
