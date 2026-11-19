@@ -99,6 +99,11 @@ def main():
 		active_sources = sources[family]
 		if args.with_i2c:
 			active_sources += ("ARM/Nordic/src/i2c_nrfx.cpp",)
+			if label == "nrf52811":
+				# nRF52811 uses IRQ3 for TWI0/SPI1 and IRQ4 for SPI0.
+				# Compile all three paths to catch mismatched CMSIS names.
+				active_sources += ("ARM/Nordic/src/spi_nrfx.cpp",
+					"ARM/Nordic/src/shared_intrf_nrfx.cpp")
 		for opt in ("-O0", "-Os"):
 			base = [compiler, "-std=gnu++23", "-fno-exceptions",
 				"-fno-rtti", "-fsyntax-only", "-Wall", "-Wextra",
