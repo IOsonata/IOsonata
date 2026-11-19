@@ -58,6 +58,46 @@ bool SysPwrSdEnabled(void) { return s_SdOn; }
 uint32_t sd_app_evt_wait(void) { s_SdWait++; return 0U; }
 """
 
+
+NRF52_WAKE = r"""
+#include <stddef.h>
+typedef enum {
+	IOPINSENSE_DISABLE,
+	IOPINSENSE_LOW_TRANSITION,
+	IOPINSENSE_HIGH_TRANSITION
+} IOPINSENSE;
+static int s_SysPwrSleepPort = -1;
+static int s_SysPwrSleepPin = -1;
+static IOPINSENSE s_SysPwrSleepSense = IOPINSENSE_DISABLE;
+static int s_IrqAllocated;
+static int s_IrqReleased;
+static bool s_AllowIrq = true;
+static void SysPwrSleepWake(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+}
+int IOPinAllocateInterrupt(int Prio, int PortNo, int PinNo, IOPINSENSE Sense,
+	void (*Handler)(int, void *), void *pCtx)
+{
+	assert(s_Mask == 1U);
+	assert(Prio == 2 && PortNo == 0 && PinNo == 11);
+	assert(Sense == IOPINSENSE_LOW_TRANSITION && Handler != NULL);
+	(void)pCtx;
+	if (!s_AllowIrq)
+	{
+		return -1;
+	}
+	s_IrqAllocated++;
+	return 3;
+}
+void IOPinDisableInterrupt(int Chan)
+{
+	assert(s_Mask == 1U && Chan == 3);
+	s_IrqReleased++;
+}
+"""
+
 FIXTURE = r"""
 int main(void)
 {
@@ -91,6 +131,26 @@ int main(void)
 	assert(s_Disable == 0U && s_Enable == 0U && s_Mask == 0U);
 	assert(g_Scb.SCR == 0x106U);
 #endif
+#ifdef NRF52_SLEEP_MODEL
+	s_Ipsr = 0U;
+	s_SdOn = false;
+	s_Mask = 0U;
+	s_Disable = s_Enable = s_Wfi = s_SdWait = 0U;
+	s_IrqAllocated = s_IrqReleased = 0;
+	s_SysPwrSleepPort = 0;
+	s_SysPwrSleepPin = 11;
+	s_SysPwrSleepSense = IOPINSENSE_LOW_TRANSITION;
+	g_Scb.SCR = 0x106U;
+	SystemSleep();
+	SystemSleep();
+	assert(s_Wfi == 2U && s_IrqAllocated == 2 && s_IrqReleased == 2);
+	assert(s_Disable == 2U && s_Enable == 2U && s_Mask == 0U);
+	assert(g_Scb.SCR == 0x106U);
+	s_AllowIrq = false;
+	SystemSleep();
+	assert(s_Wfi == 2U && s_IrqAllocated == 2 && s_IrqReleased == 2);
+	assert(s_Disable == 3U && s_Enable == 3U);
+#endif
 	return 0;
 }
 """
@@ -120,12 +180,17 @@ def main():
 		folder = Path(directory)
 		for name, relative, softdevice in BACKENDS:
 			source = (ROOT / relative).read_text(encoding="utf-8")
-			body = MODEL + sleep_function(source) + FIXTURE
+			body = MODEL
+			if name.startswith("nrf52"):
+				body += NRF52_WAKE
+			body += sleep_function(source) + FIXTURE
 			test = folder / (name + ".cpp")
 			output = folder / name
 			test.write_text(body, encoding="utf-8")
 			cmd = [os.environ.get("CXX", "g++"), "-std=c++17",
 				"-Wall", "-Wextra", "-Werror", "-O2"]
+			if name.startswith("nrf52"):
+				cmd.append("-DNRF52_SLEEP_MODEL=1")
 			if softdevice:
 				cmd.append("-DSOFTDEVICE_PRESENT=1")
 			cmd += [str(test), "-o", str(output)]
