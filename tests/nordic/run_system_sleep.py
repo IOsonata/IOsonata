@@ -57,7 +57,7 @@ uint32_t sd_app_evt_wait(void) { s_SdWait++; return 0U; }
 """
 
 
-NRF52_WAKE = r"""
+NORDIC_GPIO_WAKE = r"""
 #include <stddef.h>
 typedef enum {
 	IOPINSENSE_DISABLE,
@@ -201,7 +201,7 @@ def main():
 			source = (ROOT / relative).read_text(encoding="utf-8")
 			body = MODEL
 			if name.startswith("nrf52") or name == "nrfx":
-				body += NRF52_WAKE
+				body += NORDIC_GPIO_WAKE
 			body += sleep_function(source) + FIXTURE
 			test = folder / (name + ".cpp")
 			output = folder / name
