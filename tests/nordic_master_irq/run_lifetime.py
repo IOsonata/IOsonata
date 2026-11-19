@@ -41,6 +41,12 @@ for text, names in [(i2c, [
     'nRFxSPITxDataDma', 'nRFxSPIStopTx', 'nRFxSPIAsyncTxAbortEnd', 'SPI_IRQHandler'])]:
     parts += [function(text, name) for name in names]
 
+# Hardware DMA PTR is 32-bit. The host model stores a native pointer so
+# address comparisons work on 64-bit macOS and Linux. Only pointer-to-DMA
+# casts are adjusted in the generated host copy, never in production sources.
+parts = [re.sub(r'\\(uint32_t\\)(?=\\s*(?:&|pData\\b|pBuff\\b|pDev->TxBuf\\b|dev->TxBuf\\b))',
+                '(uintptr_t)', part) for part in parts]
+
 with tempfile.TemporaryDirectory() as directory:
     tmp = Path(directory)
     (tmp / 'driver_lifetime.inc').write_text('\n'.join(parts))
@@ -48,7 +54,7 @@ with tempfile.TemporaryDirectory() as directory:
         for opt in ['-O0', '-O2']:
             binary = tmp / 'lifetime'
             command = [args.cxx, '-std=gnu++17', opt, '-g', '-fpermissive',
-                       '-fno-pie', '-no-pie', '-fsanitize=address,undefined',
+                       '-fno-pie', '-fsanitize=address,undefined',
                        '-fno-omit-frame-pointer', f'-DTEST_DMA_MAX={maximum}',
                        f'-DNRFX_I2C_TXBUF_SIZE={capacity}', '-I' + str(tmp),
                        '-I' + str(root / 'include'),
