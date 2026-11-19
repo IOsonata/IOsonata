@@ -1604,7 +1604,12 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
     if (inten != 0)
     {
+#if defined(NRF52811_XXAA)
+		// TWI0 uses the physical IRQ3 also used by SPI1 (slot 1).
+		SharedIntrfSetIrqHandler(1, &pDev->DevIntrf, I2C_IRQHandler);
+#else
     	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, I2C_IRQHandler);
+#endif
 
     	switch (pCfgData->DevNo)
     	{
