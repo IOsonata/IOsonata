@@ -65,6 +65,18 @@ class NordicPowerSource(unittest.TestCase):
         self.assertIn("__get_IPSR() != 0U", select)
         self.assertIn("nRFxClockSdEnabled() || nRFxMpslActive()", select)
 
+    def test_nrf52_demo_drains_console_before_system_off(self):
+        demo = (ROOT / "exemples/misc/power_off_demo.cpp").read_text()
+        self.assertIn("CFifoUsed(SysLogGet()->hFifo)", demo)
+        self.assertIn("CFifoUsed(pUart->hTxFifo)", demo)
+        self.assertIn("s_Uart.PowerOff();", demo)
+        self.assertLess(demo.index("s_Uart.PowerOff();"),
+                        demo.index("SystemPowerOff();", demo.index("s_Uart.PowerOff();")))
+        for target in ("nRF52832", "nRF52840"):
+            board = (ROOT / "ARM/Nordic/nRF52" / target /
+                     "exemples/PowerOffDemo/src/board.h").read_text()
+            self.assertIn("#define POWER_DEMO_UART_OFF\t1", board)
+
     def test_nrf54l_off_checks_clock_owner(self):
         off = function(self.power, "void SystemPowerOff(void)", "bool SystemWakePin(")
         self.assertLess(off.index("nRFxClockPrepareSystemOff()"),
