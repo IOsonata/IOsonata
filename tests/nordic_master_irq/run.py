@@ -297,7 +297,9 @@ if S[0] and CHIP.startswith('NRF52832'):
     # Command then one byte: the command uses the SPIM, the byte the SPI
     pending.clear(); sent.clear()
     call('init', 1, 0, 1, 1)
-    r = call_break('read_reg', (1, 1), 'DeviceIntrfWaitTxComplete', spi_finish)
+    # Finish the SPIM command while its driver-side wait is active.
+    # The one-byte RX then uses SPI to avoid nRF52832 anomaly 58.
+    r = call_break('read_reg', (1, 1), 'nRFxSPIAsyncTxWait', spi_finish)
     check(r == 1 and sent == [0xA5] and call('busy', 1) == 0, 'command then one byte', r, sent)
 active = None
 
