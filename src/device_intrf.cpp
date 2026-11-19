@@ -110,9 +110,15 @@ int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pBuf
 
 bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout)
 {
-	while (pDev->bTxReady == false && --Timeout > 0);
+	while (Timeout-- > 0)
+	{
+		if (atomic_load(&pDev->bTxReady))
+		{
+			return true;
+		}
+	}
 
-	return Timeout > 0;
+	return false;
 }
 
 int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
