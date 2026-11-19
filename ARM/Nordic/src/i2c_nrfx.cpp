@@ -1691,6 +1691,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 				NVIC_SetPriority(TWIM0_TWIS0_TWI0_IRQn, pCfgData->IntPrio);
 				NVIC_EnableIRQ(TWIM0_TWIS0_TWI0_IRQn);
 				break;
+#elif defined(NRF52811_XXAA)
+			// nRF52811 TWIM0/TWIS0/TWI0 share IRQ 3 with SPIM1.
+			case 0:
+				NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn);
+				NVIC_SetPriority(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn);
+				break;
 #elif defined(NRF52_SERIES)
     	    case 0:
 				NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
