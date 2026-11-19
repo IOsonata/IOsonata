@@ -1643,11 +1643,13 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
                 NVIC_SetPriority(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
 				break;
+#if NRFX_SPI_MAXDEV > 2
     	    case 2:
                 NVIC_ClearPendingIRQ(SPIM2_SPIS2_SPI2_IRQn);
                 NVIC_SetPriority(SPIM2_SPIS2_SPI2_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM2_SPIS2_SPI2_IRQn);
 				break;
+#endif
 #ifdef NRF52840_XXAA
     	    case 3:
                 NVIC_ClearPendingIRQ(SPIM3_IRQn);
@@ -1747,7 +1749,7 @@ extern "C" void SPIM0_SPIS0_SPI0_IRQHandler(void)
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_SPI0_IRQn);
 }
 #endif
-#if !defined(NRF52805_XXAA) && !defined(NRF52810_XXAA)
+#if NRFX_SPI_MAXDEV > 2
 extern "C" void SPIM2_SPIS2_SPI2_IRQHandler(void)
 {
 	SPI_IRQHandler(2, &g_nRFxSPIDev[2].pSpiDev->DevIntrf);
