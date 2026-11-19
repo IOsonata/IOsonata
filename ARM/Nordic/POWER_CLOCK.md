@@ -130,6 +130,21 @@ python3 tests/nordic/build_managed_power_clock.py \
 
 The runner now checks the Eclipse output for compiler/linker, Make and
 headless-build error diagnostics in addition to the process exit status.
+When a build reports `FAIL (exit 0)` despite a final zero-error
+Eclipse summary, the matched earlier log lines must be inspected before
+classifying it as a compiler failure. The runner can now audit existing
+logs without rebuilding:
+
+```sh
+python3 tests/nordic/build_managed_power_clock.py --recheck-logs \
+    --target nrf5340_net --target nrf54lm20
+```
+
+This prints exact matching log line numbers and text. Do not reclassify
+a build as PASS solely because its final summary reports zero errors if
+an earlier genuine compiler/linker diagnostic remains present.
+
+
 It does not count a successful launcher exit as a successful build if
 the log contains an error. Verify the classifier independently with:
 
