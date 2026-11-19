@@ -321,19 +321,10 @@ static void PowerDemoPut(const char *pText)
 	}
 }
 
-// In SAMD polling mode, Tx() may leave the last bytes in its FIFO.
-// Rx() services both FIFOs, so drain TX before shutting down SERCOM.
+// Allow the last polling UART transfer to finish before shutting down.
+// No application access to driver FIFOs or receive calls for TX progress.
 static void PowerDemoDrain(void)
 {
-	UARTDev_t *pUart;
-	uint8_t dummy;
-
-	pUart = (UARTDev_t *)s_Uart;
-	while (CFifoUsed(pUart->hTxFifo) != 0)
-	{
-		(void)s_Uart.Rx(&dummy, 1);
-	}
-	// FIFO empty means the last byte reached DATA, not that TX is complete.
 	msDelay(2);
 }
 
@@ -749,15 +740,8 @@ int main()
 #endif
 	// Allow the final UART record to finish before stopping the transport.
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
-	UARTDev_t *pUart = (UARTDev_t *)s_Uart;
-	uint8_t unused;
-
-	while (CFifoUsed(SysLogGet()->hFifo) != 0 || CFifoUsed(pUart->hTxFifo) != 0)
-	{
-		(void)SysLogFlush(SysLogGet());
-		(void)s_Uart.Rx(&unused, 1);
-	}
-	// Allow the last UART character to leave the shift register.
+	(void)SysLogFlush(SysLogGet());
+	// Allow the last polling UART transfer to finish before power off.
 	msDelay(2);
 	s_Uart.PowerOff();
 #else
