@@ -253,10 +253,8 @@ uint32_t SystemResetReason(void)
 	return s_SysPwrResetReason;
 }
 
-// System ON idle: peripherals and radio retain ownership of their clocks.
-// WFI resumes on a pending interrupt; do not select System OFF or gate clocks.
-// System ON idle: the existing peripheral and radio clocks remain owned.
-// Arm a GPIO IRQ only if the application configured a GPIO wake source.
+// System ON idle preserves peripheral and radio clock ownership.
+// Arm a GPIO interrupt only when the application configured a wake pin.
 void SystemSleep(void)
 {
 	uint32_t state;
