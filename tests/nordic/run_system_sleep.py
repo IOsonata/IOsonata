@@ -126,14 +126,14 @@ int main(void)
 	g_Scb.SCR = 0x106U;
 	SystemSleep();
 	assert(s_Wfi == 0U && s_SdWait == 1U);
-#ifdef NRF52_SLEEP_MODEL
+#ifdef NRF_GPIO_SLEEP_MODEL
 	assert(s_Disable == 2U && s_Enable == 2U && s_Mask == 0U);
 #else
 	assert(s_Disable == 0U && s_Enable == 0U && s_Mask == 0U);
 #endif
 	assert(g_Scb.SCR == 0x106U);
 #endif
-#ifdef NRF52_SLEEP_MODEL
+#ifdef NRF_GPIO_SLEEP_MODEL
 	s_Ipsr = 0U;
 	s_SdOn = false;
 	s_Mask = 0U;
@@ -190,7 +190,7 @@ def main():
 		for name, relative, softdevice in BACKENDS:
 			source = (ROOT / relative).read_text(encoding="utf-8")
 			body = MODEL
-			if name.startswith("nrf52"):
+			if name.startswith("nrf52") or name == "nrfx":
 				body += NRF52_WAKE
 			body += sleep_function(source) + FIXTURE
 			test = folder / (name + ".cpp")
@@ -198,8 +198,8 @@ def main():
 			test.write_text(body, encoding="utf-8")
 			cmd = [os.environ.get("CXX", "g++"), "-std=c++17",
 				"-Wall", "-Wextra", "-Werror", "-O2"]
-			if name.startswith("nrf52"):
-				cmd.append("-DNRF52_SLEEP_MODEL=1")
+			if name.startswith("nrf52") or name == "nrfx":
+				cmd.append("-DNRF_GPIO_SLEEP_MODEL=1")
 			if softdevice:
 				cmd.append("-DSOFTDEVICE_PRESENT=1")
 			cmd += [str(test), "-o", str(output)]
