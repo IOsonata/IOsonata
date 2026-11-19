@@ -508,15 +508,26 @@ static void Sam4lSpiFinish(Sam4lSpiDev_t *dev, bool Error)
 	if (Error)
 		Sam4lSpiConfigure(dev);
 	dev->Active = false;
-	intrf->bTxReady = true;
 	if (!async)
+	{
+		intrf->bTxReady = true;
 		return;
+	}
 
 	// The generic stop helpers own the busy flag. Release before callbacks.
 	if (read)
+	{
+		intrf->bTxReady = true;
 		DeviceIntrfStopRx(intrf);
+	}
 	else
+	{
+		if (Error)
+		{
+			atomic_store(&intrf->bNoStop, false);
+		}
 		DeviceIntrfTxComplete(intrf);
+	}
 	if (intrf->EvtCB != nullptr)
 		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, buffer, count);
 }
@@ -537,13 +548,22 @@ static void Sam4lSpiCancel(Sam4lSpiDev_t *dev)
 		const bool read = dev->pRx != nullptr;
 		dev->Active = false;
 		Sam4lSpiConfigure(dev);
-		intrf->bTxReady = true;
 		if (async)
 		{
 			if (read)
+			{
+				intrf->bTxReady = true;
 				DeviceIntrfStopRx(intrf);
+			}
 			else
-				DeviceIntrfStopTx(intrf);
+			{
+				atomic_store(&intrf->bNoStop, false);
+				DeviceIntrfTxComplete(intrf);
+			}
+		}
+		else
+		{
+			intrf->bTxReady = true;
 		}
 	}
 	NVIC_ClearPendingIRQ(SPI_IRQn);
