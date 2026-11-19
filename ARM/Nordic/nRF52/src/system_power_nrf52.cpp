@@ -61,6 +61,7 @@ SOFTWARE.
 
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
+#include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 
 #define SYS_PWR_NRF52_NB_RETREG		2
@@ -77,6 +78,17 @@ SOFTWARE.
 
 static bool s_bSysPwrResetRead = false;
 static uint32_t s_SysPwrResetReason = 0;
+
+static int s_SysPwrSleepPort = -1;
+static int s_SysPwrSleepPin = -1;
+static IOPINSENSE s_SysPwrSleepSense = IOPINSENSE_DISABLE;
+
+// A wake interrupt need only make WFI return.
+static void SysPwrSleepWake(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+}
 
 // sd_softdevice_is_enabled is an SVC that only a programmed SoftDevice
 // implements, so the image is looked for first: its magic number follows the
@@ -188,6 +200,7 @@ void SystemSleep(void)
 {
 	uint32_t state;
 	uint32_t scr;
+	int wakeIrq;
 
 	if (__get_IPSR() != 0U)
 	{
@@ -195,8 +208,6 @@ void SystemSleep(void)
 	}
 
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
-	// SoftDevice filters radio-only activity from application wakeups.
-	// Its event wait must run with normal interrupt delivery.
 	if (SysPwrSdEnabled())
 	{
 		(void)sd_app_evt_wait();
@@ -205,12 +216,29 @@ void SystemSleep(void)
 #endif
 
 	state = DisableInterrupt();
+	wakeIrq = -1;
+	if (s_SysPwrSleepSense != IOPINSENSE_DISABLE)
+	{
+		// GPIO DETECT alone wakes System OFF. System ON requires an IRQ.
+		wakeIrq = IOPinAllocateInterrupt(2, s_SysPwrSleepPort,
+			s_SysPwrSleepPin, s_SysPwrSleepSense,
+			SysPwrSleepWake, NULL);
+		if (wakeIrq < 0)
+		{
+			EnableInterrupt(state);
+			return;
+		}
+	}
 	scr = SCB->SCR;
 	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
 	__DSB();
 	__WFI();
 	__ISB();
 	SCB->SCR = scr;
+	if (wakeIrq >= 0)
+	{
+		IOPinDisableInterrupt(wakeIrq);
+	}
 	EnableInterrupt(state);
 }
 
@@ -274,9 +302,23 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	}
 #endif
 
-	// SENSE of the pin, its DETECT signal wakes the MCU from System OFF
+	// System OFF uses GPIO DETECT; System ON will arm a GPIOTE IRQ.
 	IOPinSetSense(PortNo, PinNo, (IOPINSENSE)Sense);
-
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		if (s_SysPwrSleepPort == PortNo && s_SysPwrSleepPin == PinNo)
+		{
+			s_SysPwrSleepSense = IOPINSENSE_DISABLE;
+			s_SysPwrSleepPort = -1;
+			s_SysPwrSleepPin = -1;
+		}
+	}
+	else
+	{
+		s_SysPwrSleepPort = PortNo;
+		s_SysPwrSleepPin = PinNo;
+		s_SysPwrSleepSense = (IOPINSENSE)Sense;
+	}
 	return true;
 }
 
