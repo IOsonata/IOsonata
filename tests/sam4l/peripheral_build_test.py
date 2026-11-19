@@ -28,6 +28,7 @@ common = [
     'src/CppRuntimeOverload.cpp', 'ARM/src/ResetEntry.c',
     'ARM/Microchip/SAM4L/src/vectors_sam4l.c',
     'ARM/Microchip/SAM4L/src/system_sam4l.c',
+    'ARM/Microchip/SAM4L/src/system_power_sam4l.cpp',
     'ARM/Microchip/SAM4L/src/iopincfg_sam4l.c',
     'src/cfifo.c', 'src/device_intrf.cpp', 'src/device.cpp',
     'src/coredev/uart.cpp', 'ARM/Microchip/SAM4L/src/uart_sam4l.cpp',
