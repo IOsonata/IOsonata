@@ -49,6 +49,16 @@ SOFTWARE.
 #define UART_TX_PIN			6
 #define UART_TX_PINOP		1
 
+// Optional System ON wake/resume test, using TIMER0 for a one-second wake.
+// Change to 1 to test SystemSleep. Leave 0 for reset-on-wake System OFF.
+#define POWER_DEMO_NRF52_SLEEP_TEST	0
+#if POWER_DEMO_NRF52_SLEEP_TEST
+#define POWER_DEMO_RESUME_WAKE		1
+#define POWER_DEMO_TIMER_WAKE_MS		1000
+#define POWER_DEMO_TIMER_WAKE_DEVNO	TimerGetLowFreqDevCount()
+#define POWER_DEMO_STANDBY_RAM_TEST	1
+#endif
+
 // Drain SysLog/UART FIFOs and shut down the console before System OFF.
 #define POWER_DEMO_UART_OFF	1
 
