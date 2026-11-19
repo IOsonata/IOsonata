@@ -7,8 +7,11 @@ nRF91, and the initial nRF7120 port. nRF54H is excluded from this work.
 
 `SystemSleep()` is an interrupt-resumable System ON CPU idle operation.
 The MCU remains configured, and clocks and peripherals remain under their
-owners. It masks interrupts around WFI to avoid consuming a pending wake
-before entry, then restores PRIMASK and the original SCB SCR. It does not
+owners. The nRF52 SoftDevice-enabled path calls sd_app_evt_wait(), so only
+application-relevant events cause a normal application wake. In bare-metal,
+SDC/MPSL and other Nordic configurations it masks interrupts around WFI to
+avoid consuming a pending wake before entry, then restores PRIMASK and the
+original SCB SCR. It does not
 request System OFF or shut down the radio or USB.
 
 `SystemPowerOff()` means reset-exit System OFF. The application stops
@@ -52,3 +55,79 @@ before adding a System OFF implementation.
 
 The new SystemSleep and LFCLK ISR changes have not yet been tested with a
 complete Arm target build. Do not merge until target compatibility is checked.
+
+## Production code review findings (November 18, 2026)
+
+The following review covers actual existing target backends, not only newly
+introduced API functions. Source inspection and managed-project links were
+checked for nRF52832/nRF52840, nRF5340 application/network, nRF54L15,
+nRF54LM20, nRF9160/nRF91x1 and nRF7120.
+
+### Corrected on the review branch
+
+1. The nRF52 SoftDevice-enabled SystemSleep path now uses sd_app_evt_wait().
+   A raw WFI bypassed application-event filtering and could return to
+   application code on radio-only activity. Non-SoftDevice configurations
+   retain WFI, preserving clocks, memory, PRIMASK and SCR.
+2. nRFGpioGetReg previously rejected an encoded domain bit (0x80) before
+   checking it, and selected the register using the unmasked value. It now
+   selects the physical port from the low seven bits while retaining the
+   domain selector. SystemWakePin validation uses the physical port number.
+   This does not configure SPU security; a non-secure caller can only
+   configure pins already assigned to its security domain.
+3. First HFXO start/final stop and LFCLK source transitions refuse to wait
+   for oscillator hardware from interrupt context. Nested HFXO requests
+   remain reference-counted; the owner of the first request performs the
+   final release.
+4. The initial nRF71 library now links a dedicated interrupt-resumable
+   SystemSleep source; this is not an nRF71 System OFF implementation.
+5. The earlier branch changes enforce per-port wake-pin limits and initialize
+   the nRF71 CPU delay factors when the configured PLL rate changes.
+
+### Existing implementation inspected
+
+- nRF52 System OFF uses sd_power_system_off when SoftDevice is enabled,
+  otherwise direct POWER register access; reset reason and 8-bit GPREGRET
+  accesses also use the SoftDevice path where applicable.
+- The nRF53/nRF91 backend uses secure regulators/VMC where available.
+  The nRF5340 network core cannot independently request the application
+  core's System OFF. nRF91 modem activity must be stopped by its owner.
+- nRF54L System OFF refuses entry if outstanding HFXO requests, clock
+  transitions or active MPSL ownership remain. MEMCONF section retention
+  is applied at System OFF and separate VPR context is not retained.
+- GPIO wake is a SENSE/DETECT level mechanism rather than an edge-only IRQ;
+  wake pins must be initialized and released to inactive levels before OFF.
+- All established Nordic managed library projects inspected link their
+  appropriate existing power and shared clock source. nRF71 has no
+  secure power backend linked in its initial project.
+
+### Still requiring explicit verification
+
+- Debug/Release compile and link of all target variants, including
+  nRF52 bare-metal/SoftDevice/SDC and nRF53 secure/non-secure configurations.
+- Full SoftDevice and SDC/MPSL enable/handover tests with an HFXO request
+  already held before stack initialization, and release after initialization.
+  The shared clock source intentionally refuses unsafe direct-owner release
+  after radio takeover. The stack initializer still needs to coordinate
+  that transition; the generic API cannot silently migrate ownership.
+- Verify nRF53/nRF91 TrustZone access and VMC memory retention on the actual
+  selected build/security configuration; a secure register alias is not a
+  drop-in replacement for a non-secure secure-service request.
+- Validate nRF54L MEMCONF retention bank behavior and no outstanding
+  radio/USB request before OFF, on each relevant silicon variant.
+- Validate actual nRF71 CLK/HFXO/LFCLK register compatibility and its
+  secure power-service architecture before adding System OFF or RAM
+  retention. Do not assume nRF54L's clock tree is identical.
+- Measure real sleep currents and wake timing; the host WFI model tests
+  instruction/control-state transitions, not physical power consumption.
+
+### Regression commands
+
+```sh
+python3 tests/nordic/check_clock_hfxo_source.py
+python3 tests/nordic/check_power_source.py
+python3 tests/nordic/run_system_sleep.py
+```
+
+These tests are source/model checks only. A clean managed Debug/Release
+target build and physical tests of the changed paths are separate gates.
