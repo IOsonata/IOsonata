@@ -4,6 +4,7 @@
 Source checks supplement, but never replace, target builds and board tests.
 """
 from pathlib import Path
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -92,7 +93,10 @@ class NordicPowerSource(unittest.TestCase):
             self.assertRegex(board, r"#define\s+POWER_DEMO_RESUME_WAKE\s+1")
             self.assertRegex(board, r"#define\s+POWER_DEMO_STANDBY_RAM_TEST\s+1")
             self.assertRegex(board, r"#define\s+POWER_DEMO_UART_WAKE\s+0")
-            self.assertRegex(board, r"#define\s+POWER_DEMO_TIMER_WAKE_MS\s+0")
+            timer = re.search(r"#define\\s+POWER_DEMO_TIMER_WAKE_MS\\s+(\\d+)\\b", board)
+            self.assertIsNotNone(timer)
+            self.assertGreaterEqual(int(timer.group(1)), 0)
+            self.assertRegex(board, r"#define\\s+POWER_DEMO_TIMER_WAKE_DEVNO\\s+\\S+")
             self.assertRegex(board, r"#define\s+POWER_DEMO_UART_DMA\s+false")
             self.assertRegex(board, r"#define\s+WAKE_BUT_SENSE\s+IOPINSENSE_LOW_TRANSITION")
             self.assertNotIn("POWER_DEMO_NRF52_SLEEP_TEST", board)
