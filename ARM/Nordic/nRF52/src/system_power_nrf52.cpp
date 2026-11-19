@@ -201,20 +201,14 @@ void SystemSleep(void)
 	uint32_t state;
 	uint32_t scr;
 	int wakeIrq;
+	bool sd;
 
 	if (__get_IPSR() != 0U)
 	{
 		return;
 	}
 
-#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
-	if (SysPwrSdEnabled())
-	{
-		(void)sd_app_evt_wait();
-		return;
-	}
-#endif
-
+	sd = SysPwrSdEnabled();
 	state = DisableInterrupt();
 	wakeIrq = -1;
 	if (s_SysPwrSleepSense != IOPINSENSE_DISABLE)
@@ -229,12 +223,26 @@ void SystemSleep(void)
 			return;
 		}
 	}
-	scr = SCB->SCR;
-	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
-	__DSB();
-	__WFI();
-	__ISB();
-	SCB->SCR = scr;
+
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	if (sd)
+	{
+		// SoftDevice needs interrupts enabled for sd_app_evt_wait.
+		EnableInterrupt(state);
+		(void)sd_app_evt_wait();
+		state = DisableInterrupt();
+	}
+	else
+#endif
+	{
+		scr = SCB->SCR;
+		SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+		__DSB();
+		__WFI();
+		__ISB();
+		SCB->SCR = scr;
+	}
+
 	if (wakeIrq >= 0)
 	{
 		IOPinDisableInterrupt(wakeIrq);
