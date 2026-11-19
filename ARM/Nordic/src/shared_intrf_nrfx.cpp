@@ -63,6 +63,8 @@ extern "C" {
 
 #if defined(NRF52805_XXAA) || defined(NRF52810_XXAA)
 void TWIM0_TWIS0_TWI0_IRQHandler()
+#elif defined(NRF52811_XXAA)
+void SPIM0_SPIS0_SPI0_IRQHandler(void)
 #elif defined(NRF52_SERIES)
 void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
@@ -79,6 +81,8 @@ void SPI0_TWI0_IRQHandler(void)
 	}
 #if defined(NRF52805_XXAA) || defined(NRF52810_XXAA)
 	NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_IRQn);
+#elif defined(NRF52811_XXAA)
+	NVIC_ClearPendingIRQ(SPIM0_SPIS0_SPI0_IRQn);
 #elif defined(NRF52_SERIES)
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
@@ -91,7 +95,9 @@ void SPI0_TWI0_IRQHandler(void)
 }
 
 #if !defined(NRF52805_XXAA) && ! defined(NRF52810_XXAA)
-#ifdef NRF52_SERIES
+#if defined(NRF52811_XXAA)
+void TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQHandler(void)
+#elif defined(NRF52_SERIES)
 void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 void SERIAL20_IRQHandler(void)
@@ -103,9 +109,18 @@ void SPI1_TWI1_IRQHandler(void)
 {
 	if (g_SharedIntrf[1].pIntrf != NULL)
 	{
+#if defined(NRF52811_XXAA)
+		// Physical IRQ3 is shared by TWI0 and SPI1. Each driver
+		// keeps its own public device number despite sharing IRQ3.
+		int devno = g_SharedIntrf[1].pIntrf->Type == DEVINTRF_TYPE_I2C ? 0 : 1;
+		g_SharedIntrf[1].Handler(devno, g_SharedIntrf[1].pIntrf);
+#else
 		g_SharedIntrf[1].Handler(1, g_SharedIntrf[1].pIntrf);
+#endif
 	}
-#ifdef NRF52_SERIES
+#if defined(NRF52811_XXAA)
+	NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn);
+#elif defined(NRF52_SERIES)
 	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 	NVIC_ClearPendingIRQ(SERIAL20_IRQn);
