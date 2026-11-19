@@ -394,7 +394,7 @@ for kind in ('tx', 'rx'):
     twim_finish()
     check(call('events', 0) == 2 and call('busy', 0) == 0, 'transfer after an error ended')
 
-# Address NACK on the command of a register read: the read still ends.
+# Address NACK ends the command with STOP. Do not start repeated-start RX.
 twim_reset()
 def i2c_cmd_nack():
     twim_finish(amount=0, error=True)
@@ -402,11 +402,12 @@ def i2c_cmd_nack():
     isr(0)
     check(call('tx_ready', 0) == 1 and call('events', 0) == 0, 'nacked command')
 r = call_break('read_reg', (0, 4), 'DeviceIntrfWaitTxComplete', i2c_cmd_nack)
-check(r == -1 and pending == [('rx', BUF, 4)], 'read after nack', pending)
-twim_finish(amount=0, error=True)
-put(base + o[9], 1)
-isr(0)
-check(call('events', 0) == 1 and call('events', 1) == 0 and call('busy', 0) == 0, 'nacked read end')
+check(r == -1 and not pending, 'RX started after command NACK', pending)
+check(call('busy', 0) == 0 and call('events', 0) == 0, 'nacked command retained busy')
+check(actions == ['stop'], 'extra STOP after command NACK', actions)
+check(call('tx', 0, 2) == -1 and pending == [('tx', TXBUF[0], 2)], 'reuse after command NACK')
+twim_finish()
+check(call('busy', 0) == 0 and call('events', 0) == 1, 'reuse completion after command NACK')
 active = None
 
 # ---- TWI master without EasyDMA, interrupt
