@@ -11,7 +11,6 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 EXTERNAL = ROOT.parent / "external"
@@ -48,6 +47,8 @@ def main():
 		os.environ.get("NRF5_SDK_HOME", EXTERNAL / "nRF5_SDK")))
 	parser.add_argument("--nrfxlib", type=Path, default=Path(
 		os.environ.get("NRFXLIB_HOME", EXTERNAL / "sdk-nrfxlib")))
+	parser.add_argument("--sdk-config", type=Path,
+		help="SoftDevice application sdk_config.h; default uses the SDK5 UART example per chip")
 	parser.add_argument("--target", action="append",
 		help="restrict to a target label (repeatable)")
 	args = parser.parse_args()
@@ -96,56 +97,68 @@ def main():
 			"ARM/Nordic/src/system_clock_nrfx.cpp"),
 	}
 	errors = 0
-	with tempfile.TemporaryDirectory(prefix="nordic-power-build-") as work:
-		for label, chip, cpu, family, stack in TARGETS:
-			if args.target and label not in args.target:
-				continue
-			for opt in ("-O0", "-Os"):
-				base = [compiler, "-std=gnu++23", "-fno-exceptions",
-					"-fno-rtti", "-fsyntax-only", "-Wall", "-Wextra",
-					"-mcpu=" + cpu, "-mthumb", opt, "-D" + chip]
-				if family == "nrf54l" or family == "nrf71":
-					base.append("-DNRF_APPLICATION")
-				if family == "nrf52":
-					base.append("-DNRF52_SERIES")
-				if family == "nrf53":
-					base.append("-DNRF53_SERIES")
-				if family == "nrf54l":
-					base.append("-DNRF54L_SERIES")
-				if family == "nrf91":
-					base.append("-DNRF91_SERIES")
-				if family == "nrf71":
-					base.append("-DNRF71_SERIES")
-				if stack.startswith("s1"):
-					sd = args.nrf5_sdk.resolve() / (
-						"components/softdevice/" + stack + "/headers")
-					if not (sd / "nrf_soc.h").is_file():
-						parser.error("Missing SoftDevice: " + str(sd))
-					base += ["-DSOFTDEVICE_PRESENT=1",
-						"-I" + str(sd), "-I" + str(sd / "nrf52"),
-						"-I" + str(args.nrf5_sdk.resolve() /
-							"components/softdevice/common"),
-						"-I" + str(args.nrf5_sdk.resolve() /
-							"components/softdevice/common/nrf_sdh")]
-				if stack == "sdc":
-					base.append("-DNRFXLIB_SDC")
-				base += ["-I" + str(path) for path in includes if path.is_dir()]
-				for source in sources[family]:
-					file = ROOT / source
-					flags = list(base)
-					if file.suffix == ".c":
-						flags[0] = compiler.replace("g++", "gcc")
-						flags[1] = "-std=gnu17"
-					cmd = flags + [str(file)]
-					result = subprocess.run(cmd, capture_output=True, text=True)
-					if result.returncode:
-						errors += 1
-						print(label + " " + opt + " " + file.name + ": FAIL",
-							file=sys.stderr)
-						print(result.stdout + result.stderr, file=sys.stderr)
-					else:
-						print(label + " " + opt + " " + file.name + ": PASS",
-							flush=True)
+	for label, chip, cpu, family, stack in TARGETS:
+		if args.target and label not in args.target:
+			continue
+		for opt in ("-O0", "-Os"):
+			base = [compiler, "-std=gnu++23", "-fno-exceptions",
+				"-fno-rtti", "-fsyntax-only", "-Wall", "-Wextra",
+				"-mcpu=" + cpu, "-mthumb", opt, "-D" + chip]
+			if family == "nrf54l" or family == "nrf71":
+				base.append("-DNRF_APPLICATION")
+			if family == "nrf52":
+				base.append("-DNRF52_SERIES")
+			if family == "nrf53":
+				base.append("-DNRF53_SERIES")
+			if family == "nrf54l":
+				base.append("-DNRF54L_SERIES")
+			if family == "nrf91":
+				base.append("-DNRF91_SERIES")
+			if family == "nrf71":
+				base.append("-DNRF71_SERIES")
+			if stack.startswith("s1"):
+				sd = args.nrf5_sdk.resolve() / (
+					"components/softdevice/" + stack + "/headers")
+				if not (sd / "nrf_soc.h").is_file():
+					parser.error("Missing SoftDevice: " + str(sd))
+				config = args.sdk_config
+				if config is None:
+					board = "nRF52832" if chip == "NRF52832_XXAA" else "nRF52840"
+					config = ROOT / ("ARM/Nordic/nRF52/" + board +
+						"/exemples/UartPrbsTxSdk5/src/sdk_config.h")
+				config = config.resolve()
+				if not config.is_file():
+					parser.error("Missing SoftDevice SDK config: " + str(config))
+				base += ["-I" + str(config.parent), "-DSOFTDEVICE_PRESENT=1",
+					"-I" + str(sd), "-I" + str(sd / "nrf52"),
+					"-I" + str(args.nrf5_sdk.resolve() /
+						"components/softdevice/common"),
+					"-I" + str(args.nrf5_sdk.resolve() /
+						"components/softdevice/common/nrf_sdh")]
+			if stack == "sdc":
+				base.append("-DNRFXLIB_SDC")
+			base += ["-I" + str(path) for path in includes if path.is_dir()]
+			for source in sources[family]:
+				file = ROOT / source
+				flags = list(base)
+				if file.suffix == ".c":
+					ccompiler = str(Path(compiler).with_name("arm-none-eabi-gcc"))
+					if not Path(ccompiler).is_file():
+						parser.error("Arm C compiler not found: " + ccompiler)
+					flags[0] = ccompiler
+					flags[1] = "-std=gnu17"
+					flags.remove("-fno-rtti")
+					flags.remove("-fno-exceptions")
+				cmd = flags + [str(file)]
+				result = subprocess.run(cmd, capture_output=True, text=True)
+				if result.returncode:
+					errors += 1
+					print(label + " " + opt + " " + file.name + ": FAIL",
+						file=sys.stderr)
+					print(result.stdout + result.stderr, file=sys.stderr)
+				else:
+					print(label + " " + opt + " " + file.name + ": PASS",
+						flush=True)
 	print("Nordic focused power/clock syntax matrix:",
 		"PASS" if not errors else str(errors) + " FAIL")
 	return 1 if errors else 0
