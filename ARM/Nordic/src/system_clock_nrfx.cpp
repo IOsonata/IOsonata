@@ -471,6 +471,13 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	uint32_t prev;
 	bool running;
 
+	// Starting a 32 kHz crystal can wait for oscillator stabilization.
+	// No clock source transition is allowed from interrupt context.
+	if (__get_IPSR() != 0U)
+	{
+		return false;
+	}
+
 	// The 32 kHz oscillators of these parts are 32768 Hz
 	(void)OscFreq;
 
