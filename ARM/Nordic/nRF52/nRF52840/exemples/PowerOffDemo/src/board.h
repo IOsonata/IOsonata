@@ -49,6 +49,9 @@ SOFTWARE.
 #define UART_TX_PIN			6
 #define UART_TX_PINOP		1
 
+// Drain SysLog/UART FIFOs and shut down the console before System OFF.
+#define POWER_DEMO_UART_OFF	1
+
 // Wake up button, to ground
 #define WAKE_BUT_PORT		0
 #define WAKE_BUT_PIN		11
