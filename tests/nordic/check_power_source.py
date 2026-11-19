@@ -140,6 +140,21 @@ class NordicPowerSource(unittest.TestCase):
         self.assertIn("dev->pDmaReg->ENABLE", disable)
         self.assertIn("dev->pReg->ENABLE", disable)
 
+    def test_nrf52811_shared_serial_irq_routing(self):
+        i2c = (ROOT / "ARM/Nordic/src/i2c_nrfx.cpp").read_text()
+        spi = (ROOT / "ARM/Nordic/src/spi_nrfx.cpp").read_text()
+        shared = (ROOT / "ARM/Nordic/src/shared_intrf_nrfx.cpp").read_text()
+        irq3 = "TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn"
+        irq4 = "SPIM0_SPIS0_SPI0_IRQn"
+        self.assertIn("#elif defined(NRF52811_XXAA)", i2c)
+        self.assertIn(irq3, i2c)
+        self.assertIn("SharedIntrfSetIrqHandler(1,", i2c)
+        self.assertIn(irq3, spi)
+        self.assertIn(irq4, spi)
+        self.assertIn("TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQHandler", shared)
+        self.assertIn("SPIM0_SPIS0_SPI0_IRQHandler", shared)
+        self.assertIn("DEVINTRF_TYPE_I2C ? 0 : 1", shared)
+
     def test_nrf54l_off_checks_clock_owner(self):
         off = function(self.power, "void SystemPowerOff(void)", "bool SystemWakePin(")
         self.assertLess(off.index("nRFxClockPrepareSystemOff()"),
