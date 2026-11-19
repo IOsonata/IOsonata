@@ -501,7 +501,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	}
 
 	// LFCLK stop/start waits for hardware. A BLE stack also owns its source.
-	if (__get_IPSR() != 0U || nRFxClockSdEnabled() || nRFxMpslActive())
+	if (nRFxClockSdEnabled() || nRFxMpslActive())
 	{
 		return false;
 	}
