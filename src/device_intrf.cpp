@@ -145,10 +145,21 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
             		count = pDev->TxData(pDev, pAdCmd, AdCmdLen);
             	}
 
-            	if (count < 0)
-            	{
-            		DeviceIntrfWaitTxComplete(pDev, 1000000);
-            	}
+				if (count < 0)
+				{
+					if (!DeviceIntrfWaitTxComplete(pDev, 1000000))
+					{
+						// The IRQ/DMA transfer may still own the bus.
+						// Do not start RX or release its busy flag.
+						return -1;
+					}
+				}
+				else if (count != AdCmdLen)
+				{
+					pDev->bNoStop = false;
+					DeviceIntrfStopTx(pDev);
+					return -1;
+				}
 				pDev->bNoStop = false;
             }
 			// This is the repeated-start phase of a command/read transfer.
