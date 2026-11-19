@@ -1620,6 +1620,18 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 				NVIC_SetPriority(SPIM0_SPIS0_SPI0_IRQn, pCfgData->IntPrio);
 				NVIC_EnableIRQ(SPIM0_SPIS0_SPI0_IRQn);
 				break;
+#elif defined(NRF52811_XXAA)
+			// SPI0 is on IRQ4; SPI1 shares IRQ3 with TWI0.
+			case 0:
+				NVIC_ClearPendingIRQ(SPIM0_SPIS0_SPI0_IRQn);
+				NVIC_SetPriority(SPIM0_SPIS0_SPI0_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SPIM0_SPIS0_SPI0_IRQn);
+				break;
+			case 1:
+				NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn);
+				NVIC_SetPriority(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn);
+				break;
 #elif defined(NRF52_SERIES)
     		case 0:
                 NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
