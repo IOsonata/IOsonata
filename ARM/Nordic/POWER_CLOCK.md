@@ -185,9 +185,18 @@ network-core System OFF was not tested.
 
 nRF54LM20 PowerOffDemo has previous System OFF/button wake and selected
 RAM retention validation. Eclipse managed ClockDemo Debug/Release builds
-passed, but the runtime ClockDemo is not yet validated. Build the Release
-library and ClockDemo, run it at 1 Mbaud, and check HFXO request/release,
-LF RC, APB, timer IRQs and 250 ms delay timing within 245000-255000 us.
+passed, but the runtime ClockDemo has not completed: it printed
+"ClockDemo" and "Startup CPU 128000000", then stopped in the generic
+ClockDemoFlush UART RX path during its startup output. The demo was
+incorrectly reading the driver's private TX FIFO and polling UART RX to
+advance TX. The same error also existed in generic PowerOffDemo.
+Both generic demos no longer access those internal FIFOs or use RX for TX
+progress. They currently allow a short fixed settling interval before
+powering off the console, not an explicitly confirmed hardware TX drain.
+The LM20 fix still requires a new hardware run and a proper driver-owned
+transmit-completion design before calling the transport lifecycle fully
+validated. The clock selection itself was never reached in the stalled
+run, so no HFXO/LF/APB pass is claimed.
 
 ## Outstanding verification
 
