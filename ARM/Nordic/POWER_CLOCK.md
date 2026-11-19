@@ -124,7 +124,8 @@ python3 tests/nordic/check_clock_hfxo_source.py
 python3 tests/nordic/check_power_source.py
 python3 tests/nordic/check_delay_calibration.py
 python3 tests/nordic/run_system_sleep.py
-python3 tests/nordic/compile_power_clock.py --target nrf52832 --target nrf52840
+python3 tests/nordic/compile_power_clock.py --with-i2c --target nrf52832 --target nrf52840
+# Repeat --target for nRF53 / nRF54L / nRF91 once their SDKs are installed
 ```
 
 Host/source checks and production-source syntax compilation are not
