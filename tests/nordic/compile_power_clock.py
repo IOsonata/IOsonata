@@ -97,7 +97,16 @@ def main():
 			"ARM/Nordic/src/system_clock_nrfx.cpp"),
 	}
 	errors = 0
+	blocked = 0
+	mdk_devices = (mdk / "nrf.h").read_text(encoding="utf-8")
 	for label, chip, cpu, family, stack in TARGETS:
+		if family == "nrf71" and chip not in mdk_devices:
+			if args.target is None or label in args.target:
+				blocked += 1
+				print(label + ": BLOCKED: installed Nordic MDK nrf.h does not "
+					"recognize " + chip + ". Update external/nrfx MDK "
+					"before validating this target.", file=sys.stderr)
+			continue
 		if args.target and label not in args.target:
 			continue
 		for opt in ("-O0", "-Os"):
@@ -160,8 +169,9 @@ def main():
 					print(label + " " + opt + " " + file.name + ": PASS",
 						flush=True)
 	print("Nordic focused power/clock syntax matrix:",
-		"PASS" if not errors else str(errors) + " FAIL")
-	return 1 if errors else 0
+		"PASS" if not errors and not blocked else
+		str(errors) + " FAIL, " + str(blocked) + " BLOCKED")
+	return 1 if errors or blocked else 0
 
 if __name__ == "__main__":
 	sys.exit(main())
