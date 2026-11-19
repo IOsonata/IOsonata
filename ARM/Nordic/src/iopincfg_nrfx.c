@@ -149,10 +149,14 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 			break;
 	}
 #else
-	if (PortNo == -1 || PortNo >= GPIO_COUNT)
+	// The low seven bits are the port number; bit 7 selects its domain.
+	if (PortNo < 0 || (PortNo & ~0xFF) != 0 ||
+		(PortNo & 0x7F) >= GPIO_COUNT)
+	{
 		return NULL;
+	}
 
-	switch (PortNo)
+	switch (PortNo & 0x7F)
 	{
 		case 0:
 #if defined(NRF51) || defined(NRF52_SERIES)
