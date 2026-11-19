@@ -60,6 +60,7 @@ SOFTWARE.
 #endif
 
 #include "coredev/system_core_clock.h"
+#include "coredev/interrupt.h"
 #include "iopinctrl.h"
 
 #define SYS_PWR_NRF52_NB_RETREG		2
@@ -179,6 +180,28 @@ uint32_t SystemResetReason(void)
 	}
 
 	return s_SysPwrResetReason;
+}
+
+// System ON idle: peripherals and radio retain ownership of their clocks.
+// WFI resumes on a pending interrupt; do not select System OFF or gate clocks.
+void SystemSleep(void)
+{
+	uint32_t state;
+	uint32_t scr;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+
+	state = DisableInterrupt();
+	scr = SCB->SCR;
+	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+	__DSB();
+	__WFI();
+	__ISB();
+	SCB->SCR = scr;
+	EnableInterrupt(state);
 }
 
 void SystemPowerOff(void)
