@@ -75,12 +75,14 @@ int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 
 void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
 {
-	atomic_store(&pDev->bTxReady, true);
-
-	if (pDev->bNoStop == false)
+	if (atomic_load(&pDev->bNoStop) == false)
 	{
 		DeviceIntrfStopTx(pDev);
 	}
+
+	// Publish completion after the driver has released the transfer.
+	// A repeated-start command keeps ownership until the receive phase.
+	atomic_store(&pDev->bTxReady, true);
 }
 
 int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pBuff, int BuffLen)
