@@ -155,6 +155,12 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 						// Do not start RX or release its busy flag.
 						return -1;
 					}
+					if (!atomic_load(&pDev->bNoStop))
+					{
+						// The driver ended the command without retaining
+						// the bus, so it cannot be followed by RX.
+						return -1;
+					}
 				}
 				else if (count != AdCmdLen)
 				{
