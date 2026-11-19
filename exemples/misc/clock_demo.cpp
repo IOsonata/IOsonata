@@ -258,12 +258,8 @@ static bool ClockDemoTimerInit(void)
 // Drain the polling UART before stopping its clock, including the shift register.
 static void ClockDemoFlush(void)
 {
-	uint8_t unused;
-
-	while (CFifoUsed(s_Uart.hTxFifo) != 0)
-	{
-		(void)UARTRx(&s_Uart, &unused, 1);
-	}
+	// Leave time for the last polling UART byte to finish before clock
+	// changes. The demo must not inspect driver buffers or poll RX for TX.
 	msDelay(2);
 }
 
