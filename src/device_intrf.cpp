@@ -194,7 +194,6 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 		if (pAdCmd != NULL && AdCmdLen > 0)
 		{
 			atomic_store(&pDev->bNoStop, true);
-			atomic_store(&pDev->bTxReady, false);
 			atomic_store(&pDev->TxReadState, DEVINTRF_READ_WAITING);
 
 			if (pDev->TxSrData != NULL)
