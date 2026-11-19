@@ -8,17 +8,36 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 CXX = os.environ.get('CXX', 'g++')
 CC = os.environ.get('CC', 'gcc')
-# The existing display and DeviceIntrf sources use GNU C++ variable-length
-# stack arrays. Clang 16+ warns about these under -Werror even with gnu++23.
-# Keep the warning enabled, but do not fail this unrelated display regression.
+def supports(flags):
+    result = subprocess.run([CXX, *flags, '-x', 'c++', '-fsyntax-only', '-'],
+                            input='int main() { return 0; }\n',
+                            capture_output=True, text=True)
+    return result.returncode == 0
+
+
+CPP_STD = next((flag for flag in ('-std=gnu++23', '-std=gnu++2b')
+                if supports([flag])), None)
+if CPP_STD is None:
+    raise SystemExit('A C++23-capable compiler is required')
+
+# Two generations of Clang name the GNU C++ VLA extension warning
+# differently. Keep -Werror for all other diagnostics.
 CLANG = 'clang' in subprocess.run([CXX, '--version'], capture_output=True,
                                   text=True, check=True).stdout.lower()
-VLA_FLAGS = ['-Wno-error=vla-cxx-extension'] if CLANG else []
+VLA_FLAGS = []
+if CLANG:
+    for warning in ('vla-cxx-extension', 'vla-extension'):
+        flag = '-Wno-error=' + warning
+        if supports([CPP_STD, '-Werror', flag]):
+            VLA_FLAGS = [flag]
+            break
+    if not VLA_FLAGS:
+        raise SystemExit('Cannot determine the Clang C++ VLA warning option')
 
 with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
     for opt in ('-O0', '-Os'):
         exe = Path(td) / 'ssd1315_test'
-        cmd = [CXX, '-std=gnu++23', opt,
+        cmd = [CXX, CPP_STD, opt,
                '-Wall', '-Wextra', '-Werror', '-Wno-overloaded-virtual',
                *VLA_FLAGS,
                '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
