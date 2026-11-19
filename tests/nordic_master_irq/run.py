@@ -565,7 +565,9 @@ if S[0]:
         check(sent == [4], sent)
         ready()
         check(call('tx_ready', 1) == 1 and call('busy', 1) == 1 and call('events', 0) == 0, 'spi command')
-    check(call_break('read_reg', (1, 2), 'DeviceIntrfWaitTxComplete', spi_legacy_cmd) == -1)
+    # The legacy SPI driver also waits for the command's READY event
+    # inside TxData before reaching the generic completion wait.
+    check(call_break('read_reg', (1, 2), 'nRFxSPIAsyncTxWait', spi_legacy_cmd) == -1)
     check(sent == [4, 0xA5], sent)
     ready(1)
     ready(2)
