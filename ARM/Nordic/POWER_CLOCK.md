@@ -36,10 +36,10 @@ that low-frequency peripheral users are stopped.
 | nRF5340 network | Shared Nordic power backend | Controlled by application core, not this core | Shared clock backend |
 | nRF54L15 / LM20 | Shared Nordic power backend | Existing implementation checks HFXO/radio ownership first | Shared clock backend and startup PLL |
 | nRF91 | Shared Nordic power backend | Requires modem shutdown first | Shared clock backend |
-| nRF7120 | Dedicated `system_sleep_nrf71.c` | Not implemented in the initial port | Startup PLL/OSC and shared clock backend; full clock-tree audit pending |
+| nRF7120 | Dedicated `system_sleep_nrf71.c` | Not implemented in the initial port | Startup PLL/OSC implemented; shared clock backend is linked but not register-compatible with the nRF71 MDK |
 
 nRF71 is not the same clock or secure-power configuration as nRF54L.
-Its initial port is not declared fully power-ready merely because it compiles.
+Its initial port is not declared fully power-ready merely because it compiles. Nordic's nrfx 4.6.0 nRF7120E MDK exposes separate CLOCK, HFXO64M, LFXO and LFRC blocks. The shared clock source still expects the older-family HFCLK/LFCLK layout, so the current nRF71 library link is not yet a functional clock integration.
 Non-secure System OFF may require the secure service, and the retainable RAM
 regions and RF clock ownership must be verified with nRF71-specific metadata
 before adding a System OFF implementation.
