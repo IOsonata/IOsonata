@@ -49,6 +49,9 @@ SOFTWARE.
 #define UART_TX_PIN			BLYST_NANO_DK_UART_TX_PIN
 #define UART_TX_PINOP		BLYST_NANO_DK_UART_TX_PINOP
 
+// Drain SysLog/UART FIFOs and shut down the console before System OFF.
+#define POWER_DEMO_UART_OFF	1
+
 // Wake up button, to ground
 #define WAKE_BUT_PORT		BLYST_NANO_DK_BUT1_PORT
 #define WAKE_BUT_PIN		BLYST_NANO_DK_BUT1_PIN
