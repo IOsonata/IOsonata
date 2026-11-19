@@ -40,6 +40,15 @@ SOFTWARE.
 #include "istddef.h"
 #include "device_intrf.h"
 
+enum {
+	DEVINTRF_READ_IDLE = 0,
+	DEVINTRF_READ_WAITING,
+	DEVINTRF_READ_COMPLETING,
+	DEVINTRF_READ_READY,
+	DEVINTRF_READ_FAILED,
+	DEVINTRF_READ_ABANDONED
+};
+
 // NOTE : For thread safe use
 //
 // DeviceIntrfStartRx
@@ -72,15 +81,6 @@ int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 
 	return count;
 }
-
-enum {
-	DEVINTRF_READ_IDLE = 0,
-	DEVINTRF_READ_WAITING,
-	DEVINTRF_READ_COMPLETING,
-	DEVINTRF_READ_READY,
-	DEVINTRF_READ_FAILED,
-	DEVINTRF_READ_ABANDONED
-};
 
 void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
 {
