@@ -75,13 +75,18 @@ int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 
 void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
 {
-	// Publish before releasing bBusy. A new owner must not have its
-	// bTxReady reset overwritten by the previous completion.
-	atomic_store(&pDev->bTxReady, true);
-
 	if (atomic_load(&pDev->bNoStop) == false)
 	{
-		DeviceIntrfStopTx(pDev);
+		// Finish driver cleanup before publishing completion, but keep
+		// bBusy held until that publication is visible.
+		pDev->StopTx(pDev);
+		atomic_store(&pDev->bTxReady, true);
+		atomic_flag_clear(&pDev->bBusy);
+	}
+	else
+	{
+		// A command/read sequence retains the bus for its RX phase.
+		atomic_store(&pDev->bTxReady, true);
 	}
 }
 
