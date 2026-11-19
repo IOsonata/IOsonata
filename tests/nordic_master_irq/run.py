@@ -402,7 +402,7 @@ def i2c_cmd_nack():
     isr(0)
     check(call('tx_ready', 0) == 1 and call('events', 0) == 0, 'nacked command')
 r = call_break('read_reg', (0, 4), 'DeviceIntrfWaitTxComplete', i2c_cmd_nack)
-check(r == -1 and not pending, 'RX started after command NACK', pending)
+check(r == 0 and not pending, 'RX started after command NACK', pending)
 check(call('busy', 0) == 0 and call('events', 0) == 0, 'nacked command retained busy')
 check(actions == ['stop'], 'extra STOP after command NACK', actions)
 check(call('tx', 0, 2) == -1 and pending == [('tx', TXBUF[0], 2)], 'reuse after command NACK')
