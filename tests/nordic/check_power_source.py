@@ -155,6 +155,14 @@ class NordicPowerSource(unittest.TestCase):
         self.assertIn("SPIM0_SPIS0_SPI0_IRQHandler", shared)
         self.assertIn("DEVINTRF_TYPE_I2C ? 0 : 1", shared)
 
+    def test_nrf52_spi2_only_on_targets_with_instance(self):
+        source = (ROOT / "ARM/Nordic/src/spi_nrfx.cpp").read_text()
+        self.assertIn("#if NRFX_SPI_MAXDEV > 2\nextern \"C\" void SPIM2_SPIS2_SPI2_IRQHandler", source)
+        self.assertIn("#if NRFX_SPI_MAXDEV > 2\n", source)
+        case = source.index("case 2:\n                NVIC_ClearPendingIRQ(SPIM2_SPIS2_SPI2_IRQn);")
+        self.assertEqual(source.rfind("#if NRFX_SPI_MAXDEV > 2", 0, case),
+                         source.rfind("#if NRFX_SPI_MAXDEV > 2", 0, case))
+
     def test_nrf54l_off_checks_clock_owner(self):
         off = function(self.power, "void SystemPowerOff(void)", "bool SystemWakePin(")
         self.assertLess(off.index("nRFxClockPrepareSystemOff()"),
