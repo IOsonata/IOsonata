@@ -97,9 +97,10 @@ static bool Start(DevIntrf_t *, uint32_t Address)
 	return true;
 }
 
-static void Stop(DevIntrf_t *)
+static void Stop(DevIntrf_t *pDev)
 {
 	assert(selected);
+	assert(atomic_flag_test_and_set(&pDev->bBusy));
 	selected = false;
 	stops++;
 }
