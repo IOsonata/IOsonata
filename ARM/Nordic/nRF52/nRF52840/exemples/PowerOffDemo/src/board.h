@@ -49,12 +49,32 @@ SOFTWARE.
 #define UART_TX_PIN			6
 #define UART_TX_PINOP		1
 
-// Same generic resumable sleep and SRAM tests as Microchip PowerOffDemo.
-#define POWER_DEMO_RESUME_WAKE	1
+// Generic PowerOffDemo settings, matching the Microchip test profiles.
+// System ON wake uses the board button; change RESUME_WAKE to 0 for System OFF.
+#ifndef POWER_DEMO_RESUME_WAKE
+#define POWER_DEMO_RESUME_WAKE		1
+#endif
+#ifndef POWER_DEMO_STANDBY_RAM_TEST
 #define POWER_DEMO_STANDBY_RAM_TEST	1
+#endif
 
-// Drain SysLog/UART FIFOs and shut down the console before System OFF.
-#define POWER_DEMO_UART_OFF	1
+// UART receive wake is not configured by this nRF52 board profile.
+// Leave disabled until the UART driver supports this wake source.
+#ifndef POWER_DEMO_UART_WAKE
+#define POWER_DEMO_UART_WAKE		0
+#endif
+
+// RTC/timer automatic wake is a separate profile, disabled for button testing.
+#ifndef POWER_DEMO_TIMER_WAKE_MS
+#define POWER_DEMO_TIMER_WAKE_MS	0
+#endif
+#define POWER_DEMO_TIMER_WAKE_DEVNO	0
+
+// Use the same generic console and wake settings as the Microchip test.
+#define UART_BAUDRATE			1000000
+#define POWER_DEMO_UART_DMA	false
+#define POWER_DEMO_UART_OFF		1
+#define WAKE_BUT_SENSE			IOPINSENSE_LOW_TRANSITION
 
 // Wake up button, to ground
 #define WAKE_BUT_PORT		0
