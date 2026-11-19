@@ -444,7 +444,8 @@ bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout);
  * @param	pRxBuff 	  	: Pointer to memory area to receive data.
  * @param	RxLen   	: Length of buffer memory in bytes
  *
- * @return	Number of bytes read
+ * @return	Number of bytes read; zero when the command or receive start
+ * 			fails synchronously; -1 when RX was started asynchronously.
  */
 int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
                     uint8_t *pRxBuff, int RxLen);
