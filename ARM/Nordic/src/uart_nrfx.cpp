@@ -377,6 +377,27 @@ static void nRFUARTPollTx(nRFUartDev_t * const dev)
 	{
 		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+		if (dev->TxDmaLen != 0U)
+		{
+			uint32_t sent = dev->pDmaReg->DMA.TX.AMOUNT;
+			if (sent > dev->TxDmaLen)
+			{
+				sent = dev->TxDmaLen;
+			}
+			if (sent < dev->TxDmaLen)
+			{
+				uint32_t remaining = dev->TxDmaLen - sent;
+				memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);
+				dev->TxDmaLen = remaining;
+				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = remaining;
+				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
+				return;
+			}
+			dev->TxDmaLen = 0U;
+		}
+#endif
 		dev->pUartDev->bTxReady = true;
 	}
 }
