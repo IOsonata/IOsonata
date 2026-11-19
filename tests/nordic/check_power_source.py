@@ -101,6 +101,15 @@ class NordicPowerSource(unittest.TestCase):
             self.assertRegex(board, r"#define\s+WAKE_BUT_SENSE\s+IOPINSENSE_LOW_TRANSITION")
             self.assertNotIn("POWER_DEMO_NRF52_SLEEP_TEST", board)
 
+    def test_generic_timer_wake_starts_timer_before_sleep(self):
+        demo = (ROOT / "exemples/misc/power_off_demo.cpp").read_text()
+        start = demo.index("timerStarted = period != 0U && TimerEnable(&s_WakeTimer);")
+        sleep = demo.index("SystemSleep();", start)
+        stop = demo.index("TimerDisable(&s_WakeTimer);", sleep)
+        self.assertLess(start, sleep)
+        self.assertLess(sleep, stop)
+        self.assertIn("timerStarted && s_StandbyTimerWoke", demo)
+
     def test_nrf54l_off_checks_clock_owner(self):
         off = function(self.power, "void SystemPowerOff(void)", "bool SystemWakePin(")
         self.assertLess(off.index("nRFxClockPrepareSystemOff()"),
