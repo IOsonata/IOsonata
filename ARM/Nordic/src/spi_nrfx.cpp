@@ -1085,9 +1085,11 @@ static void nRFxSPIAsyncTxAbortEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * cons
 	pDev->bTxAbort = false;
 	if (pDev->bCmdFailed)
 	{
-		// The interrupted read still owns the bus until its rejected receive
-		// phase runs. Do not let the timeout callback replace it before then.
-		atomic_store(&pIntrf->bTxReady, true);
+		// The command was aborted. The read must not enter its RX phase.
+		// Hardware has stopped; release the held bus here, not in RX.
+		pDev->bCmdFailed = false;
+		atomic_store(&pIntrf->bNoStop, false);
+		DeviceIntrfStopTx(pIntrf);
 	}
 	else
 	{
