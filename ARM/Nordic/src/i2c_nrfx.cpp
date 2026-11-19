@@ -1077,14 +1077,14 @@ static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev,
 		count = pDev->TxIdx;
 		pDev->TxDatalen = 0;
 		pDev->Async = NRFX_I2C_ASYNC_IDLE;
-		if (bStopped && atomic_load(&pIntrf->bNoStop))
+		report = !atomic_load(&pIntrf->bNoStop);
+		if (bStopped && !report)
 		{
 			// The command ended with STOP rather than SUSPEND.
-			// It cannot be followed by a repeated-start receive.
+			// It cannot be followed by RX or reported as a success.
 			atomic_store(&pIntrf->bNoStop, false);
 		}
-		report = pIntrf->bNoStop == false;
-		pDev->bStopped = bStopped && report;
+		pDev->bStopped = bStopped && !atomic_load(&pIntrf->bNoStop);
 		DeviceIntrfTxComplete(pIntrf);
 	}
 
