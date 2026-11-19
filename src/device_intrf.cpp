@@ -238,7 +238,8 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 					return -1;
 				}
 			}
-			else if (count != AdCmdLen)
+			else if (count == 0 ||
+				(pDev->TxSrData == NULL && count != AdCmdLen))
 			{
 				atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
 				atomic_store(&pDev->bNoStop, false);
