@@ -119,13 +119,10 @@ bool LcdSSD1315::Send(bool bData, const uint8_t *pData, int Len)
 		{
 			return true;
 		}
-		// Reset must abort the pending transfer before local command bytes
-		// leave scope. A late completion may already have released CS.
+		// The interface owner must cancel the hardware before releasing
+		// bBusy. Reset may cancel synchronously or leave the completion
+		// interrupt responsible. Do not force StopTx on an active DMA.
 		vpIntrf->Reset();
-		if (!atomic_load(&intrf->bTxReady))
-		{
-			vpIntrf->StopTx();
-		}
 		Valid(false);
 
 		return false;
