@@ -21,6 +21,7 @@ TARGETS = {
 	"nrf5340_app": "ARM/Nordic/nRF53/nRF5340_App",
 	"nrf5340_net": "ARM/Nordic/nRF53/nRF5340_Net",
 	"nrf54l15": "ARM/Nordic/nRF54/nRF54L15",
+	"nrf54lm20": "ARM/Nordic/nRF54/nRF54LM20x",
 	"nrf9160": "ARM/Nordic/nRF91/nRF9160",
 	"nrf91x1": "ARM/Nordic/nRF91/nRF91x1",
 }
