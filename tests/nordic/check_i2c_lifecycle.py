@@ -62,37 +62,36 @@ int main(void)
 	uint32_t registers[3];
 	I2CDev_t device = {};
 	nRFTwiDev_t driver = {};
-	DevIntrf_t interface = {};
 
-	interface.pDevData = &driver;
+	device.DevIntrf.pDevData = &driver;
 	driver.pI2cDev = &device;
 	driver.pDmaReg = (NRF_TWIM_Type *)registers;
 
 	memset(registers, 0, sizeof(registers));
-	interface.bDma = true;
+	device.DevIntrf.bDma = true;
 	device.Cfg.Mode = I2CMODE_MASTER;
-	nRFxI2CEnable(&interface);
+	nRFxI2CEnable(&device.DevIntrf);
 	assert(registers[0] == TWIM_ENABLE_ENABLE_Enabled);
 	assert(registers[1] == 0 && registers[2] == 0);
-	nRFxI2CDisable(&interface);
+	nRFxI2CDisable(&device.DevIntrf);
 	assert(registers[0] == 0);
 
 	memset(registers, 0, sizeof(registers));
-	interface.bDma = true;
+	device.DevIntrf.bDma = true;
 	device.Cfg.Mode = I2CMODE_SLAVE;
-	nRFxI2CEnable(&interface);
+	nRFxI2CEnable(&device.DevIntrf);
 	assert(registers[1] == TWIS_ENABLE_ENABLE_Enabled);
 	assert(registers[0] == 0 && registers[2] == 0);
-	nRFxI2CDisable(&interface);
+	nRFxI2CDisable(&device.DevIntrf);
 	assert(registers[1] == 0);
 
 	memset(registers, 0, sizeof(registers));
-	interface.bDma = false;
+	device.DevIntrf.bDma = false;
 	device.Cfg.Mode = I2CMODE_MASTER;
-	nRFxI2CEnable(&interface);
+	nRFxI2CEnable(&device.DevIntrf);
 	assert(registers[2] == TWI_ENABLE_ENABLE_Enabled);
 	assert(registers[0] == 0 && registers[1] == 0);
-	nRFxI2CDisable(&interface);
+	nRFxI2CDisable(&device.DevIntrf);
 	assert(registers[2] == 0);
 	return 0;
 }
