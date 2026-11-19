@@ -88,13 +88,18 @@ def main():
 		help="directory for durable per-project logs")
 	parser.add_argument("--library-only", action="store_true",
 		help="build managed library only, not ClockDemo or PowerOffDemo")
+	parser.add_argument("--check-only", action="store_true",
+		help="check project and Debug/Release configuration discovery without launching IDE")
 	args = parser.parse_args()
-	try:
-		ide = find_ide(args.ide)
-	except (FileNotFoundError, ValueError) as error:
-		parser.error(str(error))
+	ide = None
+	if not args.check_only:
+		try:
+			ide = find_ide(args.ide)
+		except (FileNotFoundError, ValueError) as error:
+			parser.error(str(error))
 	logdir = args.logs.expanduser().resolve()
-	logdir.mkdir(parents=True, exist_ok=True)
+	if not args.check_only:
+		logdir.mkdir(parents=True, exist_ok=True)
 	targets = args.target or ("nrf52832", "nrf52840")
 	failures = 0
 	skipped = 0
@@ -123,6 +128,11 @@ def main():
 			print("FAIL no managed projects:", target)
 			failures += 1
 			continue
+		if args.check_only:
+			for path, name, config in projects:
+				print("FOUND:", target, name, config, path.relative_to(ROOT))
+			passed += len(projects)
+			continue
 		unique = list(dict.fromkeys(path for path, _, _ in projects))
 		with tempfile.TemporaryDirectory(prefix="iosonata-nordic-cdt-") as temporary:
 			ws = Path(temporary)
@@ -144,9 +154,10 @@ def main():
 				else:
 					passed += 1
 				print(target, name, config, "PASS" if status == 0 else "FAIL")
-	print("Nordic managed CDT builds:", passed, "PASS,",
+	print("Nordic managed CDT", "project discovery:" if args.check_only else "builds:", passed, "PASS,",
 		failures, "FAIL,", skipped, "SKIPPED")
-	print("Logs:", logdir)
+	if not args.check_only:
+		print("Logs:", logdir)
 	return 1 if failures else 0
 
 
