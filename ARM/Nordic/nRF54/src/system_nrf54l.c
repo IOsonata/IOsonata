@@ -110,7 +110,13 @@ void SystemCoreClockUpdate(void)
             break;
     }
 #endif
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	// The LM20 executes the delay loop at twice the effective rate.
+	// Keep the calibration separate from the other nRF54L parts.
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 8000000UL;
+#else
 	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+#endif
 	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
 }
 
