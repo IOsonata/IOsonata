@@ -7,6 +7,7 @@ managed Debug/Release configurations are used unchanged. This does not
 create Makefiles or substitute a command-line linker for Eclipse CDT.
 """
 import argparse
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -65,6 +66,25 @@ def find_ide(explicit):
 	raise FileNotFoundError("No Eclipse CDT launcher found; use --ide PATH")
 
 
+
+# Eclipse can finish with exit status zero even when the managed builder
+# reports compiler, linker or make failures in its output.
+BUILD_ERRORS = re.compile(
+	r"(?im)(?:^|\\n)[^\\n]*(?:"
+	r"\\bfatal error:|\\berror:|"
+	r"\\bmake(?:\\[[0-9]+\\])?: \\*\\*\\*|"
+	r"\\bBuild Failed\\b|"
+	r"\\bHeadless build encountered errors\\b|"
+	r"\\b(?:command not found|No rule to make target)\\b"
+	r")"
+)
+
+
+def log_error(logfile):
+	content = logfile.read_text(encoding="utf-8", errors="replace")
+	return BUILD_ERRORS.search(content) is not None
+
+
 def build(ide, workspace, logfile, args):
 	cmd = [str(ide), "--launcher.suppressErrors", "-nosplash",
 		"-application", "org.eclipse.cdt.managedbuilder.core.headlessbuild",
@@ -75,9 +95,15 @@ def build(ide, workspace, logfile, args):
 		output.flush()
 		result = subprocess.run(cmd, cwd=ROOT, stdout=output,
 			stderr=subprocess.STDOUT, check=False)
-	if result.returncode:
+	status = result.returncode
+	if log_error(logfile):
+		status = status or 1
+	if status:
+		lines = logfile.read_text(encoding="utf-8", errors="replace").splitlines()
 		print("FAIL:", logfile, "(exit", result.returncode, ")", flush=True)
-	return result.returncode
+		for line in lines[-25:]:
+			print(line, flush=True)
+	return status
 
 
 def main():
