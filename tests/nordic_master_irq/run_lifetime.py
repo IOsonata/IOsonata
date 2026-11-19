@@ -45,8 +45,8 @@ for text, names in [(i2c, [
 # Hardware DMA PTR is 32-bit. The host model stores a native pointer so
 # address comparisons work on 64-bit macOS and Linux. Only pointer-to-DMA
 # casts are adjusted in the generated host copy, never in production sources.
-parts = [re.sub(r'\(uint32_t\)(?=\s*(?:&|pData\b|pBuff\b|pDev->TxBuf\b|dev->TxBuf\b))',
-                '(uintptr_t)', part) for part in parts]
+parts = [re.sub(r'(\.PTR\s*=\s*)\(uint32_t\)(?=\s*(?:&|[A-Za-z_]))',
+                r'\1(uintptr_t)', part) for part in parts]
 
 with tempfile.TemporaryDirectory() as directory:
     tmp = Path(directory)
