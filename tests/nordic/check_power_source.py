@@ -110,6 +110,23 @@ class NordicPowerSource(unittest.TestCase):
         self.assertLess(sleep, stop)
         self.assertIn("timerStarted && s_StandbyTimerWoke", demo)
 
+    def test_shared_nordic_gpio_wake_arms_gpiote(self):
+        sleep = function(self.power, "void SystemSleep(void)", "void SystemPowerOff(void)")
+        wake = function(self.power, "bool SystemWakePin(", "int SystemRetRegCount(")
+        self.assertIn("IOPinAllocateInterrupt(2,", sleep)
+        self.assertIn("IOPinDisableInterrupt(wakeIrq)", sleep)
+        self.assertIn("s_SysPwrSleepSense", sleep)
+        self.assertIn("s_SysPwrSleepSense = (IOPINSENSE)Sense;", wake)
+
+    def test_nordic_i2c_disable_matches_active_transport(self):
+        source = (ROOT / "ARM/Nordic/src/i2c_nrfx.cpp").read_text()
+        disable = function(source, "void nRFxI2CDisable(", "void nRFxI2CEnable(")
+        self.assertIn("if (pDev->bDma)", disable)
+        self.assertIn("I2CMODE_SLAVE", disable)
+        self.assertIn("dev->pDmaSReg->ENABLE", disable)
+        self.assertIn("dev->pDmaReg->ENABLE", disable)
+        self.assertIn("dev->pReg->ENABLE", disable)
+
     def test_nrf54l_off_checks_clock_owner(self):
         off = function(self.power, "void SystemPowerOff(void)", "bool SystemWakePin(")
         self.assertLess(off.index("nRFxClockPrepareSystemOff()"),
