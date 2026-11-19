@@ -71,6 +71,7 @@ SOFTWARE.
 
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
+#include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 
 #if defined(NRF5340_XXAA_APPLICATION)
@@ -209,6 +210,17 @@ static const SysPwrResetMap_t s_SysPwrResetMap[] = {
 
 static bool s_bSysPwrResetRead = false;
 static uint32_t s_SysPwrResetReason = 0;
+
+static int s_SysPwrSleepPort = -1;
+static int s_SysPwrSleepPin = -1;
+static IOPINSENSE s_SysPwrSleepSense = IOPINSENSE_DISABLE;
+
+// System ON GPIO wake uses a temporary interrupt, not a new pin owner.
+static void SysPwrSleepWake(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+}
 #ifdef SYS_PWR_MEMCONF
 static uint32_t s_SysPwrRamRet = 0;		// Sections kept in System OFF, one bit each
 #endif
@@ -243,10 +255,13 @@ uint32_t SystemResetReason(void)
 
 // System ON idle: peripherals and radio retain ownership of their clocks.
 // WFI resumes on a pending interrupt; do not select System OFF or gate clocks.
+// System ON idle: the existing peripheral and radio clocks remain owned.
+// Arm a GPIO IRQ only if the application configured a GPIO wake source.
 void SystemSleep(void)
 {
 	uint32_t state;
 	uint32_t scr;
+	int wakeIrq;
 
 	if (__get_IPSR() != 0U)
 	{
@@ -254,12 +269,29 @@ void SystemSleep(void)
 	}
 
 	state = DisableInterrupt();
+	wakeIrq = -1;
+	if (s_SysPwrSleepSense != IOPINSENSE_DISABLE)
+	{
+		wakeIrq = IOPinAllocateInterrupt(2, s_SysPwrSleepPort,
+			s_SysPwrSleepPin, s_SysPwrSleepSense,
+			SysPwrSleepWake, NULL);
+		if (wakeIrq < 0)
+		{
+			EnableInterrupt(state);
+			return;
+		}
+	}
+
 	scr = SCB->SCR;
 	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
 	__DSB();
 	__WFI();
 	__ISB();
 	SCB->SCR = scr;
+	if (wakeIrq >= 0)
+	{
+		IOPinDisableInterrupt(wakeIrq);
+	}
 	EnableInterrupt(state);
 }
 
@@ -335,8 +367,23 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	}
 #endif
 
-	// SENSE of the pin, its DETECT signal wakes the MCU from System OFF
+	// GPIO SENSE supports System OFF; System ON also arms GPIOTE at entry.
 	IOPinSetSense(PortNo, PinNo, (IOPINSENSE)Sense);
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		if (s_SysPwrSleepPort == PortNo && s_SysPwrSleepPin == PinNo)
+		{
+			s_SysPwrSleepSense = IOPINSENSE_DISABLE;
+			s_SysPwrSleepPort = -1;
+			s_SysPwrSleepPin = -1;
+		}
+	}
+	else
+	{
+		s_SysPwrSleepPort = PortNo;
+		s_SysPwrSleepPin = PinNo;
+		s_SysPwrSleepSense = (IOPINSENSE)Sense;
+	}
 
 	return true;
 }
