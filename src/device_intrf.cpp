@@ -105,8 +105,10 @@ void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
 	if (state == DEVINTRF_READ_ABANDONED)
 	{
 		// The reader timed out. Hardware completion owns final release.
+		// Do not leave a success indication for this abandoned command.
 		atomic_store(&pDev->bNoStop, false);
 		pDev->StopTx(pDev);
+		atomic_store(&pDev->bTxReady, false);
 		atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
 		atomic_flag_clear(&pDev->bBusy);
 		return;
