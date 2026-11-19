@@ -99,7 +99,8 @@ struct TxByte
 };
 struct Dma
 {
-	uint32_t PTR = 0, MAXCNT = 0, AMOUNT = 0, LIST = 0;
+	uintptr_t PTR = 0;
+	uint32_t MAXCNT = 0, AMOUNT = 0, LIST = 0;
 };
 struct Reg
 {
@@ -153,6 +154,7 @@ struct nRFTwiDev_t
 	volatile int Async = 0;
 	volatile bool bAsyncErr = false, bStopped = false;
 	bool bTxRejected = false;
+	bool bPeiPrepared = false;
 	alignas(4) uint8_t TxBuf[NRFX_I2C_TXBUF_SIZE];
 };
 struct nRFSpiDev_t
@@ -166,6 +168,7 @@ struct nRFSpiDev_t
 	volatile bool *pTxWait = NULL;
 	volatile bool bTxAbort = false;
 	bool bCmdFailed = false;
+	bool bPeiPrepared = false;
 	alignas(4) uint8_t TxBuf[NRFX_SPI_TXBUF_SIZE];
 };
 static nRFSpiDev_t g_nRFxSPIDev[1];
@@ -208,6 +211,10 @@ static void IOPinSet(int, int)
 static void IOPinClear(int, int)
 {
 	csLow++;
+}
+static uint32_t nRFxSPIPinSelect(const Pin &pin)
+{
+	return (uint32_t)((pin.PortNo << 5) | pin.PinNo);
 }
 static bool nRFxI2CWaitStop(nRFTwiDev_t *, int)
 {
