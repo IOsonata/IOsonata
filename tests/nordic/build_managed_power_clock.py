@@ -70,19 +70,16 @@ def find_ide(explicit):
 # Eclipse can finish with exit status zero even when the managed builder
 # reports compiler, linker or make failures in its output.
 BUILD_ERRORS = re.compile(
-	r"(?im)(?:^|\\n)[^\\n]*(?:"
-	r"\\bfatal error:|\\berror:|"
-	r"\\bmake(?:\\[[0-9]+\\])?: \\*\\*\\*|"
-	r"\\bBuild Failed\\b|"
-	r"\\bHeadless build encountered errors\\b|"
-	r"\\b(?:command not found|No rule to make target)\\b"
-	r")"
+	r"(?i)(?:fatal error:|\berror:|\bBuild Failed\b|"
+	r"\bHeadless build encountered errors\b|"
+	r"\b(?:command not found|No rule to make target)\b|"
+	r"\bmake(?:\[[0-9]+\])?: \*\*\*)"
 )
 
 
 def log_error(logfile):
-	content = logfile.read_text(encoding="utf-8", errors="replace")
-	return BUILD_ERRORS.search(content) is not None
+	with logfile.open(encoding="utf-8", errors="replace") as input:
+		return any(BUILD_ERRORS.search(line) for line in input)
 
 
 def build(ide, workspace, logfile, args):
