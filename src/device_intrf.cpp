@@ -126,16 +126,20 @@ bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout)
 int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
                  	uint8_t *pRxBuff, int RxLen)
 {
-    int count = 0;
-    int nrtry = pDev->MaxRetry;
+	int count = 0;
+	int nrtry = pDev->MaxRetry;
+	unsigned txSequence;
 
-    if (pRxBuff == NULL || RxLen <= 0)
-        return 0;
+	if (pRxBuff == NULL || RxLen <= 0)
+	{
+		return 0;
+	}
 
-    do {
-        if (DeviceIntrfStartTx(pDev, DevAddr))
-        {
-            if (pAdCmd)
+	do {
+		if (DeviceIntrfStartTx(pDev, DevAddr))
+		{
+			txSequence = atomic_load(&pDev->TxSequence);
+			if (pAdCmd)
             {
             	pDev->bNoStop = true;
             	if (pDev->TxSrData)
@@ -155,10 +159,12 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 						// Do not start RX or release its busy flag.
 						return -1;
 					}
-					if (!atomic_load(&pDev->bNoStop))
+					// A timed-out command may have released bBusy before
+					// its waiter resumed. Never accept completion from
+					// a later owner of the same interface.
+					if (atomic_load(&pDev->TxSequence) != txSequence ||
+						!atomic_load(&pDev->bNoStop))
 					{
-						// The driver ended the command without retaining
-						// the bus, so it cannot be followed by RX.
 						return -1;
 					}
 				}
