@@ -120,12 +120,12 @@ transports has been validated. Do not report those modes as completed.
 ## Regression commands
 
 ```sh
-python3 tests/nordic/check_clock_hfxo_source.py
-python3 tests/nordic/check_power_source.py
-python3 tests/nordic/check_delay_calibration.py
-python3 tests/nordic/run_system_sleep.py
-python3 tests/nordic/compile_power_clock.py --with-i2c --target nrf52832 --target nrf52840
-# Repeat --target for nRF53 / nRF54L / nRF91 once their SDKs are installed
+python3 tests/nordic/validate_power_clock.py
+python3 tests/nordic/validate_power_clock.py \
+    --compiler /opt/xPacks/xpack-arm-none-eabi-15.2.1/bin/arm-none-eabi-g++ \
+    --target nrf52832 --target nrf52840
+# Add --target nrf5340_app / nrf5340_net / nrf54l15 / nrf54lm20a /
+# nrf54lm20b / nrf9160 / nrf9120 for other installed targets.
 ```
 
 Host/source checks and production-source syntax compilation are not
