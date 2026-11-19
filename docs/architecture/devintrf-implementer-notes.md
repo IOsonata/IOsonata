@@ -41,6 +41,7 @@ Do not assume that `DevAddr` always means a bus address.
 | `bDma` | Configured DMA intent. It does not by itself prove that the selected path is implemented or asynchronous. |
 | `bIntEn` | Configured interrupt intent. It does not by itself define transfer return semantics. |
 | `bTxReady` | Completion state used by generic TX completion helpers. Initialize it consistently with the target transfer path. |
+| `TxReadState` | Internal state of a deferred command/read transfer. The generic TX start wrapper initializes it; drivers report TX completion through `DeviceIntrfTxComplete()`. Applications must not change it. |
 | `bNoStop` | Marks a continuous command/data or repeated-start sequence where the transfer must remain open between phases. |
 
 ## Function table
@@ -137,9 +138,26 @@ pointer for later DMA. Deferred callers need caller-owned storage and a
 transfer path whose completion and buffer lifetime are explicitly supported.
 
 `DeviceIntrfRead()` waits for a deferred command phase with an iteration
-budget. The current helper does not propagate that wait result or the raw
-`StartRx` result. Drivers must handle their own command/restart failures; the
-helper is not a general asynchronous transaction state machine.
+budget. It rejects an incomplete command and a failed raw `StartRx` before
+attempting `RxData`. The iteration budget is not a wall-clock timeout and
+requires the relevant completion interrupt to be able to execute.
+
+For a deferred command, the generic code and `DeviceIntrfTxComplete()` use
+`TxReadState` to decide which context releases the interface exactly once.
+A successful command keeps `bBusy` and the bus until the receive phase. If
+the reader times out first, it returns an error and marks the command
+abandoned; the eventual completion handler performs `StopTx` and releases
+`bBusy`. If completion finishes first but the reader rejects the command,
+the reader performs the release. A stopped or aborted command must clear
+`bNoStop` before notifying `DeviceIntrfTxComplete()` so it cannot be
+mistaken for a valid repeated-start command.
+
+A driver must not publish deferred command completion by setting `bTxReady`
+directly. Use `DeviceIntrfTxComplete()` to preserve completion ownership.
+If the hardware never produces a completion event, the interface remains
+reserved rather than being reused during DMA. Recovery from that hardware
+failure belongs to the target driver; the generic wait cannot safely reset
+an arbitrary peripheral.
 
 ## Events
 
