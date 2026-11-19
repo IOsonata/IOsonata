@@ -294,7 +294,7 @@ static NRF_GPIOTE_Type *nRFGpioteGetReg(int PortNo)
  * @brief Configure individual I/O pin. nRF51 only have 1 port so PortNo is not used
  *
  * @Param 	PortNo	: Port number
- * 						Special port flag 0x80 (bit 7 set) for nRF91 secure port
+ * 						Special port flag 0x80 (bit 7 set) for non-secure GPIO alias
  * 			PinNo  	: Pin number
  * 			PinOp	: Pin function index from 0. MCU dependent
  * 						ignore for Nordic
