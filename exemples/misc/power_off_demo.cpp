@@ -558,7 +558,8 @@ int main()
 		uint64_t period = nsTimerEnableTrigger(&s_WakeTimer, 0,
 			(uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000000ULL,
 			TIMER_TRIG_TYPE_SINGLE, PowerDemoStandbyTimerWake, nullptr);
-		if (period != 0U && !s_StandbyTimerWoke)
+		bool started = period != 0U && TimerEnable(&s_WakeTimer);
+		if (started && !s_StandbyTimerWoke)
 		{
 			SystemSleep();
 		}
@@ -615,7 +616,7 @@ int main()
 #endif
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
 		uint64_t expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
-		PowerDemoPut(period != 0U && s_StandbyTimerWoke &&
+		PowerDemoPut(started && s_StandbyTimerWoke &&
 			(uint64_t)elapsed >= expected * 98ULL / 100ULL &&
 			(uint64_t)elapsed <= expected * 102ULL / 100ULL ?
 			"Standby timer wake: PASS\r\n" : "Standby timer wake: FAIL\r\n");
