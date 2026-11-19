@@ -6,12 +6,21 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+CXX = os.environ.get('CXX', 'g++')
+CC = os.environ.get('CC', 'gcc')
+# The existing display and DeviceIntrf sources use GNU C++ variable-length
+# stack arrays. Clang 16+ warns about these under -Werror even with gnu++23.
+# Keep the warning enabled, but do not fail this unrelated display regression.
+CLANG = 'clang' in subprocess.run([CXX, '--version'], capture_output=True,
+                                  text=True, check=True).stdout.lower()
+VLA_FLAGS = ['-Wno-error=vla-cxx-extension'] if CLANG else []
 
 with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
     for opt in ('-O0', '-Os'):
         exe = Path(td) / 'ssd1315_test'
-        cmd = [os.environ.get('CXX', 'g++'), '-std=gnu++23', opt,
+        cmd = [CXX, '-std=gnu++23', opt,
                '-Wall', '-Wextra', '-Werror', '-Wno-overloaded-virtual',
+               *VLA_FLAGS,
                '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                '-I' + str(ROOT / 'tests/display/hostport'),
                '-I' + str(ROOT / 'include')]
@@ -20,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
         fonts = []
         for name in ('syst5x7.c', 'FreeMono/FreeMono8pt.c', 'FreeSans/FreeSansBold24pt.c'):
             font = Path(td) / (Path(name).stem + '.o')
-            subprocess.run([os.environ.get('CC', 'gcc'), '-I' + str(ROOT / 'include'),
+            subprocess.run([CC, '-I' + str(ROOT / 'include'),
                             '-c', str(ROOT / 'src/display/fonts' / name), '-o', str(font)], check=True)
             fonts.append(str(font))
         subprocess.run(cmd + [str(ROOT / p) for p in sources] +
@@ -72,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                         'src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp',
                         'src/app_evt_handler.cpp', 'src/bluetooth/bt_adv.cpp']
         fifo = Path(td) / 'cfifo.o'
-        subprocess.run([os.environ.get('CC', 'gcc'), opt, '-I' + str(ROOT / 'include'),
+        subprocess.run([CC, opt, '-I' + str(ROOT / 'include'),
                         '-fsanitize=address,undefined', '-c', str(ROOT / 'src/cfifo.c'),
                         '-o', str(fifo)], check=True)
         subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
