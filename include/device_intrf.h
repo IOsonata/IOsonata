@@ -549,11 +549,13 @@ DEVINTRF_INLINE void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
  * 			false - failed
  */
 DEVINTRF_INLINE bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
+	bool retval;
+
     if (atomic_flag_test_and_set(&pDev->bBusy))
         return false;
 
 	atomic_init(&pDev->TxReadState, 0);
-    bool retval =  pDev->StartTx(pDev, DevAddr);
+    retval = pDev->StartTx(pDev, DevAddr);
 
     // In case of returned false, app would not call Stop to release busy flag
     // so we need to do that here before returning
