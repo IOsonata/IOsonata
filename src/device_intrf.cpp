@@ -243,6 +243,11 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 				atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
 				atomic_store(&pDev->bNoStop, false);
 				DeviceIntrfStopTx(pDev);
+				if (count == 0)
+				{
+					// Preserve the existing retry policy for zero bytes.
+					continue;
+				}
 				return -1;
 			}
 
