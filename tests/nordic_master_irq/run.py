@@ -263,7 +263,9 @@ def spi_cmd_done():
     check(call('tx_ready', 1) == 1, 'command phase not flagged ready')
     check(call('busy', 1) == 1, 'bus released after the command phase')
     check(call('events', 0) == 0, 'command phase reported as a completion')
-r = call_break('read_reg', (1, 8), 'DeviceIntrfWaitTxComplete', spi_cmd_done)
+# The Nordic SPI driver waits for its command DMA before returning to
+# DeviceIntrfRead. Complete that DMA during its own wait, before abort starts.
+r = call_break('read_reg', (1, 8), 'nRFxSPIAsyncTxWait', spi_cmd_done)
 check(r == -1, 'read returns', r)
 check(pending == [('rx', BUF, 8)], pending)
 spi_finish()
