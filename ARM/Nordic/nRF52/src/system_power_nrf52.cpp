@@ -240,25 +240,25 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	// A GPIO port register can exist even when its higher pin indices do not.
 	// Validate the bonded-port maximum exposed by the MCU pin map.
 #ifdef IOPIN_P0_MAXCOUNT
-	if (PortNo == 0 && PinNo >= IOPIN_P0_MAXCOUNT)
+	if ((PortNo & 0x7F) == 0 && PinNo >= IOPIN_P0_MAXCOUNT)
 	{
 		return false;
 	}
 #endif
 #ifdef IOPIN_P1_MAXCOUNT
-	if (PortNo == 1 && PinNo >= IOPIN_P1_MAXCOUNT)
+	if ((PortNo & 0x7F) == 1 && PinNo >= IOPIN_P1_MAXCOUNT)
 	{
 		return false;
 	}
 #endif
 #ifdef IOPIN_P2_MAXCOUNT
-	if (PortNo == 2 && PinNo >= IOPIN_P2_MAXCOUNT)
+	if ((PortNo & 0x7F) == 2 && PinNo >= IOPIN_P2_MAXCOUNT)
 	{
 		return false;
 	}
 #endif
 #ifdef IOPIN_P3_MAXCOUNT
-	if (PortNo == 3 && PinNo >= IOPIN_P3_MAXCOUNT)
+	if ((PortNo & 0x7F) == 3 && PinNo >= IOPIN_P3_MAXCOUNT)
 	{
 		return false;
 	}
