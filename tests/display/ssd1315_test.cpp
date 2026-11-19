@@ -208,7 +208,7 @@ static int Tx(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 
 // Finish the modeled IRQ only when the display waits. This catches early
 // StopTx, D/C changes and double completion, without host thread timing.
-bool DeviceIntrfWaitTxCompleteForDisplayTest(DevIntrf_t * const pDev, int Limit)
+extern "C" bool DeviceIntrfWaitTxCompleteForDisplayTest(DevIntrf_t * const pDev, int Limit)
 {
 	assert(Limit > 0);
 	if (timeout)
