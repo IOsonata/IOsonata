@@ -150,6 +150,11 @@ int main(void)
 	assert(s_Wfi == 2U && s_IrqAllocated == 2 && s_IrqReleased == 2);
 	assert(s_Disable == 2U && s_Enable == 2U && s_Mask == 0U);
 	assert(g_Scb.SCR == 0x106U);
+
+	s_AllowIrq = false;
+	SystemSleep();
+	assert(s_Wfi == 2U && s_IrqAllocated == 2 && s_IrqReleased == 2);
+	assert(s_Disable == 3U && s_Enable == 3U);
 #ifdef SOFTDEVICE_PRESENT
 	s_SdOn = true;
 	s_AllowIrq = true;
@@ -161,10 +166,6 @@ int main(void)
 	assert(s_Disable == 2U && s_Enable == 2U && s_Mask == 0U);
 	s_SdOn = false;
 #endif
-	s_AllowIrq = false;
-	SystemSleep();
-	assert(s_Wfi == 2U && s_IrqAllocated == 2 && s_IrqReleased == 2);
-	assert(s_Disable == 3U && s_Enable == 3U);
 #endif
 	return 0;
 }
