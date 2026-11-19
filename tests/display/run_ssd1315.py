@@ -32,8 +32,17 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
             subprocess.run([CC, '-I' + str(ROOT / 'include'),
                             '-c', str(ROOT / 'src/display/fonts' / name), '-o', str(font)], check=True)
             fonts.append(str(font))
+        # Compile only the SSD1315 display driver with its wait symbol
+        # redirected to the test model. Keep the generic DeviceIntrf source
+        # unchanged, including its real wait implementation.
+        display_obj = Path(td) / ('ssd1315_display_' + opt[1:] + '.o')
+        subprocess.run(cmd + [
+            '-DDeviceIntrfWaitTxComplete=DeviceIntrfWaitTxCompleteForDisplayTest',
+            '-c', str(ROOT / 'src/display/display_ssd1315.cpp'),
+            '-o', str(display_obj)], check=True)
+        sources.remove('src/display/display_ssd1315.cpp')
         subprocess.run(cmd + [str(ROOT / p) for p in sources] +
-                       fonts + ['-Wl,--wrap=DeviceIntrfWaitTxComplete', '-o', str(exe)], check=True)
+                       [str(display_obj)] + fonts + ['-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
         print(opt + ': SSD1315 checks passed', flush=True)
         # Exercise the configuration supplied to SPIInit by the real console
