@@ -388,10 +388,24 @@ void nRFxI2CDisable(DevIntrf_t * const pDev)
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
 #ifdef TWIM_PRESENT
-	dev->pDmaReg->ENABLE = (TWIM_ENABLE_ENABLE_Disabled << TWIM_ENABLE_ENABLE_Pos);
-#else
-	dev->pReg->ENABLE = (TWI_ENABLE_ENABLE_Disabled << TWI_ENABLE_ENABLE_Pos);
+	if (pDev->bDma)
+	{
+		if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
+		{
+			dev->pDmaSReg->ENABLE = (TWIS_ENABLE_ENABLE_Disabled << TWIS_ENABLE_ENABLE_Pos);
+		}
+		else
+		{
+			dev->pDmaReg->ENABLE = (TWIM_ENABLE_ENABLE_Disabled << TWIM_ENABLE_ENABLE_Pos);
+		}
+	}
+	else
 #endif
+	{
+#ifdef TWI_PRESENT
+		dev->pReg->ENABLE = (TWI_ENABLE_ENABLE_Disabled << TWI_ENABLE_ENABLE_Pos);
+#endif
+	}
 }
 
 void nRFxI2CEnable(DevIntrf_t * const pDev)
