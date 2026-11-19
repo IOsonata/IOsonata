@@ -138,7 +138,18 @@ def main():
 				config = config.resolve()
 				if not config.is_file():
 					parser.error("Missing SoftDevice SDK config: " + str(config))
-				base += ["-I" + str(config.parent), "-DSOFTDEVICE_PRESENT=1",
+				# nrf_sdh.h depends on SDK5 utility and section-variable headers.
+				# Match the SDK5 managed-project include directories.
+				sdk = args.nrf5_sdk.resolve()
+				base += ["-I" + str(sdk / "components/libraries/util"),
+					"-I" + str(sdk / "components/libraries/experimental_section_vars"),
+					"-I" + str(sdk / "components/libraries/log"),
+					"-I" + str(sdk / "components/libraries/log/src"),
+					"-I" + str(sdk / "integration/nrfx"),
+					"-I" + str(sdk / "integration/nrfx/legacy"),
+					"-I" + str(sdk / "modules/nrfx"),
+					"-I" + str(sdk / "modules/nrfx/mdk"),
+					"-I" + str(config.parent), "-DSOFTDEVICE_PRESENT=1",
 					"-I" + str(sd), "-I" + str(sd / "nrf52"),
 					"-I" + str(args.nrf5_sdk.resolve() /
 						"components/softdevice/common"),
