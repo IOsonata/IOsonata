@@ -22,3 +22,17 @@ An omitted selector prints SKIP. A configured selector that fails prints FAIL;
 unsupported selections are not silently counted as successful tests. Runtime
 clock ownership, board wiring and hardware operation still require board
 validation. See the cross-target power/clock demo matrix for build results.
+
+## PCA10121 application-core timing (November 19, 2026)
+
+Hardware UART output passed three cycles of HFXO request/release, LF RC
+selection, APB readback and timer IRQ checks. The 1 MHz timer measured
+`msDelay(250)` = 438251 us with 43 IRQs (FAIL) and
+`nsDelay(250000000)` = 250447 us with 25 IRQs (PASS).
+
+The application-core `SystemMicroSecLoopCnt` divisor was adjusted from
+16 MHz to 28 MHz, based on that single 64 MHz board measurement. The
+nanosecond factor was left unchanged. Rebuild both the nRF5340 application
+library and `ClockDemo` and repeat the hardware run; the new calibration has
+**not yet passed hardware testing**. Source-level check:
+`python3 tests/nordic/check_nrf5340_application_delay.py`.
