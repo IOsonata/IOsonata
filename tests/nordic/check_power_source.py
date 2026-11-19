@@ -110,6 +110,19 @@ class NordicPowerSource(unittest.TestCase):
         self.assertLess(sleep, stop)
         self.assertIn("timerStarted && s_StandbyTimerWoke", demo)
 
+    def test_sleep_preserves_nordic_peripheral_owners(self):
+        for source in (self.power52, self.power):
+            sleep = function(source, "void SystemSleep(void)", "void SystemPowerOff(void)")
+            self.assertNotIn("DeviceIntrfDisable(", sleep)
+            self.assertNotIn("DeviceIntrfEnable(", sleep)
+            self.assertNotIn("UARTDisable(", sleep)
+            self.assertNotIn("UARTEnable(", sleep)
+            self.assertNotIn("I2CDisable(", sleep)
+            self.assertNotIn("SPIDisable(", sleep)
+            self.assertNotIn("UARTPowerOff(", sleep)
+            self.assertNotIn("SystemCoreClockSelect(", sleep)
+            self.assertNotIn("SystemLowFreqClockSelect(", sleep)
+
     def test_shared_nordic_gpio_wake_arms_gpiote(self):
         sleep = function(self.power, "void SystemSleep(void)", "void SystemPowerOff(void)")
         wake = function(self.power, "bool SystemWakePin(", "int SystemRetRegCount(")
