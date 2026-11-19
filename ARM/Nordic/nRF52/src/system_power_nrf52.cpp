@@ -214,6 +214,15 @@ void SystemSleep(void)
 	sd = SysPwrSdEnabled();
 #endif
 	state = DisableInterrupt();
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	// sd_app_evt_wait requires normal IRQ delivery. Do not enable IRQs
+	// behind a caller that entered with PRIMASK set.
+	if (sd && state != 0U)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+#endif
 	wakeIrq = -1;
 	if (s_SysPwrSleepSense != IOPINSENSE_DISABLE)
 	{
