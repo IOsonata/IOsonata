@@ -159,8 +159,35 @@ installed at the paths expected by the project may cause a real link
 failure; the runner must not classify missing external dependencies as
 a PASS. The builder does not program devices or measure power current.
 
-This managed-project runner has not been executed on a macOS Eclipse
-installation as part of the repository review.
+The maintainer ran the managed CDT runner under IOcomposer on macOS.
+The latest nRF5340 Network and nRF54LM20 run reported 10 PASS, 0 FAIL,
+1 SKIPPED (Network PowerOffDemo absent). Earlier nRF52832/nRF52840
+builds reported 12 PASS. These are build results, not hardware validation.
+
+## nRF5340 Audio DK PCA10121 ClockDemo hardware (November 19, 2026)
+
+Both application and network cores passed three HFXO request/release cycles,
+LF RC selection and APB readback at 64 MHz CPU / 16 MHz APB.
+The 1 MHz timer counted 25 interrupts over each 250 ms delay.
+
+| Core | msDelay(250) | nsDelay(250 ms) | Result |
+| --- | ---: | ---: | --- |
+| Application | 250443 us | 250447 us | 0 failures |
+| Network | 250378 us | 250380 us | 0 failures |
+
+The application microsecond loop calibration was updated from 16 to 28
+cycles/iteration and the network from 16 to 23. Both factors then passed
+hardware timing. Nanosecond factors were unchanged. Application-core
+System OFF and RAM retention results were validated separately;
+network-core System OFF was not tested.
+
+## Next hardware gate: nRF54LM20 ClockDemo
+
+nRF54LM20 PowerOffDemo has previous System OFF/button wake and selected
+RAM retention validation. Eclipse managed ClockDemo Debug/Release builds
+passed, but the runtime ClockDemo is not yet validated. Build the Release
+library and ClockDemo, run it at 1 Mbaud, and check HFXO request/release,
+LF RC, APB, timer IRQs and 250 ms delay timing within 245000-255000 us.
 
 ## Outstanding verification
 
