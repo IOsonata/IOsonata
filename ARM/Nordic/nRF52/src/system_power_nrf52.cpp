@@ -194,6 +194,16 @@ void SystemSleep(void)
 		return;
 	}
 
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	// SoftDevice filters radio-only activity from application wakeups.
+	// Its event wait must run with normal interrupt delivery.
+	if (SysPwrSdEnabled())
+	{
+		(void)sd_app_evt_wait();
+		return;
+	}
+#endif
+
 	state = DisableInterrupt();
 	scr = SCB->SCR;
 	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
