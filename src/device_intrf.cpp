@@ -133,7 +133,6 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 {
 	int count = 0;
 	int nrtry = pDev->MaxRetry;
-	unsigned txSequence;
 
 	if (pRxBuff == NULL || RxLen <= 0)
 	{
@@ -143,7 +142,6 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 	do {
 		if (DeviceIntrfStartTx(pDev, DevAddr))
 		{
-			txSequence = atomic_load(&pDev->TxSequence);
 			if (pAdCmd)
             {
             	pDev->bNoStop = true;
@@ -164,12 +162,9 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 						// Do not start RX or release its busy flag.
 						return -1;
 					}
-					// A timed-out command may have released bBusy before
-					// its waiter resumed. Never accept completion from
-					// a later owner of the same interface.
-					if (atomic_load(&pDev->TxSequence) != txSequence ||
-						!atomic_load(&pDev->bNoStop))
+					if (!atomic_load(&pDev->bNoStop))
 					{
+						// A released bus cannot be used for repeated-start RX.
 						return -1;
 					}
 				}
