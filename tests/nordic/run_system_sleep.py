@@ -1,88 +1,139 @@
 #!/usr/bin/env python3
-"""Host-check nRF71 SystemSleep and Nordic power source links."""
+"""Compile and execute the real Nordic SystemSleep functions on a host model.
+
+Extract only the production entry points so the host can substitute CPU
+registers and SoftDevice event wait without including target CMSIS headers.
+This does not validate low-power hardware or target ABI.
+"""
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
-NRF71 = ROOT / 'ARM/Nordic/nRF71/src/system_sleep_nrf71.c'
-MOCK = """
+BACKENDS = (
+	("nrf52", "ARM/Nordic/nRF52/src/system_power_nrf52.cpp", False),
+	("nrf52_sd", "ARM/Nordic/nRF52/src/system_power_nrf52.cpp", True),
+	("nrfx", "ARM/Nordic/src/system_power_nrfx.cpp", False),
+	("nrf71", "ARM/Nordic/nRF71/src/system_sleep_nrf71.c", False),
+)
+
+MODEL = r"""
+#include <assert.h>
+#include <stdbool.h>
 #include <stdint.h>
 typedef struct { uint32_t SCR; } MockScb;
-extern MockScb g_Scb;
+static MockScb g_Scb;
 #define SCB (&g_Scb)
 #define SCB_SCR_SLEEPDEEP_Msk (1U << 2)
 #define SCB_SCR_SLEEPONEXIT_Msk (1U << 1)
-uint32_t MockIpsr(void);
-void MockWfi(void);
-#define __get_IPSR() MockIpsr()
-#define __DSB() ((void)0)
-#define __ISB() ((void)0)
-#define __WFI() MockWfi()
-"""
-FIXTURE = """
-#include <assert.h>
-#include <stdint.h>
-#include "nrf.h"
-MockScb g_Scb;
 static uint32_t s_Ipsr, s_Mask;
-static int s_Wait;
-void SystemSleep(void);
-uint32_t MockIpsr(void) { return s_Ipsr; }
-uint32_t DisableInterrupt(void) { uint32_t v = s_Mask; s_Mask = 1U; return v; }
-void EnableInterrupt(uint32_t v) { s_Mask = v; }
+static unsigned s_Disable, s_Enable, s_Wfi, s_SdWait;
+static bool s_SdOn;
+uint32_t __get_IPSR(void) { return s_Ipsr; }
+uint32_t DisableInterrupt(void)
+{
+	uint32_t state = s_Mask;
+	s_Disable++;
+	s_Mask = 1U;
+	return state;
+}
+void EnableInterrupt(uint32_t state)
+{
+	s_Enable++;
+	s_Mask = state;
+}
 void MockWfi(void)
 {
-    assert(s_Mask == 1U);
-    assert((g_Scb.SCR & 6U) == 0U);
-    s_Wait++;
+	assert(s_Mask == 1U);
+	assert((g_Scb.SCR & (SCB_SCR_SLEEPDEEP_Msk |
+		SCB_SCR_SLEEPONEXIT_Msk)) == 0U);
+	s_Wfi++;
 }
+#define __WFI() MockWfi()
+#define __DSB() ((void)0)
+#define __ISB() ((void)0)
+bool SysPwrSdEnabled(void) { return s_SdOn; }
+uint32_t sd_app_evt_wait(void) { s_SdWait++; return 0U; }
+"""
+
+FIXTURE = r"""
 int main(void)
 {
-    int i;
-    for (i = 0; i < 2; i++)
-    {
-        s_Mask = (uint32_t)i;
-        g_Scb.SCR = 0x106U;
-        s_Wait = 0;
-        SystemSleep();
-        assert(s_Wait == 1 && g_Scb.SCR == 0x106U && s_Mask == (uint32_t)i);
-        s_Ipsr = 1U;
-        SystemSleep();
-        assert(s_Wait == 1);
-        s_Ipsr = 0U;
-    }
+	unsigned i;
+
+	for (i = 0U; i < 2U; i++)
+	{
+		s_Ipsr = 0U;
+		s_SdOn = false;
+		s_Mask = i;
+		s_Disable = s_Enable = s_Wfi = s_SdWait = 0U;
+		g_Scb.SCR = 0x100U | SCB_SCR_SLEEPDEEP_Msk |
+			SCB_SCR_SLEEPONEXIT_Msk;
+		SystemSleep();
+		assert(s_Wfi == 1U && s_Disable == 1U && s_Enable == 1U);
+		assert(s_SdWait == 0U && s_Mask == i);
+		assert(g_Scb.SCR == (0x100U | SCB_SCR_SLEEPDEEP_Msk |
+			SCB_SCR_SLEEPONEXIT_Msk));
+		s_Ipsr = 11U;
+		SystemSleep();
+		assert(s_Wfi == 1U && s_Disable == 1U && s_Enable == 1U);
+	}
+#ifdef SOFTDEVICE_PRESENT
+	s_Ipsr = 0U;
+	s_SdOn = true;
+	s_Mask = 0U;
+	s_Disable = s_Enable = s_Wfi = s_SdWait = 0U;
+	g_Scb.SCR = 0x106U;
+	SystemSleep();
+	assert(s_Wfi == 0U && s_SdWait == 1U);
+	assert(s_Disable == 0U && s_Enable == 0U && s_Mask == 0U);
+	assert(g_Scb.SCR == 0x106U);
+#endif
+	return 0;
 }
 """
+
+
+def sleep_function(source):
+	start = source.index("void SystemSleep(void)")
+	brace = source.index("{", start)
+	level = 0
+	for pos in range(brace, len(source)):
+		if source[pos] == "{":
+			level += 1
+		elif source[pos] == "}":
+			level -= 1
+			if level == 0:
+				return source[start:pos + 1]
+	raise RuntimeError("SystemSleep body incomplete")
 
 
 def main():
-    for name in ('ARM/Nordic/nRF52/src/system_power_nrf52.cpp',
-                 'ARM/Nordic/src/system_power_nrfx.cpp'):
-        source = (ROOT / name).read_text()
-        assert 'void SystemSleep(void)' in source, name
-        assert 'SCB_SCR_SLEEPONEXIT_Msk' in source, name
-    project = ROOT / 'ARM/Nordic/nRF71/nRF7120x/lib/ioc/.project'
-    links = ET.parse(project).findall('.//link')
-    assert sum(link.findtext('name') == 'src/system_sleep_nrf71.c'
-               for link in links) == 1
-    with tempfile.TemporaryDirectory() as temp:
-        path = Path(temp)
-        (path / 'coredev').mkdir()
-        (path / 'nrf.h').write_text(MOCK)
-        (path / 'coredev/interrupt.h').write_text(
-            '#include <stdint.h>\nuint32_t DisableInterrupt(void);\n'
-            'void EnableInterrupt(uint32_t);\n')
-        (path / 'coredev/system_core_clock.h').write_text('void SystemSleep(void);\n')
-        (path / 'test.c').write_text(FIXTURE)
-        output = path / 'sleep_test'
-        subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror',
-                        '-I', str(path), str(NRF71), str(path / 'test.c'),
-                        '-o', str(output)], check=True)
-        subprocess.run([str(output)], check=True)
-    print('Nordic SystemSleep host and Eclipse-link checks PASS')
+	project = ROOT / "ARM/Nordic/nRF71/nRF7120x/lib/ioc/.project"
+	links = ET.parse(project).findall(".//link")
+	assert sum(link.findtext("name") == "src/system_sleep_nrf71.c"
+		for link in links) == 1
+
+	with tempfile.TemporaryDirectory(prefix="nordic-sleep-") as directory:
+		folder = Path(directory)
+		for name, relative, softdevice in BACKENDS:
+			source = (ROOT / relative).read_text(encoding="utf-8")
+			body = MODEL + sleep_function(source) + FIXTURE
+			test = folder / (name + ".cpp")
+			output = folder / name
+			test.write_text(body, encoding="utf-8")
+			cmd = [os.environ.get("CXX", "g++"), "-std=c++17",
+				"-Wall", "-Wextra", "-Werror", "-O2"]
+			if softdevice:
+				cmd.append("-DSOFTDEVICE_PRESENT=1")
+			cmd += [str(test), "-o", str(output)]
+			subprocess.run(cmd, check=True)
+			subprocess.run([str(output)], check=True)
+			print(name + ": SystemSleep host model PASS", flush=True)
+	print("Nordic power sleep models and nRF71 Eclipse link PASS")
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+	main()
