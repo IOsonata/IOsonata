@@ -514,35 +514,42 @@ int main()
 		SpiComplete();
 		CHECK(completed == 1 && !Busy(&spi.DevIntrf));
 
+		// An abort that completes before the read returns must not
+		// enter RX. The waiting read owns the final StopTx.
 		Init(dma);
 		spi.DevIntrf.MaxRetry = 0;
 		afterMask = SpiStop;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
-			receive, sizeof(receive)) == 0);
+			receive, sizeof(receive)) == -1);
 		CHECK(timedout == 1 && completed == 0 && !Busy(&spi.DevIntrf));
-		CHECK(spiReg.RxDma.MAXCNT == 0 && !d.bCmdFailed);
+		CHECK(spiReg.RxDma.MAXCNT == 0 && !g_nRFxSPIDev[0].bCmdFailed);
 		SpiReceive();
 
-		// STOPPED after bNoStop clears must not let the timeout callback
-		// replace the failed command before the old read rejects its RX.
+		// A completion callback cannot start a replacement transfer
+		// before the original reader acknowledges its failed command.
 		Init(dma);
 		spi.DevIntrf.MaxRetry = 0;
-		stopBeforeRx = replaceTimeout = true;
-		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
-			receive, sizeof(receive)) == 0);
-		CHECK(timedout == 1 && replacementResult == 0 && !Busy(&spi.DevIntrf));
-		CHECK(spiReg.RxDma.MAXCNT == 0 && !d.bCmdFailed && !d.bTxAbort);
-		SpiReceive();
-
-		// Once RxData consumes the failed command, a late stop can release
-		// the bus and start another transmit without the old read stopping it.
-		Init(dma);
-		spi.DevIntrf.MaxRetry = 0;
-		stopOnRxUnlock = replaceTimeout = true;
+		afterMask = SpiStop;
+		replaceTimeout = true;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
 			receive, sizeof(receive)) == -1);
+		CHECK(timedout == 1 && replacementResult == 0 && !Busy(&spi.DevIntrf));
+		CHECK(spiReg.RxDma.MAXCNT == 0 && !g_nRFxSPIDev[0].bCmdFailed);
+		SpiReceive();
+
+		// If the caller times out first, STOPPED owns the release.
+		// Only after that release may the callback start a new TX.
+		Init(dma);
+		spi.DevIntrf.MaxRetry = 0;
+		replaceTimeout = true;
+		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
+			receive, sizeof(receive)) == -1);
+		auto &d = g_nRFxSPIDev[0];
+		CHECK(timedout == 0 && d.bTxAbort && d.bCmdFailed && Busy(&spi.DevIntrf));
+		CHECK(replacementResult == -2 && spiReg.RxDma.MAXCNT == 0);
+		SpiStop();
 		CHECK(timedout == 1 && replacementResult == -1 && Busy(&spi.DevIntrf));
-		CHECK(spiReg.RxDma.MAXCNT == 0 && !d.bCmdFailed && !d.bTxAbort);
+		CHECK(!d.bCmdFailed && !d.bTxAbort);
 		SpiComplete();
 		CHECK(completed == 1 && !Busy(&spi.DevIntrf));
 		SpiReceive();
@@ -551,10 +558,11 @@ int main()
 		spi.DevIntrf.MaxRetry = 0;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
 			receive, sizeof(receive)) == -1);
-		CHECK(timedout == 0 && d.bTxAbort && !d.bCmdFailed && Busy(&spi.DevIntrf));
+		CHECK(timedout == 0 && d.bTxAbort && d.bCmdFailed && Busy(&spi.DevIntrf));
 		SpiStop();
 		CHECK(timedout == 1 && !Busy(&spi.DevIntrf));
 		SpiReceive();
+
 	}
 	printf("Nordic transfer lifetime: %d checks, %d failures\n", checks, failures);
 	return failures != 0;
