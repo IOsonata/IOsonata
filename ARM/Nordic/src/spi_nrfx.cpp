@@ -1085,16 +1085,12 @@ static void nRFxSPIAsyncTxAbortEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * cons
 	pDev->bTxAbort = false;
 	if (pDev->bCmdFailed)
 	{
-		// The command was aborted. The read must not enter its RX phase.
-		// Hardware has stopped; release the held bus here, not in RX.
+		// Hardware has stopped. Mark the command as failed before
+		// handing completion to the generic read owner.
 		pDev->bCmdFailed = false;
 		atomic_store(&pIntrf->bNoStop, false);
-		DeviceIntrfStopTx(pIntrf);
 	}
-	else
-	{
-		DeviceIntrfTxComplete(pIntrf);
-	}
+	DeviceIntrfTxComplete(pIntrf);
 	if (pIntrf->EvtCB)
 	{
 		pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, NULL, Count);
