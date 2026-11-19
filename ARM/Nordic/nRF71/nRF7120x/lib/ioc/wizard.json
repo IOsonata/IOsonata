@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "mcu": "NRF7120E_XXAA",
+  "cpu": "cortex-m33",
+  "fpu": true,
+  "fpu_unit": "fpv5spd16",
+  "defines": [
+    "NRF_APPLICATION"
+  ],
+  "includes": [
+    "${iosonata}/ARM/Nordic/include",
+    "${iosonata}/ARM/Nordic/nRF71/include",
+    "${external}/nrfx",
+    "${external}/nrfx/drivers/include",
+    "${external}/nrfx/bsp/stable",
+    "${external}/nrfx/bsp/stable/mdk",
+    "${external}/nrfx/bsp/stable/mdk/common",
+    "${external}/nrfx/bsp/stable/mdk/nrf71",
+    "${external}/nrfx/hal",
+    "${external}/nrfx/bsp/stable/soc"
+  ],
+  "linker_script": "${iosonata}/ARM/Nordic/nRF71/ldscript/gcc_nrf7120_xxaa.ld",
+  "lib_path": "${iosonata}/ARM/Nordic/nRF71/nRF7120x/lib/ioc/${config}",
+  "lib": "IOsonata_nRF7120x"
+}

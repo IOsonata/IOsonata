@@ -109,7 +109,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // sub-blocks and renamed the task/event registers. Everything else in the
 // transfer logic is identical, so the differences are folded into the
 // accessors below and the shared code reads through them.
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 #define NRFX_UARTE_NEW_DMA_REG		1
 
 #define NRFX_UARTE_RXD_PTR(r)		((r)->DMA.RX.PTR)
@@ -173,7 +173,7 @@ typedef struct __nRF_UART_Dev {
 	uint32_t CtsPin;
 	uint32_t RtsPin;
 	uint32_t RxDmaCnt;
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 	uint32_t TxDmaLen;
 #endif
 	uint8_t RxFifoMem[NRFX_UART_CFIFO_SIZE];
@@ -185,7 +185,7 @@ typedef struct __nRF_UART_Dev {
 #pragma pack(pop)
 
 alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 	{	// On P0
 		.DevNo = 0,
 		.pDmaReg = NRF_UARTE30_S,
@@ -577,7 +577,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	{
 		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		// TX.END also occurs when transmission was stopped early. Resume
 		// the unsent suffix before consuming more bytes from the FIFO.
 		if (dev->TxDmaLen != 0U)
@@ -612,7 +612,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			// if uart tx has not completed in time.
 			memcpy(dev->TxDmaMem, p, l);
 
-			#if defined(NRF54L_SERIES)
+			#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			dev->TxDmaLen = (uint32_t)l;
 #endif
 			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
@@ -758,7 +758,7 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	regval = (uint32_t)(((((uint64_t)Rate << 32ULL) + 8000000ULL) / 16000000ULL) + 0x800ULL) & 0xFFFFF000;
 	rate = (uint32_t)(((uint64_t)regval * 16000000ULL) >> 32ULL);
 
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 	if (dev->pDmaReg == NRF_UARTE00_S)
 	{
 		// UARTE00 sits in the MCU domain and runs on the fast clock, not
@@ -1043,7 +1043,7 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 				dev->pUartDev->bTxReady = false;
 				// The FIFO slot is reusable immediately; cache DMA data.
 				memcpy(dev->TxDmaMem, p, l);
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 				dev->TxDmaLen = (uint32_t)l;
 #endif
 				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
@@ -1156,7 +1156,7 @@ void nRFUARTPowerOff(DevIntrf_t * const pDev)
 	NRF_UARTE_Type *reg = dev->pDmaReg;
 #endif
 
-#if !defined(NRF54L_SERIES)
+#if !defined(NRF54L_SERIES) && !defined(NRF71_SERIES)
 	// Undocumented Power down.  Nordic Bug with DMA causing high current consumption
 	// Not present on the nRF54 series.
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
@@ -1266,7 +1266,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	NRF_UARTE_Type *reg = s_nRFxUARTDev[devno].pDmaReg;
 #endif
 
-#if !defined(NRF54L_SERIES)
+#if !defined(NRF54L_SERIES) && !defined(NRF71_SERIES)
 	// Force power on in case it was powered off previously
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
@@ -1478,7 +1478,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	s_nRFxUARTDev[devno].pUartDev->RxDropCnt = 0;
 	s_nRFxUARTDev[devno].pUartDev->TxDropCnt = 0;
 	s_nRFxUARTDev[devno].RxDmaCnt = 0;
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 	s_nRFxUARTDev[devno].TxDmaLen = 0U;
 #endif
 
@@ -1567,7 +1567,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	if (pCfg->bIntMode)
 	{
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54L_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		SharedIntrfSetIrqHandler(pCfg->DevNo, &pDev->DevIntrf, UartIrqHandler);
 #endif
 
@@ -1608,7 +1608,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 		switch (devno)
 		{
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		case 0:
 			NVIC_ClearPendingIRQ(SERIAL30_IRQn);
 			NVIC_SetPriority(SERIAL30_IRQn, pCfg->IntPrio);

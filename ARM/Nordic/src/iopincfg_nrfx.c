@@ -54,7 +54,7 @@ SOFTWARE.
 NRF_GPIO_Type *nRFGpioGetReg(int PortNo);
 void __WEAK GPIOTE_IRQHandler(void);
 
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 #define IOPIN_MAX_INT			(GPIOTE20_GPIOTE_NCHANNELS_SIZE + GPIOTE30_GPIOTE_NCHANNELS_SIZE)
 #elif defined(NRF54H20_XXAA)
 #define IOPIN_MAX_INT			(GPIOTE130_GPIOTE_NCHANNELS_SIZE)
@@ -220,6 +220,18 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 #endif
 			break;
 #endif
+#if GPIO_COUNT > 4
+		case 4:
+			if (PortNo & 0x80)
+			{
+				reg = NRF_P4_NS;
+			}
+			else
+			{
+				reg = NRF_P4_S;
+			}
+			break;
+#endif
 	}
 #endif
 
@@ -234,7 +246,7 @@ static NRF_GPIOTE_Type *nRFGpioteGetReg(int PortNo)
 	// One instance for all ports
 	(void)PortNo;
 	reg = NRF_GPIOTE130;
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 	if (PortNo & 0x7F)
 	{
 	    if (PortNo & 0x80)
@@ -324,7 +336,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 
 	if (Type == IOPINTYPE_OPENDRAIN)
 	{
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 		cnf |= (GPIO_PIN_CNF_DRIVE0_S0 << GPIO_PIN_CNF_DRIVE0_Pos) | (GPIO_PIN_CNF_DRIVE1_D1 << GPIO_PIN_CNF_DRIVE1_Pos);
 #else
 		cnf |= (GPIO_PIN_CNF_DRIVE_S0D1 << GPIO_PIN_CNF_DRIVE_Pos);
@@ -405,7 +417,7 @@ void IOPinDisableInterrupt(int IntNo)
 #if defined(NRF54H20_XXAA)
 		gpiotereg->H20_GPIOTE_INTENCLR = H20_GPIOTE_PORT_Msk;
 		gpiotereg->H20_GPIOTE_EVENTS_PORT = 0;
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
         if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
         {
         	if (IntNo > 4)
@@ -443,7 +455,7 @@ void IOPinDisableInterrupt(int IntNo)
 
 #if defined(NRF54H20_XXAA)
 		gpiotereg->H20_GPIOTE_INTENCLR = (1 << IntNo);
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
     	if (IntNo > 4)
     	{
     		gpiotereg->INTENCLR1 = (1 << (IntNo - 4));
@@ -479,7 +491,7 @@ void IOPinDisableInterrupt(int IntNo)
 	NVIC_ClearPendingIRQ(H20_GPIOTE_IRQn);
 	NVIC_DisableIRQ(H20_GPIOTE_IRQn);
 	gpiotereg->H20_GPIOTE_INTENCLR = 0xFFFFFFFF;
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
     if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x7F00)
     {
 		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
@@ -591,7 +603,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 #endif
 
 	uint32_t cfg = 0;
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 	// Two GPIOTE instances of 4 channels each, the second one starts over at 0
 	int idx = IntNo > 3 ? IntNo - 4 : IntNo;
 #else
@@ -660,7 +672,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 #if defined(NRF54H20_XXAA)
 		gpiotereg->H20_GPIOTE_EVENTS_PORT = 0;
 		gpiotereg->H20_GPIOTE_INTENSET = H20_GPIOTE_PORT_Msk;
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 
 		if (IntNo > 3)
 		{
@@ -770,7 +782,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 
 #if defined(NRF54H20_XXAA)
 		gpiotereg->H20_GPIOTE_INTENSET = (1 << IntNo);
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 		if (IntNo > 3)
 		{
 			if (PortNo & 0x80)
@@ -826,7 +838,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	NVIC_ClearPendingIRQ(H20_GPIOTE_IRQn);
 	NVIC_SetPriority(H20_GPIOTE_IRQn, IntPrio);
 	NVIC_EnableIRQ(H20_GPIOTE_IRQn);
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 	if ((PortNo & 0x7F) == 0)
 	{
 		if (PortNo & 0x80)
@@ -1484,7 +1496,7 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 		return;
 	}
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 	// DRIVE0 and DRIVE1 are separate 2 bit fields. A side set to disconnect
 	// (open drain) is kept, the other sides go to standard or high drive.
 	uint32_t cnf = reg->PIN_CNF[PinNo];
@@ -1632,7 +1644,7 @@ void __WEAK H20_GPIOTE_IRQHandler(void)
 
 	NVIC_ClearPendingIRQ(H20_GPIOTE_IRQn);
 }
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 
 // Unsecure
 void __WEAK GPIOTE20_0_IRQHandler(void)
@@ -1847,7 +1859,8 @@ bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
 	return assigned;
 #elif defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || \
 	defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || \
-	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || \
+	defined(NRF71_SERIES)
 	// Net/non-secure App cannot grant ownership. nRF54 auxiliary-core
 	// routing is not implemented here; do not report a successful handoff.
 	(void)PortNo;
