@@ -151,13 +151,14 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
             	}
 				pDev->bNoStop = false;
             }
-           // if (pDev->TxSrData)
-            {
-            	// Note : this is restart condition in read mode,
-            	// must not generate any stop condition here
-            	pDev->StartRx(pDev, DevAddr);
-            }
-           	count = pDev->RxData(pDev, pRxBuff, RxLen);
+			// This is the repeated-start phase of a command/read transfer.
+			if (!pDev->StartRx(pDev, DevAddr))
+			{
+				pDev->bNoStop = false;
+				DeviceIntrfStopTx(pDev);
+				return -1;
+			}
+			count = pDev->RxData(pDev, pRxBuff, RxLen);
 
         	if (count < 0)
         	{
