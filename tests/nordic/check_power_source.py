@@ -75,7 +75,7 @@ class NordicPowerSource(unittest.TestCase):
         for target in ("nRF52832", "nRF52840"):
             board = (ROOT / "ARM/Nordic/nRF52" / target /
                      "exemples/PowerOffDemo/src/board.h").read_text()
-            self.assertIn("#define POWER_DEMO_UART_OFF\t1", board)
+            self.assertRegex(board, r"#define\s+POWER_DEMO_UART_OFF\s+1")
 
     def test_nrf52_uses_microchip_generic_resume_test(self):
         source = self.power52
@@ -88,8 +88,12 @@ class NordicPowerSource(unittest.TestCase):
         for mcu in ("nRF52832", "nRF52840"):
             board = (ROOT / "ARM/Nordic/nRF52" / mcu /
                      "exemples/PowerOffDemo/src/board.h").read_text()
-            self.assertIn("#define POWER_DEMO_RESUME_WAKE\t1", board)
-            self.assertIn("#define POWER_DEMO_STANDBY_RAM_TEST\t1", board)
+            self.assertRegex(board, r"#define\s+POWER_DEMO_RESUME_WAKE\s+1")
+            self.assertRegex(board, r"#define\s+POWER_DEMO_STANDBY_RAM_TEST\s+1")
+            self.assertRegex(board, r"#define\s+POWER_DEMO_UART_WAKE\s+0")
+            self.assertRegex(board, r"#define\s+POWER_DEMO_TIMER_WAKE_MS\s+0")
+            self.assertRegex(board, r"#define\s+POWER_DEMO_UART_DMA\s+false")
+            self.assertRegex(board, r"#define\s+WAKE_BUT_SENSE\s+IOPINSENSE_LOW_TRANSITION")
             self.assertNotIn("POWER_DEMO_NRF52_SLEEP_TEST", board)
 
     def test_nrf54l_off_checks_clock_owner(self):
