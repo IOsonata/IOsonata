@@ -352,6 +352,14 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return true;
 	}
 
+	// A first request or final release can wait for oscillator hardware.
+	// Never perform that transition from interrupt context.
+	if (__get_IPSR() != 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
 	s_bNRFxHfxoTransition = true;
 	owner = s_nRFxHfxoOwner;
 	EnableInterrupt(state);
@@ -485,8 +493,8 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 			return false;
 	}
 
-	// A BLE stack owns LFCLK, it set the source when it was enabled
-	if (nRFxClockSdEnabled() || nRFxMpslActive())
+	// LFCLK stop/start waits for hardware. A BLE stack also owns its source.
+	if (__get_IPSR() != 0U || nRFxClockSdEnabled() || nRFxMpslActive())
 	{
 		return false;
 	}
