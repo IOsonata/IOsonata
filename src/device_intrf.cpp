@@ -214,6 +214,12 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 				for (;;)
 				{
 					state = atomic_load(&pDev->TxReadState);
+					// Once readiness is published, the completing IRQ owns
+					// the state transition. Do not abandon a finished command.
+					if (ready && state == DEVINTRF_READ_COMPLETING)
+					{
+						continue;
+					}
 					if (state != DEVINTRF_READ_WAITING &&
 						state != DEVINTRF_READ_COMPLETING)
 					{
