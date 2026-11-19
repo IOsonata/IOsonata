@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory() as directory:
         for opt in ['-O0', '-O2']:
             binary = tmp / 'lifetime'
             command = [args.cxx, '-std=gnu++17', opt, '-g', '-fpermissive',
-                       '-fno-pie', '-fsanitize=address,undefined',
+                       '-fsanitize=address,undefined',
                        '-fno-omit-frame-pointer', f'-DTEST_DMA_MAX={maximum}',
                        f'-DNRFX_I2C_TXBUF_SIZE={capacity}', '-I' + str(tmp),
                        '-I' + str(root / 'include'),
