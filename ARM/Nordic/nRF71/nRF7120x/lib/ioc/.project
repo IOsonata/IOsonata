@@ -496,6 +496,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/system_sleep_nrf71.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/system_sleep_nrf71.c</locationURI>
+		</link>
+		<link>
 			<name>src/system_nrf71.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_nrf71.c</locationURI>
