@@ -158,10 +158,8 @@ class NordicPowerSource(unittest.TestCase):
     def test_nrf52_spi2_only_on_targets_with_instance(self):
         source = (ROOT / "ARM/Nordic/src/spi_nrfx.cpp").read_text()
         self.assertIn("#if NRFX_SPI_MAXDEV > 2\nextern \"C\" void SPIM2_SPIS2_SPI2_IRQHandler", source)
-        self.assertIn("#if NRFX_SPI_MAXDEV > 2\n", source)
-        case = source.index("case 2:\n                NVIC_ClearPendingIRQ(SPIM2_SPIS2_SPI2_IRQn);")
-        self.assertEqual(source.rfind("#if NRFX_SPI_MAXDEV > 2", 0, case),
-                         source.rfind("#if NRFX_SPI_MAXDEV > 2", 0, case))
+        self.assertIn("#if NRFX_SPI_MAXDEV > 2\n    \t    case 2:", source)
+        self.assertIn("#if NRFX_SPI_MAXDEV > 2\nextern \"C\" void SPIM2_SPIS2_SPI2_IRQHandler(void)", source)
 
     def test_nrf54l_off_checks_clock_owner(self):
         off = function(self.power, "void SystemPowerOff(void)", "bool SystemWakePin(")
