@@ -138,8 +138,9 @@ pointer for later DMA. Deferred callers need caller-owned storage and a
 transfer path whose completion and buffer lifetime are explicitly supported.
 
 `DeviceIntrfRead()` waits for a deferred command phase with an iteration
-budget. It rejects an incomplete command and a failed raw `StartRx` before
-attempting `RxData`. The iteration budget is not a wall-clock timeout and
+budget. A command-phase failure or failed raw `StartRx` returns zero without
+starting deferred RX. A return of -1 means that `RxData` itself started an
+asynchronous receive. It rejects incomplete commands before attempting `RxData`. The iteration budget is not a wall-clock timeout and
 requires the relevant completion interrupt to be able to execute.
 
 For a deferred command, the generic code and `DeviceIntrfTxComplete()` use
