@@ -49,6 +49,10 @@ SOFTWARE.
 #define UART_TX_PIN			BLYST_NANO_DK_UART_TX_PIN
 #define UART_TX_PINOP		BLYST_NANO_DK_UART_TX_PINOP
 
+// Same generic resumable sleep and SRAM tests as Microchip PowerOffDemo.
+#define POWER_DEMO_RESUME_WAKE	1
+#define POWER_DEMO_STANDBY_RAM_TEST	1
+
 // Drain SysLog/UART FIFOs and shut down the console before System OFF.
 #define POWER_DEMO_UART_OFF	1
 
