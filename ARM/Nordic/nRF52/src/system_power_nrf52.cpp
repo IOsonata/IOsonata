@@ -201,14 +201,18 @@ void SystemSleep(void)
 	uint32_t state;
 	uint32_t scr;
 	int wakeIrq;
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 	bool sd;
+#endif
 
 	if (__get_IPSR() != 0U)
 	{
 		return;
 	}
 
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 	sd = SysPwrSdEnabled();
+#endif
 	state = DisableInterrupt();
 	wakeIrq = -1;
 	if (s_SysPwrSleepSense != IOPINSENSE_DISABLE)
