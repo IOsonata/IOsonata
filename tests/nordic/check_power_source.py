@@ -31,7 +31,8 @@ class NordicPowerSource(unittest.TestCase):
         sleep = function(self.power52, "void SystemSleep(void)", "void SystemPowerOff(void)")
         self.assertIn("SysPwrSdEnabled()", sleep)
         self.assertIn("sd_app_evt_wait()", sleep)
-        self.assertLess(sleep.index("sd_app_evt_wait()"), sleep.index("DisableInterrupt()"))
+        self.assertLess(sleep.index("IOPinAllocateInterrupt(2,"), sleep.index("sd_app_evt_wait()"))
+        self.assertIn("EnableInterrupt(state);", sleep)
         self.assertIn("__WFI()", sleep)
 
     def test_resumable_sleep_does_not_enter_system_off(self):
