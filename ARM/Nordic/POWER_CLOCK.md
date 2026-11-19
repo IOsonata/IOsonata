@@ -107,6 +107,37 @@ equivalent to SAM4L WAIT/RETENTION or SAMD Standby power-state selection.
 Neither low-power current nor seamless suspension of these active Nordic
 transports has been validated. Do not report those modes as completed.
 
+## Managed Eclipse build validation
+
+Use the checked-in CDT projects and their existing Debug/Release
+configurations; do not create a separate Make/CMake project. The dedicated
+runner uses an isolated workspace per target, imports that target's library,
+ClockDemo and PowerOffDemo projects, and performs sequential clean builds.
+Projects not provided for a target are marked SKIPPED, not PASS.
+
+```sh
+python3 tests/nordic/build_managed_power_clock.py --check-only \
+    --target nrf52832 --target nrf52840 --target nrf5340_app \
+    --target nrf5340_net --target nrf54l15 --target nrf54lm20 \
+    --target nrf9160 --target nrf91x1
+
+python3 tests/nordic/build_managed_power_clock.py \
+    --target nrf52832 --target nrf52840
+
+# Optionally use the exact IOcomposer/Eclipse launcher:
+# --ide /Applications/IOcomposer.app/Contents/MacOS/iocomposerc
+```
+
+The build uses the installed Eclipse CDT managed-build extension and
+the project's existing external toolchain and libraries. Logs are written
+to `tests/nordic/build_logs`. A linked TaktOS archive or SDK not
+installed at the paths expected by the project may cause a real link
+failure; the runner must not classify missing external dependencies as
+a PASS. The builder does not program devices or measure power current.
+
+This managed-project runner has not been executed on a macOS Eclipse
+installation as part of the repository review.
+
 ## Outstanding verification
 
 - Rerun the source/model regression tests after the nRF71 separation.
