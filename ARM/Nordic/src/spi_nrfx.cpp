@@ -1222,19 +1222,25 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 		{
 			if (dev->bTxAbort)
 			{
-				dev->pDmaReg->EVENTS_END = 0;
-				NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
-				NRFX_SPI_ENDTX(dev->pDmaReg) = 0;
-				if (dev->pDmaReg->EVENTS_STOPPED)
+				// END may win the race with TASKS_STOP, in which case
+				// hardware can be idle without raising STOPPED.
+				bool stopped = dev->pDmaReg->EVENTS_STOPPED != 0U ||
+					dev->pDmaReg->EVENTS_END != 0U;
+				if (!stopped)
 				{
-					int count = dev->TxIdx + NRFX_SPI_TX(dev->pDmaReg).AMOUNT;
-
-					dev->pDmaReg->EVENTS_STOPPED = 0;
-					dev->pDmaReg->INTENCLR = SPIM_INTENCLR_STOPPED_Msk;
-					NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
-					NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
-					nRFxSPIAsyncTxAbortEnd(pDev, dev, count);
+					return;
 				}
+				int count = dev->TxIdx + NRFX_SPI_TX(dev->pDmaReg).AMOUNT;
+
+				dev->pDmaReg->EVENTS_END = 0U;
+				NRFX_SPI_ENDRX(dev->pDmaReg) = 0U;
+				NRFX_SPI_ENDTX(dev->pDmaReg) = 0U;
+				dev->pDmaReg->EVENTS_STOPPED = 0U;
+				dev->pDmaReg->INTENCLR = SPIM_INTENCLR_STOPPED_Msk;
+				NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0U;
+				NRFX_SPI_TX(dev->pDmaReg).PTR = 0U;
+				dev->bDmaActive = false;
+				nRFxSPIAsyncTxAbortEnd(pDev, dev, count);
 				return;
 			}
 
