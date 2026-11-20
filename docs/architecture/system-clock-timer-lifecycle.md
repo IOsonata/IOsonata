@@ -315,6 +315,28 @@ BLE radio operation, and oscillator power consumption before declaring
 ownership transfer complete. The S132 clock-owner integration is separate.
 The generic application and peripheral API is unchanged.
 
+### S132 direct-clock release across SoftDevice initialization
+
+The nRF52 clock backend now includes an internal S132 release deferral.
+If an outstanding IOsonata HFXO request was acquired directly before
+SoftDevice initialization, the final `SystemHighFreqClockDisable()` while
+SoftDevice is enabled clears the logical request but does **not** write a
+direct CLOCK STOP. The physical oscillator remains on as an internal
+SoftDevice-lifetime reservation. An `NRF_SDH_STATE_EVT_DISABLED` observer
+completes the pending physical STOP after SoftDevice has relinquished
+CLOCK. If an IOsonata clock request is still outstanding at shutdown,
+the observer preserves the oscillator and attributes direct ownership
+to the remaining user instead of stopping it.
+
+This approach does not create an application mode, public API, or
+additional library configuration. It preserves the already-tested normal
+S132 clock paths while handling the previously failing pre-stack request
+case. The new S132 path is **not yet hardware-validated**. In particular,
+verify Mode 1 final logical release, continuous HFXO through startup,
+reacquisition during BLE operation, and the actual SoftDevice shutdown
+event including final physical STOP and energy behavior. The shutdown
+observer must be delivered by the linked Nordic SDK.
+
 ### Nordic owner integration investigation
 
 Nordic MPSL has an external clock-control driver registration API,
