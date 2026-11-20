@@ -263,9 +263,54 @@ static void SysLogFlushQue(void)
 	EnableInterrupt(state);
 }
 
+// Exercise the shared oscillator while BLE writes are being processed.
+// Queue the requests so a GATT callback does not wait for crystal startup.
+static uint32_t s_ClockCheckCount;
+static uint32_t s_ClockCheckFailures;
+static bool s_bClockCheckQueued;
+
+static void ClockCheckEvt(uint32_t Evt, void *pCtx)
+{
+	bool first;
+	bool second;
+
+	(void)Evt;
+	(void)pCtx;
+	s_bClockCheckQueued = false;
+	first = SystemHighFreqClockEnable();
+	second = first && SystemHighFreqClockEnable();
+	if (second)
+	{
+		SystemHighFreqClockDisable();
+	}
+	if (first)
+	{
+		SystemHighFreqClockDisable();
+	}
+	s_ClockCheckCount++;
+	if (!first || !second)
+	{
+		s_ClockCheckFailures++;
+	}
+	if (s_ClockCheckCount % 32U == 0U || !first || !second)
+	{
+		SysLogPrintf(SysLogGet(), "BLE clock requests: %u checks, %u failures\r\n",
+			(unsigned)s_ClockCheckCount, (unsigned)s_ClockCheckFailures);
+	}
+}
+
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
+	(void)pChar;
+	(void)Offset;
 	g_Uart.Tx(pData, Len);
+	if (!s_bClockCheckQueued)
+	{
+		if (AppEvtHandlerQue(0U, nullptr, ClockCheckEvt))
+		{
+			s_bClockCheckQueued = true;
+		}
+	}
 }
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
