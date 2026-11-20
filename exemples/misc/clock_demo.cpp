@@ -326,6 +326,9 @@ static void ClockDemoTimer(void)
 
 int main(void)
 {
+#if CLOCK_DEMO_HF_SOURCE_ENABLE
+	bool hfSourceEnabled = false;
+#endif
 #if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
 	// Keep the timer handle alive after acquiring and stopping a retained timer.
 	TimerCfg_t retainedCfg = s_TimerCfg;
@@ -394,11 +397,20 @@ int main(void)
 #if CLOCK_DEMO_HF_SOURCE_ENABLE
 				if (source.Type == OSC_TYPE_RC)
 				{
-					SystemHighFreqClockDisable();
+					selected = hfSourceEnabled;
+					if (selected)
+					{
+						SystemHighFreqClockDisable();
+						hfSourceEnabled = false;
+					}
 				}
 				else
 				{
 					selected = SystemHighFreqClockEnable();
+					if (selected)
+					{
+						hfSourceEnabled = true;
+					}
 				}
 #else
 				selected = SystemCoreClockSelect(source.Type, source.Frequency);
