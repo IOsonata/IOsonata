@@ -114,6 +114,40 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("SystemCoreClockSelect(OSC_TYPE_XTAL", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
+    def test_external_mpsl_clock_adapter_is_opt_in(self):
+        mpsl = self.mpsl
+        self.assertIn("IO_NRFX_MPSL_EXT_CLOCK", mpsl)
+        self.assertIn("mpsl_clock_ctrl_source_register(", mpsl)
+        self.assertIn("mpsl_init(nullptr, MPSL_LOW_PRIO_IRQn", mpsl)
+        self.assertIn("nRFxMpslExternalClockSet(true)", mpsl)
+        self.assertIn("nRFxMpslExternalClockGet()", mpsl)
+        self.assertIn("lfosc->Type != OSC_TYPE_XTAL", mpsl)
+        self.assertIn("s_MpslExternalLf.accuracy_ppm", mpsl)
+        self.assertIn("lfclk_calibration_start = nullptr", mpsl)
+
+    def test_mpsl_hf_callbacks_are_nonblocking(self):
+        request = function(self.clock, "void nRFxMpslHfclkRequest(",
+                           "void nRFxMpslHfclkRelease(")
+        release = function(self.clock, "void nRFxMpslHfclkRelease(",
+                           "bool nRFxMpslHfclkIsRunning(")
+        for block in (request, release):
+            self.assertNotIn("nRFxHfxoStart(", block)
+            self.assertNotIn("nRFxHfxoStop(", block)
+            self.assertNotIn("mpsl_clock_hfclk_src_request(", block)
+            self.assertNotIn("NRFX_HFXO_WAIT_LOOPS", block)
+            self.assertNotIn("SystemHighFreqClockEnable(", block)
+        self.assertIn("s_nRFxMpslHfxoReqCnt++", request)
+        self.assertIn("s_nRFxMpslHfxoReqCnt--", release)
+        self.assertIn("NRFX_HFXO_START", request)
+        self.assertIn("NRFX_HFXO_STOP", release)
+
+    def test_mpsl_clock_requests_share_hardware_ownership(self):
+        disable = function(self.clock, "void SystemHighFreqClockDisable(",
+                           "// System OFF requires HFXO stopped")
+        self.assertIn("s_nRFxMpslHfxoReqCnt != 0U", disable)
+        self.assertIn("s_bNRFxMpslHfxoOwned = true", disable)
+        self.assertIn("s_nRFxHfxoReqCnt = 0U", disable)
+
     def test_softdevice_probe_requires_sdk_runtime_state(self):
         source = function(self.clock, "static bool nRFxClockSdEnabled(",
                           "static bool nRFxHfxoRunning(")
