@@ -249,9 +249,8 @@ static int HfxoPreStackTest(void)
 		}
 	}
 	stopped = stoppedSamples != 0U;
-	HFXO_PRINT("After pre-stack release: HFXO stopped %u/200 samples\r\n",
-		stoppedSamples);
-	HfxoResult("Pre-stack physical release", stopped, HfxoRunning());
+	HFXO_PRINT("Pre-stack physical release: %s, HFXO stopped %u/200 samples\r\n",
+		stopped ? "PASS" : "FAIL", stoppedSamples);
 #else
 	stopped = true;
 	HFXO_PRINT("Pre-stack request released, HFXO %s\r\n",
