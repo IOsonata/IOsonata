@@ -156,7 +156,6 @@ static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
 static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
-static bool s_bNRFxLfclkSelected = false;
 static bool s_bNRFxLfclkStopPending = false;
 
 // Weak: the SoftDevice Controller is not in the build. nrf_mpsl.cpp has the
@@ -542,6 +541,12 @@ bool SystemLowFreqClockEnable(void)
 	}
 	if (s_nRFxLfclkReqCnt != 0U)
 	{
+		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+			(src & NRFX_LFCLK_SRC_Msk))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
 		s_nRFxLfclkReqCnt++;
 		EnableInterrupt(state);
 		return true;
@@ -577,7 +582,7 @@ bool SystemLowFreqClockEnable(void)
 	if (started)
 	{
 		s_nRFxLfclkReqCnt = 1U;
-		s_bNRFxLfclkOwned = !s_bNRFxLfclkSelected;
+		s_bNRFxLfclkOwned = true;
 	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);
@@ -594,7 +599,7 @@ void SystemLowFreqClockDisable(void)
 		s_nRFxLfclkReqCnt--;
 		if (s_nRFxLfclkReqCnt == 0U)
 		{
-			if (s_bNRFxLfclkOwned && !s_bNRFxLfclkSelected &&
+			if (s_bNRFxLfclkOwned &&
 				!nRFxMpslActive() && !nRFxClockSdEnabled())
 			{
 				NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
@@ -609,96 +614,51 @@ void SystemLowFreqClockDisable(void)
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t src;
-	uint32_t prev;
 	uint32_t state;
 	bool running;
-	bool change;
 	bool stopped;
-	bool success;
 
-	(void)OscFreq;
 	if (!nRFxLfclkOscSource(ClkSrc, &src) || __get_IPSR() != 0U)
 	{
 		return false;
 	}
-
 	state = DisableInterrupt();
-	if (s_bNRFxLfclkTransition || nRFxMpslActive() || nRFxClockSdEnabled())
+	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt != 0U ||
+		nRFxMpslActive() || nRFxClockSdEnabled())
 	{
 		EnableInterrupt(state);
 		return false;
 	}
 	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
-	prev = NRF_CLOCK->NRFX_LFCLKSRC;
-	change = s_bNRFxLfclkStopPending || !running || prev != src ||
-		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
-		(src & NRFX_LFCLK_SRC_Msk);
-	if (change && s_nRFxLfclkReqCnt != 0U)
+	if (running && !s_bNRFxLfclkStopPending)
 	{
-		// Do not switch clock sources beneath an active RTC.
-		EnableInterrupt(state);
-		return false;
-	}
-	if (!change)
-	{
-		// Commit an explicit owner before unmasking a possible RTC release.
-		// No hardware transition is necessary for an already running source.
-		s_bNRFxLfclkSelected = true;
-		s_bNRFxLfclkOwned = false;
+		// Never switch a running LFCLK that belongs to another user.
+		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+			(src & NRFX_LFCLK_SRC_Msk))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
 		g_McuOsc.LowPwrOsc.Type = ClkSrc;
-		g_McuOsc.LowPwrOsc.Freq = 32768U;
+		g_McuOsc.LowPwrOsc.Freq = OscFreq != 0U ? OscFreq : 32768U;
 		EnableInterrupt(state);
 		return true;
 	}
 	s_bNRFxLfclkTransition = true;
 	EnableInterrupt(state);
 
-	success = true;
-	if (change)
-	{
-		stopped = true;
-		if (s_bNRFxLfclkStopPending)
-		{
-			stopped = nRFxLfclkWaitStopped();
-			if (stopped)
-			{
-				running = false;
-			}
-		}
-		else if (running)
-		{
-			stopped = nRFxLfclkStop();
-		}
-		if (stopped)
-		{
-			success = nRFxLfclkStart(src);
-			if (!success && running)
-			{
-				(void)nRFxLfclkStart(prev);
-			}
-		}
-		else
-		{
-			success = false;
-		}
-	}
-
+	stopped = !s_bNRFxLfclkStopPending || nRFxLfclkWaitStopped();
 	state = DisableInterrupt();
-	if (change && success)
+	if (stopped)
 	{
+		NRF_CLOCK->NRFX_LFCLKSRC = src;
 		s_bNRFxLfclkStopPending = false;
-	}
-	if (success)
-	{
-		// A source selected explicitly remains on after RTC users stop.
-		s_bNRFxLfclkSelected = true;
-		s_bNRFxLfclkOwned = false;
 		g_McuOsc.LowPwrOsc.Type = ClkSrc;
-		g_McuOsc.LowPwrOsc.Freq = 32768U;
+		g_McuOsc.LowPwrOsc.Freq = OscFreq != 0U ? OscFreq : 32768U;
 	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);
-	return success;
+	return stopped;
 }
 
 uint32_t SystemPeriphClockGet(int Idx)
