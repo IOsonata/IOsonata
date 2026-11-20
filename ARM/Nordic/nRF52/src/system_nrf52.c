@@ -156,7 +156,7 @@ void SystemCoreClockUpdate(void)
 	// with 13 cycles per long-loop iteration. With a 6-cycle short-loop
 	// factor, nsDelay(250 ms) measured 125065 us; use 3 cycles instead.
 	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 13000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3120000UL;
 }
 
 void SystemInit(void)
