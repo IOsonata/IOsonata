@@ -556,6 +556,14 @@ bool MpslInit(void)
 	NVIC_EnableIRQ(MPSL_LOW_PRIO_IRQn);
 #endif
 
+#if defined(NRF52_SERIES)
+	// LFRC needs an initial calibration after MPSL starts. The clock
+	// interrupt completes it and the calibration timer schedules repeats.
+	if (externalClock && lfosc->Type == OSC_TYPE_RC)
+	{
+		nRFxMpslLfclkCalibrationStart();
+	}
+#endif
 
 	return true;
 }
