@@ -216,7 +216,7 @@ static bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 }
 
 // The USB controller enables the configured HF clock once. The clock
-// backend handles the shared count and SoftDevice/MPSL ownership.
+// system_clock_nrfx.cpp manages shared requests and SoftDevice/MPSL clock access.
 static bool UsbdXtalRequest(void)
 {
 	if (GetHighFreqOscType() == OSC_TYPE_RC)
