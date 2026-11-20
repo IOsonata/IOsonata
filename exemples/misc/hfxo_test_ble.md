@@ -76,14 +76,13 @@ a dedicated managed diagnostic project has not yet been committed.
 
 ## Status
 
-The source refactor has been committed but **not** compiled or
-hardware-tested across all three Bluetooth implementations. The
-existing Nordic HfxoTestBle Eclipse configurations must link all
-necessary IOsonata Bluetooth implementation objects, not only
-the MPSL or SoftDevice clock setup used by the previous diagnostic.
-STM32WBA also requires an Eclipse managed application configuration
-that links this same source. Those project-build integrations remain
-to be verified.
+The portable `HfxoTestBle` application has passed on nRF52832
+with S132 and SDC. The nRF52832 `ClockDemo` and `PowerOffDemo` have
+also passed on hardware. The new external LFRC calibration implementation
+has not yet been compiled or hardware-tested. Run the Nordic diagnostic
+with the rebuilt SDC library before assessing oscillator release.
+
+STM32WBA is deferred until Nordic power and clock work is complete.
 
 The STM32WBA `system_stm32wbaxx.c` implementation provides the generic HF request
 functions by validating that its selected core oscillator is ready.
