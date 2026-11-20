@@ -255,6 +255,9 @@ uint32_t SystemResetReason(void)
 
 // System ON idle preserves peripheral and radio clock ownership.
 // Arm a GPIO interrupt only when the application configured a wake pin.
+// Internal clock maintenance, not an application-facing HAL entry point.
+void nRFxClockService(void);
+
 void SystemSleep(void)
 {
 	NRF_GPIO_Type *wakeReg;
@@ -267,6 +270,10 @@ void SystemSleep(void)
 	{
 		return;
 	}
+
+	// A timer can release the last HFXO request from its IRQ. Complete
+	// a stack-owned deferred release before going idle.
+	nRFxClockService();
 
 	state = DisableInterrupt();
 	wakeIrq = -1;
