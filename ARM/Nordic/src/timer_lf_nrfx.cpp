@@ -31,9 +31,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include <atomic>
-
 #include "timer_nrfx.h"
+#include "system_clock_nrfx.h"
 #include "coredev/pei.h"
 #include "coredev/interrupt.h"
 
@@ -50,23 +49,18 @@ SOFTWARE.
 
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
-#define NRF_CLOCK		NRF_CLOCK_NS
 #define NRF_RTC0		NRF_RTC0_NS
 #define NRF_RTC1		NRF_RTC1_NS
 #else
 #if defined(NRF91_SERIES)
 // Non secure on nRF91, as POWER, which the Modem library uses there
 // (nrfx_config_nrf91.h)
-#define NRF_CLOCK		NRF_CLOCK_NS
 #else
-#define NRF_CLOCK		NRF_CLOCK_S
 #endif
 #define NRF_RTC0		NRF_RTC0_S
 #define NRF_RTC1		NRF_RTC1_S
 #define NRF_RTC2		NRF_RTC1_S
 #endif
-#define CLOCK_LFCLKSRC_SRC_RC		CLOCK_LFCLKSRC_SRC_LFRC
-#define CLOCK_LFCLKSRC_SRC_Xtal		CLOCK_LFCLKSRC_SRC_LFXO
 #endif
 
 // PEI compare channels share ordinary TimerTrig_t state, without
@@ -153,9 +147,10 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 #endif
 };
 
-static std::atomic<int> s_nRfxLFClockSem(0);
 static bool s_bRtcEnabled[TIMER_NRFX_RTC_MAX];
-static bool s_bLFClockOwned = false;
+// RTC retains its configured source across Disable/Enable. System Clock
+// owns the shared oscillator and counts requests from all RTC instances.
+static nRFxLfclkRequest_t s_RtcClockSource[TIMER_NRFX_RTC_MAX];
 // CLEAR task endpoint given out: a hardware event can clear the counter
 static bool s_bRtcHwClear[TIMER_NRFX_RTC_MAX];
 
@@ -460,34 +455,11 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 		return true;
 	}
 
-	if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
+	if (!nRFxLfclkAcquire(s_RtcClockSource[pTimer->DevNo]))
 	{
-		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-		NRF_CLOCK->TASKS_LFCLKSTART = 1;
-
-		bool started = false;
-		for (int timeout = 1000000; timeout > 0; timeout--)
-		{
-			if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) &&
-				NRF_CLOCK->EVENTS_LFCLKSTARTED)
-			{
-				started = true;
-				break;
-			}
-		}
-
-		if (!started)
-		{
-			NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-			return false;
-		}
-
-		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-		s_bLFClockOwned = true;
+		return false;
 	}
-
 	s_bRtcEnabled[pTimer->DevNo] = true;
-    s_nRfxLFClockSem++;
 
     switch (pTimer->DevNo)
 	{
@@ -541,13 +513,7 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 #endif
 	}
 
-    s_nRfxLFClockSem--;
-
-	if (s_nRfxLFClockSem == 0 && s_bLFClockOwned)
-	{
-		NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-		s_bLFClockOwned = false;
-	}
+	nRFxLfclkRelease();
 }
 
 // CLEAR task, returns once COUNTER reads lower than before it, bounded:
@@ -1145,6 +1111,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	const nRFRtcData_t *pRtc;
 	NRF_RTC_Type *reg;
 	TimerDev_t *pOldTimer;
+	nRFxLfclkRequest_t clkSource;
 	int i;
 
 	// Any frequency, SetFrequency takes the closest one
@@ -1152,6 +1119,27 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		pCfg->DevNo >= TIMER_NRFX_RTC_MAX)
 	{
 		return false;
+	}
+
+	switch (pCfg->ClkSrc)
+	{
+		case TIMER_CLKSRC_DEFAULT:
+			clkSource = NRFX_LFCLK_REQUEST_DEFAULT;
+			break;
+		case TIMER_CLKSRC_LFRC:
+			clkSource = NRFX_LFCLK_REQUEST_RC;
+			break;
+		case TIMER_CLKSRC_LFXTAL:
+			clkSource = NRFX_LFCLK_REQUEST_XTAL;
+			break;
+#if defined(NRF52_SERIES) || defined(NRF51)
+		case TIMER_CLKSRC_HFRC:
+		case TIMER_CLKSRC_HFXTAL:
+			clkSource = NRFX_LFCLK_REQUEST_SYNTH;
+			break;
+#endif
+		default:
+			return false;
 	}
 
 	pRtc = &s_nRfxRtcData[pCfg->DevNo];
@@ -1187,6 +1175,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	s_pnRfxRtcData = s_nRfxRtcData;
 	s_pnRfxRtcDev[pCfg->DevNo] = pTimer;
+	s_RtcClockSource[pCfg->DevNo] = clkSource;
 	s_bRtcHwClear[pCfg->DevNo] = false;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
@@ -1215,54 +1204,6 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	reg->INTENCLR = ccmask << RTC_INTENSET_COMPARE0_Pos;
 	reg->EVTENCLR = ccmask << RTC_EVTEN_COMPARE0_Pos;
-
-	if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
-	{
-    	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-
-    	// Init oscillator
-		switch (pCfg->ClkSrc)
-		{
-			case TIMER_CLKSRC_DEFAULT:
-			case TIMER_CLKSRC_LFRC:
-				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos;
-				break;
-			case TIMER_CLKSRC_LFXTAL:
-				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos;
-				break;
-			case TIMER_CLKSRC_EXT:
-				return false;
-	#if defined(NRF52_SERIES) || (NRF51)
-			case TIMER_CLKSRC_HFRC:
-			case TIMER_CLKSRC_HFXTAL:
-				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Synth << CLOCK_LFCLKSRC_SRC_Pos;
-				break;
-	#endif
-		}
-
-		NRF_CLOCK->TASKS_LFCLKSTART = 1;
-
-		int timeout = 1000000;
-		bool started = false;
-
-		do
-		{
-			if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) && NRF_CLOCK->EVENTS_LFCLKSTARTED)
-			{
-				started = true;
-				break;
-			}
-		} while (timeout-- > 0);
-
-		if (!started)
-		{
-			NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-			return false;
-		}
-
-		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-		s_bLFClockOwned = true;
-	}
 
 	// Init interrupt for RTC
 	switch (pCfg->DevNo)
@@ -1298,9 +1239,13 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
     nRFxRtcSetFrequency(pTimer, pCfg->Freq);
 
-	// Tick count from 0, then started with the LFCLK request of Enable
+	// Acquire shared LFCLK before clearing the RTC, so the CLEAR task
+	// completes on the selected clock. Init continues to enable the timer.
+	if (!nRFxRtcEnable(pTimer))
+	{
+		return false;
+	}
 	nRFxRtcClear(reg);
-
-    return nRFxRtcEnable(pTimer);
+	return true;
 }
 
