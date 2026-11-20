@@ -211,17 +211,34 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("nRFxMpslHfxo(false) == 0", source)
         self.assertIn("sd_clock_hfclk_release() == NRF_SUCCESS", source)
         self.assertIn("if (nRFxClockSdEnabled())", source)
-        self.assertIn("if (nRFxMpslActive() && !s_bNRFxMpslExternalClock)",
-                      source)
         self.assertIn("if (nRFxMpslActive())", source)
+        self.assertIn("if (s_bNRFxMpslExternalClock)", source)
         self.assertIn("#else", source)
         self.assertIn("#endif", source)
         stop = source.index("NRFX_HFXO_STOP = 1U")
         self.assertLess(source.index("if (nRFxClockSdEnabled())"), stop)
-        self.assertLess(source.index(
-            "if (nRFxMpslActive() && !s_bNRFxMpslExternalClock)"), stop)
         self.assertLess(source.index("if (nRFxMpslActive())"), stop)
+        self.assertLess(source.index("nRFxMpslHfxo(true)"), stop)
+        self.assertLess(source.index("nRFxMpslHfxo(false)"), stop)
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
+
+    def test_lfrc_preserves_internal_mpsl_calibration(self):
+        init = function(self.mpsl, "bool MpslInit(void)", "int MpslNvmArbiterStart(")
+        self.assertIn("externalClock = lfosc->Type == OSC_TYPE_XTAL", init)
+        self.assertIn("lfclk.rc_ctiv = MPSL_RECOMMENDED_RC_CTIV", init)
+        self.assertIn("lfclk.rc_temp_ctiv = MPSL_RECOMMENDED_RC_TEMP_CTIV", init)
+        self.assertIn("mpsl_init(externalClock ? nullptr : &lfclk", init)
+        stop = function(self.clock, "static bool nRFxHfxoStop(",
+                        "bool SystemCoreClockSelect(")
+        direct = stop.split("case NRFX_HFXO_OWNER_DIRECT:", 1)[1]
+        self.assertIn("if (nRFxMpslActive())", direct)
+        self.assertIn("if (s_bNRFxMpslExternalClock)", direct)
+        self.assertIn("nRFxMpslHfxo(true)", direct)
+        self.assertIn("return nRFxMpslHfxo(false) == 0", direct)
+        self.assertLess(direct.index("nRFxMpslHfxo(true)"),
+                        direct.index("nRFxMpslHfxo(false)"))
+        self.assertLess(direct.index("return nRFxMpslHfxo(false) == 0"),
+                        direct.index("NRFX_HFXO_STOP = 1U"))
 
     def test_ble_console_uses_interrupt_tx_completion(self):
         source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
