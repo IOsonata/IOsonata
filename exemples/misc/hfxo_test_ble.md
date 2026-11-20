@@ -95,13 +95,34 @@ with Nordic-specific initialization. The LFRC diagnostic was compiled
 in a locally modified Eclipse SDC project and run on nRF52832 hardware;
 a dedicated managed diagnostic project has not yet been committed.
 
+## SDC BLE advertising with LFRC
+
+The nRF52832 `BleAdvertiser` board header sets `MCU_OSC` to a 32 MHz
+HFXO and a 32,768 Hz LFRC with 500 ppm accuracy. Its shared example
+source is unchanged and calls `BtAppInit()`, which starts BLE advertising
+through the Nordic Bluetooth implementation.
+
+Clean-build the nRF52832 IOsonata library and `BleAdvertiser/Release_SDC`
+in IOcomposer, then flash the board. Use a second device with a BLE
+scanner to look for the name `Advertising`. Observe the device for at
+least 30 seconds, longer than the four-second calibration period, and
+check that the manufacturer data counter changes. The device should
+remain discoverable and advertise without a reset or hang.
+
+Record the advertising result separately from the LFRC clock diagnostic.
+The 12-second `HfxoTestBle` diagnostic confirms calibration completion;
+it does not enable BLE advertising. An on-air scanner confirms radio
+activity but does not measure clock frequency, current, or connection
+stability. Connections must be checked with a connectable BLE example.
+
 ## Status
 
-The portable `HfxoTestBle` application has passed on nRF52832
-with S132 and SDC. The nRF52832 `ClockDemo` and `PowerOffDemo` have
-also passed on hardware. The new external LFRC calibration implementation
-has not yet been compiled or hardware-tested. Run the Nordic diagnostic
-with the rebuilt SDC library before assessing oscillator release.
+nRF52832 `ClockDemo`, `PowerOffDemo`, portable `HfxoTestBle`
+with S132 and SDC, SDC LFRC ownership, and the periodic calibration
+diagnostic have passed hardware testing. The latest LFRC diagnostic
+completed four calibrations in 12 seconds and observed HFXO stopped
+in all 120 idle samples. On-air LFRC advertising and connection tests
+remain pending.
 
 STM32WBA is deferred until Nordic power and clock work is complete.
 
