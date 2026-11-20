@@ -41,6 +41,7 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "coredev/shared_intrf.h"
+#include "coredev/interrupt.h"
 
 #ifdef NRF52840_XXAA
 #define MAX_NB_DEV		4
@@ -56,6 +57,45 @@ SOFTWARE.
 
 const int g_SharedIntrfMaxCnt = MAX_NB_DEV;
 SharedIntrf_t g_SharedIntrf[MAX_NB_DEV] = { {0, 0},};
+
+#if defined(NRF52811_XXAA)
+// TWI0 and SPI1 are two configurations of physical serial block 3
+// (0x40003000), with one IRQ. An initialized owner excludes the other
+// even when using polling without an interrupt handler.
+static DevIntrf_t *s_pNrf52811Serial3Owner = NULL;
+
+bool nRFx52811Serial3Claim(DevIntrf_t *pDev)
+{
+	uint32_t state;
+	bool accepted;
+
+	if (pDev == NULL)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	accepted = s_pNrf52811Serial3Owner == NULL ||
+		s_pNrf52811Serial3Owner == pDev;
+	if (accepted)
+	{
+		s_pNrf52811Serial3Owner = pDev;
+	}
+	EnableInterrupt(state);
+	return accepted;
+}
+
+void nRFx52811Serial3Release(DevIntrf_t *pDev)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (s_pNrf52811Serial3Owner == pDev)
+	{
+		s_pNrf52811Serial3Owner = NULL;
+	}
+	EnableInterrupt(state);
+}
+#endif
 
 // Vector table entries are C symbols. Keep C linkage on the handlers below so
 // these definitions override the weak defaults declared in the vector table.
