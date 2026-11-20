@@ -581,6 +581,12 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	int channelCount;
 	int i;
 	bool irqLocked = false;
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+	uint32_t irqState;
+	uint32_t oldCfg;
+	uint32_t pinSel;
+	int i;
+	bool irqLocked = false;
 #endif
 
 	s_pGpIOSenseEvt = s_GpIOSenseEvt;
@@ -634,6 +640,38 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	{
 		return false;
 	}
+
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+	if (IntNo >= 0)
+	{
+		if (PinNo >= 32U || Sense == IOPINSENSE_DISABLE)
+		{
+			return false;
+		}
+		irqState = DisableInterrupt();
+		irqLocked = true;
+		if (s_GpIOSenseEvt[IntNo].Sense != IOPINSENSE_DISABLE ||
+			gpiotereg->CONFIG[idx] != 0U)
+		{
+			EnableInterrupt(irqState);
+			return false;
+		}
+		// A pin may not be assigned to two GPIOTE channels.
+		pinSel = (((PinNo | (PortNo << 5)) << GPIOTE_CONFIG_PSEL_Pos) &
+			GPIOTE_CONFIG_PORT_PIN_Msk);
+		for (i = 0; i < (int)(sizeof(gpiotereg->CONFIG) /
+			sizeof(gpiotereg->CONFIG[0])); i++)
+		{
+			oldCfg = gpiotereg->CONFIG[i];
+			if ((oldCfg & GPIOTE_CONFIG_MODE_Msk) != 0U &&
+				(oldCfg & GPIOTE_CONFIG_PORT_PIN_Msk) == pinSel)
+			{
+				EnableInterrupt(irqState);
+				return false;
+			}
+		}
+	}
+#endif
 
 #if defined(IOPIN_NRF52_GPIOTE)
 	// A conventional IRQ and PEI share the same physical GPIOTE
@@ -866,7 +904,9 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     NVIC_SetPriority(GPIOTE_IRQn, IntPrio);
     NVIC_EnableIRQ(GPIOTE_IRQn);
 #endif
-#if defined(IOPIN_NRF52_GPIOTE)
+#if defined(IOPIN_NRF52_GPIOTE) || defined(NRF54L15_XXAA) || \
+	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || \
+	defined(NRF71_SERIES)
 	if (irqLocked)
 	{
 		EnableInterrupt(irqState);
