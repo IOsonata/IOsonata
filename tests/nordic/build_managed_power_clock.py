@@ -83,7 +83,7 @@ def main():
     parser.add_argument("--target", action="append", choices=TARGETS,
                         help="Build this Nordic target (repeatable)")
     parser.add_argument("--config", action="append",
-                        choices=("Debug", "Release"),
+                        choices=("Debug", "Release", "Debug_SDC", "Release_SDC"),
                         help="Managed build configuration (default: Debug)")
     parser.add_argument("--eclipse", help="Path to IOcomposer Eclipse executable")
     args = parser.parse_args()
@@ -94,11 +94,18 @@ def main():
 
     for target in targets:
         root = PROJECT_ROOT[target]
-        projects = [
+        standard_projects = [
             root / "lib/ioc",
             root / "exemples/ClockDemo/ioc",
             root / "exemples/PowerOffDemo/ioc",
         ]
+        sdc_projects = [
+            root / "lib/ioc",
+            root / "exemples/HfxoTestBle/ioc",
+        ]
+        projects = standard_projects
+        if any(config.endswith("_SDC") for config in configurations):
+            projects = standard_projects + [sdc_projects[1]]
         for directory in projects:
             if not (directory / ".project").is_file():
                 raise FileNotFoundError("Missing managed project: " + str(directory))
@@ -109,7 +116,11 @@ def main():
                 prefix="iosonata-nordic-cdt-" + target + "-") as work:
             workspace = Path(work)
             for configuration in configurations:
-                for directory in projects:
+                if configuration.endswith("_SDC"):
+                    selected = sdc_projects
+                else:
+                    selected = standard_projects
+                for directory in selected:
                     build(eclipse, workspace, directory, configuration)
                 print(target, configuration, "PASS", flush=True)
 
