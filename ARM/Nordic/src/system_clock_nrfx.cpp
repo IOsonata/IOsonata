@@ -320,14 +320,11 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 				{
 					return false;
 				}
-				// MPSL controls CLOCK when LFRC uses its own calibration.
-				// Acquire its HF request before releasing the original
-				// direct request. Do not write CLOCK registers here.
-				if (nRFxMpslHfxo(true) != 0)
-				{
-					return false;
-				}
-				return nRFxMpslHfxo(false) == 0;
+				// LFRC uses MPSL's internal calibration and CLOCK control.
+				// An MPSL request/release cannot release the direct HFXO
+				// start made before MPSL initialized. Keep that request
+				// recorded until a safe ownership transfer is available.
+				return false;
 			}
 #else
 			if (nRFxMpslActive())
