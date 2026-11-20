@@ -420,13 +420,26 @@ void SystemHighFreqClockDisable(void)
 		return;
 	}
 #if defined(NRF52_SERIES)
-	if (s_bNRFxMpslExternalClock && s_nRFxMpslHfxoReqCnt != 0U)
+	if (s_bNRFxMpslExternalClock)
 	{
-		// MPSL's outstanding request keeps the same HFXO running.
-		// It assumes responsibility for the eventual physical stop.
-		if (s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT)
+		// The registered MPSL driver uses our physical CLOCK controller.
+		// Decide the last STOP atomically with both reference counters so
+		// a high-priority MPSL request cannot race with the STOP task.
+		if (s_nRFxMpslHfxoReqCnt != 0U)
 		{
-			s_bNRFxMpslHfxoOwned = true;
+			if (s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT)
+			{
+				s_bNRFxMpslHfxoOwned = true;
+			}
+		}
+		else if (s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT ||
+			s_bNRFxMpslHfxoOwned)
+		{
+			NRF_CLOCK->NRFX_HFXO_STOP = 1U;
+#ifdef CLOCK_HFCLKSRC_SRC_Msk
+			NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
+#endif
+			s_bNRFxMpslHfxoOwned = false;
 		}
 		s_nRFxHfxoReqCnt = 0U;
 		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
