@@ -17,6 +17,7 @@ CHECKS = (
 	"tests/nordic/check_power_source.py",
 	"tests/nordic/check_delay_calibration.py",
 	"tests/nordic/run_system_sleep.py",
+	"tests/nordic/run_hfxo_deferred.py",
 	"tests/nordic/check_i2c_lifecycle.py",
 )
 
