@@ -115,16 +115,22 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("SystemCoreClockSelect(OSC_TYPE_XTAL", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
-    def test_external_mpsl_clock_adapter_is_opt_in(self):
+    def test_mpsl_external_clock_selected_from_oscillator(self):
         mpsl = self.mpsl
-        self.assertIn("IO_NRFX_MPSL_EXT_CLOCK", mpsl)
+        clock = self.clock
+        header = (ROOT / "ARM/Nordic/include/nrf_mpsl.h").read_text(
+            encoding="utf-8")
+        for source in (mpsl, clock, header):
+            self.assertNotIn("IO_NRFX_MPSL_EXT_CLOCK", source)
         self.assertIn("mpsl_clock_ctrl_source_register(", mpsl)
-        self.assertIn("mpsl_init(nullptr, MPSL_LOW_PRIO_IRQn", mpsl)
+        self.assertIn("externalClock = lfosc->Type == OSC_TYPE_XTAL", mpsl)
+        self.assertIn("if (externalClock)", mpsl)
+        self.assertIn("mpsl_init(externalClock ? nullptr : &lfclk", mpsl)
         self.assertIn("nRFxMpslExternalClockSet(true)", mpsl)
         self.assertIn("nRFxMpslExternalClockGet()", mpsl)
-        self.assertIn("lfosc->Type != OSC_TYPE_XTAL", mpsl)
         self.assertIn("s_MpslExternalLf.accuracy_ppm", mpsl)
         self.assertIn("lfclk_calibration_start = nullptr", mpsl)
+        self.assertIn("mpsl_init(&lfclk, MPSL_LOW_PRIO_IRQn", mpsl)
 
     def test_mpsl_hf_callbacks_are_nonblocking(self):
         request = function(self.clock, "void nRFxMpslHfclkRequest(",
