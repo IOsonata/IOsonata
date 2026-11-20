@@ -104,7 +104,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertLess(pre.index("SystemHighFreqClockEnable()"),
                         pre.index("HfxoStackInit()"))
         self.assertLess(pre.index("HfxoStackInit()"),
-                        pre.index("Pre-stack request disabled"))
+                        pre.index("Pre-stack request released"))
         self.assertIn("Pre-stack handover", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
