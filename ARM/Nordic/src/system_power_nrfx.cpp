@@ -337,6 +337,13 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	{
 		return false;
 	}
+#if defined(NRF54L_SERIES)
+	// P2 is an MCU-domain GPIO without SENSE/DETECT or GPIOTE wake.
+	if ((PortNo & 0x7F) == 2)
+	{
+		return false;
+	}
+#endif
 
 	// A GPIO port register can exist even when its higher pin indices do not.
 	// Validate the bonded-port maximum exposed by the MCU pin map.
