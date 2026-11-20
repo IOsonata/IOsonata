@@ -823,14 +823,11 @@ void nRFxMpslLfclkCalibrationStart(void)
 		return;
 	}
 	s_bNRFxMpslCalibrationPending = true;
+	// Acquire the clock before interrupts are restored. The HFCLK
+	// callback only writes registers and updates the reference count.
+	nRFxMpslHfclkRequest();
 	NRF_CLOCK->INTENSET = CLOCK_INTENSET_DONE_Msk |
 		CLOCK_INTENSET_HFCLKSTARTED_Msk;
-	EnableInterrupt(state);
-
-	// Keep a separate HF request throughout calibration, including
-	// until EVENTS_DONE, without blocking the MPSL high-priority caller.
-	nRFxMpslHfclkRequest();
-	state = DisableInterrupt();
 	nRFxMpslCalibrationBegin();
 	EnableInterrupt(state);
 }
