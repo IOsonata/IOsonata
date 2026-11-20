@@ -53,6 +53,35 @@ initialization. A correct transparent owner transition is still pending;
 continuous HFXO operation across the transition must be verified independently
 before the backend is signed off.
 
+## Experimental MPSL external-clock integration
+
+For source and managed-build validation of the experimental adapter, build
+the nRF52 SDC library with `IO_NRFX_MPSL_EXT_CLOCK=1` defined **in the
+IOsonata library project**, in the Debug_SDC or Release_SDC configuration.
+The application API and its normal peripheral setup are unchanged.
+
+The experimental callback implementation currently supports only an LFXO
+clock configuration (`g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL`) because
+shared LFRC calibration has not been implemented. Use a board configuration
+that actually provides the 32.768 kHz crystal; do not change a working
+LFRC board to claim LFXO support. The nRF52 MPSL external clock-control
+feature is experimental; this path is not yet hardware-validated.
+
+For a managed build of the SDC library and HfxoTestBle:
+
+```sh
+python3 tests/nordic/check_clock_hfxo_source.py
+python3 tests/nordic/build_managed_power_clock.py \
+  --target nrf52832 --config Release_SDC
+```
+
+When the above build passes with a genuine LFXO configuration, enable
+`HFXO_TEST_PRESTACK=1` in the HfxoTestBle **application test** only and
+verify continuity and balanced final Disable through MPSL initialization.
+Keep the existing S132 and default SDC builds as regression baselines.
+Do not enable this experimental option for a production build before
+hardware, LFCLK and callback-race validation.
+
 ## Optional pre-stack HFXO diagnostic
 
 The default HfxoTestBle still initializes the BLE owner first. To exercise
