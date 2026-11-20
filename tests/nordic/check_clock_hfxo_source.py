@@ -269,6 +269,11 @@ class HfxoSourceChecks(unittest.TestCase):
             self.assertNotIn(call, calibration)
         self.assertIn("nRFxMpslHfclkRequest();", calibration)
         self.assertIn("CLOCK_INTENSET_HFCLKSTARTED_Msk", calibration)
+        self.assertLess(calibration.index("s_bNRFxMpslCalibrationPending = true"),
+                        calibration.index("nRFxMpslHfclkRequest();"))
+        self.assertLess(calibration.index("nRFxMpslHfclkRequest();"),
+                        calibration.index("EnableInterrupt(state);", calibration.index(
+                            "s_bNRFxMpslCalibrationPending = true")))
 
     def test_ble_console_uses_interrupt_tx_completion(self):
         source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
