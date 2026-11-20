@@ -93,8 +93,25 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("SystemLowFreqClockEnable()", rtc)
         self.assertIn("SystemLowFreqClockDisable()", rtc)
 
-    def test_ble_diagnostic_uses_no_application_clock_mode(self):
+    def test_portable_ble_app_has_no_vendor_stack_selection(self):
         source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
+            encoding="utf-8")
+        self.assertIn('#include "bluetooth/bt_app.h"', source)
+        self.assertIn("BtAppInit(&s_BtCfg)", source)
+        self.assertIn("SystemHighFreqClockEnable()", source)
+        self.assertIn("SystemHighFreqClockDisable()", source)
+        self.assertNotIn("SystemCoreClockSelect(", source)
+        for forbidden in ("SOFTDEVICE_PRESENT", "NRFXLIB_SDC",
+                          "nrf_sdh_", "MpslInit", "#include \"nrf.h\"",
+                          "NRF_CLOCK", "stm32", "SHCI_"):
+            self.assertNotIn(forbidden, source)
+        wba = (ROOT / "ARM/ST/STM32WBAxx/src/system_stm32wbaxx.c").read_text(
+            encoding="utf-8")
+        self.assertIn("bool SystemHighFreqClockEnable(void)", wba)
+        self.assertIn("void SystemHighFreqClockDisable(void)", wba)
+
+    def test_ble_diagnostic_uses_no_application_clock_mode(self):
+        source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
             encoding="utf-8")
         self.assertNotIn("HFXO_TEST_PRESTACK", source)
         self.assertNotIn("SystemCoreClockSelect(", source)
@@ -109,7 +126,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
     def test_pre_stack_success_continues_normal_checks(self):
-        source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
+        source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
             encoding="utf-8")
         main = function(source, "int main(void)", "return 0;")
         self.assertIn("preStackResult = HfxoPreStackTest()", main)
@@ -192,7 +209,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
     def test_ble_console_uses_interrupt_tx_completion(self):
-        source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
+        source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
             encoding="utf-8")
         self.assertIn(".bIntMode = true", source)
         self.assertIn(".EvtCallback = HfxoUartEvent", source)
@@ -214,7 +231,7 @@ class HfxoSourceChecks(unittest.TestCase):
                         main.rindex("while (1)"))
 
     def test_s132_shutdown_rechecks_direct_hfxo_lifecycle(self):
-        source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
+        source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
             encoding="utf-8")
         main = function(source, "int main(void)", "return 0;")
         self.assertIn("nrf_sdh_disable_request()", main)
