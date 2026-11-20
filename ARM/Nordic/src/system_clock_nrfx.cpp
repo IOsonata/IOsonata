@@ -83,7 +83,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 #include "nrf_mpsl.h"
-#include "system_clock_nrfx.h"
+#include "../include/system_clock_nrfx.h"
 
 // CLOCK instance, as in timer_hf_nrfx.cpp
 #if defined(NRF91_SERIES)
