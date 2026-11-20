@@ -4,7 +4,7 @@
 @brief	Generic Bluetooth initialization and shared HF clock requests
 
 The same application source tests clock requests across Bluetooth initialization
-on Nordic S1xx, SDC, and STM32WBA. The IOsonata Bluetooth backend owns the
+on Nordic S1xx, SDC, and STM32WBA. The IOsonata Bluetooth implementation initializes the
 vendor stack and its clock requirements.
 
 @author	Hoang Nguyen Hoan
@@ -165,7 +165,7 @@ int main(void)
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTestBle\r\n");
 
-	// Exercise the generic shared clock API. The Bluetooth backend
+	// Exercise the generic shared clock API. The Bluetooth implementation
 	// selects the controller and its clocks without application flags.
 	before = SystemHighFreqClockEnable();
 	HFXO_PRINT("Clock request before Bluetooth: %s\r\n",
