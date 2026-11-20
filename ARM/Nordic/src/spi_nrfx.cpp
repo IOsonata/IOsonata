@@ -265,51 +265,28 @@ static void nRFxSPIAsyncTxWait(nRFSpiDev_t * const pDev, int DataLen, volatile b
 	__set_PRIMASK(irq);
 }
 #ifdef SPIM_PRESENT
-// END or STOPPED must confirm the hardware has stopped accessing DMA
-// buffers before the caller may reuse them.
-static bool nRFxSPIDmaStop(nRFSpiDev_t * const pDev)
-{
-	uint32_t timeout;
-
-	if (pDev->pDmaReg->EVENTS_END ||
-		pDev->pDmaReg->EVENTS_STOPPED)
-	{
-		return true;
-	}
-	pDev->pDmaReg->EVENTS_STOPPED = 0U;
-	pDev->pDmaReg->TASKS_STOP = 1U;
-	timeout = NRFSPI_TIMEOUT;
-	while (timeout-- > 0U)
-	{
-		if (pDev->pDmaReg->EVENTS_STOPPED ||
-			pDev->pDmaReg->EVENTS_END)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
 bool nRFxSPIWaitDMA(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
-	do
-	{
+	uint32_t val = 0;
+
+	do {
 		if (pDev->pDmaReg->EVENTS_END)
 		{
-			pDev->pDmaReg->EVENTS_END = 0U;
-			pDev->bDmaActive = false;
+			pDev->pDmaReg->EVENTS_END = 0; // clear event
 			return true;
 		}
-	} while (Timeout-- > 0U);
+	} while (Timeout-- > 0);
 
-	if (nRFxSPIDmaStop(pDev))
-	{
-		pDev->bDmaActive = false;
-	}
-	else
-	{
-		pDev->bDmaCancelPending = true;
-	}
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
+	// Finish or abort DMA before the caller can reuse its buffer.
+	pDev->pDmaReg->EVENTS_STOPPED = 0;
+	pDev->pDmaReg->TASKS_STOP = 1;
+	Timeout = NRFSPI_TIMEOUT;
+	while (!pDev->pDmaReg->EVENTS_STOPPED && Timeout-- > 0);
+	if (!pDev->pDmaReg->EVENTS_STOPPED)
+		pDev->pDmaReg->ENABLE = 0;
+#endif
+
 	return false;
 }
 #endif
@@ -332,26 +309,16 @@ bool nRFxSPIWaitReady(nRFSpiDev_t * const pDev, uint32_t Timeout)
 #ifdef SPIM_PRESENT
 bool nRFxSPIWaitRX(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
-	do
-	{
-		// ENDRX alone does not prove that TX and the entire SPIM task
-		// have finished. END is the DMA buffer lifetime boundary.
-		if (pDev->pDmaReg->EVENTS_END)
+	uint32_t val = 0;
+
+	do {
+		if (NRFX_SPI_ENDRX(pDev->pDmaReg))
 		{
-			pDev->pDmaReg->EVENTS_END = 0U;
-			pDev->bDmaActive = false;
+			NRFX_SPI_ENDRX(pDev->pDmaReg) = 0; // clear event
 			return true;
 		}
-	} while (Timeout-- > 0U);
+	} while (Timeout-- > 0);
 
-	if (nRFxSPIDmaStop(pDev))
-	{
-		pDev->bDmaActive = false;
-	}
-	else
-	{
-		pDev->bDmaCancelPending = true;
-	}
 	return false;
 }
 #endif
@@ -560,8 +527,7 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
-	if (dev->bTxAbort || dev->bCmdFailed || dev->bPeiPrepared ||
-		dev->bDmaCancelPending)
+	if (dev->bTxAbort || dev->bCmdFailed || dev->bPeiPrepared)
 	{
 		return false;
 	}
@@ -598,7 +564,7 @@ int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
-	if (dev->bTxAbort || dev->bCmdFailed || dev->bDmaCancelPending)
+	if (dev->bTxAbort || dev->bCmdFailed)
 	{
 		uint32_t irq = __get_PRIMASK();
 		__disable_irq();
@@ -688,7 +654,6 @@ static void nRFxSPIDmaNextBlock(nRFSpiDev_t * const pDev)
 	pDev->pDmaReg->EVENTS_STOPPED = 0;
 	NRFX_SPI_ENDRX(pDev->pDmaReg) = 0;
 	NRFX_SPI_ENDTX(pDev->pDmaReg) = 0;
-	pDev->bDmaActive = true;
 	pDev->pDmaReg->TASKS_START = 1;
 }
 
@@ -703,7 +668,6 @@ static void nRFxSPIDmaEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev)
 	pDev->pDmaReg->EVENTS_END = 0;
 	NRFX_SPI_ENDRX(pDev->pDmaReg) = 0;
 	NRFX_SPI_ENDTX(pDev->pDmaReg) = 0;
-	pDev->bDmaActive = false;
 
 	if (rx)
 	{
@@ -800,12 +764,12 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
-	if (dev->bPeiPrepared || dev->bDmaCancelPending)
+	if (dev->bPeiPrepared)
 	{
 		return 0;
 	}
 
-	if (dev->bTxAbort || dev->bCmdFailed || dev->bDmaCancelPending)
+	if (dev->bTxAbort || dev->bCmdFailed)
 	{
 		uint32_t irq = __get_PRIMASK();
 		__disable_irq();
@@ -866,9 +830,7 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 #endif
 		NRFX_SPI_RX(dev->pDmaReg).MAXCNT = l;
 		dev->pDmaReg->EVENTS_END = 0;
-		dev->pDmaReg->EVENTS_STOPPED = 0;
 		NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
-		dev->bDmaActive = true;
 		dev->pDmaReg->TASKS_START = 1;
 
 #if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
@@ -876,16 +838,7 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 #else
 		if (nRFxSPIWaitRX(dev, timeout) == false)
 #endif
-		{
-			if (dev->bDmaCancelPending)
-			{
-				// The caller's RX buffer is still owned by active DMA.
-				// Reset will release it only after STOPPED or END.
-				dev->bDmaCancelWasRx = true;
-				return -1;
-			}
 			break;
-		}
 
 		l = NRFX_SPI_RX(dev->pDmaReg).AMOUNT;
 #if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
@@ -920,8 +873,7 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
-	if (dev->bTxAbort || dev->bCmdFailed || dev->bPeiPrepared ||
-		dev->bDmaCancelPending)
+	if (dev->bTxAbort || dev->bCmdFailed || dev->bPeiPrepared)
 	{
 		return false;
 	}
@@ -1015,7 +967,7 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
-	if (dev->bPeiPrepared || dev->bDmaCancelPending)
+	if (dev->bPeiPrepared)
 	{
 		return 0;
 	}
@@ -1070,18 +1022,11 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 #endif
 		NRFX_SPI_TX(dev->pDmaReg).MAXCNT = l;
 		dev->pDmaReg->EVENTS_END = 0;
-		dev->pDmaReg->EVENTS_STOPPED = 0;
 		NRFX_SPI_ENDTX(dev->pDmaReg) = 0;
-		dev->bDmaActive = true;
 		dev->pDmaReg->TASKS_START = 1;
 
 		if (nRFxSPIWaitDMA(dev, timeout) == false)
 		{
-			if (dev->bDmaCancelPending)
-			{
-				dev->bDmaCancelWasRx = false;
-				return -1;
-			}
 			break;
 		}
 
@@ -1121,120 +1066,9 @@ void nRFxSPIStopTx(DevIntrf_t * const pDev)
     }
 }
 
-// Cancel a master transfer without releasing its DMA buffers until the
-// peripheral reports END or STOPPED. A failed hardware stop retains bBusy
-// so a later Reset can complete cancellation safely.
 void nRFxSPIReset(DevIntrf_t * const pDev)
 {
-	nRFSpiDev_t *dev;
-	volatile bool *waiter;
-	uint32_t irq;
-	int count;
-	bool pending;
-	bool rx;
 
-	if (pDev == NULL || pDev->pDevData == NULL ||
-		__get_IPSR() != 0U)
-	{
-		return;
-	}
-	dev = (nRFSpiDev_t *)pDev->pDevData;
-	if (dev->pSpiDev == NULL || dev->bPeiPrepared ||
-		dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
-	{
-		// SPIS and PEI have independent buffer ownership.
-		return;
-	}
-
-	irq = __get_PRIMASK();
-	__disable_irq();
-	pending = dev->bDmaActive || dev->bDmaCancelPending ||
-		dev->bTxAbort || dev->RxBufflen > 0 ||
-		dev->TxDatalen > 0 || dev->TxIdx > 0;
-	rx = dev->bDmaCancelWasRx || dev->RxBufflen > 0;
-	count = rx ? dev->RxIdx : dev->TxIdx;
-
-#ifdef SPIM_PRESENT
-	if (pDev->bDma)
-	{
-		if (dev->bDmaActive && !nRFxSPIDmaStop(dev))
-		{
-			dev->bDmaCancelPending = true;
-			dev->bDmaCancelWasRx = rx;
-			__set_PRIMASK(irq);
-			return;
-		}
-
-		dev->pDmaReg->INTENCLR = SPIM_INTENCLR_STOPPED_Msk;
-		dev->pDmaReg->EVENTS_END = 0U;
-		dev->pDmaReg->EVENTS_STOPPED = 0U;
-		NRFX_SPI_ENDRX(dev->pDmaReg) = 0U;
-		NRFX_SPI_ENDTX(dev->pDmaReg) = 0U;
-		NRFX_SPI_RX(dev->pDmaReg).MAXCNT = 0U;
-		NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0U;
-		NRFX_SPI_RX(dev->pDmaReg).PTR = 0U;
-		NRFX_SPI_TX(dev->pDmaReg).PTR = 0U;
-	}
-	else
-#endif
-	{
-#ifdef SPI_PRESENT
-		// The byte being shifted has already been copied to TXD.
-		// Disable READY before detaching the remaining caller data.
-		dev->pReg->INTENCLR = SPI_INTENCLR_READY_Msk;
-		dev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Disabled << SPI_ENABLE_ENABLE_Pos);
-		dev->pReg->EVENTS_READY = 0U;
-		dev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
-		if (pDev->bIntEn)
-		{
-			dev->pReg->INTENSET = SPI_INTENSET_READY_Msk;
-		}
-#endif
-	}
-
-	waiter = dev->pTxWait;
-	dev->pTxWait = NULL;
-	dev->pTxData = NULL;
-	dev->pRxBuff = NULL;
-	dev->TxDatalen = 0;
-	dev->TxIdx = 0;
-	dev->RxBufflen = 0;
-	dev->RxIdx = 0;
-	dev->bTxAbort = false;
-	dev->bDmaActive = false;
-	dev->bDmaCancelPending = false;
-	dev->bDmaCancelWasRx = false;
-	dev->bCmdFailed = false;
-	atomic_store(&pDev->bNoStop, false);
-	if (waiter != NULL)
-	{
-		*waiter = true;
-	}
-	__set_PRIMASK(irq);
-
-	if (pending)
-	{
-		if (rx)
-		{
-			DeviceIntrfStopRx(pDev);
-			if (pDev->EvtCB != NULL)
-			{
-				pDev->EvtCB(pDev, DEVINTRF_EVT_RX_TIMEOUT, NULL, count);
-			}
-		}
-		else
-		{
-			DeviceIntrfTxComplete(pDev);
-			if (pDev->EvtCB != NULL)
-			{
-				pDev->EvtCB(pDev, DEVINTRF_EVT_TX_TIMEOUT, NULL, count);
-			}
-		}
-	}
-	else
-	{
-		atomic_store(&pDev->bTxReady, true);
-	}
 }
 
 void *nRFxSPIGetHandle(DevIntrf_t * const pDev)
@@ -1333,25 +1167,19 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 		{
 			if (dev->bTxAbort)
 			{
-				// END may win the race with TASKS_STOP, in which case
-				// hardware can be idle without raising STOPPED.
-				bool stopped = dev->pDmaReg->EVENTS_STOPPED != 0U ||
-					dev->pDmaReg->EVENTS_END != 0U;
-				if (!stopped)
+				dev->pDmaReg->EVENTS_END = 0;
+				NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
+				NRFX_SPI_ENDTX(dev->pDmaReg) = 0;
+				if (dev->pDmaReg->EVENTS_STOPPED)
 				{
-					return;
-				}
-				int count = dev->TxIdx + NRFX_SPI_TX(dev->pDmaReg).AMOUNT;
+					int count = dev->TxIdx + NRFX_SPI_TX(dev->pDmaReg).AMOUNT;
 
-				dev->pDmaReg->EVENTS_END = 0U;
-				NRFX_SPI_ENDRX(dev->pDmaReg) = 0U;
-				NRFX_SPI_ENDTX(dev->pDmaReg) = 0U;
-				dev->pDmaReg->EVENTS_STOPPED = 0U;
-				dev->pDmaReg->INTENCLR = SPIM_INTENCLR_STOPPED_Msk;
-				NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0U;
-				NRFX_SPI_TX(dev->pDmaReg).PTR = 0U;
-				dev->bDmaActive = false;
-				nRFxSPIAsyncTxAbortEnd(pDev, dev, count);
+					dev->pDmaReg->EVENTS_STOPPED = 0;
+					dev->pDmaReg->INTENCLR = SPIM_INTENCLR_STOPPED_Msk;
+					NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
+					NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
+					nRFxSPIAsyncTxAbortEnd(pDev, dev, count);
+				}
 				return;
 			}
 
@@ -1675,8 +1503,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	}
 	if (g_nRFxSPIDev[pCfgData->DevNo].bTxAbort ||
 		g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed ||
-		g_nRFxSPIDev[pCfgData->DevNo].bPeiPrepared ||
-		g_nRFxSPIDev[pCfgData->DevNo].bDmaCancelPending)
+		g_nRFxSPIDev[pCfgData->DevNo].bPeiPrepared)
 	{
 		// TxBuf may still be in use by the cancelled DMA block.
 		return false;
@@ -1703,9 +1530,6 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	g_nRFxSPIDev[pCfgData->DevNo].pTxData = NULL;
 	g_nRFxSPIDev[pCfgData->DevNo].pTxWait = NULL;
 	g_nRFxSPIDev[pCfgData->DevNo].bTxAbort = false;
-	g_nRFxSPIDev[pCfgData->DevNo].bDmaActive = false;
-	g_nRFxSPIDev[pCfgData->DevNo].bDmaCancelPending = false;
-	g_nRFxSPIDev[pCfgData->DevNo].bDmaCancelWasRx = false;
 	g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed = false;
 	g_nRFxSPIDev[pCfgData->DevNo].bPeiPrepared = false;
 
