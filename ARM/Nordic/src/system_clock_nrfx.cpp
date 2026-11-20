@@ -496,7 +496,7 @@ static bool nRFxLfclkWaitStopped(void)
 	return false;
 }
 
-bool nRFxLfclkAcquire(nRFxLfclkRequest_t Source)
+bool nRFxLfclkAcquire(TIMER_CLKSRC Source)
 {
 	OSC_TYPE type;
 	uint32_t src;
@@ -508,25 +508,24 @@ bool nRFxLfclkAcquire(nRFxLfclkRequest_t Source)
 	type = g_McuOsc.LowPwrOsc.Type;
 	switch (Source)
 	{
-		case NRFX_LFCLK_REQUEST_DEFAULT:
+		case TIMER_CLKSRC_DEFAULT:
 			break;
-		case NRFX_LFCLK_REQUEST_RC:
+		case TIMER_CLKSRC_LFRC:
 			type = OSC_TYPE_RC;
 			break;
-		case NRFX_LFCLK_REQUEST_XTAL:
+		case TIMER_CLKSRC_LFXTAL:
 			type = OSC_TYPE_XTAL;
 			break;
-		case NRFX_LFCLK_REQUEST_SYNTH:
-#ifdef CLOCK_LFCLKSRC_SRC_Synth
+#if defined(CLOCK_LFCLKSRC_SRC_Synth)
+		case TIMER_CLKSRC_HFRC:
+		case TIMER_CLKSRC_HFXTAL:
 			src = CLOCK_LFCLKSRC_SRC_Synth << CLOCK_LFCLKSRC_SRC_Pos;
 			break;
-#else
-			return false;
 #endif
 		default:
 			return false;
 	}
-	if (Source != NRFX_LFCLK_REQUEST_SYNTH &&
+	if (Source != TIMER_CLKSRC_HFRC && Source != TIMER_CLKSRC_HFXTAL &&
 		!nRFxLfclkOscSource(type, &src))
 	{
 		return false;
@@ -542,7 +541,7 @@ bool nRFxLfclkAcquire(nRFxLfclkRequest_t Source)
 	{
 		// RTCs share one LFCLK. An explicit source must match the source
 		// already running for the other users.
-		if (Source != NRFX_LFCLK_REQUEST_DEFAULT &&
+		if (Source != TIMER_CLKSRC_DEFAULT &&
 			(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
 			(src & NRFX_LFCLK_SRC_Msk))
 		{
@@ -558,7 +557,7 @@ bool nRFxLfclkAcquire(nRFxLfclkRequest_t Source)
 	{
 		// Do not reconfigure another owner's clock or silently accept
 		// an explicit RTC source that does not match its actual source.
-		if (Source != NRFX_LFCLK_REQUEST_DEFAULT &&
+		if (Source != TIMER_CLKSRC_DEFAULT &&
 			(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
 			(src & NRFX_LFCLK_SRC_Msk))
 		{
