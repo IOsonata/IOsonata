@@ -83,6 +83,25 @@ and verify uninterrupted HFXO operation, balanced Disable, LFCLK timing,
 and Bluetooth radio operation. No application clock-control workaround is
 part of the intended IOsonata architecture.
 
+## S132 shutdown and deferred HFXO release
+
+For S132 builds, the existing HfxoTestBle now continues after its five
+normal HFXO checks and requests SoftDevice shutdown. It then verifies that
+the oscillator is stopped, enables HFXO directly again without SoftDevice,
+and releases the direct request. This tests the previously unverified
+physical cleanup associated with an HFXO request made before S132 startup.
+
+Run the usual S132 application build, preferably first with
+`HFXO_TEST_PRESTACK=1`, and inspect the three additional results:
+
+- `S132 shutdown: PASS, HFXO stopped`
+- `Direct enable after S132: PASS, HFXO running`
+- `Direct release after S132: PASS, HFXO stopped`
+
+These results are not hardware-validated yet. If shutdown fails or the
+SoftDevice observer is not delivered, do not count the reference-counting
+test alone as full physical-clock cleanup.
+
 ## Optional pre-stack HFXO diagnostic
 
 The default HfxoTestBle still initializes the BLE owner first. To exercise
