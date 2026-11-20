@@ -344,7 +344,13 @@ static void ClockDemoTimer(void)
 int main(void)
 {
 	unsigned cycle;
+	unsigned sourceIdx;
 	bool selected;
+	const ClockDemoSource_t *pSource;
+#if defined(CLOCK_DEMO_LF_SOURCES)
+	unsigned lfIdx;
+	const ClockDemoLowFreq_t *pLfSource;
+#endif
 	uint32_t core;
 #if !CLOCK_DEMO_APB_READONLY
 	uint32_t bus;
@@ -407,23 +413,24 @@ int main(void)
 	for (cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
 	{
 		ClockDemoPrint("Cycle %u\r\n", cycle);
-		for (const ClockDemoSource_t &source : s_Sources)
+		for (sourceIdx = 0U; sourceIdx < sizeof(s_Sources) / sizeof(s_Sources[0]); sourceIdx++)
 		{
+			pSource = &s_Sources[sourceIdx];
 #if CLOCK_DEMO_CORE_READONLY
-			ClockDemoPrint("Checking %s\r\n", source.pName);
+			ClockDemoPrint("Checking %s\r\n", pSource->pName);
 #else
-			ClockDemoPrint("Selecting %s\r\n", source.pName);
+			ClockDemoPrint("Selecting %s\r\n", pSource->pName);
 #endif
 			// Polling Tx has queued the last bytes in the hardware FIFO.
 			ClockDemoClockBegin();
 #if CLOCK_DEMO_CORE_READONLY
-			selected = !source.Select;
+			selected = !pSource->Select;
 #else
 			selected = true;
-			if (source.Select)
+			if (pSource->Select)
 			{
 #if CLOCK_DEMO_HF_SOURCE_ENABLE
-				if (source.Type == OSC_TYPE_RC)
+				if (pSource->Type == OSC_TYPE_RC)
 				{
 					selected = hfSourceEnabled;
 					if (selected)
@@ -441,7 +448,7 @@ int main(void)
 					}
 				}
 #else
-				selected = SystemCoreClockSelect(source.Type, source.Frequency);
+				selected = SystemCoreClockSelect(pSource->Type, pSource->Frequency);
 #endif
 			}
 #endif
@@ -450,8 +457,8 @@ int main(void)
 				return 1;
 			}
 			core = SystemCoreClockGet();
-			ClockDemoResult(source.pName, selected && core >= source.CoreMin && core <= source.CoreMax);
-			if (!selected || core < source.CoreMin || core > source.CoreMax)
+			ClockDemoResult(pSource->pName, selected && core >= pSource->CoreMin && core <= pSource->CoreMax);
+			if (!selected || core < pSource->CoreMin || core > pSource->CoreMax)
 			{
 				continue;
 			}
@@ -478,11 +485,12 @@ int main(void)
 			}
 #endif
 #if defined(CLOCK_DEMO_LF_SOURCES)
-			for (const ClockDemoLowFreq_t &source : s_LowFreqSources)
+			for (lfIdx = 0U; lfIdx < sizeof(s_LowFreqSources) / sizeof(s_LowFreqSources[0]); lfIdx++)
 			{
-				ClockDemoPrint("Selecting LF %s\r\n", source.pName);
+				pLfSource = &s_LowFreqSources[lfIdx];
+				ClockDemoPrint("Selecting LF %s\r\n", pLfSource->pName);
 				ClockDemoClockBegin();
-				selected = SystemLowFreqClockSelect(source.Type, source.Frequency);
+				selected = SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency);
 #if CLOCK_DEMO_LF_SOURCE_ENABLE
 				if (selected)
 				{
@@ -493,7 +501,7 @@ int main(void)
 				{
 					return 1;
 				}
-				ClockDemoResult(source.pName, selected);
+				ClockDemoResult(pLfSource->pName, selected);
 				ClockDemoPrint("LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
 #if CLOCK_DEMO_LF_SOURCE_ENABLE
 				if (selected)
