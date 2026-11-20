@@ -13,8 +13,11 @@ hardware PASS evidence.
 management, sleep and wake behavior, reset and retention functions, core
 clock selection, and peripheral clock management where supported by the MCU.
 These facilities are normally initialized by `SystemInit()` and used by
-peripheral implementations. Applications call them directly when explicit
-system-level control is required.
+IOsonata's system and peripheral implementations. Applications normally
+configure and use their peripherals without invoking system clock functions.
+Direct application calls are reserved for special requirements, such as
+explicit core clock selection, system sleep/power management or intentional
+management of an MCU clock source.
 
 `SystemPeriphClockGet()` and `SystemPeriphClockSet()` provide the existing
 generic peripheral-clock frequency interface. The zero-based `Idx` selects
@@ -36,6 +39,17 @@ Shared HF/LF clock Enable/Disable operations manage shared MCU clock sources;
 they do not replace the peripheral drivers' lifecycle.
 
 ## Design principle
+
+System clock and power functions are internal utilities of IOsonata even
+though they are available in the generic API. In particular,
+`SystemHighFreqClockEnable/Disable` and `SystemLowFreqClockEnable/Disable`
+are normally called by peripheral drivers, not by applications. Drivers
+must select, start, count and stop their required clocks automatically
+through their existing Init/Enable/Disable lifecycle. A normal application
+must not choose HF versus LF, manage reference counts, know which Nordic
+BLE stack owns CLOCK, or change its startup order to keep a peripheral
+working. An application may call the system APIs directly only when it
+deliberately needs special MCU clock or power control.
 
 An application specifies the peripheral operation it needs. The MCU
 implementation selects and manages the required clocks. Applications should
