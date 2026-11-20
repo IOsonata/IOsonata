@@ -11,6 +11,9 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+# Eclipse nRF52 managed projects reference HOME/external/sdk-nrfxlib.
+# For example, lib/ioc/../../../../../../../../external/sdk-nrfxlib.
+DEFAULT_NRFXLIB = Path.home() / "external/sdk-nrfxlib"
 SYMBOL = "mpsl_clock_ctrl_source_register"
 UNREGISTER = "mpsl_clock_ctrl_source_unregister"
 
@@ -18,16 +21,19 @@ UNREGISTER = "mpsl_clock_ctrl_source_unregister"
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--nrfxlib", type=Path,
-                        default=ROOT / "external/sdk-nrfxlib")
+                        default=DEFAULT_NRFXLIB)
     parser.add_argument("--nm", default=None,
                         help="Arm nm executable (optional)")
     parser.add_argument("--target", default="nrf52",
                         help="MPSL archive target directory (default: nrf52)")
     args = parser.parse_args()
 
-    header = args.nrfxlib / "mpsl/include/mpsl_clock.h"
+    nrfxlib = args.nrfxlib.expanduser().resolve()
+    header = nrfxlib / "mpsl/include/mpsl_clock.h"
     if not header.is_file():
         print("MISSING MPSL header:", header)
+        print("Nordic managed projects expect:", DEFAULT_NRFXLIB)
+        print("Use --nrfxlib PATH if your SDK is installed elsewhere.")
         return 2
 
     source = header.read_text(encoding="utf-8")
@@ -39,7 +45,7 @@ def main():
         if not found:
             return 2
 
-    directory = args.nrfxlib / "mpsl/lib" / args.target
+    directory = nrfxlib / "mpsl/lib" / args.target
     archives = sorted(directory.rglob("*.a"))
     if not archives:
         print("MISSING MPSL archives:", directory)
@@ -76,7 +82,7 @@ def main():
 
     print("EXPORTED external-clock registration:")
     for archive in available:
-        print(" ", archive.relative_to(args.nrfxlib))
+        print(" ", archive.relative_to(nrfxlib))
     print("CAPABILITY FOUND: source-compatible interface and binary export.")
     print("This does not establish correct clock ownership or hardware "
           "behavior. S132 requires separate review.")
