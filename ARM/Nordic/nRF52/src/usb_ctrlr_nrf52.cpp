@@ -232,8 +232,12 @@ static inline void UsbdXtalRelease(void)
 {
 	if (s_bUsbdXtalHeld)
 	{
-		s_bUsbdXtalHeld = false;
-		(void)SystemCoreClockSelect(OSC_TYPE_RC, 0);
+		// Preserve the request if another clock owner prevents release.
+		// A later USB shutdown can retry without acquiring it again.
+		if (SystemCoreClockSelect(OSC_TYPE_RC, 0))
+		{
+			s_bUsbdXtalHeld = false;
+		}
 	}
 }
 
