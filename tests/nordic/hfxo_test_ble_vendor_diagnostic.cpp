@@ -274,6 +274,42 @@ static int HfxoPreStackTest(void)
 	return stopped ? 0 : 1;
 }
 
+#if defined(NRFXLIB_SDC)
+// Verify the calibration timer completes repeated LFRC calibrations.
+// The completion count changes only when CLOCK signals EVENTS_DONE.
+static bool HfxoLfCalibrationTest(void)
+{
+	uint32_t before;
+	uint32_t after;
+	unsigned sample;
+	unsigned stoppedSamples;
+	unsigned runningSamples;
+	bool passed;
+
+	before = nRFxMpslLfclkCalibrationCount();
+	stoppedSamples = 0U;
+	runningSamples = 0U;
+	for (sample = 0U; sample < 120U; sample++)
+	{
+		msDelay(100U);
+		if (HfxoRunning())
+		{
+			runningSamples++;
+		}
+		else
+		{
+			stoppedSamples++;
+		}
+	}
+	after = nRFxMpslLfclkCalibrationCount();
+	passed = after - before >= 2U && stoppedSamples != 0U;
+	HFXO_PRINT("LFRC calibration: %u completed in 12 s, HFXO running %u/120, stopped %u/120\r\n",
+		(unsigned)(after - before), runningSamples, stoppedSamples);
+	HFXO_PRINT("LFRC periodic calibration: %s\r\n", passed ? "PASS" : "FAIL");
+	return passed;
+}
+#endif
+
 int main(void)
 {
 	int preStackResult;
@@ -366,6 +402,9 @@ int main(void)
 	HfxoResult("Unmatched disable", failed, final);
 	HFXO_PRINT("HfxoTestBle: %d/5 checks PASS\r\n", pass);
 
+#if defined(NRFXLIB_SDC)
+	(void)HfxoLfCalibrationTest();
+#endif
 #if defined(SOFTDEVICE_PRESENT) && !defined(NRFXLIB_SDC)
 	// Verify the deferred direct HFXO release at SoftDevice shutdown.
 	// A subsequent direct enable/disable must work without stack ownership.
