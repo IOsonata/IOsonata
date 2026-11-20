@@ -140,6 +140,23 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("Pre-stack handover", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
+    def test_nrf52832_advertiser_uses_lfrc_board_configuration(self):
+        board = (ROOT / "ARM/Nordic/nRF52/nRF52832/exemples/BleAdvertiser/src/board.h").read_text(
+            encoding="utf-8")
+        advertiser = (ROOT / "exemples/bluetooth/ble_advertiser.cpp").read_text(
+            encoding="utf-8")
+        project = (ROOT / "ARM/Nordic/nRF52/nRF52832/exemples/BleAdvertiser/ioc/.cproject").read_text(
+            encoding="utf-8")
+        self.assertIn("#define MCU_OSC", board)
+        self.assertIn("OSC_TYPE_RC, 32768U, 500U", board)
+        self.assertIn("OSC_TYPE_XTAL, 32000000U", board)
+        self.assertIn("McuOsc_t g_McuOsc = MCU_OSC;", advertiser)
+        self.assertIn("BtAppInit(&s_BtAppCfg)", advertiser)
+        self.assertIn("BtAdvStart();", advertiser)
+        self.assertIn('name="Release_SDC"', project)
+        self.assertNotIn("SystemLowFreqClockSelect(", advertiser)
+        self.assertNotIn("MpslInit(", advertiser)
+
     def test_sdc_vendor_diagnostic_uses_lfrc(self):
         diagnostic = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
             encoding="utf-8")
