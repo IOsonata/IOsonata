@@ -117,6 +117,33 @@ it does not enable BLE advertising. An on-air scanner confirms radio
 activity but does not measure clock frequency, current, or connection
 stability. Connections must be checked with a connectable BLE example.
 
+## Shared clock requests during BLE writes
+
+The shared `exemples/bluetooth/uart_ble.cpp` example now queues a
+balanced two-request HF clock test each time a client writes the BLE
+UART characteristic. The request check executes on the application
+event queue, not inside the GATT callback. Every 32 completed checks,
+the example logs:
+
+```text
+BLE clock requests: 32 checks, 0 failures
+```
+
+The nRF52832 `UartBleDemo` board description selects 32.768 kHz LFRC
+and the project already has an Eclipse `Release_SDC` configuration.
+
+After updating the branch, clean-build the nRF52832 IOsonata library and
+`UartBleDemo/Release_SDC`. Connect using a BLE UART client and repeatedly
+send data **to the device** for at least 120 seconds. Verify received
+UART bytes and continued BLE connectivity; capture the printed clock
+check count. The counter advances on received GATT writes, not simply
+on elapsed time. It should increase while `failures` remains zero.
+
+This checks balanced generic HF clock requests under connected BLE
+traffic. Data integrity and current consumption require separate
+measurements. The shared UART BLE source is portable and uses no Nordic
+clock registers or stack selection.
+
 ## Status
 
 nRF52832 `ClockDemo`, `PowerOffDemo`, portable `HfxoTestBle`
