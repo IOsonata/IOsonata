@@ -52,17 +52,17 @@ SOFTWARE.
 #if defined(NRF52_SERIES)
 #include "mpsl_clock.h"
 
-// The nRF52 SDC library includes the external MPSL clock-control functions.
-// Select external control automatically when the LF source is LFXO.
-// LFRC uses MPSL calibration until IOsonata implements equivalent calibration.
-// LFXO does not need calibration, but registration requires valid functions.
+// The nRF52 SDC library accepts external HFCLK and LFCLK control.
+// The MCU clock implementation calibrates LFRC using HFXO and the
+// shared POWER_CLOCK interrupt. LFXO does not require calibration.
 static void MpslExternalLfCalibrationStart(void)
 {
+	nRFxMpslLfclkCalibrationStart();
 }
 
 static bool MpslExternalLfCalibrationIsEnabled(void)
 {
-	return false;
+	return nRFxMpslLfclkCalibrationIsEnabled();
 }
 
 static mpsl_clock_lfclk_ctrl_source_t s_MpslExternalLf = {
@@ -445,10 +445,10 @@ bool MpslInit(void)
 	lfclk.skip_wait_lfclk_started = MPSL_DEFAULT_SKIP_WAIT_LFCLK_STARTED;
 
 #if defined(NRF52_SERIES)
-	// One SDC library chooses its clock implementation from g_McuOsc.
-	// MPSL external clock control requires external LFRC calibration.
-	// Until IOsonata provides LFRC calibration, RC uses MPSL's calibration.
-	externalClock = lfosc->Type == OSC_TYPE_XTAL;
+	// Register the same shared clock controller for LFRC and LFXO.
+	// Calibration and HFCLK references remain with the MCU clock code.
+	externalClock = lfosc->Type == OSC_TYPE_XTAL ||
+		lfosc->Type == OSC_TYPE_RC;
 	if (nRFxMpslExternalClockGet())
 	{
 		return false;
@@ -656,6 +656,9 @@ void POWER_CLOCK_IRQHandler()
 #endif
 {
 	DEBUG_PRINTF("MPSL_IRQ_CLOCK_Handler\r\n");
+#if defined(NRF52_SERIES)
+	nRFxMpslClockIrq();
+#endif
 	MPSL_IRQ_CLOCK_Handler();
 }
 
