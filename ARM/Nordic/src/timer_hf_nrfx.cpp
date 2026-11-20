@@ -543,7 +543,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 		return true;
 	}
 
-	// Shared clock reference counting belongs in the system clock backend.
+	// Shared HFXO request counting belongs in system_clock_nrfx.cpp.
 	if (!SystemHighFreqClockEnable())
 	{
 		return false;
