@@ -15,10 +15,19 @@ peripheral implementations. Applications call them directly when explicit
 system-level control is required.
 
 `SystemPeriphClockGet()` and `SystemPeriphClockSet()` provide the existing
-generic peripheral-clock frequency interface. MCU backends determine which
-peripheral clock domains can be configured, what indices represent, and which
-frequencies are achievable. Unsupported selections must be reported rather
-than silently changing unrelated clocks. This is distinct from a driver's
+generic peripheral-clock frequency interface. The zero-based `Idx` selects
+the MCU-specific peripheral clock domain required by a peripheral, not a
+universal clock number shared across MCU families. For example, STM32L4
+implements index 0 for PCLK1 (APB1) and index 1 for PCLK2 (APB2), and
+supports independent bus prescalers. Nordic exposes index 0 as its fixed
+16 MHz peripheral clock, without an independently configurable APB divider.
+Each peripheral driver selects the applicable index and requested frequency
+based on its hardware requirements. The system clock implementation reports
+the actual achievable frequency; unsupported indices return 0. A fixed clock
+may return its fixed frequency when the requested frequency cannot change it.
+The application does not need to know the MCU's clock register layout or
+prescaler settings. Source selection must not silently change unrelated
+clock domains. This is distinct from a driver's
 own peripheral enable bits and module clock gates: UART, SPI, I2C, timers
 and other drivers still configure and enable their respective hardware.
 Shared HF/LF clock Enable/Disable operations manage shared MCU clock sources;
