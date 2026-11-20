@@ -616,17 +616,25 @@ void SystemLowFreqClockDisable(void)
 		s_nRFxLfclkReqCnt--;
 		if (s_nRFxLfclkReqCnt == 0U)
 		{
-			if (s_bNRFxLfclkOwned &&
 #if defined(NRF52_SERIES)
+			if (s_bNRFxMpslExternalClock &&
+				s_nRFxMpslLfclkReqCnt != 0U && s_bNRFxLfclkOwned)
+			{
+				s_bNRFxMpslLfclkOwned = true;
+			}
+			if ((s_bNRFxLfclkOwned || s_bNRFxMpslLfclkOwned) &&
 				s_nRFxMpslLfclkReqCnt == 0U &&
 				(!nRFxMpslActive() || s_bNRFxMpslExternalClock) &&
 #else
-				!nRFxMpslActive() &&
+			if (s_bNRFxLfclkOwned && !nRFxMpslActive() &&
 #endif
 				!nRFxClockSdEnabled())
 			{
 				NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
 				s_bNRFxLfclkStopPending = true;
+#if defined(NRF52_SERIES)
+				s_bNRFxMpslLfclkOwned = false;
+#endif
 			}
 			s_bNRFxLfclkOwned = false;
 		}
@@ -685,6 +693,18 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return stopped;
 }
 
+uint32_t SystemPeriphClockGet(int Idx)
+{
+	return Idx == 0 ? NRFX_PCLK_FREQ : 0;
+}
+
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+{
+	// Fixed, the closest frequency is the one there is
+	(void)Freq;
+
+	return SystemPeriphClockGet(Idx);
+}
 #if defined(NRF52_SERIES)
 // The external MPSL clock driver uses these short interrupt-safe callbacks.
 // Do not call MPSL's internal HF source request API in this configuration.
@@ -817,16 +837,3 @@ int32_t nRFxMpslLfclkRelease(void)
 	return 0;
 }
 #endif
-
-uint32_t SystemPeriphClockGet(int Idx)
-{
-	return Idx == 0 ? NRFX_PCLK_FREQ : 0;
-}
-
-uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
-{
-	// Fixed, the closest frequency is the one there is
-	(void)Freq;
-
-	return SystemPeriphClockGet(Idx);
-}
