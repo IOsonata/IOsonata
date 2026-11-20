@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CLOCK = ROOT / "exemples/misc/clock_demo.cpp"
 POWER = ROOT / "exemples/misc/power_off_demo.cpp"
 I2C = ROOT / "exemples/i2c/i2c_slave_demo.cpp"
+NRF_UART = ROOT / "ARM/Nordic/src/uart_nrfx.cpp"
 
 
 class DemoDriverOwnership(unittest.TestCase):
@@ -24,6 +25,27 @@ class DemoDriverOwnership(unittest.TestCase):
 		end = source.index("\n}", start)
 		self.assertNotIn("UARTRx(", source[start:end])
 		self.assertIn("msDelay(2);", source[start:end])
+
+	def test_clock_demo_finishes_last_print(self):
+		source = CLOCK.read_text(encoding="utf-8")
+		final = source.index('ClockDemoPrint("ClockDemo complete:')
+		poweroff = source.index("UARTPowerOff(&s_Uart);", final)
+		end = source.index("while (1)", final)
+		self.assertLess(poweroff, end)
+		self.assertIn("#if CLOCK_DEMO_STOP_UART", source[final:end])
+
+	def test_nrf_polling_uart_drains_before_power_off(self):
+		source = NRF_UART.read_text(encoding="utf-8")
+		poll = source.index("static bool nRFUARTDrainPollingTx(")
+		poweroff = source.index("void nRFUARTPowerOff(")
+		drain = source[poll:poweroff]
+		self.assertIn("nRFUARTPollLegacyTx(dev);", drain)
+		self.assertIn("CFifoUsed(dev->pUartDev->hTxFifo)", drain)
+		self.assertIn("remaining == 0 && dev->pUartDev->bTxReady", drain)
+		self.assertIn("timeout >= 2000000U", drain)
+		self.assertIn("!pDev->bDma && !pDev->bIntEn", source[poweroff:])
+		self.assertIn("!nRFUARTDrainPollingTx(dev)", source[poweroff:])
+		self.assertIn("return;", source[poweroff:])
 
 	def test_power_off_demo(self):
 		source = POWER.read_text(encoding="utf-8")
