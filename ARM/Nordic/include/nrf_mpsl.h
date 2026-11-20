@@ -81,9 +81,10 @@ void MpslNvmArbiterStop(void);
 /**
  * @brief	Request or release the 32 MHz crystal through MPSL
  *
- * SystemHighFreqClockEnable/Disable use it to start or stop the crystal via the
- * last release. Once MPSL is initialized it owns CLOCK and the crystal is
- * requested from MPSL. The weak default in system_clock_nrfx.cpp is used when
+ * SystemHighFreqClockEnable calls this helper on the first shared enable,
+ * and SystemHighFreqClockDisable calls it on the final disable. Once MPSL
+ * is initialized it owns CLOCK. The weak default in system_clock_nrfx.cpp
+ * is used when
  * the SoftDevice Controller is not in the build.
  *
  * @param	bOn : true - request and wait until it runs, false - release
