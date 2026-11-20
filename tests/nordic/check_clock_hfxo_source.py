@@ -235,8 +235,7 @@ class HfxoSourceChecks(unittest.TestCase):
         stop = source.index("NRFX_HFXO_STOP = 1U")
         self.assertLess(source.index("if (nRFxClockSdEnabled())"), stop)
         self.assertLess(source.index("if (nRFxMpslActive())"), stop)
-        self.assertLess(source.index("nRFxMpslHfxo(true)"), stop)
-        self.assertLess(source.index("nRFxMpslHfxo(false)"), stop)
+        self.assertLess(source.index("if (nRFxMpslActive())"), stop)
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
     def test_lfrc_preserves_internal_mpsl_calibration(self):
@@ -250,11 +249,10 @@ class HfxoSourceChecks(unittest.TestCase):
         direct = stop.split("case NRFX_HFXO_OWNER_DIRECT:", 1)[1]
         self.assertIn("if (nRFxMpslActive())", direct)
         self.assertIn("if (s_bNRFxMpslExternalClock)", direct)
-        self.assertIn("nRFxMpslHfxo(true)", direct)
-        self.assertIn("return nRFxMpslHfxo(false) == 0", direct)
-        self.assertLess(direct.index("nRFxMpslHfxo(true)"),
-                        direct.index("nRFxMpslHfxo(false)"))
-        self.assertLess(direct.index("return nRFxMpslHfxo(false) == 0"),
+        self.assertNotIn("nRFxMpslHfxo(true)", direct)
+        self.assertNotIn("nRFxMpslHfxo(false)", direct)
+        self.assertIn("An MPSL request/release cannot release the direct HFXO", direct)
+        self.assertLess(direct.index("if (s_bNRFxMpslExternalClock)"),
                         direct.index("NRFX_HFXO_STOP = 1U"))
 
     def test_ble_console_uses_interrupt_tx_completion(self):
