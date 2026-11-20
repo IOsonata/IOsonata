@@ -150,7 +150,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("stoppedSamples = 0U", diagnostic)
         self.assertIn("sample < 200U", diagnostic)
         self.assertIn("stopped = stoppedSamples != 0U", diagnostic)
-        self.assertIn('HfxoResult("Pre-stack physical release", stopped, HfxoRunning())', diagnostic)
+        self.assertIn('HFXO_PRINT("Pre-stack physical release: %s, HFXO stopped %u/200 samples', diagnostic)
         self.assertIn('return stopped ? 0 : 1;', diagnostic)
         portable = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
             encoding="utf-8")
