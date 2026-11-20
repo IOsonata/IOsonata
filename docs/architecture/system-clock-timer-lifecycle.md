@@ -288,37 +288,32 @@ nRF52 hard-float, soft-float, and softfp-float MPSL archives were found.
 Thus the API is available in the actual installed toolchain libraries.
 No production clock integration has yet been validated by that result.
 
-### Experimental nRF52 SDC external-clock adapter
+### nRF52 SDC clock integration without a feature define
 
-The working branch now contains an **opt-in, unvalidated** implementation
-in `ARM/Nordic/src/system_clock_nrfx.cpp` and
-`ARM/Nordic/src/nrf_mpsl.cpp`. Building the nRF52 SDC library with
-`IO_NRFX_MPSL_EXT_CLOCK=1` registers IOsonata's clock callbacks before
-`mpsl_init()` and passes a null LFCLK configuration so MPSL uses the
-registered external driver. The adapter tracks MPSL and IOsonata clock
-requirements separately but shares the same physical HFCLK/LFCLK sources.
-The HFCLK callbacks issue clock tasks without busy waits, as required by
-MPSL's high-priority callback interface. The default setting leaves this
-code inactive, preserving the existing stack-owned behavior.
+The nRF52 SDC library contains the external MPSL clock adapter by default.
+There is **no IO_NRFX_MPSL_EXT_CLOCK compilation option** and no second
+clock-specific library target. IOsonata selects the backend internally
+from `g_McuOsc.LowPwrOsc` when initializing MPSL:
 
-This first integration requires a board configured for **LFXO**. The
-external MPSL clock-control driver also assumes responsibility for LFRC
-calibration; IOsonata has not implemented that calibration yet. When the
-opt-in is enabled and `g_McuOsc.LowPwrOsc.Type` is not `OSC_TYPE_XTAL`,
-`MpslInit()` reports failure instead of allowing inaccurate LFRC timing.
-The existing SDC setup with LFRC therefore is not covered by the
-experimental adapter. Neither callback ordering nor runtime behavior has
-been compiled or hardware-validated in the new mode. S132 is unchanged.
+- `OSC_TYPE_XTAL`: register IOsonata's HFCLK/LFCLK clock-control callbacks
+  before `mpsl_init()`; MPSL and IOsonata share physical clock ownership.
+- `OSC_TYPE_RC`: retain MPSL's internal clock driver and its LFRC
+  calibration while the external driver lacks an equivalent calibration
+  implementation. This is an internal hardware-specific selection, not
+  a user-facing mode or a compilation setting.
 
-Before enabling this mode in a normal library build, validate:
-- Managed CDT compilation and linking for nRF52832/nRF52840 SDC builds.
-- LFXO clock setup, first request/last disable and rapid STOP/START.
-- Pre-stack HFXO request through MPSL registration and final disable;
-  no clock interruption while an outstanding user requires HFXO.
-- Callback races with an ongoing direct clock transition.
-- LFCLK operation with simultaneous RTC and MPSL users, and accurate
-  LFRC calibration before enabling external control with an RC source.
-- Continued BLE radio operation and correct low-power consumption.
+The external callbacks are nonblocking for MPSL high-priority HF requests.
+The **direct-to-stack ownership defect for LFRC remains unresolved** because
+the internal MPSL path cannot inherit an outstanding direct oscillator
+request. It must not be hidden by changing application initialization order,
+dropping a clock reference, or disabling LFRC calibration.
+
+The XTAL adapter is still experimental on nRF52 and is not signed off.
+Validate actual MPSL callback signatures in the installed SDK, managed CDT
+builds, RTC/HFCLK continuity, direct-to-stack handover, interrupt races,
+BLE radio operation, and oscillator power consumption before declaring
+ownership transfer complete. The S132 clock-owner integration is separate.
+The generic application and peripheral API is unchanged.
 
 ### Nordic owner integration investigation
 
