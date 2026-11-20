@@ -107,7 +107,7 @@ int nRFxMpslHfxo(bool bOn);
 bool nRFxMpslActive(void);
 // Internal nRF52 external-clock integration callbacks. The MPSL
 // registration implementation calls these functions; applications never do.
-#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
+#if defined(NRF52_SERIES)
 void nRFxMpslExternalClockSet(bool Enabled);
 bool nRFxMpslExternalClockGet(void);
 void nRFxMpslHfclkRequest(void);
