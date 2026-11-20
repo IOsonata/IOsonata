@@ -297,11 +297,16 @@ bool nRFxSPIWaitDMA(nRFSpiDev_t * const pDev, uint32_t Timeout)
 		if (pDev->pDmaReg->EVENTS_END)
 		{
 			pDev->pDmaReg->EVENTS_END = 0U;
+			pDev->bDmaActive = false;
 			return true;
 		}
 	} while (Timeout-- > 0U);
 
-	if (!nRFxSPIDmaStop(pDev))
+	if (nRFxSPIDmaStop(pDev))
+	{
+		pDev->bDmaActive = false;
+	}
+	else
 	{
 		pDev->bDmaCancelPending = true;
 	}
@@ -329,14 +334,21 @@ bool nRFxSPIWaitRX(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
 	do
 	{
-		if (NRFX_SPI_ENDRX(pDev->pDmaReg))
+		// ENDRX alone does not prove that TX and the entire SPIM task
+		// have finished. END is the DMA buffer lifetime boundary.
+		if (pDev->pDmaReg->EVENTS_END)
 		{
-			NRFX_SPI_ENDRX(pDev->pDmaReg) = 0U;
+			pDev->pDmaReg->EVENTS_END = 0U;
+			pDev->bDmaActive = false;
 			return true;
 		}
 	} while (Timeout-- > 0U);
 
-	if (!nRFxSPIDmaStop(pDev))
+	if (nRFxSPIDmaStop(pDev))
+	{
+		pDev->bDmaActive = false;
+	}
+	else
 	{
 		pDev->bDmaCancelPending = true;
 	}
@@ -676,6 +688,7 @@ static void nRFxSPIDmaNextBlock(nRFSpiDev_t * const pDev)
 	pDev->pDmaReg->EVENTS_STOPPED = 0;
 	NRFX_SPI_ENDRX(pDev->pDmaReg) = 0;
 	NRFX_SPI_ENDTX(pDev->pDmaReg) = 0;
+	pDev->bDmaActive = true;
 	pDev->pDmaReg->TASKS_START = 1;
 }
 
@@ -690,6 +703,7 @@ static void nRFxSPIDmaEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev)
 	pDev->pDmaReg->EVENTS_END = 0;
 	NRFX_SPI_ENDRX(pDev->pDmaReg) = 0;
 	NRFX_SPI_ENDTX(pDev->pDmaReg) = 0;
+	pDev->bDmaActive = false;
 
 	if (rx)
 	{
@@ -854,6 +868,7 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		dev->pDmaReg->EVENTS_END = 0;
 		dev->pDmaReg->EVENTS_STOPPED = 0;
 		NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
+		dev->bDmaActive = true;
 		dev->pDmaReg->TASKS_START = 1;
 
 #if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
@@ -1057,6 +1072,7 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		dev->pDmaReg->EVENTS_END = 0;
 		dev->pDmaReg->EVENTS_STOPPED = 0;
 		NRFX_SPI_ENDTX(dev->pDmaReg) = 0;
+		dev->bDmaActive = true;
 		dev->pDmaReg->TASKS_START = 1;
 
 		if (nRFxSPIWaitDMA(dev, timeout) == false)
@@ -1570,6 +1586,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	g_nRFxSPIDev[pCfgData->DevNo].pTxData = NULL;
 	g_nRFxSPIDev[pCfgData->DevNo].pTxWait = NULL;
 	g_nRFxSPIDev[pCfgData->DevNo].bTxAbort = false;
+	g_nRFxSPIDev[pCfgData->DevNo].bDmaActive = false;
 	g_nRFxSPIDev[pCfgData->DevNo].bDmaCancelPending = false;
 	g_nRFxSPIDev[pCfgData->DevNo].bDmaCancelWasRx = false;
 	g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed = false;
