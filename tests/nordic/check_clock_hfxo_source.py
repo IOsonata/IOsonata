@@ -168,6 +168,22 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertLess(main.index("initial = HfxoRunning()"),
                         main.index('HFXO_PRINT("HfxoTestBle: %d/5 checks PASS'))
 
+    def test_lfrc_periodic_calibration_diagnostic(self):
+        source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
+            encoding="utf-8")
+        test = function(source, "static bool HfxoLfCalibrationTest(void)",
+                        "int main(void)")
+        self.assertIn("nRFxMpslLfclkCalibrationCount()", test)
+        self.assertIn("sample < 120U", test)
+        self.assertIn("msDelay(100U)", test)
+        self.assertIn("after - before >= 2U", test)
+        self.assertIn("stoppedSamples != 0U", test)
+        self.assertIn("LFRC periodic calibration: %s", test)
+        self.assertIn("(void)HfxoLfCalibrationTest();", source)
+        self.assertIn("s_nRFxMpslCalibrationCount++", self.clock)
+        self.assertIn("uint32_t nRFxMpslLfclkCalibrationCount(void)", self.clock)
+        self.assertIn("NRF_CLOCK->EVENTS_DONE != 0U", self.clock)
+
     def test_mpsl_external_clock_selected_from_oscillator(self):
         mpsl = self.mpsl
         clock = self.clock
