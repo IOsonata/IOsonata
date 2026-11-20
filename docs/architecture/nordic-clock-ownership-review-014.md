@@ -35,9 +35,11 @@ executed. Keep this work separate from unmerged PR #144.
 | `AGENTS.md` | Corrects function-entry declaration and statement-format guidance |
 
 The nRF52 delay correction was derived from measured board timing.
-The newest `13/3` loop factors still need a fresh target run.
-The earlier nRF52832 ClockDemo result with `13/6` measured 250123 us for
-msDelay(250) and 125065 us for nsDelay(250 ms).
+The nRF52832 ClockDemo result with `13/6` measured 250123 us for
+msDelay(250) and 125065 us for nsDelay(250 ms). A subsequent `13/3`
+run measured 250123 us and 260123 us, respectively. The nanosecond delay
+remains outside the 2-percent check, and that result predates the polling
+UART PowerOff fix. Do not interpret it as a passing calibration.
 
 ## Further inspection required
 
