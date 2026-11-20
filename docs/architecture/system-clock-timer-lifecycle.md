@@ -295,20 +295,25 @@ There is **no IO_NRFX_MPSL_EXT_CLOCK compilation option** and no second
 clock-specific library target. `MpslInit()` selects the clock implementation internally
 from `g_McuOsc.LowPwrOsc` when initializing MPSL:
 
-- `OSC_TYPE_XTAL`: register IOsonata's HFCLK/LFCLK clock-control callbacks
-  before `mpsl_init()`; MPSL and IOsonata share physical clock ownership.
-- `OSC_TYPE_RC`: retain MPSL's internal clock driver and its LFRC
-  calibration while the external driver lacks an equivalent calibration
-  implementation. This is an internal hardware-specific selection, not
-  a user-facing mode or a compilation setting.
+- `OSC_TYPE_XTAL`: register IOsonata's HFCLK/LFCLK callbacks
+  before `mpsl_init()`; no LFRC calibration is required.
+- `OSC_TYPE_RC`: register the same callbacks, start the initial LFRC
+  calibration after MPSL initialization, then schedule calibration every
+  four seconds through the CLOCK calibration timer. A separate HFXO
+  reference is held until `EVENTS_DONE`, so a radio or application clock
+  request cannot be inadvertently released by calibration.
 
-The external callbacks are nonblocking for MPSL high-priority HF requests.
-The **direct-to-stack ownership defect for LFRC remains unresolved** because
-the internal MPSL path cannot inherit an outstanding direct oscillator
-request. It must not be hidden by changing application initialization order,
-dropping a clock reference, or disabling LFRC calibration.
+The external HFCLK callbacks are nonblocking for MPSL high-priority radio
+requests. The POWER_CLOCK handler processes HFCLKSTARTED, DONE and CTTO
+events for LFRC calibration, then calls the MPSL handler.
 
-The XTAL adapter is still experimental on nRF52 and is not signed off.
+The previous LFRC internal-MPSL implementation leaked a direct HFXO
+request across `MpslInit()`. The shared external-clock implementation
+has been committed but **has not yet passed managed CDT builds, hardware
+clock tests, Bluetooth radio tests, or current measurements**.
+
+The XTAL and RC external-clock configurations are still experimental on
+nRF52 and are not signed off.
 Validate actual MPSL callback signatures in the installed SDK, managed CDT
 builds, RTC/HFCLK continuity, direct-to-stack handover, interrupt races,
 BLE radio operation, and oscillator power consumption before declaring
