@@ -157,7 +157,7 @@ void SystemCoreClockUpdate(void)
 	// ClockDemo measured 203250 us and 500294 us for 250 ms requests
 	// with the previous 16/3-cycle factors, respectively.
 	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 13000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 6000000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 6240000UL;
 }
 
 void SystemInit(void)
