@@ -4,7 +4,7 @@
 @brief	Nordic high frequency crystal oscillator request test
 
 Checks first request, shared requests and last release through the public
-SystemCoreClockSelect API. Debug writes to the debugger semihosting console.
+SystemHighFreqClockEnable/Disable API. Debug writes to the debugger semihosting console.
 Release writes to the board UART at 1 Mbaud. The test reports the HFXO
 running state after each operation and does not initialize a BLE stack.
 
@@ -139,15 +139,19 @@ int main(void)
 	initial = HfxoRunning();
 	HFXO_PRINT("Initial HFXO: %s\r\n", initial ? "running" : "stopped");
 
-	first = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+	first = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U) &&
+		SystemHighFreqClockEnable();
 	running1 = HfxoRunning();
-	second = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+	second = SystemHighFreqClockEnable();
 	running2 = HfxoRunning();
-	release1 = SystemCoreClockSelect(OSC_TYPE_RC, 0U);
+	SystemHighFreqClockDisable();
+	release1 = true;
 	running3 = HfxoRunning();
-	release2 = SystemCoreClockSelect(OSC_TYPE_RC, 0U);
+	SystemHighFreqClockDisable();
+	release2 = true;
 	final = HfxoRunning();
-	failed = SystemCoreClockSelect(OSC_TYPE_RC, 0U) == false;
+	SystemHighFreqClockDisable();
+	failed = HfxoRunning() == final;
 
 	pass = 0;
 	if (first && running1)
@@ -164,17 +168,17 @@ int main(void)
 	{
 		pass++;
 	}
-	HfxoResult("First release", release1 && running3, running3);
+	HfxoResult("First disable", release1 && running3, running3);
 	if (release2 && final == initial)
 	{
 		pass++;
 	}
-	HfxoResult("Last release", release2 && final == initial, final);
+	HfxoResult("Last disable", release2 && final == initial, final);
 	if (failed)
 	{
 		pass++;
 	}
-	HfxoResult("Unmatched release", failed, final);
+	HfxoResult("Unmatched disable", failed, final);
 	HFXO_PRINT("HfxoTest: %d/5 checks PASS\r\n", pass);
 
 	while (1)
