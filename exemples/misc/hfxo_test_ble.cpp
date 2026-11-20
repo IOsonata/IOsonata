@@ -157,8 +157,8 @@ int main(void)
 	bool initial;
 	bool first;
 	bool second;
-	bool release1;
-	bool release2;
+	bool disable1;
+	bool disable2;
 	bool running1;
 	bool running2;
 	bool running3;
@@ -187,10 +187,10 @@ int main(void)
 	second = SystemHighFreqClockEnable();
 	running2 = HfxoRunning();
 	SystemHighFreqClockDisable();
-	release1 = true;
+	disable1 = true;
 	running3 = HfxoRunning();
 	SystemHighFreqClockDisable();
-	release2 = true;
+	disable2 = true;
 	final = HfxoRunning();
 	SystemHighFreqClockDisable();
 	failed = HfxoRunning() == final;
@@ -200,22 +200,22 @@ int main(void)
 	{
 		pass++;
 	}
-	HfxoResult("First request", first && running1, running1);
+	HfxoResult("First enable", first && running1, running1);
 	if (second && running2)
 	{
 		pass++;
 	}
-	HfxoResult("Second request", second && running2, running2);
-	if (release1 && running3)
+	HfxoResult("Second enable", second && running2, running2);
+	if (disable1 && running3)
 	{
 		pass++;
 	}
-	HfxoResult("First disable", release1 && running3, running3);
-	if (release2)
+	HfxoResult("First disable", disable1 && running3, running3);
+	if (disable2)
 	{
 		pass++;
 	}
-	HfxoResult("Last disable", release2, final);
+	HfxoResult("Last disable", disable2, final);
 	if (failed)
 	{
 		pass++;
