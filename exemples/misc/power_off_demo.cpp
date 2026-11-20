@@ -75,6 +75,9 @@ SOFTWARE.
 #ifndef POWER_DEMO_UART_DMA
 #define POWER_DEMO_UART_DMA true
 #endif
+#ifndef POWER_DEMO_UART_INT
+#define POWER_DEMO_UART_INT true
+#endif
 
 // Time before power off, in msec
 #ifndef POWER_DEMO_DELAY
@@ -124,7 +127,7 @@ static const UARTCfg_t s_UartCfg = {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	.bIntMode = false,
 #else
-	.bIntMode = true,
+	.bIntMode = POWER_DEMO_UART_INT,
 #endif
 	.IntPrio = 6,
 	.EvtCallback = nullptr,
