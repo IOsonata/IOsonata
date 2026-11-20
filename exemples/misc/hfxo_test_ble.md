@@ -44,6 +44,19 @@ reacquisition, which do not belong in portable application code.
 The vendor diagnostic must be built as an internal platform test
 rather than compiled into the common application.
 
+For the nRF52832 SDC LFRC ownership check, compile the separate
+`tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp` diagnostic with the
+SDC library. It selects LFRC before MPSL initializes, keeps MPSL's own
+LFRC calibration, holds a direct HFXO request across MPSL initialization,
+and reports the physical HFXO state immediately after that request is
+released. Confirm `Select LFRC: PASS`, `Clock survives stack init: PASS`
+and `Pre-stack handover: PASS`. Inspect the reported physical state;
+the portable `HfxoTestBle: PASS` cannot establish that HFXO stopped.
+
+Do not replace the shared `exemples/misc/hfxo_test_ble.cpp` source
+with Nordic-specific initialization. The LFRC diagnostic is not yet
+integrated into a dedicated Eclipse managed project or hardware-verified.
+
 ## Status
 
 The source refactor has been committed but **not** compiled or
