@@ -278,6 +278,16 @@ Implementation requirements:
 - Verify both directions of clock-owner lifecycle, failed initialization,
   repeated enables, and final disables before claiming transparent operation.
 
+### Installed MPSL capability confirmed (nRF52832)
+
+The maintainer ran `tests/nordic/check_mpsl_external_clock.py` on the
+installed sibling `external/sdk-nrfxlib`. All 19 installed MPSL headers
+were searched. The external clock control registration and unregistration
+APIs, both HFCLK/LFCLK callback types, and their exported symbols in the
+nRF52 hard-float, soft-float, and softfp-float MPSL archives were found.
+Thus the API is available in the actual installed toolchain libraries.
+No production clock integration has yet been validated by that result.
+
 ### Nordic owner integration investigation
 
 Nordic MPSL has an external clock-control driver registration API,
