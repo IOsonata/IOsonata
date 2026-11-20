@@ -807,6 +807,13 @@ int32_t nRFxMpslLfclkRequest(void)
 		EnableInterrupt(state);
 		return -1;
 	}
+	if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U &&
+		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+		(src & NRFX_LFCLK_SRC_Msk))
+	{
+		EnableInterrupt(state);
+		return -1;
+	}
 	if (s_nRFxMpslLfclkReqCnt == 0U && s_nRFxLfclkReqCnt == 0U &&
 		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
 	{
