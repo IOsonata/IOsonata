@@ -547,12 +547,8 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 
 	if (s_nRfxHFClockSem == 0)
 	{
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
-		if (!(NRF_CLOCK->PLL.STAT & CLOCK_PLL_STAT_STATE_Msk))
-		{
-			NRF_CLOCK->TASKS_PLLSTART = 1;
-		}
-#endif
+		// SystemInit owns the PLL. Timers request only the shared HFXO,
+		// and the clock manager owns the oscillator lifecycle.
 		// One request for the 32 MHz crystal while timers run, released by
 		// the last Disable
 		if (SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000) == false)
