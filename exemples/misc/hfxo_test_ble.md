@@ -69,6 +69,27 @@ timer. The change is **not yet built or hardware-validated**. The
 diagnostic must show HFXO stopping between calibration intervals without
 interrupting subsequent clock requests or Bluetooth operation.
 
+## Periodic LFRC calibration test
+
+After the pre-stack handover and five HFXO lifecycle checks, the
+nRF52832 SDC diagnostic observes another 12 seconds. It reads an internal
+counter incremented only when CLOCK reports `EVENTS_DONE`, and samples
+the HFXO state at 100 ms intervals.
+
+Expected after rebuilding the IOsonata library and the diagnostic:
+
+```text
+LFRC calibration: 2 completed in 12 s, HFXO running 0/120, stopped 120/120
+LFRC periodic calibration: PASS
+```
+
+The counts above illustrate the output format, not a predicted hardware
+measurement. The test requires at least two completed calibrations and at
+least one stopped HFXO sample. It verifies periodic calibration of the
+nRF52 CLOCK peripheral with MPSL initialized, **not** BLE advertising,
+connections, LFRC frequency accuracy or temperature compensation. These
+need independent hardware tests before Nordic sign-off.
+
 Do not replace the shared `exemples/misc/hfxo_test_ble.cpp` source
 with Nordic-specific initialization. The LFRC diagnostic was compiled
 in a locally modified Eclipse SDC project and run on nRF52832 hardware;
