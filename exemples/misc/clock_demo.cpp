@@ -358,8 +358,6 @@ int main(void)
 	uint32_t request;
 	uint32_t actual;
 #endif
-#if defined(CLOCK_DEMO_LF_SOURCES)
-#endif
 #if CLOCK_DEMO_HF_SOURCE_ENABLE
 	bool hfSourceEnabled = false;
 #endif
