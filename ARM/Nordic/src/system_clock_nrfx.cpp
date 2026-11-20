@@ -200,6 +200,20 @@ static bool nRFxHfxoRunning(void)
 #endif
 }
 
+// Used internally by RTC drivers to avoid direct LFCLK control once a
+// Bluetooth stack has taken over CLOCK. Not part of the public HAL.
+bool nRFxClockStackActive(void)
+{
+	return nRFxMpslActive() || nRFxClockSdEnabled();
+}
+
+// RTC implementation overrides this only when it is included in the image.
+// A running RTC forbids LFCLK source changes until it is disabled.
+__WEAK bool nRFxRtcClockActive(void)
+{
+	return false;
+}
+
 // Acquire the oscillator through its current owner. The caller holds the
 // transition flag, but interrupts remain enabled during the start wait.
 static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
@@ -512,6 +526,11 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	if (running == false || prev != src ||
 		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) != (src & NRFX_LFCLK_SRC_Msk))
 	{
+		// Do not stop/restart LFCLK under an active RTC consumer.
+		if (nRFxRtcClockActive())
+		{
+			return false;
+		}
 		if (running)
 		{
 			if (nRFxLfclkStop() == false)
