@@ -140,6 +140,29 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("Pre-stack handover", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
+    def test_nrf52832_uart_ble_clock_requests_during_gatt_writes(self):
+        board = (ROOT / "ARM/Nordic/nRF52/nRF52832/exemples/UartBleDemo/src/board.h").read_text(
+            encoding="utf-8")
+        source = (ROOT / "exemples/bluetooth/uart_ble.cpp").read_text(
+            encoding="utf-8")
+        project = (ROOT / "ARM/Nordic/nRF52/nRF52832/exemples/UartBleDemo/ioc/.cproject").read_text(
+            encoding="utf-8")
+        self.assertIn("OSC_TYPE_RC, 32768U, 500U", board)
+        self.assertIn('name="Release_SDC"', project)
+        self.assertIn("static void ClockCheckEvt(", source)
+        self.assertIn("AppEvtHandlerQue(0U, nullptr, ClockCheckEvt)", source)
+        callback = source.split("static void ClockCheckEvt(", 1)[1].split(
+            "void UartTxSrvcCallback(", 1)[0]
+        self.assertIn("first = SystemHighFreqClockEnable()", callback)
+        self.assertIn("second = first && SystemHighFreqClockEnable()", callback)
+        self.assertEqual(callback.count("SystemHighFreqClockDisable();"), 2)
+        self.assertIn("s_ClockCheckFailures++", callback)
+        self.assertIn("BLE clock requests: %u checks, %u failures", callback)
+        gatt = source.split("void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)\n{", 1)[1]
+        self.assertIn("g_Uart.Tx(pData, Len);", gatt)
+        self.assertNotIn("SystemHighFreqClockEnable()", gatt)
+        self.assertNotIn("nRFxMpsl", source)
+
     def test_nrf52832_advertiser_uses_lfrc_board_configuration(self):
         board = (ROOT / "ARM/Nordic/nRF52/nRF52832/exemples/BleAdvertiser/src/board.h").read_text(
             encoding="utf-8")
