@@ -203,6 +203,10 @@ static int HfxoPreStackTest(void)
 	bool survived;
 	bool reenabled;
 	bool stopped;
+#if defined(NRFXLIB_SDC)
+	unsigned sample;
+	unsigned stoppedSamples;
+#endif
 
 	HFXO_PRINT("Pre-stack HFXO ownership test\r\n");
 	enabled = SystemHighFreqClockEnable();
@@ -233,9 +237,21 @@ static int HfxoPreStackTest(void)
 	// A pre-stack request must not leave HFXO running when MPSL has
 	// no HF request. S132 may defer physical STOP until shutdown.
 #if defined(NRFXLIB_SDC)
-	msDelay(10);
-	stopped = !HfxoRunning();
-	HfxoResult("Pre-stack physical release", stopped, !stopped);
+	// LFRC calibration may briefly request HFXO. Observe several
+	// calibration-free intervals rather than checking one instant.
+	stoppedSamples = 0U;
+	for (sample = 0U; sample < 200U; sample++)
+	{
+		msDelay(10U);
+		if (!HfxoRunning())
+		{
+			stoppedSamples++;
+		}
+	}
+	stopped = stoppedSamples != 0U;
+	HFXO_PRINT("After pre-stack release: HFXO stopped %u/200 samples\r\n",
+		stoppedSamples);
+	HfxoResult("Pre-stack physical release", stopped, !HfxoRunning());
 #else
 	stopped = true;
 	HFXO_PRINT("Pre-stack request released, HFXO %s\r\n",
