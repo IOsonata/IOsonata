@@ -67,6 +67,22 @@ SOFTWARE.
 
 #define HFXO_PRINT(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
+// ENDTX is handled by the UART driver interrupt. Wake the foreground
+// drain when DMA completes, without polling UARTE registers.
+static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event, uint8_t *pBuffer,
+	int BufferLen)
+{
+	(void)pDev;
+	(void)pBuffer;
+	(void)BufferLen;
+
+	if (Event == UART_EVT_TXREADY)
+	{
+		__SEV();
+	}
+	return 0;
+}
+
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -83,7 +99,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 6,
-	.EvtCallback = nullptr,
+	.EvtCallback = HfxoUartEvent,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = nullptr,
@@ -107,11 +123,35 @@ static void HfxoConsoleInit(void)
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 }
+
+static void HfxoConsoleDrain(void)
+{
+	UARTDev_t *pUart;
+
+	pUart = (UARTDev_t *)s_Uart;
+	for (;;)
+	{
+		(void)SysLogFlush(SysLogGet());
+		if (CFifoPeek(SysLogGet()->hFifo) == nullptr &&
+			CFifoUsed(pUart->hTxFifo) == 0U &&
+			pUart->bTxReady)
+		{
+			break;
+		}
+		// TXREADY callback posts an event when the active DMA ends.
+		// Check the queues before waiting to avoid missed completions.
+		__WFE();
+	}
+}
 #else
 #include <stdio.h>
 #define HFXO_PRINT(...) printf(__VA_ARGS__)
 
 static void HfxoConsoleInit(void)
+{
+}
+
+static void HfxoConsoleDrain(void)
 {
 }
 #endif
@@ -363,6 +403,7 @@ int main(void)
 	}
 #endif
 
+	HfxoConsoleDrain();
 	while (1)
 	{
 		__WFE();
