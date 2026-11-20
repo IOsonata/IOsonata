@@ -252,16 +252,10 @@ int main()
 			printf("I2C slave: completed %u, errors %u\r\n", previous, s_Errors);
 		}
 #if I2C_SLEEP_TEST
-		// Drain the console before stopping USART. Do not enter WAIT while
-		// TWIS or its optional PDCA channel is transferring data.
+		// Let the system prepare and restore idle UART hardware for WAIT.
+		// Do not inspect the driver's private TX state or disable it here.
 		fflush(stdout);
-		UARTDev_t *uart = g_Uart;
-		while (CFifoUsed(uart->hTxFifo) != 0 || !uart->bTxReady)
-		{
-			__NOP();
-		}
-		usDelay(100);
-		g_Uart.Disable();
+		msDelay(2);
 		uint32_t state = DisableInterrupt();
 		unsigned requests = s_Requests;
 		bool slept = !s_TransferActive && previous == s_Completions;
@@ -277,7 +271,6 @@ int main()
 		{
 			__NOP();
 		}
-		g_Uart.Enable();
 		if (slept)
 		{
 			if (requests == s_Requests)
