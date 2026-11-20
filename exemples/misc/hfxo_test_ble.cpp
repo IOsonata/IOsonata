@@ -167,7 +167,9 @@ static int HfxoPreStackTest(void)
 	bool enabled;
 	bool running;
 	bool stackReady;
+#if HFXO_TEST_PRESTACK == 1
 	bool survived;
+#endif
 	bool disabled;
 	bool reenabled;
 	bool cleared;
