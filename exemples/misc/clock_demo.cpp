@@ -151,9 +151,11 @@ static void ClockDemoTimerHandler(TimerDev_t *pTimer, uint32_t Event)
 // output keeps the clock checks small enough for the 16 KB targets.
 static void ClockDemoPut(const char *pText)
 {
+	uint8_t value;
+
 	while (*pText != 0)
 	{
-		uint8_t value = (uint8_t)*pText;
+		value = (uint8_t)*pText;
 		if (UARTTx(&s_Uart, &value, 1) == 1)
 		{
 			pText++;
@@ -164,10 +166,13 @@ static void ClockDemoPut(const char *pText)
 static void ClockDemoPrint(const char *pFormat, ...)
 {
 	va_list args;
+	char text[11];
+	unsigned value;
+	unsigned pos;
+
 	va_start(args, pFormat);
 	while (*pFormat != 0)
 	{
-		char text[11];
 		if (*pFormat != '%')
 		{
 			text[0] = *pFormat++;
@@ -183,8 +188,8 @@ static void ClockDemoPrint(const char *pFormat, ...)
 			}
 			else if (*pFormat == 'u')
 			{
-				unsigned value = va_arg(args, unsigned);
-				unsigned pos = sizeof(text) - 1U;
+				value = va_arg(args, unsigned);
+				pos = sizeof(text) - 1U;
 				text[pos] = 0;
 				do
 				{
@@ -217,7 +222,10 @@ static void ClockDemoUartRx(void)
 {
 	uint8_t value;
 	bool received = false;
-	unsigned remaining = 1024U;
+	unsigned remaining;
+	uint32_t start;
+
+	remaining = 1024U;
 
 	// Discard bytes from the previous prompt before starting this check.
 	while (remaining != 0U && UARTRx(&s_Uart, &value, 1) > 0)
@@ -235,7 +243,7 @@ static void ClockDemoUartRx(void)
 		ClockDemoResult("UART RX timer", false);
 		return;
 	}
-	uint32_t start = TimerGetMicrosecond(&s_Timer);
+	start = TimerGetMicrosecond(&s_Timer);
 	ClockDemoPrint("UART RX: send U within 30 s\r\n");
 	while ((uint32_t)(TimerGetMicrosecond(&s_Timer) - start) < 30000000U)
 	{
@@ -286,12 +294,21 @@ static bool ClockDemoClockEnd(void)
 
 static void ClockDemoTimer(void)
 {
-	for (unsigned delay = 0U; delay < 2U; delay++)
+	unsigned delay;
+	uint32_t frequency;
+	uint64_t period;
+	uint32_t start;
+	uint32_t elapsed;
+	uint32_t count;
+	uint32_t expected;
+	uint32_t difference;
+
+	for (delay = 0U; delay < 2U; delay++)
 	{
 		// Refresh the divider after a peripheral-clock change, with timer stopped.
-		uint32_t frequency = TimerSetFrequency(&s_Timer, s_TimerCfg.Freq);
+		frequency = TimerSetFrequency(&s_Timer, s_TimerCfg.Freq);
 		s_InterruptCount = 0U;
-		uint64_t period = nsTimerEnableTrigger(&s_Timer, 0, 10000000ULL,
+		period = nsTimerEnableTrigger(&s_Timer, 0, 10000000ULL,
 			TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
 		if (frequency == 0U || period == 0U || !TimerEnable(&s_Timer))
 		{
@@ -300,7 +317,7 @@ static void ClockDemoTimer(void)
 			ClockDemoResult("Timer start", false);
 			return;
 		}
-		uint32_t start = TimerGetMicrosecond(&s_Timer);
+		start = TimerGetMicrosecond(&s_Timer);
 		if (delay == 0U)
 		{
 			msDelay(250);
@@ -310,11 +327,11 @@ static void ClockDemoTimer(void)
 			nsDelay(250000000U);
 		}
 		TimerDisable(&s_Timer);
-		uint32_t elapsed = TimerGetMicrosecond(&s_Timer) - start;
-		uint32_t count = s_InterruptCount;
+		elapsed = TimerGetMicrosecond(&s_Timer) - start;
+		count = s_InterruptCount;
 		TimerDisableTrigger(&s_Timer, 0);
-		uint32_t expected = (uint64_t)elapsed * 1000U / period;
-		uint32_t difference = count > expected ? count - expected : expected - count;
+		expected = (uint64_t)elapsed * 1000U / period;
+		difference = count > expected ? count - expected : expected - count;
 		ClockDemoPrint("Timer: %u Hz, %s 250 ms measured %u us, IRQ %u\r\n",
 			(unsigned)frequency, delay == 0U ? "msDelay" : "nsDelay",
 			(unsigned)elapsed, (unsigned)count);
@@ -326,6 +343,17 @@ static void ClockDemoTimer(void)
 
 int main(void)
 {
+	unsigned cycle;
+	bool selected;
+	uint32_t core;
+#if !CLOCK_DEMO_APB_READONLY
+	uint32_t bus;
+	uint32_t divider;
+	uint32_t request;
+	uint32_t actual;
+#endif
+#if defined(CLOCK_DEMO_LF_SOURCES)
+#endif
 #if CLOCK_DEMO_HF_SOURCE_ENABLE
 	bool hfSourceEnabled = false;
 #endif
@@ -376,7 +404,7 @@ int main(void)
 	}
 #endif
 
-	for (unsigned cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
+	for (cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
 	{
 		ClockDemoPrint("Cycle %u\r\n", cycle);
 		for (const ClockDemoSource_t &source : s_Sources)
@@ -389,9 +417,9 @@ int main(void)
 			// Polling Tx has queued the last bytes in the hardware FIFO.
 			ClockDemoClockBegin();
 #if CLOCK_DEMO_CORE_READONLY
-			bool selected = !source.Select;
+			selected = !source.Select;
 #else
-			bool selected = true;
+			selected = true;
 			if (source.Select)
 			{
 #if CLOCK_DEMO_HF_SOURCE_ENABLE
@@ -421,19 +449,19 @@ int main(void)
 			{
 				return 1;
 			}
-			uint32_t core = SystemCoreClockGet();
+			core = SystemCoreClockGet();
 			ClockDemoResult(source.pName, selected && core >= source.CoreMin && core <= source.CoreMax);
 			if (!selected || core < source.CoreMin || core > source.CoreMax)
 			{
 				continue;
 			}
 #if !CLOCK_DEMO_APB_READONLY
-			uint32_t bus = SystemPeriphClockGet(0);
-			for (uint32_t divider : s_ApbDividers)
+			bus = SystemPeriphClockGet(0);
+			for (divider : s_ApbDividers)
 			{
-				uint32_t request = bus / divider;
+				request = bus / divider;
 				ClockDemoClockBegin();
-				uint32_t actual = SystemPeriphClockSet(0, request);
+				actual = SystemPeriphClockSet(0, request);
 				if (!ClockDemoClockEnd())
 				{
 					return 1;
@@ -454,7 +482,7 @@ int main(void)
 			{
 				ClockDemoPrint("Selecting LF %s\r\n", source.pName);
 				ClockDemoClockBegin();
-				bool selected = SystemLowFreqClockSelect(source.Type, source.Frequency);
+				selected = SystemLowFreqClockSelect(source.Type, source.Frequency);
 #if CLOCK_DEMO_LF_SOURCE_ENABLE
 				if (selected)
 				{
