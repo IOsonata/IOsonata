@@ -165,6 +165,8 @@ static uint32_t s_nRFxMpslHfxoReqCnt;
 static uint32_t s_nRFxMpslLfclkReqCnt;
 static bool s_bNRFxMpslHfxoOwned;
 static bool s_bNRFxMpslLfclkOwned;
+static bool s_bNRFxMpslCalibrationPending;
+static bool s_bNRFxMpslCalibrationRunning;
 #endif
 
 // Shared LFCLK enable count belongs here, not in the RTC driver.
@@ -792,6 +794,85 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	return SystemPeriphClockGet(Idx);
 }
 #if defined(NRF52_SERIES)
+// Start LFRC calibration once HFXO is ready. The callback and CLOCK
+// interrupt both use this helper so startup never waits in an interrupt.
+static void nRFxMpslCalibrationBegin(void)
+{
+	if (s_bNRFxMpslCalibrationPending &&
+		!s_bNRFxMpslCalibrationRunning && nRFxHfxoRunning())
+	{
+		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0U;
+		NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_HFCLKSTARTED_Msk;
+		NRF_CLOCK->EVENTS_DONE = 0U;
+		NRF_CLOCK->TASKS_CAL = 1U;
+		s_bNRFxMpslCalibrationRunning = true;
+	}
+}
+
+void nRFxMpslLfclkCalibrationStart(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (!s_bNRFxMpslExternalClock ||
+		g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC ||
+		s_bNRFxMpslCalibrationPending ||
+		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	s_bNRFxMpslCalibrationPending = true;
+	NRF_CLOCK->INTENSET = CLOCK_INTENSET_DONE_Msk |
+		CLOCK_INTENSET_HFCLKSTARTED_Msk;
+	EnableInterrupt(state);
+
+	// Keep a separate HF request throughout calibration, including
+	// until EVENTS_DONE, without blocking the MPSL high-priority caller.
+	nRFxMpslHfclkRequest();
+	state = DisableInterrupt();
+	nRFxMpslCalibrationBegin();
+	EnableInterrupt(state);
+}
+
+bool nRFxMpslLfclkCalibrationIsEnabled(void)
+{
+	return g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC;
+}
+
+void nRFxMpslClockIrq(void)
+{
+	if (!s_bNRFxMpslExternalClock)
+	{
+		return;
+	}
+	if (NRF_CLOCK->EVENTS_CTTO != 0U)
+	{
+		NRF_CLOCK->EVENTS_CTTO = 0U;
+		nRFxMpslLfclkCalibrationStart();
+	}
+	if (s_bNRFxMpslCalibrationPending)
+	{
+		nRFxMpslCalibrationBegin();
+		if (s_bNRFxMpslCalibrationRunning &&
+			NRF_CLOCK->EVENTS_DONE != 0U)
+		{
+			NRF_CLOCK->EVENTS_DONE = 0U;
+			NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_DONE_Msk;
+			s_bNRFxMpslCalibrationRunning = false;
+			s_bNRFxMpslCalibrationPending = false;
+			nRFxMpslHfclkRelease();
+			// CTIV is specified in 0.25-second units on nRF52.
+			// Recalibrate every four seconds; MPSL can request
+			// additional calibrations after temperature changes.
+			NRF_CLOCK->CTIV = 16U;
+			NRF_CLOCK->EVENTS_CTTO = 0U;
+			NRF_CLOCK->INTENSET = CLOCK_INTENSET_CTTO_Msk;
+			NRF_CLOCK->TASKS_CTSTART = 1U;
+		}
+	}
+}
+
 // The external MPSL clock driver uses these short interrupt-safe callbacks.
 // Do not call MPSL's internal HF source request API in this configuration.
 void nRFxMpslExternalClockSet(bool Enabled)
