@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inspect Nordic HFXO request code; this does not execute the driver."""
+"""Inspect Nordic HF/LF clock enable and disable source paths."""
 
 from pathlib import Path
 import unittest
@@ -84,7 +84,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertNotIn("SOFTDEVICE_INFO_STRUCT_OFFSET", self.clock)
         self.assertIn("#pragma weak nrf_sdh_is_enabled", self.clock)
 
-    def test_release_uses_original_clock_owner(self):
+    def test_disable_uses_original_clock_owner(self):
         source = function(self.clock, "static bool nRFxHfxoStop(",
                           "bool SystemCoreClockSelect(")
         self.assertIn("nRFxMpslHfxo(false) == 0", source)
@@ -115,7 +115,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertLess(entry.index("nRFxClockPrepareSystemOff()"),
                         entry.index("SYS_PWR_REGULATORS->SYSTEMOFF"))
 
-    def test_failed_start_releases_clock_request(self):
+    def test_failed_start_relinquishes_vendor_clock_request(self):
         source = function(self.clock, "static bool nRFxHfxoStart(",
                           "// Stop only through the backend")
         self.assertIn("sd_clock_hfclk_request()", source)
