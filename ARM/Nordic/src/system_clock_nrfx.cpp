@@ -603,6 +603,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	bool running;
 	bool stopped;
 
+	(void)OscFreq;
 	if (!nRFxLfclkOscSource(ClkSrc, &src) || __get_IPSR() != 0U)
 	{
 		return false;
@@ -625,7 +626,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 			return false;
 		}
 		g_McuOsc.LowPwrOsc.Type = ClkSrc;
-		g_McuOsc.LowPwrOsc.Freq = OscFreq != 0U ? OscFreq : 32768U;
+		g_McuOsc.LowPwrOsc.Freq = 32768U;
 		EnableInterrupt(state);
 		return true;
 	}
@@ -639,7 +640,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		NRF_CLOCK->NRFX_LFCLKSRC = src;
 		s_bNRFxLfclkStopPending = false;
 		g_McuOsc.LowPwrOsc.Type = ClkSrc;
-		g_McuOsc.LowPwrOsc.Freq = OscFreq != 0U ? OscFreq : 32768U;
+		g_McuOsc.LowPwrOsc.Freq = 32768U;
 	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);
