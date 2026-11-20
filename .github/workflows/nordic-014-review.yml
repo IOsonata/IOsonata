@@ -1,0 +1,19 @@
+name: Nordic 0.14 review host tests
+on:
+  push:
+    branches:
+      - review_nordic_power_clock_014
+  workflow_dispatch:
+
+jobs:
+  nordic-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nordic power and clock models
+        run: python3 tests/nordic/validate_power_clock.py
+      - name: Nordic SPI and I2C resource lifetime
+        run: python3 tests/nordic_master_irq/run_lifetime.py
+      - name: nRF5340 SPIM4 register model
+        run: python3 tests/nrf5340_spi/run.py
