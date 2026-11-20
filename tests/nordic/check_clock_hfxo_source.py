@@ -102,8 +102,14 @@ class HfxoSourceChecks(unittest.TestCase):
                        "#endif")
         self.assertLess(pre.index("SystemHighFreqClockEnable()"),
                         pre.index("HfxoStackInit()"))
+        self.assertIn("#if HFXO_TEST_PRESTACK == 2", pre)
+        self.assertIn("#if HFXO_TEST_PRESTACK == 1", pre)
+        safe_mode = pre.split("#if HFXO_TEST_PRESTACK == 2", 1)[1]
+        self.assertLess(safe_mode.index("SystemHighFreqClockDisable()"),
+                        safe_mode.index("HfxoStackInit()"))
         self.assertLess(pre.index("HfxoStackInit()"),
-                        pre.index("SystemHighFreqClockDisable()"))
+                        pre.index("Pre-stack request disabled:"))
+        self.assertIn("Release-before-stack sequence", pre)
         self.assertIn("Outstanding direct HFXO request", pre)
         self.assertIn("SystemCoreClockSelect(OSC_TYPE_XTAL", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
