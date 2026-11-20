@@ -85,7 +85,7 @@ class DemoDriverOwnership(unittest.TestCase):
 			ROOT / "docs/architecture/system-clock-timer-lifecycle.md",
 			ROOT / "docs/architecture/nordic-clock-ownership-review-014.md",
 		)
-		terms = re.compile(r"\\b(?:backend|contract|guarding|guardrail|API surface|source closure)\\b", re.I)
+		terms = re.compile(r"\b(?:backend|contract|guarding|guardrail|API surface|source closure)\b", re.I)
 		for path in paths:
 			with self.subTest(path=path):
 				for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -100,8 +100,8 @@ class DemoDriverOwnership(unittest.TestCase):
 			ROOT / "exemples/misc/hfxo_test.cpp",
 			ROOT / "exemples/misc/hfxo_test_ble.cpp",
 		)
-		vendor = re.compile(r"\\b(?:NRF_CLOCK|NRF_POWER|NRF_RTC|NRF_UARTE|RCC|SAM4L_PM)\\s*->|"
-		                    r"\\b(?:nrf_sdh_enable_request|nrf_sdh_disable_request|MpslInit)\\s*\\(")
+		vendor = re.compile(r"\b(?:NRF_CLOCK|NRF_POWER|NRF_RTC|NRF_UARTE|RCC|SAM4L_PM)\s*->|"
+		                    r"\b(?:nrf_sdh_enable_request|nrf_sdh_disable_request|MpslInit)\s*\(")
 		for path in paths:
 			with self.subTest(path=path):
 				source = path.read_text(encoding="utf-8")
