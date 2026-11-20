@@ -377,6 +377,27 @@ static void nRFUARTPollTx(nRFUartDev_t * const dev)
 	{
 		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+		if (dev->TxDmaLen != 0U)
+		{
+			uint32_t sent = dev->pDmaReg->DMA.TX.AMOUNT;
+			if (sent > dev->TxDmaLen)
+			{
+				sent = dev->TxDmaLen;
+			}
+			if (sent < dev->TxDmaLen)
+			{
+				uint32_t remaining = dev->TxDmaLen - sent;
+				memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);
+				dev->TxDmaLen = remaining;
+				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = remaining;
+				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
+				return;
+			}
+			dev->TxDmaLen = 0U;
+		}
+#endif
 		dev->pUartDev->bTxReady = true;
 	}
 }
@@ -1056,6 +1077,38 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 	if (Datalen > 0)
 	{
 		dev->pUartDev->TxDropCnt += (uint32_t)Datalen;
+	}
+
+	if (!pDev->bIntEn && cnt > 0 && dev->pUartDev->Rate > 0)
+	{
+		// In polling mode no IRQ advances the FIFO. Retire each DMA block
+		// before returning so a clock change cannot strand queued bytes.
+		uint64_t cycles = ((uint64_t)SystemCoreClock *
+			((uint32_t)cnt + NRFX_UART_TXDMA_SIZE) * 16U) /
+			(uint32_t)dev->pUartDev->Rate + SystemCoreClock / 1000U;
+		uint32_t wait = cycles > UINT32_MAX ? UINT32_MAX : (uint32_t)cycles;
+
+		while (wait-- > 0)
+		{
+			nRFUARTPollTx(dev);
+			if (dev->pUartDev->bTxReady)
+			{
+				l = NRFX_UART_TXDMA_SIZE;
+				p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
+				if (p == NULL)
+				{
+					break;
+				}
+				dev->pUartDev->bTxReady = false;
+				memcpy(dev->TxDmaMem, p, l);
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+				dev->TxDmaLen = (uint32_t)l;
+#endif
+				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
+				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
+			}
+		}
 	}
 
 	return cnt;

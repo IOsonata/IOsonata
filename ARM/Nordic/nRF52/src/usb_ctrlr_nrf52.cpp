@@ -230,10 +230,10 @@ static bool UsbdXtalRequest(void)
 
 static inline void UsbdXtalRelease(void)
 {
-	if (s_bUsbdXtalHeld)
+	if (s_bUsbdXtalHeld && SystemCoreClockSelect(OSC_TYPE_RC, 0))
 	{
+		// Retain ownership on a failed release so the next Stop can retry.
 		s_bUsbdXtalHeld = false;
-		(void)SystemCoreClockSelect(OSC_TYPE_RC, 0);
 	}
 }
 

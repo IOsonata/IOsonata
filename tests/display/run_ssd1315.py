@@ -1,17 +1,53 @@
 #!/usr/bin/env python3
 """Exercise the production SSD1315 driver over a modeled SPI controller."""
 import os
+import platform
 from pathlib import Path
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+CXX = os.environ.get('CXX', 'g++')
+CC = os.environ.get('CC', 'gcc')
+def supports(flags):
+    result = subprocess.run([CXX, *flags, '-x', 'c++', '-fsyntax-only', '-'],
+                            input='int main() { return 0; }\n',
+                            capture_output=True, text=True)
+    return result.returncode == 0
+
+
+CPP_STD = next((flag for flag in ('-std=gnu++23', '-std=gnu++2b')
+                if supports([flag])), None)
+if CPP_STD is None:
+    raise SystemExit('A C++23-capable compiler is required')
+
+# Two generations of Clang name the GNU C++ VLA extension warning
+# differently. Keep -Werror for all other diagnostics.
+CLANG = 'clang' in subprocess.run([CXX, '--version'], capture_output=True,
+                                  text=True, check=True).stdout.lower()
+VLA_FLAGS = []
+if CLANG:
+    for warning in ('vla-cxx-extension', 'vla-extension'):
+        flag = '-Wno-error=' + warning
+        if supports([CPP_STD, '-Werror', flag]):
+            VLA_FLAGS = [flag]
+            break
+    if not VLA_FLAGS:
+        raise SystemExit('Cannot determine the Clang C++ VLA warning option')
+
+# Older Apple Clang does not recognize every GCC warning spelling.
+# Probe the optional suppression rather than masking unknown-warning errors.
+UNUSED_SET_FLAGS = ['-Wno-unused-but-set-variable'] if supports(
+    [CPP_STD, '-Werror', '-Wno-unused-but-set-variable']) else []
+GC_LINK_FLAGS = ['-Wl,-dead_strip'] if platform.system() == 'Darwin' else [
+    '-Wl,--gc-sections']
 
 with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
     for opt in ('-O0', '-Os'):
         exe = Path(td) / 'ssd1315_test'
-        cmd = [os.environ.get('CXX', 'g++'), '-std=gnu++23', opt,
+        cmd = [CXX, CPP_STD, opt,
                '-Wall', '-Wextra', '-Werror', '-Wno-overloaded-virtual',
+               *VLA_FLAGS,
                '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                '-I' + str(ROOT / 'tests/display/hostport'),
                '-I' + str(ROOT / 'include')]
@@ -20,11 +56,20 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
         fonts = []
         for name in ('syst5x7.c', 'FreeMono/FreeMono8pt.c', 'FreeSans/FreeSansBold24pt.c'):
             font = Path(td) / (Path(name).stem + '.o')
-            subprocess.run([os.environ.get('CC', 'gcc'), '-I' + str(ROOT / 'include'),
+            subprocess.run([CC, '-I' + str(ROOT / 'include'),
                             '-c', str(ROOT / 'src/display/fonts' / name), '-o', str(font)], check=True)
             fonts.append(str(font))
+        # Compile only the SSD1315 display driver with its wait symbol
+        # redirected to the test model. Keep the generic DeviceIntrf source
+        # unchanged, including its real wait implementation.
+        display_obj = Path(td) / ('ssd1315_display_' + opt[1:] + '.o')
+        subprocess.run(cmd + [
+            '-DDeviceIntrfWaitTxComplete=DeviceIntrfWaitTxCompleteForDisplayTest',
+            '-c', str(ROOT / 'src/display/display_ssd1315.cpp'),
+            '-o', str(display_obj)], check=True)
+        sources.remove('src/display/display_ssd1315.cpp')
         subprocess.run(cmd + [str(ROOT / p) for p in sources] +
-                       fonts + ['-Wl,--wrap=DeviceIntrfWaitTxComplete', '-o', str(exe)], check=True)
+                       [str(display_obj)] + fonts + ['-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
         print(opt + ': SSD1315 checks passed', flush=True)
         # Exercise the configuration supplied to SPIInit by the real console
@@ -34,11 +79,11 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                            'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
                            'src/device.cpp', 'src/device_intrf.cpp']
         subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
-                             '-Wno-unused-but-set-variable',
+                             *UNUSED_SET_FLAGS,
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/LCDConsoleDisplayDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in console_sources] + fonts +
                        ['-o', str(console)], check=True)
         subprocess.run([str(console)], check=True)
@@ -50,7 +95,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/GfxDisplayDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in gfx_sources] + fonts +
                        ['-o', str(gfx)], check=True)
         subprocess.run([str(gfx)], check=True)
@@ -62,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/JoystickMenuDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in menu_sources] + fonts +
                        ['-o', str(menu)], check=True)
         subprocess.run([str(menu)], check=True)
@@ -72,14 +117,14 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                         'src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp',
                         'src/app_evt_handler.cpp', 'src/bluetooth/bt_adv.cpp']
         fifo = Path(td) / 'cfifo.o'
-        subprocess.run([os.environ.get('CC', 'gcc'), opt, '-I' + str(ROOT / 'include'),
+        subprocess.run([CC, opt, '-I' + str(ROOT / 'include'),
                         '-fsanitize=address,undefined', '-c', str(ROOT / 'src/cfifo.c'),
                         '-o', str(fifo)], check=True)
         subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
                              '-Wno-unused-parameter', '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/BleScanDisplayDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in scan_sources] + fonts + [str(fifo)] +
                        ['-o', str(scan)], check=True)
         subprocess.run([str(scan)], check=True)
@@ -93,10 +138,10 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-DBLE_SECURITY_EXCHG=(BTAPP_SECEXCHG_DISPLAY|BTAPP_SECEXCHG_YESNO)',
                              '-ffunction-sections', '-fdata-sections',
                              '-Wno-unused-parameter', '-Wno-unused-variable',
-                             '-Wno-unused-but-set-variable', '-Wno-missing-field-initializers',
+                             *UNUSED_SET_FLAGS, '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/BleStatusDisplayDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in status_sources] + fonts + [str(fifo)] +
                        ['-o', str(status)], check=True)
         subprocess.run([str(status)], check=True)
@@ -107,7 +152,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/StopwatchDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in stopwatch_sources] + fonts +
                        ['-o', str(stopwatch)], check=True)
         subprocess.run([str(stopwatch)], check=True)
@@ -120,7 +165,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/CountdownTimerDemo/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in countdown_sources] + fonts +
                        ['-o', str(countdown)], check=True)
         subprocess.run([str(countdown)], check=True)
@@ -133,7 +178,7 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                              '-Wno-missing-field-initializers',
                              '-I' + str(ROOT / 'ARM/ST/include'),
                              '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/PongGame/src'),
-                             '-Wl,--gc-sections'] +
+                             *GC_LINK_FLAGS] +
                        [str(ROOT / p) for p in pong_sources] + fonts +
                        ['-o', str(pong)], check=True)
         subprocess.run([str(pong)], check=True)

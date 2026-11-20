@@ -70,6 +70,8 @@ SOFTWARE.
 #include "nrf.h"
 
 #include "coredev/system_core_clock.h"
+#include "coredev/interrupt.h"
+#include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 
 #if defined(NRF5340_XXAA_APPLICATION)
@@ -208,6 +210,17 @@ static const SysPwrResetMap_t s_SysPwrResetMap[] = {
 
 static bool s_bSysPwrResetRead = false;
 static uint32_t s_SysPwrResetReason = 0;
+
+static int s_SysPwrSleepPort = -1;
+static int s_SysPwrSleepPin = -1;
+static IOPINSENSE s_SysPwrSleepSense = IOPINSENSE_DISABLE;
+
+// System ON GPIO wake uses a temporary interrupt, not a new pin owner.
+static void SysPwrSleepWake(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+}
 #ifdef SYS_PWR_MEMCONF
 static uint32_t s_SysPwrRamRet = 0;		// Sections kept in System OFF, one bit each
 #endif
@@ -238,6 +251,75 @@ uint32_t SystemResetReason(void)
 	}
 
 	return s_SysPwrResetReason;
+}
+
+// System ON idle preserves peripheral and radio clock ownership.
+// Arm a GPIO interrupt only when the application configured a wake pin.
+// Internal clock maintenance, not an application-facing HAL entry point.
+void nRFxClockService(void);
+
+void SystemSleep(void)
+{
+	NRF_GPIO_Type *wakeReg;
+	uint32_t wakeSense;
+	uint32_t state;
+	uint32_t scr;
+	int wakeIrq;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+
+	// A timer can release the last HFXO request from its IRQ. Complete
+	// a stack-owned deferred release before going idle.
+	nRFxClockService();
+
+	state = DisableInterrupt();
+	wakeIrq = -1;
+	wakeReg = NULL;
+	wakeSense = 0U;
+	if (s_SysPwrSleepSense != IOPINSENSE_DISABLE)
+	{
+		wakeReg = nRFGpioGetReg(s_SysPwrSleepPort);
+		if (wakeReg == NULL || s_SysPwrSleepPin < 0 ||
+			s_SysPwrSleepPin >= 32)
+		{
+			EnableInterrupt(state);
+			return;
+		}
+		wakeSense = wakeReg->PIN_CNF[s_SysPwrSleepPin] &
+			GPIO_PIN_CNF_SENSE_Msk;
+		wakeIrq = IOPinAllocateInterrupt(2, s_SysPwrSleepPort,
+			s_SysPwrSleepPin, s_SysPwrSleepSense,
+			SysPwrSleepWake, NULL);
+		if (wakeIrq < 0)
+		{
+			// Failed allocation must leave System OFF sensing intact.
+			wakeReg->PIN_CNF[s_SysPwrSleepPin] =
+				(wakeReg->PIN_CNF[s_SysPwrSleepPin] &
+				~GPIO_PIN_CNF_SENSE_Msk) | wakeSense;
+			EnableInterrupt(state);
+			return;
+		}
+	}
+
+	scr = SCB->SCR;
+	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+	__DSB();
+	__WFI();
+	__ISB();
+	SCB->SCR = scr;
+	if (wakeIrq >= 0)
+	{
+		IOPinDisableInterrupt(wakeIrq);
+		// DisableInterrupt clears SENSE. Re-arm the System OFF wake
+		// level without changing the rest of the GPIO configuration.
+		wakeReg->PIN_CNF[s_SysPwrSleepPin] =
+			(wakeReg->PIN_CNF[s_SysPwrSleepPin] &
+			~GPIO_PIN_CNF_SENSE_Msk) | wakeSense;
+	}
+	EnableInterrupt(state);
 }
 
 void SystemPowerOff(void)
@@ -284,9 +366,58 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	{
 		return false;
 	}
+#if defined(NRF54L_SERIES)
+	// P2 is an MCU-domain GPIO without SENSE/DETECT or GPIOTE wake.
+	if ((PortNo & 0x7F) == 2)
+	{
+		return false;
+	}
+#endif
 
-	// SENSE of the pin, its DETECT signal wakes the MCU from System OFF
+	// A GPIO port register can exist even when its higher pin indices do not.
+	// Validate the bonded-port maximum exposed by the MCU pin map.
+#ifdef IOPIN_P0_MAXCOUNT
+	if ((PortNo & 0x7F) == 0 && PinNo >= IOPIN_P0_MAXCOUNT)
+	{
+		return false;
+	}
+#endif
+#ifdef IOPIN_P1_MAXCOUNT
+	if ((PortNo & 0x7F) == 1 && PinNo >= IOPIN_P1_MAXCOUNT)
+	{
+		return false;
+	}
+#endif
+#ifdef IOPIN_P2_MAXCOUNT
+	if ((PortNo & 0x7F) == 2 && PinNo >= IOPIN_P2_MAXCOUNT)
+	{
+		return false;
+	}
+#endif
+#ifdef IOPIN_P3_MAXCOUNT
+	if ((PortNo & 0x7F) == 3 && PinNo >= IOPIN_P3_MAXCOUNT)
+	{
+		return false;
+	}
+#endif
+
+	// GPIO SENSE supports System OFF; System ON also arms GPIOTE at entry.
 	IOPinSetSense(PortNo, PinNo, (IOPINSENSE)Sense);
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		if (s_SysPwrSleepPort == PortNo && s_SysPwrSleepPin == PinNo)
+		{
+			s_SysPwrSleepSense = IOPINSENSE_DISABLE;
+			s_SysPwrSleepPort = -1;
+			s_SysPwrSleepPin = -1;
+		}
+	}
+	else
+	{
+		s_SysPwrSleepPort = PortNo;
+		s_SysPwrSleepPin = PinNo;
+		s_SysPwrSleepSense = (IOPINSENSE)Sense;
+	}
 
 	return true;
 }

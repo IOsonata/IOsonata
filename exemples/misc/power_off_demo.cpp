@@ -321,19 +321,10 @@ static void PowerDemoPut(const char *pText)
 	}
 }
 
-// In SAMD polling mode, Tx() may leave the last bytes in its FIFO.
-// Rx() services both FIFOs, so drain TX before shutting down SERCOM.
+// Allow the last polling UART transfer to finish before shutting down.
+// No application access to driver FIFOs or receive calls for TX progress.
 static void PowerDemoDrain(void)
 {
-	UARTDev_t *pUart;
-	uint8_t dummy;
-
-	pUart = (UARTDev_t *)s_Uart;
-	while (CFifoUsed(pUart->hTxFifo) != 0)
-	{
-		(void)s_Uart.Rx(&dummy, 1);
-	}
-	// FIFO empty means the last byte reached DATA, not that TX is complete.
 	msDelay(2);
 }
 
@@ -410,6 +401,9 @@ int main()
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	uint32_t wakeCount;
+#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
+	bool timerStarted;
+#endif
 #if POWER_DEMO_UART_WAKE
 	uint32_t rxWait;
 	uint8_t rxByte;
@@ -558,7 +552,8 @@ int main()
 		uint64_t period = nsTimerEnableTrigger(&s_WakeTimer, 0,
 			(uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000000ULL,
 			TIMER_TRIG_TYPE_SINGLE, PowerDemoStandbyTimerWake, nullptr);
-		if (period != 0U && !s_StandbyTimerWoke)
+		timerStarted = period != 0U && TimerEnable(&s_WakeTimer);
+		if (timerStarted && !s_StandbyTimerWoke)
 		{
 			SystemSleep();
 		}
@@ -615,7 +610,7 @@ int main()
 #endif
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
 		uint64_t expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
-		PowerDemoPut(period != 0U && s_StandbyTimerWoke &&
+		PowerDemoPut(timerStarted && s_StandbyTimerWoke &&
 			(uint64_t)elapsed >= expected * 98ULL / 100ULL &&
 			(uint64_t)elapsed <= expected * 102ULL / 100ULL ?
 			"Standby timer wake: PASS\r\n" : "Standby timer wake: FAIL\r\n");
@@ -745,15 +740,8 @@ int main()
 #endif
 	// Allow the final UART record to finish before stopping the transport.
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
-	UARTDev_t *pUart = (UARTDev_t *)s_Uart;
-	uint8_t unused;
-
-	while (CFifoUsed(SysLogGet()->hFifo) != 0 || CFifoUsed(pUart->hTxFifo) != 0)
-	{
-		(void)SysLogFlush(SysLogGet());
-		(void)s_Uart.Rx(&unused, 1);
-	}
-	// Allow the last UART character to leave the shift register.
+	(void)SysLogFlush(SysLogGet());
+	// Allow the last polling UART transfer to finish before power off.
 	msDelay(2);
 	s_Uart.PowerOff();
 #else

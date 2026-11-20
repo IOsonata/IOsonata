@@ -97,9 +97,10 @@ static bool Start(DevIntrf_t *, uint32_t Address)
 	return true;
 }
 
-static void Stop(DevIntrf_t *)
+static void Stop(DevIntrf_t *pDev)
 {
 	assert(selected);
+	assert(atomic_flag_test_and_set(&pDev->bBusy));
 	selected = false;
 	stops++;
 }
@@ -171,10 +172,15 @@ static int Transfer(DevIntrf_t *, const uint8_t *p, int n)
 }
 
 
-static void Abort(DevIntrf_t *)
+static void Abort(DevIntrf_t *pDev)
 {
-	pendingData = nullptr;
-	pendingLen = 0;
+	// Model a reset that has stopped DMA before completing the transfer.
+	if (pendingData != nullptr)
+	{
+		pendingData = nullptr;
+		pendingLen = 0;
+		DeviceIntrfTxComplete(pDev);
+	}
 	aborts++;
 }
 
@@ -202,7 +208,7 @@ static int Tx(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 
 // Finish the modeled IRQ only when the display waits. This catches early
 // StopTx, D/C changes and double completion, without host thread timing.
-extern "C" bool __wrap_DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Limit)
+extern "C" bool DeviceIntrfWaitTxCompleteForDisplayTest(DevIntrf_t * const pDev, int Limit)
 {
 	assert(Limit > 0);
 	if (timeout)

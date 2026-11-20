@@ -22,3 +22,47 @@ An omitted selector prints SKIP. A configured selector that fails prints FAIL;
 unsupported selections are not silently counted as successful tests. Runtime
 clock ownership, board wiring and hardware operation still require board
 validation. See the cross-target power/clock demo matrix for build results.
+
+## nRF5340 Audio DK hardware test (network core)
+
+The network-core image cannot start alone after a board reset. Use the existing
+application-core `NetCoreStart` image to assign the VCOM GPIO pins to the
+network core and release it from reset. `NetCoreStart` is an Eclipse managed
+project in `ARM/Nordic/nRF53/nRF5340_App/exemples/NetCoreStart/ioc`.
+
+1. Build `IOsonata_nRF5340_App` and `NetCoreStart` in the same Debug or Release
+   configuration. Build `IOsonata_nRF5340_Net` and this `ClockDemo` in the
+   corresponding configuration. Use the existing IOcomposer managed projects.
+2. Flash `ClockDemo` to the **network core**, then `NetCoreStart` to the
+   **application core**. Keep both images installed; resetting or power cycling
+   the board restarts the application core first.
+3. Connect the Audio DK through the onboard debug USB connector and open the
+   **network core's second virtual COM port** at **1,000,000 baud, 8N1**,
+   without hardware flow control. On macOS, list available ports with
+   `ls /dev/cu.usbmodem*`; identify the two board ports rather than assuming
+   their device-name suffix or ordering.
+4. Reset the board. `NetCoreStart` hands Audio DK P1.08 (network UART RX) and
+   P1.09 (network UART TX) to the network core using `IOPinCoreCfg`, then
+   clears `NETWORK.FORCEOFF`. The network `ClockDemo` should print its clock
+   cycle and timer results on that second virtual COM port.
+
+`NetCoreStart` is deliberately a minimal application-core launcher. Do not
+flash it over an application-core firmware that must remain operational. If
+there is no UART output, first verify that both core images are flashed and
+that the application-core launcher actually ran. This test validates the
+network core's clock behavior; it does not independently validate application-
+core sleep or network-core system-power transitions.
+
+## PCA10121 runtime delay calibration (November 19, 2026)
+
+Hardware output showed all three clock-selection cycles PASS, with CPU 64 MHz
+and APB 16 MHz. The hardware timer measured `msDelay(250)` at 359899 us
+(FAIL) while `nsDelay(250000000)` measured 250380 us (PASS). The network-core
+microsecond loop calibration was changed from 16 to 23 estimated cycles per
+iteration in `lib/src/system_nrf5340_network.c`, leaving the nanosecond
+calibration unchanged. The change is based on one observed board measurement;
+**the recalibrated firmware has not been re-run on hardware**. Rebuild the
+Network-core IOsonata library and ClockDemo, flash the Network core, then
+repeat the same 250 ms timer test. Use
+`python3 tests/nordic/check_nrf5340_network_delay.py` for the source-level
+calibration check. Do not count the hardware delay test PASS until measured.

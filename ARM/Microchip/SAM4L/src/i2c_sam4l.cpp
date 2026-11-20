@@ -1236,7 +1236,12 @@ static void Sam4lI2CMasterAsyncComplete(SAM4L_I2CDEV *dev)
 
 		if (intrf->bNoStop)
 		{
-			intrf->bTxReady = true;
+			if (dev->LastError)
+			{
+				// The controller stopped; a repeated-start RX is invalid.
+				atomic_store(&intrf->bNoStop, false);
+			}
+			DeviceIntrfTxComplete(intrf);
 			return;
 		}
 
@@ -1268,8 +1273,9 @@ static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 		dev->Op = op;
 		if (op == SAM4L_I2C_OP_MASTER_TX && dev->pI2cDev->DevIntrf.bNoStop)
 		{
-			dev->pI2cDev->DevIntrf.bTxReady = true;
 			dev->Op = SAM4L_I2C_OP_NONE;
+			atomic_store(&dev->pI2cDev->DevIntrf.bNoStop, false);
+			DeviceIntrfTxComplete(&dev->pI2cDev->DevIntrf);
 			return;
 		}
 		Sam4lI2CMasterAsyncComplete(dev);

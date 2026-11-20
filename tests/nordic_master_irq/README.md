@@ -23,8 +23,8 @@ Checks cover:
 - TWIM register read: the command phase suspends the bus, sets `bTxReady`
   and reports nothing, `DeviceIntrfRead()` waits for it, then the receive;
 - TWIM bus error: the driver stops the bus, the completion reports the bytes
-  moved, the bus can be used again; an address NACK on the command phase still
-  ends the read;
+  moved, and the bus can be used again; an address NACK during a register-read
+  command rejects the receive phase and releases the interface;
 - TWI without EasyDMA (nRF52832): each byte from the interrupt, the receive
   suspends the bus after each byte and ends with STOP after the last one, a
   one byte receive stops at once, the command of a register read keeps the

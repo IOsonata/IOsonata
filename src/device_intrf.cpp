@@ -40,6 +40,15 @@ SOFTWARE.
 #include "istddef.h"
 #include "device_intrf.h"
 
+enum {
+	DEVINTRF_READ_IDLE = 0,
+	DEVINTRF_READ_WAITING,
+	DEVINTRF_READ_COMPLETING,
+	DEVINTRF_READ_READY,
+	DEVINTRF_READ_FAILED,
+	DEVINTRF_READ_ABANDONED
+};
+
 // NOTE : For thread safe use
 //
 // DeviceIntrfStartRx
@@ -75,11 +84,52 @@ int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 
 void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
 {
-	atomic_store(&pDev->bTxReady, true);
+	int state = DEVINTRF_READ_WAITING;
+	int next;
 
-	if (pDev->bNoStop == false)
+	if (atomic_compare_exchange_strong(&pDev->TxReadState, &state,
+		DEVINTRF_READ_COMPLETING))
 	{
-		DeviceIntrfStopTx(pDev);
+		// The command has finished, but its reader still owns bBusy.
+		// Publish readiness before giving the reader ownership of RX.
+		next = atomic_load(&pDev->bNoStop) ?
+			DEVINTRF_READ_READY : DEVINTRF_READ_FAILED;
+		atomic_store(&pDev->bTxReady, true);
+		state = DEVINTRF_READ_COMPLETING;
+		if (atomic_compare_exchange_strong(&pDev->TxReadState, &state, next))
+		{
+			return;
+		}
+	}
+
+	if (state == DEVINTRF_READ_ABANDONED)
+	{
+		// The reader timed out. Hardware completion owns final release.
+		// Do not leave a success indication for this abandoned command.
+		atomic_store(&pDev->bNoStop, false);
+		pDev->StopTx(pDev);
+		atomic_store(&pDev->bTxReady, false);
+		atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
+		atomic_flag_clear(&pDev->bBusy);
+		return;
+	}
+
+	if (state != DEVINTRF_READ_IDLE)
+	{
+		// A previously reported command cannot be completed twice.
+		return;
+	}
+
+	if (!atomic_load(&pDev->bNoStop))
+	{
+		// Finish driver cleanup while the old owner still holds bBusy.
+		pDev->StopTx(pDev);
+		atomic_store(&pDev->bTxReady, true);
+		atomic_flag_clear(&pDev->bBusy);
+	}
+	else
+	{
+		atomic_store(&pDev->bTxReady, true);
 	}
 }
 
@@ -110,58 +160,127 @@ int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pBuf
 
 bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout)
 {
-	while (pDev->bTxReady == false && --Timeout > 0);
+	while (Timeout-- > 0)
+	{
+		if (atomic_load(&pDev->bTxReady))
+		{
+			return true;
+		}
+	}
 
-	return Timeout > 0;
+	return false;
 }
 
 int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
-                 	uint8_t *pRxBuff, int RxLen)
+				 uint8_t *pRxBuff, int RxLen)
 {
-    int count = 0;
-    int nrtry = pDev->MaxRetry;
+	int count = 0;
+	int nrtry = pDev->MaxRetry;
+	int state;
+	int expected;
+	bool ready;
 
-    if (pRxBuff == NULL || RxLen <= 0)
-        return 0;
+	if (pRxBuff == NULL || RxLen <= 0)
+	{
+		return 0;
+	}
 
-    do {
-        if (DeviceIntrfStartTx(pDev, DevAddr))
-        {
-            if (pAdCmd)
-            {
-            	pDev->bNoStop = true;
-            	if (pDev->TxSrData)
-            	{
-            		count = pDev->TxSrData(pDev, pAdCmd, AdCmdLen);
-            	}
-            	else
-            	{
-            		count = pDev->TxData(pDev, pAdCmd, AdCmdLen);
-            	}
+	do {
+		if (!DeviceIntrfStartTx(pDev, DevAddr))
+		{
+			continue;
+		}
 
-            	if (count < 0)
-            	{
-            		DeviceIntrfWaitTxComplete(pDev, 1000000);
-            	}
-				pDev->bNoStop = false;
-            }
-           // if (pDev->TxSrData)
-            {
-            	// Note : this is restart condition in read mode,
-            	// must not generate any stop condition here
-            	pDev->StartRx(pDev, DevAddr);
-            }
-           	count = pDev->RxData(pDev, pRxBuff, RxLen);
+		if (pAdCmd != NULL && AdCmdLen > 0)
+		{
+			atomic_store(&pDev->bNoStop, true);
+			atomic_store(&pDev->TxReadState, DEVINTRF_READ_WAITING);
 
-        	if (count < 0)
-        	{
-        		break;
-        	}
-			DeviceIntrfStopRx(pDev);
-        }
-    } while (count <= 0 && nrtry-- > 0);
+			if (pDev->TxSrData != NULL)
+			{
+				count = pDev->TxSrData(pDev, pAdCmd, AdCmdLen);
+			}
+			else
+			{
+				count = pDev->TxData(pDev, pAdCmd, AdCmdLen);
+			}
 
-    return count;
+			if (count < 0)
+			{
+				ready = DeviceIntrfWaitTxComplete(pDev, 1000000);
+
+				// Claim the transfer if it has completed. Otherwise mark
+				// it abandoned so the final IRQ releases the bus.
+				for (;;)
+				{
+					state = atomic_load(&pDev->TxReadState);
+					// Once readiness is published, the completing IRQ owns
+					// the state transition. Do not abandon a finished command.
+					if (ready && state == DEVINTRF_READ_COMPLETING)
+					{
+						continue;
+					}
+					if (state != DEVINTRF_READ_WAITING &&
+						state != DEVINTRF_READ_COMPLETING)
+					{
+						break;
+					}
+					expected = state;
+					if (atomic_compare_exchange_strong(&pDev->TxReadState,
+						&expected, DEVINTRF_READ_ABANDONED))
+					{
+						return 0;
+					}
+				}
+
+				if (state != DEVINTRF_READ_READY || !ready ||
+					!atomic_load(&pDev->bNoStop))
+				{
+					if (state == DEVINTRF_READ_READY ||
+						state == DEVINTRF_READ_FAILED)
+					{
+						atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
+						atomic_store(&pDev->bNoStop, false);
+						DeviceIntrfStopTx(pDev);
+					}
+					return 0;
+				}
+			}
+			else if (count == 0 ||
+				(pDev->TxSrData == NULL && count != AdCmdLen))
+			{
+				atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
+				atomic_store(&pDev->bNoStop, false);
+				DeviceIntrfStopTx(pDev);
+				if (count == 0)
+				{
+					// Preserve the existing retry policy for zero bytes.
+					continue;
+				}
+				return 0;
+			}
+
+			atomic_store(&pDev->TxReadState, DEVINTRF_READ_IDLE);
+			atomic_store(&pDev->bNoStop, false);
+		}
+
+		// This is the repeated-start phase. The same owner keeps bBusy.
+		if (!pDev->StartRx(pDev, DevAddr))
+		{
+			atomic_store(&pDev->bNoStop, false);
+			DeviceIntrfStopTx(pDev);
+			return 0;
+		}
+
+		count = pDev->RxData(pDev, pRxBuff, RxLen);
+		if (count < 0)
+		{
+			break;
+		}
+		DeviceIntrfStopRx(pDev);
+	} while (count <= 0 && nrtry-- > 0);
+
+	return count;
 }
 
 int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,

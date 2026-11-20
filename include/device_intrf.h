@@ -162,6 +162,7 @@ struct __device_intrf {
 	bool bDma;					//!< Enable DMA transfer support. Not all hardware interface supports this feature
 	bool bIntEn;				//!< Enable interrupt support. Not all hardware interface supports this feature
 	atomic_bool bTxReady;		//!< Flag indicating Tx is ready for transfer.
+	atomic_int TxReadState;		//!< Internal command/read completion ownership
 	atomic_bool bNoStop;		//!< Flag indicating a continous transfer.  Usually used for read/write register value or
 	 	 	 	 	 	 	 	//!< cmd/response type. This flag is relevant only when interrupt is enabled async transfer
 
@@ -443,7 +444,8 @@ bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout);
  * @param	pRxBuff 	  	: Pointer to memory area to receive data.
  * @param	RxLen   	: Length of buffer memory in bytes
  *
- * @return	Number of bytes read
+ * @return	Number of bytes read; zero when the command or receive start
+ * 			fails synchronously; -1 when RX was started asynchronously.
  */
 int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
                     uint8_t *pRxBuff, int RxLen);
@@ -547,19 +549,25 @@ DEVINTRF_INLINE void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
  * @return 	true - Success\n
  * 			false - failed
  */
-DEVINTRF_INLINE bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
-    if (atomic_flag_test_and_set(&pDev->bBusy))
-        return false;
+DEVINTRF_INLINE bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
+{
+	bool retval;
 
-    bool retval =  pDev->StartTx(pDev, DevAddr);
+	if (atomic_flag_test_and_set(&pDev->bBusy))
+	{
+		return false;
+	}
 
-    // In case of returned false, app would not call Stop to release busy flag
-    // so we need to do that here before returning
-    if (retval == false) {
-    	atomic_flag_clear(&pDev->bBusy);
-    }
+	atomic_store(&pDev->TxReadState, 0);
+	retval = pDev->StartTx(pDev, DevAddr);
 
-    return retval;
+	// StartTx failure does not have a matching StopTx to release bBusy.
+	if (retval == false)
+	{
+		atomic_flag_clear(&pDev->bBusy);
+	}
+
+	return retval;
 }
 
 /**

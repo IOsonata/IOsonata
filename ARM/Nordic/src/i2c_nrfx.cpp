@@ -388,10 +388,24 @@ void nRFxI2CDisable(DevIntrf_t * const pDev)
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
 #ifdef TWIM_PRESENT
-	dev->pDmaReg->ENABLE = (TWIM_ENABLE_ENABLE_Disabled << TWIM_ENABLE_ENABLE_Pos);
-#else
-	dev->pReg->ENABLE = (TWI_ENABLE_ENABLE_Disabled << TWI_ENABLE_ENABLE_Pos);
+	if (pDev->bDma)
+	{
+		if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
+		{
+			dev->pDmaSReg->ENABLE = (TWIS_ENABLE_ENABLE_Disabled << TWIS_ENABLE_ENABLE_Pos);
+		}
+		else
+		{
+			dev->pDmaReg->ENABLE = (TWIM_ENABLE_ENABLE_Disabled << TWIM_ENABLE_ENABLE_Pos);
+		}
+	}
+	else
 #endif
+	{
+#ifdef TWI_PRESENT
+		dev->pReg->ENABLE = (TWI_ENABLE_ENABLE_Disabled << TWI_ENABLE_ENABLE_Pos);
+#endif
+	}
 }
 
 void nRFxI2CEnable(DevIntrf_t * const pDev)
@@ -403,7 +417,7 @@ void nRFxI2CEnable(DevIntrf_t * const pDev)
     {
 		if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 		{
-			dev->pDmaReg->ENABLE = (TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos);
+			dev->pDmaSReg->ENABLE = (TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos);
 		}
 		else
 		{
@@ -1063,8 +1077,14 @@ static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev,
 		count = pDev->TxIdx;
 		pDev->TxDatalen = 0;
 		pDev->Async = NRFX_I2C_ASYNC_IDLE;
-		report = pIntrf->bNoStop == false;
-		pDev->bStopped = bStopped && report;
+		report = !atomic_load(&pIntrf->bNoStop);
+		if (bStopped && !report)
+		{
+			// The command ended with STOP rather than SUSPEND.
+			// It cannot be followed by RX or reported as a success.
+			atomic_store(&pIntrf->bNoStop, false);
+		}
+		pDev->bStopped = bStopped && !atomic_load(&pIntrf->bNoStop);
 		DeviceIntrfTxComplete(pIntrf);
 	}
 
@@ -1590,7 +1610,12 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
     if (inten != 0)
     {
+#if defined(NRF52811_XXAA)
+		// TWI0 uses the physical IRQ3 also used by SPI1 (slot 1).
+		SharedIntrfSetIrqHandler(1, &pDev->DevIntrf, I2C_IRQHandler);
+#else
     	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, I2C_IRQHandler);
+#endif
 
     	switch (pCfgData->DevNo)
     	{
@@ -1676,6 +1701,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 				NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_IRQn);
 				NVIC_SetPriority(TWIM0_TWIS0_TWI0_IRQn, pCfgData->IntPrio);
 				NVIC_EnableIRQ(TWIM0_TWIS0_TWI0_IRQn);
+				break;
+#elif defined(NRF52811_XXAA)
+			// nRF52811 TWIM0/TWIS0/TWI0 share IRQ 3 with SPIM1.
+			case 0:
+				NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn);
+				NVIC_SetPriority(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn);
 				break;
 #elif defined(NRF52_SERIES)
     	    case 0:

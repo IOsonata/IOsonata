@@ -99,7 +99,8 @@ struct TxByte
 };
 struct Dma
 {
-	uint32_t PTR = 0, MAXCNT = 0, AMOUNT = 0, LIST = 0;
+	uintptr_t PTR = 0;
+	uint32_t MAXCNT = 0, AMOUNT = 0, LIST = 0;
 };
 struct Reg
 {
@@ -153,6 +154,7 @@ struct nRFTwiDev_t
 	volatile int Async = 0;
 	volatile bool bAsyncErr = false, bStopped = false;
 	bool bTxRejected = false;
+	bool bPeiPrepared = false;
 	alignas(4) uint8_t TxBuf[NRFX_I2C_TXBUF_SIZE];
 };
 struct nRFSpiDev_t
@@ -166,6 +168,7 @@ struct nRFSpiDev_t
 	volatile bool *pTxWait = NULL;
 	volatile bool bTxAbort = false;
 	bool bCmdFailed = false;
+	bool bPeiPrepared = false;
 	alignas(4) uint8_t TxBuf[NRFX_SPI_TXBUF_SIZE];
 };
 static nRFSpiDev_t g_nRFxSPIDev[1];
@@ -209,6 +212,10 @@ static void IOPinClear(int, int)
 {
 	csLow++;
 }
+static uint32_t nRFxSPIPinSelect(const Pin &pin)
+{
+	return (uint32_t)((pin.PortNo << 5) | pin.PinNo);
+}
 static bool nRFxI2CWaitStop(nRFTwiDev_t *, int)
 {
 	CHECK(false);
@@ -243,7 +250,7 @@ static bool nRFxSPIWaitRX(nRFSpiDev_t *, uint32_t)
 #include "driver_lifetime.inc"
 
 static int completed, timedout, lastCount, txAttempts, replacementResult;
-static bool replaceTx, replaceTimeout, stopBeforeRx, stopOnRxUnlock;
+static bool replaceTx, replaceTimeout;
 static int Event(DevIntrf_t *p, DEVINTRF_EVT evt, uint8_t *, int count)
 {
 	if (evt == DEVINTRF_EVT_COMPLETED)
@@ -267,25 +274,10 @@ static int Event(DevIntrf_t *p, DEVINTRF_EVT evt, uint8_t *, int count)
 	}
 	return 0;
 }
-static void SpiStop();
 static bool I2cStartTx(DevIntrf_t *p, uint32_t addr)
 {
 	txAttempts++;
 	return nRFxI2CStartTx(p, addr);
-}
-static bool SpiStartRx(DevIntrf_t *p, uint32_t addr)
-{
-	if (stopBeforeRx)
-	{
-		stopBeforeRx = false;
-		SpiStop();
-	}
-	if (stopOnRxUnlock)
-	{
-		stopOnRxUnlock = false;
-		afterMask = SpiStop;
-	}
-	return nRFxSPIStartRx(p, addr);
 }
 static bool Busy(DevIntrf_t *p)
 {
@@ -332,7 +324,7 @@ static void Init(bool dma)
 	i.RxData = dma ? nRFxI2CRxDataDMA : nRFxI2CRxData;
 	s.StartTx = nRFxSPIStartTx;
 	s.StopTx = nRFxSPIStopTx;
-	s.StartRx = SpiStartRx;
+	s.StartRx = nRFxSPIStartRx;
 	s.StopRx = nRFxSPIStopRx;
 	s.TxData = dma ? nRFxSPITxDataDma : nRFxSPITxData;
 	s.RxData = dma ? nRFxSPIRxDataDma : nRFxSPIRxData;
@@ -342,7 +334,7 @@ static void Init(bool dma)
 	replaceTx = false;
 	txAttempts = 0;
 	replacementResult = -2;
-	replaceTimeout = stopBeforeRx = stopOnRxUnlock = false;
+	replaceTimeout = false;
 	for (unsigned n = 0; n < sizeof(source); n++)
 	{
 		source[n] = (uint8_t)n;
@@ -514,35 +506,41 @@ int main()
 		SpiComplete();
 		CHECK(completed == 1 && !Busy(&spi.DevIntrf));
 
+		// An abort that completes before the read returns must not
+		// enter RX. The waiting read owns the final StopTx.
 		Init(dma);
 		spi.DevIntrf.MaxRetry = 0;
 		afterMask = SpiStop;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
 			receive, sizeof(receive)) == 0);
 		CHECK(timedout == 1 && completed == 0 && !Busy(&spi.DevIntrf));
-		CHECK(spiReg.RxDma.MAXCNT == 0 && !d.bCmdFailed);
+		CHECK(spiReg.RxDma.MAXCNT == 0 && !g_nRFxSPIDev[0].bCmdFailed);
 		SpiReceive();
 
-		// STOPPED after bNoStop clears must not let the timeout callback
-		// replace the failed command before the old read rejects its RX.
+		// A completion callback cannot start a replacement transfer
+		// before the original reader acknowledges its failed command.
 		Init(dma);
 		spi.DevIntrf.MaxRetry = 0;
-		stopBeforeRx = replaceTimeout = true;
+		afterMask = SpiStop;
+		replaceTimeout = true;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
 			receive, sizeof(receive)) == 0);
 		CHECK(timedout == 1 && replacementResult == 0 && !Busy(&spi.DevIntrf));
-		CHECK(spiReg.RxDma.MAXCNT == 0 && !d.bCmdFailed && !d.bTxAbort);
+		CHECK(spiReg.RxDma.MAXCNT == 0 && !g_nRFxSPIDev[0].bCmdFailed);
 		SpiReceive();
 
-		// Once RxData consumes the failed command, a late stop can release
-		// the bus and start another transmit without the old read stopping it.
+		// If the caller times out first, STOPPED owns the release.
+		// Only after that release may the callback start a new TX.
 		Init(dma);
 		spi.DevIntrf.MaxRetry = 0;
-		stopOnRxUnlock = replaceTimeout = true;
+		replaceTimeout = true;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
-			receive, sizeof(receive)) == -1);
+			receive, sizeof(receive)) == 0);
+		CHECK(timedout == 0 && d.bTxAbort && d.bCmdFailed && Busy(&spi.DevIntrf));
+		CHECK(replacementResult == -2 && spiReg.RxDma.MAXCNT == 0);
+		SpiStop();
 		CHECK(timedout == 1 && replacementResult == -1 && Busy(&spi.DevIntrf));
-		CHECK(spiReg.RxDma.MAXCNT == 0 && !d.bCmdFailed && !d.bTxAbort);
+		CHECK(!d.bCmdFailed && !d.bTxAbort);
 		SpiComplete();
 		CHECK(completed == 1 && !Busy(&spi.DevIntrf));
 		SpiReceive();
@@ -550,11 +548,12 @@ int main()
 		Init(dma);
 		spi.DevIntrf.MaxRetry = 0;
 		CHECK(DeviceIntrfRead(&spi.DevIntrf, 0, source, NRFX_SPI_TXBUF_SIZE + 9,
-			receive, sizeof(receive)) == -1);
-		CHECK(timedout == 0 && d.bTxAbort && !d.bCmdFailed && Busy(&spi.DevIntrf));
+			receive, sizeof(receive)) == 0);
+		CHECK(timedout == 0 && d.bTxAbort && d.bCmdFailed && Busy(&spi.DevIntrf));
 		SpiStop();
 		CHECK(timedout == 1 && !Busy(&spi.DevIntrf));
 		SpiReceive();
+
 	}
 	printf("Nordic transfer lifetime: %d checks, %d failures\n", checks, failures);
 	return failures != 0;

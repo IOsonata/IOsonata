@@ -93,23 +93,27 @@ bool LcdSSD1315::Init(const DisplayCfg_t &Cfg, DeviceIntrf * const pIntrf)
 
 bool LcdSSD1315::Send(bool bData, const uint8_t *pData, int Len)
 {
+	const IOPinCfg_t *pin;
+	DevIntrf_t *intrf;
+	int count;
+
 	if (!vbReady || Len <= 0 || pData == nullptr || !vpIntrf->StartTx(DeviceAddress()))
 	{
 		return false;
 	}
-	const IOPinCfg_t &pin = vCfg.pPins[DISPL_CTRL_DCX_PINIDX];
+	pin = &vCfg.pPins[DISPL_CTRL_DCX_PINIDX];
 	if (bData)
 	{
-		IOPinSet(pin.PortNo, pin.PinNo);
+		IOPinSet(pin->PortNo, pin->PinNo);
 	}
 	else
 	{
-		IOPinClear(pin.PortNo, pin.PinNo);
+		IOPinClear(pin->PortNo, pin->PinNo);
 	}
-	DevIntrf_t *intrf = *vpIntrf;
+	intrf = *vpIntrf;
 
 	intrf->bNoStop = false;
-	int count = vpIntrf->TxData(pData, Len);
+	count = vpIntrf->TxData(pData, Len);
 
 	if (count < 0)
 	{
@@ -119,13 +123,10 @@ bool LcdSSD1315::Send(bool bData, const uint8_t *pData, int Len)
 		{
 			return true;
 		}
-		// Reset must abort the pending transfer before local command bytes
-		// leave scope. A late completion may already have released CS.
+		// The interface owner must cancel the hardware before releasing
+		// bBusy. Reset may cancel synchronously or leave the completion
+		// interrupt responsible. Do not force StopTx on an active DMA.
 		vpIntrf->Reset();
-		if (!atomic_load(&intrf->bTxReady))
-		{
-			vpIntrf->StopTx();
-		}
 		Valid(false);
 
 		return false;

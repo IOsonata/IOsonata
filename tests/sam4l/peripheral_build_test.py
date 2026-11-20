@@ -7,21 +7,28 @@ This checks selected library sources, not the full IOcomposer library.
 import argparse
 from pathlib import Path
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/microchip'))
+from compile_power import resolve_toolchain
+
 p = argparse.ArgumentParser(description=__doc__)
-p.add_argument('--toolchain-prefix', default='arm-none-eabi-')
+p.add_argument('--toolchain-prefix', default=None,
+               help='Full Arm compiler prefix; auto-detect when omitted')
 p.add_argument('--taktos', type=Path)
 p.add_argument('--build-dir', type=Path, default=root / 'tests/sam4l/build/peripherals')
 a = p.parse_args()
-cc = a.toolchain_prefix
+cc = resolve_toolchain(a.toolchain_prefix)
+print('Arm compiler prefix: ' + cc, flush=True)
 takt = a.taktos.resolve() if a.taktos else None
 examples = root / 'ARM/Microchip/SAM4L/SAM4LSxC/exemples'
 common = [
     'src/CppRuntimeOverload.cpp', 'ARM/src/ResetEntry.c',
     'ARM/Microchip/SAM4L/src/vectors_sam4l.c',
     'ARM/Microchip/SAM4L/src/system_sam4l.c',
+    'ARM/Microchip/SAM4L/src/system_power_sam4l.cpp',
     'ARM/Microchip/SAM4L/src/iopincfg_sam4l.c',
     'src/cfifo.c', 'src/device_intrf.cpp', 'src/device.cpp',
     'src/coredev/uart.cpp', 'ARM/Microchip/SAM4L/src/uart_sam4l.cpp',

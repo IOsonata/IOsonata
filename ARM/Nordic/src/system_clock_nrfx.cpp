@@ -157,6 +157,7 @@ typedef enum {
 
 static uint32_t s_nRFxHfxoReqCnt = 0U;
 static bool s_bNRFxHfxoTransition = false;
+static bool s_bNRFxHfxoPendingStop = false;
 static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
 
 // Weak: the SoftDevice Controller is not in the build. nrf_mpsl.cpp has the
@@ -198,6 +199,20 @@ static bool nRFxHfxoRunning(void)
 	return (NRF_CLOCK->HFCLKSTAT & (CLOCK_HFCLKSTAT_STATE_Msk | CLOCK_HFCLKSTAT_SRC_Msk)) ==
 		   (CLOCK_HFCLKSTAT_STATE_Msk | NRFX_HFXO_STAT_SRC);
 #endif
+}
+
+// Used internally by RTC drivers to avoid direct LFCLK control once a
+// Bluetooth stack has taken over CLOCK. Not part of the public HAL.
+bool nRFxClockStackActive(void)
+{
+	return nRFxMpslActive() || nRFxClockSdEnabled();
+}
+
+// RTC implementation overrides this only when it is included in the image.
+// A running RTC forbids LFCLK source changes until it is disabled.
+__WEAK bool nRFxRtcClockActive(void)
+{
+	return false;
 }
 
 // Acquire the oscillator through its current owner. The caller holds the
@@ -309,6 +324,43 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 	}
 }
 
+// Complete a release requested by an ISR via the normal owner backend.
+// This is an internal service, called in thread context before System ON WFI.
+void nRFxClockService(void)
+{
+	nRFxHfxoOwner_t owner;
+	uint32_t state;
+	bool success;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+
+	state = DisableInterrupt();
+	if (!s_bNRFxHfxoPendingStop || s_bNRFxHfxoTransition ||
+		s_nRFxHfxoReqCnt != 0U)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+
+	s_bNRFxHfxoTransition = true;
+	owner = s_nRFxHfxoOwner;
+	EnableInterrupt(state);
+
+	success = nRFxHfxoStop(owner);
+
+	state = DisableInterrupt();
+	if (success)
+	{
+		s_bNRFxHfxoPendingStop = false;
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+	}
+	s_bNRFxHfxoTransition = false;
+	EnableInterrupt(state);
+}
+
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	nRFxHfxoOwner_t owner;
@@ -340,6 +392,14 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		EnableInterrupt(state);
 		return true;
 	}
+	if (ClkSrc != OSC_TYPE_RC && s_bNRFxHfxoPendingStop)
+	{
+		// A new consumer reuses the oscillator that is still running.
+		s_nRFxHfxoReqCnt = 1U;
+		s_bNRFxHfxoPendingStop = false;
+		EnableInterrupt(state);
+		return true;
+	}
 	if (ClkSrc == OSC_TYPE_RC && s_nRFxHfxoReqCnt == 0U)
 	{
 		EnableInterrupt(state);
@@ -348,6 +408,35 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	if (ClkSrc == OSC_TYPE_RC && s_nRFxHfxoReqCnt > 1U)
 	{
 		s_nRFxHfxoReqCnt--;
+		EnableInterrupt(state);
+		return true;
+	}
+
+	// First acquisition may wait for hardware, so it is thread-only.
+	// On the last release, stopping a directly-owned clock takes one
+	// nonblocking register write. Stack-owned releases are deferred.
+	if (__get_IPSR() != 0U)
+	{
+		if (ClkSrc != OSC_TYPE_RC)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		if (s_nRFxHfxoOwner == NRFX_HFXO_OWNER_NONE ||
+			(s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT &&
+			!nRFxClockStackActive()))
+		{
+			// No stack API and no oscillator wait inside an interrupt.
+			if (nRFxHfxoStop(s_nRFxHfxoOwner))
+			{
+				s_nRFxHfxoReqCnt = 0U;
+				s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+				EnableInterrupt(state);
+				return true;
+			}
+		}
+		s_nRFxHfxoReqCnt = 0U;
+		s_bNRFxHfxoPendingStop = true;
 		EnableInterrupt(state);
 		return true;
 	}
@@ -370,6 +459,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	if (ClkSrc == OSC_TYPE_RC && success)
 	{
 		s_nRFxHfxoReqCnt = 0U;
+		s_bNRFxHfxoPendingStop = false;
 		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
 	}
 	else if (success)
@@ -391,8 +481,10 @@ bool nRFxClockPrepareSystemOff(void)
 	uint32_t state;
 	int i;
 
+	nRFxClockService();
 	state = DisableInterrupt();
-	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt != 0U ||
+	if (s_bNRFxHfxoTransition || s_bNRFxHfxoPendingStop ||
+		s_nRFxHfxoReqCnt != 0U ||
 		nRFxMpslActive() || nRFxClockSdEnabled())
 	{
 		EnableInterrupt(state);
@@ -463,6 +555,13 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	uint32_t prev;
 	bool running;
 
+	// Starting a 32 kHz crystal can wait for oscillator stabilization.
+	// No clock source transition is allowed from interrupt context.
+	if (__get_IPSR() != 0U)
+	{
+		return false;
+	}
+
 	// The 32 kHz oscillators of these parts are 32768 Hz
 	(void)OscFreq;
 
@@ -485,7 +584,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 			return false;
 	}
 
-	// A BLE stack owns LFCLK, it set the source when it was enabled
+	// LFCLK stop/start waits for hardware. A BLE stack also owns its source.
 	if (nRFxClockSdEnabled() || nRFxMpslActive())
 	{
 		return false;
@@ -497,6 +596,11 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	if (running == false || prev != src ||
 		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) != (src & NRFX_LFCLK_SRC_Msk))
 	{
+		// Do not stop/restart LFCLK under an active RTC consumer.
+		if (nRFxRtcClockActive())
+		{
+			return false;
+		}
 		if (running)
 		{
 			if (nRFxLfclkStop() == false)

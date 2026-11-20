@@ -263,7 +263,9 @@ def spi_cmd_done():
     check(call('tx_ready', 1) == 1, 'command phase not flagged ready')
     check(call('busy', 1) == 1, 'bus released after the command phase')
     check(call('events', 0) == 0, 'command phase reported as a completion')
-r = call_break('read_reg', (1, 8), 'DeviceIntrfWaitTxComplete', spi_cmd_done)
+# The Nordic SPI driver waits for its command DMA before returning to
+# DeviceIntrfRead. Complete that DMA during its own wait, before abort starts.
+r = call_break('read_reg', (1, 8), 'nRFxSPIAsyncTxWait', spi_cmd_done)
 check(r == -1, 'read returns', r)
 check(pending == [('rx', BUF, 8)], pending)
 spi_finish()
@@ -295,7 +297,9 @@ if S[0] and CHIP.startswith('NRF52832'):
     # Command then one byte: the command uses the SPIM, the byte the SPI
     pending.clear(); sent.clear()
     call('init', 1, 0, 1, 1)
-    r = call_break('read_reg', (1, 1), 'DeviceIntrfWaitTxComplete', spi_finish)
+    # Finish the SPIM command while its driver-side wait is active.
+    # The one-byte RX then uses SPI to avoid nRF52832 anomaly 58.
+    r = call_break('read_reg', (1, 1), 'nRFxSPIAsyncTxWait', spi_finish)
     check(r == 1 and sent == [0xA5] and call('busy', 1) == 0, 'command then one byte', r, sent)
 active = None
 
@@ -394,7 +398,7 @@ for kind in ('tx', 'rx'):
     twim_finish()
     check(call('events', 0) == 2 and call('busy', 0) == 0, 'transfer after an error ended')
 
-# Address NACK on the command of a register read: the read still ends.
+# Address NACK ends the command with STOP. Do not start repeated-start RX.
 twim_reset()
 def i2c_cmd_nack():
     twim_finish(amount=0, error=True)
@@ -402,11 +406,12 @@ def i2c_cmd_nack():
     isr(0)
     check(call('tx_ready', 0) == 1 and call('events', 0) == 0, 'nacked command')
 r = call_break('read_reg', (0, 4), 'DeviceIntrfWaitTxComplete', i2c_cmd_nack)
-check(r == -1 and pending == [('rx', BUF, 4)], 'read after nack', pending)
-twim_finish(amount=0, error=True)
-put(base + o[9], 1)
-isr(0)
-check(call('events', 0) == 1 and call('events', 1) == 0 and call('busy', 0) == 0, 'nacked read end')
+check(r == 0 and not pending, 'RX started after command NACK', pending)
+check(call('busy', 0) == 0 and call('events', 0) == 0, 'nacked command retained busy')
+check(actions == ['stop'], 'extra STOP after command NACK', actions)
+check(call('tx', 0, 2) == -1 and pending == [('tx', TXBUF[0], 2)], 'reuse after command NACK')
+twim_finish()
+check(call('busy', 0) == 0 and call('events', 0) == 1, 'reuse completion after command NACK')
 active = None
 
 # ---- TWI master without EasyDMA, interrupt
@@ -560,7 +565,9 @@ if S[0]:
         check(sent == [4], sent)
         ready()
         check(call('tx_ready', 1) == 1 and call('busy', 1) == 1 and call('events', 0) == 0, 'spi command')
-    check(call_break('read_reg', (1, 2), 'DeviceIntrfWaitTxComplete', spi_legacy_cmd) == -1)
+    # The legacy SPI driver also waits for the command's READY event
+    # inside TxData before reaching the generic completion wait.
+    check(call_break('read_reg', (1, 2), 'nRFxSPIAsyncTxWait', spi_legacy_cmd) == -1)
     check(sent == [4, 0xA5], sent)
     ready(1)
     ready(2)

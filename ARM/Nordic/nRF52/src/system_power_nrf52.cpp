@@ -60,6 +60,8 @@ SOFTWARE.
 #endif
 
 #include "coredev/system_core_clock.h"
+#include "coredev/interrupt.h"
+#include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 
 #define SYS_PWR_NRF52_NB_RETREG		2
@@ -76,6 +78,17 @@ SOFTWARE.
 
 static bool s_bSysPwrResetRead = false;
 static uint32_t s_SysPwrResetReason = 0;
+
+static int s_SysPwrSleepPort = -1;
+static int s_SysPwrSleepPin = -1;
+static IOPINSENSE s_SysPwrSleepSense = IOPINSENSE_DISABLE;
+
+// A wake interrupt need only make WFI return.
+static void SysPwrSleepWake(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+}
 
 // sd_softdevice_is_enabled is an SVC that only a programmed SoftDevice
 // implements, so the image is looked for first: its magic number follows the
@@ -181,6 +194,104 @@ uint32_t SystemResetReason(void)
 	return s_SysPwrResetReason;
 }
 
+// System ON idle: peripherals and radio retain ownership of their clocks.
+// WFI resumes on a pending interrupt; do not select System OFF or gate clocks.
+// Internal clock maintenance, not an application-facing HAL entry point.
+void nRFxClockService(void);
+
+void SystemSleep(void)
+{
+	NRF_GPIO_Type *wakeReg;
+	uint32_t wakeSense;
+	uint32_t state;
+	uint32_t scr;
+	int wakeIrq;
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	bool sd;
+#endif
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+
+	// A timer can release the last HFXO request from its IRQ. Complete
+	// a stack-owned deferred release before going idle.
+	nRFxClockService();
+
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	sd = SysPwrSdEnabled();
+#endif
+	state = DisableInterrupt();
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	// sd_app_evt_wait requires normal IRQ delivery. Do not enable IRQs
+	// behind a caller that entered with PRIMASK set.
+	if (sd && state != 0U)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+#endif
+	wakeIrq = -1;
+	wakeReg = NULL;
+	wakeSense = 0U;
+	if (s_SysPwrSleepSense != IOPINSENSE_DISABLE)
+	{
+		wakeReg = nRFGpioGetReg(s_SysPwrSleepPort);
+		if (wakeReg == NULL || s_SysPwrSleepPin < 0 ||
+			s_SysPwrSleepPin >= 32)
+		{
+			EnableInterrupt(state);
+			return;
+		}
+		wakeSense = wakeReg->PIN_CNF[s_SysPwrSleepPin] &
+			GPIO_PIN_CNF_SENSE_Msk;
+		// GPIO DETECT alone wakes System OFF. System ON requires an IRQ.
+		wakeIrq = IOPinAllocateInterrupt(2, s_SysPwrSleepPort,
+			s_SysPwrSleepPin, s_SysPwrSleepSense,
+			SysPwrSleepWake, NULL);
+		if (wakeIrq < 0)
+		{
+			// Failed allocation must leave System OFF sensing intact.
+			wakeReg->PIN_CNF[s_SysPwrSleepPin] =
+				(wakeReg->PIN_CNF[s_SysPwrSleepPin] &
+				~GPIO_PIN_CNF_SENSE_Msk) | wakeSense;
+			EnableInterrupt(state);
+			return;
+		}
+	}
+
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	if (sd)
+	{
+		// SoftDevice needs interrupts enabled for sd_app_evt_wait.
+		EnableInterrupt(state);
+		(void)sd_app_evt_wait();
+		state = DisableInterrupt();
+	}
+	else
+#endif
+	{
+		scr = SCB->SCR;
+		SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+		__DSB();
+		__WFI();
+		__ISB();
+		SCB->SCR = scr;
+	}
+
+	if (wakeIrq >= 0)
+	{
+		IOPinDisableInterrupt(wakeIrq);
+		// DisableInterrupt clears SENSE. Re-arm the System OFF wake
+		// level without changing the rest of the GPIO configuration.
+		wakeReg->PIN_CNF[s_SysPwrSleepPin] =
+			(wakeReg->PIN_CNF[s_SysPwrSleepPin] &
+			~GPIO_PIN_CNF_SENSE_Msk) | wakeSense;
+	}
+	EnableInterrupt(state);
+}
+
 void SystemPowerOff(void)
 {
 	if (SysPwrSdEnabled())
@@ -214,9 +325,50 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 		return false;
 	}
 
-	// SENSE of the pin, its DETECT signal wakes the MCU from System OFF
-	IOPinSetSense(PortNo, PinNo, (IOPINSENSE)Sense);
+	// A GPIO port register can exist even when its higher pin indices do not.
+	// Validate the bonded-port maximum exposed by the MCU pin map.
+#ifdef IOPIN_P0_MAXCOUNT
+	if ((PortNo & 0x7F) == 0 && PinNo >= IOPIN_P0_MAXCOUNT)
+	{
+		return false;
+	}
+#endif
+#ifdef IOPIN_P1_MAXCOUNT
+	if ((PortNo & 0x7F) == 1 && PinNo >= IOPIN_P1_MAXCOUNT)
+	{
+		return false;
+	}
+#endif
+#ifdef IOPIN_P2_MAXCOUNT
+	if ((PortNo & 0x7F) == 2 && PinNo >= IOPIN_P2_MAXCOUNT)
+	{
+		return false;
+	}
+#endif
+#ifdef IOPIN_P3_MAXCOUNT
+	if ((PortNo & 0x7F) == 3 && PinNo >= IOPIN_P3_MAXCOUNT)
+	{
+		return false;
+	}
+#endif
 
+	// System OFF uses GPIO DETECT; System ON will arm a GPIOTE IRQ.
+	IOPinSetSense(PortNo, PinNo, (IOPINSENSE)Sense);
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		if (s_SysPwrSleepPort == PortNo && s_SysPwrSleepPin == PinNo)
+		{
+			s_SysPwrSleepSense = IOPINSENSE_DISABLE;
+			s_SysPwrSleepPort = -1;
+			s_SysPwrSleepPin = -1;
+		}
+	}
+	else
+	{
+		s_SysPwrSleepPort = PortNo;
+		s_SysPwrSleepPin = PinNo;
+		s_SysPwrSleepSense = (IOPINSENSE)Sense;
+	}
 	return true;
 }
 

@@ -1085,14 +1085,12 @@ static void nRFxSPIAsyncTxAbortEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * cons
 	pDev->bTxAbort = false;
 	if (pDev->bCmdFailed)
 	{
-		// The interrupted read still owns the bus until its rejected receive
-		// phase runs. Do not let the timeout callback replace it before then.
-		atomic_store(&pIntrf->bTxReady, true);
+		// Hardware has stopped. Mark the command as failed before
+		// handing completion to the generic read owner.
+		pDev->bCmdFailed = false;
+		atomic_store(&pIntrf->bNoStop, false);
 	}
-	else
-	{
-		DeviceIntrfTxComplete(pIntrf);
-	}
+	DeviceIntrfTxComplete(pIntrf);
 	if (pIntrf->EvtCB)
 	{
 		pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, NULL, Count);
@@ -1620,6 +1618,18 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 				NVIC_SetPriority(SPIM0_SPIS0_SPI0_IRQn, pCfgData->IntPrio);
 				NVIC_EnableIRQ(SPIM0_SPIS0_SPI0_IRQn);
 				break;
+#elif defined(NRF52811_XXAA)
+			// SPI0 is on IRQ4; SPI1 shares IRQ3 with TWI0.
+			case 0:
+				NVIC_ClearPendingIRQ(SPIM0_SPIS0_SPI0_IRQn);
+				NVIC_SetPriority(SPIM0_SPIS0_SPI0_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SPIM0_SPIS0_SPI0_IRQn);
+				break;
+			case 1:
+				NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn);
+				NVIC_SetPriority(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(TWIM0_TWIS0_TWI0_SPIM1_SPIS1_SPI1_IRQn);
+				break;
 #elif defined(NRF52_SERIES)
     		case 0:
                 NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
@@ -1631,11 +1641,13 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
                 NVIC_SetPriority(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
 				break;
+#if NRFX_SPI_MAXDEV > 2
     	    case 2:
                 NVIC_ClearPendingIRQ(SPIM2_SPIS2_SPI2_IRQn);
                 NVIC_SetPriority(SPIM2_SPIS2_SPI2_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPIM2_SPIS2_SPI2_IRQn);
 				break;
+#endif
 #ifdef NRF52840_XXAA
     	    case 3:
                 NVIC_ClearPendingIRQ(SPIM3_IRQn);
@@ -1735,7 +1747,7 @@ extern "C" void SPIM0_SPIS0_SPI0_IRQHandler(void)
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_SPI0_IRQn);
 }
 #endif
-#if !defined(NRF52805_XXAA) && !defined(NRF52810_XXAA)
+#if NRFX_SPI_MAXDEV > 2
 extern "C" void SPIM2_SPIS2_SPI2_IRQHandler(void)
 {
 	SPI_IRQHandler(2, &g_nRFxSPIDev[2].pSpiDev->DevIntrf);
