@@ -406,9 +406,12 @@ bool MpslInit(void)
 {
 	int32_t res = 0;
 
+#if !(defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK)
 	mpsl_clock_lfclk_cfg_t lfclk = {MPSL_CLOCK_LF_SRC_RC, 0,};
+#endif
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
 
+#if !(defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK)
 	// Set default clock based on system oscillator settings
 	if (lfosc->Type == OSC_TYPE_RC)
 	{
@@ -423,6 +426,7 @@ bool MpslInit(void)
 	}
 
 	lfclk.skip_wait_lfclk_started = MPSL_DEFAULT_SKIP_WAIT_LFCLK_STARTED;
+#endif
 
 #if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
 	// MPSL's external driver owns both clock domains. LFRC calibration
