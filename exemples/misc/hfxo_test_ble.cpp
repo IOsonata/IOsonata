@@ -225,6 +225,9 @@ static int HfxoPreStackTest(void)
 
 int main(void)
 {
+#if HFXO_TEST_PRESTACK
+	int preStackResult;
+#endif
 	bool initial;
 	bool first;
 	bool second;
@@ -240,7 +243,13 @@ int main(void)
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTestBle\r\n");
 #if HFXO_TEST_PRESTACK
-	return HfxoPreStackTest();
+	preStackResult = HfxoPreStackTest();
+	HFXO_PRINT("Pre-stack test result: %s\r\n",
+		preStackResult == 0 ? "PASS" : "FAIL");
+	while (1)
+	{
+		__WFE();
+	}
 #endif
 	if (!HfxoStackInit())
 	{
