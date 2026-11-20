@@ -105,6 +105,19 @@ int nRFxMpslHfxo(bool bOn);
  * @return	true - MPSL is initialized
  */
 bool nRFxMpslActive(void);
+// Internal nRF52 external-clock integration callbacks. The MPSL
+// registration implementation calls these functions; applications never do.
+#if defined(NRF52_SERIES)
+void nRFxMpslExternalClockSet(bool Enabled);
+bool nRFxMpslExternalClockGet(void);
+void nRFxMpslHfclkRequest(void);
+void nRFxMpslHfclkRelease(void);
+bool nRFxMpslHfclkIsRunning(void);
+int32_t nRFxMpslLfclkRequest(void);
+int32_t nRFxMpslLfclkRelease(void);
+int32_t nRFxMpslLfclkWait(void);
+#endif
+
 
 #ifdef __cplusplus
 }
