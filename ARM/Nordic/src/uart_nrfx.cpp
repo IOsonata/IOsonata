@@ -155,6 +155,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NRFX_UART_CFIFO_SIZE		CFIFO_MEMSIZE(4 * NRFX_UART_HWFIFO_SIZE)
 
+// Maximum polls without TX FIFO progress before declining a polling PowerOff.
+#define NRFX_UART_TX_DRAIN_WAIT_LOOPS	2000000U
+
 #pragma pack(push, 4)
 // Device driver data require by low level functions
 typedef struct __nRF_UART_Dev {
@@ -832,7 +835,7 @@ static bool nRFUARTDrainPollingTx(nRFUartDev_t * const dev)
 			queued = remaining;
 			timeout = 0U;
 		}
-		else if (++timeout >= 2000000U)
+		else if (++timeout >= NRFX_UART_TX_DRAIN_WAIT_LOOPS)
 		{
 			return false;
 		}
