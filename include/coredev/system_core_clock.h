@@ -241,6 +241,15 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
 
 /**
+ * @brief Internal shared clock services used by IOsonata peripheral drivers.
+ *
+ * Normal applications use peripheral Init/Enable/Disable; the drivers
+ * automatically select and manage the necessary MCU clocks. Applications
+ * may call these generic functions directly only when special requirements
+ * demand explicit control of a shared clock source.
+ */
+
+/**
  * @brief Enable the configured shared high-frequency clock source.
  *
  * Uses g_McuOsc.CoreOsc. Repeated enables count active users; failure
