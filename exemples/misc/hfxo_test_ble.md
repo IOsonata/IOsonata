@@ -57,15 +57,17 @@ evidence of a leaked clock reference. If HFXO never stops during this
 window, the diagnostic reports `Pre-stack physical release: FAIL`.
 The portable `HfxoTestBle: PASS` cannot establish physical HFXO release.
 
-The nRF52832 SDC/LFRC hardware test recorded zero stopped samples
-out of 200 over two seconds after the pre-stack HFXO release. This
-shows a continuously running HFXO during the observation window. The
-implementation previously tried an MPSL HF request/release pair, but
-that pair does not release the HFXO request started directly before
-MPSL initialization. That incorrect transfer has been removed: the
-original request remains recorded instead of silently disappearing.
-A safe ownership transfer is still required, without disabling MPSL's
-LFRC calibration or stopping a clock required by the radio.
+The nRF52832 SDC/LFRC hardware test previously recorded zero stopped
+samples out of 200 over two seconds after the pre-stack HFXO release.
+The former internal-MPSL implementation could not release the original
+direct HFXO start.
+
+The new implementation registers external clock control for LFRC as
+well as LFXO. IOsonata now handles LFRC calibration with a separate
+HFXO reference, the CLOCK DONE interrupt, and a four-second calibration
+timer. The change is **not yet built or hardware-validated**. The
+diagnostic must show HFXO stopping between calibration intervals without
+interrupting subsequent clock requests or Bluetooth operation.
 
 Do not replace the shared `exemples/misc/hfxo_test_ble.cpp` source
 with Nordic-specific initialization. The LFRC diagnostic was compiled
