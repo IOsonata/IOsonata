@@ -238,6 +238,10 @@ static void SysLogFlushEvt(uint32_t Evt, void *pCtx);
 
 static uint8_t s_UartRxBuff[PACKET_SIZE];
 static int s_UartRxBuffLen = 0;
+static uint32_t s_ClockCheckCount;
+static uint32_t s_ClockCheckFailures;
+static bool s_bClockCheckQueued;
+
 
 static void UartRxQue(void)
 {
@@ -265,10 +269,6 @@ static void SysLogFlushQue(void)
 
 // Exercise the shared oscillator while BLE writes are being processed.
 // Queue the requests so a GATT callback does not wait for crystal startup.
-static uint32_t s_ClockCheckCount;
-static uint32_t s_ClockCheckFailures;
-static bool s_bClockCheckQueued;
-
 static void ClockCheckEvt(uint32_t Evt, void *pCtx)
 {
 	bool first;
