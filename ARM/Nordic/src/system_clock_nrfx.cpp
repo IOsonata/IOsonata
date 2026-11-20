@@ -151,7 +151,7 @@ typedef enum {
 static uint32_t s_nRFxHfxoReqCnt = 0U;
 static bool s_bNRFxHfxoTransition = false;
 static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
-#if defined(NRF52_SERIES)
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
 // MPSL external clock-control calls can run at high priority. Its requests
 // are counted separately from IOsonata users but share the same oscillator.
 static bool s_bNRFxMpslExternalClock;
@@ -307,7 +307,7 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 			{
 				return false;
 			}
-#if defined(NRF52_SERIES)
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
 			if (nRFxMpslActive() && !s_bNRFxMpslExternalClock)
 #else
 			if (nRFxMpslActive())
@@ -419,7 +419,7 @@ void SystemHighFreqClockDisable(void)
 		EnableInterrupt(state);
 		return;
 	}
-#if defined(NRF52_SERIES)
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
 	if (s_bNRFxMpslExternalClock)
 	{
 		// The registered MPSL driver uses our physical CLOCK controller.
@@ -457,7 +457,7 @@ void SystemHighFreqClockDisable(void)
 	{
 		s_nRFxHfxoReqCnt = 0U;
 		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
-#if defined(NRF52_SERIES)
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
 		if (s_bNRFxMpslExternalClock && s_nRFxMpslHfxoReqCnt == 0U)
 		{
 			s_bNRFxMpslHfxoOwned = false;
@@ -635,7 +635,7 @@ void SystemLowFreqClockDisable(void)
 		s_nRFxLfclkReqCnt--;
 		if (s_nRFxLfclkReqCnt == 0U)
 		{
-#if defined(NRF52_SERIES)
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
 			if (s_bNRFxMpslExternalClock &&
 				s_nRFxMpslLfclkReqCnt != 0U && s_bNRFxLfclkOwned)
 			{
@@ -651,7 +651,7 @@ void SystemLowFreqClockDisable(void)
 			{
 				NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
 				s_bNRFxLfclkStopPending = true;
-#if defined(NRF52_SERIES)
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
 				s_bNRFxMpslLfclkOwned = false;
 #endif
 			}
@@ -724,7 +724,7 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 
 	return SystemPeriphClockGet(Idx);
 }
-#if defined(NRF52_SERIES)
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
 // The external MPSL clock driver uses these short interrupt-safe callbacks.
 // Do not call MPSL's internal HF source request API in this configuration.
 void nRFxMpslExternalClockSet(bool Enabled)
