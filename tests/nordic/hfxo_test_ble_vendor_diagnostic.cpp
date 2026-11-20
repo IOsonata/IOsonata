@@ -42,6 +42,7 @@ SOFTWARE.
 
 #include "nrf.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 
 #if defined(NRFXLIB_SDC)
 #include "nrf_mpsl.h"
@@ -201,6 +202,7 @@ static int HfxoPreStackTest(void)
 	bool stackReady;
 	bool survived;
 	bool reenabled;
+	bool stopped;
 
 	HFXO_PRINT("Pre-stack HFXO ownership test\r\n");
 	enabled = SystemHighFreqClockEnable();
@@ -228,9 +230,17 @@ static int HfxoPreStackTest(void)
 	}
 
 	SystemHighFreqClockDisable();
-	// S132 may defer the physical STOP until SoftDevice shutdown.
+	// A pre-stack request must not leave HFXO running when MPSL has
+	// no HF request. S132 may defer physical STOP until shutdown.
+#if defined(NRFXLIB_SDC)
+	msDelay(10);
+	stopped = !HfxoRunning();
+	HfxoResult("Pre-stack physical release", stopped, !stopped);
+#else
+	stopped = true;
 	HFXO_PRINT("Pre-stack request released, HFXO %s\r\n",
 		HfxoRunning() ? "running" : "stopped");
+#endif
 
 	reenabled = SystemHighFreqClockEnable();
 	running = HfxoRunning();
@@ -245,8 +255,8 @@ static int HfxoPreStackTest(void)
 	}
 	SystemHighFreqClockDisable();
 	HFXO_PRINT("Stack request released\r\n");
-	HFXO_PRINT("Pre-stack handover: PASS\r\n");
-	return 0;
+	HFXO_PRINT("Pre-stack handover: %s\r\n", stopped ? "PASS" : "FAIL");
+	return stopped ? 0 : 1;
 }
 
 int main(void)
