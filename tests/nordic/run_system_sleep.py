@@ -59,6 +59,13 @@ uint32_t sd_app_evt_wait(void) { s_SdWait++; return 0U; }
 
 NORDIC_GPIO_WAKE = r"""
 #include <stddef.h>
+typedef struct { uint32_t PIN_CNF[32]; } NRF_GPIO_Type;
+#define GPIO_PIN_CNF_SENSE_Msk (3U << 16)
+static NRF_GPIO_Type s_TestGpio;
+NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
+{
+	return PortNo == 0 ? &s_TestGpio : NULL;
+}
 typedef enum {
 	IOPINSENSE_DISABLE,
 	IOPINSENSE_LOW_TRANSITION,
@@ -84,6 +91,8 @@ int IOPinAllocateInterrupt(int Prio, int PortNo, int PinNo, IOPINSENSE Sense,
 	(void)pCtx;
 	if (!s_AllowIrq)
 	{
+		// Exercise the cleanup path even if a failed allocation touched SENSE.
+		s_TestGpio.PIN_CNF[PinNo] &= ~GPIO_PIN_CNF_SENSE_Msk;
 		return -1;
 	}
 	s_IrqAllocated++;
@@ -92,6 +101,7 @@ int IOPinAllocateInterrupt(int Prio, int PortNo, int PinNo, IOPINSENSE Sense,
 void IOPinDisableInterrupt(int Chan)
 {
 	assert(s_Mask == 1U && Chan == 3);
+	s_TestGpio.PIN_CNF[11] &= ~GPIO_PIN_CNF_SENSE_Msk;
 	s_IrqReleased++;
 }
 """
@@ -153,14 +163,18 @@ int main(void)
 	s_SysPwrSleepPin = 11;
 	s_SysPwrSleepSense = IOPINSENSE_LOW_TRANSITION;
 	g_Scb.SCR = 0x106U;
+	s_TestGpio.PIN_CNF[11] = 0x4000U | (1U << 16);
 	SystemSleep();
+	assert(s_TestGpio.PIN_CNF[11] == (0x4000U | (1U << 16)));
 	SystemSleep();
+	assert(s_TestGpio.PIN_CNF[11] == (0x4000U | (1U << 16)));
 	assert(s_Wfi == 2U && s_IrqAllocated == 2 && s_IrqReleased == 2);
 	assert(s_Disable == 2U && s_Enable == 2U && s_Mask == 0U);
 	assert(g_Scb.SCR == 0x106U);
 
 	s_AllowIrq = false;
 	SystemSleep();
+	assert(s_TestGpio.PIN_CNF[11] == (0x4000U | (1U << 16)));
 	assert(s_Wfi == 2U && s_IrqAllocated == 2 && s_IrqReleased == 2);
 	assert(s_Disable == 3U && s_Enable == 3U);
 #ifdef SOFTDEVICE_PRESENT
@@ -170,6 +184,7 @@ int main(void)
 	s_Disable = s_Enable = s_Wfi = s_SdWait = 0U;
 	SystemSleep();
 	assert(s_SdWait == 1U && s_Wfi == 0U);
+	assert(s_TestGpio.PIN_CNF[11] == (0x4000U | (1U << 16)));
 	assert(s_IrqAllocated == 1 && s_IrqReleased == 1);
 	assert(s_Disable == 2U && s_Enable == 2U && s_Mask == 0U);
 	s_SdOn = false;
