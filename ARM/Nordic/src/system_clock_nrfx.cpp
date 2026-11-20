@@ -314,13 +314,27 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 				return false;
 			}
 #if defined(NRF52_SERIES)
-			if (nRFxMpslActive() && !s_bNRFxMpslExternalClock)
+			if (nRFxMpslActive())
+			{
+				if (s_bNRFxMpslExternalClock)
+				{
+					return false;
+				}
+				// MPSL controls CLOCK when LFRC uses its own calibration.
+				// Acquire its HF request before releasing the original
+				// direct request. Do not write CLOCK registers here.
+				if (nRFxMpslHfxo(true) != 0)
+				{
+					return false;
+				}
+				return nRFxMpslHfxo(false) == 0;
+			}
 #else
 			if (nRFxMpslActive())
-#endif
 			{
 				return false;
 			}
+#endif
 			NRF_CLOCK->NRFX_HFXO_STOP = 1U;
 #ifdef CLOCK_HFCLKSRC_SRC_Msk
 			NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
