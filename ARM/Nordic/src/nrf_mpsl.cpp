@@ -52,9 +52,9 @@ SOFTWARE.
 #if defined(NRF52_SERIES)
 #include "mpsl_clock.h"
 
-// Nordic external MPSL clock driver is compiled into the SDC backend.
+// The nRF52 SDC library includes the external MPSL clock-control functions.
 // Select external control automatically when the LF source is LFXO.
-// LFRC uses MPSL internal calibration until backend calibration is added.
+// LFRC uses MPSL calibration until IOsonata implements equivalent calibration.
 // LFXO does not need calibration, but registration requires valid functions.
 static void MpslExternalLfCalibrationStart(void)
 {
@@ -447,7 +447,7 @@ bool MpslInit(void)
 #if defined(NRF52_SERIES)
 	// One SDC library chooses its clock implementation from g_McuOsc.
 	// MPSL external clock control requires external LFRC calibration.
-	// Until that backend is implemented, RC uses MPSL's own calibration.
+	// Until IOsonata provides LFRC calibration, RC uses MPSL's calibration.
 	externalClock = lfosc->Type == OSC_TYPE_XTAL;
 	if (nRFxMpslExternalClockGet())
 	{
