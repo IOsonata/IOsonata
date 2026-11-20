@@ -43,6 +43,16 @@ SOFTWARE.
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
 
+static const BtAppCfg_t s_BtCfg = {
+	.Role = BTAPP_ROLE_BROADCASTER,
+	.PeriphDevMax = 0,
+	.CentralDevMax = 0,
+	.pDevName = "ClockTest",
+	.ConnLedPort = -1,
+	.ConnLedPin = -1,
+	.AdvInterval = 100,
+};
+
 #ifdef NDEBUG
 #include "coredev/uart.h"
 #include "syslog.h"
@@ -50,21 +60,8 @@ SOFTWARE.
 
 #define HFXO_PRINT(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
-// ENDTX is handled by the UART driver interrupt. Wake the foreground
-// drain when DMA completes, without polling UARTE registers.
-static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event, uint8_t *pBuffer,
-	int BufferLen)
-{
-	(void)pDev;
-	(void)pBuffer;
-	(void)BufferLen;
-
-	if (Event == UART_EVT_TXREADY)
-	{
-		__SEV();
-	}
-	return 0;
-}
+static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event,
+	uint8_t *pBuffer, int BufferLen);
 
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
@@ -100,6 +97,22 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.RecordLen = 128,
 	.bBlocking = true,
 };
+
+// ENDTX is handled by the UART driver interrupt. Wake the foreground
+// drain when DMA completes, without polling UARTE registers.
+static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event, uint8_t *pBuffer,
+	int BufferLen)
+{
+	(void)pDev;
+	(void)pBuffer;
+	(void)BufferLen;
+
+	if (Event == UART_EVT_TXREADY)
+	{
+		__SEV();
+	}
+	return 0;
+}
 
 static void HfxoConsoleInit(void)
 {
@@ -138,16 +151,6 @@ static void HfxoConsoleDrain(void)
 {
 }
 #endif
-
-static const BtAppCfg_t s_BtCfg = {
-	.Role = BTAPP_ROLE_BROADCASTER,
-	.PeriphDevMax = 0,
-	.CentralDevMax = 0,
-	.pDevName = "ClockTest",
-	.ConnLedPort = -1,
-	.ConnLedPin = -1,
-	.AdvInterval = 100,
-};
 
 int main(void)
 {
