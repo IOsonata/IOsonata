@@ -331,11 +331,10 @@ to the remaining user instead of stopping it.
 This approach does not create an application mode, public API, or
 additional library configuration. It preserves the already-tested normal
 S132 clock paths while handling the previously failing pre-stack request
-case. The nRF52832 S132 pre-stack clock request and shutdown checks passed on hardware. Also
-verify final logical release, continuous HFXO through startup,
-reacquisition during BLE operation, and the actual SoftDevice shutdown
-event including final physical STOP and energy behavior. The shutdown
-observer must be delivered by the linked Nordic SDK.
+case. On nRF52832, the pre-stack request, S132 startup, clock release,
+SoftDevice shutdown, and direct HFXO enable/disable after shutdown passed
+hardware tests. Concurrent requests during active radio traffic, other
+nRF52 targets, and power consumption still require measurement.
 
 ### Nordic owner integration investigation
 
