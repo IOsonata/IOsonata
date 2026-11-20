@@ -739,8 +739,9 @@ static void dtm_test_done(void)
  */
 static uint32_t timer_init(void)
 {
-    // Use the configured HF source for the duration of DTM
-    if (SystemHighFreqClockEnable() == false)
+    // DTM requires the configured high-frequency crystal source.
+    if (GetHighFreqOscType() == OSC_TYPE_RC ||
+        SystemHighFreqClockEnable() == false)
     {
         return DTM_ERROR_ILLEGAL_CONFIGURATION;
     }
