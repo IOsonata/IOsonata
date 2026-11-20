@@ -32,7 +32,7 @@ class Nrf52DelayCalibration(unittest.TestCase):
                           r"\(\(uint64_t\)SystemCoreClock\s*<<\s*16\)\s*/\s*"
                           r"(\d+)UL;", self.system)
         self.assertIsNotNone(match)
-        self.assertEqual(int(match.group(1)), 3120000)
+        self.assertEqual(int(match.group(1)), 3189000)
 
     def test_fixed_point_loop_units(self):
         self.assertIn("SystemMicroSecLoopCnt + 65535ULL) >> 16", self.delay)
@@ -42,13 +42,13 @@ class Nrf52DelayCalibration(unittest.TestCase):
     def test_250ms_scale_at_64mhz(self):
         frequency = 64000000
         us_factor = (frequency << 16) // 13000000
-        ns_factor = (frequency << 16) // 3120000
+        ns_factor = (frequency << 16) // 3189000
         long_loops = (250000 * us_factor + 65535) >> 16
         short_loops = (250000000 * ns_factor + 65535999) // 65536000
         self.assertLess(abs(long_loops * 13 - 16000000), 128)
-        # The calibrated nRF52832 Release loop takes about 3.12 cycles
-        # per iteration including instruction fetch effects.
-        self.assertLess(abs(short_loops * 312 - 1600000000), 12800)
+        # Measured 255500 us at the previous 3120000 divisor. The
+        # adjusted effective loop calibration is 3.189 cycles.
+        self.assertLess(abs(short_loops * 3189 - 16000000000), 128000)
 
 
 if __name__ == "__main__":
