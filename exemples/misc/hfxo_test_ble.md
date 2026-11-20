@@ -49,16 +49,20 @@ For the nRF52832 SDC LFRC ownership check, compile the separate
 SDC library. It selects LFRC before MPSL initializes, keeps MPSL's own
 LFRC calibration, holds a direct HFXO request across MPSL initialization,
 and reports the physical HFXO state immediately after that request is
-released. Confirm `Select LFRC: PASS`, `Clock survives stack init: PASS`,
-`Pre-stack physical release: PASS, HFXO stopped`, and
-`Pre-stack handover: PASS`. The diagnostic waits 10 ms before checking
-physical HFXO release. The portable `HfxoTestBle: PASS` cannot establish
-that HFXO stopped.
+released. Confirm `Select LFRC: PASS` and `Clock survives stack init: PASS`.
+After the pre-stack release, the diagnostic samples HFXO every 10 ms for
+200 samples (2 seconds) and reports how many times it was stopped.
+LFRC calibration can temporarily run HFXO, so one running sample is not
+evidence of a leaked clock reference. If HFXO never stops during this
+window, the diagnostic reports `Pre-stack physical release: FAIL`.
+The portable `HfxoTestBle: PASS` cannot establish physical HFXO release.
 
-The nRF52832 LFRC hardware test reported HFXO still running after the
-pre-stack request was released. The earlier diagnostic incorrectly reported
-this as a successful handover. Until the original direct HFXO start is
-safely relinquished without interfering with MPSL, this path is not complete.
+The first nRF52832 LFRC hardware test observed HFXO running 10 ms after
+release. That is not sufficient to distinguish LFRC calibration from an
+unreleased direct CLOCK start. The 2-second observation test has not yet
+been run on hardware. If HFXO remains continuously running, the original
+direct request still requires an ownership fix that does not interfere
+with MPSL or its LFRC calibration.
 
 Do not replace the shared `exemples/misc/hfxo_test_ble.cpp` source
 with Nordic-specific initialization. The LFRC diagnostic is not yet
