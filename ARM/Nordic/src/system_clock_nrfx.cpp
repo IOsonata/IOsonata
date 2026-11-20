@@ -167,6 +167,7 @@ static bool s_bNRFxMpslHfxoOwned;
 static bool s_bNRFxMpslLfclkOwned;
 static bool s_bNRFxMpslCalibrationPending;
 static bool s_bNRFxMpslCalibrationRunning;
+static volatile uint32_t s_nRFxMpslCalibrationCount;
 #endif
 
 // Shared LFCLK enable count belongs here, not in the RTC driver.
@@ -837,6 +838,11 @@ bool nRFxMpslLfclkCalibrationIsEnabled(void)
 	return g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC;
 }
 
+uint32_t nRFxMpslLfclkCalibrationCount(void)
+{
+	return s_nRFxMpslCalibrationCount;
+}
+
 void nRFxMpslClockIrq(void)
 {
 	if (!s_bNRFxMpslExternalClock)
@@ -858,6 +864,7 @@ void nRFxMpslClockIrq(void)
 			NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_DONE_Msk;
 			s_bNRFxMpslCalibrationRunning = false;
 			s_bNRFxMpslCalibrationPending = false;
+			s_nRFxMpslCalibrationCount++;
 			nRFxMpslHfclkRelease();
 			// CTIV is specified in 0.25-second units on nRF52.
 			// Recalibrate every four seconds; MPSL can request
