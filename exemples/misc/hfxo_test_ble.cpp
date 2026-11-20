@@ -56,9 +56,9 @@ static const BtAppCfg_t s_BtCfg = {
 	.PeriphDevMax = 0,
 	.CentralDevMax = 0,
 	.pDevName = "ClockTest",
+	.AdvInterval = 100,
 	.ConnLedPort = -1,
 	.ConnLedPin = -1,
-	.AdvInterval = 100,
 };
 
 #ifdef NDEBUG
