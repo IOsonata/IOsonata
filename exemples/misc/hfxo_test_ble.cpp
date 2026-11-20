@@ -3,7 +3,7 @@
 
 @brief	HFXO requests with Nordic BLE clock ownership
 
-Initializes SoftDevice or MPSL before testing SystemCoreClockSelect.
+Initializes SoftDevice or MPSL before testing generic HF clock Enable/Disable.
 Debug writes through semihosting; Release writes to UART at 1 Mbaud.
 The SDC configuration initializes MPSL, which manages HFXO requests.
 This does not test advertising, connections or enabling SDC itself.
@@ -181,15 +181,19 @@ int main(void)
 	initial = HfxoRunning();
 	HFXO_PRINT("Initial HFXO: %s\r\n", initial ? "running" : "stopped");
 
-	first = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+	first = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U) &&
+		SystemHighFreqClockEnable();
 	running1 = HfxoRunning();
-	second = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+	second = SystemHighFreqClockEnable();
 	running2 = HfxoRunning();
-	release1 = SystemCoreClockSelect(OSC_TYPE_RC, 0U);
+	SystemHighFreqClockDisable();
+	release1 = true;
 	running3 = HfxoRunning();
-	release2 = SystemCoreClockSelect(OSC_TYPE_RC, 0U);
+	SystemHighFreqClockDisable();
+	release2 = true;
 	final = HfxoRunning();
-	failed = SystemCoreClockSelect(OSC_TYPE_RC, 0U) == false;
+	SystemHighFreqClockDisable();
+	failed = HfxoRunning() == final;
 
 	pass = 0;
 	if (first && running1)
@@ -206,17 +210,17 @@ int main(void)
 	{
 		pass++;
 	}
-	HfxoResult("First release", release1 && running3, running3);
+	HfxoResult("First disable", release1 && running3, running3);
 	if (release2)
 	{
 		pass++;
 	}
-	HfxoResult("Last release", release2, final);
+	HfxoResult("Last disable", release2, final);
 	if (failed)
 	{
 		pass++;
 	}
-	HfxoResult("Unmatched release", failed, final);
+	HfxoResult("Unmatched disable", failed, final);
 	HFXO_PRINT("HfxoTestBle: %d/5 checks PASS\r\n", pass);
 
 	while (1)
