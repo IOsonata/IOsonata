@@ -159,6 +159,13 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertEqual(callback.count("SystemHighFreqClockDisable();"), 2)
         self.assertIn("s_ClockCheckFailures++", callback)
         self.assertIn("BLE clock requests: %u checks, %u failures", callback)
+        self.assertIn("s_ClockCheckCount == 1U", callback)
+        self.assertIn("s_bClockCheckPending = false", callback)
+        self.assertIn("s_bClockCheckQueued = false", callback)
+        self.assertIn("BLE GATT write received", source)
+        self.assertIn("s_bClockCheckQueued = AppEvtHandlerQue(0U, nullptr, ClockCheckEvt)", source)
+        self.assertIn("if (s_bClockCheckPending && !s_bClockCheckQueued)", source)
+        self.assertIn("!s_bClockCheckPending", source)
         gatt = source.split("void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)\n{", 1)[1]
         self.assertIn("g_Uart.Tx(pData, Len);", gatt)
         self.assertNotIn("SystemHighFreqClockEnable()", gatt)
