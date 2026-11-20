@@ -111,6 +111,7 @@ typedef struct {
 	const uint8_t *pTxData;
 	volatile bool *pTxWait;	// Completion of a transmit using the caller's buffer
 	volatile bool bTxAbort;	// Timed out, waiting for STOPPED or READY
+	volatile bool bDmaActive;	// Hardware may still access the programmed DMA buffer
 	bool bDmaCancelPending;	// Polling DMA timed out before STOP was confirmed
 	bool bDmaCancelWasRx;	// Release receive ownership only after DMA stops
 	bool bCmdFailed;		// Cancelled command, do not start its receive phase
