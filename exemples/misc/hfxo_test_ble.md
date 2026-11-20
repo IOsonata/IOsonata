@@ -105,9 +105,11 @@ through the Nordic Bluetooth implementation.
 Clean-build the nRF52832 IOsonata library and `BleAdvertiser/Release_SDC`
 in IOcomposer, then flash the board. Use a second device with a BLE
 scanner to look for the name `Advertising`. Observe the device for at
-least 30 seconds, longer than the four-second calibration period, and
-check that the manufacturer data counter changes. The device should
-remain discoverable and advertise without a reset or hang.
+least 30 seconds, longer than the four-second calibration period. The
+device should remain discoverable with repeated advertising packets and
+no resets or hangs. Do not require the manufacturer data counter to
+change: the example currently notes that its advertising-timeout callback
+is not available in the SDC implementation.
 
 Record the advertising result separately from the LFRC clock diagnostic.
 The 12-second `HfxoTestBle` diagnostic confirms calibration completion;
