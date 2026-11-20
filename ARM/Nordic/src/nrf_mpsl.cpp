@@ -55,10 +55,20 @@ SOFTWARE.
 // Nordic external MPSL clock driver is compiled into the SDC backend.
 // Select external control automatically when the LF source is LFXO.
 // LFRC uses MPSL internal calibration until backend calibration is added.
+// LFXO does not need calibration, but registration requires valid functions.
+static void MpslExternalLfCalibrationStart(void)
+{
+}
+
+static bool MpslExternalLfCalibrationIsEnabled(void)
+{
+	return false;
+}
+
 static mpsl_clock_lfclk_ctrl_source_t s_MpslExternalLf = {
 	.lfclk_wait = nRFxMpslLfclkWait,
-	.lfclk_calibration_start = nullptr,
-	.lfclk_calibration_is_enabled = nullptr,
+	.lfclk_calibration_start = MpslExternalLfCalibrationStart,
+	.lfclk_calibration_is_enabled = MpslExternalLfCalibrationIsEnabled,
 	.lfclk_request = nRFxMpslLfclkRequest,
 	.lfclk_release = nRFxMpslLfclkRelease,
 	.accuracy_ppm = 0U,
