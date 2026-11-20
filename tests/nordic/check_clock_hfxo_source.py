@@ -297,7 +297,7 @@ class HfxoSourceChecks(unittest.TestCase):
 
     def test_failed_start_relinquishes_vendor_clock_request(self):
         source = function(self.clock, "static bool nRFxHfxoStart(",
-                          "// Stop only through the backend")
+                          "// Release HFXO through the owner")
         self.assertIn("sd_clock_hfclk_request()", source)
         self.assertGreaterEqual(source.count("sd_clock_hfclk_release()"), 2)
         self.assertIn("NRFX_HFXO_OWNER_SOFTDEVICE", source)
