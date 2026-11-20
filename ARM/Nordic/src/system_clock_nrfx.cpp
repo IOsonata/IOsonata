@@ -634,6 +634,17 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		EnableInterrupt(state);
 		return false;
 	}
+	if (!change)
+	{
+		// Commit an explicit owner before unmasking a possible RTC release.
+		// No hardware transition is necessary for an already running source.
+		s_bNRFxLfclkSelected = true;
+		s_bNRFxLfclkOwned = false;
+		g_McuOsc.LowPwrOsc.Type = ClkSrc;
+		g_McuOsc.LowPwrOsc.Freq = 32768U;
+		EnableInterrupt(state);
+		return true;
+	}
 	s_bNRFxLfclkTransition = true;
 	EnableInterrupt(state);
 
