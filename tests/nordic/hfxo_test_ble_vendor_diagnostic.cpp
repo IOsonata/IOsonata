@@ -229,7 +229,8 @@ static int HfxoPreStackTest(void)
 
 	SystemHighFreqClockDisable();
 	// S132 may defer the physical STOP until SoftDevice shutdown.
-	HFXO_PRINT("Pre-stack request released\r\n");
+	HFXO_PRINT("Pre-stack request released, HFXO %s\r\n",
+		HfxoRunning() ? "running" : "stopped");
 
 	reenabled = SystemHighFreqClockEnable();
 	running = HfxoRunning();
@@ -271,6 +272,18 @@ int main(void)
 
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTestBle\r\n");
+#if defined(NRFXLIB_SDC)
+	// Test the LFRC selection while MPSL retains its own calibration.
+	// This belongs to the Nordic diagnostic, not the portable application.
+	if (!SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U))
+	{
+		HFXO_PRINT("Select LFRC: FAIL\r\n");
+		HfxoConsoleDrain();
+		return 1;
+	}
+	g_McuOsc.LowPwrOsc.Accuracy = 500U;
+	HFXO_PRINT("Select LFRC: PASS\r\n");
+#endif
 	preStackResult = HfxoPreStackTest();
 	HFXO_PRINT("Pre-stack test result: %s\r\n",
 		preStackResult == 0 ? "PASS" : "FAIL");
