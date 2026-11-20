@@ -447,6 +447,10 @@ int main(void)
 	ClockDemoFlush();
 	ClockDemoPrint("ClockDemo complete: %u failures\r\n", s_Failures);
 	ClockDemoFlush();
+#if CLOCK_DEMO_STOP_UART
+	// The UART driver finishes pending TX before the last PowerOff.
+	UARTPowerOff(&s_Uart);
+#endif
 	while (1)
 	{
 		msDelay(1000);
