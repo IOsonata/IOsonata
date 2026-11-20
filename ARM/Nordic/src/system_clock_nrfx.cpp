@@ -540,7 +540,15 @@ bool nRFxLfclkAcquire(nRFxLfclkRequest_t Source)
 	}
 	if (s_nRFxLfclkReqCnt != 0U)
 	{
-		// Existing consumers retain the current source.
+		// RTCs share one LFCLK. An explicit source must match the source
+		// already running for the other users.
+		if (Source != NRFX_LFCLK_REQUEST_DEFAULT &&
+			(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+			(src & NRFX_LFCLK_SRC_Msk))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
 		s_nRFxLfclkReqCnt++;
 		EnableInterrupt(state);
 		return true;
@@ -548,7 +556,15 @@ bool nRFxLfclkAcquire(nRFxLfclkRequest_t Source)
 	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
 	if (running && !s_bNRFxLfclkStopPending)
 	{
-		// A source already running may belong to the system or BLE stack.
+		// Do not reconfigure another owner's clock or silently accept
+		// an explicit RTC source that does not match its actual source.
+		if (Source != NRFX_LFCLK_REQUEST_DEFAULT &&
+			(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+			(src & NRFX_LFCLK_SRC_Msk))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
 		s_nRFxLfclkReqCnt = 1U;
 		EnableInterrupt(state);
 		return true;
