@@ -237,11 +237,21 @@ updated to use those functions. The redundant Nordic LFCLK private header
 has been deleted. Source review is not a substitute for a complete build,
 SoftDevice/SDC integration tests, and actual hardware validation.
 
-A failed clock-owner transition during a void Disable operation is a
-remaining validation concern: the backend retains its internal count to
-avoid stopping an oscillator owned by the stack. Peripheral-level teardown
-must not assume that such a failed transition has fully shut down hardware.
-Verify this behavior at BLE handover before sign-off.
+A direct-to-BLE clock-owner transition has a confirmed limitation on
+nRF52832 with SDC/MPSL. The optional HfxoTestBle pre-stack diagnostic
+enabled HFXO directly, initialized MPSL successfully, and verified that
+HFXO kept running. The subsequent SystemHighFreqClockDisable could not
+finish because MPSL already controlled CLOCK; the outstanding request
+prevented the core oscillator selection interface from being used.
+
+Do not discard the reference count or write CLOCK STOP behind an active BLE
+stack. Applications that can end their direct HF clock use before BLE
+startup must disable that clock, initialize S132 or MPSL, then enable it
+again through the stack owner. The sequence may stop the oscillator
+temporarily; it is not a seamless handover. HfxoTestBle supports diagnostic
+mode 1 (direct-to-stack, known SDC failure) and mode 2 (release before stack,
+pending hardware test). A continuous transition requires a separately
+validated Nordic-supported implementation and must not be assumed safe.
 
 ## Cross-MCU implementation and validation
 
