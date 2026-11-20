@@ -147,7 +147,10 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("g_McuOsc.LowPwrOsc.Accuracy = 500U", diagnostic)
         self.assertIn("Select LFRC: PASS", diagnostic)
         self.assertIn("Pre-stack physical release", diagnostic)
-        self.assertIn('HfxoResult("Pre-stack physical release", stopped, !stopped)', diagnostic)
+        self.assertIn("stoppedSamples = 0U", diagnostic)
+        self.assertIn("sample < 200U", diagnostic)
+        self.assertIn("stopped = stoppedSamples != 0U", diagnostic)
+        self.assertIn('HfxoResult("Pre-stack physical release", stopped, HfxoRunning())', diagnostic)
         self.assertIn('return stopped ? 0 : 1;', diagnostic)
         portable = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
             encoding="utf-8")
