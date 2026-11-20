@@ -37,6 +37,44 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("if (success)", disable)
         self.assertNotIn("std::atomic", source)
 
+    def test_generic_clock_sources_and_lifecycle(self):
+        header = (ROOT / "include/coredev/system_core_clock.h").read_text(
+            encoding="utf-8")
+        rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(
+            encoding="utf-8")
+        for name in ("SystemHighFreqClockEnable",
+                     "SystemHighFreqClockDisable",
+                     "SystemLowFreqClockEnable",
+                     "SystemLowFreqClockDisable"):
+            self.assertIn(name + "(void)", header)
+            self.assertIn(name + "(void)", self.clock)
+        self.assertIn("g_McuOsc.CoreOsc.Type", self.clock)
+        self.assertIn("g_McuOsc.LowPwrOsc.Type", self.clock)
+        self.assertIn("SystemLowFreqClockEnable()", rtc)
+        self.assertIn("SystemLowFreqClockDisable()", rtc)
+        self.assertNotIn("nRFxLfclkAcquire", self.clock)
+        self.assertNotIn("nRFxLfclkRelease", self.clock)
+        self.assertNotIn("nRFxLfclkAcquire", rtc)
+        self.assertNotIn("nRFxLfclkRelease", rtc)
+        self.assertFalse(
+            (ROOT / "ARM/Nordic/include/system_clock_nrfx.h").exists())
+
+    def test_core_select_does_not_enable_hfxo(self):
+        select = function(self.clock, "bool SystemCoreClockSelect(",
+                          "bool SystemHighFreqClockEnable(")
+        self.assertIn("g_McuOsc.CoreOsc.Type = ClkSrc", select)
+        self.assertIn("s_nRFxHfxoReqCnt != 0U", select)
+        self.assertNotIn("nRFxHfxoStart(", select)
+        self.assertNotIn("nRFxHfxoStop(", select)
+
+    def test_low_frequency_select_does_not_start_clock(self):
+        select = function(self.clock, "bool SystemLowFreqClockSelect(",
+                          "uint32_t SystemPeriphClockGet(")
+        self.assertIn("g_McuOsc.LowPwrOsc.Type = ClkSrc", select)
+        self.assertIn("s_nRFxLfclkReqCnt != 0U", select)
+        self.assertNotIn("nRFxLfclkStart(", select)
+        self.assertNotIn("TASKS_LFCLKSTART", select)
+
     def test_softdevice_probe_requires_sdk_runtime_state(self):
         source = function(self.clock, "static bool nRFxClockSdEnabled(",
                           "static bool nRFxHfxoRunning(")
