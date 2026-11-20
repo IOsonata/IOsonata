@@ -43,6 +43,14 @@ SOFTWARE.
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
 
+#ifdef NDEBUG
+#include "coredev/uart.h"
+#include "syslog.h"
+#include "board.h"
+#else
+#include <stdio.h>
+#endif
+
 static const BtAppCfg_t s_BtCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
 	.PeriphDevMax = 0,
@@ -54,10 +62,6 @@ static const BtAppCfg_t s_BtCfg = {
 };
 
 #ifdef NDEBUG
-#include "coredev/uart.h"
-#include "syslog.h"
-#include "board.h"
-
 #define HFXO_PRINT(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
 static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event,
@@ -140,7 +144,6 @@ static void HfxoConsoleDrain(void)
 	}
 }
 #else
-#include <stdio.h>
 #define HFXO_PRINT(...) printf(__VA_ARGS__)
 
 static void HfxoConsoleInit(void)
