@@ -262,6 +262,12 @@ int main(void)
 	bool final;
 	bool failed;
 	int pass;
+#if defined(SOFTDEVICE_PRESENT) && !defined(NRFXLIB_SDC)
+	bool stopped;
+	bool enabled;
+	bool started;
+	bool released;
+#endif
 
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTestBle\r\n");
@@ -338,11 +344,6 @@ int main(void)
 	// A subsequent direct enable/disable must work without stack ownership.
 	if (nrf_sdh_disable_request() == 0U)
 	{
-		bool stopped;
-		bool enabled;
-		bool started;
-		bool released;
-
 		stopped = !HfxoRunning();
 		HfxoResult("S132 shutdown", stopped, !stopped);
 		enabled = SystemHighFreqClockEnable();
