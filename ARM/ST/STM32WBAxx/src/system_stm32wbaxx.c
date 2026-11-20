@@ -432,6 +432,26 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return true;
 }
 
+/*
+ * On STM32WBA the configured high-frequency oscillator feeds the running
+ * system clock. It cannot be stopped when an application releases a shared
+ * clock requirement. Validate availability without changing the system
+ * clock or the Bluetooth controller's RCC ownership.
+ */
+bool SystemHighFreqClockEnable(void)
+{
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+	{
+		return (RCC->CR & RCC_CR_HSIRDY) != 0U;
+	}
+	return (RCC->CR & RCC_CR_HSERDY) != 0U;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	// Core HSI/HSE continues to run irrespective of user reservations.
+}
+
 /* Core clock frequency (HCLK1) in Hz */
 uint32_t SystemHFClockGet(void)
 {
