@@ -21,19 +21,20 @@ class HfxoSourceChecks(unittest.TestCase):
         cls.clock = CLOCK.read_text(encoding="utf-8")
         cls.mpsl = MPSL.read_text(encoding="utf-8")
 
-    def test_public_api_uses_first_acquire_last_release(self):
-        source = function(self.clock, "bool SystemCoreClockSelect(",
-                          "// Starts LFCLK from Src")
+    def test_public_api_uses_first_enable_last_disable(self):
+        source = function(self.clock, "bool SystemHighFreqClockEnable(",
+                          "// System OFF requires HFXO stopped")
         self.assertIn("s_nRFxHfxoReqCnt != 0U", source)
         self.assertIn("s_nRFxHfxoReqCnt++", source)
-        self.assertIn("s_nRFxHfxoReqCnt > 1U", source)
-        self.assertIn("s_nRFxHfxoReqCnt--", source)
         self.assertIn("s_bNRFxHfxoTransition = true", source)
         self.assertIn("s_bNRFxHfxoTransition = false", source)
         self.assertIn("success = nRFxHfxoStart(&owner)", source)
-        self.assertIn("success = nRFxHfxoStop(owner)", source)
-        self.assertIn("if (ClkSrc == OSC_TYPE_RC && success)", source)
-        self.assertIn("else if (success)", source)
+        disable = function(self.clock, "void SystemHighFreqClockDisable(",
+                           "// System OFF requires HFXO stopped")
+        self.assertIn("s_nRFxHfxoReqCnt > 1U", disable)
+        self.assertIn("s_nRFxHfxoReqCnt--", disable)
+        self.assertIn("success = nRFxHfxoStop(owner)", disable)
+        self.assertIn("if (success)", disable)
         self.assertNotIn("std::atomic", source)
 
     def test_softdevice_probe_requires_sdk_runtime_state(self):
@@ -59,7 +60,7 @@ class HfxoSourceChecks(unittest.TestCase):
 
     def test_nrf54l_system_off_checks_hfxo(self):
         source = function(self.clock, "bool nRFxClockPrepareSystemOff(",
-                          "// Starts LFCLK from Src")
+                          "static bool nRFxLfclkOscSource(")
         self.assertIn("s_nRFxHfxoReqCnt != 0U", source)
         self.assertIn("s_bNRFxHfxoTransition", source)
         self.assertIn("nRFxMpslActive()", source)
@@ -78,7 +79,7 @@ class HfxoSourceChecks(unittest.TestCase):
 
     def test_failed_start_releases_clock_request(self):
         source = function(self.clock, "static bool nRFxHfxoStart(",
-                          "// Release only through the backend")
+                          "// Stop only through the backend")
         self.assertIn("sd_clock_hfclk_request()", source)
         self.assertGreaterEqual(source.count("sd_clock_hfclk_release()"), 2)
         self.assertIn("NRFX_HFXO_OWNER_SOFTDEVICE", source)
