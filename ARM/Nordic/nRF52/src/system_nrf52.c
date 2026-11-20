@@ -152,11 +152,11 @@ uint32_t SystemCoreClockGet(void)
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	// nRF52832 Release ClockDemo measured 250123 us for msDelay(250)
-	// with 13 cycles per long-loop iteration. With a 6-cycle short-loop
-	// factor, nsDelay(250 ms) measured 125065 us; use 3 cycles instead.
+	// nRF52832 Release ClockDemo: msDelay(250) measures about 250123 us.
+	// Repeated nsDelay(250 ms) measurements at divisor 3120000 were
+	// 255500 us. Adjust the effective short-loop calibration to 3189000.
 	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 13000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3120000UL;
+	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3189000UL;
 }
 
 void SystemInit(void)
