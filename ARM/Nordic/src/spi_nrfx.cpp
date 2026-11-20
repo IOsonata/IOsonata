@@ -1121,9 +1121,120 @@ void nRFxSPIStopTx(DevIntrf_t * const pDev)
     }
 }
 
+// Cancel a master transfer without releasing its DMA buffers until the
+// peripheral reports END or STOPPED. A failed hardware stop retains bBusy
+// so a later Reset can complete cancellation safely.
 void nRFxSPIReset(DevIntrf_t * const pDev)
 {
+	nRFSpiDev_t *dev;
+	volatile bool *waiter;
+	uint32_t irq;
+	int count;
+	bool pending;
+	bool rx;
 
+	if (pDev == NULL || pDev->pDevData == NULL ||
+		__get_IPSR() != 0U)
+	{
+		return;
+	}
+	dev = (nRFSpiDev_t *)pDev->pDevData;
+	if (dev->pSpiDev == NULL || dev->bPeiPrepared ||
+		dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	{
+		// SPIS and PEI have independent buffer ownership.
+		return;
+	}
+
+	irq = __get_PRIMASK();
+	__disable_irq();
+	pending = dev->bDmaActive || dev->bDmaCancelPending ||
+		dev->bTxAbort || dev->RxBufflen > 0 ||
+		dev->TxDatalen > 0 || dev->TxIdx > 0;
+	rx = dev->bDmaCancelWasRx || dev->RxBufflen > 0;
+	count = rx ? dev->RxIdx : dev->TxIdx;
+
+#ifdef SPIM_PRESENT
+	if (pDev->bDma)
+	{
+		if (dev->bDmaActive && !nRFxSPIDmaStop(dev))
+		{
+			dev->bDmaCancelPending = true;
+			dev->bDmaCancelWasRx = rx;
+			__set_PRIMASK(irq);
+			return;
+		}
+
+		dev->pDmaReg->INTENCLR = SPIM_INTENCLR_STOPPED_Msk;
+		dev->pDmaReg->EVENTS_END = 0U;
+		dev->pDmaReg->EVENTS_STOPPED = 0U;
+		NRFX_SPI_ENDRX(dev->pDmaReg) = 0U;
+		NRFX_SPI_ENDTX(dev->pDmaReg) = 0U;
+		NRFX_SPI_RX(dev->pDmaReg).MAXCNT = 0U;
+		NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0U;
+		NRFX_SPI_RX(dev->pDmaReg).PTR = 0U;
+		NRFX_SPI_TX(dev->pDmaReg).PTR = 0U;
+	}
+	else
+#endif
+	{
+#ifdef SPI_PRESENT
+		// The byte being shifted has already been copied to TXD.
+		// Disable READY before detaching the remaining caller data.
+		dev->pReg->INTENCLR = SPI_INTENCLR_READY_Msk;
+		dev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Disabled << SPI_ENABLE_ENABLE_Pos);
+		dev->pReg->EVENTS_READY = 0U;
+		dev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
+		if (pDev->bIntEn)
+		{
+			dev->pReg->INTENSET = SPI_INTENSET_READY_Msk;
+		}
+#endif
+	}
+
+	waiter = dev->pTxWait;
+	dev->pTxWait = NULL;
+	dev->pTxData = NULL;
+	dev->pRxBuff = NULL;
+	dev->TxDatalen = 0;
+	dev->TxIdx = 0;
+	dev->RxBufflen = 0;
+	dev->RxIdx = 0;
+	dev->bTxAbort = false;
+	dev->bDmaActive = false;
+	dev->bDmaCancelPending = false;
+	dev->bDmaCancelWasRx = false;
+	dev->bCmdFailed = false;
+	atomic_store(&pDev->bNoStop, false);
+	if (waiter != NULL)
+	{
+		*waiter = true;
+	}
+	__set_PRIMASK(irq);
+
+	if (pending)
+	{
+		if (rx)
+		{
+			DeviceIntrfStopRx(pDev);
+			if (pDev->EvtCB != NULL)
+			{
+				pDev->EvtCB(pDev, DEVINTRF_EVT_RX_TIMEOUT, NULL, count);
+			}
+		}
+		else
+		{
+			DeviceIntrfTxComplete(pDev);
+			if (pDev->EvtCB != NULL)
+			{
+				pDev->EvtCB(pDev, DEVINTRF_EVT_TX_TIMEOUT, NULL, count);
+			}
+		}
+	}
+	else
+	{
+		atomic_store(&pDev->bTxReady, true);
+	}
 }
 
 void *nRFxSPIGetHandle(DevIntrf_t * const pDev)
