@@ -151,6 +151,12 @@ typedef enum {
 static uint32_t s_nRFxHfxoReqCnt = 0U;
 static bool s_bNRFxHfxoTransition = false;
 static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+// A direct request may outlive SoftDevice initialization. The last
+// application user releases its logical reference immediately, but the
+// physical direct STOP is deferred until SoftDevice has been disabled.
+static bool s_bNRFxSdDirectStopPending;
+#endif
 #if defined(NRF52_SERIES)
 // MPSL external clock-control calls can run at high priority. Its requests
 // are counted separately from IOsonata users but share the same oscillator.
@@ -325,6 +331,43 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 	}
 }
 
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+static void nRFxClockSdhStateHandler(nrf_sdh_state_evt_t Event, void *pContext)
+{
+	uint32_t state;
+
+	(void)pContext;
+	if (Event != NRF_SDH_EVT_STATE_DISABLED)
+	{
+		return;
+	}
+
+	state = DisableInterrupt();
+	if (s_bNRFxSdDirectStopPending && s_nRFxHfxoReqCnt == 0U &&
+		!s_bNRFxHfxoTransition)
+	{
+		NRF_CLOCK->NRFX_HFXO_STOP = 1U;
+#ifdef CLOCK_HFCLKSRC_SRC_Msk
+		NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
+#endif
+		s_bNRFxSdDirectStopPending = false;
+	}
+	else if (s_bNRFxSdDirectStopPending && s_nRFxHfxoReqCnt != 0U)
+	{
+		// Outstanding users keep the oscillator. The released
+		// SoftDevice owner is no longer the owner after shutdown.
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_DIRECT;
+		s_bNRFxSdDirectStopPending = false;
+	}
+	EnableInterrupt(state);
+}
+
+NRF_SDH_STATE_OBSERVER(s_NRfxClockSdhObserver, 0) = {
+	.handler = nRFxClockSdhStateHandler,
+	.p_context = nullptr,
+};
+#endif
+
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t state;
@@ -419,6 +462,19 @@ void SystemHighFreqClockDisable(void)
 		EnableInterrupt(state);
 		return;
 	}
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	if (s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT &&
+		nRFxClockSdEnabled())
+	{
+		// BLE retains physical CLOCK ownership until its shutdown.
+		// A direct STOP here would violate SoftDevice ownership.
+		s_bNRFxSdDirectStopPending = true;
+		s_nRFxHfxoReqCnt = 0U;
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+		EnableInterrupt(state);
+		return;
+	}
+#endif
 #if defined(NRF52_SERIES)
 	if (s_bNRFxMpslExternalClock)
 	{
