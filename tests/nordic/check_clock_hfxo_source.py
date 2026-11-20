@@ -99,7 +99,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("#define HFXO_TEST_PRESTACK 0", source)
         self.assertIn("static int HfxoPreStackTest(void)", source)
         pre = function(source, "static int HfxoPreStackTest(void)",
-                       "#endif")
+                       "int main(void)")
         self.assertLess(pre.index("SystemHighFreqClockEnable()"),
                         pre.index("HfxoStackInit()"))
         self.assertIn("#if HFXO_TEST_PRESTACK == 2", pre)
