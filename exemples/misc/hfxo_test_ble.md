@@ -1,147 +1,70 @@
-# HFXO test with Nordic BLE clock ownership
+# HFXO clock ownership test with Nordic BLE stacks
 
-The existing HfxoTest is the bare-metal test. Each MCU has one IOcomposer managed project with four configurations for
-SoftDevice and MPSL clock ownership.
+This is an internal clock-backend diagnostic. It exercises HFXO
+reference counting across Nordic Bluetooth-stack initialization and
+shutdown. It is **not** an example of how an application should initialize
+Bluetooth.
 
-| MCU | Project | Configuration | Clock owner |
+Applications use IOsonata's generic `BtAppInit()` interface. The Nordic
+Bluetooth backend initializes and owns S132/S140 or SDC/MPSL as required.
+An application does not call `MpslInit()`, `nrf_sdh_enable_request()`,
+`nrf_sdh_disable_request()`, or any Nordic clock-control API.
+
+Likewise, an application does not select the HF oscillator or choose a
+clock-owner mode. The board oscillator is described by `g_McuOsc`, which
+is established at system initialization. Drivers request and release the
+clocks they need via generic IOsonata clock interfaces.
+
+## Diagnostic builds
+
+| MCU | Project | Build configuration | Vendor stack |
 | --- | --- | --- | --- |
-| nRF52832 | HfxoTestBle | Debug / Release | S132 SoftDevice |
-| nRF52832 | HfxoTestBle | Debug_SDC / Release_SDC | MPSL |
-| nRF52840 | HfxoTestBle | Debug / Release | S140 SoftDevice |
-| nRF52840 | HfxoTestBle | Debug_SDC / Release_SDC | MPSL |
+| nRF52832 | HfxoTestBle | Debug / Release | S132 |
+| nRF52832 | HfxoTestBle | Debug_SDC / Release_SDC | SDC/MPSL |
+| nRF52840 | HfxoTestBle | Debug / Release | S140 |
+| nRF52840 | HfxoTestBle | Debug_SDC / Release_SDC | SDC/MPSL |
 
-The Debug/Release configurations call `nrf_sdh_enable_request()` before testing
-`SystemHighFreqClockEnable()` and `SystemHighFreqClockDisable()`. Program the matching SoftDevice image before
-starting this application. Use the corresponding IOsonata library build.
+Debug builds use semihosting and Release builds use UART at
+1,000,000 baud. UART Release output is interrupt-driven with EasyDMA.
+The diagnostic waits for pending UART output before its final idle loop.
 
-The Debug_SDC/Release_SDC configurations call `MpslInit()`. MPSL handles the clock requests used by
-SDC, but this example does not initialize the full Bluetooth controller or
-start radio activity. It tests MPSL clock ownership only.
+The diagnostic automatically:
 
-Debug and Debug_SDC use `printf` with semihosting. Enable semihosting in
-the debugger. Release and Release_SDC use the board UART at 1000000 baud.
+1. Acquires HFXO through the generic clock API before initializing BLE.
+2. Initializes the selected Nordic stack from its test harness.
+3. Verifies HFXO continuity across initialization.
+4. Releases the pre-stack request and checks clock ownership.
+5. Reacquires and releases HFXO after stack initialization.
+6. Runs the normal two-enable/two-disable reference-count test.
+7. For S132, disables SoftDevice and checks direct HFXO reacquisition
+   and release after shutdown.
 
-The test enables HFXO twice and disables it twice, reporting the running
-state after each operation. The clock may remain running after the final
-disable when another part of the system owns it. Disable returns void, so
-the test observes the clock state instead of checking a return value. An
-additional unmatched disable must not change the clock state.
+There is no `HFXO_TEST_PRESTACK` mode or application clock-source
+selection in this diagnostic.
 
-## Verified SDC ownership limitation
+### What the diagnostic does not prove
 
-The nRF52832 SDC/MPSL diagnostic with `HFXO_TEST_PRESTACK=1`
-confirmed:
+It tests clock ownership, not advertising, connections, radio timing,
+LFRC calibration, or current consumption. Real Bluetooth traffic and
+low-power measurements remain separate integration checks.
 
-```text
-Pre-stack enable: PASS, HFXO running
-Stack initialization: PASS
-Clock survives stack init: PASS, HFXO running
-Pre-stack request disabled: FAIL
-```
+On nRF52 LFXO systems, the MPSL external clock callbacks allow the
+shared backend to retain HF/LF clock ownership across initialization.
+The LFRC calibration and external-clock integration still require
+separate review and validation.
 
-The direct HFXO requirement remains counted after MPSL takes CLOCK ownership,
-because the Nordic backend correctly refuses a direct CLOCK STOP while MPSL
-is active. This is a confirmed limitation of direct-to-MPSL initialization,
-not a failure of the stack-first tests. Simply discarding the clock reference
-would hide possible power consumption and is not an acceptable fix.
-
-The release-before-stack sequence is a **diagnostic comparison**, not a
-requirement for application code. IOsonata must preserve outstanding generic
-HF clock requirements when the Nordic BLE backend initializes. The application
-must not select the clock owner or insert an HFXO Disable/Enable around BLE
-initialization. A correct transparent owner transition is still pending;
-continuous HFXO operation across the transition must be verified independently
-before the backend is signed off.
-
-## MPSL external-clock integration
-
-The nRF52 SDC library includes IOsonata's MPSL clock adapter without a
-special compiler definition or a separate library target. MPSL initialization
-automatically selects its clock implementation using the configured LF
-oscillator:
-
-- LFXO: IOsonata registers its shared HF/LF clock backend with MPSL.
-- LFRC: MPSL currently retains its internal clock implementation because
-  the external adapter does not yet provide LFRC calibration.
-
-This difference is internal to IOsonata, not an application requirement.
-The previously observed direct-to-MPSL HFXO handover failure remains open
-for the LFRC path. The LFXO path is not yet hardware-validated; do not
-present it as a completed fix.
-
-For a managed build and source regression check:
+## Running the checks
 
 ```sh
 python3 tests/nordic/check_clock_hfxo_source.py
-python3 tests/nordic/build_managed_power_clock.py \
-  --target nrf52832 --config Release_SDC
+python3 tests/nordic/build_managed_power_clock.py --target nrf52832 --config Release_SDC
 ```
 
-After the LFXO clock backend compiles and links successfully with the actual
-MPSL headers, test HfxoTestBle with `HFXO_TEST_PRESTACK=1` on an LFXO board
-and verify uninterrupted HFXO operation, balanced Disable, LFCLK timing,
-and Bluetooth radio operation. No application clock-control workaround is
-part of the intended IOsonata architecture.
+Build the application with the matching Eclipse managed configuration.
+Neither the application nor the MCU HAL library needs an additional
+clock-owner configuration switch.
 
-## S132 shutdown and deferred HFXO release
-
-For S132 builds, the existing HfxoTestBle now continues after its five
-normal HFXO checks and requests SoftDevice shutdown. It then verifies that
-the oscillator is stopped, enables HFXO directly again without SoftDevice,
-and releases the direct request. This tests the previously unverified
-physical cleanup associated with an HFXO request made before S132 startup.
-
-Run the usual S132 application build, preferably first with
-`HFXO_TEST_PRESTACK=1`, and inspect the three additional results:
-
-- `S132 shutdown: PASS, HFXO stopped`
-- `Direct enable after S132: PASS, HFXO running`
-- `Direct release after S132: PASS, HFXO stopped`
-
-These results are not hardware-validated yet. If shutdown fails or the
-SoftDevice observer is not delivered, do not count the reference-counting
-test alone as full physical-clock cleanup.
-
-## Optional pre-stack HFXO diagnostic
-
-The default HfxoTestBle still initializes the BLE owner first. To exercise
-the opposite order, add `HFXO_TEST_PRESTACK=1` to the **application**
-compiler preprocessor definitions in the desired Eclipse managed
-configuration, clean-build and flash that configuration. Do not change the
-library project settings or the generic clock API.
-
-Set `HFXO_TEST_PRESTACK=1` to reproduce the observed direct-to-stack
-ownership limitation. Set `HFXO_TEST_PRESTACK=2` to test the safe
-release-before-stack sequence. The safe mode deliberately disables the
-original HFXO requirement before initializing S132 or MPSL, verifies it
-stopped, and then checks a new request through the stack after initialization.
-
-The original mode-1 diagnostic:
-
-1. Selects HFXO and calls `SystemHighFreqClockEnable()` before the stack.
-2. Checks that the oscillator is running.
-3. Initializes S132 or MPSL using the existing `HfxoStackInit()`.
-4. Checks the oscillator is still running.
-5. Calls `SystemHighFreqClockDisable()`, then probes the existing
-   `SystemCoreClockSelect()` interface to detect an outstanding shared
-   clock request. A refusal is reported as FAIL.
-6. Only when step 5 succeeds, tests another HF clock enable/disable
-   through the initialized BLE owner.
-
-This is a **diagnostic**, not a claim that direct-to-stack clock ownership
-transfer already works. The current Nordic backend deliberately refuses a
-direct CLOCK STOP after the stack becomes active. It may retain a clock
-reference; in that case the diagnostic stops with a clear FAIL rather than
-writing protected registers or pretending the release succeeded.
-
-Run either mode separately with S132 and MPSL. Save the full output, including
-`Pre-stack request disabled` and `Pre-stack handover`. An unsuccessful or
-hanging stack initialization is also a failed handover and must be
-investigated before any production owner-transfer change. Do not use this
-mode in a product or with ongoing RADIO activity. There is no assertion
-that a clock can be transferred without interruption on all Nordic MCUs.
-
-The existing stack-first tests have already passed on nRF52832 using
-S132 and SDC/MPSL. Mode 1 has reproduced the failure on nRF52832 SDC/MPSL. Mode 2 has not yet
-been hardware-tested,
-and a successful managed build is not hardware evidence.
+The S132 startup/handover/shutdown sequences and nRF52832 SDC LFXO
+handover sequences have been reported PASS in hardware testing.
+Results for other MCU targets, LFRC, and ongoing BLE radio operation
+remain open.
