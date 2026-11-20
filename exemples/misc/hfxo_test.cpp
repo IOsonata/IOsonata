@@ -1,16 +1,12 @@
 /**-------------------------------------------------------------------------
 @example	hfxo_test.cpp
 
-@brief	Nordic high frequency crystal oscillator request test
+@brief	Shared high-frequency clock request test
 
-Checks first request, shared requests and last release through the public
-SystemHighFreqClockEnable/Disable API. Debug writes to the debugger semihosting console.
-Release writes to the board UART at 1 Mbaud. The test reports the HFXO
-running state after each operation and does not initialize a BLE stack.
-
-A BLE stack already enabled by the application must retain ownership of
-CLOCK. Tests of stack initialization and handover require a separate BLE
-example.
+Exercises the generic shared clock request and release API without directly
+accessing MCU registers. Debug uses semihosting; Release uses the board UART
+at 1 Mbaud. Physical oscillator state is verified by backend tests, not by
+this portable example.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 9, 2026
@@ -44,7 +40,6 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "nrf.h"
 #include "coredev/system_core_clock.h"
 
 #ifdef NDEBUG
@@ -103,88 +98,53 @@ static void HfxoConsoleInit(void)
 }
 #endif
 
-// CLOCK register status: verify the crystal source, not merely HFCLK running.
-static bool HfxoRunning(void)
-{
-	return (NRF_CLOCK->HFCLKSTAT &
-		(CLOCK_HFCLKSTAT_STATE_Msk | CLOCK_HFCLKSTAT_SRC_Msk)) ==
-		(CLOCK_HFCLKSTAT_STATE_Msk |
-		 (CLOCK_HFCLKSTAT_SRC_Xtal << CLOCK_HFCLKSTAT_SRC_Pos));
-}
-
-static void HfxoResult(const char *pName, bool Result, bool Running)
-{
-	HFXO_PRINT("%s: %s, HFXO %s\r\n", pName,
-		Result ? "PASS" : "FAIL",
-		Running ? "running" : "stopped");
-}
-
 int main(void)
 {
-	bool initial;
 	bool first;
 	bool second;
-	bool disable1;
-	bool disable2;
-	bool running1;
-	bool running2;
-	bool running3;
-	bool final;
-	bool failed;
+	bool third;
 	int pass;
 
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTest\r\n");
 
-	initial = HfxoRunning();
-	HFXO_PRINT("Initial HFXO: %s\r\n", initial ? "running" : "stopped");
+	// Requests must be balanced. Neither the app nor this test selects
+	// oscillator hardware or reads the target's CLOCK registers.
+	first = SystemHighFreqClockEnable();
+	HFXO_PRINT("First enable: %s\r\n", first ? "PASS" : "FAIL");
 
-	first = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U) &&
-		SystemHighFreqClockEnable();
-	running1 = HfxoRunning();
-	second = SystemHighFreqClockEnable();
-	running2 = HfxoRunning();
-	SystemHighFreqClockDisable();
-	disable1 = true;
-	running3 = HfxoRunning();
-	SystemHighFreqClockDisable();
-	disable2 = true;
-	final = HfxoRunning();
-	SystemHighFreqClockDisable();
-	failed = HfxoRunning() == final;
+	second = first && SystemHighFreqClockEnable();
+	HFXO_PRINT("Second enable: %s\r\n", second ? "PASS" : "FAIL");
 
-	pass = 0;
-	if (first && running1)
+	if (second)
 	{
-		pass++;
+		SystemHighFreqClockDisable();
+		HFXO_PRINT("First request released\r\n");
 	}
-	HfxoResult("First enable", first && running1, running1);
-	if (second && running2)
+	if (first)
 	{
-		pass++;
+		SystemHighFreqClockDisable();
+		HFXO_PRINT("Last request released\r\n");
 	}
-	HfxoResult("Second enable", second && running2, running2);
-	if (disable1 && running3)
+
+	third = SystemHighFreqClockEnable();
+	HFXO_PRINT("Re-enable after release: %s\r\n",
+		third ? "PASS" : "FAIL");
+	if (third)
 	{
-		pass++;
+		SystemHighFreqClockDisable();
 	}
-	HfxoResult("First disable", disable1 && running3, running3);
-	if (disable2 && final == initial)
-	{
-		pass++;
-	}
-	HfxoResult("Last disable", disable2 && final == initial, final);
-	if (failed)
-	{
-		pass++;
-	}
-	HfxoResult("Unmatched disable", failed, final);
-	HFXO_PRINT("HfxoTest: %d/5 checks PASS\r\n", pass);
+
+	// An unmatched release must be ignored by the backend.
+	SystemHighFreqClockDisable();
+	HFXO_PRINT("Unmatched release requested\r\n");
+
+	pass = (first ? 1 : 0) + (second ? 1 : 0) + (third ? 1 : 0);
+	HFXO_PRINT("HfxoTest: %d/3 requests PASS\r\n", pass);
 
 	while (1)
 	{
 		__WFE();
 	}
-
-	return 0;
+	return pass == 3 ? 0 : 1;
 }
