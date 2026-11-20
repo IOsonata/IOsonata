@@ -193,7 +193,7 @@ static void HfxoResult(const char *pName, bool Result, bool Running)
 }
 
 // Check an outstanding HFXO request across BLE initialization.
-// The backend owns oscillator selection and BLE handover.
+// The Nordic clock implementation selects the oscillator and handles BLE startup.
 static int HfxoPreStackTest(void)
 {
 	bool enabled;
