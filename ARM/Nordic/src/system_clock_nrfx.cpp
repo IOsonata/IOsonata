@@ -444,6 +444,12 @@ void SystemHighFreqClockDisable(void)
 	{
 		s_nRFxHfxoReqCnt = 0U;
 		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+#if defined(NRF52_SERIES)
+		if (s_bNRFxMpslExternalClock && s_nRFxMpslHfxoReqCnt == 0U)
+		{
+			s_bNRFxMpslHfxoOwned = false;
+		}
+#endif
 	}
 	s_bNRFxHfxoTransition = false;
 	EnableInterrupt(state);
