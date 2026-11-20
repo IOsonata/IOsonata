@@ -238,22 +238,37 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertLess(source.index("if (nRFxMpslActive())"), stop)
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
-    def test_lfrc_preserves_internal_mpsl_calibration(self):
+    def test_lfrc_uses_external_clock_and_calibration(self):
         init = function(self.mpsl, "bool MpslInit(void)", "static void nRFxMpslHfxoStarted(")
-        self.assertIn("externalClock = lfosc->Type == OSC_TYPE_XTAL", init)
-        self.assertIn("lfclk.rc_ctiv = MPSL_RECOMMENDED_RC_CTIV", init)
-        self.assertIn("lfclk.rc_temp_ctiv = MPSL_RECOMMENDED_RC_TEMP_CTIV", init)
+        self.assertIn("externalClock = lfosc->Type == OSC_TYPE_XTAL ||", init)
+        self.assertIn("lfosc->Type == OSC_TYPE_RC", init)
+        self.assertIn("mpsl_clock_ctrl_source_register(", init)
         self.assertIn("mpsl_init(externalClock ? nullptr : &lfclk", init)
-        stop = function(self.clock, "static bool nRFxHfxoStop(",
-                        "bool SystemCoreClockSelect(")
-        direct = stop.split("case NRFX_HFXO_OWNER_DIRECT:", 1)[1]
-        self.assertIn("if (nRFxMpslActive())", direct)
-        self.assertIn("if (s_bNRFxMpslExternalClock)", direct)
-        self.assertNotIn("nRFxMpslHfxo(true)", direct)
-        self.assertNotIn("nRFxMpslHfxo(false)", direct)
-        self.assertIn("An MPSL request/release cannot release the direct HFXO", direct)
-        self.assertLess(direct.index("if (s_bNRFxMpslExternalClock)"),
-                        direct.index("NRFX_HFXO_STOP = 1U"))
+        self.assertIn("nRFxMpslLfclkCalibrationStart();", init)
+        self.assertIn("return nRFxMpslLfclkCalibrationIsEnabled();", self.mpsl)
+        self.assertIn("nRFxMpslClockIrq();", self.mpsl)
+        start = function(self.clock, "void nRFxMpslLfclkCalibrationStart(",
+                         "bool nRFxMpslLfclkCalibrationIsEnabled(")
+        irq = function(self.clock, "void nRFxMpslClockIrq(",
+                       "// The external MPSL clock driver uses")
+        self.assertIn("nRFxMpslHfclkRequest();", start)
+        self.assertIn("CLOCK_INTENSET_DONE_Msk", start)
+        self.assertIn("nRFxMpslCalibrationBegin();", start)
+        self.assertIn("NRF_CLOCK->TASKS_CAL = 1U", self.clock)
+        self.assertIn("NRF_CLOCK->EVENTS_DONE", irq)
+        self.assertIn("nRFxMpslHfclkRelease();", irq)
+        self.assertIn("NRF_CLOCK->CTIV = 16U;", irq)
+        self.assertIn("NRF_CLOCK->TASKS_CTSTART = 1U;", irq)
+        self.assertIn("s_bNRFxMpslCalibrationPending", self.clock)
+
+    def test_lfrc_calibration_does_not_use_blocking_delay(self):
+        calibration = function(self.clock, "void nRFxMpslLfclkCalibrationStart(",
+                               "bool nRFxMpslLfclkCalibrationIsEnabled(")
+        for call in ("nRFxHfxoStart(", "nRFxMpslHfxo(true)",
+                     "SystemHighFreqClockEnable(", "msDelay(", "usDelay("):
+            self.assertNotIn(call, calibration)
+        self.assertIn("nRFxMpslHfclkRequest();", calibration)
+        self.assertIn("CLOCK_INTENSET_HFCLKSTARTED_Msk", calibration)
 
     def test_ble_console_uses_interrupt_tx_completion(self):
         source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
