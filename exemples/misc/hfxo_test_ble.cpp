@@ -1,12 +1,11 @@
 /**-------------------------------------------------------------------------
 @example	hfxo_test_ble.cpp
 
-@brief	HFXO requests with Nordic BLE clock ownership
+@brief	Generic Bluetooth initialization and shared HF clock requests
 
-Exercises the generic HF clock API before and after BLE initialization.
-Debug writes through semihosting; Release writes to UART at 1 Mbaud.
-The SDC configuration initializes MPSL, which manages HFXO requests.
-This does not test advertising, connections or enabling SDC itself.
+The same application source tests clock requests across Bluetooth initialization
+on Nordic S1xx, SDC, and STM32WBA. The IOsonata Bluetooth backend owns the
+vendor stack and its clock requirements.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 9, 2026
@@ -40,19 +39,8 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "nrf.h"
 #include "coredev/system_core_clock.h"
-
-#if defined(NRFXLIB_SDC)
-#include "nrf_mpsl.h"
-#elif defined(SOFTDEVICE_PRESENT)
-#include "sdk_config.h"
-#include "nrf_sdh.h"
-#include "nrf_sdh_soc.h"
-#include "sd_dispatch.h"
-#else
-#error "HfxoTestBle requires SoftDevice or SDC"
-#endif
+#include "bluetooth/bt_app.h"
 
 #ifdef NDEBUG
 #include "coredev/uart.h"
@@ -150,212 +138,63 @@ static void HfxoConsoleDrain(void)
 }
 #endif
 
-#if defined(SOFTDEVICE_PRESENT) && !defined(NRFXLIB_SDC)
-// The SoftDevice sends NRF_EVT_HFCLKSTARTED through SD_EVT_IRQHandler.
-// Keep its interrupt handler and SoC event polling function linked.
-static void HfxoSdDispatch(void)
-{
-	nrf_sdh_evts_poll();
-}
-
-extern "C" void nrf_sdh_soc_evts_poll(void *pContext);
-
-NRF_SDH_STACK_OBSERVER(s_HfxoSocObserver, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {
-	.handler = nrf_sdh_soc_evts_poll,
-	.p_context = NULL,
+static const BtAppCfg_t s_BtCfg = {
+	.Role = BTAPP_ROLE_BROADCASTER,
+	.PeriphDevMax = 0,
+	.CentralDevMax = 0,
+	.pDevName = "ClockTest",
+	.ConnLedPort = -1,
+	.ConnLedPin = -1,
+	.AdvInterval = 100,
 };
-#endif
-
-static bool HfxoStackInit(void)
-{
-#if defined(NRFXLIB_SDC)
-	return MpslInit();
-#else
-	SetSoftdeviceDispatch(HfxoSdDispatch);
-	return nrf_sdh_enable_request() == 0U;
-#endif
-}
-
-// CLOCK register status: verify the crystal source, not merely HFCLK running.
-static bool HfxoRunning(void)
-{
-	return (NRF_CLOCK->HFCLKSTAT &
-		(CLOCK_HFCLKSTAT_STATE_Msk | CLOCK_HFCLKSTAT_SRC_Msk)) ==
-		(CLOCK_HFCLKSTAT_STATE_Msk |
-		 (CLOCK_HFCLKSTAT_SRC_Xtal << CLOCK_HFCLKSTAT_SRC_Pos));
-}
-
-static void HfxoResult(const char *pName, bool Result, bool Running)
-{
-	HFXO_PRINT("%s: %s, HFXO %s\r\n", pName,
-		Result ? "PASS" : "FAIL",
-		Running ? "running" : "stopped");
-}
-
-// Check an outstanding HFXO request across BLE initialization.
-// The backend owns oscillator selection and BLE handover.
-static int HfxoPreStackTest(void)
-{
-	bool enabled;
-	bool running;
-	bool stackReady;
-	bool survived;
-	bool reenabled;
-
-	HFXO_PRINT("Pre-stack HFXO ownership test\r\n");
-	enabled = SystemHighFreqClockEnable();
-	running = HfxoRunning();
-	HfxoResult("Pre-stack enable", enabled && running, running);
-	if (!enabled || !running)
-	{
-		return 1;
-	}
-
-	stackReady = HfxoStackInit();
-	HFXO_PRINT("Stack initialization: %s\r\n", stackReady ? "PASS" : "FAIL");
-	if (!stackReady)
-	{
-		SystemHighFreqClockDisable();
-		return 1;
-	}
-
-	survived = HfxoRunning();
-	HfxoResult("Clock survives stack init", survived, survived);
-	if (!survived)
-	{
-		SystemHighFreqClockDisable();
-		return 1;
-	}
-
-	SystemHighFreqClockDisable();
-	// S132 may defer the physical STOP until SoftDevice shutdown.
-	HFXO_PRINT("Pre-stack request released\r\n");
-
-	reenabled = SystemHighFreqClockEnable();
-	running = HfxoRunning();
-	HfxoResult("Enable through stack", reenabled && running, running);
-	if (!reenabled || !running)
-	{
-		if (reenabled)
-		{
-			SystemHighFreqClockDisable();
-		}
-		return 1;
-	}
-	SystemHighFreqClockDisable();
-	HFXO_PRINT("Stack request released\r\n");
-	HFXO_PRINT("Pre-stack handover: PASS\r\n");
-	return 0;
-}
 
 int main(void)
 {
-	int preStackResult;
-	bool initial;
-	bool first;
+	bool before;
+	bool bluetooth;
 	bool second;
-	bool disable1;
-	bool disable2;
-	bool running1;
-	bool running2;
-	bool running3;
-	bool final;
-	bool failed;
-	int pass;
-#if defined(SOFTDEVICE_PRESENT) && !defined(NRFXLIB_SDC)
-	bool stopped;
-	bool enabled;
-	bool started;
-	bool released;
-#endif
+	bool after;
 
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTestBle\r\n");
-	preStackResult = HfxoPreStackTest();
-	HFXO_PRINT("Pre-stack test result: %s\r\n",
-		preStackResult == 0 ? "PASS" : "FAIL");
-	if (preStackResult != 0)
-	{
-		HfxoConsoleDrain();
-		while (1)
-		{
-			__WFE();
-		}
-	}
-	HFXO_PRINT("Clock owner initialized\r\n");
 
-	initial = HfxoRunning();
-	HFXO_PRINT("Initial HFXO: %s\r\n", initial ? "running" : "stopped");
+	// Exercise the generic shared clock API. The Bluetooth backend
+	// selects the controller and its clocks without application flags.
+	before = SystemHighFreqClockEnable();
+	HFXO_PRINT("Clock request before Bluetooth: %s\r\n",
+		before ? "PASS" : "FAIL");
 
-	first = SystemHighFreqClockEnable();
-	running1 = HfxoRunning();
-	second = SystemHighFreqClockEnable();
-	running2 = HfxoRunning();
-	SystemHighFreqClockDisable();
-	disable1 = true;
-	running3 = HfxoRunning();
-	SystemHighFreqClockDisable();
-	disable2 = true;
-	final = HfxoRunning();
-	SystemHighFreqClockDisable();
-	failed = HfxoRunning() == final;
+	bluetooth = before && BtAppInit(&s_BtCfg);
+	HFXO_PRINT("Bluetooth initialization: %s\r\n",
+		bluetooth ? "PASS" : "FAIL");
 
-	pass = 0;
-	if (first && running1)
-	{
-		pass++;
-	}
-	HfxoResult("First enable", first && running1, running1);
-	if (second && running2)
-	{
-		pass++;
-	}
-	HfxoResult("Second enable", second && running2, running2);
-	if (disable1 && running3)
-	{
-		pass++;
-	}
-	HfxoResult("First disable", disable1 && running3, running3);
-	if (disable2)
-	{
-		pass++;
-	}
-	HfxoResult("Last disable", disable2, final);
-	if (failed)
-	{
-		pass++;
-	}
-	HfxoResult("Unmatched disable", failed, final);
-	HFXO_PRINT("HfxoTestBle: %d/5 checks PASS\r\n", pass);
+	second = bluetooth && SystemHighFreqClockEnable();
+	HFXO_PRINT("Second clock request: %s\r\n",
+		second ? "PASS" : "FAIL");
 
-#if defined(SOFTDEVICE_PRESENT) && !defined(NRFXLIB_SDC)
-	// Verify the deferred direct HFXO release at SoftDevice shutdown.
-	// A subsequent direct enable/disable must work without stack ownership.
-	if (nrf_sdh_disable_request() == 0U)
+	if (second)
 	{
-		stopped = !HfxoRunning();
-		HfxoResult("S132 shutdown", stopped, !stopped);
-		enabled = SystemHighFreqClockEnable();
-		started = HfxoRunning();
-		HfxoResult("Direct enable after S132", enabled && started, started);
-		if (enabled)
-		{
-			SystemHighFreqClockDisable();
-		}
-		released = !HfxoRunning();
-		HfxoResult("Direct release after S132", released, !released);
+		SystemHighFreqClockDisable();
 	}
-	else
+	if (before)
 	{
-		HFXO_PRINT("S132 shutdown: FAIL\r\n");
+		SystemHighFreqClockDisable();
 	}
-#endif
+
+	after = bluetooth && SystemHighFreqClockEnable();
+	HFXO_PRINT("Clock request after Bluetooth: %s\r\n",
+		after ? "PASS" : "FAIL");
+	if (after)
+	{
+		SystemHighFreqClockDisable();
+	}
+	HFXO_PRINT("HfxoTestBle: %s\r\n",
+		before && bluetooth && second && after ? "PASS" : "FAIL");
 
 	HfxoConsoleDrain();
 	while (1)
 	{
 		__WFE();
 	}
-
 	return 0;
 }
