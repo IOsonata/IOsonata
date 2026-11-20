@@ -48,6 +48,30 @@ SOFTWARE.
 #endif
 
 #include "nrf_mpsl.h"
+
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
+#include "mpsl_clock.h"
+
+// Experimental nRF52 external clock-control integration. Enabled only in
+// the Nordic SDC library build; normal BLE applications use unchanged APIs.
+// LFRC calibration is not yet implemented in this adapter, so require LFXO.
+static mpsl_clock_lfclk_ctrl_source_t s_MpslExternalLf = {
+	.lfclk_wait = nRFxMpslLfclkWait,
+	.lfclk_calibration_start = nullptr,
+	.lfclk_calibration_is_enabled = nullptr,
+	.lfclk_request = nRFxMpslLfclkRequest,
+	.lfclk_release = nRFxMpslLfclkRelease,
+	.accuracy_ppm = 0U,
+	.skip_wait_lfclk_started = false,
+};
+
+static const mpsl_clock_hfclk_ctrl_source_t s_MpslExternalHf = {
+	.hfclk_request = nRFxMpslHfclkRequest,
+	.hfclk_release = nRFxMpslHfclkRelease,
+	.hfclk_is_running = nRFxMpslHfclkIsRunning,
+	.startup_time_us = MPSL_CLOCK_HF_LATENCY_WORST_CASE,
+};
+#endif
 #ifdef NRF52_SERIES
 #include "power_clock_irq_nrf52.h"
 #endif
@@ -400,6 +424,23 @@ bool MpslInit(void)
 
 	lfclk.skip_wait_lfclk_started = MPSL_DEFAULT_SKIP_WAIT_LFCLK_STARTED;
 
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
+	// MPSL's external driver owns both clock domains. LFRC calibration
+	// needs an additional backend implementation; do not claim RC accuracy.
+	if (lfosc->Type != OSC_TYPE_XTAL || nRFxMpslExternalClockGet())
+	{
+		return false;
+	}
+	s_MpslExternalLf.accuracy_ppm = lfosc->Accuracy;
+	res = mpsl_clock_ctrl_source_register(&s_MpslExternalLf,
+		&s_MpslExternalHf);
+	if (res != 0)
+	{
+		return false;
+	}
+	nRFxMpslExternalClockSet(true);
+#endif
+
 	mpsl_fem_init();
 
 	DEBUG_PRINTF("mpsl_init\r\n");
@@ -441,12 +482,21 @@ bool MpslInit(void)
 	// signal delivered through it starved: BLOCKED, CANCELLED and the session
 	// idle transition, which is why a timeslot session worked exactly once
 	// and every request after the first failed.
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
+	res = mpsl_init(nullptr, MPSL_LOW_PRIO_IRQn, MpslAssert);
+#else
 	res = mpsl_init(&lfclk, MPSL_LOW_PRIO_IRQn, MpslAssert);
+#endif
 #endif
 	DEBUG_PRINTF("mpsl_init res = %x\r\n", res);
 
 	if (res < 0)
 	{
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
+		// No registered callback can be left active after a failed init.
+		(void)mpsl_clock_ctrl_source_unregister();
+		nRFxMpslExternalClockSet(false);
+#endif
 		return false;
 	}
 
@@ -506,6 +556,13 @@ int nRFxMpslHfxo(bool bOn)
 	{
 		return -1;
 	}
+#if defined(NRF52_SERIES) && defined(IO_NRFX_MPSL_EXT_CLOCK) && IO_NRFX_MPSL_EXT_CLOCK
+	// Internal MPSL HFCLK APIs are forbidden after external driver setup.
+	if (nRFxMpslExternalClockGet())
+	{
+		return -1;
+	}
+#endif
 
 	if (bOn == false)
 	{
