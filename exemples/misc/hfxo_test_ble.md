@@ -45,12 +45,13 @@ is active. This is a confirmed limitation of direct-to-MPSL initialization,
 not a failure of the stack-first tests. Simply discarding the clock reference
 would hide possible power consumption and is not an acceptable fix.
 
-For an application that can complete its direct-clock work before enabling
-the stack, use the safe lifecycle: disable the direct clock requirement,
-initialize the BLE stack, and enable it again through the BLE clock owner.
-This may briefly stop HFXO and **does not preserve an uninterrupted HFXO
-request across initialization**. Continuous ownership transfer requires a
-separately validated strategy supported by the Nordic clock controller.
+The release-before-stack sequence is a **diagnostic comparison**, not a
+requirement for application code. IOsonata must preserve outstanding generic
+HF clock requirements when the Nordic BLE backend initializes. The application
+must not select the clock owner or insert an HFXO Disable/Enable around BLE
+initialization. A correct transparent owner transition is still pending;
+continuous HFXO operation across the transition must be verified independently
+before the backend is signed off.
 
 ## Optional pre-stack HFXO diagnostic
 
