@@ -76,7 +76,7 @@ SOFTWARE.
 #endif
 /*******************************/
 
-// Wait for the crystal requested by SystemCoreClockSelect, about 50 ms at
+// Wait for the crystal enabled by SystemHighFreqClockEnable, about 50 ms at
 // 64 MHz. It starts in a few ms.
 #define NRF_MPSL_HFXO_WAIT_LOOPS	1000000
 
@@ -495,7 +495,7 @@ bool nRFxMpslActive(void)
 	return mpsl_is_initialized();
 }
 
-// The crystal of SystemCoreClockSelect. Once MPSL is initialized it owns
+// The crystal of SystemHighFreqClockEnable. Once MPSL is initialized it owns
 // CLOCK, the request and the release then go through it.
 int nRFxMpslHfxo(bool bOn)
 {
