@@ -43,7 +43,8 @@ SOFTWARE.
 #include "nrf.h"
 #include "coredev/system_core_clock.h"
 
-// Opt-in diagnostic; the default test retains stack-first initialization.
+// Opt-in diagnostic: 1 = direct-to-stack, 2 = disable-before-stack.
+// The default test retains stack-first initialization.
 #ifndef HFXO_TEST_PRESTACK
 #define HFXO_TEST_PRESTACK 0
 #endif
@@ -181,6 +182,19 @@ static int HfxoPreStackTest(void)
 		return 1;
 	}
 
+#if HFXO_TEST_PRESTACK == 2
+	// A direct clock requirement must end before MPSL/SoftDevice owns CLOCK.
+	// It may stop temporarily; this is not a seamless handover.
+	SystemHighFreqClockDisable();
+	disabled = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+	running = HfxoRunning();
+	HfxoResult("Direct clock stopped before stack", disabled && !running,
+		running);
+	if (!disabled || running)
+	{
+		return 1;
+	}
+#endif
 	stackReady = HfxoStackInit();
 	HFXO_PRINT("Stack initialization: %s\r\n", stackReady ? "PASS" : "FAIL");
 	if (!stackReady)
@@ -188,6 +202,7 @@ static int HfxoPreStackTest(void)
 		return 1;
 	}
 
+#if HFXO_TEST_PRESTACK == 1
 	survived = HfxoRunning();
 	HfxoResult("Clock survives stack init", survived, survived);
 	if (!survived)
@@ -206,6 +221,7 @@ static int HfxoPreStackTest(void)
 		HFXO_PRINT("Outstanding direct HFXO request after stack init\r\n");
 		return 1;
 	}
+#endif
 
 	reenabled = SystemHighFreqClockEnable();
 	running = HfxoRunning();
@@ -218,7 +234,12 @@ static int HfxoPreStackTest(void)
 	cleared = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
 	HFXO_PRINT("Stack request disabled: %s\r\n",
 		cleared ? "PASS" : "FAIL");
+#if HFXO_TEST_PRESTACK == 1
 	HFXO_PRINT("Pre-stack handover: %s\r\n", cleared ? "PASS" : "FAIL");
+#else
+	HFXO_PRINT("Release-before-stack sequence: %s\r\n",
+		cleared ? "PASS" : "FAIL");
+#endif
 	return cleared ? 0 : 1;
 }
 #endif
