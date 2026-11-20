@@ -43,6 +43,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BOARD			BLYST_NANO_DK
 
+// BLE radio test with LFRC: 32 MHz HFXO and calibrated 32.768 kHz LFRC.
+// The MCU oscillator configuration belongs to this board, not the
+// portable Bluetooth application or a particular Bluetooth controller.
+#define MCU_OSC			{ \
+	{OSC_TYPE_XTAL, 32000000U, 20U, 0U}, \
+	{OSC_TYPE_RC, 32768U, 500U, 0U}, \
+	false, 0U \
+}
+
 #if BOARD == IBK_BLUEIO
 
 #define BUTTON_PINS_MAP		IBK_BLUEIO_BUT_PINS_CFG
