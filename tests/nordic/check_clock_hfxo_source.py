@@ -93,6 +93,21 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("SystemLowFreqClockEnable()", rtc)
         self.assertIn("SystemLowFreqClockDisable()", rtc)
 
+    def test_pre_stack_hfxo_diagnostic_is_opt_in(self):
+        source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
+            encoding="utf-8")
+        self.assertIn("#define HFXO_TEST_PRESTACK 0", source)
+        self.assertIn("static int HfxoPreStackTest(void)", source)
+        pre = function(source, "static int HfxoPreStackTest(void)",
+                       "#endif")
+        self.assertLess(pre.index("SystemHighFreqClockEnable()"),
+                        pre.index("HfxoStackInit()"))
+        self.assertLess(pre.index("HfxoStackInit()"),
+                        pre.index("SystemHighFreqClockDisable()"))
+        self.assertIn("Outstanding direct HFXO request", pre)
+        self.assertIn("SystemCoreClockSelect(OSC_TYPE_XTAL", pre)
+        self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
+
     def test_softdevice_probe_requires_sdk_runtime_state(self):
         source = function(self.clock, "static bool nRFxClockSdEnabled(",
                           "static bool nRFxHfxoRunning(")
