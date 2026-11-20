@@ -149,6 +149,7 @@ class HfxoSourceChecks(unittest.TestCase):
             encoding="utf-8")
         self.assertIn("OSC_TYPE_RC, 32768U, 500U", board)
         self.assertIn('name="Release_SDC"', project)
+        self.assertIn('#include "coredev/system_core_clock.h"', source)
         self.assertIn("static void ClockCheckEvt(", source)
         self.assertIn("AppEvtHandlerQue(0U, nullptr, ClockCheckEvt)", source)
         callback = source.split("static void ClockCheckEvt(", 1)[1].split(
