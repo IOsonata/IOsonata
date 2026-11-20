@@ -150,7 +150,7 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 static bool s_bRtcEnabled[TIMER_NRFX_RTC_MAX];
 // RTC retains its configured source across Disable/Enable. System Clock
 // owns the shared oscillator and counts requests from all RTC instances.
-static nRFxLfclkRequest_t s_RtcClockSource[TIMER_NRFX_RTC_MAX];
+static TIMER_CLKSRC s_RtcClockSource[TIMER_NRFX_RTC_MAX];
 // CLEAR task endpoint given out: a hardware event can clear the counter
 static bool s_bRtcHwClear[TIMER_NRFX_RTC_MAX];
 
@@ -1111,7 +1111,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	const nRFRtcData_t *pRtc;
 	NRF_RTC_Type *reg;
 	TimerDev_t *pOldTimer;
-	nRFxLfclkRequest_t clkSource;
+	TIMER_CLKSRC clkSource;
 	int i;
 
 	// Any frequency, SetFrequency takes the closest one
@@ -1124,23 +1124,18 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	switch (pCfg->ClkSrc)
 	{
 		case TIMER_CLKSRC_DEFAULT:
-			clkSource = NRFX_LFCLK_REQUEST_DEFAULT;
-			break;
 		case TIMER_CLKSRC_LFRC:
-			clkSource = NRFX_LFCLK_REQUEST_RC;
-			break;
 		case TIMER_CLKSRC_LFXTAL:
-			clkSource = NRFX_LFCLK_REQUEST_XTAL;
 			break;
 #if defined(NRF52_SERIES) || defined(NRF51)
 		case TIMER_CLKSRC_HFRC:
 		case TIMER_CLKSRC_HFXTAL:
-			clkSource = NRFX_LFCLK_REQUEST_SYNTH;
 			break;
 #endif
 		default:
 			return false;
 	}
+	clkSource = pCfg->ClkSrc;
 
 	pRtc = &s_nRfxRtcData[pCfg->DevNo];
 	reg = pRtc->pReg;
