@@ -354,6 +354,7 @@ int main(void)
 	uint32_t core;
 #if !CLOCK_DEMO_APB_READONLY
 	uint32_t bus;
+	unsigned dividerIdx;
 	uint32_t divider;
 	uint32_t request;
 	uint32_t actual;
@@ -462,8 +463,9 @@ int main(void)
 			}
 #if !CLOCK_DEMO_APB_READONLY
 			bus = SystemPeriphClockGet(0);
-			for (divider : s_ApbDividers)
+			for (dividerIdx = 0U; dividerIdx < sizeof(s_ApbDividers) / sizeof(s_ApbDividers[0]); dividerIdx++)
 			{
+				divider = s_ApbDividers[dividerIdx];
 				request = bus / divider;
 				ClockDemoClockBegin();
 				actual = SystemPeriphClockSet(0, request);
