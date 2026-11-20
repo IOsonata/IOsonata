@@ -391,128 +391,121 @@ void IOPinDisable(int PortNo, int PinNo)
  */
 void IOPinDisableInterrupt(int IntNo)
 {
-    if (IntNo >= IOPIN_MAX_INT)
-        return;
+	NRF_GPIOTE_Type *gpiotereg;
+	NRF_GPIO_Type *reg;
+	int slot;
+	int portNo;
+	int idx;
+	int i;
 
-#if defined(IOPIN_NRF52_GPIOTE)
-	// Never clear an unused IRQ slot or a PEI-owned GPIOTE channel.
-	if (IntNo >= 0 &&
-		(s_GpIOSenseEvt[IntNo].Sense == IOPINSENSE_DISABLE ||
-		 NRF_GPIOTE->CONFIG[IntNo] == 0U))
+	if (IntNo < -1 || IntNo >= IOPIN_MAX_INT)
 	{
 		return;
 	}
-#endif
+	slot = IntNo < 0 ? IOPIN_MAX_INT : IntNo;
+	if (s_GpIOSenseEvt[slot].Sense == IOPINSENSE_DISABLE)
+	{
+		return;
+	}
 
-	// A GPIOTE hardware task is not an interrupt and must never be
-	// released through the interrupt API.
+	// GPIO tasks and PEI events retain ownership of their channels.
 	if (IntNo >= 0 &&
 		((s_GpIOTaskUsed | s_GpIOEventUsed) & (1UL << IntNo)) != 0U)
 	{
 		return;
 	}
 
-	// A negative IntNo is the port event, the last entry
-	NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].PortPinNo >> 8);
+	portNo = s_GpIOSenseEvt[slot].PortPinNo >> 8;
+	gpiotereg = nRFGpioteGetReg(portNo);
+	reg = nRFGpioGetReg(portNo);
+	if (gpiotereg == NULL || reg == NULL)
+	{
+		return;
+	}
+#if defined(IOPIN_NRF52_GPIOTE)
+	if (IntNo >= 0 && gpiotereg->CONFIG[IntNo] == 0U)
+	{
+		return;
+	}
+#endif
 
-    if (IntNo < 0)
-    {
-        IntNo = IOPIN_MAX_INT;
+	if (IntNo < 0)
+	{
 #if defined(NRF54H20_XXAA)
 		gpiotereg->H20_GPIOTE_INTENCLR = H20_GPIOTE_PORT_Msk;
-		gpiotereg->H20_GPIOTE_EVENTS_PORT = 0;
+		gpiotereg->H20_GPIOTE_EVENTS_PORT = 0U;
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
-        if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
-        {
-        	if (IntNo > 4)
-        	{
-				gpiotereg->INTENCLR1 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
-				gpiotereg->EVENTS_PORT[1].NONSECURE = 0;
-        	}
-        	else
-        	{
-				gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
-				gpiotereg->EVENTS_PORT[0].NONSECURE = 0;
-        	}
-        }
-        else
-        {
-        	if (IntNo > 4)
-        	{
-        		gpiotereg->INTENCLR1 = GPIOTE_INTENCLR0_PORT0SECURE_Msk;
-    			gpiotereg->EVENTS_PORT[1].SECURE = 0;
-        	}
-        	else
-        	{
-        		gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0SECURE_Msk;
-    			gpiotereg->EVENTS_PORT[0].SECURE = 0;
-        	}
-        }
-#else
-        gpiotereg->INTENCLR = GPIOTE_INTENSET_PORT_Msk;
-        gpiotereg->EVENTS_PORT = 0;
-#endif
-    }
-    else
-    {
-    	NRF_GPIO_Type *reg = nRFGpioGetReg(s_GpIOSenseEvt[IntNo].PortPinNo >> 8);
-
-#if defined(NRF54H20_XXAA)
-		gpiotereg->H20_GPIOTE_INTENCLR = (1 << IntNo);
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
-    	if (IntNo > 4)
-    	{
-    		gpiotereg->INTENCLR1 = (1 << (IntNo - 4));
-    	}
-    	else
-    	{
-    		gpiotereg->INTENCLR0 = (1 << IntNo);
-    	}
-#else
-    	gpiotereg->INTENCLR = (1 << IntNo);
-#endif
-        gpiotereg->CONFIG[IntNo] = 0;
-#if defined(IOPIN_NRF52_GPIOTE)
-		// Do not leave an old edge pending when this slot is reused.
-		gpiotereg->EVENTS_IN[IntNo] = 0U;
-#endif
-        reg->PIN_CNF[s_GpIOSenseEvt[IntNo].PortPinNo & 0xFF] &= ~GPIO_PIN_CNF_SENSE_Msk;
-    }
-
-    s_GpIOSenseEvt[IntNo].PortPinNo = -1;
-    s_GpIOSenseEvt[IntNo].Sense = IOPINSENSE_DISABLE;
-    s_GpIOSenseEvt[IntNo].SensEvtCB = NULL;
-    s_GpIOSenseEvt[IntNo].pCtx = NULL;
-
-    for (int i = 0; i <= IOPIN_MAX_INT; i++)
-    {
-        if (s_GpIOSenseEvt[i].SensEvtCB != NULL)
-            return;
-    }
-
-//#if defined(NRF91_SERIES) || defined(NRF53_SERIES) ||
-#if defined(NRF54H20_XXAA)
-	NVIC_ClearPendingIRQ(H20_GPIOTE_IRQn);
-	NVIC_DisableIRQ(H20_GPIOTE_IRQn);
-	gpiotereg->H20_GPIOTE_INTENCLR = 0xFFFFFFFF;
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
-    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x7F00)
-    {
-		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+		// Group 0 is non-secure; group 1 is secure for either instance.
+		if (portNo & 0x80)
 		{
-			NVIC_ClearPendingIRQ(GPIOTE20_0_IRQn);
-			NVIC_DisableIRQ(GPIOTE20_0_IRQn);
+			gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
+			gpiotereg->EVENTS_PORT[0].NONSECURE = 0U;
 		}
 		else
 		{
-			NVIC_ClearPendingIRQ(GPIOTE20_1_IRQn);
-			NVIC_DisableIRQ(GPIOTE20_1_IRQn);
+			gpiotereg->INTENCLR1 = GPIOTE_INTENCLR1_PORT0SECURE_Msk;
+			gpiotereg->EVENTS_PORT[0].SECURE = 0U;
 		}
-		gpiotereg->INTENCLR1 = 0xFFFFFFFF;
-    }
-    else
-    {
-		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+#else
+		gpiotereg->INTENCLR = GPIOTE_INTENSET_PORT_Msk;
+		gpiotereg->EVENTS_PORT = 0U;
+#endif
+	}
+	else
+	{
+#if defined(NRF54H20_XXAA)
+		idx = IntNo;
+		gpiotereg->H20_GPIOTE_INTENCLR = 1UL << idx;
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+		idx = (portNo & 0x7F) == 0 ? IntNo :
+			IntNo - GPIOTE30_GPIOTE_NCHANNELS_SIZE;
+		if (idx < 0 || idx >= (int)(sizeof(gpiotereg->CONFIG) /
+			sizeof(gpiotereg->CONFIG[0])))
+		{
+			return;
+		}
+		if (portNo & 0x80)
+		{
+			gpiotereg->INTENCLR0 = 1UL << idx;
+		}
+		else
+		{
+			gpiotereg->INTENCLR1 = 1UL << idx;
+		}
+#else
+		idx = IntNo;
+		gpiotereg->INTENCLR = 1UL << idx;
+#endif
+		gpiotereg->CONFIG[idx] = 0U;
+#if defined(IOPIN_NRF52_GPIOTE)
+		gpiotereg->EVENTS_IN[idx] = 0U;
+#endif
+		reg->PIN_CNF[s_GpIOSenseEvt[slot].PortPinNo & 0xFF] &=
+			~GPIO_PIN_CNF_SENSE_Msk;
+	}
+
+	s_GpIOSenseEvt[slot].PortPinNo = (uint16_t)-1;
+	s_GpIOSenseEvt[slot].Sense = IOPINSENSE_DISABLE;
+	s_GpIOSenseEvt[slot].SensEvtCB = NULL;
+	s_GpIOSenseEvt[slot].pCtx = NULL;
+
+	for (i = 0; i <= IOPIN_MAX_INT; i++)
+	{
+		if (s_GpIOSenseEvt[i].SensEvtCB != NULL)
+		{
+			return;
+		}
+	}
+
+#if defined(NRF54H20_XXAA)
+	NVIC_ClearPendingIRQ(H20_GPIOTE_IRQn);
+	NVIC_DisableIRQ(H20_GPIOTE_IRQn);
+	gpiotereg->H20_GPIOTE_INTENCLR = 0xFFFFFFFFUL;
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+	// PortPinNo has already been cleared, so use the saved port.
+	if ((portNo & 0x7F) == 0)
+	{
+		if (portNo & 0x80)
 		{
 			NVIC_ClearPendingIRQ(GPIOTE30_0_IRQn);
 			NVIC_DisableIRQ(GPIOTE30_0_IRQn);
@@ -522,16 +515,25 @@ void IOPinDisableInterrupt(int IntNo)
 			NVIC_ClearPendingIRQ(GPIOTE30_1_IRQn);
 			NVIC_DisableIRQ(GPIOTE30_1_IRQn);
 		}
-		gpiotereg->INTENCLR1 = 0xFFFFFFFF;
-    }
-
+	}
+	else
+	{
+		if (portNo & 0x80)
+		{
+			NVIC_ClearPendingIRQ(GPIOTE20_0_IRQn);
+			NVIC_DisableIRQ(GPIOTE20_0_IRQn);
+		}
+		else
+		{
+			NVIC_ClearPendingIRQ(GPIOTE20_1_IRQn);
+			NVIC_DisableIRQ(GPIOTE20_1_IRQn);
+		}
+	}
 #else
 #ifdef NRF5340_XXAA_NETWORK
 	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
-    NVIC_DisableIRQ(GPIOTE_IRQn);
+	NVIC_DisableIRQ(GPIOTE_IRQn);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-	// GPIOTE1 is the non secure instance, GPIOTE0 the secure one. PortPinNo
-	// is already cleared here, the instance in use tells which one.
 	if (gpiotereg == NRF_GPIOTE1_NS)
 	{
 		NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
@@ -543,11 +545,10 @@ void IOPinDisableInterrupt(int IntNo)
 		NVIC_DisableIRQ(GPIOTE0_IRQn);
 	}
 #else
-    NVIC_ClearPendingIRQ(GPIOTE_IRQn);
-    NVIC_DisableIRQ(GPIOTE_IRQn);
+	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
+	NVIC_DisableIRQ(GPIOTE_IRQn);
 #endif
-
-    gpiotereg->INTENCLR = 0xFFFFFFFF;
+	gpiotereg->INTENCLR = 0xFFFFFFFFUL;
 #endif
 }
 
