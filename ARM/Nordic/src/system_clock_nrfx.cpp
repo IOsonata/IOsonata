@@ -491,21 +491,6 @@ static bool nRFxLfclkStart(uint32_t Src)
 	return false;
 }
 
-static bool nRFxLfclkStop(void)
-{
-	int i;
-
-	NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
-	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
-	{
-		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
 // LFCLK STOP is nonblocking. Wait before a later clock enable, not in an ISR.
 static bool nRFxLfclkWaitStopped(void)
 {
