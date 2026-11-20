@@ -37,6 +37,9 @@ SOFTWARE.
 #include "coredev/pei.h"
 #include "coredev/interrupt.h"
 
+// Internal clock manager query. RTC never bypasses BLE clock ownership.
+bool nRFxClockStackActive(void);
+
 // PEI is an optional Timer feature. Weak references let ordinary RTC
 // applications link without the PEI matrix or nRF52 PPI backend.
 #if defined(__GNUC__)
@@ -156,6 +159,13 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 static std::atomic<int> s_nRfxLFClockSem(0);
 static bool s_bRtcEnabled[TIMER_NRFX_RTC_MAX];
 static bool s_bLFClockOwned = false;
+
+// An active RTC forbids LFCLK source changes in the clock manager.
+bool nRFxRtcClockActive(void)
+{
+	return s_nRfxLFClockSem.load() > 0;
+}
+
 // CLEAR task endpoint given out: a hardware event can clear the counter
 static bool s_bRtcHwClear[TIMER_NRFX_RTC_MAX];
 
@@ -462,6 +472,10 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 
 	if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
 	{
+		if (nRFxClockStackActive())
+		{
+			return false;
+		}
 		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
 		NRF_CLOCK->TASKS_LFCLKSTART = 1;
 
@@ -478,7 +492,10 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 
 		if (!started)
 		{
-			NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+			if (!nRFxClockStackActive())
+			{
+				NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+			}
 			return false;
 		}
 
@@ -545,7 +562,11 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 
 	if (s_nRfxLFClockSem == 0 && s_bLFClockOwned)
 	{
-		NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+		// The BLE stack may have taken over since the first RTC started.
+		if (!nRFxClockStackActive())
+		{
+			NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+		}
 		s_bLFClockOwned = false;
 	}
 }
@@ -1218,6 +1239,10 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
 	{
+		if (nRFxClockStackActive())
+		{
+			return false;
+		}
     	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
 
     	// Init oscillator
@@ -1256,7 +1281,10 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 		if (!started)
 		{
-			NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+			if (!nRFxClockStackActive())
+			{
+				NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+			}
 			return false;
 		}
 
