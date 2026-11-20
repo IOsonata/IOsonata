@@ -198,6 +198,8 @@ uint32_t SystemResetReason(void)
 // WFI resumes on a pending interrupt; do not select System OFF or gate clocks.
 void SystemSleep(void)
 {
+	NRF_GPIO_Type *wakeReg;
+	uint32_t wakeSense;
 	uint32_t state;
 	uint32_t scr;
 	int wakeIrq;
@@ -224,14 +226,29 @@ void SystemSleep(void)
 	}
 #endif
 	wakeIrq = -1;
+	wakeReg = NULL;
+	wakeSense = 0U;
 	if (s_SysPwrSleepSense != IOPINSENSE_DISABLE)
 	{
+		wakeReg = nRFGpioGetReg(s_SysPwrSleepPort);
+		if (wakeReg == NULL || s_SysPwrSleepPin < 0 ||
+			s_SysPwrSleepPin >= 32)
+		{
+			EnableInterrupt(state);
+			return;
+		}
+		wakeSense = wakeReg->PIN_CNF[s_SysPwrSleepPin] &
+			GPIO_PIN_CNF_SENSE_Msk;
 		// GPIO DETECT alone wakes System OFF. System ON requires an IRQ.
 		wakeIrq = IOPinAllocateInterrupt(2, s_SysPwrSleepPort,
 			s_SysPwrSleepPin, s_SysPwrSleepSense,
 			SysPwrSleepWake, NULL);
 		if (wakeIrq < 0)
 		{
+			// Failed allocation must leave System OFF sensing intact.
+			wakeReg->PIN_CNF[s_SysPwrSleepPin] =
+				(wakeReg->PIN_CNF[s_SysPwrSleepPin] &
+				~GPIO_PIN_CNF_SENSE_Msk) | wakeSense;
 			EnableInterrupt(state);
 			return;
 		}
@@ -259,6 +276,11 @@ void SystemSleep(void)
 	if (wakeIrq >= 0)
 	{
 		IOPinDisableInterrupt(wakeIrq);
+		// DisableInterrupt clears SENSE. Re-arm the System OFF wake
+		// level without changing the rest of the GPIO configuration.
+		wakeReg->PIN_CNF[s_SysPwrSleepPin] =
+			(wakeReg->PIN_CNF[s_SysPwrSleepPin] &
+			~GPIO_PIN_CNF_SENSE_Msk) | wakeSense;
 	}
 	EnableInterrupt(state);
 }
