@@ -5,7 +5,7 @@
 
 Exercises the generic shared clock request and release API without directly
 accessing MCU registers. Debug uses semihosting; Release uses the board UART
-at 1 Mbaud. Physical oscillator state is verified by backend tests, not by
+at 1 Mbaud. Physical oscillator state is checked in MCU-specific tests, not by
 this portable example.
 
 @author	Hoang Nguyen Hoan
@@ -135,7 +135,7 @@ int main(void)
 		SystemHighFreqClockDisable();
 	}
 
-	// An unmatched release must be ignored by the backend.
+	// The MCU clock implementation must ignore a release with no active request.
 	SystemHighFreqClockDisable();
 	HFXO_PRINT("Unmatched release requested\r\n");
 
