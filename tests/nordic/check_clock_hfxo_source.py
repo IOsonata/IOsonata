@@ -129,7 +129,12 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("nRFxMpslExternalClockSet(true)", mpsl)
         self.assertIn("nRFxMpslExternalClockGet()", mpsl)
         self.assertIn("s_MpslExternalLf.accuracy_ppm", mpsl)
-        self.assertIn("lfclk_calibration_start = nullptr", mpsl)
+        self.assertIn("lfclk_calibration_start = MpslExternalLfCalibrationStart", mpsl)
+        self.assertIn("lfclk_calibration_is_enabled = MpslExternalLfCalibrationIsEnabled", mpsl)
+        self.assertNotIn("lfclk_calibration_start = nullptr", mpsl)
+        self.assertNotIn("lfclk_calibration_is_enabled = nullptr", mpsl)
+        self.assertIn("static void MpslExternalLfCalibrationStart(void)", mpsl)
+        self.assertIn("static bool MpslExternalLfCalibrationIsEnabled(void)", mpsl)
         self.assertIn("mpsl_init(&lfclk, MPSL_LOW_PRIO_IRQn", mpsl)
 
     def test_mpsl_hf_callbacks_are_nonblocking(self):
