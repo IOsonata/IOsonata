@@ -47,6 +47,55 @@ clock-source enums or introduce separate Acquire/Release functions.
 
 ## Oscillator configuration and clock execution
 
+### Two principal clock-source categories
+
+IOsonata models **HF (high-frequency)** and **LF (low-frequency)** as the
+two principal MCU clock-source categories. Their configured sources feed
+the MCU's clock tree. Hardware-specific multiplexers, PLLs, dividers and
+gates derive the clocks used by the CPU, peripheral buses and peripherals.
+An MCU may also provide additional dedicated or external clock inputs;
+the generic model does not imply that every output is routed through the
+same two physical oscillators.
+
+```text
+g_McuOsc.CoreOsc                 g_McuOsc.LowPwrOsc
+High-frequency source           Low-frequency source
+RC / XTAL / TCXO                 RC / XTAL / TCXO
+         |                                |
+         +---------------+----------------+
+                         |
+             MCU clock selection/tree
+             (mux / PLL / dividers / gates)
+                         |
+             +-----------+-----------+
+             |           |           |
+          CPU/core   Peripheral   Timer / RTC
+                       domains     sources
+```
+
+The source is not the same thing as its derived clock domain. For
+example, on Nordic nRF52, HFXO can be enabled for accurate HF timing while
+the CPU clock continues to run; LFCLK must be started using the chosen
+low-frequency source. On STM32, the CPU and APB peripheral clocks can be
+derived through independently configured dividers. Implementations must
+respect the actual routing and capabilities of each MCU.
+
+The responsibilities are deliberately separated:
+
+- `g_McuOsc` describes the board's oscillator configuration.
+- System core clock selection configures the MCU clock tree.
+- The planned shared HF/LF Enable/Disable functions manage oscillator or
+  shared-clock usage and the corresponding reference counts; they do not
+  disable an essential CPU clock or replace peripheral-module gates.
+- Existing `SystemPeriphClockGet/Set` functions manage derived peripheral
+  clock frequencies and MCU-specific clock-domain indices where supported.
+- Peripheral `Init/Enable/Disable` methods select suitable clock inputs
+  from their requested operating frequency and handle module setup without
+  requiring applications to understand the clock tree.
+
+Do not introduce duplicate enums, a private oscillator resource API, or a
+synthesized-LFCLK mode to express this model.
+
 `g_McuOsc` contains the board's configured oscillator descriptions:
 
 - `CoreOsc`: high-frequency/core oscillator description.
