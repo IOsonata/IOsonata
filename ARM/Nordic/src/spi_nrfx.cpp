@@ -852,6 +852,7 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 #endif
 		NRFX_SPI_RX(dev->pDmaReg).MAXCNT = l;
 		dev->pDmaReg->EVENTS_END = 0;
+		dev->pDmaReg->EVENTS_STOPPED = 0;
 		NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
 		dev->pDmaReg->TASKS_START = 1;
 
@@ -860,7 +861,16 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 #else
 		if (nRFxSPIWaitRX(dev, timeout) == false)
 #endif
+		{
+			if (dev->bDmaCancelPending)
+			{
+				// The caller's RX buffer is still owned by active DMA.
+				// Reset will release it only after STOPPED or END.
+				dev->bDmaCancelWasRx = true;
+				return -1;
+			}
 			break;
+		}
 
 		l = NRFX_SPI_RX(dev->pDmaReg).AMOUNT;
 #if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_APPLICATION)
@@ -1045,11 +1055,17 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 #endif
 		NRFX_SPI_TX(dev->pDmaReg).MAXCNT = l;
 		dev->pDmaReg->EVENTS_END = 0;
+		dev->pDmaReg->EVENTS_STOPPED = 0;
 		NRFX_SPI_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->TASKS_START = 1;
 
 		if (nRFxSPIWaitDMA(dev, timeout) == false)
 		{
+			if (dev->bDmaCancelPending)
+			{
+				dev->bDmaCancelWasRx = false;
+				return -1;
+			}
 			break;
 		}
 
