@@ -550,8 +550,8 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 
 	if (s_nRfxHFClockSem == 0 && !s_bTimerHfxoHeld)
 	{
-		// SystemInit owns PLL. The first HF timer requests shared HFXO.
-		if (!SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000))
+		// SystemInit owns PLL. The first HF timer enables the shared HF source.
+		if (!SystemHighFreqClockEnable())
 		{
 			return false;
 		}
@@ -644,12 +644,9 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 
 	if (s_nRfxHFClockSem == 0 && s_bTimerHfxoHeld)
 	{
-		// The clock manager can refuse a release during BLE handover.
-		// Retain the local request until a subsequent release succeeds.
-		if (SystemCoreClockSelect(OSC_TYPE_RC, 0))
-		{
-			s_bTimerHfxoHeld = false;
-		}
+		// The system clock backend handles clock ownership on final disable.
+		SystemHighFreqClockDisable();
+		s_bTimerHfxoHeld = false;
 	}
 
     switch (devno)
