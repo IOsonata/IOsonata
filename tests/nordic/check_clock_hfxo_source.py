@@ -223,7 +223,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
     def test_lfrc_preserves_internal_mpsl_calibration(self):
-        init = function(self.mpsl, "bool MpslInit(void)", "int MpslNvmArbiterStart(")
+        init = function(self.mpsl, "bool MpslInit(void)", "static void nRFxMpslHfxoStarted(")
         self.assertIn("externalClock = lfosc->Type == OSC_TYPE_XTAL", init)
         self.assertIn("lfclk.rc_ctiv = MPSL_RECOMMENDED_RC_CTIV", init)
         self.assertIn("lfclk.rc_temp_ctiv = MPSL_RECOMMENDED_RC_TEMP_CTIV", init)
