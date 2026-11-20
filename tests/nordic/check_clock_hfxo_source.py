@@ -115,6 +115,17 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("SystemCoreClockSelect(OSC_TYPE_XTAL", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
+    def test_pre_stack_success_continues_normal_checks(self):
+        source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
+            encoding="utf-8")
+        main = function(source, "int main(void)", "return 0;")
+        self.assertIn("if (preStackResult != 0)", main)
+        self.assertIn("#else\n\tif (!HfxoStackInit())", main)
+        self.assertLess(main.index("#endif\n\tHFXO_PRINT(\"Clock owner initialized"),
+                        main.index("initial = HfxoRunning()"))
+        self.assertLess(main.index("initial = HfxoRunning()"),
+                        main.index('HFXO_PRINT("HfxoTestBle: %d/5 checks PASS'))
+
     def test_mpsl_external_clock_selected_from_oscillator(self):
         mpsl = self.mpsl
         clock = self.clock
