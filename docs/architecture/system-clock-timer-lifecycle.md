@@ -125,7 +125,7 @@ source-selection interface. Selection must not double as an Enable/Disable
 reference-count operation.
 
 Normal peripheral operation must not require calling these selection
-functions. When a clock is enabled, its MCU backend uses the oscillator
+functions. When a clock is enabled, the MCU clock implementation uses the oscillator
 configuration in `g_McuOsc`. Explicit source changes must not disrupt
 active clock consumers.
 
@@ -240,7 +240,7 @@ default low-frequency source is the one configured in
 | --- | --- |
 | Application | Configure and operate devices through generic APIs |
 | System core power/clock | MCU power states, sleep/wake, reset/retention, core and supported peripheral clock frequency selection, and shared clock Enable/Disable |
-| MCU core backend | Implement the MCU system facilities, apply `g_McuOsc`, maintain shared oscillator reference counts and protect hardware ownership |
+| MCU system implementation | Apply `g_McuOsc`, manage shared oscillator reference counts and use the permitted hardware clock operations |
 | Timer/peripheral driver | Select supported timer inputs and configure its own peripheral hardware; use system peripheral-clock and shared-clock APIs as needed during its normal lifecycle |
 | BLE stack or other external owner | Keep its hardware ownership; HAL must not stop an externally owned clock |
 
@@ -256,7 +256,7 @@ SoftDevice/SDC integration tests, and actual hardware validation.
 The same generic HF/LF clock API must work before and after S132 or MPSL
 initialization. Applications and generic peripheral drivers must not choose
 an HFXO owner, split clock lifetime at BLE startup, or perform Nordic-specific
-release/re-enable sequences. The MCU clock backend owns that integration.
+release/re-enable sequences. The Nordic clock implementation handles that transition.
 
 An nRF52832 SDC/MPSL diagnostic reproduced the defect: a direct HFXO
 Enable remained counted after MPSL initialization because Disable refused
@@ -273,7 +273,7 @@ Implementation requirements:
   never STOP CLOCK through registers while S132/MPSL controls it.
 - Where the underlying Nordic stack cannot accept an existing direct clock
   request without an interruption, explicitly address that limitation in the
-  backend. Do not silently stop an actively required clock or fake a balanced
+  clock implementation. Do not silently stop an actively required clock or fake a balanced
   reference count.
 - Verify both directions of clock-owner lifecycle, failed initialization,
   repeated enables, and final disables before claiming transparent operation.
@@ -292,7 +292,7 @@ No production clock integration has yet been validated by that result.
 
 The nRF52 SDC library contains the external MPSL clock adapter by default.
 There is **no IO_NRFX_MPSL_EXT_CLOCK compilation option** and no second
-clock-specific library target. IOsonata selects the backend internally
+clock-specific library target. `MpslInit()` selects the clock implementation internally
 from `g_McuOsc.LowPwrOsc` when initializing MPSL:
 
 - `OSC_TYPE_XTAL`: register IOsonata's HFCLK/LFCLK clock-control callbacks
@@ -317,7 +317,7 @@ The generic application and peripheral API is unchanged.
 
 ### S132 direct-clock release across SoftDevice initialization
 
-The nRF52 clock backend now includes an internal S132 release deferral.
+`system_clock_nrfx.cpp` defers direct HFXO shutdown while S132 is running.
 If an outstanding IOsonata HFXO request was acquired directly before
 SoftDevice initialization, the final `SystemHighFreqClockDisable()` while
 SoftDevice is enabled clears the logical request but does **not** write a
@@ -331,8 +331,8 @@ to the remaining user instead of stopping it.
 This approach does not create an application mode, public API, or
 additional library configuration. It preserves the already-tested normal
 S132 clock paths while handling the previously failing pre-stack request
-case. The new S132 path is **not yet hardware-validated**. In particular,
-verify Mode 1 final logical release, continuous HFXO through startup,
+case. The nRF52832 S132 pre-stack clock request and shutdown checks passed on hardware. Also
+verify final logical release, continuous HFXO through startup,
 reacquisition during BLE operation, and the actual SoftDevice shutdown
 event including final physical STOP and energy behavior. The shutdown
 observer must be delivered by the linked Nordic SDK.
@@ -361,7 +361,7 @@ handover API:
 
 Do not implement a blind direct-to-MPSL count transfer, issue a direct
 HFCLKSTOP after MPSL or SoftDevice initialization, or change the generic
-application API. The clock backend and the Nordic stack initialization
+application API. The Nordic clock implementation and stack initialization
 implementation must coordinate ownership internally. A safe implementation
 requires confirming the supported mechanism on the linked Nordic binaries,
 then testing existing active IOsonata clock users across stack startup and
@@ -371,12 +371,13 @@ References:
 - https://nrfconnectdocs.nordicsemi.com/ncs/latest/nrfxlib/mpsl/doc/clock.html
 - https://nrfconnectdocs.nordicsemi.com/ncs/latest/nrfxlib/doxygen/html/mpsl__clock_8h_source.html
 
-HfxoTestBle mode 0 (stack first) and mode 2 (application manually releases
-before stack) have passed on S132 and SDC/MPSL. Mode 2 is a diagnostic for
-a hardware-safe ordering, **not** an acceptable application requirement.
-Mode 1 (direct HFXO request retained through BLE initialization) has failed
-on SDC and remains an open bug. Source review and test success in other
-modes do not close it.
+nRF52832 S132 and SDC/MPSL HFXO ownership tests passed with a direct
+HFXO request outstanding during Bluetooth initialization. The S132 shutdown
+and subsequent direct HFXO enable/disable tests also passed. These results
+do not validate LFRC calibration, nRF52840, BLE radio traffic, or power
+consumption. The portable `HfxoTestBle` example now calls `BtAppInit()`;
+`tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp` retains the Nordic-specific
+clock and shutdown checks.
 
 ## Cross-MCU implementation and validation
 
