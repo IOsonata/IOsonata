@@ -198,6 +198,28 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertLess(source.index("if (nRFxMpslActive())"), stop)
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
+    def test_ble_console_uses_interrupt_tx_completion(self):
+        source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
+            encoding="utf-8")
+        self.assertIn(".bIntMode = true", source)
+        self.assertIn(".EvtCallback = HfxoUartEvent", source)
+        callback = function(source, "static int HfxoUartEvent(",
+                            "static const IOPinCfg_t")
+        self.assertIn("UART_EVT_TXREADY", callback)
+        self.assertIn("__SEV();", callback)
+        drain = function(source, "static void HfxoConsoleDrain(void)",
+                         "#else")
+        self.assertIn("SysLogFlush(SysLogGet())", drain)
+        self.assertIn("CFifoPeek(SysLogGet()->hFifo)", drain)
+        self.assertIn("CFifoUsed(pUart->hTxFifo)", drain)
+        self.assertIn("pUart->bTxReady", drain)
+        self.assertIn("__WFE();", drain)
+        self.assertNotIn("EVENTS_ENDTX", drain)
+        main = function(source, "int main(void)", "return 0;")
+        self.assertIn("HfxoConsoleDrain();", main)
+        self.assertLess(main.index("HfxoConsoleDrain();"),
+                        main.rindex("while (1)"))
+
     def test_s132_shutdown_rechecks_direct_hfxo_lifecycle(self):
         source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
             encoding="utf-8")
