@@ -116,6 +116,9 @@ bool nRFxMpslHfclkIsRunning(void);
 int32_t nRFxMpslLfclkRequest(void);
 int32_t nRFxMpslLfclkRelease(void);
 int32_t nRFxMpslLfclkWait(void);
+void nRFxMpslLfclkCalibrationStart(void);
+bool nRFxMpslLfclkCalibrationIsEnabled(void);
+void nRFxMpslClockIrq(void);
 #endif
 
 
