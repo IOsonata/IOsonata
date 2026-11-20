@@ -32,7 +32,7 @@ class Nrf52DelayCalibration(unittest.TestCase):
                           r"\(\(uint64_t\)SystemCoreClock\s*<<\s*16\)\s*/\s*"
                           r"(\d+)UL;", self.system)
         self.assertIsNotNone(match)
-        self.assertEqual(int(match.group(1)), 6000000)
+        self.assertEqual(int(match.group(1)), 3000000)
 
     def test_fixed_point_loop_units(self):
         self.assertIn("SystemMicroSecLoopCnt + 65535ULL) >> 16", self.delay)
@@ -42,11 +42,11 @@ class Nrf52DelayCalibration(unittest.TestCase):
     def test_250ms_scale_at_64mhz(self):
         frequency = 64000000
         us_factor = (frequency << 16) // 13000000
-        ns_factor = (frequency << 16) // 6000000
+        ns_factor = (frequency << 16) // 3000000
         long_loops = (250000 * us_factor + 65535) >> 16
         short_loops = (250000000 * ns_factor + 65535999) // 65536000
         self.assertLess(abs(long_loops * 13 - 16000000), 128)
-        self.assertLess(abs(short_loops * 6 - 16000000), 128)
+        self.assertLess(abs(short_loops * 3 - 16000000), 128)
 
 
 if __name__ == "__main__":
