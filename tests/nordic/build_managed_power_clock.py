@@ -98,6 +98,7 @@ def main():
             root / "lib/ioc",
             root / "exemples/ClockDemo/ioc",
             root / "exemples/PowerOffDemo/ioc",
+            root / "exemples/HfxoTestBle/ioc",
         ]
         sdc_projects = [
             root / "lib/ioc",
