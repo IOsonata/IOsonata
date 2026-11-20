@@ -140,6 +140,18 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("Pre-stack handover", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
+    def test_managed_build_covers_nrf52840_s140_and_sdc(self):
+        build = (ROOT / "tests/nordic/build_managed_power_clock.py").read_text(
+            encoding="utf-8")
+        self.assertIn('root / "exemples/HfxoTestBle/ioc",', build)
+        self.assertIn('if configuration.endswith("_SDC"):', build)
+        for target in ("nRF52832", "nRF52840"):
+            project = (ROOT / "ARM/Nordic/nRF52" / target /
+                       "exemples/HfxoTestBle/ioc/.cproject").read_text(
+                encoding="utf-8")
+            self.assertIn('name="Release"', project)
+            self.assertIn('name="Release_SDC"', project)
+
     def test_nrf52832_uart_ble_clock_requests_during_gatt_writes(self):
         board = (ROOT / "ARM/Nordic/nRF52/nRF52832/exemples/UartBleDemo/src/board.h").read_text(
             encoding="utf-8")
