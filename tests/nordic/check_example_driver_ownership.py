@@ -42,7 +42,7 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("nRFUARTPollLegacyTx(dev);", drain)
 		self.assertIn("CFifoUsed(dev->pUartDev->hTxFifo)", drain)
 		self.assertIn("remaining == 0 && dev->pUartDev->bTxReady", drain)
-		self.assertIn("timeout >= 2000000U", drain)
+		self.assertIn("timeout >= NRFX_UART_TX_DRAIN_WAIT_LOOPS", drain)
 		self.assertIn("!pDev->bDma && !pDev->bIntEn", source[poweroff:])
 		self.assertIn("!nRFUARTDrainPollingTx(dev)", source[poweroff:])
 		self.assertIn("return;", source[poweroff:])
