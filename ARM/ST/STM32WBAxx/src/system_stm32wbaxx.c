@@ -155,19 +155,25 @@ static uint32_t FindPllCfg(uint32_t SrcFreq, uint32_t *pM, uint32_t *pN, uint32_
 {
 	uint32_t best = 0;
 	uint32_t bestvco = 0;
+	uint32_t m;
+	uint32_t n;
+	uint32_t r;
+	uint32_t in;
+	uint32_t vco;
+	uint32_t f;
 
-	for (uint32_t m = 1; m <= PLLM_DIV_MAX; m++)
+	for (m = 1; m <= PLLM_DIV_MAX; m++)
 	{
-		uint32_t in = SrcFreq / m;
+		in = SrcFreq / m;
 
 		if (in < PLL_IN_FREQ_MIN || in > PLL_IN_FREQ_MAX)
 		{
 			continue;
 		}
 
-		for (uint32_t n = PLLN_MUL_MIN; n <= PLLN_MUL_MAX; n++)
+		for (n = PLLN_MUL_MIN; n <= PLLN_MUL_MAX; n++)
 		{
-			uint32_t vco = in * n;
+			vco = in * n;
 
 			if (vco < VCO_FREQ_MIN)
 			{
@@ -178,9 +184,9 @@ static uint32_t FindPllCfg(uint32_t SrcFreq, uint32_t *pM, uint32_t *pN, uint32_
 				break;
 			}
 
-			for (uint32_t r = 1; r <= PLLR_DIV_MAX; r++)
+			for (r = 1; r <= PLLR_DIV_MAX; r++)
 			{
-				uint32_t f = vco / r;
+				f = vco / r;
 
 				if (f > SYSTEM_CORE_CLOCK_MAX)
 				{
@@ -218,6 +224,12 @@ void SystemCoreClockUpdate(void)
 {
 	uint32_t clk = HSI16_FREQ;
 	uint32_t cr = RCC->CR;
+	uint32_t cfgr;
+	uint32_t divr;
+	uint32_t src;
+	uint32_t m;
+	uint32_t n;
+	uint32_t r;
 
 	switch (RCC->CFGR1 & RCC_CFGR1_SWS)
 	{
@@ -226,18 +238,18 @@ void SystemCoreClockUpdate(void)
 			break;
 		case (RCC_CFGR1_SWS_1 | RCC_CFGR1_SWS_0):	// PLL1R
 		{
-			uint32_t cfgr = RCC->PLL1CFGR;
-			uint32_t divr = RCC->PLL1DIVR;
-			uint32_t src = HSI16_FREQ;
+			cfgr = RCC->PLL1CFGR;
+			divr = RCC->PLL1DIVR;
+			src = HSI16_FREQ;
 
 			if ((cfgr & RCC_PLL1CFGR_PLL1SRC) == (RCC_PLL1CFGR_PLL1SRC_1 | RCC_PLL1CFGR_PLL1SRC_0))
 			{
 				src = HSE32_FREQ >> ((cr & RCC_CR_HSEPRE) >> RCC_CR_HSEPRE_Pos);
 			}
 
-			uint32_t m = ((cfgr & RCC_PLL1CFGR_PLL1M) >> RCC_PLL1CFGR_PLL1M_Pos) + 1;
-			uint32_t n = ((divr & RCC_PLL1DIVR_PLL1N) >> RCC_PLL1DIVR_PLL1N_Pos) + 1;
-			uint32_t r = ((divr & RCC_PLL1DIVR_PLL1R) >> RCC_PLL1DIVR_PLL1R_Pos) + 1;
+			m = ((cfgr & RCC_PLL1CFGR_PLL1M) >> RCC_PLL1CFGR_PLL1M_Pos) + 1;
+			n = ((divr & RCC_PLL1DIVR_PLL1N) >> RCC_PLL1DIVR_PLL1N_Pos) + 1;
+			r = ((divr & RCC_PLL1DIVR_PLL1R) >> RCC_PLL1DIVR_PLL1R_Pos) + 1;
 
 			clk = (uint32_t)((uint64_t)src * n / (m * r));
 			break;
@@ -266,6 +278,14 @@ void SystemCoreClockUpdate(void)
  */
 void SystemInit(void)
 {
+	uint32_t src;
+	uint32_t pllsrc;
+	uint32_t m;
+	uint32_t n;
+	uint32_t r;
+	uint32_t freq;
+	uint32_t rge;
+
 #if (__FPU_PRESENT == 1) && (__FPU_USED == 1)
 	/* The library is built for the FPU (hard float ABI). Enable CP10 and CP11
 	   before any floating point instruction runs. */
@@ -315,8 +335,8 @@ void SystemInit(void)
 	RCC->CFGR3 &= ~RCC_CFGR3_PPRE7;
 	RCC->CR &= ~(RCC_CR_HSEON | RCC_CR_HSEPRE);
 
-	uint32_t src = HSI16_FREQ;
-	uint32_t pllsrc = RCC_PLL1CFGR_PLL1SRC_1;			// HSI16
+	src = HSI16_FREQ;
+	pllsrc = RCC_PLL1CFGR_PLL1SRC_1;			// HSI16
 
 	if (g_McuOsc.CoreOsc.Type != OSC_TYPE_RC && g_McuOsc.CoreOsc.Freq == HSE32_FREQ)
 	{
@@ -336,10 +356,10 @@ void SystemInit(void)
 		}
 	}
 
-	uint32_t m = 1;
-	uint32_t n = PLLN_MUL_MIN;
-	uint32_t r = 1;
-	uint32_t freq = FindPllCfg(src, &m, &n, &r);
+	m = 1;
+	n = PLLN_MUL_MIN;
+	r = 1;
+	freq = FindPllCfg(src, &m, &n, &r);
 
 	if (freq == 0)
 	{
@@ -364,7 +384,7 @@ void SystemInit(void)
 		return;
 	}
 
-	uint32_t rge = (src / m) > PLL_IN_RANGE0_MAX ? (RCC_PLL1CFGR_PLL1RGE_1 | RCC_PLL1CFGR_PLL1RGE_0) : 0;
+	rge = (src / m) > PLL_IN_RANGE0_MAX ? (RCC_PLL1CFGR_PLL1RGE_1 | RCC_PLL1CFGR_PLL1RGE_0) : 0;
 
 	RCC->PLL1CFGR = pllsrc | rge | ((m - 1) << RCC_PLL1CFGR_PLL1M_Pos) | RCC_PLL1CFGR_PLL1REN;
 	RCC->PLL1DIVR = ((n - 1) << RCC_PLL1DIVR_PLL1N_Pos) | (1UL << RCC_PLL1DIVR_PLL1P_Pos) |
@@ -499,13 +519,16 @@ uint32_t SystemPeriphClockGet(int Idx)
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
+	uint32_t div;
+	uint32_t shift;
+	uint32_t ppre;
+
 	if (Idx < 0 || Idx > 2)
 	{
 		return 0;
 	}
 
-	uint32_t div = Freq > 0 ? (SystemCoreClock + (Freq >> 1)) / Freq : 16;
-	uint32_t shift;
+	div = Freq > 0 ? (SystemCoreClock + (Freq >> 1)) / Freq : 16;
 
 	if (div < 2)
 	{
@@ -529,7 +552,7 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	}
 
 	// PPRE: 0 undivided, 4 + n divides by 2^(n + 1)
-	uint32_t ppre = shift == 0 ? 0 : (3 + shift);
+	ppre = shift == 0 ? 0 : (3 + shift);
 
 	switch (Idx)
 	{
