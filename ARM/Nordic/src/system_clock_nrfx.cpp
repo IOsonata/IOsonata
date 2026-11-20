@@ -291,7 +291,7 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 	return false;
 }
 
-// Stop only through the backend that accepted the first enable.
+// Release HFXO through the owner that accepted its first request.
 static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 {
 	switch (Owner)
