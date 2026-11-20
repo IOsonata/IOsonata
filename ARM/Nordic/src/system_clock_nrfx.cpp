@@ -9,18 +9,11 @@ or by the 32 MHz crystal (HFXO). The crystal only improves accuracy. The
 radio and USB need it and it draws much more current, so it is started on
 request, not at startup.
 
-SystemCoreClockSelect with OSC_TYPE_XTAL or OSC_TYPE_TCXO is one request for
-the crystal, with OSC_TYPE_RC it releases one. The requests of the drivers
-and of the application are counted. The crystal starts on the first request
-and stops when the last one is released. A crystal already running before
-the first request, started by other code, is left running.
-
-When a BLE stack is enabled it owns CLOCK. The requests then go to the
-SoftDevice (sd_clock_hfclk_request and sd_clock_hfclk_release) or to MPSL for
-the SoftDevice Controller (nRFxMpslHfxo in nrf_mpsl.cpp). The application request count stays here; the first acquisition
-is passed to the active clock owner and the last release returns it to that
-same owner. Clock handover during BLE stack initialization requires explicit
-coordination by the stack initializer.
+SystemCoreClockSelect configures the core oscillator descriptor. Shared
+high-frequency oscillator use is controlled by SystemHighFreqClockEnable and
+SystemHighFreqClockDisable. The first enable starts HFXO when configured,
+and the final disable stops it without disabling the CPU clock.
+SoftDevice and MPSL ownership is handled by the MCU implementation.
 
 On the nRF53, HFCLKSRC selects the crystal before HFCLKSTART and selects the
 RC again after HFCLKSTOP. On the nRF54L the crystal is started and stopped
@@ -83,7 +76,6 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 #include "nrf_mpsl.h"
-#include "../include/system_clock_nrfx.h"
 
 // CLOCK instance, as in timer_hf_nrfx.cpp
 #if defined(NRF91_SERIES)
@@ -160,7 +152,7 @@ static uint32_t s_nRFxHfxoReqCnt = 0U;
 static bool s_bNRFxHfxoTransition = false;
 static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
 
-// Shared LFCLK requests belong here, not in the RTC driver.
+// Shared LFCLK enable count belongs here, not in the RTC driver.
 static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
@@ -208,7 +200,7 @@ static bool nRFxHfxoRunning(void)
 #endif
 }
 
-// Acquire the oscillator through its current owner. The caller holds the
+// Start the oscillator through its current owner. The caller holds the
 // transition flag, but interrupts remain enabled during the start wait.
 static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 {
@@ -285,7 +277,7 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 	return false;
 }
 
-// Release only through the backend that accepted the first request.
+// Stop only through the backend that accepted the first enable.
 static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 {
 	switch (Owner)
@@ -319,80 +311,115 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-	nRFxHfxoOwner_t owner;
 	uint32_t state;
-	bool success;
 
-	(void)OscFreq;
 	if (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL &&
 		ClkSrc != OSC_TYPE_TCXO)
 	{
 		return false;
 	}
-
 	state = DisableInterrupt();
-	if (s_bNRFxHfxoTransition)
+	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt != 0U)
 	{
 		EnableInterrupt(state);
-		// Do not wait for a preempted clock transition in an ISR.
 		return false;
 	}
-	if (ClkSrc != OSC_TYPE_RC && s_nRFxHfxoReqCnt != 0U)
+	g_McuOsc.CoreOsc.Type = ClkSrc;
+	if (OscFreq != 0U)
 	{
-		if (s_nRFxHfxoReqCnt == UINT32_MAX)
-		{
-			EnableInterrupt(state);
-			return false;
-		}
+		g_McuOsc.CoreOsc.Freq = OscFreq;
+	}
+	EnableInterrupt(state);
+	return true;
+}
+
+bool SystemHighFreqClockEnable(void)
+{
+	nRFxHfxoOwner_t owner;
+	uint32_t state;
+	bool success;
+
+	state = DisableInterrupt();
+	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt == UINT32_MAX)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if (s_nRFxHfxoReqCnt != 0U)
+	{
 		s_nRFxHfxoReqCnt++;
 		EnableInterrupt(state);
 		return true;
 	}
-	if (ClkSrc == OSC_TYPE_RC && s_nRFxHfxoReqCnt == 0U)
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+	{
+		s_nRFxHfxoReqCnt = 1U;
+		EnableInterrupt(state);
+		return true;
+	}
+	if (g_McuOsc.CoreOsc.Type != OSC_TYPE_XTAL &&
+		g_McuOsc.CoreOsc.Type != OSC_TYPE_TCXO)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
-	if (ClkSrc == OSC_TYPE_RC && s_nRFxHfxoReqCnt > 1U)
-	{
-		s_nRFxHfxoReqCnt--;
-		EnableInterrupt(state);
-		return true;
-	}
-
 	s_bNRFxHfxoTransition = true;
-	owner = s_nRFxHfxoOwner;
 	EnableInterrupt(state);
 
-	if (ClkSrc == OSC_TYPE_RC)
-	{
-		success = nRFxHfxoStop(owner);
-	}
-	else
-	{
-		owner = NRFX_HFXO_OWNER_NONE;
-		success = nRFxHfxoStart(&owner);
-	}
-
+	owner = NRFX_HFXO_OWNER_NONE;
+	success = nRFxHfxoStart(&owner);
 	state = DisableInterrupt();
-	if (ClkSrc == OSC_TYPE_RC && success)
-	{
-		s_nRFxHfxoReqCnt = 0U;
-		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
-	}
-	else if (success)
+	if (success)
 	{
 		s_nRFxHfxoReqCnt = 1U;
 		s_nRFxHfxoOwner = owner;
 	}
 	s_bNRFxHfxoTransition = false;
 	EnableInterrupt(state);
-
 	return success;
 }
 
-// System OFF requires HFXO stopped on nRF54L. The application must first
-// close radio users and release every outstanding clock request.
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state;
+	nRFxHfxoOwner_t owner;
+	bool success;
+
+	state = DisableInterrupt();
+	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt == 0U)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	if (s_nRFxHfxoReqCnt > 1U)
+	{
+		s_nRFxHfxoReqCnt--;
+		EnableInterrupt(state);
+		return;
+	}
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+	{
+		s_nRFxHfxoReqCnt = 0U;
+		EnableInterrupt(state);
+		return;
+	}
+	s_bNRFxHfxoTransition = true;
+	owner = s_nRFxHfxoOwner;
+	EnableInterrupt(state);
+
+	success = nRFxHfxoStop(owner);
+	state = DisableInterrupt();
+	if (success)
+	{
+		s_nRFxHfxoReqCnt = 0U;
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+	}
+	s_bNRFxHfxoTransition = false;
+	EnableInterrupt(state);
+}
+
+// System OFF requires HFXO stopped on nRF54L. Disable all active
+// clock users before entering System OFF.
 #if defined(NRF54L_SERIES)
 bool nRFxClockPrepareSystemOff(void)
 {
@@ -480,8 +507,7 @@ static bool nRFxLfclkStop(void)
 	return false;
 }
 
-// STOP is nonblocking for an RTC released from an interrupt. Wait before
-// subsequently starting another LFCLK request, never in interrupt context.
+// LFCLK STOP is nonblocking. Wait before a later clock enable, not in an ISR.
 static bool nRFxLfclkWaitStopped(void)
 {
 	int i;
@@ -496,41 +522,18 @@ static bool nRFxLfclkWaitStopped(void)
 	return false;
 }
 
-bool nRFxLfclkAcquire(TIMER_CLKSRC Source)
+bool SystemLowFreqClockEnable(void)
 {
-	OSC_TYPE type;
 	uint32_t src;
 	uint32_t state;
 	bool running;
 	bool stopped;
 	bool started;
 
-	type = g_McuOsc.LowPwrOsc.Type;
-	switch (Source)
-	{
-		case TIMER_CLKSRC_DEFAULT:
-			break;
-		case TIMER_CLKSRC_LFRC:
-			type = OSC_TYPE_RC;
-			break;
-		case TIMER_CLKSRC_LFXTAL:
-			type = OSC_TYPE_XTAL;
-			break;
-#if defined(CLOCK_LFCLKSRC_SRC_Synth)
-		case TIMER_CLKSRC_HFRC:
-		case TIMER_CLKSRC_HFXTAL:
-			src = CLOCK_LFCLKSRC_SRC_Synth << CLOCK_LFCLKSRC_SRC_Pos;
-			break;
-#endif
-		default:
-			return false;
-	}
-	if (Source != TIMER_CLKSRC_HFRC && Source != TIMER_CLKSRC_HFXTAL &&
-		!nRFxLfclkOscSource(type, &src))
+	if (!nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src))
 	{
 		return false;
 	}
-
 	state = DisableInterrupt();
 	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt == UINT32_MAX)
 	{
@@ -539,15 +542,6 @@ bool nRFxLfclkAcquire(TIMER_CLKSRC Source)
 	}
 	if (s_nRFxLfclkReqCnt != 0U)
 	{
-		// RTCs share one LFCLK. An explicit source must match the source
-		// already running for the other users.
-		if (Source != TIMER_CLKSRC_DEFAULT &&
-			(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
-			(src & NRFX_LFCLK_SRC_Msk))
-		{
-			EnableInterrupt(state);
-			return false;
-		}
 		s_nRFxLfclkReqCnt++;
 		EnableInterrupt(state);
 		return true;
@@ -555,10 +549,7 @@ bool nRFxLfclkAcquire(TIMER_CLKSRC Source)
 	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
 	if (running && !s_bNRFxLfclkStopPending)
 	{
-		// Do not reconfigure another owner's clock or silently accept
-		// an explicit RTC source that does not match its actual source.
-		if (Source != TIMER_CLKSRC_DEFAULT &&
-			(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
 			(src & NRFX_LFCLK_SRC_Msk))
 		{
 			EnableInterrupt(state);
@@ -593,7 +584,7 @@ bool nRFxLfclkAcquire(TIMER_CLKSRC Source)
 	return started;
 }
 
-void nRFxLfclkRelease(void)
+void SystemLowFreqClockDisable(void)
 {
 	uint32_t state;
 
@@ -603,7 +594,6 @@ void nRFxLfclkRelease(void)
 		s_nRFxLfclkReqCnt--;
 		if (s_nRFxLfclkReqCnt == 0U)
 		{
-			// A system selection or BLE stack retains its own LFCLK.
 			if (s_bNRFxLfclkOwned && !s_bNRFxLfclkSelected &&
 				!nRFxMpslActive() && !nRFxClockSdEnabled())
 			{
