@@ -157,6 +157,7 @@ typedef enum {
 
 static uint32_t s_nRFxHfxoReqCnt = 0U;
 static bool s_bNRFxHfxoTransition = false;
+static bool s_bNRFxHfxoPendingStop = false;
 static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
 
 // Weak: the SoftDevice Controller is not in the build. nrf_mpsl.cpp has the
@@ -323,6 +324,43 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 	}
 }
 
+// Complete a release requested by an ISR via the normal owner backend.
+// This is an internal service, called in thread context before System ON WFI.
+void nRFxClockService(void)
+{
+	nRFxHfxoOwner_t owner;
+	uint32_t state;
+	bool success;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+
+	state = DisableInterrupt();
+	if (!s_bNRFxHfxoPendingStop || s_bNRFxHfxoTransition ||
+		s_nRFxHfxoReqCnt != 0U)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+
+	s_bNRFxHfxoTransition = true;
+	owner = s_nRFxHfxoOwner;
+	EnableInterrupt(state);
+
+	success = nRFxHfxoStop(owner);
+
+	state = DisableInterrupt();
+	if (success)
+	{
+		s_bNRFxHfxoPendingStop = false;
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+	}
+	s_bNRFxHfxoTransition = false;
+	EnableInterrupt(state);
+}
+
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	nRFxHfxoOwner_t owner;
@@ -354,6 +392,14 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		EnableInterrupt(state);
 		return true;
 	}
+	if (ClkSrc != OSC_TYPE_RC && s_bNRFxHfxoPendingStop)
+	{
+		// A new consumer reuses the oscillator that is still running.
+		s_nRFxHfxoReqCnt = 1U;
+		s_bNRFxHfxoPendingStop = false;
+		EnableInterrupt(state);
+		return true;
+	}
 	if (ClkSrc == OSC_TYPE_RC && s_nRFxHfxoReqCnt == 0U)
 	{
 		EnableInterrupt(state);
@@ -366,12 +412,33 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return true;
 	}
 
-	// A first request or final release can wait for oscillator hardware.
-	// Never perform that transition from interrupt context.
+	// First acquisition may wait for hardware, so it is thread-only.
+	// On the last release, stopping a directly-owned clock takes one
+	// nonblocking register write. Stack-owned releases are deferred.
 	if (__get_IPSR() != 0U)
 	{
+		if (ClkSrc != OSC_TYPE_RC)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		if (s_nRFxHfxoOwner == NRFX_HFXO_OWNER_NONE ||
+			(s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT &&
+			!nRFxClockStackActive()))
+		{
+			// No stack API and no oscillator wait inside an interrupt.
+			if (nRFxHfxoStop(s_nRFxHfxoOwner))
+			{
+				s_nRFxHfxoReqCnt = 0U;
+				s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+				EnableInterrupt(state);
+				return true;
+			}
+		}
+		s_nRFxHfxoReqCnt = 0U;
+		s_bNRFxHfxoPendingStop = true;
 		EnableInterrupt(state);
-		return false;
+		return true;
 	}
 
 	s_bNRFxHfxoTransition = true;
@@ -392,6 +459,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	if (ClkSrc == OSC_TYPE_RC && success)
 	{
 		s_nRFxHfxoReqCnt = 0U;
+		s_bNRFxHfxoPendingStop = false;
 		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
 	}
 	else if (success)
@@ -413,8 +481,10 @@ bool nRFxClockPrepareSystemOff(void)
 	uint32_t state;
 	int i;
 
+	nRFxClockService();
 	state = DisableInterrupt();
-	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt != 0U ||
+	if (s_bNRFxHfxoTransition || s_bNRFxHfxoPendingStop ||
+		s_nRFxHfxoReqCnt != 0U ||
 		nRFxMpslActive() || nRFxClockSdEnabled())
 	{
 		EnableInterrupt(state);
