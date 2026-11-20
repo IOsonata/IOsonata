@@ -278,6 +278,40 @@ Implementation requirements:
 - Verify both directions of clock-owner lifecycle, failed initialization,
   repeated enables, and final disables before claiming transparent operation.
 
+### Nordic owner integration investigation
+
+Nordic MPSL has an external clock-control driver registration API,
+`mpsl_clock_ctrl_source_register()`, which must be invoked before
+`mpsl_init()`. This is a possible way to keep IOsonata as the physical clock
+owner while MPSL requests the HF and LF sources. It is not a drop-in HFXO
+handover API:
+
+- Registration requires HFCLK and LFCLK callbacks, including LFCLK request,
+  release, wait and calibration handling.
+- MPSL can invoke HFCLK request/release from high-priority context; these
+  callbacks cannot spin waiting for oscillator startup or depend on a
+  preempted transition.
+- The external clock-control integration is experimental on Nordic nRF52
+  and nRF53, and availability in the actual linked nrfxlib version must be
+  verified before use.
+- MPSL's internal `mpsl_clock_hfclk_src_request/release` cannot be used
+  simultaneously with its external clock-control driver.
+- SoftDevice S132 instead owns the CLOCK peripheral and exposes
+  `sd_clock_hfclk_request/release/is_running`; it does not share the same
+  external registration interface. Its transition needs its own solution.
+
+Do not implement a blind direct-to-MPSL count transfer, issue a direct
+HFCLKSTOP after MPSL or SoftDevice initialization, or change the generic
+application API. The clock backend and the Nordic stack initialization
+implementation must coordinate ownership internally. A safe implementation
+requires confirming the supported mechanism on the linked Nordic binaries,
+then testing existing active IOsonata clock users across stack startup and
+final Disable.
+
+References:
+- https://nrfconnectdocs.nordicsemi.com/ncs/latest/nrfxlib/mpsl/doc/clock.html
+- https://nrfconnectdocs.nordicsemi.com/ncs/latest/nrfxlib/doxygen/html/mpsl__clock_8h_source.html
+
 HfxoTestBle mode 0 (stack first) and mode 2 (application manually releases
 before stack) have passed on S132 and SDC/MPSL. Mode 2 is a diagnostic for
 a hardware-safe ordering, **not** an acceptable application requirement.
