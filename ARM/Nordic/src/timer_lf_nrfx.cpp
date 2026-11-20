@@ -32,7 +32,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "timer_nrfx.h"
-#include "system_clock_nrfx.h"
+#include "../include/system_clock_nrfx.h"
 #include "coredev/pei.h"
 #include "coredev/interrupt.h"
 
