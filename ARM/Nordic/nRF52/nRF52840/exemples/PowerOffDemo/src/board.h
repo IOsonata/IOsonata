@@ -49,6 +49,12 @@ SOFTWARE.
 #define UART_TX_PIN			6
 #define UART_TX_PINOP		1
 
+// System OFF console: use legacy UART polling so TX can be drained
+// synchronously before the peripheral and clock stop.
+#define POWER_DEMO_UART_INT	false
+#define POWER_DEMO_UART_DMA	false
+#define POWER_DEMO_UART_OFF	1
+
 // Wake up button, to ground
 #define WAKE_BUT_PORT		0
 #define WAKE_BUT_PIN		11
