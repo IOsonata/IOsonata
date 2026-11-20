@@ -219,6 +219,10 @@ static bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 // backend handles the shared count and SoftDevice/MPSL ownership.
 static bool UsbdXtalRequest(void)
 {
+	if (GetHighFreqOscType() == OSC_TYPE_RC)
+	{
+		return false;
+	}
 	if (s_bUsbdXtalHeld == false)
 	{
 		s_bUsbdXtalHeld = SystemHighFreqClockEnable();
