@@ -333,6 +333,35 @@ int main(void)
 	HfxoResult("Unmatched disable", failed, final);
 	HFXO_PRINT("HfxoTestBle: %d/5 checks PASS\r\n", pass);
 
+#if defined(SOFTDEVICE_PRESENT) && !defined(NRFXLIB_SDC)
+	// Verify the deferred direct HFXO release at SoftDevice shutdown.
+	// A subsequent direct enable/disable must work without stack ownership.
+	if (nrf_sdh_disable_request() == 0U)
+	{
+		bool stopped;
+		bool enabled;
+		bool started;
+		bool released;
+
+		stopped = !HfxoRunning();
+		HfxoResult("S132 shutdown", stopped, !stopped);
+		enabled = SystemHighFreqClockEnable();
+		started = HfxoRunning();
+		HfxoResult("Direct enable after S132", enabled && started, started);
+		if (enabled)
+		{
+			SystemHighFreqClockDisable();
+		}
+		released = !HfxoRunning() &&
+			SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+		HfxoResult("Direct release after S132", released, !released);
+	}
+	else
+	{
+		HFXO_PRINT("S132 shutdown: FAIL\r\n");
+	}
+#endif
+
 	while (1)
 	{
 		__WFE();
