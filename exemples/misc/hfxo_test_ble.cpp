@@ -3,7 +3,7 @@
 
 @brief	HFXO requests with Nordic BLE clock ownership
 
-Initializes SoftDevice or MPSL before testing generic HF clock Enable/Disable.
+Exercises the generic HF clock API before and after BLE initialization.
 Debug writes through semihosting; Release writes to UART at 1 Mbaud.
 The SDC configuration initializes MPSL, which manages HFXO requests.
 This does not test advertising, connections or enabling SDC itself.
@@ -42,12 +42,6 @@ SOFTWARE.
 
 #include "nrf.h"
 #include "coredev/system_core_clock.h"
-
-// Opt-in diagnostic: 1 = direct-to-stack, 2 = disable-before-stack.
-// The default test retains stack-first initialization.
-#ifndef HFXO_TEST_PRESTACK
-#define HFXO_TEST_PRESTACK 0
-#endif
 
 #if defined(NRFXLIB_SDC)
 #include "nrf_mpsl.h"
@@ -198,25 +192,20 @@ static void HfxoResult(const char *pName, bool Result, bool Running)
 		Running ? "running" : "stopped");
 }
 
-#if HFXO_TEST_PRESTACK
-// Check whether a direct HFXO request remains balanced when the BLE
-// stack initializes. Never issue a direct CLOCK STOP after stack init.
+// Check an outstanding HFXO request across BLE initialization.
+// The backend owns oscillator selection and BLE handover.
 static int HfxoPreStackTest(void)
 {
-	bool selected;
 	bool enabled;
 	bool running;
 	bool stackReady;
-#if HFXO_TEST_PRESTACK == 1
 	bool survived;
-#endif
 	bool disabled;
 	bool reenabled;
 	bool cleared;
 
 	HFXO_PRINT("Pre-stack HFXO ownership test\r\n");
-	selected = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
-	enabled = selected && SystemHighFreqClockEnable();
+	enabled = SystemHighFreqClockEnable();
 	running = HfxoRunning();
 	HfxoResult("Pre-stack enable", enabled && running, running);
 	if (!enabled || !running)
@@ -224,73 +213,51 @@ static int HfxoPreStackTest(void)
 		return 1;
 	}
 
-#if HFXO_TEST_PRESTACK == 2
-	// A direct clock requirement must end before MPSL/SoftDevice owns CLOCK.
-	// It may stop temporarily; this is not a seamless handover.
-	SystemHighFreqClockDisable();
-	disabled = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
-	running = HfxoRunning();
-	HfxoResult("Direct clock stopped before stack", disabled && !running,
-		running);
-	if (!disabled || running)
-	{
-		return 1;
-	}
-#endif
 	stackReady = HfxoStackInit();
 	HFXO_PRINT("Stack initialization: %s\r\n", stackReady ? "PASS" : "FAIL");
 	if (!stackReady)
 	{
+		SystemHighFreqClockDisable();
 		return 1;
 	}
 
-#if HFXO_TEST_PRESTACK == 1
 	survived = HfxoRunning();
 	HfxoResult("Clock survives stack init", survived, survived);
 	if (!survived)
 	{
+		SystemHighFreqClockDisable();
 		return 1;
 	}
 
 	SystemHighFreqClockDisable();
-	// Selection is refused while a shared HFXO request remains active.
-	// This catches an outstanding direct request after BLE takes CLOCK.
-	disabled = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
-	HFXO_PRINT("Pre-stack request disabled: %s\r\n",
-		disabled ? "PASS" : "FAIL");
+	disabled = !HfxoRunning();
+	HfxoResult("Pre-stack request disabled", disabled, !disabled);
 	if (!disabled)
 	{
-		HFXO_PRINT("Outstanding direct HFXO request after stack init\r\n");
 		return 1;
 	}
-#endif
 
 	reenabled = SystemHighFreqClockEnable();
 	running = HfxoRunning();
 	HfxoResult("Enable through stack", reenabled && running, running);
 	if (!reenabled || !running)
 	{
+		if (reenabled)
+		{
+			SystemHighFreqClockDisable();
+		}
 		return 1;
 	}
 	SystemHighFreqClockDisable();
-	cleared = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
-	HFXO_PRINT("Stack request disabled: %s\r\n",
-		cleared ? "PASS" : "FAIL");
-#if HFXO_TEST_PRESTACK == 1
+	cleared = !HfxoRunning();
+	HfxoResult("Stack request disabled", cleared, !cleared);
 	HFXO_PRINT("Pre-stack handover: %s\r\n", cleared ? "PASS" : "FAIL");
-#else
-	HFXO_PRINT("Release-before-stack sequence: %s\r\n",
-		cleared ? "PASS" : "FAIL");
-#endif
 	return cleared ? 0 : 1;
 }
-#endif
 
 int main(void)
 {
-#if HFXO_TEST_PRESTACK
 	int preStackResult;
-#endif
 	bool initial;
 	bool first;
 	bool second;
@@ -311,34 +278,23 @@ int main(void)
 
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTestBle\r\n");
-#if HFXO_TEST_PRESTACK
 	preStackResult = HfxoPreStackTest();
 	HFXO_PRINT("Pre-stack test result: %s\r\n",
 		preStackResult == 0 ? "PASS" : "FAIL");
 	if (preStackResult != 0)
 	{
+		HfxoConsoleDrain();
 		while (1)
 		{
 			__WFE();
 		}
 	}
-#else
-	if (!HfxoStackInit())
-	{
-		HFXO_PRINT("Stack initialization: FAIL\r\n");
-		while (1)
-		{
-			__WFE();
-		}
-	}
-#endif
 	HFXO_PRINT("Clock owner initialized\r\n");
 
 	initial = HfxoRunning();
 	HFXO_PRINT("Initial HFXO: %s\r\n", initial ? "running" : "stopped");
 
-	first = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U) &&
-		SystemHighFreqClockEnable();
+	first = SystemHighFreqClockEnable();
 	running1 = HfxoRunning();
 	second = SystemHighFreqClockEnable();
 	running2 = HfxoRunning();
@@ -393,8 +349,7 @@ int main(void)
 		{
 			SystemHighFreqClockDisable();
 		}
-		released = !HfxoRunning() &&
-			SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+		released = !HfxoRunning();
 		HfxoResult("Direct release after S132", released, !released);
 	}
 	else
