@@ -198,6 +198,20 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertLess(source.index("if (nRFxMpslActive())"), stop)
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
+    def test_s132_shutdown_rechecks_direct_hfxo_lifecycle(self):
+        source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
+            encoding="utf-8")
+        main = function(source, "int main(void)", "return 0;")
+        self.assertIn("nrf_sdh_disable_request()", main)
+        self.assertIn('HfxoResult("S132 shutdown"', main)
+        self.assertIn('HfxoResult("Direct enable after S132"', main)
+        self.assertIn('HfxoResult("Direct release after S132"', main)
+        self.assertLess(main.index("nrf_sdh_disable_request()"),
+                        main.index("enabled = SystemHighFreqClockEnable()"))
+        self.assertLess(main.index("SystemHighFreqClockDisable();",
+                                   main.index("nrf_sdh_disable_request()")),
+                        main.index("released = !HfxoRunning()"))
+
     def test_s132_release_is_deferred_until_stack_shutdown(self):
         disable = function(self.clock, "void SystemHighFreqClockDisable(",
                            "// System OFF requires HFXO stopped")
