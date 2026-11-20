@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_NRFXLIB = Path.home() / "external/sdk-nrfxlib"
+DEFAULT_NRFXLIB = ROOT.parent / "external/sdk-nrfxlib"
 REGISTER = "mpsl_clock_ctrl_source_register"
 UNREGISTER = "mpsl_clock_ctrl_source_unregister"
 REQUIRED = (
