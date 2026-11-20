@@ -140,6 +140,18 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("Pre-stack handover", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
+    def test_sdc_vendor_diagnostic_uses_lfrc(self):
+        diagnostic = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
+            encoding="utf-8")
+        self.assertIn("SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U)", diagnostic)
+        self.assertIn("g_McuOsc.LowPwrOsc.Accuracy = 500U", diagnostic)
+        self.assertIn("Select LFRC: PASS", diagnostic)
+        self.assertIn("Pre-stack request released, HFXO %s", diagnostic)
+        portable = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
+            encoding="utf-8")
+        self.assertNotIn("SystemLowFreqClockSelect(", portable)
+        self.assertNotIn("NRFXLIB_SDC", portable)
+
     def test_pre_stack_success_continues_normal_checks(self):
         source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
             encoding="utf-8")
