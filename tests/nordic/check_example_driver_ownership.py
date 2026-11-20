@@ -70,6 +70,41 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("SystemSleep();", source)
 		self.assertIn("fflush(stdout);", source)
 
+	def test_power_clock_examples_use_plain_engineering_terms(self):
+		paths = (
+			ROOT / "exemples/misc/clock_demo.cpp",
+			ROOT / "exemples/misc/power_off_demo.cpp",
+			ROOT / "exemples/misc/hfxo_test.cpp",
+			ROOT / "exemples/misc/hfxo_test_ble.cpp",
+			ROOT / "exemples/misc/hfxo_test_ble.md",
+			ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp",
+			ROOT / "ARM/Nordic/src/nrf_mpsl.cpp",
+			ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp",
+			ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp",
+			ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp",
+			ROOT / "docs/architecture/system-clock-timer-lifecycle.md",
+			ROOT / "docs/architecture/nordic-clock-ownership-review-014.md",
+		)
+		terms = re.compile(r"\\b(?:backend|guarding|guardrail|API surface|source closure)\\b", re.I)
+		for path in paths:
+			with self.subTest(path=path):
+				for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+					self.assertIsNone(terms.search(line), f"{path}:{lineno}: {line.strip()}")
+
+	def test_shared_clock_examples_do_not_access_vendor_registers(self):
+		paths = (
+			ROOT / "exemples/misc/clock_demo.cpp",
+			ROOT / "exemples/misc/power_off_demo.cpp",
+			ROOT / "exemples/misc/hfxo_test.cpp",
+			ROOT / "exemples/misc/hfxo_test_ble.cpp",
+		)
+		vendor = re.compile(r"\\b(?:NRF_CLOCK|NRF_POWER|NRF_RTC|NRF_UARTE|RCC|SAM4L_PM)\\s*->|"
+		                    r"\\b(?:nrf_sdh_enable_request|nrf_sdh_disable_request|MpslInit)\\s*\\(")
+		for path in paths:
+			with self.subTest(path=path):
+				source = path.read_text(encoding="utf-8")
+				self.assertIsNone(vendor.search(source))
+
 	def test_no_private_uart_casts(self):
 		for path in (CLOCK, POWER, I2C):
 			with self.subTest(path=path.name):
