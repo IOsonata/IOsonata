@@ -93,35 +93,28 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("SystemLowFreqClockEnable()", rtc)
         self.assertIn("SystemLowFreqClockDisable()", rtc)
 
-    def test_pre_stack_hfxo_diagnostic_is_opt_in(self):
+    def test_ble_diagnostic_uses_no_application_clock_mode(self):
         source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
             encoding="utf-8")
-        self.assertIn("#ifndef HFXO_TEST_PRESTACK", source)
-        self.assertRegex(source, r"(?m)^#define HFXO_TEST_PRESTACK [012]$")
+        self.assertNotIn("HFXO_TEST_PRESTACK", source)
+        self.assertNotIn("SystemCoreClockSelect(", source)
         self.assertIn("static int HfxoPreStackTest(void)", source)
         pre = function(source, "static int HfxoPreStackTest(void)",
                        "int main(void)")
         self.assertLess(pre.index("SystemHighFreqClockEnable()"),
                         pre.index("HfxoStackInit()"))
-        self.assertIn("#if HFXO_TEST_PRESTACK == 2", pre)
-        self.assertIn("#if HFXO_TEST_PRESTACK == 1", pre)
-        safe_mode = pre.split("#if HFXO_TEST_PRESTACK == 2", 1)[1]
-        self.assertLess(safe_mode.index("SystemHighFreqClockDisable()"),
-                        safe_mode.index("HfxoStackInit()"))
         self.assertLess(pre.index("HfxoStackInit()"),
-                        pre.index("Pre-stack request disabled:"))
-        self.assertIn("Release-before-stack sequence", pre)
-        self.assertIn("Outstanding direct HFXO request", pre)
-        self.assertIn("SystemCoreClockSelect(OSC_TYPE_XTAL", pre)
+                        pre.index("Pre-stack request disabled"))
+        self.assertIn("Pre-stack handover", pre)
         self.assertNotIn("NRF_CLOCK->TASKS_HFCLKSTOP", pre)
 
     def test_pre_stack_success_continues_normal_checks(self):
         source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
             encoding="utf-8")
         main = function(source, "int main(void)", "return 0;")
+        self.assertIn("preStackResult = HfxoPreStackTest()", main)
         self.assertIn("if (preStackResult != 0)", main)
-        self.assertIn("#else\n\tif (!HfxoStackInit())", main)
-        self.assertLess(main.index("#endif\n\tHFXO_PRINT(\"Clock owner initialized"),
+        self.assertLess(main.index("preStackResult = HfxoPreStackTest()"),
                         main.index("initial = HfxoRunning()"))
         self.assertLess(main.index("initial = HfxoRunning()"),
                         main.index('HFXO_PRINT("HfxoTestBle: %d/5 checks PASS'))
