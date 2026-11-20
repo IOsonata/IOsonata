@@ -50,11 +50,16 @@ msDelay(250) and 125065 us for nsDelay(250 ms).
 | `ARM/ST/STM32WBAxx/src/system_power_stm32wba.cpp` | SystemPowerOff can return when a power register check fails | Introduced after 0.13 |
 | `ARM/Nordic/src/system_clock_nrfx.cpp` | BLE ownership handover and final release in interrupt context require separate target validation | Introduced after 0.13 |
 
-`ClockDemoFlush()` and `PowerDemoDrain()` now allow transmission time
+`ClockDemoFlush()` and `PowerDemoDrain()` allow transmission time
 without reading private UART state. Their fixed delay is not an exact
-hardware-TX-complete operation and must not be represented as one. The
-existing generic UART interface does not supply a portable on-wire drain
-operation. Do not add or change a public driver API without a separate
+hardware-TX-complete operation and must not be represented as one.
+The nRF52 legacy polling UART now drains its private software queue and
+waits for the final TX completion within `nRFUARTPowerOff()`. The driver
+owns the operation; `ClockDemo` does not poll RX to advance TX. The
+final `ClockDemo complete` line is followed by the same PowerOff drain.
+This change applies to legacy polling UART, not every MCU UART/DMA path.
+The existing generic UART interface does not supply a portable on-wire
+drain operation. Do not change the generic interface without a separate
 cross-MCU review.
 
 The inspection covered 18 changed shared example sources and 15 PEI
