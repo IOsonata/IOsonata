@@ -269,11 +269,14 @@ int main(void)
 	preStackResult = HfxoPreStackTest();
 	HFXO_PRINT("Pre-stack test result: %s\r\n",
 		preStackResult == 0 ? "PASS" : "FAIL");
-	while (1)
+	if (preStackResult != 0)
 	{
-		__WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
-#endif
+#else
 	if (!HfxoStackInit())
 	{
 		HFXO_PRINT("Stack initialization: FAIL\r\n");
@@ -282,6 +285,7 @@ int main(void)
 			__WFE();
 		}
 	}
+#endif
 	HFXO_PRINT("Clock owner initialized\r\n");
 
 	initial = HfxoRunning();
