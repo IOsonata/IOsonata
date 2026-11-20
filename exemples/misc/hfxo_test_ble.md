@@ -11,7 +11,7 @@ SoftDevice and MPSL clock ownership.
 | nRF52840 | HfxoTestBle | Debug_SDC / Release_SDC | MPSL |
 
 The Debug/Release configurations call `nrf_sdh_enable_request()` before testing
-`SystemCoreClockSelect()`. Program the matching SoftDevice image before
+`SystemHighFreqClockEnable()` and `SystemHighFreqClockDisable()`. Program the matching SoftDevice image before
 starting this application. Use the corresponding IOsonata library build.
 
 The Debug_SDC/Release_SDC configurations call `MpslInit()`. MPSL handles the clock requests used by
@@ -21,12 +21,12 @@ start radio activity. It tests MPSL clock ownership only.
 Debug and Debug_SDC use `printf` with semihosting. Enable semihosting in
 the debugger. Release and Release_SDC use the board UART at 1000000 baud.
 
-The test makes two HFXO requests and releases them in order, reporting the
-running state after each operation. The clock may remain running after the
-last release when another part of the system needs it. The final release
-therefore checks the return value, not whether HFXO stopped. An additional
-release without a matching request must fail.
+The test enables HFXO twice and disables it twice, reporting the running
+state after each operation. The clock may remain running after the final
+disable when another part of the system owns it. Disable returns void, so
+the test observes the clock state instead of checking a return value. An
+additional unmatched disable must not change the clock state.
 
-These projects do not test a clock request made before enabling a BLE stack.
+These projects do not test enabling HFXO before starting the BLE stack.
 That handover remains unvalidated. No automatic hardware pass is implied by
 a successful build.
