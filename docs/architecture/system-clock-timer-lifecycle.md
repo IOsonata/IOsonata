@@ -237,21 +237,39 @@ updated to use those functions. The redundant Nordic LFCLK private header
 has been deleted. Source review is not a substitute for a complete build,
 SoftDevice/SDC integration tests, and actual hardware validation.
 
-A direct-to-BLE clock-owner transition has a confirmed limitation on
-nRF52832 with SDC/MPSL. The optional HfxoTestBle pre-stack diagnostic
-enabled HFXO directly, initialized MPSL successfully, and verified that
-HFXO kept running. The subsequent SystemHighFreqClockDisable could not
-finish because MPSL already controlled CLOCK; the outstanding request
-prevented the core oscillator selection interface from being used.
+### Nordic BLE clock ownership is transparent to applications
 
-Do not discard the reference count or write CLOCK STOP behind an active BLE
-stack. Applications that can end their direct HF clock use before BLE
-startup must disable that clock, initialize S132 or MPSL, then enable it
-again through the stack owner. The sequence may stop the oscillator
-temporarily; it is not a seamless handover. HfxoTestBle supports diagnostic
-mode 1 (direct-to-stack, known SDC failure) and mode 2 (release before stack,
-pending hardware test). A continuous transition requires a separately
-validated Nordic-supported implementation and must not be assumed safe.
+The same generic HF/LF clock API must work before and after S132 or MPSL
+initialization. Applications and generic peripheral drivers must not choose
+an HFXO owner, split clock lifetime at BLE startup, or perform Nordic-specific
+release/re-enable sequences. The MCU clock backend owns that integration.
+
+An nRF52832 SDC/MPSL diagnostic reproduced the defect: a direct HFXO
+Enable remained counted after MPSL initialization because Disable refused
+a direct CLOCK STOP while MPSL owned the registers. This is an IOsonata
+Nordic integration defect, not an invalid application request.
+
+Implementation requirements:
+
+- Preserve the logical shared HFXO reference count and active peripherals'
+  clock requirements across BLE startup.
+- Integrate owner transition within the Nordic clock and BLE initialization
+  paths; do not require an application callback or additional public API.
+- Use only Nordic-permitted clock operations for the current hardware owner;
+  never STOP CLOCK through registers while S132/MPSL controls it.
+- Where the underlying Nordic stack cannot accept an existing direct clock
+  request without an interruption, explicitly address that limitation in the
+  backend. Do not silently stop an actively required clock or fake a balanced
+  reference count.
+- Verify both directions of clock-owner lifecycle, failed initialization,
+  repeated enables, and final disables before claiming transparent operation.
+
+HfxoTestBle mode 0 (stack first) and mode 2 (application manually releases
+before stack) have passed on S132 and SDC/MPSL. Mode 2 is a diagnostic for
+a hardware-safe ordering, **not** an acceptable application requirement.
+Mode 1 (direct HFXO request retained through BLE initialization) has failed
+on SDC and remains an open bug. Source review and test success in other
+modes do not close it.
 
 ## Cross-MCU implementation and validation
 
