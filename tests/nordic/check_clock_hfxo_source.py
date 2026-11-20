@@ -198,6 +198,23 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertLess(source.index("if (nRFxMpslActive())"), stop)
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
+    def test_s132_release_is_deferred_until_stack_shutdown(self):
+        disable = function(self.clock, "void SystemHighFreqClockDisable(",
+                           "// System OFF requires HFXO stopped")
+        self.assertIn("s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT", disable)
+        self.assertIn("nRFxClockSdEnabled()", disable)
+        self.assertIn("s_bNRFxSdDirectStopPending = true", disable)
+        self.assertIn("s_nRFxHfxoReqCnt = 0U", disable)
+        handler = function(self.clock,
+                           "static void nRFxClockSdhStateHandler(",
+                           "bool SystemCoreClockSelect(")
+        self.assertIn("NRF_SDH_EVT_STATE_DISABLED", handler)
+        self.assertIn("NRF_SDH_STATE_OBSERVER(", handler)
+        self.assertIn("s_bNRFxSdDirectStopPending", handler)
+        self.assertIn("s_nRFxHfxoReqCnt == 0U", handler)
+        self.assertIn("NRFX_HFXO_STOP = 1U", handler)
+        self.assertIn("s_nRFxHfxoOwner = NRFX_HFXO_OWNER_DIRECT", handler)
+
     def test_nrf54l_system_off_checks_hfxo(self):
         source = function(self.clock, "bool nRFxClockPrepareSystemOff(",
                           "static bool nRFxLfclkOscSource(")
