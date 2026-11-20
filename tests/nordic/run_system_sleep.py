@@ -27,7 +27,12 @@ static MockScb g_Scb;
 #define SCB_SCR_SLEEPDEEP_Msk (1U << 2)
 #define SCB_SCR_SLEEPONEXIT_Msk (1U << 1)
 static uint32_t s_Ipsr, s_Mask;
-static unsigned s_Disable, s_Enable, s_Wfi, s_SdWait;
+static unsigned s_Disable, s_Enable, s_Wfi, s_SdWait, s_ClockService;
+void nRFxClockService(void)
+{
+	assert(s_Ipsr == 0U);
+	s_ClockService++;
+}
 static bool s_SdOn;
 uint32_t __get_IPSR(void) { return s_Ipsr; }
 uint32_t DisableInterrupt(void)
@@ -116,16 +121,18 @@ int main(void)
 		s_Ipsr = 0U;
 		s_SdOn = false;
 		s_Mask = i;
-		s_Disable = s_Enable = s_Wfi = s_SdWait = 0U;
+		s_Disable = s_Enable = s_Wfi = s_SdWait = s_ClockService = 0U;
 		g_Scb.SCR = 0x100U | SCB_SCR_SLEEPDEEP_Msk |
 			SCB_SCR_SLEEPONEXIT_Msk;
 		SystemSleep();
 		assert(s_Wfi == 1U && s_Disable == 1U && s_Enable == 1U);
+		assert(s_ClockService == 1U);
 		assert(s_SdWait == 0U && s_Mask == i);
 		assert(g_Scb.SCR == (0x100U | SCB_SCR_SLEEPDEEP_Msk |
 			SCB_SCR_SLEEPONEXIT_Msk));
 		s_Ipsr = 11U;
 		SystemSleep();
+		assert(s_ClockService == 1U);
 		assert(s_Wfi == 1U && s_Disable == 1U && s_Enable == 1U);
 	}
 #ifdef SOFTDEVICE_PRESENT
