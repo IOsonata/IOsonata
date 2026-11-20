@@ -111,9 +111,6 @@ typedef struct {
 	const uint8_t *pTxData;
 	volatile bool *pTxWait;	// Completion of a transmit using the caller's buffer
 	volatile bool bTxAbort;	// Timed out, waiting for STOPPED or READY
-	volatile bool bDmaActive;	// Hardware may still access the programmed DMA buffer
-	bool bDmaCancelPending;	// Polling DMA timed out before STOP was confirmed
-	bool bDmaCancelWasRx;	// Release receive ownership only after DMA stops
 	bool bCmdFailed;		// Cancelled command, do not start its receive phase
 	bool bPeiPrepared;	// PPI-started SPIM owns the existing DMA buffers
 	alignas(4) uint8_t TxBuf[NRFX_SPI_TXBUF_SIZE];	// Copy of an interrupt driven transmit
