@@ -27,6 +27,31 @@ disable when another part of the system owns it. Disable returns void, so
 the test observes the clock state instead of checking a return value. An
 additional unmatched disable must not change the clock state.
 
+## Verified SDC ownership limitation
+
+The nRF52832 SDC/MPSL diagnostic with `HFXO_TEST_PRESTACK=1`
+confirmed:
+
+```text
+Pre-stack enable: PASS, HFXO running
+Stack initialization: PASS
+Clock survives stack init: PASS, HFXO running
+Pre-stack request disabled: FAIL
+```
+
+The direct HFXO requirement remains counted after MPSL takes CLOCK ownership,
+because the Nordic backend correctly refuses a direct CLOCK STOP while MPSL
+is active. This is a confirmed limitation of direct-to-MPSL initialization,
+not a failure of the stack-first tests. Simply discarding the clock reference
+would hide possible power consumption and is not an acceptable fix.
+
+For an application that can complete its direct-clock work before enabling
+the stack, use the safe lifecycle: disable the direct clock requirement,
+initialize the BLE stack, and enable it again through the BLE clock owner.
+This may briefly stop HFXO and **does not preserve an uninterrupted HFXO
+request across initialization**. Continuous ownership transfer requires a
+separately validated strategy supported by the Nordic clock controller.
+
 ## Optional pre-stack HFXO diagnostic
 
 The default HfxoTestBle still initializes the BLE owner first. To exercise
@@ -35,7 +60,13 @@ compiler preprocessor definitions in the desired Eclipse managed
 configuration, clean-build and flash that configuration. Do not change the
 library project settings or the generic clock API.
 
-The diagnostic:
+Set `HFXO_TEST_PRESTACK=1` to reproduce the observed direct-to-stack
+ownership limitation. Set `HFXO_TEST_PRESTACK=2` to test the safe
+release-before-stack sequence. The safe mode deliberately disables the
+original HFXO requirement before initializing S132 or MPSL, verifies it
+stopped, and then checks a new request through the stack after initialization.
+
+The original mode-1 diagnostic:
 
 1. Selects HFXO and calls `SystemHighFreqClockEnable()` before the stack.
 2. Checks that the oscillator is running.
@@ -53,7 +84,7 @@ direct CLOCK STOP after the stack becomes active. It may retain a clock
 reference; in that case the diagnostic stops with a clear FAIL rather than
 writing protected registers or pretending the release succeeded.
 
-Run separately with S132 and MPSL. Save the full output, including
+Run either mode separately with S132 and MPSL. Save the full output, including
 `Pre-stack request disabled` and `Pre-stack handover`. An unsuccessful or
 hanging stack initialization is also a failed handover and must be
 investigated before any production owner-transfer change. Do not use this
@@ -61,5 +92,6 @@ mode in a product or with ongoing RADIO activity. There is no assertion
 that a clock can be transferred without interruption on all Nordic MCUs.
 
 The existing stack-first tests have already passed on nRF52832 using
-S132 and SDC/MPSL. The pre-stack diagnostic has not been hardware-tested,
+S132 and SDC/MPSL. Mode 1 has reproduced the failure on nRF52832 SDC/MPSL. Mode 2 has not yet
+been hardware-tested,
 and a successful managed build is not hardware evidence.
