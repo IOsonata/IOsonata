@@ -196,6 +196,9 @@ uint32_t SystemResetReason(void)
 
 // System ON idle: peripherals and radio retain ownership of their clocks.
 // WFI resumes on a pending interrupt; do not select System OFF or gate clocks.
+// Internal clock maintenance, not an application-facing HAL entry point.
+void nRFxClockService(void);
+
 void SystemSleep(void)
 {
 	NRF_GPIO_Type *wakeReg;
@@ -211,6 +214,10 @@ void SystemSleep(void)
 	{
 		return;
 	}
+
+	// A timer can release the last HFXO request from its IRQ. Complete
+	// a stack-owned deferred release before going idle.
+	nRFxClockService();
 
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 	sd = SysPwrSdEnabled();
