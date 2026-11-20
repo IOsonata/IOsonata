@@ -491,8 +491,10 @@ void IOPinDisableInterrupt(int IntNo)
 
 	for (i = 0; i <= IOPIN_MAX_INT; i++)
 	{
-		if (s_GpIOSenseEvt[i].SensEvtCB != NULL)
+		if (s_GpIOSenseEvt[i].Sense != IOPINSENSE_DISABLE &&
+			nRFGpioteGetReg(s_GpIOSenseEvt[i].PortPinNo >> 8) == gpiotereg)
 		{
+			// Other channels on this GPIOTE instance still own its NVIC.
 			return;
 		}
 	}
