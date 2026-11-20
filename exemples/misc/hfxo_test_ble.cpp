@@ -41,6 +41,7 @@ SOFTWARE.
 
 #include "coredev/system_core_clock.h"
 #include "bluetooth/bt_app.h"
+#include "app_evt_handler.h"
 
 #ifdef NDEBUG
 #include "coredev/uart.h"
@@ -192,9 +193,10 @@ int main(void)
 		before && bluetooth && second && after ? "PASS" : "FAIL");
 
 	HfxoConsoleDrain();
-	while (1)
+	if (before && bluetooth && second && after)
 	{
-		__WFE();
+		// Service Bluetooth work through IOsonata, not through a vendor loop.
+		AppRun();
 	}
-	return 0;
+	return before && bluetooth && second && after ? 0 : 1;
 }
