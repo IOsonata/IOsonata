@@ -807,6 +807,37 @@ static void nRFUARTPollLegacyTx(nRFUartDev_t * const dev)
 	dev->pUartDev->bTxReady = false;
 	dev->pReg->TXD = *p;
 }
+
+// Polling UART has no TX interrupt to empty its queue during a delay.
+// Complete the queued bytes and the last TXD transfer before power off.
+// Bound the wait for each byte so a stalled UART cannot block forever.
+static bool nRFUARTDrainPollingTx(nRFUartDev_t * const dev)
+{
+	uint32_t timeout;
+	int queued;
+	int remaining;
+
+	queued = CFifoUsed(dev->pUartDev->hTxFifo);
+	timeout = 0U;
+	while (true)
+	{
+		nRFUARTPollLegacyTx(dev);
+		remaining = CFifoUsed(dev->pUartDev->hTxFifo);
+		if (remaining == 0 && dev->pUartDev->bTxReady)
+		{
+			return true;
+		}
+		if (remaining < queued)
+		{
+			queued = remaining;
+			timeout = 0U;
+		}
+		else if (++timeout >= 2000000U)
+		{
+			return false;
+		}
+	}
+}
 #endif
 
 #ifdef UART_PRESENT
@@ -1154,6 +1185,14 @@ void nRFUARTPowerOff(DevIntrf_t * const pDev)
 	NRF_UART_Type *reg = dev->pReg;
 #else
 	NRF_UARTE_Type *reg = dev->pDmaReg;
+#endif
+
+#ifdef UART_PRESENT
+	if (!pDev->bDma && !pDev->bIntEn && !nRFUARTDrainPollingTx(dev))
+	{
+		// Preserve the running UART rather than discard queued TX.
+		return;
+	}
 #endif
 
 #if !defined(NRF54L_SERIES) && !defined(NRF71_SERIES)
