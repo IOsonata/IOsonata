@@ -93,6 +93,21 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("SystemLowFreqClockEnable()", rtc)
         self.assertIn("SystemLowFreqClockDisable()", rtc)
 
+    def test_hfxo_example_uses_only_generic_clock_services(self):
+        source = (ROOT / "exemples/misc/hfxo_test.cpp").read_text(
+            encoding="utf-8")
+        self.assertNotIn('#include "nrf.h"', source)
+        self.assertNotIn("NRF_CLOCK", source)
+        self.assertNotIn("HFCLKSTAT", source)
+        self.assertNotIn("SystemCoreClockSelect(", source)
+        self.assertNotIn("SOFTDEVICE_PRESENT", source)
+        self.assertNotIn("NRFXLIB_SDC", source)
+        self.assertIn("SystemHighFreqClockEnable()", source)
+        self.assertIn("SystemHighFreqClockDisable()", source)
+        self.assertIn("3 requests PASS", source)
+        self.assertNotIn("HFXO running", source)
+        self.assertNotIn("HFXO stopped", source)
+
     def test_portable_ble_app_has_no_vendor_stack_selection(self):
         source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
             encoding="utf-8")
