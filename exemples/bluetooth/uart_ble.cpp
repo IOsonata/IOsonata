@@ -243,6 +243,7 @@ static uint32_t s_ClockCheckCount;
 static uint32_t s_ClockCheckFailures;
 static uint32_t s_ClockGATTWrites;
 static volatile bool s_bClockCheckPending;
+static bool s_bClockCheckQueued;
 
 
 static void UartRxQue(void)
@@ -278,6 +279,7 @@ static void ClockCheckEvt(uint32_t Evt, void *pCtx)
 
 	(void)Evt;
 	(void)pCtx;
+	s_bClockCheckQueued = false;
 	s_bClockCheckPending = false;
 	first = SystemHighFreqClockEnable();
 	second = first && SystemHighFreqClockEnable();
@@ -315,7 +317,7 @@ void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len
 	if (!s_bClockCheckPending)
 	{
 		s_bClockCheckPending = true;
-		(void)AppEvtHandlerQue(0U, nullptr, ClockCheckEvt);
+		s_bClockCheckQueued = AppEvtHandlerQue(0U, nullptr, ClockCheckEvt);
 	}
 }
 
@@ -504,9 +506,9 @@ bool AppCheckStatus(void)
 		{
 			(void)AppEvtHandlerQue(0, nullptr, SysLogFlushEvt);
 		}
-		if (s_bClockCheckPending)
+		if (s_bClockCheckPending && !s_bClockCheckQueued)
 		{
-			(void)AppEvtHandlerQue(0U, nullptr, ClockCheckEvt);
+			s_bClockCheckQueued = AppEvtHandlerQue(0U, nullptr, ClockCheckEvt);
 		}
 	}
 	idle = s_bUartRxPending == false &&
