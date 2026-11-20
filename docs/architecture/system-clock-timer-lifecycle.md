@@ -1,9 +1,24 @@
-# System clock and timer lifecycle
+# MCU core power, clock and timer lifecycle
 
 Status: architecture decision for IOsonata 0.14. The generic clock
 Enable/Disable functions below are **planned**, not yet implemented across
 all MCU ports. Existing source code may still use older clock-selection
 semantics. Do not treat this document as evidence of hardware validation.
+
+## System core interface responsibility
+
+`coredev/system_core_clock.h` defines MCU-level system services: core power
+management, sleep and wake behavior, reset and retention functions, and
+core/system clock selection. These are internal MCU facilities normally
+established by `SystemInit()` and used by peripheral implementations.
+Applications call them directly only for specific system-level needs.
+
+This interface is not a general manager for individual peripheral module
+clock gates. UART, SPI, I2C, timers and other drivers retain responsibility
+for configuring and enabling their own peripheral hardware. Optional shared
+HF/LF oscillator Enable/Disable functions belong here only because they
+control MCU-level clock sources shared by those drivers; they must not
+replace the drivers' existing Enable/Disable lifecycle.
 
 ## Design principle
 
@@ -48,8 +63,9 @@ bool SystemLowFreqClockEnable(void);
 void SystemLowFreqClockDisable(void);
 ```
 
-These operations are generic, not Nordic-only. Each MCU port implements
-them according to its clock hardware:
+These planned functions operate the MCU's shared high- and low-frequency
+clock sources, not individual peripheral clock gates. They are generic,
+not Nordic-only. Each MCU port implements them according to its hardware:
 
 - Enable increments the corresponding clock reference count. The first
   enable starts the configured source when it is not already active.
@@ -145,8 +161,8 @@ default low-frequency source is the one configured in
 | Layer | Responsibility |
 | --- | --- |
 | Application | Configure and operate devices through generic APIs |
-| Generic system clock | Define source selection and shared Enable/Disable behavior |
-| MCU clock backend | Apply `g_McuOsc`, maintain clock reference counts and protect shared hardware |
+| System core power/clock | MCU power states, sleep/wake, reset/retention, core clock selection and shared oscillator Enable/Disable |
+| MCU core backend | Implement the MCU system facilities, apply `g_McuOsc`, maintain shared oscillator reference counts and protect hardware ownership |
 | Timer/peripheral driver | Choose supported hardware clock paths; enable/disable its required clocks in the normal lifecycle |
 | BLE stack or other external owner | Keep its hardware ownership; HAL must not stop an externally owned clock |
 
