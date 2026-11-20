@@ -404,6 +404,7 @@ int main()
 	uint32_t start;
 	uint64_t period;
 	uint32_t elapsed;
+	uint64_t expected;
 #endif
 #if POWER_DEMO_UART_WAKE
 	uint8_t wakeByte;
@@ -574,7 +575,7 @@ int main()
 		}
 #endif
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
-		uint64_t expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
+		expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
 		PowerDemoPut(period != 0U && s_StandbyTimerWoke &&
 			(uint64_t)elapsed >= expected * 98ULL / 100ULL &&
 			(uint64_t)elapsed <= expected * 102ULL / 100ULL ?
@@ -598,6 +599,7 @@ int main()
 	}
 #else
 	uint32_t reason;
+	unsigned i;
 	const char *sep;
 	uint32_t cnt;
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
@@ -614,7 +616,7 @@ int main()
 	sep = " ";
 
 	SysLogPrintf(SysLogGet(), "Reset reason 0x%x:", (unsigned)reason);
-	for (unsigned i = 0; i < sizeof(s_ResetNames) / sizeof(s_ResetNames[0]); i++)
+	for (i = 0U; i < sizeof(s_ResetNames) / sizeof(s_ResetNames[0]); i++)
 	{
 		if (reason & s_ResetNames[i].Reason)
 		{
