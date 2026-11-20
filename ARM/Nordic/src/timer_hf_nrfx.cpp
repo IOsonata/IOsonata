@@ -212,6 +212,9 @@ alignas(4) const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 
 static std::atomic<int> s_nRfxHFClockSem(0);
 static bool s_bTimerEnabled[TIMER_NRFX_HF_MAX];
+// The timers share one system-clock request. Keep it when a release is
+// refused so a later Enable does not acquire the same request again.
+static bool s_bTimerHfxoHeld;
 
 // CLEAR task endpoint given out: a hardware event can clear the counter
 static bool s_bnRFxTimerHwClear[TIMER_NRFX_HF_MAX];
@@ -545,16 +548,14 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 		return true;
 	}
 
-	if (s_nRfxHFClockSem == 0)
+	if (s_nRfxHFClockSem == 0 && !s_bTimerHfxoHeld)
 	{
-		// SystemInit owns the PLL. Timers request only the shared HFXO,
-		// and the clock manager owns the oscillator lifecycle.
-		// One request for the 32 MHz crystal while timers run, released by
-		// the last Disable
-		if (SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000) == false)
+		// SystemInit owns PLL. The first HF timer requests shared HFXO.
+		if (!SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000))
 		{
 			return false;
 		}
+		s_bTimerHfxoHeld = true;
 	}
 
 	s_bTimerEnabled[devno] = true;
@@ -641,9 +642,14 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 
 	reg->TASKS_STOP = 1;
 
-	if (s_nRfxHFClockSem == 0)
+	if (s_nRfxHFClockSem == 0 && s_bTimerHfxoHeld)
 	{
-		(void)SystemCoreClockSelect(OSC_TYPE_RC, 0);
+		// The clock manager can refuse a release during BLE handover.
+		// Retain the local request until a subsequent release succeeds.
+		if (SystemCoreClockSelect(OSC_TYPE_RC, 0))
+		{
+			s_bTimerHfxoHeld = false;
+		}
 	}
 
     switch (devno)
