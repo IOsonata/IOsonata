@@ -57,16 +57,20 @@ evidence of a leaked clock reference. If HFXO never stops during this
 window, the diagnostic reports `Pre-stack physical release: FAIL`.
 The portable `HfxoTestBle: PASS` cannot establish physical HFXO release.
 
-The first nRF52832 LFRC hardware test observed HFXO running 10 ms after
-release. That is not sufficient to distinguish LFRC calibration from an
-unreleased direct CLOCK start. The 2-second observation test has not yet
-been run on hardware. If HFXO remains continuously running, the original
-direct request still requires an ownership fix that does not interfere
-with MPSL or its LFRC calibration.
+The nRF52832 SDC/LFRC hardware test recorded zero stopped samples
+out of 200 over two seconds after the pre-stack HFXO release. This
+shows a continuously running HFXO during the observation window. The
+implementation previously tried an MPSL HF request/release pair, but
+that pair does not release the HFXO request started directly before
+MPSL initialization. That incorrect transfer has been removed: the
+original request remains recorded instead of silently disappearing.
+A safe ownership transfer is still required, without disabling MPSL's
+LFRC calibration or stopping a clock required by the radio.
 
 Do not replace the shared `exemples/misc/hfxo_test_ble.cpp` source
-with Nordic-specific initialization. The LFRC diagnostic is not yet
-integrated into a dedicated Eclipse managed project or hardware-verified.
+with Nordic-specific initialization. The LFRC diagnostic was compiled
+in a locally modified Eclipse SDC project and run on nRF52832 hardware;
+a dedicated managed diagnostic project has not yet been committed.
 
 ## Status
 
