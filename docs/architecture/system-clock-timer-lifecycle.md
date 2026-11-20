@@ -1,9 +1,11 @@
 # MCU core power, clock and timer lifecycle
 
-Status: architecture decision for IOsonata 0.14. The generic clock
-Enable/Disable functions below are **planned**, not yet implemented across
-all MCU ports. Existing source code may still use older clock-selection
-semantics. Do not treat this document as evidence of hardware validation.
+Status: architecture decision and active implementation for IOsonata 0.14.
+The generic clock Enable/Disable declarations and Nordic implementation
+are present on `refactor_nordic_clock_ownership_014`. Other MCU ports are
+not yet implemented or validated for these functions. The Nordic changes
+still require focused builds and hardware retesting; this document is not
+hardware PASS evidence.
 
 ## System core interface responsibility
 
@@ -84,7 +86,7 @@ The responsibilities are deliberately separated:
 
 - `g_McuOsc` describes the board's oscillator configuration.
 - System core clock selection configures the MCU clock tree.
-- The planned shared HF/LF Enable/Disable functions manage oscillator or
+- The shared HF/LF Enable/Disable functions manage oscillator or
   shared-clock usage and the corresponding reference counts; they do not
   disable an essential CPU clock or replace peripheral-module gates.
 - Existing `SystemPeriphClockGet/Set` functions manage derived peripheral
@@ -113,9 +115,9 @@ functions. When a clock is enabled, its MCU backend uses the oscillator
 configuration in `g_McuOsc`. Explicit source changes must not disrupt
 active clock consumers.
 
-### Planned generic functions
+### Generic clock functions
 
-Add to `include/coredev/system_core_clock.h`:
+Declared in `include/coredev/system_core_clock.h` on the working branch:
 
 ```cpp
 bool SystemHighFreqClockEnable(void);
@@ -125,7 +127,7 @@ bool SystemLowFreqClockEnable(void);
 void SystemLowFreqClockDisable(void);
 ```
 
-These planned functions operate the MCU's shared high- and low-frequency
+These functions operate the MCU's shared high- and low-frequency
 clock sources, not individual peripheral clock gates. They are generic,
 not Nordic-only. Each MCU port implements them according to its hardware:
 
@@ -228,13 +230,18 @@ default low-frequency source is the one configured in
 | Timer/peripheral driver | Select supported timer inputs and configure its own peripheral hardware; use system peripheral-clock and shared-clock APIs as needed during its normal lifecycle |
 | BLE stack or other external owner | Keep its hardware ownership; HAL must not stop an externally owned clock |
 
-On Nordic, the current implementation uses
-`SystemCoreClockSelect(OSC_TYPE_XTAL/OSC_TYPE_RC)` for HFXO reference
-counting and private `nRFxLfclkAcquire()/nRFxLfclkRelease()` functions.
-Those are **legacy/refactor-in-progress behavior**, not the approved
-generic interface. The replacement must update affected RTC, HF timer,
-USB, BLE and clock-demo call sites together and remove the redundant
-private LFCLK interface.
+The Nordic working branch now uses `SystemHighFreqClockEnable/Disable` for
+shared HF oscillator ownership and `SystemLowFreqClockEnable/Disable` for
+LFCLK. Its RTC, HF timer, USB controller, HFXO tests and ClockDemo have been
+updated to use those functions. The redundant Nordic LFCLK private header
+has been deleted. Source review is not a substitute for a complete build,
+SoftDevice/SDC integration tests, and actual hardware validation.
+
+A failed clock-owner transition during a void Disable operation is a
+remaining validation concern: the backend retains its internal count to
+avoid stopping an oscillator owned by the stack. Peripheral-level teardown
+must not assume that such a failed transition has fully shut down hardware.
+Verify this behavior at BLE handover before sign-off.
 
 ## Cross-MCU implementation and validation
 
