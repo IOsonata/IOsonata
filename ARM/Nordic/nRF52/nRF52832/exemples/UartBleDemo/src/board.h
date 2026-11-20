@@ -41,9 +41,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blystnano_boards.h"
 
-// Uncomment this to set custom board oscillator
-// Default library setting is :
-// #define MCU_OSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
+// Select calibrated LFRC for the nRF52832 BLE clock-sharing test.
+#define MCU_OSC	{ \
+	{OSC_TYPE_XTAL, 32000000U, 20U, 0U}, \
+	{OSC_TYPE_RC, 32768U, 500U, 0U}, \
+	false, 0U \
+}
 
 //#define NORDIC_DK
 
