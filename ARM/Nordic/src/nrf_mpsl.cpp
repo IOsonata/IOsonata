@@ -205,6 +205,8 @@ static void NvmOpFinish(int Res)
 static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 		mpsl_timeslot_session_id_t SessionId, uint32_t Signal)
 {
+	uint32_t remainUs;
+
 	(void)SessionId;
 
 	switch (Signal)
@@ -213,7 +215,7 @@ static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 		{
 			s_NvmSigStart = s_NvmSigStart + 1;
 
-			uint32_t remainUs = 0;
+			remainUs = 0U;
 
 			if (s_pNvmOp != nullptr && s_pNvmOp->Step != nullptr)
 			{
@@ -280,7 +282,12 @@ static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 // interface already serialises through its own busy latch.
 static int NvmArbiterRun(void *pRequest)
 {
-	NvmTimeslotOp_t *pOp = static_cast<NvmTimeslotOp_t *>(pRequest);
+	NvmTimeslotOp_t *pOp;
+	int32_t r;
+	uint32_t elapsed;
+	int result;
+
+	pOp = static_cast<NvmTimeslotOp_t *>(pRequest);
 
 	if (pOp == nullptr || pOp->Step == nullptr)
 	{
@@ -298,7 +305,7 @@ static int NvmArbiterRun(void *pRequest)
 
 	NvmBuildReq(&s_NvmNextReq, pOp->StepBudgetUs);
 
-	int32_t r = mpsl_timeslot_request(s_NvmSessionId, &s_NvmNextReq);
+	r = mpsl_timeslot_request(s_NvmSessionId, &s_NvmNextReq);
 	if (r != 0)
 	{
 		s_pNvmOp = nullptr;
@@ -313,7 +320,7 @@ static int NvmArbiterRun(void *pRequest)
 		return NVM_INTRF_OP_STARTED;
 	}
 
-	uint32_t elapsed = 0;
+	elapsed = 0U;
 	while (s_bNvmDone == false)
 	{
 		if (elapsed >= MPSL_NVM_TIMEOUT_MS * 1000UL)
@@ -333,7 +340,7 @@ static int NvmArbiterRun(void *pRequest)
 		elapsed += 100;
 	}
 
-	int result = s_NvmResult;
+	result = s_NvmResult;
 
 	if (result != 0)
 	{
