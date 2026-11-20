@@ -37,7 +37,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 
 // PEI is an optional Timer feature. Weak references let ordinary RTC
-// applications link without the PEI matrix or nRF52 PPI backend.
+// applications link without the PEI matrix or nRF52 PPI implementation.
 #if defined(__GNUC__)
 #pragma weak PeiBindEvent
 #pragma weak PeiUnbindEvent
