@@ -8,8 +8,12 @@ specifies another rate. No debugger is required for UART logging.
 
 Bare-metal HFXO requests/releases are balanced. No BLE stack is started.
 
-This project runs three clock-selection cycles. UART is drained and powered
-off before each change, then initialized again to update its baud divider.
+This project runs three clock-selection cycles. The Nordic polling UART
+driver drains queued TX and waits for the last byte before PowerOff.
+ClockDemo powers off the UART before each explicit clock selection and
+reinitializes it afterward. The final result is also drained before the
+application enters its idle loop. The application does not read the UART
+driver's private FIFO or call RX to advance TX.
 Clock selection completes before the timer is initialized because some ports
 retain timer module ownership after TimerDisable. It then checks the first
 high-frequency timer at 1 MHz requested rate, with a 10 ms trigger over 250 ms.
