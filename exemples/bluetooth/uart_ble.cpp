@@ -43,6 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "coredev/uart.h"
+#include "coredev/system_core_clock.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
