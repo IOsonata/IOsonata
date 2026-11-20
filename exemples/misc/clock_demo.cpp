@@ -69,6 +69,9 @@ SOFTWARE.
 #ifndef CLOCK_DEMO_STOP_UART
 #define CLOCK_DEMO_STOP_UART 0
 #endif
+#ifndef CLOCK_DEMO_HF_SOURCE_ENABLE
+#define CLOCK_DEMO_HF_SOURCE_ENABLE 0
+#endif
 
 struct ClockDemoSource_t {
 	const char *pName;
@@ -382,7 +385,22 @@ int main(void)
 #if CLOCK_DEMO_CORE_READONLY
 			bool selected = !source.Select;
 #else
-			bool selected = !source.Select || SystemCoreClockSelect(source.Type, source.Frequency);
+			bool selected = true;
+			if (source.Select)
+			{
+#if CLOCK_DEMO_HF_SOURCE_ENABLE
+				if (source.Type == OSC_TYPE_RC)
+				{
+					SystemHighFreqClockDisable();
+				}
+				else
+				{
+					selected = SystemHighFreqClockEnable();
+				}
+#else
+				selected = SystemCoreClockSelect(source.Type, source.Frequency);
+#endif
+			}
 #endif
 			if (!ClockDemoClockEnd())
 			{
