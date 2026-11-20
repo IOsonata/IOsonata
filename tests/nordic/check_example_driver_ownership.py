@@ -32,6 +32,11 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertNotIn("SysLogGet()->hFifo", source)
 		self.assertNotIn("s_Uart.Rx(&unused", source)
 		self.assertNotIn("s_Uart.Rx(&dummy", source)
+		self.assertNotIn("timer_sam4l.h", source)
+		self.assertNotIn("SAM4L_PM->", source)
+		self.assertNotIn("SAM4L_AST->", source)
+		self.assertNotIn("SAM4L_BPM->", source)
+		self.assertNotIn("Sam4lUartSleepDiagnostic", source)
 		self.assertIn("SysLogFlush(SysLogGet())", source)
 
 	def test_i2c_sleep_demo(self):
