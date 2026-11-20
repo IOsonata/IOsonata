@@ -31,7 +31,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include <atomic>
 
 #ifdef __ICCARM__
 #include "intrinsics.h"
@@ -210,11 +209,7 @@ alignas(4) const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 #endif
 };
 
-static std::atomic<int> s_nRfxHFClockSem(0);
 static bool s_bTimerEnabled[TIMER_NRFX_HF_MAX];
-// The timers share one system-clock request. Keep it when a release is
-// refused so a later Enable does not acquire the same request again.
-static bool s_bTimerHfxoHeld;
 
 // CLEAR task endpoint given out: a hardware event can clear the counter
 static bool s_bnRFxTimerHwClear[TIMER_NRFX_HF_MAX];
@@ -548,18 +543,12 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 		return true;
 	}
 
-	if (s_nRfxHFClockSem == 0 && !s_bTimerHfxoHeld)
+	// Shared clock reference counting belongs in the system clock backend.
+	if (!SystemHighFreqClockEnable())
 	{
-		// SystemInit owns PLL. The first HF timer enables the shared HF source.
-		if (!SystemHighFreqClockEnable())
-		{
-			return false;
-		}
-		s_bTimerHfxoHeld = true;
+		return false;
 	}
-
 	s_bTimerEnabled[devno] = true;
-	s_nRfxHFClockSem++;
 
 	switch (devno)
 	{
@@ -638,16 +627,8 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 	}
 
 	s_bTimerEnabled[devno] = false;
-	s_nRfxHFClockSem--;
-
 	reg->TASKS_STOP = 1;
-
-	if (s_nRfxHFClockSem == 0 && s_bTimerHfxoHeld)
-	{
-		// The system clock backend handles clock ownership on final disable.
-		SystemHighFreqClockDisable();
-		s_bTimerHfxoHeld = false;
-	}
+	SystemHighFreqClockDisable();
 
     switch (devno)
     {
