@@ -43,6 +43,11 @@ SOFTWARE.
 #include "nrf.h"
 #include "coredev/system_core_clock.h"
 
+// Opt-in diagnostic; the default test retains stack-first initialization.
+#ifndef HFXO_TEST_PRESTACK
+#define HFXO_TEST_PRESTACK 0
+#endif
+
 #if defined(NRFXLIB_SDC)
 #include "nrf_mpsl.h"
 #elif defined(SOFTDEVICE_PRESENT)
@@ -152,6 +157,72 @@ static void HfxoResult(const char *pName, bool Result, bool Running)
 		Running ? "running" : "stopped");
 }
 
+#if HFXO_TEST_PRESTACK
+// Check whether a direct HFXO request remains balanced when the BLE
+// stack initializes. Never issue a direct CLOCK STOP after stack init.
+static int HfxoPreStackTest(void)
+{
+	bool selected;
+	bool enabled;
+	bool running;
+	bool stackReady;
+	bool survived;
+	bool disabled;
+	bool reenabled;
+	bool cleared;
+
+	HFXO_PRINT("Pre-stack HFXO ownership test\r\n");
+	selected = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+	enabled = selected && SystemHighFreqClockEnable();
+	running = HfxoRunning();
+	HfxoResult("Pre-stack enable", enabled && running, running);
+	if (!enabled || !running)
+	{
+		return 1;
+	}
+
+	stackReady = HfxoStackInit();
+	HFXO_PRINT("Stack initialization: %s\r\n", stackReady ? "PASS" : "FAIL");
+	if (!stackReady)
+	{
+		return 1;
+	}
+
+	survived = HfxoRunning();
+	HfxoResult("Clock survives stack init", survived, survived);
+	if (!survived)
+	{
+		return 1;
+	}
+
+	SystemHighFreqClockDisable();
+	// Selection is refused while a shared HFXO request remains active.
+	// This catches an outstanding direct request after BLE takes CLOCK.
+	disabled = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+	HFXO_PRINT("Pre-stack request disabled: %s\r\n",
+		disabled ? "PASS" : "FAIL");
+	if (!disabled)
+	{
+		HFXO_PRINT("Outstanding direct HFXO request after stack init\r\n");
+		return 1;
+	}
+
+	reenabled = SystemHighFreqClockEnable();
+	running = HfxoRunning();
+	HfxoResult("Enable through stack", reenabled && running, running);
+	if (!reenabled || !running)
+	{
+		return 1;
+	}
+	SystemHighFreqClockDisable();
+	cleared = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
+	HFXO_PRINT("Stack request disabled: %s\r\n",
+		cleared ? "PASS" : "FAIL");
+	HFXO_PRINT("Pre-stack handover: %s\r\n", cleared ? "PASS" : "FAIL");
+	return cleared ? 0 : 1;
+}
+#endif
+
 int main(void)
 {
 	bool initial;
@@ -168,6 +239,9 @@ int main(void)
 
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTestBle\r\n");
+#if HFXO_TEST_PRESTACK
+	return HfxoPreStackTest();
+#endif
 	if (!HfxoStackInit())
 	{
 		HFXO_PRINT("Stack initialization: FAIL\r\n");
