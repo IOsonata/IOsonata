@@ -32,7 +32,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "timer_nrfx.h"
-#include "../include/system_clock_nrfx.h"
+#include "coredev/system_core_clock.h"
 #include "coredev/pei.h"
 #include "coredev/interrupt.h"
 
@@ -148,9 +148,6 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 };
 
 static bool s_bRtcEnabled[TIMER_NRFX_RTC_MAX];
-// RTC retains its configured source across Disable/Enable. System Clock
-// owns the shared oscillator and counts requests from all RTC instances.
-static TIMER_CLKSRC s_RtcClockSource[TIMER_NRFX_RTC_MAX];
 // CLEAR task endpoint given out: a hardware event can clear the counter
 static bool s_bRtcHwClear[TIMER_NRFX_RTC_MAX];
 
@@ -455,7 +452,7 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 		return true;
 	}
 
-	if (!nRFxLfclkAcquire(s_RtcClockSource[pTimer->DevNo]))
+	if (!SystemLowFreqClockEnable())
 	{
 		return false;
 	}
@@ -513,7 +510,7 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 #endif
 	}
 
-	nRFxLfclkRelease();
+	SystemLowFreqClockDisable();
 }
 
 // CLEAR task, returns once COUNTER reads lower than before it, bounded:
@@ -1111,7 +1108,6 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	const nRFRtcData_t *pRtc;
 	NRF_RTC_Type *reg;
 	TimerDev_t *pOldTimer;
-	TIMER_CLKSRC clkSource;
 	int i;
 
 	// Any frequency, SetFrequency takes the closest one
@@ -1121,21 +1117,15 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
-	switch (pCfg->ClkSrc)
+	// RTC uses the configured LFCLK source. No synthesized LFCLK.
+	if (pCfg->ClkSrc != TIMER_CLKSRC_DEFAULT &&
+		!((pCfg->ClkSrc == TIMER_CLKSRC_LFRC &&
+			g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC) ||
+			(pCfg->ClkSrc == TIMER_CLKSRC_LFXTAL &&
+			g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC)))
 	{
-		case TIMER_CLKSRC_DEFAULT:
-		case TIMER_CLKSRC_LFRC:
-		case TIMER_CLKSRC_LFXTAL:
-			break;
-#if defined(NRF52_SERIES) || defined(NRF51)
-		case TIMER_CLKSRC_HFRC:
-		case TIMER_CLKSRC_HFXTAL:
-			break;
-#endif
-		default:
-			return false;
+		return false;
 	}
-	clkSource = pCfg->ClkSrc;
 
 	pRtc = &s_nRfxRtcData[pCfg->DevNo];
 	reg = pRtc->pReg;
@@ -1170,7 +1160,6 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	s_pnRfxRtcData = s_nRfxRtcData;
 	s_pnRfxRtcDev[pCfg->DevNo] = pTimer;
-	s_RtcClockSource[pCfg->DevNo] = clkSource;
 	s_bRtcHwClear[pCfg->DevNo] = false;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
@@ -1234,7 +1223,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
     nRFxRtcSetFrequency(pTimer, pCfg->Freq);
 
-	// Acquire shared LFCLK before clearing the RTC, so the CLEAR task
+	// Enable LFCLK before clearing the RTC, so the CLEAR task
 	// completes on the selected clock. Init continues to enable the timer.
 	if (!nRFxRtcEnable(pTimer))
 	{
