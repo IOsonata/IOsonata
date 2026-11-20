@@ -1,0 +1,185 @@
+# System clock and timer lifecycle
+
+Status: architecture decision for IOsonata 0.14. The generic clock
+Enable/Disable functions below are **planned**, not yet implemented across
+all MCU ports. Existing source code may still use older clock-selection
+semantics. Do not treat this document as evidence of hardware validation.
+
+## Design principle
+
+An application specifies the peripheral operation it needs. The MCU
+implementation selects and manages the required clocks. Applications should
+not need MCU-specific oscillator startup sequences, clock reference counts,
+or sleep-related peripheral restoration for ordinary operation.
+
+The generic HAL is the source of interface definitions. Before adding a
+private API, type, enum, or state mechanism, inspect the existing generic
+interfaces, implementations, and other MCU ports. Do not duplicate generic
+clock-source enums or introduce separate Acquire/Release functions.
+
+## Oscillator configuration and clock execution
+
+`g_McuOsc` contains the board's configured oscillator descriptions:
+
+- `CoreOsc`: high-frequency/core oscillator description.
+- `LowPwrOsc`: low-frequency oscillator description.
+- The types come from the existing `OSC_TYPE` enum: RC, XTAL and TCXO.
+
+`SystemInit()` establishes the initial hardware clocks and power state.
+`SystemCoreClockSelect()` remains the explicit MCU core-clock selection
+interface; `SystemLowFreqClockSelect()` remains the explicit low-frequency
+source-selection interface. Selection must not double as an Enable/Disable
+reference-count operation.
+
+Normal peripheral operation must not require calling these selection
+functions. When a clock is enabled, its MCU backend uses the oscillator
+configuration in `g_McuOsc`. Explicit source changes must not disrupt
+active clock consumers.
+
+### Planned generic functions
+
+Add to `include/coredev/system_core_clock.h`:
+
+```cpp
+bool SystemHighFreqClockEnable(void);
+void SystemHighFreqClockDisable(void);
+
+bool SystemLowFreqClockEnable(void);
+void SystemLowFreqClockDisable(void);
+```
+
+These operations are generic, not Nordic-only. Each MCU port implements
+them according to its clock hardware:
+
+- Enable increments the corresponding clock reference count. The first
+  enable starts the configured source when it is not already active.
+- Disable decrements the count only for an outstanding enable. The last
+  disable stops a clock only when that hardware operation is supported and
+  the clock is not required by the CPU, another hardware owner or a stack.
+- An already running clock owned outside the HAL must not be stopped by a
+  peripheral driver.
+- A failure to start the clock must not increment the reference count.
+- Any transition and counter update must be safe from relevant concurrent
+  interrupt/peripheral activity; avoid waiting inside a critical section.
+- Where a clock is essential or cannot be gated independently, Disable must
+  not stop CPU execution or another necessary clock.
+
+HF and LF hardware behavior is not necessarily symmetric. In particular,
+on Nordic nRF52, HFCLK is available for the CPU from its internal source;
+starting HFXO requests the accurate crystal source, not the CPU clock
+itself. Stopping HFXO must not stop the core. LFCLK can be stopped and
+started with its configured RC or external low-frequency oscillator.
+Other MCU ports must implement their own supported behavior rather than
+copying Nordic register assumptions.
+
+Shared reference counting belongs in the implementation of the **shared
+clock**, not in one peripheral or a duplicated resource-management API.
+No `Acquire()`/`Release()` interface is required.
+
+## Timer API and automatic source selection
+
+The existing `TimerCfg_t`, `TIMER_CLKSRC`, `TimerInit()`,
+`TimerEnable()`, `TimerDisable()` and `TimerSetFrequency()` remain
+the user-facing timer interface.
+
+Typical use:
+
+```cpp
+TimerCfg_t cfg = {
+	.DevNo = 0,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 1000000U,
+	.IntPrio = 6,
+	.EvtHandler = TimerHandler,
+};
+
+TimerInit(&timer, &cfg);
+TimerEnable(&timer);
+```
+
+With `TIMER_CLKSRC_DEFAULT`, the selected timer implementation determines
+its supported clock inputs and configures the best available source and
+prescaler for `Freq`:
+
+1. Respect the actual timer selected by `DevNo`. `DevNo` is a virtual
+   timer index (typically low-frequency timers before high-frequency
+   timers), not an automatic cross-peripheral timer search.
+2. Choose a source that the selected timer can really use, accounting for
+   frequency, resolution, counter width, accuracy and power requirements.
+   Prefer a suitable low-power source; do not use a universal 32.768 kHz
+   boundary as a rule for all MCUs.
+3. Derive oscillator configuration from `g_McuOsc`. Do not invent a
+   second clock-source configuration or duplicate the generic
+   `TIMER_CLKSRC` enum.
+4. Configure an achievable timer frequency, report the actual supported
+   rate through the existing timer API and fail explicitly when a requested
+   operation cannot be supported. Do not silently exchange one `DevNo`
+   for a different timer.
+5. `TimerEnable()` enables the required clock through the generic clock
+   Enable function and starts the timer. `TimerDisable()` stops the
+   timer and disables its clock requirement.
+6. Reconfiguration or `TimerSetFrequency()` must respect other running
+   users of shared clocks. Do not change their clock source unexpectedly.
+
+An explicit `ClkSrc` remains available for users who require a
+particular supported timer clock. Unsupported explicit selections fail
+rather than being silently substituted.
+
+`Freq = 0` retains the existing meaning of requesting the highest
+supported rate for the selected timer, where implemented. A requested
+1 MHz rate for an inherently LF-only RTC does not turn it into an HF
+timer; the driver must report its achievable rate or fail in accordance
+with the generic timer interface.
+
+### No synthesized LFCLK requirement
+
+There is no requirement to preserve Nordic nRF52 synthesized LFCLK as a
+generic system-clock mode. Do not add a synthesized oscillator type or a
+new configuration field to `g_McuOsc`. MCU-specific high-frequency timer
+kernel clocks are distinct from a synthesized 32 kHz LFCLK. The agreed
+default low-frequency source is the one configured in
+`g_McuOsc.LowPwrOsc`.
+
+## Ownership boundaries
+
+| Layer | Responsibility |
+| --- | --- |
+| Application | Configure and operate devices through generic APIs |
+| Generic system clock | Define source selection and shared Enable/Disable behavior |
+| MCU clock backend | Apply `g_McuOsc`, maintain clock reference counts and protect shared hardware |
+| Timer/peripheral driver | Choose supported hardware clock paths; enable/disable its required clocks in the normal lifecycle |
+| BLE stack or other external owner | Keep its hardware ownership; HAL must not stop an externally owned clock |
+
+On Nordic, the current implementation uses
+`SystemCoreClockSelect(OSC_TYPE_XTAL/OSC_TYPE_RC)` for HFXO reference
+counting and private `nRFxLfclkAcquire()/nRFxLfclkRelease()` functions.
+Those are **legacy/refactor-in-progress behavior**, not the approved
+generic interface. The replacement must update affected RTC, HF timer,
+USB, BLE and clock-demo call sites together and remove the redundant
+private LFCLK interface.
+
+## Cross-MCU implementation and validation
+
+This architectural change applies to Nordic, ST, Microchip, NXP,
+Renesas, Espressif and other supported MCU ports. A generic header
+declaration alone does not mean a port implements or validates the API.
+Do not add success-only stubs to conceal missing behavior.
+
+Before implementation, compare each port's existing oscillator setup,
+clock gates, shared users and timer lifecycle. Verify at least:
+
+- Repeated Enable/Disable, zero-count Disable and counter overflow.
+- Two active consumers of a shared clock, including different Disable
+  orders and an explicit source-selection attempt while busy.
+- External/stack clock ownership and transitions; SoftDevice/SDC where
+  applicable.
+- Timer initialization with DEFAULT, explicitly supported and
+  unsupported clock sources, including actual-frequency readback.
+- Clock behavior after sleep/wake and after failed oscillator start.
+- Managed CDT Debug/Release builds and hardware tests separately.
+- Existing UART, USB, RTC and BLE operation after clock-management
+  changes.
+
+See [power-clock integration review](power-clock-review-014.md),
+[MCU power/clock port evidence](core-power-clock-ports.md) and
+[clock/power demo matrix](power-clock-demo-matrix.md).
