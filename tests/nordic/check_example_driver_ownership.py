@@ -85,10 +85,12 @@ class DemoDriverOwnership(unittest.TestCase):
 			ROOT / "docs/architecture/system-clock-timer-lifecycle.md",
 			ROOT / "docs/architecture/nordic-clock-ownership-review-014.md",
 		)
-		terms = re.compile(r"\\b(?:backend|guarding|guardrail|API surface|source closure)\\b", re.I)
+		terms = re.compile(r"\\b(?:backend|contract|guarding|guardrail|API surface|source closure)\\b", re.I)
 		for path in paths:
 			with self.subTest(path=path):
 				for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+					if "LIABILITY" in line.upper() and "CONTRACT" in line.upper():
+						continue
 					self.assertIsNone(terms.search(line), f"{path}:{lineno}: {line.strip()}")
 
 	def test_shared_clock_examples_do_not_access_vendor_registers(self):
