@@ -55,11 +55,11 @@ STM32WBA also requires an Eclipse managed application configuration
 that links this same source. Those project-build integrations remain
 to be verified.
 
-The STM32WBA clock backend now implements the generic HF request
+The STM32WBA `system_stm32wbaxx.c` implementation provides the generic HF request
 functions by validating that its selected core oscillator is ready.
 It does not gate an oscillator that supplies the CPU.
 
-Run the Nordic clock backend source checks:
+Run the Nordic clock source checks:
 
 ```sh
 python3 tests/nordic/check_clock_hfxo_source.py
