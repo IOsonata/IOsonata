@@ -8,17 +8,21 @@ semantics. Do not treat this document as evidence of hardware validation.
 ## System core interface responsibility
 
 `coredev/system_core_clock.h` defines MCU-level system services: core power
-management, sleep and wake behavior, reset and retention functions, and
-core/system clock selection. These are internal MCU facilities normally
-established by `SystemInit()` and used by peripheral implementations.
-Applications call them directly only for specific system-level needs.
+management, sleep and wake behavior, reset and retention functions, core
+clock selection, and peripheral clock management where supported by the MCU.
+These facilities are normally initialized by `SystemInit()` and used by
+peripheral implementations. Applications call them directly when explicit
+system-level control is required.
 
-This interface is not a general manager for individual peripheral module
-clock gates. UART, SPI, I2C, timers and other drivers retain responsibility
-for configuring and enabling their own peripheral hardware. Optional shared
-HF/LF oscillator Enable/Disable functions belong here only because they
-control MCU-level clock sources shared by those drivers; they must not
-replace the drivers' existing Enable/Disable lifecycle.
+`SystemPeriphClockGet()` and `SystemPeriphClockSet()` provide the existing
+generic peripheral-clock frequency interface. MCU backends determine which
+peripheral clock domains can be configured, what indices represent, and which
+frequencies are achievable. Unsupported selections must be reported rather
+than silently changing unrelated clocks. This is distinct from a driver's
+own peripheral enable bits and module clock gates: UART, SPI, I2C, timers
+and other drivers still configure and enable their respective hardware.
+Shared HF/LF clock Enable/Disable operations manage shared MCU clock sources;
+they do not replace the peripheral drivers' lifecycle.
 
 ## Design principle
 
@@ -161,9 +165,9 @@ default low-frequency source is the one configured in
 | Layer | Responsibility |
 | --- | --- |
 | Application | Configure and operate devices through generic APIs |
-| System core power/clock | MCU power states, sleep/wake, reset/retention, core clock selection and shared oscillator Enable/Disable |
+| System core power/clock | MCU power states, sleep/wake, reset/retention, core and supported peripheral clock frequency selection, and shared clock Enable/Disable |
 | MCU core backend | Implement the MCU system facilities, apply `g_McuOsc`, maintain shared oscillator reference counts and protect hardware ownership |
-| Timer/peripheral driver | Choose supported hardware clock paths; enable/disable its required clocks in the normal lifecycle |
+| Timer/peripheral driver | Select supported timer inputs and configure its own peripheral hardware; use system peripheral-clock and shared-clock APIs as needed during its normal lifecycle |
 | BLE stack or other external owner | Keep its hardware ownership; HAL must not stop an externally owned clock |
 
 On Nordic, the current implementation uses
