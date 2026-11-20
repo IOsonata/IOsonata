@@ -96,7 +96,8 @@ class HfxoSourceChecks(unittest.TestCase):
     def test_pre_stack_hfxo_diagnostic_is_opt_in(self):
         source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
             encoding="utf-8")
-        self.assertIn("#define HFXO_TEST_PRESTACK 0", source)
+        self.assertIn("#ifndef HFXO_TEST_PRESTACK", source)
+        self.assertRegex(source, r"(?m)^#define HFXO_TEST_PRESTACK [012]$")
         self.assertIn("static int HfxoPreStackTest(void)", source)
         pre = function(source, "static int HfxoPreStackTest(void)",
                        "int main(void)")
@@ -162,11 +163,17 @@ class HfxoSourceChecks(unittest.TestCase):
                           "bool SystemCoreClockSelect(")
         self.assertIn("nRFxMpslHfxo(false) == 0", source)
         self.assertIn("sd_clock_hfclk_release() == NRF_SUCCESS", source)
-        self.assertIn("if (nRFxMpslActive() || nRFxClockSdEnabled())", source)
-        guarded = source.split(
-            "if (nRFxMpslActive() || nRFxClockSdEnabled())", 1)[1]
-        self.assertLess(guarded.index("return false;"),
-                        guarded.index("NRFX_HFXO_STOP = 1U"))
+        self.assertIn("if (nRFxClockSdEnabled())", source)
+        self.assertIn("if (nRFxMpslActive() && !s_bNRFxMpslExternalClock)",
+                      source)
+        self.assertIn("if (nRFxMpslActive())", source)
+        self.assertIn("#else", source)
+        self.assertIn("#endif", source)
+        stop = source.index("NRFX_HFXO_STOP = 1U")
+        self.assertLess(source.index("if (nRFxClockSdEnabled())"), stop)
+        self.assertLess(source.index(
+            "if (nRFxMpslActive() && !s_bNRFxMpslExternalClock)"), stop)
+        self.assertLess(source.index("if (nRFxMpslActive())"), stop)
         self.assertIn("NRFX_HFXO_OWNER_NONE", self.clock)
 
     def test_nrf54l_system_off_checks_hfxo(self):
