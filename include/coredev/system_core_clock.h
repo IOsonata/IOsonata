@@ -212,14 +212,8 @@ static inline const OscDesc_t *GetHighFreqOscDesc(void) { return &g_McuOsc.CoreO
 /**
  * @brief	Select core clock oscillator type
  *
- * On an MCU whose core always runs from its internal clock and uses the
- * crystal only for accuracy, starting it on demand for the radio, USB or a
- * timer, a call with OSC_TYPE_XTAL or OSC_TYPE_TCXO is one request for the
- * crystal and a call with OSC_TYPE_RC releases one. The requests of the
- * drivers and of the application are counted: the crystal starts on the
- * first request and stops when the last one is released. Each request is
- * matched by one release. A request returns once the crystal runs, false if
- * it did not start.
+ * Selects the MCU core clock source. This does not enable or disable
+ * optional shared oscillators or adjust their reference counts.
  *
  * @param	ClkSrc : Clock source selection
  *						OSC_TYPE_RC - Internal RC
@@ -245,6 +239,32 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
  *
  */
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
+
+/**
+ * @brief Enable the configured shared high-frequency clock source.
+ *
+ * Uses g_McuOsc.CoreOsc. Repeated enables count active users; failure
+ * leaves the count unchanged. Never stops the CPU clock.
+ *
+ * @return true if the clock requirement is enabled.
+ */
+bool SystemHighFreqClockEnable(void);
+
+/** @brief Disable one shared high-frequency clock requirement. */
+void SystemHighFreqClockDisable(void);
+
+/**
+ * @brief Enable the configured shared low-frequency clock source.
+ *
+ * Uses g_McuOsc.LowPwrOsc. Repeated enables count active users; failure
+ * leaves the count unchanged.
+ *
+ * @return true if the selected clock is running.
+ */
+bool SystemLowFreqClockEnable(void);
+
+/** @brief Disable one shared low-frequency clock requirement. */
+void SystemLowFreqClockDisable(void);
 
 /**
  * @brief	Get core clock frequency
