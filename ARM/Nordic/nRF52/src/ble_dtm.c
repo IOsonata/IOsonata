@@ -739,8 +739,8 @@ static void dtm_test_done(void)
  */
 static uint32_t timer_init(void)
 {
-    // Use 16MHz from external crystal, requested for as long as DTM runs
-    if (SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000) == false)
+    // Use the configured HF source for the duration of DTM
+    if (SystemHighFreqClockEnable() == false)
     {
         return DTM_ERROR_ILLEGAL_CONFIGURATION;
     }
