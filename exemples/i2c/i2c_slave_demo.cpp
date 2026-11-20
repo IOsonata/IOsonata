@@ -224,6 +224,11 @@ int main()
 {
 	unsigned previous;
 	int i;
+#if I2C_SLEEP_TEST
+	uint32_t state;
+	unsigned requests;
+	bool slept;
+#endif
 
 	g_Uart.Init(s_UartCfg);
 #if defined(NDEBUG) || defined(UART_RETARGET) || I2C_SLEEP_TEST
@@ -256,9 +261,9 @@ int main()
 		// Do not inspect the driver's private TX state or disable it here.
 		fflush(stdout);
 		msDelay(2);
-		uint32_t state = DisableInterrupt();
-		unsigned requests = s_Requests;
-		bool slept = !s_TransferActive && previous == s_Completions;
+		state = DisableInterrupt();
+		requests = s_Requests;
+		slept = !s_TransferActive && previous == s_Completions;
 		if (slept)
 		{
 			SystemSleep();
