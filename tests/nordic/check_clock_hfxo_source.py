@@ -75,6 +75,24 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertNotIn("nRFxLfclkStart(", select)
         self.assertNotIn("TASKS_LFCLKSTART", select)
 
+    def test_nordic_consumers_use_generic_clock_lifecycle(self):
+        hf_timer = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(
+            encoding="utf-8")
+        rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(
+            encoding="utf-8")
+        usb = (ROOT / "ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp").read_text(
+            encoding="utf-8")
+        dtm = (ROOT / "ARM/Nordic/nRF52/src/ble_dtm.c").read_text(
+            encoding="utf-8")
+        for source in (hf_timer, usb, dtm):
+            self.assertIn("SystemHighFreqClockEnable()", source)
+            self.assertNotIn("SystemCoreClockSelect(", source)
+        self.assertIn("SystemHighFreqClockDisable()", hf_timer)
+        self.assertIn("SystemHighFreqClockDisable()", usb)
+        self.assertNotIn("s_nRfxHFClockSem", hf_timer)
+        self.assertIn("SystemLowFreqClockEnable()", rtc)
+        self.assertIn("SystemLowFreqClockDisable()", rtc)
+
     def test_softdevice_probe_requires_sdk_runtime_state(self):
         source = function(self.clock, "static bool nRFxClockSdEnabled(",
                           "static bool nRFxHfxoRunning(")
