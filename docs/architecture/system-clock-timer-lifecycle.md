@@ -288,6 +288,38 @@ nRF52 hard-float, soft-float, and softfp-float MPSL archives were found.
 Thus the API is available in the actual installed toolchain libraries.
 No production clock integration has yet been validated by that result.
 
+### Experimental nRF52 SDC external-clock adapter
+
+The working branch now contains an **opt-in, unvalidated** implementation
+in `ARM/Nordic/src/system_clock_nrfx.cpp` and
+`ARM/Nordic/src/nrf_mpsl.cpp`. Building the nRF52 SDC library with
+`IO_NRFX_MPSL_EXT_CLOCK=1` registers IOsonata's clock callbacks before
+`mpsl_init()` and passes a null LFCLK configuration so MPSL uses the
+registered external driver. The adapter tracks MPSL and IOsonata clock
+requirements separately but shares the same physical HFCLK/LFCLK sources.
+The HFCLK callbacks issue clock tasks without busy waits, as required by
+MPSL's high-priority callback interface. The default setting leaves this
+code inactive, preserving the existing stack-owned behavior.
+
+This first integration requires a board configured for **LFXO**. The
+external MPSL clock-control driver also assumes responsibility for LFRC
+calibration; IOsonata has not implemented that calibration yet. When the
+opt-in is enabled and `g_McuOsc.LowPwrOsc.Type` is not `OSC_TYPE_XTAL`,
+`MpslInit()` reports failure instead of allowing inaccurate LFRC timing.
+The existing SDC setup with LFRC therefore is not covered by the
+experimental adapter. Neither callback ordering nor runtime behavior has
+been compiled or hardware-validated in the new mode. S132 is unchanged.
+
+Before enabling this mode in a normal library build, validate:
+- Managed CDT compilation and linking for nRF52832/nRF52840 SDC builds.
+- LFXO clock setup, first request/last disable and rapid STOP/START.
+- Pre-stack HFXO request through MPSL registration and final disable;
+  no clock interruption while an outstanding user requires HFXO.
+- Callback races with an ongoing direct clock transition.
+- LFCLK operation with simultaneous RTC and MPSL users, and accurate
+  LFRC calibration before enabling external control with an RC source.
+- Continued BLE radio operation and correct low-power consumption.
+
 ### Nordic owner integration investigation
 
 Nordic MPSL has an external clock-control driver registration API,
