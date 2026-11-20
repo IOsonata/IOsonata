@@ -72,6 +72,9 @@ SOFTWARE.
 #ifndef CLOCK_DEMO_HF_SOURCE_ENABLE
 #define CLOCK_DEMO_HF_SOURCE_ENABLE 0
 #endif
+#ifndef CLOCK_DEMO_LF_SOURCE_ENABLE
+#define CLOCK_DEMO_LF_SOURCE_ENABLE 0
+#endif
 
 struct ClockDemoSource_t {
 	const char *pName;
@@ -440,12 +443,24 @@ int main(void)
 				ClockDemoPrint("Selecting LF %s\r\n", source.pName);
 				ClockDemoClockBegin();
 				bool selected = SystemLowFreqClockSelect(source.Type, source.Frequency);
+#if CLOCK_DEMO_LF_SOURCE_ENABLE
+				if (selected)
+				{
+					selected = SystemLowFreqClockEnable();
+				}
+#endif
 				if (!ClockDemoClockEnd())
 				{
 					return 1;
 				}
 				ClockDemoResult(source.pName, selected);
 				ClockDemoPrint("LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
+#if CLOCK_DEMO_LF_SOURCE_ENABLE
+				if (selected)
+				{
+					SystemLowFreqClockDisable();
+				}
+#endif
 			}
 #endif
 		}
