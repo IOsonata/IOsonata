@@ -54,7 +54,7 @@ SOFTWARE.
 static const BtAppCfg_t s_BtCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
 	.PeriphDevMax = 0,
-	.CentralDevMax = 0,
+	.CentralDevMax = 1,
 	.pDevName = "ClockTest",
 	.AdvInterval = 100,
 	.ConnLedPort = -1,
