@@ -91,6 +91,10 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("#pragma weak SystemHighFreqClockCalibrate", source)
 		self.assertIn("#pragma weak SystemLowFreqClockCalibrate", source)
 		self.assertIn("ClockDemoCalibrationTest();", source)
+		self.assertLess(source.index("for (cycle = 1U;"),
+			source.index("ClockDemoCalibrationTest();"))
+		self.assertLess(source.index("SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency)"),
+			source.index("ClockDemoCalibrationTest();"))
 		self.assertIn("SystemLowFreqClockEnable();", source)
 		self.assertIn("calibrated = SystemLowFreqClockCalibrate();", source)
 		self.assertIn("SystemLowFreqClockDisable();", source)
