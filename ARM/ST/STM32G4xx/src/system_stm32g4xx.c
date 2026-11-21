@@ -42,7 +42,7 @@ SOFTWARE.
 
 #include "stm32g4xx.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 
 #define HSI16_FREQ				16000000UL
 

@@ -45,7 +45,7 @@
 #include "sam4lxxx.h"
 #include "system_sam4l.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 
 #define SYSTEM_CORE_CLOCK               48000000UL
 // Ten NOPs, decrement and taken branch in the aligned ARM microsecond loop.

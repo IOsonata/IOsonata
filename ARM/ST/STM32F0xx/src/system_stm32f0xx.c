@@ -38,7 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "stm32f0xx.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 
 #define SYSTEM_CORE_CLOCK				48000000UL		// STM32F0 max core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(93UL)

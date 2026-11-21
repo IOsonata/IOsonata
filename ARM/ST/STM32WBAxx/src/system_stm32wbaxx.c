@@ -41,7 +41,7 @@ SOFTWARE.
 #include "stm32wbaxx.h"
 #include "system_stm32wbaxx.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 
 #define HSI16_FREQ				16000000UL
 #define HSE32_FREQ				32000000UL		// The only HSE crystal frequency
