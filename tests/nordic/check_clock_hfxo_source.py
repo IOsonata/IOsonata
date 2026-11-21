@@ -108,6 +108,24 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertNotIn("HFXO running", source)
         self.assertNotIn("HFXO stopped", source)
 
+    def test_hfxo_console_drains_interrupt_uart(self):
+        source = (ROOT / "exemples/misc/hfxo_test.cpp").read_text(
+            encoding="utf-8")
+        self.assertIn(".bIntMode = true", source)
+        self.assertIn(".EvtCallback = HfxoUartEvent", source)
+        callback = function(source, "static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event,",
+                            "static void HfxoConsoleInit(void)")
+        self.assertIn("UART_EVT_TXREADY", callback)
+        self.assertIn("__SEV();", callback)
+        drain = function(source, "static void HfxoConsoleDrain(void)",
+                         "#else")
+        self.assertIn("SysLogFlush(SysLogGet())", drain)
+        self.assertIn("CFifoUsed(pUart->hTxFifo)", drain)
+        self.assertIn("pUart->bTxReady", drain)
+        self.assertIn("__WFE();", drain)
+        self.assertLess(source.rindex("HfxoConsoleDrain();"),
+                        source.rindex("while (1)"))
+
     def test_portable_ble_app_has_no_vendor_stack_selection(self):
         source = (ROOT / "exemples/misc/hfxo_test_ble.cpp").read_text(
             encoding="utf-8")
