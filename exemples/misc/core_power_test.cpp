@@ -167,6 +167,7 @@ static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
 	uint32_t i;
 	uint32_t count;
+	uint32_t unchanged;
 	bool valid;
 
 	if ((Caps & SYSTEM_POWER_CAP_RAM_RETENTION) == 0U)
@@ -190,15 +191,20 @@ static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
 		CorePowerTestResult("RAM retention after System OFF", valid);
 #if defined(POWER_DEMO_RAM_DROP_ADDR)
 		count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
-		valid = false;
+		unchanged = 0U;
 		for (i = 0U; i < count; i++)
 		{
-			if (s_DropRam[i] != (CorePowerTestRamPattern(i) ^ 0xFFFFFFFFUL))
+			if (s_DropRam[i] == (CorePowerTestRamPattern(i) ^ 0xFFFFFFFFUL))
 			{
-				valid = true;
-				break;
+				unchanged++;
 			}
 		}
+		CorePowerTestPut("RAM non-retention unchanged words ");
+		CorePowerTestNumber(unchanged);
+		CorePowerTestPut(" / ");
+		CorePowerTestNumber(count);
+		CorePowerTestPut("\r\n");
+		valid = unchanged != count;
 		CorePowerTestResult("RAM non-retention after System OFF", valid);
 #endif
 	}

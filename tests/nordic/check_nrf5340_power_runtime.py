@@ -39,6 +39,14 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("defined(NRF5340_XXAA_NETWORK)", s)
 		self.assertIn("defined(NRF5340_XXAA_APPLICATION)", s)
 
+	def test_vmc_retention_write_is_verified(self):
+		backend = NRF.read_text(encoding="utf-8")
+		self.assertIn("SYS_PWR_VMC->RAM[blk].POWER & msk", backend)
+		self.assertIn("!= bRetain", backend)
+		s = SRC.read_text(encoding="utf-8")
+		self.assertIn("RAM non-retention unchanged words", s)
+		self.assertIn("unchanged != count", s)
+
 	def test_reversible_boundaries_exercised(self):
 		s = SRC.read_text(encoding="utf-8")
 		for name in ("RAM retention invalid range", "Wake pin invalid index",

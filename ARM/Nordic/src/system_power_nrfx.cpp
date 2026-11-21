@@ -408,6 +408,12 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 		{
 			SYS_PWR_VMC->RAM[blk].POWERCLR = msk;
 		}
+		// POWERSET/POWERCLR writes are not proof that the requested
+		// retention policy took effect. Verify the actual VMC state.
+		if (((SYS_PWR_VMC->RAM[blk].POWER & msk) != 0U) != bRetain)
+		{
+			return false;
+		}
 #else
 		if (bRetain)
 		{
