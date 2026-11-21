@@ -110,8 +110,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 // LF selection omitted: choosing the external slow clock cannot be reversed without a backup reset.
-#define CLOCK_DEMO_SOURCES { {"RC 4 MHz", OSC_TYPE_RC, 4000000U, 1U, UINT32_MAX}, {"RC 8 MHz", OSC_TYPE_RC, 8000000U, 1U, UINT32_MAX}, {"RC 12 MHz", OSC_TYPE_RC, 12000000U, 1U, UINT32_MAX} }
-#define CLOCK_DEMO_PERIPH_DIVIDERS {1U}
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif // __BOARD_H__
