@@ -4,7 +4,7 @@
 @brief	Delay loop functions.
 
 Delay-loop calibration is maintained by the MCU clock implementation.
-Both delay factors use 16 fractional bits. Clock owners rescale the factors
+Both delay factors are measured loop iterations per second. Clock owners rescale them
 from actual CPU frequency after every clock change. Optional DWT calibration
 measures the existing assembly loops once; no Timer dependency is required.
 
@@ -48,7 +48,7 @@ SOFTWARE.
 #ifdef __cplusplus
 extern "C" {
 #endif
-// Iterations per microsecond for each loop, with 16 fractional bits.
+// Calibrated loop iterations per second for each existing assembly loop.
 extern uint32_t SystemMicroSecLoopCnt;
 extern uint32_t SystemnsDelayFactor;
 #ifdef __cplusplus
@@ -71,7 +71,6 @@ typedef struct {
 // Returns false if no valid loop cost or CPU frequency is available.
 static inline bool ArmDelayClockUpdate(ArmDelayCalibration_t *pCal, uint32_t CpuHz)
 {
-	uint64_t scale;
 	uint64_t usFactor;
 	uint64_t nsFactor;
 
@@ -81,9 +80,8 @@ static inline bool ArmDelayClockUpdate(ArmDelayCalibration_t *pCal, uint32_t Cpu
 		return false;
 	}
 
-	scale = (uint64_t)CpuHz * ARM_DELAY_CAL_LOOPS * 65536ULL;
-	usFactor = scale / ((uint64_t)pCal->UsCycles * 1000000ULL);
-	nsFactor = scale / ((uint64_t)pCal->NsCycles * 1000000ULL);
+	usFactor = ((uint64_t)CpuHz * ARM_DELAY_CAL_LOOPS) / pCal->UsCycles;
+	nsFactor = ((uint64_t)CpuHz * ARM_DELAY_CAL_LOOPS) / pCal->NsCycles;
 
 	if (usFactor == 0U || nsFactor == 0U ||
 		usFactor > UINT32_MAX || nsFactor > UINT32_MAX)
@@ -120,13 +118,13 @@ static inline bool ArmDelayClockInit(ArmDelayCalibration_t *pCal,
 }
 
 // A port with two measured CPU speeds can interpolate both delay factors.
-// Factors are Q16 values measured at the actual CPU frequencies, not the
+// Factors are loop iterations per second measured at actual CPU frequencies, not the
 // oscillator's input frequency. Clamp to an endpoint outside the measured
 // range: extrapolation is not supported. No runtime measurement is done.
 typedef struct {
 	uint32_t CpuHz;
-	uint32_t UsQ16;
-	uint32_t NsQ16;
+	uint32_t UsLoopsPerSecond;
+	uint32_t NsLoopsPerSecond;
 } ArmDelayPoint_t;
 
 static inline bool ArmDelayClockInterpolate(uint32_t CpuHz,
@@ -140,24 +138,24 @@ static inline bool ArmDelayClockInterpolate(uint32_t CpuHz,
 
 	if (pLow == NULL || pHigh == NULL || CpuHz == 0U ||
 		pLow->CpuHz == 0U || pHigh->CpuHz <= pLow->CpuHz ||
-		pLow->UsQ16 == 0U || pLow->NsQ16 == 0U ||
-		pHigh->UsQ16 == 0U || pHigh->NsQ16 == 0U)
+		pLow->UsLoopsPerSecond == 0U || pLow->NsLoopsPerSecond == 0U ||
+		pHigh->UsLoopsPerSecond == 0U || pHigh->NsLoopsPerSecond == 0U)
 	{
 		return false;
 	}
 
 	if (CpuHz <= pLow->CpuHz)
 	{
-		SystemMicroSecLoopCnt = pLow->UsQ16;
-		SystemnsDelayFactor = pLow->NsQ16;
+		SystemMicroSecLoopCnt = pLow->UsLoopsPerSecond;
+		SystemnsDelayFactor = pLow->NsLoopsPerSecond;
 
 		return true;
 	}
 
 	if (CpuHz >= pHigh->CpuHz)
 	{
-		SystemMicroSecLoopCnt = pHigh->UsQ16;
-		SystemnsDelayFactor = pHigh->NsQ16;
+		SystemMicroSecLoopCnt = pHigh->UsLoopsPerSecond;
+		SystemnsDelayFactor = pHigh->NsLoopsPerSecond;
 
 		return true;
 	}
@@ -166,10 +164,10 @@ static inline bool ArmDelayClockInterpolate(uint32_t CpuHz,
 	lowWeight = pHigh->CpuHz - CpuHz;
 	highWeight = CpuHz - pLow->CpuHz;
 
-	us = ((uint64_t)pLow->UsQ16 * lowWeight +
-		(uint64_t)pHigh->UsQ16 * highWeight + span / 2U) / span;
-	ns = ((uint64_t)pLow->NsQ16 * lowWeight +
-		(uint64_t)pHigh->NsQ16 * highWeight + span / 2U) / span;
+	us = ((uint64_t)pLow->UsLoopsPerSecond * lowWeight +
+		(uint64_t)pHigh->UsLoopsPerSecond * highWeight + span / 2U) / span;
+	ns = ((uint64_t)pLow->NsLoopsPerSecond * lowWeight +
+		(uint64_t)pHigh->NsLoopsPerSecond * highWeight + span / 2U) / span;
 
 	if (us == 0U || ns == 0U || us > UINT32_MAX || ns > UINT32_MAX)
 	{
@@ -198,8 +196,8 @@ static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
 		return false;
 	}
 
-	usFactor = ((uint64_t)CpuHz << 16) / UsDivisor;
-	nsFactor = ((uint64_t)CpuHz << 16) / NsDivisor;
+	usFactor = ((uint64_t)CpuHz * 1000000ULL) / UsDivisor;
+	nsFactor = ((uint64_t)CpuHz * 1000000ULL) / NsDivisor;
 
 	if (usFactor == 0U || nsFactor == 0U ||
 		usFactor > UINT32_MAX || nsFactor > UINT32_MAX)
@@ -220,8 +218,8 @@ static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
 /**
  * @brief	Microsecond delay.
  *
- * SystemCoreClockUpdate refreshes SystemMicroSecLoopCnt after a CPU clock
- * change. Scale the full interval before removing the fractional bits.
+ * SystemCoreClockUpdate refreshes the calibrated iterations per second
+ * after a CPU clock change.
  * Long intervals retain the full calculated loop count.
  * Interrupt service and instruction fetch stalls can extend this delay.
  * This delay is only approximate, it is NOT 100% accurate.
@@ -230,7 +228,7 @@ static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
  */
 static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 {
-	uint64_t loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 65535ULL) >> 16;
+	uint64_t loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 999999ULL) / 1000000ULL;
 	uint32_t low = (uint32_t)loops;
 	uint32_t high = (uint32_t)(loops >> 32);
 
@@ -273,8 +271,8 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 /**
  * @brief	Nanosecond delay.
  *
- * SystemnsDelayFactor uses the same fractional format as the microsecond
- * loop count and is refreshed by the MCU clock implementation.
+ * SystemnsDelayFactor is the calibrated nanosecond-loop rate in iterations
+ * per second and is refreshed by the MCU clock implementation.
  * Calculation overhead, instruction fetch and interrupts extend the delay.
  * Use a hardware timer when precise timing is required.
  *
@@ -282,7 +280,7 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
  */
 static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 {
-	uint64_t loops = ((uint64_t)cnt * SystemnsDelayFactor + 65535999ULL) / 65536000ULL;
+	uint64_t loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) / 1000000000ULL;
 	uint32_t low = (uint32_t)loops;
 	uint32_t high = (uint32_t)(loops >> 32);
 
@@ -359,9 +357,10 @@ static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz
 
 	if (valid)
 	{
-		// A provisional factor of 65536 executes exactly N iterations.
-		SystemMicroSecLoopCnt = 65536U;
-		SystemnsDelayFactor = 65536U;
+		// One million loops per second executes exactly N iterations
+		// for N microseconds (or 1000*N nanoseconds).
+		SystemMicroSecLoopCnt = 1000000U;
+		SystemnsDelayFactor = 1000000U;
 
 		usDelay(ARM_DELAY_CAL_LOOPS);
 		start = DWT->CYCCNT;
@@ -421,8 +420,8 @@ static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
 	}
 	cpuHz = SystemCoreClockGet();
 	pPoint->CpuHz = cpuHz;
-	pPoint->UsQ16 = 0U;
-	pPoint->NsQ16 = 0U;
+	pPoint->UsLoopsPerSecond = 0U;
+	pPoint->NsLoopsPerSecond = 0U;
 	pPoint->Measured = false;
 
 	oldUs = SystemMicroSecLoopCnt;
@@ -434,8 +433,8 @@ static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
 	success = ArmDelayCalibrate(&measured, cpuHz);
 	if (success)
 	{
-		pPoint->UsQ16 = SystemMicroSecLoopCnt;
-		pPoint->NsQ16 = SystemnsDelayFactor;
+		pPoint->UsLoopsPerSecond = SystemMicroSecLoopCnt;
+		pPoint->NsLoopsPerSecond = SystemnsDelayFactor;
 		pPoint->Measured = true;
 	}
 	SystemMicroSecLoopCnt = oldUs;
@@ -464,8 +463,8 @@ static inline bool DelayCalibrationFromTimer(uint32_t CpuHz,
 		return false;
 	}
 	pPoint->CpuHz = CpuHz;
-	pPoint->UsQ16 = (uint32_t)us;
-	pPoint->NsQ16 = (uint32_t)ns;
+	pPoint->UsLoopsPerSecond = (uint32_t)us;
+	pPoint->NsLoopsPerSecond = (uint32_t)ns;
 	pPoint->Measured = true;
 	return true;
 }
