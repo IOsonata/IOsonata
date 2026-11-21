@@ -385,6 +385,20 @@ consumption. The portable `HfxoTestBle` example now calls `BtAppInit()`;
 `tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp` retains the Nordic-specific
 clock and shutdown checks.
 
+## Standalone nRF5340 network-core LFCLK
+
+The network core defaults to **LFRC** because its SystemInit does not own
+the LFXO XL1/XL2 GPIO allocation or oscillator load-capacitor setup.
+Those are application-core responsibilities. A network-core-only firmware
+image cannot assume that the application core has performed this setup.
+When the application core owns and configures LFXO, board firmware may
+override the network core's weak `g_McuOsc.LowPwrOsc` to select XTAL.
+
+Do not automatically fall back to RC after a **requested** LFXO start
+fails: that would conceal the wrong board/core configuration. Generic
+clock enable retains its failure return; RTC users must not treat an
+unstarted source as a working 32768 Hz clock.
+
 ## nRF5340 LFRC calibration API
 
 The System Core provides `SystemHighFreqClockCalibrate()` and

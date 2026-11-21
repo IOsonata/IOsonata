@@ -16,6 +16,11 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 		cls.delay = DELAY.read_text(encoding="utf-8")
 		cls.test = TEST.read_text(encoding="utf-8")
 
+	def test_standalone_network_lfclk_default(self):
+		self.assertIn(".LowPwrOsc = { OSC_TYPE_RC, 32768, 0, 0 }", self.system)
+		self.assertIn("__WEAK McuOsc_t g_McuOsc", self.system)
+		self.assertNotIn(".LowPwrOsc = { OSC_TYPE_XTAL, 32768", self.system)
+
 	def test_fixed_frequency_network_uses_port_defaults(self):
 		self.assertIn("23U, 3U", self.system)
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", self.system)
