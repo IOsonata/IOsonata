@@ -39,13 +39,44 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertNotIn("CLOCK_DEMO_APB_SHARED_CORE", source)
 		self.assertNotIn('ClockDemoResult("APB"', source)
 
+	def test_clock_demo_has_one_generic_clock_path(self):
+		source = CLOCK.read_text(encoding="utf-8")
+		self.assertIn("SystemCoreClockSelect(pSource->Type, pSource->Frequency)", source)
+		self.assertIn("SystemPeriphClockSet(0, request)", source)
+		self.assertIn("SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency)", source)
+		self.assertIn("ClockDemoTimer();", source)
+		self.assertLess(source.index("ClockDemoTimerInit();"),
+			source.index("for (cycle = 1U;"))
+		for name in ("CLOCK_DEMO_CORE_READONLY", "CLOCK_DEMO_DEFER_TIMER",
+			"CLOCK_DEMO_UART_RX_TEST", "CLOCK_DEMO_STOP_UART",
+			"CLOCK_DEMO_HF_SOURCE_ENABLE", "CLOCK_DEMO_LF_SOURCE_ENABLE",
+			"CLOCK_DEMO_APB_DIVIDERS", "CLOCK_DEMO_APB_READONLY",
+			"CLOCK_DEMO_APB_SHARED_CORE"):
+			self.assertNotIn(name, source)
+
+	def test_clock_demo_board_inputs(self):
+		paths = sorted(ROOT.glob("**/exemples/ClockDemo/src/board.h"))
+		self.assertTrue(paths)
+		for path in paths:
+			with self.subTest(path=path):
+				source = path.read_text(encoding="utf-8")
+				if "CLOCK_DEMO_SOURCES" not in source:
+					continue
+				self.assertIn("CLOCK_DEMO_PERIPH_DIVIDERS", source)
+				for name in ("CLOCK_DEMO_APB_DIVIDERS", "CLOCK_DEMO_CORE_READONLY",
+					"CLOCK_DEMO_DEFER_TIMER", "CLOCK_DEMO_STOP_UART",
+					"CLOCK_DEMO_HF_SOURCE_ENABLE", "CLOCK_DEMO_LF_SOURCE_ENABLE",
+					"CLOCK_DEMO_UART_RX_TEST", "CLOCK_DEMO_APB_READONLY",
+					"CLOCK_DEMO_APB_SHARED_CORE"):
+					self.assertNotIn(name, source)
+
 	def test_clock_demo_finishes_last_print(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		final = source.index('ClockDemoPrint("ClockDemo complete:')
-		poweroff = source.index("UARTPowerOff(&s_Uart);", final)
 		end = source.index("while (1)", final)
-		self.assertLess(poweroff, end)
-		self.assertIn("#if CLOCK_DEMO_STOP_UART", source[final:end])
+		self.assertLess(final, end)
+		self.assertIn("ClockDemoFlush();", source[final:end])
+		self.assertNotIn("UARTPowerOff(&s_Uart);", source)
 
 	def test_nrf_polling_uart_drains_before_power_off(self):
 		source = NRF_UART.read_text(encoding="utf-8")
