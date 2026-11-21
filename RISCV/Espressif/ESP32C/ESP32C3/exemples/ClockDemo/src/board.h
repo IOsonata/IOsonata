@@ -42,8 +42,6 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define CLOCK_DEMO_LF_SOURCES { \
 	{"RC_SLOW", OSC_TYPE_RC, 136000U} \
 }
-#define CLOCK_DEMO_TIMER_DEVNO 0
-#define CLOCK_DEMO_CYCLES 3U
 #ifndef CLOCK_DEMO_UART_RX_TEST
 #endif
 
