@@ -19,22 +19,6 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define UART_RX_PINOP ESP32_PINOP_U0RXD
 #define UART_TX_PINOP ESP32_PINOP_U0TXD
 
-#if defined(ESP32C3_CPU_160MHZ)
-#define CLOCK_DEMO_XTAL_CPU 160000000U
-#else
-#define CLOCK_DEMO_XTAL_CPU 40000000U
-#endif
-
-// Core source sequence and accepted frequency ranges. RC_FAST is measured against XTAL.
-// C3 divides CPU and APB together outside PLL mode.
-#if defined(ESP32C3_CPU_160MHZ)
-// APB is fixed at 80 MHz when PLL feeds the CPU.
-#else
-#endif
-// Internal sources only; no assumption about an onboard 32 kHz crystal.
-#ifndef CLOCK_DEMO_UART_RX_TEST
-#endif
-
 // ClockDemo never enters sleep; BOOT wake is tested by PowerOffDemo.
 
 #endif // __BOARD_H__
