@@ -493,7 +493,6 @@ int main(void)
 	ClockDemoFlush();
 	ClockDemoResult("Core clock startup", SystemCoreClockGet() != 0U);
 	ClockDemoSharedClockTest();
-	ClockDemoCalibrationTest();
 	if (sizeof(s_Sources) == 0U)
 	{
 		selected = SystemCoreClockSelect(GetHighFreqOscType(),
@@ -584,6 +583,10 @@ int main(void)
 #endif
 		}
 	}
+	// Calibrate the RC sources after the oscillator selection sequence.
+	// Startup configuration may select a crystal instead of RC.
+	ClockDemoCalibrationTest();
+
 	ClockDemoResult("Peripheral clock invalid index",
 		SystemPeriphClockGet(-1) == 0U);
 	ClockDemoResult("Peripheral domain scan limit",
