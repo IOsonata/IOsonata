@@ -408,8 +408,10 @@ and does not require a separate application request.
 The existing startup calibration remains in place when LFRC first
 starts. It passed ClockDemo on both nRF5340 cores. Additional
 calibrations are explicitly initiated by higher-level code, including
-any periodic calls it chooses to schedule. System Core never owns that
-schedule.
+any periodic calls it chooses to schedule. A Timer callback may queue a
+calibration event with AppEvtHandlerQue; AppRun executes the callback in
+foreground context. System Core never owns that schedule or the queue.
+See [Clock calibration from AppRun](clock-calibration-app-run.md).
 
 On Nordic targets without an implemented RC calibration operation,
 the corresponding API currently returns false. The nRF52 MPSL
