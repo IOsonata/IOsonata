@@ -52,6 +52,13 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("lowTimerCount = TimerGetLowFreqDevCount();", source)
 		self.assertIn("highTimerCount = TimerGetHighFreqDevCount();", source)
 		self.assertIn("ClockDemoTimer(timerDevNo);", source)
+		self.assertIn('ClockDemoPrint("LF RC timer timing test\\r\\n");', source)
+		self.assertIn('ClockDemoPrint("Restored LF source timer timing test\\r\\n");', source)
+		self.assertIn("timerDevNo < TimerGetLowFreqDevCount();", source)
+		self.assertLess(source.index('ClockDemoPrint("LF RC timer timing test'),
+			source.index("SystemLowFreqClockSelect(initialLfSource, initialLfFreq);",
+				source.index('ClockDemoPrint("LF RC timer timing test')))
+
 		self.assertIn("ClockDemoConcurrentTimerTest(lowTimerCount, highTimerCount);", source)
 		self.assertIn("Timer independent clock ownership", source)
 		self.assertIn("ClockDemoTimerInit(DevNo)", source)
