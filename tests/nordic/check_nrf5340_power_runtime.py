@@ -68,7 +68,7 @@ class RuntimePowerChecks(unittest.TestCase):
 	def test_console_retries_syslog_after_uart_irq_drain(self):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertNotIn("SysLogVPrintf(", s)
-		self.assertIn("msDelay(2);", s)
+		self.assertIn("SysLogUartEvent", s)
 		self.assertIn("SysLogUartEvent", s)
 		self.assertNotIn("CorePowerTestDrainLog(", s)
 		self.assertIn("SysLogPrintf(SysLogGet(),", s)

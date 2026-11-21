@@ -256,10 +256,10 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
  * interrupt for example, returns 0 and leaves its record to the running call,
  * which checks the store again before it returns.
  *
- * The sink does not call back when it has room again. When records can be
- * left waiting, call this from the sink ready event (for a UART,
- * UART_EVT_TXREADY), through the application event queue rather than from
- * the interrupt.
+ * With a UART sink, UARTCfg_t.EvtCallback can be set to SysLogUartEvent
+ * to retry pending records on UART_EVT_TXREADY. If the application installs
+ * its own UART callback, it must arrange SysLogFlush on TX readiness instead.
+ * Other DeviceIntrf sinks require their own ready-event integration.
  *
  * Note this is the opposite of CFifoFlush, which discards. This one sends.
  *

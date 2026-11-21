@@ -299,7 +299,7 @@ int SysLogUartEvent(UARTDev_t * const pDev, UART_EVT EvtId,
 	}
 
 	pLog = SysLogGet();
-	if (pLog->pSink != &pDev->DevIntrf)
+	if (pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink != &pDev->DevIntrf)
 	{
 		return 0;
 	}
