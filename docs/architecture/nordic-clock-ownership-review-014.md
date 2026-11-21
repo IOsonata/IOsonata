@@ -28,7 +28,7 @@ executed. Keep this work separate from unmerged PR #144.
 | `ARM/Nordic/src/system_clock_nrfx.cpp` | Counts RTC LFCLK requests and refuses incompatible active source choices |
 | `ARM/Nordic/src/timer_hf_nrfx.cpp` | No timer-side PLL start; retains HFXO request if release is refused |
 | `ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp` | Retains HFXO request state when the clock manager refuses release |
-| `exemples/misc/clock_demo.cpp` | No UART FIFO reads or RX-for-TX servicing |
+| `exemples/misc/core_clock_test.cpp` | No UART FIFO reads or RX-for-TX servicing |
 | `exemples/misc/power_off_demo.cpp` | No UART FIFO reads, RX-for-TX servicing or SAM4L register diagnostics |
 | `exemples/i2c/i2c_slave_demo.cpp` | Application no longer disables UART around SystemSleep or reads its private TX status |
 | `exemples/i2c/sleepwalking.md` | Documents system-managed UART preparation |
