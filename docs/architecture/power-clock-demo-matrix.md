@@ -304,8 +304,9 @@ Debug and Release: polling 14,968 flash bytes; interrupt-only 15,520; DMA-only
 15,932; DMA with interrupts 16,380. The combined setting has four bytes free.
 ClockDisplayDemo uses 16,308 flash bytes and 2,892 static RAM bytes.
 
-The Q16 calculation uses the same clock frequency and produces the same factors
-without 64-bit division. Temporary native checks compared every frequency from
+The earlier Q16 calculation used the same clock frequency and produced equivalent
+results without 64-bit division. This historical validation predates the later
+migration to measured loop iterations per second. Temporary native checks compared every frequency from
 0 to 48 MHz, every supported DPLL reference Hz, all DPLL ratios at boundary
 references, and one million full-width arithmetic samples. All passed. The
 shared ARM delay header and assembly loops are unchanged by this optimization.
