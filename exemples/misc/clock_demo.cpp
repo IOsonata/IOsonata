@@ -61,6 +61,8 @@ SOFTWARE.
 #pragma weak SystemHighFreqClockDisable
 #pragma weak SystemLowFreqClockEnable
 #pragma weak SystemLowFreqClockDisable
+#pragma weak SystemHighFreqClockCalibrate
+#pragma weak SystemLowFreqClockCalibrate
 #endif
 
 struct ClockDemoSource_t {
@@ -271,6 +273,55 @@ static void ClockDemoSharedClockTest(void)
 	}
 }
 
+// Check one-shot calibration without making the test own a periodic
+// timer or depending on the application event dispatcher.
+static void ClockDemoCalibrationTest(void)
+{
+	bool enabled;
+	bool calibrated;
+
+	if (SystemHighFreqClockCalibrate == nullptr)
+	{
+		ClockDemoPrint("HF RC calibration: UNSUPPORTED (API missing)\\r\\n");
+	}
+	else if (GetHighFreqOscType() != OSC_TYPE_RC)
+	{
+		ClockDemoPrint("HF RC calibration: UNSUPPORTED (not RC)\\r\\n");
+	}
+	else
+	{
+		calibrated = SystemHighFreqClockCalibrate();
+		ClockDemoPrint("HF RC calibration: %s\\r\\n",
+			calibrated ? "PASS" : "UNSUPPORTED or failed");
+	}
+
+	if (SystemLowFreqClockCalibrate == nullptr)
+	{
+		ClockDemoPrint("LF RC calibration: UNSUPPORTED (API missing)\\r\\n");
+		return;
+	}
+	if (GetLowFreqOscType() != OSC_TYPE_RC)
+	{
+		ClockDemoPrint("LF RC calibration: UNSUPPORTED (not RC)\\r\\n");
+		return;
+	}
+	if (SystemLowFreqClockEnable == nullptr ||
+		SystemLowFreqClockDisable == nullptr)
+	{
+		ClockDemoResult("LF RC calibration clock API", false);
+		return;
+	}
+	enabled = SystemLowFreqClockEnable();
+	if (!enabled)
+	{
+		ClockDemoResult("LF RC calibration clock enable", false);
+		return;
+	}
+	calibrated = SystemLowFreqClockCalibrate();
+	SystemLowFreqClockDisable();
+	ClockDemoResult("LF RC calibration", calibrated);
+}
+
 static bool ClockDemoTimerInit(int DevNo)
 {
 	TimerCfg_t cfg;
@@ -437,6 +488,7 @@ int main(void)
 	ClockDemoFlush();
 	ClockDemoResult("Core clock startup", SystemCoreClockGet() != 0U);
 	ClockDemoSharedClockTest();
+	ClockDemoCalibrationTest();
 	if (sizeof(s_Sources) == 0U)
 	{
 		selected = SystemCoreClockSelect(GetHighFreqOscType(),
