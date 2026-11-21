@@ -85,7 +85,7 @@ __WEAK McuOsc_t g_McuOsc = {
 uint32_t SystemCoreClock = IRC_FREQ;/*!< System Clock Frequency (Core Clock)*/
 uint32_t SystemClkFreq = IRC_FREQ;	/* System clock frequency, reset default IRC */
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 extern void (* const __Vectors[])(void);
 
 // Optional initialized AHB RAM section supplied by the application linker.
