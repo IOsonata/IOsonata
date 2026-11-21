@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>PowerOffDemo</name>
+	<name>PowerApiTest</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -36,9 +36,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/power_off_demo.cpp</name>
+			<name>src/power_api_test.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/misc/power_off_demo.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/misc/power_api_test.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

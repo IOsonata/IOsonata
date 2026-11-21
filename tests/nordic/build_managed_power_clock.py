@@ -100,9 +100,8 @@ def main():
             root / "lib/ioc",
             root / "exemples/ClockDemo/ioc",
         ]
-        standard_projects.append(root / "exemples/PowerOffDemo/ioc")
+        standard_projects.append(root / "exemples/PowerApiTest/ioc")
         if target == "nrf5340_app":
-            standard_projects.append(root / "exemples/StandbyDemo/ioc")
             standard_projects.append(root / "exemples/NetCoreStart/ioc")
         if target in ("nrf52832", "nrf52840"):
             standard_projects.append(root / "exemples/HfxoTestBle/ioc")

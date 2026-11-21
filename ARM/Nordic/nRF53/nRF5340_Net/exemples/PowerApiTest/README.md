@@ -1,7 +1,7 @@
-# nRF5340 Network Core PowerOffDemo
+# nRF5340 Network Core PowerApiTest
 
-The nRF5340 network-core PowerOffDemo uses the shared
-`exemples/misc/power_off_demo.cpp` source without target-specific sleep logic.
+The nRF5340 network-core PowerApiTest uses the shared
+`exemples/misc/power_api_test.cpp` source without target-specific sleep logic.
 It exercises resumable `SystemSleep()` using a 1,000 ms LF timer wake, 
 the network-core UARTE0 console at 1,000,000 baud, and static/stack RAM
 continuity checks.
@@ -12,9 +12,9 @@ standard DK (RX P1.00, TX P1.01).
 
 Flash `NetCoreStart` on the application core first. It assigns the network
 UART pins, prepares/holds shared LFXO, then releases the network core.
-Flash `PowerOffDemo` to the network core and power-cycle the board.
+Flash `PowerApiTest` to the network core and power-cycle the board.
 
-Expected console progression: `PowerOffDemo: Standby`,
+Expected console progression: `PowerApiTest: Standby`,
 `Entering Standby; automatic timer wake`, repeated resume counts,
 RAM sample checks, and clock/UART restoration. A failed timer initialization
 or unexpected immediate return is not a pass.
