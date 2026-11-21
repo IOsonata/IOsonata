@@ -52,7 +52,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NORDIC_DK
 
 #ifdef NORDIC_DK
-// nRF52840 DK: UART0 through interface MCU VCOM0, LED1-4 and Button1-2.
+// nRF52840 DK: UART0 through interface MCU VCOM0, LED1-3 and Button1-2.
 #define UART_RX_PORT		0
 #define UART_RX_PIN			8
 #define UART_RX_PINOP		1
