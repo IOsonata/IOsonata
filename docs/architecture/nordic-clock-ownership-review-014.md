@@ -55,11 +55,13 @@ UART PowerOff fix. Do not interpret it as a passing calibration.
 `ClockDemoFlush()` and `PowerDemoDrain()` allow transmission time
 without reading private UART state. Their fixed delay is not an exact
 hardware-TX-complete operation and must not be represented as one.
-The nRF52 legacy polling UART now drains its private software queue and
-waits for the final TX completion within `nRFUARTPowerOff()`. The driver
-owns the operation; `ClockDemo` does not poll RX to advance TX. The
-final `ClockDemo complete` line is followed by the same PowerOff drain.
-This change applies to legacy polling UART, not every MCU UART/DMA path.
+The nRF52 legacy polling UART drains its private software queue and
+waits for the last TX completion inside `nRFUARTPowerOff()`. The driver
+owns the operation; `ClockDemo` does not poll RX to advance TX.
+The generic ClockDemo no longer powers the UART off between clock
+operations. Shared oscillator ownership has separate HFXO/SDC tests,
+while ClockDemo tests core and peripheral clock APIs and timer behavior.
+UART completion handling still requires target-specific validation.
 The existing generic UART interface does not supply a portable on-wire
 drain operation. Do not change the generic interface without a separate
 cross-MCU review.
