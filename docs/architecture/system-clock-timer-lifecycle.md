@@ -246,9 +246,11 @@ default low-frequency source is the one configured in
 
 The Nordic working branch now uses `SystemHighFreqClockEnable/Disable` for
 shared HF oscillator ownership and `SystemLowFreqClockEnable/Disable` for
-LFCLK. Its RTC, HF timer, USB controller, HFXO tests and ClockDemo have been
-updated to use those functions. The redundant Nordic LFCLK private header
-has been deleted. Source review is not a substitute for a complete build,
+LFCLK. The RTC, HF timer and USB controller use those shared-clock
+functions. Dedicated HFXO/SDC tests exercise reference counting and BLE
+ownership. ClockDemo separately tests generic core selection, peripheral
+clock frequency and timer behavior. The redundant Nordic LFCLK private
+header has been deleted. Source review is not a substitute for a complete build,
 SoftDevice/SDC integration tests, and actual hardware validation.
 
 ### Nordic BLE clock ownership is transparent to applications
