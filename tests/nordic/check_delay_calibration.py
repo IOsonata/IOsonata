@@ -29,20 +29,20 @@ class Nrf52DelayCalibration(unittest.TestCase):
         helper = (ROOT / "ARM/include/idelay.h").read_text(
             encoding="utf-8")
         self.assertIn("bool ArmDelayClockSetDivisors(", helper)
-        self.assertIn("usFactor = ((uint64_t)CpuHz << 16) / UsDivisor", helper)
-        self.assertIn("nsFactor = ((uint64_t)CpuHz << 16) / NsDivisor", helper)
+        self.assertIn("usFactor = ((uint64_t)CpuHz * 1000000ULL) / UsDivisor", helper)
+        self.assertIn("nsFactor = ((uint64_t)CpuHz * 1000000ULL) / NsDivisor", helper)
 
     def test_fixed_point_loop_units(self):
-        self.assertIn("SystemMicroSecLoopCnt + 65535ULL) >> 16", self.delay)
-        self.assertIn("SystemnsDelayFactor + 65535999ULL) / 65536000ULL",
+        self.assertIn("SystemMicroSecLoopCnt + 999999ULL) / 1000000ULL", self.delay)
+        self.assertIn("SystemnsDelayFactor + 999999999ULL) / 1000000000ULL",
                       self.delay)
 
     def test_250ms_scale_at_64mhz(self):
         frequency = 64000000
-        us_factor = (frequency << 16) // 13000000
-        ns_factor = (frequency << 16) // 3000000
-        long_loops = (250000 * us_factor + 65535) >> 16
-        short_loops = (250000000 * ns_factor + 65535999) // 65536000
+        us_factor = frequency // 13
+        ns_factor = frequency // 3
+        long_loops = (250000 * us_factor + 999999) // 1000000
+        short_loops = (250000000 * ns_factor + 999999999) // 1000000000
         self.assertLess(abs(long_loops * 13 - 16000000), 128)
         # The SUBS/BNE loop takes three cycles per iteration on nRF52.
         # A previous divisor of 3189000 measured 235299 us.
