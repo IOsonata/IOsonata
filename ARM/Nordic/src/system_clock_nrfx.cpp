@@ -76,6 +76,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 #include "nrf_mpsl.h"
+#include "idelay.h"
 
 #if defined(NRF52_SERIES) && defined(NRFX_LFRC_CAL_LOG)
 #include "app_evt_handler.h"
@@ -101,6 +102,11 @@ SOFTWARE.
 
 // Well over the start time of the 32 kHz crystal, about 0.25 s
 #define NRFX_LFCLK_WAIT_LOOPS		10000000
+
+// LFXO on nRF5340 may need several hundred milliseconds to start.
+// Bound the wait in time rather than compiler-dependent loop iterations.
+#define NRFX_LFCLK_START_TIMEOUT_US	1500000U
+#define NRFX_LFCLK_START_POLL_US	100U
 
 // LFCLK registers and source values
 #if defined(CLOCK_LFCLK_SRC_SRC_Msk)
@@ -600,19 +606,30 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 // The clock manager alone starts and stops the shared oscillator.
 static bool nRFxLfclkStart(uint32_t Src)
 {
-	int i;
+	uint32_t elapsed;
 
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
 	NRF_CLOCK->TASKS_LFCLKSTART = 1U;
-	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
+	elapsed = 0U;
+	while (elapsed < NRFX_LFCLK_START_TIMEOUT_US)
 	{
-		if (NRF_CLOCK->EVENTS_LFCLKSTARTED)
+		if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
 		{
 			NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
 			return true;
 		}
+		usDelay(NRFX_LFCLK_START_POLL_US);
+		elapsed += NRFX_LFCLK_START_POLL_US;
 	}
+	if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
+	{
+		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
+		return true;
+	}
+
+	// The requested source did not start. Release only the start task
+	// issued by this clock instance and report failure to the caller.
 	NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
 	return false;
 }
@@ -694,6 +711,13 @@ bool SystemLowFreqClockEnable(void)
 	{
 		s_nRFxLfclkReqCnt = 1U;
 		s_bNRFxLfclkOwned = true;
+	}
+	else if (stopped)
+	{
+		// nRFxLfclkStart issued a STOP after a start timeout.
+		// The next enable must wait for that STOP to settle.
+		s_bNRFxLfclkStopPending = true;
+		s_bNRFxLfclkOwned = false;
 	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);
