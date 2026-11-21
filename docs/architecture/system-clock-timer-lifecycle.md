@@ -446,21 +446,22 @@ frequencies and wakeup restoration, must do the following in System Core:
    before returning control to callers that can use delay functions.
 
 `ArmDelayClockSetDivisors` applies the existing MCU-specific loop
-constants using shared fixed-point arithmetic. This path supports ARM
-targets without DWT and has no timer, interrupt wait, or event dependency.
+costs as **actual loop iterations per second**, not Q16 values. Both delay
+functions calculate iterations directly from their calibrated loop rates
+and the requested duration. This supports targets without DWT and has no
+Timer, interrupt-wait, or event dependency.
 The routine does not change clock hardware, and unsuccessful/unsupported
 clock-source selection must not commit factors for a requested clock that
 was never activated.
 
-A target with a usable DWT cycle counter may optionally call
-`ArmDelayClockInit` followed by `ArmDelayCalibrate` **once during
-startup**, before time-sensitive subsystems are active. It measures the
-existing assembly loops and caches their CPU-cycle costs. After an
-application changes the CPU clock, `ArmDelayClockUpdate` rescales the
-cached costs to the new frequency with arithmetic only; it never performs
-DWT measurements or holds interrupts off for a measurement. If DWT is
-unavailable or inaccessible, the port retains its documented fallback
-loop costs. A fallback is an estimate, not proof of measured accuracy.
+The MCU port supplies already-calibrated default-speed loop costs.
+A target with DWT may recalibrate the loops **when selecting a nondefault
+CPU frequency**, without depending on Timer or LFCLK. The measured CPU-cycle
+cost is cached and converted into loop iterations per second.
+At the default frequency, IOsonata restores the port's original calibrated
+loop costs. A target without DWT uses its port-provided cost and scales the
+loop rate from the actual CPU frequency. Calibration may briefly mask
+interrupts; it must not occur during ordinary delay calls.
 
 `SystemCoreClockUpdate` is the canonical place to read hardware clock
 state and update factors. Ports such as SAM4L that assign the core
