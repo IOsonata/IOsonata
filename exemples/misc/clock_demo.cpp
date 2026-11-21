@@ -282,27 +282,27 @@ static void ClockDemoCalibrationTest(void)
 
 	if (SystemHighFreqClockCalibrate == nullptr)
 	{
-		ClockDemoPrint("HF RC calibration: UNSUPPORTED (API missing)\\r\\n");
+		ClockDemoPrint("HF RC calibration: UNSUPPORTED (API missing)\r\n");
 	}
 	else if (GetHighFreqOscType() != OSC_TYPE_RC)
 	{
-		ClockDemoPrint("HF RC calibration: UNSUPPORTED (not RC)\\r\\n");
+		ClockDemoPrint("HF RC calibration: UNSUPPORTED (not RC)\r\n");
 	}
 	else
 	{
 		calibrated = SystemHighFreqClockCalibrate();
-		ClockDemoPrint("HF RC calibration: %s\\r\\n",
+		ClockDemoPrint("HF RC calibration: %s\r\n",
 			calibrated ? "PASS" : "UNSUPPORTED or failed");
 	}
 
 	if (SystemLowFreqClockCalibrate == nullptr)
 	{
-		ClockDemoPrint("LF RC calibration: UNSUPPORTED (API missing)\\r\\n");
+		ClockDemoPrint("LF RC calibration: UNSUPPORTED (API missing)\r\n");
 		return;
 	}
 	if (GetLowFreqOscType() != OSC_TYPE_RC)
 	{
-		ClockDemoPrint("LF RC calibration: UNSUPPORTED (not RC)\\r\\n");
+		ClockDemoPrint("LF RC calibration: UNSUPPORTED (not RC)\r\n");
 		return;
 	}
 	if (SystemLowFreqClockEnable == nullptr ||
