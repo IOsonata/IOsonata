@@ -20,19 +20,17 @@ class Nrf52DelayCalibration(unittest.TestCase):
         cls.system = SYSTEM.read_text(encoding="utf-8")
         cls.delay = DELAY.read_text(encoding="utf-8")
 
-    def test_microsecond_calibration(self):
-        match = re.search(r"SystemMicroSecLoopCnt\s*=\s*"
-                          r"\(\(uint64_t\)SystemCoreClock\s*<<\s*16\)\s*/\s*"
-                          r"(\d+)UL;", self.system)
-        self.assertIsNotNone(match)
-        self.assertEqual(int(match.group(1)), 13000000)
+    def test_existing_mcu_fallback_divisors_are_preserved(self):
+        self.assertIn("ArmDelayClockSetDivisors(SystemCoreClock,", self.system)
+        self.assertIn("13000000UL, 3000000UL", self.system)
+        self.assertIn('#include "idelay_calibration.h"', self.system)
 
-    def test_nanosecond_calibration(self):
-        match = re.search(r"SystemnsDelayFactor\s*=\s*"
-                          r"\(\(uint64_t\)SystemCoreClock\s*<<\s*16\)\s*/\s*"
-                          r"(\d+)UL;", self.system)
-        self.assertIsNotNone(match)
-        self.assertEqual(int(match.group(1)), 3000000)
+    def test_clock_change_factor_math_is_generic(self):
+        helper = (ROOT / "ARM/include/idelay_calibration.h").read_text(
+            encoding="utf-8")
+        self.assertIn("bool ArmDelayClockSetDivisors(", helper)
+        self.assertIn("usFactor = ((uint64_t)CpuHz << 16) / UsDivisor", helper)
+        self.assertIn("nsFactor = ((uint64_t)CpuHz << 16) / NsDivisor", helper)
 
     def test_fixed_point_loop_units(self):
         self.assertIn("SystemMicroSecLoopCnt + 65535ULL) >> 16", self.delay)
