@@ -621,7 +621,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			// if uart tx has not completed in time.
 			memcpy(dev->TxDmaMem, p, l);
 
-			#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+			#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 			dev->TxDmaLen = (uint32_t)l;
 #endif
 			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;

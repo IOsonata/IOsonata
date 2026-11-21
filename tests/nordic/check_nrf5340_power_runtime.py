@@ -100,6 +100,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("sent = dev->pDmaReg->TXD.AMOUNT;", s)
 		self.assertIn("memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);", s)
 		self.assertIn("dev->TxDmaLen = remaining;", s)
+		self.assertEqual(s.count("defined(NRF71_SERIES) || defined(NRF53_SERIES)"), 5)
 		self.assertIn("NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;", s)
 
 	def test_board_describes_resources_not_test_modes(self):
