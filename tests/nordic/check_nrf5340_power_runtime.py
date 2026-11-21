@@ -43,7 +43,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		header = (ROOT / "include/coredev/uart.h").read_text(encoding="utf-8")
 		self.assertIn("virtual int Tx(const uint8_t *pData, uint32_t Len)", header)
 		self.assertIn("UARTTx(UARTDev_t * const pDev, const uint8_t *pData", header)
-		self.assertIn("sent = s_Uart.Tx((const uint8_t *)pText, remaining);",
+		self.assertNotIn("s_Uart.Tx(",
 			SRC.read_text(encoding="utf-8"))
 
 	def test_retention_marker_requires_system_off_wake(self):
@@ -77,7 +77,7 @@ class RuntimePowerChecks(unittest.TestCase):
 	def test_syslog_console(self):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertIn("SysLogInitNoTimer(SysLogGet(), &s_LogCfg", s)
-		self.assertIn('SysLogPrintf(SysLogGet(),"%s: %s', s)
+		self.assertIn('SysLogPrintf(SysLogGet(), "%s: %s', s)
 		self.assertIn("SYSLOG_MEMSIZE(16, 128)", s)
 		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("CorePowerTestPut(", s)
@@ -92,8 +92,8 @@ class RuntimePowerChecks(unittest.TestCase):
 
 	def test_console_uses_syslog_not_direct_uart_printf(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn('SysLogPrintf(SysLogGet(),"%s: %s', s)
-		self.assertIn('SysLogPrintf(SysLogGet(),"CorePowerTest complete:', s)
+		self.assertIn('SysLogPrintf(SysLogGet(), "%s: %s', s)
+		self.assertIn('SysLogPrintf(SysLogGet(), "CorePowerTest complete:', s)
 		self.assertIn("SysLogFlush(SysLogGet());", s)
 		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("s_Uart.Tx(", s)
