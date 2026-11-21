@@ -648,6 +648,47 @@ static bool nRFxLfclkCalibrate(void)
 }
 #endif
 
+bool SystemHighFreqClockCalibrate(void)
+{
+	// No generic hardware calibration operation for HFRC on these targets.
+	// High-frequency crystal request/ownership is not RC calibration.
+	return false;
+}
+
+bool SystemLowFreqClockCalibrate(void)
+{
+#if defined(NRF53_SERIES)
+	uint32_t state;
+	bool active;
+	bool success;
+
+	// Calibration waits for hardware DONE. Timer ISR callbacks should
+	// dispatch foreground work rather than wait here.
+	if (__get_IPSR() != 0U)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	active = g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC &&
+		s_nRFxLfclkReqCnt != 0U && !s_bNRFxLfclkTransition &&
+		!nRFxMpslActive() && !nRFxClockSdEnabled();
+	EnableInterrupt(state);
+	if (!active || !SystemLowFreqClockEnable())
+	{
+		return false;
+	}
+
+	// Hold an additional shared LFCLK reference during calibration.
+	// A separate user's Disable cannot stop LFCLK before DONE.
+	success = nRFxLfclkCalibrate();
+	SystemLowFreqClockDisable();
+	return success;
+#else
+	// Other targets retain their existing vendor/stack calibration owner.
+	return false;
+#endif
+}
+
 // The clock manager alone starts and stops the shared oscillator.
 static bool nRFxLfclkStart(uint32_t Src)
 {
