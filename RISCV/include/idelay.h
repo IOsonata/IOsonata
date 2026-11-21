@@ -147,8 +147,8 @@ static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
 	if (pPoint != NULL)
 	{
 		pPoint->CpuHz = SystemCoreClockGet();
-		pPoint->UsQ16 = 0U;
-		pPoint->NsQ16 = 0U;
+		pPoint->UsLoopsPerSecond = 0U;
+		pPoint->NsLoopsPerSecond = 0U;
 		pPoint->Measured = false;
 	}
 	return false;
@@ -163,8 +163,8 @@ static inline bool DelayCalibrationFromTimer(uint32_t CpuHz,
 	if (pPoint != NULL)
 	{
 		pPoint->CpuHz = CpuHz;
-		pPoint->UsQ16 = 0U;
-		pPoint->NsQ16 = 0U;
+		pPoint->UsLoopsPerSecond = 0U;
+		pPoint->NsLoopsPerSecond = 0U;
 		pPoint->Measured = false;
 	}
 	return false;
