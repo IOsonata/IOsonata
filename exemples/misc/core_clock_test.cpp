@@ -94,6 +94,7 @@ static unsigned s_Failures;
 static DelayCalibrationPoint_t s_DelayHigh;
 static DelayCalibrationPoint_t s_DelayLow;
 static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event);
+static void CoreClockTestDelayCalibrationRecord(void);
 static void CoreClockTestFlush(void);
 
 static const TimerCfg_t s_TimerCfg = {
@@ -295,6 +296,8 @@ static void CoreClockTestPowerMode(void)
 		SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER &&
 		reduced != 0U && reduced < fastest);
 
+	// Measure the low-frequency endpoint before restoring performance mode.
+	CoreClockTestDelayCalibrationRecord();
 	CoreClockTestFlush();
 	restoredOk = SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);
 	restored = SystemCoreClockGet();
