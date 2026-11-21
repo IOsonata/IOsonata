@@ -62,7 +62,9 @@ class DemoDriverOwnership(unittest.TestCase):
 		body = source[drain:poweroff]
 		self.assertIn("CFifoUsed(dev->pUartDev->hTxFifo) == 0", body)
 		self.assertIn("dev->pUartDev->bTxReady", body)
-		self.assertIn("NRFX_UART_TX_DRAIN_WAIT_LOOPS", body)
+		self.assertIn("NRFX_UART_DMA_DRAIN_TIMEOUT_US", body)
+		self.assertIn("usDelay(NRFX_UART_DMA_DRAIN_POLL_US)", body)
+		self.assertIn("elapsed += NRFX_UART_DMA_DRAIN_POLL_US", body)
 		shutdown = source[poweroff:source.index("void *nRFUARTGetHandle(", poweroff)]
 		self.assertIn("pDev->bDma && pDev->bIntEn", shutdown)
 		self.assertIn("!nRFUARTDrainDmaTx(dev)", shutdown)
