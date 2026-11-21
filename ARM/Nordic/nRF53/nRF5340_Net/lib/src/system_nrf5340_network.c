@@ -67,9 +67,8 @@ void SystemCoreClockUpdate(void)
 
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
-		// DWT measurement is optional; fallback is per-target.
+		// Use the port's default loop costs without runtime measurement.
 		(void)ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U);
-		(void)ArmDelayCalibrate(&s_DelayCalibration, SystemCoreClock);
 	}
 	else if (s_DelayCalibration.CpuHz != SystemCoreClock)
 	{
