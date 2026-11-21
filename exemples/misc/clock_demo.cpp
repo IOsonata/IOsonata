@@ -449,16 +449,27 @@ static void ClockDemoDelayCalibrationRecord(void)
 
 static void ClockDemoDelayCalibrationReport(void)
 {
+#if defined(__arm__) || defined(__thumb__)
+	ArmDelayPoint_t low;
+	ArmDelayPoint_t high;
+	uint32_t midpoint;
+	uint32_t savedUs;
+	uint32_t savedNs;
+	uint32_t predictedUs;
+	uint32_t predictedNs;
+	bool interpolated;
+#endif
+
 	if (!s_DelayHigh.Measured || !s_DelayLow.Measured)
 	{
 		ClockDemoPrint("Delay two-point calibration: NOT MEASURED\r\n");
 		return;
 	}
 
-	ClockDemoPrint("Delay high %u Hz: us Q16 %u, ns Q16 %u\r\n",
+	ClockDemoPrint("Delay highest observed %u Hz: us Q16 %u, ns Q16 %u\r\n",
 		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayHigh.UsQ16,
 		(unsigned)s_DelayHigh.NsQ16);
-	ClockDemoPrint("Delay low %u Hz: us Q16 %u, ns Q16 %u\r\n",
+	ClockDemoPrint("Delay lowest observed %u Hz: us Q16 %u, ns Q16 %u\r\n",
 		(unsigned)s_DelayLow.CpuHz, (unsigned)s_DelayLow.UsQ16,
 		(unsigned)s_DelayLow.NsQ16);
 
@@ -468,7 +479,30 @@ static void ClockDemoDelayCalibrationReport(void)
 	}
 	else
 	{
-		ClockDemoPrint("Delay two-point calibration: interpolate between measured points\r\n");
+#if defined(__arm__) || defined(__thumb__)
+		low.CpuHz = s_DelayLow.CpuHz;
+		low.UsQ16 = s_DelayLow.UsQ16;
+		low.NsQ16 = s_DelayLow.NsQ16;
+		high.CpuHz = s_DelayHigh.CpuHz;
+		high.UsQ16 = s_DelayHigh.UsQ16;
+		high.NsQ16 = s_DelayHigh.NsQ16;
+		midpoint = low.CpuHz + (high.CpuHz - low.CpuHz) / 2U;
+		savedUs = SystemMicroSecLoopCnt;
+		savedNs = SystemnsDelayFactor;
+		interpolated = ArmDelayClockInterpolate(midpoint, &low, &high);
+		predictedUs = SystemMicroSecLoopCnt;
+		predictedNs = SystemnsDelayFactor;
+		SystemMicroSecLoopCnt = savedUs;
+		SystemnsDelayFactor = savedNs;
+
+		if (interpolated)
+		{
+			ClockDemoPrint("Delay interpolated %u Hz: us Q16 %u, ns Q16 %u\r\n",
+				(unsigned)midpoint, (unsigned)predictedUs, (unsigned)predictedNs);
+		}
+#else
+		ClockDemoPrint("Delay two-point calibration: cycle counter scaling\r\n");
+#endif
 	}
 }
 
