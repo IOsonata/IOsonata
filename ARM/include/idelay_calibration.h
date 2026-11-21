@@ -50,7 +50,7 @@ static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz
 	uint32_t nsCycles;
 	bool valid;
 
-	if (pCal == nullptr || CpuHz == 0U || __get_IPSR() != 0U ||
+	if (pCal == NULL || CpuHz == 0U || __get_IPSR() != 0U ||
 		(DWT->CTRL & DWT_CTRL_NOCYCCNT_Msk) != 0U)
 	{
 		return false;
