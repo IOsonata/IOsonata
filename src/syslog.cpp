@@ -285,30 +285,6 @@ static bool SysLogDrain(SysLog_t * const pLog, int *pTotal, int *pErr)
 	}
 }
 
-int SysLogUartEvent(UARTDev_t * const pDev, UART_EVT EvtId,
-		uint8_t *pBuffer, int BufferLen)
-{
-	SysLog_t *pLog;
-
-	(void)pBuffer;
-	(void)BufferLen;
-
-	if (EvtId != UART_EVT_TXREADY || pDev == nullptr)
-	{
-		return 0;
-	}
-
-	pLog = SysLogGet();
-	if (pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink != &pDev->DevIntrf)
-	{
-		return 0;
-	}
-
-	// UART IRQ has made transmit FIFO capacity available. SysLogFlush
-	// accepts more data into that FIFO; DMA remains asynchronous.
-	return SysLogFlush(pLog);
-}
-
 int SysLogFlush(SysLog_t * const pLog)
 {
 	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)

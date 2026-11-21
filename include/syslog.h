@@ -130,7 +130,6 @@ SOFTWARE.
 
 #include "sysstatus.h"
 #include "device_intrf.h"
-#include "coredev/uart.h"
 #include "cfifo.h"
 #include "coredev/timer.h"
 
@@ -256,10 +255,10 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
  * interrupt for example, returns 0 and leaves its record to the running call,
  * which checks the store again before it returns.
  *
- * With a UART sink, UARTCfg_t.EvtCallback can be set to SysLogUartEvent
- * to retry pending records on UART_EVT_TXREADY. If the application installs
- * its own UART callback, it must arrange SysLogFlush on TX readiness instead.
- * Other DeviceIntrf sinks require their own ready-event integration.
+ * The sink is transport-independent. An application using an asynchronous
+ * sink is responsible for retrying SysLogFlush when the sink has room, from
+ * its own event handler or foreground processing. SysLog does not register
+ * transport-specific callbacks.
  *
  * Note this is the opposite of CFifoFlush, which discards. This one sends.
  *
@@ -270,19 +269,6 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
  *          unchanged when no bytes went out before it.
  */
 int SysLogFlush(SysLog_t * const pLog);
-
-/**
- * @brief Default UART transmit-ready callback for the global SysLog sink.
- *
- * Install as UARTCfg_t.EvtCallback. If an application substitutes its own
- * UART callback it becomes responsible for calling SysLogFlush when the
- * transmitter has space again.
- *
- * Returns the number of additional bytes accepted by the UART sink.
- * Does not wait for physical transmission to complete.
- */
-int SysLogUartEvent(UARTDev_t * const pDev, UART_EVT EvtId,
-		uint8_t *pBuffer, int BufferLen);
 
 /**
  * Format and store one status record.

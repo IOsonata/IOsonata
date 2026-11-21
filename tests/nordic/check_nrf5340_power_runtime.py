@@ -69,8 +69,8 @@ class RuntimePowerChecks(unittest.TestCase):
 	def test_console_retries_syslog_after_uart_irq_drain(self):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertNotIn("SysLogVPrintf(", s)
-		self.assertIn("SysLogUartEvent", s)
-		self.assertIn("SysLogUartEvent", s)
+		self.assertNotIn("SysLogUartEvent", s)
+		self.assertNotIn("SysLogUartEvent", s)
 		self.assertIn("CorePowerTestDrainLog(", s)
 		self.assertIn("SysLogPrintf(SysLogGet(),", s)
 		self.assertNotIn("DeviceIntrfWaitTxComplete(", s)
@@ -88,21 +88,25 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("static void CorePowerTestDrainLog(void)", s)
 		self.assertIn("msDelay(2);", s)
 		self.assertIn("(void)SysLogFlush(SysLogGet());", s)
-		self.assertIn(".EvtCallback = SysLogUartEvent,", s)
+		self.assertIn(".EvtCallback = nullptr,", s)
 		self.assertEqual(s.count("SysLogPrintf(SysLogGet(),"), 10)
 		self.assertEqual(s.count("CorePowerTestDrainLog();"), 10)
 		self.assertNotIn("SysLogVPrintf(", s)
 
-	def test_syslog_uart_owns_tx_ready_callback(self):
+	def test_syslog_has_no_uart_specific_dependencies(self):
 		s = SRC.read_text(encoding="utf-8")
 		header = (ROOT / "include/syslog.h").read_text(encoding="utf-8")
 		impl = (ROOT / "src/syslog.cpp").read_text(encoding="utf-8")
-		self.assertIn(".EvtCallback = SysLogUartEvent,", s)
-		self.assertIn("int SysLogUartEvent(UARTDev_t * const pDev", header)
-		self.assertIn("EvtId != UART_EVT_TXREADY", impl)
-		self.assertIn("return SysLogFlush(pLog);", impl)
-		self.assertIn("CorePowerTestDrainLog(", s)
+		self.assertIn(".EvtCallback = nullptr,", s)
+		self.assertIn("CorePowerTestDrainLog();", s)
+		self.assertNotIn("SysLogUartEvent", s)
+		self.assertNotIn("SysLogUartEvent", header)
+		self.assertNotIn("SysLogUartEvent", impl)
+		self.assertNotIn('#include "coredev/uart.h"', header)
+		self.assertNotIn("UART_EVT", header)
+		self.assertNotIn("UARTDev_t", header)
 		self.assertIn("CFifoResv(pLog->hFifo)", impl)
+
 
 	def test_console_uses_interrupt_driven_uarte(self):
 		s = SRC.read_text(encoding="utf-8")
@@ -116,7 +120,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertIn('SysLogPrintf(SysLogGet(), "%s: %s', s)
 		self.assertIn('SysLogPrintf(SysLogGet(), "CorePowerTest complete:', s)
-		self.assertIn("SysLogUartEvent", s)
+		self.assertNotIn("SysLogUartEvent", s)
 		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("s_Uart.Tx(", s)
 
