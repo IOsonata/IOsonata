@@ -187,6 +187,9 @@ static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
+#if defined(NRF53_SERIES)
+static bool s_bNRFxLfclkCalibrating;
+#endif
 
 // Weak: the SoftDevice Controller is not in the build. nrf_mpsl.cpp has the
 // version that goes through MPSL once it is initialized.
@@ -671,10 +674,22 @@ bool SystemLowFreqClockCalibrate(void)
 	state = DisableInterrupt();
 	active = g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC &&
 		s_nRFxLfclkReqCnt != 0U && !s_bNRFxLfclkTransition &&
+		!s_bNRFxLfclkCalibrating &&
 		!nRFxMpslActive() && !nRFxClockSdEnabled();
-	EnableInterrupt(state);
-	if (!active || !SystemLowFreqClockEnable())
+	if (active)
 	{
+		s_bNRFxLfclkCalibrating = true;
+	}
+	EnableInterrupt(state);
+	if (!active)
+	{
+		return false;
+	}
+	if (!SystemLowFreqClockEnable())
+	{
+		state = DisableInterrupt();
+		s_bNRFxLfclkCalibrating = false;
+		EnableInterrupt(state);
 		return false;
 	}
 
@@ -682,6 +697,9 @@ bool SystemLowFreqClockCalibrate(void)
 	// A separate user's Disable cannot stop LFCLK before DONE.
 	success = nRFxLfclkCalibrate();
 	SystemLowFreqClockDisable();
+	state = DisableInterrupt();
+	s_bNRFxLfclkCalibrating = false;
+	EnableInterrupt(state);
 	return success;
 #else
 	// Other targets retain their existing vendor/stack calibration owner.
