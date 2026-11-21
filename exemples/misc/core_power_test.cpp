@@ -95,53 +95,15 @@ static volatile uint32_t * const s_DropRam = (volatile uint32_t *)POWER_DEMO_RAM
 #endif
 #endif
 
+// UART::printf queues formatted text; the enabled TX interrupt owns
+// transfer completion. The pause protects test records and System OFF.
 static void CorePowerTestPut(const char *pText)
 {
-	int remaining;
-	int sent;
-	bool lineEnd;
-
-	remaining = 0;
-	while (pText[remaining] != 0)
-	{
-		remaining++;
-	}
-	lineEnd = remaining > 0 && pText[remaining - 1] == '\n';
-	while (remaining > 0)
-	{
-		sent = s_Uart.Tx((const uint8_t *)pText, remaining);
-		if (sent > 0)
-		{
-			pText += sent;
-			remaining -= sent;
-		}
-	}
-	// Tx() queues the data. Let the UART IRQ drain a complete record.
-	// This is a test-console delay, not a driver flush or TX polling.
-	if (lineEnd)
+	s_Uart.printf("%s", pText);
+	if (pText[0] != 0)
 	{
 		msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 	}
-}
-
-static void CorePowerTestNumber(uint32_t Value)
-{
-	char output[11];
-	uint8_t digit;
-	int shift;
-	int i;
-
-	output[0] = '0';
-	output[1] = 'x';
-	i = 2;
-	for (shift = 28; shift >= 0; shift -= 4)
-	{
-		digit = (uint8_t)((Value >> shift) & 15U);
-		output[i] = (char)(digit < 10U ? '0' + digit : 'A' + digit - 10U);
-		i++;
-	}
-	output[i] = 0;
-	CorePowerTestPut(output);
 }
 
 static void CorePowerTestResult(const char *pName, bool Pass)
@@ -151,23 +113,21 @@ static void CorePowerTestResult(const char *pName, bool Pass)
 	{
 		s_Failures++;
 	}
-	CorePowerTestPut(pName);
-	CorePowerTestPut(Pass ? ": PASS\r\n" : ": FAIL\r\n");
+	s_Uart.printf("%s: %s\r\n", pName, Pass ? "PASS" : "FAIL");
+	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 }
 
 static void CorePowerTestUnsupported(const char *pName)
 {
-	CorePowerTestPut(pName);
-	CorePowerTestPut(": UNSUPPORTED\r\n");
+	s_Uart.printf("%s: UNSUPPORTED\r\n", pName);
+	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 }
 
 static void CorePowerTestSummary(void)
 {
-	CorePowerTestPut("CorePowerTest complete: ");
-	CorePowerTestNumber(s_Failures);
-	CorePowerTestPut(" failures, ");
-	CorePowerTestNumber(s_Checks);
-	CorePowerTestPut(" checks\r\n");
+	s_Uart.printf("CorePowerTest complete: 0x%08x failures, 0x%08x checks\r\n",
+		(unsigned)s_Failures, (unsigned)s_Checks);
+	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 }
 
 static uint32_t CorePowerTestRamPattern(uint32_t Idx)
@@ -220,11 +180,9 @@ static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
 				unchanged++;
 			}
 		}
-		CorePowerTestPut("RAM non-retention unchanged words ");
-		CorePowerTestNumber(unchanged);
-		CorePowerTestPut(" / ");
-		CorePowerTestNumber(count);
-		CorePowerTestPut("\r\n");
+		s_Uart.printf("RAM non-retention unchanged words 0x%08x / 0x%08x\r\n",
+			(unsigned)unchanged, (unsigned)count);
+		msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 		valid = unchanged != count;
 		CorePowerTestResult("RAM non-retention after System OFF", valid);
 #endif
@@ -366,9 +324,8 @@ static void CorePowerTestSleep(uint32_t Caps)
 			}
 		}
 		CorePowerTestResult("Static/stack RAM after resume", ok);
-		CorePowerTestPut("Standby cycle ");
-		CorePowerTestNumber(cycle + 1U);
-		CorePowerTestPut("\r\n");
+		s_Uart.printf("Standby cycle 0x%08x\r\n", (unsigned)(cycle + 1U));
+		msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 	}
 }
 
@@ -428,13 +385,11 @@ int main(void)
 		return 1;
 	}
 	caps = SystemPowerCapabilitiesGet();
-	CorePowerTestPut("Capabilities ");
-	CorePowerTestNumber(caps);
-	CorePowerTestPut("\r\n");
+	s_Uart.printf("Capabilities 0x%08x\r\n", (unsigned)caps);
+	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 	reason = SystemResetReason();
-	CorePowerTestPut("Reset reason ");
-	CorePowerTestNumber(reason);
-	CorePowerTestPut("\r\n");
+	s_Uart.printf("Reset reason 0x%08x\r\n", (unsigned)reason);
+	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 	CorePowerTestResult("Reset reason stable", SystemResetReason() == reason);
 
 	retCount = SystemRetRegCount();

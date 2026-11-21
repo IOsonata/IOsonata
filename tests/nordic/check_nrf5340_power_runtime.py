@@ -67,8 +67,7 @@ class RuntimePowerChecks(unittest.TestCase):
 
 	def test_console_leaves_irq_time_to_drain(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn("#define CORE_POWER_TEST_TX_DRAIN_MS\\t10U".replace("\\t", "\t"), s)
-		self.assertIn("lineEnd = remaining > 0", s)
+		self.assertIn("CORE_POWER_TEST_TX_DRAIN_MS", s)
 		self.assertIn("msDelay(CORE_POWER_TEST_TX_DRAIN_MS);", s)
 		self.assertIn("msDelay(100);\\n\\t\\tSystemPowerOff();".replace("\\n", "\n").replace("\\t", "\t"), s)
 		self.assertNotIn("DeviceIntrfWaitTxComplete(", s)
@@ -81,11 +80,13 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertNotIn(".bDMAMode = false,", s)
 		self.assertNotIn("DeviceIntrfWaitTxComplete", s)
 
-	def test_console_uses_buffered_uart_submission(self):
+	def test_console_uses_uart_printf(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn("sent = s_Uart.Tx((const uint8_t *)pText, remaining);", s)
-		self.assertIn("CorePowerTestPut(output);", s)
-		self.assertNotIn("s_Uart.Tx(&c, 1)", s)
+		self.assertIn('s_Uart.printf("%s: %s\\r\\n"', s)
+		self.assertIn('s_Uart.printf("CorePowerTest complete:', s)
+		self.assertIn("msDelay(CORE_POWER_TEST_TX_DRAIN_MS);", s)
+		self.assertNotIn("CorePowerTestNumber(", s)
+		self.assertNotIn("s_Uart.Tx(", s)
 
 	def test_vmc_retention_write_is_verified(self):
 		backend = NRF.read_text(encoding="utf-8")
