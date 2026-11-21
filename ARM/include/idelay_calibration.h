@@ -211,19 +211,5 @@ static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
 	return true;
 }
 
-// For ports with a documented fallback but no persistent measurement state,
-// compute both factors from the actual CPU clock with the same arithmetic.
-static inline bool ArmDelayClockSet(uint32_t CpuHz,
-	uint32_t UsLoopCycles, uint32_t NsLoopCycles)
-{
-	ArmDelayCalibration_t cal;
-
-	if (!ArmDelayClockInit(&cal, CpuHz, UsLoopCycles, NsLoopCycles))
-	{
-		return false;
-	}
-
-	return true;
-}
 
 #endif
