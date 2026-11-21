@@ -135,7 +135,7 @@ extern uint32_t SystemMicroSecLoopCnt;
 
 // CPU clock after reset is OSC8M divided by 8
 uint32_t SystemCoreClock = SAMD_OSC8M_FREQ / 8UL;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 // The frequencies of the DFLL48M and the FDPLL96M come from their registers:
 // the C startup clears .bss after SystemInit, a variable set there is lost.
