@@ -301,11 +301,13 @@ static void ClockDemoCalibrationTest(void)
 		ClockDemoPrint("LF RC calibration: UNSUPPORTED (API missing)\r\n");
 		return;
 	}
+
 	if (GetLowFreqOscType() != OSC_TYPE_RC)
 	{
 		ClockDemoPrint("LF RC calibration: UNSUPPORTED (not RC)\r\n");
 		return;
 	}
+
 	if (SystemLowFreqClockEnable == nullptr ||
 		SystemLowFreqClockDisable == nullptr)
 	{
