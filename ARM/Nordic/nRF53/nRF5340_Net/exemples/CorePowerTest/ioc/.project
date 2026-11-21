@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>ClockDemo</name>
+	<name>CorePowerTest</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -36,9 +36,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/core_clock_test.cpp</name>
+			<name>src/core_power_test.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/misc/core_clock_test.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/misc/core_power_test.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
