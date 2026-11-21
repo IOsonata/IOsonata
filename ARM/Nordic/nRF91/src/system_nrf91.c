@@ -32,6 +32,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf91_approtect.h"
 
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 /*lint ++flb "Enter library region" */
 
 void SystemStoreFICRNS(void);
@@ -91,8 +92,8 @@ uint32_t SystemCoreClockGet(void)
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, 3000000UL);
 }
 
 void SystemInit(void)

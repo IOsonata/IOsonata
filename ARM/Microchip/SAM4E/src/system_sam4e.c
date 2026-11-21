@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include "system_sam4e.h"
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 
 #define SYSTEM_CORE_CLOCK				120000000UL	// Default core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(27UL)		// Adjustment value for nanosec delay
@@ -320,8 +321,8 @@ void SystemCoreClockUpdate( void )
 
 	SystemCoreClock = clk;
 
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
 }
 
 uint32_t SystemCoreClockGet()

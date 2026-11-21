@@ -46,6 +46,7 @@ SOFTWARE.
 
 #include "re01xxx.h"
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 
 #define SYSTEM_CORE_CLOCK_MAX			64000000UL
 #define SYSTEM_NSDELAY_CORE_FACTOR		(34UL)
@@ -353,8 +354,8 @@ void SystemCoreClockUpdate(void)
 	SystemCoreClock = divider <= 6 ? SystemCoreClock >> divider : 0;
 
 	// Reporting clocks must not change divider or flash settings.
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK_MAX / 1000UL);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK_MAX / 1000UL));
 }
 
 

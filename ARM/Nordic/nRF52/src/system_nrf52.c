@@ -32,6 +32,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf52_approtect.h"
 
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 
 #define __SYSTEM_CLOCK_DEFAULT      (64000000UL)
 
@@ -156,8 +157,8 @@ void SystemCoreClockUpdate(void)
 	// The nsDelay SUBS/BNE loop takes 3 cycles per iteration.
 	// nRF52832 ClockDemo measured 235299 us with the previous 3189000
 	// divisor, matching the three-cycle loop at 64 MHz.
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 13000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		13000000UL, 3000000UL);
 }
 
 void SystemInit(void)
