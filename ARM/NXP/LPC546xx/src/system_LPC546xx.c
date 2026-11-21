@@ -129,7 +129,7 @@ static const uint32_t s_FlashTimFreq[] = {
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = DEFAULT_SYSTEM_CLOCK;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 
 static uint32_t s_Lpc546xxAudioPllFreq = 0;
