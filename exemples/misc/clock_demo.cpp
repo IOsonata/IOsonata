@@ -210,6 +210,11 @@ static void ClockDemoSharedClockTest(void)
 	bool second;
 	bool third;
 
+	ClockDemoPrint("Configured HF source %u, LF source %u (%u Hz)\r\n",
+		(unsigned)GetHighFreqOscType(),
+		(unsigned)GetLowFreqOscType(),
+		(unsigned)GetLowFreqOscFreq());
+
 	if (SystemHighFreqClockEnable == nullptr ||
 		SystemHighFreqClockDisable == nullptr)
 	{
