@@ -118,7 +118,7 @@ static void ClockDemoFlush(void);
 static const TimerCfg_t s_TimerCfg = {
 	.DevNo = 0,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
-	.Freq = 1000000U,
+	.Freq = 0U,			// Highest supported rate for each timer device
 	.IntPrio = CLOCK_DEMO_IRQ_PRIORITY,
 	.EvtHandler = ClockDemoTimerHandler,
 };
