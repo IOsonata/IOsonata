@@ -54,6 +54,21 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("!nRFUARTDrainPollingTx(dev)", source[poweroff:])
 		self.assertIn("return;", source[poweroff:])
 
+	def test_nrf_dma_uart_drains_before_power_off(self):
+		source = NRF_UART.read_text(encoding="utf-8")
+		drain = source.index("static bool nRFUARTDrainDmaTx(")
+		poweroff = source.index("void nRFUARTPowerOff(")
+		self.assertLess(drain, poweroff)
+		body = source[drain:poweroff]
+		self.assertIn("CFifoUsed(dev->pUartDev->hTxFifo) == 0", body)
+		self.assertIn("dev->pUartDev->bTxReady", body)
+		self.assertIn("NRFX_UART_TX_DRAIN_WAIT_LOOPS", body)
+		shutdown = source[poweroff:source.index("void *nRFUARTGetHandle(", poweroff)]
+		self.assertIn("pDev->bDma && pDev->bIntEn", shutdown)
+		self.assertIn("!nRFUARTDrainDmaTx(dev)", shutdown)
+		self.assertLess(shutdown.index("!nRFUARTDrainDmaTx(dev)"),
+			shutdown.index("IOPinDisable("))
+
 	def test_power_off_demo(self):
 		source = POWER.read_text(encoding="utf-8")
 		self.assertNotIn("hTxFifo", source)
