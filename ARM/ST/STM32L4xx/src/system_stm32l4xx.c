@@ -77,7 +77,7 @@ SOFTWARE.
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 // Keep this name for compatibility with STM code
 const uint32_t MSIRangeTable[] = {
