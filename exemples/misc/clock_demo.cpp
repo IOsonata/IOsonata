@@ -320,7 +320,7 @@ int main(void)
 		for (sourceIdx = 0U; sourceIdx < sizeof(s_Sources) / sizeof(s_Sources[0]); sourceIdx++)
 		{
 			pSource = &s_Sources[sourceIdx];
-			ClockDemoPrint("%s %s\\r\\n", pSource->Select ? "Selecting" : "Checking",
+			ClockDemoPrint("%s %s\r\n", pSource->Select ? "Selecting" : "Checking",
 				pSource->pName);
 			ClockDemoFlush();
 			selected = true;
