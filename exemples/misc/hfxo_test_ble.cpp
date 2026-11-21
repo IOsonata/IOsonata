@@ -46,6 +46,7 @@ SOFTWARE.
 #ifdef NDEBUG
 #include "coredev/uart.h"
 #include "syslog.h"
+#include "idelay.h"
 #include "board.h"
 #else
 #include <stdio.h>
@@ -126,22 +127,12 @@ static void HfxoConsoleInit(void)
 
 static void HfxoConsoleDrain(void)
 {
-	UARTDev_t *pUart;
+	// SysLogFlush submits queued records to the transport; it does not
+	// guarantee physical UART completion. Keep the console alive briefly
+	// before leaving this test without inspecting UART driver state.
+	(void)SysLogFlush(SysLogGet());
+	msDelay(100);
 
-	pUart = (UARTDev_t *)s_Uart;
-	for (;;)
-	{
-		(void)SysLogFlush(SysLogGet());
-		if (CFifoPeek(SysLogGet()->hFifo) == nullptr &&
-			CFifoUsed(pUart->hTxFifo) == 0U &&
-			pUart->bTxReady)
-		{
-			break;
-		}
-		// TXREADY callback posts an event when the active DMA ends.
-		// Check the queues before waiting to avoid missed completions.
-		__WFE();
-	}
 }
 #else
 #define HFXO_PRINT(...) printf(__VA_ARGS__)
