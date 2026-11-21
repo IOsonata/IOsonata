@@ -36,6 +36,7 @@ class PowerApiTest(unittest.TestCase):
 	def test_build_includes_power_api(self):
 		s = (ROOT / "tests/nordic/build_managed_power_clock.py").read_text(encoding="utf-8")
 		self.assertIn('root / "exemples/PowerApiTest/ioc"', s)
+		self.assertIn('root / "exemples/PowerOffDemo/ioc"', s)
 		self.assertNotIn('root / "exemples/StandbyDemo/ioc"', s)
 
 
