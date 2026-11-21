@@ -32,10 +32,10 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 
 	def test_250ms_nominal_loop_scale(self):
 		for frequency in (64000000, 128000000,):
-			us = (frequency << 16) // (28 * 1000000)
-			ns = (frequency << 16) // 3000000
-			us_loops = (250000 * us + 65535) >> 16
-			ns_loops = (250000000 * ns + 65535999) // 65536000
+			us = frequency // 28
+			ns = frequency // 3
+			us_loops = (250000 * us + 999999) // 1000000
+			ns_loops = (250000000 * ns + 999999999) // 1000000000
 			self.assertLess(abs(us_loops * 28 - frequency // 4), 5000)
 			self.assertLess(abs(ns_loops * 3 - frequency // 4), 5000)
 		self.assertIn("usDelay(ms * 1000U)", self.delay)
