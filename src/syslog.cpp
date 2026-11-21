@@ -285,6 +285,30 @@ static bool SysLogDrain(SysLog_t * const pLog, int *pTotal, int *pErr)
 	}
 }
 
+int SysLogUartEvent(UARTDev_t * const pDev, UART_EVT EvtId,
+		uint8_t *pBuffer, int BufferLen)
+{
+	SysLog_t *pLog;
+
+	(void)pBuffer;
+	(void)BufferLen;
+
+	if (EvtId != UART_EVT_TXREADY || pDev == nullptr)
+	{
+		return 0;
+	}
+
+	pLog = SysLogGet();
+	if (pLog->pSink != &pDev->DevIntrf)
+	{
+		return 0;
+	}
+
+	// UART IRQ has made transmit FIFO capacity available. SysLogFlush
+	// accepts more data into that FIFO; DMA remains asynchronous.
+	return SysLogFlush(pLog);
+}
+
 int SysLogFlush(SysLog_t * const pLog)
 {
 	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)
@@ -340,7 +364,7 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	// whatever the store was configured with.
 	const int recordLen = (int)CFifoBlockSize(pLog->hFifo);
 
-	char *pLine = (char *)CFifoPut(pLog->hFifo);
+	char *pLine = (char *)CFifoResv(pLog->hFifo);
 	if (pLine == 0)
 	{
 		return 0;
@@ -381,6 +405,7 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	len = SysLogAppendText(pLine, recordLen, len, "\r\n");
 
 	pLine[len] = 0;
+	(void)CFifoPut(pLog->hFifo);
 
 	// A record goes out as soon as it is stored when a transport is attached.
 	// SysLogFlush does not log, so this cannot recurse.
@@ -402,7 +427,7 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 	// Format straight into the block, no intermediate line buffer.
 	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo);
 
-	uint8_t *pBlock = CFifoPut(pLog->hFifo);
+	uint8_t *pBlock = CFifoResv(pLog->hFifo);
 	if (pBlock == 0)
 	{
 		return 0;
@@ -421,6 +446,7 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 	if (len < 0)
 	{
 		pBlock[0] = 0U;
+		(void)CFifoPut(pLog->hFifo);
 		return 0;
 	}
 
@@ -429,6 +455,7 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 	{
 		len = (int)recordLen - 1;
 	}
+	(void)CFifoPut(pLog->hFifo);
 
 	if (pLog->pSink != 0)
 	{

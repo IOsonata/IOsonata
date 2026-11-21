@@ -130,6 +130,7 @@ SOFTWARE.
 
 #include "sysstatus.h"
 #include "device_intrf.h"
+#include "coredev/uart.h"
 #include "cfifo.h"
 #include "coredev/timer.h"
 
@@ -269,6 +270,19 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
  *          unchanged when no bytes went out before it.
  */
 int SysLogFlush(SysLog_t * const pLog);
+
+/**
+ * @brief Default UART transmit-ready callback for the global SysLog sink.
+ *
+ * Install as UARTCfg_t.EvtCallback. If an application substitutes its own
+ * UART callback it becomes responsible for calling SysLogFlush when the
+ * transmitter has space again.
+ *
+ * Returns the number of additional bytes accepted by the UART sink.
+ * Does not wait for physical transmission to complete.
+ */
+int SysLogUartEvent(UARTDev_t * const pDev, UART_EVT EvtId,
+		uint8_t *pBuffer, int BufferLen);
 
 /**
  * Format and store one status record.
