@@ -75,8 +75,8 @@ extern	void (* const __Vectors[])(void);
 // Just to make the linker to keep the __Vectors
 __attribute__ ((used)) static uint32_t s_StackPtr = (uint32_t)__Vectors;
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
-uint32_t SystemMicroSecLoopCnt = 65536UL;
+// Calibrated loop iterations per second.
+uint32_t SystemMicroSecLoopCnt = 1000000UL;
 
 /**
  * @brief	Get RAM start address
