@@ -31,7 +31,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf53_approtect.h"
 
 #include "coredev/system_core_clock.h"
-#include "idelay_calibration.h"
+#include "idelay.h"
 /*lint ++flb "Enter library region" */
 
 
