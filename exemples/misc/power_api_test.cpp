@@ -620,7 +620,6 @@ int main()
 			(uint64_t)elapsed <= expected * 102ULL / 100ULL);
 #endif
 		wakeCount++;
-		PowerApiTestSummary();
 		PowerDemoPut("Resumed from Standby, count 0x");
 		PowerDemoPutCount(wakeCount);
 		PowerDemoPut("\r\n");
@@ -628,12 +627,14 @@ int main()
 		PowerApiTestResult("SRAM sample: 128 static + 128 stack bytes", ramOk);
 		if (!ramOk)
 		{
+			PowerApiTestSummary();
 			PowerDemoDrain();
 			while (1)
 			{
 			}
 		}
 #endif
+		PowerApiTestSummary();
 	}
 #else
 	uint32_t reason;
@@ -670,8 +671,15 @@ int main()
 	cnt++;
 	SystemRetRegWrite(0, cnt);
 	SysLogPrintf(SysLogGet(), "Start count %u, %d retention registers\r\n", (unsigned)cnt, SystemRetRegCount());
-	PowerApiTestResult("Retention register read/write",
-		SystemRetRegCount() == 0 || SystemRetRegRead(0) == (cnt & 0xFFU));
+	if (SystemRetRegCount() > 0)
+	{
+		PowerApiTestResult("Retention register read/write",
+			SystemRetRegRead(0) == cnt || SystemRetRegRead(0) == (cnt & 0xFFU));
+	}
+	else
+	{
+		SysLogPrintf(SysLogGet(), "Retention registers: UNSUPPORTED\r\n");
+	}
 
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
 	// Check before writing the next pattern. Startup must leave the test region untouched.
@@ -793,10 +801,13 @@ int main()
 	}
 	msDelay(50);
 	SysLogPrintf(SysLogGet(), "SystemPowerOff returned\r\n");
+	PowerApiTestSummary();
 	while (1)
 	{
 		__WFE();
 	}
+#else
+	PowerApiTestSummary();
 #endif
 
 #endif

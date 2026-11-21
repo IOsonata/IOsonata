@@ -17,6 +17,13 @@ class PowerApiTest(unittest.TestCase):
 			"CPU/APB clock after resume"):
 			self.assertIn(name, s)
 
+	def test_report_after_ram_check(self):
+		s = SRC.read_text(encoding="utf-8")
+		standby = s[s.index("int main()"):s.index("#else\\n\\tuint32_t reason;", s.index("int main()"))]
+		self.assertLess(standby.index('PowerApiTestResult("SRAM sample:'),
+			standby.rindex("PowerApiTestSummary();"))
+		self.assertIn("PowerApiTest complete:", s)
+
 	def test_one_managed_project_per_core(self):
 		for core in ("nRF5340_App", "nRF5340_Net"):
 			base = BASE / core / "exemples"
