@@ -53,7 +53,7 @@ __WEAK McuOsc_t g_McuOsc = {
 
 // Delay-loop iterations per microsecond, with 16 fractional bits.
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 
