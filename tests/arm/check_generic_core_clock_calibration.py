@@ -51,13 +51,13 @@ int main(void)
 	DelayCalibrationPoint_t high = { 64000000U, 160000U, 480000U, true };
 	DelayCalibrationPoint_t result = { 0U, 0U, 0U, false };
 	if (!DelayCalibrationInterpolate(40000000U, &low, &high, &result)) return 1;
-	if (result.UsQ16 != 100000U || result.NsQ16 != 300000U) return 2;
+	if (result.UsLoopsPerSecond != 100000U || result.NsLoopsPerSecond != 300000U) return 2;
 	if (!DelayCalibrationInterpolate(1000000U, &low, &high, &result)) return 3;
-	if (result.UsQ16 != low.UsQ16) return 4;
+	if (result.UsLoopsPerSecond != low.UsLoopsPerSecond) return 4;
 	if (!DelayCalibrationInterpolate(96000000U, &low, &high, &result)) return 5;
-	if (result.NsQ16 != high.NsQ16) return 6;
+	if (result.NsLoopsPerSecond != high.NsLoopsPerSecond) return 6;
 	if (!DelayCalibrationInterpolate(16000000U, &low, &low, &result)) return 7;
-	if (result.UsQ16 != low.UsQ16) return 8;
+	if (result.UsLoopsPerSecond != low.UsLoopsPerSecond) return 8;
 	return 0;
 }
 """
