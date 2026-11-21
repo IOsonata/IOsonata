@@ -432,13 +432,23 @@ int main(void)
 	if ((caps & SYSTEM_POWER_CAP_RET_REG) != 0U && retCount > 0)
 	{
 		startCount = SystemRetRegRead(0);
-		marker = retCount > 1 && SystemRetRegRead(1) == CORE_POWER_TEST_MARKER;
+		// Retention marker only proves a previous System OFF test when
+		// this reset was caused by a configured System OFF wake source.
+		// A reset-pin event must not validate stale RAM patterns.
+		marker = retCount > 1 &&
+			(reason & (SYSTEM_RESET_WAKE_PIN | SYSTEM_RESET_WAKE_TIMER)) != 0U &&
+			SystemRetRegRead(1) == CORE_POWER_TEST_MARKER;
 		CorePowerTestResult("Retention register write/read",
 			SystemRetRegWrite(0, startCount + 1U) &&
 			SystemRetRegRead(0) == ((startCount + 1U) & 0xFFU));
 		CorePowerTestResult("Retention register invalid index",
 			SystemRetRegRead(-1) == 0U && !SystemRetRegWrite(-1, 1U) &&
 			SystemRetRegRead(retCount) == 0U && !SystemRetRegWrite(retCount, 1U));
+		if ((reason & (SYSTEM_RESET_WAKE_PIN | SYSTEM_RESET_WAKE_TIMER)) == 0U &&
+			retCount > 1 && SystemRetRegRead(1) == CORE_POWER_TEST_MARKER)
+		{
+			(void)SystemRetRegWrite(1, 0U);
+		}
 	}
 	else
 	{

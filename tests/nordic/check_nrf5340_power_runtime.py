@@ -46,6 +46,25 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("sent = s_Uart.Tx((const uint8_t *)pText, remaining);",
 			SRC.read_text(encoding="utf-8"))
 
+	def test_retention_marker_requires_system_off_wake(self):
+		s = SRC.read_text(encoding="utf-8")
+		self.assertIn("(reason & (SYSTEM_RESET_WAKE_PIN | SYSTEM_RESET_WAKE_TIMER)) != 0U", s)
+		self.assertIn("SystemRetRegWrite(1, 0U)", s)
+
+	def test_nrf_dma_launch_serialized_with_tx_irq(self):
+		s = (ROOT / "ARM/Nordic/src/uart_nrfx.cpp").read_text(encoding="utf-8")
+		start = s.index("static int nRFUARTTxDataDma(")
+		end = s.index("static void nRFUARTStopTx(", start)
+		tx = s[start:end]
+		pos = tx.index("// The completion IRQ uses the same ready flag")
+		claim = tx.index("state = DisableInterrupt();", pos)
+		ready = tx.index("if (dev->pUartDev->bTxReady)", claim)
+		launch = tx.index("NRFX_UARTE_TASKS_STARTTX", ready)
+		restore = tx.index("EnableInterrupt(state);", launch)
+		self.assertLess(claim, ready)
+		self.assertLess(ready, launch)
+		self.assertLess(launch, restore)
+
 	def test_console_uses_interrupt_driven_uarte(self):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertIn(".bIntMode = true,", s)

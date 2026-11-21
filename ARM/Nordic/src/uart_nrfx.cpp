@@ -1096,6 +1096,9 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 			nRFUARTPollTx(dev);
 		}
 
+		// The completion IRQ uses the same ready flag and DMA cache.
+		// Claim the idle transmitter and start DMA atomically against it.
+		state = DisableInterrupt();
 		if (dev->pUartDev->bTxReady)
 		{
 			l = NRFX_UART_TXDMA_SIZE;
@@ -1113,6 +1116,7 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 			}
 		}
+		EnableInterrupt(state);
 	}
 
 	if (Datalen > 0)
