@@ -56,6 +56,8 @@ SOFTWARE.
 #ifdef __cplusplus
 extern "C" {
 #endif
+// Core frequency is maintained by each MCU System Core implementation.
+extern uint32_t SystemCoreClock;
 // Calibrated loop iterations per second for each existing assembly loop.
 extern uint32_t SystemMicroSecLoopCnt;
 extern uint32_t SystemnsDelayFactor;
