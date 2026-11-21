@@ -37,6 +37,27 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("if (success)", disable)
         self.assertNotIn("std::atomic", source)
 
+    def test_lfclk_start_timeout_releases_failed_request(self):
+        start = function(self.clock, "static bool nRFxLfclkStart(",
+                         "static bool nRFxLfclkWaitStopped(")
+        self.assertIn("NRFX_LFCLK_START_TIMEOUT_US", start)
+        self.assertIn("usDelay(NRFX_LFCLK_START_POLL_US)", start)
+        self.assertIn("NRF_CLOCK->EVENTS_LFCLKSTARTED", start)
+        self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", start)
+        enable = function(self.clock, "bool SystemLowFreqClockEnable(",
+                          "void SystemLowFreqClockDisable(")
+        self.assertIn("s_bNRFxLfclkStopPending = true", enable)
+        self.assertIn("s_bNRFxLfclkOwned = false", enable)
+
+    def test_nrf5340_lfxo_pins_assigned_in_secure_startup(self):
+        path = ROOT / "ARM/Nordic/nRF53/nRF5340_App/lib/src/system_nrf5340_application.c"
+        system = path.read_text(encoding="utf-8")
+        self.assertIn("g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL", system)
+        self.assertIn("NRF_P0_S->PIN_CNF[0]", system)
+        self.assertIn("NRF_P0_S->PIN_CNF[1]", system)
+        self.assertIn("GPIO_PIN_CNF_MCUSEL_Peripheral", system)
+        self.assertIn("#if !defined(NRF_TRUSTZONE_NONSECURE)", system)
+
     def test_generic_clock_sources_and_lifecycle(self):
         header = (ROOT / "include/coredev/system_core_clock.h").read_text(
             encoding="utf-8")
@@ -120,9 +141,9 @@ class HfxoSourceChecks(unittest.TestCase):
         drain = function(source, "static void HfxoConsoleDrain(void)",
                          "#else")
         self.assertIn("SysLogFlush(SysLogGet())", drain)
-        self.assertIn("CFifoUsed(pUart->hTxFifo)", drain)
-        self.assertIn("pUart->bTxReady", drain)
-        self.assertIn("__WFE();", drain)
+        self.assertNotIn("hTxFifo", drain)
+        self.assertNotIn("bTxReady", drain)
+        self.assertIn("msDelay(100);", drain)
         self.assertLess(source.rindex("HfxoConsoleDrain();"),
                         source.rindex("while (1)"))
 
