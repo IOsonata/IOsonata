@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-HELPER = ROOT / "ARM/include/idelay_clock.h"
+HELPER = ROOT / "ARM/include/idelay.h"
 DELAY = ROOT / "ARM/include/idelay.h"
 
 PORTS = (
@@ -37,7 +37,7 @@ class ArmClockDelayUpdates(unittest.TestCase):
 			source = (ROOT / path).read_text(encoding="utf-8")
 
 			with self.subTest(path=path):
-				self.assertIn('#include "idelay_clock.h"', source)
+				self.assertIn('#include "idelay.h"', source)
 				self.assertIn("ArmDelayClockSetDivisors(SystemCoreClock,", source)
 				self.assertNotIn(
 					"SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16)",
