@@ -384,6 +384,27 @@ void *SystemRamStart(void);
  *
  * @return	SYSTEM_RESET_xxx reasons, ORed
  */
+/**
+ * @brief Capabilities supported by the target's power-management backend.
+ *
+ * Availability is a property of the MCU/core, not a compile-time selection
+ * of which CorePowerTest phase to run. Applications normally use these APIs
+ * through driver ownership and SystemSleep/SystemPowerOff.
+ */
+#define SYSTEM_POWER_CAP_SLEEP           (1UL << 0)
+#define SYSTEM_POWER_CAP_SYSTEM_OFF      (1UL << 1)
+#define SYSTEM_POWER_CAP_WAKE_PIN        (1UL << 2)
+#define SYSTEM_POWER_CAP_TIMER_WAKE      (1UL << 3)
+#define SYSTEM_POWER_CAP_RAM_RETENTION   (1UL << 4)
+#define SYSTEM_POWER_CAP_RET_REG         (1UL << 5)
+#define SYSTEM_POWER_CAP_LOW_POWER      (1UL << 6)
+
+/**
+ * @brief Return the target's supported power and wake capabilities.
+ * A zero bit means unsupported on this MCU/core.
+ */
+uint32_t SystemPowerCapabilitiesGet(void);
+
 uint32_t SystemResetReason(void);
 
 /**
