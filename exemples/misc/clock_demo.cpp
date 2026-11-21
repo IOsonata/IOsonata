@@ -192,9 +192,13 @@ static void ClockDemoResult(const char *pName, bool Passed)
 	}
 }
 
-static bool ClockDemoTimerInit(void)
+static bool ClockDemoTimerInit(int DevNo)
 {
-	if (!TimerInit(&s_Timer, &s_TimerCfg))
+	TimerCfg_t cfg;
+
+	cfg = s_TimerCfg;
+	cfg.DevNo = DevNo;
+	if (!TimerInit(&s_Timer, &cfg))
 	{
 		ClockDemoResult("Timer initialization", false);
 		return false;
@@ -209,7 +213,7 @@ static void ClockDemoFlush(void)
 	msDelay(2);
 }
 
-static void ClockDemoTimer(void)
+static void ClockDemoTimer(int DevNo)
 {
 	unsigned delay;
 	uint32_t frequency;
@@ -220,6 +224,11 @@ static void ClockDemoTimer(void)
 	uint32_t expected;
 	uint32_t difference;
 
+	ClockDemoPrint("Timer device %u\r\n", (unsigned)DevNo);
+	if (!ClockDemoTimerInit(DevNo))
+	{
+		return;
+	}
 	for (delay = 0U; delay < 2U; delay++)
 	{
 		// Refresh the divider after a peripheral-clock change, with timer stopped.
@@ -276,6 +285,8 @@ int main(void)
 	uint32_t divider;
 	uint32_t request;
 	uint32_t actual;
+	int timerDevNo;
+	int timerCount;
 #if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
 	// Keep the timer handle alive after acquiring and stopping a retained timer.
 	TimerCfg_t retainedCfg = s_TimerCfg;
@@ -299,10 +310,6 @@ int main(void)
 	}
 	TimerDisable(&s_RetainedTimer);
 #endif
-	if (!ClockDemoTimerInit())
-	{
-		return 1;
-	}
 	if (sizeof(s_Sources) == 0U)
 	{
 		ClockDemoPrint("Core selection: SKIP (not configured)\r\n");
@@ -362,8 +369,7 @@ int main(void)
 					ClockDemoResult("Peripheral clock", actual != 0U &&
 						readback == actual &&
 						(request != bus || actual == bus));
-					ClockDemoTimer();
-				}
+ 				}
 			}
 #if defined(CLOCK_DEMO_LF_SOURCES)
 			for (lfIdx = 0U; lfIdx < sizeof(s_LowFreqSources) / sizeof(s_LowFreqSources[0]); lfIdx++)
@@ -377,6 +383,17 @@ int main(void)
 			}
 #endif
 		}
+	}
+	// Timer implementations expose their device counts through the generic API.
+	// Test every advertised device rather than a board-selected instance.
+	timerCount = TimerGetLowFreqDevCount() + TimerGetHighFreqDevCount();
+	if (timerCount == 0)
+	{
+		ClockDemoPrint("Timers: UNSUPPORTED (no devices)\r\n");
+	}
+	for (timerDevNo = 0; timerDevNo < timerCount; timerDevNo++)
+	{
+		ClockDemoTimer(timerDevNo);
 	}
 	ClockDemoFlush();
 	ClockDemoPrint("ClockDemo complete: %u failures\r\n", s_Failures);
