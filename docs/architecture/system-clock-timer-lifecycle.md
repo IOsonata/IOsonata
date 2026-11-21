@@ -431,9 +431,10 @@ requests, and HFXO release between requests before sign-off.
 
 ## CPU clock changes and delay factors
 
-ARM `usDelay`, `nsDelay`, and `msDelay` keep their existing fixed
-assembly loops. The loop-cost calibration is separate from the CPU clock
-frequency used to convert an interval to a loop count.
+The existing `ARM/include/idelay.h` contains the assembly delay loops,
+the shared delay-factor calculation, and optional DWT-based loop-cost
+measurement. No additional delay header is needed. Loop-cost calibration
+is separate from the CPU frequency used to compute a delay.
 
 Every successful CPU source or divider transition, including reduced-power
 frequencies and wakeup restoration, must do the following in System Core:
