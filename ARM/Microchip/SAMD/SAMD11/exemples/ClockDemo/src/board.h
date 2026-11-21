@@ -57,16 +57,12 @@ SOFTWARE.
 
 // Clock selection is the only ClockDemo mode. Use PowerOffDemo for SW0 wake.
 // Leave the optional UART RX prompt off until the flash-limited build is checked.
-#define CLOCK_DEMO_UART_RX_TEST 0
 #define CLOCK_DEMO_SOURCES { {"OSC8M", OSC_TYPE_RC, 8000000U, 1U, UINT32_MAX} }
 
 // LF selection omitted because a running DFLL/DPLL may own its reference.
-#define CLOCK_DEMO_APB_SHARED_CORE 1
-#define CLOCK_DEMO_APB_DIVIDERS {1U, 2U, 4U, 1U}
+#define CLOCK_DEMO_PERIPH_DIVIDERS {1U, 2U, 4U, 1U}
 #define CLOCK_DEMO_TIMER_DEVNO 4
 #define CLOCK_DEMO_CYCLES 3U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
-#define CLOCK_DEMO_STOP_UART 1
-#define CLOCK_DEMO_DEFER_TIMER 0
 
 #endif // __BOARD_H__
