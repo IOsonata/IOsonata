@@ -464,6 +464,8 @@ int main(void)
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	ClockDemoFlush();
 	ClockDemoResult("Core clock startup", SystemCoreClockGet() != 0U);
+	ClockDemoPrint("Delay factors Q16: us %u ns %u\r\n",
+		(unsigned)SystemMicroSecLoopCnt, (unsigned)SystemnsDelayFactor);
 	ClockDemoSharedClockTest();
 	initialCoreSource = GetHighFreqOscType();
 	initialCoreFreq = GetHighFreqOscFreq();
