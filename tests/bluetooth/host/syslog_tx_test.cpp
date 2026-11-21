@@ -686,9 +686,9 @@ void TestDeferredReadyDuringActiveFlush()
 
 	// The callback runs from inside MockTxData while DeviceIntrf is busy.
 	// The event must not be lost when the partial record is retried.
-	CHECK(SysLogPrintf(SysLogGet(), "ready-event\\r\\n") == 13);
+	CHECK(SysLogPrintf(SysLogGet(), "ready-event\r\n") == 13);
 	CHECK(s_CapturedLen == 13);
-	CHECK(std::memcmp(s_Captured, "ready-event\\r\\n", 13) == 0);
+	CHECK(std::memcmp(s_Captured, "ready-event\r\n", 13) == 0);
 	CHECK(SysLogFlush(SysLogGet()) == 0);
 
 	s_NotifyReadyDuringTx = false;
