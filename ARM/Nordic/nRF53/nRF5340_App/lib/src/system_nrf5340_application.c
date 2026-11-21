@@ -96,10 +96,8 @@ void SystemCoreClockUpdate(void)
 
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
-		// Documented fallback for a core without an accessible DWT.
-		// The exact loops are measured once when the core starts.
+		// Initialize the port's default delay-loop costs at startup.
 		(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U);
-		(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
 	}
 	else if (s_DelayCalibration.CpuHz != cpuHz)
 	{
