@@ -397,6 +397,21 @@ NRF_SDH_STATE_OBSERVER(s_NRfxClockSdhObserver, 0) = {
 };
 #endif
 
+// nRF5340 application core implements real running-frequency scaling in
+// system_nrf5340_application.c. Other Nordic cores currently have no
+// validated runtime CPU scaling: retain their configured performance clock.
+#if !defined(NRF5340_XXAA_APPLICATION)
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	return Mode == SYSTEM_POWER_MODE_PERFORMANCE;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return SYSTEM_POWER_MODE_PERFORMANCE;
+}
+#endif
+
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t state;
