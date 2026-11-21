@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	clock_demo.cpp
 
-@brief	Core, peripheral and low-frequency clock selection demo.
+@brief	CoreClockTest: generic System Core clock and delay validation.
 
 Uses the generic clock, UART and Timer interfaces. Oscillator selections
 come from the System Core configuration, not from board-specific test lists.
@@ -670,7 +670,7 @@ int main(void)
 		return 1;
 	}
 	msDelay(1000);
-	ClockDemoPrint("ClockDemo\r\nStartup CPU %u Hz, peripheral clock 0 %u Hz\r\n",
+	ClockDemoPrint("CoreClockTest\r\nStartup CPU %u Hz, peripheral clock 0 %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	ClockDemoFlush();
 	ClockDemoResult("Core clock startup", SystemCoreClockGet() != 0U);
@@ -831,7 +831,7 @@ int main(void)
 	ClockDemoConcurrentTimerTest(lowTimerCount, highTimerCount);
 	ClockDemoDelayCalibrationReport();
 	ClockDemoFlush();
-	ClockDemoPrint("ClockDemo complete: %u failures\r\n", s_Failures);
+	ClockDemoPrint("CoreClockTest complete: %u failures\r\n", s_Failures);
 	ClockDemoFlush();
 
 	while (1)
