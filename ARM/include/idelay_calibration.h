@@ -180,6 +180,37 @@ static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz
 #endif
 }
 
+// Generic non-DWT fallback using a target's existing loop divisors in
+// cycles-per-iteration * 1000000. Preserve their previous calibration
+// constants exactly, and call after every successful CPU frequency change.
+// The function is pure clock-factor arithmetic: no calibration delay or
+// higher-level timer dependency.
+static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
+	uint64_t UsDivisor, uint64_t NsDivisor)
+{
+	uint64_t usFactor;
+	uint64_t nsFactor;
+
+	if (CpuHz == 0U || UsDivisor == 0U || NsDivisor == 0U)
+	{
+		return false;
+	}
+
+	usFactor = ((uint64_t)CpuHz << 16) / UsDivisor;
+	nsFactor = ((uint64_t)CpuHz << 16) / NsDivisor;
+
+	if (usFactor == 0U || nsFactor == 0U ||
+		usFactor > UINT32_MAX || nsFactor > UINT32_MAX)
+	{
+		return false;
+	}
+
+	SystemMicroSecLoopCnt = (uint32_t)usFactor;
+	SystemnsDelayFactor = (uint32_t)nsFactor;
+
+	return true;
+}
+
 // For ports with a documented fallback but no persistent measurement state,
 // compute both factors from the actual CPU clock with the same arithmetic.
 static inline bool ArmDelayClockSet(uint32_t CpuHz,
