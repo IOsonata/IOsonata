@@ -101,7 +101,7 @@ __WEAK McuOsc_t g_McuOsc = {
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = RCSYS_FREQ;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 static uint32_t s_MainClock = RCSYS_FREQ;
 static uint32_t s_PllFreq;
 static uint32_t s_DfllFreq = DFLL_CORE_MHZ * 1000000UL;
