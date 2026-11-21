@@ -19,7 +19,7 @@ Expected console progression: `PowerOffDemo: Standby`,
 RAM sample checks, and clock/UART restoration. A failed timer initialization
 or unexpected immediate return is not a pass.
 
-Only resumable SystemSleep is tested. This example does not attempt
+The network-core SystemSleep backend uses WFI with SLEEPDEEP cleared,\npreserving the original PRIMASK and SCR values. It does not issue an\nindependent system-off request or shut down the application core's LFCLK.\n\nOnly resumable SystemSleep is tested. This example does not attempt
 network-core System OFF, which is an application-core power-domain operation.
 
 Build via IOcomposer managed projects:

@@ -240,6 +240,32 @@ uint32_t SystemResetReason(void)
 	return s_SysPwrResetReason;
 }
 
+#if defined(NRF5340_XXAA_NETWORK)
+// Network core has no independent System OFF. Use resumable CPU sleep.
+// NVIC wake sources and the shared LFCLK remain configured and running.
+void SystemSleep(void)
+{
+	uint32_t state;
+	uint32_t scr;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+
+	// Keep an IRQ pending across the WFI entry window, then dispatch it
+	// after restoring the caller's original interrupt mask.
+	state = DisableInterrupt();
+	scr = SCB->SCR;
+	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+	__DSB();
+	__WFI();
+	SCB->SCR = scr;
+	__ISB();
+	EnableInterrupt(state);
+}
+#endif
+
 void SystemPowerOff(void)
 {
 #ifdef SYS_PWR_MEMCONF
