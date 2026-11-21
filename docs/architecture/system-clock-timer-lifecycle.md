@@ -465,6 +465,17 @@ Validate scheduled calibration by measuring a long-running RTC user,
 multiple calibration completions and time intervals, dual-core clock
 requests, and HFXO release between requests before sign-off.
 
+## nRF5340 application-core assembly fallback factors
+
+The Audio DK's measured loop execution shows different microsecond-loop
+costs at 128 MHz and 64 MHz: approximately 25 cycles per iteration at
+128 MHz and 28 cycles at 64 MHz. The nRF5340 application port therefore
+preconfigures the appropriate factor at each supported CPU speed instead
+of applying a single 28-cycle factor at both speeds. The nanosecond-loop
+cost remains approximately three cycles. DWT-backed delays use CPU cycles
+directly; these calibrated loop factors protect translation units that
+compile the assembly fallback.
+
 ## DWT and assembly-delay translation-unit consistency
 
 Compile-time DWT selection may differ between translation units because

@@ -107,34 +107,35 @@ void SystemCoreClockUpdate(void)
 #endif
 	SystemCoreClock = cpuHz;
 
-	if (s_DelayCalibration.UsCycles == 0U)
-	{
-		// The default CPU frequency was calibrated when the MCU was ported.
-		(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U);
-		if (cpuHz != __SYSTEM_CLOCK_DEFAULT)
-		{
-			// Optional calibration only for the assembly fallback.
-#if !ARM_DELAY_USE_DWT
-			(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
-#endif
-		}
-	}
-	else if (s_DelayCalibration.CpuHz != cpuHz)
+	// Always update the assembly fallback, even when this compilation unit
+	// uses DWT. Other translation units can select the non-DWT path.
+	if (s_DelayCalibration.UsCycles == 0U ||
+		s_DelayCalibration.CpuHz != cpuHz)
 	{
 		if (cpuHz == __SYSTEM_CLOCK_DEFAULT)
 		{
-			// Restore the original calibrated defaults.
+			// Port-calibrated maximum performance: 25 cycles per us loop.
+			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 25U, 3U);
+		}
+		else if (cpuHz == (__SYSTEM_CLOCK_MAX / 2U))
+		{
+			// Port-calibrated 64 MHz mode: 28 cycles per us loop.
 			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U);
 		}
 		else
 		{
-			// Always update the assembly-loop fallback on CPU speed changes.
+			// Retain a proportional fallback for other supported speeds.
 			(void)ArmDelayClockUpdate(&s_DelayCalibration, cpuHz);
+		}
+#if !ARM_DELAY_USE_DWT
+		if (cpuHz != __SYSTEM_CLOCK_DEFAULT)
+		{
+			// Optional foreground DWT measurement for the assembly fallback.
 			(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
 		}
+#endif
 	}
 }
-
 
 /**
  * @brief Select the nRF5340 application CPU's running power mode.

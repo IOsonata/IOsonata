@@ -17,12 +17,13 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		cls.test = TEST.read_text(encoding="utf-8")
 
 	def test_default_factors_are_preserved_at_default_frequency(self):
+		self.assertIn("25U, 3U", self.system)
 		self.assertIn("28U, 3U", self.system)
 		self.assertIn("cpuHz != __SYSTEM_CLOCK_DEFAULT", self.system)
 		self.assertIn("cpuHz == __SYSTEM_CLOCK_DEFAULT", self.system)
-		self.assertEqual(self.system.count("ArmDelayCalibrate("), 2)
+		self.assertEqual(self.system.count("ArmDelayCalibrate("), 1)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.system)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", self.system)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 25U, 3U)", self.system)
 
 
 	def test_explicit_dwt_and_timer_calibration_remain_available(self):
@@ -34,11 +35,12 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 
 	def test_250ms_nominal_loop_scale(self):
 		for frequency in (64000000, 128000000,):
-			us = frequency // 28
+			us_cycles = 25 if frequency == 128000000 else 28
+			us = frequency // us_cycles
 			ns = frequency // 3
 			us_loops = (250000 * us + 999999) // 1000000
 			ns_loops = (250000000 * ns + 999999999) // 1000000000
-			self.assertLess(abs(us_loops * 28 - frequency // 4), 5000)
+			self.assertLess(abs(us_loops * us_cycles - frequency // 4), 5000)
 			self.assertLess(abs(ns_loops * 3 - frequency // 4), 5000)
 		self.assertIn("usDelay(ms * 1000U)", self.delay)
 

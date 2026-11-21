@@ -26,7 +26,7 @@ class NordicDelayArchitecture(unittest.TestCase):
 					"ArmDelayClockInit(" in source
 				)
 				if "nRF5340_App/" in path:
-					self.assertEqual(source.count("ArmDelayCalibrate("), 2)
+					self.assertEqual(source.count("ArmDelayCalibrate("), 1)
 					self.assertIn("cpuHz != __SYSTEM_CLOCK_DEFAULT", source)
 					self.assertIn("cpuHz == __SYSTEM_CLOCK_DEFAULT", source)
 				else:
@@ -38,6 +38,7 @@ class NordicDelayArchitecture(unittest.TestCase):
 		self.assertIn("NRF_CLOCK_S->HFCLKCTRL", app)
 		self.assertIn("s_DelayCalibration.CpuHz != cpuHz", app)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", app)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 25U, 3U)", app)
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", app)
 		net = (ROOT / NRF[2]).read_text(encoding="utf-8")
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", net)
