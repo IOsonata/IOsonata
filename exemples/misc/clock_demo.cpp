@@ -51,6 +51,16 @@ SOFTWARE.
 #define CLOCK_DEMO_IRQ_PRIORITY 6
 #endif
 
+// The generic API is declared for every target. A weak reference lets the
+// diagnostic report a missing MCU implementation instead of failing at link
+// time. A missing operation is a test failure, never an implicit PASS.
+#if defined(__GNUC__)
+#pragma weak SystemHighFreqClockEnable
+#pragma weak SystemHighFreqClockDisable
+#pragma weak SystemLowFreqClockEnable
+#pragma weak SystemLowFreqClockDisable
+#endif
+
 struct ClockDemoSource_t {
 	const char *pName;
 	OSC_TYPE Type;
@@ -192,6 +202,70 @@ static void ClockDemoResult(const char *pName, bool Passed)
 	}
 }
 
+// Exercise the same shared oscillator reference-count API on every MCU.
+// Physical oscillator on/off and power measurements require target tests.
+static void ClockDemoSharedClockTest(void)
+{
+	bool first;
+	bool second;
+	bool third;
+
+	if (SystemHighFreqClockEnable == nullptr ||
+		SystemHighFreqClockDisable == nullptr)
+	{
+		ClockDemoResult("HF shared clock API implemented", false);
+	}
+	else
+	{
+		first = SystemHighFreqClockEnable();
+		second = first && SystemHighFreqClockEnable();
+		if (second)
+		{
+			SystemHighFreqClockDisable();
+		}
+		if (first)
+		{
+			SystemHighFreqClockDisable();
+		}
+		// An unmatched release must not affect a later clock request.
+		SystemHighFreqClockDisable();
+		third = SystemHighFreqClockEnable();
+		if (third)
+		{
+			SystemHighFreqClockDisable();
+		}
+		ClockDemoResult("HF shared clock lifecycle",
+			first && second && third);
+	}
+
+	if (SystemLowFreqClockEnable == nullptr ||
+		SystemLowFreqClockDisable == nullptr)
+	{
+		ClockDemoResult("LF shared clock API implemented", false);
+	}
+	else
+	{
+		first = SystemLowFreqClockEnable();
+		second = first && SystemLowFreqClockEnable();
+		if (second)
+		{
+			SystemLowFreqClockDisable();
+		}
+		if (first)
+		{
+			SystemLowFreqClockDisable();
+		}
+		SystemLowFreqClockDisable();
+		third = SystemLowFreqClockEnable();
+		if (third)
+		{
+			SystemLowFreqClockDisable();
+		}
+		ClockDemoResult("LF shared clock lifecycle",
+			first && second && third);
+	}
+}
+
 static bool ClockDemoTimerInit(int DevNo)
 {
 	TimerCfg_t cfg;
@@ -299,6 +373,7 @@ int main(void)
 	ClockDemoPrint("ClockDemo\r\nStartup CPU %u Hz, peripheral clock 0 %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	ClockDemoFlush();
+	ClockDemoSharedClockTest();
 #if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
 	retainedCfg.DevNo = CLOCK_DEMO_STOP_TIMER_DEVNO;
 	retainedCfg.Freq = 0;
