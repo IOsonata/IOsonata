@@ -39,6 +39,7 @@ static void AppClockCalibrationWork(uint32_t Event, void *pContext)
 	{
 		return;
 	}
+
 	if (!pCal->Active)
 	{
 		pCal->Queued = false;
@@ -57,6 +58,7 @@ static void AppClockCalibrationWork(uint32_t Event, void *pContext)
 	{
 		success = SystemLowFreqClockCalibrate();
 	}
+
 	if (success)
 	{
 		pCal->Completed++;
