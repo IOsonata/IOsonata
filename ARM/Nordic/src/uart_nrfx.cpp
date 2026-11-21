@@ -155,6 +155,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NRFX_UART_CFIFO_SIZE		CFIFO_MEMSIZE(4 * NRFX_UART_HWFIFO_SIZE)
 
+// Maximum polls without TX FIFO progress before declining a polling PowerOff.
+#define NRFX_UART_TX_DRAIN_WAIT_LOOPS	2000000U
+
 #pragma pack(push, 4)
 // Device driver data require by low level functions
 typedef struct __nRF_UART_Dev {
@@ -807,6 +810,65 @@ static void nRFUARTPollLegacyTx(nRFUartDev_t * const dev)
 	dev->pUartDev->bTxReady = false;
 	dev->pReg->TXD = *p;
 }
+
+// Polling UART has no TX interrupt to empty its queue during a delay.
+// Complete the queued bytes and the last TXD transfer before power off.
+// Bound the wait for each byte so a stalled UART cannot block forever.
+static bool nRFUARTDrainPollingTx(nRFUartDev_t * const dev)
+{
+	uint32_t timeout;
+	int queued;
+	int remaining;
+
+	queued = CFifoUsed(dev->pUartDev->hTxFifo);
+	timeout = 0U;
+	while (true)
+	{
+		nRFUARTPollLegacyTx(dev);
+		remaining = CFifoUsed(dev->pUartDev->hTxFifo);
+		if (remaining == 0 && dev->pUartDev->bTxReady)
+		{
+			return true;
+		}
+		if (remaining < queued)
+		{
+			queued = remaining;
+			timeout = 0U;
+		}
+		else if (++timeout >= NRFX_UART_TX_DRAIN_WAIT_LOOPS)
+		{
+			return false;
+		}
+	}
+}
+#endif
+
+#ifdef UARTE_PRESENT
+// In interrupt mode the handler retires each completed EasyDMA block
+// and starts the next queued block. Do not shut down the pins while either
+// queued bytes or a DMA transfer remain. Use a time-based bounded wait
+// rather than CPU-speed-dependent polling. On timeout leave UART active.
+#define NRFX_UART_DMA_DRAIN_TIMEOUT_US	100000U
+#define NRFX_UART_DMA_DRAIN_POLL_US	10U
+
+static bool nRFUARTDrainDmaTx(nRFUartDev_t * const dev)
+{
+	uint32_t elapsed;
+
+	elapsed = 0U;
+	while (elapsed < NRFX_UART_DMA_DRAIN_TIMEOUT_US)
+	{
+		if (CFifoUsed(dev->pUartDev->hTxFifo) == 0 &&
+			dev->pUartDev->bTxReady)
+		{
+			return true;
+		}
+		usDelay(NRFX_UART_DMA_DRAIN_POLL_US);
+		elapsed += NRFX_UART_DMA_DRAIN_POLL_US;
+	}
+	return CFifoUsed(dev->pUartDev->hTxFifo) == 0 &&
+		dev->pUartDev->bTxReady;
+}
 #endif
 
 #ifdef UART_PRESENT
@@ -1154,6 +1216,21 @@ void nRFUARTPowerOff(DevIntrf_t * const pDev)
 	NRF_UART_Type *reg = dev->pReg;
 #else
 	NRF_UARTE_Type *reg = dev->pDmaReg;
+#endif
+
+#ifdef UART_PRESENT
+	if (!pDev->bDma && !pDev->bIntEn && !nRFUARTDrainPollingTx(dev))
+	{
+		// Preserve the running UART rather than discard queued TX.
+		return;
+	}
+#endif
+#ifdef UARTE_PRESENT
+	if (pDev->bDma && pDev->bIntEn && !nRFUARTDrainDmaTx(dev))
+	{
+		// Let the active DMA and interrupt handler continue transmitting.
+		return;
+	}
 #endif
 
 #if !defined(NRF54L_SERIES) && !defined(NRF71_SERIES)

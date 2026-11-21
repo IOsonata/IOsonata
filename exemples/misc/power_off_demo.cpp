@@ -58,23 +58,6 @@ SOFTWARE.
 
 #include "board.h"
 
-// Show the SAM4L AST failure stage on the UART without a debugger.
-// The generic demo remains independent of SAM4L on other MCU ports.
-#if (defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC) || \
-	defined(SAM4LSXA) || defined(SAM4LSXB) || defined(SAM4LSXC)) && \
-	defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE && \
-	defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
-#define POWER_DEMO_SAM4L_AST_DIAG 1
-#include "timer_sam4l.h"
-#endif
-
-#if (defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC) || \
-	defined(SAM4LSXA) || defined(SAM4LSXB) || defined(SAM4LSXC)) && \
-	defined(POWER_DEMO_UART_WAKE) && POWER_DEMO_UART_WAKE
-#define POWER_DEMO_SAM4L_UART_DIAG 1
-uint32_t Sam4lUartSleepDiagnostic(void);
-#endif
-
 // UART wake requires a board profile with a supported sleep receiver.
 #ifndef POWER_DEMO_UART_WAKE
 #define POWER_DEMO_UART_WAKE 0
@@ -91,6 +74,9 @@ uint32_t Sam4lUartSleepDiagnostic(void);
 // UART DMA can be disabled on targets without a DMA transport.
 #ifndef POWER_DEMO_UART_DMA
 #define POWER_DEMO_UART_DMA true
+#endif
+#ifndef POWER_DEMO_UART_INT
+#define POWER_DEMO_UART_INT true
 #endif
 
 // Time before power off, in msec
@@ -141,7 +127,7 @@ static const UARTCfg_t s_UartCfg = {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	.bIntMode = false,
 #else
-	.bIntMode = true,
+	.bIntMode = POWER_DEMO_UART_INT,
 #endif
 	.IntPrio = 6,
 	.EvtCallback = nullptr,
@@ -275,7 +261,9 @@ static uint32_t RamRetPattern(uint32_t Idx)
 static bool RamRetCheck(void)
 {
 	uint32_t i;
-	uint32_t count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
+	uint32_t count;
+
+	count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
 
 	for (i = 0; i < count; i++)
 	{
@@ -297,7 +285,9 @@ static bool RamRetCheck(void)
 static void RamRetWrite(void)
 {
 	uint32_t i;
-	uint32_t count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
+	uint32_t count;
+
+	count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
 
 	for (i = 0; i < count; i++)
 	{
@@ -321,19 +311,10 @@ static void PowerDemoPut(const char *pText)
 	}
 }
 
-// In SAMD polling mode, Tx() may leave the last bytes in its FIFO.
-// Rx() services both FIFOs, so drain TX before shutting down SERCOM.
+// Allow the last polling UART transfer to finish before shutting down.
+// No application access to driver FIFOs or receive calls for TX progress.
 static void PowerDemoDrain(void)
 {
-	UARTDev_t *pUart;
-	uint8_t dummy;
-
-	pUart = (UARTDev_t *)s_Uart;
-	while (CFifoUsed(pUart->hTxFifo) != 0)
-	{
-		(void)s_Uart.Rx(&dummy, 1);
-	}
-	// FIFO empty means the last byte reached DATA, not that TX is complete.
 	msDelay(2);
 }
 
@@ -410,7 +391,24 @@ int main()
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	uint32_t wakeCount;
+	uint32_t coreBefore;
+	uint32_t apbBefore;
+	uint32_t rateBefore;
+#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
+	uint32_t i;
+	uint32_t pattern;
+	bool ramOk;
+#endif
+#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
+	uint32_t state;
+	uint32_t start;
+	uint64_t period;
+	uint32_t elapsed;
+	uint64_t expected;
+#endif
 #if POWER_DEMO_UART_WAKE
+	uint8_t wakeByte;
+	bool received;
 	uint32_t rxWait;
 	uint8_t rxByte;
 	bool normalRx;
@@ -456,35 +454,6 @@ int main()
 	if (!TimerInit(&s_WakeTimer, &s_WakeTimerCfg))
 	{
 		PowerDemoPut("Standby timer initialization FAIL\r\n");
-#if defined(POWER_DEMO_SAM4L_AST_DIAG)
-		PowerDemoPut("SAM4L TimerInit stage 0x");
-		PowerDemoPutCount(g_Sam4lTimerInitStage);
-		PowerDemoPut("\r\n");
-		PowerDemoPut("BPM_PMCON 0x");
-		PowerDemoPutCount(SAM4L_BPM->BPM_PMCON);
-		PowerDemoPut("\r\n");
-		PowerDemoPut("BSCIF_PCLKSR 0x");
-		PowerDemoPutCount(SAM4L_BSCIF->BSCIF_PCLKSR);
-		PowerDemoPut("\r\n");
-		PowerDemoPut("PM_PBDMASK 0x");
-		PowerDemoPutCount(SAM4L_PM->PM_PBDMASK);
-		PowerDemoPut("\r\n");
-		PowerDemoPut("NVIC_ISER1 0x");
-		PowerDemoPutCount(NVIC->ISER[1]);
-		PowerDemoPut("\r\n");
-		if (g_Sam4lTimerInitStage >= SAM4L_TIMER_INIT_SYNC)
-		{
-			PowerDemoPut("AST_SR 0x");
-			PowerDemoPutCount(SAM4L_AST->AST_SR);
-			PowerDemoPut("\r\n");
-			PowerDemoPut("AST_CLOCK 0x");
-			PowerDemoPutCount(SAM4L_AST->AST_CLOCK);
-			PowerDemoPut("\r\n");
-			PowerDemoPut("AST_CR 0x");
-			PowerDemoPutCount(SAM4L_AST->AST_CR);
-			PowerDemoPut("\r\n");
-		}
-#endif
 		return 1;
 	}
 	TimerDisable(&s_WakeTimer);
@@ -499,9 +468,9 @@ int main()
 	wakeCount = 0U;
 	while (1)
 	{
-		uint32_t coreBefore = SystemCoreClockGet();
-		uint32_t apbBefore = SystemPeriphClockGet(0);
-		uint32_t rateBefore = s_Uart.Rate();
+		coreBefore = SystemCoreClockGet();
+		apbBefore = SystemPeriphClockGet(0);
+		rateBefore = s_Uart.Rate();
 #if POWER_DEMO_UART_WAKE
 		// Establish the last console exchange at normal baud before
 		// the host changes its FTDI divisor. No PICOUART setup yet.
@@ -538,9 +507,9 @@ int main()
 		// SystemSleep selects a compatible power state and temporarily
 		// suspends idle peripherals. The application does not stop UART.
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
-		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
+		for (i = 0; i < STANDBY_RAM_WORDS; i++)
 		{
-			uint32_t pattern = StandbyRamPattern(wakeCount, i);
+			pattern = StandbyRamPattern(wakeCount, i);
 
 			s_StandbyRam[i] = pattern;
 			stackRam[i] = ~pattern;
@@ -552,10 +521,10 @@ int main()
 			PowerDemoPut("Standby timer frequency FAIL\r\n");
 			return 1;
 		}
-		uint32_t state = DisableInterrupt();
+		state = DisableInterrupt();
 		s_StandbyTimerWoke = false;
-		uint32_t start = TimerGetMicrosecond(&s_WakeTimer);
-		uint64_t period = nsTimerEnableTrigger(&s_WakeTimer, 0,
+		start = TimerGetMicrosecond(&s_WakeTimer);
+		period = nsTimerEnableTrigger(&s_WakeTimer, 0,
 			(uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000000ULL,
 			TIMER_TRIG_TYPE_SINGLE, PowerDemoStandbyTimerWake, nullptr);
 		if (period != 0U && !s_StandbyTimerWoke)
@@ -563,17 +532,17 @@ int main()
 			SystemSleep();
 		}
 		EnableInterrupt(state);
-		uint32_t elapsed = TimerGetMicrosecond(&s_WakeTimer) - start;
+		elapsed = TimerGetMicrosecond(&s_WakeTimer) - start;
 		TimerDisableTrigger(&s_WakeTimer, 0);
 		TimerDisable(&s_WakeTimer);
 #else
 		SystemSleep();
 #endif
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
-		bool ramOk = true;
-		for (uint32_t i = 0; i < STANDBY_RAM_WORDS; i++)
+		ramOk = true;
+		for (i = 0; i < STANDBY_RAM_WORDS; i++)
 		{
-			uint32_t pattern = StandbyRamPattern(wakeCount, i);
+			pattern = StandbyRamPattern(wakeCount, i);
 
 			if (s_StandbyRam[i] != pattern || stackRam[i] != ~pattern)
 			{
@@ -582,19 +551,11 @@ int main()
 		}
 #endif
 #if POWER_DEMO_UART_WAKE
-		uint8_t wakeByte = 0;
-		bool received = s_Uart.Rx(&wakeByte, 1) == 1 && wakeByte == 'U';
+		wakeByte = 0;
+		received = s_Uart.Rx(&wakeByte, 1) == 1 && wakeByte == 'U';
 		// Let the host adapter switch back to its normal console baud.
 		msDelay(100);
 		PowerDemoPut(received ? "UART wake byte: PASS\r\n" : "UART wake byte: FAIL\r\n");
-#if defined(POWER_DEMO_SAM4L_UART_DIAG)
-		if (!received)
-		{
-			PowerDemoPut("SAM4L UART sleep diagnostic 0x");
-			PowerDemoPutCount(Sam4lUartSleepDiagnostic());
-			PowerDemoPut("\r\n");
-		}
-#endif
 #endif
 		// Keep wake verification in PowerOffDemo for every resumable port.
 		// UART output here also exercises TX after resume.
@@ -614,7 +575,7 @@ int main()
 		}
 #endif
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
-		uint64_t expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
+		expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
 		PowerDemoPut(period != 0U && s_StandbyTimerWoke &&
 			(uint64_t)elapsed >= expected * 98ULL / 100ULL &&
 			(uint64_t)elapsed <= expected * 102ULL / 100ULL ?
@@ -637,17 +598,25 @@ int main()
 #endif
 	}
 #else
+	uint32_t reason;
+	unsigned i;
+	const char *sep;
+	uint32_t cnt;
+#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
+	uint32_t state;
+#endif
+
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 
 	SysLogPrintf(SysLogGet(), "PowerOffDemo\r\n");
 
-	uint32_t reason = SystemResetReason();
+	reason = SystemResetReason();
 
-	const char *sep = " ";
+	sep = " ";
 
 	SysLogPrintf(SysLogGet(), "Reset reason 0x%x:", (unsigned)reason);
-	for (unsigned i = 0; i < sizeof(s_ResetNames) / sizeof(s_ResetNames[0]); i++)
+	for (i = 0U; i < sizeof(s_ResetNames) / sizeof(s_ResetNames[0]); i++)
 	{
 		if (reason & s_ResetNames[i].Reason)
 		{
@@ -658,7 +627,7 @@ int main()
 	SysLogPrintf(SysLogGet(), "\r\n");
 
 	// The retention registers are cleared by a power on reset only
-	uint32_t cnt = (reason & SYSTEM_RESET_POWERON) ? 0 : SystemRetRegRead(0);
+	cnt = (reason & SYSTEM_RESET_POWERON) ? 0 : SystemRetRegRead(0);
 
 	cnt++;
 	SystemRetRegWrite(0, cnt);
@@ -745,15 +714,8 @@ int main()
 #endif
 	// Allow the final UART record to finish before stopping the transport.
 #if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
-	UARTDev_t *pUart = (UARTDev_t *)s_Uart;
-	uint8_t unused;
-
-	while (CFifoUsed(SysLogGet()->hFifo) != 0 || CFifoUsed(pUart->hTxFifo) != 0)
-	{
-		(void)SysLogFlush(SysLogGet());
-		(void)s_Uart.Rx(&unused, 1);
-	}
-	// Allow the last UART character to leave the shift register.
+	(void)SysLogFlush(SysLogGet());
+	// Allow the last polling UART transfer to finish before power off.
 	msDelay(2);
 	s_Uart.PowerOff();
 #else
@@ -762,7 +724,7 @@ int main()
 
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
 	// Keep the alarm pending until Backup entry; the reset starts a new timer.
-	uint32_t state = DisableInterrupt();
+	state = DisableInterrupt();
 	if (nsTimerEnableTrigger(&s_WakeTimer, 0,
 		(uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000000ULL,
 		TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0U || !TimerEnable(&s_WakeTimer))

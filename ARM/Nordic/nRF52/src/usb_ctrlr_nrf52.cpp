@@ -215,14 +215,17 @@ static bool UsbdWaitReady(const volatile uint32_t *pReg, uint32_t Msk,
 	return false;
 }
 
-// One request for the 32 MHz crystal through SystemCoreClockSelect, which counts the
-// requests of every driver and goes through the SoftDevice or MPSL when one
-// owns CLOCK. The controller holds at most one.
+// The USB controller enables the configured HF clock once. The clock
+// system_clock_nrfx.cpp manages shared requests and SoftDevice/MPSL clock access.
 static bool UsbdXtalRequest(void)
 {
+	if (GetHighFreqOscType() == OSC_TYPE_RC)
+	{
+		return false;
+	}
 	if (s_bUsbdXtalHeld == false)
 	{
-		s_bUsbdXtalHeld = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000);
+		s_bUsbdXtalHeld = SystemHighFreqClockEnable();
 	}
 
 	return s_bUsbdXtalHeld;
@@ -232,8 +235,9 @@ static inline void UsbdXtalRelease(void)
 {
 	if (s_bUsbdXtalHeld)
 	{
+		// Disable the USB controller's shared HF clock requirement.
+		SystemHighFreqClockDisable();
 		s_bUsbdXtalHeld = false;
-		(void)SystemCoreClockSelect(OSC_TYPE_RC, 0);
 	}
 }
 

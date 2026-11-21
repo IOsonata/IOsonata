@@ -43,6 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "coredev/uart.h"
+#include "coredev/system_core_clock.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
@@ -238,6 +239,12 @@ static void SysLogFlushEvt(uint32_t Evt, void *pCtx);
 
 static uint8_t s_UartRxBuff[PACKET_SIZE];
 static int s_UartRxBuffLen = 0;
+static uint32_t s_ClockCheckCount;
+static uint32_t s_ClockCheckFailures;
+static uint32_t s_ClockGATTWrites;
+static volatile bool s_bClockCheckPending;
+static bool s_bClockCheckQueued;
+
 
 static void UartRxQue(void)
 {
@@ -263,9 +270,55 @@ static void SysLogFlushQue(void)
 	EnableInterrupt(state);
 }
 
+// Exercise the shared oscillator while BLE writes are being processed.
+// Queue the requests so a GATT callback does not wait for crystal startup.
+static void ClockCheckEvt(uint32_t Evt, void *pCtx)
+{
+	bool first;
+	bool second;
+
+	(void)Evt;
+	(void)pCtx;
+	s_bClockCheckQueued = false;
+	s_bClockCheckPending = false;
+	first = SystemHighFreqClockEnable();
+	second = first && SystemHighFreqClockEnable();
+	if (second)
+	{
+		SystemHighFreqClockDisable();
+	}
+	if (first)
+	{
+		SystemHighFreqClockDisable();
+	}
+	s_ClockCheckCount++;
+	if (!first || !second)
+	{
+		s_ClockCheckFailures++;
+	}
+	if (s_ClockCheckCount == 1U || s_ClockCheckCount % 8U == 0U ||
+		!first || !second)
+	{
+		SysLogPrintf(SysLogGet(), "BLE clock requests: %u checks, %u failures\r\n",
+			(unsigned)s_ClockCheckCount, (unsigned)s_ClockCheckFailures);
+	}
+}
+
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
+	(void)pChar;
+	(void)Offset;
 	g_Uart.Tx(pData, Len);
+	s_ClockGATTWrites++;
+	if (s_ClockGATTWrites == 1U)
+	{
+		SysLogPrintf(SysLogGet(), "BLE GATT write received\r\n");
+	}
+	if (!s_bClockCheckPending)
+	{
+		s_bClockCheckPending = true;
+		s_bClockCheckQueued = AppEvtHandlerQue(0U, nullptr, ClockCheckEvt);
+	}
 }
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
@@ -435,11 +488,13 @@ int main()
 
 bool AppCheckStatus(void)
 {
+	uint32_t state;
+	bool idle;
+
 	BtAppCheckStatus();
 
-	// A pending callback on an empty queue was refused. Keep the check and
-	// retry together so an interrupt cannot queue the same callback between them.
-	uint32_t state = DisableInterrupt();
+	// Retry work if the queue was full, before the application sleeps.
+	state = DisableInterrupt();
 
 	if (AppEvtHandlerPending() == false)
 	{
@@ -451,9 +506,14 @@ bool AppCheckStatus(void)
 		{
 			(void)AppEvtHandlerQue(0, nullptr, SysLogFlushEvt);
 		}
+		if (s_bClockCheckPending && !s_bClockCheckQueued)
+		{
+			s_bClockCheckQueued = AppEvtHandlerQue(0U, nullptr, ClockCheckEvt);
+		}
 	}
-	const bool idle = s_bUartRxPending == false &&
+	idle = s_bUartRxPending == false &&
 		s_bSysLogFlushPending == false &&
+		!s_bClockCheckPending &&
 		AppEvtHandlerPending() == false;
 	EnableInterrupt(state);
 	return idle;

@@ -1043,9 +1043,6 @@ static void UartBlePrintStats(void)
 	uint32_t firstRxMs;
 	uint16_t minLen;
 	uint16_t maxLen;
-	int queued;
-	const UARTDev_t *uart;
-	uint32_t uartDrop;
 
 	state = DisableInterrupt();
 	received = s_BleToUartReceived;
@@ -1056,9 +1053,6 @@ static void UartBlePrintStats(void)
 	firstRxMs = s_BleFirstRxMs;
 	minLen = notifications ? s_BleNotifyMinLen : 0;
 	maxLen = s_BleNotifyMaxLen;
-	uart = UARTGetInstance(UART_DEVNO);
-	queued = uart != nullptr ? CFifoUsed(uart->hTxFifo) : 0;
-	uartDrop = uart != nullptr ? uart->TxDropCnt : 0;
 
 	EnableInterrupt(state);
 	elapsedMs = notifications ? BtGattMsTick() - firstRxMs : 0;
@@ -1078,8 +1072,7 @@ static void UartBlePrintStats(void)
 	}
 	g_Uart.printf("\r\nStream: ble_rx=%lu uart_accepted=%lu ",
 		(unsigned long)received, (unsigned long)accepted);
-	g_Uart.printf("queued=%d ble_drop=%lu uart_refused=%lu\r\n", queued,
-		(unsigned long)dropped, (unsigned long)uartDrop);
+	g_Uart.printf("uart_refused=%lu\r\n", (unsigned long)dropped);
 }
 
 void UartRxSchedHandler(uint32_t Evt, void *pCtx)

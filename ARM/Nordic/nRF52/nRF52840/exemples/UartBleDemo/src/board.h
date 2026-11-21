@@ -41,29 +41,50 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blyst840_boards.h"
 
-//#define NORDIC_DK
+// nRF52840 SDC/LFRC validation: retain the 32 MHz HFXO for radio use.
+// LFRC calibration is managed by the Nordic power and clock implementation.
+#define MCU_OSC			{ \
+	{OSC_TYPE_XTAL, 32000000U, 20U, 0U}, \
+	{OSC_TYPE_RC, 32768U, 500U, 0U}, \
+	false, 0U \
+}
+
+#define NORDIC_DK
 
 #ifdef NORDIC_DK
-// Nordic DK PCA10040 board
-
+// nRF52840 DK: UART0 through interface MCU VCOM0, LED1-3 and Button1-2.
 #define UART_RX_PORT		0
 #define UART_RX_PIN			8
-#define UART_RX_PINOP		1	//
+#define UART_RX_PINOP		1
 #define UART_TX_PORT		0
-#define UART_TX_PIN			6//7
-#define UART_TX_PINOP		0
-#define UART_CTS_PORT		0
-#define UART_CTS_PIN		7//12
-#define UART_CTS_PINOP		0
-#define UART_RTS_PORT		0
-#define UART_RTS_PIN		5//11
-#define UART_RTS_PINOP		0
+#define UART_TX_PIN			6
+#define UART_TX_PINOP		1
 
-#define BUTTON1_PORT		0
-#define BUTTON1_PIN			13
-#define BUTTON2_PORT		0
-#define BUTTON2_PIN			14
+#define BUT1_PORT			0
+#define BUT1_PIN			11
+#define BUT2_PORT			0
+#define BUT2_PIN			12
 
+#define LED1_PORT			0
+#define LED1_PIN			13
+#define LED2_PORT			0
+#define LED2_PIN			14
+#define LED3_PORT			0
+#define LED3_PIN			15
+
+#define CONNECT_LED_PORT	LED3_PORT
+#define CONNECT_LED_PIN		LED3_PIN
+#define CONNECT_LED_LOGIC	0
+
+#define BUTTON_PINS		{ \
+	{BUT1_PORT, BUT1_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
+	{BUT2_PORT, BUT2_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
+}
+#define LED_PINS		{ \
+	{LED1_PORT, LED1_PIN, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{LED2_PORT, LED2_PIN, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{LED3_PORT, LED3_PIN, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+}
 #else
 // IBK_NRF52840 board
 

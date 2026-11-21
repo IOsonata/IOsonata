@@ -39,10 +39,13 @@ another master during this test. The master must support clock stretching.
 
 ## Sequence and expected results
 
-Start the slave first. It prints address 0x22, drains and disables its UART,
-and calls SystemSleep with TWIS enabled. The driver enables TWIS clock requests
-in PM.PPCR and the corresponding asynchronous wake bit in PM.AWEN. SystemSleep
-therefore selects WAIT. No timer or watchdog is started by this example.
+Start the slave first. It prints address 0x22, flushes the console
+output, and calls SystemSleep with TWIS enabled. The application does not
+disable or restore UART: the system coordinates an idle UART through its
+driver. The I2C driver enables TWIS clock requests in PM.PPCR and the
+corresponding asynchronous wake bit in PM.AWEN. SystemSleep can select WAIT
+when the active peripherals permit it. No timer or watchdog is started by
+this example.
 
 Start or reset the D21 master. Each of three rounds:
 
