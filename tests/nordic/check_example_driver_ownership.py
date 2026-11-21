@@ -86,6 +86,22 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn('ClockDemoResult("HF shared clock lifecycle",', source)
 		self.assertIn('ClockDemoResult("LF shared clock lifecycle",', source)
 
+	def test_clock_demo_calibration_api(self):
+		source = CLOCK.read_text(encoding="utf-8")
+		self.assertIn("#pragma weak SystemHighFreqClockCalibrate", source)
+		self.assertIn("#pragma weak SystemLowFreqClockCalibrate", source)
+		self.assertIn("ClockDemoCalibrationTest();", source)
+		self.assertIn("SystemLowFreqClockEnable();", source)
+		self.assertIn("calibrated = SystemLowFreqClockCalibrate();", source)
+		self.assertIn("SystemLowFreqClockDisable();", source)
+		self.assertIn('ClockDemoResult("LF RC calibration", calibrated);', source)
+		begin = source.index("static void ClockDemoCalibrationTest(void)")
+		end = source.index("static bool ClockDemoTimerInit(", begin)
+		section = source[begin:end]
+		self.assertNotIn("TimerInit(", section)
+		self.assertNotIn("AppEvtHandlerQue(", section)
+		self.assertNotIn("NRF_CLOCK", section)
+
 	def test_clock_demo_board_inputs(self):
 		paths = sorted(ROOT.glob("**/exemples/ClockDemo/src/board.h"))
 		self.assertTrue(paths)
