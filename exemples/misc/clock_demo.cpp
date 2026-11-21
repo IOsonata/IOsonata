@@ -356,7 +356,7 @@ int main(void)
 					request = bus / divider;
 					ClockDemoFlush();
 					actual = SystemPeriphClockSet(0, request);
-				readback = SystemPeriphClockGet(0);
+					readback = SystemPeriphClockGet(0);
 					ClockDemoPrint("CPU %u Hz, peripheral clock 0 request %u Hz, actual %u Hz\r\n",
 						(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
 					ClockDemoResult("Peripheral clock", actual != 0U &&
@@ -374,8 +374,6 @@ int main(void)
 				selected = SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency);
 				ClockDemoResult(pLfSource->pName, selected);
 				ClockDemoPrint("LF configured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
-			}
-#endif
 			}
 #endif
 		}
