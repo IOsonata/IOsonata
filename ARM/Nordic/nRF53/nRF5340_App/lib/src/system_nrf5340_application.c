@@ -79,9 +79,10 @@ uint32_t SystemCoreClockGet(void)
 	return SystemCoreClock;
 }
 
+static ArmDelayCalibration_t s_DelayCalibration;
+
 void SystemCoreClockUpdate(void)
 {
-	static uint32_t s_CalibratedClockHz;
 	uint32_t cpuHz;
 
 #if defined(NRF_TRUSTZONE_NONSECURE)
@@ -91,12 +92,18 @@ void SystemCoreClockUpdate(void)
 	cpuHz = __SYSTEM_CLOCK_MAX >>
 		(NRF_CLOCK_S->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk);
 #endif
-
 	SystemCoreClock = cpuHz;
 
-	if (s_CalibratedClockHz != cpuHz && ArmDelayCalibrate(cpuHz))
+	if (s_DelayCalibration.UsCycles == 0U)
 	{
-		s_CalibratedClockHz = cpuHz;
+		// Documented fallback for a core without an accessible DWT.
+		// The exact loops are measured once when the core starts.
+		(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U);
+		(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
+	}
+	else if (s_DelayCalibration.CpuHz != cpuHz)
+	{
+		(void)ArmDelayClockUpdate(&s_DelayCalibration, cpuHz);
 	}
 }
 
