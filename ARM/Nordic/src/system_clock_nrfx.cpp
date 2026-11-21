@@ -687,6 +687,7 @@ bool SystemLowFreqClockCalibrate(void)
 	{
 		return false;
 	}
+
 	if (!SystemLowFreqClockEnable())
 	{
 		state = DisableInterrupt();
