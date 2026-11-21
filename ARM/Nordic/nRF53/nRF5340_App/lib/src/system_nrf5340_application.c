@@ -323,6 +323,22 @@ void SystemInit(void)
 	// Oscillator trim and capacitor registers use secure aliases.
 	// Nonsecure images must leave their configuration to secure startup.
 #if !defined(NRF_TRUSTZONE_NONSECURE)
+	// XL1 (P0.00) and XL2 (P0.01) are shared with GPIO on nRF5340.
+	// Allocate them to the crystal peripheral before LFXO is requested.
+	// The pins must not be configured as GPIO while LFXO owns them.
+	if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL ||
+		g_McuOsc.LowPwrOsc.Type == OSC_TYPE_TCXO)
+	{
+		NRF_P0_S->PIN_CNF[0] =
+			(GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos);
+		NRF_P0_S->PIN_CNF[1] =
+			(GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos);
+		NRF_P0_S->PIN_CNF[0] |=
+			(GPIO_PIN_CNF_MCUSEL_Peripheral << GPIO_PIN_CNF_MCUSEL_Pos);
+		NRF_P0_S->PIN_CNF[1] |=
+			(GPIO_PIN_CNF_MCUSEL_Peripheral << GPIO_PIN_CNF_MCUSEL_Pos);
+	}
+
 	// Oscillator load capacitors, taken from g_McuOsc
 	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL && g_McuOsc.CoreOsc.LoadCap > 0)
 	{
