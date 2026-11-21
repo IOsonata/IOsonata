@@ -88,6 +88,16 @@ static TimerDev_t s_Timer;
 static TimerDev_t s_RetainedTimer;
 static volatile uint32_t s_InterruptCount;
 static unsigned s_Failures;
+
+typedef struct {
+	uint32_t CpuHz;
+	uint32_t UsQ16;
+	uint32_t NsQ16;
+	bool Measured;
+} ClockDemoDelaySample_t;
+
+static ClockDemoDelaySample_t s_DelayHigh;
+static ClockDemoDelaySample_t s_DelayLow;
 static void ClockDemoTimerHandler(TimerDev_t *pTimer, uint32_t Event);
 static void ClockDemoFlush(void);
 
@@ -301,6 +311,168 @@ static void ClockDemoCalibrationTest(void)
 	ClockDemoResult("LF RC calibration", calibrated);
 }
 
+// Calibrate the existing delay loops at the CPU frequency currently in use.
+// Prefer DWT, which measures CPU cycles independently of compiler options.
+// A high-frequency Timer is the fallback. Never use RTC for calibration.
+static bool ClockDemoDelaySample(ClockDemoDelaySample_t *pSample)
+{
+	TimerCfg_t cfg;
+	uint32_t cpuHz;
+	uint32_t start;
+	uint32_t usElapsed;
+	uint32_t nsElapsed;
+	uint32_t usFactor;
+	uint32_t nsFactor;
+	bool valid;
+
+#if defined(__arm__) || defined(__thumb__)
+	ArmDelayCalibration_t measured;
+#endif
+
+	cpuHz = SystemCoreClockGet();
+
+	if (cpuHz == 0U || pSample == nullptr)
+	{
+		return false;
+	}
+
+	pSample->CpuHz = cpuHz;
+	pSample->UsQ16 = 0U;
+	pSample->NsQ16 = 0U;
+	pSample->Measured = false;
+
+#if defined(__arm__) || defined(__thumb__)
+	usFactor = SystemMicroSecLoopCnt;
+	nsFactor = SystemnsDelayFactor;
+	measured = {};
+
+	// The DWT function uses the same assembly loops as idelay.h.
+	// Save and restore production factors: ClockDemo only recommends values.
+	if (ArmDelayCalibrate(&measured, cpuHz))
+	{
+		pSample->UsQ16 = SystemMicroSecLoopCnt;
+		pSample->NsQ16 = SystemnsDelayFactor;
+		pSample->Measured = true;
+
+		SystemMicroSecLoopCnt = usFactor;
+		SystemnsDelayFactor = nsFactor;
+
+		ClockDemoPrint("Delay calibration DWT %u Hz: us Q16 %u, ns Q16 %u\r\n",
+			(unsigned)cpuHz, (unsigned)pSample->UsQ16,
+			(unsigned)pSample->NsQ16);
+
+		return true;
+	}
+#endif
+
+	// The HF timer is a timing reference, never a calibration owner.
+	// A running LF/RTC timer is insufficiently precise for this purpose.
+	if (TimerGetHighFreqDevCount() <= 0)
+	{
+		ClockDemoPrint("Delay calibration: no DWT or HF Timer\r\n");
+		return false;
+	}
+
+	cfg = s_TimerCfg;
+	cfg.DevNo = TimerGetHighFreqDevNo();
+	cfg.EvtHandler = nullptr;
+
+	if (!TimerInit(&s_RetainedTimer, &cfg))
+	{
+		ClockDemoPrint("Delay calibration: HF Timer init FAIL\r\n");
+		return false;
+	}
+
+	valid = TimerEnable(&s_RetainedTimer);
+
+	if (!valid)
+	{
+		ClockDemoPrint("Delay calibration: HF Timer start FAIL\r\n");
+		return false;
+	}
+
+	(void)TimerSetFrequency(&s_RetainedTimer, 0U);
+
+	start = TimerGetMicrosecond(&s_RetainedTimer);
+	msDelay(100);
+	usElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+
+	start = TimerGetMicrosecond(&s_RetainedTimer);
+	nsDelay(100000000U);
+	nsElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+
+	TimerDisable(&s_RetainedTimer);
+
+	if (usElapsed == 0U || nsElapsed == 0U)
+	{
+		ClockDemoPrint("Delay calibration: HF Timer measurement FAIL\r\n");
+		return false;
+	}
+
+#if defined(__arm__) || defined(__thumb__)
+	pSample->UsQ16 = (uint32_t)((uint64_t)usFactor * 100000U / usElapsed);
+	pSample->NsQ16 = (uint32_t)((uint64_t)nsFactor * 100000U / nsElapsed);
+	pSample->Measured = pSample->UsQ16 != 0U && pSample->NsQ16 != 0U;
+
+	ClockDemoPrint("Delay calibration HF Timer %u Hz: us Q16 %u, ns Q16 %u\r\n",
+		(unsigned)cpuHz, (unsigned)pSample->UsQ16,
+		(unsigned)pSample->NsQ16);
+#else
+	ClockDemoPrint("Delay validation HF Timer %u Hz: us %u, ns %u microseconds\r\n",
+		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsElapsed);
+	pSample->Measured = true;
+#endif
+
+	return pSample->Measured;
+}
+
+static void ClockDemoDelayCalibrationRecord(void)
+{
+	ClockDemoDelaySample_t sample;
+
+	sample = {};
+
+	if (!ClockDemoDelaySample(&sample))
+	{
+		return;
+	}
+
+	if (!s_DelayHigh.Measured || sample.CpuHz > s_DelayHigh.CpuHz)
+	{
+		s_DelayHigh = sample;
+	}
+
+	if (!s_DelayLow.Measured || sample.CpuHz < s_DelayLow.CpuHz)
+	{
+		s_DelayLow = sample;
+	}
+}
+
+static void ClockDemoDelayCalibrationReport(void)
+{
+	if (!s_DelayHigh.Measured || !s_DelayLow.Measured)
+	{
+		ClockDemoPrint("Delay two-point calibration: NOT MEASURED\r\n");
+		return;
+	}
+
+	ClockDemoPrint("Delay high %u Hz: us Q16 %u, ns Q16 %u\r\n",
+		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayHigh.UsQ16,
+		(unsigned)s_DelayHigh.NsQ16);
+	ClockDemoPrint("Delay low %u Hz: us Q16 %u, ns Q16 %u\r\n",
+		(unsigned)s_DelayLow.CpuHz, (unsigned)s_DelayLow.UsQ16,
+		(unsigned)s_DelayLow.NsQ16);
+
+	if (s_DelayHigh.CpuHz == s_DelayLow.CpuHz)
+	{
+		ClockDemoPrint("Delay two-point calibration: one CPU speed observed\r\n");
+	}
+	else
+	{
+		ClockDemoPrint("Delay two-point calibration: interpolate between measured points\r\n");
+	}
+}
+
 static bool ClockDemoTimerInit(int DevNo)
 {
 	TimerCfg_t cfg;
@@ -465,6 +637,7 @@ int main(void)
 	ClockDemoFlush();
 	ClockDemoResult("Core clock startup", SystemCoreClockGet() != 0U);
 	ClockDemoSharedClockTest();
+	ClockDemoDelayCalibrationRecord();
 	initialCoreSource = GetHighFreqOscType();
 	initialCoreFreq = GetHighFreqOscFreq();
 	initialLfSource = GetLowFreqOscType();
@@ -497,6 +670,11 @@ int main(void)
 
 		core = SystemCoreClockGet();
 		ClockDemoResult("Core frequency", core != 0U);
+
+		if (core != s_DelayHigh.CpuHz && core != s_DelayLow.CpuHz)
+		{
+			ClockDemoDelayCalibrationRecord();
+		}
 
 		// Every available peripheral domain receives the same fixed requests.
 		for (clockIdx = 0; clockIdx < 32; clockIdx++)
@@ -613,6 +791,7 @@ int main(void)
 		ClockDemoTimer(timerDevNo);
 	}
 	ClockDemoConcurrentTimerTest(lowTimerCount, highTimerCount);
+	ClockDemoDelayCalibrationReport();
 	ClockDemoFlush();
 	ClockDemoPrint("ClockDemo complete: %u failures\r\n", s_Failures);
 	ClockDemoFlush();
