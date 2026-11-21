@@ -571,8 +571,8 @@ static void CoreClockTestTimer(int DevNo)
 		{
 			nsDelay(250000000U);
 		}
-		TimerDisable(&s_Timer);
 		elapsed = TimerGetMicrosecond(&s_Timer) - start;
+		TimerDisable(&s_Timer);
 		count = s_InterruptCount;
 		TimerDisableTrigger(&s_Timer, 0);
 		expected = (uint64_t)elapsed * 1000U / period;
