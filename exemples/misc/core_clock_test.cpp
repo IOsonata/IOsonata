@@ -377,15 +377,15 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	}
 
 	pSample->CpuHz = cpuHz;
-	pSample->UsQ16 = 0U;
-	pSample->NsQ16 = 0U;
+	pSample->UsLoopsPerSecond = 0U;
+	pSample->NsLoopsPerSecond = 0U;
 	pSample->Measured = false;
 
 	if (DelayCalibrationMeasure(pSample))
 	{
-		CoreClockTestPrint("Delay calibration counter %u Hz: us Q16 %u, ns Q16 %u\r\n",
-			(unsigned)cpuHz, (unsigned)pSample->UsQ16,
-			(unsigned)pSample->NsQ16);
+		CoreClockTestPrint("Delay calibration counter %u Hz: us loop/s %u, ns loop/s %u\r\n",
+			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
+			(unsigned)pSample->NsLoopsPerSecond);
 		return true;
 	}
 
@@ -432,9 +432,9 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	valid = DelayCalibrationFromTimer(cpuHz, usElapsed, nsElapsed, pSample);
 	if (valid)
 	{
-		CoreClockTestPrint("Delay calibration HF Timer %u Hz: us Q16 %u, ns Q16 %u\r\n",
-			(unsigned)cpuHz, (unsigned)pSample->UsQ16,
-			(unsigned)pSample->NsQ16);
+		CoreClockTestPrint("Delay calibration HF Timer %u Hz: us loop/s %u, ns loop/s %u\r\n",
+			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
+			(unsigned)pSample->NsLoopsPerSecond);
 	}
 	else
 	{
@@ -476,12 +476,12 @@ static void CoreClockTestDelayCalibrationReport(void)
 		return;
 	}
 
-	CoreClockTestPrint("Delay highest observed %u Hz: us Q16 %u, ns Q16 %u\r\n",
-		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayHigh.UsQ16,
-		(unsigned)s_DelayHigh.NsQ16);
-	CoreClockTestPrint("Delay lowest observed %u Hz: us Q16 %u, ns Q16 %u\r\n",
-		(unsigned)s_DelayLow.CpuHz, (unsigned)s_DelayLow.UsQ16,
-		(unsigned)s_DelayLow.NsQ16);
+	CoreClockTestPrint("Delay highest observed %u Hz: us loop/s %u, ns loop/s %u\r\n",
+		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayHigh.UsLoopsPerSecond,
+		(unsigned)s_DelayHigh.NsLoopsPerSecond);
+	CoreClockTestPrint("Delay lowest observed %u Hz: us loop/s %u, ns loop/s %u\r\n",
+		(unsigned)s_DelayLow.CpuHz, (unsigned)s_DelayLow.UsLoopsPerSecond,
+		(unsigned)s_DelayLow.NsLoopsPerSecond);
 
 	if (s_DelayHigh.CpuHz == s_DelayLow.CpuHz)
 	{
@@ -493,9 +493,9 @@ static void CoreClockTestDelayCalibrationReport(void)
 	if (DelayCalibrationInterpolate(midpoint, &s_DelayLow,
 		&s_DelayHigh, &interpolated))
 	{
-		CoreClockTestPrint("Delay interpolated %u Hz: us Q16 %u, ns Q16 %u\r\n",
-			(unsigned)midpoint, (unsigned)interpolated.UsQ16,
-			(unsigned)interpolated.NsQ16);
+		CoreClockTestPrint("Delay interpolated %u Hz: us loop/s %u, ns loop/s %u\r\n",
+			(unsigned)midpoint, (unsigned)interpolated.UsLoopsPerSecond,
+			(unsigned)interpolated.NsLoopsPerSecond);
 	}
 	else
 	{
