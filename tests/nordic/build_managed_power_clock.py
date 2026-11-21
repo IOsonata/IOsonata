@@ -102,6 +102,8 @@ def main():
         ]
         if target != "nrf5340_net":
             standard_projects.append(root / "exemples/PowerOffDemo/ioc")
+        if target == "nrf5340_app":
+            standard_projects.append(root / "exemples/NetCoreStart/ioc")
         if target in ("nrf52832", "nrf52840"):
             standard_projects.append(root / "exemples/HfxoTestBle/ioc")
         sdc_projects = [

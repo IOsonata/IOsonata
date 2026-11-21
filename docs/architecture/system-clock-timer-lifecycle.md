@@ -403,6 +403,20 @@ the crystal starts. The clock manager waits for `LFCLKSTAT.SRC` to report
 the active LFXO before claiming readiness. `LFCLKSRCCOPY` reports the
 requested source and cannot by itself establish LFXO readiness.
 
+## nRF5340 NetCoreStart application-core LFXO preparation
+
+NetCoreStart on the nRF5340 Audio DK runs as a secure application-core
+image. Secure SystemInit configures the XL1/XL2 oscillator pin ownership
+and board capacitor settings. NetCoreStart requests the declared LFXO
+through SystemLowFreqClockSelect and SystemLowFreqClockEnable *before*
+releasing NETWORK.FORCEOFF. It retains the shared LFCLK reference while
+the application core waits in WFI. Failed LFXO startup prevents release
+and keeps the success LED off.
+
+The network core still uses its own LFCLK clock manager. Its existing
+verified LFRC fallback remains appropriate when a standalone network
+core does not have access to the shared crystal.
+
 ## Network-core LFXO availability fallback
 
 The Nordic nRF5340 Audio DK declares an LFXO in `g_McuOsc`. The network

@@ -4,12 +4,12 @@
 @brief	Application core image that only starts the nRF5340 network core.
 
 After every reset the network core is held off until the application core
-releases it. A network core image flashed alone therefore stops running at the
+prepares and enables the board's shared LFXO, then releases it. A network core image flashed alone therefore stops running at the
 next reset or power cycle. Flash this image on the application core when the
 network core runs by itself (BleAdvertiser, HCI controller on UART, ...).
 
-The board LED turns on once the network core is released, so a dark LED
-means this image is not running.
+The board LED turns on after the shared LFXO is enabled and the network
+core is released. A dark LED indicates a startup failure or missing image.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 22, 2026
@@ -41,6 +41,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "nrf.h"
 
+#include "coredev/system_core_clock.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 
@@ -59,6 +60,16 @@ int main()
 		return 1;
 	}
 #endif
+
+	// SystemInit has configured the board-declared LFXO pins and caps.
+	// Keep the shared crystal enabled while the network core is running.
+	if (g_McuOsc.LowPwrOsc.Type != OSC_TYPE_XTAL ||
+		!SystemLowFreqClockSelect(OSC_TYPE_XTAL, g_McuOsc.LowPwrOsc.Freq) ||
+		!SystemLowFreqClockEnable())
+	{
+		// Do not release the network core without the required LFXO.
+		return 2;
+	}
 
 #if defined(NRF_RESET_S) && !defined(NRF_TRUSTZONE_NONSECURE)
 	NRF_RESET_S->NETWORK.FORCEOFF = RESET_NETWORK_FORCEOFF_FORCEOFF_Release;
