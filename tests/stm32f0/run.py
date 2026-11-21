@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 root = Path(__file__).resolve().parents[2]
-includes = ['tests/stm32f0/shim', 'include', 'ARM/ST/include', 'ARM/ST/STM32F0xx/include']
+includes = ['tests/stm32f0/shim', 'include', 'ARM/include', 'ARM/ST/include', 'ARM/ST/STM32F0xx/include']
 for device in ['STM32F030x6', 'STM32F030x8', 'STM32F030xC', 'STM32F070x6', 'STM32F070xB']:
     with tempfile.TemporaryDirectory() as tmp:
         opts = ['-D' + device, '-O2'] + ['-I' + str(root / p) for p in includes]
