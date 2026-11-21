@@ -359,6 +359,8 @@ int main(void)
 	uint32_t divider;
 	uint32_t request;
 	uint32_t actual;
+	int clockIdx;
+	unsigned domainCount;
 	int timerDevNo;
 	int timerCount;
 #if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
@@ -396,6 +398,7 @@ int main(void)
 	}
 #endif
 
+	domainCount = 0U;
 	for (cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
 	{
 		ClockDemoPrint("Cycle %u\r\n", cycle);
@@ -416,16 +419,19 @@ int main(void)
 			{
 				continue;
 			}
-			bus = SystemPeriphClockGet(0);
-			if (bus == 0U)
+			// Check every possible peripheral clock index in a bounded
+			// range, not just index zero. An index returning zero is
+			// unsupported; all nonzero domains receive Get/Set tests.
+			for (clockIdx = 0; clockIdx < 32; clockIdx++)
 			{
-				ClockDemoPrint("Peripheral clock 0: SKIP (unavailable)\r\n");
-			}
-			else
-			{
-				// Test the current frequency even when the board lists no
-				// additional divider requests. A fixed clock is valid when
-				// Set returns that clock and Get confirms it.
+				bus = SystemPeriphClockGet(clockIdx);
+				if (bus == 0U)
+				{
+					continue;
+				}
+				domainCount++;
+				ClockDemoPrint("Peripheral clock %u baseline %u Hz\r\n",
+					(unsigned)clockIdx, (unsigned)bus);
 				dividerCount = sizeof(s_PeriphDividers) / sizeof(s_PeriphDividers[0]);
 				for (dividerIdx = 0U; dividerIdx <= dividerCount; dividerIdx++)
 				{
@@ -437,14 +443,16 @@ int main(void)
 					}
 					request = bus / divider;
 					ClockDemoFlush();
-					actual = SystemPeriphClockSet(0, request);
-					readback = SystemPeriphClockGet(0);
-					ClockDemoPrint("CPU %u Hz, peripheral clock 0 request %u Hz, actual %u Hz\r\n",
-						(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
+					actual = SystemPeriphClockSet(clockIdx, request);
+					readback = SystemPeriphClockGet(clockIdx);
+					ClockDemoPrint("Domain %u request %u Hz, actual %u Hz\r\n",
+						(unsigned)clockIdx, (unsigned)request, (unsigned)actual);
 					ClockDemoResult("Peripheral clock", actual != 0U &&
-						readback == actual &&
-						(request != bus || actual == bus));
- 				}
+						readback == actual && (request != bus || actual == bus));
+				}
+				actual = SystemPeriphClockSet(clockIdx, bus);
+				ClockDemoResult("Peripheral clock restore",
+					actual == bus && SystemPeriphClockGet(clockIdx) == bus);
 			}
 #if defined(CLOCK_DEMO_LF_SOURCES)
 			for (lfIdx = 0U; lfIdx < sizeof(s_LowFreqSources) / sizeof(s_LowFreqSources[0]); lfIdx++)
@@ -458,6 +466,19 @@ int main(void)
 			}
 #endif
 		}
+	}
+	if (SystemPeriphClockGet(-1) != 0U ||
+		SystemPeriphClockGet(32) != 0U)
+	{
+		ClockDemoResult("Peripheral clock invalid index", false);
+	}
+	else
+	{
+		ClockDemoResult("Peripheral clock invalid index", true);
+	}
+	if (domainCount == 0U)
+	{
+		ClockDemoResult("Peripheral clock domains present", false);
 	}
 	// Timer implementations expose their device counts through the generic API.
 	// Test every advertised device rather than a board-selected instance.
