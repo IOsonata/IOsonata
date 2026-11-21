@@ -604,6 +604,38 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 	}
 }
 
+#if defined(NRF53_SERIES)
+// The nRF5340 CAL task temporarily requests HFXO through the hardware
+// clock controller. Wait for DONE outside the interrupt mask. A new LFRC
+// activation must be calibrated before its RTC consumers start counting.
+#define NRFX_LFRC_CAL_TIMEOUT_US	250000U
+
+static bool nRFxLfclkCalibrate(void)
+{
+	uint32_t elapsed;
+
+	NRF_CLOCK->EVENTS_DONE = 0U;
+	NRF_CLOCK->TASKS_CAL = 1U;
+	elapsed = 0U;
+	while (elapsed < NRFX_LFRC_CAL_TIMEOUT_US)
+	{
+		if (NRF_CLOCK->EVENTS_DONE != 0U)
+		{
+			NRF_CLOCK->EVENTS_DONE = 0U;
+			return true;
+		}
+		usDelay(NRFX_LFCLK_START_POLL_US);
+		elapsed += NRFX_LFCLK_START_POLL_US;
+	}
+	if (NRF_CLOCK->EVENTS_DONE != 0U)
+	{
+		NRF_CLOCK->EVENTS_DONE = 0U;
+		return true;
+	}
+	return false;
+}
+#endif
+
 // The clock manager alone starts and stops the shared oscillator.
 static bool nRFxLfclkStart(uint32_t Src)
 {
@@ -618,6 +650,15 @@ static bool nRFxLfclkStart(uint32_t Src)
 		if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
 		{
 			NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
+#if defined(NRF53_SERIES)
+			if ((Src & NRFX_LFCLK_SRC_Msk) ==
+				(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos) &&
+				!nRFxLfclkCalibrate())
+			{
+				NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
+				return false;
+			}
+#endif
 			return true;
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
@@ -626,6 +667,15 @@ static bool nRFxLfclkStart(uint32_t Src)
 	if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
 	{
 		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
+#if defined(NRF53_SERIES)
+		if ((Src & NRFX_LFCLK_SRC_Msk) ==
+			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos) &&
+			!nRFxLfclkCalibrate())
+		{
+			NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
+			return false;
+		}
+#endif
 		return true;
 	}
 
