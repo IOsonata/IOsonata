@@ -454,6 +454,7 @@ int main(void)
 	int timerCount;
 	int lowTimerCount;
 	int highTimerCount;
+
 	if (!UARTInit(&s_Uart, &s_UartCfg))
 	{
 		return 1;
@@ -582,6 +583,7 @@ int main(void)
 		SystemPeriphClockGet(-1) == 0U);
 	ClockDemoResult("Peripheral domain scan limit",
 		SystemPeriphClockGet(32) == 0U);
+
 	if (domainCount == 0U)
 	{
 		ClockDemoResult("Peripheral clock domains present", false);
@@ -591,10 +593,12 @@ int main(void)
 	lowTimerCount = TimerGetLowFreqDevCount();
 	highTimerCount = TimerGetHighFreqDevCount();
 	timerCount = lowTimerCount + highTimerCount;
+
 	if (timerCount == 0)
 	{
 		ClockDemoResult("Timer devices available", false);
 	}
+
 	for (timerDevNo = 0; timerDevNo < timerCount; timerDevNo++)
 	{
 		ClockDemoTimer(timerDevNo);
@@ -603,6 +607,7 @@ int main(void)
 	ClockDemoFlush();
 	ClockDemoPrint("ClockDemo complete: %u failures\r\n", s_Failures);
 	ClockDemoFlush();
+
 	while (1)
 	{
 		msDelay(1000);
