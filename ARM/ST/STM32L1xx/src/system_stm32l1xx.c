@@ -34,7 +34,7 @@ SOFTWARE.
 
 #include "stm32l1xx.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_calibration.h"
+#include "idelay_clock.h"
 
 #define HSI_FREQ 16000000UL
 #ifndef HSE_VALUE

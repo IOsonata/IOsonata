@@ -38,7 +38,7 @@ SOFTWARE.
 
 #include "stm32l4xx.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_calibration.h"
+#include "idelay_clock.h"
 
 #define DEFAULT_RC_FREQ		48000000
 #define XTAL_FREQ			16000000

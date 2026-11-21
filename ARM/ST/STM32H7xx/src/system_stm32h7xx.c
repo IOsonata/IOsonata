@@ -39,7 +39,7 @@ SOFTWARE.
 
 #include "stm32h7xx.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_calibration.h"
+#include "idelay_clock.h"
 
 #define HSI_FREQ 64000000UL
 #define CLOCK_POLLS 2000000UL

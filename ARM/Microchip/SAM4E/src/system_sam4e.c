@@ -37,7 +37,7 @@ SOFTWARE.
 
 #include "system_sam4e.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_calibration.h"
+#include "idelay_clock.h"
 
 #define SYSTEM_CORE_CLOCK				120000000UL	// Default core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(27UL)		// Adjustment value for nanosec delay
