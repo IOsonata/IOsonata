@@ -65,8 +65,6 @@ SOFTWARE.
 // LF selection omitted because a running DFLL/DPLL may own its reference.
 #define CLOCK_DEMO_SOURCES { {"OSC8M", OSC_TYPE_RC, 8000000U, 1U, UINT32_MAX} }
 #define CLOCK_DEMO_PERIPH_DIVIDERS {1U, 2U, 4U, 1U}
-#define CLOCK_DEMO_TIMER_DEVNO TimerGetLowFreqDevCount()
-#define CLOCK_DEMO_CYCLES 3U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif // __BOARD_H__

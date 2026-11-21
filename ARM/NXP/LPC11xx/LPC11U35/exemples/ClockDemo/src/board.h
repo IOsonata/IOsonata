@@ -62,8 +62,6 @@ SOFTWARE.
 #define CLOCK_DEMO_SOURCES { {"IRC", OSC_TYPE_RC, 12000000U, 1U, UINT32_MAX} }
 #define CLOCK_DEMO_PERIPH_DIVIDERS {}
 #define CLOCK_DEMO_LF_SOURCES { {"Watchdog oscillator, watchdog disabled", OSC_TYPE_RC, 500000U} }
-#define CLOCK_DEMO_TIMER_DEVNO TimerGetLowFreqDevCount()
-#define CLOCK_DEMO_CYCLES 3U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif
