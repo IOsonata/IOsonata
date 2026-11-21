@@ -96,14 +96,27 @@ void SystemCoreClockUpdate(void)
 
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
-		// Use safe defaults before optional CPU-local DWT calibration.
-		// No Timer, RTC, or clock-service dependency is introduced.
+		// The default CPU frequency was calibrated when the MCU was ported.
 		(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U);
-		(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
+		if (cpuHz != __SYSTEM_CLOCK_DEFAULT)
+		{
+			(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
+		}
 	}
 	else if (s_DelayCalibration.CpuHz != cpuHz)
 	{
-		(void)ArmDelayClockUpdate(&s_DelayCalibration, cpuHz);
+		if (cpuHz == __SYSTEM_CLOCK_DEFAULT)
+		{
+			// Restore the original calibrated defaults.
+			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U);
+		}
+		else
+		{
+			// DWT has no dependency on Timer, RTC or a clock service.
+			// Recalculate from cached costs first if DWT is unavailable.
+			(void)ArmDelayClockUpdate(&s_DelayCalibration, cpuHz);
+			(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
+		}
 	}
 }
 
