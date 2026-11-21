@@ -483,7 +483,15 @@ int main(void)
 		{
 			ClockDemoFlush();
 			selected = SystemCoreClockSelect(OSC_TYPE_RC, 0U);
-			ClockDemoResult("Core RC selection", selected);
+
+			if (selected)
+			{
+				ClockDemoResult("Core RC selection", true);
+			}
+			else
+			{
+				ClockDemoPrint("Core RC: UNSUPPORTED or rejected\r\n");
+			}
 		}
 
 		core = SystemCoreClockGet();
@@ -536,20 +544,28 @@ int main(void)
 			ClockDemoResult("Configured LF source", selected);
 		}
 
-		if (initialLfSource != OSC_TYPE_RC || initialLfFreq != 0U)
+		if (initialLfFreq != 0U)
 		{
 			ClockDemoFlush();
 			selected = SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U);
-			ClockDemoResult("LF RC selection", selected);
 
-			if (selected && cycle == CLOCK_TEST_CYCLES)
+			if (selected)
 			{
-				ClockDemoCalibrationTest();
+				ClockDemoResult("LF RC selection", true);
+
+				if (cycle == CLOCK_TEST_CYCLES)
+				{
+					ClockDemoCalibrationTest();
+				}
+			}
+			else
+			{
+				ClockDemoPrint("LF RC: UNSUPPORTED or rejected\r\n");
 			}
 		}
 
 		// Return the test to the configured board oscillator sources.
-		if (initialLfFreq != 0U && initialLfSource != OSC_TYPE_RC)
+		if (initialLfFreq != 0U)
 		{
 			selected = SystemLowFreqClockSelect(initialLfSource, initialLfFreq);
 			ClockDemoResult("LF source restoration", selected);
