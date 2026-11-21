@@ -61,7 +61,7 @@ __WEAK McuOsc_t g_McuOsc = {
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 static bool Sam4eClockWait(uint32_t Mask, uint32_t Value)
 {
 	uint32_t i;
