@@ -45,6 +45,7 @@ extern "C" {
 // The caller initializes and enables pTimer before starting.
 // TriggerNo must belong to the caller and be currently unused.
 // A 4-second period is suitable for nRF5340 LFRC periodic calibration.
+// Use a zero-initialized, statically allocated AppClockCalibration_t.
 // The structure must remain allocated while an event may be queued.
 bool AppClockCalibrationStart(AppClockCalibration_t *pCal,
 	TimerDev_t *pTimer, int TriggerNo, uint32_t PeriodMs, bool HighFreq);
