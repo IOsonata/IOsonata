@@ -576,15 +576,26 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	}
 
 #ifdef UARTE_PRESENT
-	if (NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) || dev->pDmaReg->EVENTS_TXSTOPPED)
+	bool txEnd = NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) != 0;
+	bool txStopped = dev->pDmaReg->EVENTS_TXSTOPPED != 0;
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
+	// STOPTX during initialization can leave a stale TXSTOPPED/ENDTX event.
+	// It must not consume the next software FIFO block when DMA is idle.
+	if ((txEnd || txStopped) && dev->TxDmaLen == 0U)
+	{
+		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
+		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+	}
+	else
+#endif
+	if (txEnd || txStopped)
 	{
 		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
 #if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
-		// TXSTOPPED may end the current DMA block before all bytes were sent.
-		// TX.END also occurs when transmission was stopped early. Resume
-		// the unsent suffix before consuming more bytes from the FIFO.
-		if (dev->TxDmaLen != 0U)
+		// A normal ENDTX completes the entire DMA block. Only an
+		// interrupted STOPTX transfer may need its unsent suffix resumed.
+		if (txStopped)
 		{
 			uint32_t sent;
 #if defined(NRF53_SERIES)
@@ -606,8 +617,8 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 				return;
 			}
-			dev->TxDmaLen = 0U;
 		}
+		dev->TxDmaLen = 0U;
 #endif
 
 		int l = NRFX_UART_TXDMA_SIZE;
