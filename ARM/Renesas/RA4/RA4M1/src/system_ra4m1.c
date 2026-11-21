@@ -71,7 +71,7 @@ SOFTWARE.
 // Reset is MOCO /16, not HOCO. ResetEntry initializes this storage before
 // calling SystemInit, including an application's strong g_McuOsc override.
 uint32_t SystemCoreClock = 500000UL;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 volatile uint32_t g_Ra4m1StartupError;
 extern uint32_t SystemMicroSecLoopCnt;
 extern void (* const __Vectors[])(void);
