@@ -71,7 +71,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertNotIn("SysLogVPrintf(", s)
 		self.assertNotIn("SysLogUartEvent", s)
 		self.assertNotIn("SysLogUartEvent", s)
-		self.assertIn("CorePowerTestDrainLog(", s)
+		self.assertNotIn("CorePowerTestDrainLog(", s)
 		self.assertIn("SysLogPrintf(SysLogGet(),", s)
 		self.assertNotIn("DeviceIntrfWaitTxComplete(", s)
 
@@ -83,15 +83,14 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("CorePowerTestPut(", s)
 
-	def test_syslog_flush_retry_after_each_log(self):
+	def test_syslog_uses_event_without_per_record_polling(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn("static void CorePowerTestDrainLog(void)", s)
-		self.assertIn("msDelay(2);", s)
-		self.assertIn("(void)SysLogFlush(SysLogGet());", s)
-		self.assertIn(".EvtCallback = nullptr,", s)
-		self.assertEqual(s.count("SysLogPrintf(SysLogGet(),"), 10)
-		self.assertEqual(s.count("CorePowerTestDrainLog();"), 10)
-		self.assertNotIn("SysLogVPrintf(", s)
+		self.assertIn("SysLogInitNoTimer(SysLogGet(), &s_LogCfg", s)
+		self.assertNotIn("CorePowerTestDrainLog", s)
+		self.assertNotIn("SysLogFlush(SysLogGet())", s)
+		self.assertIn("msDelay(10);", s)
+		self.assertIn("msDelay(100);", s)
+
 
 	def test_syslog_uses_generic_device_intrf_ready_event(self):
 		header = (ROOT / "include/syslog.h").read_text(encoding="utf-8")

@@ -255,10 +255,12 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
  * interrupt for example, returns 0 and leaves its record to the running call,
  * which checks the store again before it returns.
  *
- * The sink is transport-independent. An application using an asynchronous
- * sink is responsible for retrying SysLogFlush when the sink has room, from
- * its own event handler or foreground processing. SysLog does not register
- * transport-specific callbacks.
+ * The global logger can attach SysLogDevIntrfEvent to the existing
+ * DeviceIntrf EvtCB when the sink has no callback. Drivers reporting
+ * DEVINTRF_EVT_TX_READY then resume pending records automatically.
+ * Applications replacing that callback own the call to SysLogFlush.
+ * Transport drivers that do not report generic ready events need their
+ * own application-level retry when transmission capacity returns.
  *
  * Note this is the opposite of CFifoFlush, which discards. This one sends.
  *
