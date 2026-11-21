@@ -45,6 +45,7 @@ SOFTWARE.
 #ifdef NDEBUG
 #include "coredev/uart.h"
 #include "syslog.h"
+#include "idelay.h"
 #include "board.h"
 
 #define HFXO_PRINT(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
@@ -109,20 +110,12 @@ static void HfxoConsoleInit(void)
 
 static void HfxoConsoleDrain(void)
 {
-	UARTDev_t *pUart;
+	// SysLogFlush submits queued records to the transport; it does not
+	// guarantee physical UART completion. Keep the console alive briefly
+	// before leaving this test without inspecting UART driver state.
+	(void)SysLogFlush(SysLogGet());
+	msDelay(100);
 
-	pUart = (UARTDev_t *)s_Uart;
-	for (;;)
-	{
-		(void)SysLogFlush(SysLogGet());
-		if (CFifoPeek(SysLogGet()->hFifo) == nullptr &&
-			CFifoUsed(pUart->hTxFifo) == 0U &&
-			pUart->bTxReady)
-		{
-			break;
-		}
-		__WFE();
-	}
 }
 #else
 #include <stdio.h>
