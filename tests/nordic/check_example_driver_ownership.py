@@ -121,5 +121,21 @@ class DemoDriverOwnership(unittest.TestCase):
 				self.assertNotRegex(source, r"UARTDev_t\s*\*\s*(?:pUart|uart)\s*=")
 
 
+	def test_applications_do_not_read_uart_internals(self):
+		paths = (
+			CLOCK,
+			POWER,
+			I2C,
+			ROOT / "exemples/misc/hfxo_test.cpp",
+			ROOT / "exemples/misc/hfxo_test_ble.cpp",
+			ROOT / "exemples/bluetooth/uart_ble_central.cpp",
+		)
+		fields = re.compile(r"\\b(?:hTxFifo|hRxFifo|TxDropCnt|bTxReady|pDevData)\\b")
+		for path in paths:
+			with self.subTest(path=path.name):
+				source = path.read_text(encoding="utf-8")
+				self.assertIsNone(fields.search(source))
+
+
 if __name__ == "__main__":
 	unittest.main()
