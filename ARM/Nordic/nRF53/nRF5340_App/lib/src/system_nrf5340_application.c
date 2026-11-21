@@ -39,9 +39,9 @@ void SystemStoreFICRNS(void);
 void SystemLockFICRNS(void);
 
 
-/* NRF5340 application core uses a variable System Clock Frequency that starts at 64MHz */
+/* IOsonata starts the nRF5340 application core at 128 MHz. */
 #define __SYSTEM_CLOCK_MAX      (128000000UL)
-#define __SYSTEM_CLOCK_DEFAULT  ( 64000000UL)
+#define __SYSTEM_CLOCK_DEFAULT  (128000000UL)
 
 #define TRACE_PIN_CNF_VALUE (   (GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos) | \
                                 (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos) | \
@@ -78,6 +78,17 @@ uint32_t SystemCoreClockGet(void)
 	SystemCoreClockUpdate();
 	return SystemCoreClock;
 }
+
+// The application core changes HCLK128M only. Peripheral PCLK domains
+// remain independent of this divider.
+#if defined(NRF_TRUSTZONE_NONSECURE)
+#define NRF_APP_CLOCK	NRF_CLOCK_NS
+#else
+#define NRF_APP_CLOCK	NRF_CLOCK_S
+#endif
+
+#define NRF_APP_HCLK_PERFORMANCE	(CLOCK_HFCLKCTRL_HCLK_Div1 << CLOCK_HFCLKCTRL_HCLK_Pos)
+#define NRF_APP_HCLK_LOW_POWER	(CLOCK_HFCLKCTRL_HCLK_Div2 << CLOCK_HFCLKCTRL_HCLK_Pos)
 
 static ArmDelayCalibration_t s_DelayCalibration;
 
@@ -118,6 +129,75 @@ void SystemCoreClockUpdate(void)
 			(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
 		}
 	}
+}
+
+
+/**
+ * @brief Select the nRF5340 application CPU's running power mode.
+ *
+ * The HFCLKCTRL divider affects HCLK128M, not the independent PCLK clocks.
+ * No LFCLK/HFXO ownership changes or peripheral resets are needed.
+ */
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t requested;
+	uint32_t current;
+	uint32_t settle;
+
+	if (__get_IPSR() != 0U || __get_PRIMASK() != 0U)
+	{
+		return false;
+	}
+
+	switch (Mode)
+	{
+		case SYSTEM_POWER_MODE_PERFORMANCE:
+			requested = NRF_APP_HCLK_PERFORMANCE;
+			break;
+		case SYSTEM_POWER_MODE_LOW_POWER:
+			requested = NRF_APP_HCLK_LOW_POWER;
+			break;
+		default:
+			return false;
+	}
+
+	current = NRF_APP_CLOCK->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk;
+	if (current == requested)
+	{
+		return true;
+	}
+	if (current != NRF_APP_HCLK_PERFORMANCE &&
+		current != NRF_APP_HCLK_LOW_POWER)
+	{
+		return false;
+	}
+
+	NRF_APP_CLOCK->HFCLKCTRL = requested;
+	__DSB();
+	__ISB();
+
+	// The clock divider takes up to several microseconds to settle.
+	// This CPU-local loop is independent of Timer, RTC and UART.
+	for (settle = 0U; settle < 4096U; settle++)
+	{
+		__NOP();
+	}
+
+	if ((NRF_APP_CLOCK->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk) != requested)
+	{
+		return false;
+	}
+
+	SystemCoreClockUpdate();
+	return SystemCoreClock ==
+		(Mode == SYSTEM_POWER_MODE_PERFORMANCE ? 128000000UL : 64000000UL);
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return (NRF_APP_CLOCK->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk) ==
+		NRF_APP_HCLK_LOW_POWER ?
+		SYSTEM_POWER_MODE_LOW_POWER : SYSTEM_POWER_MODE_PERFORMANCE;
 }
 
 void SystemInit(void)
@@ -348,6 +428,12 @@ void SystemInit(void)
         __DSB();
         __ISB();
     #endif
+
+	// IOsonata boots the application core at its maximum 128 MHz speed.
+	// The 64 MHz reset divider is available later through SystemPowerModeSet.
+	NRF_APP_CLOCK->HFCLKCTRL = NRF_APP_HCLK_PERFORMANCE;
+	__DSB();
+	__ISB();
 
 	// Oscillator trim and capacitor registers use secure aliases.
 	// Nonsecure images must leave their configuration to secure startup.
