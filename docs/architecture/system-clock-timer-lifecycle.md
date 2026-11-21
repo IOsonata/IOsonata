@@ -403,6 +403,19 @@ the crystal starts. The clock manager waits for `LFCLKSTAT.SRC` to report
 the active LFXO before claiming readiness. `LFCLKSRCCOPY` reports the
 requested source and cannot by itself establish LFXO readiness.
 
+## nRF5340 dual-core LFCLK priority and LFRC calibration
+
+If the application core holds LFXO (as NetCoreStart does), a network-core
+request for LFRC is served by the higher-priority shared LFXO. Nordic
+nRF5340 clock-control priority is LFSYNT > LFXO > LFRC. The network-core
+LFRC selection is the *requested* source; LFCLKSTAT.SRC is the *effective*
+source. On nRF5340, only calibrate LFRC when LFCLKSTAT reports that LFRC
+is actually running. A calibration DONE timeout must not invalidate an
+otherwise running clock. Revision 1 anomaly 137 can suppress DONE when
+the other core holds LFXO. Calibration failure is still reported by the
+explicit operation; CoreClockTest treats it as unsupported/failed rather
+than a clock or timer failure.
+
 ## nRF5340 NetCoreStart application-core LFXO preparation
 
 NetCoreStart on the nRF5340 Audio DK runs as a secure application-core

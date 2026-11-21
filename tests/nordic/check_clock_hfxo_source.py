@@ -79,8 +79,28 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("#if defined(NRF53_SERIES)", ready)
         self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", ready)
         self.assertIn("NRFX_LFCLK_SRC_XTAL", ready)
-        self.assertIn("return nRFxLfclkCalibrate();", ready)
+        self.assertIn("if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)", ready)
+        self.assertIn("(void)nRFxLfclkCalibrate();", ready)
+        self.assertIn("return true;", ready)
+        self.assertNotIn("return nRFxLfclkCalibrate();", ready)
+        self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", lf)
+        self.assertIn("NRFX_LFCLK_STATE_Msk", lf)
         self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", startup)
+
+    def test_lfrc_start_accepts_shared_lfxo_override_without_calibration(self):
+        ready = function(self.clock, "static bool nRFxLfclkFinishStart(",
+                         "static bool nRFxLfclkStart(")
+        rc = ready[ready.index("if ((Src & NRFX_LFCLK_SRC_Msk) ==",
+                                ready.index("NRFX_LFCLK_SRC_XTAL") + 1):]
+        self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", rc)
+        self.assertIn("NRFX_LFCLK_SRC_RC", rc)
+        self.assertIn("(void)nRFxLfclkCalibrate();", rc)
+        self.assertIn("return true;", rc)
+        self.assertNotIn("return nRFxLfclkCalibrate();", rc)
+        calibrate = function(self.clock, "bool SystemLowFreqClockCalibrate(",
+                             "// The clock manager alone starts")
+        self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", calibrate)
+        self.assertIn("NRFX_LFCLK_SRC_RC", calibrate)
 
     def test_lfclk_start_timeout_releases_failed_request(self):
         start = function(self.clock, "static bool nRFxLfclkStart(",

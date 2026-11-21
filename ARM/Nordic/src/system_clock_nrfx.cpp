@@ -712,6 +712,9 @@ bool SystemLowFreqClockCalibrate(void)
 	}
 	state = DisableInterrupt();
 	active = nRFxLowOscSelected() == OSC_TYPE_RC &&
+		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U &&
+		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STAT_SRC_Msk) ==
+			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos) &&
 		s_nRFxLfclkReqCnt != 0U && !s_bNRFxLfclkTransition &&
 		!s_bNRFxLfclkCalibrating &&
 		!nRFxMpslActive() && !nRFxClockSdEnabled();
@@ -779,7 +782,20 @@ static bool nRFxLfclkFinishStart(uint32_t Src)
 	if ((Src & NRFX_LFCLK_SRC_Msk) ==
 		(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos))
 	{
-		return nRFxLfclkCalibrate();
+		// A higher-priority LFXO request from the other core can supply
+		// this LFCLK even though this controller requested LFRC.
+		// On nRF5340, such an override prevents LFRC calibration DONE
+		// (anomaly 137); calibration must not gate LFCLK availability.
+		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
+		{
+			return false;
+		}
+		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STAT_SRC_Msk) ==
+			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos))
+		{
+			(void)nRFxLfclkCalibrate();
+		}
+		return true;
 	}
 #else
 	(void)Src;
