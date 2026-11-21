@@ -1,6 +1,6 @@
 # Power and clock demo projects
 
-The projects use the shared `exemples/misc/clock_demo.cpp` and
+The projects use the shared `exemples/misc/core_clock_test.cpp` and
 `exemples/misc/power_off_demo.cpp`. Import each `ioc` directory in Eclipse and
 build the matching library configuration first. Board pin maps come from the
 existing example named in each README. These additions provide 29 ClockDemo
