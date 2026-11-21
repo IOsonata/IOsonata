@@ -24,5 +24,22 @@ class CoreClockTestTimer(unittest.TestCase):
         )
 
 
+    def test_low_frequency_timer_has_independent_hf_reference(self):
+        source = TEST.read_text(encoding="utf-8")
+        start = source.index("static void CoreClockTestTimer(int DevNo)\\n{")
+        end = source.index("// Check that disabling one timer", start)
+        timer = source[start:end]
+        self.assertIn("DevNo < TimerGetLowFreqDevCount()", timer)
+        self.assertIn("TimerGetHighFreqDevNo()", timer)
+        self.assertIn("hfCfg.EvtHandler = nullptr;", timer)
+        self.assertIn("TimerInit(&s_RetainedTimer, &hfCfg)", timer)
+        self.assertIn("TimerEnable(&s_RetainedTimer)", timer)
+        self.assertIn("TimerGetMicrosecond(&s_RetainedTimer) - hfStart", timer)
+        self.assertIn("LF/HF reference: LF %u us, HF %u us", timer)
+        self.assertIn("TimerDisable(&s_RetainedTimer);", timer)
+        for forbidden in ("NRF_CLOCK", "LFCLKSTAT", "HFCLKCTRL", "DWT->"):
+            self.assertNotIn(forbidden, timer)
+
+
 if __name__ == "__main__":
     unittest.main()
