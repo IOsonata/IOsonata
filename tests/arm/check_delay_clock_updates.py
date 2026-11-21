@@ -45,7 +45,7 @@ class ArmClockDelayUpdates(unittest.TestCase):
 				self.assertNotIn(
 					"SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16)",
 					source)
-				self.assertRegex(source, r"SystemCoreClockUpdate\\s*\\(\\s*void\\s*\\)")
+				self.assertRegex(source, r"SystemCoreClockUpdate\s*\(\s*void\s*\)")
 
 	def test_sam4l_changes_both_factors_in_direct_transitions(self):
 		source = (ROOT / "ARM/Microchip/SAM4L/src/system_sam4l.c").read_text(
