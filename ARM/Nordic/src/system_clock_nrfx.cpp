@@ -100,7 +100,8 @@ SOFTWARE.
 // Peripherals run from the fixed 16 MHz PCLK16M
 #define NRFX_PCLK_FREQ				16000000UL
 
-// Well over the start time of the 32 kHz crystal, about 0.25 s
+// Poll budget for MPSL's LFCLK wait; normal shared-clock start/stop uses
+// the microsecond timeout below.
 #define NRFX_LFCLK_WAIT_LOOPS		10000000
 
 // LFXO on nRF5340 may need several hundred milliseconds to start.
