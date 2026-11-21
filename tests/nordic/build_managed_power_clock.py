@@ -98,10 +98,10 @@ def main():
         root = PROJECT_ROOT[target]
         standard_projects = [
             root / "lib/ioc",
-            root / "exemples/ClockDemo/ioc",
+            root / ("exemples/CoreClockTest/ioc" if target in ("nrf5340_app", "nrf5340_net") else "exemples/ClockDemo/ioc"),
         ]
         if target in ("nrf5340_app", "nrf5340_net"):
-            standard_projects.append(root / "exemples/PowerApiTest/ioc")
+            standard_projects.append(root / "exemples/CorePowerTest/ioc")
         else:
             standard_projects.append(root / "exemples/PowerOffDemo/ioc")
         if target == "nrf5340_app":

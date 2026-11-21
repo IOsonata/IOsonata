@@ -1,7 +1,7 @@
 # nRF5340 generic power API validation
 
 The application and network cores each have exactly one Eclipse managed
-PowerApiTest project, using the shared `exemples/misc/power_api_test.cpp`
+CorePowerTest project, using the shared `exemples/misc/core_power_test.cpp`
 implementation. The previous app StandbyDemo duplicate is removed.
 
 The application-core board profile currently selects System OFF and

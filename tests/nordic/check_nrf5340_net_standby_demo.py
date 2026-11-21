@@ -4,14 +4,14 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-NET = ROOT / "ARM/Nordic/nRF53/nRF5340_Net/exemples/PowerApiTest"
+NET = ROOT / "ARM/Nordic/nRF53/nRF5340_Net/exemples/CorePowerTest"
 
 
 class NetworkStandbyDemo(unittest.TestCase):
 	def test_project_links_generic_demo(self):
 		project = (NET / "ioc/.project").read_text(encoding="utf-8")
-		self.assertIn("<name>PowerApiTest</name>", project)
-		self.assertIn("exemples/misc/power_api_test.cpp", project)
+		self.assertIn("<name>CorePowerTest</name>", project)
+		self.assertIn("exemples/misc/core_power_test.cpp", project)
 		self.assertIn("src/board.h", project)
 
 	def test_board_uses_lf_timer_wake(self):
@@ -24,7 +24,7 @@ class NetworkStandbyDemo(unittest.TestCase):
 		self.assertIn("UART_RX_PIN\t\t\t8", board)
 
 	def test_generic_timer_is_running_before_wake_compare(self):
-		s = (ROOT / "exemples/misc/power_api_test.cpp").read_text(encoding="utf-8")
+		s = (ROOT / "exemples/misc/core_power_test.cpp").read_text(encoding="utf-8")
 		start = s.index("if (TimerSetFrequency(&s_WakeTimer, 1024U)")
 		end = s.index("elapsed = TimerGetMicrosecond(&s_WakeTimer) - start;", start)
 		cycle = s[start:end]
@@ -57,7 +57,7 @@ class NetworkStandbyDemo(unittest.TestCase):
 
 	def test_managed_build_includes_net_demo(self):
 		build = (ROOT / "tests/nordic/build_managed_power_clock.py").read_text(encoding="utf-8")
-		self.assertIn('standard_projects.append(root / "exemples/PowerApiTest/ioc")', build)
+		self.assertIn('standard_projects.append(root / "exemples/CorePowerTest/ioc")', build)
 		self.assertNotIn('if target != "nrf5340_net":', build)
 
 
