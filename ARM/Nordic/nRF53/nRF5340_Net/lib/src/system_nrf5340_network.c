@@ -59,13 +59,22 @@ uint32_t SystemCoreClockGet(void)
 	return SystemCoreClock;
 }
 
+static ArmDelayCalibration_t s_DelayCalibration;
+
 void SystemCoreClockUpdate(void)
 {
 	SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 
-	// The core cycle counter measures the actual delay-loop execution
-	// cost, independent of the surrounding compiler optimization.
-	(void)ArmDelayCalibrate(SystemCoreClock);
+	if (s_DelayCalibration.UsCycles == 0U)
+	{
+		// DWT measurement is optional; fallback is per-target.
+		(void)ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U);
+		(void)ArmDelayCalibrate(&s_DelayCalibration, SystemCoreClock);
+	}
+	else if (s_DelayCalibration.CpuHz != SystemCoreClock)
+	{
+		(void)ArmDelayClockUpdate(&s_DelayCalibration, SystemCoreClock);
+	}
 }
 
 void SystemInit(void)
