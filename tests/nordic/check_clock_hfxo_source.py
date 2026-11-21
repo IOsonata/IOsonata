@@ -37,6 +37,25 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("if (success)", disable)
         self.assertNotIn("std::atomic", source)
 
+    def test_public_rc_calibration_api_has_no_timer_ownership(self):
+        header = (ROOT / "include/coredev/system_core_clock.h").read_text(
+            encoding="utf-8")
+        self.assertIn("bool SystemHighFreqClockCalibrate(void);", header)
+        self.assertIn("bool SystemLowFreqClockCalibrate(void);", header)
+        hf = function(self.clock, "bool SystemHighFreqClockCalibrate(",
+                      "bool SystemLowFreqClockCalibrate(")
+        self.assertIn("return false;", hf)
+        lf = function(self.clock, "bool SystemLowFreqClockCalibrate(",
+                      "// The clock manager alone starts")
+        self.assertIn("g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC", lf)
+        self.assertIn("s_nRFxLfclkReqCnt != 0U", lf)
+        self.assertIn("__get_IPSR() != 0U", lf)
+        self.assertIn("SystemLowFreqClockEnable()", lf)
+        self.assertIn("success = nRFxLfclkCalibrate();", lf)
+        self.assertIn("SystemLowFreqClockDisable();", lf)
+        self.assertNotIn("TimerInit(", lf)
+        self.assertNotIn("RTC", lf)
+
     def test_nrf5340_lfrc_calibrated_on_clock_start(self):
         calibration = function(self.clock, "static bool nRFxLfclkCalibrate(",
                                "// The clock manager alone starts")
