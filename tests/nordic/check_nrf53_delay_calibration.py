@@ -59,17 +59,16 @@ class Nrf53DelayCalibration(unittest.TestCase):
 		self.assertIn('" SUBS %[low], #1\\n"', self.delay)
 		self.assertIn('" BNE 1b\\n"', self.delay)
 
-	def test_fixed_point_factor_math(self):
+	def test_measured_loop_rate_math(self):
 		for cpu_hz in (64000000, 128000000):
 			for us_loop_cycles, ns_loop_cycles in ((13, 3), (23, 3), (28, 3)):
 				count = 8192
 				us_cycles = count * us_loop_cycles
 				ns_cycles = count * ns_loop_cycles
-				scale = cpu_hz * count * 65536
-				us_factor = scale // (us_cycles * 1000000)
-				ns_factor = scale // (ns_cycles * 1000000)
-				us_iterations = (250000 * us_factor + 65535) >> 16
-				ns_iterations = (250000000 * ns_factor + 65535999) // 65536000
+				us_rate = cpu_hz * count // us_cycles
+				ns_rate = cpu_hz * count // ns_cycles
+				us_iterations = (250000 * us_rate + 999999) // 1000000
+				ns_iterations = (250000000 * ns_rate + 999999999) // 1000000000
 
 				self.assertLess(abs(us_iterations * us_loop_cycles -
 					cpu_hz // 4), 1000)
