@@ -176,7 +176,7 @@ typedef struct __nRF_UART_Dev {
 	uint32_t CtsPin;
 	uint32_t RtsPin;
 	uint32_t RxDmaCnt;
-#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 	uint32_t TxDmaLen;
 #endif
 	uint8_t RxFifoMem[NRFX_UART_CFIFO_SIZE];
@@ -580,12 +580,18 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	{
 		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
-#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
+		// TXSTOPPED may end the current DMA block before all bytes were sent.
 		// TX.END also occurs when transmission was stopped early. Resume
 		// the unsent suffix before consuming more bytes from the FIFO.
 		if (dev->TxDmaLen != 0U)
 		{
-			uint32_t sent = dev->pDmaReg->DMA.TX.AMOUNT;
+			uint32_t sent;
+#if defined(NRF53_SERIES)
+			sent = dev->pDmaReg->TXD.AMOUNT;
+#else
+			sent = dev->pDmaReg->DMA.TX.AMOUNT;
+#endif
 			if (sent > dev->TxDmaLen)
 			{
 				sent = dev->TxDmaLen;
@@ -1108,7 +1114,7 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 				dev->pUartDev->bTxReady = false;
 				// The FIFO slot is reusable immediately; cache DMA data.
 				memcpy(dev->TxDmaMem, p, l);
-#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 				dev->TxDmaLen = (uint32_t)l;
 #endif
 				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
@@ -1559,7 +1565,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	s_nRFxUARTDev[devno].pUartDev->RxDropCnt = 0;
 	s_nRFxUARTDev[devno].pUartDev->TxDropCnt = 0;
 	s_nRFxUARTDev[devno].RxDmaCnt = 0;
-#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 	s_nRFxUARTDev[devno].TxDmaLen = 0U;
 #endif
 

@@ -94,6 +94,14 @@ class RuntimePowerChecks(unittest.TestCase):
 			"Retention register invalid index"):
 			self.assertIn(name, s)
 
+	def test_nrf53_preserves_partial_uarte_dma_transmission(self):
+		s = (ROOT / "ARM/Nordic/src/uart_nrfx.cpp").read_text(encoding="utf-8")
+		self.assertIn("defined(NRF71_SERIES) || defined(NRF53_SERIES)", s)
+		self.assertIn("sent = dev->pDmaReg->TXD.AMOUNT;", s)
+		self.assertIn("memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);", s)
+		self.assertIn("dev->TxDmaLen = remaining;", s)
+		self.assertIn("NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;", s)
+
 	def test_board_describes_resources_not_test_modes(self):
 		for core in ("nRF5340_App", "nRF5340_Net"):
 			p = ROOT / "ARM/Nordic/nRF53" / core / "exemples/CorePowerTest/src/board.h"
