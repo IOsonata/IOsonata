@@ -465,6 +465,18 @@ Validate scheduled calibration by measuring a long-running RTC user,
 multiple calibration completions and time intervals, dual-core clock
 requests, and HFXO release between requests before sign-off.
 
+## DWT and assembly-delay translation-unit consistency
+
+Compile-time DWT selection may differ between translation units because
+the compiler sees different target CMSIS definitions and include order.
+Until all ARM translation units consistently select the DWT backend, the
+MCU System Core must **always** initialize and refresh the assembly-loop
+fallback factors, even if its own translation unit compiles DWT delays.
+The nRF5340 application core does so at startup and at every 128/64 MHz
+transition. Never leave the global delay rates at their startup
+1,000,000-loop/s placeholders. DWT itself remains CPU-local and does
+not require loop-factor calibration.
+
 ## CPU clock changes and delay factors
 
 The existing `ARM/include/idelay.h` chooses the delay backend at compile

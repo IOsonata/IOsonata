@@ -90,9 +90,9 @@ uint32_t SystemCoreClockGet(void)
 #define NRF_APP_HCLK_PERFORMANCE	(CLOCK_HFCLKCTRL_HCLK_Div1 << CLOCK_HFCLKCTRL_HCLK_Pos)
 #define NRF_APP_HCLK_LOW_POWER	(CLOCK_HFCLKCTRL_HCLK_Div2 << CLOCK_HFCLKCTRL_HCLK_Pos)
 
-#if !ARM_DELAY_USE_DWT
+// Always calculate calibrated assembly-loop factors: another translation
+// unit can compile the non-DWT fallback even when this port has DWT.
 static ArmDelayCalibration_t s_DelayCalibration;
-#endif
 
 void SystemCoreClockUpdate(void)
 {
@@ -107,14 +107,16 @@ void SystemCoreClockUpdate(void)
 #endif
 	SystemCoreClock = cpuHz;
 
-#if !ARM_DELAY_USE_DWT
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
 		// The default CPU frequency was calibrated when the MCU was ported.
 		(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U);
 		if (cpuHz != __SYSTEM_CLOCK_DEFAULT)
 		{
+			// Optional calibration only for the assembly fallback.
+#if !ARM_DELAY_USE_DWT
 			(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
+#endif
 		}
 	}
 	else if (s_DelayCalibration.CpuHz != cpuHz)
@@ -126,13 +128,11 @@ void SystemCoreClockUpdate(void)
 		}
 		else
 		{
-			// DWT has no dependency on Timer, RTC or a clock service.
-			// Recalculate from cached costs first if DWT is unavailable.
+			// Always update the assembly-loop fallback on CPU speed changes.
 			(void)ArmDelayClockUpdate(&s_DelayCalibration, cpuHz);
 			(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
 		}
 	}
-#endif
 }
 
 

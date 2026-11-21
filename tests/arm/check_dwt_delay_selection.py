@@ -43,8 +43,12 @@ class DwtDelaySelection(unittest.TestCase):
 		self.assertIn("ArmDelayNsLoop(cnt);", src)
 		self.assertIn("ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);", src)
 		self.assertIn("ArmDelayNsLoop(ARM_DELAY_CAL_NS);", src)
-		self.assertIn("#if !ARM_DELAY_USE_DWT",
-			APP.read_text(encoding="utf-8"))
+		app = APP.read_text(encoding="utf-8")
+		self.assertIn("static ArmDelayCalibration_t s_DelayCalibration;", app)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", app)
+		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", app)
+		self.assertNotIn("#if !ARM_DELAY_USE_DWT\\nstatic ArmDelayCalibration_t", app)
+		self.assertNotIn("#if !ARM_DELAY_USE_DWT\\n\\tif (s_DelayCalibration.UsCycles", app)
 
 
 if __name__ == "__main__":

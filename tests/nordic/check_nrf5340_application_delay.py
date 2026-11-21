@@ -27,7 +27,8 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 
 	def test_explicit_dwt_and_timer_calibration_remain_available(self):
 		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", self.delay)
-		self.assertIn("#if !ARM_DELAY_USE_DWT", self.system)
+		self.assertIn("static ArmDelayCalibration_t s_DelayCalibration;", self.system)
+		self.assertNotIn("#if !ARM_DELAY_USE_DWT\\nstatic ArmDelayCalibration_t", self.system)
 		self.assertIn("DelayCalibrationMeasure(pSample)", self.test)
 		self.assertIn("DelayCalibrationFromTimer(", self.test)
 
