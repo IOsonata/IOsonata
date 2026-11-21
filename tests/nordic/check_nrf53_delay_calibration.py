@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check CPU-local startup DWT measurement and nRF5340 delay factors."""
+"""Check optional DWT calibration after nRF5340 app CPU frequency changes."""
 from pathlib import Path
 import unittest
 
@@ -32,19 +32,18 @@ class Nrf53DelayCalibration(unittest.TestCase):
 		self.assertIn("SystemnsDelayFactor = prevNsFactor;", self.cal)
 		self.assertIn("__set_PRIMASK(prevMask)", self.cal)
 
-	def test_both_cores_use_defaults_and_optional_dwt_at_startup(self):
-		for source in (self.app, self.net):
-			self.assertIn('#include "idelay.h"', source)
-			self.assertIn("ArmDelayClockInit(&s_DelayCalibration", source)
-			self.assertLess(source.index("ArmDelayClockInit(&s_DelayCalibration"), source.index("ArmDelayCalibrate(&s_DelayCalibration"))
-			self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration", source)
-			self.assertEqual(source.count("ArmDelayCalibrate("), 1)
-			self.assertNotIn(" / 23000000UL", source)
-			self.assertNotIn(" / 28000000UL", source)
-		self.assertIn("s_DelayCalibration.CpuHz != cpuHz", self.app)
-		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.app)
+	def test_only_nondefault_app_frequency_uses_dwt(self):
+		self.assertIn('#include "idelay.h"', self.app)
+		self.assertIn('#include "idelay.h"', self.net)
+		self.assertIn("cpuHz != __SYSTEM_CLOCK_DEFAULT", self.app)
+		self.assertIn("cpuHz == __SYSTEM_CLOCK_DEFAULT", self.app)
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", self.app)
+		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.app)
+		self.assertEqual(self.app.count("ArmDelayCalibrate("), 2)
+		self.assertNotIn("ArmDelayCalibrate(", self.net)
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", self.net)
+		self.assertNotIn("ArmDelayClockUpdate(&s_DelayCalibration", self.net)
+
 
 	def test_measurement_is_only_explicit_in_delay_interface(self):
 		self.assertIn("static inline bool DelayCalibrationMeasure(", self.delay)
