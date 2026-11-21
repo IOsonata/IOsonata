@@ -48,6 +48,40 @@ SOFTWARE.
 #endif
 
 #include "nrf_mpsl.h"
+
+#if defined(NRF52_SERIES)
+#include "mpsl_clock.h"
+
+// The nRF52 SDC library accepts external HFCLK and LFCLK control.
+// The MCU clock implementation calibrates LFRC using HFXO and the
+// shared POWER_CLOCK interrupt. LFXO does not require calibration.
+static void MpslExternalLfCalibrationStart(void)
+{
+	nRFxMpslLfclkCalibrationStart();
+}
+
+static bool MpslExternalLfCalibrationIsEnabled(void)
+{
+	return nRFxMpslLfclkCalibrationIsEnabled();
+}
+
+static mpsl_clock_lfclk_ctrl_source_t s_MpslExternalLf = {
+	.lfclk_wait = nRFxMpslLfclkWait,
+	.lfclk_calibration_start = MpslExternalLfCalibrationStart,
+	.lfclk_calibration_is_enabled = MpslExternalLfCalibrationIsEnabled,
+	.lfclk_request = nRFxMpslLfclkRequest,
+	.lfclk_release = nRFxMpslLfclkRelease,
+	.accuracy_ppm = 0U,
+	.skip_wait_lfclk_started = false,
+};
+
+static const mpsl_clock_hfclk_ctrl_source_t s_MpslExternalHf = {
+	.hfclk_request = nRFxMpslHfclkRequest,
+	.hfclk_release = nRFxMpslHfclkRelease,
+	.hfclk_is_running = nRFxMpslHfclkIsRunning,
+	.startup_time_us = MPSL_CLOCK_HF_LATENCY_WORST_CASE,
+};
+#endif
 #ifdef NRF52_SERIES
 #include "power_clock_irq_nrf52.h"
 #endif
@@ -76,7 +110,7 @@ SOFTWARE.
 #endif
 /*******************************/
 
-// Wait for the crystal requested by SystemCoreClockSelect, about 50 ms at
+// Wait for the crystal enabled by SystemHighFreqClockEnable, about 50 ms at
 // 64 MHz. It starts in a few ms.
 #define NRF_MPSL_HFXO_WAIT_LOOPS	1000000
 
@@ -171,6 +205,8 @@ static void NvmOpFinish(int Res)
 static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 		mpsl_timeslot_session_id_t SessionId, uint32_t Signal)
 {
+	uint32_t remainUs;
+
 	(void)SessionId;
 
 	switch (Signal)
@@ -179,7 +215,7 @@ static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 		{
 			s_NvmSigStart = s_NvmSigStart + 1;
 
-			uint32_t remainUs = 0;
+			remainUs = 0U;
 
 			if (s_pNvmOp != nullptr && s_pNvmOp->Step != nullptr)
 			{
@@ -246,7 +282,12 @@ static mpsl_timeslot_signal_return_param_t *NvmTimeslotCb(
 // interface already serialises through its own busy latch.
 static int NvmArbiterRun(void *pRequest)
 {
-	NvmTimeslotOp_t *pOp = static_cast<NvmTimeslotOp_t *>(pRequest);
+	NvmTimeslotOp_t *pOp;
+	int32_t r;
+	uint32_t elapsed;
+	int result;
+
+	pOp = static_cast<NvmTimeslotOp_t *>(pRequest);
 
 	if (pOp == nullptr || pOp->Step == nullptr)
 	{
@@ -264,7 +305,7 @@ static int NvmArbiterRun(void *pRequest)
 
 	NvmBuildReq(&s_NvmNextReq, pOp->StepBudgetUs);
 
-	int32_t r = mpsl_timeslot_request(s_NvmSessionId, &s_NvmNextReq);
+	r = mpsl_timeslot_request(s_NvmSessionId, &s_NvmNextReq);
 	if (r != 0)
 	{
 		s_pNvmOp = nullptr;
@@ -279,7 +320,7 @@ static int NvmArbiterRun(void *pRequest)
 		return NVM_INTRF_OP_STARTED;
 	}
 
-	uint32_t elapsed = 0;
+	elapsed = 0U;
 	while (s_bNvmDone == false)
 	{
 		if (elapsed >= MPSL_NVM_TIMEOUT_MS * 1000UL)
@@ -299,7 +340,7 @@ static int NvmArbiterRun(void *pRequest)
 		elapsed += 100;
 	}
 
-	int result = s_NvmResult;
+	result = s_NvmResult;
 
 	if (result != 0)
 	{
@@ -384,6 +425,9 @@ bool MpslInit(void)
 
 	mpsl_clock_lfclk_cfg_t lfclk = {MPSL_CLOCK_LF_SRC_RC, 0,};
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
+#if defined(NRF52_SERIES)
+	bool externalClock;
+#endif
 
 	// Set default clock based on system oscillator settings
 	if (lfosc->Type == OSC_TYPE_RC)
@@ -399,6 +443,28 @@ bool MpslInit(void)
 	}
 
 	lfclk.skip_wait_lfclk_started = MPSL_DEFAULT_SKIP_WAIT_LFCLK_STARTED;
+
+#if defined(NRF52_SERIES)
+	// Register the same shared clock controller for LFRC and LFXO.
+	// Calibration and HFCLK references remain with the MCU clock code.
+	externalClock = lfosc->Type == OSC_TYPE_XTAL ||
+		lfosc->Type == OSC_TYPE_RC;
+	if (nRFxMpslExternalClockGet())
+	{
+		return false;
+	}
+	if (externalClock)
+	{
+		s_MpslExternalLf.accuracy_ppm = lfosc->Accuracy;
+		res = mpsl_clock_ctrl_source_register(&s_MpslExternalLf,
+			&s_MpslExternalHf);
+		if (res != 0)
+		{
+			return false;
+		}
+		nRFxMpslExternalClockSet(true);
+	}
+#endif
 
 	mpsl_fem_init();
 
@@ -441,12 +507,24 @@ bool MpslInit(void)
 	// signal delivered through it starved: BLOCKED, CANCELLED and the session
 	// idle transition, which is why a timeslot session worked exactly once
 	// and every request after the first failed.
+#if defined(NRF52_SERIES)
+	res = mpsl_init(externalClock ? nullptr : &lfclk,
+		MPSL_LOW_PRIO_IRQn, MpslAssert);
+#else
 	res = mpsl_init(&lfclk, MPSL_LOW_PRIO_IRQn, MpslAssert);
+#endif
 #endif
 	DEBUG_PRINTF("mpsl_init res = %x\r\n", res);
 
 	if (res < 0)
 	{
+#if defined(NRF52_SERIES)
+		if (externalClock)
+		{
+			(void)mpsl_clock_ctrl_source_unregister();
+			nRFxMpslExternalClockSet(false);
+		}
+#endif
 		return false;
 	}
 
@@ -478,6 +556,14 @@ bool MpslInit(void)
 	NVIC_EnableIRQ(MPSL_LOW_PRIO_IRQn);
 #endif
 
+#if defined(NRF52_SERIES)
+	// LFRC needs an initial calibration after MPSL starts. The clock
+	// interrupt completes it and the calibration timer schedules repeats.
+	if (externalClock && lfosc->Type == OSC_TYPE_RC)
+	{
+		nRFxMpslLfclkCalibrationStart();
+	}
+#endif
 
 	return true;
 }
@@ -495,7 +581,7 @@ bool nRFxMpslActive(void)
 	return mpsl_is_initialized();
 }
 
-// The crystal of SystemCoreClockSelect. Once MPSL is initialized it owns
+// The crystal of SystemHighFreqClockEnable. Once MPSL is initialized it owns
 // CLOCK, the request and the release then go through it.
 int nRFxMpslHfxo(bool bOn)
 {
@@ -506,6 +592,13 @@ int nRFxMpslHfxo(bool bOn)
 	{
 		return -1;
 	}
+#if defined(NRF52_SERIES)
+	// Internal MPSL HFCLK APIs are forbidden after external driver setup.
+	if (nRFxMpslExternalClockGet())
+	{
+		return -1;
+	}
+#endif
 
 	if (bOn == false)
 	{
@@ -571,6 +664,9 @@ void POWER_CLOCK_IRQHandler()
 #endif
 {
 	DEBUG_PRINTF("MPSL_IRQ_CLOCK_Handler\r\n");
+#if defined(NRF52_SERIES)
+	nRFxMpslClockIrq();
+#endif
 	MPSL_IRQ_CLOCK_Handler();
 }
 

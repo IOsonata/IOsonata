@@ -9,18 +9,11 @@ or by the 32 MHz crystal (HFXO). The crystal only improves accuracy. The
 radio and USB need it and it draws much more current, so it is started on
 request, not at startup.
 
-SystemCoreClockSelect with OSC_TYPE_XTAL or OSC_TYPE_TCXO is one request for
-the crystal, with OSC_TYPE_RC it releases one. The requests of the drivers
-and of the application are counted. The crystal starts on the first request
-and stops when the last one is released. A crystal already running before
-the first request, started by other code, is left running.
-
-When a BLE stack is enabled it owns CLOCK. The requests then go to the
-SoftDevice (sd_clock_hfclk_request and sd_clock_hfclk_release) or to MPSL for
-the SoftDevice Controller (nRFxMpslHfxo in nrf_mpsl.cpp). The application request count stays here; the first acquisition
-is passed to the active clock owner and the last release returns it to that
-same owner. Clock handover during BLE stack initialization requires explicit
-coordination by the stack initializer.
+SystemCoreClockSelect configures the core oscillator descriptor. Shared
+high-frequency oscillator use is controlled by SystemHighFreqClockEnable and
+SystemHighFreqClockDisable. The first enable starts HFXO when configured,
+and the final disable stops it without disabling the CPU clock.
+SoftDevice and MPSL ownership is handled by the MCU implementation.
 
 On the nRF53, HFCLKSRC selects the crystal before HFCLKSTART and selects the
 RC again after HFCLKSTOP. On the nRF54L the crystal is started and stopped
@@ -83,6 +76,11 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 #include "nrf_mpsl.h"
+
+#if defined(NRF52_SERIES) && defined(NRFX_LFRC_CAL_LOG)
+#include "app_evt_handler.h"
+#include "syslog.h"
+#endif
 
 // CLOCK instance, as in timer_hf_nrfx.cpp
 #if defined(NRF91_SERIES)
@@ -158,6 +156,30 @@ typedef enum {
 static uint32_t s_nRFxHfxoReqCnt = 0U;
 static bool s_bNRFxHfxoTransition = false;
 static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+// A direct request may outlive SoftDevice initialization. The last
+// application user releases its logical reference immediately, but the
+// physical direct STOP is deferred until SoftDevice has been disabled.
+static bool s_bNRFxSdDirectStopPending;
+#endif
+#if defined(NRF52_SERIES)
+// MPSL external clock-control calls can run at high priority. Its requests
+// are counted separately from IOsonata users but share the same oscillator.
+static bool s_bNRFxMpslExternalClock;
+static uint32_t s_nRFxMpslHfxoReqCnt;
+static uint32_t s_nRFxMpslLfclkReqCnt;
+static bool s_bNRFxMpslHfxoOwned;
+static bool s_bNRFxMpslLfclkOwned;
+static bool s_bNRFxMpslCalibrationPending;
+static bool s_bNRFxMpslCalibrationRunning;
+static volatile uint32_t s_nRFxMpslCalibrationCount;
+#endif
+
+// Shared LFCLK enable count belongs here, not in the RTC driver.
+static uint32_t s_nRFxLfclkReqCnt = 0U;
+static bool s_bNRFxLfclkTransition = false;
+static bool s_bNRFxLfclkOwned = false;
+static bool s_bNRFxLfclkStopPending = false;
 
 // Weak: the SoftDevice Controller is not in the build. nrf_mpsl.cpp has the
 // version that goes through MPSL once it is initialized.
@@ -200,7 +222,7 @@ static bool nRFxHfxoRunning(void)
 #endif
 }
 
-// Acquire the oscillator through its current owner. The caller holds the
+// Start the oscillator through its current owner. The caller holds the
 // transition flag, but interrupts remain enabled during the start wait.
 static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 {
@@ -277,7 +299,7 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 	return false;
 }
 
-// Release only through the backend that accepted the first request.
+// Release HFXO through the owner that accepted its first request.
 static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 {
 	switch (Owner)
@@ -295,10 +317,29 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 		case NRFX_HFXO_OWNER_DIRECT:
 			// A BLE stack may take CLOCK ownership after the acquisition.
 			// Retain the request rather than report a release that did not occur.
-			if (nRFxMpslActive() || nRFxClockSdEnabled())
+			if (nRFxClockSdEnabled())
 			{
 				return false;
 			}
+#if defined(NRF52_SERIES)
+			if (nRFxMpslActive())
+			{
+				if (s_bNRFxMpslExternalClock)
+				{
+					return false;
+				}
+				// LFRC uses MPSL's internal calibration and CLOCK control.
+				// An MPSL request/release cannot release the direct HFXO
+				// start made before MPSL initialized. Keep that request
+				// recorded until a safe ownership transfer is available.
+				return false;
+			}
+#else
+			if (nRFxMpslActive())
+			{
+				return false;
+			}
+#endif
 			NRF_CLOCK->NRFX_HFXO_STOP = 1U;
 #ifdef CLOCK_HFCLKSRC_SRC_Msk
 			NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
@@ -309,82 +350,201 @@ static bool nRFxHfxoStop(nRFxHfxoOwner_t Owner)
 	}
 }
 
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+static void nRFxClockSdhStateHandler(nrf_sdh_state_evt_t Event, void *pContext)
+{
+	uint32_t state;
+
+	(void)pContext;
+	if (Event != NRF_SDH_EVT_STATE_DISABLED)
+	{
+		return;
+	}
+
+	state = DisableInterrupt();
+	if (s_bNRFxSdDirectStopPending && s_nRFxHfxoReqCnt == 0U &&
+		!s_bNRFxHfxoTransition)
+	{
+		NRF_CLOCK->NRFX_HFXO_STOP = 1U;
+#ifdef CLOCK_HFCLKSRC_SRC_Msk
+		NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
+#endif
+		s_bNRFxSdDirectStopPending = false;
+	}
+	else if (s_bNRFxSdDirectStopPending && s_nRFxHfxoReqCnt != 0U)
+	{
+		// Outstanding users keep the oscillator. The released
+		// SoftDevice owner is no longer the owner after shutdown.
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_DIRECT;
+		s_bNRFxSdDirectStopPending = false;
+	}
+	EnableInterrupt(state);
+}
+
+NRF_SDH_STATE_OBSERVER(s_NRfxClockSdhObserver, 0) = {
+	.handler = nRFxClockSdhStateHandler,
+	.p_context = nullptr,
+};
+#endif
+
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-	nRFxHfxoOwner_t owner;
 	uint32_t state;
-	bool success;
 
-	(void)OscFreq;
 	if (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL &&
 		ClkSrc != OSC_TYPE_TCXO)
 	{
 		return false;
 	}
-
 	state = DisableInterrupt();
-	if (s_bNRFxHfxoTransition)
+	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt != 0U)
 	{
 		EnableInterrupt(state);
-		// Do not wait for a preempted clock transition in an ISR.
 		return false;
 	}
-	if (ClkSrc != OSC_TYPE_RC && s_nRFxHfxoReqCnt != 0U)
+	g_McuOsc.CoreOsc.Type = ClkSrc;
+	if (OscFreq != 0U)
 	{
-		if (s_nRFxHfxoReqCnt == UINT32_MAX)
-		{
-			EnableInterrupt(state);
-			return false;
-		}
+		g_McuOsc.CoreOsc.Freq = OscFreq;
+	}
+	EnableInterrupt(state);
+	return true;
+}
+
+bool SystemHighFreqClockEnable(void)
+{
+	nRFxHfxoOwner_t owner;
+	uint32_t state;
+	bool success;
+
+	state = DisableInterrupt();
+	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt == UINT32_MAX)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if (s_nRFxHfxoReqCnt != 0U)
+	{
 		s_nRFxHfxoReqCnt++;
 		EnableInterrupt(state);
 		return true;
 	}
-	if (ClkSrc == OSC_TYPE_RC && s_nRFxHfxoReqCnt == 0U)
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+	{
+		s_nRFxHfxoReqCnt = 1U;
+		EnableInterrupt(state);
+		return true;
+	}
+	if (g_McuOsc.CoreOsc.Type != OSC_TYPE_XTAL &&
+		g_McuOsc.CoreOsc.Type != OSC_TYPE_TCXO)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
-	if (ClkSrc == OSC_TYPE_RC && s_nRFxHfxoReqCnt > 1U)
-	{
-		s_nRFxHfxoReqCnt--;
-		EnableInterrupt(state);
-		return true;
-	}
-
 	s_bNRFxHfxoTransition = true;
-	owner = s_nRFxHfxoOwner;
 	EnableInterrupt(state);
 
-	if (ClkSrc == OSC_TYPE_RC)
-	{
-		success = nRFxHfxoStop(owner);
-	}
-	else
-	{
-		owner = NRFX_HFXO_OWNER_NONE;
-		success = nRFxHfxoStart(&owner);
-	}
-
+	owner = NRFX_HFXO_OWNER_NONE;
+	success = nRFxHfxoStart(&owner);
 	state = DisableInterrupt();
-	if (ClkSrc == OSC_TYPE_RC && success)
-	{
-		s_nRFxHfxoReqCnt = 0U;
-		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
-	}
-	else if (success)
+	if (success)
 	{
 		s_nRFxHfxoReqCnt = 1U;
 		s_nRFxHfxoOwner = owner;
 	}
 	s_bNRFxHfxoTransition = false;
 	EnableInterrupt(state);
-
 	return success;
 }
 
-// System OFF requires HFXO stopped on nRF54L. The application must first
-// close radio users and release every outstanding clock request.
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state;
+	nRFxHfxoOwner_t owner;
+	bool success;
+
+	state = DisableInterrupt();
+	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt == 0U)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	if (s_nRFxHfxoReqCnt > 1U)
+	{
+		s_nRFxHfxoReqCnt--;
+		EnableInterrupt(state);
+		return;
+	}
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+	{
+		s_nRFxHfxoReqCnt = 0U;
+		EnableInterrupt(state);
+		return;
+	}
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	if (s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT &&
+		nRFxClockSdEnabled())
+	{
+		// BLE retains physical CLOCK ownership until its shutdown.
+		// A direct STOP here would violate SoftDevice ownership.
+		s_bNRFxSdDirectStopPending = true;
+		s_nRFxHfxoReqCnt = 0U;
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+		EnableInterrupt(state);
+		return;
+	}
+#endif
+#if defined(NRF52_SERIES)
+	if (s_bNRFxMpslExternalClock)
+	{
+		// The registered MPSL driver uses our physical CLOCK controller.
+		// Decide the last STOP atomically with both reference counters so
+		// a high-priority MPSL request cannot race with the STOP task.
+		if (s_nRFxMpslHfxoReqCnt != 0U)
+		{
+			if (s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT)
+			{
+				s_bNRFxMpslHfxoOwned = true;
+			}
+		}
+		else if (s_nRFxHfxoOwner == NRFX_HFXO_OWNER_DIRECT ||
+			s_bNRFxMpslHfxoOwned)
+		{
+			NRF_CLOCK->NRFX_HFXO_STOP = 1U;
+#ifdef CLOCK_HFCLKSRC_SRC_Msk
+			NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
+#endif
+			s_bNRFxMpslHfxoOwned = false;
+		}
+		s_nRFxHfxoReqCnt = 0U;
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+		EnableInterrupt(state);
+		return;
+	}
+#endif
+	s_bNRFxHfxoTransition = true;
+	owner = s_nRFxHfxoOwner;
+	EnableInterrupt(state);
+
+	success = nRFxHfxoStop(owner);
+	state = DisableInterrupt();
+	if (success)
+	{
+		s_nRFxHfxoReqCnt = 0U;
+		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
+#if defined(NRF52_SERIES)
+		if (s_bNRFxMpslExternalClock && s_nRFxMpslHfxoReqCnt == 0U)
+		{
+			s_bNRFxMpslHfxoOwned = false;
+		}
+#endif
+	}
+	s_bNRFxHfxoTransition = false;
+	EnableInterrupt(state);
+}
+
+// System OFF requires HFXO stopped on nRF54L. Disable all active
+// clock users before entering System OFF.
 #if defined(NRF54L_SERIES)
 bool nRFxClockPrepareSystemOff(void)
 {
@@ -415,112 +575,216 @@ bool nRFxClockPrepareSystemOff(void)
 }
 #endif
 
-// Starts LFCLK from Src and waits until it runs. Stopped again if it does
-// not start.
+// Convert a supported generic oscillator choice to the Nordic LFCLK source.
+static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
+{
+	switch (Type)
+	{
+		case OSC_TYPE_RC:
+			*pSrc = NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos;
+			return true;
+		case OSC_TYPE_XTAL:
+			*pSrc = NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos;
+			return true;
+#if defined(CLOCK_LFCLKSRC_BYPASS_Msk) && defined(CLOCK_LFCLKSRC_EXTERNAL_Msk)
+		case OSC_TYPE_TCXO:
+			*pSrc = (NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos) |
+				CLOCK_LFCLKSRC_BYPASS_Msk | CLOCK_LFCLKSRC_EXTERNAL_Msk;
+			return true;
+#endif
+		default:
+			return false;
+	}
+}
+
+// The clock manager alone starts and stops the shared oscillator.
 static bool nRFxLfclkStart(uint32_t Src)
 {
 	int i;
 
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
-	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-	NRF_CLOCK->TASKS_LFCLKSTART = 1;
-
+	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
+	NRF_CLOCK->TASKS_LFCLKSTART = 1U;
 	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
 	{
 		if (NRF_CLOCK->EVENTS_LFCLKSTARTED)
 		{
-			NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-
+			NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
 			return true;
 		}
 	}
-
-	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-
+	NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
 	return false;
 }
 
-static bool nRFxLfclkStop(void)
+// LFCLK STOP is nonblocking. Wait before a later clock enable, not in an ISR.
+static bool nRFxLfclkWaitStopped(void)
 {
 	int i;
 
-	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-
 	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
 	{
-		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0)
+		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
 		{
 			return true;
 		}
 	}
-
 	return false;
+}
+
+bool SystemLowFreqClockEnable(void)
+{
+	uint32_t src;
+	uint32_t state;
+	bool running;
+	bool stopped;
+	bool started;
+
+	if (!nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src))
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt == UINT32_MAX)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if (s_nRFxLfclkReqCnt != 0U)
+	{
+		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+			(src & NRFX_LFCLK_SRC_Msk))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		s_nRFxLfclkReqCnt++;
+		EnableInterrupt(state);
+		return true;
+	}
+	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
+	if (running && !s_bNRFxLfclkStopPending)
+	{
+		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+			(src & NRFX_LFCLK_SRC_Msk))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		s_nRFxLfclkReqCnt = 1U;
+		EnableInterrupt(state);
+		return true;
+	}
+	if (__get_IPSR() != 0U || nRFxMpslActive() || nRFxClockSdEnabled())
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	s_bNRFxLfclkTransition = true;
+	EnableInterrupt(state);
+
+	stopped = !s_bNRFxLfclkStopPending || nRFxLfclkWaitStopped();
+	started = stopped && nRFxLfclkStart(src);
+	state = DisableInterrupt();
+	if (stopped)
+	{
+		s_bNRFxLfclkStopPending = false;
+	}
+	if (started)
+	{
+		s_nRFxLfclkReqCnt = 1U;
+		s_bNRFxLfclkOwned = true;
+	}
+	s_bNRFxLfclkTransition = false;
+	EnableInterrupt(state);
+	return started;
+}
+
+void SystemLowFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (s_nRFxLfclkReqCnt != 0U)
+	{
+		s_nRFxLfclkReqCnt--;
+		if (s_nRFxLfclkReqCnt == 0U)
+		{
+#if defined(NRF52_SERIES)
+			if (s_bNRFxMpslExternalClock &&
+				s_nRFxMpslLfclkReqCnt != 0U && s_bNRFxLfclkOwned)
+			{
+				s_bNRFxMpslLfclkOwned = true;
+			}
+			if ((s_bNRFxLfclkOwned || s_bNRFxMpslLfclkOwned) &&
+				s_nRFxMpslLfclkReqCnt == 0U &&
+				(!nRFxMpslActive() || s_bNRFxMpslExternalClock) &&
+#else
+			if (s_bNRFxLfclkOwned && !nRFxMpslActive() &&
+#endif
+				!nRFxClockSdEnabled())
+			{
+				NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
+				s_bNRFxLfclkStopPending = true;
+#if defined(NRF52_SERIES)
+				s_bNRFxMpslLfclkOwned = false;
+#endif
+			}
+			s_bNRFxLfclkOwned = false;
+		}
+	}
+	EnableInterrupt(state);
 }
 
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t src;
-	uint32_t prev;
+	uint32_t state;
 	bool running;
+	bool stopped;
 
-	// The 32 kHz oscillators of these parts are 32768 Hz
 	(void)OscFreq;
-
-	switch (ClkSrc)
-	{
-		case OSC_TYPE_RC:
-			src = NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos;
-			break;
-		case OSC_TYPE_XTAL:
-			src = NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos;
-			break;
-#if defined(CLOCK_LFCLKSRC_BYPASS_Msk) && defined(CLOCK_LFCLKSRC_EXTERNAL_Msk)
-		case OSC_TYPE_TCXO:
-			// Rail to rail clock on XL1
-			src = (NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos) |
-				  CLOCK_LFCLKSRC_BYPASS_Msk | CLOCK_LFCLKSRC_EXTERNAL_Msk;
-			break;
-#endif
-		default:
-			return false;
-	}
-
-	// A BLE stack owns LFCLK, it set the source when it was enabled
-	if (nRFxClockSdEnabled() || nRFxMpslActive())
+	if (!nRFxLfclkOscSource(ClkSrc, &src) || __get_IPSR() != 0U)
 	{
 		return false;
 	}
-
-	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0;
-	prev = NRF_CLOCK->NRFX_LFCLKSRC;
-
-	if (running == false || prev != src ||
-		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) != (src & NRFX_LFCLK_SRC_Msk))
+	state = DisableInterrupt();
+	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt != 0U ||
+		nRFxMpslActive() || nRFxClockSdEnabled())
 	{
-		if (running)
+		EnableInterrupt(state);
+		return false;
+	}
+	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
+	if (running && !s_bNRFxLfclkStopPending)
+	{
+		// Never switch a running LFCLK that belongs to another user.
+		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+			(src & NRFX_LFCLK_SRC_Msk))
 		{
-			if (nRFxLfclkStop() == false)
-			{
-				return false;
-			}
-		}
-
-		if (nRFxLfclkStart(src) == false)
-		{
-			// Back to the source that ran before
-			if (running)
-			{
-				(void)nRFxLfclkStart(prev);
-			}
-
+			EnableInterrupt(state);
 			return false;
 		}
+		g_McuOsc.LowPwrOsc.Type = ClkSrc;
+		g_McuOsc.LowPwrOsc.Freq = 32768U;
+		EnableInterrupt(state);
+		return true;
 	}
+	s_bNRFxLfclkTransition = true;
+	EnableInterrupt(state);
 
-	g_McuOsc.LowPwrOsc.Type = ClkSrc;
-	g_McuOsc.LowPwrOsc.Freq = 32768;
-
-	return true;
+	stopped = !s_bNRFxLfclkStopPending || nRFxLfclkWaitStopped();
+	state = DisableInterrupt();
+	if (stopped)
+	{
+		NRF_CLOCK->NRFX_LFCLKSRC = src;
+		s_bNRFxLfclkStopPending = false;
+		g_McuOsc.LowPwrOsc.Type = ClkSrc;
+		g_McuOsc.LowPwrOsc.Freq = 32768U;
+	}
+	s_bNRFxLfclkTransition = false;
+	EnableInterrupt(state);
+	return stopped;
 }
 
 uint32_t SystemPeriphClockGet(int Idx)
@@ -535,3 +799,238 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 
 	return SystemPeriphClockGet(Idx);
 }
+#if defined(NRF52_SERIES)
+#if defined(NRFX_LFRC_CAL_LOG)
+// Report calibration in the foreground. Never format or transmit UART data
+// from the POWER_CLOCK interrupt handler.
+static void nRFxMpslCalibrationLog(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+	SysLogPrintf(SysLogGet(), "LFRC calibration: completed=%lu\r\n",
+		(unsigned long)s_nRFxMpslCalibrationCount);
+}
+#endif
+// Start LFRC calibration once HFXO is ready. The callback and CLOCK
+// interrupt both use this helper so startup never waits in an interrupt.
+static void nRFxMpslCalibrationBegin(void)
+{
+	if (s_bNRFxMpslCalibrationPending &&
+		!s_bNRFxMpslCalibrationRunning && nRFxHfxoRunning())
+	{
+		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0U;
+		NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_HFCLKSTARTED_Msk;
+		NRF_CLOCK->EVENTS_DONE = 0U;
+		NRF_CLOCK->TASKS_CAL = 1U;
+		s_bNRFxMpslCalibrationRunning = true;
+	}
+}
+
+void nRFxMpslLfclkCalibrationStart(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (!s_bNRFxMpslExternalClock ||
+		g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC ||
+		s_bNRFxMpslCalibrationPending ||
+		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	s_bNRFxMpslCalibrationPending = true;
+	// Acquire the clock before interrupts are restored. The HFCLK
+	// callback only writes registers and updates the reference count.
+	nRFxMpslHfclkRequest();
+	NRF_CLOCK->INTENSET = CLOCK_INTENSET_DONE_Msk |
+		CLOCK_INTENSET_HFCLKSTARTED_Msk;
+	nRFxMpslCalibrationBegin();
+	EnableInterrupt(state);
+}
+
+bool nRFxMpslLfclkCalibrationIsEnabled(void)
+{
+	return g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC;
+}
+
+uint32_t nRFxMpslLfclkCalibrationCount(void)
+{
+	return s_nRFxMpslCalibrationCount;
+}
+
+void nRFxMpslClockIrq(void)
+{
+	if (!s_bNRFxMpslExternalClock)
+	{
+		return;
+	}
+	if (NRF_CLOCK->EVENTS_CTTO != 0U)
+	{
+		NRF_CLOCK->EVENTS_CTTO = 0U;
+		nRFxMpslLfclkCalibrationStart();
+	}
+	if (s_bNRFxMpslCalibrationPending)
+	{
+		nRFxMpslCalibrationBegin();
+		if (s_bNRFxMpslCalibrationRunning &&
+			NRF_CLOCK->EVENTS_DONE != 0U)
+		{
+			NRF_CLOCK->EVENTS_DONE = 0U;
+			NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_DONE_Msk;
+			s_bNRFxMpslCalibrationRunning = false;
+			s_bNRFxMpslCalibrationPending = false;
+			s_nRFxMpslCalibrationCount++;
+			nRFxMpslHfclkRelease();
+#if defined(NRFX_LFRC_CAL_LOG)
+			(void)AppEvtHandlerQue(0U, nullptr, nRFxMpslCalibrationLog);
+#endif
+			// CTIV is specified in 0.25-second units on nRF52.
+			// Recalibrate every four seconds; MPSL can request
+			// additional calibrations after temperature changes.
+			NRF_CLOCK->CTIV = 16U;
+			NRF_CLOCK->EVENTS_CTTO = 0U;
+			NRF_CLOCK->INTENSET = CLOCK_INTENSET_CTTO_Msk;
+			NRF_CLOCK->TASKS_CTSTART = 1U;
+		}
+	}
+}
+
+// The external MPSL clock driver uses these short interrupt-safe callbacks.
+// Do not call MPSL's internal HF source request API in this configuration.
+void nRFxMpslExternalClockSet(bool Enabled)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	s_bNRFxMpslExternalClock = Enabled;
+	EnableInterrupt(state);
+}
+
+bool nRFxMpslExternalClockGet(void)
+{
+	return s_bNRFxMpslExternalClock;
+}
+
+void nRFxMpslHfclkRequest(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (s_nRFxMpslHfxoReqCnt != UINT32_MAX)
+	{
+		if (s_nRFxMpslHfxoReqCnt == 0U && s_nRFxHfxoReqCnt == 0U &&
+			!nRFxHfxoRunning())
+		{
+#ifdef CLOCK_HFCLKSRC_SRC_Msk
+			NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFXO << CLOCK_HFCLKSRC_SRC_Pos;
+#endif
+			NRF_CLOCK->NRFX_HFXO_STARTED = 0U;
+			NRF_CLOCK->NRFX_HFXO_START = 1U;
+			s_bNRFxMpslHfxoOwned = true;
+		}
+		s_nRFxMpslHfxoReqCnt++;
+	}
+	EnableInterrupt(state);
+}
+
+void nRFxMpslHfclkRelease(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (s_nRFxMpslHfxoReqCnt != 0U)
+	{
+		s_nRFxMpslHfxoReqCnt--;
+		if (s_nRFxMpslHfxoReqCnt == 0U)
+		{
+			if (s_bNRFxMpslHfxoOwned && s_nRFxHfxoReqCnt == 0U)
+			{
+				NRF_CLOCK->NRFX_HFXO_STOP = 1U;
+#ifdef CLOCK_HFCLKSRC_SRC_Msk
+				NRF_CLOCK->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFINT << CLOCK_HFCLKSRC_SRC_Pos;
+#endif
+				s_bNRFxMpslHfxoOwned = false;
+			}
+		}
+	}
+	EnableInterrupt(state);
+}
+
+bool nRFxMpslHfclkIsRunning(void)
+{
+	return nRFxHfxoRunning();
+}
+
+int32_t nRFxMpslLfclkRequest(void)
+{
+	uint32_t state;
+	uint32_t src;
+
+	if (!nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src))
+	{
+		return -1;
+	}
+	state = DisableInterrupt();
+	if (s_nRFxMpslLfclkReqCnt == UINT32_MAX ||
+		s_bNRFxLfclkTransition || s_bNRFxLfclkStopPending)
+	{
+		EnableInterrupt(state);
+		return -1;
+	}
+	if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U &&
+		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+		(src & NRFX_LFCLK_SRC_Msk))
+	{
+		EnableInterrupt(state);
+		return -1;
+	}
+	if (s_nRFxMpslLfclkReqCnt == 0U && s_nRFxLfclkReqCnt == 0U &&
+		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
+	{
+		NRF_CLOCK->NRFX_LFCLKSRC = src;
+		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
+		NRF_CLOCK->TASKS_LFCLKSTART = 1U;
+		s_bNRFxMpslLfclkOwned = true;
+	}
+	s_nRFxMpslLfclkReqCnt++;
+	EnableInterrupt(state);
+	return 0;
+}
+
+int32_t nRFxMpslLfclkWait(void)
+{
+	int i;
+
+	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
+	{
+		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U)
+		{
+			return 0;
+		}
+	}
+	return -1;
+}
+
+int32_t nRFxMpslLfclkRelease(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (s_nRFxMpslLfclkReqCnt == 0U)
+	{
+		EnableInterrupt(state);
+		return -1;
+	}
+	s_nRFxMpslLfclkReqCnt--;
+	if (s_nRFxMpslLfclkReqCnt == 0U && s_nRFxLfclkReqCnt == 0U &&
+		s_bNRFxMpslLfclkOwned)
+	{
+		NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
+		s_bNRFxLfclkStopPending = true;
+		s_bNRFxMpslLfclkOwned = false;
+	}
+	EnableInterrupt(state);
+	return 0;
+}
+#endif

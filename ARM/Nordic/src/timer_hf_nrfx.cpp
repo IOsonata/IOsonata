@@ -31,7 +31,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include <atomic>
 
 #ifdef __ICCARM__
 #include "intrinsics.h"
@@ -210,7 +209,6 @@ alignas(4) const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 #endif
 };
 
-static std::atomic<int> s_nRfxHFClockSem(0);
 static bool s_bTimerEnabled[TIMER_NRFX_HF_MAX];
 
 // CLEAR task endpoint given out: a hardware event can clear the counter
@@ -545,24 +543,12 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 		return true;
 	}
 
-	if (s_nRfxHFClockSem == 0)
+	// Shared HFXO request counting belongs in system_clock_nrfx.cpp.
+	if (!SystemHighFreqClockEnable())
 	{
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
-		if (!(NRF_CLOCK->PLL.STAT & CLOCK_PLL_STAT_STATE_Msk))
-		{
-			NRF_CLOCK->TASKS_PLLSTART = 1;
-		}
-#endif
-		// One request for the 32 MHz crystal while timers run, released by
-		// the last Disable
-		if (SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000) == false)
-		{
-			return false;
-		}
+		return false;
 	}
-
 	s_bTimerEnabled[devno] = true;
-	s_nRfxHFClockSem++;
 
 	switch (devno)
 	{
@@ -641,14 +627,8 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 	}
 
 	s_bTimerEnabled[devno] = false;
-	s_nRfxHFClockSem--;
-
 	reg->TASKS_STOP = 1;
-
-	if (s_nRfxHFClockSem == 0)
-	{
-		(void)SystemCoreClockSelect(OSC_TYPE_RC, 0);
-	}
+	SystemHighFreqClockDisable();
 
     switch (devno)
     {

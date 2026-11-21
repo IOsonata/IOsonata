@@ -1,32 +1,166 @@
-# HFXO test with Nordic BLE clock ownership
+# Portable Bluetooth clock test
 
-The existing HfxoTest is the bare-metal test. Each MCU has one IOcomposer managed project with four configurations for
-SoftDevice and MPSL clock ownership.
+`HfxoTestBle` is a common IOsonata application source for Nordic
+SoftDevice, Nordic SDC/MPSL, and STM32WBA. It contains no vendor BLE
+headers, stack-selection macros, vendor initialization calls, or
+vendor-specific clock register access.
 
-| MCU | Project | Configuration | Clock owner |
-| --- | --- | --- | --- |
-| nRF52832 | HfxoTestBle | Debug / Release | S132 SoftDevice |
-| nRF52832 | HfxoTestBle | Debug_SDC / Release_SDC | MPSL |
-| nRF52840 | HfxoTestBle | Debug / Release | S140 SoftDevice |
-| nRF52840 | HfxoTestBle | Debug_SDC / Release_SDC | MPSL |
+The application uses only these IOsonata interfaces:
 
-The Debug/Release configurations call `nrf_sdh_enable_request()` before testing
-`SystemCoreClockSelect()`. Program the matching SoftDevice image before
-starting this application. Use the corresponding IOsonata library build.
+- `BtAppInit()` to initialize Bluetooth and its platform stack
+- `SystemHighFreqClockEnable()` and `SystemHighFreqClockDisable()`
+  to exercise shared clock requests before and after Bluetooth startup
+- `AppRun()` to serve queued Bluetooth events
 
-The Debug_SDC/Release_SDC configurations call `MpslInit()`. MPSL handles the clock requests used by
-SDC, but this example does not initialize the full Bluetooth controller or
-start radio activity. It tests MPSL clock ownership only.
+The board describes its oscillators through `g_McuOsc`; normal
+peripheral applications rely on drivers to request clocks automatically.
 
-Debug and Debug_SDC use `printf` with semihosting. Enable semihosting in
-the debugger. Release and Release_SDC use the board UART at 1000000 baud.
+## Test sequence
 
-The test makes two HFXO requests and releases them in order, reporting the
-running state after each operation. The clock may remain running after the
-last release when another part of the system needs it. The final release
-therefore checks the return value, not whether HFXO stopped. An additional
-release without a matching request must fail.
+1. Request the shared high-frequency clock.
+2. Initialize Bluetooth using `BtAppInit()`.
+3. Request the clock a second time.
+4. Release both requests in reverse order.
+5. Request and release the clock again after Bluetooth initialization.
+6. Print PASS only if all four checked requests and Bluetooth
+   initialization succeed.
+7. Drain UART output and run the generic Bluetooth event loop.
 
-These projects do not test a clock request made before enabling a BLE stack.
-That handover remains unvalidated. No automatic hardware pass is implied by
-a successful build.
+This portable test verifies API availability and request success.
+It **does not** assert a physical oscillator stopped after a logical
+clock release. The STM32WBA high-frequency oscillator may be the core
+system clock and must stay on while the MCU is running.
+
+Release builds use interrupt-driven UART and EasyDMA where supported.
+Debug builds retain semihosting.
+
+## Hardware-specific validation
+
+The former low-level Nordic HFXO diagnostic was preserved at
+`tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp`. It tests
+physical HFXO state, SoftDevice shutdown, and direct-clock
+reacquisition, which do not belong in portable application code.
+
+The vendor diagnostic must be built as an internal platform test
+rather than compiled into the common application.
+
+For the nRF52832 SDC LFRC ownership check, compile the separate
+`tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp` diagnostic with the
+SDC library. It selects LFRC before MPSL initializes, keeps MPSL's own
+LFRC calibration, holds a direct HFXO request across MPSL initialization,
+and reports the physical HFXO state immediately after that request is
+released. Confirm `Select LFRC: PASS` and `Clock survives stack init: PASS`.
+After the pre-stack release, the diagnostic samples HFXO every 10 ms for
+200 samples (2 seconds) and reports how many times it was stopped.
+LFRC calibration can temporarily run HFXO, so one running sample is not
+evidence of a leaked clock reference. If HFXO never stops during this
+window, the diagnostic reports `Pre-stack physical release: FAIL`.
+The portable `HfxoTestBle: PASS` cannot establish physical HFXO release.
+
+The nRF52832 SDC/LFRC hardware test previously recorded zero stopped
+samples out of 200 over two seconds after the pre-stack HFXO release.
+The former internal-MPSL implementation could not release the original
+direct HFXO start.
+
+The new implementation registers external clock control for LFRC as
+well as LFXO. IOsonata now handles LFRC calibration with a separate
+HFXO reference, the CLOCK DONE interrupt, and a four-second calibration
+timer. The change is **not yet built or hardware-validated**. The
+diagnostic must show HFXO stopping between calibration intervals without
+interrupting subsequent clock requests or Bluetooth operation.
+
+## Periodic LFRC calibration test
+
+After the pre-stack handover and five HFXO lifecycle checks, the
+nRF52832 SDC diagnostic observes another 12 seconds. It reads an internal
+counter incremented only when CLOCK reports `EVENTS_DONE`, and samples
+the HFXO state at 100 ms intervals.
+
+Expected after rebuilding the IOsonata library and the diagnostic:
+
+```text
+LFRC calibration: 2 completed in 12 s, HFXO running 0/120, stopped 120/120
+LFRC periodic calibration: PASS
+```
+
+The counts above illustrate the output format, not a predicted hardware
+measurement. The test requires at least two completed calibrations and at
+least one stopped HFXO sample. It verifies periodic calibration of the
+nRF52 CLOCK peripheral with MPSL initialized, **not** BLE advertising,
+connections, LFRC frequency accuracy or temperature compensation. These
+need independent hardware tests before Nordic sign-off.
+
+Do not replace the shared `exemples/misc/hfxo_test_ble.cpp` source
+with Nordic-specific initialization. The LFRC diagnostic was compiled
+in a locally modified Eclipse SDC project and run on nRF52832 hardware;
+a dedicated managed diagnostic project has not yet been committed.
+
+## SDC BLE advertising with LFRC
+
+The nRF52832 `BleAdvertiser` board header sets `MCU_OSC` to a 32 MHz
+HFXO and a 32,768 Hz LFRC with 500 ppm accuracy. Its shared example
+source is unchanged and calls `BtAppInit()`, which starts BLE advertising
+through the Nordic Bluetooth implementation.
+
+Clean-build the nRF52832 IOsonata library and `BleAdvertiser/Release_SDC`
+in IOcomposer, then flash the board. Use a second device with a BLE
+scanner to look for the name `Advertising`. Observe the device for at
+least 30 seconds, longer than the four-second calibration period. The
+device should remain discoverable with repeated advertising packets and
+no resets or hangs. Do not require the manufacturer data counter to
+change: the example currently notes that its advertising-timeout callback
+is not available in the SDC implementation.
+
+Record the advertising result separately from the LFRC clock diagnostic.
+The 12-second `HfxoTestBle` diagnostic confirms calibration completion;
+it does not enable BLE advertising. An on-air scanner confirms radio
+activity but does not measure clock frequency, current, or connection
+stability. Connections must be checked with a connectable BLE example.
+
+## Shared clock requests during BLE writes
+
+The shared `exemples/bluetooth/uart_ble.cpp` example now queues a
+balanced two-request HF clock test each time a client writes the BLE
+UART characteristic. The request check executes on the application
+event queue, not inside the GATT callback. Every 32 completed checks,
+the example logs:
+
+```text
+BLE clock requests: 32 checks, 0 failures
+```
+
+The nRF52832 `UartBleDemo` board description selects 32.768 kHz LFRC
+and the project already has an Eclipse `Release_SDC` configuration.
+
+After updating the branch, clean-build the nRF52832 IOsonata library and
+`UartBleDemo/Release_SDC`. Connect using a BLE UART client and repeatedly
+send data **to the device** for at least 120 seconds. Verify received
+UART bytes and continued BLE connectivity; capture the printed clock
+check count. The counter advances on received GATT writes, not simply
+on elapsed time. It should increase while `failures` remains zero.
+
+This checks balanced generic HF clock requests under connected BLE
+traffic. Data integrity and current consumption require separate
+measurements. The shared UART BLE source is portable and uses no Nordic
+clock registers or stack selection.
+
+## Status
+
+nRF52832 `ClockDemo`, `PowerOffDemo`, portable `HfxoTestBle`
+with S132 and SDC, SDC LFRC ownership, and the periodic calibration
+diagnostic have passed hardware testing. The latest LFRC diagnostic
+completed four calibrations in 12 seconds and observed HFXO stopped
+in all 120 idle samples. On-air LFRC advertising and connection tests
+remain pending.
+
+STM32WBA is deferred until Nordic power and clock work is complete.
+
+The STM32WBA `system_stm32wbaxx.c` implementation provides the generic HF request
+functions by validating that its selected core oscillator is ready.
+It does not gate an oscillator that supplies the CPU.
+
+Run the Nordic clock source checks:
+
+```sh
+python3 tests/nordic/check_clock_hfxo_source.py
+```

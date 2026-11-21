@@ -1,16 +1,12 @@
 /**-------------------------------------------------------------------------
 @example	hfxo_test.cpp
 
-@brief	Nordic high frequency crystal oscillator request test
+@brief	Shared high-frequency clock request test
 
-Checks first request, shared requests and last release through the public
-SystemCoreClockSelect API. Debug writes to the debugger semihosting console.
-Release writes to the board UART at 1 Mbaud. The test reports the HFXO
-running state after each operation and does not initialize a BLE stack.
-
-A BLE stack already enabled by the application must retain ownership of
-CLOCK. Tests of stack initialization and handover require a separate BLE
-example.
+Exercises the generic shared clock request and release API without directly
+accessing MCU registers. Debug uses semihosting; Release uses the board UART
+at 1 Mbaud. Physical oscillator state is checked in MCU-specific tests, not by
+this portable example.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 9, 2026
@@ -44,15 +40,18 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "nrf.h"
 #include "coredev/system_core_clock.h"
 
 #ifdef NDEBUG
 #include "coredev/uart.h"
 #include "syslog.h"
+#include "idelay.h"
 #include "board.h"
 
 #define HFXO_PRINT(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
+
+static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event,
+	uint8_t *pBuffer, int BufferLen);
 
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
@@ -70,7 +69,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 6,
-	.EvtCallback = nullptr,
+	.EvtCallback = HfxoUartEvent,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = nullptr,
@@ -89,10 +88,34 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.bBlocking = true,
 };
 
+static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event,
+	uint8_t *pBuffer, int BufferLen)
+{
+	(void)pDev;
+	(void)pBuffer;
+	(void)BufferLen;
+
+	if (Event == UART_EVT_TXREADY)
+	{
+		__SEV();
+	}
+	return 0;
+}
+
 static void HfxoConsoleInit(void)
 {
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
+}
+
+static void HfxoConsoleDrain(void)
+{
+	// SysLogFlush submits queued records to the transport; it does not
+	// guarantee physical UART completion. Keep the console alive briefly
+	// before leaving this test without inspecting UART driver state.
+	(void)SysLogFlush(SysLogGet());
+	msDelay(100);
+
 }
 #else
 #include <stdio.h>
@@ -101,86 +124,60 @@ static void HfxoConsoleInit(void)
 static void HfxoConsoleInit(void)
 {
 }
+
+static void HfxoConsoleDrain(void)
+{
+}
 #endif
-
-// CLOCK register status: verify the crystal source, not merely HFCLK running.
-static bool HfxoRunning(void)
-{
-	return (NRF_CLOCK->HFCLKSTAT &
-		(CLOCK_HFCLKSTAT_STATE_Msk | CLOCK_HFCLKSTAT_SRC_Msk)) ==
-		(CLOCK_HFCLKSTAT_STATE_Msk |
-		 (CLOCK_HFCLKSTAT_SRC_Xtal << CLOCK_HFCLKSTAT_SRC_Pos));
-}
-
-static void HfxoResult(const char *pName, bool Result, bool Running)
-{
-	HFXO_PRINT("%s: %s, HFXO %s\r\n", pName,
-		Result ? "PASS" : "FAIL",
-		Running ? "running" : "stopped");
-}
 
 int main(void)
 {
-	bool initial;
 	bool first;
 	bool second;
-	bool release1;
-	bool release2;
-	bool running1;
-	bool running2;
-	bool running3;
-	bool final;
-	bool failed;
+	bool third;
 	int pass;
 
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTest\r\n");
 
-	initial = HfxoRunning();
-	HFXO_PRINT("Initial HFXO: %s\r\n", initial ? "running" : "stopped");
+	// Requests must be balanced. Neither the app nor this test selects
+	// oscillator hardware or reads the target's CLOCK registers.
+	first = SystemHighFreqClockEnable();
+	HFXO_PRINT("First enable: %s\r\n", first ? "PASS" : "FAIL");
 
-	first = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
-	running1 = HfxoRunning();
-	second = SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000U);
-	running2 = HfxoRunning();
-	release1 = SystemCoreClockSelect(OSC_TYPE_RC, 0U);
-	running3 = HfxoRunning();
-	release2 = SystemCoreClockSelect(OSC_TYPE_RC, 0U);
-	final = HfxoRunning();
-	failed = SystemCoreClockSelect(OSC_TYPE_RC, 0U) == false;
+	second = first && SystemHighFreqClockEnable();
+	HFXO_PRINT("Second enable: %s\r\n", second ? "PASS" : "FAIL");
 
-	pass = 0;
-	if (first && running1)
+	if (second)
 	{
-		pass++;
+		SystemHighFreqClockDisable();
+		HFXO_PRINT("First request released\r\n");
 	}
-	HfxoResult("First request", first && running1, running1);
-	if (second && running2)
+	if (first)
 	{
-		pass++;
+		SystemHighFreqClockDisable();
+		HFXO_PRINT("Last request released\r\n");
 	}
-	HfxoResult("Second request", second && running2, running2);
-	if (release1 && running3)
+
+	third = SystemHighFreqClockEnable();
+	HFXO_PRINT("Re-enable after release: %s\r\n",
+		third ? "PASS" : "FAIL");
+	if (third)
 	{
-		pass++;
+		SystemHighFreqClockDisable();
 	}
-	HfxoResult("First release", release1 && running3, running3);
-	if (release2 && final == initial)
-	{
-		pass++;
-	}
-	HfxoResult("Last release", release2 && final == initial, final);
-	if (failed)
-	{
-		pass++;
-	}
-	HfxoResult("Unmatched release", failed, final);
-	HFXO_PRINT("HfxoTest: %d/5 checks PASS\r\n", pass);
+
+	// The MCU clock implementation must ignore a release with no active request.
+	SystemHighFreqClockDisable();
+	HFXO_PRINT("Unmatched release requested\r\n");
+
+	pass = (first ? 1 : 0) + (second ? 1 : 0) + (third ? 1 : 0);
+	HFXO_PRINT("HfxoTest: %d/3 requests PASS\r\n", pass);
+	HfxoConsoleDrain();
 
 	while (1)
 	{
 		__WFE();
 	}
-
-	return 0;
+	return pass == 3 ? 0 : 1;
 }

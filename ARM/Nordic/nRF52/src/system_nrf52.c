@@ -152,7 +152,11 @@ uint32_t SystemCoreClockGet(void)
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	// The usDelay loop takes 13 CPU cycles per iteration on nRF52.
+	// The nsDelay SUBS/BNE loop takes 3 cycles per iteration.
+	// nRF52832 ClockDemo measured 235299 us with the previous 3189000
+	// divisor, matching the three-cycle loop at 64 MHz.
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 13000000UL;
 	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
 }
 

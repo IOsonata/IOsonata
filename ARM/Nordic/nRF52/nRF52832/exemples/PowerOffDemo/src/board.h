@@ -49,6 +49,12 @@ SOFTWARE.
 #define UART_TX_PIN			BLYST_NANO_DK_UART_TX_PIN
 #define UART_TX_PINOP		BLYST_NANO_DK_UART_TX_PINOP
 
+// System OFF console: use legacy UART polling so TX can be drained
+// synchronously before the peripheral and clock stop.
+#define POWER_DEMO_UART_INT	false
+#define POWER_DEMO_UART_DMA	false
+#define POWER_DEMO_UART_OFF	1
+
 // Wake up button, to ground
 #define WAKE_BUT_PORT		BLYST_NANO_DK_BUT1_PORT
 #define WAKE_BUT_PIN		BLYST_NANO_DK_BUT1_PIN

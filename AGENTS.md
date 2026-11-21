@@ -467,9 +467,10 @@ quoted source material, and license text.
 - ASCII text in source and project documentation.
 - Tabs for source indentation, matching the existing file.
 - Group file-scope types, constants, globals and function declarations before
-  function implementations. Keep private state in its owning implementation.
-- Local variables may stay in their relevant context; do not move them to
-  function entry merely for declaration placement.
+  function implementations. Do not insert globals between implementations.
+  Keep private state in its owning implementation.
+- Group local variable declarations at the start of each function, before
+  executable statements. Use one statement per line.
 - No template-based replacement for the runtime-polymorphic architecture.
 - Avoid large macro frameworks and broad conditional-compilation designs.
 - Do not introduce `printf` into library paths for diagnostics; use the existing

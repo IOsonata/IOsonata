@@ -81,9 +81,10 @@ void MpslNvmArbiterStop(void);
 /**
  * @brief	Request or release the 32 MHz crystal through MPSL
  *
- * SystemCoreClockSelect calls it for each request of the crystal and for the
- * last release. Once MPSL is initialized it owns CLOCK and the crystal is
- * requested from MPSL. The weak default in system_clock_nrfx.cpp is used when
+ * SystemHighFreqClockEnable calls this helper on the first shared enable,
+ * and SystemHighFreqClockDisable calls it on the final disable. Once MPSL
+ * is initialized it owns CLOCK. The weak default in system_clock_nrfx.cpp
+ * is used when
  * the SoftDevice Controller is not in the build.
  *
  * @param	bOn : true - request and wait until it runs, false - release
@@ -104,6 +105,23 @@ int nRFxMpslHfxo(bool bOn);
  * @return	true - MPSL is initialized
  */
 bool nRFxMpslActive(void);
+// Internal nRF52 external-clock integration callbacks. The MPSL
+// registration implementation calls these functions; applications never do.
+#if defined(NRF52_SERIES)
+void nRFxMpslExternalClockSet(bool Enabled);
+bool nRFxMpslExternalClockGet(void);
+void nRFxMpslHfclkRequest(void);
+void nRFxMpslHfclkRelease(void);
+bool nRFxMpslHfclkIsRunning(void);
+int32_t nRFxMpslLfclkRequest(void);
+int32_t nRFxMpslLfclkRelease(void);
+int32_t nRFxMpslLfclkWait(void);
+void nRFxMpslLfclkCalibrationStart(void);
+bool nRFxMpslLfclkCalibrationIsEnabled(void);
+uint32_t nRFxMpslLfclkCalibrationCount(void);
+void nRFxMpslClockIrq(void);
+#endif
+
 
 #ifdef __cplusplus
 }
