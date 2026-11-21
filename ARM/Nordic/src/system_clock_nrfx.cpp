@@ -609,20 +609,32 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 // clock controller. Wait for DONE outside the interrupt mask. A new LFRC
 // activation must be calibrated before its RTC consumers start counting.
 #define NRFX_LFRC_CAL_TIMEOUT_US	250000U
+#define NRFX_LFRC_CAL_RETRY_US		1000U
 
 static bool nRFxLfclkCalibrate(void)
 {
 	uint32_t elapsed;
+	uint32_t nextRetry;
 
 	NRF_CLOCK->EVENTS_DONE = 0U;
 	NRF_CLOCK->TASKS_CAL = 1U;
 	elapsed = 0U;
+	nextRetry = NRFX_LFRC_CAL_RETRY_US;
 	while (elapsed < NRFX_LFRC_CAL_TIMEOUT_US)
 	{
 		if (NRF_CLOCK->EVENTS_DONE != 0U)
 		{
 			NRF_CLOCK->EVENTS_DONE = 0U;
 			return true;
+		}
+		// nRF5340 revision 1 anomaly 137: a higher priority LFCLK
+		// source requested by the other core can prevent DONE.
+		// Re-trigger every 1 ms; CAL tasks during an active calibration
+		// are ignored by hardware.
+		if (elapsed >= nextRetry)
+		{
+			NRF_CLOCK->TASKS_CAL = 1U;
+			nextRetry += NRFX_LFRC_CAL_RETRY_US;
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
