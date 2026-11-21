@@ -427,7 +427,10 @@ static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
 
 	oldUs = SystemMicroSecLoopCnt;
 	oldNs = SystemnsDelayFactor;
-	measured = (ArmDelayCalibration_t){0};
+	measured.UsCycles = 0U;
+	measured.NsCycles = 0U;
+	measured.CpuHz = 0U;
+	measured.Measured = false;
 	success = ArmDelayCalibrate(&measured, cpuHz);
 	if (success)
 	{
