@@ -1,109 +1,98 @@
 # Clock calibration from AppRun
 
-The System Core calibration API performs one calibration when requested.
-It does not schedule a periodic timer, own an RTC, or depend on AppRun.
-A higher-level subsystem that already uses AppRun can use its Timer event
-to queue calibration as deferred foreground work.
+`SystemHighFreqClockCalibrate()` and `SystemLowFreqClockCalibrate()`
+perform one calibration in the System Core clock owner. Neither function
+creates a timer, owns an RTC or enqueues an AppRun event.
 
-## Example: periodic LFRC calibration
+The optional higher-level `AppClockCalibration` helper attaches to a
+**caller-owned Timer trigger** and queues a one-shot calibration request
+each time that trigger fires. AppRun performs the calibration in foreground
+context. The helper never calls TimerInit, TimerEnable or TimerDisable.
 
-This example owns a low-frequency Timer device. It demonstrates the
-application-side scheduling mechanism, not an automatic System Core
-timer allocation. The application must ensure that the selected timer
-is free and that the configured LFRC is in use.
+## Application example
+
+The application selects and owns its Timer device. A spare compare/trigger
+channel must be available; use a low-frequency timer when calibration
+must continue across System ON sleep.
 
 ```cpp
-#include "coredev/system_core_clock.h"
-#include "coredev/timer.h"
+#include "app_clock_calibration.h"
 #include "app_evt_handler.h"
+#include "coredev/timer.h"
 
-static TimerDev_t s_CalTimer;
-static volatile bool s_bCalQueued;
-static volatile uint32_t s_CalSuccess;
-static volatile uint32_t s_CalFailure;
+static TimerDev_t s_Timer;
+static AppClockCalibration_t s_Calibration;
 
-static void ClockCalibrationWork(uint32_t Event, void *pCtx)
-{
-	bool success;
-
-	(void)Event;
-	(void)pCtx;
-	success = SystemLowFreqClockCalibrate();
-	if (success)
-	{
-		s_CalSuccess++;
-	}
-	else
-	{
-		s_CalFailure++;
-	}
-	s_bCalQueued = false;
-}
-
-static void ClockCalibrationTimer(TimerDev_t *pTimer, uint32_t Event)
-{
-	bool queued;
-
-	(void)pTimer;
-	if ((Event & TIMER_EVT_TRIGGER(0)) == 0U || s_bCalQueued)
-	{
-		return;
-	}
-	s_bCalQueued = true;
-	queued = AppEvtHandlerQue(0U, nullptr, ClockCalibrationWork);
-	if (!queued)
-	{
-		s_bCalQueued = false;
-	}
-}
-
-static bool ClockCalibrationStart(int TimerNo)
+int main(void)
 {
 	TimerCfg_t cfg;
-	uint64_t period;
+	bool started;
 
 	cfg = {};
-	cfg.DevNo = TimerNo;
+	cfg.DevNo = 0;				// Chosen by the application
 	cfg.ClkSrc = TIMER_CLKSRC_DEFAULT;
 	cfg.Freq = 0U;
 	cfg.IntPrio = 6;
-	cfg.EvtHandler = ClockCalibrationTimer;
-	if (!TimerInit(&s_CalTimer, &cfg))
+	cfg.EvtHandler = nullptr;
+	if (!TimerInit(&s_Timer, &cfg))
 	{
-		return false;
+		return 1;
 	}
-	period = nsTimerEnableTrigger(&s_CalTimer, 0, 4000000000ULL,
-		TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
-	if (period == 0U || !TimerEnable(&s_CalTimer))
+	if (!TimerEnable(&s_Timer))
 	{
-		TimerDisableTrigger(&s_CalTimer, 0);
-		TimerDisable(&s_CalTimer);
-		return false;
+		return 1;
 	}
-	return true;
+	started = AppClockCalibrationStart(&s_Calibration, &s_Timer,
+		0, 4000U, false);		// Trigger 0, 4-second LFRC calibration
+	if (!started)
+	{
+		TimerDisable(&s_Timer);
+		return 1;
+	}
+	AppRun();
 }
 ```
 
-After selecting an available timer and starting it, the application's
-main function can call `AppRun()`. The timer IRQ only queues
-`ClockCalibrationWork`; AppRun executes that function when it dispatches
-application events. The callback must **not** call
-`SystemLowFreqClockCalibrate()` from interrupt context because the
-calibration waits for hardware completion.
+The application must configure its board and selected oscillator before
+this example starts. The example assumes that the selected Timer device and
+trigger are available. On nRF5340, the LFRC frequency must be selected
+and the timer must be running, so that the clock owner already has an LFCLK
+reference.
 
-The example uses a four-second period, leaving margin beneath an
-eight-second calibration interval. It coalesces pending requests so a
-slow foreground loop does not accumulate redundant calibration work.
-If `AppEvtHandlerQue()` refuses the event due to a full queue, the next
-timer tick can retry. An application requiring a strict maximum
-interval must account for queue latency, errors, and missed requests.
+The ISR invokes the registered trigger callback, which queues an event
+with `AppEvtHandlerQue`. AppRun executes that event and calls
+`SystemLowFreqClockCalibrate` outside interrupt context. The helper
+coalesces outstanding requests, counts completed calibrations, failures,
+and queue refusals, and never reserves a second Timer device.
 
-The Timer subsystem owns its hardware. System Core never accesses the
-Timer object or the event queue. On nRF5340, the CAL hardware requests
-HFXO temporarily; System Core holds an extra shared LFCLK reference
-during the one-shot operation and releases it afterward.
+To stop periodic calibration:
 
-This example is not automatically compiled into every ClockDemo target.
-Other MCU implementations may return false for unsupported calibration.
-`SystemHighFreqClockCalibrate()` is similarly available for an MCU that
-implements high-frequency RC calibration.
+```cpp
+AppClockCalibrationStop(&s_Calibration);
+TimerDisable(&s_Timer);
+```
+
+Stopping calibration disables only its trigger; the Timer is still owned
+by the application. A queued event is ignored when dispatched after Stop.
+A stopped helper cannot be restarted until that queued event has been
+dispatched; keep the `AppClockCalibration_t` object alive until then.
+
+For a 4-second interval, failures or queue congestion must be monitored.
+A strict 8-second maximum requires verifying ISR delivery, AppRun latency,
+and queue capacity on the target. A periodic Timer event alone does not
+guarantee calibration completion within that interval.
+
+The Core clock API is independent of the application event queue. The
+AppClockCalibration helper is opt-in: application firmware must link
+`src/app_clock_calibration.cpp` and `src/app_evt_handler.cpp` alongside
+its normal Timer implementation. No MCU-specific code or compile switch
+is required in the helper.
+
+The nRF5340 CAL operation itself requests HFXO during calibration.
+The System Clock implementation manages calibration serialization and holds
+a temporary LFCLK reference. The helper does not request HFXO or change
+the selected clock source.
+
+On an MCU that does not implement the calibration API, a request is
+counted as failed. High-frequency RC calibration uses the same helper
+with the final argument set to `true`.
