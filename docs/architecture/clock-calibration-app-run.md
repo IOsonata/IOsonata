@@ -44,6 +44,7 @@ int main(void)
 	}
 	started = AppClockCalibrationStart(&s_Calibration, &s_Timer,
 		0, 4000U, false);		// Trigger 0, 4-second LFRC calibration
+
 	if (!started)
 	{
 		TimerDisable(&s_Timer);
