@@ -397,13 +397,35 @@ the specified range and calibration at least every eight seconds. Clock
 ownership remains in System Clock, including the calibration task and its
 completion/failure handling.
 
+The nRF5340 CAL task itself requests HFXO and releases that request on
+completion. Do not add a second application-level HFXO request around each
+calibration or assume that an application can infer completion from HFXO
+state. The product specification permits both cores to trigger CAL
+independently; each can receive DONE when calibration finishes, while a
+change to the LFCLK source from either core can abort calibration without
+DONE. Error recovery must account for that inter-core behavior.
+
 The initial calibration is implemented in `system_clock_nrfx.cpp` and has
 passed the generic ClockDemo timing check on nRF5340 Application and Network
 cores. A revision 1 hardware anomaly can suppress `DONE` when the other
 core requests a higher-priority LFCLK source; the calibration start now retries
 every millisecond within a bounded wait.
 
-**Periodic calibration is not yet implemented.** It requires a low-power
+**Periodic calibration is not yet implemented.** The following must be
+true before claiming support:
+
+- One timer/alarm implementation owns the hardware counter and compare
+  registers; System Clock is an alarm client and does not select or
+  initialize an application RTC.
+- The scheduler multiplexes multiple clients on a timebase that continues
+  in System ON sleep and honors the timer drivers' allocation rules.
+- Both cores can calibrate LFRC safely, including aborted CAL after another
+  core selects a higher-priority LFCLK source.
+- Clock shutdown cancels pending calibration without affecting another
+  client, and calibration completion never holds HFXO past the required
+  operation.
+
+ It requires a low-power
 scheduler or shared timer alarm that can serve more than one client without
 reinitializing or reserving an application-owned RTC device. The periodic
 scheduler must remain active during low-power System ON sleep, avoid high
