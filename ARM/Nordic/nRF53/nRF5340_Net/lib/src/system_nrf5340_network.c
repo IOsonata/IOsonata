@@ -50,9 +50,7 @@ uint32_t SystemnsDelayFactor = 1000000UL;
 // Overload this variable in application firmware to change oscillator
 __WEAK McuOsc_t g_McuOsc = {
 	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 0 },
-	// Standalone network-core firmware cannot configure the LFXO GPIO pins.
-	// Use LFRC unless a board explicitly provides application-core LFXO setup.
-	.LowPwrOsc = { OSC_TYPE_RC, 32768, 0, 0 },
+	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 0 },
 	.bUSBClk = false
 };
 

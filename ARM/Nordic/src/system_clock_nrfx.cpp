@@ -908,15 +908,20 @@ void SystemLowFreqClockDisable(void)
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t src;
+	uint32_t prevSrc;
 	uint32_t state;
 	bool running;
+	bool owned;
 	bool stopped;
+	bool started;
+	bool restored;
 
 	(void)OscFreq;
 	if (!nRFxLfclkOscSource(ClkSrc, &src) || __get_IPSR() != 0U)
 	{
 		return false;
 	}
+
 	state = DisableInterrupt();
 	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt != 0U ||
 		nRFxMpslActive() || nRFxClockSdEnabled())
@@ -924,36 +929,62 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		EnableInterrupt(state);
 		return false;
 	}
+
 	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
-	if (running && !s_bNRFxLfclkStopPending)
+	prevSrc = NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk;
+	owned = s_bNRFxLfclkOwned;
+	if (running && !s_bNRFxLfclkStopPending && prevSrc ==
+		(src & NRFX_LFCLK_SRC_Msk))
 	{
-		// Never switch a running LFCLK that belongs to another user.
-		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
-			(src & NRFX_LFCLK_SRC_Msk))
-		{
-			EnableInterrupt(state);
-			return false;
-		}
 		g_McuOsc.LowPwrOsc.Type = ClkSrc;
 		g_McuOsc.LowPwrOsc.Freq = 32768U;
 		EnableInterrupt(state);
 		return true;
 	}
+
+	// Never stop a running clock that belongs to the other core or stack.
+	if (running && !owned && !s_bNRFxLfclkStopPending)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
 	s_bNRFxLfclkTransition = true;
 	EnableInterrupt(state);
 
 	stopped = !s_bNRFxLfclkStopPending || nRFxLfclkWaitStopped();
-	state = DisableInterrupt();
-	if (stopped)
+	if (stopped && running && !s_bNRFxLfclkStopPending)
 	{
-		NRF_CLOCK->NRFX_LFCLKSRC = src;
+		NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
+		stopped = nRFxLfclkWaitStopped();
+	}
+	started = stopped && nRFxLfclkStart(src);
+
+	// Failed START issues STOP. Restore a previously running source only
+	// once the failed source's STOP has fully completed.
+	restored = false;
+	if (!started && running && owned && nRFxLfclkWaitStopped())
+	{
+		restored = nRFxLfclkStart(prevSrc);
+	}
+
+	state = DisableInterrupt();
+	if (started)
+	{
 		s_bNRFxLfclkStopPending = false;
+		s_bNRFxLfclkOwned = true;
 		g_McuOsc.LowPwrOsc.Type = ClkSrc;
 		g_McuOsc.LowPwrOsc.Freq = 32768U;
 	}
+	else
+	{
+		s_bNRFxLfclkOwned = restored && owned;
+		s_bNRFxLfclkStopPending = !restored && (running || stopped);
+	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);
-	return stopped;
+
+	return started;
 }
 
 uint32_t SystemPeriphClockGet(int Idx)

@@ -127,13 +127,20 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertNotIn("nRFxHfxoStart(", select)
         self.assertNotIn("nRFxHfxoStop(", select)
 
-    def test_low_frequency_select_does_not_start_clock(self):
+    def test_lf_select_verifies_start_and_rolls_back_when_unowned(self):
         select = function(self.clock, "bool SystemLowFreqClockSelect(",
                           "uint32_t SystemPeriphClockGet(")
-        self.assertIn("g_McuOsc.LowPwrOsc.Type = ClkSrc", select)
         self.assertIn("s_nRFxLfclkReqCnt != 0U", select)
-        self.assertNotIn("nRFxLfclkStart(", select)
-        self.assertNotIn("TASKS_LFCLKSTART", select)
+        self.assertIn("nRFxLfclkStart(src)", select)
+        self.assertIn("nRFxLfclkWaitStopped()", select)
+        self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", select)
+        self.assertIn("restored = nRFxLfclkStart(prevSrc)", select)
+        self.assertIn("s_bNRFxLfclkOwned = true", select)
+        self.assertIn("g_McuOsc.LowPwrOsc.Type = ClkSrc", select)
+        self.assertIn("s_bNRFxLfclkTransition = true", select)
+        self.assertIn("s_bNRFxLfclkTransition = false", select)
+        self.assertLess(select.index("started = stopped && nRFxLfclkStart(src)"),
+                        select.rindex("g_McuOsc.LowPwrOsc.Type = ClkSrc"))
 
     def test_nordic_consumers_use_generic_clock_lifecycle(self):
         hf_timer = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(
