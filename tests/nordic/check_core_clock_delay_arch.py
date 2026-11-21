@@ -25,7 +25,12 @@ class NordicDelayArchitecture(unittest.TestCase):
 					"ArmDelayClockSetDivisors(" in source or
 					"ArmDelayClockInit(" in source
 				)
-				self.assertNotIn("ArmDelayCalibrate(", source)
+				if "nRF5340_" in path:
+					self.assertEqual(source.count("ArmDelayCalibrate("), 1)
+					self.assertLess(source.index("ArmDelayClockInit("),
+						source.index("ArmDelayCalibrate("))
+				else:
+					self.assertNotIn("ArmDelayCalibrate(", source)
 
 	def test_nrf5340_frequency_switch_uses_cached_cost(self):
 		app = (ROOT / NRF[1]).read_text(encoding="utf-8")
@@ -37,10 +42,16 @@ class NordicDelayArchitecture(unittest.TestCase):
 		net = (ROOT / NRF[2]).read_text(encoding="utf-8")
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", net)
 
-	def test_measurement_does_not_run_during_runtime_clock_update(self):
+	def test_dwt_calibration_uses_only_cpu_local_hardware(self):
 		delay = (ROOT / "ARM/include/idelay.h").read_text(encoding="utf-8")
 		test = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
 		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", delay)
+		start = delay.index("static inline bool ArmDelayCalibrate(")
+		end = delay.index("static inline bool DelayCalibrationMeasure(", start)
+		cal = delay[start:end]
+		for forbidden in ("TimerInit(", "TimerEnable(", "TimerGetMicrosecond(",
+			"SystemHighFreqClockEnable(", "SystemLowFreqClockEnable("):
+			self.assertNotIn(forbidden, cal)
 		self.assertIn("DelayCalibrationMeasure(pSample)", test)
 		self.assertIn("DelayCalibrationFromTimer(", test)
 		self.assertNotIn("ArmDelayCalibrate(", test)
