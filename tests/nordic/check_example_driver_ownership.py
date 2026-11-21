@@ -26,6 +26,14 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertNotIn("UARTRx(", source[start:end])
 		self.assertIn("msDelay(2);", source[start:end])
 
+	def test_clock_demo_no_arm_only_delay_factors(self):
+		source = CLOCK.read_text(encoding="utf-8")
+
+		self.assertNotIn("SystemMicroSecLoopCnt", source)
+		self.assertNotIn("SystemnsDelayFactor", source)
+		self.assertIn("msDelay(250);", source)
+		self.assertIn("nsDelay(250000000U);", source)
+
 	def test_clock_demo_peripheral_clock_interface(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("unsigned dividerIdx;", source)
