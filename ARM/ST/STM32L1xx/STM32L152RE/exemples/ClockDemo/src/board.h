@@ -54,8 +54,6 @@ SOFTWARE.
 #define UART_TX_PINOP IOPINOP_FUNC7
 
 // Runtime selectors in this port are stubs; use startup readback and timer operation.
-#define CLOCK_DEMO_SOURCES { {"Startup readback", OSC_TYPE_RC, 0U, 1U, UINT32_MAX, false} }
-#define CLOCK_DEMO_PERIPH_DIVIDERS {}
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif
