@@ -200,6 +200,9 @@ static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
 #endif
 	}
 	(void)Reason;
+	CorePowerTestResult("RAM retention invalid range",
+		!SystemRamRetain(0U, POWER_DEMO_RAM_RET_SIZE, true) &&
+		!SystemRamRetain(POWER_DEMO_RAM_RET_ADDR, 0U, true));
 	CorePowerTestResult("RAM retention enable",
 		SystemRamRetain(POWER_DEMO_RAM_RET_ADDR, POWER_DEMO_RAM_RET_SIZE, true));
 #if defined(POWER_DEMO_RAM_DROP_ADDR)
@@ -353,6 +356,16 @@ static bool CorePowerTestWakePin(uint32_t Caps)
 		IOPINRES_PULLDOWN : IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 	ok = SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
 	CorePowerTestResult("Wake pin configuration", ok);
+	if (!ok)
+	{
+		return false;
+	}
+	CorePowerTestResult("Wake pin invalid index",
+		!SystemWakePin(WAKE_BUT_PORT, -1, WAKE_BUT_SENSE));
+	CorePowerTestResult("Wake pin disable",
+		SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, IOPINSENSE_DISABLE));
+	ok = SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
+	CorePowerTestResult("Wake pin rearm", ok);
 	return ok;
 #else
 	(void)Caps;

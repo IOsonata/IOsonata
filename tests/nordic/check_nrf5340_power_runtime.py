@@ -28,6 +28,13 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("defined(NRF5340_XXAA_NETWORK)", s)
 		self.assertIn("defined(NRF5340_XXAA_APPLICATION)", s)
 
+	def test_reversible_boundaries_exercised(self):
+		s = SRC.read_text(encoding="utf-8")
+		for name in ("RAM retention invalid range", "Wake pin invalid index",
+			"Wake pin disable", "Wake pin rearm",
+			"Retention register invalid index"):
+			self.assertIn(name, s)
+
 	def test_board_describes_resources_not_test_modes(self):
 		for core in ("nRF5340_App", "nRF5340_Net"):
 			p = ROOT / "ARM/Nordic/nRF53" / core / "exemples/CorePowerTest/src/board.h"
