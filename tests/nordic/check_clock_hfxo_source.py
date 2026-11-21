@@ -53,6 +53,9 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("SystemLowFreqClockEnable()", lf)
         self.assertIn("success = nRFxLfclkCalibrate();", lf)
         self.assertIn("SystemLowFreqClockDisable();", lf)
+        self.assertIn("s_bNRFxLfclkCalibrating = true;", lf)
+        self.assertGreaterEqual(lf.count("s_bNRFxLfclkCalibrating = false;"), 2)
+        self.assertIn("!s_bNRFxLfclkCalibrating", lf)
         self.assertNotIn("TimerInit(", lf)
         self.assertNotIn("RTC", lf)
 
