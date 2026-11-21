@@ -71,11 +71,12 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("nextRetry += NRFX_LFRC_CAL_RETRY_US", calibration)
         startup = function(self.clock, "static bool nRFxLfclkStart(",
                            "static bool nRFxLfclkWaitStopped(")
-        self.assertIn("#if defined(NRF53_SERIES)", startup)
+        self.assertIn("nRFxLfclkFinishStart(Src)", startup)
         self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", startup)
         self.assertIn("nRFxLfclkFinishStart(Src)", startup)
         ready = function(self.clock, "static bool nRFxLfclkFinishStart(",
                          "static bool nRFxLfclkStart(")
+        self.assertIn("#if defined(NRF53_SERIES)", ready)
         self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", ready)
         self.assertIn("NRFX_LFCLK_SRC_XTAL", ready)
         self.assertIn("return nRFxLfclkCalibrate();", ready)
