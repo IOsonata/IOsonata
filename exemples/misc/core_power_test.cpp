@@ -95,32 +95,43 @@ static volatile uint32_t * const s_DropRam = (volatile uint32_t *)POWER_DEMO_RAM
 
 static void CorePowerTestPut(const char *pText)
 {
-	uint8_t c;
+	int remaining;
+	int sent;
 
-	while (*pText != 0)
+	remaining = 0;
+	while (pText[remaining] != 0)
 	{
-		c = (uint8_t)*pText++;
-		while (s_Uart.Tx(&c, 1) != 1)
+		remaining++;
+	}
+	while (remaining > 0)
+	{
+		sent = s_Uart.Tx((const uint8_t *)pText, remaining);
+		if (sent > 0)
 		{
+			pText += sent;
+			remaining -= sent;
 		}
 	}
 }
 
 static void CorePowerTestNumber(uint32_t Value)
 {
-	uint8_t c;
+	char output[11];
 	uint8_t digit;
 	int shift;
+	int i;
 
-	CorePowerTestPut("0x");
+	output[0] = '0';
+	output[1] = 'x';
+	i = 2;
 	for (shift = 28; shift >= 0; shift -= 4)
 	{
 		digit = (uint8_t)((Value >> shift) & 15U);
-		c = (uint8_t)(digit < 10U ? '0' + digit : 'A' + digit - 10U);
-		while (s_Uart.Tx(&c, 1) != 1)
-		{
-		}
+		output[i] = (char)(digit < 10U ? '0' + digit : 'A' + digit - 10U);
+		i++;
 	}
+	output[i] = 0;
+	CorePowerTestPut(output);
 }
 
 static void CorePowerTestResult(const char *pName, bool Pass)

@@ -39,6 +39,12 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("defined(NRF5340_XXAA_NETWORK)", s)
 		self.assertIn("defined(NRF5340_XXAA_APPLICATION)", s)
 
+	def test_console_uses_buffered_uart_submission(self):
+		s = SRC.read_text(encoding="utf-8")
+		self.assertIn("sent = s_Uart.Tx((const uint8_t *)pText, remaining);", s)
+		self.assertIn("CorePowerTestPut(output);", s)
+		self.assertNotIn("s_Uart.Tx(&c, 1)", s)
+
 	def test_vmc_retention_write_is_verified(self):
 		backend = NRF.read_text(encoding="utf-8")
 		self.assertIn("SYS_PWR_VMC->RAM[blk].POWER & msk", backend)
