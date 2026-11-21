@@ -26,12 +26,18 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertNotIn("UARTRx(", source[start:end])
 		self.assertIn("msDelay(2);", source[start:end])
 
-	def test_clock_demo_apb_divider_iteration(self):
+	def test_clock_demo_peripheral_clock_interface(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("unsigned dividerIdx;", source)
-		self.assertIn("for (dividerIdx = 0U;", source)
-		self.assertIn("divider = s_ApbDividers[dividerIdx];", source)
-		self.assertNotIn("for (divider : s_ApbDividers)", source)
+		self.assertIn("for (dividerIdx = 0U; dividerIdx <= dividerCount;", source)
+		self.assertIn("divider = dividerIdx == 0U ? 1U :", source)
+		self.assertIn("actual = SystemPeriphClockSet(0, request);", source)
+		self.assertIn("readback = SystemPeriphClockGet(0);", source)
+		self.assertIn("actual != 0U &&", source)
+		self.assertIn("readback == actual", source)
+		self.assertNotIn("CLOCK_DEMO_APB_READONLY", source)
+		self.assertNotIn("CLOCK_DEMO_APB_SHARED_CORE", source)
+		self.assertNotIn('ClockDemoResult("APB"', source)
 
 	def test_clock_demo_finishes_last_print(self):
 		source = CLOCK.read_text(encoding="utf-8")
