@@ -201,6 +201,29 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertNotIn("SystemHighFreqClockEnable()", gatt)
         self.assertNotIn("nRFxMpsl", source)
 
+    def test_nrf52840_dk_ble_pin_maps(self):
+        base = ROOT / "ARM/Nordic/nRF52/nRF52840/exemples"
+        advertiser = (base / "BleAdvertiser/src/board.h").read_text(
+            encoding="utf-8")
+        uart = (base / "UartBleDemo/src/board.h").read_text(
+            encoding="utf-8")
+        for source in (advertiser, uart):
+            self.assertIn("#define NORDIC_DK", source)
+            self.assertIn("#define UART_RX_PIN", source)
+            self.assertIn("#define UART_TX_PIN", source)
+            self.assertIn("#define MCU_OSC", source)
+            self.assertLess(source.index("#define MCU_OSC"),
+                            source.index("#ifdef NORDIC_DK"))
+        self.assertIn("#define LED_PINS_MAP", advertiser)
+        for pin in ("13", "14", "15", "16"):
+            self.assertIn("{0, " + pin + ", 0, IOPINDIR_OUTPUT", advertiser)
+        self.assertIn("#define BUTTON_PINS", uart)
+        self.assertIn("#define LED_PINS", uart)
+        self.assertIn("#define BUT1_PIN", uart)
+        self.assertIn("#define BUT2_PIN", uart)
+        self.assertIn("#define CONNECT_LED_PIN", uart)
+        self.assertIn("#define UART_PINS", uart)
+
     def test_nrf52840_ble_boards_select_lfrc(self):
         base = ROOT / "ARM/Nordic/nRF52/nRF52840/exemples"
         for project in ("BleAdvertiser", "UartBleDemo"):
