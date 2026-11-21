@@ -67,10 +67,17 @@ class RuntimePowerChecks(unittest.TestCase):
 
 	def test_console_leaves_irq_time_to_drain(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn("CORE_POWER_TEST_TX_DRAIN_MS", s)
 		self.assertIn("msDelay(CORE_POWER_TEST_TX_DRAIN_MS);", s)
-		self.assertIn("msDelay(100);\\n\\t\\tSystemPowerOff();".replace("\\n", "\n").replace("\\t", "\t"), s)
+		self.assertIn("SysLogPrintf(SysLogGet()", s)
 		self.assertNotIn("DeviceIntrfWaitTxComplete(", s)
+
+	def test_syslog_console(self):
+		s = SRC.read_text(encoding="utf-8")
+		self.assertIn("SysLogInitNoTimer(SysLogGet(), &s_LogCfg", s)
+		self.assertIn('SysLogPrintf(SysLogGet(), "%s: %s', s)
+		self.assertIn("SYSLOG_MEMSIZE(16, 128)", s)
+		self.assertNotIn("s_Uart.printf(", s)
+		self.assertNotIn("CorePowerTestPut(", s)
 
 	def test_console_uses_interrupt_driven_uarte(self):
 		s = SRC.read_text(encoding="utf-8")

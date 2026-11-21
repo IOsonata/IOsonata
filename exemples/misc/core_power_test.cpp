@@ -18,6 +18,7 @@ MIT License. Copyright (c) 2026, I-SYST inc.
 #include "coredev/timer.h"
 #include "coredev/system_core_clock.h"
 #include "idelay.h"
+#include "syslog.h"
 #include "board.h"
 
 // The current CorePowerTest requires the power API implementation to
@@ -81,6 +82,14 @@ static const TimerCfg_t s_TimerCfg = {
 	.IntPrio = 6,
 };
 
+alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(16, 128)];
+static const SysLogCfg_t s_LogCfg = {
+	.pMem = s_LogMem,
+	.MemSize = sizeof(s_LogMem),
+	.RecordLen = 128,
+	.bBlocking = true,
+};
+
 static UART s_Uart;
 static TimerDev_t s_WakeTimer;
 static volatile bool s_TimerWoke;
@@ -95,17 +104,6 @@ static volatile uint32_t * const s_DropRam = (volatile uint32_t *)POWER_DEMO_RAM
 #endif
 #endif
 
-// UART::printf queues formatted text; the enabled TX interrupt owns
-// transfer completion. The pause protects test records and System OFF.
-static void CorePowerTestPut(const char *pText)
-{
-	s_Uart.printf("%s", pText);
-	if (pText[0] != 0)
-	{
-		msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
-	}
-}
-
 static void CorePowerTestResult(const char *pName, bool Pass)
 {
 	s_Checks++;
@@ -113,21 +111,18 @@ static void CorePowerTestResult(const char *pName, bool Pass)
 	{
 		s_Failures++;
 	}
-	s_Uart.printf("%s: %s\r\n", pName, Pass ? "PASS" : "FAIL");
-	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
+	SysLogPrintf(SysLogGet(), "%s: %s\r\n", pName, Pass ? "PASS" : "FAIL");
 }
 
 static void CorePowerTestUnsupported(const char *pName)
 {
-	s_Uart.printf("%s: UNSUPPORTED\r\n", pName);
-	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
+	SysLogPrintf(SysLogGet(), "%s: UNSUPPORTED\r\n", pName);
 }
 
 static void CorePowerTestSummary(void)
 {
-	s_Uart.printf("CorePowerTest complete: 0x%08x failures, 0x%08x checks\r\n",
+	SysLogPrintf(SysLogGet(), "CorePowerTest complete: 0x%08x failures, 0x%08x checks\r\n",
 		(unsigned)s_Failures, (unsigned)s_Checks);
-	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 }
 
 static uint32_t CorePowerTestRamPattern(uint32_t Idx)
@@ -180,7 +175,7 @@ static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
 				unchanged++;
 			}
 		}
-		s_Uart.printf("RAM non-retention unchanged words 0x%08x / 0x%08x\r\n",
+		SysLogPrintf(SysLogGet(), "RAM non-retention unchanged words 0x%08x / 0x%08x\r\n",
 			(unsigned)unchanged, (unsigned)count);
 		msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 		valid = unchanged != count;
@@ -289,7 +284,7 @@ static void CorePowerTestSleep(uint32_t Caps)
 			CorePowerTestResult("Wake timer enable", false);
 			return;
 		}
-		CorePowerTestPut("Entering Standby; automatic timer wake\r\n");
+		SysLogPrintf(SysLogGet(), "Entering Standby; automatic timer wake\r\n");
 		// All pending test output must finish before CPU sleep.
 		msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 		state = DisableInterrupt();
@@ -324,7 +319,7 @@ static void CorePowerTestSleep(uint32_t Caps)
 			}
 		}
 		CorePowerTestResult("Static/stack RAM after resume", ok);
-		s_Uart.printf("Standby cycle 0x%08x\r\n", (unsigned)(cycle + 1U));
+		SysLogPrintf(SysLogGet(), "Standby cycle 0x%08x\r\n", (unsigned)(cycle + 1U));
 		msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 	}
 }
@@ -375,7 +370,11 @@ int main(void)
 	{
 		return 1;
 	}
-	CorePowerTestPut("CorePowerTest\r\n");
+	if (!SysLogInitNoTimer(SysLogGet(), &s_LogCfg, (DevIntrf_t *)s_Uart, 0, 0))
+	{
+		return 1;
+	}
+	SysLogPrintf(SysLogGet(), "CorePowerTest\r\n");
 	s_Checks = 0U;
 	s_Failures = 0U;
 	if (SystemPowerCapabilitiesGet == nullptr)
@@ -385,10 +384,10 @@ int main(void)
 		return 1;
 	}
 	caps = SystemPowerCapabilitiesGet();
-	s_Uart.printf("Capabilities 0x%08x\r\n", (unsigned)caps);
+	SysLogPrintf(SysLogGet(), "Capabilities 0x%08x\r\n", (unsigned)caps);
 	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 	reason = SystemResetReason();
-	s_Uart.printf("Reset reason 0x%08x\r\n", (unsigned)reason);
+	SysLogPrintf(SysLogGet(), "Reset reason 0x%08x\r\n", (unsigned)reason);
 	msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 	CorePowerTestResult("Reset reason stable", SystemResetReason() == reason);
 
@@ -443,7 +442,7 @@ int main(void)
 		{
 			(void)SystemRetRegWrite(1, CORE_POWER_TEST_MARKER);
 		}
-		CorePowerTestPut("Entering System OFF; press wake button\r\n");
+		SysLogPrintf(SysLogGet(), "Entering System OFF; press wake button\r\n");
 #if defined(WAKE_BUT_PIN)
 		// Do not immediately wake if the button is still held.
 		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
