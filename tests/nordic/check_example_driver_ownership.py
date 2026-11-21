@@ -154,5 +154,17 @@ class DemoDriverOwnership(unittest.TestCase):
 				self.assertIsNone(fields.search(source))
 
 
+	def test_lfrc_diagnostics_are_deferred_and_board_scoped(self):
+		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
+		project = (ROOT / "ARM/Nordic/nRF52/nRF52840/lib/ioc/.cproject").read_text(encoding="utf-8")
+		advertiser = (ROOT / "exemples/bluetooth/ble_advertiser.cpp").read_text(encoding="utf-8")
+		self.assertIn("static void nRFxMpslCalibrationLog(", clock)
+		self.assertIn("AppEvtHandlerQue(0U, nullptr, nRFxMpslCalibrationLog)", clock)
+		self.assertIn('SysLogPrintf(SysLogGet(), "LFRC calibration: completed=%lu', clock)
+		self.assertEqual(project.count('value="NRFX_LFRC_CAL_LOG"'), 4)
+		self.assertNotIn("nRFxMpslLfclkCalibrationCount(", advertiser)
+		self.assertNotIn("NRF_CLOCK->", advertiser)
+
+
 if __name__ == "__main__":
 	unittest.main()
