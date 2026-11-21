@@ -51,6 +51,8 @@ SOFTWARE.
 #define CLOCK_DEMO_IRQ_PRIORITY 6
 #endif
 
+#define CLOCK_TEST_CYCLES	3U
+
 // The generic API is declared for every target. A weak reference lets the
 // diagnostic report a missing MCU implementation instead of failing at link
 // time. A missing operation is a test failure, never an implicit PASS.
@@ -441,20 +443,21 @@ int main(void)
 #endif
 
 	domainCount = 0U;
-	for (cycle = 1U; cycle <= CLOCK_DEMO_CYCLES; cycle++)
+	for (cycle = 1U; cycle <= CLOCK_TEST_CYCLES; cycle++)
 	{
 		ClockDemoPrint("Cycle %u\r\n", cycle);
 		for (sourceIdx = 0U; sourceIdx < sizeof(s_Sources) / sizeof(s_Sources[0]); sourceIdx++)
 		{
 			pSource = &s_Sources[sourceIdx];
-			ClockDemoPrint("%s %s\r\n", pSource->Select ? "Selecting" : "Checking",
-				pSource->pName);
-			ClockDemoFlush();
-			selected = true;
-			if (pSource->Select)
+			if (!pSource->Select)
 			{
-				selected = SystemCoreClockSelect(pSource->Type, pSource->Frequency);
+				ClockDemoPrint("%s: UNSUPPORTED (selection not configured)\r\n",
+					pSource->pName);
+				continue;
 			}
+			ClockDemoPrint("Selecting %s\r\n", pSource->pName);
+			ClockDemoFlush();
+			selected = SystemCoreClockSelect(pSource->Type, pSource->Frequency);
 			core = SystemCoreClockGet();
 			ClockDemoResult(pSource->pName, selected && core >= pSource->CoreMin && core <= pSource->CoreMax);
 			if (!selected || core < pSource->CoreMin || core > pSource->CoreMax)
@@ -529,7 +532,7 @@ int main(void)
 	timerCount = lowTimerCount + highTimerCount;
 	if (timerCount == 0)
 	{
-		ClockDemoPrint("Timers: UNSUPPORTED (no devices)\r\n");
+		ClockDemoResult("Timer devices available", false);
 	}
 	for (timerDevNo = 0; timerDevNo < timerCount; timerDevNo++)
 	{
