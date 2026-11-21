@@ -32,6 +32,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf53_approtect.h"
 
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 /*lint ++flb "Enter library region" */
 
 void SystemStoreFICRNS(void);
@@ -80,15 +81,23 @@ uint32_t SystemCoreClockGet(void)
 
 void SystemCoreClockUpdate(void)
 {
+	static uint32_t s_CalibratedClockHz;
+	uint32_t cpuHz;
+
 #if defined(NRF_TRUSTZONE_NONSECURE)
-    SystemCoreClock = __SYSTEM_CLOCK_MAX >> (NRF_CLOCK_NS->HFCLKCTRL & (CLOCK_HFCLKCTRL_HCLK_Msk));
+	cpuHz = __SYSTEM_CLOCK_MAX >>
+		(NRF_CLOCK_NS->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk);
 #else
-    SystemCoreClock = __SYSTEM_CLOCK_MAX >> (NRF_CLOCK_S->HFCLKCTRL & (CLOCK_HFCLKCTRL_HCLK_Msk));
+	cpuHz = __SYSTEM_CLOCK_MAX >>
+		(NRF_CLOCK_S->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk);
 #endif
-	// PCA10121 TIMER measured 438251 us for a 250000 us delay at 64 MHz.
-	// Adjust the microsecond busy loop from 16 to 28 cycles per iteration.
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 28000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+
+	SystemCoreClock = cpuHz;
+
+	if (s_CalibratedClockHz != cpuHz && ArmDelayCalibrate(cpuHz))
+	{
+		s_CalibratedClockHz = cpuHz;
+	}
 }
 
 void SystemInit(void)
