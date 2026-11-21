@@ -51,7 +51,8 @@ static inline bool ArmDelayCalibrate(uint32_t CpuHz)
 	uint64_t scale;
 	bool valid;
 
-	if (CpuHz == 0U || (DWT->CTRL & DWT_CTRL_NOCYCCNT_Msk) != 0U)
+	if (CpuHz == 0U || __get_IPSR() != 0U ||
+		(DWT->CTRL & DWT_CTRL_NOCYCCNT_Msk) != 0U)
 	{
 		return false;
 	}
