@@ -64,7 +64,7 @@ extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = IRC_FREQ;	// System Clock Frequency (Core Clock)
 uint32_t SystemMainClkFreq = IRC_FREQ;		// System clock frequency, reset default IRC
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 static uint32_t s_SysOscFreq = OSC_FREQ;
 
