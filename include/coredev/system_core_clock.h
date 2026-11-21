@@ -210,6 +210,33 @@ static inline uint32_t GetHighFreqLoadCap(void) { return g_McuOsc.CoreOsc.LoadCa
 static inline const OscDesc_t *GetHighFreqOscDesc(void) { return &g_McuOsc.CoreOsc; }
 
 /**
+ * @brief CPU operating power mode while application code continues executing.
+ *
+ * PERFORMANCE is the fastest supported operating CPU frequency configured
+ * by SystemInit. LOW_POWER selects a supported reduced-power running mode.
+ * Neither mode enters sleep or powers off the MCU. Peripheral clock and
+ * timing requirements remain owned by the MCU and peripheral drivers.
+ */
+typedef enum {
+	SYSTEM_POWER_MODE_PERFORMANCE = 0,
+	SYSTEM_POWER_MODE_LOW_POWER = 1
+} SYSTEM_POWER_MODE;
+
+/**
+ * @brief Select a CPU running power mode.
+ *
+ * A transition unsupported by the MCU or its current clock ownership must
+ * return false without changing the operating mode. This API is for
+ * foreground use, not an interrupt handler. It does not call SystemSleep.
+ *
+ * @return true if the requested mode is active.
+ */
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode);
+
+/** @brief Return the currently active CPU running power mode. */
+SYSTEM_POWER_MODE SystemPowerModeGet(void);
+
+/**
  * @brief	Select core clock oscillator type
  *
  * Selects the MCU core clock source. This does not enable or disable
