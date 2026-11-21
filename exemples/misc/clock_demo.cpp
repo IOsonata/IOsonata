@@ -367,6 +367,14 @@ static void ClockDemoConcurrentTimerTest(int LowCount, int HighCount)
 	second = TimerInit(&s_RetainedTimer, &secondCfg);
 	if (!first || !second)
 	{
+		if (first)
+		{
+			TimerDisable(&s_Timer);
+		}
+		if (second)
+		{
+			TimerDisable(&s_RetainedTimer);
+		}
 		ClockDemoResult("Concurrent timer initialization", false);
 		return;
 	}
