@@ -19,7 +19,7 @@ class PowerApiTest(unittest.TestCase):
 
 	def test_report_after_ram_check(self):
 		s = SRC.read_text(encoding="utf-8")
-		standby = s[s.index("int main()"):s.index("#else\\n\\tuint32_t reason;", s.index("int main()"))]
+		standby = s[s.index("int main()"):s.index("#else\n\tuint32_t reason;", s.index("int main()"))]
 		self.assertLess(standby.index('PowerApiTestResult("SRAM sample:'),
 			standby.rindex("PowerApiTestSummary();"))
 		self.assertIn("PowerApiTest complete:", s)
