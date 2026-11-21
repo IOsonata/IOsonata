@@ -201,6 +201,19 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertNotIn("SystemHighFreqClockEnable()", gatt)
         self.assertNotIn("nRFxMpsl", source)
 
+    def test_nrf52840_ble_boards_select_lfrc(self):
+        base = ROOT / "ARM/Nordic/nRF52/nRF52840/exemples"
+        for project in ("BleAdvertiser", "UartBleDemo"):
+            with self.subTest(project=project):
+                board = (base / project / "src/board.h").read_text(
+                    encoding="utf-8")
+                self.assertIn("#define MCU_OSC", board)
+                self.assertIn("OSC_TYPE_XTAL, 32000000U, 20U", board)
+                self.assertIn("OSC_TYPE_RC, 32768U, 500U", board)
+                project_file = (base / project / "ioc/.cproject").read_text(
+                    encoding="utf-8")
+                self.assertIn('name="Release_SDC"', project_file)
+
     def test_nrf52832_advertiser_uses_lfrc_board_configuration(self):
         board = (ROOT / "ARM/Nordic/nRF52/nRF52832/exemples/BleAdvertiser/src/board.h").read_text(
             encoding="utf-8")
