@@ -67,12 +67,10 @@ SOFTWARE.
 
 // Internal sources only; external crystal frequency is not assumed.
 #define CLOCK_DEMO_SOURCES { {"HOCO 48 MHz", OSC_TYPE_RC, 48000000U, 1U, UINT32_MAX} }
-#define CLOCK_DEMO_APB_DIVIDERS {1U}
+#define CLOCK_DEMO_PERIPH_DIVIDERS {1U}
 #define CLOCK_DEMO_LF_SOURCES { {"LOCO", OSC_TYPE_RC, 32768U} }
 #define CLOCK_DEMO_TIMER_DEVNO TimerGetLowFreqDevCount()
 #define CLOCK_DEMO_CYCLES 3U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
-#define CLOCK_DEMO_STOP_UART 1
-#define CLOCK_DEMO_DEFER_TIMER 1
 
 #endif
