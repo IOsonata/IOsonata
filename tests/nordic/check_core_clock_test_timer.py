@@ -23,10 +23,9 @@ class CoreClockTestTimer(unittest.TestCase):
             timer.index("count = s_InterruptCount;"),
         )
 
-
     def test_low_frequency_timer_has_independent_hf_reference(self):
         source = TEST.read_text(encoding="utf-8")
-        start = source.index("static void CoreClockTestTimer(int DevNo)\\n{")
+        start = source.index("static void CoreClockTestTimer(int DevNo)\n{")
         end = source.index("// Check that disabling one timer", start)
         timer = source[start:end]
         self.assertIn("DevNo < TimerGetLowFreqDevCount()", timer)
