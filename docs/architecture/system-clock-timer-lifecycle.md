@@ -2,7 +2,7 @@
 
 Status: architecture decision and active implementation for IOsonata 0.14.
 The generic clock Enable/Disable declarations and Nordic implementation
-are present on `refactor_nordic_clock_ownership_014`. Other MCU ports are
+are present on `refactor_nrf5340_power_clock_014`. Other MCU ports are
 not yet implemented or validated for these functions. The Nordic changes
 still require focused builds and hardware retesting; this document is not
 hardware PASS evidence.
