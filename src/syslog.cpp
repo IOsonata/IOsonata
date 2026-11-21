@@ -168,8 +168,8 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 		return false;
 	}
 
-	pLog->pSink = pSink;
-	pLog->SinkAddr = SinkAddr;
+	pLog->pSink = nullptr;
+	pLog->SinkAddr = 0U;
 	pLog->pTimer = nullptr;
 	pLog->FormatTime = nullptr;
 	pLog->MinType = MinType & SYSSTATUS_TYPE_MASK;
@@ -178,6 +178,7 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 	pLog->HeadSent = 0U;
 	pLog->bFlushing = false;
 	pLog->Marker = SYSLOG_INIT_MARKER;
+	SysLogSetSink(pLog, pSink, SinkAddr);
 
 	return true;
 }
@@ -211,13 +212,24 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 		return;
 	}
 
-	// A different sink has none of the head record, so it gets all of it.
+	// Never override an application-owned event callback. Release only
+	// a callback SysLog installed when detaching or switching sinks.
+	if (pLog == SysLogGet() && pLog->pSink != nullptr &&
+		pLog->pSink != pSink &&
+		pLog->pSink->EvtCB == SysLogDevIntrfEvent)
+	{
+		pLog->pSink->EvtCB = nullptr;
+	}
 	if (pSink != pLog->pSink || SinkAddr != pLog->SinkAddr)
 	{
 		pLog->HeadSent = 0U;
 	}
 	pLog->pSink = pSink;
 	pLog->SinkAddr = SinkAddr;
+	if (pLog == SysLogGet() && pSink != nullptr && pSink->EvtCB == nullptr)
+	{
+		pSink->EvtCB = SysLogDevIntrfEvent;
+	}
 }
 
 // Send records until the store is empty or the sink stops taking bytes.
@@ -283,6 +295,25 @@ static bool SysLogDrain(SysLog_t * const pLog, int *pTotal, int *pErr)
 		pLog->HeadIdx = head + 1U;
 		(void)CFifoGet(pLog->hFifo);
 	}
+}
+
+int SysLogDevIntrfEvent(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+		uint8_t *pBuffer, int Len)
+{
+	SysLog_t *pLog;
+
+	(void)pBuffer;
+	(void)Len;
+	if (pDev == nullptr || EvtId != DEVINTRF_EVT_TX_READY)
+	{
+		return 0;
+	}
+	pLog = SysLogGet();
+	if (pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink != pDev)
+	{
+		return 0;
+	}
+	return SysLogFlush(pLog);
 }
 
 int SysLogFlush(SysLog_t * const pLog)

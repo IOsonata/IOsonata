@@ -93,6 +93,20 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertEqual(s.count("CorePowerTestDrainLog();"), 10)
 		self.assertNotIn("SysLogVPrintf(", s)
 
+	def test_syslog_uses_generic_device_intrf_ready_event(self):
+		header = (ROOT / "include/syslog.h").read_text(encoding="utf-8")
+		impl = (ROOT / "src/syslog.cpp").read_text(encoding="utf-8")
+		uart = (ROOT / "ARM/Nordic/src/uart_nrfx.cpp").read_text(encoding="utf-8")
+		self.assertIn("int SysLogDevIntrfEvent(DevIntrf_t * const pDev", header)
+		self.assertIn("DEVINTRF_EVT_TX_READY", impl)
+		self.assertIn("pSink->EvtCB == nullptr", impl)
+		self.assertIn("pSink->EvtCB = SysLogDevIntrfEvent;", impl)
+		self.assertIn("pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY", uart)
+		self.assertIn("return SysLogFlush(pLog);", impl)
+		self.assertNotIn("UARTDev_t", header)
+		self.assertNotIn("UART_EVT", header)
+		self.assertNotIn('#include "coredev/uart.h"', header)
+
 	def test_syslog_has_no_uart_specific_dependencies(self):
 		s = SRC.read_text(encoding="utf-8")
 		header = (ROOT / "include/syslog.h").read_text(encoding="utf-8")

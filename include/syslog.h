@@ -271,6 +271,17 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 int SysLogFlush(SysLog_t * const pLog);
 
 /**
+ * @brief Generic DeviceIntrf transmit-ready callback for the global logger.
+ *
+ * SysLog installs this callback when a sink has no existing EvtCB.
+ * Applications can replace EvtCB; when they do, they own SysLogFlush.
+ * The sink driver must generate DEVINTRF_EVT_TX_READY when TX FIFO
+ * capacity becomes available. No transport-specific API is required.
+ */
+int SysLogDevIntrfEvent(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+		uint8_t *pBuffer, int Len);
+
+/**
  * Format and store one status record.
  * No-op when the instance is not initialized (no SYSLOG_INIT_MARKER), when the
  * store is full under the blocking policy, or when the type field is below
