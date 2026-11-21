@@ -160,6 +160,15 @@ it on their direct clock assignments during transitions and fallback. ResetEntry
 no longer overwrites the port calibration after startup. Rebuild the library
 and application together when changing from the former integer count.
 
+The nRF5340 Application and Network cores now measure both existing assembly
+delay loops with the CPU's DWT cycle counter. SystemCoreClockUpdate derives
+SystemMicroSecLoopCnt and SystemnsDelayFactor independently from the measured
+cycle counts and the actual configured CPU clock frequency. The Application
+core repeats measurement when CPU frequency changes. The shared usDelay,
+nsDelay and msDelay implementations are unchanged. DWT state and interrupt
+masking are restored after measurement; unavailable cycle counting is reported
+by the calibration function rather than inventing measured factors.
+
 The shared idelay.h calculation has no MCU-specific path. SAMD supplies its
 13-cycle calibration from system_samd.c. Other ARM ports retain their existing
 16-cycle calibration; their physical loop timing still needs board measurement.
