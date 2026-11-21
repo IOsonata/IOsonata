@@ -130,7 +130,7 @@ class DemoDriverOwnership(unittest.TestCase):
 			ROOT / "exemples/misc/hfxo_test_ble.cpp",
 			ROOT / "exemples/bluetooth/uart_ble_central.cpp",
 		)
-		fields = re.compile(r"\\b(?:hTxFifo|hRxFifo|TxDropCnt|bTxReady|pDevData)\\b")
+		fields = re.compile(r"\b(?:hTxFifo|hRxFifo|TxDropCnt|bTxReady|pDevData)\b")
 		for path in paths:
 			with self.subTest(path=path.name):
 				source = path.read_text(encoding="utf-8")
