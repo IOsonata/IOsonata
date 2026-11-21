@@ -25,6 +25,7 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 #define __IDELAY_CLOCK_H__
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -58,7 +59,7 @@ static inline bool ArmDelayClockUpdate(ArmDelayCalibration_t *pCal, uint32_t Cpu
 	uint64_t usFactor;
 	uint64_t nsFactor;
 
-	if (pCal == nullptr || CpuHz == 0U ||
+	if (pCal == NULL || CpuHz == 0U ||
 		pCal->UsCycles == 0U || pCal->NsCycles == 0U)
 	{
 		return false;
@@ -87,7 +88,7 @@ static inline bool ArmDelayClockUpdate(ArmDelayCalibration_t *pCal, uint32_t Cpu
 static inline bool ArmDelayClockInit(ArmDelayCalibration_t *pCal,
 	uint32_t CpuHz, uint32_t UsLoopCycles, uint32_t NsLoopCycles)
 {
-	if (pCal == nullptr || UsLoopCycles == 0U || NsLoopCycles == 0U ||
+	if (pCal == NULL || UsLoopCycles == 0U || NsLoopCycles == 0U ||
 		UsLoopCycles > UINT32_MAX / ARM_DELAY_CAL_LOOPS ||
 		NsLoopCycles > UINT32_MAX / ARM_DELAY_CAL_LOOPS)
 	{
