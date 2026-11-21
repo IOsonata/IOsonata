@@ -20,6 +20,17 @@ class RuntimePowerChecks(unittest.TestCase):
 			"CORE_POWER_TEST_SLEEP_CYCLES", "SystemSleep();", "SystemPowerOff();"):
 			self.assertIn(name, s)
 
+	def test_core_power_requires_capability_api_linkage(self):
+		s = SRC.read_text(encoding="utf-8")
+		self.assertIn("#if defined(CORE_POWER_TEST_LEGACY_OPTIONAL_APIS) && defined(__GNUC__)", s)
+		self.assertIn("#pragma weak SystemPowerCapabilitiesGet", s)
+		compat = (ROOT / "exemples/misc/power_api_test.cpp").read_text(encoding="utf-8")
+		self.assertIn("#define CORE_POWER_TEST_LEGACY_OPTIONAL_APIS 1", compat)
+		for core in ("nRF5340_App", "nRF5340_Net"):
+			project = (ROOT / "ARM/Nordic/nRF53" / core / "exemples/CorePowerTest/ioc/.project").read_text(encoding="utf-8")
+			self.assertIn("exemples/misc/core_power_test.cpp", project)
+			self.assertNotIn("exemples/misc/power_api_test.cpp", project)
+
 	def test_app_and_net_differ_in_backend_capabilities(self):
 		s = NRF.read_text(encoding="utf-8")
 		self.assertIn("uint32_t SystemPowerCapabilitiesGet(void)", s)

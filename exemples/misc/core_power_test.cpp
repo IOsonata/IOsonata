@@ -20,7 +20,10 @@ MIT License. Copyright (c) 2026, I-SYST inc.
 #include "idelay.h"
 #include "board.h"
 
-#if defined(__GNUC__)
+// The current CorePowerTest requires the power API implementation to
+// be linked. Only older managed projects using the compatibility wrapper
+// can treat these functions as optional.
+#if defined(CORE_POWER_TEST_LEGACY_OPTIONAL_APIS) && defined(__GNUC__)
 #pragma weak SystemPowerCapabilitiesGet
 #pragma weak SystemSleep
 #endif
