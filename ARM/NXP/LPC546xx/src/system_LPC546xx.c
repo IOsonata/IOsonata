@@ -38,6 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "LPC546xx.h"
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 #include "clock_lpc546xx.h"
 #include "coredev/interrupt.h"
 
@@ -847,8 +848,8 @@ uint32_t clkRate = 0;
             break;
     }
     SystemCoreClock = clkRate / ((SYSCON->AHBCLKDIV & 0xFFUL) + 1UL);
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (LPC546XX_NSDELAY_LOOP_CLK * 1000000UL);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, (LPC546XX_NSDELAY_LOOP_CLK * 1000000UL));
 }
 
 /* ----------------------------------------------------------------------------

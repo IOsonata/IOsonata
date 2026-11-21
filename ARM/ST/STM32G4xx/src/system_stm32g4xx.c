@@ -42,6 +42,7 @@ SOFTWARE.
 
 #include "stm32g4xx.h"
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 
 #define HSI16_FREQ				16000000UL
 
@@ -207,8 +208,8 @@ void SystemCoreClockUpdate(void)
 	}
 
 	SystemCoreClock = clk >> AHBPrescTable[(cfgr & RCC_CFGR_HPRE) >> RCC_CFGR_HPRE_Pos];
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, 3000000UL);
 }
 
 void SystemInit(void)

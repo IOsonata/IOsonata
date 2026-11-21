@@ -33,6 +33,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_config_sau.h"
 
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 
 /*lint ++flb "Enter library region" */
 
@@ -110,8 +111,8 @@ void SystemCoreClockUpdate(void)
             break;
     }
 #endif
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, 3000000UL);
 }
 
 void SystemInit(void)
