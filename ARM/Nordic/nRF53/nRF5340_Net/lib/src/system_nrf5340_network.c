@@ -67,8 +67,10 @@ void SystemCoreClockUpdate(void)
 
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
-		// Use the port's default loop costs without runtime measurement.
+		// Use safe defaults before optional CPU-local DWT calibration.
+		// No Timer, RTC, or clock-service dependency is introduced.
 		(void)ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U);
+		(void)ArmDelayCalibrate(&s_DelayCalibration, SystemCoreClock);
 	}
 	else if (s_DelayCalibration.CpuHz != SystemCoreClock)
 	{
