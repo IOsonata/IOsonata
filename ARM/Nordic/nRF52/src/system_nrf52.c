@@ -32,7 +32,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf52_approtect.h"
 
 #include "coredev/system_core_clock.h"
-#include "idelay_calibration.h"
+#include "idelay_clock.h"
 
 #define __SYSTEM_CLOCK_DEFAULT      (64000000UL)
 
