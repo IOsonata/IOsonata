@@ -34,6 +34,7 @@ static void AppClockCalibrationWork(uint32_t Event, void *pContext)
 
 	(void)Event;
 	pCal = (AppClockCalibration_t *)pContext;
+
 	if (pCal == nullptr)
 	{
 		return;
@@ -44,6 +45,7 @@ static void AppClockCalibrationWork(uint32_t Event, void *pContext)
 		return;
 	}
 	success = false;
+
 	if (pCal->HighFreq)
 	{
 		if (SystemHighFreqClockCalibrate != nullptr)
@@ -73,6 +75,7 @@ static void AppClockCalibrationTrigger(TimerDev_t *pTimer,
 	bool queued;
 
 	pCal = (AppClockCalibration_t *)pContext;
+
 	if (pCal == nullptr || !pCal->Active || pCal->Queued ||
 		pCal->pTimer != pTimer || pCal->TriggerNo != TriggerNo)
 	{
@@ -80,6 +83,7 @@ static void AppClockCalibrationTrigger(TimerDev_t *pTimer,
 	}
 	pCal->Queued = true;
 	queued = AppEvtHandlerQue(0U, pCal, AppClockCalibrationWork);
+
 	if (!queued)
 	{
 		pCal->Queued = false;
@@ -111,6 +115,7 @@ bool AppClockCalibrationStart(AppClockCalibration_t *pCal,
 	period = nsTimerEnableTrigger(pTimer, TriggerNo,
 		(uint64_t)PeriodMs * 1000000ULL,
 		TIMER_TRIG_TYPE_CONTINUOUS, AppClockCalibrationTrigger, pCal);
+
 	if (period == 0U)
 	{
 		pCal->Active = false;
@@ -126,5 +131,6 @@ void AppClockCalibrationStop(AppClockCalibration_t *pCal)
 		return;
 	}
 	pCal->Active = false;
+
 	TimerDisableTrigger(pCal->pTimer, pCal->TriggerNo);
 }
