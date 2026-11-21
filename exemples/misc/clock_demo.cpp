@@ -291,6 +291,7 @@ static void ClockDemoCalibrationTest(void)
 	else
 	{
 		calibrated = SystemHighFreqClockCalibrate();
+
 		ClockDemoPrint("HF RC calibration: %s\r\n",
 			calibrated ? "PASS" : "UNSUPPORTED or failed");
 	}
@@ -312,6 +313,7 @@ static void ClockDemoCalibrationTest(void)
 		return;
 	}
 	enabled = SystemLowFreqClockEnable();
+
 	if (!enabled)
 	{
 		ClockDemoResult("LF RC calibration clock enable", false);
@@ -319,6 +321,7 @@ static void ClockDemoCalibrationTest(void)
 	}
 	calibrated = SystemLowFreqClockCalibrate();
 	SystemLowFreqClockDisable();
+
 	ClockDemoResult("LF RC calibration", calibrated);
 }
 
