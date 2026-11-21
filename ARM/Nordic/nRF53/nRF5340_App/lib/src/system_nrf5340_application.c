@@ -90,7 +90,9 @@ uint32_t SystemCoreClockGet(void)
 #define NRF_APP_HCLK_PERFORMANCE	(CLOCK_HFCLKCTRL_HCLK_Div1 << CLOCK_HFCLKCTRL_HCLK_Pos)
 #define NRF_APP_HCLK_LOW_POWER	(CLOCK_HFCLKCTRL_HCLK_Div2 << CLOCK_HFCLKCTRL_HCLK_Pos)
 
+#if !ARM_DELAY_USE_DWT
 static ArmDelayCalibration_t s_DelayCalibration;
+#endif
 
 void SystemCoreClockUpdate(void)
 {
@@ -105,6 +107,7 @@ void SystemCoreClockUpdate(void)
 #endif
 	SystemCoreClock = cpuHz;
 
+#if !ARM_DELAY_USE_DWT
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
 		// The default CPU frequency was calibrated when the MCU was ported.
@@ -129,6 +132,7 @@ void SystemCoreClockUpdate(void)
 			(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
 		}
 	}
+#endif
 }
 
 

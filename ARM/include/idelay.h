@@ -3,10 +3,8 @@
 
 @brief	Delay loop functions.
 
-Delay-loop calibration is maintained by the MCU clock implementation.
-Both delay factors are measured loop iterations per second. Clock owners rescale them
-from actual CPU frequency after every clock change. Optional DWT calibration
-measures the existing assembly loops once; no Timer dependency is required.
+Cycle-counter delays are compiled when CMSIS exposes DWT CYCCNT. Otherwise
+calibrated assembly loops remain the CPU-local delay backend. No Timer or RTC.
 
 @author Hoang Nguyen Hoan
 @date	May 22, 2015
@@ -44,6 +42,16 @@ SOFTWARE.
 #include <stddef.h>
 #include "coredev/system_core_clock.h"
 #include "coredev/delay_calibration.h"
+
+// CPU-local delay backend is fixed when compiling for the target MCU.
+#if defined(DWT) && defined(CoreDebug) && \
+	defined(DWT_CTRL_CYCCNTENA_Msk) && \
+	defined(CoreDebug_DEMCR_TRCENA_Msk) && \
+	(!defined(__DWT_PRESENT) || (__DWT_PRESENT == 1U))
+#define ARM_DELAY_USE_DWT 1
+#else
+#define ARM_DELAY_USE_DWT 0
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -226,7 +234,7 @@ static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
  *
  * @param	cnt : microsecond delay count
  */
-static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
+static inline __attribute__((always_inline)) void ArmDelayUsLoop(uint32_t cnt)
 {
 	uint64_t loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 999999ULL) / 1000000ULL;
 	uint32_t low = (uint32_t)loops;
@@ -278,7 +286,7 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
  *
  * @param	cnt : nanosecond count
  */
-static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
+static inline __attribute__((always_inline)) void ArmDelayNsLoop(uint32_t cnt)
 {
 	uint64_t loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) / 1000000000ULL;
 	uint32_t low = (uint32_t)loops;
@@ -310,9 +318,69 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 	);
 }
 
+// Count actual CPU cycles. No Timer, RTC or calibrated loop rate required.
+#if ARM_DELAY_USE_DWT
+static inline void ArmDelayDwtWait(uint64_t Cycles)
+{
+	uint32_t start;
+	uint32_t chunk;
+
+	if (Cycles == 0U)
+	{
+		return;
+	}
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+	// Subtract modulo 2^32 and bound each wait below half the wrap period.
+	while (Cycles != 0U)
+	{
+		chunk = Cycles > 0x40000000ULL ?
+			0x40000000U : (uint32_t)Cycles;
+		start = DWT->CYCCNT;
+		while ((uint32_t)(DWT->CYCCNT - start) < chunk)
+		{
+		}
+		Cycles -= chunk;
+	}
+}
+#endif
+
+static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
+{
+#if ARM_DELAY_USE_DWT
+	uint64_t cycles;
+
+	if (cnt == 0U)
+	{
+		return;
+	}
+	cycles = ((uint64_t)cnt * SystemCoreClock + 999999ULL) / 1000000ULL;
+	ArmDelayDwtWait(cycles);
+#else
+	ArmDelayUsLoop(cnt);
+#endif
+}
+
+static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
+{
+#if ARM_DELAY_USE_DWT
+	uint64_t cycles;
+
+	if (cnt == 0U)
+	{
+		return;
+	}
+	cycles = ((uint64_t)cnt * SystemCoreClock + 999999999ULL) / 1000000000ULL;
+	ArmDelayDwtWait(cycles);
+#else
+	ArmDelayNsLoop(cnt);
+#endif
+}
+
 #define ARM_DELAY_CAL_NS	(ARM_DELAY_CAL_LOOPS * 1000U)
 
-// Optional CPU-cycle measurement of the EXACT assembly loops in idelay.h.
+// Optional CPU-cycle measurement of the assembly fallback, not DWT waits.
 // This is an explicit foreground initialization operation, not a clock
 // change callback. The measured costs are cached; later frequency changes
 // only call ArmDelayClockUpdate without timing loops or interrupt masking.
@@ -362,14 +430,14 @@ static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz
 		SystemMicroSecLoopCnt = 1000000U;
 		SystemnsDelayFactor = 1000000U;
 
-		usDelay(ARM_DELAY_CAL_LOOPS);
+		ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);
 		start = DWT->CYCCNT;
-		usDelay(ARM_DELAY_CAL_LOOPS);
+		ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);
 		usCycles = DWT->CYCCNT - start;
 
-		nsDelay(ARM_DELAY_CAL_NS);
+		ArmDelayNsLoop(ARM_DELAY_CAL_NS);
 		start = DWT->CYCCNT;
-		nsDelay(ARM_DELAY_CAL_NS);
+		ArmDelayNsLoop(ARM_DELAY_CAL_NS);
 		nsCycles = DWT->CYCCNT - start;
 
 		valid = usCycles != 0U && nsCycles != 0U;

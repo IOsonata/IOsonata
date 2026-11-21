@@ -431,10 +431,11 @@ requests, and HFXO release between requests before sign-off.
 
 ## CPU clock changes and delay factors
 
-The existing `ARM/include/idelay.h` contains the assembly delay loops,
-the shared delay-factor calculation, and optional DWT-based loop-cost
-measurement. No additional delay header is needed. Loop-cost calibration
-is separate from the CPU frequency used to compute a delay.
+The existing `ARM/include/idelay.h` chooses the delay backend at compile
+time: DWT CYCCNT where available, otherwise the calibrated assembly loops.
+DWT delays count CPU cycles directly, handle 32-bit counter wraparound in
+bounded chunks, and use the current `SystemCoreClock`. Neither path requires
+Timer or RTC. Loop-cost calibration only affects assembly fallback.
 
 Every successful CPU source or divider transition, including reduced-power
 frequencies and wakeup restoration, must do the following in System Core:
@@ -454,9 +455,10 @@ The routine does not change clock hardware, and unsuccessful/unsupported
 clock-source selection must not commit factors for a requested clock that
 was never activated.
 
-The MCU port supplies already-calibrated default-speed loop costs.
-A target with DWT may recalibrate the loops **when selecting a nondefault
-CPU frequency**, without depending on Timer or LFCLK. The measured CPU-cycle
+The MCU port supplies already-calibrated default-speed fallback loop costs.
+A DWT-based delay requires **no assembly-loop recalibration** after CPU
+frequency changes. Optional DWT characterization of the fallback loops is
+still available for MCU porting, without Timer or LFCLK. The measured CPU-cycle
 cost is cached and converted into loop iterations per second.
 At the default frequency, IOsonata restores the port's original calibrated
 loop costs. A target without DWT uses its port-provided cost and scales the
