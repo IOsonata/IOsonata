@@ -59,18 +59,18 @@ class ArmClockDelayUpdates(unittest.TestCase):
 		source = HELPER.read_text(encoding="utf-8")
 		self.assertIn("bool ArmDelayClockSetDivisors(", source)
 		self.assertIn("CpuHz == 0U || UsDivisor == 0U || NsDivisor == 0U", source)
-		self.assertIn("usFactor = ((uint64_t)CpuHz << 16) / UsDivisor", source)
-		self.assertIn("nsFactor = ((uint64_t)CpuHz << 16) / NsDivisor", source)
+		self.assertIn("usFactor = ((uint64_t)CpuHz * 1000000ULL) / UsDivisor", source)
+		self.assertIn("nsFactor = ((uint64_t)CpuHz * 1000000ULL) / NsDivisor", source)
 		for clock in (1000000, 4000000, 16000000, 64000000, 128000000):
 			for usdiv, nsdiv in ((13000000, 3000000), (14000000, 3000000),
 				(16000000, 3000000), (16000000, 2720000)):
 				with self.subTest(cpu=clock, usdiv=usdiv, nsdiv=nsdiv):
-					usfactor = clock * 65536 // usdiv
-					nsfactor = clock * 65536 // nsdiv
+					usfactor = clock * 1000000 // usdiv
+					nsfactor = clock * 1000000 // nsdiv
 					self.assertGreater(usfactor, 0)
 					self.assertGreater(nsfactor, 0)
-					self.assertEqual(usfactor, (clock << 16) // usdiv)
-					self.assertEqual(nsfactor, (clock << 16) // nsdiv)
+					self.assertEqual(usfactor, (clock * 1000000) // usdiv)
+					self.assertEqual(nsfactor, (clock * 1000000) // nsdiv)
 
 	def test_measured_cost_is_cached_for_frequency_changes(self):
 		source = HELPER.read_text(encoding="utf-8")
