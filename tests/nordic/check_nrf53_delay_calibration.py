@@ -5,6 +5,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 CAL = ROOT / "ARM/include/idelay_calibration.h"
+CLOCK = ROOT / "ARM/include/idelay_clock.h"
 DELAY = ROOT / "ARM/include/idelay.h"
 NET = ROOT / "ARM/Nordic/nRF53/nRF5340_Net/lib/src/system_nrf5340_network.c"
 APP = ROOT / "ARM/Nordic/nRF53/nRF5340_App/lib/src/system_nrf5340_application.c"
@@ -14,6 +15,7 @@ class Nrf53DelayCalibration(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
 		cls.cal = CAL.read_text(encoding="utf-8")
+		cls.clock = CLOCK.read_text(encoding="utf-8")
 		cls.delay = DELAY.read_text(encoding="utf-8")
 		cls.net = NET.read_text(encoding="utf-8")
 		cls.app = APP.read_text(encoding="utf-8")
@@ -24,8 +26,8 @@ class Nrf53DelayCalibration(unittest.TestCase):
 		self.assertIn("DWT_CTRL_CYCCNTENA_Msk", self.cal)
 		self.assertIn("usDelay(ARM_DELAY_CAL_LOOPS)", self.cal)
 		self.assertIn("nsDelay(ARM_DELAY_CAL_NS)", self.cal)
-		self.assertIn("((uint64_t)pCal->UsCycles * 1000000ULL)", self.cal)
-		self.assertIn("((uint64_t)pCal->NsCycles * 1000000ULL)", self.cal)
+		self.assertIn("((uint64_t)pCal->UsCycles * 1000000ULL)", self.clock)
+		self.assertIn("((uint64_t)pCal->NsCycles * 1000000ULL)", self.clock)
 		self.assertIn("SystemMicroSecLoopCnt = prevUsFactor;", self.cal)
 		self.assertIn("SystemnsDelayFactor = prevNsFactor;", self.cal)
 		self.assertIn("__set_PRIMASK(prevMask)", self.cal)
