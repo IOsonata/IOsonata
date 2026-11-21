@@ -439,9 +439,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	{
 		return false;
 	}
-	if ((ClkSrc == OSC_TYPE_RC && OscFreq != 0U) ||
-		(ClkSrc != OSC_TYPE_RC && OscFreq != 0U &&
-		OscFreq != g_McuOsc.CoreOsc.Freq))
+	if (OscFreq != 0U && OscFreq != g_McuOsc.CoreOsc.Freq)
 	{
 		return false;
 	}

@@ -131,6 +131,8 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("s_nRFxCoreOscSelected = ClkSrc", select)
         self.assertNotIn("g_McuOsc.CoreOsc.Type = ClkSrc", select)
         self.assertIn("ClkSrc != g_McuOsc.CoreOsc.Type", select)
+        self.assertIn("OscFreq != g_McuOsc.CoreOsc.Freq", select)
+        self.assertNotIn("ClkSrc == OSC_TYPE_RC && OscFreq != 0U", select)
         self.assertIn("s_nRFxHfxoReqCnt != 0U", select)
         self.assertNotIn("nRFxHfxoStart(", select)
         self.assertNotIn("nRFxHfxoStop(", select)
