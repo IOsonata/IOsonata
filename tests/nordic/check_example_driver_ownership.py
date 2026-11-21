@@ -44,15 +44,22 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("SystemCoreClockSelect(pSource->Type, pSource->Frequency)", source)
 		self.assertIn("SystemPeriphClockSet(0, request)", source)
 		self.assertIn("SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency)", source)
-		self.assertIn("ClockDemoTimer();", source)
-		self.assertLess(source.index("if (!ClockDemoTimerInit())"),
-			source.index("for (cycle = 1U;"))
+		self.assertIn("TimerGetLowFreqDevCount() + TimerGetHighFreqDevCount()", source)
+		self.assertIn("ClockDemoTimer(timerDevNo);", source)
+		self.assertIn("ClockDemoTimerInit(DevNo)", source)
 		for name in ("CLOCK_DEMO_CORE_READONLY", "CLOCK_DEMO_DEFER_TIMER",
 			"CLOCK_DEMO_UART_RX_TEST", "CLOCK_DEMO_STOP_UART",
 			"CLOCK_DEMO_HF_SOURCE_ENABLE", "CLOCK_DEMO_LF_SOURCE_ENABLE",
 			"CLOCK_DEMO_APB_DIVIDERS", "CLOCK_DEMO_APB_READONLY",
 			"CLOCK_DEMO_APB_SHARED_CORE"):
 			self.assertNotIn(name, source)
+
+	def test_clock_demo_tests_all_reported_timers(self):
+		source = CLOCK.read_text(encoding="utf-8")
+		self.assertIn("timerDevNo < timerCount", source)
+		self.assertIn("cfg.DevNo = DevNo;", source)
+		self.assertIn("TimerSetFrequency(&s_Timer", source)
+		self.assertIn("TimerDisable(&s_Timer);", source)
 
 	def test_clock_demo_board_inputs(self):
 		paths = sorted(ROOT.glob("**/exemples/ClockDemo/src/board.h"))
