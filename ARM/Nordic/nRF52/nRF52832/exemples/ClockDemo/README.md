@@ -6,17 +6,16 @@ oscillator selections are in `src/board.h`, copied from this target's
 PowerOffDemo project. Default console speed is 1,000,000 baud unless board.h
 specifies another rate. No debugger is required for UART logging.
 
-Bare-metal HFXO requests/releases are balanced. No BLE stack is started.
+ClockDemo exercises the generic core-clock selection, peripheral-clock
+Get/Set, low-frequency source selection, and Timer APIs. Board definitions
+supply only test inputs; the application does not select an MCU-specific
+execution path. Shared HFXO reference counting is tested separately by
+HfxoTest and HfxoTestBle.
 
-This project runs three clock-selection cycles. The Nordic polling UART
-driver drains queued TX and waits for the last byte before PowerOff.
-ClockDemo powers off the UART before each explicit clock selection and
-reinitializes it afterward. The final result is also drained before the
-application enters its idle loop. The application does not read the UART
-driver's private FIFO or call RX to advance TX.
-Clock selection completes before the timer is initialized because some ports
-retain timer module ownership after TimerDisable. It then checks the first
-high-frequency timer at 1 MHz requested rate, with a 10 ms trigger over 250 ms.
+UART transmission stays under the UART driver's control while clock
+selections run. The application never reads the driver's FIFO or calls RX
+to advance TX. The timer is initialized before the clock test cycles,
+then tested after frequency changes using a 10 ms trigger over 250 ms.
 The returned timer rate may differ from 1 MHz. Delay and interrupt checks use
 the actual rate/period. They do not independently measure oscillator accuracy.
 No watchdog is enabled. No sleep is requested by this configuration; use
