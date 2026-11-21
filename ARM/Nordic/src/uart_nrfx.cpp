@@ -843,6 +843,29 @@ static bool nRFUARTDrainPollingTx(nRFUartDev_t * const dev)
 }
 #endif
 
+#ifdef UARTE_PRESENT
+// With interrupts enabled the handler retires completed EasyDMA transfers
+// and starts the next queued block. Wait for both the queue and active
+// transfer to finish before powering down the UART pins. A stalled UART
+// (for example CTS held inactive) must remain enabled, not lose its TX.
+static bool nRFUARTDrainDmaTx(nRFUartDev_t * const dev)
+{
+	uint32_t timeout;
+
+	timeout = 0U;
+	while (timeout < NRFX_UART_TX_DRAIN_WAIT_LOOPS)
+	{
+		if (CFifoUsed(dev->pUartDev->hTxFifo) == 0 &&
+			dev->pUartDev->bTxReady)
+		{
+			return true;
+		}
+		timeout++;
+	}
+	return false;
+}
+#endif
+
 #ifdef UART_PRESENT
 // Legacy UART RX. No EasyDMA state or tasks are accessed from this path.
 static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
@@ -1194,6 +1217,13 @@ void nRFUARTPowerOff(DevIntrf_t * const pDev)
 	if (!pDev->bDma && !pDev->bIntEn && !nRFUARTDrainPollingTx(dev))
 	{
 		// Preserve the running UART rather than discard queued TX.
+		return;
+	}
+#endif
+#ifdef UARTE_PRESENT
+	if (pDev->bDma && pDev->bIntEn && !nRFUARTDrainDmaTx(dev))
+	{
+		// Let the active DMA and interrupt handler continue transmitting.
 		return;
 	}
 #endif
