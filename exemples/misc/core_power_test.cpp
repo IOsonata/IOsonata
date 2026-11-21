@@ -12,7 +12,6 @@ The normal CPU-resumable sleep tests run on every boot before System OFF.
 MIT License. Copyright (c) 2026, I-SYST inc.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-#include <stdarg.h>
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "coredev/uart.h"
@@ -103,17 +102,11 @@ static volatile uint32_t * const s_DropRam = (volatile uint32_t *)POWER_DEMO_RAM
 #endif
 #endif
 
-// SysLog and UART use separate FIFOs. A completed UART DMA transfer
-// does not automatically retry a SysLog record left partially enqueued.
-// Let the UART IRQ drain, then retry the public SysLog queue.
-static void CorePowerTestLog(const char *pFormat, ...)
+// The UART IRQ drains its FIFO. Retry remaining SysLog records after
+// giving the transmitter time to accept pending data.
+static void CorePowerTestDrainLog(void)
 {
-	va_list args;
 	int i;
-
-	va_start(args, pFormat);
-	(void)SysLogVPrintf(SysLogGet(), pFormat, args);
-	va_end(args);
 
 	for (i = 0; i < 12; i++)
 	{
@@ -129,18 +122,21 @@ static void CorePowerTestResult(const char *pName, bool Pass)
 	{
 		s_Failures++;
 	}
-	CorePowerTestLog( "%s: %s\r\n", pName, Pass ? "PASS" : "FAIL");
+	SysLogPrintf(SysLogGet(), "%s: %s\r\n", pName, Pass ? "PASS" : "FAIL");
+	CorePowerTestDrainLog();
 }
 
 static void CorePowerTestUnsupported(const char *pName)
 {
-	CorePowerTestLog( "%s: UNSUPPORTED\r\n", pName);
+	SysLogPrintf(SysLogGet(), "%s: UNSUPPORTED\r\n", pName);
+	CorePowerTestDrainLog();
 }
 
 static void CorePowerTestSummary(void)
 {
-	CorePowerTestLog( "CorePowerTest complete: 0x%08x failures, 0x%08x checks\r\n",
+	SysLogPrintf(SysLogGet(), "CorePowerTest complete: 0x%08x failures, 0x%08x checks\r\n",
 		(unsigned)s_Failures, (unsigned)s_Checks);
+	CorePowerTestDrainLog();
 }
 
 static uint32_t CorePowerTestRamPattern(uint32_t Idx)
@@ -193,8 +189,9 @@ static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
 				unchanged++;
 			}
 		}
-		CorePowerTestLog( "RAM non-retention unchanged words 0x%08x / 0x%08x\r\n",
+		SysLogPrintf(SysLogGet(), "RAM non-retention unchanged words 0x%08x / 0x%08x\r\n",
 			(unsigned)unchanged, (unsigned)count);
+		CorePowerTestDrainLog();
 		// Logging already allows the interrupt UART and SysLog FIFOs to drain.
 		valid = unchanged != count;
 		CorePowerTestResult("RAM non-retention after System OFF", valid);
@@ -302,7 +299,8 @@ static void CorePowerTestSleep(uint32_t Caps)
 			CorePowerTestResult("Wake timer enable", false);
 			return;
 		}
-		CorePowerTestLog( "Entering Standby; automatic timer wake\r\n");
+		SysLogPrintf(SysLogGet(), "Entering Standby; automatic timer wake\r\n");
+		CorePowerTestDrainLog();
 		// All pending test output must finish before CPU sleep.
 		// Logging already allows the interrupt UART and SysLog FIFOs to drain.
 		state = DisableInterrupt();
@@ -337,7 +335,8 @@ static void CorePowerTestSleep(uint32_t Caps)
 			}
 		}
 		CorePowerTestResult("Static/stack RAM after resume", ok);
-		CorePowerTestLog( "Standby cycle 0x%08x\r\n", (unsigned)(cycle + 1U));
+		SysLogPrintf(SysLogGet(), "Standby cycle 0x%08x\r\n", (unsigned)(cycle + 1U));
+		CorePowerTestDrainLog();
 		// Logging already allows the interrupt UART and SysLog FIFOs to drain.
 	}
 }
@@ -392,7 +391,8 @@ int main(void)
 	{
 		return 1;
 	}
-	CorePowerTestLog( "CorePowerTest\r\n");
+	SysLogPrintf(SysLogGet(), "CorePowerTest\r\n");
+	CorePowerTestDrainLog();
 	s_Checks = 0U;
 	s_Failures = 0U;
 	if (SystemPowerCapabilitiesGet == nullptr)
@@ -402,10 +402,12 @@ int main(void)
 		return 1;
 	}
 	caps = SystemPowerCapabilitiesGet();
-	CorePowerTestLog( "Capabilities 0x%08x\r\n", (unsigned)caps);
+	SysLogPrintf(SysLogGet(), "Capabilities 0x%08x\r\n", (unsigned)caps);
+	CorePowerTestDrainLog();
 	// Logging already allows the interrupt UART and SysLog FIFOs to drain.
 	reason = SystemResetReason();
-	CorePowerTestLog( "Reset reason 0x%08x\r\n", (unsigned)reason);
+	SysLogPrintf(SysLogGet(), "Reset reason 0x%08x\r\n", (unsigned)reason);
+	CorePowerTestDrainLog();
 	// Logging already allows the interrupt UART and SysLog FIFOs to drain.
 	CorePowerTestResult("Reset reason stable", SystemResetReason() == reason);
 
@@ -460,7 +462,8 @@ int main(void)
 		{
 			(void)SystemRetRegWrite(1, CORE_POWER_TEST_MARKER);
 		}
-		CorePowerTestLog( "Entering System OFF; press wake button\r\n");
+		SysLogPrintf(SysLogGet(), "Entering System OFF; press wake button\r\n");
+		CorePowerTestDrainLog();
 #if defined(WAKE_BUT_PIN)
 		// Do not immediately wake if the button is still held.
 		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
