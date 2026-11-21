@@ -69,6 +69,9 @@ static SysStatusStack_t g_SysStatusStack;
 // dormant, stays inert until configured.
 //
 static SysLog g_SysLog;
+// A generic TX-ready event may interrupt an active foreground flush.
+// Preserve that notification until the active flush has retried.
+static bool s_bSysLogReadyDuringFlush;
 
 
 // Return one character tag for the status type field.
@@ -177,6 +180,10 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 	pLog->HeadIdx = hFifo->GetIdx;
 	pLog->HeadSent = 0U;
 	pLog->bFlushing = false;
+	if (pLog == SysLogGet())
+	{
+		s_bSysLogReadyDuringFlush = false;
+	}
 	pLog->Marker = SYSLOG_INIT_MARKER;
 	SysLogSetSink(pLog, pSink, SinkAddr);
 
@@ -226,6 +233,10 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 	}
 	pLog->pSink = pSink;
 	pLog->SinkAddr = SinkAddr;
+	if (pLog == SysLogGet())
+	{
+		s_bSysLogReadyDuringFlush = false;
+	}
 	if (pLog == SysLogGet() && pSink != nullptr && pSink->EvtCB == nullptr)
 	{
 		pSink->EvtCB = SysLogDevIntrfEvent;
@@ -329,6 +340,12 @@ int SysLogFlush(SysLog_t * const pLog)
 	uintptr_t state = SysIrqLock();
 	if (pLog->bFlushing)
 	{
+		// An event that occurs during a flush must not be discarded.
+		// The active flush will retry after the current submission.
+		if (pLog == SysLogGet())
+		{
+			s_bSysLogReadyDuringFlush = true;
+		}
 		SysIrqUnlock(state);
 		return 0;
 	}
@@ -343,7 +360,13 @@ int SysLogFlush(SysLog_t * const pLog)
 		bool stopped = SysLogDrain(pLog, &total, &err);
 
 		state = SysIrqLock();
-		more = stopped == false && CFifoPeek(pLog->hFifo) != 0;
+		more = CFifoPeek(pLog->hFifo) != 0 &&
+			(stopped == false ||
+			(pLog == SysLogGet() && s_bSysLogReadyDuringFlush));
+		if (pLog == SysLogGet())
+		{
+			s_bSysLogReadyDuringFlush = false;
+		}
 		pLog->bFlushing = more;
 		SysIrqUnlock(state);
 	} while (more);

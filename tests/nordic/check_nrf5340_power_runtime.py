@@ -92,6 +92,14 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("msDelay(100);", s)
 
 
+	def test_syslog_defers_tx_ready_during_active_flush(self):
+		impl = (ROOT / "src/syslog.cpp").read_text(encoding="utf-8")
+		host = (ROOT / "tests/bluetooth/host/syslog_tx_test.cpp").read_text(encoding="utf-8")
+		self.assertIn("s_bSysLogReadyDuringFlush = true;", impl)
+		self.assertIn("(pLog == SysLogGet() && s_bSysLogReadyDuringFlush)", impl)
+		self.assertIn("TestDeferredReadyDuringActiveFlush", host)
+		self.assertIn("s_NotifyReadyDuringTx = true;", host)
+
 	def test_syslog_uses_generic_device_intrf_ready_event(self):
 		header = (ROOT / "include/syslog.h").read_text(encoding="utf-8")
 		impl = (ROOT / "src/syslog.cpp").read_text(encoding="utf-8")

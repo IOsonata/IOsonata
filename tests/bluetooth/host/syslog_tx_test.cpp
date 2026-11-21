@@ -28,6 +28,7 @@ uint8_t s_Captured[512];
 int s_CapturedLen = 0;
 int s_ChunkLimit = 512;
 int s_TxCalls = 0;
+bool s_NotifyReadyDuringTx = false;
 
 // Line length used by the tests that do not care about it.
 constexpr uint32_t kLineLen = 128U;
@@ -41,7 +42,7 @@ void MockStopTx(DevIntrf_t * const)
 {
 }
 
-int MockTxData(DevIntrf_t * const, const uint8_t *pData, int DataLen)
+int MockTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	s_TxCalls++;
 	int n = DataLen < s_ChunkLimit ? DataLen : s_ChunkLimit;
@@ -49,6 +50,11 @@ int MockTxData(DevIntrf_t * const, const uint8_t *pData, int DataLen)
 	{
 		std::memcpy(s_Captured + s_CapturedLen, pData, (size_t)n);
 		s_CapturedLen += n;
+	}
+	if (s_NotifyReadyDuringTx && pDev->EvtCB != nullptr)
+	{
+		// Simulate a TX-ready IRQ interrupting a foreground SysLogFlush.
+		(void)pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, nullptr, 0);
 	}
 	return n;
 }
@@ -67,6 +73,7 @@ void MakeIntrf(DevIntrf_t *pIntrf)
 
 void ResetCapture(int ChunkLimit = 512)
 {
+	s_NotifyReadyDuringTx = false;
 	std::memset(s_Captured, 0, sizeof(s_Captured));
 	s_CapturedLen = 0;
 	s_ChunkLimit = ChunkLimit;
@@ -665,6 +672,29 @@ void TestTimestampTruncation()
 	}
 }
 
+void TestDeferredReadyDuringActiveFlush()
+{
+	alignas(4) static uint8_t memory[SYSLOG_MEMSIZE(4, 64)];
+	SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), 64, true);
+	DevIntrf_t intrf{};
+
+	MakeIntrf(&intrf);
+	ResetCapture(2);
+	CHECK(SysLogInitNoTimer(SysLogGet(), &cfg, &intrf, 0, 0));
+	CHECK(intrf.EvtCB == SysLogDevIntrfEvent);
+	s_NotifyReadyDuringTx = true;
+
+	// The callback runs from inside MockTxData while DeviceIntrf is busy.
+	// The event must not be lost when the partial record is retried.
+	CHECK(SysLogPrintf(SysLogGet(), "ready-event\\r\\n") == 13);
+	CHECK(s_CapturedLen == 13);
+	CHECK(std::memcmp(s_Captured, "ready-event\\r\\n", 13) == 0);
+	CHECK(SysLogFlush(SysLogGet()) == 0);
+
+	s_NotifyReadyDuringTx = false;
+	SysLogSetSink(SysLogGet(), nullptr, 0);
+}
+
 void TestNoTimerInitialization()
 {
 	alignas(4) uint8_t memory[SYSLOG_MEMSIZE(2, 32)];
@@ -687,6 +717,7 @@ int main()
 {
 	TestTimestampTruncation();
 	TestNoTimerInitialization();
+	TestDeferredReadyDuringActiveFlush();
 	TestBufferedBeforeSink();
 	TestRecordTruncatedToLineMax();
 	TestBufferedFlushRetriesNotReadyRecord();
