@@ -1,135 +1,64 @@
 /**-------------------------------------------------------------------------
 @example	core_power_test.cpp
+@brief	Generic power-management API validation
 
-@brief	Generic power management API validation
+The test runs all capabilities reported by SystemPowerCapabilitiesGet().
+Board definitions only describe physical UART, wake pins and reserved RAM.
+No board define selects System OFF versus resumable sleep.
 
-Logs with SysLog on the console UART the reason of the last reset and a
-start count kept in retention register 0, then powers the MCU off. The wake
-up button of board.h starts it again: the next start logs a wake up by a pin
-and the count one higher. A power on reset starts the count over.
+System OFF is last: the next boot validates reset-on-wake and retention.
+The normal CPU-resumable sleep tests run on every boot before System OFF.
 
-The MCU powers off POWER_DEMO_DELAY msec after the start, once the button is
-released. With a debugger attached, power off can be emulated by the MCU and
-the demo then stays stopped instead of waking up.
-
-The board.h of the project gives the console UART pins and the wake up
-button, a button to ground by default. WAKE_BUT_SENSE
-IOPINSENSE_HIGH_TRANSITION selects a button to the supply, for MCU that wake
-up only on a rising level. When SystemWakePin refuses the pin, the demo says
-so and only the reset pin or a power cycle starts the MCU again.
-
-@author	Hoang Nguyen Hoan
-@date	Nov. 7, 2026
-
-@license
-
-MIT License
-
-Copyright (c) 2026, I-SYST inc., all rights reserved
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
+MIT License. Copyright (c) 2026, I-SYST inc.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "coredev/uart.h"
 #include "coredev/timer.h"
 #include "coredev/system_core_clock.h"
-#include "syslog.h"
 #include "idelay.h"
-
 #include "board.h"
 
-// POWER_DEMO_* configuration names remain for existing MCU board compatibility.
-// UART wake requires a board profile with a supported sleep receiver.
-#ifndef POWER_DEMO_UART_WAKE
-#define POWER_DEMO_UART_WAKE 0
-#endif
-#if POWER_DEMO_UART_WAKE && (!defined(POWER_DEMO_RESUME_WAKE) || !POWER_DEMO_RESUME_WAKE)
-#error "UART wake requires resumable sleep"
+#if defined(__GNUC__)
+#pragma weak SystemPowerCapabilitiesGet
+#pragma weak SystemSleep
 #endif
 
-// Console rate, board.h can give another one
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE			1000000
 #endif
-
-// UART DMA can be disabled on targets without a DMA transport.
-#ifndef POWER_DEMO_UART_DMA
-#define POWER_DEMO_UART_DMA true
+#ifndef CORE_POWER_TEST_WAKE_MS
+#define CORE_POWER_TEST_WAKE_MS	1000U
 #endif
-#ifndef POWER_DEMO_UART_INT
-#define POWER_DEMO_UART_INT true
+#ifndef CORE_POWER_TEST_SLEEP_CYCLES
+#define CORE_POWER_TEST_SLEEP_CYCLES	3U
 #endif
-
-// Time before power off, in msec
-#ifndef POWER_DEMO_DELAY
-#define POWER_DEMO_DELAY		3000
+#ifndef CORE_POWER_TEST_TIMER_DEVNO
+#define CORE_POWER_TEST_TIMER_DEVNO	0
 #endif
-
-// Level of the wake up button that wakes the MCU, a button to ground by default
 #ifndef WAKE_BUT_SENSE
-#define WAKE_BUT_SENSE			IOPINSENSE_LOW_TRANSITION
+#define WAKE_BUT_SENSE	IOPINSENSE_LOW_TRANSITION
 #endif
 
-#if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
-// The board-specific linker script must reserve both test regions outside
-// .data, .bss and the stack. Startup must not overwrite them before check.
-static volatile uint32_t * const s_pRamRet =
-	(volatile uint32_t *)POWER_DEMO_RAM_RET_ADDR;
-
-#if defined(POWER_DEMO_RAM_DROP_ADDR)
-static volatile uint32_t * const s_pRamDrop =
-	(volatile uint32_t *)POWER_DEMO_RAM_DROP_ADDR;
-#endif
-
-#define RAM_TEST_PREPARED 0xA7U
-
-#endif
-
-// Pull resistor and level of the released button
-#if defined(WAKE_BUT_PIN)
-static const IOPINRES s_WakeButRes = WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? IOPINRES_PULLDOWN : IOPINRES_PULLUP;
-static const int s_WakeButIdle = WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 0 : 1;
-#endif
+#define CORE_POWER_TEST_MARKER	0xC3U
+#define CORE_POWER_TEST_RAM_WORDS	32U
 
 static const IOPinCfg_t s_UartPins[] = {
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{ UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL },
+	{ UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
 };
 
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.NbIOPins = sizeof(s_UartPins) / sizeof(s_UartPins[0]),
 	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	.bIntMode = false,
-#else
-	.bIntMode = POWER_DEMO_UART_INT,
-#endif
 	.IntPrio = 6,
 	.EvtCallback = nullptr,
 	.bFifoBlocking = true,
@@ -137,168 +66,30 @@ static const UARTCfg_t s_UartCfg = {
 	.pRxMem = nullptr,
 	.TxMemSize = 0,
 	.pTxMem = nullptr,
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	.bDMAMode = false,
-#else
-	.bDMAMode = POWER_DEMO_UART_DMA,
-#endif
 };
 
-static UART s_Uart;
-#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
-static TimerDev_t s_WakeTimer;
-static const TimerCfg_t s_WakeTimerCfg = {
-	.DevNo = POWER_DEMO_TIMER_WAKE_DEVNO,
+static const TimerCfg_t s_TimerCfg = {
+	.DevNo = CORE_POWER_TEST_TIMER_DEVNO,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 1024U,
 	.IntPrio = 6,
 };
-#endif
 
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE && \
-	defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
-static volatile bool s_StandbyTimerWoke;
-#endif
-
-#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
-// Sample static and stack storage without overwriting live application RAM.
-#define STANDBY_RAM_WORDS 32U
-static volatile uint32_t s_StandbyRam[STANDBY_RAM_WORDS];
-#endif
-
-
-#if !defined(POWER_DEMO_RESUME_WAKE) || !POWER_DEMO_RESUME_WAKE
-// SysLog on the console UART, a record goes out as soon as it is logged.
-// 16 records of 128 bytes. A record the UART does not take in full stays in
-// the store and the rest goes out at the next log call. bBlocking keeps the
-// oldest records when the store is full.
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(4, 96)];
-#else
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
-#endif
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem = s_SysLogMem,
-	.MemSize = sizeof(s_SysLogMem),
-	.RecordLen =
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
-		96,
-#else
-		128,
-#endif
-	.bBlocking = true,
-};
-
-static const struct {
-	uint32_t Reason;
-	const char *pName;
-} s_ResetNames[] = {
-	{ SYSTEM_RESET_POWERON, "power on" },
-	{ SYSTEM_RESET_PIN, "reset pin" },
-	{ SYSTEM_RESET_WDT, "watchdog" },
-	{ SYSTEM_RESET_SOFT, "software" },
-	{ SYSTEM_RESET_LOCKUP, "lockup" },
-	{ SYSTEM_RESET_DEBUG, "debug interface" },
-	{ SYSTEM_RESET_WAKE_PIN, "wake up by a pin" },
-	{ SYSTEM_RESET_WAKE_COMP, "wake up by the comparator" },
-	{ SYSTEM_RESET_WAKE_NFC, "wake up by NFC" },
-	{ SYSTEM_RESET_WAKE_USB, "wake up by USB" },
-	{ SYSTEM_RESET_WAKE_TIMER, "wake up by a timer" },
-};
-
-#endif
+static UART s_Uart;
+static TimerDev_t s_WakeTimer;
+static volatile bool s_TimerWoke;
+static volatile uint32_t s_StaticRam[CORE_POWER_TEST_RAM_WORDS];
+static uint32_t s_Checks;
+static uint32_t s_Failures;
 
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
+static volatile uint32_t * const s_RetRam = (volatile uint32_t *)POWER_DEMO_RAM_RET_ADDR;
 #if defined(POWER_DEMO_RAM_DROP_ADDR)
-static uint32_t RamDropPattern(uint32_t Idx)
-{
-	return 0x6C39E2B5UL ^ (Idx * 0x85EBCA6BUL);
-}
-
-static bool RamDropCheck(void)
-{
-	uint32_t i;
-	uint32_t unchanged;
-	uint32_t count;
-
-	count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
-	unchanged = 0U;
-	for (i = 0; i < count; i++)
-	{
-		if (s_pRamDrop[i] == RamDropPattern(i))
-		{
-			unchanged++;
-		}
-	}
-
-	SysLogPrintf(SysLogGet(),
-		"RAM non-retention %s, %u/%u words unchanged\r\n",
-		unchanged == count ? "FAIL" : "PASS",
-		(unsigned)unchanged, (unsigned)count);
-
-	return unchanged != count;
-}
-
-static void RamDropWrite(void)
-{
-	uint32_t i;
-	uint32_t count;
-
-	count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
-	for (i = 0; i < count; i++)
-	{
-		s_pRamDrop[i] = RamDropPattern(i);
-	}
-}
-
+static volatile uint32_t * const s_DropRam = (volatile uint32_t *)POWER_DEMO_RAM_DROP_ADDR;
+#endif
 #endif
 
-static uint32_t RamRetPattern(uint32_t Idx)
-{
-	return 0xA55A1234UL ^ (Idx * 0x9E3779B9UL);
-}
-
-static bool RamRetCheck(void)
-{
-	uint32_t i;
-	uint32_t count;
-
-	count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
-
-	for (i = 0; i < count; i++)
-	{
-		if (s_pRamRet[i] != RamRetPattern(i))
-		{
-			SysLogPrintf(SysLogGet(),
-				"RAM retention FAIL at word %u: 0x%08x, expected 0x%08x\r\n",
-				(unsigned)i, (unsigned)s_pRamRet[i],
-				(unsigned)RamRetPattern(i));
-			return false;
-		}
-	}
-
-	SysLogPrintf(SysLogGet(), "RAM retention PASS, %u words\r\n",
-		(unsigned)count);
-	return true;
-}
-
-static void RamRetWrite(void)
-{
-	uint32_t i;
-	uint32_t count;
-
-	count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
-
-	for (i = 0; i < count; i++)
-	{
-		s_pRamRet[i] = RamRetPattern(i);
-	}
-}
-#endif
-
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
-// Minimal polling output avoids formatted logging on the 16 KB SAM D11.
 static void CorePowerTestPut(const char *pText)
 {
 	uint8_t c;
@@ -312,22 +103,16 @@ static void CorePowerTestPut(const char *pText)
 	}
 }
 
-// Allow the last polling UART transfer to finish before shutting down.
-// No application access to driver FIFOs or receive calls for TX progress.
-static void CorePowerTestDrain(void)
+static void CorePowerTestNumber(uint32_t Value)
 {
-	msDelay(2);
-}
-
-static void CorePowerTestPutCount(uint32_t Value)
-{
-	uint8_t digit;
 	uint8_t c;
+	uint8_t digit;
 	int shift;
 
+	CorePowerTestPut("0x");
 	for (shift = 28; shift >= 0; shift -= 4)
 	{
-		digit = (uint8_t)((Value >> shift) & 0xFU);
+		digit = (uint8_t)((Value >> shift) & 15U);
 		c = (uint8_t)(digit < 10U ? '0' + digit : 'A' + digit - 10U);
 		while (s_Uart.Tx(&c, 1) != 1)
 		{
@@ -335,495 +120,336 @@ static void CorePowerTestPutCount(uint32_t Value)
 	}
 }
 
-#endif
-
-#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
-static uint32_t StandbyRamPattern(uint32_t Cycle, uint32_t Idx)
+static void CorePowerTestResult(const char *pName, bool Pass)
 {
-	return 0xA55A1234UL ^ (Cycle * 0x85EBCA6BUL) ^ (Idx * 0x9E3779B9UL);
-}
-#endif
-
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE && \
-	defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
-static void CorePowerTestStandbyTimerWake(TimerDev_t *pTimer, int Trigger, void *pContext)
-{
-	(void)pTimer;
-	(void)Trigger;
-	(void)pContext;
-	s_StandbyTimerWoke = true;
-}
-#endif
-
-// Require a stable release before arming another sleep cycle.
-static void CorePowerTestWaitRelease(void)
-{
-#if defined(WAKE_BUT_PIN)
-	unsigned idle = 0U;
-
-	while (idle < 20U)
+	s_Checks++;
+	if (!Pass)
 	{
-		if (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) == s_WakeButIdle)
-		{
-			idle++;
-		}
-		else
-		{
-			idle = 0U;
-		}
-		msDelay(1);
+		s_Failures++;
 	}
-#endif
-}
-
-static uint32_t s_PowerApiChecks;
-static uint32_t s_PowerApiFailures;
-
-static void CorePowerTestResult(const char *pName, bool Passed)
-{
-	s_PowerApiChecks++;
-	if (!Passed)
-	{
-		s_PowerApiFailures++;
-	}
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 	CorePowerTestPut(pName);
-	CorePowerTestPut(Passed ? ": PASS\r\n" : ": FAIL\r\n");
-#else
-	SysLogPrintf(SysLogGet(), "%s: %s\r\n", pName, Passed ? "PASS" : "FAIL");
-#endif
+	CorePowerTestPut(Pass ? ": PASS\r\n" : ": FAIL\r\n");
+}
+
+static void CorePowerTestUnsupported(const char *pName)
+{
+	CorePowerTestPut(pName);
+	CorePowerTestPut(": UNSUPPORTED\r\n");
 }
 
 static void CorePowerTestSummary(void)
 {
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
-	CorePowerTestPut("CorePowerTest complete: 0x");
-	CorePowerTestPutCount(s_PowerApiFailures);
-	CorePowerTestPut(" failures, 0x");
-	CorePowerTestPutCount(s_PowerApiChecks);
+	CorePowerTestPut("CorePowerTest complete: ");
+	CorePowerTestNumber(s_Failures);
+	CorePowerTestPut(" failures, ");
+	CorePowerTestNumber(s_Checks);
 	CorePowerTestPut(" checks\r\n");
-#else
-	SysLogPrintf(SysLogGet(), "CorePowerTest complete: %u failures, %u checks\r\n",
-		(unsigned)s_PowerApiFailures, (unsigned)s_PowerApiChecks);
-#endif
 }
 
-static bool CorePowerTestWakeConfig(void)
+static uint32_t CorePowerTestRamPattern(uint32_t Idx)
 {
-#if defined(WAKE_BUT_PIN)
-	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
-		IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
-	CorePowerTestWaitRelease();
-	return SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
-#else
-	return false;
-#endif
+	return 0xA55A1234UL ^ (Idx * 0x9E3779B9UL);
 }
 
-int main()
+static void CorePowerTestTimerWake(TimerDev_t *pTimer, int Trigger, void *pContext)
 {
-#if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
-	uint32_t wakeCount;
-	uint32_t coreBefore;
-	uint32_t apbBefore;
-	uint32_t rateBefore;
-#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
+	(void)pTimer;
+	(void)Trigger;
+	(void)pContext;
+	s_TimerWoke = true;
+}
+
+static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
+{
+#if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
 	uint32_t i;
-	uint32_t pattern;
-	bool ramOk;
-#endif
-#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
-	uint32_t state;
-	uint32_t start;
-	uint64_t period;
-	uint32_t elapsed;
-	uint64_t expected;
-#endif
-#if POWER_DEMO_UART_WAKE
-	uint8_t wakeByte;
-	bool received;
-	uint32_t rxWait;
-	uint8_t rxByte;
-	bool normalRx;
-#endif
-#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
-	volatile uint32_t stackRam[STANDBY_RAM_WORDS];
-#endif
+	uint32_t count;
+	bool valid;
 
-	if (!s_Uart.Init(s_UartCfg))
+	if ((Caps & SYSTEM_POWER_CAP_RAM_RETENTION) == 0U)
 	{
-		return 1;
+		CorePowerTestUnsupported("RAM retention");
+		return;
 	}
-	CorePowerTestPut("CorePowerTest: Standby\r\n");
 
-#if POWER_DEMO_UART_WAKE
-	if (!s_Uart.EnableWake(true))
+	count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
+	if (Marker)
 	{
-		CorePowerTestPut("UART wake unavailable for this configuration\r\n");
-		return 1;
-	}
-	// Validate the physical USART0 RX connection before testing PICOUART.
-	// The host sends one U at the normal 1 Mbps console rate.
-	// Do not drain the RX FIFO while waiting for the test byte.
-	CorePowerTestPut("UART RX: send U at 1000000 baud\r\n");
-	rxByte = 0U;
-	normalRx = false;
-	for (rxWait = 0U; rxWait < 3000U; rxWait++)
-	{
-		if (s_Uart.Rx(&rxByte, 1) == 1)
+		valid = true;
+		for (i = 0U; i < count; i++)
 		{
-			normalRx = rxByte == 'U';
-			break;
-		}
-		msDelay(1);
-	}
-	CorePowerTestPut(normalRx ? "UART RX normal: PASS\r\n" :
-		"UART RX normal: FAIL\r\n");
-	if (!normalRx)
-	{
-		return 1;
-	}
-#elif defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
-	if (!TimerInit(&s_WakeTimer, &s_WakeTimerCfg))
-	{
-		CorePowerTestPut("Standby timer initialization FAIL\r\n");
-		return 1;
-	}
-	TimerDisable(&s_WakeTimer);
-#else
-	if (!CorePowerTestWakeConfig())
-	{
-		CorePowerTestPut("Standby wake pin not available\r\n");
-		return 1;
-	}
-#endif
-
-	wakeCount = 0U;
-	while (1)
-	{
-		s_PowerApiChecks = 0U;
-		s_PowerApiFailures = 0U;
-		coreBefore = SystemCoreClockGet();
-		apbBefore = SystemPeriphClockGet(0);
-		rateBefore = s_Uart.Rate();
-#if POWER_DEMO_UART_WAKE
-		// Establish the last console exchange at normal baud before
-		// the host changes its FTDI divisor. No PICOUART setup yet.
-		CorePowerTestPut("UART wake setup: send R at 1000000 baud\r\n");
-		CorePowerTestDrain();
-		rxByte = 0U;
-		for (rxWait = 0U; rxWait < 3000U; rxWait++)
-		{
-			if (s_Uart.Rx(&rxByte, 1) == 1)
+			if (s_RetRam[i] != CorePowerTestRamPattern(i))
 			{
+				valid = false;
 				break;
 			}
-			msDelay(1);
 		}
-		if (rxByte != 'R')
+		CorePowerTestResult("RAM retention after System OFF", valid);
+#if defined(POWER_DEMO_RAM_DROP_ADDR)
+		count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
+		valid = false;
+		for (i = 0U; i < count; i++)
 		{
-			CorePowerTestPut("UART wake setup: FAIL\r\n");
-			CorePowerTestDrain();
-			return 1;
+			if (s_DropRam[i] != (CorePowerTestRamPattern(i) ^ 0xFFFFFFFFUL))
+			{
+				valid = true;
+				break;
+			}
 		}
-		CorePowerTestPut("UART sleep preparation: switch host to 9600 baud\r\n");
-#elif defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
-		CorePowerTestPut("Entering Standby; automatic timer wake\r\n");
+		CorePowerTestResult("RAM non-retention after System OFF", valid);
+#endif
+	}
+	(void)Reason;
+	CorePowerTestResult("RAM retention enable",
+		SystemRamRetain(POWER_DEMO_RAM_RET_ADDR, POWER_DEMO_RAM_RET_SIZE, true));
+#if defined(POWER_DEMO_RAM_DROP_ADDR)
+	CorePowerTestResult("RAM non-retention disable",
+		SystemRamRetain(POWER_DEMO_RAM_DROP_ADDR, POWER_DEMO_RAM_DROP_SIZE, false));
+	count = POWER_DEMO_RAM_DROP_SIZE / sizeof(uint32_t);
+	for (i = 0U; i < count; i++)
+	{
+		s_DropRam[i] = CorePowerTestRamPattern(i) ^ 0xFFFFFFFFUL;
+	}
+#endif
+	count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
+	for (i = 0U; i < count; i++)
+	{
+		s_RetRam[i] = CorePowerTestRamPattern(i);
+	}
 #else
-		CorePowerTestWaitRelease();
-		CorePowerTestPut("Entering Standby\r\n");
+	(void)Caps;
+	(void)Reason;
+	(void)Marker;
+	CorePowerTestUnsupported("RAM retention (no reserved board region)");
 #endif
-		CorePowerTestDrain();
-#if POWER_DEMO_UART_WAKE
-		// Test harness only: keep USART0 running while FTDI changes
-		// rate and its TX line settles. Host waits longer before U.
-		msDelay(750);
-#endif
-		// SystemSleep selects a compatible power state and temporarily
-		// suspends idle peripherals. The application does not stop UART.
-#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
-		for (i = 0; i < STANDBY_RAM_WORDS; i++)
-		{
-			pattern = StandbyRamPattern(wakeCount, i);
+}
 
-			s_StandbyRam[i] = pattern;
+static void CorePowerTestRunningMode(uint32_t Caps)
+{
+	uint32_t before;
+	uint32_t reduced;
+	bool ok;
+
+	before = SystemCoreClockGet();
+	if ((Caps & SYSTEM_POWER_CAP_LOW_POWER) == 0U)
+	{
+		CorePowerTestUnsupported("Reduced CPU power mode");
+		return;
+	}
+	ok = SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER);
+	reduced = SystemCoreClockGet();
+	CorePowerTestResult("Reduced CPU power mode", ok &&
+		SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER && reduced <= before);
+	ok = SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);
+	CorePowerTestResult("CPU performance restoration", ok &&
+		SystemCoreClockGet() == before &&
+		SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+}
+
+static void CorePowerTestSleep(uint32_t Caps)
+{
+	TimerDev_t *pTimer;
+	uint32_t cycle;
+	uint32_t coreBefore;
+	uint32_t periphBefore;
+	uint32_t uartBefore;
+	uint32_t state;
+	uint32_t start;
+	uint32_t elapsed;
+	uint32_t i;
+	uint32_t pattern;
+	uint64_t period;
+	uint64_t expected;
+	bool ok;
+	volatile uint32_t stackRam[CORE_POWER_TEST_RAM_WORDS];
+
+	if ((Caps & SYSTEM_POWER_CAP_SLEEP) == 0U || SystemSleep == nullptr)
+	{
+		CorePowerTestUnsupported("Resumable SystemSleep");
+		return;
+	}
+	if ((Caps & SYSTEM_POWER_CAP_TIMER_WAKE) == 0U)
+	{
+		CorePowerTestUnsupported("Resumable timer wake");
+		return;
+	}
+
+	pTimer = &s_WakeTimer;
+	ok = TimerInit(pTimer, &s_TimerCfg);
+	CorePowerTestResult("Wake timer initialization", ok);
+	if (!ok)
+	{
+		return;
+	}
+	TimerDisable(pTimer);
+	for (cycle = 0U; cycle < CORE_POWER_TEST_SLEEP_CYCLES; cycle++)
+	{
+		coreBefore = SystemCoreClockGet();
+		periphBefore = SystemPeriphClockGet(0);
+		uartBefore = s_Uart.Rate();
+		for (i = 0U; i < CORE_POWER_TEST_RAM_WORDS; i++)
+		{
+			pattern = CorePowerTestRamPattern(i) ^ cycle;
+			s_StaticRam[i] = pattern;
 			stackRam[i] = ~pattern;
 		}
-#endif
-#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
-		if (TimerSetFrequency(&s_WakeTimer, 1024U) == 0U)
+		if (TimerSetFrequency(pTimer, 1024U) == 0U || !TimerEnable(pTimer))
 		{
-			CorePowerTestPut("Standby timer frequency FAIL\r\n");
-			return 1;
+			CorePowerTestResult("Wake timer enable", false);
+			return;
 		}
-		// A trigger configures RTC compare registers; it does not start
-		// the counter. Start the timer before arming its wake interrupt.
-		if (!TimerEnable(&s_WakeTimer))
-		{
-			CorePowerTestPut("Standby timer enable FAIL\r\n");
-			return 1;
-		}
+		CorePowerTestPut("Entering Standby; automatic timer wake\r\n");
+		msDelay(2);
 		state = DisableInterrupt();
-		s_StandbyTimerWoke = false;
-		start = TimerGetMicrosecond(&s_WakeTimer);
-		period = nsTimerEnableTrigger(&s_WakeTimer, 0,
-			(uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000000ULL,
-			TIMER_TRIG_TYPE_SINGLE, CorePowerTestStandbyTimerWake, nullptr);
-		if (period != 0U && !s_StandbyTimerWoke)
+		s_TimerWoke = false;
+		start = TimerGetMicrosecond(pTimer);
+		period = nsTimerEnableTrigger(pTimer, 0,
+			(uint64_t)CORE_POWER_TEST_WAKE_MS * 1000000ULL,
+			TIMER_TRIG_TYPE_SINGLE, CorePowerTestTimerWake, nullptr);
+		if (period != 0U && !s_TimerWoke)
 		{
 			SystemSleep();
 		}
 		EnableInterrupt(state);
-		elapsed = TimerGetMicrosecond(&s_WakeTimer) - start;
-		TimerDisableTrigger(&s_WakeTimer, 0);
-		TimerDisable(&s_WakeTimer);
-#else
-		SystemSleep();
-#endif
-#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
-		ramOk = true;
-		for (i = 0; i < STANDBY_RAM_WORDS; i++)
-		{
-			pattern = StandbyRamPattern(wakeCount, i);
-
-			if (s_StandbyRam[i] != pattern || stackRam[i] != ~pattern)
-			{
-				ramOk = false;
-			}
-		}
-#endif
-#if POWER_DEMO_UART_WAKE
-		wakeByte = 0;
-		received = s_Uart.Rx(&wakeByte, 1) == 1 && wakeByte == 'U';
-		// Let the host adapter switch back to its normal console baud.
-		msDelay(100);
-		CorePowerTestPut(received ? "UART wake byte: PASS\r\n" : "UART wake byte: FAIL\r\n");
-#endif
-		// Keep wake verification in PowerOffDemo for every resumable port.
-		// UART output here also exercises TX after resume.
-		CorePowerTestResult("UART rate after resume", s_Uart.Rate() == rateBefore);
-		CorePowerTestResult("CPU/APB clock after resume",
-			SystemCoreClockGet() == coreBefore && SystemPeriphClockGet(0) == apbBefore);
-#if POWER_DEMO_UART_WAKE
-		if (!received)
-		{
-			// A refused sleep or an early wake is not a completed cycle.
-			// Stop instead of printing another misleading resume count.
-			CorePowerTestPut("UART wake test stopped\r\n");
-			CorePowerTestDrain();
-			return 1;
-		}
-#endif
-#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
-		expected = (uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000ULL;
-		CorePowerTestResult("Standby timer wake", period != 0U && s_StandbyTimerWoke &&
+		elapsed = TimerGetMicrosecond(pTimer) - start;
+		TimerDisableTrigger(pTimer, 0);
+		TimerDisable(pTimer);
+		expected = (uint64_t)CORE_POWER_TEST_WAKE_MS * 1000ULL;
+		CorePowerTestResult("Standby timer wake", period != 0U && s_TimerWoke &&
 			(uint64_t)elapsed >= expected * 98ULL / 100ULL &&
 			(uint64_t)elapsed <= expected * 102ULL / 100ULL);
-#endif
-		wakeCount++;
-		CorePowerTestPut("Resumed from Standby, count 0x");
-		CorePowerTestPutCount(wakeCount);
-		CorePowerTestPut("\r\n");
-#if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
-		CorePowerTestResult("SRAM sample: 128 static + 128 stack bytes", ramOk);
-		if (!ramOk)
+		CorePowerTestResult("CPU/peripheral clock after resume",
+			SystemCoreClockGet() == coreBefore &&
+			SystemPeriphClockGet(0) == periphBefore);
+		CorePowerTestResult("UART rate after resume", s_Uart.Rate() == uartBefore);
+		ok = true;
+		for (i = 0U; i < CORE_POWER_TEST_RAM_WORDS; i++)
 		{
-			CorePowerTestSummary();
-			CorePowerTestDrain();
-			while (1)
+			pattern = CorePowerTestRamPattern(i) ^ cycle;
+			if (s_StaticRam[i] != pattern || stackRam[i] != ~pattern)
 			{
+				ok = false;
 			}
 		}
-#endif
-		CorePowerTestSummary();
+		CorePowerTestResult("Static/stack RAM after resume", ok);
+		CorePowerTestPut("Standby cycle ");
+		CorePowerTestNumber(cycle + 1U);
+		CorePowerTestPut("\r\n");
 	}
-#else
-	uint32_t reason;
-	unsigned i;
-	const char *sep;
-	uint32_t cnt;
-#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
-	uint32_t state;
-#endif
+}
 
-	s_Uart.Init(s_UartCfg);
-	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
-
-	SysLogPrintf(SysLogGet(), "CorePowerTest\r\n");
-
-	reason = SystemResetReason();
-
-	sep = " ";
-
-	CorePowerTestResult("Reset reason API", reason != 0U);
-	SysLogPrintf(SysLogGet(), "Reset reason 0x%x:", (unsigned)reason);
-	for (i = 0U; i < sizeof(s_ResetNames) / sizeof(s_ResetNames[0]); i++)
-	{
-		if (reason & s_ResetNames[i].Reason)
-		{
-			SysLogPrintf(SysLogGet(), "%s%s", sep, s_ResetNames[i].pName);
-			sep = ", ";
-		}
-	}
-	SysLogPrintf(SysLogGet(), "\r\n");
-
-	// The retention registers are cleared by a power on reset only
-	cnt = (reason & SYSTEM_RESET_POWERON) ? 0 : SystemRetRegRead(0);
-
-	cnt++;
-	SystemRetRegWrite(0, cnt);
-	SysLogPrintf(SysLogGet(), "Start count %u, %d retention registers\r\n", (unsigned)cnt, SystemRetRegCount());
-	if (SystemRetRegCount() > 0)
-	{
-		CorePowerTestResult("Retention register read/write",
-			SystemRetRegRead(0) == cnt || SystemRetRegRead(0) == (cnt & 0xFFU));
-		CorePowerTestResult("Retention register invalid index",
-			SystemRetRegRead(-1) == 0U &&
-			!SystemRetRegWrite(-1, cnt) &&
-			SystemRetRegRead(SystemRetRegCount()) == 0U &&
-			!SystemRetRegWrite(SystemRetRegCount(), cnt));
-	}
-	else
-	{
-		SysLogPrintf(SysLogGet(), "Retention registers: UNSUPPORTED\r\n");
-	}
-
-#if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
-	// Check before writing the next pattern. Startup must leave the test region untouched.
-	if (SystemRetRegCount() >= 2 && SystemRetRegRead(1) == RAM_TEST_PREPARED)
-	{
-		CorePowerTestResult("System OFF reset-on-wake",
-			(reason & (SYSTEM_RESET_WAKE_PIN | SYSTEM_RESET_WAKE_TIMER)) != 0U);
-	}
-	if ((reason & SYSTEM_RESET_WAKE_PIN) &&
-		(SystemRetRegCount() < 2 || SystemRetRegRead(1) == RAM_TEST_PREPARED))
-	{
-		CorePowerTestResult("RAM retention after reset", RamRetCheck());
-#if defined(POWER_DEMO_RAM_DROP_ADDR)
-		CorePowerTestResult("RAM non-retention after reset", RamDropCheck());
-#endif
-	}
-	else
-	{
-		SysLogPrintf(SysLogGet(), "RAM test: preparing first cycle\r\n");
-	}
-
-	if (!SystemRamRetain(POWER_DEMO_RAM_RET_ADDR, POWER_DEMO_RAM_RET_SIZE, true))
-	{
-		SysLogPrintf(SysLogGet(), "RAM retention configuration FAIL\r\n");
-		while (1)
-		{
-			__WFE();
-		}
-	}
-#if defined(POWER_DEMO_RAM_DROP_ADDR)
-	if (!SystemRamRetain(POWER_DEMO_RAM_DROP_ADDR, POWER_DEMO_RAM_DROP_SIZE, false))
-	{
-		SysLogPrintf(SysLogGet(), "RAM non-retention configuration FAIL\r\n");
-		while (1)
-		{
-			__WFE();
-		}
-	}
-
-	RamDropWrite();
-#endif
-	RamRetWrite();
-	if (SystemRetRegCount() >= 2 && !SystemRetRegWrite(1, RAM_TEST_PREPARED))
-	{
-		SysLogPrintf(SysLogGet(), "RAM test marker FAIL\r\n");
-		while (1)
-		{
-			__WFE();
-		}
-	}
-	CorePowerTestResult("RAM retention configuration", true);
-	SysLogPrintf(SysLogGet(), "RAM retention enabled, %u bytes\r\n",
-		(unsigned)POWER_DEMO_RAM_RET_SIZE);
-#if defined(POWER_DEMO_RAM_DROP_ADDR)
-	CorePowerTestResult("RAM non-retention configuration", true);
-	SysLogPrintf(SysLogGet(), "RAM non-retention disabled, %u bytes\r\n",
-		(unsigned)POWER_DEMO_RAM_DROP_SIZE);
-#endif
-#endif
-
-	msDelay(POWER_DEMO_DELAY);
-
-#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
+static bool CorePowerTestWakePin(uint32_t Caps)
+{
 #if defined(WAKE_BUT_PIN)
-	(void)SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, IOPINSENSE_DISABLE);
-#endif
-	if (!TimerInit(&s_WakeTimer, &s_WakeTimerCfg))
+	bool ok;
+
+	if ((Caps & SYSTEM_POWER_CAP_WAKE_PIN) == 0U)
 	{
-		SysLogPrintf(SysLogGet(), "Wake timer initialization FAIL\r\n");
-		(void)SysLogFlush(SysLogGet());
-		return 1;
+		CorePowerTestUnsupported("Wake pin");
+		return false;
 	}
-	TimerDisable(&s_WakeTimer);
-	SysLogPrintf(SysLogGet(), "Power off, automatic timer wake in %u ms\r\n",
-		(unsigned)POWER_DEMO_TIMER_WAKE_MS);
+	ok = IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
+		IOPINDIR_INPUT, WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ?
+		IOPINRES_PULLDOWN : IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	if (ok)
+	{
+		ok = SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
+	}
+	CorePowerTestResult("Wake pin configuration", ok);
+	return ok;
 #else
-	// Configure the pin and wait for release before arming System OFF wakeup.
-	if (CorePowerTestWakeConfig())
-	{
-		CorePowerTestResult("Wake pin configuration", true);
-		SysLogPrintf(SysLogGet(), "Power off, press the button to wake up\r\n");
-	}
-	else
-	{
-		SysLogPrintf(SysLogGet(), "Wake pin configuration: UNSUPPORTED or rejected\r\n");
-		SysLogPrintf(SysLogGet(), "Power off, the button cannot wake this MCU, use the reset pin\r\n");
-	}
-
+	(void)Caps;
+	CorePowerTestUnsupported("Wake pin (no board pin)");
+	return false;
 #endif
-	// Allow the final UART record to finish before stopping the transport.
-#if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
-	(void)SysLogFlush(SysLogGet());
-	// Allow the last polling UART transfer to finish before power off.
-	msDelay(2);
-	s_Uart.PowerOff();
-#else
-	msDelay(100);
-#endif
+}
 
-#if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
-	// Keep the alarm pending until Backup entry; the reset starts a new timer.
-	state = DisableInterrupt();
-	if (nsTimerEnableTrigger(&s_WakeTimer, 0,
-		(uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000000ULL,
-		TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0U || !TimerEnable(&s_WakeTimer))
-	{
-		EnableInterrupt(state);
-		if (s_Uart.Init(s_UartCfg))
-		{
-			SysLogPrintf(SysLogGet(), "Wake timer start FAIL\r\n");
-			(void)SysLogFlush(SysLogGet());
-			msDelay(100);
-		}
-		return 1;
-	}
-#endif
-	CorePowerTestSummary();
-	SystemPowerOff();
-	CorePowerTestResult("System OFF entry", false);
+int main(void)
+{
+	uint32_t caps;
+	uint32_t reason;
+	uint32_t startCount;
+	int retCount;
+	bool marker;
+	bool pinWake;
 
-#if defined(POWER_DEMO_UART_OFF) && POWER_DEMO_UART_OFF
-	// If power off returns, rebuild the console to report the failure.
 	if (!s_Uart.Init(s_UartCfg))
 	{
 		return 1;
 	}
-	msDelay(50);
-	SysLogPrintf(SysLogGet(), "SystemPowerOff returned\r\n");
+	CorePowerTestPut("CorePowerTest\r\n");
+	s_Checks = 0U;
+	s_Failures = 0U;
+	if (SystemPowerCapabilitiesGet == nullptr)
+	{
+		CorePowerTestUnsupported("Power capability API");
+		CorePowerTestSummary();
+		return 1;
+	}
+	caps = SystemPowerCapabilitiesGet();
+	CorePowerTestPut("Capabilities ");
+	CorePowerTestNumber(caps);
+	CorePowerTestPut("\r\n");
+	reason = SystemResetReason();
+	CorePowerTestPut("Reset reason ");
+	CorePowerTestNumber(reason);
+	CorePowerTestPut("\r\n");
+	CorePowerTestResult("Reset reason stable", SystemResetReason() == reason);
+
+	retCount = SystemRetRegCount();
+	marker = false;
+	startCount = 0U;
+	if ((caps & SYSTEM_POWER_CAP_RET_REG) != 0U && retCount > 0)
+	{
+		startCount = SystemRetRegRead(0);
+		marker = retCount > 1 && SystemRetRegRead(1) == CORE_POWER_TEST_MARKER;
+		CorePowerTestResult("Retention register write/read",
+			SystemRetRegWrite(0, startCount + 1U) &&
+			SystemRetRegRead(0) == ((startCount + 1U) & 0xFFU));
+		CorePowerTestResult("Retention register invalid index",
+			SystemRetRegRead(-1) == 0U && !SystemRetRegWrite(-1, 1U) &&
+			SystemRetRegRead(retCount) == 0U && !SystemRetRegWrite(retCount, 1U));
+	}
+	else
+	{
+		CorePowerTestUnsupported("Retention registers");
+	}
+
+	if (marker)
+	{
+		CorePowerTestResult("System OFF reset-on-wake",
+			(reason & (SYSTEM_RESET_WAKE_PIN | SYSTEM_RESET_WAKE_TIMER)) != 0U);
+	}
+	CorePowerTestRetention(caps, reason, marker);
+	CorePowerTestRunningMode(caps);
+	CorePowerTestSleep(caps);
+
+	pinWake = CorePowerTestWakePin(caps);
 	CorePowerTestSummary();
+
+	if ((caps & SYSTEM_POWER_CAP_SYSTEM_OFF) == 0U)
+	{
+		CorePowerTestUnsupported("System OFF");
+	}
+	else if (pinWake)
+	{
+		if (retCount > 1)
+		{
+			(void)SystemRetRegWrite(1, CORE_POWER_TEST_MARKER);
+		}
+		CorePowerTestPut("Entering System OFF; press wake button\r\n");
+		msDelay(100);
+		SystemPowerOff();
+		CorePowerTestResult("System OFF returned unexpectedly", false);
+		CorePowerTestSummary();
+	}
+	else
+	{
+		CorePowerTestUnsupported("System OFF: no validated wake source");
+	}
+
 	while (1)
 	{
-		__WFE();
+		__WFI();
 	}
-#else
-	CorePowerTestSummary();
-#endif
-
-#endif
-	return 0;
 }

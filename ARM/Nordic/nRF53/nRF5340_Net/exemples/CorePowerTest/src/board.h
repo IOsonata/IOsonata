@@ -34,9 +34,5 @@ MIT License, Copyright (c) 2026, I-SYST inc.
 
 // Network core supports resumable SystemSleep rather than independent
 // application-core System OFF and reset-wake validation.
-#define POWER_DEMO_RESUME_WAKE		1
-#define POWER_DEMO_TIMER_WAKE_MS		1000
-#define POWER_DEMO_TIMER_WAKE_DEVNO	0
-#define POWER_DEMO_STANDBY_RAM_TEST	1
 
 #endif // __BOARD_H__
