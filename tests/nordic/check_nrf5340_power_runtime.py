@@ -39,6 +39,14 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("defined(NRF5340_XXAA_NETWORK)", s)
 		self.assertIn("defined(NRF5340_XXAA_APPLICATION)", s)
 
+	def test_console_uses_interrupt_driven_uarte(self):
+		s = SRC.read_text(encoding="utf-8")
+		self.assertIn(".bIntMode = true,", s)
+		self.assertIn(".bDMAMode = true,", s)
+		self.assertNotIn(".bIntMode = false,", s)
+		self.assertNotIn(".bDMAMode = false,", s)
+		self.assertNotIn("DeviceIntrfWaitTxComplete", s)
+
 	def test_console_uses_buffered_uart_submission(self):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertIn("sent = s_Uart.Tx((const uint8_t *)pText, remaining);", s)

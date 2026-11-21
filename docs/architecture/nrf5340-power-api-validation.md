@@ -26,3 +26,7 @@ those projects are migrated.
 
 CorePowerTest reports API behavior; it does not independently measure
 power consumption or oscillator source quality.
+
+CorePowerTest uses interrupt-driven UARTE with EasyDMA for console output
+on nRF5340. Driver-owned asynchronous transfers continue independently of
+the test's CPU polling logic. The test uses only the generic UART interface.

@@ -61,7 +61,7 @@ static const UARTCfg_t s_UartCfg = {
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = false,
+	.bIntMode = true,
 	.IntPrio = 6,
 	.EvtCallback = nullptr,
 	.bFifoBlocking = true,
@@ -69,7 +69,7 @@ static const UARTCfg_t s_UartCfg = {
 	.pRxMem = nullptr,
 	.TxMemSize = 0,
 	.pTxMem = nullptr,
-	.bDMAMode = false,
+	.bDMAMode = true,
 };
 
 static const TimerCfg_t s_TimerCfg = {
