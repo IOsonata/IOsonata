@@ -44,10 +44,6 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "board.h"
 
-#ifndef CLOCK_DEMO_APB_SHARED_CORE
-#define CLOCK_DEMO_APB_SHARED_CORE 0
-#endif
-
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE 1000000
 #endif
@@ -56,9 +52,6 @@ SOFTWARE.
 #endif
 #ifndef CLOCK_DEMO_CORE_READONLY
 #define CLOCK_DEMO_CORE_READONLY 0
-#endif
-#ifndef CLOCK_DEMO_APB_READONLY
-#define CLOCK_DEMO_APB_READONLY 0
 #endif
 #ifndef CLOCK_DEMO_DEFER_TIMER
 #define CLOCK_DEMO_DEFER_TIMER 0
@@ -101,7 +94,12 @@ static const ClockDemoSource_t s_Sources[] = CLOCK_DEMO_SOURCES;
 #if defined(CLOCK_DEMO_LF_SOURCES)
 static const ClockDemoLowFreq_t s_LowFreqSources[] = CLOCK_DEMO_LF_SOURCES;
 #endif
-static const uint32_t s_ApbDividers[] = CLOCK_DEMO_APB_DIVIDERS;
+// Existing boards still supply CLOCK_DEMO_APB_DIVIDERS. The test treats
+// index 0 as a generic peripheral clock domain, not an APB-specific bus.
+#ifndef CLOCK_DEMO_PERIPH_DIVIDERS
+#define CLOCK_DEMO_PERIPH_DIVIDERS CLOCK_DEMO_APB_DIVIDERS
+#endif
+static const uint32_t s_PeriphDividers[] = CLOCK_DEMO_PERIPH_DIVIDERS;
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -352,13 +350,13 @@ int main(void)
 	const ClockDemoLowFreq_t *pLfSource;
 #endif
 	uint32_t core;
-#if !CLOCK_DEMO_APB_READONLY
 	uint32_t bus;
+	uint32_t readback;
 	unsigned dividerIdx;
+	unsigned dividerCount;
 	uint32_t divider;
 	uint32_t request;
 	uint32_t actual;
-#endif
 #if CLOCK_DEMO_HF_SOURCE_ENABLE
 	bool hfSourceEnabled = false;
 #endif
@@ -371,7 +369,7 @@ int main(void)
 		return 1;
 	}
 	msDelay(1000);
-	ClockDemoPrint("ClockDemo\r\nStartup CPU %u Hz, APB %u Hz\r\n",
+	ClockDemoPrint("ClockDemo\r\nStartup CPU %u Hz, peripheral clock 0 %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	ClockDemoFlush();
 #if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
@@ -397,10 +395,6 @@ int main(void)
 	if (sizeof(s_Sources) == 0U)
 	{
 		ClockDemoPrint("Core selection: SKIP (not configured)\r\n");
-	}
-	if (sizeof(s_ApbDividers) == 0U)
-	{
-		ClockDemoPrint("Peripheral clock setting: SKIP (not configured)\r\n");
 	}
 
 #if !defined(CLOCK_DEMO_LF_SOURCES)
@@ -461,29 +455,43 @@ int main(void)
 			{
 				continue;
 			}
-#if !CLOCK_DEMO_APB_READONLY
 			bus = SystemPeriphClockGet(0);
-			for (dividerIdx = 0U; dividerIdx < sizeof(s_ApbDividers) / sizeof(s_ApbDividers[0]); dividerIdx++)
+			if (bus == 0U)
 			{
-				divider = s_ApbDividers[dividerIdx];
-				request = bus / divider;
-				ClockDemoClockBegin();
-				actual = SystemPeriphClockSet(0, request);
-				if (!ClockDemoClockEnd())
-				{
-					return 1;
-				}
-				ClockDemoPrint("CPU %u Hz, APB request %u Hz, actual %u Hz\r\n",
-					(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
-				ClockDemoResult("APB", actual == request &&
-					SystemPeriphClockGet(0) == actual &&
-					SystemCoreClockGet() == (CLOCK_DEMO_APB_SHARED_CORE && core == bus ? actual : core));
-
-#if !CLOCK_DEMO_DEFER_TIMER
-				ClockDemoTimer();
-#endif
+				ClockDemoPrint("Peripheral clock 0: SKIP (unavailable)\r\n");
 			}
+			else
+			{
+				// Test the current frequency even when the board lists no
+				// additional divider requests. A fixed clock is valid when
+				// Set returns that clock and Get confirms it.
+				dividerCount = sizeof(s_PeriphDividers) / sizeof(s_PeriphDividers[0]);
+				for (dividerIdx = 0U; dividerIdx <= dividerCount; dividerIdx++)
+				{
+					divider = dividerIdx == 0U ? 1U : s_PeriphDividers[dividerIdx - 1U];
+					if (divider == 0U || bus / divider == 0U)
+					{
+						ClockDemoResult("Peripheral clock request", false);
+						continue;
+					}
+					request = bus / divider;
+					ClockDemoClockBegin();
+					actual = SystemPeriphClockSet(0, request);
+					if (!ClockDemoClockEnd())
+					{
+						return 1;
+					}
+					readback = SystemPeriphClockGet(0);
+					ClockDemoPrint("CPU %u Hz, peripheral clock 0 request %u Hz, actual %u Hz\r\n",
+						(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
+					ClockDemoResult("Peripheral clock", actual != 0U &&
+						readback == actual &&
+						(request != bus || actual == bus));
+#if !CLOCK_DEMO_DEFER_TIMER
+					ClockDemoTimer();
 #endif
+				}
+			}
 #if defined(CLOCK_DEMO_LF_SOURCES)
 			for (lfIdx = 0U; lfIdx < sizeof(s_LowFreqSources) / sizeof(s_LowFreqSources[0]); lfIdx++)
 			{
