@@ -46,6 +46,8 @@ MIT License. Copyright (c) 2026, I-SYST inc.
 
 #define CORE_POWER_TEST_MARKER	0xC3U
 #define CORE_POWER_TEST_RAM_WORDS	32U
+// At 1 Mbps this gives the ISR time to send several hundred UART bytes.
+#define CORE_POWER_TEST_TX_DRAIN_MS	10U
 
 static const IOPinCfg_t s_UartPins[] = {
 	{ UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL },
@@ -97,12 +99,14 @@ static void CorePowerTestPut(const char *pText)
 {
 	int remaining;
 	int sent;
+	bool lineEnd;
 
 	remaining = 0;
 	while (pText[remaining] != 0)
 	{
 		remaining++;
 	}
+	lineEnd = remaining > 0 && pText[remaining - 1] == '\n';
 	while (remaining > 0)
 	{
 		sent = s_Uart.Tx((const uint8_t *)pText, remaining);
@@ -111,6 +115,12 @@ static void CorePowerTestPut(const char *pText)
 			pText += sent;
 			remaining -= sent;
 		}
+	}
+	// Tx() queues the data. Let the UART IRQ drain a complete record.
+	// This is a test-console delay, not a driver flush or TX polling.
+	if (lineEnd)
+	{
+		msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 	}
 }
 
@@ -322,7 +332,8 @@ static void CorePowerTestSleep(uint32_t Caps)
 			return;
 		}
 		CorePowerTestPut("Entering Standby; automatic timer wake\r\n");
-		msDelay(2);
+		// All pending test output must finish before CPU sleep.
+		msDelay(CORE_POWER_TEST_TX_DRAIN_MS);
 		state = DisableInterrupt();
 		s_TimerWoke = false;
 		start = TimerGetMicrosecond(pTimer);
@@ -486,6 +497,7 @@ int main(void)
 			msDelay(1);
 		}
 #endif
+		// Keep interrupts enabled while the final message drains.
 		msDelay(100);
 		SystemPowerOff();
 		CorePowerTestResult("System OFF returned unexpectedly", false);
