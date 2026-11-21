@@ -94,6 +94,24 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("s_bNRFxLfclkStopPending = true", enable)
         self.assertIn("s_bNRFxLfclkOwned = false", enable)
 
+    def test_nrf5340_net_unavailable_xtal_falls_back_to_running_rc(self):
+        enable = function(self.clock, "bool SystemLowFreqClockEnable(",
+                          "void SystemLowFreqClockDisable(")
+        self.assertIn("#if defined(NRF5340_XXAA_NETWORK)", enable)
+        self.assertIn("if (!started && stopped &&", enable)
+        self.assertIn("nRFxLfclkWaitStopped()", enable)
+        self.assertIn("nRFxLfclkStart(NRFX_LFCLK_SRC_RC", enable)
+        self.assertIn("if (started)", enable)
+        self.assertIn("effectiveSrc & NRFX_LFCLK_SRC_Msk", enable)
+        self.assertIn("s_bNRFxNetLfclkRcFallback =", enable)
+        self.assertIn("s_nRFxLfclkReqCnt = 1U", enable)
+        self.assertIn("s_bNRFxLfclkOwned = true", enable)
+        self.assertIn("return started;", enable)
+        select = function(self.clock, "bool SystemLowFreqClockSelect(",
+                          "uint32_t SystemPeriphClockGet(")
+        self.assertNotIn("nRFxLfclkStart(", select)
+        self.assertNotIn("TASKS_LFCLKSTART", select)
+
     def test_nrf5340_lfxo_pins_assigned_in_secure_startup(self):
         path = ROOT / "ARM/Nordic/nRF53/nRF5340_App/lib/src/system_nrf5340_application.c"
         system = path.read_text(encoding="utf-8")

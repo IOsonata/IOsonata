@@ -403,6 +403,24 @@ the crystal starts. The clock manager waits for `LFCLKSTAT.SRC` to report
 the active LFXO before claiming readiness. `LFCLKSRCCOPY` reports the
 requested source and cannot by itself establish LFXO readiness.
 
+## Network-core LFXO availability fallback
+
+The Nordic nRF5340 Audio DK declares an LFXO in `g_McuOsc`. The network
+core requests the crystal when LFCLK is enabled, but application-core
+configuration or other shared-hardware conditions can prevent LFXO from
+becoming active. If the network core cannot activate LFXO, the clock owner
+waits for the failed START's STOP and explicitly starts LFRC instead.
+
+Only a successfully started LFRC is accepted as fallback. The requested
+board source remains XTAL, while the effective RC source is tracked
+internally for repeated enables and reference-counted disable. The
+network core can retry XTAL on the next first enable. Other Nordic cores
+retain their existing behavior.
+
+`Select` remains configuration-only; no additional board capability
+mask is needed. This fallback must be validated in network-only and
+dual-core operation, including LFRC accuracy requirements.
+
 ## nRF5340 LFRC calibration API
 
 The System Core provides `SystemHighFreqClockCalibrate()` and

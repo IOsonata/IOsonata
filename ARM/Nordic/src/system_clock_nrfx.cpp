@@ -189,6 +189,10 @@ static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
+#if defined(NRF5340_XXAA_NETWORK)
+// XTAL remains the board-selected source. RC is an effective-clock fallback.
+static bool s_bNRFxNetLfclkRcFallback;
+#endif
 
 // Temporarily selected sources, independent of the board oscillator hardware.
 static bool s_bNRFxCoreOscSelected;
@@ -839,6 +843,7 @@ static bool nRFxLfclkWaitStopped(void)
 bool SystemLowFreqClockEnable(void)
 {
 	uint32_t src;
+	uint32_t effectiveSrc;
 	uint32_t state;
 	bool running;
 	bool stopped;
@@ -848,6 +853,13 @@ bool SystemLowFreqClockEnable(void)
 	{
 		return false;
 	}
+	effectiveSrc = src;
+#if defined(NRF5340_XXAA_NETWORK)
+	if (s_bNRFxNetLfclkRcFallback)
+	{
+		effectiveSrc = NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos;
+	}
+#endif
 	state = DisableInterrupt();
 	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt == UINT32_MAX)
 	{
@@ -857,7 +869,7 @@ bool SystemLowFreqClockEnable(void)
 	if (s_nRFxLfclkReqCnt != 0U)
 	{
 		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
-			(src & NRFX_LFCLK_SRC_Msk))
+			(effectiveSrc & NRFX_LFCLK_SRC_Msk))
 		{
 			EnableInterrupt(state);
 			return false;
@@ -870,7 +882,7 @@ bool SystemLowFreqClockEnable(void)
 	if (running && !s_bNRFxLfclkStopPending)
 	{
 		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
-			(src & NRFX_LFCLK_SRC_Msk))
+			(effectiveSrc & NRFX_LFCLK_SRC_Msk))
 		{
 			EnableInterrupt(state);
 			return false;
@@ -889,6 +901,23 @@ bool SystemLowFreqClockEnable(void)
 
 	stopped = !s_bNRFxLfclkStopPending || nRFxLfclkWaitStopped();
 	started = stopped && nRFxLfclkStart(src);
+#if defined(NRF5340_XXAA_NETWORK)
+	if (!started && stopped &&
+		(src & NRFX_LFCLK_SRC_Msk) ==
+		(NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos))
+	{
+		// The shared crystal is not available to this network core.
+		// Failed START issued STOP. Wait for completion before using LFRC.
+		if (nRFxLfclkWaitStopped())
+		{
+			started = nRFxLfclkStart(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos);
+			if (started)
+			{
+				effectiveSrc = NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos;
+			}
+		}
+	}
+#endif
 	state = DisableInterrupt();
 	if (stopped)
 	{
@@ -898,6 +927,11 @@ bool SystemLowFreqClockEnable(void)
 	{
 		s_nRFxLfclkReqCnt = 1U;
 		s_bNRFxLfclkOwned = true;
+#if defined(NRF5340_XXAA_NETWORK)
+		s_bNRFxNetLfclkRcFallback =
+		(effectiveSrc & NRFX_LFCLK_SRC_Msk) !=
+		(src & NRFX_LFCLK_SRC_Msk);
+#endif
 	}
 	else if (stopped)
 	{
@@ -905,6 +939,9 @@ bool SystemLowFreqClockEnable(void)
 		// The next enable must wait for that STOP to settle.
 		s_bNRFxLfclkStopPending = true;
 		s_bNRFxLfclkOwned = false;
+#if defined(NRF5340_XXAA_NETWORK)
+		s_bNRFxNetLfclkRcFallback = false;
+#endif
 	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);
@@ -937,6 +974,9 @@ void SystemLowFreqClockDisable(void)
 			{
 				NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
 				s_bNRFxLfclkStopPending = true;
+#if defined(NRF5340_XXAA_NETWORK)
+				s_bNRFxNetLfclkRcFallback = false;
+#endif
 #if defined(NRF52_SERIES)
 				s_bNRFxMpslLfclkOwned = false;
 #endif
