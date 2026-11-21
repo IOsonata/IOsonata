@@ -61,6 +61,19 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("TimerSetFrequency(&s_Timer", source)
 		self.assertIn("TimerDisable(&s_Timer);", source)
 
+	def test_clock_demo_checks_shared_clock_lifecycle(self):
+		source = CLOCK.read_text(encoding="utf-8")
+		self.assertIn("ClockDemoSharedClockTest();", source)
+		for api in ("SystemHighFreqClockEnable",
+			"SystemHighFreqClockDisable", "SystemLowFreqClockEnable",
+			"SystemLowFreqClockDisable"):
+			self.assertIn("#pragma weak " + api, source)
+			self.assertIn(api + "();", source)
+		self.assertIn('ClockDemoResult("HF shared clock API implemented", false)', source)
+		self.assertIn('ClockDemoResult("LF shared clock API implemented", false)', source)
+		self.assertIn('ClockDemoResult("HF shared clock lifecycle",', source)
+		self.assertIn('ClockDemoResult("LF shared clock lifecycle",', source)
+
 	def test_clock_demo_board_inputs(self):
 		paths = sorted(ROOT.glob("**/exemples/ClockDemo/src/board.h"))
 		self.assertTrue(paths)
