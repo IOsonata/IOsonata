@@ -61,7 +61,9 @@ uint32_t SystemCoreClockGet(void)
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	// Calibrated on PCA10121 against TIMER: 250 ms usDelay measured 359.899 ms
+	// with 16 cycles/iteration; the observed loop cost is about 23 cycles.
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 23000000UL;
 	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
 }
 

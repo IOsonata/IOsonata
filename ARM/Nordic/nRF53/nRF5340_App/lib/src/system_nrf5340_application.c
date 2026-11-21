@@ -85,7 +85,9 @@ void SystemCoreClockUpdate(void)
 #else
     SystemCoreClock = __SYSTEM_CLOCK_MAX >> (NRF_CLOCK_S->HFCLKCTRL & (CLOCK_HFCLKCTRL_HCLK_Msk));
 #endif
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
+	// PCA10121 TIMER measured 438251 us for a 250000 us delay at 64 MHz.
+	// Adjust the microsecond busy loop from 16 to 28 cycles per iteration.
+	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 28000000UL;
 	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
 }
 

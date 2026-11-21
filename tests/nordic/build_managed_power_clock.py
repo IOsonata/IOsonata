@@ -15,10 +15,12 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-TARGETS = ("nrf52832", "nrf52840")
+TARGETS = ("nrf52832", "nrf52840", "nrf5340_app", "nrf5340_net")
 PROJECT_ROOT = {
     "nrf52832": ROOT / "ARM/Nordic/nRF52/nRF52832",
     "nrf52840": ROOT / "ARM/Nordic/nRF52/nRF52840",
+    "nrf5340_app": ROOT / "ARM/Nordic/nRF53/nRF5340_App",
+    "nrf5340_net": ROOT / "ARM/Nordic/nRF53/nRF5340_Net",
 }
 DEFAULT_ECLIPSE = Path("/Applications/IOcomposer.app/Contents/MacOS/eclipse")
 
@@ -97,30 +99,29 @@ def main():
         standard_projects = [
             root / "lib/ioc",
             root / "exemples/ClockDemo/ioc",
-            root / "exemples/PowerOffDemo/ioc",
-            root / "exemples/HfxoTestBle/ioc",
         ]
+        if target != "nrf5340_net":
+            standard_projects.append(root / "exemples/PowerOffDemo/ioc")
+        if target in ("nrf52832", "nrf52840"):
+            standard_projects.append(root / "exemples/HfxoTestBle/ioc")
         sdc_projects = [
             root / "lib/ioc",
             root / "exemples/HfxoTestBle/ioc",
         ]
-        projects = standard_projects
-        if any(config.endswith("_SDC") for config in configurations):
-            projects = standard_projects + [sdc_projects[1]]
-        for directory in projects:
+        if target in ("nrf5340_app", "nrf5340_net"):
+            if any(config.endswith("_SDC") for config in configurations):
+                raise ValueError("nRF5340 managed projects provide only Debug and Release")
+        for directory in standard_projects:
             if not (directory / ".project").is_file():
                 raise FileNotFoundError("Missing managed project: " + str(directory))
 
-        # ClockDemo has the same Eclipse project name on different targets.
+        # Keep project names isolated between Nordic targets.
         # Never import two targets into the same workspace.
         with tempfile.TemporaryDirectory(
                 prefix="iosonata-nordic-cdt-" + target + "-") as work:
             workspace = Path(work)
             for configuration in configurations:
-                if configuration.endswith("_SDC"):
-                    selected = sdc_projects
-                else:
-                    selected = standard_projects
+                selected = sdc_projects if configuration.endswith("_SDC") else standard_projects
                 for directory in selected:
                     build(eclipse, workspace, directory, configuration)
                 print(target, configuration, "PASS", flush=True)
