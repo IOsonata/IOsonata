@@ -23,6 +23,20 @@ class NetworkStandbyDemo(unittest.TestCase):
 		self.assertIn("NRF5340_DK_PCA10095", board)
 		self.assertIn("UART_RX_PIN\t\t\t8", board)
 
+	def test_generic_timer_is_running_before_wake_compare(self):
+		s = (ROOT / "exemples/misc/power_off_demo.cpp").read_text(encoding="utf-8")
+		start = s.index("if (TimerSetFrequency(&s_WakeTimer, 1024U)")
+		end = s.index("elapsed = TimerGetMicrosecond(&s_WakeTimer) - start;", start)
+		cycle = s[start:end]
+		self.assertIn('PowerDemoPut("Standby timer enable FAIL', cycle)
+		self.assertIn("if (!TimerEnable(&s_WakeTimer))", cycle)
+		self.assertLess(cycle.index("TimerSetFrequency(&s_WakeTimer"),
+			cycle.index("TimerEnable(&s_WakeTimer)"))
+		self.assertLess(cycle.index("TimerEnable(&s_WakeTimer)"),
+			cycle.index("nsTimerEnableTrigger(&s_WakeTimer"))
+		self.assertLess(cycle.index("nsTimerEnableTrigger(&s_WakeTimer"),
+			cycle.index("SystemSleep();"))
+
 	def test_network_core_system_sleep_backend(self):
 		power = (ROOT / "ARM/Nordic/src/system_power_nrfx.cpp").read_text(encoding="utf-8")
 		start = power.index("#if defined(NRF5340_XXAA_NETWORK)\\n// Network core")

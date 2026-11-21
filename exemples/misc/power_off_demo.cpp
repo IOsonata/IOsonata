@@ -521,6 +521,13 @@ int main()
 			PowerDemoPut("Standby timer frequency FAIL\r\n");
 			return 1;
 		}
+		// A trigger configures RTC compare registers; it does not start
+		// the counter. Start the timer before arming its wake interrupt.
+		if (!TimerEnable(&s_WakeTimer))
+		{
+			PowerDemoPut("Standby timer enable FAIL\r\n");
+			return 1;
+		}
 		state = DisableInterrupt();
 		s_StandbyTimerWoke = false;
 		start = TimerGetMicrosecond(&s_WakeTimer);
