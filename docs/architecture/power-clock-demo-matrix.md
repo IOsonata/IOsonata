@@ -169,13 +169,19 @@ nsDelay and msDelay implementations are unchanged. DWT state and interrupt
 masking are restored after measurement; unavailable cycle counting is reported
 by the calibration function rather than inventing measured factors.
 
-The shared idelay.h calculation has no MCU-specific path. SAMD supplies its
-13-cycle calibration from system_samd.c. Other ARM ports retain their existing
-16-cycle calibration; their physical loop timing still needs board measurement.
-Nanosecond delays retain existing port calibration where available; ports
-without a prior calibration use a nominal three-cycle loop. These values
-require hardware timing validation. Both counts update together. Zero delays
-execute no loop, and nanosecond scaling uses 64-bit arithmetic.
+The assembly delay loops in idelay.h remain unchanged. ARM clock owners
+use ArmDelayClockSetDivisors to update both factors using the actual CPU
+frequency, including when reducing frequency for low-power operation and
+restoring it afterward. The shared helper preserves existing MCU-specific
+fallback cycle costs, such as SAMD's 13-cycle microsecond loop, nRF52's
+13-cycle loop and SAM4L's 14-cycle loop. On nRF5340, the DWT-measured
+loop cost is cached at initialization and later frequency changes use only
+ArmDelayClockUpdate arithmetic. Without accessible DWT, the documented
+fallback remains in use. None of these methods takes ownership of Timer,
+RTC or SysTick. Fallback cycle costs still need hardware validation.
+
+Both factors are recalculated at each clock change. Zero delays execute no
+loop, and nanosecond scaling retains 64-bit arithmetic.
 RISC-V cycle-counter delays preserve fractional MHz for every target, using
 the current SystemCoreClock. Loop overhead, interrupt handling and flash stalls
 can extend delays; these functions do not replace a hardware timer.
