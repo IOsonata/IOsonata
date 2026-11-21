@@ -83,6 +83,8 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("(void)nRFxLfclkCalibrate();", ready)
         self.assertIn("return true;", ready)
         self.assertNotIn("return nRFxLfclkCalibrate();", ready)
+        lf = function(self.clock, "bool SystemLowFreqClockCalibrate(",
+                      "// The clock manager alone starts")
         self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", lf)
         self.assertIn("NRFX_LFCLK_STATE_Msk", lf)
         self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", startup)
