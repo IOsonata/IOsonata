@@ -610,13 +610,6 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		}
 #endif
 
-		// Notify the generic sink before taking the next DMA block.
-		// A SysLog handler can replenish the FIFO while the UART is idle.
-		if (pDev->EvtCB != nullptr)
-		{
-			(void)pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, nullptr,
-				CFifoAvail(dev->pUartDev->hTxFifo));
-		}
 		int l = NRFX_UART_TXDMA_SIZE;
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
 		if (p)
@@ -638,6 +631,14 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		else
 		{
 			dev->pUartDev->bTxReady = true;
+		}
+		// Notify the generic sink only after the completed transfer's
+		// FIFO space has been released. The callback may queue more data;
+		// if the transmitter is idle, TxData starts that DMA itself.
+		if (pDev->EvtCB != nullptr)
+		{
+			(void)pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, nullptr,
+				CFifoAvail(dev->pUartDev->hTxFifo));
 		}
 		if (dev->pUartDev->EvtCallback)
 		{
