@@ -280,7 +280,7 @@ uint32_t millisecond range. Previously msDelay(4294968) converted to only
 iterations per microsecond, usDelay(1073741824) also wrapped to zero iterations.
 
 The compiler may now share msDelay code rather than inlining it at every call.
-No MCU-specific calculation or new clock dependency was added to idelay.h.
+Shared CPU-frequency delay-factor arithmetic and optional cycle measurement now reside in the existing idelay.h. No separate delay headers are required.
 The D11 ClockDemo Standby build uses 15,788 flash bytes (332 fewer) and 2,132
 static RAM bytes. Clock-selection mode uses 15,350 flash and 2,152 static RAM
 bytes. Both exclude stack use and linked in Debug and Release.
