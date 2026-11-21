@@ -348,13 +348,10 @@ static bool CorePowerTestWakePin(uint32_t Caps)
 		CorePowerTestUnsupported("Wake pin");
 		return false;
 	}
-	ok = IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
+	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
 		IOPINDIR_INPUT, WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ?
 		IOPINRES_PULLDOWN : IOPINRES_PULLUP, IOPINTYPE_NORMAL);
-	if (ok)
-	{
-		ok = SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
-	}
+	ok = SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
 	CorePowerTestResult("Wake pin configuration", ok);
 	return ok;
 #else
@@ -438,6 +435,14 @@ int main(void)
 			(void)SystemRetRegWrite(1, CORE_POWER_TEST_MARKER);
 		}
 		CorePowerTestPut("Entering System OFF; press wake button\r\n");
+#if defined(WAKE_BUT_PIN)
+		// Do not immediately wake if the button is still held.
+		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
+			(WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 1 : 0))
+		{
+			msDelay(1);
+		}
+#endif
 		msDelay(100);
 		SystemPowerOff();
 		CorePowerTestResult("System OFF returned unexpectedly", false);

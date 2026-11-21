@@ -9,22 +9,23 @@ BASE = ROOT / "ARM/Nordic/nRF53"
 
 
 class CorePowerTest(unittest.TestCase):
-	def test_shared_power_api_result_ledger(self):
+	def test_all_supported_phases_run_at_runtime(self):
 		s = SRC.read_text(encoding="utf-8")
+		main = s[s.index("int main(void)"):]
 		for name in ("CorePowerTestResult", "CorePowerTestSummary",
 			"SystemSleep();", "SystemPowerOff();",
-			"RAM retention after reset", "Standby timer wake",
-			"CPU/APB clock after resume",
-			"Retention register invalid index", "Reset reason API",
-			"System OFF reset-on-wake"):
+			"CorePowerTestRetention(caps", "CorePowerTestRunningMode(caps)",
+			"CorePowerTestSleep(caps)", "CorePowerTestWakePin(caps)",
+			"SystemPowerCapabilitiesGet()"):
 			self.assertIn(name, s)
+		self.assertNotIn("POWER_DEMO_RESUME_WAKE", s)
+		self.assertLess(main.index("CorePowerTestSleep(caps)"),
+			main.index("SystemPowerOff();"))
 
-	def test_report_after_ram_check(self):
+	def test_void_gpio_configuration_call(self):
 		s = SRC.read_text(encoding="utf-8")
-		standby = s[s.index("int main()"):s.index("#else\n\tuint32_t reason;", s.index("int main()"))]
-		self.assertLess(standby.index('CorePowerTestResult("SRAM sample:'),
-			standby.rindex("CorePowerTestSummary();"))
-		self.assertIn("CorePowerTest complete:", s)
+		self.assertNotIn("ok = IOPinConfig(", s)
+		self.assertIn("IOPinConfig(WAKE_BUT_PORT", s)
 
 	def test_one_managed_project_per_core(self):
 		for core in ("nRF5340_App", "nRF5340_Net"):

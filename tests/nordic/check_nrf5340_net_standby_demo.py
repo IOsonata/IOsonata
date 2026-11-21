@@ -14,27 +14,20 @@ class NetworkStandbyDemo(unittest.TestCase):
 		self.assertIn("exemples/misc/core_power_test.cpp", project)
 		self.assertIn("src/board.h", project)
 
-	def test_board_uses_lf_timer_wake(self):
+	def test_board_resources_do_not_select_power_test_mode(self):
 		board = (NET / "src/board.h").read_text(encoding="utf-8")
-		self.assertIn("POWER_DEMO_RESUME_WAKE", board)
-		self.assertIn("POWER_DEMO_TIMER_WAKE_MS", board)
-		self.assertIn("POWER_DEMO_TIMER_WAKE_DEVNO", board)
-		self.assertIn("POWER_DEMO_STANDBY_RAM_TEST", board)
+		self.assertNotIn("POWER_DEMO_RESUME_WAKE", board)
 		self.assertIn("NRF5340_DK_PCA10095", board)
 		self.assertIn("UART_RX_PIN\t\t\t8", board)
 
-	def test_generic_timer_is_running_before_wake_compare(self):
+	def test_generic_timer_wake_starts_before_sleep(self):
 		s = (ROOT / "exemples/misc/core_power_test.cpp").read_text(encoding="utf-8")
-		start = s.index("if (TimerSetFrequency(&s_WakeTimer, 1024U)")
-		end = s.index("elapsed = TimerGetMicrosecond(&s_WakeTimer) - start;", start)
+		start = s.index("if (TimerSetFrequency(pTimer, 1024U)")
+		end = s.index("elapsed = TimerGetMicrosecond(pTimer) - start;", start)
 		cycle = s[start:end]
-		self.assertIn('PowerDemoPut("Standby timer enable FAIL', cycle)
-		self.assertIn("if (!TimerEnable(&s_WakeTimer))", cycle)
-		self.assertLess(cycle.index("TimerSetFrequency(&s_WakeTimer"),
-			cycle.index("TimerEnable(&s_WakeTimer)"))
-		self.assertLess(cycle.index("TimerEnable(&s_WakeTimer)"),
-			cycle.index("nsTimerEnableTrigger(&s_WakeTimer"))
-		self.assertLess(cycle.index("nsTimerEnableTrigger(&s_WakeTimer"),
+		self.assertLess(cycle.index("TimerEnable(pTimer)"),
+			cycle.index("nsTimerEnableTrigger(pTimer"))
+		self.assertLess(cycle.index("nsTimerEnableTrigger(pTimer"),
 			cycle.index("SystemSleep();"))
 
 	def test_network_core_system_sleep_backend(self):

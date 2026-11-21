@@ -1,19 +1,28 @@
-# nRF5340 generic power API validation
+# nRF5340 CorePowerTest runtime validation
 
-The application and network cores each have exactly one Eclipse managed
-CorePowerTest project, using the shared `exemples/misc/core_power_test.cpp`
-implementation. The previous app StandbyDemo duplicate is removed.
+CorePowerTest is one generic firmware image per MCU. It queries the
+power backend's `SystemPowerCapabilitiesGet` mask at runtime and runs
+every supported check. Board headers contain only physical UART, GPIO
+and reserved RAM resources. They do not select System OFF or standby.
 
-The application-core board profile currently selects System OFF and
-retention verification; the network-core board profile selects resumable
-standby with RTC timer wake. Both paths print per-cycle API PASS/FAIL
-records and a failure count. Reset-on-wake results are checked after
-the next boot, not upon returning from SystemPowerOff.
+The App core advertises CPU reduced-speed mode, resumable sleep with RTC
+wake, wake pin, System OFF, retention registers and reserved-RAM retention.
+The Net core advertises resumable sleep with RTC wake and retention
+registers; independent System OFF is unsupported.
 
-The generic implementation preserves its legacy build path through a
-one-line compatibility wrapper, for other MCU projects not yet migrated.
+The runner first checks reset reasons and retention registers, verifies
+results preserved from the previous System OFF cycle, then exercises
+running power mode transitions and three timer-driven sleep/resume
+cycles. It reports each result and a per-boot failure total. On App,
+System OFF is the final action and the next boot verifies the reset
+reason and retained/nonretained RAM; no single execution can continue
+after actual System OFF. On Net the unsupported phases print UNSUPPORTED.
 
-The same app project can build the resumable configuration by defining
-POWER_DEMO_RESUME_WAKE, POWER_DEMO_TIMER_WAKE_MS,
-POWER_DEMO_TIMER_WAKE_DEVNO and POWER_DEMO_STANDBY_RAM_TEST in its
-board profile. Separate demo projects are not needed.
+The generic capability API is a port service. Other MCU targets need
+their own backend capability implementation to receive exhaustive runtime
+coverage. A missing capability API is reported explicitly, never guessed.
+Compatibility wrappers retain older Eclipse project source links until
+those projects are migrated.
+
+CorePowerTest reports API behavior; it does not independently measure
+power consumption or oscillator source quality.
