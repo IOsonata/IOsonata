@@ -31,6 +31,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf53_approtect.h"
 
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 /*lint ++flb "Enter library region" */
 
 
@@ -60,11 +61,11 @@ uint32_t SystemCoreClockGet(void)
 
 void SystemCoreClockUpdate(void)
 {
-    SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	// Calibrated on PCA10121 against TIMER: 250 ms usDelay measured 359.899 ms
-	// with 16 cycles/iteration; the observed loop cost is about 23 cycles.
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 23000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
+
+	// The core cycle counter measures the actual delay-loop execution
+	// cost, independent of the surrounding compiler optimization.
+	(void)ArmDelayCalibrate(SystemCoreClock);
 }
 
 void SystemInit(void)
