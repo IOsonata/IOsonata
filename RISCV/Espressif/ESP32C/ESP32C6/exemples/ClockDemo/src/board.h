@@ -31,7 +31,7 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 	{"RC_FAST", OSC_TYPE_RC, 0U, 10000000U, 30000000U}, \
 	{"XTAL restore", OSC_TYPE_XTAL, 40000000U, CLOCK_DEMO_XTAL_CPU, CLOCK_DEMO_XTAL_CPU} \
 }
-#define CLOCK_DEMO_APB_DIVIDERS {1U, 2U, 4U, 1U}
+#define CLOCK_DEMO_PERIPH_DIVIDERS {1U, 2U, 4U, 1U}
 // Internal sources only; no assumption about an onboard 32 kHz crystal.
 #define CLOCK_DEMO_LF_SOURCES { \
 	{"RC_SLOW", OSC_TYPE_RC, 136000U}, \
@@ -40,7 +40,6 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define CLOCK_DEMO_TIMER_DEVNO 0
 #define CLOCK_DEMO_CYCLES 3U
 #ifndef CLOCK_DEMO_UART_RX_TEST
-#define CLOCK_DEMO_UART_RX_TEST 1
 #endif
 
 // ClockDemo never enters sleep; BOOT wake is tested by PowerOffDemo.
