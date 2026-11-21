@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check nRF5340 startup delay factors and explicit test-only measurement."""
+"""Check CPU-local startup DWT measurement and nRF5340 delay factors."""
 from pathlib import Path
 import unittest
 
@@ -32,12 +32,13 @@ class Nrf53DelayCalibration(unittest.TestCase):
 		self.assertIn("SystemnsDelayFactor = prevNsFactor;", self.cal)
 		self.assertIn("__set_PRIMASK(prevMask)", self.cal)
 
-	def test_both_cores_use_defaults_without_startup_measurement(self):
+	def test_both_cores_use_defaults_and_optional_dwt_at_startup(self):
 		for source in (self.app, self.net):
 			self.assertIn('#include "idelay.h"', source)
 			self.assertIn("ArmDelayClockInit(&s_DelayCalibration", source)
+			self.assertLess(source.index("ArmDelayClockInit(&s_DelayCalibration"), source.index("ArmDelayCalibrate(&s_DelayCalibration"))
 			self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration", source)
-			self.assertNotIn("ArmDelayCalibrate(", source)
+			self.assertEqual(source.count("ArmDelayCalibrate("), 1)
 			self.assertNotIn(" / 23000000UL", source)
 			self.assertNotIn(" / 28000000UL", source)
 		self.assertIn("s_DelayCalibration.CpuHz != cpuHz", self.app)
