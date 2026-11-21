@@ -557,6 +557,13 @@ int main(void)
 				if (cycle == CLOCK_TEST_CYCLES)
 				{
 					ClockDemoCalibrationTest();
+					ClockDemoPrint("LF RC timer timing test\r\n");
+
+					for (timerDevNo = 0;
+						timerDevNo < TimerGetLowFreqDevCount(); timerDevNo++)
+					{
+						ClockDemoTimer(timerDevNo);
+					}
 				}
 			}
 			else
@@ -588,6 +595,8 @@ int main(void)
 	{
 		ClockDemoResult("Peripheral clock domains present", false);
 	}
+	ClockDemoPrint("Restored LF source timer timing test\r\n");
+
 	// Timer implementations expose their device counts through the generic API.
 	// Test every advertised device rather than a board-selected instance.
 	lowTimerCount = TimerGetLowFreqDevCount();
