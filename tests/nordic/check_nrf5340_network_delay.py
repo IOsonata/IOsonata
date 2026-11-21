@@ -16,13 +16,12 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 		cls.delay = DELAY.read_text(encoding="utf-8")
 		cls.test = TEST.read_text(encoding="utf-8")
 
-	def test_default_factors_precede_optional_dwt_measurement(self):
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration,", self.system)
+	def test_fixed_frequency_network_uses_port_defaults(self):
 		self.assertIn("23U, 3U", self.system)
-		self.assertEqual(self.system.count("ArmDelayCalibrate("), 1)
-		self.assertLess(self.system.index("ArmDelayClockInit("),
-			self.system.index("ArmDelayCalibrate("))
-		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration,", self.system)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", self.system)
+		self.assertNotIn("ArmDelayCalibrate(", self.system)
+		self.assertNotIn("ArmDelayClockUpdate(&s_DelayCalibration", self.system)
+
 
 	def test_explicit_dwt_and_timer_calibration_remain_available(self):
 		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", self.delay)
