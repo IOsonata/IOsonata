@@ -34,10 +34,12 @@ int main(void)
 	cfg.Freq = 0U;
 	cfg.IntPrio = 6;
 	cfg.EvtHandler = nullptr;
+
 	if (!TimerInit(&s_Timer, &cfg))
 	{
 		return 1;
 	}
+
 	if (!TimerEnable(&s_Timer))
 	{
 		return 1;
