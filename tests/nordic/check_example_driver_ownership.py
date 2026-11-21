@@ -45,7 +45,7 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("SystemPeriphClockSet(0, request)", source)
 		self.assertIn("SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency)", source)
 		self.assertIn("ClockDemoTimer();", source)
-		self.assertLess(source.index("ClockDemoTimerInit();"),
+		self.assertLess(source.index("if (!ClockDemoTimerInit())"),
 			source.index("for (cycle = 1U;"))
 		for name in ("CLOCK_DEMO_CORE_READONLY", "CLOCK_DEMO_DEFER_TIMER",
 			"CLOCK_DEMO_UART_RX_TEST", "CLOCK_DEMO_STOP_UART",
