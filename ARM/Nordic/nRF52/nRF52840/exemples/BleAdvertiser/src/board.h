@@ -41,6 +41,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blystnano_boards.h"
 
+// nRF52840 SDC/LFRC validation: retain the 32 MHz HFXO for radio use.
+// LFRC calibration is managed by the Nordic power and clock implementation.
+#define MCU_OSC			{ \
+	{OSC_TYPE_XTAL, 32000000U, 20U, 0U}, \
+	{OSC_TYPE_RC, 32768U, 500U, 0U}, \
+	false, 0U \
+}
+
 // nRF52840 DK UART0/VCOM0 and active-low LED1-4.
 #define NORDIC_DK
 #ifdef NORDIC_DK
@@ -59,14 +67,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_TX_PINOP		1
 #else
 #define BOARD			BLUEPYRO_CR24S_M3225
-
-// nRF52840 SDC/LFRC validation: retain the 32 MHz HFXO for radio use.
-// LFRC calibration is managed by the Nordic power and clock implementation.
-#define MCU_OSC			{ \
-	{OSC_TYPE_XTAL, 32000000U, 20U, 0U}, \
-	{OSC_TYPE_RC, 32768U, 500U, 0U}, \
-	false, 0U \
-}
 
 #if BOARD == IBK_BLUEIO
 
