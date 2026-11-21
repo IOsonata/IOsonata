@@ -3,8 +3,8 @@
 
 @brief	Architecture-neutral delay calibration data and interpolation.
 
-Calibration values describe the delay implementation's own Q16 units per
-microsecond. The meaning of those units belongs to the architecture's
+Calibration values describe the delay implementation's measured loop rates
+in iterations per second. The meaning of those units belongs to the architecture's
 idelay.h. The generic CoreClockTest never changes active delay factors.
 
 @license
@@ -20,8 +20,8 @@ Copyright (c) 2026, I-SYST inc., all rights reserved.
 
 typedef struct {
 	uint32_t CpuHz;
-	uint32_t UsQ16;
-	uint32_t NsQ16;
+	uint32_t UsLoopsPerSecond;
+	uint32_t NsLoopsPerSecond;
 	bool Measured;
 } DelayCalibrationPoint_t;
 
@@ -41,8 +41,8 @@ static inline bool DelayCalibrationInterpolate(uint32_t CpuHz,
 	if (pLow == NULL || pHigh == NULL || pResult == NULL || CpuHz == 0U ||
 		!pLow->Measured || !pHigh->Measured ||
 		pLow->CpuHz == 0U || pHigh->CpuHz < pLow->CpuHz ||
-		pLow->UsQ16 == 0U || pLow->NsQ16 == 0U ||
-		pHigh->UsQ16 == 0U || pHigh->NsQ16 == 0U)
+		pLow->UsLoopsPerSecond == 0U || pLow->NsLoopsPerSecond == 0U ||
+		pHigh->UsLoopsPerSecond == 0U || pHigh->NsLoopsPerSecond == 0U)
 	{
 		return false;
 	}
@@ -55,25 +55,25 @@ static inline bool DelayCalibrationInterpolate(uint32_t CpuHz,
 	}
 	if (CpuHz >= pHigh->CpuHz)
 	{
-		pResult->UsQ16 = pHigh->UsQ16;
-		pResult->NsQ16 = pHigh->NsQ16;
+		pResult->UsLoopsPerSecond = pHigh->UsLoopsPerSecond;
+		pResult->NsLoopsPerSecond = pHigh->NsLoopsPerSecond;
 		return true;
 	}
 
 	span = pHigh->CpuHz - pLow->CpuHz;
 	lowWeight = pHigh->CpuHz - CpuHz;
 	highWeight = CpuHz - pLow->CpuHz;
-	us = ((uint64_t)pLow->UsQ16 * lowWeight +
-		(uint64_t)pHigh->UsQ16 * highWeight + span / 2U) / span;
-	ns = ((uint64_t)pLow->NsQ16 * lowWeight +
-		(uint64_t)pHigh->NsQ16 * highWeight + span / 2U) / span;
+	us = ((uint64_t)pLow->UsLoopsPerSecond * lowWeight +
+		(uint64_t)pHigh->UsLoopsPerSecond * highWeight + span / 2U) / span;
+	ns = ((uint64_t)pLow->NsLoopsPerSecond * lowWeight +
+		(uint64_t)pHigh->NsLoopsPerSecond * highWeight + span / 2U) / span;
 
 	if (us == 0U || ns == 0U || us > UINT32_MAX || ns > UINT32_MAX)
 	{
 		return false;
 	}
-	pResult->UsQ16 = (uint32_t)us;
-	pResult->NsQ16 = (uint32_t)ns;
+	pResult->UsLoopsPerSecond = (uint32_t)us;
+	pResult->NsLoopsPerSecond = (uint32_t)ns;
 	return true;
 }
 
