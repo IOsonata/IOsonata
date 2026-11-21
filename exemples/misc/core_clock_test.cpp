@@ -57,6 +57,8 @@ SOFTWARE.
 // diagnostic report a missing MCU implementation instead of failing at link
 // time. A missing operation is a test failure, never an implicit PASS.
 #if defined(__GNUC__)
+#pragma weak SystemPowerModeSet
+#pragma weak SystemPowerModeGet
 #pragma weak SystemHighFreqClockEnable
 #pragma weak SystemHighFreqClockDisable
 #pragma weak SystemLowFreqClockEnable
@@ -252,6 +254,55 @@ static void CoreClockTestSharedClockTest(void)
 
 // Check one-shot calibration without making the test own a periodic
 // timer or depending on the application event dispatcher.
+// Exercise the generic CPU running mode API independently of sleep and
+// oscillator ownership. Unsupported low-power modes are reported as such.
+static void CoreClockTestPowerMode(void)
+{
+	uint32_t fastest;
+	uint32_t reduced;
+	uint32_t restored;
+	bool changed;
+	bool restoredOk;
+
+	if (SystemPowerModeSet == nullptr || SystemPowerModeGet == nullptr)
+	{
+		CoreClockTestPrint("CPU low-power mode: UNSUPPORTED\r\n");
+		return;
+	}
+
+	fastest = SystemCoreClockGet();
+	if (!SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE))
+	{
+		CoreClockTestResult("CPU performance mode", false);
+		return;
+	}
+	fastest = SystemCoreClockGet();
+	CoreClockTestResult("CPU performance mode",
+		SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+
+	CoreClockTestFlush();
+	changed = SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER);
+	if (!changed)
+	{
+		CoreClockTestPrint("CPU low-power mode: UNSUPPORTED\r\n");
+		return;
+	}
+
+	reduced = SystemCoreClockGet();
+	CoreClockTestPrint("CPU reduced-speed mode %u Hz (performance %u Hz)\r\n",
+		(unsigned)reduced, (unsigned)fastest);
+	CoreClockTestResult("CPU low-power mode",
+		SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER &&
+		reduced != 0U && reduced < fastest);
+
+	CoreClockTestFlush();
+	restoredOk = SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);
+	restored = SystemCoreClockGet();
+	CoreClockTestResult("CPU performance restoration",
+		restoredOk && SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE &&
+		restored == fastest);
+}
+
 static void CoreClockTestCalibrationTest(void)
 {
 	bool enabled;
@@ -613,6 +664,7 @@ int main(void)
 	CoreClockTestFlush();
 	CoreClockTestResult("Core clock startup", SystemCoreClockGet() != 0U);
 	CoreClockTestSharedClockTest();
+	CoreClockTestPowerMode();
 	CoreClockTestDelayCalibrationRecord();
 	initialCoreSource = GetHighFreqOscType();
 	initialCoreFreq = GetHighFreqOscFreq();
