@@ -37,6 +37,20 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("if (success)", disable)
         self.assertNotIn("std::atomic", source)
 
+    def test_nrf5340_lfrc_calibrated_on_clock_start(self):
+        calibration = function(self.clock, "static bool nRFxLfclkCalibrate(",
+                               "// The clock manager alone starts")
+        self.assertIn("NRF_CLOCK->TASKS_CAL = 1U", calibration)
+        self.assertIn("NRF_CLOCK->EVENTS_DONE = 0U", calibration)
+        self.assertIn("NRFX_LFRC_CAL_TIMEOUT_US", calibration)
+        self.assertIn("usDelay(NRFX_LFCLK_START_POLL_US)", calibration)
+        startup = function(self.clock, "static bool nRFxLfclkStart(",
+                           "static bool nRFxLfclkWaitStopped(")
+        self.assertIn("#if defined(NRF53_SERIES)", startup)
+        self.assertIn("NRFX_LFCLK_SRC_RC", startup)
+        self.assertIn("!nRFxLfclkCalibrate()", startup)
+        self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", startup)
+
     def test_lfclk_start_timeout_releases_failed_request(self):
         start = function(self.clock, "static bool nRFxLfclkStart(",
                          "static bool nRFxLfclkWaitStopped(")
