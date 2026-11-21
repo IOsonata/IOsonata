@@ -89,15 +89,8 @@ static TimerDev_t s_RetainedTimer;
 static volatile uint32_t s_InterruptCount;
 static unsigned s_Failures;
 
-typedef struct {
-	uint32_t CpuHz;
-	uint32_t UsQ16;
-	uint32_t NsQ16;
-	bool Measured;
-} CoreClockTestDelaySample_t;
-
-static CoreClockTestDelaySample_t s_DelayHigh;
-static CoreClockTestDelaySample_t s_DelayLow;
+static DelayCalibrationPoint_t s_DelayHigh;
+static DelayCalibrationPoint_t s_DelayLow;
 static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event);
 static void CoreClockTestFlush(void);
 
@@ -311,10 +304,10 @@ static void CoreClockTestCalibrationTest(void)
 	CoreClockTestResult("LF RC calibration", calibrated);
 }
 
-// Calibrate the existing delay loops at the CPU frequency currently in use.
-// Prefer DWT, which measures CPU cycles independently of compiler options.
-// A high-frequency Timer is the fallback. Never use RTC for calibration.
-static bool CoreClockTestDelaySample(CoreClockTestDelaySample_t *pSample)
+// The architecture's delay implementation measures its own delay units.
+// The generic HF Timer remains a fallback and a timing validation reference.
+// Do not use RTC for calibration; never change production delay factors here.
+static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 {
 	TimerCfg_t cfg;
 	uint32_t cpuHz;
@@ -323,15 +316,8 @@ static bool CoreClockTestDelaySample(CoreClockTestDelaySample_t *pSample)
 	uint32_t nsElapsed;
 	bool valid;
 
-#if defined(__arm__) || defined(__thumb__)
-	uint32_t usFactor;
-	uint32_t nsFactor;
-	ArmDelayCalibration_t measured;
-#endif
-
 	cpuHz = SystemCoreClockGet();
-
-	if (cpuHz == 0U || pSample == nullptr)
+	if (pSample == nullptr || cpuHz == 0U)
 	{
 		return false;
 	}
@@ -341,54 +327,34 @@ static bool CoreClockTestDelaySample(CoreClockTestDelaySample_t *pSample)
 	pSample->NsQ16 = 0U;
 	pSample->Measured = false;
 
-#if defined(__arm__) || defined(__thumb__)
-	usFactor = SystemMicroSecLoopCnt;
-	nsFactor = SystemnsDelayFactor;
-	measured = {};
-
-	// The DWT function uses the same assembly loops as idelay.h.
-	// Save and restore production factors: CoreClockTest only recommends values.
-	if (ArmDelayCalibrate(&measured, cpuHz))
+	if (DelayCalibrationMeasure(pSample))
 	{
-		pSample->UsQ16 = SystemMicroSecLoopCnt;
-		pSample->NsQ16 = SystemnsDelayFactor;
-		pSample->Measured = true;
-
-		SystemMicroSecLoopCnt = usFactor;
-		SystemnsDelayFactor = nsFactor;
-
-		CoreClockTestPrint("Delay calibration DWT %u Hz: us Q16 %u, ns Q16 %u\r\n",
+		CoreClockTestPrint("Delay calibration counter %u Hz: us Q16 %u, ns Q16 %u\r\n",
 			(unsigned)cpuHz, (unsigned)pSample->UsQ16,
 			(unsigned)pSample->NsQ16);
-
 		return true;
 	}
-#endif
 
-	// The HF timer is a timing reference, never a calibration owner.
-	// A running LF/RTC timer is insufficiently precise for this purpose.
 	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
 	{
-		CoreClockTestPrint("Delay calibration: no DWT or HF Timer\r\n");
+		CoreClockTestPrint("Delay timing: no CPU counter or HF Timer\r\n");
 		return false;
 	}
 
 	cfg = s_TimerCfg;
 	cfg.DevNo = TimerGetHighFreqDevNo();
 	cfg.EvtHandler = nullptr;
-
 	if (!TimerInit(&s_RetainedTimer, &cfg))
 	{
-		CoreClockTestPrint("Delay calibration: HF Timer init FAIL\r\n");
+		CoreClockTestPrint("Delay timing: HF Timer init FAIL\r\n");
 		return false;
 	}
-
 	valid = TimerSetFrequency(&s_RetainedTimer, 0U) != 0U &&
 		TimerEnable(&s_RetainedTimer);
-
 	if (!valid)
 	{
-		CoreClockTestPrint("Delay calibration: HF Timer start FAIL\r\n");
+		TimerDisable(&s_RetainedTimer);
+		CoreClockTestPrint("Delay timing: HF Timer start FAIL\r\n");
 		return false;
 	}
 
@@ -401,33 +367,31 @@ static bool CoreClockTestDelaySample(CoreClockTestDelaySample_t *pSample)
 	nsElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
 
 	TimerDisable(&s_RetainedTimer);
+	CoreClockTestPrint("Delay timing HF Timer %u Hz: msDelay %u us, nsDelay %u us\r\n",
+		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsElapsed);
 
 	if (usElapsed == 0U || nsElapsed == 0U)
 	{
-		CoreClockTestPrint("Delay calibration: HF Timer measurement FAIL\r\n");
+		CoreClockTestResult("Delay HF Timer measurement", false);
 		return false;
 	}
-
-#if defined(__arm__) || defined(__thumb__)
-	pSample->UsQ16 = (uint32_t)((uint64_t)usFactor * 100000U / usElapsed);
-	pSample->NsQ16 = (uint32_t)((uint64_t)nsFactor * 100000U / nsElapsed);
-	pSample->Measured = pSample->UsQ16 != 0U && pSample->NsQ16 != 0U;
-
-	CoreClockTestPrint("Delay calibration HF Timer %u Hz: us Q16 %u, ns Q16 %u\r\n",
-		(unsigned)cpuHz, (unsigned)pSample->UsQ16,
-		(unsigned)pSample->NsQ16);
-#else
-	CoreClockTestPrint("Delay validation HF Timer %u Hz: us %u, ns %u microseconds\r\n",
-		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsElapsed);
-	pSample->Measured = true;
-#endif
-
-	return pSample->Measured;
+	valid = DelayCalibrationFromTimer(cpuHz, usElapsed, nsElapsed, pSample);
+	if (valid)
+	{
+		CoreClockTestPrint("Delay calibration HF Timer %u Hz: us Q16 %u, ns Q16 %u\r\n",
+			(unsigned)cpuHz, (unsigned)pSample->UsQ16,
+			(unsigned)pSample->NsQ16);
+	}
+	else
+	{
+		CoreClockTestPrint("Delay factors unavailable on this MCU; timing only\r\n");
+	}
+	return valid;
 }
 
 static void CoreClockTestDelayCalibrationRecord(void)
 {
-	CoreClockTestDelaySample_t sample;
+	DelayCalibrationPoint_t sample;
 
 	sample = {};
 
@@ -449,65 +413,39 @@ static void CoreClockTestDelayCalibrationRecord(void)
 
 static void CoreClockTestDelayCalibrationReport(void)
 {
-#if defined(__arm__) || defined(__thumb__)
-	ArmDelayPoint_t low;
-	ArmDelayPoint_t high;
+	DelayCalibrationPoint_t interpolated;
 	uint32_t midpoint;
-	uint32_t savedUs;
-	uint32_t savedNs;
-	uint32_t predictedUs;
-	uint32_t predictedNs;
-	bool interpolated;
-#endif
 
 	if (!s_DelayHigh.Measured || !s_DelayLow.Measured)
 	{
-		CoreClockTestPrint("Delay two-point calibration: NOT MEASURED\r\n");
+		CoreClockTestPrint("Delay two-point calibration: not available\r\n");
 		return;
 	}
 
-#if defined(__arm__) || defined(__thumb__)
 	CoreClockTestPrint("Delay highest observed %u Hz: us Q16 %u, ns Q16 %u\r\n",
 		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayHigh.UsQ16,
 		(unsigned)s_DelayHigh.NsQ16);
 	CoreClockTestPrint("Delay lowest observed %u Hz: us Q16 %u, ns Q16 %u\r\n",
 		(unsigned)s_DelayLow.CpuHz, (unsigned)s_DelayLow.UsQ16,
 		(unsigned)s_DelayLow.NsQ16);
-#else
-	CoreClockTestPrint("Delay highest observed %u Hz, lowest observed %u Hz\r\n",
-		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayLow.CpuHz);
-#endif
 
 	if (s_DelayHigh.CpuHz == s_DelayLow.CpuHz)
 	{
 		CoreClockTestPrint("Delay two-point calibration: one CPU speed observed\r\n");
+		return;
+	}
+	midpoint = s_DelayLow.CpuHz +
+		(s_DelayHigh.CpuHz - s_DelayLow.CpuHz) / 2U;
+	if (DelayCalibrationInterpolate(midpoint, &s_DelayLow,
+		&s_DelayHigh, &interpolated))
+	{
+		CoreClockTestPrint("Delay interpolated %u Hz: us Q16 %u, ns Q16 %u\r\n",
+			(unsigned)midpoint, (unsigned)interpolated.UsQ16,
+			(unsigned)interpolated.NsQ16);
 	}
 	else
 	{
-#if defined(__arm__) || defined(__thumb__)
-		low.CpuHz = s_DelayLow.CpuHz;
-		low.UsQ16 = s_DelayLow.UsQ16;
-		low.NsQ16 = s_DelayLow.NsQ16;
-		high.CpuHz = s_DelayHigh.CpuHz;
-		high.UsQ16 = s_DelayHigh.UsQ16;
-		high.NsQ16 = s_DelayHigh.NsQ16;
-		midpoint = low.CpuHz + (high.CpuHz - low.CpuHz) / 2U;
-		savedUs = SystemMicroSecLoopCnt;
-		savedNs = SystemnsDelayFactor;
-		interpolated = ArmDelayClockInterpolate(midpoint, &low, &high);
-		predictedUs = SystemMicroSecLoopCnt;
-		predictedNs = SystemnsDelayFactor;
-		SystemMicroSecLoopCnt = savedUs;
-		SystemnsDelayFactor = savedNs;
-
-		if (interpolated)
-		{
-			CoreClockTestPrint("Delay interpolated %u Hz: us Q16 %u, ns Q16 %u\r\n",
-				(unsigned)midpoint, (unsigned)predictedUs, (unsigned)predictedNs);
-		}
-#else
-		CoreClockTestPrint("Delay two-point calibration: cycle counter scaling\r\n");
-#endif
+		CoreClockTestResult("Delay interpolation", false);
 	}
 }
 
