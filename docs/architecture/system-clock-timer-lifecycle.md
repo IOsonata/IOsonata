@@ -429,6 +429,61 @@ Validate scheduled calibration by measuring a long-running RTC user,
 multiple calibration completions and time intervals, dual-core clock
 requests, and HFXO release between requests before sign-off.
 
+## CPU clock changes and delay factors
+
+ARM `usDelay`, `nsDelay`, and `msDelay` keep their existing fixed
+assembly loops. The loop-cost calibration is separate from the CPU clock
+frequency used to convert an interval to a loop count.
+
+Every successful CPU source or divider transition, including reduced-power
+frequencies and wakeup restoration, must do the following in System Core:
+
+1. Complete the clock change and read the effective CPU frequency from the
+   relevant hardware clock register/divider.
+2. Update `SystemCoreClock` with that frequency.
+3. Recalculate BOTH `SystemMicroSecLoopCnt` and `SystemnsDelayFactor`
+   before returning control to callers that can use delay functions.
+
+`ArmDelayClockSetDivisors` applies the existing MCU-specific loop
+constants using shared fixed-point arithmetic. This path supports ARM
+targets without DWT and has no timer, interrupt wait, or event dependency.
+The routine does not change clock hardware, and unsuccessful/unsupported
+clock-source selection must not commit factors for a requested clock that
+was never activated.
+
+A target with a usable DWT cycle counter may optionally call
+`ArmDelayClockInit` followed by `ArmDelayCalibrate` **once during
+startup**, before time-sensitive subsystems are active. It measures the
+existing assembly loops and caches their CPU-cycle costs. After an
+application changes the CPU clock, `ArmDelayClockUpdate` rescales the
+cached costs to the new frequency with arithmetic only; it never performs
+DWT measurements or holds interrupts off for a measurement. If DWT is
+unavailable or inaccessible, the port retains its documented fallback
+loop costs. A fallback is an estimate, not proof of measured accuracy.
+
+`SystemCoreClockUpdate` is the canonical place to read hardware clock
+state and update factors. Ports such as SAM4L that assign the core
+frequency directly during intermediate clock transitions must refresh
+both factors at each assignment as well. This prevents stale factors
+during low-power CPU divider changes and subsequent restoration.
+
+The clock owner must serialize clock hardware transitions and factor
+updates against other execution contexts; callers must not alter CPU
+clock registers independently of System Core. Delays already in
+progress while the CPU clock changes are not guaranteed to retain the
+original duration. RTC and peripheral Timer drivers own their counters;
+none are appropriated by System Core for delay-factor updates.
+
+RISC-V ports use the counter-based delay implementation in
+`RISCV/include/idelay.h`, which obtains the effective CPU frequency
+without ARM loop factors. Do not introduce ARM delay-factor globals on
+RISC-V targets.
+
+Verify at least 250 ms delays before reduction, at reduced CPU speed,
+and after restoration, using an independent hardware timing reference.
+Also test different optimization levels and ports without DWT. Source
+assertions and arithmetic checks alone are not hardware timing validation.
+
 ## Cross-MCU implementation and validation
 
 This architectural change applies to Nordic, ST, Microchip, NXP,
