@@ -51,9 +51,9 @@ void SystemLockFICRNS(void);
 #define TRACE_TRACEDATA2_PIN (24ul)
 #define TRACE_TRACEDATA3_PIN (25ul)
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated loop iterations per second.
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 #if defined ( __CC_ARM )
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_DEFAULT;  
