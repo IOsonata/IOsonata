@@ -39,12 +39,13 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("defined(NRF5340_XXAA_NETWORK)", s)
 		self.assertIn("defined(NRF5340_XXAA_APPLICATION)", s)
 
-	def test_uart_transmit_interface_is_const_correct(self):
+	def test_core_power_uses_syslog_without_base_uart_tx_changes(self):
+		s = SRC.read_text(encoding="utf-8")
 		header = (ROOT / "include/coredev/uart.h").read_text(encoding="utf-8")
-		self.assertIn("virtual int Tx(const uint8_t *pData, uint32_t Len)", header)
-		self.assertIn("UARTTx(UARTDev_t * const pDev, const uint8_t *pData", header)
-		self.assertNotIn("s_Uart.Tx(",
-			SRC.read_text(encoding="utf-8"))
+		self.assertIn("virtual int Tx(uint8_t *pData, uint32_t Len)", header)
+		self.assertIn("UARTTx(UARTDev_t * const pDev, uint8_t *pData", header)
+		self.assertNotIn("s_Uart.Tx(", s)
+		self.assertIn("SysLogPrintf(SysLogGet(),", s)
 
 	def test_retention_marker_requires_system_off_wake(self):
 		s = SRC.read_text(encoding="utf-8")
