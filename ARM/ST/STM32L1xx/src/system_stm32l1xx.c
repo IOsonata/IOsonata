@@ -45,7 +45,7 @@ SOFTWARE.
 extern void (* const __Vectors[])(void);
 // Delay-loop iterations per microsecond, with 16 fractional bits.
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 uint32_t SystemCoreClock = 2097152UL;
 const uint8_t PLLMulTable[9] = {3, 4, 6, 8, 12, 16, 24, 32, 48};
