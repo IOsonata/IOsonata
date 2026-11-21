@@ -44,6 +44,9 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("NRF_CLOCK->EVENTS_DONE = 0U", calibration)
         self.assertIn("NRFX_LFRC_CAL_TIMEOUT_US", calibration)
         self.assertIn("usDelay(NRFX_LFCLK_START_POLL_US)", calibration)
+        self.assertIn("NRFX_LFRC_CAL_RETRY_US", calibration)
+        self.assertIn("if (elapsed >= nextRetry)", calibration)
+        self.assertIn("nextRetry += NRFX_LFRC_CAL_RETRY_US", calibration)
         startup = function(self.clock, "static bool nRFxLfclkStart(",
                            "static bool nRFxLfclkWaitStopped(")
         self.assertIn("#if defined(NRF53_SERIES)", startup)
