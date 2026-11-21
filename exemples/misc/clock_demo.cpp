@@ -430,15 +430,25 @@ int main(void)
 	ClockDemoPrint("ClockDemo\r\nStartup CPU %u Hz, peripheral clock 0 %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	ClockDemoFlush();
+	ClockDemoResult("Core clock startup", SystemCoreClockGet() != 0U);
 	ClockDemoSharedClockTest();
 	if (sizeof(s_Sources) == 0U)
 	{
-		ClockDemoPrint("Core selection: SKIP (not configured)\r\n");
+		selected = SystemCoreClockSelect(GetHighFreqOscType(),
+			GetHighFreqOscFreq());
+		ClockDemoResult("Configured core clock selection", selected);
 	}
 
 #if !defined(CLOCK_DEMO_LF_SOURCES)
+	if (GetLowFreqOscFreq() != 0U)
 	{
-		ClockDemoPrint("LF selection: SKIP (not configured)\r\n");
+		selected = SystemLowFreqClockSelect(GetLowFreqOscType(),
+			GetLowFreqOscFreq());
+		ClockDemoResult("Configured LF clock selection", selected);
+	}
+	else
+	{
+		ClockDemoPrint("LF clock: UNSUPPORTED (no oscillator configured)\r\n");
 	}
 #endif
 
@@ -512,15 +522,10 @@ int main(void)
 #endif
 		}
 	}
-	if (SystemPeriphClockGet(-1) != 0U ||
-		SystemPeriphClockGet(32) != 0U)
-	{
-		ClockDemoResult("Peripheral clock invalid index", false);
-	}
-	else
-	{
-		ClockDemoResult("Peripheral clock invalid index", true);
-	}
+	ClockDemoResult("Peripheral clock invalid index",
+		SystemPeriphClockGet(-1) == 0U);
+	ClockDemoResult("Peripheral domain scan limit",
+		SystemPeriphClockGet(32) == 0U);
 	if (domainCount == 0U)
 	{
 		ClockDemoResult("Peripheral clock domains present", false);
