@@ -1302,6 +1302,14 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 #endif
 #endif
 
+#if defined(NRF52_SERIES) && defined(NRFX_LFRC_CAL_LOG)
+	// Startup marker identifies an SDC library built with LFRC diagnostics.
+	// Calibration happens in System Clock; do not access CLOCK registers here.
+	SDC_INIT_PRINTF("SDC: LFRC diagnostic enabled=%u external=%u completed=%lu\r\n",
+		(unsigned)nRFxMpslLfclkCalibrationIsEnabled(),
+		(unsigned)nRFxMpslExternalClockGet(),
+		(unsigned long)nRFxMpslLfclkCalibrationCount());
+#endif
 	SDC_INIT_PRINTF("SDC: controller ready\r\n");
 	return true;
 }
