@@ -385,6 +385,37 @@ consumption. The portable `HfxoTestBle` example now calls `BtAppInit()`;
 `tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp` retains the Nordic-specific
 clock and shutdown checks.
 
+## nRF5340 LFRC periodic calibration
+
+On nRF5340 the clock peripheral supplies `TASKS_CAL` and `EVENTS_DONE`
+but does not supply the nRF52 calibration interval timer (`CTIV`,
+`CTTO`, `TASKS_CTSTART`). LFRC calibration for long-lived consumers must
+therefore be scheduled by another time source.
+
+The Nordic calibrated LFRC tolerance assumes a constant temperature within
+the specified range and calibration at least every eight seconds. Clock
+ownership remains in System Clock, including the calibration task and its
+completion/failure handling.
+
+The initial calibration is implemented in `system_clock_nrfx.cpp` and has
+passed the generic ClockDemo timing check on nRF5340 Application and Network
+cores. A revision 1 hardware anomaly can suppress `DONE` when the other
+core requests a higher-priority LFCLK source; the calibration start now retries
+every millisecond within a bounded wait.
+
+**Periodic calibration is not yet implemented.** It requires a low-power
+scheduler or shared timer alarm that can serve more than one client without
+reinitializing or reserving an application-owned RTC device. The periodic
+scheduler must remain active during low-power System ON sleep, avoid high
+priority blocking, coordinate calibration between the two cores, stop
+scheduling when LFRC is not needed, and never hold HFXO between
+calibrations. The existing generic Timer device count and single owner
+per device are not sufficient to provide this service.
+
+Do not claim periodic calibration from the initial `ClockDemo` PASS alone.
+Validate a long-running RTC user, multiple DONE completions, elapsed
+intervals, other-core clock requests and idle HFXO shutdown before sign-off.
+
 ## Cross-MCU implementation and validation
 
 This architectural change applies to Nordic, ST, Microchip, NXP,
