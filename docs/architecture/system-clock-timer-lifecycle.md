@@ -385,19 +385,23 @@ consumption. The portable `HfxoTestBle` example now calls `BtAppInit()`;
 `tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp` retains the Nordic-specific
 clock and shutdown checks.
 
-## Nordic LFCLK source and ownership
+## Nordic oscillator declaration and selection
 
-`SystemLowFreqClockSelect` configures the requested oscillator only when
-no active user owns LFCLK. It must never start or stop the hardware clock.
-`SystemLowFreqClockEnable` is responsible for first-use oscillator startup,
-including verification that LFXO starts successfully. `Disable` releases
-the final request and stops the owned LFCLK. A pending STOP is completed
-before the next START.
+`g_McuOsc` declares board hardware support. Nordic keeps the temporary
+HF/LF selected source in the System Core backend without modifying that
+declaration. RC is internal; external XTAL/TCXO selections are accepted only
+when the board has declared that oscillator type and its frequency.
 
-The nRF5340 network core preserves the board's configured LFXO default.
-LFXO startup on a network-only image also depends on the shared physical
-oscillator and its application-core pin configuration. This is a hardware
-precondition to diagnose, not a reason to change the default source silently.
+`Select` validates and configures but does not start or stop clocks.
+`Enable` starts the selected source on first use, verifies readiness,
+and increments the shared ref-count. `Disable` stops the source after
+the last owner releases it. The board descriptor getters remain board
+declarations, not temporary selection getters.
+
+On nRF5340 the LFXO request can initially produce LFRC output while
+the crystal starts. The clock manager waits for `LFCLKSTAT.SRC` to report
+the active LFXO before claiming readiness. `LFCLKSRCCOPY` reports the
+requested source and cannot by itself establish LFXO readiness.
 
 ## nRF5340 LFRC calibration API
 

@@ -47,7 +47,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("return false;", hf)
         lf = function(self.clock, "bool SystemLowFreqClockCalibrate(",
                       "// The clock manager alone starts")
-        self.assertIn("g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC", lf)
+        self.assertIn("nRFxLowOscSelected() == OSC_TYPE_RC", lf)
         self.assertIn("s_nRFxLfclkReqCnt != 0U", lf)
         self.assertIn("__get_IPSR() != 0U", lf)
         self.assertIn("SystemLowFreqClockEnable()", lf)
@@ -72,8 +72,13 @@ class HfxoSourceChecks(unittest.TestCase):
         startup = function(self.clock, "static bool nRFxLfclkStart(",
                            "static bool nRFxLfclkWaitStopped(")
         self.assertIn("#if defined(NRF53_SERIES)", startup)
-        self.assertIn("NRFX_LFCLK_SRC_RC", startup)
-        self.assertIn("!nRFxLfclkCalibrate()", startup)
+        self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", startup)
+        self.assertIn("nRFxLfclkFinishStart(Src)", startup)
+        ready = function(self.clock, "static bool nRFxLfclkFinishStart(",
+                         "static bool nRFxLfclkStart(")
+        self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", ready)
+        self.assertIn("NRFX_LFCLK_SRC_XTAL", ready)
+        self.assertIn("return nRFxLfclkCalibrate();", ready)
         self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", startup)
 
     def test_lfclk_start_timeout_releases_failed_request(self):
@@ -122,7 +127,9 @@ class HfxoSourceChecks(unittest.TestCase):
     def test_core_select_does_not_enable_hfxo(self):
         select = function(self.clock, "bool SystemCoreClockSelect(",
                           "bool SystemHighFreqClockEnable(")
-        self.assertIn("g_McuOsc.CoreOsc.Type = ClkSrc", select)
+        self.assertIn("s_nRFxCoreOscSelected = ClkSrc", select)
+        self.assertNotIn("g_McuOsc.CoreOsc.Type = ClkSrc", select)
+        self.assertIn("ClkSrc != g_McuOsc.CoreOsc.Type", select)
         self.assertIn("s_nRFxHfxoReqCnt != 0U", select)
         self.assertNotIn("nRFxHfxoStart(", select)
         self.assertNotIn("nRFxHfxoStop(", select)
@@ -130,7 +137,9 @@ class HfxoSourceChecks(unittest.TestCase):
     def test_lf_select_only_configures_oscillator(self):
         select = function(self.clock, "bool SystemLowFreqClockSelect(",
                           "uint32_t SystemPeriphClockGet(")
-        self.assertIn("g_McuOsc.LowPwrOsc.Type = ClkSrc", select)
+        self.assertIn("s_nRFxLowOscSelected = ClkSrc", select)
+        self.assertNotIn("g_McuOsc.LowPwrOsc.Type = ClkSrc", select)
+        self.assertIn("ClkSrc != g_McuOsc.LowPwrOsc.Type", select)
         self.assertIn("s_nRFxLfclkReqCnt != 0U", select)
         self.assertNotIn("nRFxLfclkStart(", select)
         self.assertNotIn("TASKS_LFCLKSTART", select)

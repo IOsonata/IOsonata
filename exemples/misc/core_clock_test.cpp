@@ -315,10 +315,6 @@ static void CoreClockTestCalibrationTest(void)
 	{
 		CoreClockTestPrint("HF RC calibration: UNSUPPORTED (API missing)\r\n");
 	}
-	else if (GetHighFreqOscType() != OSC_TYPE_RC)
-	{
-		CoreClockTestPrint("HF RC calibration: UNSUPPORTED (not RC)\r\n");
-	}
 	else
 	{
 		calibrated = SystemHighFreqClockCalibrate();
@@ -333,11 +329,6 @@ static void CoreClockTestCalibrationTest(void)
 		return;
 	}
 
-	if (GetLowFreqOscType() != OSC_TYPE_RC)
-	{
-		CoreClockTestPrint("LF RC calibration: UNSUPPORTED (not RC)\r\n");
-		return;
-	}
 
 	if (SystemLowFreqClockEnable == nullptr ||
 		SystemLowFreqClockDisable == nullptr)
