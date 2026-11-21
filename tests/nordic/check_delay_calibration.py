@@ -26,7 +26,7 @@ class Nrf52DelayCalibration(unittest.TestCase):
         self.assertIn('#include "idelay_calibration.h"', self.system)
 
     def test_clock_change_factor_math_is_generic(self):
-        helper = (ROOT / "ARM/include/idelay_calibration.h").read_text(
+        helper = (ROOT / "ARM/include/idelay_clock.h").read_text(
             encoding="utf-8")
         self.assertIn("bool ArmDelayClockSetDivisors(", helper)
         self.assertIn("usFactor = ((uint64_t)CpuHz << 16) / UsDivisor", helper)
