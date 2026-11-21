@@ -275,7 +275,7 @@ static inline void UARTPowerOff(UARTDev_t * const pDev) { DeviceIntrfPowerOff(&p
 static inline int UARTRx(UARTDev_t * const pDev, uint8_t *pBuff, int Bufflen) {
 	return DeviceIntrfRx(&pDev->DevIntrf, 0, pBuff, Bufflen);
 }
-static inline int UARTTx(UARTDev_t * const pDev, uint8_t *pData, int Datalen) {
+static inline int UARTTx(UARTDev_t * const pDev, const uint8_t *pData, int Datalen) {
 	return DeviceIntrfTx(&pDev->DevIntrf, 0, pData, Datalen);
 }
 static inline UARTDev_t *UARTGetDevHandle(DevIntrf_t * const pDevIntrf) { return (UARTDev_t *)DeviceIntrfGetHandle(pDevIntrf); }
@@ -351,7 +351,7 @@ public:
 	using DeviceIntrf::Tx;
 	virtual int Rx(uint8_t *pBuff, int Len) { return DeviceIntrfRx(&vDevData.DevIntrf, 0, pBuff, Len); }
 	// Initiate receive
-	virtual int Tx(uint8_t *pData, uint32_t Len) { return DeviceIntrfTx(&vDevData.DevIntrf, 0, pData, Len); }
+	virtual int Tx(const uint8_t *pData, uint32_t Len) { return DeviceIntrfTx(&vDevData.DevIntrf, 0, pData, Len); }
 	void printf(const char *pFormat, ...) {
 		va_list vl;
 	    va_start(vl, pFormat);

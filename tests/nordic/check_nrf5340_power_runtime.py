@@ -39,6 +39,13 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("defined(NRF5340_XXAA_NETWORK)", s)
 		self.assertIn("defined(NRF5340_XXAA_APPLICATION)", s)
 
+	def test_uart_transmit_interface_is_const_correct(self):
+		header = (ROOT / "include/coredev/uart.h").read_text(encoding="utf-8")
+		self.assertIn("virtual int Tx(const uint8_t *pData, uint32_t Len)", header)
+		self.assertIn("UARTTx(UARTDev_t * const pDev, const uint8_t *pData", header)
+		self.assertIn("sent = s_Uart.Tx((const uint8_t *)pText, remaining);",
+			SRC.read_text(encoding="utf-8"))
+
 	def test_console_uses_interrupt_driven_uarte(self):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertIn(".bIntMode = true,", s)
