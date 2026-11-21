@@ -23,10 +23,10 @@ class Nrf52DelayCalibration(unittest.TestCase):
     def test_existing_mcu_fallback_divisors_are_preserved(self):
         self.assertIn("ArmDelayClockSetDivisors(SystemCoreClock,", self.system)
         self.assertIn("13000000UL, 3000000UL", self.system)
-        self.assertIn('#include "idelay_calibration.h"', self.system)
+        self.assertIn('#include "idelay.h"', self.system)
 
     def test_clock_change_factor_math_is_generic(self):
-        helper = (ROOT / "ARM/include/idelay_clock.h").read_text(
+        helper = (ROOT / "ARM/include/idelay.h").read_text(
             encoding="utf-8")
         self.assertIn("bool ArmDelayClockSetDivisors(", helper)
         self.assertIn("usFactor = ((uint64_t)CpuHz << 16) / UsDivisor", helper)
