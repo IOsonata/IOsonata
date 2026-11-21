@@ -218,6 +218,8 @@ void SystemCoreClockUpdate(void)
 		default: break; // MSI
 	}
 	SystemCoreClock = clk;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK_MAX / 1000UL));
 
 	if (SystemCoreClock > 80000000)
 	{
@@ -227,8 +229,6 @@ void SystemCoreClockUpdate(void)
 	SetFlashWaitState(SystemCoreClock);
 	SystemPeriphClockSet(0, SystemCoreClock >> 1);
 	SystemPeriphClockSet(1, SystemCoreClock >> 1);
-	(void)ArmDelayClockSetDivisors(SystemCoreClock,
-		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK_MAX / 1000UL));
 }
 
 /**
