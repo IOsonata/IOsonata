@@ -43,6 +43,7 @@ SOFTWARE.
 #include <stdbool.h>
 #include <stddef.h>
 #include "coredev/system_core_clock.h"
+#include "coredev/delay_calibration.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -397,6 +398,73 @@ static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz
 
 	return false;
 #endif
+}
+
+
+/**
+ * @brief Measure delay factors with DWT, leaving runtime factors unchanged.
+ *
+ * The application calls this explicitly from foreground context. Targets
+ * without DWT return false and may use the generic high-frequency timer test.
+ */
+static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
+{
+	ArmDelayCalibration_t measured;
+	uint32_t oldUs;
+	uint32_t oldNs;
+	uint32_t cpuHz;
+	bool success;
+
+	if (pPoint == NULL)
+	{
+		return false;
+	}
+	cpuHz = SystemCoreClockGet();
+	pPoint->CpuHz = cpuHz;
+	pPoint->UsQ16 = 0U;
+	pPoint->NsQ16 = 0U;
+	pPoint->Measured = false;
+
+	oldUs = SystemMicroSecLoopCnt;
+	oldNs = SystemnsDelayFactor;
+	measured = (ArmDelayCalibration_t){0};
+	success = ArmDelayCalibrate(&measured, cpuHz);
+	if (success)
+	{
+		pPoint->UsQ16 = SystemMicroSecLoopCnt;
+		pPoint->NsQ16 = SystemnsDelayFactor;
+		pPoint->Measured = true;
+	}
+	SystemMicroSecLoopCnt = oldUs;
+	SystemnsDelayFactor = oldNs;
+	return success;
+}
+
+// The high-frequency Timer fallback reports recommended default factors.
+// Measuring does not replace production factors.
+static inline bool DelayCalibrationFromTimer(uint32_t CpuHz,
+	uint32_t UsElapsed, uint32_t NsElapsed,
+	DelayCalibrationPoint_t *pPoint)
+{
+	uint64_t us;
+	uint64_t ns;
+
+	if (pPoint == NULL || CpuHz == 0U ||
+		UsElapsed == 0U || NsElapsed == 0U)
+	{
+		return false;
+	}
+	us = (uint64_t)SystemMicroSecLoopCnt * 100000U / UsElapsed;
+	ns = (uint64_t)SystemnsDelayFactor * 100000U / NsElapsed;
+	if (us == 0U || ns == 0U || us > UINT32_MAX || ns > UINT32_MAX)
+	{
+		return false;
+	}
+	pPoint->CpuHz = CpuHz;
+	pPoint->UsQ16 = (uint32_t)us;
+	pPoint->NsQ16 = (uint32_t)ns;
+	pPoint->Measured = true;
+	return true;
 }
 
 /**
