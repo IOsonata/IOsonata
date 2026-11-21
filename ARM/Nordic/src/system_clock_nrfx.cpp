@@ -77,6 +77,11 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "nrf_mpsl.h"
 
+#if defined(NRF52_SERIES) && defined(NRFX_LFRC_CAL_LOG)
+#include "app_evt_handler.h"
+#include "syslog.h"
+#endif
+
 // CLOCK instance, as in timer_hf_nrfx.cpp
 #if defined(NRF91_SERIES)
 // Non secure on nRF91, as POWER, which the Modem library uses there
@@ -795,6 +800,17 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	return SystemPeriphClockGet(Idx);
 }
 #if defined(NRF52_SERIES)
+#if defined(NRFX_LFRC_CAL_LOG)
+// Report calibration in the foreground. Never format or transmit UART data
+// from the POWER_CLOCK interrupt handler.
+static void nRFxMpslCalibrationLog(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+	SysLogPrintf(SysLogGet(), "LFRC calibration: completed=%lu\\r\\n",
+		(unsigned long)s_nRFxMpslCalibrationCount);
+}
+#endif
 // Start LFRC calibration once HFXO is ready. The callback and CLOCK
 // interrupt both use this helper so startup never waits in an interrupt.
 static void nRFxMpslCalibrationBegin(void)
@@ -866,6 +882,9 @@ void nRFxMpslClockIrq(void)
 			s_bNRFxMpslCalibrationPending = false;
 			s_nRFxMpslCalibrationCount++;
 			nRFxMpslHfclkRelease();
+#if defined(NRFX_LFRC_CAL_LOG)
+			(void)AppEvtHandlerQue(0U, nullptr, nRFxMpslCalibrationLog);
+#endif
 			// CTIV is specified in 0.25-second units on nRF52.
 			// Recalibrate every four seconds; MPSL can request
 			// additional calibrations after temperature changes.
