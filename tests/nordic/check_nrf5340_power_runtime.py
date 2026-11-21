@@ -65,16 +65,18 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertLess(ready, launch)
 		self.assertLess(launch, restore)
 
-	def test_console_leaves_irq_time_to_drain(self):
+	def test_console_retries_syslog_after_uart_irq_drain(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn("msDelay(CORE_POWER_TEST_TX_DRAIN_MS);", s)
-		self.assertIn("SysLogPrintf(SysLogGet()", s)
+		self.assertIn("SysLogVPrintf(SysLogGet(), pFormat, args)", s)
+		self.assertIn("msDelay(2);", s)
+		self.assertIn("SysLogFlush(SysLogGet());", s)
+		self.assertIn("CorePowerTestLog(", s)
 		self.assertNotIn("DeviceIntrfWaitTxComplete(", s)
 
 	def test_syslog_console(self):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertIn("SysLogInitNoTimer(SysLogGet(), &s_LogCfg", s)
-		self.assertIn('SysLogPrintf(SysLogGet(), "%s: %s', s)
+		self.assertIn('CorePowerTestLog("%s: %s', s)
 		self.assertIn("SYSLOG_MEMSIZE(16, 128)", s)
 		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("CorePowerTestPut(", s)
@@ -89,9 +91,9 @@ class RuntimePowerChecks(unittest.TestCase):
 
 	def test_console_uses_syslog_not_direct_uart_printf(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn('SysLogPrintf(SysLogGet(), "%s: %s', s)
-		self.assertIn('SysLogPrintf(SysLogGet(), "CorePowerTest complete:', s)
-		self.assertIn("msDelay(CORE_POWER_TEST_TX_DRAIN_MS);", s)
+		self.assertIn('CorePowerTestLog("%s: %s', s)
+		self.assertIn('CorePowerTestLog("CorePowerTest complete:', s)
+		self.assertIn("SysLogFlush(SysLogGet());", s)
 		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("s_Uart.Tx(", s)
 
