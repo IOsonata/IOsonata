@@ -321,11 +321,11 @@ static bool ClockDemoDelaySample(ClockDemoDelaySample_t *pSample)
 	uint32_t start;
 	uint32_t usElapsed;
 	uint32_t nsElapsed;
-	uint32_t usFactor;
-	uint32_t nsFactor;
 	bool valid;
 
 #if defined(__arm__) || defined(__thumb__)
+	uint32_t usFactor;
+	uint32_t nsFactor;
 	ArmDelayCalibration_t measured;
 #endif
 
@@ -367,7 +367,7 @@ static bool ClockDemoDelaySample(ClockDemoDelaySample_t *pSample)
 
 	// The HF timer is a timing reference, never a calibration owner.
 	// A running LF/RTC timer is insufficiently precise for this purpose.
-	if (TimerGetHighFreqDevCount() <= 0)
+	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
 	{
 		ClockDemoPrint("Delay calibration: no DWT or HF Timer\r\n");
 		return false;
@@ -383,15 +383,14 @@ static bool ClockDemoDelaySample(ClockDemoDelaySample_t *pSample)
 		return false;
 	}
 
-	valid = TimerEnable(&s_RetainedTimer);
+	valid = TimerSetFrequency(&s_RetainedTimer, 0U) != 0U &&
+		TimerEnable(&s_RetainedTimer);
 
 	if (!valid)
 	{
 		ClockDemoPrint("Delay calibration: HF Timer start FAIL\r\n");
 		return false;
 	}
-
-	(void)TimerSetFrequency(&s_RetainedTimer, 0U);
 
 	start = TimerGetMicrosecond(&s_RetainedTimer);
 	msDelay(100);
