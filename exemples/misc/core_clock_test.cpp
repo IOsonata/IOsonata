@@ -534,11 +534,32 @@ static void CoreClockTestTimer(int DevNo)
 	uint32_t count;
 	uint32_t expected;
 	uint32_t difference;
+	uint32_t hfStart;
+	uint32_t hfElapsed;
+	TimerCfg_t hfCfg;
+	bool hfReady;
 
 	CoreClockTestPrint("Timer device %u\r\n", (unsigned)DevNo);
 	if (!CoreClockTestTimerInit(DevNo))
 	{
 		return;
+	}
+
+	// Diagnose LFCLK timing against an independent HF peripheral timer.
+	// The test remains generic: no oscillator registers or CPU counter access.
+	hfReady = false;
+	if (DevNo < TimerGetLowFreqDevCount() &&
+		TimerGetHighFreqDevCount() > 0 &&
+		TimerGetHighFreqDevNo() >= 0)
+	{
+		hfCfg = s_TimerCfg;
+		hfCfg.DevNo = TimerGetHighFreqDevNo();
+		hfCfg.EvtHandler = nullptr;
+		if (TimerInit(&s_RetainedTimer, &hfCfg))
+		{
+			TimerDisable(&s_RetainedTimer);
+			hfReady = TimerEnable(&s_RetainedTimer);
+		}
 	}
 	for (delay = 0U; delay < 2U; delay++)
 	{
@@ -552,9 +573,14 @@ static void CoreClockTestTimer(int DevNo)
 			TimerDisableTrigger(&s_Timer, 0);
 			TimerDisable(&s_Timer);
 			CoreClockTestResult("Timer start", false);
+			if (hfReady)
+			{
+				TimerDisable(&s_RetainedTimer);
+			}
 			return;
 		}
 		start = TimerGetMicrosecond(&s_Timer);
+		hfStart = hfReady ? TimerGetMicrosecond(&s_RetainedTimer) : 0U;
 		if (delay == 0U)
 		{
 			msDelay(250);
@@ -564,6 +590,8 @@ static void CoreClockTestTimer(int DevNo)
 			nsDelay(250000000U);
 		}
 		elapsed = TimerGetMicrosecond(&s_Timer) - start;
+		hfElapsed = hfReady ?
+			TimerGetMicrosecond(&s_RetainedTimer) - hfStart : 0U;
 		TimerDisable(&s_Timer);
 		count = s_InterruptCount;
 		TimerDisableTrigger(&s_Timer, 0);
@@ -574,6 +602,15 @@ static void CoreClockTestTimer(int DevNo)
 			(unsigned)elapsed, (unsigned)count);
 		CoreClockTestResult("Delay within 2 percent", elapsed >= 245000U && elapsed <= 255000U);
 		CoreClockTestResult("Timer count and IRQ", elapsed > 0U && count > 0U && difference <= 1U);
+		if (hfReady)
+		{
+			CoreClockTestPrint("LF/HF reference: LF %u us, HF %u us\r\n",
+				(unsigned)elapsed, (unsigned)hfElapsed);
+		}
+	}
+	if (hfReady)
+	{
+		TimerDisable(&s_RetainedTimer);
 	}
 }
 
