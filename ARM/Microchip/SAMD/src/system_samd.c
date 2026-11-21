@@ -60,7 +60,7 @@ SOFTWARE.
 #include "samdxxx.h"
 
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 #include "coredev/interrupt.h"
 #include "clock_samd.h"
 

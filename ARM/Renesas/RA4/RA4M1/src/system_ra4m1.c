@@ -34,7 +34,7 @@ SOFTWARE.
 #include <stdbool.h>
 #include "ra4m1xxx.h"
 #include "coredev/interrupt.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 #define RA4M1_PRCR_KEY      0xA500U
 #define RA4M1_PRCR_PRC0     0x01U
 #define RA4M1_PRCR_PRC1     0x02U

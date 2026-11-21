@@ -37,7 +37,7 @@ Modified by          Date              Description
 #include <stdbool.h>
 
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 #include "coredev/interrupt.h"
 #include "LPC11Uxx.h"
 

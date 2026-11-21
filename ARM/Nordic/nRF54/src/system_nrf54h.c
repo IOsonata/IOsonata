@@ -30,7 +30,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "nrf54h_erratas.h"
 #include "system_config_sau.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 
 /*lint ++flb "Enter library region" */
 

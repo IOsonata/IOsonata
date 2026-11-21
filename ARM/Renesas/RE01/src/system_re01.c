@@ -46,7 +46,7 @@ SOFTWARE.
 
 #include "re01xxx.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 
 #define SYSTEM_CORE_CLOCK_MAX			64000000UL
 #define SYSTEM_NSDELAY_CORE_FACTOR		(34UL)

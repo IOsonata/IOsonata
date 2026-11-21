@@ -38,7 +38,7 @@ Modified by          Date              Description
 #include "LPC17xx.h"
 #include "system_LPC17xx.h"
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 
 #define OSC_FREQ				OSC_FREQ_16MHZ  /* Installed oscillator frequency */
 #define IRC_FREQ				(4000000UL)		/* Internal RC freq */

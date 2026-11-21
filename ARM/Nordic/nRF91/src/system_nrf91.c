@@ -32,7 +32,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf91_approtect.h"
 
 #include "coredev/system_core_clock.h"
-#include "idelay_clock.h"
+#include "idelay.h"
 /*lint ++flb "Enter library region" */
 
 void SystemStoreFICRNS(void);
