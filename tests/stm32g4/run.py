@@ -65,7 +65,7 @@ def main():
     elif not cxx or not cc:
         raise SystemExit('A host C and C++ compiler is required.')
     else:
-        inc = ['-include', HERE / 'scb.h', '-I' + str(ROOT / 'tests/stm32/shim'), '-I' + str(ROOT / 'include'),
+        inc = ['-include', HERE / 'scb.h', '-I' + str(ROOT / 'tests/stm32/shim'), '-I' + str(ROOT / 'include'), '-I' + str(ROOT / 'ARM/include'),
                '-I' + str(ROOT / 'ARM/ST/include'), '-I' + str(ROOT / 'ARM/ST/STM32G4xx/include')]
         with tempfile.TemporaryDirectory(prefix='stm32g4-') as tmp:
             tmp = Path(tmp)
