@@ -80,7 +80,9 @@ static const TimerCfg_t s_TimerCfg = {
 	.IntPrio = 6,
 };
 
-alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(16, 128)];
+// Keep the complete test transcript queued during backpressure from async UART DMA.
+// This is test storage, not a change to the generic SysLog implementation.
+alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(64, 128)];
 static const SysLogCfg_t s_LogCfg = {
 	.pMem = s_LogMem,
 	.MemSize = sizeof(s_LogMem),
