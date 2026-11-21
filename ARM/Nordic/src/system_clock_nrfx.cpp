@@ -807,7 +807,7 @@ static void nRFxMpslCalibrationLog(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
 	(void)pCtx;
-	SysLogPrintf(SysLogGet(), "LFRC calibration: completed=%lu\\r\\n",
+	SysLogPrintf(SysLogGet(), "LFRC calibration: completed=%lu\r\n",
 		(unsigned long)s_nRFxMpslCalibrationCount);
 }
 #endif
