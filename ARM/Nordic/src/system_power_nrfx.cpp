@@ -240,9 +240,9 @@ uint32_t SystemResetReason(void)
 	return s_SysPwrResetReason;
 }
 
-#if defined(NRF5340_XXAA_NETWORK)
-// Network core has no independent System OFF. Use resumable CPU sleep.
-// NVIC wake sources and the shared LFCLK remain configured and running.
+#if defined(NRF5340_XXAA_NETWORK) || defined(NRF5340_XXAA_APPLICATION)
+// Resumable CPU sleep on both nRF5340 cores. Leave existing NVIC wake
+// sources and the shared LFCLK configured. System OFF is independent.
 void SystemSleep(void)
 {
 	uint32_t state;

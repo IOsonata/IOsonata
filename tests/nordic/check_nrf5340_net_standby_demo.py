@@ -39,7 +39,7 @@ class NetworkStandbyDemo(unittest.TestCase):
 
 	def test_network_core_system_sleep_backend(self):
 		power = (ROOT / "ARM/Nordic/src/system_power_nrfx.cpp").read_text(encoding="utf-8")
-		start = power.index("#if defined(NRF5340_XXAA_NETWORK)\\n// Network core")
+		start = power.index("#if defined(NRF5340_XXAA_NETWORK) || defined(NRF5340_XXAA_APPLICATION)")
 		end = power.index("#endif", start)
 		sleep = power[start:end]
 		self.assertIn("void SystemSleep(void)", sleep)
