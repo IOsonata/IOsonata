@@ -118,6 +118,69 @@ static inline bool ArmDelayClockInit(ArmDelayCalibration_t *pCal,
 	return ArmDelayClockUpdate(pCal, CpuHz);
 }
 
+// A port with two measured CPU speeds can interpolate both delay factors.
+// Factors are Q16 values measured at the actual CPU frequencies, not the
+// oscillator's input frequency. Clamp to an endpoint outside the measured
+// range: extrapolation is not supported. No runtime measurement is done.
+typedef struct {
+	uint32_t CpuHz;
+	uint32_t UsQ16;
+	uint32_t NsQ16;
+} ArmDelayPoint_t;
+
+static inline bool ArmDelayClockInterpolate(uint32_t CpuHz,
+	const ArmDelayPoint_t *pLow, const ArmDelayPoint_t *pHigh)
+{
+	uint32_t span;
+	uint32_t lowWeight;
+	uint32_t highWeight;
+	uint64_t us;
+	uint64_t ns;
+
+	if (pLow == NULL || pHigh == NULL || CpuHz == 0U ||
+		pLow->CpuHz == 0U || pHigh->CpuHz <= pLow->CpuHz ||
+		pLow->UsQ16 == 0U || pLow->NsQ16 == 0U ||
+		pHigh->UsQ16 == 0U || pHigh->NsQ16 == 0U)
+	{
+		return false;
+	}
+
+	if (CpuHz <= pLow->CpuHz)
+	{
+		SystemMicroSecLoopCnt = pLow->UsQ16;
+		SystemnsDelayFactor = pLow->NsQ16;
+
+		return true;
+	}
+
+	if (CpuHz >= pHigh->CpuHz)
+	{
+		SystemMicroSecLoopCnt = pHigh->UsQ16;
+		SystemnsDelayFactor = pHigh->NsQ16;
+
+		return true;
+	}
+
+	span = pHigh->CpuHz - pLow->CpuHz;
+	lowWeight = pHigh->CpuHz - CpuHz;
+	highWeight = CpuHz - pLow->CpuHz;
+
+	us = ((uint64_t)pLow->UsQ16 * lowWeight +
+		(uint64_t)pHigh->UsQ16 * highWeight + span / 2U) / span;
+	ns = ((uint64_t)pLow->NsQ16 * lowWeight +
+		(uint64_t)pHigh->NsQ16 * highWeight + span / 2U) / span;
+
+	if (us == 0U || ns == 0U || us > UINT32_MAX || ns > UINT32_MAX)
+	{
+		return false;
+	}
+
+	SystemMicroSecLoopCnt = (uint32_t)us;
+	SystemnsDelayFactor = (uint32_t)ns;
+
+	return true;
+}
+
 // Generic non-DWT fallback using a target's existing loop divisors in
 // cycles-per-iteration * 1000000. Preserve their previous calibration
 // constants exactly, and call after every successful CPU frequency change.
