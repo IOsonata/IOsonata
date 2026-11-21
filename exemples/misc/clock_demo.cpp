@@ -107,16 +107,14 @@ static const UARTCfg_t s_UartCfg = {
 };
 static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
-#if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
 static TimerDev_t s_RetainedTimer;
-#endif
 static volatile uint32_t s_InterruptCount;
 static unsigned s_Failures;
 static void ClockDemoTimerHandler(TimerDev_t *pTimer, uint32_t Event);
 static void ClockDemoFlush(void);
 
 static const TimerCfg_t s_TimerCfg = {
-	.DevNo = CLOCK_DEMO_TIMER_DEVNO,
+	.DevNo = 0,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 1000000U,
 	.IntPrio = CLOCK_DEMO_IRQ_PRIORITY,
@@ -341,6 +339,55 @@ static void ClockDemoTimer(int DevNo)
 }
 
 
+// Check that disabling one timer does not stop an independently
+// configured timer. Prefer one LF and one HF device when available.
+static void ClockDemoConcurrentTimerTest(int LowCount, int HighCount)
+{
+	TimerCfg_t firstCfg;
+	TimerCfg_t secondCfg;
+	int secondNo;
+	uint32_t start;
+	uint32_t elapsed;
+	bool first;
+	bool second;
+
+	if (LowCount + HighCount < 2)
+	{
+		ClockDemoPrint("Concurrent timers: UNSUPPORTED (one device)\r\n");
+		return;
+	}
+	secondNo = LowCount > 0 && HighCount > 0 ? LowCount : 1;
+	firstCfg = s_TimerCfg;
+	secondCfg = s_TimerCfg;
+	firstCfg.DevNo = 0;
+	secondCfg.DevNo = secondNo;
+	firstCfg.EvtHandler = nullptr;
+	secondCfg.EvtHandler = nullptr;
+	first = TimerInit(&s_Timer, &firstCfg);
+	second = TimerInit(&s_RetainedTimer, &secondCfg);
+	if (!first || !second)
+	{
+		ClockDemoResult("Concurrent timer initialization", false);
+		return;
+	}
+	first = TimerEnable(&s_Timer);
+	second = TimerEnable(&s_RetainedTimer);
+	if (first && second)
+	{
+		start = TimerGetMicrosecond(&s_RetainedTimer);
+		TimerDisable(&s_Timer);
+		msDelay(30);
+		elapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+		ClockDemoResult("Timer independent clock ownership", elapsed > 0U);
+	}
+	else
+	{
+		ClockDemoResult("Concurrent timer enable", false);
+	}
+	TimerDisable(&s_Timer);
+	TimerDisable(&s_RetainedTimer);
+}
+
 int main(void)
 {
 	unsigned cycle;
@@ -363,10 +410,8 @@ int main(void)
 	unsigned domainCount;
 	int timerDevNo;
 	int timerCount;
-#if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
-	// Keep the timer handle alive after acquiring and stopping a retained timer.
-	TimerCfg_t retainedCfg = s_TimerCfg;
-#endif
+	int lowTimerCount;
+	int highTimerCount;
 	if (!UARTInit(&s_Uart, &s_UartCfg))
 	{
 		return 1;
@@ -376,17 +421,6 @@ int main(void)
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	ClockDemoFlush();
 	ClockDemoSharedClockTest();
-#if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
-	retainedCfg.DevNo = CLOCK_DEMO_STOP_TIMER_DEVNO;
-	retainedCfg.Freq = 0;
-	retainedCfg.EvtHandler = nullptr;
-	if (!TimerInit(&s_RetainedTimer, &retainedCfg))
-	{
-		ClockDemoResult("Retained timer initialization", false);
-		return 1;
-	}
-	TimerDisable(&s_RetainedTimer);
-#endif
 	if (sizeof(s_Sources) == 0U)
 	{
 		ClockDemoPrint("Core selection: SKIP (not configured)\r\n");
@@ -482,7 +516,9 @@ int main(void)
 	}
 	// Timer implementations expose their device counts through the generic API.
 	// Test every advertised device rather than a board-selected instance.
-	timerCount = TimerGetLowFreqDevCount() + TimerGetHighFreqDevCount();
+	lowTimerCount = TimerGetLowFreqDevCount();
+	highTimerCount = TimerGetHighFreqDevCount();
+	timerCount = lowTimerCount + highTimerCount;
 	if (timerCount == 0)
 	{
 		ClockDemoPrint("Timers: UNSUPPORTED (no devices)\r\n");
@@ -491,6 +527,7 @@ int main(void)
 	{
 		ClockDemoTimer(timerDevNo);
 	}
+	ClockDemoConcurrentTimerTest(lowTimerCount, highTimerCount);
 	ClockDemoFlush();
 	ClockDemoPrint("ClockDemo complete: %u failures\r\n", s_Failures);
 	ClockDemoFlush();
