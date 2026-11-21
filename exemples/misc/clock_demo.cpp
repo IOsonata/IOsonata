@@ -466,12 +466,17 @@ static void ClockDemoDelayCalibrationReport(void)
 		return;
 	}
 
+#if defined(__arm__) || defined(__thumb__)
 	ClockDemoPrint("Delay highest observed %u Hz: us Q16 %u, ns Q16 %u\r\n",
 		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayHigh.UsQ16,
 		(unsigned)s_DelayHigh.NsQ16);
 	ClockDemoPrint("Delay lowest observed %u Hz: us Q16 %u, ns Q16 %u\r\n",
 		(unsigned)s_DelayLow.CpuHz, (unsigned)s_DelayLow.UsQ16,
 		(unsigned)s_DelayLow.NsQ16);
+#else
+	ClockDemoPrint("Delay highest observed %u Hz, lowest observed %u Hz\r\n",
+		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayLow.CpuHz);
+#endif
 
 	if (s_DelayHigh.CpuHz == s_DelayLow.CpuHz)
 	{
