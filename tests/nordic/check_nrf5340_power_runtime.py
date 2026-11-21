@@ -66,7 +66,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertLess(ready, launch)
 		self.assertLess(launch, restore)
 
-	def test_console_retries_syslog_after_uart_irq_drain(self):
+	def test_console_uses_syslog_without_uart_specific_callbacks(self):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertNotIn("SysLogVPrintf(", s)
 		self.assertNotIn("SysLogUartEvent", s)
@@ -111,7 +111,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		header = (ROOT / "include/syslog.h").read_text(encoding="utf-8")
 		impl = (ROOT / "src/syslog.cpp").read_text(encoding="utf-8")
 		self.assertIn(".EvtCallback = nullptr,", s)
-		self.assertIn("CorePowerTestDrainLog();", s)
+		self.assertNotIn("CorePowerTestDrainLog();", s)
 		self.assertNotIn("SysLogUartEvent", s)
 		self.assertNotIn("SysLogUartEvent", header)
 		self.assertNotIn("SysLogUartEvent", impl)
