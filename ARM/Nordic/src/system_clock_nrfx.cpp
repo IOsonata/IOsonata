@@ -637,16 +637,19 @@ static bool nRFxLfclkStart(uint32_t Src)
 // LFCLK STOP is nonblocking. Wait before a later clock enable, not in an ISR.
 static bool nRFxLfclkWaitStopped(void)
 {
-	int i;
+	uint32_t elapsed;
 
-	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
+	elapsed = 0U;
+	while (elapsed < NRFX_LFCLK_START_TIMEOUT_US)
 	{
 		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
 		{
 			return true;
 		}
+		usDelay(NRFX_LFCLK_START_POLL_US);
+		elapsed += NRFX_LFCLK_START_POLL_US;
 	}
-	return false;
+	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U;
 }
 
 bool SystemLowFreqClockEnable(void)
