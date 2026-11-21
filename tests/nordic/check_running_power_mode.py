@@ -55,6 +55,13 @@ class RunningPowerMode(unittest.TestCase):
 
 	def test_core_test_remains_architecture_neutral(self):
 		self.assertIn("CoreClockTestPowerMode();", self.demo)
+		start = self.demo.index("static void CoreClockTestPowerMode(void)")
+		end = self.demo.index("static void CoreClockTestCalibrationTest(void)", start)
+		body = self.demo[start:end]
+		self.assertIn("CoreClockTestDelayCalibrationRecord();", body)
+		self.assertLess(body.index("CoreClockTestDelayCalibrationRecord();"),
+			body.index("SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);", 
+				body.index("CoreClockTestDelayCalibrationRecord();")))
 		self.assertIn("SYSTEM_POWER_MODE_LOW_POWER", self.demo)
 		self.assertIn("SYSTEM_POWER_MODE_PERFORMANCE", self.demo)
 		for term in ("NRF_CLOCK", "HFCLKCTRL", "__arm__", "__riscv", "DWT->"):
