@@ -58,6 +58,7 @@ SOFTWARE.
 
 #include "board.h"
 
+// POWER_DEMO_* configuration names remain for existing MCU board compatibility.
 // UART wake requires a board profile with a supported sleep receiver.
 #ifndef POWER_DEMO_UART_WAKE
 #define POWER_DEMO_UART_WAKE 0
@@ -298,7 +299,7 @@ static void RamRetWrite(void)
 
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
 // Minimal polling output avoids formatted logging on the 16 KB SAM D11.
-static void PowerDemoPut(const char *pText)
+static void PowerApiTestPut(const char *pText)
 {
 	uint8_t c;
 
@@ -313,12 +314,12 @@ static void PowerDemoPut(const char *pText)
 
 // Allow the last polling UART transfer to finish before shutting down.
 // No application access to driver FIFOs or receive calls for TX progress.
-static void PowerDemoDrain(void)
+static void PowerApiTestDrain(void)
 {
 	msDelay(2);
 }
 
-static void PowerDemoPutCount(uint32_t Value)
+static void PowerApiTestPutCount(uint32_t Value)
 {
 	uint8_t digit;
 	uint8_t c;
@@ -345,7 +346,7 @@ static uint32_t StandbyRamPattern(uint32_t Cycle, uint32_t Idx)
 
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE && \
 	defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
-static void PowerDemoStandbyTimerWake(TimerDev_t *pTimer, int Trigger, void *pContext)
+static void PowerApiTestStandbyTimerWake(TimerDev_t *pTimer, int Trigger, void *pContext)
 {
 	(void)pTimer;
 	(void)Trigger;
@@ -355,7 +356,7 @@ static void PowerDemoStandbyTimerWake(TimerDev_t *pTimer, int Trigger, void *pCo
 #endif
 
 // Require a stable release before arming another sleep cycle.
-static void PowerDemoWaitRelease(void)
+static void PowerApiTestWaitRelease(void)
 {
 #if defined(WAKE_BUT_PIN)
 	unsigned idle = 0U;
@@ -386,8 +387,8 @@ static void PowerApiTestResult(const char *pName, bool Passed)
 		s_PowerApiFailures++;
 	}
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
-	PowerDemoPut(pName);
-	PowerDemoPut(Passed ? ": PASS\r\n" : ": FAIL\r\n");
+	PowerApiTestPut(pName);
+	PowerApiTestPut(Passed ? ": PASS\r\n" : ": FAIL\r\n");
 #else
 	SysLogPrintf(SysLogGet(), "%s: %s\r\n", pName, Passed ? "PASS" : "FAIL");
 #endif
@@ -396,23 +397,23 @@ static void PowerApiTestResult(const char *pName, bool Passed)
 static void PowerApiTestSummary(void)
 {
 #if defined(POWER_DEMO_RESUME_WAKE) && POWER_DEMO_RESUME_WAKE
-	PowerDemoPut("PowerApiTest complete: 0x");
-	PowerDemoPutCount(s_PowerApiFailures);
-	PowerDemoPut(" failures, 0x");
-	PowerDemoPutCount(s_PowerApiChecks);
-	PowerDemoPut(" checks\r\n");
+	PowerApiTestPut("PowerApiTest complete: 0x");
+	PowerApiTestPutCount(s_PowerApiFailures);
+	PowerApiTestPut(" failures, 0x");
+	PowerApiTestPutCount(s_PowerApiChecks);
+	PowerApiTestPut(" checks\r\n");
 #else
 	SysLogPrintf(SysLogGet(), "PowerApiTest complete: %u failures, %u checks\r\n",
 		(unsigned)s_PowerApiFailures, (unsigned)s_PowerApiChecks);
 #endif
 }
 
-static bool PowerDemoWakeConfig(void)
+static bool PowerApiTestWakeConfig(void)
 {
 #if defined(WAKE_BUT_PIN)
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
 		IOPINDIR_INPUT, s_WakeButRes, IOPINTYPE_NORMAL);
-	PowerDemoWaitRelease();
+	PowerApiTestWaitRelease();
 	return SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
 #else
 	return false;
@@ -453,18 +454,18 @@ int main()
 	{
 		return 1;
 	}
-	PowerDemoPut("PowerApiTest: Standby\r\n");
+	PowerApiTestPut("PowerApiTest: Standby\r\n");
 
 #if POWER_DEMO_UART_WAKE
 	if (!s_Uart.EnableWake(true))
 	{
-		PowerDemoPut("UART wake unavailable for this configuration\r\n");
+		PowerApiTestPut("UART wake unavailable for this configuration\r\n");
 		return 1;
 	}
 	// Validate the physical USART0 RX connection before testing PICOUART.
 	// The host sends one U at the normal 1 Mbps console rate.
 	// Do not drain the RX FIFO while waiting for the test byte.
-	PowerDemoPut("UART RX: send U at 1000000 baud\r\n");
+	PowerApiTestPut("UART RX: send U at 1000000 baud\r\n");
 	rxByte = 0U;
 	normalRx = false;
 	for (rxWait = 0U; rxWait < 3000U; rxWait++)
@@ -476,7 +477,7 @@ int main()
 		}
 		msDelay(1);
 	}
-	PowerDemoPut(normalRx ? "UART RX normal: PASS\r\n" :
+	PowerApiTestPut(normalRx ? "UART RX normal: PASS\r\n" :
 		"UART RX normal: FAIL\r\n");
 	if (!normalRx)
 	{
@@ -485,14 +486,14 @@ int main()
 #elif defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
 	if (!TimerInit(&s_WakeTimer, &s_WakeTimerCfg))
 	{
-		PowerDemoPut("Standby timer initialization FAIL\r\n");
+		PowerApiTestPut("Standby timer initialization FAIL\r\n");
 		return 1;
 	}
 	TimerDisable(&s_WakeTimer);
 #else
-	if (!PowerDemoWakeConfig())
+	if (!PowerApiTestWakeConfig())
 	{
-		PowerDemoPut("Standby wake pin not available\r\n");
+		PowerApiTestPut("Standby wake pin not available\r\n");
 		return 1;
 	}
 #endif
@@ -508,8 +509,8 @@ int main()
 #if POWER_DEMO_UART_WAKE
 		// Establish the last console exchange at normal baud before
 		// the host changes its FTDI divisor. No PICOUART setup yet.
-		PowerDemoPut("UART wake setup: send R at 1000000 baud\r\n");
-		PowerDemoDrain();
+		PowerApiTestPut("UART wake setup: send R at 1000000 baud\r\n");
+		PowerApiTestDrain();
 		rxByte = 0U;
 		for (rxWait = 0U; rxWait < 3000U; rxWait++)
 		{
@@ -521,18 +522,18 @@ int main()
 		}
 		if (rxByte != 'R')
 		{
-			PowerDemoPut("UART wake setup: FAIL\r\n");
-			PowerDemoDrain();
+			PowerApiTestPut("UART wake setup: FAIL\r\n");
+			PowerApiTestDrain();
 			return 1;
 		}
-		PowerDemoPut("UART sleep preparation: switch host to 9600 baud\r\n");
+		PowerApiTestPut("UART sleep preparation: switch host to 9600 baud\r\n");
 #elif defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0
-		PowerDemoPut("Entering Standby; automatic timer wake\r\n");
+		PowerApiTestPut("Entering Standby; automatic timer wake\r\n");
 #else
-		PowerDemoWaitRelease();
-		PowerDemoPut("Entering Standby\r\n");
+		PowerApiTestWaitRelease();
+		PowerApiTestPut("Entering Standby\r\n");
 #endif
-		PowerDemoDrain();
+		PowerApiTestDrain();
 #if POWER_DEMO_UART_WAKE
 		// Test harness only: keep USART0 running while FTDI changes
 		// rate and its TX line settles. Host waits longer before U.
@@ -552,14 +553,14 @@ int main()
 #if defined(POWER_DEMO_TIMER_WAKE_MS) && POWER_DEMO_TIMER_WAKE_MS > 0 && !POWER_DEMO_UART_WAKE
 		if (TimerSetFrequency(&s_WakeTimer, 1024U) == 0U)
 		{
-			PowerDemoPut("Standby timer frequency FAIL\r\n");
+			PowerApiTestPut("Standby timer frequency FAIL\r\n");
 			return 1;
 		}
 		// A trigger configures RTC compare registers; it does not start
 		// the counter. Start the timer before arming its wake interrupt.
 		if (!TimerEnable(&s_WakeTimer))
 		{
-			PowerDemoPut("Standby timer enable FAIL\r\n");
+			PowerApiTestPut("Standby timer enable FAIL\r\n");
 			return 1;
 		}
 		state = DisableInterrupt();
@@ -567,7 +568,7 @@ int main()
 		start = TimerGetMicrosecond(&s_WakeTimer);
 		period = nsTimerEnableTrigger(&s_WakeTimer, 0,
 			(uint64_t)POWER_DEMO_TIMER_WAKE_MS * 1000000ULL,
-			TIMER_TRIG_TYPE_SINGLE, PowerDemoStandbyTimerWake, nullptr);
+			TIMER_TRIG_TYPE_SINGLE, PowerApiTestStandbyTimerWake, nullptr);
 		if (period != 0U && !s_StandbyTimerWoke)
 		{
 			SystemSleep();
@@ -596,7 +597,7 @@ int main()
 		received = s_Uart.Rx(&wakeByte, 1) == 1 && wakeByte == 'U';
 		// Let the host adapter switch back to its normal console baud.
 		msDelay(100);
-		PowerDemoPut(received ? "UART wake byte: PASS\r\n" : "UART wake byte: FAIL\r\n");
+		PowerApiTestPut(received ? "UART wake byte: PASS\r\n" : "UART wake byte: FAIL\r\n");
 #endif
 		// Keep wake verification in PowerOffDemo for every resumable port.
 		// UART output here also exercises TX after resume.
@@ -608,8 +609,8 @@ int main()
 		{
 			// A refused sleep or an early wake is not a completed cycle.
 			// Stop instead of printing another misleading resume count.
-			PowerDemoPut("UART wake test stopped\r\n");
-			PowerDemoDrain();
+			PowerApiTestPut("UART wake test stopped\r\n");
+			PowerApiTestDrain();
 			return 1;
 		}
 #endif
@@ -620,15 +621,15 @@ int main()
 			(uint64_t)elapsed <= expected * 102ULL / 100ULL);
 #endif
 		wakeCount++;
-		PowerDemoPut("Resumed from Standby, count 0x");
-		PowerDemoPutCount(wakeCount);
-		PowerDemoPut("\r\n");
+		PowerApiTestPut("Resumed from Standby, count 0x");
+		PowerApiTestPutCount(wakeCount);
+		PowerApiTestPut("\r\n");
 #if defined(POWER_DEMO_STANDBY_RAM_TEST) && POWER_DEMO_STANDBY_RAM_TEST
 		PowerApiTestResult("SRAM sample: 128 static + 128 stack bytes", ramOk);
 		if (!ramOk)
 		{
 			PowerApiTestSummary();
-			PowerDemoDrain();
+			PowerApiTestDrain();
 			while (1)
 			{
 			}
@@ -654,6 +655,7 @@ int main()
 
 	sep = " ";
 
+	PowerApiTestResult("Reset reason API", reason != 0U);
 	SysLogPrintf(SysLogGet(), "Reset reason 0x%x:", (unsigned)reason);
 	for (i = 0U; i < sizeof(s_ResetNames) / sizeof(s_ResetNames[0]); i++)
 	{
@@ -675,6 +677,11 @@ int main()
 	{
 		PowerApiTestResult("Retention register read/write",
 			SystemRetRegRead(0) == cnt || SystemRetRegRead(0) == (cnt & 0xFFU));
+		PowerApiTestResult("Retention register invalid index",
+			SystemRetRegRead(-1) == 0U &&
+			!SystemRetRegWrite(-1, cnt) &&
+			SystemRetRegRead(SystemRetRegCount()) == 0U &&
+			!SystemRetRegWrite(SystemRetRegCount(), cnt));
 	}
 	else
 	{
@@ -683,6 +690,11 @@ int main()
 
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
 	// Check before writing the next pattern. Startup must leave the test region untouched.
+	if (SystemRetRegCount() >= 2 && SystemRetRegRead(1) == RAM_TEST_PREPARED)
+	{
+		PowerApiTestResult("System OFF reset-on-wake",
+			(reason & (SYSTEM_RESET_WAKE_PIN | SYSTEM_RESET_WAKE_TIMER)) != 0U);
+	}
 	if ((reason & SYSTEM_RESET_WAKE_PIN) &&
 		(SystemRetRegCount() < 2 || SystemRetRegRead(1) == RAM_TEST_PREPARED))
 	{
@@ -752,12 +764,14 @@ int main()
 		(unsigned)POWER_DEMO_TIMER_WAKE_MS);
 #else
 	// Configure the pin and wait for release before arming System OFF wakeup.
-	if (PowerDemoWakeConfig())
+	if (PowerApiTestWakeConfig())
 	{
+		PowerApiTestResult("Wake pin configuration", true);
 		SysLogPrintf(SysLogGet(), "Power off, press the button to wake up\r\n");
 	}
 	else
 	{
+		SysLogPrintf(SysLogGet(), "Wake pin configuration: UNSUPPORTED or rejected\r\n");
 		SysLogPrintf(SysLogGet(), "Power off, the button cannot wake this MCU, use the reset pin\r\n");
 	}
 

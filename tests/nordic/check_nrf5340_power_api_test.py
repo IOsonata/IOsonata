@@ -14,7 +14,9 @@ class PowerApiTest(unittest.TestCase):
 		for name in ("PowerApiTestResult", "PowerApiTestSummary",
 			"SystemSleep();", "SystemPowerOff();",
 			"RAM retention after reset", "Standby timer wake",
-			"CPU/APB clock after resume"):
+			"CPU/APB clock after resume",
+			"Retention register invalid index", "Reset reason API",
+			"System OFF reset-on-wake"):
 			self.assertIn(name, s)
 
 	def test_report_after_ram_check(self):
