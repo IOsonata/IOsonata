@@ -36,6 +36,7 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("clockIdx < 32", source)
 		self.assertIn("SystemPeriphClockGet(-1)", source)
 		self.assertIn("SystemPeriphClockGet(32)", source)
+		self.assertIn("Peripheral domain scan limit", source)
 		self.assertIn("SystemPeriphClockSet(clockIdx, bus)", source)
 		self.assertIn("actual != 0U &&", source)
 		self.assertIn("readback == actual", source)
@@ -50,6 +51,8 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency)", source)
 		self.assertIn("TimerGetLowFreqDevCount() + TimerGetHighFreqDevCount()", source)
 		self.assertIn("ClockDemoTimer(timerDevNo);", source)
+		self.assertIn("ClockDemoConcurrentTimerTest(lowTimerCount, highTimerCount);", source)
+		self.assertIn("Timer independent clock ownership", source)
 		self.assertIn("ClockDemoTimerInit(DevNo)", source)
 		for name in ("CLOCK_DEMO_CORE_READONLY", "CLOCK_DEMO_DEFER_TIMER",
 			"CLOCK_DEMO_UART_RX_TEST", "CLOCK_DEMO_STOP_UART",
@@ -63,11 +66,16 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("timerDevNo < timerCount", source)
 		self.assertIn("cfg.DevNo = DevNo;", source)
 		self.assertIn("TimerSetFrequency(&s_Timer", source)
+		self.assertNotIn("CLOCK_DEMO_TIMER_DEVNO", source)
+		self.assertNotIn("CLOCK_DEMO_STOP_TIMER_DEVNO", source)
+		self.assertNotIn("CLOCK_DEMO_CYCLES", source)
 		self.assertIn("TimerDisable(&s_Timer);", source)
 
 	def test_clock_demo_checks_shared_clock_lifecycle(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("ClockDemoSharedClockTest();", source)
+		self.assertIn("Configured core clock selection", source)
+		self.assertIn("Configured LF clock selection", source)
 		for api in ("SystemHighFreqClockEnable",
 			"SystemHighFreqClockDisable", "SystemLowFreqClockEnable",
 			"SystemLowFreqClockDisable"):
@@ -87,7 +95,9 @@ class DemoDriverOwnership(unittest.TestCase):
 				if "CLOCK_DEMO_SOURCES" not in source:
 					continue
 				self.assertIn("CLOCK_DEMO_PERIPH_DIVIDERS", source)
-				for name in ("CLOCK_DEMO_APB_DIVIDERS", "CLOCK_DEMO_CORE_READONLY",
+				for name in ("CLOCK_DEMO_TIMER_DEVNO", "CLOCK_DEMO_STOP_TIMER_DEVNO",
+					"CLOCK_DEMO_CYCLES",
+					"CLOCK_DEMO_APB_DIVIDERS", "CLOCK_DEMO_CORE_READONLY",
 					"CLOCK_DEMO_DEFER_TIMER", "CLOCK_DEMO_STOP_UART",
 					"CLOCK_DEMO_HF_SOURCE_ENABLE", "CLOCK_DEMO_LF_SOURCE_ENABLE",
 					"CLOCK_DEMO_UART_RX_TEST", "CLOCK_DEMO_APB_READONLY",
