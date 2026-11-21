@@ -26,22 +26,12 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #endif
 
 // Core source sequence and accepted frequency ranges. RC_FAST is measured against XTAL.
-#define CLOCK_DEMO_SOURCES { \
-	{"XTAL", OSC_TYPE_XTAL, 40000000U, CLOCK_DEMO_XTAL_CPU, CLOCK_DEMO_XTAL_CPU}, \
-	{"RC_FAST", OSC_TYPE_RC, 0U, 10000000U, 30000000U}, \
-	{"XTAL restore", OSC_TYPE_XTAL, 40000000U, CLOCK_DEMO_XTAL_CPU, CLOCK_DEMO_XTAL_CPU} \
-}
 // C3 divides CPU and APB together outside PLL mode.
 #if defined(ESP32C3_CPU_160MHZ)
 // APB is fixed at 80 MHz when PLL feeds the CPU.
-#define CLOCK_DEMO_PERIPH_DIVIDERS {1U}
 #else
-#define CLOCK_DEMO_PERIPH_DIVIDERS {1U, 2U, 4U, 1U}
 #endif
 // Internal sources only; no assumption about an onboard 32 kHz crystal.
-#define CLOCK_DEMO_LF_SOURCES { \
-	{"RC_SLOW", OSC_TYPE_RC, 136000U} \
-}
 #ifndef CLOCK_DEMO_UART_RX_TEST
 #endif
 

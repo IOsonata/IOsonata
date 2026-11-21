@@ -37,8 +37,6 @@ Copyright (c) 2026 I-SYST inc.
 
 
 // Internal sources only; external crystal frequency is not assumed.
-#define CLOCK_DEMO_SOURCES { {"HSI", OSC_TYPE_RC, 16000000U, 1U, UINT32_MAX} }
-#define CLOCK_DEMO_PERIPH_DIVIDERS {1U, 2U, 4U, 1U}
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif

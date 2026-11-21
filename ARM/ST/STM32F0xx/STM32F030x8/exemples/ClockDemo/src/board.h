@@ -24,8 +24,6 @@
 #define UART_TX_PINOP IOPINOP_FUNC1
 
 // Internal sources only; external crystal frequency is not assumed.
-#define CLOCK_DEMO_SOURCES { {"HSI", OSC_TYPE_RC, 8000000U, 1U, UINT32_MAX} }
-#define CLOCK_DEMO_PERIPH_DIVIDERS {}
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif

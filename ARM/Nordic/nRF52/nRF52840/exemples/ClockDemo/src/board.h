@@ -56,9 +56,6 @@ SOFTWARE.
 
 
 // Test core oscillator selection. Shared HFXO ownership has its own test.
-#define CLOCK_DEMO_SOURCES { {"Core XTAL", OSC_TYPE_XTAL, 0U, 1U, UINT32_MAX}, {"Core RC", OSC_TYPE_RC, 0U, 1U, UINT32_MAX} }
-#define CLOCK_DEMO_PERIPH_DIVIDERS {1U}
-#define CLOCK_DEMO_LF_SOURCES { {"LF RC", OSC_TYPE_RC, 32768U} }
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif
