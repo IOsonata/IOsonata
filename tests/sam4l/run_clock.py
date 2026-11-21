@@ -16,6 +16,7 @@ with tempfile.TemporaryDirectory(prefix='sam4l-clock-') as tmp:
                 '-fsanitize=undefined', '-fno-sanitize-recover=all',
                 '-I' + str(ROOT / 'tests/sam4l/clock_shim'),
                 '-I' + str(ROOT / 'include'),
+                '-I' + str(ROOT / 'ARM/include'),
                 '-I' + str(ROOT / 'ARM/Microchip/SAM4L/include'),
                 str(ROOT / 'tests/sam4l/clock_test.c'), '-o', str(binary)], check=True)
             subprocess.run([str(binary)], check=True, timeout=30)
