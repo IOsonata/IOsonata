@@ -71,7 +71,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertNotIn("SysLogVPrintf(", s)
 		self.assertIn("SysLogUartEvent", s)
 		self.assertIn("SysLogUartEvent", s)
-		self.assertNotIn("CorePowerTestDrainLog(", s)
+		self.assertIn("CorePowerTestDrainLog(", s)
 		self.assertIn("SysLogPrintf(SysLogGet(),", s)
 		self.assertNotIn("DeviceIntrfWaitTxComplete(", s)
 
@@ -83,6 +83,16 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("CorePowerTestPut(", s)
 
+	def test_syslog_flush_retry_after_each_log(self):
+		s = SRC.read_text(encoding="utf-8")
+		self.assertIn("static void CorePowerTestDrainLog(void)", s)
+		self.assertIn("msDelay(2);", s)
+		self.assertIn("(void)SysLogFlush(SysLogGet());", s)
+		self.assertIn(".EvtCallback = SysLogUartEvent,", s)
+		self.assertEqual(s.count("SysLogPrintf(SysLogGet(),"), 10)
+		self.assertEqual(s.count("CorePowerTestDrainLog();"), 10)
+		self.assertNotIn("SysLogVPrintf(", s)
+
 	def test_syslog_uart_owns_tx_ready_callback(self):
 		s = SRC.read_text(encoding="utf-8")
 		header = (ROOT / "include/syslog.h").read_text(encoding="utf-8")
@@ -91,7 +101,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("int SysLogUartEvent(UARTDev_t * const pDev", header)
 		self.assertIn("EvtId != UART_EVT_TXREADY", impl)
 		self.assertIn("return SysLogFlush(pLog);", impl)
-		self.assertNotIn("CorePowerTestDrainLog(", s)
+		self.assertIn("CorePowerTestDrainLog(", s)
 		self.assertIn("CFifoResv(pLog->hFifo)", impl)
 
 	def test_console_uses_interrupt_driven_uarte(self):
