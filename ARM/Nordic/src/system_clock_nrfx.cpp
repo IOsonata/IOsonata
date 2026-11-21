@@ -676,11 +676,13 @@ bool SystemLowFreqClockCalibrate(void)
 		s_nRFxLfclkReqCnt != 0U && !s_bNRFxLfclkTransition &&
 		!s_bNRFxLfclkCalibrating &&
 		!nRFxMpslActive() && !nRFxClockSdEnabled();
+
 	if (active)
 	{
 		s_bNRFxLfclkCalibrating = true;
 	}
 	EnableInterrupt(state);
+
 	if (!active)
 	{
 		return false;
@@ -697,9 +699,11 @@ bool SystemLowFreqClockCalibrate(void)
 	// A separate user's Disable cannot stop LFCLK before DONE.
 	success = nRFxLfclkCalibrate();
 	SystemLowFreqClockDisable();
+
 	state = DisableInterrupt();
 	s_bNRFxLfclkCalibrating = false;
 	EnableInterrupt(state);
+
 	return success;
 #else
 	// Other targets retain their existing vendor/stack calibration owner.
