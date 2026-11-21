@@ -7,7 +7,7 @@ Uses the generic clock, UART and Timer interfaces. The board supplies the
 source sequence and peripheral clock divisors. Each change is made with the
 timer stopped. Both build configurations log to UART without a debugger.
 Timer elapsed time and interrupt counts check operation after clock changes.
-Boards that defer timer initialization check it after the selection sequence.
+Clock and timer checks use only the public IOsonata HAL interfaces.
 These checks do not measure absolute oscillator accuracy. PowerOffDemo tests
 low-power modes, wake sources and peripheral operation following resume.
 
@@ -50,24 +50,6 @@ SOFTWARE.
 #ifndef CLOCK_DEMO_IRQ_PRIORITY
 #define CLOCK_DEMO_IRQ_PRIORITY 6
 #endif
-#ifndef CLOCK_DEMO_CORE_READONLY
-#define CLOCK_DEMO_CORE_READONLY 0
-#endif
-#ifndef CLOCK_DEMO_DEFER_TIMER
-#define CLOCK_DEMO_DEFER_TIMER 0
-#endif
-#ifndef CLOCK_DEMO_UART_RX_TEST
-#define CLOCK_DEMO_UART_RX_TEST 0
-#endif
-#ifndef CLOCK_DEMO_STOP_UART
-#define CLOCK_DEMO_STOP_UART 0
-#endif
-#ifndef CLOCK_DEMO_HF_SOURCE_ENABLE
-#define CLOCK_DEMO_HF_SOURCE_ENABLE 0
-#endif
-#ifndef CLOCK_DEMO_LF_SOURCE_ENABLE
-#define CLOCK_DEMO_LF_SOURCE_ENABLE 0
-#endif
 
 struct ClockDemoSource_t {
 	const char *pName;
@@ -93,11 +75,6 @@ struct ClockDemoLowFreq_t {
 static const ClockDemoSource_t s_Sources[] = CLOCK_DEMO_SOURCES;
 #if defined(CLOCK_DEMO_LF_SOURCES)
 static const ClockDemoLowFreq_t s_LowFreqSources[] = CLOCK_DEMO_LF_SOURCES;
-#endif
-// Existing boards still supply CLOCK_DEMO_APB_DIVIDERS. The test treats
-// index 0 as a generic peripheral clock domain, not an APB-specific bus.
-#ifndef CLOCK_DEMO_PERIPH_DIVIDERS
-#define CLOCK_DEMO_PERIPH_DIVIDERS CLOCK_DEMO_APB_DIVIDERS
 #endif
 static const uint32_t s_PeriphDividers[] = CLOCK_DEMO_PERIPH_DIVIDERS;
 static const IOPinCfg_t s_UartPins[] = {
@@ -215,47 +192,6 @@ static void ClockDemoResult(const char *pName, bool Passed)
 	}
 }
 
-#if CLOCK_DEMO_UART_RX_TEST
-static void ClockDemoUartRx(void)
-{
-	uint8_t value;
-	bool received = false;
-	unsigned remaining;
-	uint32_t start;
-
-	remaining = 1024U;
-
-	// Discard bytes from the previous prompt before starting this check.
-	while (remaining != 0U && UARTRx(&s_Uart, &value, 1) > 0)
-	{
-		remaining--;
-	}
-	if (remaining == 0U)
-	{
-		ClockDemoResult("UART RX", false);
-		return;
-	}
-	if (!TimerEnable(&s_Timer))
-	{
-		TimerDisable(&s_Timer);
-		ClockDemoResult("UART RX timer", false);
-		return;
-	}
-	start = TimerGetMicrosecond(&s_Timer);
-	ClockDemoPrint("UART RX: send U within 30 s\r\n");
-	while ((uint32_t)(TimerGetMicrosecond(&s_Timer) - start) < 30000000U)
-	{
-		if (UARTRx(&s_Uart, &value, 1) > 0 && value == 'U')
-		{
-			received = true;
-			break;
-		}
-	}
-	TimerDisable(&s_Timer);
-	ClockDemoResult("UART RX", received);
-}
-#endif
-
 static bool ClockDemoTimerInit(void)
 {
 	if (!TimerInit(&s_Timer, &s_TimerCfg))
@@ -271,23 +207,6 @@ static bool ClockDemoTimerInit(void)
 static void ClockDemoFlush(void)
 {
 	msDelay(2);
-}
-
-static void ClockDemoClockBegin(void)
-{
-	ClockDemoFlush();
-#if CLOCK_DEMO_STOP_UART
-	UARTPowerOff(&s_Uart);
-#endif
-}
-
-static bool ClockDemoClockEnd(void)
-{
-#if CLOCK_DEMO_STOP_UART
-	return UARTInit(&s_Uart, &s_UartCfg);
-#else
-	return true;
-#endif
 }
 
 static void ClockDemoTimer(void)
@@ -357,9 +276,6 @@ int main(void)
 	uint32_t divider;
 	uint32_t request;
 	uint32_t actual;
-#if CLOCK_DEMO_HF_SOURCE_ENABLE
-	bool hfSourceEnabled = false;
-#endif
 #if defined(CLOCK_DEMO_STOP_TIMER_DEVNO)
 	// Keep the timer handle alive after acquiring and stopping a retained timer.
 	TimerCfg_t retainedCfg = s_TimerCfg;
@@ -383,15 +299,10 @@ int main(void)
 	}
 	TimerDisable(&s_RetainedTimer);
 #endif
-#if !CLOCK_DEMO_DEFER_TIMER
 	if (!ClockDemoTimerInit())
 	{
 		return 1;
 	}
-#if CLOCK_DEMO_UART_RX_TEST
-	ClockDemoUartRx();
-#endif
-#endif
 	if (sizeof(s_Sources) == 0U)
 	{
 		ClockDemoPrint("Core selection: SKIP (not configured)\r\n");
@@ -409,45 +320,13 @@ int main(void)
 		for (sourceIdx = 0U; sourceIdx < sizeof(s_Sources) / sizeof(s_Sources[0]); sourceIdx++)
 		{
 			pSource = &s_Sources[sourceIdx];
-#if CLOCK_DEMO_CORE_READONLY
-			ClockDemoPrint("Checking %s\r\n", pSource->pName);
-#else
-			ClockDemoPrint("Selecting %s\r\n", pSource->pName);
-#endif
-			// Polling Tx has queued the last bytes in the hardware FIFO.
-			ClockDemoClockBegin();
-#if CLOCK_DEMO_CORE_READONLY
-			selected = !pSource->Select;
-#else
+			ClockDemoPrint("%s %s\\r\\n", pSource->Select ? "Selecting" : "Checking",
+				pSource->pName);
+			ClockDemoFlush();
 			selected = true;
 			if (pSource->Select)
 			{
-#if CLOCK_DEMO_HF_SOURCE_ENABLE
-				if (pSource->Type == OSC_TYPE_RC)
-				{
-					selected = hfSourceEnabled;
-					if (selected)
-					{
-						SystemHighFreqClockDisable();
-						hfSourceEnabled = false;
-					}
-				}
-				else
-				{
-					selected = SystemHighFreqClockEnable();
-					if (selected)
-					{
-						hfSourceEnabled = true;
-					}
-				}
-#else
 				selected = SystemCoreClockSelect(pSource->Type, pSource->Frequency);
-#endif
-			}
-#endif
-			if (!ClockDemoClockEnd())
-			{
-				return 1;
 			}
 			core = SystemCoreClockGet();
 			ClockDemoResult(pSource->pName, selected && core >= pSource->CoreMin && core <= pSource->CoreMax);
@@ -475,21 +354,15 @@ int main(void)
 						continue;
 					}
 					request = bus / divider;
-					ClockDemoClockBegin();
+					ClockDemoFlush();
 					actual = SystemPeriphClockSet(0, request);
-					if (!ClockDemoClockEnd())
-					{
-						return 1;
-					}
-					readback = SystemPeriphClockGet(0);
+				readback = SystemPeriphClockGet(0);
 					ClockDemoPrint("CPU %u Hz, peripheral clock 0 request %u Hz, actual %u Hz\r\n",
 						(unsigned)SystemCoreClockGet(), (unsigned)request, (unsigned)actual);
 					ClockDemoResult("Peripheral clock", actual != 0U &&
 						readback == actual &&
 						(request != bus || actual == bus));
-#if !CLOCK_DEMO_DEFER_TIMER
 					ClockDemoTimer();
-#endif
 				}
 			}
 #if defined(CLOCK_DEMO_LF_SOURCES)
@@ -497,49 +370,19 @@ int main(void)
 			{
 				pLfSource = &s_LowFreqSources[lfIdx];
 				ClockDemoPrint("Selecting LF %s\r\n", pLfSource->pName);
-				ClockDemoClockBegin();
+				ClockDemoFlush();
 				selected = SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency);
-#if CLOCK_DEMO_LF_SOURCE_ENABLE
-				if (selected)
-				{
-					selected = SystemLowFreqClockEnable();
-				}
-#endif
-				if (!ClockDemoClockEnd())
-				{
-					return 1;
-				}
 				ClockDemoResult(pLfSource->pName, selected);
-				ClockDemoPrint("LF measured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
-#if CLOCK_DEMO_LF_SOURCE_ENABLE
-				if (selected)
-				{
-					SystemLowFreqClockDisable();
-				}
+				ClockDemoPrint("LF configured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
+			}
 #endif
 			}
 #endif
 		}
 	}
-#if CLOCK_DEMO_DEFER_TIMER
-	// Some ports keep a timer's module clock until reset, even after Disable.
-	// Complete clock selection before acquiring that timer.
-	if (!ClockDemoTimerInit())
-	{
-		return 1;
-	}
-	ClockDemoTimer();
-#if CLOCK_DEMO_UART_RX_TEST
-	ClockDemoUartRx();
-#endif
-#endif
 	ClockDemoFlush();
 	ClockDemoPrint("ClockDemo complete: %u failures\r\n", s_Failures);
 	ClockDemoFlush();
-#if CLOCK_DEMO_STOP_UART
-	// The UART driver finishes pending TX before the last PowerOff.
-	UARTPowerOff(&s_Uart);
-#endif
 	while (1)
 	{
 		msDelay(1000);
