@@ -46,6 +46,8 @@ static inline bool ArmDelayCalibrate(uint32_t CpuHz)
 	uint32_t start;
 	uint32_t usCycles;
 	uint32_t nsCycles;
+	uint32_t prevUsFactor;
+	uint32_t prevNsFactor;
 	uint64_t scale;
 	bool valid;
 
@@ -59,6 +61,8 @@ static inline bool ArmDelayCalibrate(uint32_t CpuHz)
 
 	prevTrace = CoreDebug->DEMCR;
 	prevCtrl = DWT->CTRL;
+	prevUsFactor = SystemMicroSecLoopCnt;
+	prevNsFactor = SystemnsDelayFactor;
 	CoreDebug->DEMCR = prevTrace | CoreDebug_DEMCR_TRCENA_Msk;
 	DWT->CTRL = prevCtrl | DWT_CTRL_CYCCNTENA_Msk;
 
@@ -98,6 +102,12 @@ static inline bool ArmDelayCalibrate(uint32_t CpuHz)
 			((uint64_t)nsCycles * 1000000ULL));
 		valid = SystemMicroSecLoopCnt != 0U &&
 			SystemnsDelayFactor != 0U;
+	}
+
+	if (!valid)
+	{
+		SystemMicroSecLoopCnt = prevUsFactor;
+		SystemnsDelayFactor = prevNsFactor;
 	}
 
 	DWT->CTRL = prevCtrl;
