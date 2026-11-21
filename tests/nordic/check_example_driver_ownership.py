@@ -29,8 +29,8 @@ class DemoDriverOwnership(unittest.TestCase):
 	def test_clock_demo_peripheral_clock_interface(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("unsigned dividerIdx;", source)
-		self.assertIn("for (dividerIdx = 0U; dividerIdx <= dividerCount;", source)
-		self.assertIn("divider = dividerIdx == 0U ? 1U :", source)
+		self.assertIn("for (dividerIdx = 1U; dividerIdx <= 4U;", source)
+		self.assertIn("divider = dividerIdx;", source)
 		self.assertIn("actual = SystemPeriphClockSet(clockIdx, request);", source)
 		self.assertIn("readback = SystemPeriphClockGet(clockIdx);", source)
 		self.assertIn("clockIdx < 32", source)
@@ -46,10 +46,11 @@ class DemoDriverOwnership(unittest.TestCase):
 
 	def test_clock_demo_has_one_generic_clock_path(self):
 		source = CLOCK.read_text(encoding="utf-8")
-		self.assertIn("SystemCoreClockSelect(pSource->Type, pSource->Frequency)", source)
+		self.assertIn("SystemCoreClockSelect(initialCoreSource, initialCoreFreq)", source)
 		self.assertIn("SystemPeriphClockSet(clockIdx, request)", source)
-		self.assertIn("SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency)", source)
-		self.assertIn("TimerGetLowFreqDevCount() + TimerGetHighFreqDevCount()", source)
+		self.assertIn("SystemLowFreqClockSelect(initialLfSource, initialLfFreq)", source)
+		self.assertIn("lowTimerCount = TimerGetLowFreqDevCount();", source)
+		self.assertIn("highTimerCount = TimerGetHighFreqDevCount();", source)
 		self.assertIn("ClockDemoTimer(timerDevNo);", source)
 		self.assertIn("ClockDemoConcurrentTimerTest(lowTimerCount, highTimerCount);", source)
 		self.assertIn("Timer independent clock ownership", source)
@@ -74,8 +75,8 @@ class DemoDriverOwnership(unittest.TestCase):
 	def test_clock_demo_checks_shared_clock_lifecycle(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("ClockDemoSharedClockTest();", source)
-		self.assertIn("Configured core clock selection", source)
-		self.assertIn("Configured LF clock selection", source)
+		self.assertIn("Configured core source", source)
+		self.assertIn("Configured LF source", source)
 		for api in ("SystemHighFreqClockEnable",
 			"SystemHighFreqClockDisable", "SystemLowFreqClockEnable",
 			"SystemLowFreqClockDisable"):
@@ -93,7 +94,7 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("ClockDemoCalibrationTest();", source)
 		self.assertLess(source.index("for (cycle = 1U;"),
 			source.index("ClockDemoCalibrationTest();"))
-		self.assertLess(source.index("SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency)"),
+		self.assertLess(source.index("SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U)"),
 			source.index("ClockDemoCalibrationTest();"))
 		self.assertIn("SystemLowFreqClockEnable();", source)
 		self.assertIn("calibrated = SystemLowFreqClockCalibrate();", source)
@@ -107,22 +108,22 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertNotIn("NRF_CLOCK", section)
 
 	def test_clock_demo_board_inputs(self):
+		source = CLOCK.read_text(encoding="utf-8")
+		macros = ("CLOCK_DEMO_SOURCES", "CLOCK_DEMO_LF_SOURCES",
+			"CLOCK_DEMO_PERIPH_DIVIDERS")
 		paths = sorted(ROOT.glob("**/exemples/ClockDemo/src/board.h"))
+
 		self.assertTrue(paths)
+
+		for name in macros:
+			self.assertNotIn(name, source)
+
 		for path in paths:
 			with self.subTest(path=path):
-				source = path.read_text(encoding="utf-8")
-				if "CLOCK_DEMO_SOURCES" not in source:
-					continue
-				self.assertIn("CLOCK_DEMO_PERIPH_DIVIDERS", source)
-				for name in ("CLOCK_DEMO_TIMER_DEVNO", "CLOCK_DEMO_STOP_TIMER_DEVNO",
-					"CLOCK_DEMO_CYCLES",
-					"CLOCK_DEMO_APB_DIVIDERS", "CLOCK_DEMO_CORE_READONLY",
-					"CLOCK_DEMO_DEFER_TIMER", "CLOCK_DEMO_STOP_UART",
-					"CLOCK_DEMO_HF_SOURCE_ENABLE", "CLOCK_DEMO_LF_SOURCE_ENABLE",
-					"CLOCK_DEMO_UART_RX_TEST", "CLOCK_DEMO_APB_READONLY",
-					"CLOCK_DEMO_APB_SHARED_CORE"):
-					self.assertNotIn(name, source)
+				board = path.read_text(encoding="utf-8")
+
+				for name in macros:
+					self.assertNotIn("#define " + name, board)
 
 	def test_clock_demo_finishes_last_print(self):
 		source = CLOCK.read_text(encoding="utf-8")
