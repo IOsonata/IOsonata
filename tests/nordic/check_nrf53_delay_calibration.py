@@ -4,8 +4,8 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-CAL = ROOT / "ARM/include/idelay_calibration.h"
-CLOCK = ROOT / "ARM/include/idelay_clock.h"
+CAL = ROOT / "ARM/include/idelay.h"
+CLOCK = ROOT / "ARM/include/idelay.h"
 DELAY = ROOT / "ARM/include/idelay.h"
 NET = ROOT / "ARM/Nordic/nRF53/nRF5340_Net/lib/src/system_nrf5340_network.c"
 APP = ROOT / "ARM/Nordic/nRF53/nRF5340_App/lib/src/system_nrf5340_application.c"
@@ -34,7 +34,7 @@ class Nrf53DelayCalibration(unittest.TestCase):
 
 	def test_both_cores_calibrate_from_hardware(self):
 		for source in (self.app, self.net):
-			self.assertIn('#include "idelay_calibration.h"', source)
+			self.assertIn('#include "idelay.h"', source)
 			self.assertIn("ArmDelayCalibrate(", source)
 			self.assertNotIn(" / 23000000UL", source)
 			self.assertNotIn(" / 28000000UL", source)
