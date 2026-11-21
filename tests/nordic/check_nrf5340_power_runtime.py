@@ -87,12 +87,12 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertNotIn(".bDMAMode = false,", s)
 		self.assertNotIn("DeviceIntrfWaitTxComplete", s)
 
-	def test_console_uses_uart_printf(self):
+	def test_console_uses_syslog_not_direct_uart_printf(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn('s_Uart.printf("%s: %s\\r\\n"', s)
-		self.assertIn('s_Uart.printf("CorePowerTest complete:', s)
+		self.assertIn('SysLogPrintf(SysLogGet(), "%s: %s', s)
+		self.assertIn('SysLogPrintf(SysLogGet(), "CorePowerTest complete:', s)
 		self.assertIn("msDelay(CORE_POWER_TEST_TX_DRAIN_MS);", s)
-		self.assertNotIn("CorePowerTestNumber(", s)
+		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("s_Uart.Tx(", s)
 
 	def test_vmc_retention_write_is_verified(self):
