@@ -93,7 +93,8 @@ bool AppClockCalibrationStart(AppClockCalibration_t *pCal,
 	uint64_t period;
 
 	if (pCal == nullptr || pTimer == nullptr || PeriodMs == 0U ||
-		pCal->Active || pTimer->EnableTrigger == nullptr ||
+		pCal->Active || pCal->Queued ||
+		pTimer->EnableTrigger == nullptr ||
 		pTimer->DisableTrigger == nullptr)
 	{
 		return false;
