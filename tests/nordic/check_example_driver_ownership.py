@@ -16,20 +16,20 @@ NRF_UART = ROOT / "ARM/Nordic/src/uart_nrfx.cpp"
 
 
 class DemoDriverOwnership(unittest.TestCase):
-	def test_clock_demo(self):
+	def test_core_clock(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertNotIn("hTxFifo", source)
 		self.assertNotIn("hRxFifo", source)
 		self.assertNotIn("CFifoUsed(", source)
-		start = source.index("static void ClockDemoFlush(void)\n{")
+		start = source.index("static void CoreClockTestFlush(void)\n{")
 		end = source.index("\n}", start)
 		self.assertNotIn("UARTRx(", source[start:end])
 		self.assertIn("msDelay(2);", source[start:end])
 
-	def test_clock_demo_delay_calibration_prioritizes_dwt(self):
+	def test_core_clock_delay_calibration_prioritizes_dwt(self):
 		source = CLOCK.read_text(encoding="utf-8")
-		start = source.index("static bool ClockDemoDelaySample(")
-		end = source.index("static void ClockDemoDelayCalibrationRecord(", start)
+		start = source.index("static bool CoreClockTestDelaySample(")
+		end = source.index("static void CoreClockTestDelayCalibrationRecord(", start)
 		section = source[start:end]
 
 		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", section)
@@ -42,12 +42,12 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertNotIn("RTC", section.split("if (TimerGetHighFreqDevCount()", 1)[1])
 		self.assertIn("msDelay(100);", section)
 		self.assertIn("nsDelay(100000000U);", section)
-		self.assertIn("ClockDemoDelayCalibrationRecord();", source)
-		self.assertIn("ClockDemoDelayCalibrationReport();", source)
+		self.assertIn("CoreClockTestDelayCalibrationRecord();", source)
+		self.assertIn("CoreClockTestDelayCalibrationReport();", source)
 		self.assertIn("ArmDelayClockInterpolate(midpoint, &low, &high)", source)
 		self.assertIn("if (core != s_DelayHigh.CpuHz", source)
 
-	def test_clock_demo_peripheral_clock_interface(self):
+	def test_core_clock_peripheral_clock_interface(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("unsigned dividerIdx;", source)
 		self.assertIn("for (dividerIdx = 1U; dividerIdx <= 4U;", source)
@@ -63,26 +63,26 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("readback == actual", source)
 		self.assertNotIn("CLOCK_DEMO_APB_READONLY", source)
 		self.assertNotIn("CLOCK_DEMO_APB_SHARED_CORE", source)
-		self.assertNotIn('ClockDemoResult("APB"', source)
+		self.assertNotIn('CoreClockTestResult("APB"', source)
 
-	def test_clock_demo_has_one_generic_clock_path(self):
+	def test_core_clock_has_one_generic_clock_path(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("SystemCoreClockSelect(initialCoreSource, initialCoreFreq)", source)
 		self.assertIn("SystemPeriphClockSet(clockIdx, request)", source)
 		self.assertIn("SystemLowFreqClockSelect(initialLfSource, initialLfFreq)", source)
 		self.assertIn("lowTimerCount = TimerGetLowFreqDevCount();", source)
 		self.assertIn("highTimerCount = TimerGetHighFreqDevCount();", source)
-		self.assertIn("ClockDemoTimer(timerDevNo);", source)
-		self.assertIn('ClockDemoPrint("LF RC timer timing test\\r\\n");', source)
-		self.assertIn('ClockDemoPrint("Restored LF source timer timing test\\r\\n");', source)
+		self.assertIn("CoreClockTestTimer(timerDevNo);", source)
+		self.assertIn('CoreClockTestPrint("LF RC timer timing test\\r\\n");', source)
+		self.assertIn('CoreClockTestPrint("Restored LF source timer timing test\\r\\n");', source)
 		self.assertIn("timerDevNo < TimerGetLowFreqDevCount();", source)
-		self.assertLess(source.index('ClockDemoPrint("LF RC timer timing test'),
+		self.assertLess(source.index('CoreClockTestPrint("LF RC timer timing test'),
 			source.index("SystemLowFreqClockSelect(initialLfSource, initialLfFreq);",
-				source.index('ClockDemoPrint("LF RC timer timing test')))
+				source.index('CoreClockTestPrint("LF RC timer timing test')))
 
-		self.assertIn("ClockDemoConcurrentTimerTest(lowTimerCount, highTimerCount);", source)
+		self.assertIn("CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);", source)
 		self.assertIn("Timer independent clock ownership", source)
-		self.assertIn("ClockDemoTimerInit(DevNo)", source)
+		self.assertIn("CoreClockTestTimerInit(DevNo)", source)
 		for name in ("CLOCK_DEMO_CORE_READONLY", "CLOCK_DEMO_DEFER_TIMER",
 			"CLOCK_DEMO_UART_RX_TEST", "CLOCK_DEMO_STOP_UART",
 			"CLOCK_DEMO_HF_SOURCE_ENABLE", "CLOCK_DEMO_LF_SOURCE_ENABLE",
@@ -90,7 +90,7 @@ class DemoDriverOwnership(unittest.TestCase):
 			"CLOCK_DEMO_APB_SHARED_CORE"):
 			self.assertNotIn(name, source)
 
-	def test_clock_demo_tests_all_reported_timers(self):
+	def test_core_clock_tests_all_reported_timers(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("timerDevNo < timerCount", source)
 		self.assertIn("cfg.DevNo = DevNo;", source)
@@ -100,9 +100,9 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertNotIn("CLOCK_DEMO_CYCLES", source)
 		self.assertIn("TimerDisable(&s_Timer);", source)
 
-	def test_clock_demo_checks_shared_clock_lifecycle(self):
+	def test_core_clock_checks_shared_clock_lifecycle(self):
 		source = CLOCK.read_text(encoding="utf-8")
-		self.assertIn("ClockDemoSharedClockTest();", source)
+		self.assertIn("CoreClockTestSharedClockTest();", source)
 		self.assertIn("Configured core source", source)
 		self.assertIn("Configured LF source", source)
 		for api in ("SystemHighFreqClockEnable",
@@ -110,32 +110,32 @@ class DemoDriverOwnership(unittest.TestCase):
 			"SystemLowFreqClockDisable"):
 			self.assertIn("#pragma weak " + api, source)
 			self.assertIn(api + "();", source)
-		self.assertIn('ClockDemoResult("HF shared clock API implemented", false)', source)
-		self.assertIn('ClockDemoResult("LF shared clock API implemented", false)', source)
-		self.assertIn('ClockDemoResult("HF shared clock lifecycle",', source)
-		self.assertIn('ClockDemoResult("LF shared clock lifecycle",', source)
+		self.assertIn('CoreClockTestResult("HF shared clock API implemented", false)', source)
+		self.assertIn('CoreClockTestResult("LF shared clock API implemented", false)', source)
+		self.assertIn('CoreClockTestResult("HF shared clock lifecycle",', source)
+		self.assertIn('CoreClockTestResult("LF shared clock lifecycle",', source)
 
-	def test_clock_demo_calibration_api(self):
+	def test_core_clock_calibration_api(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("#pragma weak SystemHighFreqClockCalibrate", source)
 		self.assertIn("#pragma weak SystemLowFreqClockCalibrate", source)
-		self.assertIn("ClockDemoCalibrationTest();", source)
+		self.assertIn("CoreClockTestCalibrationTest();", source)
 		self.assertLess(source.index("for (cycle = 1U;"),
-			source.index("ClockDemoCalibrationTest();"))
+			source.index("CoreClockTestCalibrationTest();"))
 		self.assertLess(source.index("SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U)"),
-			source.index("ClockDemoCalibrationTest();"))
+			source.index("CoreClockTestCalibrationTest();"))
 		self.assertIn("SystemLowFreqClockEnable();", source)
 		self.assertIn("calibrated = SystemLowFreqClockCalibrate();", source)
 		self.assertIn("SystemLowFreqClockDisable();", source)
-		self.assertIn('ClockDemoResult("LF RC calibration", calibrated);', source)
-		begin = source.index("static void ClockDemoCalibrationTest(void)")
-		end = source.index("static bool ClockDemoTimerInit(", begin)
+		self.assertIn('CoreClockTestResult("LF RC calibration", calibrated);', source)
+		begin = source.index("static void CoreClockTestCalibrationTest(void)")
+		end = source.index("static bool CoreClockTestTimerInit(", begin)
 		section = source[begin:end]
 		self.assertNotIn("TimerInit(", section)
 		self.assertNotIn("AppEvtHandlerQue(", section)
 		self.assertNotIn("NRF_CLOCK", section)
 
-	def test_clock_demo_board_inputs(self):
+	def test_core_clock_board_inputs(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		macros = ("CLOCK_DEMO_SOURCES", "CLOCK_DEMO_LF_SOURCES",
 			"CLOCK_DEMO_PERIPH_DIVIDERS")
@@ -153,12 +153,12 @@ class DemoDriverOwnership(unittest.TestCase):
 				for name in macros:
 					self.assertNotIn("#define " + name, board)
 
-	def test_clock_demo_finishes_last_print(self):
+	def test_core_clock_finishes_last_print(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		final = source.index('CoreClockTestPrint("CoreClockTest complete:')
 		end = source.index("while (1)", final)
 		self.assertLess(final, end)
-		self.assertIn("ClockDemoFlush();", source[final:end])
+		self.assertIn("CoreClockTestFlush();", source[final:end])
 		self.assertNotIn("UARTPowerOff(&s_Uart);", source)
 
 	def test_nrf_polling_uart_drains_before_power_off(self):
