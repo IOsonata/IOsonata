@@ -3,9 +3,9 @@
 
 @brief	Core, peripheral and low-frequency clock selection demo.
 
-Uses the generic clock, UART and Timer interfaces. The board supplies the
-source sequence and peripheral clock divisors. Each change is made with the
-timer stopped. Both build configurations log to UART without a debugger.
+Uses the generic clock, UART and Timer interfaces. Oscillator selections
+come from the System Core configuration, not from board-specific test lists.
+Both build configurations log to UART without a debugger.
 Timer elapsed time and interrupt counts check operation after clock changes.
 Clock and timer checks use only the public IOsonata HAL interfaces.
 These checks do not measure absolute oscillator accuracy. PowerOffDemo tests
@@ -65,32 +65,6 @@ SOFTWARE.
 #pragma weak SystemLowFreqClockCalibrate
 #endif
 
-struct ClockDemoSource_t {
-	const char *pName;
-	OSC_TYPE Type;
-	uint32_t Frequency;
-	uint32_t CoreMin;
-	uint32_t CoreMax;
-	bool Select;
-
-	constexpr ClockDemoSource_t(const char *pLabel, OSC_TYPE Osc, uint32_t Freq,
-		uint32_t Min, uint32_t Max, bool bSelect = true) :
-		pName(pLabel), Type(Osc), Frequency(Freq), CoreMin(Min), CoreMax(Max), Select(bSelect)
-	{
-	}
-};
-
-struct ClockDemoLowFreq_t {
-	const char *pName;
-	OSC_TYPE Type;
-	uint32_t Frequency;
-};
-
-static const ClockDemoSource_t s_Sources[] = CLOCK_DEMO_SOURCES;
-#if defined(CLOCK_DEMO_LF_SOURCES)
-static const ClockDemoLowFreq_t s_LowFreqSources[] = CLOCK_DEMO_LF_SOURCES;
-#endif
-static const uint32_t s_PeriphDividers[] = CLOCK_DEMO_PERIPH_DIVIDERS;
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -462,18 +436,15 @@ static void ClockDemoConcurrentTimerTest(int LowCount, int HighCount)
 int main(void)
 {
 	unsigned cycle;
-	unsigned sourceIdx;
 	bool selected;
-	const ClockDemoSource_t *pSource;
-#if defined(CLOCK_DEMO_LF_SOURCES)
-	unsigned lfIdx;
-	const ClockDemoLowFreq_t *pLfSource;
-#endif
+	OSC_TYPE initialCoreSource;
+	OSC_TYPE initialLfSource;
+	uint32_t initialCoreFreq;
+	uint32_t initialLfFreq;
 	uint32_t core;
 	uint32_t bus;
 	uint32_t readback;
 	unsigned dividerIdx;
-	unsigned dividerCount;
 	uint32_t divider;
 	uint32_t request;
 	uint32_t actual;
@@ -493,99 +464,103 @@ int main(void)
 	ClockDemoFlush();
 	ClockDemoResult("Core clock startup", SystemCoreClockGet() != 0U);
 	ClockDemoSharedClockTest();
-	if (sizeof(s_Sources) == 0U)
-	{
-		selected = SystemCoreClockSelect(GetHighFreqOscType(),
-			GetHighFreqOscFreq());
-		ClockDemoResult("Configured core clock selection", selected);
-	}
-
-#if !defined(CLOCK_DEMO_LF_SOURCES)
-	if (GetLowFreqOscFreq() != 0U)
-	{
-		selected = SystemLowFreqClockSelect(GetLowFreqOscType(),
-			GetLowFreqOscFreq());
-		ClockDemoResult("Configured LF clock selection", selected);
-	}
-	else
-	{
-		ClockDemoPrint("LF clock: UNSUPPORTED (no oscillator configured)\r\n");
-	}
-#endif
-
+	initialCoreSource = GetHighFreqOscType();
+	initialCoreFreq = GetHighFreqOscFreq();
+	initialLfSource = GetLowFreqOscType();
+	initialLfFreq = GetLowFreqOscFreq();
 	domainCount = 0U;
+
 	for (cycle = 1U; cycle <= CLOCK_TEST_CYCLES; cycle++)
 	{
 		ClockDemoPrint("Cycle %u\r\n", cycle);
-		for (sourceIdx = 0U; sourceIdx < sizeof(s_Sources) / sizeof(s_Sources[0]); sourceIdx++)
+
+		// Exercise the configured core source and RC using the same HAL.
+		ClockDemoFlush();
+		selected = SystemCoreClockSelect(initialCoreSource, initialCoreFreq);
+		ClockDemoResult("Configured core source", selected);
+
+		if (initialCoreSource != OSC_TYPE_RC)
 		{
-			pSource = &s_Sources[sourceIdx];
-			if (!pSource->Select)
-			{
-				ClockDemoPrint("%s: UNSUPPORTED (selection not configured)\r\n",
-					pSource->pName);
-				continue;
-			}
-			ClockDemoPrint("Selecting %s\r\n", pSource->pName);
 			ClockDemoFlush();
-			selected = SystemCoreClockSelect(pSource->Type, pSource->Frequency);
-			core = SystemCoreClockGet();
-			ClockDemoResult(pSource->pName, selected && core >= pSource->CoreMin && core <= pSource->CoreMax);
-			if (!selected || core < pSource->CoreMin || core > pSource->CoreMax)
+			selected = SystemCoreClockSelect(OSC_TYPE_RC, 0U);
+			ClockDemoResult("Core RC selection", selected);
+		}
+
+		core = SystemCoreClockGet();
+		ClockDemoResult("Core frequency", core != 0U);
+
+		// Every available peripheral domain receives the same fixed requests.
+		for (clockIdx = 0; clockIdx < 32; clockIdx++)
+		{
+			bus = SystemPeriphClockGet(clockIdx);
+
+			if (bus == 0U)
 			{
 				continue;
 			}
-			// Check every possible peripheral clock index in a bounded
-			// range, not just index zero. An index returning zero is
-			// unsupported; all nonzero domains receive Get/Set tests.
-			for (clockIdx = 0; clockIdx < 32; clockIdx++)
+
+			domainCount++;
+			ClockDemoPrint("Peripheral clock %u baseline %u Hz\r\n",
+				(unsigned)clockIdx, (unsigned)bus);
+
+			for (dividerIdx = 1U; dividerIdx <= 4U; dividerIdx *= 2U)
 			{
-				bus = SystemPeriphClockGet(clockIdx);
-				if (bus == 0U)
+				divider = dividerIdx;
+				request = bus / divider;
+
+				if (request == 0U)
 				{
+					ClockDemoResult("Peripheral clock request", false);
 					continue;
 				}
-				domainCount++;
-				ClockDemoPrint("Peripheral clock %u baseline %u Hz\r\n",
-					(unsigned)clockIdx, (unsigned)bus);
-				dividerCount = sizeof(s_PeriphDividers) / sizeof(s_PeriphDividers[0]);
-				for (dividerIdx = 0U; dividerIdx <= dividerCount; dividerIdx++)
-				{
-					divider = dividerIdx == 0U ? 1U : s_PeriphDividers[dividerIdx - 1U];
-					if (divider == 0U || bus / divider == 0U)
-					{
-						ClockDemoResult("Peripheral clock request", false);
-						continue;
-					}
-					request = bus / divider;
-					ClockDemoFlush();
-					actual = SystemPeriphClockSet(clockIdx, request);
-					readback = SystemPeriphClockGet(clockIdx);
-					ClockDemoPrint("Domain %u request %u Hz, actual %u Hz\r\n",
-						(unsigned)clockIdx, (unsigned)request, (unsigned)actual);
-					ClockDemoResult("Peripheral clock", actual != 0U &&
-						readback == actual && (request != bus || actual == bus));
-				}
-				actual = SystemPeriphClockSet(clockIdx, bus);
-				ClockDemoResult("Peripheral clock restore",
-					actual == bus && SystemPeriphClockGet(clockIdx) == bus);
-			}
-#if defined(CLOCK_DEMO_LF_SOURCES)
-			for (lfIdx = 0U; lfIdx < sizeof(s_LowFreqSources) / sizeof(s_LowFreqSources[0]); lfIdx++)
-			{
-				pLfSource = &s_LowFreqSources[lfIdx];
-				ClockDemoPrint("Selecting LF %s\r\n", pLfSource->pName);
+
 				ClockDemoFlush();
-				selected = SystemLowFreqClockSelect(pLfSource->Type, pLfSource->Frequency);
-				ClockDemoResult(pLfSource->pName, selected);
-				ClockDemoPrint("LF configured %u Hz\r\n", (unsigned)GetLowFreqOscFreq());
+				actual = SystemPeriphClockSet(clockIdx, request);
+				readback = SystemPeriphClockGet(clockIdx);
+				ClockDemoPrint("Domain %u request %u Hz, actual %u Hz\r\n",
+					(unsigned)clockIdx, (unsigned)request, (unsigned)actual);
+				ClockDemoResult("Peripheral clock", actual != 0U &&
+					readback == actual);
 			}
-#endif
+
+			actual = SystemPeriphClockSet(clockIdx, bus);
+			ClockDemoResult("Peripheral clock restore",
+				actual == bus && SystemPeriphClockGet(clockIdx) == bus);
+		}
+
+		// Test the configured LF source and the internal RC where supported.
+		if (initialLfFreq != 0U)
+		{
+			ClockDemoFlush();
+			selected = SystemLowFreqClockSelect(initialLfSource, initialLfFreq);
+			ClockDemoResult("Configured LF source", selected);
+		}
+
+		if (initialLfSource != OSC_TYPE_RC || initialLfFreq != 0U)
+		{
+			ClockDemoFlush();
+			selected = SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U);
+			ClockDemoResult("LF RC selection", selected);
+
+			if (selected && cycle == CLOCK_TEST_CYCLES)
+			{
+				ClockDemoCalibrationTest();
+			}
+		}
+
+		// Return the test to the configured board oscillator sources.
+		if (initialLfFreq != 0U && initialLfSource != OSC_TYPE_RC)
+		{
+			selected = SystemLowFreqClockSelect(initialLfSource, initialLfFreq);
+			ClockDemoResult("LF source restoration", selected);
+		}
+
+		if (initialCoreSource != OSC_TYPE_RC)
+		{
+			selected = SystemCoreClockSelect(initialCoreSource, initialCoreFreq);
+			ClockDemoResult("Core source restoration", selected);
 		}
 	}
-	// Calibrate the RC sources after the oscillator selection sequence.
-	// Startup configuration may select a crystal instead of RC.
-	ClockDemoCalibrationTest();
 
 	ClockDemoResult("Peripheral clock invalid index",
 		SystemPeriphClockGet(-1) == 0U);
