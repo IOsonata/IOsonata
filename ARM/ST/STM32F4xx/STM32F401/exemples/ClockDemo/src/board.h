@@ -18,8 +18,6 @@
 // The port lacks generic runtime selectors. This project checks startup readback and timer operation only.
 #define CLOCK_DEMO_SOURCES { {"Startup readback", OSC_TYPE_RC, 0U, 1U, UINT32_MAX, false} }
 #define CLOCK_DEMO_PERIPH_DIVIDERS {}
-#define CLOCK_DEMO_TIMER_DEVNO TimerGetLowFreqDevCount()
-#define CLOCK_DEMO_CYCLES 3U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif
