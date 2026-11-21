@@ -40,5 +40,17 @@ class CoreClockTestTimer(unittest.TestCase):
             self.assertNotIn(forbidden, timer)
 
 
+class CoreClockTestLfLifecycle(unittest.TestCase):
+    def test_enable_sequence_reports_individual_results(self):
+        source = TEST.read_text(encoding="utf-8")
+        start = source.index("static void CoreClockTestSharedClockTest(void)")
+        end = source.index("static void CoreClockTestPowerMode(void)", start)
+        lifecycle = source[start:end]
+        self.assertIn("first = SystemLowFreqClockEnable();", lifecycle)
+        self.assertIn("second = first && SystemLowFreqClockEnable();", lifecycle)
+        self.assertIn("third = SystemLowFreqClockEnable();", lifecycle)
+        self.assertIn("LF lifecycle: first %u, second %u, after release %u", lifecycle)
+
+
 if __name__ == "__main__":
     unittest.main()

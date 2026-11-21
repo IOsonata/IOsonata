@@ -248,6 +248,8 @@ static void CoreClockTestSharedClockTest(void)
 		{
 			SystemLowFreqClockDisable();
 		}
+		CoreClockTestPrint("LF lifecycle: first %u, second %u, after release %u\r\n",
+			(unsigned)first, (unsigned)second, (unsigned)third);
 		CoreClockTestResult("LF shared clock lifecycle",
 			first && second && third);
 	}
