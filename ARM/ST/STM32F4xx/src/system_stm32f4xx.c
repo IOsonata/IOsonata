@@ -64,6 +64,7 @@
 
 #include "stm32f4xx.h"
 #include "coredev/system_core_clock.h"
+#include "idelay_calibration.h"
 
 #if !defined  (HSE_VALUE) 
   #define HSE_VALUE    ((uint32_t)25000000) /*!< Default value of the External oscillator in Hz */
@@ -291,8 +292,8 @@ void SystemCoreClockUpdate(void)
   tmp = AHBPrescTable[((RCC->CFGR & RCC_CFGR_HPRE) >> 4)];
   /* HCLK frequency */
   SystemCoreClock >>= tmp;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, 3000000UL);
 }
 
 /**
