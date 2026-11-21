@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check nRF5340 delay factor measurement without replacing the delay loops."""
+"""Check nRF5340 startup delay factors and explicit test-only measurement."""
 from pathlib import Path
 import unittest
 
@@ -32,20 +32,26 @@ class Nrf53DelayCalibration(unittest.TestCase):
 		self.assertIn("SystemnsDelayFactor = prevNsFactor;", self.cal)
 		self.assertIn("__set_PRIMASK(prevMask)", self.cal)
 
-	def test_both_cores_calibrate_from_hardware(self):
+	def test_both_cores_use_defaults_without_startup_measurement(self):
 		for source in (self.app, self.net):
 			self.assertIn('#include "idelay.h"', source)
-			self.assertIn("ArmDelayCalibrate(", source)
+			self.assertIn("ArmDelayClockInit(&s_DelayCalibration", source)
+			self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration", source)
+			self.assertNotIn("ArmDelayCalibrate(", source)
 			self.assertNotIn(" / 23000000UL", source)
 			self.assertNotIn(" / 28000000UL", source)
-			self.assertNotIn(" / 3000000UL", source)
 		self.assertIn("s_DelayCalibration.CpuHz != cpuHz", self.app)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration", self.app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration", self.net)
-		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration", self.net)
-		self.assertEqual(self.app.count("ArmDelayCalibrate("), 1)
-		self.assertEqual(self.net.count("ArmDelayCalibrate("), 1)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", self.app)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", self.net)
+
+	def test_measurement_is_only_explicit_in_delay_interface(self):
+		self.assertIn("static inline bool DelayCalibrationMeasure(", self.delay)
+		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", self.delay)
+		self.assertIn("SystemMicroSecLoopCnt = oldUs;", self.delay)
+		self.assertIn("SystemnsDelayFactor = oldNs;", self.delay)
+		self.assertIn("DWT->CYCCNT - start", self.delay)
+
 
 	def test_delay_implementation_is_not_replaced(self):
 		self.assertIn("static inline __attribute__((always_inline)) void usDelay(", self.delay)
