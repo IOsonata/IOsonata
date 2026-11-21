@@ -385,58 +385,47 @@ consumption. The portable `HfxoTestBle` example now calls `BtAppInit()`;
 `tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp` retains the Nordic-specific
 clock and shutdown checks.
 
-## nRF5340 LFRC periodic calibration
+## nRF5340 LFRC calibration API
 
-On nRF5340 the clock peripheral supplies `TASKS_CAL` and `EVENTS_DONE`
-but does not supply the nRF52 calibration interval timer (`CTIV`,
-`CTTO`, `TASKS_CTSTART`). LFRC calibration for long-lived consumers must
-therefore be scheduled by another time source.
+The System Core provides `SystemHighFreqClockCalibrate()` and
+`SystemLowFreqClockCalibrate()`. These are one-shot calibration requests.
+They never initialize an RTC, select a Timer device, or schedule a
+periodic task. A higher-level subsystem owns its own timer and decides
+when to call the appropriate calibration function.
 
-The Nordic calibrated LFRC tolerance assumes a constant temperature within
-the specified range and calibration at least every eight seconds. Clock
-ownership remains in System Clock, including the calibration task and its
-completion/failure handling.
+The functions return true only after calibration completes. A false return
+means unavailable, invalid current source/state, or calibration failure.
+The functions are foreground operations. Timer interrupt callbacks must
+defer the call to foreground code rather than blocking inside the ISR.
 
-The nRF5340 CAL task itself requests HFXO and releases that request on
-completion. Do not add a second application-level HFXO request around each
-calibration or assume that an application can infer completion from HFXO
-state. The product specification permits both cores to trigger CAL
-independently; each can receive DONE when calibration finishes, while a
-change to the LFCLK source from either core can abort calibration without
-DONE. Error recovery must account for that inter-core behavior.
+On nRF5340, `SystemLowFreqClockCalibrate()` requires an active LFRC
+shared-clock user. It acquires an additional LFCLK reference while
+`TASKS_CAL` runs and releases it afterward; it waits for `EVENTS_DONE`
+with a bounded timeout. The calibration retry interval is 1 ms for
+nRF5340 revision 1 anomaly 137. HFXO is requested by the CAL hardware
+and does not require a separate application request.
 
-The initial calibration is implemented in `system_clock_nrfx.cpp` and has
-passed the generic ClockDemo timing check on nRF5340 Application and Network
-cores. A revision 1 hardware anomaly can suppress `DONE` when the other
-core requests a higher-priority LFCLK source; the calibration start now retries
-every millisecond within a bounded wait.
+The existing startup calibration remains in place when LFRC first
+starts. It passed ClockDemo on both nRF5340 cores. Additional
+calibrations are explicitly initiated by higher-level code, including
+any periodic calls it chooses to schedule. System Core never owns that
+schedule.
 
-**Periodic calibration is not yet implemented.** The following must be
-true before claiming support:
+On Nordic targets without an implemented RC calibration operation,
+the corresponding API currently returns false. The nRF52 MPSL
+calibration path continues through its existing clock-owner integration;
+the new generic API must not bypass SoftDevice/MPSL. HFRC calibration
+is not currently supported by the Nordic implementation.
 
-- One timer/alarm implementation owns the hardware counter and compare
-  registers; System Clock is an alarm client and does not select or
-  initialize an application RTC.
-- The scheduler multiplexes multiple clients on a timebase that continues
-  in System ON sleep and honors the timer drivers' allocation rules.
-- Both cores can calibrate LFRC safely, including aborted CAL after another
-  core selects a higher-priority LFCLK source.
-- Clock shutdown cancels pending calibration without affecting another
-  client, and calibration completion never holds HFXO past the required
-  operation.
+For applications requiring calibrated LFRC accuracy continuously,
+the higher-level subsystem must schedule and validate a suitable
+recalibration interval, including across sleep/wake. The nRF5340
+CLOCK peripheral does not have the nRF52 calibration interval timer.
+Cross-core clock-source changes can abort calibration without DONE.
 
- It requires a low-power
-scheduler or shared timer alarm that can serve more than one client without
-reinitializing or reserving an application-owned RTC device. The periodic
-scheduler must remain active during low-power System ON sleep, avoid high
-priority blocking, coordinate calibration between the two cores, stop
-scheduling when LFRC is not needed, and never hold HFXO between
-calibrations. The existing generic Timer device count and single owner
-per device are not sufficient to provide this service.
-
-Do not claim periodic calibration from the initial `ClockDemo` PASS alone.
-Validate a long-running RTC user, multiple DONE completions, elapsed
-intervals, other-core clock requests and idle HFXO shutdown before sign-off.
+Validate scheduled calibration by measuring a long-running RTC user,
+multiple calibration completions and time intervals, dual-core clock
+requests, and HFXO release between requests before sign-off.
 
 ## Cross-MCU implementation and validation
 
