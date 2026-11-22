@@ -55,6 +55,9 @@ class CoreClockTestInitialization(unittest.TestCase):
         end = source.index("static void CoreClockTestDelayCalibrationRecord(void)\n{", start)
         sample = source[start:end]
         self.assertIn("nsDelay(100000000U);", sample)
+        self.assertIn("if (DelayCalibrationMeasure(pSample))", sample)
+        self.assertIn("Delay calibration DWT %u Hz:", sample)
+        self.assertIn("DWT cycle calibration unavailable; using HF Timer", sample)
         self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,", sample)
         self.assertNotIn("DelayCalibrationProbeNs(", sample)
         self.assertNotIn("raw ns loop", sample)
