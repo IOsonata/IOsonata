@@ -30,9 +30,9 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 
 
 	def test_hf_timer_calibration_without_dwt(self):
-		self.assertNotIn("ArmDelayCalibrate(", self.delay)
-		self.assertNotIn("DWT", self.delay)
-		self.assertNotIn("DelayCalibrationMeasure(", self.test)
+		self.assertIn("static inline bool ArmDelayCalibrate(", self.delay)
+		self.assertIn("DWT->CYCCNT", self.delay)
+		self.assertIn("DelayCalibrationMeasure(pSample)", self.test)
 		self.assertIn("DelayCalibrationFromTimer(", self.test)
 
 	def test_both_runtime_delays_use_original_countdowns(self):
