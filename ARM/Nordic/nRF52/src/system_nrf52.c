@@ -153,12 +153,12 @@ uint32_t SystemCoreClockGet(void)
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	// The usDelay loop takes 13 CPU cycles per iteration on nRF52.
-	// The nsDelay SUBS/BNE loop takes 3 cycles per iteration.
-	// nRF52832 ClockDemo measured 235299 us with the previous 3189000
-	// divisor, matching the three-cycle loop at 64 MHz.
+	// nRF52832 CoreClockTest HF Timer: at 64 MHz, 100 ms usDelay
+	// measured 115393 us with the previous 13-cycle divisor.
+	// The measured rate is 4266355 loops/s, approximately 15 cycles
+	// per iteration. The nsDelay loop remains 3 cycles per iteration.
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
-		13000000UL, 3000000UL);
+		15000000UL, 3000000UL);
 }
 
 void SystemInit(void)
