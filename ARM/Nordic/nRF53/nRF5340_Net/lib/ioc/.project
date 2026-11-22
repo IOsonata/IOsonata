@@ -31,59 +31,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_dfu_smp.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dfu_smp.h</locationURI>
-		</link>
-		<link>
-			<name>include/cbor.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_boot.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_boot.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_image.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_image.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_smp.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_smp.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_serial.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_serial.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_target.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_target.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_writer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_writer.h</locationURI>
-		</link>
-		<link>
-			<name>include/semihost_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/semihost_intrf.h</locationURI>
-		</link>
-		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/app_evt_handler.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
 		</link>
 		<link>
 			<name>include/base64.h</name>
@@ -99,6 +54,11 @@
 			<name>include/bluetooth</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/cbor.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
 		</link>
 		<link>
 			<name>include/cfifo.h</name>
@@ -121,6 +81,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crc.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/device bridge.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/device%20bridge.h</locationURI>
@@ -136,14 +101,34 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/fatfs.h</name>
+			<name>include/dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/iatomic.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
+		</link>
+		<link>
+			<name>include/idelay.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/idelay.h</locationURI>
 		</link>
 		<link>
 			<name>include/intelhex.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
+		</link>
+		<link>
+			<name>include/iosonata_types.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/iosonata_types.h</locationURI>
+		</link>
+		<link>
+			<name>include/ipc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/isha1.h</name>
@@ -166,19 +151,34 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/md5.h</locationURI>
 		</link>
 		<link>
+			<name>include/nrfx_glue.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/include/nrfx_glue.h</locationURI>
+		</link>
+		<link>
 			<name>include/prbs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/pwm.h</name>
+			<name>include/pulse_train.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/seep.h</name>
+			<name>include/rftag</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/semihost_intrf.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/semihost_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/slip_intrf.h</name>
@@ -191,6 +191,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/syslog.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/syslog.h</locationURI>
+		</link>
+		<link>
 			<name>include/sysstatus.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatus.h</locationURI>
@@ -199,11 +209,6 @@
 			<name>include/sysstatusdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatusdef.h</locationURI>
-		</link>
-		<link>
-			<name>include/system_core_clock.h</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/system_core_clock.h</locationURI>
 		</link>
 		<link>
 			<name>include/system_nrf5340_network.h</name>
@@ -219,6 +224,11 @@
 			<name>include/utf8cvt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/utf8cvt.h</locationURI>
+		</link>
+		<link>
+			<name>include/video</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/CppRuntimeOverload.cpp</name>
@@ -261,11 +271,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_dfu_smp.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dfu_smp.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/cbor.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/cbor.c</locationURI>
@@ -286,6 +291,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crc.c</locationURI>
 		</link>
 		<link>
+			<name>src/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/device.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/device.cpp</locationURI>
@@ -301,54 +311,59 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_boot.cpp</name>
+			<name>src/excelitas_serlink.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_boot.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/excelitas_serlink.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_image.cpp</name>
+			<name>src/i-syst_logo_color_320x153.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_image.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153.c</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_layout.cpp</name>
+			<name>src/intelhex.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_layout.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/intelhex.c</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_mgr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_mgr.cpp</locationURI>
+			<name>src/ipc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_wire.cpp</name>
+			<name>src/isha1.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_wire.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/isha1.c</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_smp.cpp</name>
+			<name>src/isha256.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_smp.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/isha256.c</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_nrfx.cpp</name>
+			<name>src/md5.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/dfu_nrfx.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/md5.c</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_serial.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_serial.cpp</locationURI>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_writer.cpp</name>
+			<name>src/pei_nrf53.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_writer.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/pei_nrf53.c</locationURI>
 		</link>
 		<link>
 			<name>src/prbs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/prbs.c</locationURI>
+		</link>
+		<link>
+			<name>src/pulse_train.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pulse_train.c</locationURI>
 		</link>
 		<link>
 			<name>src/sbuffer.c</name>
@@ -366,6 +381,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/semihost_intrf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sensors</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/slip_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/slip_intrf.cpp</locationURI>
@@ -376,9 +396,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/stddev.c</locationURI>
 		</link>
 		<link>
+			<name>src/storage</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/system_nrf5340_network.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/system_nrf5340_network.c</locationURI>
+		</link>
+		<link>
+			<name>src/uart_retarget.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>
@@ -391,389 +426,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/utf8cvt.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/video</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/services/bt_dis.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/services/bt_dis.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_peer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_peer.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/i2c.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2c.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/iopincfg.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/iopincfg.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/iopinctrl.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/pdm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/shared_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/spi.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/timer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/timer_nrfx.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/timer_nrfx.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/uart.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_adv.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_ead.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ead.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_app.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_app_handler.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_att.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_attreq.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attreq.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_attrsp.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/services/bt_dis.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_dis.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_gap.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_gatt.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gatt.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_smp_bond.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_hci_host.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_host.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_psync.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_psync.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_peer.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_scan.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_scan.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_sdp.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sdp.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_smp.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_p256.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/crypto</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/icrypto.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto_softaes.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto_softrng.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto_softsha256.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto_uecc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_aes_modes.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_aes_soft.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_softrng.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_softsha256.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_uecc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/rng_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/uECC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_uuid.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/nrf_mpsl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/nrf_mpsl.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/i2c.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/i2c_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/iopincfg_nrfx.c</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/shared_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/shared_intrf_nrf5340_network.c</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/shared_intrf_nrf5340_network.c</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/spi.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/spi_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/timer.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/system_clock_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/system_clock_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/system_power_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/system_power_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/timer_hf_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_hf_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/timer_lf_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/timer_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/uart.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/uart_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
-		</link>
-			<link>
-			<name>include/ipc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/ipc/ipc_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/ipc/ipc_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_hci_h4.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_h4.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_hci_ipc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_ipc.h</locationURI>
-		</link>
-		<link>
-			<name>src/ipc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/ipc/ipc_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/ipc/ipc_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/ipc/ipc_ctrlr_nrf53.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/nRF53/src/ipc_ctrlr_nrf53.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_hci_h4.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_h4.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_hci_ipc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_ipc.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/services</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/rftag</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/storage</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/services</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/app_evt_handler.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_adv.h</name>
@@ -801,6 +461,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_dfu_smp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dfu_smp.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_ead.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ead.h</locationURI>
@@ -824,6 +489,16 @@
 			<name>include/bluetooth/bt_hci_ctlr_h4.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_ctlr_h4.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_hci_h4.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_h4.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_hci_ipc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_ipc.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_hci_uart.h</name>
@@ -861,6 +536,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_pds.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_peer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_peer.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_psync.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_psync.h</locationURI>
@@ -886,34 +566,154 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_uuid.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/services/bt_bas.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/services/bt_bas.h</locationURI>
+			<name>include/bluetooth/services</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/iatomic.h</name>
+			<name>include/coredev/i2c.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2c.h</locationURI>
 		</link>
 		<link>
-			<name>include/iosonata_types.h</name>
+			<name>include/coredev/iopincfg.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/iosonata_types.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/iopincfg.h</locationURI>
 		</link>
 		<link>
-			<name>include/nrfx_glue.h</name>
+			<name>include/coredev/iopinctrl.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/include/nrfx_glue.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
 		</link>
 		<link>
-			<name>include/pulse_train.h</name>
+			<name>include/coredev/pdm.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/pei.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pei.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/pwm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/shared_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/spi.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/system_core_clock.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/timer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/timer_nrfx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/timer_nrfx.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/uart.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_ecb_nrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_ecb_nrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_rng_nrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_rng_nrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softaes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softrng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softrng.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softsha256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_uecc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/icrypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_boot.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_boot.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_image.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_image.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_serial.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_serial.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_smp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_smp.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_target.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_target.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_writer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_writer.h</locationURI>
+		</link>
+		<link>
+			<name>include/ipc/ipc_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/ipc/ipc_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/rftag/nfct_nrfx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/include/nfct_nrfx.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/temp_nrf5x.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/temp_nrf5x.h</locationURI>
 		</link>
 		<link>
 			<name>include/storage/diskio.h</name>
@@ -929,6 +729,11 @@
 			<name>include/storage/diskio_nvm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_nvm.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/fatfs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
 		</link>
 		<link>
 			<name>include/storage/flash.h</name>
@@ -956,14 +761,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/sdcard.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/seep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/stdfs_littlefs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/stdfs_littlefs.h</locationURI>
 		</link>
 		<link>
-			<name>include/syslog.h</name>
+			<name>include/video/cam_arducam_mega.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/syslog.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
+		</link>
+		<link>
+			<name>include/video/videodev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_adv.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_adv_hci.cpp</name>
@@ -971,9 +791,64 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv_hci.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_app.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_handler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_att.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_attreq.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attreq.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_attrsp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_crypto_ctlr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_crypto_ctlr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_dfu_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dfu_smp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_ead.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ead.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gap.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_gap_hci.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gatt.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gatt.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gatt_hci.cpp</name>
@@ -996,9 +871,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/bt_hci_ctlr_sdc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_hci_h4.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_h4.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_hci_host.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_host.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_hci_ipc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_ipc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_hci_uart.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_uart.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_l2cap.cpp</name>
@@ -1021,9 +916,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_pds.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_peer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_psync.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_psync.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_psync_hci.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_psync_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_scan.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_scan.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_scan_hci.cpp</name>
@@ -1031,84 +941,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_scan_hci.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_smp_bond_nvm.cpp</name>
+			<name>src/bluetooth/bt_sdp.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond_nvm.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/services/bt_bas.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_bas.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_store_nvm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_store_nvm.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/excelitas_serlink.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/excelitas_serlink.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/i-syst_logo_color_320x153.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153.c</locationURI>
-		</link>
-		<link>
-			<name>src/intelhex.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/intelhex.c</locationURI>
-		</link>
-		<link>
-			<name>src/isha1.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/isha1.c</locationURI>
-		</link>
-		<link>
-			<name>src/isha256.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/isha256.c</locationURI>
-		</link>
-		<link>
-			<name>src/md5.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/md5.c</locationURI>
-		</link>
-		<link>
-			<name>src/pulse_train.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/pulse_train.c</locationURI>
-		</link>
-		<link>
-			<name>src/syslog.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/uart_retarget.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/wdt_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/nvm_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/temp_nrf5x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/temp_nrf5x.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_app_hci.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_hci.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sdp.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_sec_hci.cpp</name>
@@ -1116,14 +951,244 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sec_hci.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_crypto_ctlr.cpp</name>
+			<name>src/bluetooth/bt_smp.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_crypto_ctlr.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/storage</name>
+			<name>src/bluetooth/bt_smp_bond.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_smp_bond_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond_nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_uuid.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/nrf_mpsl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nrf_mpsl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/services</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2c.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2c_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/iopincfg_nrfx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/nvm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pei.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/pei.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/shared_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/shared_intrf_nrf5340_network.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/shared_intrf_nrf5340_network.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/system_clock_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_clock_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/system_power_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_power_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_hf_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_hf_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_lf_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/wdt_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_modes.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_modes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_ecb_nrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_ecb_nrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_p256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softsha256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_uecc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/rng_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_boot.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_boot.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_image.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_image.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_layout.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_layout.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_mgr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_mgr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/dfu_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_serial.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_serial.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_smp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_store_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_store_nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_wire.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_wire.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_writer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_writer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/ipc/ipc_ctrlr_nrf53.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/nRF53/src/ipc_ctrlr_nrf53.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/ipc/ipc_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/ipc/ipc_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/micro-ecc/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/temp_nrf5x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/temp_nrf5x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/diskio_nvm.cpp</name>
@@ -1141,69 +1206,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
 		</link>
 		<link>
-			<name>include/crypto/crypto_rng_nrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_rng_nrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/temp_nrf5x.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/temp_nrf5x.h</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto_ecb_nrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_ecb_nrf.h</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_ecb_nrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_ecb_nrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_default_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/ARM/Nordic/src/crypto_default_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
-		</link>
-			<link>
-			<name>include/video/videodev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/video/videodev.h</locationURI>
-		</link>
-		<link>
-			<name>include/video/cam_arducam_mega.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/video/cam_arducam_mega.h</locationURI>
-		</link>
-		<link>
 			<name>src/video/cam_arducam_mega.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/pei.h</name>
+			<name>include/bluetooth/services/bt_bas.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pei.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/services/bt_bas.h</locationURI>
 		</link>
 		<link>
-			<name>src/pei_nrf53.c</name>
+			<name>include/bluetooth/services/bt_dis.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/pei_nrf53.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/services/bt_dis.h</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/pei.c</name>
+			<name>src/bluetooth/services/bt_bas.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/pei.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_bas.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/services/bt_dis.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_dis.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
