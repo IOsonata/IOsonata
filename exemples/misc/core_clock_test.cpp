@@ -602,7 +602,11 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 		CoreClockTestResult("Delay HF Timer measurement", false);
 		return false;
 	}
-	valid = DelayCalibrationFromTimer(cpuHz, usElapsed, nsElapsed, pSample);
+	// Runtime factors must be inferred from the actual public delay
+	// entry point, not the separate raw probe whose inlined flash
+	// placement can have a different loop timing on nRF52.
+	valid = DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,
+		pSample);
 	if (valid)
 	{
 		CoreClockTestPrint("Delay calibration HF Timer %u Hz: us loop/s %u, ns loop/s %u\r\n",
@@ -687,7 +691,9 @@ static bool CoreClockTestTimerInit(int DevNo)
 		CoreClockTestResult("Timer initialization", false);
 		return false;
 	}
-	TimerDisable(&s_Timer);
+	// TimerInit owns the initial hardware enable. Do not immediately
+	// disable and restart an LF timer: that churns the shared LFCLK
+	// oscillator and can race its asynchronous STOP transition.
 	return true;
 }
 
@@ -746,7 +752,6 @@ static void CoreClockTestTimer(int DevNo)
 		hfCfg.EvtHandler = nullptr;
 		if (TimerInit(&s_RetainedTimer, &hfCfg))
 		{
-			TimerDisable(&s_RetainedTimer);
 			hfReady = TimerEnable(&s_RetainedTimer);
 		}
 	}
