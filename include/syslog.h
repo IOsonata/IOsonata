@@ -244,37 +244,32 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 				   uint32_t SinkAddr);
 
 /**
- * Send queued records through the configured DeviceIntrf until the store is
- * empty or the sink stops taking them.
+ * Submit bytes from at most one SysLog record through DeviceIntrf.
  *
- * Not normally needed. SysLogStatus and SysLogPrintf already do this whenever
- * a sink is attached. Call it after SysLogSetSink to send what was stored
- * while there was no transport, or when a sink refused the last record and no
- * further record is coming to send it.
+ * Each SysLogPrintf / SysLogStatus call stores a separate record. When the
+ * transfer buffer is empty, one CFifo record is copied into it and removed
+ * from CFifo. The next record is not taken in the same flush call.
  *
- * One CFifo block is copied into the transfer buffer and removed from CFifo
- * before submission. A record leaves the transfer buffer when the sink has
- * accepted all its bytes. Partial acceptance retains the unaccepted suffix
- * across calls, including callbacks from interrupt context.
+ * DeviceIntrfTx returns the number of bytes accepted by the sink. When only
+ * part of a record is accepted, the rest remains in the transfer buffer
+ * until a later call or DEVINTRF_EVT_TX_READY event. An event occurring
+ * during submission may retry the same record without concurrently
+ * modifying its transfer position.
  *
- * A single flush owns the transfer buffer. An interrupt arriving during a
- * foreground submission requests another pass rather than consuming the
- * buffer concurrently.
+ * SysLogPrintf and SysLogStatus invoke SysLogFlush when a sink is attached.
+ * Call SysLogFlush repeatedly to drain records collected before attaching a
+ * sink if the sink does not issue TX_READY notifications.
  *
  * The global logger can attach SysLogDevIntrfEvent to the existing
- * DeviceIntrf EvtCB when the sink has no callback. Drivers reporting
- * DEVINTRF_EVT_TX_READY then resume pending records automatically.
- * Applications replacing that callback own the call to SysLogFlush.
- * Transport drivers that do not report generic ready events need their
- * own application-level retry when transmission capacity returns.
+ * DeviceIntrf EvtCB when the sink has no callback. Applications replacing
+ * that callback own the continuation.
  *
- * Note this is the opposite of CFifoFlush, which discards. This one sends.
+ * Unlike CFifoFlush, which discards records, this operation submits bytes.
  *
- * @param	pLog : Logger instance.
- *
- * @return	Total bytes the sink accepted, 0 when there was nothing to send or
- *          the sink took nothing. A negative DeviceIntrfTx result is returned
- *          unchanged when no bytes went out before it.
+ * @param pLog : Logger instance.
+ * @return Bytes accepted from this record, zero when no bytes were accepted
+ *         or no record was available. A negative DeviceIntrfTx result is
+ *         returned unchanged when nothing was accepted.
  */
 int SysLogFlush(SysLog_t * const pLog);
 
