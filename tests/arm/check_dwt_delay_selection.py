@@ -1,77 +1,61 @@
 #!/usr/bin/env python3
-"""Verify DWT is used only for temporary ARM delay-loop calibration."""
+"""Verify that ARM System Core owns calibration and runtime delays remain loops."""
 from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 DELAY = ROOT / "ARM/include/idelay.h"
-NRF52 = ROOT / "ARM/Nordic/nRF52/src/system_nrf52.c"
+CAL = ROOT / "ARM/include/system_core_clock_calibration.h"
 APP = ROOT / "ARM/Nordic/nRF53/nRF5340_App/lib/src/system_nrf5340_application.c"
 
 
 class DelayCalibrationDwt(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
-		cls.source = DELAY.read_text(encoding="utf-8")
+		cls.delay = DELAY.read_text(encoding="utf-8")
+		cls.cal = CAL.read_text(encoding="utf-8")
 
-	def test_runtime_delay_never_uses_dwt(self):
-		src = self.source
+	def test_runtime_delays_have_no_counter_dependency(self):
+		src = self.delay
 		start = src.index("static inline __attribute__((always_inline)) void usDelay(")
-		end = src.index("#define ARM_DELAY_CAL_NS", start)
+		end = src.index('"system_core_clock_calibration.h"', start)
 		runtime = src[start:end]
-		self.assertIn("ArmDelayUsLoop(cnt);", runtime)
-		self.assertIn("ArmDelayNsLoop(cnt);", runtime)
-		for forbidden in ("DWT->", "CoreDebug->", "ArmDelayDwtInit(",
-			"ArmDelayDwtWait(", "ARM_DELAY_CAL_DWT_AVAILABLE"):
-			self.assertNotIn(forbidden, runtime)
+		self.assertIn('" SUBS %[remaining], #1\\n"', runtime)
+		self.assertIn('" BGT 1b\\n"', runtime)
+		self.assertIn('" .p2align 5\\n"', runtime)
+		for forbidden in ("DWT->", "CoreDebug->", "ArmDelayCalibrate(",
+			"DelayCalibrationMeasure(", "NRF52_SERIES", "nrf52_errata"):
+			self.assertNotIn(forbidden, src)
 
-	def test_calibration_restores_trace_counter_interrupt_and_factors(self):
-		src = self.source
-		cal = src[src.index("static inline bool ArmDelayCalibrate("):
-			src.index("static inline bool DelayCalibrationMeasure(")]
+	def test_dwt_only_measures_factors_and_restores_state(self):
+		cal = self.cal
+		start = cal.index("static inline bool ArmDelayCalibrate(")
+		end = cal.index("static inline bool DelayCalibrationMeasure(", start)
+		src = cal[start:end]
 		for term in (
 			"#if ARM_DELAY_CAL_DWT_AVAILABLE",
 			"prevMask = __get_PRIMASK();",
 			"prevTrace = CoreDebug->DEMCR;",
-			"CoreDebug->DEMCR = prevTrace | CoreDebug_DEMCR_TRCENA_Msk;",
 			"prevCtrl = DWT->CTRL;",
-			"DWT->CTRL = prevCtrl | DWT_CTRL_CYCCNTENA_Msk;",
 			"valid = DWT->CYCCNT != start;",
-			"ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);",
-			"ArmDelayNsLoop(ARM_DELAY_CAL_NS);",
+			"usDelay(ARM_DELAY_CAL_LOOPS);",
+			"nsDelay(ARM_DELAY_CAL_NS);",
 			"SystemMicroSecLoopCnt = prevUsFactor;",
 			"SystemnsDelayFactor = prevNsFactor;",
 			"DWT->CTRL = prevCtrl;",
 			"CoreDebug->DEMCR = prevTrace;",
 			"__set_PRIMASK(prevMask);",
 		):
-			self.assertIn(term, cal)
-		self.assertNotIn("TimerInit(", cal)
-		self.assertNotIn("RTC", cal)
-		self.assertNotIn("ArmDelayDwtWait(", src)
+			self.assertIn(term, src)
+		for forbidden in ("TimerInit(", "RTC", "NRF52_SERIES",
+			"ArmDelayCalibrationDwtAllowed"):
+			self.assertNotIn(forbidden, src)
 
-	def test_nrf52_erratum_guard_and_no_startup_dwt(self):
-		src = NRF52.read_text(encoding="utf-8")
-		self.assertIn("bool ArmDelayCalibrationDwtAllowed(void)", src)
-		self.assertIn("return !nrf52_errata_32();", src)
-		self.assertNotIn("ArmDelayDwtInit(", src)
-		cal = self.source[self.source.index("static inline bool ArmDelayCalibrate("):]
-		self.assertIn("if (!ArmDelayCalibrationDwtAllowed())", cal)
-
-	def test_frequency_changes_keep_fallback_updated(self):
+	def test_clock_changes_use_cached_factors(self):
 		app = APP.read_text(encoding="utf-8")
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", app)
-
-	def test_nanosecond_delay_uses_measured_ns_loop_for_all_durations(self):
-		src = self.source
-		start = src.index("static inline __attribute__((always_inline)) void nsDelay(")
-		end = src.index("#define ARM_DELAY_CAL_NS", start)
-		ns = src[start:end]
-		self.assertIn("ArmDelayNsLoop(cnt);", ns)
-		self.assertNotIn("ArmDelayUsLoop(", ns)
-		self.assertNotIn("cnt /= 1000U", ns)
-		self.assertNotIn("cnt %= 1000U", ns)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U)", app)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 22U, 3U)", app)
 
 
 if __name__ == "__main__":
