@@ -242,6 +242,22 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertIn("CoreClockTestSleepDelay();", src)
 
 
+    def test_core_clock_test_validates_timer_trigger_implementations(self):
+        source = TEST.read_text(encoding="utf-8")
+        self.assertIn("static void CoreClockTestTimerTriggers(void)", source)
+        self.assertIn("CoreClockTestTimerTriggers();", source)
+        self.assertIn("TimerGetMaxTrigger(&s_Timer)", source)
+        self.assertIn("s_Timer.FindAvailTrigger(&s_Timer)", source)
+        self.assertIn("TIMER_TRIG_TYPE_SINGLE, CoreClockTestTriggerHandler", source)
+        self.assertIn("TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler", source)
+        self.assertIn('CoreClockTestResult("Timer one-shot callback",', source)
+        self.assertIn('CoreClockTestResult("Timer continuous callback",', source)
+        self.assertIn('CoreClockTestResult("Timer counter advances",', source)
+        self.assertIn('CoreClockTestResult("Timer trigger disabled",', source)
+        self.assertIn('CoreClockTestResult("Timer trigger slot reusable",', source)
+        self.assertNotIn("nRFxRtcSleepClaim(", source)
+        self.assertNotIn("nRFxRtcSleepRelease(", source)
+
     def test_clock_test_runs_contention_after_timer_matrix(self):
         source = TEST.read_text(encoding="utf-8")
         self.assertIn("static void CoreClockTestSleepDelayOwnership(int LowCount)", source)
