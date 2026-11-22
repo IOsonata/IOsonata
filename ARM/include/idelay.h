@@ -339,8 +339,9 @@ static inline __attribute__((always_inline)) void ArmDelayNsLoop(uint32_t cnt)
 	}
 }
 
-// The calibration test measures the raw nanosecond fallback loop.
-// Public long nsDelay waits may use the microsecond loop instead.
+// Calibration probe and public nsDelay use the same generic countdown.
+// Factor recommendations must be measured through the public API because
+// its inlined call sites can have different instruction-fetch behavior.
 static inline void DelayCalibrationProbeNs(uint32_t Nanoseconds)
 {
 	ArmDelayNsLoop(Nanoseconds);
