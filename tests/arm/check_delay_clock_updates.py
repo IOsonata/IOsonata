@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-HELPER = ROOT / "ARM/include/idelay.h"
+HELPER = ROOT / "ARM/include/system_core_clock_calibration.h"
 DELAY = ROOT / "ARM/include/idelay.h"
 
 PORTS = (
