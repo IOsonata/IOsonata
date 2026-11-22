@@ -39,6 +39,7 @@ class NordicDelayArchitecture(unittest.TestCase):
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 29U, 3U)", app)
 		net = (ROOT / NRF[2]).read_text(encoding="utf-8")
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 10U)", net)
+		self.assertIn("SystemnsDelayFactor = 6398912U;", net)
 		self.assertNotIn("ArmDelayCalibrate(", net)
 
 	def test_dwt_calibration_uses_only_cpu_local_hardware(self):
