@@ -325,6 +325,13 @@ static inline __attribute__((always_inline)) void ArmDelayNsLoop(uint32_t cnt)
 	);
 }
 
+// The calibration test measures the raw nanosecond fallback loop.
+// Public long nsDelay waits may use the microsecond loop instead.
+static inline void DelayCalibrationProbeNs(uint32_t Nanoseconds)
+{
+	ArmDelayNsLoop(Nanoseconds);
+}
+
 // The cycle counter must be explicitly enabled by the MCU port at startup.
 // Never undo a device erratum or a later trace-disable from a delay call.
 #if ARM_DELAY_USE_DWT
