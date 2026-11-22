@@ -662,6 +662,14 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		{
 			(void)pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, nullptr,
 				CFifoAvail(dev->pUartDev->hTxFifo));
+			// Report the physical completion of the final DMA block.
+			// TX_READY alone only means FIFO space is available.
+			if (dev->pUartDev->bTxReady &&
+				CFifoUsed(dev->pUartDev->hTxFifo) == 0)
+			{
+				(void)pDev->EvtCB(pDev, DEVINTRF_EVT_TX_FIFO_EMPTY,
+					nullptr, 0);
+			}
 		}
 	}
 #endif
