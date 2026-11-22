@@ -735,6 +735,35 @@ void TestDeferredReadyDuringActiveFlush()
 	SysLogSetSink(SysLogGet(), nullptr, 0);
 }
 
+// A TX_READY interrupt can arrive during the final successful submission.
+// That event must service the next queued record instead of being stranded.
+void TestDeferredReadyAfterCompleteRecord()
+{
+	alignas(4) static uint8_t memory[SYSLOG_MEMSIZE(4, 64)];
+	SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), 64, true);
+	DevIntrf_t intrf{};
+
+	MakeIntrf(&intrf);
+	CHECK(SysLogInitNoTimer(SysLogGet(), &cfg, nullptr, 0, 0));
+	CHECK(SysLogPrintf(SysLogGet(), "one\r\n") == 5);
+	CHECK(SysLogPrintf(SysLogGet(), "two\r\n") == 5);
+	ResetCapture();
+	SysLogSetSink(SysLogGet(), &intrf, 0);
+	CHECK(intrf.EvtCB == SysLogDevIntrfEvent);
+
+	// Simulate a ready IRQ interrupting each full DeviceIntrfTx call.
+	s_NotifyReadyDuringTx = true;
+	CHECK(SysLogFlush(SysLogGet()) == 10);
+	CHECK(s_CapturedLen == 10);
+	CHECK(std::memcmp(s_Captured, "one\r\ntwo\r\n", 10) == 0);
+	CHECK(SysLogGet()->TxLen == 0);
+	CHECK(CFifoUsed(SysLogGet()->hFifo) == 0);
+
+	s_NotifyReadyDuringTx = false;
+	CHECK(SysLogFlush(SysLogGet()) == 0);
+	SysLogSetSink(SysLogGet(), nullptr, 0);
+}
+
 void TestNoTimerInitialization()
 {
 	alignas(4) uint8_t memory[SYSLOG_MEMSIZE(2, 32)];
@@ -758,6 +787,7 @@ int main()
 	TestTimestampTruncation();
 	TestNoTimerInitialization();
 	TestDeferredReadyDuringActiveFlush();
+	TestDeferredReadyAfterCompleteRecord();
 	TestBufferedBeforeSink();
 	TestRecordTruncatedToLineMax();
 	TestConsecutivePrintfLineEndings();
