@@ -189,6 +189,11 @@ static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
+#if defined(NRF52_SERIES) && defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+// A direct LFCLK owner may release while the SoftDevice controls CLOCK.
+// Its physical STOP is deferred until the SoftDevice has shut down.
+static bool s_bNRFxSdLfclkStopPending;
+#endif
 #if defined(NRF5340_XXAA_NETWORK)
 // XTAL remains the board-selected source. RC is an effective-clock fallback.
 static bool s_bNRFxNetLfclkRcFallback;
@@ -410,6 +415,23 @@ static void nRFxClockSdhStateHandler(nrf_sdh_state_evt_t Event, void *pContext)
 		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_DIRECT;
 		s_bNRFxSdDirectStopPending = false;
 	}
+#if defined(NRF52_SERIES)
+	if (s_bNRFxSdLfclkStopPending && !s_bNRFxLfclkTransition)
+	{
+		if (s_nRFxLfclkReqCnt != 0U)
+		{
+			// A new application user inherited the original direct clock.
+			s_bNRFxLfclkOwned = true;
+			s_bNRFxSdLfclkStopPending = false;
+		}
+		else if (!nRFxMpslActive() && s_nRFxMpslLfclkReqCnt == 0U)
+		{
+			NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
+			s_bNRFxLfclkStopPending = true;
+			s_bNRFxSdLfclkStopPending = false;
+		}
+	}
+#endif
 	EnableInterrupt(state);
 }
 
@@ -997,6 +1019,14 @@ void SystemLowFreqClockDisable(void)
 				s_bNRFxMpslLfclkOwned = false;
 #endif
 			}
+			#if defined(NRF52_SERIES) && defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+			// Preserve the direct oscillator's last physical STOP until
+			// SoftDevice shutdown; it must not be issued under stack ownership.
+			if (s_bNRFxLfclkOwned && nRFxClockSdEnabled())
+			{
+				s_bNRFxSdLfclkStopPending = true;
+			}
+			#endif
 			s_bNRFxLfclkOwned = false;
 		}
 	}
