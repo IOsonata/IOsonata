@@ -61,6 +61,21 @@ class CoreClockTestInitialization(unittest.TestCase):
         self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', sample)
         self.assertIn('CoreClockTestResult("nsDelay factor unchanged during timing",', sample)
 
+    def test_arm_usloop_preserves_original_countdown(self):
+        delay = (ROOT / "ARM/include/idelay.h").read_text(
+            encoding="utf-8")
+        start = delay.index("static inline __attribute__((always_inline)) "
+            "void ArmDelayUsLoop(uint32_t cnt)")
+        end = delay.index(" * @brief\\tNanosecond delay.", start)
+        implementation = delay[start:end]
+        self.assertIn('" MOVS %[remaining], %[count]\\n"', implementation)
+        self.assertEqual(implementation.count('" NOP\\n"'), 10)
+        self.assertIn('" SUBS %[remaining], #1\\n"', implementation)
+        self.assertIn('" BGT 1b\\n"', implementation)
+        self.assertIn("chunk = loops > INT32_MAX ? INT32_MAX", implementation)
+        self.assertNotIn(" BNE ", implementation)
+        self.assertNotIn("NRF52_SERIES", implementation)
+
     def test_arm_nsloop_remains_vendor_independent(self):
         delay = (ROOT / "ARM/include/idelay.h").read_text(
             encoding="utf-8")
