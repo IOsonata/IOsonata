@@ -251,6 +251,10 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertIn("TIMER_TRIG_TYPE_SINGLE, CoreClockTestTriggerHandler", source)
         self.assertIn("TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler", source)
         self.assertIn('CoreClockTestResult("Timer one-shot callback",', source)
+        self.assertIn("TimerReset(&s_Timer);", source)
+        self.assertIn("Timer continuous diagnostics:", source)
+        self.assertLess(source.index("TimerReset(&s_Timer);"),
+            source.index("TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler"))
         self.assertIn('CoreClockTestResult("Timer continuous callback",', source)
         self.assertIn('CoreClockTestResult("Timer counter advances",', source)
         self.assertIn('CoreClockTestResult("Timer trigger disabled",', source)
