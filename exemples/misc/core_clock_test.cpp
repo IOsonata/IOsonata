@@ -539,7 +539,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	// If unavailable, use the existing HF Timer calibration path.
 	if (DelayCalibrationMeasure(pSample))
 	{
-		CoreClockTestPrint("Delay calibration DWT %u Hz: us loop/s %u, ns loop/s %u\\r\\n",
+		CoreClockTestPrint("Delay calibration DWT %u Hz: us loop/s %u, ns loop/s %u\r\n",
 			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
 			(unsigned)pSample->NsLoopsPerSecond);
 		return true;
