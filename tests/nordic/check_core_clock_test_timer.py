@@ -83,7 +83,7 @@ class CoreClockTestInitialization(unittest.TestCase):
         us_start = delay.index("static inline __attribute__((always_inline)) "
             "void usDelay(uint32_t cnt)")
         ns_start = delay.index("static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)", us_start)
-        end = delay.index("// The high-frequency Timer reports recommended", ns_start)
+        end = delay.index('#include "system_core_clock_calibration.h"', ns_start)
         us_loop = delay[us_start:ns_start]
         ns_loop = delay[ns_start:end]
         self.assertEqual(us_loop.count('" NOP\n"'), 10)
@@ -97,8 +97,8 @@ class CoreClockTestInitialization(unittest.TestCase):
         for forbidden in ("ArmDelayUsLoop(", "ArmDelayNsLoop(",
             "DelayCalibrationProbeNs("):
             self.assertNotIn(forbidden, delay)
-        self.assertIn("static inline bool ArmDelayCalibrate(", delay)
-        self.assertIn("static inline bool DelayCalibrationMeasure(", delay)
+        self.assertIn("static inline bool ArmDelayCalibrate(", (ROOT / "ARM/include/system_core_clock_calibration.h").read_text(encoding="utf-8"))
+        self.assertIn("static inline bool DelayCalibrationMeasure(", (ROOT / "ARM/include/system_core_clock_calibration.h").read_text(encoding="utf-8"))
         self.assertNotIn("ArmDelayCalibrationDwtAllowed", delay)
         self.assertNotIn("NRF52_SERIES", delay)
         self.assertIn('" .p2align 5\\n"', ns_loop)
