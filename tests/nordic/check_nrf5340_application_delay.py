@@ -53,6 +53,16 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 			self.assertNotIn(name, delay[start:end])
 		self.assertIn("ArmDelayUsLoop(cnt);", delay[start:end])
 
+	def test_nsdelay_uses_same_calibrated_loop_as_raw_probe(self):
+		start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
+		end = self.delay.index("#define ARM_DELAY_CAL_NS", start)
+		runtime = self.delay[start:end]
+		self.assertIn("ArmDelayNsLoop(cnt);", runtime)
+		self.assertNotIn("ArmDelayUsLoop(", runtime)
+		self.assertIn("ArmDelayNsLoop(Nanoseconds);", self.delay)
+		self.assertIn("nsDelay(100000000U);", self.test)
+		self.assertIn("nsDelay(250000000U);", self.test)
+
 	def test_250ms_nominal_loop_scale(self):
 		for frequency in (64000000, 128000000,):
 			us_cycles = 25 if frequency == 128000000 else 28
