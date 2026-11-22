@@ -576,47 +576,48 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	}
 
 #ifdef UARTE_PRESENT
-	bool txEnd = NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) != 0;
-	bool txStopped = dev->pDmaReg->EVENTS_TXSTOPPED != 0;
-#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
-	// STOPTX during initialization can leave a stale TXSTOPPED/ENDTX event.
-	// It must not consume the next software FIFO block when DMA is idle.
-	if ((txEnd || txStopped) && dev->TxDmaLen == 0U)
+	// TXSTOPPED is not a DMA completion event. In particular, anomaly
+	// workarounds at startup may leave it set after the first TX begins.
+	// Only ENDTX may retire a software FIFO block or start the next DMA.
+	if (dev->pDmaReg->EVENTS_TXSTOPPED)
 	{
-		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+	}
+	bool txEnd = NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) != 0;
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
+	if (txEnd && dev->TxDmaLen == 0U)
+	{
+		// An ENDTX without an in-flight DMA belongs to an earlier STOPTX.
+		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 	}
 	else
 #endif
-	if (txEnd || txStopped)
+	if (txEnd)
 	{
 		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
-		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
 #if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
-		// A normal ENDTX completes the entire DMA block. Only an
-		// interrupted STOPTX transfer may need its unsent suffix resumed.
-		if (txStopped)
-		{
-			uint32_t sent;
+		// Check the completed transfer's actual byte count. STOPTX can
+		// generate ENDTX for a partial DMA; do not silently discard its
+		// unsent suffix or assume that TXSTOPPED and ENDTX coincide.
+		uint32_t sent;
 #if defined(NRF53_SERIES)
-			sent = dev->pDmaReg->TXD.AMOUNT;
+		sent = dev->pDmaReg->TXD.AMOUNT;
 #else
-			sent = dev->pDmaReg->DMA.TX.AMOUNT;
+		sent = dev->pDmaReg->DMA.TX.AMOUNT;
 #endif
-			if (sent > dev->TxDmaLen)
-			{
-				sent = dev->TxDmaLen;
-			}
-			if (sent < dev->TxDmaLen)
-			{
-				uint32_t remaining = dev->TxDmaLen - sent;
-				memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);
-				dev->TxDmaLen = remaining;
-				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = remaining;
-				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
-				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
-				return;
-			}
+		if (sent > dev->TxDmaLen)
+		{
+			sent = dev->TxDmaLen;
+		}
+		if (sent < dev->TxDmaLen)
+		{
+			uint32_t remaining = dev->TxDmaLen - sent;
+			memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);
+			dev->TxDmaLen = remaining;
+			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = remaining;
+			NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+			NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
+			return;
 		}
 		dev->TxDmaLen = 0U;
 #endif
