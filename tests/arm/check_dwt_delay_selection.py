@@ -35,6 +35,20 @@ class DwtDelaySelection(unittest.TestCase):
 						0xfffffff0) & 0xffffffff, chunk)
 					remaining -= chunk
 
+	def test_long_ns_wait_uses_calibrated_us_loop(self):
+		src = DELAY.read_text(encoding="utf-8")
+		start = src.index("static inline __attribute__((always_inline)) void nsDelay(")
+		end = src.index("#define ARM_DELAY_CAL_NS", start)
+		ns = src[start:end]
+		self.assertIn("if (cnt >= 10000U)", ns)
+		self.assertIn("ArmDelayUsLoop(cnt / 1000U);", ns)
+		self.assertIn("cnt %= 1000U;", ns)
+		self.assertIn("ArmDelayNsLoop(cnt);", ns)
+		for nanoseconds in (10000, 10001, 100000000, 250000000):
+			microseconds, remainder = divmod(nanoseconds, 1000)
+			self.assertEqual(1000 * microseconds + remainder, nanoseconds)
+
+
 	def test_loop_fallback_kept_separate(self):
 		src = DELAY.read_text(encoding="utf-8")
 		self.assertIn("void ArmDelayUsLoop(uint32_t cnt)", src)
