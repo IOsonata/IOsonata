@@ -143,6 +143,12 @@ static inline __attribute__((always_inline)) void msDelay(uint32_t ms)
 }
 
 
+// No independently calibrated nanosecond assembly loop on RISC-V.
+static inline void DelayCalibrationProbeNs(uint32_t Nanoseconds)
+{
+	nsDelay(Nanoseconds);
+}
+
 // RISC-V delay uses CPU cycles, not ARM loop-iteration factors.
 // Counter-based delays require no loop-factor calibration. Without a counter,
 // the high-frequency Timer test still validates timing; its result must not
