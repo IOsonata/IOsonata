@@ -35,18 +35,20 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 		self.assertIn("DelayCalibrationFromTimer(", self.test)
 
 	def test_both_runtime_delays_use_original_countdowns(self):
-		us_start = self.delay.index("static inline __attribute__((always_inline)) void ArmDelayUsLoop(")
-		ns_start = self.delay.index("static inline __attribute__((always_inline)) void ArmDelayNsLoop(")
+		us_start = self.delay.index("static inline __attribute__((always_inline)) void usDelay(")
+		ns_start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
 		us_loop = self.delay[us_start:ns_start]
-		ns_loop = self.delay[ns_start:self.delay.index("// Calibration probe", ns_start)]
-		self.assertEqual(us_loop.count('" NOP\\n"'), 10)
+		ns_loop = self.delay[ns_start:self.delay.index("#define ARM_DELAY_CAL_NS", ns_start)]
+		self.assertEqual(us_loop.count('" NOP\n"'), 10)
 		for loop in (us_loop, ns_loop):
-			self.assertIn('" MOVS %[remaining], %[count]\\n"', loop)
-			self.assertIn('" SUBS %[remaining], #1\\n"', loop)
-			self.assertIn('" BGT 1b\\n"', loop)
+			self.assertIn('" MOVS %[remaining], %[count]\n"', loop)
+			self.assertIn('" SUBS %[remaining], #1\n"', loop)
+			self.assertIn('" BGT 1b\n"', loop)
 			self.assertIn("chunk = loops > INT32_MAX ? INT32_MAX", loop)
 			self.assertNotIn('" BNE ', loop)
 			self.assertNotIn("NRF5340", loop)
+		self.assertNotIn("ArmDelayUsLoop(", self.delay)
+		self.assertNotIn("ArmDelayNsLoop(", self.delay)
 		self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', self.test)
 
 	def test_250ms_nominal_loop_scale(self):
