@@ -197,10 +197,8 @@ int TimerGetHighFreqDevNo()
 	defined(NRF52833_XXAA) || defined(NRF52840_XXAA) || \
 	defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK)
 
-// The RTC backend manages timer ownership and LFCLK reference counting.
-// Claiming skips initialized timers rather than replacing a user handle.
-extern "C" int nRFxRtcSleepClaim(TimerDev_t *pTimer, TimerCfg_t *pCfg);
-extern "C" void nRFxRtcSleepRelease(TimerDev_t *pTimer);
+// TimerInit selects an unused LF timer for DevNo=-1; TimerDisable
+// returns only automatically selected timers to the timer backend.
 extern "C" bool nRFxSleepLfClockRunning(void);
 
 // Signed end-to-end compensation in LF ticks. Positive values shorten
@@ -253,7 +251,7 @@ static void nRFxSleepTimerWake(TimerDev_t *pTimer, int Trigger,
 }
 
 // A low-power seconds delay. The complete function call, including timer
-// claim/release, is the delay. Busy loops and high-frequency timers are not
+// initialization and disable, is the delay. Busy loops and high-frequency timers are not
 // used. WFE uses the same System ON sleep depth as SystemSleep, but the
 // latched event prevents a lost-wakeup race between checking the deadline
 // and entering sleep.
@@ -296,7 +294,7 @@ extern "C" bool sDelay(uint32_t Seconds)
 	cfg.IntPrio = 6;
 	cfg.EvtHandler = nullptr;
 	cfg.bTickInt = false;
-	success = nRFxRtcSleepClaim(&s_SleepTimer, &cfg) >= 0;
+	success = TimerInit(&s_SleepTimer, &cfg);
 	if (success)
 	{
 		frequency = TimerGetFrequency(&s_SleepTimer);
@@ -360,15 +358,8 @@ extern "C" bool sDelay(uint32_t Seconds)
 		}
 		SCB->SCR = oldScr;
 		__ISB();
-		nRFxRtcSleepRelease(&s_SleepTimer);
-	}
-	else if (s_SleepTimer.Enable != nullptr &&
-		s_SleepTimer.DevNo >= 1 &&
-		s_SleepTimer.DevNo < TimerGetLowFreqDevCount())
-	{
-		// A claim can fail after a timer was partially configured;
-		// the RTC backend only releases handles it still owns.
-		nRFxRtcSleepRelease(&s_SleepTimer);
+		TimerDisableTrigger(&s_SleepTimer, 0);
+		TimerDisable(&s_SleepTimer);
 	}
 	irqState = __get_PRIMASK();
 	__disable_irq();
