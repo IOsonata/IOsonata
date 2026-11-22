@@ -167,12 +167,15 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 
 	// Reserve one complete record outside the FIFO for in-progress TX.
 	if (pCfg->pMem == nullptr ||
-		pCfg->MemSize < sizeof(CFifo_t) + 2U * recordLen)
+		recordLen > UINT32_MAX - SYSLOG_RECORD_META_SIZE ||
+		pCfg->MemSize < sizeof(CFifo_t) +
+			2U * (recordLen + SYSLOG_RECORD_META_SIZE))
 	{
 		return false;
 	}
-	hCFifo_t hFifo = CFifoInit(pCfg->pMem, pCfg->MemSize - recordLen,
-							   recordLen, pCfg->bBlocking);
+	hCFifo_t hFifo = CFifoInit(pCfg->pMem,
+					pCfg->MemSize - recordLen - SYSLOG_RECORD_META_SIZE,
+					recordLen + SYSLOG_RECORD_META_SIZE, pCfg->bBlocking);
 	if (hFifo == 0)
 	{
 		return false;
@@ -184,7 +187,7 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 	pLog->FormatTime = nullptr;
 	pLog->MinType = MinType & SYSSTATUS_TYPE_MASK;
 	pLog->hFifo = hFifo;
-	pLog->pTxBuffer = pCfg->pMem + pCfg->MemSize - recordLen;
+	pLog->pTxBuffer = pCfg->pMem + pCfg->MemSize - recordLen - SYSLOG_RECORD_META_SIZE;
 	pLog->TxLen = 0U;
 	pLog->TxSent = 0U;
 	pLog->bFlushing = false;
@@ -306,7 +309,7 @@ int SysLogFlush(SysLog_t * const pLog)
 	pLog->bFlushing = true;
 	SysIrqUnlock(state);
 
-	recordLen = CFifoBlockSize(pLog->hFifo);
+	recordLen = CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE;
 	total = 0;
 	err = 0;
 	while (true)
@@ -328,12 +331,15 @@ int SysLogFlush(SysLog_t * const pLog)
 					SysIrqUnlock(state);
 					break;
 				}
-				memcpy(pLog->pTxBuffer, pBlock, recordLen);
-				len = 0U;
-				while (len < recordLen && pLog->pTxBuffer[len] != 0U)
+				// The producer recorded the formatted length before
+				// publishing this block. Never infer it by scanning text.
+				memcpy(&len, pBlock, SYSLOG_RECORD_META_SIZE);
+				if (len >= recordLen)
 				{
-					len++;
+					len = recordLen - 1U;
 				}
+				memcpy(pLog->pTxBuffer,
+					pBlock + SYSLOG_RECORD_META_SIZE, recordLen);
 				pLog->TxLen = len;
 				pLog->TxSent = 0U;
 				if (len == 0U)
@@ -413,10 +419,11 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 
 	// Format in place. No scratch buffer, so the record length is free to be
 	// whatever the store was configured with.
-	const int recordLen = (int)CFifoBlockSize(pLog->hFifo);
+	const int recordLen = (int)(CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE);
 
-	char *pLine = (char *)CFifoResv(pLog->hFifo);
-	if (pLine == 0)
+	uint8_t *pBlock = CFifoResv(pLog->hFifo);
+	char *pLine = (char *)(pBlock + SYSLOG_RECORD_META_SIZE);
+	if (pBlock == nullptr)
 	{
 		return 0;
 	}
@@ -456,6 +463,8 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	len = SysLogAppendText(pLine, recordLen, len, "\r\n");
 
 	pLine[len] = 0;
+	uint32_t written = (uint32_t)len;
+	memcpy(pBlock, &written, SYSLOG_RECORD_META_SIZE);
 	(void)CFifoPut(pLog->hFifo);
 
 	// A record goes out as soon as it is stored when a transport is attached.
@@ -476,7 +485,7 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 	}
 
 	// Format straight into the block, no intermediate line buffer.
-	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo);
+	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE;
 
 	uint8_t *pBlock = CFifoResv(pLog->hFifo);
 	if (pBlock == 0)
@@ -489,14 +498,18 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 
 	if (pLog->FormatTime != nullptr)
 	{
-		pre = pLog->FormatTime(pLog->pTimer, (char *)pBlock, (int)recordLen, false);
+		pre = pLog->FormatTime(pLog->pTimer,
+			(char *)pBlock + SYSLOG_RECORD_META_SIZE, (int)recordLen, false);
 	}
 
-	int len = vsnprintf((char *)pBlock + pre, (size_t)(recordLen - (uint32_t)pre),
+	int len = vsnprintf((char *)pBlock + SYSLOG_RECORD_META_SIZE + pre,
+						(size_t)(recordLen - (uint32_t)pre),
 						pFormat, Args);
 	if (len < 0)
 	{
-		pBlock[0] = 0U;
+		uint32_t emptyLen = 0U;
+		memcpy(pBlock, &emptyLen, SYSLOG_RECORD_META_SIZE);
+		pBlock[SYSLOG_RECORD_META_SIZE] = 0U;
 		(void)CFifoPut(pLog->hFifo);
 		return 0;
 	}
@@ -506,6 +519,8 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 	{
 		len = (int)recordLen - 1;
 	}
+	uint32_t written = (uint32_t)len;
+	memcpy(pBlock, &written, SYSLOG_RECORD_META_SIZE);
 	(void)CFifoPut(pLog->hFifo);
 
 	if (pLog->pSink != 0)
