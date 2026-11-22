@@ -63,6 +63,21 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		self.assertIn("nsDelay(100000000U);", self.test)
 		self.assertIn("nsDelay(250000000U);", self.test)
 
+	def test_both_runtime_delays_use_original_countdowns(self):
+		us_start = self.delay.index("static inline __attribute__((always_inline)) void ArmDelayUsLoop(")
+		ns_start = self.delay.index("static inline __attribute__((always_inline)) void ArmDelayNsLoop(")
+		us_loop = self.delay[us_start:ns_start]
+		ns_loop = self.delay[ns_start:self.delay.index("// Calibration probe", ns_start)]
+		self.assertEqual(us_loop.count('" NOP\\n"'), 10)
+		for loop in (us_loop, ns_loop):
+			self.assertIn('" MOVS %[remaining], %[count]\\n"', loop)
+			self.assertIn('" SUBS %[remaining], #1\\n"', loop)
+			self.assertIn('" BGT 1b\\n"', loop)
+			self.assertIn("chunk = loops > INT32_MAX ? INT32_MAX", loop)
+			self.assertNotIn('" BNE ', loop)
+			self.assertNotIn("NRF5340", loop)
+		self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', self.test)
+
 	def test_250ms_nominal_loop_scale(self):
 		for frequency in (64000000, 128000000,):
 			us_cycles = 25 if frequency == 128000000 else 28
