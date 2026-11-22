@@ -29,11 +29,11 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U)", self.system)
 
 
-	def test_explicit_dwt_and_timer_calibration_remain_available(self):
-		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", self.delay)
+	def test_hf_timer_calibration_without_dwt(self):
+		self.assertNotIn("ArmDelayCalibrate(", self.delay)
+		self.assertNotIn("DWT", self.delay)
 		self.assertIn("static ArmDelayCalibration_t s_DelayCalibration;", self.system)
-		self.assertNotIn("#if !ARM_DELAY_USE_DWT\\nstatic ArmDelayCalibration_t", self.system)
-		self.assertIn("DelayCalibrationMeasure(pSample)", self.test)
+		self.assertNotIn("DelayCalibrationMeasure(", self.test)
 		self.assertIn("DelayCalibrationFromTimer(", self.test)
 
 	def test_both_cores_are_dwt_free_at_runtime(self):
@@ -47,19 +47,18 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		self.assertIn("22U, 3U", self.system)
 		delay = self.delay
 		start = delay.index("static inline __attribute__((always_inline)) void usDelay(")
-		end = delay.index("#define ARM_DELAY_CAL_NS", start)
+		end = delay.index("// The high-frequency Timer reports recommended", start)
 		for name in ("DWT->", "CoreDebug->", "ArmDelayCalibrate("):
 			self.assertNotIn(name, delay[start:end])
 
 	def test_nsdelay_owns_its_assembly(self):
 		start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
-		end = self.delay.index("#define ARM_DELAY_CAL_NS", start)
+		end = self.delay.index("// The high-frequency Timer reports recommended", start)
 		runtime = self.delay[start:end]
 		self.assertIn('" SUBS %[remaining], #1\n"', runtime)
 		self.assertIn('" BGT 1b\n"', runtime)
 		self.assertNotIn("ArmDelayNsLoop(", self.delay)
 		self.assertNotIn("ArmDelayUsLoop(", self.delay)
-		self.assertIn("nsDelay(ARM_DELAY_CAL_NS);", self.delay)
 		self.assertIn("nsDelay(100000000U);", self.test)
 		self.assertIn("nsDelay(250000000U);", self.test)
 
@@ -67,7 +66,7 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		us_start = self.delay.index("static inline __attribute__((always_inline)) void usDelay(")
 		ns_start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
 		us_loop = self.delay[us_start:ns_start]
-		ns_loop = self.delay[ns_start:self.delay.index("#define ARM_DELAY_CAL_NS", ns_start)]
+		ns_loop = self.delay[ns_start:self.delay.index("// The high-frequency Timer reports recommended", ns_start)]
 		self.assertEqual(us_loop.count('" NOP\n"'), 10)
 		for loop in (us_loop, ns_loop):
 			self.assertIn('" MOVS %[remaining], %[count]\n"', loop)
