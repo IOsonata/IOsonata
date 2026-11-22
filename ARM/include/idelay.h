@@ -304,19 +304,7 @@ static inline __attribute__((always_inline)) void ArmDelayUsLoop(uint32_t cnt)
  *
  * @param	cnt : nanosecond count
  */
-// On nRF52, inlining this tight branch loop at different flash addresses
-// produces different loop timings (100 ms versus 200 ms with the same
-// factor). Use one fixed, aligned implementation per translation unit.
-// Keep the proven assembly instructions and other MCU paths unchanged.
-#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
-	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
-	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
-	defined(NRF52832_XXAB) || defined(NRF52833_XXAA) || \
-	defined(NRF52840_XXAA)
-static __attribute__((noinline, aligned(16))) void ArmDelayNsLoop(uint32_t cnt)
-#else
 static inline __attribute__((always_inline)) void ArmDelayNsLoop(uint32_t cnt)
-#endif
 {
 	uint64_t loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) / 1000000000ULL;
 	uint32_t low = (uint32_t)loops;
