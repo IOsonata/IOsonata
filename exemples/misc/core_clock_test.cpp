@@ -542,7 +542,10 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 		CoreClockTestPrint("Delay calibration DWT %u Hz: us loop/s %u, ns loop/s %u\r\n",
 			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
 			(unsigned)pSample->NsLoopsPerSecond);
-		return true;
+	}
+	else
+	{
+		CoreClockTestPrint("DWT calibration unavailable; HF Timer will measure delay timing\r\n");
 	}
 
 	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
