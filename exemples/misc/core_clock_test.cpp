@@ -519,7 +519,9 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	uint32_t usElapsed;
 	uint32_t nsPublicElapsed;
 	uint32_t nsRepeatElapsed;
+	uint32_t nsSameSiteElapsed[3];
 	uint32_t nsFactorBefore;
+	unsigned i;
 	uint32_t nsFactorAfter;
 	bool valid;
 
@@ -581,18 +583,36 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	nsDelay(100000000U);
 	nsRepeatElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
 
+	// Each iteration uses exactly the same nsDelay call site.
+	// Compare these readings with the two separate calls above to
+	// distinguish one-time activity from call-site-dependent timing.
+	for (i = 0U; i < 3U; i++)
+	{
+		start = TimerGetMicrosecond(&s_RetainedTimer);
+		nsDelay(100000000U);
+		nsSameSiteElapsed[i] =
+			TimerGetMicrosecond(&s_RetainedTimer) - start;
+	}
 	nsFactorAfter = SystemnsDelayFactor;
 
 	TimerDisable(&s_RetainedTimer);
 	CoreClockTestPrint("nsDelay repeat %u us, factors before %u after %u\r\n",
 		(unsigned)nsRepeatElapsed, (unsigned)nsFactorBefore,
 		(unsigned)nsFactorAfter);
+	CoreClockTestPrint("nsDelay same-site 100 ms: %u, %u, %u us\r\n",
+		(unsigned)nsSameSiteElapsed[0],
+		(unsigned)nsSameSiteElapsed[1],
+		(unsigned)nsSameSiteElapsed[2]);
 	CoreClockTestPrint("Delay timing HF Timer %u Hz: msDelay %u us, nsDelay %u us\r\n",
 		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsPublicElapsed);
 	CoreClockTestResult("nsDelay HF Timer 100 ms",
 		nsPublicElapsed >= 98000U && nsPublicElapsed <= 102000U);
 	CoreClockTestResult("nsDelay repeated HF Timer 100 ms",
 		nsRepeatElapsed >= 98000U && nsRepeatElapsed <= 102000U);
+	CoreClockTestResult("nsDelay same-site HF Timer 100 ms",
+		nsSameSiteElapsed[0] >= 98000U && nsSameSiteElapsed[0] <= 102000U &&
+		nsSameSiteElapsed[1] >= 98000U && nsSameSiteElapsed[1] <= 102000U &&
+		nsSameSiteElapsed[2] >= 98000U && nsSameSiteElapsed[2] <= 102000U);
 	CoreClockTestResult("nsDelay factor unchanged during timing",
 		nsFactorBefore == nsFactorAfter);
 
