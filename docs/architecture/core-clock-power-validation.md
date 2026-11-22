@@ -4,6 +4,7 @@ The generic managed-project firmware sources are:
 
 - `exemples/misc/core_clock_test.cpp` — CoreClockTest
 - `exemples/misc/core_power_test.cpp` — CorePowerTest
+- `exemples/timer/timer_demo.cpp` — TimerDemo (timer-driver functional test)
 
 Both are identical across MCU targets. The timer and oscillator implementations
 remain in the appropriate MCU drivers. Do not add target-specific test code,
@@ -16,11 +17,14 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
    at 1,000,000 baud. Run without a debugger attached for sleep tests.
 2. Run CoreClockTest after a power cycle. Check its final
    `CoreClockTest complete: 0 failures` line.
-3. Build CorePowerTest using the same managed-project workflow. Run it
+3. Run the existing TimerDemo for the target's supported timer-device
+   configurations. Verify timer Init/Enable/Disable, trigger callbacks,
+   count and period reporting; it is the timer implementation test.
+4. Build CorePowerTest using the same managed-project workflow. Run it
    without an attached debugger.
-4. Let all automatic Standby timer-wake cycles finish. Check the final
+5. Let all automatic Standby timer-wake cycles finish. Check the final
    `CorePowerTest complete: 0x00000000 failures` line.
-5. If System OFF and a wake button are supported, press the wake button,
+6. If System OFF and a wake button are supported, press the wake button,
    verify the reset-on-wake reason and repeat. Do not treat reset-on-wake
    as an ordinary return from System OFF.
 
@@ -38,8 +42,10 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
 - `sDelay(1)` cold and warm, with end-to-end HF timer reference. A further
   `sDelay(1)` call after releasing the LF clock verifies temporary
   timer reuse; this is a separate timing sample.
-- All enumerated LF/HF timer devices, 250 ms delay timing and interrupt
-  counts, and an independent HF reference for LF timer tests.
+- Clock-change integration with LF/HF timer devices: verify 250 ms
+  delay timing and timer interrupt counts **after oscillator selection and
+  restoration**, with independent HF reference for LF timers. These are
+  clock integration checks, not a replacement for TimerDemo.
 - Independent timer clock ownership.
 - **After** the timer matrix, only if every advertised LF timer was
   initialized successfully: verify `sDelay(0)` succeeds and that
@@ -52,6 +58,14 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
 The ownership test uses only the public `TimerInit`, `TimerDisable`,
 `TimerGetLowFreqDevCount`, and `sDelay` interface. No Nordic RTC
 registers or Claim/Release APIs appear in CoreClockTest.
+
+## TimerDemo coverage
+
+TimerDemo is the existing generic timer-driver exercise. It tests the
+configured timer's initialization, available triggers, callback periods,
+count reporting and Enable/Disable behavior. Run the MCU's existing
+managed TimerDemo project; do not replicate those driver functionality tests
+in CoreClockTest or CorePowerTest.
 
 ## CorePowerTest coverage
 
