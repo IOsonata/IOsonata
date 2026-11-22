@@ -52,5 +52,21 @@ class CoreClockTestLfLifecycle(unittest.TestCase):
         self.assertIn("LF lifecycle: first %u, second %u, after release %u", lifecycle)
 
 
+class NordicRtcStopOwnership(unittest.TestCase):
+    def test_nrf52_stop_completes_before_lfclk_release(self):
+        source = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(
+            encoding="utf-8")
+        start = source.index("static void nRFxRtcDisable(")
+        end = source.index("// CLEAR task", start)
+        disable = source[start:end]
+        self.assertLess(
+            disable.index("TASKS_STOP = 1"),
+            disable.index("usDelay(50U);"))
+        self.assertLess(
+            disable.index("usDelay(50U);"),
+            disable.index("SystemLowFreqClockDisable();"))
+        self.assertIn("#if defined(NRF52_SERIES)", disable)
+
+
 if __name__ == "__main__":
     unittest.main()
