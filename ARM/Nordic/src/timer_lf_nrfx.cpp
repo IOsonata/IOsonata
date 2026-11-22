@@ -1161,7 +1161,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	if (automatic)
 	{
 		first = 1;
-#if (defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT) || \\
+#if (defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT) || \
 	defined(NRF_SDC_ENABLED)
 		first = 2;
 #endif
