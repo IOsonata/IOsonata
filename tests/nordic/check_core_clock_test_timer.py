@@ -66,7 +66,8 @@ class CoreClockTestInitialization(unittest.TestCase):
             encoding="utf-8")
         start = delay.index("static inline __attribute__((always_inline)) "
             "void ArmDelayUsLoop(uint32_t cnt)")
-        end = delay.index(" * @brief\\tNanosecond delay.", start)
+        end = delay.index("static inline __attribute__((always_inline)) "
+            "void ArmDelayNsLoop(uint32_t cnt)", start)
         implementation = delay[start:end]
         self.assertIn('" MOVS %[remaining], %[count]\\n"', implementation)
         self.assertEqual(implementation.count('" NOP\\n"'), 10)
@@ -81,7 +82,7 @@ class CoreClockTestInitialization(unittest.TestCase):
             encoding="utf-8")
         start = delay.index("static inline __attribute__((always_inline)) "
             "void ArmDelayNsLoop(uint32_t cnt)")
-        end = delay.index("// The calibration test measures", start)
+        end = delay.index("// Calibration probe and public nsDelay", start)
         implementation = delay[start:end]
         self.assertIn('" MOVS %[remaining], %[count]\\n"', implementation)
         self.assertIn('" SUBS %[remaining], #1\\n"', implementation)
