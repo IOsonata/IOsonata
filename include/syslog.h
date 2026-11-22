@@ -148,7 +148,7 @@ SOFTWARE.
 //    alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(16, 64)];  // 16 x 64
 //
 #define SYSLOG_RECORD_META_SIZE                  sizeof(uint32_t)
-#define SYSLOG_MEMSIZE(NbRecord, RecordLen)    CFIFO_TOTAL_MEMSIZE((NbRecord) + 1, (RecordLen) + SYSLOG_RECORD_META_SIZE)
+#define SYSLOG_MEMSIZE(NbRecord, RecordLen)    CFIFO_TOTAL_MEMSIZE((NbRecord) + 2, (RecordLen) + SYSLOG_RECORD_META_SIZE)
 
 #ifdef __cplusplus
 extern "C" {
@@ -160,12 +160,12 @@ extern "C" {
  * Size the memory with SYSLOG_MEMSIZE(NbRecord, RecordLen) and pass
  * sizeof() as MemSize. The record count is not repeated here because
  * MemSize and RecordLen already determine it, and MemSize is the one value
- * that describes the memory that exists. One record-sized block is reserved
- * for the transfer buffer; the remaining blocks form the CFifo store.
+ * that describes the memory that exists. Two record-sized blocks are reserved
+ * for formatting and transmission; the remaining blocks form CFifo.
  * Each block contains a uint32_t formatted length followed by RecordLen
  * bytes of text, including the terminating NUL.
- * A shorter RecordLen puts more records in the same memory. There is no
- * upper limit, every record is formatted in place in its own block.
+ * A shorter RecordLen puts more records in the same memory. Formatting
+ * takes place in the dedicated buffer, not in a reserved CFifo slot.
  */
 typedef struct __Sys_Log_Cfg {
 	uint8_t		*pMem;		//!< Word aligned memory for the record store
@@ -188,6 +188,7 @@ typedef struct __Sys_Log {
 	uint32_t	MinType;	//!< Minimum type field emitted, e.g. SYSSTATUS_TYPE_WRN. 0 emits all.
 	hCFifo_t	hFifo;		//!< Record store, one complete record per block.
 	uint8_t		*pTxBuffer;	//!< One-record transfer buffer reserved from pMem
+	uint8_t		*pFormatBuffer;	//!< One-record formatting buffer outside CFifo
 	uint32_t	TxLen;	//!< Bytes in transfer buffer
 	uint32_t	TxSent;	//!< Bytes of transfer buffer accepted by sink
 	volatile bool bFlushing;	//!< Set while a SysLogFlush call is sending
