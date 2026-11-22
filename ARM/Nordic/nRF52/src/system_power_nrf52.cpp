@@ -181,6 +181,36 @@ uint32_t SystemResetReason(void)
 	return s_SysPwrResetReason;
 }
 
+// Resumable System ON sleep. Existing peripherals and NVIC interrupt sources
+// remain configured, including LFCLK users and GPIO SENSE wake sources.
+void SystemSleep(void)
+{
+	uint32_t state;
+	uint32_t scr;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	scr = SCB->SCR;
+	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+	__DSB();
+	__WFI();
+	SCB->SCR = scr;
+	__ISB();
+	__set_PRIMASK(state);
+}
+
+uint32_t SystemPowerCapabilitiesGet(void)
+{
+	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_SYSTEM_OFF |
+		SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE |
+		SYSTEM_POWER_CAP_RAM_RETENTION | SYSTEM_POWER_CAP_RET_REG;
+}
+
 void SystemPowerOff(void)
 {
 	if (SysPwrSdEnabled())
