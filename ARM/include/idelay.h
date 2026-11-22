@@ -254,44 +254,46 @@ static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
  */
 static inline __attribute__((always_inline)) void ArmDelayUsLoop(uint32_t cnt)
 {
-	uint64_t loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 999999ULL) / 1000000ULL;
-	uint32_t low = (uint32_t)loops;
-	uint32_t high = (uint32_t)(loops >> 32);
+	uint64_t loops;
+	uint32_t chunk;
+	uint32_t remaining;
 
-	// Run the low word first. Each remaining high count adds 2^32 iterations.
-	// Subtracting from zero clears carry and ends the outer loop.
-	__asm__ volatile (
+	loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 999999ULL) /
+		1000000ULL;
+
+	// Preserve the original IOsonata NOP/SUBS/BGT countdown.
+	// BGT is signed, so split delays outside the assembly loop.
+	while (loops != 0U)
+	{
+		chunk = loops > INT32_MAX ? INT32_MAX : (uint32_t)loops;
+		__asm__ volatile (
 #ifdef __GNUC__
-		".syntax unified\n"
+			".syntax unified\n"
 #endif
-		" CMP %[low], #0\n"
-		" BEQ 2f\n"
-		// Keep loop placement independent of surrounding code and optimization.
-		".balign 8\n"
-		"1:\n"
-		" NOP\n"
-		" NOP\n"
-		" NOP\n"
-		" NOP\n"
-		" NOP\n"
-		" NOP\n"
-		" NOP\n"
-		" NOP\n"
-		" NOP\n"
-		" NOP\n"
-		" SUBS %[low], #1\n"
-		" BNE 1b\n"
-		"2:\n"
-		" SUBS %[high], #1\n"
-		" BCS 1b\n"
+			" MOVS %[remaining], %[count]\n"
+			"1:\n"
+			" NOP\n"
+			" NOP\n"
+			" NOP\n"
+			" NOP\n"
+			" NOP\n"
+			" NOP\n"
+			" NOP\n"
+			" NOP\n"
+			" NOP\n"
+			" NOP\n"
+			" SUBS %[remaining], #1\n"
+			" BGT 1b\n"
 #if defined ( __ARMCC_VERSION )
 #elif defined ( __GNUC__ )
-		".syntax divided\n"
+			".syntax divided\n"
 #endif
-		: [low] "+&l" (low), [high] "+&l" (high)
-		:
-		: "cc"
-	);
+			: [remaining] "=&l" (remaining)
+			: [count] "l" (chunk)
+			: "cc"
+		);
+		loops -= chunk;
+	}
 }
 
 /**
@@ -321,15 +323,15 @@ static inline __attribute__((always_inline)) void ArmDelayNsLoop(uint32_t cnt)
 		chunk = loops > INT32_MAX ? INT32_MAX : (uint32_t)loops;
 		__asm__ volatile (
 #ifdef __GNUC__
-			".syntax unified\\n"
+			".syntax unified\n"
 #endif
-			" MOVS %[remaining], %[count]\\n"
-			"1:\\n"
-			" SUBS %[remaining], #1\\n"
-			" BGT 1b\\n"
+			" MOVS %[remaining], %[count]\n"
+			"1:\n"
+			" SUBS %[remaining], #1\n"
+			" BGT 1b\n"
 #if defined ( __ARMCC_VERSION )
 #elif defined ( __GNUC__ )
-			".syntax divided\\n"
+			".syntax divided\n"
 #endif
 			: [remaining] "=&l" (remaining)
 			: [count] "l" (chunk)
