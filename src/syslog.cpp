@@ -169,12 +169,12 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 	if (pCfg->pMem == nullptr ||
 		recordLen > UINT32_MAX - SYSLOG_RECORD_META_SIZE ||
 		pCfg->MemSize < sizeof(CFifo_t) +
-			2U * (recordLen + SYSLOG_RECORD_META_SIZE))
+			3U * (recordLen + SYSLOG_RECORD_META_SIZE))
 	{
 		return false;
 	}
 	hCFifo_t hFifo = CFifoInit(pCfg->pMem,
-					pCfg->MemSize - recordLen - SYSLOG_RECORD_META_SIZE,
+					pCfg->MemSize - 2U * (recordLen + SYSLOG_RECORD_META_SIZE),
 					recordLen + SYSLOG_RECORD_META_SIZE, pCfg->bBlocking);
 	if (hFifo == 0)
 	{
@@ -187,7 +187,8 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 	pLog->FormatTime = nullptr;
 	pLog->MinType = MinType & SYSSTATUS_TYPE_MASK;
 	pLog->hFifo = hFifo;
-	pLog->pTxBuffer = pCfg->pMem + pCfg->MemSize - recordLen - SYSLOG_RECORD_META_SIZE;
+	pLog->pTxBuffer = pCfg->pMem + pCfg->MemSize - 2U * (recordLen + SYSLOG_RECORD_META_SIZE);
+	pLog->pFormatBuffer = pLog->pTxBuffer + recordLen + SYSLOG_RECORD_META_SIZE;
 	pLog->TxLen = 0U;
 	pLog->TxSent = 0U;
 	pLog->bFlushing = false;
@@ -417,16 +418,11 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 		return 0;
 	}
 
-	// Format in place. No scratch buffer, so the record length is free to be
-	// whatever the store was configured with.
+	// Prepare one complete record before publishing it to CFifo.
 	const int recordLen = (int)(CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE);
 
-	uint8_t *pBlock = CFifoResv(pLog->hFifo);
+	uint8_t *pBlock = pLog->pFormatBuffer;
 	char *pLine = (char *)(pBlock + SYSLOG_RECORD_META_SIZE);
-	if (pBlock == nullptr)
-	{
-		return 0;
-	}
 
 	if (pLog->FormatTime != nullptr)
 	{
@@ -465,7 +461,17 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	pLine[len] = 0;
 	uint32_t written = (uint32_t)len;
 	memcpy(pBlock, &written, SYSLOG_RECORD_META_SIZE);
-	(void)CFifoPut(pLog->hFifo);
+	uintptr_t state = SysIrqLock();
+	uint8_t *pDst = CFifoPut(pLog->hFifo);
+	if (pDst != nullptr)
+	{
+		memcpy(pDst, pBlock, CFifoBlockSize(pLog->hFifo));
+	}
+	SysIrqUnlock(state);
+	if (pDst == nullptr)
+	{
+		return 0;
+	}
 
 	// A record goes out as soon as it is stored when a transport is attached.
 	// SysLogFlush does not log, so this cannot recurse.
@@ -493,14 +499,9 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 		return 0;
 	}
 
-	// The configured RecordLen is the text capacity, including NUL.
-	// Length metadata is stored before the text in each FIFO block.
+	// Format into private staging memory, not an unpublished FIFO slot.
 	recordLen = CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE;
-	pBlock = CFifoResv(pLog->hFifo);
-	if (pBlock == nullptr)
-	{
-		return 0;
-	}
+	pBlock = pLog->pFormatBuffer;
 	pLine = (char *)pBlock + SYSLOG_RECORD_META_SIZE;
 
 	pre = 0;
@@ -540,7 +541,19 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 	pLine[len] = 0;
 	written = (uint32_t)len;
 	memcpy(pBlock, &written, SYSLOG_RECORD_META_SIZE);
-	(void)CFifoPut(pLog->hFifo);
+	// CFifoPut publishes immediately. Keep interrupts masked until
+	// the freshly published slot contains the complete formatted record.
+	uintptr_t state = SysIrqLock();
+	uint8_t *pDst = CFifoPut(pLog->hFifo);
+	if (pDst != nullptr)
+	{
+		memcpy(pDst, pBlock, CFifoBlockSize(pLog->hFifo));
+	}
+	SysIrqUnlock(state);
+	if (pDst == nullptr)
+	{
+		return 0;
+	}
 
 	if (pLog->pSink != nullptr)
 	{
