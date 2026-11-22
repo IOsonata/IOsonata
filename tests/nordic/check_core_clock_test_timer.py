@@ -83,7 +83,7 @@ class CoreClockTestInitialization(unittest.TestCase):
             encoding="utf-8")
         us_start = delay.index("static inline __attribute__((always_inline)) "
             "void usDelay(uint32_t cnt)")
-        ns_start = delay.index("static ARM_NSDELAY_ATTR void nsDelay(uint32_t cnt)", us_start)
+        ns_start = delay.index("static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)", us_start)
         end = delay.index("#define ARM_DELAY_CAL_NS", ns_start)
         us_loop = delay[us_start:ns_start]
         ns_loop = delay[ns_start:end]
@@ -100,8 +100,7 @@ class CoreClockTestInitialization(unittest.TestCase):
             self.assertNotIn(forbidden, delay)
         self.assertIn("usDelay(ARM_DELAY_CAL_LOOPS);", delay)
         self.assertIn("nsDelay(ARM_DELAY_CAL_NS);", delay)
-        self.assertIn('__attribute__((noinline, aligned(32), optimize("O0")))', delay)
-        self.assertNotIn('" .p2align 5\\n"', ns_loop)
+        self.assertIn('" .p2align 5\\n"', ns_loop)
 
 
 class CoreClockTestLfLifecycle(unittest.TestCase):
