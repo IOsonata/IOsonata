@@ -68,8 +68,10 @@ void SystemCoreClockUpdate(void)
 
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
-		// Fixed-speed network core: use the port's calibrated defaults.
-		(void)ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U);
+		// Original SUBS/BGT countdown: hardware measured 834556 us for
+		// nsDelay(250 ms) with the old three-cycle factor. Ten cycles
+		// per iteration restores the nominal rate on the Network Core.
+		(void)ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 10U);
 	}
 }
 
