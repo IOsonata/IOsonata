@@ -90,8 +90,9 @@ uint32_t SystemCoreClockGet(void)
 #define NRF_APP_HCLK_PERFORMANCE	(CLOCK_HFCLKCTRL_HCLK_Div1 << CLOCK_HFCLKCTRL_HCLK_Pos)
 #define NRF_APP_HCLK_LOW_POWER	(CLOCK_HFCLKCTRL_HCLK_Div2 << CLOCK_HFCLKCTRL_HCLK_Pos)
 
-// Always calculate calibrated assembly-loop factors: another translation
-// unit can compile the non-DWT fallback even when this port has DWT.
+// Runtime delays use calibrated assembly loops, never DWT.
+// Keep separate measured defaults for 128 MHz and 64 MHz; any intermediate
+// CPU rate uses the cached loop cost without enabling trace hardware.
 static ArmDelayCalibration_t s_DelayCalibration;
 
 void SystemCoreClockUpdate(void)
@@ -107,8 +108,8 @@ void SystemCoreClockUpdate(void)
 #endif
 	SystemCoreClock = cpuHz;
 
-	// Always update the assembly fallback, even when this compilation unit
-	// uses DWT. Other translation units can select the non-DWT path.
+	// Refresh the runtime assembly-loop factors whenever HCLK changes.
+	// This path never enables DWT or debug/trace clocks.
 	if (s_DelayCalibration.UsCycles == 0U ||
 		s_DelayCalibration.CpuHz != cpuHz)
 	{
