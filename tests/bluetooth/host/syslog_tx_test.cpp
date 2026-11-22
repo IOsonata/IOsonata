@@ -110,7 +110,8 @@ void TestBufferedBeforeSink()
 	MakeIntrf(&intrf);
 	SysLogSetSink(&log, &intrf, 0);
 
-	CHECK(SysLogFlush(&log) == 13);
+	CHECK(SysLogFlush(&log) == 6);
+	CHECK(SysLogFlush(&log) == 7);
 	CHECK(SysLogFlush(&log) == 0);
 	CHECK(s_TxCalls == 2);
 	CHECK(s_CapturedLen == 13);
@@ -165,7 +166,8 @@ void TestConsecutivePrintfLineEndings()
 	CHECK(SysLogPrintf(&log, "%s", second) == secondLen);
 	SysLogSetSink(&log, &intrf, 0);
 	ResetCapture();
-	CHECK(SysLogFlush(&log) == firstLen + secondLen);
+	CHECK(SysLogFlush(&log) == firstLen);
+	CHECK(SysLogFlush(&log) == secondLen);
 	CHECK(s_CapturedLen == firstLen + secondLen);
 	CHECK(std::memcmp(s_Captured, first, (size_t)firstLen) == 0);
 	CHECK(std::memcmp(s_Captured + firstLen, second, (size_t)secondLen) == 0);
@@ -253,7 +255,9 @@ void TestPartialRecordEvicted()
 	CHECK(CFifoUsed(log.hFifo) == 2);
 
 	ResetCapture();
-	CHECK(SysLogFlush(&log) == 13);
+	CHECK(SysLogFlush(&log) == 2);
+	CHECK(SysLogFlush(&log) == 6);
+	CHECK(SysLogFlush(&log) == 5);
 	CHECK(s_CapturedLen == 13);
 	CHECK(std::memcmp(s_Captured, "e\nthree\nfour\n", 13) == 0);
 	CHECK(log.TxLen == 0 && log.TxSent == 0);
@@ -357,7 +361,8 @@ void TestBufferedDropIsRecordBased()
 	ResetCapture();
 	SysLogSetSink(&log, &intrf, 0);
 
-	CHECK(SysLogFlush(&log) == 10);
+	CHECK(SysLogFlush(&log) == 4);
+	CHECK(SysLogFlush(&log) == 6);
 	CHECK(s_TxCalls == 2);
 	CHECK(s_CapturedLen == 10);
 	CHECK(std::memcmp(s_Captured, "two\nthree\n", 10) == 0);
@@ -619,6 +624,8 @@ void TestAutoSendRetriesOnNextRecord()
 
 	s_ChunkLimit = 512;
 	CHECK(SysLogPrintf(&log, "two\n") == 4);
+	CHECK(s_CapturedLen == 4);
+	CHECK(SysLogFlush(&log) == 4);
 	CHECK(s_CapturedLen == 8);
 	CHECK(std::memcmp(s_Captured, "one\ntwo\n", 8) == 0);
 }
@@ -643,7 +650,8 @@ void TestStoredRecordsGoOutOnSinkAttach()
 	CHECK(s_TxCalls == 0);
 
 	SysLogSetSink(&log, &intrf, 0);
-	CHECK(SysLogFlush(&log) == 8);
+	CHECK(SysLogFlush(&log) == 4);
+	CHECK(SysLogFlush(&log) == 4);
 	CHECK(std::memcmp(s_Captured, "one\ntwo\n", 8) == 0);
 }
 
