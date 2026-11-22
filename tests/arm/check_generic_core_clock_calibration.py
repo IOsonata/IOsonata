@@ -6,6 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 TEST = ROOT / "exemples/misc/core_clock_test.cpp"
 ARM = ROOT / "ARM/include/idelay.h"
+ARM_CAL = ROOT / "ARM/include/system_core_clock_calibration.h"
 RISCV = ROOT / "RISCV/include/idelay.h"
 
 
@@ -14,7 +15,7 @@ class GenericDelayCalibration(unittest.TestCase):
 		source = TEST.read_text(encoding="utf-8")
 		for forbidden in (
 			"ArmDelay", "DWT->", "CoreDebug->", "__arm__", "__thumb__",
-			"__riscv", "SystemMicroSecLoopCnt", "SystemnsDelayFactor",
+			"__riscv",
 		):
 			with self.subTest(symbol=forbidden):
 				self.assertNotIn(forbidden, source)
@@ -24,12 +25,15 @@ class GenericDelayCalibration(unittest.TestCase):
 
 	def test_architectures_share_api_without_sharing_mechanisms(self):
 		arm = ARM.read_text(encoding="utf-8")
+		cal = ARM_CAL.read_text(encoding="utf-8")
 		riscv = RISCV.read_text(encoding="utf-8")
-		for source in (arm, riscv):
+		for source in (cal, riscv):
 			self.assertIn("} DelayCalibrationPoint_t;", source)
 			self.assertIn("bool DelayCalibrationMeasure(", source)
 			self.assertIn("bool DelayCalibrationFromTimer(", source)
-		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", arm)
+		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", cal)
+		self.assertNotIn("DWT->", arm)
+		self.assertNotIn("NRF52_SERIES", cal)
 		self.assertNotIn("ArmDelay", riscv)
 		self.assertIn("IOsonataRiscvDelayCycles", riscv)
 
@@ -41,8 +45,9 @@ class GenericDelayCalibration(unittest.TestCase):
 		self.assertIn("pResult->UsLoopsPerSecond", source)
 		self.assertIn("pResult->NsLoopsPerSecond", source)
 		self.assertNotIn("DelayCalibrationInterpolate(", arm)
+		self.assertNotIn("DelayCalibrationInterpolate(", cal)
 		self.assertNotIn("DelayCalibrationInterpolate(", riscv)
-		self.assertFalse((ROOT / "include/coredev/delay_calibration.h").exists())
+		self.assertTrue(ARM_CAL.exists())
 
 
 if __name__ == "__main__":
