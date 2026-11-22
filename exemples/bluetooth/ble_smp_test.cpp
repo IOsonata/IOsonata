@@ -106,7 +106,7 @@ McuOsc_t g_McuOsc = MCU_OSC;
 // UART trace
 //-----------------------------------------------------------------------------
 
-int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int UartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void SmpValueWriteCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
 
 #define UARTFIFOSIZE		CFIFO_MEMSIZE(256)
@@ -126,7 +126,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 6,
-	.EvtCallback = UartEvthandler,
+	.EvtCB = UartEvthandler,
 	.bFifoBlocking = true,
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
@@ -209,7 +209,7 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.bBlocking = false
 };
 
-int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int UartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	(void)pDev;
 	(void)EvtId;

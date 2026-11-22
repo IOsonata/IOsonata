@@ -81,15 +81,15 @@ static int BtHciUartH4TxRoom(BtHciH4Dev_t * const pH4)
 
 // UART event handler, in the UART interrupt. Only reports that bytes arrived,
 // the framing runs in the owner context.
-static int BtHciUartEvtHandler(UARTDev_t * const pUart, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+static int BtHciUartEvtHandler(DevIntrf_t * const pUart, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	(void)pBuffer;
 	(void)BufferLen;
 
 	// Uart is the first member of the transport
-	BtHciUartDev_t *dev = (BtHciUartDev_t *)pUart;
+	BtHciUartDev_t *dev = (BtHciUartDev_t *)((uint8_t *)pUart - offsetof(UARTDev_t, DevIntrf));
 
-	if (EvtId == UART_EVT_RXDATA || EvtId == UART_EVT_RXTIMEOUT)
+	if (EvtId == DEVINTRF_EVT_RX_DATA || EvtId == DEVINTRF_EVT_RX_TIMEOUT)
 	{
 		BtHciH4RxNotify(&dev->H4);
 	}
@@ -136,7 +136,7 @@ bool BtHciUartInit(BtHciUartDev_t * const pDev, const BtHciUartCfg_t *pCfg)
 	UARTCfg_t ucfg = *pCfg->pUartCfg;
 	ucfg.bIntMode = true;
 	ucfg.bFifoBlocking = true;
-	ucfg.EvtCallback = BtHciUartEvtHandler;
+	ucfg.EvtCB = BtHciUartEvtHandler;
 
 	if (UARTInit(&pDev->Uart, &ucfg) == false)
 	{

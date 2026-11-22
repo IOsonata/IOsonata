@@ -59,7 +59,7 @@ struct UartModel {
 static UartModel s_Model[LPCUART_DEV_COUNT];
 static bool s_Irq[64];
 static uint32_t s_Priority[64];
-static int s_Events[4];
+static int s_Events[16];
 static UARTDev_t s_Uart[LPCUART_DEV_COUNT];
 static int s_PinConfigs;
 static int s_RegWrites;
@@ -251,7 +251,7 @@ static void ModelWrite(int No, const char *Reg, uint32_t Value)
 #include "../../../src/cfifo.c"
 #include "../../../src/device_intrf.cpp"
 
-static int Callback(UARTDev_t *, UART_EVT Event, uint8_t *, int)
+static int Callback(DevIntrf_t *, DEVINTRF_EVT Event, uint8_t *, int)
 {
 	s_Events[Event]++;
 	return 0;
@@ -300,7 +300,7 @@ static void DriverTest()
 	cfg.Parity = UART_PARITY_EVEN;
 	cfg.StopBits = 1;
 	cfg.bFifoBlocking = true;
-	cfg.EvtCallback = Callback;
+	cfg.EvtCB = Callback;
 	uint8_t data[65];
 	for (int i = 0; i < 65; i++)
 	{
@@ -345,7 +345,7 @@ static void DriverTest()
 		}
 		assert(sent == sizeof(data));
 		assert(model.Tx == std::vector<uint8_t>(data, data + sizeof(data)));
-		assert(uart.bTxReady && s_Events[UART_EVT_TXREADY]);
+		assert(uart.bTxReady && s_Events[DEVINTRF_EVT_TX_READY]);
 
 		for (int i = 0; i < 32; i++)
 		{

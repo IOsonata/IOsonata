@@ -147,7 +147,7 @@ uint32_t R9a02SauSnoozeSrcHz(void);
 /// In Software Standby a start bit on RxD starts Snooze, the UART receives
 /// the character without the CPU. A good character wakes the CPU: the
 /// Snooze end interrupt puts it in the RX CFIFO and the UART back in normal
-/// operation, then UART_EVT_RXDATA. A character with an error sends the MCU
+/// operation, then DEVINTRF_EVT_RX_DATA. A character with an error sends the MCU
 /// back to Software Standby (SCRm1.EOC = 1, SSCm.SSEC = 1, figure 23.41).
 ///
 /// Enabling sets up Snooze with R9a02SnoozeSet (request RxD, wake-up on the

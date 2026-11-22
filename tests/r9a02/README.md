@@ -197,10 +197,10 @@ at each read. It checks, for the HOCO at 32 and 24 MHz and 4800 and 9600 bps:
 - The TX CFIFO sent before the channels stop, at the enabling and at the
   standby entry, none cut; the transmission going on after a rate change.
 - A character received in Snooze, with BFF set by it or not: it reaches the
-  RX CFIFO once with one `UART_EVT_RXDATA`, the UART is back in normal
+  RX CFIFO once with one `DEVINTRF_EVT_RX_DATA`, the UART is back in normal
   operation and the next characters are received; an ICU_SNZCANCEL request
   left from Normal mode dropped.
-- An answer sent from `UART_EVT_RXDATA`, after the wake-up and for a
+- An answer sent from `DEVINTRF_EVT_RX_DATA`, after the wake-up and for a
   character the standby hook takes (sent after the wake-up); Snooze turned
   off and the UART disabled from that event while the channel is set for
   Snooze; another Snooze set up replacing it (not set for Snooze, kept when

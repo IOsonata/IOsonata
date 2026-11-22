@@ -611,7 +611,7 @@ static void R9a02UartSnzRestore(R9a02UartDev_t * const pDev)
 // error flags are not set (SSEC = 1) and with SWC = 1 the manual does not
 // say that BFF follows, the reception end alone tells that it is there.
 // The receive channel goes back to normal operation at once, for the next
-// character, before UART_EVT_RXDATA.
+// character, before DEVINTRF_EVT_RX_DATA.
 static void R9a02UartSnzWake(void *pCtx)
 {
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pCtx;
@@ -639,9 +639,9 @@ static void R9a02UartSnzWake(void *pCtx)
 
 	EnableInterrupt(state);
 
-	if (put && udev->EvtCallback)
+	if (put && udev->DevIntrf.EvtCB)
 	{
-		udev->EvtCallback(udev, UART_EVT_RXDATA, NULL, CFifoUsed(udev->hRxFifo));
+		udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(udev->hRxFifo));
 	}
 }
 
@@ -653,15 +653,15 @@ static void R9a02UartRxIRQHandler(int IntNo, void *pCtx)
 	uint8_t err = 0;
 	int cnt = R9a02UartRxHw(dev, &err);
 
-	if (udev->EvtCallback)
+	if (udev->DevIntrf.EvtCB)
 	{
 		if (err)
 		{
-			udev->EvtCallback(udev, UART_EVT_LINESTATE, &err, 1);
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_STATECHG, &err, 1);
 		}
 		if (cnt > 0)
 		{
-			udev->EvtCallback(udev, UART_EVT_RXDATA, NULL, CFifoUsed(udev->hRxFifo));
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(udev->hRxFifo));
 		}
 	}
 }
@@ -670,9 +670,9 @@ static void R9a02UartRxIRQHandler(int IntNo, void *pCtx)
 // around every SDR write.
 __attribute__((noinline)) static void R9a02UartTxNotify(UARTDev_t * const pDev)
 {
-	if (pDev->DevIntrf.bIntEn && pDev->EvtCallback)
+	if (pDev->DevIntrf.bIntEn && pDev->DevIntrf.EvtCB)
 	{
-		pDev->EvtCallback(pDev, UART_EVT_TXREADY, NULL, CFifoAvail(pDev->hTxFifo));
+		pDev->DevIntrf.EvtCB(&pDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(pDev->hTxFifo));
 	}
 }
 
@@ -729,9 +729,9 @@ static void R9a02UartTxDmaIRQHandler(int IntNo, void *pCtx)
 
 	EnableInterrupt(state);
 
-	if (udev->bTxReady && udev->DevIntrf.bIntEn && udev->EvtCallback)
+	if (udev->bTxReady && udev->DevIntrf.bIntEn && udev->DevIntrf.EvtCB)
 	{
-		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+		udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
 	}
 }
 
@@ -1153,15 +1153,15 @@ static void R9a02UartSnzHook(bool bEnter, void *pCtx)
 	// An answer sent from here waits in the TX CFIFO until the wake-up
 	UARTDev_t *udev = dev->pUartDev;
 
-	if (udev->EvtCallback != NULL)
+	if (udev->DevIntrf.EvtCB != NULL)
 	{
 		if (err)
 		{
-			udev->EvtCallback(udev, UART_EVT_LINESTATE, &err, 1);
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_STATECHG, &err, 1);
 		}
 		if (cnt > 0)
 		{
-			udev->EvtCallback(udev, UART_EVT_RXDATA, NULL, CFifoUsed(udev->hRxFifo));
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(udev->hRxFifo));
 		}
 	}
 }
@@ -1501,7 +1501,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->LineState = 0;
 	pDev->bRxReady = false;
 	pDev->bTxReady = true;
@@ -1515,7 +1515,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
-	pDev->DevIntrf.EvtCB = NULL;
+	// EvtCB was initialized from UARTCfg_t; do not overwrite it.
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.Reset = NULL;
 	pDev->DevIntrf.GetHandle = R9a02UartGetHandle;

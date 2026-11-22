@@ -225,10 +225,10 @@ class HfxoSourceChecks(unittest.TestCase):
         source = (ROOT / "exemples/misc/hfxo_test.cpp").read_text(
             encoding="utf-8")
         self.assertIn(".bIntMode = true", source)
-        self.assertIn(".EvtCallback = HfxoUartEvent", source)
-        callback = function(source, "static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event,",
+        self.assertIn(".EvtCB = HfxoUartEvent", source)
+        callback = function(source, "static int HfxoUartEvent(DevIntrf_t *pDev, DEVINTRF_EVT Event,",
                             "static void HfxoConsoleInit(void)")
-        self.assertIn("UART_EVT_TXREADY", callback)
+        self.assertIn("DEVINTRF_EVT_TX_READY", callback)
         self.assertIn("__SEV();", callback)
         drain = function(source, "static void HfxoConsoleDrain(void)",
                          "#else")
@@ -522,10 +522,10 @@ class HfxoSourceChecks(unittest.TestCase):
         source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
             encoding="utf-8")
         self.assertIn(".bIntMode = true", source)
-        self.assertIn(".EvtCallback = HfxoUartEvent", source)
+        self.assertIn(".EvtCB = HfxoUartEvent", source)
         callback = function(source, "static int HfxoUartEvent(",
                             "static const IOPinCfg_t")
-        self.assertIn("UART_EVT_TXREADY", callback)
+        self.assertIn("DEVINTRF_EVT_TX_READY", callback)
         self.assertIn("__SEV();", callback)
         drain = function(source, "static void HfxoConsoleDrain(void)",
                          "#else")

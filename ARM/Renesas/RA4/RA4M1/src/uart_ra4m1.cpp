@@ -774,10 +774,10 @@ static bool Ra4m1UartDmaService(Ra4m1UartDev_t * const pDev)
 
 	Ra4m1UartDmaTxIdle(pDev);
 	udev->bTxReady = true;
-	if (udev->DevIntrf.bIntEn && udev->EvtCallback)
+	if (udev->DevIntrf.bIntEn && udev->DevIntrf.EvtCB)
 	{
 		// Length is the free space in the TX FIFO
-		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+		udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
 	}
 
 	return true;
@@ -875,19 +875,19 @@ static void Ra4m1UartIRQHandler(int IntNo, void *pCtx)
 		Ra4m1AcknowledgeInt(dev->IrqEri);
 	}
 
-	if (udev->EvtCallback)
+	if (udev->DevIntrf.EvtCB)
 	{
 		if (err)
 		{
-			udev->EvtCallback(udev, UART_EVT_LINESTATE, &err, 1);
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_STATECHG, &err, 1);
 		}
 		if (rxcnt > 0)
 		{
-			udev->EvtCallback(udev, UART_EVT_RXDATA, NULL, CFifoUsed(udev->hRxFifo));
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(udev->hRxFifo));
 		}
 		if (txevt)
 		{
-			udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
 		}
 	}
 }
@@ -1524,7 +1524,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->LineState = 0;
 	pDev->bRxReady = false;
 	pDev->bTxReady = true;
@@ -1538,7 +1538,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
-	pDev->DevIntrf.EvtCB = NULL;
+	// EvtCB was initialized from UARTCfg_t; do not overwrite it.
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.Reset = NULL;
 	pDev->DevIntrf.GetHandle = Ra4m1UartGetHandle;

@@ -42,7 +42,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "board.h"
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE			CFIFO_MEMSIZE(64)
 
@@ -67,7 +67,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 1, 					// use APP_IRQ_PRIORITY_LOW with Softdevice
-	.EvtCallback = nRFUartEvthandler,
+	.EvtCB = nRFUartEvthandler,
 	.bFifoBlocking = true,				// fifo blocking mode
 	.RxMemSize = 0,
 	.pRxMem = NULL,
@@ -78,20 +78,20 @@ static const UARTCfg_t s_UartCfg = {
 
 UART g_Uart;
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];
 
 	switch (EvtId)
 	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
+		case DEVINTRF_EVT_RX_TIMEOUT:
+		case DEVINTRF_EVT_RX_DATA:
 
 			break;
-		case UART_EVT_TXREADY:
+		case DEVINTRF_EVT_TX_READY:
 			break;
-		case UART_EVT_LINESTATE:
+		case DEVINTRF_EVT_STATECHG:
 			break;
 	}
 

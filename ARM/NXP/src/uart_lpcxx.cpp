@@ -391,23 +391,23 @@ void LpcUARTIrqHandler(int DevNo)
 	}
 	EnableInterrupt(state);
 
-	if (uart->EvtCallback != NULL)
+	if (uart->DevIntrf.EvtCB != NULL)
 	{
 		if (errors != 0 || modem)
 		{
 			uint32_t line = uart->LineState | errors;
 
-			uart->EvtCallback(uart, UART_EVT_LINESTATE, (uint8_t *)&line, sizeof(line));
+			uart->DevIntrf.EvtCB(&uart->DevIntrf, DEVINTRF_EVT_STATECHG, (uint8_t *)&line, sizeof(line));
 		}
 		if (rx)
 		{
-			UART_EVT evt = rxtimeout ? UART_EVT_RXTIMEOUT : UART_EVT_RXDATA;
+			DEVINTRF_EVT evt = rxtimeout ? DEVINTRF_EVT_RX_TIMEOUT : DEVINTRF_EVT_RX_DATA;
 
-			uart->EvtCallback(uart, evt, NULL, CFifoUsed(uart->hRxFifo));
+			uart->DevIntrf.EvtCB(&uart->DevIntrf, evt, NULL, CFifoUsed(uart->hRxFifo));
 		}
 		if (tx)
 		{
-			uart->EvtCallback(uart, UART_EVT_TXREADY, NULL, CFifoAvail(uart->hTxFifo));
+			uart->DevIntrf.EvtCB(&uart->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(uart->hTxFifo));
 		}
 	}
 }
@@ -768,7 +768,7 @@ bool UARTInit(UARTDev_t *pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAInvert = pCfg->bIrDAInvert;
 	pDev->bIrDAFixPulse = pCfg->bIrDAFixPulse;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->LineState = 0;
 	pDev->RxOvrErrCnt = 0;
 	pDev->ParErrCnt = 0;
@@ -791,7 +791,7 @@ bool UARTInit(UARTDev_t *pDev, const UARTCfg_t *pCfg)
 			pDev->DevIntrf.IntPrio = maxprio;
 		}
 	}
-	pDev->DevIntrf.EvtCB = NULL;
+	// EvtCB was initialized from UARTCfg_t; do not overwrite it.
 	pDev->DevIntrf.MaxRetry = 0;
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.bDma = false;

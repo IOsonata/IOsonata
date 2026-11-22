@@ -1201,15 +1201,15 @@ static uint8_t s_LastLine;
 static int s_RefillLeft;
 static const uint8_t *s_pRefill;
 
-static int EvtHandler(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+static int EvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	switch (EvtId)
 	{
-		case UART_EVT_RXDATA:
+		case DEVINTRF_EVT_RX_DATA:
 			s_EvtRx++;
 			CHECK(BufferLen == CFifoUsed(pDev->hRxFifo));
 			break;
-		case UART_EVT_TXREADY:
+		case DEVINTRF_EVT_TX_READY:
 			s_EvtTx++;
 			CHECK(BufferLen == CFifoAvail(pDev->hTxFifo));
 			if (s_RefillLeft > 0)
@@ -1220,7 +1220,7 @@ static int EvtHandler(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, 
 				s_RefillLeft -= n;
 			}
 			break;
-		case UART_EVT_LINESTATE:
+		case DEVINTRF_EVT_STATECHG:
 			s_EvtLine++;
 			CHECK(BufferLen == 1 && pBuffer != NULL);
 			s_LastLine = pBuffer ? *pBuffer : 0;
@@ -1300,7 +1300,7 @@ static UARTCfg_t Cfg(int DevNo, bool bIntMode, bool bDma = false)
 	cfg.FlowControl = UART_FLWCTRL_NONE;
 	cfg.bIntMode = bIntMode;
 	cfg.IntPrio = 1;
-	cfg.EvtCallback = NULL;
+	cfg.EvtCB = NULL;
 	cfg.bFifoBlocking = true;
 	cfg.RxMemSize = sizeof(s_RxMem);
 	cfg.pRxMem = s_RxMem;
@@ -1823,10 +1823,10 @@ static std::vector<uint8_t> s_LockRx;
 static std::deque<uint8_t> s_LockEcho;
 static bool s_bLockEcho;
 
-static int LockEvtHandler(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+static int LockEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
-	CHECK(g_TestBasePri == 0 || EvtId == UART_EVT_RXDATA || EvtId == UART_EVT_LINESTATE);
-	if (EvtId == UART_EVT_RXDATA || EvtId == UART_EVT_TXREADY)
+	CHECK(g_TestBasePri == 0 || EvtId == DEVINTRF_EVT_RX_DATA || EvtId == DEVINTRF_EVT_STATECHG);
+	if (EvtId == DEVINTRF_EVT_RX_DATA || EvtId == DEVINTRF_EVT_TX_READY)
 	{
 		uint8_t b[16];
 		int n;
@@ -1871,7 +1871,7 @@ static void TestTxLockPreempt(void)
 					ResetModel();
 					s_DmaHold = hold;
 					UARTCfg_t cfg = Cfg(u, true, true);
-					cfg.EvtCallback = LockEvtHandler;
+					cfg.EvtCB = LockEvtHandler;
 					CHECK(UARTInit(&s_Uart, &cfg) == true);
 					CHECK(s_Ra4m1UartDev[u].TxBasePri != 0);
 					s_LockRx.clear();
@@ -1933,7 +1933,7 @@ static void TestTxLockPreempt(void)
 							// TX that went idle in a TxData call gives no TX ready
 							// event, the echo left over is sent from here
 							uint32_t state = DisableInterrupt();
-							LockEvtHandler(&s_Uart, UART_EVT_TXREADY, NULL, 0);
+							LockEvtHandler(&s_Uart.DevIntrf, DEVINTRF_EVT_TX_READY, NULL, 0);
 							EnableInterrupt(state);
 							RunLine(1);
 						}
@@ -2208,7 +2208,7 @@ static void TestErrors(void)
 	// No FIFO, interrupt : ERI, line state callback, break
 	ResetModel();
 	cfg = Cfg(3, true);
-	cfg.EvtCallback = EvtHandler;
+	cfg.EvtCB = EvtHandler;
 	CHECK(UARTInit(&s_Uart, &cfg) == true);
 	s_Sci[3].bRxdLow = true;
 	s_Sci[3].RxIn = { (uint16_t)(0 | C_FER) };
@@ -2226,7 +2226,7 @@ static void TestErrors(void)
 	// FIFO, interrupt : overrun reported through ERI
 	ResetModel();
 	cfg = Cfg(1, true);
-	cfg.EvtCallback = EvtHandler;
+	cfg.EvtCB = EvtHandler;
 	CHECK(UARTInit(&s_Uart, &cfg) == true);
 	s_Sci[1].Scr &= ~RIE;			// Interrupt held off, the FIFO fills
 	for (int i = 0; i < 18; i++)
@@ -2294,7 +2294,7 @@ static void TestCallbacks(void)
 	{
 		ResetModel();
 		UARTCfg_t cfg = Cfg(u, true);
-		cfg.EvtCallback = EvtHandler;
+		cfg.EvtCB = EvtHandler;
 		CHECK(UARTInit(&s_Uart, &cfg) == true);
 
 		// RX data events

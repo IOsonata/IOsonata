@@ -741,7 +741,7 @@ for hoco, rate, prs, stclk, snzstclk in ((32000000, 9600, 4, 103, 106), (3200000
     SNZ_CANCEL_NORMAL[0] = False
     SNZ_ROUTE_IR[0] = True
     SNZ_BFF[0] = False
-    # The answer sent from UART_EVT_RXDATA leaves in normal operation
+    # The answer sent from DEVINTRF_EVT_RX_DATA leaves in normal operation
     si("g_CbMode", 1)
     ua.tx.clear()
     c = random.randrange(256)

@@ -106,12 +106,6 @@ typedef enum {
 
 #define UART_RETRY_MAX			100
 
-typedef enum {
-	UART_EVT_RXTIMEOUT,
-	UART_EVT_RXDATA,
-	UART_EVT_TXREADY,
-	UART_EVT_LINESTATE,
-} UART_EVT;
 
 // Hardware UART/UARTE event registers on the configured nRF52 instance.
 // Legacy UART and EasyDMA UARTE share UART0 hardware but not task modes.
@@ -138,25 +132,6 @@ typedef struct __Uart_Dev UARTDev_t;
 typedef UARTDev_t	UARTDEV;
 
 
-/**
- * @brief	Event handler callback. This is normally being called within interrupts, avoid blocking
- *
- * @param pDev : Device handle
- * @param EvtId : Event code
- * @param pBuffer : In/Out Buffer containing data
- * 					- on UART_EVT_RXTIMEOUT & UART_EVT_RXDATA, buffer contains data received. If
- * 					driver implements CFIFO, this parameter is NULL with BufferLen indicating total data
- * 					in FIFO.
- * 					- on UART_EVT_TXREADY, buffer allocated for data to be transmit with max length
- * 					BufferLen (FIFO size). If driver implements CFIFO, this parameter is NULL and BufferLen
- * 					indicates max available space in FIFO
- * 					- on UART_EVT_LINESTATE, buffer contains 1 byte Line Status
- * @param BufferLen : Max buffer length.  See above description
- *
- * @return number of bytes written to pBuffer for transmit
- */
-typedef int (*UARTEvtHandler_t)(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-typedef UARTEvtHandler_t	UARTEVTCB;
 
 #pragma pack(push, 4)
 
@@ -172,7 +147,7 @@ typedef struct {
 	UART_FLWCTRL FlowControl;	//!< Flow control
 	bool bIntMode;				//!< Enable interrupt support
 	int IntPrio;				//!< Interrupt priority
-	UARTEvtHandler_t EvtCallback;		//!< UART event callback
+	DevIntrfEvtHandler_t EvtCB;	//!< Generic DeviceIntrf event callback
 	bool bFifoBlocking;			//!< CFIFO operating mode, false : drop when full
 	int RxMemSize;				//!< Memory size in bytes for Rx CFIFO
 	uint8_t *pRxMem;			//!< Pointer to memory allocated for RX CFIFO
@@ -203,7 +178,7 @@ struct __Uart_Dev {
 	bool bIrDAFixPulse;			//!< Enable IrDA fix pulse
 	int	IrDAPulseDiv;			//!< Fix pulse divider
 	DevIntrf_t DevIntrf;			//!< Device interface implementation
-	UARTEvtHandler_t EvtCallback;		//!< UART event callback
+
 	void *pObj;					//!< Pointer to UART object instance
 	hCFifo_t hRxFifo;				//!< Rx FIFO handle
 	hCFifo_t hTxFifo;				//!< Tx Fifo handle

@@ -35,7 +35,7 @@
 		                 last byte to DATA. RX as without DMA: the USART has
 		                 no idle line event to move a DMA ring after a short
 		                 burst. With bIntMode the DMAC interrupt ends the
-		                 blocks and sends UART_EVT_TXREADY when the TX CFIFO
+		                 blocks and sends DEVINTRF_EVT_TX_READY when the TX CFIFO
 		                 is empty; without it TxData and RxData do.
 
 @author	Hoang Nguyen Hoan
@@ -378,10 +378,10 @@ static void SamdUartDmaHandler(int Chan, uint32_t Flags, void *pCtx)
 	}
 	EnableInterrupt(state);
 
-	if (!run && udev->EvtCallback)
+	if (!run && udev->DevIntrf.EvtCB)
 	{
 		// Length is the free space in the TX FIFO
-		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+		udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
 	}
 }
 
@@ -426,9 +426,9 @@ static void SamdUartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	if (flags & (SERCOM_USART_INT_INTFLAG_RXC_Msk | SERCOM_USART_INT_INTFLAG_ERROR_Msk))
 	{
 		SamdUartPollRxRead(dev);
-		if (udev->EvtCallback)
+		if (udev->DevIntrf.EvtCB)
 		{
-			udev->EvtCallback(udev, UART_EVT_RXDATA, NULL, CFifoUsed(udev->hRxFifo));
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(udev->hRxFifo));
 		}
 	}
 
@@ -446,10 +446,10 @@ static void SamdUartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			// FIFO empty, DRE disabled so that it does not keep interrupting
 			reg->SERCOM_INTENCLR = SERCOM_USART_INT_INTENCLR_DRE_Msk;
 			udev->bTxReady = true;
-			if (udev->EvtCallback)
+			if (udev->DevIntrf.EvtCB)
 			{
 				// Length is the free space in the TX FIFO
-				udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+				udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
 			}
 		}
 	}
@@ -1202,7 +1202,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->bRxReady = false;
 	pDev->bTxReady = true;
 	pDev->RxOvrErrCnt = 0;
@@ -1215,7 +1215,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
-	pDev->DevIntrf.EvtCB = NULL;
+	// EvtCB was initialized from UARTCfg_t; do not overwrite it.
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.GetHandle = SamdUartGetHandle;
 	pDev->DevIntrf.Reset = SamdUartReset;

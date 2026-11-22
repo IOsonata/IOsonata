@@ -51,7 +51,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
 static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOMEMSIZE			CFIFO_MEMSIZE(256)
 
@@ -71,7 +71,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 1,
-	.EvtCallback = NULL,//nRFUartEvthandler,
+	.EvtCB = NULL,//nRFUartEvthandler,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = NULL,

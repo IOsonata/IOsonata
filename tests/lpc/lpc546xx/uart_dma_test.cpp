@@ -274,10 +274,10 @@ static const IOPinCfg_t s_UartPins[] = {
 static int s_TxReadyCnt = 0;
 static int s_TxReadyLen = -1;
 
-static int UartEvt(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+static int UartEvt(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	(void)pDev; (void)pBuffer;
-	if (EvtId == UART_EVT_TXREADY)
+	if (EvtId == DEVINTRF_EVT_TX_READY)
 	{
 		s_TxReadyCnt++;
 		s_TxReadyLen = BufferLen;
@@ -301,7 +301,7 @@ static UARTCfg_t UartCfg(bool bInt, bool bDma, bool bBlocking, uint8_t *pTxMem, 
 	cfg.FlowControl = UART_FLWCTRL_NONE;
 	cfg.bIntMode = bInt;
 	cfg.IntPrio = 3;
-	cfg.EvtCallback = UartEvt;
+	cfg.EvtCB = UartEvt;
 	cfg.bFifoBlocking = bBlocking;
 	cfg.TxMemSize = TxMemSize;
 	cfg.pTxMem = pTxMem;

@@ -184,7 +184,7 @@ static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
 
 int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
-int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int UartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define UARTFIFOSIZE				CFIFO_MEMSIZE(256)
 
@@ -206,7 +206,7 @@ const UARTCfg_t g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
 	.bIntMode = true,					// Interrupt mode
 	.IntPrio = IRQ_PRIO_LOW,			// Interrupt priority
-	.EvtCallback = UartEvthandler,		// UART event handler
+	.EvtCB = UartEvthandler,		// UART event handler
 	.bFifoBlocking = true,				// Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
@@ -410,27 +410,27 @@ static void SysLogFlushEvt(uint32_t Evt, void *pCtx)
 	(void)SysLogFlush(SysLogGet());
 }
 
-int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int UartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];
 
 	switch (EvtId)
 	{
-		case UART_EVT_RXTIMEOUT:
+		case DEVINTRF_EVT_RX_TIMEOUT:
 			s_bUartRxTimeout = true;
 			UartRxQue();
 			break;
-		case UART_EVT_RXDATA:
+		case DEVINTRF_EVT_RX_DATA:
 			UartRxQue();
 			break;
-		case UART_EVT_TXREADY:
+		case DEVINTRF_EVT_TX_READY:
 			if (CFifoPeek(SysLogGet()->hFifo) != nullptr)
 			{
 				SysLogFlushQue();
 			}
 			break;
-		case UART_EVT_LINESTATE:
+		case DEVINTRF_EVT_STATECHG:
 			break;
 	}
 

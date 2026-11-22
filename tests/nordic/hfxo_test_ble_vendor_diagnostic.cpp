@@ -64,14 +64,14 @@ SOFTWARE.
 
 // ENDTX is handled by the UART driver interrupt. Wake the foreground
 // drain when DMA completes, without polling UARTE registers.
-static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event, uint8_t *pBuffer,
+static int HfxoUartEvent(DevIntrf_t *pDev, DEVINTRF_EVT Event, uint8_t *pBuffer,
 	int BufferLen)
 {
 	(void)pDev;
 	(void)pBuffer;
 	(void)BufferLen;
 
-	if (Event == UART_EVT_TXREADY)
+	if (Event == DEVINTRF_EVT_TX_READY)
 	{
 		__SEV();
 	}
@@ -94,7 +94,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 6,
-	.EvtCallback = HfxoUartEvent,
+	.EvtCB = HfxoUartEvent,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = nullptr,

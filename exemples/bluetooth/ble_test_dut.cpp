@@ -226,7 +226,7 @@ static uint8_t s_UartRxFifo[DUT_UART_FIFO_SIZE];
 static uint8_t s_UartTxFifo[DUT_UART_FIFO_SIZE];
 static IOPinCfg_t s_UartPins[] = UART_PINS;
 
-static int UartEvtHandler(UARTDev_t *pDev, UART_EVT EvtId,
+static int UartEvtHandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId,
 	uint8_t *pBuffer, int BufferLen);
 static int DutBleIntrfEvtHandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId,
 	uint8_t *pBuffer, int BufferLen);
@@ -246,7 +246,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = IRQ_PRIO_LOW,
-	.EvtCallback = UartEvtHandler,
+	.EvtCB = UartEvtHandler,
 	.bFifoBlocking = true,
 	.RxMemSize = DUT_UART_FIFO_SIZE,
 	.pRxMem = s_UartRxFifo,
@@ -1821,14 +1821,14 @@ static void DutUartHandler(uint32_t Evt, void *pCtx)
 	}
 }
 
-static int UartEvtHandler(UARTDev_t *pDev, UART_EVT EvtId,
+static int UartEvtHandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId,
 	uint8_t *pBuffer, int BufferLen)
 {
 	(void)pDev;
 	(void)pBuffer;
 	(void)BufferLen;
 
-	if (EvtId == UART_EVT_RXDATA || EvtId == UART_EVT_RXTIMEOUT)
+	if (EvtId == DEVINTRF_EVT_RX_DATA || EvtId == DEVINTRF_EVT_RX_TIMEOUT)
 	{
 		DutUartQue();
 	}

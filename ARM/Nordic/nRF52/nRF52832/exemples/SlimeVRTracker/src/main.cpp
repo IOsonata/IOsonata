@@ -117,7 +117,7 @@ volatile bool g_FdsCleaned = false;
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
-//int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+//int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
 
@@ -139,7 +139,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 1,
-	//.EvtCallback = nRFUartEvthandler,
+	//.EvtCB = nRFUartEvthandler,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,//UARTFIFOSIZE,
 	.pRxMem = NULL,//s_UartRxFifo,

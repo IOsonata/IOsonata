@@ -363,9 +363,9 @@ static void Esp32UartIRQHandler(ESP32_UARTDEV *pDev)
 		ESP32_UART_INT_CLR_REG(base) = ESP32_UART_INT_RXFIFO_FULL |
 			ESP32_UART_INT_RXFIFO_TOUT;
 		udev->bRxReady = CFifoUsed(udev->hRxFifo) > 0;
-		if (udev->EvtCallback != nullptr)
+		if (udev->DevIntrf.EvtCB != nullptr)
 		{
-			udev->EvtCallback(udev, UART_EVT_RXDATA, nullptr,
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_RX_DATA, nullptr,
 				CFifoUsed(udev->hRxFifo));
 			if (!pDev->bEnabled)
 			{
@@ -380,9 +380,9 @@ static void Esp32UartIRQHandler(ESP32_UARTDEV *pDev)
 		{
 			ESP32_UART_INT_ENA_REG(base) &= ~ESP32_UART_INT_TXFIFO_EMPTY;
 			udev->bTxReady = true;
-			if (udev->EvtCallback != nullptr)
+			if (udev->DevIntrf.EvtCB != nullptr)
 			{
-				udev->EvtCallback(udev, UART_EVT_TXREADY, nullptr, 0);
+				udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, nullptr, 0);
 				if (!pDev->bEnabled)
 				{
 					return;
@@ -967,7 +967,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->FlowControl  = pCfg->FlowControl;
 	pDev->Mode         = pCfg->Mode;
 	pDev->Duplex       = pCfg->Duplex;
-	pDev->EvtCallback  = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->bRxReady     = false;
 	pDev->bTxReady     = true;
 	pDev->RxOvrErrCnt  = 0;

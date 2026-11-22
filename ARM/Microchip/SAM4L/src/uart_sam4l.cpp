@@ -223,9 +223,9 @@ void Sam4lUsartIrqHandler(SAM4L_UARTDEV *pDev)
 
 		} while ((csr & US_CSR_RXRDY) && (cnt-- > 0));
 
-		if (pDev->pUartDev->EvtCallback)
+		if (pDev->pUartDev->DevIntrf.EvtCB)
 		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_RXDATA, NULL, 0);
+			pDev->pUartDev->DevIntrf.EvtCB(&pDev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, 0);
 		}
 	}
 
@@ -250,9 +250,9 @@ void Sam4lUsartIrqHandler(SAM4L_UARTDEV *pDev)
 			csr = reg->US_CSR;
 		} while ((csr & US_CSR_TXRDY) && (cnt-- > 0));
 
-		if (pDev->pUartDev->EvtCallback)
+		if (pDev->pUartDev->DevIntrf.EvtCB)
 		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+			pDev->pUartDev->DevIntrf.EvtCB(&pDev->pUartDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, 0);
 		}
 	}
 
@@ -335,9 +335,9 @@ static void Sam4lPdcaTxIrqHandler(SAM4L_UARTDEV *pDev)
 		pDev->pUartDev->bTxReady = true;
 	}
 
-	if (pDev->pUartDev->EvtCallback)
+	if (pDev->pUartDev->DevIntrf.EvtCB)
 	{
-		pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+		pDev->pUartDev->DevIntrf.EvtCB(&pDev->pUartDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, 0);
 	}
 }
 
@@ -891,9 +891,9 @@ void Sam4lUartResumeSleep(void)
 			dev->bSleepPaused = false;
 		}
 	}
-	if (received && pDev != NULL && pDev->EvtCallback != NULL)
+	if (received && pDev != NULL && pDev->DevIntrf.EvtCB != NULL)
 	{
-		pDev->EvtCallback(pDev, UART_EVT_RXDATA, NULL, 0);
+		pDev->DevIntrf.EvtCB(&pDev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, 0);
 	}
 }
 
@@ -1063,7 +1063,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCFG *pCfg)
 	pDev->bIrDAMode         = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv      = pCfg->IrDAPulseDiv;
 	pDev->Parity            = pCfg->Parity;
-	pDev->EvtCallback       = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->DevIntrf.Disable  = Sam4lUartDisable;
 	pDev->DevIntrf.Enable   = Sam4lUartEnable;
 	pDev->DevIntrf.GetRate  = Sam4lUartGetRate;

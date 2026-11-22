@@ -114,7 +114,7 @@ typedef void (*BtHciUartRxHandler_t)(BtHciUartDev_t * const pDev, uint8_t Type,
 									 uint8_t *pPkt, uint16_t Len);
 
 typedef struct __Bt_Hci_Uart_Config {
-	const UARTCfg_t *pUartCfg;			//!< UART to the other side. EvtCallback is replaced by the transport,
+	const UARTCfg_t *pUartCfg;			//!< UART to the other side. EvtCB is replaced by the transport,
 										//!< interrupt mode and blocking FIFOs are forced. The TX FIFO must hold
 										//!< BT_HCI_UART_TXFIFO_MIN bytes. Hardware flow control is recommended.
 	uint8_t *pPktMem;					//!< Packet queue memory, BT_HCI_UART_PKTMEM_SIZE(n), word aligned
@@ -129,7 +129,7 @@ typedef struct __Bt_Hci_Uart_Config {
 } BtHciUartCfg_t;
 
 /// Transport state. Uart must stay the first member: the UART event handler
-/// gets the UART device and finds the transport from it.
+/// gets DeviceIntrf and finds the containing UART device.
 struct __Bt_Hci_Uart_Dev {
 	UARTDev_t Uart;						//!< UART device
 	BtHciH4Dev_t H4;					//!< Framing layer, reads and writes through Uart

@@ -92,7 +92,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = NET_DEMO_INT_PRIO,
-	.EvtCallback = nullptr,
+	.EvtCB = nullptr,
 	.bFifoBlocking = true,
 #if NET_DEMO_NATIVE_TLS
 	.RxMemSize = sizeof(s_UartRxMem),

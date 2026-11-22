@@ -490,10 +490,10 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		dev->pDmaReg->TASKS_FLUSHRX = 1;
 #endif
 		reg->EVENTS_RXTO = 0;
-		if (dev->pUartDev->EvtCallback)
+		if (dev->pUartDev->DevIntrf.EvtCB)
 		{
 			len = CFifoUsed(dev->pUartDev->hRxFifo);
-			cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXTIMEOUT, NULL, len);
+			cnt = dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_TIMEOUT, NULL, len);
 		}
 	}
 
@@ -535,10 +535,10 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			reg->EVENTS_RXDRDY = 0;
 			dev->RxDmaCnt++;
 		}
-		if (dev->pUartDev->EvtCallback)
+		if (dev->pUartDev->DevIntrf.EvtCB)
 		{
 			len = CFifoUsed(dev->pUartDev->hRxFifo);
-			cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
+			cnt = dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, len);
 		}
 	}
 
@@ -566,10 +566,10 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 				cnt++;
 			} while (dev->pReg->EVENTS_TXDRDY && cnt < NRFX_UART_HWFIFO_SIZE);
 
-			if (dev->pUartDev->EvtCallback)
+			if (dev->pUartDev->DevIntrf.EvtCB)
 			{
 				len = CFifoAvail(dev->pUartDev->hTxFifo);
-				len = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, len);
+				len = dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, len);
 			}
 		}
 #endif
@@ -651,11 +651,6 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			(void)pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, nullptr,
 				CFifoAvail(dev->pUartDev->hTxFifo));
 		}
-		if (dev->pUartDev->EvtCallback)
-		{
-			len = CFifoAvail(dev->pUartDev->hTxFifo);
-			len = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, len);
-		}
 	}
 #endif
 
@@ -694,10 +689,10 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 					dev->pUartDev->bRxReady = false;
 					*p = dev->pReg->RXD;
 				}
-				if (dev->pUartDev->EvtCallback)
+				if (dev->pUartDev->DevIntrf.EvtCB)
 				{
 					len = CFifoUsed(dev->pUartDev->hRxFifo);
-					dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
+					dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, len);
 				}
 #endif
 			}
@@ -718,9 +713,9 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		// without them ever being counted.
 		reg->ERRORSRC = err;
 		len = 0;
-		if (dev->pUartDev->EvtCallback)
+		if (dev->pUartDev->DevIntrf.EvtCB)
 		{
-			dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_LINESTATE, NULL, len);
+			dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_STATECHG, NULL, len);
 		}
 #ifdef UARTE_PRESENT
 		if (pDev->bDma == true)
@@ -743,11 +738,11 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	{
 		reg->EVENTS_CTS = 0;
 		dev->pUartDev->LineState &= ~UART_LINESTATE_CTS;
-        if (dev->pUartDev->EvtCallback)
+        if (dev->pUartDev->DevIntrf.EvtCB)
         {
             uint8_t buff = 0;
             len = 1;
-            dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_LINESTATE, &buff, len);
+            dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_STATECHG, &buff, len);
         }
 	}
 
@@ -755,11 +750,11 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	{
 		reg->EVENTS_NCTS = 0;
 		dev->pUartDev->LineState |= UART_LINESTATE_CTS;
-        if (dev->pUartDev->EvtCallback)
+        if (dev->pUartDev->DevIntrf.EvtCB)
         {
             uint8_t buff = UART_LINESTATE_CTS;
             len = 1;
-            dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_LINESTATE, &buff, len);
+            dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_STATECHG, &buff, len);
         }
 	}
 }
@@ -1601,7 +1596,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->DevIntrf.Disable = nRFUARTDisable;
 	pDev->DevIntrf.Enable = nRFUARTEnable;
 	pDev->DevIntrf.GetRate = nRFUARTGetRate;

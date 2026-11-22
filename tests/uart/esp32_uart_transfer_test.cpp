@@ -122,7 +122,7 @@ static void Reset(bool Blocking)
 	s_Uart.DevIntrf.pDevData = &s_Esp32UartDev[0];
 	s_Uart.DevIntrf.bIntEn = true;
 	s_Uart.DevIntrf.MaxRetry = 1;
-	s_Uart.EvtCallback = nullptr;
+	s_Uart.DevIntrf.EvtCB = nullptr;
 	s_Uart.bTxReady = true;
 	s_Uart.TxDropCnt = 0;
 }
@@ -155,7 +155,7 @@ int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr,
 	return count;
 }
 
-static int TxCallback(UARTDev_t *pDev, UART_EVT Event, uint8_t *pData, int Len)
+static int TxCallback(DevIntrf_t *pDev, DEVINTRF_EVT Event, uint8_t *pData, int Len)
 {
 	(void)pDev;
 	(void)Event;
@@ -261,7 +261,7 @@ int main()
 	assert(s_Tx.back() == data[512]);
 
 	Reset(true);
-	s_Uart.EvtCallback = TxCallback;
+	s_Uart.DevIntrf.EvtCB = TxCallback;
 	// Room in the hardware FIFO: the byte goes out at once, TX stays ready
 	// and the TX empty interrupt stays off, so a writer slower than the line
 	// takes no interrupt per byte.
@@ -289,7 +289,7 @@ int main()
 	assert(s_Tx.back() == data[300]);
 
 	Reset(true);
-	s_Uart.EvtCallback = TxCallback;
+	s_Uart.DevIntrf.EvtCB = TxCallback;
 	// Match PRBS callback and one-byte writes with the interrupt consumer.
 	for (i = 0; i < sizeof(data); i++)
 	{
