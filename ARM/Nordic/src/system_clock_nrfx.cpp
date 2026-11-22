@@ -896,6 +896,14 @@ static bool nRFxLfclkWaitStopped(void)
 	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U;
 }
 
+// Snapshot actual LFCLK hardware state before sDelay requests an RTC.
+// A running oscillator avoids the cold LFXO startup penalty. No ownership
+// change or oscillator start takes place in this query.
+extern "C" bool nRFxSleepLfClockRunning(void)
+{
+	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
+}
+
 bool SystemLowFreqClockEnable(void)
 {
 	uint32_t src;
