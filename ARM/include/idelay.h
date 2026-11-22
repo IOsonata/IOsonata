@@ -252,7 +252,7 @@ static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
  *
  * @param	cnt : microsecond delay count
  */
-static inline __attribute__((always_inline)) void ArmDelayUsLoop(uint32_t cnt)
+static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 {
 	uint64_t loops;
 	uint32_t chunk;
@@ -261,8 +261,8 @@ static inline __attribute__((always_inline)) void ArmDelayUsLoop(uint32_t cnt)
 	loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 999999ULL) /
 		1000000ULL;
 
-	// Preserve the original IOsonata NOP/SUBS/BGT countdown.
-	// BGT is signed, so split delays outside the assembly loop.
+	// Keep the original ten-NOP signed countdown inside usDelay.
+	// Each chunk is bounded because BGT compares a signed counter.
 	while (loops != 0U)
 	{
 		chunk = loops > INT32_MAX ? INT32_MAX : (uint32_t)loops;
@@ -299,14 +299,13 @@ static inline __attribute__((always_inline)) void ArmDelayUsLoop(uint32_t cnt)
 /**
  * @brief	Nanosecond delay.
  *
- * SystemnsDelayFactor is the calibrated nanosecond-loop rate in iterations
- * per second and is refreshed by the MCU clock implementation.
- * Calculation overhead, instruction fetch and interrupts extend the delay.
- * Use a hardware timer when precise timing is required.
+ * SystemnsDelayFactor is the calibrated loop rate in iterations per second.
+ * Keep the original signed countdown in this public function. Long delays
+ * are split into signed-counter-sized chunks before entering assembly.
  *
  * @param	cnt : nanosecond count
  */
-static inline __attribute__((always_inline)) void ArmDelayNsLoop(uint32_t cnt)
+static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 {
 	uint64_t loops;
 	uint32_t chunk;
@@ -315,9 +314,6 @@ static inline __attribute__((always_inline)) void ArmDelayNsLoop(uint32_t cnt)
 	loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) /
 		1000000000ULL;
 
-	// Preserve the original IOsonata SUBS/BGT signed countdown loop.
-	// Use chunks because BGT is signed: an individual counter must never
-	// exceed INT32_MAX. Clock factors remain iterations per second.
 	while (loops != 0U)
 	{
 		chunk = loops > INT32_MAX ? INT32_MAX : (uint32_t)loops;
@@ -339,28 +335,6 @@ static inline __attribute__((always_inline)) void ArmDelayNsLoop(uint32_t cnt)
 		);
 		loops -= chunk;
 	}
-}
-
-// Calibration probe and public nsDelay use the same generic countdown.
-// Factor recommendations must be measured through the public API because
-// its inlined call sites can have different instruction-fetch behavior.
-static inline void DelayCalibrationProbeNs(uint32_t Nanoseconds)
-{
-	ArmDelayNsLoop(Nanoseconds);
-}
-
-// Runtime delays are independent of debug and trace clocks.
-// Each precision unit uses its own calibrated assembly loop. Do not
-// substitute the microsecond loop for long nsDelay calls: inlining and
-// instruction layout change its measured iteration cost at call sites.
-static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
-{
-	ArmDelayUsLoop(cnt);
-}
-
-static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
-{
-	ArmDelayNsLoop(cnt);
 }
 
 #define ARM_DELAY_CAL_NS	(ARM_DELAY_CAL_LOOPS * 1000U)
@@ -431,14 +405,14 @@ static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz
 			SystemMicroSecLoopCnt = 1000000U;
 			SystemnsDelayFactor = 1000000U;
 
-			ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);
+			usDelay(ARM_DELAY_CAL_LOOPS);
 			start = DWT->CYCCNT;
-			ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);
+			usDelay(ARM_DELAY_CAL_LOOPS);
 			usCycles = DWT->CYCCNT - start;
 
-			ArmDelayNsLoop(ARM_DELAY_CAL_NS);
+			nsDelay(ARM_DELAY_CAL_NS);
 			start = DWT->CYCCNT;
-			ArmDelayNsLoop(ARM_DELAY_CAL_NS);
+			nsDelay(ARM_DELAY_CAL_NS);
 			nsCycles = DWT->CYCCNT - start;
 			valid = usCycles != 0U && nsCycles != 0U;
 		}
