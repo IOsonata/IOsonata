@@ -865,6 +865,8 @@ static void CoreClockTestSleepDelayOwnership(int LowCount)
 		CoreClockTestPrint("sDelay RTC contention: UNSUPPORTED (not all LF timers initialized)\\r\\n");
 		return;
 	}
+	// Zero seconds is a no-op even when every LF timer is occupied.
+	CoreClockTestResult("sDelay zero with LF timers occupied", sDelay(0U));
 	// All advertised LF timers have been initialized, then disabled.
 	// A temporary delay may not reuse any of these application handles.
 	blocked = !sDelay(1U);
