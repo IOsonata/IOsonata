@@ -283,6 +283,7 @@ int SysLogFlush(SysLog_t * const pLog)
 	int total;
 	int err;
 	bool blocked;
+	bool empty;
 	bool ready;
 
 	if (pLog == nullptr || pLog->Marker != SYSLOG_INIT_MARKER ||
@@ -311,21 +312,23 @@ int SysLogFlush(SysLog_t * const pLog)
 	while (true)
 	{
 		blocked = false;
+		empty = false;
 		while (true)
 		{
 			state = SysIrqLock();
 			if (pLog->TxLen == 0U)
 			{
-				// Copy before consuming: CFifoGet makes this slot
-				// immediately reusable by a producer in any context.
-				pBlock = CFifoPeek(pLog->hFifo);
+				// Take one record and copy it while interrupts are masked.
+				// The released FIFO slot cannot be reused by an ISR
+				// until this copy finishes.
+				pBlock = CFifoGet(pLog->hFifo);
 				if (pBlock == nullptr)
 				{
+					empty = true;
 					SysIrqUnlock(state);
 					break;
 				}
 				memcpy(pLog->pTxBuffer, pBlock, recordLen);
-				(void)CFifoGet(pLog->hFifo);
 				len = 0U;
 				while (len < recordLen && pLog->pTxBuffer[len] != 0U)
 				{
@@ -380,8 +383,7 @@ int SysLogFlush(SysLog_t * const pLog)
 		}
 		// An in-progress record is retried only if TX_READY was
 		// observed during the active submission.
-		if ((blocked && !ready) ||
-			(pLog->TxLen == 0U && CFifoPeek(pLog->hFifo) == nullptr))
+		if ((blocked || empty) && !ready)
 		{
 			pLog->bFlushing = false;
 			SysIrqUnlock(state);
