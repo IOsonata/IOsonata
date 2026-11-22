@@ -903,11 +903,13 @@ static void CoreClockTestTimerTriggers(void)
 		return;
 	}
 
-	// Continuous trigger callbacks and the running counter must advance.
+	// Restart the stopped timer from a known epoch before checking
+	// the continuous trigger. TimerReset is a public Timer operation.
+	TimerReset(&s_Timer);
 	s_TriggerCount = 0U;
-	period = nsTimerEnableTrigger(&s_Timer, trigger, 20000000ULL,
-		TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler, nullptr);
 	enabled = TimerEnable(&s_Timer);
+	period = enabled ? nsTimerEnableTrigger(&s_Timer, trigger, 20000000ULL,
+		TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler, nullptr) : 0U;
 	before = TimerGetTickCount(&s_Timer);
 	if (enabled && period != 0U)
 	{
@@ -915,6 +917,15 @@ static void CoreClockTestTimerTriggers(void)
 	}
 	after = TimerGetTickCount(&s_Timer);
 	fired = s_TriggerCount;
+	if (!enabled || period == 0U || fired < 4U || fired > 7U ||
+		after <= before)
+	{
+		CoreClockTestPrint("Timer continuous diagnostics: device %u, enabled %u, "
+			"period %u ns, callbacks %u, before %u, after %u\\r\\n",
+			(unsigned)s_Timer.DevNo, (unsigned)enabled,
+			(unsigned)period, (unsigned)fired,
+			(unsigned)before, (unsigned)after);
+	}
 	CoreClockTestResult("Timer continuous callback",
 		enabled && period != 0U && fired >= 4U && fired <= 7U);
 	CoreClockTestResult("Timer counter advances",
