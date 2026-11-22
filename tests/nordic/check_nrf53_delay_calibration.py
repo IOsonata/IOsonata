@@ -51,16 +51,16 @@ class Nrf53DelayCalibration(unittest.TestCase):
 	def test_measurement_is_only_explicit_in_delay_interface(self):
 		self.assertIn("static inline bool DelayCalibrationMeasure(", self.cal)
 		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", self.cal)
-		self.assertIn("SystemMicroSecLoopCnt = oldUs;", self.delay)
-		self.assertIn("SystemnsDelayFactor = oldNs;", self.delay)
+		self.assertIn("SystemMicroSecLoopCnt = oldUs;", self.cal)
+		self.assertIn("SystemnsDelayFactor = oldNs;", self.cal)
 		self.assertIn("DWT->CYCCNT - start", self.cal)
 
 
 	def test_delay_implementation_is_not_replaced(self):
 		self.assertIn("static inline __attribute__((always_inline)) void usDelay(", self.delay)
 		self.assertIn("static inline __attribute__((always_inline)) void nsDelay(", self.delay)
-		self.assertIn('" SUBS %[low], #1\\n"', self.delay)
-		self.assertIn('" BNE 1b\\n"', self.delay)
+		self.assertIn('" SUBS %[remaining], #1\\n"', self.delay)
+		self.assertIn('" BGT 1b\\n"', self.delay)
 
 	def test_measured_loop_rate_math(self):
 		for cpu_hz in (64000000, 128000000):
