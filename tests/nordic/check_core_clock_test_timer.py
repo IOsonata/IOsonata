@@ -78,36 +78,29 @@ class CoreClockTestInitialization(unittest.TestCase):
         self.assertLess(sample.rindex("__set_PRIMASK(irqState);"),
             sample.index('CoreClockTestPrint("nsDelay repeat'))
 
-    def test_arm_usloop_preserves_original_countdown(self):
+    def test_public_delay_functions_own_original_countdowns(self):
         delay = (ROOT / "ARM/include/idelay.h").read_text(
             encoding="utf-8")
-        start = delay.index("static inline __attribute__((always_inline)) "
-            "void ArmDelayUsLoop(uint32_t cnt)")
-        end = delay.index("static inline __attribute__((always_inline)) "
-            "void ArmDelayNsLoop(uint32_t cnt)", start)
-        implementation = delay[start:end]
-        self.assertIn('" MOVS %[remaining], %[count]\\n"', implementation)
-        self.assertEqual(implementation.count('" NOP\\n"'), 10)
-        self.assertIn('" SUBS %[remaining], #1\\n"', implementation)
-        self.assertIn('" BGT 1b\\n"', implementation)
-        self.assertIn("chunk = loops > INT32_MAX ? INT32_MAX", implementation)
-        self.assertNotIn(" BNE ", implementation)
-        self.assertNotIn("NRF52_SERIES", implementation)
-
-    def test_arm_nsloop_remains_vendor_independent(self):
-        delay = (ROOT / "ARM/include/idelay.h").read_text(
-            encoding="utf-8")
-        start = delay.index("static inline __attribute__((always_inline)) "
-            "void ArmDelayNsLoop(uint32_t cnt)")
-        end = delay.index("// Calibration probe and public nsDelay", start)
-        implementation = delay[start:end]
-        self.assertIn('" MOVS %[remaining], %[count]\\n"', implementation)
-        self.assertIn('" SUBS %[remaining], #1\\n"', implementation)
-        self.assertIn('" BGT 1b\\n"', implementation)
-        self.assertIn("chunk = loops > INT32_MAX ? INT32_MAX", implementation)
-        self.assertNotIn("NRF52_SERIES", implementation)
-        self.assertNotIn("NRF52832_XXAA", implementation)
-        self.assertNotIn("noinline", implementation)
+        us_start = delay.index("static inline __attribute__((always_inline)) "
+            "void usDelay(uint32_t cnt)")
+        ns_start = delay.index("static inline __attribute__((always_inline)) "
+            "void nsDelay(uint32_t cnt)", us_start)
+        end = delay.index("#define ARM_DELAY_CAL_NS", ns_start)
+        us_loop = delay[us_start:ns_start]
+        ns_loop = delay[ns_start:end]
+        self.assertEqual(us_loop.count('" NOP\n"'), 10)
+        for loop in (us_loop, ns_loop):
+            self.assertIn('" MOVS %[remaining], %[count]\n"', loop)
+            self.assertIn('" SUBS %[remaining], #1\n"', loop)
+            self.assertIn('" BGT 1b\n"', loop)
+            self.assertIn("chunk = loops > INT32_MAX ? INT32_MAX", loop)
+            self.assertNotIn('" BNE ', loop)
+            self.assertNotIn("NRF52_SERIES", loop)
+        for forbidden in ("ArmDelayUsLoop(", "ArmDelayNsLoop(",
+            "DelayCalibrationProbeNs("):
+            self.assertNotIn(forbidden, delay)
+        self.assertIn("usDelay(ARM_DELAY_CAL_LOOPS);", delay)
+        self.assertIn("nsDelay(ARM_DELAY_CAL_NS);", delay)
 
 
 class CoreClockTestLfLifecycle(unittest.TestCase):
