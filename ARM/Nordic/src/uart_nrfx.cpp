@@ -466,6 +466,15 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 	int len = 0;
 	int cnt = 0;
+#ifdef UARTE_PRESENT
+	bool txEnd;
+	int txLen;
+	uint8_t *pTx;
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
+	uint32_t sent;
+	uint32_t remaining;
+#endif
+#endif
 
 #ifdef UART_PRESENT
 	NRF_UART_Type *reg = dev->pReg;
@@ -583,7 +592,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	{
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
 	}
-	bool txEnd = NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) != 0;
+	txEnd = NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) != 0;
 #if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 	if (txEnd && dev->TxDmaLen == 0U)
 	{
@@ -599,8 +608,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		// Check the completed transfer's actual byte count. STOPTX can
 		// generate ENDTX for a partial DMA; do not silently discard its
 		// unsent suffix or assume that TXSTOPPED and ENDTX coincide.
-		uint32_t sent;
-#if defined(NRF53_SERIES)
+		#if defined(NRF53_SERIES)
 		sent = dev->pDmaReg->TXD.AMOUNT;
 #else
 		sent = dev->pDmaReg->DMA.TX.AMOUNT;
@@ -611,7 +619,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		}
 		if (sent < dev->TxDmaLen)
 		{
-			uint32_t remaining = dev->TxDmaLen - sent;
+			remaining = dev->TxDmaLen - sent;
 			memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);
 			dev->TxDmaLen = remaining;
 			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = remaining;
@@ -622,24 +630,24 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		dev->TxDmaLen = 0U;
 #endif
 
-		int l = NRFX_UART_TXDMA_SIZE;
-		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
-		if (p)
+		txLen = NRFX_UART_TXDMA_SIZE;
+		pTx = CFifoGetMultiple(dev->pUartDev->hTxFifo, &txLen);
+		if (pTx)
 		{
 			dev->pUartDev->bTxReady = false;
 
 			// Transfer to tx cache before sending as CFifo will immediately make the memory
 			// block available for reuse in the Put request. This could cause an overwrite
 			// if uart tx has not completed in time.
-			memcpy(dev->TxDmaMem, p, l);
+			memcpy(dev->TxDmaMem, pTx, txLen);
 
 			#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
-			dev->TxDmaLen = (uint32_t)l;
+			dev->TxDmaLen = (uint32_t)txLen;
 #endif
 			// Clear stale events before a fresh STARTTX; no transfer is active.
 			NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
 			dev->pDmaReg->EVENTS_TXSTOPPED = 0;
-			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
+			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = txLen;
 			NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
 			NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 		}
