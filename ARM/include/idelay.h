@@ -3,8 +3,9 @@
 
 @brief	Delay loop functions.
 
-Cycle-counter delays are compiled when CMSIS exposes DWT CYCCNT. Otherwise
-calibrated assembly loops remain the CPU-local delay backend. No Timer or RTC.
+Runtime delays always use calibrated assembly loops. The DWT cycle counter
+is used only by explicit foreground calibration, then restored to its prior
+state. The runtime delay path never enables trace, Timer, or RTC.
 
 @author Hoang Nguyen Hoan
 @date	May 22, 2015
@@ -48,14 +49,14 @@ typedef struct {
 	bool Measured;
 } DelayCalibrationPoint_t;
 
-// CPU-local delay backend is fixed when compiling for the target MCU.
+// DWT is available only to the explicit calibration probe, never runtime delay.
 #if defined(DWT) && defined(CoreDebug) && \
 	defined(DWT_CTRL_CYCCNTENA_Msk) && \
 	defined(CoreDebug_DEMCR_TRCENA_Msk) && \
 	(!defined(__DWT_PRESENT) || (__DWT_PRESENT == 1U))
-#define ARM_DELAY_USE_DWT 1
+#define ARM_DELAY_CAL_DWT_AVAILABLE 1
 #else
-#define ARM_DELAY_USE_DWT 0
+#define ARM_DELAY_CAL_DWT_AVAILABLE 0
 #endif
 
 #ifdef __cplusplus
@@ -66,6 +67,16 @@ extern uint32_t SystemCoreClock;
 // Calibrated loop iterations per second for each existing assembly loop.
 extern uint32_t SystemMicroSecLoopCnt;
 extern uint32_t SystemnsDelayFactor;
+
+// nRF52 erratum 32 can require leaving trace disabled. Calibration must
+// consult the MCU port before changing trace controls.
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52832_XXAB) || defined(NRF52833_XXAA) || \
+	defined(NRF52840_XXAA)
+bool ArmDelayCalibrationDwtAllowed(void);
+#endif
 #ifdef __cplusplus
 }
 #endif
@@ -332,178 +343,16 @@ static inline void DelayCalibrationProbeNs(uint32_t Nanoseconds)
 	ArmDelayNsLoop(Nanoseconds);
 }
 
-// The cycle counter must be explicitly enabled by the MCU port at startup.
-// Never undo a device erratum or a later trace-disable from a delay call.
-#if ARM_DELAY_USE_DWT
-static inline bool ArmDelayDwtReady(void)
-{
-#if defined(DWT_CTRL_NOCYCCNT_Msk)
-	if ((DWT->CTRL & DWT_CTRL_NOCYCCNT_Msk) != 0U)
-	{
-		return false;
-	}
-#endif
-	return (CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) != 0U &&
-		(DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U;
-}
-
-// Called once by a port which permits trace access. A short finite probe
-// verifies the hardware counter without relying on a debugger or an RTC.
-// On failure restore both register values and retain the assembly fallback.
-static inline bool ArmDelayDwtInit(void)
-{
-	uint32_t trace;
-	uint32_t ctrl;
-	uint32_t start;
-	uint32_t i;
-
-#if defined(DWT_CTRL_NOCYCCNT_Msk)
-	if ((DWT->CTRL & DWT_CTRL_NOCYCCNT_Msk) != 0U)
-	{
-		return false;
-	}
-#endif
-	trace = CoreDebug->DEMCR;
-	ctrl = DWT->CTRL;
-	CoreDebug->DEMCR = trace | CoreDebug_DEMCR_TRCENA_Msk;
-	DWT->CTRL = ctrl | DWT_CTRL_CYCCNTENA_Msk;
-	__DSB();
-	__ISB();
-	start = DWT->CYCCNT;
-	for (i = 0U; i < 64U; i++)
-	{
-		__NOP();
-	}
-	if (DWT->CYCCNT != start && ArmDelayDwtReady())
-	{
-		return true;
-	}
-	DWT->CTRL = ctrl;
-	CoreDebug->DEMCR = trace;
-	return false;
-}
-
-// Return the unconsumed count in cycles if the counter stops. Bounded
-// progress detection avoids hanging forever when trace is disabled.
-static inline uint64_t ArmDelayDwtWait(uint64_t Cycles)
-{
-	uint32_t start;
-	uint32_t last;
-	uint32_t now;
-	uint32_t chunk;
-	uint32_t consumed;
-	uint32_t stalled;
-
-	if (!ArmDelayDwtReady())
-	{
-		// On nRF52, SystemInit controls DWT because anomaly 32 forbids
-		// re-enabling trace on affected silicon.
-#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
-	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
-	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
-	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
-		return Cycles;
-#else
-		if (!ArmDelayDwtInit())
-		{
-			return Cycles;
-		}
-#endif
-	}
-	while (Cycles != 0U)
-	{
-		chunk = Cycles > 0x40000000ULL ?
-			0x40000000U : (uint32_t)Cycles;
-		start = DWT->CYCCNT;
-		last = start;
-		stalled = 0U;
-		while ((uint32_t)(DWT->CYCCNT - start) < chunk)
-		{
-			now = DWT->CYCCNT;
-			if (now == last)
-			{
-				if (++stalled >= 4096U)
-				{
-					consumed = (uint32_t)(now - start);
-					return Cycles - consumed;
-				}
-			}
-			else
-			{
-				last = now;
-				stalled = 0U;
-			}
-		}
-		Cycles -= chunk;
-	}
-	return 0U;
-}
-#else
-static inline bool ArmDelayDwtReady(void)
-{
-	return false;
-}
-
-static inline bool ArmDelayDwtInit(void)
-{
-	return false;
-}
-#endif
-
+// Runtime delays are independent of debug and trace clocks.
+// Long nanosecond intervals use the calibrated microsecond loop to avoid
+// accumulating the short loop's instruction-fetch and branch penalties.
 static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 {
-#if ARM_DELAY_USE_DWT
-	uint64_t cycles;
-
-	if (cnt == 0U)
-	{
-		return;
-	}
-	cycles = ((uint64_t)cnt * SystemCoreClock + 999999ULL) / 1000000ULL;
-	cycles = ArmDelayDwtWait(cycles);
-	if (cycles != 0U)
-	{
-		// Convert any remaining cycles to microseconds, rounding upward.
-		ArmDelayUsLoop((uint32_t)((cycles * 1000000ULL +
-			SystemCoreClock - 1U) / SystemCoreClock));
-	}
-#else
 	ArmDelayUsLoop(cnt);
-#endif
 }
 
 static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 {
-#if ARM_DELAY_USE_DWT
-	uint64_t cycles;
-	uint32_t remainder;
-
-	if (cnt == 0U)
-	{
-		return;
-	}
-	cycles = ((uint64_t)cnt * SystemCoreClock + 999999999ULL) / 1000000000ULL;
-	cycles = ArmDelayDwtWait(cycles);
-	if (cycles != 0U)
-	{
-		// A stopped DWT falls back without restarting the full interval.
-		remainder = (uint32_t)((cycles * 1000000000ULL +
-			SystemCoreClock - 1U) / SystemCoreClock);
-		if (remainder >= 10000U)
-		{
-			ArmDelayUsLoop(remainder / 1000U);
-			remainder %= 1000U;
-		}
-		if (remainder != 0U)
-		{
-			ArmDelayNsLoop(remainder);
-		}
-	}
-#else
-	// The short SUBS/BNE loop has target-dependent fetch/branch timing.
-	// For multi-microsecond waits use the calibrated microsecond loop,
-	// whose longer body is less sensitive to flash layout and branch cost.
-	// Preserve the nanosecond loop for the sub-microsecond remainder.
 	if (cnt >= 10000U)
 	{
 		ArmDelayUsLoop(cnt / 1000U);
@@ -513,7 +362,6 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 	{
 		ArmDelayNsLoop(cnt);
 	}
-#endif
 }
 
 #define ARM_DELAY_CAL_NS	(ARM_DELAY_CAL_LOOPS * 1000U)
@@ -526,7 +374,7 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 // case, existing per-target fallback factors remain in effect.
 static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz)
 {
-#if ARM_DELAY_USE_DWT
+#if ARM_DELAY_CAL_DWT_AVAILABLE
 	uint32_t prevMask;
 	uint32_t prevTrace;
 	uint32_t prevCtrl;
@@ -535,55 +383,73 @@ static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz
 	uint32_t start;
 	uint32_t usCycles;
 	uint32_t nsCycles;
+	uint32_t i;
 	bool valid;
 
-	if (pCal == NULL || CpuHz == 0U || __get_IPSR() != 0U ||
-		!ArmDelayDwtReady())
+	if (pCal == NULL || CpuHz == 0U || __get_IPSR() != 0U)
 	{
 		return false;
 	}
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52832_XXAB) || defined(NRF52833_XXAA) || \
+	defined(NRF52840_XXAA)
+	if (!ArmDelayCalibrationDwtAllowed())
+	{
+		return false;
+	}
+#endif
 
 	prevMask = __get_PRIMASK();
 	__disable_irq();
-
 	prevTrace = CoreDebug->DEMCR;
-	prevCtrl = DWT->CTRL;
 	prevUsFactor = SystemMicroSecLoopCnt;
 	prevNsFactor = SystemnsDelayFactor;
-
-	// Only measure a cycle counter that the MCU port has enabled.
-	// Do not override its trace policy during calibration.
-
-	start = DWT->CYCCNT;
-	__asm__ volatile ("nop\n nop\n nop\n nop\n");
-	valid = DWT->CYCCNT != start;
 	usCycles = 0U;
 	nsCycles = 0U;
+	valid = false;
 
-	if (valid)
+	CoreDebug->DEMCR = prevTrace | CoreDebug_DEMCR_TRCENA_Msk;
+	__DSB();
+	__ISB();
+	prevCtrl = DWT->CTRL;
+#if defined(DWT_CTRL_NOCYCCNT_Msk)
+	if ((prevCtrl & DWT_CTRL_NOCYCCNT_Msk) == 0U)
+#endif
 	{
-		// One million loops per second executes exactly N iterations
-		// for N microseconds (or 1000*N nanoseconds).
-		SystemMicroSecLoopCnt = 1000000U;
-		SystemnsDelayFactor = 1000000U;
-
-		ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);
+		DWT->CTRL = prevCtrl | DWT_CTRL_CYCCNTENA_Msk;
+		__DSB();
+		__ISB();
 		start = DWT->CYCCNT;
-		ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);
-		usCycles = DWT->CYCCNT - start;
+		for (i = 0U; i < 64U; i++)
+		{
+			__NOP();
+		}
+		valid = DWT->CYCCNT != start;
+		if (valid)
+		{
+			SystemMicroSecLoopCnt = 1000000U;
+			SystemnsDelayFactor = 1000000U;
 
-		ArmDelayNsLoop(ARM_DELAY_CAL_NS);
-		start = DWT->CYCCNT;
-		ArmDelayNsLoop(ARM_DELAY_CAL_NS);
-		nsCycles = DWT->CYCCNT - start;
+			ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);
+			start = DWT->CYCCNT;
+			ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS);
+			usCycles = DWT->CYCCNT - start;
 
-		valid = usCycles != 0U && nsCycles != 0U;
+			ArmDelayNsLoop(ARM_DELAY_CAL_NS);
+			start = DWT->CYCCNT;
+			ArmDelayNsLoop(ARM_DELAY_CAL_NS);
+			nsCycles = DWT->CYCCNT - start;
+			valid = usCycles != 0U && nsCycles != 0U;
+		}
 	}
-
 	SystemMicroSecLoopCnt = prevUsFactor;
 	SystemnsDelayFactor = prevNsFactor;
 	DWT->CTRL = prevCtrl;
 	CoreDebug->DEMCR = prevTrace;
+	__DSB();
+	__ISB();
 	__set_PRIMASK(prevMask);
 
 	if (valid)
@@ -591,19 +457,15 @@ static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz
 		pCal->UsCycles = usCycles;
 		pCal->NsCycles = nsCycles;
 		pCal->Measured = true;
-
 		valid = ArmDelayClockUpdate(pCal, CpuHz);
 	}
-
 	return valid;
 #else
 	(void)pCal;
 	(void)CpuHz;
-
 	return false;
 #endif
 }
-
 
 /**
  * @brief Measure delay factors with DWT, leaving runtime factors unchanged.
