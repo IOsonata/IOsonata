@@ -121,6 +121,22 @@ static void CorePowerTestUnsupported(const char *pName)
 
 static void CorePowerTestSummary(void)
 {
+	uint32_t logRejected;
+	uint32_t uartUnaccepted;
+	int logPending;
+	int uartPending;
+
+	// Snapshot transport backpressure independently from the test assertions.
+	// TxDropCnt counts unaccepted UART submissions (which SysLog may retry);
+	// it is not proof that a byte was lost on the physical wire.
+	logRejected = __atomic_load_n(&SysLogGet()->hFifo->DropCnt, __ATOMIC_RELAXED);
+	uartUnaccepted = s_Uart.TxDropCnt;
+	logPending = CFifoUsed(SysLogGet()->hFifo);
+	uartPending = CFifoUsed(s_Uart.hTxFifo);
+	SysLogPrintf(SysLogGet(),
+		"LogDiag fifo=0x%08x uartfifo=0x%08x evicted=0x%08x uartRejected=0x%08x\r\n",
+		(unsigned)logPending, (unsigned)uartPending,
+		(unsigned)logRejected, (unsigned)uartUnaccepted);
 	SysLogPrintf(SysLogGet(), "CorePowerTest complete: 0x%08x failures, 0x%08x checks\r\n",
 		(unsigned)s_Failures, (unsigned)s_Checks);
 }
