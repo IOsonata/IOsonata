@@ -243,6 +243,94 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 	}
 }
 
+// Send records until the store is empty or the sink stops taking bytes.
+// HeadSent counts the bytes of the head record already sent, so a sink that
+// takes part of a record gets only the rest of it on the next call. HeadIdx
+// is the store index of that record: when a full non-blocking store evicts
+// it, the index moves and the new head starts from its first byte.
+// Returns true when the sink stopped before the store was empty.
+static bool SysLogDrain(SysLog_t * const pLog, int *pTotal, int *pErr)
+{
+	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo);
+	uint32_t head;
+	uint32_t len;
+	uint32_t sent;
+	uint8_t *pBlock;
+	uintptr_t state;
+	int count;
+
+	while (true)
+	{
+		// The FIFO consumer index, block pointer, and partial-record
+		// position form one state. Snapshot them with interrupts masked
+		// so an interrupt callback cannot change the queue head here.
+		state = SysIrqLock();
+		head = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE);
+		pBlock = CFifoPeek(pLog->hFifo);
+		if (pBlock == nullptr)
+		{
+			SysIrqUnlock(state);
+			return false;
+		}
+		if (head != pLog->HeadIdx)
+		{
+			pLog->HeadIdx = head;
+			pLog->HeadSent = 0U;
+		}
+		len = 0U;
+		while (len < recordLen && pBlock[len] != 0U)
+		{
+			len++;
+		}
+		sent = pLog->HeadSent;
+		SysIrqUnlock(state);
+
+		// Do not mask interrupts while submitting bytes. DeviceIntrfTx
+		// may enqueue data for asynchronous DMA; the UART IRQ must remain
+		// able to retire buffers and signal TX_READY.
+		count = 0;
+		if (sent < len)
+		{
+			count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+								   pBlock + sent, (int)(len - sent));
+			if (count > 0)
+			{
+				*pTotal += count;
+				sent += (uint32_t)count;
+			}
+		}
+
+		state = SysIrqLock();
+		// A non-blocking log store may evict a record while its bytes
+		// are being submitted. Never consume the replacement as though
+		// it were the record whose transmission just returned.
+		if (__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE) != head)
+		{
+			pLog->HeadIdx = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_RELAXED);
+			pLog->HeadSent = 0U;
+			SysIrqUnlock(state);
+			continue;
+		}
+		if (sent < len)
+		{
+			pLog->HeadSent = sent;
+			SysIrqUnlock(state);
+			if (count < 0 && *pTotal == 0)
+			{
+				*pErr = count;
+			}
+			return true;
+		}
+
+		// The entire head record was accepted, so release exactly that
+		// record while the queue state is protected.
+		pLog->HeadSent = 0U;
+		(void)CFifoGet(pLog->hFifo);
+		pLog->HeadIdx = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_RELAXED);
+		SysIrqUnlock(state);
+	}
+}
+
 int SysLogDevIntrfEvent(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 		uint8_t *pBuffer, int Len)
 {
@@ -262,35 +350,21 @@ int SysLogDevIntrfEvent(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 	return SysLogFlush(pLog);
 }
 
-// Submit queued records through DeviceIntrf. One caller owns the record
-// consumer position; a TX_READY interrupt can request another pass without
-// interrupting that ownership. HeadSent tracks bytes accepted, not bytes
-// physically transmitted by an asynchronous sink.
 int SysLogFlush(SysLog_t * const pLog)
 {
-	uintptr_t state;
-	uint32_t recordLen;
-	uint32_t head;
-	uint32_t len;
-	uint32_t sent;
-	uint8_t *pBlock;
-	int count;
-	int total;
-	int err;
-	bool stopped;
-	bool more;
-
-	if (pLog == nullptr || pLog->Marker != SYSLOG_INIT_MARKER ||
-		pLog->pSink == nullptr)
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)
 	{
 		return 0;
 	}
 
-	state = SysIrqLock();
+	// One flush at a time. A record stored by an interrupt while another
+	// context is sending is left to that flush, which looks at the store again
+	// before it lets go, so the record is not stranded.
+	uintptr_t state = SysIrqLock();
 	if (pLog->bFlushing)
 	{
-		// A ready event during a foreground submission is handled when
-		// the active caller finishes its current record.
+		// An event that occurs during a flush must not be discarded.
+		// The active flush will retry after the current submission.
 		if (pLog == SysLogGet())
 		{
 			s_bSysLogReadyDuringFlush = true;
@@ -301,83 +375,17 @@ int SysLogFlush(SysLog_t * const pLog)
 	pLog->bFlushing = true;
 	SysIrqUnlock(state);
 
-	recordLen = CFifoBlockSize(pLog->hFifo);
-	total = 0;
-	err = 0;
-	do
-	{
-		stopped = false;
-		while (true)
-		{
-			// Snapshot the FIFO head and partial-record position with
-			// interrupts masked. Never mask interrupts across DeviceIntrfTx.
-			state = SysIrqLock();
-			head = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE);
-			pBlock = CFifoPeek(pLog->hFifo);
-			if (pBlock == nullptr)
-			{
-				SysIrqUnlock(state);
-				break;
-			}
-			if (head != pLog->HeadIdx)
-			{
-				pLog->HeadIdx = head;
-				pLog->HeadSent = 0U;
-			}
-			len = 0U;
-			while (len < recordLen && pBlock[len] != 0U)
-			{
-				len++;
-			}
-			sent = pLog->HeadSent;
-			SysIrqUnlock(state);
+	int total = 0;
+	int err = 0;
+	bool more;
 
-			count = 0;
-			if (sent < len)
-			{
-				count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
-									   pBlock + sent, (int)(len - sent));
-				if (count > 0)
-				{
-					total += count;
-					sent += (uint32_t)count;
-				}
-			}
-
-			state = SysIrqLock();
-			// A non-blocking FIFO can evict the head during the submission.
-			// In that case the next record starts from its first byte.
-			if (__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE) != head)
-			{
-				pLog->HeadIdx =
-					__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_RELAXED);
-				pLog->HeadSent = 0U;
-				SysIrqUnlock(state);
-				continue;
-			}
-			if (sent < len)
-			{
-				pLog->HeadSent = sent;
-				SysIrqUnlock(state);
-				if (count < 0 && total == 0)
-				{
-					err = count;
-				}
-				stopped = true;
-				break;
-			}
-
-			pLog->HeadSent = 0U;
-			(void)CFifoGet(pLog->hFifo);
-			pLog->HeadIdx =
-				__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_RELAXED);
-			SysIrqUnlock(state);
-		}
+	do {
+		bool stopped = SysLogDrain(pLog, &total, &err);
 
 		state = SysIrqLock();
-		more = CFifoPeek(pLog->hFifo) != nullptr &&
-			(!stopped ||
-			 (pLog == SysLogGet() && s_bSysLogReadyDuringFlush));
+		more = CFifoPeek(pLog->hFifo) != 0 &&
+			(stopped == false ||
+			(pLog == SysLogGet() && s_bSysLogReadyDuringFlush));
 		if (pLog == SysLogGet())
 		{
 			s_bSysLogReadyDuringFlush = false;
