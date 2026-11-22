@@ -124,6 +124,7 @@ static bool DelayCalibrationInterpolate(uint32_t CpuHz,
 #pragma weak SystemLowFreqClockDisable
 #pragma weak SystemHighFreqClockCalibrate
 #pragma weak SystemLowFreqClockCalibrate
+#pragma weak sDelay
 #endif
 
 static const IOPinCfg_t s_UartPins[] = {
@@ -440,6 +441,52 @@ static void CoreClockTestCalibrationTest(void)
 // The architecture's delay implementation measures its own delay units.
 // The generic HF Timer remains a fallback and a timing validation reference.
 // Do not use RTC for calibration; never change production delay factors here.
+// Measure complete seconds-sleep latency, including temporary RTC
+// allocation and release. HF timer is a diagnostic reference only.
+static void CoreClockTestSleepDelay(void)
+{
+	TimerCfg_t cfg;
+	uint32_t started;
+	uint32_t elapsed;
+	uint32_t difference;
+	uint32_t correction;
+	bool ok;
+
+	if (sDelay == nullptr)
+	{
+		CoreClockTestPrint("sDelay: UNSUPPORTED on this MCU\r\n");
+		return;
+	}
+	cfg = s_TimerCfg;
+	cfg.DevNo = TimerGetHighFreqDevNo();
+	cfg.EvtHandler = nullptr;
+	if (cfg.DevNo < 0 || !TimerInit(&s_RetainedTimer, &cfg) ||
+		!TimerEnable(&s_RetainedTimer))
+	{
+		CoreClockTestPrint("sDelay timing reference: UNSUPPORTED\r\n");
+		return;
+	}
+	started = TimerGetMicrosecond(&s_RetainedTimer);
+	ok = sDelay(1U);
+	elapsed = TimerGetMicrosecond(&s_RetainedTimer) - started;
+	TimerDisable(&s_RetainedTimer);
+	if (!ok)
+	{
+		CoreClockTestPrint("sDelay: LF timer unavailable or sleep rejected\r\n");
+		return;
+	}
+	difference = elapsed >= 1000000U ?
+		elapsed - 1000000U : 1000000U - elapsed;
+	correction = (uint32_t)(((uint64_t)difference * 32768U + 500000U) /
+		1000000U);
+	CoreClockTestPrint("sDelay(1) end-to-end %u us (target 1000000 us)\r\n",
+		(unsigned)elapsed);
+	CoreClockTestPrint("sDelay overhead suggestion: %s %u LF ticks\r\n",
+		elapsed >= 1000000U ? "subtract" : "add", (unsigned)correction);
+	CoreClockTestResult("sDelay end-to-end within 2 percent",
+		difference <= 20000U);
+}
+
 static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 {
 	TimerCfg_t cfg;
@@ -818,6 +865,7 @@ int main(void)
 	CoreClockTestSharedClockTest();
 	CoreClockTestPowerMode();
 	CoreClockTestDelayCalibrationRecord();
+	CoreClockTestSleepDelay();
 	initialCoreSource = GetHighFreqOscType();
 	initialCoreFreq = GetHighFreqOscFreq();
 	initialLfSource = GetLowFreqOscType();
