@@ -19,14 +19,14 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		cls.test = TEST.read_text(encoding="utf-8")
 
 	def test_default_factors_are_preserved_at_default_frequency(self):
-		self.assertIn("26U, 3U", self.system)
-		self.assertIn("29U, 3U", self.system)
+		self.assertIn("20U, 3U", self.system)
+		self.assertIn("22U, 3U", self.system)
 		self.assertIn("s_DelayCalibration.CpuHz != cpuHz", self.system)
 		self.assertIn("cpuHz == __SYSTEM_CLOCK_DEFAULT", self.system)
 		self.assertNotIn("ArmDelayCalibrate(", self.system)
 		self.assertIn("NRF_APP_CLOCK->HFCLKCTRL & ~CLOCK_HFCLKCTRL_HCLK_Msk", self.system)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.system)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 26U, 3U)", self.system)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U)", self.system)
 
 
 	def test_explicit_dwt_and_timer_calibration_remain_available(self):
@@ -44,7 +44,7 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 			self.assertIn("ArmDelayClockInit(", core)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.system)
 		self.assertIn("23U, 3U", self.network)
-		self.assertIn("29U, 3U", self.system)
+		self.assertIn("22U, 3U", self.system)
 		delay = self.delay
 		start = delay.index("static inline __attribute__((always_inline)) void usDelay(")
 		end = delay.index("#define ARM_DELAY_CAL_NS", start)
@@ -81,7 +81,7 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 
 	def test_250ms_nominal_loop_scale(self):
 		for frequency in (64000000, 128000000,):
-			us_cycles = 26 if frequency == 128000000 else 29
+			us_cycles = 20 if frequency == 128000000 else 22
 			us = frequency // us_cycles
 			ns = frequency // 3
 			us_loops = (250000 * us + 999999) // 1000000
