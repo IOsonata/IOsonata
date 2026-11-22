@@ -163,7 +163,7 @@ class NordicSleepDelay(unittest.TestCase):
             encoding="utf-8")
         example = TEST.read_text(encoding="utf-8")
         self.assertIn("defined(NRF52832_XXAA) || defined(NRF52832_XXAB)", clock)
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8596", clock)
+        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8604", clock)
         self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", clock)
         self.assertIn("nsFactorBefore = SystemnsDelayFactor;", example)
         self.assertIn("nsFactorAfter = SystemnsDelayFactor;", example)
