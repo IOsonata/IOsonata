@@ -161,17 +161,6 @@ void SystemCoreClockUpdate(void)
 		13000000UL, 3000000UL);
 }
 
-// DWT may be used temporarily for calibration only. Never defeat
-// the silicon trace workaround while requesting that calibration.
-bool ArmDelayCalibrationDwtAllowed(void)
-{
-#if NRF52_ERRATA_32_ENABLE_WORKAROUND
-	return !nrf52_errata_32();
-#else
-	return true;
-#endif
-}
-
 void SystemInit(void)
 {
     /* Enable SWO trace functionality. If ENABLE_SWO is not defined, SWO pin will be used as GPIO (see Product
