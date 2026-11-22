@@ -43,7 +43,7 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 			self.assertNotIn("DWT->", core)
 			self.assertIn("ArmDelayClockInit(", core)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.system)
-		self.assertIn("23U, 10U", self.network)
+		self.assertIn("23U, 3U", self.network)
 		self.assertIn("29U, 3U", self.system)
 		delay = self.delay
 		start = delay.index("static inline __attribute__((always_inline)) void usDelay(")
