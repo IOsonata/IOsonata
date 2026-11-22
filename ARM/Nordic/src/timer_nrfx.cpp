@@ -201,11 +201,23 @@ int TimerGetHighFreqDevNo()
 // Claiming skips initialized timers rather than replacing a user handle.
 extern "C" int nRFxRtcSleepClaim(TimerDev_t *pTimer, TimerCfg_t *pCfg);
 extern "C" void nRFxRtcSleepRelease(TimerDev_t *pTimer);
+extern "C" bool nRFxSleepLfClockRunning(void);
 
-// Default measured-overhead compensation: zero until CoreClockTest has
-// established a target/board-specific value. One tick = ~30.5 us at 32768 Hz.
-#ifndef NRF_SDELAY_OVERHEAD_TICKS
-#define NRF_SDELAY_OVERHEAD_TICKS 0U
+// The end-to-end sDelay contract includes LFCLK startup and RTC release.
+// Compensation depends on whether the clock was already running at entry.
+// Measured nRF5340 Application cold-start baseline (CoreClockTest 2026-11-22):
+// 1,260,591 us for a 1 s call -> 8,539 LFCLK ticks. Provisional until
+// repeated cold/warm measurements confirm board and temperature variation.
+#if defined(NRF5340_XXAA_APPLICATION)
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 8539U
+#else
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 0U
+#endif
+#ifndef NRF_SDELAY_COLD_OVERHEAD_TICKS
+#define NRF_SDELAY_COLD_OVERHEAD_TICKS NRF_SDELAY_COLD_DEFAULT_TICKS
+#endif
+#ifndef NRF_SDELAY_WARM_OVERHEAD_TICKS
+#define NRF_SDELAY_WARM_OVERHEAD_TICKS 0U
 #endif
 
 #define NRF_SDELAY_MAX_CHUNK_SECONDS 60U
@@ -241,6 +253,7 @@ extern "C" bool sDelay(uint32_t Seconds)
 	uint64_t ticks;
 	uint64_t nanoseconds;
 	uint32_t frequency;
+	bool warmClock;
 	bool success;
 
 	if (Seconds == 0U)
@@ -261,6 +274,7 @@ extern "C" bool sDelay(uint32_t Seconds)
 	s_bSleepTimerBusy = true;
 	__set_PRIMASK(irqState);
 
+	warmClock = nRFxSleepLfClockRunning();
 	cfg = {};
 	cfg.DevNo = -1;
 	cfg.ClkSrc = TIMER_CLKSRC_DEFAULT;
@@ -293,7 +307,8 @@ extern "C" bool sDelay(uint32_t Seconds)
 			// The overhead factor applies once to the full call, not
 			// once per chunk. RTC compare has a minimum 2-tick lead.
 			compensation = Seconds == chunk ?
-				NRF_SDELAY_OVERHEAD_TICKS : 0U;
+				(warmClock ? NRF_SDELAY_WARM_OVERHEAD_TICKS :
+					NRF_SDELAY_COLD_OVERHEAD_TICKS) : 0U;
 			if (ticks <= (uint64_t)compensation + 2U)
 			{
 				ticks = 2U;
