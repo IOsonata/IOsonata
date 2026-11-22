@@ -49,7 +49,12 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "coredev/system_core_clock.h"
-#include "coredev/delay_calibration.h"
+typedef struct {
+	uint32_t CpuHz;
+	uint32_t UsLoopsPerSecond;
+	uint32_t NsLoopsPerSecond;
+	bool Measured;
+} DelayCalibrationPoint_t;
 
 #ifdef __cplusplus
 extern "C" {
