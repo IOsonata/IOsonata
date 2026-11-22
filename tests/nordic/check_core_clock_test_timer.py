@@ -86,11 +86,11 @@ class CoreClockTestInitialization(unittest.TestCase):
         end = delay.index('#include "system_core_clock_calibration.h"', ns_start)
         us_loop = delay[us_start:ns_start]
         ns_loop = delay[ns_start:end]
-        self.assertEqual(us_loop.count('" NOP\n"'), 10)
+        self.assertEqual(us_loop.count('" NOP\\n"'), 10)
         for loop in (us_loop, ns_loop):
-            self.assertIn('" MOVS %[remaining], %[count]\n"', loop)
-            self.assertIn('" SUBS %[remaining], #1\n"', loop)
-            self.assertIn('" BGT 1b\n"', loop)
+            self.assertIn('" MOVS %[remaining], %[count]\\n"', loop)
+            self.assertIn('" SUBS %[remaining], #1\\n"', loop)
+            self.assertIn('" BGT 1b\\n"', loop)
             self.assertIn("chunk = loops > INT32_MAX ? INT32_MAX", loop)
             self.assertNotIn('" BNE ', loop)
             self.assertNotIn("NRF52_SERIES", loop)
