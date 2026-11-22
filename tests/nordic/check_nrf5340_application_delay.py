@@ -30,10 +30,10 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 
 
 	def test_hf_timer_calibration_without_dwt(self):
-		self.assertNotIn("ArmDelayCalibrate(", self.delay)
-		self.assertNotIn("DWT", self.delay)
+		self.assertIn("static inline bool ArmDelayCalibrate(", self.delay)
+		self.assertIn("DWT->CYCCNT", self.delay)
 		self.assertIn("static ArmDelayCalibration_t s_DelayCalibration;", self.system)
-		self.assertNotIn("DelayCalibrationMeasure(", self.test)
+		self.assertIn("DelayCalibrationMeasure(pSample)", self.test)
 		self.assertIn("DelayCalibrationFromTimer(", self.test)
 
 	def test_both_cores_are_dwt_free_at_runtime(self):
