@@ -528,6 +528,25 @@ static void CoreClockTestSleepDelay(void)
 	CoreClockTestSleepDelayMeasure("reuse");
 }
 
+// Print the measured factors as loop divisors, CPU Hz x 1000000 / loops
+// per second, the unit a port passes to its delay factor setup.
+static void CoreClockTestDelayDivisors(const DelayCalibrationPoint_t *pSample)
+{
+	uint64_t usDivisor;
+	uint64_t nsDivisor;
+
+	if (pSample->UsLoopsPerSecond == 0U || pSample->NsLoopsPerSecond == 0U)
+	{
+		return;
+	}
+	usDivisor = (uint64_t)pSample->CpuHz * 1000000ULL /
+		pSample->UsLoopsPerSecond;
+	nsDivisor = (uint64_t)pSample->CpuHz * 1000000ULL /
+		pSample->NsLoopsPerSecond;
+	CoreClockTestPrint("Delay divisors %u Hz: us %u, ns %u\r\n",
+		(unsigned)pSample->CpuHz, (unsigned)usDivisor, (unsigned)nsDivisor);
+}
+
 static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 {
 	TimerCfg_t cfg;
@@ -559,6 +578,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 		CoreClockTestPrint("Delay calibration DWT %u Hz: us loop/s %u, ns loop/s %u\r\n",
 			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
 			(unsigned)pSample->NsLoopsPerSecond);
+		CoreClockTestDelayDivisors(pSample);
 	}
 	else
 	{
@@ -648,6 +668,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 		CoreClockTestPrint("Delay calibration HF Timer %u Hz: us loop/s %u, ns loop/s %u\r\n",
 			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
 			(unsigned)pSample->NsLoopsPerSecond);
+		CoreClockTestDelayDivisors(pSample);
 	}
 	else
 	{
