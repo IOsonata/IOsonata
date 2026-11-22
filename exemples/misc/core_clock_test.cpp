@@ -53,6 +53,59 @@ SOFTWARE.
 
 #define CLOCK_TEST_CYCLES	3U
 
+// Calibration interpolation belongs to the diagnostic, not the HAL.
+// Interpolation is arithmetic only; the MCU's clock owner applies factors.
+// A fixed-frequency MCU can use one measured endpoint.
+static bool DelayCalibrationInterpolate(uint32_t CpuHz,
+	const DelayCalibrationPoint_t *pLow,
+	const DelayCalibrationPoint_t *pHigh,
+	DelayCalibrationPoint_t *pResult)
+{
+	uint32_t span;
+	uint32_t lowWeight;
+	uint32_t highWeight;
+	uint64_t us;
+	uint64_t ns;
+
+	if (pLow == NULL || pHigh == NULL || pResult == NULL || CpuHz == 0U ||
+		!pLow->Measured || !pHigh->Measured ||
+		pLow->CpuHz == 0U || pHigh->CpuHz < pLow->CpuHz ||
+		pLow->UsLoopsPerSecond == 0U || pLow->NsLoopsPerSecond == 0U ||
+		pHigh->UsLoopsPerSecond == 0U || pHigh->NsLoopsPerSecond == 0U)
+	{
+		return false;
+	}
+
+	*pResult = *pLow;
+	pResult->CpuHz = CpuHz;
+	if (pLow->CpuHz == pHigh->CpuHz || CpuHz <= pLow->CpuHz)
+	{
+		return true;
+	}
+	if (CpuHz >= pHigh->CpuHz)
+	{
+		pResult->UsLoopsPerSecond = pHigh->UsLoopsPerSecond;
+		pResult->NsLoopsPerSecond = pHigh->NsLoopsPerSecond;
+		return true;
+	}
+
+	span = pHigh->CpuHz - pLow->CpuHz;
+	lowWeight = pHigh->CpuHz - CpuHz;
+	highWeight = CpuHz - pLow->CpuHz;
+	us = ((uint64_t)pLow->UsLoopsPerSecond * lowWeight +
+		(uint64_t)pHigh->UsLoopsPerSecond * highWeight + span / 2U) / span;
+	ns = ((uint64_t)pLow->NsLoopsPerSecond * lowWeight +
+		(uint64_t)pHigh->NsLoopsPerSecond * highWeight + span / 2U) / span;
+
+	if (us == 0U || ns == 0U || us > UINT32_MAX || ns > UINT32_MAX)
+	{
+		return false;
+	}
+	pResult->UsLoopsPerSecond = (uint32_t)us;
+	pResult->NsLoopsPerSecond = (uint32_t)ns;
+	return true;
+}
+
 // The generic API is declared for every target. A weak reference lets the
 // diagnostic report a missing MCU implementation instead of failing at link
 // time. A missing operation is a test failure, never an implicit PASS.
