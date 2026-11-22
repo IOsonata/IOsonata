@@ -189,3 +189,153 @@ int TimerGetHighFreqDevNo()
 	return TIMER_NRFX_RTC_MAX;
 }
 
+
+
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA) || \
+	defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK)
+
+// The RTC backend manages timer ownership and LFCLK reference counting.
+// Claiming skips initialized timers rather than replacing a user handle.
+extern "C" int nRFxRtcSleepClaim(TimerDev_t *pTimer, TimerCfg_t *pCfg);
+extern "C" void nRFxRtcSleepRelease(TimerDev_t *pTimer);
+
+// Default measured-overhead compensation: zero until CoreClockTest has
+// established a target/board-specific value. One tick = ~30.5 us at 32768 Hz.
+#ifndef NRF_SDELAY_OVERHEAD_TICKS
+#define NRF_SDELAY_OVERHEAD_TICKS 0U
+#endif
+
+#define NRF_SDELAY_MAX_CHUNK_SECONDS 60U
+
+static TimerDev_t s_SleepTimer;
+static volatile bool s_bSleepTimerBusy;
+static volatile bool s_bSleepTimerDone;
+
+static void nRFxSleepTimerWake(TimerDev_t *pTimer, int Trigger,
+	void *pContext)
+{
+	(void)pTimer;
+	(void)Trigger;
+	(void)pContext;
+	s_bSleepTimerDone = true;
+	// WFE must still return if the compare IRQ ran immediately before
+	// the foreground entered sleep. This event remains latched.
+	__SEV();
+}
+
+// A low-power seconds delay. The complete function call, including timer
+// claim/release, is the delay. Busy loops and high-frequency timers are not
+// used. WFE uses the same System ON sleep depth as SystemSleep, but the
+// latched event prevents a lost-wakeup race between checking the deadline
+// and entering sleep.
+extern "C" bool sDelay(uint32_t Seconds)
+{
+	TimerCfg_t cfg;
+	uint32_t irqState;
+	uint32_t oldScr;
+	uint32_t chunk;
+	uint32_t compensation;
+	uint64_t ticks;
+	uint64_t nanoseconds;
+	uint32_t frequency;
+	bool success;
+
+	if (Seconds == 0U)
+	{
+		return true;
+	}
+	if (__get_IPSR() != 0U || __get_PRIMASK() != 0U)
+	{
+		return false;
+	}
+	irqState = __get_PRIMASK();
+	__disable_irq();
+	if (s_bSleepTimerBusy)
+	{
+		__set_PRIMASK(irqState);
+		return false;
+	}
+	s_bSleepTimerBusy = true;
+	__set_PRIMASK(irqState);
+
+	cfg = {};
+	cfg.DevNo = -1;
+	cfg.ClkSrc = TIMER_CLKSRC_DEFAULT;
+	cfg.Freq = 0U;
+	cfg.IntPrio = 6;
+	cfg.EvtHandler = nullptr;
+	cfg.bTickInt = false;
+	success = nRFxRtcSleepClaim(&s_SleepTimer, &cfg) >= 0;
+	if (success)
+	{
+		frequency = TimerGetFrequency(&s_SleepTimer);
+		success = frequency != 0U;
+	}
+	else
+	{
+		frequency = 0U;
+	}
+
+	oldScr = SCB->SCR;
+	if (success)
+	{
+		SCB->SCR = (oldScr & ~(SCB_SCR_SLEEPDEEP_Msk |
+			SCB_SCR_SLEEPONEXIT_Msk)) | SCB_SCR_SEVONPEND_Msk;
+
+		while (Seconds != 0U && success)
+		{
+			chunk = Seconds > NRF_SDELAY_MAX_CHUNK_SECONDS ?
+				NRF_SDELAY_MAX_CHUNK_SECONDS : Seconds;
+			ticks = (uint64_t)chunk * frequency;
+			// The overhead factor applies once to the full call, not
+			// once per chunk. RTC compare has a minimum 2-tick lead.
+			compensation = Seconds == chunk ?
+				NRF_SDELAY_OVERHEAD_TICKS : 0U;
+			if (ticks <= (uint64_t)compensation + 2U)
+			{
+				ticks = 2U;
+			}
+			else
+			{
+				ticks -= compensation;
+			}
+			nanoseconds = (ticks * 1000000000ULL + frequency / 2U) /
+				frequency;
+			s_bSleepTimerDone = false;
+			success = nsTimerEnableTrigger(&s_SleepTimer, 0,
+				nanoseconds, TIMER_TRIG_TYPE_SINGLE, nRFxSleepTimerWake,
+				nullptr) != 0U;
+			if (success)
+			{
+				// Interrupt-driven System ON sleep, with a latched event
+				// in the handler to avoid missing an already-serviced IRQ.
+				while (!s_bSleepTimerDone)
+				{
+					__DSB();
+					__WFE();
+				}
+				Seconds -= chunk;
+			}
+		}
+		SCB->SCR = oldScr;
+		__ISB();
+		nRFxRtcSleepRelease(&s_SleepTimer);
+	}
+	else if (s_SleepTimer.Enable != nullptr &&
+		s_SleepTimer.DevNo >= 1 &&
+		s_SleepTimer.DevNo < TimerGetLowFreqDevCount())
+	{
+		// A claim can fail after a timer was partially configured;
+		// the RTC backend only releases handles it still owns.
+		nRFxRtcSleepRelease(&s_SleepTimer);
+	}
+	irqState = __get_PRIMASK();
+	__disable_irq();
+	s_bSleepTimerBusy = false;
+	__set_PRIMASK(irqState);
+	return success && Seconds == 0U;
+}
+#endif
