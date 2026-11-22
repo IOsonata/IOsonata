@@ -248,7 +248,8 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
  *
  * Each SysLogPrintf / SysLogStatus call stores a separate record. When the
  * transfer buffer is empty, one CFifo record is copied into it and removed
- * from CFifo. The next record is not taken in the same flush call.
+ * from CFifo. Each pass submits one record; a TX_READY event deferred during
+ * submission can cause another pass before the active flush returns.
  *
  * DeviceIntrfTx returns the number of bytes accepted by the sink. When only
  * part of a record is accepted, the rest remains in the transfer buffer
