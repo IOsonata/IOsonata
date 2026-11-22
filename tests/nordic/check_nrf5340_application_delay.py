@@ -49,13 +49,13 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		self.assertIn("22U, 3U", self.system)
 		delay = self.delay
 		start = delay.index("static inline __attribute__((always_inline)) void usDelay(")
-		end = delay.index("// The high-frequency Timer reports recommended", start)
+		end = delay.index('#include "system_core_clock_calibration.h"', start)
 		for name in ("DWT->", "CoreDebug->", "ArmDelayCalibrate("):
 			self.assertNotIn(name, delay[start:end])
 
 	def test_nsdelay_owns_its_assembly(self):
 		start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
-		end = self.delay.index("// The high-frequency Timer reports recommended", start)
+		end = self.delay.index('#include "system_core_clock_calibration.h"', start)
 		runtime = self.delay[start:end]
 		self.assertIn('" SUBS %[remaining], #1\n"', runtime)
 		self.assertIn('" BGT 1b\n"', runtime)
@@ -68,7 +68,7 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		us_start = self.delay.index("static inline __attribute__((always_inline)) void usDelay(")
 		ns_start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
 		us_loop = self.delay[us_start:ns_start]
-		ns_loop = self.delay[ns_start:self.delay.index("// The high-frequency Timer reports recommended", ns_start)]
+		ns_loop = self.delay[ns_start:self.delay.index('#include "system_core_clock_calibration.h"', ns_start)]
 		self.assertEqual(us_loop.count('" NOP\n"'), 10)
 		for loop in (us_loop, ns_loop):
 			self.assertIn('" MOVS %[remaining], %[count]\n"', loop)
