@@ -152,8 +152,8 @@ void TestConsecutivePrintfLineEndings()
 	SysLog_t log{};
 	SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), 128, true);
 	DevIntrf_t intrf{};
-	const char first[] = "Standby cycle 0x00000002\\r\\n";
-	const char second[] = "Entering Standby; automatic timer wake\\r\\n";
+	const char first[] = "Standby cycle 0x00000002\r\n";
+	const char second[] = "Entering Standby; automatic timer wake\r\n";
 	int firstLen;
 	int secondLen;
 
@@ -161,7 +161,7 @@ void TestConsecutivePrintfLineEndings()
 	CHECK(SysLogInitNoTimer(&log, &cfg, nullptr, 0, 0));
 	firstLen = (int)std::strlen(first);
 	secondLen = (int)std::strlen(second);
-	CHECK(SysLogPrintf(&log, "Standby cycle 0x%08x\\r\\n", 2U) == firstLen);
+	CHECK(SysLogPrintf(&log, "Standby cycle 0x%08x\r\n", 2U) == firstLen);
 	CHECK(SysLogPrintf(&log, "%s", second) == secondLen);
 	SysLogSetSink(&log, &intrf, 0);
 	ResetCapture();
