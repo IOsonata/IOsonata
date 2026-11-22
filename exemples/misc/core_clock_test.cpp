@@ -536,11 +536,14 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 
 	if (DelayCalibrationMeasure(pSample))
 	{
-		CoreClockTestPrint("Delay calibration counter %u Hz: us loop/s %u, ns loop/s %u\r\n",
+		CoreClockTestPrint("Delay calibration DWT %u Hz: us loop/s %u, ns loop/s %u\r\n",
 			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
 			(unsigned)pSample->NsLoopsPerSecond);
 		return true;
 	}
+	// A missing, locked or non-running DWT CYCCNT cannot measure cycles.
+	// Keep the production factor intact and use the independent HF timer.
+	CoreClockTestPrint("DWT cycle calibration unavailable; using HF Timer\r\n");
 
 	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
 	{
