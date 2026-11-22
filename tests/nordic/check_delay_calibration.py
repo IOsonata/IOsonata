@@ -20,9 +20,10 @@ class Nrf52DelayCalibration(unittest.TestCase):
         cls.system = SYSTEM.read_text(encoding="utf-8")
         cls.delay = DELAY.read_text(encoding="utf-8")
 
-    def test_existing_mcu_fallback_divisors_are_preserved(self):
+    def test_measured_nrf52832_factor_is_retained(self):
         self.assertIn("ArmDelayClockSetDivisors(SystemCoreClock,", self.system)
-        self.assertIn("13000000UL, 3000000UL", self.system)
+        self.assertIn("13001042UL, 3000000UL", self.system)
+        self.assertEqual(64000000 * 1000000 // 13001042, 4922682)
         self.assertIn('#include "idelay.h"', self.system)
 
     def test_clock_change_factor_math_is_generic(self):
@@ -39,11 +40,11 @@ class Nrf52DelayCalibration(unittest.TestCase):
 
     def test_250ms_scale_at_64mhz(self):
         frequency = 64000000
-        us_factor = frequency // 13
+        us_factor = frequency * 1000000 // 13001042
         ns_factor = frequency // 3
         long_loops = (250000 * us_factor + 999999) // 1000000
         short_loops = (250000000 * ns_factor + 999999999) // 1000000000
-        self.assertLess(abs(long_loops * 13 - 16000000), 128)
+        self.assertLess(abs(long_loops * 13001042 // 1000000 - 16000000), 128)
         # The SUBS/BNE loop takes three cycles per iteration on nRF52.
         # A previous divisor of 3189000 measured 235299 us.
         self.assertLess(abs(short_loops * 3000 - 16000000000), 128000)
