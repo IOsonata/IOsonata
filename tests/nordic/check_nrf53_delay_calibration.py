@@ -22,9 +22,10 @@ class Nrf53DelayCalibration(unittest.TestCase):
 
 	def test_uses_real_cpu_cycle_measurements(self):
 		self.assertIn("DWT->CYCCNT - start", self.cal)
-		self.assertIn("#define ARM_DELAY_USE_DWT 1", self.delay)
-		self.assertIn("ArmDelayDwtWait(cycles);", self.delay)
-		self.assertIn("(uint32_t)(DWT->CYCCNT - start) < chunk", self.delay)
+		self.assertIn("#define ARM_DELAY_CAL_DWT_AVAILABLE 1", self.delay)
+		self.assertNotIn("ArmDelayDwtWait(", self.delay)
+		self.assertIn("CoreDebug->DEMCR = prevTrace;", self.cal)
+		self.assertIn("DWT->CTRL = prevCtrl;", self.cal)
 		self.assertIn("CoreDebug_DEMCR_TRCENA_Msk", self.cal)
 		self.assertIn("DWT_CTRL_CYCCNTENA_Msk", self.cal)
 		self.assertIn("ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS)", self.cal)
@@ -35,16 +36,13 @@ class Nrf53DelayCalibration(unittest.TestCase):
 		self.assertIn("SystemnsDelayFactor = prevNsFactor;", self.cal)
 		self.assertIn("__set_PRIMASK(prevMask)", self.cal)
 
-	def test_only_nondefault_app_frequency_uses_dwt(self):
+	def test_app_frequency_update_uses_calibrated_loop_factors(self):
 		self.assertIn('#include "idelay.h"', self.app)
 		self.assertIn('#include "idelay.h"', self.net)
-		self.assertIn("cpuHz != __SYSTEM_CLOCK_DEFAULT", self.app)
-		self.assertIn("cpuHz == __SYSTEM_CLOCK_DEFAULT", self.app)
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 25U, 3U)", self.app)
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", self.app)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.app)
-		self.assertIn("#if !ARM_DELAY_USE_DWT", self.app)
-		self.assertEqual(self.app.count("ArmDelayCalibrate("), 1)
+		self.assertNotIn("ArmDelayCalibrate(", self.app)
 		self.assertNotIn("ArmDelayCalibrate(", self.net)
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", self.net)
 		self.assertNotIn("ArmDelayClockUpdate(&s_DelayCalibration", self.net)
