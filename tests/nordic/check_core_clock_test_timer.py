@@ -58,6 +58,20 @@ class CoreClockTestInitialization(unittest.TestCase):
         self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,", sample)
         self.assertNotIn("DelayCalibrationProbeNs(", sample)
         self.assertNotIn("raw ns loop", sample)
+        self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', sample)
+        self.assertIn('CoreClockTestResult("nsDelay factor unchanged during timing",', sample)
+
+    def test_nrf52_nsloop_uses_one_aligned_implementation(self):
+        delay = (ROOT / "ARM/include/idelay.h").read_text(
+            encoding="utf-8")
+        self.assertIn("#if defined(NRF52_SERIES)\n"
+            "static __attribute__((noinline, aligned(16))) "
+            "void ArmDelayNsLoop(uint32_t cnt)", delay)
+        self.assertIn("#else\n"
+            "static inline __attribute__((always_inline)) "
+            "void ArmDelayNsLoop(uint32_t cnt)", delay)
+        self.assertIn('" SUBS %[low], #1\\n"', delay)
+        self.assertIn('" BNE 1b\\n"', delay)
 
 
 class CoreClockTestLfLifecycle(unittest.TestCase):
