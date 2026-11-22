@@ -22,9 +22,9 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 		self.assertNotIn(".LowPwrOsc = { OSC_TYPE_RC, 32768", self.system)
 
 	def test_fixed_frequency_network_uses_port_defaults(self):
-		self.assertIn("23U, 10U", self.system)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 10U)", self.system)
-		self.assertIn("SystemnsDelayFactor = 6398912U;", self.system)
+		self.assertIn("23U, 3U", self.system)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", self.system)
+		self.assertIn("SystemnsDelayFactor = 21321178U;", self.system)
 		self.assertNotIn("ArmDelayCalibrate(", self.system)
 		self.assertNotIn("ArmDelayClockUpdate(&s_DelayCalibration", self.system)
 
@@ -55,11 +55,11 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 	def test_250ms_nominal_loop_scale(self):
 		for frequency in (64000000,):
 			us = frequency // 23
-			ns = 6398912
+			ns = 21321178
 			us_loops = (250000 * us + 999999) // 1000000
 			ns_loops = (250000000 * ns + 999999999) // 1000000000
 			self.assertLess(abs(us_loops * 23 - frequency // 4), 5000)
-			self.assertLess(abs(ns_loops * 10 - frequency // 4), 5000)
+			self.assertLess(abs(ns_loops * 3 - frequency // 4), 5000)
 		self.assertIn("usDelay(ms * 1000U)", self.delay)
 
 
