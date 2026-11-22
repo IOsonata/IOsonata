@@ -216,6 +216,11 @@ extern "C" bool nRFxSleepLfClockRunning(void);
 #elif defined(NRF5340_XXAA_NETWORK)
 #define NRF_SDELAY_COLD_DEFAULT_TICKS 8
 #define NRF_SDELAY_WARM_DEFAULT_TICKS (-10)
+#elif defined(NRF52832_XXAA) || defined(NRF52832_XXAB)
+// First nRF52832 cold LFCLK measurement: 1,262,331 us without correction.
+// This 8,596-tick candidate must be verified with repeated cold startups.
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 8596
+#define NRF_SDELAY_WARM_DEFAULT_TICKS 0
 #else
 #define NRF_SDELAY_COLD_DEFAULT_TICKS 0
 #define NRF_SDELAY_WARM_DEFAULT_TICKS 0
