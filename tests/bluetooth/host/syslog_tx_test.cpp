@@ -198,8 +198,8 @@ void TestBufferedFlushResumesPartialRecord()
 	CHECK(std::memcmp(s_Captured, "record\n", 7) == 0);
 }
 
-// The record that was partly sent is evicted by a full non-blocking store.
-// The next record starts from its first byte, not from the old position.
+// A partial transfer owns its copy even when the non-blocking FIFO evicts
+// a different queued record. No accepted byte is duplicated or discarded.
 void TestPartialRecordEvicted()
 {
 	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(2, kLineLen)];
@@ -208,23 +208,29 @@ void TestPartialRecordEvicted()
 	std::memset(&log, 0, sizeof(log));
 	SysLogCfg_t cfg = MakeCfg(fifoMem, sizeof(fifoMem), kLineLen, false);
 	CHECK(SysLogInit(&log, &cfg, nullptr, 0, nullptr, 0));
-	CHECK(SysLogPrintf(&log, "one\n") == 4);
+	CHECK(SysLogPrintf(&log, "one\\n") == 4);
 
 	DevIntrf_t intrf{};
 	MakeIntrf(&intrf);
 	SysLogSetSink(&log, &intrf, 0);
 	ResetCapture(2);
 	CHECK(SysLogFlush(&log) == 2);
+	CHECK(log.TxLen == 4 && log.TxSent == 2);
+	CHECK(CFifoUsed(log.hFifo) == 0);
 
-	// The sink is stalled: these stay queued and the second one evicts "one".
+	// The active transfer retains "e\\n" outside CFifo. Queue three
+	// more records while stalled; the oldest queued record is evicted.
 	ResetCapture(0);
-	CHECK(SysLogPrintf(&log, "two\n") == 4);
-	CHECK(SysLogPrintf(&log, "three\n") == 6);
+	CHECK(SysLogPrintf(&log, "two\\n") == 4);
+	CHECK(SysLogPrintf(&log, "three\\n") == 6);
+	CHECK(SysLogPrintf(&log, "four\\n") == 5);
+	CHECK(CFifoUsed(log.hFifo) == 2);
 
 	ResetCapture();
-	CHECK(SysLogFlush(&log) == 10);
-	CHECK(s_CapturedLen == 10);
-	CHECK(std::memcmp(s_Captured, "two\nthree\n", 10) == 0);
+	CHECK(SysLogFlush(&log) == 13);
+	CHECK(s_CapturedLen == 13);
+	CHECK(std::memcmp(s_Captured, "e\\nthree\\nfour\\n", 13) == 0);
+	CHECK(log.TxLen == 0 && log.TxSent == 0);
 }
 
 // A sink attached after a partial send gets the whole head record.
