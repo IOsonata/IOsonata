@@ -88,6 +88,8 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 			".syntax unified\n"
 #endif
 			" MOVS %[remaining], %[count]\n"
+			// Keep the ten-NOP countdown inside one 32-byte flash fetch block.
+			" .p2align 5\n"
 			"1:\n"
 			" NOP\n"
 			" NOP\n"
