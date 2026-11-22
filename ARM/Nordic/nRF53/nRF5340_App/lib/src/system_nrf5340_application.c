@@ -127,13 +127,6 @@ void SystemCoreClockUpdate(void)
 			// Retain a proportional fallback for other supported speeds.
 			(void)ArmDelayClockUpdate(&s_DelayCalibration, cpuHz);
 		}
-#if !ARM_DELAY_USE_DWT
-		if (cpuHz != __SYSTEM_CLOCK_DEFAULT)
-		{
-			// Optional foreground DWT measurement for the assembly fallback.
-			(void)ArmDelayCalibrate(&s_DelayCalibration, cpuHz);
-		}
-#endif
 	}
 }
 
@@ -177,7 +170,9 @@ bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
 		return false;
 	}
 
-	NRF_APP_CLOCK->HFCLKCTRL = requested;
+	// Preserve fields other than the CPU HCLK divider.
+	NRF_APP_CLOCK->HFCLKCTRL =
+		(NRF_APP_CLOCK->HFCLKCTRL & ~CLOCK_HFCLKCTRL_HCLK_Msk) | requested;
 	__DSB();
 	__ISB();
 
