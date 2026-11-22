@@ -6,6 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEM = ROOT / "ARM/Nordic/nRF53/nRF5340_Net/lib/src/system_nrf5340_network.c"
 DELAY = ROOT / "ARM/include/idelay.h"
+CAL = ROOT / "ARM/include/system_core_clock_calibration.h"
 TEST = ROOT / "exemples/misc/core_clock_test.cpp"
 
 
@@ -14,6 +15,7 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 	def setUpClass(cls):
 		cls.system = SYSTEM.read_text(encoding="utf-8")
 		cls.delay = DELAY.read_text(encoding="utf-8")
+		cls.cal = CAL.read_text(encoding="utf-8")
 		cls.test = TEST.read_text(encoding="utf-8")
 
 	def test_original_network_lfclk_default(self):
@@ -30,10 +32,10 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 
 
 	def test_hf_timer_calibration_without_dwt(self):
-		self.assertIn("static inline bool ArmDelayCalibrate(", self.delay)
-		self.assertIn("DWT->CYCCNT", self.delay)
+		self.assertIn("static inline bool ArmDelayCalibrate(", self.cal)
+		self.assertIn("DWT->CYCCNT", self.cal)
 		self.assertIn("DelayCalibrationMeasure(pSample)", self.test)
-		self.assertIn("DelayCalibrationFromTimer(", self.test)
+		self.assertIn("DelayCalibrationFromTimer(", self.cal)
 
 	def test_both_runtime_delays_use_original_countdowns(self):
 		us_start = self.delay.index("static inline __attribute__((always_inline)) void usDelay(")
