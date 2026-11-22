@@ -158,9 +158,11 @@ void SystemCoreClockUpdate(void)
 	// The aligned countdown measured 100008 us for a 100 ms request;
 	// all 250 ms timer tests passed. DWT was unavailable on this build.
 	// Scaled divisor 13001042 produces the measured loop rate at 64 MHz.
-	// Keep the validated three-cycle ns-delay divisor unchanged.
+	// The same run measured 100008 us for a 100 ms nsDelay request with
+	// the 3000000 divisor and reported 21331626 ns-delay iterations/s.
+	// Divisor 3000240 produces that loop rate at 64 MHz.
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
-		13001042UL, 3000000UL);
+		13001042UL, 3000240UL);
 }
 
 void SystemInit(void)
