@@ -55,8 +55,8 @@ class CoreClockTestInitialization(unittest.TestCase):
         end = source.index("static void CoreClockTestDelayCalibrationRecord(void)\n{", start)
         sample = source[start:end]
         self.assertIn("nsDelay(100000000U);", sample)
-        self.assertNotIn("DelayCalibrationMeasure(", sample)
-        self.assertNotIn("DWT", sample)
+        self.assertIn("if (DelayCalibrationMeasure(pSample))", sample)
+        self.assertIn("Delay calibration DWT %u Hz:", sample)
         self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,", sample)
         self.assertNotIn("DelayCalibrationProbeNs(", sample)
         self.assertNotIn("raw ns loop", sample)
@@ -97,9 +97,9 @@ class CoreClockTestInitialization(unittest.TestCase):
         for forbidden in ("ArmDelayUsLoop(", "ArmDelayNsLoop(",
             "DelayCalibrationProbeNs("):
             self.assertNotIn(forbidden, delay)
-        self.assertNotIn("ArmDelayCalibrate(", delay)
-        self.assertNotIn("DelayCalibrationMeasure(", delay)
-        self.assertNotIn("DWT", delay)
+        self.assertIn("static inline bool ArmDelayCalibrate(", delay)
+        self.assertIn("static inline bool DelayCalibrationMeasure(", delay)
+        self.assertNotIn("ArmDelayCalibrationDwtAllowed", delay)
         self.assertNotIn("NRF52_SERIES", delay)
         self.assertIn('" .p2align 5\\n"', ns_loop)
 
