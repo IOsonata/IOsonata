@@ -682,12 +682,30 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 #define NRFX_LFRC_CAL_TIMEOUT_US	250000U
 #define NRFX_LFRC_CAL_RETRY_US		1000U
 
+// nRF52 anomaly 192: LFRC frequency offset after calibration. The errata
+// workaround writes 2 to this register before the CAL task; the vendor
+// driver writes 0 again when calibration is done.
+#define NRFX_LFRC_ERRATA192_REG		(*(volatile uint32_t *)0x40000C34UL)
+
+static inline void nRFxLfrcCalErrata192(bool bStart)
+{
+#if NRF52_ERRATA_192_ENABLE_WORKAROUND
+	if (nrf52_errata_192())
+	{
+		NRFX_LFRC_ERRATA192_REG = bStart ? 2U : 0U;
+	}
+#else
+	(void)bStart;
+#endif
+}
+
 static bool nRFxLfclkCalibrate(void)
 {
 	uint32_t elapsed;
 	uint32_t nextRetry;
 
 	NRF_CLOCK->EVENTS_DONE = 0U;
+	nRFxLfrcCalErrata192(true);
 	NRF_CLOCK->TASKS_CAL = 1U;
 	elapsed = 0U;
 	nextRetry = NRFX_LFRC_CAL_RETRY_US;
@@ -696,6 +714,7 @@ static bool nRFxLfclkCalibrate(void)
 		if (NRF_CLOCK->EVENTS_DONE != 0U)
 		{
 			NRF_CLOCK->EVENTS_DONE = 0U;
+			nRFxLfrcCalErrata192(false);
 			return true;
 		}
 		// nRF5340 revision 1 anomaly 137: a higher priority LFCLK
@@ -713,8 +732,10 @@ static bool nRFxLfclkCalibrate(void)
 	if (NRF_CLOCK->EVENTS_DONE != 0U)
 	{
 		NRF_CLOCK->EVENTS_DONE = 0U;
+		nRFxLfrcCalErrata192(false);
 		return true;
 	}
+	nRFxLfrcCalErrata192(false);
 	return false;
 }
 #endif
@@ -1153,6 +1174,7 @@ static void nRFxMpslCalibrationBegin(void)
 		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0U;
 		NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_HFCLKSTARTED_Msk;
 		NRF_CLOCK->EVENTS_DONE = 0U;
+		nRFxLfrcCalErrata192(true);
 		NRF_CLOCK->TASKS_CAL = 1U;
 		s_bNRFxMpslCalibrationRunning = true;
 	}
@@ -1209,6 +1231,7 @@ void nRFxMpslClockIrq(void)
 			NRF_CLOCK->EVENTS_DONE != 0U)
 		{
 			NRF_CLOCK->EVENTS_DONE = 0U;
+			nRFxLfrcCalErrata192(false);
 			NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_DONE_Msk;
 			s_bNRFxMpslCalibrationRunning = false;
 			s_bNRFxMpslCalibrationPending = false;
