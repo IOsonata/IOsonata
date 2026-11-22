@@ -64,8 +64,10 @@ class CoreClockTestInitialization(unittest.TestCase):
     def test_nrf52_nsloop_uses_one_aligned_implementation(self):
         delay = (ROOT / "ARM/include/idelay.h").read_text(
             encoding="utf-8")
-        self.assertIn("#if defined(NRF52_SERIES)\n"
-            "static __attribute__((noinline, aligned(16))) "
+        self.assertIn("#if defined(NRF52_SERIES) || defined(NRF52805_XXAA)", delay)
+        self.assertIn("defined(NRF52832_XXAA)", delay)
+        self.assertIn("defined(NRF52840_XXAA)", delay)
+        self.assertIn("static __attribute__((noinline, aligned(16))) "
             "void ArmDelayNsLoop(uint32_t cnt)", delay)
         self.assertIn("#else\n"
             "static inline __attribute__((always_inline)) "
