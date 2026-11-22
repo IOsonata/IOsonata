@@ -517,7 +517,6 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	uint32_t cpuHz;
 	uint32_t start;
 	uint32_t usElapsed;
-	uint32_t nsElapsed;
 	uint32_t nsPublicElapsed;
 	uint32_t nsRepeatElapsed;
 	uint32_t nsFactorBefore;
@@ -575,36 +574,31 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	nsDelay(100000000U);
 	nsPublicElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
 
-	// Public and calibration paths use the same assembly algorithm,
-	// but inline placement can affect flash-fetch timing. Repeat to
-	// distinguish a transient from a persistent call-site difference.
+	// Repeat the real API measurement at a second call site. The raw
+	// assembly probe can execute at a different flash alignment, so it
+	// must not be treated as the production delay's calibration source.
 	start = TimerGetMicrosecond(&s_RetainedTimer);
 	nsDelay(100000000U);
 	nsRepeatElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
 
-	start = TimerGetMicrosecond(&s_RetainedTimer);
-	DelayCalibrationProbeNs(100000000U);
-	nsElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
 	nsFactorAfter = SystemnsDelayFactor;
 
 	TimerDisable(&s_RetainedTimer);
-	CoreClockTestPrint("nsDelay repeat %u us, raw %u us, factors before %u after %u\r\n",
-		(unsigned)nsRepeatElapsed, (unsigned)nsElapsed,
-		(unsigned)nsFactorBefore, (unsigned)nsFactorAfter);
-	CoreClockTestPrint("Delay timing HF Timer %u Hz: msDelay %u us, nsDelay %u us, raw ns loop %u us\r\n",
-		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsPublicElapsed,
-		(unsigned)nsElapsed);
+	CoreClockTestPrint("nsDelay repeat %u us, factors before %u after %u\r\n",
+		(unsigned)nsRepeatElapsed, (unsigned)nsFactorBefore,
+		(unsigned)nsFactorAfter);
+	CoreClockTestPrint("Delay timing HF Timer %u Hz: msDelay %u us, nsDelay %u us\r\n",
+		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsPublicElapsed);
 	CoreClockTestResult("nsDelay HF Timer 100 ms",
 		nsPublicElapsed >= 98000U && nsPublicElapsed <= 102000U);
 
-	if (usElapsed == 0U || nsElapsed == 0U)
+	if (usElapsed == 0U || nsPublicElapsed == 0U)
 	{
 		CoreClockTestResult("Delay HF Timer measurement", false);
 		return false;
 	}
-	// Runtime factors must be inferred from the actual public delay
-	// entry point, not the separate raw probe whose inlined flash
-	// placement can have a different loop timing on nRF52.
+	// Recommend factors from the public API, never from a differently
+	// placed inline assembly probe.
 	valid = DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,
 		pSample);
 	if (valid)
