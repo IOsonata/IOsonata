@@ -49,6 +49,14 @@ class GenericDelayCalibration(unittest.TestCase):
 		self.assertNotIn("DelayCalibrationInterpolate(", riscv)
 		self.assertTrue(ARM_CAL.exists())
 
+	def test_only_generic_system_core_clock_header_remains(self):
+		canonical = ROOT / "include/coredev/system_core_clock.h"
+		self.assertTrue(canonical.is_file())
+		legacy = [p for p in (ROOT / "ARM").rglob("system_core_clock.h")
+			if p.is_file()]
+		self.assertEqual([], legacy)
+
+
 
 if __name__ == "__main__":
 	unittest.main()
