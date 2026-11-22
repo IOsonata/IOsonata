@@ -138,6 +138,19 @@ class NordicSleepDelay(unittest.TestCase):
             self.assertEqual(ticks, expected)
 
 
+    def test_nrf52832_cold_calibration_and_ns_probe(self):
+        clock = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
+            encoding="utf-8")
+        example = TEST.read_text(encoding="utf-8")
+        self.assertIn("defined(NRF52832_XXAA) || defined(NRF52832_XXAB)", clock)
+        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8596", clock)
+        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", clock)
+        self.assertIn("nsFactorBefore = SystemnsDelayFactor;", example)
+        self.assertIn("nsFactorAfter = SystemnsDelayFactor;", example)
+        self.assertIn("nsDelay repeat %u us", example)
+        self.assertIn("nsRepeatElapsed = TimerGetMicrosecond", example)
+
+
     def test_core_clock_test_reports_end_to_end_calibration(self):
         src = TEST.read_text(encoding="utf-8")
         start = src.index("static void CoreClockTestSleepDelayMeasure(")
