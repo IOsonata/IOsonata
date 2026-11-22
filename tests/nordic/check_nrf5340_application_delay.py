@@ -52,7 +52,7 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 			self.assertNotIn(name, delay[start:end])
 
 	def test_nsdelay_owns_its_assembly(self):
-		start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
+		start = self.delay.index("static ARM_NSDELAY_ATTR void nsDelay(")
 		end = self.delay.index("#define ARM_DELAY_CAL_NS", start)
 		runtime = self.delay[start:end]
 		self.assertIn('" SUBS %[remaining], #1\n"', runtime)
@@ -65,7 +65,7 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 
 	def test_both_runtime_delays_use_original_countdowns(self):
 		us_start = self.delay.index("static inline __attribute__((always_inline)) void usDelay(")
-		ns_start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
+		ns_start = self.delay.index("static ARM_NSDELAY_ATTR void nsDelay(")
 		us_loop = self.delay[us_start:ns_start]
 		ns_loop = self.delay[ns_start:self.delay.index("#define ARM_DELAY_CAL_NS", ns_start)]
 		self.assertEqual(us_loop.count('" NOP\n"'), 10)
@@ -77,6 +77,7 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 			self.assertNotIn('" BNE ', loop)
 			self.assertNotIn("NRF5340", loop)
 		self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', self.test)
+		self.assertIn('__attribute__((noinline, aligned(32), optimize("O0")))', self.delay)
 
 	def test_250ms_nominal_loop_scale(self):
 		for frequency in (64000000, 128000000,):
