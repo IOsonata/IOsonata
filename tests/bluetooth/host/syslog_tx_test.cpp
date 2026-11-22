@@ -208,7 +208,7 @@ void TestPartialRecordEvicted()
 	std::memset(&log, 0, sizeof(log));
 	SysLogCfg_t cfg = MakeCfg(fifoMem, sizeof(fifoMem), kLineLen, false);
 	CHECK(SysLogInit(&log, &cfg, nullptr, 0, nullptr, 0));
-	CHECK(SysLogPrintf(&log, "one\\n") == 4);
+	CHECK(SysLogPrintf(&log, "one\n") == 4);
 
 	DevIntrf_t intrf{};
 	MakeIntrf(&intrf);
@@ -218,18 +218,18 @@ void TestPartialRecordEvicted()
 	CHECK(log.TxLen == 4 && log.TxSent == 2);
 	CHECK(CFifoUsed(log.hFifo) == 0);
 
-	// The active transfer retains "e\\n" outside CFifo. Queue three
+	// The active transfer retains "e\n" outside CFifo. Queue three
 	// more records while stalled; the oldest queued record is evicted.
 	ResetCapture(0);
-	CHECK(SysLogPrintf(&log, "two\\n") == 4);
-	CHECK(SysLogPrintf(&log, "three\\n") == 6);
-	CHECK(SysLogPrintf(&log, "four\\n") == 5);
+	CHECK(SysLogPrintf(&log, "two\n") == 4);
+	CHECK(SysLogPrintf(&log, "three\n") == 6);
+	CHECK(SysLogPrintf(&log, "four\n") == 5);
 	CHECK(CFifoUsed(log.hFifo) == 2);
 
 	ResetCapture();
 	CHECK(SysLogFlush(&log) == 13);
 	CHECK(s_CapturedLen == 13);
-	CHECK(std::memcmp(s_Captured, "e\\nthree\\nfour\\n", 13) == 0);
+	CHECK(std::memcmp(s_Captured, "e\nthree\nfour\n", 13) == 0);
 	CHECK(log.TxLen == 0 && log.TxSent == 0);
 }
 
