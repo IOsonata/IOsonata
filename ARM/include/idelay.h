@@ -389,7 +389,19 @@ static inline uint64_t ArmDelayDwtWait(uint64_t Cycles)
 
 	if (!ArmDelayDwtReady())
 	{
+		// On nRF52, SystemInit controls DWT because anomaly 32 forbids
+		// re-enabling trace on affected silicon.
+#if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
+	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
+	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
+	defined(NRF52833_XXAA) || defined(NRF52840_XXAA)
 		return Cycles;
+#else
+		if (!ArmDelayDwtInit())
+		{
+			return Cycles;
+		}
+#endif
 	}
 	while (Cycles != 0U)
 	{
@@ -457,6 +469,7 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 {
 #if ARM_DELAY_USE_DWT
 	uint64_t cycles;
+	uint32_t remainder;
 
 	if (cnt == 0U)
 	{
@@ -467,7 +480,7 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 	if (cycles != 0U)
 	{
 		// A stopped DWT falls back without restarting the full interval.
-		uint32_t remainder = (uint32_t)((cycles * 1000000000ULL +
+		remainder = (uint32_t)((cycles * 1000000000ULL +
 			SystemCoreClock - 1U) / SystemCoreClock);
 		if (remainder >= 10000U)
 		{
