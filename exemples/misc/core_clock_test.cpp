@@ -870,8 +870,7 @@ static void CoreClockTestSleepDelayOwnership(int LowCount)
 	// All advertised LF timers have been initialized, then disabled.
 	// A temporary delay may not reuse any of these application handles.
 	blocked = !sDelay(1U);
-	CoreClockTestResult("sDelay disabled RTC ownership", blocked);
-	CoreClockTestResult("sDelay all LF timers occupied", blocked);
+	CoreClockTestResult("sDelay occupied disabled LF timers", blocked);
 }
 
 // Check that disabling one timer does not stop an independently
