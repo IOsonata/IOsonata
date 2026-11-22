@@ -154,6 +154,7 @@ static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
 static TimerDev_t s_RetainedTimer;
 static volatile uint32_t s_InterruptCount;
+static uint32_t s_LfTimerInitMask;
 static unsigned s_Failures;
 static volatile bool s_UartTxEmpty = true;
 
@@ -509,6 +510,10 @@ static void CoreClockTestSleepDelay(void)
 	}
 	CoreClockTestSleepDelayMeasure("warm");
 	SystemLowFreqClockDisable();
+	// A second call confirms that the temporary LF timer was returned
+	// to its owner pool after the first call. Preserve the existing
+	// cold/warm calibration measurements above.
+	CoreClockTestSleepDelayMeasure("reuse");
 }
 
 static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
@@ -758,6 +763,10 @@ static void CoreClockTestTimer(int DevNo)
 	{
 		return;
 	}
+	if (DevNo >= 0 && DevNo < TimerGetLowFreqDevCount() && DevNo < 32)
+	{
+		s_LfTimerInitMask |= 1UL << DevNo;
+	}
 
 	// Diagnose LFCLK timing against an independent HF peripheral timer.
 	// The test remains generic: no oscillator registers or CPU counter access.
@@ -834,6 +843,34 @@ static void CoreClockTestTimer(int DevNo)
 	}
 }
 
+
+// Check that an initialized but disabled LF timer remains owned.
+// This runs after the device matrix: those TimerInit calls intentionally
+// retain their handles across TimerDisable. No hardware-specific RTC map
+// or private allocation API is used here.
+static void CoreClockTestSleepDelayOwnership(int LowCount)
+{
+	uint32_t expectedMask;
+	bool blocked;
+
+	if (sDelay == nullptr || LowCount <= 0 || LowCount > 32)
+	{
+		CoreClockTestPrint("sDelay RTC contention: UNSUPPORTED\\r\\n");
+		return;
+	}
+	expectedMask = LowCount == 32 ? UINT32_MAX :
+		(1UL << LowCount) - 1U;
+	if ((s_LfTimerInitMask & expectedMask) != expectedMask)
+	{
+		CoreClockTestPrint("sDelay RTC contention: UNSUPPORTED (not all LF timers initialized)\\r\\n");
+		return;
+	}
+	// All advertised LF timers have been initialized, then disabled.
+	// A temporary delay may not reuse any of these application handles.
+	blocked = !sDelay(1U);
+	CoreClockTestResult("sDelay disabled RTC ownership", blocked);
+	CoreClockTestResult("sDelay all LF timers occupied", blocked);
+}
 
 // Check that disabling one timer does not stop an independently
 // configured timer. Prefer one LF and one HF device when available.
@@ -1080,6 +1117,7 @@ int main(void)
 		CoreClockTestTimer(timerDevNo);
 	}
 	CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);
+	CoreClockTestSleepDelayOwnership(lowTimerCount);
 	CoreClockTestDelayCalibrationReport();
 	CoreClockTestFlush();
 	CoreClockTestPrint("CoreClockTest complete: %u failures\r\n", s_Failures);
