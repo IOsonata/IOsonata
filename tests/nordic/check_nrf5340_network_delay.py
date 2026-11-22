@@ -29,16 +29,17 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 		self.assertNotIn("ArmDelayClockUpdate(&s_DelayCalibration", self.system)
 
 
-	def test_explicit_dwt_and_timer_calibration_remain_available(self):
-		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", self.delay)
-		self.assertIn("DelayCalibrationMeasure(pSample)", self.test)
+	def test_hf_timer_calibration_without_dwt(self):
+		self.assertNotIn("ArmDelayCalibrate(", self.delay)
+		self.assertNotIn("DWT", self.delay)
+		self.assertNotIn("DelayCalibrationMeasure(", self.test)
 		self.assertIn("DelayCalibrationFromTimer(", self.test)
 
 	def test_both_runtime_delays_use_original_countdowns(self):
 		us_start = self.delay.index("static inline __attribute__((always_inline)) void usDelay(")
 		ns_start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
 		us_loop = self.delay[us_start:ns_start]
-		ns_loop = self.delay[ns_start:self.delay.index("#define ARM_DELAY_CAL_NS", ns_start)]
+		ns_loop = self.delay[ns_start:self.delay.index("// The high-frequency Timer reports recommended", ns_start)]
 		self.assertEqual(us_loop.count('" NOP\n"'), 10)
 		for loop in (us_loop, ns_loop):
 			self.assertIn('" MOVS %[remaining], %[count]\n"', loop)
