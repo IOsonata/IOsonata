@@ -64,6 +64,19 @@ class CoreClockTestInitialization(unittest.TestCase):
         self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', sample)
         self.assertNotIn("nsSameSiteElapsed", sample)
         self.assertIn('CoreClockTestResult("nsDelay factor unchanged during timing",', sample)
+        self.assertEqual(sample.count("irqState = __get_PRIMASK();"), 3)
+        self.assertEqual(sample.count("__disable_irq();"), 3)
+        self.assertEqual(sample.count("__set_PRIMASK(irqState);"), 3)
+        for call, elapsed in (
+            ("msDelay(100);", "usElapsed"),
+            ("nsDelay(100000000U);", "nsPublicElapsed"),
+            ("nsDelay(100000000U);", "nsRepeatElapsed"),
+        ):
+            start = sample.index(elapsed + " = TimerGetMicrosecond")
+            self.assertIn("__set_PRIMASK(irqState);",
+                sample[start:start + 120])
+        self.assertLess(sample.rindex("__set_PRIMASK(irqState);"),
+            sample.index('CoreClockTestPrint("nsDelay repeat'))
 
     def test_arm_usloop_preserves_original_countdown(self):
         delay = (ROOT / "ARM/include/idelay.h").read_text(
