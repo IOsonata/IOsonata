@@ -61,19 +61,18 @@ class CoreClockTestInitialization(unittest.TestCase):
         self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', sample)
         self.assertIn('CoreClockTestResult("nsDelay factor unchanged during timing",', sample)
 
-    def test_nrf52_nsloop_uses_one_aligned_implementation(self):
+    def test_arm_nsloop_remains_vendor_independent(self):
         delay = (ROOT / "ARM/include/idelay.h").read_text(
             encoding="utf-8")
-        self.assertIn("#if defined(NRF52_SERIES) || defined(NRF52805_XXAA)", delay)
-        self.assertIn("defined(NRF52832_XXAA)", delay)
-        self.assertIn("defined(NRF52840_XXAA)", delay)
-        self.assertIn("static __attribute__((noinline, aligned(16))) "
-            "void ArmDelayNsLoop(uint32_t cnt)", delay)
-        self.assertIn("#else\n"
-            "static inline __attribute__((always_inline)) "
-            "void ArmDelayNsLoop(uint32_t cnt)", delay)
-        self.assertIn('" SUBS %[low], #1\\n"', delay)
-        self.assertIn('" BNE 1b\\n"', delay)
+        start = delay.index("static inline __attribute__((always_inline)) "
+            "void ArmDelayNsLoop(uint32_t cnt)")
+        end = delay.index("// The calibration test measures", start)
+        implementation = delay[start:end]
+        self.assertIn('" SUBS %[low], #1\\n"', implementation)
+        self.assertIn('" BNE 1b\\n"', implementation)
+        self.assertNotIn("NRF52_SERIES", implementation)
+        self.assertNotIn("NRF52832_XXAA", implementation)
+        self.assertNotIn("noinline", implementation)
 
 
 class CoreClockTestLfLifecycle(unittest.TestCase):
