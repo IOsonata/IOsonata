@@ -516,6 +516,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	TimerCfg_t cfg;
 	uint32_t cpuHz;
 	uint32_t start;
+	uint32_t irqState;
 	uint32_t usElapsed;
 	uint32_t nsPublicElapsed;
 	uint32_t nsRepeatElapsed;
@@ -568,21 +569,36 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 		return false;
 	}
 
+	// Sample the busy loop without UART or other interrupt-handler time.
+	// The independent HF hardware timer keeps running with PRIMASK set.
+	irqState = __get_PRIMASK();
+	__disable_irq();
 	start = TimerGetMicrosecond(&s_RetainedTimer);
 	msDelay(100);
 	usElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+	__set_PRIMASK(irqState);
 
 	nsFactorBefore = SystemnsDelayFactor;
+	// Sample the busy loop without UART or other interrupt-handler time.
+	// The independent HF hardware timer keeps running with PRIMASK set.
+	irqState = __get_PRIMASK();
+	__disable_irq();
 	start = TimerGetMicrosecond(&s_RetainedTimer);
 	nsDelay(100000000U);
 	nsPublicElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+	__set_PRIMASK(irqState);
 
 	// Repeat the real API measurement at a second call site. The raw
 	// assembly probe can execute at a different flash alignment, so it
 	// must not be treated as the production delay's calibration source.
+	// Sample the busy loop without UART or other interrupt-handler time.
+	// The independent HF hardware timer keeps running with PRIMASK set.
+	irqState = __get_PRIMASK();
+	__disable_irq();
 	start = TimerGetMicrosecond(&s_RetainedTimer);
 	nsDelay(100000000U);
 	nsRepeatElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+	__set_PRIMASK(irqState);
 
 	nsFactorAfter = SystemnsDelayFactor;
 
