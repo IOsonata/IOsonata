@@ -68,8 +68,10 @@ class CoreClockTestInitialization(unittest.TestCase):
             "void ArmDelayNsLoop(uint32_t cnt)")
         end = delay.index("// The calibration test measures", start)
         implementation = delay[start:end]
-        self.assertIn('" SUBS %[low], #1\\n"', implementation)
-        self.assertIn('" BNE 1b\\n"', implementation)
+        self.assertIn('" MOVS %[remaining], %[count]\\n"', implementation)
+        self.assertIn('" SUBS %[remaining], #1\\n"', implementation)
+        self.assertIn('" BGT 1b\\n"', implementation)
+        self.assertIn("chunk = loops > INT32_MAX ? INT32_MAX", implementation)
         self.assertNotIn("NRF52_SERIES", implementation)
         self.assertNotIn("NRF52832_XXAA", implementation)
         self.assertNotIn("noinline", implementation)
