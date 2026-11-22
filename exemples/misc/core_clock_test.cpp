@@ -535,6 +535,7 @@ static void CoreClockTestTimer(int DevNo)
 	uint32_t hfElapsed;
 	TimerCfg_t hfCfg;
 	bool hfReady;
+	bool enabled;
 
 	CoreClockTestPrint("Timer device %u\r\n", (unsigned)DevNo);
 	if (!CoreClockTestTimerInit(DevNo))
@@ -565,8 +566,15 @@ static void CoreClockTestTimer(int DevNo)
 		s_InterruptCount = 0U;
 		period = nsTimerEnableTrigger(&s_Timer, 0, 10000000ULL,
 			TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
-		if (frequency == 0U || period == 0U || !TimerEnable(&s_Timer))
+		// Evaluate all three independently. Short-circuiting would conceal
+		// whether frequency, compare setup or clock ownership caused failure.
+		enabled = TimerEnable(&s_Timer);
+		if (frequency == 0U || period == 0U || !enabled)
 		{
+			CoreClockTestPrint("Timer start diagnostic: device %u, frequency %u Hz, "
+				"period %u ns, enable %u, LF source %u\r\n",
+				(unsigned)DevNo, (unsigned)frequency, (unsigned)period,
+				(unsigned)enabled, (unsigned)GetLowFreqOscType());
 			TimerDisableTrigger(&s_Timer, 0);
 			TimerDisable(&s_Timer);
 			CoreClockTestResult("Timer start", false);
