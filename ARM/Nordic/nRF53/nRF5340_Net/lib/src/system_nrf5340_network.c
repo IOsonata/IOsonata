@@ -68,12 +68,13 @@ void SystemCoreClockUpdate(void)
 
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
-		// Preserve the original signed countdown and 23-cycle us factor.
-		// Network Core HF Timer measured 6,398,912 ns loop iterations/s
-		// at 64 MHz (100,017 us for a 100 ms request).
-		if (ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 10U))
+		// The 32-byte-aligned countdown runs at approximately 3 CPU
+		// cycles per iteration. Two HF Timer measurements at 64 MHz
+		// gave 30,012 us for 100 ms using the former 6,398,912 factor.
+		// Preserve the measured 21,321,178 iterations/s correction.
+		if (ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U))
 		{
-			SystemnsDelayFactor = 6398912U;
+			SystemnsDelayFactor = 21321178U;
 		}
 	}
 }
