@@ -68,10 +68,13 @@ void SystemCoreClockUpdate(void)
 
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
-		// Original SUBS/BGT countdown: hardware measured 834556 us for
-		// nsDelay(250 ms) with the old three-cycle factor. Ten cycles
-		// per iteration restores the nominal rate on the Network Core.
-		(void)ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 10U);
+		// Preserve the original signed countdown and 23-cycle us factor.
+		// Network Core HF Timer measured 6,398,912 ns loop iterations/s
+		// at 64 MHz (100,017 us for a 100 ms request).
+		if (ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 10U))
+		{
+			SystemnsDelayFactor = 6398912U;
+		}
 	}
 }
 
