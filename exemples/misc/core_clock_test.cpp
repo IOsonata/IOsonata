@@ -441,9 +441,10 @@ static void CoreClockTestCalibrationTest(void)
 // The architecture's delay implementation measures its own delay units.
 // The generic HF Timer remains a fallback and a timing validation reference.
 // Do not use RTC for calibration; never change production delay factors here.
-// Measure complete seconds-sleep latency, including temporary RTC
-// allocation and release. HF timer is a diagnostic reference only.
-static void CoreClockTestSleepDelay(void)
+// Measure complete sDelay latency for both LFCLK ownership states.
+// Cold-start includes crystal startup; warm-start keeps LFCLK enabled by
+// another user. These require separate compensation values in production.
+static void CoreClockTestSleepDelayMeasure(const char *pMode)
 {
 	TimerCfg_t cfg;
 	uint32_t started;
@@ -452,18 +453,13 @@ static void CoreClockTestSleepDelay(void)
 	uint32_t correction;
 	bool ok;
 
-	if (sDelay == nullptr)
-	{
-		CoreClockTestPrint("sDelay: UNSUPPORTED on this MCU\r\n");
-		return;
-	}
 	cfg = s_TimerCfg;
 	cfg.DevNo = TimerGetHighFreqDevNo();
 	cfg.EvtHandler = nullptr;
 	if (cfg.DevNo < 0 || !TimerInit(&s_RetainedTimer, &cfg) ||
 		!TimerEnable(&s_RetainedTimer))
 	{
-		CoreClockTestPrint("sDelay timing reference: UNSUPPORTED\r\n");
+		CoreClockTestPrint("sDelay HF reference: UNSUPPORTED\r\n");
 		return;
 	}
 	started = TimerGetMicrosecond(&s_RetainedTimer);
@@ -472,19 +468,47 @@ static void CoreClockTestSleepDelay(void)
 	TimerDisable(&s_RetainedTimer);
 	if (!ok)
 	{
-		CoreClockTestPrint("sDelay: LF timer unavailable or sleep rejected\r\n");
+		CoreClockTestPrint("sDelay %s: LF timer unavailable or sleep rejected\r\n",
+			pMode);
+		CoreClockTestResult("sDelay sleep operation", false);
 		return;
 	}
 	difference = elapsed >= 1000000U ?
 		elapsed - 1000000U : 1000000U - elapsed;
 	correction = (uint32_t)(((uint64_t)difference * 32768U + 500000U) /
 		1000000U);
-	CoreClockTestPrint("sDelay(1) end-to-end %u us (target 1000000 us)\r\n",
-		(unsigned)elapsed);
-	CoreClockTestPrint("sDelay overhead suggestion: %s %u LF ticks\r\n",
-		elapsed >= 1000000U ? "subtract" : "add", (unsigned)correction);
+	CoreClockTestPrint("sDelay %s end-to-end %u us (target 1000000 us)\r\n",
+		pMode, (unsigned)elapsed);
+	CoreClockTestPrint("sDelay %s overhead: %s %u LF ticks\r\n",
+		pMode, elapsed >= 1000000U ? "subtract" : "add",
+		(unsigned)correction);
 	CoreClockTestResult("sDelay end-to-end within 2 percent",
 		difference <= 20000U);
+}
+
+static void CoreClockTestSleepDelay(void)
+{
+	bool held;
+
+	if (sDelay == nullptr)
+	{
+		CoreClockTestPrint("sDelay: UNSUPPORTED on this MCU\r\n");
+		return;
+	}
+	CoreClockTestSleepDelayMeasure("cold");
+	if (SystemLowFreqClockEnable == nullptr ||
+		SystemLowFreqClockDisable == nullptr)
+	{
+		return;
+	}
+	held = SystemLowFreqClockEnable();
+	if (!held)
+	{
+		CoreClockTestPrint("sDelay warm: LF clock hold unavailable\r\n");
+		return;
+	}
+	CoreClockTestSleepDelayMeasure("warm");
+	SystemLowFreqClockDisable();
 }
 
 static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
