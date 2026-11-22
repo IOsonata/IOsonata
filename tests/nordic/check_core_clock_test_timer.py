@@ -103,15 +103,39 @@ class NordicSleepDelay(unittest.TestCase):
             self.assertNotIn(forbidden, delay)
         self.assertIn('extern "C" bool sDelay(uint32_t Seconds)', src)
 
-    def test_nrf5340_cold_start_compensation_is_provisional(self):
+    def test_nrf5340_per_core_signed_compensation(self):
         source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
             encoding="utf-8")
         clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(
             encoding="utf-8")
-        self.assertIn("NRF_SDELAY_COLD_DEFAULT_TICKS 8539U", source)
-        self.assertIn("NRF_SDELAY_WARM_OVERHEAD_TICKS 0U", source)
+        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8539", source)
+        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS (-11)", source)
+        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8", source)
+        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS (-10)", source)
+        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 0", source)
+        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", source)
+        self.assertIn("int32_t compensation;", source)
+        self.assertIn("if (compensation > 0)", source)
+        self.assertIn("else if (compensation < 0)", source)
+        self.assertIn("ticks -= (uint32_t)compensation;", source)
+        self.assertIn("ticks += (uint32_t)(-(int64_t)compensation);", source)
         self.assertIn('extern "C" bool nRFxSleepLfClockRunning(void)', clock)
         self.assertIn("NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk", clock)
+
+    def test_signed_calibration_math(self):
+        for base, adjustment, expected in (
+            (32768, 8539, 24229),
+            (32768, -11, 32779),
+            (32768, 8, 32760),
+            (32768, -10, 32778),
+            (32768, 0, 32768),
+        ):
+            ticks = base
+            if adjustment > 0:
+                ticks = max(2, ticks - adjustment)
+            elif adjustment < 0:
+                ticks += -adjustment
+            self.assertEqual(ticks, expected)
 
 
     def test_core_clock_test_reports_end_to_end_calibration(self):
