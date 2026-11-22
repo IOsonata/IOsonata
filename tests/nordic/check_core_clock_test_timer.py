@@ -40,6 +40,26 @@ class CoreClockTestTimer(unittest.TestCase):
             self.assertNotIn(forbidden, timer)
 
 
+class CoreClockTestInitialization(unittest.TestCase):
+    def test_initialization_does_not_restart_lfclk(self):
+        source = TEST.read_text(encoding="utf-8")
+        start = source.index("static bool CoreClockTestTimerInit(int DevNo)")
+        end = source.index("static void CoreClockTestFlush(void)", start)
+        setup = source[start:end]
+        self.assertIn("TimerInit(&s_Timer, &cfg)", setup)
+        self.assertNotIn("TimerDisable(&s_Timer);", setup)
+
+    def test_factors_use_public_nsdelay(self):
+        source = TEST.read_text(encoding="utf-8")
+        start = source.index("static bool CoreClockTestDelaySample(")
+        end = source.index("static void CoreClockTestDelayCalibrationRecord(void)\n{", start)
+        sample = source[start:end]
+        self.assertIn("nsDelay(100000000U);", sample)
+        self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,", sample)
+        self.assertNotIn("DelayCalibrationProbeNs(", sample)
+        self.assertNotIn("raw ns loop", sample)
+
+
 class CoreClockTestLfLifecycle(unittest.TestCase):
     def test_enable_sequence_reports_individual_results(self):
         source = TEST.read_text(encoding="utf-8")
