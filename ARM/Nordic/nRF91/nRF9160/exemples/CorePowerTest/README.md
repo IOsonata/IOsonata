@@ -1,3 +1,14 @@
+# CorePowerTest — generic MCU test
+
+> **Release 0.14 migration:** This Eclipse managed project now compiles the shared
+> `exemples/misc/core_power_test.cpp` test. The legacy demo instructions below
+> are historical reference only; they do **not** describe the current test flow.
+> Check `src/board.h` for this board's UART, oscillator, timer and wake-pin setup.
+> Use the generic test output and capability reporting to determine supported
+> functionality; build and hardware validation remain target-specific.
+
+## Historical demo notes (pre-migration)
+
 # nRF9160 PowerOffDemo
 
 Build the matching library and this Eclipse managed project in the same
