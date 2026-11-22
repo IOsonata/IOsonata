@@ -58,4 +58,8 @@ SOFTWARE.
 // Test core oscillator selection. Shared HFXO ownership has its own test.
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
+// Exercise interrupt-driven UART with EasyDMA on these nRF52 DKs.
+#define CORE_CLOCK_TEST_UART_INT true
+#define CORE_CLOCK_TEST_UART_DMA true
+
 #endif
