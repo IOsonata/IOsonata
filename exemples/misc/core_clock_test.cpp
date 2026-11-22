@@ -921,7 +921,7 @@ static void CoreClockTestTimerTriggers(void)
 		after <= before)
 	{
 		CoreClockTestPrint("Timer continuous diagnostics: device %u, enabled %u, "
-			"period %u ns, callbacks %u, before %u, after %u\\r\\n",
+			"period %u ns, callbacks %u, before %u, after %u\r\n",
 			(unsigned)s_Timer.DevNo, (unsigned)enabled,
 			(unsigned)period, (unsigned)fired,
 			(unsigned)before, (unsigned)after);
