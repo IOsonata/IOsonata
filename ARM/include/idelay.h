@@ -305,17 +305,7 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
  *
  * @param	cnt : nanosecond count
  */
-// A single fixed, aligned countdown avoids flash placement differences
-// between inlined call sites. GCC builds this function without -Os
-// optimization; other compilers retain the unoptimized volatile assembly.
-#if defined(__GNUC__) && !defined(__clang__)
-#define ARM_NSDELAY_ATTR __attribute__((noinline, aligned(32), optimize("O0")))
-#elif defined(__GNUC__)
-#define ARM_NSDELAY_ATTR __attribute__((noinline, aligned(32)))
-#else
-#define ARM_NSDELAY_ATTR
-#endif
-static ARM_NSDELAY_ATTR void nsDelay(uint32_t cnt)
+static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 {
 	uint64_t loops;
 	uint32_t chunk;
@@ -332,6 +322,8 @@ static ARM_NSDELAY_ATTR void nsDelay(uint32_t cnt)
 			".syntax unified\n"
 #endif
 			" MOVS %[remaining], %[count]\n"
+			// Align the inlined countdown to a flash fetch boundary.
+			" .p2align 5\n"
 			"1:\n"
 			" SUBS %[remaining], #1\n"
 			" BGT 1b\n"
