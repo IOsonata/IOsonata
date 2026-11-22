@@ -14,9 +14,40 @@ class DwtDelaySelection(unittest.TestCase):
 		for text in ("#define ARM_DELAY_USE_DWT 1",
 			"#define ARM_DELAY_USE_DWT 0", "defined(DWT)",
 			"(__DWT_PRESENT == 1U)",
-			"CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;",
-			"DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;"):
+			"CoreDebug->DEMCR = trace | CoreDebug_DEMCR_TRCENA_Msk;",
+			"DWT->CTRL = ctrl | DWT_CTRL_CYCCNTENA_Msk;",
+			"bool ArmDelayDwtReady(void)",
+			"bool ArmDelayDwtInit(void)"):
 			self.assertIn(text, src)
+
+	def test_nrf52_respects_trace_erratum_and_probes_counter(self):
+		delay = DELAY.read_text(encoding="utf-8")
+		nrf52 = (ROOT / "ARM/Nordic/nRF52/src/system_nrf52.c").read_text(
+			encoding="utf-8")
+		self.assertIn("dwtAllowed = false;", nrf52)
+		self.assertIn("if (dwtAllowed)", nrf52)
+		self.assertIn("(void)ArmDelayDwtInit();", nrf52)
+		self.assertIn("if (DWT->CYCCNT != start && ArmDelayDwtReady())", delay)
+		self.assertIn("DWT->CTRL = ctrl;", delay)
+		self.assertIn("CoreDebug->DEMCR = trace;", delay)
+		wait = delay[delay.index("static inline uint64_t ArmDelayDwtWait("):
+			delay.index("static inline __attribute__((always_inline)) void usDelay(")]
+		self.assertIn("#if defined(NRF52_SERIES)", wait)
+		self.assertIn("if (++stalled >= 4096U)", wait)
+		self.assertIn("return Cycles - consumed;", wait)
+		self.assertIn("if (!ArmDelayDwtInit())", wait)
+
+	def test_runtime_delay_falls_back_with_remaining_cycles(self):
+		src = DELAY.read_text(encoding="utf-8")
+		us = src[src.index("static inline __attribute__((always_inline)) void usDelay("):
+			src.index("static inline __attribute__((always_inline)) void nsDelay(")]
+		ns = src[src.index("static inline __attribute__((always_inline)) void nsDelay("):
+			src.index("#define ARM_DELAY_CAL_NS")]
+		self.assertIn("cycles = ArmDelayDwtWait(cycles);", us)
+		self.assertIn("ArmDelayUsLoop(", us)
+		self.assertIn("cycles = ArmDelayDwtWait(cycles);", ns)
+		self.assertIn("ArmDelayUsLoop(remainder / 1000U)", ns)
+		self.assertIn("ArmDelayNsLoop(remainder)", ns)
 
 	def test_wrap_and_frequency_updates(self):
 		src = DELAY.read_text(encoding="utf-8")
