@@ -266,6 +266,7 @@ extern "C" bool sDelay(uint32_t Seconds)
 	uint64_t nanoseconds;
 	uint32_t frequency;
 	bool warmClock;
+	bool initialized;
 	bool success;
 
 	if (Seconds == 0U)
@@ -294,8 +295,9 @@ extern "C" bool sDelay(uint32_t Seconds)
 	cfg.IntPrio = 6;
 	cfg.EvtHandler = nullptr;
 	cfg.bTickInt = false;
-	success = TimerInit(&s_SleepTimer, &cfg);
-	if (success)
+	initialized = TimerInit(&s_SleepTimer, &cfg);
+	success = initialized;
+	if (initialized)
 	{
 		frequency = TimerGetFrequency(&s_SleepTimer);
 		success = frequency != 0U;
@@ -358,6 +360,11 @@ extern "C" bool sDelay(uint32_t Seconds)
 		}
 		SCB->SCR = oldScr;
 		__ISB();
+	}
+	// Always return a successfully initialized automatic timer to the
+	// backend, including a zero-frequency or trigger-setup failure.
+	if (initialized)
+	{
 		TimerDisableTrigger(&s_SleepTimer, 0);
 		TimerDisable(&s_SleepTimer);
 	}
