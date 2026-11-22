@@ -322,6 +322,9 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 			".syntax unified\n"
 #endif
 			" MOVS %[remaining], %[count]\n"
+			// Align each inlined countdown, not the inline function entry.
+			// Keep the SUBS/BGT pair within a 32-byte flash fetch block.
+			" .p2align 5\n"
 			"1:\n"
 			" SUBS %[remaining], #1\n"
 			" BGT 1b\n"
