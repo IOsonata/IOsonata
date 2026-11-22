@@ -381,7 +381,19 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 	cycles = ((uint64_t)cnt * SystemCoreClock + 999999999ULL) / 1000000000ULL;
 	ArmDelayDwtWait(cycles);
 #else
-	ArmDelayNsLoop(cnt);
+	// The short SUBS/BNE loop has target-dependent fetch/branch timing.
+	// For multi-microsecond waits use the calibrated microsecond loop,
+	// whose longer body is less sensitive to flash layout and branch cost.
+	// Preserve the nanosecond loop for the sub-microsecond remainder.
+	if (cnt >= 10000U)
+	{
+		ArmDelayUsLoop(cnt / 1000U);
+		cnt %= 1000U;
+	}
+	if (cnt != 0U)
+	{
+		ArmDelayNsLoop(cnt);
+	}
 #endif
 }
 
