@@ -4,9 +4,9 @@ The generic managed-project firmware sources are:
 
 - `exemples/misc/core_clock_test.cpp` — CoreClockTest
 - `exemples/misc/core_power_test.cpp` — CorePowerTest
-- `exemples/timer/timer_demo.cpp` — TimerDemo (timer-driver functional test)
+- `exemples/timer/timer_demo.cpp` — TimerDemo (user-facing learning example)
 
-Both are identical across MCU targets. The timer and oscillator implementations
+Both tests are identical across MCU targets. The timer and oscillator implementations
 remain in the appropriate MCU drivers. Do not add target-specific test code,
 private timer allocation, DWT runtime delay code, or UART flush workarounds.
 
@@ -17,14 +17,11 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
    at 1,000,000 baud. Run without a debugger attached for sleep tests.
 2. Run CoreClockTest after a power cycle. Check its final
    `CoreClockTest complete: 0 failures` line.
-3. Run the existing TimerDemo for the target's supported timer-device
-   configurations. Verify timer Init/Enable/Disable, trigger callbacks,
-   count and period reporting; it is the timer implementation test.
-4. Build CorePowerTest using the same managed-project workflow. Run it
+3. Build CorePowerTest using the same managed-project workflow. Run it
    without an attached debugger.
-5. Let all automatic Standby timer-wake cycles finish. Check the final
+4. Let all automatic Standby timer-wake cycles finish. Check the final
    `CorePowerTest complete: 0x00000000 failures` line.
-6. If System OFF and a wake button are supported, press the wake button,
+5. If System OFF and a wake button are supported, press the wake button,
    verify the reset-on-wake reason and repeat. Do not treat reset-on-wake
    as an ordinary return from System OFF.
 
@@ -42,10 +39,13 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
 - `sDelay(1)` cold and warm, with end-to-end HF timer reference. A further
   `sDelay(1)` call after releasing the LF clock verifies temporary
   timer reuse; this is a separate timing sample.
-- Clock-change integration with LF/HF timer devices: verify 250 ms
-  delay timing and timer interrupt counts **after oscillator selection and
-  restoration**, with independent HF reference for LF timers. These are
-  clock integration checks, not a replacement for TimerDemo.
+- **All enumerated LF/HF timers:** initialize, set frequency, Enable/Disable,
+  verify elapsed time, counter and periodic IRQs across LF clock selection
+  and restoration. Independently compare LF timing against the HF reference.
+- **Timer implementation:** verify an available trigger, single-shot callback,
+  continuous callback, counter progression, stopping callbacks, and trigger
+  slot reuse using the generic Timer API. These are automated assertions;
+  TimerDemo is not a validation dependency.
 - Independent timer clock ownership.
 - **After** the timer matrix, only if every advertised LF timer was
   initialized successfully: verify `sDelay(0)` succeeds and that
@@ -59,13 +59,11 @@ The ownership test uses only the public `TimerInit`, `TimerDisable`,
 `TimerGetLowFreqDevCount`, and `sDelay` interface. No Nordic RTC
 registers or Claim/Release APIs appear in CoreClockTest.
 
-## TimerDemo coverage
+## TimerDemo
 
-TimerDemo is the existing generic timer-driver exercise. It tests the
-configured timer's initialization, available triggers, callback periods,
-count reporting and Enable/Disable behavior. Run the MCU's existing
-managed TimerDemo project; do not replicate those driver functionality tests
-in CoreClockTest or CorePowerTest.
+TimerDemo is a user-facing educational example for learning the generic
+Timer API; it is not part of hardware acceptance. Its code is not a
+substitute for automated, pass/fail checks in CoreClockTest.
 
 ## CorePowerTest coverage
 
@@ -94,5 +92,5 @@ in CoreClockTest or CorePowerTest.
   delay factors or clock support to another MCU.
 
 Existing successful nRF52832 and nRF5340 CoreClockTest timings remain valid
-for their reported scope. The newly added RTC-contention phase needs
-a new hardware run before it can be signed off.
+for their reported scope. The expanded timer trigger checks have not yet
+been run on hardware and must pass before signoff.
