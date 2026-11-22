@@ -252,59 +252,82 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 static bool SysLogDrain(SysLog_t * const pLog, int *pTotal, int *pErr)
 {
 	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo);
+	uint32_t head;
+	uint32_t len;
+	uint32_t sent;
+	uint8_t *pBlock;
+	uintptr_t state;
+	int count;
 
 	while (true)
 	{
-		uint32_t head = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE);
-		uint8_t *pBlock = CFifoPeek(pLog->hFifo);
-		if (pBlock == 0)
+		// The FIFO consumer index, block pointer, and partial-record
+		// position form one state. Snapshot them with interrupts masked
+		// so an interrupt callback cannot change the queue head here.
+		state = SysIrqLock();
+		head = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE);
+		pBlock = CFifoPeek(pLog->hFifo);
+		if (pBlock == nullptr)
 		{
+			SysIrqUnlock(state);
 			return false;
-		}
-		if (__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE) != head)
-		{
-			// Evicted while it was being looked up, take the new head.
-			continue;
 		}
 		if (head != pLog->HeadIdx)
 		{
 			pLog->HeadIdx = head;
 			pLog->HeadSent = 0U;
 		}
-
-		uint32_t len = 0U;
+		len = 0U;
 		while (len < recordLen && pBlock[len] != 0U)
 		{
 			len++;
 		}
+		sent = pLog->HeadSent;
+		SysIrqUnlock(state);
 
-		uint32_t sent = pLog->HeadSent;
+		// Do not mask interrupts while submitting bytes. DeviceIntrfTx
+		// may enqueue data for asynchronous DMA; the UART IRQ must remain
+		// able to retire buffers and signal TX_READY.
+		count = 0;
 		if (sent < len)
 		{
-			int count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+			count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
 								   pBlock + sent, (int)(len - sent));
 			if (count > 0)
 			{
 				*pTotal += count;
 				sent += (uint32_t)count;
 			}
-			if (sent < len)
-			{
-				// Keep the record and what went out of it. A negative result
-				// with nothing sent in this call is reported as it came back.
-				pLog->HeadSent = sent;
-				if (count < 0 && *pTotal == 0)
-				{
-					*pErr = count;
-				}
-				return true;
-			}
 		}
 
-		// Sent in full, or an empty record that a failed format left behind.
+		state = SysIrqLock();
+		// A non-blocking log store may evict a record while its bytes
+		// are being submitted. Never consume the replacement as though
+		// it were the record whose transmission just returned.
+		if (__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE) != head)
+		{
+			pLog->HeadIdx = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_RELAXED);
+			pLog->HeadSent = 0U;
+			SysIrqUnlock(state);
+			continue;
+		}
+		if (sent < len)
+		{
+			pLog->HeadSent = sent;
+			SysIrqUnlock(state);
+			if (count < 0 && *pTotal == 0)
+			{
+				*pErr = count;
+			}
+			return true;
+		}
+
+		// The entire head record was accepted, so release exactly that
+		// record while the queue state is protected.
 		pLog->HeadSent = 0U;
-		pLog->HeadIdx = head + 1U;
 		(void)CFifoGet(pLog->hFifo);
+		pLog->HeadIdx = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_RELAXED);
+		SysIrqUnlock(state);
 	}
 }
 
