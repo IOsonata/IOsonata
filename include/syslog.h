@@ -139,13 +139,13 @@ SOFTWARE.
 // SysLogInit is called.
 #define SYSLOG_INIT_MARKER  0x474f4c53UL    // 'SLOG'
 
-// Bytes of memory to reserve for NbRecord records of RecordLen bytes each,
-// including the CFifo header. RecordLen is the log line length in bytes and
+// Bytes of memory to reserve for NbRecord queued records and one transfer buffer,
+// including the CFifo header. The transfer buffer has RecordLen bytes. RecordLen is the log line length in bytes and
 // includes the terminating NUL, so a 64 byte record holds 63 characters.
 //
 //    alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(16, 64)];  // 16 x 64
 //
-#define SYSLOG_MEMSIZE(NbRecord, RecordLen)    CFIFO_TOTAL_MEMSIZE(NbRecord, RecordLen)
+#define SYSLOG_MEMSIZE(NbRecord, RecordLen)    CFIFO_TOTAL_MEMSIZE((NbRecord) + 1, RecordLen)
 
 #ifdef __cplusplus
 extern "C" {
@@ -157,8 +157,9 @@ extern "C" {
  * Size the memory with SYSLOG_MEMSIZE(NbRecord, RecordLen) and pass
  * sizeof() as MemSize. The record count is not repeated here because
  * MemSize and RecordLen already determine it, and MemSize is the one value
- * that describes the memory that exists. A shorter RecordLen puts more
- * records in the same memory; a longer one allows longer lines. There is no
+ * that describes the memory that exists. One RecordLen block is reserved
+ * for the transfer buffer; the remaining blocks form the CFifo store.
+ * A shorter RecordLen puts more records in the same memory. There is no
  * upper limit, every record is formatted in place in its own block.
  */
 typedef struct __Sys_Log_Cfg {
@@ -171,7 +172,7 @@ typedef struct __Sys_Log_Cfg {
 } SysLogCfg_t;
 
 /**
- * Logger instance. Configuration and the send position in the head record.
+ * Logger instance. The transfer buffer owns one record independently of CFifo.
  */
 typedef struct __Sys_Log {
 	uint32_t	Marker;		//!< SYSLOG_INIT_MARKER when initialized, else dormant
@@ -181,8 +182,9 @@ typedef struct __Sys_Log {
 	int (*FormatTime)(TimerDev_t *, char *, int, bool); //!< Optional timestamp writer, set by Init.
 	uint32_t	MinType;	//!< Minimum type field emitted, e.g. SYSSTATUS_TYPE_WRN. 0 emits all.
 	hCFifo_t	hFifo;		//!< Record store, one complete record per block.
-	uint32_t	HeadIdx;	//!< Store index of the record HeadSent belongs to
-	uint32_t	HeadSent;	//!< Bytes of that record already accepted by the sink
+	uint8_t		*pTxBuffer;	//!< One-record transfer buffer reserved from pMem
+	uint32_t	TxLen;	//!< Bytes in transfer buffer
+	uint32_t	TxSent;	//!< Bytes of transfer buffer accepted by sink
 	volatile bool bFlushing;	//!< Set while a SysLogFlush call is sending
 } SysLog_t;
 
@@ -244,16 +246,14 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
  * while there was no transport, or when a sink refused the last record and no
  * further record is coming to send it.
  *
- * One store block is one log record. A record is consumed when the sink has
- * accepted all of it. When the sink takes only part of a record, or returns
- * zero or a negative value, the call ends and the record stays queued with
- * the count already sent; the next call sends only the remainder, so no byte
- * goes out twice. If the non-blocking store evicts that record in the
- * meantime, the next record is sent from its first byte.
+ * One CFifo block is copied into the transfer buffer and removed from CFifo
+ * before submission. A record leaves the transfer buffer when the sink has
+ * accepted all its bytes. Partial acceptance retains the unaccepted suffix
+ * across calls, including callbacks from interrupt context.
  *
- * One flush runs at a time. A call made while another one is sending, from an
- * interrupt for example, returns 0 and leaves its record to the running call,
- * which checks the store again before it returns.
+ * A single flush owns the transfer buffer. An interrupt arriving during a
+ * foreground submission requests another pass rather than consuming the
+ * buffer concurrently.
  *
  * The global logger can attach SysLogDevIntrfEvent to the existing
  * DeviceIntrf EvtCB when the sink has no callback. Drivers reporting
