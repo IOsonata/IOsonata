@@ -25,12 +25,9 @@ class NordicDelayArchitecture(unittest.TestCase):
 					"ArmDelayClockSetDivisors(" in source or
 					"ArmDelayClockInit(" in source
 				)
-				if "nRF5340_App/" in path:
-					self.assertEqual(source.count("ArmDelayCalibrate("), 1)
-					self.assertIn("cpuHz != __SYSTEM_CLOCK_DEFAULT", source)
-					self.assertIn("cpuHz == __SYSTEM_CLOCK_DEFAULT", source)
-				else:
-					self.assertNotIn("ArmDelayCalibrate(", source)
+				# All production clock-update paths only update loop factors.
+				# DWT calibration runs explicitly in the diagnostic.
+				self.assertNotIn("ArmDelayCalibrate(", source)
 
 	def test_nrf5340_frequency_switch_uses_cached_cost(self):
 		app = (ROOT / NRF[1]).read_text(encoding="utf-8")
