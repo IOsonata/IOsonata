@@ -20,7 +20,6 @@ class DelayCalibrationDwt(unittest.TestCase):
 		end = src.index("#define ARM_DELAY_CAL_NS", start)
 		runtime = src[start:end]
 		self.assertIn("ArmDelayUsLoop(cnt);", runtime)
-		self.assertIn("ArmDelayUsLoop(cnt / 1000U);", runtime)
 		self.assertIn("ArmDelayNsLoop(cnt);", runtime)
 		for forbidden in ("DWT->", "CoreDebug->", "ArmDelayDwtInit(",
 			"ArmDelayDwtWait(", "ARM_DELAY_CAL_DWT_AVAILABLE"):
@@ -64,16 +63,15 @@ class DelayCalibrationDwt(unittest.TestCase):
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", app)
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", app)
 
-	def test_long_nanosecond_delay_uses_microsecond_loop(self):
+	def test_nanosecond_delay_uses_measured_ns_loop_for_all_durations(self):
 		src = self.source
 		start = src.index("static inline __attribute__((always_inline)) void nsDelay(")
 		end = src.index("#define ARM_DELAY_CAL_NS", start)
 		ns = src[start:end]
-		self.assertIn("if (cnt >= 10000U)", ns)
-		self.assertIn("cnt %= 1000U;", ns)
-		for ns_count in (10000, 10001, 100000000, 250000000):
-			us, remainder = divmod(ns_count, 1000)
-			self.assertEqual(us * 1000 + remainder, ns_count)
+		self.assertIn("ArmDelayNsLoop(cnt);", ns)
+		self.assertNotIn("ArmDelayUsLoop(", ns)
+		self.assertNotIn("cnt /= 1000U", ns)
+		self.assertNotIn("cnt %= 1000U", ns)
 
 
 if __name__ == "__main__":
