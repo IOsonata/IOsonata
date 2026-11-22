@@ -855,14 +855,14 @@ static void CoreClockTestSleepDelayOwnership(int LowCount)
 
 	if (sDelay == nullptr || LowCount <= 0 || LowCount > 32)
 	{
-		CoreClockTestPrint("sDelay RTC contention: UNSUPPORTED\\r\\n");
+		CoreClockTestPrint("sDelay RTC contention: UNSUPPORTED\r\n");
 		return;
 	}
 	expectedMask = LowCount == 32 ? UINT32_MAX :
 		(1UL << LowCount) - 1U;
 	if ((s_LfTimerInitMask & expectedMask) != expectedMask)
 	{
-		CoreClockTestPrint("sDelay RTC contention: UNSUPPORTED (not all LF timers initialized)\\r\\n");
+		CoreClockTestPrint("sDelay RTC contention: UNSUPPORTED (not all LF timers initialized)\r\n");
 		return;
 	}
 	// Zero seconds is a no-op even when every LF timer is occupied.
