@@ -248,8 +248,7 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertIn("s_LfTimerInitMask |= 1UL << DevNo;", source)
         self.assertIn("CoreClockTestSleepDelayOwnership(lowTimerCount);", source)
         self.assertIn('CoreClockTestResult("sDelay zero with LF timers occupied", sDelay(0U));', source)
-        self.assertIn('CoreClockTestResult("sDelay disabled RTC ownership", blocked);', source)
-        self.assertIn('CoreClockTestResult("sDelay all LF timers occupied", blocked);', source)
+        self.assertIn('CoreClockTestResult("sDelay occupied disabled LF timers", blocked);', source)
         self.assertIn("blocked = !sDelay(1U);", source)
         self.assertIn("s_LfTimerInitMask & expectedMask", source)
         self.assertLess(source.index("CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);"),
