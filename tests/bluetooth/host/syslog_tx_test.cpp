@@ -145,6 +145,32 @@ void TestRecordTruncatedToLineMax()
 
 // A zero result means the sink did not accept the record. The reader leaves
 // it queued so a later flush can send the same complete record.
+// Two consecutive printf records retain exact lengths, including CR/LF.
+void TestConsecutivePrintfLineEndings()
+{
+	alignas(4) uint8_t memory[SYSLOG_MEMSIZE(2, 128)];
+	SysLog_t log{};
+	SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), 128, true);
+	DevIntrf_t intrf{};
+	const char first[] = "Standby cycle 0x00000002\\r\\n";
+	const char second[] = "Entering Standby; automatic timer wake\\r\\n";
+	int firstLen;
+	int secondLen;
+
+	MakeIntrf(&intrf);
+	CHECK(SysLogInitNoTimer(&log, &cfg, nullptr, 0, 0));
+	firstLen = (int)std::strlen(first);
+	secondLen = (int)std::strlen(second);
+	CHECK(SysLogPrintf(&log, "Standby cycle 0x%08x\\r\\n", 2U) == firstLen);
+	CHECK(SysLogPrintf(&log, "%s", second) == secondLen);
+	SysLogSetSink(&log, &intrf, 0);
+	ResetCapture();
+	CHECK(SysLogFlush(&log) == firstLen + secondLen);
+	CHECK(s_CapturedLen == firstLen + secondLen);
+	CHECK(std::memcmp(s_Captured, first, (size_t)firstLen) == 0);
+	CHECK(std::memcmp(s_Captured + firstLen, second, (size_t)secondLen) == 0);
+}
+
 void TestBufferedFlushRetriesNotReadyRecord()
 {
 	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(2, kLineLen)];
@@ -726,6 +752,7 @@ int main()
 	TestDeferredReadyDuringActiveFlush();
 	TestBufferedBeforeSink();
 	TestRecordTruncatedToLineMax();
+	TestConsecutivePrintfLineEndings();
 	TestBufferedFlushRetriesNotReadyRecord();
 	TestBufferedFlushResumesPartialRecord();
 	TestPartialRecordEvicted();
