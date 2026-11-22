@@ -93,12 +93,26 @@ class NordicSleepDelay(unittest.TestCase):
             "nsTimerEnableTrigger(&s_SleepTimer, 0,",
             "TIMER_TRIG_TYPE_SINGLE", "__WFE();",
             "s_bSleepTimerDone", "SCB_SCR_SEVONPEND_Msk",
-            "nRFxRtcSleepRelease(&s_SleepTimer)", "NRF_SDELAY_OVERHEAD_TICKS"):
+            "nRFxRtcSleepRelease(&s_SleepTimer)",
+            "NRF_SDELAY_COLD_OVERHEAD_TICKS",
+            "NRF_SDELAY_WARM_OVERHEAD_TICKS",
+            "warmClock = nRFxSleepLfClockRunning();"):
             self.assertIn(term, delay)
         for forbidden in ("msDelay(", "usDelay(", "nsDelay(", "DWT->",
             "SysTick", "malloc(", "new "):
             self.assertNotIn(forbidden, delay)
         self.assertIn('extern "C" bool sDelay(uint32_t Seconds)', src)
+
+    def test_nrf5340_cold_start_compensation_is_provisional(self):
+        source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
+            encoding="utf-8")
+        clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(
+            encoding="utf-8")
+        self.assertIn("NRF_SDELAY_COLD_DEFAULT_TICKS 8539U", source)
+        self.assertIn("NRF_SDELAY_WARM_OVERHEAD_TICKS 0U", source)
+        self.assertIn('extern "C" bool nRFxSleepLfClockRunning(void)', clock)
+        self.assertIn("NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk", clock)
+
 
     def test_core_clock_test_reports_end_to_end_calibration(self):
         src = TEST.read_text(encoding="utf-8")
