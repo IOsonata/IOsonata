@@ -36,7 +36,7 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 
 	def test_both_runtime_delays_use_original_countdowns(self):
 		us_start = self.delay.index("static inline __attribute__((always_inline)) void usDelay(")
-		ns_start = self.delay.index("static ARM_NSDELAY_ATTR void nsDelay(")
+		ns_start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
 		us_loop = self.delay[us_start:ns_start]
 		ns_loop = self.delay[ns_start:self.delay.index("#define ARM_DELAY_CAL_NS", ns_start)]
 		self.assertEqual(us_loop.count('" NOP\n"'), 10)
@@ -50,7 +50,7 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 		self.assertNotIn("ArmDelayUsLoop(", self.delay)
 		self.assertNotIn("ArmDelayNsLoop(", self.delay)
 		self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', self.test)
-		self.assertIn('__attribute__((noinline, aligned(32), optimize("O0")))', self.delay)
+		self.assertIn('" .p2align 5\\n"', ns_loop)
 
 	def test_250ms_nominal_loop_scale(self):
 		for frequency in (64000000,):
