@@ -115,15 +115,15 @@ void SystemCoreClockUpdate(void)
 	{
 		if (cpuHz == __SYSTEM_CLOCK_DEFAULT)
 		{
-			// Measured with restored countdown: 104009 us / requested
-			// 100000 us at 25 cycles -> 26 cycles per us loop.
-			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 26U, 3U);
+			// Aligned countdown: HF Timer measured 76,932 us for
+			// 100 ms at 26 cycles; 20 cycles matches 6,399,256 loops/s.
+			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U);
 		}
 		else if (cpuHz == (__SYSTEM_CLOCK_MAX / 2U))
 		{
-			// Measured with restored countdown: 103591 us / requested
-			// 100000 us at 28 cycles -> 29 cycles per us loop.
-			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 29U, 3U);
+			// Aligned countdown: HF Timer measured 75,881 us for
+			// 100 ms at 29 cycles; 22 cycles matches 2,908,364 loops/s.
+			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 22U, 3U);
 		}
 		else
 		{
