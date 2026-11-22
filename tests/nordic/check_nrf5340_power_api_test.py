@@ -39,7 +39,9 @@ class CorePowerTest(unittest.TestCase):
 	def test_build_includes_power_api(self):
 		s = (ROOT / "tests/nordic/build_managed_power_clock.py").read_text(encoding="utf-8")
 		self.assertIn('root / "exemples/CorePowerTest/ioc"', s)
-		self.assertIn('root / "exemples/PowerOffDemo/ioc"', s)
+		self.assertNotIn('root / "exemples/PowerOffDemo/ioc"', s)
+		self.assertIn('root / "exemples/CoreClockTest/ioc"', s)
+		self.assertNotIn('root / "exemples/ClockDemo/ioc"', s)
 		self.assertNotIn('root / "exemples/StandbyDemo/ioc"', s)
 
 
