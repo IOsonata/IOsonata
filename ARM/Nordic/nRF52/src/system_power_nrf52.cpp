@@ -268,6 +268,9 @@ void SystemPowerOff(void)
 
 bool SystemWakePin(int PortNo, int PinNo, int Sense)
 {
+	uint32_t state;
+	uint32_t bit;
+
 	if (PinNo < 0 || PinNo >= 32 || nRFGpioGetReg(PortNo) == NULL)
 	{
 		return false;
@@ -280,8 +283,8 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 
 	// Keep the explicit wake setting separate from temporary GPIOTE IRQ
 	// allocation. A later IRQ cleanup must not lose the System OFF source.
-	uint32_t state = __get_PRIMASK();
-	uint32_t bit = 1UL << PinNo;
+	state = __get_PRIMASK();
+	bit = 1UL << PinNo;
 
 	__disable_irq();
 	if (Sense == IOPINSENSE_DISABLE)
