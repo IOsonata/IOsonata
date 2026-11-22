@@ -153,13 +153,14 @@ uint32_t SystemCoreClockGet(void)
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	// nRF52832 HF Timer showed different usDelay loop speeds across
-	// inlined call sites (218-250 ms for a 250 ms request). Aligning
-	// the ten-NOP countdown within one 32-byte fetch block removes
-	// the varying flash-boundary penalty; its base loop is 13 cycles.
-	// Revalidate the factor on hardware after the alignment change.
+	// nRF52832 CoreClockTest: two independent 64 MHz hardware runs,
+	// HF Timer measured 4922682 us-delay iterations/s in both runs.
+	// The aligned countdown measured 100008 us for a 100 ms request;
+	// all 250 ms timer tests passed. DWT was unavailable on this build.
+	// Scaled divisor 13001042 produces the measured loop rate at 64 MHz.
+	// Keep the validated three-cycle ns-delay divisor unchanged.
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
-		13000000UL, 3000000UL);
+		13001042UL, 3000000UL);
 }
 
 void SystemInit(void)
