@@ -59,10 +59,7 @@ class CoreClockTestInitialization(unittest.TestCase):
         self.assertNotIn("DelayCalibrationProbeNs(", sample)
         self.assertNotIn("raw ns loop", sample)
         self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', sample)
-        self.assertIn("for (i = 0U; i < 3U; i++)", sample)
-        self.assertIn("nsSameSiteElapsed[i] =", sample)
-        self.assertIn("nsDelay same-site 100 ms: %u, %u, %u us", sample)
-        self.assertIn('CoreClockTestResult("nsDelay same-site HF Timer 100 ms",', sample)
+        self.assertNotIn("nsSameSiteElapsed", sample)
         self.assertIn('CoreClockTestResult("nsDelay factor unchanged during timing",', sample)
 
     def test_arm_usloop_preserves_original_countdown(self):
