@@ -115,9 +115,9 @@ static TimerTrig_t s_nRfxRtc2Trig[RTC2_CC_NUM];
 
 // Timer device of each timer, set by nRFxRtcInit
 static TimerDev_t *s_pnRfxRtcDev[TIMER_NRFX_RTC_MAX];
-// Temporary RTC reservations made by sDelay. Other TimerInit calls must not
-// replace these handles while the sleep deadline is armed.
-static TimerDev_t *s_pnRfxRtcSleepOwner[TIMER_NRFX_RTC_MAX];
+// A timer initialized with DevNo=-1 is returned to the pool by Disable.
+// Explicitly indexed timers retain their handles across Disable/Enable.
+static bool s_bRtcAutoSelected[TIMER_NRFX_RTC_MAX];
 
 // What does not change is constant, so it stays in flash. Only the trigger
 // state above and the device pointers are in RAM.
@@ -521,6 +521,17 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 	usDelay(50U);
 #endif
 	SystemLowFreqClockDisable();
+	if (s_bRtcAutoSelected[pTimer->DevNo] &&
+		s_pnRfxRtcDev[pTimer->DevNo] == pTimer)
+	{
+		uint32_t irqState = DisableInterrupt();
+		int devno = pTimer->DevNo;
+		s_nRfxRtcData[devno].pReg->INTENCLR = 0xFFFFFFFFU;
+		s_nRfxRtcData[devno].pReg->EVTENCLR = 0xFFFFFFFFU;
+		s_pnRfxRtcDev[devno] = nullptr;
+		s_bRtcAutoSelected[devno] = false;
+		EnableInterrupt(irqState);
+	}
 }
 
 // CLEAR task, returns once COUNTER reads lower than before it, bounded:
@@ -1118,10 +1129,14 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	const nRFRtcData_t *pRtc;
 	NRF_RTC_Type *reg;
 	TimerDev_t *pOldTimer;
+	TimerCfg_t selected;
+	bool automatic;
+	int first;
+	int candidate;
 	int i;
 
 	// Any frequency, SetFrequency takes the closest one
-	if (pTimer == nullptr || pCfg == nullptr || pCfg->DevNo < 0 ||
+	if (pTimer == nullptr || pCfg == nullptr || pCfg->DevNo < -1 ||
 		pCfg->DevNo >= TIMER_NRFX_RTC_MAX)
 	{
 		return false;
@@ -1137,11 +1152,39 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
+	// DevNo=-1 requests an available LF timer through the normal TimerInit
+	// interface. Keep the radio/stack RTCs out of the candidate set.
+	automatic = pCfg->DevNo == -1;
+	selected = *pCfg;
+	if (automatic)
+	{
+		first = 1;
+#if (defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT) || \\
+	defined(NRF_SDC_ENABLED)
+		first = 2;
+#endif
+		selected.DevNo = -1;
+		for (candidate = TIMER_NRFX_RTC_MAX - 1; candidate >= first;
+			candidate--)
+		{
+			if (s_pnRfxRtcDev[candidate] == nullptr &&
+				!s_bRtcEnabled[candidate])
+			{
+				selected.DevNo = candidate;
+				break;
+			}
+		}
+		if (selected.DevNo < 0)
+		{
+			return false;
+		}
+	}
+	pCfg = &selected;
 	pRtc = &s_nRfxRtcData[pCfg->DevNo];
 	reg = pRtc->pReg;
 	pOldTimer = s_pnRfxRtcDev[pCfg->DevNo];
-	if (s_pnRfxRtcSleepOwner[pCfg->DevNo] != nullptr &&
-		s_pnRfxRtcSleepOwner[pCfg->DevNo] != pTimer)
+	// Never replace another initialized handle, even if disabled.
+	if (pOldTimer != nullptr && pOldTimer != pTimer)
 	{
 		return false;
 	}
@@ -1242,107 +1285,24 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	// completes on the selected clock. Init continues to enable the timer.
 	if (!nRFxRtcEnable(pTimer))
 	{
+		// Initialization failed after attaching the handle: undo it.
+		reg->INTENCLR = 0xFFFFFFFFU;
+		reg->EVTENCLR = 0xFFFFFFFFU;
+		reg->TASKS_STOP = 1U;
+		switch (pCfg->DevNo)
+		{
+			case 0: NVIC_DisableIRQ(RTC0_IRQn); NVIC_ClearPendingIRQ(RTC0_IRQn); break;
+			case 1: NVIC_DisableIRQ(RTC1_IRQn); NVIC_ClearPendingIRQ(RTC1_IRQn); break;
+#if TIMER_NRFX_RTC_MAX > 2
+			case 2: NVIC_DisableIRQ(RTC2_IRQn); NVIC_ClearPendingIRQ(RTC2_IRQn); break;
+#endif
+		}
+		s_pnRfxRtcDev[pCfg->DevNo] = nullptr;
 		return false;
 	}
+	s_bRtcAutoSelected[pCfg->DevNo] = automatic;
 	nRFxRtcClear(reg);
 	return true;
 }
 
 
-// Temporarily reserve an unused LF RTC. Do not steal an initialized timer,
-// including a disabled one which an application may enable again later.
-// RTC0 can belong to the radio/SoftDevice, so use RTC1/RTC2 only.
-// The static reservation protects the initialization window.
-extern "C" int nRFxRtcSleepClaim(TimerDev_t *pTimer, TimerCfg_t *pCfg)
-{
-	uint32_t state;
-	int i;
-	int first;
-
-	if (pTimer == nullptr || pCfg == nullptr)
-	{
-		return -1;
-	}
-	// Prefer the last RTC and never borrow a SoftDevice-owned RTC1.
-	// RTC0 is reserved for system/radio use even without SoftDevice.
-	first = 1;
-#if (defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT) || \
-	defined(NRF_SDC_ENABLED)
-	first = 2;
-#endif
-	for (i = TIMER_NRFX_RTC_MAX - 1; i >= first; i--)
-	{
-		state = DisableInterrupt();
-		if (s_pnRfxRtcDev[i] == nullptr &&
-			s_pnRfxRtcSleepOwner[i] == nullptr && !s_bRtcEnabled[i])
-		{
-			s_pnRfxRtcSleepOwner[i] = pTimer;
-			EnableInterrupt(state);
-			pCfg->DevNo = i;
-			if (nRFxRtcInit(pTimer, pCfg))
-			{
-				return i;
-			}
-			// Initialization can fail after the handle is installed when
-			// the selected LF clock cannot start. Release only our handle.
-			state = DisableInterrupt();
-			if (s_pnRfxRtcDev[i] == pTimer)
-			{
-				// Init may have enabled NVIC before LFCLK admission
-				// failed. Leave no IRQ attached to the temporary handle.
-				s_nRfxRtcData[i].pReg->INTENCLR = 0xFFFFFFFFU;
-				s_nRfxRtcData[i].pReg->EVTENCLR = 0xFFFFFFFFU;
-				s_nRfxRtcData[i].pReg->TASKS_STOP = 1U;
-				if (i == 1)
-				{
-					NVIC_DisableIRQ(RTC1_IRQn);
-					NVIC_ClearPendingIRQ(RTC1_IRQn);
-				}
-#if TIMER_NRFX_RTC_MAX > 2
-				else if (i == 2)
-				{
-					NVIC_DisableIRQ(RTC2_IRQn);
-					NVIC_ClearPendingIRQ(RTC2_IRQn);
-				}
-#endif
-				s_pnRfxRtcDev[i] = nullptr;
-			}
-			s_pnRfxRtcSleepOwner[i] = nullptr;
-			EnableInterrupt(state);
-		}
-		else
-		{
-			EnableInterrupt(state);
-		}
-	}
-	return -1;
-}
-
-extern "C" void nRFxRtcSleepRelease(TimerDev_t *pTimer)
-{
-	uint32_t state;
-	int devno;
-
-	if (pTimer == nullptr)
-	{
-		return;
-	}
-	devno = pTimer->DevNo;
-	if (devno < 1 || devno >= TIMER_NRFX_RTC_MAX ||
-		s_pnRfxRtcSleepOwner[devno] != pTimer ||
-		s_pnRfxRtcDev[devno] != pTimer)
-	{
-		return;
-	}
-	// This also releases our LFCLK reference, but never one belonging
-	// to another timer or the Bluetooth stack.
-	TimerDisableTrigger(pTimer, 0);
-	TimerDisable(pTimer);
-	state = DisableInterrupt();
-	if (s_pnRfxRtcDev[devno] == pTimer)
-	{
-		s_pnRfxRtcDev[devno] = nullptr;
-	}
-	s_pnRfxRtcSleepOwner[devno] = nullptr;
-	EnableInterrupt(state);
-}
