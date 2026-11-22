@@ -154,6 +154,7 @@ static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
 static TimerDev_t s_RetainedTimer;
 static volatile uint32_t s_InterruptCount;
+static volatile uint32_t s_TriggerCount;
 static uint32_t s_LfTimerInitMask;
 static unsigned s_Failures;
 static volatile bool s_UartTxEmpty = true;
@@ -161,6 +162,7 @@ static volatile bool s_UartTxEmpty = true;
 static DelayCalibrationPoint_t s_DelayHigh;
 static DelayCalibrationPoint_t s_DelayLow;
 static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event);
+static void CoreClockTestTimerTriggers(void);
 static void CoreClockTestDelayCalibrationRecord(void);
 static void CoreClockTestFlush(void);
 
@@ -171,6 +173,16 @@ static const TimerCfg_t s_TimerCfg = {
 	.IntPrio = CLOCK_DEMO_IRQ_PRIORITY,
 	.EvtHandler = CoreClockTestTimerHandler,
 };
+
+// Test the trigger callback independently of the timer event handler.
+static void CoreClockTestTriggerHandler(TimerDev_t *pTimer, int Trigger,
+	void *pContext)
+{
+	(void)pTimer;
+	(void)Trigger;
+	(void)pContext;
+	s_TriggerCount++;
+}
 
 static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event)
 {
@@ -841,8 +853,81 @@ static void CoreClockTestTimer(int DevNo)
 	{
 		TimerDisable(&s_RetainedTimer);
 	}
+	CoreClockTestTimerTriggers();
 }
 
+
+// Exercise the public Timer trigger API on each enumerated hardware timer.
+// Keep this separate from the clock-change timing and IRQ measurements.
+static void CoreClockTestTimerTriggers(void)
+{
+	uint64_t period;
+	uint64_t before;
+	uint64_t after;
+	uint32_t fired;
+	int trigger;
+	bool enabled;
+	bool valid;
+
+	valid = s_Timer.FindAvailTrigger != nullptr &&
+		TimerGetMaxTrigger(&s_Timer) > 0;
+	CoreClockTestResult("Timer trigger availability", valid);
+	if (!valid)
+	{
+		return;
+	}
+	trigger = s_Timer.FindAvailTrigger(&s_Timer);
+	CoreClockTestResult("Timer free trigger",
+		trigger >= 0 && trigger < TimerGetMaxTrigger(&s_Timer));
+	if (trigger < 0 || trigger >= TimerGetMaxTrigger(&s_Timer))
+	{
+		return;
+	}
+
+	// One-shot must invoke the callback once, not periodically.
+	s_TriggerCount = 0U;
+	period = nsTimerEnableTrigger(&s_Timer, trigger, 20000000ULL,
+		TIMER_TRIG_TYPE_SINGLE, CoreClockTestTriggerHandler, nullptr);
+	enabled = TimerEnable(&s_Timer);
+	if (enabled && period != 0U)
+	{
+		msDelay(75U);
+	}
+	fired = s_TriggerCount;
+	CoreClockTestResult("Timer one-shot callback",
+		enabled && period != 0U && fired == 1U);
+	TimerDisableTrigger(&s_Timer, trigger);
+	TimerDisable(&s_Timer);
+	if (!enabled || period == 0U)
+	{
+		return;
+	}
+
+	// Continuous trigger callbacks and the running counter must advance.
+	s_TriggerCount = 0U;
+	period = nsTimerEnableTrigger(&s_Timer, trigger, 20000000ULL,
+		TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler, nullptr);
+	enabled = TimerEnable(&s_Timer);
+	before = TimerGetTickCount(&s_Timer);
+	if (enabled && period != 0U)
+	{
+		msDelay(110U);
+	}
+	after = TimerGetTickCount(&s_Timer);
+	fired = s_TriggerCount;
+	CoreClockTestResult("Timer continuous callback",
+		enabled && period != 0U && fired >= 4U && fired <= 7U);
+	CoreClockTestResult("Timer counter advances",
+		enabled && after > before);
+	TimerDisableTrigger(&s_Timer, trigger);
+	TimerDisable(&s_Timer);
+	before = s_TriggerCount;
+	msDelay(40U);
+	CoreClockTestResult("Timer trigger disabled",
+		s_TriggerCount == before);
+	CoreClockTestResult("Timer trigger slot reusable",
+		s_Timer.FindAvailTrigger(&s_Timer) == trigger);
+}
 
 // Check that an initialized but disabled LF timer remains owned.
 // This runs after the device matrix: those TimerInit calls intentionally
