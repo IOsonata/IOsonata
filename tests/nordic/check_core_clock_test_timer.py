@@ -145,6 +145,10 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertIn("candidate >= first", rtc)
         self.assertIn("pOldTimer != nullptr && pOldTimer != pTimer", rtc)
         self.assertIn("s_bRtcAutoSelected[devno] = false;", rtc)
+        self.assertIn("s_pnRfxRtcDev[candidate] == nullptr", rtc)
+        self.assertIn("pOldTimer != nullptr && pOldTimer != pTimer", rtc)
+        self.assertIn("s_bRtcAutoSelected[pSelectedCfg->DevNo] = automatic;", rtc)
+        self.assertNotIn("s_pnRfxRtcSleepOwner", rtc)
         self.assertIn("SystemLowFreqClockDisable();", rtc)
 
     def test_sdelay_uses_only_lf_rtc_and_sleep(self):
@@ -165,6 +169,11 @@ class NordicSleepDelay(unittest.TestCase):
             "SysTick", "malloc(", "new "):
             self.assertNotIn(forbidden, delay)
         self.assertIn('extern "C" bool sDelay(uint32_t Seconds)', src)
+        self.assertIn("initialized = TimerInit(&s_SleepTimer, &cfg);", delay)
+        self.assertIn("if (initialized)", delay)
+        self.assertIn("TimerDisableTrigger(&s_SleepTimer, 0);", delay)
+        self.assertNotIn("nRFxRtcSleepClaim(", delay)
+        self.assertNotIn("nRFxRtcSleepRelease(", delay)
 
     def test_nrf5340_per_core_signed_compensation(self):
         source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
