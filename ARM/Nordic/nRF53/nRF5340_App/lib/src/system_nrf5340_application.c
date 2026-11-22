@@ -115,13 +115,15 @@ void SystemCoreClockUpdate(void)
 	{
 		if (cpuHz == __SYSTEM_CLOCK_DEFAULT)
 		{
-			// Port-calibrated maximum performance: 25 cycles per us loop.
-			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 25U, 3U);
+			// Measured with restored countdown: 104009 us / requested
+			// 100000 us at 25 cycles -> 26 cycles per us loop.
+			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 26U, 3U);
 		}
 		else if (cpuHz == (__SYSTEM_CLOCK_MAX / 2U))
 		{
-			// Port-calibrated 64 MHz mode: 28 cycles per us loop.
-			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U);
+			// Measured with restored countdown: 103591 us / requested
+			// 100000 us at 28 cycles -> 29 cycles per us loop.
+			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 29U, 3U);
 		}
 		else
 		{
