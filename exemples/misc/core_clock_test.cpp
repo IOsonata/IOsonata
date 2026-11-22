@@ -535,6 +535,16 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	pSample->NsLoopsPerSecond = 0U;
 	pSample->Measured = false;
 
+	// DWT is an optional measurement instrument, never the runtime delay.
+	// If unavailable, use the existing HF Timer calibration path.
+	if (DelayCalibrationMeasure(pSample))
+	{
+		CoreClockTestPrint("Delay calibration DWT %u Hz: us loop/s %u, ns loop/s %u\\r\\n",
+			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
+			(unsigned)pSample->NsLoopsPerSecond);
+		return true;
+	}
+
 	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
 	{
 		CoreClockTestPrint("Delay timing: no CPU counter or HF Timer\r\n");
