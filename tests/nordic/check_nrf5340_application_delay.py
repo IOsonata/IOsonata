@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SYSTEM = ROOT / "ARM/Nordic/nRF53/nRF5340_App/lib/src/system_nrf5340_application.c"
 NETWORK = ROOT / "ARM/Nordic/nRF53/nRF5340_Net/lib/src/system_nrf5340_network.c"
 DELAY = ROOT / "ARM/include/idelay.h"
+CAL = ROOT / "ARM/include/system_core_clock_calibration.h"
 TEST = ROOT / "exemples/misc/core_clock_test.cpp"
 
 
@@ -16,6 +17,7 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		cls.system = SYSTEM.read_text(encoding="utf-8")
 		cls.network = NETWORK.read_text(encoding="utf-8")
 		cls.delay = DELAY.read_text(encoding="utf-8")
+		cls.cal = CAL.read_text(encoding="utf-8")
 		cls.test = TEST.read_text(encoding="utf-8")
 
 	def test_default_factors_are_preserved_at_default_frequency(self):
@@ -30,11 +32,11 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 
 
 	def test_hf_timer_calibration_without_dwt(self):
-		self.assertIn("static inline bool ArmDelayCalibrate(", self.delay)
-		self.assertIn("DWT->CYCCNT", self.delay)
+		self.assertIn("static inline bool ArmDelayCalibrate(", self.cal)
+		self.assertIn("DWT->CYCCNT", self.cal)
 		self.assertIn("static ArmDelayCalibration_t s_DelayCalibration;", self.system)
 		self.assertIn("DelayCalibrationMeasure(pSample)", self.test)
-		self.assertIn("DelayCalibrationFromTimer(", self.test)
+		self.assertIn("DelayCalibrationFromTimer(", self.cal)
 
 	def test_both_cores_are_dwt_free_at_runtime(self):
 		for core in (self.system, self.network):
