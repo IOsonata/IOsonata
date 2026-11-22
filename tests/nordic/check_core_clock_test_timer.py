@@ -234,11 +234,29 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertIn("sDelay %s overhead:", test)
         self.assertIn('CoreClockTestSleepDelayMeasure("cold");', test)
         self.assertIn('CoreClockTestSleepDelayMeasure("warm");', test)
+        self.assertIn('CoreClockTestSleepDelayMeasure("reuse");', test)
         self.assertIn("held = SystemLowFreqClockEnable();", test)
         self.assertIn("SystemLowFreqClockDisable();", test)
         self.assertLess(test.index("ok = sDelay(1U);"),
             test.index("elapsed = TimerGetMicrosecond(&s_RetainedTimer) - started;"))
         self.assertIn("CoreClockTestSleepDelay();", src)
+
+
+    def test_clock_test_runs_contention_after_timer_matrix(self):
+        source = TEST.read_text(encoding="utf-8")
+        self.assertIn("static void CoreClockTestSleepDelayOwnership(int LowCount)", source)
+        self.assertIn("s_LfTimerInitMask |= 1UL << DevNo;", source)
+        self.assertIn("CoreClockTestSleepDelayOwnership(lowTimerCount);", source)
+        self.assertIn('CoreClockTestResult("sDelay zero with LF timers occupied", sDelay(0U));', source)
+        self.assertIn('CoreClockTestResult("sDelay disabled RTC ownership", blocked);', source)
+        self.assertIn('CoreClockTestResult("sDelay all LF timers occupied", blocked);', source)
+        self.assertIn("blocked = !sDelay(1U);", source)
+        self.assertIn("s_LfTimerInitMask & expectedMask", source)
+        self.assertLess(source.index("CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);"),
+            source.index("CoreClockTestSleepDelayOwnership(lowTimerCount);"))
+        self.assertLess(source.index("CoreClockTestSleepDelayOwnership(lowTimerCount);"),
+            source.index("CoreClockTestDelayCalibrationReport();", source.index("int main(void)")))
+
 
 
 if __name__ == "__main__":
