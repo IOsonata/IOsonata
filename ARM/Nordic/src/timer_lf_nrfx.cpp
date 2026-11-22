@@ -488,6 +488,9 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 
 static void nRFxRtcDisable(TimerDev_t * const pTimer)
 {
+	uint32_t irqState;
+	int devno;
+
 	if (!s_bRtcEnabled[pTimer->DevNo])
 	{
 		return;
@@ -524,8 +527,8 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 	if (s_bRtcAutoSelected[pTimer->DevNo] &&
 		s_pnRfxRtcDev[pTimer->DevNo] == pTimer)
 	{
-		uint32_t irqState = DisableInterrupt();
-		int devno = pTimer->DevNo;
+		irqState = DisableInterrupt();
+		devno = pTimer->DevNo;
 		s_nRfxRtcData[devno].pReg->INTENCLR = 0xFFFFFFFFU;
 		s_nRfxRtcData[devno].pReg->EVTENCLR = 0xFFFFFFFFU;
 		s_pnRfxRtcDev[devno] = nullptr;
