@@ -591,6 +591,10 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsPublicElapsed);
 	CoreClockTestResult("nsDelay HF Timer 100 ms",
 		nsPublicElapsed >= 98000U && nsPublicElapsed <= 102000U);
+	CoreClockTestResult("nsDelay repeated HF Timer 100 ms",
+		nsRepeatElapsed >= 98000U && nsRepeatElapsed <= 102000U);
+	CoreClockTestResult("nsDelay factor unchanged during timing",
+		nsFactorBefore == nsFactorAfter);
 
 	if (usElapsed == 0U || nsPublicElapsed == 0U)
 	{
