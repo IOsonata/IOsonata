@@ -41,7 +41,7 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 		us_start = self.delay.index("static inline __attribute__((always_inline)) void usDelay(")
 		ns_start = self.delay.index("static inline __attribute__((always_inline)) void nsDelay(")
 		us_loop = self.delay[us_start:ns_start]
-		ns_loop = self.delay[ns_start:self.delay.index("// The high-frequency Timer reports recommended", ns_start)]
+		ns_loop = self.delay[ns_start:self.delay.index('#include "system_core_clock_calibration.h"', ns_start)]
 		self.assertEqual(us_loop.count('" NOP\n"'), 10)
 		for loop in (us_loop, ns_loop):
 			self.assertIn('" MOVS %[remaining], %[count]\n"', loop)
