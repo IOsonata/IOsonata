@@ -203,21 +203,28 @@ extern "C" int nRFxRtcSleepClaim(TimerDev_t *pTimer, TimerCfg_t *pCfg);
 extern "C" void nRFxRtcSleepRelease(TimerDev_t *pTimer);
 extern "C" bool nRFxSleepLfClockRunning(void);
 
-// The end-to-end sDelay contract includes LFCLK startup and RTC release.
-// Compensation depends on whether the clock was already running at entry.
-// Measured nRF5340 Application cold-start baseline (CoreClockTest 2026-11-22):
-// 1,260,591 us for a 1 s call -> 8,539 LFCLK ticks. Provisional until
-// repeated cold/warm measurements confirm board and temperature variation.
+// Signed end-to-end compensation in LF ticks. Positive values shorten
+// the programmed timer; negative values lengthen it. These are production
+// defaults from two independent CoreClockTest runs per nRF5340 core.
+// Application cold: 8,539 ticks from the uncorrected 1,260,591 us result;
+// corrected cold: 1,000,268 / 999,881 us, warm: 999,653 / 999,679 us.
+// Network cold: 1,000,237 / 1,000,245 us, warm: 999,690 / 999,702 us.
+// The cold startup value can vary with oscillator conditions.
 #if defined(NRF5340_XXAA_APPLICATION)
-#define NRF_SDELAY_COLD_DEFAULT_TICKS 8539U
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 8539
+#define NRF_SDELAY_WARM_DEFAULT_TICKS (-11)
+#elif defined(NRF5340_XXAA_NETWORK)
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 8
+#define NRF_SDELAY_WARM_DEFAULT_TICKS (-10)
 #else
-#define NRF_SDELAY_COLD_DEFAULT_TICKS 0U
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 0
+#define NRF_SDELAY_WARM_DEFAULT_TICKS 0
 #endif
 #ifndef NRF_SDELAY_COLD_OVERHEAD_TICKS
 #define NRF_SDELAY_COLD_OVERHEAD_TICKS NRF_SDELAY_COLD_DEFAULT_TICKS
 #endif
 #ifndef NRF_SDELAY_WARM_OVERHEAD_TICKS
-#define NRF_SDELAY_WARM_OVERHEAD_TICKS 0U
+#define NRF_SDELAY_WARM_OVERHEAD_TICKS NRF_SDELAY_WARM_DEFAULT_TICKS
 #endif
 
 #define NRF_SDELAY_MAX_CHUNK_SECONDS 60U
@@ -249,7 +256,7 @@ extern "C" bool sDelay(uint32_t Seconds)
 	uint32_t irqState;
 	uint32_t oldScr;
 	uint32_t chunk;
-	uint32_t compensation;
+	int32_t compensation;
 	uint64_t ticks;
 	uint64_t nanoseconds;
 	uint32_t frequency;
@@ -309,13 +316,22 @@ extern "C" bool sDelay(uint32_t Seconds)
 			compensation = Seconds == chunk ?
 				(warmClock ? NRF_SDELAY_WARM_OVERHEAD_TICKS :
 					NRF_SDELAY_COLD_OVERHEAD_TICKS) : 0U;
-			if (ticks <= (uint64_t)compensation + 2U)
+			if (compensation > 0)
 			{
-				ticks = 2U;
+				// Never program less than the RTC's two-tick compare lead.
+				if (ticks <= (uint32_t)compensation + 2U)
+				{
+					ticks = 2U;
+				}
+				else
+				{
+					ticks -= (uint32_t)compensation;
+				}
 			}
-			else
+			else if (compensation < 0)
 			{
-				ticks -= compensation;
+				// A negative correction adds ticks without unsigned wrap.
+				ticks += (uint32_t)(-(int64_t)compensation);
 			}
 			nanoseconds = (ticks * 1000000000ULL + frequency / 2U) /
 				frequency;
