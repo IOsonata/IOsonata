@@ -636,6 +636,9 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 			dev->TxDmaLen = (uint32_t)l;
 #endif
+			// Clear stale events before a fresh STARTTX; no transfer is active.
+			NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
+			dev->pDmaReg->EVENTS_TXSTOPPED = 0;
 			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
 			NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
 			NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
@@ -1132,7 +1135,10 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 #if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 				dev->TxDmaLen = (uint32_t)l;
 #endif
-				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
+				// Clear stale events before a fresh STARTTX; no transfer is active.
+			NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
+			dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
 				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
 				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 			}
