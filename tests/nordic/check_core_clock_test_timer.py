@@ -133,31 +133,30 @@ class NordicRtcStopOwnership(unittest.TestCase):
 
 
 class NordicSleepDelay(unittest.TestCase):
-    def test_temporary_rtc_claim_and_release(self):
+    def test_temporary_rtc_uses_generic_timer_lifecycle(self):
         rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(
             encoding="utf-8")
-        self.assertIn("nRFxRtcSleepClaim(", rtc)
-        self.assertIn("nRFxRtcSleepRelease(", rtc)
-        self.assertIn("s_pnRfxRtcDev[i] == nullptr", rtc)
-        self.assertIn("s_pnRfxRtcSleepOwner[i] == nullptr", rtc)
+        self.assertNotIn("nRFxRtcSleepClaim(", rtc)
+        self.assertNotIn("nRFxRtcSleepRelease(", rtc)
+        self.assertNotIn("s_pnRfxRtcSleepOwner", rtc)
+        self.assertIn("automatic = pCfg->DevNo == -1;", rtc)
         self.assertIn("first = 1;", rtc)
         self.assertIn("first = 2;", rtc)
-        self.assertIn("i >= first", rtc)
-        self.assertIn("TimerDisable(pTimer);", rtc)
-        self.assertIn("s_pnRfxRtcDev[devno] = nullptr;", rtc)
-        self.assertIn("s_pnRfxRtcSleepOwner[devno] = nullptr;", rtc)
-        self.assertIn("s_pnRfxRtcSleepOwner[pCfg->DevNo] != pTimer", rtc)
+        self.assertIn("candidate >= first", rtc)
+        self.assertIn("pOldTimer != nullptr && pOldTimer != pTimer", rtc)
+        self.assertIn("s_bRtcAutoSelected[devno] = false;", rtc)
+        self.assertIn("SystemLowFreqClockDisable();", rtc)
 
     def test_sdelay_uses_only_lf_rtc_and_sleep(self):
         src = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
             encoding="utf-8")
         start = src.index('extern "C" bool sDelay(uint32_t Seconds)')
         delay = src[start:]
-        for term in ("nRFxRtcSleepClaim(&s_SleepTimer, &cfg)",
+        for term in ("TimerInit(&s_SleepTimer, &cfg)",
             "nsTimerEnableTrigger(&s_SleepTimer, 0,",
             "TIMER_TRIG_TYPE_SINGLE", "__WFE();",
             "s_bSleepTimerDone", "SCB_SCR_SEVONPEND_Msk",
-            "nRFxRtcSleepRelease(&s_SleepTimer)",
+            "TimerDisable(&s_SleepTimer)",
             "NRF_SDELAY_COLD_OVERHEAD_TICKS",
             "NRF_SDELAY_WARM_OVERHEAD_TICKS",
             "warmClock = nRFxSleepLfClockRunning();"):
