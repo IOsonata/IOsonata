@@ -3,8 +3,8 @@
 
 @brief	Delay loop functions.
 
-Runtime delays use calibrated assembly loops without enabling trace,
-Timer or RTC hardware.
+Runtime delays use calibrated assembly loops without invoking DWT, Timer,
+or RTC. DWT is available only for explicit calibration-factor measurement.
 
 @author Hoang Nguyen Hoan
 @date	May 22, 2015
@@ -47,6 +47,16 @@ typedef struct {
 	uint32_t NsLoopsPerSecond;
 	bool Measured;
 } DelayCalibrationPoint_t;
+
+// DWT is available only to the explicit calibration probe, never runtime delay.
+#if defined(DWT) && defined(CoreDebug) && \
+	defined(DWT_CTRL_CYCCNTENA_Msk) && \
+	defined(CoreDebug_DEMCR_TRCENA_Msk) && \
+	(!defined(__DWT_PRESENT) || (__DWT_PRESENT == 1U))
+#define ARM_DELAY_CAL_DWT_AVAILABLE 1
+#else
+#define ARM_DELAY_CAL_DWT_AVAILABLE 0
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -317,6 +327,140 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 		);
 		loops -= chunk;
 	}
+}
+
+#define ARM_DELAY_CAL_NS	(ARM_DELAY_CAL_LOOPS * 1000U)
+
+// Optional CPU-cycle measurement of the assembly fallback, not DWT waits.
+// This is an explicit foreground initialization operation, not a clock
+// change callback. The measured costs are cached; later frequency changes
+// only call ArmDelayClockUpdate without timing loops or interrupt masking.
+// Returns false on MCUs without an accessible DWT cycle counter; in that
+// case, existing per-target fallback factors remain in effect.
+static inline bool ArmDelayCalibrate(ArmDelayCalibration_t *pCal, uint32_t CpuHz)
+{
+#if ARM_DELAY_CAL_DWT_AVAILABLE
+	uint32_t prevMask;
+	uint32_t prevTrace;
+	uint32_t prevCtrl;
+	uint32_t prevUsFactor;
+	uint32_t prevNsFactor;
+	uint32_t start;
+	uint32_t usCycles;
+	uint32_t nsCycles;
+	uint32_t i;
+	bool valid;
+
+	if (pCal == NULL || CpuHz == 0U || __get_IPSR() != 0U)
+	{
+		return false;
+	}
+	prevMask = __get_PRIMASK();
+	__disable_irq();
+	prevTrace = CoreDebug->DEMCR;
+	prevUsFactor = SystemMicroSecLoopCnt;
+	prevNsFactor = SystemnsDelayFactor;
+	usCycles = 0U;
+	nsCycles = 0U;
+	valid = false;
+
+	CoreDebug->DEMCR = prevTrace | CoreDebug_DEMCR_TRCENA_Msk;
+	__DSB();
+	__ISB();
+	prevCtrl = DWT->CTRL;
+#if defined(DWT_CTRL_NOCYCCNT_Msk)
+	if ((prevCtrl & DWT_CTRL_NOCYCCNT_Msk) == 0U)
+#endif
+	{
+		DWT->CTRL = prevCtrl | DWT_CTRL_CYCCNTENA_Msk;
+		__DSB();
+		__ISB();
+		start = DWT->CYCCNT;
+		for (i = 0U; i < 64U; i++)
+		{
+			__NOP();
+		}
+		valid = DWT->CYCCNT != start;
+		if (valid)
+		{
+			SystemMicroSecLoopCnt = 1000000U;
+			SystemnsDelayFactor = 1000000U;
+
+			usDelay(ARM_DELAY_CAL_LOOPS);
+			start = DWT->CYCCNT;
+			usDelay(ARM_DELAY_CAL_LOOPS);
+			usCycles = DWT->CYCCNT - start;
+
+			nsDelay(ARM_DELAY_CAL_NS);
+			start = DWT->CYCCNT;
+			nsDelay(ARM_DELAY_CAL_NS);
+			nsCycles = DWT->CYCCNT - start;
+			valid = usCycles != 0U && nsCycles != 0U;
+		}
+	}
+	SystemMicroSecLoopCnt = prevUsFactor;
+	SystemnsDelayFactor = prevNsFactor;
+	DWT->CTRL = prevCtrl;
+	CoreDebug->DEMCR = prevTrace;
+	__DSB();
+	__ISB();
+	__set_PRIMASK(prevMask);
+
+	if (valid)
+	{
+		pCal->UsCycles = usCycles;
+		pCal->NsCycles = nsCycles;
+		pCal->Measured = true;
+		valid = ArmDelayClockUpdate(pCal, CpuHz);
+	}
+	return valid;
+#else
+	(void)pCal;
+	(void)CpuHz;
+	return false;
+#endif
+}
+
+/**
+ * @brief Measure delay factors with DWT, leaving runtime factors unchanged.
+ *
+ * The application calls this explicitly from foreground context. Targets
+ * without DWT return false and may use the generic high-frequency timer test.
+ */
+static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
+{
+	ArmDelayCalibration_t measured;
+	uint32_t oldUs;
+	uint32_t oldNs;
+	uint32_t cpuHz;
+	bool success;
+
+	if (pPoint == NULL)
+	{
+		return false;
+	}
+	cpuHz = SystemCoreClockGet();
+	pPoint->CpuHz = cpuHz;
+	pPoint->UsLoopsPerSecond = 0U;
+	pPoint->NsLoopsPerSecond = 0U;
+	pPoint->Measured = false;
+
+	oldUs = SystemMicroSecLoopCnt;
+	oldNs = SystemnsDelayFactor;
+	measured.UsCycles = 0U;
+	measured.NsCycles = 0U;
+	measured.CpuHz = 0U;
+	measured.Measured = false;
+	success = ArmDelayCalibrate(&measured, cpuHz);
+	if (success)
+	{
+		pPoint->UsLoopsPerSecond = SystemMicroSecLoopCnt;
+		pPoint->NsLoopsPerSecond = SystemnsDelayFactor;
+		pPoint->Measured = true;
+	}
+	SystemMicroSecLoopCnt = oldUs;
+	SystemnsDelayFactor = oldNs;
+	return success;
 }
 
 // The high-frequency Timer reports recommended default factors.
