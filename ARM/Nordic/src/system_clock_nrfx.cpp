@@ -214,7 +214,7 @@ static inline OSC_TYPE nRFxLowOscSelected(void)
 {
 	return s_bNRFxLowOscSelected ? s_nRFxLowOscSelected : g_McuOsc.LowPwrOsc.Type;
 }
-#if defined(NRF53_SERIES)
+#if defined(NRF53_SERIES) || defined(NRF52_SERIES)
 static bool s_bNRFxLfclkCalibrating;
 #endif
 
@@ -668,8 +668,9 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 	}
 }
 
-#if defined(NRF53_SERIES)
-// The nRF5340 CAL task temporarily requests HFXO through the hardware
+#if defined(NRF53_SERIES) || defined(NRF52_SERIES)
+// The LFRC CAL task uses HFXO as a reference. nRF52 callers must
+// request HFXO explicitly; nRF53 CLOCK owns that calibration request.
 // clock controller. Wait for DONE outside the interrupt mask. A new LFRC
 // activation must be calibrated before its RTC consumers start counting.
 #define NRFX_LFRC_CAL_TIMEOUT_US	250000U
@@ -721,10 +722,13 @@ bool SystemHighFreqClockCalibrate(void)
 
 bool SystemLowFreqClockCalibrate(void)
 {
-#if defined(NRF53_SERIES)
+#if defined(NRF53_SERIES) || defined(NRF52_SERIES)
 	uint32_t state;
 	bool active;
 	bool success;
+#if defined(NRF52_SERIES)
+	bool hfxo;
+#endif
 
 	// Calibration waits for hardware DONE. Timer ISR callbacks should
 	// dispatch foreground work rather than wait here.
@@ -762,7 +766,22 @@ bool SystemLowFreqClockCalibrate(void)
 
 	// Hold an additional shared LFCLK reference during calibration.
 	// A separate user's Disable cannot stop LFCLK before DONE.
+#if defined(NRF52_SERIES)
+	// nRF52 CAL requires crystal-sourced HFCLK. Use the shared owner,
+	// not direct CLOCK tasks, so existing radio requests remain intact.
+	hfxo = SystemHighFreqClockEnable();
+	if (hfxo)
+	{
+		success = nRFxLfclkCalibrate();
+		SystemHighFreqClockDisable();
+	}
+	else
+	{
+		success = false;
+	}
+#else
 	success = nRFxLfclkCalibrate();
+#endif
 	SystemLowFreqClockDisable();
 
 	state = DisableInterrupt();
