@@ -436,15 +436,15 @@ static void R9a02UartaRxIRQHandler(int IntNo, void *pCtx)
 	uint8_t err = 0;
 	int cnt = R9a02UartaRxHw(dev, &err);
 
-	if (udev->EvtCallback)
+	if (udev->DevIntrf.EvtCB)
 	{
 		if (err)
 		{
-			udev->EvtCallback(udev, UART_EVT_LINESTATE, &err, 1);
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_STATECHG, &err, 1);
 		}
 		if (cnt > 0)
 		{
-			udev->EvtCallback(udev, UART_EVT_RXDATA, NULL, CFifoUsed(udev->hRxFifo));
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(udev->hRxFifo));
 		}
 	}
 }
@@ -473,9 +473,9 @@ static void R9a02UartaTxIRQHandler(int IntNo, void *pCtx)
 
 	EnableInterrupt(state);
 
-	if (udev->bTxReady && udev->DevIntrf.bIntEn && udev->EvtCallback)
+	if (udev->bTxReady && udev->DevIntrf.bIntEn && udev->DevIntrf.EvtCB)
 	{
-		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+		udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
 	}
 }
 
@@ -984,7 +984,7 @@ bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->LineState = 0;
 	pDev->bRxReady = false;
 	pDev->bTxReady = true;
@@ -998,7 +998,7 @@ bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
-	pDev->DevIntrf.EvtCB = NULL;
+	// EvtCB was initialized from UARTCfg_t; do not overwrite it.
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.Reset = NULL;
 	pDev->DevIntrf.GetHandle = R9a02UartaGetHandle;

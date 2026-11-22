@@ -52,7 +52,7 @@ SOFTWARE.
 #include "miscdev/led.h"
 #include "board.h"
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define UART_FIFO_MEMSIZE				CFIFO_MEMSIZE(256)
 static uint8_t s_UartTxFifoMem[UART_FIFO_MEMSIZE];
@@ -70,7 +70,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 1,
-	.EvtCallback = nullptr,
+	.EvtCB = nullptr,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = NULL,

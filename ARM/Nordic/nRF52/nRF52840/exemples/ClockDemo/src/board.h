@@ -55,16 +55,7 @@ SOFTWARE.
 #define WAKE_BUT_PINOP		0
 
 
-// Bare-metal HFXO requests/releases are balanced. No BLE stack is started.
-#define CLOCK_DEMO_HF_SOURCE_ENABLE 1
-#define CLOCK_DEMO_LF_SOURCE_ENABLE 1
-#define CLOCK_DEMO_SOURCES { {"Request HFXO", OSC_TYPE_XTAL, 0U, 1U, UINT32_MAX}, {"Release HFXO", OSC_TYPE_RC, 0U, 1U, UINT32_MAX} }
-#define CLOCK_DEMO_APB_DIVIDERS {1U}
-#define CLOCK_DEMO_LF_SOURCES { {"LF RC", OSC_TYPE_RC, 32768U} }
-#define CLOCK_DEMO_TIMER_DEVNO TimerGetLowFreqDevCount()
-#define CLOCK_DEMO_CYCLES 3U
+// Test core oscillator selection. Shared HFXO ownership has its own test.
 #define CLOCK_DEMO_IRQ_PRIORITY 1
-#define CLOCK_DEMO_STOP_UART 1
-#define CLOCK_DEMO_DEFER_TIMER 1
 
 #endif

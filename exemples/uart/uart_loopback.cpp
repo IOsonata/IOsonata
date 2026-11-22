@@ -91,7 +91,7 @@ const UARTCfg_t g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = UART_INT_MODE,
 	.IntPrio = 1,
-	.EvtCallback = nullptr,
+	.EvtCB = nullptr,
 	.bFifoBlocking = true,
 #ifdef UARTFIFOSIZE
 	.RxMemSize = UARTFIFOSIZE,

@@ -23,9 +23,9 @@ CPU clock started by SystemInit keeps running from it.
 SystemCoreClockSelect does not change g_McuOsc, it stays the description of
 the board.
 
-SystemLowFreqClockSelect selects the source of LFCLK, the 32 kHz clock of
-the RTCs, and starts it, restarting it when it ran from another source. It
-records the source in g_McuOsc.LowPwrOsc. The RC, the crystal, and on the
+SystemLowFreqClockSelect validates the board-declared source and configures
+LFCLK without starting it. Enable and Disable own the oscillator lifecycle.
+The board's g_McuOsc declaration is never rewritten. The RC, the crystal, and on the
 nRF52 a rail to rail external clock on XL1 (OSC_TYPE_TCXO) are supported.
 On the nRF54L the LFCLK registers are LFCLK.SRC, LFCLK.STAT and
 LFCLK.SRCCOPY.
@@ -76,6 +76,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 #include "nrf_mpsl.h"
+#include "idelay.h"
 
 #if defined(NRF52_SERIES) && defined(NRFX_LFRC_CAL_LOG)
 #include "app_evt_handler.h"
@@ -99,8 +100,14 @@ SOFTWARE.
 // Peripherals run from the fixed 16 MHz PCLK16M
 #define NRFX_PCLK_FREQ				16000000UL
 
-// Well over the start time of the 32 kHz crystal, about 0.25 s
+// Poll budget for MPSL's LFCLK wait; normal shared-clock start/stop uses
+// the microsecond timeout below.
 #define NRFX_LFCLK_WAIT_LOOPS		10000000
+
+// LFXO on nRF5340 may need several hundred milliseconds to start.
+// Bound the wait in time rather than compiler-dependent loop iterations.
+#define NRFX_LFCLK_START_TIMEOUT_US	1500000U
+#define NRFX_LFCLK_START_POLL_US	100U
 
 // LFCLK registers and source values
 #if defined(CLOCK_LFCLK_SRC_SRC_Msk)
@@ -112,6 +119,7 @@ SOFTWARE.
 #define NRFX_LFCLK_STATE_Msk		CLOCK_LFCLK_STAT_STATE_Msk
 #define NRFX_LFCLK_SRC_RC			CLOCK_LFCLK_SRC_SRC_LFRC
 #define NRFX_LFCLK_SRC_XTAL			CLOCK_LFCLK_SRC_SRC_LFXO
+#define NRFX_LFCLK_STAT_SRC_Msk		CLOCK_LFCLK_STAT_SRC_Msk
 #else
 #define NRFX_LFCLKSRC				LFCLKSRC
 #define NRFX_LFCLKSTAT				LFCLKSTAT
@@ -126,6 +134,7 @@ SOFTWARE.
 #define NRFX_LFCLK_SRC_RC			CLOCK_LFCLKSRC_SRC_LFRC
 #define NRFX_LFCLK_SRC_XTAL			CLOCK_LFCLKSRC_SRC_LFXO
 #endif
+#define NRFX_LFCLK_STAT_SRC_Msk		CLOCK_LFCLKSTAT_SRC_Msk
 #endif
 
 // Crystal start and stop tasks and started event
@@ -180,6 +189,29 @@ static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
+#if defined(NRF5340_XXAA_NETWORK)
+// XTAL remains the board-selected source. RC is an effective-clock fallback.
+static bool s_bNRFxNetLfclkRcFallback;
+#endif
+
+// Temporarily selected sources, independent of the board oscillator hardware.
+static bool s_bNRFxCoreOscSelected;
+static bool s_bNRFxLowOscSelected;
+static OSC_TYPE s_nRFxCoreOscSelected;
+static OSC_TYPE s_nRFxLowOscSelected;
+
+static inline OSC_TYPE nRFxCoreOscSelected(void)
+{
+	return s_bNRFxCoreOscSelected ? s_nRFxCoreOscSelected : g_McuOsc.CoreOsc.Type;
+}
+
+static inline OSC_TYPE nRFxLowOscSelected(void)
+{
+	return s_bNRFxLowOscSelected ? s_nRFxLowOscSelected : g_McuOsc.LowPwrOsc.Type;
+}
+#if defined(NRF53_SERIES)
+static bool s_bNRFxLfclkCalibrating;
+#endif
 
 // Weak: the SoftDevice Controller is not in the build. nrf_mpsl.cpp has the
 // version that goes through MPSL once it is initialized.
@@ -387,26 +419,43 @@ NRF_SDH_STATE_OBSERVER(s_NRfxClockSdhObserver, 0) = {
 };
 #endif
 
+// nRF5340 application core implements real running-frequency scaling in
+// system_nrf5340_application.c. Other Nordic cores currently have no
+// validated runtime CPU scaling: retain their configured performance clock.
+#if !defined(NRF5340_XXAA_APPLICATION)
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	return Mode == SYSTEM_POWER_MODE_PERFORMANCE;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return SYSTEM_POWER_MODE_PERFORMANCE;
+}
+#endif
+
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t state;
 
-	if (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL &&
-		ClkSrc != OSC_TYPE_TCXO)
+	if (ClkSrc != OSC_TYPE_RC &&
+		(ClkSrc != g_McuOsc.CoreOsc.Type || g_McuOsc.CoreOsc.Freq == 0U))
 	{
 		return false;
 	}
+	if (OscFreq != 0U && OscFreq != g_McuOsc.CoreOsc.Freq)
+	{
+		return false;
+	}
+
 	state = DisableInterrupt();
 	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt != 0U)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
-	g_McuOsc.CoreOsc.Type = ClkSrc;
-	if (OscFreq != 0U)
-	{
-		g_McuOsc.CoreOsc.Freq = OscFreq;
-	}
+	s_nRFxCoreOscSelected = ClkSrc;
+	s_bNRFxCoreOscSelected = true;
 	EnableInterrupt(state);
 	return true;
 }
@@ -429,14 +478,14 @@ bool SystemHighFreqClockEnable(void)
 		EnableInterrupt(state);
 		return true;
 	}
-	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+	if (nRFxCoreOscSelected() == OSC_TYPE_RC)
 	{
 		s_nRFxHfxoReqCnt = 1U;
 		EnableInterrupt(state);
 		return true;
 	}
-	if (g_McuOsc.CoreOsc.Type != OSC_TYPE_XTAL &&
-		g_McuOsc.CoreOsc.Type != OSC_TYPE_TCXO)
+	if (nRFxCoreOscSelected() != OSC_TYPE_XTAL &&
+		nRFxCoreOscSelected() != OSC_TYPE_TCXO)
 	{
 		EnableInterrupt(state);
 		return false;
@@ -475,7 +524,7 @@ void SystemHighFreqClockDisable(void)
 		EnableInterrupt(state);
 		return;
 	}
-	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+	if (nRFxCoreOscSelected() == OSC_TYPE_RC)
 	{
 		s_nRFxHfxoReqCnt = 0U;
 		EnableInterrupt(state);
@@ -597,19 +646,191 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 	}
 }
 
+#if defined(NRF53_SERIES)
+// The nRF5340 CAL task temporarily requests HFXO through the hardware
+// clock controller. Wait for DONE outside the interrupt mask. A new LFRC
+// activation must be calibrated before its RTC consumers start counting.
+#define NRFX_LFRC_CAL_TIMEOUT_US	250000U
+#define NRFX_LFRC_CAL_RETRY_US		1000U
+
+static bool nRFxLfclkCalibrate(void)
+{
+	uint32_t elapsed;
+	uint32_t nextRetry;
+
+	NRF_CLOCK->EVENTS_DONE = 0U;
+	NRF_CLOCK->TASKS_CAL = 1U;
+	elapsed = 0U;
+	nextRetry = NRFX_LFRC_CAL_RETRY_US;
+	while (elapsed < NRFX_LFRC_CAL_TIMEOUT_US)
+	{
+		if (NRF_CLOCK->EVENTS_DONE != 0U)
+		{
+			NRF_CLOCK->EVENTS_DONE = 0U;
+			return true;
+		}
+		// nRF5340 revision 1 anomaly 137: a higher priority LFCLK
+		// source requested by the other core can prevent DONE.
+		// Re-trigger every 1 ms; CAL tasks during an active calibration
+		// are ignored by hardware.
+		if (elapsed >= nextRetry)
+		{
+			NRF_CLOCK->TASKS_CAL = 1U;
+			nextRetry += NRFX_LFRC_CAL_RETRY_US;
+		}
+		usDelay(NRFX_LFCLK_START_POLL_US);
+		elapsed += NRFX_LFCLK_START_POLL_US;
+	}
+	if (NRF_CLOCK->EVENTS_DONE != 0U)
+	{
+		NRF_CLOCK->EVENTS_DONE = 0U;
+		return true;
+	}
+	return false;
+}
+#endif
+
+bool SystemHighFreqClockCalibrate(void)
+{
+	// No generic hardware calibration operation for HFRC on these targets.
+	// High-frequency crystal request/ownership is not RC calibration.
+	return false;
+}
+
+bool SystemLowFreqClockCalibrate(void)
+{
+#if defined(NRF53_SERIES)
+	uint32_t state;
+	bool active;
+	bool success;
+
+	// Calibration waits for hardware DONE. Timer ISR callbacks should
+	// dispatch foreground work rather than wait here.
+	if (__get_IPSR() != 0U)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	active = nRFxLowOscSelected() == OSC_TYPE_RC &&
+		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U &&
+		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STAT_SRC_Msk) ==
+			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos) &&
+		s_nRFxLfclkReqCnt != 0U && !s_bNRFxLfclkTransition &&
+		!s_bNRFxLfclkCalibrating &&
+		!nRFxMpslActive() && !nRFxClockSdEnabled();
+
+	if (active)
+	{
+		s_bNRFxLfclkCalibrating = true;
+	}
+	EnableInterrupt(state);
+
+	if (!active)
+	{
+		return false;
+	}
+
+	if (!SystemLowFreqClockEnable())
+	{
+		state = DisableInterrupt();
+		s_bNRFxLfclkCalibrating = false;
+		EnableInterrupt(state);
+		return false;
+	}
+
+	// Hold an additional shared LFCLK reference during calibration.
+	// A separate user's Disable cannot stop LFCLK before DONE.
+	success = nRFxLfclkCalibrate();
+	SystemLowFreqClockDisable();
+
+	state = DisableInterrupt();
+	s_bNRFxLfclkCalibrating = false;
+	EnableInterrupt(state);
+
+	return success;
+#else
+	// Other targets retain their existing vendor/stack calibration owner.
+	return false;
+#endif
+}
+
 // The clock manager alone starts and stops the shared oscillator.
+// LFXO may take hundreds of milliseconds to take over from LFRC.
+// Read the active source, not the selected-source register copy.
+static bool nRFxLfclkFinishStart(uint32_t Src)
+{
+#if defined(NRF53_SERIES)
+	uint32_t elapsed;
+
+	if ((Src & NRFX_LFCLK_SRC_Msk) ==
+		(NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos))
+	{
+		elapsed = 0U;
+		while (elapsed < NRFX_LFCLK_START_TIMEOUT_US)
+		{
+			if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U &&
+				(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STAT_SRC_Msk) ==
+				(NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos))
+			{
+				return true;
+			}
+			usDelay(NRFX_LFCLK_START_POLL_US);
+			elapsed += NRFX_LFCLK_START_POLL_US;
+		}
+		return false;
+	}
+	if ((Src & NRFX_LFCLK_SRC_Msk) ==
+		(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos))
+	{
+		// A higher-priority LFXO request from the other core can supply
+		// this LFCLK even though this controller requested LFRC.
+		// On nRF5340, such an override prevents LFRC calibration DONE
+		// (anomaly 137); calibration must not gate LFCLK availability.
+		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
+		{
+			return false;
+		}
+		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STAT_SRC_Msk) ==
+			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos))
+		{
+			(void)nRFxLfclkCalibrate();
+		}
+		return true;
+	}
+#else
+	(void)Src;
+#endif
+	return true;
+}
+
 static bool nRFxLfclkStart(uint32_t Src)
 {
-	int i;
+	uint32_t elapsed;
 
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
 	NRF_CLOCK->TASKS_LFCLKSTART = 1U;
-	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
+	elapsed = 0U;
+	while (elapsed < NRFX_LFCLK_START_TIMEOUT_US)
 	{
-		if (NRF_CLOCK->EVENTS_LFCLKSTARTED)
+		if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
 		{
 			NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
+			if (nRFxLfclkFinishStart(Src))
+			{
+				return true;
+			}
+			NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
+			return false;
+		}
+		usDelay(NRFX_LFCLK_START_POLL_US);
+		elapsed += NRFX_LFCLK_START_POLL_US;
+	}
+	if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
+	{
+		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
+		if (nRFxLfclkFinishStart(Src))
+		{
 			return true;
 		}
 	}
@@ -620,30 +841,41 @@ static bool nRFxLfclkStart(uint32_t Src)
 // LFCLK STOP is nonblocking. Wait before a later clock enable, not in an ISR.
 static bool nRFxLfclkWaitStopped(void)
 {
-	int i;
+	uint32_t elapsed;
 
-	for (i = 0; i < NRFX_LFCLK_WAIT_LOOPS; i++)
+	elapsed = 0U;
+	while (elapsed < NRFX_LFCLK_START_TIMEOUT_US)
 	{
 		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
 		{
 			return true;
 		}
+		usDelay(NRFX_LFCLK_START_POLL_US);
+		elapsed += NRFX_LFCLK_START_POLL_US;
 	}
-	return false;
+	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U;
 }
 
 bool SystemLowFreqClockEnable(void)
 {
 	uint32_t src;
+	uint32_t effectiveSrc;
 	uint32_t state;
 	bool running;
 	bool stopped;
 	bool started;
 
-	if (!nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src))
+	if (!nRFxLfclkOscSource(nRFxLowOscSelected(), &src))
 	{
 		return false;
 	}
+	effectiveSrc = src;
+#if defined(NRF5340_XXAA_NETWORK)
+	if (s_bNRFxNetLfclkRcFallback)
+	{
+		effectiveSrc = NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos;
+	}
+#endif
 	state = DisableInterrupt();
 	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt == UINT32_MAX)
 	{
@@ -653,7 +885,7 @@ bool SystemLowFreqClockEnable(void)
 	if (s_nRFxLfclkReqCnt != 0U)
 	{
 		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
-			(src & NRFX_LFCLK_SRC_Msk))
+			(effectiveSrc & NRFX_LFCLK_SRC_Msk))
 		{
 			EnableInterrupt(state);
 			return false;
@@ -666,7 +898,7 @@ bool SystemLowFreqClockEnable(void)
 	if (running && !s_bNRFxLfclkStopPending)
 	{
 		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
-			(src & NRFX_LFCLK_SRC_Msk))
+			(effectiveSrc & NRFX_LFCLK_SRC_Msk))
 		{
 			EnableInterrupt(state);
 			return false;
@@ -685,6 +917,23 @@ bool SystemLowFreqClockEnable(void)
 
 	stopped = !s_bNRFxLfclkStopPending || nRFxLfclkWaitStopped();
 	started = stopped && nRFxLfclkStart(src);
+#if defined(NRF5340_XXAA_NETWORK)
+	if (!started && stopped &&
+		(src & NRFX_LFCLK_SRC_Msk) ==
+		(NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos))
+	{
+		// The shared crystal is not available to this network core.
+		// Failed START issued STOP. Wait for completion before using LFRC.
+		if (nRFxLfclkWaitStopped())
+		{
+			started = nRFxLfclkStart(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos);
+			if (started)
+			{
+				effectiveSrc = NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos;
+			}
+		}
+	}
+#endif
 	state = DisableInterrupt();
 	if (stopped)
 	{
@@ -694,6 +943,21 @@ bool SystemLowFreqClockEnable(void)
 	{
 		s_nRFxLfclkReqCnt = 1U;
 		s_bNRFxLfclkOwned = true;
+#if defined(NRF5340_XXAA_NETWORK)
+		s_bNRFxNetLfclkRcFallback =
+		(effectiveSrc & NRFX_LFCLK_SRC_Msk) !=
+		(src & NRFX_LFCLK_SRC_Msk);
+#endif
+	}
+	else if (stopped)
+	{
+		// nRFxLfclkStart issued a STOP after a start timeout.
+		// The next enable must wait for that STOP to settle.
+		s_bNRFxLfclkStopPending = true;
+		s_bNRFxLfclkOwned = false;
+#if defined(NRF5340_XXAA_NETWORK)
+		s_bNRFxNetLfclkRcFallback = false;
+#endif
 	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);
@@ -726,6 +990,9 @@ void SystemLowFreqClockDisable(void)
 			{
 				NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
 				s_bNRFxLfclkStopPending = true;
+#if defined(NRF5340_XXAA_NETWORK)
+				s_bNRFxNetLfclkRcFallback = false;
+#endif
 #if defined(NRF52_SERIES)
 				s_bNRFxMpslLfclkOwned = false;
 #endif
@@ -743,8 +1010,11 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	bool running;
 	bool stopped;
 
-	(void)OscFreq;
-	if (!nRFxLfclkOscSource(ClkSrc, &src) || __get_IPSR() != 0U)
+	if ((ClkSrc != OSC_TYPE_RC &&
+		(ClkSrc != g_McuOsc.LowPwrOsc.Type ||
+		g_McuOsc.LowPwrOsc.Freq != 32768U)) ||
+		(OscFreq != 0U && OscFreq != 32768U) ||
+		!nRFxLfclkOscSource(ClkSrc, &src) || __get_IPSR() != 0U)
 	{
 		return false;
 	}
@@ -756,19 +1026,12 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return false;
 	}
 	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
-	if (running && !s_bNRFxLfclkStopPending)
+	if (running && !s_bNRFxLfclkStopPending &&
+		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
+		(src & NRFX_LFCLK_SRC_Msk))
 	{
-		// Never switch a running LFCLK that belongs to another user.
-		if ((NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
-			(src & NRFX_LFCLK_SRC_Msk))
-		{
-			EnableInterrupt(state);
-			return false;
-		}
-		g_McuOsc.LowPwrOsc.Type = ClkSrc;
-		g_McuOsc.LowPwrOsc.Freq = 32768U;
 		EnableInterrupt(state);
-		return true;
+		return false;
 	}
 	s_bNRFxLfclkTransition = true;
 	EnableInterrupt(state);
@@ -779,8 +1042,8 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	{
 		NRF_CLOCK->NRFX_LFCLKSRC = src;
 		s_bNRFxLfclkStopPending = false;
-		g_McuOsc.LowPwrOsc.Type = ClkSrc;
-		g_McuOsc.LowPwrOsc.Freq = 32768U;
+		s_nRFxLowOscSelected = ClkSrc;
+		s_bNRFxLowOscSelected = true;
 	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);
@@ -832,7 +1095,7 @@ void nRFxMpslLfclkCalibrationStart(void)
 
 	state = DisableInterrupt();
 	if (!s_bNRFxMpslExternalClock ||
-		g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC ||
+		nRFxLowOscSelected() != OSC_TYPE_RC ||
 		s_bNRFxMpslCalibrationPending ||
 		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
 	{
@@ -851,7 +1114,7 @@ void nRFxMpslLfclkCalibrationStart(void)
 
 bool nRFxMpslLfclkCalibrationIsEnabled(void)
 {
-	return g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC;
+	return nRFxLowOscSelected() == OSC_TYPE_RC;
 }
 
 uint32_t nRFxMpslLfclkCalibrationCount(void)
@@ -967,7 +1230,7 @@ int32_t nRFxMpslLfclkRequest(void)
 	uint32_t state;
 	uint32_t src;
 
-	if (!nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src))
+	if (!nRFxLfclkOscSource(nRFxLowOscSelected(), &src))
 	{
 		return -1;
 	}

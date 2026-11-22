@@ -1362,10 +1362,10 @@ static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 
 	pDev->pReg->CR1 &= ~USART_CR1_TCIE;
 	dev->bTxReady = true;
-	if (dev->DevIntrf.bIntEn && dev->EvtCallback)
+	if (dev->DevIntrf.bIntEn && dev->DevIntrf.EvtCB)
 	{
 		// Length is the free space in the TX FIFO
-		dev->EvtCallback(dev, UART_EVT_TXREADY, NULL, CFifoAvail(dev->hTxFifo));
+		dev->DevIntrf.EvtCB(&dev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(dev->hTxFifo));
 	}
 
 	return true;
@@ -1384,18 +1384,18 @@ static void Stm32UartDmaIrq(Stm32UartDev_t * const pDev)
 #ifdef STM32H753xx
 	if (Stm32DmaFlags(&pDev->RxDma) & ST_DMA_TE)
 	{
-		if (Stm32UartDmaRxMove(pDev) > 0 && dev->EvtCallback)
+		if (Stm32UartDmaRxMove(pDev) > 0 && dev->DevIntrf.EvtCB)
 		{
-			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
+			dev->DevIntrf.EvtCB(&dev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(dev->hRxFifo));
 		}
 	}
 #endif
 	if (Stm32DmaFlags(&pDev->RxDma) & (ST_DMA_HT | ST_DMA_TC))
 	{
 		Stm32DmaClear(&pDev->RxDma);
-		if (Stm32UartDmaRxMove(pDev) > 0 && dev->EvtCallback)
+		if (Stm32UartDmaRxMove(pDev) > 0 && dev->DevIntrf.EvtCB)
 		{
-			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
+			dev->DevIntrf.EvtCB(&dev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(dev->hRxFifo));
 		}
 	}
 
@@ -1469,9 +1469,9 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 	{
 		// End of an RX burst, what the DMA received goes in the RX CFIFO
 		ST_USART_IDLE_CLEAR(reg, iflag);
-		if (Stm32UartDmaRxMove(pDev) > 0 && dev->EvtCallback)
+		if (Stm32UartDmaRxMove(pDev) > 0 && dev->DevIntrf.EvtCB)
 		{
-			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
+			dev->DevIntrf.EvtCB(&dev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(dev->hRxFifo));
 		}
 	}
 #endif
@@ -1524,9 +1524,9 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 		{
 			dev->RxDropCnt++;
 		}
-		if (dev->EvtCallback)
+		if (dev->DevIntrf.EvtCB)
 		{
-			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(fifo));
+			dev->DevIntrf.EvtCB(&dev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(fifo));
 		}
 	}
 
@@ -1556,10 +1556,10 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 			// FIFO empty, mask TXEIE so TXE does not keep interrupting.
 			reg->CR1 &= ~ST_USART_CR1_TXEIE;
 			dev->bTxReady = true;
-			if (dev->EvtCallback)
+			if (dev->DevIntrf.EvtCB)
 			{
 				// Length is the free space in the TX FIFO
-				dev->EvtCallback(dev, UART_EVT_TXREADY, NULL, CFifoAvail(dev->hTxFifo));
+				dev->DevIntrf.EvtCB(&dev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(dev->hTxFifo));
 			}
 		}
 	}
@@ -2405,7 +2405,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->bRxReady = false;
 	pDev->bTxReady = true;
 	pDev->RxOvrErrCnt = 0;
@@ -2424,7 +2424,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
-	pDev->DevIntrf.EvtCB = NULL;
+	// EvtCB was initialized from UARTCfg_t; do not overwrite it.
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.GetHandle = Stm32UartGetHandle;
 	pDev->DevIntrf.Reset = Stm32UartReset;

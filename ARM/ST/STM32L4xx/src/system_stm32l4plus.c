@@ -38,6 +38,7 @@ SOFTWARE.
 
 #include "stm32l4xx.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 
 #define DEFAULT_RC_FREQ		48000000
 #define XTAL_FREQ			16000000
@@ -68,7 +69,7 @@ SOFTWARE.
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 // Keep this name for compatibility with STM code
 const uint32_t MSIRangeTable[] = {
@@ -217,6 +218,8 @@ void SystemCoreClockUpdate(void)
 		default: break; // MSI
 	}
 	SystemCoreClock = clk;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK_MAX / 1000UL));
 
 	if (SystemCoreClock > 80000000)
 	{
@@ -226,8 +229,6 @@ void SystemCoreClockUpdate(void)
 	SetFlashWaitState(SystemCoreClock);
 	SystemPeriphClockSet(0, SystemCoreClock >> 1);
 	SystemPeriphClockSet(1, SystemCoreClock >> 1);
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK_MAX / 1000UL);
 }
 
 /**

@@ -60,14 +60,6 @@ SOFTWARE.
 
 
 // Runtime selectors in this port are stubs; use startup readback and timer operation.
-#define CLOCK_DEMO_SOURCES { {"Startup readback", OSC_TYPE_RC, 0U, 1U, UINT32_MAX, false} }
-#define CLOCK_DEMO_APB_DIVIDERS {}
-#define CLOCK_DEMO_TIMER_DEVNO TimerGetLowFreqDevCount()
-#define CLOCK_DEMO_CYCLES 3U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
-#define CLOCK_DEMO_STOP_UART 1
-#define CLOCK_DEMO_DEFER_TIMER 1
-#define CLOCK_DEMO_CORE_READONLY 1
-#define CLOCK_DEMO_APB_READONLY 1
 
 #endif // __BOARD_H__

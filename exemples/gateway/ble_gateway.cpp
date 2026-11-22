@@ -523,14 +523,14 @@ static const IOPinCfg_t s_UartPins[] = {
 // TX space is available; AppCheckStatus drains SysLog from the main context.
 static volatile bool s_bLogTxReady = false;
 
-static int GatewayUartEvt(UARTDev_t * const pDev, UART_EVT EvtId,
+static int GatewayUartEvt(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
                           uint8_t *pBuffer, int BufferLen)
 {
 	(void)pDev;
 	(void)pBuffer;
 	(void)BufferLen;
 
-	if (EvtId == UART_EVT_TXREADY)
+	if (EvtId == DEVINTRF_EVT_TX_READY)
 	{
 		s_bLogTxReady = true;
 	}
@@ -549,7 +549,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = IRQ_PRIO_LOW,
-	.EvtCallback = GatewayUartEvt,
+	.EvtCB = GatewayUartEvt,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = nullptr,

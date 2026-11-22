@@ -111,7 +111,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define I2C_SLAVE_SCL_DIR IOPINDIR_OUTPUT
 #endif
 
-//int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+//int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #ifndef I2C_TEST_UART_INT_ENABLE
 #define I2C_TEST_UART_INT_ENABLE true

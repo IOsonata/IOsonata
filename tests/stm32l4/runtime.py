@@ -30,7 +30,7 @@ uint32_t SystemnsDelayFactor;
 struct {struct {uint32_t Freq;} CoreOsc;} g_McuOsc{{24000000}};
 const uint32_t MSIRangeTable[]={100000,200000,400000,800000,1000000,2000000,4000000,8000000,16000000,24000000,32000000,48000000};
 void SetFlashWaitState(uint32_t){} void SystemPeriphClockSet(int,uint32_t){}
-'''+('\n#define SYSTEM_NSDELAY_CORE_FACTOR 34UL\n#define SYSTEM_CORE_CLOCK_MAX 120000000UL\n' if 'plus' in name else '\n#define SYSTEM_NSDELAY_CORE_FACTOR 40UL\n#define SYSTEM_CORE_CLOCK_MAX 80000000UL\n')+function((BASE/'src'/name).read_text(),'SystemCoreClockUpdate')+r'''
+'''+('\n#define SYSTEM_NSDELAY_CORE_FACTOR 34UL\n#define SYSTEM_CORE_CLOCK_MAX 120000000UL\n' if 'plus' in name else '\n#define SYSTEM_NSDELAY_CORE_FACTOR 40UL\n#define SYSTEM_CORE_CLOCK_MAX 80000000UL\n')+function((ROOT/'ARM/include/idelay.h').read_text(),'ArmDelayClockSetDivisors')+function((BASE/'src'/name).read_text(),'SystemCoreClockUpdate')+r'''
 int main(){
  rcc.CR=RCC_CR_MSIRGSEL|(11<<RCC_CR_MSIRANGE_Pos);
  rcc.PLLCFGR=RCC_PLLCFGR_PLLSRC_HSE|(10<<RCC_PLLCFGR_PLLN_Pos);
@@ -38,8 +38,8 @@ int main(){
  rcc.CFGR=RCC_CFGR_SWS_HSI;SystemCoreClockUpdate();assert(SystemCoreClock==16000000);
  rcc.CFGR=RCC_CFGR_SWS_MSI;SystemCoreClockUpdate();assert(SystemCoreClock==48000000);
  rcc.CR=0;rcc.CSR=6<<RCC_CSR_MSISRANGE_Pos;SystemCoreClockUpdate();assert(SystemCoreClock==4000000);
- assert(SystemMicroSecLoopCnt==16384);
- assert(SystemnsDelayFactor==((uint64_t)4000000<<16)/(SYSTEM_NSDELAY_CORE_FACTOR*SYSTEM_CORE_CLOCK_MAX/1000));
+ assert(SystemMicroSecLoopCnt==250000);
+ assert(SystemnsDelayFactor==((uint64_t)4000000*1000000ULL)/(SYSTEM_NSDELAY_CORE_FACTOR*SYSTEM_CORE_CLOCK_MAX/1000));
  rcc.CFGR=RCC_CFGR_SWS_PLL;
  for(unsigned src=1;src<=3;src++) {
   rcc.PLLCFGR=src|(10<<RCC_PLLCFGR_PLLN_Pos);
@@ -49,7 +49,7 @@ int main(){
  rcc.CR=RCC_CR_MSIRGSEL|(11<<RCC_CR_MSIRANGE_Pos);
  rcc.PLLCFGR=RCC_PLLCFGR_PLLSRC_MSI|(5<<RCC_PLLCFGR_PLLM_Pos)|(40<<RCC_PLLCFGR_PLLN_Pos)|(1<<RCC_PLLCFGR_PLLR_Pos);
  SystemCoreClockUpdate();assert(SystemCoreClock==80000000);
- assert(SystemMicroSecLoopCnt==327680);
+ assert(SystemMicroSecLoopCnt==5000000);
  puts("PASS clock: direct sources, PLL sources/dividers and both MSI range selectors");
 }
 '''

@@ -125,9 +125,9 @@ void Sam4UartIntHandler(SAM4_UARTDEV *pDev)
 
 		} while ((status & UART_SR_RXRDY) && (cnt-- > 0));
 
-		if (pDev->pUartDev->EvtCallback)
+		if (pDev->pUartDev->DevIntrf.EvtCB)
 		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_RXDATA, NULL, 0);
+			pDev->pUartDev->DevIntrf.EvtCB(&pDev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, 0);
 		}
 	}
 	cnt = 10;
@@ -152,9 +152,9 @@ void Sam4UartIntHandler(SAM4_UARTDEV *pDev)
 				pDev->pUartReg->UART_IDR = UART_IER_ENDTX;
 			}
 
-			if (pDev->pUartDev->EvtCallback)
+			if (pDev->pUartDev->DevIntrf.EvtCB)
 			{
-				pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+				pDev->pUartDev->DevIntrf.EvtCB(&pDev->pUartDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, 0);
 			}
 		}
 	}
@@ -173,9 +173,9 @@ void Sam4UartIntHandler(SAM4_UARTDEV *pDev)
 			status = pDev->pUartReg->UART_SR;
 		} while ((status & UART_SR_TXRDY) && (cnt-- > 0));
 
-		if (pDev->pUartDev->EvtCallback)
+		if (pDev->pUartDev->DevIntrf.EvtCB)
 		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+			pDev->pUartDev->DevIntrf.EvtCB(&pDev->pUartDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, 0);
 		}
 	}
 
@@ -232,9 +232,9 @@ void Sam4USartIntHandler(SAM4_UARTDEV *pDev)
 			status = pDev->pUSartReg->US_CSR;
 		} while ((status & US_CSR_RXRDY) && cnt-- > 0);
 
-		if (pDev->pUartDev->EvtCallback)
+		if (pDev->pUartDev->DevIntrf.EvtCB)
 		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_RXDATA, NULL, 0);
+			pDev->pUartDev->DevIntrf.EvtCB(&pDev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, 0);
 		}
 	}
 	
@@ -258,9 +258,9 @@ void Sam4USartIntHandler(SAM4_UARTDEV *pDev)
 				pDev->pUartReg->UART_IDR = US_IER_ENDTX;
 			}
 
-			if (pDev->pUartDev->EvtCallback)
+			if (pDev->pUartDev->DevIntrf.EvtCB)
 			{
-				pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+				pDev->pUartDev->DevIntrf.EvtCB(&pDev->pUartDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, 0);
 			}
 		}
 	}
@@ -281,9 +281,9 @@ void Sam4USartIntHandler(SAM4_UARTDEV *pDev)
 			status = pDev->pUSartReg->US_CSR;
 		} while (status & US_CSR_TXRDY && cnt-- > 0);
 
-		if (pDev->pUartDev->EvtCallback)
+		if (pDev->pUartDev->DevIntrf.EvtCB)
 		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+			pDev->pUartDev->DevIntrf.EvtCB(&pDev->pUartDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, 0);
 		}
 	}
 
@@ -736,7 +736,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.Disable = Sam4UARTDisable;
 	pDev->DevIntrf.Enable = Sam4UARTEnable;

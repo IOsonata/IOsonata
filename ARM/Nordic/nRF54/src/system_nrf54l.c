@@ -33,6 +33,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_config_sau.h"
 
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 
 /*lint ++flb "Enter library region" */
 
@@ -77,9 +78,9 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
          (TAMPC_PROTECT_GPIOSWD_CTRL_KEY_KEY << TAMPC_PROTECT_GPIOSWD_CTRL_KEY_Pos))
 #endif
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated loop iterations per second.
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 #if defined ( __CC_ARM ) || defined ( __GNUC__ )
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_DEFAULT;
@@ -110,8 +111,8 @@ void SystemCoreClockUpdate(void)
             break;
     }
 #endif
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, 3000000UL);
 }
 
 void SystemInit(void)

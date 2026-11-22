@@ -1234,13 +1234,13 @@ static int s_RxDataCnt;
 static uint32_t s_Ring[MAX_INST];
 static uint32_t s_RingBase[MAX_INST];
 
-static int EvtHandler(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+static int EvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
-	if (EvtId == UART_EVT_TXREADY)
+	if (EvtId == DEVINTRF_EVT_TX_READY)
 	{
 		s_TxReadyCnt++;
 	}
-	else if (EvtId == UART_EVT_RXDATA)
+	else if (EvtId == DEVINTRF_EVT_RX_DATA)
 	{
 		s_RxDataCnt++;
 	}
@@ -1263,7 +1263,7 @@ static UARTCfg_t Cfg(int DevNo, int Rate, bool bInt, bool bDma)
 	c.FlowControl = UART_FLWCTRL_NONE;
 	c.bIntMode = bInt;
 	c.IntPrio = 3;
-	c.EvtCallback = EvtHandler;
+	c.EvtCB = EvtHandler;
 	c.bFifoBlocking = true;
 	c.bDMAMode = bDma;
 	c.Duplex = UART_DUPLEX_FULL;

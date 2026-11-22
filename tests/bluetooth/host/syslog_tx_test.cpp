@@ -28,6 +28,7 @@ uint8_t s_Captured[512];
 int s_CapturedLen = 0;
 int s_ChunkLimit = 512;
 int s_TxCalls = 0;
+bool s_NotifyReadyDuringTx = false;
 
 // Line length used by the tests that do not care about it.
 constexpr uint32_t kLineLen = 128U;
@@ -41,7 +42,7 @@ void MockStopTx(DevIntrf_t * const)
 {
 }
 
-int MockTxData(DevIntrf_t * const, const uint8_t *pData, int DataLen)
+int MockTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	s_TxCalls++;
 	int n = DataLen < s_ChunkLimit ? DataLen : s_ChunkLimit;
@@ -49,6 +50,11 @@ int MockTxData(DevIntrf_t * const, const uint8_t *pData, int DataLen)
 	{
 		std::memcpy(s_Captured + s_CapturedLen, pData, (size_t)n);
 		s_CapturedLen += n;
+	}
+	if (s_NotifyReadyDuringTx && pDev->EvtCB != nullptr)
+	{
+		// Simulate a TX-ready IRQ interrupting a foreground SysLogFlush.
+		(void)pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, nullptr, 0);
 	}
 	return n;
 }
@@ -67,6 +73,7 @@ void MakeIntrf(DevIntrf_t *pIntrf)
 
 void ResetCapture(int ChunkLimit = 512)
 {
+	s_NotifyReadyDuringTx = false;
 	std::memset(s_Captured, 0, sizeof(s_Captured));
 	s_CapturedLen = 0;
 	s_ChunkLimit = ChunkLimit;
@@ -103,7 +110,8 @@ void TestBufferedBeforeSink()
 	MakeIntrf(&intrf);
 	SysLogSetSink(&log, &intrf, 0);
 
-	CHECK(SysLogFlush(&log) == 13);
+	CHECK(SysLogFlush(&log) == 6);
+	CHECK(SysLogFlush(&log) == 7);
 	CHECK(SysLogFlush(&log) == 0);
 	CHECK(s_TxCalls == 2);
 	CHECK(s_CapturedLen == 13);
@@ -138,6 +146,33 @@ void TestRecordTruncatedToLineMax()
 
 // A zero result means the sink did not accept the record. The reader leaves
 // it queued so a later flush can send the same complete record.
+// Two consecutive printf records retain exact lengths, including CR/LF.
+void TestConsecutivePrintfLineEndings()
+{
+	alignas(4) uint8_t memory[SYSLOG_MEMSIZE(2, 128)];
+	SysLog_t log{};
+	SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), 128, true);
+	DevIntrf_t intrf{};
+	const char first[] = "Standby cycle 0x00000002\r\n";
+	const char second[] = "Entering Standby; automatic timer wake\r\n";
+	int firstLen;
+	int secondLen;
+
+	MakeIntrf(&intrf);
+	CHECK(SysLogInitNoTimer(&log, &cfg, nullptr, 0, 0));
+	firstLen = (int)std::strlen(first);
+	secondLen = (int)std::strlen(second);
+	CHECK(SysLogPrintf(&log, "Standby cycle 0x%08x\r\n", 2U) == firstLen);
+	CHECK(SysLogPrintf(&log, "%s", second) == secondLen);
+	SysLogSetSink(&log, &intrf, 0);
+	ResetCapture();
+	CHECK(SysLogFlush(&log) == firstLen);
+	CHECK(SysLogFlush(&log) == secondLen);
+	CHECK(s_CapturedLen == firstLen + secondLen);
+	CHECK(std::memcmp(s_Captured, first, (size_t)firstLen) == 0);
+	CHECK(std::memcmp(s_Captured + firstLen, second, (size_t)secondLen) == 0);
+}
+
 void TestBufferedFlushRetriesNotReadyRecord()
 {
 	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(2, kLineLen)];
@@ -191,8 +226,8 @@ void TestBufferedFlushResumesPartialRecord()
 	CHECK(std::memcmp(s_Captured, "record\n", 7) == 0);
 }
 
-// The record that was partly sent is evicted by a full non-blocking store.
-// The next record starts from its first byte, not from the old position.
+// A partial transfer owns its copy even when the non-blocking FIFO evicts
+// a different queued record. No accepted byte is duplicated or discarded.
 void TestPartialRecordEvicted()
 {
 	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(2, kLineLen)];
@@ -208,16 +243,24 @@ void TestPartialRecordEvicted()
 	SysLogSetSink(&log, &intrf, 0);
 	ResetCapture(2);
 	CHECK(SysLogFlush(&log) == 2);
+	CHECK(log.TxLen == 4 && log.TxSent == 2);
+	CHECK(CFifoUsed(log.hFifo) == 0);
 
-	// The sink is stalled: these stay queued and the second one evicts "one".
+	// The active transfer retains "e\n" outside CFifo. Queue three
+	// more records while stalled; the oldest queued record is evicted.
 	ResetCapture(0);
 	CHECK(SysLogPrintf(&log, "two\n") == 4);
 	CHECK(SysLogPrintf(&log, "three\n") == 6);
+	CHECK(SysLogPrintf(&log, "four\n") == 5);
+	CHECK(CFifoUsed(log.hFifo) == 2);
 
 	ResetCapture();
-	CHECK(SysLogFlush(&log) == 10);
-	CHECK(s_CapturedLen == 10);
-	CHECK(std::memcmp(s_Captured, "two\nthree\n", 10) == 0);
+	CHECK(SysLogFlush(&log) == 2);
+	CHECK(SysLogFlush(&log) == 6);
+	CHECK(SysLogFlush(&log) == 5);
+	CHECK(s_CapturedLen == 13);
+	CHECK(std::memcmp(s_Captured, "e\nthree\nfour\n", 13) == 0);
+	CHECK(log.TxLen == 0 && log.TxSent == 0);
 }
 
 // A sink attached after a partial send gets the whole head record.
@@ -318,7 +361,8 @@ void TestBufferedDropIsRecordBased()
 	ResetCapture();
 	SysLogSetSink(&log, &intrf, 0);
 
-	CHECK(SysLogFlush(&log) == 10);
+	CHECK(SysLogFlush(&log) == 4);
+	CHECK(SysLogFlush(&log) == 6);
 	CHECK(s_TxCalls == 2);
 	CHECK(s_CapturedLen == 10);
 	CHECK(std::memcmp(s_Captured, "two\nthree\n", 10) == 0);
@@ -580,6 +624,8 @@ void TestAutoSendRetriesOnNextRecord()
 
 	s_ChunkLimit = 512;
 	CHECK(SysLogPrintf(&log, "two\n") == 4);
+	CHECK(s_CapturedLen == 4);
+	CHECK(SysLogFlush(&log) == 4);
 	CHECK(s_CapturedLen == 8);
 	CHECK(std::memcmp(s_Captured, "one\ntwo\n", 8) == 0);
 }
@@ -604,7 +650,8 @@ void TestStoredRecordsGoOutOnSinkAttach()
 	CHECK(s_TxCalls == 0);
 
 	SysLogSetSink(&log, &intrf, 0);
-	CHECK(SysLogFlush(&log) == 8);
+	CHECK(SysLogFlush(&log) == 4);
+	CHECK(SysLogFlush(&log) == 4);
 	CHECK(std::memcmp(s_Captured, "one\ntwo\n", 8) == 0);
 }
 
@@ -665,6 +712,58 @@ void TestTimestampTruncation()
 	}
 }
 
+void TestDeferredReadyDuringActiveFlush()
+{
+	alignas(4) static uint8_t memory[SYSLOG_MEMSIZE(4, 64)];
+	SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), 64, true);
+	DevIntrf_t intrf{};
+
+	MakeIntrf(&intrf);
+	ResetCapture(2);
+	CHECK(SysLogInitNoTimer(SysLogGet(), &cfg, &intrf, 0, 0));
+	CHECK(intrf.EvtCB == SysLogDevIntrfEvent);
+	s_NotifyReadyDuringTx = true;
+
+	// The callback runs from inside MockTxData while DeviceIntrf is busy.
+	// The event must not be lost when the partial record is retried.
+	CHECK(SysLogPrintf(SysLogGet(), "ready-event\r\n") == 13);
+	CHECK(s_CapturedLen == 13);
+	CHECK(std::memcmp(s_Captured, "ready-event\r\n", 13) == 0);
+	CHECK(SysLogFlush(SysLogGet()) == 0);
+
+	s_NotifyReadyDuringTx = false;
+	SysLogSetSink(SysLogGet(), nullptr, 0);
+}
+
+// A TX_READY interrupt can arrive during the final successful submission.
+// That event must service the next queued record instead of being stranded.
+void TestDeferredReadyAfterCompleteRecord()
+{
+	alignas(4) static uint8_t memory[SYSLOG_MEMSIZE(4, 64)];
+	SysLogCfg_t cfg = MakeCfg(memory, sizeof(memory), 64, true);
+	DevIntrf_t intrf{};
+
+	MakeIntrf(&intrf);
+	CHECK(SysLogInitNoTimer(SysLogGet(), &cfg, nullptr, 0, 0));
+	CHECK(SysLogPrintf(SysLogGet(), "one\r\n") == 5);
+	CHECK(SysLogPrintf(SysLogGet(), "two\r\n") == 5);
+	ResetCapture();
+	SysLogSetSink(SysLogGet(), &intrf, 0);
+	CHECK(intrf.EvtCB == SysLogDevIntrfEvent);
+
+	// Simulate a ready IRQ interrupting each full DeviceIntrfTx call.
+	s_NotifyReadyDuringTx = true;
+	CHECK(SysLogFlush(SysLogGet()) == 10);
+	CHECK(s_CapturedLen == 10);
+	CHECK(std::memcmp(s_Captured, "one\r\ntwo\r\n", 10) == 0);
+	CHECK(SysLogGet()->TxLen == 0);
+	CHECK(CFifoUsed(SysLogGet()->hFifo) == 0);
+
+	s_NotifyReadyDuringTx = false;
+	CHECK(SysLogFlush(SysLogGet()) == 0);
+	SysLogSetSink(SysLogGet(), nullptr, 0);
+}
+
 void TestNoTimerInitialization()
 {
 	alignas(4) uint8_t memory[SYSLOG_MEMSIZE(2, 32)];
@@ -687,8 +786,11 @@ int main()
 {
 	TestTimestampTruncation();
 	TestNoTimerInitialization();
+	TestDeferredReadyDuringActiveFlush();
+	TestDeferredReadyAfterCompleteRecord();
 	TestBufferedBeforeSink();
 	TestRecordTruncatedToLineMax();
+	TestConsecutivePrintfLineEndings();
 	TestBufferedFlushRetriesNotReadyRecord();
 	TestBufferedFlushResumesPartialRecord();
 	TestPartialRecordEvicted();

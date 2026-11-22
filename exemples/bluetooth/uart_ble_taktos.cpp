@@ -207,7 +207,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
 };
 
-int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int UartEvtHandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 // UART configuration data
 
@@ -224,7 +224,7 @@ const UARTCfg_t g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = IRQ_PRIO_NORMAL,//TAKTOS_PRIORITY_NORMAL,
-	.EvtCallback = UartEvtHandler,
+	.EvtCB = UartEvtHandler,
 	.bFifoBlocking = true,				// fifo blocking mode
 	.RxMemSize = 0,
 	.pRxMem = NULL,
@@ -407,7 +407,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 }
 
 // UART interrupt: queue the UART to BLE step
-int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int UartEvtHandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	(void)pDev;
 	(void)pBuffer;
@@ -415,13 +415,13 @@ int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLe
 
 	switch (EvtId)
 	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
+		case DEVINTRF_EVT_RX_TIMEOUT:
+		case DEVINTRF_EVT_RX_DATA:
 			UartRxQue();
 			break;
-		case UART_EVT_TXREADY:
+		case DEVINTRF_EVT_TX_READY:
 			break;
-		case UART_EVT_LINESTATE:
+		case DEVINTRF_EVT_STATECHG:
 			break;
 	}
 

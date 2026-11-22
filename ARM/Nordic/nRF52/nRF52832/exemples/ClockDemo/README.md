@@ -6,23 +6,29 @@ oscillator selections are in `src/board.h`, copied from this target's
 PowerOffDemo project. Default console speed is 1,000,000 baud unless board.h
 specifies another rate. No debugger is required for UART logging.
 
-Bare-metal HFXO requests/releases are balanced. No BLE stack is started.
+ClockDemo exercises the generic core-clock selection, peripheral-clock
+Get/Set, low-frequency source selection, shared HF/LF reference counting,
+and Timer APIs. Board definitions supply oscillator test inputs and physical
+UART configuration; they do not select an MCU-specific execution path.
+ClockDemo reports missing shared-clock API implementations as failures.
+HfxoTest and HfxoTestBle additionally inspect physical oscillator behavior
+and BLE ownership on supported hardware.
 
-This project runs three clock-selection cycles. The Nordic polling UART
-driver drains queued TX and waits for the last byte before PowerOff.
-ClockDemo powers off the UART before each explicit clock selection and
-reinitializes it afterward. The final result is also drained before the
-application enters its idle loop. The application does not read the UART
-driver's private FIFO or call RX to advance TX.
-Clock selection completes before the timer is initialized because some ports
-retain timer module ownership after TimerDisable. It then checks the first
-high-frequency timer at 1 MHz requested rate, with a 10 ms trigger over 250 ms.
+UART transmission stays under the UART driver's control while clock
+selections run. The application never reads the driver's FIFO or calls RX
+to advance TX. Every timer reported by TimerGetLowFreqDevCount and
+TimerGetHighFreqDevCount is exercised with a 10 ms trigger over 250 ms.
+When at least two timer devices exist, the demo checks that disabling
+one does not stop the other.
 The returned timer rate may differ from 1 MHz. Delay and interrupt checks use
 the actual rate/period. They do not independently measure oscillator accuracy.
 No watchdog is enabled. No sleep is requested by this configuration; use
 PowerOffDemo for target wake validation. Reset restores startup clocks.
 
-An omitted selector prints SKIP. A configured selector that fails prints FAIL;
-unsupported selections are not silently counted as successful tests. Runtime
-clock ownership, board wiring and hardware operation still require board
-validation. See the cross-target power/clock demo matrix for build results.
+The demo checks peripheral clock indices 0 through 31 and verifies
+invalid-index handling. The generic HAL does not currently expose a count
+of peripheral clock domains or oscillator-source capabilities. Consequently,
+this test cannot yet establish exhaustive coverage of every source or
+domain on every MCU. An unavailable operation is reported explicitly,
+not treated as PASS. Target builds, board wiring and oscillator operation
+still require hardware validation.

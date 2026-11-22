@@ -20,31 +20,29 @@ class Nrf52DelayCalibration(unittest.TestCase):
         cls.system = SYSTEM.read_text(encoding="utf-8")
         cls.delay = DELAY.read_text(encoding="utf-8")
 
-    def test_microsecond_calibration(self):
-        match = re.search(r"SystemMicroSecLoopCnt\s*=\s*"
-                          r"\(\(uint64_t\)SystemCoreClock\s*<<\s*16\)\s*/\s*"
-                          r"(\d+)UL;", self.system)
-        self.assertIsNotNone(match)
-        self.assertEqual(int(match.group(1)), 13000000)
+    def test_existing_mcu_fallback_divisors_are_preserved(self):
+        self.assertIn("ArmDelayClockSetDivisors(SystemCoreClock,", self.system)
+        self.assertIn("13000000UL, 3000000UL", self.system)
+        self.assertIn('#include "idelay.h"', self.system)
 
-    def test_nanosecond_calibration(self):
-        match = re.search(r"SystemnsDelayFactor\s*=\s*"
-                          r"\(\(uint64_t\)SystemCoreClock\s*<<\s*16\)\s*/\s*"
-                          r"(\d+)UL;", self.system)
-        self.assertIsNotNone(match)
-        self.assertEqual(int(match.group(1)), 3000000)
+    def test_clock_change_factor_math_is_generic(self):
+        helper = (ROOT / "ARM/include/idelay.h").read_text(
+            encoding="utf-8")
+        self.assertIn("bool ArmDelayClockSetDivisors(", helper)
+        self.assertIn("usFactor = ((uint64_t)CpuHz * 1000000ULL) / UsDivisor", helper)
+        self.assertIn("nsFactor = ((uint64_t)CpuHz * 1000000ULL) / NsDivisor", helper)
 
     def test_fixed_point_loop_units(self):
-        self.assertIn("SystemMicroSecLoopCnt + 65535ULL) >> 16", self.delay)
-        self.assertIn("SystemnsDelayFactor + 65535999ULL) / 65536000ULL",
+        self.assertIn("SystemMicroSecLoopCnt + 999999ULL) / 1000000ULL", self.delay)
+        self.assertIn("SystemnsDelayFactor + 999999999ULL) / 1000000000ULL",
                       self.delay)
 
     def test_250ms_scale_at_64mhz(self):
         frequency = 64000000
-        us_factor = (frequency << 16) // 13000000
-        ns_factor = (frequency << 16) // 3000000
-        long_loops = (250000 * us_factor + 65535) >> 16
-        short_loops = (250000000 * ns_factor + 65535999) // 65536000
+        us_factor = frequency // 13
+        ns_factor = frequency // 3
+        long_loops = (250000 * us_factor + 999999) // 1000000
+        short_loops = (250000000 * ns_factor + 999999999) // 1000000000
         self.assertLess(abs(long_loops * 13 - 16000000), 128)
         # The SUBS/BNE loop takes three cycles per iteration on nRF52.
         # A previous divisor of 3189000 measured 235299 us.

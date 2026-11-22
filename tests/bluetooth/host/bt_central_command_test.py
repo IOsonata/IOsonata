@@ -26,13 +26,15 @@ struct UARTDev_t
 	hCFifo_t hTxFifo;
 } uart;
 
-enum UART_EVT
+enum DEVINTRF_EVT
 {
-	UART_EVT_RXTIMEOUT,
-	UART_EVT_RXDATA,
-	UART_EVT_TXREADY,
-	UART_EVT_LINESTATE
+	DEVINTRF_EVT_RX_TIMEOUT,
+	DEVINTRF_EVT_RX_DATA,
+	DEVINTRF_EVT_TX_READY,
+	DEVINTRF_EVT_STATECHG
 };
+
+struct DevIntrf_t {} intrf;
 
 struct BtDevice_t
 {
@@ -194,7 +196,7 @@ int main()
 		assert(g_UartRxExtBuffLen == int(split));
 		assert(CFifoUsed(g_UartRx2BleFifo) == 0 && txQueued == 0);
 		assert(rxQueued == split - 1); // Partial command must not spin in main.
-		nRFUartEvthandler(&uart, UART_EVT_RXDATA, nullptr, 0);
+		nRFUartEvthandler(&intrf, DEVINTRF_EVT_RX_DATA, nullptr, 0);
 		assert(rxQueued == split); // Further RX must wake the partial command.
 		g_Uart.input = command + split;
 		UartRxSchedHandler(0, nullptr);

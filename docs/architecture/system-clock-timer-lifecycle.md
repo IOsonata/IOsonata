@@ -2,7 +2,7 @@
 
 Status: architecture decision and active implementation for IOsonata 0.14.
 The generic clock Enable/Disable declarations and Nordic implementation
-are present on `refactor_nordic_clock_ownership_014`. Other MCU ports are
+are present on `refactor_nrf5340_power_clock_014`. Other MCU ports are
 not yet implemented or validated for these functions. The Nordic changes
 still require focused builds and hardware retesting; this document is not
 hardware PASS evidence.
@@ -246,9 +246,11 @@ default low-frequency source is the one configured in
 
 The Nordic working branch now uses `SystemHighFreqClockEnable/Disable` for
 shared HF oscillator ownership and `SystemLowFreqClockEnable/Disable` for
-LFCLK. Its RTC, HF timer, USB controller, HFXO tests and ClockDemo have been
-updated to use those functions. The redundant Nordic LFCLK private header
-has been deleted. Source review is not a substitute for a complete build,
+LFCLK. The RTC, HF timer and USB controller use those shared-clock
+functions. Dedicated HFXO/SDC tests exercise reference counting and BLE
+ownership. ClockDemo separately tests generic core selection, peripheral
+clock frequency and timer behavior. The redundant Nordic LFCLK private
+header has been deleted. Source review is not a substitute for a complete build,
 SoftDevice/SDC integration tests, and actual hardware validation.
 
 ### Nordic BLE clock ownership is transparent to applications
@@ -382,6 +384,195 @@ do not validate LFRC calibration, nRF52840, BLE radio traffic, or power
 consumption. The portable `HfxoTestBle` example now calls `BtAppInit()`;
 `tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp` retains the Nordic-specific
 clock and shutdown checks.
+
+## Nordic oscillator declaration and selection
+
+`g_McuOsc` declares board hardware support. Nordic keeps the temporary
+HF/LF selected source in the System Core backend without modifying that
+declaration. RC is internal; external XTAL/TCXO selections are accepted only
+when the board has declared that oscillator type and its frequency.
+
+`Select` validates and configures but does not start or stop clocks.
+`Enable` starts the selected source on first use, verifies readiness,
+and increments the shared ref-count. `Disable` stops the source after
+the last owner releases it. The board descriptor getters remain board
+declarations, not temporary selection getters.
+
+On nRF5340 the LFXO request can initially produce LFRC output while
+the crystal starts. The clock manager waits for `LFCLKSTAT.SRC` to report
+the active LFXO before claiming readiness. `LFCLKSRCCOPY` reports the
+requested source and cannot by itself establish LFXO readiness.
+
+## nRF5340 dual-core LFCLK priority and LFRC calibration
+
+If the application core holds LFXO (as NetCoreStart does), a network-core
+request for LFRC is served by the higher-priority shared LFXO. Nordic
+nRF5340 clock-control priority is LFSYNT > LFXO > LFRC. The network-core
+LFRC selection is the *requested* source; LFCLKSTAT.SRC is the *effective*
+source. On nRF5340, only calibrate LFRC when LFCLKSTAT reports that LFRC
+is actually running. A calibration DONE timeout must not invalidate an
+otherwise running clock. Revision 1 anomaly 137 can suppress DONE when
+the other core holds LFXO. Calibration failure is still reported by the
+explicit operation; CoreClockTest treats it as unsupported/failed rather
+than a clock or timer failure.
+
+## nRF5340 NetCoreStart application-core LFXO preparation
+
+NetCoreStart on the nRF5340 Audio DK runs as a secure application-core
+image. Secure SystemInit configures the XL1/XL2 oscillator pin ownership
+and board capacitor settings. NetCoreStart requests the declared LFXO
+through SystemLowFreqClockSelect and SystemLowFreqClockEnable *before*
+releasing NETWORK.FORCEOFF. It retains the shared LFCLK reference while
+the application core waits in WFI. Failed LFXO startup prevents release
+and keeps the success LED off.
+
+The network core still uses its own LFCLK clock manager. Its existing
+verified LFRC fallback remains appropriate when a standalone network
+core does not have access to the shared crystal.
+
+## Network-core LFXO availability fallback
+
+The Nordic nRF5340 Audio DK declares an LFXO in `g_McuOsc`. The network
+core requests the crystal when LFCLK is enabled, but application-core
+configuration or other shared-hardware conditions can prevent LFXO from
+becoming active. If the network core cannot activate LFXO, the clock owner
+waits for the failed START's STOP and explicitly starts LFRC instead.
+
+Only a successfully started LFRC is accepted as fallback. The requested
+board source remains XTAL, while the effective RC source is tracked
+internally for repeated enables and reference-counted disable. The
+network core can retry XTAL on the next first enable. Other Nordic cores
+retain their existing behavior.
+
+`Select` remains configuration-only; no additional board capability
+mask is needed. This fallback must be validated in network-only and
+dual-core operation, including LFRC accuracy requirements.
+
+## nRF5340 LFRC calibration API
+
+The System Core provides `SystemHighFreqClockCalibrate()` and
+`SystemLowFreqClockCalibrate()`. These are one-shot calibration requests.
+They never initialize an RTC, select a Timer device, or schedule a
+periodic task. A higher-level subsystem owns its own timer and decides
+when to call the appropriate calibration function.
+
+The functions return true only after calibration completes. A false return
+means unavailable, invalid current source/state, or calibration failure.
+The functions are foreground operations. Timer interrupt callbacks must
+defer the call to foreground code rather than blocking inside the ISR.
+
+On nRF5340, `SystemLowFreqClockCalibrate()` requires an active LFRC
+shared-clock user. It acquires an additional LFCLK reference while
+`TASKS_CAL` runs and releases it afterward; it waits for `EVENTS_DONE`
+with a bounded timeout. The calibration retry interval is 1 ms for
+nRF5340 revision 1 anomaly 137. HFXO is requested by the CAL hardware
+and does not require a separate application request.
+
+The existing startup calibration remains in place when LFRC first
+starts. It passed ClockDemo on both nRF5340 cores. Additional
+calibrations are explicitly initiated by higher-level code, including
+any periodic calls it chooses to schedule. A Timer callback may queue a
+calibration event with AppEvtHandlerQue; AppRun executes the callback in
+foreground context. System Core never owns that schedule or the queue.
+See [Clock calibration from AppRun](clock-calibration-app-run.md).
+
+On Nordic targets without an implemented RC calibration operation,
+the corresponding API currently returns false. The nRF52 MPSL
+calibration path continues through its existing clock-owner integration;
+the new generic API must not bypass SoftDevice/MPSL. HFRC calibration
+is not currently supported by the Nordic implementation.
+
+For applications requiring calibrated LFRC accuracy continuously,
+the higher-level subsystem must schedule and validate a suitable
+recalibration interval, including across sleep/wake. The nRF5340
+CLOCK peripheral does not have the nRF52 calibration interval timer.
+Cross-core clock-source changes can abort calibration without DONE.
+
+Validate scheduled calibration by measuring a long-running RTC user,
+multiple calibration completions and time intervals, dual-core clock
+requests, and HFXO release between requests before sign-off.
+
+## nRF5340 application-core assembly fallback factors
+
+The Audio DK's measured loop execution shows different microsecond-loop
+costs at 128 MHz and 64 MHz: approximately 25 cycles per iteration at
+128 MHz and 28 cycles at 64 MHz. The nRF5340 application port therefore
+preconfigures the appropriate factor at each supported CPU speed instead
+of applying a single 28-cycle factor at both speeds. The nanosecond-loop
+cost remains approximately three cycles. DWT-backed delays use CPU cycles
+directly; these calibrated loop factors protect translation units that
+compile the assembly fallback.
+
+## DWT and assembly-delay translation-unit consistency
+
+Compile-time DWT selection may differ between translation units because
+the compiler sees different target CMSIS definitions and include order.
+Until all ARM translation units consistently select the DWT backend, the
+MCU System Core must **always** initialize and refresh the assembly-loop
+fallback factors, even if its own translation unit compiles DWT delays.
+The nRF5340 application core does so at startup and at every 128/64 MHz
+transition. Never leave the global delay rates at their startup
+1,000,000-loop/s placeholders. DWT itself remains CPU-local and does
+not require loop-factor calibration.
+
+## CPU clock changes and delay factors
+
+The existing `ARM/include/idelay.h` chooses the delay backend at compile
+time: DWT CYCCNT where available, otherwise the calibrated assembly loops.
+DWT delays count CPU cycles directly, handle 32-bit counter wraparound in
+bounded chunks, and use the current `SystemCoreClock`. Neither path requires
+Timer or RTC. Loop-cost calibration only affects assembly fallback.
+
+Every successful CPU source or divider transition, including reduced-power
+frequencies and wakeup restoration, must do the following in System Core:
+
+1. Complete the clock change and read the effective CPU frequency from the
+   relevant hardware clock register/divider.
+2. Update `SystemCoreClock` with that frequency.
+3. Recalculate BOTH `SystemMicroSecLoopCnt` and `SystemnsDelayFactor`
+   before returning control to callers that can use delay functions.
+
+`ArmDelayClockSetDivisors` applies the existing MCU-specific loop
+costs as **actual loop iterations per second**, not Q16 values. Both delay
+functions calculate iterations directly from their calibrated loop rates
+and the requested duration. This supports targets without DWT and has no
+Timer, interrupt-wait, or event dependency.
+The routine does not change clock hardware, and unsuccessful/unsupported
+clock-source selection must not commit factors for a requested clock that
+was never activated.
+
+The MCU port supplies already-calibrated default-speed fallback loop costs.
+A DWT-based delay requires **no assembly-loop recalibration** after CPU
+frequency changes. Optional DWT characterization of the fallback loops is
+still available for MCU porting, without Timer or LFCLK. The measured CPU-cycle
+cost is cached and converted into loop iterations per second.
+At the default frequency, IOsonata restores the port's original calibrated
+loop costs. A target without DWT uses its port-provided cost and scales the
+loop rate from the actual CPU frequency. Calibration may briefly mask
+interrupts; it must not occur during ordinary delay calls.
+
+`SystemCoreClockUpdate` is the canonical place to read hardware clock
+state and update factors. Ports such as SAM4L that assign the core
+frequency directly during intermediate clock transitions must refresh
+both factors at each assignment as well. This prevents stale factors
+during low-power CPU divider changes and subsequent restoration.
+
+The clock owner must serialize clock hardware transitions and factor
+updates against other execution contexts; callers must not alter CPU
+clock registers independently of System Core. Delays already in
+progress while the CPU clock changes are not guaranteed to retain the
+original duration. RTC and peripheral Timer drivers own their counters;
+none are appropriated by System Core for delay-factor updates.
+
+RISC-V ports use the counter-based delay implementation in
+`RISCV/include/idelay.h`, which obtains the effective CPU frequency
+without ARM loop factors. Do not introduce ARM delay-factor globals on
+RISC-V targets.
+
+Verify at least 250 ms delays before reduction, at reduced CPU speed,
+and after restoration, using an independent hardware timing reference.
+Also test different optimization levels and ports without DWT. Source
+assertions and arithmetic checks alone are not hardware timing validation.
 
 ## Cross-MCU implementation and validation
 

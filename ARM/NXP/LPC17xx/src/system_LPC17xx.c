@@ -38,6 +38,7 @@ Modified by          Date              Description
 #include "LPC17xx.h"
 #include "system_LPC17xx.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 
 #define OSC_FREQ				OSC_FREQ_16MHZ  /* Installed oscillator frequency */
 #define IRC_FREQ				(4000000UL)		/* Internal RC freq */
@@ -84,7 +85,7 @@ __WEAK McuOsc_t g_McuOsc = {
 uint32_t SystemCoreClock = IRC_FREQ;/*!< System Clock Frequency (Core Clock)*/
 uint32_t SystemClkFreq = IRC_FREQ;	/* System clock frequency, reset default IRC */
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 extern void (* const __Vectors[])(void);
 
 // Optional initialized AHB RAM section supplied by the application linker.
@@ -231,8 +232,8 @@ void SystemCoreClockUpdate (void)
 	// Apply the CPU divider before narrowing the result.
 	SystemCoreClock = (uint32_t)(sysclk / ((LPC_SC->CCLKCFG & 0xFFU) + 1U));
 
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, 3000000UL);
 }
 
 // For one PLL ratio, only the two dividers bracketing the request can win.

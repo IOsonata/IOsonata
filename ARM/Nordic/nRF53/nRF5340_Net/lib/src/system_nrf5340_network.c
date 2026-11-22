@@ -31,14 +31,15 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf53_approtect.h"
 
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 /*lint ++flb "Enter library region" */
 
 
 #define __SYSTEM_CLOCK_DEFAULT      (64000000UL)     /*!< NRF5340 network core uses a fixed System Clock Frequency of 64MHz */
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated loop iterations per second.
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 #if defined ( __CC_ARM ) || defined ( __GNUC__ )
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_DEFAULT;
@@ -58,11 +59,17 @@ uint32_t SystemCoreClockGet(void)
 	return SystemCoreClock;
 }
 
+static ArmDelayCalibration_t s_DelayCalibration;
+
 void SystemCoreClockUpdate(void)
 {
-    SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
+
+	if (s_DelayCalibration.UsCycles == 0U)
+	{
+		// Fixed-speed network core: use the port's calibrated defaults.
+		(void)ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U);
+	}
 }
 
 void SystemInit(void)

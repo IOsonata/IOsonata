@@ -32,15 +32,16 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf53_approtect.h"
 
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 /*lint ++flb "Enter library region" */
 
 void SystemStoreFICRNS(void);
 void SystemLockFICRNS(void);
 
 
-/* NRF5340 application core uses a variable System Clock Frequency that starts at 64MHz */
+/* IOsonata starts the nRF5340 application core at 128 MHz. */
 #define __SYSTEM_CLOCK_MAX      (128000000UL)
-#define __SYSTEM_CLOCK_DEFAULT  ( 64000000UL)
+#define __SYSTEM_CLOCK_DEFAULT  (128000000UL)
 
 #define TRACE_PIN_CNF_VALUE (   (GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos) | \
                                 (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos) | \
@@ -55,9 +56,9 @@ void SystemLockFICRNS(void);
 #define TRACE_TRACEDATA2_PIN TAD_PSEL_TRACEDATA2_PIN_Tracedata2
 #define TRACE_TRACEDATA3_PIN TAD_PSEL_TRACEDATA3_PIN_Tracedata3
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated loop iterations per second.
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 #if defined ( __CC_ARM ) || defined ( __GNUC__ )
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_DEFAULT;
@@ -78,15 +79,125 @@ uint32_t SystemCoreClockGet(void)
 	return SystemCoreClock;
 }
 
+// The application core changes HCLK128M only. Peripheral PCLK domains
+// remain independent of this divider.
+#if defined(NRF_TRUSTZONE_NONSECURE)
+#define NRF_APP_CLOCK	NRF_CLOCK_NS
+#else
+#define NRF_APP_CLOCK	NRF_CLOCK_S
+#endif
+
+#define NRF_APP_HCLK_PERFORMANCE	(CLOCK_HFCLKCTRL_HCLK_Div1 << CLOCK_HFCLKCTRL_HCLK_Pos)
+#define NRF_APP_HCLK_LOW_POWER	(CLOCK_HFCLKCTRL_HCLK_Div2 << CLOCK_HFCLKCTRL_HCLK_Pos)
+
+// Always calculate calibrated assembly-loop factors: another translation
+// unit can compile the non-DWT fallback even when this port has DWT.
+static ArmDelayCalibration_t s_DelayCalibration;
+
 void SystemCoreClockUpdate(void)
 {
+	uint32_t cpuHz;
+
 #if defined(NRF_TRUSTZONE_NONSECURE)
-    SystemCoreClock = __SYSTEM_CLOCK_MAX >> (NRF_CLOCK_NS->HFCLKCTRL & (CLOCK_HFCLKCTRL_HCLK_Msk));
+	cpuHz = __SYSTEM_CLOCK_MAX >>
+		(NRF_CLOCK_NS->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk);
 #else
-    SystemCoreClock = __SYSTEM_CLOCK_MAX >> (NRF_CLOCK_S->HFCLKCTRL & (CLOCK_HFCLKCTRL_HCLK_Msk));
+	cpuHz = __SYSTEM_CLOCK_MAX >>
+		(NRF_CLOCK_S->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk);
 #endif
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	SystemCoreClock = cpuHz;
+
+	// Always update the assembly fallback, even when this compilation unit
+	// uses DWT. Other translation units can select the non-DWT path.
+	if (s_DelayCalibration.UsCycles == 0U ||
+		s_DelayCalibration.CpuHz != cpuHz)
+	{
+		if (cpuHz == __SYSTEM_CLOCK_DEFAULT)
+		{
+			// Port-calibrated maximum performance: 25 cycles per us loop.
+			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 25U, 3U);
+		}
+		else if (cpuHz == (__SYSTEM_CLOCK_MAX / 2U))
+		{
+			// Port-calibrated 64 MHz mode: 28 cycles per us loop.
+			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U);
+		}
+		else
+		{
+			// Retain a proportional fallback for other supported speeds.
+			(void)ArmDelayClockUpdate(&s_DelayCalibration, cpuHz);
+		}
+	}
+}
+
+/**
+ * @brief Select the nRF5340 application CPU's running power mode.
+ *
+ * The HFCLKCTRL divider affects HCLK128M, not the independent PCLK clocks.
+ * No LFCLK/HFXO ownership changes or peripheral resets are needed.
+ */
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t requested;
+	uint32_t current;
+	uint32_t settle;
+
+	if (__get_IPSR() != 0U || __get_PRIMASK() != 0U)
+	{
+		return false;
+	}
+
+	switch (Mode)
+	{
+		case SYSTEM_POWER_MODE_PERFORMANCE:
+			requested = NRF_APP_HCLK_PERFORMANCE;
+			break;
+		case SYSTEM_POWER_MODE_LOW_POWER:
+			requested = NRF_APP_HCLK_LOW_POWER;
+			break;
+		default:
+			return false;
+	}
+
+	current = NRF_APP_CLOCK->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk;
+	if (current == requested)
+	{
+		return true;
+	}
+	if (current != NRF_APP_HCLK_PERFORMANCE &&
+		current != NRF_APP_HCLK_LOW_POWER)
+	{
+		return false;
+	}
+
+	// Preserve fields other than the CPU HCLK divider.
+	NRF_APP_CLOCK->HFCLKCTRL =
+		(NRF_APP_CLOCK->HFCLKCTRL & ~CLOCK_HFCLKCTRL_HCLK_Msk) | requested;
+	__DSB();
+	__ISB();
+
+	// The clock divider takes up to several microseconds to settle.
+	// This CPU-local loop is independent of Timer, RTC and UART.
+	for (settle = 0U; settle < 4096U; settle++)
+	{
+		__NOP();
+	}
+
+	if ((NRF_APP_CLOCK->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk) != requested)
+	{
+		return false;
+	}
+
+	SystemCoreClockUpdate();
+	return SystemCoreClock ==
+		(Mode == SYSTEM_POWER_MODE_PERFORMANCE ? 128000000UL : 64000000UL);
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return (NRF_APP_CLOCK->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk) ==
+		NRF_APP_HCLK_LOW_POWER ?
+		SYSTEM_POWER_MODE_LOW_POWER : SYSTEM_POWER_MODE_PERFORMANCE;
 }
 
 void SystemInit(void)
@@ -318,9 +429,31 @@ void SystemInit(void)
         __ISB();
     #endif
 
+	// IOsonata boots the application core at its maximum 128 MHz speed.
+	// The 64 MHz reset divider is available later through SystemPowerModeSet.
+	NRF_APP_CLOCK->HFCLKCTRL = NRF_APP_HCLK_PERFORMANCE;
+	__DSB();
+	__ISB();
+
 	// Oscillator trim and capacitor registers use secure aliases.
 	// Nonsecure images must leave their configuration to secure startup.
 #if !defined(NRF_TRUSTZONE_NONSECURE)
+	// XL1 (P0.00) and XL2 (P0.01) are shared with GPIO on nRF5340.
+	// Allocate them to the crystal peripheral before LFXO is requested.
+	// The pins must not be configured as GPIO while LFXO owns them.
+	if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL ||
+		g_McuOsc.LowPwrOsc.Type == OSC_TYPE_TCXO)
+	{
+		NRF_P0_S->PIN_CNF[0] =
+			(GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos);
+		NRF_P0_S->PIN_CNF[1] =
+			(GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos);
+		NRF_P0_S->PIN_CNF[0] |=
+			(GPIO_PIN_CNF_MCUSEL_Peripheral << GPIO_PIN_CNF_MCUSEL_Pos);
+		NRF_P0_S->PIN_CNF[1] |=
+			(GPIO_PIN_CNF_MCUSEL_Peripheral << GPIO_PIN_CNF_MCUSEL_Pos);
+	}
+
 	// Oscillator load capacitors, taken from g_McuOsc
 	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL && g_McuOsc.CoreOsc.LoadCap > 0)
 	{

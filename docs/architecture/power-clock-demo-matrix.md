@@ -1,6 +1,6 @@
 # Power and clock demo projects
 
-The projects use the shared `exemples/misc/clock_demo.cpp` and
+The projects use the shared `exemples/misc/core_clock_test.cpp` and
 `exemples/misc/power_off_demo.cpp`. Import each `ioc` directory in Eclipse and
 build the matching library configuration first. Board pin maps come from the
 existing example named in each README. These additions provide 29 ClockDemo
@@ -160,13 +160,28 @@ it on their direct clock assignments during transitions and fallback. ResetEntry
 no longer overwrites the port calibration after startup. Rebuild the library
 and application together when changing from the former integer count.
 
-The shared idelay.h calculation has no MCU-specific path. SAMD supplies its
-13-cycle calibration from system_samd.c. Other ARM ports retain their existing
-16-cycle calibration; their physical loop timing still needs board measurement.
-Nanosecond delays retain existing port calibration where available; ports
-without a prior calibration use a nominal three-cycle loop. These values
-require hardware timing validation. Both counts update together. Zero delays
-execute no loop, and nanosecond scaling uses 64-bit arithmetic.
+The nRF5340 Application and Network cores now measure both existing assembly
+delay loops with the CPU's DWT cycle counter. SystemCoreClockUpdate derives
+SystemMicroSecLoopCnt and SystemnsDelayFactor independently from the measured
+cycle counts and the actual configured CPU clock frequency. The Application
+core repeats measurement when CPU frequency changes. The shared usDelay,
+nsDelay and msDelay implementations are unchanged. DWT state and interrupt
+masking are restored after measurement; unavailable cycle counting is reported
+by the calibration function rather than inventing measured factors.
+
+The assembly delay loops in idelay.h remain unchanged. ARM clock owners
+use ArmDelayClockSetDivisors to update both factors using the actual CPU
+frequency, including when reducing frequency for low-power operation and
+restoring it afterward. The shared helper preserves existing MCU-specific
+fallback cycle costs, such as SAMD's 13-cycle microsecond loop, nRF52's
+13-cycle loop and SAM4L's 14-cycle loop. On nRF5340, the DWT-measured
+loop cost is cached at initialization and later frequency changes use only
+ArmDelayClockUpdate arithmetic. Without accessible DWT, the documented
+fallback remains in use. None of these methods takes ownership of Timer,
+RTC or SysTick. Fallback cycle costs still need hardware validation.
+
+Both factors are recalculated at each clock change. Zero delays execute no
+loop, and nanosecond scaling retains 64-bit arithmetic.
 RISC-V cycle-counter delays preserve fractional MHz for every target, using
 the current SystemCoreClock. Loop overhead, interrupt handling and flash stalls
 can extend delays; these functions do not replace a hardware timer.
@@ -265,7 +280,7 @@ uint32_t millisecond range. Previously msDelay(4294968) converted to only
 iterations per microsecond, usDelay(1073741824) also wrapped to zero iterations.
 
 The compiler may now share msDelay code rather than inlining it at every call.
-No MCU-specific calculation or new clock dependency was added to idelay.h.
+Shared CPU-frequency delay-factor arithmetic and optional cycle measurement now reside in the existing idelay.h. No separate delay headers are required.
 The D11 ClockDemo Standby build uses 15,788 flash bytes (332 fewer) and 2,132
 static RAM bytes. Clock-selection mode uses 15,350 flash and 2,152 static RAM
 bytes. Both exclude stack use and linked in Debug and Release.
@@ -289,8 +304,9 @@ Debug and Release: polling 14,968 flash bytes; interrupt-only 15,520; DMA-only
 15,932; DMA with interrupts 16,380. The combined setting has four bytes free.
 ClockDisplayDemo uses 16,308 flash bytes and 2,892 static RAM bytes.
 
-The Q16 calculation uses the same clock frequency and produces the same factors
-without 64-bit division. Temporary native checks compared every frequency from
+The earlier Q16 calculation used the same clock frequency and produced equivalent
+results without 64-bit division. This historical validation predates the later
+migration to measured loop iterations per second. Temporary native checks compared every frequency from
 0 to 48 MHz, every supported DPLL reference Hz, all DPLL ratios at boundary
 references, and one million full-width arithmetic samples. All passed. The
 shared ARM delay header and assembly loops are unchanged by this optimization.

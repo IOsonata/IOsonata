@@ -59,14 +59,6 @@ SOFTWARE.
 
 
 // Internal sources only; external crystal frequency is not assumed.
-#define CLOCK_DEMO_SOURCES { {"IRC", OSC_TYPE_RC, 12000000U, 1U, UINT32_MAX} }
-#define CLOCK_DEMO_APB_DIVIDERS {}
-#define CLOCK_DEMO_APB_READONLY 1
-#define CLOCK_DEMO_LF_SOURCES { {"Watchdog oscillator, watchdog disabled", OSC_TYPE_RC, 500000U} }
-#define CLOCK_DEMO_TIMER_DEVNO TimerGetLowFreqDevCount()
-#define CLOCK_DEMO_CYCLES 3U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
-#define CLOCK_DEMO_STOP_UART 1
-#define CLOCK_DEMO_DEFER_TIMER 1
 
 #endif

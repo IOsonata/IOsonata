@@ -227,9 +227,9 @@ static void Lpc546xxUartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			}
 		} while (reg->FIFOSTAT & USART_FIFOSTAT_RXNOTEMPTY_MASK);
 
-		if (udev->EvtCallback)
+		if (udev->DevIntrf.EvtCB)
 		{
-			udev->EvtCallback(udev, UART_EVT_RXDATA, NULL, CFifoUsed(udev->hRxFifo));
+			udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(udev->hRxFifo));
 		}
 	}
 
@@ -243,10 +243,10 @@ static void Lpc546xxUartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			// Lpc546xxUartTxData has data again.
 			reg->FIFOINTENCLR = USART_FIFOINTENCLR_TXLVL_MASK;
 			udev->bTxReady = true;
-			if (udev->EvtCallback)
+			if (udev->DevIntrf.EvtCB)
 			{
 				// Length is the free space in the TX CFIFO
-				udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+				udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
 			}
 		}
 	}
@@ -366,10 +366,10 @@ static bool Lpc546xxUartDmaService(Lpc546xxUartDev_t * const pDev)
 	}
 
 	udev->bTxReady = true;
-	if (udev->DevIntrf.bIntEn && udev->EvtCallback)
+	if (udev->DevIntrf.bIntEn && udev->DevIntrf.EvtCB)
 	{
 		// Length is the free space in the TX CFIFO
-		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+		udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
 	}
 
 	return true;
@@ -861,7 +861,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->bRxReady = false;
 	pDev->bTxReady = true;
 	pDev->RxOvrErrCnt = 0;
@@ -874,7 +874,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
-	pDev->DevIntrf.EvtCB = NULL;
+	// EvtCB was initialized from UARTCfg_t; do not overwrite it.
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.GetHandle = Lpc546xxUartGetHandle;
 	pDev->DevIntrf.Reset = Lpc546xxUartReset;

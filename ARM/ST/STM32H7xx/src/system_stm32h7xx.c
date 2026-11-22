@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "stm32h7xx.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 
 #define HSI_FREQ 64000000UL
 #define CLOCK_POLLS 2000000UL
@@ -46,7 +47,7 @@ SOFTWARE.
 extern void (* const __Vectors[])(void);
 // Delay-loop iterations per microsecond, with 16 fractional bits.
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 uint32_t SystemCoreClock = HSI_FREQ;
 uint32_t SystemD2Clock = HSI_FREQ;
@@ -98,8 +99,8 @@ void SystemCoreClockUpdate(void)
 	}
 	SystemCoreClock = freq >> D1CorePrescTable[(RCC->D1CFGR & RCC_D1CFGR_D1CPRE) >> RCC_D1CFGR_D1CPRE_Pos];
 	SystemD2Clock = SystemCoreClock >> D1CorePrescTable[(RCC->D1CFGR & RCC_D1CFGR_HPRE) >> RCC_D1CFGR_HPRE_Pos];
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / 3000000UL;
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, 3000000UL);
 }
 
 void SystemInit(void)

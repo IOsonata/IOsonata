@@ -217,12 +217,12 @@ static void Re01UartIRQHandler(int IntNo, void *pCtx)
 	}
 	if ((dev->pUartReg2->SCR & SCI2_SCR_TIE_Msk) && (status & SCI2_SSR_TDRE_Msk))
 		sent = Re01UartFillTx(dev);
-	if (dev->pUartDev->EvtCallback)
+	if (dev->pUartDev->DevIntrf.EvtCB)
 	{
 		if (received)
-			dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->pUartDev->hRxFifo));
+			dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, CFifoUsed(dev->pUartDev->hRxFifo));
 		if (sent)
-			dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, CFifoAvail(dev->pUartDev->hTxFifo));
+			dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(dev->pUartDev->hTxFifo));
 	}
 }
 
@@ -480,7 +480,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->bIrDAInvert = pCfg->bIrDAInvert;
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->bRxReady = false;
 	pDev->bTxReady = true;
 	pDev->RxOvrErrCnt = pDev->ParErrCnt = pDev->FramErrCnt = pDev->RxDropCnt = pDev->TxDropCnt = 0;

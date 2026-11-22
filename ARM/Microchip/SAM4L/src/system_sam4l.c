@@ -45,6 +45,7 @@
 #include "sam4lxxx.h"
 #include "system_sam4l.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 
 #define SYSTEM_CORE_CLOCK               48000000UL
 // Ten NOPs, decrement and taken branch in the aligned ARM microsecond loop.
@@ -100,7 +101,7 @@ __WEAK McuOsc_t g_McuOsc = {
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = RCSYS_FREQ;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 static uint32_t s_MainClock = RCSYS_FREQ;
 static uint32_t s_PllFreq;
 static uint32_t s_DfllFreq = DFLL_CORE_MHZ * 1000000UL;
@@ -1029,8 +1030,8 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		return false;
 	}
 	SystemCoreClock = RCSYS_FREQ;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / (SAM4L_USDELAY_LOOP_CYCLES * 1000000UL);
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		(SAM4L_USDELAY_LOOP_CYCLES * 1000000UL), (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL));
 
 	if (Startup)
 	{
@@ -1191,8 +1192,8 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 	}
 	s_MainClock = mainRate;
 	SystemCoreClock = Sam4lApplyClkDiv(mainRate, sel);
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / (SAM4L_USDELAY_LOOP_CYCLES * 1000000UL);
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		(SAM4L_USDELAY_LOOP_CYCLES * 1000000UL), (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL));
 
 	if (g_McuOsc.bUSBClk) {
 		// Only the external OSC0/PLL path reaches here. The application must
@@ -1272,8 +1273,8 @@ void SystemCoreClockUpdate(void)
 	// Reporting a clock must not change Flash timing underneath the CPU.
 	s_MainClock = Sam4lMainClockGet();
 	SystemCoreClock = Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_CPUSEL);
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / (SAM4L_USDELAY_LOOP_CYCLES * 1000000UL);
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		(SAM4L_USDELAY_LOOP_CYCLES * 1000000UL), (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL));
 }
 
 uint32_t SystemCoreClockGet(void)

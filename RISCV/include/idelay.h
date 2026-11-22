@@ -49,6 +49,7 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "coredev/system_core_clock.h"
+#include "coredev/delay_calibration.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -134,6 +135,39 @@ static inline __attribute__((always_inline)) void msDelay(uint32_t ms)
 {
 	uint64_t cycles = ((uint64_t)ms * SystemCoreClock + 999ULL) / 1000ULL;
 	IOsonataRiscvDelayCycles(cycles);
+}
+
+
+// RISC-V delay uses CPU cycles, not ARM loop-iteration factors.
+// Counter-based delays require no loop-factor calibration. Without a counter,
+// the high-frequency Timer test still validates timing; its result must not
+// be presented as a calibrated loop factor until the MCU supplies one.
+static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
+{
+	if (pPoint != NULL)
+	{
+		pPoint->CpuHz = SystemCoreClockGet();
+		pPoint->UsLoopsPerSecond = 0U;
+		pPoint->NsLoopsPerSecond = 0U;
+		pPoint->Measured = false;
+	}
+	return false;
+}
+
+static inline bool DelayCalibrationFromTimer(uint32_t CpuHz,
+	uint32_t UsElapsed, uint32_t NsElapsed,
+	DelayCalibrationPoint_t *pPoint)
+{
+	(void)UsElapsed;
+	(void)NsElapsed;
+	if (pPoint != NULL)
+	{
+		pPoint->CpuHz = CpuHz;
+		pPoint->UsLoopsPerSecond = 0U;
+		pPoint->NsLoopsPerSecond = 0U;
+		pPoint->Measured = false;
+	}
+	return false;
 }
 
 /** @} End of group Utilities */

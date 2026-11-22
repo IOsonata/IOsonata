@@ -284,7 +284,7 @@ bool UARTInit(UARTDEV *pDev, const UARTCfg_t *pCfgData)
     osxdev->pUartDev = pDev;
     osxdev->OrigTTYAttrs = OrigTTYAttrs;
     
-    pDev->EvtCallback = pCfgData->EvtCallback;
+    pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
     pDev->DevIntrf.Disable = OsxUARTDisable;
     pDev->DevIntrf.Enable = OsxUARTEnable;
     pDev->DevIntrf.GetRate = OsxUARTGetRate;

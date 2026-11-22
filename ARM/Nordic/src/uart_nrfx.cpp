@@ -176,7 +176,7 @@ typedef struct __nRF_UART_Dev {
 	uint32_t CtsPin;
 	uint32_t RtsPin;
 	uint32_t RxDmaCnt;
-#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 	uint32_t TxDmaLen;
 #endif
 	uint8_t RxFifoMem[NRFX_UART_CFIFO_SIZE];
@@ -466,6 +466,15 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 	int len = 0;
 	int cnt = 0;
+#ifdef UARTE_PRESENT
+	bool txEnd;
+	int txLen;
+	uint8_t *pTx;
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
+	uint32_t sent;
+	uint32_t remaining;
+#endif
+#endif
 
 #ifdef UART_PRESENT
 	NRF_UART_Type *reg = dev->pReg;
@@ -490,10 +499,10 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		dev->pDmaReg->TASKS_FLUSHRX = 1;
 #endif
 		reg->EVENTS_RXTO = 0;
-		if (dev->pUartDev->EvtCallback)
+		if (dev->pUartDev->DevIntrf.EvtCB)
 		{
 			len = CFifoUsed(dev->pUartDev->hRxFifo);
-			cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXTIMEOUT, NULL, len);
+			cnt = dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_TIMEOUT, NULL, len);
 		}
 	}
 
@@ -535,10 +544,10 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			reg->EVENTS_RXDRDY = 0;
 			dev->RxDmaCnt++;
 		}
-		if (dev->pUartDev->EvtCallback)
+		if (dev->pUartDev->DevIntrf.EvtCB)
 		{
 			len = CFifoUsed(dev->pUartDev->hRxFifo);
-			cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
+			cnt = dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, len);
 		}
 	}
 
@@ -566,59 +575,79 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 				cnt++;
 			} while (dev->pReg->EVENTS_TXDRDY && cnt < NRFX_UART_HWFIFO_SIZE);
 
-			if (dev->pUartDev->EvtCallback)
+			if (dev->pUartDev->DevIntrf.EvtCB)
 			{
 				len = CFifoAvail(dev->pUartDev->hTxFifo);
-				len = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, len);
+				len = dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, len);
 			}
 		}
 #endif
 	}
 
 #ifdef UARTE_PRESENT
-	if (NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) || dev->pDmaReg->EVENTS_TXSTOPPED)
+	// TXSTOPPED is not a DMA completion event. In particular, anomaly
+	// workarounds at startup may leave it set after the first TX begins.
+	// Only ENDTX may retire a software FIFO block or start the next DMA.
+	if (dev->pDmaReg->EVENTS_TXSTOPPED)
+	{
+		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+	}
+	txEnd = NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) != 0;
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
+	if (txEnd && dev->TxDmaLen == 0U)
+	{
+		// An ENDTX without an in-flight DMA belongs to an earlier STOPTX.
+		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
+	}
+	else
+#endif
+	if (txEnd)
 	{
 		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
-		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
-#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
-		// TX.END also occurs when transmission was stopped early. Resume
-		// the unsent suffix before consuming more bytes from the FIFO.
-		if (dev->TxDmaLen != 0U)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
+		// Check the completed transfer's actual byte count. STOPTX can
+		// generate ENDTX for a partial DMA; do not silently discard its
+		// unsent suffix or assume that TXSTOPPED and ENDTX coincide.
+		#if defined(NRF53_SERIES)
+		sent = dev->pDmaReg->TXD.AMOUNT;
+#else
+		sent = dev->pDmaReg->DMA.TX.AMOUNT;
+#endif
+		if (sent > dev->TxDmaLen)
 		{
-			uint32_t sent = dev->pDmaReg->DMA.TX.AMOUNT;
-			if (sent > dev->TxDmaLen)
-			{
-				sent = dev->TxDmaLen;
-			}
-			if (sent < dev->TxDmaLen)
-			{
-				uint32_t remaining = dev->TxDmaLen - sent;
-				memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);
-				dev->TxDmaLen = remaining;
-				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = remaining;
-				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
-				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
-				return;
-			}
-			dev->TxDmaLen = 0U;
+			sent = dev->TxDmaLen;
 		}
+		if (sent < dev->TxDmaLen)
+		{
+			remaining = dev->TxDmaLen - sent;
+			memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);
+			dev->TxDmaLen = remaining;
+			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = remaining;
+			NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
+			NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
+			return;
+		}
+		dev->TxDmaLen = 0U;
 #endif
 
-		int l = NRFX_UART_TXDMA_SIZE;
-		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
-		if (p)
+		txLen = NRFX_UART_TXDMA_SIZE;
+		pTx = CFifoGetMultiple(dev->pUartDev->hTxFifo, &txLen);
+		if (pTx)
 		{
 			dev->pUartDev->bTxReady = false;
 
 			// Transfer to tx cache before sending as CFifo will immediately make the memory
 			// block available for reuse in the Put request. This could cause an overwrite
 			// if uart tx has not completed in time.
-			memcpy(dev->TxDmaMem, p, l);
+			memcpy(dev->TxDmaMem, pTx, txLen);
 
-			#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
-			dev->TxDmaLen = (uint32_t)l;
+			#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
+			dev->TxDmaLen = (uint32_t)txLen;
 #endif
-			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
+			// Clear stale events before a fresh STARTTX; no transfer is active.
+			NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
+			dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = txLen;
 			NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
 			NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 		}
@@ -626,10 +655,13 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		{
 			dev->pUartDev->bTxReady = true;
 		}
-		if (dev->pUartDev->EvtCallback)
+		// Notify the generic sink only after the completed transfer's
+		// FIFO space has been released. The callback may queue more data;
+		// if the transmitter is idle, TxData starts that DMA itself.
+		if (pDev->EvtCB != nullptr)
 		{
-			len = CFifoAvail(dev->pUartDev->hTxFifo);
-			len = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, len);
+			(void)pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, nullptr,
+				CFifoAvail(dev->pUartDev->hTxFifo));
 		}
 	}
 #endif
@@ -669,10 +701,10 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 					dev->pUartDev->bRxReady = false;
 					*p = dev->pReg->RXD;
 				}
-				if (dev->pUartDev->EvtCallback)
+				if (dev->pUartDev->DevIntrf.EvtCB)
 				{
 					len = CFifoUsed(dev->pUartDev->hRxFifo);
-					dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
+					dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_RX_DATA, NULL, len);
 				}
 #endif
 			}
@@ -693,9 +725,9 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		// without them ever being counted.
 		reg->ERRORSRC = err;
 		len = 0;
-		if (dev->pUartDev->EvtCallback)
+		if (dev->pUartDev->DevIntrf.EvtCB)
 		{
-			dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_LINESTATE, NULL, len);
+			dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_STATECHG, NULL, len);
 		}
 #ifdef UARTE_PRESENT
 		if (pDev->bDma == true)
@@ -718,11 +750,11 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	{
 		reg->EVENTS_CTS = 0;
 		dev->pUartDev->LineState &= ~UART_LINESTATE_CTS;
-        if (dev->pUartDev->EvtCallback)
+        if (dev->pUartDev->DevIntrf.EvtCB)
         {
             uint8_t buff = 0;
             len = 1;
-            dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_LINESTATE, &buff, len);
+            dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_STATECHG, &buff, len);
         }
 	}
 
@@ -730,11 +762,11 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	{
 		reg->EVENTS_NCTS = 0;
 		dev->pUartDev->LineState |= UART_LINESTATE_CTS;
-        if (dev->pUartDev->EvtCallback)
+        if (dev->pUartDev->DevIntrf.EvtCB)
         {
             uint8_t buff = UART_LINESTATE_CTS;
             len = 1;
-            dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_LINESTATE, &buff, len);
+            dev->pUartDev->DevIntrf.EvtCB(&dev->pUartDev->DevIntrf, DEVINTRF_EVT_STATECHG, &buff, len);
         }
 	}
 }
@@ -1096,6 +1128,9 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 			nRFUARTPollTx(dev);
 		}
 
+		// The completion IRQ uses the same ready flag and DMA cache.
+		// Claim the idle transmitter and start DMA atomically against it.
+		state = DisableInterrupt();
 		if (dev->pUartDev->bTxReady)
 		{
 			l = NRFX_UART_TXDMA_SIZE;
@@ -1105,14 +1140,18 @@ static int nRFUARTTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 				dev->pUartDev->bTxReady = false;
 				// The FIFO slot is reusable immediately; cache DMA data.
 				memcpy(dev->TxDmaMem, p, l);
-#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 				dev->TxDmaLen = (uint32_t)l;
 #endif
-				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
+				// Clear stale events before a fresh STARTTX; no transfer is active.
+			NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0;
+			dev->pDmaReg->EVENTS_TXSTOPPED = 0;
+			NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = l;
 				NRFX_UARTE_TXD_PTR(dev->pDmaReg) = (uint32_t)dev->TxDmaMem;
 				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;
 			}
 		}
+		EnableInterrupt(state);
 	}
 
 	if (Datalen > 0)
@@ -1555,7 +1594,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	s_nRFxUARTDev[devno].pUartDev->RxDropCnt = 0;
 	s_nRFxUARTDev[devno].pUartDev->TxDropCnt = 0;
 	s_nRFxUARTDev[devno].RxDmaCnt = 0;
-#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 	s_nRFxUARTDev[devno].TxDmaLen = 0U;
 #endif
 
@@ -1572,7 +1611,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.EvtCB = pCfg->EvtCB;
 	pDev->DevIntrf.Disable = nRFUARTDisable;
 	pDev->DevIntrf.Enable = nRFUARTEnable;
 	pDev->DevIntrf.GetRate = nRFUARTGetRate;

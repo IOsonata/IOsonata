@@ -780,9 +780,9 @@ static uint32_t bestError(uint32_t Clock, uint32_t Rate)
 
 // A byte received while the UART handler runs, at the first call
 static int s_UartRxIrq = -1, s_UartRxCalls;
-static int uartRaise(UARTDev_t * const, UART_EVT Evt, uint8_t *, int)
+static int uartRaise(DevIntrf_t * const, DEVINTRF_EVT Evt, uint8_t *, int)
 {
-	if (Evt == UART_EVT_RXDATA && s_UartRxCalls++ == 0)
+	if (Evt == DEVINTRF_EVT_RX_DATA && s_UartRxCalls++ == 0)
 	{
 		routes[s_UartRxIrq] |= ICU_IELSR0_IR_Msk;
 	}
@@ -870,7 +870,7 @@ static void uarts()
 		}
 	}
 	assert(s_UartRxIrq >= 0);
-	u.EvtCallback = uartRaise;
+	u.EvtCB = uartRaise;
 	*(volatile uint8_t*)&SCI9->RDR = 0x77;
 	SCI9->SSR = SCI2_SSR_RDRF_Msk;
 	routes[s_UartRxIrq] |= ICU_IELSR0_IR_Msk;
@@ -880,7 +880,7 @@ static void uarts()
 	SCI9->SSR = SCI2_SSR_RDRF_Msk;
 	handlers[s_UartRxIrq]();
 	assert(s_UartRxCalls == 2 && (routes[s_UartRxIrq] & ICU_IELSR0_IR_Msk) == 0);
-	u.EvtCallback = nullptr;
+	u.EvtCB = nullptr;
 	assert(u.DevIntrf.RxData(&u.DevIntrf, received, sizeof(received)) == 2);
 	assert(received[0] == 0x77 && received[1] == 0x78);
 	cfg.bIntMode = false;

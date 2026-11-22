@@ -38,6 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "stm32f0xx.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 
 #define SYSTEM_CORE_CLOCK				48000000UL		// STM32F0 max core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(93UL)
@@ -52,7 +53,7 @@ __WEAK McuOsc_t g_McuOsc = {
 
 // Delay-loop iterations per microsecond, with 16 fractional bits.
 extern uint32_t SystemMicroSecLoopCnt;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 
@@ -100,8 +101,8 @@ void SystemCoreClockUpdate (void)
 	}
 	static const uint8_t ahbshift[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
 	SystemCoreClock >>= ahbshift[(cfgr & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos];
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
 }
 
 //

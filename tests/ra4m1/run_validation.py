@@ -194,7 +194,8 @@ def main():
         raise SystemExit('Install Clang/Clang++, LLD and llvm-ar, or set CLANG, CLANGXX, LD_LLD, LLVM_AR.')
     BUILD.mkdir(exist_ok=True)
     prepare_register_model()
-    includes = ['-I'+str(BUILD), '-I'+str(HERE/'include'), '-I'+str(TARGET/'include')]
+    includes = ['-I'+str(BUILD), '-I'+str(HERE/'include'),
+                '-I'+str(ROOT/'ARM/include'), '-I'+str(TARGET/'include')]
     # The register model is C++: the driver registers are host objects
     # (include/ra4m1_host_regs.h). system_ra4m1.c is compiled as C++ there,
     # where {0} initializers warn without being wrong.

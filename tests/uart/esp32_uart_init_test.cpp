@@ -103,12 +103,12 @@ void Esp32C3ClearSourceIrqHandler(uint32_t Source) { (void)Source; }
 void Esp32C3IntMtxDispatch(void) {}
 #endif
 static unsigned s_Events;
-static int Event(UARTDev_t *pDev, UART_EVT Evt, uint8_t *pBuffer, int Size)
+static int Event(DevIntrf_t *pDev, DEVINTRF_EVT Evt, uint8_t *pBuffer, int Size)
 {
 	(void)pDev;
 	(void)pBuffer;
 	(void)Size;
-	assert(Evt == UART_EVT_TXREADY);
+	assert(Evt == DEVINTRF_EVT_TX_READY);
 	s_Events++;
 	return 0;
 }
@@ -219,7 +219,7 @@ int main()
 	assert(mapped == reinterpret_cast<void *>(ESP32_CLIC_BASE));
 #endif
 #ifdef ESP32_UART_REAL_IRQ
-	cfg.EvtCallback = Event;
+	cfg.EvtCB = Event;
 #endif
 	g_McuOsc.CoreOsc.Freq = 40000000;
 	cfg.pIOPinMap = pins;

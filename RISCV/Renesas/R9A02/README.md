@@ -277,7 +277,7 @@ transfer-end event, allowing following bytes to accumulate before selecting
 the next block, as in STM32's TC path. DMA blocks use buffer-empty events.
 While a transfer is active, `TxData` only adds to the CFIFO; its TX event
 starts the next byte or queued DMA block. This avoids descriptor setup for each byte of a byte-mode
-producer. `UART_EVT_TXREADY` is reported when the queue drains, as in STM32.
+producer. `DEVINTRF_EVT_TX_READY` is reported when the queue drains, as in STM32.
 The caller may reuse accepted data immediately, including with a non-blocking
 FIFO. A positive TX return counts bytes accepted, not bytes already on wire.
 RX remains interrupt driven or polled according to `bIntMode`, with immediate
@@ -383,7 +383,7 @@ before the channels stop, at the enabling and at each Software Standby. In
 Software Standby a start bit on RxD starts Snooze and the character is
 received without the CPU: a good one wakes it, the Snooze end interrupt puts
 it in the RX CFIFO and the UART back in normal operation (figure 23.41 steps
-10 to 12), then `UART_EVT_RXDATA`; one with an error sends the MCU back to
+10 to 12), then `DEVINTRF_EVT_RX_DATA`; one with an error sends the MCU back to
 Software Standby. A character that follows before the receive channel is
 restarted, right after the wake-up, is lost, and so is one that ends while the
 MCU enters Software Standby (the next one wakes it): the sender waits for an

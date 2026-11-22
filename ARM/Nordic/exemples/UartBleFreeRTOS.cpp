@@ -163,7 +163,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
 };
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 // UART configuration data
 
@@ -185,7 +185,7 @@ const UARTCfg_t g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = APP_IRQ_PRIORITY_LOW, 					// use APP_IRQ_PRIORITY_LOW with Softdevice
-	.EvtCallback = nRFUartEvthandler,
+	.EvtCB = nRFUartEvthandler,
 	.bFifoBlocking = true,				// fifo blocking mode
 	.RxMemSize = 0,
 	.pRxMem = NULL,
@@ -279,7 +279,7 @@ void BtAppInitUserData()
 
 }
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];
@@ -287,13 +287,13 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 
 	switch (EvtId)
 	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
+		case DEVINTRF_EVT_RX_TIMEOUT:
+		case DEVINTRF_EVT_RX_DATA:
 		    vTaskNotifyGiveFromISR(g_RxTask, &yield_req);
 			break;
-		case UART_EVT_TXREADY:
+		case DEVINTRF_EVT_TX_READY:
 			break;
-		case UART_EVT_LINESTATE:
+		case DEVINTRF_EVT_STATECHG:
 			break;
 	}
 

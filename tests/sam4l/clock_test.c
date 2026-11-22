@@ -12,7 +12,7 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include "sam4lxxx.h"
 
 // Supplied by ARM startup in firmware builds.
-uint32_t SystemMicroSecLoopCnt = 65536UL;
+uint32_t SystemMicroSecLoopCnt = 1000000UL;
 uint32_t g_TestMask;
 uint32_t g_TestIpsr;
 static jmp_buf s_Halt;
@@ -213,7 +213,7 @@ int main(void)
 			SCIF_PCLKSR_DFLL0LOCKC | SCIF_PCLKSR_DFLL0LOCKF;
 		assert(SystemCoreClockSelect(OSC_TYPE_RC, 8000000));
 		assert(SystemCoreClockGet() == 40000000);
-		assert(SystemMicroSecLoopCnt == ((uint64_t)40000000U << 16) / 14000000U);
+		assert(SystemMicroSecLoopCnt == ((uint64_t)40000000U * 1000000ULL) / 14000000U);
 		assert(SystemnsDelayFactor == ((uint64_t)40000000U << 16) / 3000000U);
 		assert(g_TestMask == mask);
 		assert(SAM4L_WDT->WDT_CTRL == WDT_CTRL_EN);

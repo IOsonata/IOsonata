@@ -37,6 +37,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
+#include <string.h>
 
 #include "syslog.h"
 
@@ -69,6 +70,9 @@ static SysStatusStack_t g_SysStatusStack;
 // dormant, stays inert until configured.
 //
 static SysLog g_SysLog;
+// A generic TX-ready event may interrupt an active foreground flush.
+// Preserve that notification until the active flush has retried.
+static bool s_bSysLogReadyDuringFlush;
 
 
 // Return one character tag for the status type field.
@@ -161,23 +165,39 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 		return false;
 	}
 
-	hCFifo_t hFifo = CFifoInit(pCfg->pMem, pCfg->MemSize, recordLen,
-							   pCfg->bBlocking);
+	// Reserve one complete record outside the FIFO for in-progress TX.
+	if (pCfg->pMem == nullptr ||
+		recordLen > UINT32_MAX - SYSLOG_RECORD_META_SIZE ||
+		pCfg->MemSize < sizeof(CFifo_t) +
+			3U * (recordLen + SYSLOG_RECORD_META_SIZE))
+	{
+		return false;
+	}
+	hCFifo_t hFifo = CFifoInit(pCfg->pMem,
+					pCfg->MemSize - 2U * (recordLen + SYSLOG_RECORD_META_SIZE),
+					recordLen + SYSLOG_RECORD_META_SIZE, pCfg->bBlocking);
 	if (hFifo == 0)
 	{
 		return false;
 	}
 
-	pLog->pSink = pSink;
-	pLog->SinkAddr = SinkAddr;
+	pLog->pSink = nullptr;
+	pLog->SinkAddr = 0U;
 	pLog->pTimer = nullptr;
 	pLog->FormatTime = nullptr;
 	pLog->MinType = MinType & SYSSTATUS_TYPE_MASK;
 	pLog->hFifo = hFifo;
-	pLog->HeadIdx = hFifo->GetIdx;
-	pLog->HeadSent = 0U;
+	pLog->pTxBuffer = pCfg->pMem + pCfg->MemSize - 2U * (recordLen + SYSLOG_RECORD_META_SIZE);
+	pLog->pFormatBuffer = pLog->pTxBuffer + recordLen + SYSLOG_RECORD_META_SIZE;
+	pLog->TxLen = 0U;
+	pLog->TxSent = 0U;
 	pLog->bFlushing = false;
+	if (pLog == SysLogGet())
+	{
+		s_bSysLogReadyDuringFlush = false;
+	}
 	pLog->Marker = SYSLOG_INIT_MARKER;
+	SysLogSetSink(pLog, pSink, SinkAddr);
 
 	return true;
 }
@@ -211,111 +231,178 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 		return;
 	}
 
-	// A different sink has none of the head record, so it gets all of it.
+	// Never override an application-owned event callback. Release only
+	// a callback SysLog installed when detaching or switching sinks.
+	if (pLog == SysLogGet() && pLog->pSink != nullptr &&
+		pLog->pSink != pSink &&
+		pLog->pSink->EvtCB == SysLogDevIntrfEvent)
+	{
+		pLog->pSink->EvtCB = nullptr;
+	}
 	if (pSink != pLog->pSink || SinkAddr != pLog->SinkAddr)
 	{
-		pLog->HeadSent = 0U;
+		pLog->TxSent = 0U;
 	}
 	pLog->pSink = pSink;
 	pLog->SinkAddr = SinkAddr;
-}
-
-// Send records until the store is empty or the sink stops taking bytes.
-// HeadSent counts the bytes of the head record already sent, so a sink that
-// takes part of a record gets only the rest of it on the next call. HeadIdx
-// is the store index of that record: when a full non-blocking store evicts
-// it, the index moves and the new head starts from its first byte.
-// Returns true when the sink stopped before the store was empty.
-static bool SysLogDrain(SysLog_t * const pLog, int *pTotal, int *pErr)
-{
-	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo);
-
-	while (true)
+	if (pLog == SysLogGet())
 	{
-		uint32_t head = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE);
-		uint8_t *pBlock = CFifoPeek(pLog->hFifo);
-		if (pBlock == 0)
-		{
-			return false;
-		}
-		if (__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE) != head)
-		{
-			// Evicted while it was being looked up, take the new head.
-			continue;
-		}
-		if (head != pLog->HeadIdx)
-		{
-			pLog->HeadIdx = head;
-			pLog->HeadSent = 0U;
-		}
-
-		uint32_t len = 0U;
-		while (len < recordLen && pBlock[len] != 0U)
-		{
-			len++;
-		}
-
-		uint32_t sent = pLog->HeadSent;
-		if (sent < len)
-		{
-			int count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
-								   pBlock + sent, (int)(len - sent));
-			if (count > 0)
-			{
-				*pTotal += count;
-				sent += (uint32_t)count;
-			}
-			if (sent < len)
-			{
-				// Keep the record and what went out of it. A negative result
-				// with nothing sent in this call is reported as it came back.
-				pLog->HeadSent = sent;
-				if (count < 0 && *pTotal == 0)
-				{
-					*pErr = count;
-				}
-				return true;
-			}
-		}
-
-		// Sent in full, or an empty record that a failed format left behind.
-		pLog->HeadSent = 0U;
-		pLog->HeadIdx = head + 1U;
-		(void)CFifoGet(pLog->hFifo);
+		s_bSysLogReadyDuringFlush = false;
+	}
+	if (pLog == SysLogGet() && pSink != nullptr && pSink->EvtCB == nullptr)
+	{
+		pSink->EvtCB = SysLogDevIntrfEvent;
 	}
 }
 
+int SysLogDevIntrfEvent(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+		uint8_t *pBuffer, int Len)
+{
+	SysLog_t *pLog;
+
+	(void)pBuffer;
+	(void)Len;
+	if (pDev == nullptr || EvtId != DEVINTRF_EVT_TX_READY)
+	{
+		return 0;
+	}
+	pLog = SysLogGet();
+	if (pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink != pDev)
+	{
+		return 0;
+	}
+	return SysLogFlush(pLog);
+}
+
+// One consumer copies records out of CFifo into a separate transfer buffer.
+// DeviceIntrfTx owns every accepted byte; only the unaccepted suffix is kept.
+// Submit no more than one SysLog record per call. The next invocation,
+// usually a sink TX_READY event, continues a partial record or takes the
+// next FIFO record. Nothing from separate printf calls is combined here.
 int SysLogFlush(SysLog_t * const pLog)
 {
-	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)
+	uintptr_t state;
+	uint8_t *pBlock;
+	uint32_t recordLen;
+	uint32_t len;
+	uint32_t sent;
+	int count;
+	int total;
+	int err;
+	bool retry;
+	bool next;
+
+	if (pLog == nullptr || pLog->Marker != SYSLOG_INIT_MARKER ||
+		pLog->pSink == nullptr)
 	{
 		return 0;
 	}
 
-	// One flush at a time. A record stored by an interrupt while another
-	// context is sending is left to that flush, which looks at the store again
-	// before it lets go, so the record is not stranded.
-	uintptr_t state = SysIrqLock();
+	state = SysIrqLock();
 	if (pLog->bFlushing)
 	{
+		// An interrupt during submission must not operate on the same
+		// transfer buffer. Let the active owner service its notification.
+		if (pLog == SysLogGet())
+		{
+			s_bSysLogReadyDuringFlush = true;
+		}
 		SysIrqUnlock(state);
 		return 0;
 	}
 	pLog->bFlushing = true;
 	SysIrqUnlock(state);
 
-	int total = 0;
-	int err = 0;
-	bool more;
+	recordLen = CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE;
+	total = 0;
+	err = 0;
 
-	do {
-		bool stopped = SysLogDrain(pLog, &total, &err);
+	// Each pass owns one record. A deferred TX_READY is another logical
+	// flush request, serviced here without nesting flush calls.
+	do
+	{
+		state = SysIrqLock();
+		if (pLog->TxLen == 0U)
+		{
+			pBlock = CFifoGet(pLog->hFifo);
+			if (pBlock == nullptr)
+			{
+				// No record remains for a deferred ready notification.
+				if (pLog == SysLogGet())
+				{
+					s_bSysLogReadyDuringFlush = false;
+				}
+				pLog->bFlushing = false;
+				SysIrqUnlock(state);
+				break;
+			}
+			memcpy(&len, pBlock, SYSLOG_RECORD_META_SIZE);
+			if (len >= recordLen)
+			{
+				len = recordLen - 1U;
+			}
+			memcpy(pLog->pTxBuffer,
+				pBlock + SYSLOG_RECORD_META_SIZE, recordLen);
+			pLog->TxLen = len;
+			pLog->TxSent = 0U;
+		}
+		len = pLog->TxLen;
+		sent = pLog->TxSent;
+		SysIrqUnlock(state);
+
+		while (sent < len)
+		{
+			count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+				pLog->pTxBuffer + sent, (int)(len - sent));
+			if (count > 0)
+			{
+				sent += (uint32_t)count;
+				total += count;
+			}
+
+			state = SysIrqLock();
+			pLog->TxSent = sent;
+			// Consume a deferred event only if the current record
+			// still has bytes to submit. Otherwise it belongs to
+			// continuation after the completed record.
+			retry = sent < len && pLog == SysLogGet() &&
+				s_bSysLogReadyDuringFlush;
+			if (retry)
+			{
+				s_bSysLogReadyDuringFlush = false;
+			}
+			SysIrqUnlock(state);
+
+			if (sent < len && !retry)
+			{
+				if (count < 0 && total == 0)
+				{
+					err = count;
+				}
+				break;
+			}
+		}
 
 		state = SysIrqLock();
-		more = stopped == false && CFifoPeek(pLog->hFifo) != 0;
-		pLog->bFlushing = more;
+		if (sent >= len)
+		{
+			pLog->TxLen = 0U;
+			pLog->TxSent = 0U;
+		}
+		// Once a record completes, a suppressed TX_READY must be
+		// serviced before ownership is released. Never drop this event.
+		next = sent >= len && pLog == SysLogGet() &&
+			s_bSysLogReadyDuringFlush;
+		if (next)
+		{
+			s_bSysLogReadyDuringFlush = false;
+		}
+		else
+		{
+			pLog->bFlushing = false;
+		}
 		SysIrqUnlock(state);
-	} while (more);
+	} while (next);
 
 	return err < 0 ? err : total;
 }
@@ -336,15 +423,11 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 		return 0;
 	}
 
-	// Format in place. No scratch buffer, so the record length is free to be
-	// whatever the store was configured with.
-	const int recordLen = (int)CFifoBlockSize(pLog->hFifo);
+	// Prepare one complete record before publishing it to CFifo.
+	const int recordLen = (int)(CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE);
 
-	char *pLine = (char *)CFifoPut(pLog->hFifo);
-	if (pLine == 0)
-	{
-		return 0;
-	}
+	uint8_t *pBlock = pLog->pFormatBuffer;
+	char *pLine = (char *)(pBlock + SYSLOG_RECORD_META_SIZE);
 
 	if (pLog->FormatTime != nullptr)
 	{
@@ -381,6 +464,19 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	len = SysLogAppendText(pLine, recordLen, len, "\r\n");
 
 	pLine[len] = 0;
+	uint32_t written = (uint32_t)len;
+	memcpy(pBlock, &written, SYSLOG_RECORD_META_SIZE);
+	uintptr_t state = SysIrqLock();
+	uint8_t *pDst = CFifoPut(pLog->hFifo);
+	if (pDst != nullptr)
+	{
+		memcpy(pDst, pBlock, CFifoBlockSize(pLog->hFifo));
+	}
+	SysIrqUnlock(state);
+	if (pDst == nullptr)
+	{
+		return 0;
+	}
 
 	// A record goes out as soon as it is stored when a transport is attached.
 	// SysLogFlush does not log, so this cannot recurse.
@@ -394,43 +490,77 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 
 int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 {
-	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pFormat == 0)
+	uint8_t *pBlock;
+	char *pLine;
+	uint32_t recordLen;
+	uint32_t written;
+	int pre;
+	int formatted;
+	int len;
+
+	if (pLog == nullptr || pLog->Marker != SYSLOG_INIT_MARKER ||
+		pFormat == nullptr)
 	{
 		return 0;
 	}
 
-	// Format straight into the block, no intermediate line buffer.
-	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo);
+	// Format into private staging memory, not an unpublished FIFO slot.
+	recordLen = CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE;
+	pBlock = pLog->pFormatBuffer;
+	pLine = (char *)pBlock + SYSLOG_RECORD_META_SIZE;
 
-	uint8_t *pBlock = CFifoPut(pLog->hFifo);
-	if (pBlock == 0)
-	{
-		return 0;
-	}
-
-	// Millisecond stamp ahead of the text when a Timer is configured.
-	int pre = 0;
-
+	pre = 0;
 	if (pLog->FormatTime != nullptr)
 	{
-		pre = pLog->FormatTime(pLog->pTimer, (char *)pBlock, (int)recordLen, false);
+		pre = pLog->FormatTime(pLog->pTimer, pLine,
+			(int)recordLen, false);
+	}
+	if (pre < 0)
+	{
+		pre = 0;
+	}
+	if ((uint32_t)pre >= recordLen)
+	{
+		pre = (int)recordLen - 1;
 	}
 
-	int len = vsnprintf((char *)pBlock + pre, (size_t)(recordLen - (uint32_t)pre),
-						pFormat, Args);
-	if (len < 0)
+	// vsnprintf returns the number of characters it wanted to write,
+	// excluding NUL. Clamp it to the bytes actually stored before
+	// publishing the record. This includes any CR/LF that fits.
+	formatted = vsnprintf(pLine + pre, (size_t)(recordLen - (uint32_t)pre),
+		pFormat, Args);
+	if (formatted < 0)
 	{
-		pBlock[0] = 0U;
+		pLine[0] = 0;
+		len = 0;
+	}
+	else
+	{
+		len = formatted;
+		if ((uint32_t)len >= recordLen - (uint32_t)pre)
+		{
+			len = (int)(recordLen - (uint32_t)pre - 1U);
+		}
+		len += pre;
+	}
+	pLine[len] = 0;
+	written = (uint32_t)len;
+	memcpy(pBlock, &written, SYSLOG_RECORD_META_SIZE);
+	// CFifoPut publishes immediately. Keep interrupts masked until
+	// the freshly published slot contains the complete formatted record.
+	uintptr_t state = SysIrqLock();
+	uint8_t *pDst = CFifoPut(pLog->hFifo);
+	if (pDst != nullptr)
+	{
+		memcpy(pDst, pBlock, CFifoBlockSize(pLog->hFifo));
+	}
+	SysIrqUnlock(state);
+	if (pDst == nullptr)
+	{
 		return 0;
 	}
 
-	len += pre;
-	if ((uint32_t)len >= recordLen)
-	{
-		len = (int)recordLen - 1;
-	}
-
-	if (pLog->pSink != 0)
+	if (pLog->pSink != nullptr)
 	{
 		(void)SysLogFlush(pLog);
 	}

@@ -48,7 +48,7 @@ SOFTWARE.
 UART g_Uart;
 uint8_t g_RxBuf[32];
 volatile int g_RxEvt;
-volatile int g_CbMode;			// UART_EVT_RXDATA: 1 echo, 2 Snooze off, 3 Disable
+volatile int g_CbMode;			// DEVINTRF_EVT_RX_DATA: 1 echo, 2 Snooze off, 3 Disable
 volatile int g_FifoBlocking;		// 0 drops oldest when full, 1 refuses new data
 volatile int g_PollMode;			// 0 interrupts, 1 polling
 volatile int g_DmaMode;			// DTC transmit, RX retains interrupt/polling
@@ -123,17 +123,17 @@ extern "C" int EmuIrqRelease(void)
 	return 1;
 }
 
-static int Evt(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+static int Evt(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
-	if (EvtId == UART_EVT_TXREADY)
+	if (EvtId == DEVINTRF_EVT_TX_READY)
 	{
 		g_TxEvt = g_TxEvt + 1;
 	}
-	if (EvtId == UART_EVT_LINESTATE)
+	if (EvtId == DEVINTRF_EVT_STATECHG)
 	{
 		g_LineEvt = g_LineEvt + 1;
 	}
-	if (EvtId == UART_EVT_RXDATA)
+	if (EvtId == DEVINTRF_EVT_RX_DATA)
 	{
 		g_RxEvt = g_RxEvt + 1;
 
@@ -174,7 +174,7 @@ extern "C" int EmuUartInit(int Rate)
 	cfg.bIntMode = g_PollMode == 0;
 	cfg.bDMAMode = g_DmaMode != 0;
 	cfg.IntPrio = 6;
-	cfg.EvtCallback = Evt;
+	cfg.EvtCB = Evt;
 	cfg.bFifoBlocking = g_FifoBlocking != 0;
 	cfg.RxMemSize = EMU_FIFO_SIZE;
 	cfg.pRxMem = g_DefaultFifo ? NULL : s_RxMem;

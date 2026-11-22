@@ -240,6 +240,49 @@ uint32_t SystemResetReason(void)
 	return s_SysPwrResetReason;
 }
 
+#if defined(NRF5340_XXAA_NETWORK) || defined(NRF5340_XXAA_APPLICATION)
+// Resumable CPU sleep on both nRF5340 cores. Leave existing NVIC wake
+// sources and the shared LFCLK configured. System OFF is independent.
+void SystemSleep(void)
+{
+	uint32_t state;
+	uint32_t scr;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+
+	// Keep an IRQ pending across the WFI entry window, then dispatch it
+	// after restoring the caller's original interrupt mask.
+	state = DisableInterrupt();
+	scr = SCB->SCR;
+	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+	__DSB();
+	__WFI();
+	SCB->SCR = scr;
+	__ISB();
+	EnableInterrupt(state);
+}
+#endif
+
+uint32_t SystemPowerCapabilitiesGet(void)
+{
+#if defined(NRF5340_XXAA_APPLICATION)
+	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_SYSTEM_OFF |
+		SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE |
+		SYSTEM_POWER_CAP_RAM_RETENTION | SYSTEM_POWER_CAP_RET_REG |
+		SYSTEM_POWER_CAP_LOW_POWER;
+#elif defined(NRF5340_XXAA_NETWORK)
+	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_TIMER_WAKE |
+		SYSTEM_POWER_CAP_RET_REG;
+#else
+	// Keep capability expansion explicit for other Nordic families.
+	return SYSTEM_POWER_CAP_SYSTEM_OFF | SYSTEM_POWER_CAP_WAKE_PIN |
+		SYSTEM_POWER_CAP_RAM_RETENTION | SYSTEM_POWER_CAP_RET_REG;
+#endif
+}
+
 void SystemPowerOff(void)
 {
 #ifdef SYS_PWR_MEMCONF
@@ -364,6 +407,12 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 		else
 		{
 			SYS_PWR_VMC->RAM[blk].POWERCLR = msk;
+		}
+		// POWERSET/POWERCLR writes are not proof that the requested
+		// retention policy took effect. Verify the actual VMC state.
+		if (((SYS_PWR_VMC->RAM[blk].POWER & msk) != 0U) != bRetain)
+		{
+			return false;
 		}
 #else
 		if (bRetain)

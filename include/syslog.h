@@ -139,13 +139,16 @@ SOFTWARE.
 // SysLogInit is called.
 #define SYSLOG_INIT_MARKER  0x474f4c53UL    // 'SLOG'
 
-// Bytes of memory to reserve for NbRecord records of RecordLen bytes each,
-// including the CFifo header. RecordLen is the log line length in bytes and
+// Bytes of memory to reserve for NbRecord queued records and one transfer buffer,
+// including the CFifo header. Each stored record carries a four-byte length
+// before its RecordLen-byte text buffer. The transfer buffer has the same
+// size. RecordLen is the log line length in bytes and
 // includes the terminating NUL, so a 64 byte record holds 63 characters.
 //
 //    alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(16, 64)];  // 16 x 64
 //
-#define SYSLOG_MEMSIZE(NbRecord, RecordLen)    CFIFO_TOTAL_MEMSIZE(NbRecord, RecordLen)
+#define SYSLOG_RECORD_META_SIZE                  sizeof(uint32_t)
+#define SYSLOG_MEMSIZE(NbRecord, RecordLen)    CFIFO_TOTAL_MEMSIZE((NbRecord) + 2, (RecordLen) + SYSLOG_RECORD_META_SIZE)
 
 #ifdef __cplusplus
 extern "C" {
@@ -157,9 +160,12 @@ extern "C" {
  * Size the memory with SYSLOG_MEMSIZE(NbRecord, RecordLen) and pass
  * sizeof() as MemSize. The record count is not repeated here because
  * MemSize and RecordLen already determine it, and MemSize is the one value
- * that describes the memory that exists. A shorter RecordLen puts more
- * records in the same memory; a longer one allows longer lines. There is no
- * upper limit, every record is formatted in place in its own block.
+ * that describes the memory that exists. Two record-sized blocks are reserved
+ * for formatting and transmission; the remaining blocks form CFifo.
+ * Each block contains a uint32_t formatted length followed by RecordLen
+ * bytes of text, including the terminating NUL.
+ * A shorter RecordLen puts more records in the same memory. Formatting
+ * takes place in the dedicated buffer, not in a reserved CFifo slot.
  */
 typedef struct __Sys_Log_Cfg {
 	uint8_t		*pMem;		//!< Word aligned memory for the record store
@@ -171,7 +177,7 @@ typedef struct __Sys_Log_Cfg {
 } SysLogCfg_t;
 
 /**
- * Logger instance. Configuration and the send position in the head record.
+ * Logger instance. The transfer buffer owns one record independently of CFifo.
  */
 typedef struct __Sys_Log {
 	uint32_t	Marker;		//!< SYSLOG_INIT_MARKER when initialized, else dormant
@@ -181,8 +187,10 @@ typedef struct __Sys_Log {
 	int (*FormatTime)(TimerDev_t *, char *, int, bool); //!< Optional timestamp writer, set by Init.
 	uint32_t	MinType;	//!< Minimum type field emitted, e.g. SYSSTATUS_TYPE_WRN. 0 emits all.
 	hCFifo_t	hFifo;		//!< Record store, one complete record per block.
-	uint32_t	HeadIdx;	//!< Store index of the record HeadSent belongs to
-	uint32_t	HeadSent;	//!< Bytes of that record already accepted by the sink
+	uint8_t		*pTxBuffer;	//!< One-record transfer buffer reserved from pMem
+	uint8_t		*pFormatBuffer;	//!< One-record formatting buffer outside CFifo
+	uint32_t	TxLen;	//!< Bytes in transfer buffer
+	uint32_t	TxSent;	//!< Bytes of transfer buffer accepted by sink
 	volatile bool bFlushing;	//!< Set while a SysLogFlush call is sending
 } SysLog_t;
 
@@ -236,39 +244,46 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 				   uint32_t SinkAddr);
 
 /**
- * Send queued records through the configured DeviceIntrf until the store is
- * empty or the sink stops taking them.
+ * Submit bytes from at most one SysLog record through DeviceIntrf.
  *
- * Not normally needed. SysLogStatus and SysLogPrintf already do this whenever
- * a sink is attached. Call it after SysLogSetSink to send what was stored
- * while there was no transport, or when a sink refused the last record and no
- * further record is coming to send it.
+ * Each SysLogPrintf / SysLogStatus call stores a separate record. When the
+ * transfer buffer is empty, one CFifo record is copied into it and removed
+ * from CFifo. Each pass submits one record; a TX_READY event deferred during
+ * submission can cause another pass before the active flush returns.
  *
- * One store block is one log record. A record is consumed when the sink has
- * accepted all of it. When the sink takes only part of a record, or returns
- * zero or a negative value, the call ends and the record stays queued with
- * the count already sent; the next call sends only the remainder, so no byte
- * goes out twice. If the non-blocking store evicts that record in the
- * meantime, the next record is sent from its first byte.
+ * DeviceIntrfTx returns the number of bytes accepted by the sink. When only
+ * part of a record is accepted, the rest remains in the transfer buffer
+ * until a later call or DEVINTRF_EVT_TX_READY event. An event occurring
+ * during submission may retry the same record without concurrently
+ * modifying its transfer position.
  *
- * One flush runs at a time. A call made while another one is sending, from an
- * interrupt for example, returns 0 and leaves its record to the running call,
- * which checks the store again before it returns.
+ * SysLogPrintf and SysLogStatus invoke SysLogFlush when a sink is attached.
+ * Call SysLogFlush repeatedly to drain records collected before attaching a
+ * sink if the sink does not issue TX_READY notifications.
  *
- * The sink does not call back when it has room again. When records can be
- * left waiting, call this from the sink ready event (for a UART,
- * UART_EVT_TXREADY), through the application event queue rather than from
- * the interrupt.
+ * The global logger can attach SysLogDevIntrfEvent to the existing
+ * DeviceIntrf EvtCB when the sink has no callback. Applications replacing
+ * that callback own the continuation.
  *
- * Note this is the opposite of CFifoFlush, which discards. This one sends.
+ * Unlike CFifoFlush, which discards records, this operation submits bytes.
  *
- * @param	pLog : Logger instance.
- *
- * @return	Total bytes the sink accepted, 0 when there was nothing to send or
- *          the sink took nothing. A negative DeviceIntrfTx result is returned
- *          unchanged when no bytes went out before it.
+ * @param pLog : Logger instance.
+ * @return Bytes accepted from this record, zero when no bytes were accepted
+ *         or no record was available. A negative DeviceIntrfTx result is
+ *         returned unchanged when nothing was accepted.
  */
 int SysLogFlush(SysLog_t * const pLog);
+
+/**
+ * @brief Generic DeviceIntrf transmit-ready callback for the global logger.
+ *
+ * SysLog installs this callback when a sink has no existing EvtCB.
+ * Applications can replace EvtCB; when they do, they own SysLogFlush.
+ * The sink driver must generate DEVINTRF_EVT_TX_READY when TX FIFO
+ * capacity becomes available. No transport-specific API is required.
+ */
+int SysLogDevIntrfEvent(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+		uint8_t *pBuffer, int Len);
 
 /**
  * Format and store one status record.

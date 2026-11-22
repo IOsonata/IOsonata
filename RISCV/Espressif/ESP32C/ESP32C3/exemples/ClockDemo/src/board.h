@@ -19,36 +19,6 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define UART_RX_PINOP ESP32_PINOP_U0RXD
 #define UART_TX_PINOP ESP32_PINOP_U0TXD
 
-#if defined(ESP32C3_CPU_160MHZ)
-#define CLOCK_DEMO_XTAL_CPU 160000000U
-#else
-#define CLOCK_DEMO_XTAL_CPU 40000000U
-#endif
-
-// Core source sequence and accepted frequency ranges. RC_FAST is measured against XTAL.
-#define CLOCK_DEMO_SOURCES { \
-	{"XTAL", OSC_TYPE_XTAL, 40000000U, CLOCK_DEMO_XTAL_CPU, CLOCK_DEMO_XTAL_CPU}, \
-	{"RC_FAST", OSC_TYPE_RC, 0U, 10000000U, 30000000U}, \
-	{"XTAL restore", OSC_TYPE_XTAL, 40000000U, CLOCK_DEMO_XTAL_CPU, CLOCK_DEMO_XTAL_CPU} \
-}
-// C3 divides CPU and APB together outside PLL mode.
-#define CLOCK_DEMO_APB_SHARED_CORE 1
-#if defined(ESP32C3_CPU_160MHZ)
-// APB is fixed at 80 MHz when PLL feeds the CPU.
-#define CLOCK_DEMO_APB_DIVIDERS {1U}
-#else
-#define CLOCK_DEMO_APB_DIVIDERS {1U, 2U, 4U, 1U}
-#endif
-// Internal sources only; no assumption about an onboard 32 kHz crystal.
-#define CLOCK_DEMO_LF_SOURCES { \
-	{"RC_SLOW", OSC_TYPE_RC, 136000U} \
-}
-#define CLOCK_DEMO_TIMER_DEVNO 0
-#define CLOCK_DEMO_CYCLES 3U
-#ifndef CLOCK_DEMO_UART_RX_TEST
-#define CLOCK_DEMO_UART_RX_TEST 1
-#endif
-
 // ClockDemo never enters sleep; BOOT wake is tested by PowerOffDemo.
 
 #endif // __BOARD_H__

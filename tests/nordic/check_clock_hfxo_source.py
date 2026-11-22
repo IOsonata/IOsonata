@@ -37,6 +37,112 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("if (success)", disable)
         self.assertNotIn("std::atomic", source)
 
+    def test_public_rc_calibration_api_has_no_timer_ownership(self):
+        header = (ROOT / "include/coredev/system_core_clock.h").read_text(
+            encoding="utf-8")
+        self.assertIn("bool SystemHighFreqClockCalibrate(void);", header)
+        self.assertIn("bool SystemLowFreqClockCalibrate(void);", header)
+        hf = function(self.clock, "bool SystemHighFreqClockCalibrate(",
+                      "bool SystemLowFreqClockCalibrate(")
+        self.assertIn("return false;", hf)
+        lf = function(self.clock, "bool SystemLowFreqClockCalibrate(",
+                      "// The clock manager alone starts")
+        self.assertIn("nRFxLowOscSelected() == OSC_TYPE_RC", lf)
+        self.assertIn("s_nRFxLfclkReqCnt != 0U", lf)
+        self.assertIn("__get_IPSR() != 0U", lf)
+        self.assertIn("SystemLowFreqClockEnable()", lf)
+        self.assertIn("success = nRFxLfclkCalibrate();", lf)
+        self.assertIn("SystemLowFreqClockDisable();", lf)
+        self.assertIn("s_bNRFxLfclkCalibrating = true;", lf)
+        self.assertGreaterEqual(lf.count("s_bNRFxLfclkCalibrating = false;"), 2)
+        self.assertIn("!s_bNRFxLfclkCalibrating", lf)
+        self.assertNotIn("TimerInit(", lf)
+        self.assertNotIn("RTC", lf)
+
+    def test_nrf5340_lfrc_calibrated_on_clock_start(self):
+        calibration = function(self.clock, "static bool nRFxLfclkCalibrate(",
+                               "// The clock manager alone starts")
+        self.assertIn("NRF_CLOCK->TASKS_CAL = 1U", calibration)
+        self.assertIn("NRF_CLOCK->EVENTS_DONE = 0U", calibration)
+        self.assertIn("NRFX_LFRC_CAL_TIMEOUT_US", calibration)
+        self.assertIn("usDelay(NRFX_LFCLK_START_POLL_US)", calibration)
+        self.assertIn("NRFX_LFRC_CAL_RETRY_US", calibration)
+        self.assertIn("if (elapsed >= nextRetry)", calibration)
+        self.assertIn("nextRetry += NRFX_LFRC_CAL_RETRY_US", calibration)
+        startup = function(self.clock, "static bool nRFxLfclkStart(",
+                           "static bool nRFxLfclkWaitStopped(")
+        self.assertIn("nRFxLfclkFinishStart(Src)", startup)
+        self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", startup)
+        self.assertIn("nRFxLfclkFinishStart(Src)", startup)
+        ready = function(self.clock, "static bool nRFxLfclkFinishStart(",
+                         "static bool nRFxLfclkStart(")
+        self.assertIn("#if defined(NRF53_SERIES)", ready)
+        self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", ready)
+        self.assertIn("NRFX_LFCLK_SRC_XTAL", ready)
+        self.assertIn("if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)", ready)
+        self.assertIn("(void)nRFxLfclkCalibrate();", ready)
+        self.assertIn("return true;", ready)
+        self.assertNotIn("return nRFxLfclkCalibrate();", ready)
+        lf = function(self.clock, "bool SystemLowFreqClockCalibrate(",
+                      "// The clock manager alone starts")
+        self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", lf)
+        self.assertIn("NRFX_LFCLK_STATE_Msk", lf)
+        self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", startup)
+
+    def test_lfrc_start_accepts_shared_lfxo_override_without_calibration(self):
+        ready = function(self.clock, "static bool nRFxLfclkFinishStart(",
+                         "static bool nRFxLfclkStart(")
+        rc = ready[ready.index("if ((Src & NRFX_LFCLK_SRC_Msk) ==",
+                                ready.index("NRFX_LFCLK_SRC_XTAL") + 1):]
+        self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", rc)
+        self.assertIn("NRFX_LFCLK_SRC_RC", rc)
+        self.assertIn("(void)nRFxLfclkCalibrate();", rc)
+        self.assertIn("return true;", rc)
+        self.assertNotIn("return nRFxLfclkCalibrate();", rc)
+        calibrate = function(self.clock, "bool SystemLowFreqClockCalibrate(",
+                             "// The clock manager alone starts")
+        self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", calibrate)
+        self.assertIn("NRFX_LFCLK_SRC_RC", calibrate)
+
+    def test_lfclk_start_timeout_releases_failed_request(self):
+        start = function(self.clock, "static bool nRFxLfclkStart(",
+                         "static bool nRFxLfclkWaitStopped(")
+        self.assertIn("NRFX_LFCLK_START_TIMEOUT_US", start)
+        self.assertIn("usDelay(NRFX_LFCLK_START_POLL_US)", start)
+        self.assertIn("NRF_CLOCK->EVENTS_LFCLKSTARTED", start)
+        self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", start)
+        enable = function(self.clock, "bool SystemLowFreqClockEnable(",
+                          "void SystemLowFreqClockDisable(")
+        self.assertIn("s_bNRFxLfclkStopPending = true", enable)
+        self.assertIn("s_bNRFxLfclkOwned = false", enable)
+
+    def test_nrf5340_net_unavailable_xtal_falls_back_to_running_rc(self):
+        enable = function(self.clock, "bool SystemLowFreqClockEnable(",
+                          "void SystemLowFreqClockDisable(")
+        self.assertIn("#if defined(NRF5340_XXAA_NETWORK)", enable)
+        self.assertIn("if (!started && stopped &&", enable)
+        self.assertIn("nRFxLfclkWaitStopped()", enable)
+        self.assertIn("nRFxLfclkStart(NRFX_LFCLK_SRC_RC", enable)
+        self.assertIn("if (started)", enable)
+        self.assertIn("effectiveSrc & NRFX_LFCLK_SRC_Msk", enable)
+        self.assertIn("s_bNRFxNetLfclkRcFallback =", enable)
+        self.assertIn("s_nRFxLfclkReqCnt = 1U", enable)
+        self.assertIn("s_bNRFxLfclkOwned = true", enable)
+        self.assertIn("return started;", enable)
+        select = function(self.clock, "bool SystemLowFreqClockSelect(",
+                          "uint32_t SystemPeriphClockGet(")
+        self.assertNotIn("nRFxLfclkStart(", select)
+        self.assertNotIn("TASKS_LFCLKSTART", select)
+
+    def test_nrf5340_lfxo_pins_assigned_in_secure_startup(self):
+        path = ROOT / "ARM/Nordic/nRF53/nRF5340_App/lib/src/system_nrf5340_application.c"
+        system = path.read_text(encoding="utf-8")
+        self.assertIn("g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL", system)
+        self.assertIn("NRF_P0_S->PIN_CNF[0]", system)
+        self.assertIn("NRF_P0_S->PIN_CNF[1]", system)
+        self.assertIn("GPIO_PIN_CNF_MCUSEL_Peripheral", system)
+        self.assertIn("#if !defined(NRF_TRUSTZONE_NONSECURE)", system)
+
     def test_generic_clock_sources_and_lifecycle(self):
         header = (ROOT / "include/coredev/system_core_clock.h").read_text(
             encoding="utf-8")
@@ -62,18 +168,25 @@ class HfxoSourceChecks(unittest.TestCase):
     def test_core_select_does_not_enable_hfxo(self):
         select = function(self.clock, "bool SystemCoreClockSelect(",
                           "bool SystemHighFreqClockEnable(")
-        self.assertIn("g_McuOsc.CoreOsc.Type = ClkSrc", select)
+        self.assertIn("s_nRFxCoreOscSelected = ClkSrc", select)
+        self.assertNotIn("g_McuOsc.CoreOsc.Type = ClkSrc", select)
+        self.assertIn("ClkSrc != g_McuOsc.CoreOsc.Type", select)
+        self.assertIn("OscFreq != g_McuOsc.CoreOsc.Freq", select)
+        self.assertNotIn("ClkSrc == OSC_TYPE_RC && OscFreq != 0U", select)
         self.assertIn("s_nRFxHfxoReqCnt != 0U", select)
         self.assertNotIn("nRFxHfxoStart(", select)
         self.assertNotIn("nRFxHfxoStop(", select)
 
-    def test_low_frequency_select_does_not_start_clock(self):
+    def test_lf_select_only_configures_oscillator(self):
         select = function(self.clock, "bool SystemLowFreqClockSelect(",
                           "uint32_t SystemPeriphClockGet(")
-        self.assertIn("g_McuOsc.LowPwrOsc.Type = ClkSrc", select)
+        self.assertIn("s_nRFxLowOscSelected = ClkSrc", select)
+        self.assertNotIn("g_McuOsc.LowPwrOsc.Type = ClkSrc", select)
+        self.assertIn("ClkSrc != g_McuOsc.LowPwrOsc.Type", select)
         self.assertIn("s_nRFxLfclkReqCnt != 0U", select)
         self.assertNotIn("nRFxLfclkStart(", select)
         self.assertNotIn("TASKS_LFCLKSTART", select)
+        self.assertNotIn("TASKS_LFCLKSTOP", select)
 
     def test_nordic_consumers_use_generic_clock_lifecycle(self):
         hf_timer = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(
@@ -112,17 +225,17 @@ class HfxoSourceChecks(unittest.TestCase):
         source = (ROOT / "exemples/misc/hfxo_test.cpp").read_text(
             encoding="utf-8")
         self.assertIn(".bIntMode = true", source)
-        self.assertIn(".EvtCallback = HfxoUartEvent", source)
-        callback = function(source, "static int HfxoUartEvent(UARTDev_t *pDev, UART_EVT Event,",
+        self.assertIn(".EvtCB = HfxoUartEvent", source)
+        callback = function(source, "static int HfxoUartEvent(DevIntrf_t *pDev, DEVINTRF_EVT Event,",
                             "static void HfxoConsoleInit(void)")
-        self.assertIn("UART_EVT_TXREADY", callback)
+        self.assertIn("DEVINTRF_EVT_TX_READY", callback)
         self.assertIn("__SEV();", callback)
         drain = function(source, "static void HfxoConsoleDrain(void)",
                          "#else")
         self.assertIn("SysLogFlush(SysLogGet())", drain)
-        self.assertIn("CFifoUsed(pUart->hTxFifo)", drain)
-        self.assertIn("pUart->bTxReady", drain)
-        self.assertIn("__WFE();", drain)
+        self.assertNotIn("hTxFifo", drain)
+        self.assertNotIn("bTxReady", drain)
+        self.assertIn("msDelay(100);", drain)
         self.assertLess(source.rindex("HfxoConsoleDrain();"),
                         source.rindex("while (1)"))
 
@@ -409,10 +522,10 @@ class HfxoSourceChecks(unittest.TestCase):
         source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
             encoding="utf-8")
         self.assertIn(".bIntMode = true", source)
-        self.assertIn(".EvtCallback = HfxoUartEvent", source)
+        self.assertIn(".EvtCB = HfxoUartEvent", source)
         callback = function(source, "static int HfxoUartEvent(",
                             "static const IOPinCfg_t")
-        self.assertIn("UART_EVT_TXREADY", callback)
+        self.assertIn("DEVINTRF_EVT_TX_READY", callback)
         self.assertIn("__SEV();", callback)
         drain = function(source, "static void HfxoConsoleDrain(void)",
                          "#else")

@@ -55,7 +55,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 //#define DEMO_C
 //#define USE_GETCHAR
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #ifndef UARTFIFOSIZE
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
@@ -94,7 +94,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = UART_INT_MODE,
 	.IntPrio = 1,
-	.EvtCallback = nRFUartEvthandler,
+	.EvtCB = nRFUartEvthandler,
 	.bFifoBlocking = true,
 #ifdef UARTFIFOSIZE
 	.RxMemSize = UARTFIFOSIZE,
@@ -123,19 +123,19 @@ UART g_Uart;
 McuOsc_t g_McuOsc = BOARD_OSC;
 #endif
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 
 	switch (EvtId)
 	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
+		case DEVINTRF_EVT_RX_TIMEOUT:
+		case DEVINTRF_EVT_RX_DATA:
 
 			break;
-		case UART_EVT_TXREADY:
+		case DEVINTRF_EVT_TX_READY:
 			break;
-		case UART_EVT_LINESTATE:
+		case DEVINTRF_EVT_STATECHG:
 			break;
 	}
 

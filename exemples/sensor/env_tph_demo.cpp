@@ -77,7 +77,7 @@ const static TimerCfg_t s_TimerCfg = {
 Timer g_Timer;
 
 //********** UART **********
-//int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+//int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
 

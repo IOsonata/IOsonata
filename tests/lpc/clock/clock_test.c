@@ -50,7 +50,7 @@ static void Check(uint32_t Main, uint32_t Core)
 	SystemCoreClockUpdate();
 	assert(SystemMainClkFreq == Main);
 	assert(SystemCoreClockGet() == Core);
-	assert(SystemMicroSecLoopCnt == ((uint64_t)Core << 16) / 16000000U);
+	assert(SystemMicroSecLoopCnt == ((uint64_t)Core * 1000000ULL) / 16000000U);
 	assert(SystemPeriphClockGet(0) == Core);
 	assert(SystemPeriphClockGet(-1) == 0);
 	assert(SystemPeriphClockGet(1) == 0);

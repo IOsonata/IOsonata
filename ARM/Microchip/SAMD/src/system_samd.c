@@ -60,6 +60,7 @@ SOFTWARE.
 #include "samdxxx.h"
 
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 #include "coredev/interrupt.h"
 #include "clock_samd.h"
 
@@ -134,7 +135,7 @@ extern uint32_t SystemMicroSecLoopCnt;
 
 // CPU clock after reset is OSC8M divided by 8
 uint32_t SystemCoreClock = SAMD_OSC8M_FREQ / 8UL;
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 // The frequencies of the DFLL48M and the FDPLL96M come from their registers:
 // the C startup clears .bss after SystemInit, a variable set there is lost.
@@ -906,23 +907,14 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 
 // Reduce 65536 / 1000000 to 1024 / 15625 before scaling. Splitting
 // the quotient and remainder keeps both products within 32 bits.
-static uint32_t SamdDelayFactor(uint32_t Freq, uint32_t LoopClocks)
-{
-	uint32_t divisor = LoopClocks * 15625U;
-	uint32_t whole = Freq / divisor;
-	uint32_t remainder = Freq - whole * divisor;
-
-	return (whole << 10) + ((remainder << 10) / divisor);
-}
-
 void SystemCoreClockUpdate(void)
 {
 	uint32_t freq = SamdGclkGenFreq(SAMD_GCLK_MAIN);
 
 	SystemCoreClock = freq >> ((PM_REGS->PM_CPUSEL & PM_CPUSEL_CPUDIV_Msk) >> PM_CPUSEL_CPUDIV_Pos);
 
-	SystemMicroSecLoopCnt = SamdDelayFactor(SystemCoreClock, 13U);
-	SystemnsDelayFactor = SamdDelayFactor(SystemCoreClock, SAMD_NSDELAY_LOOP_CLK);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		13ULL * 1000000ULL, (uint64_t)SAMD_NSDELAY_LOOP_CLK * 1000000ULL);
 }
 
 // Clock registers at the end of the startup, see s_SamdStartupReg

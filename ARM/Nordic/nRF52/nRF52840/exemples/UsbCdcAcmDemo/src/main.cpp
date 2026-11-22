@@ -157,7 +157,7 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst, app_us
 static void usbd_user_ev_handler(app_usbd_event_type_t event);
 
 void HardwareInit();
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void UartRxSchedHandler(void * p_event_data, uint16_t event_size);
 
 
@@ -329,7 +329,7 @@ UARTCfg_t g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
 	.bIntMode = true,							// Interrupt mode
 	.IntPrio = APP_IRQ_PRIORITY_LOW,			// Interrupt priority
-	.EvtCallback = nRFUartEvthandler,			// UART event handler
+	.EvtCB = nRFUartEvthandler,			// UART event handler
 	.bFifoBlocking = true,						// Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
@@ -554,19 +554,19 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event)
 
 
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 //	uint8_t buff[20];
 
 	switch (EvtId)
 	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
+		case DEVINTRF_EVT_RX_TIMEOUT:
+		case DEVINTRF_EVT_RX_DATA:
 			break;
-		case UART_EVT_TXREADY:
+		case DEVINTRF_EVT_TX_READY:
 			break;
-		case UART_EVT_LINESTATE:
+		case DEVINTRF_EVT_STATECHG:
 			break;
 	}
 

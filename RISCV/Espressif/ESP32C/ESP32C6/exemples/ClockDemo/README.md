@@ -30,7 +30,7 @@ Open the terminal before pressing RESET. No jumper is needed. At each
 `Entering sleep; press BOOT to resume` prompt, press and release BOOT (GPIO9).
 The default run has nine sleep prompts.
 
-The shared source is `exemples/misc/clock_demo.cpp`. Board configuration selects
+The shared source is `exemples/misc/core_clock_test.cpp`. Board configuration selects
 three repetitions of the following sequence:
 
 1. Select the 40 MHz XTAL, calibrated RC_FAST, then XTAL again.
@@ -68,7 +68,7 @@ prompt waits for BOOT before continuing.
 Each operation prints its result. The final line should read:
 
 ```
-ClockDemo complete: 0 failures
+CoreClockTest complete: 0 failures
 ```
 
 A rejected core source is reported as FAIL and its dependent steps are skipped.
@@ -137,7 +137,7 @@ A temporary PMU register model checked the retained settings for XTAL, RC_FAST
 and PLL CPU selections with both internal LF sources, full saved-register
 restoration, and unchanged Deep-sleep wake/reject settings at O0 and Os.
 Hardware retest at `b79ea4253` completed three cycles and all nine BOOT wake
-operations with `ClockDemo complete: 0 failures`. CPU and APB restoration,
+operations with `CoreClockTest complete: 0 failures`. CPU and APB restoration,
 LF descriptor preservation, timer interrupts and delay checks passed after
 every wake. RC_FAST measured 16128365-16132336 Hz. The post-resume 250 ms
 samples were 250019-250078 us, all with 25 interrupts. The timer stall is

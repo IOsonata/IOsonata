@@ -37,6 +37,7 @@ Modified by          Date              Description
 #include <stdbool.h>
 
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 #include "coredev/interrupt.h"
 #include "LPC11Uxx.h"
 
@@ -63,7 +64,7 @@ extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = IRC_FREQ;	// System Clock Frequency (Core Clock)
 uint32_t SystemMainClkFreq = IRC_FREQ;		// System clock frequency, reset default IRC
-uint32_t SystemnsDelayFactor = 65536UL;
+uint32_t SystemnsDelayFactor = 1000000UL;
 
 static uint32_t s_SysOscFreq = OSC_FREQ;
 
@@ -130,8 +131,8 @@ void SystemCoreClockUpdate(void)
 	SystemMainClkFreq = sysclk;
 	// Divider zero disables the system clock; do not retain a stale frequency.
 	SystemCoreClock = div != 0 ? sysclk / div : 0;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
 }
 
 // A register-read budget bounds startup even if an oscillator or PLL fails.
@@ -171,15 +172,15 @@ static bool Lpc11MainClockIRC(void)
 	{
 		SystemMainClkFreq = 0;
 		SystemCoreClock = 0;
-		SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-		SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
 		return false;
 	}
 	LPC_SYSCON->SYSAHBCLKDIV = 1;
 	SystemMainClkFreq = IRC_FREQ;
 	SystemCoreClock = IRC_FREQ;
-	SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-	SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
 
 	return true;
 }
@@ -316,8 +317,8 @@ static uint32_t Lpc11SetCoreClock(OSC_TYPE Type, uint32_t ClkFreq, bool UsbClock
 	{
 		SystemMainClkFreq = fclko;
 		SystemCoreClock = fclko / div;
-		SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-		SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
 		EnableInterrupt(state);
 		return SystemCoreClock;
 	}
@@ -333,8 +334,8 @@ static uint32_t Lpc11SetCoreClock(OSC_TYPE Type, uint32_t ClkFreq, bool UsbClock
 		// A failed clock-source latch leaves the active frequency unknown.
 		SystemMainClkFreq = 0;
 		SystemCoreClock = 0;
-		SystemMicroSecLoopCnt = ((uint64_t)SystemCoreClock << 16) / 16000000UL;
-		SystemnsDelayFactor = ((uint64_t)SystemCoreClock << 16) / ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL);
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
 	}
 	EnableInterrupt(state);
 

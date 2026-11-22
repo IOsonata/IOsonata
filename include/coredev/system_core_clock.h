@@ -210,6 +210,33 @@ static inline uint32_t GetHighFreqLoadCap(void) { return g_McuOsc.CoreOsc.LoadCa
 static inline const OscDesc_t *GetHighFreqOscDesc(void) { return &g_McuOsc.CoreOsc; }
 
 /**
+ * @brief CPU operating power mode while application code continues executing.
+ *
+ * PERFORMANCE is the fastest supported operating CPU frequency configured
+ * by SystemInit. LOW_POWER selects a supported reduced-power running mode.
+ * Neither mode enters sleep or powers off the MCU. Peripheral clock and
+ * timing requirements remain owned by the MCU and peripheral drivers.
+ */
+typedef enum {
+	SYSTEM_POWER_MODE_PERFORMANCE = 0,
+	SYSTEM_POWER_MODE_LOW_POWER = 1
+} SYSTEM_POWER_MODE;
+
+/**
+ * @brief Select a CPU running power mode.
+ *
+ * A transition unsupported by the MCU or its current clock ownership must
+ * return false without changing the operating mode. This API is for
+ * foreground use, not an interrupt handler. It does not call SystemSleep.
+ *
+ * @return true if the requested mode is active.
+ */
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode);
+
+/** @brief Return the currently active CPU running power mode. */
+SYSTEM_POWER_MODE SystemPowerModeGet(void);
+
+/**
  * @brief	Select core clock oscillator type
  *
  * Selects the MCU core clock source. This does not enable or disable
@@ -275,6 +302,27 @@ bool SystemLowFreqClockEnable(void);
 /** @brief Disable one shared low-frequency clock requirement. */
 void SystemLowFreqClockDisable(void);
 
+/** @brief Calibrate the configured high-frequency RC clock.
+ *
+ * Called by a higher-level subsystem when it needs recalibration.
+ * This operation does not own a timer or start periodic work.
+ * Call from thread/foreground context, never a timer interrupt callback.
+ *
+ * @return true if calibration completed, false when unavailable or failed.
+ */
+bool SystemHighFreqClockCalibrate(void);
+
+/** @brief Calibrate the configured low-frequency RC clock.
+ *
+ * The LF clock must already be enabled. The implementation preserves its
+ * existing users and does not take ownership of their timers. A higher-level
+ * subsystem chooses the calibration interval and calls from foreground
+ * context, not from an interrupt.
+ *
+ * @return true if calibration completed, false when unavailable or failed.
+ */
+bool SystemLowFreqClockCalibrate(void);
+
 /**
  * @brief	Get core clock frequency
  *
@@ -336,6 +384,27 @@ void *SystemRamStart(void);
  *
  * @return	SYSTEM_RESET_xxx reasons, ORed
  */
+/**
+ * @brief Capabilities supported by the target's power-management backend.
+ *
+ * Availability is a property of the MCU/core, not a compile-time selection
+ * of which CorePowerTest phase to run. Applications normally use these APIs
+ * through driver ownership and SystemSleep/SystemPowerOff.
+ */
+#define SYSTEM_POWER_CAP_SLEEP           (1UL << 0)
+#define SYSTEM_POWER_CAP_SYSTEM_OFF      (1UL << 1)
+#define SYSTEM_POWER_CAP_WAKE_PIN        (1UL << 2)
+#define SYSTEM_POWER_CAP_TIMER_WAKE      (1UL << 3)
+#define SYSTEM_POWER_CAP_RAM_RETENTION   (1UL << 4)
+#define SYSTEM_POWER_CAP_RET_REG         (1UL << 5)
+#define SYSTEM_POWER_CAP_LOW_POWER      (1UL << 6)
+
+/**
+ * @brief Return the target's supported power and wake capabilities.
+ * A zero bit means unsupported on this MCU/core.
+ */
+uint32_t SystemPowerCapabilitiesGet(void);
+
 uint32_t SystemResetReason(void);
 
 /**
