@@ -897,19 +897,19 @@ static void CoreClockTestTimerTriggers(void)
 	CoreClockTestResult("Timer one-shot callback",
 		enabled && period != 0U && fired == 1U);
 	TimerDisableTrigger(&s_Timer, trigger);
-	TimerDisable(&s_Timer);
 	if (!enabled || period == 0U)
 	{
+		TimerDisable(&s_Timer);
 		return;
 	}
 
-	// Restart the stopped timer from a known epoch before checking
-	// the continuous trigger. TimerReset is a public Timer operation.
+	// Switch trigger modes while the timer owns its clock. Disable/Enable
+	// is tested by the timer matrix; this phase validates the trigger API,
+	// not a second asynchronous LFCLK stop/start transition.
 	TimerReset(&s_Timer);
 	s_TriggerCount = 0U;
-	enabled = TimerEnable(&s_Timer);
-	period = enabled ? nsTimerEnableTrigger(&s_Timer, trigger, 20000000ULL,
-		TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler, nullptr) : 0U;
+	period = nsTimerEnableTrigger(&s_Timer, trigger, 20000000ULL,
+		TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler, nullptr);
 	before = TimerGetTickCount(&s_Timer);
 	if (enabled && period != 0U)
 	{
