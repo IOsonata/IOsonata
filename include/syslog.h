@@ -140,12 +140,15 @@ SOFTWARE.
 #define SYSLOG_INIT_MARKER  0x474f4c53UL    // 'SLOG'
 
 // Bytes of memory to reserve for NbRecord queued records and one transfer buffer,
-// including the CFifo header. The transfer buffer has RecordLen bytes. RecordLen is the log line length in bytes and
+// including the CFifo header. Each stored record carries a four-byte length
+// before its RecordLen-byte text buffer. The transfer buffer has the same
+// size. RecordLen is the log line length in bytes and
 // includes the terminating NUL, so a 64 byte record holds 63 characters.
 //
 //    alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(16, 64)];  // 16 x 64
 //
-#define SYSLOG_MEMSIZE(NbRecord, RecordLen)    CFIFO_TOTAL_MEMSIZE((NbRecord) + 1, RecordLen)
+#define SYSLOG_RECORD_META_SIZE                  sizeof(uint32_t)
+#define SYSLOG_MEMSIZE(NbRecord, RecordLen)    CFIFO_TOTAL_MEMSIZE((NbRecord) + 1, (RecordLen) + SYSLOG_RECORD_META_SIZE)
 
 #ifdef __cplusplus
 extern "C" {
@@ -157,8 +160,10 @@ extern "C" {
  * Size the memory with SYSLOG_MEMSIZE(NbRecord, RecordLen) and pass
  * sizeof() as MemSize. The record count is not repeated here because
  * MemSize and RecordLen already determine it, and MemSize is the one value
- * that describes the memory that exists. One RecordLen block is reserved
+ * that describes the memory that exists. One record-sized block is reserved
  * for the transfer buffer; the remaining blocks form the CFifo store.
+ * Each block contains a uint32_t formatted length followed by RecordLen
+ * bytes of text, including the terminating NUL.
  * A shorter RecordLen puts more records in the same memory. There is no
  * upper limit, every record is formatted in place in its own block.
  */
