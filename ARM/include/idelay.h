@@ -344,8 +344,9 @@ static inline void DelayCalibrationProbeNs(uint32_t Nanoseconds)
 }
 
 // Runtime delays are independent of debug and trace clocks.
-// Long nanosecond intervals use the calibrated microsecond loop to avoid
-// accumulating the short loop's instruction-fetch and branch penalties.
+// Each precision unit uses its own calibrated assembly loop. Do not
+// substitute the microsecond loop for long nsDelay calls: inlining and
+// instruction layout change its measured iteration cost at call sites.
 static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 {
 	ArmDelayUsLoop(cnt);
@@ -353,15 +354,7 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 
 static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 {
-	if (cnt >= 10000U)
-	{
-		ArmDelayUsLoop(cnt / 1000U);
-		cnt %= 1000U;
-	}
-	if (cnt != 0U)
-	{
-		ArmDelayNsLoop(cnt);
-	}
+	ArmDelayNsLoop(cnt);
 }
 
 #define ARM_DELAY_CAL_NS	(ARM_DELAY_CAL_LOOPS * 1000U)
