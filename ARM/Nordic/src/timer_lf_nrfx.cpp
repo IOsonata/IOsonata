@@ -1288,6 +1288,23 @@ extern "C" int nRFxRtcSleepClaim(TimerDev_t *pTimer, TimerCfg_t *pCfg)
 			state = DisableInterrupt();
 			if (s_pnRfxRtcDev[i] == pTimer)
 			{
+				// Init may have enabled NVIC before LFCLK admission
+				// failed. Leave no IRQ attached to the temporary handle.
+				s_nRfxRtcData[i].pReg->INTENCLR = 0xFFFFFFFFU;
+				s_nRfxRtcData[i].pReg->EVTENCLR = 0xFFFFFFFFU;
+				s_nRfxRtcData[i].pReg->TASKS_STOP = 1U;
+				if (i == 1)
+				{
+					NVIC_DisableIRQ(RTC1_IRQn);
+					NVIC_ClearPendingIRQ(RTC1_IRQn);
+				}
+#if TIMER_NRFX_RTC_MAX > 2
+				else if (i == 2)
+				{
+					NVIC_DisableIRQ(RTC2_IRQn);
+					NVIC_ClearPendingIRQ(RTC2_IRQn);
+				}
+#endif
 				s_pnRfxRtcDev[i] = nullptr;
 			}
 			s_pnRfxRtcSleepOwner[i] = nullptr;
