@@ -37,7 +37,8 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 #define __SYSTEM_CLOCK_DEFAULT      (64000000UL)     /*!< NRF5340 network core uses a fixed System Clock Frequency of 64MHz */
 
-// Calibrated loop iterations per second.
+// Runtime delays use CPU-local assembly loops only. The 64 MHz Network
+// Core keeps fixed, port-calibrated loop factors without enabling DWT.
 extern uint32_t SystemMicroSecLoopCnt;
 uint32_t SystemnsDelayFactor = 1000000UL;
 
