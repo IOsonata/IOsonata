@@ -671,8 +671,7 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 #if defined(NRF53_SERIES) || defined(NRF52_SERIES)
 // The LFRC CAL task uses HFXO as a reference. nRF52 callers must
 // request HFXO explicitly; nRF53 CLOCK owns that calibration request.
-// clock controller. Wait for DONE outside the interrupt mask. A new LFRC
-// activation must be calibrated before its RTC consumers start counting.
+// Wait for DONE outside the interrupt mask.
 #define NRFX_LFRC_CAL_TIMEOUT_US	250000U
 #define NRFX_LFRC_CAL_RETRY_US		1000U
 
