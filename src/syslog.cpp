@@ -290,6 +290,7 @@ int SysLogFlush(SysLog_t * const pLog)
 	int total;
 	int err;
 	bool retry;
+	bool next;
 
 	if (pLog == nullptr || pLog->Marker != SYSLOG_INIT_MARKER ||
 		pLog->pSink == nullptr)
@@ -300,8 +301,8 @@ int SysLogFlush(SysLog_t * const pLog)
 	state = SysIrqLock();
 	if (pLog->bFlushing)
 	{
-		// The active owner handles any TX_READY notification that
-		// arrives during its current DeviceIntrfTx submission.
+		// An interrupt during submission must not operate on the same
+		// transfer buffer. Let the active owner service its notification.
 		if (pLog == SysLogGet())
 		{
 			s_bSysLogReadyDuringFlush = true;
@@ -315,67 +316,93 @@ int SysLogFlush(SysLog_t * const pLog)
 	recordLen = CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE;
 	total = 0;
 	err = 0;
-	state = SysIrqLock();
-	if (pLog->TxLen == 0U)
-	{
-		pBlock = CFifoGet(pLog->hFifo);
-		if (pBlock == nullptr)
-		{
-			pLog->bFlushing = false;
-			SysIrqUnlock(state);
-			return 0;
-		}
-		memcpy(&len, pBlock, SYSLOG_RECORD_META_SIZE);
-		if (len >= recordLen)
-		{
-			len = recordLen - 1U;
-		}
-		memcpy(pLog->pTxBuffer,
-			pBlock + SYSLOG_RECORD_META_SIZE, recordLen);
-		pLog->TxLen = len;
-		pLog->TxSent = 0U;
-	}
-	len = pLog->TxLen;
-	sent = pLog->TxSent;
-	SysIrqUnlock(state);
 
-	while (sent < len)
+	// Each pass owns one record. A deferred TX_READY is another logical
+	// flush request, serviced here without nesting flush calls.
+	do
 	{
-		count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
-			pLog->pTxBuffer + sent, (int)(len - sent));
-		if (count > 0)
+		state = SysIrqLock();
+		if (pLog->TxLen == 0U)
 		{
-			sent += (uint32_t)count;
-			total += count;
+			pBlock = CFifoGet(pLog->hFifo);
+			if (pBlock == nullptr)
+			{
+				// No record remains for a deferred ready notification.
+				if (pLog == SysLogGet())
+				{
+					s_bSysLogReadyDuringFlush = false;
+				}
+				pLog->bFlushing = false;
+				SysIrqUnlock(state);
+				break;
+			}
+			memcpy(&len, pBlock, SYSLOG_RECORD_META_SIZE);
+			if (len >= recordLen)
+			{
+				len = recordLen - 1U;
+			}
+			memcpy(pLog->pTxBuffer,
+				pBlock + SYSLOG_RECORD_META_SIZE, recordLen);
+			pLog->TxLen = len;
+			pLog->TxSent = 0U;
+		}
+		len = pLog->TxLen;
+		sent = pLog->TxSent;
+		SysIrqUnlock(state);
+
+		while (sent < len)
+		{
+			count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+				pLog->pTxBuffer + sent, (int)(len - sent));
+			if (count > 0)
+			{
+				sent += (uint32_t)count;
+				total += count;
+			}
+
+			state = SysIrqLock();
+			pLog->TxSent = sent;
+			// Consume a deferred event only if the current record
+			// still has bytes to submit. Otherwise it belongs to
+			// continuation after the completed record.
+			retry = sent < len && pLog == SysLogGet() &&
+				s_bSysLogReadyDuringFlush;
+			if (retry)
+			{
+				s_bSysLogReadyDuringFlush = false;
+			}
+			SysIrqUnlock(state);
+
+			if (sent < len && !retry)
+			{
+				if (count < 0 && total == 0)
+				{
+					err = count;
+				}
+				break;
+			}
 		}
 
 		state = SysIrqLock();
-		pLog->TxSent = sent;
-		retry = pLog == SysLogGet() && s_bSysLogReadyDuringFlush;
-		if (pLog == SysLogGet())
+		if (sent >= len)
+		{
+			pLog->TxLen = 0U;
+			pLog->TxSent = 0U;
+		}
+		// Once a record completes, a suppressed TX_READY must be
+		// serviced before ownership is released. Never drop this event.
+		next = sent >= len && pLog == SysLogGet() &&
+			s_bSysLogReadyDuringFlush;
+		if (next)
 		{
 			s_bSysLogReadyDuringFlush = false;
 		}
-		SysIrqUnlock(state);
-
-		if (sent < len && !retry)
+		else
 		{
-			if (count < 0 && total == 0)
-			{
-				err = count;
-			}
-			break;
+			pLog->bFlushing = false;
 		}
-	}
-
-	state = SysIrqLock();
-	if (sent >= len)
-	{
-		pLog->TxLen = 0U;
-		pLog->TxSent = 0U;
-	}
-	pLog->bFlushing = false;
-	SysIrqUnlock(state);
+		SysIrqUnlock(state);
+	} while (next);
 
 	return err < 0 ? err : total;
 }
