@@ -447,6 +447,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	uint32_t start;
 	uint32_t usElapsed;
 	uint32_t nsElapsed;
+	uint32_t nsPublicElapsed;
 	bool valid;
 
 	cpuHz = SystemCoreClockGet();
@@ -497,11 +498,20 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 
 	start = TimerGetMicrosecond(&s_RetainedTimer);
 	nsDelay(100000000U);
+	nsPublicElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+
+	// Measure the raw nanosecond loop separately. Long public nsDelay()
+	// calls may delegate to the microsecond loop on non-DWT targets.
+	start = TimerGetMicrosecond(&s_RetainedTimer);
+	DelayCalibrationProbeNs(100000000U);
 	nsElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
 
 	TimerDisable(&s_RetainedTimer);
-	CoreClockTestPrint("Delay timing HF Timer %u Hz: msDelay %u us, nsDelay %u us\r\n",
-		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsElapsed);
+	CoreClockTestPrint("Delay timing HF Timer %u Hz: msDelay %u us, nsDelay %u us, raw ns loop %u us\r\n",
+		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsPublicElapsed,
+		(unsigned)nsElapsed);
+	CoreClockTestResult("nsDelay HF Timer 100 ms",
+		nsPublicElapsed >= 98000U && nsPublicElapsed <= 102000U);
 
 	if (usElapsed == 0U || nsElapsed == 0U)
 	{
