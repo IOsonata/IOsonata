@@ -161,9 +161,19 @@ void SystemCoreClockUpdate(void)
 		13000000UL, 3000000UL);
 }
 
+// DWT may be used temporarily for calibration only. Never defeat
+// the silicon trace workaround while requesting that calibration.
+bool ArmDelayCalibrationDwtAllowed(void)
+{
+#if NRF52_ERRATA_32_ENABLE_WORKAROUND
+	return !nrf52_errata_32();
+#else
+	return true;
+#endif
+}
+
 void SystemInit(void)
 {
-	bool dwtAllowed = true;
     /* Enable SWO trace functionality. If ENABLE_SWO is not defined, SWO pin will be used as GPIO (see Product
        Specification to see which one). */
     #if defined (ENABLE_SWO) && defined(CLOCK_TRACECONFIG_TRACEMUX_Pos)
@@ -213,7 +223,6 @@ void SystemInit(void)
            for your device located at https://infocenter.nordicsemi.com/index.jsp */
         if (nrf52_errata_32()){
             CoreDebug->DEMCR &= ~CoreDebug_DEMCR_TRCENA_Msk;
-			dwtAllowed = false;
         }
     #endif
 
@@ -421,10 +430,4 @@ void SystemInit(void)
 						(POWER_DCDCEN0_DCDCEN_Disabled << POWER_DCDCEN0_DCDCEN_Pos);
 #endif
 
-	// DWT is a CPU-local timing reference, not a debugger requirement.
-	// Do not re-enable trace on silicon affected by anomaly 32.
-	if (dwtAllowed)
-	{
-		(void)ArmDelayDwtInit();
-	}
 }
