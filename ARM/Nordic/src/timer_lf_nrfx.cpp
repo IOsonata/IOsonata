@@ -35,6 +35,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/pei.h"
 #include "coredev/interrupt.h"
+#include "idelay.h"
 
 // PEI is an optional Timer feature. Weak references let ordinary RTC
 // applications link without the PEI matrix or nRF52 PPI implementation.
@@ -510,6 +511,12 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 #endif
 	}
 
+	// nRF52 RTC STOP is synchronized into LFCLK and takes 15-46 us.
+	// Complete that task while this RTC still owns LFCLK; otherwise the
+	// final reference can stop the oscillator before STOP has taken effect.
+#if defined(NRF52_SERIES)
+	usDelay(50U);
+#endif
 	SystemLowFreqClockDisable();
 }
 
