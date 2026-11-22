@@ -238,10 +238,13 @@ static void CorePowerTestRunningMode(uint32_t Caps)
 		CorePowerTestUnsupported("Reduced CPU power mode");
 		return;
 	}
+	// Let UART finish pending output before changing the CPU power mode.
+	msDelay(500);
 	ok = SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER);
 	reduced = SystemCoreClockGet();
 	CorePowerTestResult("Reduced CPU power mode", ok &&
 		SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER && reduced <= before);
+	msDelay(500);
 	ok = SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);
 	CorePowerTestResult("CPU performance restoration", ok &&
 		SystemCoreClockGet() == before &&
@@ -301,8 +304,8 @@ static void CorePowerTestSleep(uint32_t Caps)
 			return;
 		}
 		SysLogPrintf(SysLogGet(), "Entering Standby; automatic timer wake\r\n");
-		// Allow queued DMA transfers to finish before entering sleep.
-		msDelay(10);
+		// Allow queued UART DMA transfers to finish before entering sleep.
+		msDelay(500);
 		// All pending test output must finish before CPU sleep.
 		// Logging already allows the interrupt UART and SysLog FIFOs to drain.
 		state = DisableInterrupt();
@@ -469,8 +472,8 @@ int main(void)
 			msDelay(1);
 		}
 #endif
-		// Keep interrupts enabled while the final message drains.
-		msDelay(100);
+		// Keep interrupts enabled while UART sends the final message.
+		msDelay(500);
 		SystemPowerOff();
 		CorePowerTestResult("System OFF returned unexpectedly", false);
 		CorePowerTestSummary();
