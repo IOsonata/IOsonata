@@ -1257,12 +1257,20 @@ extern "C" int nRFxRtcSleepClaim(TimerDev_t *pTimer, TimerCfg_t *pCfg)
 {
 	uint32_t state;
 	int i;
+	int first;
 
 	if (pTimer == nullptr || pCfg == nullptr)
 	{
 		return -1;
 	}
-	for (i = TIMER_NRFX_RTC_MAX - 1; i >= 1; i--)
+	// Prefer the last RTC and never borrow a SoftDevice-owned RTC1.
+	// RTC0 is reserved for system/radio use even without SoftDevice.
+	first = 1;
+#if (defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT) || \
+	defined(NRF_SDC_ENABLED)
+	first = 2;
+#endif
+	for (i = TIMER_NRFX_RTC_MAX - 1; i >= first; i--)
 	{
 		state = DisableInterrupt();
 		if (s_pnRfxRtcDev[i] == nullptr &&
