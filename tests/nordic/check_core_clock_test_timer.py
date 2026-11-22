@@ -102,13 +102,17 @@ class NordicSleepDelay(unittest.TestCase):
 
     def test_core_clock_test_reports_end_to_end_calibration(self):
         src = TEST.read_text(encoding="utf-8")
-        start = src.index("static void CoreClockTestSleepDelay(void)")
+        start = src.index("static void CoreClockTestSleepDelayMeasure(")
         end = src.index("static bool CoreClockTestDelaySample(", start)
         test = src[start:end]
         self.assertIn("started = TimerGetMicrosecond(&s_RetainedTimer);", test)
         self.assertIn("ok = sDelay(1U);", test)
         self.assertIn("TimerDisable(&s_RetainedTimer);", test)
-        self.assertIn("sDelay overhead suggestion", test)
+        self.assertIn("sDelay %s overhead:", test)
+        self.assertIn('CoreClockTestSleepDelayMeasure("cold");', test)
+        self.assertIn('CoreClockTestSleepDelayMeasure("warm");', test)
+        self.assertIn("held = SystemLowFreqClockEnable();", test)
+        self.assertIn("SystemLowFreqClockDisable();", test)
         self.assertLess(test.index("ok = sDelay(1U);"),
             test.index("elapsed = TimerGetMicrosecond(&s_RetainedTimer) - started;"))
         self.assertIn("CoreClockTestSleepDelay();", src)
