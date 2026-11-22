@@ -1130,10 +1130,12 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	NRF_RTC_Type *reg;
 	TimerDev_t *pOldTimer;
 	TimerCfg_t selected;
+	const TimerCfg_t *pSelectedCfg;
 	bool automatic;
 	int first;
 	int candidate;
 	int i;
+	uint32_t ccmask;
 
 	// Any frequency, SetFrequency takes the closest one
 	if (pTimer == nullptr || pCfg == nullptr || pCfg->DevNo < -1 ||
@@ -1179,10 +1181,10 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			return false;
 		}
 	}
-	pCfg = &selected;
-	pRtc = &s_nRfxRtcData[pCfg->DevNo];
+	pSelectedCfg = &selected;
+	pRtc = &s_nRfxRtcData[pSelectedCfg->DevNo];
 	reg = pRtc->pReg;
-	pOldTimer = s_pnRfxRtcDev[pCfg->DevNo];
+	pOldTimer = s_pnRfxRtcDev[pSelectedCfg->DevNo];
 	// Never replace another initialized handle, even if disabled.
 	if (pOldTimer != nullptr && pOldTimer != pTimer)
 	{
@@ -1198,7 +1200,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		{
 			for (i = 0; i < 2; i++)
 			{
-				if (s_nRfxRtcRaw[pCfg->DevNo][i].pPei != nullptr)
+				if (s_nRfxRtcRaw[pSelectedCfg->DevNo][i].pPei != nullptr)
 				{
 					return false;
 				}
@@ -1214,11 +1216,11 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		}
 	}
 
-	pTimer->DevNo = pCfg->DevNo;
-	pTimer->EvtHandler = pCfg->EvtHandler;
+	pTimer->DevNo = pSelectedCfg->DevNo;
+	pTimer->EvtHandler = pSelectedCfg->EvtHandler;
 	s_pnRfxRtcData = s_nRfxRtcData;
-	s_pnRfxRtcDev[pCfg->DevNo] = pTimer;
-	s_bRtcHwClear[pCfg->DevNo] = false;
+	s_pnRfxRtcDev[pSelectedCfg->DevNo] = pTimer;
+	s_bRtcHwClear[pSelectedCfg->DevNo] = false;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	memset(pRtc->pTrigger, 0, pRtc->MaxNbTrigEvt * sizeof(TimerTrig_t));
@@ -1242,28 +1244,28 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     reg->EVENTS_OVRFLW = 0;
 
 	// No compare of an earlier use, the triggers are cleared above
-	uint32_t ccmask = ((1U << pRtc->MaxNbTrigEvt) - 1U);
+	ccmask = ((1U << pRtc->MaxNbTrigEvt) - 1U);
 
 	reg->INTENCLR = ccmask << RTC_INTENSET_COMPARE0_Pos;
 	reg->EVTENCLR = ccmask << RTC_EVTEN_COMPARE0_Pos;
 
 	// Init interrupt for RTC
-	switch (pCfg->DevNo)
+	switch (pSelectedCfg->DevNo)
 	{
 		case 0:
 			NVIC_ClearPendingIRQ(RTC0_IRQn);
-			NVIC_SetPriority(RTC0_IRQn, pCfg->IntPrio);
+			NVIC_SetPriority(RTC0_IRQn, pSelectedCfg->IntPrio);
 			NVIC_EnableIRQ(RTC0_IRQn);
 			break;
 		case 1:
 			NVIC_ClearPendingIRQ(RTC1_IRQn);
-			NVIC_SetPriority(RTC1_IRQn, pCfg->IntPrio);
+			NVIC_SetPriority(RTC1_IRQn, pSelectedCfg->IntPrio);
 			NVIC_EnableIRQ(RTC1_IRQn);
 			break;
 #if TIMER_NRFX_RTC_MAX > 2
 		case 2:
 			NVIC_ClearPendingIRQ(RTC2_IRQn);
-			NVIC_SetPriority(RTC2_IRQn, pCfg->IntPrio);
+			NVIC_SetPriority(RTC2_IRQn, pSelectedCfg->IntPrio);
 			NVIC_EnableIRQ(RTC2_IRQn);
 			break;
 #endif
@@ -1273,13 +1275,13 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	reg->INTENSET = RTC_INTENSET_OVRFLW_Msk;
     reg->EVTENSET = RTC_EVTEN_OVRFLW_Msk;
 
-    if (pCfg->EvtHandler && pCfg->bTickInt)
+    if (pSelectedCfg->EvtHandler && pSelectedCfg->bTickInt)
 	{
     	reg->INTENSET = RTC_INTENSET_TICK_Msk;
         reg->EVTENSET = RTC_EVTEN_TICK_Msk;
 	}
 
-    nRFxRtcSetFrequency(pTimer, pCfg->Freq);
+    nRFxRtcSetFrequency(pTimer, pSelectedCfg->Freq);
 
 	// Enable LFCLK before clearing the RTC, so the CLEAR task
 	// completes on the selected clock. Init continues to enable the timer.
@@ -1289,18 +1291,27 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		reg->INTENCLR = 0xFFFFFFFFU;
 		reg->EVTENCLR = 0xFFFFFFFFU;
 		reg->TASKS_STOP = 1U;
-		switch (pCfg->DevNo)
+		switch (pSelectedCfg->DevNo)
 		{
-			case 0: NVIC_DisableIRQ(RTC0_IRQn); NVIC_ClearPendingIRQ(RTC0_IRQn); break;
-			case 1: NVIC_DisableIRQ(RTC1_IRQn); NVIC_ClearPendingIRQ(RTC1_IRQn); break;
+			case 0:
+				NVIC_DisableIRQ(RTC0_IRQn);
+				NVIC_ClearPendingIRQ(RTC0_IRQn);
+				break;
+			case 1:
+				NVIC_DisableIRQ(RTC1_IRQn);
+				NVIC_ClearPendingIRQ(RTC1_IRQn);
+				break;
 #if TIMER_NRFX_RTC_MAX > 2
-			case 2: NVIC_DisableIRQ(RTC2_IRQn); NVIC_ClearPendingIRQ(RTC2_IRQn); break;
+			case 2:
+				NVIC_DisableIRQ(RTC2_IRQn);
+				NVIC_ClearPendingIRQ(RTC2_IRQn);
+				break;
 #endif
 		}
-		s_pnRfxRtcDev[pCfg->DevNo] = nullptr;
+		s_pnRfxRtcDev[pSelectedCfg->DevNo] = nullptr;
 		return false;
 	}
-	s_bRtcAutoSelected[pCfg->DevNo] = automatic;
+	s_bRtcAutoSelected[pSelectedCfg->DevNo] = automatic;
 	nRFxRtcClear(reg);
 	return true;
 }
