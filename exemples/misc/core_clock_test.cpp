@@ -50,6 +50,12 @@ SOFTWARE.
 #ifndef CLOCK_DEMO_IRQ_PRIORITY
 #define CLOCK_DEMO_IRQ_PRIORITY 6
 #endif
+#ifndef CORE_CLOCK_TEST_UART_INT
+#define CORE_CLOCK_TEST_UART_INT false
+#endif
+#ifndef CORE_CLOCK_TEST_UART_DMA
+#define CORE_CLOCK_TEST_UART_DMA false
+#endif
 
 #define CLOCK_TEST_CYCLES	3U
 
@@ -124,6 +130,9 @@ static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
+static int CoreClockTestUartEvent(DevIntrf_t *pDev, DEVINTRF_EVT Event,
+	uint8_t *pBuffer, int Length);
+
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
@@ -133,16 +142,19 @@ static const UARTCfg_t s_UartCfg = {
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = false,
+	.bIntMode = CORE_CLOCK_TEST_UART_INT,
 	.IntPrio = CLOCK_DEMO_IRQ_PRIORITY,
+	.EvtCB = CORE_CLOCK_TEST_UART_INT && CORE_CLOCK_TEST_UART_DMA ?
+		CoreClockTestUartEvent : nullptr,
 	.bFifoBlocking = true,
-	.bDMAMode = false,
+	.bDMAMode = CORE_CLOCK_TEST_UART_DMA,
 };
 static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
 static TimerDev_t s_RetainedTimer;
 static volatile uint32_t s_InterruptCount;
 static unsigned s_Failures;
+static volatile bool s_UartTxEmpty = true;
 
 static DelayCalibrationPoint_t s_DelayHigh;
 static DelayCalibrationPoint_t s_DelayLow;
@@ -167,8 +179,24 @@ static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event)
 	}
 }
 
-// This demo prints only strings and unsigned decimal values. Direct polling
-// output keeps the clock checks small enough for the 16 KB targets.
+// The Nordic DMA backend raises TX_FIFO_EMPTY only after the final byte
+// completes. Keep the diagnostic independent of UART FIFO internals.
+static int CoreClockTestUartEvent(DevIntrf_t *pDev, DEVINTRF_EVT Event,
+	uint8_t *pBuffer, int Length)
+{
+	(void)pDev;
+	(void)pBuffer;
+	(void)Length;
+
+	if (Event == DEVINTRF_EVT_TX_FIFO_EMPTY)
+	{
+		s_UartTxEmpty = true;
+	}
+	return 0;
+}
+
+// This test prints only strings and unsigned decimal values, keeping
+// the formatting path small on targets without interrupt/DMA support.
 static void CoreClockTestPut(const char *pText)
 {
 	uint8_t value;
@@ -176,6 +204,7 @@ static void CoreClockTestPut(const char *pText)
 	while (*pText != 0)
 	{
 		value = (uint8_t)*pText;
+		s_UartTxEmpty = false;
 		if (UARTTx(&s_Uart, &value, 1) == 1)
 		{
 			pText++;
@@ -568,10 +597,25 @@ static bool CoreClockTestTimerInit(int DevNo)
 	return true;
 }
 
-// Allow the polling UART to finish its last byte before clock changes.
+// Wait for the public completion event on interrupt-driven DMA targets.
+// Legacy polling targets retain the existing delay until their UART drivers
+// expose an equivalent completion event.
 static void CoreClockTestFlush(void)
 {
+#if CORE_CLOCK_TEST_UART_INT && CORE_CLOCK_TEST_UART_DMA
+	uint32_t timeout;
+
+	for (timeout = 0U; !s_UartTxEmpty && timeout < 5000U; timeout++)
+	{
+		usDelay(100U);
+	}
+	if (!s_UartTxEmpty)
+	{
+		s_Failures++;
+	}
+#else
 	msDelay(2);
+#endif
 }
 
 static void CoreClockTestTimer(int DevNo)
