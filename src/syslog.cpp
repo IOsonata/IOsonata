@@ -479,51 +479,70 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 
 int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 {
-	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pFormat == 0)
+	uint8_t *pBlock;
+	char *pLine;
+	uint32_t recordLen;
+	uint32_t written;
+	int pre;
+	int formatted;
+	int len;
+
+	if (pLog == nullptr || pLog->Marker != SYSLOG_INIT_MARKER ||
+		pFormat == nullptr)
 	{
 		return 0;
 	}
 
-	// Format straight into the block, no intermediate line buffer.
-	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE;
-
-	uint8_t *pBlock = CFifoResv(pLog->hFifo);
-	if (pBlock == 0)
+	// The configured RecordLen is the text capacity, including NUL.
+	// Length metadata is stored before the text in each FIFO block.
+	recordLen = CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE;
+	pBlock = CFifoResv(pLog->hFifo);
+	if (pBlock == nullptr)
 	{
 		return 0;
 	}
+	pLine = (char *)pBlock + SYSLOG_RECORD_META_SIZE;
 
-	// Millisecond stamp ahead of the text when a Timer is configured.
-	int pre = 0;
-
+	pre = 0;
 	if (pLog->FormatTime != nullptr)
 	{
-		pre = pLog->FormatTime(pLog->pTimer,
-			(char *)pBlock + SYSLOG_RECORD_META_SIZE, (int)recordLen, false);
+		pre = pLog->FormatTime(pLog->pTimer, pLine,
+			(int)recordLen, false);
+	}
+	if (pre < 0)
+	{
+		pre = 0;
+	}
+	if ((uint32_t)pre >= recordLen)
+	{
+		pre = (int)recordLen - 1;
 	}
 
-	int len = vsnprintf((char *)pBlock + SYSLOG_RECORD_META_SIZE + pre,
-						(size_t)(recordLen - (uint32_t)pre),
-						pFormat, Args);
-	if (len < 0)
+	// vsnprintf returns the number of characters it wanted to write,
+	// excluding NUL. Clamp it to the bytes actually stored before
+	// publishing the record. This includes any CR/LF that fits.
+	formatted = vsnprintf(pLine + pre, (size_t)(recordLen - (uint32_t)pre),
+		pFormat, Args);
+	if (formatted < 0)
 	{
-		uint32_t emptyLen = 0U;
-		memcpy(pBlock, &emptyLen, SYSLOG_RECORD_META_SIZE);
-		pBlock[SYSLOG_RECORD_META_SIZE] = 0U;
-		(void)CFifoPut(pLog->hFifo);
-		return 0;
+		pLine[0] = 0;
+		len = 0;
 	}
-
-	len += pre;
-	if ((uint32_t)len >= recordLen)
+	else
 	{
-		len = (int)recordLen - 1;
+		len = formatted;
+		if ((uint32_t)len >= recordLen - (uint32_t)pre)
+		{
+			len = (int)(recordLen - (uint32_t)pre - 1U);
+		}
+		len += pre;
 	}
-	uint32_t written = (uint32_t)len;
+	pLine[len] = 0;
+	written = (uint32_t)len;
 	memcpy(pBlock, &written, SYSLOG_RECORD_META_SIZE);
 	(void)CFifoPut(pLog->hFifo);
 
-	if (pLog->pSink != 0)
+	if (pLog->pSink != nullptr)
 	{
 		(void)SysLogFlush(pLog);
 	}
