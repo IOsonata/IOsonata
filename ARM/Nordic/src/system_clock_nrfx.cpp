@@ -67,6 +67,7 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "nrf.h"
+#include "nrf_erratas.h"
 
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 #include "nrf_sdh.h"
@@ -108,6 +109,12 @@ SOFTWARE.
 // Bound the wait in time rather than compiler-dependent loop iterations.
 #define NRFX_LFCLK_START_TIMEOUT_US	1500000U
 #define NRFX_LFCLK_START_POLL_US	100U
+
+// nRF52832 anomaly 132: the LFRC oscillator might not start, with no
+// LFCLKSTARTED event, when it is started in a window after it stopped.
+// The errata gives 66 to 138 us, a later vendor note 230 to 330 us.
+// Wait past both before every direct start on an affected part.
+#define NRFX_LFCLK_ERRATA132_DELAY_US	400U
 
 // LFCLK registers and source values
 #if defined(CLOCK_LFCLK_SRC_SRC_Msk)
@@ -849,6 +856,12 @@ static bool nRFxLfclkStart(uint32_t Src)
 
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
+#if NRF52_ERRATA_132_ENABLE_WORKAROUND
+	if (nrf52_errata_132())
+	{
+		usDelay(NRFX_LFCLK_ERRATA132_DELAY_US);
+	}
+#endif
 	NRF_CLOCK->TASKS_LFCLKSTART = 1U;
 	elapsed = 0U;
 	while (elapsed < NRFX_LFCLK_START_TIMEOUT_US)
