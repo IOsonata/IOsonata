@@ -306,34 +306,37 @@ static inline __attribute__((always_inline)) void ArmDelayUsLoop(uint32_t cnt)
  */
 static inline __attribute__((always_inline)) void ArmDelayNsLoop(uint32_t cnt)
 {
-	uint64_t loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) / 1000000000ULL;
-	uint32_t low = (uint32_t)loops;
-	uint32_t high = (uint32_t)(loops >> 32);
+	uint64_t loops;
+	uint32_t chunk;
+	uint32_t remaining;
 
-	// Run the low word first. Each remaining high count adds 2^32 iterations.
-	// Subtracting from zero clears carry and ends the outer loop.
-	__asm__ volatile (
+	loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) /
+		1000000000ULL;
+
+	// Preserve the original IOsonata SUBS/BGT signed countdown loop.
+	// Use chunks because BGT is signed: an individual counter must never
+	// exceed INT32_MAX. Clock factors remain iterations per second.
+	while (loops != 0U)
+	{
+		chunk = loops > INT32_MAX ? INT32_MAX : (uint32_t)loops;
+		__asm__ volatile (
 #ifdef __GNUC__
-		".syntax unified\n"
+			".syntax unified\\n"
 #endif
-		" CMP %[low], #0\n"
-		" BEQ 2f\n"
-		// Keep loop placement independent of surrounding code and optimization.
-		".balign 8\n"
-		"1:\n"
-		" SUBS %[low], #1\n"
-		" BNE 1b\n"
-		"2:\n"
-		" SUBS %[high], #1\n"
-		" BCS 1b\n"
+			" MOVS %[remaining], %[count]\\n"
+			"1:\\n"
+			" SUBS %[remaining], #1\\n"
+			" BGT 1b\\n"
 #if defined ( __ARMCC_VERSION )
 #elif defined ( __GNUC__ )
-		".syntax divided\n"
+			".syntax divided\\n"
 #endif
-		: [low] "+&l" (low), [high] "+&l" (high)
-		:
-		: "cc"
-	);
+			: [remaining] "=&l" (remaining)
+			: [count] "l" (chunk)
+			: "cc"
+		);
+		loops -= chunk;
+	}
 }
 
 // The calibration test measures the raw nanosecond fallback loop.
